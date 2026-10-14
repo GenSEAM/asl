@@ -27,6 +27,28 @@ fn page title: String -> String
   `layerOrder`, `container`, `keyframes`, `fontFace`, `importUrl`, `atRule`; value helpers;
   `renderSheet` (minified) and `renderSheetPretty`.
 - `asl-html/markdown`: `blocks` and `inline`, the Markdown subset to `Node`s.
+- `asl-html/svg`: typed drawing for ASL programs: a path builder (`moveTo`, `lineTo`, `curveTo`,
+  `arcTo`, `close`, ...), shapes with numeric geometry (`canvas`, `rectAt`, `circleAt`,
+  `polygonOf`, `textAt`, ...), transforms, paint, gradients, and `renderSvg` for a standalone file.
+- `asl-html/asnSvg`: ASN drawings to SVG, for agents that write data rather than programs.
+
+## SVG from ASN
+
+```asn
+(:svg :w 240 :h 80
+  (:rc :x 0 :y 0 :w 240 :h 80 :rx 16 :f "#c2185b")
+  (:circ :cx 40 :cy 40 :r 18 :f "none" :s "#fff" :sw 3)
+  (:txt :x 72 :y 47 :sz 20 :fontFamily "system-ui" :f "#fff" "build passing"))
+```
+
+```sh
+IN=badge.asn OUT=badge.svg asl/host/out/asl-host run asl/packages/asl-html/src/svgCli.asl
+```
+
+Elements and attributes are keywords; `rc circ el ln pl poly p txt group` and `w h v f s sw op sz t
+anchor` are short aliases, and camelCase attributes become kebab-case. An unknown element, a
+misspelled attribute or text outside a text element is an error that names its place in the
+drawing (`svg[0] > rect[1]: unknown attribute :fil`), so an agent can fix it in one turn.
 
 ## Guarantees
 
@@ -43,5 +65,6 @@ fn page title: String -> String
 | `tests/htmlTest.asl` | 15 pass |
 | `tests/cssTest.asl` | 4 pass |
 | `tests/markdownTest.asl` | 9 pass |
+| `tests/svgTest.asl` | 14 pass |
 
-All three also compile with `asl-target-js` and pass under node with the same assertion counts.
+All four also compile with `asl-target-js` and pass under node with the same assertion counts.
