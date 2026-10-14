@@ -9,6 +9,7 @@
       (aslSite/ui/html :a h)
       (aslSite/app/theme :a theme)
       (aslSite/app/home :a home)
+      (aslSite/app/mascot :a mascot)
       (aslSite/app/docs :a docs)
       (aslSite/app/blog :a blog)
       (aslSite/tools/posts :a posts)
@@ -115,14 +116,15 @@ fn ! main -> Int64
                   (compileWasm! work wasm)))
       1
       (let [(stats (home/Stats :wasmBytes (resultOr (fileSize wasm) 0) :aslLines (aslLines!) :bridgeLines (lineCount! (str (web) "/bridge/boot.js"))))
-            (all (posts/loadPosts (mt (fileRead (str (web) "/content/posts.asn")) ((ok s) s) ((err e) ""))))
+            (all (posts/loadPosts! (str (web) "/content/blog")))
             (pages (listAppend [(pair "/" (home/homePage stats)) (pair "/docs" (docs/docsPage)) (pair "/blog" (blog/blogIndexPage all))]
                                (map (fn [(p blog/Post)] -> (Pair String h/Node) (pair (str "/blog/" p.slug) (blog/postPage p))) all)))
             (wrote (and (ok? (fileWrite (str (dist) "/site.css") (theme/stylesheet)))
+                     (and (ok? (fileWrite (str (dist) "/favicon.svg") (h/render (mascot/iconSvg))))
                      (and (ok? (fileWrite (str (dist) "/404.html") (h/renderDocument (blog/notFoundPage))))
                        (and (ok? (fileWrite (str (dist) "/sitemap.xml") (feeds/sitemapXml all)))
                          (and (ok? (fileWrite (str (dist) "/rss.xml") (feeds/rssXml all)))
-                           (listAll? (fn [(page (Pair String h/Node))] -> Bool (writePage! (pairFirst page) (pairSecond page))) pages))))))]
+                           (listAll? (fn [(page (Pair String h/Node))] -> Bool (writePage! (pairFirst page) (pairSecond page))) pages)))))))]
         (do
           (sh! (str "rm -rf " (quoteSh work)))
           (println (str "built " (dist) ": " (stringFromInt64 (listLength pages)) " pages, site.wasm " (stringFromInt64 stats.wasmBytes) " bytes, " (stringFromInt64 stats.aslLines) " lines of ASL"))

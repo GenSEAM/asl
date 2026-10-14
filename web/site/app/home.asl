@@ -1,6 +1,6 @@
 (module aslSite/app/home
   :x [Stats placeholderStats installLine batchLine homeContent homePage]
-  :i [(aslSite/ui/html :a h) (aslSite/app/layout :a l) (aslSite/app/msg :a m)])
+  :i [(aslSite/ui/html :a h) (aslSite/app/layout :a l) (aslSite/app/msg :a m) (aslSite/app/mascot :a mascot)])
 
 (schema Stats (:f wasmBytes Int64) (:f aslLines Int64) (:f bridgeLines Int64))
 
@@ -21,16 +21,19 @@ fn shellLine line: String buttonId: String msg: m/Msg -> h/Node
 
 fn heroSection -> h/Node
   (h/section [(h/cls "hero")]
-    [(h/div [(h/cls "shell stack")]
-      [(l/eyebrow "ASL" "AgentScript")
-       (h/h1 [(h/cls "display")] [(h/text "The language models write ") (h/em [] [(h/text "without repair loops.")])])
-       (h/p [(h/cls "lead")] [(h/text "AgentScript is a programming language and data notation for code that models write and models read. Structure lives in balanced parentheses, every failure is a value and every effect is marked, so a wrong program is rejected before it runs instead of three turns later.")])
-       (shellLine (installLine) "copy-install" (m/copyInstall))
-       (h/ul [(h/cls "facts")]
-         [(h/li [] [(h/elem "b" [] [(h/text "( )")]) (h/text " balanced S-expressions")])
-          (h/li [] [(h/elem "b" [] [(h/text "0")]) (h/text " nil, exceptions or try")])
-          (h/li [] [(h/elem "b" [] [(h/text "!")]) (h/text " marks every effect")])
-          (h/li [] [(h/elem "b" [] [(h/text "wasm32")]) (h/text " and native through LLVM")])])])])
+    [(h/div [(h/cls "shell hero-grid")]
+      [(h/div [(h/cls "stack")]
+        [(l/eyebrow "ASL" "AgentScript")
+         (h/h1 [(h/cls "display")] [(h/text "The language models write ") (h/em [] [(h/text "without repair loops.")])])
+         (h/p [(h/cls "lead")] [(h/text "AgentScript is a programming language and data notation for code that models write and models read. Structure lives in balanced parentheses, every failure is a value and every effect is marked, so a wrong program is rejected before it runs instead of three turns later.")])
+         (shellLine (installLine) "copy-install" (m/copyInstall))
+         (h/p [(h/cls "micro")] [(h/text "Builds from source on macOS today; Linux and Windows are in progress. ") (h/a [(h/href "/docs#install")] [(h/text "Platform status")])])
+         (h/ul [(h/cls "facts")]
+           [(h/li [] [(h/elem "b" [] [(h/text "( )")]) (h/text " balanced S-expressions")])
+            (h/li [] [(h/elem "b" [] [(h/text "0")]) (h/text " nil, exceptions or try")])
+            (h/li [] [(h/elem "b" [] [(h/text "!")]) (h/text " marks every effect")])
+            (h/li [] [(h/elem "b" [] [(h/text "wasm32")]) (h/text " and native through LLVM")])])])
+       (h/figure [(h/cls "hero-art")] [(mascot/chameleon true "large") (h/figcaption [(h/cls "micro")] [(h/text "Drawn in ASL: typed SVG nodes, no image file.")])])])])
 
 fn costCell n: String title: String body: String cost: String -> h/Node
   (h/div [(h/cls "cell")] [(h/span [(h/cls "n")] [(h/text n)]) (h/h3 [(h/cls "h3")] [(h/text title)]) (h/p [] [(h/text body)]) (h/span [(h/cls "cost")] [(h/text cost)])])

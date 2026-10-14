@@ -32,4 +32,6 @@ fn runTests -> Bool
       (assert (stringContains? page "235 KB") "stats reach the proof section")
       (assert (not (stringContains? page "<script>")) "no inline script")
       (assert (= (l/routePath (l/post "x")) "/blog/x") "post routes")
+      (assert (stringContains? (theme/stylesheet) ".hero-grid{display:grid;grid-template-columns:minmax(0,1fr)") "the hero column cannot grow past the viewport on phones")
+      (assert (stringContains? page "class=\"cham small\"") "the chameleon marks the top bar")
       true))

@@ -28,7 +28,7 @@ fn postPage p: Post -> h/Node
           (md/blocks (filter (fn [(line String)] -> Bool (not (metaLine? line))) (stringLines p.content)))))])])
 
 fn notFoundPage -> h/Node
-  (l/document (l/home) "Not found · AgentScript" "This page does not exist."
+  (l/document (l/missing) "Not found · AgentScript" "This page does not exist."
     [(h/div [(h/cls "shell page")]
       [(h/div [(h/cls "head")]
         [(l/eyebrow "404" "Not found") (h/h1 [(h/cls "h2")] [(h/text "Nothing is defined at this address.")])

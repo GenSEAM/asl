@@ -1,24 +1,30 @@
 (module aslSite/app/layout
-  :x [Route home docs blog post routePath siteUrl document topBar footBar eyebrow sectionHead markNode copyButton]
-  :i [(aslSite/ui/html :a h) (aslSite/app/msg :a m)])
+  :x [Route home docs blog post missing routePath siteUrl document topBar footBar eyebrow sectionHead markNode copyButton]
+  :i [(aslSite/ui/html :a h) (aslSite/app/msg :a m) (aslSite/app/mascot :a mascot)])
 
-(enum Route (:c home [] "landing page") (:c docs [] "the language on one page") (:c blog [] "post index") (:c post [(slug String)] "one article"))
+(enum Route (:c home [] "landing page") (:c docs [] "the language on one page") (:c blog [] "post index") (:c post [(slug String)] "one article") (:c missing [] "the 404 page"))
 
 fn siteUrl -> String
   "https://aslang.dev"
 
 fn routePath r: Route -> String
-  (mt r ((home) "/") ((docs) "/docs") ((blog) "/blog") ((post slug) (str "/blog/" slug)))
+  (mt r ((home) "/") ((docs) "/docs") ((blog) "/blog") ((post slug) (str "/blog/" slug)) ((missing) "/404"))
 
 fn current? r: Route target: Route -> Bool
   (mt target
     ((home) (mt r ((home) true) (_ false)))
     ((docs) (mt r ((docs) true) (_ false)))
     ((blog) (mt r ((blog) true) ((post s) true) (_ false)))
-    ((post s) false))
+    ((post s) false)
+    ((missing) false))
 
 fn markNode -> h/Node
-  (h/span [(h/cls "glyph") (h/attr "aria-hidden" "true")] [(h/text "(") (h/elem "b" [] [(h/text "•")]) (h/text ")")])
+  (mascot/chameleon false "small")
+
+fn themeIcon -> h/Node
+  (h/svg [(h/attr "viewBox" "0 0 24 24") (h/attr "aria-hidden" "true")]
+    [(h/circle [(h/cls "ring") (h/attr "cx" "12") (h/attr "cy" "12") (h/attr "r" "9")])
+     (h/path [(h/cls "sun") (h/attr "d" "M12 3a9 9 0 0 1 0 18z")])])
 
 fn navLink here: Route target: Route label: String extra: String -> h/Node
   (h/a (listAppend [(h/href (routePath target)) (h/cls extra)] (if (current? here target) [(h/attr "aria-current" "page")] [])) [(h/text label)])
@@ -32,7 +38,7 @@ fn topBar here: Route -> h/Node
           (navLink here (blog) "Blog" "")
           (h/a [(h/href "https://github.com/GenSEAM/asl") (h/cls "wide")] [(h/text "GitHub")])
           (h/a [(h/href "/llms.txt") (h/cls "wide")] [(h/text "llms.txt")])
-          (h/button [(h/cls "toggle") (h/id "theme-toggle") (m/onClick (m/toggleTheme)) (h/attr "aria-label" "Switch colour theme") (h/attr "title" "Switch colour theme")] [(h/span [(h/attr "aria-hidden" "true")] [(h/text "◐")])])])])])
+          (h/button [(h/cls "toggle") (h/id "theme-toggle") (m/onClick (m/toggleTheme)) (h/attr "aria-label" "Switch colour theme") (h/attr "title" "Switch colour theme")] [(themeIcon)])])])])
 
 fn footCol heading: String links: (List (Pair String String)) -> h/Node
   (h/div []
@@ -63,7 +69,9 @@ fn headNodes here: Route pageTitle: String description: String -> (List h/Node)
    (h/meta [(h/attr "name" "viewport") (h/attr "content" "width=device-width, initial-scale=1")])
    (h/title pageTitle)
    (h/meta [(h/attr "name" "description") (h/attr "content" description)])
-   (h/link [(h/attr "rel" "canonical") (h/href (str (siteUrl) (routePath here)))])
+   (mt here
+     ((missing) (h/meta [(h/attr "name" "robots") (h/attr "content" "noindex")]))
+     (_ (h/link [(h/attr "rel" "canonical") (h/href (str (siteUrl) (routePath here)))])))
    (h/meta [(h/attr "property" "og:type") (h/attr "content" (mt here ((post s) "article") (_ "website")))])
    (h/meta [(h/attr "property" "og:title") (h/attr "content" pageTitle)])
    (h/meta [(h/attr "property" "og:description") (h/attr "content" description)])
@@ -76,6 +84,7 @@ fn headNodes here: Route pageTitle: String description: String -> (List h/Node)
    (h/link [(h/attr "rel" "alternate") (h/attr "type" "application/rss+xml") (h/attr "title" "AgentScript blog") (h/href "/rss.xml")])
    (h/link [(h/attr "rel" "stylesheet") (h/href "/site.css")])
    (h/link [(h/attr "rel" "modulepreload") (h/href "/boot.js")])
+   (h/link [(h/attr "rel" "preload") (h/href "/site.wasm") (h/attr "as" "fetch") (h/attr "type" "application/wasm") (h/attr "crossorigin" "anonymous")])
    (h/script [(h/attr "type" "module") (h/attr "src" "/boot.js")])]
 
 fn document here: Route pageTitle: String description: String content: (List h/Node) -> h/Node

@@ -12,7 +12,7 @@ fn topic anchor: String heading: String body: (List h/Node) -> (List h/Node)
   (cons (h/h2 [(h/id anchor)] [(h/text heading)]) body)
 
 fn topics -> (List (Pair String String))
-  [(pair "files" "Files and modules") (pair "functions" "Functions") (pair "data" "Enums and records")
+  [(pair "install" "Install") (pair "files" "Files and modules") (pair "functions" "Functions") (pair "data" "Enums and records")
    (pair "failure" "No nil, no exceptions") (pair "effects" "Effects") (pair "tests" "Tests")
    (pair "toolbelt" "The toolbelt") (pair "wasm" "WebAssembly")]
 
@@ -20,13 +20,29 @@ fn toc -> h/Node
   (h/ul [(h/cls "toc") (h/attr "aria-label" "On this page")]
     (map (fn [(t (Pair String String))] -> h/Node (h/li [] [(h/a [(h/href (str "#" (pairFirst t)))] [(h/text (pairSecond t))])])) (topics)))
 
+fn platform name: String state: String note: String -> h/Node
+  (h/tr [(h/td [] [(h/text name)]) (h/td [] [(h/strong [] [(h/text state)])]) (h/td [] [(h/text note)])])
+
+fn install -> (List h/Node)
+  (topic "install" "Install"
+    [(para "There are no prebuilt binaries yet. The installer clones the repository into ~/.asl/repo, builds the stage-0 host (host/out/asl-host) with your C compiler and runs the ASL installer on it, so it needs git and a C compiler.")
+     (listing ["curl -fsSL https://aslang.dev/install.sh | sh"])
+     (h/div [(h/cls "tablewrap")]
+       [(h/table []
+         [(h/thead [(h/tr [(h/th [] [(h/text "Platform")]) (h/th [] [(h/text "Status")]) (h/th [] [(h/text "Notes")])])])
+          (h/tbody
+            [(platform "macOS, Apple silicon" "Works" "The platform the project is developed on; the native compiler seed (asl1) exists for arm64-apple-darwin only.")
+             (platform "Linux" "Not yet" "The host does not compile on Linux today (a missing limits.h in host/src/verbs.c, and gcc's -Werror warnings), so the installer stops at the host build. Fixes are in progress.")
+             (platform "Windows" "Not yet" "No native build. install.ps1 expects release binaries that have not been published.")])])])
+     (para "From a checkout, host/build.sh builds the same host, and host/out/asl-host check, test and run work on it directly.")])
+
 fn body -> (List h/Node)
   (listAppend
     [(l/eyebrow "DOCS" "The language on one page")
      (h/h1 [] [(h/text "AgentScript in ten minutes")])
      (para "ASL source (.asl) and data (.asn) files are S-expressions with balanced parentheses. A malformed program is caught by counting delimiters rather than by running it, and whitespace carries no meaning inside a form. The complete rules an agent needs are in llms.txt; this page is the same material for a person.")
      (toc)]
-    (listAppend
+    (listAppend (install) (listAppend
       (topic "files" "Files and modules"
         [(para "A file is a module header, then items starting in column 0. Imports name the module a file declares, not its path. Each bracket kind pairs exactly: ( ) forms, [ ] lists, { } records.")
          (listing ["(module demo/shapes :x [area runTests] :i [(other/module :a alias)])"])
@@ -60,7 +76,7 @@ fn body -> (List h/Node)
                   (topic "wasm" "WebAssembly"
                     [(para "asl-target-llvm lowers a linked program to LLVM IR for wasm32-unknown-unknown with its own collector and allocator. The module imports four host functions (asl.write, asl.exit, asl.nowNs and asl.trap) and nothing else; a builtin the target cannot provide, such as tcpListen or a clock read, is a compile error rather than a runtime surprise.")
                      (para "This site is built that way. Its markup, styles and event handlers are ASL in web/site; web/tools/build.asl prerenders every page and compiles the same modules into site.wasm, and a short JavaScript bridge forwards clicks to the module's update export.")
-                     (listing ["fn ! update code: Int64 model: Int64 -> Int64" "  (let [(r (u/step (m/msgOf code) model))]" "    (do (print (b/encodeOps (pairSecond r))) (pairFirst r)))"])])))))))))
+                     (listing ["fn ! update code: Int64 model: Int64 -> Int64" "  (let [(r (u/step (m/msgOf code) model))]" "    (do (print (b/encodeOps (pairSecond r))) (pairFirst r)))"])]))))))))))
 
 fn docsPage -> h/Node
   (l/document (l/docs) "AgentScript docs: the language on one page" "The AgentScript (ASL) language on one page: modules, functions, enums, no nil or exceptions, marked effects, tests, the agent toolbelt and WebAssembly."
