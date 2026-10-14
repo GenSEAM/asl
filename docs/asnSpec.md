@@ -22,7 +22,7 @@ scanner. That lexer is not the stage-0 host's reader, and §1 lists where the tw
 lexeme ASN keeps that Core retired is the free `;` comment (§2.1).
 
 **ASN keys are data.** Core §2.1 makes an ASL compact alias significant only in the one
-position it names. ASN has none of those positions, so `:f`, `:d`, `:x`, `:c`, `:i` and `:a` in an
+position it names. ASN has none of those positions, so `:f`, `:x`, `:c`, `:i` and `:a` in an
 ASN payload are ordinary keys spelled with those letters and mean nothing else. No tool may
 rewrite them.
 
@@ -52,8 +52,8 @@ touches, `1e3` is a float as it is in Core, and `.5`, `1.` and `+5` are not numb
 
 **Escapes.** The reader keeps every string as its source lexeme and accepts a backslash before any
 character; `asnStringValue` decodes `\n`, `\t`, `\r` and `\0` and yields the escaped character
-itself for anything else, so `\"` and `\\` are a quote and a backslash. A writer emits only those
-six. The host's `.asl` reader has a different set (no `\0`; `\xHH` and `\u` escapes), which ASN does
+itself for anything else, so `\"` and `\\` are a quote and a backslash. A writer should emit
+only those six. The host's `.asl` reader has a different set (no `\0`; `\xHH` and `\u` escapes), which ASN does
 not decode.
 
 `{` and `}` are already produced — Core writes anonymous records in them — so map literals cost
@@ -66,8 +66,9 @@ no new character either.
 - **Keywords** in either spelling: `(:timeoutMs 5)` and `(:timeout-ms 5)` both read and write back
   unchanged. Write keys camelCase.
 - **Case heads and alias prefixes** only as the `ident` rule above: lowercase, digits and single
-  hyphens. `(some-case 1)` reads; `(someCase 1)` and `(snake_case 1)` are `parse` errors. Target: camelCase heads, per
-  the dialect rule; until the reader changes, a camelCase case head does not read.
+  hyphens. `(some-case 1)` reads; `(someCase 1)` and `(snake_case 1)` are `parse` errors.
+  Target: camelCase heads, per the dialect rule; until the reader changes, a camelCase case head
+  does not read.
 
 ## 2. Documents
 
@@ -135,7 +136,7 @@ A bare identifier is **not** a value. `x` alone is a parse error. Names appear o
 |---|---|
 | `1`, `-1` | Integer. Widths and overflow are Core §3's. |
 | `1.5` | `Float64`. |
-| `"text"` | String, with Core §2's five escapes and no others. |
+| `"text"` | String, with §1's escapes. |
 | `true` / `false` | Boolean. |
 | `()` | Unit. |
 | `:kw` | **Keyword.** A self-denoting symbolic scalar. See §3.2. |
@@ -194,9 +195,10 @@ A map is an unordered dictionary. Two entry forms:
 - `:kw value` — the cheap form, for a key a keyword can spell.
 - `(key value)` — for a key it cannot: a dotted path, an integer id, a boolean.
 
-A **float may not be a map key**, by grammar. Core §3 forbids `Float64` as a `(Map K V)` key
-because its equality is IEEE-754 and a `NaN` key could never be looked up again; a data format
-that admitted one would produce payloads no consumer could decode.
+A **float may not be a map key**, by grammar (`asl/grammar/corpus/asn/invalid/floatMapKey.asn`).
+`Float64` equality is IEEE-754, so a `NaN` key could never be looked up again — Core's `Map`
+accepts such a key and then never finds it (Core §3) — and a data format that admitted one would
+produce payloads no consumer could decode.
 
 `_` may not be a map key either — nil denotes absence, and an absent key is a key that is not
 there.
@@ -516,7 +518,7 @@ is a consequence of the value grammar, not a construct in it.
 lexeme, and a new lexeme in a data format that claims to share the language's lexer is a fork of
 that lexer.
 
-Multi-line text uses Core §2's escapes:
+Multi-line text uses a raw newline (§2.1), the `\n` escape:
 
 ```asn
 (:lang :python
