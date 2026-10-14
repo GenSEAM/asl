@@ -18,31 +18,30 @@ This post describes the memory we run today in AgentScript (ASL), and the recurs
 
 ---
 
-## 1. Today: Plain Ledgers in Two Tiers
+## 1. Today: Plain Ledgers, One Directory
 
-Our memory is plain ASN text under `.asl/mem`, versioned with the code:
+Our memory is plain ASN text under `.asl/mem` at the workspace root, kept beside the code it describes. The tools know a handful of ledger kinds:
 - `intent.asn` and `roadmap.asn`: what the work is for and what comes next.
-- `principles.asn`: principles, each marked normative (adopted) or empirical (with method, scope and date).
-- `decisions/`: decision records with their rationale.
-- `notes.asn`: observations, recorded and listed with the `(:note)` op.
-- `knownRed.asn`: failing suites acknowledged with a digest; the list may only shrink.
-- `work/`: dated working ledgers for plans and findings that a command cannot reconstruct.
+- `decisions/decisions.asn`: decision records with their rationale.
+- `notes.asn`: observations, written and listed with the `(:note)` op.
 
-There are two tiers today: the workspace's `.asl/mem` and the standalone language package's own `asl/.asl/mem`, which holds the same kinds of files (`intent.asn`, `roadmap.asn`, `decisions.asn`, `notes.asn`) for that package alone. A record belongs to the tier whose work it describes, and does not leak into the other unless someone copies it up.
+The ops that touch it are confined to it. `(:mem :op list|get|query|put ...)` reads and stages row-keyed ledger changes, and a path that leaves `.asl/mem` is rejected with `ERR_BOUNDARY_VIOLATION`. `(:note :action :list)` reports the notes ledger, and `asl '(:observe :dim memory)'` reports ledger sizes; the old `asl mem` command is retired in its favour.
 
-Two tools give a structural view without reading files: `asl '(:tree :path ".asl/mem")'` counts files and directories and lists the top entries, and `asl '(:note :action :list)'` reports the notes ledger (on 2026-09-24, 223 active notes).
+The ledgers are workspace state, not part of the published language repository: a fresh clone of it has no `.asl/mem`, and `(:note :action :list)` there answers `:status :empty`. Today there is one tier, the workspace that holds the working directory.
 
 ---
 
 ## 2. The Target: Self-Similar Tiers at Depth N
 
-The design we are building extends the two tiers into a recursion:
+The design we are building extends that one directory into a recursion:
 
-$$\mathbf{Tier}_{0}\ (\text{Workspace}) \rightarrow \mathbf{Tier}_{1}\ (\text{Subsystems}) \rightarrow \mathbf{Tier}_{2}\ (\text{Packages}) \rightarrow \mathbf{Tier}_{3}\ (\text{Components}) \rightarrow \mathbf{Tier}_{4}\ (\text{Modules})$$
+```text
+Tier 0 workspace -> Tier 1 subsystems -> Tier 2 packages -> Tier 3 components -> Tier 4 modules
+```
 
 ```mermaid
 graph TD
-    Root["Workspace .asl/mem"] --> Sub1["Subsystem: asl (asl/.asl/mem)"]
+    Root["Workspace .asl/mem"] --> Sub1["Subsystem: asl"]
     Root --> Sub2["Subsystem: agent-bus"]
     Sub1 --> Pkg1["Package: asl-checker"]
     Sub1 --> Pkg2["Package: asl-compiler"]
@@ -54,7 +53,7 @@ Three properties define it:
 2. **Local ownership**: a decision made inside a package is recorded in that package's memory and reaches the root only when an upper tier aggregates it.
 3. **Inheritance**: a child tier inherits its parent's constraints unless it records an explicit, reasoned override.
 
-Only the first two tiers exist today; per-package memory directories below `asl/` are the next step.
+Only the root tier exists today; ledgers below it are the next step.
 
 ---
 
@@ -65,16 +64,21 @@ In most systems memory is passive text: Markdown, JSON, or embeddings. An agent 
 In ASL, memory records are S-expressions, the same syntax as the code, and a function is a value that a record can hold. An invariant can therefore carry its own check. This runs on the stage-0 host today:
 
 ```asl
-(module probe/p20a :d "An invariant record whose predicate is a function value" :x [noDoubleComment zeroComment holds runTests] :i [])
+(module probe/invariant :x [Invariant noDoubleComment zeroComment holds runTests])
+
+schema Invariant
+  id: String
+  scope: String
+  predicate: (Fn [String] -> Bool)
 
 fn noDoubleComment source: String -> Bool
-  (not (string-contains? source ";;"))
+  (not (stringContains? source ";;"))
 
 fn zeroComment -> Invariant
   {:id "C0001" :scope "asl/packages/asl-checker" :predicate noDoubleComment}
 
 fn holds inv: Invariant source: String -> Bool
-  ((.-predicate inv) source)
+  (let [(p inv.predicate)] (p source))
 
 fn runTests -> Bool
   (do
@@ -83,7 +87,7 @@ fn runTests -> Bool
     true)
 ```
 
-`asl/host/out/asl-host test` on this file prints `1 assertion(s) executed, 1 refutation(s) executed (2 passed)`. Today our ledgers hold data, not predicates; storing executable invariants in `.asl/mem` so that a gate can evaluate them directly is part of the design.
+`host/out/asl-host test` on this file prints `1 assertion(s) executed, 1 refutation(s) executed (2 passed)` (2026-10-14). Today our ledgers hold data, not predicates; storing executable invariants in `.asl/mem` so that a gate can evaluate them directly is part of the design.
 
 ---
 
@@ -110,7 +114,7 @@ Focused work wants local memory; coordinators and humans also want the whole pic
   :status :consistent)
 ```
 
-The shape above is illustrative; no command produces it yet. The old `asl mem` subcommands are deprecated, and the aggregation will arrive as an agent-plane op listed by `asl '(:tools)'`.
+The shape above is illustrative; no command produces it yet. When it ships it will be an agent-plane op listed by `asl '(:tools)'`.
 
 An earlier version of this post printed a tree and a comparison table (token cost per turn, pollution rate, scan time, pass rate) for flat, two-tier and fractal memory. No run backs those figures, so we removed them. We will publish a comparison when it comes from a recorded run with its method, scope and date.
 
@@ -118,6 +122,6 @@ An earlier version of this post printed a tree and a comparison table (token cos
 
 ## 6. Conclusion
 
-Memory for an agent is not a key-value store or a pile of notes. It is the structure through which the agent sees the system. Our current memory is deliberately plain: line-oriented ASN ledgers in two tiers, versioned with the code. The recursion, the logical addresses and the aggregation are where it is going, and each will be described as shipped only when a command does it.
+Memory for an agent is not a key-value store or a pile of notes. It is the structure through which the agent sees the system. Our current memory is deliberately plain: line-oriented ASN ledgers in one directory beside the code. The recursion, the logical addresses and the aggregation are where it is going, and each will be described as shipped only when a command does it.
 
 - Explore test runners and what they report in [Test Telemetry](/blog/zero-overhead-test-telemetry-and-resource-observability).

@@ -1,4 +1,4 @@
-# Debugging Autonomous Swarms Without Reading 50,000-Token Logs
+# Debugging Autonomous Swarms Without Reading Their Logs
 *By GenSEAM | September 2026*
 
 A common failure mode of scaling autonomous coding swarms is the **Observability Inversion Trap**.
@@ -43,15 +43,15 @@ In human software engineering, architectural drift happens over months. An auton
 In AgentScript (ASL), every module declares its exports (`:x`) and imports (`:i`) in its header. Because the header is data, the dependency graph can be read without executing a line of code:
 
 ```agentscript
-(module store/checkout :d "Checkout transaction coordinator" :x [processCheckout] :i [(store/cart :a cart) (store/payment :a pay)])
+(module store/checkout :x [processCheckout] :i [(store/cart :a cart) (store/payment :a pay)])
 
 fn processCheckout prices: (List Int64) -> (Result Int64 String)
   (pay/charge (cart/total prices))
 ```
 
-The stage-0 host resolves every import by the module name a file declares before anything runs: an import of a module no file declares is `ERR_UNRESOLVED_IMPORT`, and a call to a name that is neither bound, imported nor a builtin is `ERR_UNKNOWN_SYMBOL`. Both are reported with file, line and column, so the coordinator gets the exact location rather than a log to search.
+The stage-0 host resolves every import by the module name a file declares before anything runs: an import of a module no file declares is `ERR_UNRESOLVED_IMPORT`, and a call to a name that is neither bound, imported nor a builtin is `ERR_UNKNOWN_SYMBOL`. Both are reported with file, line and column, so the coordinator gets the exact location rather than a log to search. (With two small `store/cart` and `store/payment` modules beside it, this example passes `asl-host check`.)
 
-Cycles are audited at the package level. `asl coupling` reads the import declarations across the repository and reports cohesion, fan-in, fan-out and inter-package cycles; on 2026-09-24 it reported 46 packages, 340 modules and 0 cycles. Module-level cycles inside a package are not rejected by the host checker today; a detector for them is on our list.
+Cycles are audited at the package level. `asl coupling` reads the import declarations across the repository and reports cohesion, fan-in, fan-out and inter-package cycles. Run on 2026-10-14, it reported 66 packages, 718 modules and 22 inter-package cycles, plus 70 imports of a package the importer's manifest does not declare. Those are real findings, not a clean bill of health: the audit is how we see them, and the count is what has to come down. Module-level cycles inside a package are not rejected by the host checker today.
 
 For a single symbol, `(:observe :dim callers :symbol s)` returns its call sites with path, line and kind, which is what an agent needs before it changes a signature.
 
@@ -61,7 +61,7 @@ For a single symbol, `(:observe :dim callers :symbol s)` returns its call sites 
 
 Context windows are finite buffers, and in multi-agent swarms token spending is uneven: a few large files take a disproportionate share of every prompt that loads them.
 
-Traditional application performance monitoring tracks CPU cycles and memory. For agents, the scarce resource is tokens, so we measure them directly. `(:observe :dim tokenCost :scope path)` counts tokens by file kind with a named tokenizer and lists the costliest files. For example, run over `agent-bus` on 2026-09-24 (o200k_base, revision b8fc39a2), it reported 37 ASL files totalling 64,234 tokens, with `asl/packages/asl-agent-bus/src/bus.asl` the largest at 6,499.
+Traditional application performance monitoring tracks CPU cycles and memory. For agents, the scarce resource is tokens, so we measure them directly. `(:observe :dim tokenCost :scope path)` counts tokens by file kind with a named tokenizer and lists the costliest files. It needs the tokenizer tables under `data/tokenizers`; without them it refuses with `ERR_NO_ENCODER` rather than guess, which is what it does in a checkout that lacks them.
 
 That tells a coordinator which modules to hand over as interfaces or symbol slices instead of whole files. What we do not have yet is per-turn telemetry that attributes a running agent's context to the files it loaded; that is the next step.
 
@@ -73,7 +73,7 @@ Letting an autonomous agent run arbitrary shell or Python commands on a host is 
 
 What exists today is a path boundary at the tool layer. Every path an `asl` op receives resolves against the workspace root; a path outside it is rejected with `ERR_BOUNDARY_VIOLATION` before anything is read or written. The agent loop, `(:agent ...)`, adds a declared ownership list: it edits only inside `:owns` and returns a receipt listing status, findings and the gates it ran.
 
-What we are building is the execution half: effect tracking in the language, so that functions touching disk, network or process state are marked and checked, and an in-memory WebAssembly sandbox whose system calls pass through a capability envelope. Neither is enforced yet: today a function that calls `println` passes the host checker without any effect annotation.
+The language adds the second half: effects are marked and checked. A function that calls an effectful builtin such as `println` must be marked (`fn ! main ...` or a name ending in `!`); otherwise `asl-host check` rejects it with `ERR_EFFECT_UNMARKED` before anything runs. And when a program is compiled to `wasm32-unknown-unknown` through `asl-target-llvm`, the module imports only four host functions (`asl.write`, `asl.exit`, `asl.nowNs`, `asl.trap`), and a program that calls a file, environment or socket builtin fails to compile with `ERR_CAPABILITY_ABSENT` naming it. What we do not have yet is a per-run capability envelope that grants a generated program a chosen subset of the host.
 
 ---
 
@@ -84,6 +84,6 @@ The same queries serve both audiences. A human reads the receipt; an agent parse
 * **Module graph:** `asl coupling` for the package DAG and cycles; `(:observe :dim callers)` for one symbol.
 * **Token cost:** `(:observe :dim tokenCost)` by kind, file and scope.
 * **Working state:** `(:observe :dim session)` for running agent sessions and overlapping ownership; `(:observe :dim memory)` for the size of the `.asl/mem` ledgers.
-* **Correctness:** `asl-host check` for names, arity and enum coverage, and `asl-host test` for executed assertions.
+* **Correctness:** `asl-host check` for names, arity, enum coverage and effect marking, and `asl-host test` for executed assertions.
 
-By treating observability as structured queries over the code rather than string logging, we give coordinators something they can act on without reading 50,000 tokens first. The execution dimension is the part still under construction.
+By treating observability as structured queries over the code rather than string logging, we give coordinators something they can act on without reading the logs first. Per-turn token attribution and per-run capability grants are the parts still under construction.

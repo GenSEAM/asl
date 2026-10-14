@@ -33,7 +33,7 @@ graph TD
 Every quadrant shares the same syntactic rules:
 - **One Delimiter Rule**: every expression is enclosed in balanced `(...)`, and an unbalanced form is caught by a balance check (`asl '(:check :file "...")'`) before anything evaluates it.
 - **Short Keywords**: attributes and verbs are short keywords (`:cmd`, `:args`, `:rc`, `:circ`, `:f`, `:s`).
-- **Rendering as Library Code**: the renderers are ASL functions in the repository, listed per quadrant below with their status on 2026-09-24.
+- **Rendering as Library Code**: the renderers are ASL functions in the repository, listed per quadrant below with their test status on the stage-0 host on 2026-10-14.
 
 ---
 
@@ -58,8 +58,8 @@ In ASN, a command is data with an explicit argument vector:
 This form is not shorter: tiktoken 0.12.0 counts 34 tokens for it against 12 for the equivalent `find packages -name "*.asl" | wc -l` (both `o200k_base` and `cl100k_base`, 2026-09-24). What it buys is that every argument is a separate string, so quoting is the renderer's job, not the model's.
 
 What exists today:
-1. `asl/packages/asl-target-sh/src/emitSh.asl` prints POSIX sh with single-quote quarantine: a literal `it's safe` becomes `'it'\''s safe'`, `$(rm -rf /)` becomes `'$(rm -rf /)'`, and a variable becomes `"${user_input:-}"`. Its suite `asl/packages/asl-target-sh/tests/emitShTest.asl` passes on the strict host (`asl-host test`: 12 assertions, 1 refutation).
-2. `asl/packages/asl-transpile/src/shTranspile.asl` (`asnToSh`, `shToAsn`) converts between the `:sh` form and script text; its 22-assertion suite passes under `./bin/asl test` (the lenient asl-core engine) and does not load on the host yet.
+1. `asl/packages/asl-target-sh/src/emitSh.asl` prints POSIX sh with single-quote quarantine: a literal `it's safe` becomes `'it'\''s safe'`, `$(rm -rf /)` becomes `'$(rm -rf /)'`, and a variable becomes `"${user_input:-}"`. Its suite `asl/packages/asl-target-sh/tests/emitShTest.asl` passes on the host (`asl-host test`: 12 assertions, 1 refutation).
+2. `asl/packages/asl-transpile/src/shTranspile.asl` (`asnToSh`, `shToAsn`) converts between the `:sh` form and script text; its suite passes on the host with 22 assertions.
 
 Executing an argument vector directly through `execve`, with no shell in between, is the direction we are building toward; today the output is a script.
 
@@ -81,7 +81,7 @@ When generating icons, UI cards or diagrams, raw XML repeats attribute names on 
   (:ln :x1 200 :y1 300 :x2 200 :y2 400 :s "#00ffff" :sw 2))
 ```
 
-This drawing costs 151 tokens against 172 for its hand-written SVG equivalent on `o200k_base` (12.2 percent fewer; 151 against 171 on `cl100k_base`). Two renderers turn it into SVG: `asl/packages/asl-vdom/src/asnSvg.asl` and `asl/packages/asl-transpile/src/svgTranspile.asl`; their suites pass under `./bin/asl test` and do not load on the strict host yet. The SVG they emit can then be rasterized by standard tools such as `resvg` or `librsvg`. [Why LLMs Choke on SVG XML](/blog/why-llms-break-on-svg-xml) has the details.
+This drawing costs 151 tokens against 172 for its hand-written SVG equivalent on `o200k_base` (12.2 percent fewer; 151 against 171 on `cl100k_base`). Two renderers turn it into SVG: `asl/packages/asl-vdom/src/asnSvg.asl` and `asl/packages/asl-transpile/src/svgTranspile.asl`; their suites pass on the host (`asnSvgTest` 27 assertions, `svgTranspileTest` 62). The SVG they emit can then be rasterized by standard tools such as `resvg` or `librsvg`. [Why LLMs Choke on SVG XML](/blog/why-llms-break-on-svg-xml) has the details.
 
 ---
 
@@ -99,7 +99,7 @@ ASN writes configuration and inter-agent frames as keywords and values:
   :payload (:task "runGate" :strict true :timeoutMs 10000))
 ```
 
-This frame costs 44 tokens against 52 for the same record as JSON (`json.dumps` with default separators), on both `o200k_base` and `cl100k_base`: 15 percent fewer. Converters exist in `asl/packages/asl-transpile/src/transpile.asl` (`jsonToAsn`, `asnToJson`, `yamlToAsn`, `asnToYaml`); its 81-assertion suite passes under `./bin/asl test` and does not load on the strict host yet.
+This frame costs 44 tokens against 52 for the same record as JSON (`json.dumps` with default separators), on both `o200k_base` and `cl100k_base`: 15 percent fewer. Converters exist in `asl/packages/asl-transpile/src/transpile.asl` (`jsonToAsn`, `asnToJson`, `yamlToAsn`, `asnToYaml`); its suite passes on the host with 81 assertions, and the YAML converter's own suite with 42.
 
 ---
 
