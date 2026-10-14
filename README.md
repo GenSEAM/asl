@@ -25,7 +25,7 @@ Languages and formats built for human typists cost a model in two places:
 - **Whitespace-significant syntax** (Python, YAML): a misplaced indent is a syntax error found only when the file is loaded.
 - **JSON tool calls**: quoted keys, colons and commas are paid for on every object before the model starts reasoning.
 
-ASL keeps structure in delimiters and keys bare. The same command, counted with `cl100k_base` (tiktoken, 2026-09-24; the untracked `bench/token_frames.lock` records the same counts):
+ASL keeps structure in delimiters and keys bare. The same command, counted with `cl100k_base` (tiktoken, 2026-09-24; the count is recorded in `bench/publishedClaims.asn`, the token lists themselves are not in this repository):
 
 ```json
 {
@@ -68,8 +68,10 @@ A function header is a bare column-0 line; its body is indented below. There is 
 
 ## Quickstart
 
+AgentScript is not released: there are no release binaries, and the installer at `aslang.dev/install.sh` is under development. From a checkout:
+
 ```sh
-curl -fsSL https://aslang.dev/install.sh | sh     # not released yet: the installer is under development
+sh host/build.sh                    # builds host/out/asl-host and the runtime archives (needs clang)
 asl version
 asl check file.asl                  # delimiter balance, then the host check
 asl test fileTest.asl               # run a suite on the host
@@ -78,11 +80,11 @@ host/out/asl-host test fileTest.asl # strict runner
 asl '(:tools)'                      # the agent-plane operation catalogue
 ```
 
-`asl-host` is the reference: it checks names, arity, enums and effects before running anything.
+`asl-host` is the reference: it checks names, arity, enums, types it knows and effects (an unmarked effectful `fn` is ERR_EFFECT_UNMARKED) before running anything. The `asl` CLI is `packages/asl-cli`; it looks for its workspace as a directory holding `.git` and `asl/grammar/rules.asn`, so outside that layout set `ASL_CLI_ROOT` to the directory that contains this checkout as `asl/`. `asl help` lists its commands; `asl gate`, `asl lint`, `asl mem` and `asl tool` are retired and answer ERR_RETIRED.
 
 ## Packages
 
-`packages/` holds 46 packages. A few, by their manifests:
+`packages/` holds 66 packages. A few, by their manifests:
 
 | Package | Description |
 | :--- | :--- |
@@ -96,7 +98,7 @@ asl '(:tools)'                      # the agent-plane operation catalogue
 | [`asl-codegen`](packages/asl-codegen/), [`asl-target-*`](packages/) | Code generators; not wired to `asl build` yet |
 | [`asl-contracts`](packages/asl-contracts/) | Contract specs, staging and the tool plane |
 
-Each package README lists what its `src/` exports and which runner its tests pass on.
+Every package has a `manifest.asn` and a `doc.asn` holding the docs of its symbols; 19 also have a README.
 
 ## License
 
