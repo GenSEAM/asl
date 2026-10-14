@@ -1,7 +1,7 @@
 (:package asl-target-ts
  :version "0.1.0"
  :entry "src/emitTs.asl"
- :description "Standalone TypeScript (ESM) transpiler, pure TsAst lowering, and npm/browser runtime for AgentSlang"
+ :description "Superseded: AST-level TypeScript emitter kept for its tests; TypeScript support is asl-target-js (JavaScript from asl-ir) with generated .d.mts declarations"
  :layer 0
  :aslFirst true
  :modules [

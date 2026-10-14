@@ -209,4 +209,4 @@ fn emitJsModule m: ty/SsaModule -> (Result String (List ty/IrDiag))
                "const $S = [" (stringJoin (map jsString m.strings) ", ") "];\n"
                (stringJoin (map (fn [(r (Result String (List String)))] -> String (mt r ((ok s) s) ((err _) ""))) fns) "")
                (exportsText m)
-               "export const setOutput = $.setOutput;\nexport const AslTrap = $.AslTrap;\nexport const counts = $.counts;\n"))))
+               "export const setOutput = $.setOutput;\nexport const AslTrap = $.AslTrap;\nexport const counts = $.counts;\nexport const asl = $.asl;\n"))))

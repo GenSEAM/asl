@@ -23,13 +23,29 @@ asl/host/out/asl-host run <driver.asl>   # a driver calls (asl-target-js/main co
 - Clocks work (`nowNs`, `monotonicNs`); files, processes, sockets and the environment are
   `ERR_CAPABILITY_ABSENT` at compile time.
 
+## TypeScript
+
+`compileWithTypes!` returns the module and its declarations (`.d.mts`), generated from the entry
+module's signatures: `Int` is `bigint`, a schema a readonly interface, an enum a union tagged by
+variant name, type variables generics, and `List`/`Option`/`Result`/`Pair`/`Map` the runtime's
+shapes (`AslList`, `AslOption`, ...). The module also exports `asl`, typed constructors for values a
+TypeScript caller passes in (`asl.list`, `asl.some`, `asl.record`, `asl.variant`, ...), and
+`counts`, the assertions run so far, so ASL test suites can run under node.
+
+```sh
+ENTRY=asl/path/entry.asl OUT=/tmp/entry.mjs asl/host/out/asl-host run asl/web/tools/jsc.asl   # writes entry.mjs and entry.d.mts
+```
+
 ## Exports
 
-`src/main.asl`: `compileEntry!`, `diagText`. `src/emit.asl`: `emitJsModule`, `jsIdent`,
+`src/main.asl`: `compileEntry!`, `compileWithTypes!`, `diagText`. `src/dts.asl`: `emitDts`, `tsType`. `src/emit.asl`: `emitJsModule`, `jsIdent`,
 `jsString`, `supportedBuiltins`. `src/runtime.asl`: `runtimeText`, `builtinNames`, `entryNames`.
 
 ## Tests
 
-`tests/emitJsTest.asl` (asl-host, needs node on PATH): 12 fixtures compiled to JS and run under
-node must print the same bytes, exit with the same code and trap with the same error code as
-`asl-host run`. 75 assertions pass (2026-10-14).
+- `tests/emitJsTest.asl` (asl-host, needs node): 12 fixtures compiled to JS and run under node
+  print the same bytes, exit with the same code and trap with the same error code as
+  `asl-host run`; asl-html's three suites pass under node with the host's assertion counts. 85
+  assertions pass (2026-10-14).
+- `tests/dtsTest.asl` (asl-host; the TypeScript half needs tsc): declarations for a typed fixture;
+  a consumer passes `tsc --strict` and runs, a misuse fails `tsc`. 14 assertions pass.

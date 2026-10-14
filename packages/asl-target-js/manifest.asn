@@ -1,11 +1,12 @@
 (:package asl-target-js
  :version "0.1.0"
  :entry "src/main.asl"
- :description "JavaScript (ES2020 module) backend: lowers a linked, verified asl-ir SSA module to one self-contained ES module with a small runtime; Int is BigInt and traps on int64 overflow, strings keep ASL's UTF-8 byte semantics"
+ :description "JavaScript (ES2020 module) backend: lowers a linked, verified asl-ir SSA module to one self-contained ES module with a small runtime; Int is BigInt and traps on int64 overflow, strings keep ASL's UTF-8 byte semantics; TypeScript declarations (.d.mts) generated from the entry module's signatures"
  :aslFirst true
  :modules [
    "asl-target-js"
    "asl-target-js/emit"
    "asl-target-js/runtime"
+   "asl-target-js/dts"
  ]
- :dependencies ["asl-ir"])
+ :dependencies ["asl-ir" "asl-parser"])

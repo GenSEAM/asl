@@ -2,4 +2,4 @@
 
 fn ! main -> Int64
   (let [(entry (optionOr (envGet "ENTRY") "spike/small.asl")) (out (optionOr (envGet "OUT") "/tmp/out.mjs"))]
-    (mt (js/compileEntry! entry) ((err ds) (do (eprintln (js/diagText ds)) 1)) ((ok text) (do (fileWrite out text) 0))))
+    (mt (js/compileWithTypes! entry) ((err ds) (do (eprintln (js/diagText ds)) 1)) ((ok both) (do (fileWrite out (pairFirst both)) (fileWrite (str (stringReplace out ".mjs" "") ".d.mts") (pairSecond both)) 0))))

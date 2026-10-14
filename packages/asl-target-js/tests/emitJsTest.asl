@@ -41,10 +41,28 @@ fn ! sameAsHost! name: String -> Bool
           (assert (= (errCode viaJs.stderr) (errCode viaHost.stderr)) (str name " trap code matches; js=" viaJs.stderr " host=" viaHost.stderr))
           true))))
 
+fn hostCount output: String -> String
+  (optionOr (listHead (stringSplit (optionOr (listLast (stringSplit (optionOr (listHead (stringSplit output " assertion")) "") " ")) "") " ")) "")
+
+fn ! suiteUnderJs! suite: String -> Bool
+  (let [(work "/tmp/asl-target-js")
+        (path (str "asl/packages/asl-html/tests/" suite ".asl"))
+        (out (str work "/" suite ".mjs"))
+        (compiled (js/compileEntry! path))]
+    (do
+      (assert (ok? compiled) (str suite " compiles to js: " (mt compiled ((ok _) "ok") ((err ds) (js/diagText ds)))))
+      (assert (ok? (fileWrite out (mt compiled ((ok t) t) ((err _) "")))) (str suite " writes its module"))
+      (let [(viaJs (processRun (str (shellQuote (node!)) " --input-type=module -e " (shellQuote (str "const m = await import('" out "'); process.stdout.write(String(m.runTests()) + ' ' + m.counts.asserts)")))))
+            (viaHost (processRun (str "asl/host/out/asl-host test " (shellQuote path))))]
+        (do
+          (assert (= viaJs.stdout (str "true " (hostCount viaHost.stdout))) (str suite " passes under node with the host's assertion count; js=" viaJs.stdout viaJs.stderr " host=" viaHost.stdout))
+          true))))
+
 fn ! runTests -> Bool
   (do
     (assert (not (stringEmpty? (node!))) "node is on PATH")
     (assert (listAll? sameAsHost! ["hello" "arithmetic" "string" "list" "map" "gcLoop" "trap" "overflow" "shapes" "text" "deep" "printArgs"]) "every fixture runs the same under node as on the host")
+    (assert (listAll? suiteUnderJs! ["htmlTest" "cssTest" "markdownTest"]) "asl-html's suites pass compiled to js")
     (let [(absent (js/compileEntry! (fixture "needsFile")))]
       (assert (mt absent ((ok _) false) ((err ds) (listAny? (fn [(d ty/IrDiag)] -> Bool (= d.code "ERR_CAPABILITY_ABSENT")) ds))) "a program that reads a file does not compile to js: ERR_CAPABILITY_ABSENT"))
     true)
