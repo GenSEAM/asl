@@ -36,12 +36,7 @@ npx wrangler pages deploy web/dist --project-name asl
 `web/public/_redirects` sends the retired routes (`/roadmap`, `/ecosystem`, `/playground`, …) to
 `/`; unknown paths get `404.html`. `_headers` serves `*.wasm` as `application/wasm`.
 
-## 2. GitLab Pages
-
-`.gitlab-ci.yml` installs clang, LLVM and lld on `ubuntu:24.04`, runs `sh web/build.sh` and
-publishes `web/dist` as `public/`.
-
-## 3. GitHub Pages
+## 2. GitHub Pages
 
 No workflow is included. One that installs `clang llvm lld`, runs `sh web/build.sh` and uploads
 `web/dist` is enough.
