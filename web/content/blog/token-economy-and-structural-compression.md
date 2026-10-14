@@ -35,7 +35,7 @@ The effect across a whole codebase is small. Rewriting every camelCase identifie
 
 ## 2. One Spelling per Concept
 
-If shortening keywords does not pay, what should a language choose? AgentScript's rule is whole words in camelCase and one spelling per concept, and among names that carry the meaning, the measured cheapest wins.
+If shortening keywords does not pay, what should a language choose? AgentSlang's rule is whole words in camelCase and one spelling per concept, and among names that carry the meaning, the measured cheapest wins.
 
 The forms the stage-0 host accepts today:
 
@@ -51,7 +51,7 @@ The forms the stage-0 host accepts today:
 
 The older `defun` and `df` definition heads are rejected by the host (`ERR_UNSUPPORTED_TOPLEVEL`), and so are `:d` docstrings (`ERR_READ_DOC`): documentation lives as rows in each package's `doc.asn`, not in the source.
 
-```agentscript
+```agentslang
 (module math/vector :x [dot runTests] :i [])
 
 schema Point
@@ -138,7 +138,7 @@ When agents pass batches of records, JSON repeats every key on every object:
 ]
 ```
 
-AgentScript Notation (ASN) states the column names once and streams the rows as positional vectors:
+AgentSlang Notation (ASN) states the column names once and streams the rows as positional vectors:
 
 ```asn
 ([:id :sku :qty :status]

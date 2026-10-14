@@ -1,4 +1,4 @@
-(:doc :symbol "asl/packages/asl-target-go/src/emitGo.asl#" :text "Standalone Go emitter backend for AgentScript.")
+(:doc :symbol "asl/packages/asl-target-go/src/emitGo.asl#" :text "Standalone Go emitter backend for AgentSlang.")
 (:doc :symbol "asl/packages/asl-target-go/tests/emitGoTest.asl#" :text "Unit tests for standalone Go platform leaf code generator with dual-polarity D77 refutations.")
 (:doc :symbol "asl/packages/asl-target-go/tests/fixtures/calcFn.asl#" :text "Localized typed calculation function fixture for Go target code emission.")
 (:doc :symbol "asl/packages/asl-target-go/tests/fixtures/userStruct.asl#" :text "Localized user struct and constructor fixture for Go target code emission.")

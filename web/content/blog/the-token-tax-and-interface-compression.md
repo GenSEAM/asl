@@ -25,11 +25,11 @@ The caller agent does not care *how* a module computes tax or serializes a buffe
 
 ## 2. AST Interface Extraction: Compressing Implementation to Contract
 
-An AgentScript (ASL) module declares its public surface in its header: `:x` lists the exported names. That makes the interface a property of the syntax tree rather than a convention.
+An AgentSlang (ASL) module declares its public surface in its header: `:x` lists the exported names. That makes the interface a property of the syntax tree rather than a convention.
 
 Consider an order module (124 tokens under `cl100k_base`):
 
-```agentscript
+```agentslang
 (module store/orders :x [calculateTotal] :i [])
 
 enum OrderStatus (pending) (completed txId: String)
@@ -49,7 +49,7 @@ fn calculateTotal items: (List Order) taxRate: Float64 -> Float64
 
 A peer subagent that only needs to build orders and ask for totals can receive the interface instead (64 tokens):
 
-```agentscript
+```agentslang
 (module store/orders :x [calculateTotal] :i [])
 
 enum OrderStatus (pending) (completed txId: String)
@@ -95,4 +95,4 @@ Token savings are worthless if they cause regressions. Three properties keep a s
 
 ### Summary
 
-Context engineering is not about fitting bigger files into bigger windows. It is about the information density of every token sent. Making interface extraction a first-class operation on the syntax tree is how AgentScript intends to cut the token tax; the single-module figure above shows the mechanism, and the repository-wide benchmark will show its size.
+Context engineering is not about fitting bigger files into bigger windows. It is about the information density of every token sent. Making interface extraction a first-class operation on the syntax tree is how AgentSlang intends to cut the token tax; the single-module figure above shows the mechanism, and the repository-wide benchmark will show its size.

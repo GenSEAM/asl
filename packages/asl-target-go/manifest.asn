@@ -1,7 +1,7 @@
 (:package asl-target-go
  :version "0.1.0"
  :entry "src/emitGo.asl"
- :description "Standalone Go emitter backend for AgentScript"
+ :description "Standalone Go emitter backend for AgentSlang"
  :aslFirst true
  :layer 0
  :modules ["asl-target-go/emitGo"]

@@ -11,7 +11,7 @@ fn postItem p: Post -> h/Node
   (h/li [] [(h/a [(h/href (l/routePath (l/post p.slug)))] [(h/span [(h/cls "micro")] [(h/text (str p.date " · " p.category))]) (h/h3 [(h/cls "h3")] [(h/text p.title)]) (h/p [] [(h/text p.excerpt)])])])
 
 fn blogIndexPage posts: (List Post) -> h/Node
-  (l/document (l/blog) "AgentScript blog" "Notes on AgentScript (ASL): language design for model-written code, the wire protocol, the toolbelt and the WebAssembly target."
+  (l/document (l/blog) "AgentSlang blog" "Notes on AgentSlang (ASL): language design for model-written code, the wire protocol, the toolbelt and the WebAssembly target."
     [(h/div [(h/cls "shell page")]
       [(h/div [(h/cls "head")] [(l/eyebrow "BLOG" "Engineering notes") (h/h1 [(h/cls "h2")] [(h/text "Notes from building a language for models.")])])
        (h/ul [(h/cls "posts")] (map postItem posts))])])
@@ -20,7 +20,7 @@ fn metaLine? line: String -> Bool
   (or (stringStartsWith? line "*Published on") (stringStartsWith? line "*Canonical URL"))
 
 fn postPage p: Post -> h/Node
-  (l/document (l/post p.slug) (str p.title " · AgentScript") p.excerpt
+  (l/document (l/post p.slug) (str p.title " · AgentSlang") p.excerpt
     [(h/div [(h/cls "shell page")]
       [(h/article [(h/cls "prose")]
         (listAppend
@@ -28,7 +28,7 @@ fn postPage p: Post -> h/Node
           (md/blocks (filter (fn [(line String)] -> Bool (not (metaLine? line))) (stringLines p.content)))))])])
 
 fn notFoundPage -> h/Node
-  (l/document (l/missing) "Not found · AgentScript" "This page does not exist."
+  (l/document (l/missing) "Not found · AgentSlang" "This page does not exist."
     [(h/div [(h/cls "shell page")]
       [(h/div [(h/cls "head")]
         [(l/eyebrow "404" "Not found") (h/h1 [(h/cls "h2")] [(h/text "Nothing is defined at this address.")])

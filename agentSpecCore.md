@@ -1,4 +1,4 @@
-# agentSpecCore.md — AgentScript Core
+# agentSpecCore.md — AgentSlang Core
 
 **Status:** normative for the language as the stage-0 host `asl/host/out/asl-host` reads, checks
 and runs it (`asl-host check FILE`, `test FILE`, `run FILE`, `eval EXPR`). Where this document
@@ -114,7 +114,7 @@ vectors), `{ }` anonymous records, `{:a 1 :b "x"}`. A mismatch is `ERR_READ_UNBA
 `/` is both the division operator and the qualified-name separator. They never collide: division
 is a standalone token, while a qualified name has no internal whitespace.
 
-`agentscript-` is meant to be a **reserved identifier prefix** for compiler-internal names. The
+`agentslang-` is meant to be a **reserved identifier prefix** for compiler-internal names. The
 host does not reject it (`asl/grammar/corpus/semantic/reservedPrefix.asl` checks clean).
 
 ### 2.1 Short and long spellings
@@ -519,7 +519,7 @@ expression, in every branch. The same program is the fixture
 ## 8. Identifier mangling
 
 **Target design, partly implemented.** Output that is not byte-reproducible cannot be
-differentially tested, so a name should mangle deterministically, and two distinct AgentScript
+differentially tested, so a name should mangle deterministically, and two distinct AgentSlang
 names that mangle to one target name should be a compile error rather than a silent rename. Each
 emitter carries its own mangler today, and no emitter implements the collision error:
 
@@ -549,7 +549,7 @@ A Core program is well-formed iff the rules below hold. The status column is wha
 | 4 | Every `mt` over an enum is exhaustive. | `ERR_MATCH_NONEXHAUSTIVE` |
 | 5 | Every `cond` ends in `(else v)`. | not enforced; an untaken `cond` yields `()` |
 | 6 | No arithmetic mixes `Int64` and `Float64`; argument and return types match the signature. | `ERR_TYPE_MISMATCH`; `Int32` and `Int64` are not told apart |
-| 7 | No identifier begins with `agentscript-`. | not enforced |
+| 7 | No identifier begins with `agentslang-`. | not enforced |
 | 8 | No `:d` docstring and no free `;` comment. | `ERR_READ_DOC`, `ERR_READ_COMMENT` |
 | 9 | Every `alias/member` uses an alias bound in `:i`, and the member is exported by that module; calls match its arity. | `ERR_NOT_EXPORTED`, `ERR_ARITY` |
 | 10 | Every type variable in a signature is meant as one. | not enforced: there is no binder (§4.2) |

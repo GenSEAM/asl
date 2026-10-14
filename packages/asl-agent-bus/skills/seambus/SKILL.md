@@ -1,6 +1,6 @@
 ---
 name: seambus
-description: Design reference for the AgentScript agent-to-agent session layer (SkyLoom in the specification, SeamBus being this skill's alias for it) and a map of the wire code that exists today. Use when designing or reviewing inter-agent frames, handoff and yield contracts or the error codes 1001-1010, or when changing the wire, transport, ndAsn, presence or mesh modules of asl/packages/asl-agent-bus. It sends nothing, and there is no bus daemon or CLI.
+description: Design reference for the AgentSlang agent-to-agent session layer (SkyLoom in the specification, SeamBus being this skill's alias for it) and a map of the wire code that exists today. Use when designing or reviewing inter-agent frames, handoff and yield contracts or the error codes 1001-1010, or when changing the wire, transport, ndAsn, presence or mesh modules of asl/packages/asl-agent-bus. It sends nothing, and there is no bus daemon or CLI.
 ---
 
 # SeamBus (the SkyLoom session layer)

@@ -7,7 +7,7 @@ If context windows are expensive and attention degrades with sequence length, sh
 
 In practice this compression rarely saves tokens and often costs correctness. Micro-shortened identifiers split into rare subword fragments, invite synonym guessing, and make text edits ambiguous.
 
-Here is why character-level disemvoweling is an anti-pattern, and the naming rule AgentScript adopted instead.
+Here is why character-level disemvoweling is an anti-pattern, and the naming rule AgentSlang adopted instead.
 
 ---
 
@@ -51,13 +51,13 @@ For agents generating code from parametric memory, **synonym collisions** matter
 
 The one-token "saving" is paid back many times over by that repair turn.
 
-The AgentScript builtins follow one spelling per concept, in camelCase with predicates ending in `?`: `listLength`, `stringContains?`, `some?`. Short aliases such as `len`, `head` or `includes?` are not bound on the host and fail with `ERR_UNKNOWN_SYMBOL`. For user-defined names, one canonical spelling is a convention we adopt rather than a rule the host enforces: on 2026-10-14 `asl-host check` accepts a `snake_case` function name. The one naming mark the host does enforce is for effects: a function that calls an effectful builtin must be marked, as `fn !` or with a trailing `!`, or the check fails with `ERR_EFFECT_UNMARKED`.
+The AgentSlang builtins follow one spelling per concept, in camelCase with predicates ending in `?`: `listLength`, `stringContains?`, `some?`. Short aliases such as `len`, `head` or `includes?` are not bound on the host and fail with `ERR_UNKNOWN_SYMBOL`. For user-defined names, one canonical spelling is a convention we adopt rather than a rule the host enforces: on 2026-10-14 `asl-host check` accepts a `snake_case` function name. The one naming mark the host does enforce is for effects: a function that calls an effectful builtin must be marked, as `fn !` or with a trailing `!`, or the check fails with `ERR_EFFECT_UNMARKED`.
 
 ---
 
 ## 3. The Naming Rule: Whole Words, Measured Cheapest Wins
 
-AgentScript's adopted naming rule is short: **identifiers are camelCase whole words; among names that carry the meaning, the measured cheapest wins.**
+AgentSlang's adopted naming rule is short: **identifiers are camelCase whole words; among names that carry the meaning, the measured cheapest wins.**
 
 Two parts do the work:
 - **Whole words** keep every fragment a common token and every name a readable phrase. Established abbreviations with high corpus frequency (`cfg`, `ctx`, `msg`) stay acceptable when they tokenize as cheaply as the word; invented ones do not.

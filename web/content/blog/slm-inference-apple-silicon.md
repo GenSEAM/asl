@@ -1,4 +1,4 @@
-# Small Models on Local Hardware: What AgentScript Offers Them Today
+# Small Models on Local Hardware: What AgentSlang Offers Them Today
 *Published on September 10, 2026 · 4 min read · By the GenSEAM Team*
 *Canonical URL: https://aslang.dev/blog/slm-inference-apple-silicon*
 

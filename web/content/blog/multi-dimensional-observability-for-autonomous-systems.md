@@ -40,9 +40,9 @@ Monitoring autonomous software generation means watching three orthogonal dimens
 
 In human software engineering, architectural drift happens over months. An autonomous agent can tangle a clean module graph in minutes.
 
-In AgentScript (ASL), every module declares its exports (`:x`) and imports (`:i`) in its header. Because the header is data, the dependency graph can be read without executing a line of code:
+In AgentSlang (ASL), every module declares its exports (`:x`) and imports (`:i`) in its header. Because the header is data, the dependency graph can be read without executing a line of code:
 
-```agentscript
+```agentslang
 (module store/checkout :x [processCheckout] :i [(store/cart :a cart) (store/payment :a pay)])
 
 fn processCheckout prices: (List Int64) -> (Result Int64 String)

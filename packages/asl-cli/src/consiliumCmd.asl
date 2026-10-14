@@ -73,7 +73,7 @@ fn formatConsiliumInfo -> Str
        "========================================================================================\n")
 
 fn formatConsiliumVersion -> Str
-  "asl-consilium v2.1.0 (5-Model Frontier Council Consensus Engine - 100% Pure AgentScript)"
+  "asl-consilium v2.1.0 (5-Model Frontier Council Consensus Engine - 100% Pure AgentSlang)"
 
 fn quoteConsiliumShell value: Str -> Str
   (str "'" (stringReplace value "'" "'\\''") "'")
@@ -105,7 +105,7 @@ fn consiliumTestResults first: ProcessOutput second: ProcessOutput -> (Result St
     (err (if (stringEmpty? first.stderr) first.stdout first.stderr))
     (if (!= second.exitCode 0)
       (err (if (stringEmpty? second.stderr) second.stdout second.stderr))
-      (ok (str "--> Running asl-consilium pure ASL test suites...\n" first.stdout second.stdout "✓ [Consilium Test] All pure AgentScript test suites passed cleanly.\n"))))
+      (ok (str "--> Running asl-consilium pure ASL test suites...\n" first.stdout second.stdout "✓ [Consilium Test] All pure AgentSlang test suites passed cleanly.\n"))))
 
 fn runConsiliumTests! -> (Result Str Str)
   (mt (consiliumRepoRoot!)

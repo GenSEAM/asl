@@ -4,7 +4,7 @@
 
 ## 1. The Clean Break Goal
 
-Projects that let a new language coexist indefinitely with the scripts that bootstrapped it tend to drift: the wrapper becomes the real implementation, and the language becomes a front end to it. The v0.4 line set the opposite goal for AgentScript: the compiler, the standard library and the agent tooling are written in ASL, and the only foreign code on the critical path is a small C host that reads, checks and runs it.
+Projects that let a new language coexist indefinitely with the scripts that bootstrapped it tend to drift: the wrapper becomes the real implementation, and the language becomes a front end to it. The v0.4 line set the opposite goal for AgentSlang: the compiler, the standard library and the agent tooling are written in ASL, and the only foreign code on the critical path is a small C host that reads, checks and runs it.
 
 That is a direction, not a finished state. This post says how far it has got, measured on the repository as it is today.
 

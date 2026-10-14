@@ -1,6 +1,6 @@
 ---
 name: agent-bus
-description: Map of asl/packages/asl-agent-bus, the pure AgentScript library of agent-bus values (message envelopes, SSE event text, priority queues, routing tables, swarm presence, task contracts, canonical wire frames and newline-delimited ASN). Use when reading, changing or testing those modules. The package performs no I/O, so it cannot by itself send a message between running agents, and there is no bus daemon or CLI.
+description: Map of asl/packages/asl-agent-bus, the pure AgentSlang library of agent-bus values (message envelopes, SSE event text, priority queues, routing tables, swarm presence, task contracts, canonical wire frames and newline-delimited ASN). Use when reading, changing or testing those modules. The package performs no I/O, so it cannot by itself send a message between running agents, and there is no bus daemon or CLI.
 ---
 
 # Agent Bus (`asl/packages/asl-agent-bus`)

@@ -8,7 +8,7 @@ Models read and write through byte-pair encoders such as `cl100k_base` and `o200
 
 ## 2. S-Expressions as Wire Payloads
 
-Agent Script Notation (ASN) writes the same data as S-expressions: bare keywords instead of quoted keys, whitespace instead of commas, one kind of bracket per structure. The design goal for the wire is that code travels as forms rather than as escaped strings inside a JSON field.
+Agent Slang Notation (ASN) writes the same data as S-expressions: bare keywords instead of quoted keys, whitespace instead of commas, one kind of bracket per structure. The design goal for the wire is that code travels as forms rather than as escaped strings inside a JSON field.
 
 ## 3. One Measured Example
 

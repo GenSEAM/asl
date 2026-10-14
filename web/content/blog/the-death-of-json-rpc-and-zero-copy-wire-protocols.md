@@ -44,7 +44,7 @@ Today the frame's `payload` field is a string, so the "form as a form" property 
 
 ## 4. What Is Still Design
 
-The AgentScript wire protocol (AgP, `docs/agenticProtocol.md`) is a target design, and its own status line says so. It specifies sigil frames with a space after the sigil:
+The AgentSlang wire protocol (AgP, `docs/agenticProtocol.md`) is a target design, and its own status line says so. It specifies sigil frames with a space after the sigil:
 
 ```text
 (? agentCoder synthesizeFsm :states ["idle" "active" "error"] :timeoutMs 50)

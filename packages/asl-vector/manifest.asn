@@ -1,7 +1,7 @@
 (:package asl-vector
  :version "0.1.0"
  :entry "src/vectorizer.asl"
- :description "Pure AgentScript Native Image-to-SVG Vector Synthesizer and Gestalt Semiotics Engine"
+ :description "Pure AgentSlang Native Image-to-SVG Vector Synthesizer and Gestalt Semiotics Engine"
  :status "frozen"
  :aslFirst true
  :modules [

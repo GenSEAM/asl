@@ -36,7 +36,7 @@ One measurement on today's interpreter: on 2026-10-14 we ran `asl-host test` on 
 
 ---
 
-## 2. Recall in Plain AgentScript
+## 2. Recall in Plain AgentSlang
 
 The stage-0 host binds unboxed `F64Array` builtins (`f64ArrayGenerate`, `f64ArrayGet`, `f64ArrayLen`, `f64ArraySum`, among others) and `sqrt`, which is enough for an in-process cosine scan. This sample passes `asl-host check` and `asl-host test` (3 assertions):
 

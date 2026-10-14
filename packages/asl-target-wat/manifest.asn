@@ -1,7 +1,7 @@
 (:package asl-target-wat
  :version "0.1.0"
  :entry "src/emitWat.asl"
- :description "Standalone WebAssembly Text (WAT) emitter backend for AgentScript under ADR D93"
+ :description "Standalone WebAssembly Text (WAT) emitter backend for AgentSlang under ADR D93"
  :layer 0
  :aslFirst true
  :modules ["asl-target-wat/emitWat"]

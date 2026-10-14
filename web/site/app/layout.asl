@@ -32,7 +32,7 @@ fn navLink here: Route target: Route label: String extra: String -> h/Node
 fn topBar here: Route -> h/Node
   (h/header [(h/cls "top")]
     [(h/div [(h/cls "shell")]
-      [(h/a [(h/href "/") (h/cls "mark") (h/attr "aria-label" "AgentScript home")] [(markNode) (h/span [] [(h/text "AgentScript")])])
+      [(h/a [(h/href "/") (h/cls "mark") (h/attr "aria-label" "AgentSlang home")] [(markNode) (h/span [] [(h/text "AgentSlang")])])
        (h/nav [(h/cls "links") (h/attr "aria-label" "Primary")]
          [(navLink here (docs) "Docs" "")
           (navLink here (blog) "Blog" "")
@@ -49,7 +49,7 @@ fn footBar -> h/Node
   (h/footer [(h/cls "foot")]
     [(h/div [(h/cls "shell")]
       [(h/div [(h/cls "stack")]
-        [(h/a [(h/href "/") (h/cls "mark")] [(markNode) (h/span [] [(h/text "AgentScript")])])
+        [(h/a [(h/href "/") (h/cls "mark")] [(markNode) (h/span [] [(h/text "AgentSlang")])])
          (h/p [] [(h/text "A language and data notation written by models, for models. Dual-licensed MIT or Apache-2.0.")])
          (h/p [(h/cls "micro") (h/id "built-with")] [(h/text "This site is an ASL program: markup, styles and event handlers compiled to WebAssembly.")])])
        (footCol "Language" [(pair "Docs" "/docs") (pair "llms.txt" "/llms.txt") (pair "Install script" "/install.sh")])
@@ -81,7 +81,7 @@ fn headNodes here: Route pageTitle: String description: String -> (List h/Node)
    (h/meta [(h/attr "name" "theme-color") (h/attr "content" "#121012")])
    (h/link [(h/attr "rel" "icon") (h/attr "type" "image/svg+xml") (h/href "/favicon.svg")])
    (h/link [(h/attr "rel" "alternate") (h/attr "type" "text/plain") (h/attr "title" "LLM entry") (h/href "/llms.txt")])
-   (h/link [(h/attr "rel" "alternate") (h/attr "type" "application/rss+xml") (h/attr "title" "AgentScript blog") (h/href "/rss.xml")])
+   (h/link [(h/attr "rel" "alternate") (h/attr "type" "application/rss+xml") (h/attr "title" "AgentSlang blog") (h/href "/rss.xml")])
    (h/link [(h/attr "rel" "stylesheet") (h/href "/site.css")])
    (h/link [(h/attr "rel" "modulepreload") (h/href "/boot.js")])
    (h/link [(h/attr "rel" "preload") (h/href "/site.wasm") (h/attr "as" "fetch") (h/attr "type" "application/wasm") (h/attr "crossorigin" "anonymous")])

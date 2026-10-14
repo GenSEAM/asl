@@ -1,7 +1,7 @@
 (:skill
   :name "asl-contracts"
   :guide "SKILL.md"
-  :desc "Map of asl/packages/asl-contracts, an experimental pure AgentScript package of contract records and validation functions (a smart-contract state-transition sketch, pipeline stage contracts, and tool descriptors with scopes and secret masking). Use when reading, changing or testing those modules. It has no SMT or Z3 proofs, no Wasm Stylus or CosmWasm ABI and no chain connection; those are named in its manifest description only."
+  :desc "Map of asl/packages/asl-contracts, an experimental pure AgentSlang package of contract records and validation functions (a smart-contract state-transition sketch, pipeline stage contracts, and tool descriptors with scopes and secret masking). Use when reading, changing or testing those modules. It has no SMT or Z3 proofs, no Wasm Stylus or CosmWasm ABI and no chain connection; those are named in its manifest description only."
   :rules [
     (:rule :type "mandatory" :text "Transitions are pure functions returning a TransitionResult record (success, events, errorMsg) built by transitionSuccess or transitionRevert in src/spec.asl.")
     (:rule :type "mandatory" :text "Amounts are I64; validateNonNegativeBalance rejects a negative amount. Nothing proves balance conservation.")

@@ -1,6 +1,6 @@
 ---
 name: asl-contracts
-description: Map of asl/packages/asl-contracts, an experimental pure AgentScript package of contract records and validation functions (a smart-contract state-transition sketch, pipeline stage contracts, and tool descriptors with scopes and secret masking). Use when reading, changing or testing those modules. It has no SMT or Z3 proofs, no Wasm Stylus or CosmWasm ABI and no chain connection; those are named in its manifest description only.
+description: Map of asl/packages/asl-contracts, an experimental pure AgentSlang package of contract records and validation functions (a smart-contract state-transition sketch, pipeline stage contracts, and tool descriptors with scopes and secret masking). Use when reading, changing or testing those modules. It has no SMT or Z3 proofs, no Wasm Stylus or CosmWasm ABI and no chain connection; those are named in its manifest description only.
 ---
 
 # asl-contracts (package `aslContracts`)

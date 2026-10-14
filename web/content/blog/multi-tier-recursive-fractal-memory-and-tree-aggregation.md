@@ -1,4 +1,4 @@
-# Beyond Flat Context: Tiered Memory and Tree Aggregation in AgentScript
+# Beyond Flat Context: Tiered Memory and Tree Aggregation in AgentSlang
 *By GenSEAM | September 2026*
 
 When designing memory architectures for autonomous software development agents, the prevailing industry default is a flat context dump.
@@ -14,7 +14,7 @@ Some systems answer with a **two-tier memory model**: "global" repository memory
 
 Real systems are not two-tier. A workspace contains subsystems, packages, internal sub-packages, and modules. A binary global/local split either leaks package-level decisions into the global store or hides them where no one looks.
 
-This post describes the memory we run today in AgentScript (ASL), and the recursive, tiered design we are building toward.
+This post describes the memory we run today in AgentSlang (ASL), and the recursive, tiered design we are building toward.
 
 ---
 

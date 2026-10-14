@@ -3,7 +3,7 @@
 Return each most-frequent letter of a space-separated string, with its count. Ties all included.
 
 > **Historical record, not a current measurement.** The comparison below (sections 1 to 3 and
-> everything after them) was made against an earlier AgentScript syntax — top-level `(df ...)`,
+> everything after them) was made against an earlier AgentSlang syntax — top-level `(df ...)`,
 > `:d` docstrings, kebab-case builtins such as `map-get` — and a Python lowering and pytest
 > harness (`.venv/bin/python -m pytest bench/algo -q`, 17 assertions) that are not in this
 > repository. The section 1 source no longer loads: the stage-0 host rejects a top-level
@@ -28,9 +28,9 @@ The current versions are `asl/bench/algo/histogram.asl` and `asl/bench/algo/vari
 ## The original comparison (earlier syntax)
 
 
-## 1. AgentScript source — hand-written, earlier syntax
+## 1. AgentSlang source — hand-written, earlier syntax
 
-<!-- not-agentscript: retired (df ...) syntax, kept as the historical input -->
+<!-- not-agentslang: retired (df ...) syntax, kept as the historical input -->
 ```text
 (df tally [(m (Map Str I64)) (w Str)] -> (Map Str I64)
   :d "Increment the count for one letter."
@@ -55,23 +55,23 @@ The current versions are `asl/bench/algo/histogram.asl` and `asl/bench/algo/vari
 
 ```python
 def tally(m, w):
-    _t1 = _agentscript.m_get(m, w)
+    _t1 = _agentslang.m_get(m, w)
     if _t1[0] == "some":
         n = _t1[1]
-        _t2 = _agentscript.m_set(m, w, (n + 1))
+        _t2 = _agentslang.m_set(m, w, (n + 1))
     elif _t1[0] == "none":
-        _t2 = _agentscript.m_set(m, w, 1)
+        _t2 = _agentslang.m_set(m, w, 1)
     return _t2
 
 def histogram(text):
     words = [_x for _x in text.strip().split(" ") if (lambda w: (not (len(w) == 0)))(_x)]
-    counts = _agentscript.fold(tally, {}, words)
-    _t3 = _agentscript.greatest([counts[_k] for _k in sorted(counts)])
+    counts = _agentslang.fold(tally, {}, words)
+    _t3 = _agentslang.greatest([counts[_k] for _k in sorted(counts)])
     if _t3[0] == "none":
         _t4 = {}
     elif _t3[0] == "some":
         top = _t3[1]
-        _t4 = _agentscript.m_from([_x for _x in _agentscript.m_pairs(counts) if (lambda p: _agentscript.eq(p[2], top))(_x)])
+        _t4 = _agentslang.m_from([_x for _x in _agentslang.m_pairs(counts) if (lambda p: _agentslang.eq(p[2], top))(_x)])
     return _t4
 ```
 
@@ -95,11 +95,11 @@ def histogram(text):
 
 | Artifact | Bytes | ~Tokens | Code lines |
 |---|---:|---:|---:|
-| AgentScript source | 894 | 223 | 19 |
+| AgentSlang source | 894 | 223 | 19 |
 | Generated Python | 643 | 160 | 19 |
 | Idiomatic Python | 341 | 85 | 9 |
 
-**In that version, AgentScript cost 2.6× the tokens and 2.1× the lines of idiomatic Python for this task.** The tokenizer and date of those counts were not recorded.
+**In that version, AgentSlang cost 2.6× the tokens and 2.1× the lines of idiomatic Python for this task.** The tokenizer and date of those counts were not recorded.
 
 That number matters more than it looks. The project's stated goal is more work per agent pass, and
 tokens spent on syntax are tokens not spent on problem-solving. On that evidence the language was
@@ -137,9 +137,9 @@ mystery.
 
 ## What that run established, and what it did not
 
-**Established then:** an algorithm could be written in AgentScript, lowered to Python, and pass the
+**Established then:** an algorithm could be written in AgentSlang, lowered to Python, and pass the
 original benchmark's assertions unmodified. The lowering and harness used are not in this
 repository, so this tree does not re-establish it.
 
-**Did not establish:** anything about whether an *agent* can write AgentScript. The source was written
+**Did not establish:** anything about whether an *agent* can write AgentSlang. The source was written
 by hand. The premise under test in `asl/EXPERIMENT.md` is untouched by it.

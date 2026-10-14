@@ -1,7 +1,7 @@
 (module text/usage :x [banner usage cells lines render])
 
 fn banner -> String
-  "AgentScript
+  "AgentSlang
 ==========="
 
 fn usage -> String

@@ -1,7 +1,7 @@
 (:package asl-target-py
  :version "0.1.0"
  :entry "src/emitPy.asl"
- :description "Standalone Python 3.11+ emitter backend for AgentScript under ADR D93"
+ :description "Standalone Python 3.11+ emitter backend for AgentSlang under ADR D93"
  :layer 0
  :aslFirst true
  :modules ["asl-target-py/emitPy"]

@@ -1,8 +1,8 @@
-# AgentScript (ASL)
+# AgentSlang (ASL)
 
 > Generated from asl/grammar/llmsEntry.md and asl/grammar/tools.asn by asl/packages/asl-target-sh/src/rules.asl, the installer's --render-rules mode; its --check-rules mode fails when this file differs from that render.
 
-AgentScript is two things.
+AgentSlang is two things.
 
 - ASL, the language: source files (.asl) and data files (.asn) are S-expressions with balanced parentheses. `asl check <file>` checks an .asl file on the stage-0 host and any other file for delimiter balance, `asl test <file>` runs a test suite, and `asl help` lists the shell commands; the language section below says which engine enforces what.
 - asl, the toolbelt: `asl '<form> <form> ...'` runs file operations on the git repository that holds the working directory; the forms of one call run as one batch.

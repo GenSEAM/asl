@@ -73,9 +73,9 @@ An LLM generating token 450 cannot "look ahead" to see the lifetime variables it
 
 ## 3. The Geometry of Attention: S-Expressions as Serialized ASTs
 
-AgentScript (ASL) rejects both indentation-based scoping and implicit operator precedence. Instead, it adopts **Single-Pass S-Expressions**.
+AgentSlang (ASL) rejects both indentation-based scoping and implicit operator precedence. Instead, it adopts **Single-Pass S-Expressions**.
 
-```agentscript
+```agentslang
 (module math/geometry :x [area runTests] :i [])
 
 enum Shape (circle r: Float64) (rect w: Float64 h: Float64)
@@ -134,7 +134,7 @@ A reviewer, or a coordinator, can therefore tell from a function's name whether 
 
 ## 5. Measuring the First-Run Pass Rate
 
-The claim this post makes is testable: give models the same specifications in Python, Rust, and AgentScript, and count first-run parse success, first-run test success, and repair iterations to green, with each language's strictest checker (`mypy --strict`, `cargo check`, `asl-host check`) as the gate. We have not yet run that comparison with a recorded method and result, so this post quotes no pass rates.
+The claim this post makes is testable: give models the same specifications in Python, Rust, and AgentSlang, and count first-run parse success, first-run test success, and repair iterations to green, with each language's strictest checker (`mypy --strict`, `cargo check`, `asl-host check`) as the gate. We have not yet run that comparison with a recorded method and result, so this post quotes no pass rates.
 
 ### The Systems Takeaway
 

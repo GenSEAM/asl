@@ -1,7 +1,7 @@
 (:package aslTranspile
  :version "0.1.0"
  :entry "src/core/codec.asl"
- :description "AgentScript Multi-Target AST Transpiler, Formatter, and Document Engine (YAML, TOML, CSV, SVG, CSS, Shell, Docs)"
+ :description "AgentSlang Multi-Target AST Transpiler, Formatter, and Document Engine (YAML, TOML, CSV, SVG, CSS, Shell, Docs)"
  :aslFirst true
  :modules ["asl-transpile/core"
            "asl-transpile/asn"

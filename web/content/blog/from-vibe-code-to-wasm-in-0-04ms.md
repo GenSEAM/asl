@@ -9,7 +9,7 @@ Testing agent-generated code requires an isolated sandbox. Today that usually me
 
 The alternative, running agent-generated code directly in a host subprocess, is a security hole. Unconstrained agents can traverse directories, leak API keys, exhaust file descriptors, or open network connections.
 
-AgentScript (ASL) is aiming at a third option: **in-memory WebAssembly sandboxing**, where a test run costs about as much as the computation it performs. This post describes that direction, what exists today, and what we have measured.
+AgentSlang (ASL) is aiming at a third option: **in-memory WebAssembly sandboxing**, where a test run costs about as much as the computation it performs. This post describes that direction, what exists today, and what we have measured.
 
 ---
 
@@ -35,7 +35,7 @@ What does not exist yet is the sandbox runner: an engine embedded in the toolbel
 
 A module an agent might hand to such a sandbox:
 
-```agentscript
+```agentslang
 (module cipher/rollingHash :x [checksum runTests] :i [])
 
 fn checksum bytes: (List Int64) -> Int64
@@ -69,7 +69,7 @@ A sandbox is only useful if the code verified inside it behaves the same where i
 
 Testing in one environment and deploying to another creates environment drift: code that passes in a Python sandbox can behave differently in a Go or TypeScript service.
 
-The direction AgentScript takes is a single source with several lowerings. The repository holds target packages for C, Go, LLVM, Python, Rust, shell, Swift, TypeScript and WebAssembly Text (`asl/packages/asl-target-*`). Only `asl-target-llvm` compiles real multi-module programs today, natively and to wasm32; the source-to-source targets are prototypes.
+The direction AgentSlang takes is a single source with several lowerings. The repository holds target packages for C, Go, LLVM, Python, Rust, shell, Swift, TypeScript and WebAssembly Text (`asl/packages/asl-target-*`). Only `asl-target-llvm` compiles real multi-module programs today, natively and to wasm32; the source-to-source targets are prototypes.
 
 1. **Verify once:** The agent iterates until the unit tests pass.
 2. **Lower to the target:** The same syntax tree is emitted for each target.

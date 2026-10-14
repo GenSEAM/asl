@@ -111,7 +111,7 @@ fn testCorpusLosslessFiles! -> Bool
 
 fn testUpstreamEntryValid! -> Bool
   (let [(entry (crp/makeUpstreamEntry
-                 "https://github.com/agent-script/asex"
+                 "https://github.com/agent-slang/asex"
                  "0ddf291142993115146c70aeb5a06749126cea90"
                  "be0106ad10c83661edf4f03bc5c9d55f1e0b9c1f936349ecd6eec638ebedd260"
                  "MIT"
@@ -123,7 +123,7 @@ fn testUpstreamEntryValid! -> Bool
 
 fn testUpstreamEntryInvalidSha! -> Bool
   (let [(entry (crp/makeUpstreamEntry
-                 "https://github.com/agent-script/asex"
+                 "https://github.com/agent-slang/asex"
                  "0ddf291142993115146c70aeb5a06749126cea90"
                  "0000000000000000000000000000000000000000000000000000000000000000"
                  "MIT"
@@ -140,7 +140,7 @@ fn testUpstreamEntryInvalidSha! -> Bool
 
 fn testUpstreamEntryMissingFile! -> Bool
   (let [(entry (crp/makeUpstreamEntry
-                 "https://github.com/agent-script/asex"
+                 "https://github.com/agent-slang/asex"
                  "0ddf291142993115146c70aeb5a06749126cea90"
                  "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
                  "MIT"
@@ -261,7 +261,7 @@ fn testCorpusTreeRunner! -> Bool
 fn testBrokenManifestUnbalanced! -> Bool
   (let [(_ (dirCreate "scratch/broken-manifests"))
         (path "scratch/broken-manifests/unbalanced.asn")
-        (content "(:upstreamManifest\n  :version \"1.0.0\"\n  :entries [\n    (:entry\n      :url \"https://github.com/agent-script/asex\"\n      :commit \"0ddf291142993115146c70aeb5a06749126cea90\"\n      :sha256 \"be0106ad10c83661edf4f03bc5c9d55f1e0b9c1f936349ecd6eec638ebedd260\"\n      :license \"MIT\"\n      :path \"asl/packages/asl-syntax/manifest.asn\")\n      :url \"https://github.com/SimonSapin/css-parsing-tests\"\n      :commit \"203ce36bffd617db7f118c551e32794561fb273d\"\n      :sha256 \"a8d7a5252373b892cfcac359360930ad9a57ed918a84331bcf0c872b80f83200\"\n      :license \"CC0-1.0\"\n      :path \"asl/packages/asl-syntax/tests/fixtures/upstream/css/component_value_list.json.sample\")\n  ])\n")
+        (content "(:upstreamManifest\n  :version \"1.0.0\"\n  :entries [\n    (:entry\n      :url \"https://github.com/agent-slang/asex\"\n      :commit \"0ddf291142993115146c70aeb5a06749126cea90\"\n      :sha256 \"be0106ad10c83661edf4f03bc5c9d55f1e0b9c1f936349ecd6eec638ebedd260\"\n      :license \"MIT\"\n      :path \"asl/packages/asl-syntax/manifest.asn\")\n      :url \"https://github.com/SimonSapin/css-parsing-tests\"\n      :commit \"203ce36bffd617db7f118c551e32794561fb273d\"\n      :sha256 \"a8d7a5252373b892cfcac359360930ad9a57ed918a84331bcf0c872b80f83200\"\n      :license \"CC0-1.0\"\n      :path \"asl/packages/asl-syntax/tests/fixtures/upstream/css/component_value_list.json.sample\")\n  ])\n")
         (_ (fileWrite path content))
         (parseRes (crp/parseUpstreamManifest content))
         (verifyRes (crp/verifyUpstreamManifestFile! path))]
@@ -275,7 +275,7 @@ fn testBrokenManifestUnbalanced! -> Bool
 fn testBrokenManifestDuplicateKey! -> Bool
   (let [(_ (dirCreate "scratch/broken-manifests"))
         (path "scratch/broken-manifests/duplicate_key.asn")
-        (content "(:upstreamManifest\n  :version \"1.0.0\"\n  :entries [\n    (:entry\n      :url \"https://github.com/agent-script/asex\"\n      :url \"https://github.com/agent-script/asex-dup\"\n      :commit \"0ddf291142993115146c70aeb5a06749126cea90\"\n      :sha256 \"be0106ad10c83661edf4f03bc5c9d55f1e0b9c1f936349ecd6eec638ebedd260\"\n      :license \"MIT\"\n      :path \"asl/packages/asl-syntax/manifest.asn\")\n  ])\n")
+        (content "(:upstreamManifest\n  :version \"1.0.0\"\n  :entries [\n    (:entry\n      :url \"https://github.com/agent-slang/asex\"\n      :url \"https://github.com/agent-slang/asex-dup\"\n      :commit \"0ddf291142993115146c70aeb5a06749126cea90\"\n      :sha256 \"be0106ad10c83661edf4f03bc5c9d55f1e0b9c1f936349ecd6eec638ebedd260\"\n      :license \"MIT\"\n      :path \"asl/packages/asl-syntax/manifest.asn\")\n  ])\n")
         (_ (fileWrite path content))
         (parseRes (crp/parseUpstreamManifest content))
         (verifyRes (crp/verifyUpstreamManifestFile! path))]
@@ -286,7 +286,7 @@ fn testBrokenManifestDuplicateKey! -> Bool
 fn testBrokenManifestMissingKey! -> Bool
   (let [(_ (dirCreate "scratch/broken-manifests"))
         (path "scratch/broken-manifests/missing_key.asn")
-        (content "(:upstreamManifest\n  :version \"1.0.0\"\n  :entries [\n    (:entry\n      :url \"https://github.com/agent-script/asex\"\n      :commit \"0ddf291142993115146c70aeb5a06749126cea90\"\n      :sha256 \"be0106ad10c83661edf4f03bc5c9d55f1e0b9c1f936349ecd6eec638ebedd260\"\n      :path \"asl/packages/asl-syntax/manifest.asn\")\n  ])\n")
+        (content "(:upstreamManifest\n  :version \"1.0.0\"\n  :entries [\n    (:entry\n      :url \"https://github.com/agent-slang/asex\"\n      :commit \"0ddf291142993115146c70aeb5a06749126cea90\"\n      :sha256 \"be0106ad10c83661edf4f03bc5c9d55f1e0b9c1f936349ecd6eec638ebedd260\"\n      :path \"asl/packages/asl-syntax/manifest.asn\")\n  ])\n")
         (_ (fileWrite path content))
         (parseRes (crp/parseUpstreamManifest content))
         (verifyRes (crp/verifyUpstreamManifestFile! path))]
@@ -297,7 +297,7 @@ fn testBrokenManifestMissingKey! -> Bool
 fn testBrokenManifestUnknownKey! -> Bool
   (let [(_ (dirCreate "scratch/broken-manifests"))
         (path "scratch/broken-manifests/unknown_key.asn")
-        (content "(:upstreamManifest\n  :version \"1.0.0\"\n  :entries [\n    (:entry\n      :url \"https://github.com/agent-script/asex\"\n      :commit \"0ddf291142993115146c70aeb5a06749126cea90\"\n      :sha256 \"be0106ad10c83661edf4f03bc5c9d55f1e0b9c1f936349ecd6eec638ebedd260\"\n      :license \"MIT\"\n      :path \"asl/packages/asl-syntax/manifest.asn\"\n      :unknownKey \"bad\")\n  ])\n")
+        (content "(:upstreamManifest\n  :version \"1.0.0\"\n  :entries [\n    (:entry\n      :url \"https://github.com/agent-slang/asex\"\n      :commit \"0ddf291142993115146c70aeb5a06749126cea90\"\n      :sha256 \"be0106ad10c83661edf4f03bc5c9d55f1e0b9c1f936349ecd6eec638ebedd260\"\n      :license \"MIT\"\n      :path \"asl/packages/asl-syntax/manifest.asn\"\n      :unknownKey \"bad\")\n  ])\n")
         (_ (fileWrite path content))
         (parseRes (crp/parseUpstreamManifest content))
         (verifyRes (crp/verifyUpstreamManifestFile! path))]
@@ -308,7 +308,7 @@ fn testBrokenManifestUnknownKey! -> Bool
 fn testBrokenManifestWrongSha256! -> Bool
   (let [(_ (dirCreate "scratch/broken-manifests"))
         (path "scratch/broken-manifests/wrong_sha256.asn")
-        (content "(:upstreamManifest\n  :version \"1.0.0\"\n  :entries [\n    (:entry\n      :url \"https://github.com/agent-script/asex\"\n      :commit \"0ddf291142993115146c70aeb5a06749126cea90\"\n      :sha256 \"0000000000000000000000000000000000000000000000000000000000000000\"\n      :license \"MIT\"\n      :path \"asl/packages/asl-syntax/manifest.asn\")\n  ])\n")
+        (content "(:upstreamManifest\n  :version \"1.0.0\"\n  :entries [\n    (:entry\n      :url \"https://github.com/agent-slang/asex\"\n      :commit \"0ddf291142993115146c70aeb5a06749126cea90\"\n      :sha256 \"0000000000000000000000000000000000000000000000000000000000000000\"\n      :license \"MIT\"\n      :path \"asl/packages/asl-syntax/manifest.asn\")\n  ])\n")
         (_ (fileWrite path content))
         (parseRes (crp/parseUpstreamManifest content))
         (verifyRes (crp/verifyUpstreamManifestFile! path))]

@@ -41,7 +41,7 @@ Checking an ASL file has two layers, and `(:check :file f)` runs both, in order:
 
 Here is a module that passes both (checked 2026-10-14):
 
-```agentscript
+```agentslang
 (module telemetry/metrics :x [Counter recordTick])
 
 schema Counter

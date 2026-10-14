@@ -1,7 +1,7 @@
 (:package asl-target-rs
  :version "0.1.0"
  :entry "src/emitRust.asl"
- :description "Standalone Rust 2024 native transpiler, pure RsAst lowerer, and C-ABI FFI bridge for AgentScript under ADR D93 and D130"
+ :description "Standalone Rust 2024 native transpiler, pure RsAst lowerer, and C-ABI FFI bridge for AgentSlang under ADR D93 and D130"
  :layer 0
  :aslFirst true
  :modules [

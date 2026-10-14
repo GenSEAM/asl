@@ -7,7 +7,7 @@
 
 ---
 
-## 1. Why AgentScript Exists
+## 1. Why AgentSlang Exists
 
 Production languages were designed for human keyboards and IDEs, and each has a trap for a model that writes left to right: invisible indentation (Python), non-local lifetimes (Rust), silent missing properties (JavaScript), repeated error boilerplate (Go). Agents spend part of their budget on the repair loops these cause.
 
@@ -60,7 +60,7 @@ Every figure the project publishes is a row in `bench/publishedClaims.asn` with 
 
 ## 6. Quick Start
 
-AgentScript is not released and the installer is under development. From a checkout:
+AgentSlang is not released and the installer is under development. From a checkout:
 
 ```bash
 sh host/build.sh                       # builds host/out/asl-host

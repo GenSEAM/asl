@@ -1,5 +1,5 @@
 <!-- ASL_TOOLBELT_START -->
-# AgentScript (ASL) Universal Toolbelt
+# AgentSlang (ASL) Universal Toolbelt
 
 When `asl` is available, agents can run workspace operations as ASN forms via `asl '(<form1> <form2> ...)'`:
 

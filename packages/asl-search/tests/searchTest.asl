@@ -54,7 +54,7 @@ fn testSearchUrlCleaningLogic -> Bool
 
 fn testBipolarQueryVerification -> Bool
   (let [(claim "contract liability limitation")
-        (archClaim "AgentScript Wasm sandbox performance")]
+        (archClaim "AgentSlang Wasm sandbox performance")]
     (assert (stringContains? claim "liability") "claim contains liability")
     (refute (stringContains? claim "exploit") "claim refutes exploit")
     (assert (stringContains? archClaim "sandbox") "arch claim contains sandbox")
