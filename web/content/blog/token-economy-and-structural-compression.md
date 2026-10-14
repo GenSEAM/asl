@@ -7,7 +7,7 @@ Faced with this, developers often jump to an intuitive conclusion: *if we abbrev
 
 Under a byte-pair tokenizer, that assumption is mostly false.
 
-In this essay we measure why abbreviating keywords saves little or nothing, and where the large reductions actually come from: **structural compaction and tabular serialization**. Every count below was taken with tiktoken 0.12.0 on 2026-09-24 unless a lock file is named, and each covers only the strings shown.
+In this essay we measure why abbreviating keywords saves little or nothing, and where the large reductions actually come from: **structural compaction and tabular serialization**. Every count below was taken with js-tiktoken 1.0.15 on 2026-10-14, and each covers only the strings shown.
 
 ---
 
@@ -27,9 +27,9 @@ Counting single keywords under `cl100k_base`, first bare and then after a space 
 | `:function` | 1 | 2 | `:fn` | 2 | 2 |
 | `:default` | 2 | 2 | `:dflt` | 2 | 3 |
 
-Most abbreviations tie in context, and some cost more: `:dflt` takes 3 tokens where `:default` takes 2. The same pairs appear in `asl/bench/asn_tokens.lock`, with the same results.
+Most abbreviations tie in context, and some cost more: `:dflt` takes 3 tokens where `:default` takes 2.
 
-The effect across a whole codebase is small. Rewriting every camelCase identifier in the tracked `.asl` and `.asn` files (2964 files, 169852 identifiers) to kebab-case and counting both versions gave a saving of 1.90% for camelCase under `o200k_base` and 1.68% under `cl100k_base` (measured 2026-09-22, recorded in `.asl/mem/principles.asn` as `CamelCaseCorpusSaving`). Naming conventions move token counts by a few percent, not tens of percent.
+The effect across a whole codebase is small. Rewriting every camelCase identifier in the tracked `.asl` and `.asn` files (2964 files, 169852 identifiers) to kebab-case and counting both versions gave a saving of 1.90% for camelCase under `o200k_base` and 1.68% under `cl100k_base` (measured 2026-09-22, recorded in the project ledger as `CamelCaseCorpusSaving` and listed in `bench/publishedClaims.asn`). Naming conventions move token counts by a few percent, not tens of percent.
 
 ---
 
@@ -46,21 +46,20 @@ The forms the stage-0 host accepts today:
 | Variants | `enum Name (case field: Type) ...` | |
 | Match | `mt` | `match` |
 | Sequence | `do` | `begin` |
-| Module doc, exports, imports | `:d`, `:x`, `:i` | |
+| Module exports, imports | `:x`, `:i` | |
 | Primitive types | `Int64`, `Float64`, `String`, `Bool` | |
 
-The older `defun` and `df` definition heads are rejected by the host (`ERR_UNSUPPORTED_TOPLEVEL`).
+The older `defun` and `df` definition heads are rejected by the host (`ERR_UNSUPPORTED_TOPLEVEL`), and so are `:d` docstrings (`ERR_READ_DOC`): documentation lives as rows in each package's `doc.asn`, not in the source.
 
 ```agentscript
-(module math/vector :d "Dot product and vector operations." :x [dot runTests] :i [])
+(module math/vector :x [dot runTests] :i [])
 
 schema Point
   x: Float64
   y: Float64
 
 fn dot a: Point b: Point -> Float64
-  :d "Sum of coordinate products."
-  (+ (* (.-x a) (.-x b)) (* (.-y a) (.-y b)))
+  (+ (* a.x b.x) (* a.y b.y))
 
 fn runTests -> Bool
   (do (assert (= (dot {:x 1.0 :y 2.0} {:x 3.0 :y 4.0}) 11.0) "dot product") true)
@@ -84,8 +83,8 @@ The comment repeats what the names already say.
 
 The convention we adopt:
 1. **No restating comments:** names carry the *what*.
-2. **One-line docstrings:** `:d` states the contract.
-3. **Rationale in the ledger:** long design justifications live in the project memory under `.asl/mem/` (principles, decisions), where an agent retrieves them only when it needs them, for example with `asl '(:query :text "CamelCaseCorpusSaving")'`, which returns the definition's location in `.asl/mem/principles.asn`.
+2. **Docs out of the source:** a symbol's contract is one row in the package `doc.asn`, looked up with `asl '(:doc :symbol "path#name")'`.
+3. **Rationale in the ledger:** long design justifications live in the project memory under `.asl/mem/` (principles, decisions), where an agent retrieves them only when it needs them, with `(:mem :op query ...)` or `(:query :text "..." :in text)`.
 
 ---
 
@@ -125,7 +124,7 @@ timeout_ms: 50
 (? agent-coder synthesize-fsm ["idle" "active" "error"] 50)
 ```
 
-On this frame, moving from JSON to the positional form saves 51.2% under `cl100k_base` (41 to 20) and 52.4% under `o200k_base` (42 to 20). `asl/bench/token_frames.lock` records a similar comparison on a different frame, 51 to 18 tokens under `cl100k_base`, a 64.71% saving; the lock does not store the frame text, so that figure cannot be re-derived from the file alone.
+On this frame, moving from JSON to the positional form saves 51.2% under `cl100k_base` (41 to 20) and 52.4% under `o200k_base` (42 to 20). The README shows a second frame, a `git status` command with its arguments, working directory and timeout: 51 tokens as JSON and 18 as a positional frame under `cl100k_base`, a 64.7% saving.
 
 ### Tabular Data: ASN Against JSON
 
@@ -148,7 +147,7 @@ AgentScript Notation (ASN) states the column names once and streams the rows as 
   [103 "C-99" 12 "delivered"]])
 ```
 
-These three records take 85 tokens as JSON and 51 as the ASN table under `cl100k_base`, a 40.0% saving. The saving grows with the number of rows, because the header is paid once: `asl/bench/asn_tokens.lock` records a 100-record dataset at 3,802 tokens as JSON, 2,600 as keyed ASN records (31.6% fewer) and 1,601 as ASN rows (57.9% fewer), under `cl100k_base`.
+These three records take 85 tokens as JSON and 51 as the ASN table under `cl100k_base`, a 40.0% saving. The header is paid once, so the share of the stream spent on key names shrinks as rows are added, while JSON pays for every key on every row.
 
 ---
 
@@ -157,6 +156,6 @@ These three records take 85 tokens as JSON and 51 as the ASN table under `cl100k
 1. **Stop shortening identifiers:** renaming `calculateTotal` to `calcTot` saves little or nothing and makes the name harder for a model to recall.
 2. **Remove punctuation overhead:** quotes, colons and commas around every key are paid on every call; whitespace-separated S-expressions do without them.
 3. **Hoist repeated schemas:** in multi-record handoffs, send the column names once and the rows as positional vectors.
-4. **Keep rationale out of the code:** a one-line `:d` in the code, the long justification in the memory ledger.
+4. **Keep rationale out of the code:** the contract in a doc row, the long justification in the memory ledger.
 
-Structure, not spelling, is where the tokens are. On the samples above, replacing keyed JSON with positional S-expressions and ASN tables cut token counts by 40% to 58%.
+Structure, not spelling, is where the tokens are. On the samples above, replacing keyed JSON with positional S-expressions and ASN tables cut token counts by 40% to 65%.

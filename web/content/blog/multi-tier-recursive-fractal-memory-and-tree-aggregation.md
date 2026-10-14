@@ -39,13 +39,13 @@ The design we are building extends that one directory into a recursion:
 Tier 0 workspace -> Tier 1 subsystems -> Tier 2 packages -> Tier 3 components -> Tier 4 modules
 ```
 
-```mermaid
-graph TD
-    Root["Workspace .asl/mem"] --> Sub1["Subsystem: asl"]
-    Root --> Sub2["Subsystem: agent-bus"]
-    Sub1 --> Pkg1["Package: asl-checker"]
-    Sub1 --> Pkg2["Package: asl-compiler"]
-    Pkg2 --> Comp2["Component: codegen"]
+```text
+Workspace .asl/mem
+├── Subsystem: asl
+│   ├── Package: asl-checker
+│   └── Package: asl-compiler
+│       └── Component: codegen
+└── Subsystem: agent-bus
 ```
 
 Three properties define it:

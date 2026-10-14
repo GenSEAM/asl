@@ -17,17 +17,12 @@ Each switch is a new set of escaping and closing rules for the model to get righ
 
 The design goal: the agent does not write raw JSON, YAML, SVG, HTML or Bash. It writes **AgentScript Notation (ASN)**, and renderers produce the external format.
 
-```mermaid
-graph TD
-    A["Universal ASN S-Expression"] --> B["Quadrant 1: Shell & Execution (:sh)"]
-    A --> C["Quadrant 2: Vector Visuals & UI (:svg, :vdom)"]
-    A --> D["Quadrant 3: Schema & Data (:config, :wire)"]
-    A --> E["Quadrant 4: Relational Querying (asl-sql)"]
-
-    B --> B1["Quoted POSIX sh"]
-    C --> C1["SVG XML"]
-    D --> D1["JSON & YAML"]
-    E --> E1["Postgres, SQLite, MySQL, ClickHouse"]
+```text
+Universal ASN S-expression
+├── Quadrant 1: shell and execution (:sh)        → quoted POSIX sh
+├── Quadrant 2: vector visuals and UI (:svg :vdom) → SVG XML
+├── Quadrant 3: schema and data (:config :wire)  → JSON and YAML
+└── Quadrant 4: relational querying (asl-sql)    → Postgres, SQLite, MySQL, ClickHouse
 ```
 
 Every quadrant shares the same syntactic rules:

@@ -53,7 +53,7 @@ This is one example, not a benchmark. The `(! ...)` sigil frame is the target wi
 ## The language in one example
 
 ```asl
-(module demo/shapes :d "Areas of shapes" :x [area runTests])
+(module demo/shapes :x [area runTests])
 
 enum Shape (circle r: Int64) (square side: Int64)
 
@@ -71,14 +71,14 @@ A function header is a bare column-0 line; its body is indented below. There is 
 ```sh
 curl -fsSL https://aslang.dev/install.sh | sh     # builds asl-host from source: macOS today, Linux and Windows in progress
 asl version
-asl check file.asl                  # delimiter balance (asl-core)
-asl test fileTest.asl               # run a suite on asl-core, which is lenient
+asl check file.asl                  # delimiter balance, then the host check
+asl test fileTest.asl               # run a suite on the host
 host/out/asl-host check file.asl    # strict: names, arity, enums
 host/out/asl-host test fileTest.asl # strict runner
 asl '(:tools)'                      # the agent-plane operation catalogue
 ```
 
-`asl test` runs asl-core, which reads 0 as true, treats unknown names as data and passes a `runTests` that returns false; `asl-host` is the reference.
+`asl-host` is the reference: it checks names, arity, enums and effects before running anything.
 
 ## Packages
 
