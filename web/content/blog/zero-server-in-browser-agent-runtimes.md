@@ -12,7 +12,7 @@ This architecture has real ceilings:
 
 What if the whole development environment (the compiler, the test runner, the virtual filesystem, the git storage and the coding agent) **ran locally inside the user's browser tab, with no backend server**?
 
-This is the direction we are building AgentScript (ASL) toward. It is not shipped yet; this post describes the design and where we stand.
+This is the direction we are building AgentScript (ASL) toward. The IDE is not shipped; this post describes the design and the part that already runs.
 
 ---
 
@@ -20,9 +20,9 @@ This is the direction we are building AgentScript (ASL) toward. It is not shippe
 
 The target stack uses standard web platform features:
 
-* **WebAssembly:** the ASL runtime compiled to WebAssembly, so ASL programs run in the tab at close to native speed.
-* **Origin Private File System (OPFS):** browser-isolated storage for the project repository, with fast synchronous access from a worker.
-* **WASI Preview 1 in JavaScript:** an in-memory implementation of the few system calls a program needs (`clock_time_get`, `fd_read`, `fd_write`, `random_get`), so a program runs without touching the host.
+* **WebAssembly:** ASL compiled to WebAssembly, so ASL programs, and eventually the checker and test runner themselves, run in the tab.
+* **A narrow host interface:** instead of emulating an operating system, the module imports a handful of functions from the page. The `wasm32-unknown-unknown` target of `asl-target-llvm` imports four today: `asl.write`, `asl.exit`, `asl.nowNs` and `asl.trap`.
+* **Origin Private File System (OPFS):** browser-isolated storage for the project repository, reached through the page rather than through the module directly.
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -37,8 +37,8 @@ The target stack uses standard web platform features:
 │                                                      │                 │
 │                                                      ▼                 │
 │   ┌────────────────────┐                ┌──────────────────────────┐   │
-│   │  OPFS Git Storage  │ <────────────> │   In-Memory WASI Layer   │   │
-│   │  - Virtual Repo    │    File I/O    │   - 64KB memory pages    │   │
+│   │  OPFS Git Storage  │ <────────────> │   Page-side host imports │   │
+│   │  - Virtual Repo    │    File I/O    │   - write, exit, trap    │   │
 │   └────────────────────┘                └──────────────────────────┘   │
 │                                                                        │
 └────────────────────────────────────────────────────────────────────────┘
@@ -46,13 +46,15 @@ The target stack uses standard web platform features:
 
 ---
 
-## 2. Where We Stand: A Small Local Runtime First
+## 2. Where We Stand: ASL Already Runs in the Tab
 
-The piece that makes the browser plan plausible is a runtime small enough to ship to a tab. Today that runtime is native: the stage-0 host is a C program, `asl/host/out/asl-host`, 178,056 bytes on arm64, that checks, tests and runs ASL with no server and no package manager. `asl-host build FILE -o OUT` embeds a program into a standalone executable of about the same size.
+The first piece is real, and you are looking at it. aslang.dev is an ASL program (`asl/web/site`, built by `asl/web/tools/build.asl`) compiled through `asl-target-llvm` to `site.wasm`. A small JavaScript bridge, `boot.js`, loads the module, supplies the four imports, forwards clicks to the module's update export and applies the DOM operations the module prints, one ASN form per line. Every decision on the page is made inside the module. The build in `asl/web/dist` measured 256,943 bytes on 2026-10-14, 73,629 bytes after `gzip -9`. The bridge also times the module's render export, and the home page shows that figure as measured in your own browser.
 
-Starting it is cheap. On 2026-09-24, 200 runs of `asl-host eval '(+ 1 2)'` as a fresh process on an Apple M1 Pro had a median wall time of about 5 ms, including process creation. That is a native figure, not a browser one; the WebAssembly build of the host does not exist yet, and we will measure it in the browser when it does.
+The module is deliberately sandboxed by construction. On wasm32 the only host builtin a program can call is `print`; clocks, files, environment and sockets are rejected when the program is lowered, with `ERR_CAPABILITY_ABSENT`. The module brings its own allocator and garbage collector, so it needs nothing from the page beyond the four imports.
 
-What is not built: the WebAssembly host, the OPFS repository, the in-tab test runner and the browser IDE.
+Outside the browser, the same toolchain is small and starts quickly. The stage-0 host, `asl/host/out/asl-host`, is a C program that checks, tests and runs ASL with no server and no package manager; built in a Linux x86_64 container on 2026-10-14 it was 360,488 bytes, and 200 fresh-process runs of `asl-host eval '(+ 1 2)'` there had a median wall time of about 12 ms, including process creation.
+
+What is not built: the checker and test runner compiled to WebAssembly, the OPFS repository, the in-tab agent loop and the browser IDE. The site proves that ASL programs run in a tab under a narrow capability surface; it does not yet prove an IDE.
 
 ---
 
@@ -62,7 +64,7 @@ Running code in the browser opens a second opportunity: **local intelligence loo
 
 Browsers are starting to ship on-device small language models (Chrome's built-in Prompt API with Gemini Nano, and WebLLM over WebGPU). The design we are aiming at splits work by tier:
 
-1. **Tier 0, local reflexes:** a small model in the tab handles syntax completion, docstrings and mechanical refactors on the user's own hardware, with no API cost and no network round trip.
+1. **Tier 0, local reflexes:** a small model in the tab handles syntax completion, doc rows and mechanical refactors on the user's own hardware, with no API cost and no network round trip.
 2. **Tier 1, architectural reasoning:** for multi-module changes, the tab sends a compact interface of the relevant modules to a frontier model (Claude, GPT, Gemini).
 3. **Local validation:** whatever comes back is checked and tested in the tab before the developer sees a diff.
 

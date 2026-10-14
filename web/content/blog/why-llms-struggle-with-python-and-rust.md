@@ -1,7 +1,7 @@
 # Why Autonomous LLMs Break on Human Languages (and What We Are Building Instead)
 *By GenSEAM | September 2026*
 
-Modern autonomous coding agents (Devin, Claude Code, Cursor, Codex derivatives) can spend much of their inference compute and context budget in a tight loop: generate, syntax error, patch, cascade indentation failure, re-query, repeat. 
+Autonomous coding agents can spend a good part of their inference compute and context budget in a tight loop: generate, syntax error, patch, cascade indentation failure, re-query, repeat. 
 
 In compiler engineering, we characterize this phenomenon as the **Syntax Repair Tax**. Our hypothesis is that it is not only an artifact of model size or pre-training data, but a mismatch between **left-to-right autoregressive token generation** and **20th-century human-centric grammar designs**.
 
@@ -27,7 +27,7 @@ def process_transactions(batches):
 
 ### The Autoregressive Failure Mode
 
-When an autoregressive transformer generates code, it predicts the next subword token $P(t_k \mid t_1, \dots, t_{k-1})$ in a strictly causal sequence.
+When an autoregressive transformer generates code, it predicts each next subword token from the tokens before it, in a strictly causal sequence.
 
 1. **No Explicit Closure Tokens:** In Python, closing three nested blocks (an `if`, an inner `for`, and an outer `for`) requires emitting zero characters on disk for the closures themselves. Closure is signaled entirely by where the *next* substantive token begins on the next line.
 2. **Column Misalignment Cascades:** If the tokenizer splits four spaces into `[ĠĠ, ĠĠ]` or a tab into an uneven byte sequence, an off-by-one column error silently re-parents the entire AST subtree. The model cannot output an explicit `end` or `}` to anchor its structural intent.
@@ -63,15 +63,11 @@ impl<'a> SessionManager<'a> {
 
 ### The Bidirectional Constraint Trap
 
-An LLM generating token $t_{450}$ cannot "look ahead" to see the lifetime variables it will introduce at token $t_{600}$. Nor can it backpropagate constraint conflicts backward to line 12 during forward inference.
+An LLM generating token 450 cannot "look ahead" to see the lifetime variables it will introduce at token 600. Nor can it backpropagate constraint conflicts backward to line 12 during forward inference.
 
 * **Non-Local Lifetimes:** A reference taken in line 4 may remain active until line 85 depending on drop order, temporary scopes, and lexical lifetimes.
 * **Forward Generation vs. Backward Solvers:** Transformer generation runs forward, one token at a time. The Rust borrow checker is an iterative, whole-function constraint solver operating over control-flow graphs (CFGs).
-* **The Repair Paradox:** When `rustc` outputs an error:
-  ```text
-  error[E0499]: cannot borrow `*self` as mutable more than once at a time
-  ```
-  an agent will instinctively attempt local fixes: adding `clone()`, wrapping in `Rc<RefCell<T>>`, or introducing explicit lifetime parameters (`'a`, `'b`). Each local patch can move the conflict to a caller, and the agent can thrash until the context window runs out.
+* **The Repair Paradox:** When `rustc` outputs an error such as `error[E0499]: cannot borrow *self as mutable more than once at a time`, an agent will instinctively attempt local fixes: adding `clone()`, wrapping in `Rc<RefCell<T>>`, or introducing explicit lifetime parameters (`'a`, `'b`). Each local patch can move the conflict to a caller, and the agent can thrash until the context window runs out.
 
 ---
 
@@ -99,14 +95,7 @@ This module passes `asl-host check` and `asl-host test` (1 assertion executed) o
 
 1. **Homoiconic 1:1 Mapping:** The textual representation of an S-expression is a direct serialization of the syntax tree. There is no intermediate lowering step between grammar and tree.
 2. **Balanced Delimiters as Causal Anchors:** Every subtree begins with `(` and ends with `)`. When a model generates `)`, it does not compute whitespace heuristics; it closes one specific opening node. Each bracket kind pairs exactly: `( )` forms, `[ ]` lists, `{ }` records, and the host rejects a mismatch before running anything.
-3. **No Operator Precedence:** In C, JavaScript, or Python, an expression like:
-   ```python
-   result = a + b * c > d and e or f
-   ```
-   requires the model to apply several layers of precedence rules. In ASL, prefix notation makes the order of evaluation explicit by construction:
-   ```agentscript
-   (or (and (> (+ a (* b c)) d) e) f)
-   ```
+3. **No Operator Precedence:** In C, JavaScript, or Python, an expression like `a + b * c > d and e or f` requires the model to apply several layers of precedence rules. In ASL, prefix notation makes the order of evaluation explicit by construction: `(or (and (> (+ a (* b c)) d) e) f)`.
 4. **Single-Pass Parsing:** The reader needs no backtracking. A well-formed token stream becomes a tree in one linear scan.
 
 Balanced delimiters remove one class of failure, the structural one. Semantic and integration failures still need checks and tests.
