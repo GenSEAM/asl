@@ -1,4 +1,4 @@
-# Injection-Resistant SQL by Construction: Rendering Relational S-Expressions to Postgres, SQLite, MySQL & ClickHouse
+# Bound Literals, Unquoted Names: Rendering Relational S-Expressions to Postgres, SQLite, MySQL & ClickHouse
 *By GenSEAM | September 2026*
 
 When autonomous coding agents are tasked with database operations (schema changes, analytical queries, data filtering) the default industry pattern is to prompt the LLM to emit raw SQL strings:
@@ -100,11 +100,14 @@ In traditional code, injection happens because string manipulation lets untruste
 cursor.execute(f"SELECT * FROM users WHERE name = '{agent_payload}'")
 ```
 
-In `asl-sql`, a literal in value position (`litStr`, `litInt`, `litBool`) renders as a placeholder and travels in the parameter list, so its quotes, semicolons and `--` comments stay data. The boundary has three known gaps, and we name them rather than claim a guarantee:
+In `asl-sql`, a literal in value position (`litStr`, `litInt`, `litBool`) renders as a placeholder and travels in the parameter list, so its quotes, semicolons and `--` comments stay data. The boundary has four known gaps, and we name them rather than claim a guarantee:
 
 1. `rawSql` (built by `rawExpr`) inserts its text unescaped; it is the escape hatch.
 2. `makeUpdate` and `renderDelete` still take their WHERE clause as a string.
 3. Column and table names are passed through as written; `renderSelect` does not quote identifiers yet.
+4. A `jsonExtract` path is written inside quotes without escaping, so a quote in the path changes the query.
+
+Closing these is the first item of the project roadmap (ROADMAP.md, P0).
 
 Code that stays with the expression builders keeps values out of the SQL text; code that reaches for `rawSql` or string WHERE clauses is back to trusting its input.
 

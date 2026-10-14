@@ -1,7 +1,7 @@
 (:package asl-sql
  :version "0.1.0"
  :entry "src/core/sql.asl"
- :description "Native AgentSlang Cross-Dialect SQL AST Query Builder & Parameterized Emission Engine"
+ :description "Cross-dialect SQL text from an AST: literals in value position are bound as parameters; identifiers, JSON paths, rawSql and UPDATE/DELETE clauses are not escaped yet (ROADMAP P0); nothing executes queries"
  :aslFirst true
  :modules [
    "asl-sql/ddl"
