@@ -20,21 +20,11 @@ fn toc -> h/Node
   (h/ul [(h/cls "toc") (h/attr "aria-label" "On this page")]
     (map (fn [(t (Pair String String))] -> h/Node (h/li [] [(h/a [(h/href (str "#" (pairFirst t)))] [(h/text (pairSecond t))])])) (topics)))
 
-fn platform name: String state: String note: String -> h/Node
-  (h/tr [(h/td [] [(h/text name)]) (h/td [] [(h/strong [] [(h/text state)])]) (h/td [] [(h/text note)])])
-
 fn install -> (List h/Node)
   (topic "install" "Install"
-    [(para "There are no prebuilt binaries yet. The installer clones the repository into ~/.asl/repo, builds the stage-0 host (host/out/asl-host) with your C compiler and runs the ASL installer on it, so it needs git and a C compiler.")
+    [(para "AgentScript has not been released yet. The installer is under development: there are no release binaries, and the script below is the one that will ship.")
      (listing ["curl -fsSL https://aslang.dev/install.sh | sh"])
-     (h/div [(h/cls "tablewrap")]
-       [(h/table []
-         [(h/thead [(h/tr [(h/th [] [(h/text "Platform")]) (h/th [] [(h/text "Status")]) (h/th [] [(h/text "Notes")])])])
-          (h/tbody
-            [(platform "macOS, Apple silicon" "Works" "The platform the project is developed on; the native compiler seed (asl1) exists for arm64-apple-darwin only.")
-             (platform "Linux" "Not yet" "The host does not compile on Linux today (a missing limits.h in host/src/verbs.c, and gcc's -Werror warnings), so the installer stops at the host build. Fixes are in progress.")
-             (platform "Windows" "Not yet" "No native build. install.ps1 expects release binaries that have not been published.")])])])
-     (para "From a checkout, host/build.sh builds the same host, and host/out/asl-host check, test and run work on it directly.")])
+     (para "To try the language before then, clone the repository and build the stage-0 host with host/build.sh; host/out/asl-host check, test and run work on it directly.")])
 
 fn body -> (List h/Node)
   (listAppend

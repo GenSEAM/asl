@@ -27,7 +27,7 @@ fn heroSection -> h/Node
          (h/h1 [(h/cls "display")] [(h/text "The language models write ") (h/em [] [(h/text "without repair loops.")])])
          (h/p [(h/cls "lead")] [(h/text "AgentScript is a programming language and data notation for code that models write and models read. Structure lives in balanced parentheses, every failure is a value and every effect is marked, so a wrong program is rejected before it runs instead of three turns later.")])
          (shellLine (installLine) "copy-install" (m/copyInstall))
-         (h/p [(h/cls "micro")] [(h/text "Builds from source on macOS today; Linux and Windows are in progress. ") (h/a [(h/href "/docs#install")] [(h/text "Platform status")])])
+         (h/p [(h/cls "micro")] [(h/text "Not released yet: the installer is under development. ") (h/a [(h/href "/docs#install")] [(h/text "Details")])])
          (h/ul [(h/cls "facts")]
            [(h/li [] [(h/elem "b" [] [(h/text "( )")]) (h/text " balanced S-expressions")])
             (h/li [] [(h/elem "b" [] [(h/text "0")]) (h/text " nil, exceptions or try")])

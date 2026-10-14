@@ -69,7 +69,7 @@ A function header is a bare column-0 line; its body is indented below. There is 
 ## Quickstart
 
 ```sh
-curl -fsSL https://aslang.dev/install.sh | sh     # builds asl-host from source: macOS today, Linux and Windows in progress
+curl -fsSL https://aslang.dev/install.sh | sh     # not released yet: the installer is under development
 asl version
 asl check file.asl                  # delimiter balance, then the host check
 asl test fileTest.asl               # run a suite on the host
