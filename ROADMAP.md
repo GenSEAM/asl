@@ -19,6 +19,15 @@ here is a claim about the future except the items themselves.
 | Foreign functions | libc calls are a fixed table inside the LLVM backend; no `extern` in the language; the JS target cannot import anything | missing |
 | Packaging and release | `asl pack` needs a missing `audit.py` and `bin/asl`; no tarball, release, npm package or Linux seed exists | missing |
 
+## Constraints in force
+
+- **No language or host changes** while the stage-0 host is being replaced. Anything that needs
+  new grammar, parser or `host/src` work waits for that: `extern` (item 4) and everything that
+  rides on it (items 5, 6, the native and npm adapters in 17). Work now stays inside packages,
+  targets and tools, on the language the host reads today.
+- **No publishing.** The DOM bridge and any npm-shaped output are used inside this repository
+  only; item 10 stops at producing a local package, nothing goes to the registry.
+
 ## Priorities
 
 ### P0 — safety and honesty (small, do first)
@@ -34,7 +43,7 @@ here is a claim about the future except the items themselves.
    `tools/release.asl`, `asl target sh` (prints a fixed skeleton), the canned
    `emitPyStandaloneCase`/`emitC11StandaloneCase`, `asl-ui/renderNative`, `asl-web/hydrate`.
 
-### P1 — the language can reach other ecosystems
+### P1 — the language can reach other ecosystems (deferred: needs language changes)
 
 4. **`extern` declarations** (grammar, parser, `asl-ir/lower.asl` `moduleExterns`, both backends):
 
@@ -68,8 +77,9 @@ here is a claim about the future except the items themselves.
    `verbs.c` `PATH_MAX` include (owned by the host work); layout-agnostic root discovery so a
    standalone clone works (`rules.asl`, `pack.asl`, `build.sh`, `distrib.asl`, the installer's
    `--render-rules`).
-10. **npm.** Emit `package.json` (`exports`, `types`) around an `asl-target-js` module so any ASL
-    library can be published; publish the DOM bridge; an `asl` wrapper package that runs the CLI.
+10. **npm-shaped output, local only.** Emit `package.json` (`exports`, `types`) around an
+    `asl-target-js` module so an ASL library can be consumed from JS in this repository (a
+    `file:` or workspace dependency). Publishing the DOM bridge or an `asl` wrapper package waits.
 11. **Real releases.** `pack` rebuilt around artifacts (no python gates), per-triple tarballs
     with SHA256SUMS, a CI matrix, tags, and `install.sh` downloading a release before falling back
     to a source build.
