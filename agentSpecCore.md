@@ -1,57 +1,45 @@
-# AGENT_SPEC_CORE.md — AgentScript v0.2
+# agentSpecCore.md — AgentScript Core
 
-**Status:** normative for the concept-validation experiment (`EXPERIMENT.md`).
-Supersedes [`AGENT_SPEC.md`](AGENT_SPEC.md) (frozen as v0) for everything it covers.
+**Status:** normative for the language as the stage-0 host `asl/host/out/asl-host` reads, checks
+and runs it (`asl-host check FILE`, `test FILE`, `run FILE`, `eval EXPR`). Where this document
+states a rule the host does not enforce, it says so; such a rule is a target, not a description of
+today. §9 lists every rule with its status. The concept-validation protocol that first scoped this
+document is `EXPERIMENT.md`.
 
-This document is **closed**: every identifier used in any example here is defined here. That is
-the property [`SPEC_REVIEW.md`](SPEC_REVIEW.md) §7 found missing in v0 (20 defined forms against
-24 undefined ones), and it is a precondition for measuring generation reliability — a model
-cannot be judged on forms the specification never gave it.
+The vocabulary is not restated here in full. `prelude/prelude.asn` lists the builtins the host
+binds, with types and docs, and `asl '(:help :builtin <text>)'` searches it (§6).
 
 ## 0. Scope
 
-**In:** modules, `dfs` (`defschema`), `dfe` (`defenum`), `df` (`defun`), `fn`, type parameters, `let`, `if`, `cond`,
-`match`, `try`, records, `Result`, `Option`, `Pair`, `List`, `Map`, strings, arithmetic,
-comparison, `Bool` / `Int32` / `Int64` / `Float64` / `String` / `Unit`.
+**In:** modules, `schema` (records), `enum` (closed unions), `fn` (named and anonymous), `let`,
+`if`, `cond`, `mt` (`match`), `do`, `when`, `unless`, `assert`, `refute`, record update with
+`with`, field access `x.f`, `Option`, `Result`, `Pair`, `List`, `Map`, strings, bytes, numeric
+arrays, arithmetic and comparison over `Bool` / `Int32` / `Int64` / `Float64` / `String` /
+`Unit`.
 
-**Deliberately out of Core:** `defagent`, `defui`, `meta:async`, `if-target`, FFI, JSON
-serialization.
+**Not in the language today:** a foreign-function form, a `try` or `?` propagation operator (the
+host answers `ERR_UNKNOWN_SYMBOL try`), `for`, mutation (`set!`), and JSON naming: the host
+accepts a field's `:json "name"` and does nothing with it, and a schema-level case option such as
+`:jsonCase camel` is `ERR_BAD_DEFINITION`.
 
-**I/O is in**, with its effects tracked: a declaration that touches the world carries `!` in its
-signature (§4.2), failures are values of the closed union `IoError` (§3), and a program's entry
-point is `main` (§4.0). The exclusion was defensible while the benchmark was pure functions; it is
-not, now that the unit of measurement is a whole working program.
+**I/O is in**, with its effects tracked: a function that touches the world carries `!` (§5.7),
+`fileRead` fails with the closed union `IoError` (§3), and a program's entry point is `main`
+(§4.0).
 
-### Why v0.2 exists
+### Design commitments
 
-v0.1 was scoped to what a HumanEval-class benchmark exercises, and that scope was wrong for the
-product. A suite of small self-contained functions cannot reveal the absence of a module system or
-of user-declarable polymorphism, because no task in it spans two files or needs a shared
-abstraction. Scoping to the benchmark therefore optimised the measurement and not the language.
-
-Three additions follow directly from the stated goal that an agent should produce reusable work,
-and that the unit of one pass is a **working module** (PCP `r-43ea`, `r-8f23`, `r-b539`):
+The unit of one agent pass is a **working module**, so three things are in the language from the
+start:
 
 * **Modules by default** — every file is a module with an explicit exported surface, so a later
   pass can compose an earlier one having read only that surface.
-* **Type parameters** — without them only the prelude is polymorphic and every user abstraction
-  must be duplicated per concrete type, which caps reuse at zero.
+* **Polymorphic signatures** — a type name the module does not declare, such as `A`, stands for
+  any type (§4.2), so a user abstraction need not be duplicated per concrete type.
 * **Closed unions and a keyed collection** — without the first, domain states get encoded as
-  strings, defeating type safety exactly where it pays; without the second, ordinary programs are
-  inexpressible.
+  strings; without the second, ordinary programs are inexpressible.
 
-**No FFI *yet*.** This is a staging decision, not a permanent boundary: a total foreign-call
-surface is the language's central rationale (PCP `d-4b8c`), and it will land here. Core omits it
-only until the checker exists, because an untotal boundary is worse than none. Core contains no
-`(.method obj)` form, so the v0 collision
-([`SPEC_REVIEW.md`](SPEC_REVIEW.md) C3) cannot arise. The `.-` accessor is specified so that
-reintroducing FFI later is additive rather than breaking.
-
-### Deviation from the approved plan
-
-The plan listed `for` among Core's iteration forms. It is **omitted**: bindings are immutable and
-there is no mutation, so `for` would add nothing `fold` does not already provide. Iteration is
-`map` / `filter` / `fold` / `range` plus recursion.
+Iteration is `map` / `filter` / `fold` / `range` plus recursion. There is no `for`: bindings are
+immutable, so it would add nothing `fold` does not already provide.
 
 ---
 
@@ -63,7 +51,7 @@ Format-restricted generation degrades reasoning when the grammar **commits a res
 reasoning that produced it**. Measured on GSM8K with GPT-3.5-turbo: natural language 75.99%,
 JSON-shaped *instructions* 74.70%, JSON-*mode* constrained decoding **49.25%** — and the mechanism
 is explicit, with 100% of JSON-mode responses emitting the `answer` key before the `reason` key,
-converting chain-of-thought into direct answering (`RESEARCH_REPORT.md` §3).
+converting chain-of-thought into direct answering (`researchReport.md` §3).
 
 Constraint itself costs ~1.3 points. **Ordering costs ~27.**
 
@@ -73,444 +61,287 @@ result *structurally*, which is the opposite of a schema whose key order can com
 first.
 
 This is a claim about grammar shape, and it survives the fact that guaranteed syntactic validity
-is commodity (`RESEARCH_REPORT.md` §2.2). Claims about parser convenience or token efficiency are
+is commodity (`researchReport.md` §2.2). Claims about parser convenience or token efficiency are
 **not** supported by located evidence and must not be made.
 
 ---
 
 ## 2. Lexical structure
 
+The host's reader is `asl/host/src/reader.c`.
+
 ```
 note       ::= string-lit                     ; free-standing, bound to nothing
-ident      ::= [a-z] [a-z0-9-]* [?!]?          ; kebab-case
-qualified  ::= ident "/" ident                 ; alias-qualified, e.g. s/upper
-qual-type  ::= ident "/" type-name             ; alias-qualified type, e.g. s/Shape
-mod-path   ::= ident ( "/" ident )*            ; module path, e.g. core/strings
-type-var   ::= [A-Z] [A-Za-z0-9]*              ; only inside a { } binder
-type-name  ::= [A-Z] [A-Za-z0-9]*              ; PascalCase
+meta       ::= ";" (:m ...)                   ; the only ; line the reader admits
+ident      ::= any run of characters other than whitespace, ( ) [ ] { } " ; ,
+qualified  ::= alias "/" name                 ; e.g. s/upper, s/Shape
+field      ::= ident "." name ("." name)*     ; x.f, a.b.c; also ")" "." name after a form
 keyword    ::= ":" ident
-int-lit    ::= "-"? [0-9]+
-float-lit  ::= "-"? [0-9]+ "." [0-9]+
-string-lit ::= '"' ( char | escape )* '"'
-escape     ::= "\\" ( '"' | "\\" | "n" | "t" | "r" | "0" )
+int-lit    ::= [+-]? [0-9]+
+float-lit  ::= [+-]? [0-9]+ ( "." [0-9]+ )? ( [eE] [+-]? [0-9]+ )?   ; with a point or an exponent
+string-lit ::= '"' ( char | newline | escape )* '"'
+escape     ::= "\" ( '"' | "\" | "n" | "t" | "r" | "x" hex hex | "u" hex{4} | "u{" hex{1,6} "}" )
 bool-lit   ::= "true" | "false"
 unit-lit   ::= "()"
 ```
 
-Identifiers are case-sensitive. Whitespace and notes are insignificant — a note is a string
-literal bound to nothing, the only comment form, erased by every backend. `;` line comments are
-retired: a `;` outside a string is now a lexical error.
+Identifiers are case-sensitive. Whitespace and commas separate tokens. A **note** is a string
+literal bound to nothing, at top level or in a body; the host evaluates a top-level one at load and
+discards it (`asl/grammar/corpus/valid/33-notes.asl`).
+
+**Prose does not live in source.** A `;` line is legal only when it holds one `(:m ...)` meta form
+without `:why`; any other `;` comment is `ERR_READ_COMMENT`, and a `:d` or `:doc` docstring is
+`ERR_READ_DOC`. Documentation is a row `(:doc :symbol "path#name" :text "...")` in the package's
+`doc.asn`, read by `asl '(:doc :symbol "path#name")'`.
+
+**Names.** User and builtin names are camelCase whole words; a predicate ends in `?`, and an
+effectful function may end in `!` (§5.7). The reader does not enforce the convention — `my-fn` and
+`snake_name` load — but every builtin has exactly one camelCase spelling, and the hyphenated
+spellings earlier versions used (`list-cons`, `read-line`, `str-find`, …) are
+`ERR_UNKNOWN_SYMBOL`.
+
+**Numbers.** A leading `-` is part of the literal when it touches the digits: `-1` is one token,
+`- 1` is two, and `(-1 2)` applies the number `-1` and fails with `ERR_TYPE` when run. `.5` and `1.`
+are not numbers (they read as names, so `.5` is `ERR_UNKNOWN_SYMBOL`). An integer literal outside
+`Int64` is `ERR_INT_RANGE`; an exponent makes a float, so `1.5e3` is `1500.0`.
+
+**Strings.** A raw newline inside a string literal is part of it. An escape outside the set above is
+`ERR_BAD_ESCAPE`; there is no `\0`.
+
+**Brackets.** Each kind pairs exactly: `( )` forms, `[ ]` vectors (lists, parameter and binding
+vectors), `{ }` anonymous records, `{:a 1 :b "x"}`. A mismatch is `ERR_READ_UNBALANCED`.
 
 `/` is both the division operator and the qualified-name separator. They never collide: division
-is a standalone token surrounded by separators, while a qualified name has no internal whitespace.
-Clojure resolves it the same way, and for the same reason.
-`agentscript-` is a **reserved identifier prefix** for compiler-internal names; user code using it is
-rejected (precedent: Haxe's `_hx_`, `SPEC_REVIEW.md` §11.8). The prefix is deliberately spelled in
-a form the identifier rule above can actually produce — a reserved word the lexer cannot emit
-reserves nothing, and its conformance fixture would pass for an unrelated reason.
+is a standalone token, while a qualified name has no internal whitespace.
 
-### 2.1 The Nano projection
+`agentscript-` is meant to be a **reserved identifier prefix** for compiler-internal names. The
+host does not reject it (`asl/grammar/corpus/semantic/reservedPrefix.asl` checks clean).
 
-**Generated from `prelude/prelude.json`** — edit there, not here.
+### 2.1 Short and long spellings
 
-Every form below has two spellings. They are the same form: the grammars produce one tree from
-either, and no rule anywhere may distinguish them. The short spelling is what the language stores
-on disk and puts on the wire; the long one is what a human reads.
+A short spelling is significant only in the position named, and is an ordinary atom everywhere
+else.
 
-| Nano | Long | Significant in |
-|---|---|---|
-| `df` | `defun` | decl-head |
-| `dfs` | `defschema` | decl-head |
-| `dfe` | `defenum` | decl-head |
-| `mt` | `match` | expr-head |
-| `:d` | `:doc` | module-opt, defun-opt |
-| `:x` | `:export` | module-opt |
-| `:i` | `:import` | module-opt |
-| `:a` | `:as` | import-spec |
-| `:f` | `:field` | field-head |
-| `:c` | `:case` | enum-case-head |
-| `starts?` | `stringStartsWith?` | call-head |
-| `ends?` | `stringEndsWith?` | call-head |
-| `len` | `listLength` | call-head |
-| `head` | `listHead` | call-head |
-| `tail` | `listTail` | call-head |
-| `rev` | `listReverse` | call-head |
-| `sum` | `listSum` | call-head |
-| `split` | `stringSplit` | call-head |
-| `join` | `stringJoin` | call-head |
-| `trim` | `stringTrim` | call-head |
-| `slice` | `listSlice` | call-head |
-| `chars` | `stringChars` | call-head |
-| `f64` | `stringToFloat64` | call-head |
-| `i64` | `stringToInt64` | call-head |
-| `keys` | `mapKeys` | call-head |
-| `vals` | `mapValues` | call-head |
-| `has?` | `mapHas?` | call-head |
-| `empty?` | `listEmpty?` | call-head |
-| `some?` | `some?` | call-head |
-| `none?` | `none?` | call-head |
-| `ok?` | `ok?` | call-head |
-| `err?` | `err?` | call-head |
-| `blank?` | `stringEmpty?` | call-head |
-| `substr` | `stringSlice` | call-head |
-| `str-find` | `stringIndexOf` | call-head |
-| `includes?` | `stringContains?` | call-head |
-| `lower` | `stringLower` | call-head |
-| `strrev` | `stringReverse` | call-head |
-| `replace` | `stringReplace` | call-head |
-| `str-i` | `stringFromInt64` | call-head |
-| `str-f` | `stringFromFloat64` | call-head |
-| `widen` | `int32ToInt64` | call-head |
-| `narrow` | `int64ToInt32` | call-head |
-| `float` | `int64ToFloat64` | call-head |
-| `trunc` | `float64ToInt64` | call-head |
-| `contains?` | `listContains?` | call-head |
-| `index-of` | `listIndexOf` | call-head |
-| `sort-by` | `listSortBy` | call-head |
-| `pairs` | `mapPairs` | call-head |
-| `to-map` | `mapFromPairs` | call-head |
-| `err-map` | `resultMapErr` | call-head |
-| `opt-res` | `optionToResult` | call-head |
-| `res-opt` | `resultToOption` | call-head |
-| `denied` | `permissionDenied` | call-head |
-| `exists` | `alreadyExists` | call-head |
-| `exists?` | `fileExists?` | call-head |
-| `append` | `listAppend` | call-head |
-| `append-file` | `file-append` | call-head |
+| Short | Long | Position | Host |
+|---|---|---|---|
+| `mt` | `match` | expression head | both read |
+| `fn` | `lambda` | expression head | both read |
+| `do` | `begin` | expression head | both read |
+| `:x` | `:export` | module option | only `:x` is read; `:export` is ignored, so the module exports nothing |
+| `:i` | `:import` | module option | only `:i` is read; `:import` is ignored |
+| `:a` | `:as` | import entry | both read |
+| `:f` | `:field` | list-form schema field | the host takes any keyword head |
+| `:c` | `:case` | list-form enum case | only `:c`; `:case` is `ERR_BAD_DEFINITION` |
 
-A third, intermediate spelling of the declaration heads is also accepted: `def`, `schema`, `enum`. It is a
-compatibility surface and carries no meaning of its own.
+`(Point :x 3)` supplies a field called `x`, and no tool may rewrite it. This is why the table
+carries a position column: a projection applied as text substitution corrupts any record whose
+field is spelled like an option.
 
-**An alias is significant only in the position named above, and is an ordinary atom everywhere
-else.** `:x` opens a module's export list; `(Point :x 3)` supplies a field called `x`, and no
-tool may rewrite it. This is the whole reason the table carries a position column: a projection
-applied as text substitution corrupts any record whose field is spelled like a keyword.
+The list forms `(df ...)`, `(defun ...)`, `(def ...)`, `(dfs ...)`, `(defschema ...)`,
+`(defenum ...)` and `(fn name ...)` at top level are `ERR_UNSUPPORTED_TOPLEVEL`.
 
-These forms are deliberately unaliased, being one token already or too short to shorten without
-colliding with an identifier: `module`, `fn`, `let`, `if`, `cond`, `try`, and the option
-keywords `:else`, `:default`, `:json`, `:json-case`.
-
-Types have short spellings on the same terms:
+Types have short spellings (`prelude/prelude.asn` `:types :aliases`):
 
 | Alias | Type |
 |---|---|
-| `Int` | `Int64` |
-| `I64` | `Int64` |
+| `Int`, `I64` | `Int64` |
 | `I32` | `Int32` |
-| `F64` | `Float64` |
-| `F32` | `Float64` |
-| `Num` | `Float64` |
+| `F64`, `F32`, `Num`, `Float` | `Float64` |
 | `Str` | `String` |
-| `Float` | `Float64` |
 
-`F32` resolves to `Float64` — a **reserved width name**. Core has no such width. It is accepted so that source
-written against a narrower host type parses and checks today, and it carries none of that width's
-semantics: no narrowing, no wrapping, and no trap at the narrower boundary. It exists as
-groundwork for host interop, where a real fixed-width type will replace it; until then, reaching
-for one to obtain a smaller number is a mistake the language cannot catch for you.
+`F32` resolves to `Float64` — a **reserved width name** with none of that width's semantics: no
+narrowing, no wrapping, no trap at the narrower boundary.
+
 ## 3. Types
 
 | Type | Notes |
 |---|---|
-| `Bool` | `true` / `false`. No truthiness — `if` accepts `Bool` only. |
-| `Int32`, `Int64` | Two's complement, wrapping is an error not a behavior; see §6.1 |
-| `Float64` | IEEE-754 binary64 |
-| `String` | Sequence of Unicode scalar values. **All indices are in characters, never bytes.** |
-| `Unit` | Exactly one value, written `()` |
-| `(List T)` | Homogeneous, immutable, ordered |
-| `(Option T)` | `(some v)` \| `(none)` |
-| `(Result T E)` | `(ok v)` \| `(err e)` |
-| `(Pair A B)` | Built-in record, fields `first` / `second` |
-| `(Map K V)` | Immutable keyed collection; `K` must support ordering and equality. `Float64` is not a legal key type: its equality is IEEE-754, so a `NaN` key could never be looked up again |
-| `IoError` | Closed union of I/O failures: `(notFound)`, `(permissionDenied)`, `(alreadyExists)`, `(invalidPath)`, `(interrupted)`, `(other)`. Fixed so every target reaches the same case for the same condition |
+| `Bool` | `true` / `false`. No truthiness: `if`, `cond`, `and`, `or`, `not` and `assert` take `Bool` only. |
+| `Int64` | Two's complement; overflow traps (§3.1). |
+| `Int32` | An annotation and a conversion target (`int64ToInt32`). The host keeps no separate 32-bit arithmetic: `(+ v 1)` on an `Int32` of 2147483647 gives 2147483648. |
+| `Float64` | IEEE-754 binary64. |
+| `String` | UTF-8 bytes. **Lengths and indices are in bytes**: `(stringLength "héllo")` is 6, and a slice inside a multi-byte character splits it. `stringChars` yields characters. |
+| `Unit` | Exactly one value, written `()`. |
+| `Bytes`, `F64Array`, `I64Array`, `I8Array` | Byte buffers and flat numeric arrays (§6). |
+| `(List T)` | Homogeneous, immutable, ordered. |
+| `(Option T)` | `(some v)` \| `(none)`. |
+| `(Result T E)` | `(ok v)` \| `(err e)`. |
+| `(Pair A B)` | Built with `pair`, read with `pairFirst` / `pairSecond` or the pattern `(pair a b)`. |
+| `(Map K V)` | Immutable keyed collection with sorted keys. The host accepts any key type, `Float64` included; a `NaN` key is never found again. |
+| `IoError` | Closed union `(notFound)`, `(permissionDenied)`, `(alreadyExists)`, `(invalidPath)`, `(interrupted)`, `(other)`. |
 
-`Int` is a documented alias for `Int64`. **There is no implicit numeric conversion** — mixing
-`Int64` and `Float64` in one arithmetic form is a type error. Use §6.4's explicit conversions.
+**There is no implicit numeric conversion** — mixing `Int64` and `Float64` in one arithmetic form
+is `ERR_TYPE_MISMATCH`, at check time where the types are known and at run time otherwise. Use
+§6's explicit conversions. An unsuffixed integer literal is `Int64`; a literal with a point or an
+exponent is `Float64`.
 
-An unsuffixed integer literal takes whichever integer type its context requires, and `Int64` where
-nothing constrains it; a literal with a decimal point is always `Float64`. Without this a literal
-would have to be written with a width to be usable at all, which is the ceremony §5 exists to
-avoid — and leaving it unstated made `(+ x 1)` mean different things to different implementations.
+There is no nil and no exception: absence is `(none)`, failure is `(err e)`.
 
-A literal whose value does not fit the type its context requires is a **static error**, not an
-overflow: nothing has been computed yet. This has to be said, because one host has no width to
-notice with — `2147483648` at `Int32` answered itself on Python while `rustc` refused the same
-literal.
+### 3.1 Integer overflow and division
 
-A leading `-` is part of the literal when it touches the digits and the subtraction operator when it
-does not: `-1` is one token, `- 1` is two, and `(- 1 2)` is arithmetic while `(-1 2)` applies the
-number `-1` to `2` and is rejected. Both readings are legal parses of the same characters, so the
-choice is normative rather than an implementation detail: the grammar is the constrained-decoding
-surface, and an ambiguity there is a decoder that can emit either. There is no exponent form — a
-number is an optional sign, digits, and optionally a point and more digits — so `1.5e3` is the
-float `1.5` followed by the name `e3`, and `.5` and `1.` are not numbers at all.
+An `Int64` operation whose exact result is not representable **traps** with `ERR_INT_OVERFLOW`:
+`(+ a b)`, `(- a b)`, `(* a b)`, `(abs a)` at the minimum, `(/ a b)` for `MIN / -1`, and
+`(listSum xs)`. Negation is `(- a)`; there is no `neg`.
 
-Fixing the widths resolves `SPEC_REVIEW.md` A3, which otherwise makes the same program overflow
-differently on each of the four targets.
-
-### 3.1 Integer overflow
-
-An integer operation whose exact result is not representable in the operand type **traps**. `Int32`
-and `Int64` never wrap and never widen, so `(+ a b)`, `(- a b)`, `(* a b)`, `(neg a)`, `(abs a)`,
-`(/ a b)` and `(listSum xs)` all trap at their boundaries, and `(neg a)` and `(abs a)` do so at
-`MIN` because two's complement is not symmetric. `(mod a b)` does not trap there: `MIN mod -1` is
-`0`, which the type holds, and the rule is about the result rather than about the operands.
+Integer `/` **floors**: `(/ -7 2)` is `-4`. `mod` is the floored remainder, so its sign follows the
+divisor: `(mod -7 3)` is `2`. A zero `Int` divisor traps (`ERR_DIV_ZERO`).
 
 `(checkedDiv a b)` answers `(none)` in exactly the cases `/` traps on — a zero divisor and
-`MIN / -1` — because being total is the reason it exists; `(checkedMod a b)` answers `(none)` only
-for a zero divisor. A conversion that cannot represent its argument answers `(none)` rather than the
-nearest value it can: `(float64ToInt64 1e30)` and `(stringToInt64 "9223372036854775808")` are
-both `(none)`, not `9223372036854775807`.
-
-A host without fixed integer widths has to impose them, and a host whose `-O` build wraps has to
-check explicitly: the semantics are the language's, not the profile's.
+`MIN / -1`; `(checkedMod a b)` answers `(none)` for a zero divisor. A conversion that cannot
+represent its argument answers `(none)` rather than the nearest value:
+`(float64ToInt64 1e30)` and `(stringToInt64 "9223372036854775808")` are both `(none)`.
 
 ### 3.2 Ordering and NaN
 
-Comparison is IEEE-754. `<`, `<=`, `>` and `>=` are all false when either operand is `NaN`, and
-`(= nan nan)` is false — including inside a container, so a list holding a `NaN` is not equal to
-itself.
+Comparison is IEEE-754: `<`, `<=`, `>` and `>=` are false when either operand is `NaN`, and
+`(= nan nan)` is false. `<` and its kin compare two values of one type — `Int`, `Float`, `String`
+(bytewise) or keyword (by name); any other pair, enum values included, is `ERR_TYPE`.
 
-Ordering is not comparison. `listSort`, `listSortBy`, `listMin`, `listMax`, `min` and `max` use
-one **sort order**, which is total because a sort with an unordered element has no defined output
-and this language's output is defined on every target:
-
-- a value holding a `NaN` sorts after every value that does not;
-- values holding a `NaN` tie with one another, and every sort is stable, so they keep their input
-  order;
-- a value of a user enum or union type orders by **declaration order** — the order its cases are
-  written in the `dfe` (or `defenum`) — never by case name, so `(listSort (list (zed) (alpha)))` with `zed`
-  declared before `alpha` yields `(zed alpha)`;
-- everything else is ordered as `<` orders it.
-
-So `(listSort (list 3.0 nan 0.5))` is `(0.5 3.0 nan)`, `(min nan 1.0)` and `(min 1.0 nan)` are both
-`1.0`, and `(max …)` is `nan` from either side. Selection agrees with the sort — `(listMin xs)` is
-the head of `(listSort xs)` — rather than being a second rule that answers by operand position.
-Leaving it to `<` alone is what made one host answer `(1.0 nan 2.0 3.0)` and the other
-`(1.0 3.0 nan 2.0)` for the same input.
+`listSort` and `listSortBy` are stable and put a `NaN` last: `(listSort (list 3.0 nan 0.5))` is
+`(0.5 3.0 nan)`, and `listMin` / `listMax` agree with that order. `min` and `max` do not: with a
+`NaN` operand their result depends on operand order (`(min nan 1.0)` is `nan`, `(min 1.0 nan)` is
+`1.0`).
 
 ## 4. Declarations
 
 ### 4.0 `module` — modularity by default
 
-Every source file is a module. The header is its contract, and it is deliberately readable without
-the body: a later pass composes a module by reading only this.
+Every source file is a module. The header is its contract, and it is readable without the body.
 
 ```lisp
 (module text/casing
-  :d "Case-conversion helpers for report rendering."
   :x [shout initials]
   :i [(core/strings :a s)
-      (core/lists   :a l)])
+      (core/lists :a l)])
 ```
 
-* `:d` (`:doc`) — mandatory. One sentence on what the module is for.
-* `:x` (`:export`) — the public surface. **Everything not listed is private to the module.** An entry
-  is a function name or a type name, and its case decides which: `:x [describe Shape]`
-  publishes one of each. This is the only place in the language where spelling decides a kind,
-  and it is a deliberate exception — a second `:export-types` vector would be a second
-  contract, free to disagree with the first about what is public.
-* `:i` (`:import`) — each entry binds a module path to an alias (using `:a` / `:as`); members are then reached as
-  `alias/name`, and an exported type as `alias/TypeName`.
+* `:x` — the public surface. **Everything not listed is private to the module.** An entry is a
+  function or a type name; exporting a `schema` or `enum` publishes its fields or cases with it.
+* `:i` — each entry binds a module to an alias (`:a`); members are then reached as `alias/name`,
+  and an exported type as `alias/TypeName`. Using a member the module does not export is
+  `ERR_NOT_EXPORTED`.
 
-**An exported type is transparent.** Exporting a `dfe` publishes its cases, written
-`alias/case-name` both as constructors and as patterns; exporting a `dfs` publishes its fields, for construction and for `.-field` access. Exhaustiveness forces this: §9 rule 4
-requires every `match` to cover its union, so an importer that cannot see every case cannot
-write a legal one. There is no opaque form in v0.2, because an opaque type is an abstract
-handle and what may be done with one depends on an ownership model this version deliberately
-leaves unrecorded (PCP `l-880d`); the syntax is left additive so opacity can arrive later
-without invalidating a program written now.
+An import names the module a file **declares**, not its path. The loader (`asl/host/src/loader.c`)
+resolves it from the nearest `.asl.config.asn` above the importer: a name qualified by that
+workspace resolves inside it (`rest.asl`, `src/rest.asl`, then the declared name); a path
+`first/rest` resolves in the package named `first` or in a `:dependencies` entry of the config; a
+bare name resolves in the importing package, then in its manifest dependencies. A file with no
+config above it can import nothing (`ERR_UNRESOLVED_IMPORT`).
 
-**A bare case name is not exportable.** Cases travel with their type, so `:export [circle]`
-names nothing the module declares and violates rule 2. A second route to publishing a
-constructor would be a second contract, and it would publish a constructor for a type no
-importer can name.
+A file with no `module` header is still a module, and exports nothing. Aliases are module-local.
 
-**There is no re-export.** An entry must name a type or function this module declares, so
-listing an imported type violates rule 2. A consumer of B need not import A to call a B
-function whose signature mentions an A type — identity is by defining module, not by who is
-looking — but it must import A the moment it needs to write that type itself.
+**A module that exports `main` is a program.**
 
-**The contract is this header together with the declarations of the types it exports.** Under
-transparent export the vector seeds the public surface rather than being the whole of it, so a
-mechanical extractor reads both; both are in the same file, which is what keeps the surface
-readable without the bodies.
-
-A file with no `module` header is still a module: its path relative to the source root becomes its
-name, its `:doc` is absent, and **nothing is exported**. Modularity is the default; the header
-only names and opens it.
-
-Private-by-default is the deliberate choice. An explicit export list is a stable surface to
-program against, and it is the one part of a module another pass must read — which is exactly the
-property being optimised when the unit of work is a whole module.
-
-Import cycles are an error. Aliases are module-local and may be chosen freely.
-
-**A module that declares `main` is a program.** The entry point is
-
-<!-- not-agentscript: a signature, shown without the body §4.2 requires of a declaration -->
 ```lisp
-(df ! main [(args (List Str))] -> (Result Unit IoError))
+(module tools/hello :x [main])
+
+fn ! main args: (List String) -> (Result Unit IoError)
+  (do (println "hello" (listLength args)) (ok ()))
 ```
 
-and its `Result` is the process's exit status: `ok` exits zero, `err` exits non-zero with the case
-name on standard error. Arguments arrive as a parameter rather than through a hidden global, so the
-program's input is visible in its contract and testable without substituting an environment. A
-module without `main` is a library and gets no entry point.
+`main` takes no parameter or one `(List String)`. `asl-host run FILE ARGS` exits 0 when it returns
+`(ok v)`, exits `n` when it returns an `Int64` `n` or `(ok n)` with `n` in 0..255, and otherwise
+fails with `ERR_MAIN_FAILED`. A module that exports `runTests` is a test (§5.8).
 
-### 4.1 `dfs` — records (ASL Verbose: `defschema`)
+### 4.1 `schema` — records
+
+Two spellings, the same declaration:
 
 ```lisp
-(dfs Point
-  (:f x I64 "Horizontal coordinate")
-  (:f y I64 "Vertical coordinate"))
+(schema Config (:f name String) (:f retries Int64 :default 3))
 
-(dfs Config
-  (:f name    Str "Display name")
-  (:f retries I64 "Attempt count" :default 3))
+schema Point
+  x: Int64
+  y: Int64
 ```
 
-`(dfs [{<type-vars>}] <TypeName> <field>+)`, with
-`(:f <ident> <Type> <doc-string> [:default <literal>] [:json <string>])`.
-(The verbose spellings `defschema` and `:field` are also supported).
-The doc-string is mandatory — it is cheap, and it is what an LLM reads.
+The list form is `(schema Name (:f field Type ["note"] [:default literal])...)`; the block form is a
+bare column-0 line `schema Name` with one `field: Type` line per field below it. Only the list form
+takes `:default`: the block form has no syntax for one, and a `:default` written there is ignored.
+There are no type parameters on a schema: `(schema {T} Box ...)` is `ERR_BAD_DEFINITION`.
 
-Records may be parameterised. Type variables are bound in a leading `{ }`, so a name is a type
-variable because it was declared one, never because of how it is spelled:
+**Construction** names the fields; order is irrelevant: `(Point :x 3 :y 4)`, `(Config :name "svc")`
+(retries defaults to 3). A PascalCase name in head position is a constructor. The host does not
+reject a missing field or an unknown key at check time: a missing field fails when it is read
+(`ERR_FIELD`), and an unknown key is stored on the record like a declared one.
 
-```lisp
-(dfs {T} Box
-  (:f value T "The wrapped value"))
-```
+**Field access** is `p.x`, chained as `a.b.c`, and on an expression as `(expr).f`. The earlier
+accessor `(.-x p)` is `ERR_READ_FIELD`. **Update** is a copy: `(with p :x 5)` is `p` with field
+`x` set to 5.
 
-**Construction** (resolves `SPEC_REVIEW.md` B2, which left records unconstructable):
-
-```lisp
-(Point :x 3 :y 4)
-(Config :name "svc")
-"retries defaults to 3"
-```
-
-A PascalCase identifier in head position is a constructor. Every field without a `:default` must
-be supplied; order is irrelevant; unknown or duplicate keys are errors.
-
-**Field access** uses the `.-` prefix (resolves C3, precedent Clojure §11.1):
+### 4.2 `fn` — named functions
 
 ```lisp
-(.-x p)
-```
+fn add a: Int64 b: Int64 -> Int64
+  (+ a b)
 
-**JSON naming** is pinned now even though Core ships no serializer, so that adding one later cannot
-silently change the wire format (resolves A2): `:json-case` on the schema selects
-`kebab` (default, name verbatim) / `camel` / `snake` / `pascal`, and `:json "..."` on a field
-overrides it. Shape copied from serde and pydantic, which converged independently (§11.5).
-
-### 4.2 `df` (ASL Verbose: `defun`)
-
-```lisp
-(df add [(a I64) (b I64)] -> I64
-  (+ a b))
-
-(df safe-div [(a I64) (b I64)] -> (Result I64 Str)
+fn safeDiv a: Int64 b: Int64 -> (Result Int64 String)
   (if (= b 0)
     (err "division by zero")
-    (ok (/ a b))))
+    (ok (/ a b)))
 ```
 
-`(df [!] [{<type-vars>}] <ident> [<params>] -> <Type> [:d <string>] <body-expr>+)`. The
-parameter list is a **vector**, and `->` is a literal token in the form, not an expression
-(resolves A9). In ASL Verbose, `df` is spelled `defun` and `:d` is `:doc`. The body is one or more
-expressions evaluated in order; the value is the last one.
+The header is a bare line starting in column 0, `fn [!] name p: Type ... -> Type`, and the body is
+indented below it. The header is not a form, so the body closes only its own parentheses. The body
+is one or more expressions evaluated in order; the value is the last one.
 
-The optional `!` marks a function that **touches the world** — anything in §6's I/O group, or
-anything that calls something marked. It is written on the signature and not inferred away,
-because the signature is what a caller reads (§4.0); a marker on a function that turns out to
-perform no effect is legal, since tightening a contract later must not break its callers. Calling a
-marked function from an unmarked one is an error (§5.7).
+Every parameter carries a type (`ERR_UNTYPED_PARAM`), and the check pass compares argument and
+return types against the signature (`ERR_TYPE_MISMATCH`) and call arity (`ERR_ARITY`). A name
+defined twice is `ERR_DUPLICATE_DEFINITION`.
 
-`:d` (or `:doc` in ASL Verbose) is **mandatory for every exported function** and optional otherwise.
-v0.1 required a doc-string on record fields but gave functions nowhere to put one, which is backwards:
-an agent composing a module reads its functions, not its field layouts.
+The optional `!` marks a function that **touches the world** (§5.7).
 
-Functions may be parameterised over types, bound in a leading `{ }`:
+**Polymorphism.** A type name the module neither declares nor imports, such as `A` or `T`, stands
+for any type:
 
 ```lisp
-(df {A B} swap [(p (Pair A B))] -> (Pair B A)
-  :d "Exchange the two components of a pair."
-  (pair (.-second p) (.-first p)))
+fn swap p: (Pair A B) -> (Pair B A)
+  (mt p ((pair a b) (pair b a)))
 ```
 
-Without this, only the prelude is polymorphic and every shared abstraction has to be rewritten per
-concrete type (PCP `r-8f23`).
+There is no `{ }` binder: a misspelled concrete type name is read the same way, and the host
+reports nothing for it (`asl/grammar/corpus/semantic/unboundTypevar.asl` checks clean).
 
-Parameters are vectors throughout the language — v0 used a list for `defun` and a vector for
-`defui`, which was inconsistent (C4). Core standardizes on the vector.
+Visibility comes from the module's `:x` list, not from position.
 
-Visibility comes from the module's `:x` list (or `:export` in ASL Verbose, §4.0), not from position.
-A top-level definition that is not exported is private to its module, and that is what drives Go's
-capitalization (§8). A `dfs` or `dfe` is exported by naming it on that same list, and its fields or
-cases travel with it.
-
-### 4.3 `fn`
+### 4.3 `fn` — lambdas
 
 ```lisp
-(fn [(x I64)] -> I64 (* x 2))
-"annotated"
+(fn [(x Int64)] -> Int64 (* x 2))
 (map (fn [x] (* x 2)) xs)
-"annotations elided: map fixes them"
 ```
 
-`(fn [!] [<param>*] [-> <Type>] <body-expr>+)`, where each `<param>` is `<ident>` or
-`(<ident> <Type>)`. Anonymous function, closing over the enclosing scope by value. A lambda carries
-its own effect marker: `(map (fn ! [p] (fileRead p)) paths)` is how one `map` serves both kinds
-without a second, effectful copy of it.
+`(fn [<param>*] [-> Type] <body-expr>+)`, where each `<param>` is a name or `(name Type)`. A lambda
+closes over the enclosing scope by value. Annotations may be elided where the call position
+determines them. A lambda takes no `!` and no type parameters: `(fn ! [p] ...)` is
+`ERR_BAD_LAMBDA`; its effects count toward the named function that encloses it (§5.7).
 
-**Annotations are optional where the position determines them.** A lambda passed to a callee whose
-signature fixes its parameter and return types cannot carry an annotation that differs from what
-the position implies, so writing one carries no information. Where nothing determines them — a
-lambda bound by `let` and never applied, say — they are **required**, and a checker rejects the
-elision rather than typing the lambda by accident of what its body happens to allow.
+A lambda cannot name itself through the `let` that binds it (`ERR_LETREC`). Recursion is a
+top-level `fn`, or a lambda that receives itself as a parameter.
 
-Named declarations are the opposite case and keep their mandatory annotations: `df`, `dfs`
-and `dfe` are the module surface, read without the body (§4.0).
-
-It is **not** simply `df` without a name: a lambda takes neither type parameters nor `:d`.
-Type parameters are bound by the named declaration that encloses it, and a lambda has no exported
-surface to document. Both grammars enforce this, and a fixture pins it.
-
-### 4.4 `dfe` — closed unions (ASL Verbose: `defenum`)
+### 4.4 `enum` — closed unions
 
 ```lisp
-(dfe Shape
-  (:c circle    [(radius F64)]                  "A circle")
-  (:c rectangle [(width F64) (height F64)]  "An axis-aligned rectangle")
-  (:c point     []                                  "A degenerate zero-area shape"))
+enum Shape (circle radius: Float64) (rectangle width: Float64 height: Float64) (point)
+
+(enum Grade
+  (:c steady [])
+  (:c drifting [(by Float64)] "Spread too large."))
 ```
 
-`(dfe [{<type-vars>}] <TypeName> <case>+)` with
-`(:c <ident> [<fields>] <doc-string>)` (in ASL Verbose: `defenum`, `:case`). Case names are kebab-case identifiers and are used as
-both constructors and patterns within their own module, exactly like the built-in `ok` /
-`some`; an importer writes them `alias/case-name` in both positions (§4.0):
+The block form is a bare line `enum Name (case field: Type ...) ...`; the list form is
+`(enum Name (:c case [(field Type)...] ["note"])...)`. Case names are camelCase, and are used as
+both constructors and patterns, exactly like the built-in `ok` / `some`; an importer writes them
+`alias/case` in both positions:
 
 ```lisp
-(circle 2.0)
 (mt sh
-  ((circle r)      (* 3.14159 (* r r)))
+  ((circle r) (* 3.14159 (* r r)))
   ((rectangle w h) (* w h))
-  ((point)         0.0))
+  ((point) 0.0))
 ```
 
-Enums may be parameterised, which is what makes recursive container types expressible:
-
-```lisp
-(dfe {T} Tree
-  (:c leaf []                            "An empty subtree")
-  (:c node [(value T) (left (Tree T)) (right (Tree T))] "An interior node"))
-```
-
-Matching an enum must be exhaustive, as for every other `mt`. Without closed unions a domain
-state is encoded as a string or an integer, which discards type safety at precisely the points
-where it would have paid, and the compiler's own AST is inexpressible (PCP `r-b539`).
+Cases are positional: `(circle 2.0)`. Matching an enum must be exhaustive (§5.4).
 
 ## 5. Expressions
 
@@ -522,353 +353,214 @@ where it would have paid, and the compiler's own AST is inexpressible (PCP `r-b5
   (stringSlice s 0 half))
 ```
 
-Bindings are evaluated **in order**, and each may refer to those before it (`let*` semantics,
-resolving A6). Bindings are **immutable** — Core has no `set!`. Shadowing an outer name is
-permitted. `let` is not recursive; use `df` for recursion.
+Bindings are evaluated **in order**, and each may refer to those before it. The flat spelling
+`(let [n 1 m (+ n 1)] m)` is the same form. Bindings are **immutable** — there is no `set!`.
+Shadowing an outer name is permitted. `let` is not recursive (`ERR_LETREC`).
 
-### 5.2 `if` — total
+### 5.2 `if`
 
 ```lisp
 (if (< a b) a b)
 ```
 
-Both branches are **mandatory** and must have the same type; the condition must be `Bool`
-(resolves A7). There is no single-armed `if`.
+The condition must be `Bool` (`ERR_TYPE_MISMATCH`). A two-armed `if` is total. A one-armed `if` is
+accepted and yields `()` when the condition is false, so it type-checks only where `Unit` is
+wanted; `when` and `unless` are the one-armed forms.
 
 ### 5.3 `cond`
 
 ```lisp
 (cond
-  ((< n 0)  "negative")
-  ((= n 0)  "zero")
-  (:else    "positive"))
+  ((< n 0) "negative")
+  ((= n 0) "zero")
+  (else "positive"))
 ```
 
-Clauses are tested in order. `:else` is **mandatory** and must be last — a `cond` is always total,
-for the same reason `if` is.
+Clauses are tested in order; the catch-all is `(else v)`. `(:else v)` is a keyword test and fails
+with `ERR_TYPE_MISMATCH`. The host does not require the `else` clause: a `cond` with no clause
+taken yields `()`.
 
-### 5.4 `mt` (ASL Verbose: `match`)
+### 5.4 `mt` (`match`)
 
 ```lisp
 (mt (stringToInt64 s)
   ((some n) (* n 2))
-  ((none)   0))
-
-(mt (optionToResult (listHead xs) "empty list")
-  ((ok n)    n)
-  ((err msg) (stringLength msg)))
-
-(mt xs
-  ((list)      0)
-  ((cons h t)  (+ h (sum-list t))))
+  ((none) 0))
 ```
-
-Patterns, and nothing else:
 
 | Pattern | Matches |
 |---|---|
 | `(ok p)` / `(err p)` | a `Result` |
 | `(some p)` / `(none)` | an `Option` |
-| `(list)` | the empty list |
-| `(cons <p> <p>)` | a non-empty list, binding head and tail |
-| `(pair <p> <p>)` | a `Pair` |
-| literal | equal `I32`/`I64`/`Bool`/`Str` value |
-| `(<case> <p>*)` | a `dfe` case, binding its fields (§4.4) |
-| `<ident>` | anything, binding it |
-| `_` | anything, binding nothing |
+| `(pair a b)` | a `Pair` |
+| `(<case> p ...)` | an `enum` case, binding its fields positionally |
+| literal | an equal `Int64`/`Bool`/`String` value |
+| `<name>` | anything, binding it |
+| `_` or `else` | anything, binding nothing |
 
-Match must be **exhaustive**; a non-exhaustive `mt` is a compile error. All arms must share a
-type.
+A constructor argument is a name or `_`, so **patterns nest one level** (`ERR_BAD_PATTERN`). A list
+is not a pattern — `(list)` and `(cons h t)` are `ERR_UNKNOWN_SYMBOL` there; take a list apart with
+`listHead` and `listTail`. `:else` as a pattern is `ERR_ELSE_KEYWORD`.
 
-### 5.5 `try` — Result propagation
+A match over an `enum` must cover every case or end in a catch-all (`ERR_MATCH_NONEXHAUSTIVE`).
+
+### 5.5 Results and options
+
+There is no propagation operator. A `Result` or `Option` is taken apart with `mt`, or collapsed
+with a fallback by `optionOr` / `resultOr`; `optionMap`, `resultMap`, `resultMapErr`,
+`optionToResult` and `resultToOption` transform one without unwrapping it.
 
 ```lisp
-(df parse-port [(text Str)] -> (Result I64 Str)
-  (let [(raw (try (optionToResult (listGet (stringSplit text ":") 1)
-                                    "missing port")))
-        (n   (try (optionToResult (stringToInt64 (stringTrim raw))
-                                    "port is not a number")))]
-    (if (> n 65535)
-      (err "port out of range")
-      (ok n))))
+fn parsePort text: String -> (Result Int64 String)
+  (mt (listGet (stringSplit text ":") 1)
+    ((none) (err "missing port"))
+    ((some raw)
+      (mt (stringToInt64 (stringTrim raw))
+        ((none) (err "port is not a number"))
+        ((some n) (if (> n 65535) (err "port out of range") (ok n))))))
 ```
-
-`(try e)` where `e : (Result T E)` evaluates to `T`, or returns `(err …)` from the enclosing
-`df` immediately. Legal only inside a `df` whose return type is `(Result _ E)` with a
-matching `E`, and **not inside an `fn`** — a lambda is not the function `try` returns from, so the
-form there has no meaning to give it.
-
-Together `mt` and `try` resolve `SPEC_REVIEW.md` B1 — v0 could construct `ok`/`err` and had no
-way to consume them, making every I/O-shaped program unwritable. Precedent: Gleam's
-`use`/`result.try` and Rust's `?` (§11.2). `try` exists specifically because `mt`-only code
-nests deeply, and nesting depth is the dominant LLM syntax-failure mode.
 
 ### 5.6 Evaluation order
 
 Strict, left to right, depth first. Arguments are fully evaluated before the call. `and` / `or`
-short-circuit; nothing else does. The compiler may not reorder or elide any call (resolves G9).
+short-circuit; nothing else does. `(do e1 e2 ...)` evaluates in order and yields the last value.
 
 ### 5.7 Effects
 
-A form is **effectful** when it calls an I/O builtin (§6), calls a function marked `!`, or hands a
-lambda marked `!` to something. An effectful form is legal only inside a `df` or `fn` that
-carries the marker; otherwise it is an error (§9 rule 12).
+A named function is **effectful** when its body, including the lambdas inside it, names an
+effectful builtin (the I/O section of §6) or a function marked effectful. It must then carry the
+marker, written `fn ! name ...` or as a name ending in `!` (`fn readAll! ...`); otherwise
+`asl-host check` reports `ERR_EFFECT_UNMARKED`. The check runs in `check` only; `test` and `run` do
+not repeat it.
 
-Effects need no ordering rule of their own: §5.6 already fixes evaluation as strict, left to right,
-with no reordering or elision, and `let` is already the sequencing form. What the marker buys is
-not ordering but *visibility* — a caller sees that a function touches the world without reading its
-body, and the language keeps the option of adding concurrency later without colouring every
-function retroactively.
+The marker is written on the signature and not inferred away, because the signature is what a
+caller reads (§4.0). A marker on a function that performs no effect is legal.
 
-The rule over-approximates in one place, deliberately: a marked lambda that is passed somewhere and
-never applied still makes the call that received it effectful. Deciding otherwise would mean
-carrying effects inside the type of a function, which is the machinery this design is avoiding.
+### 5.8 Tests
+
+A test module exports `fn runTests -> Bool`. `asl-host test FILE` runs it and passes when it
+returns `true` after at least one `(assert cond "msg")` or `(refute cond "msg")` executed; zero
+assertions is `ERR_TEST_FAILED`, and an assertion over a constant is `ERR_CONSTANT_ASSERT`. The
+executed count is printed.
 
 ---
 
 ## 6. Closed vocabulary
 
-Every builtin, with its type. Nothing outside this table and §4-5 exists in Core.
+`prelude/prelude.asn` is the list of builtins the host binds, as probed on its date, with each
+one's type, section, defining source and doc; every name in it binds on the host. The host also
+binds system builtins it does not list, such as the socket and file-descriptor calls `asl-net`
+uses. `asl '(:help :builtin stringTo)'` searches the list by name, then by doc.
 
-**Generated from `prelude/prelude.json`** — edit there, not here.
+By section:
 
-### 6.1 Arithmetic
+- **Arithmetic** — `+ - * / mod checkedDiv checkedMod abs min max trap floor ceil round clamp pow
+  exp log log2 log10 sqrt sin cos tan atan2 isNan? isFinite? floatNan floatInf floatNegInf`
+- **Comparison and logic** — `= == != not= < <= > >= and or not`
+- **String** — `str stringConcat stringLength stringLines stringRepeat stringCountChar fnv1a64
+  stringEmpty? stringSlice stringIndexOf stringContains? stringStartsWith? stringEndsWith?
+  stringSplit stringJoin stringUpper stringLower stringTrim stringReverse stringReplace stringChars
+  stringFromInt64 stringFromFloat64 stringToInt64 stringToFloat64`
+- **Numeric conversion** — `int32ToInt64 int64ToInt32 int64ToFloat64 float64ToInt64`
+- **List** — `list cons listEmpty? listLength listGet listHead listTail listAppend listReverse
+  listSlice listContains? listIndexOf listSort listSortBy map filter fold parMap parFold range
+  listTake listDrop listLast listAny? listAll? enumerate zip listSum listMin listMax partial`
+- **Map** — `mapEmpty mapGet mapSet mapRemove mapHas? mapSize mapKeys mapValues mapPairs
+  mapFromPairs`
+- **Option, Result, Pair** — `some none ok err pair pairFirst pairSecond some? none? ok? err?
+  optionOr resultOr optionMap resultMap resultMapErr optionToResult resultToOption`
+- **I/O** (effectful) — the `IoError` cases, `print println eprintln fileExists? fileRead
+  fileReadString fileReadBytes fileReadRange fileSize fileWrite fileAppend dirList fileStat
+  fileLstat fileChmod fileFsync fileReadlink fileUtime pathSymlink processRun processSpawn
+  processWait cpuCount procRusage platformInfo localDate procAlive? nowNs monotonicNs sleepMs envGet
+  getHomeDir fileCreateExclusive dirCreate pathRemove pathRename realPath pathCanonicalize`
+- **Bytes**, **Arrays**, **Parquet** — byte buffers and bit operations, `F64Array` / `I64Array` /
+  `I8Array` kernels, and a Parquet reader; see `prelude/prelude.asn`.
 
-| Form | Type | Meaning |
-|---|---|---|
-| `(+ a b)` | `N N -> N` | Sum. Traps on integer overflow. |
-| `(- a b)` | `N N -> N` | Difference. Traps on integer overflow. |
-| `(* a b)` | `N N -> N` | Product. Traps on integer overflow. |
-| `(/ a b)` | `N N -> N` | Division; integer division truncates toward zero. Traps on a zero divisor and on a quotient outside the type. |
-| `(mod a b)` | `N N -> N` | Floored remainder; the sign follows the divisor. Traps on a zero Int divisor; a Float is C `fmod` moved to the divisor's sign, so a zero divisor or a NaN or infinite dividend gives nan. |
-| `(checkedDiv a b)` | `N N -> (Option N)` | Division, or none on a zero divisor or a quotient outside the type. |
-| `(checkedMod a b)` | `N N -> (Option N)` | Remainder, or none on a zero divisor; the remainder is always in range. |
-| `(neg a)` | `N -> N` | Arithmetic negation. Traps on integer overflow. |
-| `(abs a)` | `N -> N` | Absolute value. Traps on integer overflow. |
-| `(min a b)` | `N N -> N` | Lesser of two values in the sort order, so NaN is the greater. |
-| `(max a b)` | `N N -> N` | Greater of two values in the sort order, so NaN is the greater. |
+Points that differ from what an LLM may expect: `print`, `println` and `eprintln` take any values,
+separate them by spaces and return `()`; only `fileRead` and `pathCanonicalize` fail with
+`IoError`, the other file calls with a `String` message; `resultMap` takes the `Result` first,
+unlike `optionMap`; `stringLength`, `stringSlice` and `stringIndexOf` count bytes (§3).
 
-### 6.2 Comparison and logic
+`prelude/prelude.asn` `:absent` records names earlier versions declared and the host does not
+bind: `read-line`, `read-all`, `file-append`, `try`.
 
-| Form | Type | Meaning |
-|---|---|---|
-| `(= a b)` | `T T -> Bool` | Structural equality. |
-| `(!= a b)` | `T T -> Bool` | Structural inequality. |
-| `(< a b)` | `T T -> Bool` | Ordered comparison of two values of the same type: Int, Float, String (bytewise) or Keyword (by name); any other pair is ERR_TYPE. |
-| `(<= a b)` | `T T -> Bool` | Ordered comparison of two values of the same type: Int, Float, String (bytewise) or Keyword (by name); any other pair is ERR_TYPE. |
-| `(> a b)` | `T T -> Bool` | Ordered comparison of two values of the same type: Int, Float, String (bytewise) or Keyword (by name); any other pair is ERR_TYPE. |
-| `(>= a b)` | `T T -> Bool` | Ordered comparison of two values of the same type: Int, Float, String (bytewise) or Keyword (by name); any other pair is ERR_TYPE. |
-| `(and a b)` | `Bool Bool -> Bool` | Conjunction; short-circuits. |
-| `(or a b)` | `Bool Bool -> Bool` | Disjunction; short-circuits. |
-| `(not a)` | `Bool -> Bool` | Negation. |
-
-### 6.3 String
-
-| Form | Type | Meaning |
-|---|---|---|
-| `(stringLength a)` | `String -> Int64` | Length in characters. |
-| `(stringEmpty? a)` | `String -> Bool` | True when the string has no characters. |
-| `(str a b …)` | `String... -> String` | Concatenate strings. Takes strings only; convert first. |
-| `(stringSlice a b c)` | `String Int64 Int64 -> (Option String)` | Half-open character slice, or none when out of range. |
-| `(stringIndexOf a b)` | `String String -> (Option Int64)` | Character index of the first occurrence. |
-| `(stringContains? a b)` | `String String -> Bool` | True when the substring occurs. |
-| `(stringStartsWith? a b)` | `String String -> Bool` | True when the string begins with the prefix. |
-| `(stringEndsWith? a b)` | `String String -> Bool` | True when the string ends with the suffix. |
-| `(stringSplit a b)` | `String String -> (List String)` | Split on a separator. |
-| `(stringJoin a b)` | `(List String) String -> String` | Join with a separator. |
-| `(stringUpper a)` | `String -> String` | Upper case. |
-| `(stringLower a)` | `String -> String` | Lower case. |
-| `(stringTrim a)` | `String -> String` | Remove leading and trailing whitespace. |
-| `(stringReverse a)` | `String -> String` | Reverse the character sequence. |
-| `(stringReplace a b c)` | `String String String -> String` | Replace every occurrence. |
-| `(stringChars a)` | `String -> (List String)` | Characters as one-character strings. |
-| `(stringFromInt64 a)` | `Int64 -> String` | Decimal rendering of an integer. |
-| `(stringFromFloat64 a)` | `Float64 -> String` | Decimal rendering of a float. |
-| `(stringToInt64 a)` | `String -> (Option Int64)` | Parse an integer, or none when it is malformed or outside Int64. |
-| `(stringToFloat64 a)` | `String -> (Option Float64)` | Parse a float, or none. |
-
-### 6.4 Numeric conversion
-
-| Form | Type | Meaning |
-|---|---|---|
-| `(int32ToInt64 a)` | `Int32 -> Int64` | Widen. |
-| `(int64ToInt32 a)` | `Int64 -> (Option Int32)` | Narrow, or none when out of range. |
-| `(int64ToFloat64 a)` | `Int64 -> Float64` | Convert to floating point. |
-| `(float64ToInt64 a)` | `Float64 -> (Option Int64)` | Truncate toward zero, or none for NaN, infinity or out of range. |
-
-### 6.5 List
-
-| Form | Type | Meaning |
-|---|---|---|
-| `(list a b …)` | `T... -> (List T)` | Construct a list. |
-| `(listEmpty? a)` | `(List T) -> Bool` | True when the list has no elements. |
-| `(listLength a)` | `(List T) -> Int64` | Element count. |
-| `(listGet a b)` | `(List T) Int64 -> (Option T)` | Element at an index, or none. |
-| `(listHead a)` | `(List T) -> (Option T)` | First element, or none. |
-| `(listTail a)` | `(List T) -> (Option (List T))` | All but the first element, or none when empty. |
-| `(list-cons a b)` | `T (List T) -> (List T)` | Prepend an element. |
-| `(listAppend a b)` | `(List T) (List T) -> (List T)` | Concatenate two lists. |
-| `(listReverse a)` | `(List T) -> (List T)` | Reverse order. |
-| `(listSlice a b c)` | `(List T) Int64 Int64 -> (Option (List T))` | Half-open slice, or none when out of range. |
-| `(listContains? a b)` | `(List T) T -> Bool` | True when the element occurs. |
-| `(listIndexOf a b)` | `(List T) T -> (Option Int64)` | Index of the first occurrence. |
-| `(listSort a)` | `(List T) -> (List T)` | Stable ascending sort; a value holding a NaN sorts last. |
-| `(listSortBy a b)` | `(fn [T] -> K) (List T) -> (List T)` | Stable ascending sort by a derived key; a key holding a NaN sorts last. |
-| `(map a b)` | `(fn [A] -> B) (List A) -> (List B)` | Apply a function to every element. |
-| `(filter a b)` | `(fn [T] -> Bool) (List T) -> (List T)` | Keep elements satisfying a predicate. |
-| `(fold a b c)` | `(fn [B A] -> B) B (List A) -> B` | Left fold with an initial accumulator. |
-| `(range a b)` | `Int64 Int64 -> (List Int64)` | Half-open integer range; empty when start is not below end. |
-| `(zip a b)` | `(List A) (List B) -> (List (Pair A B))` | Pair up elements, truncating to the shorter list. |
-| `(listSum a)` | `(List N) -> N` | Sum of elements, 0 when empty. Traps on integer overflow. |
-| `(listMin a)` | `(List T) -> (Option T)` | Least element in the sort order, or none when empty. |
-| `(listMax a)` | `(List T) -> (Option T)` | Greatest element in the sort order, or none when empty. |
-
-### 6.6 Map
-
-| Form | Type | Meaning |
-|---|---|---|
-| `(mapEmpty)` | `-> (Map K V)` | The empty map. |
-| `(mapGet a b)` | `(Map K V) K -> (Option V)` | Value for a key, or none. |
-| `(mapSet a b c)` | `(Map K V) K V -> (Map K V)` | Map with the key bound to the value. |
-| `(mapRemove a b)` | `(Map K V) K -> (Map K V)` | Map without the key. |
-| `(mapHas? a b)` | `(Map K V) K -> Bool` | True when the key is present. |
-| `(mapSize a)` | `(Map K V) -> Int64` | Number of entries. |
-| `(mapKeys a)` | `(Map K V) -> (List K)` | Keys, sorted. |
-| `(mapValues a)` | `(Map K V) -> (List V)` | Values, ordered by sorted key. |
-| `(mapPairs a)` | `(Map K V) -> (List (Pair K V))` | Entries as pairs, ordered by sorted key. |
-| `(mapFromPairs a)` | `(List (Pair K V)) -> (Map K V)` | Build from pairs; later entries win. |
-
-### 6.7 Option, Result, Pair
-
-| Form | Type | Meaning |
-|---|---|---|
-| `(some a)` | `T -> (Option T)` | A present value. |
-| `(none)` | `-> (Option T)` | An absent value. |
-| `(ok a)` | `T -> (Result T E)` | A successful result. |
-| `(err a)` | `E -> (Result T E)` | A failed result. |
-| `(some? a)` | `(Option T) -> Bool` | True when a value is present. |
-| `(none? a)` | `(Option T) -> Bool` | True when no value is present. |
-| `(ok? a)` | `(Result T E) -> Bool` | True when the result succeeded. |
-| `(err? a)` | `(Result T E) -> Bool` | True when the result failed. |
-| `(optionOr a b)` | `(Option T) T -> T` | The value, or a fallback when absent. |
-| `(resultOr a b)` | `(Result T E) T -> T` | The value, or a fallback on failure. |
-| `(optionMap a b)` | `(fn [A] -> B) (Option A) -> (Option B)` | Transform a present value. |
-| `(resultMap a b)` | `(fn [A] -> B) (Result A E) -> (Result B E)` | Transform a successful value. |
-| `(resultMapErr a b)` | `(fn [E] -> F) (Result T E) -> (Result T F)` | Transform a failure value. |
-| `(optionToResult a b)` | `(Option T) E -> (Result T E)` | Absent becomes the given failure. |
-| `(resultToOption a)` | `(Result T E) -> (Option T)` | Failure becomes absence. |
-| `(pair a b)` | `A B -> (Pair A B)` | Construct a pair. |
-
-### 6.8 I/O
-
-| Form | Type | Meaning |
-|---|---|---|
-| `(notFound)` | `-> IoError` | The not found failure. |
-| `(permissionDenied)` | `-> IoError` | The permission denied failure. |
-| `(alreadyExists)` | `-> IoError` | The already exists failure. |
-| `(invalidPath)` | `-> IoError` | The invalid path failure. |
-| `(interrupted)` | `-> IoError` | The interrupted failure. |
-| `(other)` | `-> IoError` | The other failure. |
-| `(read-line)` | `-> (Result (Option String) IoError)` | Read one line from standard input; none at end of input. |
-| `(read-all)` | `-> (Result String IoError)` | Read all of standard input. |
-| `(print a)` | `String -> (Result Unit IoError)` | Write to standard output with no trailing newline. |
-| `(println a)` | `String -> (Result Unit IoError)` | Write a line to standard output. |
-| `(eprintln a)` | `String -> (Result Unit IoError)` | Write a line to standard error. |
-| `(fileRead a)` | `String -> (Result String IoError)` | Read a whole file as text. |
-| `(fileWrite a b)` | `String String -> (Result Unit IoError)` | Write text to a file, replacing it. |
-| `(file-append a b)` | `String String -> (Result Unit IoError)` | Append text to a file, creating it if absent. |
-| `(fileExists? a)` | `String -> (Result Bool IoError)` | Whether a path exists. |
 ## 7. Worked example
 
-Complete, uses only forms defined above, and is the shape few-shot prompts should use.
+Complete, uses only forms defined above, and passes `asl-host check`.
 
 ```lisp
-"Return the longest run of identical characters in s, as (Pair char length)."
-"Empty input yields (none)."
+(module text/runs :x [longestRun])
 
-(df run-length [(chars (List Str)) (cur Str) (n I64) (best (Pair Str I64))]
-        -> (Pair Str I64)
-  (mt chars
-    ((list)
-     (if (> n (.-second best)) (pair cur n) best))
-    ((cons h t)
-     (if (= h cur)
-       (run-length t cur (+ n 1) best)
-       (let [(best2 (if (> n (.-second best)) (pair cur n) best))]
-         (run-length t h 1 best2))))))
+fn runLength chars: (List String) cur: String n: Int64 best: (Pair String Int64) -> (Pair String Int64)
+  (let [(better (mt best ((pair c k) (if (> n k) (pair cur n) best))))
+        (rest (optionOr (listTail chars) (list)))]
+    (mt (listHead chars)
+      ((none) better)
+      ((some h)
+        (if (= h cur)
+          (runLength rest cur (+ n 1) best)
+          (runLength rest h 1 better)))))
 
-(df longest-run [(s Str)] -> (Option (Pair Str I64))
-  (mt (stringChars s)
-    ((list)     (none))
-    ((cons h t) (some (run-length t h 1 (pair h 1))))))
+fn longestRun s: String -> (Option (Pair String Int64))
+  (let [(cs (stringChars s))]
+    (mt (listHead cs)
+      ((none) (none))
+      ((some h) (some (runLength (optionOr (listTail cs) (list)) h 1 (pair h 1))))))
 ```
 
-Note the ordering property from §1: every intermediate value is bound and computed before the
-returned expression, in every branch.
+`(longestRun "aabbbc")` is `(some (pair "b" 3))` and `(longestRun "")` is `(none)`. Note the
+ordering property from §1: every intermediate value is bound and computed before the returned
+expression, in every branch. The same program is the fixture
+`asl/grammar/corpus/valid/04-longest-run.asl`.
 
 ---
 
 ## 8. Identifier mangling
 
-Deterministic, because output that is not byte-reproducible cannot be differentially tested
-(resolves A1).
+**Target design, partly implemented.** Output that is not byte-reproducible cannot be
+differentially tested, so a name should mangle deterministically, and two distinct AgentScript
+names that mangle to one target name should be a compile error rather than a silent rename. Each
+emitter carries its own mangler today, and no emitter implements the collision error:
 
-| AgentScript | TypeScript | Python | Go (top-level) | Go (local) | Rust |
-|---|---|---|---|---|---|
-| `parse-html-url` | `parseHtmlUrl` | `parse_html_url` | `ParseHtmlUrl` | `parseHtmlUrl` | `parse_html_url` |
-| `Point` | `Point` | `Point` | `Point` | `Point` | `Point` |
-| `empty?` | `isEmpty` | `is_empty` | `IsEmpty` | `isEmpty` | `is_empty` |
-| `set!` | `setMut` | `set_mut` | `SetMut` | `setMut` | `set_mut` |
-| `s/parse-html-url` | — | `core_strings__parse_html_url` | — | — | `core_strings::parse_html_url` |
-| `s/Point` | — | `core_strings__Point` | — | — | `core_strings::Point` |
+| Emitter | Function | What it does |
+|---|---|---|
+| shared, Rust-style | `mangleIdent` in `asl/packages/asl-codegen/src/mangle.asl` | trailing `?` → `is_` prefix, trailing `!` → `_mut` suffix, `-` → `_`, a Rust keyword gets `_`; `core/strings` → `core_strings` |
+| Rust | `rustMangleIdent` in `asl/packages/asl-target-rs/src/types.asl` | as above, with `r#` for raw-identifier keywords |
+| TypeScript | `tsMangleIdent` in `asl/packages/asl-target-ts/src/types.asl` | trailing `?` → `is` prefix, hyphenated → camelCase, a keyword gets `_`, `a/b` → `a.b` |
+| Python | `pyMangleIdent` in `asl/packages/asl-target-py/src/emitPy.asl` | `/` and `-` → `_`, a keyword gets `_`; camelCase is kept |
+| C | `mangleCIdent` in `asl/packages/asl-codegen/src/c99Mangle.asl` | C identifiers and module prefixes |
 
-Rules: strip a trailing `?` and prefix `is-`; strip a trailing `!` and suffix `-mut`; then split on
-`-` and recase. Acronyms are not special-cased — `html` becomes `Html`, always.
-
-A qualified name mangles as its member would unqualified, prefixed by its **defining module
-path** — never by the alias, which is module-local and would give one definition two names.
-The path itself mangles segment by segment and the segments are joined by the target's own
-namespace separator, shown above for the two targets that have a backend; `—` marks a target
-whose separator is fixed when that backend lands.
-
-If a mangled name collides with a target keyword, append `_`. **If two distinct AgentScript identifiers
-mangle to the same target identifier, the compiler errors** — it does not silently rename. v0 had
-no collision policy at all. The same applies to module paths: `core/shapes` and a module named
-`core-shapes` mangle alike under either scheme above, and the collision is an error rather than
-a silent merge.
+Sources are camelCase (§2), so most names pass through unchanged and only the `?` and `!` suffixes,
+qualified names and keyword clashes are rewritten.
 
 ---
 
 ## 9. Conformance checklist
 
-A Core program is well-formed iff:
+A Core program is well-formed iff the rules below hold. The status column is what
+`asl-host check` does today; "not enforced" marks a target.
 
-1. Delimiters balance, and every form is a list, vector, map, or atom.
-2. Every identifier is defined in §6, bound by `df`/`fn`/`let`, declared by
-   `dfs`/`dfe`, or imported under an alias declared in the module header.
-3. Every `df` declares parameter types and a return type.
-4. Every `if` and `cond` is total; every `mt` is exhaustive.
-5. Every `try` sits in a `df` returning a compatible `(Result _ E)`.
-6. No numeric operation mixes types; all conversions are explicit.
-7. No identifier begins with `agentscript-`.
-8. The module header carries a `:d` (or `:doc`), and every exported `df` carries a `:d` (or `:doc`).
-9. Every qualified name `alias/member` uses an alias bound in `:i` (`:import`), and the member — a
-   function, a type name, or a case of an exported union — is exported by that module.
-10. Every type variable used in a signature is bound in that declaration's `{ }`.
-11. There are no import cycles.
-12. Every effectful form sits inside a `df` or `fn` marked `!`.
-13. Every type named in the signature of an exported `df`, in every field type of an
-    exported `dfs`, and in every case-parameter type of an exported `dfe`, is a §3
-    built-in, a type variable bound in that declaration's `{ }`, or a type exported by the
-    module that defines it. A signature naming a private type is not a contract: no importer
-    can write the type of what it receives.
+| # | Rule | Host |
+|---|---|---|
+| 1 | Delimiters balance and each bracket kind pairs exactly. | `ERR_READ_UNBALANCED` |
+| 2 | Every name is a builtin (§6), bound by `fn`/`let`/a pattern, declared by `schema`/`enum`, or `alias/member` of an import. | `ERR_UNKNOWN_SYMBOL` |
+| 3 | Every named `fn` declares its parameter types and return type. | `ERR_UNTYPED_PARAM` |
+| 4 | Every `mt` over an enum is exhaustive. | `ERR_MATCH_NONEXHAUSTIVE` |
+| 5 | Every `cond` ends in `(else v)`. | not enforced; an untaken `cond` yields `()` |
+| 6 | No arithmetic mixes `Int64` and `Float64`; argument and return types match the signature. | `ERR_TYPE_MISMATCH`; `Int32` and `Int64` are not told apart |
+| 7 | No identifier begins with `agentscript-`. | not enforced |
+| 8 | No `:d` docstring and no free `;` comment. | `ERR_READ_DOC`, `ERR_READ_COMMENT` |
+| 9 | Every `alias/member` uses an alias bound in `:i`, and the member is exported by that module; calls match its arity. | `ERR_NOT_EXPORTED`, `ERR_ARITY` |
+| 10 | Every type variable in a signature is meant as one. | not enforced: there is no binder (§4.2) |
+| 11 | There are no import cycles. | not enforced |
+| 12 | Every function that names an effect is marked `!`. | `ERR_EFFECT_UNMARKED` |
+| 13 | Every type in the signature of an exported `fn`, and in the fields or cases of an exported type, is a built-in, a type variable, or a type exported by the module that defines it. | not enforced |
+| 14 | `:x` names only what the module declares, and never a bare enum case. | not enforced |
+| 15 | A constructor supplies every field without a `:default`, and no unknown key. | not enforced; a missing field is `ERR_FIELD` when read |
 
-Rules 2, 5, 6, 7-13 are **semantic**, not context-free, and so is the `match` half of rule 4 —
-`if` and `cond` totality is the only part of it a grammar reaches. No grammar can enforce them, and the
-conformance gate deliberately keeps such fixtures in `grammar/corpus/semantic/` so the untested
-surface stays visible rather than appearing covered.
-
-The list is necessary, not sufficient: §4.1's construction rules (every field without a `:default`
-supplied, no unknown or duplicate keys) and type correctness generally are enforced alongside it.
-Each fixture in `grammar/corpus/semantic/` names the rule it violates, and the gate asserts that
-rule specifically — a fixture rejected for the wrong reason is a failure there.
+`asl/grammar/corpus/semantic/` holds a fixture per rule violation, with the rule it violates in
+its `asl/doc/grammar.asn` row. No suite asserts that the host rejects them: on 2026-10-14,
+`asl-host check` rejects 18 of the 45 fixtures and checks the other 27 clean, and two of the 18
+(`tryInLambda.asl`, `tryOutsideResult.asl`) fail only because `try` does not exist.
+`asl/grammar/tests/corpusTest.asl` checks delimiter balance of the corpus, nothing more.

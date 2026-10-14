@@ -1,105 +1,111 @@
 ---
 name: seambus
-description: Universal Inter-Agent Communication Protocol & Resilient Swarm Mesh (SeamBus / Simba). Use when coordinating multiple AI agents, exchanging structured tasks, communicating across agent boundaries (aware vs unaware models), or routing messages via SeamBus CLI or Wasm SDK.
+description: Design reference for the AgentScript agent-to-agent session layer (SkyLoom in the specification, SeamBus being this skill's alias for it) and a map of the wire code that exists today. Use when designing or reviewing inter-agent frames, handoff and yield contracts or the error codes 1001-1010, or when changing the wire, transport, ndAsn, presence or mesh modules of asl/packages/asl-agent-bus. It sends nothing, and there is no bus daemon or CLI.
 ---
 
-# SeamBus (Simba) Agent Protocol Skill
+# SeamBus (the SkyLoom session layer)
 
-SeamBus (also known as Simba, CLI: `asl bus` / `asl sb`) is the session layer of the AgentScript wire protocol:
-peer registry, dialect negotiation, delivery guarantees, and context-isolated handoff. It eliminates hallucinated
-schemas, prevents silent message loss, and bridges ASL-native agents with vanilla LLM agents.
+**Status: design, not code.** The normative specification is `asl/docs/agenticProtocol.md`:
+Part I is the frame layer (AgP: sigils, value syntax, error taxonomy), Part II the session layer
+(SkyLoom: dialects, frame types, handoff, mailbox). That document states that no code implements
+either layer. SeamBus is this skill's name for the same design; where the two disagree, the
+document wins.
 
-**The normative specification is `docs/AGENTIC_PROTOCOL.md`** — Part I for the frame layer
-(sigils, value syntax, error taxonomy), Part II for everything this skill uses. When this skill
-and that document disagree, the document wins.
+## 1. What does not exist
 
-## 1. Quick Start
+Do not tell a user that a message was sent, queued or delivered through any of these:
 
-### Connecting to the Mesh
-Agents connect to the local SeamBus mesh through the CLI:
+- No CLI. `asl bus`, `asl sb` and `asl loom` are not commands; each answers `ERR_UNKNOWN_COMMAND`.
+- No op. `(:handoff)` answers `ERR_UNIMPLEMENTED`, and `(:tools)` lists no bus or mesh op.
+- No daemon, socket listener, mailbox, Wasm SDK or dialect negotiator. The names the
+  specification uses (`LoomFrame`, `FrameType`, `encodeFrame`, `AsymmetricNegotiator`) occur
+  nowhere in code.
 
-#### Via CLI
+## 2. What exists today
+
+`asl/packages/asl-agent-bus/src` holds pure functions that build, validate and encode values;
+none of them opens a socket or performs other I/O. The implemented wire is a smaller shape than
+AgP: `CanonicalWireFrame`, five string fields, declared in `asl/grammar/wire.asn`.
+
+| Module | What it holds | Suite on `asl-host test` (2026-10-14) |
+|---|---|---|
+| `wire.asl` | `CanonicalWireFrame` (`identity` `sessionId` `causality` `payload` `digest`), `validateWireFrame`, `encodeCanonicalFrame`/`decodeCanonicalFrame`, per-transport `encodeStdioFrame` ... `decodeSseFrame` (stdio, Unix socket, HTTP, SSE text) | `wireTest.asl`, 29 assertions |
+| `transport.asl` | `TransportFrameType` (`frameHandshake` `frameHeartbeat` `frameRpcReq` `frameRpcRes` `frameStreamChunk` `frameClose`), `makeTransportEnvelope`, `initTransportSession` | `transportTest.asl`, 18 |
+| `ndAsn.asl` | Newline-delimited ASN frames: `ndAsnFrame` (`topic` `seq` `ts` `payload` `meta`), `ndAsnSerialize`, `ndAsnDeserialize` | `ndAsnTest.asl`, 31 |
+| `presence.asl` | `createSwarmRoom`, `joinSwarmRoom`, `leaveSwarmRoom`, `claimPath`, `proposeTask`, `acceptTask`, `declineTask`: the nearest thing to rendezvous and handoff | `presenceTest.asl`, 24 |
+| `mesh.asl` | `TaskContract`, `makeTaskContract`, `delegateContract`, `PeerRegistry`, `routePacket` | `meshTest.asl`, 40 |
+
+Run a suite from the workspace root; exit 0 and the executed assertion count are the evidence:
+
 ```bash
-asl sb peers
-asl sb send --to agent-planner --msg "hello"
+asl/host/out/asl-host test asl/packages/asl-agent-bus/tests/wireTest.asl
 ```
 
----
+`asl-host` is built by `sh asl/host/build.sh`.
 
-## 2. Asymmetric Scenarios: Aware vs. Unaware Peers
+## 3. The design (target)
 
-### Scenario A: Both Agents Know SeamBus (Native Mode)
-- Four dialects carry the same frame: `asl/v1` (verbose, self-describing), `asl/coord`
-  (coordination and delegation, fully typed), `compact/v1` (positional `SB1|...`, the default),
-  `polyglot/v1` (markdown and JSON, for unaware peers).
-- `asl/v1` shape: `(sb :v 1 :id "msg-01" :from "a" :to "b" :dialect "asl/v1" :ts 1788350000000 :type "DATA" :body {"action":"compile"})`.
-  The envelope is an s-expression; the **body is JSON today** and becomes ASN when
-  `docs/ASN_SPEC.md` lands. `asl/coord` is the one dialect that is already typed end to end.
-- Delegation primitives: single-token `(pass ...)` for task delegation and `(ret ...)` for task return.
-- Frame types: `HANDSHAKE DATA HANDOFF YIELD SPAWN ACK NACK PING PONG RENDEZVOUS LEAVE`.
-  Liveness is `PING`/`PONG`, not `HEARTBEAT_PING`/`HEARTBEAT_PONG`.
-- Keys are kebab-case with the unit in the name: `:timeout-ms`, never `:timeout`, `:t-out`
-  or `:timeout_ms`.
+Everything below is what code is meant to meet. Nothing decodes or encodes it yet.
 
-### Scenario B: Talking to an Unaware Counterparty (Polyglot Mode)
-When sending a task to an agent that does NOT have the SeamBus skill:
-1. Build the prompt primer for the peer from the sender id and the target peer id.
-2. Wrap your message in the Polyglot envelope:
-   ```markdown
-   <!-- SEAMBUS_HEADER: {"v":1,"id":"msg-01","from":"orchestrator","to":"vanilla-claude","type":"DATA"} -->
-   [SeamBus Autonomous Protocol Primer]
-   Please execute the requested task and reply with a structured JSON code block:
-   ```json
-   { "action": "audit_code", "files": ["src/index.ts"] }
-   ```
-   <!-- SEAMBUS_FOOTER -->
-   ```
-3. When the peer replies with conversational text + JSON, the SeamBus router automatically unwraps it back into a nominal typed `LoomFrame`.
+### Dialects
 
----
+Four dialects carry the same frame: `asl/v1` (a `loom:frame` head with every field keyed),
+`asl/coord` (`loom:handoff`, `loom:yield` and `loom:coord` heads, typed end to end),
+`compact/v1` (positional `SK1|v|id|from|to|type|channel|ts|replyTo|body`, the default for
+high-frequency loops) and `polyglot/v1` (a markdown envelope with a JSON block, for peers that
+have never heard of the protocol). In `asl/v1`, `compact/v1` and `polyglot/v1` the body is JSON
+inside the envelope; the target is an ASN body. Dialect tags are not version strings: the
+protocol version is `asl/1.0`, carried in `:proto` during the handshake.
 
-## 3. Lonely Agent & Offline Peer Handling
+### Frame types
 
-If you send a message to a peer that is not yet online or has crashed:
-- SeamBus buffers the message in the **Mailbox Queue** (with TTL).
-- Status returns: `{"status": "QUEUED", "errorCode": 1002}` (`:lonely-queued`).
-- You do NOT need to retry in a tight loop. When the counterparty joins, SeamBus automatically drains the mailbox and delivers your message.
-- You will receive a `peer_joined` / `lonely:resolved` event.
+`HANDSHAKE DATA HANDOFF YIELD SPAWN ACK NACK PING PONG RENDEZVOUS LEAVE`. Liveness is
+`PING`/`PONG`, not `HEARTBEAT_PING`/`HEARTBEAT_PONG`.
 
-### Error codes
+### Keys
 
-One closed taxonomy, shared by frame-layer `:err` keywords and session-layer `NACK` codes.
+Every key is camelCase, and a quantity carries its unit in the key: `:timeoutMs`, `:replyTo`.
+The spellings `:timeout`, `:tOut`, `:timeout_ms` and `:timeout-ms` are wrong. Nothing enforces
+this today; a conforming codec is where it will be checked.
+
+### Handoff and yield
+
+Delegate a task without copying context: the delegator names the task, a working directory, the
+files the assignee owns, the files it must not touch, a verification gate and a token budget;
+the assignee answers with a yield. From `asl/docs/agenticProtocol.md` §14.2:
+
+```agp
+(loom:handoff :v 1 :id "handoff-7721" :from "agentOrchestrator" :to "agentCoder1"
+  :ts 1788350000000 :task "implementRateLimiter" :cwd "packages/asl-rate"
+  :owns ["src/limiter.asl" "tests/limiterTest.asl"] :frozen ["src/core.asl"]
+  :gate "asl/host/out/asl-host test tests/limiterTest.asl" :budget 4000)
+
+(loom:yield :v 1 :id "yield-7722" :replyTo "handoff-7721" :from "agentCoder1"
+  :to "agentOrchestrator" :ts 1788350004000 :status "ok"
+  :verdict "PASS (0 diagnostics, 12 tests green)" :artifacts ["src/limiter.asl"])
+```
+
+Reaching outside `:cwd` or writing a `:frozen` path is `:scopeViolation` (1009); declining the
+contract is `:handoffRejected` (1010). Until a codec exists, the implemented neighbours are
+`proposeTask`/`acceptTask`/`declineTask` in `presence.asl` and `delegateContract` in `mesh.asl`.
+
+### Absent peers and the mailbox
+
+In the design, a frame sent to an absent peer is buffered with a TTL rather than dropped, and the
+sender is told `:lonelyQueued` (1002). Retrying in a tight loop is wrong: delivery happens when
+the peer announces itself with `RENDEZVOUS`. A frame that outlives its retries is `:deadLetter`
+(1008). A peer that accepted work and then stopped answering `PING` is `:stalled` (1007),
+distinct from `:timeout` (1006), which is silence before acceptance.
+
+### Error taxonomy
+
+One closed set, shared by frame-layer `:err` keywords and session-layer `NACK` codes. A new
+failure mode means a new row here and in `asl/docs/agenticProtocol.md` §8 together.
 
 | Keyword | Code | Keyword | Code |
 |---|---|---|---|
-| `:peer-unreachable` | 1001 | `:timeout` | 1006 |
-| `:lonely-queued` | 1002 | `:stalled` | 1007 |
-| `:dialect-unsupported` | 1003 | `:dead-letter` | 1008 |
-| `:decode-failed` | 1004 | `:scope-violation` | 1009 |
-| `:type-mismatch` | 1005 | `:handoff-rejected` | 1010 |
-
----
-
-## 5. Context-Isolated Delegation & Directory Scoping
-
-To avoid $O(N^2)$ token explosions and context rot, do NOT broadcast full chat histories between agents. Instead, use context-isolated delegations:
-
-```bash
-asl sb pass --to agent-coder --task build_feature --cwd packages/rate --owns "src/main.asl" --gate "asl check"
-```
-
-The assignee receives a minimal, single-token-headed S-expression:
-```agp
-(pass :v 1 :id "h-001" :from "orchestrator" :to "agent-coder"
-  :ts 1788350000000 :task "build_feature" :cwd "packages/rate"
-  :owns ["src/main.asl"] :gate "asl check" :budget 4000)
-```
-When complete, the worker returns:
-```agp
-(ret :v 1 :id "ret-001" :reply-to "h-001" :from "agent-coder"
-  :to "orchestrator" :ts 1788350004000 :status :ok
-  :verdict "PASS (0 errors)" :artifacts ["src/main.asl"])
-```
-Reaching outside `:cwd` or writing a `:frozen` path is `:scope-violation` (1009); declining the
-contract is `:handoff-rejected` (1010).
-The Zero-Leak Mesh Firewall prevents the worker from receiving unrelated project chatter.
+| `:peerUnreachable` | 1001 | `:timeout` | 1006 |
+| `:lonelyQueued` | 1002 | `:stalled` | 1007 |
+| `:dialectUnsupported` | 1003 | `:deadLetter` | 1008 |
+| `:decodeFailed` | 1004 | `:scopeViolation` | 1009 |
+| `:typeMismatch` | 1005 | `:handoffRejected` | 1010 |

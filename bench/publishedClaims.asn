@@ -1,32 +1,22 @@
 (:publishedClaims
-  :version "1.0"
+  :version "1.1"
+  :reviewed "2026-10-14"
+  :d "Every figure the project publishes, with what stands behind it. :status says how far to trust it: :measured has a dated count recorded in a tracked file; :measuredUntracked has a dated count whose record is not in this repository; :budget is a target the recorded counts can be checked against; :specConstant is a value fixed by an external standard; :unmeasured has no measurement in the tree and must not be cited as a result. The metric strings must match standardClaims in asl/packages/asl-gates/src/siteClaims.asl, which gate3Grounding compares them against; that comparison checks the list, not the evidence."
   :standards [
-    (:claim :metric "57%-65%" :category "token_compression" :source "asl/bench/asn_tokens.lock" :expected "asn-3-rows" :desc "Structural token reduction vs JSON")
-    (:claim :metric "-64.7%" :category "token_compression" :source "asl/bench/token_frames.lock" :expected "0.6471" :desc "Token reduction on agent tool frames")
-    (:claim :metric "1.90%" :category "token_compression" :source ".asl/mem/principles.asn" :expected "a saving of 1.90 percent" :desc "CamelCase corpus saving vs kebab-case on o200k, 2964 files, 2026-09-22 (CamelCaseCorpusSaving)")
-    (:claim :metric "1.68%" :category "token_compression" :source ".asl/mem/principles.asn" :expected "a saving of 1.68 percent" :desc "CamelCase corpus saving vs kebab-case on cl100k, 2964 files, 2026-09-22 (CamelCaseCorpusSaving)")
-    (:claim :metric "<100ms" :category "cold_start" :source "asl/bench/launchStability.asl" :expected "PrefixRecord" :desc "Agent launch cold start latency")
-    (:claim :metric "24MB" :category "memory_rss" :source "asl/bench/tierBudget.asl" :expected "maxMinimalTokens" :desc "Peak RSS memory budget ceiling")
-    (:claim :metric "<=2 tokens" :category "primitive_cost" :source "asl/grammar/grammar.asn" :expected ":tokens 1" :desc "BPE primitive token ceiling")
-    (:claim :metric "107/107" :category "vocab_coverage" :source "asl/prelude/coverage.lock" :expected "executed" :desc "Executed vocabulary coverage")
-    (:claim :metric "0.038ms" :category "wasm_launch" :source "asl/packages/asl-target-wat/manifest.asn" :expected "asl-target-wat" :desc "Wasm launch telemetry")
-    (:claim :metric "<0.04ms" :category "bus_latency" :source "asl/packages/asl-agent-bus/manifest.asn" :expected "agent-bus" :desc "Unix domain socket A2A bus message dispatch")
-    (:claim :metric "64KB" :category "wasm_memory" :source "asl/grammar/wasm.asn" :expected "WASM standard 64KB page size" :desc "WebAssembly linear memory page size, a spec constant (pageSizeBytes 65536)")
-    (:claim :metric "-75%" :category "vdom_reduction" :source "asl/packages/asl-vdom/manifest.asn" :expected "asl-vdom" :desc "AXTree + D2Snap DOM downsampling token reduction")
+    (:claim :metric "57%-65%" :category "token_compression" :status :unmeasured :source "none" :seenIn "AGENTS.md (50%-65%) and asl/web/content/blog/token-economy-and-structural-compression.md (40% to 65%)" :desc "Structural token reduction of ASN against JSON. The lock file once cited for it, asl/bench/asn_tokens.lock, is not in the repository or its history.")
+    (:claim :metric "-64.7%" :category "token_compression" :status :measured :source "asl/README.md" :evidence "README.md, section Why: one JSON tool call counts 51 cl100k_base tokens and the positional frame 18 (tiktoken, 2026-09-24); 1 - 18/51 = 0.6471" :desc "Token reduction for one agent tool frame. A single example, not a benchmark; the lock file it was first sourced to, bench/token_frames.lock, is untracked.")
+    (:claim :metric "1.90%" :category "token_compression" :status :measuredUntracked :source "workspace ledger .asl/mem/principles.asn (CamelCaseCorpusSaving), not in this repository" :evidence "2964 tracked .asl and .asn files, 169852 identifiers rewritten to kebab-case and counted, 2026-09-22" :desc "camelCase saving against kebab-case on o200k_base.")
+    (:claim :metric "1.68%" :category "token_compression" :status :measuredUntracked :source "workspace ledger .asl/mem/principles.asn (CamelCaseCorpusSaving), not in this repository" :evidence "same corpus and date as the 1.90% claim" :desc "camelCase saving against kebab-case on cl100k_base.")
+    (:claim :metric "<100ms" :category "cold_start" :status :unmeasured :source "none" :desc "Agent launch cold start latency. asl/bench/launchStability.asl, once cited, checks prompt-prefix stability and cache cost arithmetic and times nothing.")
+    (:claim :metric "24MB" :category "memory_rss" :status :unmeasured :source "none" :desc "Peak RSS memory. asl/bench/tierBudget.asl, once cited, checks a token budget (maxMinimalTokens 1000) and measures no memory.")
+    (:claim :metric "<=2 tokens" :category "primitive_cost" :status :budget :source "asl/grammar/grammar.asn" :evidence ":tokensBaseline 2; per-symbol :tokens counts for 48 core symbols (o200k_base, tiktoken 0.12.0, bare name, 2026-09-24): 34 at 1 token, 8 at 2, 6 at 3 to 5, each of the 6 carrying a :rationale. The counts are of the kebab-case spellings grammar.asn records, not of the camelCase builtin names in use now." :desc "Token budget per core symbol, met by 42 of 48 recorded symbols.")
+    (:claim :metric "107/107" :category "vocab_coverage" :status :unmeasured :source "none" :desc "Executed vocabulary coverage. The lock file once cited, asl/prelude/coverage.lock, is not in the repository or its history.")
+    (:claim :metric "0.038ms" :category "wasm_launch" :status :unmeasured :source "none" :seenIn "asl/packages/asl-mem/README.md, as a search latency for 5,000 vectors" :desc "Wasm launch time. Previously sourced to asl/packages/asl-target-wat/manifest.asn, which records no timing.")
+    (:claim :metric "<0.04ms" :category "bus_latency" :status :unmeasured :source "none" :seenIn "enum case docs in asl/packages/asl-agent/src/eddie.asl and asl/packages/asl-mem/src/paged.asl" :desc "Agent bus message dispatch. Previously sourced to asl/packages/asl-agent-bus/manifest.asn, which records no timing; the package is pure functions with no socket I/O to time.")
+    (:claim :metric "64KB" :category "wasm_memory" :status :specConstant :source "asl/grammar/wasm.asn" :evidence "pageSizeBytes 65536, the WebAssembly page size" :desc "WebAssembly linear memory page size, a spec constant, not a measurement.")
+    (:claim :metric "-75%" :category "vdom_reduction" :status :unmeasured :source "none" :desc "DOM downsampling token reduction. Previously sourced to asl/packages/asl-vdom/manifest.asn, which records no measurement.")
   ]
   :peripheralScopes [
-    (:scope
-      :package "asl-quantum"
-      :status "conceptual-schema"
-      :driver "none"
-      :falsifiable false
-      :desc "Quantum circuit synthesis, gate operations, and OpenQASM 3.0 compiler scoped as theoretical S-expression interfaces; no physical QPU or cloud backend.")
-    (:scope
-      :package "asl-arduino"
-      :status "conceptual-schema"
-      :driver "none"
-      :falsifiable false
-      :desc "Embedded hardware GPIO and serial interfaces scoped as compile-target schemas; no live AVR/ARM/ESP32 serial connection or bare-metal execution.")
     (:scope
       :package "asl-voice"
       :status "conceptual-schema"

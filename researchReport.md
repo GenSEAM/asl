@@ -1,7 +1,21 @@
-# RESEARCH_REPORT.md — Viability and Design Research for AgentScript
+# researchReport.md — Viability and Design Research for AgentScript
 
-Companion to [`SPEC_REVIEW.md`](SPEC_REVIEW.md). Where the review asked *"is this specification
-complete?"*, this asks *"should this be built, and in what shape?"*
+Companion to a specification review (`SPEC_REVIEW.md`, not in this repository). Where the review
+asked *"is this specification complete?"*, this asks *"should this be built, and in what shape?"*
+
+> **Status, 2026-10-14: a historical record.** It was written about the v0 specification, before
+> the amendments of 2026-08-20 in [`EXPERIMENT.md`](EXPERIMENT.md), and is kept as written. "The
+> spec" below is that v0 text, which is not in this repository either. What has changed since:
+>
+> * The experiment it recommends first (§2.1, §6.1) has not been run; `EXPERIMENT.md` records
+>   its status.
+> * The project did not take the shared-runtime route of §4.2. It has a stage-0 C host
+>   (`host/out/asl-host`) that type-checks and runs ASL, and `asl-target-llvm`, which lowers a
+>   linked program to LLVM IR for native code and `wasm32-unknown-unknown`. The self-hosted
+>   compiler `asl1` has a seed for `arm64-apple-darwin` only; the TypeScript, WAT and other
+>   source-to-source targets are prototypes.
+> * `defui` and `defagent` are not part of the language: `asl-host check` reports either as
+>   ERR_UNKNOWN_SYMBOL.
 
 ---
 
@@ -220,7 +234,7 @@ cutting it from v1 (§6).
 **If these hold, they are the most important findings in this report** — they say the entire
 grammar strategy buys roughly a tenth of what a type-aware completion engine does, and they
 relocate AgentScript's defensible value from syntax to types. **They also directly downgrade my earlier
-recommendation in `SPEC_REVIEW.md` §11.4 to ship a GBNF grammar.** That advice is not wrong, but I
+recommendation in the review (`SPEC_REVIEW.md` §11.4) to ship a GBNF grammar.** That advice is not wrong, but I
 weighted it far too heavily; a grammar is table stakes, and the leverage is in the type layer.
 
 **Verify these before acting on them.** One paper, one unreachable source, carrying the verdict.

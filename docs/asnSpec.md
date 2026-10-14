@@ -14,20 +14,21 @@ question wins.
 | `asl/docs/asnSpec.md` (this file) | **Data**: what one ASN value is and what it means. |
 | `asl/docs/agenticProtocol.md` | The **wire**: framing, handshake, streams, error frames (a target design). |
 
-ASN adds no type to Core. It reuses Core §2's lexical structure and defines a different phrase
-structure over it — the same relationship a JSON document has to JavaScript's lexer. The
+ASN adds no type to Core. It shares Core §2's token classes and defines a different phrase
+structure over them — the same relationship a JSON document has to JavaScript's lexer. The
 executable reader is `asl/packages/asl-transpile/src/core/asn.asl`, which takes its tokens from
-the language lexer (`asl/packages/asl-parser/src/lexer.asl`) rather than a second scanner. The one
-lexeme ASN keeps that Core retired is the `;` comment (§2.1).
+the self-hosted language lexer (`asl/packages/asl-parser/src/lexer.asl`) rather than a second
+scanner. That lexer is not the stage-0 host's reader, and §1 lists where the two differ. The one
+lexeme ASN keeps that Core retired is the free `;` comment (§2.1).
 
 **ASN keys are data.** Core §2.1 makes an ASL compact alias significant only in the one
-position it names. ASN has none of those positions, so `:f`, `:d`, `:x`, `:c`, `:i` and `:a` in an
+position it names. ASN has none of those positions, so `:f`, `:x`, `:c`, `:i` and `:a` in an
 ASN payload are ordinary keys spelled with those letters and mean nothing else. No tool may
 rewrite them.
 
 ## 1. Lexical structure
 
-Every token is Core §2's:
+The tokens, as `asl-parser`'s lexer and `asnRead` admit them:
 
 ```
 comment    ::= ";" <any char except newline>*
@@ -35,33 +36,39 @@ ident      ::= [a-z] [a-z0-9-]* [?!]?
 qualified  ::= ident "/" ident
 qual-type  ::= ident "/" type-name
 type-name  ::= [A-Z] [A-Za-z0-9]*
-keyword    ::= ":" ident
+keyword    ::= ":" name                       ; camelCase, kebab-case and snake_case all read
 int-lit    ::= "-"? [0-9]+
-float-lit  ::= "-"? [0-9]+ "." [0-9]+
-string-lit ::= '"' ( char | escape )* '"'
-escape     ::= "\\" ( '"' | "\\" | "n" | "t" | "r" | "0" )
+float-lit  ::= "-"? [0-9]+ ( "." [0-9]+ )? ( [eE] [+-]? [0-9]+ )?   ; with a point or an exponent
+string-lit ::= '"' ( char | newline | "\\" char )* '"'
 bool-lit   ::= "true" | "false"
 unit-lit   ::= "()"
 nil-lit    ::= "_"
 ```
 
-`nil-lit` is not a new token. `_` is the character Core §2 already produces as `WILDCARD` in a
-pattern; ASN gives it a meaning in a position Core has no phrase for, so nothing about the lexer
-changes. §3 and §5 of Core carry over unchanged: a sign belongs to the digits it touches, there is
-no exponent form, and `.5` and `1.` are not numbers.
+`nil-lit` is not a new token. `_` is the wildcard of a Core pattern; ASN gives it a meaning in a
+position Core has no phrase for, so nothing about the lexer changes. A sign belongs to the digits it
+touches, `1e3` is a float as it is in Core, and `.5`, `1.` and `+5` are not numbers (each is a
+`parse` error).
 
-`{` and `}` are likewise already produced — Core binds type variables in them — so map literals
-cost no new character either.
+**Escapes.** The reader keeps every string as its source lexeme and accepts a backslash before any
+character; `asnStringValue` decodes `\n`, `\t`, `\r` and `\0` and yields the escaped character
+itself for anything else, so `\"` and `\\` are a quote and a backslash. A writer should emit
+only those six. The host's `.asl` reader has a different set (no `\0`; `\xHH` and `\u` escapes), which ASN does
+not decode.
+
+`{` and `}` are already produced — Core writes anonymous records in them — so map literals cost
+no new character either.
 
 **Names.** The dialect rule is camelCase whole words for user-chosen keywords and symbols
-(`:timeoutMs`, not `:timeout-ms`); the language's builtins keep their one hyphenated spelling
+(`:timeoutMs`, not `:timeout-ms`); the language's builtins have one camelCase spelling each
 (`listLength`, `stringContains?`). What today's reader admits:
 
 - **Keywords** in either spelling: `(:timeoutMs 5)` and `(:timeout-ms 5)` both read and write back
   unchanged. Write keys camelCase.
 - **Case heads and alias prefixes** only as the `ident` rule above: lowercase, digits and single
-  hyphens. `(some-case 1)` reads; `(someCase 1)` is a `parse` error. Target: camelCase heads, per
-  the dialect rule; until the reader changes, a camelCase case head does not read.
+  hyphens. `(some-case 1)` reads; `(someCase 1)` and `(snake_case 1)` are `parse` errors.
+  Target: camelCase heads, per the dialect rule; until the reader changes, a camelCase case head
+  does not read.
 
 ## 2. Documents
 
@@ -83,18 +90,15 @@ string **is** a value — the two are the same phrase. There is nowhere for a no
 way to tell one from data if it stood there.
 
 So `; …` is the only way to annotate an ASN text, and the reader strips it before reading
-(`(:a 1) ; note` reads as `(:a 1)`). Core's specification retired `;` on 2026-09-03 in favour of
-the note; ASN kept it for the reason above, and moving `; canonical:` / `; expect:` into a
-sidecar is a cost with no payoff while `;` can still annotate. The price is stated plainly: ASN
-carries one lexeme on its own authority. (The stage-0 host still reads `;` as a comment in
-`.asl` files too.)
+(`(:a 1) ; note` reads as `(:a 1)`). Core retired the free `;` comment: the host rejects one in an
+`.asl` file (`ERR_READ_COMMENT`) unless the line holds a single `(:m ...)` meta form, and prose
+lives in the package `doc.asn`. ASN kept `;` for the reason above, and moving `; canonical:` /
+`; expect:` into a sidecar is a cost with no payoff while `;` can still annotate. The price is
+stated plainly: ASN carries one lexeme on its own authority.
 
-**A raw newline inside an ASN string literal is legal**, and both the grammar and the reader accept
-it. The one-line restriction the language currently places on a note does not reach ASN: it exists
-because a note is lowered into a target language's source, where an unescaped newline lands inside
-that target's quotes. ASN text is data, read at runtime and never lowered, so there is no target
-quote to escape out of. §10's "no line breaks" governs whitespace *between* tokens; a newline
-inside a string is part of that string's lexeme and is preserved.
+**A raw newline inside an ASN string literal is legal**, as it is in a Core string, and the reader
+keeps it. §10's "no line breaks" governs whitespace *between* tokens; a newline inside a string is
+part of that string's lexeme and is preserved.
 
 ## 3. The value grammar
 
@@ -132,7 +136,7 @@ A bare identifier is **not** a value. `x` alone is a parse error. Names appear o
 |---|---|
 | `1`, `-1` | Integer. Widths and overflow are Core §3's. |
 | `1.5` | `Float64`. |
-| `"text"` | String, with Core §2's five escapes and no others. |
+| `"text"` | String, with §1's escapes. |
 | `true` / `false` | Boolean. |
 | `()` | Unit. |
 | `:kw` | **Keyword.** A self-denoting symbolic scalar. See §3.2. |
@@ -149,8 +153,8 @@ declares no keyword type. Concretely: a keyword may not fill a column of a `row-
 
 This rule is **not** free. Measured where the value actually sits — after a space, which BPE
 merges into the token — ` :inStock` is three tokens and ` "inStock"` is four (cl100k_base via
-tiktoken, 2026-09-24; the kebab spellings count the same, and `asl/bench/asn_tokens.lock` records
-`column-keyword` 3 against `column-string` 4). The rule costs one token per cell.
+tiktoken, 2026-09-24; the kebab spellings counted the same; the lock file that recorded the run is
+no longer in the tree). The rule costs one token per cell.
 
 It stands anyway, because the argument for it was never price. Core §3 declares no keyword type, so
 a keyword in a schema-bound column has nothing to bind to; a format that admitted it would
@@ -191,9 +195,10 @@ A map is an unordered dictionary. Two entry forms:
 - `:kw value` — the cheap form, for a key a keyword can spell.
 - `(key value)` — for a key it cannot: a dotted path, an integer id, a boolean.
 
-A **float may not be a map key**, by grammar. Core §3 forbids `Float64` as a `(Map K V)` key
-because its equality is IEEE-754 and a `NaN` key could never be looked up again; a data format
-that admitted one would produce payloads no consumer could decode.
+A **float may not be a map key**, by grammar (`asl/grammar/corpus/asn/invalid/floatMapKey.asn`).
+`Float64` equality is IEEE-754, so a `NaN` key could never be looked up again — Core's `Map`
+accepts such a key and then never finds it (Core §3) — and a data format that admitted one would
+produce payloads no consumer could decode.
 
 `_` may not be a map key either — nil denotes absence, and an absent key is a key that is not
 there.
@@ -289,8 +294,8 @@ A schema field may carry a JSON name, `:json "..."`:
 
 **That name is JSON's, and ASN does not use it.** An override key, a table column keyword and a
 positional slot all bind to the field's **declared** name — `:isoCode`, never `:countryCode`.
-(Core §4.1 also describes a `:json-case` header option; the stage-0 host rejects a schema that
-carries one, so it is not shown.)
+(The stage-0 host accepts the field's `:json` and does nothing with it; a schema-level case option
+such as `:jsonCase camel` is `ERR_BAD_DEFINITION` there, so none is shown.)
 
 The rule has to be written down because both notations sit on one `schema` and reading it the
 other way is a silent mis-bind, not an error: `:countryCode` would simply look like an unknown
@@ -376,10 +381,10 @@ depth-bounded resolution operation that raises `ref-cycle`; no code resolves ref
 
 ### 8.1 Why not `&`
 
-An earlier draft spelled an identity anchor `(& 1 :name "x")`. `&` is not a character Core §2 can
-produce in any position (fixture `asl/grammar/corpus/asn/invalid/ampersandAnchor.asn` fails to read): it is in no identifier, no
-keyword, no operator and no literal. Admitting it would mean forking the lexer, which is the one
-thing ASN exists not to do.
+An earlier draft spelled an identity anchor `(& 1 :name "x")`. The ASN reader does not admit it
+(fixture `asl/grammar/corpus/asn/invalid/ampersandAnchor.asn` is a `parse` error): in Core, `&` is
+the bitwise-and builtin, a bare name, and a bare name is never an ASN value or case head. Admitting
+it would mean forking the reader's lexical rules, which is the one thing ASN exists not to do.
 
 The replacement is not a respelling. `&` is **deleted**, and anchors are pool entries, because the
 pool already had to exist for deduplication and an anchor is a pool entry someone points at twice.
@@ -485,7 +490,7 @@ What is implemented: `asnRead` raises `parse`, and
 `map-duplicate-key`, `record-duplicate-key`, `pool-kind`, `ref-shape`, `ref-dangling`,
 `ref-no-pool`, `table-ragged`, `table-duplicate-column`, `envelope-data-kind`,
 `envelope-scalar-element`. Each fixture in `asl/grammar/corpus/asn/semantic/` draws exactly the
-code it is named for (asl-core run, 2026-09-24).
+code it is named for (run on the stage-0 host, 2026-10-14).
 
 Target: the schema-directed codes — `row-*`, `nil-at-required-field`, `unknown-schema`,
 `table-missing-column` — and `ref-cycle`. They are normative here; no code raises them yet,
@@ -508,11 +513,12 @@ is a consequence of the value grammar, not a construct in it.
 
 ### 12.2 Raw strings `#"""…"""#` — rejected
 
-`#` is not a character Core §2 produces anywhere. A raw-string form needs a new
+`#"""` opens nothing in Core §2 or in the ASN reader (fixture
+`asl/grammar/corpus/asn/invalid/rawString.asn` is a `parse` error). A raw-string form needs a new
 lexeme, and a new lexeme in a data format that claims to share the language's lexer is a fork of
 that lexer.
 
-Multi-line text uses Core §2's escapes:
+Multi-line text uses a raw newline (§2.1), the `\n` escape:
 
 ```asn
 (:lang :python
@@ -546,7 +552,8 @@ protocol's. An offload pointer, for instance, is an ordinary record:
  :sample [(:sku "A1" :price 24.50) (:sku "A2" :price 12.00)])
 ```
 
-Those three characters are also not producible by Core §2's lexer, which is a problem
+To Core the three characters are ordinary name characters (`~` is the bitwise-not builtin), so a
+frame head is a name there and a `parse` error here; giving them frame meaning is a problem
 `asl/docs/agenticProtocol.md` has to resolve for itself. ASN neither creates nor inherits it.
 
 ### 12.4 Schema mixins `:use`
@@ -559,8 +566,8 @@ payload, which sees only the resulting field list in declaration order.
 `:default` has no compact alias, on the grounds that it is already short enough. The measurement
 agrees, and it is not close: measured in context — after a space, as a document actually contains
 it — ` :dflt` costs **more** than ` :default`, three tokens against two (cl100k_base via tiktoken,
-2026-09-24; `asl/bench/asn_tokens.lock` records `ctx:dflt` 3 and `ctx:default` 2, and a tie of 2
-each in isolation). The abbreviation is not merely a wash, it is a regression.
+2026-09-24, and a tie of 2 each in isolation; the lock file that recorded the run is no longer in
+the tree). The abbreviation is not merely a wash, it is a regression.
 
 Therefore:
 
@@ -573,7 +580,7 @@ Therefore:
 An ASN document is well-formed iff:
 
 1. It is exactly one value, balanced, under §3's grammar.
-2. Every token is Core §2's, with `_` admitted in value position.
+2. Every token is one §1 admits, with `_` admitted in value position.
 3. No map or record repeats a key.
 4. Every `:pool` names a vector; every `:ref` is a single-key record over a non-negative integer
    that resolves inside an enclosing pool.
@@ -595,12 +602,10 @@ holds a schema, not by a text-only check that would have to guess.
 ## 15. Gates
 
 ```bash
-./bin/asl test asl/packages/asl-transpile/tests/asnDriver.asl   # reader and writer: 2 assertions
+asl/host/out/asl-host test asl/packages/asl-transpile/tests/asnDriver.asl   # reader and writer: 2 assertions
 ```
 
-This runs on asl-core, which is lenient. The stage-0 host does not load the reader yet:
-`asl/host/out/asl-host test` on the same file stops at `asl-text/src/text.asl`, which calls
-`listTake`, a name the host does not bind (`ERR_UNKNOWN_SYMBOL listTake`).
+Run from the directory that holds `asl/`; it passes on the stage-0 host (2026-10-14).
 
 Target: one suite that reads every fixture under `asl/grammar/corpus/asn/` — each `valid/` file
 reads and round-trips, each `invalid/` file is a `parse` error, each `semantic/` file draws its

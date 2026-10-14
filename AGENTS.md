@@ -1,148 +1,99 @@
 <!-- ASL_TOOLBELT_START -->
 # AgentScript (ASL) Universal Toolbelt
 
-When `asl` is available on the host system, agents can execute high-speed, token-efficient workspace operations via `asl '(<form1> <form2> ...)'`:
+When `asl` is available, agents can run workspace operations as ASN forms via `asl '(<form1> <form2> ...)'`:
 
-- **Introspect Tool Schemas**: `asl '(:tools)'` — returns the authoritative machine-readable catalog of operational Pure-ASN S-expressions.
-- **Fast Semantic & Symbol Search**: `asl '(:query "symbolName")'` — sub-15ms BM25 and symbol index search across the codebase.
-- **Targeted Reading**: `asl '(:read :file "path/to/file.ext" :symbol "funcName")'` — bounded AST slice retrieval without whole-file dumping.
+- **Introspect Tool Schemas**: `asl '(:tools)'` — the operation catalogue; `asl '(:help :op read)'` explains one op, `asl '(:help :topic language)'` the language.
+- **Symbol Search**: `asl '(:query "symbolName")'` — definitions and uses of a name in code; `:in` searches comments, docs, memories and data instead.
+- **Targeted Reading**: `asl '(:read :file "path/to/file.ext" :symbol "funcName")'` — one symbol or a bounded slice (`:limit`, `:start`, `:end`) instead of the whole file.
 - **Safe Staged Editing**:
-  - `asl '(:edit :file "path/to/file.ext" :old "exactOldString" :new "exactNewString")'` — stage changes in RAM VFS buffer.
-  - `asl '(:diff)'` — inspect dirty RAM buffer diffs prior to disk commit.
-  - `asl '(:flush)'` — atomically persist staged modifications to disk with fsync and rename.
-  - `asl '(:discard)'` — clear all pending staged modifications without disk side effects.
-- **Daemon & Process Supervision**: `asl '(:manage :action <:spawn|:poll|:tail|:kill|:list> :id "taskId" ...)'` (or alias `(:proc ...)`).
-- **Multi-Lens Code Audit**: `asl '(:lens :file "path" :lenses ("invariants" "architecture"))'`
+  - `asl '(:edit :file "path/to/file.ext" :old "exactOldString" :new "exactNewString")'` — stage a replacement in the session buffer (`.asl/vfs` in the workspace, else `~/.cache/asl/vfs/`), not on the file.
+  - `asl '(:diff)'` — show staged changes against disk.
+  - `asl '(:flush)'` — write staged changes to disk (temp file, then rename).
+  - `asl '(:discard)'` — drop staged changes.
+  - `asl '(:txn :owns ("path") <form> ...)'` — stage, gate and flush in one call; every touched file is restored when a nested step fails.
+- **Process Supervision**: `asl '(:manage :action <:spawn|:poll|:tail|:kill|:list> :id "taskId" ...)'`; logs go to `/tmp/asl-sessions/<id>.log`.
+- **Multi-Lens Code Audit**: `asl '(:lens :file "path" :lenses ("invariants" "architecture"))'` — an ASN report; a lens it cannot evaluate is listed under `:lensesNotEvaluated`.
 - **Web Distillation & Research**:
-  - `asl '(:crawl :url "https://..." :distill :asn)'` — crawl and distill web DOM directly to dense ASN.
-  - `asl '(:search :query "query" :limit 5)'` — cognitive web search.
+  - `asl '(:crawl :url "https://..." :distill :asn)'` — crawl a page and distill it to ASN.
+  - `asl '(:search :query "query" :limit 5)'` — web search.
   - `asl '(:research :topic "topic" :depth :deep)'` — web research through the gateway; `:depth` is `:flash`, `:deep` or `:exhaustive`.
-- **Compound Batching**: Multiple forms execute concurrently in one roundtrip: `asl '(:query "foo") (:read :file "bar.ts")'`.
+- **Batching**: several forms in one call run in order as one batch: `asl '(:query "foo") (:read :file "bar.asl")'`.
 
 <!-- ASL_TOOLBELT_END -->
 
-# ASL Engine Internal Operational Instructions
-
-> [!NOTE]
-> This guide covers ASL runtime internals. For the global autonomous agent teleological mandates, please refer to the root `/AGENTS.md` file.
+# ASL Repository Instructions
 
 > [!CAUTION]
-> ### 🛑 Standalone ASL Repository Boundary & Workspace Isolation (CRITICAL)
-> **The GitHub repository `git@github.com:GenSEAM/asl.git` is dedicated EXCLUSIVELY to the `asl` package.**
-> 1. The root of `GenSEAM/asl` corresponds directly to this `asl/` directory (package.json, bin, grammar, packages, prelude, tools, web).
-> 2. The local workspace (this repository's parent monorepo checkout) is an un-pushed monorepo with zero remotes.
-> 3. NEVER push the workspace monorepo or its parent tree to `GenSEAM/asl`. Only clean ASL package trees are published here.
+> ### Repository boundary
+> **The GitHub repository `GenSEAM/asl` holds only the ASL package.**
+> 1. Its root is this directory (grammar, host, packages, prelude, seed, tools, web and the docs beside them).
+> 2. It is developed inside a larger local workspace that has no remote; the `asl` CLI expects that layout (a directory holding `.git` and `asl/grammar/rules.asn`), or `ASL_CLI_ROOT` pointing at the directory that contains this checkout as `asl/`.
+> 3. Never push the workspace or its parent tree to `GenSEAM/asl`.
 
-> **Foundational Philosophy & Invariants**: All AI agents operating in this workspace MUST adhere strictly to [**`MANIFESTO.md`**](../MANIFESTO.md) and its 8 core pillars:
-> 1. **LLM-Native Code Generation**: Homogeneous S-expression geometry, closed AST vocabulary, and balanced form semantics.
-> 2. **Mathematical Optimality & Token Density**: Extreme BPE subtoken efficiency (<= 2 tokens per primitive) without lossy disemvoweling.
-> 3. **Zero-Foreign-Code Invariant**: 100% pure AgentScript (.asl/.asn) in code packages. Zero Python/JS/TS/Rust/C in core logic.
-> 4. **Dual-Projection Architecture**: Code is machine-native; human engineering operates via architecture DAGs, contracts, and falsifiable proofs.
-> 5. **Atomic In-Memory Compound Tooling**: Mandatory pure-ASN S-expression execution via `asl '(:tools)'` and compound top-level batches with zero unvalidated shell commands.
-> 6. **Multi-Runtime Orchestration**: AgentScript acts as the universal control plane coordinating Python AI/ML, Node.js/V8, Rust, C, WASM, and WebGPU via strict ASN stage contracts.
-> 7. **Falsifiable Verification**: Zero vacuous passes, strict exit code validation, and separation of duties between authors and reviewers.
+Design rationale is in [`MANIFESTO.md`](MANIFESTO.md). The rules every agent follows live in `grammar/rules.asn` (goal, refuting question and check for each).
 
 ## 1. Core Technical Specifications
-- Consult `AGENT_SPEC_CORE.md` as the normative language specification.
-- Consult `ROADMAP.md` for current milestone status and active implementation goals.
-- Maintain single-source-of-truth definitions in `prelude/prelude.json` for all closed vocabulary and projection tables.
+- The language rules are the `language` topic of `grammar/tools.asn` (`asl '(:help :topic language)'`), rendered into [`llms.txt`](llms.txt). [`docs/syntaxProjections.md`](docs/syntaxProjections.md) covers short spellings.
+- `agentSpecCore.md` is the v0.2 specification written for the concept-validation experiment (`EXPERIMENT.md`); where it differs from the host, the host and the `language` topic win.
+- The vocabulary is what the stage-0 host binds: the builtins in `host/src` and the public fns of `prelude/prelude.asl`, listed in `prelude/prelude.asn`. Operations are catalogued in `grammar/tools.asn`.
 
-## 2. Verification Toolchain & Continuous Audit Gates
-Verify all changes using the native sovereign ASL CLI before committing:
-
-```bash
-asl gate
-```
-
-The verification suite evaluates seven gates:
-1. **Manifest Integrity**: Validates package manifests and module structure across all packages.
-2. **Structural Balance**: Verifies pure ASL syntax and S-expression form balance across all `.asl` files.
-3. **Registry Grounding**: Verifies published benchmark claims against the benchmark registry.
-4. **Pure AgentScript Implementation**: Confirms that code packages contain pure AgentScript modules.
-5. **Native Test Execution**: Runs native ASL test suites across packages.
-6. **ASN Grammar & Symbol Density**: Verifies symbol registries, token budget limits (<= 2 tokens under BPE), and unambiguous canonical naming.
-7. **Modular Skills Freshness**: Confirms skill frontmatters, trigger descriptions, and protocol names are synchronized.
-
-Individual module checks, dynamic execution, and tests can be run targeted:
-```bash
-asl lint <path-to-file.asl>           # AST delimiter balance & anti-pattern linter (asl check aliases to lint)
-asl run <path-to-file.asl>            # In-memory AST tree-walking interpreter
-asl run <path-to-file.asl> --wasm     # In-memory WebAssembly bytecode compilation & MicroVM execution
-asl run <path-to-file.asl> --wat      # WebAssembly Text format emission
-asl test [path-to-test.asl]          # Run native test suites
-asl audit <path-to-file.asl>         # Run lint, test, and blast-radius impact analysis
-```
-
-## 3. Modern ASL v0.4+ Syntax & Pure Dyck-1 Form
-AgentScript v0.4+ syntax rules:
-- **Canonical Syntax (Storage & Wire Default)**:
-  - Use modern syntax (`fn`, `schema`, `module`, `:d`, `:x`, `:i`, `:a`, `:f`, `:c`, `I64`, `F64`, `Str`, `Bool`, `Unit`) for files on disk, inter-agent message frames, and emitted artifacts. Legacy `(df ...)`, `(dfs ...)`, `(dfe ...)`, and `(mt ...)` are strictly forbidden.
-  - Standard primitives adhere to a <= 2 token ceiling under BPE (`cl100k_base` and `o200k_base`), reducing context overhead by 50%–65% compared to JSON.
-- **Pure Dyck-1 Homoiconic Form**:
-  - All statements and definitions are balanced S-expressions.
-  - Outlines and symbol navigation are queried dynamically via `asl '(:read ...)'` or `asl '(:query ...)'`.
-- **Positional Aliasing**:
-  - Short aliases resolve based on syntactic position as defined in `AGENT_SPEC_CORE.md` §2.1.
-  - Record field keys preserve literal names (for example, `(P :x 1)` specifies a field named `:x`).
-- **Comments as String Literal Notes**:
-  - Express code comments as free-standing string literal notes placed at the top level or within declaration bodies.
-  - Runtimes erase top-level notes during compilation while preserving multiline formatting.
-- **Control-Flow Linearization**:
-  - Keep nesting depth within 4 levels. Use early returns and concise local helper functions to maintain linear flow.
-
-## 4. Pure-ASN Sovereign Agent Plane & Compound Tooling
-All code exploration, reading, symbol queries, in-memory editing, diff inspection, daemon supervision, and verification MUST execute through pure-ASN S-expressions (`asl '(:op ...)'`) in single or compound top-level batches. Third-party agents interact exclusively via structured pure-ASL callable forms without raw shell string-blasting or unvalidated CLI pipelines.
-
-### 4.1 Canonical Machine-Readable Tool Registry
-Agents introspect active operational signatures at runtime via `asl '(:tools)'`:
-
-```asn
-(:tools :v 1 :substrate "ASL-Sovereign"
-  (:op :tools :params [] :doc "Introspect active tool schema")
-  (:op :manage :params [:action :id :cmd :lines :timeoutMs] :actions [:spawn :poll :tail :kill :list] :doc "Resident daemon process supervision, log spooling, and session lifecycle")
-  (:op :proc :params [:action :id :cmd :lines :timeoutMs] :alias :manage :doc "Process supervision alias")
-  (:op :lens :params [:file :target :lenses] :doc "Sovereign multi-lens audit returning structured ASN report")
-  (:op :read :params [:file :symbol :anchor :limit] :doc "Bounded AST symbol and slice retrieval without integer line numbers")
-  (:op :query :params [:text :scope :limit] :doc "Vector and semantic search across AST symbols and ledgers")
-  (:op :edit :params [:file :old :new] :doc "Atomic string replacement staged in virtual RAM VFS buffer")
-  (:op :diff :params [:file] :doc "Inspect dirty RAM VFS buffer modifications prior to disk flush")
-  (:op :flush :params [] :doc "Atomically persist all staged RAM VFS modifications to disk")
-  (:op :discard :params [] :doc "Clear all pending RAM VFS buffer modifications without disk side effects")
-  (:op :check :params [:file] :doc "Verify Dyck-1 parenthesis balance, pure ASL syntax, and symbol resolution")
-  (:op :test :params [:file] :doc "Execute falsifiable test suite via pure evaluator with strictly positive assertCount")
-  (:op :audit :params [:subcmd] :subcmds [:consistency :gates :coupling :closure :foreign :steps] :doc "Run systemic monorepo audit across declared dimensions")
-  (:op :crawl :params [:url :mode :distill] :doc "Crawl target web page and distill DOM to pure Dyck-1 ASN without noise")
-  (:op :search :params [:query :limit] :doc "Cognitive web search with provider cascading and direct fallback")
-  (:op :research :params [:topic :depth] :doc "Web research through the gateway; :verified only when facts with source urls pass verification")
-  (:op :doctor :params [] :doc "Audit measured capabilities and substrate invariants")
-  (:op :note :params [:action :kind :scope :date :claim] :doc "Record or query working memory observations in pure ASN"))
-```
-
-### 4.2 Compound In-Memory Batches & Zero-Line-Number Addressing
-Pass multiple top-level forms in a single command. Forms execute concurrently in RAM VFS buffers:
+## 2. Verification
+The stage-0 host is the reference. Build it with `sh host/build.sh`, then:
 
 ```bash
-asl '(:query :text "handleRequest") (:read :file "src/server.asl" :symbol "handleRequest") (:doctor)'
+host/out/asl-host check <file.asl>    # names, arity, enums, known types, effects
+host/out/asl-host test <fileTest.asl> # runs runTests; exit 0 and the executed assert count are the evidence
+host/out/asl-host run <file.asl>      # calls main
+host/out/asl-host eval '<expr>'
 ```
 
-Zero-Line-Number Invariant: Code locations, slices, diffs, and receipts are addressed exclusively by path and symbol anchor (`:file ?f :symbol ?s :anchor ?a`). Integer line numbers are strictly excluded from agent commands and receipts.
+Through the CLI (`asl help` lists the commands):
 
-### 4.3 Resident Daemon Process Supervision (`:manage`)
-Agents supervise background commands and external processes via `:manage` (or `:proc`), eliminating dependence on host `manage_task`:
-- `(:manage :action :spawn :id "<id>" :cmd "<command>")`: Spawns process asynchronously, tracking PID and spooling logs to `/tmp/asl-sessions/<id>.log`.
-- `(:manage :action :poll :id "<id>")`: Polls active state (`:running`, `:completed`, `:failed`), exit code, and execution duration.
-- `(:manage :action :tail :id "<id>" [:lines <n>])`: Streams tail of output log.
-- `(:manage :action :kill :id "<id>")`: Terminates process group cleanly.
-- `(:manage :action :list)`: Lists all active supervised sessions.
+```bash
+asl check <file>       # delimiter balance, then asl-host check for .asl; bare: every tracked file
+asl test <file|dir>    # suites on asl-host; bare: every discovered suite; --changed [BASE] selects by impact
+asl run <file.asl>     # load the file and call its main
+asl audit <subcmd>     # coupling, deadcode, vacuity, sweep, graph, complexity, stubs, vitality, trace, full, all, system
+```
 
-### 4.4 Failure Protocol & Atomic Recovery
-- **RAM VFS Staging**: Modifying code stages edits in virtual RAM VFS (`:edit -> :diff -> :flush | :discard`). If an edit is erroneous, call `(:discard)` to roll back cleanly without leaving corrupted files on disk.
-- **Edit Failure Recovery**: If `:edit` fails, do not blind-retry. Query the symbol via `(:read :file <path> :symbol <name>)` to observe the ground-truth code structure and anchor.
-- **Circuit Breaker**: Capped at 3 identical failures (`:rule :id limitCycle`). Tripping forces phase transition or escalation.
+`asl gate`, `asl lint`, `asl mem` and `asl tool` are retired and answer ERR_RETIRED. `asl audit gates` and `asl audit consistency` run the workspace's `scripts/audit/audit.py`, which is not part of this repository; the gate code in `packages/asl-gates` (`auditMain.asl`) also needs the workspace's git root.
 
-## 5. Ecosystem & Multi-Package Architecture
-- Code packages reside under `packages/` and are organized as self-contained ASL modules with a `manifest.asn` declaration.
-- Maintain pure ASL implementations across all code packages.
-- Ensure that all AST definitions and schemas in `grammar/` adhere to pure Dyck-1 homoiconicity and pass `./bin/asl check`.
-- Ensure all public documentation examples fenced with ` ```agentscript ` or ` ```lisp ` parse cleanly, or annotate speculative snippets with `<!-- not-agentscript: reason -->`.
+## 3. Syntax
+The full rules are in the `language` topic; the points agents most often get wrong:
+- **A file** is a module header, `(module ws/name :x [exports] :i [(other/module :a alias)])`, then items in column 0. A function header is a bare line, `fn name a: Int64 -> Bool`, with its body indented below.
+- **Saved form**: `fn`, `(schema ...)`, `enum`, `mt` (or `match`), `:x`, `:i`, `:a`, `:f`, `:c`. `(df ...)`, `(dfs ...)`, `(defun ...)` and `(defschema ...)` are rejected with ERR_UNSUPPORTED_TOPLEVEL.
+- **Types**: `Int64`, `Float64`, `String`, `Bool`, `Unit`, `(List T)`; the host also reads `I64`, `F64`, `Str`.
+- **Effects**: a function that does I/O is `fn ! name ...` or ends in `!`; otherwise check fails with ERR_EFFECT_UNMARKED.
+- **Docs and comments**: `:d` docstrings are rejected (ERR_READ_DOC) and so are free `;` comments (ERR_READ_COMMENT). A doc is a `(:doc :symbol "path#name" :text "...")` row in the package's `doc.asn`.
+- **Positional aliasing**: a short spelling counts only in its position; `(Point :x 1)` is a record with a field named `x`, and a field reads as `p.x`.
+- **Control flow**: keep nesting shallow; prefer small helper functions to deep nesting.
 
+## 4. Agent Plane
+Exploration, reads, symbol queries, staged edits and checks go through ASN forms (`asl '(:op ...)'`), several forms per call where they are independent. `asl '(:tools)'` is the authoritative catalogue. On 2026-10-14 it listed (`:tools :v 2`): `:tools :help :eval :mem :doc :manage :engine :lens :agent :intel :read :query :edit :write :tree :observe :diff :flush :discard :check :test :fix :txn :audit :crawl :search :research :doctor :note :target :pack`.
+
+```bash
+asl '(:query "handleRequest") (:read :file "src/server.asl" :symbol "handleRequest")'
+```
+
+`asl -f FILE` runs the forms in FILE, and `asl -` reads them from stdin.
+
+### 4.1 Addressing
+Commands and patches address code by path and symbol or content anchor (`:file`, `:symbol`, `:anchor`), never by line number (the `output` rule). `:read` reports the `:start`/`:end` of what it returned.
+
+### 4.2 Process supervision (`:manage`)
+- `(:manage :action :spawn :id "<id>" :cmd "<command>")`: starts the process and spools its output to `/tmp/asl-sessions/<id>.log`.
+- `(:manage :action :poll :id "<id>")`: state and exit code.
+- `(:manage :action :tail :id "<id>" :lines <n>)`: tail of the log.
+- `(:manage :action :kill :id "<id>")`: terminates it.
+- `(:manage :action :list)`: supervised sessions.
+
+### 4.3 Failure protocol
+- **Staging**: edits go `:edit -> :diff -> :flush | :discard`. If an edit is wrong, `(:discard)` drops it without touching disk.
+- **Edit failure**: if `:edit` fails, do not retry blindly. Read the symbol with `(:read :file <path> :symbol <name>)` and edit against what is there.
+
+## 5. Packages
+- `packages/` holds 66 packages; each has a `manifest.asn` and a `doc.asn`.
+- Package code is ASL; the other files under `packages/` are test fixtures and the browser extension's `manifest.json` and `popup.html` (`asl-browser-plugin`). The stage-0 host in `host/src` is C.
+- Files in `grammar/` must pass `asl check`.
+- ASL examples in documentation are fenced as ` ```asl ` and should pass `host/out/asl-host check`.

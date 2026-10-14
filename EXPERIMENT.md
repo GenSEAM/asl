@@ -15,7 +15,7 @@ AgentScript's premise is that a regular S-expression syntax, injected into a sys
 generate code more reliably than mainstream languages, and that this justifies a DSL between the
 model and native Rust/Go.
 
-`RESEARCH_REPORT.md` found this premise **untested by anyone** — no located source evaluates
+`researchReport.md` found this premise **untested by anyone** — no located source evaluates
 S-expressions — and found evidence pointing the other way: generation quality tracks
 training-corpus presence, and AgentScript is by construction zero-corpus.
 
@@ -32,7 +32,7 @@ This experiment resolves that empirically, cheaply, before a compiler is written
 | **H5** | Core transpiles cleanly to Rust and Go | compile rate < 95%, or differential disagreement on any task |
 
 **H2 is the primary gate.** H1 is necessary but cheap and largely guaranteed under constraint —
-per `RESEARCH_REPORT.md` §2.2, constrained decoding gives ~100% parse success to *any* grammar, so
+per `researchReport.md` §2.2, constrained decoding gives ~100% parse success to *any* grammar, so
 H1 passing is weak evidence and must not be reported as concept validation.
 
 ## 3. Benchmark
@@ -61,7 +61,7 @@ comparator and this is recorded here as an amendment.
 
 | Arm | Condition | Runtime | Purpose |
 |---|---|---|---|
-| **A** | `AGENT_SPEC_CORE.md` in system prompt, unconstrained | OpenRouter | headline number |
+| **A** | `agentSpecCore.md` in system prompt, unconstrained | OpenRouter | headline number |
 | **B** | A + 3 few-shot worked examples | OpenRouter | measures how much of the gap is closed by examples |
 | **C** | A + GBNF grammar constraint | llama.cpp, local | isolates the grammar effect |
 | **Base** | MultiPL-E Python / TS / Go / Rust, unconstrained | OpenRouter | comparator |
@@ -94,19 +94,19 @@ exists to compare against (§4).
 
 **If the gate is missed:** stop. Do not iterate on prompt wording, examples, or grammar until it
 passes — that is how a null result gets laundered into a positive one. Report the number, then
-evaluate the pivot named in `RESEARCH_REPORT.md` §5 (synthetic programming elicitation: choose a
+evaluate the pivot named in `researchReport.md` §5 (synthetic programming elicitation: choose a
 syntax models already emit fluently and transpile from that).
 
 **Secondary measurements** (reported, not gated): token count per solution vs baselines; error
 taxonomy — parse / type / runtime / wrong-answer, which tests whether the ~6%-syntactic /
-~94%-type split from `RESEARCH_REPORT.md` §5 reproduces on AgentScript.
+~94%-type split from `researchReport.md` §5 reproduces on AgentScript.
 
 ## 7. Expressiveness probe (H4)
 
 Write the AgentScript lexer **in AgentScript**. Pass condition: it tokenizes the Stage 1 conformance
 corpus and matches the reference Rust lexer token-for-token.
 
-Prediction on record: **this will fail without user-defined sum types** (`SPEC_REVIEW.md` G5), since
+Prediction on record: **this will fail without user-defined sum types** (`SPEC_REVIEW.md` G5; that review is not in this repository), since
 token kinds are a sum. Recording the prediction now so that discovering it counts as confirmation
 rather than hindsight.
 
@@ -252,3 +252,29 @@ constraint. Two things are:
    holding the credential. Unchanged since it was recorded; PCP `l-298e`.
 
 No threshold moves. The 15 pp gate against the Python and JavaScript baselines stands as written.
+
+### 2026-10-14-a — references brought up to date (made BEFORE any results)
+
+No arm has run and no result has been observed. This amendment changes no hypothesis, threshold
+or gate; it records where the files this protocol names stand today.
+
+**Renamed in place.** `RESEARCH_REPORT.md` is now `researchReport.md` and `AGENT_SPEC_CORE.md` is
+now `agentSpecCore.md`; the references above were updated to the new names and nothing else in
+those sentences changed. `SPEC_REVIEW.md` is not in this repository. `researchReport.md` §5, as it
+stands, names no "synthetic programming elicitation" pivot; §6's reference to it has no target.
+
+**The harness named in 2026-09-03-a is gone.** `bench/harness/run.py` is not in the tree;
+`bench/harness/` holds only `config.example.asn` (endpoint, model, key variable, $0.20 spend cap,
+5 samples per task), and nothing reads it. The task once at `bench/tasks/histogram.json` is now
+`bench/tasks/histogram.asn` (HumanEval/111, still a pure function with cases).
+`bench/tasks/SUBSET.txt`, `bench/tasks/PILOT.txt` and `results/` have not been written. A harness
+must exist again before any arm can run; this is now blocking alongside gateway access.
+
+**Host language (2026-08-20-c) superseded.** The compiler is not hosted in Rust. The stage-0 host
+is C (`host/src`); the native compiler `asl1` is written in ASL and lowers through LLVM IR
+(`asl-target-llvm`), with a committed seed for `arm64-apple-darwin` only.
+
+**H5 backends (2026-08-21-a).** `asl-target-py` and `asl-target-rs` are source-to-source
+prototypes, and the differential gate that amendment describes is not identified in the tree today.
+H5 is left as last stated; restating it over the backends that now produce runnable output
+(LLVM IR, native and `wasm32-unknown-unknown`) is a decision for a later amendment.

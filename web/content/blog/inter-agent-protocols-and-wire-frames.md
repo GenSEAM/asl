@@ -56,7 +56,7 @@ An AgP frame begins with one of three single-character sigils:
 
 AgP values are AgentScript literals, not JSON:
 * Lists are whitespace-delimited (`["idle" "active"]`), with no commas.
-* Keys are camelCase with the physical unit in the name (`:timeoutMs`), following the language dialect. The specification is camelCase throughout; the `seambus` skill still spells some keys and error keywords kebab-case (`:reply-to`, `:scope-violation`), and the two are being converged.
+* Keys are camelCase with the physical unit in the name (`:timeoutMs`), following the language dialect. The specification and the `seambus` skill are camelCase throughout (`:replyTo`, `:scopeViolation`).
 * Payloads are constructor forms such as `(fsm :states 3)`, read directly as S-expressions without a JSON decoding step.
 
 How much this saves depends on the frame, and we have no corpus measurement. The one recorded example is in the [README](https://github.com/GenSEAM/asl#why): a `git status` tool call is 51 `cl100k_base` tokens as a JSON object and 18 as a positional sigil frame. That is one example, not a benchmark.
