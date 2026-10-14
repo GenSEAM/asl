@@ -16,7 +16,7 @@ AgentScript is two things:
 - **ASL, the language.** Source (`.asl`) and data (`.asn`) files are S-expressions with balanced parentheses. A malformed program is caught by counting delimiters rather than by running it, and whitespace carries no meaning inside a form.
 - **`asl`, the toolbelt.** `asl '<form> <form> ...'` reads, searches and edits files in a git repository; the forms of one call run as one batch, and edits are staged, inspected with `(:diff)`, then flushed or discarded.
 
-Status: early. The stage-0 C host (`host/out/asl-host`) checks and runs programs; `asl build` returns `ERR_UNIMPLEMENTED` and produces no artifact until phase R1. Compiling to WebAssembly or C, and a differential gate across backends, are targets.
+Status: early. The stage-0 C host (`host/out/asl-host`) checks and runs programs. `asl-target-llvm` lowers a linked program to LLVM IR for native code and for `wasm32-unknown-unknown`; [aslang.dev](https://aslang.dev) is built that way from [`web/`](web/) (markup, styles and event handlers in ASL, compiled to `site.wasm`). The self-hosted native compiler (`asl1`) has a seed for `arm64-apple-darwin` only, and self-hosting is in progress. The TypeScript, WAT and other source-to-source targets are prototypes.
 
 ## Why
 
@@ -53,7 +53,7 @@ This is one example, not a benchmark. The `(! ...)` sigil frame is the target wi
 ## The language in one example
 
 ```asl
-(module demo/shapes :d "Areas of shapes" :x [area runTests])
+(module demo/shapes :x [area runTests])
 
 enum Shape (circle r: Int64) (square side: Int64)
 
@@ -69,16 +69,16 @@ A function header is a bare column-0 line; its body is indented below. There is 
 ## Quickstart
 
 ```sh
-curl -fsSL https://aslang.dev/install.sh | bash   # installer source: dist/install.sh
+curl -fsSL https://aslang.dev/install.sh | sh     # not released yet: the installer is under development
 asl version
-asl check file.asl                  # delimiter balance (asl-core)
-asl test fileTest.asl               # run a suite on asl-core, which is lenient
+asl check file.asl                  # delimiter balance, then the host check
+asl test fileTest.asl               # run a suite on the host
 host/out/asl-host check file.asl    # strict: names, arity, enums
 host/out/asl-host test fileTest.asl # strict runner
 asl '(:tools)'                      # the agent-plane operation catalogue
 ```
 
-`asl test` runs asl-core, which reads 0 as true, treats unknown names as data and passes a `runTests` that returns false; `asl-host` is the reference.
+`asl-host` is the reference: it checks names, arity, enums and effects before running anything.
 
 ## Packages
 

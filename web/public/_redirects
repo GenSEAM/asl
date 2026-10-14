@@ -1,2 +1,7 @@
 /install /install.sh 302
-/* /index.html 200
+/roadmap / 301
+/ecosystem / 301
+/playground / 301
+/mascot / 301
+/in-ide / 301
+/ide / 301
