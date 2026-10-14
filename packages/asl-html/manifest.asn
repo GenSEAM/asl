@@ -1,7 +1,7 @@
 (:package asl-html
  :version "0.1.0"
  :entry "src/html.asl"
- :description "Typed HTML5 and CSS for AgentSlang: one constructor per HTML5 and SVG element, escaping by construction (text, attributes, script and style bodies), styles as data with every at-rule, a Markdown subset to nodes, typed SVG drawing and an ASN-to-SVG converter with a command line"
+ :description "Typed HTML5 and CSS for AgentSlang: one constructor per HTML5 and SVG element, escaping by construction (text, attributes, script and style bodies), styles as data with every at-rule, a Markdown subset to nodes, typed SVG drawing, and ASN-to-SVG, ASN-to-HTML and ASN-to-CSS converters wired into the toolbelt as (:target :name svg|html|css)"
  :aslFirst true
  :modules [
    "asl-html/html"
@@ -10,5 +10,9 @@
    "asl-html/svg"
    "asl-html/asnSvg"
    "asl-html/svgCli"
+   "asl-html/asn"
+   "asl-html/asnHtml"
+   "asl-html/asnCss"
+   "asl-html/convert"
  ]
  :dependencies ["asl-parser"])

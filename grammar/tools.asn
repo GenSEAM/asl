@@ -434,10 +434,11 @@
     (:op :target
       :scope toolchain
       :params (
-        (:name :type sym :default :list :note "target generator name")
-        (:file :type str :default "" :note "target file path")
+        (:name :type sym :default :list :note "svg, html or css (from an ASN form), js or ts (from an ASL entry module), or list")
+        (:file :type str :default "" :note "source file path")
+        (:out :type str :default "" :note "stage the result at this path, like (:write); without it the result is returned in :output")
       )
-      :doc "Compile ASL to standalone target code or synchronize distribution artifacts (sh, ps1, cmd, distrib, c, go, llvm, py, rs, swift, wat).")
+      :doc "Convert an ASN drawing, page or stylesheet to SVG, HTML or CSS, or compile an ASL entry module to an ES module (js) or its TypeScript declarations (ts). Errors name their place in the source. Other target names answer ERR_NOT_IMPLEMENTED.")
 
     (:op :pack
       :scope toolchain

@@ -50,6 +50,26 @@ anchor` are short aliases, and camelCase attributes become kebab-case. An unknow
 misspelled attribute or text outside a text element is an error that names its place in the
 drawing (`svg[0] > rect[1]: unknown attribute :fil`), so an agent can fix it in one turn.
 
+## Pages and stylesheets from ASN, and the toolbelt
+
+`asl-html/asnHtml` and `asl-html/asnCss` do for pages and stylesheets what `asnSvg` does for
+drawings:
+
+```asn
+(:html :lang "en"
+  (:head (:title "Status") (:style (:rule "h1" :color "#c2185b" :fontSize "2rem")))
+  (:body (:h1 "All green") (:svg :w 20 :h 20 (:circ :cx 10 :cy 10 :r 8 :f "#2e7d32"))))
+```
+
+An agent converts any of the three with the toolbelt; `:out` stages the file like `(:write)`, so
+it shows in `(:diff)` and lands with `(:flush)`:
+
+```sh
+asl '(:target :name html :file "status.asn" :out "status.html")'
+asl '(:target :name css :file "site.asn")'          # result returned in :output
+asl '(:target :name ts :file "src/app.asl")'        # asl-target-js declarations
+```
+
 ## Guarantees
 
 - Text and attribute values are escaped; raw HTML in text stays text.
@@ -66,5 +86,6 @@ drawing (`svg[0] > rect[1]: unknown attribute :fil`), so an agent can fix it in 
 | `tests/cssTest.asl` | 4 pass |
 | `tests/markdownTest.asl` | 9 pass |
 | `tests/svgTest.asl` | 14 pass |
+| `tests/asnTest.asl` | 7 pass |
 
 All four also compile with `asl-target-js` and pass under node with the same assertion counts.

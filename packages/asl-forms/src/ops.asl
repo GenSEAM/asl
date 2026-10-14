@@ -1,4 +1,4 @@
-(module asl-forms/ops :x [StepOutcome runStep! splitLinesKeepEnds pyInt] :i [(asl-forms/kernel :a k) (asl-forms/similarity :a sm) (asl-forms/symbol :a sy) (asl-forms/delegate :a d) (asl-proc/coreProcess :a cp) (asl-forms/search :a s) (asl-forms/tools :a t) (asl-forms/gate :a g) (asl-forms/vfs :a v) (asl-forms/edit :a e) (asl-forms/lens :a l) (asl-forms/evalOp :a ev) (asl-forms/memOp :a m) (asl-forms/docOp :a doc)])
+(module asl-forms/ops :x [StepOutcome runStep! splitLinesKeepEnds pyInt] :i [(asl-forms/kernel :a k) (asl-forms/similarity :a sm) (asl-forms/symbol :a sy) (asl-forms/delegate :a d) (asl-proc/coreProcess :a cp) (asl-forms/search :a s) (asl-forms/tools :a t) (asl-forms/gate :a g) (asl-forms/vfs :a v) (asl-html/convert :a conv) (asl-ir/types :a ty) (asl-target-js/main :a jsc) (asl-forms/edit :a e) (asl-forms/lens :a l) (asl-forms/evalOp :a ev) (asl-forms/memOp :a m) (asl-forms/docOp :a doc)])
 
 
 (schema StepOutcome (:f lines (List String)) (:f errCount Int64))
@@ -274,18 +274,45 @@ fn packStep! root: String id: Int64 kw: (Map String String) args: (List String) 
         (let [(tOut (if (not (stringEmpty? target)) target "all"))]
           (done (str (stepHead id "pack") " :status \"ok\" :target \"" (k/escapeAsnVal tOut) "\" :exitCode 0)"))))))
 
+fn targetSource! root: String kw: (Map String String) args: (List String) -> (Result (Pair String String) String)
+  (let [(raw (k/kwOr kw "file" (k/kwOr kw "path" (optionOr (listGet args 1) ""))))
+        (target (if (stringEmpty? raw) (pair "" "Missing :file") (k/resolveEditTarget! root raw)))]
+    (cond
+      ((not (stringEmpty? (pairSecond target))) (err (pairSecond target)))
+      ((not (k/isFile! (pairFirst target))) (err (str "File not found: " raw)))
+      (else (mt (fileReadString (pairFirst target)) ((ok text) (ok (pair (pairFirst target) text))) ((err e) (err (str "Failed to read " raw ": " e)))))))
+
+fn compiled! kind: String path: String source: String -> (Result String (List String))
+  (cond
+    ((listContains? (conv/kinds) kind) (conv/convertSource kind source))
+    (else
+      (mt (jsc/compileWithTypes! path)
+        ((err ds) (err (map (fn [(d ty/IrDiag)] -> String (str d.code ": " d.message)) ds)))
+        ((ok both) (ok (if (= kind "ts") (pairSecond both) (pairFirst both)))))))
+
+fn targetConverted! root: String id: Int64 tname: String kw: (Map String String) args: (List String) -> (Result String StepOutcome)
+  (mt (targetSource! root kw args)
+    ((err e) (err (rejected id "target" "ERR_MISSING_ARG" (msgTail e))))
+    ((ok found)
+      (mt (compiled! tname (pairFirst found) (pairSecond found))
+        ((ok text) (ok text))
+        ((err es) (err (rejected id "target" "ERR_TARGET" (str " :target \"" tname "\" :errors (" (stringJoin (map (fn [(e String)] -> String (str "\"" (k/escapeAsnVal e) "\"")) es) " ") ")")))))))
+
 fn targetStep id: Int64 kw: (Map String String) args: (List String) -> StepOutcome
   (let [(rawName (k/kwOr kw "name" (k/kwOr kw "target" (k/kwOr kw "to" (optionOr (listHead args) "list")))))
         (tname (k/lstripColons rawName))]
     (cond
       ((= tname "list")
-        (rejected id "target" "ERR_NOT_IMPLEMENTED" " :message \"target listing is not connected to a compiler registry\""))
+        (done (str (stepHead id "target") " :status \"ok\" :targets (\"svg\" \"html\" \"css\" \"js\" \"ts\") :note \"svg, html and css convert an ASN form; js and ts compile an ASL entry module; :out stages the result like (:write)\")")))
       ((= tname "distrib")
         (rejected id "target" "ERR_NOT_IMPLEMENTED" " :message \"distribution generation is not connected to its generator\""))
       ((listContains? (list "sh" "shell" "posix" "ps1" "powershell" "cmd" "bat" "c" "go" "llvm" "py" "rs" "swift" "wat") tname)
         (rejected id "target" "ERR_NOT_IMPLEMENTED" (str " :message \"No compiler is wired for target " (k/escapeAsnVal tname) "\"")))
       (else
         (rejected id "target" "ERR_UNKNOWN_TARGET" (str " :message \"Unknown compilation target: " (k/escapeAsnVal tname) "\"")))))
+
+fn targetWired? kw: (Map String String) args: (List String) -> Bool
+  (listContains? ["svg" "html" "css" "js" "ts"] (k/lstripColons (k/kwOr kw "name" (k/kwOr kw "target" (k/kwOr kw "to" (optionOr (listHead args) "list"))))))
 
 fn identChar? c: String first: Bool -> Bool
   (let [(k (charCode c))]
@@ -424,6 +451,22 @@ fn runNested! root: String id: Int64 form: String held: (List String) -> StepOut
   (let [(p (k/parseStep form))]
     (runStepHeld! root id p.op p.kwargs p.args held form))
 
+fn targetRun! root: String id: Int64 kw: (Map String String) args: (List String) held: (List String) -> StepOutcome
+  (let [(tname (k/lstripColons (k/kwOr kw "name" (k/kwOr kw "target" (k/kwOr kw "to" (optionOr (listHead args) ""))))))
+        (out (k/kwOr kw "out" ""))]
+    (mt (targetConverted! root id tname kw args)
+      ((err refusal) refusal)
+      ((ok text)
+        (if (stringEmpty? out)
+          (done (str (stepHead id "target") " :status \"ok\" :target \"" tname "\" :bytes " (stringFromInt64 (stringLength text)) " :output \"" (k/escapeAsnVal text) "\")"))
+          (mt (e/editOp! (resultOr (v/vfsContext! root) (v/vfsAt root (v/vfsRoot! root (envOr! "ASL_VFS_DIR") (envOr! "HOME")) (envOr! "ASL_SESSION")))
+                        (editCheckers! (gateContext! root))
+                        (fn [(n Int64) (form String) (h (List String))] -> k/EditOutcome
+                          (let [(r (runNested! root n form h))] (k/EditOutcome :lines r.lines :errCount r.errCount)))
+                        held id "write" (mapSet (mapSet (mapEmpty) "file" out) "content" text) [])
+            ((some staged) (StepOutcome :lines staged.lines :errCount staged.errCount))
+            ((none) (rejected id "target" "ERR_WRITE_FAILED" " :message \"the staging buffer did not take the write\"")))))))
+
 fn delegateContext! root: String -> d/DelegateCtx
   (d/contextFromEnv! root (resultOr (realPath ".") root))
 
@@ -444,6 +487,7 @@ fn runStepHeld! root: String id: Int64 op: String kw: (Map String String) args: 
     ((= op "job") (jobStep id kw args))
     ((= op "consult") (consultStep id kw args))
     ((= op "pack") (packStep! root id kw args))
+    ((and (or (= op "target") (= op "codegen")) (targetWired? kw args)) (targetRun! root id kw args held))
     ((or (= op "target") (= op "codegen")) (targetStep id kw args))
     ((= op "browserSession") (browserSessionStep! id kw args))
     ((or (= op "q") (= op "query"))
