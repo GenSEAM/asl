@@ -14,5 +14,6 @@
    "asl-ir/printer"
    "asl-ir/patch"
    "asl-ir/link"
+   "asl-ir/blocks"
  ]
  :dependencies ["asl-parser" "asl-checker"])

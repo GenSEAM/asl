@@ -1,4 +1,4 @@
-(module aslConform/runner :x [runConformCase! runConformProfile! formatReceipt] :i [(aslConform/types :a ty) (aslConform/semantics :a sem) (aslConform/compare :a cmp) (asl-target-c :a c11) (asl-target-py/emitPy :a py) (asl-proc/coreProcess :a proc) (asl-proc/pool :a pool)])
+(module aslConform/runner :x [runConformCase! runConformProfile! formatReceipt] :i [(aslConform/types :a ty) (aslConform/semantics :a sem) (aslConform/compare :a cmp) (asl-target-c :a c11) (asl-target-py :a py) (asl-proc/coreProcess :a proc) (asl-proc/pool :a pool)])
 
 fn readCaseFile! path: Str -> Str
   (mt (fileRead path) ((ok content) content) ((err _) ""))
@@ -17,8 +17,16 @@ fn ! runArgv! bin: Str args: (List Str) -> proc/ProcessOutput
             ((some message) (proc/ProcessOutput :exitCode (if (= message "permission") 126 127) :stdout "" :stderr (str "sh: " bin ": " (if (= message "permission") "Permission denied" "command not found")) :durationMs 0))
             ((none) (proc/ProcessOutput :exitCode row.exitCode :stdout row.stdout :stderr row.stderr :durationMs row.durationMs)))))))
 
+fn pyQuoted s: Str -> Str
+  (str "\"" (stringReplace (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\n" "\\n") "\"")
+
+fn ! pyCaseSource! casePath: Str -> Str
+  (mt (py/compileEntry! (str casePath "/case.asl"))
+    ((ok code) code)
+    ((err ds) (str "import sys\nsys.exit(" (pyQuoted (py/diagText ds)) ")\n")))
+
 fn ! runPyTargetCase! caseId: Str -> ty/ConformanceResult
-  (let [(wsDir (str "tmp/conform/" caseId)) (_ (runArgv! "mkdir" (list "-p" wsDir))) (pyFile (str wsDir "/run.py")) (pyCode (py/emitPyStandaloneCase caseId)) (_w (fileWrite pyFile pyCode)) (execRes (runArgv! "python3" (list pyFile))) (actStdout (stringTrim execRes.stdout)) (actExit execRes.exitCode)] (ty/makeResult caseId "py" true actStdout actExit ""))
+  (let [(wsDir (str "tmp/conform/" caseId)) (_ (runArgv! "mkdir" (list "-p" wsDir))) (pyFile (str wsDir "/run.py")) (pyCode (pyCaseSource! (str "tests/conformance/xplat/" caseId))) (_w (fileWrite pyFile pyCode)) (execRes (runArgv! "python3" (list pyFile))) (actStdout (stringTrim execRes.stdout)) (actExit execRes.exitCode)] (ty/makeResult caseId "py" true actStdout actExit ""))
 
 fn ! runC11TargetCase! caseId: Str -> ty/ConformanceResult
   (let [(wsDir (str "tmp/conform/" caseId)) (_ (runArgv! "mkdir" (list "-p" wsDir))) (cFile (str wsDir "/run.c")) (binFile (str wsDir "/run")) (cCode (c11/emitC11StandaloneCase caseId)) (_w (fileWrite cFile cCode)) (compRes (runArgv! "clang" (list "-std=c11" "-Wall" "-Werror" "-fsanitize=undefined,address" "-fno-sanitize-recover=all" "-ffp-contract=off" cFile "-o" binFile)))] (if (!= compRes.exitCode 0) (ty/makeResult caseId "c11" false "" compRes.exitCode (str "Clang compilation failed under UBSan/ASan: " compRes.stderr)) (let [(runRes (runArgv! binFile (list))) (actStdout (stringTrim runRes.stdout)) (actExit runRes.exitCode)] (ty/makeResult caseId "c11" true actStdout actExit ""))))

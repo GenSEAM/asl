@@ -12,8 +12,9 @@ here is a claim about the future except the items themselves.
 | WebAssembly | the same backend for `wasm32-unknown-unknown`; aslang.dev ships `site.wasm` built this way (`web/tools/build.asl`) | real, script-driven |
 | JavaScript / TypeScript | `asl-target-js` from SSA, byte-equal to the host on its fixtures, `.d.mts` checked by `tsc --strict` | real, new |
 | HTML / CSS / SVG | `asl-html`: typed nodes, CSS rules, SVG, Markdown, and ASN converters; toolbelt `(:target :name svg|html|css|js|ts)` | real, new |
+| Python, Go | `asl-target-py` and `asl-target-go` from the same SSA through the shared `asl-ir/blocks`; 12 fixtures byte-equal with the host, asl-html suites pass; toolbelt `(:target :name py|go)` | real, new |
 | C | `asl-target-c` lowers SSA but links one source plus the prelude, not imports | ~70% |
-| Go, Python, Rust, Swift, sh, WAT, the old TS | syntax-level emitters of one module, some tests compare canned strings | prototypes |
+| Rust, Swift, sh, WAT, the old TS | syntax-level emitters of one module, some tests compare canned strings | prototypes |
 | SQL | `asl-sql` renders text for sqlite/postgres/mysql/clickhouse; nothing executes it; identifiers, JSON paths and UPDATE/DELETE clauses are not escaped | unsafe prototype |
 | Packages | local `:path` dependencies only; `:rev` checks an existing checkout; no lockfile, registry, git or npm fetching | missing |
 | Foreign functions | libc calls are a fixed table inside the LLVM backend; no `extern` in the language; the JS target cannot import anything | missing |
@@ -41,7 +42,7 @@ here is a claim about the future except the items themselves.
    Add `IS NULL`, `IN (list)` and golden SQL per dialect with negative injection tests.
 3. **Mark or remove stubs that look real:** `asl-compiler/src/{elf,macho,wasi}.asl`,
    `tools/release.asl`, `asl target sh` (prints a fixed skeleton), the canned
-   `emitPyStandaloneCase`/`emitC11StandaloneCase`, `asl-ui/renderNative`, `asl-web/hydrate`.
+   `emitC11StandaloneCase`, `asl-ui/renderNative`, `asl-web/hydrate`.
 
 ### P1 — the language can reach other ecosystems (deferred: needs language changes)
 
@@ -113,7 +114,9 @@ here is a claim about the future except the items themselves.
 20. **C from SSA as the default C target** (switch to `linkEntry!`, finish closures and ADTs,
     strings and GC in its runtime, a `cc` and run gate); retire `asl-codegen` c99 and the legacy
     `IrModule` path.
-21. **Python from SSA** next (~750 lines with its runtime), then Go. Rust last.
+21. **Kotlin and Swift from SSA** on the `asl-ir/blocks` shape Python and Go use (both done); a shell target only
+    for a subset (strings, ints, processes, printing) that refuses the rest. Retire Rust: shared GC values
+    become `Rc<RefCell<…>>` there, slower than the native LLVM build and without Rust's guarantees.
 22. **Retire** `asl-target-ts` (superseded by `asl-target-js`), `asl-target-wat` and
     `asl-compiler/src/wasm.asl` (the LLVM path ships wasm), and the duplicate Rust emitters. Restore
     or drop the missing parity corpus (`tests/acceptance/targetParity`).

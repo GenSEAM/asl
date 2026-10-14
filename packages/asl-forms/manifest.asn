@@ -27,4 +27,4 @@
    "asl-forms/foreignBlock"
    "asl-forms/memOp"
  ]
- :dependencies ["aslGateway" "asl-json" "asl-intel" "asl-proc" "asl-syntax" "asl-coord" "asl-gates" "asl-html" "asl-target-js" "asl-ir"])
+ :dependencies ["aslGateway" "asl-json" "asl-intel" "asl-proc" "asl-syntax" "asl-coord" "asl-gates" "asl-html" "asl-target-js" "asl-target-py" "asl-target-go" "asl-ir"])

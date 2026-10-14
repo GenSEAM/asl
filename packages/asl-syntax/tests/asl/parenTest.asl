@@ -380,7 +380,6 @@ fn testTrackedParenAslFiles! -> Bool
                           "asl/packages/asl-pack/tests/intermediatePolicyTest.asl"
                           "asl/packages/asl-plugin/src/types.asl"
                           "asl/packages/asl-replay/src/main.asl"
-                          "asl/packages/asl-target-py/tests/fixtures/pointClass.asl"
                           "asl/packages/asl-ui/src/main.asl"
                           "asl/packages/asl-mem/src/tasks.asl"
                           "tests/acceptance/d81/Task58801IntermediatePolicyTest.asl"

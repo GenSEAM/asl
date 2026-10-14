@@ -434,11 +434,11 @@
     (:op :target
       :scope toolchain
       :params (
-        (:name :type sym :default :list :note "svg, html or css (from an ASN form), js or ts (from an ASL entry module), or list")
+        (:name :type sym :default :list :note "svg, html or css (from an ASN form), js, ts, py or go (from an ASL entry module), or list")
         (:file :type str :default "" :note "source file path")
         (:out :type str :default "" :note "stage the result at this path, like (:write); without it the result is returned in :output")
       )
-      :doc "Convert an ASN drawing, page or stylesheet to SVG, HTML or CSS, or compile an ASL entry module to an ES module (js) or its TypeScript declarations (ts). Errors name their place in the source. Other target names answer ERR_NOT_IMPLEMENTED.")
+      :doc "Convert an ASN drawing, page or stylesheet to SVG, HTML or CSS, or compile an ASL entry module to an ES module (js), its TypeScript declarations (ts), a Python 3 file (py) or a Go file (go). Errors name their place in the source. Other target names answer ERR_NOT_IMPLEMENTED.")
 
     (:op :pack
       :scope toolchain

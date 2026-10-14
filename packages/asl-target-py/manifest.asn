@@ -1,9 +1,11 @@
 (:package asl-target-py
- :version "0.1.0"
- :entry "src/emitPy.asl"
- :description "Standalone Python 3.11+ emitter backend for AgentSlang under ADR D93"
- :layer 0
+ :version "0.2.0"
+ :entry "src/main.asl"
+ :description "Python 3 backend: lowers a linked, verified asl-ir SSA module to one self-contained Python file with a small runtime; Int traps on int64 overflow, strings keep ASL's UTF-8 byte semantics, main's result is the exit code"
  :aslFirst true
- :modules ["asl-target-py/emitPy"]
- :dependencies ["asl-parser" "asl-ir"]
- :capabilities ["codegen/target"])
+ :modules [
+   "asl-target-py"
+   "asl-target-py/emit"
+   "asl-target-py/runtime"
+ ]
+ :dependencies ["asl-ir"])

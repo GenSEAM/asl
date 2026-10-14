@@ -1,4 +1,4 @@
-(module asl-forms/ops :x [StepOutcome runStep! splitLinesKeepEnds pyInt] :i [(asl-forms/kernel :a k) (asl-forms/similarity :a sm) (asl-forms/symbol :a sy) (asl-forms/delegate :a d) (asl-proc/coreProcess :a cp) (asl-forms/search :a s) (asl-forms/tools :a t) (asl-forms/gate :a g) (asl-forms/vfs :a v) (asl-html/convert :a conv) (asl-ir/types :a ty) (asl-target-js/main :a jsc) (asl-forms/edit :a e) (asl-forms/lens :a l) (asl-forms/evalOp :a ev) (asl-forms/memOp :a m) (asl-forms/docOp :a doc)])
+(module asl-forms/ops :x [StepOutcome runStep! splitLinesKeepEnds pyInt] :i [(asl-forms/kernel :a k) (asl-forms/similarity :a sm) (asl-forms/symbol :a sy) (asl-forms/delegate :a d) (asl-proc/coreProcess :a cp) (asl-forms/search :a s) (asl-forms/tools :a t) (asl-forms/gate :a g) (asl-forms/vfs :a v) (asl-html/convert :a conv) (asl-ir/types :a ty) (asl-target-js/main :a jsc) (asl-target-py :a pyc) (asl-target-go :a goc) (asl-forms/edit :a e) (asl-forms/lens :a l) (asl-forms/evalOp :a ev) (asl-forms/memOp :a m) (asl-forms/docOp :a doc)])
 
 
 (schema StepOutcome (:f lines (List String)) (:f errCount Int64))
@@ -282,9 +282,16 @@ fn targetSource! root: String kw: (Map String String) args: (List String) -> (Re
       ((not (k/isFile! (pairFirst target))) (err (str "File not found: " raw)))
       (else (mt (fileReadString (pairFirst target)) ((ok text) (ok (pair (pairFirst target) text))) ((err e) (err (str "Failed to read " raw ": " e)))))))
 
+fn irErrors r: (Result String (List ty/IrDiag)) -> (Result String (List String))
+  (mt r
+    ((ok text) (ok text))
+    ((err ds) (err (map (fn [(d ty/IrDiag)] -> String (str d.code ": " d.message)) ds))))
+
 fn compiled! kind: String path: String source: String -> (Result String (List String))
   (cond
     ((listContains? (conv/kinds) kind) (conv/convertSource kind source))
+    ((= kind "py") (irErrors (pyc/compileEntry! path)))
+    ((= kind "go") (irErrors (goc/compileEntry! path)))
     (else
       (mt (jsc/compileWithTypes! path)
         ((err ds) (err (map (fn [(d ty/IrDiag)] -> String (str d.code ": " d.message)) ds)))
@@ -303,16 +310,16 @@ fn targetStep id: Int64 kw: (Map String String) args: (List String) -> StepOutco
         (tname (k/lstripColons rawName))]
     (cond
       ((= tname "list")
-        (done (str (stepHead id "target") " :status \"ok\" :targets (\"svg\" \"html\" \"css\" \"js\" \"ts\") :note \"svg, html and css convert an ASN form; js and ts compile an ASL entry module; :out stages the result like (:write)\")")))
+        (done (str (stepHead id "target") " :status \"ok\" :targets (\"svg\" \"html\" \"css\" \"js\" \"ts\" \"py\" \"go\") :note \"svg, html and css convert an ASN form; js, ts, py and go compile an ASL entry module; :out stages the result like (:write)\")")))
       ((= tname "distrib")
         (rejected id "target" "ERR_NOT_IMPLEMENTED" " :message \"distribution generation is not connected to its generator\""))
-      ((listContains? (list "sh" "shell" "posix" "ps1" "powershell" "cmd" "bat" "c" "go" "llvm" "py" "rs" "swift" "wat") tname)
+      ((listContains? (list "sh" "shell" "posix" "ps1" "powershell" "cmd" "bat" "c" "llvm" "rs" "swift" "wat") tname)
         (rejected id "target" "ERR_NOT_IMPLEMENTED" (str " :message \"No compiler is wired for target " (k/escapeAsnVal tname) "\"")))
       (else
         (rejected id "target" "ERR_UNKNOWN_TARGET" (str " :message \"Unknown compilation target: " (k/escapeAsnVal tname) "\"")))))
 
 fn targetWired? kw: (Map String String) args: (List String) -> Bool
-  (listContains? ["svg" "html" "css" "js" "ts"] (k/lstripColons (k/kwOr kw "name" (k/kwOr kw "target" (k/kwOr kw "to" (optionOr (listHead args) "list"))))))
+  (listContains? ["svg" "html" "css" "js" "ts" "py" "go"] (k/lstripColons (k/kwOr kw "name" (k/kwOr kw "target" (k/kwOr kw "to" (optionOr (listHead args) "list"))))))
 
 fn identChar? c: String first: Bool -> Bool
   (let [(k (charCode c))]

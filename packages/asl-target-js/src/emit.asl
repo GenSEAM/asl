@@ -1,24 +1,12 @@
 (module asl-target-js/emit
   :x [jsIdent jsString emitJsModule supportedBuiltins]
-  :i [(asl-ir/types :a ty) (asl-target-js/runtime :a rt)])
-
-fn identChar? c: String -> Bool
-  (or (and (>= c "a") (<= c "z")) (or (and (>= c "A") (<= c "Z")) (and (>= c "0") (<= c "9"))))
-
-fn hexDigit n: Int64 -> String
-  (optionOr (stringSlice "0123456789abcdef" n (+ n 1)) "0")
-
-fn escapeChar c: String -> String
-  (if (identChar? c) c (let [(n (charCode c))] (str "$" (hexDigit (/ n 16)) (hexDigit (mod n 16)))))
+  :i [(asl-ir/types :a ty) (asl-ir/blocks :a bl) (asl-target-js/runtime :a rt)])
 
 fn jsIdent prefix: String name: String -> String
-  (str prefix (stringJoin (map escapeChar (stringChars name)) ""))
-
-fn replaceIn s: String old: String new: String -> String
-  (if (stringContains? s old) (stringReplace s old new) s)
+  (bl/mangle prefix "$" name)
 
 fn jsString s: String -> String
-  (str "\"" (replaceIn (replaceIn (replaceIn (replaceIn (replaceIn s "\\" "\\\\") "\"" "\\\"") "\n" "\\n") "\r" "\\r") "\t" "\\t") "\"")
+  (bl/quoted s)
 
 fn v name: String -> String
   (jsIdent "v_" name)
@@ -90,11 +78,6 @@ fn opText op: ty/SsaOp -> (Result String String)
     ((ty/opUnbox x) (ok (v x)))
     ((ty/opPrim name xs) (ok (primText name xs))))
 
-(schema Ctx (:f self String) (:f params (List String)) (:f labels (Map String Int64)) (:f params0 (Map String (List String))) (:f returners (List String)))
-
-fn labelIndex ctx: Ctx label: String -> String
-  (stringFromInt64 (optionOr (mapGet ctx.labels label) -1))
-
 fn assignAll targets: (List String) values: (List String) -> String
   (if (listEmpty? targets)
     ""
@@ -102,10 +85,10 @@ fn assignAll targets: (List String) values: (List String) -> String
       (str "const [" (stringJoin temps ", ") "] = [" (args values) "]; "
            (stringJoin (map (fn [(t String)] -> String (str (v t) " = t" (v t) "; ")) targets) ""))))
 
-fn edgeText ctx: Ctx e: ty/SsaEdge -> String
-  (str "{ " (assignAll (optionOr (mapGet ctx.params0 e.target) []) e.args) "$b = " (labelIndex ctx e.target) "; continue; }")
+fn edgeText ctx: bl/BlockCtx e: ty/SsaEdge -> String
+  (str "{ " (assignAll (optionOr (mapGet ctx.params0 e.target) []) e.args) "$b = " (bl/labelIndex ctx e.target) "; continue; }")
 
-fn termText ctx: Ctx t: ty/SsaTerm -> String
+fn termText ctx: bl/BlockCtx t: ty/SsaTerm -> String
   (mt t
     ((ty/termReturn x) (str "return " (v x) ";"))
     ((ty/termJump e) (edgeText ctx e))
@@ -116,86 +99,37 @@ fn termText ctx: Ctx t: ty/SsaTerm -> String
            "default: " (mt d ((some e) (edgeText ctx e)) ((none) "$.unreachable();")) " }"))
     ((ty/termUnreachable) "$.unreachable();"))
 
-fn soleParam b: ty/SsaBlock -> String
-  (optionOr (listHead (map (fn [(p ty/SsaParam)] -> String p.name) b.params)) "")
-
-fn forwards? known: (List String) b: ty/SsaBlock -> Bool
-  (and (= (listLength b.params) 1)
-    (and (listEmpty? b.instrs)
-      (mt b.term
-        ((ty/termReturn x) (= x (soleParam b)))
-        ((ty/termJump e) (and (listContains? known e.target) (= e.args [(soleParam b)])))
-        (_ false))))
-
-fn returners known: (List String) blocks: (List ty/SsaBlock) -> (List String)
-  (let [(next (map (fn [(b ty/SsaBlock)] -> String b.label) (filter (fn [(b ty/SsaBlock)] -> Bool (forwards? known b)) blocks)))]
-    (if (= (listLength next) (listLength known)) known (returners next blocks)))
-
-fn tailCall ctx: Ctx b: ty/SsaBlock -> (Option (List String))
-  (mt (listLast b.instrs)
-    ((none) (none))
-    ((some last)
-      (mt last.op
-        ((ty/opCall callee xs)
-          (let [(returnsIt (mt b.term
-                             ((ty/termReturn x) (= x last.dest))
-                             ((ty/termJump e) (and (listContains? ctx.returners e.target) (= e.args [last.dest])))
-                             (_ false)))]
-            (if (and returnsIt (and (= callee ctx.self) (= (listLength xs) (listLength ctx.params)))) (some xs) (none))))
-        (_ (none)))))
-
 fn instrLine i: ty/SsaInstr -> (Result String String)
   (mt (opText i.op) ((ok text) (ok (str (v i.dest) " = " text "; "))) ((err e) (err e)))
 
-fn collect results: (List (Result String String)) -> (Result (List String) (List String))
-  (let [(bad (fold (fn [(acc (List String)) (r (Result String String))] -> (List String) (mt r ((err e) (cons e acc)) ((ok _) acc))) [] results))]
-    (if (listEmpty? bad) (ok (map (fn [(r (Result String String))] -> String (mt r ((ok s) s) ((err _) ""))) results)) (err (listReverse bad))))
-
-fn blockText ctx: Ctx index: Int64 b: ty/SsaBlock -> (Result String (List String))
-  (mt (tailCall ctx b)
+fn blockText ctx: bl/BlockCtx index: Int64 b: ty/SsaBlock -> (Result String (List String))
+  (mt (bl/tailCall ctx b)
     ((some xs)
-      (mt (collect (map instrLine (optionOr (listSlice b.instrs 0 (- (listLength b.instrs) 1)) [])))
+      (mt (bl/collect (map instrLine (optionOr (listSlice b.instrs 0 (- (listLength b.instrs) 1)) [])))
         ((err es) (err es))
         ((ok lines) (ok (str "case " (stringFromInt64 index) ": { " (stringJoin lines "") (assignAll ctx.params xs) "$b = 0; continue; }")))))
     ((none)
-      (mt (collect (map instrLine b.instrs))
+      (mt (bl/collect (map instrLine b.instrs))
         ((err es) (err es))
         ((ok lines) (ok (str "case " (stringFromInt64 index) ": { " (stringJoin lines "") (termText ctx b.term) " }"))))))
 
-fn paramNames ps: (List ty/SsaParam) -> (List String)
-  (map (fn [(p ty/SsaParam)] -> String p.name) ps)
-
-fn locals fn0: ty/SsaFunction -> (List String)
-  (fold (fn [(acc (List String)) (b ty/SsaBlock)] -> (List String)
-          (listAppend acc (listAppend (paramNames b.params) (map (fn [(i ty/SsaInstr)] -> String i.dest) b.instrs))))
-        [] fn0.blocks)
-
 fn functionText fn0: ty/SsaFunction -> (Result String (List String))
   (let [(indexed (enumerate fn0.blocks))
-        (ctx (Ctx :self fn0.name :params (paramNames fn0.params)
-                  :labels (fold (fn [(m (Map String Int64)) (p (Pair Int64 ty/SsaBlock))] -> (Map String Int64) (mapSet m (pairSecond p).label (pairFirst p))) (mapEmpty) indexed)
-                  :params0 (fold (fn [(m (Map String (List String))) (b ty/SsaBlock)] -> (Map String (List String)) (mapSet m b.label (paramNames b.params))) (mapEmpty) fn0.blocks)
-                  :returners (returners [] fn0.blocks)))
+        (ctx (bl/blockCtx fn0))
         (blocks (map (fn [(p (Pair Int64 ty/SsaBlock))] -> (Result String (List String)) (blockText ctx (pairFirst p) (pairSecond p))) indexed))
         (bad (fold (fn [(acc (List String)) (r (Result String (List String)))] -> (List String) (mt r ((err es) (listAppend acc es)) ((ok _) acc))) [] blocks))
-        (vars (locals fn0))]
+        (vars (bl/locals fn0))]
     (if (not (listEmpty? bad))
       (err bad)
-      (ok (str "function " (f fn0.name) "(" (args (listAppend (paramNames fn0.captures) (paramNames fn0.params))) ") {\n"
+      (ok (str "function " (f fn0.name) "(" (args (listAppend (bl/paramNames fn0.captures) (bl/paramNames fn0.params))) ") {\n"
                (if (listEmpty? vars) "" (str "  let " (args vars) ";\n"))
                "  let $b = 0;\n  for (;;) switch ($b) {\n"
                (stringJoin (map (fn [(r (Result String (List String)))] -> String (mt r ((ok s) (str "    " s "\n")) ((err _) ""))) blocks) "")
                "    default: $.unreachable();\n  }\n}\n"))))
 
-fn exportName moduleName: String fnName: String -> (Option String)
-  (let [(prefix (str moduleName "."))]
-    (if (and (stringStartsWith? fnName prefix) (not (stringContains? fnName "@")))
-      (stringSlice fnName (stringLength prefix) (stringLength fnName))
-      (none)))
-
 fn exportsText m: ty/SsaModule -> String
   (let [(pairs (fold (fn [(acc (List String)) (fn0 ty/SsaFunction)] -> (List String)
-                       (mt (exportName m.name fn0.name) ((some short) (cons (str (f fn0.name) " as " (jsString short)) acc)) ((none) acc)))
+                       (mt (bl/exportName m.name fn0.name) ((some short) (cons (str (f fn0.name) " as " (jsString short)) acc)) ((none) acc)))
                      [] m.functions))]
     (str "export { " (stringJoin (listReverse pairs) ", ") " };\n"))
 

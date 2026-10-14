@@ -528,7 +528,7 @@ emitter carries its own mangler today, and no emitter implements the collision e
 | shared, Rust-style | `mangleIdent` in `asl/packages/asl-codegen/src/mangle.asl` | trailing `?` → `is_` prefix, trailing `!` → `_mut` suffix, `-` → `_`, a Rust keyword gets `_`; `core/strings` → `core_strings` |
 | Rust | `rustMangleIdent` in `asl/packages/asl-target-rs/src/types.asl` | as above, with `r#` for raw-identifier keywords |
 | TypeScript | `tsMangleIdent` in `asl/packages/asl-target-ts/src/types.asl` | trailing `?` → `is` prefix, hyphenated → camelCase, a keyword gets `_`, `a/b` → `a.b` |
-| Python | `pyMangleIdent` in `asl/packages/asl-target-py/src/emitPy.asl` | `/` and `-` → `_`, a keyword gets `_`; camelCase is kept |
+| JS, Python, Go | `mangle` in `asl/packages/asl-ir/src/blocks.asl` | `f_`/`v_` prefix, every byte outside `[A-Za-z0-9]` becomes an escape and two hex digits (`$` in JS, `_` in Python and Go), so no keyword can clash |
 | C | `mangleCIdent` in `asl/packages/asl-codegen/src/c99Mangle.asl` | C identifiers and module prefixes |
 
 Sources are camelCase (§2), so most names pass through unchanged and only the `?` and `!` suffixes,
