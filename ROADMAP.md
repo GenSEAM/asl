@@ -63,7 +63,8 @@ here is a claim about the future except the items themselves.
    `asl fetch` writes `asl.lock.asn` (git revision and tree hash, npm integrity) into a cache;
    the loader resolves only from the lock and cache, never the network. Make
    `asl-pack/src/packageAsl.asl` the one manifest parser.
-9. **Linux.** A linux-x86_64 seed (`asl1` and the runtime seed) and `tools/seed.asl regen`; the
+9. **Linux.** A linux-x86_64 seed (`asl1` and the runtime seed) and the `tools/seed.asl` that `seed/seed.asn`
+   names for `regen` and `check` but this tree does not have; the
    `verbs.c` `PATH_MAX` include (owned by the host work); layout-agnostic root discovery so a
    standalone clone works (`rules.asl`, `pack.asl`, `build.sh`, `distrib.asl`, the installer's
    `--render-rules`).
@@ -104,5 +105,5 @@ here is a claim about the future except the items themselves.
     `IrModule` path.
 21. **Python from SSA** next (~750 lines with its runtime), then Go. Rust last.
 22. **Retire** `asl-target-ts` (superseded by `asl-target-js`), `asl-target-wat` and
-    `asl-compiler/wasm.asl` (the LLVM path ships wasm), and the duplicate Rust emitters. Restore
+    `asl-compiler/src/wasm.asl` (the LLVM path ships wasm), and the duplicate Rust emitters. Restore
     or drop the missing parity corpus (`tests/acceptance/targetParity`).

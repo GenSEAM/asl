@@ -156,9 +156,9 @@ fn test262Exclusions -> (List (Pair String String))
 
 fn trackedJsExclusions -> (List (Pair String String))
   (list
-    (pair "asl/web/plugins/vitePluginAsl.js" "uses import/export module declarations owned by unit S4 (module.asl)")
-    (pair "asl/web/tailwind.config.js" "uses import/export module declarations owned by unit S4 (module.asl)")
-    (pair "asl/web/vite.config.js" "uses import/export module declarations owned by unit S4 (module.asl)"))
+    (pair "asl/packages/asl-syntax/tests/fixtures/js/vitePluginAsl.js.sample" "uses import/export module declarations owned by unit S4 (module.asl)")
+    (pair "asl/packages/asl-syntax/tests/fixtures/js/tailwind.config.js.sample" "uses import/export module declarations owned by unit S4 (module.asl)")
+    (pair "asl/packages/asl-syntax/tests/fixtures/js/vite.config.js.sample" "uses import/export module declarations owned by unit S4 (module.asl)"))
 
 fn printExclusions! prefix: String cases: (List (Pair String String)) -> Bool
   (if (listEmpty? cases)
@@ -295,9 +295,9 @@ fn test262Files -> (List String)
 
 fn trackedJsFiles -> (List String)
   (list
-    "asl/web/plugins/vitePluginAsl.js"
-    "asl/web/tailwind.config.js"
-    "asl/web/vite.config.js"
+    "asl/packages/asl-syntax/tests/fixtures/js/vitePluginAsl.js.sample"
+    "asl/packages/asl-syntax/tests/fixtures/js/tailwind.config.js.sample"
+    "asl/packages/asl-syntax/tests/fixtures/js/vite.config.js.sample"
     "tests/harnessBench/cases/attention-flood/svc/vendor/uploader.min.js")
 
 fn checkFileSuite! suiteName: String files: (List String) exclusions: (List (Pair String String)) runCount: Int64 passCount: Int64 excludedCount: Int64 -> Bool

@@ -303,11 +303,15 @@ fn testAllTrackedFilesLossless! -> Bool
       (assert (= mismatches 0) "zero tiling or print mismatches across all tracked files")
       true))
 
+fn benchmarkSource! -> String
+  (let [(parts (map (fn [(p String)] -> String (resultOr (fileReadString p) ""))
+                    ["asl/web/site/app/docs.asl" "asl/web/site/app/home.asl" "asl/web/site/app/theme.asl" "asl/web/site/app/mascot.asl"]))
+        (once (stringJoin parts "\n"))]
+    (stringJoin [once once once] "\n"))
+
 fn testBenchmarkPerformance! -> Bool
-  (let [(path "asl/web/src/views/PlaygroundView.asl")]
-    (mt (fileReadBytes path)
-      ((err e) (assert false (str "benchmark file missing: " e)))
-      ((ok bs)
+  (let [(bs (stringToBytes (benchmarkSource!)))]
+    (do
        (let [(len (bytesLength bs))]
          (assert (> len 100000) "benchmark file is >100 KB")
          (let [(t0 (nowNs))
@@ -320,7 +324,7 @@ fn testBenchmarkPerformance! -> Bool
                (msPer100Kb (/ (* elapsedMs 102400) len))]
            (assert (= outBs bs) "benchmark output matches input bytes")
            (assert (<= msPer100Kb 60) (str "tokenize+print <= 60 ms per 100 KB, took: " (stringFromInt64 msPer100Kb) " ms"))
-           true)))))
+           true))))
 
 fn ! runTests -> Bool
   (and (testDelimitersAndTrivia)

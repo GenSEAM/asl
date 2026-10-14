@@ -105,12 +105,12 @@ fn testManifestVerifierSha256! -> Bool
               true))))))
 
 fn testIndexCss! -> Bool
-  (let [(contentRes (fileReadString "asl/web/src/index.css"))]
+  (let [(contentRes (fileReadString "asl/packages/asl-syntax/tests/fixtures/css/tailwindIndex.css"))]
     (assert (ok? contentRes) "read index.css")
     (let [(cssText (resultOr contentRes ""))
           (tree (rules/parseStylesheet cssText))
           (printed (pr/print cssText tree))
-          (src (src/sourceFromString "asl/web/src/index.css" cssText))
+          (src (src/sourceFromString "asl/packages/asl-syntax/tests/fixtures/css/tailwindIndex.css" cssText))
           (outlineSyms (rules/extractOutlineSymbols tree cssText))
           (count (listLength outlineSyms))
           (allSyms (rules/extractSymbols tree cssText))
@@ -120,7 +120,7 @@ fn testIndexCss! -> Bool
         (assert (= printed cssText) "index.css round-trip")
         (assert (= count 29) "29 outline symbols in index.css")
         (assert (= (listLength customProps) 26) "26 custom properties in index.css")
-        (let [(receipt (out/formatOutlineReceipt "asl/web/src/index.css" "css" outlineSyms src))]
+        (let [(receipt (out/formatOutlineReceipt "asl/packages/asl-syntax/tests/fixtures/css/tailwindIndex.css" "css" outlineSyms src))]
           (do
             (assert (stringStartsWith? receipt "(:outline :status :ok :file ") "receipt starts with outline")
             (assert (stringContains? receipt ":itemsCount 29") "receipt itemsCount 29")

@@ -237,7 +237,7 @@ fn testAllHtmlStyles! -> Bool
                 files)))))
 
 fn testIndexCss! -> Bool
-  (mt (fileReadBytes "asl/web/src/index.css")
+  (mt (fileReadBytes "asl/packages/asl-syntax/tests/fixtures/css/tailwindIndex.css")
     ((err e) (do (assert false (str "failed to read index.css: " e)) false))
     ((ok bs)
      (let [(len (bytesLength bs))

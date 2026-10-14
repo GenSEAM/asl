@@ -44,7 +44,7 @@
       main]
   :i [(asl-json/json :a j)
       (config :a cfg)
-      (asl/packages/asl-cli/src/system :a sys)])
+      (asl-cli/system :a sys)])
 
 (schema CliUsage
   (:f inputTokens Int64)

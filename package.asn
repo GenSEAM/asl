@@ -6,8 +6,6 @@
   :packageManager "pnpm@11.25.0"
   :engines (:node ">=20.0.0")
   :scripts (
-    :build:wasmRunner "asl test packages/asl-codegen/tests/emit_wat_test.asl"
-    :test:wasmRunner "asl test packages/asl-codegen/tests/emit_wat_test.asl"
     :build:web "sh web/build.sh"
     :build "sh web/build.sh"
     :preview:web "npx --yes serve web/dist -l 4173"
