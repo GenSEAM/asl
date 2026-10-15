@@ -1,0 +1,120 @@
+(module asl-cli/irSplit
+  :x [Body Split split declOf externOf]
+  :i [])
+
+(schema Body
+  (:f head String)
+  (:f text String)
+  (:f size Int64))
+
+(schema Split
+  (:f shared (List String))
+  (:f owned (List String))
+  (:f bodies (List Body)))
+
+fn paramType p: String -> String
+  (let [(words (stringSplit p " "))]
+    (if (< (listLength words) 2) p (stringJoin (listTake words (- (listLength words) 1)) " ")))
+
+fn declOf head: String -> (Option String)
+  (let [(rest (stringReplace (stringReplace (optionOr (stringSlice head 7 (stringLength head)) "") "internal " "") "weak " ""))]
+    (mt (stringIndexOf rest "(")
+      ((none) (none))
+      ((some open) (mt (stringIndexOf rest ")")
+        ((none) (none))
+        ((some close) (let [(params (optionOr (stringSlice rest (+ open 1) close) ""))]
+                        (some (str "declare " (optionOr (stringSlice rest 0 open) "") "("
+                                   (if (stringEmpty? params) "" (stringJoin (map paramType (stringSplit params ", ")) ", ")) ")"))))))))
+
+fn externOf line: String -> (Option String)
+  (mt (stringIndexOf line " global ")
+    ((none) (none))
+    ((some at) (let [(name (optionOr (stringSlice line 0 (optionOr (stringIndexOf line " = ") 0)) ""))
+                     (init (optionOr (stringSlice line (+ at 8) (stringLength line)) ""))
+                     (typed (optionOr (listHead (stringSplit init ", align ")) init))
+                     (words (stringSplit typed " "))
+                     (ty (stringJoin (listTake words (max 0 (- (listLength words) 1))) " "))]
+                 (cond
+                   ((or (stringEmpty? name) (stringEmpty? ty)) (none))
+                   ((stringStartsWith? (definition line) "weak global ") (some (str name " = external global " ty)))
+                   (else (some (str name " = external hidden global " ty)))))))
+
+fn definition line: String -> String
+  (mt (stringIndexOf line " = ") ((none) "") ((some i) (optionOr (stringSlice line (+ i 3) (stringLength line)) "")))
+
+fn owned? line: String -> Bool
+  (and (stringStartsWith? line "@") (or (stringStartsWith? (definition line) "internal global ") (stringStartsWith? (definition line) "weak global ")))
+
+fn bodyOf piece: String -> (Result (Pair Body String) String)
+  (let [(whole (str piece "\n"))]
+    (mt (stringIndexOf whole "\n}\n")
+      ((none) (err "a define has no closing brace line"))
+      ((some end) (let [(text (str "define " (optionOr (stringSlice whole 0 (+ end 3)) "")))
+                        (head (optionOr (stringSlice text 0 (optionOr (stringIndexOf text "\n") (stringLength text))) ""))]
+                    (ok (pair (Body :head head :text text :size (stringLength text)) (optionOr (stringSlice whole (+ end 3) (stringLength whole)) "")))))))
+
+fn bodiesOf pieces: (List String) bodies: (List Body) tails: (List String) -> (Result (Pair (List Body) (List String)) String)
+  (mt (listHead pieces)
+    ((none) (ok (pair (listReverse bodies) tails)))
+    ((some p) (mt (bodyOf p)
+      ((err e) (err e))
+      ((ok u) (bodiesOf (optionOr (listTail pieces) (list)) (cons (pairFirst u) bodies) (cons (pairSecond u) tails))))))
+
+fn parse text: String -> (Result Split String)
+  (let [(pieces (stringSplit text "\ndefine "))]
+    (mt (bodiesOf (optionOr (listTail pieces) (list)) (list) (list))
+      ((err e) (err e))
+      ((ok found) (let [(lines (filter (fn [(l String)] -> Bool (not (stringEmpty? l)))
+                                       (stringLines (stringJoin (cons (str (optionOr (listHead pieces) "") "\n") (pairSecond found)) "\n"))))]
+                    (ok (Split :shared (filter (fn [(l String)] -> Bool (not (owned? l))) lines)
+                               :owned (filter owned? lines)
+                               :bodies (pairFirst found)))))))
+
+fn assign bodies: (List Body) n: Int64 -> (List Int64)
+  (let [(total (fold (fn [(acc Int64) (u Body)] -> Int64 (+ acc u.size)) 0 bodies))
+        (per (max 1 (/ (+ total (- n 1)) n)))]
+    (listReverse (pairSecond (fold (fn [(acc (Pair Int64 (List Int64))) (u Body)] -> (Pair Int64 (List Int64))
+                                     (let [(before (pairFirst acc))]
+                                       (pair (+ before u.size) (cons (min (- n 1) (/ before per)) (pairSecond acc)))))
+                                   (pair 0 (list)) bodies))))
+
+fn ownText u: Body -> String
+  (if (stringStartsWith? u.head "define internal ") (str "define hidden " (optionOr (stringSlice u.text 16 (stringLength u.text)) "")) u.text)
+
+fn otherText u: Body -> (Result String String)
+  (cond
+    ((stringStartsWith? u.head "define linkonce_odr ") (ok u.text))
+    ((and (stringStartsWith? u.head "define internal ") (stringEndsWith? u.head " alwaysinline {"))
+      (ok (str "define available_externally " (optionOr (stringSlice u.text 16 (stringLength u.text)) ""))))
+    (else (mt (declOf u.head)
+            ((none) (err (str "cannot declare " u.head)))
+            ((some d) (ok (if (stringStartsWith? u.head "define internal ") (str "declare hidden " (optionOr (stringSlice d 8 (stringLength d)) "")) d))))))
+
+fn ownedText k: Int64 line: String -> (Result String String)
+  (if (= k 0)
+    (let [(rhs (definition line))]
+      (ok (if (stringStartsWith? rhs "internal global ")
+            (str (optionOr (stringSlice line 0 (- (stringLength line) (stringLength rhs))) "") "hidden global " (optionOr (stringSlice rhs 16 (stringLength rhs)) ""))
+            line)))
+    (mt (externOf line) ((none) (err (str "cannot declare " line))) ((some d) (ok d))))
+
+fn collect xs: (List (Result String String)) acc: (List String) -> (Result (List String) String)
+  (mt (listHead xs)
+    ((none) (ok (listReverse acc)))
+    ((some r) (mt r ((err e) (err e)) ((ok s) (collect (optionOr (listTail xs) (list)) (cons s acc))))))
+
+fn part s: Split owners: (List Int64) k: Int64 -> (Result String String)
+  (mt (collect (map (fn [(l String)] -> (Result String String) (ownedText k l)) s.owned) (list))
+    ((err e) (err e))
+    ((ok globals) (mt (collect (map (fn [(p (Pair Int64 Body))] -> (Result String String)
+                                       (if (= (pairFirst p) k) (ok (ownText (pairSecond p))) (otherText (pairSecond p))))
+                                     (zip owners s.bodies)) (list))
+      ((err e) (err e))
+      ((ok bodies) (ok (str (stringJoin s.shared "\n") "\n" (stringJoin globals "\n") "\n" (stringJoin bodies "\n") "\n"))))))
+
+fn split text: String n: Int64 -> (Result (List String) String)
+  (mt (parse text)
+    ((err e) (err e))
+    ((ok s) (let [(parts (max 1 (min n (listLength s.bodies))))
+                  (owners (assign s.bodies parts))]
+              (collect (map (fn [(k Int64)] -> (Result String String) (part s owners k)) (range 0 parts)) (list)))))

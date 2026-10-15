@@ -1,6 +1,6 @@
 (module asl-cli/nativeBuild
-  :x [main]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/prelude/native/sha256 :a sh) (tools/fleet/run :a run)])
+  :x [Build main link! partsOf]
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/prelude/native/sha256 :a sh) (tools/fleet/run :a run) (asl/packages/asl-cli/src/irSplit :a ir)])
 
 (schema Build
   (:f root String)
@@ -97,9 +97,55 @@ fn ! setup! root: String cacheDir: String owner: String -> (Result (Pair Build S
                         ((err e) (err (str "cannot create " start.tmp ": " e)))
                         ((ok _) (ok (pair (with (with start :base (sh/bytesSha256 (stringToBytes (str row "\n" libSha "\n" version)))) :clangVersion version) row)))))))))))))))
 
-fn ! link! b: Build ll: String out: String -> (Result String String)
-  (let [(d (child! b (list (clang!) "-O2" "-Wno-override-module" "-x" "ir" ll "-x" "none" b.lib "-lm" "-o" out)))]
+fn ! linkWith! b: Build inputs: (List String) ll: String out: String -> (Result String String)
+  (let [(d (child! b (listAppend (cons (clang!) (cons "-O2" inputs)) (list b.lib "-lm" "-o" out))))]
     (if (passed? d) (ok out) (err (failure (str "clang link of " ll) d))))
+
+fn ! writeParts! ll: String parts: (List (Pair Int64 String)) -> (Result (List String) String)
+  (mt (listHead parts)
+    ((none) (ok (list)))
+    ((some p) (let [(path (str ll ".part" (stringFromInt64 (pairFirst p)) ".ll"))]
+                (mt (fileWrite path (pairSecond p))
+                  ((err e) (err (str "cannot write " path ": " e)))
+                  ((ok _) (mt (writeParts! ll (optionOr (listTail parts) (list)))
+                    ((err e) (err e))
+                    ((ok rest) (ok (cons path rest)))))))))
+
+fn ! partsOf ll: String n: Int64 -> (Result (List String) String)
+  (mt (fileRead ll)
+    ((err e) (err (str "cannot read " ll ": " e)))
+    ((ok text) (mt (ir/split text n)
+      ((err e) (err (str "cannot split " ll ": " e)))
+      ((ok parts) (writeParts! ll (enumerate parts))))))
+
+fn ! compileParts! b: Build ll: String paths: (List String) n: Int64 -> (Result (List String) String)
+  (let [(jobs (map (fn [(p String)] -> run/Job (run/job (list (clang!) "-O2" "-Wno-override-module" "-x" "ir" p "-c" "-o" (str p ".o")) b.root (run/childEnv (list))))
+                   paths))
+        (done (if (or (<= b.deadlineNs (monotonicNs)) (not (ownerAlive? b))) (list) (run/runPoolLimited jobs n (run/limits (remainingS b) b.maxDesc))))
+        (bad (filter (fn [(d run/Done)] -> Bool (not (passed? d))) done))]
+    (cond
+      ((!= (listLength done) (listLength paths)) (err (str "clang -c of the parts of " ll " did not run: " (if (ownerAlive? b) "deadline" "owner-gone"))))
+      ((not (listEmpty? bad)) (mt (listHead bad)
+                                ((some d) (err (failure (str "clang -c of " (optionOr (listGet paths d.idx) ll)) d)))
+                                ((none) (err (str "clang -c of the parts of " ll " failed")))))
+      (else (ok (map (fn [(p String)] -> String (str p ".o")) paths)))))
+
+fn ! link! b: Build ll: String out: String -> (Result String String)
+  (let [(n (envInt! "ASL_NATIVE_LINK_JOBS" 8))
+        (start (monotonicNs))
+        (whole (fn [(why String)] -> (Result String String)
+                 (do (say! (str "asl: native build: link " (sys/baseName ll) " whole" why))
+                     (linkWith! b (list "-Wno-override-module" "-x" "ir" ll "-x" "none") ll out))))
+        (linked (if (<= n 1) (whole "")
+                  (mt (partsOf ll n)
+                    ((err e) (whole (str " (" e ")")))
+                    ((ok paths) (if (< (listLength paths) 2) (whole "")
+                                  (mt (compileParts! b ll paths n)
+                                    ((err e) (err e))
+                                    ((ok objs) (do (say! (str "asl: native build: link " (sys/baseName ll) " parts " (stringFromInt64 (listLength objs))))
+                                                   (linkWith! b objs ll out)))))))))]
+    (do (say! (str "asl: native build: link " (sys/baseName ll) " " (stringFromInt64 (/ (- (monotonicNs) start) 1000000)) " ms"))
+        linked))
 
 fn ! seed! b: Build row: String -> (Result String String)
   (let [(file (optionOr (seedField row "file") ""))
@@ -178,7 +224,9 @@ fn ! install! b: Build name: String tag: String entry: String key: String dir: S
 
 fn ! compile! b: Build name: String compiler: String tag: String entry: String dir: String deps: (List String) key: String -> (Result String String)
   (let [(ll (str b.tmp "/" name ".ll"))
+        (start (monotonicNs))
         (built (child! b (list compiler "build" entry "-o" ll)))
+        (_ (say! (str "asl: native build: build " entry " " (stringFromInt64 (/ (- (monotonicNs) start) 1000000)) " ms")))
         (failed (fn [(why String)] -> (Result String String)
                   (do (fileWrite (str dir ".failed") (str why "\n")) (err why))))]
     (cond
