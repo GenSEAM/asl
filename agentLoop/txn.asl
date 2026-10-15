@@ -690,28 +690,27 @@ fn ! mapSub kv: (List (Pair String c/KvVal)) owns: (List String) txnOwns: (List 
           ((effectConfirm) (subStop (confirmReceipt (newId) op)))
           ((effectAllowed) (subGo forms targets))))))
 
-; (:m :tags (owns txn))
+; (:m :tags (owns txn) :do "no :owns on the session means the session may write anywhere inside :root; sessionOwns stands in for that case so a :txn with no :owns of its own inherits unrestricted scope, while a :txn that spells out :owns () still narrows to nothing")
 fn ! txnPrepare form: String owns: (List String) root: String effects: (List (Pair String String)) rid: String newId: (fn [] -> String) -> TxnPrep
-  (if (listEmpty? owns)
-    (prepDone (simpleReject rid (rStr "txn") "ERR_OWNS" "Transaction rejected: no :owns"))
-    (let [txnOwns (txnOwnsOf form owns)
-          unowned (filter (fn [p] (not (c/checkOwns p owns root))) txnOwns)]
-      (if (not (listEmpty? unowned))
-        (prepDone (ownsReceipt rid "txn" (c/firstOf unowned) owns))
-        (let [n (stringLength form)
-              inner (if (>= n 2) (c/sliceOf form 1 (- n 1)) "")
-              subs (filter (fn [f] (stringStartsWith? (pyStrip f) "(:")) (c/parseForms inner))
-              acc (fold (fn [a f] (mt a
-                                    ((subGo fs ts) (mapSub (c/parseKv f) owns txnOwns root effects rid newId fs ts))
-                                    ((subStop _) a)))
-                    (subGo (list) (list)) subs)]
-          (mt acc
-            ((subStop r) (prepDone r))
-            ((subGo fs ts)
-              (if (listEmpty? fs)
-                (prepDone (list (pair "id" (rStr rid)) (pair "op" (rStr "txn")) (pair "status" (rStr "ok")) (pair "owns" (rList txnOwns))
-                            (pair "flushed" (rList (list))) (pair "exit" (rInt 0)) (pair "persisted" (rBool false))))
-                (prepRun txnOwns ts (stepsOf subs) (str "(:txn :owns (" (quoteEach txnOwns) ") " (c/joinSep fs " ") ")")))))))))
+  (let [sessionOwns (if (listEmpty? owns) (list "**") owns)
+        txnOwns (txnOwnsOf form sessionOwns)
+        unowned (filter (fn [p] (not (c/checkOwns p sessionOwns root))) txnOwns)]
+    (if (not (listEmpty? unowned))
+      (prepDone (ownsReceipt rid "txn" (c/firstOf unowned) owns))
+      (let [n (stringLength form)
+            inner (if (>= n 2) (c/sliceOf form 1 (- n 1)) "")
+            subs (filter (fn [f] (stringStartsWith? (pyStrip f) "(:")) (c/parseForms inner))
+            acc (fold (fn [a f] (mt a
+                                  ((subGo fs ts) (mapSub (c/parseKv f) sessionOwns txnOwns root effects rid newId fs ts))
+                                  ((subStop _) a)))
+                  (subGo (list) (list)) subs)]
+        (mt acc
+          ((subStop r) (prepDone r))
+          ((subGo fs ts)
+            (if (listEmpty? fs)
+              (prepDone (list (pair "id" (rStr rid)) (pair "op" (rStr "txn")) (pair "status" (rStr "ok")) (pair "owns" (rList txnOwns))
+                          (pair "flushed" (rList (list))) (pair "exit" (rInt 0)) (pair "persisted" (rBool false))))
+              (prepRun txnOwns ts (stepsOf subs) (str "(:txn :owns (" (quoteEach txnOwns) ") " (c/joinSep fs " ") ")"))))))))
 
 fn refusedMark -> String
   "refused: the delimiters"

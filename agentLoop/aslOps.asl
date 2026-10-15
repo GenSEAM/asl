@@ -531,13 +531,14 @@ fn intelSubops -> (List String)
 fn validIntelSubop? sub: String -> Bool
   (listContains? (intelSubops) sub)
 
+; (:m :tags (owns) :do "no :owns on the session means the session may write anywhere inside :root; an empty owns list sends the unrestricted \"**\" scope instead of an empty one")
 fn buildWriteForm filePath: String content: String force: Bool owns: (List String) -> String
-  (let [ownsAsn (stringJoin (map (fn [o] (str "\"" (pyStrip o) "\"")) owns) " ")
+  (let [ownsAsn (stringJoin (map (fn [o] (str "\"" (pyStrip o) "\"")) (if (listEmpty? owns) (list "**") owns)) " ")
         forceAsn (if force " :force true" "")]
     (str "(:txn :owns (" ownsAsn ") (:write :file \"" filePath "\" :content \"" (c/escapeAsn content) "\"" forceAsn "))"))
 
 fn buildEditForm filePath: String old: String new: String owns: (List String) -> String
-  (let [ownsAsn (stringJoin (map (fn [o] (str "\"" (pyStrip o) "\"")) owns) " ")]
+  (let [ownsAsn (stringJoin (map (fn [o] (str "\"" (pyStrip o) "\"")) (if (listEmpty? owns) (list "**") owns)) " ")]
     (str "(:txn :owns (" ownsAsn ") (:edit :file \"" filePath "\" :old \"" (c/escapeAsn old) "\" :new \"" (c/escapeAsn new) "\"))"))
 
 fn buildReadForm filePath: String symbol: String anchor: String start: String end: String cap: Int64 -> String

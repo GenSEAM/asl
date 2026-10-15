@@ -623,6 +623,7 @@ fn ownsRec rid: String opName: String path: String owns: (List String) -> (List 
   (list (vs "id" rid) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_OWNS") (vs "file" path)
     (pair "owns" (vStrs owns)) (vs "message" (str "'" path "' is outside :owns; nothing in this step was written; the run goes on")))
 
+; (:m :tags (owns) :do "no :owns on the session means the session may write anywhere inside :root; effOwns stands in as the unrestricted \"**\" scope for that case, :owns only narrows")
 fn ! writeCheck op: (List (Pair String c/KvVal)) opName: String env: ExecEnv newId: (fn [] -> String) -> (Option (List (Pair String Val)))
   (let [target (opStr op "file" "")
         rawFields (filter (fn [w] (not (stringEmpty? w))) (stringSplit (stringJoin (map (fn [ch] (if (isWs ch) " " ch)) (stringChars (if (opTruthy op "rawFields") (opStr op "rawFields" "") ""))) "") " "))
@@ -634,7 +635,8 @@ fn ! writeCheck op: (List (Pair String c/KvVal)) opName: String env: ExecEnv new
         useRaw (and (not (listContains? rawFields field)) (and (opIsStr op field) (and (> (stringLength val) (rawRequiredBytes)) hasEscapes)))
         isRaw (fn [k] (mt (opGet op k) ((some v) (= v (c/kvStr ":raw"))) ((none) false)))
         rawMissing (or (= (opGet op "error") (some (c/kvStr "ERR_RAW_MISSING"))) (or (isRaw "content") (or (isRaw "old") (isRaw "new"))))
-        owns env.owns]
+        owns env.owns
+        effOwns (if (listEmpty? owns) (list "**") owns)]
     (cond
       (useRaw
         (some (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_USE_RAW") (vs "file" target)
@@ -643,11 +645,8 @@ fn ! writeCheck op: (List (Pair String c/KvVal)) opName: String env: ExecEnv new
         (some (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_RAW_MISSING") (vs "file" target) (vs "message" "missing raw block for :raw"))))
       ((not (opTruthy op "file"))
         (some (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_MISSING_ARG") (vs "message" (str opName " needs :file")))))
-      ((listEmpty? owns)
-        (some (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_OWNS") (vs "file" target)
-                (vs "message" (str "Edit rejected: no :owns covers " target)))))
       ((not (r/insideRoot! target env.root)) (some (rootRec (newId) opName target)))
-      ((not (c/checkOwns target owns (absRoot! env.root))) (some (ownsRec (newId) opName target owns)))
+      ((not (c/checkOwns target effOwns (absRoot! env.root))) (some (ownsRec (newId) opName target owns)))
       (else (none))))
 
 fn ! aslRunner! repoRoot: String transport: String env: (Option (List String)) runTimeout: Int64 deadlineAt: (Option Float64) -> (fn [String String] -> t/AslRun)
