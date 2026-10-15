@@ -194,11 +194,11 @@ fn parseTypeStr s: String typevars: (List String) -> Type
   (let [(toks (tokenizeTypeStr s))] (pairFirst (parseTypeToks toks typevars)))
 
 fn collectTvars params: (List String) ret: String -> (List String)
-  (let [(allStrs (cons ret params))]
+  (let [(allStrs (listAppend params (list ret)))]
     (fold (fn [(acc (List String)) (s String)] -> (List String)
             (fold (fn [(aacc (List String)) (w String)] -> (List String)
                     (if (and (= (stringLength w) 1) (stringContains? "ABCDEFGHIJKLMNOPQRSTUVWXYZ" w))
-                      (if (listContains? aacc w) aacc (cons w aacc))
+                      (if (listContains? aacc w) aacc (listAppend aacc (list w)))
                       aacc))
                   acc
                   (stringSplit (stringReplace (stringReplace (stringReplace (stringReplace s "(" " ") ")" " ") "[" " ") "]" " ") " ")))

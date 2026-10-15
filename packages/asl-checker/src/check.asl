@@ -469,11 +469,14 @@ fn bodyDiagPos d: a/DefunNode idx: Int64 ds: (List ty/Diagnostic) -> (Pair Int64
         (unknown (listAny? (fn [(diag ty/Diagnostic)] -> Bool (or (= diag.code "rule-1") (= diag.code "rule-2"))) ds))]
     (mt expr ((rd/sexprList _) (if (and unknown (> (pairSecond pos) 0)) (pair (pairFirst pos) (+ (pairSecond pos) 1)) pos)) (_ pos)))
 
-fn paramInferType p: a/Param summary: r/ModuleSummary deps: r/DepIndex -> ty/Type
-  (if (stringEmpty? p.type) (ty/tyCon "?" (list) (none) (none)) (qualifyTypeWithMod (ty/parseTypeStr p.type (list)) summary deps))
+fn paramInferType p: a/Param summary: r/ModuleSummary deps: r/DepIndex vmap: (Map String ty/Type) -> ty/Type
+  (if (stringEmpty? p.type) (ty/tyCon "?" (list) (none) (none)) (qualifyTypeWithMod (substParsedType (ty/parseTypeStr p.type (list)) vmap) summary deps))
+
+fn defunTvars d: a/DefunNode -> (List String)
+  (if (listEmpty? d.typeVars) (ty/collectTvars (map (fn [(p a/Param)] -> String p.type) d.params) d.retType) d.typeVars)
 
 fn checkDefunDiags d: a/DefunNode summary: r/ModuleSummary deps: r/DepIndex path: String -> (List ty/Diagnostic)
-  (let [(st0 (makeInferState)) (env0 (fold (fn [(e (Map String ty/Type)) (p a/Param)] -> (Map String ty/Type) (mapSet e p.name (paramInferType p summary deps))) (mapEmpty) d.params)) (retTy (qualifyTypeWithMod (ty/parseTypeStr d.retType (list)) summary deps)) (scopeName (str "function " d.name)) (stParams (fold (fn [(s InferState) (p a/Param)] -> InferState (noteMapType s (paramInferType p summary deps) scopeName)) st0 d.params)) (stNote (noteMapType stParams retTy scopeName)) (bodyNodes d.body)]
+  (let [(st00 (makeInferState)) (tvRes (freshVarsFrom (defunTvars d) (mapEmpty) st00)) (vmap (pairFirst tvRes)) (st0 (pairSecond tvRes)) (env0 (fold (fn [(e (Map String ty/Type)) (p a/Param)] -> (Map String ty/Type) (mapSet e p.name (paramInferType p summary deps vmap))) (mapEmpty) d.params)) (retTy (qualifyTypeWithMod (substParsedType (ty/parseTypeStr d.retType (list)) vmap) summary deps)) (scopeName (str "function " d.name)) (stParams (fold (fn [(s InferState) (p a/Param)] -> InferState (noteMapType s (paramInferType p summary deps vmap) scopeName)) st0 d.params)) (stNote (noteMapType stParams retTy scopeName)) (bodyNodes d.body)]
     (if (listEmpty? bodyNodes) (list)
       (let [(allBodyRes (fold (fn [(accRes (Pair ty/Type InferState)) (ie (Pair Int64 rd/SExpr))] -> (Pair ty/Type InferState) (let [(i (pairFirst ie)) (e (pairSecond ie)) (before (listLength (pairSecond accRes).diags)) (res (runExprDirect e env0 (some retTy) false scopeName path summary deps (pairSecond accRes))) (pos (bodyDiagPos d i (pairSecond res).diags))] (pair (pairFirst res) (setDiags (pairSecond res) (placeFresh (pairSecond res).diags before pos))))) (pair (unitType) stNote) (zip (range 0 (listLength bodyNodes)) bodyNodes))) (lastTy (pairFirst allBodyRes)) (st1 (pairSecond allBodyRes)) (placed (listLength st1.diags)) (st2 (resolveDeferred (expectType st1 lastTy retTy (str "return of " d.name) path) summary path)) (st3Subst st2.subst) (dLit (checkLiteralRanges st2.intSites st3Subst path st2.diags)) (dMap (checkMapKeyRules st2.mapSites st3Subst summary deps path dLit))]
         (placeFresh dMap placed (bodyDiagPos d (- (listLength bodyNodes) 1) st2.diags)))))
