@@ -1,4 +1,4 @@
-(:doc :symbol "asl/examples/fib.asl#" :text "Fibonacci calculation in pure AgentScript.")
+(:doc :symbol "asl/examples/fib.asl#" :text "Fibonacci calculation in pure AgentSlang.")
 (:doc :symbol "asl/examples/fib.asl#fib" :text "Compute n-th Fibonacci number.")
 (:doc :symbol "asl/examples/fib.asl#main" :text "Main entry point.")
 (:doc :symbol "asl/examples/migration-python-to-asl/geometry.asl#" :text "High-performance geometric calculations ported from legacy Python.")

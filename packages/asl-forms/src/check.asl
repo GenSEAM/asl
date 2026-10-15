@@ -250,8 +250,8 @@ fn findHostFromTarget! targetPath: String -> String
     (mt (walkUpHostDir! absDir)
       ((some host) host)
       ((none)
-       (if (fileExists? "asl/host/out/asl-host")
-         "asl/host/out/asl-host"
+       (if (fileExists? (k/aslPath! "." "host/out/asl-host"))
+         (k/aslPath! "." "host/out/asl-host")
          "asl-host"))))
 
 fn findHostBinary! targetPath: String -> String

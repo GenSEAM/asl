@@ -5,7 +5,6 @@
   :aslFirst true
   :projections [
     (:proj :from "package.asn" :to "package.json" :format "json" :doc "Root ASL NPM manifest")
-    (:proj :from "web/package.asn" :to "web/package.json" :format "json" :doc "Web showcase package manifest")
     (:proj :from "wrangler.asn" :to "wrangler.toml" :format "toml" :doc "Cloudflare Workers configuration")
   ]
   :ignore [
@@ -43,7 +42,6 @@
     (:task :name "test" :cmd "asl test" :doc "Run native ASL test suites")
     (:task :name "coverage" :cmd "asl coverage" :doc "Audit native function test coverage")
     (:task :name "telemetry" :cmd "asl telemetry" :doc "Collect performance telemetry and token metrics")
-    (:task :name "web:transpile" :cmd "asl transpile-pkg web/package.asn web/package.json" :doc "Transpile web package.asn to package.json")
-    (:task :name "web:build" :cmd "asl task web:transpile && npm --prefix web run build" :doc "Build production web showcase")
-    (:task :name "web:dev" :cmd "asl task web:transpile && npm --prefix web run dev" :doc "Start Vite development server")
+    (:task :name "web:build" :cmd "sh web/build.sh" :doc "Prerender aslang.dev and compile web/site to site.wasm into web/dist")
+    (:task :name "web:test" :cmd "asl test web/tests" :doc "Run the site's ASL test suites")
   ])

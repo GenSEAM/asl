@@ -3,6 +3,6 @@
 (:doc :symbol "asl/packages/asl-vector/src/marching.asl#" :text "Marching squares 2D contour tracer and polyline extraction for binary mask grids.")
 (:doc :symbol "asl/packages/asl-vector/src/primitives.asl#" :text "Geometric primitive fitting and substitution: rect, circle, and line detection for token minimization.")
 (:doc :symbol "asl/packages/asl-vector/src/vector.asl#" :text "Pure ASL 4-Wide Chunked Loop Unrolling Acceleration for Vector Dot-Product and Cosine Similarity")
-(:doc :symbol "asl/packages/asl-vector/src/vectorizer.asl#" :text "Pure AgentScript end-to-end Image-to-SVG vector synthesizer with primitive-first optimization.")
+(:doc :symbol "asl/packages/asl-vector/src/vectorizer.asl#" :text "Pure AgentSlang end-to-end Image-to-SVG vector synthesizer with primitive-first optimization.")
 (:doc :symbol "asl/packages/asl-vector/tests/vectorTest.asl#" :text "Popperian verification suite for 4-wide accelerated vector math")
-(:doc :symbol "asl/packages/asl-vector/tests/vectorizerTest.asl#" :text "Unit tests for pure AgentScript Image-to-SVG vectorizer and gestalt primitives.")
+(:doc :symbol "asl/packages/asl-vector/tests/vectorizerTest.asl#" :text "Unit tests for pure AgentSlang Image-to-SVG vectorizer and gestalt primitives.")

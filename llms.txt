@@ -1,10 +1,10 @@
-# AgentScript (ASL)
+# AgentSlang (ASL)
 
-> Generated from asl/grammar/llmsEntry.md and asl/grammar/tools.asn by scripts/install.sh --render-rules; scripts/install.sh --check-rules fails when this file differs from that render.
+> Generated from asl/grammar/llmsEntry.md and asl/grammar/tools.asn by asl/packages/asl-target-sh/src/rules.asl, the installer's --render-rules mode; its --check-rules mode fails when this file differs from that render.
 
-AgentScript is two things.
+AgentSlang is two things.
 
-- ASL, the language: source files (.asl) and data files (.asn) are S-expressions with balanced parentheses. `asl check <file>` checks delimiter balance, `asl test <file>` runs a test suite, and `asl help` lists the shell commands; the language section below says which engine enforces what.
+- ASL, the language: source files (.asl) and data files (.asn) are S-expressions with balanced parentheses. `asl check <file>` checks an .asl file on the stage-0 host and any other file for delimiter balance, `asl test <file>` runs a test suite, and `asl help` lists the shell commands; the language section below says which engine enforces what.
 - asl, the toolbelt: `asl '<form> <form> ...'` runs file operations on the git repository that holds the working directory; the forms of one call run as one batch.
 
 ## The language
@@ -29,7 +29,7 @@ An ASL file is a module header, then items starting in column 0: (module ws/name
 
 - `(:tools)` Print the operation registry.
 - `(:help)` Show help for an op, a topic, or the ASL builtins whose name contains a text.
-- `(:eval)` Evaluate ASL code in an isolated, time-bounded native-first subprocess.
+- `(:eval)` Evaluate ASL code in a time-bounded subprocess.
 - `(:mem)` List, get, query, and stage row-keyed memory ledger changes.
 - `(:doc)` Look up a D150 doc ledger row by symbol, or list a file's rows.
 - `(:read)` Return a symbol or bounded slice of a file.

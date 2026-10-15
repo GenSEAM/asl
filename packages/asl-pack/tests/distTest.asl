@@ -7,7 +7,7 @@ fn testEmitInstallSh -> Bool
   (let [(cfg (d/makeDistConfig "0.1.0")) (script (d/emitInstallSh cfg))] (assert (stringContains? script "asl-${VERSION}-${OS}-${ARCH_TAG}.tar.gz") "Script must have tarball name") (assert (stringContains? script "REPO_URL") "Script must have REPO_URL") (assert (stringContains? script "chmod +x") "Script must have chmod +x") (assert (stringContains? script "sha256sum") "Script must have sha256sum verification") (assert (stringContains? script "shasum -a 256") "Script must have shasum fallback") (assert (stringContains? script "VERIFIED") "Script must track verification state") true)
 
 fn testEmitBuildFromSource -> Bool
-  (let [(cfg (d/makeDistConfig "0.1.0")) (script (d/emitBuildFromSourceSh cfg))] (assert (stringContains? script "Building AgentScript from source") "Script must announce build") (assert (stringContains? script "gate") "Script must invoke gate") (assert (stringContains? script "ln -sf") "Script must create symlink") true)
+  (let [(cfg (d/makeDistConfig "0.1.0")) (script (d/emitBuildFromSourceSh cfg))] (assert (stringContains? script "Building AgentSlang from source") "Script must announce build") (assert (stringContains? script "gate") "Script must invoke gate") (assert (stringContains? script "ln -sf") "Script must create symlink") true)
 
 fn testEmitNpmFiles -> Bool
   (let [(cfg (d/makeDistConfig "0.1.0")) (pkg (d/emitNpmPackageJson cfg)) (launcher (d/emitNpmBin cfg))] (assert (stringContains? pkg "\"name\": \"asl\"") "Package name must be serialized") (assert (stringContains? pkg "\"bin\":") "Package bin field must exist") (assert (stringContains? launcher "spawn") "Launcher must invoke spawn") true)

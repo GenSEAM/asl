@@ -63,10 +63,10 @@ fn testUnresolvedTsRelativeImport! -> Bool
           true))))
 
 fn testResolvedTsRelativeImport! -> Bool
-  (let [(code "import { aslPlugin } from './plugins/vitePluginAsl.js';\nexport const ok = true;\n")
-        (semRes (chk/checkSemantic! "asl/web/vite.config.js" code))
+  (let [(code "import { run } from './boot.js';\nexport const ok = true;\n")
+        (semRes (chk/checkSemantic! "asl/web/bridge/boot.js" code))
         (items (resultOr semRes (list)))
-        (receipt (chk/checkFileReceipt! 3 "check" "asl/web/vite.config.js" ":disk" code))]
+        (receipt (chk/checkFileReceipt! 3 "check" "asl/web/bridge/boot.js" ":disk" code))]
     (do
       (assert (ok? semRes) "resolved relative import checkSemantic is ok")
       (assert (listEmpty? items) "resolved relative import produces no left items")
@@ -91,8 +91,8 @@ fn testLeftItemCapping -> Bool
       true))
 
 fn testAbsolutePathImportingFile! -> Bool
-  (let [(canon (resultOr (realPath "asl/web/vite.config.js") ""))
-        (code "import { aslPlugin } from './plugins/vitePluginAsl.js';\nexport const ok = true;\n")
+  (let [(canon (resultOr (realPath "asl/web/bridge/boot.js") ""))
+        (code "import { run } from './boot.js';\nexport const ok = true;\n")
         (semRes (chk/checkSemantic! canon code))
         (items (resultOr semRes (list)))
         (receipt (chk/checkFileReceipt! 4 "check" canon ":disk" code))]
@@ -235,9 +235,7 @@ fn testCleanCorpusFiles! -> Bool
     (assert (checkFileClean! "asl/packages/asl-parser/src/reader.asl") "clean corpus file yields no semantic items: asl/packages/asl-parser/src/reader.asl")
     (assert (checkFileClean! "asl/packages/asl-parser/src/ast.asl") "clean corpus file yields no semantic items: asl/packages/asl-parser/src/ast.asl")
     (assert (checkFileClean! "asl/packages/asl-parser/src/indentLexer.asl") "clean corpus file yields no semantic items: asl/packages/asl-parser/src/indentLexer.asl")
-    (assert (checkFileClean! "asl/web/plugins/vitePluginAsl.js") "clean corpus file yields no semantic items: asl/web/plugins/vitePluginAsl.js")
-    (assert (checkFileClean! "asl/web/tailwind.config.js") "clean corpus file yields no semantic items: asl/web/tailwind.config.js")
-    (assert (checkFileClean! "asl/web/vite.config.js") "clean corpus file yields no semantic items: asl/web/vite.config.js")
+    (assert (checkFileClean! "asl/web/bridge/boot.js") "clean corpus file yields no semantic items: asl/web/bridge/boot.js")
     (assert (checkFileClean! "tests/harnessBench/cases/attention-flood/svc/vendor/uploader.min.js") "clean corpus file yields no semantic items: tests/harnessBench/cases/attention-flood/svc/vendor/uploader.min.js")
     true)
 

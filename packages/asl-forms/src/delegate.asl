@@ -15,7 +15,7 @@ fn envOr! name: String -> String
 
 fn contextFromEnv! ws: String cwd: String -> DelegateCtx
   (let [(given (k/toolEnv! "SCRIPT_DIR"))
-        (binDir (if (stringEmpty? given) (k/joinPath cwd "bin") given))
+        (binDir (if (stringEmpty? given) (k/binFor! cwd) given))
         (rootGiven (k/toolEnv! "ROOT_DIR"))
         (rootDir (cond ((not (stringEmpty? rootGiven)) rootGiven) ((= (k/baseName binDir) "bin") (k/dirName binDir)) (else cwd)))]
     (DelegateCtx :rootDir rootDir :binDir binDir :wsDir ws))
@@ -214,8 +214,15 @@ fn binaryStep id: Int64 op: String field: String sp: Spawned fallback: String ex
     ((and (= sp.code 0) (not (stringEmpty? (pyStrip sp.out))))
       (okLine (str (stepHead id op) " :status \"ok\"" extra " :" field "\n" (pyStrip sp.out) ")")))
     (else
-      (let [(e (pyStrip sp.errText))]
-        (rejectedLine id op "ERR_EXEC_FAILED" (msgTail (if (stringEmpty? e) fallback e))))))
+      (let [(e (pyStrip sp.errText)) (o (pyStrip sp.out))]
+        (rejectedLine id op (failureCode (str e " " o)) (msgTail (cond ((not (stringEmpty? e)) e) ((not (stringEmpty? o)) o) (else fallback)))))))
+
+fn failureCode text: String -> String
+  (cond
+    ((stringContains? text "ERR_GATEWAY_NO_CONFIG") "ERR_GATEWAY_NO_CONFIG")
+    ((or (stringContains? text "CONNECT tunnel failed") (stringContains? text " 403")) "ERR_NETWORK_DENIED")
+    ((or (stringContains? text "Could not resolve host") (stringContains? text "curl: (6)")) "ERR_NETWORK_UNREACHABLE")
+    (else "ERR_EXEC_FAILED"))
 
 fn envMapFromList! -> (Map String String)
   (fold (fn [(m (Map String String)) (row String)] -> (Map String String)
@@ -257,7 +264,7 @@ fn ! searchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List S
             (st (srch/newHubState env (/ now 1000000) 0 (mapEmpty) (mapEmpty)))
             (step (srch/executeSearchHub! st q eng lim))]
         (mt (pairFirst step)
-          ((err e) (rejectedLine id "search" "ERR_EXEC_FAILED" (msgTail e.msg)))
+          ((err e) (rejectedLine id "search" (failureCode e.msg) (msgTail e.msg)))
           ((ok res)
             (let [(results (listOf (optionOr (pt/jget res "results") (j/jarr (list)))))
                   (errors (listOf (optionOr (pt/jget res "errors") (j/jarr (list)))))]
@@ -265,9 +272,9 @@ fn ! searchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List S
                 (let [(e0 (optionOr (listHead errors) (j/jnull)))
                       (rawMsg (pt/pyStr (optionOr (pt/jget e0 "error") (j/jnull))))
                       (msg (unwrapUrlError rawMsg))]
-                  (rejectedLine id "search" "ERR_EXEC_FAILED" (msgTail (if (stringEmpty? msg) "Search execution failed" msg))))
+                  (rejectedLine id "search" (failureCode msg) (msgTail (if (stringEmpty? msg) "Search execution failed" msg))))
                 (mt (srch/formatSearchAsn res q)
-                  ((err e) (rejectedLine id "search" "ERR_EXEC_FAILED" (msgTail e.msg)))
+                  ((err e) (rejectedLine id "search" (failureCode e.msg) (msgTail e.msg)))
                   ((ok text)
                     (okLine (str (stepHead id "search") " :status \"ok\" :results\n" (pyStrip text) ")")))))))))))
 
@@ -450,7 +457,7 @@ fn ! researchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List
       ((stringEmpty? dTarget) (rejectedLine id "research" "ERR_INVALID_ARG" (msgTail (str "unknown depth :" depth "; allowed: :flash :deep :exhaustive"))))
       (else
         (mt (researchGatewayEntry! model)
-          ((err e) (rejectedLine id "research" "ERR_EXEC_FAILED" (msgTail e.msg)))
+          ((err e) (rejectedLine id "research" (failureCode e.msg) (msgTail e.msg)))
           ((ok routes)
             (let [(env (envMapFromList!))
                   (now (monotonicNs))
@@ -463,7 +470,7 @@ fn ! researchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List
                   (auditOpt (if (listEmpty? auditEntries) (none) (some auditEntries)))
                   (resPair (rs/executeResearchHub! st topic dTarget entries (j/jstr "auto") triage auditOpt up disp))]
               (mt (pairFirst resPair)
-                ((err e) (rejectedLine id "research" "ERR_EXEC_FAILED" (msgTail e.msg)))
+                ((err e) (rejectedLine id "research" (failureCode e.msg) (msgTail e.msg)))
                 ((ok rawRep)
                   (let [(rep (pt/jset rawRep "profile" (j/jstr (pairFirst routes))))
                         (status (pt/pyStr (optionOr (pt/jget rep "status") (j/jstr ""))))]
@@ -475,7 +482,7 @@ fn ! researchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List
                             (reason (if (not (stringEmpty? tErr)) tErr rawReason))]
                         (rejectedLine id "research" "ERR_EXEC_FAILED" (msgTail (if (stringEmpty? reason) "Research execution failed" reason))))
                       (mt (rs/formatResearchAsn rep triage)
-                        ((err e) (rejectedLine id "research" "ERR_EXEC_FAILED" (msgTail e.msg)))
+                        ((err e) (rejectedLine id "research" (failureCode e.msg) (msgTail e.msg)))
                         ((ok text)
                           (okLine (str (stepHead id "research") " :status \"ok\" :report\n" (pyStrip text) ")"))))))))))))))
 
@@ -490,12 +497,12 @@ fn resolveHost! ctx: DelegateCtx -> String
   (let [(env (envOr! "ASL_HOST"))]
     (cond
       ((and (not (stringEmpty? env)) (fileExists? env)) env)
-      ((fileExists? (k/joinPath ctx.rootDir "asl/host/out/asl-host")) (k/joinPath ctx.rootDir "asl/host/out/asl-host"))
-      ((fileExists? "asl/host/out/asl-host") "asl/host/out/asl-host")
+      ((fileExists? (k/aslPath! ctx.rootDir "host/out/asl-host")) (k/aslPath! ctx.rootDir "host/out/asl-host"))
+      ((fileExists? (k/aslPath! "." "host/out/asl-host")) (k/aslPath! "." "host/out/asl-host"))
       (else "asl-host")))
 
 fn ! crawlerSpawn ctx: DelegateCtx args: (List String) timeoutSec: Int64 -> Spawned
-  (let [(pkgEntry (k/joinPath ctx.rootDir "asl/packages/asl-crawler/src/crawler.asl"))]
+  (let [(pkgEntry (k/aslPath! ctx.rootDir "packages/asl-crawler/src/crawler.asl"))]
     (if (fileExists? pkgEntry)
       (spawnRun (listAppend (list (resolveHost! ctx) "run" pkgEntry) args) (none) (mapEmpty) timeoutSec)
       (spawnRun (listAppend (list (str ctx.binDir "/asl-crawler")) args) (none) (mapEmpty) timeoutSec)))
@@ -648,7 +655,7 @@ fn ! makeDirs path: String -> (Result Bool String)
         ((ok _) (mt (dirCreate path) ((ok _) (ok true)) ((err e) (if (k/isDir! path) (ok true) (err (errnoText e path)))))))))
 
 fn ! engineCli ctx: DelegateCtx args: (List String) seconds: Int64 -> Spawned
-  (let [(entry (k/joinPath ctx.rootDir "asl/packages/asl-engine/src/cli.asl"))
+  (let [(entry (k/aslPath! ctx.rootDir "packages/asl-engine/src/cli.asl"))
         (host (resolveHost! ctx))]
     (if (not (fileExists? entry))
       (Spawned :code -1 :out "" :errText "" :failure (errnoText "notFound" entry))
@@ -731,6 +738,10 @@ fn ! engineStep ctx: DelegateCtx id: Int64 op: String kw: (Map String String) ar
         (es (engineScope! ctx reqScope))
         (made (if (taskScope? reqScope) (makeDirs (k/dirName es.sock)) (ok true)))]
     (cond
+      ((and (= op "engine") (not (listContains? (list "status" "ping" "start" "stop" "restart") action)))
+        (rejectedLine id "engine" "ERR_UNKNOWN_ACTION" (str " :action \"" (k/escapeAsnVal action) "\" :message \"known actions: status ping start stop restart\"")))
+      ((and (= op "engine") (not (or (stringEmpty? reqScope) (or (listContains? (list "workspace" "system") reqScope) (taskScope? reqScope)))))
+        (rejectedLine id "engine" "ERR_BAD_SCOPE" (str " :scope \"" (k/escapeAsnVal reqScope) "\" :message \"known scopes: workspace system\"")))
       ((err? made) (rejectedLine id op "ERR_EXEC_FAILED" (msgTail (mt made ((err e) e) ((ok _) "")))))
       ((and (= op "engine") (listContains? (list "stop" "restart") action) (= es.scope "system"))
         (rejectedLine id "engine" "ERR_PERMISSION_DENIED" " :message \"Agent workspace isolation boundary: mutating actions (:stop, :restart) on system-wide engine are restricted to human CLI operators; use :scope :workspace to manage workspace engine\""))
@@ -762,8 +773,8 @@ fn agentKillSeconds kw: (Map String String) -> Int64
     (+ timeout (+ queue 30)))
 
 fn ! agentStep ctx: DelegateCtx id: Int64 kw: (Map String String) stepStr: String -> Outcome
-  (let [(host (k/joinPath ctx.rootDir "asl/host/out/asl-host"))
-        (agentMain (k/joinPath ctx.rootDir "asl/agentLoop/main.asl"))]
+  (let [(host (k/aslPath! ctx.rootDir "host/out/asl-host"))
+        (agentMain (k/aslPath! ctx.rootDir "agentLoop/main.asl"))]
     (if (or (not (k/isFile! host)) (not (k/isFile! agentMain)))
       (rejectedLine id "agent" "ERR_AGENT_DISPATCH" (msgTail (str "ASL agent loop not installed: " agentMain)))
       (let [(sp (spawnRun (list host "run" agentMain stepStr) (some ctx.rootDir) (mapSet (mapEmpty) "ASL_ROOT_DIR" ctx.wsDir) (agentKillSeconds kw)))

@@ -1,6 +1,6 @@
 (:package asl-cli
  :version "0.1.0"
  :entry "src/cli.asl"
- :description "Pure AgentScript Native CLI Toolchain"
+ :description "Pure AgentSlang Native CLI Toolchain"
  :aslFirst true
  :dependencies ["asl-parser" "asl-checker" "asl-compiler" "asl-ir" "asl-hypergraph" "asl-conform" "asl-ui" "asl-intel"])

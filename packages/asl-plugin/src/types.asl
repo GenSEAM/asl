@@ -17,7 +17,7 @@
 
 (schema PluginExport
   (:f symbolName Str)
-  (:f signature Str "AgentScript typed signature description")
+  (:f signature Str "AgentSlang typed signature description")
   (:f doc Str "Export documentation")
   (:f requiredCapability Str "Capability token required to invoke this export"))
 

@@ -1,7 +1,7 @@
 (:package asl-compiler
  :version "0.1.0"
  :entry "src/compiler.asl"
- :description "Pure AgentScript 100% Self-Hosted Compiler Toolchain"
+ :description "Pure AgentSlang 100% Self-Hosted Compiler Toolchain"
  :aslFirst true
  :modules [
    "asl-compiler/compiler"

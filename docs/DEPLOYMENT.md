@@ -1,47 +1,42 @@
-# ASL Web Showcase Deployment Guide
+# Deploying aslang.dev
 
-The ASL Showcase website is a static site built by Vite (`web/package.json`: `vite build`) into `web/dist`, with no backend. Any static host can serve it.
+The site is an ASL program in `web/site`. `sh web/build.sh` writes a static site into `web/dist`:
+every page prerendered to HTML by `web/tools/build.asl` on the stage-0 host, `site.css` generated
+from `web/site/app/theme.asl`, and `site.wasm` compiled from the same modules through
+`asl-target-llvm`. There is no backend and no Node build step; any static host can serve
+`web/dist`.
 
----
+## Requirements
 
-## 1. Deploy to Cloudflare Pages (Recommended ⭐)
+- A C compiler for the stage-0 host (`clang` is preferred: `web/build.sh` builds `host/out/asl-host`
+  with it when the host is missing).
+- `llc` and `wasm-ld` from LLVM 18 or newer (Debian/Ubuntu: `clang llvm lld`; macOS: Homebrew
+  `llvm lld`). `LLC` and `WASM_LD` override the lookup.
 
-Cloudflare Pages serves static files from its CDN with automatic TLS.
-
-### Option A: Via Cloudflare Dashboard (Automatic Git Deploys)
-1. Push your repository to GitHub or GitLab.
-2. Open [Cloudflare Dashboard](https://dash.cloudflare.com/) ➔ **Workers & Pages** ➔ **Create Application** ➔ **Pages** ➔ **Connect to Git**.
-3. Set the build settings:
-   * **Framework preset:** `Vite`
-   * **Build command:** `npm --prefix web run build` (or `npm run build:web`)
-   * **Build output directory:** `web/dist`
-   * **Node.js Version:** `20`
-4. Click **Save and Deploy**.
-
-### Option B: Via Wrangler CLI
-```bash
-# 1. Build the static bundle
-npm run build:web
-
-# 2. Deploy directly to Cloudflare Pages
-npx wrangler pages deploy web/dist --project-name asl-showcase
+```sh
+sh web/build.sh                      # -> web/dist
+npx --yes serve web/dist -l 4173     # preview
 ```
 
----
+## 1. Cloudflare Pages
 
-## 2. Deploy to GitLab Pages
+`wrangler.toml` already points `pages_build_output_dir` at `web/dist`.
 
-The repository already includes a preconfigured [`.gitlab-ci.yml`](../.gitlab-ci.yml).
+- **Build command:** `sh web/build.sh`
+- **Build output directory:** `web/dist`
 
-1. Push your repository to GitLab.
-2. GitLab CI will automatically execute the `pages` pipeline:
-   * Installs dependencies (`npm ci && npm --prefix web ci`)
-   * Builds the site (`npm run build:web`)
-   * Copies `web/dist` to `public/`
-3. Your site will be live at `https://<username>.gitlab.io/<project-name>`.
+The Cloudflare build image must provide clang, `llc` and `wasm-ld`. If it does not, build in CI and
+upload the output instead:
 
----
+```sh
+sh web/build.sh
+npx wrangler pages deploy web/dist --project-name asl
+```
 
-## 3. GitHub Pages
+`web/public/_redirects` sends the retired routes (`/roadmap`, `/ecosystem`, `/playground`, …) to
+`/`; unknown paths get `404.html`. `_headers` serves `*.wasm` as `application/wasm`.
 
-No GitHub Actions workflow is included (`asl/.github/` does not exist). To publish there, add a workflow that runs `npm ci && npm --prefix web ci && npm run build:web` and uploads `web/dist`.
+## 2. GitHub Pages
+
+No workflow is included. One that installs `clang llvm lld`, runs `sh web/build.sh` and uploads
+`web/dist` is enough.

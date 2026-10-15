@@ -56,6 +56,11 @@ fn listFilesLoop! dir: String rel: String names: (List String) acc: (List String
           (listFilesLoop! dir rel tail (if (and (stringEndsWith? name ".asn") (k/isFile! full)) (listAppend acc (list r)) acc))))))
 
 fn listFiles! dir: String rel: String -> (Result (List String) String)
+  (if (and (stringEmpty? rel) (not (k/isDir! dir)))
+    (ok (list))
+    (listFilesIn! dir rel))
+
+fn listFilesIn! dir: String rel: String -> (Result (List String) String)
   (mt (dirList dir)
     ((err e) (err e))
     ((ok names) (listFilesLoop! dir rel names (list))))

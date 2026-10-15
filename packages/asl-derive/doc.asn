@@ -1,4 +1,4 @@
-(:doc :symbol "asl/packages/asl-derive/src/derive.asl#" :text "Pure AgentScript Zero-Cost Schema, Codec, and Monomorphic Serializer Generation Engine")
+(:doc :symbol "asl/packages/asl-derive/src/derive.asl#" :text "Pure AgentSlang Zero-Cost Schema, Codec, and Monomorphic Serializer Generation Engine")
 (:doc :symbol "asl/packages/asl-derive/src/derive.asl#FieldDef.name" :text "Field identifier")
 (:doc :symbol "asl/packages/asl-derive/src/derive.asl#FieldDef.typeName" :text "Declared field type (Int, Str, Bool, Float)")
 (:doc :symbol "asl/packages/asl-derive/src/derive.asl#FieldDef.isOptional" :text "True if field is wrapped in Option")

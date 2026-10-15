@@ -247,9 +247,10 @@ fn testTrackedFile! path: String -> Bool
 
 fn testTrackedFiles! -> Bool
   (do
-    (assert (testTrackedFile! "asl/web/vite.config.js") "vite.config.js round-trip")
-    (assert (testTrackedFile! "asl/web/tailwind.config.js") "tailwind.config.js round-trip")
-    (assert (testTrackedFile! "asl/web/plugins/vitePluginAsl.js") "vitePluginAsl.js round-trip")
+    (assert (testTrackedFile! "asl/web/bridge/boot.js") "boot.js round-trip")
+    (assert (testTrackedFile! "asl/packages/asl-syntax/tests/fixtures/js/vite.config.js.sample") "vite.config.js round-trip")
+    (assert (testTrackedFile! "asl/packages/asl-syntax/tests/fixtures/js/tailwind.config.js.sample") "tailwind.config.js round-trip")
+    (assert (testTrackedFile! "asl/packages/asl-syntax/tests/fixtures/js/vitePluginAsl.js.sample") "vitePluginAsl.js round-trip")
     (assert (testTrackedFile! "tests/harnessBench/cases/attention-flood/svc/vendor/uploader.min.js") "uploader.min.js round-trip")
     true)
 

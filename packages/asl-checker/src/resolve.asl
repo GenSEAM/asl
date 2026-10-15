@@ -972,10 +972,10 @@ fn checkQualifiedMember v: String alias: String member: String mod: ModuleSummar
   (mt (modImport mod alias) ((none) (some (makeDiag "rule-9" (str v ": alias " alias " is not imported") path))) ((some mpath) (mt (resolveDepIn mpath deps) ((err _) (none)) ((ok target) (if (and (not (exportedFn? target member)) (not (mapHas? target.exportedCases member))) (some (makeDiag "rule-9" (str "ERR_NOT_EXPORTED: " member " is not exported by " target.name) path)) (none))))))
 
 fn isReservedIdent? s: String -> Bool
-  (or (stringStartsWith? s "agentscript-") (stringContains? s "/agentscript-"))
+  (or (stringStartsWith? s "agentslang-") (stringContains? s "/agentslang-"))
 
 fn diagReservedPrefix name: String path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
-  (cons (makeDiag "rule-7" (str name " uses the reserved agentscript- prefix") path) acc)
+  (cons (makeDiag "rule-7" (str name " uses the reserved agentslang- prefix") path) acc)
 
 fn checkHeadExpr headExpr: rd/SExpr scope: (Map String Bool) effectOk: Bool mod: ModuleSummary deps: DepIndex fieldNames: (Map String Bool) path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
   (mt headExpr ((rd/sexprAtom v) (if (isLiteralAtom? v) acc (if (stringStartsWith? v ":") acc (if (stringStartsWith? v ".-") acc (if (isReservedIdent? v) (diagReservedPrefix v path acc) (if (isQualifiedName? v) (let [(qp (splitQual v)) (alias (pairFirst qp)) (member (pairSecond qp))] (mt (checkQualifiedMember v alias member mod deps path) ((some d) (cons d acc)) ((none) acc))) (if (or (mapHas? scope v) (or (mapHas? mod.funs v) (or (mapHas? mod.caseOwner v) (or (some? (findUnqualifiedCaseInDeps v mod deps)) (or (isPreludeTag? v) (or (isSpecialForm? v) (or (some? (ty/builtinSig v)) (ty/genericName? v)))))))) acc (cons (makeDiag "rule-2" (str v " is not defined") path) acc)))))))) (_ acc))

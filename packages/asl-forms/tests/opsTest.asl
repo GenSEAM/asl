@@ -69,7 +69,7 @@ fn testFallbacks! -> Bool
 
 fn testTarget! -> Bool
   (do
-    (assert (stringContains? (line! "(:target)") "ERR_NOT_IMPLEMENTED") "target listing refuses an unverified registry")
+    (assert (stringContains? (line! "(:target)") ":targets (\"svg\" \"html\" \"css\" \"js\" \"ts\" \"py\" \"go\")") "target listing names the implemented targets")
     (assert (stringContains? (line! "(:target :name \"distrib\")") "ERR_NOT_IMPLEMENTED") "distribution refuses to claim generation without running its generator")
     (assert (stringContains? (line! "(:codegen :name \"sh\" :file \"missing-file.asl\")") "ERR_NOT_IMPLEMENTED") "codegen refuses to claim compilation without a compiler")
     (assert (stringContains? (line! "(:target :name \"bogus\")") ":error-code \":ERR_UNKNOWN_TARGET\" :message \"Unknown compilation target: bogus\"") "unknown target rejected")

@@ -51,7 +51,7 @@
 (:doc :symbol "asl/packages/asl-engine/src/lease.asl#LeaseLock.fd" :text "File descriptor of acquired lock")
 (:doc :symbol "asl/packages/asl-engine/src/lease.asl#LeaseLock.lockPath" :text "Path to the companion .lock file")
 (:doc :symbol "asl/packages/asl-engine/src/lease.asl#LeaseLock.error" :text "Error message if lock failed")
-(:doc :symbol "asl/packages/asl-engine/src/main.asl#" :text "Pure AgentScript Sovereign Resident Engine and Context Isolation Supervisor under ADR0081 / D120")
+(:doc :symbol "asl/packages/asl-engine/src/main.asl#" :text "Pure AgentSlang Sovereign Resident Engine and Context Isolation Supervisor under ADR0081 / D120")
 (:doc :symbol "asl/packages/asl-engine/src/server.asl#" :text "Resident engine unix-socket server over the NET1 builtins: a 0600 socket, one framed request per connection, forms requests run through bin/asl, lifetime, idle, RSS and self-update watchdogs between accepts")
 (:doc :symbol "asl/packages/asl-engine/src/server.asl#ServerState.rt" :text "Engine runtime: config, sessions, lease, build")
 (:doc :symbol "asl/packages/asl-engine/src/server.asl#ServerState.listener" :text "Listening socket descriptor")

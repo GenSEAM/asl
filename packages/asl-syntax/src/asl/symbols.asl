@@ -255,11 +255,11 @@ fn matchIndentHead text: String bs: Bytes len: Int64 lineStart: Int64 -> (Option
            (if (= spEnd hend)
              (none)
              (let [(nstart spEnd)
-                   (nstart2 (if (and (< nstart len) (= (bytesGet bs nstart) 33)) (+ nstart 1) nstart))
+                   (nstart2 (if (and (< nstart len) (= (bytesGet bs nstart) 33)) (scanSpacesAndTabs bs len (+ nstart 1)) nstart))
                    (nend (scanDelimEnd bs len nstart2))]
-               (if (= nend nstart)
+               (if (= nend nstart2)
                  (none)
-                 (let [(name (optionOr (stringSlice text nstart nend) ""))]
+                 (let [(name (optionOr (stringSlice text nstart2 nend) ""))]
                    (some (HeadMatch :kind head :name name)))))))))))
 
 fn scanParenLoop text: String bs: Bytes len: Int64 idx: Int64 stack: (List ParenFrame) inComment: Bool inStr: Bool esc: Bool acc: (List RawSymbol) -> (List RawSymbol)

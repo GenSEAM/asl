@@ -39,7 +39,7 @@ fn flagOn? kw: (Map String String) key: String -> Bool
   (listContains? (list "true" ":true" "1") (stringLower (optionOr (mapGet kw key) "")))
 
 fn autofixOff? kw: (Map String String) -> Bool
-  (listContains? (list "false" "0") (k/lstripColons (stringLower (optionOr (mapGet kw "autofix") ""))))
+  (listContains? (list "false" "0" "none" "off") (k/lstripColons (stringLower (optionOr (mapGet kw "autofix") ""))))
 
 fn targetArg kw: (Map String String) args: (List String) -> String
   (k/kwOr kw "file" (k/kwOr kw "path" (optionOr (listHead args) "")))
@@ -248,7 +248,7 @@ fn writeLocked! vs: v/Vfs ch: Checkers id: Int64 kw: (Map String String) fpath: 
         (let [(repairing (and (not (autofixOff? kw)) (or (= lang "asl") (= lang "asn")) (some? (delimDiag content0))))
               (res (if repairing (some (repairRun content0 lang -1 -1 (none) (k/kwOr kw "pick" ""))) (none)))]
           (mt res
-            ((some r) (if (= (leftCount r) 0) (writeChecked! vs ch id kw fpath rel prior (rep/repairResultText r) (str " " (receiptLine r))) (unrepairable id "write" rel r)))
+            ((some r) (if (= (leftCount r) 0) (writeChecked! vs ch id kw fpath rel prior (rep/repairResultText r) (str " " (receiptLine r))) (if (flagOn? kw "force") (writeChecked! vs ch id kw fpath rel prior content0 " :repairSkipped true") (unrepairable id "write" rel r))))
             ((none) (writeChecked! vs ch id kw fpath rel prior content0 "")))))))
 
 fn writeChecked! vs: v/Vfs ch: Checkers id: Int64 kw: (Map String String) fpath: String rel: String prior: (Option String) content: String fix: String -> k/EditOutcome
@@ -257,7 +257,7 @@ fn writeChecked! vs: v/Vfs ch: Checkers id: Int64 kw: (Map String String) fpath:
       (failStep id "write" vd.code (str " :file " (quoted rel) vd.fields (msgTail (str vd.message "; pass :force true to stage anyway"))))
       (mt (v/stage! vs fpath content)
         ((err e) (failStep id "write" ":ERR_WRITE_FAILED" (msgTail e)))
-        ((ok _) (okStep id "write" (str " :file " (quoted rel) " :bytes " (stringFromInt64 (v/charLength content)) " :staged true :pendingFlush true" vd.fields fix))))))
+        ((ok _) (okStep id "write" (str " :file " (quoted rel) " :bytes " (stringFromInt64 (stringLength content)) " :staged true :pendingFlush true" vd.fields fix))))))
 
 fn writeStep! vs: v/Vfs ch: Checkers held: (List String) id: Int64 kw: (Map String String) args: (List String) -> k/EditOutcome
   (let [(raw (targetArg kw args))
@@ -266,6 +266,7 @@ fn writeStep! vs: v/Vfs ch: Checkers held: (List String) id: Int64 kw: (Map Stri
         (fpath (pairFirst res))]
     (cond
       ((stringEmpty? raw) (failStep id "write" ":ERR_MISSING_ARG" " :message \"Missing file argument\""))
+      ((and (none? (mapGet kw "content")) (< (listLength args) 2)) (failStep id "write" ":ERR_MISSING_ARG" " :message \"Missing :content (pass :content \\\"\\\" to stage an empty file)\""))
       ((not (stringEmpty? (pairSecond res))) (failStep id "write" ":ERR_BOUNDARY_VIOLATION" (msgTail (pairSecond res))))
       ((k/isDir! fpath) (failStep id "write" ":ERR_IS_DIRECTORY" (msgTail (str "Target is a directory: " raw))))
       (else
@@ -314,7 +315,7 @@ fn editLocked! vs: v/Vfs ch: Checkers id: Int64 kw: (Map String String) fpath: S
                   (let [(r (repairRun replaced lang at spanEnd (if all (none) (some old)) (k/kwOr kw "pick" "")))]
                     (if (= (leftCount r) 0)
                       (editChecked! vs ch id kw fpath rel base (rep/repairResultText r) occ (str " " (receiptLine r)))
-                      (unrepairable id "edit" rel r)))
+                      (if (flagOn? kw "force") (editChecked! vs ch id kw fpath rel base replaced occ " :repairSkipped true") (unrepairable id "edit" rel r))))
                   (editChecked! vs ch id kw fpath rel base replaced occ "")))))))))
 
 fn editChecked! vs: v/Vfs ch: Checkers id: Int64 kw: (Map String String) fpath: String rel: String base: String replaced: String occ: Int64 fix: String -> k/EditOutcome
@@ -323,7 +324,7 @@ fn editChecked! vs: v/Vfs ch: Checkers id: Int64 kw: (Map String String) fpath: 
       (failStep id "edit" vd.code (str " :file " (quoted rel) vd.fields fix (msgTail (str vd.message "; nothing staged (pass :force true)"))))
       (mt (v/stage! vs fpath replaced)
         ((err e) (failStep id "edit" ":ERR_EDIT_FAILED" (msgTail e)))
-        ((ok _) (okStep id "edit" (str " :file " (quoted rel) " :staged true :replacements " (stringFromInt64 occ) " :bytes " (stringFromInt64 (v/charLength replaced))
+        ((ok _) (okStep id "edit" (str " :file " (quoted rel) " :staged true :replacements " (stringFromInt64 occ) " :bytes " (stringFromInt64 (stringLength replaced))
                                        " :pendingFlush true" vd.fields fix))))))
 
 fn editStep! vs: v/Vfs ch: Checkers held: (List String) id: Int64 kw: (Map String String) args: (List String) -> k/EditOutcome
@@ -531,7 +532,7 @@ fn fileDiff! vs: v/Vfs tp: String staged: String -> String
       (str "(:fileDiff :file " (quoted rel) " :error-code :ERR_BOUNDARY_VIOLATION :message " (quoted gerr) ")")
       (let [(disk (if (k/isFile! tp) (resultOr (v/readText! tp) "") ""))
             (dl (unifiedDiff! (k/splitLinesKeepEnds disk) (k/splitLinesKeepEnds staged) (str "disk/" rel) (str "staged/" rel) 2))]
-        (str "(:fileDiff :file " (quoted rel) " :diskBytes " (stringFromInt64 (v/charLength disk)) " :stagedBytes " (stringFromInt64 (v/charLength staged))
+        (str "(:fileDiff :file " (quoted rel) " :diskBytes " (stringFromInt64 (stringLength disk)) " :stagedBytes " (stringFromInt64 (stringLength staged))
              " :hunkLines " (stringFromInt64 (listLength dl)) " :patch " (quoted (k/concatAll dl)) ")"))))
 
 fn unreadable! tps: (List String) -> (List String)

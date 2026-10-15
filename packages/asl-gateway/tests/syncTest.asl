@@ -40,7 +40,7 @@ fn testResearchSync -> Bool
 fn testChannelSync -> Bool
   (let [(c (s/ChannelSync
              :id "chan-tech-01"
-             :name "AgentScript Tech"
+             :name "AgentSlang Tech"
              :platform "youtube"
              :styleGuide "(:font \"Inter\" :palette \"dark\")"))
         (formatted (s/formatChannelSync c))]

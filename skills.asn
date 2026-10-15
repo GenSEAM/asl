@@ -2,5 +2,8 @@
   :package asl
   :version "0.1.0"
   :skills [
-    (:skill :name "asl-toolbelt" :desc "Unified Third-Party Autonomous Agent Toolbelt")
+    (:skill :name "asl-toolbelt" :path "skills/asl-toolbelt" :generatedFrom "grammar/tools.asn" :desc "Batch file operations through the asl CLI: bounded reads and symbol slices, staged edits validated before disk commit, atomic txns")
+    (:skill :name "agent-bus" :path "packages/asl-agent-bus/skills/agent-bus" :desc "Map of the pure asl-agent-bus library; no daemon or CLI")
+    (:skill :name "seambus" :path "packages/asl-agent-bus/skills/seambus" :status :design :desc "Design reference for the unimplemented agent-to-agent session layer, and the wire code that exists")
+    (:skill :name "asl-contracts" :path "packages/asl-contracts/skills/asl-contracts" :desc "Map of the experimental asl-contracts package; no SMT proofs or chain ABI")
   ])

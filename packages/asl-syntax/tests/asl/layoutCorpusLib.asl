@@ -24,17 +24,12 @@ fn isParenOrInvalidFile path: String -> Bool
   (or (stringContains? path "tests/acceptance/vtbotDataPlane/fixtures/invalid/")
   (or (stringContains? path "tests/acceptance/r1Host/generated/float/oracle")
   (or (stringContains? path "tests/acceptance/r1Host/generated/invalid/depth/")
-  (or (= path "asl/web/src/components/SkyLoomVisualizer.asl")
-  (or (= path "asl/web/src/components/EngineeringBlog.asl")
-  (or (= path "asl/web/src/components/InBrowserAgent.asl")
-  (or (= path "asl/web/src/views/BlogView.asl")
-  (or (= path "asl/web/src/data/blog/posts.asl")
   (or (= path "asl/packages/asl-agent/src/dispatch.asl")
   (or (= path "asl/packages/asl-agent/tests/dispatchTest.asl")
   (or (= path "asl/packages/asl-macro/src/macro.asl")
   (or (= path "asl/packages/asl-ui/src/main.asl")
   (or (= path "asl/packages/asl-mem/src/tasks.asl")
-      (= path "tests/acceptance/d81/Task58801IntermediatePolicyTest.asl"))))))))))))))))))))
+      (= path "tests/acceptance/d81/Task58801IntermediatePolicyTest.asl")))))))))))))))
 
 fn knownMisparseReason path: String -> (Option String)
   (cond

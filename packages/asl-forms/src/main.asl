@@ -24,7 +24,7 @@ fn workspaceRoot! rootArg: String cwd: String -> String
 
 fn toolchainRoot! cwd: String -> String
   (let [(given (k/toolEnv! "ROOT_DIR"))
-        (binDir (if (stringEmpty? (k/toolEnv! "SCRIPT_DIR")) (k/joinPath cwd "bin") (k/toolEnv! "SCRIPT_DIR")))]
+        (binDir (if (stringEmpty? (k/toolEnv! "SCRIPT_DIR")) (k/binFor! cwd) (k/toolEnv! "SCRIPT_DIR")))]
     (cond
       ((not (stringEmpty? given)) given)
       ((= (k/baseName binDir) "bin") (k/dirName binDir))
@@ -40,7 +40,7 @@ fn workspaceFor! rootArg: String -> w/Workspace
   (let [(cwd (realOr! "."))
         (root (workspaceRoot! rootArg cwd))
         (rootDir (toolchainRoot! cwd))
-        (tools (resultOr (fileReadString (k/joinPath rootDir "asl/grammar/tools.asn")) ""))]
+        (tools (resultOr (fileReadString (k/aslPath! rootDir "grammar/tools.asn")) ""))]
     (w/Workspace :root root
                  :roots (uniqueRoots (list rootDir (resultOr (realPath rootDir) "") root (resultOr (realPath root) "")) (list))
                  :ops (w/toolOps tools)))
@@ -185,6 +185,14 @@ fn validSession? s: String -> Bool
        (!= s ".")
        (listAll? (fn [(c String)] -> Bool (let [(k (charCode c))] (or (and (>= k 48) (<= k 57)) (and (>= k 65) (<= k 90)) (and (>= k 97) (<= k 122)) (= c ".") (= c "_") (= c "-")))) (stringChars s)))
 
+fn ! payloadText! args: (List String) -> (Result String String)
+  (cond
+    ((= (optionOr (listHead args) "") "-") (fileReadString "/dev/stdin"))
+    ((= (optionOr (listHead args) "") "-f")
+      (let [(path (optionOr (listGet args 1) ""))]
+        (if (stringEmpty? path) (err "-f needs a FILE of forms") (mt (fileReadString path) ((ok t) (ok t)) ((err e) (err (str path ": " e)))))))
+    (else (ok (stringJoin args " "))))
+
 fn ! mainText! args: (List String) -> (Pair String Int64)
   (let [(hasRoot (= (optionOr (listHead args) "") "--root"))
         (rootArg (if hasRoot (optionOr (listGet args 1) "") ""))
@@ -192,7 +200,9 @@ fn ! mainText! args: (List String) -> (Pair String Int64)
         (session (envOr! "ASL_SESSION"))]
     (if (and (not (stringEmpty? session)) (not (validSession? session)))
       (pair "(:error :code ERR_BAD_SESSION :message \"ASL_SESSION must match [A-Za-z0-9._-]+ without ..\")\n" 2)
-      (runPayloadText! (workspaceFor! rootArg) (stringJoin payloadArgs " "))))
+      (mt (payloadText! payloadArgs)
+        ((err e) (pair (str "(:error :code ERR_READ_FAILED :message \"" (k/escapeAsnVal e) "\")\n") 2))
+        ((ok payload) (runPayloadText! (workspaceFor! rootArg) payload)))))
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(result (mainText! args))]

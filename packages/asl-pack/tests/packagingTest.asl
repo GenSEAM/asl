@@ -36,7 +36,7 @@ fn testRpmPackaging -> Bool
       (assert (stringContains? rpmSpec "Name:           asl") "RPM spec must declare Name: asl")
       (assert (stringContains? rpmSpec "Version:        0.2.0") "RPM spec must declare Version: 0.2.0")
       (assert (stringContains? rpmSpec "Release:        1%{?dist}") "RPM spec must declare Release")
-      (assert (stringContains? rpmSpec "Summary:        AgentScript Pure AI Agent Language") "RPM spec must declare Summary")
+      (assert (stringContains? rpmSpec "Summary:        AgentSlang Pure AI Agent Language") "RPM spec must declare Summary")
       (assert (stringContains? rpmSpec "%install") "RPM spec must have %install section")
       (assert (stringContains? rpmSpec "%files") "RPM spec must have %files section")
       (refute (stringContains? rpmSpec "Name:           python") "RPM spec must refute foreign names")

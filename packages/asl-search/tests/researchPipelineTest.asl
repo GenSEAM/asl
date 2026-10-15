@@ -3,8 +3,8 @@
   :i [(research :a res) (engine :a eng)])
 
 fn testResearchPlanning -> Bool
-  (let [(flashPlan (res/makeResearchPlan "AgentScript Wasm" "flash"))
-        (targetPlan (res/makeResearchPlan "AgentScript Wasm" "targeted"))
+  (let [(flashPlan (res/makeResearchPlan "AgentSlang Wasm" "flash"))
+        (targetPlan (res/makeResearchPlan "AgentSlang Wasm" "targeted"))
         (bipolarPlan (res/makeResearchPlan "Wasm SIMD speedup" "bipolar"))
         (matrixPlan (res/makeResearchPlan "Distributed Consensus" "matrix"))]
     (assert (= flashPlan.depth "flash") "flash plan depth mismatch")
@@ -60,7 +60,7 @@ fn testSourceClassification -> Bool
     true)
 
 fn testExtractionFromResults -> Bool
-  (let [(item1 (eng/SearchResult :title "ASL Substrate" :url "https://github.com/GenSEAM/asl" :snippet "Native AgentScript" :engine "ddg" :score 0.92))
+  (let [(item1 (eng/SearchResult :title "ASL Substrate" :url "https://github.com/GenSEAM/asl" :snippet "Native AgentSlang" :engine "ddg" :score 0.92))
         (item2 (eng/SearchResult :title "ASL Compiler" :url "https://arxiv.org/abs/2400.1234" :snippet "LLVM emitter" :engine "brave" :score 0.88))
         (facts (res/extractKeyFacts (list item1 item2) false))]
     (assert (= (listLength facts) 2) "extracted facts count should be 2")

@@ -1,6 +1,6 @@
 (:package asl-json
  :version "0.1.0"
  :entry "src/json.asl"
- :description "Pure AgentScript RFC 8259 JSON parser, emitter, and inspector"
+ :description "Pure AgentSlang RFC 8259 JSON parser, emitter, and inspector"
  :aslFirst true
  :dependencies [])

@@ -1,6 +1,6 @@
 (module aslAgent/ideMesh :x [IdeRuntime WorktreeSlot MeshHubConfig IdeTaskEnvelope IdeExecutionReceipt IdeMeshCoordinator ideClaudeCode ideAntigravity ideNativeAd ideCursorBridge runtimeToStr strToRuntime makeWorktreeSlot formatGitWorktreeAdd formatGitWorktreeRemove hasWorktreeCollision? makeDefaultHubConfig makeIdeTask formatClaudeCliDispatch formatAntigravityCliDispatch formatHubEnvelopeAsn makeExecutionReceipt isReceiptFalsifiedAndGreen? formatReceiptAloud makeMeshCoordinator allocateTaskWorktree releaseTaskWorktree dispatchTaskToMesh recordTaskSettlement renderMeshStatusAsn] :i [(asl-text/string :a s)])
 
-(enum IdeRuntime (:c ideClaudeCode [] "Claude Code CLI headless runner") (:c ideAntigravity [] "Google Antigravity IDE headless CLI runner") (:c ideNativeAd [] "Native AgentScript autonomous session") (:c ideCursorBridge [] "Cursor or Windsurf external tool bridge"))
+(enum IdeRuntime (:c ideClaudeCode [] "Claude Code CLI headless runner") (:c ideAntigravity [] "Google Antigravity IDE headless CLI runner") (:c ideNativeAd [] "Native AgentSlang autonomous session") (:c ideCursorBridge [] "Cursor or Windsurf external tool bridge"))
 
 (schema WorktreeSlot (:f taskId Str) (:f branchName Str) (:f worktreePath Str) (:f repoRoot Str) (:f isActive Bool) (:f allocatedAt Int64))
 

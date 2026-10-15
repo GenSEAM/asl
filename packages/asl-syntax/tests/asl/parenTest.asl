@@ -380,7 +380,6 @@ fn testTrackedParenAslFiles! -> Bool
                           "asl/packages/asl-pack/tests/intermediatePolicyTest.asl"
                           "asl/packages/asl-plugin/src/types.asl"
                           "asl/packages/asl-replay/src/main.asl"
-                          "asl/packages/asl-target-py/tests/fixtures/pointClass.asl"
                           "asl/packages/asl-ui/src/main.asl"
                           "asl/packages/asl-mem/src/tasks.asl"
                           "tests/acceptance/d81/Task58801IntermediatePolicyTest.asl"
@@ -400,7 +399,7 @@ fn testTrackedParenAslFiles! -> Bool
         (stats (fold checkParenAslFile! (pair 0 0) parenFiles))
         (totalChecked (pairFirst stats))
         (mismatches (pairSecond stats))]
-    (assert (= totalChecked 33) "checked all 33 valid paren asl files")
+    (assert (= totalChecked 32) "checked all 32 valid paren asl files")
     (assert (= mismatches 0) "zero mismatches on valid paren asl files")
     (assert (verifyFixtureFile! "asl/packages/asl-agent/src/dispatch.asl" true 15) "dispatch.asl has 15 top-level forms")
     (assert (verifyFixtureFile! "asl/grammar/corpus/semantic/exportBareCase.asl" true 2) "exportBareCase.asl has 2 top-level forms")

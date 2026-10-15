@@ -1,7 +1,7 @@
 (:package asl-gates
  :version "0.1.0"
  :entry "src/gates.asl"
- :description "Pure AgentScript Verification Gate Runners & Continuous Audit Engine"
+ :description "Pure AgentSlang Verification Gate Runners & Continuous Audit Engine"
  :aslFirst true
  :modules [
    "asl-gates/annotationLint"

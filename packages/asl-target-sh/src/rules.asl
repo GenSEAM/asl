@@ -495,8 +495,7 @@ fn outputRows ctx: Ctx -> (List (List String))
   (let [(r ctx.root)]
     (list (list "toolbelt-skill-md" (str r "/asl/skills/asl-toolbelt/SKILL.md") "skillMd")
           (list "toolbelt-skill-asn" (str r "/asl/skills/asl-toolbelt/skill.asn") "skillAsn")
-          (list "llms" (str r "/asl/llms.txt") "llms")
-          (list "llms-web" (str r "/asl/web/public/llms.txt") "llms")))
+          (list "llms" (str r "/asl/llms.txt") "llms")))
 
 fn renderOutput! ctx: Ctx which: String -> String
   (let [(tools (resultOr (dist/readText! ctx.tools) ""))

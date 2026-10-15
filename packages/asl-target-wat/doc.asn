@@ -1,4 +1,4 @@
-(:doc :symbol "asl/packages/asl-target-wat/src/emitWat.asl#" :text "Standalone WebAssembly Text (WAT) emitter backend for AgentScript.")
+(:doc :symbol "asl/packages/asl-target-wat/src/emitWat.asl#" :text "Standalone WebAssembly Text (WAT) emitter backend for AgentSlang.")
 (:doc :symbol "asl/packages/asl-target-wat/tests/emitWatTest.asl#" :text "Unit tests for standalone WebAssembly Text (WAT) code generator with D77 refutations.")
 (:doc :symbol "asl/packages/asl-target-wat/tests/fixtures/arithmetic.asl#" :text "Localized arithmetic test fixture for WebAssembly Text target code emission.")
 (:doc :symbol "asl/packages/asl-target-wat/tests/fixtures/wasiImports.asl#" :text "Localized WASI snapshot preview-1 host imports test fixture for WebAssembly Text target code emission.")

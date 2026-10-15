@@ -13,7 +13,7 @@ fn testMissingDocProbe -> Bool
   (do (refute (resolveProbe "(module m :export [foo]) (fn foo [] -> Int64 1)" "rule-8") "an export without a source doc is not rule-8: docs live in doc.asn (D158)") (refute (resolveProbe "(module m :x [foo]) (fn foo [] -> Int64 1)" "rule-8") "documented export not rule-8") true)
 
 fn testReservedProbe -> Bool
-  (do (assert (resolveProbe "(fn agentscript-foo [] -> Int64 1)" "rule-7") "reserved prefix rule-7") (refute (resolveProbe "(fn user-foo [] -> Int64 1)" "rule-7") "unreserved prefix not rule-7") true)
+  (do (assert (resolveProbe "(fn agentslang-foo [] -> Int64 1)" "rule-7") "reserved prefix rule-7") (refute (resolveProbe "(fn user-foo [] -> Int64 1)" "rule-7") "unreserved prefix not rule-7") true)
 
 fn testUnboundTypevarProbe -> Bool
   (do (assert (resolveProbe "(fn foo [] -> UnknownType 1)" "rule-10") "unknown type rule-10") (refute (resolveProbe "(fn foo [] -> Int64 1)" "rule-10") "known type not rule-10") true)

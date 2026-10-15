@@ -1,7 +1,7 @@
 (:package aslProc
  :version "0.1.0"
  :entry "src/process.asl"
- :description "Native AgentScript OS Child Process Management, Stream Redirection, Pipes, APM, and Resource Guards"
+ :description "Native AgentSlang OS Child Process Management, Stream Redirection, Pipes, APM, and Resource Guards"
  :aslFirst true
  :modules [
    "asl-proc"

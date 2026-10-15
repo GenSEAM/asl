@@ -399,7 +399,7 @@ fn ! distribute! ctx: sys/Context o: PackOptions -> Int64
 
 fn ! buildMode! ctx: sys/Context o: PackOptions -> Int64
   (do (sys/say! (rule))
-      (sys/say! "        AgentScript (ASL) Unified Packager & Multi-Platform Bundler             ")
+      (sys/say! "        AgentSlang (ASL) Unified Packager & Multi-Platform Bundler             ")
       (sys/say! (rule))
     (let [(made (mkdirs! (list (str ctx.root "/dist"))))
           (gated (cond

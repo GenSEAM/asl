@@ -1,7 +1,7 @@
 (:doc :symbol "asl/packages/asl-target-swift/src/app.asl#" :text "Native macOS App and SwiftUI WindowGroup application generator under ADR D129.")
 (:doc :symbol "asl/packages/asl-target-swift/src/audio.asl#" :text "Native macOS CoreAudio AUVoiceProcessingIO Audio Ingress generator under ADR D139.")
 (:doc :symbol "asl/packages/asl-target-swift/src/cockpitView.asl#" :text "Native SwiftUI VoiceBar and AttentionRail Cockpit Views under ADR D126 and D139.")
-(:doc :symbol "asl/packages/asl-target-swift/src/emitSwift.asl#" :text "Standalone Swift 6 / SwiftUI emitter backend for AgentScript under ADR D93 and D129.")
+(:doc :symbol "asl/packages/asl-target-swift/src/emitSwift.asl#" :text "Standalone Swift 6 / SwiftUI emitter backend for AgentSlang under ADR D93 and D129.")
 (:doc :symbol "asl/packages/asl-target-swift/src/types.asl#" :text "Standalone Swift 6 type lowering, keyword mangling, and operator primitives under ADR D93 and D129.")
 (:doc :symbol "asl/packages/asl-target-swift/tests/emitSwiftTest.asl#" :text "Unit tests for standalone Swift 6 code generation with dual-polarity D77 refutations.")
 (:doc :symbol "asl/packages/asl-target-swift/tests/swiftAudioCockpitTest.asl#" :text "Unit test suite for Swift native CoreAudio ingress and SwiftUI Cockpit views codegen under ADR D139.")

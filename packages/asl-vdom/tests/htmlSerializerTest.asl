@@ -7,7 +7,7 @@ fn testVoidElement -> Bool
   (let [(node (h/input (h/attrsOf (list (h/attr "type" "text") (h/attr "name" "q"))))) (serialized (h/vnodeToHtml node))] (assert (= serialized "<input name=\"q\" type=\"text\">") "Void input element must not have closing tag; attributes serialize in key order") true)
 
 fn testNestedVdomTree -> Bool
-  (let [(tree (h/secPlain (list (h/h1Plain (list (h/t "AgentScript"))) (h/divPlain (list (h/pPlain (list (h/t "Multi-Runtime")))))))) (serialized (h/vnodeToHtml tree))] (assert (= serialized "<section><h1>AgentScript</h1><div><p>Multi-Runtime</p></div></section>") "Nested VDOM tree serialization must match") true)
+  (let [(tree (h/secPlain (list (h/h1Plain (list (h/t "AgentSlang"))) (h/divPlain (list (h/pPlain (list (h/t "Multi-Runtime")))))))) (serialized (h/vnodeToHtml tree))] (assert (= serialized "<section><h1>AgentSlang</h1><div><p>Multi-Runtime</p></div></section>") "Nested VDOM tree serialization must match") true)
 
 fn testRawHtml -> Bool
   (let [(node (h/divPlain (list (h/raw "<svg viewBox=\"0 0 10 10\"><path d=\"M0,0\"/></svg>")))) (serialized (h/vnodeToHtml node))] (assert (= serialized "<div><svg viewBox=\"0 0 10 10\"><path d=\"M0,0\"/></svg></div>") "Raw node must pass through without escaping") true)

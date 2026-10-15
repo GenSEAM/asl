@@ -16,7 +16,7 @@ fn testExtractJson -> Bool
   (let [(raw "{\"title\": \"API Spec\", \"content\": \"Primary API payload text.\"}") (doc (txt/extractJsonKv raw "payload.json"))] (assert (= doc.title "API Spec") "Doc title must match JSON title") (assert (= doc.content "Primary API payload text.") "Doc content must match JSON content") true)
 
 fn testChunking -> Bool
-  (let [(text "The quick brown fox jumps over the lazy dog. AgentScript enables lightweight sandboxed execution.") (chunks (txt/chunkText text 25 5 "doc1"))] (assert (> (listLength chunks) 1) "Chunk count must be greater than 1") (mt (listHead chunks) ((none) (assert false "List head must exist")) ((some c) (assert (= c.index 1) "First chunk index must be 1") (assert (= c.source "doc1") "First chunk source must match doc1"))) true)
+  (let [(text "The quick brown fox jumps over the lazy dog. AgentSlang enables lightweight sandboxed execution.") (chunks (txt/chunkText text 25 5 "doc1"))] (assert (> (listLength chunks) 1) "Chunk count must be greater than 1") (mt (listHead chunks) ((none) (assert false "List head must exist")) ((some c) (assert (= c.index 1) "First chunk index must be 1") (assert (= c.source "doc1") "First chunk source must match doc1"))) true)
 
 fn testRagFormatting -> Bool
   (let [(doc (txt/ExtractedDoc :title "Doc A" :content "Fact statement 1." :format "text" :source "https://example.com" :charCount 17)) (md (txt/formatDocsRag "query test" (list doc)))] (assert (stringContains? md "## Extracted Documents for query: 'query test'") "Markdown must contain header") (assert (stringContains? md "Fact statement 1.") "Markdown must contain fact text") true)

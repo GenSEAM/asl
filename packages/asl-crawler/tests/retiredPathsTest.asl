@@ -29,7 +29,7 @@ fn ! runTests -> Bool
         (tiktokRes (processRun (str "PATH=" trapDir "/bin:$PATH CRAWL_ROOT=. " host " run asl/packages/asl-crawler/src/crawler.asl tiktok https://example.com/test --watch 0")))
         (tiktokTrapFired (stringContains? (resultOr (fileReadString trapLog) "") "TRAP_INVOKED"))
         (_ (fileWrite trapLog ""))
-        (automateRes (processRun (str "PATH=" trapDir "/bin:$PATH CRAWL_ROOT=. " host " run asl/packages/asl-crawler/src/crawler.asl automate /tmp/nonexistent-agent-script")))
+        (automateRes (processRun (str "PATH=" trapDir "/bin:$PATH CRAWL_ROOT=. " host " run asl/packages/asl-crawler/src/crawler.asl automate /tmp/nonexistent-agent-slang")))
         (automateTrapFired (stringContains? (resultOr (fileReadString trapLog) "") "TRAP_INVOKED"))
         (_ (fileWrite trapLog ""))
         (agentRes (processRun (str "PATH=" trapDir "/bin:$PATH CRAWL_ROOT=. " host " run asl/packages/asl-crawler/src/crawler.asl agent --status")))

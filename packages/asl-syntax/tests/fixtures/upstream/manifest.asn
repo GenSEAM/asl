@@ -2,7 +2,7 @@
   :version "1.0.0"
   :entries [
     (:entry
-      :url "https://github.com/agent-script/asex"
+      :url "https://github.com/agent-slang/asex"
       :commit "0ddf291142993115146c70aeb5a06749126cea90"
       :sha256 "be0106ad10c83661edf4f03bc5c9d55f1e0b9c1f936349ecd6eec638ebedd260"
       :license "MIT"

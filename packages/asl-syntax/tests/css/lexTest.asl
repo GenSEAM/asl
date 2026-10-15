@@ -237,7 +237,7 @@ fn testAllHtmlStyles! -> Bool
                 files)))))
 
 fn testIndexCss! -> Bool
-  (mt (fileReadBytes "asl/web/src/index.css")
+  (mt (fileReadBytes "asl/packages/asl-syntax/tests/fixtures/css/tailwindIndex.css.sample")
     ((err e) (do (assert false (str "failed to read index.css: " e)) false))
     ((ok bs)
      (let [(len (bytesLength bs))
@@ -252,7 +252,7 @@ fn testIndexCss! -> Bool
        true)))
 
 fn testAllTrackedCss! -> Bool
-  (let [(cmd "git ls-files \"*.css\"")
+  (let [(cmd "git ls-files \"*.css\" \"*.css.sample\"")
         (res (processRun cmd))]
     (do
       (assert (= res.exitCode 0) "git ls-files css exited 0")

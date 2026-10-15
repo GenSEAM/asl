@@ -163,7 +163,7 @@
 (:doc :symbol "asl/packages/asl-syntax/src/core/incremental.asl#flushLoop" :text "finishes the pending token as if the input ended here, exactly as prn/parseBytes treats the end of its buffer")
 (:doc :symbol "asl/packages/asl-syntax/src/core/outline.asl#" :text "Outline formatting and ASN receipt generation byte-identical to aslForms")
 (:doc :symbol "asl/packages/asl-syntax/src/core/print.asl#" :text "Lossless printing of syntax trees by leaf slice concatenation")
-(:doc :symbol "asl/packages/asl-syntax/src/core/source.asl#" :text "Pure AgentScript Source mapping, line indexing, and binaryKind classification")
+(:doc :symbol "asl/packages/asl-syntax/src/core/source.asl#" :text "Pure AgentSlang Source mapping, line indexing, and binaryKind classification")
 (:doc :symbol "asl/packages/asl-syntax/src/core/symbols.asl#" :text "SymbolDef, dotted lookup, nearest names, anchor resolution and reparse guard")
 (:doc :symbol "asl/packages/asl-syntax/src/core/tree.asl#" :text "Green syntax tree Token and Node structures with byte spans and tiling check")
 (:doc :symbol "asl/packages/asl-syntax/src/css/lex.asl#" :text "Lossless CSS Syntax Level 3 tokenizer")

@@ -2,6 +2,8 @@
 
 Runs a self-hosted coder model on Modal as a gateway provider. The default preset is Bonsai 2: `prism-ml/Ternary-Bonsai-2-27B-gguf`, a ternary Qwen3.8-27B.
 
+Status (2026-10-14): `src/modal.asl` fails `asl/host/out/asl-host check`, so none of the `$H run $M ...` commands below runs today. It imports `aslGateway/plugin`, whose imports reach `asl-gateway/src/cliDispatch.asl`; that file imports `asl/packages/asl-cli/src/system` by path, which the host does not resolve (the declared name is `asl-cli/system`). The commands and the design below describe the driver as written; running them needs that import in asl-gateway fixed. `src/modal.asl` also imports `asl-harness/launch`, `asl-parser` and `asl-json`.
+
 - `presets/*.asn`: the one place every version is pinned. `bonsai2.asn` is the default (PrismML llama.cpp fork). `bonsai2Vllm.asn` uses the community vLLM port.
 - `src/modal.asl`: the ASL driver. It:
   - parses and validates a preset, with typed errors;
@@ -208,3 +210,23 @@ Estimate for L4 (assumed, not measured: about 1 core and 8 GiB alongside the GPU
 - **Budget lines.** With no budget lines, `budget.gate` allows a paid deploy. The Modal plugin needs one line per endpoint (`asl-<app>-<tier>`) with an approval, otherwise deploy and start are not capped. Routed to GWWIRE/GWBUDGET.
 - **Long replies against the 150 s limit.** A reply longer than 150 s returns 303. The gateway transport must follow it, and streaming behaviour under the limit is undocumented.
 - **Secrets during snapshots.** It is not confirmed that the Modal Secret's environment is present during `snap=True` enter. The API key passed to the engine is then part of the snapshot.
+
+## Modules and exports
+
+From the `:x` list in each module header under `src/` (2026-10-14): 1 module, 45 exported names. Long lists are cut at 18 names; the header of each file has the full list.
+
+- `asl-modal/modal` (`src/modal.asl`, 45): `GpuTier`, `PoolSettings`, `Sampling`, `ModalPreset`, `ModalError`, `ChatReply`, `ModalOp`, `modalErrorText`, `modalPresetParse`, `modalPresetLoad!`, `modalTier`, `modalAppName`, `modalAppEnv`, `modalAppSettings`, `modalDeployArgv`, `modalPrepareArgv`, `modalStopArgv`, `modalStatusArgv`, and 27 more.
+
+## Tests
+
+Measured 2026-10-14 with the stage-0 host, run from the directory that contains the `asl/` checkout:
+
+```sh
+asl/host/out/asl-host test asl/packages/asl-modal/tests/<file>.asl
+```
+
+0 of 1 test files exit 0 (0 assertions and refutations pass in those files).
+
+| File | Result | Detail |
+|---|---|---|
+| `modalTest.asl` | **fail** | load error: `src/modal.asl` imports `aslGateway/plugin`, which reaches `src/cliDispatch.asl` in asl-gateway and its path import `asl/packages/asl-cli/src/system` |
