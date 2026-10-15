@@ -513,7 +513,7 @@ fn lintDiagnosticMessage? d: ty/Diagnostic -> Bool
   (or (stringContains? d.message "is exported but not defined in this module") (and (= d.code "builtin-reference") (stringContains? d.message "is a builtin, not a value")))
 
 fn hostCheckCode code: String -> String
-  (cond ((= code "rule-1") "ERR_UNKNOWN_SYMBOL") ((= code "rule-2") "ERR_UNKNOWN_SYMBOL") ((= code "rule-12") "ERR_EFFECT_UNMARKED") ((= code "unresolved-import") "ERR_UNRESOLVED_IMPORT") ((= code "arity") "ERR_ARITY") ((= code "ctor") "ERR_BAD_CONSTRUCTOR") ((= code "type") "ERR_TYPE_MISMATCH") ((= code "rule-6") "ERR_TYPE_MISMATCH") ((= code "rule-4") "ERR_MATCH_NONEXHAUSTIVE") (else code))
+  (cond ((= code "rule-1") "ERR_UNKNOWN_SYMBOL") ((= code "rule-2") "ERR_UNKNOWN_SYMBOL") ((= code "rule-12") "ERR_EFFECT_UNMARKED") ((= code "unresolved-import") "ERR_UNRESOLVED_IMPORT") ((= code "arity") "ERR_ARITY") ((= code "ctor") "ERR_BAD_CONSTRUCTOR") ((= code "type") "ERR_TYPE_MISMATCH") ((= code "rule-6") "ERR_TYPE_MISMATCH") ((= code "rule-4") "ERR_MATCH_NONEXHAUSTIVE") ((= code "unreachable-arm") "ERR_UNREACHABLE_ARM") ((= code "else-keyword") "ERR_ELSE_KEYWORD") (else code))
 
 fn hostCheckDiagCode d: ty/Diagnostic -> String
   (if (= d.code "rule-9") (if (stringContains? d.message "ERR_NOT_EXPORTED") "ERR_NOT_EXPORTED" "ERR_UNRESOLVED_IMPORT") (hostCheckCode d.code))

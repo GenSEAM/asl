@@ -93,7 +93,7 @@ fn ! runCases! cwd: String binary: String binDir: String -> (List Outcome)
       (Outcome :label "absolute exe, good file" :got (runClean! cwd plain binary "ok.asl") :exitCode 0 :receipt (passedReceipt) :stderrHas "")
       (Outcome :label "PATH symlink named asl, good file" :got (runClean! cwd viaPath "asl" "ok.asl") :exitCode 0 :receipt (passedReceipt) :stderrHas "")
       (Outcome :label "absolute exe, unbalanced file" :got (runClean! cwd plain binary "unbalanced.asl") :exitCode 1 :receipt (unbalancedReceipt) :stderrHas "")
-      (Outcome :label "PATH symlink named asl, unknown symbol" :got (runClean! cwd viaPath "asl" "unknown.asl") :exitCode 1 :receipt (unknownReceipt) :stderrHas "ERR_UNKNOWN_SYMBOL nope")))
+      (Outcome :label "PATH symlink named asl, unknown symbol" :got (runClean! cwd viaPath "asl" "unknown.asl") :exitCode 1 :receipt (unknownReceipt) :stderrHas "ERR_UNKNOWN_SYMBOL unbound symbol: nope")))
 
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
