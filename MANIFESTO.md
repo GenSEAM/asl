@@ -16,12 +16,12 @@ The model is the main author and reader of the code, so the language is designed
 
 ## 2. Infrastructure SEAM
 
-One language to describe, build and run a whole system.
+The language, its runtime and its tools are one seamless infrastructure: one place to describe, build and run a whole system.
 
 - SQL, JavaScript, HTML, CSS and other languages live inside ASL as checked blocks.
 - The compiler is written in ASL, compiles itself, and targets native code and WebAssembly; source-to-source targets cover ecosystems that need source.
 - A foreign-function interface (on the roadmap) makes any library or binary usable from ASL.
-- Engineers govern from above the code with lenses (topology, coupling, complexity, effect boundaries, intent coverage) and gates that count only after they have failed on a seeded defect.
+- Engineers govern from above the code with lenses (topology, coupling, complexity, effect boundaries, intent coverage, the same lenses agents use to focus) and gates that count only after they have failed on a seeded defect.
 
 ## 3. Non-restrictive harness
 
@@ -29,6 +29,7 @@ Constraints belong in the program and the environment, not in the prompt.
 
 - **Enforce, don't instruct.** Permissions, sandboxes, file ownership, checkers and gates make the wrong action impossible or visible; a prompt full of prohibitions only competes with the task for attention.
 - **No roles.** A persona is a bias, not a capability.
+- **Separated duties.** A writer does not grade its own work; the environment assigns grading to another agent.
 - **Intents, lenses and attractors** state what must become true, show the task from several sides, keep attention on the goal, and route each request to the model that fits it.
 
 ## 4. Agent-assistive tools
@@ -39,5 +40,5 @@ Tools built for how agents work and fail:
 - typed, compact receipts that say what to do next;
 - memory the model keeps for itself (notes, scratchpads, to-do lists, its own guidelines) and project memory in tiers, so focus survives long tasks and compaction;
 - onboarding from a small index in one request;
-- every claim tied to a check that ran.
+- every claim tied to a check that ran, with its exit code and executed assertions.
 
