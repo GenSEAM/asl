@@ -1,61 +1,49 @@
-# ASL Language Technical Manifesto
+# ASL Manifesto
 
-> **"A language for models to write, for checkers to prove, and for engineers to govern."**
+> **"LLM first."**
 
----
-
-## 1. Why AgentSlang exists
-
-Production languages were designed for human keyboards and eyes. Each has a trap for a model that writes left to right: invisible indentation, non-local lifetimes, silently missing properties, repeated error boilerplate. Agents spend their budget on the repair loops these cause, and their attention on syntax that carries no meaning.
-
-**ASL removes that layer.** It is a language whose main author and reader is a language model, and whose syntax is chosen by measurement: tokens per idea and how often models generate it correctly. People work above it, on architecture, intent and evidence, with tools built for that.
+AgentSlang (ASL) is a language and toolset for software written by language models. The problem it is built against: **a model hallucinates when its attention is short or spread thin.** Noisy context, ambiguous structure, contradictory instructions and lost state all dilute attention. Each principle below removes one of those causes.
 
 ---
 
-## 2. Principles
+## 1. LLM first
 
-### 1. Structure that cannot be misread
-Forms are balanced trees. The written form mirrors the tree, so parse and print round-trip and a model never has to guess where a form ends.
+The model is the main author and reader of the code, so the language is designed for it and measured on it.
 
-### 2. Every choice is measured on models
-A keyword, a marker or a naming scheme stays only while models write correct code better with it than without it. Builtins carry no effect marker because models wrote correct programs about twice as often without one; predicates keep `?` because models do better with it. When a measurement refutes a choice, the choice goes.
+- **Structure that cannot be misread.** Forms are balanced trees; the written form mirrors the tree, so a model never guesses where a form ends.
+- **Measured, not assumed.** A keyword, marker or naming scheme stays only while models generate correct code better with it than without it. When a measurement refutes a choice, the choice goes.
+- **Few tokens per idea.** Whole words the model already knows, no ceremony for human eyes, one notation (ASN) for code, data, messages and memory.
+- **No silent failure.** No null, no exceptions, effects visible to the checker: the model learns it is wrong at the place it is wrong.
 
-### 3. Whole words, no ceremony
-camelCase whole words the model already knows, the module carries the domain, and among names that carry the meaning the measured cheapest wins.
+## 2. Infrastructure SEAM
 
-### 4. No silent failure
-No null and no exceptions. Optional values are `(some v)` / `(none)`, failures `(ok v)` / `(err e)`, matched exhaustively. Side effects are visible to the checker, so a refactor cannot add one unseen.
+One language to describe, build and run a whole system.
 
-### 5. One notation for code and messages
-Code, contracts, tool payloads, wire messages and ledgers are all ASN, so nothing is translated between them.
+- SQL, JavaScript, HTML, CSS and other languages live inside ASL as checked blocks.
+- The compiler is written in ASL, compiles itself, and targets native code and WebAssembly; source-to-source targets cover ecosystems that need source.
+- A foreign-function interface (on the roadmap) makes any library or binary usable from ASL.
+- Engineers govern from above the code with lenses (topology, coupling, complexity, effect boundaries, intent coverage) and gates that count only after they have failed on a seeded defect.
 
-### 6. Fast where it matters
-Native code with reference counting and no tracing collector as the goal, buffers and data structures close to C, and a sandboxed WebAssembly build that can only do what its host hands it.
+## 3. Non-restrictive harness
 
----
+Constraints belong in the program and the environment, not in the prompt.
 
-## 3. One language that glues the others
+- **Enforce, don't instruct.** Permissions, sandboxes, file ownership, checkers and gates make the wrong action impossible or visible; a prompt full of prohibitions only competes with the task for attention.
+- **No roles.** A persona is a bias, not a capability.
+- **Intents, lenses and attractors** state what must become true, show the task from several sides, keep attention on the goal, and route each request to the model that fits it.
 
-ASL is meant to describe and generate a whole system from one place:
+## 4. Agent-assistive tools
 
-- **Embedded languages.** SQL, JavaScript, HTML, CSS and others live inside ASL as checked blocks, not opaque strings.
-- **Self-compiling.** The compiler is written in ASL and compiles itself to native code and WebAssembly.
-- **Transpiling.** Source-to-source targets produce other languages where an ecosystem needs source, with the same semantics checked by differential tests.
-- **Foreign calls.** A foreign-function interface makes any library or binary usable from ASL without a rewrite.
+Tools built for how agents work and fail:
 
----
-
-## 4. Tools for agents and for engineers
-
-The language comes with a toolset in the same notation:
-
-- **For agents:** read by symbol and slice, batch independent operations into one call, stage edits in memory and flush them as a transaction, get typed receipts that say what to do next, and learn the language from a small index in one request.
-- **For engineers:** lenses over the code base (topology, coupling, complexity, effect boundaries, intent coverage), audits whose every claim can be rerun, and gates that count only after they have failed on a seeded defect.
+- read by symbol and slice, batch independent operations, stage edits and flush them as one transaction;
+- typed, compact receipts that say what to do next;
+- memory the model keeps for itself (notes, scratchpads, to-do lists, its own guidelines) and project memory in tiers, so focus survives long tasks and compaction;
+- onboarding from a small index in one request;
+- every claim tied to a check that ran.
 
 ---
 
-## 5. Evidence
-
-Every figure the project publishes is a row in `bench/publishedClaims.asn` with its status and what stands behind it. An unmeasured figure is not cited as a result.
+Every figure the project publishes is a row in `bench/publishedClaims.asn` with its status; an unmeasured figure is not cited as a result.
 
 *ASL is dual-licensed under MIT or Apache-2.0.*
