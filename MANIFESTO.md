@@ -41,8 +41,3 @@ Tools built for how agents work and fail:
 - onboarding from a small index in one request;
 - every claim tied to a check that ran.
 
----
-
-Every figure the project publishes is a row in `bench/publishedClaims.asn` with its status; an unmeasured figure is not cited as a result.
-
-*ASL is dual-licensed under MIT or Apache-2.0.*
