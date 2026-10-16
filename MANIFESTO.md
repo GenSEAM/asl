@@ -8,10 +8,9 @@ AgentSlang (ASL) is a language and toolset for software written by language mode
 
 ## 1. LLM first
 
-The model is the main author and reader of the code, so the language is designed for it and measured on it.
+The model is the main author and reader of the code, so the language is designed for it.
 
 - **Structure that cannot be misread.** Forms are balanced trees; the written form mirrors the tree, so a model never guesses where a form ends.
-- **Measured, not assumed.** A keyword, marker or naming scheme stays only while models generate correct code better with it than without it. When a measurement refutes a choice, the choice goes.
 - **Few tokens per idea.** Whole words the model already knows, no ceremony for human eyes, one notation (ASN) for code, data, messages and memory.
 - **No silent failure.** No null, no exceptions, effects visible to the checker: the model learns it is wrong at the place it is wrong.
 
