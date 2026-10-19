@@ -201,7 +201,7 @@ fn testForceFullPrefixes -> Bool
   (do
     (assert (rm/isForceFull "bin/asl-full") "bin/asl matches bin/asl-full as a prefix")
     (assert (rm/isForceFull "bin/asl-core-legacy") "bin/asl-core matches as a prefix")
-    (assert (rm/isForceFull "scripts/runGateTests.sh.orig") "scripts/runGateTests.sh matches as a prefix")
+    (assert (rm/isForceFull "scripts/audit/foo.py") "scripts/audit/ matches as a prefix")
     (assert (rm/isForceFull ".asl/mem/knownRed.asn.tmp") "knownRed path matches as a prefix")
     (assert (rm/isForceFull "asl/grammar/rules.asn") "directory entry matches")
     (refute (rm/isForceFull "bin/as") "a shorter path is not forced")
@@ -235,7 +235,7 @@ fn ! timesLedger! -> String
 
 fn runAsl! dir: String env: String args: String -> Outcome
   (let [(root (workRoot!))
-        (argv (listAppend (list (str root "/asl/host/out/asl-host") "run" (str root "/asl/packages/asl-gates/src/runnerMain.asl"))
+        (argv (listAppend (list (str root "/bin/asl") "run" (str root "/asl/packages/asl-gates/src/runnerMain.asl"))
                           (filter (fn [(arg String)] -> Bool (not (stringEmpty? arg))) (stringSplit args " "))))
         (extra (filter (fn [(kv String)] -> Bool (not (stringEmpty? kv))) (stringSplit env " ")))
         (childEnv (listAppend (filter (fn [(kv String)] -> Bool (not (stringStartsWith? kv "ASL_GATE_TIMES="))) (envList)) (cons (str "ASL_GATE_TIMES=" (timesLedger!)) extra)))]

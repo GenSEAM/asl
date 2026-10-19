@@ -142,7 +142,7 @@ fn testGatewayParams -> Bool
       (refute (listEmpty? errsInvalid) "invalid params must produce errors")
       true))
 
-fn testSessionHeaderParse -> Bool
+fn ! testSessionHeaderParse -> Bool
   (let [(withHeaderText "(:gateway :v 2\n  :providers ((:provider :id custom :kind openai :base \"https://example.com\" :sessionHeader \"x-opencode-session\"))\n  :models ((:model :id m1 :provider custom :name \"m1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
         (withHeaderRes (cfg/gateway_config_parse! withHeaderText "sessionHeaderPresent" ".asl/mem/calibration/index.asn"))
         (withoutHeaderText "(:gateway :v 2\n  :providers ((:provider :id custom :kind openai :base \"https://example.com\"))\n  :models ((:model :id m1 :provider custom :name \"m1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
@@ -167,6 +167,114 @@ fn testSessionHeaderParse -> Bool
               (do
                 (assert (= pv.sessionHeader "") "OCSESSION: absent :sessionHeader stays empty")
                 true)))))))
+
+; (:m :tags (anthropic) :do "GW-ANTHROPIC-KIND: a provider with :kind anthropic parses like openai (needs :base) and gateway_v2_entry! propagates the real provider kind onto the resolved GatewayEntry instead of a hardcoded openai literal; a :kind anthropic provider missing :base is rejected the same way an openai one would be")
+fn testAnthropicKindParsesAndResolvesEntry -> Bool
+  (let [(text "(:gateway :v 2\n  :providers ((:provider :id commandCodeMsg :kind anthropic :base \"https://api.commandcode.ai/provider/v1\" :keyEnv COMMANDCODE_API_KEY))\n  :models ((:model :id ccHaiku :provider commandCodeMsg :name \"claude-haiku-5-5\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (ccHaiku)))))\n  :uses ((:use :for default :profile p1)))")
+        (res (cfg/gateway_config_parse! text "anthropicKind" ".asl/mem/calibration/index.asn"))
+        (missingBaseText "(:gateway :v 2\n  :providers ((:provider :id badAnthropic :kind anthropic))\n  :models ((:model :id m1 :provider badAnthropic :name \"m1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
+        (missingBaseRes (cfg/gateway_config_parse! missingBaseText "anthropicKindNoBase" ".asl/mem/calibration/index.asn"))]
+    (do
+      (mt res
+        ((err e) (assert false (str "ANTHROPICKIND: a well-formed :kind anthropic provider must parse: " e)))
+        ((ok tbl)
+          (mt (mapGet tbl.providers "commandCodeMsg")
+            ((none) (assert false "ANTHROPICKIND: provider commandCodeMsg missing from parsed table"))
+            ((some pv)
+              (do
+                (assert (= pv.kind "anthropic") "ANTHROPICKIND: :kind anthropic is parsed onto GatewayProvider")
+                (mt (cfg/gateway_v2_entry! tbl "ccHaiku")
+                  ((cfg/entryResolved e)
+                   (do
+                     (assert (= e.kind "anthropic") "ANTHROPICKIND: gateway_v2_entry! propagates the real provider kind, not a hardcoded openai literal")
+                     (assert (= e.upstream.url "https://api.commandcode.ai/provider/v1") "ANTHROPICKIND: the resolved entry's upstream url is the provider's :base")
+                     true))
+                  ((cfg/entryUnresolved _) (assert false "ANTHROPICKIND: ccHaiku must resolve"))))))))
+      (mt missingBaseRes
+        ((ok _) (assert false "ANTHROPICKIND: a :kind anthropic provider with no :base must be rejected, same as openai"))
+        ((err e) (assert (stringContains? e "needs :base") (str "ANTHROPICKIND: missing-base error names the requirement: " e))))
+      true))
+
+fn testGeminiKindParsesAndResolvesEntry -> Bool
+  (let [(text "(:gateway :v 2\n  :providers ((:provider :id opencodeGemini :kind gemini :base \"https://opencode.ai/inference/go/v1\" :keyEnv OPENCODE_GO_API_KEY :sessionHeader \"x-opencode-session\"))\n  :models ((:model :id gemini4Argon :provider opencodeGemini :name \"gemini-4-argon-contributor\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (gemini4Argon)))))\n  :uses ((:use :for default :profile p1)))")
+        (res (cfg/gateway_config_parse! text "geminiKind" ".asl/mem/calibration/index.asn"))
+        (missingBaseText "(:gateway :v 2\n  :providers ((:provider :id badGemini :kind gemini))\n  :models ((:model :id m1 :provider badGemini :name \"m1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
+        (missingBaseRes (cfg/gateway_config_parse! missingBaseText "geminiKindNoBase" ".asl/mem/calibration/index.asn"))]
+    (do
+      (mt res
+        ((err e) (assert false (str "GEMINIKIND: a well-formed :kind gemini provider must parse: " e)))
+        ((ok tbl)
+          (mt (mapGet tbl.providers "opencodeGemini")
+            ((none) (assert false "GEMINIKIND: provider opencodeGemini missing from parsed table"))
+            ((some pv)
+              (do
+                (assert (= pv.kind "gemini") "GEMINIKIND: :kind gemini is parsed onto GatewayProvider")
+                (mt (cfg/gateway_v2_entry! tbl "gemini4Argon")
+                  ((cfg/entryResolved e)
+                   (do
+                     (assert (= e.kind "gemini") "GEMINIKIND: gateway_v2_entry! propagates the real provider kind, not a hardcoded openai literal")
+                     (assert (= e.upstream.url "https://opencode.ai/inference/go/v1") "GEMINIKIND: the resolved entry's upstream url is the provider's :base")
+                     true))
+                  ((cfg/entryUnresolved _) (assert false "GEMINIKIND: gemini4Argon must resolve"))))))))
+      (mt missingBaseRes
+        ((ok _) (assert false "GEMINIKIND: a :kind gemini provider with no :base must be rejected, same as openai"))
+        ((err e) (assert (stringContains? e "needs :base") (str "GEMINIKIND: missing-base error names the requirement: " e))))
+      true))
+
+; (:m an optional top-level :ledgerPath overrides ul/defaultLedgerPath's home/.asl/run/gatewayCalls.asn; absent, malformed or non-string text is none, never guessed)
+fn testLedgerPathOverride -> Bool
+  (let [(withPath (cfg/gatewayLedgerPathOverride "(:gateway :v 2 :ledgerPath \"/custom/calls.asn\")"))
+        (withoutPath (cfg/gatewayLedgerPathOverride "(:gateway :v 2)"))
+        (malformed (cfg/gatewayLedgerPathOverride "not even a gateway form"))
+        (nonString (cfg/gatewayLedgerPathOverride "(:gateway :v 2 :ledgerPath 42)"))]
+    (do
+      (assert (= withPath (some "/custom/calls.asn")) "CONFPATH: a :ledgerPath string is read back exactly")
+      (assert (= withoutPath none) "CONFPATH: absent :ledgerPath is none, so the caller falls back to the default path")
+      (assert (= malformed none) "CONFPATH: unparseable text is none, never a guess")
+      (assert (= nonString none) "CONFPATH: a non-string :ledgerPath is none, not coerced")
+      true))
+
+; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "an optional top-level :sharedUsagePath, same parse shape as :ledgerPath, overriding ul/defaultSharedUsagePath's home/.asl/run/usage/gatewayCalls.asn; a scratch-HOME gateway that copies the real gateway.asn verbatim (tools/fleet/freePool.asl's writeGatewayConfig!) carries this ABSOLUTE string unchanged, so it still appends to the real, shared, non-deleted ledger -- the gate this closes")
+fn testSharedUsagePathOverride -> Bool
+  (let [(samplePath (str (optionOr (envGet "HOME") "/opt/op") "/.asl/run/usage/gatewayCalls.asn"))
+        (withPath (cfg/gatewaySharedUsagePathOverride (str "(:gateway :v 2 :sharedUsagePath \"" samplePath "\")")))
+        (withoutPath (cfg/gatewaySharedUsagePathOverride "(:gateway :v 2)"))
+        (malformed (cfg/gatewaySharedUsagePathOverride "not even a gateway form"))
+        (nonString (cfg/gatewaySharedUsagePathOverride "(:gateway :v 2 :sharedUsagePath 42)"))]
+    (do
+      (assert (= withPath (some samplePath)) "SHAREDPATH: a :sharedUsagePath string is read back exactly, unaffected by whatever HOME reads it")
+      (assert (= withoutPath none) "SHAREDPATH: absent :sharedUsagePath is none, so the caller falls back to the default home-derived path")
+      (assert (= malformed none) "SHAREDPATH: unparseable text is none, never a guess")
+      (assert (= nonString none) "SHAREDPATH: a non-string :sharedUsagePath is none, not coerced")
+      true))
+
+; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "an optional top-level :dailyTokenBudgets list of (profileId N) pairs; a profile absent from the list, or absent in a text with no such key at all, is none -- never guessed, so an operator who sets no budget keeps unlimited behaviour for that profile")
+fn testDailyTokenBudget -> Bool
+  (let [(freeBulk (cfg/gatewayDailyTokenBudget "(:gateway :v 2 :dailyTokenBudgets ((freeBulk 2000000) (commandCode 5000000)))" "freeBulk"))
+        (commandCode (cfg/gatewayDailyTokenBudget "(:gateway :v 2 :dailyTokenBudgets ((freeBulk 2000000) (commandCode 5000000)))" "commandCode"))
+        (missingProfile (cfg/gatewayDailyTokenBudget "(:gateway :v 2 :dailyTokenBudgets ((freeBulk 2000000)))" "commandCode"))
+        (noKeyAtAll (cfg/gatewayDailyTokenBudget "(:gateway :v 2)" "freeBulk"))
+        (malformed (cfg/gatewayDailyTokenBudget "not even a gateway form" "freeBulk"))]
+    (do
+      (assert (= freeBulk (some 2000000)) "DAILYBUDGET: freeBulk's own row is read back exactly")
+      (assert (= commandCode (some 5000000)) "DAILYBUDGET: a second row in the same list reads back exactly too")
+      (assert (= missingProfile none) "DAILYBUDGET: a profile absent from the list is none, never a guessed default")
+      (assert (= noKeyAtAll none) "DAILYBUDGET: a config with no :dailyTokenBudgets key at all is none")
+      (assert (= malformed none) "DAILYBUDGET: unparseable text is none, never a guess")
+      true))
+
+; (:m :ref GW-BREAKER-STALE-20261018 :do "an optional top-level :breakerCooldownSec int, same parse shape as :ledgerPath; absent, malformed or non-int text is none, so a config that never sets this keeps the 600s hardcoded default -- this is the knob GW-BREAKER-STALE-20261018 found missing when a fixed 600s cooldown outlasted a whole 45-cell sweep")
+fn testBreakerCooldownSecOverride -> Bool
+  (let [(withSec (cfg/gatewayBreakerCooldownSecOverride "(:gateway :v 2 :breakerCooldownSec 30)"))
+        (withoutSec (cfg/gatewayBreakerCooldownSecOverride "(:gateway :v 2)"))
+        (malformed (cfg/gatewayBreakerCooldownSecOverride "not even a gateway form"))
+        (nonInt (cfg/gatewayBreakerCooldownSecOverride "(:gateway :v 2 :breakerCooldownSec \"thirty\")"))]
+    (do
+      (assert (= withSec (some 30)) "COOLDOWNCFG: a :breakerCooldownSec int is read back exactly")
+      (assert (= withoutSec none) "COOLDOWNCFG: absent :breakerCooldownSec is none, so the caller falls back to the 600s default")
+      (assert (= malformed none) "COOLDOWNCFG: unparseable text is none, never a guess")
+      (assert (= nonInt none) "COOLDOWNCFG: a non-int :breakerCooldownSec is none, not coerced")
+      true))
 
 fn testRoutingAndEntries! tbl: cfg/GatewayTable -> Bool
   (let [(lineDesign (cfg/gateway_intent_line tbl "design"))
@@ -229,7 +337,7 @@ fn testProfilesV1Parse -> Bool
           (assert (mapHas? v1Cfg.profiles "defProfile") "v1 profiles map has defProfile")
           true))))
 
-fn testModelApiParse -> Bool
+fn ! testModelApiParse -> Bool
   (let [(okText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-m\" :api \"responses\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
         (badText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-m\" :api \"bogus\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
         (okRes (cfg/gateway_config_parse! okText "apiOk" ".asl/mem/calibration/index.asn"))
@@ -247,6 +355,113 @@ fn testModelApiParse -> Bool
       (mt badRes
         ((ok _) (do (assert false "RESPAPI: :api bogus must be rejected") false))
         ((err e) (do (assert (stringContains? (stringLower e) ":api") (str "RESPAPI: bogus :api error names :api: " e)) true)))))
+
+; (:m :do "GW-HARDCODED-CASCADES-20261017 gate: a role cascade is a config row, not a built-in model list, so editing only the :chain in the gateway config text -- no source change, no rebuild -- changes which model a role resolves to first")
+fn ! testRoleCascadeIsConfigOnly -> Bool
+  (let [(textA "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\") (:model :id m2 :provider test :name \"model-b\"))\n  :intents ((:intent :id coder))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)) (:intent coder :chain (m1 m2) :temperature 0.0))))\n  :uses ((:use :for default :profile p1)))")
+        (textB "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\") (:model :id m2 :provider test :name \"model-b\"))\n  :intents ((:intent :id coder))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)) (:intent coder :chain (m2 m1) :temperature 0.0))))\n  :uses ((:use :for default :profile p1)))")
+        (resA (cfg/gateway_config_parse! textA "cascadeA" ".asl/mem/calibration/index.asn"))
+        (resB (cfg/gateway_config_parse! textB "cascadeB" ".asl/mem/calibration/index.asn"))]
+    (mt resA
+      ((err e) (do (assert false (str "role-cascade-is-config fixture A failed to parse: " e)) false))
+      ((ok tblA)
+        (mt resB
+          ((err e) (do (assert false (str "role-cascade-is-config fixture B failed to parse: " e)) false))
+          ((ok tblB)
+            (mt (cfg/gatewayRouteEntriesExact! tblA (list) (none) "coder")
+              ((err e) (do (assert false (str "role-cascade-is-config: route A failed: " e)) false))
+              ((ok reA)
+                (mt (cfg/gatewayRouteEntriesExact! tblB (list) (none) "coder")
+                  ((err e) (do (assert false (str "role-cascade-is-config: route B failed: " e)) false))
+                  ((ok reB)
+                    (let [(firstLabel (fn [(re cfg/RouteEntries)] -> String
+                                        (mt (listHead re.entries) ((some e) (cfg/gateway_entry_label e)) ((none) ""))))
+                          (labA (firstLabel reA))
+                          (labB (firstLabel reB))]
+                      (do
+                        (assert (= labA "m1") (str "role-cascade-is-config: config A's :chain (m1 m2) resolves coder to m1 first, got " labA))
+                        (assert (= labB "m2") (str "role-cascade-is-config: config B's :chain (m2 m1) resolves coder to m2 first, got " labB))
+                        (refute (= labA labB) "role-cascade-is-config: a config-only cascade edit must change which model is chosen first")
+                        true)))))))))))
+
+fn routeNamed routes: (List cfg/GatewayRoute) intent: String -> (Option cfg/GatewayRoute)
+  (listHead (filter (fn [(r cfg/GatewayRoute)] -> Bool (= r.intent intent)) routes))
+
+fn routeOfProfile tbl: cfg/GatewayTable pid: String intent: String -> (Option cfg/GatewayRoute)
+  (mt (mapGet tbl.profiles pid)
+    ((none) none)
+    ((some pr) (routeNamed pr.routes intent)))
+
+; (:m :do "GW-SPREAD-20261017 parse+validate gate: a route's :spread ((ALIAS WEIGHT) ...) sits beside :chain, read back as (alias weight) pairs in file order; :cooldownSec defaults to 60 and is overridable; a zero or negative weight, an alias unknown to :models, and a non-positive :cooldownSec are each a parse error naming the offender, never silently dropped or defaulted past")
+fn ! testSpreadParsesWeightsAndValidates -> Bool
+  (let [(okText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\") (:model :id m2 :provider test :name \"model-b\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1 m2) :spread ((m1 3) (m2 1))))))\n  :uses ((:use :for default :profile p1)))")
+        (cooldownText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1) :spread ((m1 1)) :cooldownSec 30))))\n  :uses ((:use :for default :profile p1)))")
+        (zeroWeightText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1) :spread ((m1 0))))))\n  :uses ((:use :for default :profile p1)))")
+        (negWeightText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1) :spread ((m1 -2))))))\n  :uses ((:use :for default :profile p1)))")
+        (unknownAliasText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1) :spread ((ghost 1))))))\n  :uses ((:use :for default :profile p1)))")
+        (badCooldownText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1) :spread ((m1 1)) :cooldownSec 0))))\n  :uses ((:use :for default :profile p1)))")
+        (okRes (cfg/gateway_config_parse! okText "spreadOk" ".asl/mem/calibration/index.asn"))
+        (cooldownRes (cfg/gateway_config_parse! cooldownText "spreadCooldown" ".asl/mem/calibration/index.asn"))
+        (zeroRes (cfg/gateway_config_parse! zeroWeightText "spreadZero" ".asl/mem/calibration/index.asn"))
+        (negRes (cfg/gateway_config_parse! negWeightText "spreadNeg" ".asl/mem/calibration/index.asn"))
+        (unknownRes (cfg/gateway_config_parse! unknownAliasText "spreadUnknown" ".asl/mem/calibration/index.asn"))
+        (badCooldownRes (cfg/gateway_config_parse! badCooldownText "spreadBadCooldown" ".asl/mem/calibration/index.asn"))]
+    (mt okRes
+      ((err e) (do (assert false (str "SPREAD: a valid :spread must parse: " e)) false))
+      ((ok tbl)
+        (mt (routeOfProfile tbl "p1" "any")
+          ((none) (do (assert false "SPREAD: the any route must exist") false))
+          ((some route)
+            (do
+              (assert (= route.spread (list (pair "m1" 3) (pair "m2" 1))) (str "SPREAD: spread pairs read back in file order with their weights, got " route.spread))
+              (assert (= route.cooldownSec 60) (str "SPREAD: cooldownSec defaults to 60 when absent, got " route.cooldownSec))
+              (mt cooldownRes
+                ((err e) (do (assert false (str "SPREAD: a valid :cooldownSec override must parse: " e)) false))
+                ((ok tbl2)
+                  (mt (routeOfProfile tbl2 "p1" "any")
+                    ((none) (do (assert false "SPREAD: the any route must exist in the cooldown fixture") false))
+                    ((some route2)
+                      (do
+                        (assert (= route2.cooldownSec 30) (str "SPREAD: an explicit :cooldownSec overrides the 60 default, got " route2.cooldownSec))
+                        (assert (err? zeroRes) "SPREAD: a zero weight must be a parse error, never silently dropped")
+                        (assert (mt zeroRes ((err e) (stringContains? e "m1")) ((ok _) false)) "SPREAD: the zero-weight error names the offending alias")
+                        (assert (err? negRes) "SPREAD: a negative weight must be a parse error")
+                        (assert (err? unknownRes) "SPREAD: an alias absent from :models must be a parse error")
+                        (assert (mt unknownRes ((err e) (stringContains? e "ghost")) ((ok _) false)) "SPREAD: the unknown-alias error names the offending alias")
+                        (assert (err? badCooldownRes) "SPREAD: a non-positive :cooldownSec must be a parse error")
+                        true)))))))))))
+
+; (:m :ref GW-SPREAD-LIVE-20261018 :do "RouteEntries carries the matched route's :spread/:cooldownSec through gatewayRouteEntries!/gatewayRouteEntriesExact!, the same way it already carries :temperature -- cascadeChosen has nothing else to read these from")
+fn ! testRouteEntriesCarriesSpread -> Bool
+  (let [(okText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\") (:model :id m2 :provider test :name \"model-b\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1 m2) :spread ((m1 3) (m2 1)) :cooldownSec 45))))\n  :uses ((:use :for default :profile p1)))")
+        (plainText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
+        (okRes (cfg/gateway_config_parse! okText "spreadEntriesOk" ".asl/mem/calibration/index.asn"))
+        (plainRes (cfg/gateway_config_parse! plainText "spreadEntriesPlain" ".asl/mem/calibration/index.asn"))]
+    (mt okRes
+      ((err e) (do (assert false (str "SPREADLIVE: a valid config must parse: " e)) false))
+      ((ok tbl)
+        (mt (cfg/gatewayRouteEntries! tbl (list) (none) "any")
+          ((err e) (do (assert false (str "SPREADLIVE: gatewayRouteEntries! must resolve the default profile: " e)) false))
+          ((ok re)
+            (do
+              (assert (= re.spread (list (pair "m1" 3) (pair "m2" 1))) (str "SPREADLIVE: gatewayRouteEntries! must carry the route's :spread, got " re.spread))
+              (assert (= re.cooldownSec 45) (str "SPREADLIVE: gatewayRouteEntries! must carry the route's :cooldownSec, got " re.cooldownSec))
+              (mt (cfg/gatewayRouteEntriesExact! tbl (list) (none) "any")
+                ((err e) (do (assert false (str "SPREADLIVE: gatewayRouteEntriesExact! must resolve the default profile: " e)) false))
+                ((ok reExact)
+                  (do
+                    (assert (= reExact.spread (list (pair "m1" 3) (pair "m2" 1))) (str "SPREADLIVE: gatewayRouteEntriesExact! must carry the route's :spread too, got " reExact.spread))
+                    (assert (= reExact.cooldownSec 45) (str "SPREADLIVE: gatewayRouteEntriesExact! must carry the route's :cooldownSec too, got " reExact.cooldownSec))
+                    (mt plainRes
+                      ((err e) (do (assert false (str "SPREADLIVE: a plain no-spread config must parse: " e)) false))
+                      ((ok tbl2)
+                        (mt (cfg/gatewayRouteEntries! tbl2 (list) (none) "any")
+                          ((err e) (do (assert false (str "SPREADLIVE: gatewayRouteEntries! must resolve the plain profile: " e)) false))
+                          ((ok rePlain)
+                            (do
+                              (assert (listEmpty? rePlain.spread) (str "SPREADLIVE: a route without :spread carries the empty-list default, got " rePlain.spread))
+                              (assert (= rePlain.cooldownSec 60) (str "SPREADLIVE: a route without :cooldownSec carries the 60 default, got " rePlain.cooldownSec))
+                              true))))))))))))))
 
 fn ! runTests -> Bool
   (let [(contentRes (fileReadString "asl/packages/asl-gateway/tests/configFixture.asn"))]
@@ -279,5 +494,14 @@ fn ! runTests -> Bool
                                   ((ok tbl) (assert (testRoutingAndEntries! tbl) "Routing, entries, and labels tested"))))
                               (assert (testProfilesV1Parse) "Profiles v1 parsing tested")
                               (assert (testModelApiParse) "RESPAPI: model :api parsing tested")
+                              (assert (testLedgerPathOverride) "CONFPATH: top-level :ledgerPath override tested")
+                              (assert (testSharedUsagePathOverride) "SHAREDPATH: top-level :sharedUsagePath override tested")
+                              (assert (testDailyTokenBudget) "DAILYBUDGET: top-level :dailyTokenBudgets override tested")
+                              (assert (testBreakerCooldownSecOverride) "COOLDOWNCFG: top-level :breakerCooldownSec override tested")
+                              (assert (testAnthropicKindParsesAndResolvesEntry) "ANTHROPICKIND: :kind anthropic provider parsing and entry resolution tested")
+                              (assert (testGeminiKindParsesAndResolvesEntry) "GEMINIKIND: :kind gemini provider parsing and entry resolution tested")
+                              (assert (testRoleCascadeIsConfigOnly) "GW-HARDCODED-CASCADES-20261017: a config-only role cascade edit changes the chosen model")
+                              (assert (testSpreadParsesWeightsAndValidates) "GW-SPREAD-20261017: :spread parses with :chain, validates weights and aliases, cooldownSec defaults and overrides")
+                              (assert (testRouteEntriesCarriesSpread) "GW-SPREAD-LIVE-20261018: gatewayRouteEntries!/gatewayRouteEntriesExact! carry the matched route's :spread/:cooldownSec, defaulting to empty/60 for a route without one")
                               true))
                           (_ (do (assert false "variants is not a list") false))))))))))))))

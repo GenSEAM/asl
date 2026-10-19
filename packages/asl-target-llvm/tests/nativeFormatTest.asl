@@ -1,9 +1,13 @@
 (module asl-target-llvm/tests/nativeFormatTest
   :x [runTests]
-  :i [])
+  :i [(asl-cli/asl1Cache :a cache) (asl-cli/system :a sys)])
 
-fn host -> String
-  "asl/host/out/asl-host"
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): the asl1-build-via-host calls now use the cached native asl1 compiler (asl-cli/asl1Cache nativeAsl1!), same as deepStackTest. Both fixtures are fixed and deterministic; deep.asl's recorded host output is a short literal, but format.asl prints one line per iteration of a 100000-step float round-trip corpus (2.3MB of stdout), too large to inline as a source literal, so it is a one-time capture in golden/nativeFormatHost.{stdout,stderr}, read back at test time. Both captured via the leftover host binary at ~/projects/asex/asl/host/out/asl-host, read-only, outside this worktree")
+
+(schema Recorded
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
 
 fn clang -> String
   "/usr/bin/clang -Wno-override-module"
@@ -13,6 +17,24 @@ fn runtimeLib -> String
 
 fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)
+
+fn ! nativeAsl1Bin! -> (Result String String)
+  (mt (sys/context!)
+    ((err e) (err e))
+    ((ok ctx) (cache/nativeAsl1! ctx (str ctx.root "/asl/host/out/libaslrt.a") "/usr/bin/clang")))
+
+fn ! buildWithNativeAsl1! label: String src: String ll: String -> Recorded
+  (mt (nativeAsl1Bin!)
+    ((err e) (Recorded :exitCode 1 :stdout "" :stderr (str label ": native asl1 compiler: " e)))
+    ((ok nativeAsl1) (let [(r (sh (str nativeAsl1 " build " src " -o " ll)))] (Recorded :exitCode r.exitCode :stdout r.stdout :stderr r.stderr))))
+
+fn ! recordedFormatInterp -> Recorded
+  (Recorded :exitCode 0
+    :stdout (resultOr (fileReadString "asl/packages/asl-target-llvm/tests/golden/nativeFormatHost.stdout") "")
+    :stderr (resultOr (fileReadString "asl/packages/asl-target-llvm/tests/golden/nativeFormatHost.stderr") ""))
+
+fn recordedDeepInterp -> Recorded
+  (Recorded :exitCode 1 :stdout "70006\n" :stderr "ERR_DEPTH: printing a value nested deeper than 10000")
 
 fn ! runTests -> Bool
   (let [(made (sh "mktemp -d"))
@@ -77,7 +99,7 @@ fn ! runTests -> Bool
           "      (show (stringify 17))"
           "      (ok 0)))") "\n")))
         "nativeFormat: writes source")
-      (let [(built (sh (str (host) " run asl/packages/asl-compiler/src/asl1.asl build " src " -o " ll)))]
+      (let [(built (buildWithNativeAsl1! "nativeFormat" src ll))]
         (do
           (assert (= built.exitCode 0) (str "nativeFormat: asl1 emits IR; stderr " built.stderr))
           (let [(ir (mt (fileReadString ll) ((ok t) t) ((err _) "")))]
@@ -94,14 +116,14 @@ fn ! runTests -> Bool
               (assert (stringContains? (formatFloatLoop ir) "call double @strtod") "nativeFormat: IR has the float formatter retry loop")
               (refute (stringContains? (formatFloatLoop ir) "alloca") "nativeFormat: float formatter retry loop allocates no stack slot")))))
       (let [(linked (sh (str (clang) " -x ir " ll " -x none " (runtimeLib) " -lm -o " nativePath)))
-            (hosted (sh (str (host) " run " src)))]
+            (hosted (recordedFormatInterp))]
         (do
           (assert (= linked.exitCode 0) (str "nativeFormat: clang links generated formatter IR; stderr " linked.stderr))
           (let [(native (sh nativePath))]
             (do
-              (assert (= native.exitCode hosted.exitCode) (str "nativeFormat: exit equals asl-host; native " native.exitCode " host " hosted.exitCode))
-              (assert (= native.stdout hosted.stdout) (str "nativeFormat: stdout equals asl-host; got " native.stdout " host " hosted.stdout))
-              (assert (= native.stderr hosted.stderr) (str "nativeFormat: stderr equals asl-host; got " native.stderr " host " hosted.stderr))
+              (assert (= native.exitCode hosted.exitCode) (str "nativeFormat: exit equals the recorded asl-host output; native " native.exitCode " host " hosted.exitCode))
+              (assert (= native.stdout hosted.stdout) (str "nativeFormat: stdout equals the recorded asl-host output; got " native.stdout " host " hosted.stdout))
+              (assert (= native.stderr hosted.stderr) (str "nativeFormat: stderr equals the recorded asl-host output; got " native.stderr " host " hosted.stderr))
               (assert (and (stringContains? hosted.stdout "(\"q\\\"\" \"b\\\\\" \"n\\n\" \"t\\t\" \"c")
                            (stringContains? hosted.stdout "{:x 1 :y \"r\\\"\\\\\\n\\t\"}(labelled \"l\\\"\\\\\\n\\t\")"))
                       "nativeFormat: strings nested in a list, record and variant print escaped"))))
@@ -146,15 +168,15 @@ fn ! testDepth work: String -> Bool
           "    (println (str (build 10001 (leaf))))"
           "    (ok 0))") "\n")))
         "nativeDepth: writes source")
-      (let [(built (sh (str (host) " run asl/packages/asl-compiler/src/asl1.asl build " src " -o " ll)))
+      (let [(built (buildWithNativeAsl1! "nativeDepth" src ll))
             (linked (sh (str (clang) " -x ir " ll " -x none " (runtimeLib) " -lm -o " nativePath)))
-            (hosted (sh (str (host) " run " src)))
+            (hosted (recordedDeepInterp))
             (native (sh nativePath))
             (message "ERR_DEPTH: printing a value nested deeper than 10000")]
         (do
           (assert (and (= built.exitCode 0) (= linked.exitCode 0)) (str "nativeDepth: builds and links; stderr " built.stderr linked.stderr))
-          (assert (= hosted.stdout "70006\n") (str "nativeDepth: asl-host formats the 10000-deep value; got " hosted.stdout))
-          (assert (= native.stdout hosted.stdout) (str "nativeDepth: stdout equals asl-host; got " native.stdout))
+          (assert (= hosted.stdout "70006\n") (str "nativeDepth: recorded asl-host output formats the 10000-deep value; got " hosted.stdout))
+          (assert (= native.stdout hosted.stdout) (str "nativeDepth: stdout equals the recorded asl-host output; got " native.stdout))
           (assert (and (= hosted.exitCode 1) (= native.exitCode 1)) (str "nativeDepth: both exit 1; native " native.exitCode " host " hosted.exitCode))
           (assert (and (stringContains? hosted.stderr message) (stringContains? native.stderr message))
                   (str "nativeDepth: both report ERR_DEPTH; native " native.stderr " host " hosted.stderr)))

@@ -255,8 +255,9 @@ fn trimLeft s: String -> String
 fn stripTrailingNewlines s: String -> String
   (if (stringEndsWith? s "\n") (stripTrailingNewlines (optionOr (stringSlice s 0 (- (stringLength s) 1)) "")) s)
 
+; (:m :ref HL-FIXWAVE :do "the former message named asl/host/build.sh as how to build the stage-0 host; HL-DELETE rewrote build.sh to build only libaslrt.a (the native runtime), never a host, so that instruction was a lie for every caller of this shared formatter (command.asl, native.asl, pack.asl, nativeCli.asl): there is no longer any way to build asl-host, so the message says so instead of pointing at a build step that cannot produce it")
 fn hostAbsent cmd: String -> String
-  (str "(:" cmd " :status :failed :error ERR_HOST_ABSENT :message \"asl " cmd " needs the stage-0 host at asl/host/out/asl-host; build it with sh asl/host/build.sh or set ASL_HOST\")")
+  (str "(:" cmd " :status :failed :error ERR_HOST_ABSENT :message \"asl " cmd " has no native implementation yet, and the stage-0 host it used to run on was permanently retired by HL-DELETE (asl/host/src no longer exists, so it cannot be built)\")")
 
 fn parentOf path: String -> String
   (let [(parts (stringSplit path "/"))]

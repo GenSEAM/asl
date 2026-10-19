@@ -1,6 +1,6 @@
 (module asl-cli/native
   :x [main]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/command :a cmd) (tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (tools/fleet/run :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/command :a cmd) (tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
 
 fn rest args: (List String) -> (List String)
   (optionOr (listTail args) (list))
@@ -20,11 +20,56 @@ fn ! nativeTest! args: (List String) -> Int64
     ((ok code) code)
     ((err e) (do (sys/sayErr! (str "asl: nativeTest: " e)) 1)))
 
+; (:m :ref NATIVETEST-HOSTLESS :do "bin/asl run tools/nativeTest.asl runs the nativeTest this CLI is built from in place (bin/asl rebuilds the CLI when that source moves): no per-process compile of its ~60-module closure, and nothing of it in the suite cache")
+fn ! nativeTool! args: (List String) -> Int64
+  (mt (nt/main args)
+    ((ok code) code)
+    ((err e) (do (sys/sayErr! (str "asl: nativeTest: " e)) 1)))
+
+fn ! outsideStageDir ctx: sys/Context -> String
+  (str ctx.root "/.asl/cache/nativeTest/outside")
+
+fn ! outsideRelPath digest: String -> String
+  (str ".asl/cache/nativeTest/outside/" digest ".asl")
+
+fn ! ensureDir! dir: String -> (Result Unit String)
+  (if (sys/isDir? dir) (ok ()) (dirCreate dir))
+
+fn ! stageOutside! ctx: sys/Context absFile: String -> (Result String String)
+  (mt (fileReadString absFile)
+    ((err e) (err (str "cannot read " absFile ": " e)))
+    ((ok src)
+      (let [(digest (bytesSha256 (stringToBytes src)))
+            (rel (outsideRelPath digest))
+            (dest (str ctx.root "/" rel))]
+        (mt (ensureDir! (outsideStageDir ctx))
+          ((err e2) (err (str "cannot create " (outsideStageDir ctx) ": " e2)))
+          ((ok _)
+            (if (sys/isFile? dest)
+              (ok rel)
+              (mt (fileWrite dest src)
+                ((err e3) (err (str "cannot write " dest ": " e3)))
+                ((ok _) (ok rel)))))))))
+
+fn ! runOutside! ctx: sys/Context file: String absFile: String args: (List String) -> Int64
+  (if (not (sys/isFile? absFile))
+    (do (sys/sayErr! (str "(:run :status :failed :error ERR_NO_FILE :message \"file not found: " file "\")")) 1)
+    (mt (stageOutside! ctx absFile)
+      ((err e) (do (sys/sayErr! (str "(:run :status :failed :error ERR_BUILD :message \"cannot stage " file ": " e "\")")) 1))
+      ((ok rel)
+        (do (eprintln (str "NATIVE-BYPASS " file " :reason absolute-path-outside-workspace :staged " rel))
+            (nativeTest! (cons "run" (cons rel (rest args))))))))
+
+; (:m :ref OUT-OF-ROOT-USERPATH :do "an in-root file is run as absFile, not (rooted ctx absFile): nativeTest.asl's runFile now reads the path it is given against the caller's actual cwd (OUT-OF-ROOT-USERPATH), so a root-stripped name only resolves when cwd already equals root; absFile is cwd-independent and runFile derives its own logical/import name by stripping toolRoot internally")
 fn ! run! ctx: sys/Context args: (List String) -> Int64
-  (let [(file (first args))]
-    (if (or (or (listEmpty? args) (or (= file "--help") (= file "-h"))) (or (not (atRoot? ctx)) (and (stringStartsWith? file "/") (not (stringStartsWith? file (str ctx.root "/"))))))
-      (cmd/dispatch! ctx "run" args)
-      (nativeTest! (cons "run" (cons (rooted ctx file) (rest args))))))
+  (let [(file (first args))
+        (absFile (resultOr (realPath file) file))
+        (inRoot (stringStartsWith? absFile (str ctx.root "/")))]
+    (cond
+      ((or (listEmpty? args) (or (= file "--help") (= file "-h"))) (cmd/dispatch! ctx "run" args))
+      ((not inRoot) (runOutside! ctx file absFile args))
+      ((= (rooted ctx absFile) "tools/nativeTest.asl") (nativeTool! (rest args)))
+      (else (nativeTest! (cons "run" (cons absFile (rest args)))))))
 
 fn ! eprintText text: String -> Unit
   (if (stringEmpty? text) () (do (eprintln (if (stringEndsWith? text "\n") (optionOr (stringSlice text 0 (- (stringLength text) 1)) text) text)) ()))
@@ -44,23 +89,35 @@ fn ! gapNote path: String reason: String -> Unit
 
 fn ! hostSuite! ctx: sys/Context path: String reason: String -> Int64
   (if (not (sys/executable? ctx.hostBin))
-    (do (eprintln (str "FAIL " path ": ERR_NATIVE_UNSUPPORTED: " reason " (after 0 asserts)")) 1)
+    (do (eprintln (nt/failLine path reason)) 1)
     (let [(_ (gapNote path reason))
           (errFile (str "/tmp/aslNativeHost" (stringFromInt64 (procSelf)) ".err"))
           (timeoutS (resultOr (sw/timeoutWanted!) 1800))
           (d (run/runOneLimited (hostJob ctx "." path errFile) (run/limits timeoutS 64)))
-          (errText (resultOr (fileRead errFile) ""))
+          (errText (resultOr (fileReadString errFile) ""))
           (_ (pathRemove errFile))]
       (do (print d.out)
           (eprintText errText)
           (if (= d.verdict "exit") d.exit (do (eprintln (str "FAIL " path ": asl-host " d.verdict " after " (stringFromInt64 timeoutS) "s (after 0 asserts)")) 124)))))
 
+fn ! suiteRelPath! ctx: sys/Context path: String -> (Result String String)
+  (let [(absPath (resultOr (realPath path) path))]
+    (if (stringStartsWith? absPath (str ctx.root "/"))
+      (ok (rooted ctx absPath))
+      (stageOutside! ctx absPath)))
+
 fn ! suite! ctx: sys/Context fp: String path: String -> Int64
-  (let [(built (nt/prepare (rooted ctx path) fp))]
+  (mt (suiteRelPath! ctx path)
+    ((err e) (do (eprintln (str "FAIL " path ": ERR_BUILD cannot stage " path ": " e " (after 0 asserts)")) 1))
+    ((ok rel) (suiteBuilt! ctx fp path rel)))
+
+; (:m :ref OUT-OF-ROOT-USERPATH :do "rel is always root-relative (rooted for an in-root file, stageOutside!'s rel for a staged one); nt/prepare would read it bare against the actual cwd (OUT-OF-ROOT-USERPATH), wrong whenever test! skipped reexecTestAtRoot! (anyOutOfRoot?) and cwd never became ctx.root, so prepareSourceIn reads the absolute ctx.root-anchored path while keeping rel as the logical/import name")
+fn ! suiteBuilt! ctx: sys/Context fp: String path: String rel: String -> Int64
+  (let [(built (nt/prepareTestSource (str ctx.root "/" rel) rel fp))]
     (mt built.binary
       ((some bin)
-        (let [(out (nt/runProc (list "nice" "-n" "15" bin) (some (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx))))))
-              (v (nt/verdictOf path out.exitCode out.stderr))]
+        (let [(out (nt/runProc (list "nice" "-n" "15" bin) (some (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff))))))
+              (v (nt/judgeInit! bin path (preludeOverride ctx) (nt/verdictOf path out.exitCode out.stderr)))]
           (do (print out.stdout)
               (eprintText v.stderr)
               (if (= v.exit 0) (println v.line) (eprintln v.line))
@@ -79,12 +136,31 @@ fn ! absolute path: String -> String
 
 fn ! sweepJob ctx: sys/Context ws: String tmp: String i: Int64 bin: String -> run/Job
   (run/job (list "/bin/sh" "-c" "exec \"$0\" 2>\"$NATIVE_SWEEP_ERR\"" bin) ws
-           (run/childEnv (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (str "NATIVE_SWEEP_ERR=" tmp "/" (stringFromInt64 i) ".err"))))
+           (run/childEnv (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff) (str "NATIVE_SWEEP_ERR=" tmp "/" (stringFromInt64 i) ".err"))))
+
+fn ! initProbeJob ctx: sys/Context ws: String tmp: String i: Int64 bin: String -> run/Job
+  (run/job (list "/bin/sh" "-c" "exec \"$0\" 2>\"$NATIVE_SWEEP_ERR\"" bin) ws
+           (run/childEnv (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOn) (str "NATIVE_SWEEP_ERR=" tmp "/" (stringFromInt64 i) ".init.err"))))
+
+fn ! initProbed tmp: String timeoutS: Int64 done: sw/Done d: run/Done -> sw/Done
+  (if (!= d.verdict "exit")
+    (sw/Done :index done.index :path done.path :code 124 :last (str "module-initialization probe timed out after " (stringFromInt64 timeoutS) "s") :out done.out)
+    (mt (nt/initVerdict done.path d.exit (resultOr (fileReadString (str tmp "/" (stringFromInt64 done.index) ".init.err")) ""))
+      ((none) done)
+      ((some v) (sw/Done :index done.index :path done.path :code v.exit :last v.line :out ""))))
+
+fn ! sweepInitProbes! ctx: sys/Context ws: String tmp: String timeoutS: Int64 k: Int64 pairs: (List (Pair sw/Done String)) -> (List sw/Done)
+  (let [(passed (filter (fn [(p (Pair sw/Done String))] -> Bool (= (pairFirst p).code 0)) pairs))
+        (failed (filter (fn [(p (Pair sw/Done String))] -> Bool (!= (pairFirst p).code 0)) pairs))
+        (jobs (map (fn [(p (Pair sw/Done String))] -> run/Job (initProbeJob ctx ws tmp (pairFirst p).index (pairSecond p))) passed))
+        (ran (run/runPoolLimited jobs k (run/limits timeoutS 64)))]
+    (listAppend (map (fn [(p (Pair (Pair sw/Done String) run/Done))] -> sw/Done (initProbed tmp timeoutS (pairFirst (pairFirst p)) (pairSecond p))) (zip passed ran))
+                (map (fn [(p (Pair sw/Done String))] -> sw/Done (pairFirst p)) failed)))
 
 fn ! sweepVerdict tmp: String timeoutS: Int64 i: Int64 path: String d: run/Done -> sw/Done
   (if (!= d.verdict "exit")
     (sw/Done :index i :path path :code 124 :last (str "timed out after " (stringFromInt64 timeoutS) "s") :out "")
-    (let [(v (nt/verdictOf path d.exit (resultOr (fileRead (str tmp "/" (stringFromInt64 i) ".err")) "")))
+    (let [(v (nt/verdictOf path d.exit (resultOr (fileReadString (str tmp "/" (stringFromInt64 i) ".err")) "")))
           (out (if (= v.exit 0) (str d.out v.line "\n") d.out))
           (errText (if (= v.exit 0) v.stderr (str v.stderr "\n" v.line)))]
       (sw/Done :index i :path path :code v.exit :last (sw/lastLine (str out "\n" errText)) :out out)))
@@ -99,9 +175,11 @@ fn ! sweepDone! ctx: sys/Context ws: String timeoutS: Int64 k: Int64 files: (Lis
         (unbuilt (filter (fn [(b (Pair (Pair Int64 String) nt/Built))] -> Bool (none? (pairSecond b).binary)) built))
         (jobs (map (fn [(b (Pair (Pair Int64 String) nt/Built))] -> run/Job (sweepJob ctx ws tmp (pairFirst (pairFirst b)) (absolute (optionOr (pairSecond b).binary "")))) runnable))
         (ran (if (ok? made) (run/runPoolLimited jobs k (run/limits timeoutS 64)) (list)))
-        (fromRuns (map (fn [(p (Pair (Pair (Pair Int64 String) nt/Built) run/Done))] -> sw/Done
-                         (sweepVerdict tmp timeoutS (pairFirst (pairFirst (pairFirst p))) (pairSecond (pairFirst (pairFirst p))) (pairSecond p)))
-                       (zip runnable ran)))
+        (judged (map (fn [(p (Pair (Pair (Pair Int64 String) nt/Built) run/Done))] -> (Pair sw/Done String)
+                       (pair (sweepVerdict tmp timeoutS (pairFirst (pairFirst (pairFirst p))) (pairSecond (pairFirst (pairFirst p))) (pairSecond p))
+                             (absolute (optionOr (pairSecond (pairFirst p)).binary ""))))
+                     (zip runnable ran)))
+        (fromRuns (sweepInitProbes! ctx ws tmp timeoutS k judged))
         (fromBuilds (hostSweep! ctx ws tmp timeoutS k unbuilt))
         (lost (map (fn [(b (Pair (Pair Int64 String) nt/Built))] -> sw/Done
                      (sw/Done :index (pairFirst (pairFirst b)) :path (pairSecond (pairFirst b)) :code 127 :last (str "cannot create " tmp) :out ""))
@@ -117,7 +195,7 @@ fn ! hostSweep! ctx: sys/Context ws: String tmp: String timeoutS: Int64 k: Int64
     (if (not hosted)
       (map (fn [(b (Pair (Pair Int64 String) nt/Built))] -> sw/Done
              (sw/Done :index (pairFirst (pairFirst b)) :path (pairSecond (pairFirst b)) :code 1
-                      :last (str "FAIL " (pairSecond (pairFirst b)) ": ERR_NATIVE_UNSUPPORTED: " (pairSecond b).reason " (after 0 asserts)") :out ""))
+                      :last (nt/failLine (pairSecond (pairFirst b)) (pairSecond b).reason) :out ""))
            unbuilt)
       (map (fn [(p (Pair (Pair (Pair Int64 String) nt/Built) run/Done))] -> sw/Done
              (let [(i (pairFirst (pairFirst (pairFirst p))))
@@ -125,7 +203,7 @@ fn ! hostSweep! ctx: sys/Context ws: String tmp: String timeoutS: Int64 k: Int64
                    (d (pairSecond p))]
                (if (!= d.verdict "exit")
                  (sw/Done :index i :path path :code 124 :last (str "timed out after " (stringFromInt64 timeoutS) "s") :out "")
-                 (sw/Done :index i :path path :code d.exit :last (sw/lastLine (str d.out "\n" (resultOr (fileRead (errOf i)) ""))) :out d.out))))
+                 (sw/Done :index i :path path :code d.exit :last (sw/lastLine (str d.out "\n" (resultOr (fileReadString (errOf i)) ""))) :out d.out))))
            (zip unbuilt ran))))
 
 fn ! sweepFailed! verb: String e: String -> Int64
@@ -174,11 +252,28 @@ fn ! check! ctx: sys/Context args: (List String) -> Int64
     (cmd/dispatch! ctx "check" args)
     (mt (sw/nativeCheckSweep!) ((ok code) code) ((err e) (do (sys/sayErr! e) 1))))
 
+fn ! rootRelativeArg ctx: sys/Context a: String -> String
+  (rooted ctx (resultOr (realPath a) a))
+
+fn ! reexecTestAtRoot! ctx: sys/Context args: (List String) -> Int64
+  (sys/execv! (listAppend (list "/bin/sh" "-c" "cd -- \"$0\" && exec \"$@\"" ctx.root (str ctx.root "/bin/asl") "test")
+                          (map (fn [(a String)] -> String (rootRelativeArg ctx a)) args))
+              (list))
+
+fn ! outOfRoot? ctx: sys/Context a: String -> Bool
+  (not (stringStartsWith? (resultOr (realPath a) a) (str ctx.root "/")))
+
+; (:m :ref OUT-OF-ROOT-USERPATH :do "reexecTestAtRoot! exists so a plain-file arg given relative to a toolchain SUBdirectory still resolves (cd to root, then make the arg root-relative); an already-absolute, genuinely out-of-root arg (a /tmp fixture repo, fleetCompareTest's base/head) gains nothing from that cd and loses everything from it, since the fixture's own relative data-file reads (at runtime, inside the compiled suite) stay anchored to whatever cwd the reexec left behind, not the fixture's own root; skip the reexec for those and let the normal else-branch pipeline (suites!, whose suiteRelPath! already stages a genuinely out-of-root path) run with cwd untouched")
+fn ! anyOutOfRoot? ctx: sys/Context args: (List String) -> Bool
+  (listAny? (fn [(a String)] -> Bool (outOfRoot? ctx a)) (filter (fn [(a String)] -> Bool (not (stringStartsWith? a "--"))) args))
+
 fn ! test! ctx: sys/Context args: (List String) -> Int64
   (let [(tracing (or (listContains? args "--trace") (= (optionOr (envGet "ASL_TRACE") "0") "1")))
-        (hosted (or (listContains? args "--compare") (or tracing (not (atRoot? ctx)))))]
+        (plainFiles (and (not (listEmpty? args)) (and (not (listContains? args "--changed")) (not (= (first args) "--native")))))
+        (hosted (or (listContains? args "--compare") (or tracing (and (not plainFiles) (not (atRoot? ctx))))))]
     (cond
       (hosted (cmd/dispatch! ctx "test" args))
+      ((and plainFiles (not (atRoot? ctx)) (not (anyOutOfRoot? ctx args))) (reexecTestAtRoot! ctx args))
       ((listContains? args "--changed") (changedTest! ctx args))
       ((listEmpty? args) (sweepTest! ctx))
       ((= (first args) "--native") (if (listEmpty? (rest args)) (cmd/dispatch! ctx "test" args) (suites! ctx (rest args))))
@@ -201,7 +296,7 @@ fn ! parse! ctx: sys/Context args: (List String) -> Int64
   (if (listEmpty? args)
     (cmd/dispatch! ctx "parse" args)
     (let [(path (first args))]
-      (mt (fileRead path)
+      (mt (fileReadString path)
         ((err _) (do (sys/sayErr! (str path ": ERR_IO cannot read file")) 1))
         ((ok src) (mt (ip/parseIndentedFormsPos src)
                     ((err e) (do (sys/sayErr! (str path ":" (stringFromInt64 e.line) ":" (stringFromInt64 e.col) ": " (readCode e.msg) " " e.msg)) 1))
@@ -213,13 +308,24 @@ fn evalSource expr: String -> String
        "  (let [(shown (str (list (do " expr "\n  ))))]\n"
        "    (do (println (optionOr (stringSlice shown 1 (- (stringLength shown) 1)) shown)) (ok 0)))\n")
 
+fn ! printDiag! d: ty/Diagnostic -> Bool
+  (sys/sayErr! (str d.path ":" (stringFromInt64 d.line) ":" (stringFromInt64 d.col) ": " d.code " " d.message))
+
+fn ! evalRejected! path: String reason: String -> Int64
+  (let [(verdict (pairFirst (cc/checkFileCached! path (verify/checkRoots) (cc/emptyCache))))
+        (diags (mt verdict ((err _) (list)) ((ok v) v.diags)))]
+    (if (listEmpty? diags)
+      (do (sys/sayErr! (str "asl eval: " reason)) 1)
+      (do (map printDiag! diags) 1)))
+
 fn ! evalValue! ctx: sys/Context expr: String -> Int64
   (let [(src (evalSource expr))
         (digest (nt/slotKey "eval" src))
-        (dir ".asl/cache/nativeTest/evals")
+        (dir (str ctx.root "/.asl/cache/nativeTest/evals"))
         (path (str dir "/" digest ".asl"))
         (fp (nt/fingerprint))
-        (cDir (optionOr (envGet "ASL_NATIVE_TEST_CACHE") ".asl/cache/nativeTest"))
+        (cDir (let [(configured (optionOr (envGet "ASL_NATIVE_TEST_CACHE") ""))]
+                (if (stringEmpty? configured) (str ctx.root "/.asl/cache/nativeTest") configured)))
         (key (nt/slotKey (str "eval:" (nt/importPathOf path)) digest))
         (slot (str cDir "/" fp "/" key))
         (made (mt (dirCreate dir) ((err e) (str e)) ((ok _) (mt (fileWrite path src) ((err e) (str e)) ((ok _) (mt (dirCreate slot) ((err e) (str e)) ((ok _) "")))))))]
@@ -227,7 +333,7 @@ fn ! evalValue! ctx: sys/Context expr: String -> Int64
       (do (sys/sayErr! (str "asl eval: cannot prepare " path ": " made)) 1)
       (let [(built (nt/compileIn cDir path src slot key fp "eval"))]
                 (mt built.binary
-                  ((none) (cmd/dispatch! ctx "eval" (list expr)))
+                  ((none) (evalRejected! path built.reason))
                   ((some bin) (let [(out (nt/runProc (list bin) (some (nt/withEnvOverrides! (list (preludeOverride ctx))))))]
                                 (do (print out.stdout)
                                     (eprintText out.stderr)
@@ -241,7 +347,6 @@ fn ! eval! ctx: sys/Context args: (List String) -> Int64
         (if (or (listEmpty? (rest args)) (not (atRoot? ctx))) (cmd/dispatch! ctx "eval" args) (nativeTest! (list "eval" (stringJoin (rest args) " ")))))
       ((stringStartsWith? trimmed "(:") (let [(r (cmd/asnEcho trimmed))] (do (sys/say! (pairFirst r)) (pairSecond r))))
       ((stringEmpty? (stringTrim expr)) (do (sys/say! "()") 0))
-      ((not (atRoot? ctx)) (cmd/dispatch! ctx "eval" args))
       (else (evalValue! ctx expr))))
 
 fn ! launch! ctx: sys/Context args: (List String) -> Int64

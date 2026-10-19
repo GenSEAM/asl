@@ -55,20 +55,22 @@ fn assertWords code: String -> Int64
   (let [(b (stringToBytes code)) (n (bytesLength b)) (a (stringToBytes "assert")) (rf (stringToBytes "refute"))]
     (+ (t/wordHits b n a 6 0 9223372036854775807 0) (t/wordHits b n rf 6 0 9223372036854775807 0)))
 
+; (:m :ref MAINFIX14-TRACKEDASL-20261019 :do "dc/trackedAsl! (git ls-files, not find) so a gitignored fixture artifact left in .asl/cache/<suite>/*.asl by another suite running in parallel is never in scope -- see deadcode.asl MAINFIX14-TRACKEDASL-20261019")
 fn analyzeVacuity! ctx: h/Ctx root: String -> (Result VacuitySummary String)
-  (mt (dc/walkIgnoring! ctx root)
+  (mt (dc/trackedAsl! ctx root)
     ((err e) (err e))
     ((ok files)
-      (ok (fold (fn [(st VacuitySummary) (f String)] -> VacuitySummary
-                  (mt (h/readText! f)
-                    ((err _) st)
-                    ((ok code)
-                      (let [(rel (t/relPath f root ctx.cwd))]
+      (ok (fold (fn [(st VacuitySummary) (rel String)] -> VacuitySummary
+                  (let [(full (if (stringStartsWith? rel "/") rel (t/joinPath root rel)))]
+                    (mt (h/readText! full)
+                      ((err _) st)
+                      ((ok code)
+                        ; (:m :ref MAINFIX1-VACFIXTURE-20261018 :do "the fixtures/corpus-invalid exclusion used to come second in this cond, so it was dead for any fixture whose path also contains /tests/ or whose name ends Test.asl -- true of every deliberate negative-control fixture built to BE vacuous for the scanner's own test suite (noAsserts.asl, zeroTest.asl, zeroAssertsTest.asl, zeroAssertTest.asl all live under a tests/ or fixtures/ dir and are conventionally *Test.asl so suite runners can find them), so all four were scanned as real test files and flagged as production vacuous-test debt instead of being skipped. Checking the exclusion first restores the intended precedence: a fixture is a fixture first, a test-suite candidate only once it is not one. tests/acceptance/r1Host/runner/ is the same kind of fixture set under a different name: 9 negative-control files run.sh drives to probe the R1 runner's own honesty (documented 'U4 I5' in .asl/mem/docs/tests.asn), zeroAssertsTest.asl among them deliberately returning true after zero asserts -- added alongside /fixtures/ rather than invented as a new convention")
                         (cond
-                          ((or (stringContains? f "/tests/") (stringEndsWith? rel "Test.asl"))
+                          ((or (stringContains? rel "/fixtures/") (or (stringContains? rel "corpus/invalid") (stringContains? rel "/r1Host/runner/"))) st)
+                          ((or (stringContains? rel "/tests/") (stringEndsWith? rel "Test.asl"))
                             (VacuitySummary :testFiles (+ st.testFiles 1) :assertions (+ st.assertions (assertWords code))
                                        :vacuous (listAppend st.vacuous (vacuousIn! code rel)) :trivial st.trivial))
-                          ((or (stringContains? f "/fixtures/") (stringContains? f "corpus/invalid")) st)
                           (else (VacuitySummary :testFiles st.testFiles :assertions st.assertions :vacuous st.vacuous
                                            :trivial (listAppend st.trivial (trivialIn! code rel)))))))))
                 (VacuitySummary :testFiles 0 :assertions 0 :vacuous (list) :trivial (list)) files))))

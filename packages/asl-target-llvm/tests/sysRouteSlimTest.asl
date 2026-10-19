@@ -5,8 +5,15 @@
       (asl-target-llvm :a llvm)
       (asl-target-llvm/libc :a libc)])
 
-fn host -> String
-  "asl/host/out/asl-host"
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): testComboParity's sysCombo fixture is fully deterministic (procSelf is always positive, procAlive? of self is always true, fileAppend/fileReadString act on a fresh dir so their content is fixed, and the unix-socket round trip always echoes hi), so the asl-host comparison is replaced by this one-time recorded literal, captured from the leftover asl-host binary before HL-DELETE removed it")
+
+(schema Recorded
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
+
+fn recordedVm -> Recorded
+  (Recorded :exitCode 0 :stdout "procSelf positive true\nprocAlive self (ok true)\nfileAppend (ok ())\nfileReadString (ok \"line\\n\")\necho hi\nnet 0\n" :stderr "")
 
 fn clang -> String
   "/usr/bin/clang -Wno-override-module"
@@ -38,7 +45,7 @@ fn diagText ds: (List ty/IrDiag) -> String
   (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message)) ds) "; ")
 
 fn ! lowered name: String src: String -> (Option ty/SsaModule)
-  (let [(preludeText (resultOr (fileRead (lk/preludePath)) ""))]
+  (let [(preludeText (resultOr (fileReadString (lk/preludePath)) ""))]
     (do (assert (not (stringEmpty? preludeText)) (str (lk/preludePath) " is readable"))
         (mt (lk/lowerSourceWith src preludeText)
           ((err ds) (do (assert false (str name ": lowerSourceWith: " (diagText ds))) (none)))
@@ -125,14 +132,13 @@ fn comboSource -> String
 
 fn ! testComboParity work: String -> Bool
   (let [(dn (str work "/combon"))
-        (dv (str work "/combov"))
-        (_ (sh (str "mkdir -p " dn " " dv)))
+        (_ (sh (str "mkdir -p " dn)))
         (ll (build work "sysCombo" (comboSource)))
         (_ (linkBin work "sysCombo"))
         (native (sh (str work "/sysCombo " dn)))
-        (vm (sh (str (host) " run " work "/sysCombo.asl " dv)))]
-    (do (assert (= native.stdout vm.stdout) (str "sysCombo: native stdout equals asl-host run's; native=" native.stdout " vm=" vm.stdout " vm stderr=" vm.stderr))
-        (assert (= native.exitCode vm.exitCode) (str "sysCombo: native exit " native.exitCode " equals asl-host run's " vm.exitCode "; native stderr " native.stderr))
+        (vm (recordedVm))]
+    (do (assert (= native.stdout vm.stdout) (str "sysCombo: native stdout equals the recorded asl-host run's; native=" native.stdout " vm=" vm.stdout))
+        (assert (= native.exitCode vm.exitCode) (str "sysCombo: native exit " native.exitCode " equals the recorded asl-host run's " vm.exitCode "; native stderr " native.stderr))
         (assert (stringContains? native.stdout "echo hi") (str "sysCombo: the unix round trip echoes hi: " native.stdout))
         true))
 

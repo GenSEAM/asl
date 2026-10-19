@@ -1,0 +1,57 @@
+; chatParityTest's own builtin-fallback config (used only when a case's :config is null).
+; Kept separate from tests/fixtures/builtinConfig/gateway.asn (shared, byte-for-byte parity
+; fixture for profileParityTest/getRoutesTest) so this file is free to carry the v2 role/intent
+; routes chatParityTest needs without disturbing that v1 parity snapshot.
+;
+; The :chain entries and :temperature values below are the exact old roleCascades/roleTemperatures
+; and intentCascades/intentTemperatures tables that used to live in chat.asl, now read from config
+; instead of a built-in model list (GW-HARDCODED-CASCADES-20261017). mixed-case keys the old tables
+; carried ("chiefJustice", "shadowCritic") were unreachable dead code -- role/intent strings are
+; always lowercased before lookup -- so only their lowercase siblings are ported here.
+(:gateway :v 2 :profile default
+  :intents (
+    (:intent :id plan) (:intent :id design :as plan) (:intent :id research :as plan)
+    (:intent :id coder) (:intent :id planner) (:intent :id scout) (:intent :id distillator)
+    (:intent :id auditor) (:intent :id "auditor:concurrency") (:intent :id "auditor:logic")
+    (:intent :id "auditor:invariants") (:intent :id "auditor:architecture") (:intent :id "auditor:nonvacuity")
+    (:intent :id knowledgecurator) (:intent :id corroborator) (:intent :id consilium)
+    (:intent :id chiefjustice) (:intent :id falsifier) (:intent :id notebook) (:intent :id router) (:intent :id vision)
+    (:intent :id falsify) (:intent :id discover) (:intent :id construct) (:intent :id formulate)
+    (:intent :id reconcile) (:intent :id deliberate) (:intent :id puredeterministic) (:intent :id strictast))
+  :profiles (
+    (:profile :id default
+      :routes (
+        (:intent plan :chain ("codex/gpt-6-astra" "agy/gemini-3.8-flash-high"))
+        (:intent any :chain ("agy/gemini-3.8-flash-high" "codex/gpt-6-astra"))
+        (:intent coder :chain ("groq/qwen/qwen3.8-27b" "gemini-3.8-flash" "poolside/laguna-s-2.1:free" "cohere/north-mini-code:free" "poolside/laguna-xs-2.1:free" "google/gemma-4-31b-it:free" "google/gemma-4-26b-a4b-it:free" "qwen/qwen3.8-27b:free") :temperature 0.0)
+        (:intent planner :chain ("gemini-3.8-flash" "groq/qwen/qwen3.8-27b" "nvidia/nemotron-3-ultra-550b-a55b:free" "nvidia/nemotron-3-super-120b-a12b:free" "z-ai/glm-5.2:free" "nex-agi/nex-n2.5-pro:free") :temperature 0.2)
+        (:intent scout :chain ("groq/qwen/qwen3.8-27b" "gemini-3.5-flash-lite" "cohere/north-mini-code:free" "nex-agi/nex-n2.5-pro:free" "google/gemma-4-26b-a4b-it:free") :temperature 0.2)
+        (:intent distillator :chain ("gemini-3.5-flash-lite" "groq/qwen/qwen3.8-27b" "cohere/north-mini-code:free" "nex-agi/nex-n2.5-pro:free" "google/gemma-4-31b-it:free") :temperature 0.45)
+        (:intent auditor :chain ("gemini-3.8-flash" "nex-agi/nex-n2.5-pro:free" "nvidia/nemotron-3-super-120b-a12b:free" "qwen/qwen3.8-27b:free" "google/gemma-4-31b-it:free") :temperature 0.25)
+        (:intent "auditor:concurrency" :chain ("gemini-3.8-flash" "qwen/qwen3.8-27b:free" "google/gemma-4-31b-it:free" "nvidia/nemotron-3-super-120b-a12b:free") :temperature 0.6)
+        (:intent "auditor:logic" :chain ("gemini-3.8-flash" "google/gemma-4-31b-it:free" "qwen/qwen3.8-27b:free" "nvidia/nemotron-3-super-120b-a12b:free") :temperature 0.55)
+        (:intent "auditor:invariants" :chain ("gemini-3.8-flash" "nex-agi/nex-n2.5-pro:free" "nvidia/nemotron-3-super-120b-a12b:free" "google/gemma-4-31b-it:free") :temperature 0.25)
+        (:intent "auditor:architecture" :chain ("gemini-3.8-flash" "nvidia/nemotron-3-super-120b-a12b:free" "nex-agi/nex-n2.5-pro:free" "google/gemma-4-31b-it:free") :temperature 0.2)
+        (:intent "auditor:nonvacuity" :chain ("gemini-3.8-flash" "cohere/north-mini-code:free" "google/gemma-4-31b-it:free" "qwen/qwen3.8-27b:free") :temperature 0.45)
+        (:intent knowledgecurator :chain ("gemini-3.8-flash" "nvidia/nemotron-3-super-120b-a12b:free" "nex-agi/nex-n2.5-pro:free" "google/gemma-4-31b-it:free") :temperature 0.2)
+        (:intent corroborator :chain ("gemini-3.8-flash" "qwen/qwen3.8-27b:free" "google/gemma-4-31b-it:free" "nex-agi/nex-n2.5-pro:free") :temperature 0.5)
+        (:intent consilium :chain ("gemini-3.8-flash" "nvidia/nemotron-3-super-120b-a12b:free" "qwen/qwen3.8-27b:free" "google/gemma-4-31b-it:free") :temperature 0.35)
+        (:intent chiefjustice :chain ("gpt-6-astra" "nvidia/nemotron-3-ultra-550b-a55b:free") :temperature 0.0)
+        (:intent falsifier :chain ("gemini-3.8-flash" "deepseek/deepseek-chat:free" "qwen/qwen3.8-27b:free" "google/gemma-4-31b-it:free" "nex-agi/nex-n2.5-pro:free") :temperature 0.55)
+        (:intent notebook :chain ("dots-studio/dots-3-note-preview:free" "thinkingmachines/inkling:free" "thinkingmachines/inkling-small:free"))
+        (:intent router :chain ("gemini-3.5-flash-lite" "liquid/lfm-2.5-2.6b:free" "inclusionai/ling-3.0-flash-fin:free" "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free") :temperature 0.0)
+        (:intent vision :chain ("inclusionai/ling-3.0-flash-vl:free"))
+        (:intent falsify :chain ("gemini-3.8-flash" "qwen/qwen3.8-27b:free" "google/gemma-4-31b-it:free" "nex-agi/nex-n2.5-pro:free" "nvidia/nemotron-3-super-120b-a12b:free" "cohere/north-mini-code:free") :temperature 0.55)
+        (:intent discover :chain ("gemini-3.5-flash-lite" "nex-agi/nex-n2.5-pro:free" "liquid/lfm-2.5-2.6b:free" "cohere/north-mini-code:free" "nvidia/nemotron-3-super-120b-a12b:free") :temperature 0.25)
+        (:intent construct :chain ("gemini-3.8-flash" "google/gemma-4-31b-it:free" "poolside/laguna-s-2.1:free" "cohere/north-mini-code:free" "poolside/laguna-xs-2.1:free") :temperature 0.15)
+        (:intent formulate :chain ("gemini-3.8-flash" "nvidia/nemotron-3-ultra-550b-a55b:free" "nvidia/nemotron-3-super-120b-a12b:free" "google/gemma-4-31b-it:free") :temperature 0.2)
+        (:intent reconcile :chain ("gemini-3.8-flash" "nvidia/nemotron-3-super-120b-a12b:free" "nex-agi/nex-n2.5-pro:free" "google/gemma-4-31b-it:free") :temperature 0.35)
+        (:intent deliberate :chain ("gemini-3.8-flash" "gpt-6-astra" "nvidia/nemotron-3-ultra-550b-a55b:free" "qwen/qwen3.8-27b:free" "google/gemma-4-31b-it:free") :temperature 0.6)
+        (:intent puredeterministic :chain ("liquid/lfm-2.5-2.6b:free") :temperature 0.0)
+        (:intent strictast :chain ("nex-agi/nex-n2.5-pro:free") :temperature 0.035)))
+    ; no :fallback to default here: entriesLoop!/entriesLoopExact! accumulate a fallback profile's own
+    ; :any route into the cascade, which would make a free-profile request also try default's models.
+    ; "coder" is duplicated below (chain+temperature) just so its own :temperature is reachable by name.
+    (:profile :id free
+      :routes ((:intent any :chain ("groq/qwen/qwen3.8-27b" "gemini-3.8-flash" "agy/gemini-3.8-flash"))
+               (:intent coder :chain ("groq/qwen/qwen3.8-27b" "gemini-3.8-flash" "poolside/laguna-s-2.1:free" "cohere/north-mini-code:free" "poolside/laguna-xs-2.1:free" "google/gemma-4-31b-it:free" "google/gemma-4-26b-a4b-it:free" "qwen/qwen3.8-27b:free") :temperature 0.0)))))

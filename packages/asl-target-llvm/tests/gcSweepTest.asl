@@ -5,9 +5,6 @@
 fn lib -> String
   "asl/host/out/libaslrt.a"
 
-fn hostLib -> String
-  "asl/host/out/libaslhost.a"
-
 fn clangLink -> String
   "/usr/bin/clang -Wno-override-module -x ir "
 
@@ -139,40 +136,29 @@ fn lineOf text: String prefix: String -> String
 fn numOf pairs: (List (Pair String String)) key: String -> Int64
   (optionOr (stringToInt64 (optionOr (mapGet (mapFromPairs pairs) key) "")) -1)
 
-fn policyStats line: String -> String
-  (stringJoin (map (fn [(p (Pair String String))] -> String (str (pairFirst p) "=" (pairSecond p)))
-                   (filter (fn [(p (Pair String String))] -> Bool (!= (pairFirst p) "totalGCNs")) (fieldsOf line "(:gcStats ")))
-              " ")
-
-fn ! linkBoth work: String name: String -> Bool
-  (let [(ll (str work "/" name ".ll " work "/floor.ll"))
-        (a (sh (str (clangLink) ll " -x none " (lib) " -lm -o " work "/asl/" name)))
-        (c (sh (str (clangLink) ll " -x none " work "/gc.o " work "/rtNoGc.a -lm -o " work "/gcc/" name)))]
+fn ! linkAsl work: String name: String -> Bool
+  (let [(a (sh (str (clangLink) work "/" name ".ll " work "/floor.ll -x none " (lib) " -lm -o " work "/asl/" name)))]
     (do (assert (= a.exitCode 0) (str name ": links against libaslrt.a; " a.stderr))
-        (assert (= c.exitCode 0) (str name ": links against gc.o and libaslrt.a without gcAsl.o; " c.stderr))
         true))
 
 fn ! testDeadSlot work: String -> Bool
   (do (assert (ok? (fileWrite (str work "/dead.ll") (deadIr))) "dead: IR written")
-      (linkBoth work "dead")
+      (linkAsl work "dead")
       (let [(want (str "header " (consHeaderHex) " found 0 kept 1 reuse 1\n"))
             (plain (sh (str "cd " work "/asl && ./dead")))
             (stressed (sh (str "cd " work "/asl && ASL_GC_STRESS=1 ./dead")))
-            (verified (sh (str "cd " work "/asl && ASL_GC_VERIFY=1 ./dead")))
-            (floor (sh (str "cd " work "/gcc && ./dead")))]
+            (verified (sh (str "cd " work "/asl && ASL_GC_VERIFY=1 ./dead")))]
         (do (assert (= plain.exitCode 0) (str "dead: exits 0; " plain.stderr))
             (assert (= plain.stdout want) (str "dead: the swept page keeps the dead cons header intact, the kept cons alive and the dead slot is the next cons; got " plain.stdout))
             (assert (= stressed.stdout want) (str "dead: same under ASL_GC_STRESS=1; got " stressed.stdout stressed.stderr))
             (assert (= verified.stdout want) (str "dead: same under ASL_GC_VERIFY=1; got " verified.stdout verified.stderr))
-            (assert (= floor.stdout "header 0 found 0 kept 1 reuse 1\n") (str "dead: gc.c threads its free list through the dead slot; got " floor.stdout))
             true)))
 
 fn ! testSteadyPages work: String -> Bool
   (do (assert (ok? (fileWrite (str work "/sparse.ll") (sparseIr))) "sparse: IR written")
-      (linkBoth work "sparse")
+      (linkAsl work "sparse")
       (map (fn [(env String)] -> Bool
              (let [(a (sh (str "cd " work "/asl && ASL_GC_STATS=1 " env "./sparse")))
-                   (c (sh (str "cd " work "/gcc && ASL_GC_STATS=1 " env "./sparse")))
                    (stats (fieldsOf (lineOf a.stderr "(:gcStats ") "(:gcStats "))
                    (phases (fieldsOf (lineOf a.stderr "(:gcPhases ") "(:gcPhases "))
                    (label (str "sparse under '" env "'"))]
@@ -182,7 +168,6 @@ fn ! testSteadyPages work: String -> Bool
                    (assert (= (numOf phases "pagesUnmapped") 0) (str label ": the page cache keeps a cycle's pages, none unmapped; " (lineOf a.stderr "(:gcPhases ")))
                    (assert (= (numOf phases "unmapCalls") 0) (str label ": no munmap call; " (lineOf a.stderr "(:gcPhases ")))
                    (assert (<= (numOf phases "pagesMapped") 640) (str label ": at most 640 pages mapped in steady state; " (lineOf a.stderr "(:gcPhases ")))
-                   (assert (= (policyStats (lineOf a.stderr "(:gcStats ")) (policyStats (lineOf c.stderr "(:gcStats "))) (str label ": stats equal gc.c's but totalGCNs; ASL " (lineOf a.stderr "(:gcStats ") " gc.c " (lineOf c.stderr "(:gcStats ")))
                    true)))
            (list "ASL_GC_MIN_MIB=8 " "ASL_GC_GROWTH=1.5 ASL_GC_MIN_MIB=4 "))
       true)
@@ -191,11 +176,9 @@ fn ! runTests -> Bool
   (let [(made (sh "mktemp -d"))
         (work (stringReplace made.stdout "\n" ""))]
     (do (assert (= made.exitCode 0) "mktemp -d makes a work directory")
-        (assert (= (sh (str "mkdir -p " work "/gcc " work "/asl")).exitCode 0) "gcc and asl output directories made")
+        (assert (= (sh (str "mkdir -p " work "/asl")).exitCode 0) "asl output directory made")
         (assert (= (sh "sh asl/host/build.sh").exitCode 0) "host libraries build")
         (assert (ok? (fileWrite (str work "/floor.ll") (ssa/cRuntimeModule))) "floor.ll: the C floor's IR written")
-        (assert (= (sh (str "ar p " (hostLib) " gc.o > " work "/gc.o")).exitCode 0) "gc.o taken from libaslhost.a")
-        (assert (= (sh (str "cp " (lib) " " work "/rtNoGc.a && ar d " work "/rtNoGc.a gcAsl.o")).exitCode 0) "libaslrt.a copied without gcAsl.o")
         (testDeadSlot work)
         (testSteadyPages work)
         (assert (= (sh (str "rm -rf " work)).exitCode 0) "work directory removed")

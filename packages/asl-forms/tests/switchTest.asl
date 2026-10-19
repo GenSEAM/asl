@@ -3,27 +3,13 @@
 fn repoRoot! -> String
   (resultOr (realPath ".") "")
 
-fn currentHost! repo: String -> (Option String)
-  (mt (envGet "ASL_HOST")
-    ((some h) (if (fileExists? h)
-                (some (resultOr (realPath h) h))
-                (do (println (str "invalid environment variable: ASL_HOST path does not exist: " h))
-                    (assert false (str "invalid environment variable: ASL_HOST path does not exist: " h))
-                    (none))))
-    ((none) (let [(p (k/joinPath repo "asl/host/out/asl-host"))]
-              (if (fileExists? p)
-                (some (resultOr (realPath p) p))
-                (do (println (str "the stage-0 host is absent at " p "; build it with sh asl/host/build.sh or set ASL_HOST"))
-                    (assert false (str "the stage-0 host is absent at " p "; build it with sh asl/host/build.sh or set ASL_HOST"))
-                    (none))))))
-
 fn runCliWith! root: String payload: String extra: (List String) -> g/RunOut
   (let [(repo (repoRoot!))
         (cli (k/joinPath repo "bin/asl"))
         (path (k/joinPath root "bin"))
-        (hasHost (listAny? (fn [(e String)] -> Bool (stringStartsWith? e "ASL_HOST=")) extra))
-        (baseEnv (list (str "PATH=" path) (str "HOME=" root) (str "ASL_ROOT=" root)))
-        (env (listAppend (if hasHost baseEnv (cons (str "ASL_HOST=" (optionOr (currentHost! repo) "")) baseEnv)) extra))]
+        (cache (optionOr (envGet "ASL_NATIVE_CLI_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli")))
+        (clang (optionOr (envGet "CLANG") "/usr/bin/clang"))
+        (env (listAppend (list (str "PATH=" path) (str "HOME=" root) (str "ASL_ROOT=" root) (str "ASL_NATIVE_CLI_CACHE=" cache) (str "CLANG=" clang)) extra))]
     (g/runArgv! (list cli payload) (some root) (some env) 30000 0))
 
 fn runCli! root: String payload: String -> g/RunOut
@@ -42,9 +28,6 @@ fn successfulReceipt? out: g/RunOut op: String field: String value: String -> Bo
 
 fn ! runTests -> Bool
   (let [(repo (repoRoot!))]
-    (mt (currentHost! repo)
-      ((none) false)
-      ((some host)
   (let [(base (str (optionOr (envGet "TMPDIR") "/tmp/") "aslSwitchForms_" (stringFromInt64 (mod (nowNs) 1000000000))))
         (made (dirCreate base))
         (bin (k/joinPath base "bin"))
@@ -66,9 +49,11 @@ fn ! runTests -> Bool
         (tools (runCli! base "(:tools)"))
         (failure (runCli! base "(:read :file \"missing.asl\")"))
         (wrapper (k/joinPath base "host-wrapper.sh"))
-        (wrapperWritten (fileWrite wrapper "#!/bin/bash\ncase \"$2\" in\n  *asl-cli/src/command.asl) exec \"$REAL_HOST\" \"$@\" ;;\n  *) printf '%s\\n' '(:stub :ok)' ; printf '%s\\n' 'forms-child-stderr' >&2; exit 7 ;;\nesac\n"))
+        (marker (k/joinPath base "host-wrapper.ran"))
+        (wrapperWritten (fileWrite wrapper (str "#!/bin/bash\n: > '" marker "'\nprintf '%s\\n' '(:stub :ok)'\nexit 7\n")))
         (wrapperChmod (g/runArgv! (list "chmod" "+x" wrapper) (none) (none) 5000 0))
-        (stderrRoute (runCliWith! base "(:ping)" (list (str "ASL_HOST=" wrapper) (str "REAL_HOST=" host))))
+        (stderrRoute (runCliWith! base "(:ping)" (list (str "ASL_HOST=" wrapper))))
+        (wrapperRan (fileExists? marker))
         (clean (g/runArgv! (list "rm" "-rf" base) (none) (none) 5000 0))]
     (do
       (assert (= binEntryCount 4) "restricted PATH directory contains only the four explicitly linked runtime tools")
@@ -83,5 +68,6 @@ fn ! runTests -> Bool
       (assert (successfulReceipt? outline "intel" "greet" "greet") "outline returns its operation data")
       (assert (successfulReceipt? tools "tools" ":ops" ":read") "tools receipt contains the operation catalogue")
       (assert (and (!= failure.code 0) (and (asnValid? failure.out) (and (stringStartsWith? failure.out "(:read :status :rejected") (not (stringContains? failure.out ":status :ok"))))) "failing read is valid ASN carrying :status :rejected, never :ok")
-      (assert (and (ok? wrapperWritten) (and (= wrapperChmod.code 0) (and (= stderrRoute.code 7) (and (stringContains? stderrRoute.out "(:stub :ok)") (= (stringTrim stderrRoute.errText) "forms-child-stderr"))))) "forms relay preserves child stderr and exit code")
-      true)))))
+      (assert (and (ok? wrapperWritten) (= wrapperChmod.code 0)) "the stand-in ASL_HOST wrapper was written and made executable")
+      (assert (and (= stderrRoute.code 0) (and (stringStartsWith? stderrRoute.out "(:ping") (and (not (stringContains? stderrRoute.out "(:stub :ok)")) (not wrapperRan)))) (str "the native CLI runs forms in-process and never starts an ASL_HOST runner: " stderrRoute.out))
+      true)))

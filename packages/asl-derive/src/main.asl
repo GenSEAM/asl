@@ -36,7 +36,7 @@ fn parseJsonToFieldPairs schema: drv/RecordSchema json: Str -> (List (Pair Str S
 fn parseAsnToFieldPairs schema: drv/RecordSchema asn: Str -> (List (Pair Str Str))
   (drv/parseAsnToFieldPairs schema asn)
 
-fn runTests -> Bool
+fn ! runTests -> Bool
   (let [(f1 (makeField "id" "I64" false))
         (s1 (makeRecordSchema "User" "users" (some "id") (list f1)))
         (jc (deriveJsonCodec s1))
@@ -47,5 +47,5 @@ fn runTests -> Bool
       (assert (stringContains? ac.encoderSource "serializeUserToAsn") "ASN codec verified")
       true))
 
-fn RunTests -> Bool
+fn ! RunTests -> Bool
   (runTests)

@@ -3,9 +3,9 @@
   :i [])
 
 fn testCrawlerSourceIntegrity! -> Bool
-  (let [(cRes (fileRead "asl/packages/asl-crawler/src/crawler.asl"))
-        (sRes (fileRead "asl/packages/asl-crawler/src/stealth.asl"))
-        (bRes (fileRead "asl/packages/asl-crawler/src/browserDetector.asl"))]
+  (let [(cRes (fileReadString "asl/packages/asl-crawler/src/crawler.asl"))
+        (sRes (fileReadString "asl/packages/asl-crawler/src/stealth.asl"))
+        (bRes (fileReadString "asl/packages/asl-crawler/src/browserDetector.asl"))]
     (mt cRes
       ((err e1) (assert false (str "Failed to read crawler.asl: " e1)))
       ((ok cSrc)
@@ -37,7 +37,7 @@ fn testCrawlerSourceIntegrity! -> Bool
     true)
 
 fn testCrawlerGrammarRegistration! -> Bool
-  (let [(gRes (fileRead "asl/packages/asl-crawler/src/crawler.asl"))]
+  (let [(gRes (fileReadString "asl/packages/asl-crawler/src/crawler.asl"))]
     (mt gRes
       ((err e) (assert false (str "Failed to read crawler.asl: " e)))
       ((ok gSrc)
@@ -59,7 +59,7 @@ fn testCrawlerUrlValidation -> Bool
     true)
 
 fn testCrawlerStatusLogic! -> Bool
-  (mt (fileRead "asl/packages/asl-crawler/src/crawler.asl")
+  (mt (fileReadString "asl/packages/asl-crawler/src/crawler.asl")
     ((err e) (do (assert false (str "Failed to read crawler.asl: " e)) false))
     ((ok src)
      (do

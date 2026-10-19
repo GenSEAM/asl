@@ -20,7 +20,7 @@ fn ! resolveHost hOpt: (Option String) defaultRel: String -> (Option String)
                     (none))))))
 
 fn ! host -> (Option String)
-  (resolveHost (envGet "ASL_HOST") "asl/host/out/asl-host")
+  (resolveHost (envGet "ASL_HOST") "bin/asl")
 
 fn ! tempDir -> String
   (stringTrim (processRun "mktemp -d /tmp/asl-live-loop-XXXXXX").stdout)

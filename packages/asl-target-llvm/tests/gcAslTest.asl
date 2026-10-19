@@ -224,7 +224,7 @@ fn ! testArchive work: String -> Bool
         (refute (listContains? rt "gc.o") (str "libaslrt.a has no gc.o; members: " (stringJoin rt " ")))
         (assert (listContains? rt "gcAsl.o") (str "libaslrt.a has the ASL collector member gcAsl.o; members: " (stringJoin rt " ")))
         (assert (listContains? hostMembers "gc.o") "libaslhost.a keeps gc.o, asl-host's collector")
-        (assert (= (sh (str "cd " work "/rt && ar x " (resultOr (pathCanonicalize (gcLib)) (gcLib)))).exitCode 0) "libaslrt.a members extracted")
+        (assert (= (sh (str "cd " work "/rt && ar x " (resultOr (realPath (gcLib)) (gcLib)))).exitCode 0) "libaslrt.a members extracted")
       (let [(gcDefs (symbolNames (str "nm -gU " work "/rt/gcAsl.o")))
             (imports (map (fn [(m String)] -> (Pair String (List String))
                             (pair m (filter (fn [(n String)] -> Bool (listContains? (gr/entryNames) n)) (symbolNames (str "nm -u " work "/rt/" m)))))

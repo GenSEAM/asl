@@ -57,7 +57,7 @@ fn childEnv! extras: (List String) -> (List String)
 
 fn runnerCall! dir: String argv: (List String) env: (List String) -> gr/Captured
   (let [(root (workspaceRoot!))
-        (cmd (listAppend (list (str root "/asl/host/out/asl-host") "run" (str root "/asl/packages/asl-gates/src/runnerMain.asl")) argv))
+        (cmd (listAppend (list (str root "/bin/asl") "run" (str root "/asl/packages/asl-gates/src/runnerMain.asl")) argv))
         (script (str "exec " (stringJoin (map (fn [(s String)] -> String (str "'" (stringReplace s "'" "'\\''") "'")) cmd) " ")))]
     (mt (gr/runCommand! (list "/bin/sh" "-c" script) dir (some (childEnv! env)))
       ((err e) (do (assert false (str "ASL runner spawned for " (stringJoin argv " ") ": " e)) (gr/Captured :exit 127 :stdout "" :stderr e)))

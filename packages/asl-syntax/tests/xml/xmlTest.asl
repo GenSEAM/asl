@@ -184,18 +184,18 @@ fn testRoundTripTrackedCorpus! -> Bool
         (xmlFiles (filterOutUpstream rawXmlFiles (list)))
         (allFiles (listAppend svgFiles xmlFiles))
         (totalFiles (listLength allFiles))]
-    (assert (= (listLength svgFiles) 34) "tracked svg count is exactly 34")
-    (assert (= (listLength xmlFiles) 2) "tracked xml count is exactly 2")
-    (assert (= totalFiles 36) "total tracked svg + xml count is exactly 36")
+    (assert (= (listLength svgFiles) 33) "tracked svg count is exactly 33")
+    (assert (= (listLength xmlFiles) 0) "tracked xml count is exactly 0")
+    (assert (= totalFiles 33) "total tracked svg + xml count is exactly 33")
     (let [(pipeline (fn [(bs Bytes)] -> (Result Bytes String)
                       (let [(root (xml/parseXmlBytes bs))]
                         (mt (tr/checkTiling root (bytesLength bs))
                           ((err msg) (err (str "tiling error: " msg)))
                           ((ok _) (ok (pr/printTreeBytes! bs root)))))))
           (report (crp/runCorpusOnFiles! pipeline allFiles))]
-      (assert (= (crp/reportFiles report) 36) "corpus processed all 36 files")
+      (assert (= (crp/reportFiles report) 33) "corpus processed all 33 files")
       (assert (= (crp/reportMismatchCount report) 0) "corpus has 0 print mismatches")
-      (assert (crp/reportSuccess? report) "corpus round-trip passes on all 36 files")
+      (assert (crp/reportSuccess? report) "corpus round-trip passes on all 33 files")
       true))
 
 fn testTrackedTruncatedSvgDetectedAsNotWf! -> Bool
@@ -273,7 +273,7 @@ fn testXmlBenchPerf! -> Bool
                  allFiles))
         (elapsedNs (- (monotonicNs) t0))
         (elapsedMs (/ elapsedNs 1000000))]
-    (assert (< elapsedMs 2000) "parsing all 36 files took less than 2s")
+    (assert (< elapsedMs 2000) "parsing all 33 files took less than 2s")
     true)
 
 fn testElementNodeAndTokenSpans -> Bool

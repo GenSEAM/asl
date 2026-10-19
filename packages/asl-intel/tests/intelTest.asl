@@ -71,15 +71,18 @@ fn testPaths -> Bool
     (assert (= (t/pyStrip "  hi  ") "hi") "strip removes Unicode spaces")
     (= (t/relPath "/a/b/c" "/a/x" "/") "../b/c"))
 
+; (:m :ref MAINFIX1-SWEEPCOMMENT-20261018 :do "balanceError grew a comments: Bool param (mirrors asl-gates/dyck#check's own file-type convention: true skips ';'-led comments to end of line, matching .asn; false does not, matching .asl, whose own comments are balanced (:m ...) forms by convention) so a bracket written inside free text, like tests/fixtures/dyck/valid/parenInComment.asn's probe, no longer breaks the sweep's balance check; the five pre-existing cases pass true since none of them contain ';' and are unaffected either way, and two new cases pin the comments flag's own behavior in both directions")
 fn testSweep -> Bool
   (do
-    (assert (= (sw/balanceError "(a [b) ]") (some "unexpected ) at byte 5")) "mismatched close")
-    (assert (= (sw/balanceError "é)") (some "unexpected ) at byte 1")) "index counts code points")
-    (assert (= (sw/balanceError "(\"a)") (some "unclosed string")) "unclosed string")
-    (assert (= (sw/balanceError "([{") (some "unclosed delimiters: ([{")) "stack order")
-    (assert (= (sw/balanceError "(\"\\\")\")") (none)) "escaped quote inside a string")
+    (assert (= (sw/balanceError "(a [b) ]" true) (some "unexpected ) at byte 5")) "mismatched close")
+    (assert (= (sw/balanceError "é)" true) (some "unexpected ) at byte 1")) "index counts code points")
+    (assert (= (sw/balanceError "(\"a)" true) (some "unclosed string")) "unclosed string")
+    (assert (= (sw/balanceError "([{" true) (some "unclosed delimiters: ([{")) "stack order")
+    (assert (= (sw/balanceError "(\"\\\")\")" true) (none)) "escaped quote inside a string")
+    (assert (= (sw/balanceError "(fn f -> Int\n  ; a comment with ( and ]\n  1)" true) (none)) "a bracket inside a ;-comment is skipped when comments is true")
+    (assert (!= (sw/balanceError "(fn f -> Int\n  ; a comment with ( and ]\n  1)" false) (none)) "the same bracket is NOT skipped when comments is false")
     (assert (= (sw/pyOsError "/x/y" "notFound: /x/y: No such file or directory") "[Errno 2] No such file or directory: '/x/y'") "ENOENT text")
-    (= (sw/balanceError "([{") (some "unclosed delimiters: ([{")))
+    (= (sw/balanceError "([{" true) (some "unclosed delimiters: ([{")))
 
 fn testReader! -> Bool
   (mt (fx/readAsn ";; c\n(:case :id \"a\\\"b\\n\" :n -3 :v [1 x \"y\"] :k :init)")
@@ -140,6 +143,23 @@ fn testDispatch! -> Bool
         (assert (= o.err "Unknown intel subcommand: nope\n") "unknown subcommand message")
         (= o.code 1)))
 
+; (:m :ref MAINFIX14-TRACKEDASL-20261019 :do "plants a trivial-stub fixture under .asl/cache (gitignored by .gitignore:9, same path shape nativeTest.asl/nativeTestReportTest.asl leave behind when they run in the train) and asserts audit vacuity still reports Production Stubs: 0 -- the gate for dc/trackedAsl!: red on walkIgnoring!'s raw find, green once only git-tracked files are in scope")
+fn ! testVacuityIgnoresUntrackedCacheArtifact! -> Bool
+  (let [(ctx (intel/makeCtx!))
+        (dir (t/joinPath ctx.home (str ".asl/cache/mainfix14VacuityTest-" (stringFromInt64 (monotonicNs)))))
+        (path (t/joinPath dir "outsideStub.asl"))
+        (made (dirCreate dir))
+        (written (fileWrite path "(module q/mainfix14VacuityFixture :x [runTests])\n\nfn runTests -> Bool\n  true\n"))
+        (o (intel/runIntel! ctx (list "vacuity" "--summary")))
+        (cleaned (pathRemove dir))]
+    (do (assert (ok? made) (str "dirCreate failed for vacuity fixture " dir))
+        (assert (ok? written) "write untracked cache-artifact fixture")
+        (assert (= o.code 0) (str "asl-intel vacuity --summary must exit 0: " o.err))
+        (assert (stringContains? o.out "Production Stubs:    0")
+                (str "vacuity audit must not count a gitignored .asl/cache artifact as a production stub: " o.out))
+        (assert (ok? cleaned) "remove vacuity fixture dir")
+        true))
+
 fn testWholeRepo! -> Bool
   (let [(ctx (intel/makeCtx!))
         (t0 (monotonicNs))
@@ -159,5 +179,5 @@ fn testWholeRepo! -> Bool
       (and (> nodes 1000) (< tGraph 60000))))
 
 fn ! runTests -> Bool
-  (let [(rs (list (testRegex!) (testNumbers) (testJson) (testPaths) (testSweep) (testReader!) (testModel) (testDispatch!) (testLargeInputs!) (testWholeRepo!)))]
+  (let [(rs (list (testRegex!) (testNumbers) (testJson) (testPaths) (testSweep) (testReader!) (testModel) (testDispatch!) (testLargeInputs!) (testVacuityIgnoresUntrackedCacheArtifact!) (testWholeRepo!)))]
     (fold (fn [(acc Bool) (x Bool)] -> Bool (and acc x)) true rs))

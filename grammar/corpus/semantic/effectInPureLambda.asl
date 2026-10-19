@@ -1,2 +1,2 @@
-fn ! readEach paths: (List String) -> (List (Result String IoError))
-  (map (fn [p] (fileRead p)) paths)
+fn ! readEach paths: (List String) -> (List (Result String String))
+  (map (fn [p] (fileReadString p)) paths)

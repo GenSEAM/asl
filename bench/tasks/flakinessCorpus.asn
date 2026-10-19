@@ -15,13 +15,6 @@
       :expectedStable true
       :expectedGuaranteeEligible true
       :justification "Deterministic passing suite across repeated iterations")
-    (:suite
-      :id "eval-test"
-      :path "asl/packages/asl-eval/tests/eval_test.asl"
-      :behavior :deterministicPass
-      :expectedStable true
-      :expectedGuaranteeEligible true
-      :justification "Deterministic passing suite across repeated iterations")
   ]
   :repeatedRuns [
     (:seed 42 :repetitions 5 :wallMs 45808)

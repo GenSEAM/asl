@@ -190,7 +190,7 @@ fn ! testNative -> Bool
         (assert (stringContains? spin.out "spin 1000000\n") "spin computes 1e6 through the singleton none and the hoisted lambda")
         (assert (and (>= objects 0) (< objects 10000)) (str "spin allocates O(1) objects over 1e6 evaluations, got " objects))
         (assert (= sem.exit 0) (str "semantics main exits 0: " sem.out))
-        (assert (stringContains? sem.out (semanticsLines)) (str "main entry: module init, =, mt, function values and parMap workers agree with asl-host: " sem.out))
+        (assert (stringContains? sem.out (semanticsLines)) (str "main entry: module init, =, mt, function values and parMap workers match the recorded semantics: " sem.out))
         (assert (= wrapped.exit 0) (str "semanticsTest under the test wrapper passes: " wrapped.out))
         (assert (stringContains? wrapped.out "init true dark true false 42") "the test wrapper entry runs the imported module init")
         true))

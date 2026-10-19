@@ -143,7 +143,6 @@
 (:doc :symbol "asl/packages/asl-codegen/tests/c99TypeTest.asl#" :text "Unit tests for ISO C99 Type System Mapping, Memory Layout & Tagged Union Architecture.")
 (:doc :symbol "asl/packages/asl-codegen/tests/cCodegenTest.asl#" :text "Unit tests for Embedded C and Arduino code generator.")
 (:doc :symbol "asl/packages/asl-codegen/tests/codegenTest.asl#" :text "Unit tests for asl-codegen/emit")
-(:doc :symbol "asl/packages/asl-codegen/tests/emitWatTest.asl#" :text "Unit tests for WebAssembly Text (WAT) code generator.")
 (:doc :symbol "asl/packages/asl-codegen/tests/exprTest.asl#" :text "Unit tests for asl-codegen/expr")
 (:doc :symbol "asl/packages/asl-codegen/tests/fixtures/c99/sampleC99.asl#" :text "Localized C99 sample fixture for C99 header and source code emission.")
 (:doc :symbol "asl/packages/asl-codegen/tests/goCodegenTest.asl#" :text "Unit tests for Go platform leaf code generator with dual-polarity assertions.")

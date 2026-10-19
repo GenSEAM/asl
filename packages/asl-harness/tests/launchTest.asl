@@ -281,6 +281,10 @@ fn pruneDirs -> (List String)
 
 (schema E2e (:f base String) (:f root String) (:f stubs String) (:f ws String) (:f host String) (:f launch String) (:f platform String) (:f date String))
 
+; (:m :ref LAUNCHTEST-CACHEPIN :do "every e2e case below execs ctx.host (the bin/asl wrapper) with HOME redirected to a scratch dir; without this, the wrapper's own home-based native-cli pointer lookup finds nothing and cold-rebuilds the whole toolchain from asl/seed per case, which is slow and, under load, can fail its own self-probe (ERR_HOST_ABSENT) since the stage-0 host is gone; pinning ASL_NATIVE_CLI_CACHE to the real HOME's already-built cache keeps every isolated-HOME exec on the fast path")
+fn nativeCliCache -> String
+  (optionOr (envGet "ASL_NATIVE_CLI_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli"))
+
 fn ! buildE2e s: Suite base: String -> (Result E2e String)
   (let [(e (str base "/e2e")) (root (str base "/e2e/root")) (stubs (str base "/e2e/stubs")) (ws (str base "/e2e/ws"))
         (src (optionOr (fget s.fx "sources") (l/asnForm (list))))
@@ -292,8 +296,8 @@ fn ! buildE2e s: Suite base: String -> (Result E2e String)
         (wsOk (buildWs ws (list "git")))]
     (if (not (and made (and grammar (and stubsOk wsOk))))
       (err "e2e setup failed")
-      (mt (realPath "asl/host/out/asl-host")
-        ((err e) (err (str "asl-host: " e)))
+      (mt (realPath "bin/asl")
+        ((err e) (err (str "bin/asl: " e)))
         ((ok host)
           (mt (realPath "asl/packages/asl-harness/src/launch.asl")
             ((err e) (err (str "launch.asl: " e)))
@@ -336,14 +340,14 @@ fn ! checkE2e ctx: E2e i: Int64 row: l/Asn -> Bool
         (pre (if (= kind "prune") (listAll? (fn [(d String)] -> Bool (ok? (dirCreate (str runRoot "/" d)))) (pruneDirs)) true))
         (log (str ctx.base "/log" (stringFromInt64 i)))
         (env (list (str "PATH=" (if (= kind "bare") "" (str ctx.stubs ":")) "/usr/bin:/bin") (str "HOME=" home) (str "STUB_LOG=" log)
-                   (str "STUB_MODE=" (fstr row "stubMode")) "LANG=C" (str "ASL_ROOT=" ctx.root)))
+                   (str "STUB_MODE=" (fstr row "stubMode")) "LANG=C" (str "ASL_ROOT=" ctx.root) (str "ASL_NATIVE_CLI_CACHE=" (nativeCliCache))))
         (res (l/runCapture! (listAppend (list ctx.host "run" ctx.launch) args) (some ctx.ws) (some env)))]
     (mt res
       ((err e) (do (assert false (str "e2e " (showList args) ": " e)) false))
       ((ok c)
         (let [(dirs (resultOr (dirList runRoot) (list)))
               (pidDirs (filter (fn [(d String)] -> Bool (and (not (stringEmpty? (clientOfDir d))) (not (listContains? (pruneDirs) d)))) dirs))
-              (subs (listAppend (list (pair (str ctx.root "/asl/host/out/asl-host") "{host}"))
+              (subs (listAppend (list (pair ctx.host "{host}"))
                                 (listAppend (map (fn [(d String)] -> (Pair String String) (pair d (str (clientOfDir d) "-PID"))) pidDirs)
                                             (list (pair runRoot "{run}") (pair ctx.base "{base}") (pair ctx.platform "{platform}") (pair ctx.date "{date}")))))
               (dry (and (listContains? args "--dry-run") (= c.code 0)))
@@ -377,7 +381,7 @@ fn ! checkPromptOnly ctx: E2e i: Int64 -> Bool
         (made (ok? (dirCreate promptDir)))
         (log (str ctx.base "/promptOnly.log"))
         (env (list (str "PATH=" ctx.stubs ":/usr/bin:/bin") (str "HOME=" home) (str "STUB_LOG=" log)
-                   (str "ASL_ROOT=" ctx.root) (str "ASL_LAUNCH_PROMPT_DIR=" promptDir) "LANG=C"))
+                   (str "ASL_ROOT=" ctx.root) (str "ASL_LAUNCH_PROMPT_DIR=" promptDir) "LANG=C" (str "ASL_NATIVE_CLI_CACHE=" (nativeCliCache))))
         (out (l/runCapture! (list ctx.host "run" ctx.launch "claude" "--prompt-only") (some ctx.ws) (some env)))
         (captured (mt out ((ok c) c) ((err _) (l/Captured :code 127 :out "" :errText "could not run prompt-only"))))
         (row (if (= captured.code 0) (l/readOne captured.out) (err captured.errText)))
@@ -392,7 +396,7 @@ fn ! checkPromptOnly ctx: E2e i: Int64 -> Bool
 
 fn ! hookRun ctx: E2e i: Int64 args: (List String) extra: String -> l/Captured
   (let [(home (str ctx.base "/hookHome" (stringFromInt64 i)))
-        (env (listAppend (list (str "PATH=" ctx.stubs ":" (resultOr (realPath "bin") "/usr/bin") ":" ctx.root "/bin:/usr/bin:/bin") (str "HOME=" home) (str "ASL_ROOT=" ctx.root) "LANG=C") (if (stringEmpty? extra) (list) (list extra))))
+        (env (listAppend (list (str "PATH=" ctx.stubs ":" (resultOr (realPath "bin") "/usr/bin") ":" ctx.root "/bin:/usr/bin:/bin") (str "HOME=" home) (str "ASL_ROOT=" ctx.root) "LANG=C" (str "ASL_NATIVE_CLI_CACHE=" (nativeCliCache))) (if (stringEmpty? extra) (list) (list extra))))
         (got (l/runCapture! (listAppend (list ctx.host "run" ctx.launch) args) (some ctx.ws) (some env)))]
     (mt got ((ok c) c) ((err e) (l/Captured :code 127 :out "" :errText e))))
 
@@ -420,7 +424,7 @@ fn leasePidDigits s: String -> Bool
 
 fn ! leasePidCase ctx: E2e i: Int64 supplied: String -> l/Captured
   (let [(home (str ctx.base "/leaseHome" (stringFromInt64 i)))
-        (env (listAppend (list (str "PATH=" ctx.base "/leaseStubs:/usr/bin:/bin") (str "HOME=" home) (str "ASL_ROOT=" ctx.root) "LANG=C")
+        (env (listAppend (list (str "PATH=" ctx.base "/leaseStubs:/usr/bin:/bin") (str "HOME=" home) (str "ASL_ROOT=" ctx.root) "LANG=C" (str "ASL_NATIVE_CLI_CACHE=" (nativeCliCache)))
                          (if (stringEmpty? supplied) (list) (list (str "ASL_LEASE_PID=" supplied)))))
         (got (l/runCapture! (list ctx.host "run" ctx.launch "claude") (some ctx.ws) (some env)))]
     (mt got ((ok c) c) ((err e) (l/Captured :code 127 :out "" :errText e))))

@@ -62,7 +62,7 @@ fn testPreludeProgramCompiles prelude: Str -> Bool
       true))
 
 fn ! runTests -> Bool
-  (let [(prelude (mt (fileRead "asl/prelude/prelude.asl") ((ok text) text) ((err e) (do (assert false (str "asl/prelude/prelude.asl is readable: " e)) ""))))]
+  (let [(prelude (mt (fileReadString "asl/prelude/prelude.asl") ((ok text) text) ((err e) (do (assert false (str "asl/prelude/prelude.asl is readable: " e)) ""))))]
     (do
       (assert (testMainOnlyProgramNamesEntry prelude) "testMainOnlyProgramNamesEntry must pass")
       (assert (testValidProgramCompilesOk prelude) "testValidProgramCompilesOk must pass")

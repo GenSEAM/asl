@@ -377,7 +377,7 @@ fn generateInstallSh -> String
   (str
     "#!/bin/sh\n"
     (generateInstallShHeader)
-    "# AgentSlang Universal Installer bootstrap: it only finds or builds asl-host and runs the ASL installer\n"
+    "# AgentSlang Universal Installer bootstrap: it only finds the native asl entry point (bin/asl) and runs the ASL installer through it, hostless\n"
     "# Canonical URL: https://aslang.dev/install.sh\n"
     "# Usage: curl -fsSL https://aslang.dev/install.sh | sh\n"
     "set -eu\n"
@@ -394,18 +394,18 @@ fn generateInstallSh -> String
     "  elif [ -f \"$1/packages/asl-target-sh/src/distrib.asl\" ]; then echo \"$1\"\n"
     "  else return 1; fi\n"
     "}\n"
-    "host_of() {\n"
-    "  if [ ! -x \"$1/host/out/asl-host\" ] || [ -n \"$(find \"$1/host/src/\" \"$1/prelude/\" \"$1/host/build.sh\" -newer \"$1/host/out/asl-host\" 2>/dev/null | head -n 1)\" ]; then\n"
-    "    sh \"$1/host/build.sh\" >&2 || [ -x \"$1/host/out/asl-host\" ] || return 1\n"
+    "asl_of() {\n"
+    "  if [ -x \"$1/../bin/asl\" ]; then echo \"$1/../bin/asl\"\n"
+    "  elif [ -x \"$1/bin/asl\" ]; then echo \"$1/bin/asl\"\n"
+    "  else return 1\n"
     "  fi\n"
-    "  echo \"$1/host/out/asl-host\"\n"
     "}\n"
     "case \"${1:-}\" in\n"
     "  --tier|--render-rules|--check-rules|--render-home|--render-lexicon|--render-installers|--check-installers)\n"
     "    [ -n \"$ROOT\" ] || die \"install.sh $1 runs from a checkout, not from a pipe\"\n"
     "    PKG=\"$(pkg_of \"$ROOT\")\" || die \"no ASL installer under $ROOT\"\n"
-    "    HOST=\"$(host_of \"$PKG\")\" || die \"cannot build asl-host in $PKG/host (needs a C compiler)\"\n"
-    "    exec \"$HOST\" run \"$PKG/packages/asl-target-sh/src/rules.asl\" \"$ROOT\" \"$@\" ;;\n"
+    "    ASLBIN=\"$(asl_of \"$PKG\")\" || die \"cannot find the native asl entry point (bin/asl) beside $PKG\"\n"
+    "    exec \"$ASLBIN\" run \"$PKG/packages/asl-target-sh/src/rules.asl\" \"$ROOT\" \"$@\" ;;\n"
     "esac\n"
     "OS=\"$(uname -s | tr '[:upper:]' '[:lower:]')\"\n"
     "ARCH=\"$(uname -m)\"\n"
@@ -441,8 +441,8 @@ fn generateInstallSh -> String
     "  fi\n"
     "fi\n"
     "PKG=\"$(pkg_of \"$TREE\")\" || die \"no ASL installer in $TREE\"\n"
-    "HOST=\"$(host_of \"$PKG\")\" || die \"cannot build asl-host in $PKG/host (needs a C compiler)\"\n"
-    "export ASL_HOST=\"$HOST\"\n"
+    "ASLBIN=\"$(asl_of \"$PKG\")\" || die \"cannot find the native asl entry point (bin/asl) beside $PKG\"\n"
+    "export ASL_HOST=\"$ASLBIN\"\n"
     "TTY=none\n"
     "if [ -t 0 ]; then TTY=tty\n"
     "elif [ -e /dev/tty ]; then\n"
@@ -450,11 +450,11 @@ fn generateInstallSh -> String
     "fi\n"
     "INSTALLER=\"$PKG/packages/asl-target-sh/src/distrib.asl\"\n"
     "if [ \"$DRY\" -eq 0 ] && [ -e \"$TREE/.git\" ] && git -C \"$TREE\" rev-parse --git-dir >/dev/null 2>&1; then\n"
-    "  git -C \"$TREE\" config --local merge.asnRows.driver \"\\\"$HOST\\\" run \\\"$PKG/tools/mergeRows/mergeRows.asl\\\" %O %A %B %P\"\n"
+    "  git -C \"$TREE\" config --local merge.asnRows.driver \"\\\"$ASLBIN\\\" run \\\"$PKG/tools/mergeRows/mergeRows.asl\\\" %O %A %B %P\"\n"
     "  git -C \"$TREE\" config --local merge.asnRows.name 'ASN row-keyed merge (MRG1)'\n"
     "fi\n"
-    "if [ \"$TTY\" = devtty ]; then exec \"$HOST\" run \"$INSTALLER\" \"$TREE\" \"$FROM\" \"$TTY\" \"$OS\" \"$ARCH\" \"$@\" </dev/tty; fi\n"
-    "exec \"$HOST\" run \"$INSTALLER\" \"$TREE\" \"$FROM\" \"$TTY\" \"$OS\" \"$ARCH\" \"$@\"\n")
+    "if [ \"$TTY\" = devtty ]; then exec \"$ASLBIN\" run \"$INSTALLER\" \"$TREE\" \"$FROM\" \"$TTY\" \"$OS\" \"$ARCH\" \"$@\" </dev/tty; fi\n"
+    "exec \"$ASLBIN\" run \"$INSTALLER\" \"$TREE\" \"$FROM\" \"$TTY\" \"$OS\" \"$ARCH\" \"$@\"\n")
 
 (schema Inst (:f tree String) (:f from String) (:f tty String) (:f os String) (:f arch String) (:f home String) (:f installDir String) (:f dry Bool) (:f autoYes Bool) (:f filter String) (:f skip Bool) (:f purge Bool) (:f force Bool) (:f sourceDir String) (:f entry String) (:f prebuilt Bool) (:f links (List String)) (:f answeredOps String))
 
@@ -547,9 +547,10 @@ fn parseOpts args: (List String) o: Opts -> Opts
                                (parseOpts rest (optSet o "source" ""))))
           (else (optSet o "bad" (str "install.sh: unknown option " a)))))))
 
+; (:m :ref HL-FIXWAVE :do "root/asl/bin/asl (the published GenSEAM/asl subtree's own native launcher) was missing from this list: a tree rooted one level above asl/ (root/asl/packages/... present, no root/bin/asl wrapper of its own) fell through every candidate here and reached emitPortableEntry!'s host-searching fallback even though a working native entry point already existed right under it")
 fn aslEntry! root: String os: String arch: String -> (Option String)
   (listHead (filter (fn [p] (isRunnable! p os arch))
-    (listAppend (list (str root "/bin/asl") (str root "/asl/asl") (str root "/asl"))
+    (listAppend (list (str root "/bin/asl") (str root "/asl/bin/asl") (str root "/asl/asl") (str root "/asl"))
                 (list (str root "/host/out/asl") (str root "/asl/host/out/asl")))))
 
 fn pkgOf! tree: String -> (Option String)
@@ -561,10 +562,13 @@ fn pkgOf! tree: String -> (Option String)
 fn portableEntry? path: String -> Bool
   (stringEndsWith? path "/host/out/asl")
 
+; (:m :ref HL-FIXWAVE :do "this used to search for a stage-0 host binary (asl-host) by candidate path and fall back to a bare 'command -v asl-host', erroring only if none of those guesses existed; HL-DELETE retired asl-host for good, so every one of those guesses is now permanently dead. This script is written to pkg/host/out/asl where pkg is the asl/ subtree root (emitPortableEntry!'s own target path), and pkg/bin/asl (asl/bin/asl, fixed for HL-FIXWAVE) is the real native launcher one directory up from HERE (host/out) and one more up (host) from pkg: it already finds or builds the native CLI from the asl1 seed with no host at all, so this portable entry point is now a pure delegate to it rather than a second, independent (and now-broken) resolution path")
 fn generatePortableAsl -> String
   (str
     "#!/bin/sh\n"
-    "# AgentSlang (ASL) Portable CLI entry point\n"
+    "# AgentSlang (ASL) Portable CLI entry point: delegates to the package's own native launcher (bin/asl),\n"
+    "# which builds or finds the native CLI from the asl1 seed; there is no host interpreter to search for\n"
+    "# (HL-DELETE retired asl-host for good).\n"
     "set -eu\n"
     "CDPATH=\n"
     "PRG=\"$0\"\n"
@@ -583,44 +587,7 @@ fn generatePortableAsl -> String
     "  esac\n"
     "done\n"
     "HERE=\"$(CDPATH= cd -P -- \"$(dirname -- \"$PRG\")\" && pwd -P)\"\n"
-    "HOST=\"${ASL_HOST:-}\"\n"
-    "if [ -z \"$HOST\" ] || [ ! -x \"$HOST\" ]; then\n"
-    "  if [ -x \"$HERE/asl-host\" ]; then HOST=\"$HERE/asl-host\"\n"
-    "  elif [ -x \"$HERE/../host/out/asl-host\" ]; then HOST=\"$(CDPATH= cd -P -- \"$HERE/../host/out\" && pwd -P)/asl-host\"\n"
-    "  elif [ -x \"$HERE/host/out/asl-host\" ]; then HOST=\"$(CDPATH= cd -P -- \"$HERE/host/out\" && pwd -P)/asl-host\"\n"
-    "  elif [ -x \"$HERE/../asl/host/out/asl-host\" ]; then HOST=\"$(CDPATH= cd -P -- \"$HERE/../asl/host/out\" && pwd -P)/asl-host\"\n"
-    "  elif [ -x \"$HERE/asl/host/out/asl-host\" ]; then HOST=\"$(CDPATH= cd -P -- \"$HERE/asl/host/out\" && pwd -P)/asl-host\"\n"
-    "  elif command -v asl-host >/dev/null 2>&1; then HOST=\"$(command -v asl-host)\"\n"
-    "  else echo \"asl: cannot locate asl-host binary\" >&2; exit 1; fi\n"
-    "fi\n"
-    "PKG=\"\"\n"
-    "if [ -f \"$HERE/packages/asl-cli/src/main.asl\" ]; then PKG=\"$HERE\"\n"
-    "elif [ -f \"$HERE/../packages/asl-cli/src/main.asl\" ]; then PKG=\"$(CDPATH= cd -P -- \"$HERE/..\" && pwd -P)\"\n"
-    "elif [ -f \"$HERE/../../packages/asl-cli/src/main.asl\" ]; then PKG=\"$(CDPATH= cd -P -- \"$HERE/../..\" && pwd -P)\"\n"
-    "elif [ -f \"$HERE/asl/packages/asl-cli/src/main.asl\" ]; then PKG=\"$HERE/asl\"\n"
-    "elif [ -f \"$HERE/../asl/packages/asl-cli/src/main.asl\" ]; then PKG=\"$(CDPATH= cd -P -- \"$HERE/..\" && pwd -P)/asl\"\n"
-    "elif [ -f \"$HERE/../../asl/packages/asl-cli/src/main.asl\" ]; then PKG=\"$(CDPATH= cd -P -- \"$HERE/../..\" && pwd -P)/asl\"\n"
-    "fi\n"
-    "case \"${1:-}\" in\n"
-    "  check) shift; exec \"$HOST\" check \"$@\" ;;\n"
-    "  test) shift; exec \"$HOST\" test \"$@\" ;;\n"
-    "  run) shift; exec \"$HOST\" run \"$@\" ;;\n"
-    "  eval) shift; exec \"$HOST\" eval \"$@\" ;;\n"
-    "  parse) shift; exec \"$HOST\" parse \"$@\" ;;\n"
-    "  --version|version|-v)\n"
-    "    if [ -n \"$PKG\" ] && [ -f \"$PKG/packages/asl-cli/src/main.asl\" ]; then\n"
-    "      export ASL_HOST=\"$HOST\"\n"
-    "      exec \"$HOST\" run \"$PKG/packages/asl-cli/src/main.asl\" \"$@\"\n"
-    "    else\n"
-    "      exec \"$HOST\" version\n"
-    "    fi ;;\n"
-    "  *) \n"
-    "    if [ -n \"$PKG\" ] && [ -f \"$PKG/packages/asl-cli/src/main.asl\" ]; then\n"
-    "      export ASL_HOST=\"$HOST\"\n"
-    "      exec \"$HOST\" run \"$PKG/packages/asl-cli/src/main.asl\" \"$@\"\n"
-    "    fi\n"
-    "    echo \"asl: unknown command ${1:-}\" >&2; exit 2 ;;\n"
-    "esac\n")
+    "exec \"$HERE/../../bin/asl\" \"$@\"\n")
 fn emitPortableEntry! root: String st: Inst -> (Option String)
   (mt (pkgOf! root)
     ((none) (none))

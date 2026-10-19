@@ -15,8 +15,8 @@ fn testResolveComputedStyle -> Bool
 fn testFormatComputedStyle -> Bool
   (let [(computed (css/ComputedStyle :selector "#app .hero" :properties (list (pair "display" "flex") (pair "padding" "24px")) :resolvedVariables (list (pair "--hero-h" "400px")))) (formatted (css/formatComputedStyle computed))] (assert (stringContains? formatted "(:computed-style") "has :computed-style") (assert (stringContains? formatted ":selector \"#app .hero\"") "has selector") (assert (stringContains? formatted ":display \"flex\"") "has display flex") true)
 
-fn runCssTests -> Bool
+fn ! runCssTests -> Bool
   (runTests)
 
-fn runTests -> Bool
+fn ! runTests -> Bool
   (do (assert (testCalcSpecificity) "test-calc-specificity must pass") (assert (testExtractCssVariables) "test-extract-css-variables must pass") (assert (testParseCssRules) "test-parse-css-rules must pass") (assert (testResolveComputedStyle) "test-resolve-computed-style must pass") (assert (testFormatComputedStyle) "test-format-computed-style must pass") true)

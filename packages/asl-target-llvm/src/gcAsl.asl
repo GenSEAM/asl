@@ -1,5 +1,5 @@
 (module asl-target-llvm/gcAsl
-  :x [GcCtx defaultMinMib wasmDefaultMinMib defaultMinMibFor gcFactNames gcFacts gcFactsFor gcStrings gcExterns gcFunctions helperDefinitions helperDefinitionsFor functionName stateWords stateBlockText statePtrText fastAllocClass fastAllocCall fastConsCall fastAllocDefinitions]
+  :x [GcCtx untracedCtx tracingFunctionNames defaultMinMib wasmDefaultMinMib defaultMinMibFor gcFactNames gcFacts gcFactsFor gcStrings gcExterns gcFunctions helperDefinitions helperDefinitionsFor functionName stateWords stateBlockText statePtrText fastAllocClass fastAllocCall fastConsCall fastAllocDefinitions]
   :i [(asl-ir/types :a ty)
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/target :a target)])
@@ -8,6 +8,10 @@ schema GcCtx
   k: (Map String Int64)
   errno: String
   target: target/TargetFacts
+  notrace: Bool
+
+fn untracedCtx c: GcCtx -> GcCtx
+  (GcCtx :k c.k :errno c.errno :target c.target :notrace true)
 
 fn pn name: String -> String
   (str "asl-target-llvm/gcAsl." name)
@@ -335,7 +339,7 @@ fn gcFacts facts: libc/TripleFacts -> (Result GcCtx String)
 
 fn gcFactsFor facts: libc/TripleFacts target: target/TargetFacts -> (Result GcCtx String)
   (if (target/isWasm32 target)
-    (ok (GcCtx :k (mapEmpty) :errno "" :target target))
+    (ok (GcCtx :k (mapEmpty) :errno "" :target target :notrace false))
     (let [(resolved (fold (fn [(acc (Result (Map String Int64) String)) (n String)] -> (Result (Map String Int64) String)
                           (mt acc
                             ((err e) (err e))
@@ -349,7 +353,7 @@ fn gcFactsFor facts: libc/TripleFacts target: target/TargetFacts -> (Result GcCt
         (cond
           ((> (optionOr (mapGet m "timespec.size") 0) 32) (err (str "struct timespec exceeds 32 bytes on " facts.triple)))
           ((stringEmpty? facts.errnoAccessor) (err (str "libc.asl names no errno accessor for " facts.triple)))
-          (else (ok (GcCtx :k m :errno facts.errnoAccessor :target target))))))))
+          (else (ok (GcCtx :k m :errno facts.errnoAccessor :target target :notrace false))))))))
 
 fn fact c: GcCtx name: String -> Int64
   (optionOr (mapGet c.k name) 0)
@@ -1178,11 +1182,11 @@ fn allocConsFn -> ty/SsaFunction
           (collectB "go")
           (blk "go" (list (k "sc" 3) (k "ss" 40) (cl "o" "poolAlloc" (list "sc" "ss")) (k "h" (consHeader)) (st "wh" "o" 0 "h") (countAlloc "n" "ss")) (ret "o"))))
 
-fn allocPermFn -> ty/SsaFunction
+fn allocPermFn notrace: Bool -> ty/SsaFunction
   (fun "allocPerm" (list "type" "bytes")
     (list (blk "entry" (list (state) (k "one" 1) (ex "r" (ptr) "calloc" (list "one" "bytes")) (p2i "o" "r") (cmpK "dead" "eqInt" "o" 0)) (br "dead" "oom" "init"))
           (failB "oom" "ERR_OOM" "out of memory allocating %zu bytes" (list) (list "bytes"))
-          (blk "init" (list (bandK "size" "bytes" 4294967295) (shlK "ty" "type" 32) (k "permBits" (+ 281474976710656 (largeClassBits)))
+          (blk "init" (list (bandK "size" "bytes" 4294967295) (shlK "ty" "type" 32) (k "permBits" (+ (if notrace 71776119061217280 281474976710656) (largeClassBits)))
                             (bor "h1" "size" "ty") (bor "h" "h1" "permBits") (st "wh" "o" 0 "h") (sincK "oa" (sObjectsAllocated) 1) (sinc "ba" (sBytesAllocated) "bytes"))
             (ret "o"))))
 
@@ -1454,12 +1458,39 @@ fn printStatsFn -> ty/SsaFunction
                                  (ex "r2" (i32) "dprintf" (list "fd" "pfmt" "mn" "ln" "sn" "rn" "pm" "pu" "uc"))))))
 
 fn gcFunctions c: GcCtx -> (List ty/SsaFunction)
+  (let [(all (tracedFunctions c))]
+    (if c.notrace (map uncollected (filter (fn [(f ty/SsaFunction)] -> Bool (not (listContains? (map pn (tracingFunctionNames)) f.name))) all)) all))
+
+fn tracingFunctionNames -> (List String)
+  (list "markObj" "growMark" "markVal" "drain" "markRoot" "markPhase" "poolScan" "clearMarks" "abortMark" "verifyDfs" "verifyHeap" "scanConservative"
+        "sweepLarge" "sweepPages" "sweepPhase")
+
+fn collectCall? i: ty/SsaInstr -> Bool
+  (mt i.op ((ty/opCall callee _) (= callee "gcAslCollect")) (_ false))
+
+fn uncollected f: ty/SsaFunction -> ty/SsaFunction
+  (ty/ssaFunction f.name f.captures f.params f.retTy
+    (map (fn [(b ty/SsaBlock)] -> ty/SsaBlock (ty/ssaBlock b.label b.params (filter (fn [(i ty/SsaInstr)] -> Bool (not (collectCall? i))) b.instrs) b.term)) f.blocks))
+
+fn allocLargeUntracedFn -> ty/SsaFunction
+  (fun "allocLarge" (list "type" "bytes")
+    (list (blk "entry" (list (state) (k "eight" 8) (ult "gt8" "eight" "bytes") (sub "x" "bytes" "eight") (k "zero" 0)) (brA "gt8" "extra" (list "x") "extra" (list "zero")))
+          (blkp "extra" (list "ex") (list (addK "total" "ex" 32) (ult "wrapped" "total" "ex")) (br "wrapped" "oomBytes" "alloc"))
+          (blk "alloc" (list (k "one" 1) (ex "r" (ptr) "calloc" (list "one" "total")) (p2i "lo" "r") (cmpK "dead" "eqInt" "lo" 0)) (br "dead" "oomBytes" "fill"))
+          (failB "oomBytes" "ERR_OOM" "out of memory allocating %zu bytes" (list) (list "bytes"))
+          (blk "fill" (list (addK "span" "total" -24) (st "w3" "lo" 16 "span") (st "w7" "lo" 8 "bytes") (k "u32" 4294967295) (ult "huge" "u32" "bytes"))
+            (brA "huge" "head" (list "u32") "head" (list "bytes")))
+          (blkp "head" (list "size") (list (shlK "ty" "type" 32) (k "cls" (largeClassBits)) (bor "h1" "size" "ty") (bor "h" "h1" "cls") (st "w8" "lo" 24 "h")
+                                           (countAlloc "c" "bytes") (addK "o" "lo" 24))
+            (ret "o"))))
+
+fn tracedFunctions c: GcCtx -> (List ty/SsaFunction)
   (appendAll
     (list (list (rootPushFn) (rootPopFn) (registerProtoFn c) (markObjFn) (growMarkFn c) (markValFn) (drainFn) (markRootFn) (markPhaseFn c) (poolScanFn) (clearMarksFn)
                 (abortMarkFn) (numChildrenFn) (childAddrFn) (typeNameFn) (verifyDfsFn c) (verifyHeapFn) (pageSlotFn) (pageSetPutFn) (pageSetReserveFn c) (pageSetGetFn)
                 (pageSetDelFn))
           (if (target/growsLinearMemory c.target) (list) (list (unmapFn)))
-          (list (freshPageFn c) (widenHeapFn) (newPageFn) (freePageFn) (releaseCacheFn c) (poolAllocFn) (allocFn) (allocRawFn) (allocConsFn) (allocPermFn) (allocLargeFn)
+          (list (freshPageFn c) (widenHeapFn) (newPageFn) (freePageFn) (releaseCacheFn c) (poolAllocFn) (allocFn) (allocRawFn) (allocConsFn) (allocPermFn c.notrace) (if c.notrace (allocLargeUntracedFn) (allocLargeFn))
                 (accountFn) (willAllocateFn) (freedObjectsFn) (failNextGrowFn) (findObjFn) (scanConservativeFn) (monoNsFn c) (beginFn) (stampFn) (sweepLargeFn c) (sweepPagesFn)
                 (sweepPhaseFn))
           (if (wasm? c) (list (wasmInitFn)) (list (isOneFn) (presentFn) (mibOfFn c) (initFn c) (printStatsFn)))))

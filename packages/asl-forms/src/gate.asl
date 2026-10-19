@@ -1,4 +1,4 @@
-(module asl-forms/gate :x [GateEnv GateOutcome RunOut DelimDiag Repair RepairRun gateOp? readOnlyOp? linesFailed? runGate! checkStep testStep fixStep doctorStep! auditStep languageOf syntaxLang readText foreignSyntax! validateStaged! buildOverlay! runHost aslDelimiterDiag aslDelimiterError aslRepair repairAsn pySplitLines pyExt runArgv! whichTool stagedWritable!] :i [(asl-forms/kernel :a k) (asl-forms/edit :a e)])
+(module asl-forms/gate :x [GateEnv GateOutcome RunOut HostRun nativeCheck! DelimDiag Repair RepairRun gateOp? readOnlyOp? linesFailed? runGate! checkStep testStep fixStep doctorStep! auditStep languageOf syntaxLang readText foreignSyntax! validateStaged! buildOverlay! runHost aslDelimiterDiag aslDelimiterError aslRepair repairAsn pySplitLines pyExt runArgv! whichTool stagedWritable!] :i [(asl-forms/kernel :a k) (asl-forms/edit :a e) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
 
 
 (schema GateEnv (:f root String) (:f rootDir String) (:f binDir String) (:f host String) (:f staged (List (Pair String String))))
@@ -862,32 +862,55 @@ fn runHost! env: GateEnv verb: String path: String timeoutS: Int64 -> (Result Ho
 fn hostAbsent -> String
   "the stage-0 host is absent at asl/host/out/asl-host; build it with sh asl/host/build.sh or set ASL_HOST"
 
-fn hostCheckOnce! env: GateEnv overlay: String target: String path: String text: String -> (Pair String String)
-  (do (fileWrite target text)
-      (let [(r (runArgv! (list env.host "check" (relOf env path)) (some overlay) (none) 15000 0))]
-        (cond
-          ((not (stringEmpty? r.failure)) (pair "skipped" (str "asl-host check did not run: " (osErrorText r.failure env.host))))
-          (r.timedOut (pair "skipped" "asl-host check timed out after 15s"))
-          ((= r.code 0) (pair "ok" ""))
-          (else
-            (let [(out (stringJoin (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (list r.errText r.out)) "\n"))
-                  (lines (strippedLines (unroot out (list overlay (resultOr (realPath overlay) overlay)))))]
-              (pair "error" (pyTrunc (optionOr (listHead lines) (str "asl-host check exit " (stringFromInt64 r.code))) 300)))))))
+fn diagLine d: ty/Diagnostic -> String
+  (str d.path ":" (stringFromInt64 d.line) ":" (stringFromInt64 d.col) ": " d.code " " d.message)
 
-fn aslHostCheck! env: GateEnv path: String after: String before: (Option String) -> (List String)
-  (if (not (executable? env.host))
-    (list "skipped" (str "stage-0 host absent at " env.host) "")
-    (let [(others (filter (fn [(sp (Pair String String))] -> Bool (!= (pairFirst sp) path)) (writableStaged! env)))
-          (self (listAppend others (mt (stagedContent env path) ((some c) (list (pair path c))) ((none) (list)))))]
-      (mt (buildOverlay! env self)
-        ((err e) (list "skipped" (str "asl-host check did not run: " e) ""))
-        ((ok overlay)
-          (let [(target (k/joinPath overlay (k/relPath path env.root)))
-                (mk (dirCreate (k/dirName target)))
-                (r1 (hostCheckOnce! env overlay target path after))
-                (pre (if (and (= (pairFirst r1) "error") (some? before)) (pairFirst (hostCheckOnce! env overlay target path (optionOr before ""))) ""))
-                (gone (pathRemove overlay))]
-            (list (pairFirst r1) (pairSecond r1) pre))))))
+fn ! nativeCheck! base: String path: String -> HostRun
+  (let [(full (if (stringStartsWith? path "/") path (k/joinPath base path)))
+        (roots (list base (resultOr (realPath base) base)))
+        (rel (unroot full roots))
+        (r (cc/checkFileCached! full (list base (k/joinPath base "asl/packages") (k/joinPath base "asl")) (cc/emptyCache)))]
+    (mt (pairFirst r)
+      ((err _) (HostRun :code 1 :out "" :errText (str rel ":0:0: ERR_IO cannot open the file or resolve one of its imports\ncheck failed: " rel ": 1 error(s)") :source ""))
+      ((ok v)
+        (if (listEmpty? v.diags)
+          (HostRun :code 0 :out (str "ok " rel ": " (stringFromInt64 v.moduleCount) " module(s) checked") :errText "" :source "")
+          (HostRun :code 1 :out ""
+                   :errText (unroot (stringJoin (listAppend (map diagLine v.diags) (list (str "check failed: " rel ": " (stringFromInt64 (listLength v.diags)) " error(s)"))) "\n") roots)
+                   :source "")))))
+
+fn checkNative! env: GateEnv path: String -> (Result HostRun String)
+  (let [(staged (writableStaged! env))]
+    (mt (if (listEmpty? staged) (ok "") (buildOverlay! env staged))
+      ((err e) (err e))
+      ((ok overlay)
+        (let [(h (nativeCheck! (if (stringEmpty? overlay) env.root overlay) (relOf env path)))
+              (gone (if (stringEmpty? overlay) (ok ()) (pathRemove overlay)))]
+          (ok (with h :source (if (stringEmpty? overlay) ":disk" ":staged")))))))
+
+fn checkOnce! overlay: String target: String rel: String text: String -> (Pair String String)
+  (mt (fileWrite target text)
+    ((err e) (pair "skipped" (str "native check did not run: " e)))
+    ((ok _)
+      (let [(h (nativeCheck! overlay rel))]
+        (if (= h.code 0)
+          (pair "ok" "")
+          (let [(lines (strippedLines (stringJoin (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (list h.errText h.out)) "\n")))]
+            (pair "error" (pyTrunc (optionOr (listHead lines) (str "native check exit " (stringFromInt64 h.code))) 300)))))))
+
+fn aslCheck! env: GateEnv path: String after: String before: (Option String) -> (List String)
+  (let [(others (filter (fn [(sp (Pair String String))] -> Bool (!= (pairFirst sp) path)) (writableStaged! env)))
+        (self (listAppend others (mt (stagedContent env path) ((some c) (list (pair path c))) ((none) (list)))))]
+    (mt (buildOverlay! env self)
+      ((err e) (list "skipped" (str "native check did not run: " e) ""))
+      ((ok overlay)
+        (let [(rel (relOf env path))
+              (target (k/joinPath overlay (k/relPath path env.root)))
+              (mk (dirCreate (k/dirName target)))
+              (r1 (checkOnce! overlay target rel after))
+              (pre (if (and (= (pairFirst r1) "error") (some? before)) (pairFirst (checkOnce! overlay target rel (optionOr before ""))) ""))
+              (gone (pathRemove overlay))]
+          (list (pairFirst r1) (pairSecond r1) pre)))))
 
 fn validateStaged! env: GateEnv path: String before: (Option String) after: String force: Bool -> (List String)
   (let [(lang (syntaxLang! path after))]
@@ -896,11 +919,11 @@ fn validateStaged! env: GateEnv path: String before: (Option String) after: Stri
         ((none)
           (if (= lang "asn")
             (list "" "" " :balanced true")
-            (let [(hc (aslHostCheck! env path after before))
+            (let [(hc (aslCheck! env path after before))
                   (st (optionOr (listGet hc 0) ""))
                   (diag (optionOr (listGet hc 1) ""))
                   (pre (= (optionOr (listGet hc 2) "") "error"))
-                  (chk " :checker \"asl-host\"")]
+                  (chk " :checker \"asl-checker\"")]
               (cond
                 ((!= st "error") (list "" "" (str " :balanced true :syntax :" st chk (if (stringEmpty? diag) "" (str " :syntaxMessage " (q diag))))))
                 ((or pre force) (list "" "" (str " :balanced true :syntax :error" chk (if pre " :preexisting true" " :forced true") " :syntaxMessage " (q diag))))
@@ -947,18 +970,15 @@ fn checkFile! env: GateEnv id: Int64 op: String raw: String resolved: String -> 
                 ((not (stringEmpty? derr)) (rejectLine id op ":ERR_UNBALANCED_DELIMITERS" (str common (msgTail derr))))
                 ((= lang "asn") (okLine (str (head id op) " :status \"ok\"" common " :valid true :balanced true)")))
                 (else
-                  (mt (runHost! env "check" resolved 300)
-                    ((err e)
-                      (if (= e "absent")
-                        (rejectLine id op ":ERR_HOST_ABSENT" (str " :file \"" rel "\"" (msgTail (hostAbsent))))
-                        (rejectLine id op ":ERR_READ_FAILED" (msgTail (sub e 5 (stringLength e))))))
+                  (mt (checkNative! env resolved)
+                    ((err e) (rejectLine id op ":ERR_READ_FAILED" (msgTail e)))
                     ((ok h)
                       (let [(hc (str " :file \"" rel "\" :language \"" lang "\" :source " h.source))]
                         (if (= h.code 0)
-                          (okLine (str (head id op) " :status \"ok\"" hc " :valid true :balanced true :checker \"asl-host\" :checkerExit 0" (msgTail h.out) ")"))
+                          (okLine (str (head id op) " :status \"ok\"" hc " :valid true :balanced true :checker \"asl-checker\" :checkerExit 0" (msgTail h.out) ")"))
                           (let [(diag (stringJoin (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (list h.errText h.out)) "\n"))]
-                            (rejectLine id op ":ERR_CHECK_FAILED" (str hc " :balanced true :checker \"asl-host\" :checkerExit " (stringFromInt64 h.code)
-                                                                      (msgTail (if (stringEmpty? diag) "asl-host check failed" diag)))))))))))))))))
+                            (rejectLine id op ":ERR_CHECK_FAILED" (str hc " :balanced true :checker \"asl-checker\" :checkerExit " (stringFromInt64 h.code)
+                                                                      (msgTail (if (stringEmpty? diag) "native check failed" diag)))))))))))))))))
 
 fn stagedFailure! env: GateEnv sp: (Pair String String) -> String
   (let [(p (pairFirst sp))
@@ -1298,15 +1318,15 @@ fn auditStep! env: GateEnv id: Int64 kw: (Map String String) args: (List String)
         (asn (listContains? (list "vitality" "full" "all" "system" "stubs" "graph" "complexity" "coupling" "vacuity" "deadcode") subcmd))
         (intelSub (listContains? (list "coupling" "deadcode" "vacuity" "sweep" "graph" "complexity" "stubs" "trace") subcmd))
         (workspaceSub (listContains? (list "consistency" "gates" "closure" "foreign" "steps" "vitality" "full" "all" "system") subcmd))
-        (hasAuditPy (fileExists? (k/joinPath env.rootDir "scripts/audit/audit.py")))
+        (hasNativeAudit (fileExists? (k/joinPath env.rootDir "asl/packages/asl-gates/src/auditMain.asl")))
         (argv (if intelSub
                 (listAppend (list bin "intel" subcmd) (if (or asn (= subcmd "trace")) (list "--asn") (list)))
                 (listAppend (list bin "audit" subcmd) (listAppend (if full (list "--full") (list)) (if asn (list "--asn") (list))))))
-        (r (if (or intelSub hasAuditPy) (runArgv! argv (some env.rootDir) (none) (* timeoutS 1000) 15000) (RunOut :code 1 :out "" :errText "" :timedOut false :failure "")))]
+        (r (if (or intelSub hasNativeAudit) (runArgv! argv (some env.rootDir) (none) (* timeoutS 1000) 15000) (RunOut :code 1 :out "" :errText "" :timedOut false :failure "")))]
     (cond
-      ((and (not intelSub) (not hasAuditPy) workspaceSub)
-        (rejectLine id "audit" ":ERR_WORKSPACE_ONLY" (str " :subcmd \"" sc "\" :message \"" sc " runs the workspace's scripts/audit/audit.py, which this checkout does not have; asl-intel audits here: coupling deadcode vacuity sweep graph complexity stubs trace\"")))
-      ((and (not intelSub) (not hasAuditPy)) (rejectLine id "audit" ":ERR_UNKNOWN_SUBCMD" (str " :subcmd \"" sc "\" :message \"known: coupling deadcode vacuity sweep graph complexity stubs trace (asl-intel); consistency gates closure foreign steps vitality full all system (the workspace audit)\"")))
+      ((and (not intelSub) (not hasNativeAudit) workspaceSub)
+        (rejectLine id "audit" ":ERR_WORKSPACE_ONLY" (str " :subcmd \"" sc "\" :message \"" sc " runs the workspace's native asl-gates/auditMain.asl, which this checkout does not have; asl-intel audits here: coupling deadcode vacuity sweep graph complexity stubs trace\"")))
+      ((and (not intelSub) (not hasNativeAudit)) (rejectLine id "audit" ":ERR_UNKNOWN_SUBCMD" (str " :subcmd \"" sc "\" :message \"known: coupling deadcode vacuity sweep graph complexity stubs trace (asl-intel); consistency gates closure foreign steps vitality full all system (the workspace audit)\"")))
       ((not (stringEmpty? r.failure)) (rejectLine id "audit" ":ERR_EXEC_FAILED" (msgTail (osErrorText r.failure bin))))
       (r.timedOut (rejectLine id "audit" ":ERR_TIMEOUT" (str " :subcmd \"" sc "\" :receipt (:audit :sub " sc " :status :failed :err ERR_TIMEOUT :timeoutS " (stringFromInt64 timeoutS) ")")))
       (else

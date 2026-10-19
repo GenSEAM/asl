@@ -3,7 +3,9 @@
       Review reviewError reviewVerdict AdviceForm adviceOf AdvisorResult advisorSkipped advisorError advisorAdvice Cover coverOf
       vendorBounds fitVendorCall contextTokensFor modelBase calibrationIndexPath calibrationIndexPath! servedContextTokens servedContextTokens!
       readPayloadChars renderTranscript renderTurnContext renderWindow stableSectionAt stableWindowTurn gateOutcome gateTail gateNow
-      noWriteNudge readStreakEscalate noWriteTurns batchingRates costForm reinforceWhyFor escalationNear nowForm stepState! spanHolder seenReceipt failureSignatures
+      noWriteNudge noWriteNudgeTurns readStreakEscalate noWriteTurns parseDefectEscalate parseDefectEscalateIn parseDefectEscalateFor! batchingRates costForm reinforceWhyFor escalationNear nowForm stepState! spanHolder seenReceipt failureSignatures
+      renderTranscriptBounded turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
+      contextMaxOlderLines contextMaxOlderLinesIn contextMaxOlderLinesFor!
       coreDelta coreStatsLine formEnd sitePath possibleSitesOf readCovers siteNamed openPossible findingsRun possibleSiteList possibleNotice
       hiddenVars hiddenEnv! prefetchPaths! prefetchBlock! receiptPhase taskHintLines unmetForm specUnescape specCheckDiff! parseSpecVerdict
       runSpecCheck! digestLine evidenceDigest askReviewer! runFindingsCheck! advisorSkip advisorGateOutput advisorOpLine advisorSummary
@@ -628,6 +630,132 @@ fn noWriteNudgeTurns -> Int64
 
 fn noWriteTurns -> Int64
   20
+
+; (:m :ref LEON-TURN-RUNAWAY-20261017 :do "a streak of this many straight replies with no parseable op at all (never reaching a deliver declaration) escalates on its own, independent of the deliver=patch-gated noWriteTurns check above; this is the fallback when no project config overrides it")
+fn parseDefectEscalate -> Int64
+  8
+
+fn parseDefectEscalateAt s: String p: Int64 -> (Option Int64)
+  (let [j0 (+ p (stringLength ":parseDefectEscalate"))
+        j (skipWhile s j0 pySpace)
+        e (digitsAt s j)]
+    (if (> e j) (stringToInt64 (sub s j e)) none))
+
+; (:m :ref LEON-TURN-RUNAWAY-PARSEDEFECT-CONFIG-20261017 :do "the 165-turn ccBeam incident wasted several minutes before the fix above could even fire at the old literal 20; let a project tune the cap via :agentLoop (:parseDefectEscalate N) in its own .asl.config.asn without a rebuild, same lightweight key-scan style as budgetAt above rather than pulling a full ASN parser into this module")
+fn parseDefectEscalateIn text: String -> (Option Int64)
+  (match (stringIndexOf text ":parseDefectEscalate")
+    ((none) none)
+    ((some k) (parseDefectEscalateAt text k)))
+
+fn parseDefectEscalateFor! root: String -> Int64
+  (let [cfg (pathJoin root ".asl.config.asn")]
+    (if (isFile! cfg)
+      (optionOr (parseDefectEscalateIn (resultOr (fileReadString cfg) "")) (parseDefectEscalate))
+      (parseDefectEscalate)))
+
+; (:m :ref LEON-CONTEXT-RESEND-20261017 :do "renderTranscript's budget (state.transcriptChars) was the model's entire context window, so a run of a few dozen turns never reached it and resent the whole growing history verbatim every call; contextKeepTurns/contextToolCapBytes bound per-call input on turn count instead, same config-driven, key-scan-over-.asl.config.asn style as parseDefectEscalate above")
+fn contextKeepTurns -> Int64
+  8
+
+fn contextKeepTurnsAt s: String p: Int64 -> (Option Int64)
+  (let [j0 (+ p (stringLength ":contextKeepTurns"))
+        j (skipWhile s j0 pySpace)
+        e (digitsAt s j)]
+    (if (> e j) (stringToInt64 (sub s j e)) none))
+
+fn contextKeepTurnsIn text: String -> (Option Int64)
+  (mt (stringIndexOf text ":contextKeepTurns")
+    ((none) none)
+    ((some k) (contextKeepTurnsAt text k)))
+
+fn ! contextKeepTurnsFor! root: String -> Int64
+  (let [cfg (pathJoin root ".asl.config.asn")]
+    (if (isFile! cfg)
+      (optionOr (contextKeepTurnsIn (resultOr (fileReadString cfg) "")) (contextKeepTurns))
+      (contextKeepTurns)))
+
+fn contextToolCapBytes -> Int64
+  1500
+
+fn contextToolCapBytesAt s: String p: Int64 -> (Option Int64)
+  (let [j0 (+ p (stringLength ":contextToolCapBytes"))
+        j (skipWhile s j0 pySpace)
+        e (digitsAt s j)]
+    (if (> e j) (stringToInt64 (sub s j e)) none))
+
+fn contextToolCapBytesIn text: String -> (Option Int64)
+  (mt (stringIndexOf text ":contextToolCapBytes")
+    ((none) none)
+    ((some k) (contextToolCapBytesAt text k)))
+
+fn ! contextToolCapBytesFor! root: String -> Int64
+  (let [cfg (pathJoin root ".asl.config.asn")]
+    (if (isFile! cfg)
+      (optionOr (contextToolCapBytesIn (resultOr (fileReadString cfg) "")) (contextToolCapBytes))
+      (contextToolCapBytes)))
+
+; (:m :do "a hard cap on how many aged-out turns keep a summary line at all; without this, the summary section alone grows one line per turn forever and a long enough run still blows any fixed per-call ceiling, just slowly instead of compoundingly. Beyond the cap the oldest excess older turns are dropped with no line at all (not even a marker), so the rendered size has a true fixed ceiling for a run of any length: maxOlderLines summary lines plus keepTurns whole turns, never more. A run shorter than maxOlderLines+keepTurns (every real bench case so far: FREEBENCH caps runs at budget 30) never drops anything, so the summary section stays purely append-only and the rendered prefix stays byte-stable turn over turn for the whole run")
+fn contextMaxOlderLines -> Int64
+  50
+
+fn contextMaxOlderLinesAt s: String p: Int64 -> (Option Int64)
+  (let [j0 (+ p (stringLength ":contextMaxOlderLines"))
+        j (skipWhile s j0 pySpace)
+        e (digitsAt s j)]
+    (if (> e j) (stringToInt64 (sub s j e)) none))
+
+fn contextMaxOlderLinesIn text: String -> (Option Int64)
+  (mt (stringIndexOf text ":contextMaxOlderLines")
+    ((none) none)
+    ((some k) (contextMaxOlderLinesAt text k)))
+
+fn ! contextMaxOlderLinesFor! root: String -> Int64
+  (let [cfg (pathJoin root ".asl.config.asn")]
+    (if (isFile! cfg)
+      (optionOr (contextMaxOlderLinesIn (resultOr (fileReadString cfg) "")) (contextMaxOlderLines))
+      (contextMaxOlderLines)))
+
+; (:m :do "a deterministic one-line receipt summary for a turn that has aged out of the kept window: just ops/files/gates, never the model's reply text, so the summary section is cheap and never carries prose that could itself grow unbounded")
+fn jgetStr h: j/Json k: String -> String
+  (mt (jget h k) ((some v) (pyStr v)) ((none) ""))
+
+fn turnReceiptLine h: j/Json -> String
+  (let [turn (jgetStr h "turn")
+        ops (jgetStr h "ops")
+        files (jgetStr h "files")
+        gates (jgetStr h "gates")]
+    (str "(:turnSummary :turn " turn
+      (if (stringEmpty? ops) "" (str " :ops \"" (c/escapeAsn ops) "\""))
+      (if (stringEmpty? files) "" (str " :files \"" (c/escapeAsn files) "\""))
+      (if (stringEmpty? gates) "" (str " :gates \"" (c/escapeAsn gates) "\""))
+      ")"))
+
+; (:m :do "a kept turn is still rendered whole (sent+got), but got is clipped past toolCapBytes with a pointer back to the journal instead of growing the prompt with a large tool output")
+fn clipGot got: String turnLabel: String cap: Int64 -> String
+  (if (> (stringLength got) cap)
+    (str (sub got 0 cap) " ... [" (stringFromInt64 (- (stringLength got) cap)) " more bytes clipped, see turn " turnLabel " in the journal]")
+    got)
+
+fn turnWhole h: j/Json cap: Int64 -> String
+  (let [turn (jgetStr h "turn")
+        sent (jgetStr h "sent")
+        got (jgetStr h "got")]
+    (str "(:turn " turn " :sent \"" (c/escapeAsn sent) "\" :got \"" (c/escapeAsn (clipGot got turn cap)) "\")"))
+
+; (:m :do "everything older than the last keepTurns turns collapses to one deterministic receipt line each (ops/files/gates, never model text); only the most recent maxOlderLines of those survive at all, the rest are dropped with nothing rendered in their place, giving a true fixed ceiling for a run of any length. Below that cap the older section is pure append-only as turns age out of the kept window one at a time, so the rendered prefix stays byte-stable call over call; the kept tail is re-rendered whole (clipped per-turn) every call")
+fn renderTranscriptBounded history: (List j/Json) keepTurns: Int64 toolCapBytes: Int64 maxOlderLines: Int64 -> String
+  (if (listEmpty? history)
+    ""
+    (let [n (listLength history)
+          k (max 0 (min keepTurns n))
+          cutAt (- n k)
+          older (optionOr (listSlice history 0 cutAt) (list))
+          olderCount (listLength older)
+          survivors (optionOr (listSlice older (max 0 (- olderCount maxOlderLines)) olderCount) (list))
+          kept (optionOr (listSlice history cutAt n) (list))
+          summaryLines (map turnReceiptLine survivors)
+          keptLines (map (fn [h] (turnWhole h toolCapBytes)) kept)]
+      (c/joinSep (listAppend summaryLines keptLines) "\n")))
 
 fn noWriteNudge deliver: (Option String) wrote: Bool done: Int64 files: (List String) win: (Option (List Int64)) readStreak: Int64 redGate: j/Json -> String
   (cond

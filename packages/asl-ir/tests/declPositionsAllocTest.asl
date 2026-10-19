@@ -12,7 +12,7 @@ fn ! cpuMicros -> Int64
       ((ok usage) (+ usage.selfUserUs usage.selfSysUs))))
 
 fn ! lowerSrc -> String
-  (optionOr (resultToOption (fileRead "asl/packages/asl-ir/src/lower.asl")) "")
+  (optionOr (resultToOption (fileReadString "asl/packages/asl-ir/src/lower.asl")) "")
 
 fn ! largeFixture -> String
   (repeatOnto 10 (lowerSrc) "")

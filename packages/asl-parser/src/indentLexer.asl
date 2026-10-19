@@ -44,7 +44,7 @@ fn indentScan bs: Bytes len: Int64 i: Int64 spaces: Int64 lineNum: Int64 diags: 
         (else (IndentScanState :idx i :spaces spaces :inIndent false :diags diags)))))
 
 fn measureIndent rawLine: String lineNum: Int64 -> LineMeasure
-  (let [(clean (stripCr rawLine)) (len (stringLength clean)) (finalState (indentScan (stringToBytes clean) len 0 0 lineNum (list)))] (let [(firstNonWhite finalState.idx) (rawSpaces finalState.spaces) (diags (listReverse finalState.diags)) (restContent (if (>= firstNonWhite len) "" (sliceStr clean firstNonWhite len)))] (if (= (mod rawSpaces 2) 1) (let [(w002 (makeDiagnostic "W002" "odd indentation rounded down to 2-space boundary" lineNum 1))] (LineMeasure :spaces (- rawSpaces 1) :rest restContent :diagnostics (cons w002 diags))) (LineMeasure :spaces rawSpaces :rest restContent :diagnostics diags))))
+  (let [(clean (stripCr rawLine)) (len (stringLength clean)) (finalState (indentScan (stringToBytes clean) len 0 0 lineNum (list)))] (let [(firstNonWhite finalState.idx) (rawSpaces finalState.spaces) (diags (listReverse finalState.diags)) (restContent (if (>= firstNonWhite len) "" (sliceStr clean firstNonWhite len)))] (LineMeasure :spaces rawSpaces :rest restContent :diagnostics diags)))
 
 (schema SymbolRun (:f nextIdx Int64) (:f sym String))
 
@@ -193,7 +193,7 @@ fn tokenizeLineNormal st: TokenizeState line: String lNum: Int64 -> TokenizeStat
         (let [(firstRes (scanLineContent content lNum meas.spaces)) (moved (+ st.depth (delimDelta firstRes.reversed))) (nd (if (< moved 0) 0 moved)) (pendOut (pendingFromLine firstRes.pendingStr lNum))]
           (if (> st.depth 0)
             (with st :tokens (listAppend firstRes.reversed st.tokens) :diagnostics (listAppend firstRes.diagnostics diags) :lineCount lNum :hasEmitted true :depth nd :pendingString pendOut)
-            (let [(curLevel (/ meas.spaces 2)) (topLevel (optionOr (listHead st.stack) 0)) (lineRes firstRes) (lineToksRev lineRes.reversed) (allDiags (listAppend lineRes.diagnostics diags))]
+            (let [(curLevel meas.spaces) (topLevel (optionOr (listHead st.stack) 0)) (lineRes firstRes) (lineToksRev lineRes.reversed) (allDiags (listAppend lineRes.diagnostics diags))]
               (cond
                 ((> curLevel topLevel) (let [(indTok (makeIndentToken (tokIndent curLevel) "" lNum 1)) (newStack (cons curLevel st.stack)) (newToks (listAppend lineToksRev (cons indTok st.tokens)))] (TokenizeState :stack newStack :tokens newToks :diagnostics allDiags :lineCount lNum :hasEmitted true :depth nd :pendingString pendOut)))
                 ((< curLevel topLevel) (let [(popRes (fold (fn [(acc (Pair (List Int64) (List IndentToken))) (_ Int64)] -> (Pair (List Int64) (List IndentToken)) (let [(stk (pairFirst acc)) (dtoks (pairSecond acc)) (tp (optionOr (listHead stk) 0))] (if (> tp curLevel) (let [(nxtStk (optionOr (listTail stk) (list))) (nxtTp (optionOr (listHead nxtStk) 0)) (dtok (makeIndentToken (tokDedent nxtTp) "" lNum 1))] (pair nxtStk (cons dtok dtoks))) acc))) (pair st.stack (list)) st.stack))] (let [(nxtStack (pairFirst popRes)) (dedToks (pairSecond popRes)) (newToks (listAppend lineToksRev (listAppend dedToks st.tokens)))] (TokenizeState :stack nxtStack :tokens newToks :diagnostics allDiags :lineCount lNum :hasEmitted true :depth nd :pendingString pendOut))))

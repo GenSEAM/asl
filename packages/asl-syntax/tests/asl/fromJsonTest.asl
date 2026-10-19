@@ -78,7 +78,7 @@ fn topFormsEquivalent? xs: (List a/TopForm) ys: (List a/TopForm) -> Bool
                true (zip xs ys))))
 
 fn loadAstSchema! -> (Result j/Json String)
-  (mt (fileRead "asl/grammar/aslAst.schema.json")
+  (mt (fileReadString "asl/grammar/aslAst.schema.json")
     ((err e) (err (str "Failed reading aslAst.schema.json: " e)))
     ((ok text)
      (mt (j/jsonParse text)
@@ -234,7 +234,7 @@ fn verifyTopFormsList! path: String idx: Int64 forms: (List a/TopForm) -> Bool
        (and ok1 okRest))))
 
 fn verifyCorpusFile! path: String -> Bool
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err e)
      (do
        (assert false (str path " read error: " e))
@@ -349,7 +349,6 @@ fn inScopeCorpusFiles -> (List String)
         "asl/packages/asl-agent-bus/src/asnlRing.asl"
         "asl/packages/asl-agent-bus/src/bridge.asl"
         "asl/packages/asl-syntax/src/core/bytesText.asl"
-        "asl/packages/asl-search/src/commonCrawl.asl"
         "asl/packages/asl-syntax/src/core/outline.asl")
 
 fn ! runTests -> Bool

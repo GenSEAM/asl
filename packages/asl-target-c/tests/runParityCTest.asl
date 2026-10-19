@@ -14,10 +14,10 @@ fn workName path: String -> String
   (stringReplace (stringReplace path "/" "_") "." "_")
 
 fn ! emitAndCheckSyntax work: String path: String -> (Result ProcessOutput String)
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err e) (err (str path ": read failed: " e)))
     ((ok src)
-      (mt (mt (fileRead "asl/prelude/prelude.asl") ((err e) (err (str "prelude read failed: " e))) ((ok preludeText) (em/emitC11SourceWith src preludeText path)))
+      (mt (mt (fileReadString "asl/prelude/prelude.asl") ((err e) (err (str "prelude read failed: " e))) ((ok preludeText) (em/emitC11SourceWith src preludeText path)))
         ((err m) (err (str path ": emit failed: " m)))
         ((ok code)
           (let [(cFile (str work "/" (workName path) ".c"))]

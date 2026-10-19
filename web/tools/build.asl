@@ -98,7 +98,7 @@ fn ! compileWasm! work: String out: String -> Bool
           (ok! "wasm-ld" (wl/linkWasm32 (wasmLd!) [(str work "/main.ll.o") (str work "/runtime.ll.o") (str work "/support.ll.o")] (map pairFirst (exports)) out))))))
 
 fn ! lineCount! path: String -> Int64
-  (mt (fileRead path) ((ok s) (stringCountChar s "\n")) ((err e) 0))
+  (mt (fileReadString path) ((ok s) (stringCountChar s "\n")) ((err e) 0))
 
 fn ! aslLines! -> Int64
   (let [(files (filter (fn [(f String)] -> Bool (not (stringEmpty? f))) (stringSplit (sh! (str "find " (web) "/site asl/packages/asl-html/src -name '*.asl'")).stdout "\n")))]

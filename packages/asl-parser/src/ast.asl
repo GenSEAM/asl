@@ -1,4 +1,4 @@
-(module asl-parser/ast :x [moduleNode ModuleNode SchemaNode EnumNode DefunNode EnumCase Param AstField TopForm ParseError PosForm KidForm readForms parse parseLegacy parseForTypeCheck retiredProse parseForChecker renderNode AstLit litInt litFloat litString litBool litUnit AstPattern patWildcard patVar patLit patTuple patRecord patCtor AstMatchArm matchArm makeMatchArm AstExpr exprLit exprIdent exprMember exprCall exprLet exprIf exprMatch exprTry exprBlock exprRecord exprCond exprLambda exprInterpolation AstType typeNamed typeTuple typeRecord typeFn charsWithin? tailExprs sexprItems nthExpr hasTailrec? isInlineBodyCandidate? typeNodeText joinFnHeader readKidForms kidFormsFor] :i [(lexer :a lx) (reader :a rd) (indentParser :a ip) (asl-syntax/core/tree :a tr) (fnHeader :a fh)])
+(module asl-parser/ast :x [moduleNode ModuleNode SchemaNode EnumNode DefunNode EnumCase Param AstField TopForm ParseError PosForm KidForm readForms parse parseLegacy parseForTypeCheck retiredProse retiredSpelling retiredSource spellingErrors retiredFormErrors strictSpellingDefault bangedBuiltins parseForChecker renderNode AstLit litInt litFloat litString litBool litUnit AstPattern patWildcard patVar patLit patTuple patRecord patCtor AstMatchArm matchArm makeMatchArm AstExpr exprLit exprIdent exprMember exprCall exprLet exprIf exprMatch exprTry exprBlock exprRecord exprCond exprLambda exprInterpolation AstType typeNamed typeTuple typeRecord typeFn charsWithin? tailExprs sexprItems nthExpr hasTailrec? isInlineBodyCandidate? typeNodeText joinFnHeader readKidForms kidFormsFor] :i [(lexer :a lx) (reader :a rd) (indentParser :a ip) (asl-syntax/core/tree :a tr) (fnHeader :a fh)])
 
 (schema ParseError (:f msg String) (:f line Int64) (:f col Int64))
 
@@ -375,15 +375,101 @@ fn retiredProse src: String -> (Option ParseError)
             ((some t) (some (ParseError :msg "ERR_READ_DOC :d docstrings are retired: move the text to the package doc.asn (asl doc)" :line t.line :col t.col)))
             ((none) (none)))))))
 
+(schema SpellScan (:f before String) (:f prev String) (:f opens (List String)) (:f phase Int64) (:f strict Bool) (:f fnAt (Option lx/Token)) (:f mods (List String)) (:f errs (List ParseError)) (:f defs (List String)) (:f calls (List lx/Token)))
+
+fn bangedBuiltins -> (List String)
+  (list "bytesFromBase64" "bytesSet" "bytesSetFloat64" "bytesSha256" "cpuCount" "dirCreate" "dirList" "envGet" "envList" "eprintln" "execCmd" "fdClose" "fdNonBlocking" "fdPoll" "fdRead" "fdWrite" "file-append" "fileAppend" "fileChmod" "fileCreateExclusive" "fileExists?" "fileFsync" "fileLock" "fileLockAt" "fileLockWait" "fileLstat" "fileReadAt" "fileReadBytes" "fileReadlink" "fileReadRange" "fileReadString" "fileSize" "fileStat" "fileUtime" "fileWrite" "fileWriteAt" "getHomeDir" "localDate" "monotonicNs" "nowNs" "parquetOpen" "parquetReadF64" "parquetReadI64" "parquetReadI8" "pathRemove" "pathRename" "pathSymlink" "platformInfo" "preludeB64Dec" "print" "println" "procAlive?" "processRun" "processSpawn" "processWait" "procExecv" "procExePath" "procKill" "procPoll" "procRusage" "procSelf" "procSpawnv" "procWaitAny" "procWaitPid" "read-all" "read-line" "realPath" "sleepMs" "sockAccept" "sockLocalPort" "sockRecvFd" "sockSendFd" "tcpConnect" "tcpListen" "unixConnect" "unixListen" "unixSocketPair" "zstdAslBackwardInit" "zstdAslBackwardRead" "zstdAslBlocks" "zstdAslCountBlockDone" "zstdAslCountBlocks" "zstdAslDecompress" "zstdAslFillFseNorms" "zstdAslFinishFrame" "zstdAslForwardBits" "zstdAslForwardBitsLoop" "zstdAslFseBuildCell" "zstdAslFseBuildNorms" "zstdAslFseCountFinish" "zstdAslFseCounts" "zstdAslFseDecodeStep" "zstdAslFseInit" "zstdAslFseRead" "zstdAslFseSpread" "zstdAslFseSpreadOne" "zstdAslFseSpreadSkip" "zstdAslFseWeightLoop" "zstdAslFseZeroRun" "zstdAslHufBuild" "zstdAslHufCached" "zstdAslHufCheckWeights" "zstdAslHufCountWeights" "zstdAslHufDirectWeights" "zstdAslHufFill" "zstdAslHufFour" "zstdAslHufFseWeights" "zstdAslHufLiterals" "zstdAslHufOne" "zstdAslHufRead" "zstdAslHufSet16" "zstdAslHufSpread" "zstdAslHufStarts" "zstdAslHufStream" "zstdAslLiteralBlock" "zstdAslNormInit" "zstdAslNormSet" "zstdAslNormZeroRun" "zstdAslRepGet" "zstdAslRepSet" "zstdAslSeqLoad" "zstdAslSeqSave" "zstdAslSeqStateCopy" "zstdAslSeqTable" "zstdAslSequenceAdvance" "zstdAslSequenceCopy" "zstdAslSequenceMatch" "zstdAslSequenceRun" "zstdAslSequences" "zstdAslSequencesTables" "zstdAslSetRaw" "zstdAslSetRle" "zstdDecompress")
+
+fn bangedBuiltinMessage x: String -> String
+  (str "ERR_READ_SPELLING (" x " ...) is retired: an effectful builtin carries !, write (" x "! ...)")
+
+fn strictSpellingDefault -> Bool
+  false
+
+fn spellingEntry? name: String -> Bool
+  (or (= name "main") (= name "runTests"))
+
+fn spellingOpen? x: String -> Bool
+  (or (= x "(") (or (= x "[") (= x "{")))
+
+fn spellingClose? x: String -> Bool
+  (or (= x ")") (or (= x "]") (= x "}")))
+
+fn spellingSymbol? t: lx/Token -> Bool
+  (match t.kind ((lx/tokSymbol _) true) (_ false))
+
+fn bindingPairAt? opens: (List String) before: String -> Bool
+  (and (listContains? (list "[ let" "[ fn") (optionOr (listGet opens 1) "")) (or (= before "[") (= before ")")))
+
+fn retiredHeadMessage x: String -> String
+  (cond
+    ((= x "mt") "ERR_READ_SPELLING (mt subject arm ...) is retired: write (match subject arm ...)")
+    ((= x "==") "ERR_READ_SPELLING (== a b) is retired: write (= a b)")
+    ((= x "not=") "ERR_READ_SPELLING (not= a b) is retired: write (!= a b)")
+    (else ""))
+
+fn fnMarkMessage name: String -> String
+  (str "ERR_READ_SPELLING fn ! " name " is retired: write fn " (if (or (spellingEntry? name) (stringEndsWith? name "!")) name (str name "!")))
+
+fn spellingErr msg: String t: lx/Token -> ParseError
+  (ParseError :msg msg :line t.line :col t.col)
+
+fn spellingFnStep st: SpellScan t: lx/Token -> SpellScan
+  (match st.fnAt
+    ((none) st)
+    ((some f)
+      (cond
+        ((listContains? (list "!" "tailrec" ":tailrec") t.rawText) (with st :mods (cons t.rawText st.mods)))
+        ((and (listContains? st.mods "!") (spellingSymbol? t)) (with st :fnAt (none) :mods (list) :defs (cons t.rawText st.defs) :errs (cons (spellingErr (fnMarkMessage t.rawText) f) st.errs)))
+        ((spellingSymbol? t) (with st :fnAt (none) :mods (list) :defs (cons t.rawText st.defs)))
+        (else (with st :fnAt (none) :mods (list))))))
+
+fn spellingStep st: SpellScan t: lx/Token -> SpellScan
+  (let [(x t.rawText)
+        (afterOpen (= st.prev "("))
+        (head (and afterOpen (and (spellingSymbol? t) (not (bindingPairAt? st.opens st.before)))))
+        (opens (cond ((spellingOpen? x) (cons (str x " " st.prev) st.opens)) ((spellingClose? x) (optionOr (listTail st.opens) (list))) (else st.opens)))
+        (phase (cond ((and (= st.phase 0) (= x "module")) 1) ((and (= st.phase 1) (listEmpty? opens)) 2) ((and (= st.phase 0) (and (not (= x "(")) (not (= x "module")))) 2) (else st.phase)))
+        (strict (or st.strict (and (= st.phase 1) (and (= st.prev ":spelling") (= x "strict")))))
+        (fnState (spellingFnStep st t))
+        (headMsg (if head (retiredHeadMessage x) ""))
+        (startsFn (and (= x "fn") (and (spellingSymbol? t) (or afterOpen (= t.col 1)))))
+        (errs (if (stringEmpty? headMsg) fnState.errs (cons (spellingErr headMsg t) fnState.errs)))
+        (calls (if (and head (listContains? (bangedBuiltins) x)) (cons t fnState.calls) fnState.calls))]
+    (with st :before st.prev :prev x :opens opens :phase phase :strict strict :fnAt (if startsFn (some t) fnState.fnAt) :mods (if startsFn (list) fnState.mods) :errs errs :defs fnState.defs :calls calls))
+
+fn spellingScan src: String -> SpellScan
+  (fold spellingStep (SpellScan :before "" :prev "" :opens (list) :phase 0 :strict false :fnAt (none) :mods (list) :errs (list) :defs (list) :calls (list)) (lx/tokenize src))
+
+fn scanErrors st: SpellScan -> (List ParseError)
+  (let [(own (filter (fn [(t lx/Token)] -> Bool (not (listContains? st.defs t.rawText))) st.calls))
+        (bang (map (fn [(t lx/Token)] -> ParseError (spellingErr (bangedBuiltinMessage t.rawText) t)) own))]
+    (listSortBy (fn [(e ParseError)] -> Int64 (+ (* e.line 100000) e.col)) (listAppend (listReverse st.errs) bang)))
+
+fn spellingErrors src: String -> (List ParseError)
+  (scanErrors (spellingScan src))
+
+; (:m :ref AGENTSURFACE-BANG-STALE :do "scanErrors' bang arm flags every bare call to a tools/codemod/builtinBang.asn effectful builtin as retired, which was correct under the 2026-10-15 builtinBang decision but is now stale: EFFECT-INFER (principles.asn InferWhatCanBeInferred, adopted 88729ed98) makes the bang optional and the bare spelling current. retiredFormErrors keeps the two still-genuine retired forms (mt/==/not=, fn ! name) and drops the bang arm, for a caller that counts retired debt rather than enforcing the opt-in :spelling strict codemod target; spellingErrors/bangedBuiltins are untouched so strictSpellingTest and the codemod keep their own, still-valid behavior")
+fn retiredFormErrors src: String -> (List ParseError)
+  (listReverse (spellingScan src).errs)
+
+fn retiredSpelling src: String -> (Option ParseError)
+  (if (not (or (strictSpellingDefault) (stringContains? src ":spelling strict"))) (none)
+    (let [(st (spellingScan src))]
+      (if (or (strictSpellingDefault) st.strict) (listHead (scanErrors st)) (none))))
+
+fn retiredSource src: String -> (Option ParseError)
+  (match (retiredProse src) ((some e) (some e)) ((none) (retiredSpelling src)))
+
 fn parse src: String -> (Result (List TopForm) ParseError)
-  (mt (retiredProse src)
+  (mt (retiredSource src)
     ((some e) (err e))
     ((none) (mt (parseLegacy src)
       ((err e) (err e))
       ((ok forms) (rejectBareLiteralTopExpr forms)))))
 
 fn parseForTypeCheck src: String -> (Result (List TopForm) ParseError)
-  (mt (retiredProse src)
+  (mt (retiredSource src)
     ((some e) (err e))
     ((none) (mt (parseForChecker src)
       ((err e) (err e))

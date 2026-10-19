@@ -297,7 +297,7 @@ fn chooseBase! -> (Pair (Option FullGreenRecord) (List String))
   (chooseBaseAt! "")
 
 fn forceFullPrefixes -> (List String)
-  (list "asl/bin/" "bin/asl" "bin/asl-core" "asl/prelude/" "asl/grammar/" "scripts/runGateTests.sh" "scripts/audit/" ".asl/mem/knownRed.asn")
+  (list "asl/bin/" "bin/asl" "bin/asl-core" "asl/prelude/" "asl/grammar/" "scripts/audit/" ".asl/mem/knownRed.asn")
 
 fn isForceFull p: String -> Bool
   (listAny? (fn [(f String)] -> Bool (stringStartsWith? p f)) (forceFullPrefixes))

@@ -1,5 +1,5 @@
 (module asl-parser/tests/cachedParserTest
-  :x [testCachedParserHashAndSymbol testCachedParserIncrementalParsing testCachedParserHitAndTelemetry testCachedParserEvictionAndClear runTests RunTests]
+  :x [testCachedParserHashAndSymbol testCachedParserIncrementalParsing testCachedParserHitAndTelemetry testCachedParserEvictionAndClear runTests RunTests!]
   :i [(cachedParser :a cp) (reader :a rd)])
 
 fn testCachedParserHashAndSymbol -> Bool
@@ -117,5 +117,5 @@ fn runTests -> Bool
     (assert (testCachedParserArrowedFnBareSentinelAtomsInBodySurvive) "testCachedParserArrowedFnBareSentinelAtomsInBodySurvive passed")
     true)
 
-fn RunTests -> Bool
+fn RunTests! -> Bool
   (runTests)

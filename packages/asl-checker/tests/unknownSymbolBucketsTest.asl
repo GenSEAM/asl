@@ -29,7 +29,13 @@ fn testMissingBuiltinSig -> Bool
 
 fn testCmpAliasOperators -> Bool
   (do (assert (accepts? "(module b :x [f])\nfn f a: Int64 b: Int64 -> Bool\n  (== a b)\n") "== is the same operator as =, not a bare-value reference to it")
-      (assert (accepts? "(module b :x [f])\nfn f a: Int64 b: Int64 -> Bool\n  (not= a b)\n") "not= is the same operator as !=")
+      true)
+
+fn parseDiag src: String -> String
+  (optionOr (listHead (map (fn [(d ty/Diagnostic)] -> String d.message) (filter (fn [(d ty/Diagnostic)] -> Bool (= d.code "parse")) (c/checkSource src (mapEmpty) "unknownBucket.asl")))) "")
+
+fn testNotEqRetired -> Bool
+  (do (assert (= (parseDiag "(module b :x [f])\nfn f a: Int64 b: Int64 -> Bool\n  (not= a b)\n") "ERR_READ_SPELLING (not= a b) is retired: write (!= a b)") "not= is retired, not an alias of !=; the checker rejects it at parse time naming != as the spelling")
       true)
 
 fn testKeywordLiteral -> Bool
@@ -56,6 +62,7 @@ fn ! runTests -> Bool
   (do (assert (testMissingBuiltinSig) "bucket missingBuiltinSig")
       (assert (testWithIsResolvedAsSpecialForm) "with is a record-copy special form, not an unknown callee")
       (assert (testCmpAliasOperators) "bucket cmpAliasOperators")
+      (assert (testNotEqRetired) "not= is retired at parse time")
       (assert (testKeywordLiteral) "bucket keywordLiteral")
       (assert (testPreludeSourcedBuiltins) "bucket preludeSourcedBuiltins")
       (assert (testStillCatchesRealUnknowns) "sanity: a real unknown symbol is still caught")

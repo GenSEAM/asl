@@ -43,7 +43,7 @@ fn ! sameAsHost! name: String -> Bool
           (assert (ok? built) (str name " builds with go: " (mt built ((ok _) "ok") ((err e) e))))
           (let [(errBase (str "/tmp/asl-target-go/" name))
                 (viaGo (splitSh! "." (shellQuote (resultOr built "false")) (str errBase "/go.stderr") 30 16))
-                (viaHost (splitSh! "." (str "asl/host/out/asl-host run " (shellQuote (fixture name))) (str errBase "/host.stderr") 60 32))]
+                (viaHost (splitSh! "." (str "./bin/asl run " (shellQuote (fixture name))) (str errBase "/host.stderr") 60 32))]
             (do
               (assert (= viaGo.stdout viaHost.stdout) (str name " stdout matches the host; go=" viaGo.stdout " host=" viaHost.stdout))
               (assert (= viaGo.exitCode viaHost.exitCode) (str name " exit matches the host; go=" (stringFromInt64 viaGo.exitCode) " host=" (stringFromInt64 viaHost.exitCode) " " viaGo.stderr))
@@ -66,7 +66,7 @@ fn ! suiteUnderGo! suite: String -> Bool
           (assert (ok? built) (str suite " builds with go: " (mt built ((ok _) "ok") ((err e) e))))
           (let [(errBase (str "/tmp/asl-target-go/" suite))
                 (viaGo (splitSh! "." (shellQuote (resultOr built "false")) (str errBase "/go.stderr") 30 16))
-                (viaHost (splitSh! "." (str "asl/bin/asl test " (shellQuote path)) (str errBase "/host.stderr") 120 32))]
+                (viaHost (splitSh! "." (str "./bin/asl test " (shellQuote path)) (str errBase "/host.stderr") 120 32))]
             (do
               (assert (= viaGo.stdout (str "true " (hostCount viaHost.stdout))) (str suite " passes under go with the host's assertion count; go=" viaGo.stdout viaGo.stderr " host=" viaHost.stdout))
               true))))))

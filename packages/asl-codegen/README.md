@@ -8,7 +8,7 @@ ASL source generators that turn parsed ASL (the `asl-parser` AST, typed by `asl-
 
 These modules are libraries. `asl-compiler` calls `c99Emit` (`compileSourceToC99`, `targets.asl`); no command-line tool drives them, and `asl/host/out/asl-host build` does not use them (it embeds module sources in an executable linked against the host). The native and `wasm32` path is `asl-target-llvm`, not this package.
 
-Module names use the prefix `asl-codegen/`; `manifest.asn` lists the same 10 modules. All 10 files in `src/` pass `asl/host/out/asl-host check` (2026-10-14). Two of the test files exercise other packages: `emitWatTest.asl` imports `asl-target-wat/emitWat` and `goCodegenTest.asl` imports `asl-target-go/emitGo`.
+Module names use the prefix `asl-codegen/`; `manifest.asn` lists the same 10 modules. All 10 files in `src/` pass `asl/host/out/asl-host check` (2026-10-14). `asl-target-wat` was deleted 2026-10-15 (principal decision: the interpreter and rs/wat targets are not needed, wasm goes through `asl-target-llvm`); its duplicate `emitWatTest.asl` under this package's `tests/` was deleted with it. `goCodegenTest.asl` still imports `asl-target-go/emitGo`.
 
 ## Modules and exports
 

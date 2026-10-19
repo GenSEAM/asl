@@ -116,7 +116,7 @@ fn loadSpec text: String -> (Result MetaSpec String)
                   (else (ok (MetaSpec :keys keys :tags tags :effects effects :whyWords why :pragmas pragmas)))))))))))
 
 fn readOr! path: String fallback: String -> String
-  (mt (fileRead path) ((ok s) s) ((err _) fallback))
+  (mt (fileReadString path) ((ok s) s) ((err _) fallback))
 
 fn joinPath dir: String name: String -> String
   (if (or (stringEmpty? dir) (= dir ".")) name (str dir "/" name))
@@ -488,7 +488,7 @@ fn scanFile! ctx: Ctx path: String -> (Option (Result FileScan String))
              (or (stringContains? (lastSegment path) ".")
                  (mt (fileStat path) ((ok st) (not st.isFile)) ((err _) true))))
       (none)
-      (mt (fileRead path)
+      (mt (fileReadString path)
         ((err _) (some (err path)))
         ((ok text)
           (let [(lang (if (stringEmpty? extLang) (fileLang path (firstLineOf text)) extLang))]
@@ -633,14 +633,14 @@ fn ! main args: (List String) -> (Result Int64 String)
     ((err e) (fail! (str e "; usage: metaAudit.asl [--root DIR] [--meta FILE] [--baseline FILE] [--list FILE] [--seed DATE] PATH...") 64))
     ((ok a)
       (let [(root a.root)
-            (listed (if (stringEmpty? a.list) (ok (list)) (mt (fileRead a.list) ((ok t) (ok (listLines t))) ((err _) (err a.list)))))]
+            (listed (if (stringEmpty? a.list) (ok (list)) (mt (fileReadString a.list) ((ok t) (ok (listLines t))) ((err _) (err a.list)))))]
         (mt listed
           ((err p) (fail! (str "cannot read list file " p) 2))
           ((ok tracked)
             (let [(paths (listAppend tracked (listReverse a.paths)))]
               (if (listEmpty? paths)
                 (fail! "no paths; usage: metaAudit.asl [--root DIR] [--meta FILE] [--baseline FILE] [--list FILE] [--seed DATE] PATH..." 64)
-                (mt (fileRead (orDefault a.meta (joinPath root "asl/grammar/meta.asn")))
+                (mt (fileReadString (orDefault a.meta (joinPath root "asl/grammar/meta.asn")))
                   ((err _) (fail! "cannot read meta.asn" 2))
                   ((ok metaText)
                     (mt (loadSpec metaText)
@@ -649,7 +649,7 @@ fn ! main args: (List String) -> (Result Int64 String)
                         (let [(ctx (loadCtx! root spec tracked))]
                           (if (not (stringEmpty? a.seed))
                             (do (print (baselineText (auditPaths! ctx (list) paths) a.seed)) (ok 0))
-                            (mt (fileRead (orDefault a.baseline (joinPath root "scripts/audit/metaBaseline.asn")))
+                            (mt (fileReadString (orDefault a.baseline (joinPath root "scripts/audit/metaBaseline.asn")))
                               ((err _) (fail! "cannot read the baseline" 2))
                               ((ok baseText)
                                 (mt (parseBaseline baseText)

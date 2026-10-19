@@ -1,4 +1,4 @@
-(module asl-ir/lower :x [LinkScope lowerModule lowerWithPrelude lowerLinked lowerLinkedAs lowerSource declPositions builtinArity builtinArityFor] :i [(asl-ir/types :a ty) (asl-parser/ast :a ast) (asl-parser/reader :a rd)])
+(module asl-ir/lower :x [LinkScope lowerModule lowerWithPrelude lowerLinked lowerLinkedAs lowerSource declPositions sitedPositions builtinArity builtinArityFor genericConcrete genericAlias genericMulti?] :i [(asl-ir/types :a ty) (asl-parser/ast :a ast) (asl-parser/reader :a rd) (asl-checker/types :a cty)])
 
 (schema Ctor (:f typeName String) (:f variant String) (:f arity Int64))
 
@@ -26,7 +26,7 @@
   (:f strings (List String))
   (:f only (Option (List String))))
 
-(schema LowerCtx (:f fnName String) (:f pos String) (:f info ModInfo))
+(schema LowerCtx (:f fnName String) (:f pos String) (:f sites (List String)) (:f info ModInfo))
 
 (schema Arm (:f kind String) (:f variant String) (:f typeName String) (:f binds (List String)) (:f name String) (:f body (List rd/SExpr)))
 
@@ -995,6 +995,7 @@ fn matchFamily ctx: LowerCtx arms: (List rd/SExpr) -> String
         (applied (firstOf false))]
     (if (= applied "") (firstOf true) applied))
 
+; (:m :ref HL-FIX2 :do "a bare keyword-literal pattern (:foo) is never a catch-all (unlike a bare name or _): in a pure literal match (no ctor family established) it is a 'lit' arm, lowered via lowerAtom's existing constKeyword case and compared with the generic '=' builtin like any other literal; mixed into a constructor match (family non-empty) it is classified 'deadLit' instead, since lowerLitArms cannot mix ctor arms and a keyword can never structurally equal a constructed enum/record value -- lowerMatch's ctor path drops 'deadLit' arms before computing catch-all position, switch cases and missing-variant diagnostics, the same outcome as if the arm were never written")
 fn classifyArm ctx: LowerCtx kw: String family: String arm: rd/SExpr -> (Result Arm ty/IrDiag)
   (let [(items (rd/sexprToList arm))
         (pat (nthOf items 0))
@@ -1005,7 +1006,8 @@ fn classifyArm ctx: LowerCtx kw: String family: String arm: rd/SExpr -> (Result 
       ((and (rd/isAtom? pat) (or (= head "_") (= head "else"))) (ok (Arm :kind "wild" :variant "" :typeName "" :binds (list) :name "" :body body)))
       ((and (rd/isAtom? pat) (and (mapHas? ctx.info.ctors head) (= (ctorOf ctx head).typeName family))) (let [(c (ctorOf ctx head))] (if (!= c.arity 0) (err (lowerDiag ctx "ERR_LOWER_ARITY" (str "pattern '" head "' of " c.typeName " binds 0 field(s), the variant has " c.arity))) (ok (Arm :kind "ctor" :variant c.variant :typeName c.typeName :binds (list) :name "" :body body)))))
       ((bindName? pat) (ok (Arm :kind "var" :variant "" :typeName "" :binds (list) :name head :body body)))
-      ((and (rd/isAtom? pat) (or (some? (stringToInt64 head)) (and (stringStartsWith? head "\"") (stringEndsWith? head "\"")))) (ok (Arm :kind "lit" :variant "" :typeName "" :binds (list) :name head :body body)))
+      ((and (rd/isAtom? pat) (and (stringStartsWith? head ":") (> (stringLength head) 1)) (not (stringEmpty? family))) (ok (Arm :kind "deadLit" :variant "" :typeName "" :binds (list) :name head :body body)))
+      ((and (rd/isAtom? pat) (or (some? (stringToInt64 head)) (or (and (stringStartsWith? head "\"") (stringEndsWith? head "\"")) (and (stringStartsWith? head ":") (> (stringLength head) 1))))) (ok (Arm :kind "lit" :variant "" :typeName "" :binds (list) :name head :body body)))
       ((not (and (rd/isList? pat) (rd/isAtom? (nthOf (rd/sexprToList pat) 0)))) (err (unsupported ctx (rd/renderSexpr pat) "is a pattern outside the lowered subset, which takes (constructor name ...), _ or a name")))
       ((and (qualified? head) (not (mapHas? ctx.info.ctors head))) (err (if ctx.info.linked (qualifiedDiag ctx head) (unsupported ctx head "is an imported constructor, outside the lowered subset"))))
       ((not (mapHas? ctx.info.ctors head)) (err (lowerDiag ctx "ERR_LOWER_UNKNOWN_CONSTRUCTOR" (str "unknown constructor '" head "' in a " kw " pattern"))))
@@ -1120,7 +1122,73 @@ fn lowerLitArms ctx: LowerCtx env: (Map String String) st: LowerState scrutinee:
                                  (ok (joinExits br.st (str "join" k) exits br.value))
                                  (lowerLitArms ctx env (closeBlock br.st (jumpTo (str "join" k) br.value) nextL (list)) scrutinee k rest (+ i 1) (listAppend exits (list (pair br.st.label br.value))) trapLabel false)))))))))))
 
+; (:m :ref LOWER-LITPAT :do "a constructor arm with a literal or constructor in a payload position, ((ok \"0\") ...) or ((some (pair a b)) ...), is rewritten before lowering into a first-match chain of the lowered forms: each arm binds names only, tests a literal field with =, descends a nested constructor with its own mt, and on any miss falls through to the remaining arms; the scrutinee is bound once; the chain is built as forms, never rendered and re-read, so dotted field reads in the scrutinee and bodies survive; the fall-through form is repeated at each miss point, so its size grows with the nested arms ahead of it")
+fn nestedArm? ctx: LowerCtx arm: rd/SExpr -> Bool
+  (let [(pat (nthOf (rd/sexprToList arm) 0))]
+    (and (rd/isList? arm)
+         (and (rd/isList? pat)
+              (and (rd/isAtom? (nthOf (rd/sexprToList pat) 0))
+                   (and (mapHas? ctx.info.ctors (rd/sexprHead pat))
+                        (listAny? (fn [(f rd/SExpr)] -> Bool (not (bindName? f))) (tailOf (rd/sexprToList pat))))))))
+
+fn bodyForm items: (List rd/SExpr) -> rd/SExpr
+  (if (= (listLength items) 1) (nthOf items 0) (rd/makeList (cons (rd/makeAtom "do") items)))
+
+fn patVars tag: String fields: (List rd/SExpr) -> (Pair (List String) (List (Pair String rd/SExpr)))
+  (let [(named (map (fn [(i Int64)] -> (Pair String rd/SExpr)
+                      (let [(f (nthOf fields i))] (pair (if (bindName? f) (rd/sexprHead f) (str tag "f" (stringFromInt64 i))) f)))
+                    (range 0 (listLength fields))))]
+    (pair (map pairFirst named) (filter (fn [(p (Pair String rd/SExpr))] -> Bool (not (bindName? (pairSecond p)))) named)))
+
+fn headForm head: String items: (List rd/SExpr) -> rd/SExpr
+  (rd/makeList (cons (rd/makeAtom head) items))
+
+fn ctorArm head: String vars: (List String) body: rd/SExpr -> rd/SExpr
+  (rd/makeList (list (headForm head (map rd/makeAtom vars)) body))
+
+fn missArm fall: rd/SExpr -> rd/SExpr
+  (rd/makeList (list (rd/makeAtom "_") fall))
+
+fn fieldsForm tag: String pairs: (List (Pair String rd/SExpr)) body: rd/SExpr fall: rd/SExpr n: Int64 -> rd/SExpr
+  (mt (listHead pairs)
+    ((none) body)
+    ((some p) (let [(x (pairFirst p))
+                    (pat (pairSecond p))
+                    (more (optionOr (listTail pairs) (list)))]
+                (if (rd/isList? pat)
+                  (let [(vs (patVars (str tag "n" (stringFromInt64 n)) (tailOf (rd/sexprToList pat))))]
+                    (headForm "mt" (list (rd/makeAtom x)
+                                     (ctorArm (rd/sexprHead pat) (pairFirst vs) (fieldsForm tag (listAppend (pairSecond vs) more) body fall (+ n 1)))
+                                     (missArm fall))))
+                  (headForm "if" (list (headForm "=" (list (rd/makeAtom x) pat)) (fieldsForm tag more body fall n) fall))))))
+
+fn chainForm ctx: LowerCtx s: String tag: String arms: (List rd/SExpr) i: Int64 -> rd/SExpr
+  (mt (listHead arms)
+    ((none) (headForm "mt" (list (rd/makeAtom s))))
+    ((some arm) (let [(items (rd/sexprToList arm))
+                      (pat (nthOf items 0))
+                      (body (bodyForm (tailOf items)))
+                      (fall (chainForm ctx s tag (tailOf arms) (+ i 1)))
+                      (h (rd/sexprHead pat))
+                      (scrutinee (rd/makeAtom s))]
+                  (cond
+                    ((and (rd/isAtom? pat) (or (= h "_") (= h "else"))) body)
+                    ((and (rd/isAtom? pat) (mapHas? ctx.info.ctors h)) (headForm "mt" (list scrutinee (rd/makeList (list pat body)) (missArm fall))))
+                    ((bindName? pat) (headForm "let" (list (rd/makeVect (list (rd/makeList (list pat scrutinee)))) body)))
+                    ((rd/isAtom? pat) (headForm "if" (list (headForm "=" (list scrutinee pat)) body fall)))
+                    (else (let [(vs (patVars (str tag "a" (stringFromInt64 i)) (tailOf (rd/sexprToList pat))))]
+                            (headForm "mt" (list scrutinee
+                                             (ctorArm h (pairFirst vs) (fieldsForm (str tag "a" (stringFromInt64 i)) (pairSecond vs) body fall 0))
+                                             (missArm fall)))))))))
+
 fn lowerMatch ctx: LowerCtx env: (Map String String) st: LowerState kw: String args: (List rd/SExpr) -> (Result Lowered ty/IrDiag)
+  (if (listAny? (fn [(a rd/SExpr)] -> Bool (nestedArm? ctx a)) (tailOf args))
+    (let [(tag (str "litPat" (stringFromInt64 st.labels)))
+          (s (str tag "s"))]
+      (lowerExpr ctx env (bumpLabels st) (headForm "let" (list (rd/makeVect (list (rd/makeList (list (rd/makeAtom s) (nthOf args 0))))) (chainForm ctx s tag (tailOf args) 0)))))
+    (lowerMatchArms ctx env st kw args))
+
+fn lowerMatchArms ctx: LowerCtx env: (Map String String) st: LowerState kw: String args: (List rd/SExpr) -> (Result Lowered ty/IrDiag)
   (mt (classifyArms ctx kw (matchFamily ctx (tailOf args)) (tailOf args))
     ((err d) (err d))
     ((ok rawArms)
@@ -1138,7 +1206,7 @@ fn lowerMatch ctx: LowerCtx env: (Map String String) st: LowerState kw: String a
                                  (if (listEmpty? arms)
                                    (lowerNoArms sr)
                                    (lowerLitArms ctx env bumped sr.value k arms 0 (list) trapLabel (not hasCatchall)))))))))
-        (let [(arms (upToCatchAll rawArms))]
+        (let [(arms (upToCatchAll (filter (fn [(a Arm)] -> Bool (!= a.kind "deadLit")) rawArms)))]
           (mt (matchShapeDiag ctx kw arms)
                  ((some d) (err d))
                  ((none) (if (not (stringEmpty? (listMatch ctx env (nthOf args 0) arms)))
@@ -1179,6 +1247,18 @@ fn armFor arms: (List Arm) variant: String -> (Option Arm)
     ((some a) (some a))
     ((none) (listHead (filter (fn [(a Arm)] -> Bool (= a.kind "wild")) arms))))
 
+; (:m :ref NATIVE-LOWER-GAPS :do "a fused list match missing an arm builds the Option it failed on only on the miss path, so the trap names the value as an unfused match does; a missing none arm needs no read of the list")
+fn withListMissBlock st: LowerState k: String payload: String noneMissing: Bool xs: String -> LowerState
+  (let [(item (valueName st.next))
+        (opt (if noneMissing item (valueName (+ st.next 1))))
+        (instrs (if noneMissing
+                  (list (ty/ssaInstr opt (ty/tyVal) (ty/opConstruct "Option" "none" (list))))
+                  (list (ty/ssaInstr item (ty/tyVal) (ty/opEntry payload (list xs))) (ty/ssaInstr opt (ty/tyVal) (ty/opConstruct "Option" "some" (list item))))))
+        (trapL (str "nomatchTrap" k))
+        (miss (ty/ssaBlock (str "nomatch" k) (list) instrs (ty/termSwitch opt "Option" (list) (some (ty/ssaEdge trapL (list))))))
+        (typed (withType (withType (with st :next (+ st.next (listLength instrs))) item (ty/tyVal)) opt (ty/tyVal)))]
+    (withTrapBlock (with typed :done (cons miss typed.done)) trapL))
+
 fn lowerListArm ctx: LowerCtx env: (Map String String) st: LowerState payload: String xs: String a: Arm -> (Result Lowered ty/IrDiag)
   (let [(name (optionOr (listHead a.binds) "_"))]
     (if (or (!= a.variant "some") (= name "_"))
@@ -1190,7 +1270,7 @@ fn lowerListMatch ctx: LowerCtx env: (Map String String) st: LowerState payload:
   (mt (lowerExpr ctx env st listExpr)
     ((err d) (err d))
     ((ok l0) (let [(l (coerce l0.st l0.value (ty/tyVal)))
-                   (empty (emitAs l.st (ty/tyI1) (ty/opEntry "listEmpty?" (list l.value))))
+                   (empty (emitAs l.st (ty/tyI1) (ty/opEntry (if (= payload "@listFirst") "@listHeadEmpty?" "@listTailEmpty?") (list l.value))))
                    (k (stringFromInt64 empty.st.labels))
                    (joinL (str "join" k))
                    (someArm (armFor arms "some"))
@@ -1198,7 +1278,7 @@ fn lowerListMatch ctx: LowerCtx env: (Map String String) st: LowerState payload:
                    (someL (if (some? someArm) (armLabel k 0) (str "nomatch" k)))
                    (noneL (if (some? noneArm) (armLabel k 1) (str "nomatch" k)))
                    (branched (closeBlock (bumpLabels empty.st) (ty/termBranch empty.value (ty/ssaEdge noneL (list)) (ty/ssaEdge someL (list))) (if (some? someArm) someL noneL) (list)))
-                   (ready (if (and (some? someArm) (some? noneArm)) branched (withTrapBlock branched (str "nomatch" k))))]
+                   (ready (if (and (some? someArm) (some? noneArm)) branched (withListMissBlock branched k payload (some? someArm) l.value)))]
                (mt someArm
                  ((none) (mt noneArm
                            ((none) (err (unsupported ctx "mt" "without arms is outside the lowered subset")))
@@ -1372,9 +1452,12 @@ fn lowerHead ctx: LowerCtx env: (Map String String) st: LowerState name: String 
     ((= name "list") (mt (lowerArgs ctx env st args) ((err d) (err d)) ((ok r) (ok (listOf r.st r.values)))))
     ((= name "fn") (lowerLambda ctx env st args))
     ((or (= name "assert") (= name "refute"))
-      (if (or (listEmpty? args) (> (listLength args) 2))
-        (err (lowerDiag ctx "ERR_LOWER_ARITY" (str "'" name "' takes a condition and an optional message, got " (listLength args) " operand(s)")))
-        (lowerBuiltin ctx env st name -1 args)))
+      (let [(site (siteOf args))
+            (given (if (stringEmpty? site) args (listTake args (- (listLength args) 1))))]
+        (if (or (listEmpty? given) (> (listLength given) 2))
+          (err (lowerDiag ctx "ERR_LOWER_ARITY" (str "'" name "' takes a condition and an optional message, got " (listLength given) " operand(s)")))
+          (lowerBuiltin ctx env st name -1 (if (stringEmpty? site) given (list (nthOf given 0) (optionOr (listGet given 1) (rd/makeAtom "()")) (rd/makeAtom (str "\"" site "\""))))))))
+
     ((and (= name "optionOr") (and (= (listLength args) 2) (and (preludeName? ctx env name) (not (stringEmpty? (optionSource ctx env (nthOf args 0)))))))
       (lowerOptionOr ctx env st (optionSource ctx env (nthOf args 0)) args))
     ((or (= name "when") (= name "unless"))
@@ -1412,82 +1495,13 @@ fn lowerExpr ctx: LowerCtx env: (Map String String) st: LowerState e: rd/SExpr -
                                         (lowerCallClosure ctx env st h (tailOf items)))))))
 
 fn genericConcrete name: String kind: String -> String
-  (if (= kind "*") (genericStar name) (genericKinded name kind))
-
-fn genericStar name: String -> String
-  (cond
-    ((= name "head") "listHead") ((= name "tail") "listTail") ((= name "startsWith?") "stringStartsWith?")
-    ((= name "getFloat64") "bytesGetFloat64") ((= name "setFloat64") "bytesSetFloat64") ((= name "sha256") "bytesSha256")
-    ((= name "last") "listLast") ((= name "take") "listTake") ((= name "drop") "listDrop")
-    ((= name "all?") "listAll?") ((= name "any?") "listAny?") ((= name "sort") "listSort")
-    ((= name "sortBy") "listSortBy") ((= name "endsWith?") "stringEndsWith?") ((= name "split") "stringSplit")
-    ((= name "join") "stringJoin") ((= name "replace") "stringReplace") ((= name "trim") "stringTrim")
-    ((= name "chars") "stringChars") ((= name "lines") "stringLines") ((= name "upper") "stringUpper")
-    ((= name "lower") "stringLower") ((= name "repeat") "stringRepeat") ((= name "countChar") "stringCountChar")
-    ((= name "keys") "mapKeys") ((= name "values") "mapValues") ((= name "pairs") "mapPairs")
-    ((= name "remove") "mapRemove")
-    (else ""))
-
-fn genericKinded name: String kind: String -> String
-  (cond
-    ((= name "length")
-      (cond
-        ((= kind "String") "stringLength") ((= kind "List") "listLength") ((= kind "Bytes") "bytesLength")
-        ((= kind "Map") "mapSize") ((= kind "I64Array") "i64ArrayLen") ((= kind "I8Array") "i8ArrayLen")
-        ((= kind "F64Array") "f64ArrayLen")
-        (else "")))
-    ((= name "empty?")
-      (cond
-        ((= kind "String") "stringEmpty?") ((= kind "List") "listEmpty?")
-        (else "")))
-    ((= name "get")
-      (cond
-        ((= kind "List") "listGet") ((= kind "Bytes") "bytesGet") ((= kind "Map") "mapGet")
-        ((= kind "I64Array") "i64ArrayGet") ((= kind "I8Array") "i8ArrayGet") ((= kind "F64Array") "f64ArrayGet")
-        (else "")))
-    ((= name "set")
-      (cond
-        ((= kind "Bytes") "bytesSet") ((= kind "Map") "mapSet")
-        (else "")))
-    ((= name "slice")
-      (cond
-        ((= kind "String") "stringSlice") ((= kind "List") "listSlice") ((= kind "I64Array") "i64ArraySlice")
-        ((= kind "I8Array") "i8ArraySlice") ((= kind "F64Array") "f64ArraySlice")
-        (else "")))
-    ((= name "contains?")
-      (cond
-        ((= kind "String") "stringContains?") ((= kind "List") "listContains?") ((= kind "Map") "mapHas?")
-        (else "")))
-    ((= name "indexOf")
-      (cond
-        ((= kind "String") "stringIndexOf") ((= kind "List") "listIndexOf")
-        (else "")))
-    ((= name "reverse")
-      (cond
-        ((= kind "String") "stringReverse") ((= kind "List") "listReverse")
-        (else "")))
-    ((= name "append")
-      (cond
-        ((= kind "String") "stringConcat") ((= kind "List") "listAppend")
-        (else "")))
-    ((= name "sum")
-      (cond
-        ((= kind "List") "listSum") ((= kind "I64Array") "i64ArraySum") ((= kind "I8Array") "i8ArraySum")
-        ((= kind "F64Array") "f64ArraySum")
-        (else "")))
-    ((= name "countEq")
-      (cond
-        ((= kind "I64Array") "i64ArrayCountEq") ((= kind "I8Array") "i8ArrayCountEq") ((= kind "F64Array") "f64ArrayCountEq")
-        (else "")))
-    (else ""))
+  (if (= kind "*") (genericAlias name) (cty/genericConcrete name kind))
 
 fn genericAlias name: String -> String
-  (genericConcrete name "*")
+  (cty/genericAlias name)
 
 fn genericMulti? name: String -> Bool
-  (or (= name "length") (= name "empty?") (= name "get") (= name "set")
-      (= name "slice") (= name "contains?") (= name "indexOf") (= name "reverse")
-      (= name "append") (= name "sum") (= name "countEq"))
+  (cty/genericMulti? name)
 
 fn ambiguousDiag ctx: LowerCtx name: String -> ty/IrDiag
   (lowerDiag ctx "ERR_AMBIGUOUS_OVERLOAD" (str name ": the receiver kind is not known here; candidates " (stringJoin (filter (fn [(k String)] -> Bool (not (stringEmpty? (genericConcrete name k)))) (list "String" "List" "Bytes" "Map" "I64Array" "I8Array" "F64Array")) ", ") "; annotate the receiver (D159)"))
@@ -1609,6 +1623,68 @@ fn resolveGenerics ctx: LowerCtx kinds: (Map String String) e: rd/SExpr -> rd/SE
                                                 ((or (stringStartsWith? name ":") (stringStartsWith? name "\"")) (rd/makeList (cons h (resolveAll ctx kinds (tailOf items)))))
                                                 (else (resolveCall ctx kinds items)))))))))
 
+; (:m :ref NATIVE-LOWER-GAPS :do "assert and refute call sites: declPositions also records, per declaration, the line:col of each (assert or (refute in its text under siteKey, and lowering appends the k-th site to the k-th assert or refute of the body in source order as an (@site \"path:L:C\") operand; a count that disagrees attaches none")
+fn siteKey name: String -> String
+  (str name "@sites")
+
+fn codeAt? line: String col: Int64 -> Bool
+  (let [(state (fold (fn [(acc (Pair String Bool)) (c String)] -> (Pair String Bool)
+                       (let [(mode (pairFirst acc)) (escaped (pairSecond acc))]
+                         (cond
+                           ((= mode "comment") acc)
+                           ((= mode "string") (cond (escaped (pair "string" false)) ((= c "\\") (pair "string" true)) ((= c "\"") (pair "code" false)) (else acc)))
+                           ((= c "\"") (pair "string" false))
+                           ((= c ";") (pair "comment" false))
+                           (else acc))))
+                     (pair "code" false) (stringChars (optionOr (stringSlice line 0 col) ""))))]
+    (= (pairFirst state) "code"))
+
+fn callCols line: String word: String from: Int64 acc: (List Int64) -> (List Int64)
+  (mt (stringIndexOf (optionOr (stringSlice line from (stringLength line)) "") (str "(" word))
+    ((none) acc)
+    ((some i) (let [(at (+ from i))
+                    (next (+ at (+ (stringLength word) 1)))
+                    (after (if (< next (stringLength line)) (optionOr (stringSlice line next (+ next 1)) "") ""))
+                    (whole (or (stringEmpty? after) (or (= after " ") (= after ")"))))]
+                (callCols line word (+ at 1) (if (and whole (codeAt? line at)) (cons at acc) acc)))))
+
+fn withLineSites m: (Map String String) owner: String i: Int64 line: String -> (Map String String)
+  (let [(added (map (fn [(c Int64)] -> String (str (stringFromInt64 (+ i 1)) ":" (stringFromInt64 (+ c 1)))) (listSort (callCols line "assert" 0 (callCols line "refute" 0 (list))))))
+        (key (siteKey owner))
+        (was (optionOr (mapGet m key) ""))]
+    (if (listEmpty? added) m (mapSet m key (stringJoin (if (stringEmpty? was) added (cons was added)) " "))))
+
+fn assertForm? e: rd/SExpr -> Bool
+  (and (rd/isList? e) (let [(h (rd/sexprHead e))] (or (= h "assert") (= h "refute"))))
+
+fn siteCount e: rd/SExpr -> Int64
+  (fold (fn [(n Int64) (x rd/SExpr)] -> Int64 (+ n (siteCount x))) (if (assertForm? e) 1 0) (rd/sexprToList e))
+
+fn attachAll items: (List rd/SExpr) sites: (List String) -> (Pair (List rd/SExpr) (List String))
+  (let [(done (fold (fn [(acc (Pair (List rd/SExpr) (List String))) (x rd/SExpr)] -> (Pair (List rd/SExpr) (List String))
+                      (let [(one (attachSite x (pairSecond acc)))] (pair (cons (pairFirst one) (pairFirst acc)) (pairSecond one))))
+                    (pair (list) sites) items))]
+    (pair (listReverse (pairFirst done)) (pairSecond done)))
+
+fn attachSite e: rd/SExpr sites: (List String) -> (Pair rd/SExpr (List String))
+  (mt e
+    ((rd/sexprAtom _) (pair e sites))
+    ((rd/sexprVect items) (let [(kids (attachAll items sites))] (pair (rd/makeVect (pairFirst kids)) (pairSecond kids))))
+    ((rd/sexprList items) (let [(own (and (assertForm? e) (not (listEmpty? sites))))
+                                (kids (attachAll items (if own (optionOr (listTail sites) (list)) sites)))
+                                (marker (rd/makeList (list (rd/makeAtom "@site") (rd/makeAtom (optionOr (listHead sites) "")))))]
+                            (pair (rd/makeList (if own (listAppend (pairFirst kids) (list marker)) (pairFirst kids))) (pairSecond kids)))))
+
+fn withSites sites: (List String) body: (List rd/SExpr) -> (List rd/SExpr)
+  (if (or (listEmpty? sites) (!= (fold (fn [(n Int64) (x rd/SExpr)] -> Int64 (+ n (siteCount x))) 0 body) (listLength sites)))
+    body
+    (pairFirst (attachAll body sites)))
+
+fn siteOf args: (List rd/SExpr) -> String
+  (mt (listLast args)
+    ((some a) (if (and (rd/isList? a) (= (rd/sexprHead a) "@site")) (rd/sexprHead (nthOf (rd/sexprToList a) 1)) ""))
+    ((none) ""))
+
 fn lowerFunction ctx: LowerCtx strings: StringPool d: ast/DefunNode -> (Result LoweredFn ty/IrDiag)
   (let [(names (map (fn [(p ast/Param)] -> String p.name) d.params))
         (sig (resolveSig ctx.info (sigOf d)))
@@ -1621,7 +1697,7 @@ fn lowerFunction ctx: LowerCtx strings: StringPool d: ast/DefunNode -> (Result L
         (kinds (fold (fn [(k (Map String String)) (p ast/Param)] -> (Map String String) (mapSet k p.name (kindOfAnnotation p.type))) (mapEmpty) d.params))]
     (mt (lowerSeq ctx env st0 (if (and (preludeBitOp? ctx d.name) (= ctx.fnName (str "prelude." d.name)))
                                 (list (rd/makeList (cons (rd/makeAtom d.name) (map rd/makeAtom names))))
-                                (resolveAll ctx kinds d.body)))
+                                (withSites ctx.sites (resolveAll ctx kinds d.body))))
       ((err e) (err e))
       ((ok r0) (let [(r (coerce r0.st r0.value sig.ret))
                      (final (closeBlock r.st (ty/termReturn r.value) "" (list)))]
@@ -1630,7 +1706,8 @@ fn lowerFunction ctx: LowerCtx strings: StringPool d: ast/DefunNode -> (Result L
                                :strings final.strings))))))
 
 fn ctxFor name: String positions: (Map String String) info: ModInfo -> LowerCtx
-  (LowerCtx :fnName (optionOr (mapGet info.targets name) name) :pos (optionOr (mapGet positions name) "?") :info info)
+  (LowerCtx :fnName (optionOr (mapGet info.targets name) name) :pos (optionOr (mapGet positions name) "?")
+            :sites (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (stringSplit (optionOr (mapGet positions (siteKey name)) "") " ")) :info info)
 
 fn addLowered acc: ModAcc lf: LoweredFn -> ModAcc
   (ModAcc :strings lf.strings :functions (fold (fn [(fs (List ty/SsaFunction)) (f ty/SsaFunction)] -> (List ty/SsaFunction) (cons f fs)) acc.functions (cons lf.function lf.lifted)) :diags acc.diags)
@@ -2080,7 +2157,17 @@ fn lowerWithPrelude forms: (List ast/TopForm) positions: (Map String String) pre
 fn locatedPositions scope: LinkScope positions: (Map String String) prefix: String -> (Map String String)
   (if (stringEmpty? prefix)
     positions
-    (mapFromPairs (map (fn [(k String)] -> (Pair String String) (pair k (str scope.path ":" (optionOr (mapGet positions k) "?")))) (mapKeys positions))))
+    (mapFromPairs (map (fn [(k String)] -> (Pair String String) (pair k (located scope.path k (optionOr (mapGet positions k) "?")))) (mapKeys positions))))
+
+fn located path: String key: String pos: String -> String
+  (if (stringEndsWith? key "@sites") pos (str path ":" pos))
+
+fn sitedPositions path: String positions: (Map String String) -> (Map String String)
+  (mapFromPairs (map (fn [(p (Pair String String))] -> (Pair String String)
+                       (if (stringEndsWith? (pairFirst p) "@sites")
+                         (pair (pairFirst p) (stringJoin (map (fn [(s String)] -> String (str path ":" s)) (stringSplit (pairSecond p) " ")) " "))
+                         p))
+                     (mapPairs positions)))
 
 fn lowerLinkedAs forms: (List ast/TopForm) positions: (Map String String) scope: LinkScope prefix: String -> (Result ty/SsaModule (List ty/IrDiag))
   (lowerWith forms (locatedPositions scope positions prefix) (linkedInfoAs forms scope prefix) prefix scope.strings scope.only)
@@ -2116,16 +2203,18 @@ fn declName line: String -> String
 
 fn declPositions src: String -> (Map String String)
   (let [(srcLines (stringSplit src "\n"))
-        (final (fold (fn [(acc (Pair (Map String String) Int64)) (line String)] -> (Pair (Map String String) Int64)
-                       (let [(m (pairFirst acc))
+        (final (fold (fn [(acc (Pair (Pair (Map String String) String) Int64)) (line String)] -> (Pair (Pair (Map String String) String) Int64)
+                       (let [(m (pairFirst (pairFirst acc)))
                              (i (pairSecond acc))
-                             (name (declName line))]
-                         (pair (if (or (stringEmpty? name) (mapHas? m name))
-                                 m
-                                 (mapSet m name (str (stringFromInt64 (+ i 1)) ":" (stringFromInt64 (+ (leadingSpaces line) 1)))))
+                             (name (declName line))
+                             (owner (if (stringEmpty? name) (pairSecond (pairFirst acc)) name))
+                             (placed (if (or (stringEmpty? name) (mapHas? m name))
+                                       m
+                                       (mapSet m name (str (stringFromInt64 (+ i 1)) ":" (stringFromInt64 (+ (leadingSpaces line) 1))))))]
+                         (pair (pair (if (or (stringEmpty? owner) (not (or (stringContains? line "(assert") (stringContains? line "(refute")))) placed (withLineSites placed owner i line)) owner)
                                (+ i 1))))
-                     (pair (mapEmpty) 0) srcLines))]
-    (pairFirst final))
+                     (pair (pair (mapEmpty) "") 0) srcLines))]
+    (pairFirst (pairFirst final)))
 
 fn lowerSource src: String -> (Result ty/SsaModule (List ty/IrDiag))
   (mt (ast/parse src)

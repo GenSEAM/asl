@@ -1,6 +1,6 @@
 (module asl-forms/search
   :x [KnowCtx KnowOutcome queryStep! noteStep! whereStep! observeStep! observeResult kwOrder localDate! localDateAt! pyStrip pyDecode pySplitWs pyInt utf8Take utf8TakeLast splitLinesPy quoted stepHead okLine badLine procErrorMessage]
-  :i [(asl-forms/kernel :a k) (asl-proc/coreProcess :a cp) (asl-forms/vfs :a v)
+  :i [(asl-forms/kernel :a k) (asl-proc/coreProcess :a cp) (asl-forms/vfs :a v) (asl-forms/evalOp :a ev)
       (ws/asl/tools/observe/observe :a obs) (ws/asl/tools/observe/common :a oc)])
 
 
@@ -215,14 +215,13 @@ fn runArgv! argv: (List String) cwd: String timeoutMs: Int64 -> (Result cp/Proce
     ((none) (err (cp/executionFailed -1 "empty argv")))
     ((some bin) (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd bin (tailOf argv)) cwd) timeoutMs))))
 
-fn runObserveArgv! argv: (List String) cwd: String root: String host: String timeoutMs: Int64 -> (Result cp/ProcessOutput cp/ProcessError)
+fn runObserveArgv! argv: (List String) cwd: String root: String timeoutMs: Int64 -> (Result cp/ProcessOutput cp/ProcessError)
   (mt (listHead argv)
     ((none) (runArgv! argv cwd timeoutMs))
     ((some bin)
       (let [(base (cp/withCwd (cp/cmd bin (tailOf argv)) cwd))
-            (withRoot (cp/withEnv base "ASL_CLI_ROOT" root))
-            (withHost (cp/withEnv withRoot "ASL_CLI_HOST_BIN" host))]
-        (cp/exec! (cp/withTimeout withHost timeoutMs)))))
+            (withRoot (cp/withEnv base "ASL_CLI_ROOT" root))]
+        (cp/exec! (cp/withTimeout withRoot timeoutMs)))))
 
 fn readText! p: String -> (Option String)
   (mt (fileReadString p)
@@ -1469,12 +1468,13 @@ fn observeStep! ctx: KnowCtx id: Int64 kw: (Map String String) args: (List Strin
         (root ctx.toolRoot)]
     (if (safeObserveInProcessDim? dim)
       (observeInProcess! root ctx.ws (listAppend (list "--dim" dim) extra) id)
-      (let [(host (optionOr (envGet "ASL_CLI_HOST_BIN") (k/joinPath (k/joinPath root "asl") "host/out/asl-host")))
-            (program (k/joinPath (k/joinPath root "asl") "tools/observe/observe.asl"))
-            (argv (listAppend (list host "run" program "--dim" dim) extra))]
-        (mt (runObserveArgv! argv ctx.ws root host 300000)
-          ((err e) (rejectedLine id "observe" "ERR_EXEC_FAILED" (str " :message " (quoted (procErrorMessage argv e)))))
-          ((ok out) (observeResult id out.exitCode out.stdout out.stderr))))))
+      (mt (ev/nativeEntry! root "asl/tools/observe/observe" false)
+        ((err e) (rejectedLine id "observe" "ERR_EXEC_FAILED" (str " :message " (quoted e))))
+        ((ok bin)
+          (let [(argv (listAppend (list bin "--dim" dim) extra))]
+            (mt (runObserveArgv! argv ctx.ws root 300000)
+              ((err e) (rejectedLine id "observe" "ERR_EXEC_FAILED" (str " :message " (quoted (procErrorMessage argv e)))))
+              ((ok out) (observeResult id out.exitCode out.stdout out.stderr))))))))
 
 fn floorDiv a: Int64 b: Int64 -> Int64
   (/ a b)

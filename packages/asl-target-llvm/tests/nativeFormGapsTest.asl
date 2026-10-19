@@ -4,6 +4,13 @@
       (asl-ir/types :a irTy)
       (asl-target-llvm :a llvm)])
 
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): the parity oracle used to be a live asl-host interpreting these fixtures; they are fixed, deterministic sources, so Recorded below holds a one-time capture of asl-host's own output for each exact fixture, taken before HL-DELETE removed the binary. While capturing, both fixtures' field access used the retired (.-field x) form, which the native checker (and the leftover asl-host used for the capture) rejects as ERR_READ_FIELD; rewritten to x.field, unrelated to the host removal, to make the suite loadable at all")
+
+(schema Recorded
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
+
 fn source -> String
   (stringJoin (list
     "(module formGap :x [main])"
@@ -14,7 +21,7 @@ fn source -> String
     "  (mt choice ((chosen text) text))"
     "fn ! main -> Int64"
     "  (let [(session (GapSession :id \"s\")) (wire (GapWire :valid? true :errorKind \"\" :message \"ok\"))]"
-    "    (do (println (.-id session)) (println (if (== (.-valid? wire) true) \"true\" \"false\")) (println (pick (chosen \"variant\"))) 0))") "\n")
+    "    (do (println session.id) (println (if (== wire.valid? true) \"true\" \"false\")) (println (pick (chosen \"variant\"))) 0))") "\n")
 
 fn omittedBoolSource -> String
   (stringJoin (list
@@ -22,7 +29,13 @@ fn omittedBoolSource -> String
     "(schema GapSession (:f id String) (:f deadlocked Bool))"
     "fn ! main -> Int64"
     "  (let [(session (GapSession :id \"s\"))]"
-    "    (do (println (.-id session)) (if (.-deadlocked session) 1 0)))") "\n")
+    "    (do (println session.id) (if session.deadlocked 1 0)))") "\n")
+
+fn recordedSourceInterp -> Recorded
+  (Recorded :exitCode 0 :stdout "s\ntrue\nvariant\n" :stderr "")
+
+fn recordedOmittedBoolInterp -> Recorded
+  (Recorded :exitCode 1 :stdout "s\n" :stderr "FAIL omittedBool.asl: ERR_FIELD: record has no field deadlocked (after 0 asserts)")
 
 fn diagText diags: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.code ": " d.message)) diags) "; ")
@@ -33,14 +46,12 @@ fn ! testQuestionKeyedRecord -> Bool
         (made (processRun "mktemp -d"))
         (dir (stringReplace made.stdout "\n" ""))
         (srcPath (str dir "/questionKeyed.asl"))
-        (interpreterPath (str dir "/interpreterEquivalent.asl"))
         (llPath (str dir "/questionKeyed.ll"))
         (exePath (str dir "/questionKeyed"))]
     (do
       (assert (= made.exitCode 0) "question-keyed temporary fixture directory created")
       (assert (stringContains? src "(mt :valid)") "question-keyed fixture uses the mt field marker")
       (assert (ok? (fileWrite srcPath src)) "question-keyed fixture source written")
-      (assert (ok? (fileWrite interpreterPath (source))) "interpreter-equivalent keyword record fixture written")
       (mt (low/lowerSource src)
         ((err diags) (do (assert (listEmpty? diags) (str "question-keyed fixture lowers: " (diagText diags))) false))
         ((ok m)
@@ -52,7 +63,7 @@ fn ! testQuestionKeyedRecord -> Bool
               (let [(linked (processRun (str "/usr/bin/clang -Wno-override-module -x ir " llPath " -x none asl/host/out/libaslrt.a -lm -o " exePath)))]
                 (assert (= linked.exitCode 0) (str "question-keyed fixture linked: " linked.stderr)))
               (let [(native (processRun exePath))
-                    (interp (processRun (str "asl/host/out/asl-host run " interpreterPath)))]
+                    (interp (recordedSourceInterp))]
                 (do
                   (assert (= native.exitCode 0) (str "question-keyed native fixture exits 0: " native.stderr))
                   (assert (= interp.exitCode 0) (str "interpreter-equivalent fixture exits 0: " interp.stderr))
@@ -83,7 +94,7 @@ fn ! testNativeParity -> Bool
               (let [(linked (processRun (str "/usr/bin/clang -Wno-override-module -x ir " ll " -x none asl/host/out/libaslrt.a -lm -o " exe)))]
                 (assert (= linked.exitCode 0) (str "native fixture linked: " linked.stderr)))
               (let [(native (processRun exe))
-                    (interp (processRun (str "asl/host/out/asl-host run " src)))]
+                    (interp (recordedSourceInterp))]
                 (do
                   (assert (= native.exitCode 0) (str "native fixture exits 0: " native.stderr))
                   (assert (= interp.exitCode 0) (str "interpreter fixture exits 0: " interp.stderr))
@@ -111,7 +122,7 @@ fn ! testOmittedBool dir: String -> Bool
               (let [(linked (processRun (str "/usr/bin/clang -Wno-override-module -x ir " ll " -x none asl/host/out/libaslrt.a -lm -o " exe)))]
                 (assert (= linked.exitCode 0) (str "omitted-Bool fixture linked: " linked.stderr)))
               (let [(native (processRun exe))
-                    (interp (processRun (str "asl/host/out/asl-host run " src)))]
+                    (interp (recordedOmittedBoolInterp))]
                 (do
                   (assert (= native.exitCode 1) (str "native access to omitted Bool fails: " native.stderr))
                   (assert (= interp.exitCode 1) (str "interpreter access to omitted Bool fails: " interp.stderr))

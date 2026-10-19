@@ -123,6 +123,13 @@ fn stateFile cfg: eng/EngineConfig -> String
 fn setEnvRow rows: (List String) key: String val: String -> (List String)
   (cons (str key "=" val) (filter (fn [(r String)] -> Bool (not (stringStartsWith? r (str key "=")))) rows))
 
+; (:m :ref MAINFIX9 :do "startFormsJob! used to spawn the forms child with env3 as its WHOLE environment -- envRows of the client's :env object alone, with no HOME/PATH/etc inherited -- so a client sending an empty env object (the common case, meaning 'no overrides') left the child with none of the engine's own environment; asl's own cold-bootstrap (asl/host/build.sh, set -eu) then dies on 'HOME: unbound variable' the first time that child needs a native-CLI rebuild, same spawn pattern selfUpdate! already gets right via envList. mergedEnv keeps every client override (and every setEnvRow call layered on top) and fills in the rest of the engine process's own inherited environment, same precedence rule as tools/fleet/run.asl's childEnv")
+fn mergedEnv overrides: (List String) -> (List String)
+  (let [(nameOf (fn [(row String)] -> String (optionOr (listHead (stringSplit row "=")) row)))
+        (names (map nameOf overrides))]
+    (listAppend overrides
+      (filter (fn [(row String)] -> Bool (not (listContains? names (nameOf row)))) (envList))))
+
 fn ! selfUpdate! st: ServerState disk: String -> String
   (let [(rt st.rt)
         (cfg rt.config)
@@ -215,7 +222,7 @@ fn ! startFormsJob! build: bld/EngineBuild request: String clientFd: Int64 logFi
           ((or (stringEmpty? build.toolRoot) (not (ok? (fileStat aslBin))))
             (pair (none) (formsAnswer 2 "" (str "ERR_FORMS_ABSENT: no " aslBin))))
           (else
-            (let [(env0 (envRows (j/jsonGet req "env")))
+            (let [(env0 (mergedEnv (envRows (j/jsonGet req "env"))))
                   (env1 (setEnvRow env0 "ASL_ROOT" root))
                   (env2 (setEnvRow env1 "ROOT_DIR" build.toolRoot))
                   (env3 (setEnvRow env2 "SCRIPT_DIR" (str build.toolRoot "/bin")))]

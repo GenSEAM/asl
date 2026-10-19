@@ -13,6 +13,8 @@ fn ! main args: (List String) -> (Result Int64 String)
                        (do (println (str "result " (listLength (listDrop xs k)))) (ok 0))))
       ((= sc "all") (do (println (str "result " (listAll? (fn [(x Int64)] -> Bool (>= x 0)) xs))) (ok 0)))
       ((= sc "any") (do (println (str "result " (listAny? (fn [(x Int64)] -> Bool (= x -1)) xs))) (ok 0)))
+      ((= sc "enumerate") (do (println (str "result " (listLength (enumerate xs)))) (ok 0)))
+      ((= sc "last") (do (println (str "result " (optionOr (listLast xs) -1))) (ok 0)))
       (else (err (str "unknown scenario " sc)))))
 
 fn ! testListTakeCorrectness -> Bool
@@ -113,6 +115,15 @@ fn ! testListAnyAllocation -> Bool
                                       "(measured ~1), not one per element via optionOr (measured ~9975 before the fix): marginal=" marginal " " (pairSecond r)))
       true))
 
+fn ! testEnumerateAllocation -> Bool
+  (let [(base (pairFirst (runScenario (list "build"))))
+        (r (runScenario (list "enumerate")))
+        (marginal (- (pairFirst r) base))]
+    (do
+      (assert (< marginal 35000) (str "enumerate over 10000 elements walks xs once, building only the Pair/cons list itself (measured 30005), "
+                                      "not that plus a whole separate (range 0 (listLength xs)) list thrown away after one zip (measured 40005 before the fix): marginal=" marginal " " (pairSecond r)))
+      true))
+
 fn ! runTests -> Bool
   (do
     (assert (testListTakeCorrectness) "listTake edge cases: empty, n<=0, negative n, n > length")
@@ -123,4 +134,5 @@ fn ! runTests -> Bool
     (assert (testListDropAllocation) "listDrop allocates ~0 extra objects for a 10k list, not one per dropped element")
     (assert (testListAllAllocation) "listAll? allocates ~0 extra objects over a 10k list, not one per element")
     (assert (testListAnyAllocation) "listAny? allocates ~0 extra objects over a 10k list, not one per element")
+    (assert (testEnumerateAllocation) "enumerate over a 10k list allocates one pass worth, not a separate range list too")
     true)

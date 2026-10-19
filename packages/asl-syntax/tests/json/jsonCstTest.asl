@@ -208,7 +208,7 @@ fn testTrackedJsonFiles! -> Bool
         (jsonFiles (filterTrackedJson allFiles (list)))
         (count (listLength jsonFiles))]
     (do
-      (assert (>= count 94) (str "at least 94 tracked json files (found " (stringFromInt64 count) ")"))
+      (assert (>= count 91) (str "at least 91 tracked json files (found " (stringFromInt64 count) ")"))
       (checkTrackedFilesLoop! jsonFiles 0 count)
       true))
 

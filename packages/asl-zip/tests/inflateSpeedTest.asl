@@ -90,7 +90,7 @@ fn ! runTests -> Bool
         (dir (stringReplace made.stdout "\n" ""))
         (gen (sh (str (generator) " " dir "/plain.txt && /usr/bin/gzip -6 -c " dir "/plain.txt > " dir "/input.txt.gz && /usr/bin/gzip -dc " dir "/input.txt.gz > " dir "/reference.txt && rm " dir "/plain.txt && wc -c < " dir "/reference.txt")))
         (refBytes (optionOr (stringToInt64 (stringTrim gen.stdout)) 0))
-        (built (sh (str "asl/host/out/asl-host run asl/packages/asl-compiler/src/asl1.asl build asl/packages/asl-zip/tests/inflateSpeedTest.asl -o " dir "/speed.ll")))
+        (built (sh (str "bin/asl run asl/packages/asl-compiler/src/asl1.asl build asl/packages/asl-zip/tests/inflateSpeedTest.asl -o " dir "/speed.ll")))
         (linked (sh (str "/usr/bin/clang -O2 -Wno-override-module -x ir " dir "/speed.ll -x none asl/host/out/libaslrt.a -lm -o " dir "/speed")))
         (run (sh (str "INFLATE_SPEED_DIR=" dir " " (cpuRunner) " " dir "/speed")))
         (load (sh "uptime"))

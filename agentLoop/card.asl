@@ -41,7 +41,9 @@ fn extractLocalOps text: String n: Int64 i: Int64 acc: (List String) -> (List St
                   (extractLocalOps text n (+ endOp 1) newAcc)))))))))
 
 fn ! getAllowlist rootDir: String -> (Result (List String) String)
-  (let [path (str rootDir "/scripts/agentLoop/effects.asn")]
+  (let [selfHostedPath (str rootDir "/asl/agentLoop/effects.asn")
+        legacyPath (str rootDir "/scripts/agentLoop/effects.asn")
+        path (if (fileExists? selfHostedPath) selfHostedPath legacyPath)]
     (mt (fileReadString path)
       ((err e) (err e))
       ((ok text) (ok (extractLocalOps text (stringLength text) 0 (list))))))

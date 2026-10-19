@@ -2,8 +2,12 @@
   :x [runTests]
   :i [(asl-ir/link :a lk) (asl-ir/types :a irTy) (asl-target-llvm :a llvm)])
 
-fn host -> String
-  "asl/host/out/asl-host"
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): testValueParity/testFailingParity used asl-host as a live parity oracle for the hand-built native binary over stringFixture, keyed by op. Every op is fixed, so the oracle is replaced by a recordedCase table, captured once from the leftover asl-host binary before HL-DELETE removed it, covering all of valueCases and failingCases; native build/link/run logic is unchanged. Also fixed the same pre-existing sourceDirs/asl-host-src gap already fixed in nativeOpsTest.asl")
+
+(schema Recorded
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
 
 fn fixtureLines -> (List String)
   (list "(module stringFixture :x [main] :i [])"
@@ -175,10 +179,10 @@ fn ! testArchive -> Bool
            (deletedEntries))
       true))
 
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): dropped the asl/host/src dir, which HL-DELETE removed entirely; see nativeOpsTest.asl's identical fix")
 fn sourceDirs -> (List (Pair String (List String)))
   (list (pair "asl/packages/asl-target-llvm/src" (list ".asl"))
-        (pair "asl/packages/asl-target-llvm/tests" (list ".asl"))
-        (pair "asl/host/src" (list ".c" ".h")))
+        (pair "asl/packages/asl-target-llvm/tests" (list ".asl")))
 
 fn ! sourceFiles -> (List String)
   (fold (fn [(acc (List String)) (d (Pair String (List String)))] -> (List String)
@@ -236,28 +240,61 @@ fn ! nativeExe dir: String -> String
     (do (assert (= linked.exitCode 0) (str "stringFixture links against libaslrt.a: " linked.stderr))
         exe))
 
+fn recordedCase op: String -> Recorded
+  (cond
+    ((= op "big") (Recorded :exitCode 0 :stdout "1048576 1048576 2097152 (some \"aabb\") true false true false true 2097152\n" :stderr ""))
+    ((= op "bounds") (Recorded :exitCode 0 :stdout "(none) (none) (none) (none) (none) (some \"\") (none) (some \"abcdef\") (some \"\") (none) (none) (none)\n" :stderr ""))
+    ((= op "concatFirst") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringConcat expects String, got Int (after 0 asserts)\n"))
+    ((= op "concatParam") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringConcat expects String, got Int (after 0 asserts)\n"))
+    ((= op "concatSecond") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringConcat expects String, got Bool (after 0 asserts)\n"))
+    ((= op "containsFirst") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringContains? expects String, got Int (after 0 asserts)\n"))
+    ((= op "containsParam") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringContains? expects String, got Float (after 0 asserts)\n"))
+    ((= op "containsSecond") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringContains? expects String, got List (after 0 asserts)\n"))
+    ((= op "empties") (Recorded :exitCode 0 :stdout "0 |(some \"\") (none) true true false false 0 0 xy\n" :stderr ""))
+    ((= op "fromIntFloat") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringFromInt64 expects Int, got Float (after 0 asserts)\n"))
+    ((= op "fromIntParam") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringFromInt64 expects Int, got String (after 0 asserts)\n"))
+    ((= op "fromIntText") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringFromInt64 expects Int, got String (after 0 asserts)\n"))
+    ((= op "ints") (Recorded :exitCode 0 :stdout "0 -1 -9223372036854775808 9223372036854775807 1234567890 -10 9\n" :stderr ""))
+    ((= op "lengthParam") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringLength expects String, got Float (after 0 asserts)\n"))
+    ((= op "lengthValue") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringLength expects String, got Int (after 0 asserts)\n"))
+    ((= op "needles") (Recorded :exitCode 0 :stdout "true true false false true true true true false true false false false true false\n" :stderr ""))
+    ((= op "sliceAcrossBlocks") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringSlice expects String, got Int (after 0 asserts)\n"))
+    ((= op "sliceFrom") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringSlice expects Int, got String (after 0 asserts)\n"))
+    ((= op "sliceParam") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringSlice expects Int, got String (after 0 asserts)\n"))
+    ((= op "sliceText") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringSlice expects String, got Int (after 0 asserts)\n"))
+    ((= op "sliceTextAndFrom") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringSlice expects String, got Int (after 0 asserts)\n"))
+    ((= op "sliceTextAndTo") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringSlice expects String, got List (after 0 asserts)\n"))
+    ((= op "sliceTo") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringSlice expects Int, got Float (after 0 asserts)\n"))
+    ((= op "startsFirst") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringStartsWith? expects String, got Int (after 0 asserts)\n"))
+    ((= op "startsParam") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringStartsWith? expects String, got List (after 0 asserts)\n"))
+    ((= op "startsSecond") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringStartsWith? expects String, got Int (after 0 asserts)\n"))
+    ((= op "toBytesParam") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringToBytes expects String, got Float (after 0 asserts)\n"))
+    ((= op "toBytesValue") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/strCap/stringFixture.asl: ERR_TYPE: stringToBytes expects String, got Int (after 0 asserts)\n"))
+    ((= op "utf8") (Recorded :exitCode 0 :stdout "17 (some \"\xc3\") (some \"\xc3\xa9\") (some \"\xa9\") (some \"\xe2\x9c\") (some \"\xe2\x9c\x93\") h\xc3\xa9llo w\xc3\xb6rld \xe2\x9c\x93 34 true true true false 17 195 169 147 #<Bytes>\n" :stderr ""))
+    ((= op "values") (Recorded :exitCode 0 :stdout "3 abcd (some \"bc\") (none) -42 true true 3 (0 1 2) (\"1\" \"-2\") xyz (#<Bytes>)\n" :stderr ""))
+    (else (Recorded :exitCode -1 :stdout "" :stderr (str "no recorded case: " op))))
 fn ! testValueParity exe: String src: String op: String -> Bool
   (let [(native (processRun (str exe " " op)))
-        (interp (processRun (str (host) " run " src " " op)))]
+        (interp (recordedCase op))]
     (do
-      (assert (= interp.exitCode 0) (str op ": asl-host run exit " interp.exitCode "; stderr " interp.stderr))
+      (assert (= interp.exitCode 0) (str op ": the recorded asl-host exit " interp.exitCode "; stderr " interp.stderr))
       (assert (= native.exitCode 0) (str op ": native exit " native.exitCode "; stderr " native.stderr))
-      (assert (> (stringLength interp.stdout) 1) (str op ": asl-host run prints the group"))
-      (assert (= native.stdout interp.stdout) (str op ": native prints " native.stdout " and asl-host run " interp.stdout))
+      (assert (> (stringLength interp.stdout) 1) (str op ": the recorded asl-host run prints the group"))
+      (assert (= native.stdout interp.stdout) (str op ": native prints " native.stdout " and the recorded asl-host run " interp.stdout))
       (assert (= native.stderr "") (str op ": native stderr empty, got " native.stderr))
       true))
 
 fn ! testFailingParity exe: String src: String op: String -> Bool
   (let [(native (processRun (str exe " " op)))
-        (interp (processRun (str (host) " run " src " " op)))
+        (interp (recordedCase op))
         (line (stringReplace native.stderr "\n" ""))]
     (do
       (assert (= native.exitCode 1) (str op ": native exit " native.exitCode ", want 1; stderr " native.stderr))
-      (assert (= native.exitCode interp.exitCode) (str op ": native exit equals asl-host run exit " interp.exitCode))
+      (assert (= native.exitCode interp.exitCode) (str op ": native exit equals the recorded asl-host exit " interp.exitCode))
       (assert (stringStartsWith? line "ERR_TYPE: string") (str op ": native stderr is one string builtin's ERR_TYPE line: " native.stderr))
       (assert (= native.stderr (str line "\n")) (str op ": native stderr is a single line: " native.stderr))
-      (assert (stringContains? interp.stderr (str ": " line " (after")) (str op ": asl-host run reports " line "; it reported " interp.stderr))
-      (assert (= native.stdout interp.stdout) (str op ": native stdout equals asl-host run stdout"))
+      (assert (stringContains? interp.stderr (str ": " line " (after")) (str op ": the recorded asl-host run reports " line "; it reported " interp.stderr))
+      (assert (= native.stdout interp.stdout) (str op ": native stdout equals the recorded asl-host run stdout"))
       true))
 
 fn ! runTests -> Bool

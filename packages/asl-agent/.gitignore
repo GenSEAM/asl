@@ -1,9 +1,0 @@
-dist/
-node_modules/
-.DS_Store
-*.log
-.tokensave/
-build/
-__pycache__/
-*.pyc
-asl.json

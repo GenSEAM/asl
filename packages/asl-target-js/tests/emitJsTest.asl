@@ -44,7 +44,7 @@ fn ! sameAsHost! name: String -> Bool
       (assert (ok? (fileWrite (str work "/run.mjs") (runner))) "writes the node runner")
       (assert (ok? (fileWrite out (mt compiled ((ok t) t) ((err _) "")))) (str name " writes its module"))
       (let [(viaJs (splitSh! "." (str (shellQuote (node!)) " " work "/run.mjs " (shellQuote out)) (str work "/" name ".js.stderr") 30 16))
-            (viaHost (splitSh! "." (str "asl/host/out/asl-host run " (shellQuote (fixture name))) (str work "/" name ".host.stderr") 60 32))]
+            (viaHost (splitSh! "." (str "./bin/asl run " (shellQuote (fixture name))) (str work "/" name ".host.stderr") 60 32))]
         (do
           (assert (= viaJs.stdout viaHost.stdout) (str name " stdout matches the host; js=" viaJs.stdout " host=" viaHost.stdout))
           (assert (= viaJs.exitCode viaHost.exitCode) (str name " exit matches the host; js=" (stringFromInt64 viaJs.exitCode) " host=" (stringFromInt64 viaHost.exitCode) " " viaJs.stderr))
@@ -63,7 +63,7 @@ fn ! suiteUnderJs! suite: String -> Bool
       (assert (ok? compiled) (str suite " compiles to js: " (mt compiled ((ok _) "ok") ((err ds) (js/diagText ds)))))
       (assert (ok? (fileWrite out (mt compiled ((ok t) t) ((err _) "")))) (str suite " writes its module"))
       (let [(viaJs (splitSh! "." (str (shellQuote (node!)) " --input-type=module -e " (shellQuote (str "const m = await import('" out "'); process.stdout.write(String(m.runTests()) + ' ' + m.counts.asserts)"))) (str work "/" suite ".js.stderr") 30 16))
-            (viaHost (splitSh! "." (str "asl/bin/asl test " (shellQuote path)) (str work "/" suite ".host.stderr") 120 32))]
+            (viaHost (splitSh! "." (str "./bin/asl test " (shellQuote path)) (str work "/" suite ".host.stderr") 120 32))]
         (do
           (assert (= viaJs.stdout (str "true " (hostCount viaHost.stdout))) (str suite " passes under node with the host's assertion count; js=" viaJs.stdout viaJs.stderr " host=" viaHost.stdout))
           true))))

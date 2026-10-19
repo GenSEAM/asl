@@ -1,6 +1,6 @@
 (module asl-target-llvm/tests/stdioFlushTest
   :x [runTests]
-  :i [(tools/fleet/run :a run)])
+  :i [(tools/fleet/run :a run) (asl-target-llvm/rtAbi :a rtAbi) (asl-cli/asl1Cache :a cache) (asl-cli/system :a sys)])
 
 ; (:m :ref NATIVE-STDIO-FLUSH :do "native stdio is unbuffered for print/println (raw write(2) in rtFormat.asl), but a native process can still hold buffered libc stdio open across a fork/exec or exit if something upstream (a linked C library, or future code) ever buffers through FILE*; this matches the already-established fflush-before-fork/fflush-before-exit convention in parallel.asl's own native worker pool. Checked structurally against the generated LLVM IR text rather than by chasing a live repro, since every buffered-I/O path this codebase currently owns (print/println, processRun's open_memstream capture) was independently confirmed already correct; the fix is defensive parity with host semantics and with parallel.asl's own precedent for every other fork/exit site: rtAbi.asl's asl_rt_main body thread, processRunFn's shell-exec fork, and processSpawnFn's fork")
 
@@ -21,13 +21,16 @@ fn ! sh cmd: String -> Captured
         (_ (pathRemove errPath))]
     (Captured :exitCode done.exit :stdout outText :stderr (if (= done.verdict "exit") errText (str errText done.out))))
 
-fn host -> String
-  "asl/host/out/asl-host"
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): regenRtAbi! used to shell out to asl-host to interpret rtAbi.asl as a CLI script (its own fn ! main, writing the generated .ll to the given path); this is not a host-vs-native parity check, just a CLI wrapper around rtAbi/abiText, so it now calls rtAbi/main directly in-process (the exact same exported entry point) instead of spawning anything. buildProcFixture! used to run asl1.asl's build command interpreted by asl-host; it now uses the cached native asl1 compiler (asl-cli/asl1Cache nativeAsl1!), the same replacement used by deepStackTest")
+
+fn ! nativeAsl1Bin! -> (Result String String)
+  (mt (sys/context!)
+    ((err e) (err e))
+    ((ok ctx) (cache/nativeAsl1! ctx (str ctx.root "/asl/host/out/libaslrt.a") "/usr/bin/clang")))
 
 fn ! regenRtAbi! out: String -> Bool
-  (let [(cmd (str (host) " run asl/packages/asl-target-llvm/src/rtAbi.asl " out))
-        (res (sh cmd))]
-    (do (assert (= res.exitCode 0) (str "rtAbi.asl: asl-host regenerates its .ll; exit " res.exitCode "; stderr " res.stderr))
+  (let [(res (rtAbi/main (list out)))]
+    (do (assert (ok? res) (str "rtAbi/main regenerates its .ll: " res))
         true))
 
 fn procFixtureSource -> String
@@ -43,10 +46,14 @@ fn ! buildProcFixture! work: String -> Bool
   (let [(src (str work "/procFlushFixture.asl"))
         (ll (str work "/procFlushFixture.ll"))
         (wrote (ok? (fileWrite src (procFixtureSource))))
-        (built (sh (str (host) " run asl/packages/asl-compiler/src/asl1.asl build " src " -o " ll)))]
-    (do (assert wrote "procFlushFixture: source written")
-        (assert (= built.exitCode 0) (str "procFlushFixture: asl1 builds it; exit " built.exitCode "; stderr " built.stderr))
-        true))
+        (compiler (nativeAsl1Bin!))]
+    (mt compiler
+      ((err e) (do (assert false (str "procFlushFixture: native asl1 compiler: " e)) false))
+      ((ok nativeAsl1)
+        (let [(built (sh (str nativeAsl1 " build " src " -o " ll)))]
+          (do (assert wrote "procFlushFixture: source written")
+              (assert (= built.exitCode 0) (str "procFlushFixture: asl1 builds it natively; exit " built.exitCode "; stderr " built.stderr))
+              true)))))
 
 fn ! textOf path: String -> String
   (mt (fileReadString path)

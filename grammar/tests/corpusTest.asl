@@ -26,7 +26,7 @@ fn balanced? text: String -> Bool
     (and (= end.depth 0) (and (= end.low 0) (not end.inStr))))
 
 fn ! fileBalanced? path: String want: Bool -> Bool
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((ok text) (and (> (stringLength text) 0) (= (balanced? text) want)))
     ((err e) false))
 

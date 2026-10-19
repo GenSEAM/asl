@@ -26,8 +26,9 @@ fn ! binAslHostless! fresh: String args: (List String) home: String cache: Strin
 
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
-        (pid (stringFromInt64 (procSelf)))
-        (base (str root "/.asl/cache/binAslHostless/" pid))
+        (made (sh! root (list "mktemp" "-d") 10 4))
+        (tmp (stringTrim made.out))
+        (base (str (resultOr (realPath tmp) tmp) "/binAslHostless"))
         (fresh (str base "/wt"))
         (home (str base "/home"))
         (cache (str base "/nativeCli"))
@@ -39,8 +40,9 @@ fn ! runTests -> Bool
         (noPathHost (sh! fresh (list "/bin/sh" "-c" "command -v asl-host") 10 4))
         (cold (binAslHostless! fresh (list "test" (probe)) home cache hostCache))
         (removed (sh! root (list "git" "worktree" "remove" "--force" fresh) 30 8))
-        (cleaned (sh! root (list "/bin/sh" "-c" "rm -rf \"$0\"" base) 30 8))]
-    (do (assert (= added.exit 0) (str "a fresh worktree was checked out with no asl/host/out: " added.out added.verdict))
+        (cleaned (sh! root (list "/bin/sh" "-c" "rm -rf \"$0\"" tmp) 30 8))]
+    (do (assert (and (= made.exit 0) (stringStartsWith? tmp "/")) (str "mktemp -d made a work directory outside the workspace: " made.out))
+        (assert (= added.exit 0) (str "a fresh worktree was checked out with no asl/host/out: " added.out added.verdict))
         (assert noOut "the fresh worktree has no asl/host/out/asl-host (a true cold clone)")
         (assert (ok? homed) "a fresh HOME for the cold run was created")
         (assert (!= noPathHost.exit 0) "the cold run's PATH has no asl-host on it either")

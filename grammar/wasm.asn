@@ -2,7 +2,7 @@
   :d "WebAssembly substrate: linear memory limits, host imports and browser storage for the ASL runtime. The page size is the WebAssembly constant; the other contracts are targets, modelled in pure ASL in asl/packages/asl-mem/src and not bound to a browser."
   :schemas [
     (:schema WasmSubstrateConfig
-      :d "runtime memory configuration; asl/packages/asl-mem/src/wasmRuntime.asl initWasmRuntime takes initialPages and maxPages, and asl/packages/asl-target-wat/src/emitWat.asl emitWasmMemoryModel writes them into a (memory ...) export"
+      :d "runtime memory configuration; asl/packages/asl-mem/src/wasmRuntime.asl initWasmRuntime takes initialPages and maxPages"
       :fields [
         (:field :initialPages :type :int :d "Initial linear memory pages (64KB each)")
         (:field :maxPages :type :int :d "Maximum linear memory page ceiling")

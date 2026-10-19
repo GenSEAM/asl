@@ -8,8 +8,7 @@
       (asl-target-llvm/ssa :a ssa)
       (asl-target-llvm/sysRoute :a rt)])
 
-fn host -> String
-  "asl/host/out/asl-host"
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): checkParity used to run the leftover host binary live (`asl-host run <src>`) for 3 labels (sysFd, sysInfo, sysTwelve) and diff its full stdout/exitCode against native's own run; all 3 are captured once via the leftover host binary at ~/projects/asex/asl/host/out/asl-host, read-only, outside this worktree, with SYSROUTE_PROBE='sysRoute 42' set (matching probeEnv), into the recordedVm cond table below, keyed by the same `label` string each call site already passes. None of the 3 captures embeds a work directory (verified at capture time: 0 occurrences of the capture's own mktemp path in any stdout/stderr), so no placeholder substitution is needed. testArchive, which nm'd libaslhost.a's sys.o/sysNet.o members to confirm asl_rt_builtin_sys/asl_rt_builtin_sysNet are defined there and absent from libaslrt.a, is removed entirely: libaslhost.a no longer exists anywhere in the tree (confirmed via find), the same irreducible gap already frozen for gcAslTest/gcStressTest/tailCallSpillGcTest. testTwelve's sysCNames/cNames/sysSyms (also nm'd libaslhost.a, to confirm no sys.c symbol is linked into the native binary) are removed for the same reason; with sysCNames and testArchive both gone, fn hostLib and fn nmLines (nm -P -A on an archive path) have no remaining caller and are removed as dead code. the rest of testTwelve (the checkParity-based stdout comparison, linkBin's own exit check, and nmSymbols on the NATIVE binary, which needs no host archive) is unchanged. testInfo's assertion that asl-host's own stderr starts with `(realOf (host))` is removed: it needs asl-host to literally exist as a file in THIS worktree so realPath can resolve it, and it is deleted here; the matching native-side assertion, which only needs the native binary's own realpath, is unaffected. testFile's vm/fv half is removed: fileSource's `child` helper self-spawns `self` (the running binary) recursively to create live file-locking contention between a parent and a child process, so asl-host would have to be invoked as its own self-spawning child mid-run, not a one-shot snapshot that can be captured and replayed - the same kind of irreducible live multi-process gap already handled by removing testWire in parRouteTest.asl; native's own self-recursive run, the literal fileWant comparison (already a hardcoded literal needing no host), and the fn-side (native-side) mode-640 check are kept, dropping only the fv-side fileDirSetup call and its matching find check")
 
 fn clang -> String
   "/usr/bin/clang -Wno-override-module"
@@ -17,11 +16,35 @@ fn clang -> String
 fn lib -> String
   "asl/host/out/libaslrt.a"
 
-fn hostLib -> String
-  "asl/host/out/libaslhost.a"
-
 fn probeEnv -> String
   "env SYSROUTE_PROBE='sysRoute 42' "
+
+(schema Recorded
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
+
+fn ! recordedVm label: String -> Recorded
+  (cond
+    ((= label "sysFd") (Recorded :exitCode 0 :stdout (lines (list "write empty (ok 0)" "read zero (ok \"\")" "poll idle 0 ok" "poll idle 50 ok" "poll writable ok w:2" "write one (ok 1)" "poll readable ok r:1" "poll both ok r:1 w:2"
+               "read one (ok \"y\")" "nonblocking on (ok ())" "read empty pipe (err \"wouldBlock\")" "nonblocking off (ok ())" "nonblocking w (ok ())" "big round trip true true"
+               "close w (ok ())" "read eof (ok \"\")" "wait cat (ok (some 0))" "close r (ok ())" "read closed (err \"badFd\")" "write closed (err \"badFd\")" "close closed (err \"badFd\")"
+               "poll closed ok r:4" "nonblocking closed (err \"badFd\")"
+               "fd -1 (err \"badFd\") (err \"badFd\") (err \"badFd\") (err \"badFd\")" "fd 999999 (err \"badFd\") (err \"badFd\") (err \"badFd\") (err \"badFd\")"
+               "fd 2147483648 (err \"badFd\") (err \"badFd\") (err \"badFd\")" "bad max (err \"io:22\") (err \"io:22\")"
+               "bad types (err \"badFd\") (err \"badFd\") (err \"io:22\") (err \"badFd\") (err \"badFd\") (err \"io:22\") (err \"badFd\")"
+               "poll args (err \"io:22\") (err \"io:22\") (ok ()) (ok ()) (err \"io:22\") (err \"io:22\")"
+               "poll items (err \"badFd\") (err \"badFd\") (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\")"
+               "poll big timeout ok other:4"
+               "poll shapes (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\")")) :stderr ""))
+    ((= label "sysInfo") (Recorded :exitCode 0 :stdout (lines (list "cpuCount is getconf true" "platformInfo (ok {:os \"Darwin\" :release \"25.1.0\" :machine \"arm64\"})" "platformInfo is uname true" "localDate is date true"
+               "envList has probe true" "envList is env true" "procSelf is sh's parent true" "procAlive? self (ok true)" "procAlive? reaped (ok false)" "procAlive? 1 (ok true)"
+               "procAlive? bad (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\")" "procKill self (ok ()) (ok ())" "procKill reaped (err \"noProcess\")"
+               "procKill bad (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\")"
+               "procExePath ok true")) :stderr (str (optionOr (envGet "HOME") "/opt") "/projects/asex/asl/host/out/asl-host" "\n")))
+    ((= label "sysTwelve") (Recorded :exitCode 0 :stdout (lines (list "proc (ok \"\") (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\") true (err \"io:22\")"
+               "file (err \"notFound\") (err \"notFound\") (err \"notFound\") (err \"io:22\") (err \"io:22\") (err \"io:22\")")) :stderr ""))
+    (else (Recorded :exitCode -1 :stdout "" :stderr (str "no recorded case: " label))))
 
 fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)
@@ -289,7 +312,7 @@ fn diagText ds: (List ty/IrDiag) -> String
   (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message)) ds) "; ")
 
 fn ! lowered name: String src: String -> (Option ty/SsaModule)
-  (let [(preludeText (resultOr (fileRead (lk/preludePath)) ""))]
+  (let [(preludeText (resultOr (fileReadString (lk/preludePath)) ""))]
     (do (assert (not (stringEmpty? preludeText)) (str (lk/preludePath) " is readable"))
         (mt (lk/lowerSourceWith src preludeText)
           ((err ds) (do (assert false (str name ": lowerSourceWith: " (diagText ds))) (none)))
@@ -314,9 +337,9 @@ fn ! checkIr label: String ll: String used: (List String) -> Bool
       (map (fn [(n String)] -> Bool (do (assert (stringContains? ll (wrapperDef n)) (str label ": IR defines the " n " wrapper internal")) true)) used)
       true)
 
-fn ! checkParity label: String bin: String src: String -> (Pair ProcessOutput ProcessOutput)
+fn ! checkParity label: String bin: String src: String -> (Pair ProcessOutput Recorded)
   (let [(native (sh (str (probeEnv) bin)))
-        (vm (sh (str (probeEnv) (host) " run " src)))]
+        (vm (recordedVm label))]
     (do (assert (= native.stdout vm.stdout) (str label ": native stdout equals asl-host run's; native=" native.stdout " vm=" vm.stdout " vm stderr=" vm.stderr))
         (assert (= native.exitCode vm.exitCode) (str label ": native exit " native.exitCode " equals asl-host run's " vm.exitCode "; native stderr " native.stderr))
         (pair native vm)))
@@ -361,7 +384,6 @@ fn ! testInfo work: String -> Bool
                    "procExePath ok true"))
         (assert (stringStartsWith? out "cpuCount is getconf true\nplatformInfo (ok {:os ") (str "sysInfo platformInfo is a PlatformInfo record: " out))
         (assert (= (pairFirst outs).stderr (str (realOf bin) "\n")) (str "native procExePath is the binary's realpath: " (pairFirst outs).stderr))
-        (assert (stringStartsWith? (pairSecond outs).stderr (str (realOf (host)) "\n")) (str "asl-host procExePath is asl-host's realpath: " (pairSecond outs).stderr))
         true))
 
 fn ! fileDirSetup dir: String -> Bool
@@ -397,20 +419,13 @@ fn ! fileWant -> String
 
 fn ! testFile work: String -> Bool
   (let [(_ (fileDirSetup (str work "/fn")))
-        (_ (fileDirSetup (str work "/fv")))
         (ll (build work "sysFile" (fileSource)))
         (_ (checkIr "sysFile" ll (fileNames)))
         (_ (linkBin work "sysFile"))
         (bin (str work "/sysFile"))
-        (vmCmd (str (host) " run " work "/sysFile.asl"))
-        (native (sh (str bin " '" bin "' main " work "/fn")))
-        (vm (sh (str vmCmd " '" vmCmd "' main " work "/fv")))]
-    (do (assert (= native.stdout vm.stdout) (str "sysFile: native stdout equals asl-host run's; native=" native.stdout " vm=" vm.stdout " vm stderr=" vm.stderr))
-        (assert (= native.exitCode vm.exitCode) (str "sysFile: native exit " native.exitCode " equals asl-host run's " vm.exitCode "; native stderr " native.stderr))
-        (assert (= native.stdout (fileWant)) (str "sysFile: each step prints sys.c's shape: " native.stdout))
-        (map (fn [(side String)] -> Bool
-               (do (assert (= (sh (str "find " work "/" side "/sub/f.txt -perm 640")).stdout (str work "/" side "/sub/f.txt\n")) (str "sysFile: fileWriteAt kept f.txt's mode 640 in " side)) true))
-             (list "fn" "fv"))
+        (native (sh (str bin " '" bin "' main " work "/fn")))]
+    (do (assert (= native.stdout (fileWant)) (str "sysFile: each step prints sys.c's shape: " native.stdout))
+        (assert (= (sh (str "find " work "/fn/sub/f.txt -perm 640")).stdout (str work "/fn/sub/f.txt\n")) "sysFile: fileWriteAt kept f.txt's mode 640")
         true))
 
 fn lowerNames -> (List String)
@@ -437,33 +452,18 @@ fn ! nmSymbols bin: String -> (List String)
                  (if (stringStartsWith? name "_") (optionOr (stringSlice name 1 (stringLength name)) name) name)))
              (filter (fn [(line String)] -> Bool (not (stringEmpty? line))) (stringSplit out.stdout "\n")))))
 
-fn ! sysCNames -> (List String)
-  (fold (fn [(acc (List String)) (r (List String))] -> (List String)
-          (let [(raw (optionOr (listGet r 1) ""))
-                (name (if (stringStartsWith? raw "_") (optionOr (stringSlice raw 1 (stringLength raw)) raw) raw))]
-            (if (and (stringEndsWith? (optionOr (listHead r) "") "[sys.o]")
-                     (and (!= (optionOr (listGet r 2) "") "U")
-                          (or (stringStartsWith? name "bFd") (or (stringStartsWith? name "bProc") (stringStartsWith? name "bFile")))))
-              (cons name acc)
-              acc)))
-        (list) (nmLines (hostLib)))
-
 fn ! testTwelve work: String -> Bool
   (let [(ll (build work "sysTwelve" (twelveSource)))
         (_ (checkIr "sysTwelve" ll (cons "fdRead" (filter (fn [(n String)] -> Bool (not (= n "fileLockWait"))) (lowerNames)))))
         (_ (assert (stringContains? ll (wrapperDef "fileLockWait/3")) "sysTwelve: IR defines the fileLockWait/3 wrapper internal"))
         (_ (assert (not (stringContains? ll "@asl_rt_builtin_sys(")) "sysTwelve: no call or declare of asl_rt_builtin_sys is emitted"))
-        (_ (assert (listContains? (ssa/runtimeDecls) "declare %Val @asl_rt_builtin_sys(ptr, i64, ptr)") "sysTwelve: runtimeDecls keeps asl_rt_builtin_sys, which usedDecls drops when unused"))
+        (_ (assert (not (listAny? (fn [(d String)] -> Bool (stringContains? d "@asl_rt_builtin_")) (ssa/runtimeDecls))) "sysTwelve: runtimeDecls declares no C builtin table"))
         (linked (linkBin work "sysTwelve"))
         (outs (checkParity "sysTwelve" (str work "/sysTwelve") (str work "/sysTwelve.asl")))
-        (syms (nmSymbols (str work "/sysTwelve")))
-        (cNames (sysCNames))
-        (sysSyms (filter (fn [(s String)] -> Bool (listContains? cNames s)) syms))]
+        (syms (nmSymbols (str work "/sysTwelve")))]
     (do (assert linked "sysTwelve links against libaslrt.a")
         (assert (= (pairFirst outs).stdout (twelveWant)) (str "sysTwelve prints sys.c's answers: " (pairFirst outs).stdout))
         (assert (> (listLength syms) 0) "sysTwelve: nm -P lists symbols")
-        (assert (listContains? cNames "bProcSpawnv") (str "libaslhost.a's sys.o lists its bFd, bProc and bFile functions: " cNames))
-        (assert (listEmpty? sysSyms) (str "sysTwelve: no sys.c bFd, bProc or bFile symbol is linked: " sysSyms))
         true))
 
 fn probeSource names: (List String) -> String
@@ -483,35 +483,6 @@ fn ! testConsts work: String -> Bool
         (map (fn [(n String)] -> Bool (do (assert (= (rt/routeConst (hostFacts) n) (libc/libcConst (hostFacts) n)) (str "routeConst reads libc.asl's " n " row")) true)) names)
         true))
 
-fn ! nmLines archive: String -> (List (List String))
-  (let [(out (sh (str "nm -P -A " archive)))]
-    (do (assert (= out.exitCode 0) (str "nm -P -A " archive ": " out.stderr))
-        (map (fn [(line String)] -> (List String)
-               (let [(halves (stringSplit line ": "))
-                     (member (optionOr (listHead halves) ""))
-                     (rest (stringSplit (optionOr (listGet halves 1) "") " "))]
-                 (list member (optionOr (listGet rest 0) "") (optionOr (listGet rest 1) ""))))
-             (filter (fn [(line String)] -> Bool (stringContains? line ": ")) (stringSplit out.stdout "\n")))))
-
-fn defines? row: (List String) -> Bool
-  (listContains? (list "T" "D" "S" "C" "B") (optionOr (listGet row 2) ""))
-
-fn ! testArchive -> Bool
-  (let [(hostRows (nmLines (hostLib)))
-        (sysDefs (map (fn [(r (List String))] -> String (optionOr (listGet r 1) ""))
-                      (filter (fn [(r (List String))] -> Bool (and (or (stringEndsWith? (optionOr (listHead r) "") "[sys.o]") (stringEndsWith? (optionOr (listHead r) "") "[sysNet.o]")) (defines? r))) hostRows)))
-        (rtRows (nmLines (lib)))
-        (members (filter (fn [(m String)] -> Bool (or (stringEndsWith? m "[sys.o]") (stringEndsWith? m "[sysNet.o]"))) (map (fn [(r (List String))] -> String (optionOr (listHead r) "")) rtRows)))
-        (defs (filter (fn [(r (List String))] -> Bool (and (defines? r) (listContains? sysDefs (optionOr (listGet r 1) "")))) rtRows))
-        (refs (filter (fn [(r (List String))] -> Bool (and (= (optionOr (listGet r 2) "") "U") (listContains? sysDefs (optionOr (listGet r 1) "")))) rtRows))]
-    (do (assert (listContains? sysDefs "_asl_rt_builtin_sys") (str "libaslhost.a's sys.o defines asl_rt_builtin_sys: " sysDefs))
-        (assert (listContains? sysDefs "_asl_rt_builtin_sysNet") (str "libaslhost.a's sysNet.o defines asl_rt_builtin_sysNet: " sysDefs))
-        (assert (> (listLength rtRows) 0) "nm -P -A lists libaslrt.a's symbols")
-        (assert (listEmpty? members) (str "libaslrt.a has no sys.o or sysNet.o member: " (listTake members 3)))
-        (assert (listEmpty? defs) (str "no libaslrt.a member defines a sys.c or sysNet.c global: " (listTake defs 3)))
-        (assert (listEmpty? refs) (str "no libaslrt.a member refers to a sys.c or sysNet.c global: " (listTake refs 3)))
-        true))
-
 fn ! optBin -> (Option String)
   (listHead (filter (fn [(c String)] -> Bool (= (sh (str "test -x " c)).exitCode 0))
                     (list "/opt/homebrew/opt/llvm/bin/opt" "/opt/homebrew/opt/llvm@22/bin/opt" "/usr/local/opt/llvm/bin/opt")))
@@ -521,10 +492,8 @@ fn ! testPortable work: String -> Bool
     ((none) false)
     ((some m)
       (do (mt (llvm/emitLlvmProgram m "main")
-            ((err ds) (assert false (str "sysInfo emitLlvmProgram: " (diagText ds))))
-            ((ok text)
-              (do (map (fn [(n String)] -> Bool (do (assert (stringContains? text (cTableCall n)) (str "pure emitLlvmProgram calls " n " through sys.c's table")) true)) (infoNames))
-                  (assert (not (stringContains? text "sysRoute$2E")) "pure emitLlvmProgram adds no sysRoute function"))))
+            ((err ds) (map (fn [(n String)] -> Bool (do (assert (stringContains? (diagText ds) (str "'" n "'")) (str "pure emitLlvmProgram rejects unrouted " n ", there being no C sys table: " (diagText ds))) true)) (infoNames)))
+            ((ok _) (assert false "pure emitLlvmProgram emits sysInfo without routing: no C sys table exists to call")))
           (mt (llvm/emitLlvmProgramFor (libc/linuxX8664Facts) m "main")
             ((err ds) (assert false (str "sysInfo emitLlvmProgramFor linux-x86_64: " (diagText ds))))
             ((ok text)
@@ -639,7 +608,6 @@ fn ! runTests -> Bool
         (work (stringReplace made.stdout "\n" ""))]
     (do (assert (= made.exitCode 0) "mktemp -d makes a work directory")
         (testConsts work)
-        (testArchive)
         (testPoolWith)
         (testRouteModule)
         (testFd work)

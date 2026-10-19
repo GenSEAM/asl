@@ -371,7 +371,7 @@ fn testBinaryPredicatesAndFile! -> Bool
       (assert (not (src/sourceIsBinary txtSrc)) "text source sourceIsBinary is false"))
     (let [(missingRes (src/binaryKindFile! "nonexistent_file_path_12345.xyz"))
           (textRes (src/binaryKindFile! "asl/packages/asl-syntax/manifest.asn"))
-          (binRes (src/binaryKindFile! "asl/host/out/asl-host"))]
+          (binRes (src/binaryKindFile! "asl/host/out/libaslrt.a"))]
       (assert (err? missingRes) "missing file binaryKindFile is err")
       (assert (ok? textRes) "manifest binaryKindFile is ok")
       (assert (= (resultOr textRes "FAIL") "") "manifest binaryKindFile is empty string")

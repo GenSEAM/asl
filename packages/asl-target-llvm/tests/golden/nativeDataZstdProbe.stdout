@@ -1,0 +1,94 @@
+crafted-rawBlockMax-control.zst ok 131072 6007c17e06a93c026df05f33f9df8ee3be5ba102830bf063d9ca8e00d43d2930
+crafted-rleSequences-control.zst ok 6 bbb59da3af939f7af5f360f2ceb80a496e3bae1cd87dde426db0ae40677e1c2c
+empty-cli-l1.zst ok 0 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+empty-cli-l19.zst ok 0 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+empty-cli-l3.zst ok 0 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+empty-py-l3-checksum.zst ok 0 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+empty-py-l3-nochecksum-nosize.zst ok 0 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+oneByte-cli-l1.zst ok 1 559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd
+oneByte-cli-l19.zst ok 1 559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd
+oneByte-cli-l3.zst ok 1 559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd
+oneByte-py-l3-checksum.zst ok 1 559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd
+oneByte-py-l3-nochecksum-nosize.zst ok 1 559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd
+text128k-cli-l1.zst ok 131072 831a85eb021292f18bbf806268e8a8f8e959f4ff86bc3a525216e122f0a2c82d
+text128k-cli-l19.zst ok 131072 831a85eb021292f18bbf806268e8a8f8e959f4ff86bc3a525216e122f0a2c82d
+text128k-cli-l3.zst ok 131072 831a85eb021292f18bbf806268e8a8f8e959f4ff86bc3a525216e122f0a2c82d
+text128k-py-l3-checksum.zst ok 131072 831a85eb021292f18bbf806268e8a8f8e959f4ff86bc3a525216e122f0a2c82d
+text128k-py-l3-nochecksum-nosize.zst ok 131072 831a85eb021292f18bbf806268e8a8f8e959f4ff86bc3a525216e122f0a2c82d
+text4m-cli-l1.zst ok 4194304 sparse 226501606
+text4m-cli-l19.zst ok 4194304 sparse 226501606
+text4m-cli-l3.zst ok 4194304 sparse 226501606
+text4m-py-l3-checksum.zst ok 4194304 sparse 226501606
+rg0c0p0-type2.zst ok 32000 ef2641c270ba425549a2cf6c0037fccb4fca7ba7c782c46f64e16100a578e1a1
+rg0c0p1-type0.zst ok 6016 8abd2fac7048e2abf472f35a26e2f64872962b67bb8001a34d72cbde2408bd51
+rg0c1p0-type2.zst ok 32000 59b89abe0b34e31e3926e7af018fd5cf7bfbf60deaae51f2dcfa12e20864654b
+rg0c1p1-type0.zst ok 6016 8abd2fac7048e2abf472f35a26e2f64872962b67bb8001a34d72cbde2408bd51
+rg0c2p0-type2.zst ok 2160 b36c9d511683128c54a76deaa8c7f6166f3d5282b1e9ce7ff9797f4004ee45a1
+rg0c2p1-type0.zst ok 4277 36692f2da22c158d13b458c0f88691f47810d01585de8556b0b8b765b972f2ef
+rg0c3p0-type2.zst ok 20576 456fbd558307be04efa4295580efc73b27a2d5c59c7ee41d7567329668c34f46
+rg0c3p1-type0.zst ok 5983 c67d3c0856c05552bf5640c001cebb95c957f65fd3e6f771f8ebe50b91586df5
+rg0c4p0-type2.zst ok 8 3bdcf6187bab53fc6e18b7f3e8ea4a666f06f545460189157c6f1ef1e5d85ebc
+rg0c4p1-type0.zst ok 549 09082cf01a55ab35a3830ec6502205481dc649add25170b2db72aec53dde461f
+rg1c0p0-type2.zst ok 32000 b8eee057dbc95af5beab85bb03e78dc4a1c00af18969da4019d6324f5ad154b0
+rg1c0p1-type0.zst ok 6016 8abd2fac7048e2abf472f35a26e2f64872962b67bb8001a34d72cbde2408bd51
+rg1c1p0-type2.zst ok 32000 06895eebb08321529403913182630a4482faaec169cd677d2cdb4696e58f8045
+rg1c1p1-type0.zst ok 6016 8abd2fac7048e2abf472f35a26e2f64872962b67bb8001a34d72cbde2408bd51
+rg1c2p0-type2.zst ok 2448 d1c60f77003604d2d506ed16f399350b345fdd9d0ddcbc909ed7052704bbd01c
+rg1c2p1-type0.zst ok 4363 f79dffadd050f7fdfab42c83cd499d8d7435916963164063e35c59379e5aa4a8
+rg1c3p0-type2.zst ok 18200 6e30a58bbf3bfb4f05439a3f0791cecc4d6504d75c8a48b7381ce25de2420767
+rg1c3p1-type0.zst ok 5971 c0f3296d82ab5340585967cac082b171c7316762879094627f64d74b11aa7fe5
+rg1c4p0-type2.zst ok 8 b15348c8f462384c01e83b6d499c6faf3f96808f5aa07c6bab4b65b36b4445d4
+rg1c4p1-type0.zst ok 600 1de44df09dd97c97bea5fc4b7e7a3e5b69ef7265317d5b2e34bf9f254c39ea75
+rg2c0p0-type2.zst ok 16000 a742b38973cfe31eb497a10a25f440b41dbaf6e210ef5c3b147379697ea239f5
+rg2c0p1-type0.zst ok 2762 db233051cd97e5b765e31d62cf574bbb82a0bed4189d599479a7fc20c76d3d59
+rg2c1p0-type2.zst ok 16000 51a3de22a3d058bc7c0b4e797dc41d4da07aeff4cf5ffef730700d7631ac192b
+rg2c1p1-type0.zst ok 2762 db233051cd97e5b765e31d62cf574bbb82a0bed4189d599479a7fc20c76d3d59
+rg2c2p0-type2.zst ok 1672 2a036c06f9d03cf0c8f12ca30f715d7470826ad73e670501c1a08dc6b67539b2
+rg2c2p1-type0.zst ok 1960 e91de24060cc4646471964d547b8fccdd22e1cfda100aa3f16bb5e15055cbba1
+rg2c3p0-type2.zst ok 10384 f9d7b3d233dea2ff1213578c1f9de192ef2e9353481525b1ae5546c06c51f259
+rg2c3p1-type0.zst ok 2737 54e690229ae04ed2cde5282f37a7a897f1e6916f8dff13412954c2aa25b467fa
+rg2c4p0-type2.zst ok 8 3bdcf6187bab53fc6e18b7f3e8ea4a666f06f545460189157c6f1ef1e5d85ebc
+rg2c4p1-type0.zst ok 301 325123ebedae626047d389618a59c7060157762e3e7fe14dc4ebc2ca48157e80
+badChecksum.zst err ERR_ZSTD_CORRUPT
+badMagic.zst err ERR_ZSTD_CORRUPT
+badWindowDescriptor.zst err ERR_ZSTD_CORRUPT
+dictionaryId.zst err ERR_ZSTD_UNSUPPORTED
+flip-14634-10.zst err ERR_ZSTD_CORRUPT
+flip-18983-14.zst err ERR_ZSTD_CORRUPT
+flip-21226-0.zst err ERR_ZSTD_CORRUPT
+flip-23969-3.zst err ERR_ZSTD_CORRUPT
+flip-24409-19.zst err ERR_ZSTD_CORRUPT
+flip-2461-5.zst err ERR_ZSTD_CORRUPT
+flip-25879-1.zst err ERR_ZSTD_CORRUPT
+flip-28423-6.zst err ERR_ZSTD_CORRUPT
+flip-3056-13.zst err ERR_ZSTD_CORRUPT
+flip-3253-12.zst err ERR_ZSTD_CORRUPT
+flip-32537-23.zst err ERR_ZSTD_CORRUPT
+flip-33259-4.zst err ERR_ZSTD_CORRUPT
+flip-35900-20.zst err ERR_ZSTD_CORRUPT
+flip-36721-17.zst err ERR_ZSTD_CORRUPT
+flip-36990-21.zst err ERR_ZSTD_CORRUPT
+flip-37419-16.zst err ERR_ZSTD_CORRUPT
+flip-37825-11.zst err ERR_ZSTD_CORRUPT
+flip-3877-9.zst err ERR_ZSTD_CORRUPT
+flip-40571-22.zst err ERR_ZSTD_CORRUPT
+flip-4582-7.zst err ERR_ZSTD_CORRUPT
+flip-4751-2.zst err ERR_ZSTD_CORRUPT
+flip-5948-8.zst err ERR_ZSTD_CORRUPT
+flip-6757-18.zst err ERR_ZSTD_CORRUPT
+flip-9457-15.zst err ERR_ZSTD_CORRUPT
+malformedFseTable.zst err ERR_ZSTD_CORRUPT
+malformedHuffmanTree.zst err ERR_ZSTD_CORRUPT
+multiFrame.zst err ERR_ZSTD_UNSUPPORTED
+offsetBeyondWindow.zst err ERR_ZSTD_CORRUPT
+oversizedBlock.zst err ERR_ZSTD_CORRUPT
+reservedBit.zst err ERR_ZSTD_CORRUPT
+skippableFrame.zst err ERR_ZSTD_UNSUPPORTED
+truncated-0.zst err ERR_ZSTD_CORRUPT
+truncated-19705.zst err ERR_ZSTD_CORRUPT
+truncated-3.zst err ERR_ZSTD_CORRUPT
+truncated-39406.zst err ERR_ZSTD_CORRUPT
+truncated-39410.zst err ERR_ZSTD_CORRUPT
+truncated-5.zst err ERR_ZSTD_CORRUPT
+truncated-8.zst err ERR_ZSTD_CORRUPT
+decoded 93

@@ -1,4 +1,4 @@
-(module asl-forms/tests/editsParityTest :x [runTests] :i [(asl-forms/kernel :a k) (asl-forms/vfs :a v) (asl-forms/edit :a e) (asl-forms/ops :a ops) (asl-json/json :a j) (asl-proc/coreProcess :a proc)])
+(module asl-forms/tests/editsParityTest :x [runTests] :i [(asl-forms/kernel :a k) (asl-forms/vfs :a v) (asl-forms/edit :a e) (asl-forms/ops :a ops) (asl-json/json :a j) (asl-proc/coreProcess :a proc) (asl-forms/gate :a g)])
 
 
 (schema Replay (:f ws String) (:f steps Int64) (:f failures Int64) (:f loose Int64) (:f diverged Int64))
@@ -16,33 +16,26 @@ fn tmpRoot! -> String
 fn firstLine text: String -> String
   (optionOr (listHead (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (map stringTrim (stringSplit text "\n")))) "")
 
-fn hostCheck! host: String overlay: String rel: String text: String -> (Pair String String)
+fn nativeCheck! overlay: String rel: String text: String -> (Pair String String)
   (let [(target (str overlay "/" rel))]
     (do (resultOr (dirCreate (k/dirName target)) ())
         (resultOr (fileWrite target text) ())
-        (mt (proc/exec! (proc/withTimeout (proc/withCwd (proc/cmd host (list "check" rel)) overlay) 15000))
-          ((err e)
-            (mt e
-              ((proc/timeout ms) (pair "error" (str "asl-host check timed out after " (stringFromInt64 (/ ms 1000)) "s")))
-              (_ (pair "error" "asl-host check did not run"))))
-          ((ok o)
-            (if (= o.exitCode 0)
-              (pair "ok" "")
-              (let [(both (stringJoin (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (list o.stderr o.stdout)) "\n"))
-                    (cut (stringReplace (stringReplace both (str (resultOr (realPath overlay) overlay) "/") "") (str overlay "/") ""))
-                    (line (firstLine cut))]
-                (pair "error" (optionOr (stringSlice (if (stringEmpty? line) (str "asl-host check exit " (stringFromInt64 o.exitCode)) line) 0 300) line))))))))
+        (let [(h (g/nativeCheck! overlay rel))]
+          (if (= h.code 0)
+            (pair "ok" "")
+            (let [(line (firstLine (stringJoin (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (list h.errText h.out)) "\n")))]
+              (pair "error" (optionOr (stringSlice (if (stringEmpty? line) (str "native check exit " (stringFromInt64 h.code)) line) 0 300) line)))))))
 
-fn aslCheckIn! ws: String host: String p: String after: String before: (Option String) -> e/SyntaxResult
+fn aslCheckIn! ws: String p: String after: String before: (Option String) -> e/SyntaxResult
   (let [(overlay (str (tmpRoot!) "/aslOverlay" (stringFromInt64 (nowNs))))
         (rel (k/relPath p ws))
-        (r (hostCheck! host overlay rel after))
-        (pre (if (= (pairFirst r) "error") (mt before ((some b) (pairFirst (hostCheck! host overlay rel b))) ((none) "")) ""))]
+        (r (nativeCheck! overlay rel after))
+        (pre (if (= (pairFirst r) "error") (mt before ((some b) (pairFirst (nativeCheck! overlay rel b))) ((none) "")) ""))]
     (do (resultOr (pathRemove overlay) ())
         (e/SyntaxResult :status (pairFirst r) :message (pairSecond r) :before pre :host "")))
 
-fn routed! ws: String host: String -> e/Checkers
-  (e/Checkers :aslCheck (fn [(p String) (after String) (before (Option String))] -> e/SyntaxResult (aslCheckIn! ws host p after before))
+fn routed! ws: String -> e/Checkers
+  (e/Checkers :aslCheck (fn [(p String) (after String) (before (Option String))] -> e/SyntaxResult (aslCheckIn! ws p after before))
               :foreignCheck (fn [(p String) (content String)] -> e/SyntaxResult (e/SyntaxResult :status "skipped" :message "foreign syntax check not configured" :before "" :host "")))
 
 fn vfsFor! ws: String session: String -> v/Vfs
@@ -158,12 +151,12 @@ fn normHost s: String -> String
   (let [(parts (stringSplit s ":syntaxHost \"python"))]
     (stringJoin (cons (optionOr (listHead parts) "") (map hostTail (optionOr (listTail parts) (list)))) ":syntaxHost \"python"))
 
-fn step! r: Replay kw: (Map String String) exact: Bool host: String -> Replay
+fn step! r: Replay kw: (Map String String) exact: Bool -> Replay
   (let [(form (get kw "form"))
         (n (optionOr (stringToInt64 (get kw "n")) 0))
         (isHarness (stringStartsWith? form "(:harness"))
         (r2 (if isHarness (harness! r form) r))
-        (out (if isHarness (ops/StepOutcome :lines (list) :errCount 0) (dispatch! (vfsFor! r.ws (get kw "session")) (routed! r.ws host) n form (list))))
+        (out (if isHarness (ops/StepOutcome :lines (list) :errCount 0) (dispatch! (vfsFor! r.ws (get kw "session")) (routed! r.ws) n form (list))))
         (lines (normHost (stringJoin out.lines "\n")))
         (diverged (mapHas? kw "linesAsl"))
         (want (normHost (get kw (if diverged "linesAsl" "lines"))))
@@ -184,7 +177,7 @@ fn fresh! parent: String sid: String -> Replay
 fn tally a: Replay b: Replay -> Replay
   (with b :steps (+ a.steps b.steps) :failures (+ a.failures b.failures) :loose (+ a.loose b.loose) :diverged (+ a.diverged b.diverged))
 
-fn replayAll! parent: String exact: Bool host: String lines: (List String) cur: Replay sid: String total: Replay -> Replay
+fn replayAll! parent: String exact: Bool lines: (List String) cur: Replay sid: String total: Replay -> Replay
   (mt (listHead lines)
     ((none) (tally total cur))
     ((some line)
@@ -195,10 +188,10 @@ fn replayAll! parent: String exact: Bool host: String lines: (List String) cur: 
             (total2 (if (and switch (not (stringEmpty? sid))) (tally total cur) total))
             (base (if switch (fresh! parent lsid) cur))]
         (cond
-          ((stringStartsWith? line "(:file ") (replayAll! parent exact host rest (setupFile! base kw) lsid total2))
-          ((stringStartsWith? line "(:link ") (replayAll! parent exact host rest (addLink! base (get kw "path") (get kw "target")) lsid total2))
-          ((stringStartsWith? line "(:step ") (replayAll! parent exact host rest (step! base kw exact host) lsid total2))
-          (else (replayAll! parent exact host rest cur sid total))))))
+          ((stringStartsWith? line "(:file ") (replayAll! parent exact rest (setupFile! base kw) lsid total2))
+          ((stringStartsWith? line "(:link ") (replayAll! parent exact rest (addLink! base (get kw "path") (get kw "target")) lsid total2))
+          ((stringStartsWith? line "(:step ") (replayAll! parent exact rest (step! base kw exact) lsid total2))
+          (else (replayAll! parent exact rest cur sid total))))))
 
 fn unitChecks! root: String -> Bool
   (let [(ws (str root "/unit"))
@@ -224,30 +217,20 @@ fn unitChecks! root: String -> Bool
               "a rejected status after quoted pairs fails the step; the same words inside a value do not")
       (assert (= (e/unifiedDiff! (list "a\n" "b\n") (list "a\n" "c\n") "x" "y" 2) (list "--- x\n" "+++ y\n" "@@ -1,2 +1,2 @@\n" " a\n" "-b\n" "+c\n")) "unified diff of a one-line change")
       (assert (listEmpty? (e/unifiedDiff! (list "same\n") (list "same\n") "x" "y" 2)) "equal sequences give no diff lines")
-      (let [(chBad (routed! ws "/nonexistent/path/to/asl-host"))
-            (vBad (e/validateStaged! chBad (str ws "/foo.asl") (none) "(module foo :x [] :i [])\n" false))
-            (wBad (e/writeStep! vs chBad (list) 99 (mapEmpty) (list "foo.asl" "(module foo :x [] :i [])\n")))]
-        (assert (= vBad.code ":ERR_CHECK_FAILED") "validation with a nonexistent host path fails with ERR_CHECK_FAILED")
-        (assert (= wBad.errCount 1) "writeStep with nonexistent host fails with an error"))
+      (let [(ch (routed! ws))
+            (unbound "(module foo :x [f] :i [])\n\nfn f -> Int64\n  (+ 1 undefinedThing)\n")
+            (vGood (e/validateStaged! ch (str ws "/foo.asl") (none) "(module foo :x [f] :i [])\n\nfn f -> Int64\n  1\n" false))
+            (vBad (e/validateStaged! ch (str ws "/foo.asl") (none) unbound false))
+            (wBad (e/writeStep! vs ch (list) 99 (mapEmpty) (list "foo.asl" unbound)))]
+        (assert (= vGood.code "") (str "native validation passes a well-typed module: " vGood.code " " vGood.message))
+        (assert (= vBad.code ":ERR_CHECK_FAILED") "native validation of an unbound symbol fails with ERR_CHECK_FAILED")
+        (assert (stringContains? vBad.message "ERR_UNKNOWN_SYMBOL") (str "the failure carries the checker diagnostic: " vBad.message))
+        (assert (= wBad.errCount 1) "writeStep of a module with an unbound symbol fails with an error"))
       (resultOr (pathRemove ws) ())
       true))
 
 fn resultOk? r: (Result Unit String) -> Bool
   (mt r ((ok _) true) ((err _) false))
-
-fn currentHost! repo: String -> (Option String)
-  (mt (envGet "ASL_HOST")
-    ((some h) (if (fileExists? h)
-                (some (resultOr (realPath h) h))
-                (do (println (str "invalid environment variable: ASL_HOST path does not exist: " h))
-                    (assert false (str "invalid environment variable: ASL_HOST path does not exist: " h))
-                    (none))))
-    ((none) (let [(p (str repo "/asl/host/out/asl-host"))]
-              (if (fileExists? p)
-                (some (resultOr (realPath p) p))
-                (do (println (str "the stage-0 host is absent at " p "; build it with sh asl/host/build.sh or set ASL_HOST"))
-                    (assert false (str "the stage-0 host is absent at " p "; build it with sh asl/host/build.sh or set ASL_HOST"))
-                    (none))))))
 
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
@@ -261,16 +244,13 @@ fn ! runTests -> Bool
     (assert (= (get header "base") "75a7d7ba") "the fixture is pinned to base 75a7d7ba")
     (assert (>= want 120) "the fixture holds at least 120 recorded steps")
     (assert (unitChecks! here) "unit checks ran")
-    (mt (currentHost! root)
-      ((none) false)
-      ((some host)
-       (let [(zero (Replay :ws "" :steps 0 :failures 0 :loose 0 :diverged 0))
-             (r (replayAll! here exact host lines zero "" zero))
-             (compared (listLength (filter (fn [(l String)] -> Bool (stringContains? l " :compare \"")) lines)))]
-         (do
-           (resultOr (pathRemove here) ())
-           (println (str "(:editsParity :steps " (stringFromInt64 r.steps) " :failures " (stringFromInt64 r.failures) " :hashOrderLoose " (stringFromInt64 r.loose) " :divergences " (stringFromInt64 r.diverged) " :exactRoot " (if exact "true" "false") ")"))
-           (assert (= r.steps want) "every recorded step replayed")
-           (assert (and (> compared 0) (= r.diverged compared)) "every :compare step is checked against its recorded ASL receipt")
-           (assert (= r.failures 0) "every step gives the recorded receipt, error count, tree and staged store")
-           true)))))
+    (let [(zero (Replay :ws "" :steps 0 :failures 0 :loose 0 :diverged 0))
+          (r (replayAll! here exact lines zero "" zero))
+          (compared (listLength (filter (fn [(l String)] -> Bool (stringContains? l " :compare \"")) lines)))]
+      (do
+        (resultOr (pathRemove here) ())
+        (println (str "(:editsParity :steps " (stringFromInt64 r.steps) " :failures " (stringFromInt64 r.failures) " :hashOrderLoose " (stringFromInt64 r.loose) " :divergences " (stringFromInt64 r.diverged) " :exactRoot " (if exact "true" "false") ")"))
+        (assert (= r.steps want) "every recorded step replayed")
+        (assert (and (> compared 0) (= r.diverged compared)) "every :compare step is checked against its recorded ASL receipt")
+        (assert (= r.failures 0) "every step gives the recorded receipt, error count, tree and staged store")
+        true)))

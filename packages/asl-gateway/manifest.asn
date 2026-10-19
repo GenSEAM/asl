@@ -33,4 +33,5 @@
     "aslGateway/plugin"
     "aslGateway/router"
     "aslGateway/upstream"
-    "aslGateway/usage"))
+    "aslGateway/usage"
+    "aslGateway/usageLedger"))

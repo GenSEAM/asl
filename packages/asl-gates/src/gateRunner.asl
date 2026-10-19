@@ -35,7 +35,7 @@ fn ! checkPaths what: Str listing: (Result (List Str) Str) check: (fn [Str] -> (
           (else (err (str (stringFromInt64 (listLength problems)) " of " (stringFromInt64 (listLength paths)) " " what " failed: " (stringJoin problems "; "))))))))
 
 fn ! manifestCheck! p: Str -> (Result Unit Str)
-  (mt (fileRead p)
+  (mt (fileReadString p)
     ((err e) (err (str "Failed to read manifest " p ": " e)))
     ((ok c) (if (g/verifyManifestString c) (ok ()) (err (str p ": no valid package id")))))
 
@@ -45,7 +45,7 @@ fn ! balanceCheck! p: Str -> (Result Unit Str)
     ((ok issue) (mt issue ((none) (ok ())) ((some at) (err (str p ": unbalanced at byte " (stringFromInt64 (pairFirst at)) ": " (pairSecond at)))))))
 
 fn ! skillCheck! p: Str -> (Result Unit Str)
-  (mt (fileRead p)
+  (mt (fileReadString p)
     ((err e) (err (str "Failed to read skill " p ": " e)))
     ((ok c) (if (stringStartsWith? c "---\n") (ok ()) (err (str p ": does not open with a --- frontmatter fence")))))
 

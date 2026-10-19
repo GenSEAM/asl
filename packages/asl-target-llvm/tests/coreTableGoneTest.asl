@@ -1,6 +1,6 @@
 (module asl-target-llvm/tests/coreTableGoneTest
   :x [runTests]
-  :i [(asl-ir/link :a lk) (asl-ir/types :a irTy) (asl-target-llvm :a llvm)])
+  :i [(asl-ir/link :a lk) (asl-ir/types :a irTy) (asl-ir/lower :a low) (asl-target-llvm :a llvm)])
 
 fn runtime -> String
   "asl/host/out/libaslrt.a"
@@ -8,16 +8,16 @@ fn runtime -> String
 fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)
 
-fn tableRows text: String -> (List (Pair String Int64))
-  (mt (stringIndexOf text "const Builtin coreBuiltins[] = {")
-    ((none) (list))
-    ((some start)
-      (let [(body (optionOr (stringSlice text start (stringLength text)) ""))
-            (table (optionOr (stringSlice body 0 (optionOr (stringIndexOf body "};") 0)) ""))]
-        (map (fn [(p String)] -> (Pair String Int64)
-               (pair (optionOr (listHead (stringSplit p "\"")) "")
-                     (optionOr (stringToInt64 (optionOr (listGet (stringSplit p ", ") 2) "")) -9)))
-             (listDrop (stringSplit table "{\"") 1)))))
+fn nativeArity name: String -> (Option Int64)
+  (if (= name "list") (some -1) (low/builtinArity name))
+
+fn tableRows -> (List (Pair String Int64))
+  (fold (fn [(acc (List (Pair String Int64))) (c (List String))] -> (List (Pair String Int64))
+          (let [(name (caseName c))]
+            (mt (nativeArity name)
+              ((some a) (listAppend acc (list (pair name a))))
+              ((none) acc))))
+        (list) (cases))
 
 fn cases -> (List (List String))
   (list (list "list" "1 2" "%%") (list "listTail" "(list 1 2)" "%%") (list "listHead" "(list 1 2)" "%%") (list "listEmpty?" "(list)" "%%")
@@ -97,9 +97,9 @@ fn ! optBin -> (Option String)
       ((none) (if (= (sh "command -v opt >/dev/null 2>&1").exitCode 0) (some "opt") (none)))))
 
 fn ! testTable rows: (List (Pair String Int64)) -> Bool
-  (do (assert (> (listLength rows) 70) (str "prelude.c's coreBuiltins initializer yields its rows, got " (listLength rows)))
-      (assert (= (listSort (map pairFirst rows)) (listSort (map caseName (cases)))) (str "the cases name prelude.c's coreBuiltins: " (stringJoin (map pairFirst rows) " ")))
-      (assert (= (listLength (cases)) (listLength rows)) "one case per coreBuiltins row")
+  (do (assert (> (listLength rows) 70) (str "asl-ir/lower's builtinArity resolves a row for most cases, got " (listLength rows)))
+      (assert (= (listSort (map pairFirst rows)) (listSort (map caseName (cases)))) (str "every case names a builtin asl-ir/lower's builtinArity recognizes: " (stringJoin (map pairFirst rows) " ")))
+      (assert (= (listLength (cases)) (listLength rows)) "one resolved row per case, none unresolved (asl-host's prelude.c coreBuiltins table is gone since HL-DELETE; builtinArity is the native successor)")
       true)
 
 fn ! testIr dir: String code: String -> Bool
@@ -187,30 +187,24 @@ fn ! archiveLines path: String -> (List String)
     (do (assert (= listed.exitCode 0) (str "nm -A -P " path ": " listed.stderr))
         (filter (fn [(l String)] -> Bool (not (stringEmpty? (memberOf l)))) (stringLines listed.stdout))))
 
-fn definedIn lines: (List String) member: String -> (List String)
-  (map symbolOf (filter (fn [(l String)] -> Bool (and (= (memberOf l) member) (and (!= (kindOf l) "U") (not (stringEmpty? (kindOf l)))))) lines))
-
 fn ! testArchive -> Bool
   (let [(rt (archiveLines (runtime)))
-        (hostLines (archiveLines "asl/host/out/libaslhost.a"))
-        (gone (listAppend (definedIn hostLines "prelude.o") (definedIn hostLines "zstd.o")))
         (members (fold (fn [(acc (List String)) (l String)] -> (List String) (if (listContains? acc (memberOf l)) acc (listAppend acc (list (memberOf l))))) (list) rt))
         (defined (filter (fn [(l String)] -> Bool (and (!= (kindOf l) "U") (not (stringEmpty? (kindOf l))))) rt))
-        (refs (filter (fn [(l String)] -> Bool (and (= (kindOf l) "U") (listContains? gone (symbolOf l)))) rt))]
+        (undefined (filter (fn [(l String)] -> Bool (= (kindOf l) "U")) rt))
+        (legacyHostNames (list "coreBuiltins" "asl_rt_builtin" "bFileStat" "zstdDecompress" "bStringConcat" "bStringLength" "bStringSlice"))]
     (do
-      (assert (> (listLength gone) 20) (str "libaslhost.a's prelude.o and zstd.o define their symbols, got " (listLength gone)))
-      (assert (listContains? gone "coreBuiltins") "libaslhost.a's prelude.o defines coreBuiltins")
+      (refute (= (sh "test -e asl/host/out/libaslhost.a").exitCode 0) "asl/host/out/libaslhost.a is gone (HL-DELETE): no host archive exists to link libaslrt.a against, let alone refer to")
+      (refute (= (sh "test -d asl/host/src").exitCode 0) "asl/host/src is gone (HL-DELETE): prelude.c and zstd.c, the one-time home of coreBuiltins, no longer exist")
       (assert (listContains? members "rtAbi.o") (str "libaslrt.a holds rtAbi.o (abi.c ported to asl-target-llvm/rtAbi.asl, RT-ABI): " (stringJoin members " ")))
       (refute (listContains? members "prelude.o") (str "libaslrt.a holds no prelude.o: " (stringJoin members " ")))
       (refute (listContains? members "zstd.o") (str "libaslrt.a holds no zstd.o: " (stringJoin members " ")))
       (map (fn [(s String)] -> Bool
              (do (refute (listAny? (fn [(l String)] -> Bool (= (symbolOf l) s)) defined) (str "libaslrt.a defines no " s)) true))
-           (list "coreBuiltins" "asl_rt_builtin" "bFileStat" "zstdDecompress"))
+           legacyHostNames)
       (map (fn [(s String)] -> Bool
-             (do (refute (listAny? (fn [(l String)] -> Bool (= (symbolOf l) s)) defined) (str "no libaslrt.a member defines " s " (strFloor.c is libaslhost.a's alone since RT-FLOOR)")) true))
-           (list "bStringConcat" "bStringLength" "bStringSlice"))
-      (assert (listEmpty? refs)
-              (str "no libaslrt.a member refers to prelude.o or zstd.o (hostVerbLink.o, whose builtin chain did, left in NX4): " (stringJoin (map (fn [(l String)] -> String (str (memberOf l) " " (symbolOf l))) refs) "; ")))
+             (do (refute (listAny? (fn [(l String)] -> Bool (= (symbolOf l) s)) undefined) (str "no libaslrt.a member refers to " s " (its one-time home, libaslhost.a's prelude.o/zstd.o, is gone since HL-DELETE)")) true))
+           legacyHostNames)
       true))
 
 fn ! testUnsupported root: String -> Bool
@@ -238,7 +232,7 @@ fn ! runTests -> Bool
   (let [(made (sh "mktemp -d"))
         (root (stringReplace made.stdout "\n" ""))
         (src (str root "/coreTable.asl"))
-        (rows (mt (fileReadString "asl/host/src/prelude.c") ((ok t) (tableRows t)) ((err e) (do (assert false (str "reads prelude.c: " e)) (list)))))]
+        (rows (tableRows))]
     (do
       (assert (= made.exitCode 0) "mktemp -d makes a work directory")
       (testTable rows)

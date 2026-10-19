@@ -1,6 +1,6 @@
 (module asl-forms/tests/docOpTest
   :x [runTests]
-  :i [(asl-forms/kernel :a k) (asl-forms/ops :a ops) (asl-forms/docOp :a doc) (asl-forms/gate :a g)])
+  :i [(asl-forms/kernel :a k) (asl-forms/ops :a ops) (asl-forms/docOp :a doc) (asl-forms/gate :a g) (asl-forms/tests/formsDriver :a fd)])
 
 fn ! sandboxDir! -> String
   (stringTrim (processRun "mktemp -d").stdout)
@@ -57,15 +57,14 @@ fn testRunStepDispatchesDoc! -> Bool
 
 fn ! externalDocRun! root: String form: String -> g/RunOut
   (let [(repo (resultOr (realPath ".") ""))
-        (host (k/joinPath repo "asl/host/out/asl-host"))
-        (mainPath (k/joinPath repo "asl/packages/asl-forms/src/main.asl"))]
-    (g/runArgv! (list host "run" mainPath "--root" root form) (some repo) (none) 10000 0))
+        (forms (fd/formsBin! repo))]
+    (g/runArgv! (list forms "--root" root form) (some repo) (none) 10000 0))
 
 fn testCliRoundTrip! -> Bool
   (let [(dir (buildSandbox!))
         (out (externalDocRun! dir "(:doc :symbol \"asl/packages/fxpkg/src/thing.asl#addOne\")"))]
     (do
-      (assert (= out.code 0) "the real asl-host CLI dispatch for (:doc) exits zero")
+      (assert (= out.code 0) "the native forms CLI dispatch for (:doc) exits zero")
       (assert (stringContains? out.out "Adds one to a") "the CLI round trip through main.asl and tools.asn recovers the ledgered text")
       (cleanup! dir)))
 

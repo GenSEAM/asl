@@ -1,15 +1,9 @@
 (:package asl-lint
  :version "0.1.0"
  :entry "src/core/lint.asl"
- :description "AgentSlang Native Quality, Smell, and Anti-Pattern Analysis Engine"
+ :description "AgentSlang Native Quality, Smell, and Anti-Pattern Analysis Engine (the anchorGuard/incongruity/rules/clone/tokens modules and 4 of this package's own 5 tests were deleted in DEAD-PACKAGES/e6dcc002b as dead; the core smell/quality module remains live, imported by tests/conformance/rules/rulesSyntaxDialectTest.asl's delimiterHealTest.asl fixture check)"
  :aslFirst true
  :modules [
    "asl-lint/core"
-   "asl-lint/anchorGuard"
-   "asl-lint/incongruity"
-   "asl-lint/rules"
-   "asl-lint/clone"
-   "asl-lint/heal"
-   "asl-lint/tokens"
  ]
  :dependencies ["asl-parser"])

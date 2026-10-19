@@ -66,7 +66,7 @@ fn verifyClaimsGrounding claims: (List ClaimCitation) receipts: (List GroundedRe
         (err (str "Refuted " (stringFromInt64 (listLength unbacked)) " ungrounded claim(s) lacking test receipts"))))
 
 fn groundClaims! registryPath: Str -> (Result (List ClaimCitation) Str)
-  (let [(readRes (fileRead registryPath))]
+  (let [(readRes (fileReadString registryPath))]
     (mt readRes
       ((err _) (err (str "Failed to read claims registry: " registryPath)))
       ((ok content)

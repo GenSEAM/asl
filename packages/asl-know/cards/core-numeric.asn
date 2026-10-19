@@ -1,0 +1,5 @@
+(:card "core/numeric" :purpose "Numeric conversion builtins, no import" :sigs ("int32ToInt64 : Int32 -> Int64" "int64ToInt32 : Int64 -> (Option Int32)" "int64ToFloat64 : Int64 -> Float64" "float64ToInt64 : Float64 -> (Option Int64)") :example none)
+(:sym "int32ToInt64" :sig "int32ToInt64 : Int32 -> Int64" :doc "Widen.")
+(:sym "int64ToInt32" :sig "int64ToInt32 : Int64 -> (Option Int32)" :doc "Narrow, or none when out of range." :pit (option))
+(:sym "int64ToFloat64" :sig "int64ToFloat64 : Int64 -> Float64" :doc "Convert to floating point.")
+(:sym "float64ToInt64" :sig "float64ToInt64 : Float64 -> (Option Int64)" :doc "Truncate toward zero, or none for NaN, infinity and values outside Int64." :pit (option))

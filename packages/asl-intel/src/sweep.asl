@@ -28,10 +28,11 @@ fn pyOsError path: String hostErr: String -> String
         (no (errnoOf reason))]
     (if (< no 0) hostErr (str "[Errno " (t/intStr no) "] " reason ": " (t/pyReprStr path))))
 
-fn balanceError s: String -> (Option String)
-  (let [(b (stringToBytes s))] (scan b (bytesLength b) 0 0 false false (list)))
+; (:m :ref MAINFIX1-SWEEPCOMMENT-20261018 :do "this hand-rolled scanner had no ';'-comment awareness at all (unlike the canonical asl-gates/dyck#checkLoop, which layer boundary tiers forbid importing from here: asl-intel is layer 1, asl-gates is layer 3, and verifyLayerBoundary only allows src>=dst), so a bracket written inside a free-text comment -- tests/fixtures/dyck/valid/parenInComment.asn's whole reason to exist -- broke balance checking even though dyck/check (what asl audit consistency actually runs) already treats it as balanced. comments mirrors dyck.asl's own file-type convention exactly (true for non-.asl, i.e. .asn data files; false for .asl, whose comments are themselves balanced (:m ...) forms by the git rule's own convention and so never needed special-casing here)")
+fn balanceError s: String comments: Bool -> (Option String)
+  (let [(b (stringToBytes s))] (scan b (bytesLength b) 0 0 false false false comments (list)))
 
-fn scan b: Bytes n: Int64 i: Int64 ci: Int64 inStr: Bool esc: Bool stack: (List Int64) -> (Option String)
+fn scan b: Bytes n: Int64 i: Int64 ci: Int64 inStr: Bool esc: Bool inComment: Bool comments: Bool stack: (List Int64) -> (Option String)
   (if (>= i n)
     (cond
       (inStr (some "unclosed string"))
@@ -41,20 +42,23 @@ fn scan b: Bytes n: Int64 i: Int64 ci: Int64 inStr: Bool esc: Bool stack: (List 
           (ci2 (if (and (>= x 128) (< x 192)) ci (+ ci 1)))
           (idx (- ci2 1))]
       (cond
-        ((and (>= x 128) (< x 192)) (scan b n (+ i 1) ci inStr esc stack))
+        ((and (>= x 128) (< x 192)) (scan b n (+ i 1) ci inStr esc inComment comments stack))
+        (inComment
+          (if (= x 10) (scan b n (+ i 1) ci2 false false false comments stack) (scan b n (+ i 1) ci2 false false true comments stack)))
         (inStr (cond
-                 (esc (scan b n (+ i 1) ci2 true false stack))
-                 ((= x 92) (scan b n (+ i 1) ci2 true true stack))
-                 ((= x 34) (scan b n (+ i 1) ci2 false false stack))
-                 (else (scan b n (+ i 1) ci2 true false stack))))
-        ((= x 34) (scan b n (+ i 1) ci2 true false stack))
-        ((or (= x 40) (or (= x 91) (= x 123))) (scan b n (+ i 1) ci2 false false (cons x stack)))
+                 (esc (scan b n (+ i 1) ci2 true false false comments stack))
+                 ((= x 92) (scan b n (+ i 1) ci2 true true false comments stack))
+                 ((= x 34) (scan b n (+ i 1) ci2 false false false comments stack))
+                 (else (scan b n (+ i 1) ci2 true false false comments stack))))
+        ((= x 34) (scan b n (+ i 1) ci2 true false false comments stack))
+        ((and (= x 59) comments) (scan b n (+ i 1) ci2 false false true comments stack))
+        ((or (= x 40) (or (= x 91) (= x 123))) (scan b n (+ i 1) ci2 false false false comments (cons x stack)))
         ((or (= x 41) (or (= x 93) (= x 125)))
           (let [(want (cond ((= x 41) 40) ((= x 93) 91) (else 123)))]
             (if (= (optionOr (listHead stack) -1) want)
-              (scan b n (+ i 1) ci2 false false (optionOr (listTail stack) (list)))
+              (scan b n (+ i 1) ci2 false false false comments (optionOr (listTail stack) (list)))
               (some (str "unexpected " (t/charStr x) " at byte " (t/intStr idx))))))
-        (else (scan b n (+ i 1) ci2 false false stack)))))
+        (else (scan b n (+ i 1) ci2 false false false comments stack)))))
 
 fn sweepFiles! ctx: h/Ctx root: String -> (Result (List String) String)
   (mt (h/gitLsFiles! ctx root)
@@ -69,7 +73,7 @@ fn checkFile! root: String f: String -> (Option String)
     (if (h/isDir? full) (some (str "[Errno 21] Is a directory: " (t/pyReprStr full)))
       (mt (h/readText! full)
         ((err e) (some (pyOsError full e)))
-        ((ok s) (balanceError s)))))
+        ((ok s) (balanceError s (not (stringEndsWith? f ".asl")))))))
 
 fn sweepMonorepo! ctx: h/Ctx root: String verbose: Bool -> (Result Sweep String)
   (mt (sweepFiles! ctx root)

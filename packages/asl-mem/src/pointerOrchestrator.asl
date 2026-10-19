@@ -12,7 +12,7 @@ fn collapsePointer ptr: PointerSpec -> PointerSpec
   (let [(ref (if (not (stringEmpty? ptr.payload)) ptr.payload ptr.vfsRef))] (with ptr :isExpanded false :payload "" :vfsRef ref))
 
 fn rehydratePointer! ptr: PointerSpec -> PointerSpec
-  (if ptr.isExpanded ptr (let [(ref ptr.vfsRef)] (if (stringEmpty? ref) (derefPointer ptr ptr.target) (if (and (= ptr.kind "file") (fileExists? ref)) (mt (fileRead ref) ((ok content) (derefPointer ptr content)) ((err _) (derefPointer ptr ref))) (derefPointer ptr ref)))))
+  (if ptr.isExpanded ptr (let [(ref ptr.vfsRef)] (if (stringEmpty? ref) (derefPointer ptr ptr.target) (if (and (= ptr.kind "file") (fileExists? ref)) (mt (fileReadString ref) ((ok content) (derefPointer ptr content)) ((err _) (derefPointer ptr ref))) (derefPointer ptr ref)))))
 
 fn formatPointerSpec ptr: PointerSpec -> Str
   (let [(tokS (stringFromInt64 ptr.tokens)) (expS (if ptr.isExpanded "true" "false")) (p1 (str "(:ptr :kind \"" ptr.kind "\" :id \"" ptr.id "\" :target \"" ptr.target "\"")) (p2 (str " :tokens " tokS " :expanded " expS " :summary \"" ptr.summary "\"")) (p3 (if (stringEmpty? ptr.vfsRef) ")" (str " :vfs-ref \"" ptr.vfsRef "\")")))] (str p1 p2 p3))

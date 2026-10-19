@@ -21,8 +21,6 @@
    "asl-ui/blastRadiusHeatmap"
    "asl-ui/radarCard"
    "asl-ui/sessionTile"
-   "asl-ui/terminalCanvas"
-   "asl-ui/terminalObservatory"
    "asl-ui/vacuousMockDetector"
    "asl-ui/voiceBar"
    "asl-ui/workflowDag"

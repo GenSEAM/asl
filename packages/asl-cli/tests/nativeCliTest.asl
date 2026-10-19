@@ -1,6 +1,6 @@
 (module asl-cli/tests/nativeCliTest
   :x [runTests normalize telemetry? caseJob cliEnv Case caseLine readCases prepareSweep!]
-  :i [(tools/fleet/run :a run) (tools/nativeTest :a nt)])
+  :i [(tools/fleet/run :a run) (tools/nativeTest :a nt) (asl/packages/asl-cli/src/nativeCli :a nc)])
 
 (schema Case
   (:f id String)
@@ -88,11 +88,17 @@ fn normalize text: String root: String sweep: String -> String
 fn envName row: String -> String
   (optionOr (listHead (stringSplit row "=")) row)
 
+; (:m :ref HL-FIXWAVE :do "HOSTBIN: host used to be the literal string /nonexistent/asl-host -- a path that merely happens not to exist, so replay! could not tell 'the build correctly never touched hostBin' apart from 'something else masked a touch that would otherwise have failed the same way'. host is now a real, executable witness stub (hostWitness!) that logs every invocation to ASL_HOST_WITNESS before exiting nonzero; runTests asserts that log stays empty across every replayed case, buildHostAbsent included, so a build that quietly execs ctx.hostBin is caught even if its exit code and output would otherwise have matched")
 fn cliEnv root: String host: String errFile: String overrides: (List String) -> (List String)
   (listAppend (filter (fn [(row String)] -> Bool (not (listContains? (map envName overrides) (envName row))))
     (list "PATH=/usr/bin:/bin" (str "HOME=" root) "TMPDIR=/tmp" (str "ASL_ROOT=" root) (str "ASL_CLI_ROOT=" root) (str "ASL_CLI_SCRIPT_DIR=" root "/bin")
-        (str "ASL_CLI_ARGV0=" root "/bin/asl") (str "ASL_CLI_HOST_BIN=" host) (str "ASL_HOST=" host) (str "NATIVE_CLI_ERR=" errFile)))
+        (str "ASL_CLI_ARGV0=" root "/bin/asl") (str "ASL_CLI_HOST_BIN=" host) (str "ASL_HOST=" host) (str "ASL_HOST_WITNESS=" host ".log") (str "NATIVE_CLI_ERR=" errFile)))
     overrides)
+
+fn ! hostWitness! path: String -> (Result Unit String)
+  (mt (fileWrite path "#!/bin/sh\necho \"host-invoked $*\" >> \"$ASL_HOST_WITNESS\"\nexit 97\n")
+    ((err e) (err e))
+    ((ok _) (mt (fileChmod path 493) ((err e) (err e)) ((ok _) (ok ())))))
 
 fn expand s: String root: String sweep: String -> String
   (stringReplace (stringReplace s "$SWEEP" sweep) "$ROOT" root)
@@ -101,10 +107,10 @@ fn caseJob program: (List String) c: Case root: String host: String errFile: Str
   (run/job (listAppend (list "/bin/sh" "-c" "exec \"$0\" \"$@\" 2>\"$NATIVE_CLI_ERR\"") (listAppend program (map (fn [(a String)] -> String (expand a root sweep)) c.argv)))
            root (cliEnv root host errFile (map (fn [(e String)] -> String (expand e root sweep)) c.env)))
 
-fn ! replay! c: Case binary: String root: String errFile: String sweep: String -> (List String)
+fn ! replay! c: Case binary: String root: String errFile: String sweep: String host: String -> (List String)
   (let [(_ (fileWrite errFile ""))
-        (d (run/runOneLimited (caseJob (list binary) c root "/nonexistent/asl-host" errFile sweep) (run/limits 900 32)))
-        (errText (resultOr (fileRead errFile) ""))
+        (d (run/runOneLimited (caseJob (list binary) c root host errFile sweep) (run/limits 900 32)))
+        (errText (resultOr (fileReadString errFile) ""))
         (out (normalize d.out root sweep))
         (errNorm (normalize errText root sweep))]
     (filter (fn [(m String)] -> Bool (not (stringEmpty? m)))
@@ -113,12 +119,16 @@ fn ! replay! c: Case binary: String root: String errFile: String sweep: String -
             (if (= errNorm c.stderr) "" (str "stderr native " (asnQuote errNorm) " host " (asnQuote c.stderr)))
             (if (= d.exit c.exit) "" (str "exit native " (stringFromInt64 d.exit) " host " (stringFromInt64 c.exit))))))
 
+; (:m :do "a case that re-enters $ROOT/bin/asl (auditIntelTrace) reaches the native CLI cache under HOME=$ROOT; after any source change its first call prints the stale-CLI rebuild banner on stderr, a build event rather than CLI behaviour, so one call with the case environment builds it before the replay")
+fn ! warmCli! root: String errFile: String host: String -> run/Done
+  (run/runOneLimited (run/job (list (str root "/bin/asl") "version") root (cliEnv root host errFile (list))) (run/limits 1800 32))
+
 fn ! git! dir: String args: (List String) -> (Result Unit String)
   (let [(d (run/runOneLimited (run/job (cons "git" args) dir (run/childEnv (list "GIT_CONFIG_NOSYSTEM=1"))) (run/limits 60 8)))]
     (if (and (= d.verdict "exit") (= d.exit 0)) (ok ()) (err (str "git " (stringJoin args " ") ": " d.out))))
 
 fn ! copyFixture! root: String dir: String name: String -> (Result Unit String)
-  (mt (fileRead (str root "/asl/packages/asl-cli/tests/fixtures/sweep/" name))
+  (mt (fileReadString (str root "/asl/packages/asl-cli/tests/fixtures/sweep/" name))
     ((err e) (err (str "cannot read fixture " name)))
     ((ok text) (mt (fileWrite (str dir "/tests/" name) text) ((err e) (err (str "cannot write " name))) ((ok _) (ok ())))))
 
@@ -134,25 +144,53 @@ fn ! prepareSweep! root: String -> (Result String String)
             ((some bad) (mt bad ((err e) (err e)) ((ok _) (err "unreachable"))))
             ((none) (ok dir)))))))
 
+fn knownGapIds -> (List String)
+  (list)
+
+fn replayable cs: (List Case) -> (List Case)
+  (filter (fn [(c Case)] -> Bool (not (listContains? (knownGapIds) c.id))) cs)
+
+; (:m GWSTATS-HOSTGAP: "gateway"/"relay"/"rla" are dispatched by command.asl's dispatch! (tool! ctx "asl-gateway" args), never by the retired stage-0 host; verbKind must classify them as "forms" so nativeGate! never routes them through hostExec!'s ERR_HOST_ABSENT, which asl/host/build.sh's own header says no host is built to answer)
+fn testGatewayVerbsAreForms! -> Bool
+  (do
+    (assert (!= (nc/verbKind (list "gateway" "stats")) "host") "gateway must not be classified as needing the retired stage-0 host")
+    (assert (!= (nc/verbKind (list "relay" "stats")) "host") "relay (gateway alias) must not be classified as needing the retired stage-0 host")
+    (assert (!= (nc/verbKind (list "rla" "stats")) "host") "rla (gateway alias) must not be classified as needing the retired stage-0 host")
+    (assert (= (nc/verbKind (list "gateway" "stats")) "forms") "gateway classifies as forms, same lane as audit/build/pack")
+    true)
+
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
-        (cases (mt (fileRead (str root "/asl/packages/asl-cli/tests/fixtures/argv.asn")) ((err _) (err "argv.asn unreadable: run from the workspace root")) ((ok text) (readCases text))))
+        (cases (mt (fileReadString (str root "/asl/packages/asl-cli/tests/fixtures/argv.asn")) ((err _) (err "argv.asn unreadable: run from the workspace root")) ((ok text) (readCases text))))
+        (allCases (resultOr cases (list)))
+        (liveCases (replayable allCases))
         (built (nt/prepareRun "asl/packages/asl-cli/src/native.asl" (nt/fingerprint)).binary)
         (errFile (str "/tmp/aslNativeCli" (stringFromInt64 (procSelf)) ".err"))
+        (host (str errFile ".hostWitness"))
+        (hostLog (str host ".log"))
+        (witnessWritten (hostWitness! host))
         (sweep (prepareSweep! root))
         (sweepDir (resultOr sweep "/nonexistent/sweep"))
+        (warm (warmCli! root errFile host))
         (found (mt (if (ok? sweep) built (none))
                  ((none) (list))
-                 ((some bin) (map (fn [(c Case)] -> (Pair String (List String)) (pair c.id (replay! c bin root errFile sweepDir))) (resultOr cases (list))))))
+                 ((some bin) (map (fn [(c Case)] -> (Pair String (List String)) (pair c.id (replay! c bin root errFile sweepDir host))) liveCases))))
         (problems (fold (fn [(acc (List String)) (p (Pair String (List String)))] -> (List String) (if (listEmpty? (pairSecond p)) acc (listAppend acc (list (str "case " (pairFirst p) ": " (stringJoin (pairSecond p) "; ")))))) (list) found))
+        (witnessText (resultOr (fileReadString hostLog) ""))
         (removed (if (fileExists? errFile) (pathRemove errFile) (ok ())))
+        (hostGone (if (fileExists? host) (pathRemove host) (ok ())))
+        (hostLogGone (if (fileExists? hostLog) (pathRemove hostLog) (ok ())))
         (sweepGone (if (ok? sweep) (pathRemove sweepDir) (ok ())))]
     (do
       (assert (ok? cases) (mt cases ((err e) e) ((ok _) "cases read")))
+      (assert (listAny? (fn [(c Case)] -> Bool (= c.id "buildHostAbsent")) allCases) "the known BUILD-HOSTBIN gap case stays in the fixture")
+      (assert (ok? witnessWritten) (mt witnessWritten ((err e) (str "host witness stub: " e)) ((ok _) "host witness stub written")))
       (assert (some? built) "asl/packages/asl-cli/src/native.asl builds natively")
       (assert (ok? sweep) (mt sweep ((err e) (str "sweep workspace: " e)) ((ok _) "sweep workspace")))
+      (assert (and (= warm.verdict "exit") (= warm.exit 0)) (str "the workspace CLI that cases re-enter as $ROOT/bin/asl is built before replay: " warm.verdict " " (stringFromInt64 warm.exit) " " warm.out))
       (assert (> (listLength found) 0) "at least one case replayed")
-      (assert (= (listLength found) (listLength (resultOr cases (list)))) "every case replayed")
-      (assert (listEmpty? problems) (str "native equals asl-host on every case; " (stringJoin problems " | ")))
-      (assert (and (ok? removed) (and (ok? sweepGone) (not (fileExists? sweepDir)))) "stderr capture file and sweep workspace removed")
-      true))
+      (assert (= (listLength found) (listLength liveCases)) "every live case replayed")
+      (assert (stringEmpty? witnessText) (str "buildHostAbsent and every other replayed case never touch ctx.hostBin/ASL_HOST (HOSTBIN): " witnessText))
+      (assert (listEmpty? problems) (str "native equals asl-host on every live case; " (stringJoin problems " | ")))
+      (assert (and (ok? removed) (and (ok? hostGone) (and (ok? hostLogGone) (and (ok? sweepGone) (not (fileExists? sweepDir)))))) "stderr capture file, host witness stub/log and sweep workspace removed")
+      (testGatewayVerbsAreForms!)))

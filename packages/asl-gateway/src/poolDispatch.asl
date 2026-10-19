@@ -93,7 +93,7 @@ fn failureText f: u/UpstreamFailure -> String
   (mt f
     ((u/toolAbsent tool detail) (str tool ": " detail))
     ((u/transportFailure code text) (str "curl exit " (stringFromInt64 code) ": " (stringTrim text)))
-    ((u/httpFailure status reason _) (u/httpErrorText status reason))
+    ((u/httpFailure status reason _ _) (u/httpErrorText status reason))
     ((u/protocolFailure detail) detail))
 
 fn ! poolLog! text: String -> Bool
@@ -233,7 +233,7 @@ fn splitBatch resp: u/UpstreamResponse count: Int64 -> (Result (List u/UpstreamR
                 ((j/jarr xs)
                   (if (= (listLength xs) count)
                     (ok (map (fn [(x j/Json)] -> u/UpstreamResponse
-                               (u/UpstreamResponse :status resp.status :reason resp.reason :body (pt/jsonDumps x -1))) xs))
+                               (u/UpstreamResponse :status resp.status :reason resp.reason :body (pt/jsonDumps x -1) :headers resp.headers)) xs))
                     (err (str "batch reply carries " (stringFromInt64 (listLength xs)) " items for " (stringFromInt64 count) " requests"))))
                 (_ (err "batch reply :batch is not an array"))))
             ((none) (err "batch reply has no batch array"))))

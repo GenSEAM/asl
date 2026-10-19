@@ -66,7 +66,7 @@ fn ! nativeRun name: String source: String work: String -> ProcessOutput
 
 fn ! runCase name: String -> Bool
   (let [(path (str "asl/packages/asl-target-llvm/tests/fixtures/wasmE2e/" name ".asl"))
-        (read (fileRead path))
+        (read (fileReadString path))
         (source (mt read ((ok s) s) ((err e) (str "FIXTURE READ ERROR: " e))))
         (work (str "/tmp/asl-wasm-e2e/" name))
         (mainText (emitLinked (optionOr (libc/libcFacts "wasm32-unknown-unknown") (libc/emptyTripleFacts)) (target/wasm32TargetFacts) source))
@@ -128,7 +128,7 @@ fn ! missingCollectorRejected work: String -> Bool
 
 fn ! absentCapabilityRejected -> Bool
   (let [(path "asl/packages/asl-target-llvm/tests/fixtures/wasmE2e/tcpListen.asl")
-        (read (fileRead path))]
+        (read (fileReadString path))]
     (do
       (assert (ok? read) "reads tcpListen absent-capability fixture")
       (mt (emitLinked (optionOr (libc/libcFacts "wasm32-unknown-unknown") (libc/emptyTripleFacts)) (target/wasm32TargetFacts) (mt read ((ok s) s) ((err e) (str "FIXTURE READ ERROR: " e))))

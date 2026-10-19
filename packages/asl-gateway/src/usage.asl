@@ -27,7 +27,10 @@
       gatewayFileVersion!
       gatewayUpdateStatus
       gatewayStatusJson
-      gatewayUpdateAsn]
+      gatewayUpdateAsn
+      posixDirname
+      posixJoin
+      appendFile!]
   :i [(asl-json/json :a j)
       (upstream :a u)
       (wire :a w)])
@@ -180,11 +183,19 @@ fn nullish? v: (Option j/Json) -> Bool
     ((none) true)
     ((some x) (= x (j/jnull))))
 
+; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "completion_tokens_details.reasoning_tokens (OpenAI/DeepSeek-shape) is a provider's own count of reasoning tokens, separate from completion_tokens; GW-USAGE-ACCOUNTING-20261017's dashboard gap (500M unaccounted tokens) was partly this count going unrecorded. The already-normalized inputTokens/cachedTokens/outputTokens shape some providers (agy, codex) are translated into has no reasoning count of its own yet, so it reads 0 there, same as an absent completion_tokens_details does for the OpenAI shape -- never guessed")
+fn reasoningTokensFrom kvs: (List (Pair String j/Json)) -> Int64
+  (positiveInt
+    (mt (u/objGet kvs "completion_tokens_details")
+      ((some d) (mt d ((j/jobj dk) (u/objGet dk "reasoning_tokens")) (_ none)))
+      ((none) none)))
+
 fn usageTokens usage: j/Json -> (List Int64)
   (mt usage
     ((j/jobj kvs)
      (if (some? (u/objGet kvs "inputTokens"))
-       (list (positiveInt (u/objGet kvs "inputTokens")) (positiveInt (u/objGet kvs "cachedTokens")) (positiveInt (u/objGet kvs "outputTokens")))
+       (list (positiveInt (u/objGet kvs "inputTokens")) (positiveInt (u/objGet kvs "cachedTokens")) (positiveInt (u/objGet kvs "outputTokens"))
+             (positiveInt (u/objGet kvs "reasoningTokens")))
        (let [(cached (u/objGet kvs "cached_tokens"))
              (details (u/objGet kvs "prompt_tokens_details"))
              (fromDetails (mt details
@@ -193,8 +204,9 @@ fn usageTokens usage: j/Json -> (List Int64)
              (c (if (nullish? cached)
                   (mt fromDetails ((some x) x) ((none) cached))
                   cached))]
-         (list (positiveInt (u/objGet kvs "prompt_tokens")) (positiveInt c) (positiveInt (u/objGet kvs "completion_tokens"))))))
-    (_ (list 0 0 0)))
+         (list (positiveInt (u/objGet kvs "prompt_tokens")) (positiveInt c) (positiveInt (u/objGet kvs "completion_tokens"))
+               (reasoningTokensFrom kvs)))))
+    (_ (list 0 0 0 0)))
 
 fn defaultRow -> j/Json
   (j/jobj (list (pair "requests" (j/jint 0)) (pair "ok" (j/jint 0)) (pair "errors" (j/jobj (list))) (pair "fallbacks" (j/jint 0))

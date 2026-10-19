@@ -14,7 +14,7 @@ fn verifyRoundtrip ast: rd/SExpr name: String -> Bool
         false)))
 
 fn testFunctionWithMatchRoundtrip -> Bool
-  (let [(ast (rd/makeList (list (rd/makeAtom "fn") (rd/makeAtom "area") (rd/makeVect (list (rd/makeList (list (rd/makeAtom "s") (rd/makeAtom "Shape"))))) (rd/makeAtom "->") (rd/makeAtom "Float") (rd/makeList (list (rd/makeAtom "match") (rd/makeAtom "s") (rd/makeList (list (rd/makeList (list (rd/makeList (list (rd/makeAtom "Circle") (rd/makeAtom "r"))) (rd/makeList (list (rd/makeAtom "mul") (rd/makeAtom "pi") (rd/makeList (list (rd/makeAtom "mul") (rd/makeAtom "r") (rd/makeAtom "r"))))))))))))))]
+  (let [(ast (rd/makeList (list (rd/makeAtom "fn") (rd/makeAtom "area") (rd/makeVect (list (rd/makeList (list (rd/makeAtom "s") (rd/makeAtom "Shape"))))) (rd/makeAtom "->") (rd/makeAtom "Float") (rd/makeList (list (rd/makeAtom "match") (rd/makeAtom "s") (rd/makeList (list (rd/makeList (list (rd/makeAtom "Circle") (rd/makeAtom "r"))) (rd/makeList (list (rd/makeAtom "mul") (rd/makeAtom "pi") (rd/makeList (list (rd/makeAtom "mul") (rd/makeAtom "r") (rd/makeAtom "r"))))))))))))]
     (verifyRoundtrip ast "function definition with match"))
 
 fn testMultiParamFunctionRoundtrip -> Bool

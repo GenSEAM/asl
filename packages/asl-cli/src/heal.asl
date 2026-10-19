@@ -1,16 +1,50 @@
-(module asl-cli/heal :x [runHealCommand! formatHealHelp formatHealReceipt executeHealFile! testHealDispatch!] :i [(asl-ir/patch :a patch) (asl-compiler/heal :a heal) (asl-cli/patch :a patchCli) (asl-cli/check :a checkCli) (asl-compiler/diagnostics :a diag) (asl-parser/ast :a ast)])
+(module asl-cli/heal
+  :x [runHealCommand! formatHealHelp healTarget maxAttempts]
+  :i [(asl-forms/heal :a heal) (asl/packages/asl-cli/src/verify :a verify)])
 
-fn formatHealHelp -> Str
-  (str "Usage: asl heal [options] <file.asl>\n\n" "Options:\n" "  --max-attempts=<n>           Maximum self-healing recursion attempts (default 3)\n" "  --dry-run                    Simulate patch synthesis without disk modifications\n\n" "[Teleology] Principle: GroundTruthOverReport (ADR D97)\n" "  \"Self-healing compiler bridge closes the error-to-patch loop with structured candidate AST patches.\"\n\n" "[Assistive Ontology] Enforces Feedback Loop Invariants:\n" "  • Limit-Cycle Circuit Breaker: Max 3 attempts recursion ceiling\n" "  • Transactional Application: Validates and applies candidate patches in 1 step\n" "  • Rollback Journaling: Inverse patches tracked in .asl/mem/patch_stack.asn\n" "  • Zero-Line-Number Invariant: Code addressed strictly by Module:symbol and :anchor\n")
+; (:m :do "asl heal FILE: runs the one heal pipeline (asl-forms/heal) on an .asl file and writes the repaired text back unless --dry-run; a file that already checks is left byte-identical; exit 0 only when nothing is left over")
 
-fn formatHealReceipt patchId: Str filePath: Str attempts: Int64 status: Str healed: Bool -> Str
-  (str "(:heal-receipt\n" "  :patchId \"" patchId "\"\n" "  :file \"" filePath "\"\n" "  :attempts " (stringFromInt64 attempts) "\n" "  :status \"" status "\"\n" "  :healed " (if healed "true" "false") ")\n")
+fn formatHealHelp -> String
+  (str "Usage: asl heal [--dry-run] [--max-attempts=<n>] <file.asl>\n\n"
+       "Repairs generated ASL with named rules (" (stringJoin (heal/healRuleNames) " ") "); an edit is kept only when it lowers the checker's diagnostics.\n"
+       "A file that already checks is never changed. Prints (:heal :file F :written B :repaired (rule ...) :left (diag ...)); exit 1 when diagnostics are left.\n"
+       "  --dry-run            report the repairs without writing the file\n"
+       "  --max-attempts=<n>   cap the rule applications (default 24)\n")
 
-fn executeHealFile! filePath: Str maxAttempts: Int64 dryRun: Bool -> (Result Str Str)
-  (let [(readRes (fileRead filePath))] (mt readRes ((err _) (err (str "Failed to read target file for self-healing: " filePath))) ((ok src) (let [(patchId (str "heal-" (patch/computeAstDigest src))) (receipt (formatHealReceipt patchId filePath 1 "SUCCESS" true))] (ok receipt)))))
+fn healTarget args: (List String) -> (Option String)
+  (listLast (filter (fn [(a String)] -> Bool (not (stringStartsWith? a "-"))) args))
 
-fn runHealCommand! args: (List Str) -> (Result Str Str)
-  (if (listEmpty? args) (err "Usage: asl heal [--max-attempts=<n>] [--dry-run] <file.asl>") (let [(firstArg (optionOr (listHead args) ""))] (cond ((or (= firstArg "-h") (= firstArg "--help")) (ok (formatHealHelp))) (else (let [(filePath (optionOr (listHead (listReverse args)) ""))] (if (stringStartsWith? filePath "-") (err "Missing target file path. Usage: asl heal <file.asl>") (executeHealFile! filePath 3 false)))))))
+fn maxAttempts args: (List String) -> Int64
+  (mt (listHead (filter (fn [(a String)] -> Bool (stringStartsWith? a "--max-attempts=")) args))
+    ((none) 24)
+    ((some a) (max 0 (optionOr (stringToInt64 (optionOr (stringSlice a 15 (stringLength a)) "")) 24))))
 
-fn testHealDispatch! -> Bool
-  (let [(helpRes (runHealCommand! (list "--help"))) (receipt (formatHealReceipt "p-test" "test.asl" 1 "SUCCESS" true))] (assert (ok? helpRes) "heal --help succeeds") (assert (stringContains? receipt ":heal-receipt") "receipt well-formed") true)
+fn quoted s: String -> String
+  (str "\"" (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\"")
+
+fn ! preludePath! -> String
+  (let [(p (optionOr (envGet "ASL_PRELUDE") ""))]
+    (if (stringEmpty? p) "asl/prelude/prelude.asl" p))
+
+fn ! healFile! path: String dryRun: Bool rounds: Int64 -> (Result String String)
+  (mt (fileReadString path)
+    ((err e) (err (str "(:heal :file " (quoted path) " :status :failed :error ERR_IO :message " (quoted e) ")")))
+    ((ok text)
+      (mt (heal/heal! path text (verify/checkRoots) (preludePath!) rounds)
+        ((err e) (err (str "(:heal :file " (quoted path) " :status :failed :error ERR_HEAL :message " (quoted e) ")")))
+        ((ok res)
+          (let [(write (and res.changed (not dryRun)))
+                (written (if write (mt (fileWrite path res.text) ((ok _) (ok true)) ((err e) (err e))) (ok false)))]
+            (mt written
+              ((err e) (err (str "(:heal :file " (quoted path) " :status :failed :error ERR_IO :message " (quoted e) ")")))
+              ((ok w)
+                (let [(body (stringReplace res.receipt "(:repaired" (str "(:heal :file " (quoted path) " :written " (if w "true" "false") " :repaired")))]
+                  (if (listEmpty? res.left) (ok body) (err body))))))))))
+
+fn ! runHealCommand! args: (List String) -> (Result String String)
+  (cond
+    ((or (listContains? args "-h") (listContains? args "--help")) (ok (formatHealHelp)))
+    (else
+      (mt (healTarget args)
+        ((none) (err "(:heal :status :failed :error ERR_MISSING_ARG :message \"Usage: asl heal [--dry-run] [--max-attempts=<n>] <file.asl>\")"))
+        ((some path) (healFile! path (listContains? args "--dry-run") (maxAttempts args))))))

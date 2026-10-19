@@ -84,8 +84,6 @@
       :doc "The same operator as =.")
     (:name "!=" :sec "Comparison and logic" :type "T T -> Bool" :src "asl/host/src/compile.c"
       :doc "Structural inequality.")
-    (:name "not=" :sec "Comparison and logic" :type "T T -> Bool" :src "asl/host/src/compile.c"
-      :doc "The same operator as !=.")
     (:name "<" :sec "Comparison and logic" :type "T T -> Bool" :src "asl/host/src/compile.c"
       :doc "Ordered comparison of two values of the same type: Int, Float, String (bytewise) or Keyword (by name); any other pair is ERR_TYPE.")
     (:name "<=" :sec "Comparison and logic" :type "T T -> Bool" :src "asl/host/src/compile.c"
@@ -118,6 +116,8 @@
       :doc "True when the string has no bytes.")
     (:name "stringSlice" :sec "String" :type "String Int64 Int64 -> (Option String)" :src "asl/host/src/prelude.c"
       :doc "Half-open byte slice, or none when out of range; a cut inside a multi-byte character splits it.")
+    (:name "stringSliceUtf8" :sec "String" :type "String Int64 Int64 -> (Option String)" :src "asl/prelude/prelude.asl"
+      :doc "Half-open byte slice like stringSlice, but none when out of range or when either cut point lands inside a multi-byte character; a cut on a codepoint boundary always succeeds.")
     (:name "stringIndexOf" :sec "String" :type "String String -> (Option Int64)" :src "asl/prelude/prelude.asl"
       :doc "Byte index of the first occurrence, or none.")
     (:name "stringContains?" :sec "String" :type "String String -> Bool" :src "asl/host/src/prelude.c"
@@ -208,6 +208,12 @@
       :doc "True when the predicate holds for some element; stops at the first.")
     (:name "listAll?" :sec "List" :type "(fn [T] -> Bool) (List T) -> Bool" :src "asl/prelude/prelude.asl"
       :doc "True when the predicate holds for every element, so true for an empty list.")
+    (:name "listFind" :sec "List" :type "(fn [T] -> Bool) (List T) -> (Option T)" :src "asl/prelude/prelude.asl"
+      :doc "The first element the predicate holds for, or none; stops at the first match.")
+    (:name "listCount" :sec "List" :type "(fn [T] -> Bool) (List T) -> Int64" :src "asl/prelude/prelude.asl"
+      :doc "How many elements the predicate holds for; 0 for an empty list.")
+    (:name "listFlatMap" :sec "List" :type "(fn [A] -> (List B)) (List A) -> (List B)" :src "asl/prelude/prelude.asl"
+      :doc "Map then concatenate: each element's resulting list in order, back to back.")
     (:name "enumerate" :sec "List" :type "(List T) -> (List (Pair Int64 T))" :src "asl/prelude/prelude.asl"
       :doc "Each element paired with its index from 0.")
     (:name "zip" :sec "List" :type "(List A) (List B) -> (List (Pair A B))" :src "asl/prelude/prelude.asl"
@@ -224,6 +230,8 @@
       :doc "The empty map.")
     (:name "mapGet" :sec "Map" :type "(Map K V) K -> (Option V)" :src "asl/prelude/prelude.asl"
       :doc "Value for a key, or none.")
+    (:name "mapGetOr" :sec "Map" :type "(Map K V) K V -> V" :src "asl/prelude/prelude.asl"
+      :doc "Value for a key, or the given default when absent.")
     (:name "mapSet" :sec "Map" :type "(Map K V) K V -> (Map K V)" :src "asl/prelude/prelude.asl"
       :doc "Map with the key bound to the value; entries stay ordered by key.")
     (:name "mapRemove" :sec "Map" :type "(Map K V) K -> (Map K V)" :src "asl/prelude/prelude.asl"
@@ -296,8 +304,6 @@
       :doc "Write the arguments to standard output, separated by spaces, then a newline.")
     (:name "eprintln" :sec "I/O" :type "T... -> Unit" :src "asl/host/src/prelude.c" :effect true
       :doc "Write the arguments to standard error, separated by spaces, then a newline.")
-    (:name "fileRead" :sec "I/O" :type "String -> (Result String IoError)" :src "asl/prelude/prelude.asl" :effect true
-      :doc "Read a whole file as text; the failure is the IoError case of the host message, e.g. (err (notFound)).")
     (:name "fileReadString" :sec "I/O" :type "String -> (Result String String)" :src "asl/host/src/prelude.c" :effect true
       :doc "Read a whole file as text. Every host IO failure is the message \"KIND: PATH: reason\", KIND an IoError case from errno, as in \"notFound: /x: No such file or directory\".")
     (:name "fileReadBytes" :sec "I/O" :type "String -> (Result Bytes String)" :src "asl/host/src/prelude.c" :effect true
@@ -362,8 +368,6 @@
       :doc "Rename from to (rename(2)).")
     (:name "realPath" :sec "I/O" :type "String -> (Result String String)" :src "asl/host/src/prelude.c" :effect true
       :doc "Resolve a path with realpath; the failure is a \"KIND: PATH: reason\" message.")
-    (:name "pathCanonicalize" :sec "I/O" :type "String -> (Result String IoError)" :src "asl/prelude/prelude.asl" :effect true
-      :doc "Resolve a path with realpath; the failure is the IoError case, e.g. (err (notFound)).")
     (:name "bytesLength" :sec "Bytes" :type "Bytes -> Int64" :src "asl/host/src/prelude.c"
       :doc "Byte count.")
     (:name "bytesAlloc" :sec "Bytes" :type "Int64 -> Bytes" :src "asl/host/src/prelude.c"

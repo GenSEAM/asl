@@ -150,27 +150,30 @@ fn valuesGolden -> String
     "      (return %1)))"
     "  (fn prelude.preludeMapOnto (captures) (params (f val) (xs val) (acc val)) (returns val)"
     "    (block entry ()"
-    "      (let %0 i1 (entry \"listEmpty?\" xs))"
+    "      (let %0 i1 (entry \"@listHeadEmpty?\" xs))"
     "      (branch %0 (arm0.1) (arm0.0)))"
     "    (block arm0.0 ()"
     "      (let %1 val (entry \"@listFirst\" xs))"
-    "      (let %2 i1 (entry \"listEmpty?\" xs))"
+    "      (let %2 i1 (entry \"@listTailEmpty?\" xs))"
     "      (branch %2 (nomatch1) (arm1.0)))"
     "    (block nomatch1 ()"
+    "      (let %3 val (construct Option none))"
+    "      (switch %3 Option (default (nomatchTrap1))))"
+    "    (block nomatchTrap1 ()"
     "      (unreachable))"
     "    (block arm1.0 ()"
-    "      (let %3 val (entry \"@listRest\" xs))"
-    "      (let %4 val (call-closure f %1))"
-    "      (let %5 val (entry \"cons\" %4 acc))"
-    "      (let %6 val (call prelude.preludeMapOnto f %3 %5))"
-    "      (jump (join1 %6)))"
-    "    (block join1 ((%7 val))"
-    "      (jump (join0 %7)))"
-    "    (block arm0.1 ()"
-    "      (let %8 val (call prelude.listReverse acc))"
+    "      (let %4 val (entry \"@listRest\" xs))"
+    "      (let %5 val (call-closure f %1))"
+    "      (let %6 val (entry \"cons\" %5 acc))"
+    "      (let %7 val (call prelude.preludeMapOnto f %4 %6))"
+    "      (jump (join1 %7)))"
+    "    (block join1 ((%8 val))"
     "      (jump (join0 %8)))"
-    "    (block join0 ((%9 val))"
-    "      (return %9)))"
+    "    (block arm0.1 ()"
+    "      (let %9 val (call prelude.listReverse acc))"
+    "      (jump (join0 %9)))"
+    "    (block join0 ((%10 val))"
+    "      (return %10)))"
     "  (fn prelude.listReverse (captures) (params (xs val)) (returns val)"
     "    (block entry ()"
     "      (let %0 val (list))"
@@ -178,25 +181,28 @@ fn valuesGolden -> String
     "      (return %1)))"
     "  (fn prelude.preludeReverseOnto (captures) (params (xs val) (acc val)) (returns val)"
     "    (block entry ()"
-    "      (let %0 i1 (entry \"listEmpty?\" xs))"
+    "      (let %0 i1 (entry \"@listHeadEmpty?\" xs))"
     "      (branch %0 (arm0.1) (arm0.0)))"
     "    (block arm0.0 ()"
     "      (let %1 val (entry \"@listFirst\" xs))"
-    "      (let %2 i1 (entry \"listEmpty?\" xs))"
+    "      (let %2 i1 (entry \"@listTailEmpty?\" xs))"
     "      (branch %2 (nomatch1) (arm1.0)))"
     "    (block nomatch1 ()"
+    "      (let %3 val (construct Option none))"
+    "      (switch %3 Option (default (nomatchTrap1))))"
+    "    (block nomatchTrap1 ()"
     "      (unreachable))"
     "    (block arm1.0 ()"
-    "      (let %3 val (entry \"@listRest\" xs))"
-    "      (let %4 val (entry \"cons\" %1 acc))"
-    "      (let %5 val (call prelude.preludeReverseOnto %3 %4))"
-    "      (jump (join1 %5)))"
-    "    (block join1 ((%6 val))"
-    "      (jump (join0 %6)))"
+    "      (let %4 val (entry \"@listRest\" xs))"
+    "      (let %5 val (entry \"cons\" %1 acc))"
+    "      (let %6 val (call prelude.preludeReverseOnto %4 %5))"
+    "      (jump (join1 %6)))"
+    "    (block join1 ((%7 val))"
+    "      (jump (join0 %7)))"
     "    (block arm0.1 ()"
     "      (jump (join0 acc)))"
-    "    (block join0 ((%7 val))"
-    "      (return %7))))"))
+    "    (block join0 ((%8 val))"
+    "      (return %8))))"))
 
 fn patternGolden -> String
   (joinLines (list
@@ -313,9 +319,13 @@ fn ! testStrictEscapes -> Bool
            (list "\\u{1g}" "\\u{110000}" "\\u{}" "\\u{D800}" "\\u{1234567}" "\\xZZ" "\\x-1" "\\a" "\\q" "\\0" "\\e" "\\{" "\\u +1a" "\\uD800"))
       true)
 
+; (:m :ref HL-FIX2 :do "fc2e0ded6 (HL-FIXWAVE HL-FIX2) made a bare keyword-literal match arm mixed with real constructor arms a distinct 'deadLit' Arm kind, dropped by lowerMatch's ctor path before it computes the catch-all position, switch cases and missing-variant diagnostics -- the same generated code as if the arm were never written, no longer a build-time ERR_LOWER_UNSUPPORTED. The ASL1-elseKeywordPatternParity invariant now lives at the checker (asl-checker/resolve.asl's else-keyword rule, ERR_ELSE_KEYWORD, gated by ctorPatternTest), which lowerSourceLinked! bypasses by design; this fixture's dead :else arm has no ctor arm for 'square', so the still-live, checker-independent part of the invariant to assert at the lowering layer is that :else's body never becomes the fallback: square's case is absent from the switch and its default traps (unreachable), not returns the dead arm's 0")
 fn ! testElseKeywordRejected -> Bool
   (let [(res (lk/lowerSourceLinked! (elseKeywordSource)))]
-    (do (assert (= (diagCodes res) (list "ERR_LOWER_UNSUPPORTED")) (str "ASL1-elseKeywordPatternParity: (:else ...) is a keyword literal, not the catch-all arm, so lowering it is unsupported rather than silently treated as wild, got " (printed res)))
+    (do (assert (verified? res) (str "ASL1-elseKeywordPatternParity: a dead keyword-literal arm no longer fails lowering (HL-FIX2), it lowers and verifies with that arm dropped: " (printed res)))
+        (assert (stringContains? (printed res) "(switch s Shape (circle (arm0.0)) (default (nomatch0)))") (str "the switch has a case for circle alone, no case for square and no :else fallback case: " (printed res)))
+        (assert (stringContains? (printed res) "(block nomatch0 ()\n      (unreachable))") (str "square, left unhandled, traps through the default block rather than returning :else's dead body 0: " (printed res)))
+        (refute (stringContains? (printed res) "(const int 0)") (str ":else's dead arm is dropped outright, its own body never lowered into any instruction: " (printed res)))
         true))
 
 fn ! testIndentEnum -> Bool

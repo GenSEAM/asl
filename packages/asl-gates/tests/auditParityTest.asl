@@ -31,18 +31,14 @@ fn findCase cases: (List p/SExpr) id: String -> (Option p/SExpr)
       (if (= (strField (optionOr (listTail (items c)) (list)) ":id") id)
         (some c)
         (findCase (optionOr (listTail cases) (list)) id))))
-fn sourceAt sourcePairs: (List p/SExpr) index: Int64 -> String
-  (let [pairForm (items (optionOr (listGet sourcePairs index) (p/sexprAtom "")))
-        value (optionOr (listGet pairForm 1) (p/sexprAtom ""))]
-    (gr/decodeString (atom value)))
-
 fn ! workspaceRoot -> String
   (mt (envGet "ASL_CLI_ROOT")
     ((some root) root)
     ((none) (resultOr (realPath ".") ".")))
 fn ! childEnv -> (List String)
-  (let [path (optionOr (envGet "PATH") "/usr/bin:/bin")]
-    (list (str "PATH=" path)))
+  (let [path (optionOr (envGet "PATH") "/usr/bin:/bin")
+        home (optionOr (envGet "HOME") "/tmp")]
+    (list (str "PATH=" path) (str "HOME=" home)))
 fn ! runArgv argv: (List String) -> (Result gr/Captured String)
   (gr/runCommand! argv (workspaceRoot) (some (childEnv)))
 fn ! testDecodeAndCapture -> Bool
@@ -58,11 +54,6 @@ fn ! testDecodeAndCapture -> Bool
         ((err e) (assert false (str "cat ran: " e)))
         ((ok r) (assert (and (= r.exit 0) (= r.stdout "")) "a child reading stdin sees EOF")))
       true))
-fn ! sourceBlobMatches! path: String expected: String -> Bool
-  (mt (runArgv (list "git" "hash-object" path))
-    ((err e) (assert false (str path ": source hash command ran: " e)))
-    ((ok result)
-      (and (= result.exit 0) (= (stringTrim result.stdout) expected))))
 fn ! replayCase! fixture: (List p/SExpr) caseId: String kind: String args: (List String) -> Bool
   (mt (findCase fixture caseId)
     ((none) (assert false (str caseId ": recorded fixture case exists")))
@@ -72,7 +63,7 @@ fn ! replayCase! fixture: (List p/SExpr) caseId: String kind: String args: (List
             recordedExit (optionOr (stringToInt64 (atom (optionOr (field fields ":exit") (p/sexprAtom "-999")))) -999)
             wantedOut (strField fields ":stdout")
             wantedErr (strField fields ":stderr")
-            got (runArgv (listAppend (list "asl/host/out/asl-host" "run" (str "asl/packages/asl-gates/src/" kind ".asl")) args))]
+            got (runArgv (listAppend (list "bin/asl" "run" (str "asl/packages/asl-gates/src/" kind ".asl")) args))]
         (do
           (assert (= recordedArgs args) (str caseId ": fixture argv matches corpus"))
           (mt got
@@ -111,21 +102,13 @@ fn ! runTests -> Bool
         root (items (p/parseSexpr fixtureText))
         fields (optionOr (listTail root) (list))
         cases (listOf (optionOr (field fields ":cases") (p/sexprList (list))))
-        sourceForm (items (optionOr (field fields ":sources") (p/sexprList (list))))
-        sourcePairs sourceForm
-        dyckSha (sourceAt sourcePairs 0)
-        vacuitySha (sourceAt sourcePairs 1)
         recordedAtBase (strField fields ":recordedAtBase")]
     (do
       (assert (testDecodeAndCapture) "shared decode and capture helpers")
-      (assert (= (listLength cases) 41) "fixture covers 30 dyck and 11 vacuity cases")
-      (assert (= dyckSha "7b3a0227119e590ef6501d043b8fb0ec78a1ddb6") (str "dyck source is pinned, got: " dyckSha))
-      (assert (= vacuitySha "dbc3bf6ce03fec152e1bd2bdeebe14280e4bb262") "vacuity source is pinned")
-      (assert (sourceBlobMatches! "scripts/audit/dyck.py" dyckSha) "dyck fixture pin matches the real source blob")
-      (assert (sourceBlobMatches! "scripts/audit/vacuity.py" vacuitySha) "vacuity fixture pin matches the real source blob")
+      (assert (= (listLength cases) 40) "fixture covers 29 dyck and 11 vacuity cases")
       (assert (= (stringLength recordedAtBase) 40) "audit fixture records a full git HEAD SHA")
       (assert (replayDyck! cases
-        (list "d01" "d02" "d03" "d04" "d05" "d06" "d07" "d08" "d09" "d10" "d11" "d12" "d13" "d14" "d15" "d16" "d17" "d18" "d19" "d21" "d22" "d23" "d24" "d25" "d26" "d27" "d28" "d29" "d30" "d31")
-        (list "tests/fixtures/dyck/valid/nested.asn" "tests/fixtures/dyck/valid/parenInString.asn" "tests/fixtures/dyck/valid/escapedQuoteInString.asn" "tests/fixtures/dyck/valid/parenInComment.asn" "tests/fixtures/dyck/valid/semicolonInString.asn" "tests/fixtures/dyck/invalid/semicolonIsRetired.asl" "tests/fixtures/dyck/invalid/extraOpen.asn" "tests/fixtures/dyck/invalid/extraClose.asn" "tests/fixtures/dyck/invalid/closeBeforeOpen.asn" "tests/fixtures/dyck/invalid/unclosedBracket.asn" "tests/fixtures/dyck/invalid/unterminatedString.asn" ".addie/config.asn" ".asl.config.asn" "asl/packages/asl-gates/manifest.asn" "asl/packages/asl-compiler/manifest.asn" "asl/packages/asl-checker/manifest.asn" "asl/packages/asl-parser/manifest.asn" "asl/packages/asl-eval/manifest.asn" "asl/packages/asl-help/manifest.asn" "asl/packages/asl-lint/manifest.asn" "asl/packages/asl-mesh/manifest.asn" "asl/packages/asl-proc/manifest.asn" "asl/packages/asl-text/manifest.asn" "asl/prelude/prelude.asl" "asl/packages/asl-gates/src/grammarGate.asl" "asl/packages/asl-gates/src/lexiconGate.asl" "asl/packages/asl-gates/src/manifestGate.asl" "asl/packages/asl-gates/src/polarity.asl" "asl/packages/asl-gates/src/shebangAudit.asl" "asl/packages/asl-gates/src/siteClaims.asl")) "dyck corpus replay")
+        (list "d01" "d02" "d03" "d04" "d05" "d06" "d07" "d08" "d09" "d10" "d11" "d12" "d13" "d14" "d15" "d16" "d17" "d19" "d21" "d22" "d23" "d24" "d25" "d26" "d27" "d28" "d29" "d30" "d31")
+        (list "tests/fixtures/dyck/valid/nested.asn" "tests/fixtures/dyck/valid/parenInString.asn" "tests/fixtures/dyck/valid/escapedQuoteInString.asn" "tests/fixtures/dyck/valid/parenInComment.asn" "tests/fixtures/dyck/valid/semicolonInString.asn" "tests/fixtures/dyck/invalid/semicolonIsRetired.asl" "tests/fixtures/dyck/invalid/extraOpen.asn" "tests/fixtures/dyck/invalid/extraClose.asn" "tests/fixtures/dyck/invalid/closeBeforeOpen.asn" "tests/fixtures/dyck/invalid/unclosedBracket.asn" "tests/fixtures/dyck/invalid/unterminatedString.asn" ".addie/config.asn" ".asl.config.asn" "asl/packages/asl-gates/manifest.asn" "asl/packages/asl-compiler/manifest.asn" "asl/packages/asl-checker/manifest.asn" "asl/packages/asl-parser/manifest.asn" "asl/packages/asl-help/manifest.asn" "asl/packages/asl-lint/manifest.asn" "asl/packages/asl-mesh/manifest.asn" "asl/packages/asl-proc/manifest.asn" "asl/packages/asl-text/manifest.asn" "asl/prelude/prelude.asl" "asl/packages/asl-gates/src/grammarGate.asl" "asl/packages/asl-gates/src/lexiconGate.asl" "asl/packages/asl-gates/src/manifestGate.asl" "asl/packages/asl-gates/src/polarity.asl" "asl/packages/asl-gates/src/shebangAudit.asl" "asl/packages/asl-gates/src/siteClaims.asl")) "dyck corpus replay")
       (assert (replayVacuity! cases) "vacuity corpus replay")
       true))

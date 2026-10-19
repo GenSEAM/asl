@@ -22,6 +22,9 @@ fn kindEnv lines: (List String) kind: String -> (List String)
 fn withKey env: (List String) key: String -> (List String)
   (filter (fn [(kv String)] -> Bool (stringStartsWith? kv (str key "="))) env)
 
+fn leakCheckedKeys kind: String -> (List String)
+  (filter (fn [(k String)] -> Bool (not (and (= kind "asl") (= k "ASL_CLI_ROOT")))) (sessionKeys))
+
 fn checkKind! lines: (List String) kind: String -> Bool
   (let [(env (kindEnv lines kind))]
     (do
@@ -29,17 +32,19 @@ fn checkKind! lines: (List String) kind: String -> Bool
       (assert (listContains? env "ASL_IN_RUNNER=1") (str kind " job carries the runner's ASL_IN_RUNNER"))
       (assert (= (withKey env "ASL_GATE_TIMES") (list "ASL_GATE_TIMES=/snap/.git/aslGateTimes.asn"))
         (str kind " job has only the runner's ASL_GATE_TIMES: " (stringJoin (withKey env "ASL_GATE_TIMES") " ")))
+      (assert (or (!= kind "asl") (= (withKey env "ASL_CLI_ROOT") (list "ASL_CLI_ROOT=/snap")))
+        (str "asl job has only suiteJob!'s own ASL_CLI_ROOT, not a leaked one: " (stringJoin (withKey env "ASL_CLI_ROOT") " ")))
       (fold (fn [(acc Bool) (key String)] -> Bool
               (do
                 (assert (listEmpty? (withKey env key)) (str kind " job does not inherit " key))
                 acc))
             true
-            (sessionKeys))))
+            (leakCheckedKeys kind))))
 
 fn ! runTests -> Bool
   (let [(prelude (resultOr (realPath "asl/host/out/prelude.asl") "asl/host/out/prelude.asl"))
         (leaks (stringJoin (map (fn [(k String)] -> String (if (= k "ASL_PRELUDE") (str k "=" prelude) (str k "=leak"))) (listAppend (sessionKeys) (list "ASL_GATE_TIMES"))) " "))
-        (child (processRun (str "env " leaks " ASL_SCRUB_PROBE=kept asl/host/out/asl-host run asl/packages/asl-gates/tests/suiteEnvTest.asl")))
+        (child (processRun (str "env " leaks " ASL_SCRUB_PROBE=kept bin/asl run asl/packages/asl-gates/tests/suiteEnvTest.asl")))
         (lines (stringSplit child.stdout "\n"))]
     (do
       (assert (= child.exitCode 0) (str "child relaunch succeeds: " child.stderr))

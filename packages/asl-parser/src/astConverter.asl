@@ -47,7 +47,7 @@ fn lowerPattern pat: a/AstPattern -> rd/SExpr
     ((a/patRecord fields) (rd/makeList (cons (rd/makeAtom "record") (map (fn [(f (Pair String a/AstPattern))] -> rd/SExpr (rd/makeList (list (rd/makeAtom (pairFirst f)) (lowerPattern (pairSecond f))))) fields))))
     ((a/patCtor name arg)
      (cond
-       ((or (= name ":flat") (or (= name ":nested-list") (or (= name ":vect") (or (= name ":match") (or (= name ":match-wrapped") (= name ":multi"))))))
+       ((or (= name ":flat") (or (= name ":nested-list") (or (= name ":vect") (or (= name ":match") (= name ":multi")))))
         (mt arg
           ((some a) (lowerPattern a))
           ((none) (rd/makeAtom "_"))))
@@ -271,26 +271,16 @@ fn lowerExpr expr: a/AstExpr -> rd/SExpr
           (let [(eNodes (lowerSpliced elseBranch))]
             (rd/makeList (cons (rd/makeAtom "if") (cons cNode (listAppend tNodes eNodes)))))))))
     ((a/exprMatch target arms)
-     (let [(isMatchWrapped
-             (mt (listHead arms)
+     (let [(isMatchHead
+             (match (listHead arms)
                ((some firstArm)
-                (mt firstArm.pat
-                  ((a/patCtor name _) (= name ":match-wrapped"))
+                (match firstArm.pat
+                  ((a/patCtor name _) (= name ":match"))
                   (_ false)))
                ((none) false)))
-           (isMatchHead
-             (or isMatchWrapped
-                 (mt (listHead arms)
-                   ((some firstArm)
-                    (mt firstArm.pat
-                      ((a/patCtor name _) (= name ":match"))
-                      (_ false)))
-                   ((none) false))))
            (headStr (if isMatchHead "match" "mt"))
            (armNodes (map lowerMatchArm arms))]
-       (if isMatchWrapped
-         (rd/makeList (list (rd/makeAtom headStr) (lowerExpr target) (rd/makeList armNodes)))
-         (rd/makeList (cons (rd/makeAtom headStr) (cons (lowerExpr target) armNodes))))))
+       (rd/makeList (cons (rd/makeAtom headStr) (cons (lowerExpr target) armNodes)))))
     ((a/exprTry inner)
      (mt inner
        ((a/exprCall f args)
@@ -418,15 +408,6 @@ fn isDesugaredTryMatch? items: (List rd/SExpr) -> Bool
                                             (and (= (rd/sexprHead b2) "err")
                                                  (= (rd/sexprHead (a/nthExpr p2Items 1)) (rd/sexprHead (a/nthExpr b2Items 1))))))))))))))))
 
-fn isWrappedMatchArms? node: rd/SExpr -> Bool
-  (mt node
-    ((rd/sexprList items)
-     (and (not (listEmpty? items))
-          (fold (fn [(allArms Bool) (item rd/SExpr)] -> Bool
-                  (and allArms (rd/isList? item)))
-                true items)))
-    (_ false))
-
 fn liftExpr s: rd/SExpr -> a/AstExpr
   (mt s
     ((rd/sexprAtom v) (mt (liftLit v) ((some lit) (a/exprLit lit)) ((none) (a/exprIdent v))))
@@ -489,21 +470,10 @@ fn liftExpr s: rd/SExpr -> a/AstExpr
             (if (isDesugaredTryMatch? items)
               (a/exprTry (liftExpr (a/nthExpr items 1)))
               (let [(target (liftExpr (a/nthExpr items 1)))
-                    (rawTail (if (> (listLength items) 2) (optionOr (listSlice items 2 (listLength items)) (list)) (list)))
-                    (isMatchWrapped (and (= h "match") (and (= (listLength rawTail) 1) (isWrappedMatchArms? (a/nthExpr rawTail 0)))))
-                    (rawArms (if isMatchWrapped (a/sexprItems (a/nthExpr rawTail 0)) rawTail))
+                    (rawArms (if (> (listLength items) 2) (optionOr (listSlice items 2 (listLength items)) (list)) (list)))
                     (arms (map liftMatchArmForm rawArms))
                     (markedArms
                       (cond
-                        (isMatchWrapped
-                         (mt (listHead arms)
-                           ((some firstArm)
-                            (let [(firstPat firstArm.pat)
-                                  (mPat (a/patCtor ":match-wrapped" (some firstPat)))
-                                  (mArm (a/matchArm mPat firstArm.body))
-                                  (tailArms (optionOr (listTail arms) (list)))]
-                              (cons mArm tailArms)))
-                           ((none) arms)))
                         ((= h "match")
                          (mt (listHead arms)
                            ((some firstArm)

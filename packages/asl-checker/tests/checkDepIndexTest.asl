@@ -3,7 +3,7 @@
   :i [(types :a ty) (ast :a a) (resolve :a r) (check :a c)])
 
 fn funOf name: String ret: String -> r/FunSummary
-  (r/FunSummary :name name :params (list) :ret ret :typevars (list) :hasDoc true :effect false)
+  (r/FunSummary :name name :params (list) :ret ret :typevars (list) :hasDoc true :effect false :calls (list) :witness "")
 
 fn depSummary k: Int64 gRet: String -> r/ModuleSummary
   (with (r/emptyModuleSummary)

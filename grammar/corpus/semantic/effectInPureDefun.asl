@@ -1,2 +1,2 @@
-fn readConfig path: String -> (Result String IoError)
-  (fileRead path)
+fn readConfig path: String -> (Result String String)
+  (fileReadString path)

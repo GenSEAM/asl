@@ -182,6 +182,7 @@ fn runtimeText -> String
      "  '@listRest': (l) => (l === null ? trap('ERR_RANGE', 'listRest of an empty list') : l.t),"
      "  '@stringSliceOr': (s, i, j, d) => slice(s, i, j) ?? d,"
      "  '@stringIndexOf': (s, t) => opt(indexOf(s, t)),"
+     "  '@listHeadEmpty?': (l) => l === null, '@listTailEmpty?': (l) => l === null,"
      "  '@listHeadOr': (l, d) => (l === null ? d : l.h),"
      "  '@listTailOr': (l, d) => (l === null ? d : l.t),"
      "  '@listGetOr': (l, i, d) => { if (i < 0n) return d; for (; l !== null; l = l.t, i--) if (i === 0n) return l.h; return d; },"
@@ -222,4 +223,4 @@ fn builtinNames -> (List String)
   ["print" "println" "str" "max" "min" "abs" "cons" "listEmpty?" "listHead" "listTail" "list" "stringConcat" "stringContains?" "stringStartsWith?" "stringLength" "stringSlice" "stringFromInt64" "stringToBytes" "bytesLength" "bytesGet" "stringFromFloat64" "stringToFloat64" "int64ToFloat64" "float64ToInt64" "floor" "sqrt" "log2" "sin" "atan2" "clamp" "partial" "bytesAlloc" "bytesSet" "bytesGetFloat64" "bytesSetFloat64" "eprintln" "nowNs" "monotonicNs" "trap" "assert" "refute" "ceil" "round" "exp" "log" "log10" "cos" "tan" "pow"]
 
 fn entryNames -> (List String)
-  (listAppend ["+" "/" "=" "<" "@listFirst" "@listRest" "@stringSliceOr" "@stringIndexOf" "@listHeadOr" "@listTailOr" "@listGetOr" "not" "-" "*" "mod" "%" "!=" "==" "<=" ">" ">="] (builtinNames))
+  (listAppend ["+" "/" "=" "<" "@listFirst" "@listRest" "@stringSliceOr" "@stringIndexOf" "@listHeadOr" "@listTailOr" "@listHeadEmpty?" "@listTailEmpty?" "@listGetOr" "not" "-" "*" "mod" "%" "!=" "==" "<=" ">" ">="] (builtinNames))

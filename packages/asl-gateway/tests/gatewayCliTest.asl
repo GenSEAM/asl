@@ -34,7 +34,8 @@ fn ! testGatewayCliAndLifecycle -> Bool
         (temp (stringTrim (processRun "mktemp -d /tmp/asl-gateway-cli.XXXXXX").stdout))
         (injectionMarker (str temp "/shell-injection-ran"))
         (pathDir (str temp "/path"))
-        (_path (processRun (str "/bin/mkdir -p " pathDir " && /bin/ln -sf /bin/bash " pathDir "/bash && /bin/ln -sf /usr/bin/dirname " pathDir "/dirname && /bin/ln -sf /usr/bin/basename " pathDir "/basename && /bin/ln -sf /bin/mkdir " pathDir "/mkdir")))
+        (_path (processRun (str "/bin/mkdir -p " pathDir " && /bin/ln -sf /bin/bash " pathDir "/bash && /bin/ln -sf /usr/bin/dirname " pathDir "/dirname && /bin/ln -sf /usr/bin/basename " pathDir "/basename && /bin/ln -sf /bin/mkdir " pathDir "/mkdir"
+                           " && /bin/ln -sf /usr/bin/clang " pathDir "/clang && /bin/ln -sf /usr/bin/perl " pathDir "/perl && /bin/ln -sf /usr/bin/uname " pathDir "/uname")))
         (valid (str temp "/valid.asn"))
         (invalidA (str temp "/invalid-a.asn"))
         (invalidB (str temp "/invalid-b.asn"))
@@ -225,7 +226,7 @@ fn ! gatewayLifecycleTest! root: String temp: String host: String runner: String
         (portPath (str temp "/upstream.port"))
         (stubPidPath (str temp "/upstream.pid"))
         (testFile (str root "/asl/packages/asl-gateway/tests/gatewayCliTest.asl"))
-        (statePath (str home "/.asl/gateway.asn"))
+        (statePath (str home "/.asl/run/gatewayState.asn"))
         (stubStart (processSpawn (str host " run " testFile " stub " portPath " " stubPidPath)))
         (stubHandle (mt stubStart ((err _) 0) ((ok handle) handle)))
         (stubPid (gatewayTestWaitPort! stubPidPath 150))

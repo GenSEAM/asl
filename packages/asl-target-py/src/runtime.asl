@@ -213,11 +213,11 @@ fn runtimeText -> String
      "    if x != x or x in (_math.inf, -_math.inf): return _none"
      "    t = int(x)"
      "    return _some(t) if _MIN <= t <= _MAX and -9223372036854775808.0 <= _math.trunc(x) < 9223372036854775808.0 else _none"
-     "def _assert(c, m):"
+     "def _assert(c, m, site=None):"
      "    counts[\"asserts\"] += 1"
      "    if c is not True: _trap(\"ERR_ASSERT\", f\"assertion failed: {_text(show(m))}\")"
      "    return UNIT"
-     "def _refute(c, m):"
+     "def _refute(c, m, site=None):"
      "    counts[\"refutes\"] += 1"
      "    if c is not False: _trap(\"ERR_REFUTE\", f\"refutation failed: {_text(show(m))}\")"
      "    return UNIT"
@@ -327,6 +327,7 @@ fn runtimeText -> String
      "    \">\": lambda a, b: _order(\">\", a, b), \">=\": lambda a, b: _order(\">=\", a, b),"
      "    \"@listFirst\": _first, \"@listRest\": _rest, \"@stringSliceOr\": _sliceor,"
      "    \"@stringIndexOf\": lambda s, t: _opt(_index(s, t)),"
+     "    \"@listHeadEmpty?\": lambda l: l is None, \"@listTailEmpty?\": lambda l: l is None,"
      "    \"@listHeadOr\": lambda l, d: d if l is None else l.h,"
      "    \"@listTailOr\": lambda l, d: d if l is None else l.t,"
      "    \"@listGetOr\": _getor,"
@@ -385,4 +386,4 @@ fn builtinNames -> (List String)
   ["print" "println" "str" "max" "min" "abs" "cons" "listEmpty?" "listHead" "listTail" "list" "stringConcat" "stringContains?" "stringStartsWith?" "stringLength" "stringSlice" "stringFromInt64" "stringToBytes" "bytesLength" "bytesGet" "stringFromFloat64" "stringToFloat64" "int64ToFloat64" "float64ToInt64" "floor" "ceil" "round" "sqrt" "exp" "log" "log2" "log10" "sin" "cos" "tan" "atan2" "pow" "clamp" "partial" "bytesAlloc" "bytesSet" "bytesGetFloat64" "bytesSetFloat64" "eprintln" "nowNs" "monotonicNs" "trap" "assert" "refute"]
 
 fn entryNames -> (List String)
-  (listAppend ["+" "-" "*" "/" "mod" "%" "=" "!=" "==" "<" "<=" ">" ">=" "@listFirst" "@listRest" "@stringSliceOr" "@stringIndexOf" "@listHeadOr" "@listTailOr" "@listGetOr" "not"] (builtinNames))
+  (listAppend ["+" "-" "*" "/" "mod" "%" "=" "!=" "==" "<" "<=" ">" ">=" "@listFirst" "@listRest" "@stringSliceOr" "@stringIndexOf" "@listHeadOr" "@listTailOr" "@listHeadEmpty?" "@listTailEmpty?" "@listGetOr" "not"] (builtinNames))

@@ -191,17 +191,16 @@ fn checkTrackedHtmlFile! acc: (Pair Int64 Int64) path: String -> (Pair Int64 Int
            (pair (+ checked 1) mismatches)
            (pair (+ checked 1) (+ mismatches 1)))))))
 
-fn testAllFiveTrackedHtmlFiles! -> Bool
-  (let [(files (list "asl/web/index.html"
-                     "asl/packages/asl-browser-plugin/src/popup.html"
+fn testAllTrackedHtmlFiles! -> Bool
+  (let [(files (list "asl/packages/asl-browser-plugin/src/popup.html"
                      "docs/diagrams/DiagramWorkbench.html"
                      "docs/diagrams/OrchestrationTopology.html"
                      "editorial-matrix/assets/review/index.html"))
         (stats (fold checkTrackedHtmlFile! (pair 0 0) files))
         (totalChecked (pairFirst stats))
         (mismatches (pairSecond stats))]
-    (assert (= totalChecked 5) "checked all 5 tracked html files")
-    (assert (= mismatches 0) "zero tiling or print mismatches across all 5 tracked html files")
+    (assert (= totalChecked 4) "checked all 4 tracked html files")
+    (assert (= mismatches 0) "zero tiling or print mismatches across all 4 tracked html files")
     true)
 
 fn testHeadingsInReviewHtml! -> Bool
@@ -358,7 +357,7 @@ fn ! runTests -> Bool
   (and (testImpliedEndTagsFixtures)
   (and (testRecoveryFixtures)
   (and (testOutlineDiagramWorkbench!)
-  (and (testAllFiveTrackedHtmlFiles!)
+  (and (testAllTrackedHtmlFiles!)
   (and (testHeadingsInReviewHtml!)
   (and (testReparseGuardSpanEdit)
   (and (testBenchmarkPerformance!)

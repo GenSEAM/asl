@@ -7,7 +7,7 @@ fn ! main -> Int64
         (output (optionOr (envGet "OUT") ""))]
     (if (stringEmpty? input)
       (do (eprintln "usage: IN=drawing.asn [OUT=drawing.svg] asl-host run asl/packages/asl-html/src/svgCli.asl") 2)
-      (mt (fileRead input)
+      (mt (fileReadString input)
         ((err e) (do (eprintln (str "svg: cannot read " input)) 2))
         ((ok source)
           (mt (conv/asnToSvg source)

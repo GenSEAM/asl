@@ -1,5 +1,5 @@
 (module asl-target-llvm/ssa
-  :x [emitLlvmModule emitLlvmProgram emitLlvmModuleWasm32 emitLlvmProgramWasm32 trapLowering llvmName llvmBytes llvmFloat runtimeDecls cDeclFits? overwideCDecls builtinTables builtinTableSym cRuntimeModule ModEnv FnEnv NameIndex nameIndexSet tailCall? linkInits definesInit? ensureInit]
+  :x [emitLlvmModule emitLlvmProgram emitLlvmModuleWasm32 emitLlvmProgramWasm32 trapLowering llvmName llvmBytes llvmFloat runtimeDecls cDeclFits? overwideCDecls cRuntimeModule ModEnv FnEnv NameIndex nameIndexSet tailCall? linkInits definesInit? ensureInit listBuilder?]
 
   :i [(asl-ir/types :a ty)
       (asl-ir/verify :a vfy)
@@ -12,7 +12,7 @@
       (asl-target-llvm/target :a target)
       (asl-target-llvm/ssaOpt :a opt)])
 
-(schema ModEnv (:f name String) (:f functions NameIndex) (:f externs NameIndex) (:f types NameIndex) (:f strings NameIndex) (:f records NameIndex))
+(schema ModEnv (:f name String) (:f functions NameIndex) (:f externs NameIndex) (:f types NameIndex) (:f strings NameIndex) (:f records NameIndex) (:f boxed NameIndex))
 
 (schema ListCells (:f lines (List String)) (:f index Int64) (:f tail String))
 
@@ -243,14 +243,16 @@ fn wrappedCallee f: ty/SsaFunction -> (Option String)
     (none)
     (listHead (fold (fn [(acc (List String)) (b ty/SsaBlock)] -> (List String)
                       (listAppend acc (fold (fn [(found (List String)) (i ty/SsaInstr)] -> (List String)
-                                              (mt i.op ((ty/opCall callee _) (listAppend found (list callee))) (_ found)))
+                                              (mt i.op ((ty/opCall callee _) (if (stringStartsWith? callee "aslRc") found (listAppend found (list callee)))) (_ found)))
                                             (list) b.instrs)))
                     (list) f.blocks)))
 
 fn protoNameIn functions: NameIndex callee: String -> String
-  (mt (nameIndexGet functions callee)
-    ((some f) (mt (wrappedCallee f) ((some w) (protoName w)) ((none) (protoName callee))))
-    ((none) (protoName callee)))
+  (if (stringEndsWith? callee "@rc")
+    (protoNameIn functions (optionOr (stringSlice callee 0 (- (stringLength callee) 3)) callee))
+    (mt (nameIndexGet functions callee)
+      ((some f) (mt (wrappedCallee f) ((some w) (protoName w)) ((none) (protoName callee))))
+      ((none) (protoName callee))))
 
 fn protoNameSym name: String -> String
   (str "@protoName." (llvmName name))
@@ -266,6 +268,9 @@ fn codeSym name: String -> String
 
 fn tailCodeSym name: String -> String
   (str "@" (llvmName name) ".tailCode")
+
+fn valSym name: String -> String
+  (str "@" (llvmName name) ".val")
 
 fn initSym moduleName: String -> String
   (str "@init." (llvmName moduleName))
@@ -300,9 +305,6 @@ fn linkInits text: String moduleNames: (List String) -> (Result String String)
 fn runtimeDecls -> (List String)
   (list "declare void @asl_rt_init()"
         "declare i32 @asl_rt_main(ptr, i32, ptr)"
-        "declare %Val @asl_rt_builtin_sys(ptr, i64, ptr)"
-        "declare %Val @asl_rt_builtin_sysNet(ptr, i64, ptr)"
-        "declare %Val @asl_rt_builtin_parallel(ptr, i64, ptr)"
         "declare ptr @asl_alloc(i32, i64)"
         "declare ptr @asl_alloc_raw(i32, i64)"
         "declare ptr @asl_alloc_cons()"
@@ -314,21 +316,17 @@ fn nativeBuiltinEntries -> (List ty/SsaBuiltin)
 fn builtinSym b: ty/SsaBuiltin -> String
   (if (= b.kind "intrinsic") (str "llvm." b.symbol ".f64") b.symbol)
 
-fn builtinTables -> (List (Pair String (List String)))
-  (list (pair "sys" (list "fdRead" "fdWrite" "fdClose" "fdPoll" "fdNonBlocking" "fileLock" "fileLockWait" "fileAppend" "fileLockAt" "fileReadAt" "fileWriteAt"
-                          "procSpawnv" "procWaitPid" "procKill" "procSelf" "procExePath" "procExecv" "envList" "procWaitAny" "procPoll" "cpuCount" "procRusage" "platformInfo" "localDate" "procAlive?"))
-        (pair "sysNet" (list "tcpListen" "tcpConnect" "sockAccept" "sockLocalPort" "unixListen" "unixConnect"))
-        (pair "parallel" (list "parMap" "parFold")))
+; (:m :ref LIBASLHOST-COMPAT-DROP :do "the sys, socket and parallel builtins have native definitions only through sysRoute, sysNet and parRoute, which need libc facts for the triple; unrouted they are a lowering error, there being no C builtin table to call")
+fn routedOnlyNames -> (List String)
+  (list "fdRead" "fdWrite" "fdClose" "fdPoll" "fdNonBlocking" "fileLock" "fileLockWait" "fileAppend" "fileLockAt" "fileReadAt" "fileWriteAt"
+        "procSpawnv" "procWaitPid" "procKill" "procSelf" "procExePath" "procExecv" "envList" "procWaitAny" "procPoll" "cpuCount" "procRusage" "platformInfo" "localDate" "procAlive?"
+        "tcpListen" "tcpConnect" "sockAccept" "sockLocalPort" "unixListen" "unixConnect" "parMap" "parFold")
 
-fn builtinTableSym name: String -> (Option String)
-  (fold (fn [(acc (Option String)) (t (Pair String (List String)))] -> (Option String)
-          (if (and (none? acc) (listContains? (pairSecond t) name)) (some (str "asl_rt_builtin_" (pairFirst t))) acc))
-        (none) (builtinTables))
-
-fn tableCall lhs: String name: String n: Int64 arr: String -> String
-  (mt (builtinTableSym name)
-    ((some sym) (str lhs "call %Val @" sym "(ptr " (nameSym name) ", i64 " n ", " arr ")\n"))
-    ((none) ""))
+fn routedOnly? op: ty/SsaOp -> Bool
+  (mt op
+    ((ty/opBuiltin name _) (listContains? (routedOnlyNames) name))
+    ((ty/opEntry name _) (listContains? (routedOnlyNames) name))
+    (_ false))
 
 fn entryDecl b: ty/SsaBuiltin -> String
   (str "declare " (llTy b.result) " @" (builtinSym b) "(" (stringJoin (map llTy b.args) ", ") ")")
@@ -796,7 +794,7 @@ fn idResolvedOp? op: ty/SsaOp -> Bool
   (mt op ((ty/opConstruct _ _ _) true) ((ty/opRecord _ _ _) true) ((ty/opBuiltin name args) (partialCtor? name (listLength args))) (_ false))
 
 fn inlinedEntryName? name: String -> Bool
-  (listContains? (list "cons" "listHead" "listTail" "listEmpty?" "bytesLength" "bytesGet" "bytesSet") name)
+  (listContains? (list "cons" "listHead" "listTail" "listEmpty?" "@listHeadEmpty?" "@listTailEmpty?" "bytesLength" "bytesGet" "bytesSet") name)
 
 fn stringEntryName? name: String -> Bool
   (listContains? (list "stringLength" "stringConcat" "stringSlice" "stringStartsWith?" "stringContains?" "stringToBytes") name)
@@ -849,7 +847,7 @@ fn emitCons lhs: String dest: String a: String b: String -> String
          lbl ".join:\n"
          lhs "phi %Val [ " p ".fastval, %" lbl ".alloc ]\n"))
 
-fn emitListEmpty lhs: String dest: String xs: String -> String
+fn emitListEmpty lhs: String dest: String xs: String who: String -> String
   (let [(p (str "%" (llvmName dest))) (lbl (llvmName dest)) (xv (val xs))]
     (str (valTag p xv)
          "  " p ".isList = icmp eq i32 " p ".vtag, 6\n"
@@ -858,7 +856,7 @@ fn emitListEmpty lhs: String dest: String xs: String -> String
          (valObj p xv)
          "  " p ".fastval = icmp eq ptr " p ".obj, null\n"
          "  br label %" lbl ".join\n"
-         (wantTrap (str lbl ".bad") "@.listrt.who.listEmpty" 6 (str p ".vtag"))
+         (wantTrap (str lbl ".bad") who 6 (str p ".vtag"))
          lbl ".join:\n"
          lhs "phi i1 [ " p ".fastval, %" lbl ".chk ]\n"))
 
@@ -963,7 +961,9 @@ fn emitInlinedEntry lhs: String dest: String name: String args: (List String) ->
       ((= name "cons") (emitCons lhs dest a0 a1))
       ((= name "listHead") (emitListExtract lhs dest a0 8 "@.listrt.who.listHead"))
       ((= name "listTail") (emitListExtract lhs dest a0 24 "@.listrt.who.listTail"))
-      ((= name "listEmpty?") (emitListEmpty lhs dest a0))
+      ((= name "listEmpty?") (emitListEmpty lhs dest a0 "@.listrt.who.listEmpty"))
+      ((= name "@listHeadEmpty?") (emitListEmpty lhs dest a0 "@.listrt.who.listHead"))
+      ((= name "@listTailEmpty?") (emitListEmpty lhs dest a0 "@.listrt.who.listTail"))
       ((= name "bytesLength") (emitBytesLength lhs dest a0))
       ((= name "bytesGet") (emitBytesGet lhs dest a0 a1))
       (else (emitBytesSet lhs dest a0 a1 a2))))
@@ -1135,8 +1135,11 @@ fn registerParams params: (List ty/SsaParam) -> (List ty/SsaParam)
          (filter (fn [(i Int64)] -> Bool (< (optionOr (listGet slots i) -1) 0)) (range 0 (listLength params)))))
 
 fn tailCall lhs: String dest: String retTy: ty/SsaTy callee: String args: (List String) types: (List ty/SsaTy) -> String
+  (tailCallSym lhs dest retTy (fnSym callee) args types)
+
+fn tailCallSym lhs: String dest: String retTy: ty/SsaTy sym: String args: (List String) types: (List ty/SsaTy) -> String
   (let [(parts (tailCallArgs dest args types))]
-    (str (pairFirst parts) lhs "call tailcc " (llTy retTy) " " (fnSym callee) "(" (pairSecond parts) ")\n"))
+    (str (pairFirst parts) lhs "call tailcc " (llTy retTy) " " sym "(" (pairSecond parts) ")\n"))
 
 fn externCallType e: ty/SsaExtern -> String
   (str (llTy e.ret) " (" (stringJoin (listAppend (map llTy e.params) (if e.variadic (list "...") (list))) ", ") ")")
@@ -1452,7 +1455,7 @@ fn emitInstr env: FnEnv ins: ty/SsaInstr -> String
                                            (str (fillArray d items)
                                              (mt (ty/builtinEntry name (listLength args))
                                                ((some b) (str lhs "call " (llTy b.result) " @" (builtinSym b) "(" (typedArgs args b.args) ")\n"))
-                                               ((none) (tableCall lhs name (listLength args) arr))))))))
+                                               ((none) "")))))))
       ((ty/opList xs) (emitListLiteral lhs d xs))
       ((ty/opBuiltin name args) (cond
                                     ((and (= name "floatNan") (listEmpty? args))
@@ -1466,8 +1469,7 @@ fn emitInstr env: FnEnv ins: ty/SsaInstr -> String
                                     ((seqBuiltin? name (listLength args)) (emitSeqBuiltin lhs d name args))
                                     ((opsrt/opsBuiltin? name (listLength args)) (opsrt/opsBuiltinCall lhs (val d) name (map val args)))
                                     (else (str (fillArray d items)
-                                         (if (rtFormatBuiltin? name) (emitFormatBuiltin d name args arr)
-                                           (tableCall lhs name (listLength args) arr))))))
+                                         (if (rtFormatBuiltin? name) (emitFormatBuiltin d name args arr) "")))))
       (_ (str (fillArray d items)
          (mt op
            ((ty/opConst c) (emitConst env lhs d t c))
@@ -1528,7 +1530,10 @@ fn emitTerm env: FnEnv from: String term: ty/SsaTerm -> String
   (let [(edges (ty/termEdges term))
         (to (fn [(k Int64)] -> String (str "%" (edgeLabel env from edges k))))]
     (mt term
-      ((ty/termReturn v) (str "  ret " (llTy env.retTy) " " (val v) "\n"))
+      ((ty/termReturn v) (let [(t (defType env v))]
+                           (if (and (valContext? env) (not (sameAbi? t env.retTy)))
+                             (let [(r (str v ".ret"))] (str (boxInline (str "  " (val r) " = ") r t (val v)) "  ret %Val " (val r) "\n"))
+                             (str "  ret " (llTy env.retTy) " " (val v) "\n"))))
       ((ty/termJump _) (str "  br label " (to 0) "\n"))
       ((ty/termBranch c _ _)
         (if (= (ty/ssaTyName (defType env c)) "i1")
@@ -1549,8 +1554,10 @@ fn emitTerm env: FnEnv from: String term: ty/SsaTerm -> String
                                           ((none) "")
                                           ((some c) (str "    i64 " (variantTag env typeName c.variant) ", label " (to k) "\n"))))
                                       (range 0 n)) ""))]
-          (str (variantTagLookup env from (val s) typeName (map (fn [(c ty/SsaCase)] -> String c.variant) cases))
-               "  switch i64 %" (label from) ".tag, label " fallback " [\n" arms "  ]\n")))
+          (if (= n 0)
+            (str "  br label " fallback "\n")
+            (str (variantTagLookup env from (val s) typeName (map (fn [(c ty/SsaCase)] -> String c.variant) cases))
+                 "  switch i64 %" (label from) ".tag, label " fallback " [\n" arms "  ]\n"))))
       ((ty/termUnreachable) (str "  call void @rterr.match(ptr " (nameSym env.name) ")\n  unreachable\n"))))
 
 fn patternArityCheck env: FnEnv p: String blk: String typeName: String armed: (List String) -> String
@@ -1677,27 +1684,71 @@ fn returnsDest? env: FnEnv b: ty/SsaBlock dest: String -> Bool
     ((ty/termJump e) (and (= e.args (list dest)) (returnsParam? env e.target env.size)))
     (_ false))
 
+; (:m :ref TCO-CLOSURE-ABI :do "a branch that jumps with a Val to a join block whose only work is unboxing its parameter for the return: in a Val-returning body that unbox is the return conversion, so the Val call ending the branch is a tail call")
+fn unboxesParam? env: FnEnv target: String -> Bool
+  (mt (nameIndexGet env.blocks target)
+    ((none) false)
+    ((some j) (and (= (listLength j.params) 1)
+                   (and (= (listLength j.instrs) 1)
+                        (mt (listHead j.instrs)
+                          ((some u) (and (plainUnbox? u.op)
+                                         (and (= (ty/opOperands u.op) (map (fn [(p ty/SsaParam)] -> String p.name) j.params))
+                                              (returnsDest? env j u.dest))))
+                          ((none) false))))))
+
+fn returnsUnboxed? env: FnEnv b: ty/SsaBlock dest: String -> Bool
+  (mt b.term
+    ((ty/termJump e) (and (= e.args (list dest)) (unboxesParam? env e.target)))
+    (_ false))
+
 fn sameAbi? a: ty/SsaTy b: ty/SsaTy -> Bool
   (= (ty/ssaAbiName a) (ty/ssaAbiName b))
 
-fn tailCall? env: FnEnv b: ty/SsaBlock -> Bool
+fn valContext? env: FnEnv -> Bool
+  (sameAbi? env.retTy (ty/tyVal))
+
+fn boxedTarget? env: FnEnv callee: String -> Bool
+  (and (valContext? env) (nameIndexHas? env.mod.boxed callee))
+
+fn directTail? env: FnEnv callee: String -> Bool
+  (and (not (stringContains? callee "sysRoute."))
+       (mt (nameIndexGet env.mod.functions callee)
+         ((some f) (sameAbi? f.retTy env.retTy))
+         ((none) (mt (nameIndexGet env.mod.externs callee)
+                   ((some e) (and e.typed (and (not (nativeExtern? e)) (and (not (hostDefined? callee)) (sameAbi? e.ret env.retTy)))))
+                   ((none) false)))))
+
+fn tailCallOp? env: FnEnv op: ty/SsaOp -> Bool
+  (mt op
+    ((ty/opCall callee _) (or (boxedTarget? env callee) (directTail? env callee)))
+    ((ty/opCallClosure _ args) (and (valContext? env) (<= (listLength args) (spillCapacity))))
+    (_ false))
+
+; (:m :ref TCO-CLOSURE-ABI :do "in a Val-returning body, a call whose result is only unboxed (a Val call) or only boxed (a call to a boxed body) before the return is still a tail call: the call already returns the body's Val ABI, so the conversion is dropped and the call becomes musttail")
+fn rewrapped? env: FnEnv op: ty/SsaOp call: ty/SsaInstr -> Bool
+  (and (valContext? env)
+       (and (= (ty/opOperands op) (list call.dest))
+            (mt op
+              ((ty/opUnbox _) (tailCallOp? env call.op))
+              ((ty/opBox _) (mt call.op ((ty/opCall callee _) (boxedTarget? env callee)) (_ false)))
+              (_ false))))
+
+fn tailSpan env: FnEnv b: ty/SsaBlock -> Int64
   (mt (lastInstr b)
-    ((none) false)
+    ((none) 0)
     ((some ins)
-      (mt ins.op
-        ((ty/opCall callee _)
-          (and (not (stringContains? callee "sysRoute."))
-               (and (mt (nameIndexGet env.mod.functions callee)
-                      ((some f) (sameAbi? f.retTy env.retTy))
-                      ((none) (mt (nameIndexGet env.mod.externs callee)
-                                ((some e) (and e.typed (and (not (nativeExtern? e)) (and (not (hostDefined? callee)) (sameAbi? e.ret env.retTy)))))
-                                ((none) false))))
-                    (returnsDest? env b ins.dest))))
-        ((ty/opCallClosure _ args)
-          (and (sameAbi? env.retTy (ty/tyVal))
-               (and (<= (listLength args) (spillCapacity))
-                    (returnsDest? env b ins.dest))))
-        (_ false))))
+      (cond
+        ((returnsDest? env b ins.dest)
+          (cond
+            ((tailCallOp? env ins.op) 1)
+            (else (mt (listGet b.instrs (- (listLength b.instrs) 2))
+                    ((some call) (if (rewrapped? env ins.op call) 2 0))
+                    ((none) 0)))))
+        ((and (valContext? env) (and (tailCallOp? env ins.op) (returnsUnboxed? env b ins.dest))) 1)
+        (else 0))))
+
+fn tailCall? env: FnEnv b: ty/SsaBlock -> Bool
+  (> (tailSpan env b) 0)
 
 fn closureTailArgs dest: String args: (List String) -> String
   (stringJoin (map (fn [(i Int64)] -> String
@@ -1707,7 +1758,10 @@ fn closureTailArgs dest: String args: (List String) -> String
 
 fn emitTailCall env: FnEnv ins: ty/SsaInstr -> String
   (mt ins.op
-    ((ty/opCall callee args) (str (emitCall env (str "  " (val ins.dest) " = musttail ") ins.dest callee args)
+    ((ty/opCall callee args) (str (if (boxedTarget? env callee)
+                                    (tailCallSym (str "  " (val ins.dest) " = musttail ") ins.dest (ty/tyVal) (valSym callee) args
+                                                 (mt (nameIndexGet env.mod.functions callee) ((some f) (signatureTypes f)) ((none) (list))))
+                                    (emitCall env (str "  " (val ins.dest) " = musttail ") ins.dest callee args))
                                   "  ret " (llTy env.retTy) " " (val ins.dest) "\n"))
     ((ty/opCallClosure c args) (str (closureTailArgs ins.dest args)
                                     "  " (val ins.dest) " = musttail call tailcc %Val @tailrt.closure(%Val " (val c) ", i64 " (listLength args) ", ptr @asl_rt_spill)\n"
@@ -1715,10 +1769,10 @@ fn emitTailCall env: FnEnv ins: ty/SsaInstr -> String
     (_ (emitInstr env ins)))
 
 fn emitBlock env: FnEnv allocas: String isEntry: Bool frame: NameIndex b: ty/SsaBlock -> String
-  (let [(tail (tailCall? env b))
+  (let [(span (tailSpan env b))
         (instrs b.instrs)
         (n (listLength instrs))
-        (body (if tail (listTake instrs (- n 1)) instrs))
+        (body (if (> span 0) (listTake instrs (- n span)) instrs))
         (framed (not (nameIndexEmpty? frame)))
         (emitOne (fn [(ins ty/SsaInstr)] -> String
                    (mt (nameIndexGet frame ins.dest)
@@ -1733,8 +1787,8 @@ fn emitBlock env: FnEnv allocas: String isEntry: Bool frame: NameIndex b: ty/Ssa
          (emitPhis env b)
          (stringJoin (map (fn [(p ty/SsaParam)] -> String (rootKeep frame p.name)) b.params) "")
          (stringJoin (map emitOne body) "")
-         (if tail
-           (str (if framed (rootPop) "") (mt (lastInstr b) ((some ins) (emitTailCall env ins)) ((none) "")))
+         (if (> span 0)
+           (str (if framed (rootPop) "") (mt (listGet instrs (- n span)) ((some ins) (emitTailCall env ins)) ((none) "")))
            (str (mt b.term ((ty/termReturn _) (if framed (rootPop) "")) (_ ""))
                 (emitTerm env b.label b.term) (emitEdgeBlocks env b)))))
 
@@ -1779,7 +1833,8 @@ fn rootSlots env: FnEnv f: ty/SsaFunction -> (List String)
                      (filter (fn [(p ty/SsaParam)] -> Bool (heapVal? p.ty)) (listAppend f.captures f.params))))
         (inBlock (fn [(b ty/SsaBlock)] -> (List String)
                    (let [(instrs b.instrs)
-                         (body (if (tailCall? env b) (listTake instrs (- (listLength instrs) 1)) instrs))
+                         (span (tailSpan env b))
+                         (body (if (> span 0) (listTake instrs (- (listLength instrs) span)) instrs))
                          (phis (filter (fn [(i Int64)] -> Bool
                                          (mt (listGet b.params i)
                                            ((none) false)
@@ -1798,13 +1853,22 @@ fn functionDefs f: ty/SsaFunction -> NameIndex
                   (addParams acc b.params) b.instrs))
           base f.blocks))
 
+fn registerParamList f: ty/SsaFunction -> String
+  (stringJoin (map (fn [(p ty/SsaParam)] -> String (str (llTy p.ty) " " (val p.name))) (registerParams (listAppend f.captures f.params))) ", ")
+
 fn emitFunctionRooted menv: ModEnv f: ty/SsaFunction rooted: Bool -> String
+  (let [(raw (emitBodyAs menv f rooted f.retTy (str "define tailcc " (llTy f.retTy) " " (fnSym f.name))))]
+    (if (nameIndexHas? menv.boxed f.name)
+      (str raw (emitBodyAs menv f rooted (ty/tyVal) (str "define internal tailcc %Val " (valSym f.name))))
+      raw))
+
+fn emitBodyAs menv: ModEnv f: ty/SsaFunction rooted: Bool retTy: ty/SsaTy head: String -> String
   (let [(blocks f.blocks)
         (env (FnEnv :mod menv
                     :defs (functionDefs f)
                     :blocks (fold (fn [(acc NameIndex) (b ty/SsaBlock)] -> NameIndex (nameIndexSet acc b.label b)) (nameIndexEmpty) blocks)
                     :order blocks
-                    :retTy f.retTy
+                    :retTy retTy
                     :name f.name
                     :fused (fusedMap f)
                     :records (recordMap f)
@@ -1813,7 +1877,7 @@ fn emitFunctionRooted menv: ModEnv f: ty/SsaFunction rooted: Bool -> String
                     :size (listLength blocks)))
         (allocas (stringJoin (map (fn [(b ty/SsaBlock)] -> String (stringJoin (map allocaFor b.instrs) "")) blocks) ""))
         (allParams (listAppend f.captures f.params))
-        (params (stringJoin (map (fn [(p ty/SsaParam)] -> String (str (llTy p.ty) " " (val p.name))) (registerParams allParams)) ", "))
+        (params (registerParamList f))
         (slotNames (if rooted (rootSlots env f) (list)))
         (frame (pairSecond (fold (fn [(acc (Pair Int64 NameIndex)) (name String)] -> (Pair Int64 NameIndex) (pair (+ (pairFirst acc) 1) (nameIndexSet (pairSecond acc) name (pairFirst acc))))
                                  (pair 1 (nameIndexEmpty)) slotNames)))
@@ -1825,7 +1889,7 @@ fn emitFunctionRooted menv: ModEnv f: ty/SsaFunction rooted: Bool -> String
                 ((none) "")
                 ((some first) (str (emitBlock env entryText true frame first)
                                    (stringJoin (map (fn [(b ty/SsaBlock)] -> String (emitBlock env entryText false frame b)) (optionOr (listTail blocks) (list))) "")))))]
-    (str "define tailcc " (llTy f.retTy) " " (fnSym f.name) "(" params ") {\n" body "}\n"))
+    (str head "(" params ") {\n" body "}\n"))
 
 fn listBuilderNames -> (List String)
   (list "prelude.map" "prelude.filter")
@@ -1926,13 +1990,15 @@ fn emitCaptureInline i: Int64 -> String
          "  " p " = phi %Val [ " p ".fastval, %" lbl ".fast ], [ " p ".slowval, %" lbl ".slow ]\n"))
 
 fn emitTrampoline f: ty/SsaFunction -> String
-  (emitTrampolineAs f (str "define internal %Val " (codeSym f.name)) "  %result = ")
+  (emitTrampolineAs f (str "define internal %Val " (codeSym f.name)) "  %result = " f.retTy (fnSym f.name))
 
-fn emitTailTrampoline f: ty/SsaFunction -> String
-  (emitTrampolineAs f (str "define internal tailcc %Val " (tailCodeSym f.name))
-                    (if (= (ty/ssaAbiName f.retTy) (ty/ssaAbiName (ty/tyVal))) "  %result = musttail " "  %result = "))
+fn emitTailTrampoline menv: ModEnv f: ty/SsaFunction -> String
+  (if (nameIndexHas? menv.boxed f.name)
+    (emitTrampolineAs f (str "define internal tailcc %Val " (tailCodeSym f.name)) "  %result = musttail " (ty/tyVal) (valSym f.name))
+    (emitTrampolineAs f (str "define internal tailcc %Val " (tailCodeSym f.name))
+                      (if (= (ty/ssaAbiName f.retTy) (ty/ssaAbiName (ty/tyVal))) "  %result = musttail " "  %result = ") f.retTy (fnSym f.name)))
 
-fn emitTrampolineAs f: ty/SsaFunction head: String lhs: String -> String
+fn emitTrampolineAs f: ty/SsaFunction head: String lhs: String retTy: ty/SsaTy sym: String -> String
   (let [(caps (listLength f.captures))
         (n (listLength f.params))
         (capLines (stringJoin (map emitCaptureInline (range 0 caps)) ""))
@@ -1944,7 +2010,7 @@ fn emitTrampolineAs f: ty/SsaFunction head: String lhs: String -> String
                               (map (fn [(i Int64)] -> String (str "arg" i)) (range 0 n))))]
     (str head "(%Val %env, i64 %argc, ptr %argv) {\nbb.entry:\n"
          capLines argLines
-         (tailCall lhs "result" f.retTy f.name callArgs (signatureTypes f))
+         (tailCallSym lhs "result" retTy sym callArgs (signatureTypes f))
          "  ret %Val %result\n}\n"))
 
 fn allOps m: ty/SsaModule -> (List ty/SsaOp)
@@ -2021,6 +2087,60 @@ fn trappingFunctions m: ty/SsaModule -> (List String)
                                                   (_ false))) f.blocks)))
                      (hasStaticFieldRead? f)))
                m.functions))
+
+; (:m :ref TCO-CLOSURE-ABI :do "a function returning raw i1, i64 or f64 whose tail calls reach a closure call (a Val closure call unboxed before the return) is boxed: besides its raw body it gets a clone over the Val ABI, @name.val, in which every such tail call is musttail; tail calls from Val bodies and closure tail trampolines go to .val, so recursion through a function value runs in constant stack while ordinary callers keep the raw body at no cost; other modules see only the raw body")
+fn boxableAbi? t: ty/SsaTy -> Bool
+  (listContains? (list "i1" "i64" "f64") (ty/ssaAbiName t))
+
+fn probeEnv menv: ModEnv f: ty/SsaFunction -> FnEnv
+  (FnEnv :mod menv :defs (nameIndexEmpty)
+         :blocks (fold (fn [(acc NameIndex) (b ty/SsaBlock)] -> NameIndex (nameIndexSet acc b.label b)) (nameIndexEmpty) f.blocks)
+         :order f.blocks :retTy (ty/tyVal) :name f.name :fused (nameIndexEmpty) :records (nameIndexEmpty) :wants (nameIndexEmpty) :preds (nameIndexEmpty)
+         :size (listLength f.blocks))
+
+fn rawCallee? env: FnEnv callee: String -> Bool
+  (and (not (stringContains? callee "sysRoute."))
+       (mt (nameIndexGet env.mod.functions callee) ((some g) (boxableAbi? g.retTy)) ((none) false)))
+
+fn boxSeed? env: FnEnv b: ty/SsaBlock -> Bool
+  (let [(span (tailSpan env b))]
+    (and (> span 0)
+         (mt (listGet b.instrs (- (listLength b.instrs) span))
+           ((some call) (mt call.op ((ty/opCallClosure _ _) true) (_ false)))
+           ((none) false))))
+
+fn rawTailCallees env: FnEnv f: ty/SsaFunction -> (List String)
+  (fold (fn [(acc (List String)) (b ty/SsaBlock)] -> (List String)
+          (mt (lastInstr b)
+            ((some ins) (mt ins.op
+                          ((ty/opCall callee _) (if (and (rawCallee? env callee) (returnsDest? env b ins.dest)) (cons callee acc) acc))
+                          (_ acc)))
+            ((none) acc)))
+        (list) f.blocks)
+
+fn boxClose callers: NameIndex work: (List String) done: NameIndex -> NameIndex
+  (mt (listHead work)
+    ((none) done)
+    ((some n) (let [(rest (optionOr (listTail work) (list)))]
+                (if (nameIndexHas? done n)
+                  (boxClose callers rest done)
+                  (boxClose callers (listAppend (optionOr (nameIndexGet callers n) (list)) rest) (nameIndexSet done n true))))))
+
+fn boxedBodies menv: ModEnv m: ty/SsaModule -> NameIndex
+  (let [(scan (map (fn [(f ty/SsaFunction)] -> (Pair String (Pair Bool (List String)))
+                     (let [(env (probeEnv menv f))]
+                       (pair f.name (pair (listAny? (fn [(b ty/SsaBlock)] -> Bool (boxSeed? env b)) f.blocks) (rawTailCallees env f)))))
+                   (filter (fn [(f ty/SsaFunction)] -> Bool (boxableAbi? f.retTy)) m.functions)))
+        (callers (fold (fn [(acc NameIndex) (s (Pair String (Pair Bool (List String))))] -> NameIndex
+                         (fold (fn [(a NameIndex) (g String)] -> NameIndex (nameIndexSet a g (cons (pairFirst s) (optionOr (nameIndexGet a g) (list)))))
+                               acc (pairSecond (pairSecond s))))
+                       (nameIndexEmpty) scan))
+        (seeds (map (fn [(s (Pair String (Pair Bool (List String))))] -> String (pairFirst s)) (filter (fn [(s (Pair String (Pair Bool (List String))))] -> Bool (pairFirst (pairSecond s))) scan)))]
+    (boxClose callers seeds (nameIndexEmpty)))
+
+fn boxedEnv menv: ModEnv m: ty/SsaModule -> ModEnv
+  (ModEnv :name menv.name :functions menv.functions :externs menv.externs :types menv.types :strings menv.strings :records menv.records
+          :boxed (boxedBodies menv m))
 
 fn closureTargets m: ty/SsaModule -> (List String)
   (distinct (gather (fn [(op ty/SsaOp)] -> (List String) (mt op ((ty/opMakeClosure callee _) (list callee)) (_ (list)))) (allOps m)))
@@ -2183,7 +2303,8 @@ fn moduleEnv m: ty/SsaModule -> ModEnv
           :externs (fold (fn [(acc NameIndex) (e ty/SsaExtern)] -> NameIndex (nameIndexSet acc e.name e)) (nameIndexEmpty) m.externs)
           :types (fold (fn [(acc NameIndex) (d ty/SsaTypeDecl)] -> NameIndex (nameIndexSet acc d.name d.variants)) (nameIndexEmpty) m.types)
           :strings (pairSecond (fold (fn [(acc (Pair Int64 NameIndex)) (s String)] -> (Pair Int64 NameIndex) (pair (+ (pairFirst acc) 1) (nameIndexSet (pairSecond acc) (stringFromInt64 (pairFirst acc)) s))) (pair 0 (nameIndexEmpty)) m.strings))
-          :records (fold (fn [(acc NameIndex) (r ty/SsaRecordDecl)] -> NameIndex (nameIndexSet acc r.name r.fields)) (nameIndexEmpty) m.records))
+          :records (fold (fn [(acc NameIndex) (r ty/SsaRecordDecl)] -> NameIndex (nameIndexSet acc r.name r.fields)) (nameIndexEmpty) m.records)
+          :boxed (nameIndexEmpty))
 
 fn rtFormatBuiltin? name: String -> Bool
   (or (= name "str") (= name "print") (= name "println") (= name "eprintln")
@@ -2231,14 +2352,15 @@ fn emitFormatBuiltin dest: String name: String args: (List String) arr: String -
 
 fn errorBuiltin? name: String n: Int64 -> Bool
   (or (and (= name "trap") (= n 2))
-      (and (or (= name "assert") (= name "refute")) (and (>= n 1) (<= n 2))))
+      (and (or (= name "assert") (= name "refute")) (and (>= n 1) (<= n 3))))
 
 fn emitErrorBuiltin lhs: String dest: String name: String args: (List String) -> String
   (let [(a0 (val (optionOr (listGet args 0) "")))
-        (message (mt (listGet args 1) ((some m) (val m)) ((none) "zeroinitializer")))]
+        (message (mt (listGet args 1) ((some m) (val m)) ((none) "zeroinitializer")))
+        (site (mt (listGet args 2) ((some s) (val s)) ((none) "zeroinitializer")))]
     (if (= name "trap")
       (str lhs "call %Val @rterr.trap(%Val " a0 ", %Val " message ")\n")
-      (str "  call void @rterr." name "(%Val " a0 ", %Val " message ")\n"
+      (str "  call void @rterr." name "(%Val " a0 ", %Val " message ", %Val " site ")\n"
            lhs "insertvalue %Val { i64 0, i64 0 }, i64 0, 1\n")))
 
 fn mathBuiltin? name: String n: Int64 -> Bool
@@ -2984,11 +3106,11 @@ fn formatHelpers -> (List String)
               (fmt/rtFormatTerminalLlvm))
 
 fn emitDefinitionsRooted m: ty/SsaModule entryCalls: String rooted: Bool fieldIds: (List String) -> (List String)
-  (let [(menv (moduleEnv m))
+  (let [(menv (boxedEnv (moduleEnv m) m))
         (framed (map (fn [(f ty/SsaFunction)] -> String (if (and (not rooted) (listBuilder? f)) (listBuilderText f) (emitFunctionRooted menv f rooted))) m.functions))
         (fns (if (listAny? (fn [(t String)] -> Bool (stringContains? t "@asl_gc_shadow_top")) framed) (cons (shadowTopDecl) framed) framed))
         (targets (closureTargets m))
-        (tramps (map (fn [(f ty/SsaFunction)] -> String (str (emitTrampoline f) (emitTailTrampoline f))) (filter (fn [(f ty/SsaFunction)] -> Bool (listContains? targets f.name)) m.functions)))
+        (tramps (map (fn [(f ty/SsaFunction)] -> String (str (emitTrampoline f) (emitTailTrampoline menv f))) (filter (fn [(f ty/SsaFunction)] -> Bool (listContains? targets f.name)) m.functions)))
         (resolvers (map (fn [(t String)] -> String (emitVariantIdsInit menv t)) (switchTypes m)))
         (fieldResolvers (map emitFieldIdInit fieldIds))
         (ctorResolvers (map emitCtorIdInit (constructedVariants m)))
@@ -3017,7 +3139,7 @@ fn valueExports defs: (List String) -> (List String)
   (let [(text (stringJoin defs "\n"))
         (keys (rterr/refKeys text))]
     (filter (fn [(piece String)] -> Bool (pieceAbsent? keys text piece))
-            (exportDefinitions (valrt/rtValueExportRoots) (stringContains? text "call %Val @asl_rt_builtin_"))))
+            (exportDefinitions (valrt/rtValueExportRoots) false)))
 
 fn pieceAbsent? keys: (Map String Bool) text: String piece: String -> Bool
   (let [(trimmed (stringTrim piece))]
@@ -3106,12 +3228,12 @@ fn nativeBuiltin? name: String n: Int64 -> Bool
       (or (mathBuiltin? name n)
           (or (seqBuiltin? name n)
               (or (opsrt/opsBuiltin? name n)
-                  (or (rtFormatBuiltin? name) (some? (builtinTableSym name))))))))
+                  (rtFormatBuiltin? name))))))
 
 fn nativeEntryCall? name: String n: Int64 -> Bool
   (or (some? (nativeEntry name n))
       (or (formatEntryName? name)
-          (or (some? (ty/builtinEntry name n)) (some? (builtinTableSym name)))))
+          (some? (ty/builtinEntry name n))))
 
 fn unsupportedBuiltin op: ty/SsaOp -> (Option String)
   (mt op
@@ -3124,7 +3246,7 @@ fn builtinDiags m: ty/SsaModule -> (List ty/IrDiag)
           (fold (fn [(a (List ty/IrDiag)) (b ty/SsaBlock)] -> (List ty/IrDiag)
                   (fold (fn [(d (List ty/IrDiag)) (ins ty/SsaInstr)] -> (List ty/IrDiag)
                           (mt (unsupportedBuiltin ins.op)
-                            ((some what) (listAppend d (list (ty/makeIrDiag "ERR_LOWER_UNSUPPORTED" (str "builtin " what " has no native definition") f.name))))
+                            ((some what) (listAppend d (list (ty/makeIrDiag "ERR_LOWER_UNSUPPORTED" (str "builtin " what " has no native definition" (if (routedOnly? ins.op) "; it is native only through sysRoute, sysNet or parRoute, for a triple libc.asl has facts for" "")) f.name))))
                             ((none) d)))
                         a b.instrs))
                 acc f.blocks))

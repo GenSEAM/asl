@@ -1,6 +1,6 @@
 (module asl-cli/nativeBuild
-  :x [Build main link! partsOf]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/prelude/native/sha256 :a sh) (tools/fleet/run :a run) (asl/packages/asl-cli/src/irSplit :a ir)])
+  :x [Build main link! compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! transientFailure?]
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir)])
 
 (schema Build
   (:f root String)
@@ -58,6 +58,10 @@ fn lastLines text: String -> String
   (let [(lines (stringLines (stringTrim text)))]
     (stringJoin (listDrop lines (max 0 (- (listLength lines) 20))) "\n"))
 
+; (:m :ref NATIVECLI-STICKY-FAIL-20261018 :do "owner-gone/deadline (child!, compileParts!'s own ad hoc message) and timeout/runaway/spawnFailed (run/Done.verdict, via failure) are transient infrastructure causes, never a compiler diagnostic; only an 'exited N' message (failure's d.verdict = exit branch) reflects the compiler itself running and rejecting the input, which is the one case safe to cache and replay under the input digest. transientFailure? names every other message shape this module ever produces, by the fixed substrings failure/compileParts! always write for a non-exit verdict, so compile!'s .failed marker is written only for a deterministic failure")
+fn transientFailure? why: String -> Bool
+  (or (stringContains? why " was killed: ") (stringContains? why " did not run: "))
+
 fn failure what: String d: run/Done -> String
   (if (= d.verdict "exit")
     (str what " exited " (stringFromInt64 d.exit) ": " (lastLines d.out))
@@ -85,7 +89,7 @@ fn ! setup! root: String cacheDir: String owner: String -> (Result (Pair Build S
         ((err e) (err e))
         ((ok machine)
           (let [(triple (seedTriple machine))]
-            (mt (mt (fileRead (str root "/asl/seed/seed.asn")) ((err e) (none)) ((ok text) (seedRow text triple)))
+            (mt (mt (fileReadString (str root "/asl/seed/seed.asn")) ((err e) (none)) ((ok text) (seedRow text triple)))
               ((none) (err (str "no seed for " triple " in asl/seed/seed.asn")))
               ((some row)
                 (mt (firstLine! start (list (clang!) "--version"))
@@ -112,7 +116,7 @@ fn ! writeParts! ll: String parts: (List (Pair Int64 String)) -> (Result (List S
                     ((ok rest) (ok (cons path rest)))))))))
 
 fn ! partsOf ll: String n: Int64 -> (Result (List String) String)
-  (mt (fileRead ll)
+  (mt (fileReadString ll)
     ((err e) (err (str "cannot read " ll ": " e)))
     ((ok text) (mt (ir/split text n)
       ((err e) (err (str "cannot split " ll ": " e)))
@@ -146,6 +150,117 @@ fn ! link! b: Build ll: String out: String -> (Result String String)
                                                    (linkWith! b objs ll out)))))))))]
     (do (say! (str "asl: native build: link " (sys/baseName ll) " " (stringFromInt64 (/ (- (monotonicNs) start) 1000000)) " ms"))
         linked))
+
+fn ! sanitizeFlags -> (List String)
+  (list "-O0" "-g" "-fno-omit-frame-pointer" "-fsanitize=address,undefined")
+
+fn ! linkWithFlags! b: Build inputs: (List String) lib: String out: String sanitize: Bool label: String -> (Result String String)
+  (let [(opt (if sanitize (sanitizeFlags) (list "-O2")))
+        (d (child! b (listAppend (cons (clang!) opt) (listAppend inputs (list lib "-lm" "-o" out)))))]
+    (if (passed? d) (ok out) (err (failure (str "clang link of " label (if sanitize " under ASan" "")) d))))
+
+fn ! linkSanitized! b: Build ll: String lib: String out: String sanitize: Bool -> (Result String String)
+  (linkWithFlags! b (list "-Wno-override-module" "-x" "ir" ll "-x" "none") lib out sanitize (sys/baseName ll))
+
+fn ! emitLl! b: Build asl1: String src: String out: String -> (Result String String)
+  (let [(d (child! b (list asl1 "build" src "-o" out)))]
+    (if (passed? d) (ok out) (err (failure (str asl1 " build " src) d))))
+
+fn ! compileObj! b: Build ll: String obj: String -> (Result String String)
+  (let [(d (child! b (list (clang!) "-O2" "-Wno-override-module" "-c" "-x" "ir" ll "-o" obj)))]
+    (if (passed? d) (ok obj) (err (failure (str "clang -c of " ll) d))))
+
+fn ! arPack! b: Build out: String objs: (List String) -> (Result String String)
+  (let [(d (child! b (listAppend (list "ar" "rcs" out) objs)))]
+    (if (passed? d) (ok out) (err (failure (str "ar " out) d))))
+
+fn ! buildEmitter! b: Build asl1: String src: String tmp: String name: String -> (Result String String)
+  (let [(ll (str tmp "/" name "Emitter.ll")) (bin (str tmp "/" name "Emitter"))]
+    (mt (emitLl! b asl1 src ll)
+      ((err e) (err e))
+      ((ok _) (linkSanitized! b ll b.lib bin false))))
+
+fn ! runEmitter! b: Build bin: String out: String extra: (List String) -> (Result String String)
+  (let [(d (child! b (cons bin (cons out extra))))]
+    (if (passed? d) (ok out) (err (failure (str bin " " out) d))))
+
+fn ! emitModuleObj! b: Build asl1: String src: String tmp: String name: String extra: (List String) -> (Result String String)
+  (mt (buildEmitter! b asl1 src tmp name)
+    ((err e) (err e))
+    ((ok bin)
+      (let [(ll (str tmp "/" name ".ll")) (obj (str tmp "/" name ".o"))]
+        (mt (runEmitter! b bin ll extra)
+          ((err e) (err e))
+          ((ok _) (compileObj! b ll obj))))))
+
+fn ! emitObjs! b: Build asl1: String tmp: String specs: (List (Pair (Pair String String) (List String))) -> (Result (List String) String)
+  (mt (listHead specs)
+    ((none) (ok (list)))
+    ((some spec)
+      (let [(loc (pairFirst spec)) (src (pairFirst loc)) (name (pairSecond loc)) (extra (pairSecond spec))]
+        (mt (emitModuleObj! b asl1 src tmp name extra)
+          ((err e) (err e))
+          ((ok obj) (mt (emitObjs! b asl1 tmp (optionOr (listTail specs) (list)))
+            ((err e) (err e))
+            ((ok rest) (ok (cons obj rest)))))))))
+
+fn ! asanRuntimeKey! b: Build packagesDir: String -> (Result String String)
+  (variantKey! b packagesDir "asan")
+
+fn ! variantKey! b: Build packagesDir: String variant: String -> (Result String String)
+  (mt (shaOf (str packagesDir "/asl-target-llvm/src/gcRoute.asl"))
+    ((err e) (err e))
+    ((ok s1) (mt (shaOf (str packagesDir "/asl-target-llvm/src/rtAbi.asl"))
+      ((err e) (err e))
+      ((ok s2) (mt (shaOf (str packagesDir "/asl-target-llvm/src/rtFloor.asl"))
+        ((err e) (err e))
+        ((ok s3) (ok (sh/bytesSha256 (stringToBytes (str b.clangVersion "\n" variant "\n" s1 "\n" s2 "\n" s3))))))))))
+
+fn ! asanRuntime! b: Build asl1: String packagesDir: String -> (Result String String)
+  (variantRuntime! b asl1 packagesDir "asan" (list) (list "asan"))
+
+fn ! notraceRuntime! b: Build asl1: String packagesDir: String -> (Result String String)
+  (variantRuntime! b asl1 packagesDir "notrace" (list "notrace") (list))
+
+fn ! clearDir! dir: String -> (Result Unit String)
+  (mt (dirList dir)
+    ((err e) (err (str "cannot list " dir ": " e)))
+    ((ok names)
+      (let [(left (filter (fn [(n String)] -> Bool (err? (pathRemove (str dir "/" n)))) names))]
+        (cond
+          ((not (listEmpty? left)) (err (str "cannot remove " dir "/" (optionOr (listHead left) ""))))
+          (else (mt (pathRemove dir)
+            ((err e) (err (str "cannot remove " dir ": " e)))
+            ((ok _) (ok ()))))))))
+
+fn ! packVariant! b: Build asl1: String tmp: String specs: (List (Pair (Pair String String) (List String))) variant: String dir: String lib: String -> (Result String String)
+  (mt (emitObjs! b asl1 tmp specs)
+    ((err e) (err e))
+    ((ok objs) (mt (arPack! b (str tmp "/libaslrt-" variant ".a") objs)
+      ((err e) (err e))
+      ((ok built) (mt (dirCreate dir)
+        ((err e) (err (str "cannot create " dir ": " e)))
+        ((ok _) (mt (pathRename built lib)
+          ((err e) (err (str "cannot install " lib ": " e)))
+          ((ok _) (ok lib)))))))))
+
+fn ! variantRuntime! b: Build asl1: String packagesDir: String variant: String gcExtra: (List String) abiExtra: (List String) -> (Result String String)
+  (mt (variantKey! b packagesDir variant)
+    ((err e) (err e))
+    ((ok key)
+      (let [(dir (str b.cache "/rt-" variant "-" key)) (lib (str dir "/libaslrt-" variant ".a"))]
+        (if (sys/isFile? lib) (ok lib)
+          (let [(tmp (str b.tmp "/rt-" variant "." (stringFromInt64 (procSelf))))
+                (specs (list (pair (pair (str packagesDir "/asl-target-llvm/src/gcRoute.asl") "gcAsl") gcExtra)
+                             (pair (pair (str packagesDir "/asl-target-llvm/src/rtAbi.asl") "rtAbi") abiExtra)
+                             (pair (pair (str packagesDir "/asl-target-llvm/src/rtFloor.asl") "rtFloor") (list))))]
+            (mt (dirCreate tmp)
+              ((err e) (err (str "cannot create " tmp ": " e)))
+              ((ok _)
+                (let [(built (packVariant! b asl1 tmp specs variant dir lib))]
+                  (mt (clearDir! tmp)
+                    ((err e) (mt built ((err first) (err (str first "; " e))) ((ok _) (err e))))
+                    ((ok _) built))))))))))
 
 fn ! seed! b: Build row: String -> (Result String String)
   (let [(file (optionOr (seedField row "file") ""))
@@ -184,7 +299,7 @@ fn ! depsOf! b: Build compiler: String entry: String extra: (List String) -> (Re
                       (filter (fn [(n String)] -> Bool (stringEndsWith? n ".asl")) (resultOr (dirList (str b.root "/asl/prelude/native")) (list)))))]
     (if (not (passed? d))
       (err (failure (str compiler " deps " entry) d))
-      (mt (fileRead out)
+      (mt (fileReadString out)
         ((err e) (err (str "cannot read " out ": " e)))
         ((ok text) (ok (distinct (listAppend (cons entry (cons "asl/prelude/prelude.asl" (map (fn [(l String)] -> String (rootRelative prefixes (stringTrim l)))
                                                                                          (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringLines text)))))
@@ -228,7 +343,7 @@ fn ! compile! b: Build name: String compiler: String tag: String entry: String d
         (built (child! b (list compiler "build" entry "-o" ll)))
         (_ (say! (str "asl: native build: build " entry " " (stringFromInt64 (/ (- (monotonicNs) start) 1000000)) " ms")))
         (failed (fn [(why String)] -> (Result String String)
-                  (do (fileWrite (str dir ".failed") (str why "\n")) (err why))))]
+                  (do (if (transientFailure? why) (ok ()) (fileWrite (str dir ".failed") (str why "\n"))) (err why))))]
     (cond
       ((= built.verdict "exit") (if (= built.exit 0)
                                   (mt (link! b ll (str b.tmp "/" name ".bin"))
@@ -237,15 +352,21 @@ fn ! compile! b: Build name: String compiler: String tag: String entry: String d
                                   (failed (failure (str compiler " build " entry) built))))
       (else (err (failure (str compiler " build " entry) built)))))
 
+; (:m :ref NATIVECLI-STICKY-FAIL-20261018 :do "a .failed marker written before this fix (or by another process) can itself carry a transient-shaped message; a marker whose own stored text is transient is read as absent, not replayed, and is removed so it is not re-parsed on every later call")
 fn ! stage! b: Build name: String compiler: String tag: String entry: String extra: (List String) -> (Result String String)
   (mt (depsOf! b compiler entry extra)
     ((err e) (err e))
     ((ok deps) (mt (keyOf! b b.root tag entry deps)
       ((err e) (err e))
-      ((ok key) (let [(dir (str b.cache "/" name "-" key))]
+      ((ok key) (let [(dir (str b.cache "/" name "-" key))
+                       (marker (str dir ".failed"))
+                       (markerPresent (sys/isFile? marker))
+                       (markerText (if markerPresent (stringTrim (resultOr (fileReadString marker) "")) ""))
+                       (stuckTransient (and markerPresent (transientFailure? markerText)))
+                       (cleared (if stuckTransient (pathRemove marker) (ok ())))]
                   (cond
                     ((sys/executable? (str dir "/bin")) (ok dir))
-                    ((sys/isFile? (str dir ".failed")) (err (str "an earlier build of " entry " with key " key " failed: " (stringTrim (resultOr (fileRead (str dir ".failed")) "")))))
+                    ((and markerPresent (not stuckTransient)) (err (str "an earlier build of " entry " with key " key " failed: " markerText)))
                     (else (do (say! (str "asl: native build: " entry " with " (sys/baseName (sys/parentOf compiler))))
                               (compile! b name compiler tag entry dir deps key)))))))))
 
@@ -265,7 +386,7 @@ fn ! build! root: String cacheDir: String owner: String -> (Result String String
           ((err e) (err e))
           ((ok seedBin) (mt (stage! b "asl1" seedBin (sys/baseName (sys/parentOf seedBin)) "asl/packages/asl-compiler/src/asl1.asl" (list))
             ((err e) (err e))
-            ((ok stage1) (let [(asl1Deps (stringLines (stringTrim (resultOr (fileRead (str stage1 "/deps")) ""))))]
+            ((ok stage1) (let [(asl1Deps (stringLines (stringTrim (resultOr (fileReadString (str stage1 "/deps")) ""))))]
               (mt (stage! b "cli" (str stage1 "/bin") (sys/baseName stage1) "asl/packages/asl-cli/src/native.asl"
                           (listAppend asl1Deps (list "asl/host/out/libaslrt.a" "asl/seed/seed.asn")))
                 ((err e) (err e))
@@ -278,7 +399,7 @@ fn flagValue args: (List String) flag: String -> (Option String)
 
 fn ! releaseLock! cacheDir: String owner: String -> Bool
   (let [(lock (str cacheDir "/lock"))
-        (held (stringTrim (resultOr (fileRead (str lock "/pid")) "")))]
+        (held (stringTrim (resultOr (fileReadString (str lock "/pid")) "")))]
     (if (and (not (stringEmpty? held)) (or (= held (stringFromInt64 (procSelf))) (= held owner))) (ok? (pathRemove lock)) false))
 
 fn ! main args: (List String) -> (Result Int64 String)
@@ -289,7 +410,7 @@ fn ! main args: (List String) -> (Result Int64 String)
         (pid (stringFromInt64 (procSelf)))]
     (cond
       ((stringEmpty? root) (do (say! "usage: nativeBuild ROOT [CACHE] [--if-cold] [--lock-owner PID]") (ok 2)))
-      ((and (listContains? args "--if-cold") (let [(head (stringTrim (resultOr (fileRead (nc/headPath cacheDir root)) "")))] (and (nc/fresh? root head) (nc/probe? root head)))) (ok 0))
+      ((and (listContains? args "--if-cold") (let [(head (stringTrim (resultOr (fileReadString (nc/headPath cacheDir root)) "")))] (and (nc/fresh? root head) (nc/probe? root head)))) (ok 0))
       ((and (not (stringEmpty? owner)) (or (<= (optionOr (stringToInt64 owner) 0) 1) (not (nc/alive? (optionOr (stringToInt64 owner) 0))))) (do (releaseLock! cacheDir owner) (ok 1)))
       (else
         (let [(_ (say! (str "asl: native build pid " pid " started for " root)))

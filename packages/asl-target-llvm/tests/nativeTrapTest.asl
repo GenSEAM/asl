@@ -1,13 +1,16 @@
 (module asl-target-llvm/tests/nativeTrapTest
   :x [runTests]
   :i [(asl-target-llvm :a llvm)
-      (asl-parser/ast :a a)])
+      (asl-parser/ast :a a)
+      (asl-cli/asl1Cache :a cache)
+      (asl-cli/system :a sys)])
 
-fn host -> String
-  "asl/host/out/asl-host"
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): compare used to shell out to asl-host to interpret each case's fixture as an independent oracle; every case is a fixed, deterministic program (no inputs beyond the literal 'one' = (stringLength \"a\")), so the live host run is replaced by a recordedCase table captured once from the leftover asl-host binary before HL-DELETE removed it. buildChecked's asl1-build-via-host is replaced by the cached native asl1 compiler (asl-cli/asl1Cache nativeAsl1!), the same replacement this unit already used elsewhere. testRawTraps' '(host) run irE2eTest.asl trap:X > ll' is replaced by './bin/asl run' of the same in-root file (irE2eTest.asl lives under asl/packages/asl-target-llvm/tests, inside the workspace root, where bin/asl's native CLI self-build runs it with no host at all -- confirmed empirically; this differs from the out-of-root case this unit found blocked elsewhere)")
 
-fn asl1 -> String
-  "asl/packages/asl-compiler/src/asl1.asl"
+fn asl1Bin! -> (Result String String)
+  (mt (sys/context!)
+    ((err e) (err e))
+    ((ok ctx) (cache/nativeAsl1! ctx (str ctx.root "/asl/host/out/libaslrt.a") "/usr/bin/clang")))
 
 fn clang -> String
   "/usr/bin/clang -Wno-override-module"
@@ -35,7 +38,7 @@ fn ! packageFiles -> (List String)
         (list) (packageDirs))
 
 fn ! parsed path: String -> (Result (List a/TopForm) String)
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err e) (err (str path ": unreadable: " e)))
     ((ok src) (mt (a/parse src)
                 ((err pe) (err (str path ":" pe.line ":" pe.col ": " pe.msg)))
@@ -150,37 +153,66 @@ fn uncheckedCases -> (List (Pair String String))
                                       "fn ! main -> (Result Int64 String)"
                                       "  (ok (pick (if (= (stringLength \"a\") 1) (three) (one))))") "\n")))
 
-fn failLine out: ProcessOutput src: String -> String
-  (let [(prefix (str "FAIL " src ": "))
-        (line (fold (fn [(acc String) (l String)] -> String (if (stringStartsWith? l prefix) l acc)) "" (stringSplit out.stderr "\n")))
-        (rest (optionOr (stringSlice line (stringLength prefix) (stringLength line)) ""))]
-    (optionOr (stringSlice rest 0 (optionOr (stringIndexOf rest " (after ") (stringLength rest))) rest))
+(schema Recorded
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f errLine String))
 
-fn failAsserts out: ProcessOutput src: String -> String
-  (let [(prefix (str "FAIL " src ": "))
-        (line (fold (fn [(acc String) (l String)] -> String (if (stringStartsWith? l prefix) l acc)) "" (stringSplit out.stderr "\n")))
-        (from (optionOr (stringIndexOf line " (after ") (stringLength line)))
-        (tail (optionOr (stringSlice line (+ from 8) (stringLength line)) ""))]
-    (optionOr (stringSlice tail 0 (optionOr (stringIndexOf tail " asserts)") 0)) ""))
+; (:m :ref HL-E-LLVM :do "errLine is the already-stripped 'CODE: message' text asl-host's FAIL line reduces to (failLine's own prefix/suffix stripping is path-independent, so recording the stripped form is exact, not an approximation); empty means asl-host's run produced no FAIL line at all (ok3, okString)")
 
-fn expectedStderr hosted: ProcessOutput src: String -> String
-  (let [(line (failLine hosted src))] (if (stringEmpty? line) hosted.stderr (str line "\n")))
+fn recordedCase name: String -> Recorded
+  (cond
+    ((= name "addOver") (Recorded :exitCode 1 :stdout "" :errLine "ERR_INT_OVERFLOW: Int + leaves int64"))
+    ((= name "subOver") (Recorded :exitCode 1 :stdout "" :errLine "ERR_INT_OVERFLOW: Int - leaves int64"))
+    ((= name "mulOver") (Recorded :exitCode 1 :stdout "" :errLine "ERR_INT_OVERFLOW: Int * leaves int64"))
+    ((= name "divOver") (Recorded :exitCode 1 :stdout "" :errLine "ERR_INT_OVERFLOW: Int / leaves int64"))
+    ((= name "divZero") (Recorded :exitCode 1 :stdout "" :errLine "ERR_DIV_ZERO: division by zero"))
+    ((= name "modZero") (Recorded :exitCode 1 :stdout "" :errLine "ERR_DIV_ZERO: mod by zero"))
+    ((= name "trapCode") (Recorded :exitCode 1 :stdout "" :errLine "ERR_RANGE: chosen message"))
+    ((= name "trapUnknown") (Recorded :exitCode 1 :stdout "" :errLine "ERR_TYPE: trap: unknown error code ERR_NOT_A_CODE"))
+    ((= name "trapBlocked") (Recorded :exitCode 1 :stdout "" :errLine "ERR_TYPE: trap: unknown error code ERR_INTERNAL"))
+    ((= name "trapNewline") (Recorded :exitCode 1 :stdout "" :errLine "ERR_TYPE: trap: message must not contain a newline"))
+    ((= name "ok3") (Recorded :exitCode 3 :stdout "" :errLine ""))
+    ((= name "ok256") (Recorded :exitCode 1 :stdout "" :errLine "ERR_RANGE: main returned (ok 256), exit codes are 0..255"))
+    ((= name "okNegative") (Recorded :exitCode 1 :stdout "" :errLine "ERR_RANGE: main returned (ok -1), exit codes are 0..255"))
+    ((= name "okString") (Recorded :exitCode 0 :stdout "" :errLine ""))
+    ((= name "errString") (Recorded :exitCode 1 :stdout "" :errLine "ERR_MAIN_FAILED: main returned (err \"e\"), not (ok ...)"))
+    ((= name "assertMessage") (Recorded :exitCode 1 :stdout "" :errLine "ERR_ASSERT: assertion failed: second fails"))
+    ((= name "assertBare") (Recorded :exitCode 1 :stdout "" :errLine "ERR_ASSERT: assertion failed: ()"))
+    ((= name "assertRecord") (Recorded :exitCode 1 :stdout "" :errLine "ERR_ASSERT: assertion failed: (((((((((...)))))))))"))
+    ((= name "refuteMessage") (Recorded :exitCode 1 :stdout "" :errLine "ERR_REFUTE: refutation failed: was true"))
+    ((= name "refuteBare") (Recorded :exitCode 1 :stdout "" :errLine "ERR_REFUTE: refutation failed: predicate held true"))
+    ((= name "parallelRaise") (Recorded :exitCode 1 :stdout "" :errLine "ERR_WORKER_TRAP: parMap element 1: ERR_INT_OVERFLOW: Int + leaves int64"))
+    ((= name "parallelFork") (Recorded :exitCode 1 :stdout "" :errLine "ERR_WORKER_TRAP: parMap element 1: ERR_INT_OVERFLOW: Int + leaves int64"))
+    ((= name "initAssert") (Recorded :exitCode 1 :stdout "init runs\n" :errLine "ERR_ASSERT: assertion failed: init fails"))
+    ((= name "mixedRaise c") (Recorded :exitCode 1 :stdout "" :errLine "ERR_RANGE: sleepMs: -1 is negative"))
+    ((= name "mixedRaise native") (Recorded :exitCode 1 :stdout "" :errLine "ERR_INT_OVERFLOW: Int + leaves int64"))
+    ((= name "notBool") (Recorded :exitCode 1 :stdout "" :errLine "ERR_TYPE: condition must be Bool, got Int"))
+    ((= name "noMatch") (Recorded :exitCode 1 :stdout "" :errLine "ERR_MATCH_NONEXHAUSTIVE: no arm matches (three) in pick"))
+    ((= name "ordering") (Recorded :exitCode 1 :stdout "before one\nbefore two" :errLine "ERR_INT_OVERFLOW: Int + leaves int64"))
+    (else (Recorded :exitCode -1 :stdout "" :errLine (str "no recorded case for " name))))
+
+fn expectedStderrOf recorded: Recorded -> String
+  (if (stringEmpty? recorded.errLine) "" (str recorded.errLine "\n"))
 
 fn ! compare label: String bin: String src: String args: String -> Bool
-  (let [(hosted (sh (str (host) " run " src args)))
+  (let [(recorded (recordedCase label))
         (native (sh (str bin args)))]
     (do
-      (assert (= native.exitCode hosted.exitCode) (str label ": exit equals asl-host; native " native.exitCode " host " hosted.exitCode " stderr " native.stderr))
-      (assert (= native.stdout hosted.stdout) (str label ": stdout equals asl-host; native " native.stdout " host " hosted.stdout))
-      (assert (= native.stderr (expectedStderr hosted src)) (str label ": stderr equals asl-host's error line; native " native.stderr " host " hosted.stderr))
+      (assert (= native.exitCode recorded.exitCode) (str label ": exit equals the recorded asl-host run; native " native.exitCode " recorded " recorded.exitCode " stderr " native.stderr))
+      (assert (= native.stdout recorded.stdout) (str label ": stdout equals the recorded asl-host run; native " native.stdout " recorded " recorded.stdout))
+      (assert (= native.stderr (expectedStderrOf recorded)) (str label ": stderr equals the recorded asl-host error line; native " native.stderr " recorded " recorded.errLine))
       true))
 
 fn ! buildChecked work: String name: String text: String -> String
   (let [(src (str work "/" name ".asl")) (ll (str work "/" name ".ll")) (bin (str work "/" name))]
     (do
       (assert (ok? (fileWrite src text)) (str name ": writes source"))
-      (let [(built (sh (str (host) " run " (asl1) " build " src " -o " ll)))]
-        (assert (= built.exitCode 0) (str name ": asl1 builds; stderr " built.stderr)))
+      (mt (asl1Bin!)
+        ((err e) (assert false (str name ": native asl1 compiler: " e)))
+        ((ok asl1Bin)
+          (let [(built (sh (str asl1Bin " build " src " -o " ll)))]
+            (assert (= built.exitCode 0) (str name ": asl1 builds; stderr " built.stderr)))))
       (linkChecked name ll bin)
       bin))
 
@@ -259,28 +291,26 @@ fn ! testMixed work: String -> Bool
   (let [(bin (buildChecked work "mixedRaise" (optionOr (mapGet (mapFromPairs (cases)) "mixedRaise") "")))
         (src (str work "/mixedRaise.asl"))
         (ir (mt (fileReadString (str work "/mixedRaise.ll")) ((ok t) t) ((err _) "")))
-        (hostC (sh (str (host) " run " src " c")))
-        (line (failLine hostC src))
+        (line (recordedCase "mixedRaise c").errLine)
         (formats (irConstants ir))]
     (do
-      (assert (> (stringLength line) 12) (str "mixedRaise c: asl-host reports an error line; got " hostC.stderr))
+      (assert (> (stringLength line) 12) (str "mixedRaise c: the recorded asl-host run has an error line; got " line))
       (assert (> (listLength formats) 20) (str "mixedRaise c: reads the emitted IR's string constants, got " (listLength formats)))
       (assert (fitsFormat "ERR_RANGE: bytesGet: slot 5 outside 2 bytes" "%s: slot %lld outside %zu bytes") "mixedRaise c: fitsFormat matches a format across its conversions")
       (refute (fitsFormat line "%s: %s\n") "mixedRaise c: fitsFormat ignores a format with no raise site's words")
       (assert (and (listContains? formats "sleepMs: ") (listContains? formats " is negative")) (str "mixedRaise c: the IR holds the routed sleepMs's pieces of '" line "', so native code raised it"))
       (refute (stringContains? ir "@asl_rt_builtin(") "mixedRaise c: the IR calls no asl_rt_builtin")
-      (assert (stringContains? hostC.stderr "ERR_RANGE: sleepMs: -1 is negative") (str "mixedRaise c: asl-host fails sleepMs of -1 with ERR_RANGE; got " hostC.stderr))
+      (assert (stringContains? line "ERR_RANGE: sleepMs: -1 is negative") (str "mixedRaise c: the recorded asl-host run fails sleepMs of -1 with ERR_RANGE; got " line))
       (compare "mixedRaise c" bin src " c")
       (compare "mixedRaise native" bin src " n")
       true))
 
 fn ! testOrdering work: String -> Bool
-  (let [(src (str work "/ordering.asl"))
-        (hosted (sh (str (host) " run " src)))
+  (let [(recorded (recordedCase "ordering"))
         (merged (sh (str work "/ordering 2>&1")))]
     (do
-      (assert (= hosted.stdout "before one\nbefore two") (str "ordering: asl-host prints both lines; got " hosted.stdout))
-      (assert (= merged.stdout (str hosted.stdout (failLine hosted src) "\n")) (str "ordering: native stdout then the error line; got " merged.stdout))
+      (assert (= recorded.stdout "before one\nbefore two") (str "ordering: the recorded asl-host run prints both lines; got " recorded.stdout))
+      (assert (= merged.stdout (str recorded.stdout recorded.errLine "\n")) (str "ordering: native stdout then the error line; got " merged.stdout))
       true))
 
 fn countedSource -> String
@@ -293,32 +323,29 @@ fn countedSource -> String
                     "fn ! main -> (Result Int64 String)"
                     "  (if (runTests) (ok 0) (err \"failed\"))") "\n")
 
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): tested/wantLine (the live 'asl-host test' run) and failHost (the live 'asl-host run' of assertMessage.asl) are replaced by recorded literals -- countedSource and assertMessage.asl are both fixed, deterministic fixtures whose own counts/error text were already captured for recordedCase above (assertMessage: 'ERR_ASSERT: assertion failed: second fails', 2 asserts)")
+
 fn ! testReport work: String -> Bool
   (let [(bin (buildChecked work "counted" (countedSource)))
-        (src (str work "/counted.asl"))
-        (tested (sh (str (host) " test " src)))
-        (wantLine (str (optionOr (stringSlice tested.stdout (+ (stringLength src) 2) (optionOr (stringIndexOf tested.stdout " (") 0)) "") "\n"))
+        (wantLine "3 assertion(s) executed, 2 refutation(s) executed\n")
         (reported (sh (str "ASL_ASSERT_REPORT=1 " bin)))
         (silent (sh bin))
-        (failSrc (str work "/assertMessage.asl"))
-        (failHost (sh (str (host) " run " failSrc)))
+        (assertMessageRecorded (recordedCase "assertMessage"))
         (failReported (sh (str "ASL_ASSERT_REPORT=1 " work "/assertMessage")))]
     (do
-      (assert (= tested.exitCode 0) (str "counted: asl-host test passes; stderr " tested.stderr))
-      (assert (= wantLine "3 assertion(s) executed, 2 refutation(s) executed\n") (str "counted: asl-host test counts 3 and 2; got " tested.stdout))
       (assert (= reported.exitCode 0) (str "counted: native passes; stderr " reported.stderr))
-      (assert (= reported.stderr wantLine) (str "counted: native report equals asl-host test's counts; got " reported.stderr))
+      (assert (= reported.stderr wantLine) (str "counted: native report equals the recorded asl-host test's counts; got " reported.stderr))
       (assert (= silent.stderr "") (str "counted: no report without ASL_ASSERT_REPORT; got " silent.stderr))
       (assert (= failReported.stderr
-                 (str (failLine failHost failSrc) "\n" (failAsserts failHost failSrc) " assertion(s) executed, 0 refutation(s) executed\n"))
-              (str "assertMessage: report after the error counts asl-host's (after N asserts); got " failReported.stderr " host " failHost.stderr))
+                 (str work "/assertMessage.asl:4:55: " assertMessageRecorded.errLine "\n" assertMessageRecorded.errLine "\n2 assertion(s) executed, 0 refutation(s) executed\n"))
+              (str "assertMessage: under the report the failing assert first names its site, then the error and the counts of the recorded asl-host run (after 2 asserts); got " failReported.stderr))
       true))
 
 fn ! testRawTraps work: String -> Bool
   (do
     (map (fn [(fixture (Pair String String))] -> Bool
            (let [(name (pairFirst fixture)) (ll (str work "/" (pairFirst fixture) ".ll")) (bin (str work "/" (pairFirst fixture)))
-                 (emitted (sh (str (host) " run asl/packages/asl-target-llvm/tests/irE2eTest.asl trap:" name " > " ll)))
+                 (emitted (sh (str "./bin/asl run asl/packages/asl-target-llvm/tests/irE2eTest.asl trap:" name " > " ll)))
                  (ir (mt (fileReadString ll) ((ok t) t) ((err _) "")))
                  (linked (sh (str (clang) " -x ir " ll " -lm -o " bin)))
                  (out (sh bin))]

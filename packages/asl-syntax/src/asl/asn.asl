@@ -53,13 +53,24 @@
   (:c asnRows [(name String) (rows (List AsnValue))])
   (:c asnTable [(cols (List AsnValue)) (rows (List AsnValue))])
   (:c asnCase [(name String) (args (List AsnValue))])
-  (:c asnPair [(key AsnValue) (val AsnValue)]))
+  (:c asnPair [(key AsnValue) (val AsnValue)])
+  (:c asnTagged [(tag String) (fields (List AsnField)) (children (List AsnValue))])
+  (:c asnTuple [(items (List AsnValue))]))
 
 fn valueOk? v: AsnValue -> Bool
   (mt v
+    (_ true))
+
+fn standaloneOk? v: AsnValue -> Bool
+  (mt v
     ((asnSym _) false)
     ((asnPair _ _) false)
-    (_ true))
+    (_ (valueOk? v)))
+
+fn vectorValueOk? v: AsnValue -> Bool
+  (mt v
+    ((asnSym name) (wellFormedSym? name))
+    (_ (valueOk? v)))
 
 fn isVec? v: AsnValue -> Bool
   (mt v
@@ -240,6 +251,8 @@ fn wChildren v: AsnValue -> (List WItem)
     ((asnTable cs rs) (list (wVal (asnVec cs)) (wVal (asnVec rs))))
     ((asnCase n args) (cons (wText n) (wVals args)))
     ((asnPair k val) (list (wVal k) (wVal val)))
+    ((asnTagged tag fs children) (cons (wText tag) (listAppend (wFields fs) (wVals children))))
+    ((asnTuple items) (wVals items))
     (_ (list)))
 
 fn wSeparated items: (List WItem) -> (List WItem)
@@ -285,6 +298,7 @@ fn isLower? c: String -> Bool
 (enum HeadKind
   (:c headType [])
   (:c headCase [])
+  (:c headTag [])
   (:c headBad []))
 
 fn allCharsIn? s: String allowed: String -> Bool
@@ -299,7 +313,7 @@ fn kebabOk? s: String -> Bool
        (and (isLower? (firstChar s))
             (and (not (stringContains? s "--"))
                  (and (not (stringEndsWith? s "-"))
-                      (allCharsIn? s "abcdefghijklmnopqrstuvwxyz0123456789-")))))
+                      (allCharsIn? s "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-")))))
 
 fn stripIdentSuffix s: String -> String
   (if (or (stringEndsWith? s "?") (stringEndsWith? s "!"))
@@ -314,10 +328,18 @@ fn typeNameOk? s: String -> Bool
        (and (isUpper? (firstChar s))
             (allCharsIn? s "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")))
 
+fn screamingOk? s: String -> Bool
+  (and (not (stringEmpty? s))
+       (and (isUpper? (firstChar s))
+            (and (not (stringContains? s "--"))
+                 (and (not (stringEndsWith? s "-"))
+                      (allCharsIn? s "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")))))
+
 fn bareHeadKind s: String -> HeadKind
   (cond
     ((typeNameOk? s) (headType))
     ((identOk? s) (headCase))
+    ((screamingOk? s) (headTag))
     (else (headBad)))
 
 fn partAt parts: (List String) i: Int64 -> String
@@ -333,11 +355,16 @@ fn headKind name: String -> HeadKind
          (headBad)))
       (else (headBad))))
 
+fn wellFormedSym? name: String -> Bool
+  (mt (headKind name)
+    ((headBad) false)
+    (_ true))
+
 fn nthValue items: (List AsnValue) i: Int64 -> AsnValue
   (mt (listGet items i) ((some v) v) ((none) (asnNil)))
 
-fn allValues? items: (List AsnValue) -> Bool
-  (listEmpty? (filter (fn [(v AsnValue)] -> Bool (not (valueOk? v))) items))
+fn allVectorValues? items: (List AsnValue) -> Bool
+  (listEmpty? (filter (fn [(v AsnValue)] -> Bool (not (vectorValueOk? v))) items))
 
 fn allVectors? items: (List AsnValue) -> Bool
   (listEmpty? (filter (fn [(v AsnValue)] -> Bool (not (isVec? v))) items))
@@ -372,7 +399,39 @@ fn buildRecord items: (List AsnValue) -> (Result AsnValue String)
      (if (listEmpty? fs)
        (err "parse")
        (ok (asnRec fs))))
-    ((err c) (err c)))
+    ((err _) (buildTagged items)))
+
+fn tagFieldsAndChildren items: (List AsnValue) fieldsAcc: (List AsnField) childrenAcc: (List AsnValue) -> (Result (Pair (List AsnField) (List AsnValue)) String)
+  (mt (listHead items)
+    ((none) (ok (pair (listReverse fieldsAcc) (listReverse childrenAcc))))
+    ((some h)
+     (let [(tail (optionOr (listTail items) (list)))]
+       (mt h
+         ((asnKw key)
+          (mt (listHead tail)
+            ((some v)
+             (if (vectorValueOk? v)
+               (tagFieldsAndChildren (optionOr (listTail tail) (list)) (cons (AsnField :key key :val v) fieldsAcc) childrenAcc)
+               (err "parse")))
+            ((none) (err "parse"))))
+         (_ (if (vectorValueOk? h)
+              (tagFieldsAndChildren tail fieldsAcc (cons h childrenAcc))
+              (err "parse")))))))
+
+fn buildTagged items: (List AsnValue) -> (Result AsnValue String)
+  (mt (listHead items)
+    ((none) (err "parse"))
+    ((some h)
+     (mt h
+       ((asnKw tag)
+        (let [(rest (optionOr (listTail items) (list)))]
+          (if (listEmpty? rest)
+            (err "parse")
+            (mt (tagFieldsAndChildren rest (list) (list))
+              ((ok fc) (ok (asnTagged tag (pairFirst fc) (pairSecond fc))))
+              ((err c) (err c))))))
+       (_ (err "parse")))))
+
 
 fn buildSchemaHead name: String rest: (List AsnValue) -> (Result AsnValue String)
   (mt (listHead rest)
@@ -381,12 +440,13 @@ fn buildSchemaHead name: String rest: (List AsnValue) -> (Result AsnValue String
      (mt h
        ((asnVec _) (if (allVectors? rest) (ok (asnRows name rest)) (err "parse")))
        ((asnKw _) (mt (fieldsOf rest (list)) ((ok fs) (ok (asnCtor name fs))) ((err c) (err c))))
-       (_ (err "parse")))))
+       (_ (if (allVectorValues? rest) (ok (asnCase name rest)) (err "parse"))))))
 
 fn buildNamed name: String rest: (List AsnValue) -> (Result AsnValue String)
   (mt (headKind name)
     ((headType) (buildSchemaHead name rest))
-    ((headCase) (if (allValues? rest) (ok (asnCase name rest)) (err "parse")))
+    ((headCase) (if (allVectorValues? rest) (ok (asnCase name rest)) (err "parse")))
+    ((headTag) (buildTuple (cons (asnSym name) rest)))
     ((headBad) (err "parse")))
 
 fn buildTable items: (List AsnValue) -> (Result AsnValue String)
@@ -404,6 +464,11 @@ fn buildPair items: (List AsnValue) -> (Result AsnValue String)
       (if (valueOk? v)
         (ok (asnPair (nthValue items 0) v))
         (err "parse")))
+    (buildTuple items))
+
+fn buildTuple items: (List AsnValue) -> (Result AsnValue String)
+  (if (and (not (listEmpty? items)) (allVectorValues? items))
+    (ok (asnTuple items))
     (err "parse"))
 
 fn entriesOf items: (List AsnValue) acc: (List AsnEntry) -> (Result (List AsnEntry) String)
@@ -473,7 +538,7 @@ fn buildCstVector text: String kids: (List tr/TreeElement) -> (Result AsnValue S
   (let [(inner (dropFirstAndLast kids))]
     (mt (elementsToValues text inner (list))
       ((ok vals)
-       (if (allValues? vals)
+       (if (allVectorValues? vals)
          (ok (asnVec vals))
          (err "parse")))
       ((err e) (err e))))
@@ -517,7 +582,7 @@ fn buildCstList text: String kids: (List tr/TreeElement) -> (Result AsnValue Str
               ((asnStr _) (buildPair items))
               ((asnInt _) (buildPair items))
               ((asnBool _) (buildPair items))
-              (_ (err "parse"))))))
+              (_ (buildTuple items))))))
         ((err e) (err e)))))
 
 fn nodeToAsnValue text: String node: tr/Node -> (Result AsnValue String)
@@ -554,7 +619,7 @@ fn asnRead text: String -> (Result AsnValue String)
             ((none) (err "parse"))
             ((some form)
              (mt (cstToAsnValue text form)
-               ((ok v) (if (valueOk? v) (ok v) (err "parse")))
+               ((ok v) (if (standaloneOk? v) (ok v) (err "parse")))
                ((err e) (err e)))))))))
 
 fn asnReadForms text: String -> (Result (List AsnValue) String)

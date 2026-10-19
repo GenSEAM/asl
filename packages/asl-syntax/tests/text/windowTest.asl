@@ -193,6 +193,14 @@ fn testGeneratedLogExportedFunctions! scratchDir: String -> Bool
         (_ (assert (err? aWinMissing) "readWindowedAnchor missing file returns err"))]
     true)
 
+fn probeSource name: String read: String -> String
+  (str "(module " name "\n  :x [main]\n  :i [])\n\nfn ! main args: (List String) -> (Result Int64 String)\n  (let [(path (optionOr (listHead args) \"\"))]\n    (mt " read "\n      ((ok bs) (ok (if (> (bytesLength bs) 0) 0 1)))\n      ((err e) (err e))))\n")
+
+fn ! peakRss! bin: String arg: String -> Int64
+  (let [(cmd (str "sh -c 'if /usr/bin/time -l true >/dev/null 2>&1; then /usr/bin/time -l " bin " " arg " 2>&1 >/dev/null | awk \"/maximum resident set size/{print \\$1}\"; else /usr/bin/time -v " bin " " arg " 2>&1 >/dev/null | awk \"/Maximum resident set size/{print \\$6 * 1024}\"; fi'"))
+        (r (processRun cmd))]
+    (if (= r.exitCode 0) (optionOr (stringToInt64 (stringTrim r.stdout)) 0) 0))
+
 fn test50MbLogGate! scratchDir: String -> Bool
   (let [(bigPath (str scratchDir "/big_50mb.log"))
         (genCmd (str "yes '2026-09-26T05:30:00.000Z [INFO] worker-pool-42 task executed successfully with status 200 ok!! 12ms' | head -c 52428800 > " bigPath))
@@ -224,13 +232,17 @@ fn test50MbLogGate! scratchDir: String -> Bool
         (winRange50MbOob (win/readWindowedRange! bigPath 600000 600010 200 12000 65536))
         (_ (assert (err? winRange50MbOob) "readWindowedRange on 50 MB log out-of-range is err"))
         (hostBin (run/legacyHost!))
-        (rssCmd (str "sh -c 'if /usr/bin/time -l true >/dev/null 2>&1; then /usr/bin/time -l " hostBin " eval \"(fileReadRange \\\"" bigPath "\\\" 25000000 4096)\" 2>&1 | awk \"/maximum resident set size/{print \\$1}\"; else /usr/bin/time -v " hostBin " eval \"(fileReadRange \\\"" bigPath "\\\" 25000000 4096)\" 2>&1 | awk \"/Maximum resident set size/{print \\$6 * 1024}\"; fi'"))
-        (rssRun (processRun rssCmd))
-        (_ (assert (= rssRun.exitCode 0) "rss measurement command executed cleanly"))
-        (rssOut (stringTrim rssRun.stdout))
-        (rssBytes (optionOr (stringToInt64 rssOut) 0))
+        (windowProbe (str scratchDir "/windowProbe"))
+        (wholeProbe (str scratchDir "/wholeProbe"))
+        (_ (assert (ok? (fileWrite (str windowProbe ".asl") (probeSource "windowProbe" "(fileReadRange path 25000000 4096)"))) "window probe source written"))
+        (_ (assert (ok? (fileWrite (str wholeProbe ".asl") (probeSource "wholeProbe" "(fileReadBytes path)"))) "whole-file probe source written"))
+        (_ (assert (= (run/runOneLimited (run/job (list hostBin "build" (str windowProbe ".asl") "-o" windowProbe) "." (run/childEnv (list))) (run/limits 300 8)).exit 0) "window probe builds unmeasured, so the RSS below is the program's and not the compiler's"))
+        (_ (assert (= (run/runOneLimited (run/job (list hostBin "build" (str wholeProbe ".asl") "-o" wholeProbe) "." (run/childEnv (list))) (run/limits 300 8)).exit 0) "whole-file probe builds"))
+        (rssBytes (peakRss! windowProbe bigPath))
+        (wholeBytes (peakRss! wholeProbe bigPath))
         (_ (assert (> rssBytes 0) "measured peak RSS is positive"))
         (_ (assert (< rssBytes 15728640) "peak RSS below 2x window count bound (< 15 MB, whole-file > 50 MB)"))
+        (_ (assert (> wholeBytes 52428800) "the whole-file read of the same log peaks above 50 MB, so the meter sees the program's own reads"))
         (rmRes (processRun (str "rm -f " bigPath)))
         (_ (assert (= rmRes.exitCode 0) "50 MB log cleaned up"))]
     true)

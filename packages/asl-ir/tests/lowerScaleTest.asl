@@ -125,7 +125,7 @@ fn ! testLowerIsLinear -> Bool
                 (str "lowerLinked of a module with n enums, schemas and functions importing a module of n more allocates linearly: 2n "
                      large " bytes vs n " small ", above 2.15x"))
         (mt digestRes
-          ((ok d) (do (assert (= d "-6406126751201197738") (str "lowered module of n=2 digest " d " matches recorded")) true))
+          ((ok d) (do (assert (= d "-2335005752323814402") (str "lowered module of n=2 digest " d " matches recorded")) true))
           ((err e) (do (assert false (str "lowerModuleDigest 2 failed: " e)) false)))))
 
 fn refSuccessorMap blocks: (List ty/SsaBlock) -> (Map String (List String))

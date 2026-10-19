@@ -418,7 +418,7 @@ fn generateAstSchema forms: (List a/TopForm) -> (Result String String)
     ((ok j) (ok (str (prettyJson j 0) "\n"))))
 
 fn generateAstSchemaFromAstFile! path: String -> (Result String String)
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err e) (err (str "Could not read " path ": " e)))
     ((ok src)
      (mt (a/parse src)

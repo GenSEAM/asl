@@ -230,9 +230,11 @@ fn rtErrorValueLlvm -> (List String)
   (listAppend (textConstants (valueCodes) (valueMessages)) (list
     "@rterr.assertCount = weak global i64 0"
     "@rterr.refuteCount = weak global i64 0"
+    "@rterr.siteReport = weak global i1 false"
     (cText "@.rterr.ok" "ok")
     (cText "@.rterr.reportEnv" "ASL_ASSERT_REPORT")
     (str "@.rterr.reportLine = private unnamed_addr constant [" (+ (stringLength (reportText)) 2) " x i8] c\"" (reportText) "\\0A\\00\"")
+    "@.rterr.siteFormat = private unnamed_addr constant [12 x i8] c\"%s: %s: %s\\0A\\00\""
     (str "@.rterr.trapCodes = private unnamed_addr constant [" (listLength (rtErrorTrapCodes)) " x ptr] ["
          (stringJoin (map (fn [(c String)] -> String (str "ptr " (codeSym c))) (rtErrorTrapCodes)) ", ") "]")
     ""
@@ -350,7 +352,7 @@ fn rtErrorValueLlvm -> (List String)
     "  unreachable"
     "}"
     ""
-    "define internal void @rterr.assert(%Val %c, %Val %m) {"
+    "define internal void @rterr.assert(%Val %c, %Val %m, %Val %site) {"
     "entry:"
     "  %word = extractvalue %Val %c, 0"
     "  %tag = trunc i64 %word to i32"
@@ -371,10 +373,11 @@ fn rtErrorValueLlvm -> (List String)
     "fail:"
     "  %shown = call %Val @asl_rt_format_val(%Val %m, i32 0, i32 8)"
     "  %shownText = call ptr @rterr.text(%Val %shown)"
+    (str "  call void @rterr.siteLine(%Val %site, ptr " (codeSym "ERR_ASSERT") ", ptr " (msgSym "assertFailed") ", ptr %shownText)")
     (raiseText "ERR_ASSERT" "assertFailed" "%shownText")
     "}"
     ""
-    "define internal void @rterr.refute(%Val %c, %Val %m) {"
+    "define internal void @rterr.refute(%Val %c, %Val %m, %Val %site) {"
     "entry:"
     "  %word = extractvalue %Val %c, 0"
     "  %tag = trunc i64 %word to i32"
@@ -398,11 +401,40 @@ fn rtErrorValueLlvm -> (List String)
     "  %bare = icmp eq i32 %mtag, 0"
     "  br i1 %bare, label %held.bare, label %held.message"
     "held.bare:"
+    (str "  call void @rterr.siteLine(%Val %site, ptr " (codeSym "ERR_REFUTE") ", ptr " (msgSym "refuteHeld") ", ptr null)")
     (raiseFixed "ERR_REFUTE" "refuteHeld")
     "held.message:"
     "  %shown = call %Val @asl_rt_format_val(%Val %m, i32 0, i32 8)"
     "  %shownText = call ptr @rterr.text(%Val %shown)"
+    (str "  call void @rterr.siteLine(%Val %site, ptr " (codeSym "ERR_REFUTE") ", ptr " (msgSym "refuteFailed") ", ptr %shownText)")
     (raiseText "ERR_REFUTE" "refuteFailed" "%shownText")
+    "}"
+    ""
+    "define internal void @rterr.siteLine(%Val %site, ptr %code, ptr %format, ptr %arg) {"
+    "entry:"
+    "  %msg = alloca [4096 x i8]"
+    "  %line = alloca [8192 x i8]"
+    "  %word = extractvalue %Val %site, 0"
+    "  %tag = trunc i64 %word to i32"
+    "  %named = icmp eq i32 %tag, 5"
+    "  %testing = load i1, ptr @rterr.siteReport"
+    "  %wanted = and i1 %named, %testing"
+    "  br i1 %wanted, label %check, label %done"
+    "check:"
+    "  %slot = call ptr @aslHandlerSlot()"
+    "  %handler = load ptr, ptr %slot"
+    "  %caught = icmp ne ptr %handler, null"
+    "  br i1 %caught, label %done, label %emit"
+    "emit:"
+    "  %where = call ptr @rterr.text(%Val %site)"
+    "  %shown = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %msg, i64 4096, ptr %format, ptr %arg)"
+    "  %written = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %line, i64 8192, ptr @.rterr.siteFormat, ptr %where, ptr %code, ptr %msg)"
+    "  %len = call i64 @strlen(ptr %line)"
+    "  %flushed = call i32 @fflush(ptr null)"
+    "  call void @rterr.writeAll(i32 2, ptr %line, i64 %len)"
+    "  br label %done"
+    "done:"
+    "  ret void"
     "}"
     ""
     "define internal void @rterr.report() {"
@@ -428,6 +460,7 @@ fn rtErrorValueLlvm -> (List String)
     "  br i1 %one, label %install, label %done"
     "install:"
     "  %rc = call i32 @atexit(ptr @rterr.report)"
+    "  store i1 true, ptr @rterr.siteReport"
     "  %uc = call i32 @unsetenv(ptr @.rterr.reportEnv)"
     "  %failed = icmp ne i32 %rc, 0"
     "  br i1 %failed, label %fail, label %done"

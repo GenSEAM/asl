@@ -2,20 +2,20 @@
 
 ASL modules for compiling ASL: the `asl1` driver that writes LLVM IR through `asl-target-llvm`, a C99 path through `asl-codegen`, a target dispatcher, a WebAssembly binary encoder, a reference tree-walking evaluator, and supporting passes (macros, constant folding, incremental queries, diagnostics with patch suggestions).
 
-- `asl1.asl`: `usage: asl1 build ENTRY -o OUT.ll | asl1 check ENTRY | asl1 deps ENTRY`. `build` calls `compilePackageToLlvm!` and writes LLVM IR. On 2026-10-14, `asl/host/out/asl-host run asl/packages/asl-compiler/src/asl1.asl build hello.asl -o hello.ll` wrote IR for a one-function program. `asl-target-llvm` lowers to native code and to `wasm32-unknown-unknown`; per the repository README, the self-hosted native `asl1` binary has a seed for `arm64-apple-darwin` only.
+- `asl1.asl`: `usage: asl1 build ENTRY -o OUT.ll [--rc 0|1|asan|notrace] | asl1 check ENTRY | asl1 deps ENTRY`. `build` calls `compilePackageToLlvm!` and writes LLVM IR. On 2026-10-14, `asl/host/out/asl-host run asl/packages/asl-compiler/src/asl1.asl build hello.asl -o hello.ll` wrote IR for a one-function program. `asl-target-llvm` lowers to native code and to `wasm32-unknown-unknown`; per the repository README, the self-hosted native `asl1` binary has a seed for `arm64-apple-darwin` only.
 - `compiler.asl`: `compileSourceToC99`, `compilePackageToC99!`, `compilePackageToLlvm!`, `formatDiagnostic`, capability checks. `targets.asl`: dispatch to the C99, C11 (`asl-target-c`), LLVM, Swift, Rust and shell backends.
 - `wasm.asl`: WebAssembly v1 binary encoding (LEB128, sections, opcodes) and an MVP lowering (`lowerAstExpr`) for integer arithmetic: integer and boolean constants, locals, `if`, `do`, arithmetic, comparison and logic operators, and calls (including the WASI `fd_write` and `proc_exit` imports). Any other form, strings and records included, lowers silently to the constant 0, and a bare top-level expression is rejected (`ERR_WASM_TOPLEVEL_EXPR`). `wasi.asl`: WASI preview 1 constants, import descriptors and capability checks.
 - `evaluator.asl`: tree-walking evaluator (`evalSexpr!`, environments, builtin groups). `checkCache.asl`: cached check verdicts for `asl1 check`.
 - `elf.asl`, `macho.asl`: ELF64 and Mach-O arm64 emitter sketches.
-- `diagnostics.asl`, `heal.asl`, `comptime.asl`, `salsa.asl`, `compactRewrite.asl`, `optFold.asl`, `vfsGit.asl`, `macro.asl`, `monad.asl`, `threadMacro.asl`, `tryMacro.asl`: diagnostics with patch suggestions, compile-time evaluation, incremental queries, rewrites, a git reader and macro expanders.
+- `diagnostics.asl`, `comptime.asl`, `salsa.asl`, `compactRewrite.asl`, `optFold.asl`, `vfsGit.asl`, `macro.asl`, `monad.asl`, `threadMacro.asl`, `tryMacro.asl`: diagnostics with patch suggestions, compile-time evaluation, incremental queries, rewrites, a git reader and macro expanders.
 
 `asl/host/out/asl-host` (the C host) is what checks, runs and tests ASL today; `asl-host build FILE -o OUT` embeds the checked module sources in an executable linked against the host and does not use this package.
 
-Module names use the prefix `asl-compiler/`; `manifest.asn` lists the same 20 modules. All 20 files in `src/` pass `asl/host/out/asl-host check` (2026-10-14).
+Module names use the prefix `asl-compiler/`; `manifest.asn` lists the same 18 modules. All 18 files in `src/` pass `asl/host/out/asl-host check` (2026-10-14).
 
 ## Modules and exports
 
-From the `:x` list in each module header under `src/` (2026-10-14): 20 modules, 258 exported names. Long lists are cut at 18 names; the header of each file has the full list.
+From the `:x` list in each module header under `src/` (2026-10-15, after asl-compiler/heal moved to asl-forms/heal): 18 modules. Long lists are cut at 18 names; the header of each file has the full list.
 
 - `asl-compiler/asl1` (`src/asl1.asl`, 2): `main`, `usage`.
 - `asl-compiler/checkCache` (`src/checkCache.asl`, 9): `Verdict`, `cacheDir!`, `verdictKey!`, `keyText`, `encodeVerdict`, `decodeVerdict`, `lookup!`, `store!`, `replay!`.
@@ -25,7 +25,6 @@ From the `:x` list in each module header under `src/` (2026-10-14): 20 modules, 
 - `asl-compiler/diagnostics` (`src/diagnostics.asl`, 10): `SelfHealingDiagnostic`, `makeSelfHealingDiagnostic`, `emitDiagnosticWithPatch`, `suggestMissingImportPatch`, `suggestMissingMatchBranchPatch`, `suggestTypeMismatchPatch`, `suggestMissingExportPatch`, `formatDiagnosticWithPatch`, `renderDiagnosticReceipt`, `parseDiagnosticReceipt`.
 - `asl-compiler/elf` (`src/elf.asl`, 13): `emitElf64`, `writeElfHeaders`, `elfSections`, `sysvAbi`, `hostLinuxAdapter`, `hostWindowsAdapter`, `hostWasiAdapter`, `normalizeWin32Path`, `qpcToNanoseconds`, `iocpRingInit`, `iocpRingPush`, `iocpRingPop`, `translateIocpEvent`.
 - `asl-compiler/evaluator` (`src/evaluator.asl`, 22): `EvalValue`, `EvalEnv`, `makeRootEnv`, `makeChildEnv`, `envLookup`, `envBind`, `evalAtom`, `evalBuiltinArithmetic`, `evalBuiltinComparison`, `evalBuiltinLogic`, `evalBuiltinString`, `evalBuiltinList`, `evalBuiltinIo!`, `evalBuiltinSys!`, `evalSpecialForm!`, `evalSexpr!`, `evalAssert`, `truthy?`, and 4 more.
-- `asl-compiler/heal` (`src/heal.asl`, 10): `HealTransactionResult`, `makeHealTransactionResult`, `RollbackJournalRecord`, `makeRollbackJournalRecord`, `createRollbackJournalEntry`, `canRetryHeal`, `synthesizeHealPatch`, `verifyHealPatchCandidate`, `applyHealTransaction`, `getPatchOpKind`.
 - `asl-compiler/macho` (`src/macho.asl`, 7): `emitMachoArm64`, `writeMachoHeaders`, `arm64Instructions`, `machoSections`, `hostDarwinAdapter`, `machTimeToNanoseconds`, `canonicalizePathDarwin`.
 - `asl-compiler/macro` (`src/macro.asl`, 7): `expandLetPair`, `expandIfLet`, `expandWhenLet`, `expandCond`, `expandCase`, `expandLetStar`, `expandPipe`.
 - `asl-compiler/monad` (`src/monad.asl`, 7): `optionMap`, `option-and-then`, `option-unwrap-or`, `resultMap`, `resultMapErr`, `result-and-then`, `result-unwrap-or`.
@@ -62,7 +61,6 @@ asl/host/out/asl-host test asl/packages/asl-compiler/tests/<file>.asl
 | `entryDirResolutionTest.asl` | pass | 7 assertions, 2 refutations |
 | `evaluatorTest.asl` | pass | 46 assertions, 40 refutations |
 | `evaluatorWasiTest.asl` | pass | 14 assertions, 9 refutations |
-| `healTest.asl` | pass | 15 assertions, 9 refutations |
 | `hostAdapterTest.asl` | pass | 52 assertions, 22 refutations |
 | `macroTest.asl` | pass | 27 assertions, 7 refutations |
 | `monadTest.asl` | pass | 21 assertions, 12 refutations |

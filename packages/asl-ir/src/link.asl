@@ -45,6 +45,11 @@ fn headerOf forms: (List ast/TopForm) -> (Option ast/ModuleNode)
 fn ! realOrSelf! path: String -> String
   (mt (realPath path) ((ok p) p) ((err _) path))
 
+fn ! rootRelative! path: String -> String
+  (mt (realPath ".")
+    ((ok root) (if (stringStartsWith? path (str root "/")) (optionOr (stringSlice path (+ (stringLength root) 1) (stringLength path)) path) path))
+    ((err _) path))
+
 fn ! resolveImports! importer: String path: String imps: (List (Pair String String)) acc: (List (Pair String String)) diags: (List ty/IrDiag) ix: r/ModIndex -> (Pair (Result (List (Pair String String)) (List ty/IrDiag)) r/ModIndex)
   (mt (listHead imps)
     ((none) (pair (if (listEmpty? diags) (ok (listReverse acc)) (err (listReverse diags))) ix))
@@ -56,7 +61,7 @@ fn ! resolveImports! importer: String path: String imps: (List (Pair String Stri
                       (if found
                         (resolveImports! importer path rest (cons (pair (importAlias imp) res.path) acc) diags res.index)
                         (resolveImports! importer path rest acc
-                          (cons (ty/makeIrDiag "ERR_LINK_UNRESOLVED_IMPORT" (str path " imports " (pairFirst imp) res.note) path) diags)
+                          (cons (ty/makeIrDiag "ERR_UNRESOLVED_IMPORT" (str path " imports " (pairFirst imp) res.note) path) diags)
                           res.index)))))))
 
 fn parseDiag pe: ast/ParseError locus: String -> ty/IrDiag
@@ -65,7 +70,7 @@ fn parseDiag pe: ast/ParseError locus: String -> ty/IrDiag
     (ty/makeIrDiag "ERR_LOWER_PARSE" pe.msg locus))
 
 fn ! readUnit! path: String ix: r/ModIndex -> (Pair (Result LinkUnit (List ty/IrDiag)) r/ModIndex)
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err _) (pair (err (list (ty/makeIrDiag "ERR_LINK_READ" (str "cannot read " path) path))) ix))
     ((ok src) (mt (ast/parse src)
                 ((err pe) (pair (err (list (parseDiag pe (str path ":" pe.line ":" pe.col)))) ix))
@@ -74,7 +79,7 @@ fn ! readUnit! path: String ix: r/ModIndex -> (Pair (Result LinkUnit (List ty/Ir
                               ((some m) (let [(resolved (resolveImports! (realOrSelf! path) path m.imports (list) (list) ix))]
                                           (pair (mt (pairFirst resolved)
                                                   ((err ds) (err ds))
-                                                  ((ok imports) (ok (LinkUnit :path path :name m.path :forms forms :positions (low/declPositions src) :imports imports))))
+                                                  ((ok imports) (ok (LinkUnit :path path :name m.path :forms forms :positions (low/sitedPositions (rootRelative! path) (low/declPositions src)) :imports imports))))
                                                 (pairSecond resolved)))))))))
 
 fn ! visitAll! st: LoadState paths: (List String) -> LoadState
@@ -177,7 +182,7 @@ fn nativeOverlayDir -> String
   "asl/prelude/native/"
 
 fn ! overlayTopForms! path: String -> (Result (List ast/TopForm) (List ty/IrDiag))
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err _) (err (list (ty/makeIrDiag "ERR_LINK_READ" (str "cannot read native overlay file " path) path))))
     ((ok src) (mt (ast/parse src)
                 ((err pe) (err (list (ty/makeIrDiag "ERR_LOWER_PARSE" pe.msg (str path ":" pe.line ":" pe.col)))))
@@ -472,6 +477,6 @@ fn lowerSourceWith src: String preludeSrc: String -> (Result ty/SsaModule (List 
   (lowerSourceAgainst src (preludeUnitOf preludeSrc))
 
 fn ! lowerSourceLinked! src: String -> (Result ty/SsaModule (List ty/IrDiag))
-  (lowerSourceAgainst src (mt (fileRead (preludePath))
+  (lowerSourceAgainst src (mt (fileReadString (preludePath))
                             ((ok text) (preludeUnitOf text))
                             ((err _) (err (list (ty/makeIrDiag "ERR_LINK_READ" (str "cannot read " (preludePath)) (preludePath)))))))

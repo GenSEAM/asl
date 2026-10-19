@@ -29,7 +29,7 @@ fn ! runTests -> Bool
         (env (listAppend (list (str "ASL_HOST_OUT=" work "/out") (str "ASL_HOST_CACHE_DIR=" work "/hosts") (str "ASL_NATIVE_RT=" root "/asl/host/out/libaslrt.a") (str "SNAP=" snap))
                (filter (fn [(row String)] -> Bool (not (or (stringStartsWith? row "ASL_HOST_") (or (stringStartsWith? row "ASL_NATIVE_") (stringStartsWith? row "SNAP="))))) (run/childEnv (list)))))
         (built (run/runOneLimited (run/job (list "/bin/sh" "-c" (sampler) "/bin/sh" (str root "/asl/host/build.sh")) root env) (run/limits 1200 64)))
-        (seen (map argv0 (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringLines (resultOr (fileRead snap) "")))))
+        (seen (map argv0 (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringLines (resultOr (fileReadString snap) "")))))
         (split (sh! root (list "/bin/sh" "-c" "mkdir -p \"$1/native\" \"$1/host\" && cd \"$1/native\" && ar x \"$1/out/libaslrt.a\" && cd \"$1/host\" && ar x \"$2\"" "split" work (str root "/asl/host/out/libaslrt.a"))))
         (equal (map (fn [(m String)] -> Bool (sameMember? (str work "/native") (str work "/host") m)) (members)))
         (cleaned (sh! root (list "/bin/rm" "-rf" work)))]

@@ -181,14 +181,17 @@ fn treeRows n: Node -> (List String)
 fn subst env: Env a: String -> String
   (stringReplace (stringReplace a "@ROOT" env.root) "@HOME" env.home)
 
+fn nativeCliCache! -> String
+  (optionOr (envGet "ASL_NATIVE_CLI_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli"))
+
 fn childEnv! env: Env -> (List String)
   (listAppend
     (filter (fn [r] (not (or (stringStartsWith? r "PATH=") (stringStartsWith? r "HOME=") (stringStartsWith? r "TMPDIR=") (stringStartsWith? r "LC_ALL=")
-                             (stringStartsWith? r "STUB_") (stringStartsWith? r "ASL_ROOT=") (stringStartsWith? r "ASL_HOST=")
+                             (stringStartsWith? r "STUB_") (stringStartsWith? r "ASL_ROOT=") (stringStartsWith? r "ASL_HOST=") (stringStartsWith? r "ASL_NATIVE_CLI_CACHE=")
                              (stringContains? (optionOr (listHead (stringSplit r "=")) "") "_API_KEY"))))
       (envList))
     (list (str "PATH=" env.sandbox "/stub/bin:/usr/bin:/bin:/usr/sbin:/sbin") (str "HOME=" env.home) (str "TMPDIR=" env.sandbox "/tmp")
-          "LC_ALL=C" (str "STUB_LOG=" env.sandbox "/stub/log") (str "STUB_STATE=" env.sandbox "/stub/state")))
+          "LC_ALL=C" (str "STUB_LOG=" env.sandbox "/stub/log") (str "STUB_STATE=" env.sandbox "/stub/state") (str "ASL_NATIVE_CLI_CACHE=" (nativeCliCache!))))
 
 fn stripSkillLines s: String -> String
   (dist/joinLines (filter (fn [l] (not (stringContains? l " install-skill"))) (dist/splitLines s)))
@@ -265,7 +268,7 @@ fn repoRoot! -> String
 
 fn hostPath! repo: String -> String
   (let [(envHost (optionOr (envGet "ASL_HOST") ""))]
-    (if (and (not (stringEmpty? envHost)) (dist/isExecutable! envHost)) envHost (str repo "/asl/host/out/asl-host")))
+    (if (and (not (stringEmpty? envHost)) (dist/isExecutable! envHost)) envHost (str repo "/bin/asl")))
 
 fn ! runTests -> Bool
   (let [(repo (repoRoot!))

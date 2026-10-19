@@ -2,9 +2,6 @@
   :x [runTests]
   :i [])
 
-fn host -> String
-  "asl/host/out/asl-host"
-
 fn runtime -> String
   "asl/host/out/libaslrt.a"
 
@@ -29,7 +26,7 @@ fn source count: String -> String
 fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)
 
-fn hostErrorLine out: ProcessOutput -> String
+fn errorLine out: ProcessOutput -> String
   (let [(text (str out.stdout out.stderr))
         (at (optionOr (stringIndexOf text "ERR_") (stringLength text)))
         (tail (optionOr (stringSlice text at (stringLength text)) ""))
@@ -37,35 +34,25 @@ fn hostErrorLine out: ProcessOutput -> String
         (line (optionOr (stringSlice tail 0 lineEnd) tail))]
     (optionOr (stringSlice line 0 (optionOr (stringIndexOf line " (after ") (stringLength line))) line))
 
-fn ! build work: String name: String count: String -> String
-  (let [(src (str work "/" name ".asl"))
-        (ll (str work "/" name ".ll"))]
+fn ! write! work: String name: String count: String -> String
+  (let [(src (str work "/" name ".asl"))]
     (do (assert (ok? (fileWrite src (source count))) (str name ": source written"))
-        (let [(built (sh (str (host) " run asl/packages/asl-compiler/src/asl1.asl build " src " -o " ll)))
-              (linked (sh (str "/usr/bin/clang -Wno-override-module -x ir " ll " -x none " (runtime) " -lm -o " work "/" name)))]
-          (do (assert (= built.exitCode 0) (str name ": asl1 builds it; " built.stderr))
-              (assert (= linked.exitCode 0) (str name ": links against libaslrt.a; " linked.stderr))
-              src))))
+        src))
 
 fn ! testFits work: String -> Bool
-  (let [(src (build work "floorFits" "1000"))
-        (native (sh (str (cap) work "/floorFits")))
-        (interp (sh (str (cap) (host) " run " src)))]
-    (do (assert (= interp.exitCode 0) (str "floorFits: asl-host run fits the cap; " interp.stdout interp.stderr))
-        (assert (= native.exitCode 0) (str "floorFits: native fits the cap; " native.stderr))
+  (let [(src (write! work "floorFits" "1000"))
+        (native (sh (str (cap) "bin/asl run " src)))]
+    (do (assert (= native.exitCode 0) (str "floorFits: native fits the cap; " native.stderr))
         (assert (= native.stdout "1000\n") (str "floorFits: native output; got " native.stdout))
-        (assert (= native.stdout interp.stdout) (str "floorFits: native output equals asl-host run; host " interp.stdout))
         true))
 
 fn ! testExhausts work: String -> Bool
-  (let [(src (build work "floorOom" "1000000"))
-        (native (sh (str (cap) work "/floorOom")))
-        (interp (sh (str (cap) (host) " run " src)))
-        (want (hostErrorLine interp))]
-    (do (assert (= interp.exitCode 1) (str "floorOom: asl-host run exit " interp.exitCode ", want 1; " interp.stdout interp.stderr))
-        (assert (stringStartsWith? want "ERR_OOM: ") (str "floorOom: asl-host reports ERR_OOM; got " want))
-        (assert (= native.exitCode interp.exitCode) (str "floorOom: native exit " native.exitCode " equals asl-host run exit " interp.exitCode))
-        (assert (= native.stderr (str want "\n")) (str "floorOom: native stderr is asl-host's error line " want "; got " native.stderr))
+  (let [(src (write! work "floorOom" "1000000"))
+        (native (sh (str (cap) "bin/asl run " src)))
+        (want (errorLine native))]
+    (do (assert (= native.exitCode 1) (str "floorOom: native run exit " (stringFromInt64 native.exitCode) ", want 1; " native.stdout native.stderr))
+        (assert (stringStartsWith? want "ERR_OOM: ") (str "floorOom: native reports ERR_OOM; got " want))
+        (assert (= native.stderr (str want "\n")) (str "floorOom: native's whole stderr is the error line " want "; got " native.stderr))
         (assert (= native.stdout "") (str "floorOom: native prints nothing before the error; got " native.stdout))
         true))
 
@@ -84,16 +71,18 @@ fn ! testFloorObject work: String member: String needs: String -> Bool
         (listed (sh (str "nm -u " obj)))
         (names (undefinedNames listed.stdout))]
     (do (assert (= extracted.exitCode 0) (str member ": extracted from libaslrt.a; " extracted.stderr))
-        (assert (= listed.exitCode 0) (str member ": nm -u exit " listed.exitCode "; " listed.stderr))
+        (assert (= listed.exitCode 0) (str member ": nm -u exit " (stringFromInt64 listed.exitCode) "; " listed.stderr))
         (assert (listContains? names needs) (str member ": nm -u lists " needs "; got " (stringJoin names " ")))
         (assert (= (filter (fn [(name String)] -> Bool (listContains? names name)) (valueErrorNames)) (list))
-          (str member ": no undefined reference to value.c's error machinery " (stringJoin (valueErrorNames) " ") "; got " (stringJoin names " ")))
+          (str member ": no undefined reference to value.c's old error machinery " (stringJoin (valueErrorNames) " ") "; got " (stringJoin names " ")))
         true))
 
 fn ! runTests -> Bool
-  (let [(made (sh "mktemp -d"))
-        (work (stringReplace made.stdout "\n" ""))]
-    (do (assert (= made.exitCode 0) "mktemp -d makes a work directory")
+  (let [(root (resultOr (realPath ".") "."))
+        (work (str root "/.asl/cache/floorRtTest/" (stringFromInt64 (procSelf))))
+        (fresh (sh (str "rm -rf " work)))
+        (made (dirCreate work))]
+    (do (assert (ok? made) "the work dir was created")
         (testFloorObject work "gcAsl.o" "mmap")
         (testFloorObject work "rtFloor.o" "write")
         (testFits work)

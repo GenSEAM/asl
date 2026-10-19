@@ -3,7 +3,7 @@
   :i [(asl-parser/ast :a a) (asl-checker/resolve :a r)])
 
 fn ! loadClosureFor entryFile: Str -> (Result (List r/ModuleSummary) Str)
-  (mt (fileRead entryFile)
+  (mt (fileReadString entryFile)
     ((err _) (err (str "Cannot read entry file: " entryFile)))
     ((ok src)
       (mt (a/parse src)
@@ -33,9 +33,7 @@ fn ! runTests -> Bool
           (assert (listContains? names "asl-compiler/compiler") "closure contains asl-compiler/compiler")
           (assert (listContains? names "asl-checker/check") "closure contains asl-checker/check")
           (assert (listContains? names "asl-parser/ast") "closure contains asl-parser/ast")
-          (refute (listContains? names "emitWat") "the WAT backend must not reach the self-hosting core")
           (refute (listContains? names "asl-target-swift/emitSwift") "swift backend must not reach the self-hosting core")
-          (refute (listContains? names "asl-target-rs/emitRust") "rust backend must not reach the self-hosting core")
           (assert (listEmpty? outsidePackages) (str "closure contains no module outside asl/packages, but found: " (stringJoin outsidePackages ", ")))
           (refute (listContains? names "thisModuleDoesNotExist") "refutation: invented module is not in closure")
           true))))

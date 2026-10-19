@@ -66,7 +66,7 @@ fn ! testCheck work: String -> Bool
         (assert (stringContains? checked.stderr (str bad ":4:4: [ERR_UNKNOWN_SYMBOL] unbound symbol: undefinedThing\n")) (str "asl1 check prints the checker diagnostic: " checked.stderr))
         (assert (= built.exitCode 1) (str "asl1 build on an unbound symbol exits 1, got " built.exitCode))
         (assert (stringContains? built.stderr "[rule-2] undefinedThing is not defined") (str "asl1 build prints the checker diagnostic: " built.stderr))
-        (assert (err? (fileRead (str work "/bad.ll"))) "asl1 build writes no .ll when there are diagnostics")
+        (assert (err? (fileReadString (str work "/bad.ll"))) "asl1 build writes no .ll when there are diagnostics")
         (assert (= noDocChecked.exitCode 0) (str "XPLATDOC: asl1 check exits 0 on an exported main with no :doc (rule-8 is a warning), got " (stringFromInt64 noDocChecked.exitCode) "; stderr: " noDocChecked.stderr))
         true))
 
@@ -115,7 +115,7 @@ fn ! testUsage -> Bool
         (depsBare (driver "deps"))]
     (do (map (fn [(out ProcessOutput)] -> Bool
                (do (assert (= out.exitCode 2) (str "a malformed command line exits 2, got " out.exitCode "; stderr: " out.stderr))
-                   (assert (= out.stderr "usage: asl1 build ENTRY -o OUT.ll | asl1 check ENTRY | asl1 deps ENTRY\n") (str "the usage line on stderr: " out.stderr))
+                   (assert (= out.stderr "usage: asl1 build ENTRY -o OUT.ll [--rc 0|1|asan|notrace] | asl1 check ENTRY | asl1 deps ENTRY\n") (str "the usage line on stderr: " out.stderr))
                    true))
              (list none noOut unknown depsBare))
         true))

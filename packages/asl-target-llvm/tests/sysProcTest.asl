@@ -8,11 +8,10 @@
       (asl-target-llvm/sysProc :a proc)
       (asl-target-llvm/libc :a libc)])
 
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): checkParity's single call site (label sysProc) used to run asl-host live and assert native.stdout/exitCode equal the host run's; captured once via the leftover host binary (exit 0, stdout byte-identical to procWant, 0 work-dir leakage), it turns out the captured stdout IS procWant verbatim (confirmed by diff, not assumed), so recordedVm below just returns procWant itself rather than a second copy of the same ~1.9KB literal. testProcFwd's host half (running the same fixture under asl-host, under the SIGTERM-forwarding harness) asserted vm equals the same hardcoded `want` literal that native is independently asserted against right below it, so it is dropped outright as tautological - native's own assertion against `want` is the one assertion that actually exercises the native code under test here")
+
 fn clang -> String
   "/usr/bin/clang -Wno-override-module"
-
-fn host -> String
-  "asl/host/out/asl-host"
 
 fn lib -> String
   "asl/host/out/libaslrt.a"
@@ -788,7 +787,7 @@ fn diagText ds: (List ty/IrDiag) -> String
   (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message)) ds) "; ")
 
 fn ! lowered name: String src: String -> (Option ty/SsaModule)
-  (let [(preludeText (resultOr (fileRead (lk/preludePath)) ""))]
+  (let [(preludeText (resultOr (fileReadString (lk/preludePath)) ""))]
     (do (assert (not (stringEmpty? preludeText)) (str (lk/preludePath) " is readable"))
         (mt (lk/lowerSourceWith src preludeText)
           ((err ds) (do (assert false (str name ": lowerSourceWith: " (diagText ds))) (none)))
@@ -813,11 +812,21 @@ fn ! checkIr label: String ll: String used: (List String) -> Bool
       (map (fn [(n String)] -> Bool (do (assert (stringContains? ll (wrapperDef n)) (str label ": IR defines the " n " wrapper internal")) true)) used)
       true)
 
-fn ! checkParity label: String bin: String src: String -> (Pair ProcessOutput ProcessOutput)
+(schema Recorded
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
+
+fn ! recordedVm label: String -> Recorded
+  (cond
+    ((= label "sysProc") (Recorded :exitCode 0 :stdout (procWant) :stderr ""))
+    (else (Recorded :exitCode -1 :stdout "" :stderr (str "no recorded case: " label))))
+
+fn ! checkParity label: String bin: String src: String -> (Pair ProcessOutput Recorded)
   (let [(native (sh (str (probeEnv) bin)))
-        (vm (sh (str (probeEnv) (host) " run " src)))]
-    (do (assert (= native.stdout vm.stdout) (str label ": native stdout equals asl-host run's; native=" native.stdout " vm=" vm.stdout " vm stderr=" vm.stderr))
-        (assert (= native.exitCode vm.exitCode) (str label ": native exit " native.exitCode " equals asl-host run's " vm.exitCode "; native stderr " native.stderr))
+        (vm (recordedVm label))]
+    (do (assert (= native.stdout vm.stdout) (str label ": native stdout equals the recorded asl-host run's; native=" native.stdout " vm=" vm.stdout " vm stderr=" vm.stderr))
+        (assert (= native.exitCode vm.exitCode) (str label ": native exit " native.exitCode " equals the recorded asl-host run's " vm.exitCode "; native stderr " native.stderr))
         (pair native vm)))
 
 fn procSource work: String -> String
@@ -1026,10 +1035,8 @@ fn ! fwdRun work: String tag: String cmd: String -> String
 
 fn ! testProcFwd work: String -> Bool
   (let [(want (lines (list "status=143" "fwd spawned" "term")))
-        (native (fwdRun work "fwdNative" (str work "/sysProc")))
-        (vm (fwdRun work "fwdVm" (str (host) " run " work "/sysProc.asl")))]
-    (do (assert (= vm want) (str "sysProc fwd: asl-host run forwards SIGTERM and dies by it: " vm))
-        (assert (= native want) (str "sysProc fwd: the native binary forwards SIGTERM and dies by it, as asl-host run: " native))
+        (native (fwdRun work "fwdNative" (str work "/sysProc")))]
+    (do (assert (= native want) (str "sysProc fwd: the native binary forwards SIGTERM and dies by it: " native))
         true))
 
 fn ! testProcLinux work: String facts: libc/TripleFacts arch: String -> Bool

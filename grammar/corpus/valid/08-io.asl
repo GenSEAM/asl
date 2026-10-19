@@ -1,7 +1,7 @@
 (module ioDemo :x [main])
 
 fn ! describe path: String -> String
-  (match (fileRead path) ((ok text) text) ((err e) (if (= e (notFound)) "missing" "unreadable")))
+  (match (fileReadString path) ((ok text) text) ((err e) (if (stringStartsWith? e "notFound") "missing" "unreadable")))
 
 fn ! copyAll paths: (List String) -> (List String)
   (map (fn [p] (describe p)) paths)

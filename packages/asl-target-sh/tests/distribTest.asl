@@ -152,8 +152,8 @@ fn resolveHost! -> String
         (statEnv (if (> (stringLength envHost) 0) (fileStat envHost) (err "none")))]
     (if (ok? statEnv)
       envHost
-      (resultOr (pathCanonicalize "asl/host/out/asl-host")
-                (resultOr (pathCanonicalize "host/out/asl-host") "asl/host/out/asl-host"))))
+      (resultOr (realPath "bin/asl")
+                (resultOr (realPath "host/out/asl") "bin/asl"))))
 
 
 fn testPortableEntry! -> Bool
@@ -205,7 +205,7 @@ fn testPortableEntry! -> Bool
               true))))))
 
 fn testAnswersAgainstRealCli! -> Bool
-  (let [(bin (resultOr (pathCanonicalize "bin/asl") "bin/asl"))
+  (let [(bin (resultOr (realPath "bin/asl") "bin/asl"))
         (home (optionOr (envGet "HOME") "/tmp"))
         (dir (optionOr (envGet "TMPDIR") "/tmp"))]
     (do

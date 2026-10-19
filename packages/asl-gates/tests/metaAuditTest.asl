@@ -9,7 +9,7 @@ fn fixture name: String -> String
   (str (fixtureDir) "/" name)
 
 fn loadRealSpec! -> meta/MetaSpec
-  (mt (fileRead "asl/grammar/meta.asn")
+  (mt (fileReadString "asl/grammar/meta.asn")
     ((err _) (do (assert false "asl/grammar/meta.asn reads") (meta/MetaSpec :keys (list) :tags (list) :effects (list) :whyWords 0 :pragmas (list))))
     ((ok text)
       (mt (meta/loadSpec text)
@@ -27,7 +27,7 @@ fn fixtureCtx! -> meta/Ctx
 
 fn scanFixture! name: String lang: String -> meta/FileScan
   (let [(path (fixture name))]
-    (mt (fileRead path)
+    (mt (fileReadString path)
       ((err _) (do (assert false (str path " reads")) (meta/FileScan :path path :plain -1 :metas -1 :violations (list))))
       ((ok text) (meta/scanText! (fixtureCtx!) path lang text))))
 
@@ -123,7 +123,7 @@ fn testCounting! -> Bool
     true)
 
 fn testGrowth! -> Bool
-  (let [(rows (mt (fileRead (fixture "baseline.asn"))
+  (let [(rows (mt (fileReadString (fixture "baseline.asn"))
                 ((ok t) (resultOr (meta/parseBaseline t) (list)))
                 ((err _) (list))))
         (grownScan (scanFixture! "growth.py.txt" "python"))
@@ -150,7 +150,7 @@ fn testRealTree! -> Bool
       true))
 
 fn copyTo! src: String dst: String -> Bool
-  (mt (fileRead src)
+  (mt (fileReadString src)
     ((err _) false)
     ((ok t) (ok? (fileWrite dst t))))
 
@@ -171,7 +171,7 @@ fn testMain! -> Bool
       true))
 
 fn testSeedCaseTokens! -> Bool
-  (mt (fileRead "scripts/audit/cases.asn")
+  (mt (fileReadString "scripts/audit/cases.asn")
     ((err _) false)
     ((ok cases)
       (mt (meta/seedCaseReceipts cases)

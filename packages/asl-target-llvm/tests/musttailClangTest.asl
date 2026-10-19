@@ -63,7 +63,7 @@ fn returnAbiMismatchUsesOrdinaryCall? -> Bool
   (let [(target (ty/ssaFunction "returnTarget" (list) (list) (ty/tyI1) (list)))
         (mod (ssa/ModEnv :name "returnAbiFixture"
               :functions (ssa/nameIndexSet (ssa/nameIndexEmpty) "returnTarget" target)
-              :externs (ssa/nameIndexEmpty) :types (ssa/nameIndexEmpty) :strings (ssa/nameIndexEmpty) :records (ssa/nameIndexEmpty)))
+              :externs (ssa/nameIndexEmpty) :types (ssa/nameIndexEmpty) :strings (ssa/nameIndexEmpty) :records (ssa/nameIndexEmpty) :boxed (ssa/nameIndexEmpty)))
         (env (ssa/FnEnv :mod mod :defs (ssa/nameIndexEmpty) :blocks (ssa/nameIndexEmpty) :order (list)
               :retTy (ty/tyI64) :name "returnCaller" :fused (ssa/nameIndexEmpty)
               :records (ssa/nameIndexEmpty) :wants (ssa/nameIndexEmpty) :preds (ssa/nameIndexEmpty) :size 0))

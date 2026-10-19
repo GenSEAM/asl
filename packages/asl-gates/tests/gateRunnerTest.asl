@@ -33,7 +33,7 @@ fn ! testRunAll -> Bool
         (buildCommand (fn [(p Str)] -> fr/Job (fr/job (list "/bin/sh" "-c" (str "bin/asl test " p (if (= p passPath) (str " && printf passed > " marker) ""))) "." (fr/childEnv (list)))))
         (verdict (gr/auditSuitePaths (list failPath passPath) buildCommand))
         (markerStat (fileStat marker))
-        (markerText (fileRead marker))
+        (markerText (fileReadString marker))
         (passVerdict (gr/auditSuitePaths (list passPath) buildCommand))
         (emptyVerdict (gr/auditSuitePaths (list) buildCommand))
         (removed (pathRemove scratch))

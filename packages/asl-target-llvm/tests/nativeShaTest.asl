@@ -1,18 +1,17 @@
 (module asl-target-llvm/tests/nativeShaTest
   :x [runTests]
-  :i [])
+  :i [(tools/nativeTest :a nt)])
+
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): hostRun used to re-derive the FIPS 180-4 vectors by interpreting the probe through asl-host, but the probe is fully deterministic (fixed 1 MiB affine fill, fixed algorithm) and its expected stdout was already pinned to the literal vectors() below, so the host round-trip is dropped and native.stdout is compared straight to vectors(). nativeRun used to shell out to asl-host to run tools/nativeTest.asl as a subprocess; it now calls tools/nativeTest's own prepareRun/runProc in-process (the same pipeline tools/nativeTest.asl would have driven), which has zero host dependency even on a cold cache")
 
 fn probe -> String
   "asl/packages/asl-target-llvm/tests/fixtures/nativeSha/shaProbe.asl"
 
-fn ! sh cmd: String -> ProcessOutput
-  (processRun cmd)
-
-fn ! nativeRun cache: String -> ProcessOutput
-  (sh (str "ASL_NATIVE_TEST_CACHE='" cache "' nice -n 15 asl/host/out/asl-host run tools/nativeTest.asl run " (probe) " </dev/null"))
-
-fn ! hostRun -> ProcessOutput
-  (sh (str "nice -n 15 asl/host/out/asl-host run " (probe) " </dev/null"))
+fn ! nativeRun -> nt/ProcOut
+  (let [(built (nt/prepareRun (probe) "nativeShaTest"))]
+    (mt built.binary
+      ((none) (nt/ProcOut :exitCode 127 :stdout "" :stderr built.reason))
+      ((some bin) (nt/runProc (list bin) (none)))))
 
 fn shaMs stderr: String -> Int64
   (mt (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? l "shaMs ")) (stringLines stderr)))
@@ -26,19 +25,12 @@ fn vectors -> String
                     "") "\n")
 
 fn ! runTests -> Bool
-  (let [(made (sh "mktemp -d"))
-        (cache (stringTrim made.stdout))
-        (native (nativeRun cache))
-        (host (hostRun))
+  (let [(native (nativeRun))
         (ms (shaMs native.stderr))]
     (do
-      (assert (= made.exitCode 0) "temporary native cache created")
       (assert (= native.exitCode 0) (str "native sha probe exits 0: " native.stderr))
-      (refute (stringContains? native.stderr "NATIVE-FALLBACK") (str "native sha probe does not fall back to asl-host: " native.stderr))
-      (assert (= host.exitCode 0) (str "asl-host sha probe exits 0: " host.stderr))
-      (assert (= host.stdout (vectors)) (str "asl-host digests of empty, abc and the 1 MB affine fill are the FIPS 180-4 values: " host.stdout))
-      (assert (= native.stdout host.stdout) (str "native digests equal asl-host's: " native.stdout))
+      (refute (stringContains? native.stderr "NATIVE-FALLBACK") (str "native sha probe does not fall back to a host: " native.stderr))
+      (assert (= native.stdout (vectors)) (str "native digests of empty, abc and the 1 MB affine fill are the FIPS 180-4 values: " native.stdout))
       (assert (>= ms 0) (str "native probe reports shaMs: " native.stderr))
       (assert (< ms 50) (str "native bytesSha256 of 1 MB takes under 50 ms (best of 3), took " ms " ms"))
-      (assert (= (sh (str "rm -rf '" cache "'")).exitCode 0) "temporary native cache removed")
       true))

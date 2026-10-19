@@ -14,7 +14,7 @@
 fn usageLines -> String
   (str "usage: asl pack [--plan|--check|--stage DIR] [--quick] [--install] [--skip-gates] [--target PLATFORM] [--version V] [--all] [--keep-intermediates] [PLATFORM]\n"
        "  --plan   print the stages and inputs a build would use; builds nothing, runs no gates\n"
-       "  --check  verify prerequisites (stage-0 host, static gate checks); builds nothing\n"
+       "  --check  verify prerequisites (native build script, static gate checks); builds nothing\n"
        "  --stage DIR  lay out the darwin-arm64 tree in DIR from the files as they are; builds nothing")
 
 fn withTarget o: PackOptions t: String -> PackOptions
@@ -60,13 +60,18 @@ fn flag b: Bool -> String
 fn planText o: PackOptions -> String
   (str "(:packPlan :target \"" o.target "\" :version \"" o.version "\" :stages (\n"
        "  (:stage 1 :do \"asl audit gates --static; asl check .asl.config.asn; asl audit consistency\" :skipped " (flag o.skipGates) ")\n"
-       "  (:stage 2 :do \"dist/v" o.version ": wasm32 via tools/compileWasm.asl, darwin-arm64 and linux-x64 tarballs\" :quick " (flag o.quick) ")))")
+       "  (:stage 2 :do \"dist/v" o.version ": darwin-arm64 and linux-x64 tarballs\" :quick " (flag o.quick) ")))")
 
+; (:m :ref AUDIT-PY-RETIRE :do "the asl-gates audit entrypoint and its dependency closure a packed bundle's bin/asl needs on disk, now that audit! execs auditMain.asl via bin/asl run instead of scripts/audit/audit.py")
 fn cliScripts -> (List String)
-  (list "scripts/audit/audit.py")
-
-fn uniqueSorted xs: (List String) -> (List String)
-  (fold (fn [(acc (List String)) (x String)] -> (List String) (if (listContains? acc x) acc (listAppend acc (list x)))) (list) (listSort xs))
+  (list "asl/packages/asl-gates/src/dyck.asl"
+        "asl/packages/asl-gates/src/suiteTimes.asl"
+        "asl/packages/asl-gates/src/runnerLedger.asl"
+        "asl/packages/asl-gates/src/runnerMain.asl"
+        "asl/packages/asl-gates/src/suiteRunner.asl"
+        "asl/packages/asl-gates/src/auditGates.asl"
+        "asl/packages/asl-gates/src/auditForeign.asl"
+        "asl/packages/asl-gates/src/auditMain.asl")
 
 fn ! mkdirs! dirs: (List String) -> Int64
   (mt (listHead dirs)
@@ -83,22 +88,6 @@ fn ! copyEach! files: (List String) dest: String -> Int64
       (let [(rc (sys/run! (list "cp" "-f" f dest)))]
         (if (!= rc 0) rc (copyEach! (optionOr (listTail files) (list)) dest)))))
 
-fn ! copyScripts! root: String rt: String dirs: (List String) -> Int64
-  (mt (listHead dirs)
-    ((none) 0)
-    ((some dir)
-      (let [(made (mkdirs! (list (str rt "/" dir))))]
-        (if (!= made 0)
-          made
-          (mt (sys/capture! (list "git" "-C" root "ls-files" "-z" "--" (str ":(glob)" dir "/*.py")) (none))
-            ((err e) (do (sys/sayErr! (str "asl pack: git: " e)) 127))
-            ((ok c)
-              (if (!= c.exitCode 0)
-                (do (print c.stdout) (sys/sayErr! (sys/stripTrailingNewlines c.stderr)) c.exitCode)
-                (let [(files (map (fn [(p String)] -> String (str root "/" p)) (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (stringSplit c.stdout "\u{0}"))))
-                      (rc (copyEach! files (str rt "/" dir "/")))]
-                  (if (!= rc 0) rc (copyScripts! root rt (optionOr (listTail dirs) (list))))))))))))
-
 fn ! sourcesOf! dir: String suffix: String -> (Result (List String) String)
   (mt (dirList dir)
     ((err e) (err (str dir ": " e)))
@@ -114,7 +103,7 @@ fn ! copyCliSources! root: String rt: String -> Int64
           (let [(r1 (copyEach! cli (str rt "/asl/packages/asl-cli/src/")))]
             (if (!= r1 0)
               r1
-              (let [(r2 (copyEach! (list (str root "/asl/packages/asl-gates/src/dyck.asl") (str root "/asl/packages/asl-gates/src/suiteRunner.asl")) (str rt "/asl/packages/asl-gates/src/")))]
+              (let [(r2 (copyEach! (map (fn [(p String)] -> String (str root "/" p)) (cliScripts)) (str rt "/asl/packages/asl-gates/src/")))]
                 (if (!= r2 0) r2 (let [(r3 (sys/run! (list "cp" "-f" (str root "/.asl.config.asn") (str rt "/.asl.config.asn"))))] (if (!= r3 0) r3 (copyRuntimePackages! root rt)))))))))))
 
 fn ! copyPackages! root: String dest: String -> Int64
@@ -138,6 +127,7 @@ fn ! copyRuntimePackages! root: String rt: String -> Int64
 fn ! writePlatform! path: String line: String -> Int64
   (mt (fileWrite path (str line "\n")) ((err e) (do (sys/sayErr! (str "asl pack: " path ": " e)) 1)) ((ok _) 0))
 
+; (:m :ref HL-FIXWAVE :do "r8 used to copy asl/host/out/asl-host into the staged runtime only when it happened to exist, a leftover from the stage-0 host era; HL-DELETE means that path can never exist again, so the staged bundle instead gets what rt/bin/asl's own cold-start bootstrap (asl/bin/asl's logic) actually needs on a fresh machine with no prebuilt cache: asl/host/build.sh and the asl1 seed tree, plus any already-built libaslrt.a as a best-effort head start")
 fn ! stageDarwin! ctx: sys/Context stage: String version: String -> Int64
   (let [(root ctx.root) (rt (str stage "/runtime"))
         (r1 (mkdirs! (list (str rt "/bin") (str rt "/asl/grammar") (str rt "/asl/prelude") (str stage "/bin") (str stage "/packages") (str stage "/.dist-meta"))))]
@@ -146,21 +136,24 @@ fn ! stageDarwin! ctx: sys/Context stage: String version: String -> Int64
         (if (!= r2 0) r2
           (let [(r3 (sys/run! (list "chmod" "+x" (str rt "/bin/asl"))))]
             (if (!= r3 0) r3
-              (let [(r4 (copyScripts! root rt (uniqueSorted (map sys/parentOf (cliScripts)))))]
-                (if (!= r4 0) r4
-                  (let [(r5 (copyCliSources! root rt))]
-                    (if (!= r5 0) r5
-                      (mt (sourcesOf! (str root "/asl/grammar") ".asn")
+              (let [(r5 (copyCliSources! root rt))]
+                (if (!= r5 0) r5
+                  (mt (sourcesOf! (str root "/asl/grammar") ".asn")
                         ((err e) (do (sys/sayErr! (str "asl pack: " e)) 1))
                         ((ok grammar)
                           (let [(r6 (if (listEmpty? grammar) (do (sys/sayErr! (str "cp: " root "/asl/grammar/*.asn: No such file or directory")) 1) (copyEach! grammar (str rt "/asl/grammar/"))))]
                             (if (!= r6 0) r6
                               (let [(r7 (sys/run! (list "cp" "-f" (str root "/asl/prelude/prelude.asn") (str rt "/asl/prelude/"))))]
                                 (if (!= r7 0) r7
-                                  (let [(r8 (if (sys/executable? (str root "/asl/host/out/asl-host"))
-                                              (let [(m (mkdirs! (list (str rt "/asl/host/out"))))]
-                                                (if (!= m 0) m (copyEach! (list (str root "/asl/host/out/asl-host") (str root "/asl/host/out/prelude.asl")) (str rt "/asl/host/out/"))))
-                                              0))]
+                                  (let [(r8 (let [(m (mkdirs! (list (str rt "/asl/host/out") (str rt "/asl/seed"))))]
+                                              (if (!= m 0) m
+                                                (let [(rb (sys/run! (list "cp" "-f" (str root "/asl/host/build.sh") (str rt "/asl/host/build.sh"))))]
+                                                  (if (!= rb 0) rb
+                                                    (let [(rs (sys/run! (list "cp" "-R" (str root "/asl/seed/.") (str rt "/asl/seed/"))))]
+                                                      (if (!= rs 0) rs
+                                                        (if (sys/isFile? (str root "/asl/host/out/libaslrt.a"))
+                                                          (copyEach! (list (str root "/asl/host/out/libaslrt.a")) (str rt "/asl/host/out/"))
+                                                          0))))))))]
                                     (if (!= r8 0) r8
                                       (let [(r9 (sys/run! (list "ln" "-sfn" "runtime/bin/asl" (str stage "/asl"))))]
                                         (if (!= r9 0) r9
@@ -169,7 +162,7 @@ fn ! stageDarwin! ctx: sys/Context stage: String version: String -> Int64
                                               (let [(r11 (copyPackages! root (str stage "/packages/")))]
                                                 (if (!= r11 0) r11
                                                   (writePlatform! (str stage "/.dist-meta/platform.asn")
-                                                                  (str "(:target \"darwin-arm64\" :version \"" version "\" :substrate \"native-llvm\" :arch \"arm64\" :os \"darwin\")"))))))))))))))))))))))))))
+                                                                  (str "(:target \"darwin-arm64\" :version \"" version "\" :substrate \"native-llvm\" :arch \"arm64\" :os \"darwin\")"))))))))))))))))))))))))
 
 fn ! stageMode! ctx: sys/Context o: PackOptions -> Int64
   (let [(dir o.stageDir)
@@ -181,17 +174,27 @@ fn ! stageMode! ctx: sys/Context o: PackOptions -> Int64
       (let [(rc (stageDarwin! ctx dir o.version))]
         (if (!= rc 0) rc (do (sys/say! (str "(:packStage :target \"darwin-arm64\" :dir \"" dir "\")")) 0)))))
 
-fn ! staticGatesPass! root: String -> Bool
-  (mt (sys/capture! (list "/usr/bin/python3" (str root "/scripts/audit/audit.py") "gates" "--static") (none))
-    ((err _) false)
-    ((ok c) (= c.exitCode 0)))
+; (:m :ref AUDIT-PY-RETIRE :do "asl pack's own gate checks exec the native asl-gates/auditMain.asl entry via bin/asl run, same dispatch as command.asl's audit!, not scripts/audit/audit.py")
+fn nativeAuditEntry root: String -> String
+  (str root "/asl/packages/asl-gates/src/auditMain.asl")
 
+fn nativeAuditArgv root: String sub: String args: (List String) -> (List String)
+  (listAppend (listAppend (list (str root "/bin/asl") "run" (nativeAuditEntry root) sub) args) (list "--root" root))
+
+fn ! staticGatesPass! root: String -> Bool
+  (if (not (sys/isFile? (nativeAuditEntry root)))
+    false
+    (mt (sys/capture! (nativeAuditArgv root "gates" (list "--static")) (none))
+      ((err _) false)
+      ((ok c) (= c.exitCode 0))))
+
+; (:m :ref HL-FIXWAVE :do "asl/host/out/asl-host can never exist again after HL-DELETE; the prerequisite pack now checks for is the native build script that bootstraps bin/asl from the asl1 seed (asl/host/build.sh), not a host binary")
 fn ! checkMode! ctx: sys/Context -> Int64
-  (let [(noHost (if (sys/executable? (str ctx.root "/asl/host/out/asl-host")) "" " stage-0 host asl/host/out/asl-host absent (sh asl/host/build.sh);"))
+  (let [(noNative (if (sys/isFile? (str ctx.root "/asl/host/build.sh")) "" " native build script asl/host/build.sh absent;"))
         (noGates (if (staticGatesPass! ctx.root) "" " static gate checks fail (asl audit gates --static);"))
-        (missing (str noHost noGates))]
+        (missing (str noNative noGates))]
     (if (stringEmpty? missing)
-      (do (sys/say! "(:packCheck :host \"asl/host/out/asl-host\" :staticGates :passed)") 0)
+      (do (sys/say! "(:packCheck :native \"asl/host/build.sh\" :staticGates :passed)") 0)
       (do (sys/say! (str "(:packCheck :status :failed :message \"" (optionOr (stringSlice missing 1 (stringLength missing)) "") "\")")) 1)))
 
 fn ! makeTemp! prefix: String n: Int64 -> (Result String String)
@@ -201,11 +204,13 @@ fn ! makeTemp! prefix: String n: Int64 -> (Result String String)
       (mt (dirCreate path) ((err e) (err (str path ": " e))) ((ok _) (ok path)))))
 
 fn ! gates! ctx: sys/Context -> Int64
-  (let [(root ctx.root)
-        (r1 (sys/run! (list "/usr/bin/python3" (str root "/scripts/audit/audit.py") "gates" "--static")))]
-    (if (!= r1 0) r1
-      (let [(r2 (verify/checkFiles! ctx (list (str root "/.asl.config.asn"))))]
-        (if (!= r2 0) r2 (sys/run! (list "/usr/bin/python3" (str root "/scripts/audit/audit.py") "consistency"))))))
+  (let [(root ctx.root)]
+    (if (not (sys/isFile? (nativeAuditEntry root)))
+      (do (sys/sayErr! "Error: the asl-gates audit entry was not found") 1)
+      (let [(r1 (sys/run! (nativeAuditArgv root "gates" (list "--static"))))]
+        (if (!= r1 0) r1
+          (let [(r2 (verify/checkFiles! ctx (list (str root "/.asl.config.asn"))))]
+            (if (!= r2 0) r2 (sys/run! (nativeAuditArgv root "consistency" (list)))))))))
 
 fn digitAt? s: String i: Int64 -> Bool
   (let [(b (stringToBytes s))] (and (< i (bytesLength b)) (and (>= (bytesGet b i) 48) (<= (bytesGet b i) 57))))

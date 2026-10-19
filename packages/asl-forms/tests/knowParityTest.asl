@@ -58,20 +58,6 @@ fn runGit! ws: String args: (List String) -> Bool
     ((ok out) (= out.exitCode 0))
     ((err _) false))
 
-fn currentHost! repo: String -> (Option String)
-  (mt (envGet "ASL_HOST")
-    ((some h) (if (fileExists? h)
-                (some (resultOr (realPath h) h))
-                (do (println (str "invalid environment variable: ASL_HOST path does not exist: " h))
-                    (assert false (str "invalid environment variable: ASL_HOST path does not exist: " h))
-                    (none))))
-    ((none) (let [(p (k/joinPath repo "asl/host/out/asl-host"))]
-              (if (fileExists? p)
-                (some (resultOr (realPath p) p))
-                (do (println (str "the stage-0 host is absent at " p "; build it with sh asl/host/build.sh or set ASL_HOST"))
-                    (assert false (str "the stage-0 host is absent at " p "; build it with sh asl/host/build.sh or set ASL_HOST"))
-                    (none))))))
-
 fn caseDirName id: Int64 -> String
   (str "c" (stringFromInt64 id))
 
@@ -87,20 +73,13 @@ fn prepareCase! repo: String base: String files: (List FileSpec) c: CaseSpec -> 
                  ((= c.git "add") (and (runGit! ws (list "init" "-q")) (runGit! ws (list "add" "-A"))))
                  (else true)))
         (stubs (k/joinPath repo "asl/packages/asl-forms/tests/fixtures/recorded/knowStubs"))
-        (hostOpt (currentHost! repo))
-        (hostDir (k/joinPath tc "asl/host/out"))
-        (hostLinked (and (some? hostOpt)
-                         (mkdirs! hostDir)
-                         (mt (cp/exec! (cp/withTimeout (cp/cmd "ln" (list "-s" (optionOr hostOpt "") (k/joinPath hostDir "asl-host"))) 60000))
-                           ((ok out) (= out.exitCode 0))
-                           ((err _) false))))
         (bin (cond
                ((= c.bin "echo") (k/joinPath stubs "echo"))
                ((= c.bin "false") (k/joinPath stubs (if (fileExists? "/usr/bin/false") "false" "binFalse")))
                ((= c.bin "sh") (k/joinPath stubs "sh"))
                ((= c.bin "plain") (k/joinPath tc "bin"))
                (else (k/joinPath dir "nobin"))))]
-    (if (and made gitOk hostLinked)
+    (if (and made gitOk)
       (CaseDirs :dir dir :ws ws :tc tc :bin bin :toolsFile (if (stringEmpty? c.tools) "" (k/joinPath dir c.tools)))
       (CaseDirs :dir "" :ws ws :tc tc :bin bin :toolsFile "")))
 
@@ -203,10 +182,7 @@ fn lastFind s: String b: Bytes marker: String from: Int64 best: Int64 -> Int64
 
 fn ! runTests -> Bool
   (let [(repo (resultOr (realPath ".") "."))]
-    (mt (currentHost! repo)
-      ((none) false)
-      ((some _)
-       (let [(text (resultOr (fileReadString (k/joinPath repo "asl/packages/asl-forms/tests/fixtures/recorded/know.asn")) ""))
+    (let [(text (resultOr (fileReadString (k/joinPath repo "asl/packages/asl-forms/tests/fixtures/recorded/know.asn")) ""))
         (files (parseFiles text))
         (registries (filter (fn [(f FileSpec)] -> Bool (and (= f.tree "tc1") (listContains? (list "asl/grammar/tools.asn" "asl/prelude/prelude.asn") f.path))) files))
         (cases (parseCases text))
@@ -241,4 +217,4 @@ fn ! runTests -> Bool
     (assert (= (s/localDateAt! (some "") 1782941400) "2026-07-01") "an empty TZ is UTC")
     (assert (= (s/localDateAt! (some "America/Sao_Paulo") 0) "1969-12-31") "a negative local time keeps its day (python time.localtime)")
     (assert (= (s/localDateAt! (some "Asia/Kolkata") -315619200) "1960-01-01") "a pre-1970 half-hour zone keeps its day (python time.localtime)")
-    true))))
+    true))

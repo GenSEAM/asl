@@ -13,6 +13,9 @@
       GatewayModel
       GatewayProvider
       GatewayPool
+      RetryPolicy
+      noRetryPolicy
+      mergedRetryPolicy
       GatewayUpstream
       GatewayEntry
       GatewayResolvedEntry
@@ -42,10 +45,14 @@
       gatewayIntentLine
       gateway_v2_route
       gatewayV2Route
+      gateway_v2_route_temperature
+      gatewayV2RouteTemperature
       gateway_v2_entry!
       gatewayV2Entry!
       gateway_v2_entries!
       gatewayV2Entries!
+      gateway_v2_entries_exact!
+      gatewayV2EntriesExact!
       gateway_v2_alias_entry!
       gatewayV2AliasEntry!
       gateway_note_intent
@@ -68,6 +75,11 @@
       healthV2
       ConfigHealth
       gatewayProfilesPath
+      gatewayLedgerPathOverride
+      gatewaySharedUsagePathOverride
+      gatewayDailyTokenBudget
+      gatewayBreakerCooldownSecOverride
+      profilePinPath profilePinRead! writeProfilePin!
       gatewayConfigKey!
       configKeyEqual?
       gatewayProfilesLoadText!
@@ -78,12 +90,16 @@
       gatewayProfileSelect
       gatewayProfileModels
       gatewayRouteEntries!
+      gatewayRouteEntriesExact!
+      gateway_chain_containing_model!
+      gatewayChainContainingModel!
       gatewayProfileHealth
       gatewayConfigHealth
       gatewayProfileAsn
       gatewayConfigAsn
       gatewayConfigReceipt
-      gatewayConfigCheckText!]
+      gatewayConfigCheckText!
+      headerGet]
   :i [(wire :a wire)
       (asl-parser/ast :a ast)
       (asl-parser/lexer :a lx)
@@ -109,9 +125,11 @@ fn scalarToString sc: AsnScalar -> String
   (:f maxTokens (Option Int64))
   (:f contextBudget (Option Int64))
   (:f timeoutSec (Option Float64))
+  (:f firstByteSec (Option Float64))
   (:f reasoning (Option Bool))
   (:f rpm (Option Float64))
-  (:f api (Option String)))
+  (:f api (Option String))
+  (:f retry (Option RetryPolicy)))
 
 fn emptyGatewayParams -> GatewayParams
   (GatewayParams
@@ -120,9 +138,11 @@ fn emptyGatewayParams -> GatewayParams
     :maxTokens (none)
     :contextBudget (none)
     :timeoutSec (none)
+    :firstByteSec (none)
     :reasoning (none)
     :rpm (none)
-    :api (none))
+    :api (none)
+    :retry (none))
 
 fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
   (GatewayParams
@@ -131,14 +151,20 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
     :maxTokens (if (some? override.maxTokens) override.maxTokens base.maxTokens)
     :contextBudget (if (some? override.contextBudget) override.contextBudget base.contextBudget)
     :timeoutSec (if (some? override.timeoutSec) override.timeoutSec base.timeoutSec)
+    :firstByteSec (if (some? override.firstByteSec) override.firstByteSec base.firstByteSec)
     :reasoning (if (some? override.reasoning) override.reasoning base.reasoning)
     :rpm (if (some? override.rpm) override.rpm base.rpm)
-    :api (if (some? override.api) override.api base.api))
+    :api (if (some? override.api) override.api base.api)
+    :retry (if (some? override.retry) override.retry base.retry))
 
 (schema GatewayRoute
   (:f intent String)
   (:f chain (List String))
-  (:f models (List String)))
+  (:f models (List String))
+  (:f temperature (Option Float64))
+  ; (:m :ref GW-SPREAD-20261017 :do "beside :chain, never instead of it: (ALIAS WEIGHT) pairs over aliases also present in :models, tried by smooth weighted round-robin before the plain chain; absent :spread is the empty list, unchanged behaviour")
+  (:f spread (List (Pair String Int64)))
+  (:f cooldownSec Int64))
 
 (schema GatewayProfile
   (:f id String)
@@ -160,13 +186,24 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
   (:f keyEnv String)
   (:f sessionHeader String)
   (:f timeoutSec Float64)
+  (:f firstByteSec Float64)
   (:f rpm Float64)
-  (:f pool (Option GatewayPool)))
+  (:f pool (Option GatewayPool))
+  (:f retry (Option RetryPolicy)))
 
 (schema GatewayPool
   (:f config bp/PoolConfig)
   (:f batch Bool)
   (:f scaleDownPath String))
+
+; (:m :tags (retry) :do "a transient upstream failure (429 rate-limit text, 502/503/504, a cheap transport timeout or reset) retries the same model maxAttempts times with exponential backoff before any cascade or circuit-breaker trip; absent on both provider and model, maxAttempts is 0 so nothing changes for a config that never names :retry")
+(schema RetryPolicy
+  (:f maxAttempts Int64)
+  (:f baseMs Int64)
+  (:f capMs Int64))
+
+fn noRetryPolicy -> RetryPolicy
+  (RetryPolicy :maxAttempts 0 :baseMs 1000 :capMs 20000)
 
 (schema GatewayUpstream
   (:f provider String)
@@ -182,8 +219,10 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
   (:f params GatewayParams)
   (:f upstream GatewayUpstream)
   (:f timeoutSec Float64)
+  (:f firstByteSec Float64)
   (:f rpm (Option Float64))
-  (:f pool (Option GatewayPool)))
+  (:f pool (Option GatewayPool))
+  (:f retry (Option RetryPolicy)))
 
 (enum GatewayResolvedEntry
   (:c entryResolved [(entry GatewayEntry)])
@@ -351,6 +390,12 @@ fn asn_name v: rd/SExpr what: String -> (Result String String)
 fn asnName v: rd/SExpr what: String -> (Result String String)
   (asn_name v what)
 
+; (:m :do "a bare atom names most things (:id plan), but a composite key like a role:lens pair (auditor:logic) cannot lex as one atom since ':' always breaks a symbol run; a quoted string carries it instead, so :id/:as/:intent accept either form")
+fn asn_name_or_string v: rd/SExpr what: String -> (Result String String)
+  (mt (asn_scalar v)
+    ((scalarStr s) (if (stringEmpty? s) (err (str what " must be a bare atom or string, found " (sexprRawText v))) (ok s)))
+    (_ (err (str what " must be a bare atom or string, found " (sexprRawText v)))))
+
 fn asn_scalar expr: rd/SExpr -> AsnScalar
   (mt expr
     ((rd/sexprAtom raw)
@@ -491,6 +536,22 @@ fn checkTimeoutSec props: (Map String rd/SExpr) what: String cur: GatewayParams 
               (pair cur (cons (str what ": :timeoutSec must be a positive number") errs))))
           (_ (pair cur (cons (str what ": :timeoutSec must be a positive number") errs)))))))
 
+fn checkFirstByteSec props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
+  (mt (mapGet props "firstByteSec")
+    ((none) (pair cur errs))
+    ((some expr)
+      (let [(sc (asn_figure expr))]
+        (mt sc
+          ((scalarFloat f)
+            (if (> f 0.0)
+              (pair (with cur :firstByteSec (some f)) errs)
+              (pair cur (cons (str what ": :firstByteSec must be a positive number") errs))))
+          ((scalarInt n)
+            (if (> n 0)
+              (pair (with cur :firstByteSec (some (int64ToFloat64 n))) errs)
+              (pair cur (cons (str what ": :firstByteSec must be a positive number") errs))))
+          (_ (pair cur (cons (str what ": :firstByteSec must be a positive number") errs)))))))
+
 fn checkReasoning props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (mt (mapGet props "reasoning")
     ((none) (pair cur errs))
@@ -523,10 +584,12 @@ fn gateway_params props: (Map String rd/SExpr) what: String -> (Pair GatewayPara
         (s3 (checkMaxTokens props what (pairFirst s2) (pairSecond s2)))
         (s4 (checkContextBudget props what (pairFirst s3) (pairSecond s3)))
         (s5 (checkTimeoutSec props what (pairFirst s4) (pairSecond s4)))
-        (s6 (checkReasoning props what (pairFirst s5) (pairSecond s5)))
+        (s5b (checkFirstByteSec props what (pairFirst s5) (pairSecond s5)))
+        (s6 (checkReasoning props what (pairFirst s5b) (pairSecond s5b)))
         (s7 (checkRpm props what (pairFirst s6) (pairSecond s6)))
-        (s8 (checkApi props what (pairFirst s7) (pairSecond s7)))]
-    (pair (pairFirst s8) (listReverse (pairSecond s8))))
+        (s8 (checkApi props what (pairFirst s7) (pairSecond s7)))
+        (s9 (checkRetry props what (pairFirst s8) (pairSecond s8)))]
+    (pair (pairFirst s9) (listReverse (pairSecond s9))))
 
 fn checkApi props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (mt (mapGet props "api")
@@ -540,6 +603,14 @@ fn checkApi props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (
               (pair cur (cons (str what ": :api must be chat or responses") errs))))
           (_ (pair cur (cons (str what ": :api must be chat or responses") errs)))))))
 
+fn checkRetry props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
+  (mt (mapGet props "retry")
+    ((none) (pair cur errs))
+    ((some expr)
+      (mt (parseRetryPolicy expr what)
+        ((err e) (pair cur (cons e errs)))
+        ((ok policy) (pair (with cur :retry (some policy)) errs)))))
+
 fn gatewayParams props: (Map String rd/SExpr) what: String -> (Pair GatewayParams (List String))
   (gateway_params props what)
 
@@ -550,6 +621,7 @@ fn paramPresent? params: GatewayParams k: String -> Bool
     ((= k "maxTokens") (some? params.maxTokens))
     ((= k "contextBudget") (some? params.contextBudget))
     ((= k "timeoutSec") (some? params.timeoutSec))
+    ((= k "firstByteSec") (some? params.firstByteSec))
     ((= k "reasoning") (some? params.reasoning))
     ((= k "rpm") (some? params.rpm))
     ((= k "api") (some? params.api))
@@ -571,7 +643,7 @@ fn paramsShown props: (Map String rd/SExpr) params: GatewayParams -> (List (Pair
                 (listAppend acc (list (pair k (scalarAsnValue (asn_figure expr)))))
                 acc))))
         (list)
-        (list "temperature" "effort" "maxTokens" "contextBudget" "timeoutSec" "reasoning" "rpm" "api"))
+        (list "temperature" "effort" "maxTokens" "contextBudget" "timeoutSec" "firstByteSec" "reasoning" "rpm" "api"))
 
 fn shownHasKey? shown: (List (Pair String String)) k: String -> Bool
   (listAny? (fn [(p (Pair String String))] -> Bool (= (pairFirst p) k)) shown)
@@ -708,14 +780,14 @@ fn parseV1Route rf: rd/SExpr pid: String -> (Result GatewayRoute String)
                           (let [(allStr (listAll? (fn [(m rd/SExpr)] -> Bool (and (isStringLiteral? m) (not (stringEmpty? (stripQuotesAndUnescape (sexprRawText m)))))) mItems))]
                             (if (not allStr)
                               (err (str "profile " pid " route " intent ": :models must be a non-empty list of strings"))
-                              (ok (GatewayRoute :intent intent :chain (list) :models (map (fn [(m rd/SExpr)] -> String (stripQuotesAndUnescape (sexprRawText m))) mItems)))))))
+                              (ok (GatewayRoute :intent intent :chain (list) :models (map (fn [(m rd/SExpr)] -> String (stripQuotesAndUnescape (sexprRawText m))) mItems) :temperature none :spread (list) :cooldownSec 60))))))
                       ((rd/sexprVect mItems)
                         (if (listEmpty? mItems)
                           (err (str "profile " pid " route " intent ": :models must be a non-empty list of strings"))
                           (let [(allStr (listAll? (fn [(m rd/SExpr)] -> Bool (and (isStringLiteral? m) (not (stringEmpty? (stripQuotesAndUnescape (sexprRawText m)))))) mItems))]
                             (if (not allStr)
                               (err (str "profile " pid " route " intent ": :models must be a non-empty list of strings"))
-                              (ok (GatewayRoute :intent intent :chain (list) :models (map (fn [(m rd/SExpr)] -> String (stripQuotesAndUnescape (sexprRawText m))) mItems)))))))
+                              (ok (GatewayRoute :intent intent :chain (list) :models (map (fn [(m rd/SExpr)] -> String (stripQuotesAndUnescape (sexprRawText m))) mItems) :temperature none :spread (list) :cooldownSec 60))))))
                       (_ (err (str "profile " pid " route " intent ": :models must be a non-empty list of strings")))))))))))))
 
 fn parseV1Routes rItems: (List rd/SExpr) pid: String acc: (List GatewayRoute) -> (Result (List GatewayRoute) String)
@@ -806,13 +878,13 @@ fn defaultProviders! -> (Map String GatewayProvider)
                                    ((none) (none))
                                    ((some s) (if (isFloatString? s) (stringToFloat64 s) (mt (stringToInt64 s) ((some n) (some (int64ToFloat64 n)) ((none) (none)))))))
                                  300.0))
-        (p1 (GatewayProvider :id "agy" :kind "cli" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :rpm 0.0 :pool (none)))
-        (p2 (GatewayProvider :id "codex" :kind "cli" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :rpm 0.0 :pool (none)))
-        (p3 (GatewayProvider :id "claude" :kind "cli" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :rpm 0.0 :pool (none)))
-        (p4 (GatewayProvider :id "gemini" :kind "openai" :base geminiBase :keyEnv "GEMINI_API_KEY" :sessionHeader "" :timeoutSec 45.0 :rpm 0.0 :pool (none)))
-        (p5 (GatewayProvider :id "groq" :kind "openai" :base groqBase :keyEnv "GROQ_API_KEY" :sessionHeader "" :timeoutSec 45.0 :rpm 0.0 :pool (none)))
-        (p6 (GatewayProvider :id "openrouter" :kind "openai" :base openrouterBase :keyEnv "OPENROUTER_API_KEY" :sessionHeader "" :timeoutSec 45.0 :rpm 0.0 :pool (none)))
-        (p7 (GatewayProvider :id "ollama" :kind "openai" :base ollamaBase :keyEnv "OLLAMA_API_KEY" :sessionHeader "" :timeoutSec ollamaTimeout :rpm 0.0 :pool (none)))]
+        (p1 (GatewayProvider :id "agy" :kind "cli" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p2 (GatewayProvider :id "codex" :kind "cli" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p3 (GatewayProvider :id "claude" :kind "cli" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p4 (GatewayProvider :id "gemini" :kind "openai" :base geminiBase :keyEnv "GEMINI_API_KEY" :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p5 (GatewayProvider :id "groq" :kind "openai" :base groqBase :keyEnv "GROQ_API_KEY" :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p6 (GatewayProvider :id "openrouter" :kind "openai" :base openrouterBase :keyEnv "OPENROUTER_API_KEY" :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p7 (GatewayProvider :id "ollama" :kind "openai" :base ollamaBase :keyEnv "OLLAMA_API_KEY" :sessionHeader "" :timeoutSec ollamaTimeout :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))]
     (mapFromPairs (list (pair "agy" p1) (pair "codex" p2) (pair "claude" p3) (pair "gemini" p4) (pair "groq" p5) (pair "openrouter" p6) (pair "ollama" p7))))
 
 fn extractPropList items: (List rd/SExpr) head: String accForms: (List (Map String rd/SExpr)) accErrs: (List String) -> (Pair (List (Map String rd/SExpr)) (List String))
@@ -885,6 +957,40 @@ fn parsePoolConfig expr: rd/SExpr -> (Result GatewayPool String)
                               (ok (GatewayPool :config (bp/makePoolConfig windowMs peakCount bypassWhileBusy requestTimeoutMs)
                                     :batch batch :scaleDownPath scaleDownPath))))))))))))))))
 
+fn retryRequiredNonNegInt props: (Map String rd/SExpr) key: String what: String -> (Result Int64 String)
+  (mt (mapGet props key)
+    ((none) (err (str what ": :retry requires :" key)))
+    ((some expr)
+      (mt (asn_scalar expr)
+        ((scalarInt n) (if (>= n 0) (ok n) (err (str what ": :retry :" key " must be a nonnegative integer"))))
+        (_ (err (str what ": :retry :" key " must be a nonnegative integer"))))))
+
+fn retryOptionalPosInt props: (Map String rd/SExpr) key: String fallback: Int64 what: String -> (Result Int64 String)
+  (mt (mapGet props key)
+    ((none) (ok fallback))
+    ((some expr)
+      (mt (asn_scalar expr)
+        ((scalarInt n) (if (> n 0) (ok n) (err (str what ": :retry :" key " must be a positive integer"))))
+        (_ (err (str what ": :retry :" key " must be a positive integer"))))))
+
+; (:m :tags (retry) :do "(:retry (:max N :baseMs N :capMs N)): :max is the extra attempts after the first (0 keeps today's no-retry behaviour); :baseMs/:capMs default to 1000/20000 and bound the exponential backoff")
+fn parseRetryPolicy expr: rd/SExpr what: String -> (Result RetryPolicy String)
+  (mt (asn_props expr (none))
+    ((err e) (err (str what ": invalid :retry: " e)))
+    ((ok props)
+      (mt (retryRequiredNonNegInt props "max" what)
+        ((err e) (err e))
+        ((ok maxN)
+          (mt (retryOptionalPosInt props "baseMs" 1000 what)
+            ((err e) (err e))
+            ((ok baseMs)
+              (mt (retryOptionalPosInt props "capMs" 20000 what)
+                ((err e) (err e))
+                ((ok capMs)
+                  (if (< capMs baseMs)
+                    (err (str what ": :retry :capMs must be >= :baseMs"))
+                    (ok (RetryPolicy :maxAttempts maxN :baseMs baseMs :capMs capMs)))))))))))
+
 fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p: (Map String rd/SExpr) -> (Pair (Map String GatewayProvider) (List String))
   (mt (mapGet p "id")
     ((none) (pair provs curErrs))
@@ -893,12 +999,12 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
         ((err e) (pair provs (listAppendOne curErrs e)))
         ((ok pid)
           (let [(withKeyErr (if (mapHas? p "key") (listAppendOne curErrs (str "provider " pid ": keys are named by :keyEnv, never stored in the file")) curErrs))
-                (existing (optionOr (mapGet provs pid) (GatewayProvider :id pid :kind "" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :rpm 0.0 :pool (none))))
+                (existing (optionOr (mapGet provs pid) (GatewayProvider :id pid :kind "" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))
                 (kind (mt (mapGet p "kind")
                         ((some kExpr) (scalarToString (asn_scalar kExpr)))
                         ((none) existing.kind)))
-                (kindErr (if (and (!= kind "openai") (!= kind "cli"))
-                           (listAppendOne withKeyErr (str "provider " pid ": :kind must be openai or cli"))
+                (kindErr (if (and (!= kind "openai") (and (!= kind "cli") (and (!= kind "anthropic") (!= kind "gemini"))))
+                           (listAppendOne withKeyErr (str "provider " pid ": :kind must be openai, anthropic, gemini or cli"))
                            (if (and (= kind "cli") (not (or (= pid "agy") (or (= pid "codex") (= pid "claude")))))
                              (listAppendOne withKeyErr (str "provider " pid ": a cli provider is one of agy, codex, claude"))
                              withKeyErr)))
@@ -941,14 +1047,24 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                                     (_ (pair existing.timeoutSec (listAppendOne withShErr (str "provider " pid ": :timeoutSec must be a positive number")))))))))
                 (timeoutSec (pairFirst timeoutRes))
                 (withToErr (pairSecond timeoutRes))
+                (firstByteSecRes (mt (mapGet p "firstByteSec")
+                              ((none) (pair existing.firstByteSec withToErr))
+                              ((some fbExpr)
+                                (let [(sc (asn_scalar fbExpr))]
+                                  (mt sc
+                                    ((scalarFloat f) (if (> f 0.0) (pair f withToErr) (pair existing.firstByteSec (listAppendOne withToErr (str "provider " pid ": :firstByteSec must be a positive number")))))
+                                    ((scalarInt n) (if (> n 0) (pair (int64ToFloat64 n) withToErr) (pair existing.firstByteSec (listAppendOne withToErr (str "provider " pid ": :firstByteSec must be a positive number")))))
+                                    (_ (pair existing.firstByteSec (listAppendOne withToErr (str "provider " pid ": :firstByteSec must be a positive number")))))))))
+                (firstByteSec (pairFirst firstByteSecRes))
+                (withFbErr (pairSecond firstByteSecRes))
                 (rpmRes (mt (mapGet p "rpm")
-                          ((none) (pair existing.rpm withToErr))
+                          ((none) (pair existing.rpm withFbErr))
                           ((some rExpr)
                             (let [(sc (asn_scalar rExpr))]
                               (mt sc
-                                ((scalarFloat f) (if (> f 0.0) (pair f withToErr) (pair existing.rpm (listAppendOne withToErr (str "provider " pid ": :rpm must be a positive number")))))
-                                ((scalarInt n) (if (> n 0) (pair (int64ToFloat64 n) withToErr) (pair existing.rpm (listAppendOne withToErr (str "provider " pid ": :rpm must be a positive number")))))
-                                (_ (pair existing.rpm (listAppendOne withToErr (str "provider " pid ": :rpm must be a positive number")))))))))
+                                ((scalarFloat f) (if (> f 0.0) (pair f withFbErr) (pair existing.rpm (listAppendOne withFbErr (str "provider " pid ": :rpm must be a positive number")))))
+                                ((scalarInt n) (if (> n 0) (pair (int64ToFloat64 n) withFbErr) (pair existing.rpm (listAppendOne withFbErr (str "provider " pid ": :rpm must be a positive number")))))
+                                (_ (pair existing.rpm (listAppendOne withFbErr (str "provider " pid ": :rpm must be a positive number")))))))))
                 (rpm (pairFirst rpmRes))
                 (withRpmErr (pairSecond rpmRes))
                 (poolRes (mt (mapGet p "pool")
@@ -959,10 +1075,18 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                                 ((ok poolValue) (pair (some poolValue) withRpmErr))))))
                 (poolValue (pairFirst poolRes))
                 (withPoolErr (pairSecond poolRes))
-                (finalErrs (if (and (= kind "openai") (stringEmpty? base))
-                             (listAppendOne withPoolErr (str "provider " pid ": an openai provider needs :base"))
-                             withPoolErr))
-                (updated (GatewayProvider :id pid :kind kind :base base :keyEnv keyEnv :sessionHeader sessionHeader :timeoutSec timeoutSec :rpm rpm :pool poolValue))]
+                (retryRes (mt (mapGet p "retry")
+                            ((none) (pair existing.retry withPoolErr))
+                            ((some retryExpr)
+                              (mt (parseRetryPolicy retryExpr (str "provider " pid))
+                                ((err e) (pair existing.retry (listAppendOne withPoolErr e)))
+                                ((ok retryValue) (pair (some retryValue) withPoolErr))))))
+                (retryValue (pairFirst retryRes))
+                (withRetryErr (pairSecond retryRes))
+                (finalErrs (if (and (or (= kind "openai") (or (= kind "anthropic") (= kind "gemini"))) (stringEmpty? base))
+                             (listAppendOne withRetryErr (str "provider " pid ": an " kind " provider needs :base"))
+                             withRetryErr))
+                (updated (GatewayProvider :id pid :kind kind :base base :keyEnv keyEnv :sessionHeader sessionHeader :timeoutSec timeoutSec :firstByteSec firstByteSec :rpm rpm :pool poolValue :retry retryValue))]
             (pair (mapSet provs pid updated) finalErrs))))))
 
 fn loopProviders pForms: (List (Map String rd/SExpr)) provs: (Map String GatewayProvider) errs: (List String) -> (Pair (Map String GatewayProvider) (List String))
@@ -1088,14 +1212,14 @@ fn loopIntents iForms: (List (Map String rd/SExpr)) ints: (Map String (Option St
         (mt (mapGet i "id")
           ((none) (loopIntents tail ints errs))
           ((some idExpr)
-            (mt (asn_name idExpr "(:intent :id ...)")
+            (mt (asn_name_or_string idExpr "(:intent :id ...)")
               ((err e) (loopIntents tail ints (listAppendOne errs e)))
               ((ok rawIid)
                 (let [(iid (stringLower rawIid))
                       (parentRes (mt (mapGet i "as")
                                    ((none) (ok (none)))
                                    ((some asExpr)
-                                     (mt (asn_name asExpr (str "intent " iid " :as"))
+                                     (mt (asn_name_or_string asExpr (str "intent " iid " :as"))
                                        ((err e) (err e))
                                        ((ok p) (ok (some (stringLower p))))))))]
                   (mt parentRes
@@ -1131,13 +1255,59 @@ fn parseChainItem a: rd/SExpr models: (Map String GatewayModel) pid: String inte
             (pair (listAppendOne cList rawA) cErrs)))
         (_ (pair cList (listAppendOne cErrs (str "profile " pid " route " intent ": chain entry compound is neither an alias nor a model string")))))))
 
+fn parseRouteTemperature props: (Map String rd/SExpr) pid: String intent: String -> (Pair (Option Float64) (List String))
+  (mt (mapGet props "temperature")
+    ((none) (pair (none) (list)))
+    ((some expr)
+      (let [(sc (asn_figure expr))]
+        (mt sc
+          ((scalarFloat f) (pair (some f) (list)))
+          ((scalarInt n) (pair (some (int64ToFloat64 n)) (list)))
+          (_ (pair (none) (list (str "profile " pid " route " intent ": :temperature must be a number"))))))))
+
+; (:m :ref GW-SPREAD-20261017 :do "one (ALIAS WEIGHT) pair: ALIAS is a bare atom checked against :models the same way parseChainItem checks a chain entry (never a string, never the raw model name); WEIGHT must be a positive integer, so 0, negative or a non-integer each name the offending alias rather than being silently dropped")
+fn parseSpreadItem item: rd/SExpr models: (Map String GatewayModel) pid: String intent: String st: (Pair (List (Pair String Int64)) (List String)) -> (Pair (List (Pair String Int64)) (List String))
+  (let [(acc (pairFirst st))
+        (errs (pairSecond st))
+        (parts (mt item ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list))))]
+    (if (!= (listLength parts) 2)
+      (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread entry must be (ALIAS WEIGHT)")))
+      (let [(aExpr (optionOr (listGet parts 0) (rd/makeAtom "")))
+            (wExpr (optionOr (listGet parts 1) (rd/makeAtom "")))]
+        (mt (asn_name aExpr (str "profile " pid " route " intent " :spread alias"))
+          ((err e) (pair acc (listAppendOne errs e)))
+          ((ok alias)
+            (if (not (mapHas? models alias))
+              (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread unknown alias " alias)))
+              (mt (asn_scalar wExpr)
+                ((scalarInt w)
+                  (if (<= w 0)
+                    (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread weight for " alias " must be a positive integer")))
+                    (pair (listAppendOne acc (pair alias w)) errs)))
+                (_ (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread weight for " alias " must be a positive integer")))))))))))
+
+fn parseSpread expr: rd/SExpr models: (Map String GatewayModel) pid: String intent: String -> (Pair (List (Pair String Int64)) (List String))
+  (let [(items (mt expr ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list))))]
+    (fold (fn [(st (Pair (List (Pair String Int64)) (List String))) (it rd/SExpr)] -> (Pair (List (Pair String Int64)) (List String))
+            (parseSpreadItem it models pid intent st))
+      (pair (list) (list)) items))
+
+; (:m :ref GW-SPREAD-20261017 :do "default 60 when absent, as the plan names; present but non-positive is a parse error rather than a silently-ignored value")
+fn parseCooldownSec props: (Map String rd/SExpr) pid: String intent: String -> (Pair Int64 (List String))
+  (mt (mapGet props "cooldownSec")
+    ((none) (pair 60 (list)))
+    ((some expr)
+      (mt (asn_scalar expr)
+        ((scalarInt n) (if (> n 0) (pair n (list)) (pair 60 (list (str "profile " pid " route " intent ": :cooldownSec must be a positive integer")))))
+        (_ (pair 60 (list (str "profile " pid " route " intent ": :cooldownSec must be a positive integer")))))))
+
 fn parseProfileRoute rf: rd/SExpr pid: String intents: (Map String (Option String)) models: (Map String GatewayModel) -> (Pair (Option GatewayRoute) (List String))
   (mt (asn_props rf (none))
     ((err e) (pair (none) (list (str "profile " pid ": " e))))
     ((ok props)
       (let [(intentRes (mt (mapGet props "intent")
-                         ((none) (err (str "profile " pid " route :intent must be a bare atom, found ()")))
-                         ((some iExpr) (asn_name iExpr (str "profile " pid " route :intent")))))
+                         ((none) (err (str "profile " pid " route :intent must be a bare atom or string, found ()")))
+                         ((some iExpr) (asn_name_or_string iExpr (str "profile " pid " route :intent")))))
             (intent (stringLower (resultOr intentRes "")))
             (errs1 (mt intentRes ((err e) (list (str "profile " pid ": " e))) ((ok _) (list))))
             (errs2 (if (and (not (stringEmpty? intent)) (and (!= intent "any") (not (mapHas? intents intent))))
@@ -1156,8 +1326,17 @@ fn parseProfileRoute rf: rd/SExpr pid: String intents: (Map String (Option Strin
                                       cItems))
                       (chain (pairFirst chainRes))
                       (chainErrs (pairSecond chainRes))
-                      (finalErrs (listAppend errs2 chainErrs))]
-                  (pair (some (GatewayRoute :intent intent :chain chain :models (list))) finalErrs)))))))))
+                      (tempRes (parseRouteTemperature props pid intent))
+                      (temperature (pairFirst tempRes))
+                      (tempErrs (pairSecond tempRes))
+                      (spreadRes (mt (mapGet props "spread") ((none) (pair (list) (list))) ((some sExpr) (parseSpread sExpr models pid intent))))
+                      (spread (pairFirst spreadRes))
+                      (spreadErrs (pairSecond spreadRes))
+                      (cooldownRes (parseCooldownSec props pid intent))
+                      (cooldownSec (pairFirst cooldownRes))
+                      (cooldownErrs (pairSecond cooldownRes))
+                      (finalErrs (listAppend (listAppend (listAppend (listAppend errs2 chainErrs) tempErrs) spreadErrs) cooldownErrs))]
+                  (pair (some (GatewayRoute :intent intent :chain chain :models (list) :temperature temperature :spread spread :cooldownSec cooldownSec)) finalErrs)))))))))
 
 fn profileFallbackStep profiles: (Map String GatewayProfile) cur: String seen: (List String) -> (Option (List String))
   (if (listContains? seen cur)
@@ -1330,7 +1509,7 @@ fn gateway_config_v2_build! g: (Map String rd/SExpr) source: String registryPath
                     (listAppendOne allErrs1 ":profiles must define at least one (:profile ...)")
                     allErrs1))
         (envWarns (fold (fn [(acc (List String)) (pid String)] -> (List String)
-                          (let [(pv (optionOr (mapGet providers pid) (GatewayProvider :id pid :kind "" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :rpm 0.0 :pool (none))))]
+                          (let [(pv (optionOr (mapGet providers pid) (GatewayProvider :id pid :kind "" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))]
                             (if (and (not (stringEmpty? pv.keyEnv)) (listAny? (fn [(m GatewayModel)] -> Bool (= m.provider pid)) (mapValues models)))
                               (mt (envGet pv.keyEnv)
                                 ((none) (listAppendOne acc (str "provider " pid ": key env " pv.keyEnv " is not set")))
@@ -1434,32 +1613,43 @@ fn gateway_intent_line table: GatewayTable intent: String -> (List String)
 fn gatewayIntentLine table: GatewayTable intent: String -> (List String)
   (gateway_intent_line table intent)
 
-fn routeFindIntent routes: (List GatewayRoute) targetIntent: String -> (Option (List String))
+fn routeFindIntent routes: (List GatewayRoute) targetIntent: String -> (Option GatewayRoute)
   (mt (listHead routes)
     ((none) (none))
     ((some r)
       (if (= r.intent targetIntent)
-        (some r.chain)
+        (some r)
         (routeFindIntent (optionOr (listTail routes) (list)) targetIntent))))
 
-fn routeFindLine routes: (List GatewayRoute) line: (List String) -> (Option (List String))
+fn routeFindLine routes: (List GatewayRoute) line: (List String) -> (Option GatewayRoute)
   (mt (listHead line)
     ((none) (none))
     ((some i)
       (mt (routeFindIntent routes i)
-        ((some ch) (some ch))
+        ((some r) (some r))
         ((none) (routeFindLine routes (optionOr (listTail line) (list)))))))
 
+fn routeFindLineOrAny routes: (List GatewayRoute) line: (List String) -> (Option GatewayRoute)
+  (mt (routeFindLine routes line)
+    ((some r) (some r))
+    ((none) (routeFindIntent routes "any")))
+
 fn gateway_v2_route profile: GatewayProfile line: (List String) -> (List String)
-  (mt (routeFindLine profile.routes line)
-    ((some ch) ch)
-    ((none)
-      (mt (routeFindIntent profile.routes "any")
-        ((some ch) ch)
-        ((none) (list)))))
+  (mt (routeFindLineOrAny profile.routes line)
+    ((some r) r.chain)
+    ((none) (list)))
 
 fn gatewayV2Route profile: GatewayProfile line: (List String) -> (List String)
   (gateway_v2_route profile line)
+
+; (:m :do "the per-route :temperature default, for the same route resolution gateway_v2_route uses, so a role/intent's calibrated sampling temperature comes from config instead of a hardcoded table")
+fn gateway_v2_route_temperature profile: GatewayProfile line: (List String) -> (Option Float64)
+  (mt (routeFindLineOrAny profile.routes line)
+    ((some r) r.temperature)
+    ((none) none))
+
+fn gatewayV2RouteTemperature profile: GatewayProfile line: (List String) -> (Option Float64)
+  (gateway_v2_route_temperature profile line)
 
 fn gateway_v2_entry! table: GatewayTable alias: String -> GatewayResolvedEntry
   (mt (mapGet table.models alias)
@@ -1478,26 +1668,37 @@ fn gateway_v2_entry! table: GatewayTable alias: String -> GatewayResolvedEntry
                              :params m.params
                              :upstream (GatewayUpstream :provider (str m.provider "-cli") :url (str "cli://" m.provider) :key "")
                              :timeoutSec 0.0
+                             :firstByteSec 0.0
                              :rpm (none)
-                             :pool none))
+                             :pool none
+                             :retry (none)))
             (let [(key (if (stringEmpty? pv.keyEnv) "" (optionOr (envGet pv.keyEnv) "")))
                   (tSec (mt m.params.timeoutSec
                           ((some ts) ts)
                           ((none) pv.timeoutSec)))
+                  ; (:m :ref FREEPOOL-GATEWAY-FIRSTBYTE-20261017 :do "a model's own :firstByteSec wins over its provider's; 0.0 (neither set one) is firstByteCapSec's own unconfigured sentinel, never a second 60.0 literal resolved here")
+                  (fbSec (mt m.params.firstByteSec
+                          ((some fb) fb)
+                          ((none) pv.firstByteSec)))
                   (rpmVal (mt m.params.rpm
                             ((some r) (some r))
-                            ((none) (if (> pv.rpm 0.0) (some pv.rpm) (none)))))]
+                            ((none) (if (> pv.rpm 0.0) (some pv.rpm) (none)))))
+                  (retryVal (mt m.params.retry
+                              ((some r) (some r))
+                              ((none) pv.retry)))]
               (entryResolved (GatewayEntry
                                :alias alias
                                :provider m.provider
-                               :kind "openai"
+                               :kind pv.kind
                                :name m.name
                                :dispatch m.name
                                :params m.params
                                :upstream (GatewayUpstream :provider m.provider :url pv.base :key key)
                                :timeoutSec tSec
+                               :firstByteSec fbSec
                                :rpm rpmVal
-                               :pool pv.pool))))))))
+                               :pool pv.pool
+                               :retry retryVal))))))))
 
 fn gatewayV2Entry! table: GatewayTable alias: String -> GatewayResolvedEntry
   (gateway_v2_entry! table alias)
@@ -1532,6 +1733,32 @@ fn gateway_v2_entries! table: GatewayTable name: String intent: String -> (List 
 fn gatewayV2Entries! table: GatewayTable name: String intent: String -> (List GatewayResolvedEntry)
   (gateway_v2_entries! table name intent)
 
+; (:m :do "the exact-match sibling of entriesLoop!: a profile fallback chain is still honored, but there is no silent substitution of the profile's :intent any catch-all route when the requested intent has no route of its own -- used where a caller is testing several candidate keys in turn (role, then a role:lens composite, then a bare role) and must tell a real miss from the generic default, rather than have every candidate succeed via the same any route")
+fn entriesLoopExact! table: GatewayTable cur: String line: (List String) seen: (List String) tried: (List String) acc: (List GatewayResolvedEntry) -> (List GatewayResolvedEntry)
+  (if (or (stringEmpty? cur) (listContains? seen cur))
+    (listReverse acc)
+    (mt (mapGet table.profiles cur)
+      ((none) (listReverse acc))
+      ((some prof)
+        (let [(chain (mt (routeFindLine prof.routes line) ((some r) r.chain) ((none) (list))))
+              (res (fold (fn [(st (Pair (List String) (List GatewayResolvedEntry))) (a String)] -> (Pair (List String) (List GatewayResolvedEntry))
+                           (entriesStep! st a table))
+                         (pair tried acc)
+                         chain))
+              (nextTried (pairFirst res))
+              (nextAcc (pairSecond res))
+              (nextSeen (cons cur seen))]
+          (mt prof.fallback
+            ((none) (listReverse nextAcc))
+            ((some fb) (entriesLoopExact! table fb line nextSeen nextTried nextAcc)))))))
+
+fn gateway_v2_entries_exact! table: GatewayTable name: String intent: String -> (List GatewayResolvedEntry)
+  (let [(line (gateway_intent_line table intent))]
+    (entriesLoopExact! table name line (list) (list) (list)))
+
+fn gatewayV2EntriesExact! table: GatewayTable name: String intent: String -> (List GatewayResolvedEntry)
+  (gateway_v2_entries_exact! table name intent)
+
 fn findModelByProviderAndName models: (List GatewayModel) target: String -> (Option GatewayModel)
   (mt (listHead models)
     ((none) (none))
@@ -1560,6 +1787,16 @@ fn gateway_entry_label e: GatewayResolvedEntry -> String
 
 fn gatewayEntryLabel e: GatewayResolvedEntry -> String
   (gateway_entry_label e)
+
+; (:m :tags (retry) :do "a model's own :retry wins; absent, it falls back to its provider's :retry; absent on both, noRetryPolicy (maxAttempts 0) keeps today's behaviour unchanged")
+fn providerRetryOf table: (Option GatewayTable) providerId: String -> (Option RetryPolicy)
+  (mt table
+    ((none) (none))
+    ((some tbl) (mt (mapGet tbl.providers providerId) ((some pv) pv.retry) ((none) (none)))))
+
+fn mergedRetryPolicy table: (Option GatewayTable) providerId: String entry: (Option GatewayEntry) -> RetryPolicy
+  (let [(entryRetry (mt entry ((some e) e.retry) ((none) (none))))]
+    (optionOr entryRetry (optionOr (providerRetryOf table providerId) (noRetryPolicy))))
 
 fn anyOnlyForProfile table: GatewayTable pid: String pr: GatewayProfile -> (List String)
   (let [(namedRoutes (filter (fn [(r GatewayRoute)] -> Bool (!= r.intent "any")) pr.routes))
@@ -1618,7 +1855,11 @@ fn gatewayUndeclaredIntents table: GatewayTable -> (Map String Int64)
 (schema RouteEntries
   (:f name String)
   (:f entries (List GatewayResolvedEntry))
-  (:f table GatewayTable))
+  (:f table GatewayTable)
+  (:f temperature (Option Float64))
+  ; (:m :ref GW-SPREAD-LIVE-20261018 :do "the matched route's own :spread/:cooldownSec, carried the same way :temperature already is, so cascadeChosen can order its Loop.models without re-resolving the route itself")
+  (:f spread (List (Pair String Int64)))
+  (:f cooldownSec Int64))
 
 (enum ProfileHealth
   (:c healthError [(error String) (source String)])
@@ -1636,6 +1877,121 @@ fn gatewayUndeclaredIntents table: GatewayTable -> (Map String Int64)
 
 fn gatewayProfilesPath home: String -> String
   (str (rstripSlash home) "/.asl/gateway.asn")
+
+; (:m an optional top-level (:gateway ... :ledgerPath "...") string overrides ul/defaultLedgerPath's home/.asl/run/gatewayCalls.asn; absent, unparseable or non-string text is none, never guessed)
+fn gatewayLedgerPathOverride text: String -> (Option String)
+  (mt (ast/readForms (lx/tokenize text))
+    ((err _) none)
+    ((ok forms)
+     (if (!= (listLength forms) 1)
+       none
+       (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
+         (mt (asn_props top (some ":gateway"))
+           ((err _) none)
+           ((ok g)
+            (mt (mapGet g "ledgerPath")
+              ((none) none)
+              ((some value)
+               (mt (asn_scalar value)
+                 ((scalarStr s) (some s))
+                 (_ none))))))))))
+
+; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "an optional top-level (:gateway ... :sharedUsagePath \"...\") string, same shape as :ledgerPath above but for the shared accounting ledger every gateway process (any HOME, any scratch slot) appends every call to; absent, unparseable or non-string text is none, same default-to-home fallback as :ledgerPath. A scratch-HOME gateway only reaches the real, shared, non-deleted path when its own copy of this config carries this key as an ABSOLUTE string (fp/writeGatewayConfig!-style copy preserves it verbatim, since it is a literal string in the file, not derived from $HOME at read time) -- the operator sets this once in the real ~/.asl/gateway.asn after merge, same deliver step as GW-SPREAD-20261017's :spread rows")
+fn gatewaySharedUsagePathOverride text: String -> (Option String)
+  (mt (ast/readForms (lx/tokenize text))
+    ((err _) none)
+    ((ok forms)
+     (if (!= (listLength forms) 1)
+       none
+       (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
+         (mt (asn_props top (some ":gateway"))
+           ((err _) none)
+           ((ok g)
+            (mt (mapGet g "sharedUsagePath")
+              ((none) none)
+              ((some value)
+               (mt (asn_scalar value)
+                 ((scalarStr s) (some s))
+                 (_ none))))))))))
+
+; (:m :ref GW-BREAKER-STALE-20261018 :do "an optional top-level (:gateway ... :breakerCooldownSec N), same shape as :ledgerPath above; absent, unparseable or non-int text is none, so a config that never sets this keeps the 600s default -- GW-BREAKER-STALE-20261018's own incident was a cooldown fixed at 600s outlasting an entire sweep with no way to shorten it")
+fn gatewayBreakerCooldownSecOverride text: String -> (Option Int64)
+  (mt (ast/readForms (lx/tokenize text))
+    ((err _) none)
+    ((ok forms)
+     (if (!= (listLength forms) 1)
+       none
+       (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
+         (mt (asn_props top (some ":gateway"))
+           ((err _) none)
+           ((ok g)
+            (mt (mapGet g "breakerCooldownSec")
+              ((none) none)
+              ((some value)
+               (mt (asn_scalar value)
+                 ((scalarInt n) (some n))
+                 (_ none))))))))))
+
+; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "walks (:dailyTokenBudgets ((profileId N) ...)) looking for one row naming profile; a profile absent from the list has no budget (none), never guessed, so an operator who sets no budget for a profile keeps today's unlimited behaviour")
+fn gatewayDailyTokenBudgetItems items: (List rd/SExpr) profile: String -> (Option Int64)
+  (mt (listHead items)
+    ((none) none)
+    ((some entry)
+     (let [(parts (mt entry ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list))))
+           (name (mt (listHead parts) ((none) "") ((some n) (resultOr (asn_name_or_string n "dailyTokenBudgets entry") ""))))
+           (budget (mt (asn_scalar (optionOr (listGet parts 1) (rd/makeAtom ""))) ((scalarInt n) (some n)) (_ none)))]
+       (if (= name profile) budget (gatewayDailyTokenBudgetItems (optionOr (listTail items) (list)) profile)))))
+
+fn gatewayDailyTokenBudget text: String profile: String -> (Option Int64)
+  (mt (ast/readForms (lx/tokenize text))
+    ((err _) none)
+    ((ok forms)
+     (if (!= (listLength forms) 1)
+       none
+       (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
+         (mt (asn_props top (some ":gateway"))
+           ((err _) none)
+           ((ok g)
+            (mt (mapGet g "dailyTokenBudgets")
+              ((none) none)
+              ((some value)
+               (let [(items (mt value ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list))))]
+                 (gatewayDailyTokenBudgetItems items profile))))))))))
+
+; (:m :ref PROFILE-PIN-NAME-20261018 :do "a per-worktree/per-rootDir pin naming which gateway profile this run should use, written by tools/fleet/freePool.asl and tools/orch/main.asl's Leon lane, read by asl/agentLoop/providers.asl's providerEnv! and asl-forms/delegate.asl's (:research ...) op -- previously each of those four call sites duplicated its own profilePinPath string and its own ad-hoc parse (a byte tokenizer in one, a stringIndexOf/split in another); this is the one shared path, reader and writer all four now call. .asl.config.asn already has several unrelated :profile rows of its own (FREEPOOL-PROFILE-COLLISION), so the pin keeps its own dedicated file rather than folding into that surface; renamed from freePoolProfile.asn since the pin is not free-pool-specific -- orch's own non-freePool Leon lane and :research read it too")
+fn profilePinPath rootDir: String -> String
+  (str rootDir "/.asl/gatewayProfilePin.asn")
+
+fn profilePinFromText text: String -> (Option String)
+  (mt (ast/readForms (lx/tokenize text))
+    ((err _) none)
+    ((ok forms)
+     (if (!= (listLength forms) 1)
+       none
+       (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
+         (mt top
+           ((rd/sexprList items)
+            (mt (listHead items)
+              ((none) none)
+              ((some head)
+               (if (!= (sexprRawText head) ":profile")
+                 none
+                 (mt (listGet items 1)
+                   ((none) none)
+                   ((some valueExpr)
+                    (mt (asn_scalar valueExpr)
+                      ((scalarStr s) (if (stringEmpty? s) none (some s)))
+                      (_ none))))))))
+           (_ none))))))
+
+fn ! profilePinRead! rootDir: String -> (Option String)
+  (mt (fileReadString (profilePinPath rootDir))
+    ((err _) none)
+    ((ok text) (profilePinFromText text)))
+
+fn ! writeProfilePin! rootDir: String profile: String -> Bool
+  (and (ok? (dirCreate (str rootDir "/.asl")))
+    (ok? (fileWrite (profilePinPath rootDir) (str "(:profile " (asnQuoted profile) ")\n"))))
 
 fn configKeyPart! path: String -> (Pair String (Option (Pair Int64 Int64)))
   (mt (fileStat path)
@@ -1780,16 +2136,104 @@ fn gatewayProfileModels routes: (List GatewayRoute) intent: String -> (Option (L
       ((some ms) (some ms))
       ((none) (routeModelsAny routes))))
 
+fn routeTemperatureFor table: GatewayTable name: String intent: String -> (Option Float64)
+  (mt (mapGet table.profiles name)
+    ((none) (none))
+    ((some prof) (gateway_v2_route_temperature prof (gateway_intent_line table intent))))
+
+; (:m :do "the exact-match sibling of routeTemperatureFor: walks the same profile fallback chain as entriesLoopExact! (so a profile that falls back to another one inherits its temperature, not just its models) but never substitutes the :intent any catch-all for a specific miss")
+fn routeTemperatureForExactLoop table: GatewayTable cur: String line: (List String) seen: (List String) -> (Option Float64)
+  (if (or (stringEmpty? cur) (listContains? seen cur))
+    none
+    (mt (mapGet table.profiles cur)
+      ((none) none)
+      ((some prof)
+       (mt (routeFindLine prof.routes line)
+         ((some r) r.temperature)
+         ((none) (mt prof.fallback ((none) none) ((some fb) (routeTemperatureForExactLoop table fb line (cons cur seen)))))))))
+
+fn routeTemperatureForExact table: GatewayTable name: String intent: String -> (Option Float64)
+  (routeTemperatureForExactLoop table name (gateway_intent_line table intent) (list))
+
+; (:m :ref GW-SPREAD-LIVE-20261018 :do "routeTemperatureFor's sibling for :spread/:cooldownSec: same single-profile, :intent any-substituting lookup, never a fallback walk")
+fn routeSpreadFor table: GatewayTable name: String intent: String -> (List (Pair String Int64))
+  (mt (mapGet table.profiles name)
+    ((none) (list))
+    ((some prof) (mt (routeFindLineOrAny prof.routes (gateway_intent_line table intent)) ((some r) r.spread) ((none) (list)))))
+
+fn routeCooldownSecFor table: GatewayTable name: String intent: String -> Int64
+  (mt (mapGet table.profiles name)
+    ((none) 60)
+    ((some prof) (mt (routeFindLineOrAny prof.routes (gateway_intent_line table intent)) ((some r) r.cooldownSec) ((none) 60))))
+
+; (:m :do "the exact-match sibling of routeSpreadFor/routeCooldownSecFor: walks the profile fallback chain exactly like routeTemperatureForExactLoop, no :intent any substitution")
+fn routeSpreadForExactLoop table: GatewayTable cur: String line: (List String) seen: (List String) -> (List (Pair String Int64))
+  (if (or (stringEmpty? cur) (listContains? seen cur))
+    (list)
+    (mt (mapGet table.profiles cur)
+      ((none) (list))
+      ((some prof)
+       (mt (routeFindLine prof.routes line)
+         ((some r) r.spread)
+         ((none) (mt prof.fallback ((none) (list)) ((some fb) (routeSpreadForExactLoop table fb line (cons cur seen)))))))))
+
+fn routeSpreadForExact table: GatewayTable name: String intent: String -> (List (Pair String Int64))
+  (routeSpreadForExactLoop table name (gateway_intent_line table intent) (list))
+
+fn routeCooldownSecForExactLoop table: GatewayTable cur: String line: (List String) seen: (List String) -> Int64
+  (if (or (stringEmpty? cur) (listContains? seen cur))
+    60
+    (mt (mapGet table.profiles cur)
+      ((none) 60)
+      ((some prof)
+       (mt (routeFindLine prof.routes line)
+         ((some r) r.cooldownSec)
+         ((none) (mt prof.fallback ((none) 60) ((some fb) (routeCooldownSecForExactLoop table fb line (cons cur seen)))))))))
+
+fn routeCooldownSecForExact table: GatewayTable name: String intent: String -> Int64
+  (routeCooldownSecForExactLoop table name (gateway_intent_line table intent) (list))
+
 fn gatewayRouteEntries! table: GatewayTable headers: (List (Pair String String)) envProfile: (Option String) intent: String -> (Result RouteEntries String)
   (mt (gatewayProfileName table headers envProfile)
     ((err e) (err e))
     ((ok name)
       (if (= table.version 2)
         (let [(noted (gateway_note_intent table (stringLower (lstripColons intent))))]
-          (ok (RouteEntries :name name :entries (gateway_v2_entries! noted name intent) :table noted)))
+          (ok (RouteEntries :name name :entries (gateway_v2_entries! noted name intent) :table noted :temperature (routeTemperatureFor noted name intent)
+                :spread (routeSpreadFor noted name intent) :cooldownSec (routeCooldownSecFor noted name intent))))
         (let [(routes (mt (mapGet table.profiles name) ((some pr) pr.routes) ((none) (list))))
               (models (optionOr (gatewayProfileModels routes intent) (list)))]
-          (ok (RouteEntries :name name :entries (map (fn [(m String)] -> GatewayResolvedEntry (entryUnresolved m)) models) :table table))))))
+          (ok (RouteEntries :name name :entries (map (fn [(m String)] -> GatewayResolvedEntry (entryUnresolved m)) models) :table table :temperature none :spread (list) :cooldownSec 60))))))
+
+; (:m :do "the exact-match sibling of gatewayRouteEntries!: no :intent any substitution, so an empty entries list genuinely means this key has no route of its own; used by aliasRoute! to try role, role:lens composite and bare role in turn without the active profile's generic any route masking every miss")
+fn gatewayRouteEntriesExact! table: GatewayTable headers: (List (Pair String String)) envProfile: (Option String) intent: String -> (Result RouteEntries String)
+  (mt (gatewayProfileName table headers envProfile)
+    ((err e) (err e))
+    ((ok name)
+      (if (= table.version 2)
+        (let [(noted (gateway_note_intent table (stringLower (lstripColons intent))))]
+          (ok (RouteEntries :name name :entries (gateway_v2_entries_exact! noted name intent) :table noted :temperature (routeTemperatureForExact noted name intent)
+                :spread (routeSpreadForExact noted name intent) :cooldownSec (routeCooldownSecForExact noted name intent))))
+        (let [(routes (mt (mapGet table.profiles name) ((some pr) pr.routes) ((none) (list))))
+              (models (optionOr (routeModelsNamed routes (stringLower (lstripColons intent))) (list)))]
+          (ok (RouteEntries :name name :entries (map (fn [(m String)] -> GatewayResolvedEntry (entryUnresolved m)) models) :table table :temperature none :spread (list) :cooldownSec 60))))))
+
+; (:m :do "a reverse lookup: does the active profile's own chain for ANY intent already list this raw model string; used when the caller's model field names a dispatch target directly rather than an alias or a role/intent, so a dead model still gets a cascade of configured siblings to retry instead of a single dead end")
+fn routeChainContaining routes: (List GatewayRoute) model: String -> (Option (List String))
+  (mt (listHead (filter (fn [(r GatewayRoute)] -> Bool (listContains? r.chain model)) routes))
+    ((none) none)
+    ((some r) (some r.chain)))
+
+fn gateway_chain_containing_model! table: GatewayTable headers: (List (Pair String String)) envProfile: (Option String) model: String -> (Option (List String))
+  (mt (gatewayProfileName table headers envProfile)
+    ((err _) none)
+    ((ok name)
+      (mt (mapGet table.profiles name)
+        ((none) none)
+        ((some prof) (routeChainContaining prof.routes model)))))
+
+fn gatewayChainContainingModel! table: GatewayTable headers: (List (Pair String String)) envProfile: (Option String) model: String -> (Option (List String))
+  (gateway_chain_containing_model! table headers envProfile model)
 
 fn gatewayProfileHealth loaded: (Result GatewayTable String) headers: (List (Pair String String)) envProfile: (Option String) path: String exists: Bool -> ProfileHealth
   (let [(errSource (if exists path "builtin"))]

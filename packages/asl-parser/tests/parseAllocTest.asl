@@ -11,7 +11,7 @@ fn workload -> (List String)
   (list "asl/prelude/prelude.asl" "asl/packages/asl-json/src/json.asl" "asl/packages/asl-json/tests/jsonTest.asl")
 
 fn ! sources -> (List String)
-  (map (fn [(p String)] -> String (mt (fileRead p) ((ok s) s) ((err _) ""))) (workload))
+  (map (fn [(p String)] -> String (mt (fileReadString p) ((ok s) s) ((err _) ""))) (workload))
 
 fn formCount src: String -> Int64
   (mt (ast/parse src) ((ok forms) (listLength forms)) ((err _) -1))
@@ -49,7 +49,7 @@ fn ! runTests -> Bool
         (parseBytes (- (pairFirst parseRun) (pairFirst readRun)))]
     (do
       (println (str "parseAlloc read " (pairFirst readRun) " parse " (pairFirst parseRun) " delta " parseBytes))
-      (assert (stringContains? (pairSecond parseRun) "parseAlloc parse forms 252 28 12") (str "every workload module parses to its form count: " (pairSecond parseRun)))
+      (assert (stringContains? (pairSecond parseRun) "parseAlloc parse forms 263 28 12") (str "every workload module parses to its form count: " (pairSecond parseRun)))
       (assert (and (> (pairFirst readRun) 0) (> parseBytes 0)) "both runs report bytesAllocated and parsing allocates")
       (assert (< parseBytes 241000000) (str "parsing prelude and the jsonTest closure allocates < 241 MB (0.5x base 482 MB), got " parseBytes))
       true))

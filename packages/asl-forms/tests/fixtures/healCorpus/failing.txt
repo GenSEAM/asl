@@ -1,0 +1,1164 @@
+;;; case E10_bangBuiltins_t01
+(module cand :x [solve])
+
+fn ! solve n: Int64 -> Int64
+  (let [(a (+ n 1)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none))) (s (listSum ws)) (result (cond ((some? opt) (+ s 1)) (else s))) (p (println! result))] result)
+
+;;; case E1_flatPairs_t01
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let (a (+ n 1) b (* n 1) ws [a b (+ a b)] opt (cond (> b 0) (some b) (else none)))
+    (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E1_flatPairs_t03
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let (a (+ n 3) b (* n 3) ws [a b (+ a b)] opt (cond ((> b 0) (some b)) (else none)))
+  (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E1_flatPairs_t05
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+    (let (a (+ n 5) b (* n 1) ws [a b (+ a b)] opt (cond (> b 0) (some b) (else none)))
+        (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E1_flatPairs_t07
+(module cand :x [solve])
+(let (a (+ n 1) b (* n 3) ws [a b (+ a b)] opt (cond (> b 0) (some b) (else none)))
+  (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+;;; case E1_flatPairs_t09
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let (a (+ n 3) b (* n 1) ws [a b (+ a b)] opt (cond ((> b 0) (some b)) (else none)))
+    (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E1_flatPairs_t11
+(module cand :x [solve])
+(let (a (+ n 5)
+         b (* n 3)
+         ws [a b (+ a b)]
+         opt (cond (> b 0) (some b) (else none)))
+    (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+;;; case E1_flatPairs_t13
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let (a (+ n 1) b (* n 1) ws [a b (+ a b)] opt (cond ((> b 0) (some b)) (else none)))
+  (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E1_flatPairs_t16
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+  (let (a (+ n 4) b (* n 4) ws [a b (+ a b)] opt (cond ((> b 0) (some b)) (else none)))
+    (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E1_flatPairs_t18
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let (a (+ n 6) b (* n 2) ws [a b (+ a b)] opt (cond ((> b 0) (some b)) (else none)))
+    (cond ((some? opt) (+ (listSum ws) 1))
+          (else (listSum ws))))
+
+;;; case E1_flatPairs_t20
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+  (let (a (+ n 2) b (* n 4) ws [a b (+ a b)] opt (cond ((> b 0) (some b)) (else none)))
+    (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E1_flatPairs_t22
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let (a (+ n 4) b (* n 2) ws [a b (+ a b)] opt (cond ((> b 0) (some b)) (else none))) (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E1_flatPairs_t24
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let (a (+ n 6) b (* n 4) ws [a b (+ a b)] opt (cond ((> b 0) (some b)) (else none)))
+    (mt opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
+
+;;; case E1_flatPairs_t26
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let (a (+ n 2) b (* n 2) ws [a b (+ a b)] opt (cond ((> b 0) (some b)) (else none))) (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E1_flatPairs_t28
+(module cand :x [solve])
+(let (a (+ n 4) b (* n 4) ws [a b (+ a b)] opt (cond (> b 0) (some b) (else none)))
+  (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+;;; case E1_flatPairs_t30
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let (a (+ n 6) b (* n 2) ws [a b (+ a b)] opt (cond ((> b 0) (some b)) (else none)))
+  (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E1_flatPairs_t32
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let (a (+ n 2) b (* n 4) ws [a b (+ a b)] opt (cond ((> b 0) (some b)) (else none)))
+    (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E1_flatPairs_t34
+(module cand :x [solve])
+(let (a (+ n 4) b (* n 2) ws [a b (+ a b)] opt (cond ((> b 0) (some b)) (else none)))
+   (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+;;; case E1_flatPairs_t36
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let (a (+ n 6) b (* n 4) ws [a b (+ a b)] opt (cond ((> b 0) (some b)) (else none)))
+    (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E1_flatPairs_t39
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let (a (+ n 3) b (* n 3) ws [a b (+ a b)] opt (cond ((> b 0) (some b)) (else none)))
+   (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E1_flatPairs_t41
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let (a (+ n 5) b (* n 1) ws [a b (+ a b)] opt (cond ((> b 0) (some b)) (else none))) (let (s (listSum ws)) (cond ((some? opt) (+ s 1)) (else s))))
+
+;;; case E1_flatPairs_t43
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let (a (+ n 1) b (* n 3) ws [a b (+ a b)] opt (cond ((> b 0) (some b)) (else none)))
+    (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E1_flatPairs_t46
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let (a (+ n 4) b (* n 2) ws [a b (+ a b)] opt (cond (> b 0) (some b) (else none)))
+    (let (s (listSum ws))
+      (cond (some? opt) (+ s 1) (else s))))
+
+;;; case E1_flatPairs_t50
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let (a (+ n 2) b (* n 2) ws [a b (+ a b)] opt (cond ((> b 0) (some b)) (else none)))
+    (mt opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
+
+;;; case E1_schemePairs_t02
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let ((a (+ n 2)) (b (* n 2)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))) (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E1_schemePairs_t04
+(module cand :x [solve])
+(let ((a (+ n 4)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))) (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+;;; case E1_schemePairs_t06
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+  (let ((a (+ n 6))
+        (b (* n 2))
+        (ws [a b (+ a b)])
+        (opt (cond ((> b 0) (some b)) (else none))))
+    (cond ((some? opt) (+ (listSum ws) 1))
+          (else (listSum ws))))
+
+;;; case E1_schemePairs_t08
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let ((a (+ n 2))
+        (b (* n 4))
+        (ws [a b (+ a b)])
+        (opt (cond ((> b 0) (some b)) (else none))))
+    (cond ((some? opt) (+ (listSum ws) 1))
+          (else (listSum ws))))
+
+;;; case E1_schemePairs_t10
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let ((a (+ n 4))
+        (b (* n 2)))
+    (let ((ws [a b (+ a b)]))
+      (let ((opt (cond ((> b 0) (some b)) (else none))))
+        (cond ((some? opt) (+ (listSum ws) 1))
+              (else (listSum ws))))))
+
+;;; case E1_schemePairs_t12
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let ((a (+ n 6))
+        (b (* n 4))
+        (ws [a b (+ a b)])
+        (opt (cond ((> b 0) (some b))
+                   (else none))))
+    (cond ((some? opt) (+ (listSum ws) 1))
+          (else (listSum ws))))
+
+;;; case E1_schemePairs_t14
+(module cand :x [solve])
+(let ((a (+ n 2)) (b (* n 2)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))) (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+;;; case E1_schemePairs_t16
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let ((a (+ n 4))
+        (b (* n 4))
+        (ws [a b (+ a b)])
+        (opt (cond ((> b 0) (some b)) (else none))))
+    (cond ((some? opt) (+ (listSum ws) 1))
+          (else (listSum ws))))
+
+;;; case E1_schemePairs_t18
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let ((a (+ n 6))
+        (b (* n 2))
+        (ws [a b (+ a b)])
+        (opt (cond ((> b 0) (some b)) (else none))))
+    (let ((s (listSum ws)))
+      (cond ((some? opt) (+ s 1)) (else s))))
+
+;;; case E1_schemePairs_t20
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+  (let ((a (+ n 2))
+        (b (* n 4))
+        (ws [a b (+ a b)]))
+    (let ((opt (cond ((> b 0) (some b))
+                     (else none))))
+      (cond ((some? opt) (+ (listSum ws) 1))
+            (else (listSum ws)))))
+
+;;; case E1_schemePairs_t22
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let ((a (+ n 4)) (b (* n 2)) (ws [a b (+ a b)]))
+    (let ((opt (cond ((> b 0) (some b)) (else none))))
+      (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws)))))
+
+;;; case E1_schemePairs_t24
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let ((a (+ n 6)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none))))
+    (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E1_schemePairs_t26
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let ((a (+ n 2))
+        (b (* n 2))
+        (ws [a b (+ a b)])
+        (opt (cond ((> b 0) (some b))
+                   (else none))))
+    (cond ((some? opt) (+ (listSum ws) 1))
+          (else (listSum ws))))
+
+;;; case E1_schemePairs_t28
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let ((a (+ n 4))
+        (b (* n 4))
+        (ws [a b (+ a b)])
+        (opt (cond ((> b 0) (some b))
+                   (else none))))
+    (cond ((some? opt) (+ (listSum ws) 1))
+          (else (listSum ws))))
+
+;;; case E1_schemePairs_t30
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+  (let ((a (+ n 6))
+        (b (* n 2))
+        (ws [a b (+ a b)])
+        (opt (cond ((> b 0) (some b)) (else none))))
+    (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E1_schemePairs_t32
+(module cand :x [solve])
+(let ((a (+ n 2))
+         (b (* n 4))
+         (ws [a b (+ a b)])
+         (opt (cond ((> b 0) (some b))
+                    (else none))))
+     (cond ((some? opt) (+ (listSum ws) 1))
+           (else (listSum ws))))
+;;; case E1_schemePairs_t36
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let ((a (+ n 6)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond (> b 0) (some b) (else none)))) (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E1_schemePairs_t38
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let ((a (+ n 2)) (b (* n 2)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none))) (s (listSum ws)))
+    (cond ((some? opt) (+ s 1)) (else s)))
+
+;;; case E1_schemePairs_t40
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let ((a (+ n 4)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none))))
+    (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E1_schemePairs_t42
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let ((a (+ n 6))
+        (b (* n 2))
+        (ws [a b (+ a b)])
+        (opt (cond ((> b 0) (some b))
+                   (else none))))
+    (cond ((some? opt) (+ (listSum ws) 1))
+          (else (listSum ws))))
+
+;;; case E1_schemePairs_t45
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let ((a (+ n 3))
+        (b (* n 1))
+        (ws [a b (+ a b)])
+        (opt (cond ((> b 0) (some b)) (else none))))
+    (mt opt
+      ((some v) (+ (listSum ws) 1))
+      (none (listSum ws))))
+
+;;; case E1_schemePairs_t50
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let ((a (+ n 2)) (b (* n 2)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none))))
+  (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E2_brackets_t06
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 6)) (b (* n 2)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+  (cond ((some? opt) (+ (listSum ws) 1))
+        (else (listSum ws))))
+
+;;; case E2_brackets_t10
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 4))
+       (b (* n 2))
+       (ws [a b (+ a b)])
+       (opt (cond ((> b 0) (some b))
+                  (else none)))]
+  (cond ((some? opt) (+ (listSum ws) 1))
+        (else (listSum ws))))
+
+;;; case E2_brackets_t18
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 6))
+       (b (* n 2))
+       (ws [a b (+ a b)])
+       (opt (cond ((> b 0) (some b)) (else none)))]
+   (mt opt
+    ((some v) (+ (listSum ws) 1))
+    (none (listSum ws))))
+
+;;; case E2_brackets_t26
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 2)) (b (* n 2)) (ws [a b (+ a b)]) (opt (cond [(> b 0) (some b)] [(else none)]))]
+  (cond [(some? opt) (+ (listSum ws) 1)] [(else (listSum ws))])))
+
+;;; case E2_brackets_t32
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 2))
+        (b (* n 4))
+        (ws [a b (+ a b)])
+        (opt (cond (> b 0) (some b) (else none)))]
+    (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E2_brackets_t40
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 4))
+        (b (* n 4))
+        (ws [a b (+ a b)])
+        (opt (cond (> b 0) (some b) (else none)))]
+    (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E2_brackets_t46
+(module cand :x [solve])
+(let [(a (+ n 4))
+        (b (* n 2))
+        (ws [a b (+ a b)])
+        (opt (cond ((> b 0) (some b)) (else none)))]
+   (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+;;; case E2_brackets_t50
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 2)) (b (* n 2)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))] (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E2_parenOnly_t04
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 4))
+       (b (* n 4))
+       (ws (list a b (+ a b)))
+       (opt (cond ((> b 0) (some b)) (else none)))]
+  (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E2_parenOnly_t07
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 1))
+        (b (* n 3))
+        (ws (list a b (+ a b)))
+        (opt (cond (> b 0) (some b) (else none)))]
+    (cond (some? opt)
+          (+ (listSum ws) 1)
+          (else (listSum ws))))
+
+;;; case E2_parenOnly_t12
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 6)) (b (* n 4)) (ws (list a b (+ a b))) (opt (cond (> b 0) (some b) (else none)))]
+  (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E2_parenOnly_t14
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 2)) (b (* n 2)) (ws (list a b (+ a b))) (opt (cond [(> b 0) (some b)] [true none]))]
+    (cond [(some? opt) (+ (listSum ws) 1)] [true (listSum ws)]))
+
+;;; case E2_parenOnly_t18
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 6))
+        (b (* n 2))
+        (ws (list a b (+ a b)))
+        (opt (cond (> b 0) (some b) (else none)))]
+    (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E2_parenOnly_t29
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 5)) (b (* n 1)) (ws (list a b (+ a b))) (opt (cond (> b 0) (some b) (else none)))]
+    (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E2_parenOnly_t32
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 2))
+       (b (* n 4))
+       (ws (list a b (+ a b)))
+       (opt (cond ((> b 0) (some b)) (else none)))]
+   (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E2_parenOnly_t36
+(module cand :x [solve])
+(let [(a (+ n 6)) (b (* n 4)) (ws (list a b (+ a b))) (opt (cond ((> b 0) (some b)) (else none)))]
+  (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+;;; case E2_parenOnly_t40
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 4))
+        (b (* n 4))
+        (ws (list a b (+ a b)))
+        (opt (cond (> b 0) (some b) (else none)))]
+    (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E2_parenOnly_t43
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 1)) (b (* n 3)) (ws (list a b (+ a b))) (opt (cond ((> b 0) (some b)) (else none)))]
+  (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E2_parenOnly_t45
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 3)) (b (* n 1)) (ws (list a b (+ a b))) (opt (cond ((> b 0) (some b)) (else none)))]
+  (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E2_parenOnly_t47
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 5)) (b (* n 3)) (ws (list a b (+ a b)))]
+    (let [(opt (cond (> b 0) (some b) (else none)))]
+      (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws)))))
+
+;;; case E3_bare_t01
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 1)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((some opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_bare_t03
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 3)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))] (cond ((some opt) (+ (listSum ws) 1)) (else (listSum ws))))
+;;; case E3_bare_t06
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 6)) (b (* n 2)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((some opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_bare_t08
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 2)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((some opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_bare_t11
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 5)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((some opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_bare_t13
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 1)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+  (cond ((some opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_bare_t15
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 3)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond [(> b 0) (some b)] [(else none)]))]
+    (cond [(some opt) (+ (listSum ws) 1)] [(else (listSum ws))]))
+
+;;; case E3_bare_t17
+(module cand :x [solve])
+(let [(a (+ n 5)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+  (cond ((some opt) (+ (listSum ws) 1)) (else (listSum ws))))
+;;; case E3_bare_t19
+(module cand :x [solve])
+(let [(a (+ n 1)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((some opt) (+ (listSum ws) 1)) (else (listSum ws))))
+;;; case E3_bare_t22
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 4)) (b (* n 2)) (ws [a b (+ a b)]) (opt (cond (> b 0) (some b) (else none)))]
+  (cond (some opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E3_bare_t24
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 6)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((some opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_bare_t27
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 3)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+  (cond ((some opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_bare_t29
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 5)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond (> b 0) (some b) (else none)))]
+    (cond (some opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E3_bare_t31
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 1)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((some opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_bare_t33
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 3)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))] (cond ((some opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_bare_t36
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 6)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+  (cond ((some opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_bare_t38
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 2)) (b (* n 2)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else (none))))]
+    (cond ((some opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_bare_t40
+(module cand :x [solve])
+(let [(a (+ n 4))
+       (b (* n 4))
+       (ws [a b (+ a b)])
+       (opt (cond (> b 0) (some b) (else none)))]
+   (cond (some opt)
+     (+ (listSum ws) 1)
+     (else (listSum ws))))
+;;; case E3_bare_t42
+(module cand :x [solve])
+(let [(a (+ n 6))
+        (b (* n 2))
+        (ws [a b (+ a b)])
+        (opt (cond ((> b 0) (some b)) (else none)))]
+  (cond ((some opt) (+ (listSum ws) 1)) (else (listSum ws))))
+;;; case E3_bare_t45
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 3)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))] (cond ((some opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_bare_t47
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 5)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+  (cond ((some opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_bare_t50
+(module cand :x [solve])
+(let [(a (+ n 2)) (b (* n 2)) (ws [a b (+ a b)]) (opt (if (> b 0) (some b) none))]
+    (if (some opt) (+ (listSum ws) 1) (listSum ws)))
+;;; case E3_isX_t04
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 4)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond (> b 0) (some b) (else none)))]
+  (cond (isSome opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E3_isX_t06
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 6)) (b (* n 2)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((isSome opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_isX_t08
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 2)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))] (cond ((isSome opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_isX_t12
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 6)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))] (cond ((isSome opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_isX_t14
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 2))
+        (b (* n 2))
+        (ws [a b (+ a b)])
+        (opt (cond [(> b 0) (some b)]
+                   [(else none)]))]
+    (cond [(isSome opt) (+ (listSum ws) 1)]
+          [(else (listSum ws))]))
+
+;;; case E3_isX_t16
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 4)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond (> b 0) (some b) (else none)))] (cond (isSome opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E3_isX_t19
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 1)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond (> b 0) (some b) (else none)))]
+    (cond (isSome opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E3_isX_t21
+(module cand :x [solve])
+(let [(a (+ n 3)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((isSome opt) (+ (listSum ws) 1))
+      (else (listSum ws))))
+;;; case E3_isX_t23
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 5))
+       (b (* n 3))
+       (ws [a b (+ a b)])
+       (opt (cond ((> b 0) (some b))
+                  (else none)))]
+  (cond ((isSome opt) (+ (listSum ws) 1))
+        (else (listSum ws))))
+
+;;; case E3_isX_t25
+(module cand :x [solve])
+(let [(a (+ n 1)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))] (cond ((isSome opt) (+ (listSum ws) 1)) (else (listSum ws))))
+;;; case E3_isX_t29
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 5)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond [(> b 0) (some b)] (else none)))]
+  (cond [(isSome opt) (+ (listSum ws) 1)] (else (listSum ws))))
+
+;;; case E3_isX_t31
+(module cand :x [solve])
+(let [(a (+ n 1)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+  (cond ((isSome opt) (+ (listSum ws) 1)) (else (listSum ws))))
+;;; case E3_isX_t33
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 3)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+     (cond ((isSome opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_isX_t35
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 5)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((isSome opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_isX_t37
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 1)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((isSome opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_isX_t40
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 4)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((isSome opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_isX_t42
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 6)) (b (* n 2)) (ws [a b (+ a b)]) (opt (if (> b 0) (some b) none))]
+    (if (isSome opt) (+ (listSum ws) 1) (listSum ws)))
+
+;;; case E3_isX_t44
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 2)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond [(> b 0) (some b)] (else none)))]
+    (cond [(isSome opt) (+ (listSum ws) 1)] (else (listSum ws))))
+
+;;; case E3_isX_t46
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 4))
+       (b (* n 2))
+       (ws [a b (+ a b)])
+       (opt (cond (> b 0) (some b) (else none)))]
+  (cond (isSome opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E3_isX_t48
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 6)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((isSome opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_qmark_t02
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 2)) (b (* n 2)) (ws [a b (+ a b)]) (opt (cond (> b 0) (some b) (else none)))]
+  (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E3_qmark_t05
+(module cand :x [solve])
+(let [(a (+ n 5)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+;;; case E3_qmark_t08
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 2)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))] (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_qmark_t21
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 3)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))] (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E3_qmark_t24
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 6))
+        (b (* n 4))
+        (ws [a b (+ a b)])
+        (opt (cond [(> b 0) (some b)] (else none)))]
+    (cond [(some? opt) (+ (listSum ws) 1)] (else (listSum ws))))
+
+;;; case E3_qmark_t36
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 6)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond (> b 0) (some b) (else none)))] (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E3_qmark_t43
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 1)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+   (mt opt
+     ((some v) (+ (listSum ws) 1))
+     (none (listSum ws)))))
+
+;;; case E3_qmark_t46
+(module cand :x [solve])
+(let [(a (+ n 4)) (b (* n 2)) (ws [a b (+ a b)]) (opt (cond (> b 0) (some b) (else none)))]
+    (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+;;; case E3_qmark_t49
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 1)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+  (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E7_currentHeader_t06
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 6)) (b (* n 2)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+  (cond ((some? opt) (+ (listSum ws) 1))
+   (else (listSum ws))))
+
+;;; case E7_currentHeader_t08
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 2)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond (> b 0) (some b) (else none)))] (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E7_currentHeader_t15
+(module cand :x [solve])
+(let [(a (+ n 3))
+       (b (* n 3))
+       (ws [a b (+ a b)])
+       (opt (cond ((> b 0) (some b)) (else none)))]
+   (cond ((some? opt) (+ (listSum ws) 1))
+         (else (listSum ws))))
+;;; case E7_currentHeader_t19
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 1)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+  (mt opt ((some v) (+ (listSum ws) 1)) (none (listSum ws)))))
+
+;;; case E7_currentHeader_t27
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 3)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond (> b 0) (some b) (else none)))]
+    (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E7_currentHeader_t32
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 2))
+        (b (* n 4))
+        (ws [a b (+ a b)])
+        (opt (cond [(> b 0) (some b)]
+                   [(else none)]))]
+    (cond [(some? opt) (+ (listSum ws) 1)]
+          [(else (listSum ws))]))
+
+;;; case E7_currentHeader_t39
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 3)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))] (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E7_currentHeader_t50
+(module cand :x [solve])
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 2))
+       (b (* n 2))
+       (ws [a b (+ a b)])
+       (opt (cond [(> b 0) (some b)] [(else none)]))]
+   (mt opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
+
+;;; case E7_newHeader_t02
+module cand
+doc "one line description"
+exports solve
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 2)) (b (* n 2)) (ws [a b (+ a b)]) (opt (if (> b 0) (some b) none))]
+    (if (some? opt) (+ (listSum ws) 1) (listSum ws)))
+
+;;; case E7_newHeader_t04
+module cand
+doc "one line description"
+exports solve
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 4)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E7_newHeader_t06
+module cand
+doc "one line description"
+exports solve
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 6))
+        (b (* n 2))
+        (ws [a b (+ a b)])
+        (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((some? opt) (+ (listSum ws) 1))
+          (else (listSum ws))))
+
+;;; case E7_newHeader_t08
+module cand
+doc "one line description"
+exports solve
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 2)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E7_newHeader_t10
+module cand
+doc "one line description"
+exports solve
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 4)) (b (* n 2)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E7_newHeader_t13
+module cand
+doc "one line description"
+exports solve
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 1))
+        (b (* n 1))
+        (ws [a b (+ a b)])
+        (opt (cond (> b 0) (some b) (else none)))]
+    (cond (some? opt)
+      (+ (listSum ws) 1)
+      (else (listSum ws))))
+
+;;; case E7_newHeader_t15
+module cand
+doc "one line description"
+exports solve
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 3))
+        (b (* n 3))
+        (ws [a b (+ a b)])
+        (opt (cond ((> b 0) (some b))
+                   ((else none))))]
+    (cond ((some? opt) (+ (listSum ws) 1))
+          ((else (listSum ws)))))
+
+;;; case E7_newHeader_t17
+module cand
+doc "solve builds a list sum from n and adds one when the option is present"
+exports solve
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 5))
+        (b (* n 1))
+        (ws [a b (+ a b)])
+        (opt (cond (> b 0) (some b) (else none)))]
+    (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E7_newHeader_t19
+module cand
+doc "solves for n by summing a,b,a+b and adding one when opt holds"
+exports solve
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 1)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E7_newHeader_t21
+module cand
+doc "computes a sum of a list plus one when n is positive"
+exports solve
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 3)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))] (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E7_newHeader_t23
+module cand
+doc "one line description"
+exports solve
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 5)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))] (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E7_newHeader_t27
+module cand
+doc "adds one to the sum of three derived values when the option holds a value"
+exports solve
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 3))
+       (b (* n 3))
+       (ws [a b (+ a b)])
+       (opt (cond ((> b 0) (some b)) (else none)))]
+   (cond ((some? opt) (+ (listSum ws) 1))
+         (else (listSum ws))))
+
+;;; case E7_newHeader_t29
+module cand
+doc "one line description"
+exports solve
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 5)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+  (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E7_newHeader_t31
+module cand
+doc "one line description"
+exports solve
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 1))
+       (b (* n 3))
+       (ws [a b (+ a b)])
+       (opt (cond ((> b 0) (some b))
+                  (else none)))]
+   (cond ((some? opt) (+ (listSum ws) 1))
+         (else (listSum ws))))
+
+;;; case E7_newHeader_t33
+module cand
+doc "one line description"
+exports solve
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 3)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond (> b 0) (some b) (else none)))]
+    (mt opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
+
+;;; case E7_newHeader_t35
+module cand
+doc "one line description"
+exports solve
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 5)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+  (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E7_newHeader_t37
+module cand
+doc "one line description"
+exports solve
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 1)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+   (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E7_newHeader_t40
+module cand
+doc "computes n+4, n*4 and their sum, plus one when the option holds a value"
+exports solve
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 4))
+        (b (* n 4))
+        (ws [a b (+ a b)])
+        (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E7_newHeader_t42
+module cand
+doc "one line description"
+exports solve
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 6))
+        (b (* n 2))
+        (ws [a b (+ a b)])
+        (opt (cond (> b 0) (some b) (else none)))]
+    (cond (some? opt) (+ (listSum ws) 1) (else (listSum ws))))
+
+;;; case E7_newHeader_t45
+module cand
+doc "one line description"
+exports solve
+
+fn solve n: Int64 -> Int64
+  (let [(a (+ n 3)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E7_newHeader_t47
+module cand
+doc "one line description"
+exports solve
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 5))
+       (b (* n 3))
+       (ws [a b (+ a b)])
+       (opt (cond ((> b 0) (some b))
+                  (else none)))]
+   (cond ((some? opt) (+ (listSum ws) 1))
+         (else (listSum ws))))
+
+;;; case E7_newHeader_t49
+module cand
+doc "one line description"
+exports solve
+
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 1)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))] (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+
+;;; case E8_match_t01
+(module cand :x [solve])
+fn solve n: Int64 -> Int64
+ (let [(a (+ n 1)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+  (match opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
+
+;;; case E8_mt_t01
+(module cand :x [solve])
+(let [(a (+ n 1)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
+    (mt opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
+;;; case E9_bangPrefix_t02
+(module cand :x [solve])
+
+fn ! solve n: Int64 -> Int64
+  (let [(a (+ n 2))
+        (b (* n 2))
+        (ws [a b (+ a b)])
+        (opt (cond (> b 0) (some b) (else none)))
+        (result (mt opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))]
+    (let [(printed (println result))]
+      result)))
+
+;;; case E9_bangSuffix_t02
+(module cand :x [solve])
+
+fn solve! n: Int64 -> Int64
+  (let [(a (+ n 2))
+        (b (* n 2))
+        (ws [a b (+ a b)])
+        (opt (cond ((> b 0) (some b)) (else none)))
+        (result (cond ((some? opt) (+ (listSum ws) 1)) (else (listSum ws))))
+        (printed (println result))]
+     result)
+

@@ -3,7 +3,7 @@
   :i [])
 
 fn testPreloadRankingSourceIntegrity! -> Bool
-  (let [(pRes (fileRead "asl/packages/asl-intel/src/preload.asl"))]
+  (let [(pRes (fileReadString "asl/packages/asl-intel/src/preload.asl"))]
     (mt pRes
       ((err e) (assert false (str "Failed to read asl/packages/asl-intel/src/preload.asl: " e)))
       ((ok src)
@@ -20,7 +20,7 @@ fn testPreloadRankingSourceIntegrity! -> Bool
     true)
 
 fn testPreloadGrammarRegistration! -> Bool
-  (let [(gRes (fileRead "asl/packages/asl-intel/manifest.asn"))]
+  (let [(gRes (fileReadString "asl/packages/asl-intel/manifest.asn"))]
     (mt gRes
       ((err ge) (assert false (str "Failed to read asl/packages/asl-intel/manifest.asn: " ge)))
       ((ok gSrc)
@@ -52,7 +52,7 @@ fn testPreloadBm25Computation! -> Bool
     true)
 
 fn testIncrementalBm25Update! -> Bool
-  (let [(evalIncCmd "./bin/asl eval '(let [(s0 (list 0 0 1)) (d1 50) (s1 (list (+ (listGet s0 0) 1) (+ (listGet s0 1) d1) (/ (+ (listGet s0 1) d1) (+ (listGet s0 0) 1))))] s1)'")
+  (let [(evalIncCmd "./bin/asl eval '(let [(s0 (list 0 0 1)) (d1 50) (s1 (list (+ (optionOr (listGet s0 0) 0) 1) (+ (optionOr (listGet s0 1) 0) d1) (/ (+ (optionOr (listGet s0 1) 0) d1) (+ (optionOr (listGet s0 0) 0) 1))))] s1)'")
         (evalIncRes (processRun evalIncCmd))]
     (assert (= evalIncRes.exitCode 0) "asl eval exits 0 on incremental BM25 stats calculation")
     (assert (stringContains? evalIncRes.stdout "50") "Incremental stats computes 50 average doc length")

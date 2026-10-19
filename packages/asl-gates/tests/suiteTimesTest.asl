@@ -126,7 +126,7 @@ fn ! testRunnerRecords! dir: String -> Bool
         (seeded (st/writeTimes! ledger (list (st/SuiteTime :suite "tests/fastTest.sh" :ms 10) (st/SuiteTime :suite "tests/slowTest.sh" :ms 2000))))
         (setup (sh! (str "cd " repo " && git init -q && git config user.name fixture && git config user.email fixture@example.invalid"
                          " && chmod +x tests/*.sh && git add -A && git commit -q -m fixture")))
-        (run (str "cd " repo " && ASL_JOBS=1 ASL_GATE_TIMES=" ledger " " cwd "/asl/host/out/asl-host run " cwd "/asl/packages/asl-gates/src/runnerMain.asl run --suite tests/fastTest.sh --suite tests/slowTest.sh"))
+        (run (str "cd " repo " && ASL_JOBS=1 ASL_GATE_TIMES=" ledger " " cwd "/bin/asl run " cwd "/asl/packages/asl-gates/src/runnerMain.asl run --suite tests/fastTest.sh --suite tests/slowTest.sh"))
         (first (processRun run))
         (observedOrder (readText! orderPath))
         (suiteEnv (readText! envPath))

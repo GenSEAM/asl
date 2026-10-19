@@ -5,6 +5,7 @@
  :aslFirst true
  :modules [
    "aslMem/amnesia"
+   "aslMem/asnBoxart"
    "aslMem/astFilter"
    "aslMem/astMerge"
    "aslMem/bm25"

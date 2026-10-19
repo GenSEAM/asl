@@ -1,8 +1,10 @@
 (module aslGateway/server
-  :x [GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! main! main mainWith]
+  :x [GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main! main mainWith
+      GatewayConn ConnPhase connReading connTimer connBucketWait connWriting drive! apiKindOf PendingCall runEffect! budgetRefusal!]
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (asl-cli/system :a sys)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
-      (aslGateway/dispatch :a dp) (aslGateway/plugin :a p)])
+      (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/router :a rt) (asl-json/json :a j)
+      (aslGateway/omniApi :a om) (asl-http/http11 :a h)])
 
 (schema GatewayTurnVerdict
   (:f allowed Bool)
@@ -84,8 +86,9 @@ fn gatewayFindArg args: (List String) flag: String fallback: String -> String
     (if (= (gatewayServerArg args 0) flag) (gatewayServerArg args 1)
       (gatewayFindArg (gatewayDropArgs args) flag fallback)))
 
+; (:m this path must never collide with c/gatewayProfilesPath's home/.asl/gateway.asn, the real hand-maintained provider/model/profile config, or with ul/defaultLedgerPath's home/.asl/run/gatewayCalls.asn: gatewayStartWithHost! below unconditionally overwrites this path with a one-line run-state receipt, and a collision silently destroys whatever real file sits at the same path on every start; serverTest.asl's testStatePathIsolation asserts this directly so a future edit cannot reintroduce the collision)
 fn ! gatewayStatePath! -> String
-  (str (optionOr (envGet "HOME") "/tmp") "/.asl/gateway.asn")
+  (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/gatewayState.asn")
 
 fn ! gatewayReadyPath! -> String
   (str (gatewayStatePath!) ".ready")
@@ -111,8 +114,8 @@ fn ! gatewayServiceOwnsPid! launch: Launch pid: Int64 -> Bool
     (let [(ps (processRun (str "/bin/ps -p " pid " -o command=")))
           (cmd ps.stdout)]
       (and (= ps.exitCode 0)
-        (and (stringContains? cmd launch.module)
-          (stringContains? cmd " serve ")))))
+        (and (stringContains? cmd " serve --port ")
+          (or (stringContains? cmd launch.module) (stringContains? cmd " --ready "))))))
 
 fn gatewaySafeShellArgAt? text: String index: Int64 -> Bool
   (if (>= index (stringLength text)) true
@@ -254,7 +257,7 @@ fn ! mainWith args: (List String) module: String families: (List dp/LifecycleFam
           (mt (gatewayRunServer! launch port upstream "")
             ((err e) (do (sys/sayErr! e) (ok 1)))
             ((ok _) (ok 0)))))
-      ((or (= mode "config") (or (= mode "configCheck") (= mode "convert")))
+      ((or (= mode "config") (or (= mode "configCheck") (or (= mode "convert") (= mode "stats"))))
         (cli/gatewayCliMain args))
       ((or (= mode "restart") (= mode "update"))
         (mt (gatewayRestart! launch args)
@@ -291,15 +294,19 @@ fn gatewayHostPath! hostResult: (Result String String) -> (Result String String)
             (err "resolved gateway host executable path contains unsupported shell characters")
             (ok host))))))
 
+fn ! gatewaySelfHost! -> (Result String String)
+  (let [(root (optionOr (envGet "ASL_GATEWAY_ROOT") ""))]
+    (if (stringEmpty? root) (procExePath) (ok (str root "/bin/asl"))))
+
 fn ! gatewayStart! launch: Launch args: (List String) -> (Result Int64 String)
-  (mt (gatewayHostPath! (procExePath))
+  (mt (gatewayHostPath! (gatewaySelfHost!))
     ((err e) (err e))
     ((ok host) (gatewayStartWithHost! launch args host)))
 
 fn ! gatewayStartWithHost! launch: Launch args: (List String) host: String -> (Result Int64 String)
   (let [(statePath (gatewayStatePath!))
         (readyPath (gatewayReadyPath!))
-        (dir (str (optionOr (envGet "HOME") "/tmp") "/.asl"))
+        (dir (str (optionOr (envGet "HOME") "/tmp") "/.asl/run"))
         (portText (gatewayFindArg args "--port" "0"))
         (port (optionOr (stringToInt64 portText) (- 1)))
         (upstream (gatewayFindArg args "--upstream" ""))
@@ -352,9 +359,13 @@ fn ! gatewayRunServer! launch: Launch port: Int64 upstream: String readyPath: St
 
 (enum ConnPhase
   (:c connReading [])
-  (:c connHttp [(call u/UpstreamCall) (k (fn [ch/ChatOutcome] -> ch/ChatStep)) (slot String) (provider String) (startMs Int64)])
+  (:c connHttp [(call u/UpstreamCall) (k (fn [ch/ChatOutcome] -> ch/ChatStep)) (slot String) (provider String) (startMs Int64) (model String) (intent String) (tag String) (params ul/CallParams) (profile String)])
   (:c connPool [(requestId Int64) (k (fn [ch/ChatOutcome] -> ch/ChatStep))])
-  (:c connWarm [(slot String) (provider String) (request u/UpstreamRequest) (timeout Float64) (k (fn [ch/ChatOutcome] -> ch/ChatStep)) (deadlineMs Int64)])
+  (:c connWarm [(slot String) (provider String) (request u/UpstreamRequest) (timeout Float64) (k (fn [ch/ChatOutcome] -> ch/ChatStep)) (deadlineMs Int64) (model String) (intent String) (tag String) (profile String)])
+  ; (:m :tags (retry) :do "a retry backoff wait (effSleepMs) parks here instead of blocking: no fd, just a wall-clock deadline; the reactor resumes it once nowMs! passes deadlineMs, same turn it would otherwise have spent sleeping, so every other connection keeps being served meanwhile")
+  (:c connTimer [(deadlineMs Int64) (k (fn [ch/ChatOutcome] -> ch/ChatStep)) (tag String)])
+  ; (:m :tags (retry) :do "a token-bucket wait (effBucket) parks here instead of blocking, same shape as connTimer: the token is already reserved/debited into srv.buckets at park time (GW-BUCKET-RESERVE), so a second concurrent request for the same model+rpm sees the debit and computes a wait pushed out by another 1/rate, giving N parked requests deadlines spaced ~1/rate apart instead of all waking at once; resume just proceeds (the reservation already happened), no stale-snapshot write-back needed here")
+  (:c connBucketWait [(deadlineMs Int64) (k (fn [ch/ChatOutcome] -> ch/ChatStep)) (tag String)])
   (:c connProxy [(upstreamFd Int64) (pending String) (response String)])
   (:c connWriting [(data String)]))
 
@@ -362,6 +373,16 @@ fn ! gatewayRunServer! launch: Launch port: Int64 upstream: String readyPath: St
   (:f fd Int64)
   (:f input String)
   (:f phase ConnPhase))
+
+; (:m latency, served model, intent, the caller tag and the effective request params are known only where the direct HTTP attempt completes (settled!); stashed here and merged into the next effUsageNote row, since that call alone carries alias and outcome)
+(schema PendingCall
+  (:f intent String)
+  (:f model String)
+  (:f latencyMs Int64)
+  (:f charge Int64)
+  (:f tag String)
+  (:f params ul/CallParams)
+  (:f profile String))
 
 (schema GatewayLoop
   (:f listener Int64)
@@ -380,16 +401,33 @@ fn ! gatewayRunServer! launch: Launch port: Int64 upstream: String readyPath: St
   (:f wiring dp/Wiring)
   (:f wiringText (Option String))
   (:f families (List dp/LifecycleFamily))
-  (:f outbox (List (Pair Int64 String))))
+  (:f outbox (List (Pair Int64 String)))
+  (:f pendingCall (Option PendingCall))
+  ; (:m :ref GW-SPREAD-LIVE-20261018 :do "live SWRR state: keyed profile|intent, each a (List (Pair String Int64)) alias->current-weight map persisted across calls; spreadLast429 is alias->epoch-ms of its last 429, independent of and in addition to srv.breaker's own per-model trip")
+  (:f spreadState (Map String (Map String Int64)))
+  (:f spreadLast429 (Map String Int64))
+  (:f omni om/OmniState))
+
+fn omniZeroKey -> om/Word64
+  (om/Word64 :hi 0 :lo 0)
+
+fn loopOmni srv: GatewayLoop state: om/OmniState -> GatewayLoop
+  (with srv :omni state)
 
 fn loopConns srv: GatewayLoop conns: (List GatewayConn) -> GatewayLoop
   (with srv :conns conns)
+
+fn loopPending srv: GatewayLoop pendingCall: (Option PendingCall) -> GatewayLoop
+  (with srv :pendingCall pendingCall)
 
 fn loopPools srv: GatewayLoop pools: pd/PoolRegistry replies: (List pd/PoolReply) -> GatewayLoop
   (with srv :pools pools :replies replies)
 
 fn loopState srv: GatewayLoop breaker: b/BreakerState buckets: u/BucketRegistry profiles: c/ProfilesCache -> GatewayLoop
   (with srv :breaker breaker :buckets buckets :profiles profiles)
+
+fn loopSpreadState srv: GatewayLoop spreadState: (Map String (Map String Int64)) spreadLast429: (Map String Int64) -> GatewayLoop
+  (with srv :spreadState spreadState :spreadLast429 spreadLast429)
 
 fn loopWiring srv: GatewayLoop wiring: dp/Wiring text: (Option String) -> GatewayLoop
   (with srv :pools (pd/poolWithPlugins srv.pools wiring.plugins) :wiring wiring :wiringText text)
@@ -470,7 +508,7 @@ fn chatPath? path: String -> Bool
 
 fn failureReply f: u/UpstreamFailure -> ch/HttpReply
   (mt f
-    ((u/httpFailure status reason body) (ch/httpError status reason (list) body))
+    ((u/httpFailure status reason body headers) (ch/httpError status reason headers body))
     ((u/transportFailure code text) (ch/httpRaised (= code 28) (str "curl exit " (stringFromInt64 code) ": " (stringTrim text))))
     ((u/toolAbsent tool detail) (ch/httpRaised false (str tool ": " detail)))
     ((u/protocolFailure detail) (ch/httpRaised false detail)))
@@ -512,82 +550,212 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
         (pair (loopState srv (pairFirst r) srv.buckets srv.profiles) (ch/outFloats (pairSecond r)))))
     ((ch/effBreakerEvent event pool)
       (pair (loopState srv (breakerEvent! srv.breaker event pool (nowSec!)) srv.buckets srv.profiles) ch/outDone))
-    ((ch/effUsageNote p a o _)
-      (do (logLine! (str "(:gateway :usage :provider \"" (wire/asnEscape p) "\" :alias \"" (wire/asnEscape a) "\" :outcome \"" (wire/asnEscape o) "\")"))
-        (pair srv ch/outDone)))
+    ((ch/effUsageNote p a o usage)
+      (let [(pc srv.pendingCall)
+            (tokens (g/usageTokens usage))
+            (params (mt pc ((some x) x.params) ((none) (ul/defaultCallParams))))
+            (row (ul/CallRow :atMs (/ (nowNs) 1000000) :profile (mt pc ((some x) x.profile) ((none) "")) :intent (mt pc ((some x) x.intent) ((none) "")) :alias a :provider p
+                   :model (mt pc ((some x) x.model) ((none) "")) :inTokens (optionOr (listGet tokens 0) 0)
+                   :cachedTokens (optionOr (listGet tokens 1) 0) :outTokens (optionOr (listGet tokens 2) 0)
+                   :reasoningTokens (optionOr (listGet tokens 3) 0)
+                   :ttftMs none :ms (mt pc ((some x) (some x.latencyMs)) ((none) none)) :outcome o
+                   :charge (mt pc ((some x) x.charge) ((none) 0))
+                   :tag (mt pc ((some x) (if (stringEmpty? x.tag) none (some x.tag))) ((none) none))
+                   :temperature params.temperature :topP params.topP :maxTokens params.maxTokens :effort params.effort
+                   :api params.api :stream params.stream :toolCount params.toolCount :promptBytes params.promptBytes :sysHash params.sysHash))
+            (ledgerPath (optionOr (mt srv.wiringText ((some t) (c/gatewayLedgerPathOverride t)) ((none) none)) (ul/defaultLedgerPath srv.home)))
+            (wrote (ul/appendCallRow! ledgerPath row))
+            ; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "written in addition to, never instead of, the stats ledger above: GW-STATS's per-HOME ledgerPath keeps serving its own calibration/--by queries unchanged, this is the separate shared ledger (default outside scratch homes once the operator sets :sharedUsagePath, see gatewaySharedUsagePathOverride) that a scratch HOME's deletion cannot take with it")
+            (sharedPath (optionOr (mt srv.wiringText ((some t) (c/gatewaySharedUsagePathOverride t)) ((none) none)) (ul/defaultSharedUsagePath srv.home)))
+            (wroteShared (ul/appendCallRow! sharedPath row))]
+        (do (mt wrote ((ok _) true) ((err e) (logLine! (str "(:gateway :statsLedger :error \"" (wire/asnEscape e) "\")"))))
+          (do (mt wroteShared ((ok _) true) ((err e) (logLine! (str "(:gateway :sharedUsageLedger :error \"" (wire/asnEscape e) "\")"))))
+            (do (logLine! (str "(:gateway :usage :provider \"" (wire/asnEscape p) "\" :alias \"" (wire/asnEscape a) "\" :outcome \"" (wire/asnEscape o) "\")"))
+              (pair (loopPending srv none) ch/outDone))))))
     ((ch/effUsageFallback p a)
       (do (logLine! (str "(:gateway :fallback :provider \"" (wire/asnEscape p) "\" :alias \"" (wire/asnEscape a) "\")")) (pair srv ch/outDone)))
+    ; (:m :ref GW-SPREAD-LIVE-20261018 :do "the only place rt/spreadOrder is ever called: real per-profile+intent state read from and written back to srv.spreadState, real wall clock, real breaker availability via srv.breaker keyed by the pool the caller resolved per alias -- chat.asl and router.asl both stay clock/breaker-free")
+    ((ch/effSpreadOrder profile intent spread cooldownSec pools)
+      (let [(key (str profile "|" intent))
+            (state (optionOr (mapGet srv.spreadState key) (mapEmpty)))
+            (now (/ (nowNs) 1000000))
+            (poolMap (mapFromPairs pools))
+            (breakerOpen? (fn [(alias String)] -> Bool
+                            (let [(pk (optionOr (mapGet poolMap alias) ""))]
+                              (if (stringEmpty? pk) false (> (pairSecond (b/breakerDownFor srv.breaker pk (nowSec!))) 0)))))
+            (stepped (rt/spreadOrder now cooldownSec spread srv.spreadLast429 breakerOpen? state))
+            (order (pairFirst stepped))
+            (nextState (pairSecond stepped))]
+        (pair (loopSpreadState srv (mapSet srv.spreadState key nextState) srv.spreadLast429) (ch/outStrings order))))
+    ((ch/effSpreadNote429 alias)
+      (pair (loopSpreadState srv srv.spreadState (mapSet srv.spreadLast429 alias (/ (nowNs) 1000000))) ch/outDone))
     ((ch/effTelemetry rec)
       (do (mt rec ((some r) (logLine! r)) ((none) true)) (pair srv ch/outDone)))
     ((ch/effNoteIntent i)
       (do (logLine! (str "(:gateway :unknownIntent \"" (wire/asnEscape i) "\")")) (pair srv ch/outDone)))
     ((ch/effLog text) (do (logLine! (stringTrim text)) (pair srv ch/outDone)))
+    ; (:m :tags (retry) :do "unreachable from the reactor: drive! matches ch/effBucket itself and parks a connBucketWait instead of calling the blocking geminiAcquire! below; this fallback only serves a caller that invokes runEffect! directly outside drive! (e.g. a test), where there is no reactor turn to protect")
     ((ch/effBucket model rpm timeout)
       (let [(r (u/geminiAcquire! srv.buckets model rpm timeout))]
         (pair (loopState srv srv.breaker (pairFirst r) srv.profiles) (ch/outBool (resultOr (pairSecond r) false)))))
+    ; (:m :tags (retry) :do "unreachable from the reactor: drive! matches ch/effSleepMs itself and parks a connTimer instead of calling runEffect!; this blocking fallback only serves a caller that invokes runEffect! directly outside drive! (e.g. a test), where there is no reactor turn to protect")
+    ((ch/effSleepMs ms) (do (sleepMs (max 0 ms)) (pair srv ch/outDone)))
     ((ch/effCli client _)
       (do (logLine! (str "(:gateway :cli :unavailable \"" (wire/asnEscape client) "\" :entry http)")) (pair srv (ch/outCli none))))
-    ((ch/effHttp _ _ _ _ _ _) (pair srv (ch/outHttp (ch/httpRaised false "an HTTP effect reached the synchronous effect runner"))))
+    ((ch/effHttp _ _ _ _ _ _ _) (pair srv (ch/outHttp (ch/httpRaised false "an HTTP effect reached the synchronous effect runner"))))
     ((ch/effPoolHttp _ _ _ _ _ _) (pair srv (ch/outHttp (ch/httpRaised false "a pool effect reached the synchronous effect runner")))))
 
-fn ! drive! srv: GatewayLoop fd: Int64 step: ch/ChatStep -> GatewayLoop
+fn ! drive! srv: GatewayLoop fd: Int64 tag: String step: ch/ChatStep -> GatewayLoop
   (mt step
     ((ch/stepDone resp) (addConn srv fd (connWriting (renderResponse resp))))
     ((ch/stepRaised kind message) (addConn srv fd (connWriting (errorResponse 500 (str kind ": " message)))))
     ((ch/stepEffect eff k)
       (mt eff
-        ((ch/effHttp provider model intent role request timeout)
-          (dispatchHttp! srv fd (dp/RouteHint :provider provider :model model :intent intent :role role
-                                  :promptTokens (/ (stringLength request.data) 4)) request timeout k))
+        ((ch/effHttp provider model intent role request timeout profile)
+          (dispatchHttp! srv fd tag (dp/RouteHint :provider provider :model model :intent intent :role role
+                                  :promptTokens (/ (stringLength request.data) 4)) request timeout k profile))
         ((ch/effPoolHttp provider model base pool request timeout)
           (let [(sub (pd/poolSubmit! srv.pools provider model base pool request timeout srv.env (nowMs!)))
                 (out (pairSecond sub))]
             (addConn (loopPools srv out.registry (listAppend srv.replies out.replies)) fd (connPool (pairFirst sub) k))))
-        (_ (let [(r (runEffect! srv eff))] (drive! (pairFirst r) fd (k (pairSecond r))))))))
+        ; (:m :tags (retry) :do "park, don't block: effSleepMs never reaches runEffect!'s own (blocking) case from here, so a retry backoff never stalls the single-threaded reactor for any other connection")
+        ((ch/effSleepMs ms) (addConn srv fd (connTimer (+ (nowMs!) ms) k tag)))
+        ; (:m :tags (retry) :do "park, don't block, same as effSleepMs: tokenBucketBegin is pure and cheap, so it always runs synchronously now (committing the refilled bucket state immediately). GW-BUCKET-RESERVE: on an actual bucketWait, the token is debited now too (takeToken on the already-under-1.0 bucket, going negative -- a reservation, not an acquisition), so the NEXT concurrent request for this same model+rpm reads that debit and computes a wait pushed out by another 1/rate, spacing parked requests instead of letting them all wake at the same instant and over-acquire")
+        ((ch/effBucket model rpm timeout)
+          (let [(got (u/geminiBucket srv.buckets model rpm (u/wallSeconds!)))
+                (begun (u/tokenBucketBegin (pairSecond got) timeout (u/wallSeconds!)))
+                (b1 (pairFirst begun))]
+            (mt (pairSecond begun)
+              ((err _) (drive! (loopState srv srv.breaker (u/bucketRegistryPut (pairFirst got) model rpm b1) srv.profiles) fd tag (k (ch/outBool false))))
+              ((ok s)
+               (mt s
+                 ((u/bucketAcquired) (drive! (loopState srv srv.breaker (u/bucketRegistryPut (pairFirst got) model rpm b1) srv.profiles) fd tag (k (ch/outBool true))))
+                 ((u/bucketRefused) (drive! (loopState srv srv.breaker (u/bucketRegistryPut (pairFirst got) model rpm b1) srv.profiles) fd tag (k (ch/outBool false))))
+                 ((u/bucketWait secs)
+                  (addConn (loopState srv srv.breaker (u/bucketRegistryPut (pairFirst got) model rpm (u/takeToken b1)) srv.profiles) fd
+                    (connBucketWait (+ (nowMs!) (u/ceilMs secs)) k tag))))))))
+        (_ (let [(r (runEffect! srv eff))] (drive! (pairFirst r) fd tag (k (pairSecond r))))))))
 
 fn errorOutcome status: Int64 reason: String -> ch/ChatOutcome
   (ch/outHttp (ch/httpError status reason (list (pair (ch/gatewayOriginHeader) "gateway")) (str "{\"error\": \"" (wire/asnEscape reason) "\"}")))
 
-fn ! dispatchHttp! srv: GatewayLoop fd: Int64 hint: dp/RouteHint request: u/UpstreamRequest timeout: Float64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) -> GatewayLoop
+fn jsonFloatOf v: (Option j/Json) -> (Option Float64)
+  (mt v ((none) none) ((some jv) (mt jv ((j/jint i) (some (int64ToFloat64 i))) ((j/jfloat f) (some f)) ((j/jnum n) (some n)) (_ none))))
+
+fn jsonIntOf v: (Option j/Json) -> (Option Int64)
+  (mt v ((none) none) ((some jv) (mt jv ((j/jint i) (some i)) ((j/jfloat f) (float64ToInt64 f)) ((j/jnum n) (float64ToInt64 n)) (_ none))))
+
+fn jsonStrOf v: (Option j/Json) -> (Option String)
+  (mt v ((none) none) ((some jv) (mt jv ((j/jstr s) (some s)) (_ none))))
+
+fn jsonBoolOf v: (Option j/Json) d: Bool -> Bool
+  (mt v ((none) d) ((some jv) (mt jv ((j/jbool b) b) (_ d))))
+
+fn jsonArrOf v: (Option j/Json) -> (List j/Json)
+  (mt v ((none) (list)) ((some jv) (mt jv ((j/jarr xs) xs) (_ (list)))))
+
+fn apiKindOf url: String -> String
+  (cond
+    ((stringEndsWith? url "/responses") "responses")
+    ((stringEndsWith? url "/messages") "messages")
+    ((stringEndsWith? url ":generateContent") "generateContent")
+    (else "chat"))
+
+; (:m a short, non-reversible fingerprint of the system prefix, to see prefix-cache reuse across calls without storing the prefix text itself)
+fn systemPrefixHash messages: (List j/Json) -> String
+  (mt (listHead messages)
+    ((none) "")
+    ((some first)
+     (if (= (optionOr (jsonStrOf (j/jsonGet first "role")) "") "system")
+       (mt (jsonStrOf (j/jsonGet first "content"))
+         ((none) "")
+         ((some content) (optionOr (stringSlice (bytesSha256 (stringToBytes content)) 0 16) "")))
+       "")))
+
+; (:m the effective request parameters as actually sent, read back out of sent.data rather than re-derived from config, so a parameter the provider ignores is still recorded as sent, not guessed; on an unparseable body this is honestly the api kind alone with every other field defaulted, not a guess at what was meant)
+fn paramsFromRequest sent: u/UpstreamRequest -> ul/CallParams
+  (mt (j/jsonParse sent.data)
+    ((err _) (with (ul/defaultCallParams) :api (apiKindOf sent.url)))
+    ((ok body)
+     (let [(messages (jsonArrOf (j/jsonGet body "messages")))
+           (effortDirect (jsonStrOf (j/jsonGet body "effort")))
+           (effort (mt effortDirect ((some s) (some s)) ((none) (jsonStrOf (j/jsonGet body "reasoning_effort")))))]
+       (ul/CallParams
+         :temperature (jsonFloatOf (j/jsonGet body "temperature"))
+         :topP (jsonFloatOf (j/jsonGet body "top_p"))
+         :maxTokens (jsonIntOf (j/jsonGet body "max_tokens"))
+         :effort effort
+         :api (apiKindOf sent.url)
+         :stream (jsonBoolOf (j/jsonGet body "stream") false)
+         :toolCount (listLength (jsonArrOf (j/jsonGet body "tools")))
+         :promptBytes (stringLength (j/jsonEmit (j/jarr messages)))
+         :sysHash (systemPrefixHash messages)))))
+
+; (:m :ref GW-BUDGET-ENFORCE-20261018 :do "no budget row for this profile (none configured, or profile empty on an unprofiled/passthrough dispatch) means allow, same as absent ever meant; a configured cap compares against today's shared-ledger total for that exact profile (profileTokensToday), never a cross-profile or cross-day figure, so one profile's dispatches never throttle another's")
+fn ! budgetRefusal! srv: GatewayLoop profile: String -> (Option String)
+  (if (stringEmpty? profile) none
+    (let [(text (optionOr srv.wiringText ""))]
+      (mt (c/gatewayDailyTokenBudget text profile)
+        ((none) none)
+        ((some cap)
+          (let [(sharedPath (optionOr (c/gatewaySharedUsagePathOverride text) (ul/defaultSharedUsagePath srv.home)))
+                (rows (resultOr (ul/readRows! sharedPath) (list)))
+                (day (ul/dayKeyOf (/ (nowNs) 1000000)))
+                (total (ul/profileTokensToday rows day profile))]
+            (if (>= total cap)
+              (some (str "profile " profile " is over its daily token budget (" (stringFromInt64 total) "/" (stringFromInt64 cap) " tokens today)"))
+              none))))))
+
+fn ! dispatchHttp! srv: GatewayLoop fd: Int64 tag: String hint: dp/RouteHint request: u/UpstreamRequest timeout: Float64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) profile: String -> GatewayLoop
+  (mt (budgetRefusal! srv profile)
+    ((some reason) (do (logLine! (str "(:gateway :budget :profile \"" (wire/asnEscape profile) "\" :result refused :reason \"" (wire/asnEscape reason) "\")")) (drive! srv fd tag (k (errorOutcome 429 reason)))))
+    ((none)
+      (let [(w srv.wiring)
+            (planned (dp/plan w hint request srv.env (nowMs!)))]
+        (mt planned
+          ((dp/planReject status reason row)
+            (do (logLine! (dp/decisionText row))
+              (drive! srv fd tag (k (errorOutcome status reason)))))
+          ((dp/planSend slot provider sent row)
+            (do (logLine! (dp/decisionText row))
+              (sendPlanned! srv fd tag slot provider sent (dp/sendTimeout w hint provider timeout) k hint.model hint.intent profile)))
+          ((dp/planWait slot provider sent row cold deadline)
+            (do (logLine! (dp/decisionText row))
+              (if cold
+                (mt (dp/startSlot! w slot (nowMs!) deadline)
+                  ((dp/startRefused status reason line) (do (logLine! line) (drive! srv fd tag (k (errorOutcome status reason)))))
+                  ((dp/startOk next line) (do (logLine! line) (addConn (loopWiring srv next srv.wiringText) fd (connWarm slot provider sent (dp/sendTimeout w hint provider timeout) k deadline hint.model hint.intent tag profile)))))
+                (addConn (loopWiring srv (dp/waiting w slot) srv.wiringText) fd (connWarm slot provider sent (dp/sendTimeout w hint provider timeout) k deadline hint.model hint.intent tag profile)))))))))
+
+fn ! sendPlanned! srv: GatewayLoop fd: Int64 tag: String slot: String provider: String sent: u/UpstreamRequest timeout: Float64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) model: String intent: String profile: String -> GatewayLoop
   (let [(w srv.wiring)
-        (planned (dp/plan w hint request srv.env (nowMs!)))]
-    (mt planned
-      ((dp/planReject status reason row)
-        (do (logLine! (dp/decisionText row))
-          (drive! srv fd (k (errorOutcome status reason)))))
-      ((dp/planSend slot provider sent row)
-        (do (logLine! (dp/decisionText row))
-          (sendPlanned! srv fd slot provider sent (dp/sendTimeout w hint provider timeout) k)))
-      ((dp/planWait slot provider sent row cold deadline)
-        (do (logLine! (dp/decisionText row))
-          (if cold
-            (mt (dp/startSlot! w slot (nowMs!) deadline)
-              ((dp/startRefused status reason line) (do (logLine! line) (drive! srv fd (k (errorOutcome status reason)))))
-              ((dp/startOk next line) (do (logLine! line) (addConn (loopWiring srv next srv.wiringText) fd (connWarm slot provider sent (dp/sendTimeout w hint provider timeout) k deadline)))))
-            (addConn (loopWiring srv (dp/waiting w slot) srv.wiringText) fd (connWarm slot provider sent (dp/sendTimeout w hint provider timeout) k deadline)))))))
-
-fn ! sendPlanned! srv: GatewayLoop fd: Int64 slot: String provider: String sent: u/UpstreamRequest timeout: Float64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) -> GatewayLoop
-  (let [(w srv.wiring)]
+        (params (paramsFromRequest sent))]
     (mt (p/sendHttp! w.plugins provider sent srv.env timeout)
-      ((err f) (drive! (settled! srv slot provider "" 0 false) fd (k (ch/outHttp (failureReply f)))))
-      ((ok call) (addConn (loopWiring srv (dp/started w slot) srv.wiringText) fd (connHttp call k slot provider (nowMs!))))))
+      ((err f) (drive! (settled! srv slot provider intent model tag params "" 0 false profile) fd tag (k (ch/outHttp (failureReply f)))))
+      ((ok call) (addConn (loopWiring srv (dp/started w slot) srv.wiringText) fd (connHttp call k slot provider (nowMs!) model intent tag params profile)))))
 
-fn ! stepWarm! srv: GatewayLoop conn: GatewayConn slot: String provider: String sent: u/UpstreamRequest timeout: Float64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) deadline: Int64 -> GatewayLoop
+fn ! stepWarm! srv: GatewayLoop conn: GatewayConn tag: String slot: String provider: String sent: u/UpstreamRequest timeout: Float64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) deadline: Int64 model: String intent: String profile: String -> GatewayLoop
   (let [(now (nowMs!))]
     (mt (dp/slotReady srv.wiring slot now)
-      ((dp/readyNow) (sendPlanned! srv conn.fd slot provider sent timeout k))
-      ((dp/readyGone reason) (drive! srv conn.fd (k (errorOutcome 503 reason))))
+      ((dp/readyNow) (sendPlanned! srv conn.fd tag slot provider sent timeout k model intent profile))
+      ((dp/readyGone reason) (drive! srv conn.fd tag (k (errorOutcome 503 reason))))
       ((dp/readyLater)
         (if (> now deadline)
           (do (logLine! (str "(:gateway :lifecycle :op wait :endpoint \"" slot "\" :result timeout)"))
-            (drive! srv conn.fd (k (errorOutcome 503 (str "endpoint " slot " did not warm within coldStartMs")))))
+            (drive! srv conn.fd tag (k (errorOutcome 503 (str "endpoint " slot " did not warm within coldStartMs")))))
           (loopConns srv (listAppend srv.conns (list conn)))))))
 
-fn ! settled! srv: GatewayLoop slot: String provider: String body: String startMs: Int64 success: Bool -> GatewayLoop
+fn ! settled! srv: GatewayLoop slot: String provider: String intent: String model: String tag: String params: ul/CallParams body: String startMs: Int64 success: Bool profile: String -> GatewayLoop
   (if (stringEmpty? slot) srv
     (let [(now (nowMs!))
-          (out (dp/settle srv.wiring slot provider (dp/usageTokens body) (if (> startMs 0) (- now startMs) 1) success now))]
-      (do (logLine! (pairSecond out)) (loopWiring srv (pairFirst out) srv.wiringText))))
+          (latencyMs (if (> startMs 0) (- now startMs) 1))
+          (total (dp/usageTokens body))
+          (out (dp/settle srv.wiring slot provider total latencyMs success now))
+          (srv1 (loopWiring srv (pairFirst out) srv.wiringText))
+          (served (dp/servedModel body model))
+          (charge (/ (* (max 0 total) (dp/priceFor srv1.wiring slot)) 1000000))
+          (pending (PendingCall :intent intent :model served :latencyMs latencyMs :charge charge :tag tag :params params :profile profile))]
+      (do (logLine! (pairSecond out)) (loopPending srv1 (some pending)))))
 
 fn ! chatWorld! srv: GatewayLoop -> (Pair GatewayLoop (Result ch/ChatWorld String))
   (let [(loaded (c/gatewayProfilesLoad! srv.profiles srv.home srv.registryPath))
@@ -607,15 +775,37 @@ fn ! wired! srv: GatewayLoop table: (Result c/GatewayTable String) settings: u/U
         ((err e) (do (logLine! (str "(:gateway :wiring :error \"" (wire/asnEscape e) "\")"))
                    (loopWiring srv (dp/emptyWiring settings) (some text)))))))
 
+; (:m a provider that declares :sessionHeader (e.g. OpenCode's x-opencode-session) rejects a call with no session id at all; withSessionHeader only maps a caller-supplied X-ASL-Session onto it, so a caller that never sends one still needs a value here, not a MissingSessionID failure; this fallback is per-run, not truly session-scoped, but it is non-empty and stable for the lifetime of this one request)
+fn sessionFallbackId fd: Int64 nowMs: Int64 -> String
+  (str "asl-run-" (stringFromInt64 fd) "-" (stringFromInt64 nowMs))
+
+; (:m ensures request.headers carries an X-ASL-Session value: a caller-supplied one is left exactly as sent, never overwritten; an absent one is filled with a per-run fallback, so a provider's :sessionHeader always has something to map onto; serverTest.asl's testEnsureSessionHeader covers both branches)
+fn ensureSessionHeader headers: (List (Pair String String)) fd: Int64 nowMs: Int64 -> (List (Pair String String))
+  (let [(existing (c/headerGet headers "X-ASL-Session"))]
+    (if (stringEmpty? existing) (u/headerPut headers "X-ASL-Session" (sessionFallbackId fd nowMs)) headers))
+
 fn ! dispatch! srv: GatewayLoop fd: Int64 raw: String request: HttpRequest -> GatewayLoop
   (if (and (= request.method "POST") (chatPath? request.path))
-    (let [(w (chatWorld! srv))]
+    (let [(w (chatWorld! srv))
+          (tag (c/headerGet request.headers "X-ASL-Tag"))
+          (headersWithSession (ensureSessionHeader request.headers fd (nowMs!)))]
       (mt (pairSecond w)
         ((err e) (addConn (pairFirst w) fd (connWriting (errorResponse 500 e))))
-        ((ok world) (drive! (pairFirst w) fd (ch/chatStart! (ch/ChatRequest :path request.path :headers request.headers :body request.body) world)))))
-    (mt (tcpConnect srv.upstreamPort)
-      ((err e) (addConn srv fd (connWriting (errorResponse 502 (str "upstream connect failed: " e)))))
-      ((ok upstreamFd) (addConn srv fd (connProxy upstreamFd raw "")))))
+        ((ok world) (drive! (pairFirst w) fd tag (ch/chatStart! (ch/ChatRequest :path request.path :headers headersWithSession :body request.body) world)))))
+    (mt (omniRoute! srv fd request)
+      ((some next) next)
+      ((none)
+        (mt (tcpConnect srv.upstreamPort)
+          ((err e) (addConn srv fd (connWriting (errorResponse 502 (str "upstream connect failed: " e)))))
+          ((ok upstreamFd) (addConn srv fd (connProxy upstreamFd raw "")))))))
+
+; (:m :ref MAINFIX10 :do "omniApi.asl implemented every /api/asl/ route (browser target+extension registration and poll, project/channel sync ingest) but was never imported outside itself, so every /api/asl/ request fell through to the generic proxy and 502'd against whatever --upstream happened to be. omniRoute! handles only paths omniDispatch itself recognizes under /api/asl/, returning none for anything else (including every non-/api/asl path) so the existing fallback arm's proxy call is unchanged for everything this does not claim")
+fn ! omniRoute! srv: GatewayLoop fd: Int64 request: HttpRequest -> (Option GatewayLoop)
+  (if (not (stringStartsWith? request.path "/api/asl/")) none
+    (mt (om/omniDispatch srv.omni request.method request.path request.body (nowMs!))
+      ((none) none)
+      ((some (ok reply)) (some (addConn (loopOmni srv reply.state) fd (connWriting (h/formatHttpResponse reply.response)))))
+      ((some (err e)) (some (addConn srv fd (connWriting (errorResponse 502 (str "omni dispatch failed: " e))))))))
 
 fn ! closeConn! conn: GatewayConn -> Bool
   (do (fdClose conn.fd) true)
@@ -655,21 +845,35 @@ fn ! stepWriting! srv: GatewayLoop conn: GatewayConn data: String ready: (List (
           (if (stringEmpty? rest) (do (closeConn! conn) srv)
             (addConn srv conn.fd (connWriting rest)))))))
 
-fn ! stepHttp! srv: GatewayLoop conn: GatewayConn call: u/UpstreamCall k: (fn [ch/ChatOutcome] -> ch/ChatStep) slot: String provider: String startMs: Int64 ready: (List (Pair Int64 Int64)) -> GatewayLoop
+fn ! stepHttp! srv: GatewayLoop conn: GatewayConn tag: String call: u/UpstreamCall k: (fn [ch/ChatOutcome] -> ch/ChatStep) slot: String provider: String startMs: Int64 model: String intent: String params: ul/CallParams profile: String ready: (List (Pair Int64 Int64)) -> GatewayLoop
   (mt (u/upstreamCallPump! call ready)
-    ((err f) (drive! (settled! srv slot provider "" startMs false) conn.fd (k (ch/outHttp (failureReply f)))))
+    ((err f) (drive! (settled! srv slot provider intent model tag params "" startMs false profile) conn.fd tag (k (ch/outHttp (failureReply f)))))
     ((ok next)
-      (if (u/upstreamCallOpen? next) (addConn srv conn.fd (connHttp next k slot provider startMs))
+      (if (u/upstreamCallOpen? next) (addConn srv conn.fd (connHttp next k slot provider startMs model intent tag params profile))
         (mt (u/upstreamCallFinish! next)
-          ((ok resp) (drive! (settled! srv slot provider resp.body startMs true) conn.fd (k (ch/outHttp (ch/httpOk resp.status (list) resp.body)))))
-          ((err f) (drive! (settled! srv slot provider "" startMs false) conn.fd (k (ch/outHttp (failureReply f)))))))))
+          ((ok resp) (drive! (settled! srv slot provider intent model tag params resp.body startMs true profile) conn.fd tag (k (ch/outHttp (ch/httpOk resp.status (list) resp.body)))))
+          ((err f) (drive! (settled! srv slot provider intent model tag params "" startMs false profile) conn.fd tag (k (ch/outHttp (failureReply f)))))))))
+
+; (:m :tags (retry) :do "resumes once the wall clock passes deadlineMs, same as any other conn this turn; otherwise re-parks for the next poll, exactly like stepWarm!'s coldStart wait")
+fn ! stepTimer! srv: GatewayLoop conn: GatewayConn deadlineMs: Int64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) tag: String -> GatewayLoop
+  (if (>= (nowMs!) deadlineMs)
+    (drive! srv conn.fd tag (k ch/outDone))
+    (loopConns srv (listAppend srv.conns (list conn))))
+
+; (:m :tags (retry) :do "GW-BUCKET-RESERVE: the token was already debited into srv.buckets at park time (drive!'s bucketWait case), so resuming needs no bucket math and no write-back of a now-stale snapshot -- just proceed once the monotonic deadline passes, same shape as stepTimer!")
+fn ! stepBucketWait! srv: GatewayLoop conn: GatewayConn deadlineMs: Int64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) tag: String -> GatewayLoop
+  (if (>= (nowMs!) deadlineMs)
+    (drive! srv conn.fd tag (k (ch/outBool true)))
+    (loopConns srv (listAppend srv.conns (list conn))))
 
 fn ! stepConn! srv: GatewayLoop conn: GatewayConn ready: (List (Pair Int64 Int64)) -> GatewayLoop
   (mt conn.phase
     ((connReading) (stepReading! srv conn ready))
-    ((connHttp call k slot provider startMs) (stepHttp! srv conn call k slot provider startMs ready))
+    ((connHttp call k slot provider startMs model intent tag params profile) (stepHttp! srv conn tag call k slot provider startMs model intent params profile ready))
     ((connPool _ _) (loopConns srv (listAppend srv.conns (list conn))))
-    ((connWarm slot provider sent timeout k deadline) (stepWarm! srv conn slot provider sent timeout k deadline))
+    ((connWarm slot provider sent timeout k deadline model intent tag profile) (stepWarm! srv conn tag slot provider sent timeout k deadline model intent profile))
+    ((connTimer deadlineMs k tag) (stepTimer! srv conn deadlineMs k tag))
+    ((connBucketWait deadlineMs k tag) (stepBucketWait! srv conn deadlineMs k tag))
     ((connProxy upstreamFd pending response) (stepProxy! srv conn upstreamFd pending response ready))
     ((connWriting data) (stepWriting! srv conn data ready)))
 
@@ -687,15 +891,17 @@ fn ! deliverReplies! srv: GatewayLoop -> GatewayLoop
           ((some conn)
             (let [(others (loopConns rest (filter (fn [(cn GatewayConn)] -> Bool (not (waitsFor? cn reply.requestId))) rest.conns)))]
               (mt conn.phase
-                ((connPool _ k) (deliverReplies! (drive! others conn.fd (k (ch/outHttp (poolReplyHttp reply.result))))))
+                ((connPool _ k) (deliverReplies! (drive! others conn.fd "" (k (ch/outHttp (poolReplyHttp reply.result))))))
                 (_ (deliverReplies! rest)))))))))
 
 fn connWatch conn: GatewayConn -> (List (Pair Int64 Int64))
   (mt conn.phase
     ((connReading) (list (pair conn.fd 1)))
-    ((connHttp call _ _ _ _) (u/upstreamCallWatch call))
+    ((connHttp call _ _ _ _ _ _ _ _ _) (u/upstreamCallWatch call))
     ((connPool _ _) (list))
-    ((connWarm _ _ _ _ _ _) (list))
+    ((connWarm _ _ _ _ _ _ _ _ _ _) (list))
+    ((connTimer _ _ _) (list))
+    ((connBucketWait _ _ _) (list))
     ((connProxy upstreamFd pending _) (list (pair upstreamFd (if (stringEmpty? pending) 1 2))))
     ((connWriting _) (list (pair conn.fd 2))))
 
@@ -714,7 +920,26 @@ fn ! warmPolled! srv: GatewayLoop -> GatewayLoop
       (loopWiring srv (pairFirst polled) srv.wiringText)))
 
 fn parked? conn: GatewayConn -> Bool
-  (mt conn.phase ((connWarm _ _ _ _ _ _) true) (_ false))
+  (mt conn.phase ((connWarm _ _ _ _ _ _ _ _ _ _) true) (_ false))
+
+; (:m :tags (retry) :do "the deadline-ordered timer queue the poll loop watches alongside its sockets: how long until this one conn's connTimer or connBucketWait should fire, clamped to >=0; none for every other phase")
+fn timerWaitMs now: Int64 conn: GatewayConn -> (Option Int64)
+  (mt conn.phase
+    ((connTimer deadlineMs _ _) (some (max 0 (- deadlineMs now))))
+    ((connBucketWait deadlineMs _ _) (some (max 0 (- deadlineMs now))))
+    (_ none))
+
+; (:m :tags (retry) :do "the soonest a parked connTimer needs the reactor to look again; -1 (no constraint) when none are parked")
+fn nearestTimerWaitMs now: Int64 conns: (List GatewayConn) -> Int64
+  (fold (fn [(acc Int64) (cn GatewayConn)] -> Int64
+          (mt (timerWaitMs now cn)
+            ((none) acc)
+            ((some w) (if (< acc 0) w (min acc w)))))
+    -1 conns)
+
+; (:m :tags (retry) :do "combines two poll-timeout constraints, each either a nonnegative ms bound or -1 for \"no constraint from this source\"; the tighter (smaller) bound wins, matching fdPoll's own -1-means-block convention")
+fn combineTimeoutMs a: Int64 b: Int64 -> Int64
+  (if (< a 0) b (if (< b 0) a (min a b)))
 
 fn ! gatewayTurn! srv: GatewayLoop ready: (List (Pair Int64 Int64)) -> GatewayLoop
   (let [(polled (warmPolled! srv))
@@ -728,7 +953,9 @@ fn ! gatewayEventLoop! srv: GatewayLoop -> (Result Int64 String)
   (let [(watch (listAppend (list (pair srv.listener 1))
                  (listAppend (fold (fn [(acc (List (Pair Int64 Int64))) (cn GatewayConn)] -> (List (Pair Int64 Int64)) (listAppend acc (connWatch cn))) (list) srv.conns)
                    (pd/poolWatch srv.pools))))
-        (timeout (if (pd/poolActive? srv.pools) 10 (if (listAny? parked? srv.conns) 20 -1)))]
+        (timeout (combineTimeoutMs (if (pd/poolActive? srv.pools) 10 -1)
+                   (combineTimeoutMs (if (listAny? parked? srv.conns) 20 -1)
+                     (nearestTimerWaitMs (nowMs!) srv.conns))))]
     (mt (fdPoll watch timeout)
       ((err e) (if (= e "interrupted") (gatewayEventLoop! srv) (err (str "gateway poll failed: " e))))
       ((ok ready) (gatewayEventLoop! (gatewayTurn! srv ready)))))
@@ -743,9 +970,11 @@ fn ! gatewayServe! listenerFd: Int64 upstreamPort: Int64 families: (List dp/Life
       :conns (list) :pools (pd/emptyPoolRegistry) :replies (list) :breaker (b/defaultBreakerState)
       :buckets (u/emptyBucketRegistry) :profiles (c/emptyProfilesCache)
       :wiring (dp/emptyWiring (resultOr (u/upstreamSettings env) (u/UpstreamSettings :geminiUrl "" :geminiKey "" :groqUrl "" :ollamaUrl "" :groqKey "" :url "" :key "" :ollamaTimeoutSec 45.0)))
-      :wiringText none :families families :outbox (list))))
+      :wiringText none :families families :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty)
+      :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey)))))
 
 
+; (:m :ref GW-BREAKER-STALE-20261018 :tags (breaker config) :do "the breaker's cooldown comes from the loaded config's (:gateway ... :breakerCooldownSec N) when present, else the 600s default via makeBreakerState's own guard; a config that never sets it is unchanged from before. BreakerState itself is held only in this GatewayLoop value, freshly built here on every linkOpen! call -- there is no file-backed persistence across processes, so GW-BREAKER-STALE-20261018's '45-cell sweep stuck open' incident was one long-lived in-process breaker outlasting a fixed 600s cooldown within a single sweep run, not state surviving a restart")
 fn ! linkOpen! env: (Map String String) home: String rootDir: String families: (List dp/LifecycleFamily) -> (Result GatewayLoop String)
   (let [(registryEnv (optionOr (mapGet env "ASL_CALIBRATION_INDEX") ""))
         (registryPath (if (stringEmpty? registryEnv) (str rootDir "/.asl/mem/calibration/index.asn") registryEnv))
@@ -763,9 +992,11 @@ fn ! linkOpen! env: (Map String String) home: String rootDir: String families: (
                 ((ok w)
                   (ok (GatewayLoop :listener -1 :upstreamPort 0 :env env :home home :rootDir rootDir :registryPath registryPath
                         :promptMaxBytes (optionOr (stringToInt64 (optionOr (mapGet env "AGY_PROMPT_MAX_BYTES") "188000")) 188000)
-                        :conns (list) :pools (pd/poolWithPlugins (pd/emptyPoolRegistry) w.plugins) :replies (list) :breaker (b/defaultBreakerState)
+                        :conns (list) :pools (pd/poolWithPlugins (pd/emptyPoolRegistry) w.plugins) :replies (list)
+                        :breaker (b/makeBreakerState (optionOr (c/gatewayBreakerCooldownSecOverride text) 600))
                         :buckets (u/emptyBucketRegistry) :profiles (pairFirst loaded) :wiring w :wiringText (some text)
-                        :families families :outbox (list)))))))))))
+                        :families families :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty)
+                        :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey))))))))))))
 
 fn outboxFor srv: GatewayLoop fd: Int64 -> (Option String)
   (optionMap pairSecond (listHead (filter (fn [(x (Pair Int64 String))] -> Bool (= (pairFirst x) fd)) srv.outbox)))
@@ -786,7 +1017,9 @@ fn ! linkPump! srv: GatewayLoop fd: Int64 deadlineMs: Int64 -> (Pair GatewayLoop
         (else
           (let [(watch (listAppend (fold (fn [(acc (List (Pair Int64 Int64))) (cn GatewayConn)] -> (List (Pair Int64 Int64)) (listAppend acc (connWatch cn))) (list) srv.conns)
                          (pd/poolWatch srv.pools)))
-                (timeout (if (pd/poolActive? srv.pools) 10 (if (or (listEmpty? watch) (listAny? parked? srv.conns)) 20 1000)))]
+                (timeout (combineTimeoutMs (if (pd/poolActive? srv.pools) 10 -1)
+                           (combineTimeoutMs (if (or (listEmpty? watch) (listAny? parked? srv.conns)) 20 -1)
+                             (combineTimeoutMs (nearestTimerWaitMs (nowMs!) srv.conns) 1000))))]
             (mt (fdPoll watch timeout)
               ((err e) (if (= e "interrupted") (linkPump! srv fd deadlineMs) (pair srv (err (str "gateway poll failed: " e)))))
               ((ok ready) (linkPump! (gatewayTurn! srv ready) fd deadlineMs))))))))

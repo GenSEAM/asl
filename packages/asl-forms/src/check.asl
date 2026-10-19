@@ -6,9 +6,7 @@
       validateStaged
       checkFileReceipt!
       checkSemantic!
-      findHostBinary!
-      runHostCheck!
-      runHostCheckWithBinary!
+      runNativeCheck!
       makeLeftItem
       leftItemLine
       leftItemCol
@@ -32,7 +30,9 @@
       (asl-syntax/css/rules :a cssrules)
       (asl-syntax/html/tree :a htmltree)
       (asl-syntax/xml :a xmltree)
-      (asl-forms/kernel :a k)])
+      (asl-forms/kernel :a k)
+      (asl-checker/checkCached :a cc)
+      (asl-checker/types :a ty)])
 
 (schema CheckVerdict
   (:f status String)
@@ -199,103 +199,22 @@ fn nearSnippet text: String s: src/Source line: Int64 col: Int64 -> String
            sub))))
     ((none) ""))
 
-fn parseAslDiagLine line: String text: String s: src/Source -> (Option LeftItem)
-  (if (or (stringStartsWith? line "check failed:") (stringEmpty? line))
-    (none)
-    (mt (stringIndexOf line ": ")
-      ((none) (none))
-      ((some csIdx)
-       (let [(prefix (optionOr (stringSlice line 0 csIdx) ""))
-             (rest (optionOr (stringSlice line (+ csIdx 2) (stringLength line)) ""))
-             (parts (stringSplit prefix ":"))
-             (nParts (listLength parts))]
-         (if (< nParts 3)
-           (none)
-           (let [(colStr (optionOr (listLast parts) "0"))
-                 (lineStr (optionOr (listGet parts (- nParts 2)) "0"))
-                 (lineNum (optionOr (stringToInt64 lineStr) 0))
-                 (colNum (optionOr (stringToInt64 colStr) 0))
-                 (restWords (stringSplit rest " "))
-                 (code (optionOr (listHead restWords) "ERR_SEMANTIC"))
-                 (near (nearSnippet text s lineNum colNum))]
-             (if (stringStartsWith? code "ERR_")
-               (some (LeftItem :line lineNum :col colNum :expected code :near near :kind "semantic"))
-               (none))))))))
+fn diagCode code: String -> String
+  (cond
+    ((stringStartsWith? code "ERR_") code)
+    ((= code "parse") "ERR_PARSE")
+    (else (str "ERR_" code)))
 
-fn collectAslDiags lines: (List String) text: String s: src/Source acc: (List LeftItem) -> (List LeftItem)
-  (if (listEmpty? lines)
-    (listReverse acc)
-    (let [(hd (optionOr (listHead lines) ""))
-          (tl (optionOr (listTail lines) (list)))]
-      (mt (parseAslDiagLine hd text s)
-        ((some item) (collectAslDiags tl text s (cons item acc)))
-        ((none) (collectAslDiags tl text s acc)))))
+fn diagItem text: String s: src/Source d: ty/Diagnostic -> LeftItem
+  (LeftItem :line d.line :col d.col :expected (diagCode d.code) :near (nearSnippet text s d.line d.col) :kind "semantic")
 
-fn shellQuote s: String -> String
-  (str "'" (stringReplace s "'" "'\\''") "'")
-
-fn walkUpHostDir! dir: String -> (Option String)
-  (let [(candidate (str dir "/asl/host/out/asl-host"))]
-    (if (fileExists? candidate)
-      (some candidate)
-      (let [(parent (pathDir dir))]
-        (if (or (stringEmpty? parent) (= parent dir))
-          (none)
-          (walkUpHostDir! parent)))))
-
-fn findHostFromTarget! targetPath: String -> String
-  (let [(dir (pathDir targetPath))
-        (startDir (if (stringEmpty? dir) "." dir))
-        (absDir (mt (realPath startDir) ((ok c) c) ((err _) startDir)))]
-    (mt (walkUpHostDir! absDir)
-      ((some host) host)
-      ((none)
-       (if (fileExists? (k/aslPath! "." "host/out/asl-host"))
-         (k/aslPath! "." "host/out/asl-host")
-         "asl-host"))))
-
-fn findHostBinary! targetPath: String -> String
-  (mt (envGet "ASL_HOST")
-    ((some h)
-     (if (and (not (stringEmpty? h)) (fileExists? h))
-       h
-       (findHostFromTarget! targetPath)))
-    ((none)
-     (findHostFromTarget! targetPath)))
-
-fn executeHostCheckWithBinary! targetPath: String hostBin: String -> (Pair Int64 String)
-  (let [(cmd (str (shellQuote hostBin) " check " (shellQuote targetPath)))
-        (res (processRun cmd))]
-    (pair res.exitCode res.stderr))
-
-fn executeHostCheck! targetPath: String -> (Pair Int64 String)
-  (executeHostCheckWithBinary! targetPath (findHostBinary! targetPath))
-
-fn firstNonEmptyLine lines: (List String) -> String
-  (if (listEmpty? lines)
-    ""
-    (let [(hd (stringTrim (optionOr (listHead lines) "")))
-          (tl (optionOr (listTail lines) (list)))]
-      (if (stringEmpty? hd)
-        (firstNonEmptyLine tl)
-        hd)))
-
-fn runHostCheckWithBinary! targetPath: String text: String hostBin: String -> (Result (List LeftItem) String)
-  (let [(execRes (executeHostCheckWithBinary! targetPath hostBin))
-        (exitCode (pairFirst execRes))
-        (stderrStr (pairSecond execRes))]
-    (if (= exitCode 0)
-      (ok (list))
-      (let [(lines (stringSplit stderrStr "\n"))
-            (srcObj (src/sourceFromString targetPath text))
-            (diags (collectAslDiags lines text srcObj (list)))]
-        (if (listEmpty? diags)
-          (let [(firstLine (firstNonEmptyLine lines))]
-            (err (str "hostCheck exit " (stringFromInt64 exitCode) ": " firstLine)))
-          (ok diags)))))
-
-fn runHostCheck! targetPath: String text: String -> (Result (List LeftItem) String)
-  (runHostCheckWithBinary! targetPath text (findHostBinary! targetPath))
+fn ! runNativeCheck! targetPath: String text: String -> (Result (List LeftItem) String)
+  (let [(r (cc/checkFileCached! targetPath (list "." "asl/packages" "asl") (cc/emptyCache)))]
+    (mt (pairFirst r)
+      ((err _) (err (str "native check could not read " targetPath " or resolve one of its imports")))
+      ((ok v)
+        (let [(s (src/sourceFromString targetPath text))]
+          (ok (map (fn [(d ty/Diagnostic)] -> LeftItem (diagItem text s d)) v.diags))))))
 
 fn createAslTempFile! dir: String content: String counter: Int64 -> (Result String String)
   (if (> counter 100)
@@ -315,13 +234,13 @@ fn checkAslSemantic! path: String content: String -> (Result (List LeftItem) Str
                      ((ok c) (= c content))
                      ((err _) false)))]
     (if diskMatch
-      (runHostCheck! path content)
+      (runNativeCheck! path content)
       (let [(dir (pathDir path))
             (cRes (createAslTempFile! dir content 0))]
         (mt cRes
           ((err e) (err (str "fileWrite failed: " e)))
           ((ok tmpPath)
-           (let [(res (runHostCheck! tmpPath content))
+           (let [(res (runNativeCheck! tmpPath content))
                  (rmRes (pathRemove tmpPath))]
              (mt rmRes
                ((err e) (err (str "pathRemove failed: " e)))

@@ -1,0 +1,119 @@
+file tests/acceptance/vtbotDataPlane/fixtures/seiSpotDeals10k.parquet
+rows 10000 groups 3
+kv missing
+kvAbsent err key not found
+tsUs int64 rg0 n4000 poly 134189330 first 1782864090013919 last 1783010805663592
+tsUs int64 rg1 n4000 poly 738576479 first 1783010940814814 last 1783212467982568
+tsUs int64 rg2 n2000 poly 128393269 first 1783212947923969 last 1783315035412213
+tradeId int64 rg0 n4000 poly 346484135 first 24636075 last 24640074
+tradeId int64 rg1 n4000 poly 433440218 first 24640075 last 24644074
+tradeId int64 rg2 n2000 poly 730258161 first 24644075 last 24646074
+price double rg0 n4000 fold 0.09577335263907144 sum 191.62866 first 0.04744 last 0.04791
+price double rg1 n4000 fold 0.09980963821428687 sum 197.15989 first 0.04798 last 0.04988
+price double rg2 n2000 fold 0.09764019464428378 sum 98.20979 first 0.04979 last 0.04882
+amount double rg0 n4000 fold 953.4007772443795 sum 7245488.0 first 5277.64 last 261.28
+amount double rg1 n4000 fold 1994.0472745865047 sum 9644320.89 first 261.12 last 1631.25
+amount double rg2 n2000 fold 748.620485698664 sum 3527235.6 first 310.75 last 24.39
+side int8 rg0 n4000 poly 891655596 sum 304 ones 2152
+side int8 rg1 n4000 poly 773378653 sum -184 ones 1908
+side int8 rg2 n2000 poly 193157625 sum 102 ones 1051
+file tests/acceptance/r1Host/fixtures/parquet/seiSpotDeals10k-snappy.parquet
+rows 10000 groups 3
+kv missing
+kvAbsent err key not found
+tsUs int64 rg0 n4000 poly 134189330 first 1782864090013919 last 1783010805663592
+tsUs int64 rg1 n4000 poly 738576479 first 1783010940814814 last 1783212467982568
+tsUs int64 rg2 n2000 poly 128393269 first 1783212947923969 last 1783315035412213
+tradeId int64 rg0 n4000 poly 346484135 first 24636075 last 24640074
+tradeId int64 rg1 n4000 poly 433440218 first 24640075 last 24644074
+tradeId int64 rg2 n2000 poly 730258161 first 24644075 last 24646074
+price double rg0 n4000 fold 0.09577335263907144 sum 191.62866 first 0.04744 last 0.04791
+price double rg1 n4000 fold 0.09980963821428687 sum 197.15989 first 0.04798 last 0.04988
+price double rg2 n2000 fold 0.09764019464428378 sum 98.20979 first 0.04979 last 0.04882
+amount double rg0 n4000 fold 953.4007772443795 sum 7245488.0 first 5277.64 last 261.28
+amount double rg1 n4000 fold 1994.0472745865047 sum 9644320.89 first 261.12 last 1631.25
+amount double rg2 n2000 fold 748.620485698664 sum 3527235.6 first 310.75 last 24.39
+side int8 rg0 n4000 poly 891655596 sum 304 ones 2152
+side int8 rg1 n4000 poly 773378653 sum -184 ones 1908
+side int8 rg2 n2000 poly 193157625 sum 102 ones 1051
+file tests/acceptance/r1Host/fixtures/parquet/seiSpotDeals10k-uncompressed.parquet
+rows 10000 groups 3
+kv missing
+kvAbsent err key not found
+tsUs int64 rg0 n4000 poly 134189330 first 1782864090013919 last 1783010805663592
+tsUs int64 rg1 n4000 poly 738576479 first 1783010940814814 last 1783212467982568
+tsUs int64 rg2 n2000 poly 128393269 first 1783212947923969 last 1783315035412213
+tradeId int64 rg0 n4000 poly 346484135 first 24636075 last 24640074
+tradeId int64 rg1 n4000 poly 433440218 first 24640075 last 24644074
+tradeId int64 rg2 n2000 poly 730258161 first 24644075 last 24646074
+price double rg0 n4000 fold 0.09577335263907144 sum 191.62866 first 0.04744 last 0.04791
+price double rg1 n4000 fold 0.09980963821428687 sum 197.15989 first 0.04798 last 0.04988
+price double rg2 n2000 fold 0.09764019464428378 sum 98.20979 first 0.04979 last 0.04882
+amount double rg0 n4000 fold 953.4007772443795 sum 7245488.0 first 5277.64 last 261.28
+amount double rg1 n4000 fold 1994.0472745865047 sum 9644320.89 first 261.12 last 1631.25
+amount double rg2 n2000 fold 748.620485698664 sum 3527235.6 first 310.75 last 24.39
+side int8 rg0 n4000 poly 891655596 sum 304 ones 2152
+side int8 rg1 n4000 poly 773378653 sum -184 ones 1908
+side int8 rg2 n2000 poly 193157625 sum 102 ones 1051
+file tests/acceptance/r1Host/fixtures/parquet/seiSpotDeals10k-zstdPageV2.parquet
+rows 10000 groups 3
+kv missing
+kvAbsent err key not found
+tsUs int64 rg0 n4000 poly 134189330 first 1782864090013919 last 1783010805663592
+tsUs int64 rg1 n4000 poly 738576479 first 1783010940814814 last 1783212467982568
+tsUs int64 rg2 n2000 poly 128393269 first 1783212947923969 last 1783315035412213
+tradeId int64 rg0 n4000 poly 346484135 first 24636075 last 24640074
+tradeId int64 rg1 n4000 poly 433440218 first 24640075 last 24644074
+tradeId int64 rg2 n2000 poly 730258161 first 24644075 last 24646074
+price double rg0 n4000 fold 0.09577335263907144 sum 191.62866 first 0.04744 last 0.04791
+price double rg1 n4000 fold 0.09980963821428687 sum 197.15989 first 0.04798 last 0.04988
+price double rg2 n2000 fold 0.09764019464428378 sum 98.20979 first 0.04979 last 0.04882
+amount double rg0 n4000 fold 953.4007772443795 sum 7245488.0 first 5277.64 last 261.28
+amount double rg1 n4000 fold 1994.0472745865047 sum 9644320.89 first 261.12 last 1631.25
+amount double rg2 n2000 fold 748.620485698664 sum 3527235.6 first 310.75 last 24.39
+side int8 rg0 n4000 poly 891655596 sum 304 ones 2152
+side int8 rg1 n4000 poly 773378653 sum -184 ones 1908
+side int8 rg2 n2000 poly 193157625 sum 102 ones 1051
+file tests/acceptance/vtbotDataPlane/fixtures/seiSpotDeals10kCanonical.parquet
+rows 10000 groups 3
+kv {"columns": {"price": {"scale": 5, "storage": "int64Ticks"}, "qty": {"scale": 2, "storage": "int64Ticks"}, "side": {"storage": "int8"}, "tradeId": {"storage": "int64"}, "tsUs": {"storage": "int64"}}, "contractMultiplier": null, "dataset": "trades", "encoding": "delta+byteStreamSplit+zstd19", "exchange": "gateio", "instrument": "SEI-USDT", "market": "spot", "nativeSymbol": "SEI_USDT", "partial": true, "qtyUnit": "base", "quarter": "2026Q3", "rows": 10000, "schema": "vtbot.dataset.v1", "sources": [], "tsMaxUs": 1783315035412213, "tsMinUs": 1782864090013919, "writer": "tools/tradeStore.py (fixture)"}
+kvAbsent err key not found
+tsUs int64 rg0 n4000 poly 134189330 first 1782864090013919 last 1783010805663592
+tsUs int64 rg1 n4000 poly 738576479 first 1783010940814814 last 1783212467982568
+tsUs int64 rg2 n2000 poly 128393269 first 1783212947923969 last 1783315035412213
+price int64 rg0 n4000 poly 355758602 first 4744 last 4791
+price int64 rg1 n4000 poly 522634503 first 4798 last 4988
+price int64 rg2 n2000 poly 361039219 first 4979 last 4882
+qty int64 rg0 n4000 poly 721737125 first 527764 last 26128
+qty int64 rg1 n4000 poly 50921551 first 26112 last 163125
+qty int64 rg2 n2000 poly 449581407 first 31075 last 2439
+side int8 rg0 n4000 poly 891655596 sum 304 ones 2152
+side int8 rg1 n4000 poly 773378653 sum -184 ones 1908
+side int8 rg2 n2000 poly 193157625 sum 102 ones 1051
+tradeId int64 rg0 n4000 poly 346484135 first 24636075 last 24640074
+tradeId int64 rg1 n4000 poly 433440218 first 24640075 last 24644074
+tradeId int64 rg2 n2000 poly 730258161 first 24644075 last 24646074
+file tests/acceptance/r1Host/fixtures/parquet/big3e6.parquet
+rows 3000000 groups 3
+kv missing
+kvAbsent err key not found
+price double rg0 n1000000 fold 201.996 sum 100499500.0 first 100.0 last 100.999
+price double rg1 n1000000 fold 201.996 sum 100499500.0 first 100.0 last 100.999
+price double rg2 n1000000 fold 201.996 sum 100499500.0 first 100.0 last 100.999
+side int8 rg0 n1000000 poly 377443071 sum 461539 ones 461539
+side int8 rg1 n1000000 poly 641096016 sum 461539 ones 461539
+side int8 rg2 n1000000 poly 814337255 sum 461539 ones 461539
+file tests/acceptance/r1Host/fixtures/parquet/badMagic.parquet
+open err ERR_PARQUET: tests/acceptance/r1Host/fixtures/parquet/badMagic.parquet has no PAR1 magic
+file tests/acceptance/r1Host/fixtures/parquet/truncatedFooter.parquet
+open err ERR_PARQUET: tests/acceptance/r1Host/fixtures/parquet/truncatedFooter.parquet has no PAR1 magic
+file tests/acceptance/r1Host/fixtures/parquet/zeroLength.parquet
+open err ERR_PARQUET: tests/acceptance/r1Host/fixtures/parquet/zeroLength.parquet is too short for a parquet file
+file tests/acceptance/r1Host/fixtures/parquet/headOnly.parquet
+open err ERR_PARQUET: tests/acceptance/r1Host/fixtures/parquet/headOnly.parquet is too short for a parquet file
+file tests/acceptance/r1Host/fixtures/parquet/missing.parquet
+open err ERR_IO: cannot open tests/acceptance/r1Host/fixtures/parquet/missing.parquet
+file tests/acceptance/vtbotDataPlane/fixtures/unknownEncoding.parquet
+open err ERR_PARQUET_UNSUPPORTED: column tsUs row group 0 encoding 20
+file tests/acceptance/vtbotDataPlane/fixtures/truncatedPage.parquet
+open err ERR_PARQUET: page beyond the column chunk in column tsUs row group 0

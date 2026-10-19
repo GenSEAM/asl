@@ -2,12 +2,9 @@
   :name "asl-audio"
   :version "0.1.0"
   :layer 0
-  :description "Sovereign voice engine: dual-feature VAD, speaker biometrics, AST Cyrillic sound-folding, ear-budgeted digests, and voice intent"
+  :description "Ear-budgeted auditory digests, voice intent two-phase-commit tiering, and AST Cyrillic sound-folding (the VAD/dictation/speaker-biometrics modules this package once also held were deleted in DEAD-PACKAGES/bd4dd4fa3 as dead; these three remain live, imported by tests/acceptance/voiceAudioIngressAndCockpitBridgeTest.asl)"
   :dependencies []
   :modules [
-    "asl-audio/vad"
-    "asl-audio/dictation"
-    "asl-audio/speakerVerifier"
     "asl-audio/heardname"
     "asl-audio/aloud"
     "asl-audio/voiceIntent"

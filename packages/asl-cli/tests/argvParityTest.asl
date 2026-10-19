@@ -33,9 +33,8 @@ fn shellQuote value: String -> String
 fn runFixtureProcess! cmd: String args: (List String) -> ProcessOutput
   (let [(quotedArgs (map shellQuote (cons cmd args)))
         (root (mt (realPath ".") ((ok path) path) ((err _) ".")))
-        (host (str root "/asl/host/out/asl-host"))
-        (main (str root "/asl/packages/asl-cli/src/main.asl"))
-        (command (str (shellQuote host) " run " (shellQuote main) " " (stringJoin quotedArgs " ")))]
+        (binAsl (str root "/bin/asl"))
+        (command (str (shellQuote binAsl) " " (stringJoin quotedArgs " ")))]
     (processRun command))
 
 fn processOutput process: ProcessOutput -> String
@@ -149,7 +148,7 @@ fn testPayloadAndFailureContracts! -> Bool
         ((ok _) (do (assert false "lens --test must fail when its suite fails") false)))))
 
 fn ! runTests -> Bool
-  (mt (fileRead "tests/parity/cli/argvFixture.asn")
+  (mt (fileReadString "tests/parity/cli/argvFixture.asn")
     ((err e) (do (assert false (str "could not read argv fixture: " e)) false))
     ((ok src)
      (mt (ast/readForms (lx/tokenize src))

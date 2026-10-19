@@ -11,7 +11,7 @@ fn ! sh! root: String argv: (List String) -> run/Done
   (run/runOneLimited (run/job argv root (run/childEnv (list))) (run/limits 30 4))
 
 fn ! cleanup! root: String cache: String -> Bool
-  (let [(pid (optionOr (stringToInt64 (stringTrim (resultOr (fileRead (str cache "/lock/pid")) ""))) 0))
+  (let [(pid (optionOr (stringToInt64 (stringTrim (resultOr (fileReadString (str cache "/lock/pid")) ""))) 0))
         (killed (if (> pid 1) (sh! root (list "/bin/kill" "-9" (str "-" (stringFromInt64 pid)))) (sh! root (list "/usr/bin/true"))))
         (removed (sh! root (list "/bin/rm" "-rf" cache)))]
     (= removed.exit 0))
@@ -23,7 +23,7 @@ fn ! runTests -> Bool
         (cold (binAsl! root (list "test" "asl/packages/asl-cli/tests/fixtures/sweep/passTest.asl") (envFor cache (list))))
         (locked (ok? (dirList (str cache "/lock"))))
         (served (binAsl! root (list "test" "asl/packages/asl-cli/tests/fixtures/servedBy/servedProbe.asl") (envFor cache (list "ASL_NATIVE_CLI_WAIT=1"))))
-        (log (resultOr (fileRead (str cache "/build.log")) ""))
+        (log (resultOr (fileReadString (str cache "/build.log")) ""))
         (cleaned (cleanup! root cache))]
     (do (assert (= fresh.exit 0) "the test cache starts empty")
         (assert (= cold.exit 0) (str "the cold call answers on asl-host: " cold.out))

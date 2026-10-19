@@ -106,7 +106,7 @@ fn testDryRunNoWrite! -> Bool
         ((ok r)
           (do
             (assert (= r.unchanged false) "candidates were found")
-            (assert (= (readFixture! "moduleDoc.asl.txt") (resultOr (fileRead dst) src)) "dry run touched nothing on disk"))))
+            (assert (= (readFixture! "moduleDoc.asl.txt") (resultOr (fileReadString dst) src)) "dry run touched nothing on disk"))))
       (assert (= (processRun (str "rm -rf '" dir "'")).exitCode 0) "temp dir removed")
       true))
 
@@ -132,7 +132,7 @@ fn testApplyRoundTrip! -> Bool
                 (assert (= (fileTextOr! dst) r.stripped) "the file on disk matches the computed stripped text")
                 (assert (not (stringContains? (fileTextOr! dst) ":d ")) "the :d keyword is gone from the written file")
                 (assert (stringContains? (fileTextOr! (str dir "/" ledgerRel)) "Adds one to a") "the ledger on disk carries the doc text")
-                (assert (= (processRun (str "asl/host/out/asl-host check '" dst "'")).exitCode 0) "asl-host check passes on the stripped file"))))))
+                (assert (= (processRun (str "bin/asl check '" dst "'")).exitCode 0) "the native CLI check passes on the stripped file"))))))
       (assert (= (processRun (str "rm -rf '" dir "'")).exitCode 0) "temp dir removed")
       true))
 

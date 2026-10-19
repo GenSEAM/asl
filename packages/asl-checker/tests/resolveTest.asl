@@ -18,8 +18,16 @@ fn testReservedProbe -> Bool
 fn testUnboundTypevarProbe -> Bool
   (do (assert (resolveProbe "(fn foo [] -> UnknownType 1)" "rule-10") "unknown type rule-10") (refute (resolveProbe "(fn foo [] -> Int64 1)" "rule-10") "known type not rule-10") true)
 
+; (:m :ref EFFECT-INFER :do "InferWhatCanBeInferred: ! is optional and the checker infers the effect from the body; test.asl has no manifest.asn on disk so it is never a :pure package, and an inferred effect in a non-pure module is never an error")
 fn testEffectProbe -> Bool
-  (do (assert (resolveProbe "(fn foo [] -> (Result Unit IoError) (println \"hi\"))" "rule-12") "effectful call in pure df rule-12") (refute (resolveProbe "(fn foo [] -> Int64 42)" "rule-12") "pure function not rule-12") true)
+  (do (refute (resolveProbe "(fn foo [] -> (Result Unit IoError) (println \"hi\"))" "rule-12") "an unmarked effectful fn in a non-pure module infers clean, no rule-12") (refute (resolveProbe "(fn foo [] -> Int64 42)" "rule-12") "pure function not rule-12") true)
+
+; (:m :ref CHKFIX :do "markedFn? treats unmarked top-level main and runTests as entry points (CMSPELL codemod prerequisite): every suite's effectful runTests and every effectful main lack a trailing ! by convention, so without this they would all need rule-12 in a :pure package; any other unmarked effectful fn is simply inferred effectful (EFFECT-INFER), never rule-12 outside a :pure package")
+fn testUnmarkedEntryPointProbe -> Bool
+  (do (refute (resolveProbe "(fn main [] -> Int64 (do (println \"hi\") 0))" "rule-12") "unmarked main performing effects is not rule-12")
+      (refute (resolveProbe "(fn runTests [] -> Bool (do (println \"hi\") true))" "rule-12") "unmarked runTests performing effects is not rule-12")
+      (refute (resolveProbe "(fn setup [] -> Int64 (do (println \"hi\") 0))" "rule-12") "unmarked non-entry-point fn performing effects is inferred, not rule-12, outside a :pure package")
+      true)
 
 fn testArityProbe -> Bool
   (do (assert (resolveProbe "(fn foo [(x Int64)] -> Int64 (+ x 1)) (fn bar [] -> Int64 (foo 1 2))" "arity") "excess args trigger arity") (refute (resolveProbe "(fn foo [(x Int64)] -> Int64 (+ x 1)) (fn bar [] -> Int64 (foo 1))" "arity") "matching args do not trigger arity") true)
@@ -34,10 +42,10 @@ fn testBuiltinRefProbe -> Bool
   (do (assert (resolveProbe "(fn shout [(xs (List Bool))] -> (List Bool) (map and xs))" "builtin-reference") "naked variadic builtin (and) in HOF builtin-reference") (refute (resolveProbe "(fn shout [(xs (List String))] -> (List String) (map stringUpper xs))" "builtin-reference") "naked fixed-arity builtin (stringUpper) in HOF is typed as a value, not builtin-reference") (refute (resolveProbe "(fn foo [] -> Int64 (+ 1 2))" "builtin-reference") "normal call not builtin-reference") true)
 
 fn testResolve -> Bool
-  (do (assert (testUnboundProbe) "unbound probe rule-2") (assert (testMissingDocProbe) "missing doc probe rule-8") (assert (testReservedProbe) "reserved probe rule-7") (assert (testUnboundTypevarProbe) "unbound typevar probe rule-10") (assert (testEffectProbe) "effect probe rule-12") (assert (testArityProbe) "arity probe") (assert (testCtorProbe) "ctor probe") (assert (testNotCallableProbe) "not-callable probe") (assert (testBuiltinRefProbe) "builtin-ref probe") (refute (checkHasCode (list) "rule-2") "empty diagnostics has no error") true)
+  (do (assert (testUnboundProbe) "unbound probe rule-2") (assert (testMissingDocProbe) "missing doc probe rule-8") (assert (testReservedProbe) "reserved probe rule-7") (assert (testUnboundTypevarProbe) "unbound typevar probe rule-10") (assert (testEffectProbe) "effect probe rule-12") (assert (testUnmarkedEntryPointProbe) "unmarked entry point probe rule-12") (assert (testArityProbe) "arity probe") (assert (testCtorProbe) "ctor probe") (assert (testNotCallableProbe) "not-callable probe") (assert (testBuiltinRefProbe) "builtin-ref probe") (refute (checkHasCode (list) "rule-2") "empty diagnostics has no error") true)
 
-fn runTests -> Bool
+fn ! runTests -> Bool
   (do (assert (testResolve) "test-resolve must pass") (refute (resolveProbe "(fn foo [] -> Int64 42)" "rule-2") "pure constant has no rule-2") true)
 
-fn RunTests -> Bool
+fn ! RunTests -> Bool
   (runTests)

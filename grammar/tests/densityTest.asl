@@ -18,7 +18,7 @@ fn symBodies text: String -> (List String)
   (map (fn [e] (symBody e)) (optionOr (listTail (stringSplit text "(:sym ")) (list)))
 
 fn grammarText! -> String
-  (mt (fileRead "asl/grammar/grammar.asn")
+  (mt (fileReadString "asl/grammar/grammar.asn")
     ((ok text) text)
     ((err e) ""))
 

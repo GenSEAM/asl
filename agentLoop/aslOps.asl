@@ -326,10 +326,16 @@ fn ! runBounded argv: (List String) cwd: (Option String) timeoutSec: (Option Int
                   ((none) (do (killGroup! sp.pid) (afterKill! sp false false o e)))
                   ((some code) (ok (Bounded :code (some code) :out (universalNewlines o) :errText (universalNewlines e) :timedOut false)))))))))))
 
+; (:m :tags (transport))
 fn envWithAslRoot! rootDir: String env: (Option (List String)) -> (List String)
   (let [base (mt env ((some rows) rows) ((none) (envList)))
-        filtered (filter (fn [r] (not (stringStartsWith? r "ASL_ROOT="))) base)]
-    (cons (str "ASL_ROOT=" (t/normPath rootDir)) filtered))
+        filtered (filter (fn [r] (not (stringStartsWith? r "ASL_ROOT="))) base)
+        homed (if (listAny? (fn [r] (stringStartsWith? r "HOME=")) filtered)
+                filtered
+                (match (envGet "HOME")
+                  ((none) filtered)
+                  ((some h) (cons (str "HOME=" h) filtered))))]
+    (cons (str "ASL_ROOT=" (t/normPath rootDir)) homed))
 
 fn envOverride key: String env: (Option (List String)) -> (Option String)
   (mt (listHead (filter (fn [row] (stringStartsWith? row (str key "="))) (optionOr env (list))))

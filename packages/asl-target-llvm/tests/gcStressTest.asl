@@ -1,9 +1,24 @@
 (module asl-target-llvm/tests/gcStressTest
   :x [runTests]
-  :i [(asl-ir/link :a lk) (asl-ir/types :a irTy) (asl-target-llvm :a llvm)])
+  :i [(asl-ir/link :a lk) (asl-ir/types :a irTy) (asl-target-llvm :a llvm)
+      (asl-cli/system :a sys) (asl-cli/asl1Cache :a cache) (asl-cli/nativeBuild :a nb)])
 
+; (:m :ref FROZEN-HOSTLESS :do "host names ./bin/asl, the native CLI, as in nativeRunTest; the ASan runtime is the native variant nativeBuild.asanRuntime! builds (cached under .asl/cache/rcRuntime, shared with rcSelfCompileTest), and stressMod compiles in-process like the other fixtures")
 fn host -> String
-  "asl/host/out/asl-host"
+  "./bin/asl"
+
+fn ! asanRuntime! -> (Result String String)
+  (let [(r (resultOr (realPath ".") "."))
+        (plain (str r "/asl/host/out/libaslrt.a"))
+        (cacheDir (str r "/.asl/cache/rcRuntime"))
+        (_ (dirCreate (str r "/.asl/cache")))
+        (_ (dirCreate cacheDir))
+        (ctx (sys/Context :root r :scriptDir "" :argv0 "" :hostBin ""))
+        (b (nb/Build :root r :cache cacheDir :tmp cacheDir :lib plain :base "" :clangVersion "" :owner ""
+                     :deadlineNs (+ (monotonicNs) 900000000000) :maxDesc 16))]
+    (mt (cache/nativeAsl1! ctx plain (optionOr (envGet "CLANG") "clang"))
+      ((err e) (err (str "native asl1: " e)))
+      ((ok asl1) (nb/asanRuntime! b asl1 (str r "/asl/packages")))))
 
 fn abiTest -> String
   "asl/packages/asl-target-llvm/tests/abiPrograms.asl"
@@ -135,8 +150,8 @@ fn ! compiledText path: String -> (Result String String)
 fn asanLink -> String
   "/usr/bin/clang -Wno-override-module -fsanitize=address,undefined -x ir "
 
-fn asanLib -> String
-  " -x none asl/host/out/libaslrt-asan.a -lm -o "
+fn ! asanLib -> String
+  (str " -x none " (resultOr (asanRuntime!) "") " -lm -o ")
 
 fn asanStress -> String
   "ASAN_OPTIONS=detect_stack_use_after_return=1 ASL_GC_STRESS=1 "
@@ -179,10 +194,11 @@ fn ! testSource work: String -> Bool
   (let [(src (str work "/stressMod.asl"))
         (ll (str work "/stressMod.ll"))]
     (do (assert (ok? (fileWrite src (heapSource))) "stressMod: source written")
-        (let [(built (sh (str (host) " run asl/packages/asl-compiler/src/asl1.asl build " src " -o " ll)))
+        (let [(code (compiledText src))
+              (built (mt code ((ok c) (fileWrite ll c)) ((err e) (err e))))
               (linked (sh (str (clangLink) ll (lib) work "/stressMod")))
               (interp (sh (str (host) " run " src)))]
-          (do (assert (= built.exitCode 0) (str "stressMod: asl1 builds it; " built.stderr))
+          (do (assert (ok? built) (str "stressMod: compiles and writes its .ll; " built))
               (assert (= linked.exitCode 0) (str "stressMod: links; " linked.stderr))
               (assert (= interp.stdout "i299k\n1333400\nabcdx7\n45150\n") (str "stressMod: host output; got " interp.stdout))
               (sameUnderStress "stressMod" (str work "/stressMod") 0)
@@ -231,7 +247,7 @@ fn ! runTests -> Bool
   (let [(made (sh "mktemp -d"))
         (work (stringReplace made.stdout "\n" ""))]
     (do (assert (= made.exitCode 0) "mktemp -d makes a work directory")
-        (assert (= (sh "sh asl/host/build.sh --sanitize").exitCode 0) "ASan host library builds")
+        (assert (ok? (asanRuntime!)) (str "the native ASan runtime builds: " (asanRuntime!)))
         (testPrograms work)
         (testSource work)
         (testListStress work)

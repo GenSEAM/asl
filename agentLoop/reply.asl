@@ -195,6 +195,17 @@ fn cmScan text: String bs: Bytes n: Int64 i: Int64 depth: Int64 closed: Int64 cn
 fn tokAt toks: (List (Pair String String)) k: Int64 -> (Pair String String)
   (mt (listGet toks k) ((some t) t) (none (pair "" "")))
 
+; (:m :ref COMMITMSG-CMKEYS-LISTVALUE-20261017 :do "skips a key's parenthesized list value (open...close, any nesting) to find the next key; used only from cmKeys's open-value branch below")
+fn skipListValue toks: (List (Pair String String)) len: Int64 k: Int64 depth: Int64 -> Int64
+  (if (>= k len)
+    k
+    (let [t (tokAt toks k)
+          kind (pairFirst t)
+          nd (cond ((= kind "open") (+ depth 1)) ((= kind "close") (- depth 1)) (else depth))]
+      (if (and (= kind "close") (= nd 0))
+        (+ k 1)
+        (skipListValue toks len (+ k 1) nd))))
+
 fn cmKeys toks: (List (Pair String String)) len: Int64 k: Int64 keys: (List String) -> (Result (List String) String)
   (if (>= k (- len 1))
     (ok keys)
@@ -209,6 +220,9 @@ fn cmKeys toks: (List (Pair String String)) len: Int64 k: Int64 keys: (List Stri
               v (tokAt toks (+ k 1))]
           (cond
             ((>= (+ k 1) (- len 1)) (err (str ":" key " has no value")))
+            ((and (= key "ev") (= (pairFirst v) "open"))
+              ; (:m :ref COMMITMSG-CMKEYS-LISTVALUE-20261017 :do "fix: :ev's value is a parenthesized list of ids (the form the commit convention itself mandates, e.g. :ev (ID1 ID2)); this branch used to treat the value's own opening paren as itself invalid and always rejected it as 'has no value'. Only :ev gets this: every other key (:a :do :g ...) keeps a single atom/string value, so an 'open' token there still falls through to the next clause and errors")
+              (cmKeys toks len (skipListValue toks len (+ k 1) 0) (cons key keys)))
             ((or (= (pairFirst v) "open") (or (= (pairFirst v) "close") (and (= (pairFirst v) "atom") (stringStartsWith? (pairSecond v) ":"))))
               (err (str ":" key " has no value")))
             (else (cmKeys toks len (+ k 2) (cons key keys))))))))

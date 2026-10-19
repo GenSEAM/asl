@@ -485,9 +485,9 @@ fn testRoot! tmp: String -> Bool
         (result (am/main (list "steps" "--root" root)))
         (run (am/runAudit! root (list "steps") "" false))
         (repo (stringTrim (resultOr (runGit! "." (list "rev-parse" "--show-toplevel") (none) (none)) "")))
-        (envRun (p/exec! (p/withCwd (p/cmd "env" (list (str "ROOT_DIR=" root) (str repo "/asl/host/out/asl-host") "run" (str repo "/asl/packages/asl-gates/src/auditMain.asl") "steps")) repo)))
+        (envRun (p/exec! (p/withCwd (p/cmd "env" (list (str "ROOT_DIR=" root) (str repo "/bin/asl") "run" (str repo "/asl/packages/asl-gates/src/auditMain.asl") "steps")) repo)))
         (envOutput (mt envRun ((err _) "") ((ok o) o.stdout)))
-        (cliRoot (p/exec! (p/withCwd (p/cmd (str repo "/asl/host/out/asl-host") (list "run" (str repo "/asl/packages/asl-gates/src/auditMain.asl") "gates" "--static" "--root" root)) repo)))
+        (cliRoot (p/exec! (p/withCwd (p/cmd (str repo "/bin/asl") (list "run" (str repo "/asl/packages/asl-gates/src/auditMain.asl") "gates" "--static" "--root" root)) repo)))
         (cliOutput (mt cliRoot ((err _) "") ((ok o) o.stdout)))
         (cleaned (pathRemove root))]
     (do

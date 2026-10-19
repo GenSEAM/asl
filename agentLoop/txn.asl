@@ -2,10 +2,11 @@
   :x [RVal AslRun TxnStep TxnPrep AbortAid WidenItem Effect FileText
       execTxn! txnPrepare txnFinish! serReceipt serValue balanceAid txnRefusal abortAid! abortAidOn applySteps stepsOf
       intelSubop widenWanted widenPick widenForm widenToSymbol! insideRoot normPath parseEffects loadEffects! checkEffect readText! splitLines outlineItems stripRightAt
-      langForPath tryRepairText]
+      langForPath tryRepairText!]
   :i [(asl/agentLoop/core :a c)
       (asl/agentLoop/diff :a diff)
-      (asl-forms/repair :a rep)])
+      (asl-forms/repair :a rep)
+      (asl-forms/heal :a heal)])
 
 enum RVal
   (rStr text: String)
@@ -690,9 +691,9 @@ fn ! mapSub kv: (List (Pair String c/KvVal)) owns: (List String) txnOwns: (List 
           ((effectConfirm) (subStop (confirmReceipt (newId) op)))
           ((effectAllowed) (subGo forms targets))))))
 
-; (:m :tags (owns txn) :do "no :owns on the session means the session may write anywhere inside :root; sessionOwns stands in for that case so a :txn with no :owns of its own inherits unrestricted scope, while a :txn that spells out :owns () still narrows to nothing")
+; (:m :ref LEON-OWNS-ALL-20261018 :do "no :owns on the session means the session may write anywhere inside :root; sessionOwns stands in for that case so a :txn with no :owns of its own inherits unrestricted scope, while a :txn that spells out :owns () still narrows to nothing -- this now shares c/effectiveOwns, the one normalization, instead of keeping its own independent (correct but redundant) copy")
 fn ! txnPrepare form: String owns: (List String) root: String effects: (List (Pair String String)) rid: String newId: (fn [] -> String) -> TxnPrep
-  (let [sessionOwns (if (listEmpty? owns) (list "**") owns)
+  (let [sessionOwns (c/effectiveOwns owns)
         txnOwns (txnOwnsOf form sessionOwns)
         unowned (filter (fn [p] (not (c/checkOwns p sessionOwns root))) txnOwns)]
     (if (not (listEmpty? unowned))
@@ -735,25 +736,29 @@ fn langForPath path: String -> (Option String)
     ((stringEndsWith? path ".asl") (some "asl"))
     (else none))
 
-; (:m :ref G4 :tags (repair) :do "repairs cur with asl-forms/repair; accepted only when nothing is left over and the repaired text itself balances")
-fn tryRepairText cur: (Option String) tf: String -> (Option rep/RepairResult)
+; (:m :ref G4 :tags (repair) :do "an .asl text goes through the one heal pipeline (asl-forms/heal) and is accepted only when it changed and, for a checker abort (clean), nothing is left over, for a balance refusal the healed text balances; an .asn text through asl-forms/repair, accepted only when nothing is left and the result balances; yields the repaired text and its (:repaired ... :left ...) receipt")
+fn tryRepairText! cur: (Option String) tf: String root: String clean: Bool -> (Option (Pair String String))
   (mt cur
     ((none) none)
     ((some t)
       (mt (langForPath tf)
         ((none) none)
         ((some lang)
-          (let [res (rep/repairAtSite t lang)]
-            (if (and (listEmpty? (rep/repairResultLeft res)) (none? (balanceAid (rep/repairResultText res))))
-              (some res)
-              none))))))
+          (if (= lang "asl")
+            (match (heal/heal! (joinPath root tf) t (list root) (joinPath root "asl/prelude/prelude.asl") 24)
+              ((ok res) (if (and res.changed (if clean (listEmpty? res.left) (none? (balanceAid res.text)))) (some (pair res.text res.receipt)) none))
+              ((err _) none))
+            (let [res (rep/repairAtSite t lang)]
+              (if (and (listEmpty? (rep/repairResultLeft res)) (none? (balanceAid (rep/repairResultText res))))
+                (some (pair (rep/repairResultText res) (rep/repairResultReceipt res)))
+                none)))))))
 
-fn repairedReceipt rid: String txnOwns: (List String) tf: String res: rep/RepairResult cmd: String -> (List (Pair String RVal))
+fn repairedReceipt rid: String txnOwns: (List String) tf: String receipt: String cmd: String -> (List (Pair String RVal))
   (list (pair "id" (rStr rid)) (pair "op" (rStr "txn")) (pair "status" (rStr "ok"))
     (pair "owns" (rList txnOwns)) (pair "flushed" (rList (list tf)))
     (pair "error" (rNone)) (pair "message" (rNone))
     (pair "cmd" (rStr cmd))
-    (pair "repaired" (rStr (rep/repairResultReceipt res)))
+    (pair "repaired" (rStr receipt))
     (pair "exit" (rInt 0)) (pair "stdout" (rStr "")) (pair "persisted" (rBool true)))
 
 fn ! defaultReceipt rid: String txnOwns: (List String) tf: String steps: (List TxnStep) root: String cmd: String okRun: Bool err: String msg: String balance: (Option String) code: Int64 out: String errText: String -> (List (Pair String RVal))
@@ -776,7 +781,7 @@ fn ! defaultReceipt rid: String txnOwns: (List String) tf: String steps: (List T
             (mt aid ((some x) (mt x ((abortAidOf k a _) (list (pair "line" (rInt k)) (pair "arrived" (rStr a)))))) (none (list)))
             (opt "hint" hint))))))
 
-; (:m :ref G4 :tags (repair txn) :do "a balance-flagged refusal is retried once through the repair module before it reaches the model; only a payload repair cannot fix still refuses")
+; (:m :ref G4 :tags (repair txn) :do "a balance-flagged refusal, and for an .asl target a checker abort, is retried once through the repair pipeline before it reaches the model; only a payload repair cannot fix still refuses")
 fn ! txnFinish! prep: TxnPrep result: AslRun root: String rid: String -> (List (Pair String RVal))
   (mt prep
     ((prepDone r) r)
@@ -797,11 +802,12 @@ fn ! txnFinish! prep: TxnPrep result: AslRun root: String rid: String -> (List (
                 balance (mt cur
                           ((some t) (if (or (= err "ERR_TXN_FLUSH_FAILED") (stringContains? tMsg (refusedMark))) (balanceAid t) none))
                           (none none))
-                repaired (if (some? balance) (tryRepairText cur tf) none)]
+                healable (or (some? balance) (and (not okRun) (and (= err "ERR_TXN_ABORTED") (stringEndsWith? tf ".asl"))))
+                repaired (if healable (tryRepairText! cur tf root (none? balance)) none)]
             (mt repaired
-              ((some res)
-                (mt (fileWrite (joinPath root tf) (rep/repairResultText res))
-                  ((ok _) (repairedReceipt rid txnOwns tf res cmd))
+              ((some fix)
+                (mt (fileWrite (joinPath root tf) (pairFirst fix))
+                  ((ok _) (repairedReceipt rid txnOwns tf (pairSecond fix) cmd))
                   ((err _) (defaultReceipt rid txnOwns tf steps root cmd okRun err msg balance code out errText))))
               ((none) (defaultReceipt rid txnOwns tf steps root cmd okRun err msg balance code out errText))))))))
 

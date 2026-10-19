@@ -1,7 +1,7 @@
 (module aslConform/runner :x [runConformCase! runConformProfile! formatReceipt] :i [(aslConform/types :a ty) (aslConform/semantics :a sem) (aslConform/compare :a cmp) (asl-target-c :a c11) (asl-target-py :a py) (asl-proc/coreProcess :a proc) (asl-proc/pool :a pool)])
 
 fn readCaseFile! path: Str -> Str
-  (mt (fileRead path) ((ok content) content) ((err _) ""))
+  (mt (fileReadString path) ((ok content) content) ((err _) ""))
 
 fn runConformCase! casePath: Str profileId: Str invert: Bool -> ty/ConformanceResult
   (let [(caseAslPath (str casePath "/case.asl")) (expectOutPath (str casePath "/expect.stdout")) (expectExitPath (str casePath "/expect.exit")) (expectOut (stringTrim (readCaseFile! expectOutPath))) (expectExitStr (stringTrim (readCaseFile! expectExitPath))) (expectExit (optionOr (stringToInt64 expectExitStr) 0)) (caseId (stringReplace casePath "tests/conformance/xplat/" "")) (actualRes (executeTarget! profileId caseId))] (let [(actOut actualRes.actualStdout) (actExit actualRes.actualExit) (actReason actualRes.reason)] (if (!= actReason "") (ty/makeResult caseId profileId false actOut actExit actReason) (let [(matches (if invert (cmp/invertComparison actOut actExit expectOut expectExit) (cmp/compareOutput actOut actExit expectOut expectExit)))] (if matches (ty/makeResult caseId profileId true actOut actExit "Passed cleanly") (ty/makeResult caseId profileId false actOut actExit (str "Divergence detected: expected '" expectOut "' exit " (stringFromInt64 expectExit) ", observed '" actOut "' exit " (stringFromInt64 actExit))))))))

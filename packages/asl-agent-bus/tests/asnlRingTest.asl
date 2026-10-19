@@ -3,7 +3,7 @@
   :i [])
 
 fn testRingSourceIntegrity! -> Bool
-  (let [(rRes (fileRead "asl/packages/asl-agent-bus/src/asnlRing.asl"))]
+  (let [(rRes (fileReadString "asl/packages/asl-agent-bus/src/asnlRing.asl"))]
     (mt rRes
       ((err e) (assert false (str "Failed to read asl/packages/asl-agent-bus/src/asnlRing.asl: " e)))
       ((ok src)
@@ -24,7 +24,7 @@ fn testRingSourceIntegrity! -> Bool
     true)
 
 fn testGrammarRegistration! -> Bool
-  (let [(gRes (fileRead "asl/packages/asl-agent-bus/manifest.asn"))]
+  (let [(gRes (fileReadString "asl/packages/asl-agent-bus/manifest.asn"))]
     (mt gRes
       ((err e) (assert false (str "Failed to read asl/packages/asl-agent-bus/manifest.asn: " e)))
       ((ok gSrc)

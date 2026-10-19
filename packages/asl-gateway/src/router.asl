@@ -1,5 +1,6 @@
 (module aslGateway/router
-  :x [Candidate Rule Profile Request ModelCalibration EndpointState ScoreParts Decision RouteDecision RouterError route parseRules score replay mergeSampling matches]
+  :x [Candidate Rule Profile Request ModelCalibration EndpointState ScoreParts Decision RouteDecision RouterError route parseRules score replay mergeSampling matches
+      spreadOrder spreadAvailable?]
   :i [(asl-intel/fixture :a asn)])
 
 (schema Candidate
@@ -163,7 +164,7 @@ fn rawScore c: Candidate r: Rule q: Request s: EndpointState calibration: (Optio
 
 fn mergeSampling c: Candidate cal: (Option ModelCalibration) -> Candidate
   (mt cal
-    ((some m) (Candidate :endpoint c.endpoint :model c.model :weight c.weight
+    ((some m) (Candidate :endpoint c.endpoint :model c.model :weight c.weight :explicit c.explicit
        :temperature (if (some? c.temperature) c.temperature (some m.temperature))
        :topP (if (some? c.topP) c.topP (some m.topP)) :maxTokens (if (some? c.maxTokens) c.maxTokens (some m.maxTokens))
        :effort (if (some? c.effort) c.effort (some m.effort))
@@ -272,3 +273,44 @@ fn replay records: (List (Pair Request (List EndpointState))) profile: Profile c
   (mt (listHead records)
     ((none) (list))
     ((some item) (listAppend (list (route profile (pairFirst item) (pairSecond item) calibrations)) (replay (optionOr (listTail records) (list)) profile calibrations))))
+
+; (:m :ref GW-SPREAD-20261017 :do "nginx's smooth weighted round-robin: every live member's current weight gains its own static weight each round, the max is picked, and only the picked member's current is reduced by the round's total live weight; a member excluded this round (breaker open or in cooldown) keeps its stored current untouched, so it resumes mid-rotation rather than resetting once it returns")
+fn spreadCurrentOf state: (Map String Int64) alias: String -> Int64
+  (optionOr (mapGet state alias) 0)
+
+fn spreadBumped members: (List (Pair String Int64)) state: (Map String Int64) -> (List (Pair String Int64))
+  (map (fn [(m (Pair String Int64))] -> (Pair String Int64)
+         (pair (pairFirst m) (+ (spreadCurrentOf state (pairFirst m)) (pairSecond m))))
+    members)
+
+fn spreadBest bumped: (List (Pair String Int64)) -> (Option (Pair String Int64))
+  (fold (fn [(acc (Option (Pair String Int64))) (b (Pair String Int64))] -> (Option (Pair String Int64))
+          (mt acc
+            ((none) (some b))
+            ((some cur) (if (> (pairSecond b) (pairSecond cur)) (some b) acc))))
+    none bumped)
+
+; (:m :ref GW-SPREAD-20261017 :do "available = still configured in :spread, breaker not open, and no 429 within :cooldownSec of now; a member outside this list is skipped for the pick entirely, not merely deprioritized")
+fn spreadAvailable? now: Int64 cooldownSec: Int64 last429: (Map String Int64) breakerOpen?: (fn [String] -> Bool) alias: String -> Bool
+  (and (not (breakerOpen? alias))
+    (mt (mapGet last429 alias)
+      ((none) true)
+      ((some at) (>= (- now at) (* cooldownSec 1000)))))
+
+; (:m :ref GW-SPREAD-20261017 :do "the full attempt order for one call: the SWRR-picked member first, then every other available member by descending bumped current weight (the order they would have won in, had this round continued), skipped/unavailable members absent entirely; cascadeChosen prepends this ahead of the plain :chain and must never attempt a model twice, so the chain walk needs to skip whatever already appears here")
+fn spreadOrder now: Int64 cooldownSec: Int64 members: (List (Pair String Int64)) last429: (Map String Int64) breakerOpen?: (fn [String] -> Bool) state: (Map String Int64) -> (Pair (List String) (Map String Int64))
+  (let [(avail (filter (fn [(m (Pair String Int64))] -> Bool (spreadAvailable? now cooldownSec last429 breakerOpen? (pairFirst m))) members))]
+    (if (listEmpty? avail) (pair (list) state)
+      (let [(total (listSum (map pairSecond avail)))
+            (bumped (spreadBumped avail state))
+            (best (spreadBest bumped))]
+        (mt best
+          ((none) (pair (list) state))
+          ((some b)
+            (let [(bestAlias (pairFirst b))
+                  (rest (listSortBy (fn [(x (Pair String Int64))] -> Int64 (- 0 (pairSecond x)))
+                          (filter (fn [(x (Pair String Int64))] -> Bool (!= (pairFirst x) bestAlias)) bumped)))
+                  (order (cons bestAlias (map pairFirst rest)))
+                  (withBumped (fold (fn [(m (Map String Int64)) (x (Pair String Int64))] -> (Map String Int64) (mapSet m (pairFirst x) (pairSecond x))) state bumped))
+                  (finalState (mapSet withBumped bestAlias (- (pairSecond b) total)))]
+              (pair order finalState)))))))

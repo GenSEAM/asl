@@ -32,7 +32,7 @@ fn ! testTwoTierCloseSync! -> Bool
   (let [(tmpDir (str (optionOr (envGet "TMPDIR") "/tmp") "/asl-proc-twotier-" (stringFromInt64 (monotonicNs)))) (path (str tmpDir "/nested/two-tier-sync-test.spool")) (tt (spool/makeTwoTierSpool path 5 1024)) (pushed (fold (fn [(s spool/TwoTierSpool) (i Int64)] -> spool/TwoTierSpool (spool/twoTierPush s (str "msg-" (stringFromInt64 i)))) tt (range 0 3))) (closeRes (spool/twoTierCloseSync! pushed))]
     (do
       (assert (ok? closeRes) "two-tier-close-sync! must succeed")
-      (let [(closed (resultOr closeRes pushed)) (readRes (fileRead path))]
+      (let [(closed (resultOr closeRes pushed)) (readRes (fileReadString path))]
         (do
           (refute (spool/spoolIsUnlinked? closed.disk) "Disk spool must remain linked (file present on disk) right after sync-close")
           (assert (ok? readRes) "fileRead of the synced two-tier spool must succeed while it is still linked")
@@ -40,7 +40,7 @@ fn ! testTwoTierCloseSync! -> Bool
           (let [(unlinkRes (spool/spoolUnlink! closed.disk))]
             (do
               (assert (ok? unlinkRes) "spool-unlink! must succeed")
-              (refute (ok? (fileRead path)) "fileRead must fail once the spool has actually been removed from disk")
+              (refute (ok? (fileReadString path)) "fileRead must fail once the spool has actually been removed from disk")
               (let [(_ (pathRemove tmpDir))] true)))))))
 
 fn ! testShLifecycleWiring! -> Bool
@@ -48,21 +48,21 @@ fn ! testShLifecycleWiring! -> Bool
     (do
       (assert (ok? res) "run-cmd! execution must succeed")
       (assert (mt res ((ok receipt) (and (= receipt.exitCode 0) (and (stringStartsWith? receipt.spoolPath expectedPrefix) (and (stringEndsWith? receipt.spoolPath ".spool") (< (proc/receiptTokens receipt) 80))))) ((err _) false)) "ProcessReceipt must have exit-code 0, an absolute spool path under TMPDIR/asl-proc, and stay under 80 tokens")
-      (let [(spoolPath (mt res ((ok receipt) receipt.spoolPath) ((err _) ""))) (readRes (fileRead spoolPath))]
+      (let [(spoolPath (mt res ((ok receipt) receipt.spoolPath) ((err _) ""))) (readRes (fileReadString spoolPath))]
         (do
           (assert (ok? readRes) "fileRead of the documented spoolPath must succeed")
           (assert (mt readRes ((ok content) (= content "hi\n")) ((err _) false)) "Spool file at the documented spoolPath must hold the command's exact raw output byte-for-byte")
           (let [(releaseRes (mt res ((ok receipt) (sh/releaseReceipt! receipt)) ((err _) (err "no receipt"))))]
             (do
               (assert (ok? releaseRes) "release-receipt! must succeed")
-              (refute (ok? (fileRead spoolPath)) "fileRead must fail once the receipt's spool path has been released")
+              (refute (ok? (fileReadString spoolPath)) "fileRead must fail once the receipt's spool path has been released")
               true))))))
 
 fn ! testRawByteFidelity! -> Bool
   (let [(res (sh/runCmd! "sh" (list "-c" "printf '%s' no-trailing-newline")))]
     (do
       (assert (ok? res) "run-cmd! of a command with no trailing newline must still succeed")
-      (let [(spoolPath (mt res ((ok receipt) receipt.spoolPath) ((err _) ""))) (readRes (fileRead spoolPath))]
+      (let [(spoolPath (mt res ((ok receipt) receipt.spoolPath) ((err _) ""))) (readRes (fileReadString spoolPath))]
         (do
           (assert (ok? readRes) "fileRead of the no-trailing-newline command's spool path must succeed")
           (assert (mt readRes ((ok content) (= content "no-trailing-newline")) ((err _) false)) "Spool content must be the exact raw bytes with no newline normalization added")
@@ -76,9 +76,9 @@ fn ! testUniqueSpoolPathsAndRelease! -> Bool
         (do
           (assert (= distinctCount 100) "100 runCmd! calls must produce 100 distinct spool paths, not a handful reused across calls")
           (let [(pairs (zip receipts labels))]
-            (assert (listAll? (fn [(pr (Pair cp/ProcessReceipt String))] -> Bool (let [(rc (pairFirst pr)) (label (pairSecond pr))] (mt (fileRead rc.spoolPath) ((ok content) (stringContains? content label)) ((err _) false)))) pairs) "every receipt's spool file must contain that call's own output, not another run's"))
+            (assert (listAll? (fn [(pr (Pair cp/ProcessReceipt String))] -> Bool (let [(rc (pairFirst pr)) (label (pairSecond pr))] (mt (fileReadString rc.spoolPath) ((ok content) (stringContains? content label)) ((err _) false)))) pairs) "every receipt's spool file must contain that call's own output, not another run's"))
           (assert (listAll? (fn [(rc cp/ProcessReceipt)] -> Bool (ok? (sh/releaseReceipt! rc))) receipts) "release must succeed for every receipt")
-          (refute (listAny? (fn [(p String)] -> Bool (ok? (fileRead p))) paths) "no spool files must remain readable after every receipt has been released")
+          (refute (listAny? (fn [(p String)] -> Bool (ok? (fileReadString p))) paths) "no spool files must remain readable after every receipt has been released")
           true))))
 
 fn ! testDiskSpool50mbHardCap! -> Bool
@@ -92,7 +92,7 @@ fn ! testDiskSpool50mbHardCap! -> Bool
       (mt syncRes
         ((err _) false)
         ((ok synced)
-          (let [(readRes (fileRead path))]
+          (let [(readRes (fileReadString path))]
             (do
               (assert (ok? readRes) "fileRead of synced spool must succeed")
               (assert (mt readRes ((ok diskData) (and (<= (stringLength diskData) 10485760) (and (= (stringLength diskData) 10485760) (stringEndsWith? diskData "FINAL_BYTES_50MB")))) ((err _) false)) "Synced disk file size must be exactly 10485760 bytes and preserve trailing stream bytes")

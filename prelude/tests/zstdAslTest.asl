@@ -139,8 +139,8 @@ fn ! overlayProgram paths: (List String) -> String
        "  (do\n" (pathCalls paths) "\n    (ok 0))\n")
 
 fn ! nativeFixtureParity! paths: (List String) -> Bool
-  (let [(made (processRun "mktemp -d"))
-        (dir (stringReplace made.stdout "\n" ""))
+  (let [(dir (str "scratch/zstdAslTest." (stringFromInt64 (monotonicNs))))
+        (made (dirCreate dir))
         (sourcePath (str dir "/zstdOverlayAll.asl"))
         (llPath (str dir "/zstdOverlayAll.ll"))
         (exe (str dir "/zstdOverlayAll"))
@@ -153,13 +153,13 @@ fn ! nativeFixtureParity! paths: (List String) -> Bool
         (wroteLl (fileWrite llPath code))
         (clang (processRun (str "/usr/bin/clang -Wno-override-module -x ir " llPath " -x none asl/host/out/libaslrt.a -lm -o " exe)))
         (native (processRun exe))
-        (host (processRun (str "asl/host/out/asl-host run " sourcePath)))
+        (host (processRun (str "bin/asl run " sourcePath)))
         (removed (processRun (str "rm -rf " dir)))
         (lines (filter (fn [(l String)] -> Bool (> (stringLength l) 0)) (stringSplit native.stdout "\n")))
         (okLines (filter (fn [(l String)] -> Bool (stringContains? l " OK ")) lines))
         (errLines (filter (fn [(l String)] -> Bool (stringContains? l " ERR ")) lines))]
     (do
-      (assert (= made.exitCode 0) "mktemp -d makes the native zstd fixture work directory")
+      (assert (ok? made) "dirCreate makes the native zstd fixture work directory")
       (assert (= removed.exitCode 0) "native zstd fixture work directory removed")
       (assert (> (listLength paths) 0) "all three zstd fixture directories contain files")
       (assert (ok? wroteSource) "write all-fixture native zstd program")

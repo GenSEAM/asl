@@ -5,7 +5,7 @@
 # Single Source of Truth (SSOT): asl/packages/asl-target-sh/src/distrib.asl & asl/grammar/rules.asn
 # All modifications must be made to the ASL source and compiled via: asl target distrib
 # ============================================================================
-# AgentSlang Universal Installer bootstrap: it only finds or builds asl-host and runs the ASL installer
+# AgentSlang Universal Installer bootstrap: it only finds the native asl entry point (bin/asl) and runs the ASL installer through it, hostless
 # Canonical URL: https://aslang.dev/install.sh
 # Usage: curl -fsSL https://aslang.dev/install.sh | sh
 set -eu
@@ -22,18 +22,18 @@ pkg_of() {
   elif [ -f "$1/packages/asl-target-sh/src/distrib.asl" ]; then echo "$1"
   else return 1; fi
 }
-host_of() {
-  if [ ! -x "$1/host/out/asl-host" ] || [ -n "$(find "$1/host/src/" "$1/prelude/" "$1/host/build.sh" -newer "$1/host/out/asl-host" 2>/dev/null | head -n 1)" ]; then
-    sh "$1/host/build.sh" >&2 || [ -x "$1/host/out/asl-host" ] || return 1
+asl_of() {
+  if [ -x "$1/../bin/asl" ]; then echo "$1/../bin/asl"
+  elif [ -x "$1/bin/asl" ]; then echo "$1/bin/asl"
+  else return 1
   fi
-  echo "$1/host/out/asl-host"
 }
 case "${1:-}" in
   --tier|--render-rules|--check-rules|--render-home|--render-lexicon|--render-installers|--check-installers)
     [ -n "$ROOT" ] || die "install.sh $1 runs from a checkout, not from a pipe"
     PKG="$(pkg_of "$ROOT")" || die "no ASL installer under $ROOT"
-    HOST="$(host_of "$PKG")" || die "cannot build asl-host in $PKG/host (needs a C compiler)"
-    exec "$HOST" run "$PKG/packages/asl-target-sh/src/rules.asl" "$ROOT" "$@" ;;
+    ASLBIN="$(asl_of "$PKG")" || die "cannot find the native asl entry point (bin/asl) beside $PKG"
+    exec "$ASLBIN" run "$PKG/packages/asl-target-sh/src/rules.asl" "$ROOT" "$@" ;;
 esac
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"
@@ -69,8 +69,8 @@ else
   fi
 fi
 PKG="$(pkg_of "$TREE")" || die "no ASL installer in $TREE"
-HOST="$(host_of "$PKG")" || die "cannot build asl-host in $PKG/host (needs a C compiler)"
-export ASL_HOST="$HOST"
+ASLBIN="$(asl_of "$PKG")" || die "cannot find the native asl entry point (bin/asl) beside $PKG"
+export ASL_HOST="$ASLBIN"
 TTY=none
 if [ -t 0 ]; then TTY=tty
 elif [ -e /dev/tty ]; then
@@ -78,8 +78,8 @@ elif [ -e /dev/tty ]; then
 fi
 INSTALLER="$PKG/packages/asl-target-sh/src/distrib.asl"
 if [ "$DRY" -eq 0 ] && [ -e "$TREE/.git" ] && git -C "$TREE" rev-parse --git-dir >/dev/null 2>&1; then
-  git -C "$TREE" config --local merge.asnRows.driver "\"$HOST\" run \"$PKG/tools/mergeRows/mergeRows.asl\" %O %A %B %P"
+  git -C "$TREE" config --local merge.asnRows.driver "\"$ASLBIN\" run \"$PKG/tools/mergeRows/mergeRows.asl\" %O %A %B %P"
   git -C "$TREE" config --local merge.asnRows.name 'ASN row-keyed merge (MRG1)'
 fi
-if [ "$TTY" = devtty ]; then exec "$HOST" run "$INSTALLER" "$TREE" "$FROM" "$TTY" "$OS" "$ARCH" "$@" </dev/tty; fi
-exec "$HOST" run "$INSTALLER" "$TREE" "$FROM" "$TTY" "$OS" "$ARCH" "$@"
+if [ "$TTY" = devtty ]; then exec "$ASLBIN" run "$INSTALLER" "$TREE" "$FROM" "$TTY" "$OS" "$ARCH" "$@" </dev/tty; fi
+exec "$ASLBIN" run "$INSTALLER" "$TREE" "$FROM" "$TTY" "$OS" "$ARCH" "$@"

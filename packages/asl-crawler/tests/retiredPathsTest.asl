@@ -3,7 +3,7 @@
   :i [])
 
 fn ! runTests -> Bool
-  (let [(host (optionOr (envGet "ASL_HOST") "asl/host/out/asl-host"))
+  (let [(host (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl")))
         (t (stringFromInt64 (monotonicNs)))
         (trapDir (str "/tmp/trapTest_" t))
         (_ (dirCreate trapDir))

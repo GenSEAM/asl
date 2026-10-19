@@ -1,22 +1,24 @@
 (module asl-checker/tests/quadGoldenTest
-  :x [entries checkerRoots goldenDigests corpusText rewritten? runTests]
+  :x [entries checkerRoots goldenFileFor corpusText rewritten? runTests]
   :i [(asl-parser/ast :a a) (asl-checker/resolve :a r) (asl-checker/check :a chk) (asl-checker/types :a ty)])
 
 fn entries -> (List String)
   (list "asl/packages/asl-forms/tests/checkSemanticTest.asl" "asl/packages/asl-cli/src/main.asl")
 
 fn checkerRoots -> (List String)
-  (list "asl/packages/asl-cli/src" "." "asl/packages/asl-parser/src" "asl/packages/asl-checker/src" "asl/packages/asl-compiler/src" "asl/packages/asl-eval/src" "asl/packages/asl-codegen/src" "asl/packages/asl-text/src" "asl/packages" "asl")
+  (list "asl/packages/asl-cli/src" "." "asl/packages/asl-parser/src" "asl/packages/asl-checker/src" "asl/packages/asl-compiler/src" "asl/packages/asl-codegen/src" "asl/packages/asl-text/src" "asl/packages" "asl")
 
-fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "491215424082749433:677692")
-        (pair "asl/packages/asl-cli/src/main.asl" "-1197766571249195617:1490549"))
+; (:m :ref CHKFIX :do "the golden is the full checker summary text in fixtures/quadGolden, not just its digest, so a mismatch prints a reviewable line diff instead of two opaque numbers; re-recorded after PRELPASS/Perceus/TGTTRIM merged, asl-eval/src dropped from checkerRoots since that package is deleted")
+fn goldenFileFor entry: String -> String
+  (cond ((= entry "asl/packages/asl-forms/tests/checkSemanticTest.asl") "asl/packages/asl-checker/tests/fixtures/quadGolden/checkSemanticTest.golden.txt")
+        ((= entry "asl/packages/asl-cli/src/main.asl") "asl/packages/asl-checker/tests/fixtures/quadGolden/main.golden.txt")
+        (else (str "asl/packages/asl-checker/tests/fixtures/quadGolden/" (stringReplace (stringReplace entry "/" "_") "." "_") ".golden.txt")))
 
 fn diagLine d: ty/Diagnostic -> String
   (str d.path ":" d.line ":" d.col " " d.code " " d.message " | " d.msg)
 
 fn ! moduleText path: String deps: (Map String r/ModuleSummary) viaSource: Bool -> String
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err _) (str "(unreadable " path ")"))
     ((ok src) (mt (a/parse src)
                 ((err e) (str "(parse " path " " e.msg ")"))
@@ -26,7 +28,7 @@ fn ! moduleText path: String deps: (Map String r/ModuleSummary) viaSource: Bool 
                                  (if viaSource (stringJoin (map diagLine (chk/checkSource src deps path)) "\n") "") ")")))))
 
 fn ! corpusText entry: String -> String
-  (mt (fileRead entry)
+  (mt (fileReadString entry)
     ((err _) (str "(unreadable " entry ")"))
     ((ok src) (mt (a/parse src)
                 ((err e) (str "(parse " entry " " e.msg ")"))
@@ -49,15 +51,34 @@ fn ! rootRelative text: String -> String
 fn digestOf text: String -> String
   (str (stringFromInt64 (fnv1a64 text)) ":" (stringFromInt64 (stringLength text)))
 
+fn truncateLine s: String -> String
+  (if (> (stringLength s) 160) (str (optionOr (stringSlice s 0 160) s) "...") s)
+
+fn lineDiffAt i: Int64 wantLines: (List String) gotLines: (List String) -> String
+  (let [(w (optionOr (listGet wantLines i) "<eof>"))
+        (g (optionOr (listGet gotLines i) "<eof>"))]
+    (if (= w g) "" (str "  L" (stringFromInt64 i) " want: " (truncateLine w) "\n  L" (stringFromInt64 i) " got:  " (truncateLine g))))
+
+; (:m :ref CHKFIX :do "short reviewable diff between the stored golden text and the live corpus text: line-by-line, truncated, capped at 6 shown mismatches so a real drift is readable at a glance")
+fn shortDiff want: String got: String -> String
+  (let [(wantLines (stringSplit want "\n"))
+        (gotLines (stringSplit got "\n"))
+        (n (max (listLength wantLines) (listLength gotLines)))
+        (allDiffs (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map (fn [(i Int64)] -> String (lineDiffAt i wantLines gotLines)) (range 0 n))))
+        (shown (listTake allDiffs 6))]
+    (if (listEmpty? allDiffs) ""
+      (str (stringFromInt64 (listLength allDiffs)) " line(s) differ of " (stringFromInt64 n) " (showing up to 6):\n" (stringJoin shown "\n"))))
+
 fn ! goldenMismatch entry: String -> String
   (let [(text (rootRelative (corpusText entry)))
         (got (digestOf text))
-        (want (optionOr (mapGet (fold (fn [(m (Map String String)) (p (Pair String String))] -> (Map String String) (mapSet m (pairFirst p) (pairSecond p))) (mapEmpty) (goldenDigests)) entry) ""))]
+        (path (goldenFileFor entry))
+        (want (mt (fileReadString path) ((ok s) s) ((err _) "")))]
     (do (print (str "(quadGolden :entry " entry " :digest \"" got "\")"))
         (assert (> (stringLength text) 10000) (str entry ": the corpus must load, not collapse: " (stringLength text)))
-        (if (= got want) "" (str entry ": want " want ", got " got))))
+        (if (= want text) "" (str entry ": drifted from " path " (want " (digestOf want) ", got " got ")\n" (shortDiff want text)))))
 
 fn ! runTests -> Bool
   (let [(misses (filter (fn [(m String)] -> Bool (not (stringEmpty? m))) (map goldenMismatch (entries))))]
-    (do (assert (listEmpty? misses) (str "checker summaries and diagnostics are byte-identical to the pre-QUAD-LISTGET goldens: " (stringJoin misses "; ")))
+    (do (assert (listEmpty? misses) (str "checker summaries and diagnostics are byte-identical to their golden fixtures: " (stringJoin misses "; ")))
         true))

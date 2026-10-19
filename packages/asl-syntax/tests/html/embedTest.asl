@@ -140,20 +140,6 @@ fn testOrchestrationTopologyScriptSymbols! -> Bool
                        "setTransform endLine >= startLine")
                true)))))))
 
-fn testWebIndexHtmlFile! -> Bool
-  (let [(path "asl/web/index.html")]
-    (mt (fileReadString path)
-      ((err e) (assert false (str "missing asl/web/index.html: " e)))
-      ((ok text)
-       (let [(len (stringLength text))
-             (root (emb/parseHtmlWithEmbedded text))
-             (tiling (tr/checkTiling root len))
-             (printed (pr/printTreeString text root))]
-         (do
-           (assert (ok? tiling) "asl/web/index.html tiles cleanly with embedded scripts")
-           (assert (= printed text) "asl/web/index.html round-trips losslessly with embedded scripts")
-           true)))))
-
 fn testPopupHtmlFile! -> Bool
   (let [(path "asl/packages/asl-browser-plugin/src/popup.html")]
     (mt (fileReadString path)
@@ -247,9 +233,8 @@ fn checkSingleTrackedHtmlFile! path: String -> Bool
          (assert (= printed text) (str path " round-trips losslessly in corpus sweep"))
          true))))
 
-fn testAllFiveTrackedFilesLosslessRoundTrip! -> Bool
+fn testAllFourTrackedFilesLosslessRoundTrip! -> Bool
   (do
-    (checkSingleTrackedHtmlFile! "asl/web/index.html")
     (checkSingleTrackedHtmlFile! "asl/packages/asl-browser-plugin/src/popup.html")
     (checkSingleTrackedHtmlFile! "docs/diagrams/DiagramWorkbench.html")
     (checkSingleTrackedHtmlFile! "docs/diagrams/OrchestrationTopology.html")
@@ -263,9 +248,8 @@ fn ! runTests -> Bool
     (testMultipleScriptsOneBrokenOneValid!)
     (testDiagramWorkbenchScriptSymbols!)
     (testOrchestrationTopologyScriptSymbols!)
-    (testWebIndexHtmlFile!)
     (testPopupHtmlFile!)
     (testReviewHtmlFile!)
     (testUnifiedExtractSymbolsIncludesHtmlAndEmbedded!)
-    (testAllFiveTrackedFilesLosslessRoundTrip!)
+    (testAllFourTrackedFilesLosslessRoundTrip!)
     true)

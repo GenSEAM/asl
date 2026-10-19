@@ -139,11 +139,11 @@ fn ! testDepthGuard -> Bool
         (over (parseVerdict (ast/parse (deepSource 997))))]
     (do
       (println "nativeHang depth CPU us parse/lower 2000-deep:" (- c1 c0) (- c2 c1))
-      (assert (= deep "ERR_DEPTH expression nested deeper than 1000 at 7:4004") (str "a 2000-deep nest fails to parse with ERR_DEPTH where asl-host reports it, got " deep))
+      (assert (= deep "ERR_DEPTH expression nested deeper than 1000 at 7:4004") (str "a 2000-deep nest fails to parse with ERR_DEPTH at the recorded position, got " deep))
       (assert (< (- c1 c0) 3000000) "the 2000-deep nest is rejected within 3 s of CPU time")
       (assert (mt lowered ((err ds) (= (optionOr (listHead (map (fn [(d ir/IrDiag)] -> String d.code) ds)) "") "ERR_DEPTH")) ((ok _) false)) "lowerSource reports the 2000-deep nest as ERR_DEPTH")
-      (assert (= limit "ok") (str "an expression at depth 1000 parses, as asl-host accepts it, got " limit))
-      (assert (= over "ERR_DEPTH expression nested deeper than 1000 at 7:4004") (str "one level deeper fails as asl-host does, got " over))
+      (assert (= limit "ok") (str "an expression at depth 1000 parses, as the recorded expectation has it, got " limit))
+      (assert (= over "ERR_DEPTH expression nested deeper than 1000 at 7:4004") (str "one level deeper fails as the recorded expectation has it, got " over))
       true))
 
 fn ! loadVerdict path: String -> String
@@ -158,8 +158,8 @@ fn ! testDeepFiles -> Bool
         (c1 (cpuMicros))]
     (do
       (println "nativeHang depth CPU us load deepDo+deepNot:" (- c1 c0))
-      (assert (= deepDo "ERR_DEPTH expression nested deeper than 1000 tests/acceptance/r1Host/generated/invalid/depth/deepDoTest.asl:7:4004") (str "deepDoTest loads as ERR_DEPTH at asl-host's position, got " deepDo))
-      (assert (= deepNot "ERR_DEPTH expression nested deeper than 1000 tests/acceptance/r1Host/generated/invalid/depth/deepNotTest.asl:7:5001") (str "deepNotTest loads as ERR_DEPTH at asl-host's position, got " deepNot))
+      (assert (= deepDo "ERR_DEPTH expression nested deeper than 1000 tests/acceptance/r1Host/generated/invalid/depth/deepDoTest.asl:7:4004") (str "deepDoTest loads as ERR_DEPTH at the recorded position, got " deepDo))
+      (assert (= deepNot "ERR_DEPTH expression nested deeper than 1000 tests/acceptance/r1Host/generated/invalid/depth/deepNotTest.asl:7:5001") (str "deepNotTest loads as ERR_DEPTH at the recorded position, got " deepNot))
       (assert (< (- c1 c0) 3000000) "both 1e5-deep files are rejected within 3 s of CPU time")
       true))
 

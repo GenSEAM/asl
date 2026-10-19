@@ -92,7 +92,7 @@ fn testTrackedMarkdownRoundTrip! -> Bool
      (let [(total (listLength files))
            (passed (checkFilesLoop! files 0))]
        (do
-         (assert (= total 211) (str "pinned tracked md files total == 211: " (stringFromInt64 total)))
+         (assert (= total 215) (str "pinned tracked md files total == 215: " (stringFromInt64 total)))
          (assert (= passed total) (str "all files passed round-trip: " (stringFromInt64 passed) " / " (stringFromInt64 total)))
          true))))
 

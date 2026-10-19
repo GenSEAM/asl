@@ -125,6 +125,13 @@ fn fcntlExtern -> ty/SsaExtern
 fn closeExtern -> ty/SsaExtern
   (ty/ssaExternTyped "close" (list (ty/tyI32)) (ty/tyI32))
 
+; (:m :ref HLFIX-C :do "unixListenWith chmods the bound AF_UNIX path to 0600 before listen; bind()'s socket file inherits umask-masked 0777 permissions from the kernel (0755 under a typical 022 umask), not the 0600 loopbackTest.asl expects, so the mode has to be set explicitly the same way sys.asl's fileWrite already does for its own atomic-create path")
+fn chmodExtern -> ty/SsaExtern
+  (ty/ssaExternTyped "chmod" (list (ty/tyPtr) (ty/tyI32)) (ty/tyI32))
+
+fn unlinkExtern -> ty/SsaExtern
+  (ty/ssaExternTyped "unlink" (list (ty/tyPtr)) (ty/tyI32))
+
 
 fn somaxconnRows -> (List (Pair String Int64))
   (list (pair "darwin-arm64" 128) (pair "linux-x86_64" 4096) (pair "linux-aarch64" 4096))
@@ -606,12 +613,32 @@ fn unixListenWith facts: libc/TripleFacts backlog: Int64 -> (Result ty/SsaFuncti
                                         (sys/callInstr "ul.bindR" (ty/tyI32) "bind" (list "fd" "ul.sa" "ul.saSizeConst"))
                                         (sys/int32Const "ul.z1" 0)
                                         (sys/primInstr "ul.bindErr" (ty/tyI1) "rawLtI32" (list "ul.bindR" "ul.z1")))
-                                  (ty/termBranch "ul.bindErr" (sys/edgeTo "ul.bindErrB") (sys/edgeTo "ul.listen")))
+                                  (ty/termBranch "ul.bindErr" (sys/edgeTo "ul.bindErrB") (sys/edgeTo "ul.chmod")))
                                 (sys/block "ul.bindErrB"
                                   (list (sys/callInstr "ul.errnoBind" (ty/tyI64) "sysErrnoValue" (list))
                                         (freeInstr "ul.freeBind" "ul.sa")
                                         (sys/callInstr "ul.closeBind" (ty/tyI32) "close" (list "fd")))
                                   (ty/termJump (ty/ssaEdge "ul.err" (list "ul.errnoBind"))))
+                                (sys/block "ul.chmod"
+                                  (list (sys/primInstr "ul.saAt2" (ty/tyI64) "rawPtrToInt" (list "ul.sa"))
+                                        (sys/int64Const "ul.pathOffC2" pathOff)
+                                        (sys/primInstr "ul.pathAt2" (ty/tyI64) "addInt" (list "ul.saAt2" "ul.pathOffC2"))
+                                        (sys/primInstr "ul.pathPtr" (ty/tyPtr) "rawIntToPtr" (list "ul.pathAt2"))
+                                        (sys/int32Const "ul.chmodMode" 384)
+                                        (sys/callInstr "ul.chmodR" (ty/tyI32) "chmod" (list "ul.pathPtr" "ul.chmodMode"))
+                                        (sys/int32Const "ul.z3" 0)
+                                        (sys/primInstr "ul.chmodErr" (ty/tyI1) "rawLtI32" (list "ul.chmodR" "ul.z3")))
+                                  (ty/termBranch "ul.chmodErr" (sys/edgeTo "ul.chmodErrB") (sys/edgeTo "ul.listen")))
+                                (sys/block "ul.chmodErrB"
+                                  (list (sys/callInstr "ul.errnoChmod" (ty/tyI64) "sysErrnoValue" (list))
+                                        (sys/primInstr "ul.saAt3" (ty/tyI64) "rawPtrToInt" (list "ul.sa"))
+                                        (sys/int64Const "ul.pathOffC3" pathOff)
+                                        (sys/primInstr "ul.pathAt3" (ty/tyI64) "addInt" (list "ul.saAt3" "ul.pathOffC3"))
+                                        (sys/primInstr "ul.pathPtr2" (ty/tyPtr) "rawIntToPtr" (list "ul.pathAt3"))
+                                        (sys/callInstr "ul.unlinkChmod" (ty/tyI32) "unlink" (list "ul.pathPtr2"))
+                                        (freeInstr "ul.freeChmod" "ul.sa")
+                                        (sys/callInstr "ul.closeChmod" (ty/tyI32) "close" (list "fd")))
+                                  (ty/termJump (ty/ssaEdge "ul.err" (list "ul.errnoChmod"))))
                                 (sys/block "ul.listen"
                                   (list (sys/int32Const "ul.backlog" backlog)
                                         (sys/callInstr "ul.listenR" (ty/tyI32) "listen" (list "fd" "ul.backlog"))
@@ -1019,7 +1046,7 @@ fn recvFdFn facts: libc/TripleFacts -> (Result ty/SsaFunction String)
 fn sysNetExterns facts: libc/TripleFacts -> (List ty/SsaExtern)
   (listAppend (sys/sysCommonExterns facts)
     (list (socketExtern) (bindExtern) (listenExtern) (connectExtern) (acceptExtern) (accept4Extern) (getsocknameExtern) (fcntlExtern) (closeExtern)
-          (socketpairExtern) (sendmsgExtern) (recvmsgExtern)))
+          (socketpairExtern) (sendmsgExtern) (recvmsgExtern) (chmodExtern) (unlinkExtern)))
 
 fn sysNetFunctions facts: libc/TripleFacts -> (Result (List ty/SsaFunction) String)
   (mt (tcpListenFn facts)

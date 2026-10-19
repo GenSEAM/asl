@@ -25,6 +25,7 @@
       breaker_reset_timeout
       breakerIsQuotaError
       breaker_is_quota_error
+      breakerIsProviderWideQuota
       breakerSnapshot
       breaker_snapshot
       formatBreakerSnapshotAsn
@@ -111,6 +112,13 @@ fn breakerIsQuotaError text: String -> Bool
 
 fn breaker_is_quota_error text: String -> Bool
   (breakerIsQuotaError text)
+
+; (:m :tags (breaker pool) :do "a 429 is per-model by default (each free model on a shared provider has its own upstream limit); these markers mean the account itself is out, so the whole provider pool trips instead of just the one model")
+fn breakerIsProviderWideQuota text: String -> Bool
+  (let [(t (stringUpper text))]
+    (or (stringContains? t "INSUFFICIENT_QUOTA")
+      (or (stringContains? t "BILLING")
+        (and (stringContains? t "ACCOUNT") (stringContains? t "QUOTA")))))
 
 fn breakerDownFor st: BreakerState provider: String now: Int64 -> (Pair BreakerState Int64)
   (if (stringEmpty? provider)

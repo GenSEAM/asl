@@ -2,8 +2,12 @@
   :x [runTests]
   :i [(asl-ir/link :a lk) (asl-ir/types :a irTy) (asl-target-llvm :a llvm)])
 
-fn host -> String
-  "asl/host/out/asl-host"
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): testValueParity/testFailingParity/testOverApplied used asl-host as a live parity oracle for the hand-built native binary over listBytesFixture, keyed by op. Every op is fixed (idOf is never even needed here; the fixture never reads argv beyond op), so the oracle is replaced by a recordedCase table, captured once from the leftover asl-host binary before HL-DELETE removed it, covering all of valueCases, failingCases and partialOver. Native build/link/run logic is unchanged. Also fixed a pre-existing, unrelated HL-DELETE gap in sourceDirs (same as nativeOpsTest.asl): it scanned asl/host/src (the old C runtime), which no longer exists")
+
+(schema Recorded
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
 
 fn bigCount -> Int64
   2000
@@ -169,10 +173,10 @@ fn ! testRuntimeDecls -> Bool
     (refute (listAny? (fn [(d String)] -> Bool (stringContains? d "@asl_rt_list(")) (llvm/runtimeDecls)) "runtimeDecls declares no asl_rt_list")
     true)
 
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): dropped the asl/host/src dir, which HL-DELETE removed entirely; see nativeOpsTest.asl's identical fix")
 fn sourceDirs -> (List (Pair String (List String)))
   (list (pair "asl/packages/asl-target-llvm/src" (list ".asl"))
-        (pair "asl/packages/asl-target-llvm/tests" (list ".asl"))
-        (pair "asl/host/src" (list ".c" ".h")))
+        (pair "asl/packages/asl-target-llvm/tests" (list ".asl")))
 
 fn ! sourceFiles -> (List String)
   (fold (fn [(acc (List String)) (d (Pair String (List String)))] -> (List String)
@@ -246,37 +250,78 @@ fn ! nativeExe dir: String -> String
     (do (assert (= linked.exitCode 0) (str "listBytesFixture links against libaslrt.a: " linked.stderr))
         exe))
 
+fn recordedCase op: String -> Recorded
+  (cond
+    ((= op "allocHuge") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_OOM: cannot allocate 9223372036854775807 bytes (after 0 asserts)\n"))
+    ((= op "allocNeg") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_RANGE: bytesAlloc: negative size -5 (after 0 asserts)\n"))
+    ((= op "big") (Recorded :exitCode 0 :stdout "1999000\n" :stderr ""))
+    ((= op "consType") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_TYPE: cons expects List, got Int (after 0 asserts)\n"))
+    ((= op "direct") (Recorded :exitCode 0 :stdout "(some 0) (some (1 2 3)) false true (none) (none) 20 255 7 2.5 1.26e-321 () () () () 0\n" :stderr ""))
+    ((= op "emptyType") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_TYPE: listEmpty? expects List, got Int (after 0 asserts)\n"))
+    ((= op "floats") (Recorded :exitCode 0 :stdout "-0.0 inf 128 127 0 ()()\n" :stderr ""))
+    ((= op "fused") (Recorded :exitCode 0 :stdout "4 -1 (5 6) (9) 6 -1 -2 -3 ell e  ? ? ? 4 -1 (5 6) (7) 0\n" :stderr ""))
+    ((= op "getF64IndexType") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_TYPE: bytesGetFloat64 expects Int, got Float (after 0 asserts)\n"))
+    ((= op "getF64LenMinus7") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_RANGE: bytesGetFloat64: slot 13 outside 20 bytes (after 0 asserts)\n"))
+    ((= op "getF64LenMinus8") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_RANGE: bytesGetFloat64: slot 12 outside 20 bytes (after 0 asserts)\n"))
+    ((= op "getF64Neg") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_RANGE: bytesGetFloat64: slot -1 outside 20 bytes (after 0 asserts)\n"))
+    ((= op "getF64Past") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_RANGE: bytesGetFloat64: slot 2 outside 20 bytes (after 0 asserts)\n"))
+    ((= op "getF64Type") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_TYPE: bytesGetFloat64 expects Bytes, got String (after 0 asserts)\n"))
+    ((= op "getNeg") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_RANGE: bytesGet: slot -1 outside 20 bytes (after 0 asserts)\n"))
+    ((= op "getOrType") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_TYPE: listEmpty? expects List, got Int (after 0 asserts)\n"))
+    ((= op "getRange") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_RANGE: bytesGet: slot 20 outside 20 bytes (after 0 asserts)\n"))
+    ((= op "getType") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_TYPE: bytesGet expects Bytes, got Int (after 0 asserts)\n"))
+    ((= op "headOrType") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_TYPE: listHead expects List, got Int (after 0 asserts)\n"))
+    ((= op "headType") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_TYPE: listHead expects List, got Int (after 0 asserts)\n"))
+    ((= op "lengthType") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_TYPE: bytesLength expects Bytes, got Int (after 0 asserts)\n"))
+    ((= op "partialNone") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_ARITY: partial expects a function (after 0 asserts)\n"))
+    ((= op "partialOver") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_ARITY: add3 expects 3 argument(s), got 4 (after 0 asserts)\n"))
+    ((= op "partials") (Recorded :exitCode 0 :stdout "6 6 6 42 (13 23)\n" :stderr ""))
+    ((= op "setF64LenMinus7") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_RANGE: bytesSetFloat64: slot 13 outside 20 bytes (after 0 asserts)\n"))
+    ((= op "setF64LenMinus8") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_RANGE: bytesSetFloat64: slot 12 outside 20 bytes (after 0 asserts)\n"))
+    ((= op "setF64Neg") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_RANGE: bytesSetFloat64: slot -1 outside 20 bytes (after 0 asserts)\n"))
+    ((= op "setF64Past") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_RANGE: bytesSetFloat64: slot 2 outside 20 bytes (after 0 asserts)\n"))
+    ((= op "setF64Type") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_TYPE: bytesSetFloat64 expects Float, got Int (after 0 asserts)\n"))
+    ((= op "setHigh") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_RANGE: bytesSet: 256 is not a byte (after 0 asserts)\n"))
+    ((= op "setLow") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_RANGE: bytesSet: -1 is not a byte (after 0 asserts)\n"))
+    ((= op "setRange") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_RANGE: bytesSet: slot 20 outside 20 bytes (after 0 asserts)\n"))
+    ((= op "setRangeHigh") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_RANGE: bytesSet: slot 20 outside 20 bytes (after 0 asserts)\n"))
+    ((= op "sliceOrType") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_TYPE: stringSlice expects String, got Int (after 0 asserts)\n"))
+    ((= op "tailOrType") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_TYPE: listTail expects List, got String (after 0 asserts)\n"))
+    ((= op "tailType") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/lbCap/listBytesFixture.asl: ERR_TYPE: listTail expects List, got String (after 0 asserts)\n"))
+    ((= op "values") (Recorded :exitCode 0 :stdout "(1 2) (some 1) (some ()) true 16 () 9 () 1.5 ((some 1) (none)) (true false) (16)\n" :stderr ""))
+    (else (Recorded :exitCode -1 :stdout "" :stderr (str "no recorded case: " op))))
+
 fn ! testValueParity exe: String src: String op: String -> Bool
   (let [(native (processRun (str exe " " op)))
-        (interp (processRun (str (host) " run " src " " op)))]
+        (interp (recordedCase op))]
     (do
-      (assert (= interp.exitCode 0) (str op ": asl-host run exit " interp.exitCode "; stderr " interp.stderr))
+      (assert (= interp.exitCode 0) (str op ": the recorded asl-host exit " interp.exitCode "; stderr " interp.stderr))
       (assert (= native.exitCode 0) (str op ": native exit " native.exitCode "; stderr " native.stderr))
-      (assert (= native.stdout interp.stdout) (str op ": native prints " native.stdout " and asl-host run " interp.stdout))
+      (assert (= native.stdout interp.stdout) (str op ": native prints " native.stdout " and the recorded asl-host run " interp.stdout))
       (assert (= native.stderr "") (str op ": native stderr empty, got " native.stderr))
       true))
 
 fn ! testFailingParity exe: String src: String op: String -> Bool
   (let [(native (processRun (str exe " " op)))
-        (interp (processRun (str (host) " run " src " " op)))
+        (interp (recordedCase op))
         (line (stringReplace native.stderr "\n" ""))]
     (do
       (assert (= native.exitCode 1) (str op ": native exit " native.exitCode ", want 1; stderr " native.stderr))
-      (assert (= native.exitCode interp.exitCode) (str op ": native exit equals asl-host run exit " interp.exitCode))
+      (assert (= native.exitCode interp.exitCode) (str op ": native exit equals the recorded asl-host exit " interp.exitCode))
       (assert (stringStartsWith? line "ERR_") (str op ": native stderr is one error line: " native.stderr))
       (assert (= native.stderr (str line "\n")) (str op ": native stderr is a single line: " native.stderr))
-      (assert (stringContains? interp.stderr (str ": " line " (after")) (str op ": asl-host run reports " line "; it reported " interp.stderr))
-      (assert (= native.stdout interp.stdout) (str op ": native stdout equals asl-host run stdout"))
+      (assert (stringContains? interp.stderr (str ": " line " (after")) (str op ": the recorded asl-host run reports " line "; it reported " interp.stderr))
+      (assert (= native.stdout interp.stdout) (str op ": native stdout equals the recorded asl-host run stdout"))
       true))
 
 fn ! testOverApplied exe: String src: String -> Bool
   (let [(native (processRun (str exe " partialOver")))
-        (interp (processRun (str (host) " run " src " partialOver")))]
+        (interp (recordedCase "partialOver"))]
     (do
       (assert (= native.exitCode 1) (str "partialOver: native exit " native.exitCode))
-      (assert (= interp.exitCode 1) (str "partialOver: asl-host run exit " interp.exitCode))
+      (assert (= interp.exitCode 1) (str "partialOver: the recorded asl-host exit " interp.exitCode))
       (assert (= native.stderr "ERR_ARITY: add3 expects 3 argument(s), got 4\n") (str "partialOver: native reports " native.stderr))
-      (assert (stringContains? interp.stderr ": ERR_ARITY: add3 expects 3 argument(s), got 4 (after") (str "partialOver: asl-host run reports " interp.stderr))
+      (assert (stringContains? interp.stderr ": ERR_ARITY: add3 expects 3 argument(s), got 4 (after") (str "partialOver: the recorded asl-host run reports " interp.stderr))
       true))
 
 fn ! runTests -> Bool

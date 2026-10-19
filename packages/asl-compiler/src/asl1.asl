@@ -1,7 +1,7 @@
 (module asl-compiler/asl1 :x [main usage] :i [(asl-parser/ast :a a) (asl-checker/resolve :a r) (asl-checker/check :a chk) (asl-checker/types :a ty) (asl-compiler/compiler :a comp) (asl-compiler/checkCache :a cc)])
 
 fn usage -> String
-  "usage: asl1 build ENTRY -o OUT.ll | asl1 check ENTRY | asl1 deps ENTRY"
+  "usage: asl1 build ENTRY -o OUT.ll [--rc 0|1|asan|notrace] | asl1 check ENTRY | asl1 deps ENTRY"
 
 fn roots -> (List String)
   (list ".")
@@ -12,8 +12,8 @@ fn ! report diags: (List String) -> (Result Int64 String)
     ((some d) (do (eprintln d)
                   (report (optionOr (listTail diags) (list))))))
 
-fn ! build entry: String out: String -> (Result Int64 String)
-  (mt (comp/compilePackageToLlvm! entry (roots))
+fn ! build entry: String out: String rcMode: String -> (Result Int64 String)
+  (mt (comp/compilePackageToLlvmWith! entry (roots) rcMode)
     ((err e) (report (list e)))
     ((ok cr) (if cr.ok
                (mt (fileWrite out cr.code)
@@ -31,7 +31,7 @@ fn checkRoots -> (List String)
   (list "." "asl/packages" "asl")
 
 fn ! verdictOf entry: String -> (Option cc/Verdict)
-  (mt (fileRead entry)
+  (mt (fileReadString entry)
     ((err _) (failed (list (str entry ": [ERR_IO] cannot read the entry"))))
     ((ok _) (mt (chk/checkFile! entry (checkRoots))
               ((err _) (none))
@@ -62,14 +62,14 @@ fn rootRelative root: String p: String -> String
     (if (stringStartsWith? p prefix) (optionOr (stringSlice p (stringLength prefix) (stringLength p)) p) p))
 
 fn ! deps entry: String -> (Result Int64 String)
-  (mt (fileRead entry)
+  (mt (fileReadString entry)
     ((err _) (report (list (str entry ": [ERR_IO] cannot read the entry"))))
     ((ok src) (mt (a/parse src)
                 ((err pe) (report (list (str entry ":" pe.line ":" pe.col ": [parse-error] " pe.msg))))
                 ((ok forms) (let [(summary (r/collectSummary forms entry))]
                               (mt (r/loadModuleDeps! (cons (r/parentDirOf entry) (roots)) (r/mapValuesList summary.imports))
                                 ((err _) (report (list (str entry ": [ERR_LOAD] its imports do not load"))))
-                                ((ok closure) (let [(root (resultOr (pathCanonicalize ".") ""))
+                                ((ok closure) (let [(root (resultOr (realPath ".") ""))
                                                      (absPaths (filter (fn [(k String)] -> Bool (stringStartsWith? k "/")) (mapKeys closure)))
                                                      (relPaths (map (fn [(p String)] -> String (rootRelative root p)) absPaths))]
                                                 (do (println (stringJoin (distinctSorted relPaths) "\n"))
@@ -83,7 +83,8 @@ fn ! main args: (List String) -> (Result Int64 String)
   (let [(cmd (optionOr (listGet args 0) ""))
         (entry (optionOr (listGet args 1) ""))]
     (cond
-      ((and (= cmd "build") (and (= (listLength args) 4) (= (optionOr (listGet args 2) "") "-o"))) (build entry (optionOr (listGet args 3) "")))
+      ((and (= cmd "build") (and (= (listLength args) 4) (= (optionOr (listGet args 2) "") "-o"))) (build entry (optionOr (listGet args 3) "") "0"))
+      ((and (= cmd "build") (and (= (listLength args) 6) (and (= (optionOr (listGet args 2) "") "-o") (= (optionOr (listGet args 4) "") "--rc")))) (build entry (optionOr (listGet args 3) "") (optionOr (listGet args 5) "")))
       ((and (= cmd "check") (= (listLength args) 2)) (check entry))
       ((and (= cmd "deps") (= (listLength args) 2)) (deps entry))
       (else (usageError))))

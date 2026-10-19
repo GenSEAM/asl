@@ -178,23 +178,23 @@ fn testHostCheckPathShellQuoting! -> Bool
 
 fn testWorkingDirectoryIndependence! -> Bool
   (let [(deepPath (resultOr (realPath "asl/packages/asl-forms/src/check.asl") ""))
-        (hostBin (chk/findHostBinary! deepPath))]
+        (content (resultOr (fileReadString deepPath) ""))
+        (res (chk/runNativeCheck! deepPath content))]
     (do
       (assert (not (stringEmpty? deepPath)) "canonical deepPath is non-empty")
-      (assert (fileExists? hostBin) "findHostBinary finds existing host executable")
-      (assert (stringEndsWith? hostBin "asl/host/out/asl-host") "hostBin ends with asl/host/out/asl-host")
+      (assert (ok? res) (str "the native checker accepts an absolute path: " (mt res ((err e) e) ((ok _) ""))))
+      (assert (listEmpty? (resultOr res (list (chk/makeLeftItem 0 0 "" "" "")))) "the absolute-path check of a clean module yields no items")
       (assert (not (fileExists? "asl/packages/asl-forms/tests/_chk_tmp.asl")) "no fixed temp file in tests directory")
       true))
 
-fn testHostCheckFailureReporting! -> Bool
-  (let [(nonHost "/nonexistent/path/to/asl-host")
-        (testPath "asl/packages/asl-forms/src/check.asl")
-        (res (chk/runHostCheckWithBinary! testPath "(module a)" nonHost))
+fn testNativeCheckFailureReporting! -> Bool
+  (let [(missing "asl/packages/asl-forms/tests/noSuchModuleForCheck.asl")
+        (res (chk/runNativeCheck! missing "(module a)"))
         (errStr (mt res ((err e) e) ((ok _) "")))]
     (do
-      (assert (err? res) "non-zero exit without ERR lines returns err result")
-      (assert (stringStartsWith? errStr "hostCheck exit ") "err message starts with hostCheck exit")
-      (assert (stringContains? errStr "127") "err message includes exit code 127")
+      (assert (err? res) "an unreadable target returns an err result, not an empty item list")
+      (assert (stringStartsWith? errStr "native check could not read ") (str "the err names the native check: " errStr))
+      (assert (stringContains? errStr missing) "the err names the target path")
       true))
 
 fn testCleanCorpusFiles! -> Bool
@@ -338,7 +338,7 @@ fn ! runTests -> Bool
     (assert (testDynamicImportAndRequire!) "testDynamicImportAndRequire")
     (assert (testHostCheckPathShellQuoting!) "testHostCheckPathShellQuoting")
     (assert (testWorkingDirectoryIndependence!) "testWorkingDirectoryIndependence")
-    (assert (testHostCheckFailureReporting!) "testHostCheckFailureReporting")
+    (assert (testNativeCheckFailureReporting!) "testNativeCheckFailureReporting")
     (assert (testStagedEditPackageImports!) "testStagedEditPackageImports")
     (assert (testTempFileWriteFailure!) "testTempFileWriteFailure")
     (assert (testTemplateLiteralDynamicImports!) "testTemplateLiteralDynamicImports")

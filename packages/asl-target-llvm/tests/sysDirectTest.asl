@@ -5,11 +5,10 @@
       (asl-target-llvm/sys :a sys)
       (asl-target-llvm/libc :a libc)])
 
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): every host usage in this file ran a tiny one-shot asl-host fixture purely as a cross-check oracle for a real OS-level syscall (fdRead byte count, fdWrite text, realPath, procExePath, stat/lstat fields, dirList names) - never a live multi-process or C-archive dependency, so each is replaced with either (a) the already-hardcoded literal the SAME function already checks a line above (testRead's read-count and testWrite's written-text host comparisons were tautological with asserts already pinned to 5 and `text` respectively, so those host-comparison blocks are dropped outright) or (b) a genuinely independent OS oracle that is not this project's own code: /bin/realpath for testRealpath (both the symlink and relative-path cases) and testExePath (also dropping testExePath's `same` check, which only tested asl-host's own procExePath-vs-realPath self-consistency and said nothing about the native code under test here), perl's builtin stat() for testStatFamily (stat(2) by a non-ASL interpreter, giving decimal size/mode/mtime directly, verified against BSD stat -f to confirm the same raw st_mode decimal<->octal encoding), and plain ls for testDirList's directory-listing oracle (both sides already piped through sort before comparing)")
+
 fn clang -> String
   "/usr/bin/clang -Wno-override-module"
-
-fn host -> String
-  "asl/host/out/asl-host"
 
 fn ! repoRootAbs -> String
   (stringTrim (sh "pwd").stdout)
@@ -139,12 +138,7 @@ fn ! testRead work: String facts: libc/TripleFacts -> Bool
         (neverBuiltin okText "fdRead")
         (writeAndLink work "sysReadOk" okText)
         (let [(out (sh (str "printf 'abcde' | " work "/sysReadOk")))]
-          (do (assert (= out.exitCode 5) (str "read ok: exit " out.exitCode ", want 5 (bytes read)"))
-              (assert (ok? (fileWrite (str work "/readFixture.asl")
-                              "(module tests/readFixture :x [main] :i [])\nfn ! main -> (Result Int64 String)\n  (mt (fdRead 0 256) ((ok s) (ok (stringLength s))) ((err e) (err e)))\n"))
-                      "read ok: asl-host comparison fixture written")
-              (let [(hostOut (sh (str "printf 'abcde' | " (host) " run " work "/readFixture.asl")))]
-                (assert (= out.exitCode hostOut.exitCode) (str "read ok: native byte count equals the asl-host run's: native=" out.exitCode " host=" hostOut.exitCode)))))
+          (assert (= out.exitCode 5) (str "read ok: exit " out.exitCode ", want 5 (bytes read)")))
         (expectErrno "read err" (runPlain work "sysReadErr" errMod) facts "EBADF")))
 
 fn ! testReadZeroLength work: String facts: libc/TripleFacts -> Bool
@@ -180,12 +174,7 @@ fn ! testWrite work: String facts: libc/TripleFacts -> Bool
         (writeAndLink work "sysWriteOk" okText)
         (let [(out (sh (str work "/sysWriteOk")))]
           (do (assert (= out.exitCode (stringLength text)) (str "write ok: exit " out.exitCode ", want " (stringLength text) " (bytes written)"))
-              (assert (= out.stdout text) (str "write ok: stdout is the literal, got " out.stdout))
-              (assert (ok? (fileWrite (str work "/writeFixture.asl")
-                              (str "(module tests/writeFixture :x [main] :i [])\nfn ! main -> (Result Int64 String)\n  (mt (fdWrite 1 \"" text "\") ((ok _) (ok 0)) ((err e) (err e)))\n")))
-                      "write ok: asl-host comparison fixture written")
-              (let [(hostOut (sh (str (host) " run " work "/writeFixture.asl")))]
-                (assert (= out.stdout hostOut.stdout) (str "write ok: native stdout equals the asl-host run's: native=" out.stdout " host=" hostOut.stdout)))))
+              (assert (= out.stdout text) (str "write ok: stdout is the literal, got " out.stdout))))
         (expectErrno "write err" (runPlain work "sysWriteErr" errMod) facts "EBADF")))
 
 fn ! testClose work: String facts: libc/TripleFacts -> Bool
@@ -415,27 +404,18 @@ fn ! testRealpath work: String facts: libc/TripleFacts -> Bool
         (relMod (realpathWriteModule facts (list "realpathLink")))
         (errMod (errnoCaseModule facts (list missing) (list (sys/sysRealpathFn))
                   (list (ty/ssaInstr "p" (ty/tyVal) (ty/opConst (ty/constStr 0)))) "sysRealpath" (list "p")))
-        (okText (textOf (llvm/emitLlvmProgram okMod "run")))
-        (root (repoRootAbs))]
+        (okText (textOf (llvm/emitLlvmProgram okMod "run")))]
     (do (declaresReal okText "declare ptr @realpath(ptr, ptr)")
         (assert (ok? (fileWrite target "realpath target")) "realpath ok: target file written")
         (assert (= (sh (str "ln -sf " target " " link)).exitCode 0) "realpath ok: symlink made")
         (let [(out (runPlain work "sysRealpathOk" okMod))
-              (hostFixture (str work "/realpathHostFixture.asl"))]
+              (oracleOut (sh (str "/bin/realpath " link)))]
           (do (assert (> out.exitCode 0) (str "realpath ok (symlink): exit " out.exitCode ", want a positive byte count"))
-              (assert (ok? (fileWrite hostFixture
-                          (str "(module tests/realpathHostFixture :x [main] :i [])\nfn ! main -> (Result Int64 String)\n  (mt (realPath \"" link "\") ((ok s) (do (print s) (ok 0))) ((err e) (err e)))\n")))
-                    "realpath ok (symlink): asl-host comparison fixture written")
-              (let [(hostOut (sh (str root "/" (host) " run " hostFixture)))]
-                (assert (= out.stdout hostOut.stdout) (str "realpath ok (symlink): native stdout " out.stdout " vs asl-host run's realPath+print stdout " hostOut.stdout)))))
+              (assert (= out.stdout (stringTrim oracleOut.stdout)) (str "realpath ok (symlink): native stdout " out.stdout " vs /bin/realpath's " oracleOut.stdout))))
         (let [(relOut (runCase work "sysRealpathRel" relMod (str "cd '" work "' && exec " work "/sysRealpathRel")))
-              (relHostFixture (str work "/realpathRelHostFixture.asl"))]
+              (relOracleOut (sh (str "cd '" work "' && /bin/realpath realpathLink")))]
           (do (assert (> relOut.exitCode 0) (str "realpath rel: exit " relOut.exitCode ", want a positive byte count"))
-              (assert (ok? (fileWrite relHostFixture
-                          "(module tests/realpathRelHostFixture :x [main] :i [])\nfn ! main -> (Result Int64 String)\n  (mt (realPath \"realpathLink\") ((ok s) (do (print s) (ok 0))) ((err e) (err e)))\n"))
-                    "realpath rel: asl-host comparison fixture written")
-              (let [(relHostOut (sh (str "cd '" work "' && " root "/" (host) " run " relHostFixture)))]
-                (assert (= relOut.stdout relHostOut.stdout) (str "realpath rel: native stdout " relOut.stdout " vs asl-host run's realPath+print stdout " relHostOut.stdout)))))
+              (assert (= relOut.stdout (stringTrim relOracleOut.stdout)) (str "realpath rel: native stdout " relOut.stdout " vs /bin/realpath's " relOracleOut.stdout))))
         (expectErrno "realpath err" (runPlain work "sysRealpathErr" errMod) facts "ENOENT")))
 
 fn ! exePathWriteModule facts: libc/TripleFacts -> ty/SsaModule
@@ -460,26 +440,16 @@ fn ! testExePath work: String facts: libc/TripleFacts -> Bool
         (text (textOf (llvm/emitLlvmProgram mod "run")))
         (bin (str work "/sysExePathOk"))
         (link (str work "/exePathLink"))
-        (root (repoRootAbs))
         (darwin? (= (libc/exePathSource facts.triple) "nsGetExecutablePath"))]
     (do (declaresReal text "declare ptr @realpath(ptr, ptr)")
         (if darwin?
           (declaresReal text "declare i32 @_NSGetExecutablePath(ptr, ptr)")
           (neverBuiltin text "_NSGetExecutablePath"))
         (let [(out (runCase work "sysExePathOk" mod (str "ln -sf " bin " " link " && cd / && exec " link)))
-              (fixture (str work "/exePathHostFixture.asl"))]
+              (oracleOut (sh (str "/bin/realpath " bin)))]
           (do (assert (> out.exitCode 0) (str "exe path: exit " out.exitCode ", want a positive byte count; stderr: " out.stderr))
-              (assert (ok? (fileWrite fixture
-                          (str "(module tests/exePathHostFixture :x [main] :i [])\nfn ! main -> (Result Int64 String)\n"
-                               "  (mt (realPath \"" bin "\") ((ok s) (do (println s) (mt (procExePath) ((ok e) (mt (realPath \"" root "/" (host) "\") ((ok h) (do (print (if (= e h) \"same\" (str \"differs \" e \" \" h))) (ok 0))) ((err x) (err x)))) ((err x) (err x))))) ((err e) (err e)))\n")))
-                    "exe path: asl-host comparison fixture written")
-              (let [(hostLink (str work "/hostExeLink"))
-                    (hostOut (sh (str "ln -sf " root "/" (host) " " hostLink " && cd / && exec " hostLink " run " fixture)))
-                    (lines (stringSplit hostOut.stdout "\n"))]
-                (do (assert (= hostOut.exitCode 0) (str "exe path: asl-host fixture exit " hostOut.exitCode "; stderr: " hostOut.stderr))
-                    (assert (= out.stdout (optionOr (listGet lines 0) "")) (str "exe path: native stdout " out.stdout " vs asl-host realPath of the binary " hostOut.stdout))
-                    (assert (= (optionOr (listGet lines 1) "") "same") (str "exe path: asl-host procExePath vs its own realPath: " hostOut.stdout))
-                    true))))))
+              (assert (= out.stdout (stringTrim oracleOut.stdout)) (str "exe path: native stdout " out.stdout " vs /bin/realpath's " oracleOut.stdout))
+              true))))
 
 fn ! testSysconf work: String facts: libc/TripleFacts -> Bool
   (let [(name (constOf facts "_SC_NPROCESSORS_ONLN"))
@@ -682,24 +652,21 @@ fn ! testStatFamily work: String facts: libc/TripleFacts label: String sysFnName
         (missingMod (errnoCaseModule facts (list (str path ".missing")) (list fn0)
                       (list (ty/ssaInstr "p" (ty/tyVal) (ty/opConst (ty/constStr 0)))) sysFnName (list "p")))
         (text (textOf (llvm/emitLlvmProgram okMod "run")))
-        (oracleFn (if followLink "fileStat" "fileLstat"))]
+        (statFn (if followLink "stat" "lstat"))]
     (do (declaresReal text (str "declare i32 @" externName))
         (let [(out (runPlain work (str label "Ok") okMod))
               (outFields (stringSplit (stringTrim out.stdout) " "))
               (nativeSize (optionOr (listGet outFields 0) "")) (nativeMode (optionOr (listGet outFields 1) ""))
               (nativeMtime (optionOr (listGet outFields 2) "")) (nativeKind (optionOr (listGet outFields 3) ""))
-              (fixturePath (str work "/" label "Fixture.asl"))
-              (fixtureSrc (str "(module tests/" label "Fixture :x [main] :i [])\nfn ! main -> (Result Int64 String)\n  (mt (" oracleFn " \"" path "\")\n    ((ok st) (mt (fdWrite 1 (str (stringFromInt64 st.size) \" \" (stringFromInt64 st.mode) \" \" (stringFromInt64 st.mtime)))\n                ((ok _) (ok 0)) ((err e) (err e))))\n    ((err e) (err e)))\n"))]
+              (oracleOut (sh (str "perl -e '@s = " statFn "($ARGV[0]); print $s[7] . \" \" . $s[2] . \" \" . $s[9]' " path)))
+              (hostFields (stringSplit (stringTrim oracleOut.stdout) " "))
+              (hostSize (optionOr (listGet hostFields 0) "")) (hostMode (optionOr (listGet hostFields 1) ""))
+              (hostMtime (optionOr (listGet hostFields 2) ""))]
           (do (assert (= out.exitCode 0) (str label " ok: exit " out.exitCode ", want 0; stderr: " out.stderr))
-              (assert (ok? (fileWrite fixturePath fixtureSrc)) (str label " ok: asl-host " oracleFn " fixture written"))
-              (let [(oracleOut (sh (str (host) " run " fixturePath)))
-                    (hostFields (stringSplit (stringTrim oracleOut.stdout) " "))
-                    (hostSize (optionOr (listGet hostFields 0) "")) (hostMode (optionOr (listGet hostFields 1) ""))
-                    (hostMtime (optionOr (listGet hostFields 2) ""))]
-                (do (assert (= nativeSize hostSize) (str label " ok: size " nativeSize ", oracle says " hostSize))
-                    (assert (= nativeMode hostMode) (str label " ok: mode " nativeMode ", oracle says " hostMode))
-                    (assert (= nativeMtime hostMtime) (str label " ok: mtime " nativeMtime ", oracle says " hostMtime))
-                    (assert (= nativeKind (stringFromInt64 (constOf facts wantKind))) (str label " ok: kind " nativeKind ", want " wantKind "=" (stringFromInt64 (constOf facts wantKind))))))
+              (assert (= nativeSize hostSize) (str label " ok: size " nativeSize ", perl " statFn " says " hostSize))
+              (assert (= nativeMode hostMode) (str label " ok: mode " nativeMode ", perl " statFn " says " hostMode))
+              (assert (= nativeMtime hostMtime) (str label " ok: mtime " nativeMtime ", perl " statFn " says " hostMtime))
+              (assert (= nativeKind (stringFromInt64 (constOf facts wantKind))) (str label " ok: kind " nativeKind ", want " wantKind "=" (stringFromInt64 (constOf facts wantKind))))
               (expectErrno (str label " err") (runPlain work (str label "Err") missingMod) facts "ENOENT")))))
 
 fn ! testStat work: String facts: libc/TripleFacts -> Bool
@@ -956,13 +923,9 @@ fn ! testDirList work: String facts: libc/TripleFacts -> Bool
               (declaresReal text "declare i32 @closedir(ptr)")
               (let [(out (runPlain work "sysDirListOk" okMod))
                     (nativeSorted (stringTrim (sh (str "printf %s " (quoteSh out.stdout) " | sort")).stdout))
-                    (fixturePath (str work "/dirListFixture.asl"))
-                    (fixtureSrc (str "(module tests/dirListFixture :x [main] :i [])\nfn ! main -> (Result Int64 String)\n  (mt (dirList \"" dir "\")\n    ((ok names) (mt (fdWrite 1 (stringJoin (map (fn [n] (str n \"\\n\")) names) \"\"))\n                   ((ok _) (ok 0)) ((err e) (err e))))\n    ((err e) (err e)))\n"))]
+                    (oracleSorted (stringTrim (sh (str "ls -1 " dir " | sort")).stdout))]
                 (do (assert (= out.exitCode 0) (str "dirList ok: exit " out.exitCode ", want 0; stderr: " out.stderr))
-                    (assert (ok? (fileWrite fixturePath fixtureSrc)) "dirList ok: asl-host comparison fixture written")
-                    (let [(hostOut (sh (str (host) " run " fixturePath)))
-                          (hostSorted (stringTrim (sh (str "printf %s " (quoteSh hostOut.stdout) " | sort")).stdout))]
-                      (assert (= nativeSorted hostSorted) (str "dirList ok: sorted native names [" nativeSorted "] != asl-host dirList's sorted [" hostSorted "]")))))))
+                    (assert (= nativeSorted oracleSorted) (str "dirList ok: sorted native names [" nativeSorted "] != ls's sorted [" oracleSorted "]"))))))
         (let [(errMod (errnoCaseModule facts (list (str dir ".missing")) (list (unwrapFn "dirList" (sys/sysDirListFn facts)))
                         (list (ty/ssaInstr "p" (ty/tyVal) (ty/opConst (ty/constStr 0)))) "sysDirList" (list "p")))]
           (expectErrno "dirList err" (runPlain work "sysDirListErr" errMod) facts "ENOENT"))))

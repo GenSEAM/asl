@@ -58,7 +58,7 @@ asl intel <subcmd>     # coupling, deadcode, vacuity, sweep, graph, complexity, 
 asl '(:audit :subcmd coupling)'   # the same audits as a toolbelt receipt
 ```
 
-`asl gate`, `asl lint`, `asl mem` and `asl tool` are retired and answer ERR_RETIRED. The audits `consistency`, `gates`, `closure`, `foreign`, `steps` and `vitality` run the workspace's `scripts/audit/audit.py`, which is not part of this repository: `(:audit)` answers ERR_WORKSPACE_ONLY for them here. The gate code in `packages/asl-gates` (`auditMain.asl`) also needs the workspace's git root.
+`asl gate`, `asl lint`, `asl mem` and `asl tool` are retired and answer ERR_RETIRED. The audits `consistency`, `gates`, `closure`, `foreign`, `steps` and `vitality` run the workspace's native `asl-gates/auditMain.asl`, which this checkout's layout does not expose at the workspace-relative path the guard checks: `(:audit)` answers ERR_WORKSPACE_ONLY for them here. The gate code in `packages/asl-gates` (`auditMain.asl`) also needs the workspace's git root.
 
 ## 3. Syntax
 The full rules are in the `language` topic; the points agents most often get wrong:

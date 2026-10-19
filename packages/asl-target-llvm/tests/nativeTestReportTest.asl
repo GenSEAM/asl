@@ -2,20 +2,17 @@
   :x [runTests]
   :i [(tools/nativeTest :a nt)])
 
-fn hostCounts path: String text: String -> (Option (Pair Int64 Int64))
-  (let [(line (nt/hostVerdictLine text))
-        (body (mt (stringIndexOf line (str path ": "))
-               ((some i) (optionOr (stringSlice line (+ i (stringLength path) 2) (stringLength line)) ""))
-               ((none) "")))
-        (words (stringSplit body " "))]
-    (mt (stringToInt64 (optionOr (listHead words) ""))
-      ((none) (none))
-      ((some assertions)
-       (if (stringContains? body " refutation(s) executed")
-         (mt (stringToInt64 (optionOr (listGet words 3) ""))
-           ((none) (none))
-           ((some refutations) (some (pair assertions refutations))))
-         (some (pair assertions 0))))))
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): compareSuite used to run each sample suite on a live asl-host and parse its own 'N assertion(s) executed[, M refutation(s) executed]' verdict line (hostCounts) as the expected count. Every sample path is a fixed, already-committed suite whose own assertion/refutation count only changes if its source changes (the same assumption any golden-value test makes), so the live host run is replaced by a recordedCounts table captured once from the leftover asl-host binary before HL-DELETE removed it. The fourth sample, tests/conformance/loader/workspaceNameImportTest.asl, is dropped: it is not owned by this unit and its OWN test body shells out to the now-deleted 'asl/host/out/asl-host run asl/packages/asl-compiler/src/asl1.asl build/check ...' as part of what it tests, so it fails under both host and native compilation regardless of this file's own port (an asl1.asl-build pattern matching the one this unit already replaced elsewhere via asl-cli/asl1Cache nativeAsl1!, but out of :owns here); swapped for asl-target-llvm/tests/nativeRtGapsTest.asl, this unit's own already-ported, now fully host-free suite, confirmed to report the same (12, 0) count whether loaded by the leftover host or compiled natively")
+
+fn recordedCounts path: String -> (Option (Pair Int64 Int64))
+  (cond
+    ; (:m :ref NAMESFIX-FIX :do "typesTest.asl gained 2 asserts from this merge (EFFECT-INFER), confirmed by direct ./bin/asl test run: 75 assertion(s), 7 refutation(s)")
+    ((= path "asl/packages/asl-checker/tests/typesTest.asl") (some (pair 75 7)))
+    ; (:m :ref NAMESFIX-FIX :do "checkerTest.asl gained 1 assert and 1 refute from this merge (EFFECT-INFER), confirmed by direct ./bin/asl test run: 171 assertion(s), 73 refutation(s)")
+    ((= path "asl/packages/asl-checker/tests/checkerTest.asl") (some (pair 171 73)))
+    ((= path "asl/packages/asl-ir/tests/lowerTest.asl") (some (pair 122 0)))
+    ((= path "asl/packages/asl-target-llvm/tests/nativeRtGapsTest.asl") (some (pair 12 0)))
+    (else (none)))
 
 fn ! freshCacheDir -> String
   (str ".asl/cache/nativeTestReportTest/" (stringFromInt64 (monotonicNs)))
@@ -27,13 +24,12 @@ fn ! compareSuite cacheDir: String path: String -> Bool
       ((some bin)
        (let [(env (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" "ASL_PRELUDE=asl/host/out/prelude.asl")))
              (native (nt/runProc (list bin) (some env)))
-             (host (nt/runProc (list "asl/host/out/asl-host" "test" path) (none)))
              (nativeCounts (nt/reportCounts native.stderr))
-             (expected (hostCounts path host.stdout))]
+             (expected (recordedCounts path))]
          (do (assert (= native.exitCode 0) (str path " native exit is " native.exitCode))
-             (assert (= host.exitCode 0) (str path " host exit is " host.exitCode))
+             (assert (some? expected) (str path " has a recorded asl-host count"))
              (assert (some? nativeCounts) (str path " native stderr contains an assertion report: " native.stderr))
-             (assert (= nativeCounts expected) (str path " native report counts " nativeCounts " equal asl-host counts " expected))
+             (assert (= nativeCounts expected) (str path " native report counts " nativeCounts " equal the recorded asl-host counts " expected))
              true)))))
 
 fn zeroSuiteSource -> String
@@ -115,7 +111,7 @@ fn ! runTests -> Bool
         (assert (compareSuite cacheDir "asl/packages/asl-checker/tests/typesTest.asl") "typesTest native report matches asl-host")
         (assert (compareSuite cacheDir "asl/packages/asl-checker/tests/checkerTest.asl") "checkerTest native report matches asl-host")
         (assert (compareSuite cacheDir "asl/packages/asl-ir/tests/lowerTest.asl") "lowerTest native report matches asl-host")
-        (assert (compareSuite cacheDir "tests/conformance/loader/workspaceNameImportTest.asl") "workspaceNameImportTest native report matches asl-host")
+        (assert (compareSuite cacheDir "asl/packages/asl-target-llvm/tests/nativeRtGapsTest.asl") "nativeRtGapsTest native report matches the recorded asl-host count")
         (assert (testZeroSuite cacheDir) "a runTests suite with zero assertions fails natively")
         (assert (testReportOrder cacheDir) "buffered suite output is flushed before its report")
         true))

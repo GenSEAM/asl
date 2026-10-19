@@ -24,12 +24,13 @@ fn inherited? row: String -> Bool
           (or (stringStartsWith? row "ASL_ROOT=")
               (or (stringStartsWith? row "ASL_PRELUDE=") (or (stringStartsWith? row "SNAP=") (stringStartsWith? row "SERVED_STOP_PID="))))))
 
+; (:m :ref NATIVE-ROOT-ANCHOR-20261019 :do "work used to sit under root + /.asl/cache/runtimeSeed, nesting the fresh clone inside this very checkout; that checkout's own .asl.config.asn copies verbatim into the clone, so any still-frozen bootstrap stage (the pinned seed asl1, not rebuildable except at seedFixpointTest/release per seed.asn's policy) that has not absorbed resolve.asl's scanUp! root-anchor fix keeps climbing past the clone's config into the enclosing checkout's, and computes asl1.asl's own dependency closure rooted there: absolute, outer-worktree paths that do not exist relative to the clone, which bin/asl's native_suspect reads as the just-finished build's sources having moved again. mktemp -d gives a work dir outside every checkout, so nothing above the clone ever has a .asl.config.asn to escape into, independent of which bootstrap stage is frozen")
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
-        (work (str root "/.asl/cache/runtimeSeed/" (stringFromInt64 (procSelf))))
+        (tmp (sh! root (list "/bin/sh" "-c" "mktemp -d")))
+        (work (stringTrim tmp.out))
         (clone (str work "/root"))
-        (fresh (sh! root (list "/bin/rm" "-rf" work)))
-        (made (dirCreate work))
+        (made (if (and (= tmp.exit 0) (not (stringEmpty? work))) (ok work) (err (str "mktemp -d failed: " tmp.out))))
         (copied (sh! root (list "/bin/sh" "-c" "mkdir -p \"$1\" && git ls-files -co --exclude-standard -z asl bin tools .asl.config.asn pack.asn | tar --null -T - -cf - | (cd \"$1\" && tar xf -)" "copy" clone)))
         (bare (not (fileExists? (str clone "/asl/host/out/libaslrt.a"))))
         (witness (str work "/host-witness"))
@@ -37,7 +38,7 @@ fn ! runTests -> Bool
                (filter (fn [(row String)] -> Bool (not (inherited? row))) (run/childEnv (list)))))
         (built (run/runOneLimited (run/job (list "/bin/sh" "-c" (freshClone)) clone env) (run/limits 1800 64)))
         (witnessed (fileExists? witness))
-        (wrapperReady (stringContains? (resultOr (fileRead (str clone "/asl/host/out/asl-host")) "") "host-invoked"))
+        (wrapperReady (stringContains? (resultOr (fileReadString (str clone "/asl/host/out/asl-host")) "") "host-invoked"))
         (split (sh! root (list "/bin/sh" "-c" "mkdir -p \"$1/fresh\" \"$1/tree\" && cd \"$1/fresh\" && ar x \"$1/root/asl/host/out/libaslrt.a\" && cd \"$1/tree\" && ar x \"$2\"" "split" work (str root "/asl/host/out/libaslrt.a"))))
         (equal (map (fn [(m String)] -> Bool (sameMember? (str work "/fresh") (str work "/tree") m)) (members)))
         (cleaned (sh! root (list "/bin/rm" "-rf" work)))]

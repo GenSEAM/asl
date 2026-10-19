@@ -1,5 +1,5 @@
 (module asl-target-llvm/tests/sourceE2eTest
-  :x [fibSource fibGolden testFibSourceToLlvm testUnsupportedReturnsDiagnostic testCompilePackageToLlvmImportsLinked! runTests main]
+  :x [fibSource fibGolden testFibSourceToLlvm! testUnsupportedReturnsDiagnostic! testCompilePackageToLlvmImportsLinked! runTests main]
   :i [(asl-ir/types :a ty)
       (asl-compiler/compiler :a comp)
       (asl-target-llvm :a llvm)])
@@ -189,6 +189,7 @@ fn fibGolden -> String
       "@.rterr.m.reportFailed = private unnamed_addr constant [37 x i8] c\"cannot register the assertion report\\00\""
       "@rterr.assertCount = weak global i64 0"
       "@rterr.refuteCount = weak global i64 0"
+      "@rterr.siteReport = weak global i1 false"
       "@.rterr.reportEnv = private unnamed_addr constant [18 x i8] c\"ASL_ASSERT_REPORT\\00\""
       "@.rterr.reportLine = private unnamed_addr constant [57 x i8] c\"%lld assertion(s) executed, %lld refutation(s) executed\\0A\\00\""
       ""
@@ -215,6 +216,7 @@ fn fibGolden -> String
       "  br i1 %one, label %install, label %done"
       "install:"
       "  %rc = call i32 @atexit(ptr @rterr.report)"
+      "  store i1 true, ptr @rterr.siteReport"
       "  %uc = call i32 @unsetenv(ptr @.rterr.reportEnv)"
       "  %failed = icmp ne i32 %rc, 0"
       "  br i1 %failed, label %fail, label %done"
@@ -258,7 +260,7 @@ fn fibGolden -> String
       "")
     "\n")
 
-fn ! testFibSourceToLlvm -> Bool
+fn ! testFibSourceToLlvm! -> Bool
   (let [(res (llvm/emitLlvmSource (fibSource) "fibMain"))]
     (do
       (assert (ok? res) "paren-dialect fib compiles to .ll")
@@ -277,7 +279,7 @@ fn ! testFibSourceToLlvm -> Bool
             (assert (stringContains? code "%$259 = phi i64 [ %n, %bb.then0 ], [ %$258, %$258.p.ok ]") "emitted .ll derives a raw phi in bb.join0 from the checked add's continuation")
             true)))))
 
-fn ! testUnsupportedReturnsDiagnostic -> Bool
+fn ! testUnsupportedReturnsDiagnostic! -> Bool
   (let [(res (llvm/emitLlvmSource (unsupportedSource) "main"))]
     (do
       (assert (err? res) "unsupported construct must return err")
@@ -324,7 +326,7 @@ fn ! main args: (List String) -> (Result Int64 String)
     ((err diags)
       (err (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.locus ": " d.message)) diags) "; "))))
 
-fn ! testMissingEntryIsDiagnostic -> Bool
+fn ! testMissingEntryIsDiagnostic! -> Bool
   (mt (llvm/emitLlvmSource (fibSource) "main")
     ((ok _) (do (assert false "a source without main must not compile with entry main") false))
     ((err diags)
@@ -334,8 +336,8 @@ fn ! testMissingEntryIsDiagnostic -> Bool
 
 fn ! runTests -> Bool
   (do
-    (assert (testFibSourceToLlvm) "testFibSourceToLlvm")
-    (assert (testUnsupportedReturnsDiagnostic) "testUnsupportedReturnsDiagnostic")
+    (assert (testFibSourceToLlvm!) "testFibSourceToLlvm")
+    (assert (testUnsupportedReturnsDiagnostic!) "testUnsupportedReturnsDiagnostic")
     (assert (testCompilePackageToLlvmImportsLinked!) "testCompilePackageToLlvmImportsLinked")
-    (assert (testMissingEntryIsDiagnostic) "testMissingEntryIsDiagnostic")
+    (assert (testMissingEntryIsDiagnostic!) "testMissingEntryIsDiagnostic")
     true)

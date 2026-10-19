@@ -687,6 +687,8 @@ fn runtimeText -> String
      "			i := strings.Index(a[0].(string), a[1].(string))"
      "			return opt(int64(i), i >= 0)"
      "		},"
+     "		\"@listHeadEmpty?\": func(a ...V) V { return a[0] == nil },"
+     "		\"@listTailEmpty?\": func(a ...V) V { return a[0] == nil },"
      "		\"@listHeadOr\": func(a ...V) V {"
      "			if a[0] == nil {"
      "				return a[1]"
@@ -757,4 +759,4 @@ fn builtinNames -> (List String)
   ["print" "println" "str" "max" "min" "abs" "cons" "listEmpty?" "listHead" "listTail" "list" "stringConcat" "stringContains?" "stringStartsWith?" "stringLength" "stringSlice" "stringFromInt64" "stringToBytes" "bytesLength" "bytesGet" "stringFromFloat64" "stringToFloat64" "int64ToFloat64" "float64ToInt64" "floor" "sqrt" "log2" "sin" "atan2" "pow" "clamp" "partial" "bytesAlloc" "bytesSet" "bytesGetFloat64" "bytesSetFloat64" "eprintln" "nowNs" "monotonicNs" "trap" "assert" "refute" "ceil" "round" "exp" "log" "log10" "cos" "tan"]
 
 fn entryNames -> (List String)
-  (listAppend ["+" "-" "*" "/" "mod" "%" "=" "==" "!=" "<" "<=" ">" ">=" "@listFirst" "@listRest" "@stringSliceOr" "@stringIndexOf" "@listHeadOr" "@listTailOr" "@listGetOr" "not"] (builtinNames))
+  (listAppend ["+" "-" "*" "/" "mod" "%" "=" "==" "!=" "<" "<=" ">" ">=" "@listFirst" "@listRest" "@stringSliceOr" "@stringIndexOf" "@listHeadOr" "@listTailOr" "@listHeadEmpty?" "@listTailEmpty?" "@listGetOr" "not"] (builtinNames))

@@ -93,5 +93,5 @@ fn document here: Route pageTitle: String description: String content: (List h/N
      (h/body []
        [(h/a [(h/href "#content") (h/cls "skip")] [(h/text "Skip to content")])
         (topBar here)
-        (h/main [(h/id "content")] content)
+        (h/mainEl [(h/id "content")] content)
         (footBar)])])

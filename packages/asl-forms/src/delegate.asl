@@ -1,4 +1,4 @@
-(module asl-forms/delegate :x [DelegateCtx Outcome Spawned engineOk? engineExchangeWith engineFrameData contextFromEnv! delegateOp? runDelegate agentKillSeconds fieldNumber spawnRun spawnRunInput stepHead okLine rejectedLine pyStrip pyRepr pyExt errnoText timeoutText researchGatewayEntry! researchGatewayRoutes! resolveResearchEntry! researchEntryJson searchLimit researchCliArgv! researchCliText researchTimeoutSeconds researchDispatch researchDispatchWith researchTriage? searchFailed? crawlerSpawn] :i [(asl-forms/kernel :a k) (asl-forms/extract :a ex) (aslGateway/search :a srch) (aslGateway/research :a rs) (aslGateway/config :a cfg) (aslGateway/pyText :a pt) (asl-json/json :a j) (asl-engine/transport :a etp) (asl-intel/text :a it)])
+(module asl-forms/delegate :x [DelegateCtx Outcome Spawned engineOk? engineExchangeWith engineFrameData contextFromEnv! delegateOp? runDelegate agentKillSeconds fieldNumber spawnRun spawnRunInput stepHead okLine rejectedLine pyStrip pyRepr pyExt errnoText timeoutText researchGatewayEntry! researchGatewayRoutes! resolveResearchEntry! researchEntryJson searchLimit researchCliArgv! researchCliText researchTimeoutSeconds researchDispatch researchDispatchWith researchTriage? searchFailed? crawlerSpawn] :i [(asl-forms/kernel :a k) (asl-forms/extract :a ex) (aslGateway/search :a srch) (aslGateway/research :a rs) (aslGateway/config :a cfg) (aslGateway/pyText :a pt) (asl-json/json :a j) (asl-engine/transport :a etp) (asl-intel/text :a it) (asl-forms/evalOp :a ev)])
 
 
 (schema DelegateCtx (:f rootDir String) (:f binDir String) (:f wsDir String))
@@ -347,7 +347,11 @@ fn resolveResearchEntry! table: cfg/GatewayTable model: String profile: (Option 
     ((err e) (err e))
     ((ok routes) (mt (listHead (pairSecond routes)) ((none) (err (pt/pyErr "ValueError" "gateway profile has no research route"))) ((some entry) (ok entry)))))
 
-fn researchGatewayEntry! model: String -> (Result (Pair String (Pair (List j/Json) (List j/Json))) pt/PyErr)
+; (:m :ref PROFILE-PIN-NAME-20261018 :do "rule no-env-config: FREEBULK-ROUTED-DEEPSEEK-20261017 dropped ASL_PROFILE everywhere it was read, this included -- a (:research ...) op reads the same per-worktree pin file asl/agentLoop/providers.asl's providerEnv! and tools/fleet/freePool.asl's writeProfilePin! already use, instead of a process-wide env var; absent or unparseable, this returns none, same as an unset ASL_PROFILE did. Previously this was its own stringIndexOf/split scan of researchProfilePinPath; now it is cfg/profilePinRead!, the one shared reader every caller uses")
+fn researchProfileFromConfig! rootDir: String -> (Option String)
+  (cfg/profilePinRead! rootDir)
+
+fn researchGatewayEntry! model: String rootDir: String -> (Result (Pair String (Pair (List j/Json) (List j/Json))) pt/PyErr)
   (let [(configured (envOr! "ASL_GATEWAY_CONFIG"))
         (home (envOr! "HOME"))
         (path (if (stringEmpty? configured) (cfg/gatewayProfilesPath home) configured))
@@ -355,7 +359,7 @@ fn researchGatewayEntry! model: String -> (Result (Pair String (Pair (List j/Jso
         (exists (fileExists? path))
         (profileText (if exists (fileReadString path) (err "gateway config unavailable")))
         (loaded (cfg/gatewayProfilesLoadText! path exists profileText registry))
-        (profileName (envGet "ASL_PROFILE"))]
+        (profileName (researchProfileFromConfig! rootDir))]
     (mt loaded
       ((err message) (err (pt/pyErr "ValueError" message)))
       ((ok table) (researchGatewayRoutes! table profileName model))))
@@ -456,7 +460,7 @@ fn ! researchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List
       ((stringEmpty? topic) (rejectedLine id "research" "ERR_MISSING_ARG" (msgTail "Missing topic argument")))
       ((stringEmpty? dTarget) (rejectedLine id "research" "ERR_INVALID_ARG" (msgTail (str "unknown depth :" depth "; allowed: :flash :deep :exhaustive"))))
       (else
-        (mt (researchGatewayEntry! model)
+        (mt (researchGatewayEntry! model ctx.rootDir)
           ((err e) (rejectedLine id "research" (failureCode e.msg) (msgTail e.msg)))
           ((ok routes)
             (let [(env (envMapFromList!))
@@ -493,18 +497,12 @@ fn crawlMode raw: String -> String
       ((or (= m "fast") (= m "static")) "staticHttp")
       (else "auto")))
 
-fn resolveHost! ctx: DelegateCtx -> String
-  (let [(env (envOr! "ASL_HOST"))]
-    (cond
-      ((and (not (stringEmpty? env)) (fileExists? env)) env)
-      ((fileExists? (k/aslPath! ctx.rootDir "host/out/asl-host")) (k/aslPath! ctx.rootDir "host/out/asl-host"))
-      ((fileExists? (k/aslPath! "." "host/out/asl-host")) (k/aslPath! "." "host/out/asl-host"))
-      (else "asl-host")))
-
 fn ! crawlerSpawn ctx: DelegateCtx args: (List String) timeoutSec: Int64 -> Spawned
   (let [(pkgEntry (k/aslPath! ctx.rootDir "packages/asl-crawler/src/crawler.asl"))]
     (if (fileExists? pkgEntry)
-      (spawnRun (listAppend (list (resolveHost! ctx) "run" pkgEntry) args) (none) (mapEmpty) timeoutSec)
+      (mt (ev/nativeEntry! ctx.rootDir "asl/packages/asl-crawler/src/crawler" false)
+        ((ok bin) (spawnRun (listAppend (list bin) args) (none) (mapEmpty) timeoutSec))
+        ((err e) (Spawned :code -1 :out "" :errText "" :failure e)))
       (spawnRun (listAppend (list (str ctx.binDir "/asl-crawler")) args) (none) (mapEmpty) timeoutSec)))
 
 fn ! crawlStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List String) -> Outcome
@@ -654,13 +652,18 @@ fn ! makeDirs path: String -> (Result Bool String)
         ((err e) (err e))
         ((ok _) (mt (dirCreate path) ((ok _) (ok true)) ((err e) (if (k/isDir! path) (ok true) (err (errnoText e path)))))))))
 
+fn ! engineRunner ctx: DelegateCtx -> String
+  (let [(env (envOr! "ASL_HOST"))]
+    (if (and (not (stringEmpty? env)) (fileExists? env)) env (str ctx.binDir "/asl")))
+
 fn ! engineCli ctx: DelegateCtx args: (List String) seconds: Int64 -> Spawned
-  (let [(entry (k/aslPath! ctx.rootDir "packages/asl-engine/src/cli.asl"))
-        (host (resolveHost! ctx))]
+  (let [(entry (k/aslPath! ctx.rootDir "packages/asl-engine/src/cli.asl"))]
     (if (not (fileExists? entry))
       (Spawned :code -1 :out "" :errText "" :failure (errnoText "notFound" entry))
-      (spawnRun (listAppend (list host "run" entry) args) (some ctx.rootDir)
-                (mapSet (mapSet (mapEmpty) "ASL_ENGINE_ENTRY" entry) "ASL_HOST" host) seconds)))
+      (mt (ev/nativeEntry! ctx.rootDir "asl/packages/asl-engine/src/cli" false)
+        ((err e) (Spawned :code -1 :out "" :errText "" :failure e))
+        ((ok bin) (spawnRun (listAppend (list bin) args) (some ctx.rootDir)
+                            (mapSet (mapSet (mapEmpty) "ASL_ENGINE_ENTRY" entry) "ASL_HOST" (engineRunner ctx)) seconds)))))
 
 fn ! engineConnect ctx: DelegateCtx es: EngineScope tries: Int64 -> (Result Int64 String)
   (mt (unixConnect es.sock)
@@ -773,11 +776,12 @@ fn agentKillSeconds kw: (Map String String) -> Int64
     (+ timeout (+ queue 30)))
 
 fn ! agentStep ctx: DelegateCtx id: Int64 kw: (Map String String) stepStr: String -> Outcome
-  (let [(host (k/aslPath! ctx.rootDir "host/out/asl-host"))
-        (agentMain (k/aslPath! ctx.rootDir "agentLoop/main.asl"))]
-    (if (or (not (k/isFile! host)) (not (k/isFile! agentMain)))
-      (rejectedLine id "agent" "ERR_AGENT_DISPATCH" (msgTail (str "ASL agent loop not installed: " agentMain)))
-      (let [(sp (spawnRun (list host "run" agentMain stepStr) (some ctx.rootDir) (mapSet (mapEmpty) "ASL_ROOT_DIR" ctx.wsDir) (agentKillSeconds kw)))
+  (let [(agentMain (k/aslPath! ctx.rootDir "agentLoop/main.asl"))
+        (bin (if (k/isFile! agentMain) (ev/nativeEntry! ctx.rootDir "asl/agentLoop/main" true) (err (str "ASL agent loop not installed: " agentMain))))]
+    (mt bin
+      ((err e) (rejectedLine id "agent" "ERR_AGENT_DISPATCH" (msgTail e)))
+      ((ok b)
+      (let [(sp (spawnRun (list b stepStr) (some ctx.rootDir) (mapSet (mapEmpty) "ASL_ROOT_DIR" ctx.wsDir) (agentKillSeconds kw)))
             (shown (if (stringEmpty? sp.errText) true (do (eprintln (if (stringEndsWith? sp.errText "\n") (optionOr (stringSlice sp.errText 0 (- (stringLength sp.errText) 1)) "") sp.errText)) true)))
             (out (pyStrip sp.out))
             (bad (if (!= sp.code 0) 1 0))]
@@ -788,7 +792,7 @@ fn ! agentStep ctx: DelegateCtx id: Int64 kw: (Map String String) stepStr: Strin
           (else
             (Outcome :line (str (stepHead id "agent") " :status \"rejected\" :error-code \":ERR_AGENT_DISPATCH\""
                                 (msgTail (str "empty output, exit " (stringFromInt64 sp.code) " (the agent stderr went to stderr)")) ")")
-                     :errCount (+ 1 bad)))))))
+                     :errCount (+ 1 bad))))))))
 
 fn delegateOp? op: String -> Bool
   (listContains? (list "search" "research" "crawl" "tiktok" "automate" "inBrowserAgent" "intel" "manage" "proc" "engine" "agent") op)

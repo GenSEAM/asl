@@ -394,9 +394,10 @@ fn findVacuousOutside! results: (List GateResult) verdicts: (List String) owns: 
               (findVacuousOutside! gs restV owns rootDir))))
         (findVacuousOutside! gs restV owns rootDir))))
 
+; (:m :ref LEON-OWNS-ALL-20261018 :do "no :owns on the session means the session may write anywhere inside :root; findVacuousOutside! used to feed checkOwns the raw list, so with :owns unset a vacuous gate's own file would always look outside owns and fail gate integrity for a session that never narrowed its scope")
 fn vacuousOutsideOwns! results: (List GateResult) owns: (List String) rootDir: String -> (Option (Pair String String))
   (let [verdicts (gateVerdicts results false)]
-    (findVacuousOutside! results verdicts owns rootDir))
+    (findVacuousOutside! results verdicts (c/effectiveOwns owns) rootDir))
 
 fn stripLeadingDotSlash s: String -> String
   (if (stringEmpty? s)

@@ -35,14 +35,14 @@ fn undocumented docs: (List (Pair String String)) path: String t: a/TopForm -> (
     (_ (list)))
 
 fn ! missingIn docs: (List (Pair String String)) path: String -> (List String)
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err _) (list (str path ": unreadable")))
     ((ok src) (mt (a/parse src)
                 ((err pe) (list (str path ":" pe.line ":" pe.col ": parse error: " pe.msg)))
                 ((ok forms) (fold (fn [(acc (List String)) (t a/TopForm)] -> (List String) (listAppend acc (undocumented docs path t))) (list) forms)))))
 
 fn ! exportedCount path: String -> Int64
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err _) 0)
     ((ok src) (mt (a/parse src)
                 ((err _) 0)
@@ -54,7 +54,7 @@ fn ! runTests -> Bool
         (missing (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (missingIn docs p))) (list) files))
         (exported (fold (fn [(acc Int64) (p String)] -> Int64 (+ acc (exportedCount p))) 0 files))]
     (do
-      (assert (= (listLength files) 10) (str "asl-ir/src holds 10 modules, got " (listLength files)))
+      (assert (= (listLength files) 11) (str "asl-ir/src holds 11 modules, got " (listLength files)))
       (assert (> exported 80) (str "the modules export their functions, got " exported))
       (assert (> (listLength docs) 80) (str "asl-ir/doc.asn holds the package's doc rows, got " (listLength docs)))
       (assert (listEmpty? missing) (str "every exported fn has a doc.asn row; missing: " (stringJoin missing "; ")))

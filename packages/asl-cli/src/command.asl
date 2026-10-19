@@ -1,6 +1,6 @@
 (module asl-cli/command
   :x [main dispatch! route! asnEcho testFiles!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/heal :a healCli) (asl/packages/asl-gates/src/suiteRunner :a runner)])
 
 (schema Open
   (:f closer String)
@@ -15,6 +15,7 @@ fn helpText -> String
        "\n"
        "Commands:\n"
        "  check <file>        Balance, then asl-host check for .asl (names, arity, enums); bare: every tracked file\n"
+       "  heal <file>         Repair generated ASL with the named heal rules; a file that already checks is unchanged\n"
        "  test <file|dir>     Run suites; --changed [BASE] selects impacts (default main), --dry-run lists without execution\n"
        "  parse <file>        Count top-level forms on asl-host\n"
        "  eval [--native] <expr> Host evaluates expressions and echoes (:keyword ...) as ASN data; --native evaluates a single Int64 expression only\n"
@@ -48,19 +49,18 @@ fn rest args: (List String) -> (List String)
 fn first args: (List String) -> String
   (optionOr (listHead args) "")
 
+; (:m :ref HL-FIXWAVE :do "version! used to shell out to ctx.hostBin --version whenever sys/executable? ctx.hostBin was true, and otherwise print a message naming asl/host/build.sh as how to build asl-host -- a lie after HL-DELETE (build.sh builds libaslrt.a only, never a host) and, worse, a live host touch whenever ctx.hostBin happened to point at something executable (the nativeCliTest.asl witness-stub fix caught this: warmCli!'s plain 'asl version' call hit the stub and returned its exit 97). asl's own version is a native-CLI fact, not something a (possibly absent, possibly stale) second binary needs to confirm, so this prints it and nothing else")
 fn ! version! ctx: sys/Context -> Int64
-  (do (sys/say! "asl 0.1.0 (bin/asl)")
-      (if (sys/executable? ctx.hostBin)
-        (sys/run! (list ctx.hostBin "--version"))
-        (do (sys/say! "asl-host absent: build it with sh asl/host/build.sh or set ASL_HOST") 0)))
+  (do (sys/say! "asl 0.1.0 (bin/asl)") 0)
 
 fn retired! cmd: String pointer: String -> Int64
   (do (sys/say! (str "(:" cmd " :status :failed :error ERR_RETIRED :message \"asl " cmd " ran bin/asl-core, which is retired; " pointer "\")")) 2)
 
 fn ! forms! ctx: sys/Context args: (List String) -> Int64
-  (let [(entry (str ctx.root "/asl/packages/asl-forms/src/main.asl"))]
-    (if (and (sys/executable? ctx.hostBin) (sys/isFile? entry))
-      (mt (sys/captureWith! (cons ctx.hostBin (cons "run" (cons entry args))) (none)
+  (let [(entry (str ctx.root "/asl/packages/asl-forms/src/main.asl"))
+        (selfBin (str ctx.root "/bin/asl"))]
+    (if (sys/isFile? entry)
+      (mt (sys/captureWith! (cons selfBin (cons "run" (cons entry args))) (none)
                             (list (str "SCRIPT_DIR=" ctx.scriptDir) (str "ROOT_DIR=" ctx.root)))
         ((err e) (do (sys/sayErr! e) 1))
         ((ok out)
@@ -69,7 +69,7 @@ fn ! forms! ctx: sys/Context args: (List String) -> Int64
               (sys/say! text)
               (if (stringEmpty? out.stderr) true (sys/sayErr! (sys/stripTrailingNewlines out.stderr)))
               out.exitCode))))
-      (do (sys/sayErr! "Error: ASL host or asl-forms package entry not found") 1)))
+      (do (sys/sayErr! "Error: the asl-forms package entry was not found") 1)))
 
 fn ! delegate! ctx: sys/Context name: String args: (List String) missing: String -> Int64
   (mt (sys/findCommand! ctx name)
@@ -80,10 +80,11 @@ fn ! tool! ctx: sys/Context name: String args: (List String) -> Int64
   (delegate! ctx name args (str "Error: " name " binary or tool not found"))
 
 fn ! intel! ctx: sys/Context args: (List String) -> Int64
-  (let [(entry (str ctx.root "/asl/packages/asl-intel/src/main.asl"))]
-    (if (and (sys/executable? ctx.hostBin) (sys/isFile? entry))
-      (sys/runWith! (cons ctx.hostBin (cons "run" (cons entry args))) (list (str "ASL_INTEL_WORKSPACE=" ctx.root)))
-      (do (sys/sayErr! "Error: ASL host or intel package entry not found") 1)))
+  (let [(entry (str ctx.root "/asl/packages/asl-intel/src/main.asl"))
+        (selfBin (str ctx.root "/bin/asl"))]
+    (if (sys/isFile? entry)
+      (sys/runWith! (cons selfBin (cons "run" (cons entry args))) (list (str "ASL_INTEL_WORKSPACE=" ctx.root)))
+      (do (sys/sayErr! "Error: the intel package entry was not found") 1)))
 
 fn pySpace? c: String -> Bool
   (listContains? (list " " "\t" "\n" "\r" "\u{b}" "\u{c}" "\u{1c}" "\u{1d}" "\u{1e}" "\u{1f}" "\u{85}" "\u{a0}") c)
@@ -156,10 +157,11 @@ fn asnEcho text: String -> (Pair String Int64)
       (pair (str "(:eval :status :failed :error ERR_ASN_SYNTAX :message \"" problem "\")") 2)))
 
 fn ! crawler! ctx: sys/Context args: (List String) -> Int64
-  (let [(entry (str ctx.root "/asl/packages/asl-crawler/src/crawler.asl"))]
-    (if (and (sys/executable? ctx.hostBin) (sys/isFile? entry))
-      (sys/execv! (cons ctx.hostBin (cons "run" (cons entry args))) (list))
-      (do (sys/sayErr! "Error: ASL host or crawler package entry not found") 1)))
+  (let [(entry (str ctx.root "/asl/packages/asl-crawler/src/crawler.asl"))
+        (selfBin (str ctx.root "/bin/asl"))]
+    (if (sys/isFile? entry)
+      (sys/execv! (cons selfBin (cons "run" (cons entry args))) (list))
+      (do (sys/sayErr! "Error: the crawler package entry was not found") 1)))
 
 fn outputLine value: String -> String
   (if (stringEndsWith? value "\n") (optionOr (stringSlice value 0 (- (stringLength value) 1)) "") value)
@@ -173,16 +175,24 @@ fn ! cliResult! cmd: String args: (List String) res: (Result String String) -> I
        (do (if usageOnStdout (sys/say! (outputLine e)) (sys/sayErr! (outputLine e))) 1))))
 
 fn ! engine! ctx: sys/Context args: (List String) -> Int64
-  (let [(entry (str ctx.root "/asl/packages/asl-engine/src/cli.asl"))]
-    (if (and (sys/executable? ctx.hostBin) (sys/isFile? entry))
-      (sys/execv! (cons ctx.hostBin (cons "run" (cons entry args))) (list (str "ASL_ENGINE_ENTRY=" entry) (str "ASL_HOST=" ctx.hostBin)))
-      (do (sys/sayErr! "Error: ASL host or asl-engine package entry not found") 1)))
+  (let [(entry (str ctx.root "/asl/packages/asl-engine/src/cli.asl"))
+        (selfBin (str ctx.root "/bin/asl"))]
+    (if (sys/isFile? entry)
+      (sys/execv! (cons selfBin (cons "run" (cons entry args))) (list (str "ASL_ENGINE_ENTRY=" entry)))
+      (do (sys/sayErr! "Error: the asl-engine package entry was not found") 1)))
 
 fn ! mesh! ctx: sys/Context args: (List String) -> Int64
-  (let [(entry (str ctx.root "/asl/tools/mesh/cmd.asl"))]
-    (if (and (sys/executable? ctx.hostBin) (sys/isFile? entry))
-      (sys/execv! (cons ctx.hostBin (cons "run" (cons entry args))) (list (str "ROOT_DIR=" ctx.root)))
-      (do (sys/sayErr! "Error: ASL host or mesh tool entry not found") 1)))
+  (let [(entry (str ctx.root "/asl/tools/mesh/cmd.asl"))
+        (selfBin (str ctx.root "/bin/asl"))]
+    (if (sys/isFile? entry)
+      (sys/execv! (cons selfBin (cons "run" (cons entry args))) (list (str "ROOT_DIR=" ctx.root)))
+      (do (sys/sayErr! "Error: the mesh tool entry was not found") 1)))
+
+fn ! train! ctx: sys/Context args: (List String) -> Int64
+  (let [(entry (str ctx.root "/tools/fleet/train.asl"))]
+    (if (sys/isFile? entry)
+      (sys/execv! (cons (str ctx.root "/bin/asl") (cons "run" (cons entry args))) (list))
+      (do (sys/sayErr! "Error: the train tool entry tools/fleet/train.asl was not found") 1)))
 
 fn ! eval! ctx: sys/Context args: (List String) -> Int64
   (if (= (first args) "--native")
@@ -235,16 +245,10 @@ fn ! browser! args: (List String) -> Int64
       (else (do (sys/sayErr! "Usage: asl browser <targets|exec> [options]") 1))))
 
 fn ! cockpit! ctx: sys/Context args: (List String) -> Int64
-  (if (listContains? args "--tui")
-    (do (sys/say! "[Cockpit] Launching Terminal UI Observatory...")
-        (let [(tui (str ctx.root "/asl/packages/asl-agent/src/tui.asl"))]
-          (if (sys/isFile? tui)
-            (dispatch! ctx "run" (cons tui args))
-            (do (sys/sayErr! "[Cockpit] TUI component not found.") 1))))
-    (do (sys/say! "[Cockpit] Opening Sovereign Cockpit at http://127.0.0.1:8765/cockpit")
-        (mt (sys/onPath! "open")
-          ((some path) (sys/run! (list path "http://127.0.0.1:8765/cockpit")))
-          ((none) 0))))
+  (do (sys/say! "[Cockpit] Opening Sovereign Cockpit at http://127.0.0.1:8765/cockpit")
+      (mt (sys/onPath! "open")
+        ((some path) (sys/run! (list path "http://127.0.0.1:8765/cockpit")))
+        ((none) 0)))
 
 fn intelAudit? sub: String -> Bool
   (listContains? (list "coupling" "deadcode" "vacuity" "sweep" "graph" "complexity" "stubs" "vitality" "trace" "full" "all" "system") sub)
@@ -254,7 +258,11 @@ fn ! audit! ctx: sys/Context args: (List String) -> Int64
         (sub (if (stringEmpty? given) "consistency" given))]
     (if (intelAudit? sub)
       (intel! ctx (cons sub (rest args)))
-      (sys/execv! (cons "/usr/bin/python3" (cons (str ctx.root "/scripts/audit/audit.py") (cons sub (rest args)))) (list))))
+      (let [(entry (str ctx.root "/asl/packages/asl-gates/src/auditMain.asl"))
+            (selfBin (str ctx.root "/bin/asl"))]
+        (if (sys/isFile? entry)
+          (sys/execv! (cons selfBin (cons "run" (cons entry (cons sub (rest args))))) (list (str "ROOT_DIR=" ctx.root)))
+          (do (sys/sayErr! "Error: the asl-gates audit entry was not found") 1)))))
 
 fn asnQuote v: String -> String
   (str "\"" (stringReplace (stringReplace v "\\" "\\\\") "\"" "\\\"") "\"")
@@ -479,6 +487,7 @@ fn ! dispatch! ctx: sys/Context cmd: String args: (List String) -> Int64
     ((= cmd "lens") (cliResult! "lens" args (lens/runLensCommand args)))
     ((= cmd "consilium") (cliResult! "consilium" args (consilium/runConsiliumCommand args)))
     ((= cmd "mesh") (mesh! ctx args))
+    ((= cmd "train") (train! ctx args))
     ((or (= cmd "relay") (or (= cmd "rla") (= cmd "gateway"))) (tool! ctx "asl-gateway" args))
     ((or (= cmd "web") (= cmd "search")) (webDelegate! ctx "search" "query" args))
     ((= cmd "research") (webDelegate! ctx "research" "topic" args))
@@ -500,6 +509,7 @@ fn ! dispatch! ctx: sys/Context cmd: String args: (List String) -> Int64
     ((= cmd "rpc") (forms! ctx args))
     ((= cmd "run") (runFile! ctx args))
     ((= cmd "check") (check! ctx args))
+    ((= cmd "heal") (cliResult! "heal" args (healCli/runHealCommand! args)))
     ((= cmd "build") (build/buildCommand! ctx args))
     ((= cmd "parse") (parse! ctx args))
     ((= cmd "lint") (retired! "lint" "asl check FILE runs balance and asl-host check"))
@@ -523,7 +533,7 @@ fn ! entry! ctx: sys/Context args: (List String) -> Int64
       ((= cmd "-f")
         (if (or (!= (listLength args) 2) (not (sys/isFile? (first (rest args)))))
           (batchUsage! "usage: asl -f FILE, one readable file of forms and no other argument")
-          (mt (fileRead (first (rest args)))
+          (mt (fileReadString (first (rest args)))
             ((err _) (batchUsage! "usage: asl -f FILE, one readable file of forms and no other argument"))
             ((ok text) (dispatch! ctx "rpc" (list (sys/stripTrailingNewlines text)))))))
       ((= cmd "-")

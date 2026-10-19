@@ -50,10 +50,7 @@ fn ! emitMicros -> (List (Pair String Int64))
 fn microsOf rows: (List (Pair String Int64)) name: String -> Int64
   (optionOr (listHead (map (fn [(r (Pair String Int64))] -> Int64 (pairSecond r)) (filter (fn [(r (Pair String Int64))] -> Bool (= (pairFirst r) name)) rows))) -1)
 
-fn ! runningNatively? -> Bool
-  (mt (procExePath)
-    ((ok p) (not (stringEndsWith? p "/asl-host")))
-    ((err _) false))
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): this runTests ran under either asl-host (interpreted, slower) or a natively-built asl-host test binary, picking a timing threshold at runtime via procExePath's suffix. asl-host no longer exists, so every run is now the native case; the host threshold branch is unreachable dead code and is dropped, keeping only the native thresholds that were already measured and asserted")
 
 fn ! main args: (List String) -> (Result Int64 String)
   (do
@@ -64,17 +61,14 @@ fn ! runTests -> Bool
   (let [(rows (emitMicros))
         (wrapper (microsOf rows "emitRefsSourceEntry"))
         (source (microsOf rows "asl-syntax/core/source"))
-        (native (runningNatively?))
-        (wrapperLimit (if native 15000 40000))
-        (sourceLimit (if native 250000 650000))]
+        (wrapperLimit 15000)
+        (sourceLimit 250000)]
     (do
-      (println (str "emitRefsTiming wrapper us " wrapper " source us " source " mode " (if native "native" "host")))
+      (println (str "emitRefsTiming wrapper us " wrapper " source us " source " mode native"))
       (assert (> wrapper 0) "the entry wrapper emits")
       (assert (> source 0) "asl-syntax/core/source emits")
       (assert (< wrapper wrapperLimit)
-              (if native "entry wrapper emit < 15 ms (native; ~6 ms measured 2026-10-10 at head, ~35 ms with U3-REFS-SET reverted)"
-                "entry wrapper emit < 40 ms (host; ~26.5 ms measured 2026-10-10 at head, ~53.4 ms with U3-REFS-SET reverted)"))
+              "entry wrapper emit < 15 ms (native; ~6 ms measured 2026-10-10 at head, ~35 ms with U3-REFS-SET reverted)")
       (assert (< source sourceLimit)
-              (if native "asl-syntax/core/source emit < 250 ms (native; ~91 ms measured 2026-10-10 at head, ~438 ms with U3-REFS-SET reverted)"
-                "asl-syntax/core/source emit < 650 ms (host; ~357 ms measured 2026-10-10 at head, ~865 ms with U3-REFS-SET reverted)"))
+              "asl-syntax/core/source emit < 250 ms (native; ~91 ms measured 2026-10-10 at head, ~438 ms with U3-REFS-SET reverted)")
       true))

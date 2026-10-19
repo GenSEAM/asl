@@ -1,5 +1,5 @@
 (module asl-target-llvm
-  :x [emitLlvmModule emitLlvmProgram emitLlvmModuleFor emitLlvmProgramFor emitLlvmModuleForTarget emitLlvmProgramForTarget emitLlvmRuntimeForTarget emitLlvmSupportForTarget emitLlvmProgramNative! runtimeDecls emitLlvmType emitLlvmBlock emitLlvmStmt emitLlvmExpr emitLlvmClosure emitLlvmPanic emitLlvmSource emitLlvmSourceWith emitLlvmTargetTriple llvmPreamble emitLlvmFunction]
+  :x [emitLlvmModule emitLlvmProgram emitLlvmModuleFor emitLlvmProgramFor emitLlvmModuleForTarget emitLlvmProgramForTarget emitLlvmRuntimeForTarget emitLlvmSupportForTarget emitLlvmProgramNative! emitLlvmProgramNativeWith! runtimeDecls emitLlvmType emitLlvmBlock emitLlvmStmt emitLlvmExpr emitLlvmClosure emitLlvmPanic emitLlvmSource emitLlvmSourceWith emitLlvmTargetTriple llvmPreamble emitLlvmFunction]
   :i [(asl-ir/types :a irTy)
       (asl-ir/link :a lk)
       (asl-target-llvm/types :a ty)
@@ -12,7 +12,8 @@
       (asl-target-llvm/wasmRuntime :a wr)
       (asl-target-llvm/sysRoute :a rt)
       (asl-target-llvm/parRoute :a pr)
-      (asl-target-llvm/arrayRoute :a ar)])
+      (asl-target-llvm/arrayRoute :a ar)
+      (asl-target-llvm/rc :a rc)])
 
 fn emitLlvmModule m: irTy/SsaModule -> (Result String (List irTy/IrDiag))
   (emitRouted (ar/routeModule m) (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (ssa/emitLlvmModule (opt/hoistConstants r))))
@@ -73,8 +74,21 @@ fn lowerWasmPrint m: irTy/SsaModule -> irTy/SsaModule
            m.functions)))
 
 fn ! emitLlvmProgramNative! m: irTy/SsaModule entry: String -> (Result String (List irTy/IrDiag))
-  (emitRouted (thenPar (thenPar (rt/routeHost! m) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (pr/routeHost! r))) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (ar/routeModule r)))
-              (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (ssa/emitLlvmProgram (opt/hoistConstants r) entry)))
+  (emitLlvmProgramNativeWith! m entry "0")
+
+fn ! emitLlvmProgramNativeWith! m: irTy/SsaModule entry: String mode: String -> (Result String (List irTy/IrDiag))
+  (let [(user (fold (fn [(acc (Map String Bool)) (f irTy/SsaFunction)] -> (Map String Bool) (mapSet acc f.name true)) (mapEmpty) m.functions))]
+    (mt (emitRouted (thenPar (thenPar (rt/routeHost! m) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (pr/routeHost! r))) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (ar/routeModule r)))
+                    (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag))
+                      (cond
+                        ((or (= mode "") (= mode "0")) (ssa/emitLlvmProgram (opt/hoistConstants r) entry))
+                        ((or (= mode "1") (or (= mode "asan") (= mode "notrace")))
+                          (mt (ssa/emitLlvmProgram (rc/rcModule (opt/hoistConstants r) user) entry)
+                            ((err ds) (err ds))
+                            ((ok text) (ok (rc/rcFinishTextWith text (= mode "asan") (= mode "notrace"))))))
+                        (else (err (list (irTy/makeIrDiag "ERR_LLVM_RC_MODE" (str "the RC mode (asl1 build --rc, .asl.config.asn :native :rc) must be 0, 1, asan or notrace, got " mode) "asl-target-llvm")))))))
+      ((err ds) (err ds))
+      ((ok text) (ok (rc/sanitized (if (or (= mode "") (= mode "0")) text (rc/routeArrayAlloc text)) (= mode "asan"))))))
 
 fn routeFor facts: libc/TripleFacts m: irTy/SsaModule -> (Result rt/Routed (List irTy/IrDiag))
   (thenPar (thenPar (rt/routeModule facts m) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (pr/routeModule facts r))) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (ar/routeModule r)))

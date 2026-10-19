@@ -1,27 +1,122 @@
-#!/bin/sh
-# The asl command. It only picks which ASL entry module the stage-0 host runs:
-#   asl '(:op ...)' | asl -f FILE | asl -   the toolbelt (packages/asl-forms)
-#   asl intel ...                           code intelligence (packages/asl-intel)
-#   asl <command> ...                       everything else (packages/asl-cli)
-here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-host=${ASL_HOST:-$here/host/out/asl-host}
-if [ ! -x "$host" ]; then
-  echo "asl: the stage-0 host is not built: $host" >&2
-  echo "asl: build it with: CC=\$(command -v clang) sh $here/host/build.sh" >&2
-  exit 127
+#!/usr/bin/env bash
+# asl/bin/asl (HL-FIXWAVE, 2026-10-16): the launcher for the published GenSEAM/asl subtree (asl/ itself, whether
+# checked out standalone or as the asl/ subdirectory of this monorepo). It finds the workspace root (the directory
+# holding asl/, i.e. two levels above this script), then execs the native asl binary its pointer file names, else
+# bootstraps one from the committed seed (asl/host/build.sh: a fresh clone has clang but no host interpreter) and
+# retries the pointer once. There is no host fallback: asl runs on the native CLI or not at all.
+# This mirrors the top-level bin/asl convenience wrapper exactly (same pointer protocol, same cache, same seed
+# bootstrap); it only differs in how many directories up the workspace root is, since this script lives one level
+# deeper (asl/bin/asl, not bin/asl).
+set -eo pipefail
+
+# BIN-ASL-FORKS: the warm path forks nothing before it execs the native CLI (no $(...), no dirname, no subshell), so
+# it still works where the process table or ulimit -u leaves no room for a child; only a symlinked asl/bin/asl runs
+# readlink. The directories are made physical with cd -P in this shell, then the caller's cwd, PWD and OLDPWD are
+# put back.
+PRG="${BASH_SOURCE[0]}"
+while [ -h "$PRG" ]; do
+  link=$(readlink "$PRG")
+  case "$link" in /*) PRG="$link" ;; *) case "$PRG" in */*) PRG="${PRG%/*}/$link" ;; *) PRG="$link" ;; esac ;; esac
+done
+case "$PRG" in */*) SCRIPT_DIR="${PRG%/*}" ;; *) SCRIPT_DIR="." ;; esac
+ASL_CALLER_PWD="$PWD" ASL_CALLER_OLDPWD="${OLDPWD-}" ASL_CALLER_OLDPWD_SET="${OLDPWD+set}"
+builtin cd -P -- "${SCRIPT_DIR:-/}" || exit 2
+SCRIPT_DIR="$PWD"
+# ASL_WRAPPER_ROOT (not ROOT_DIR): ROOT_DIR is a public env-var contract several packages read/set
+# (asl-cli/command.asl's relaunch, asl-gates/auditMain.asl, asl-gateway/*, asl-pack/*) to point audits/tools
+# at a chosen tree; bash keeps an inherited exported var exported across reassignment, so naming this local
+# wrapper-root variable ROOT_DIR would silently clobber any caller-supplied ROOT_DIR before exec.
+# Two levels up (not one, as the top-level bin/asl does): this script is asl/bin/asl, so its script dir's
+# parent is asl/ itself, and the workspace root nativeBuild/nativeCli key every path against (ctx.root, with
+# "asl/host/out/...", "asl/prelude/...") is one level above that.
+builtin cd -P ../.. || exit 2
+ASL_WRAPPER_ROOT="$PWD"
+builtin cd -- "$ASL_CALLER_PWD" 2> /dev/null || builtin cd -P -- "$ASL_CALLER_PWD" || exit 2
+PWD="$ASL_CALLER_PWD" OLDPWD="$ASL_CALLER_OLDPWD"
+[ -n "$ASL_CALLER_OLDPWD_SET" ] || unset OLDPWD
+unset ASL_CALLER_PWD ASL_CALLER_OLDPWD ASL_CALLER_OLDPWD_SET
+# ASL_CLI_USER_PRELUDE carries the top-level user's original choice; once set (even empty) it survives nested
+# asl/bin/asl invocations unchanged, so a descendant process's own internal ASL_PRELUDE (resolved for its own use,
+# e.g. to run a compiled test/eval binary) is never mistaken for a fresh user override by the wrapper it execs next.
+export ASL_CLI_USER_PRELUDE="${ASL_CLI_USER_PRELUDE-${ASL_PRELUDE:-}}" ASL_PRELUDE="${ASL_PRELUDE:+$ASL_WRAPPER_ROOT/asl/prelude/prelude.asl}" ASL_CLI_ROOT="$ASL_WRAPPER_ROOT" ASL_CLI_SCRIPT_DIR="$SCRIPT_DIR" ASL_CLI_ARGV0="$0" ASL_CLI_ENTRY_PID=$$
+# the pointer: ASL_NATIVE_CLI_CACHE/head<root with / as _> names the cache dir of the native binary nativeBuild last built for this root
+NATIVE_CACHE="${ASL_NATIVE_CLI_CACHE:-${HOME:-/tmp}/.asl/run/nativeCli}"
+NATIVE_HEAD="$NATIVE_CACHE/head${ASL_WRAPPER_ROOT//\//_}"
+
+# NATIVE-STALE-UNDETECTED: a cached binary's freshness gate is its own compiled code, so a binary built before a gate
+# fix (or with a broken gate) never notices it is stale. The wrapper is read from the tree on every call, so it checks
+# first: a source the binary's deps list names that is missing or newer than STAMP makes the binary suspect, and a
+# suspect binary never runs before the current tree's builder has verified or rebuilt it. Builtins only (read, [ -nt ]),
+# no fork; an edit inside the same second as STAMP is left to the in-binary byte comparison (nativeCli fresh?).
+native_suspect() {
+  local p n=0
+  [ -r "$1/deps" ] || return 0
+  while IFS= read -r p || [ -n "$p" ]; do
+    [ -n "$p" ] || continue
+    n=$((n + 1))
+    [ -e "$ASL_WRAPPER_ROOT/$p" ] || return 0
+    [ "$ASL_WRAPPER_ROOT/$p" -nt "$2" ] && return 0
+  done < "$1/deps"
+  [ "$n" -eq 0 ]
+}
+
+native_stale_fail() {
+  [ -n "${NATIVE_LOCKED:-}" ] && rm -rf "$NATIVE_CACHE/lock"
+  echo "(:asl :status :failed :error ERR_NATIVE_STALE :message \"the native CLI $NATIVE_DIR predates its sources and $1; see $NATIVE_CACHE/build.log\")"
+  exit 2
+}
+
+# the slow path: under the shared build lock (lock/pid created exclusively, the protocol asl-cli/nativeCli uses), the
+# current tree's builder (asl/host/out/aslNativeBuild, refreshed by asl/host/build.sh when its own sources moved)
+# verifies the cached binary byte for byte or rebuilds it; a verified head is rewritten so the next call is warm again
+native_refresh() {
+  local out="$ASL_WRAPPER_ROOT/asl/host/out" lock="$NATIVE_CACHE/lock" held tries=0 wait_s="${ASL_NATIVE_BUILD_WAIT:-3600}" deadline rc=0
+  deadline=$((SECONDS + wait_s))
+  echo "asl: native CLI $NATIVE_DIR predates its sources; verifying or rebuilding it (waiting up to ASL_NATIVE_BUILD_WAIT=${wait_s}s)" >&2
+  mkdir -p "$lock" 2> /dev/null || native_stale_fail "cannot create $lock"
+  until (set -C; echo "$$" > "$lock/pid") 2> /dev/null; do
+    held=""
+    read -r held 2> /dev/null < "$lock/pid" || true
+    if [ -z "$held" ]; then
+      tries=$((tries + 1))
+      [ "$tries" -gt 5 ] && rm -f "$lock/pid"
+    elif ! kill -0 "$held" 2> /dev/null; then
+      rm -f "$lock/pid"
+    fi
+    [ "$SECONDS" -lt "$deadline" ] || native_stale_fail "the build lock stayed held by pid ${held:-unknown}"
+    sleep 1
+    mkdir -p "$lock" 2> /dev/null || true
+  done
+  NATIVE_LOCKED=1
+  if read -r NATIVE_DIR 2> /dev/null < "$NATIVE_HEAD" && [ -x "$NATIVE_DIR/bin" ] && ! native_suspect "$NATIVE_DIR" "$NATIVE_HEAD"; then
+    rm -rf "$lock"
+    return 0
+  fi
+  if { [ ! -x "$out/aslNativeBuild" ] || native_suspect "$out/aslNativeBuild-fresh" "$out/aslNativeBuild-fresh/deps"; } && [ -x "$ASL_WRAPPER_ROOT/asl/host/build.sh" ]; then
+    perl -e 'alarm shift; exec @ARGV' "$wait_s" sh "$ASL_WRAPPER_ROOT/asl/host/build.sh" 1>&2 || true
+  fi
+  [ -x "$out/aslNativeBuild" ] || native_stale_fail "there is no builder at $out/aslNativeBuild (sh asl/host/build.sh)"
+  perl -e 'alarm shift; exec @ARGV' "$((deadline > SECONDS ? deadline - SECONDS : 1))" "$out/aslNativeBuild" "$ASL_WRAPPER_ROOT" "$NATIVE_CACHE" --if-cold 1>&2 || rc=$?
+  [ "$rc" -eq 0 ] || native_stale_fail "its rebuild exited $rc"
+  read -r NATIVE_DIR 2> /dev/null < "$NATIVE_HEAD" && [ -x "$NATIVE_DIR/bin" ] || native_stale_fail "the rebuild left no head at $NATIVE_HEAD"
+  printf '%s\n' "$NATIVE_DIR" > "$NATIVE_HEAD.part.$$" && mv -f "$NATIVE_HEAD.part.$$" "$NATIVE_HEAD" || native_stale_fail "cannot rewrite $NATIVE_HEAD"
+  native_suspect "$NATIVE_DIR" "$NATIVE_HEAD" && native_stale_fail "its sources moved again during the rebuild"
+  rm -rf "$lock"
+  NATIVE_LOCKED=""
+}
+
+if read -r NATIVE_DIR 2> /dev/null < "$NATIVE_HEAD" && [ -x "$NATIVE_DIR/bin" ]; then
+  native_suspect "$NATIVE_DIR" "$NATIVE_HEAD" && native_refresh
+  ASL_NATIVE_CLI_DIR="$NATIVE_DIR" ASL_NATIVE_QUIET_PID=$$ exec "$NATIVE_DIR/bin" "$@"
 fi
-export ASL_HOST="$host"
-: "${ASL_CLI_ROOT:=$here}"
-: "${ASL_CLI_SCRIPT_DIR:=$here/bin}"
-export ASL_CLI_ROOT ASL_CLI_SCRIPT_DIR
-case "${1-}" in
-  "("*|-f|-) exec "$host" run "$here/packages/asl-forms/src/main.asl" "$@" ;;
-  intel)
-    shift
-    # asl-intel reports paths as asl/packages/...: give it a directory holding this checkout as asl/.
-    if [ "$(basename -- "$here")" = asl ]; then ws=$(dirname -- "$here"); else
-      ws=${XDG_CACHE_HOME:-$HOME/.cache}/asl/workspace; mkdir -p "$ws" && ln -sfn "$here" "$ws/asl"; fi
-    : "${ASL_INTEL_HOME:=$ws}"; export ASL_INTEL_HOME
-    exec "$host" run "$here/packages/asl-intel/src/main.asl" "$@" ;;
-  *) exec "$host" run "$here/packages/asl-cli/src/main.asl" "$@" ;;
-esac
+# COLDSTART: a fresh clone has no native pointer yet; bootstrap the native CLI straight from the committed seed
+# (asl/host/build.sh: runtime seed -> seed asl1 -> native asl1 -> native CLI, clang and gunzip only) and retry the
+# pointer once.
+if [ -x "${ASL_WRAPPER_ROOT}/asl/host/build.sh" ]; then
+  perl -e 'alarm '"${ASL_COLDSTART_TIMEOUT:-1800}"'; exec @ARGV' sh "${ASL_WRAPPER_ROOT}/asl/host/build.sh" 1>&2 || true
+  if read -r NATIVE_DIR 2> /dev/null < "$NATIVE_HEAD" && [ -x "$NATIVE_DIR/bin" ]; then
+    ASL_NATIVE_CLI_DIR="$NATIVE_DIR" ASL_NATIVE_QUIET_PID=$$ exec "$NATIVE_DIR/bin" "$@"
+  fi
+fi
+echo "(:asl :status :failed :error ERR_NATIVE_ABSENT :message \"asl runs on the native CLI built from asl/seed; its cold-start bootstrap (asl/host/build.sh) did not produce one here; build it with sh asl/host/build.sh\")"
+exit 2

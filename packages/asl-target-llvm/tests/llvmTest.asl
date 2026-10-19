@@ -131,7 +131,7 @@ fn testLlvmSourceLowering -> Bool
           (refute (stringContains? code "@asl_rt_int_trap") "the deleted abi.c asl_rt_int_trap is neither declared nor called")
           (assert (and (some? divAt) (and (some? modAt) (some? addAt))) (str "division fails as the host does on a zero divisor (kind 5) or INT64_MIN by -1 (kind 3), mod on a zero divisor (kind 6), add on overflow:\n" code))
           (assert (and (< (optionOr divAt 0) (optionOr modAt 0)) (< (optionOr modAt 0) (optionOr addAt 0))) "operands are evaluated before the add that consumes them")
-          (assert (stringContains? code "%$252 = sub i64 %$252.p.q, %$252.p.step") "division floors: a truncated quotient steps down when the remainder's sign differs from the divisor's")
+          (assert (stringContains? code "%$252.p.fixed = call i64 @mathrt.floorDivFix(i64 %$252.p.q, i64 %$252.p.r, i64 %$251)") "division floors: a cold noinline mathrt.floorDivFix call steps the truncated quotient down when the remainder's sign differs from the divisor's (NATIVE-PERF d33199a89)")
           (assert (stringContains? code "%result = call tailcc i64 @dm()") "entry wrapper calls the entry function")
           (assert (stringContains? code "%code = trunc i64 %result to i32") "entry wrapper narrows the raw result to the exit code")
           true))))

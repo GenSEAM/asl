@@ -15,7 +15,7 @@ fn field items: (List rd/SExpr) key: String -> String
     ((some at) (mt (listGet items (+ at 1)) ((some x) (mt x ((rd/sexprAtom v) (unquote v)) (_ ""))) ((none) ""))))
 
 fn body! dir: String slug: String -> String
-  (mt (fileRead (str dir "/" slug ".md")) ((ok s) s) ((err e) ""))
+  (mt (fileReadString (str dir "/" slug ".md")) ((ok s) s) ((err e) ""))
 
 fn postOf! dir: String e: rd/SExpr -> (Option blog/Post)
   (mt e
@@ -29,5 +29,5 @@ fn newestFirst posts: (List blog/Post) -> (List blog/Post)
   (listReverse (listSortBy (fn [(p blog/Post)] -> String p.date) posts))
 
 fn loadPosts! dir: String -> (List blog/Post)
-  (let [(index (mt (fileRead (str dir "/index.asn")) ((ok s) s) ((err e) "")))]
+  (let [(index (mt (fileReadString (str dir "/index.asn")) ((ok s) s) ((err e) "")))]
     (newestFirst (fold (fn [(acc (List blog/Post)) (e rd/SExpr)] -> (List blog/Post) (mt (postOf! dir e) ((some p) (cons p acc)) ((none) acc))) [] (rd/sexprToList (rd/parseSexpr index)))))

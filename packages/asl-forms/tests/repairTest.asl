@@ -1,16 +1,21 @@
 (module asl-forms/tests/repairTest
   :x [runTests]
-  :i [(asl-forms/repair :a rep)])
+  :i [(asl-forms/repair :a rep) (asl-forms/gate :a g) (asl-parser/indentParser :a ip)])
 
-fn checkHostValid! content: String tmpPath: String -> Bool
+fn ! nativeRunText! content: String tmpPath: String cmd: String -> (Pair Int64 String)
   (mt (fileWrite tmpPath content)
-    ((err e) (do (assert false (str "failed to write " tmpPath ": " e)) false))
+    ((err e) (do (assert false (str "failed to write " tmpPath ": " e)) (pair -1 e)))
     ((ok _)
-     (let [(res (processRun (str "asl/host/out/asl-host check " tmpPath)))
-           (exitCode res.exitCode)]
-       (do
-         (processRun (str "rm -f " tmpPath))
-         (= exitCode 0)))))
+     (let [(res (if (= cmd "parse")
+                  (mt (ip/parseIndentedFormsPos content)
+                    ((ok _) (pair 0 ""))
+                    ((err e) (pair 1 (str tmpPath ":" (stringFromInt64 e.line) ":" (stringFromInt64 e.col) ": ERR_READ " e.msg))))
+                  (let [(h (g/nativeCheck! (resultOr (realPath ".") ".") tmpPath))] (pair h.code (str h.out h.errText)))))
+           (gone (pathRemove tmpPath))]
+       res)))
+
+fn ! nativeAccepts! content: String tmpPath: String cmd: String -> Bool
+  (= (pairFirst (nativeRunText! content tmpPath cmd)) 0)
 
 fn testCleanInputs -> Bool
   (let [(aslClean "(module foo/bar\n  :x [runTests]\n  :i [])\nfn runTests -> Bool\n  true\n")
@@ -101,7 +106,7 @@ fn checkFixtureRepair! path: String isAsl: Bool tmpPath: String -> Bool
          (assert (listEmpty? (rep/repairResultLeft res)) (str path " repair must have empty left"))
          (assert (not (listEmpty? (rep/repairResultRepaired res))) (str path " repair must have non-empty repaired"))
          (if isAsl
-           (do (assert (checkHostValid! repaired tmpPath) (str path " repaired must pass asl-host check")) true)
+           (do (assert (nativeAccepts! repaired tmpPath "check") (str path " repaired must pass the native check")) true)
            true)
          true))))
 
@@ -364,18 +369,6 @@ fn replayFixture! name: String -> String
     ((ok t) t)
     ((err e) (do (assert false (str "missing fixture " name ": " e)) "")))
 
-fn hostRunText! content: String tmpPath: String cmd: String -> (Pair Int64 String)
-  (mt (fileWrite tmpPath content)
-    ((err e) (do (assert false (str "failed to write " tmpPath ": " e)) (pair -1 e)))
-    ((ok _)
-     (let [(res (processRun (str "asl/host/out/asl-host " cmd " " tmpPath " 2>&1")))]
-       (do
-         (processRun (str "rm -f " tmpPath))
-         (pair res.exitCode (str res.stdout res.stderr))))))
-
-fn hostAccepts! content: String tmpPath: String cmd: String -> Bool
-  (= (pairFirst (hostRunText! content tmpPath cmd)) 0)
-
 fn checkSurplusReplay! name: String base: String at: Int64 oldLen: Int64 receipt: String checkError: String -> Bool
   (let [(edit (>= at 0))
         (b (if edit (replayFixture! base) ""))
@@ -388,14 +381,14 @@ fn checkSurplusReplay! name: String base: String at: Int64 oldLen: Int64 receipt
     (do
       (assert (= (rep/repairResultReceipt res) receipt) (str name " receipt: " (rep/repairResultReceipt res)))
       (assert (= (stringLength fixed) (- (stringLength text) (listLength (rep/repairResultRepaired res)))) (str name " only the surplus closers are removed"))
-      (assert (not (hostAccepts! text (str "asl/packages/asl-forms/tests/.surplus_" name "_before.asl") "parse")) (str name " payload is rejected before the repair"))
+      (assert (not (nativeAccepts! text (str "asl/packages/asl-forms/tests/.surplus_" name "_before.asl") "parse")) (str name " payload is rejected before the repair"))
       (if (= checkError "")
-        (do (assert (hostAccepts! fixed (str "asl/packages/asl-forms/tests/.surplus_" name ".asl") "check") (str name " repaired text passes asl-host check")) true)
-        (let [(chk (hostRunText! fixed (str "asl/packages/asl-forms/tests/.surplus_" name ".asl") "check"))]
+        (do (assert (nativeAccepts! fixed (str "asl/packages/asl-forms/tests/.surplus_" name ".asl") "check") (str name " repaired text passes the native check")) true)
+        (let [(chk (nativeRunText! fixed (str "asl/packages/asl-forms/tests/.surplus_" name ".asl") "check"))]
           (do
-            (assert (hostAccepts! fixed (str "asl/packages/asl-forms/tests/.surplus_" name ".asl") "parse") (str name " repaired text passes asl-host parse"))
-            (assert (and (!= (pairFirst chk) 0) (stringContains? (pairSecond chk) checkError)) (str name " asl-host check fails only on the payload's own " checkError ", not syntax: " (pairSecond chk)))
-            (assert (not (stringContains? (pairSecond chk) "ERR_READ")) (str name " asl-host check reports no reader error"))
+            (assert (nativeAccepts! fixed (str "asl/packages/asl-forms/tests/.surplus_" name ".asl") "parse") (str name " repaired text passes the native parse"))
+            (assert (and (!= (pairFirst chk) 0) (stringContains? (pairSecond chk) checkError)) (str name " native check fails only on the payload's own " checkError ", not syntax: " (pairSecond chk)))
+            (assert (not (or (stringContains? (pairSecond chk) "ERR_READ") (stringContains? (pairSecond chk) ": parse "))) (str name " native check reports no reader error: " (pairSecond chk)))
             true)))
       true))
 
@@ -403,10 +396,10 @@ fn testFnSurplusReplays! -> Bool
   (do
       (assert (checkSurplusReplay! "case01" "case01" -1 0 "(:repaired ((:kind delete :tok \")\" :line 41 :col 9)) :left ())" "ERR_UNKNOWN_SYMBOL") "case01 fn-end surplus replay")
       (assert (checkSurplusReplay! "case02" "case02" -1 0 "(:repaired ((:kind delete :tok \")\" :line 80 :col 28)) :left ())" "") "case02 fn-end surplus replay")
-      (assert (checkSurplusReplay! "case04" "case04" -1 0 "(:repaired ((:kind delete :tok \")\" :line 62 :col 73) (:kind delete :tok \")\" :line 95 :col 13)) :left ())" "ERR_EFFECT_UNMARKED") "case04 fn-end surplus replay")
+      (assert (checkSurplusReplay! "case04" "case04" -1 0 "(:repaired ((:kind delete :tok \")\" :line 62 :col 73) (:kind delete :tok \")\" :line 95 :col 13)) :left ())" "") "case04 fn-end surplus replay: EFFECT-INFER, the payload's unmarked effect now infers clean outside a :pure package")
       (assert (checkSurplusReplay! "case05" "case05" -1 0 "(:repaired ((:kind delete :tok \")\" :line 52 :col 63) (:kind delete :tok \")\" :line 100 :col 13)) :left ())" "ERR_ARITY") "case05 fn-end surplus replay")
       (assert (checkSurplusReplay! "case17" "case17" -1 0 "(:repaired ((:kind delete :tok \")\" :line 23 :col 13) (:kind delete :tok \")\" :line 33 :col 13) (:kind delete :tok \")\" :line 43 :col 13) (:kind delete :tok \")\" :line 55 :col 13) (:kind delete :tok \")\" :line 65 :col 13) (:kind delete :tok \")\" :line 73 :col 13) (:kind delete :tok \")\" :line 80 :col 13) (:kind delete :tok \")\" :line 91 :col 13) (:kind delete :tok \")\" :line 104 :col 10) (:kind delete :tok \")\" :line 116 :col 10)) :left ())" "ERR_UNKNOWN_SYMBOL") "case17 fn-end surplus replay")
-      (assert (checkSurplusReplay! "case20" "case20" -1 0 "(:repaired ((:kind delete :tok \")\" :line 27 :col 85)) :left ())" "ERR_EFFECT_UNMARKED") "case20 fn-end surplus replay")
+      (assert (checkSurplusReplay! "case20" "case20" -1 0 "(:repaired ((:kind delete :tok \")\" :line 27 :col 85)) :left ())" "") "case20 fn-end surplus replay: EFFECT-INFER, the payload's unmarked effect now infers clean outside a :pure package")
       (assert (checkSurplusReplay! "case22" "case22" -1 0 "(:repaired ((:kind delete :tok \")\" :line 202 :col 64) (:kind delete :tok \")\" :line 213 :col 13) (:kind delete :tok \")\" :line 228 :col 21) (:kind delete :tok \")\" :line 274 :col 19)) :left ())" "ERR_CONSTANT_ASSERT") "case22 fn-end surplus replay")
       (assert (checkSurplusReplay! "case25" "baseb1b9331b" 12020 72 "(:repaired ((:kind delete :tok \")\" :line 314 :col 72)) :left ())" "") "case25 fn-end surplus replay")
       (assert (checkSurplusReplay! "case27" "base6341fd35" 1321 115 "(:repaired ((:kind delete :tok \")\" :line 54 :col 59)) :left ())" "") "case27 fn-end surplus replay")

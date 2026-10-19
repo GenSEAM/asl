@@ -1,6 +1,10 @@
 (:package asl-help
   :version "0.2.0"
   :entry "src/toolRegistry.asl"
-  :description "Self-Contained Machine-Readable ASN Help System and Autonomous Toolbelt Introspection Engine"
+  :description "Self-Contained Machine-Readable ASN Help System and Autonomous Toolbelt Introspection Engine (the helpNode/registry/situations modules and both of this package's own tests were deleted in DEAD-PACKAGES/eef761e17 as dead; toolDescriptor and toolRegistry remain live, imported by tests/acceptance/toolbeltConsultTest.asl and read as corpus by asl/packages/asl-gates/tests/auditParityTest.asl's manifest.asn)"
   :aslFirst true
+  :modules [
+    "asl-help/toolDescriptor"
+    "asl-help/toolRegistry"
+  ]
   :dependencies ["asl-text"])

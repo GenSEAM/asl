@@ -194,7 +194,7 @@ fn recordGolden -> String
     "      (let %1 i64 (prim addIntHost a %0))"
     "      (let %2 val (box a))"
     "      (let %3 val (box %1))"
-    "      (let %4 val (record Point (x %2) (y %3)))"
+    "      (let %4 rec:Point (record Point (x %2) (y %3)))"
     "      (return %4)))"
     "  (fn sum (captures) (params (p rec:Point)) (returns i64)"
     "    (block entry ()"

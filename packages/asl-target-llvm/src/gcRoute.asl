@@ -1,5 +1,5 @@
 (module asl-target-llvm/gcRoute
-  :x [collectorModule collectorModuleForTarget collectorText collectorTextForTarget entryNames hostTriple main]
+  :x [collectorModule collectorModuleForTarget collectorModuleWith collectorText collectorTextForTarget collectorTextWith entryNames hostTriple main]
   :i [(asl-ir/types :a ty)
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/ssa :a ssa)
@@ -13,9 +13,13 @@ fn collectorModule facts: libc/TripleFacts -> (Result ty/SsaModule (List ty/IrDi
   (collectorModuleForTarget facts (target/nativeTargetFacts facts.triple))
 
 fn collectorModuleForTarget facts: libc/TripleFacts target: target/TargetFacts -> (Result ty/SsaModule (List ty/IrDiag))
+  (collectorModuleWith facts target false)
+
+fn collectorModuleWith facts: libc/TripleFacts target: target/TargetFacts notrace: Bool -> (Result ty/SsaModule (List ty/IrDiag))
   (mt (gc/gcFactsFor facts target)
     ((err e) (err (list (diag e))))
-    ((ok c) (ok (ty/ssaModule "asl-target-llvm/gcAsl" (gc/gcStrings) (list) (list) (gc/gcExterns c) (list) (gc/gcFunctions c)))))
+    ((ok c0) (let [(c (if notrace (gc/untracedCtx c0) c0))]
+               (ok (ty/ssaModule "asl-target-llvm/gcAsl" (gc/gcStrings) (list) (list) (gc/gcExterns c) (list) (gc/gcFunctions c))))))
 
 fn sym name: String -> String
   (str "@" (ssa/llvmName (gc/functionName name)))
@@ -27,8 +31,21 @@ fn entryNames -> (List String)
   (list "asl_alloc" "asl_alloc_raw" "asl_alloc_cons" "asl_alloc_perm" "asl_gc_collect" "asl_gc_root_push" "asl_gc_root_pop" "gcInit" "gcWillAllocate" "gcAccount"
         "gcRegisterProto" "gcFindObj" "gcFreedObjects" "gcTestFailNextPageSetGrow" "gcScanConservative" "gcStackBase" "gcStackTop" "gcExternalRoots" "asl_gc_state_ptr")
 
-fn entryText target: target/TargetFacts -> String
+fn untracedEntryText target: target/TargetFacts -> String
   (stringJoin
+    (cons (untracedEntries)
+          (filter (fn [(part String)] -> Bool (not (or (stringStartsWith? part "define void @asl_gc_collect(") (or (stringStartsWith? part "define void @gcScanConservative(")
+                                                      (stringStartsWith? part "define internal void @gcAslMarkRootC(")))))
+                  (entryParts target)))
+    "\n")
+
+fn untracedEntries -> String
+  "define void @asl_gc_collect() {\n  ret void\n}\n\ndefine void @gcScanConservative(ptr %lo, ptr %hi) {\n  ret void\n}"
+
+fn entryText target: target/TargetFacts -> String
+  (stringJoin (entryParts target) "\n")
+
+fn entryParts target: target/TargetFacts -> (List String)
     (filter (fn [(line String)] -> Bool (not (= line "")))
     (list
       (str "define ptr @asl_alloc(i32 %t, i64 %n) {\n  %t64 = sext i32 %t to i64\n  %r = " (call "alloc" "i64 %t64, i64 %n") "\n  %p = inttoptr i64 %r to ptr\n  ret ptr %p\n}")
@@ -68,9 +85,7 @@ fn entryText target: target/TargetFacts -> String
       (if (target/isWasm32 target) "@asl_gc_shadow_top = global i64 0, align 8" "")
       (gc/stateBlockText target)
       (gc/statePtrText)
-      "@gcAsl.failBuf = internal global [1024 x i8] zeroinitializer, align 1")
-    )
-    "\n")
+      "@gcAsl.failBuf = internal global [1024 x i8] zeroinitializer, align 1"))
 
 fn extraDecls target: target/TargetFacts -> (List String)
   (if (target/isWasm32 target)
@@ -95,8 +110,15 @@ fn internal line: String -> String
         local))
     line)
 
-fn finishLines lines: (List String) target: target/TargetFacts -> (Result (List String) String)
-  (let [(helpers (gc/helperDefinitionsFor target))
+fn untracedHelper d: (Pair String String) -> (Pair String String)
+  (cond
+    ((= (pairFirst d) "declare tailcc i64 @gcAslMutatorRoots()") (pair (pairFirst d) "define internal tailcc i64 @gcAslMutatorRoots() {\n  ret i64 0\n}"))
+    ((= (pairFirst d) "declare tailcc i64 @gcAslExternalRoots()") (pair (pairFirst d) "define internal tailcc i64 @gcAslExternalRoots() {\n  ret i64 0\n}"))
+    (else d))
+
+fn finishLines lines: (List String) target: target/TargetFacts notrace: Bool -> (Result (List String) String)
+  (let [(traced (gc/helperDefinitionsFor target))
+        (helpers (if notrace (map untracedHelper traced) traced))
         (missing (filter (fn [(d (Pair String String))] -> Bool (!= (listLength (filter (fn [(l String)] -> Bool (= l (pairFirst d))) lines)) 1)) helpers))
         (clashes (filter (fn [(n String)] -> Bool (listAny? (fn [(l String)] -> Bool (or (stringContains? l (str " @" n "(")) (stringStartsWith? l (str "@" n " ")))) lines)) (entryNames)))]
     (cond
@@ -108,20 +130,23 @@ fn finishLines lines: (List String) target: target/TargetFacts -> (Result (List 
         (let [(replaced (map (fn [(l String)] -> String
                                (fold (fn [(acc String) (d (Pair String String))] -> String (if (= l (pairFirst d)) (pairSecond d) acc)) (internal l) helpers))
                              lines))]
-          (ok (listAppend (listAppend replaced (list "" (entryText target) ""))
-                          (filter (fn [(d String)] -> Bool (not (declares? lines d))) (extraDecls target))))))))
+          (ok (listAppend (listAppend replaced (list "" (if notrace (untracedEntryText target) (entryText target)) ""))
+                          (filter (fn [(d String)] -> Bool (and (not (declares? lines d)) (not (and notrace (stringContains? d "@gcMutatorRoots("))))) (extraDecls target))))))))
 
 fn collectorText facts: libc/TripleFacts -> (Result String (List ty/IrDiag))
   (collectorTextForTarget facts (target/nativeTargetFacts facts.triple))
 
 fn collectorTextForTarget facts: libc/TripleFacts target: target/TargetFacts -> (Result String (List ty/IrDiag))
-  (mt (collectorModuleForTarget facts target)
+  (collectorTextWith facts target false)
+
+fn collectorTextWith facts: libc/TripleFacts target: target/TargetFacts notrace: Bool -> (Result String (List ty/IrDiag))
+  (mt (collectorModuleWith facts target notrace)
     ((err ds) (err ds))
     ((ok m)
       (mt (ssa/emitLlvmModule m)
         ((err ds) (err ds))
         ((ok text)
-          (mt (finishLines (stringSplit text "\n") target)
+          (mt (finishLines (stringSplit text "\n") target notrace)
             ((err e) (err (list (diag e))))
             ((ok lines) (ok (ssa/trapLowering (target/lowerLlvmText (str (stringJoin lines "\n") "\n") target) target))))))))
 
@@ -142,7 +167,7 @@ fn ! main args: (List String) -> (Result Int64 String)
     (mt (libc/libcFacts triple)
       ((none) (err (str "ERR_LLVM_GCROUTE: libc.asl covers no host printing '" out.stdout "' for uname -s -m")))
       ((some facts)
-        (mt (collectorText facts)
+        (mt (collectorTextWith facts (target/nativeTargetFacts facts.triple) (= (optionOr (listGet args 1) "") "notrace"))
           ((err ds) (err (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code ": " d.message)) ds) "; ")))
           ((ok text)
             (mt (listHead args)

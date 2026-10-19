@@ -11,7 +11,7 @@ fn ! runChildTest root: Str casePath: Str -> (List Str)
         (record (str root "/python-argv"))
         (mutant (ty/makeMutant "argv probe" "py" "argv probe" "div_mod_neg_neg"))
         (trial (mut/runIsolatedMutantTrial! mutant "tests/conformance/xplat/div_mod_neg_neg"))
-        (observed (mt (fileRead record) ((ok value) value) ((err _) "")))
+        (observed (mt (fileReadString record) ((ok value) value) ((err _) "")))
         (cleanup (proc/exec! (proc/cmd "rm" (list "-rf" "tmp/conform/mutants/argv probe"))))]
     (list (checkLine "routePassed" result.passed)
           (checkLine "stubRan" (= result.actualStdout "argv-stub-ran"))

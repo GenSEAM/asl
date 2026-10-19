@@ -36,24 +36,36 @@ fn preludeTail xs: (List T) -> (List T)
 fn preludeSlice s: String i: Int64 j: Int64 -> String
   (mt (stringSlice s i j) ((some t) t))
 
+fn preludeAsciiByte c: String -> Int64
+  (bytesGet (stringToBytes c) 0)
+
 fn preludeLess a: T b: T -> Bool
   (cond
     ((!= a a) false)
     ((!= b b) true)
     (else (< a b)))
 
+; (:m :ref CHKFIX :do "checkedDiv/checkedMod are generic over N (Int32, Int64 or Float64) and dispatch on preludeIsFloat at runtime; the old single-body form compared b against both a concrete Float64 literal (0.0) and a flexible int-kind literal (0) inside one shared check pass over the same metavariable N, so whichever comparison the checker reached first pinned N's kind and the other then mismatched. Splitting each into its own float-only / int-only helper gives each literal kind its own isolated, internally-consistent check pass over a fresh N, with identical runtime behavior")
+fn checkedDivFloat a: N b: N -> (Option N)
+  (if (= b 0.0) none (some (/ a b)))
+
+fn checkedDivInt a: N b: N -> (Option N)
+  (cond
+    ((= b 0) none)
+    ((and (= b -1) (= a -9223372036854775808)) none)
+    (else (some (/ a b))))
+
 fn checkedDiv a: N b: N -> (Option N)
-  (if (preludeIsFloat b)
-    (if (= b 0.0) none (some (/ a b)))
-    (cond
-      ((= b 0) none)
-      ((and (= b -1) (= a -9223372036854775808)) none)
-      (else (some (/ a b)))))
+  (if (preludeIsFloat b) (checkedDivFloat a b) (checkedDivInt a b))
+
+fn checkedModFloat a: N b: N -> (Option N)
+  (if (= b 0.0) none (some (mod a b)))
+
+fn checkedModInt a: N b: N -> (Option N)
+  (if (= b 0) none (some (mod a b)))
 
 fn checkedMod a: N b: N -> (Option N)
-  (if (preludeIsFloat b)
-    (if (= b 0.0) none (some (mod a b)))
-    (if (= b 0) none (some (mod a b))))
+  (if (preludeIsFloat b) (checkedModFloat a b) (checkedModInt a b))
 
 fn floatNan -> Float64
   (/ 0.0 0.0)
@@ -65,7 +77,7 @@ fn floatNegInf -> Float64
   (/ -1.0 0.0)
 
 fn int32ToInt64 x: Int32 -> Int64
-  (+ x 0)
+  (optionOr (stringToInt64 (str x)) 0)
 
 fn int64ToInt32 x: Int64 -> (Option Int32)
   (if (and (>= x -2147483648) (<= x 2147483647)) (some x) none)
@@ -360,69 +372,91 @@ fn stringReplace s: String old: String new: String -> String
     (preludeTrap "stringReplace: empty search string")
     (stringJoin (preludeSplit s old 0 0 (list)) new))
 
-fn preludeIsSpace c: String -> Bool
-  (stringContains? " \t\n\r" c)
+fn preludeIsSpaceByte b: Int64 -> Bool
+  (or (= b 32) (or (= b 9) (or (= b 10) (= b 13))))
 
-fn preludeTrimStart s: String i: Int64 -> Int64
-  (if (and (< i (stringLength s)) (preludeIsSpace (preludeSlice s i (+ i 1)))) (preludeTrimStart s (+ i 1)) i)
+fn preludeTrimStartB bs: Bytes n: Int64 i: Int64 -> Int64
+  (if (and (< i n) (preludeIsSpaceByte (bytesGet bs i))) (preludeTrimStartB bs n (+ i 1)) i)
 
-fn preludeTrimEnd s: String j: Int64 lo: Int64 -> Int64
-  (if (and (> j lo) (preludeIsSpace (preludeSlice s (- j 1) j))) (preludeTrimEnd s (- j 1) lo) j)
+fn preludeTrimEndB bs: Bytes lo: Int64 j: Int64 -> Int64
+  (if (and (> j lo) (preludeIsSpaceByte (bytesGet bs (- j 1)))) (preludeTrimEndB bs lo (- j 1)) j)
 
 fn stringTrim s: String -> String
-  (let [i (preludeTrimStart s 0)]
-    (preludeSlice s i (preludeTrimEnd s (stringLength s) i)))
+  (let [bs (stringToBytes s)
+        n (bytesLength bs)
+        i (preludeTrimStartB bs n 0)]
+    (preludeSlice s i (preludeTrimEndB bs i n)))
 
-fn preludeIsContinuation b: String -> Bool
-  (and (>= b (preludeSlice "À" 1 2)) (<= b (preludeSlice "¿" 1 2)))
+fn preludeContinuationByte? b: Int64 -> Bool
+  (and (>= b 128) (<= b 191))
 
-fn preludeCharEnd s: String j: Int64 -> Int64
-  (if (and (< j (stringLength s)) (preludeIsContinuation (preludeSlice s j (+ j 1)))) (preludeCharEnd s (+ j 1)) j)
+fn preludeCharEndB bs: Bytes n: Int64 j: Int64 -> Int64
+  (if (and (< j n) (preludeContinuationByte? (bytesGet bs j))) (preludeCharEndB bs n (+ j 1)) j)
 
-fn preludeChars s: String i: Int64 acc: (List String) -> (List String)
-  (if (>= i (stringLength s)) (listReverse acc)
-    (let [j (preludeCharEnd s (+ i 1))]
-      (preludeChars s j (cons (preludeSlice s i j) acc))))
+fn preludeCharsB s: String bs: Bytes n: Int64 i: Int64 acc: (List String) -> (List String)
+  (if (>= i n) (listReverse acc)
+    (let [j (preludeCharEndB bs n (+ i 1))]
+      (preludeCharsB s bs n j (cons (preludeSlice s i j) acc))))
 
 fn stringChars s: String -> (List String)
-  (preludeChars s 0 (list))
+  (let [bs (stringToBytes s)]
+    (preludeCharsB s bs (bytesLength bs) 0 (list)))
+
+fn stringSliceUtf8 s: String i: Int64 j: Int64 -> (Option String)
+  (let [bs (stringToBytes s)
+        n (bytesLength bs)]
+    (if (or (< i 0) (or (< j i) (> j n))) none
+      (if (or (and (< i n) (preludeContinuationByte? (bytesGet bs i)))
+              (and (< j n) (preludeContinuationByte? (bytesGet bs j))))
+        none
+        (stringSlice s i j))))
 
 fn stringReverse s: String -> String
   (stringJoin (listReverse (stringChars s)) "")
 
-fn preludeMapCaseChar c: String from: String to: String -> String
-  (mt (stringIndexOf from c) ((some i) (preludeSlice to i (+ i 1))) (none c))
+fn preludeUpperChar c: String -> String
+  (let [b (preludeAsciiByte c)]
+    (if (and (>= b 97) (<= b 122))
+      (let [idx (- b 97)] (preludeSlice "ABCDEFGHIJKLMNOPQRSTUVWXYZ" idx (+ idx 1)))
+      c))
 
-fn preludeMapCase s: String from: String to: String -> String
-  (stringJoin (map (fn [(c String)] -> String (preludeMapCaseChar c from to)) (stringChars s)) "")
+fn preludeLowerChar c: String -> String
+  (let [b (preludeAsciiByte c)]
+    (if (and (>= b 65) (<= b 90))
+      (let [idx (- b 65)] (preludeSlice "abcdefghijklmnopqrstuvwxyz" idx (+ idx 1)))
+      c))
 
 fn stringUpper s: String -> String
-  (preludeMapCase s "abcdefghijklmnopqrstuvwxyz" "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+  (stringJoin (map preludeUpperChar (stringChars s)) "")
 
 fn stringLower s: String -> String
-  (preludeMapCase s "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
+  (stringJoin (map preludeLowerChar (stringChars s)) "")
 
-fn preludeDigits s: String i: Int64 acc: Int64 -> (Option Int64)
-  (if (>= i (stringLength s)) (some acc)
-    (mt (stringIndexOf "0123456789" (preludeSlice s i (+ i 1)))
-      ((some d)
-        (if (or (< acc -922337203685477580) (and (= acc -922337203685477580) (> d 8)))
-          none
-          (preludeDigits s (+ i 1) (- (* acc 10) d))))
-      (none none)))
+fn preludeDigitsB bs: Bytes n: Int64 i: Int64 acc: Int64 -> (Option Int64)
+  (if (>= i n) (some acc)
+    (let [b (bytesGet bs i)]
+      (if (and (>= b 48) (<= b 57))
+        (let [d (- b 48)]
+          (if (or (< acc -922337203685477580) (and (= acc -922337203685477580) (> d 8)))
+            none
+            (preludeDigitsB bs n (+ i 1) (- (* acc 10) d))))
+        none)))
 
 fn stringToInt64 s: String -> (Option Int64)
-  (let [n (stringLength s)
-        sign (if (> n 0) (preludeSlice s 0 1) "")
-        start (if (or (= sign "-") (= sign "+")) 1 0)]
-    (if (>= start n) none
-      (mt (preludeDigits s start 0)
-        ((some v)
-          (cond
-            ((= sign "-") (some v))
-            ((= v -9223372036854775808) none)
-            (else (some (- v)))))
-        (none none))))
+  (let [bs (stringToBytes s)
+        n (bytesLength bs)]
+    (if (= n 0) none
+      (let [b0 (bytesGet bs 0)
+            neg (= b0 45)
+            start (if (or neg (= b0 43)) 1 0)]
+        (if (>= start n) none
+          (mt (preludeDigitsB bs n start 0)
+            ((some v)
+              (cond
+                (neg (some v))
+                ((= v -9223372036854775808) none)
+                (else (some (- v)))))
+            (none none))))))
 
 fn preludeRankPow5 t: Int64 -> Int64
   (let [t2 (mod (* t t) 2147483647)
@@ -539,6 +573,9 @@ fn mapEmpty -> (Map K V)
 fn mapGet m: (Map K V) k: K -> (Option V)
   (preludeTreeGet (preludeTree m) k)
 
+fn mapGetOr m: (Map K V) k: K default: V -> V
+  (optionOr (mapGet m k) default)
+
 fn mapHas? m: (Map K V) k: K -> Bool
   (some? (mapGet m k))
 
@@ -577,12 +614,6 @@ fn preludeIoError message: String -> IoError
     ((stringStartsWith? message "invalidPath:") (invalidPath))
     ((stringStartsWith? message "interrupted:") (interrupted))
     (else (other)))
-
-fn ! fileRead path: String -> (Result String IoError)
-  (mt (fileReadString path) ((ok s) (ok s)) ((err m) (err (preludeIoError m))))
-
-fn ! pathCanonicalize path: String -> (Result String IoError)
-  (mt (realPath path) ((ok s) (ok s)) ((err m) (err (preludeIoError m))))
 
 fn isNan? x: Float64 -> Bool
   (!= x x)
@@ -714,8 +745,8 @@ fn ! preludeB64Dec s: String out: Bytes g: Int64 groups: Int64 padFrom: Int64 ->
         (let [a (optionOr v0 0) b (optionOr v1 0) c (optionOr v2 0) d (optionOr v3 0)]
           (do
             (bytesSet out o (+ (* a 4) (/ b 16)))
-            (if (< (+ o 1) n) (bytesSet out (+ o 1) (+ (* (mod b 16) 16) (/ c 4))) (+ 0 0))
-            (if (< (+ o 2) n) (bytesSet out (+ o 2) (+ (* (mod c 4) 64) d)) (+ 0 0))
+            (if (< (+ o 1) n) (bytesSet out (+ o 1) (+ (* (mod b 16) 16) (/ c 4))) ())
+            (if (< (+ o 2) n) (bytesSet out (+ o 2) (+ (* (mod c 4) 64) d)) ())
             (preludeB64Dec s out (+ g 1) groups padFrom))))))
 
 fn ! bytesFromBase64 s: String -> (Result Bytes String)
@@ -746,16 +777,49 @@ fn fnv1a64 s: String -> Int64
 fn stringLines s: String -> (List String)
   (stringSplit s "\n")
 
+fn preludeLastFrom xs: (List T) -> T
+  (mt (listTail xs)
+    ((some t) (if (listEmpty? t) (preludeHead xs) (preludeLastFrom t)))
+    (none (preludeHead xs)))
+
 fn listLast xs: (List T) -> (Option T)
-  (let [n (listLength xs)]
-    (if (<= n 0) none
-      (listGet xs (- n 1))))
+  (if (listEmpty? xs) none (some (preludeLastFrom xs)))
 
 fn stringCountChar s: String ch: String -> Int64
   (listLength (filter (fn [c] (= c ch)) (stringChars s)))
 
+fn preludeEnumerateFrom xs: (List T) i: Int64 acc: (List (Pair Int64 T)) -> (List (Pair Int64 T))
+  (mt (listTail xs)
+    ((some t) (preludeEnumerateFrom t (+ i 1) (cons (pair i (preludeHead xs)) acc)))
+    (none (listReverse acc)))
+
 fn enumerate xs: (List T) -> (List (Pair Int64 T))
-  (zip (range 0 (listLength xs)) xs)
+  (preludeEnumerateFrom xs 0 (list))
+
+fn preludeFindLoop pred: (fn [T] -> Bool) xs: (List T) -> (Option T)
+  (mt (listHead xs)
+    ((some x) (if (pred x) (some x) (preludeFindLoop pred (preludeTail xs))))
+    (none none))
+
+fn listFind pred: (fn [T] -> Bool) xs: (List T) -> (Option T)
+  (preludeFindLoop pred xs)
+
+fn preludeCountLoop pred: (fn [T] -> Bool) xs: (List T) acc: Int64 -> Int64
+  (mt (listHead xs)
+    ((some x) (preludeCountLoop pred (preludeTail xs) (if (pred x) (+ acc 1) acc)))
+    (none acc))
+
+fn listCount pred: (fn [T] -> Bool) xs: (List T) -> Int64
+  (preludeCountLoop pred xs 0)
+
+fn preludeFlatMapOnto f: (fn [A] -> (List B)) xs: (List A) acc: (List B) -> (List B)
+  (mt (listHead xs)
+    ((some x) (mt (listTail xs)
+                ((some t) (preludeFlatMapOnto f t (fold (fn [acc2 b] (cons b acc2)) acc (f x))))))
+    (none (listReverse acc)))
+
+fn listFlatMap f: (fn [A] -> (List B)) xs: (List A) -> (List B)
+  (preludeFlatMapOnto f xs (list))
 
 fn zstdAslCorrupt message: String -> (Result Bytes String)
   (err (str "ERR_ZSTD_CORRUPT: " message))
@@ -763,23 +827,20 @@ fn zstdAslCorrupt message: String -> (Result Bytes String)
 fn zstdAslUnsupported message: String -> (Result Bytes String)
   (err (str "ERR_ZSTD_UNSUPPORTED: " message))
 
-fn zstdAslByte bs: Bytes i: Int64 -> Int64
-  (bytesGet bs i)
-
 fn zstdAslU32 bs: Bytes i: Int64 -> Int64
-  (+ (zstdAslByte bs i)
-    (+ (* (zstdAslByte bs (+ i 1)) 256)
-      (+ (* (zstdAslByte bs (+ i 2)) 65536)
-        (* (zstdAslByte bs (+ i 3)) 16777216))))
+  (+ (bytesGet bs i)
+    (+ (* (bytesGet bs (+ i 1)) 256)
+      (+ (* (bytesGet bs (+ i 2)) 65536)
+        (* (bytesGet bs (+ i 3)) 16777216))))
 
 fn zstdAslUInt bs: Bytes at: Int64 n: Int64 factor: Int64 acc: Int64 -> Int64
   (if (= n 0) acc
     (zstdAslUInt bs (+ at 1) (- n 1) (* factor 256)
-      (+ acc (* (zstdAslByte bs at) factor))))
+      (+ acc (* (bytesGet bs at) factor))))
 
 fn zstdAslDictZero bs: Bytes at: Int64 n: Int64 -> Bool
   (if (= n 0) true
-    (and (= (zstdAslByte bs at) 0)
+    (and (= (bytesGet bs at) 0)
       (zstdAslDictZero bs (+ at 1) (- n 1))))
 
 fn zstdAslPow2 n: Int64 -> Int64
@@ -794,7 +855,7 @@ fn ! zstdAslSetRaw src: Bytes si: Int64 dst: Bytes di: Int64 n: Int64 -> Bool
   (if (>= n 0)
     (if (= n 0) true
       (do
-        (bytesSet dst di (zstdAslByte src si))
+        (bytesSet dst di (bytesGet src si))
         (zstdAslSetRaw src (+ si 1) dst (+ di 1) (- n 1))))
     false)
 
@@ -808,7 +869,7 @@ fn ! zstdAslSetRle dst: Bytes di: Int64 byte: Int64 n: Int64 -> Bool
 
 fn ! zstdAslLiteralBlock src: Bytes start: Int64 end: Int64 out: Bytes outAt: Int64 baseOut: Int64 window: Int64 hufState: Bytes seqState: Bytes reps: Bytes countOnly: Bool -> (Result (Pair Int64 Int64) String)
   (if (>= start end) (err "ERR_ZSTD_CORRUPT: literals header truncated")
-    (let [head (zstdAslByte src start)
+    (let [head (bytesGet src start)
           typ (mod head 4)
           sizeFlag (mod (/ head 4) 4)
           headerSize (if (or (= sizeFlag 0) (= sizeFlag 2)) 1 (if (= sizeFlag 1) 2 3))]
@@ -816,9 +877,9 @@ fn ! zstdAslLiteralBlock src: Bytes start: Int64 end: Int64 out: Bytes outAt: In
         (let [regenerated
                 (if (= headerSize 1) (/ head 8)
                   (if (= headerSize 2)
-                    (+ (/ head 16) (* (zstdAslByte src (+ start 1)) 16))
-                    (+ (/ head 16) (+ (* (zstdAslByte src (+ start 1)) 16)
-                      (* (zstdAslByte src (+ start 2)) 4096)))))
+                    (+ (/ head 16) (* (bytesGet src (+ start 1)) 16))
+                    (+ (/ head 16) (+ (* (bytesGet src (+ start 1)) 16)
+                      (* (bytesGet src (+ start 2)) 4096)))))
               dataAt (+ start headerSize)
               stored (if (= typ 0) regenerated 1)
               seqAt (+ dataAt stored)]
@@ -839,7 +900,7 @@ fn ! zstdAslLiteralBlock src: Bytes start: Int64 end: Int64 out: Bytes outAt: In
               (let [lit (bytesAlloc 131072)]
                 (do
                   (if (= typ 0) (zstdAslSetRaw src dataAt lit 0 regenerated)
-                    (zstdAslSetRle lit 0 (zstdAslByte src dataAt) regenerated))
+                    (zstdAslSetRle lit 0 (bytesGet src dataAt) regenerated))
                   (zstdAslSequences src seqAt end lit regenerated out outAt baseOut window seqState reps countOnly)))))))))
 
 fn ! zstdAslHufLiterals src: Bytes start: Int64 end: Int64 out: Bytes outAt: Int64 head: Int64 sizeFlag: Int64 hufState: Bytes -> (Result (Pair Int64 Int64) String)
@@ -913,9 +974,9 @@ fn ! zstdAslHufFour table: Bytes tableAt: Int64 log: Int64 src: Bytes at: Int64 
 
 fn ! zstdAslCountBlocks src: Bytes len: Int64 at: Int64 window: Int64 total: Int64 hufState: Bytes seqState: Bytes reps: Bytes -> (Result (Pair Int64 Int64) String)
   (if (> (+ at 3) len) (err "ERR_ZSTD_CORRUPT: block header truncated")
-    (let [bh (+ (zstdAslByte src at)
-              (+ (* (zstdAslByte src (+ at 1)) 256)
-                (* (zstdAslByte src (+ at 2)) 65536)))
+    (let [bh (+ (bytesGet src at)
+              (+ (* (bytesGet src (+ at 1)) 256)
+                (* (bytesGet src (+ at 2)) 65536)))
           last (= (mod bh 2) 1)
           typ (mod (/ bh 2) 4)
           size (/ bh 8)
@@ -946,9 +1007,9 @@ fn ! zstdAslCountBlockDone src: Bytes len: Int64 last: Bool nextAt: Int64 window
 
 fn ! zstdAslBlocks src: Bytes len: Int64 at: Int64 out: Bytes outAt: Int64 window: Int64 hufState: Bytes seqState: Bytes reps: Bytes -> (Result Int64 String)
   (if (> (+ at 3) len) (err "ERR_ZSTD_CORRUPT: block header truncated")
-    (let [bh (+ (zstdAslByte src at)
-              (+ (* (zstdAslByte src (+ at 1)) 256)
-                (* (zstdAslByte src (+ at 2)) 65536)))
+    (let [bh (+ (bytesGet src at)
+              (+ (* (bytesGet src (+ at 1)) 256)
+                (* (bytesGet src (+ at 2)) 65536)))
           last (= (mod bh 2) 1)
           typ (mod (/ bh 2) 4)
           size (/ bh 8)
@@ -982,13 +1043,13 @@ fn ! zstdAslBlocks src: Bytes len: Int64 at: Int64 out: Bytes outAt: Int64 windo
           (if (>= dataAt len) (err "ERR_ZSTD_CORRUPT: RLE block truncated")
             (if (> (+ outAt size) outLen) (err "ERR_ZSTD_CORRUPT: output exceeds the frame content size or 1 GiB")
               (do
-                (zstdAslSetRle out outAt (zstdAslByte src dataAt) size)
+                (zstdAslSetRle out outAt (bytesGet src dataAt) size)
                 (if last
                   (if (= (+ outAt size) outLen) (ok (+ dataAt 1))
                     (err "ERR_ZSTD_CORRUPT: decoded size differs from the frame content size"))
                   (zstdAslBlocks src len (+ dataAt 1) out (+ outAt size) window hufState seqState reps)))))))))
 
-fn ! zstdAslFrame src: Bytes -> (Result Bytes String)
+fn ! zstdAslDecompress src: Bytes -> (Result Bytes String)
   (let [len (bytesLength src)]
     (if (< len 4) (zstdAslCorrupt "shorter than a frame magic")
       (let [magic (zstdAslU32 src 0)]
@@ -997,13 +1058,13 @@ fn ! zstdAslFrame src: Bytes -> (Result Bytes String)
           ((!= magic 4247762216) (zstdAslCorrupt "bad frame magic"))
           ((< len 5) (zstdAslCorrupt "frame header truncated"))
           (else
-            (let [fhd (zstdAslByte src 4)
+            (let [fhd (bytesGet src 4)
                   fcsFlag (/ fhd 64)
                   single (= (mod (/ fhd 32) 2) 1)
                   checksum (= (mod (/ fhd 4) 2) 1)
                   dictFlag (mod fhd 4)
                   descriptorAt (if single 5 6)
-                  windowDescriptor (if (or single (< len 6)) 0 (zstdAslByte src 5))
+                  windowDescriptor (if (or single (< len 6)) 0 (bytesGet src 5))
                   windowLog (+ 10 (/ windowDescriptor 8))
                   windowBase (zstdAslPow2 windowLog)
                   window (if single 0 (+ windowBase (* (/ windowBase 8) (mod windowDescriptor 8))))
@@ -1020,9 +1081,9 @@ fn ! zstdAslFrame src: Bytes -> (Result Bytes String)
                 ((> (+ 5 (if single 0 1) dictSize) len) (zstdAslCorrupt "dictionary id truncated"))
                 ((and (> dictSize 0) (not (zstdAslDictZero src descriptorAt dictSize))) (zstdAslUnsupported "frame needs a dictionary"))
                 ((> (+ fcsAt fcsSize) len) (zstdAslCorrupt "frame content size truncated"))
-                ((and (= fcsSize 8) (not (and (= (zstdAslByte src (+ fcsAt 4)) 0)
-                  (and (= (zstdAslByte src (+ fcsAt 5)) 0)
-                    (and (= (zstdAslByte src (+ fcsAt 6)) 0) (= (zstdAslByte src (+ fcsAt 7)) 0))))))
+                ((and (= fcsSize 8) (not (and (= (bytesGet src (+ fcsAt 4)) 0)
+                  (and (= (bytesGet src (+ fcsAt 5)) 0)
+                    (and (= (bytesGet src (+ fcsAt 6)) 0) (= (bytesGet src (+ fcsAt 7)) 0))))))
                   (zstdAslCorrupt "content size above 1 GiB"))
                 ((> fcs 1073741824) (zstdAslCorrupt "content size above 1 GiB"))
                 (else
@@ -1524,19 +1585,19 @@ fn ! zstdAslSequenceAdvance src: Bytes bitsAt: Int64 bitsLen: Int64 pos3: Int64 
 
 fn ! zstdAslSequences src: Bytes start: Int64 end: Int64 lit: Bytes litCount: Int64 out: Bytes outAt: Int64 baseOut: Int64 window: Int64 state: Bytes reps: Bytes countOnly: Bool -> (Result (Pair Int64 Int64) String)
   (if (>= start end) (err "ERR_ZSTD_CORRUPT: sequences header truncated")
-    (let [first (zstdAslByte src start)
+    (let [first (bytesGet src start)
           headLen (if (< first 128) 1 (if (< first 255) 2 3))]
       (if (> (+ start headLen) end) (err "ERR_ZSTD_CORRUPT: sequences header truncated")
         (let [nseq (if (< first 128) first
-                    (if (< first 255) (+ (* (- first 128) 256) (zstdAslByte src (+ start 1)))
-                      (+ 32512 (zstdAslByte src (+ start 1)) (* (zstdAslByte src (+ start 2)) 256))))
+                    (if (< first 255) (+ (* (- first 128) 256) (bytesGet src (+ start 1)))
+                      (+ 32512 (bytesGet src (+ start 1)) (* (bytesGet src (+ start 2)) 256))))
               afterHead (+ start headLen)]
           (if (= nseq 0)
             (if (!= afterHead end) (err "ERR_ZSTD_CORRUPT: bytes after an empty sequences section")
               (if (> (+ baseOut litCount) 1073741824) (err "ERR_ZSTD_CORRUPT: output exceeds the frame content size or 1 GiB")
                 (do (if countOnly true (zstdAslSequenceCopy lit 0 out outAt litCount)) (ok (pair end litCount)))))
             (if (>= afterHead end) (err "ERR_ZSTD_CORRUPT: sequences modes truncated")
-              (let [modes (zstdAslByte src afterHead)
+              (let [modes (bytesGet src afterHead)
                     llMode (/ modes 64) ofMode (mod (/ modes 16) 4) mlMode (mod (/ modes 4) 4)
                     tablesAt (+ afterHead 1)]
                 (if (!= (mod modes 4) 0) (err "ERR_ZSTD_CORRUPT: reserved sequence mode bits set")
@@ -1808,6 +1869,3 @@ fn ! zstdAslHufBuild weights: Bytes count: Int64 -> (Result (Pair Bytes Int64) S
                       (ok (pair table maxBits))
                       (err "ERR_ZSTD_CORRUPT: Huffman weights do not complete a tree")))
                   (err "ERR_ZSTD_CORRUPT: Huffman table build failed")))))))))
-
-fn ! zstdAslDecompress src: Bytes -> (Result Bytes String)
-  (zstdAslFrame src)

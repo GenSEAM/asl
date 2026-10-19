@@ -37,8 +37,6 @@
 (:doc :symbol "asl/packages/asl-grammar/src/peg.asl#starAt" :text "greedy loop; far tracks the furthest failure")
 (:doc :symbol "asl/packages/asl-grammar/src/peg.asl#repAt" :text "greedy up to most; fewer than least fails")
 (:doc :symbol "asl/packages/asl-grammar/src/peg.asl#pm" :text "end and furthest failure packed in one Int64")
-(:doc :symbol "asl/packages/asl-grammar/src/salvage.asl#" :text "Closing contract for a constrained generation cut at max_tokens: keep the longest prefix of whole column-0 items the generation start rule accepts, never guessed closers.")
-(:doc :symbol "asl/packages/asl-grammar/src/salvage.asl#main" :text "Reads the text at the first argument and writes its salvage to the second, under start genFile of the grammar file given third (default asl/grammar/aslGrammar.asn); err when no prefix is accepted.")
 (:doc :symbol "asl/packages/asl-grammar/src/sample.asl#" :text "Random texts derived from a grammar read as a context-free grammar, as GBNF reads it: not, and and end derive nothing, every alt branch is open. Past a depth budget each choice takes its shallowest branch, so derivation ends. Used to check that a start rule only derives texts asl-host check accepts.")
 (:doc :symbol "asl/packages/asl-grammar/src/sample.asl#Gen.text" :text "Text derived so far, in reverse pieces joined at the end")
 (:doc :symbol "asl/packages/asl-grammar/src/sample.asl#Gen.seed" :text "Random state")

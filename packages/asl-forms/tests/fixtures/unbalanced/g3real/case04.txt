@@ -36,7 +36,7 @@ fn formsMatch? lForms: (List rd/SExpr) iForms: (List rd/SExpr) -> Bool
   (:f failed Int64))
 
 fn verifyCorpusFile path: String -> CorpusStats
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err e)
      (do
        (assert false (str path " read error: " e))

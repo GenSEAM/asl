@@ -7,7 +7,7 @@ fn ! runTests -> Bool
         repo (resultOr (realPath ".") ".")
         layout (processRun (str "mkdir -p " root "/asl && ln -s " repo "/asl/agentLoop " root "/asl/agentLoop && ln -s " repo "/asl/grammar " root "/asl/grammar"))
         main (str repo "/asl/agentLoop/main.asl")
-        host (str repo "/asl/host/out/asl-host")
+        host (str repo "/bin/asl")
         proc (processRun (str "ASL_ROOT_DIR=" root " " host " run " main " '(:agent :task \"dispatch smoke\" :dryRun true :root \"" root "\")'"))
         output proc.stdout
         relativeProc (processRun (str "cd " root " && ASL_ROOT_DIR=" root " " host " run " main " '(:agent :task \"relative workspace\" :dryRun true :root \"" root "\")'"))
@@ -16,7 +16,7 @@ fn ! runTests -> Bool
     (do
       (assert (= tmp.exitCode 0) "temporary workspace created")
       (assert (= layout.exitCode 0) "target workspace has the agent and grammar modules")
-      (assert (fileExists? host) "stage-0 host is available")
+      (assert (fileExists? host) "the native asl CLI entry point is available")
       (assert (= proc.exitCode 0) "self-hosted agent entry point exits successfully")
       (assert (stringContains? output "(:dryRunReceipt") "self-hosted agent entry point returns its dry-run receipt")
       (assert (stringContains? output "Task: dispatch smoke") "receipt preserves the requested task")

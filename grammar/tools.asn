@@ -124,7 +124,7 @@
       :params (
         (:file :type str :default "" :note "target file to evaluate")
         (:target :type str :default "workspace" :note "target scope or path")
-        (:lenses :type forms :default (:invariants) :note "list of audit lenses to evaluate")
+        (:lenses :type forms :default [:invariants] :note "list of audit lenses to evaluate")
         (:profile :type sym :default :freeTier :note "execution profile: freeTier frontier codexLuna")
       )
       :lenses (:all :invariants :teleology :semantics :gates :triMap :grading :astAddressing :ramTxn :foreign :limitCycle :workspaceIsolation :dyck1Purity :tokenEconomics)
@@ -187,7 +187,7 @@
         (:file :type str :req true :note "path to file in repository")
         (:symbol :type str :default "" :note "symbol definition to extract")
         (:anchor :type str :default "" :note "text anchor substring")
-        (:limit :type int :default 200 :note "maximum lines to return; after an :anchor, characters from the anchor")
+        (:limit :type int :default 200 :note "maximum lines to return; after :anchor, characters from it")
         (:start :type int :default 0 :note "starting line number for slice")
         (:end :type int :default 0 :note "ending line number for slice")
       )
@@ -196,7 +196,7 @@
       )
       :errors (ERR_MISSING_ARG ERR_FILE_NOT_FOUND ERR_SYMBOL_NOT_FOUND ERR_BOUNDARY_VIOLATION ERR_ANCHOR_NOT_FOUND ERR_BINARY ERR_INVALID_ARG ERR_NOT_PORTED ERR_READ_FAILED ERR_AMBIGUOUS_PATH ERR_RANGE_OUT_OF_BOUNDS)
       :related (query)
-      :doc "Bounded AST symbol and slice retrieval without whole-file dumping; a binary file (NUL in the first 8 KB or a known magic) is rejected with ERR_BINARY, :bytes and :kind, never returned.")
+      :doc "Bounded symbol or slice retrieval, no whole-file dump; binary (NUL in first 8 KB, or known magic) rejects with ERR_BINARY, :bytes and :kind, never returned.")
 
     (:op :query
       :scope any
@@ -232,7 +232,7 @@
       )
       :errors (ERR_MISSING_ARG ERR_FILE_NOT_FOUND ERR_NO_MATCH ERR_AMBIGUOUS ERR_UNBALANCED ERR_UNREPAIRABLE)
       :related (diff flush discard check txn)
-      :doc "Atomic string replacement staged in the session buffer; rejected when the staged result breaks delimiter balance or syntax. :all replaces every occurrence, :autofix (true, indentation or heuristic) stages a delimiter repair, :force stages anyway.")
+      :doc "Atomic string replacement staged in the session buffer; rejected when the staged result breaks delimiter balance or syntax.")
 
     (:op :write
       :scope any
@@ -333,7 +333,7 @@
       )
       :errors (ERR_FILE_NOT_FOUND ERR_BOUNDARY_VIOLATION ERR_SYNTAX ERR_UNBALANCED_DELIMITERS ERR_CHECK_FAILED ERR_HOST_ABSENT ERR_WORKSPACE_CHECK_FAILED ERR_READ_FAILED ERR_STAGED_CHECK_FAILED ERR_EXEC_FAILED)
       :related (test fix edit)
-      :doc "Verify delimiter balance of an ASL or ASN file, or run a local syntax checker on a foreign one. A balanced .asl file then goes to asl/host/out/asl-host check on the content the next flush would write, which resolves imports and names and checks arity; its exit is :checkerExit and its diagnostics come back in :message. Without :file it runs asl check over the workspace: balance of every tracked ASL and ASN file and asl/host/out/asl-host check of each .asl.")
+      :doc "Verify delimiter balance of an ASL or ASN file, or run a local syntax checker on a foreign one. A balanced .asl file then goes to the native checker on the content the next flush would write, resolving imports and names and checking arity; its exit is :checkerExit, diagnostics come back in :message. Without :file it checks the whole workspace: balance of every tracked file, native-checked per .asl.")
 
     (:op :test
       :scope asl
@@ -384,7 +384,7 @@
         (:subcmd :type sym :default :coupling :note "the audit to run")
       )
       :subcmds (:coupling :deadcode :vacuity :sweep :graph :complexity :stubs :trace :consistency :gates :closure :foreign :steps :vitality :all :full :system)
-      :doc "coupling, deadcode, vacuity, sweep, graph, complexity, stubs and trace run asl-intel and return its receipt; consistency, gates, closure, foreign, steps, vitality, all, full and system run the workspace's scripts/audit/audit.py and answer ERR_WORKSPACE_ONLY where it is absent; any other name is ERR_UNKNOWN_SUBCMD.")
+      :doc "coupling, deadcode, vacuity, sweep, graph, complexity, stubs and trace run asl-intel and return its receipt; consistency, gates, closure, foreign, steps, vitality, all, full and system run the workspace's native asl-gates/auditMain.asl and answer ERR_WORKSPACE_ONLY where it is absent; any other name is ERR_UNKNOWN_SUBCMD.")
 
     (:op :crawl
       :scope toolchain

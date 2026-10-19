@@ -1,0 +1,119 @@
+empty bytes ok 0 
+empty string (ok "")
+one bytes ok 1 120,
+one string (ok "x")
+large bytes ok 3145728 97 98 99
+large string 3145728
+missing bytes notFound: @@FSROUTE_WORK@@/tree/missing: No such file or directory
+missing string (err "notFound: @@FSROUTE_WORK@@/tree/missing: No such file or directory")
+directory bytes ok 0 
+directory string (ok "")
+fifo string (ok "fifo")
+nul string (ok "x")
+nul stat ok true false 1 420 8
+long stat 1183 invalidPath: @@FSROUTE_WORK@@/tree/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+range zero ok 1 120,
+range zero length ok 0 
+range mid ok 12 103,104,105,106,10,97,98,99,100,101,102,103,
+range clamp ok 8 103,104,105,106,10,97,98,99,
+range past ok 0 
+range negative offset err fileReadRange: @@FSROUTE_WORK@@/tree/one: negative offset
+range negative length err fileReadRange: @@FSROUTE_WORK@@/tree/one: negative length
+range cap err lengthLimitExceeded: @@FSROUTE_WORK@@/tree/one: length exceeds 1 GiB cap
+range missing err notFound: @@FSROUTE_WORK@@/tree/missing: No such file or directory
+range device ok 3 0,0,0,
+range fifo offset err nonSeekable: @@FSROUTE_WORK@@/tree/fifo2: positive offset on non-seekable file
+range fifo ok 3 102,105,102,
+range nul ok 1 120,
+write (ok ())
+written stat ok true false 4 420 8
+written time ok true true true
+write bytes (ok ())
+wbytes ok 3 97,0,98,
+write truncates (ok ()) (ok "z")
+write missing dir (err "notFound: @@FSROUTE_WORK@@/tree/absent/file: No such file or directory")
+write nul (ok ()) (ok "n")
+exclusive (ok ()) (ok "e")
+exclusive again (err "alreadyExists: @@FSROUTE_WORK@@/tree/excl: File exists") (ok "e")
+exclusive nul (err "invalidPath: @@FSROUTE_WORK@@/tree/ex: Invalid argument")
+exclusive missing dir (err "notFound: @@FSROUTE_WORK@@/tree/absent/excl: No such file or directory")
+list empty (ok ())
+list dots (ok (".b" ".hidden" "B" "a" "c"))
+list missing (err "notFound: @@FSROUTE_WORK@@/tree/missing: No such file or directory")
+list file (err "invalidPath: @@FSROUTE_WORK@@/tree/one: Not a directory")
+create deep (ok ())
+create again (ok ())
+list made (ok ("deep"))
+create under file (err "invalidPath: @@FSROUTE_WORK@@/tree/one: Not a directory")
+create empty (err "invalidPath: : Invalid argument")
+create nul (err "invalidPath: @@FSROUTE_WORK@@/tree/nul: Invalid argument")
+remove tree (ok ()) (ok "kept")
+remove missing (err "notFound: @@FSROUTE_WORK@@/tree/missing: No such file or directory")
+remove nul (err "invalidPath: @@FSROUTE_WORK@@/tree/one: Invalid argument")
+rename over (ok ()) (ok "src") (err "notFound: @@FSROUTE_WORK@@/tree/source: No such file or directory")
+rename missing parent (err "notFound: @@FSROUTE_WORK@@/tree/one: No such file or directory")
+rename missing (err "notFound: @@FSROUTE_WORK@@/tree/missing: No such file or directory")
+rename nul (err "invalidPath: @@FSROUTE_WORK@@/tree/to: Invalid argument")
+chmod zero (ok ())
+read chmod zero (err "permissionDenied: @@FSROUTE_WORK@@/tree/locked: Permission denied")
+range chmod zero permissionDenied: @@FSROUTE_WORK@@/tree/locked: Permission denied
+stat chmod zero ok true false 1 0 8
+chmod restore (ok ()) (ok "L")
+chmod bad mode (err "fileChmod: @@FSROUTE_WORK@@/tree/locked: invalid argument")
+chmod negative (err "fileChmod: @@FSROUTE_WORK@@/tree/locked: invalid argument")
+chmod missing (err "notFound: @@FSROUTE_WORK@@/tree/missing: No such file or directory")
+chmod nul (err "fileChmod: -: invalid argument")
+fsync closed (ok ())
+fsync dir (ok ())
+fsync missing (err "notFound: @@FSROUTE_WORK@@/tree/missing: No such file or directory")
+fsync nul (err "fileFsync: -: invalid argument")
+symlink (ok ())
+symlink again (err "alreadyExists: @@FSROUTE_WORK@@/tree/link: File exists")
+symlink empty target (err "pathSymlink: @@FSROUTE_WORK@@/tree/link2: invalid argument")
+symlink nul target (err "pathSymlink: @@FSROUTE_WORK@@/tree/link2: invalid argument")
+symlink nul link (err "pathSymlink: -: invalid argument")
+symlink dangling (ok ())
+readlink (ok "one")
+readlink long 300
+readlink file (err "invalidPath: @@FSROUTE_WORK@@/tree/one: Invalid argument")
+readlink missing (err "notFound: @@FSROUTE_WORK@@/tree/missing: No such file or directory")
+readlink nul (err "fileReadlink: -: invalid argument")
+lstat link ok false false true 3 10
+stat link ok true false 1 420 8
+lstat dangling ok false false true 7 10
+stat dangling err notFound: @@FSROUTE_WORK@@/tree/dangling: No such file or directory
+lstat dir ok false true false 704 4
+lstat nul err fileLstat: -: invalid argument
+realpath link (ok "/private@@FSROUTE_WORK@@/tree/one")
+realpath dangling (err "notFound: @@FSROUTE_WORK@@/tree/dangling: No such file or directory")
+utime (ok ())
+utime stat (ok {:isFile true :isDir false :size 1 :mtime 1767225600 :mode 33188 :mtimeNs 1767225600123456789})
+utime lstat (ok {:isFile true :isDir false :isSymlink false :size 1 :mtime 1767225600 :mode 33188 :mtimeNs 1767225600123456789})
+utime negative (ok ()) -2 -1500000000
+utime through link (ok ()) 1000000000000000001
+utime missing (err "notFound: @@FSROUTE_WORK@@/tree/missing: No such file or directory")
+utime nul (err "fileUtime: -: invalid argument")
+env set (some "set")
+env empty (some "")
+env unset (none)
+env nul (none)
+home (ok "@@FSROUTE_WORK@@/home")
+value fileReadBytes ok 1 120,
+value fileReadString (ok "x")
+value realPath (ok "/private@@FSROUTE_WORK@@/tree/one")
+value fileReadlink (ok "one")
+value dirList (ok (".b" ".hidden" "B" "a" "c"))
+value fileStat ok true false 1 420 8
+value dirCreate (ok ())
+value pathRemove (ok ())
+value pathRename (ok ())
+value envGet (some "set")
+value fileWrite (ok ())
+value fileReadRange ok 1 118,
+value getHomeDir (ok "@@FSROUTE_WORK@@/home")
+value fileCreateExclusive (ok ())
+value fileChmod (ok ())
+value fileFsync (ok ())
+value fileLstat ok false false true 3 10
+value pathSymlink (ok ())
+value fileUtime (ok ()) 5000000000

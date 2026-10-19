@@ -1,7 +1,7 @@
 (module asl-html/html
   :x [Node Attr el voidEl text frag attr flag cls classes id href src alt typeAttr nameAttr valueAttr rel target titleAttr lang role aria data style
       script styleSheet document escapeText escapeAttr render renderDocument voidTag?
-      a abbr address article aside audio b bdi bdo blockquote body button canvas caption cite code colgroup dataEl datalist dd del details dfn dialog div dl dt em fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 head header hgroup html i iframe ins kbd label legend li main mapEl mark menu meter nav noscript objectEl ol optgroup option output p picture pre progress q rp rt ruby s samp search section select slot small span strong sub summary sup table tbody td template textarea tfoot th thead time title tr u ul varEl video area base br col embed hr img input link meta source track wbr svg g defs svgSymbol svgUse svgText tspan textPath linearGradient radialGradient stop clipPath svgMask svgPattern svgMarker svgFilter foreignObject svgDesc path circle ellipse line polygon polyline rect svgImage]
+      a abbr address article aside audio b bdi bdo blockquote body button canvas caption cite code colgroup dataEl datalist dd del details dfn dialog div dl dt em fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 head header hgroup html i iframe ins kbd label legend li mainEl mapEl mark menu meter nav noscript objectEl ol optgroup option output p picture pre progress q rp rt ruby s samp search section select slot small span strong sub summary sup table tbody td template textarea tfoot th thead time title tr u ul varEl video area base br col embed hr img input link meta source track wbr svg g defs svgSymbol svgUse svgText tspan textPath linearGradient radialGradient stop clipPath svgMask svgPattern svgMarker svgFilter foreignObject svgDesc path circle ellipse line polygon polyline rect svgImage]
   :i [(asl-html/css :a c)])
 
 (enum Attr (:c attrPair [(k String) (v String)] "name=value attribute, value escaped on render") (:c attrFlag [(k String)] "boolean attribute"))
@@ -240,7 +240,8 @@ fn legend attrs: (List Attr) kids: (List Node) -> Node
 fn li attrs: (List Attr) kids: (List Node) -> Node
   (elemNode "li" attrs kids)
 
-fn main attrs: (List Attr) kids: (List Node) -> Node
+; (:m :ref HLFIXB :do "renamed from main to mainEl, following the dataEl/objectEl/varEl precedent just above and below for a tag name that collides with a reserved identifier: asl-checker/src/resolve.asl#markedFn? hardcodes any function literally named main as an effect-boundary entry point (bin/asl run's main-returns-Result convention), so this library's own <main> tag helper was wrongly forcing every caller to carry a ! mark")
+fn mainEl attrs: (List Attr) kids: (List Node) -> Node
   (elemNode "main" attrs kids)
 
 fn mapEl attrs: (List Attr) kids: (List Node) -> Node

@@ -37,7 +37,7 @@ fn findRoot! dir: String depth: Int64 -> (Result String String)
           (findRoot! (stringJoin (listTake parts (- (listLength parts) 1)) "/") (- depth 1))))))
 
 fn repoRoot! -> (Result String String)
-  (mt (pathCanonicalize ".")
+  (mt (realPath ".")
     ((err _) (err "cannot canonicalize the working directory"))
     ((ok cwd) (findRoot! cwd 64)))
 
@@ -186,11 +186,11 @@ fn testOutcomes! -> Bool
       (and (stringEmpty? badText) (and (stringEmpty? badTokens) (stringEmpty? badHost)))))
 
 fn testOracleRejects! -> Bool
-  (let [(astPrinterOut (hostRun! "fn foo -> Int64\n  (let (list (a 1)) a)\n" "asl"))
+  (let [(astPrinterOut (hostRun! "fn foo -> Int64\n  (let [(a 1)] undefinedZzzSymbol)\n" "asl"))
         (badAsn (hostRun! "(a [b c)\n" "asn"))]
     (do
       (assert (mt astPrinterOut ((ok r) (and (!= r.exitCode 0) (stringContains? r.output "ERR_UNKNOWN_SYMBOL"))) ((err _) false))
-              (str "host rejects (let (list (a 1)) a): " (mt astPrinterOut ((ok r) r.output) ((err e) e))))
+              (str "host rejects (let [(a 1)] undefinedZzzSymbol): " (mt astPrinterOut ((ok r) r.output) ((err e) e))))
       (assert (mt badAsn ((ok r) (!= r.exitCode 0)) ((err _) false))
               (str "host parse rejects an unbalanced ASN frame: " (mt badAsn ((ok r) r.output) ((err e) e))))
       true))

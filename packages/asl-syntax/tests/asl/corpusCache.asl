@@ -26,9 +26,9 @@ fn cacheAt dir: String fingerprint: String -> Cache
 
 fn defaultRoots -> (List (Pair String String))
   (list (pair "asl/prelude" "")
-        (pair "asl/host/src" "")
+        (pair "asl/seed" "")
         (pair "asl/host" "build.sh")
-        (pair "asl/host/out/asl-host" "")
+        (pair "asl/host/out/libaslrt.a" "")
         (pair "asl/packages/asl-parser/src" "")
         (pair "asl/packages/asl-syntax/src" "")
         (pair "asl/packages/asl-json/src" "")

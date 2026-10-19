@@ -231,17 +231,33 @@ fn keywordTryName items: (List rd/SExpr) -> (Option String)
         (some (str (rd/sexprHead target) "?"))
         (none))))
 
+; (:m :do "a record sentinel ({ k v ... }) prints as the { k v ... } source indentParser reads back as it: spliced flat into its parent list, and a body that is one record prints bare")
+fn braceRecord? items: (List rd/SExpr) -> Bool
+  (and (>= (listLength items) 2)
+       (and (= (rd/sexprHead (optionOr (listHead items) (rd/makeAtom ""))) "{")
+            (= (rd/sexprHead (optionOr (listLast items) (rd/makeAtom ""))) "}")))
+
+fn spliceRecords items: (List rd/SExpr) -> (List rd/SExpr)
+  (listFlatMap (fn [(e rd/SExpr)] -> (List rd/SExpr)
+                 (mt e
+                   ((rd/sexprList xs) (if (braceRecord? xs) xs (list e)))
+                   (_ (list e))))
+               items)
+
 fn hostSexpr s: rd/SExpr -> rd/SExpr
   (mt s
     ((rd/sexprAtom _) s)
     ((rd/sexprList items)
      (mt (keywordTryName items)
        ((some kw) (rd/makeAtom kw))
-       ((none) (rd/makeList (hostListItems items)))))
-    ((rd/sexprVect items) (rd/makeVect (map hostSexpr items))))
+       ((none) (rd/makeList (spliceRecords (hostListItems items))))))
+    ((rd/sexprVect items) (rd/makeVect (spliceRecords (map hostSexpr items)))))
 
 fn printHostBody b: rd/SExpr -> String
-  (str "  " (rd/renderSexpr (hostSexpr b)))
+  (let [(h (hostSexpr b))]
+    (str "  " (mt h
+                ((rd/sexprList xs) (if (braceRecord? xs) (stringJoin (map rd/renderSexpr xs) " ") (rd/renderSexpr h)))
+                (_ (rd/renderSexpr h)))))
 
 fn printParam p: a/Param -> String
   (str p.name ": " p.type)

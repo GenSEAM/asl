@@ -1,4 +1,4 @@
-(module asl-forms/ops :x [StepOutcome runStep! splitLinesKeepEnds pyInt] :i [(asl-forms/kernel :a k) (asl-forms/similarity :a sm) (asl-forms/symbol :a sy) (asl-forms/delegate :a d) (asl-proc/coreProcess :a cp) (asl-forms/search :a s) (asl-forms/tools :a t) (asl-forms/gate :a g) (asl-forms/vfs :a v) (asl-html/convert :a conv) (asl-ir/types :a ty) (asl-target-js/main :a jsc) (asl-target-py :a pyc) (asl-target-go :a goc) (asl-forms/edit :a e) (asl-forms/lens :a l) (asl-forms/evalOp :a ev) (asl-forms/memOp :a m) (asl-forms/docOp :a doc)])
+(module asl-forms/ops :x [StepOutcome runStep! splitLinesKeepEnds pyInt gateContext!] :i [(asl-forms/kernel :a k) (asl-forms/similarity :a sm) (asl-forms/symbol :a sy) (asl-forms/delegate :a d) (asl-proc/coreProcess :a cp) (asl-forms/search :a s) (asl-forms/tools :a t) (asl-forms/gate :a g) (asl-forms/vfs :a v) (asl-html/convert :a conv) (asl-ir/types :a ty) (asl-target-js/main :a jsc) (asl-target-py :a pyc) (asl-target-go :a goc) (asl-forms/edit :a e) (asl-forms/lens :a l) (asl-forms/evalOp :a ev) (asl-forms/memOp :a m) (asl-forms/docOp :a doc)])
 
 
 (schema StepOutcome (:f lines (List String)) (:f errCount Int64))
@@ -56,9 +56,6 @@ fn jobStep id: Int64 kw: (Map String String) args: (List String) -> StepOutcome
         (jid (k/kwOr kw "jobId" (k/kwOr kw "id" "")))]
     (failedStep (str (stepHead id "job") " :subop \"" (k/escapeAsnVal sub) "\" :status \"rejected\" :error-code \":ERR_NOT_IMPLEMENTED\" :jobId \"" (k/escapeAsnVal jid)
                      "\" :message \"job supervision is not implemented; use (:manage :action :spawn|:poll|:tail|:kill|:list)\")")))
-
-fn runStep id: Int64 kw: (Map String String) args: (List String) -> StepOutcome
-  (rejected id "run" "ERR_NOT_IMPLEMENTED" " :message \"to run ASL code, use (:eval :code \\\"...\\\"); to run a file from the CLI, use asl run FILE\"")
 
 fn consultStep id: Int64 kw: (Map String String) args: (List String) -> StepOutcome
   (let [(prompt (k/kwOr kw "prompt" (optionOr (listHead args) "")))
@@ -299,24 +296,19 @@ fn compiled! kind: String path: String source: String -> (Result String (List St
         ((err ds) (err (map (fn [(d ty/IrDiag)] -> String (str d.code ": " d.message)) ds)))
         ((ok both) (ok (if (= kind "ts") (pairSecond both) (pairFirst both)))))))
 
-fn ! hostChecked! root: String kind: String path: String -> (Result Unit (List String))
+fn ! aslChecked! root: String kind: String path: String -> (Result Unit (List String))
   (if (listContains? (conv/kinds) kind)
     (ok ())
-    (let [(given (envOr! "ASL_HOST"))
-          (host (if (stringEmpty? given) (k/aslPath! (toolchainRoot! root) "host/out/asl-host") given))
-          (r (processRun (str (shellQuoted host) " check " (shellQuoted path) " 2>&1")))]
-      (if (= r.exitCode 0)
+    (let [(h (g/nativeCheck! root path))]
+      (if (= h.code 0)
         (ok ())
-        (err (filter (fn [(l String)] -> Bool (stringContains? l "ERR_")) (stringSplit r.stdout "\n"))))))
-
-fn shellQuoted s: String -> String
-  (str "'" (stringReplace s "'" "'\\''") "'")
+        (err (filter (fn [(l String)] -> Bool (stringContains? l "ERR_")) (stringSplit (str h.errText "\n" h.out) "\n"))))))
 
 fn targetConverted! root: String id: Int64 tname: String kw: (Map String String) args: (List String) -> (Result String StepOutcome)
   (mt (targetSource! root kw args)
     ((err e) (err (rejected id "target" "ERR_MISSING_ARG" (msgTail e))))
     ((ok found)
-      (mt (mt (hostChecked! root tname (pairFirst found)) ((err es) (err es)) ((ok _) (compiled! tname (pairFirst found) (pairSecond found))))
+      (mt (mt (aslChecked! root tname (pairFirst found)) ((err es) (err es)) ((ok _) (compiled! tname (pairFirst found) (pairSecond found))))
         ((ok text) (ok text))
         ((err es) (err (rejected id "target" "ERR_TARGET" (str " :target \"" tname "\" :errors (" (stringJoin (map (fn [(e String)] -> String (str "\"" (k/escapeAsnVal e) "\"")) es) " ") ")")))))))
 
@@ -433,8 +425,7 @@ fn knowContext! root: String -> s/KnowCtx
 fn gateContext! root: String -> g/GateEnv
   (let [(toolRoot (toolchainRoot! root))
         (bin (binDirectory! root))
-        (given (envOr! "ASL_HOST"))
-        (host (if (stringEmpty? given) (k/aslPath! toolRoot "host/out/asl-host") given))
+        (host (k/joinPath bin "asl"))
         (vs (v/vfsAt root (v/vfsRoot! root (envOr! "ASL_VFS_DIR") (envOr! "HOME")) (envOr! "ASL_SESSION")))
         (staged (stagedCheckFiles! vs (v/stagedPaths! vs)))]
     (g/GateEnv :root root :rootDir toolRoot :binDir bin :host host :staged staged))
@@ -505,7 +496,6 @@ fn runStepHeld! root: String id: Int64 op: String kw: (Map String String) args: 
     ((= op "ping") (done (str (stepHead id "ping") " :status \"ok\" :pong true)")))
     ((= op "read") (readStep! root id kw args))
     ((= op "tree") (treeStep! root id kw args))
-    ((= op "run") (runStep id kw args))
     ((= op "job") (jobStep id kw args))
     ((= op "consult") (consultStep id kw args))
     ((= op "pack") (packStep! root id kw args))

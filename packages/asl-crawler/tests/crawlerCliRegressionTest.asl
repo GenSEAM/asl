@@ -3,7 +3,7 @@
   :i [])
 
 fn ! runTests -> Bool
-  (let [(host (optionOr (envGet "ASL_HOST") "asl/host/out/asl-host"))
+  (let [(host (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl")))
         (t (stringFromInt64 (monotonicNs)))
         (stubDir (str "/tmp/crawlStubs_" t))
         (_ (dirCreate stubDir))

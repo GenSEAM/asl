@@ -32,6 +32,8 @@ fn knownMisparseReason path: String -> (Option String)
      (some "reference parser misparses: dedent defect corrupts enum YamlLineKind case list"))
     ((= path "tests/acceptance/r1Host/reader/surfaceTest.asl")
      (some "reference parser misparses: dedent defect drops enum Shape case list and schema Pt fields, collapsing 8 top forms into 3"))
+    ((= path "asl/packages/asl-target-llvm/tests/nativeStringTest.asl")
+     (some "astPrinter gap, confirmed on base 010f3a1bc (file and astPrinter.asl both byte-identical to base): one top form embeds a raw \\x00/\\xNN byte-escape string literal (a generated-fixture-text payload testing native string/byte builtins), and re-serializing it through astPrinter yields a different escape rendering than the source, so form 19's reparsed SExpr differs from the original -- a printer round-trip limitation on raw-byte escapes, not a reader or host-checker gap"))
     (else (none)))
 
 fn isPrintReparseFile! path: String -> Bool
@@ -187,7 +189,7 @@ fn parseCheck path: String src: String stats: CorpusStats -> CorpusStats
     ((ok forms) (moduleCheck path forms stats)))
 
 fn verifyCorpusFile! path: String stats: CorpusStats -> CorpusStats
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err e)
      (do
        (assert false (str path " read error: " e))

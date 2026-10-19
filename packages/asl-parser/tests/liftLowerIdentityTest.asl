@@ -39,6 +39,26 @@ fn sexprEquivalent? a: rd/SExpr b: rd/SExpr -> Bool
                 true (zip va vb))))
        (_ false))))
 
+; (:m :do "indentParser reads a record as the ({ k v ... }) list asl-ir/lower builds, while lower splices a record body element as flat { k v ... } source tokens that indentParser reads back as that same list; both sides compare with records spliced flat")
+fn braceList? xs: (List rd/SExpr) -> Bool
+  (and (>= (listLength xs) 2)
+       (and (= (rd/sexprHead (optionOr (listHead xs) (rd/makeAtom ""))) "{")
+            (= (rd/sexprHead (optionOr (listLast xs) (rd/makeAtom ""))) "}")))
+
+fn flatItems items: (List rd/SExpr) -> (List rd/SExpr)
+  (listFlatMap (fn [(e rd/SExpr)] -> (List rd/SExpr)
+                 (mt e
+                   ((rd/sexprList xs) (if (braceList? xs) (flatItems xs) (list (rd/makeList (flatItems xs)))))
+                   ((rd/sexprVect xs) (list (rd/makeVect (flatItems xs))))
+                   ((rd/sexprAtom _) (list e))))
+               items)
+
+fn flatBraces s: rd/SExpr -> rd/SExpr
+  (mt s
+    ((rd/sexprList xs) (rd/makeList (flatItems xs)))
+    ((rd/sexprVect xs) (rd/makeVect (flatItems xs)))
+    ((rd/sexprAtom _) s))
+
 fn checkBodyForms name: String body: (List rd/SExpr) -> (Option String)
   (fold (fn [(errOpt (Option String)) (b rd/SExpr)] -> (Option String)
           (mt errOpt
@@ -46,7 +66,7 @@ fn checkBodyForms name: String body: (List rd/SExpr) -> (Option String)
             ((none)
              (let [(orig b)
                    (rt (ac/lower (ac/lift b)))]
-               (if (not (sexprEquivalent? orig rt))
+               (if (not (sexprEquivalent? (flatBraces orig) (flatBraces rt)))
                  (some (str "fn " name " diff:\n  ORIG: " (rd/renderSexpr orig) "\n  LIFT: " (rd/renderSexpr rt)))
                  (none))))))
         (none) body)
@@ -82,7 +102,7 @@ fn verifyCorpusFile! cache: cc/Cache path: String -> (Pair Bool Bool)
   (mt (lib/knownMisparseReason path)
     ((some _) (pair true false))
     ((none)
-     (mt (fileRead path)
+     (mt (fileReadString path)
        ((err e)
         (do
           (assert false (str path " read error: " e))
@@ -135,7 +155,7 @@ fn envInt! key: String defaultVal: Int64 -> Int64
 
 fn testTailrecTestRoundtrip! -> Bool
   (let [(path "tests/host/tailrecTest.asl")]
-    (mt (fileRead path)
+    (mt (fileReadString path)
       ((err e) (do (assert false (str path " read error: " e)) false))
       ((ok src) (verifySource! (cc/cacheFromEnv!) path src))))
 

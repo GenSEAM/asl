@@ -118,8 +118,9 @@ fn ! runTests -> Bool
         (host (hostExe!))
         (server (resultOr (realPath "asl/packages/asl-gateway/src/server.asl") ""))
         (driver (resultOr (realPath "asl/agentLoop/tests/gatewayLinkDriver.asl") ""))
+        (nativeCliCache (str (optionOr (envGet "ASL_NATIVE_CLI_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli"))))
         (common (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" temp) (str "ASL_GATEWAY_ROOT=" temp)
-                      (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") "FIXA_KEY=aKey" (str "TMPDIR=" temp)))
+                      (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") "FIXA_KEY=aKey" (str "TMPDIR=" temp) (str "ASL_NATIVE_CLI_CACHE=" nativeCliCache)))
         (gwPid (spawnSh! (str "exec " host " run " server " serve --port 0 --upstream " base "/v1 --ready " temp "/ready 2>" temp "/gateway.err") common))
         (gwPort (if (> gwPid 0) (waitPort! (str temp "/ready") 500) 0))
         (url (str "http://127.0.0.1:" (stringFromInt64 gwPort) "/v1/chat/completions"))
@@ -129,7 +130,7 @@ fn ! runTests -> Bool
         (linkPid (spawnSh! (str "exec " host " run " driver " " temp "/work >" temp "/link.out 2>" temp "/link.err") common))
         (linkRun (pumpUntilExit! (pairFirst httpRun) linkPid (+ (nowMs!) 60000)))
         (barePid (spawnSh! (str "exec " host " run " driver " " temp "/work >" temp "/bare.out 2>" temp "/bare.err")
-                   (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" bare) (str "TMPDIR=" temp))))
+                   (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" bare) (str "TMPDIR=" temp) (str "ASL_NATIVE_CLI_CACHE=" nativeCliCache))))
         (bareRun (pumpUntilExit! (pairFirst linkRun) barePid (+ (nowMs!) 60000)))
         (closed (do (fdClose listener) true))
         (seen (pairFirst bareRun).seen)
@@ -158,4 +159,4 @@ fn ! runTests -> Bool
       (and gwKilled (and closed removed))))
 
 fn ! hostExe! -> String
-  (optionOr (envGet "ASL_HOST") (resultOr (realPath "asl/host/out/asl-host") "asl/host/out/asl-host"))
+  (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl"))

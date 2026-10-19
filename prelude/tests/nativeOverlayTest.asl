@@ -3,7 +3,7 @@
   :i [(asl-ir/link :a lk) (asl-ir/types :a irTy) (asl-ir/verify :a vfy) (asl-target-llvm :a llvm)])
 
 fn host -> String
-  "asl/host/out/asl-host"
+  "bin/asl"
 
 fn fixtureSrc -> String
   (stringJoin
@@ -199,7 +199,7 @@ fn ! testRequestedBuiltin dir: String -> Bool
       true))
 
 fn ! testLateBuiltin dir: String -> Bool
-  (let [(real (fileRead "asl/prelude/prelude.asl"))
+  (let [(real (fileReadString "asl/prelude/prelude.asl"))
         (realText (mt real ((ok t) t) ((err _) "")))
         (customText (stringReplace realText "fn floatInf -> Float64\n  (/ 1.0 0.0)" "fn floatInf -> Float64\n  (do (bytesSha256 (bytesAlloc 0)) (/ 1.0 0.0))"))
         (preludeFile (str dir "/latePrelude.asl"))
@@ -217,7 +217,7 @@ fn ! testLateBuiltin dir: String -> Bool
       true))
 
 fn ! testCollidingDefinitionName dir: String -> Bool
-  (let [(real (fileRead "asl/prelude/prelude.asl"))
+  (let [(real (fileReadString "asl/prelude/prelude.asl"))
         (realText (mt real ((ok t) t) ((err _) "")))
         (customText (str realText "\nfn mask32 x: Int64 -> Int64\n  (+ x 1)\n\nfn ! triggerMask32 -> Int64\n  (mask32 7)\n"))
         (preludeFile (str dir "/collidingPrelude.asl"))
@@ -263,10 +263,10 @@ fn ! testOverlayErrors dir: String -> Bool
           true))))
 
 fn ! runTests -> Bool
-  (let [(made (processRun "mktemp -d"))
-        (dir (stringReplace made.stdout "\n" ""))]
+  (let [(dir (str "scratch/nativeOverlayTest." (stringFromInt64 (monotonicNs))))
+        (made (dirCreate dir))]
     (do
-      (assert (= made.exitCode 0) "mktemp -d makes a work directory")
+      (assert (ok? made) "dirCreate makes a work directory inside the workspace root")
       (testOverlayLinked dir)
       (testFixtureParity dir)
       (testHugeInput dir)

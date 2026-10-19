@@ -5,18 +5,24 @@
       (asl-target-llvm :a llvm)
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/ssa :a ssa)
-      (asl-target-llvm/parRoute :a pr)
-      (asl-target-llvm/arrayRoute :a ar)
-      (asl-target-llvm/sysRoute :a rt)])
+      (asl-target-llvm/parRoute :a pr)])
 
-fn host -> String
-  "asl/host/out/asl-host"
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): checkParity used to run the leftover host binary live (`asl-host run <src> <args>`) and diff its full stdout/stderr/exitCode against native's own run, for 20 distinct (label, env, args) combinations across testCases/testCodec/testFail/testArity/testLiteral. All 20 are captured once via the leftover host binary at ~/projects/asex/asl/host/out/asl-host, read-only, outside this worktree, into the recordedRaw cond table below, keyed by the same `label` string each call site already passes; the capturing run's own mktemp work directory (embedded in 14 of the parFail stderr captures via the host CLI's own 'FAIL <path>: <message> (after N asserts)' failure-report wrapper, since hostError parses that prefix using the replay-time `src` path) is normalized to the placeholder @@PARWORK@@ and substituted back with (dirOf src) at replay time; neither stdout leaks the work path in any of the 20 captures. testWire (the only genuinely-blocked piece: its wireCheck.c harness needs #include \"parallel.c\" and links against asl/host/out/libaslhost.a, both deleted by HL-DELETE with no replacement, the same gap already frozen for gcAslTest/gcStressTest/tailCallSpillGcTest) is removed entirely, along with its now-dead wireStandIn/wireDumpFn/wireSource/wireCheckSource helpers and the now-unused arrayRoute/sysRoute imports. testFail's trap-fallback block used to rely on native AND the live host both appending into the same trapFile (ASL_PAR_FORCE_FALLBACK=1 runs every element in one process, so each side's 6 pid lines were expected to share one pid); since the host is now a recorded value that never touches the filesystem, only native's own 6 entries land in trapFile, so the host-side self-consistency half of that check is dropped and the count assertion changes from 12 to 6")
 
 fn clang -> String
   "/usr/bin/clang -Wno-override-module"
 
 fn lib -> String
   "asl/host/out/libaslrt.a"
+
+(schema Recorded
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
+
+fn ! dirOf path: String -> String
+  (let [(parts (stringSplit path "/"))]
+    (stringJoin (listTake parts (- (listLength parts) 1)) "/"))
 
 fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)
@@ -214,7 +220,7 @@ fn aritySource -> String
     "      (ok 0))"))
 
 fn ! lowered name: String src: String -> (Option ty/SsaModule)
-  (let [(preludeText (resultOr (fileRead (lk/preludePath)) ""))]
+  (let [(preludeText (resultOr (fileReadString (lk/preludePath)) ""))]
     (do (assert (not (stringEmpty? preludeText)) (str (lk/preludePath) " is readable"))
         (mt (lk/lowerSourceWith src preludeText)
           ((err ds) (do (assert false (str name ": lowerSourceWith: " (diagText ds))) (none)))
@@ -275,16 +281,47 @@ fn pidsOf text: String -> (List String)
   (map (fn [(l String)] -> String (optionOr (stringSlice l 4 (stringLength l)) ""))
        (filter (fn [(l String)] -> Bool (stringStartsWith? l "pid ")) (stringSplit text "\n")))
 
-fn ! checkParity label: String env: String bin: String src: String args: String -> (Pair ProcessOutput ProcessOutput)
+fn ! recordedVm key: String work: String -> Recorded
+  (let [(raw (recordedRaw key))]
+    (Recorded :exitCode (pairFirst raw)
+      :stdout (stringReplace (pairFirst (pairSecond raw)) "@@PARWORK@@" work)
+      :stderr (stringReplace (pairSecond (pairSecond raw)) "@@PARWORK@@" work)))
+
+fn ! recordedRaw key: String -> (Pair Int64 (Pair String String))
+  (cond
+    ((= key "parCases") (pair 0 (pair "map 0 1 0 true () clean true\nmap 0 2 0 true () clean true\nmap 0 64 0 true () clean true\nmap 1 1 1 true (0) clean true\nmap 1 2 1 true (0) clean true\nmap 1 64 1 true (0) clean true\nmap 7 1 7 true (0 1 4 9 16 25 36) clean true\nmap 7 2 7 true (0 1 4 9 16 25 36) clean true\nmap 7 64 7 true (0 1 4 9 16 25 36) clean true\nmap 10000 1 10000 true  clean true\nmap 10000 2 10000 true  clean true\nmap 10000 64 10000 true  clean true\nfold 0 1 0  clean true\nfold 0 2 0  clean true\nfold 0 64 0  clean true\nfold 1 1 2 .0 clean true\nfold 1 2 2 .0 clean true\nfold 1 64 2 .0 clean true\nfold 7 1 14 .0.1.2.3.4.5.6 clean true\nfold 7 2 15 .0.1.2|.3.4.5.6 clean true\nfold 7 64 20 .0|.1|.2|.3|.4|.5|.6 clean true\nfold 10000 1 48890 (some \".0.1.2.3.4.5.6.7.8.9.10.11.12.13.14.15.1\") clean true\nfold 10000 2 48891 (some \".0.1.2.3.4.5.6.7.8.9.10.11.12.13.14.15.1\") clean true\nfold 10000 64 48953 (some \".0.1.2.3.4.5.6.7.8.9.10.11.12.13.14.15.1\") clean true\ninParent false\n" "")))
+    ((= key "parCases fallback") (pair 0 (pair "map 0 1 0 true () clean true\nmap 0 2 0 true () clean true\nmap 0 64 0 true () clean true\nmap 1 1 1 true (0) clean true\nmap 1 2 1 true (0) clean true\nmap 1 64 1 true (0) clean true\nmap 7 1 7 true (0 1 4 9 16 25 36) clean true\nmap 7 2 7 true (0 1 4 9 16 25 36) clean true\nmap 7 64 7 true (0 1 4 9 16 25 36) clean true\nmap 10000 1 10000 true  clean true\nmap 10000 2 10000 true  clean true\nmap 10000 64 10000 true  clean true\nfold 0 1 0  clean true\nfold 0 2 0  clean true\nfold 0 64 0  clean true\nfold 1 1 2 .0 clean true\nfold 1 2 2 .0 clean true\nfold 1 64 2 .0 clean true\nfold 7 1 14 .0.1.2.3.4.5.6 clean true\nfold 7 2 14 .0.1.2.3.4.5.6 clean true\nfold 7 64 14 .0.1.2.3.4.5.6 clean true\nfold 10000 1 48890 (some \".0.1.2.3.4.5.6.7.8.9.10.11.12.13.14.15.1\") clean true\nfold 10000 2 48890 (some \".0.1.2.3.4.5.6.7.8.9.10.11.12.13.14.15.1\") clean true\nfold 10000 64 48890 (some \".0.1.2.3.4.5.6.7.8.9.10.11.12.13.14.15.1\") clean true\ninParent true\n" "")))
+    ((= key "parCodec") (pair 0 (pair "record true ({:name \"rec0\" :inner {:kw :inner :xs (1.5 -0.0) :deep {:s \"\xc3\xbc\"}} :n 0} {:name \"rec1\" :inner {:kw :inner :xs (1.5 -2.25) :deep {:s \"\xc3\xbc\"}} :n -1} {:name \"rec2\" :inner {:kw :inner :xs (1.5 -4.5) :deep {:s \"\xc3\xbc\"}} :n -2})\nctor true ((none) (some (ok (1 2 3))) (some (err \"bad\")))\nkeyword true (:alpha :beta :gamma)\ntext true (\"h\xc3\xa9llo w\xc3\xb6rld \xe6\xbc\xa2\xe5\xad\x97 \xf0\x9d\x84\x9e 0\" \"h\xc3\xa9llo w\xc3\xb6rld \xe6\xbc\xa2\xe5\xad\x97 \xf0\x9d\x84\x9e 1\" \"h\xc3\xa9llo w\xc3\xb6rld \xe6\xbc\xa2\xe5\xad\x97 \xf0\x9d\x84\x9e 2\")\nbytes true (\"AP8A\" \"AP8BAA==\" \"AP8CAAA=\")\nf64 true ((0.0 1.25) (-1.25 0.0 1.25) (-2.5 -1.25 0.0 1.25))\ni64 true ((-9223372036854775807 1000000007) (-9223372036854775807 1000000007 2000000014) (-9223372036854775807 1000000007 2000000014 3000000021))\ni8 true ((-128 -127) (-128 -127 -126) (-128 -127 -126 -125))\nscalars true ((0 9223372036854775807 -9223372036854775807 0) (1 9223372036854775807 -9223372036854775807 0) (2 9223372036854775807 -9223372036854775807 0))\nnegzero true ((0 0 0 0 0 0 0 128) (0 0 0 0 0 0 0 128) (0 0 0 0 0 0 0 128))\nnan true ((0 0 0 0 0 0 248 127) (1 0 0 0 0 0 248 127) (2 0 0 0 0 0 248 127))\nmisc true (((pair false \"\") (pair true \"()\")) ((pair true \"\") (pair true \"()\")) ((pair false \"\") (pair true \"()\")))\nunit true (() () ())\nnested true ((((0)) ()) (((1)) ()) (((2)) ()))\n" "")))
+    ((= key "parFail trap") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_WORKER_TRAP: parMap element 5: ERR_DIV_ZERO: division by zero (after 0 asserts)\n")))
+    ((= key "parFail foldTrap") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_WORKER_TRAP: ERR_DIV_ZERO: division by zero (after 0 asserts)\n")))
+    ((= key "parFail longTrap") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_WORKER_TRAP: parMap element 5: ERR_ARG: yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy (after 0 asserts)\n")))
+    ((= key "parFail foldLong") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_WORKER_TRAP: ERR_ARG: yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy (after 0 asserts)\n")))
+    ((= key "parFail kill") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_WORKER_TRAP: worker 1 killed by signal 9 (after 0 asserts)\n")))
+    ((= key "parFail stall") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_WORKER_TRAP: parMap element 0: ERR_DIV_ZERO: division by zero (after 0 asserts)\n")))
+    ((= key "parFail unserializable") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_WORKER_TRAP: parMap element 2: ERR_NOT_SERIALIZABLE: cannot serialize parMap result across worker process (after 0 asserts)\n")))
+    ((= key "parFail childBig") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_WORKER_TRAP: parMap element 1: ERR_SERIALIZE_SIZE: parMap worker result exceeds serialization size limit (after 0 asserts)\n")))
+    ((= key "parFail parentBig") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_SERIALIZE_SIZE: worker 1 response exceeds serialization size limit (after 0 asserts)\n")))
+    ((= key "parFail fitBig") (pair 0 (pair "start\n(1 67108846)\n" "")))
+    ((= key "parFail big") (pair 0 (pair "start\n(0 16777216 33554432)\n" "")))
+    ((= key "parFail slots") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_ARG: parMap slots must be positive, got 0 (after 0 asserts)\n")))
+    ((= key "parFail trap fallback") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_WORKER_TRAP: parMap element 5: ERR_DIV_ZERO: division by zero (after 0 asserts)\n")))
+    ((= key "parFail foldTrap fallback") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_DIV_ZERO: division by zero (after 0 asserts)\n")))
+    ((= key "parArity") (pair 0 (pair "map2 (0 3 6 9 12 15 18 21 24 27 30 33 36 39 42 45 48 51 54 57)\nfold4 499570\nfold4 empty 7\n" "")))
+    ((= key "parLiteral") (pair 0 (pair "declare ptr @aslParWord0(%Val)\ndeclare i32 @setjmp(ptr)\n30\nunrouted\n" "")))
+    ((= key "parLiteralRouted") (pair 0 (pair "declare ptr @aslParWord0(%Val)\ndeclare i32 @setjmp(ptr)\n30\n(\"@aslParWord0(1\" \"@aslParWord0(2\")\n" "")))
+    (else (pair -1 (pair "" (str "no recorded case: " key)))))
+
+
+fn ! checkParity label: String env: String bin: String src: String args: String -> (Pair ProcessOutput Recorded)
   (let [(native (sh (str env bin " " args)))
-        (vm (sh (str env (host) " run " src " " args)))]
-    (do (assert (= native.stdout vm.stdout) (str label ": native stdout equals asl-host run's; native=" native.stdout " vm=" vm.stdout " vm stderr=" (otherLines vm.stderr)))
-        (assert (= native.exitCode vm.exitCode) (str label ": native exit " native.exitCode " equals asl-host run's " vm.exitCode "; native stderr " (otherLines native.stderr)))
-        (assert (= (otherLines native.stderr) (hostError vm.stderr src)) (str label ": native stderr '" (otherLines native.stderr) "' is asl-host run's error '" (hostError vm.stderr src) "'"))
+        (vm (recordedVm label (dirOf src)))]
+    (do (assert (= native.stdout vm.stdout) (str label ": native stdout equals the recorded asl-host run's; native=" native.stdout " vm=" vm.stdout " vm stderr=" (otherLines vm.stderr)))
+        (assert (= native.exitCode vm.exitCode) (str label ": native exit " native.exitCode " equals the recorded asl-host run's " vm.exitCode "; native stderr " (otherLines native.stderr)))
+        (assert (= (otherLines native.stderr) (hostError vm.stderr src)) (str label ": native stderr '" (otherLines native.stderr) "' is the recorded asl-host run's error '" (hostError vm.stderr src) "'"))
         (pair native vm)))
 
 fn ! pidLines path: String -> (List String)
-  (pidsOf (resultOr (fileRead path) ""))
+  (pidsOf (resultOr (fileReadString path) ""))
 
 fn ! checkGone label: String pids: (List String) -> Bool
   (let [(alive (filter (fn [(p String)] -> Bool (= (sh (str "kill -0 " p " 2>/dev/null")).exitCode 0)) pids))]
@@ -362,14 +399,11 @@ fn ! testFail work: String -> Bool
         (let [(trapFile (str work "/trapFallback.pids"))
               (trap (checkParity "parFail trap fallback" "ASL_PAR_FORCE_FALLBACK=1 " bin src (str "trap " trapFile)))
               (fold (checkParity "parFail foldTrap fallback" "ASL_PAR_FORCE_FALLBACK=1 " bin src (str "foldTrap " work "/foldFallback.pids")))
-              (pids (pidLines trapFile))
-              (native (listTake pids 6))
-              (vm (listDrop pids 6))]
+              (nativePids (pidLines trapFile))]
           (do (assert (= (otherLines (pairFirst trap).stderr) "ERR_WORKER_TRAP: parMap element 5: ERR_DIV_ZERO: division by zero") (str "parFail trap fallback: " (pairFirst trap).stderr))
               (assert (= (otherLines (pairFirst fold).stderr) "ERR_DIV_ZERO: division by zero") (str "parFail foldTrap fallback: " (pairFirst fold).stderr))
-              (assert (= (listLength pids) 12) (str "parFail trap fallback: each run reaches elements 0 to 5: " pids))
-              (assert (listAll? (fn [(p String)] -> Bool (= (some p) (listHead native))) native) (str "parFail trap fallback: the native run maps every element in the one process: " native))
-              (assert (listAll? (fn [(p String)] -> Bool (= (some p) (listHead vm))) vm) (str "parFail trap fallback: asl-host maps every element in the one process: " vm))
+              (assert (= (listLength nativePids) 6) (str "parFail trap fallback: the native run reaches elements 0 to 5 in the one fallback process: " nativePids))
+              (assert (listAll? (fn [(p String)] -> Bool (= (some p) (listHead nativePids))) nativePids) (str "parFail trap fallback: the native run maps every element in the one process: " nativePids))
               true))))
 
 fn ! testArity work: String -> Bool
@@ -434,154 +468,6 @@ fn ! testLiteral work: String -> Bool
            (list false true))
       true)
 
-fn wireStandIn -> String
-  "wireDump"
-
-fn wireDumpFn f: ty/SsaFunction -> ty/SsaFunction
-  (let [(v (mt (listHead f.params) ((some p) p.name) ((none) "")))
-        (c (fn [(d String) (n Int64)] -> ty/SsaInstr (ty/ssaInstr d (ty/tyI64) (ty/opConst (ty/constInt n)))))
-        (p (fn [(d String) (t ty/SsaTy) (name String) (args (List String))] -> ty/SsaInstr (ty/ssaInstr d t (ty/opPrim name args))))
-        (call (fn [(d String) (t ty/SsaTy) (name String) (args (List String))] -> ty/SsaInstr (ty/ssaInstr d t (ty/opCall name args))))]
-    (ty/ssaFunction f.name f.captures f.params f.retTy
-      (list (ty/ssaBlock "entry" (list)
-              (list (c "one" 1) (c "size" 48) (call "sb" (ty/tyPtr) "calloc" (list "one" "size")) (p "sbI" (ty/tyI64) "rawPtrToInt" (list "sb")) (c "z" 0)
-                    (call "w" (ty/tyI64) "asl-target-llvm/parallel.serVal" (list "sbI" v "z"))
-                    (c "o0" 0) (p "data" (ty/tyI64) "rawLoadI64" (list "sb" "o0")) (c "o8" 8) (p "len" (ty/tyI64) "rawLoadI64" (list "sb" "o8"))
-                    (c "o24" 24) (p "err" (ty/tyI64) "rawLoadI64" (list "sb" "o24")) (c "o32" 32) (p "s1" (ty/tyI1) "rawStoreI64" (list "sb" "o32" "err"))
-                    (c "o40" 40) (p "s2" (ty/tyI1) "rawStoreI64" (list "sb" "o40" "len")) (p "hdrI" (ty/tyI64) "rawAddI64" (list "sbI" "o32")) (p "hdr" (ty/tyPtr) "rawIntToPtr" (list "hdrI"))
-                    (ty/ssaInstr "fd" (ty/tyI32) (ty/opConst (ty/constInt 1))) (c "sixteen" 16) (call "wh" (ty/tyI64) "write" (list "fd" "hdr" "sixteen"))
-                    (p "dataP" (ty/tyPtr) "rawIntToPtr" (list "data")) (call "wd" (ty/tyI64) "write" (list "fd" "dataP" "len"))
-                    (call "f1" (ty/tyI64) "free" (list "dataP")) (call "f2" (ty/tyI64) "free" (list "sb")) (ty/ssaInstr "u" (ty/tyVal) (ty/opConst (ty/constUnit))))
-              (ty/termReturn "u")))))
-
-fn ! testWire work: String -> Bool
-  (let [(preludeText (resultOr (fileRead (lk/preludePath)) ""))
-        (_ (assert (ok? (fileWrite (str work "/wireCheck.c") (wireCheckSource))) "wireCheck.c written"))
-        (cc (sh (str "/usr/bin/cc -std=c11 -D_DEFAULT_SOURCE -D_DARWIN_C_SOURCE -Iasl/host/src " work "/wireCheck.c " (lib) " asl/host/out/libaslhost.a -lm -o " work "/wireCheck")))
-        (_ (assert (= cc.exitCode 0) (str "wireCheck compiles over parallel.c: " cc.stderr)))]
-    (mt (mt (lk/lowerSourceWith (wireSource) preludeText) ((err ds) (err ds)) ((ok m0) (ar/routeModule m0)))
-      ((err ds) (do (assert false (str "parWire: lowerSourceWith and arrayRoute: " (diagText ds))) false))
-      ((ok arrays)
-        (mt (pr/routeModule (hostFacts) arrays.result)
-          ((err ds) (do (assert false (str "parWire: routeModule: " (diagText ds))) false))
-          ((ok r)
-            (let [(routed r.result)
-                  (_ (assert (listAny? (fn [(f ty/SsaFunction)] -> Bool (= f.name (wireStandIn))) routed.functions) "parWire: the wireDump stand-in is lowered"))
-                  (withDump (ty/ssaModule routed.name routed.strings routed.types routed.records routed.externs routed.globals
-                              (map (fn [(f ty/SsaFunction)] -> ty/SsaFunction (if (= f.name (wireStandIn)) (wireDumpFn f) f)) routed.functions)))
-                  (text (rt/internalize (ar/finishText (ar/routedNames? arrays.internal) (pr/finishText (pr/routedNames? r.internal) (ssa/emitLlvmProgram withDump "main"))) (listAppend arrays.internal r.internal)))]
-              (mt text
-                ((err ds) (do (assert false (str "parWire: emit: " (diagText ds))) false))
-                ((ok ll)
-                  (let [(_ (assert (ok? (fileWrite (str work "/parWire.ll") ll)) "parWire.ll written"))
-                        (linked (linkBin work "parWire"))
-                        (ran (sh (str work "/parWire > " work "/parWire.frames")))
-                        (checked (sh (str work "/wireCheck < " work "/parWire.frames")))]
-                    (do (assert linked "parWire links")
-                        (assert (= ran.exitCode 0) (str "parWire runs: " ran.stderr))
-                        (assert (= checked.exitCode 0) (str "parallel.c takes and re-encodes every native frame byte for byte: " checked.stdout checked.stderr))
-                        (assert (= checked.stdout "frames 24 equal\n") (str "wireCheck checks all 24 frames: " checked.stdout))
-                        true))))))))))
-
-fn wireSource -> String
-  (lines (list
-    "(module parWire :x [main] :i [])"
-    ""
-    "schema Deep"
-    "  s: String"
-    ""
-    "schema Inner"
-    "  kw: Keyword"
-    "  xs: (List Float64)"
-    "  deep: Deep"
-    ""
-    "schema Outer"
-    "  name: String"
-    "  inner: Inner"
-    "  n: Int64"
-    ""
-    "fn nanWithPayload k: Int64 -> Float64"
-    "  (let [(b (bytesAlloc 8))]"
-    "    (do (bytesSet b 0 k) (bytesSet b 6 248) (bytesSet b 7 127)"
-    "        (bytesGetFloat64 b 0)))"
-    ""
-    "fn bytesOf i: Int64 -> Bytes"
-    "  (let [(b (bytesAlloc (+ i 3)))]"
-    "    (do (bytesSet b 0 0) (bytesSet b 1 255) (bytesSet b 2 i) b))"
-    ""
-    "fn ! main args: (List String) -> (Result Int64 String)"
-    "  (let [(n (listLength (parMap (fn [(x Int64)] -> Int64 (* x x)) (list 1 2 3) 2)))]"
-    "    (do (wireDump n)"
-    "        (wireDump (Outer :name \"rec\" :inner (Inner :kw :inner :xs (list 1.5 -2.25) :deep (Deep :s \"ü\")) :n -7))"
-    "        (wireDump (list (Deep :s \"a\") (Deep :s \"b\")))"
-    "        (wireDump (none))"
-    "        (wireDump (some (ok (list 1 2 3))))"
-    "        (wireDump (some (err \"bad\")))"
-    "        (wireDump :alpha)"
-    "        (wireDump (list :alpha :beta :alpha))"
-    "        (wireDump \"héllo wörld 漢字 𝄞\")"
-    "        (wireDump \"\")"
-    "        (wireDump (bytesOf 2))"
-    "        (wireDump (f64ArrayGenerate 3 (fn [(j Int64)] -> Float64 (* 1.25 (int64ToFloat64 j)))))"
-    "        (wireDump (i64ArrayGenerate 3 (fn [(j Int64)] -> Int64 (if (= j 0) -9223372036854775807 (* j 1000000007)))))"
-    "        (wireDump (i8ArrayGenerate 3 (fn [(j Int64)] -> Int64 (- j 128))))"
-    "        (wireDump (list 9223372036854775807 -9223372036854775807 0))"
-    "        (wireDump -0.0)"
-    "        (wireDump (nanWithPayload 3))"
-    "        (wireDump 1.5)"
-    "        (wireDump true)"
-    "        (wireDump false)"
-    "        (wireDump ())"
-    "        (wireDump (list))"
-    "        (wireDump (list (list (list 1)) (list)))"
-    "        (wireDump (pair \"k\" 2))"
-    "        (ok 0)))"
-    ""
-    "fn ! wireDump v: A -> B"
-    "  (err \"unlowered\")"))
-
-fn wireCheckSource -> String
-  (lines (list
-    "#include <stdint.h>"
-    "#include <stdio.h>"
-    "#include <stdlib.h>"
-    "#include <string.h>"
-    "#include \"parallel.c\""
-    ""
-    "void asl_rt_init(void);"
-    ""
-    "static int readFull(void *out, size_t n) { return fread(out, 1, n, stdin) == n; }"
-    ""
-    "int main(void) {"
-    "  asl_rt_init();"
-    "  int64_t count = 0;"
-    "  for (;;) {"
-    "    int64_t err = 0, len = 0;"
-    "    if (fread(&err, 1, 8, stdin) != 8) break;"
-    "    if (!readFull(&len, 8)) { printf(\"frame %lld: truncated header\\n\", (long long)count); return 1; }"
-    "    if (err != 0) { printf(\"frame %lld: native serVal error %lld\\n\", (long long)count, (long long)err); return 1; }"
-    "    if (len < 0 || len > (int64_t)SER_MAX_BYTES) { printf(\"frame %lld: length %lld\\n\", (long long)count, (long long)len); return 1; }"
-    "    uint8_t *data = malloc(len ? (size_t)len : 1);"
-    "    if (!data) { printf(\"frame %lld: out of memory\\n\", (long long)count); return 1; }"
-    "    if (!readFull(data, (size_t)len)) { printf(\"frame %lld: truncated body\\n\", (long long)count); free(data); return 1; }"
-    "    DeserCtx d = {data, 0, (size_t)len, 0};"
-    "    Val v = deserVal(&d, 0);"
-    "    if (d.err || d.pos != (size_t)len) { printf(\"frame %lld: parallel.c deserVal rejects it (err %d at %zu of %lld)\\n\", (long long)count, d.err, d.pos, (long long)len); free(data); return 1; }"
-    "    SerBuf b = {0};"
-    "    serVal(&b, v, 0);"
-    "    if (b.err || b.len != (size_t)len || (len && memcmp(b.data, data, (size_t)len) != 0)) {"
-    "      size_t at = 0;"
-    "      while (at < b.len && at < (size_t)len && b.data[at] == data[at]) at++;"
-    "      printf(\"frame %lld: parallel.c serVal gives %zu bytes, native %lld; first difference at byte %zu\\n\", (long long)count, b.len, (long long)len, at);"
-    "      free(b.data); free(data); return 1;"
-    "    }"
-    "    free(b.data); free(data);"
-    "    count++;"
-    "  }"
-    "  printf(\"frames %lld equal\\n\", (long long)count);"
-    "  return 0;"
-    "}"))
-
 fn ! runTests -> Bool
   (let [(made (sh "mktemp -d"))
         (work (stringReplace made.stdout "\n" ""))]
@@ -593,6 +479,5 @@ fn ! runTests -> Bool
         (testFail work)
         (testArity work)
         (testLiteral work)
-        (testWire work)
         (assert (= (sh (str "rm -rf " work)).exitCode 0) "work directory removed")
         true))

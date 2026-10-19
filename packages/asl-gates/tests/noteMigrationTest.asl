@@ -33,19 +33,26 @@ fn escRow s: String -> String
 fn ! fileTextOr! path: String -> String
   (mt (fileReadString path) ((ok t) t) ((err _) ""))
 
+; (:m :ref DEADPKG-LEFT :do "asl-agent's package was deleted (DEAD-PACKAGES); its doc.asn, the ledger dx/ledgerPathFor would still point this migration's 9 pinned files at, moved verbatim to .asl/mem/docs/retiredNotes.asn so the package directory could go away entirely while the pinned note texts stay findable")
+fn retiredLedgerOverride path: String -> (Option String)
+  (if (stringStartsWith? path "asl/packages/asl-agent/") (some ".asl/mem/docs/retiredNotes.asn") (none))
+
+fn ledgerPathForMigration path: String -> String
+  (optionOr (retiredLedgerOverride path) (dx/ledgerPathFor path))
+
 fn allNotesPresent! cs: (List dx/NoteCandidate) ledgerText: String path: String -> Bool
   (mt (listHead cs)
     ((none) true)
     ((some c)
       (do (assert (stringContains? ledgerText (escRow c.text))
-                  (str path ": note text for " c.symbol " must appear in " (dx/ledgerPathFor path)))
+                  (str path ": note text for " c.symbol " must appear in " (ledgerPathForMigration path)))
           (allNotesPresent! (optionOr (listTail cs) (list)) ledgerText path))))
 
 fn ! checkPathNotes! path: String -> Bool
   (mt (oldTextOf! path)
     ((none) (do (assert false (str "git show " (migrationCommit) "^:" path " failed")) false))
     ((some oldText)
-      (let [(cs (dx/noteScanAll path oldText)) (ledgerText (fileTextOr! (dx/ledgerPathFor path)))]
+      (let [(cs (dx/noteScanAll path oldText)) (ledgerText (fileTextOr! (ledgerPathForMigration path)))]
         (allNotesPresent! cs ledgerText path))))
 
 fn ! checkAllPaths! paths: (List String) -> Bool

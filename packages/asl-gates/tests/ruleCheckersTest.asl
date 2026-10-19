@@ -28,7 +28,7 @@ fn testAuditC3 -> Bool
   (let [(valid (rc/auditC3Duplicates (list (list "s1" "a") (list "s2" "b" "c")) (list "s2") (list))) (invalid (rc/auditC3Duplicates (list (list "s1" "a" "b" "c")) (list "s2") (list))) (invalidHome (rc/auditC3Duplicates (list (list "s3" "wrong-pkg")) (list) (list (list "s3" "home-pkg")))) (validHome (rc/auditC3Duplicates (list (list "s3" "home-pkg")) (list) (list (list "s3" "home-pkg"))))] (do (assert valid.passed "valid") (assert (not invalid.passed) "invalid") (assert (not invalidHome.passed) "invalid home") (assert validHome.passed "valid home") true))
 
 fn ! testAuditCheckScript -> Bool
-  (let [(valid (rc/auditCheckScriptExistence (list "scripts/runGateTests.sh"))) (invalid (rc/auditCheckScriptExistence (list "scripts/ghost-script-xyz.sh")))] (do (assert valid.passed "valid script exists") (assert (not invalid.passed) "missing script fails") true))
+  (let [(valid (rc/auditCheckScriptExistence (list "asl/packages/asl-gates/src/runnerMain.asl"))) (invalid (rc/auditCheckScriptExistence (list "scripts/ghost-script-xyz.sh")))] (do (assert valid.passed "valid script exists") (assert (not invalid.passed) "missing script fails") true))
 
 fn testAuditD51 -> Bool
   (let [(valid (rc/auditD51Convergence "pkg1" (list "testFoo") (list) 90 80)) (invalidRatio (rc/auditD51Convergence "pkg1" (list "testFoo") (list) 70 80)) (invalidKebab (rc/auditD51Convergence "pkg1" (list "test-foo") (list) 90 85))] (do (assert valid.passed "valid") (assert (not invalidRatio.passed) "invalid ratio") (assert (not invalidKebab.passed) "invalid kebab") true))

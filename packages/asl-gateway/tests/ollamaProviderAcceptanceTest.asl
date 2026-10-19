@@ -1,3 +1,4 @@
+; (:m :do "GW-UPSTREAM-TABLES dropped the old modelTokenFloors hardcoded ollama/glm-prefix token-floor table (rule LEON-ROLE/gateway-config-in-home: no model-name knowledge in code); this suite still proves provider/URL/auth/timeout routing for an explicit ollama/glm model, which is a separate, still-live string-prefix provider lookup (getUpstreamForModelIn), not a reasoning-floor guess")
 (module aslGateway/tests/ollamaProviderAcceptanceTest
   :x [runTests]
   :i [(upstream :a u)])
@@ -6,11 +7,6 @@ fn hasAuth headers: (List (Pair String String)) -> Bool
   (listAny? (fn [(p (Pair String String))] -> Bool
                (and (= (pairFirst p) "Authorization") (= (pairSecond p) "Bearer testKey123")))
             headers)
-
-fn hasOllamaFloor floors: (List (Pair String Int64)) -> Bool
-  (listAny? (fn [(p (Pair String Int64))] -> Bool
-               (and (= (pairFirst p) "ollama/glm") (>= (pairSecond p) 32768)))
-            floors)
 
 fn runTests -> Bool
   (let [(env (mapSet (mapSet (mapSet (mapEmpty) "OLLAMA_BASE_URL" "http://127.0.0.1:9000/")
@@ -26,8 +22,7 @@ fn runTests -> Bool
                                              (u/getUpstreamForModel settings env (some "ollama/glm-5.3")).key
                                              "{\"model\":\"glm-5.3\"}"
                                              (list)))
-              (timeout settings.ollamaTimeoutSec)
-              (floors (u/modelTokenFloors))]
+              (timeout settings.ollamaTimeoutSec)]
           (mt requestRes
             ((err _) false)
             ((ok request)
@@ -39,5 +34,4 @@ fn runTests -> Bool
                 (assert (= request.method "POST") "provider request uses POST")
                 (assert (hasAuth request.headers) "provider request carries bearer authorization")
                 (assert (= timeout 1.0) "Ollama timeout uses its environment setting")
-                (assert (hasOllamaFloor floors) "GLM Ollama model has the configured token floor")
                 true)))))))

@@ -200,8 +200,20 @@ fn testExpectedWaitOverflowGuard -> Bool
     (mt result ((err _) false) ((ok decision)
       (assert (= decision.choice.waitMs 9223372036854775807) "overflowed expected wait saturates at Int64 maximum") true)))
 
+fn testMergeSamplingPreservesExplicit -> Bool
+  (let [(cal (some (calibration "m" "assistant" 9000)))
+        (explicitCand (rt/Candidate :endpoint "e" :model "m" :weight 1 :explicit true :temperature (none) :topP (none) :maxTokens (none) :effort (none) :stopSet false :stop (list)))
+        (defaultCand (candidate "e" "m" 1))
+        (mergedExplicit (rt/mergeSampling explicitCand cal))
+        (mergedDefault (rt/mergeSampling defaultCand cal))]
+    (do
+      (assert mergedExplicit.explicit "mergeSampling must carry an explicitly-configured candidate's :explicit true through to the merged result, not just the sampling fields")
+      (assert (not mergedDefault.explicit) "mergeSampling must carry a default candidate's :explicit false through unchanged")
+      true))
+
 fn ! runTests -> Bool
   (do
+    (testMergeSamplingPreservesExplicit)
     (testProfileParseAndFirstMatch)
     (testCalibrationSamplingDefaults)
     (testDimensionAndNoRoute)

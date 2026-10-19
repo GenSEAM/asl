@@ -5,7 +5,6 @@
  :aslFirst true
  :modules [
    "asl-compiler/compiler"
-   "asl-compiler/wasm"
    "asl-compiler/wasi"
    "asl-compiler/vfsGit"
    "asl-compiler/evaluator"
@@ -15,7 +14,6 @@
    "asl-compiler/diagnostics"
    "asl-compiler/comptime"
    "asl-compiler/salsa"
-   "asl-compiler/heal"
    "asl-compiler/tryMacro"
    "asl-compiler/threadMacro"
    "asl-compiler/monad"
@@ -25,4 +23,4 @@
    "asl-compiler/checkCache"
    "asl-compiler/targets"
  ]
- :dependencies ["asl-parser" "asl-checker" "asl-codegen" "asl-ir" "asl-target-llvm" "asl-target-swift" "asl-target-rs" "asl-target-sh" "asl-target-c"])
+ :dependencies ["asl-parser" "asl-checker" "asl-codegen" "asl-ir" "asl-target-llvm" "asl-target-swift" "asl-target-sh" "asl-target-c"])

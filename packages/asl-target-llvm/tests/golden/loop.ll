@@ -87,6 +87,7 @@ report:
 @.rterr.m.reportFailed = private unnamed_addr constant [37 x i8] c"cannot register the assertion report\00"
 @rterr.assertCount = weak global i64 0
 @rterr.refuteCount = weak global i64 0
+@rterr.siteReport = weak global i1 false
 @.rterr.reportEnv = private unnamed_addr constant [18 x i8] c"ASL_ASSERT_REPORT\00"
 @.rterr.reportLine = private unnamed_addr constant [57 x i8] c"%lld assertion(s) executed, %lld refutation(s) executed\0A\00"
 
@@ -113,6 +114,7 @@ check:
   br i1 %one, label %install, label %done
 install:
   %rc = call i32 @atexit(ptr @rterr.report)
+  store i1 true, ptr @rterr.siteReport
   %uc = call i32 @unsetenv(ptr @.rterr.reportEnv)
   %failed = icmp ne i32 %rc, 0
   br i1 %failed, label %fail, label %done

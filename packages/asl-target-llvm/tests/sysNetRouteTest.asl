@@ -6,16 +6,41 @@
       (asl-target-llvm :a llvm)
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/sysNet :a sysNet)
-      (asl-target-llvm/sysRoute :a rt)])
+      (asl-target-llvm/sysRoute :a rt)
+      (asl-cli/asl1Cache :a cache)
+      (asl-cli/system :a sys)])
 
-fn host -> String
-  "asl/host/out/asl-host"
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): checkParity used to run the leftover host binary live (`asl-host run <src> <hostArg>`) for 3 labels (netEcho, netErrors, netLinked) and diff its full stdout/exitCode against native's own run; all 3 are captured once via the leftover host binary at ~/projects/asex/asl/host/out/asl-host, read-only, outside this worktree, into the recordedVm cond table below, keyed by the same `label` string each call site already passes. None of the 3 captures embeds the work directory (verified at capture time), so no placeholder substitution is needed. testTwoModules used the host as a plain compiler launcher (`asl-host run asl/packages/asl-compiler/src/asl1.asl build <appPath> -o <linkedLl>`), not as an oracle, so it is replaced with the cached native asl1 compiler (asl-cli/asl1Cache nativeAsl1!), the same substitution already used in deepStackTest/nativeFormatTest. testNativeEntries's netSixPure sub-check, which linked the unrouted IR against both libaslrt.a and asl/host/out/libaslhost.a to confirm the C sysNet table's own EINVAL behaviour, is removed: libaslhost.a (and the C sources it archived) no longer exist anywhere in the tree, the same irreducible gap already frozen for gcAslTest/gcStressTest/tailCallSpillGcTest; the earlier pure-IR-text assertions in testNativeEntries, which need no linking, are unchanged")
 
 fn clang -> String
   "/usr/bin/clang -Wno-override-module"
 
 fn lib -> String
   "asl/host/out/libaslrt.a"
+
+(schema Recorded
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
+
+fn ! nativeAsl1Bin! -> (Result String String)
+  (mt (sys/context!)
+    ((err e) (err e))
+    ((ok ctx) (cache/nativeAsl1! ctx (str ctx.root "/asl/host/out/libaslrt.a") "/usr/bin/clang")))
+
+fn ! buildWithNativeAsl1! appPath: String ll: String -> Recorded
+  (mt (nativeAsl1Bin!)
+    ((err e) (Recorded :exitCode 1 :stdout "" :stderr (str "native asl1 compiler: " e)))
+    ((ok nativeAsl1) (let [(r (sh (str nativeAsl1 " build " appPath " -o " ll)))] (Recorded :exitCode r.exitCode :stdout r.stdout :stderr r.stderr))))
+
+fn ! recordedVm label: String -> Recorded
+  (cond
+    ((= label "netEcho") (Recorded :exitCode 0 :stdout "tcp port in range true\ntcp echo ping\nunix echo ping\n" :stderr ""))
+    ((= label "netErrors") (Recorded :exitCode 0
+      :stdout "tcpListen -1 io:22\ntcpListen 65536 io:22\ntcpListen bound port io:48\ntcpConnect closed port io:61\ntcpConnect 0 io:22\ntcpConnect 4294967297 io:22\nsockAccept -1 io:22\nsockAccept 2147483648 io:22\nsockLocalPort -1 io:22\nunixListen empty io:22\nunixListen 200-byte path io:22\nunixConnect missing io:2\ntcpListen string 80 io:22\ntcpListen float 80.0 io:22\nunixListen int 7 io:22\n"
+      :stderr ""))
+    ((= label "netLinked") (Recorded :exitCode 0 :stdout "lib io:22\nlib ok\napp io:22\n" :stderr ""))
+    (else (Recorded :exitCode -1 :stdout "" :stderr (str "no recorded case: " label))))
 
 fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)
@@ -174,7 +199,7 @@ fn ! fileText path: String -> String
 fn ! build work: String name: String src: String -> String
   (let [(srcPath (str work "/" name ".asl"))
         (ll (str work "/" name ".ll"))
-        (preludeText (resultOr (fileRead (lk/preludePath)) ""))]
+        (preludeText (resultOr (fileReadString (lk/preludePath)) ""))]
     (do (assert (ok? (fileWrite srcPath src)) (str name ".asl written"))
         (assert (not (stringEmpty? preludeText)) (str (lk/preludePath) " is readable"))
         (mt (mt (lk/lowerSourceWith src preludeText) ((err ds) (err ds)) ((ok m) (llvm/emitLlvmProgramFor (hostFacts) m "main")))
@@ -210,9 +235,9 @@ fn ! checkSymbols label: String bin: String -> Bool
 
 fn ! checkParity label: String bin: String src: String nativeArg: String hostArg: String -> String
   (let [(native (sh (str bin " " nativeArg)))
-        (vm (sh (str (host) " run " src " " hostArg)))]
-    (do (assert (= native.stdout vm.stdout) (str label ": native stdout equals asl-host run's; native=" native.stdout " vm=" vm.stdout " vm stderr=" vm.stderr))
-        (assert (= native.exitCode vm.exitCode) (str label ": native exit " native.exitCode " equals asl-host run's " vm.exitCode "; native stderr " native.stderr))
+        (vm (recordedVm label))]
+    (do (assert (= native.stdout vm.stdout) (str label ": native stdout equals the recorded asl-host run's; native=" native.stdout " vm=" vm.stdout " vm stderr=" vm.stderr))
+        (assert (= native.exitCode vm.exitCode) (str label ": native exit " native.exitCode " equals the recorded asl-host run's " vm.exitCode "; native stderr " native.stderr))
         native.stdout))
 
 fn ! testEcho work: String -> Bool
@@ -256,16 +281,14 @@ fn ! testTwoModules work: String -> Bool
         (_ (assert (ok? (fileWrite appPath (appSource))) "netApp.asl written"))
         (want (lines (list "lib io:22" "lib ok" "app io:22")))
         (linkedLl (str work "/netLinked.ll"))
-        (built (sh (str (host) " run asl/packages/asl-compiler/src/asl1.asl build " appPath " -o " linkedLl)))
+        (built (buildWithNativeAsl1! appPath linkedLl))
         (_ (assert (= built.exitCode 0) (str "two-module asl1 build: " built.stdout built.stderr)))
         (linkedText (fileText linkedLl))
         (routedHere (some? (rt/routeFactsFor (hostTriple))))
         (_ (if routedHere
              (do (assert (= (countOf linkedText "define internal tailcc %Val @sysNetTcpListen(") 1) "linked two-module IR defines sysNetTcpListen once")
                  (checkIr "netLinked" linkedText (list "tcpListen")))
-             (do (assert (stringContains? linkedText "asl_rt_builtin_sysNet") (str "asl1 build on unverified " (hostTriple) " keeps the C sysNet table"))
-                 (assert (= (countOf linkedText "@sysNetTcpListen(") 0) (str "asl1 build on unverified " (hostTriple) " adds no routed function"))
-                 true)))
+             (assert false (str "two-module build on " (hostTriple) ": libc.asl has no facts for it, so its socket builtins have no native definition"))))
         (_ (linkBin work "netLinked" (list linkedLl)))
         (_ (if routedHere (checkSymbols "netLinked" (str work "/netLinked")) true))
         (linkedOut (checkParity "netLinked" (str work "/netLinked") appPath "" ""))
@@ -393,16 +416,10 @@ fn ! testNativeEntries work: String -> Bool
     ((err ds) (do (assert false (str "netSix lowers: " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) ds) "; "))) false))
     ((ok m)
       (do (mt (llvm/emitLlvmProgram m "main")
-            ((err ds) (assert false (str "netSix emitLlvmProgram: " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) ds) "; "))))
-            ((ok text)
-              (do (assert (stringContains? text "asl_rt_builtin_sysNet") "pure emitLlvmProgram calls the C sysNet table")
-                  (assert (not (stringContains? text "@sysNetTcpListen(")) "pure emitLlvmProgram adds no sysNet function")
-                  (map (fn [(n String)] -> Bool (do (assert (not (stringContains? text (str "sysRoute$2E" n "("))) (str "pure emitLlvmProgram adds no " n " wrapper")) true)) (routedNames))
-                  (assert (not (stringContains? text "@__error(")) "pure emitLlvmProgram reads no darwin __error")
-                  (assert (ok? (fileWrite (str work "/netSixPure.ll") text)) "netSixPure.ll written")
-                  (linkBinWith work "netSixPure" (list (str work "/netSixPure.ll")) (str (lib) " asl/host/out/libaslhost.a"))
-                  (assert (= (sh (str work "/netSixPure")).stdout (lines (map (fn [(i Int64)] -> String (hostConst "EINVAL")) (range 0 6))))
-                          "the unrouted netSix prints the C table's EINVAL for each call"))))
+            ((err ds) (let [(t (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message)) ds) "; "))]
+                        (assert (and (stringContains? t "ERR_LOWER_UNSUPPORTED") (and (stringContains? t "'tcpListen'") (stringContains? t "sysRoute, sysNet or parRoute")))
+                                (str "pure emitLlvmProgram rejects the unrouted socket builtins, naming their routes: " t))))
+            ((ok _) (assert false "pure emitLlvmProgram emits netSix without routing: no C sysNet table exists to call")))
           (assert (= (rt/tripleOf "Linux" "x86_64") "linux-x86_64") "tripleOf Linux x86_64")
           (assert (= (rt/tripleOf "Linux" "aarch64") "linux-aarch64") "tripleOf Linux aarch64")
           (assert (= (rt/tripleOf "Darwin" "arm64") "darwin-arm64") "tripleOf Darwin arm64")
@@ -419,9 +436,7 @@ fn ! testNativeEntries work: String -> Bool
             ((ok text)
               (if (some? (rt/routeFactsFor (hostTriple)))
                 (checkIr (str "netSix native " (hostTriple)) text (routedNames))
-                (do (assert (and (stringContains? text "asl_rt_builtin_sysNet") (not (stringContains? text "@sysNetTcpListen(")))
-                            (str "netSix native on unverified " (hostTriple) " keeps the C sysNet table"))
-                    true))))
+                (assert false (str "netSix native on " (hostTriple) ": libc.asl has no facts for it")))))
           true)))
 
 

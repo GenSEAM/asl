@@ -78,10 +78,12 @@ fn testResolveModuleDiagnostics -> Bool
         (assert (= (listLength bad) 2) (str "exactly the two seeded diagnostics: " (stringJoin texts "; ")))
         true))
 
+; (:m :ref EFFECT-INFER :do "resolveModuleIn now runs refineEffects before checking bodies, which rebuilds its own DepIndex from deps.deps (a fixed-point effect-inference pass over the whole dependency graph, not something a partial index can participate in) -- forging only :byKey no longer reaches checkBodies, so the probe forges the same ModuleSummary into both :byKey and :deps, keeping its original intent (the resolver sees g once pkg/mod1's own export list carries it) valid under the rebuild")
 fn testResolverReadsTheIndex -> Bool
   (let [(deps (synthDeps 12))
         (real (r/depIndexOf deps))
-        (forged (with real :byKey (mapSet real.byKey "pkg/mod1" (list (with (depSummary 1) :exports (list "f" "g"))))))
+        (forgedSummary (with (depSummary 1) :exports (list "f" "g")))
+        (forged (with (with real :byKey (mapSet real.byKey "pkg/mod1" (list forgedSummary))) :deps (mapSet real.deps "/x/pkg/src/mod1.asl" forgedSummary)))
         (codes (fn [(ds (List ty/Diagnostic))] -> String (stringJoin (map (fn [(d ty/Diagnostic)] -> String (str d.code " " d.message)) ds) "; ")))
         (viaForged (synthDiagsIn 12 40 "(m1/g)" forged))
         (viaScan (synthDiagsIn 12 40 "(m1/g)" (r/depScanOf deps)))

@@ -32,7 +32,7 @@ fn unresolvedRefs schema: j/Json -> (List String)
             (collectRefs schema)))
 
 fn loadCommittedSchema! -> (Result j/Json String)
-  (mt (fileRead "asl/grammar/aslAst.schema.json")
+  (mt (fileReadString "asl/grammar/aslAst.schema.json")
     ((err e) (err (str "read asl/grammar/aslAst.schema.json: " e)))
     ((ok text)
      (mt (j/jsonParse text)
@@ -40,7 +40,7 @@ fn loadCommittedSchema! -> (Result j/Json String)
        ((ok root) (ok root)))))
 
 fn loadAstForms! -> (Result (List a/TopForm) String)
-  (mt (fileRead "asl/packages/asl-parser/src/ast.asl")
+  (mt (fileReadString "asl/packages/asl-parser/src/ast.asl")
     ((err e) (err (str "read asl/packages/asl-parser/src/ast.asl: " e)))
     ((ok src)
      (mt (a/parse src)
@@ -68,7 +68,7 @@ fn addAstLitCase forms: (List a/TopForm) extraCase: a/EnumCase -> (List a/TopFor
        forms)
 
 fn testSchemaDrift! -> Bool
-  (mt (fileRead "asl/grammar/aslAst.schema.json")
+  (mt (fileReadString "asl/grammar/aslAst.schema.json")
     ((err e)
      (do
        (assert false (str "Failed reading committed schema: " e))

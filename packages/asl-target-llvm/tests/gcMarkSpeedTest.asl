@@ -211,14 +211,14 @@ fn deepSource -> String
     "\n")
 
 fn runs -> (List (List String))
-  (list (list "record" "3000" "ASL_GC_STRESS=1" "0 1" "3035" "3035" "3024" "169050" "276")
-        (list "list" "2000" "ASL_GC_STRESS=1" "3003000" "5036" "5036" "4025" "201056" "40259")
-        (list "allocMix" "2000" "ASL_GC_STRESS=1" "164708" "10034" "10034" "10023" "417006" "297")
-        (list "deep" "5" "ASL_GC_STRESS=1" "19512 39012 8893" "5396" "5396" "4397" "167885" "41124")
-        (list "record" "200000" "ASL_GC_MIN_MIB=1" "780 -39" "10" "200045" "187259" "11201374" "296")
-        (list "list" "200000" "ASL_GC_MIN_MIB=1" "30000300000" "3" "500046" "34" "20001380" "9428611")
-        (list "allocMix" "200000" "ASL_GC_MIN_MIB=1" "509154" "39" "1000044" "983060" "41601322" "355")
-        (list "deep" "13" "ASL_GC_MIN_MIB=1" "1208473736 2416947460 24893" "3" "354521" "51317" "13672033" "5451447"))
+  (list (list "record" "3000" "ASL_GC_STRESS=1" "0 1" "3011" "3011" "3003" "168345" "213")
+        (list "list" "2000" "ASL_GC_STRESS=1" "3003000" "5012" "5012" "4005" "200351" "40154")
+        (list "allocMix" "2000" "ASL_GC_STRESS=1" "164708" "10010" "10010" "10001" "416301" "282")
+        (list "deep" "5" "ASL_GC_STRESS=1" "19512 39012 8893" "5387" "5387" "4391" "167648" "41061")
+        (list "record" "200000" "ASL_GC_MIN_MIB=1" "780 -39" "10" "200011" "187249" "11200357" "140")
+        (list "list" "200000" "ASL_GC_MIN_MIB=1" "30000300000" "3" "500012" "3" "20000363" "9436468")
+        (list "allocMix" "200000" "ASL_GC_MIN_MIB=1" "509154" "39" "1000010" "983052" "41600305" "372")
+        (list "deep" "13" "ASL_GC_MIN_MIB=1" "1208473736 2416947460 24893" "3" "354507" "51319" "13671640" "5452157"))
 
 fn ! sameRun work: String bins: (List (Pair String String)) row: (List String) -> Bool
   (let [(name (optionOr (listGet row 0) ""))

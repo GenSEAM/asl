@@ -1,5 +1,5 @@
 (module asl/agentLoop/core
-  :x [asnUnescape escapeAsn parseForms stripForms parseKv parseReply isProseWrapped checkOwns fieldVal evidenceKey mergeSpans spanSeen recordRead renderSeen renderTranscript renderWindow makeTurn serString serOps serKey serSpans joinAll editDistance nearestOp terminalForms dataFindings uniqueSteps gateVerdict noteStep runOutward changePlan harnessPath hiddenPath runReadOnly firstOf restOf sliceOf ch dictGet isSpace isWordByte joinSep KvVal kvInt kvStr windowOf isDigit truthy headOf dictHas dictOr formEnd mapBytes progName runEnd strBodyEnd stripLeft stripRight trimSpace charIndex charLen charPrefix Turn
+  :x [asnUnescape escapeAsn parseForms stripForms parseKv parseReply isProseWrapped checkOwns effectiveOwns fieldVal evidenceKey mergeSpans spanSeen recordRead renderSeen renderTranscript renderWindow makeTurn serString serOps serKey serSpans joinAll editDistance nearestOp terminalForms dataFindings uniqueSteps gateVerdict noteStep runOutward changePlan harnessPath hiddenPath runReadOnly firstOf restOf sliceOf ch dictGet isSpace isWordByte joinSep KvVal kvInt kvStr windowOf isDigit truthy headOf dictHas dictOr formEnd mapBytes progName runEnd strBodyEnd stripLeft stripRight trimSpace charIndex charLen charPrefix Turn
       residueWordCount hasFormResidue joinForms]
   :i [])
 
@@ -477,6 +477,10 @@ fn checkOwns path: String owns: (List String) root: String -> Bool
         ((= rel ".") (fold (fn [hit p] (or hit (ownsEntry "" p))) false owns))
         (else (fold (fn [hit p] (or hit (ownsEntry rel p))) false owns)))))
 
+; (:m :ref LEON-OWNS-ONE-RULE-20261018 :do "no :owns declared on a session means the session may write anywhere inside :root; checkOwns itself stays false-on-empty because some callers (a :txn's own narrowing owns, for one) need an explicit empty list to mean exactly nothing, not everything -- effectiveOwns is the one place that turns an unset session-level owns into the unrestricted ** scope before a caller asks checkOwns whether something is owned. exec.asl's writeCheck and main.asl's liveExecOps! each used to reimplement this same if-empty-then-** check locally and had drifted out of sync (main.asl's copy fed checkOwns the raw list, never the normalized one, so a write with no :owns declared was allowed but never counted as owned); both now call this instead of keeping their own copy")
+fn effectiveOwns owns: (List String) -> (List String)
+  (if (listEmpty? owns) (list "**") owns)
+
 fn spanLess x: (Pair Int64 Int64) y: (Pair Int64 Int64) -> Bool
   (mt x ((pair a b) (mt y ((pair c d) (or (< a c) (and (= a c) (< b d)))))))
 
@@ -769,14 +773,15 @@ fn hiddenPath p: String dirs: (List String) root: String -> Bool
       (filter (fn [d] (not (= d ""))) dirs)))
 
 ; (:m :tags (owns))
+; (:m :ref LEON-OWNS-ALL-20261018 :do "no :owns on the session means the session may write anywhere inside :root; segmentOutward's rm/mv check must agree with that or it flags every rm/mv target as outside owns and asks for confirmation on an ordinary, unrestricted session -- effectiveOwns is applied once here so segmentOutward itself can keep checking literally")
 fn runOutward words: (List String) owns: (List String) root: String -> String
   (if (listAny? (fn [w] (or (stringContains? w "git push") (stringContains? w " publish"))) words)
     "it pushes or publishes"
-    (fold (fn [acc seg] (if (= acc "") (segmentOutward seg owns root) acc)) "" (commandSegments words)))
+    (fold (fn [acc seg] (if (= acc "") (segmentOutward seg (effectiveOwns owns) root) acc)) "" (commandSegments words)))
 
-; (:m :tags (owns))
+; (:m :ref LEON-OWNS-ALL-20261018 :do "no :owns on the session means the session may write anywhere inside :root; changePlan decides keep-vs-restore for files a shell run step touched outside the declared write/edit ops, and execDeleteOp! (runOps.asl) calls this too for its own owns check -- both used to feed checkOwns the raw list, so with :owns unset every changed file looked outside owns: a run step's own side effects got reverted by settle!, and every delete was rejected with ERR_OWNS, even though write/edit were already unrestricted")
 fn changePlan paths: (List String) owns: (List String) root: String -> (List String)
-  (map (fn [p] (if (checkOwns p owns root) "keep" "restore")) paths)
+  (map (fn [p] (if (checkOwns p (effectiveOwns owns) root) "keep" "restore")) paths)
 
 fn levRow ca: String b: String j: Int64 n: Int64 prevRest: (List Int64) diag: Int64 left: Int64 acc: (List Int64) -> (List Int64)
   (if (> j n)
@@ -846,12 +851,16 @@ fn isExplicitFinding op: (List (Pair String KvVal)) declared: (List String) -> B
   (and (= (dictGet op "type") (some (kvStr "findings"))) (isDataOp op declared))
 
 ; (:m :ref LEONCTX2-FINDINGS-DONE :do "a reply pairing a proper (:findings ...) form with another recognized op in the same turn (most often (:done), ending a scout delivery in the turn that states it) used to lose every finding, since the former all-ops-must-be-data fold demanded the whole reply be undeclared ad-hoc data and :done broke that for the entire reply; an explicit (:findings ...) op is now taken unconditionally (its type is only set by the parser for a syntactically real findings form), and the ad-hoc all-or-nothing fallback applies only when the reply carries no explicit findings op")
+; (:m :ref LEON-DATAFINDINGS-FALLBACK-20261017 :do "a confused or garbled reply can still carry a few colon-headed parenthetical fragments among many non-colon ones (a hallucinated receipt, a rambling note); parseReply already drops the latter via headOf before building ops, so a fold over the survivors alone cannot tell scattered noise from a deliberate all-data reply; require every top-level balanced-paren fragment in the raw text to have survived that filter before treating any of them as ad-hoc findings data")
 fn dataFindings reply: String declared: (List String) -> (List String)
   (let [ops (parseReply reply)
-        explicit (filter (fn [op] (isExplicitFinding op declared)) ops)]
+        explicit (filter (fn [op] (isExplicitFinding op declared)) ops)
+        raw (parseForms reply)
+        kept (filter (fn [f] (!= (headOf f) "")) raw)
+        coherent (= (listLength kept) (listLength raw))]
     (if (not (listEmpty? explicit))
       (map dataFindingForm explicit)
-      (if (fold (fn [acc op] (and acc (isDataOp op declared))) true ops)
+      (if (and coherent (fold (fn [acc op] (and acc (isDataOp op declared))) true ops))
         (map dataFindingForm ops)
         (list))))
 

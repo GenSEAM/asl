@@ -204,7 +204,7 @@ fn testStagingEditDiffFlush! -> Bool
     (let [(f "tmp_test_batch/stage_test.txt")
           (wRes (b/evalBatch! (str "(:batch (:write :file \"" f "\" :content \"foo bar\"))")))]
       (assert (ok? wRes) "seed write ok")
-      (assert (= (resultOr (fileRead f) "") "foo bar") "disk seeded")
+      (assert (= (resultOr (fileReadString f) "") "foo bar") "disk seeded")
       (let [(batchRes (b/evalBatch! (str "(:batch :seq true (:edit :file \"" f "\" :old \"bar\" :new \"baz\") (:diff :file \"" f "\") (:flush :file \"" f "\"))")))]
         (assert (ok? batchRes) "batch seq ok")
         (let [(out (resultOr batchRes ""))]
@@ -215,7 +215,7 @@ fn testStagingEditDiffFlush! -> Bool
           (assert (stringContains? out "baz") "diff sees staged replacement")
           (assert (stringContains? out ":op \"flush\"") "flush op in batch")
           (assert (stringContains? out ":persisted true") "flush persisted")
-          (assert (= (resultOr (fileRead f) "") "foo baz") "disk updated after flush"))))
+          (assert (= (resultOr (fileReadString f) "") "foo baz") "disk updated after flush"))))
     (let [(f2 "tmp_test_batch/stage_discard_test.txt")
           (w2 (b/evalBatch! (str "(:batch (:write :file \"" f2 "\" :content \"initial val\"))")))]
       (assert (ok? w2) "seed write 2 ok")
@@ -223,7 +223,7 @@ fn testStagingEditDiffFlush! -> Bool
         (assert (ok? discRes) "discard batch ok")
         (let [(out2 (resultOr discRes ""))]
           (assert (stringContains? out2 ":clean true") "diff after discard is clean")
-          (assert (= (resultOr (fileRead f2) "") "initial val") "disk unchanged after discard"))))
+          (assert (= (resultOr (fileReadString f2) "") "initial val") "disk unchanged after discard"))))
     (let [(fa "tmp_test_batch/stage_a.txt")
           (fb "tmp_test_batch/stage_b.txt")
           (wa (b/evalBatch! (str "(:batch (:write :file \"" fa "\" :content \"aaa 111\") (:write :file \"" fb "\" :content \"bbb 222\"))")))]
@@ -232,8 +232,8 @@ fn testStagingEditDiffFlush! -> Bool
         (assert (ok? bareFlushRes) "bare flush batch ok")
         (let [(out3 (resultOr bareFlushRes ""))]
           (assert (stringContains? out3 ":persisted true") "bare flush persisted")
-          (assert (= (resultOr (fileRead fa) "") "aaa 999") "file a updated by bare flush")
-          (assert (= (resultOr (fileRead fb) "") "bbb 888") "file b updated by bare flush"))))
+          (assert (= (resultOr (fileReadString fa) "") "aaa 999") "file a updated by bare flush")
+          (assert (= (resultOr (fileReadString fb) "") "bbb 888") "file b updated by bare flush"))))
     (let [(atA "tmp_test_batch/atomic_a.txt")
           (atB "tmp_test_batch/atomic_b.txt")
           (wSeed (b/evalBatch! (str "(:batch (:write :file \"" atA "\" :content \"seed a\") (:write :file \"" atB "\" :content \"seed (b)\"))")))]
@@ -243,8 +243,8 @@ fn testStagingEditDiffFlush! -> Bool
         (let [(outAt (resultOr atomicFlushRes ""))]
           (assert (stringContains? outAt ":status \"rejected\"") "atomic flush rejected on invalid staged file")
           (assert (stringContains? outAt ":ERR_SYNTAX_MALFORMATION") "atomic flush flagged syntax error")
-          (assert (= (resultOr (fileRead atA) "") "seed a") "disk a untouched when preflush fails")
-          (assert (= (resultOr (fileRead atB) "") "seed (b)") "disk b untouched when preflush fails"))))
+          (assert (= (resultOr (fileReadString atA) "") "seed a") "disk a untouched when preflush fails")
+          (assert (= (resultOr (fileReadString atB) "") "seed (b)") "disk b untouched when preflush fails"))))
     true)
 
 fn ! runTests -> Bool

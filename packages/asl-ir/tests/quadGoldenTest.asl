@@ -7,9 +7,10 @@
 fn entries -> (List String)
   (list "asl/packages/asl-forms/tests/checkSemanticTest.asl")
 
+; (:m :ref NATIVE-LOWER-GAPS :do "repinned: fused list matches test @listHeadEmpty? or @listTailEmpty? and build the Option on the miss path; assert and refute carry their call site")
 fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "-2859233404496240521:3192986")
-        (pair "lowerSourceWith" "7145294191011425170:8412"))
+  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "4455284649864694010:4905884")
+        (pair "lowerSourceWith" "6806003338108627551:8856"))
 
 fn diagLine d: ty/IrDiag -> String
   (str d.code " " d.message " @ " d.locus)
@@ -32,7 +33,7 @@ fn sourceCases -> (List String)
         "(module q/c :x [main])\n\n(enum Shape (:c circle [(r Int64)] \"round\") (:c rect [(w Int64) (h Int64)] \"box\"))\n\nfn area s: Shape -> Int64\n  (mt s ((circle r) (* r r)) ((rect w h) (* w h)))\n\nfn main -> Int64\n  (+ (area (circle 2)) (optionOr (listGet (list 1 2 3) 1) 0))\n")
 
 fn ! sourceText -> String
-  (mt (fileRead (lk/preludePath))
+  (mt (fileReadString (lk/preludePath))
     ((err _) "(unreadable prelude)")
     ((ok preludeSrc) (stringJoin (map (fn [(src String)] -> String (resultText (lk/lowerSourceWith src preludeSrc))) (sourceCases)) "\n----\n")))
 

@@ -112,7 +112,7 @@ fn executeReadStep! stepId: Int64 args: (List BatchArg) staged: (Map Str Str) ->
             (StepResult :id stepId :op "read" :status "ok" :isErr false :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"read\" :status \"ok\" :file \"" (escapeStr file) "\" :content \"" (escapeStr content) "\")")))
           (if (not (fileExists? file))
             (makeStepResultErr stepId "read" ":ERR_FILE_NOT_FOUND" (str "File not found: " file))
-            (let [(readRes (fileRead file))]
+            (let [(readRes (fileReadString file))]
               (mt readRes
                 ((err _) (makeStepResultErr stepId "read" ":ERR_READ_FAILED" (str "Failed to read file: " file)))
                 ((ok content) (StepResult :id stepId :op "read" :status "ok" :isErr false :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"read\" :status \"ok\" :file \"" (escapeStr file) "\" :content \"" (escapeStr content) "\")"))))))))))
@@ -149,7 +149,7 @@ fn executeEditStep! stepId: Int64 args: (List BatchArg) staged: (Map Str Str) ->
         (let [(contentOpt (if (mapHas? staged file)
                             (some (optionOr (mapGet staged file) ""))
                             (if (fileExists? file)
-                              (mt (fileRead file) ((ok s) (some s)) ((err _) (none)))
+                              (mt (fileReadString file) ((ok s) (some s)) ((err _) (none)))
                               (none))))]
           (mt contentOpt
             ((none)
@@ -195,7 +195,7 @@ fn executeDiffStep! stepId: Int64 args: (List BatchArg) staged: (Map Str Str) ->
               (allDiffs (fold (fn [(acc Str) (p (Pair Str Str))] -> Str
                                 (let [(fp (pairFirst p))
                                       (stagedContent (pairSecond p))
-                                      (diskContent (if (fileExists? fp) (resultOr (fileRead fp) "") ""))
+                                      (diskContent (if (fileExists? fp) (resultOr (fileReadString fp) "") ""))
                                       (d (renderDiff diskContent stagedContent))]
                                   (if (stringEmpty? acc) d (str acc "\n" d))))
                               "" pairs))]
@@ -204,7 +204,7 @@ fn executeDiffStep! stepId: Int64 args: (List BatchArg) staged: (Map Str Str) ->
         (makeStepResultErr stepId "diff" ":ERR_BOUNDARY_VIOLATION" (str "Path escapes workspace boundary: " file))
         (if (mapHas? staged file)
           (let [(stagedContent (optionOr (mapGet staged file) ""))
-                (diskContent (if (fileExists? file) (resultOr (fileRead file) "") ""))
+                (diskContent (if (fileExists? file) (resultOr (fileReadString file) "") ""))
                 (d (renderDiff diskContent stagedContent))]
             (if (= stagedContent diskContent)
               (StepResult :id stepId :op "diff" :status "ok" :isErr false :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"diff\" :status \"ok\" :file \"" (escapeStr file) "\" :diff \"\" :clean true)"))
@@ -253,7 +253,7 @@ fn executePreflushStep! stepId: Int64 args: (List BatchArg) staged: (Map Str Str
               (StepResult :id stepId :op "preflush" :status "ok" :isErr false :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"preflush\" :status \"ok\" :file \"" (escapeStr file) "\" :canFlush true :checksPassed [:dyck1Purity :syntaxIntegrity :zeroLineNumbers])"))))
           (if (not (fileExists? file))
             (makeStepResultErr stepId "preflush" ":ERR_FILE_NOT_FOUND" (str "File not found: " file))
-            (let [(readRes (fileRead file))]
+            (let [(readRes (fileReadString file))]
               (mt readRes
                 ((err _) (makeStepResultErr stepId "preflush" ":ERR_READ_FAILED" (str "Failed to read file: " file)))
                 ((ok content)
@@ -309,7 +309,7 @@ fn executeFlushStep! stepId: Int64 args: (List BatchArg) staged: (Map Str Str) -
                   (pair (StepResult :id stepId :op "flush" :status "ok" :isErr false :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"flush\" :status \"ok\" :file \"" (escapeStr file) "\" :persisted true)")) (mapRemove staged file))))))
           (if (not (fileExists? file))
             (pair (makeStepResultErr stepId "flush" ":ERR_FILE_NOT_FOUND" (str "File not found: " file)) staged)
-            (let [(readRes (fileRead file))]
+            (let [(readRes (fileReadString file))]
               (mt readRes
                 ((err _) (pair (makeStepResultErr stepId "flush" ":ERR_READ_FAILED" (str "Failed to read file: " file)) staged))
                 ((ok content)

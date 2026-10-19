@@ -1,4 +1,4 @@
-(module asl-forms/tests/gatesParityTest :x [runTests main] :i [(asl-forms/kernel :a k) (asl-forms/gate :a g) (asl-forms/ops :a ops) (asl-forms/wire :a w) (asl-forms/main :a m)])
+(module asl-forms/tests/gatesParityTest :x [runTests main] :i [(asl-forms/kernel :a k) (asl-forms/gate :a g) (asl-forms/ops :a ops) (asl-forms/wire :a w) (asl-forms/main :a m) (tools/nativeTest :a nt)])
 
 
 (schema Case (:f id String) (:f kind String) (:f root String) (:f form String) (:f exit String) (:f stdout String) (:f log String) (:f lock String))
@@ -77,7 +77,7 @@ fn diffNote! label: String id: String want: String got: String -> Bool
     true
     (do (println (str "(:gatesDiff :case " id " :aspect " label " :want \"" (k/escapeAsnVal want) "\" :got \"" (k/escapeAsnVal got) "\")")) false))
 
-fn checkCase! repo: String work: String host: String text: String row: String t: Tally -> Tally
+fn checkCase! repo: String work: String bin: String text: String row: String t: Tally -> Tally
   (let [(c (caseOf row))
         (stubs (str repo "/asl/packages/asl-forms/tests/fixtures/recorded/gatesStubs"))
         (ws (wsDir work c.root))
@@ -85,7 +85,7 @@ fn checkCase! repo: String work: String host: String text: String row: String t:
         (stagePath (str work "/stage" c.id))
         (lockPath (str ws "/asl/grammar/capabilities.lock"))
         (reset (do (fileWrite logPath "") (fileWrite stagePath "")))
-        (r (g/runArgv! (list host "run" (str repo "/asl/packages/asl-forms/tests/gatesParityTest.asl") (str repo "/asl/packages/asl-forms/tests/fixtures/recorded/gates.asn") c.id work)
+        (r (g/runArgv! (list bin (str repo "/asl/packages/asl-forms/tests/fixtures/recorded/gates.asn") c.id work)
                       (some ws) (some (caseEnv! repo work c text)) 120000 0))
         (got (masked r.out work stubs))
         (gotLog (resultOr (fileReadString logPath) "<no log>"))
@@ -101,19 +101,9 @@ fn checkCase! repo: String work: String host: String text: String row: String t:
     (do (if (and bad (not (stringEmpty? r.errText))) (println (str "(:gatesChildErr :case " c.id " :err \"" (k/escapeAsnVal r.errText) "\")")) (print ""))
         (Tally :cases (+ t.cases 1) :failures (+ t.failures (if bad 1 0)))))
 
-fn ! currentHost repo: String -> (Option String)
-  (mt (envGet "ASL_HOST")
-    ((some h) (if (fileExists? h)
-                (some (resultOr (realPath h) h))
-                (do (println (str "invalid environment variable: ASL_HOST path does not exist: " h))
-                    (assert false (str "invalid environment variable: ASL_HOST path does not exist: " h))
-                    (none))))
-    ((none) (let [(p (str repo "/asl/host/out/asl-host"))]
-              (if (fileExists? p)
-                (some (resultOr (realPath p) p))
-                (do (println (str "the stage-0 host is absent at " p "; build it with sh asl/host/build.sh or set ASL_HOST"))
-                    (assert false (str "the stage-0 host is absent at " p "; build it with sh asl/host/build.sh or set ASL_HOST"))
-                    (none))))))
+fn ! driver! repo: String -> (Result String String)
+  (let [(built (nt/prepareRun "asl/packages/asl-forms/tests/gatesParityTest.asl" (nt/fingerprint)))]
+    (mt built.binary ((some b) (ok (if (stringStartsWith? b "/") b (str repo "/" b)))) ((none) (err built.reason))))
 
 fn doctorUsesUnifiedIntel! repo: String dir: String host: String -> Bool
   (let [(bin (str dir "/staleBin"))
@@ -127,10 +117,11 @@ fn doctorUsesUnifiedIntel! repo: String dir: String host: String -> Bool
 
 fn ! runTests -> Bool
   (let [(repo (resultOr (realPath ".") "."))]
-    (mt (currentHost repo)
-      ((none) false)
-      ((some host)
-       (let [(text (resultOr (fileReadString (str repo "/asl/packages/asl-forms/tests/fixtures/recorded/gates.asn")) ""))
+    (mt (driver! repo)
+      ((err e) (do (assert false (str "gatesParityTest builds natively in run mode as the per-case driver: " e)) false))
+      ((ok bin)
+       (let [(host (str repo "/asl/packages/asl-forms/tests/fixtures/recorded/gatesStubs/bin/asl-host"))
+             (text (resultOr (fileReadString (str repo "/asl/packages/asl-forms/tests/fixtures/recorded/gates.asn")) ""))
              (work (resultOr (realPath (str (optionOr (envGet "TMPDIR") "/tmp") "/")) "/tmp"))
              (dir (str work "/aslGatesParity" (stringFromInt64 (procSelf)) "x" (stringFromInt64 (monotonicNs))))
              (made (dirCreate (str dir "/emptyBin")))
@@ -139,7 +130,7 @@ fn ! runTests -> Bool
          (assert (>= n 100) "the gates fixture holds at least 100 recorded cases")
          (assert (doctorUsesUnifiedIntel! repo dir host) "doctor probes bin/asl for intel even beside a stale asl-intel")
          (assert (materialize! dir text) "fixture trees materialize")
-         (let [(tally (fold (fn [(t Tally) (row String)] -> Tally (checkCase! repo dir host text row t)) (Tally :cases 0 :failures 0) rows))]
+         (let [(tally (fold (fn [(t Tally) (row String)] -> Tally (checkCase! repo dir bin text row t)) (Tally :cases 0 :failures 0) rows))]
            (do (pathRemove dir)
                (println (str "(:gatesParity :cases " (stringFromInt64 tally.cases) " :failures " (stringFromInt64 tally.failures) ")"))
                (assert (= tally.cases n) "every recorded case ran")

@@ -112,9 +112,9 @@ fn checkBasisToken! principles: Str acc: Int64 tok: Str -> Int64
       (+ acc 1)))
 
 fn testRulesClaimGrounding! -> Bool
-  (let [(readRes (fileRead "asl/grammar/rules.asn"))
-        (principlesRes (fileRead ".asl/mem/principles.asn"))
-        (wsRes (fileRead ".asl/rules.asn"))
+  (let [(readRes (fileReadString "asl/grammar/rules.asn"))
+        (principlesRes (fileReadString ".asl/mem/principles.asn"))
+        (wsRes (fileReadString ".asl/rules.asn"))
         (wsContent (resultOr wsRes ""))]
     (do
       (assert (ok? readRes) "rules.asn must be readable on disk")

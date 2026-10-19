@@ -298,11 +298,12 @@ fn ! gateTelemetry sc: LensScope st: LensState runId: Int64 -> (Pair Telemetry L
   (mt (mapGet st.tel (num runId))
     ((some t) (pair t st))
     ((none)
-      (let [(runner (k/joinPath sc.root "scripts/runGateTests.sh"))
+      (let [(bin (k/joinPath sc.root "bin/asl"))
+            (runnerMain (k/joinPath sc.root "asl/packages/asl-gates/src/runnerMain.asl"))
             (telPath (str "/tmp/aslLensTel." (num (procSelf)) "." (num runId) ".asn"))
-            (t (if (not (k/isFile! runner))
+            (t (if (not (and (k/isFile! bin) (k/isFile! runnerMain)))
                  (telemetryOf -1 "")
-                 (let [(res (lensSh sc (list "bash" runner (str "--telemetry=" telPath))))
+                 (let [(res (lensSh sc (list bin "run" runnerMain "gateTests" (str "--telemetry=" telPath))))
                        (raw (resultOr (fileReadString telPath) ""))
                        (gone (pathRemove telPath))]
                    (telemetryOf (pairFirst res) raw))))]
@@ -363,7 +364,7 @@ fn ! repoSecurity sc: LensScope st0: LensState -> LensState
 fn ! repoFalsification sc: LensScope st0: LensState -> LensState
   (let [(g (gateTelemetry sc st0 1)) (t (pairFirst g)) (st (pairSecond g))]
     (if (< t.rc 0)
-      (finding (record st "falsification" "unmeasured" "(:reason \"gate runner scripts/runGateTests.sh unavailable\")") "falsification" "high" "Falsification unmeasurable: gate runner not executable")
+      (finding (record st "falsification" "unmeasured" "(:reason \"gate runner (bin/asl run asl-gates/src/runnerMain.asl gateTests) unavailable\")") "falsification" "high" "Falsification unmeasurable: gate runner not executable")
       (let [(okf (and (= t.rc 0) (= t.failedSuites 0) (> t.suites 0) (> t.executedAsserts 0)))
             (s1 (findingIf st (not okf) "falsification" "high" (str "Gate suite falsification failed: exit " (num t.rc) ", failedSuites " (num t.failedSuites) ", executedAsserts " (num t.executedAsserts))))]
         (record s1 "falsification" (if okf "pass" "fail")

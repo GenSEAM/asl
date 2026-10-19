@@ -1,5 +1,5 @@
 (module asl-gates/suiteRunner
-  :x [SuiteResult SnapRun Fault Job Done discover frozenCount isFrozenPath! selectDirectorySuites! getExcludedForm snapRun gainedPaths workerCount envInt! gate main makeSuiteResult esc trustForm gateCounts computeDigest normpath dirname relpath makeSnapshot! runJobs! runJobsBy! doneMs runOne! gitOut! gitRun! gitRoot! absPath slowSuiteTimeoutS suiteJob! makeTempDir! sweepStaleTemps! isFile! nonHermeticReason driverCorpus pyStrip pyLines isSuiteName isExcludedSegment helpers! buildHost! nativeCliReady? nativeFallbackReason]
+  :x [SuiteResult SnapRun Fault Job Done discover frozenCount isFrozenPath! selectDirectorySuites! getExcludedForm snapRun gainedPaths workerCount envInt! gate main makeSuiteResult esc trustForm gateCounts computeDigest normpath dirname relpath makeSnapshot! runJobs! runJobsBy! doneMs runOne! gitOut! gitRun! gitRoot! absPath slowSuiteTimeoutS suiteJob! makeTempDir! sweepStaleTemps! isFile! nonHermeticReason driverCorpus pyStrip pyLines isSuiteName isExcludedSegment helpers! buildHost! nativeCliReady?]
   :i [(asl-gates/suiteTimes :a st) (asl-proc/runnerBin :a rb)])
 
 (schema SuiteResult
@@ -119,8 +119,10 @@ fn pyLines s: String -> (List String)
 fn lastLineOf out: String -> String
   (optionOr (listLast (pyLines (pyStrip out))) "")
 
+; (:m :ref MAINFIX10 :do "cutoverGate.asl sets ASL_SPAWN_LOG in a child host before running cutoverTest.asl; the walk can never set that env var itself, so the suite it should discover is the gate, named by exact path since a bare 'Gate.asl' suffix would also sweep in asl-gates/src/*Gate.asl library modules that are not suites at all")
 fn isSuiteName p: String -> Bool
   (cond
+    ((= p "tests/conformance/agentLoopCutover/cutoverGate.asl") true)
     ((stringEndsWith? p "Test.asl") true)
     ((stringEndsWith? p "_test.asl") true)
     ((stringEndsWith? p "Test.sh") true)
@@ -166,7 +168,8 @@ fn getNonHermeticPairs -> (List (Pair String String))
   (listSortBy (fn [(p (Pair String String))] -> String (pairFirst p))
     (listAppend
       (list (pair "tests/acceptance/daemonLifecycleTest.sh" "runs asl_daemon_socket_test.sh and omni_daemon_test.sh, which start daemons")
-            (pair "tests/acceptance/vtbotDataTooling/httpDownloadTest.asl" "downloads from https://download.gatedata.org (network)"))
+            (pair "tests/acceptance/vtbotDataTooling/httpDownloadTest.asl" "downloads from https://download.gatedata.org (network)")
+            (pair "tests/conformance/agentLoopCutover/cutoverTest.asl" "requires ASL_SPAWN_LOG, set only by tests/conformance/agentLoopCutover/cutoverGate.asl, which spawns it as a child; the hermetic walk discovers the gate instead"))
       (listAppend
         (acceptanceTests (list "asl_daemon_socket" "mesh_daemon" "mesh_declarative_config" "omni_daemon" "unified_agent_plane") (daemonReason))
         (listAppend
@@ -176,12 +179,12 @@ fn getNonHermeticPairs -> (List (Pair String String))
                                  "gateway_subscription_cli" "gateway_sync" "in_browser_agent" "in_browser_extension_bridge" "relay_cli"
                                  "search_research_nexus")
                            (liveReason))
-          (acceptanceTests (list "attractor_benchmark" "attractor_experiment_ledger" "audit_mesh" "cockpit_bento_arena" "cockpit_focus_authority"
+          (acceptanceTests (list "attractor_benchmark" "attractor_experiment_ledger" "audit_mesh" "cockpit_bento_arena"
                                  "cockpit_observatory_tiles" "cockpit_tokens_and_theme" "coupling_audit" "d121_decision" "host_computer_use_ax"
                                  "mesh_ast_mutations" "mesh_memory_compaction" "mesh_preflush_and_mutations" "mesh_profiles_config"
                                  "mesh_sharded_blackboard" "mesh_stale_cleanup" "mesh_transaction_concurrency" "mesh_witness_sandbox"
-                                 "preflush_gate" "profile_sync" "terminal_canvas_diff" "terminal_observatory_widgets"
-                                 "toolbelt_consult" "tui_cockpit_e2e" "tui_workspace_router"
+                                 "preflush_gate" "profile_sync"
+                                 "toolbelt_consult"
                                  "universal_consilium" "unsafe_runtime_acceleration")
                            (unverifiedReason))))))
 
@@ -984,23 +987,10 @@ fn ! nativeCliReady? real: String -> Bool
 fn ! nativeTestCacheRoot! -> String
   (optionOr (envGet "ASL_NATIVE_TEST_CACHE") (str (optionOr (envGet "HOME") (tempBase!)) "/.asl/run/nativeTest"))
 
-fn getNativeFallbackPairs -> (List (Pair String String))
-  (list
-    (pair "asl/packages/asl-agent-bus/tests/asnlRingTest.asl"
-          "its own logic shells out to ./bin/asl check and captures the nested subprocess output; measured under the native CLI (asl1 build, 2026-10-12) that capture truncates (33 passed interpreted by asl-host vs failing assert 16 of 16 compiled natively), independent of this runner; runs on asl-host directly until that native nested-capture gap is fixed")
-    (pair "tests/acceptance/aslDaemonSocketTest.asl"
-          "spawns a live engine daemon and drives it through repeated nested ./bin/asl engine/manage subprocess calls over a real socket; measured directly (2026-10-12, no env difference) that asl-host passes 7/7 every run while the native CLI fails deterministically at the first manage-spawn call (3 of 7 asserts), independent of this runner's own env vars; same nested-subprocess class as asnlRingTest; runs on asl-host directly until that native nested-subprocess gap is fixed"))
-
-fn getNativeFallbackMap -> (Map String String)
-  (mapFromPairs (getNativeFallbackPairs))
-
-fn nativeFallbackReason suite: String -> (Option String)
-  (mapGet (getNativeFallbackMap) suite)
+; (:m :ref HOSTLESS-GATES :do "HL-DG: no suite runs on asl-host any more (the stage-0 host was deleted, HL-DELETE); a suite the native CLI cannot run stays/becomes frozen in asl/grammar/frozen.asn with the native diagnostic as the quoted reason, instead of silently routing to the deleted host; an absent/stale native toolchain surfaces as buildHost!'s own reported Result error")
 
 fn ! nativeSuiteArgv! snap: String real: String suite: String -> (List String)
-  (if (some? (nativeFallbackReason suite))
-    (list (str snap "/asl/host/out/asl-host") "test" suite)
-    (list (rb/runnerBin! real) "test" suite))
+  (list (rb/runnerBin! real) "test" suite)
 
 fn ! suiteJob! snap: String suite: String baseS: Int64 -> Job
   (let [(path (str snap "/" suite))]
@@ -1022,11 +1012,14 @@ fn tail1500 s: String -> String
   (let [(n (stringLength s))]
     (if (> n 1500) (optionOr (stringSlice s (- n 1500) n) s) s))
 
+; (:m :ref SNAPSHOT-HOST-ABSENT :do "HL-C: the parent asl process sets ASL_CLI_ROOT (and friends) on itself to the REAL workspace root, not the snapshot; buildHost!'s build.sh/aslNativeBuild child used to inherit that unfiltered (:env (none)), so its own self-probe (a 'bin test' of a trivial fixture) resolved sys/context! and the native-test closure cache to the real tree's .asl/cache/nativeTest, racing every other concurrent process on this machine against the same path (ERR_NATIVE_UNSUPPORTED: closure load failed) instead of the snapshot's own isolated one; scrub the session keys and pin ASL_CLI_ROOT/ASL_NATIVE_TEST_CACHE to the snapshot the same way suiteJob! already does for the suites themselves")
 fn ! buildHost! snap: String real: String baseS: Int64 guard: (Option Guard) registry: (Option String) -> (Result Unit String)
   (mt (envInt! "ASL_HOST_BUILD_TIMEOUT_S" 1800)
     ((err e) (err e))
     ((ok hostBuildS)
-     (mt (runJobs! (list (Job :input "" :argv (list "/bin/bash" "asl/host/build.sh") :cwd (some snap) :env (none) :timeoutMs (* (max baseS hostBuildS) 1000))) 1 guard registry)
+     (mt (runJobs! (list (Job :input "" :argv (list "/bin/bash" "asl/host/build.sh") :cwd (some snap)
+                          :env (some (withEnv! (list "ASL_IN_RUNNER=1" (str "ASL_CLI_ROOT=" real) (str "ASL_NATIVE_TEST_CACHE=" (nativeTestCacheRoot!)) (nestedTimes snap))))
+                          :timeoutMs (* (max baseS hostBuildS) 1000))) 1 guard registry)
        ((err e) (err e))
        ((ok ds)
         (let [(d (optionOr (listHead ds) (Done :code -1 :out "" :errText "" :merged "" :startNs 0 :endNs 0)))]

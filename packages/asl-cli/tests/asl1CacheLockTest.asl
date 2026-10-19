@@ -102,7 +102,7 @@ fn ! testConcurrentCallersBuildOnce -> Bool
       (mt (sys/context!)
         ((err _) false)
         ((ok ctx)
-          (mt (spawnWorker! ctx.hostBin root)
+          (mt (spawnWorker! ctx.argv0 root)
             ((err _) false)
             ((ok childPid)
               (let [(artifactPath (str root "/artifact"))

@@ -83,6 +83,29 @@ fn ! wiringFor text: String -> (Result dp/Wiring String)
         ((err e) (err e))
         ((ok st) (dp/wiringFromConfig (some table) text st (testEnv) (listAppend (dp/builtinFamilies) (list (lf/fixtureFamily))))))))
 
+fn ! testRowsFromTableIncludesGeminiProvider -> Bool
+  (let [(text "(:gateway :v 2\n  :providers ((:provider :id testGeminiRow :kind gemini :base \"https://example.test/v1\" :keyEnv TESTGEMINIROW_API_KEY))\n  :models ((:model :id testGeminiRowModel :provider testGeminiRow :name \"m\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (testGeminiRowModel)))))\n  :uses ((:use :for default :profile p1)))")
+        (res (cfg/gateway_config_parse! text "rowsFromTableGemini" ".asl/mem/calibration/index.asn"))]
+    (mt res
+      ((err e) (assert false (str "ROWSFROMTABLE: config must parse: " e)))
+      ((ok tbl)
+        (let [(rows (dp/rowsFromTable (some tbl)))]
+          (mt (u/upstreamProviderNamed rows "testGeminiRow")
+            ((none) (assert false "ROWSFROMTABLE: a configured :kind gemini provider must appear in the dispatch row list, not be silently dropped"))
+            ((some _) true))))))
+
+; (:m :do "GW-OPENROUTER-PLUGIN-20261018: rowsFromTable's some-tbl branch excludes any id defaultRowNamed already knows (gemini/groq/ollama/openrouter/cli ids) from configured, then appends only upstreamProviders(), which itself excludes the openrouter catch-all row (upstreamFallback is a separate function, listed beside, not inside, upstreamProviders()); so once a real config table exists (every live gateway), the openrouter row never reaches rows/plugins and any model wired to provider openrouter gets ERR_NO_UPSTREAM no plugin for provider openrouter")
+fn ! testRowsFromTableIncludesOpenrouterProvider -> Bool
+  (let [(text "(:gateway :v 2\n  :models ((:model :id testOpenrouterModel :provider openrouter :name \"m\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (testOpenrouterModel)))))\n  :uses ((:use :for default :profile p1)))")
+        (res (cfg/gateway_config_parse! text "rowsFromTableOpenrouter" ".asl/mem/calibration/index.asn"))]
+    (mt res
+      ((err e) (assert false (str "ROWSFROMTABLE: config must parse: " e)))
+      ((ok tbl)
+        (let [(rows (dp/rowsFromTable (some tbl)))]
+          (mt (u/upstreamProviderNamed rows "openrouter")
+            ((none) (assert false "ROWSFROMTABLE: the built-in openrouter fallback provider must appear in the dispatch row list when a real config table is present, not only when table is none"))
+            ((some _) true))))))
+
 fn ! unitChecks -> Bool
   (let [(base "http://127.0.0.1:9")
         (routed (wiringFor (wiringConfig base true)))
@@ -359,7 +382,7 @@ fn ! socketChecks -> Bool
         (readyPath (str temp "/ready"))
         (command (str "exec " host " run " server " serve --port 0 --upstream " base "/v1 --ready " readyPath " 2>" temp "/gateway.err"))
         (env (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" temp) (str "ASL_GATEWAY_ROOT=" temp)
-                   (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") "FIXA_KEY=aKey" "RUNPOD_API_KEY=rpKey"))
+                   (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") "FIXA_KEY=aKey" "RUNPOD_API_KEY=rpKey" (nativeCliCacheEnvRow!)))
         (spawned (procSpawnv (list "/bin/sh" "-c" command) (none) (some env)))
         (pid (mt spawned ((ok sp) sp.pid) ((err _) 0)))
         (gatewayPort (if (> pid 0) (waitPort! readyPath 500) 0))
@@ -426,7 +449,10 @@ fn ! socketChecks -> Bool
       (and killed (and closed removed))))
 
 fn ! runTests -> Bool
-  (and (unitChecks) (and (redirectChecks) (and (coldChecks) (socketChecks))))
+  (and (testRowsFromTableIncludesGeminiProvider) (and (testRowsFromTableIncludesOpenrouterProvider) (and (unitChecks) (and (redirectChecks) (and (coldChecks) (socketChecks))))))
 
 fn ! hostExe! -> String
-  (optionOr (envGet "ASL_HOST") (resultOr (realPath "asl/host/out/asl-host") "asl/host/out/asl-host"))
+  (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl"))
+
+fn ! nativeCliCacheEnvRow! -> String
+  (str "ASL_NATIVE_CLI_CACHE=" (optionOr (envGet "ASL_NATIVE_CLI_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli")))

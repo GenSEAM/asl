@@ -11,7 +11,7 @@
 schema LoopEnv
   (:f provider (fn [String String] -> pv/Turn))
   (:f task String) (:f modeHint (Option String)) (:f owns (List String)) (:f gates (List String))
-  (:f rootDir String) (:f budget Int64) (:f journalPath String) (:f maxRetries Int64)
+  (:f rootDir String) (:f budget Int64) (:f inputTokenBudget Int64) (:f journalPath String) (:f maxRetries Int64)
   (:f sessionId (Option String)) (:f base (Option String)) (:f contextTokens (Option Int64))
   (:f model (Option String)) (:f gateTimeout (Option Int64)) (:f wallBudget (Option Int64))
   (:f resume (Option j/Json)) (:f intent (Option String)) (:f plan Bool) (:f specCheck Bool)

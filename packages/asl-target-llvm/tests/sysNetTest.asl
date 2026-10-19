@@ -6,14 +6,19 @@
       (asl-target-llvm/sysNet :a sysNet)
       (asl-target-llvm/libc :a libc)])
 
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): runTests used to spawn the leftover host binary live (`asl-host run <work>/tcpEchoSrc.asl` / unixEchoSrc.asl) and compare only its exitCode, both against a hardcoded literal 65 and against the native build's own exit. The host is gone; a real run of both fixtures against the leftover host binary at ~/projects/asex/asl/host/out/asl-host, read-only, outside this worktree, confirmed exitCode 65 for both the tcp and the unix echo fixture (verified at port time, not guessed), so the now-dead `(assert (= tcpHost.exitCode 65) ...)`/`(assert (= unixHost.exitCode 65) ...)` self-checks (tautological once that value is a recorded constant rather than a live run) are dropped, and the native-vs-host comparison becomes native-vs-recorded-65 directly")
+
 fn clang -> String
   "/usr/bin/clang -Wno-override-module"
 
-fn host -> String
-  "asl/host/out/asl-host"
-
 fn lib -> String
   "asl/host/out/libaslrt.a"
+
+fn recordedTcpEchoExit -> Int64
+  65
+
+fn recordedUnixEchoExit -> Int64
+  65
 
 fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)
@@ -218,59 +223,6 @@ fn ! unwrapFns label: String res: (Result (List ty/SsaFunction) String) -> (List
 fn ! asciiA -> String
   "A"
 
-fn ! tcpSourceFixture work: String -> String
-  (let [(path (str work "/tcpEchoSrc.asl"))
-        (src (str
-               "(module tests/tcpEchoSrc :x [main] :i [])\n"
-               "fn ! main args: (List String) -> (Result Int64 String)\n"
-               "  (mt (tcpListen 0)\n"
-               "    ((err e) (ok 201))\n"
-               "    ((ok fd)\n"
-               "     (mt (sockLocalPort fd)\n"
-               "       ((err e) (ok 202))\n"
-               "       ((ok port)\n"
-               "        (mt (tcpConnect port)\n"
-               "          ((err e) (ok 203))\n"
-               "          ((ok cfd)\n"
-               "           (mt (sockAccept fd)\n"
-               "             ((err e) (ok 204))\n"
-               "             ((ok afd)\n"
-               "              (mt (fdWrite cfd \"A\")\n"
-               "                ((err e) (ok 205))\n"
-               "                ((ok n)\n"
-               "                 (mt (fdRead afd 1)\n"
-               "                   ((err e) (ok 206))\n"
-               "                   ((ok s)\n"
-               "                    (do (fdClose cfd) (fdClose afd) (fdClose fd)\n"
-               "                        (if (= s \"A\") (ok 65) (ok 0)))))))))))))))\n"))]
-    (do (assert (ok? (fileWrite path src)) "tcpEchoSrc.asl written")
-        path))
-
-fn ! unixSourceFixture work: String path: String -> String
-  (let [(srcPath (str work "/unixEchoSrc.asl"))
-        (src (str
-               "(module tests/unixEchoSrc :x [main] :i [])\n"
-               "fn ! main args: (List String) -> (Result Int64 String)\n"
-               "  (mt (unixListen \"" path "\")\n"
-               "    ((err e) (ok 201))\n"
-               "    ((ok fd)\n"
-               "     (mt (unixConnect \"" path "\")\n"
-               "       ((err e) (ok 203))\n"
-               "       ((ok cfd)\n"
-               "        (mt (sockAccept fd)\n"
-               "          ((err e) (ok 204))\n"
-               "          ((ok afd)\n"
-               "           (mt (fdWrite cfd \"A\")\n"
-               "             ((err e) (ok 205))\n"
-               "             ((ok n)\n"
-               "              (mt (fdRead afd 1)\n"
-               "                ((err e) (ok 206))\n"
-               "                ((ok s)\n"
-               "                 (do (fdClose cfd) (fdClose afd) (fdClose fd)\n"
-               "                     (if (= s \"A\") (ok 65) (ok 0)))))))))))))\n"))]
-    (do (assert (ok? (fileWrite srcPath src)) "unixEchoSrc.asl written")
-        srcPath))
-
 fn ! runOneEcho work: String name: String facts: libc/TripleFacts runFn: (Result (List ty/SsaFunction) String) strings: (List String) -> Int64
   (let [(fns (unwrapFns (str name ": step functions") runFn))]
     (if (= (listLength fns) 0)
@@ -365,20 +317,13 @@ fn ! portRangeRunFn facts: libc/TripleFacts -> (Result (List ty/SsaFunction) Str
 fn ! runTests -> Bool
   (let [(made (sh "mktemp -d")) (work (stringReplace made.stdout "\n" "")) (facts (hostFacts))]
     (do (assert (= made.exitCode 0) "mktemp -d makes a work directory")
-        (let [(tcpNative (runOneEcho work "tcpEcho" facts (tcpEchoRunFn facts) (list (asciiA))))
-              (tcpSrc (tcpSourceFixture work))
-              (tcpHost (sh (str (host) " run " tcpSrc)))]
+        (let [(tcpNative (runOneEcho work "tcpEcho" facts (tcpEchoRunFn facts) (list (asciiA))))]
           (do (assert (= tcpNative 65) (str "tcp echo native: exit " tcpNative ", want 65 ('A' echoed through a real loopback TCP round trip)"))
-              (assert (= tcpHost.exitCode 65) (str "tcp echo asl-host: exit " tcpHost.exitCode ", want 65; stderr " tcpHost.stderr))
-              (assert (= tcpNative tcpHost.exitCode) (str "tcp echo: native exit equals asl-host run's exit; native=" tcpNative " host=" tcpHost.exitCode))))
+              (assert (= tcpNative (recordedTcpEchoExit)) (str "tcp echo: native exit equals the recorded asl-host run's exit; native=" tcpNative " recorded=" (recordedTcpEchoExit)))))
         (let [(sockPath (str work "/echo.sock"))
-              (sockPathHost (str work "/echoHost.sock"))
-              (unixNative (runOneEcho work "unixEcho" facts (unixEchoRunFn facts sockPath) (list (asciiA) sockPath)))
-              (unixSrc (unixSourceFixture work sockPathHost))
-              (unixHost (sh (str (host) " run " unixSrc)))]
+              (unixNative (runOneEcho work "unixEcho" facts (unixEchoRunFn facts sockPath) (list (asciiA) sockPath)))]
           (do (assert (= unixNative 65) (str "unix echo native: exit " unixNative ", want 65"))
-              (assert (= unixHost.exitCode 65) (str "unix echo asl-host: exit " unixHost.exitCode ", want 65; stderr " unixHost.stderr))
-              (assert (= unixNative unixHost.exitCode) (str "unix echo: native exit equals asl-host run's exit; native=" unixNative " host=" unixHost.exitCode))))
+              (assert (= unixNative (recordedUnixEchoExit)) (str "unix echo: native exit equals the recorded asl-host run's exit; native=" unixNative " recorded=" (recordedUnixEchoExit)))))
         (let [(mutant (mutantSockaddrInFacts facts))
               (mutantResult (runOneEcho work "tcpEchoMutant" mutant (tcpEchoRunFn mutant) (list (asciiA))))]
           (assert (not (= mutantResult 65)) (str "mutant sin_port offset+1: tcp echo must NOT exit 65 (got " mutantResult "), proving the gate is sensitive to a real byte-layout bug")))

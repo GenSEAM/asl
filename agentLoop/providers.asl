@@ -4,7 +4,7 @@
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
       parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
       curlConfig parseCurlResponse tempDir! freshDir! buildDryRunInfo! providerEnv! makeProvider! nextTurn! advise! review! providerName vendorName splitContext cleanup!]
-  :i [(asl-json/json :a j) (asl-proc/coreProcess :a cp) (aslGateway/server :a gs) (aslGateway/dispatch :a gd) (aslGateway/upstream :a gu)])
+  :i [(asl-json/json :a j) (asl-proc/coreProcess :a cp) (aslGateway/server :a gs) (aslGateway/dispatch :a gd) (aslGateway/upstream :a gu) (aslGateway/config :a cfg)])
 
 enum ProviderError
   (providerError code: String message: String)
@@ -696,11 +696,12 @@ fn envOr! name: String fallback: String -> String
     ((some v) (if (stringEmpty? v) fallback v))
     (none fallback))
 
-fn ! providerEnv! -> ProviderEnv
+; (:m :ref PROFILE-PIN-NAME-20261018 :do "rule no-env-config: FREEBULK-ROUTED-DEEPSEEK-20261017 dropped the ASL_PROFILE env var entirely. An empty :profile here already made callProfile! send no X-ASL-Profile header (model != 'profile' is the only other no-header case), and the gateway resolves a headerless request through its own default profile (~/.asl/gateway.asn :uses (:use :for default :profile commandCode)), whose code/any chain opens with ccDeepseekFlash -- the exact deepseek RETRY5/6/7 hit. The env var was one more way to land on empty besides an unset/missing pin: keeping it meant a FREEPOOL child could still silently inherit whatever ASL_PROFILE its own ambient shell had (or lacked), on top of the pin file this worktree actually wanted. The pin's path, reader and writer are now the one shared cfg/profilePinPath / cfg/profilePinRead! / cfg/writeProfilePin! (asl-gateway/config.asl) every caller uses -- this used to duplicate its own path string and its own byte-tokenizer parse")
+fn ! providerEnv! rootDir: String -> ProviderEnv
   (ProviderEnv
     :gatewayUrl (envOr! "ASL_GATEWAY_URL" "http://127.0.0.1:8765/v1/chat/completions")
     :inProcess (stringEmpty? (envOr! "ASL_GATEWAY_URL" ""))
-    :profile (envOr! "ASL_PROFILE" "")
+    :profile (optionOr (cfg/profilePinRead! rootDir) "")
     :gatewayConfig (envOr! "ASL_GATEWAY_CONFIG" (str (envOr! "HOME" "") "/.asl/gateway.asn"))
     :tmpDir (envOr! "TMPDIR" (envOr! "TEMP" (envOr! "TMP" "/tmp")))
     :childEnv (mapEmpty))

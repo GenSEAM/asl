@@ -1,4 +1,4 @@
-(module asl-forms/tests/opsTest :x [runTests] :i [(asl-forms/kernel :a k) (asl-forms/ops :a ops) (asl-forms/delegate :a d) (asl-forms/gate :a g)])
+(module asl-forms/tests/opsTest :x [runTests] :i [(asl-forms/kernel :a k) (asl-forms/ops :a ops) (asl-forms/delegate :a d) (asl-forms/gate :a g) (asl-forms/tests/formsDriver :a fd)])
 
 fn wsRoot! -> String
   (resultOr (realPath "asl/packages/asl-forms/tests/fixtures/ws") "")
@@ -11,15 +11,13 @@ fn line! form: String -> String
 
 fn gatewayRun! form: String -> g/RunOut
   (let [(root (resultOr (realPath ".") "."))
-        (host (k/joinPath root "asl/host/out/asl-host"))
-        (mainPath (k/joinPath root "asl/packages/asl-forms/src/main.asl"))
+        (host (fd/formsBin! root))
         (env (list (str "PATH=" (optionOr (envGet "PATH") "")) "ASL_GATEWAY_PORT=1"))]
-    (g/runArgv! (list host "run" mainPath form) (some root) (some env) 10000 0))
+    (g/runArgv! (list host form) (some root) (some env) 10000 0))
 
 fn gatewayReplyRun! form: String reply: String -> g/RunOut
   (let [(root (resultOr (realPath ".") "."))
-        (host (k/joinPath root "asl/host/out/asl-host"))
-        (mainPath (k/joinPath root "asl/packages/asl-forms/src/main.asl"))
+        (host (fd/formsBin! root))
         (tmp (str (optionOr (envGet "TMPDIR") "/tmp/") "aslGatewayReply_" (stringFromInt64 (mod (nowNs) 1000000))))
         (bin (k/joinPath tmp "bin"))
         (curl (k/joinPath bin "curl"))
@@ -29,7 +27,7 @@ fn gatewayReplyRun! form: String reply: String -> g/RunOut
         (env (list (str "PATH=" bin ":" (optionOr (envGet "PATH") ""))
                    "ASL_GATEWAY_PORT=1"
                    (str "ASL_TEST_GATEWAY_REPLY=" reply)))
-        (result (g/runArgv! (list host "run" mainPath form) (some root) (some env) 10000 0))
+        (result (g/runArgv! (list host form) (some root) (some env) 10000 0))
         (clean (g/runArgv! (list "rm" "-rf" tmp) (none) (none) 5000 0))]
     result)
 
@@ -118,10 +116,9 @@ fn workspaceLine! form: String -> String
 
 fn externalRootRun! root: String form: String -> g/RunOut
   (let [(repo (resultOr (realPath ".") ""))
-        (host (k/joinPath repo "asl/host/out/asl-host"))
-        (mainPath (k/joinPath repo "asl/packages/asl-forms/src/main.asl"))
+        (host (fd/formsBin! repo))
         (env (list (str "PATH=" (optionOr (envGet "PATH") "")) (str "ASL_VFS_DIR=" (k/joinPath root ".asl/vfs"))))]
-    (g/runArgv! (list host "run" mainPath "--root" root form) (some repo) (some env) 10000 0))
+    (g/runArgv! (list host "--root" root form) (some repo) (some env) 10000 0))
 
 fn unknownSymbolCheck! -> (Pair String Bool)
   (let [(tmp (str (optionOr (envGet "TMPDIR") "/tmp/") "aslOpsCheck_" (stringFromInt64 (mod (nowNs) 1000000))))
@@ -136,14 +133,13 @@ fn testTxnRouter! -> Bool
         (vfs (k/joinPath root ".asl/vfs"))
         (file (k/joinPath root "a.txt"))
         (repo (resultOr (realPath ".") ""))
-        (host (k/joinPath repo "asl/host/out/asl-host"))
-        (mainPath (k/joinPath repo "asl/packages/asl-forms/src/main.asl"))
+        (host (fd/formsBin! repo))
         (env (list (str "PATH=" (optionOr (envGet "PATH") "")) (str "ASL_VFS_DIR=" vfs)))
         (payload "(:txn :owns (\"a.txt\") (:edit :file \"a.txt\" :old \"hello\" :new \"world\"))")]
     (do
       (assert (ok? (dirCreate vfs)) "create isolated transaction vfs")
       (assert (ok? (fileWrite file "hello")) "seed transaction target")
-      (let [(out (g/runArgv! (list host "run" mainPath "--root" root payload) (some repo) (some env) 30000 0))
+      (let [(out (g/runArgv! (list host "--root" root payload) (some repo) (some env) 30000 0))
             (content (resultOr (fileReadString file) ""))]
         (do
           (assert (and (= out.code 0) (stringContains? out.out ":status \"ok\"")) "txn nested edit completes through runStep router")
@@ -163,7 +159,7 @@ fn testRoutedOperations! -> Bool
       (assert (stringContains? foreignTools.out ":op :read") "foreign workspace tools return the actual operation registry")
       (assert (stringContains? (line! "(:reed :file \"x\")") "ERR_UNIMPLEMENTED") "unknown operations preserve the legacy unimplemented error without a not-ported router path")
       (assert (pairSecond unknownCheck) "the foreign check workspace was created and removed")
-      (assert (stringContains? (pairFirst unknownCheck) "ERR_CHECK_FAILED") "foreign workspace ASL checks use the toolchain host and reject unknown symbols")
+      (assert (stringContains? (pairFirst unknownCheck) "ERR_CHECK_FAILED") "foreign workspace ASL checks run the native checker and reject unknown symbols")
       true))
 
 fn routedReply? op: String out: String -> Bool
@@ -194,19 +190,18 @@ fn scratchDir! tag: String -> String
 
 fn isolatedRun! root: String form: String -> g/RunOut
   (let [(repo (resultOr (realPath ".") ""))
-        (host (k/joinPath repo "asl/host/out/asl-host"))
-        (mainPath (k/joinPath repo "asl/packages/asl-forms/src/main.asl"))
+        (host (fd/formsBin! repo))
         (env (list (str "PATH=" (optionOr (envGet "PATH") "")) (str "ROOT_DIR=" root) (str "SCRIPT_DIR=" (k/joinPath root "bin"))
                    (str "HOME=" root) (str "ASL_VFS_DIR=" (k/joinPath root ".asl/vfs")) "ASL_GATEWAY_PORT=1"))]
-    (g/runArgv! (list host "run" mainPath "--root" root form) (some repo) (some env) 60000 0))
+    (g/runArgv! (list host "--root" root form) (some repo) (some env) 60000 0))
 
+; (:m :ref MAINFIX14-AGENTROUTE-TIMEOUT-20261019 :do "routedAgentRun! sends an :agent step, which agentStep (asl-forms/delegate.asl) handles by building asl/agentLoop/main.asl's native binary via ev/nativeEntry! before it can even spawn the rejection check this test wants -- a strictly heavier path than isolatedRun!'s (forms-host build only), yet this had half isolatedRun!'s 60000ms budget. On a cold .asl/cache/nativeTest (the state after any other suite's cache sweep, or the first worktree to touch this path in a train) that build alone exceeds 30s, g/runArgv! SIGKILLs the still-building subprocess at the deadline (gate.asl#runArgv! graceMs 0), and RunOut.code becomes the kill/wait status, not the ERR_ROLE_DEPRECATED rejection's exit 1 -- reproduced verbatim (same assertion, same 'after 39 asserts') by clearing .asl/cache/nativeTest and rerunning this file. 180000ms matches the run/limits 180s convention used elsewhere for CLI subprocess budgets and comfortably covers the measured ~137s cold-build wall time for this file")
 fn routedAgentRun! root: String form: String -> g/RunOut
   (let [(repo (resultOr (realPath ".") ""))
-        (host (k/joinPath repo "asl/host/out/asl-host"))
-        (mainPath (k/joinPath repo "asl/packages/asl-forms/src/main.asl"))
+        (host (fd/formsBin! repo))
         (env (list (str "PATH=" (optionOr (envGet "PATH") "")) (str "ROOT_DIR=" repo) (str "SCRIPT_DIR=" (k/joinPath repo "bin"))
                    (str "HOME=" root) (str "ASL_VFS_DIR=" (k/joinPath root ".asl/vfs")) "ASL_GATEWAY_PORT=1"))]
-    (g/runArgv! (list host "run" mainPath "--root" root form) (some repo) (some env) 30000 0))
+    (g/runArgv! (list host "--root" root form) (some repo) (some env) 180000 0))
 
 fn testAgentGetsRawForm! -> Bool
   (let [(root (scratchDir! "aslOpsAgent"))
@@ -312,9 +307,18 @@ fn testManifestCoverage! -> Bool
          (stringContains? manifest "\"asl-syntax\"")
          (stringContains? manifest "\"asl-coord\"")))
 
+fn testGateContextUsesNativeCli! -> Bool
+  (let [(root (resultOr (realPath ".") "."))
+        (env (ops/gateContext! root))]
+    (do
+      (assert (stringEndsWith? env.host "/asl") (str "gateContext! points :host at the native asl CLI binary, got " env.host))
+      (assert (not (stringContains? env.host "host/out/asl-host")) "gateContext! has no preference for the deleted stage-0 host binary")
+      true))
+
 fn ! runTests -> Bool
   (do
     (assert (testManifestCoverage!) "manifest declares all forms modules and direct package dependencies")
+    (assert (testGateContextUsesNativeCli!) "testGateContextUsesNativeCli")
     (assert (testLegacyRoutes!) "testLegacyRoutes")
     (assert (testEngineExchange!) "testEngineExchange")
     (assert (testEngineFrames!) "testEngineFrames")

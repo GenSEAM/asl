@@ -1,6 +1,6 @@
 (module asl-cli/asl1Cache
   :x [nativeAsl1! singleFlight! bootstrap! buildNative! buildNativeTransaction! closure!]
-  :i [(asl/packages/asl-cli/src/system :a sys)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl-parser/ast :a a) (asl-checker/resolve :a r)])
 
 fn compilerPath! ctx: sys/Context -> String
   (optionOr (envGet "ASL_NATIVE_ASL1_SOURCE") (str ctx.root "/asl/packages/asl-compiler/src/asl1.asl"))
@@ -56,13 +56,25 @@ fn ! appendFileHashIn root: String paths: (List String) acc: String -> (Result S
 fn underRoot root: String path: String -> String
   (if (or (stringEmpty? root) (stringStartsWith? path "/")) path (str root "/" path))
 
+fn distinctSorted xs: (List String) -> (List String)
+  (listReverse (fold (fn [(acc (List String)) (x String)] -> (List String) (if (= (optionOr (listHead acc) "") x) acc (cons x acc))) (list) (listSort xs)))
+
+; (:m :ref SNAPSHOT-HOST-ABSENT-BUILD-HOSTBIN :do "HL-C: asl1.asl's own 'deps' verb (asl-compiler/src/asl1.asl's deps fn) used to be the only way to compute the asl1 dependency closure for cache-keying, and it only ran interpreted through the deleted stage-0 host (ctx.hostBin); this walks the same closure in-process, with the same resolver (asl-checker/resolve's collectSummary/loadModuleDeps!) asl1.asl itself uses, so no process -- host or native -- needs to exist yet for a cold cache to key itself")
 fn ! interpretedDeps! ctx: sys/Context compiler: String -> (Result String String)
-  (mt (sys/capture! (list "nice" "-n" "15" ctx.hostBin "run" compiler "deps" compiler) (some ctx.root))
+  (mt (fileReadString compiler)
     ((err e) (err (str "cannot read asl1 dependency closure: " e)))
-    ((ok captured)
-      (if (!= captured.exitCode 0)
-        (err (str "asl1 deps failed (exit " (stringFromInt64 captured.exitCode) ")"))
-        (ok captured.stdout))))
+    ((ok src)
+      (mt (a/parse src)
+        ((err pe) (err (str "cannot read asl1 dependency closure: " compiler ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": parse error " pe.msg)))
+        ((ok forms)
+          (let [(summary (r/collectSummary forms compiler))
+                (root (resultOr (realPath ctx.root) ctx.root))]
+            (mt (r/loadModuleDeps! (cons (r/parentDirOf compiler) (list ctx.root)) (r/mapValuesList summary.imports))
+              ((err _) (err "cannot read asl1 dependency closure: its imports do not load"))
+              ((ok closure)
+                (let [(absPaths (filter (fn [(k String)] -> Bool (stringStartsWith? k "/")) (mapKeys closure)))
+                      (relPaths (map (fn [(p String)] -> String (rootRelative root p)) absPaths))]
+                  (ok (stringJoin (distinctSorted relPaths) "\n"))))))))))
 
 fn ! versionLine clang: String -> (Result String String)
   (mt (sys/capture! (list "env" "TMPDIR=/tmp" clang "--version") (none))
@@ -224,8 +236,9 @@ fn ! ensureSeed! root: String lib: String clang: String -> (Result String String
     ((some pinned) (if (validSeed? pinned) (ok pinned) (err "ERR_NO_NATIVE_SEED")))
     ((none) (checkedInSeed! root lib clang)))
 
+; (:m :ref HL-FIXWAVE :do "this message told the reader to regenerate the seed with asl-host, retired for good by HL-DELETE; bin/asl is the only runner left")
 fn staleSeed reason: String -> String
-  (str "ERR_SEED_STALE: the bootstrap seed cannot build the compiler sources (" reason "); regenerate it with asl-host run tools/seed.asl regen")
+  (str "ERR_SEED_STALE: the bootstrap seed cannot build the compiler sources (" reason "); regenerate it with bin/asl run tools/seed.asl regen")
 
 fn ! nativeStage! compiler: String source: String lib: String clang: String -> (Result String String)
   (let [(ll (str compiler ".boot.ll"))

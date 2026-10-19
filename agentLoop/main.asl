@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveBody! loopResultOf main mainCli]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveBody! loopResultOf main mainCli mainWithRoots]
   :i [(asl/agentLoop/core :a c)
       (asl/agentLoop/diff :a diff)
       (asl/agentLoop/providers :a pv)
@@ -114,6 +114,7 @@
   (:f timeoutSet Bool)
   (:f queueTimeout Int64)
   (:f budget Int64)
+  (:f inputTokenBudget Int64)
   (:f gateTimeout Int64)
   (:f wallBudget (Option Int64))
   (:f intent (Option String))
@@ -123,7 +124,7 @@
   (:f resume (Option ResumeState)))
 
 fn knownParams -> (List String)
-  (list "agent" "task" "mode" "intent" "root" "owns" "gates" "backend" "budget" "dryRun" "resume" "answer" "role"
+  (list "agent" "task" "mode" "intent" "root" "owns" "gates" "backend" "budget" "inputTokenBudget" "dryRun" "resume" "answer" "role"
         "model" "timeout" "contextFile" "base" "queueTimeout" "contextTokens" "gateTimeout" "wallBudget" "plan")
 
 fn acceptedKeys -> (List String)
@@ -342,6 +343,7 @@ fn applyKey ps: (List (Pair String j/Json)) key: String v: j/Json -> (Pair (List
     ((or (= key "intent") (= key "role")) (pair (paramSet ps key (j/jstr (lstripColons (pv/pyStr v)))) none))
     ((or (= key "owns") (= key "gates")) (pair (paramSet ps key (listParam v)) none))
     ((= key "budget") (pair (paramSet ps key (intParam v 3000)) none))
+    ((= key "inputTokenBudget") (pair (paramSet ps key (intParam v 0)) none))
     ((= key "timeout") (pair (paramSet ps key (intParam v 600)) none))
     ((= key "queueTimeout") (pair (paramSet ps key (intParam v 1200)) none))
     ((= key "dryRun")
@@ -1229,7 +1231,8 @@ fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: 
           opName (liveOpName op)
           target (liveOpPath op)
           mutating (listContains? (list "write" "edit" "delete") opName)
-          owned (and mutating (and (not (stringEmpty? target)) (c/checkOwns target ra.owns rootDir)))
+          ; (:m :ref LEON-WRITE-NOT-COUNTED-20261018 :do "a session with no :owns writes anywhere inside :root, but this 'owned' flag used to feed ra.owns raw into checkOwns: checkOwns on an empty list is false by definition, never true, so a real, accepted, on-disk write with no :owns declared never counted as owned, writesPersisted stayed false forever, and the run escalated nothing written by turn 20 even though the write succeeded and read back correctly. c/effectiveOwns (LEON-OWNS-ONE-RULE-20261018) is the single normalization exec.asl's writeCheck now shares, so the two owns checks can no longer drift out of sync")
+          owned (and mutating (and (not (stringEmpty? target)) (c/checkOwns target (c/effectiveOwns ra.owns) rootDir)))
           before (if owned (jr/snapshotBeforeWrite run.written target) (ok run.written))
           runOp (fn [form root] (let [r (ao/runAsl repoRoot form root ra.timeout none "subprocess")]
                                   (tx/aslRun (ao/runExit r) (ao/runStdout r) (ao/runStderr r))))
@@ -1301,6 +1304,17 @@ fn liveLastGateMap gates: (List g/GateResult) old: (Map String j/Json) -> (Map S
 fn ! runLiveGates! gates: (List String) rootDir: String timeout: Int64 -> (List g/GateResult)
   (map liveGateResult (go/runGates! (map (fn [p] (pair (stringFromInt64 (+ (pairFirst p) 1)) (pairSecond p))) (enumerate gates)) rootDir timeout none))
 
+; (:m :ref LEON-CONTEXT-RESEND-20261017 :do "a deterministic gate-verdict summary for the turn's receipt line; feeds the aged-out-turn summary in ctx/renderTranscriptBounded instead of that turn's raw model text")
+fn liveGateSummary gates: (List g/GateResult) -> String
+  (if (listEmpty? gates)
+    ""
+    (let [total (listLength gates)
+          green (listLength (filter (fn [gt] (= (g/gateExit gt) 0)) gates))]
+      (if (= green total)
+        (str (stringFromInt64 green) "/" (stringFromInt64 total) " green")
+        (str (stringFromInt64 green) "/" (stringFromInt64 total) " green, red: "
+          (c/joinSep (map g/gateCmd (filter (fn [gt] (!= (g/gateExit gt) 0)) gates)) "; ")))))
+
 fn liveDoneOps? ops: (List (List (Pair String c/KvVal))) -> Bool
   (listAny? (fn [op] (mt (c/dictGet op "type") ((some v) (mt v ((c/kvStr t) (= t "done")) (_ false))) ((none) false))) ops)
 
@@ -1339,19 +1353,28 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
   (let [run wrapped.run
         state run.state
         turn state.turn
-        transcript (ctx/renderTranscript wrapped.history state.transcriptChars)
+        transcript (ctx/renderTranscriptBounded wrapped.history (ctx/contextKeepTurnsFor! rootDir) (ctx/contextToolCapBytesFor! rootDir) (ctx/contextMaxOlderLinesFor! rootDir))
         advisorInvoked (= (optionOr ra.intent "") "reinforce")
         advisorResult (if advisorInvoked
           (env.advise (ctx/advisorSystem) (str "Task: " ra.task "\n\n" transcript))
           (ok none))
         advisorLogged (if advisorInvoked (appendLiveHook! path turn "advisor" advisorResult) true)
         advisorText (mt advisorResult ((ok value) (optionOr value "")) ((err _) ""))
+        turnsSoFar (max 0 (- turn 1))
+        writeNudge (if (and (= (optionOr state.deliver "") "patch")
+                        (and (not state.writesPersisted) (>= turnsSoFar (ctx/noWriteNudgeTurns))))
+          (str "\n\n" (stringFromInt64 turnsSoFar) " turns and nothing written; the run stops at turn "
+            (stringFromInt64 (ctx/noWriteTurns)) " without a write. Write now to "
+            (c/joinSep ra.owns ", ") " -- stop re-reading and make the edit.")
+          "")
         user (str "Task: " ra.task (if (stringEmpty? transcript) "" (str "\n\n" transcript))
           (if (stringEmpty? advisorText) "" (str "\n\nAdvisor: " advisorText))
-          (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." ""))
+          (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." "")
+          writeNudge)
         turnOwnSent (str "Task: " ra.task
           (if (stringEmpty? advisorText) "" (str "\n\nAdvisor: " advisorText))
-          (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." ""))
+          (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." "")
+          writeNudge)
         _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :sent \"" (c/escapeAsn user) "\")\n"))
         retried (liveProviderRetry! wrapped.provider
           (fn [p attempt] (providerCall p system user)) env.wallBudget env.sleep)
@@ -1393,17 +1416,28 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
                   execResult (if parseDefect (pair run (pair "" false))
                     (liveExecOps! operations ra rootDir repoRoot run.session path execEnv run))
                   executedRaw (pairFirst execResult)
-                  executed (mt (if ra.plan (livePlanJson facts.forms) none)
+                  executed0 (mt (if ra.plan (livePlanJson facts.forms) none)
                     ((some planState) (rl/withState executedRaw (rl/withPlan executedRaw.state planState)))
                     ((none) executedRaw))
+                  turnUsageIn (mt response.meta.usage ((some fields) (providerUsageInt fields "inputTokens")) ((none) 0))
+                  turnUsageCached (mt response.meta.usage ((some fields) (providerUsageInt fields "cachedTokens")) ((none) 0))
+                  turnUsageOut (mt response.meta.usage ((some fields) (providerUsageInt fields "outputTokens")) ((none) 0))
+                  executedUsage (rl/withState executed0 (rl/withUsageTotals executed0.state
+                    (rl/usageTotalsPlus executed0.state.usageTotals turnUsageIn turnUsageCached turnUsageOut)))
+                  executed (rl/withState executedUsage (rl/withBatching executedUsage.state
+                    (rl/batchingPlus executedUsage.state.batching (listLength operations))))
                   opReceipts (pairFirst (pairSecond execResult))
                   wrote (pairSecond (pairSecond execResult))
                   got (str normalized (if (stringEmpty? opReceipts) "" (str "\n" opReceipts)))
                   newGates (if parseDefect (list) (runLiveGates! ra.gates rootDir ra.gateTimeout))
                   allGates (listAppend state.allGateResults newGates)
                   lastGates (liveLastGateMap newGates state.lastGates)
+                  turnOpNames (c/joinSep (map liveOpName operations) " ")
+                  turnOpFiles (c/joinSep (filter (fn [p] (not (stringEmpty? p))) (map liveOpPath operations)) " ")
+                  turnGateSummary (liveGateSummary newGates)
                   history (listAppend wrapped.history
-                    (list (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr turnOwnSent)) (pair "got" (j/jstr got))))))
+                    (list (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr turnOwnSent)) (pair "got" (j/jstr got))
+                      (pair "ops" (j/jstr turnOpNames)) (pair "files" (j/jstr turnOpFiles)) (pair "gates" (j/jstr turnGateSummary))))))
                   _ (fold (fn [acc gate] (and acc (ok? (fileAppend path (str "(:gate :cmd \"" (c/escapeAsn (g/gateCmd gate)) "\" :exit "
                        (stringFromInt64 (g/gateExit gate)) (if (g/gateTimeout gate) " :timeout true" "") ")\n"))))) true newGates)
                   _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :reply \"" (c/escapeAsn normalized) "\")\n"))
@@ -1516,7 +1550,7 @@ fn ! executeLive ra: RunArgs repoRoot: String rootDir: String env: pv/ProviderEn
                       providerCall (fn [p sys user] (pv/nextTurn! p sys user))
                       hooks (liveHooks! provider)
                       liveEnv (ls/LoopEnv :provider call :task ra.task :modeHint (modeOf ra.modeHint)
-                        :owns ra.owns :gates ra.gates :rootDir rootDir :budget ra.budget
+                        :owns ra.owns :gates ra.gates :rootDir rootDir :budget ra.budget :inputTokenBudget ra.inputTokenBudget
                         :journalPath path :maxRetries 3 :sessionId (some session) :base (some ra.base)
                         :contextTokens (some tokens) :model (some model) :gateTimeout (some ra.gateTimeout)
                         :wallBudget ra.wallBudget :resume none :intent ra.intent :plan ra.plan :specCheck true
@@ -1548,13 +1582,13 @@ fn ! executeDryRun ra: RunArgs repoRoot: String rootDir: String env: pv/Provider
                             :exitCode 1))))))))
 
 fn ! execute ra: RunArgs dry: Bool repoRoot: String rootDir: String -> MainResult
-  (let [env (pv/providerEnv!)]
+  (let [env (pv/providerEnv! rootDir)]
     (if dry (executeDryRun ra repoRoot rootDir env) (executeLive ra repoRoot rootDir env)))
 
 fn resumed ra: RunArgs st: ResumeState -> RunArgs
   (RunArgs :task st.task :modeHint st.modeHint :owns st.owns :gates st.gates :backend ra.backend
            :model ra.model :timeout ra.timeout :timeoutSet ra.timeoutSet :queueTimeout ra.queueTimeout
-           :budget ra.budget :gateTimeout ra.gateTimeout :wallBudget ra.wallBudget
+           :budget ra.budget :inputTokenBudget ra.inputTokenBudget :gateTimeout ra.gateTimeout :wallBudget ra.wallBudget
            :intent (mt ra.intent ((some i) (some i)) ((none) st.intent))
            :base st.base
            :contextTokens (mt ra.contextTokens ((some t) (if (= t 0) st.contextTokens (some t))) ((none) st.contextTokens))
@@ -1567,6 +1601,7 @@ fn ! dispatch ps: (List (Pair String j/Json)) repoRoot: String rootDir: String t
                     :backend (textValue (paramOr ps "backend" (j/jstr "agy"))) :model (optionOr (optText (paramGet ps "model")) "")
                     :timeout timeout :timeoutSet (paramHas ps "timeout") :queueTimeout queueTimeout
                     :budget (optionOr (intValue (paramOr ps "budget" (j/jint 3000))) 3000)
+                    :inputTokenBudget (optionOr (intValue (paramOr ps "inputTokenBudget" (j/jint 0))) 0)
                     :gateTimeout (optionOr (intValue (paramOr ps "gateTimeout" (j/jint 300))) 300)
                     :wallBudget (some (optionOr (intValue (paramOr ps "wallBudget" (j/jint (min 86400 (+ timeout queueTimeout)))))
                                                   (min 86400 (+ timeout queueTimeout))))

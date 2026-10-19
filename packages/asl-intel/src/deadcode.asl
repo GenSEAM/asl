@@ -1,5 +1,5 @@
 (module asl-intel/deadcode
-  :x [DeadCodeSummary analyzeDeadcode! deadcodeJson formatDeadcodeAsn formatDeadcodeSummary runDeadcode! walkIgnoring!]
+  :x [DeadCodeSummary analyzeDeadcode! deadcodeJson formatDeadcodeAsn formatDeadcodeSummary runDeadcode! walkIgnoring! trackedAsl!]
   :i [(asl-intel/text :a t)
       (asl-intel/rx :a r)
       (asl-intel/pats :a p)
@@ -23,6 +23,15 @@ fn walkIgnoring! ctx: h/Ctx root: String -> (Result (List String) String)
   (mt (h/findTree! ctx root true (list "*.asl"))
     ((err e) (err e))
     ((ok tree) (ok (h/walkFiles! tree))))
+
+; (:m :ref MAINFIX14-TRACKEDASL-20261019 :do "walkIgnoring! shells out to find, which has no notion of .gitignore and descends into gitignored dirs such as .asl/cache -- harmless for lint (working tree, no claim of truth) but wrong for any audit that reports a production-truth count: a fixture artifact another suite happens to leave in .asl/cache/<suite>/*.asl (nativeTest.asl, nativeTestReportTest.asl -- both gitignored by .gitignore:9) gets scanned and counted as a real production stub. trackedAsl! asks git ls-files instead, so only committed source is ever in scope; same pattern already proven in asl-intel/stubs.asl trackedAsl!")
+fn trackedAsl! ctx: h/Ctx root: String -> (Result (List String) String)
+  (mt (h/gitLsFiles! ctx root)
+    ((ok fs) (ok (filter (fn [(f String)] -> Bool (and (stringEndsWith? f ".asl") (not (stringContains? f "/invalid/")))) fs)))
+    ((err _)
+      (mt (walkIgnoring! ctx root)
+        ((err e) (err e))
+        ((ok fs) (ok (map (fn [(f String)] -> String (t/relPath f root ctx.cwd)) fs))))))
 
 fn fileDefs! code: String rel: String -> (List Def)
   (let [(b (stringToBytes code)) (n (bytesLength b))

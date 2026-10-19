@@ -47,7 +47,7 @@ fn closureSource -> String
                     "  (if (= n 0) acc (let [(g viaValue)] (g (- n 1) acc)))"
                     "fn countBox n: Int64 -> Int64"
                     "  (if (= n 0) 0 (let [(g countBox)] (g (- n 1))))"
-                    "fn main -> Int64 (if (and (= (viaClosure 10000000 \"x\") \"x\") (= (viaValue 10000000 \"y\") \"y\")) (+ 3 (countBox 3)) 1)")
+                    "fn main -> Int64 (if (and (= (viaClosure 10000000 \"x\") \"x\") (= (viaValue 10000000 \"y\") \"y\")) (+ 3 (countBox 10000000)) 1)")
               "\n")
 
 fn functionIr ir: String name: String -> String
@@ -84,13 +84,48 @@ fn ! testClosureIrO0 -> Bool
               (assert (stringContains? (definitionIr ir "tailrt.closure") "musttail call tailcc %Val %tail(") "tailrt.closure enters the proto's tailcc slot with musttail")
               (assert (stringContains? (definitionIr ir "tailrt.closure") "call %Val @objrt.call(") "tailrt.closure falls back to objrt.call")
               (assert (stringContains? ir "ptr @viaClosure$40lambda0.code, ptr @viaClosure$40lambda0.tailCode }") "proto carries the tailCode slot after the native entry")
-              (assert (not (stringContains? (functionIr ir "countBox") "musttail")) "an Int64 result unboxed from a closure call is not a tail call")
+              (assert (not (stringContains? (functionIr ir "countBox") "musttail")) "in the raw Int64 body a closure call whose result is unboxed is not a tail call")
+              (assert (stringContains? (definitionIr ir "countBox.val") "musttail call tailcc %Val @tailrt.closure(") "the Val clone of the Int64 body makes that closure call musttail")
+              (assert (stringContains? (functionIr ir "countBox$40lambda0") "musttail call tailcc %Val @countBox.val(") "the function-value adapter of countBox enters its Val clone with musttail")
               (assert (= made.exitCode 0) "scratch directory created")
               (assert (= written (ok ())) "closure IR written")
               (assert (= cc.exitCode 0) (str "clang -O0 accepts the musttail closure IR: " cc.stderr))
-              (assert (= run.exitCode 3) (str "1e7 closure and function-value tail steps at -O0 on a 1 MiB stack exit 3, got " run.exitCode " " run.stderr))
+              (assert (= run.exitCode 3) (str "1e7 closure, function-value and Int64 function-value tail steps at -O0 on a 1 MiB stack exit 3, got " run.exitCode " " run.stderr))
               (assert (= removed.exitCode 0) "scratch directory removed")
               true))))))
+
+fn boxedSource -> String
+  (stringJoin (list "(module boxed :x [main applyTo isEvenH isOddH evenB plainB])"
+                    "fn applyTo f: (Fn Int64 Bool) x: Int64 -> Bool"
+                    "  (f x)"
+                    "fn isEvenH n: Int64 -> Bool"
+                    "  (if (= n 0) true (applyTo isOddH (- n 1)))"
+                    "fn isOddH n: Int64 -> Bool"
+                    "  (if (= n 0) false (applyTo isEvenH (- n 1)))"
+                    "fn evenB f: (Fn Int64 Bool) n: Int64 -> Bool"
+                    "  (if (= n 0) true (f (- n 1)))"
+                    "fn plainB n: Int64 -> Bool"
+                    "  (if (= n 0) true (plainB (- n 1)))"
+                    "fn main -> Int64 (if (and (isEvenH 10) (and (evenB isOddH 3) (plainB 4))) 0 1)")
+              "\n")
+
+fn testBoxedIr -> Bool
+  (let [(emitted (llvm/emitLlvmSource (boxedSource) "main"))]
+    (do
+      (assert (ok? emitted) (str "boxed tail source lowers: " emitted))
+      (mt emitted
+        ((err _) false)
+        ((ok ir)
+          (do
+            (assert (stringContains? ir "define tailcc i1 @applyTo(%Val %f, i64 %x)") "a Bool function with a closure tail call keeps its raw i1 body for ordinary callers")
+            (assert (stringContains? (functionIr ir "applyTo") "call %Val @objrt.call(") "the raw body calls the closure through objrt.call and unboxes")
+            (assert (stringContains? (definitionIr ir "applyTo.val") "musttail call tailcc %Val @tailrt.closure(") "its Val clone makes the closure call musttail")
+            (assert (stringContains? (definitionIr ir "evenB.val") "musttail call tailcc %Val @tailrt.closure(") "a closure call ending a branch that joins into an unboxing return is musttail in the Val clone")
+            (assert (stringContains? (functionIr ir "isEvenH") "musttail call tailcc i1 @applyTo(") "the raw caller still tail-calls the raw body")
+            (assert (stringContains? (definitionIr ir "isEvenH.val") "musttail call tailcc %Val @applyTo.val(") "a raw caller reaching a boxed body by tail call is boxed and calls the Val clone with musttail")
+            (assert (stringContains? (functionIr ir "isEvenH$40lambda0") "musttail call tailcc %Val @isOddH.val(") "the function-value adapter enters the Val clone with musttail instead of call and box")
+            (refute (stringContains? ir "@plainB.val(") "a Bool function whose tail calls reach no closure call gets no Val clone")
+            true)))))
 
 fn externFixture -> ty/SsaModule
   (ty/ssaModule "externTail" (list) (list) (list)
@@ -122,6 +157,7 @@ fn testExternIr -> Bool
 fn ! runTests -> Bool
   (do
     (assert (testExternIr) "extern tail IR")
+    (assert (testBoxedIr) "boxed Val clone IR")
     (assert (testClosureIrO0) "closure tail IR at -O0")
     (assert (testNativeRuns) "native tail runs")
     true)

@@ -4,10 +4,16 @@
 
 (schema AsnEntry (:f key AsnValue) (:f val AsnValue) (:f paren Bool))
 
-(enum AsnValue (:c asnNil [] "The nil sentinel `_`") (:c asnBool [(b Bool)] "true or false") (:c asnUnit [] "The unit literal `()`") (:c asnInt [(lex String)] "Integer literal, held as its source lexeme") (:c asnFloat [(lex String)] "Float literal, held as its source lexeme") (:c asnStr [(lex String)] "String literal, held as its source lexeme with quotes") (:c asnKw [(k String)] "Keyword scalar, including its leading colon") (:c asnSym [(name String)] "A bare name. Legal as a head, never as a value") (:c asnVec [(items (List AsnValue))] "A bracketed vector") (:c asnMap [(entries (List AsnEntry))] "A brace map") (:c asnRec [(fields (List AsnField))] "An anonymous record `(:k v ...)`") (:c asnCtor [(name String) (fields (List AsnField))] "Named construction `(Name :k v ...)`") (:c asnRows [(name String) (rows (List AsnValue))] "Schema-grouped rows `(Name [..] ..)`") (:c asnTable [(cols (List AsnValue)) (rows (List AsnValue))] "Ad-hoc table `([:c ..] [[..]])`") (:c asnCase [(name String) (args (List AsnValue))] "Union case value `(name v ..)`") (:c asnPair [(key AsnValue) (val AsnValue)] "A parenthesised map entry, legal only in a map"))
+(enum AsnValue (:c asnNil [] "The nil sentinel `_`") (:c asnBool [(b Bool)] "true or false") (:c asnUnit [] "The unit literal `()`") (:c asnInt [(lex String)] "Integer literal, held as its source lexeme") (:c asnFloat [(lex String)] "Float literal, held as its source lexeme") (:c asnStr [(lex String)] "String literal, held as its source lexeme with quotes") (:c asnKw [(k String)] "Keyword scalar, including its leading colon") (:c asnSym [(name String)] "A bare name. Legal as a head, a nested field or child value, or a well-formed vector element; never standalone as the whole document") (:c asnVec [(items (List AsnValue))] "A bracketed vector") (:c asnMap [(entries (List AsnEntry))] "A brace map") (:c asnRec [(fields (List AsnField))] "An anonymous record `(:k v ...)`") (:c asnCtor [(name String) (fields (List AsnField))] "Named construction `(Name :k v ...)`") (:c asnRows [(name String) (rows (List AsnValue))] "Schema-grouped rows `(Name [..] ..)`") (:c asnTable [(cols (List AsnValue)) (rows (List AsnValue))] "Ad-hoc table `([:c ..] [[..]])`") (:c asnCase [(name String) (args (List AsnValue))] "Union case value `(name v ..)`") (:c asnPair [(key AsnValue) (val AsnValue)] "A parenthesised map entry, legal only in a map") (:c asnTagged [(tag String) (fields (List AsnField)) (children (List AsnValue))] "A keyword-tagged form: head keyword, :key value fields, and positional children") (:c asnTuple [(items (List AsnValue))] "A parenthesised list of positional values with no field head"))
 
 fn valueOk? v: AsnValue -> Bool
-  (mt v ((asnSym _) false) ((asnPair _ _) false) (_ true))
+  (mt v (_ true))
+
+fn standaloneOk? v: AsnValue -> Bool
+  (mt v ((asnSym _) false) ((asnPair _ _) false) (_ (valueOk? v)))
+
+fn vectorValueOk? v: AsnValue -> Bool
+  (mt v ((asnSym name) (wellFormedSym? name)) (_ (valueOk? v)))
 
 fn asnIntValue v: AsnValue -> (Option Int64)
   (mt v ((asnInt lex) (stringToInt64 lex)) (_ (none)))
@@ -63,13 +69,13 @@ fn isUpper? c: String -> Bool
 fn isLower? c: String -> Bool
   (stringContains? "abcdefghijklmnopqrstuvwxyz" c)
 
-(enum HeadKind (:c headType [] "A PascalCase head: named construction or row groups") (:c headCase [] "A kebab-case head: a union case value") (:c headBad [] "Not a head shape Core §2 can produce"))
+(enum HeadKind (:c headType [] "A PascalCase head: named construction or row groups") (:c headCase [] "A kebab-case head: a union case value") (:c headTag [] "A SCREAMING-KEBAB-CASE head: a tuple of positional values") (:c headBad [] "Not a head shape Core §2 can produce"))
 
 fn allCharsIn? s: String allowed: String -> Bool
   (and (not (stringEmpty? s)) (listEmpty? (filter (fn [(c String)] -> Bool (not (stringContains? allowed c))) (stringChars s))))
 
 fn kebabOk? s: String -> Bool
-  (and (not (stringEmpty? s)) (and (isLower? (firstChar s)) (and (not (stringContains? s "--")) (and (not (stringEndsWith? s "-")) (allCharsIn? s "abcdefghijklmnopqrstuvwxyz0123456789-")))))
+  (and (not (stringEmpty? s)) (and (isLower? (firstChar s)) (and (not (stringContains? s "--")) (and (not (stringEndsWith? s "-")) (allCharsIn? s "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-")))))
 
 fn stripIdentSuffix s: String -> String
   (if (or (stringEndsWith? s "?") (stringEndsWith? s "!")) (optionOr (stringSlice s 0 (- (stringLength s) 1)) "") s)
@@ -80,14 +86,20 @@ fn identOk? s: String -> Bool
 fn typeNameOk? s: String -> Bool
   (and (not (stringEmpty? s)) (and (isUpper? (firstChar s)) (allCharsIn? s "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")))
 
+fn screamingOk? s: String -> Bool
+  (and (not (stringEmpty? s)) (and (isUpper? (firstChar s)) (and (not (stringContains? s "--")) (and (not (stringEndsWith? s "-")) (allCharsIn? s "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")))))
+
 fn bareHeadKind s: String -> HeadKind
-  (cond ((typeNameOk? s) (headType)) ((identOk? s) (headCase)) (else (headBad)))
+  (cond ((typeNameOk? s) (headType)) ((identOk? s) (headCase)) ((screamingOk? s) (headTag)) (else (headBad)))
 
 fn partAt parts: (List String) i: Int64 -> String
   (mt (listGet parts i) ((some p) p) ((none) ""))
 
 fn headKind name: String -> HeadKind
   (let [(parts (stringSplit name "/"))] (cond ((= (listLength parts) 1) (bareHeadKind name)) ((= (listLength parts) 2) (if (kebabOk? (partAt parts 0)) (bareHeadKind (partAt parts 1)) (headBad))) (else (headBad))))
+
+fn wellFormedSym? name: String -> Bool
+  (mt (headKind name) ((headBad) false) (_ true))
 
 fn firstChar s: String -> String
   (mt (stringSlice s 0 1) ((some c) c) ((none) ""))
@@ -98,8 +110,8 @@ fn symValue s: String -> AsnValue
 fn atomValue t: lx/Token -> (Result AsnValue String)
   (mt t.kind ((lx/tokInt _) (ok (asnInt t.rawText))) ((lx/tokFloat _) (ok (asnFloat t.rawText))) ((lx/tokString _) (ok (asnStr t.rawText))) ((lx/tokKeyword _) (ok (asnKw t.rawText))) ((lx/tokSymbol s) (ok (symValue s))) ((lx/tokError _) (err "parse")) ((lx/tokEof) (err "parse")) ((lx/tokLparen) (err "parse")) ((lx/tokRparen) (err "parse")) ((lx/tokLbracket) (err "parse")) ((lx/tokRbracket) (err "parse")))
 
-fn allValues? items: (List AsnValue) -> Bool
-  (listEmpty? (filter (fn [(v AsnValue)] -> Bool (not (valueOk? v))) items))
+fn allVectorValues? items: (List AsnValue) -> Bool
+  (listEmpty? (filter (fn [(v AsnValue)] -> Bool (not (vectorValueOk? v))) items))
 
 fn allVectors? items: (List AsnValue) -> Bool
   (listEmpty? (filter (fn [(v AsnValue)] -> Bool (not (isVec? v))) items))
@@ -120,13 +132,22 @@ fn fieldsOf items: (List AsnValue) acc: (List AsnField) -> (Result (List AsnFiel
   (mt (listHead items) ((none) (ok (listReverse acc))) ((some k) (mt k ((asnKw key) (mt (listHead (itemTail items)) ((some v) (if (valueOk? v) (fieldsOf (itemTail (itemTail items)) (cons (AsnField :key key :val v) acc)) (err "parse"))) ((none) (err "parse")))) (_ (err "parse")))))
 
 fn buildRecord items: (List AsnValue) -> (Result AsnValue String)
-  (mt (fieldsOf items (list)) ((ok fs) (if (listEmpty? fs) (err "parse") (ok (asnRec fs)))) ((err c) (err c)))
+  (mt (fieldsOf items (list)) ((ok fs) (if (listEmpty? fs) (err "parse") (ok (asnRec fs)))) ((err _) (buildTagged items)))
+
+fn tagFieldsAndChildren items: (List AsnValue) fieldsAcc: (List AsnField) childrenAcc: (List AsnValue) -> (Result (Pair (List AsnField) (List AsnValue)) String)
+  (mt (listHead items) ((none) (ok (pair (listReverse fieldsAcc) (listReverse childrenAcc)))) ((some h) (let [(tail (itemTail items))] (mt h ((asnKw key) (mt (listHead tail) ((some v) (if (vectorValueOk? v) (tagFieldsAndChildren (itemTail tail) (cons (AsnField :key key :val v) fieldsAcc) childrenAcc) (err "parse"))) ((none) (err "parse")))) (_ (if (vectorValueOk? h) (tagFieldsAndChildren tail fieldsAcc (cons h childrenAcc)) (err "parse")))))))
+
+fn buildTagged items: (List AsnValue) -> (Result AsnValue String)
+  (mt (listHead items) ((none) (err "parse")) ((some h) (mt h ((asnKw tag) (let [(rest (itemTail items))] (if (listEmpty? rest) (err "parse") (mt (tagFieldsAndChildren rest (list) (list)) ((ok fc) (ok (asnTagged tag (pairFirst fc) (pairSecond fc)))) ((err c) (err c)))))) (_ (err "parse")))))
+
+fn buildTuple items: (List AsnValue) -> (Result AsnValue String)
+  (if (and (not (listEmpty? items)) (allVectorValues? items)) (ok (asnTuple items)) (err "parse"))
 
 fn buildNamed name: String rest: (List AsnValue) -> (Result AsnValue String)
-  (mt (headKind name) ((headType) (buildSchemaHead name rest)) ((headCase) (if (allValues? rest) (ok (asnCase name rest)) (err "parse"))) ((headBad) (err "parse")))
+  (mt (headKind name) ((headType) (buildSchemaHead name rest)) ((headCase) (if (allVectorValues? rest) (ok (asnCase name rest)) (err "parse"))) ((headTag) (buildTuple (cons (asnSym name) rest))) ((headBad) (err "parse")))
 
 fn buildSchemaHead name: String rest: (List AsnValue) -> (Result AsnValue String)
-  (mt (listHead rest) ((none) (ok (asnCtor name (list)))) ((some h) (mt h ((asnVec _) (if (allVectors? rest) (ok (asnRows name rest)) (err "parse"))) ((asnKw _) (mt (fieldsOf rest (list)) ((ok fs) (ok (asnCtor name fs))) ((err c) (err c)))) (_ (err "parse")))))
+  (mt (listHead rest) ((none) (ok (asnCtor name (list)))) ((some h) (mt h ((asnVec _) (if (allVectors? rest) (ok (asnRows name rest)) (err "parse"))) ((asnKw _) (mt (fieldsOf rest (list)) ((ok fs) (ok (asnCtor name fs))) ((err c) (err c)))) (_ (if (allVectorValues? rest) (ok (asnCase name rest)) (err "parse"))))))
 
 fn buildTable items: (List AsnValue) -> (Result AsnValue String)
   (if (= (listLength items) 2) (let [(cols (vecItems (nthValue items 0))) (rows (vecItems (nthValue items 1)))] (if (and (isVec? (nthValue items 1)) (and (allKeywords? cols) (allVectors? rows))) (ok (asnTable cols rows)) (err "parse"))) (err "parse"))
@@ -135,10 +156,10 @@ fn nthValue items: (List AsnValue) i: Int64 -> AsnValue
   (mt (listGet items i) ((some v) v) ((none) (asnNil)))
 
 fn buildPair items: (List AsnValue) -> (Result AsnValue String)
-  (if (= (listLength items) 2) (let [(v (nthValue items 1))] (if (valueOk? v) (ok (asnPair (nthValue items 0) v)) (err "parse"))) (err "parse"))
+  (if (= (listLength items) 2) (let [(v (nthValue items 1))] (if (valueOk? v) (ok (asnPair (nthValue items 0) v)) (err "parse"))) (buildTuple items))
 
 fn buildParen fr: Frame items: (List AsnValue) t: lx/Token -> (Result AsnValue String)
-  (mt (listHead items) ((none) (if (and (= fr.line t.line) (= (+ fr.col 1) t.col)) (ok (asnUnit)) (err "parse"))) ((some h) (mt h ((asnKw _) (buildRecord items)) ((asnSym s) (buildNamed s (itemTail items))) ((asnVec _) (buildTable items)) ((asnStr _) (buildPair items)) ((asnInt _) (buildPair items)) ((asnBool _) (buildPair items)) (_ (err "parse")))))
+  (mt (listHead items) ((none) (if (and (= fr.line t.line) (= (+ fr.col 1) t.col)) (ok (asnUnit)) (err "parse"))) ((some h) (mt h ((asnKw _) (buildRecord items)) ((asnSym s) (buildNamed s (itemTail items))) ((asnVec _) (buildTable items)) ((asnStr _) (buildPair items)) ((asnInt _) (buildPair items)) ((asnBool _) (buildPair items)) (_ (buildTuple items)))))
 
 fn entriesOf items: (List AsnValue) acc: (List AsnEntry) -> (Result (List AsnEntry) String)
   (mt (listHead items) ((none) (ok (listReverse acc))) ((some h) (mt h ((asnKw key) (mt (listHead (itemTail items)) ((some v) (if (valueOk? v) (entriesOf (itemTail (itemTail items)) (cons (AsnEntry :key (asnKw key) :val v :paren false) acc)) (err "parse"))) ((none) (err "parse")))) ((asnPair k v) (entriesOf (itemTail items) (cons (AsnEntry :key k :val v :paren true) acc))) ((asnRec fs) (if (= (listLength fs) 1) (entriesOf (itemTail items) (cons (AsnEntry :key (asnKw (fieldKey fs)) :val (fieldVal fs) :paren true) acc)) (err "parse"))) (_ (err "parse")))))
@@ -153,7 +174,7 @@ fn buildMap items: (List AsnValue) -> (Result AsnValue String)
   (mt (entriesOf items (list)) ((ok es) (ok (asnMap es))) ((err c) (err c)))
 
 fn buildForm fr: Frame t: lx/Token -> (Result AsnValue String)
-  (let [(items (listReverse fr.items))] (cond ((= fr.open "[") (if (allValues? items) (ok (asnVec items)) (err "parse"))) ((= fr.open "{") (buildMap items)) (else (buildParen fr items t))))
+  (let [(items (listReverse fr.items))] (cond ((= fr.open "[") (if (allVectorValues? items) (ok (asnVec items)) (err "parse"))) ((= fr.open "{") (buildMap items)) (else (buildParen fr items t))))
 
 fn emit st: ReadState v: AsnValue -> ReadState
   (mt (listHead st.stack) ((some fr) (rst st.toks (cons (Frame :open fr.open :line fr.line :col fr.col :items (cons v fr.items)) (frameTail st.stack)) st.done st.code)) ((none) (rst st.toks st.stack (cons v st.done) st.code)))
@@ -178,7 +199,7 @@ fn asnRead src: String -> (Result AsnValue String)
   (finish (readRun (rst (lx/tokenize src) (list) (list) "") 64))
 
 fn finish st: ReadState -> (Result AsnValue String)
-  (cond ((not (stringEmpty? st.code)) (err st.code)) ((not (listEmpty? st.stack)) (err "parse")) ((not (= (listLength st.done) 1)) (err "parse")) (else (mt (listHead st.done) ((some v) (if (valueOk? v) (ok v) (err "parse"))) ((none) (err "parse")))))
+  (cond ((not (stringEmpty? st.code)) (err st.code)) ((not (listEmpty? st.stack)) (err "parse")) ((not (= (listLength st.done) 1)) (err "parse")) (else (mt (listHead st.done) ((some v) (if (standaloneOk? v) (ok v) (err "parse"))) ((none) (err "parse")))))
 
 (enum WItem (:c wText [(t String)] "Literal output text, already final") (:c wVal [(v AsnValue)] "A value still to expand"))
 
@@ -209,7 +230,7 @@ fn wVals vs: (List AsnValue) -> (List WItem)
   (map (fn [(v AsnValue)] -> WItem (wVal v)) vs)
 
 fn wChildren v: AsnValue -> (List WItem)
-  (mt v ((asnVec items) (wVals items)) ((asnMap es) (wEntries es)) ((asnRec fs) (wFields fs)) ((asnCtor n fs) (cons (wText n) (wFields fs))) ((asnRows n rows) (cons (wText n) (wVals rows))) ((asnTable cs rs) (list (wVal (asnVec cs)) (wVal (asnVec rs)))) ((asnCase n args) (cons (wText n) (wVals args))) ((asnPair k val) (list (wVal k) (wVal val))) (_ (list)))
+  (mt v ((asnVec items) (wVals items)) ((asnMap es) (wEntries es)) ((asnRec fs) (wFields fs)) ((asnCtor n fs) (cons (wText n) (wFields fs))) ((asnRows n rows) (cons (wText n) (wVals rows))) ((asnTable cs rs) (list (wVal (asnVec cs)) (wVal (asnVec rs)))) ((asnCase n args) (cons (wText n) (wVals args))) ((asnPair k val) (list (wVal k) (wVal val))) ((asnTagged tag fs children) (cons (wText tag) (listAppend (wFields fs) (wVals children)))) ((asnTuple items) (wVals items)) (_ (list)))
 
 fn wSeparated items: (List WItem) -> (List WItem)
   (mt (listHead items) ((some h) (cons h (listReverse (fold (fn [(acc (List WItem)) (x WItem)] -> (List WItem) (cons x (cons (wText " ") acc))) (list) (wTail items))))) ((none) (list)))

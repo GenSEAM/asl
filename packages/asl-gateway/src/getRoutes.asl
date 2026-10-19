@@ -1,7 +1,7 @@
 (module aslGateway/getRoutes
   :x [PoolRow CliRow BreakerRow SessionRow TargetRow ActionQueue HealthInputs GetState SearchRequest GetOutcome
       getRespond getCockpit getSearch getFail
-      roleCascades cockpitPath? pyIntParse pathRstrip pathStrip requestPath
+      cockpitPath? pyIntParse pathRstrip pathStrip requestPath
       profileHealthJson configHealthJson healthAsn healthJson modelsJson
       searchResponse gatewayGet gatewayGetRequest]
   :i [(config :a cfg)
@@ -78,28 +78,17 @@
   (:c getSearch [(request SearchRequest)])
   (:c getFail [(error pt/PyErr)]))
 
-fn roleCascades -> (List (Pair String (List String)))
-  (list
-    (pair "coder" (list "groq/qwen/qwen3.8-27b" "gemini-3.8-flash" "poolside/laguna-s-2.1:free" "cohere/north-mini-code:free" "poolside/laguna-xs-2.1:free" "google/gemma-4-31b-it:free" "google/gemma-4-26b-a4b-it:free" "qwen/qwen3.8-27b:free"))
-    (pair "planner" (list "gemini-3.8-flash" "groq/qwen/qwen3.8-27b" "nvidia/nemotron-3-ultra-550b-a55b:free" "nvidia/nemotron-3-super-120b-a12b:free" "z-ai/glm-5.2:free" "nex-agi/nex-n2.5-pro:free"))
-    (pair "scout" (list "groq/qwen/qwen3.8-27b" "gemini-3.5-flash-lite" "cohere/north-mini-code:free" "nex-agi/nex-n2.5-pro:free" "google/gemma-4-26b-a4b-it:free"))
-    (pair "distillator" (list "gemini-3.5-flash-lite" "groq/qwen/qwen3.8-27b" "cohere/north-mini-code:free" "nex-agi/nex-n2.5-pro:free" "google/gemma-4-31b-it:free"))
-    (pair "auditor" (list "gemini-3.8-flash" "nex-agi/nex-n2.5-pro:free" "nvidia/nemotron-3-super-120b-a12b:free" "qwen/qwen3.8-27b:free" "google/gemma-4-31b-it:free"))
-    (pair "auditor:concurrency" (list "gemini-3.8-flash" "qwen/qwen3.8-27b:free" "google/gemma-4-31b-it:free" "nvidia/nemotron-3-super-120b-a12b:free"))
-    (pair "auditor:logic" (list "gemini-3.8-flash" "google/gemma-4-31b-it:free" "qwen/qwen3.8-27b:free" "nvidia/nemotron-3-super-120b-a12b:free"))
-    (pair "auditor:invariants" (list "gemini-3.8-flash" "nex-agi/nex-n2.5-pro:free" "nvidia/nemotron-3-super-120b-a12b:free" "google/gemma-4-31b-it:free"))
-    (pair "auditor:architecture" (list "gemini-3.8-flash" "nvidia/nemotron-3-super-120b-a12b:free" "nex-agi/nex-n2.5-pro:free" "google/gemma-4-31b-it:free"))
-    (pair "auditor:nonvacuity" (list "gemini-3.8-flash" "cohere/north-mini-code:free" "google/gemma-4-31b-it:free" "qwen/qwen3.8-27b:free"))
-    (pair "knowledgecurator" (list "gemini-3.8-flash" "nvidia/nemotron-3-super-120b-a12b:free" "nex-agi/nex-n2.5-pro:free" "google/gemma-4-31b-it:free"))
-    (pair "corroborator" (list "gemini-3.8-flash" "qwen/qwen3.8-27b:free" "google/gemma-4-31b-it:free" "nex-agi/nex-n2.5-pro:free"))
-    (pair "consilium" (list "gemini-3.8-flash" "nvidia/nemotron-3-super-120b-a12b:free" "qwen/qwen3.8-27b:free" "google/gemma-4-31b-it:free"))
-    (pair "chiefJustice" (list "gpt-6-astra" "nvidia/nemotron-3-ultra-550b-a55b:free" "z-ai/glm-5.2:free"))
-    (pair "chiefjustice" (list "gpt-6-astra" "nvidia/nemotron-3-ultra-550b-a55b:free"))
-    (pair "falsifier" (list "gemini-3.8-flash" "deepseek/deepseek-chat:free" "qwen/qwen3.8-27b:free" "google/gemma-4-31b-it:free" "nex-agi/nex-n2.5-pro:free"))
-    (pair "shadowCritic" (list "gemini-3.8-flash" "deepseek/deepseek-chat:free" "nvidia/nemotron-3-super-120b-a12b:free" "google/gemma-4-31b-it:free"))
-    (pair "notebook" (list "dots-studio/dots-3-note-preview:free" "thinkingmachines/inkling:free" "thinkingmachines/inkling-small:free"))
-    (pair "router" (list "gemini-3.5-flash-lite" "liquid/lfm-2.5-2.6b:free" "inclusionai/ling-3.0-flash-fin:free" "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"))
-    (pair "vision" (list "inclusionai/ling-3.0-flash-vl:free")))
+; (:m :do "the /v1/models listing used to dump a built-in roleCascades table; it now lists whatever the active profile's own config routes carry (role/intent -> chain), excluding the generic :intent any catch-all, so a config-only change to a route changes this listing with no rebuild and an absent config simply lists nothing instead of a hardcoded model set")
+fn routeModelNames r: cfg/GatewayRoute -> (List String)
+  (if (listEmpty? r.chain) r.models r.chain)
+
+fn activeProfileRoutes headers: (List (Pair String String)) hi: HealthInputs -> (List cfg/GatewayRoute)
+  (mt hi.profiles
+    ((err _) (list))
+    ((ok tbl)
+     (mt (cfg/gatewayProfileSelect tbl headers hi.envProfile)
+       ((err _) (list))
+       ((ok sel) (filter (fn [(r cfg/GatewayRoute)] -> Bool (!= r.intent "any")) sel.profile.routes)))))
 
 fn cockpitPath? path: String -> Bool
   (listContains? (list "/cockpit" "/cockpit/" "/cockpit/api/observatory" "/cockpit/api/intel" "/cockpit/api/coupling"
@@ -324,14 +313,14 @@ fn healthJson st: GetState headers: (List (Pair String String)) api: Bool -> (Re
           ((err e) (err e))
           ((ok g) (ok (j/jobj (listAppend (listAppend withUsage (list (pair "gateway" g))) api3))))))))
 
-fn modelsJson -> j/Json
+fn modelsJson headers: (List (Pair String String)) hi: HealthInputs -> j/Json
   (j/jobj (list (pair "object" (j/jstr "list"))
-                (pair "data" (j/jarr (fold (fn [(acc (List j/Json)) (rc (Pair String (List String)))] -> (List j/Json)
+                (pair "data" (j/jarr (fold (fn [(acc (List j/Json)) (r cfg/GatewayRoute)] -> (List j/Json)
                                              (listAppend acc (map (fn [(m String)] -> j/Json
                                                                     (j/jobj (list (pair "id" (j/jstr m)) (pair "object" (j/jstr "model"))
-                                                                                  (pair "owned_by" (j/jstr "openrouter")) (pair "role" (j/jstr (pairFirst rc))))))
-                                                                  (pairSecond rc))))
-                                           (list) (roleCascades))))))
+                                                                                  (pair "owned_by" (j/jstr "openrouter")) (pair "role" (j/jstr r.intent)))))
+                                                                  (routeModelNames r))))
+                                           (list) (activeProfileRoutes headers hi))))))
 
 fn fallbackJson st: GetState -> j/Json
   (j/jobj (list (pair "status" (j/jstr "ok")) (pair "service" (j/jstr "asl-gateway")) (pair "cascades" (j/jbool true))
@@ -446,7 +435,7 @@ fn restRoute target: String headers: (List (Pair String String)) st: GetState ->
     ((stringStartsWith? target "/api/asl/browser/target/poll") (pollRoute target st true))
     ((stringStartsWith? target "/api/asl/browser/extension/poll") (pollRoute target st false))
     ((or (= target "/v1/models") (= target "/models"))
-      (getRespond st (ok200 (jsonHeaders) (dumps (modelsJson)))))
+      (getRespond st (ok200 (jsonHeaders) (dumps (modelsJson headers st.health)))))
     ((stringStartsWith? target "/api/asl/search") (searchRoute target headers))
     (else (getRespond st (ok200 (jsonHeaders) (dumps (fallbackJson st))))))
 

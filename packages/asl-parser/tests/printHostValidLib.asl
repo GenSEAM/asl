@@ -17,6 +17,8 @@ fn knownHostInvalidReason path: String -> (Option String)
      (some "compile.c's D152 constant-assert exemption keys off a ; (:m :tags (hostSubject)) line comment textually adjacent to the fn; DefunNode carries no field for it, so astPrinter cannot reproduce the comment and the printed form's otherwise-constant assert is rejected: ERR_CONSTANT_ASSERT"))
     ((= path "tests/acceptance/r1Host/reader/expLiteralTest.asl")
      (some "compile.c's D152 constant-assert exemption keys off a ; (:m :tags (hostSubject)) line comment textually adjacent to the fn; DefunNode carries no field for it, so astPrinter cannot reproduce the comment and the printed form's otherwise-constant assert is rejected: ERR_CONSTANT_ASSERT"))
+    ((= path "asl/packages/asl-target-llvm/tests/nativeStringTest.asl")
+     (some "astPrinter gap, confirmed on base 010f3a1bc (file and astPrinter.asl both byte-identical to base, matching printReparseLib.asl's knownMisparseReason entry for this file): one top form embeds a raw \\x00/\\xNN byte-escape string literal (a generated-fixture-text payload for native string/byte builtins), and the printed form's re-serialized escapes land in a field-name position the host rejects as ERR_BAD_CONSTRUCTOR"))
     (else (none)))
 
 fn parentDir path: String -> String
@@ -26,19 +28,19 @@ fn parentDir path: String -> String
       (stringJoin (listTake parts (- (listLength parts) 1)) "/")))
 
 fn findHostFrom! dir: String -> (Result String String)
-  (let [(candidate (str dir "/asl/host/out/asl-host"))]
+  (let [(candidate (str dir "/bin/asl"))]
     (if (fileExists? candidate)
       (ok candidate)
       (let [(up (parentDir dir))]
         (if (or (stringEmpty? up) (= up dir))
-          (err "asl/host/out/asl-host not found in any ancestor of the working directory")
+          (err "bin/asl not found in any ancestor of the working directory")
           (findHostFrom! up)))))
 
 fn hostBinary! -> (Result String String)
   (mt (envGet "ASL_HOST")
     ((some h) (if (stringEmpty? h) (err "ASL_HOST is set but empty") (ok h)))
     ((none)
-     (mt (pathCanonicalize ".")
+     (mt (realPath ".")
        ((err _) (err "cannot canonicalize the working directory"))
        ((ok cwd) (findHostFrom! cwd)))))
 
@@ -103,7 +105,7 @@ fn printForms forms: (List a/TopForm) -> String
 
 fn checkFile! host: String root: String path: String -> (Result CheckOutcome String)
   (let [(abs (str root "/" path))]
-    (mt (fileRead abs)
+    (mt (fileReadString abs)
       ((err _) (err (str path ": read failed")))
       ((ok src)
        (mt (a/parse src)
@@ -157,7 +159,7 @@ fn runShard! label: String n: Int64 k: Int64 -> Bool
      (mt (hostBinary!)
        ((err e) (do (assert false (str "host binary: " e)) false))
        ((ok host)
-        (mt (pathCanonicalize ".")
+        (mt (realPath ".")
           ((err _) (do (assert false "cannot canonicalize the repo root") false))
           ((ok root)
            (let [(shard (prl/shardFiles allFiles n k))

@@ -1,6 +1,6 @@
 (module aslGateway/localTime
   :x [Zone PosixRule RuleDate DstRule utcZone zoneLoad! zoneFromTzif zoneFromPosix posixParse localOffset
-      daysFromCivil civilFromDays floorSeconds formatLocal formatUtcTouch]
+      daysFromCivil civilFromDays floorSeconds formatLocal formatUtcTouch parseHttpDateEpochSeconds]
   :i [])
 
 (enum RuleDate
@@ -386,3 +386,41 @@ fn formatLocal z: Zone t: Int64 withSeconds: Bool -> String
 
 fn formatUtcTouch t: Int64 -> String
   (civilText t true "" "" "")
+
+fn httpDateMonthNumber abbr: String -> (Option Int64)
+  (cond
+    ((= abbr "Jan") (some 1)) ((= abbr "Feb") (some 2)) ((= abbr "Mar") (some 3)) ((= abbr "Apr") (some 4))
+    ((= abbr "May") (some 5)) ((= abbr "Jun") (some 6)) ((= abbr "Jul") (some 7)) ((= abbr "Aug") (some 8))
+    ((= abbr "Sep") (some 9)) ((= abbr "Oct") (some 10)) ((= abbr "Nov") (some 11)) ((= abbr "Dec") (some 12))
+    (else none))
+
+fn httpDateClockOk? hour: Int64 minute: Int64 sec: Int64 -> Bool
+  (and (>= hour 0) (and (<= hour 23) (and (>= minute 0) (and (<= minute 59) (and (>= sec 0) (<= sec 60))))))
+
+; (:m :tags (retry) :do "RFC 7231's preferred HTTP-date, e.g. \"Wed, 21 Oct 2026 07:28:00 GMT\": weekday and zone are read as the fixed field count they occupy but not validated against the date (a misreported weekday or a zone other than GMT is not this parser's problem, HTTP-date is always UTC regardless of the trailing token); the two obsolete formats (RFC 850, asctime) are not accepted -- RFC 7231 requires senders to use this form and only recommends recipients also accept the others, and no upstream in this gateway's fleet has ever been seen to send them")
+fn parseHttpDateEpochSeconds text: String -> (Option Float64)
+  (let [(parts (stringSplit (stringTrim text) " "))]
+    (if (!= (listLength parts) 6) none
+      (let [(clockParts (stringSplit (optionOr (listGet parts 4) "") ":"))]
+        (if (!= (listLength clockParts) 3) none
+          (mt (stringToInt64 (optionOr (listGet parts 1) ""))
+            ((none) none)
+            ((some day)
+             (mt (httpDateMonthNumber (optionOr (listGet parts 2) ""))
+               ((none) none)
+               ((some mon)
+                (mt (stringToInt64 (optionOr (listGet parts 3) ""))
+                  ((none) none)
+                  ((some year)
+                   (mt (stringToInt64 (optionOr (listGet clockParts 0) ""))
+                     ((none) none)
+                     ((some hour)
+                      (mt (stringToInt64 (optionOr (listGet clockParts 1) ""))
+                        ((none) none)
+                        ((some minute)
+                         (mt (stringToInt64 (optionOr (listGet clockParts 2) ""))
+                           ((none) none)
+                           ((some sec)
+                            (if (or (< day 1) (or (> day 31) (not (httpDateClockOk? hour minute sec))))
+                              none
+                              (some (int64ToFloat64 (+ (* (daysFromCivil year mon day) 86400) (+ (* hour 3600) (+ (* minute 60) sec))))))))))))))))))))))

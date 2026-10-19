@@ -148,50 +148,6 @@ fn ! testStackScan work: String -> Bool
         (map (fn [(kind String)] -> Bool (and (runProbe work triple kind false) (runProbe work triple kind true))) (probeKinds triple))
         true))
 
-fn layoutRows -> (List (Pair String Int64))
-  (list (pair "sizeof(Val)" 16) (pair "offsetof(Val, tag)" 0) (pair "offsetof(Val, aux)" 4) (pair "offsetof(Val, u)" 8)
-        (pair "__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__" 1) (pair "sizeof(double)" 8) (pair "sizeof(void *)" 8) (pair "sizeof(int)" 4)
-        (pair "T_UNIT" 0) (pair "T_BOOL" 1) (pair "T_INT" 2) (pair "T_FLOAT" 3) (pair "T_STR" 5) (pair "T_REC" 7) (pair "T_CTOR" 8) (pair "T_FN" 9) (pair "T_BUILTIN" 10)
-        (pair "offsetof(Ctor, ctor)" 8) (pair "offsetof(Ctor, n)" 12) (pair "offsetof(Ctor, f)" 16)
-        (pair "offsetof(Rec, schema)" 8) (pair "offsetof(Rec, n)" 12) (pair "offsetof(Rec, keys)" 16) (pair "offsetof(Rec, v)" 24)
-        (pair "offsetof(Closure, p)" 8) (pair "offsetof(Closure, n)" 16) (pair "offsetof(Closure, up)" 24)
-        (pair "O_STR" 0) (pair "O_REC" 2) (pair "O_CTOR" 3) (pair "O_CLOSURE" 4) (pair "offsetof(Str, len)" 8) (pair "offsetof(Str, s)" 16)
-        (pair "sizeof(Proto)" 64) (pair "offsetof(Proto, name)" 0) (pair "offsetof(Proto, file)" 8) (pair "offsetof(Proto, nparams)" 16)
-        (pair "offsetof(Proto, maxstack)" 20) (pair "offsetof(Proto, code)" 24) (pair "offsetof(Proto, ncode)" 32) (pair "offsetof(Proto, capcode)" 36)
-        (pair "offsetof(Proto, consts)" 40) (pair "offsetof(Proto, nconsts)" 48) (pair "offsetof(Proto, capconsts)" 52) (pair "offsetof(Proto, native)" 56))
-
-fn layoutProbeText -> String
-  (stringJoin
-    (listAppend
-      (list "#include \"value.h\"" "int main(void) {")
-      (listAppend
-        (map (fn [(r (Pair String Int64))] -> String (str "  printf(\"%s=%lld\\n\", \"" (pairFirst r) "\", (long long)(" (pairFirst r) "));")) (layoutRows))
-        (list "  return 0;" "}" "")))
-    "\n")
-
-fn layoutValue lines: (List String) name: String -> (Option Int64)
-  (fold (fn [(acc (Option Int64)) (l String)] -> (Option Int64)
-          (if (stringStartsWith? l (str name "=")) (stringToInt64 (optionOr (stringSlice l (+ (stringLength name) 1) (stringLength l)) "")) acc))
-        (none) lines)
-
-fn ! testLayout work: String -> Bool
-  (let [(src (str work "/layout.c"))
-        (bin (str work "/layout"))
-        (written (fileWrite src (layoutProbeText)))
-        (built (sh (str "/usr/bin/cc -std=c11 -D_DEFAULT_SOURCE -I asl/host/src " src " -o " bin)))
-        (run (sh bin))
-        (lines (stringLines run.stdout))]
-    (do (assert (ok? written) "layout probe written")
-        (assert (= built.exitCode 0) (str "layout probe compiles against value.h; " built.stderr))
-        (assert (= run.exitCode 0) (str "layout probe runs; " run.stderr))
-        (map (fn [(r (Pair String Int64))] -> Bool
-               (let [(got (layoutValue lines (pairFirst r)))]
-                 (do (assert (= got (some (pairSecond r)))
-                       (str (pairFirst r) " is " (pairSecond r) " in the layout the emitted IR assumes; value.h gives " (optionOr got -1)))
-                     true)))
-             (layoutRows))
-        true))
-
 fn ! testAbiModule work: String -> Bool
   (let [(triple (hostTriple))
         (facts (libc/libcFacts triple))]
@@ -244,7 +200,6 @@ fn ! runTests -> Bool
   (let [(made (sh "mktemp -d"))
         (work (stringReplace made.stdout "\n" ""))]
     (do (assert (= made.exitCode 0) "mktemp -d makes a work directory")
-        (testLayout work)
         (testAbiModule work)
         (testArchive work)
         (testStackScan work)

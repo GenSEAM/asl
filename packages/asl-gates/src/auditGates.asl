@@ -3,6 +3,7 @@
       syntaxCheck! remoteCheck! ssotCheck! emojiCheck! conflictMarkerCheck! coreCheck!
       manifestCheck! groundingCheck! grammarChecks! skillCheck! installerChecks! storageChecks!
       lineHasPlaceholder? staticGateChecks! recordCheck! recordRefused? writeRecord! fullGreenDir cmdGates! cmdGatesAt! spawnFullJob! snapshotFault cmdClosure! cmdSteps! cmdCheck! cmdBuild! cmdConsistency!
+      agentSurfaceCheck!
       esc isFile! isLink? readText! readBytes! git! gitOk! discoverRoot! itos basename dirname]
   :i [(asl-gates/dyck :a dyck)
       (asl-gates/runnerMain :a rm)
@@ -10,7 +11,8 @@
       (asl-gates/suiteRunner :a sr)
       (asl-gates/auditForeign :a af)
       (asl-proc/coreProcess :a p)
-      (asl-proc/gitFixture :a gf)])
+      (asl-proc/gitFixture :a gf)
+      (tools/agentSurfaceAudit :a asa)])
 
 (schema Check
   (:f id String)
@@ -744,8 +746,15 @@ fn cmdConsistency! root: String argv: (List String) -> AuditRun
         (c3 (emojiCheck! root))
         (c4 (conflictMarkerCheck! root))
         (c5 (list (coreCheck! root "coreConsistency" (list "audit" "consistency"))))
-        (checks (listAppend c1 (listAppend c2 (listAppend c3 (listAppend c4 c5)))))]
+        (c6 (list (agentSurfaceCheck! root)))
+        (checks (listAppend c1 (listAppend c2 (listAppend c3 (listAppend c4 (listAppend c5 c6))))))]
     (emit "consistency" checks "" "" false))
+
+fn ! agentSurfaceCheck! root: String -> Check
+  (let [(r (asa/auditAll! root))]
+    (if r.ok
+      (passCheck "gate8AgentSurface" (some r.totalRetired) (none))
+      (failCheck "gate8AgentSurface" "ERR_AGENT_SURFACE" (str "retired forms " (itos r.totalRetired) " exceed the committed ratchet " (itos r.ratchet)) (none) (none))))
 
 fn cmdClosure! root: String argv: (List String) -> AuditRun
   (let [(tSyntax (tier "syntax" (syntaxCheck! root "syntax")))

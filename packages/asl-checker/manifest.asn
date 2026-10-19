@@ -3,4 +3,4 @@
  :entry "src/check.asl"
  :description "100% Self-Hosted Pure AgentSlang Semantic Type Checker"
  :aslFirst true
- :dependencies ["asl-parser"])
+ :dependencies ["asl-parser" "asl-proc"])

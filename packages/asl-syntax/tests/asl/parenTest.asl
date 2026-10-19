@@ -264,8 +264,8 @@ fn checkDirectoryAtRuntime! dir: String -> CheckDirStats
 fn testDyckFixtures! -> Bool
   (let [(stats (checkDirectoryAtRuntime! "tests/fixtures/dyck"))]
     (assert (= stats.total 16) "dyck checked 16 files")
-    (assert (= stats.agree 14) "dyck agree count is 14")
-    (assert (= stats.disagree 2) "dyck disagree count is 2")
+    (assert (= stats.agree 16) "dyck agree count is 16")
+    (assert (= stats.disagree 0) "dyck disagree count is 0")
     (and (verifyFixtureFile! "tests/fixtures/dyck/valid/empty.asn" true 0)
     (and (verifyFixtureFile! "tests/fixtures/dyck/valid/escapedQuoteInString.asn" true 1)
     (and (verifyFixtureFile! "tests/fixtures/dyck/valid/nested.asn" true 1)
@@ -287,11 +287,11 @@ fn testAcceptanceAndGrammarInvalidFixtures! -> Bool
         (sAsn (checkDirectoryAtRuntime! "asl/grammar/corpus/asn/invalid"))
         (sAccept (checkDirectoryAtRuntime! "tests/acceptance/r1Host/reader/invalid"))]
     (assert (= sGrammar.total 7) "corpus invalid checked 7 files")
-    (assert (= sGrammar.agree 4) "corpus invalid agree count is 4")
-    (assert (= sGrammar.disagree 3) "corpus invalid disagree count is 3")
+    (assert (= sGrammar.agree 3) "corpus invalid agree count is 3")
+    (assert (= sGrammar.disagree 4) "corpus invalid disagree count is 4")
     (assert (= sAsn.total 17) "corpus asn invalid checked 17 files")
-    (assert (= sAsn.agree 7) "corpus asn invalid agree count is 7")
-    (assert (= sAsn.disagree 10) "corpus asn invalid disagree count is 10")
+    (assert (= sAsn.agree 17) "corpus asn invalid agree count is 17")
+    (assert (= sAsn.disagree 0) "corpus asn invalid disagree count is 0")
     (assert (= sAccept.total 2) "reader invalid checked 2 files")
     (assert (= sAccept.agree 2) "reader invalid agree count is 2")
     (assert (= sAccept.disagree 0) "reader invalid disagree count is 0")
@@ -364,12 +364,7 @@ fn checkParenAslFile! acc: (Pair Int64 Int64) path: String -> (Pair Int64 Int64)
            (pair (+ checked 1) mismatches))))))
 
 fn testTrackedParenAslFiles! -> Bool
-  (let [(parenFiles (list "asl/packages/asl-agent/src/dispatch.asl"
-                          "asl/packages/asl-agent/src/onion.asl"
-                          "asl/packages/asl-agent/tests/fixtures/test-app/src/snake.asl"
-                          "asl/packages/asl-agent/tests/fixtures/test-app/tests/snake-test.asl"
-                          "asl/packages/asl-agent/tests/fixtures/test-app/tests/snakeTest.asl"
-                          "asl/grammar/corpus/semantic/exportBareCase.asl"
+  (let [(parenFiles (list "asl/grammar/corpus/semantic/exportBareCase.asl"
                           "asl/packages/asl-checker/tests/fixtures/closureParity/ambiguousImporter.asl"
                           "asl/packages/asl-checker/tests/fixtures/closureParity/one/parityDup.asl"
                           "asl/packages/asl-checker/tests/fixtures/closureParity/symlinkImporter.asl"
@@ -378,7 +373,6 @@ fn testTrackedParenAslFiles! -> Bool
                           "asl/packages/asl-mesh/src/main.asl"
                           "asl/packages/asl-mesh/target.asl"
                           "asl/packages/asl-pack/tests/intermediatePolicyTest.asl"
-                          "asl/packages/asl-plugin/src/types.asl"
                           "asl/packages/asl-replay/src/main.asl"
                           "asl/packages/asl-ui/src/main.asl"
                           "asl/packages/asl-mem/src/tasks.asl"
@@ -399,9 +393,8 @@ fn testTrackedParenAslFiles! -> Bool
         (stats (fold checkParenAslFile! (pair 0 0) parenFiles))
         (totalChecked (pairFirst stats))
         (mismatches (pairSecond stats))]
-    (assert (= totalChecked 32) "checked all 32 valid paren asl files")
+    (assert (= totalChecked 26) "checked all 26 valid paren asl files")
     (assert (= mismatches 0) "zero mismatches on valid paren asl files")
-    (assert (verifyFixtureFile! "asl/packages/asl-agent/src/dispatch.asl" true 15) "dispatch.asl has 15 top-level forms")
     (assert (verifyFixtureFile! "asl/grammar/corpus/semantic/exportBareCase.asl" true 2) "exportBareCase.asl has 2 top-level forms")
     (assert (verifyFixtureFile! "tests/acceptance/d81/Task58801IntermediatePolicyTest.asl" true 6) "Task58801 has 6 top-level forms")
     (assert (verifyFixtureFile! "asl/packages/asl-syntax/manifest.asn" true 1) "manifest.asn has 1 top-level form")

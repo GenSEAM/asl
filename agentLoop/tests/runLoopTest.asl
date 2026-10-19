@@ -36,14 +36,14 @@ fn makeEnv id: String task: String root: String journal: String budget: Int64 wa
 
 fn makeEnvWith sid: (Option String) task: String root: String journal: String budget: Int64 wall: (Option Int64) gates: (List String) resume: (Option j/Json) -> s/LoopEnv
   (s/LoopEnv :provider fakeTurn :task task :modeHint (some "implement") :owns (list) :gates gates
-    :rootDir root :budget budget :journalPath journal :maxRetries 0 :sessionId sid
+    :rootDir root :budget budget :inputTokenBudget 0 :journalPath journal :maxRetries 0 :sessionId sid
     :base (some "") :contextTokens (some 24000) :model (some "loop-run-fixture")
     :gateTimeout (some 10) :wallBudget wall :resume resume :intent (some "patch") :plan false :specCheck false
     :next fakeTurn :advise fakeAdvice :review fakeAdvice :newId fakeId :now fakeNow :sleep fakeSleep)
 
 fn makeEnvModel id: String model: String contextTokens: (Option Int64) root: String journal: String -> s/LoopEnv
   (s/LoopEnv :provider fakeTurn :task "context window check" :modeHint (some "implement") :owns (list) :gates (list)
-    :rootDir root :budget 4 :journalPath journal :maxRetries 0 :sessionId (some id)
+    :rootDir root :budget 4 :inputTokenBudget 0 :journalPath journal :maxRetries 0 :sessionId (some id)
     :base (some "") :contextTokens contextTokens :model (some model)
     :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck false
     :next fakeTurn :advise fakeAdvice :review fakeAdvice :newId fakeId :now fakeNow :sleep fakeSleep)
@@ -51,7 +51,15 @@ fn makeEnvModel id: String model: String contextTokens: (Option Int64) root: Str
 ; (:m :ref PREFETCH-WIRE)
 fn makeEnvOwns id: String task: String root: String journal: String owns: (List String) -> s/LoopEnv
   (s/LoopEnv :provider fakeTurn :task task :modeHint (some "implement") :owns owns :gates (list)
-    :rootDir root :budget 4 :journalPath journal :maxRetries 0 :sessionId (some id)
+    :rootDir root :budget 4 :inputTokenBudget 0 :journalPath journal :maxRetries 0 :sessionId (some id)
+    :base (some "") :contextTokens (some 24000) :model (some "loop-run-fixture")
+    :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck false
+    :next fakeTurn :advise fakeAdvice :review fakeAdvice :newId fakeId :now fakeNow :sleep fakeSleep)
+
+; (:m :ref FREEBENCH-TOKENBUDGET-20261017 :do "a dedicated fixture for the cumulative input-token cap, separate from makeEnv's unbounded default, so existing tests keep their original unconfigured-budget behaviour")
+fn makeEnvTokenBudget id: String root: String journal: String inputTokenBudget: Int64 -> s/LoopEnv
+  (s/LoopEnv :provider fakeTurn :task "token budget check" :modeHint (some "implement") :owns (list) :gates (list)
+    :rootDir root :budget 4 :inputTokenBudget inputTokenBudget :journalPath journal :maxRetries 0 :sessionId (some id)
     :base (some "") :contextTokens (some 24000) :model (some "loop-run-fixture")
     :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck false
     :next fakeTurn :advise fakeAdvice :review fakeAdvice :newId fakeId :now fakeNow :sleep fakeSleep)
@@ -270,7 +278,8 @@ fn wrote turn: Int64 status: String gates: (List g/GateResult) lastGates: (Map S
 fn runWith run: rl/LoopRun state: s/LoopState written: jr/Written procs: ro/Procs message: (Option String) defects: (List (Pair Int64 Bool)) -> rl/LoopRun
   (fold (fn [acc d] (rl/noteParseTurn acc (pairFirst d) (pairSecond d)))
     (rl/LoopRun :state state :procs procs :written written :session run.session :commitMessage message
-      :parseDefects run.parseDefects :lastDefect run.lastDefect :lastDefectTurn run.lastDefectTurn)
+      :parseDefects run.parseDefects :lastDefect run.lastDefect :lastDefectTurn run.lastDefectTurn
+      :parseDefectStreak run.parseDefectStreak)
     defects)
 
 fn ! writeRun! run: rl/LoopRun rel: String text: String -> jr/Written
@@ -488,6 +497,12 @@ fn ! runTests -> Bool
         patchState (fn [turn] (rl/withHeadState baseState turn 0 false (some "patch") (list) (mapEmpty) "ok" none none baseState.runStarted))
         budget10Env (makeEnv "loopRun12" "no write share" tmp (str tmp "/loopRunTest-share.asn") 10 none (list) none)
         budget60Env (makeEnv "loopRun13" "no write cap" tmp (str tmp "/loopRunTest-cap.asn") 60 none (list) none)
+        parseDefectCfgRoot (str tmp "/parseDefectCfg")
+        parseDefectCfgFile (str parseDefectCfgRoot "/.asl.config.asn")
+        parseDefectCfgEnv (makeEnv "loopRun22" "parse-defect config override" parseDefectCfgRoot (str tmp "/loopRunTest-parseDefectCfg.asn") 40 none (list) none)
+        tokenBudgetEnv (makeEnvTokenBudget "loopRun23" tmp (str tmp "/loopRunTest-tokenBudget.asn") 1000)
+        unboundedTokenEnv (makeEnv "loopRun24" "unbounded token budget" tmp (str tmp "/loopRunTest-tokenUnbounded.asn") 40 none (list) none)
+        usageState (fn [n] (rl/withUsageTotals baseState (j/jobj (list (pair "inputTokens" (j/jint n))))))
         prefetchFile (str tmp "/prefetch.txt")
         prefetchFileReady (ok? (fileWrite prefetchFile "hello prefetch\n"))
         prefetchEnv (makeEnvOwns "loopRun20" "prefetch wiring test" tmp (str tmp "/loopRunTest-prefetch.asn") (list "prefetch.txt"))
@@ -592,22 +607,38 @@ fn ! runTests -> Bool
                         (assert (stringContains? (fileText resumeGoodJournal) "(:resumeApplied \"loopRunTest-resumeGood.patch\")") "successful resume journals the applied patch")
                         (assert (= (fileText (str tmp "/resume-good.txt")) "after\n") "successful resume applies patch inside its temporary root")))
                     (assert (= bodyResult.turns 2) "runLoopWith invokes the body then finalizes its updated state")
-                    (assert (= (rl/headDecision gateEnv (streakState 11)) "continue") "a red declared gate below the readStreak limit continues")
-                    (assert (= (rl/headDecision gateEnv (streakState 12)) "readStreak") "a red declared gate at readStreakEscalate escalates")
-                    (assert (= (rl/headDecision gateEnv healedState) "continue") "a gate whose latest result is green is not red even after an earlier red result")
-                    (assert (= (rl/headDecision gateEnv undeclaredState) "continue") "a red result for an undeclared gate does not count")
-                    (assert (= (rl/headDecision gateEnv timeoutState) "readStreak") "a declared gate whose latest result has no exit code counts as red")
-                    (assert (= (rl/headDecision budget10Env (patchState 4)) "continue") "no write before half the turn budget continues")
-                    (assert (= (rl/headDecision budget10Env (patchState 5)) "noWriteTurns") "no write at half the turn budget escalates")
-                    (assert (= (rl/headDecision budget60Env (patchState 19)) "continue") "no write below the noWriteTurns cap continues")
-                    (assert (= (rl/headDecision budget60Env (patchState 20)) "noWriteTurns") "no write at the noWriteTurns cap escalates")
+                    (assert (= (rl/headDecision! gateEnv (streakState 11) 0) "continue") "a red declared gate below the readStreak limit continues")
+                    (assert (= (rl/headDecision! gateEnv (streakState 12) 0) "readStreak") "a red declared gate at readStreakEscalate escalates")
+                    (assert (= (rl/headDecision! gateEnv healedState 0) "continue") "a gate whose latest result is green is not red even after an earlier red result")
+                    (assert (= (rl/headDecision! gateEnv undeclaredState 0) "continue") "a red result for an undeclared gate does not count")
+                    (assert (= (rl/headDecision! gateEnv timeoutState 0) "readStreak") "a declared gate whose latest result has no exit code counts as red")
+                    (assert (= (rl/headDecision! budget10Env (patchState 4) 0) "continue") "no write before half the turn budget continues")
+                    (assert (= (rl/headDecision! budget10Env (patchState 5) 0) "noWriteTurns") "no write at half the turn budget escalates")
+                    (assert (= (rl/headDecision! budget60Env (patchState 19) 0) "continue") "no write below the noWriteTurns cap continues")
+                    (assert (= (rl/headDecision! budget60Env (patchState 20) 0) "noWriteTurns") "no write at the noWriteTurns cap escalates")
+                    (assert (= (rl/headDecision! noWriteEnv baseState 7) "continue") "7 non-actionable replies in a row, still no deliver intent, continues")
+                    (assert (= (rl/headDecision! noWriteEnv baseState 8) "parseDefect") "8 non-actionable replies in a row (the default cap) escalates even though deliver was never declared")
+                    (assert (= (rl/headDecision! noWriteEnv (patchState 1) 8) "parseDefect") "a parse-defect streak at the default cap escalates ahead of a fresh patch-intent noWrite window")
+                    (assert (ok? (dirCreate parseDefectCfgRoot)) "parse-defect config fixture root exists")
+                    (assert (ok? (fileWrite parseDefectCfgFile "(:aslConfig :agentLoop (:parseDefectEscalate 3))\n")) "parse-defect config fixture file is written")
+                    (assert (= (rl/headDecision! parseDefectCfgEnv baseState 2) "continue") "a project .asl.config.asn can lower the cap below the default -- 2 replies still continues")
+                    (assert (= (rl/headDecision! parseDefectCfgEnv baseState 3) "parseDefect") "and 3 replies hits that project's own lowered cap")
+                    (assert (= (rl/headDecision! noWriteEnv baseState 3) "continue") "the same streak of 3 against a root with no .asl.config.asn still uses the unconfigured default of 8")
+                    (assert (= (rl/usageIntOf (rl/usageTotalsPlus (j/jobj (list)) 100 10 20) "inputTokens") 100) "usageTotalsPlus starts an empty total at the first turn's input delta")
+                    (assert (= (rl/usageIntOf (rl/usageTotalsPlus (j/jobj (list)) 100 10 20) "cachedTokens") 10) "usageTotalsPlus tracks cachedTokens alongside inputTokens")
+                    (assert (= (rl/usageIntOf (rl/usageTotalsPlus (j/jobj (list (pair "inputTokens" (j/jint 100)))) 50 0 0) "inputTokens") 150) "usageTotalsPlus adds onto an existing total rather than replacing it")
+                    (assert (= (rl/usageIntOf (usageState 1).usageTotals "inputTokens") 1) "withUsageTotals actually lands on state.usageTotals, not a dead passthrough field")
+                    (assert (= (rl/headDecision! tokenBudgetEnv (usageState 999) 0) "continue") "999 cumulative input tokens below a 1000 cap continues")
+                    (assert (= (rl/headDecision! tokenBudgetEnv (usageState 1000) 0) "tokenBudget") "1000 cumulative input tokens at the cap escalates")
+                    (assert (= (rl/headDecision! tokenBudgetEnv (usageState 50000) 0) "tokenBudget") "well past the cap still escalates")
+                    (assert (= (rl/headDecision! unboundedTokenEnv (usageState 5000000) 0) "continue") "inputTokenBudget 0 (unconfigured, the default for every caller outside the bench harness) means no cap regardless of cumulative usage")
                     (assert (= (map rl/wallSeconds (list 0.5 1.5 2.5 3.49 3.5)) (list "0" "2" "2" "3" "4")) "wallSeconds rounds half to even like Python format .0f")
                     (assert (= escalatedResult.status "escalated") "a body may end the run escalated")
                     (assert (none? escalatedResult.escalate) "an escalated run without an escalate receipt reports none")
                     (assert retainReady "retain failure fixture builds a linked worktree")
                     (assert (= retainResult.status "failed") "a journal retention error fails the run")
                     (assert (= retainResult.error (some (str "OSError: permissionDenied: '" retainJournalPath "'"))) "a journal retention error is returned whole")
-                    (assert (= (rl/headDecision noWriteEnv noWriteState) "noWriteTurns") "head! reads constructed persisted patch turns")
+                    (assert (= (rl/headDecision! noWriteEnv noWriteState 0) "noWriteTurns") "head! reads constructed persisted patch turns")
                     (assert (= redResult.status "escalated") "red gate read streak escalates through the loop")
                     (assert (= redResult.signal (some "readStreak")) "red gate final result retains the readStreak signal")
                     (assert (= redResult.escalate (some (j/jstr "(:escalate :reason \"12 turns without a write while a gate is red\")"))) "red gate final result retains the escalation reason")

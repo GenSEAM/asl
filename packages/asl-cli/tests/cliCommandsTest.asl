@@ -83,47 +83,35 @@ fn testCmdTestNoDocPasses! -> Bool
     true)
 
 fn testCmdRunWithDifferentWorkingDirectory! -> Bool
-  (let [(procRes (processRun "cd asl/packages/asl-cli && ../../../asl/host/out/asl-host run src/main.asl eval '(+ 20 22)'"))]
+  (let [(procRes (processRun "cd asl/packages/asl-cli && ../../../bin/asl eval '(+ 20 22)'"))]
     (assert (= procRes.exitCode 0) "cli eval from subdirectory must succeed")
     (assert (stringContains? procRes.stdout "42") "cli eval from subdirectory produces 42")
     true)
 
 fn testCmdRunFromSubdirectoryExecutesMain! -> Bool
-  (let [(procRes (processRun "cd asl/packages/asl-cli && ../../../asl/host/out/asl-host run src/main.asl run tests/fixtures/runMe.asl"))]
+  (let [(procRes (processRun "cd asl/packages/asl-cli && ../../../bin/asl run tests/fixtures/runMe.asl"))]
     (assert (= procRes.exitCode 0) "cli run from subdirectory must exit 0")
     (assert (stringContains? procRes.stdout "RUN_OUTPUT_MARKER") "cli run from subdirectory shows main ran")
     true)
 
 fn testCmdTestFromSubdirectory! -> Bool
-  (let [(okRes (processRun "cd asl/packages/asl-cli && ../../../asl/host/out/asl-host run src/main.asl test tests/fixtures/testOk.asl"))
-        (badRes (processRun "cd asl/packages/asl-cli && ../../../asl/host/out/asl-host run src/main.asl test tests/fixtures/noAsserts.asl"))]
+  (let [(okRes (processRun "cd asl/packages/asl-cli && ../../../bin/asl test tests/fixtures/testOk.asl"))
+        (badRes (processRun "cd asl/packages/asl-cli && ../../../bin/asl test tests/fixtures/noAsserts.asl"))]
     (assert (= okRes.exitCode 0) "cli test on testOk from subdirectory must exit 0")
     (assert (stringContains? okRes.stdout "assertion(s) executed") "cli test on testOk reports executed assertions")
     (assert (not (= badRes.exitCode 0)) "cli test on noAsserts from subdirectory must exit non-zero")
     (assert (stringContains? (str badRes.stdout badRes.stderr) "zero assertions") "cli test on noAsserts reports zero assertions")
     true)
 
-fn testCmdEvalFromTmpWithHostEnv! -> Bool
+fn testCmdEvalFromTmp! -> Bool
   (let [(pwdRes (processRun "pwd -P"))
         (root (stringTrim pwdRes.stdout))
-        (hostPath (str root "/asl/host/out/asl-host"))
-        (mainPath (str root "/asl/packages/asl-cli/src/main.asl"))
-        (cmd (str "cd /tmp && ASL_HOST='" hostPath "' '" hostPath "' run '" mainPath "' eval '(+ 20 22)'"))
+        (binAsl (str root "/bin/asl"))
+        (cmd (str "cd /tmp && '" binAsl "' eval '(+ 20 22)'"))
         (procRes (processRun cmd))]
     (assert (= pwdRes.exitCode 0) "pwd -P from repo root must succeed")
-    (assert (= procRes.exitCode 0) "cli eval from /tmp with ASL_HOST must exit 0")
-    (assert (stringContains? procRes.stdout "42") "cli eval from /tmp with ASL_HOST prints 42")
-    true)
-
-fn testCmdEvalFromTmpWithoutHostEnv! -> Bool
-  (let [(pwdRes (processRun "pwd -P"))
-        (root (stringTrim pwdRes.stdout))
-        (hostPath (str root "/asl/host/out/asl-host"))
-        (mainPath (str root "/asl/packages/asl-cli/src/main.asl"))
-        (cmd (str "cd /tmp && env -u ASL_HOST '" hostPath "' run '" mainPath "' eval '(+ 20 22)'"))
-        (procRes (processRun cmd))]
-    (assert (not (= procRes.exitCode 0)) "cli eval from /tmp without ASL_HOST must fail")
-    (assert (stringContains? (str procRes.stdout procRes.stderr) ".asl.config.asn") "cli eval without ASL_HOST names .asl.config.asn")
+    (assert (= procRes.exitCode 0) (str "cli eval from /tmp must exit 0: " procRes.stdout procRes.stderr))
+    (assert (stringContains? procRes.stdout "42") "cli eval from /tmp prints 42")
     true)
 
 fn testCheckDispatchUnknownSymbol! -> Bool
@@ -159,7 +147,6 @@ fn ! runTests -> Bool
   (and (testCmdRunWithDifferentWorkingDirectory!)
   (and (testCmdRunFromSubdirectoryExecutesMain!)
   (and (testCmdTestFromSubdirectory!)
-  (and (testCmdEvalFromTmpWithHostEnv!)
-  (and (testCmdEvalFromTmpWithoutHostEnv!)
+  (and (testCmdEvalFromTmp!)
   (and (testCheckDispatchUnknownSymbol!)
-       (testCheckDispatchCleanNoDoc!))))))))))))))
+       (testCheckDispatchCleanNoDoc!)))))))))))))

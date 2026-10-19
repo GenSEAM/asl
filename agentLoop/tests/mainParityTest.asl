@@ -8,7 +8,7 @@ fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
 
 fn ! host -> String
-  (optionOr (envGet "ASL_HOST") "asl/host/out/asl-host")
+  (optionOr (envGet "ASL_HOST") "bin/asl")
 
 fn ! runAsl env: String form: String -> ProcessOutput
   (processRun (str env " nice -n 15 " (host) " run asl/agentLoop/tests/mainDriver.asl " (shellQuote form)))

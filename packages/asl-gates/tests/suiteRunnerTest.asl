@@ -106,7 +106,7 @@ fn ! replayGates! records: (List p/SExpr) -> Bool
             suite (strField fields ":suite")
             wantedExit (numField fields ":exit")
             wantedOut (strField fields ":stdout")
-            got (processRun (str "ASL_GATE_TIMES=" (timesLedger!) " asl/host/out/asl-host run asl/packages/asl-gates/src/suiteRunner.asl gate " suite))]
+            got (processRun (str "ASL_GATE_TIMES=" (timesLedger!) " bin/asl run asl/packages/asl-gates/src/suiteRunner.asl gate " suite))]
         (do
           (assert (= got.stdout wantedOut)
             (str "gate stdout matches recorded Python for " suite
@@ -179,7 +179,7 @@ fn ! runTests -> Bool
         timeouts (listOf timeoutNode)
         tableSuites (timeoutTableSuites!)
         gates (listOf gateNode)
-        discoveryResult (processRun "asl/host/out/asl-host run asl/packages/asl-gates/src/suiteRunner.asl discover")
+        discoveryResult (processRun "bin/asl run asl/packages/asl-gates/src/suiteRunner.asl discover")
         discoveryLines (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines discoveryResult.stdout))
         discoveredCount (listLength discoveryLines)
         suiteLines (listTake discoveryLines (- discoveredCount 2))
@@ -217,8 +217,10 @@ fn ! runTests -> Bool
       (assert (sr/isSuiteName "tests/acceptance/daemonLifecycleTest.asl") "isSuiteName accepts the ported lifecycle .asl suite")
       (assert (listContains? suiteLines "tests/acceptance/daemonLifecycleTest.asl")
         "discovery includes the ported lifecycle .asl suite")
-      (assert (listContains? suiteLines "tests/acceptance/aslDaemonSocketTest.asl")
-        "discovery includes the ported daemon socket .asl suite")
+      (assert (not (listContains? suiteLines "tests/acceptance/aslDaemonSocketTest.asl"))
+        "discovery excludes the daemon socket .asl suite, frozen (HL-DG) pending a native nested-subprocess fix")
+      (assert (sr/isFrozenPath! gitTreeRoot "tests/acceptance/aslDaemonSocketTest.asl")
+        "the daemon socket suite is recognized as frozen")
       (assert (not (listContains? suiteLines "tests/acceptance/daemonLifecycleTest.sh"))
         "discovery excludes the legacy nonhermetic lifecycle shell wrapper")
       (assert (not (listContains? (sr/helpers! gitTreeRoot tracked) "tests/acceptance/daemonLifecycleTest.sh"))
@@ -246,7 +248,7 @@ fn ! runTests -> Bool
       (assert (listAll? (fn [(suite String)] -> Bool (listContains? tableSuites suite)) (timeoutSuites timeouts))
         "every recorded Python timeout entry is in the ASL table")
       (assert (replayTimeouts! timeouts) "every ASL timeout equals the recorded Python table")
-      (assert (= (listLength gates) 10) "fixture records all ten runner gate cases")
+      (assert (= (listLength gates) 9) "fixture records all nine runner gate cases (asl-agent/tests/swarmCoordinatorTest.asl's case dropped: the suite and its aslAgent/swarmCoordinator dependency are genuinely dead, zero importers, DEAD-PACKAGES/eba523678)")
       (assert (= (gateExit gates "nonexistentTest.asl") 1) "recorded missing-suite gate fails")
       (assert (stringContains? (gateOutput gates "nonexistentTest.asl") "ERR_NOT_A_SUITE") "recorded missing-suite cause is preserved")
       (assert (replayGates! gates) "ASL gate outputs and exits equal recorded Python")

@@ -1,4 +1,4 @@
-(module asl-forms/edit :x [SyntaxResult Checkers Verdict DelimDiag delimDiag delimError languageOf syntaxLang validateStaged! unifiedDiff! fnmatch parseOwns linesFailed stepReadOnly writeStep! editStep! diffStep! preflushStep! flushStep! discardStep! txnStep! editOp!] :i [(asl-forms/kernel :a k) (asl-forms/vfs :a v) (asl-forms/repair :a rep) (asl-coord/claims :a coord)])
+(module asl-forms/edit :x [SyntaxResult Checkers Verdict DelimDiag delimDiag delimError languageOf syntaxLang validateStaged! unifiedDiff! fnmatch parseOwns linesFailed stepReadOnly writeStep! editStep! diffStep! preflushStep! flushStep! discardStep! txnStep! editOp!] :i [(asl-forms/kernel :a k) (asl-forms/vfs :a v) (asl-forms/repair :a rep) (asl-coord/claims :a coord) (asl-forms/heal :a h)])
 
 
 (schema SyntaxResult (:f status String) (:f message String) (:f before String) (:f host String))
@@ -178,12 +178,12 @@ fn validateAsl ch: Checkers path: String lang: String before: (Option String) af
         (let [(r (ch.aslCheck path after before))
               (st r.status)
               (diag r.message)
-              (chk " :checker \"asl-host\"")
+              (chk " :checker \"asl-checker\"")
               (pre (= r.before "error"))]
           (cond
             ((= st "ok") (Verdict :code "" :message "" :fields (str " :balanced true :syntax :ok" chk)))
             ((or pre force) (Verdict :code "" :message "" :fields (str " :balanced true :syntax :error" chk (preOrForced pre) " :syntaxMessage " (quoted diag))))
-            (else (Verdict :code ":ERR_CHECK_FAILED" :message (if (stringEmpty? diag) (str "asl-host check " st) diag) :fields (str " :balanced true :syntax :error" chk)))))))
+            (else (Verdict :code ":ERR_CHECK_FAILED" :message (if (stringEmpty? diag) (str "native check " st) diag) :fields (str " :balanced true :syntax :error" chk)))))))
     ((some d)
       (let [(pre (mt before ((some b) (some? (delimDiag b))) ((none) false)))
             (detail (str " :byte " (stringFromInt64 d.byte) (if (stringEmpty? d.expected) "" (str " :expected " (quoted d.expected)))))]
@@ -592,12 +592,17 @@ fn ! diskMatches? path: String meta: v/VfsMeta -> Bool
     (and (= cur meta.baseExists)
          (or (not cur) (= (v/shaText (resultOr (v/readText! path) "")) meta.baseSha))))
 
+; (:m :ref "lead amend 2026-10-16" :do "effectMark runs on every flush of a staged .asl file, on by default: an LLM writer never has to add or remove a ! itself, the checker just infers; plain asl check stays read-only")
+fn ! effectMarkOnWrite! tp: String staged: String -> String
+  (if (aslFile? tp) (let [(res (h/healSourceRules staged tp (mapEmpty) (list) (list "effectMark")))] res.text) staged)
+
 fn flushOne! vs: v/Vfs tp: String -> (Pair String String)
   (let [(rel (k/relToRoot vs.root tp))]
     (mt (v/stagedContent! vs tp)
       ((none) (pair ":ERR_NOT_STAGED" (str "No staged modification for " rel)))
-      ((some staged)
-        (let [(gerr (v/writeGuard! vs.root tp))
+      ((some staged0)
+        (let [(staged (effectMarkOnWrite! tp staged0))
+              (gerr (v/writeGuard! vs.root tp))
               (derr (if (aslFile? tp) (delimError staged) ""))]
           (cond
             ((not (stringEmpty? gerr)) (pair ":ERR_BOUNDARY_VIOLATION" gerr))

@@ -14,6 +14,6 @@ fn compileWithTypes! entryPath: String -> (Result (Pair String String) (List ty/
   (mt (compileEntry! entryPath)
     ((err ds) (err ds))
     ((ok js)
-      (mt (fileRead entryPath)
+      (mt (fileReadString entryPath)
         ((err e) (err [(ty/makeIrDiag "ERR_LINK_READ" (str "cannot read " entryPath) entryPath)]))
         ((ok src) (mt (dts/emitDts src) ((ok types) (ok (pair js types))) ((err e) (err [(ty/makeIrDiag "ERR_DTS" e entryPath)])))))))

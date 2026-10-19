@@ -1,6 +1,6 @@
 (module asl-target-llvm/tests/deepStackTest
   :x [runTests]
-  :i [(tools/fleet/run :a run)])
+  :i [(tools/fleet/run :a run) (asl-cli/asl1Cache :a cache) (asl-cli/system :a sys)])
 
 (schema Captured
   (:f exitCode Int64)
@@ -22,10 +22,12 @@ fn ! shWithin cmd: String timeoutS: Int64 -> Captured
 fn ! sh cmd: String -> Captured
   (shWithin cmd 120)
 
-; (:m :ref NATIVE-STACK-GUARD :do "beyond-limit case: recursion deep enough to exceed both host's MAX_FRAMES (1048576, asl/host/src/value.h) and native's 1 GiB body-thread stack (rtAbi mainText). Runs as a real subprocess on each side since a stack overflow cannot safely let the same process keep asserting afterward. Before NATIVE-STACK-GUARD: native died raw (SIGBUS/SIGSEGV, exit 128+signal, no message). After: rtAbi's guard-page sigaltstack handler (rtAbi.asl#locateDarwinText) reports ERR_STACK_DEPTH and exits 1, matching the host's own ERR_STACK_DEPTH text and exit 1 for the identical source")
+; (:m :ref NATIVE-STACK-GUARD :do "beyond-limit case: recursion deep enough to exceed native's 1 GiB body-thread stack (rtAbi mainText). Runs as a real subprocess since a stack overflow cannot safely let the same process keep asserting afterward. Before NATIVE-STACK-GUARD: native died raw (SIGBUS/SIGSEGV, exit 128+signal, no message). After: rtAbi's guard-page sigaltstack handler (rtAbi.asl#locateDarwinText) reports ERR_STACK_DEPTH and exits 1. HL-E-LLVM (asl-host deleted): the build used to go through asl-host interpreting asl1.asl, now uses the cached native asl1 compiler (asl-cli/asl1Cache nativeAsl1!); the suite also used to assert that asl-host's own interpreter guards the identical recursion the same way, a claim about the deleted interpreter with no native analogue (tools/nativeTest.asl's -O2 native compile of the same source does not even hit the guard: 50000000 frames fit comfortably below 1 GiB at that optimization level), so that one assertion is dropped rather than ported; the native rtAbi guard-page assertions below are unchanged")
 
-fn hostBin -> String
-  "asl/host/out/asl-host"
+fn ! nativeAsl1Bin! -> (Result String String)
+  (mt (sys/context!)
+    ((err e) (err e))
+    ((ok ctx) (cache/nativeAsl1! ctx (str ctx.root "/asl/host/out/libaslrt.a") "/usr/bin/clang")))
 
 fn clangBin -> String
   "/usr/bin/clang -Wno-override-module"
@@ -59,12 +61,14 @@ fn ! testBeyondStackLimit base: String -> Bool
         (ll (str base "/beyondLimit.ll"))
         (bin (str base "/beyondLimit"))
         (wrote (fileWrite src (beyondLimitSource)))
-        (built (expectExit! "beyondLimit: asl1 builds it" (str (hostBin) " run asl/packages/asl-compiler/src/asl1.asl build " src " -o " ll) 0))
+        (compiler (nativeAsl1Bin!))
+        (built (mt compiler
+                 ((err e) (do (assert false (str "beyondLimit: native asl1 compiler: " e)) false))
+                 ((ok nativeAsl1) (expectExit! "beyondLimit: asl1 builds it natively" (str nativeAsl1 " build " src " -o " ll) 0))))
         (linked (expectExit! "beyondLimit: clang links it" (str (clangBin) " -x ir " ll " -x none " (rtLib) " -lm -o " bin) 0))
-        (hostOk (stderrHolds! "beyondLimit host" (str (hostBin) " run " src) "ERR_STACK_DEPTH"))
         (nativeExit (expectExit! "beyondLimit native: guard catches the overflow loudly" bin 1))
         (nativeMsg (stderrHolds! "beyondLimit native" bin "ERR_STACK_DEPTH"))]
-    (and (ok? wrote) (and built (and linked (and hostOk (and nativeExit nativeMsg))))))
+    (and (ok? wrote) (and built (and linked (and nativeExit nativeMsg)))))
 
 fn depth -> Int64
   400000
@@ -93,7 +97,7 @@ fn kept k: Int64 -> Int64
   (if (= k 0) 0 (+ (+ (+ 200 (mod k 7)) (+ 40 (mod k 5))) (kept (- k 1))))
 
 fn ! scratchBase! -> String
-  (str (optionOr (envGet "TMPDIR") "/tmp") "/deepStackTest-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs)))
+  (str "asl/tmp/deepStackTest-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs)))
 
 fn ! runTests -> Bool
   (let [(text (str (opens (depth)) (closes (depth))))
@@ -102,6 +106,7 @@ fn ! runTests -> Bool
         (end (group bs n 0))
         (total (keep (depth)))
         (base (scratchBase!))
+        (tmpRoot (if (sys/isDir? "asl/tmp") true (ok? (dirCreate "asl/tmp"))))
         (madeBase (dirCreate base))
         (guardOk (testBeyondStackLimit base))
         (cleaned (pathRemove base))]

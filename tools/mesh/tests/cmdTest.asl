@@ -265,8 +265,12 @@ fn collect! pid: Int64 outFd: Int64 errFd: Int64 outs: (List String) errs: (List
                (mt ec ((some x) (if (stringEmpty? x) errs (cons x errs))) ((none) errs))
                (and outOpen (some? oc)) (and errOpen (some? ec)) code2)))
 
-fn runChild! argv: (List String) cwd: String env: (List String) -> (Result Run String)
-  (mt (procSpawnv argv (some cwd) (some env))
+; (:m :ref FROZEN-HOSTLESS :do "children run bin/asl through /bin/bash (a case PATH may be empty, so the wrapper shebang cannot find bash) and share the already-built native CLI cache through ASL_NATIVE_CLI_CACHE, since each case has its own HOME")
+fn ! nativeCache! -> String
+  (str (optionOr (envGet "HOME") "") "/.asl/run/nativeCli")
+
+fn ! runChild! argv: (List String) cwd: String env: (List String) -> (Result Run String)
+  (mt (procSpawnv (cons "/bin/bash" argv) (some cwd) (some (cons (str "ASL_NATIVE_CLI_CACHE=" (nativeCache!)) env)))
     ((err e) (err e))
     ((ok sp)
       (do
@@ -376,7 +380,7 @@ fn ! runTests -> Bool
         lines (caseLines text)
         base (scratchBase!)
         made (dirCreate base)
-        host (absPath! "asl/host/out/asl-host")
+        host (absPath! "bin/asl")
         cmdPath (absPath! "asl/tools/mesh/cmd.asl")
         selectedCount (fold (fn [n p] (+ n (if (selected! (at (caseFields (pairSecond p)) 0)) 1 0))) 0 (enumerate lines))
         results (map (fn [p] (let [cid (at (caseFields (pairSecond p)) 0)]

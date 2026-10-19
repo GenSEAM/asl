@@ -1,6 +1,6 @@
 (module asl-forms/tests/driverParityTest
   :x [runTests]
-  :i [(asl-forms/kernel :a k) (asl-forms/gate :a g) (asl-forms/ops :a ops) (asl-forms/main :a main)])
+  :i [(asl-forms/kernel :a k) (asl-forms/gate :a g) (asl-forms/ops :a ops) (asl-forms/main :a main) (asl-forms/tests/formsDriver :a fd)])
 
 
 (schema CaseSpec
@@ -71,9 +71,9 @@ fn ! driveWrite root: String lines: (List String) -> main/Drive
 fn ported? output: String -> Bool
   (not (stringContains? output "ERR_NOT_PORTED"))
 
-fn checkCase! root: String defaultStubs: String host: String mainPath: String c: CaseSpec t: Tally -> Tally
+fn checkCase! root: String defaultStubs: String forms: String c: CaseSpec t: Tally -> Tally
   (let [(env (buildEnv! root defaultStubs c))
-        (r (g/runArgv! (list host "run" mainPath c.form) (some root) (some env) 10000 0))
+        (r (g/runArgv! (list forms c.form) (some root) (some env) 10000 0))
         (got (stringTrim r.out))
         (code r.code)
         (same (and (= got c.want) (= code c.exit)))
@@ -98,13 +98,12 @@ fn checkCase! root: String defaultStubs: String host: String mainPath: String c:
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (stubs (prepareStubs!))
-        (host (k/joinPath root "asl/host/out/asl-host"))
-        (mainPath (k/joinPath root "asl/packages/asl-forms/src/main.asl"))
+        (forms (fd/formsBin! root))
         (fixturePath (k/joinPath root "asl/packages/asl-forms/tests/fixtures/recorded/driver.asn"))
         (text (resultOr (fileReadString fixturePath) ""))
         (lines (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:case ")) (stringSplit text "\n")))
         (cases (map parseCase lines))
-        (t (fold (fn [(acc Tally) (c CaseSpec)] -> Tally (checkCase! root stubs host mainPath c acc))
+        (t (fold (fn [(acc Tally) (c CaseSpec)] -> Tally (checkCase! root stubs forms c acc))
                  (Tally :cases 0 :failures 0 :packNotPorted 0 :batchDiverged 0 :packFlagFailures 0) cases))
         (rejectedDrive (main/driveOutcome! root (list) 1 true
                         (main/Drive :lines (list) :failed (list) :heads (list) :errs 0 :stop "")

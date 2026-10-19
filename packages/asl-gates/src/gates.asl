@@ -18,11 +18,11 @@ fn verifyManifestString content: Str -> Bool
   (let [(pkg (mg/parsePackageId content))] (and (> (stringLength pkg) 2) (mg/isValidPkgName? pkg)))
 
 fn ! verifyManifests manifestPaths: (List Str) -> (Result I64 (List Str))
-  (let [(problems (fold (fn [(acc (List Str)) (path Str)] -> (List Str) (mt (fileRead path) ((err e) (listAppend acc (list (str "Failed to read manifest " path ": " e)))) ((ok content) (if (verifyManifestString content) acc (listAppend acc (list (str path ": no valid package id"))))))) (list) manifestPaths))]
+  (let [(problems (fold (fn [(acc (List Str)) (path Str)] -> (List Str) (mt (fileReadString path) ((err e) (listAppend acc (list (str "Failed to read manifest " path ": " e)))) ((ok content) (if (verifyManifestString content) acc (listAppend acc (list (str path ": no valid package id"))))))) (list) manifestPaths))]
     (if (listEmpty? problems) (ok (listLength manifestPaths)) (err problems)))
 
 fn ! verifyFileSemantic path: Str -> (Result Unit Str)
-  (mt (fileRead path) ((err e) (err (str "Failed to read file " path ": " e))) ((ok src) (mt (a/parse src) ((err pe) (err (str path ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": " pe.msg))) ((ok forms) (let [(diags (chk/checkModule forms (mapEmpty) path))] (if (listEmpty? diags) (ok ()) (err (str path ": " (stringFromInt64 (listLength diags)) " semantic error(s)"))))))))
+  (mt (fileReadString path) ((err e) (err (str "Failed to read file " path ": " e))) ((ok src) (mt (a/parse src) ((err pe) (err (str path ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": " pe.msg))) ((ok forms) (let [(diags (chk/checkModule forms (mapEmpty) path))] (if (listEmpty? diags) (ok ()) (err (str path ": " (stringFromInt64 (listLength diags)) " semantic error(s)"))))))))
 
 fn verifyForeignExt ext: Str -> Bool
   (or (= ext ".asl") (= ext ".asn"))
@@ -40,7 +40,7 @@ fn findForeignFilesInPaths paths: (List Str) -> (List Str)
   (filter (fn [(p Str)] -> Bool (not (or (stringEndsWith? p ".asl") (or (stringEndsWith? p ".asn") (stringEndsWith? p ".md"))))) paths)
 
 fn ! allowlistedPaths allowlistPath: Str -> (Result (List Str) Str)
-  (mt (fileRead allowlistPath)
+  (mt (fileReadString allowlistPath)
     ((err e) (err (str "Failed to read foreign-file allowlist " allowlistPath ": " e)))
     ((ok c)
       (mt (a/parse c)

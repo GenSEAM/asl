@@ -3,10 +3,10 @@
   :i [(asl-ir/link :a lk)
       (asl-ir/types :a irTy)
       (asl-target-llvm :a llvm)
-      (tools/fleet/run :a run)])
-
-fn host -> String
-  "asl/host/out/asl-host"
+      (tools/fleet/run :a run)
+      (asl/packages/asl-cli/src/system :a sys)
+      (asl/packages/asl-cli/src/asl1Cache :a cache)
+      (asl/packages/asl-cli/src/nativeBuild :a nb)])
 
 fn clangLink -> String
   "/usr/bin/clang -Wno-override-module -x ir "
@@ -17,8 +17,22 @@ fn lib -> String
 fn asanLink -> String
   "/usr/bin/clang -Wno-override-module -fsanitize=address,undefined -x ir "
 
-fn asanLib -> String
-  " -x none asl/host/out/libaslrt-asan.a -lm -o "
+; (:m :ref FROZEN-HOSTLESS :do "the ASan runtime is the native variant build nativeBuild.asanRuntime! makes from the runtime sources (cached under .asl/cache/rcRuntime, shared with rcSelfCompileTest), not the retired host build.sh --sanitize")
+fn ! asanRuntime! -> (Result String String)
+  (let [(r (resultOr (realPath ".") "."))
+        (plain (str r "/asl/host/out/libaslrt.a"))
+        (cacheDir (str r "/.asl/cache/rcRuntime"))
+        (_ (dirCreate (str r "/.asl/cache")))
+        (_ (dirCreate cacheDir))
+        (ctx (sys/Context :root r :scriptDir "" :argv0 "" :hostBin ""))
+        (b (nb/Build :root r :cache cacheDir :tmp cacheDir :lib plain :base "" :clangVersion "" :owner ""
+                     :deadlineNs (+ (monotonicNs) 900000000000) :maxDesc 16))]
+    (mt (cache/nativeAsl1! ctx plain (optionOr (envGet "CLANG") "clang"))
+      ((err e) (err (str "native asl1: " e)))
+      ((ok asl1) (nb/asanRuntime! b asl1 (str r "/asl/packages")))))
+
+fn asanLib asan: String -> String
+  (str " -x none " asan " -lm -o ")
 
 fn asanStress -> String
   "ASAN_OPTIONS=detect_stack_use_after_return=1 ASL_GC_STRESS=1 "
@@ -96,8 +110,8 @@ fn notRun why: String -> Ran
 fn ! underStress bin: String -> StressRuns
   (StressRuns :plain (sh bin) :stressed (sh (str "ASL_GC_STRESS=1 " bin)))
 
-fn ! underAsanStress ll: String bin: String -> AsanRuns
-  (let [(linked (sh (str (asanLink) ll (asanLib) bin)))]
+fn ! underAsanStress ll: String bin: String asan: String -> AsanRuns
+  (let [(linked (sh (str (asanLink) ll (asanLib asan) bin)))]
     (AsanRuns :linked linked :run (if (= linked.exitCode 0) (sh (str (asanStress) bin)) (notRun "ASan link failed"))))
 
 fn sameUnderStress label: String r: StressRuns -> Bool
@@ -118,7 +132,6 @@ fn sameUnderAsanStress label: String r: AsanRuns -> Bool
   (:f code (Result String String))
   (:f llWritten Bool)
   (:f linked Ran)
-  (:f interp Ran)
   (:f stress StressRuns)
   (:f asan AsanRuns))
 
@@ -130,7 +143,7 @@ fn sameUnderAsanStress label: String r: AsanRuns -> Bool
   (:f linked Ran)
   (:f run Ran))
 
-fn ! spillRuns work: String -> SpillRuns
+fn ! spillRuns work: String asan: String -> SpillRuns
   (let [(src (str work "/tailSpillMod.asl"))
         (ll (str work "/tailSpillMod.ll"))
         (bin (str work "/tailSpillMod"))
@@ -140,9 +153,8 @@ fn ! spillRuns work: String -> SpillRuns
         (linked (if llWritten (sh (str (clangLink) ll (lib) bin)) (notRun "no .ll")))
         (linkedOk (= linked.exitCode 0))]
     (SpillRuns :sourceWritten sourceWritten :code code :llWritten llWritten :linked linked
-               :interp (sh (str (host) " run " src))
                :stress (if linkedOk (underStress bin) (StressRuns :plain (notRun "link failed") :stressed (notRun "link failed")))
-               :asan (if llWritten (underAsanStress ll (str bin ".asan")) (AsanRuns :linked (notRun "no .ll") :run (notRun "no .ll")))))
+               :asan (if llWritten (underAsanStress ll (str bin ".asan") asan) (AsanRuns :linked (notRun "no .ll") :run (notRun "no .ll")))))
 
 fn testSpillSurvivesStress r: SpillRuns -> Bool
   (do (assert r.sourceWritten "tailSpillMod: source written")
@@ -150,7 +162,6 @@ fn testSpillSurvivesStress r: SpillRuns -> Bool
         ((err e) (assert false (str "tailSpillMod: links and emits; " e)))
         ((ok code)
           (do (assert r.llWritten "tailSpillMod: .ll written")
-              (assert (= r.interp.stdout (wantOutput)) (str "tailSpillMod: asl-host run output; got " r.interp.stdout r.interp.stderr))
               (assert (= r.linked.exitCode 0) (str "tailSpillMod: links; " r.linked.stderr))
               (assert (stringContains? code "musttail call tailcc %Val @tailrt.closure(") "tailInto's (f b) is a musttail closure call spilling through @asl_rt_spill")
               (sameUnderStress "tailSpillMod" r.stress)
@@ -158,7 +169,7 @@ fn testSpillSurvivesStress r: SpillRuns -> Bool
               true)))
       true)
 
-fn ! mutantRuns work: String -> MutantRuns
+fn ! mutantRuns work: String asan: String -> MutantRuns
   (let [(src (str work "/tailSpillMutant.asl"))
         (ll (str work "/tailSpillMutant.ll"))
         (bin (str work "/tailSpillMutant.asan"))
@@ -166,7 +177,7 @@ fn ! mutantRuns work: String -> MutantRuns
         (code (compiledText src))
         (mutated (mt code ((ok c) (plantSlowAlloc c)) ((err _) (none))))
         (llWritten (mt mutated ((some m) (ok? (fileWrite ll m))) ((none) false)))
-        (linked (if llWritten (sh (str (asanLink) ll (asanLib) bin)) (notRun "no mutated .ll")))]
+        (linked (if llWritten (sh (str (asanLink) ll (asanLib asan) bin)) (notRun "no mutated .ll")))]
     (MutantRuns :sourceWritten sourceWritten :code code :mutated mutated :llWritten llWritten :linked linked
                 :run (if (= linked.exitCode 0) (sh (str (asanStress) bin)) (notRun "mutant link failed"))))
 
@@ -194,12 +205,13 @@ fn ! testChildrenSupervised -> Bool
 fn ! runTests -> Bool
   (let [(work (str (optionOr (envGet "TMPDIR") "/tmp") "/tailCallSpillGcTest." (monotonicNs)))
         (made (ok? (dirCreate work)))
-        (built (if made (sh (str "ASL_HOST_CACHE_DIR='" work "/hostCache' sh asl/host/build.sh --sanitize")) (notRun "no work directory")))
-        (spill (spillRuns work))
-        (mutant (mutantRuns work))
+        (built (asanRuntime!))
+        (asan (resultOr built ""))
+        (spill (spillRuns work asan))
+        (mutant (mutantRuns work asan))
         (removed (ok? (pathRemove work)))]
     (do (assert made "a fresh work directory is created")
-        (assert (= built.exitCode 0) (str "ASan host library builds; " built.stderr))
+        (assert (ok? built) (str "the native ASan runtime builds: " built))
         (testSpillSurvivesStress spill)
         (testMutantIsCaught mutant)
         (testChildrenSupervised)

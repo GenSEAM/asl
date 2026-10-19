@@ -3,10 +3,10 @@
   :i [(asl-parser/ast :a a) (asl-checker/resolve :a r) (asl-checker/check :a chk) (asl-checker/types :a ty)])
 
 fn targetPaths -> (List Str)
-  (list "asl/packages/asl-gates/src/gateRunner.asl" "asl/packages/asl-engine/src/engine.asl" "asl/packages/asl-engine/src/main.asl" "asl/packages/asl-engine/src/transport.asl" "asl/packages/asl-cli/tests/argvParityTest.asl" "tests/host/genInventoryTest.asl")
+  (list "asl/packages/asl-gates/src/gateRunner.asl" "asl/packages/asl-engine/src/engine.asl" "asl/packages/asl-engine/src/main.asl" "asl/packages/asl-engine/src/transport.asl" "asl/packages/asl-cli/tests/argvParityTest.asl")
 
 fn checkerRoots -> (List Str)
-  (list "asl/packages/asl-cli/src" "." "asl/packages/asl-parser/src" "asl/packages/asl-checker/src" "asl/packages/asl-compiler/src" "asl/packages/asl-eval/src" "asl/packages/asl-codegen/src" "asl/packages/asl-text/src" "asl/packages" "asl")
+  (list "asl/packages/asl-cli/src" "." "asl/packages/asl-parser/src" "asl/packages/asl-checker/src" "asl/packages/asl-compiler/src" "asl/packages/asl-codegen/src" "asl/packages/asl-text/src" "asl/packages" "asl")
 
 fn ! diagMessagesForParsed path: Str forms: (List a/TopForm) -> (Result (List Str) Str)
   (let [(summary (r/collectSummary forms path))
@@ -17,7 +17,7 @@ fn ! diagMessagesForParsed path: Str forms: (List a/TopForm) -> (Result (List St
       ((ok deps) (ok (map (fn [(d ty/Diagnostic)] -> Str (str path ": " d.code ": " d.message)) (chk/checkModule forms deps path))))))
 
 fn ! diagMessagesForPath path: Str -> (Result (List Str) Str)
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err _) (err (str path ": unreadable")))
     ((ok src) (mt (a/parse src) ((err e) (err (str path ": does not parse: " e.msg))) ((ok forms) (diagMessagesForParsed path forms)))))
 
@@ -30,7 +30,7 @@ fn ! testNoProcessResultAnnotationRemains -> Bool
         (msgs (fold (fn [(acc (List Str)) (o (Result (List Str) Str))] -> (List Str) (mt o ((err _) acc) ((ok ms) (listAppend acc ms)))) (list) outcomes))
         (hits (filter (fn [(m Str)] -> Bool (stringContains? m "ProcessResult")) msgs))]
     (do
-      (assert (= (listLength outcomes) 6) "the gate covers the six target files")
+      (assert (= (listLength outcomes) 5) "the gate covers the five target files")
       (assert (listEmpty? failures) (str "each target file reads, parses and loads its imports, so the check below runs on real diagnostics: " (stringJoin failures "; ")))
       (assert (listEmpty? hits) (str "the undefined ProcessResult annotation must not reappear: " (stringJoin hits "; ")))
       true))

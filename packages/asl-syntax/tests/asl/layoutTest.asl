@@ -212,7 +212,7 @@ fn testTrackedIndentedFilesSweep! -> Bool
         true)))
 
 fn checkLoweringAgainstIndentParser! path: String -> Bool
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err _) false)
     ((ok src)
      (let [(loweredRes (lay/lowerString src))
@@ -247,15 +247,15 @@ fn testLoweringParitySample! -> Bool
     true)
 
 fn hostTopLevelFormCount! path: String -> Int64
-  (let [(res0 (processRun (str "asl/host/out/asl-host parse " path)))
-        (res (if (= res0.exitCode 0) res0 (processRun (str "asl-host parse " path))))
+  (let [(res0 (processRun (str "bin/asl parse " path)))
+        (res (if (= res0.exitCode 0) res0 (processRun (str "asl parse " path))))
         (out (stringTrim res.stdout))
         (parts (stringSplit out " "))
         (first (optionOr (listHead parts) "0"))]
     (optionOr (stringToInt64 first) 0))
 
 fn checkTopCount! path: String -> Bool
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err _) false)
     ((ok src)
      (let [(root (lay/parse src))
@@ -297,9 +297,9 @@ fn testMultilineStringAndCorpusFixtures! -> Bool
                  "    ((= c \"\\\"\") st)\n"
                  "    (else st))\n"))
         (r3 (lay/lowerString s3))
-        (rPres (lay/lowerString (resultOr (fileRead "asl/packages/asl-agent-bus/src/presence.asl") "")))
-        (rRunner (lay/lowerString (resultOr (fileRead "asl/packages/asl-gates/tests/runnerMainTest.asl") "")))
-        (rCorpus (lay/lowerString (resultOr (fileRead "asl/grammar/tests/corpusTest.asl") "")))]
+        (rPres (lay/lowerString (resultOr (fileReadString "asl/packages/asl-agent-bus/src/presence.asl") "")))
+        (rRunner (lay/lowerString (resultOr (fileReadString "asl/packages/asl-gates/tests/runnerMainTest.asl") "")))
+        (rCorpus (lay/lowerString (resultOr (fileReadString "asl/grammar/tests/corpusTest.asl") "")))]
     (do
       (assert (ok? r1) "multiline string in body lowers successfully")
       (mt r1

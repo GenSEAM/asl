@@ -7,12 +7,11 @@
 fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
 
-fn envPrefix root: String caseRoot: String -> String
-  (str "cd " (shellQuote root) " && unset ASL_ROOT ASL_SESSION; SCRIPT_DIR=" (shellQuote (str root "/bin")) " ROOT_DIR=" (shellQuote caseRoot) " ASL_VFS_DIR=" (shellQuote (str root "/.asl/parityVfs")))
+fn envPrefix root: String -> String
+  (str "cd " (shellQuote root) " && unset ASL_ROOT ASL_SESSION SCRIPT_DIR ROOT_DIR; ASL_VFS_DIR=" (shellQuote (str root "/.asl/parityVfs")))
 
 fn aslCommand root: String caseRoot: String form: String -> String
-  (str (envPrefix root caseRoot) " " (shellQuote (str root "/asl/host/out/asl-host")) " run " (shellQuote (str root "/asl/packages/asl-forms/src/main.asl"))
-       " --root " (shellQuote caseRoot) " " (shellQuote form))
+  (str (envPrefix root) " " (shellQuote (str root "/bin/asl")) " rpc --root " (shellQuote caseRoot) " " (shellQuote form))
 
 fn snapshotCommit -> String
   "4045414237cd7dbd7cee32ff062e7873e80239a8"

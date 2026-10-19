@@ -1,32 +1,9 @@
 (:package aslVoice
  :version "0.1.0"
- :status "conceptual-schema"
- :entry "src/voice.asl"
- :description "Streaming speech synthesis and voice capability controller conceptual schema"
+ :entry "src/voiceBuffer.asl"
+ :description "150ms pre-roll circular audio buffer with VAD-driven utterance chunking, and conversational turn history with barge-in tracking (the larger conceptual-schema voice package this once was got deleted in DEADPKG-LEFT/744ac0457 as dead; these two modules remain live, imported by asl-agent-core/tests/dualIsolationTest.asl)"
  :aslFirst true
- :disposition :dormant
- :wakingCondition "Native audio I/O streaming bridge connected via 16kHz PCM duplex session"
  :modules [
-   "aslVoice/aloud"
-   "aslVoice/audioBridge"
-   "aslVoice/audioFrame"
-   "aslVoice/audioStream"
-   "aslVoice/endturn"
-   "aslVoice/fastPath"
-   "aslVoice/heardName"
-   "aslVoice/harnessProfile"
-   "aslVoice/intentCleaner"
-   "aslVoice/multilingualMatrix"
-   "aslVoice/roomNoise"
-   "aslVoice/speakerMatch"
-   "aslVoice/transliterator"
-   "aslVoice/ttsEngine"
-   "aslVoice/vad"
-   "aslVoice/voice"
-   "aslVoice/voiceIntent"
-   "aslVoice/voicePipeline"
-   "aslVoice/voiceSettle"
-   "aslVoice/voiceBuffer"
    "aslVoice/conversationalContext"
- ]
- :dependencies [])
+   "aslVoice/voiceBuffer"
+ ])

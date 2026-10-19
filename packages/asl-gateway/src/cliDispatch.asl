@@ -44,6 +44,7 @@
       main]
   :i [(asl-json/json :a j)
       (config :a cfg)
+      (usageLedger :a ul)
       (asl-cli/system :a sys)])
 
 (schema CliUsage
@@ -400,15 +401,59 @@ fn ! gatewayConfigCheckCli! path: String -> (Result Int64 String)
                      (let [(result (cfg/gatewayConfigCheckText! text source registry))]
                        (do (sys/say! (pairFirst result)) (ok (pairSecond result)))))))))))))))
 
+fn flagValue args: (List String) flag: String -> (Option String)
+  (mt (listIndexOf args flag)
+    ((none) none)
+    ((some i) (listGet args (+ i 1))))
+
+fn ! gatewayStatsCli! args: (List String) -> (Result Int64 String)
+  (let [(windowText (optionOr (flagValue args "--window") "1h"))
+        (byText (optionOr (flagValue args "--by") "provider"))
+        (tagText (optionOr (flagValue args "--tag") ""))
+        (root (optionOr (envGet "ASL_GATEWAY_ROOT") (optionOr (envGet "ROOT_DIR") ".")))
+        (home (optionOr (envGet "HOME") root))
+        (configPath (cfg/gatewayProfilesPath home))
+        (configText (if (fileExists? configPath) (resultOr (fileReadString configPath) "") ""))
+        (path (optionOr (cfg/gatewayLedgerPathOverride configText) (ul/defaultLedgerPath home)))]
+    (mt (ul/windowMsOf windowText)
+      ((err e) (do (sys/sayErr! (str "gateway stats: " e)) (ok 2)))
+      ((ok windowMs)
+       (mt (ul/keyFor byText)
+         ((err e) (do (sys/sayErr! (str "gateway stats: " e)) (ok 2)))
+         ((ok keyFn)
+          (mt (ul/readRows! path)
+            ((err e) (do (sys/sayErr! (str "gateway stats: " e)) (ok 1)))
+            ((ok allRows)
+             (let [(rows (ul/filterByTag allRows tagText))
+                   (nowMs (/ (nowNs) 1000000))
+                   (stats (ul/computeStats rows nowMs windowMs keyFn))]
+               (do (sys/say! (ul/statsAsn stats)) (ok 0))))))))))
+
+; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "the per-day per-provider per-model total command, reading the SHARED accounting ledger (ul/defaultSharedUsagePath/:sharedUsagePath), never the per-HOME stats ledgerPath gateway stats reads above -- the shared ledger is the one meant to survive a scratch HOME's deletion, so this is the authoritative source for 'how many tokens did provider/model X use on day Y'")
+fn ! gatewayUsageCli! args: (List String) -> (Result Int64 String)
+  (let [(tagText (optionOr (flagValue args "--tag") ""))
+        (root (optionOr (envGet "ASL_GATEWAY_ROOT") (optionOr (envGet "ROOT_DIR") ".")))
+        (home (optionOr (envGet "HOME") root))
+        (configPath (cfg/gatewayProfilesPath home))
+        (configText (if (fileExists? configPath) (resultOr (fileReadString configPath) "") ""))
+        (path (optionOr (cfg/gatewaySharedUsagePathOverride configText) (ul/defaultSharedUsagePath home)))]
+    (mt (ul/readRows! path)
+      ((err e) (do (sys/sayErr! (str "gateway usage: " e)) (ok 1)))
+      ((ok allRows)
+       (let [(rows (ul/filterByTag allRows tagText))
+             (stats (ul/computeDailyStats rows))]
+         (do (sys/say! (ul/statsAsn stats)) (ok 0))))))
+
 fn ! gatewayCliMain args: (List String) -> (Result Int64 String)
   (let [(mode (gatewayCliArg args 0))
         (second (gatewayCliArg args 1))
         (path (if (= mode "config") (gatewayCliArg args 2) second))]
-    (if (= mode "convert")
-      (gatewayCliConvert! path)
-      (if (or (= mode "configCheck") (and (= mode "config") (= second "check")))
-        (gatewayConfigCheckCli! path)
-        (do (sys/sayErr! "unknown gateway ASL CLI mode") (ok 2)))))
+    (cond
+      ((= mode "convert") (gatewayCliConvert! path))
+      ((or (= mode "configCheck") (and (= mode "config") (= second "check"))) (gatewayConfigCheckCli! path))
+      ((= mode "stats") (gatewayStatsCli! (optionOr (listTail args) (list))))
+      ((= mode "usage") (gatewayUsageCli! (optionOr (listTail args) (list))))
+      (else (do (sys/sayErr! "unknown gateway ASL CLI mode") (ok 2)))))
 
 fn ! main args: (List String) -> (Result Int64 String)
   (gatewayCliMain args)

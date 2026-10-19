@@ -31,6 +31,11 @@ fn ! testLinkInits -> Bool
         (assert (= (llvm/ensureInit entryIr "e") entryIr) "ensureInit keeps an existing init")
         true))
 
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): libA/mainB is a fixed, deterministic fixture (only its generated path varies), so hostRun below is a one-time recorded capture of asl-host's own output for this exact fixture, taken before HL-DELETE removed the binary. The native side already builds through tools/nativeTest's own prepareRunIn, so it cannot also serve as this suite's independent oracle without comparing native against itself; the recorded capture is used instead")
+
+fn recordedHostRun -> nt/ProcOut
+  (nt/ProcOut :exitCode 0 :stdout "libA loaded\nshared\n" :stderr "")
+
 fn ! testSeparateModules -> Bool
   (let [(workDir (str ".asl/cache/nativeGlobalsTest-" (monotonicNs)))
         (pkg (str workDir "/pkg"))
@@ -40,17 +45,16 @@ fn ! testSeparateModules -> Bool
         (libName (nt/importPathOf libPath))
         (_ (fileWrite libPath (libSource libName)))
         (_ (fileWrite mainPath (mainSource (nt/importPathOf mainPath) libName)))
-        (hostBin (optionOr (envGet "ASL_HOST") "asl/host/out/asl-host"))
-        (hostRun (nt/runProc (list hostBin "run" mainPath) (none)))
+        (hostRun (recordedHostRun))
         (built (nt/prepareRunIn (str workDir "/cache") mainPath "fp_native_globals"))
         (bin (optionOr built.binary ""))
         (nativeRun (if (stringEmpty? bin) (nt/ProcOut :exitCode 127 :stdout "" :stderr built.reason) (nt/runProc (list bin) (none))))
         (_ (pathRemove workDir))]
-    (do (assert (= hostRun.exitCode 0) (str "asl-host run exits 0: " hostRun.stderr))
-        (assert (= hostRun.stdout "libA loaded\nshared\n") "asl-host run prints the imported module's top-level line and the spawned output")
+    (do (assert (= hostRun.exitCode 0) "recorded asl-host output exits 0")
+        (assert (= hostRun.stdout "libA loaded\nshared\n") "recorded asl-host output prints the imported module's top-level line and the spawned output")
         (assert (some? built.binary) (str "per-module native build links: " built.reason))
-        (assert (= nativeRun.exitCode hostRun.exitCode) (str "native exit equals asl-host run: " nativeRun.stderr))
-        (assert (= nativeRun.stdout hostRun.stdout) (str "native stdout equals asl-host run: " nativeRun.stdout))
+        (assert (= nativeRun.exitCode hostRun.exitCode) (str "native exit equals the recorded asl-host output: " nativeRun.stderr))
+        (assert (= nativeRun.stdout hostRun.stdout) (str "native stdout equals the recorded asl-host output: " nativeRun.stdout))
         true))
 
 fn ! runTests -> Bool

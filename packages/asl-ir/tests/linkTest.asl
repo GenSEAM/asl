@@ -470,7 +470,7 @@ fn ! testUnresolvedImport dir: String -> Bool
   (let [(ds (diagsOf (lk/linkEntry! (str dir "/linkfx/missing.asl"))))
         (d (optionOr (listHead ds) (ty/makeIrDiag "" "" "")))]
     (do
-      (assert (= d.code "ERR_LINK_UNRESOLVED_IMPORT") (str "unresolved import code: " d.code))
+      (assert (= d.code "ERR_UNRESOLVED_IMPORT") (str "unresolved import code: " d.code))
       (assert (stringContains? d.message "imports linkfx/nowhere") (str "unresolved import message: " d.message))
       true))
 

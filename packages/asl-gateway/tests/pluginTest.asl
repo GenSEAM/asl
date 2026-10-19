@@ -91,11 +91,13 @@ fn rejected result: (Result p/Plugin String) -> String
 fn rateFor rates: (List (Pair String Float64)) gpu: String -> Float64
   (fold (fn [(acc Float64) (rate (Pair String Float64))] -> Float64 (if (= (pairFirst rate) gpu) (pairSecond rate) acc)) -1.0 rates)
 
+; (:m :do "a3dec6880 added :firstByteSec to UpstreamProvider everywhere else but missed this one fixture row; 0.0 is the same unconfigured sentinel upstream.asl's own built-in rows use, so firstByteCapSec's 60s floor applies here too, never a second hardcoded literal")
 fn runpodRow -> up/UpstreamProvider
   (up/UpstreamProvider :id "runpod" :prefixes (list "runpod/") :names (list)
     :url (fn [(st up/UpstreamSettings) (env (Map String String))] -> String (up/envGetOr env "RUNPOD_BASE_URL" ""))
     :key (fn [(st up/UpstreamSettings) (env (Map String String))] -> String (up/envGetOr env "RUNPOD_API_KEY" ""))
-    :timeoutSec (fn [(st up/UpstreamSettings)] -> Float64 300.0))
+    :timeoutSec (fn [(st up/UpstreamSettings)] -> Float64 300.0)
+    :firstByteSec (fn [(st up/UpstreamSettings)] -> Float64 0.0))
 
 fn ! capabilityChecks -> Bool
   (let [(caps (serverlessCaps (p/continuous)))]

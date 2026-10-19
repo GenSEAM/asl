@@ -42,7 +42,7 @@ fn expectedShardCount total: Int64 n: Int64 k: Int64 -> Int64
   (lib/expectedShardCount total n k)
 
 fn loadRootSchema! -> (Result j/Json String)
-  (mt (fileRead "asl/grammar/aslAst.schema.json")
+  (mt (fileReadString "asl/grammar/aslAst.schema.json")
     ((err e) (err (str "Failed reading aslAst.schema.json: " e)))
     ((ok text)
      (mt (j/jsonParse text)
@@ -135,7 +135,7 @@ fn formsToJsonString forms: (List a/TopForm) -> String
     ((none) (fj/topFormsToJsonString forms)))
 
 fn verifyCorpusFile! path: String stats: CorpusStats rootSchema: j/Json -> CorpusStats
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err e)
      (do
        (assert false (str path " read error: " e))

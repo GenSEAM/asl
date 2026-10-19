@@ -27,6 +27,62 @@ fn parseProbeOutput out: String -> (List (Pair String Int64))
     (list)
     (stringLines out))
 
+fn hexValue digits: (List String) acc: Int64 -> (Option Int64)
+  (mt (listHead digits)
+    ((none) (some acc))
+    ((some d) (mt (stringIndexOf "0123456789abcdef" (stringLower d))
+      ((none) (none))
+      ((some k) (hexValue (optionOr (listTail digits) (list)) (+ (* acc 16) k))))))
+
+fn macroValue text: String -> (Option Int64)
+  (if (and (stringStartsWith? text "0x") (> (stringLength text) 2))
+    (hexValue (stringChars (optionOr (stringSlice text 2 (stringLength text)) "")) 0)
+    (stringToInt64 text))
+
+fn parseMacroLine line: String -> (Option (Pair String Int64))
+  (let [(parts (stringSplit line " "))]
+    (if (and (= (listLength parts) 3) (= (optionOr (listHead parts) "") "#define"))
+      (optionMap (fn [(v Int64)] -> (Pair String Int64) (pair (optionOr (listGet parts 1) "") v)) (macroValue (optionOr (listGet parts 2) "")))
+      (none)))
+
+; (:m :ref RETIRED-PROBES :do "table names by typedef whose layout clang reads from the headers, so no probe C grows for them")
+fn headerRecords -> (List (Pair String String))
+  (list (pair "struct __siginfo" "siginfo_t") (pair "struct __darwin_sigaltstack" "stack_t"))
+
+fn layoutStep state: (Pair String (List (Pair String Int64))) line: String -> (Pair String (List (Pair String Int64)))
+  (let [(cur (pairFirst state)) (acc (pairSecond state))]
+    (mt (stringIndexOf line "|")
+      ((none) state)
+      ((some k) (let [(left (stringTrim (optionOr (stringSlice line 0 k) "")))
+                      (right (optionOr (stringSlice line (+ k 1) (stringLength line)) ""))
+                      (body (stringTrim right))]
+        (cond
+          ((stringStartsWith? body "[sizeof=")
+            (if (stringEmpty? cur) state
+              (mt (stringToInt64 (optionOr (listHead (stringSplit (optionOr (stringSlice body 8 (stringLength body)) "") ",")) ""))
+                ((none) state)
+                ((some n) (pair "" (cons (pair (str "sizeof_" cur) n) acc))))))
+          ((and (stringStartsWith? right " ") (not (stringStartsWith? right "  ")))
+            (pair (optionOr (lc/pairFind (headerRecords) body) "") acc))
+          ((and (not (stringEmpty? cur)) (and (stringStartsWith? right "   ") (not (stringStartsWith? right "    "))))
+            (mt (stringToInt64 left)
+              ((none) state)
+              ((some off) (pair cur (cons (pair (str cur "." (optionOr (listLast (stringSplit body " ")) "")) off) acc)))))
+          (else state))))))
+
+; (:m :ref RETIRED-PROBES :do "signal.h constants and record layouts the stack guard needs, measured by clang itself: macros by -dM, layouts by -fdump-record-layouts-complete")
+fn ! headerFacts! -> (List (Pair String Int64))
+  (let [(macros (sh (str (clang) " -E -dM -x c -include signal.h /dev/null")))
+        (layouts (sh (str (clang) " -x c -fsyntax-only -Xclang -fdump-record-layouts-complete -include signal.h /dev/null")))
+        (defined (fold (fn [(acc (List (Pair String Int64))) (line String)] -> (List (Pair String Int64))
+                         (mt (parseMacroLine line) ((some p) (cons p acc)) ((none) acc)))
+                       (list) (stringLines macros.stdout)))
+        (laid (pairSecond (fold layoutStep (pair "" (list)) (stringLines layouts.stdout))))]
+    (do (assert (= macros.exitCode 0) (str "clang -dM lists signal.h macros: " macros.stderr))
+        (assert (= layouts.exitCode 0) (str "clang dumps signal.h record layouts: " layouts.stderr))
+        (assert (some? (lc/pairFind laid "stack_t.ss_flags")) "the layout dump has stack_t's fields")
+        (listAppend defined laid)))
+
 fn assertOneConst probed: (List (Pair String Int64)) name: String want: Int64 -> Bool
   (let [(gotOpt (lc/pairFind probed name))]
     (assert (some? gotOpt) (str "probe reports " name))
@@ -92,7 +148,7 @@ fn ! runTests -> Bool
         (assert (= built.exitCode 0) (str "clang builds libcProbe: " built.stderr))
         (let [(ran (sh (str work "/libcProbe")))]
           (assert (= ran.exitCode 0) (str "libcProbe runs: " ran.stderr))
-          (let [(probed (parseProbeOutput ran.stdout)) (facts (lc/darwinArm64Facts))]
+          (let [(probed (listAppend (headerFacts!) (parseProbeOutput ran.stdout))) (facts (lc/darwinArm64Facts))]
             (assert (> (listLength probed) 0) "probe produced output")
             (assert (lc/libcVerified "darwin-arm64") "darwin-arm64 is the measured row")
             (assert (= facts.triple "darwin-arm64") "darwinArm64Facts.triple")

@@ -49,7 +49,7 @@ fn body -> (List h/Node)
           (listAppend
             (topic "failure" "No nil, no exceptions"
               [(para "There is no nil, exception or try. listHead, listGet, stringSlice and mapGet return (some v) or (none); a failure is (err e). They are unwrapped with mt, optionOr or resultOr, so the unhappy path is visible where it happens.")
-               (listing ["(mt (fileRead path)" "  ((ok text) (stringLength text))" "  ((err e) 0))"])])
+               (listing ["(mt (fileReadString path)" "  ((ok text) (stringLength text))" "  ((err e) 0))"])])
             (listAppend
               (topic "effects" "Effects"
                 [(para "A function that prints, reads a file or runs a process marks it, either with ! after fn or as a name ending in !. The checker rejects an unmarked effect:")

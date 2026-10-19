@@ -14,7 +14,7 @@
     (:sym :name "let" :kind :form :tokens 1)
     (:sym :name "if" :kind :form :tokens 1)
     (:sym :name "cond" :kind :form :tokens 1)
-    (:sym :name "mt" :kind :form :tokens 1)
+    (:sym :name "match" :kind :form :tokens 1)
 
     (:sym :name "ok" :kind :ctor :tokens 1)
     (:sym :name "err" :kind :ctor :tokens 1)

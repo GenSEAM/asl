@@ -15,7 +15,7 @@ fn runTests -> Bool
     (assert (= (h/render (h/styleSheet [(c/rule "a" [(c/decl "content" (c/cssString "</style>"))])])) "<style>a{content:\"<\\/style>\"}</style>") "style text cannot close its element")
     (assert (= (h/render (h/div [(h/classes ["a" "" "b"]) (h/data "msg" "2") (h/aria "label" "Close")] [])) "<div class=\"a b\" data-msg=\"2\" aria-label=\"Close\"></div>") "class lists, data and aria attributes")
     (assert (= (h/render (h/span [(h/style [(c/decl "color" (c/cssVar "ink")) (c/important "margin" (c/px 0))])] [])) "<span style=\"color:var(--ink);margin:0px !important\"></span>") "inline style from typed declarations")
-    (assert (= (h/renderDocument (h/document "en" [(h/title [] [(h/text "T")])] [] [(h/main [] [])])) "<!doctype html><html lang=\"en\"><head><title>T</title></head><body><main></main></body></html>") "documents")
+    (assert (= (h/renderDocument (h/document "en" [(h/title [] [(h/text "T")])] [] [(h/mainEl [] [])])) "<!doctype html><html lang=\"en\"><head><title>T</title></head><body><main></main></body></html>") "documents")
     (assert (= (h/render (h/svg [(h/attr "viewBox" "0 0 1 1")] [(h/path [(h/attr "d" "M0 0")]) (h/svgText [] [(h/text "a<b")])])) "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1 1\"><path d=\"M0 0\"/><text>a&lt;b</text></svg>") "svg with its namespace")
     (assert (= (h/render (h/mapEl [(h/nameAttr "m")] [(h/area [(h/href "#")])])) "<map name=\"m\"><area href=\"#\"/></map>") "tags whose names clash with the prelude have El names")
     (assert (h/voidTag? "wbr") "every HTML void element is known")

@@ -1,28 +1,10 @@
-(module asl-forms/tests/claimTest :x [runTests] :i [])
-
-fn currentHost! root: String -> (Option String)
-  (mt (envGet "ASL_HOST")
-    ((some h) (if (fileExists? h)
-                (some (resultOr (realPath h) h))
-                (do (println (str "invalid environment variable: ASL_HOST path does not exist: " h))
-                    (assert false (str "invalid environment variable: ASL_HOST path does not exist: " h))
-                    (none))))
-    ((none) (let [(p (str root "/asl/host/out/asl-host"))]
-              (if (fileExists? p)
-                (some (resultOr (realPath p) p))
-                (do (println (str "the stage-0 host is absent at " p "; build it with sh asl/host/build.sh or set ASL_HOST"))
-                    (assert false (str "the stage-0 host is absent at " p "; build it with sh asl/host/build.sh or set ASL_HOST"))
-                    (none))))))
+(module asl-forms/tests/claimTest :x [runTests] :i [(asl-forms/tests/formsDriver :a fd)])
 
 fn runEnv! workspace: String env: String form: String -> ProcessOutput
   (let [(root (optionOr (envGet "ROOT_DIR") (resultOr (realPath ".") ".")))
-        (hostOpt (currentHost! root))]
-    (mt hostOpt
-      ((none) (processRun "exit 127"))
-      ((some host)
-       (let [(main (str root "/asl/packages/asl-forms/src/main.asl"))
-             (payload (stringReplace form "\"" "\\\""))]
-         (processRun (str "cd " workspace " && ROOT_DIR=" root " ASL_LEASE_PID=0 ASL_HOST=" host " " env " ASL_VFS_DIR=" workspace "/.asl/vfs " host " run " main " --root " workspace " \"" payload "\""))))))
+        (forms (fd/formsBin! (resultOr (realPath ".") ".")))
+        (payload (stringReplace form "\"" "\\\""))]
+    (processRun (str "cd " workspace " && ROOT_DIR=" root " ASL_LEASE_PID=0 " env " ASL_VFS_DIR=" workspace "/.asl/vfs " forms " --root " workspace " \"" payload "\"")))
 
 fn runAt! workspace: String unit: String form: String -> ProcessOutput
   (runEnv! workspace (str "ASL_UNIT=" unit " ASL_AGENT=" unit) form)
@@ -32,10 +14,7 @@ fn runAtBranch! workspace: String agent: String form: String -> ProcessOutput
 
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))]
-    (mt (currentHost! root)
-      ((none) false)
-      ((some _)
-       (let [(tmp (str (optionOr (envGet "TMPDIR") "/tmp") "/aslClaims" (stringFromInt64 (nowNs))))
+    (let [(tmp (str (optionOr (envGet "TMPDIR") "/tmp") "/aslClaims" (stringFromInt64 (nowNs))))
         (seed (str tmp "/seed"))
         (a (str tmp "/a"))
         (b (str tmp "/b"))
@@ -121,4 +100,4 @@ fn ! runTests -> Bool
       (assert (= ownRelease.exitCode 0) (str "the holder releases its own live lease: " ownRelease.stdout " " ownRelease.stderr))
       (assert ownLeaseGone "the holder's release removes the lease file")
       (assert (and (ok? cleaned) (not (fileExists? tmp))) "the temporary repository is removed")
-      true)))))
+      true)))

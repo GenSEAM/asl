@@ -6,14 +6,34 @@
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/ssa :a ssa)])
 
-fn host -> String
-  "asl/host/out/asl-host"
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): checkParity used to run the leftover host binary live against the just-built fixture tree (`asl-host run <work>/fsRoute.asl <root>`) and diff its full stdout/stderr against the native binary's own run of the same tree. The host is gone, so the three env variants (HOME set/empty/unset) are captured once via the leftover host binary at ~/projects/asex/asl/host/out/asl-host, read-only, outside this worktree, into golden/preludeFsRoute{HomeSet,HomeEmpty,HomeUnset}.{stdout,stderr}. Every occurrence of that capture's own mktemp work directory is replaced with the placeholder @@FSROUTE_WORK@@ in the golden text (both stdout and stderr), since runTests uses a fresh `mktemp -d` work directory on every invocation and that path is woven through nearly every error message the fixture prints (e.g. 'notFound: <work>/tree/missing'); recordedGolden substitutes the placeholder back with the current run's own `work` value before comparing, so the comparison is independent of which random work directory this run picked. The HOME-empty/HOME-unset cases fall back to the OS's real passwd home directory (getHomeDir's non-env fallback) rather than anything derived from `work`; that path is replaced with the placeholder @@FSROUTE_HOME@@ the same way (PUBLIC-BOUNDARY-20261019: a literal /Users/<name> in a tracked golden leaked the capturing developer's username), and recordedGolden substitutes it back with this run's own (getHomeDir) before comparing, so the comparison still assumes the suite is replayed under the same single-developer, no-CI, remote-less account that captured it (consistent with this workspace's existing convention: hostless gates are macOS-only, local-only; see golden/nativeFormatHost.* for the same one-time-capture pattern), but no longer hardcodes whose account that is")
 
 fn clang -> String
   "/usr/bin/clang -Wno-override-module"
 
 fn lib -> String
   "asl/host/out/libaslrt.a"
+
+(schema Recorded
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
+
+fn goldenBase label: String -> String
+  (cond
+    ((= label "HOME set") "preludeFsRouteHomeSet")
+    ((= label "HOME empty") "preludeFsRouteHomeEmpty")
+    ((= label "HOME unset") "preludeFsRouteHomeUnset")
+    (else ""))
+
+fn ! recordedGolden label: String work: String -> Recorded
+  (let [(base (goldenBase label))
+        (rawOut (resultOr (fileReadString (str "asl/packages/asl-target-llvm/tests/golden/" base ".stdout")) ""))
+        (rawErr (resultOr (fileReadString (str "asl/packages/asl-target-llvm/tests/golden/" base ".stderr")) ""))
+        (home (resultOr (getHomeDir) ""))]
+    (Recorded :exitCode 0
+      :stdout (stringReplace (stringReplace rawOut "@@FSROUTE_WORK@@" work) "@@FSROUTE_HOME@@" home)
+      :stderr (stringReplace (stringReplace rawErr "@@FSROUTE_WORK@@" work) "@@FSROUTE_HOME@@" home)))
 
 fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)
@@ -43,7 +63,7 @@ fn diagText ds: (List ty/IrDiag) -> String
   (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message)) ds) "; ")
 
 fn ! lowered src: String -> (Option ty/SsaModule)
-  (let [(preludeText (resultOr (fileRead (lk/preludePath)) ""))]
+  (let [(preludeText (resultOr (fileReadString (lk/preludePath)) ""))]
     (do (assert (not (stringEmpty? preludeText)) (str (lk/preludePath) " is readable"))
         (mt (lk/lowerSourceWith src preludeText)
           ((err ds) (do (assert false (str "lowerSourceWith: " (diagText ds))) (none)))
@@ -308,10 +328,10 @@ fn ! runIn work: String env: String cmd: String -> ProcessOutput
 
 fn ! checkParity work: String label: String env: String -> Bool
   (let [(native (runIn work env (str work "/fsRoute")))
-        (vm (runIn work env (str (host) " run " work "/fsRoute.asl")))]
-    (do (assert (= native.exitCode vm.exitCode) (str label ": native exit " native.exitCode " equals asl-host run's " vm.exitCode "; native stderr " native.stderr "; vm stderr " vm.stderr))
-        (assert (= native.stdout vm.stdout) (str label ": native stdout equals asl-host run's; native=" native.stdout " vm=" vm.stdout))
-        (assert (= native.stderr vm.stderr) (str label ": native stderr equals asl-host run's; native=" native.stderr " vm=" vm.stderr))
+        (vm (recordedGolden label work))]
+    (do (assert (= native.exitCode vm.exitCode) (str label ": native exit " native.exitCode " equals the recorded asl-host run's " vm.exitCode "; native stderr " native.stderr "; vm stderr " vm.stderr))
+        (assert (= native.stdout vm.stdout) (str label ": native stdout equals the recorded asl-host run's; native=" native.stdout " vm=" vm.stdout))
+        (assert (= native.stderr vm.stderr) (str label ": native stderr equals the recorded asl-host run's; native=" native.stderr " vm=" vm.stderr))
         (assert (= native.exitCode 0) (str label ": native run exits 0; stderr " native.stderr))
         (assert (stringContains? native.stdout "value fileUtime (ok ())") (str label ": native run reaches its last case"))
         true))

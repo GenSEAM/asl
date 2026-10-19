@@ -5,7 +5,7 @@
       (asl-syntax/asl/asn :a asn)
       (tools/fleet/run :a run)])
 
-fn hostBin -> String
+fn ! hostBin! -> String
   (run/legacyHost!)
 
 fn escapeCases -> (List (Pair String Bool))
@@ -83,7 +83,7 @@ fn checkCase! dir: String index: Int64 body: String expected: Bool -> Bool
         (label (str "case " (stringFromInt64 index) " " body))]
     (do
       (assert (ok? written) (str label ": temp file written"))
-      (let [(res (processRun (str (hostBin) " parse " path)))
+      (let [(res (processRun (str (hostBin!) " parse " path)))
             (hostAccepts (= res.exitCode 0))
             (lexAccepts (lexAccepts? text))]
         (do
@@ -113,7 +113,7 @@ fn testDifferentialTable! -> Bool
          true))))
 
 fn testDecodedValues! -> Bool
-  (let [(res (processRun (str (hostBin) " eval '(stringLength \"\\u{62}\")'")))]
+  (let [(res (processRun (str (hostBin!) " eval '(stringLength \"\\u{62}\")'")))]
     (do
       (assert (= res.exitCode 0) "asl-host eval of a braced escape succeeds")
       (assert (= (stringTrim res.stdout) "1") (str "asl-host eval (stringLength \"\\u{62}\") is 1, got " res.stdout))
@@ -133,7 +133,7 @@ fn byteList s: String -> String
   (str "(" (stringJoin (map (fn [(k Int64)] -> String (stringFromInt64 (bytesGet (stringToBytes s) k))) (range 0 (stringLength s))) " ") ")")
 
 fn hostBytes! body: String -> String
-  (let [(res (processRun (str (hostBin) " eval '(map (fn [(k Int64)] -> Int64 (bytesGet (stringToBytes \"" body "\") k)) (range 0 (stringLength \"" body "\")))'")))]
+  (let [(res (processRun (str (hostBin!) " eval '(map (fn [(k Int64)] -> Int64 (bytesGet (stringToBytes \"" body "\") k)) (range 0 (stringLength \"" body "\")))'")))]
     (if (= res.exitCode 0) (stringTrim res.stdout) (str "host eval failed: " res.stderr)))
 
 fn asnDecoded text: String -> (Result String String)

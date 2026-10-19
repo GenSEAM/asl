@@ -35,7 +35,7 @@ fn ! sameAsHost! name: String -> Bool
       (sh! "." (list "/bin/sh" "-c" (str "mkdir -p " work)) 15 8)
       (assert (ok? (fileWrite out (mt compiled ((ok t) t) ((err _) "")))) (str name " writes its module"))
       (let [(viaPy (splitSh! "." (str (shellQuote (python!)) " " (shellQuote out)) (str work "/" name ".py.stderr") 30 16))
-            (viaHost (splitSh! "." (str "asl/host/out/asl-host run " (shellQuote (fixture name))) (str work "/" name ".host.stderr") 60 32))]
+            (viaHost (splitSh! "." (str "./bin/asl run " (shellQuote (fixture name))) (str work "/" name ".host.stderr") 60 32))]
         (do
           (assert (= viaPy.stdout viaHost.stdout) (str name " stdout matches the host; py=" viaPy.stdout " host=" viaHost.stdout))
           (assert (= viaPy.exitCode viaHost.exitCode) (str name " exit matches the host; py=" (stringFromInt64 viaPy.exitCode) " host=" (stringFromInt64 viaHost.exitCode) " " viaPy.stderr))
@@ -58,7 +58,7 @@ fn ! suiteUnderPy! suite: String -> Bool
       (assert (ok? compiled) (str suite " compiles to python: " (mt compiled ((ok _) "ok") ((err ds) (py/diagText ds)))))
       (assert (ok? (fileWrite out (mt compiled ((ok t) t) ((err _) "")))) (str suite " writes its module"))
       (let [(viaPy (splitSh! "." (str (shellQuote (python!)) " -c " (shellQuote (loader out))) (str work "/" suite ".py.stderr") 30 16))
-            (viaHost (splitSh! "." (str "asl/bin/asl test " (shellQuote path)) (str work "/" suite ".host.stderr") 120 32))]
+            (viaHost (splitSh! "." (str "./bin/asl test " (shellQuote path)) (str work "/" suite ".host.stderr") 120 32))]
         (do
           (assert (= viaPy.stdout (str "true " (hostCount viaHost.stdout))) (str suite " passes under python with the host's assertion count; py=" viaPy.stdout viaPy.stderr " host=" viaHost.stdout))
           true))))

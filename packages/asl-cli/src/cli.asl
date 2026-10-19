@@ -46,11 +46,11 @@ fn formatDiagnostics diags: (List ty/Diagnostic) -> Str
 fn shellQuote s: Str -> Str
   (str "'" (stringReplace s "'" "'\\''") "'")
 
-fn checkGateSrc! files: (List Str) count: I64 path: Str srcRes: (Result Str IoError) -> (Result Str Str)
+fn checkGateSrc! files: (List Str) count: I64 path: Str srcRes: (Result Str Str) -> (Result Str Str)
   (mt srcRes ((err _) (err (str "Failed to read gate target file: " path))) ((ok src) (mt (a/parse src) ((err pe) (if (stringContains? pe.msg "not kebab-case") (checkGateFilesStep! (optionOr (listTail files) (list)) (+ count 1)) (err (str path ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": [parse-error] " pe.msg)))) ((ok _) (checkGateFilesStep! (optionOr (listTail files) (list)) (+ count 1))))))
 
 fn checkGateFilesStep! files: (List Str) count: I64 -> (Result Str Str)
-  (mt (listHead files) ((none) (ok (str "✓ [Pure ASL Gate] " (stringFromInt64 count) " file(s) verified cleanly."))) ((some path) (checkGateSrc! files count path (fileRead path))))
+  (mt (listHead files) ((none) (ok (str "✓ [Pure ASL Gate] " (stringFromInt64 count) " file(s) verified cleanly."))) ((some path) (checkGateSrc! files count path (fileReadString path))))
 
 fn ! checkGateFiles files: (List Str) -> (Result Str Str)
   (if (listEmpty? files) (err "Usage: asl gate <file1.asl> [file2.asl ...]") (checkGateFilesStep! files 0))
@@ -104,46 +104,20 @@ fn ! cmdCheck args: (List Str) -> (Result Str Str)
   (checkCli/runCheckCommand! args)
 
 fn ! cmdBuild args: (List Str) -> (Result Str Str)
-  (if (listEmpty? args) (err "Usage: asl build [--target <c99|c-embedded>] <file.asl>") (let [(hasTargetFlag (and (>= (listLength args) 2) (= (optionOr (listHead args) "") "--target"))) (target (if hasTargetFlag (optionOr (listGet args 1) "c99") "c99")) (restArgs (if hasTargetFlag (optionOr (listTail (optionOr (listTail args) (list))) (list)) args)) (path (optionOr (listHead restArgs) ""))] (cond ((stringEmpty? path) (err "Usage: asl build [--target <c99|c-embedded>] <file.asl>")) ((and (!= target "c99") (!= target "c-embedded")) (err (str "Target '" target "' is not built into the self-hosting core; it lives in asl-compiler/targets"))) (else (let [(srcRes (fileRead path))] (mt srcRes ((err ioErr) (err (str "Failed to read source file: " path))) ((ok src) (let [(cres (comp/compileSourceToC99 src path (= target "c-embedded")))] (if cres.ok (ok cres.code) (err (str "Build failed: " (stringJoin cres.diagnostics "\n"))))))))))))
+  (if (listEmpty? args) (err "Usage: asl build [--target <c99|c-embedded>] <file.asl>") (let [(hasTargetFlag (and (>= (listLength args) 2) (= (optionOr (listHead args) "") "--target"))) (target (if hasTargetFlag (optionOr (listGet args 1) "c99") "c99")) (restArgs (if hasTargetFlag (optionOr (listTail (optionOr (listTail args) (list))) (list)) args)) (path (optionOr (listHead restArgs) ""))] (cond ((stringEmpty? path) (err "Usage: asl build [--target <c99|c-embedded>] <file.asl>")) ((and (!= target "c99") (!= target "c-embedded")) (err (str "Target '" target "' is not built into the self-hosting core; it lives in asl-compiler/targets"))) (else (let [(srcRes (fileReadString path))] (mt srcRes ((err ioErr) (err (str "Failed to read source file: " path))) ((ok src) (let [(cres (comp/compileSourceToC99 src path (= target "c-embedded")))] (if cres.ok (ok cres.code) (err (str "Build failed: " (stringJoin cres.diagnostics "\n"))))))))))))
 
-fn findRepoRootLoop! dir: Str candidate: (Option Str) -> (Result Str Str)
-  (let [(cfgPath (if (= dir "/") "/.asl.config.asn" (str dir "/.asl.config.asn")))
-        (hasCfg (ok? (fileStat cfgPath)))
-        (newCand (if hasCfg (some dir) candidate))
-        (parentRes (realPath (str dir "/..")))]
-    (mt parentRes
-      ((err _)
-       (mt newCand
-         ((some root) (ok root))
-         ((none) (err "Failed to resolve parent directory while searching for .asl.config.asn"))))
-      ((ok parent)
-       (if (or (stringEmpty? parent) (= parent dir))
-         (mt newCand
-           ((some root) (ok root))
-           ((none) (err "Could not find .asl.config.asn in current or parent directories")))
-         (findRepoRootLoop! parent newCand)))))
-
-fn findRepoRoot! dir: Str -> (Result Str Str)
-  (findRepoRootLoop! dir (none))
-
+; (:m :ref NATIVE-LOWER-GAPS :do "with no ASL_HOST, run, test and eval go to the native CLI of the toolchain bin/asl names in ASL_CLI_ROOT for every child, not to a guessed path")
 fn resolveHostBinary! -> (Result Str Str)
-  (let [(envRes (processRun "printf %s \"$ASL_HOST\""))
-        (envHost (if (= envRes.exitCode 0) (stringTrim envRes.stdout) ""))]
-    (if (not (stringEmpty? envHost))
+  (let [(envHost (optionOr (envGet "ASL_HOST") ""))
+        (cliRoot (optionOr (envGet "ASL_CLI_ROOT") ""))
+        (native (str cliRoot "/bin/asl"))]
+    (if (stringEmpty? envHost)
+      (if (and (not (stringEmpty? cliRoot)) (ok? (fileStat native)))
+        (ok native)
+        (err "neither ASL_HOST nor ASL_CLI_ROOT names a runner (asl/host/src was retired by HL-DELETE) -- run through bin/asl, which sets ASL_CLI_ROOT, or set ASL_HOST to a real interpreter binary"))
       (mt (fileStat envHost)
         ((ok _) (ok envHost))
-        ((err _) (err (str "ASL_HOST binary not found: " envHost))))
-      (let [(curDirRes (realPath "."))]
-        (mt curDirRes
-          ((err _) (err "Failed to get current working directory"))
-          ((ok curDir)
-           (mt (findRepoRoot! curDir)
-             ((err e) (err (str "Could not resolve ASL host: " e)))
-             ((ok repoRoot)
-              (let [(binPath (if (= repoRoot "/") "/asl/host/out/asl-host" (str repoRoot "/asl/host/out/asl-host")))]
-                (mt (fileStat binPath)
-                  ((ok _) (ok binPath))
-                  ((err _) (err (str "ASL host binary not found at " binPath ". Run 'bash asl/host/build.sh' to build it."))))))))))))
+        ((err _) (err (str "ASL_HOST binary not found: " envHost))))))
 
 fn ! cmdEval args: (List Str) -> (Result Str Str)
   (if (listEmpty? args)
@@ -167,7 +141,7 @@ fn ! cmdRun args: (List Str) -> (Result Str Str)
         ((err e) (err e))
         ((ok hostBin)
          (let [(path (optionOr (listHead args) ""))
-               (srcRes (fileRead path))]
+               (srcRes (fileReadString path))]
            (mt srcRes
              ((err ioErr) (err (str "Failed to read source file: " path)))
              ((ok src)
@@ -201,10 +175,10 @@ fn ! cmdTest args: (List Str) -> (Result Str Str)
              (err (stringTrim (if (stringEmpty? procRes.stderr) procRes.stdout procRes.stderr))))))))))
 
 fn ! cmdParse args: (List Str) -> (Result Str Str)
-  (if (listEmpty? args) (err "Usage: asl parse <file.asl>") (let [(path (optionOr (listHead args) "")) (srcRes (fileRead path))] (mt srcRes ((err ioErr) (err (str "Failed to read source file: " path))) ((ok src) (mt (a/parse src) ((err pe) (err (str path ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": [parse-error] " pe.msg))) ((ok forms) (ok (str "Parsed " (stringFromInt64 (listLength forms)) " top-level AST form(s)."))))))))
+  (if (listEmpty? args) (err "Usage: asl parse <file.asl>") (let [(path (optionOr (listHead args) "")) (srcRes (fileReadString path))] (mt srcRes ((err ioErr) (err (str "Failed to read source file: " path))) ((ok src) (mt (a/parse src) ((err pe) (err (str path ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": [parse-error] " pe.msg))) ((ok forms) (ok (str "Parsed " (stringFromInt64 (listLength forms)) " top-level AST form(s)."))))))))
 
 fn ! cmdLint args: (List Str) -> (Result Str Str)
-  (if (listEmpty? args) (err "Usage: asl lint <file.asl>") (let [(path (optionOr (listHead args) "")) (srcRes (fileRead path))] (mt srcRes ((err ioErr) (err (str "Failed to read source file: " path))) ((ok src) (mt (a/parse src) ((err pe) (err (str "Parse error during lint: " pe.msg))) ((ok forms) (ok (str "✓ " path ": Clean. AST parsed cleanly."))))))))
+  (if (listEmpty? args) (err "Usage: asl lint <file.asl>") (let [(path (optionOr (listHead args) "")) (srcRes (fileReadString path))] (mt srcRes ((err ioErr) (err (str "Failed to read source file: " path))) ((ok src) (mt (a/parse src) ((err pe) (err (str "Parse error during lint: " pe.msg))) ((ok forms) (ok (str "✓ " path ": Clean. AST parsed cleanly."))))))))
 
 fn outputLine value: Str -> Str
   (if (stringEndsWith? value "\n")

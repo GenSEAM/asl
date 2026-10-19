@@ -8,14 +8,32 @@
       (asl-target-llvm/sysProc :a proc)
       (asl-target-llvm/ssa :a ssa)])
 
-fn host -> String
-  "asl/host/out/asl-host"
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): testParity and testPollFailure used to run the leftover host binary live (runHost: `asl-host run <work>/<name>.asl`, with ASL_SPAWN_LOG=<work>/host.log for testParity and the io shim preloaded for testPollFailure) and diff its full stdout/stderr/exitCode and its spawn log against the native binary's own run. The host is gone, so both are captured once via the leftover host binary at ~/projects/asex/asl/host/out/asl-host, read-only, outside this worktree: golden/preludeProcRouteProcRoute.{stdout,stderr,log} (2MB stdout, since the 'large' sub-case alone writes 256*4096 bytes to each stream, too large to inline, same pattern as golden/nativeFormatHost.*) and golden/preludeProcRoutePollFail.{stdout,stderr}. Neither capture embeds the per-run mktemp work directory (verified: zero occurrences of the capturing run's own mktemp path in either stdout or the spawn log); the spawn log's '/bin/sh <cwd>' lines did embed the capturing worktree's own checkout path, which is not stable across worktrees (a later run in a differently-named worktree diverged byte-for-byte on that path alone, FIXL), so golden/preludeProcRouteProcRoute.log now holds a '<CWD>' placeholder there and recordedProcRouteLog substitutes the current run's own pwd before comparing. testReadInterrupted's two call sites already passed a hardcoded expected `line` literal that the original code's own first assert checked the live host output against; since that hardcoded literal is itself the recorded expected value, the live `runHost` call and the now-tautological self-check assert are dropped and `native.stdout` is compared directly against `line`. testCaptureWriteFailure, testExternsCalled, testFactsDeclared and testWaitStateGuard never called the host and are unchanged")
 
 fn clang -> String
   "/usr/bin/clang -Wno-override-module"
 
 fn lib -> String
   "asl/host/out/libaslrt.a"
+
+(schema Recorded
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
+
+fn ! recordedProcRoute -> Recorded
+  (Recorded :exitCode 0
+    :stdout (resultOr (fileReadString "asl/packages/asl-target-llvm/tests/golden/preludeProcRouteProcRoute.stdout") "")
+    :stderr (resultOr (fileReadString "asl/packages/asl-target-llvm/tests/golden/preludeProcRouteProcRoute.stderr") ""))
+
+fn ! recordedProcRouteLog -> String
+  (stringReplace (resultOr (fileReadString "asl/packages/asl-target-llvm/tests/golden/preludeProcRouteProcRoute.log") "")
+                 "<CWD>" (stringReplace (sh "pwd").stdout "\n" ""))
+
+fn ! recordedPollFail -> Recorded
+  (Recorded :exitCode 0
+    :stdout (resultOr (fileReadString "asl/packages/asl-target-llvm/tests/golden/preludeProcRoutePollFail.stdout") "")
+    :stderr (resultOr (fileReadString "asl/packages/asl-target-llvm/tests/golden/preludeProcRoutePollFail.stderr") ""))
 
 fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)
@@ -44,7 +62,7 @@ fn diagText ds: (List ty/IrDiag) -> String
   (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message)) ds) "; ")
 
 fn ! lowered src: String -> (Option ty/SsaModule)
-  (let [(preludeText (resultOr (fileRead (lk/preludePath)) ""))]
+  (let [(preludeText (resultOr (fileReadString (lk/preludePath)) ""))]
     (do (assert (not (stringEmpty? preludeText)) "host prelude is readable")
         (mt (lk/lowerSourceWith src preludeText)
           ((err ds) (do (assert false (str "lowerSourceWith: " (diagText ds))) (none)))
@@ -135,11 +153,8 @@ fn ! buildNative work: String name: String -> ProcessOutput
 fn ! runNative work: String name: String prefix: String -> ProcessOutput
   (sh (str prefix "ASL_SPAWN_LOG=" work "/native.log " work "/" name " < " work "/parentStdin.txt"))
 
-fn ! runHost work: String name: String prefix: String -> ProcessOutput
-  (sh (str prefix "ASL_SPAWN_LOG=" work "/host.log " (host) " run " work "/" name ".asl < " work "/parentStdin.txt"))
-
 fn ! fileText path: String -> String
-  (resultOr (fileRead path) (str "<read error: " path ">"))
+  (resultOr (fileReadString path) (str "<read error: " path ">"))
 
 fn ! testParity work: String -> Bool
   (let [(scriptPath (str work "/stdinCheck.py"))
@@ -148,7 +163,7 @@ fn ! testParity work: String -> Bool
         (ll (emit work "procRoute" src))]
     (do (assert (ok? scriptWritten) "stdin check script written")
         (assert (checkIr ll) "process IR bypasses core builtins")
-        (let [(expected (runHost work "procRoute" ""))]
+        (let [(expected (recordedProcRoute))]
           (do (assert (= expected.exitCode 0) "host source completed")
               (assert (stringContains? expected.stdout "\nsignal 143  \n") "host reports SIGTERM death as 128+15")
               (assert (stringContains? expected.stdout "\ntimeout-before-grace true\n") "host timed processWait returns before the SIGTERM grace deadline")
@@ -168,12 +183,11 @@ fn ! testParity work: String -> Bool
                           (assert (= native.stdout expected.stdout) "native stdout matches host")
                           (assert (= native.stderr expected.stderr) "native stderr matches host")
                           (let [(nativePath (str work "/native.log"))
-                                (hostPath (str work "/host.log"))
                                 (nativeLog (fileText nativePath))
-                                (hostLog (fileText hostPath))]
+                                (hostLog (recordedProcRouteLog))]
                             (do (assert (not (= nativeLog (str "<read error: " nativePath ">"))) "native spawn log was readable")
-                                (assert (not (= hostLog (str "<read error: " hostPath ">"))) "host spawn log was readable")
-                                (assert (= nativeLog hostLog) "ASL_SPAWN_LOG lines match byte-for-byte")))
+                                (assert (> (stringLength hostLog) 0) "the recorded asl-host spawn log is non-empty")
+                                (assert (= nativeLog hostLog) "ASL_SPAWN_LOG lines match byte-for-byte against the recorded asl-host run")))
                           true))))))))
 
 fn ioShimSource -> String
@@ -268,12 +282,12 @@ fn ! buildRun work: String name: String cmd: String -> Bool
 fn ! testPollFailure work: String shim: String -> Bool
   (let [(prefix (preloadPrefix shim "poll"))]
     (do (buildRun work "pollFail" "exit 7")
-        (let [(expected (runHost work "pollFail" prefix))
+        (let [(expected (recordedPollFail))
               (native (runNative work "pollFail" prefix))]
-          (do (assert (= expected.exitCode 0) "host completed under failing poll")
-              (assert (stringContains? expected.stderr "pollShim\n") "host processRun called the failing poll")
-              (assert (stringContains? expected.stderr "pollShim pipes closed\n") "host closed both pipes after poll failed")
-              (assert (= expected.stdout "pollFail 7  \n") "host reaped the child after poll failed")
+          (do (assert (= expected.exitCode 0) "the recorded asl-host run completed under failing poll")
+              (assert (stringContains? expected.stderr "pollShim\n") "the recorded asl-host run's processRun called the failing poll")
+              (assert (stringContains? expected.stderr "pollShim pipes closed\n") "the recorded asl-host run closed both pipes after poll failed")
+              (assert (= expected.stdout "pollFail 7  \n") "the recorded asl-host run reaped the child after poll failed")
               (assert (= native.exitCode expected.exitCode) "native exit matches host under failing poll")
               (assert (= native.stdout expected.stdout) "native stdout matches host under failing poll")
               (assert (stringContains? native.stderr "pollShim pipes closed\n") "native closed both pipes after poll failed")
@@ -285,12 +299,10 @@ fn stderrOnly -> String
 
 fn ! testReadInterrupted work: String shim: String name: String cmd: String line: String -> Bool
   (do (buildRun work name cmd)
-      (let [(expected (runHost work name ""))
-            (native (runNative work name (preloadPrefix shim "readEintr")))]
-        (do (assert (= expected.stdout line) (str name " host captured the child output"))
-            (assert (stringContains? native.stderr "readShim eintr\n") (str name " native processRun read was interrupted"))
+      (let [(native (runNative work name (preloadPrefix shim "readEintr")))]
+        (do (assert (stringContains? native.stderr "readShim eintr\n") (str name " native processRun read was interrupted"))
             (assert (= native.exitCode 0) (str name " native completed after the interrupted read"))
-            (assert (= native.stdout expected.stdout) (str name " native output survives the interrupted read"))
+            (assert (= native.stdout line) (str name " native output survives the interrupted read and matches the recorded asl-host output"))
             (assert (stringContains? native.stderr "readShim freed\n") (str name " native freed the interrupted read buffer"))
             true)))
 

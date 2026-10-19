@@ -61,6 +61,9 @@ fn jstrOf v: j/Json -> String
 fn optStr v: j/Json -> (Option String)
   (mt v ((j/jstr s) (some s)) (_ none))
 
+fn optBool v: j/Json -> (Option Bool)
+  (mt v ((j/jbool b) (some b)) (_ none))
+
 fn numF v: j/Json -> Float64
   (mt v
     ((j/jint i) (int64ToFloat64 i))
@@ -237,12 +240,10 @@ fn requestCase a: j/Json -> j/Json
     ((err e) (raisesJ e))
     ((ok r) (okJ (requestJ r))))
 
+; (:m :do "GW-UPSTREAM-TABLES: reasoningModels/coderCascade/plannerCascade/tokenFloorRoles/modelTokenFloors are gone -- no model-name knowledge survives in upstream.asl (rule LEON-ROLE/gateway-config-in-home); the reasoning floor comes only from the request body's own :reasoning or the caller-resolved model's config :reasoning (see upstream.asl#isReasoningModel?, exercised directly by the payload_* prepareRequestPayload cases below, never by a snapshot of a hardcoded list)")
 fn tablesCase -> j/Json
   (let [(modes (list "scout" "plan" "implement" "grade" "orchestrate"))]
-    (j/jobj (list (pair "reasoningModels" (strList (listSort (u/reasoningModels)))) (pair "coderCascade" (strList (u/coderCascade)))
-                  (pair "plannerCascade" (strList (u/plannerCascade))) (pair "tokenFloorRoles" (strList (listSort (u/tokenFloorRoles))))
-                  (pair "minTokenFloor" (j/jint (u/minTokenFloor)))
-                  (pair "modelTokenFloors" (j/jarr (map (fn [(p (Pair String Int64))] -> j/Json (j/jarr (list (strJ (pairFirst p)) (j/jint (pairSecond p))))) (u/modelTokenFloors))))
+    (j/jobj (list (pair "minTokenFloor" (j/jint (u/minTokenFloor)))
                   (pair "replyCeilings" (j/jobj (map (fn [(m String)] -> (Pair String j/Json) (pair m (j/jint (optionOr (u/replyCeiling m) -1)))) modes)))
                   (pair "roleTokenPolicy" (j/jobj (map (fn [(p (Pair String u/RoleTokenPolicy))] -> (Pair String j/Json) (pair (pairFirst p) (policyJ (pairSecond p)))) (u/roleTokenPolicyTable))))
                   (pair "emptyContentRetries" (j/jint (u/emptyContentRetries))) (pair "harness" (strJ (u/aslMinimalHarness)))
@@ -274,7 +275,7 @@ fn pureGot c: Case -> (Option j/Json)
       ((= f "roleTokenPolicy") (some (policyCase a)))
       ((= f "emptyContentAction") (some (strJ (u/emptyContentAction (numI (jget a "cascadeLen")) (numI (jget a "retriesDone"))))))
       ((= f "isEmptyContent") (some (j/jbool (u/isEmptyContent? (jget a "content")))))
-      ((= f "prepareRequestPayload") (some (resultJ (u/prepareRequestPayload (jget a "payload") (optStr (jget a "role"))))))
+      ((= f "prepareRequestPayload") (some (resultJ (u/prepareRequestPayload (jget a "payload") (optStr (jget a "role")) (optBool (jget a "reasoning"))))))
       ((= f "applyHarnessPolicy") (some (resultJ (u/applyHarnessPolicy (jget a "payload") (jstrOf (jget a "mode")) (optStr (jget a "role"))))))
       ((= f "harnessMode") (some (okJ (strJ (u/harnessMode (headerPairs (jget a "headers")) (envOf (jget a "env")))))))
       ((= f "upstreamRequest") (some (requestCase a)))
@@ -460,7 +461,7 @@ fn outcomeJ r: (Result u/UpstreamResponse u/UpstreamFailure) -> j/Json
     ((ok resp) (j/jobj (list (pair "body" (strJ resp.body)))))
     ((err f)
      (mt f
-       ((u/httpFailure status reason body)
+       ((u/httpFailure status reason body _)
         (j/jobj (list (pair "status" (j/jint status)) (pair "usage" (strJ (g/usageHttpError status)))
                       (pair "reason" (strJ (w/upstreamErrorReason body (u/httpErrorText status reason)))))))
        ((u/transportFailure code errText) (j/jobj (list (pair "usage" (strJ (g/usageException f))))))
@@ -507,7 +508,7 @@ fn ! literalConfig! dir: String tmp: String -> Bool
   (let [(reset (resetStub! dir "0" "HTTP/1.1 200 OK\r\n\r\nok"))
         (key "k\"q\\z\\")
         (res (mt (u/upstreamRequest "https://h.example/v1" "/chat" key "l1\nl2 \"q\" \\ end\\" (list (pair "X-Q" "a\"b\\c\\")))
-               ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0))
+               ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0 0.0))
                ((err e) (err (u/protocolFailure e)))))
         (cfg (readOr! (str dir "/stdin")))
         (argv (readOr! (str dir "/argv")))
@@ -524,7 +525,7 @@ fn ! literalConfig! dir: String tmp: String -> Bool
 fn ! rejected! dir: String tmp: String url: String key: String headers: (List (Pair String String)) secret: String -> Bool
   (let [(reset (resetStub! dir "0" "HTTP/1.1 200 OK\r\n\r\nok"))
         (res (mt (u/upstreamRequest url "/chat" key "{}" headers)
-               ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0))
+               ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0 0.0))
                ((err e) (err (u/protocolFailure e)))))]
     (and reset
          (and (mt res
@@ -548,16 +549,16 @@ fn ! lineBreaksRejected! dir: String tmp: String -> Bool
 fn ! redirectIsError! dir: String tmp: String -> Bool
   (let [(reset (resetStub! dir "0" "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:9/elsewhere\r\n\r\nmoved"))
         (res (mt (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" (list))
-               ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0))
+               ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0 0.0))
                ((err e) (err (u/protocolFailure e)))))]
-    (and reset (mt res ((err f) (mt f ((u/httpFailure status _ body) (and (= status 302) (= body "moved"))) (_ false))) ((ok _) false))))
+    (and reset (mt res ((err f) (mt f ((u/httpFailure status _ body _) (and (= status 302) (= body "moved"))) (_ false))) ((ok _) false))))
 
 ; (:m OCSESSION: withSessionHeader tags the upstream request with the provider's session header)
 fn ! sessionHeaderAdded! dir: String tmp: String -> Bool
   (let [(reset (resetStub! dir "0" "HTTP/1.1 200 OK\r\n\r\nok"))
         (headers (u/withSessionHeader (list (pair "X-ASL-Session" "sess-oc-1")) "x-opencode-session"))
         (res (mt (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" headers)
-               ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0))
+               ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0 0.0))
                ((err e) (err (u/protocolFailure e)))))
         (cfg (readOr! (str dir "/stdin")))]
     (and reset
@@ -569,7 +570,7 @@ fn ! sessionHeaderOmittedWithoutProviderHeader! dir: String tmp: String -> Bool
   (let [(reset (resetStub! dir "0" "HTTP/1.1 200 OK\r\n\r\nok"))
         (headers (u/withSessionHeader (list (pair "X-ASL-Session" "sess-oc-2")) ""))
         (res (mt (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" headers)
-               ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0))
+               ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0 0.0))
                ((err e) (err (u/protocolFailure e)))))
         (cfg (readOr! (str dir "/stdin")))]
     (and reset
@@ -581,7 +582,7 @@ fn ! sessionHeaderOmittedWithoutClientSession! dir: String tmp: String -> Bool
   (let [(reset (resetStub! dir "0" "HTTP/1.1 200 OK\r\n\r\nok"))
         (headers (u/withSessionHeader (list) "x-opencode-session"))
         (res (mt (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" headers)
-               ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0))
+               ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0 0.0))
                ((err e) (err (u/protocolFailure e)))))
         (cfg (readOr! (str dir "/stdin")))]
     (and reset
@@ -599,7 +600,7 @@ fn ! stubCase! c: Case dir: String tmp: String -> (Pair j/Json j/Json)
     (mt reqRes
       ((err e) (pair (raisesJ e) c.want))
       ((ok req)
-       (let [(out (u/callUpstream! req (stubEnv dir tmp) 45.0))
+       (let [(out (u/callUpstream! req (stubEnv dir tmp) 45.0 0.0))
              (transport (transportOk? req key (readOr! (str dir "/argv")) (readOr! (str dir "/env")) (readOr! (str dir "/stdin"))))]
          (pair (j/jobj (list (pair "request" (requestJ req)) (pair "outcome" (outcomeJ out)) (pair "transport" (j/jbool transport))))
                (j/jobj (list (pair "request" (jget c.want "request")) (pair "outcome" (jget c.want "outcome")) (pair "transport" (j/jbool true)))))))))
@@ -662,7 +663,7 @@ fn ! missingCurl! tmp: String -> Bool
     (mt (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" (list))
       ((err _) false)
       ((ok req)
-       (mt (u/callUpstream! req (mapFromPairs (list (pair "PATH" empty))) 5.0)
+       (mt (u/callUpstream! req (mapFromPairs (list (pair "PATH" empty))) 5.0 0.0)
          ((err f) (mt f ((u/toolAbsent tool _) (= tool "curl")) (_ false)))
          ((ok _) false)))))
 
@@ -674,7 +675,7 @@ fn ! largeTransfer! dir: String tmp: String -> (Pair Bool Int64)
         (w3 (fileWrite (str dir "/code") "0"))
         (t0 (monotonicNs))
         (res (mt (u/upstreamRequest "https://h.example/v1" "/chat" "fixture-openrouter-key-7Q2" body (list))
-               ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0))
+               ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0 0.0))
                ((err e) (err (u/protocolFailure e)))))
         (ms (/ (- (monotonicNs) t0) 1000000))
         (sent (resultOr (fileSize (str dir "/stdin")) 0))]
@@ -720,7 +721,7 @@ fn ! runTests -> Bool
     (do
       (assert (not (stringEmpty? text)) "fixture file is readable")
       (assert (= (listLength parsed) (listLength cases)) "every fixture line parses as JSON")
-      (assert (= (listLength cases) 521) "fixture holds the 521 recorded cases")
+      (assert (= (listLength cases) 527) "fixture holds the 527 recorded cases")
       (assert (= (listLength fns) 25) "cases cover the 25 recorded function families")
       (assert installed "stub curl installed in a unique temp dir")
       (assert first "command -v curl resolves to the stub before /usr/bin")

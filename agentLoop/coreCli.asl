@@ -300,7 +300,7 @@ fn runCase! kind: String fs: (List String) -> String
     ((= kind "loopBoundary")
       (lp/loopBoundary (= (arg fs 0) "1") (toInt (arg fs 1)) (toInt (arg fs 2)) (arg fs 3) (= (arg fs 4) "1")
         (toFloat (arg fs 5)) (toFloat (arg fs 6)) (toInt (arg fs 7)) (toFloat (arg fs 8)) (toFloat (arg fs 9))
-        (toInt (arg fs 10)) (toInt (arg fs 11))))
+        (toInt (arg fs 10)) (toInt (arg fs 11)) (toInt (arg fs 12)) (toInt (arg fs 13)) (toInt (arg fs 14)) (toInt (arg fs 15))))
     ((= kind "specCheckKind")
       (lp/specCheckKind (= (arg fs 0) "1") (= (arg fs 1) "1") (arg fs 2) (= (arg fs 3) "1")
         (= (arg fs 4) "1") (= (arg fs 5) "1") (toInt (arg fs 6)) (toInt (arg fs 7))))

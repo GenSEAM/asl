@@ -89,6 +89,37 @@ fn testCompoundValues -> Bool
     (assert (= (asn/asnWrite (resultOr rPair (asn/asnNil))) "{(\"key\" 100)}") "pair render")
     true)
 
+fn testCamelCaseAndSymbolArgs -> Bool
+  (let [(rCamelCase (asn/asnRead "(deployEvent :success 1714829100)"))
+        (rSymCaseArgs (asn/asnRead "(claude-opus claude-sonnet agy)"))
+        (rSymFieldValue (asn/asnRead "(:id ssot)"))
+        (rSymCitationList (asn/asnRead "(:basis (AGateThatCannotFailIsNotAGate GroundTruthOverReport))"))
+        (rWellFormedSymInVector (asn/asnRead "[claude-opus claude-sonnet]"))
+        (rMalformedSymInVectorRejected (asn/asnRead "[.5 1.]"))]
+    (do
+      (assert (ok? rCamelCase) "camelCase case head parses")
+      (assert (= (asn/asnWrite (resultOr rCamelCase (asn/asnNil))) "(deployEvent :success 1714829100)") "camelCase case head renders back")
+      (assert (ok? rSymCaseArgs) "bare symbols as case positional args parse")
+      (assert (= (asn/asnWrite (resultOr rSymCaseArgs (asn/asnNil))) "(claude-opus claude-sonnet agy)") "bare symbol case args render back")
+      (assert (ok? rSymFieldValue) "bare symbol as a record field value parses")
+      (assert (= (asn/asnWrite (resultOr rSymFieldValue (asn/asnNil))) "(:id ssot)") "bare symbol field value renders back")
+      (assert (ok? rSymCitationList) "a PascalCase head with bare-symbol positional args parses")
+      (assert (= (asn/asnWrite (resultOr rSymCitationList (asn/asnNil))) "(:basis (AGateThatCannotFailIsNotAGate GroundTruthOverReport))") "bare-symbol citation list renders back")
+      (assert (ok? rWellFormedSymInVector) "a well-formed bare symbol is accepted as a vector element")
+      (assert (= (asn/asnWrite (resultOr rWellFormedSymInVector (asn/asnNil))) "[claude-opus claude-sonnet]") "well-formed symbol vector renders back")
+      (assert (err? rMalformedSymInVectorRejected) "a malformed numeric-looking token is still rejected as a vector element")
+      true))
+
+fn testKeywordTaggedForms -> Bool
+  (let [(rRule (asn/asnRead "(:rule :id x :do \"y\")"))
+        (rRules (asn/asnRead "(:rules :v 1 (:rule :id a) (:rule :id b))"))]
+    (do
+      (assert (ok? rRule) "a keyword-tagged form with :key value fields parses")
+      (assert (= (asn/asnWrite (resultOr rRule (asn/asnNil))) "(:rule :id x :do \"y\")") "keyword-tagged form renders back")
+      (assert (ok? rRules) "a keyword-tagged form nesting further tagged forms as children parses")
+      (assert (= (asn/asnWrite (resultOr rRules (asn/asnNil))) "(:rules :v 1 (:rule :id a) (:rule :id b))") "nested keyword-tagged form renders back")
+      true))
+
 fn testAtAsnReadComments -> Bool
   (let [(r (at/asnRead "; leading comment\n42 ; trailing comment\n"))]
     (do
@@ -101,8 +132,10 @@ fn ! runTests -> Bool
   (and (testStringJoin)
   (and (testBasicScalars)
   (and (testCompoundValues)
+  (and (testCamelCaseAndSymbolArgs)
+  (and (testKeywordTaggedForms)
   (and (testInvalidAsnRejected)
-       (testDirectStepParsing))))))
+       (testDirectStepParsing))))))))
 
 fn testInvalidAsnRejected -> Bool
   (let [(rEmpty (asn/asnRead ""))

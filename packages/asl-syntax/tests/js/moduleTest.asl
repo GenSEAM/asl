@@ -55,8 +55,8 @@ fn testExportForms! -> Bool
     true)
 
 fn testTrackedWebFiles! -> Bool
-  (let [(res1 (fileRead "asl/packages/asl-syntax/tests/fixtures/js/tailwind.config.js.sample"))
-        (res2 (fileRead "asl/packages/asl-syntax/tests/fixtures/js/vite.config.js.sample"))]
+  (let [(res1 (fileReadString "asl/packages/asl-syntax/tests/fixtures/js/tailwind.config.js.sample"))
+        (res2 (fileReadString "asl/packages/asl-syntax/tests/fixtures/js/vite.config.js.sample"))]
     (do
       (assert (ok? res1) "tailwind.config.js reads ok")
       (assert (ok? res2) "vite.config.js reads ok")

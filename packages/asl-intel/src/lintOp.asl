@@ -16,7 +16,7 @@ fn rowOf path: String hit: lint/LintHit -> LintRow
   (LintRow :file path :fnName hit.fnName :line hit.line :hint hit.message)
 
 fn ! lintHitsForFile! path: String -> (List LintRow)
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err _) (list))
     ((ok src) (mt (a/parseForChecker src)
                 ((err _) (list))

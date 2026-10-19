@@ -80,7 +80,7 @@ fn testIoErrorPayloads -> Bool
   (do (assert (accepts? "(module b :x [f])\nfn ! f p: String -> (Result String String)\n  (mt (fileReadString p) ((ok s) (ok s)) ((err e) (err e)))\n") "a fileReadString error is a String")
       (assert (accepts? "(module b :x [f])\nfn ! f p: String -> (Result Int64 String)\n  (mt (fileReadBytes p) ((ok b) (ok (bytesLength b))) ((err e) (err e)))\n") "a fileReadBytes error is a String")
       (assert (accepts? "(module b :x [f])\nfn ! f p: String -> (Result Unit String)\n  (mt (fileWrite p \"x\") ((ok u) (ok u)) ((err e) (err (str \"write: \" e))))\n") "a fileWrite error is a String")
-      (assert (rejects? "(module b :x [f])\nfn ! f p: String -> (Result String String)\n  (mt (fileRead p) ((ok s) (ok s)) ((err e) (err e)))\n" "IoError") "a fileRead error is still an IoError")
+      (assert (rejects? "(module b :x [f])\nfn ! f p: String -> (Result String String)\n  (err (notFound))\n" "IoError") "a literal IoError still mismatches a declared String error")
       true)
 
 fn testTextKind -> Bool

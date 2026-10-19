@@ -6,7 +6,7 @@ fn diagnosticsText ds: (List ty/Diagnostic) -> String
 fn ! checkSnippet! tag: String src: String -> (List ty/Diagnostic)
   (let [(path (str (optionOr (envGet "TMPDIR") "/tmp/") "hlCheckTypeRegression_" tag "_" (stringFromInt64 (nowNs)) ".asl"))
         (_wrote (fileWrite path src))
-        (ds (resultOr (resultMapErr (fn [(e IoError)] -> String (str e)) (c/checkFile! path (list "."))) (list)))
+        (ds (resultOr (c/checkFile! path (list ".")) (list)))
         (_cleaned (pathRemove path))]
     ds)
 

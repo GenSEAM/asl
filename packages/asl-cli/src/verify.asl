@@ -22,7 +22,7 @@ fn ! checkOther! paths: (List String) -> Int64
 fn ! printDiag! d: ty/Diagnostic -> Bool
   (sys/sayErr! (str d.path ":" (stringFromInt64 d.line) ":" (stringFromInt64 d.col) ": " d.code " " d.message))
 
-fn ! reportOne! path: String verdict: (Result cc/Verdict IoError) -> Int64
+fn ! reportOne! path: String verdict: (Result cc/Verdict String) -> Int64
   (mt verdict
     ((err _) (do (sys/sayErr! (str path ":0:0: ERR_IO cannot open file"))
                  (sys/sayErr! (str "check failed: " path ": 1 error(s)"))

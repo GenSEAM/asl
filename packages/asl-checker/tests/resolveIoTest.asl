@@ -36,7 +36,7 @@ fn ! testUnreadableDependencyIsAnIoLine dir: String -> Bool
     (do (assert (= locked.exitCode 0) "ioB.asl made unreadable")
         (assert (= restored.exitCode 0) "ioB.asl made readable again")
         (assert (hasLine cl.errors (str dir "/ioB.asl: ERR_IO ")) (str "an unreadable dependency is an ERR_IO line: " (stringJoin cl.errors "; ")))
-        (assert (hasLine cl.errors "permission denied") (str "the line names the IoError case: " (stringJoin cl.errors "; ")))
+        (assert (hasLine cl.errors "permissionDenied") (str "the line names the IoError case: " (stringJoin cl.errors "; ")))
         (refute (listContains? cl.paths (str dir "/ioB.asl")) "the unreadable dependency is not loaded")
         true))
 
@@ -47,7 +47,7 @@ fn ! testUnreadableEntryIsAnIoLine dir: String -> Bool
     (do (assert (= locked.exitCode 0) "ioA.asl made unreadable")
         (assert (= restored.exitCode 0) "ioA.asl made readable again")
         (assert (= (listLength cl.errors) 1) (str "an unreadable entry is one error line: " (stringJoin cl.errors "; ")))
-        (assert (hasLine cl.errors (str dir "/ioA.asl: ERR_IO permission denied")) (str "the entry line names the file and the case: " (stringJoin cl.errors "; ")))
+        (assert (hasLine cl.errors (str dir "/ioA.asl: ERR_IO permissionDenied")) (str "the entry line names the file and the case: " (stringJoin cl.errors "; ")))
         (assert (listEmpty? cl.paths) "nothing is loaded from an unreadable entry")
         true))
 
@@ -87,7 +87,7 @@ fn ! testAsl1ReportsTransitiveMissingImport dir: String -> Bool
         (assert (= built.exitCode 1) (str "asl1 build exits 1 when a dependency's import is missing, got " built.exitCode))
         (assert (stringContains? built.stderr (str dir "/ioC.asl: ERR_UNRESOLVED_IMPORT ioNope")) (str "asl1 build names the missing import: " built.stderr))
         (assert (stringContains? built.stderr "Failed to load package dependencies of ") (str "asl1 build stops at the load, before linking: " built.stderr))
-        (assert (err? (fileRead (str dir "/ioMain.ll"))) "asl1 build writes no .ll")
+        (assert (err? (fileReadString (str dir "/ioMain.ll"))) "asl1 build writes no .ll")
         true))
 
 fn ! testSysImportShortcuts dir: String -> Bool

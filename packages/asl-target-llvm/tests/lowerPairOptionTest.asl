@@ -10,6 +10,11 @@
 fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
 
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): fixtureSource is fixed and deterministic (self-checks its own pair/option/listReverse/imported-call values before printing), so recordedInterp below is a one-time capture of asl-host's own output for this exact fixture, taken before HL-DELETE removed the binary (asl-host run <fixtureSource>: exit 0, stdout \"20\\n22\\n3\\n7\\n3\\nlowerPairOptionFixture\\n\", stderr empty); used by both testNativeParity (linkEntry!) and testEmitLlvmSourceCliPath (emitLlvmSource), which compile the same fixture through two different asl-target-llvm entry points")
+
+fn recordedInterp -> Captured
+  (Captured :exitCode 0 :stdout "20\n22\n3\n7\n3\nlowerPairOptionFixture\n" :stderr "")
+
 fn ! shWithin cmd: String timeoutS: Int64 -> Captured
   (let [(root (optionOr (envGet "ASL_ROOT") "."))
         (prelude (optionOr (envGet "ASL_PRELUDE") (str root "/asl/prelude/prelude.asl")))
@@ -87,7 +92,7 @@ fn ! testNativeParity -> Bool
         (written (fileWrite path (fixtureSource)))
         (native (if (and (ok? made) (ok? written)) (compileNative path llPath exePath)
                     (Captured :exitCode 1 :stdout "" :stderr "fixture setup failed")))
-        (interp (sh (str (shellQuote (optionOr (envGet "ASL_HOST") "asl/host/out/asl-host")) " run " (shellQuote path))))
+        (interp (recordedInterp))
         (ran (if (= native.exitCode 0) (sh (shellQuote exePath))
                  (Captured :exitCode 1 :stdout "" :stderr native.stderr)))
         (removedExe (if (fileExists? exePath) (pathRemove exePath) (ok ())))
@@ -98,9 +103,9 @@ fn ! testNativeParity -> Bool
       (assert (ok? made) "temporary fixture directory is created")
       (assert (ok? written) "fixture source is written")
       (assert (= native.exitCode 0) (str "linked native fixture builds: " native.stderr))
-      (assert (= interp.exitCode 0) (str "asl-host run exits 0: " interp.stderr))
-      (assert (= ran.exitCode interp.exitCode) "native exit matches asl-host run")
-      (assert (= ran.stdout interp.stdout) "native stdout matches asl-host for optionOr, pair fields, listReverse, and an imported call")
+      (assert (= interp.exitCode 0) "recorded asl-host output exits 0")
+      (assert (= ran.exitCode interp.exitCode) "native exit matches the recorded asl-host output")
+      (assert (= ran.stdout interp.stdout) "native stdout matches the recorded asl-host output for optionOr, pair fields, listReverse, and an imported call")
       (assert (= ran.exitCode 0) (str "native fixture validates all lowered values: " ran.stderr))
       (assert (ok? removedExe) "native executable is removed")
       (assert (ok? removedLl) "LLVM file is removed")
@@ -127,7 +132,7 @@ fn ! testEmitLlvmSourceCliPath -> Bool
         (written (fileWrite path (fixtureSource)))
         (native (if (and (ok? made) (ok? written)) (compileViaEmitLlvmSource llPath exePath)
                     (Captured :exitCode 1 :stdout "" :stderr "fixture setup failed")))
-        (interp (sh (str (shellQuote (optionOr (envGet "ASL_HOST") "asl/host/out/asl-host")) " run " (shellQuote path))))
+        (interp (recordedInterp))
         (ran (if (= native.exitCode 0) (sh (shellQuote exePath))
                  (Captured :exitCode 1 :stdout "" :stderr native.stderr)))
         (removedExe (if (fileExists? exePath) (pathRemove exePath) (ok ())))
@@ -138,9 +143,9 @@ fn ! testEmitLlvmSourceCliPath -> Bool
       (assert (ok? made) "temporary fixture directory is created")
       (assert (ok? written) "fixture source is written")
       (assert (= native.exitCode 0) (str "llvm/emitLlvmSource (the bare CLI entry, no path argument) builds and links: " native.stderr))
-      (assert (= interp.exitCode 0) (str "asl-host run exits 0: " interp.stderr))
-      (assert (= ran.exitCode interp.exitCode) "emitLlvmSource's native build exits like asl-host run")
-      (assert (= ran.stdout interp.stdout) "emitLlvmSource's native build prints the same pair/optionOr/listReverse/imported-call values as asl-host run")
+      (assert (= interp.exitCode 0) "recorded asl-host output exits 0")
+      (assert (= ran.exitCode interp.exitCode) "emitLlvmSource's native build exits like the recorded asl-host output")
+      (assert (= ran.stdout interp.stdout) "emitLlvmSource's native build prints the same pair/optionOr/listReverse/imported-call values as the recorded asl-host output")
       (assert (= ran.exitCode 0) (str "emitLlvmSource's native fixture validates all lowered values: " ran.stderr))
       (assert (ok? removedExe) "native executable is removed")
       (assert (ok? removedLl) "LLVM file is removed")
@@ -151,6 +156,6 @@ fn ! testEmitLlvmSourceCliPath -> Bool
 fn ! runTests -> Bool
   (do
     (assert (testSourceBuiltinLowering) "linking a bare source file against the real prelude resolves pair/optionOr/pairFirst/pairSecond/listReverse")
-    (assert (testNativeParity) "the linked module's builtin and imported calls agree between asl-host run and the native build")
-    (assert (testEmitLlvmSourceCliPath) "the asl-target-llvm emitLlvmSource CLI entry (LOWERPQ) resolves the same prelude functions and imported call as linkEntry!, matching asl-host run")
+    (assert (testNativeParity) "the linked module's builtin and imported calls agree between the recorded asl-host output and the native build")
+    (assert (testEmitLlvmSourceCliPath) "the asl-target-llvm emitLlvmSource CLI entry (LOWERPQ) resolves the same prelude functions and imported call as linkEntry!, matching the recorded asl-host output")
     true)

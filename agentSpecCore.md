@@ -23,8 +23,8 @@ accepts a field's `:json "name"` and does nothing with it, and a schema-level ca
 `:jsonCase camel` is `ERR_BAD_DEFINITION`.
 
 **I/O is in**, with its effects tracked: a function that touches the world carries `!` (§5.7),
-`fileRead` fails with the closed union `IoError` (§3), and a program's entry point is `main`
-(§4.0).
+every I/O builtin fails with a `String` host message of the form `"KIND: PATH: reason"`, `KIND`
+one of the `IoError` case names from §3, and a program's entry point is `main` (§4.0).
 
 ### Design commitments
 
@@ -469,17 +469,18 @@ By section:
   mapFromPairs`
 - **Option, Result, Pair** — `some none ok err pair pairFirst pairSecond some? none? ok? err?
   optionOr resultOr optionMap resultMap resultMapErr optionToResult resultToOption`
-- **I/O** (effectful) — the `IoError` cases, `print println eprintln fileExists? fileRead
+- **I/O** (effectful) — the `IoError` cases, `print println eprintln fileExists?
   fileReadString fileReadBytes fileReadRange fileSize fileWrite fileAppend dirList fileStat
   fileLstat fileChmod fileFsync fileReadlink fileUtime pathSymlink processRun processSpawn
   processWait cpuCount procRusage platformInfo localDate procAlive? nowNs monotonicNs sleepMs envGet
-  getHomeDir fileCreateExclusive dirCreate pathRemove pathRename realPath pathCanonicalize`
+  getHomeDir fileCreateExclusive dirCreate pathRemove pathRename realPath`
 - **Bytes**, **Arrays**, **Parquet** — byte buffers and bit operations, `F64Array` / `I64Array` /
   `I8Array` kernels, and a Parquet reader; see `prelude/prelude.asn`.
 
 Points that differ from what an LLM may expect: `print`, `println` and `eprintln` take any values,
-separate them by spaces and return `()`; only `fileRead` and `pathCanonicalize` fail with
-`IoError`, the other file calls with a `String` message; `resultMap` takes the `Result` first,
+separate them by spaces and return `()`; every file call fails with a `String` message of the
+form `"KIND: PATH: reason"`, `KIND` one of the `IoError` case names — no builtin returns an
+`IoError` value itself; `resultMap` takes the `Result` first,
 unlike `optionMap`; `stringLength`, `stringSlice` and `stringIndexOf` count bytes (§3).
 
 `prelude/prelude.asn` `:absent` records names earlier versions declared and the host does not

@@ -6,8 +6,8 @@ fn label e: IoError -> String
 fn labels -> String
   (stringJoin (list (label (notFound)) (label (permissionDenied)) (label (alreadyExists)) (label (invalidPath)) (label (interrupted)) (label (other))) ",")
 
-fn ! run path: String -> (Result Unit IoError)
-  (match (fileRead path) ((err e) (println (label e)) (err e)) ((ok text) (ok (print text))))
+fn ! run path: String -> (Result Unit String)
+  (match (fileReadString path) ((err e) (println e) (err e)) ((ok text) (ok (print text))))
 
-fn ! main args: (List String) -> (Result Unit IoError)
+fn ! main args: (List String) -> (Result Unit String)
   (match (listHead args) ((some a) (if (= a "--labels") (ok (println (labels))) (run a))) ((none) (ok (println "usage: log PATH"))))

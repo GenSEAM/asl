@@ -3,7 +3,7 @@
   :i [(asl-ir/link :a lk) (asl-ir/types :a irTy) (asl-target-llvm :a llvm)])
 
 fn host -> String
-  "asl/host/out/asl-host"
+  "bin/asl"
 
 fn mathNames -> (List String)
   (list "int64ToFloat64" "float64ToInt64" "floor" "ceil" "round" "clamp" "pow" "exp" "log" "log2" "log10" "sqrt"
@@ -154,9 +154,9 @@ fn ! testValueParity exe: String src: String op: String -> Bool
   (let [(native (processRun (str exe " " op)))
         (interp (processRun (str (host) " run " src " " op)))]
     (do
-      (assert (= interp.exitCode 0) (str op ": asl-host run exit " interp.exitCode "; stderr " interp.stderr))
+      (assert (= interp.exitCode 0) (str op ": ./bin/asl run exit " interp.exitCode "; stderr " interp.stderr))
       (assert (= native.exitCode 0) (str op ": native exit " native.exitCode "; stderr " native.stderr))
-      (assert (= native.stdout interp.stdout) (str op ": native prints " native.stdout " and asl-host run " interp.stdout))
+      (assert (= native.stdout interp.stdout) (str op ": native prints " native.stdout " and ./bin/asl run " interp.stdout))
       (assert (= native.stderr "") (str op ": native stderr empty, got " native.stderr))
       true))
 
@@ -166,11 +166,11 @@ fn ! testFailingParity exe: String src: String op: String -> Bool
         (line (stringReplace native.stderr "\n" ""))]
     (do
       (assert (= native.exitCode 1) (str op ": native exit " native.exitCode ", want 1; stderr " native.stderr))
-      (assert (= native.exitCode interp.exitCode) (str op ": native exit equals asl-host run exit " interp.exitCode))
+      (assert (= native.exitCode interp.exitCode) (str op ": native exit equals ./bin/asl run exit " interp.exitCode))
       (assert (stringStartsWith? line "ERR_") (str op ": native stderr is one error line: " native.stderr))
       (assert (= native.stderr (str line "\n")) (str op ": native stderr is a single line: " native.stderr))
-      (assert (stringContains? interp.stderr (str ": " line " (after")) (str op ": asl-host run reports " line "; it reported " interp.stderr))
-      (assert (= native.stdout interp.stdout) (str op ": native stdout equals asl-host run stdout"))
+      (assert (stringContains? interp.stderr line) (str op ": ./bin/asl run reports " line "; it reported " interp.stderr))
+      (assert (= native.stdout interp.stdout) (str op ": native stdout equals ./bin/asl run stdout"))
       true))
 
 fn ! testNow exe: String -> Bool
@@ -186,11 +186,11 @@ fn ! testNow exe: String -> Bool
       true))
 
 fn ! runTests -> Bool
-  (let [(made (processRun "mktemp -d"))
-        (dir (stringReplace made.stdout "\n" ""))
+  (let [(dir (str "scratch/nativeMathTest." (stringFromInt64 (monotonicNs))))
+        (made (dirCreate dir))
         (src (str dir "/mathFixture.asl"))]
     (do
-      (assert (= made.exitCode 0) "mktemp -d makes a work directory")
+      (assert (ok? made) "dirCreate makes a work directory inside the workspace root")
       (testRuntimeDecls)
       (assert (ok? (fileWrite src (fixtureSrc))) (str "fileWrite " src))
       (mt (compiled src)

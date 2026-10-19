@@ -1,0 +1,6 @@
+(:package asl-know
+ :version "0.1.0"
+ :entry "src/know.asl"
+ :description "Tiered knowledge surface for models: L0 index, L1 cards per package and language area, L2 rows per symbol, generated from code, doc.asn and checked examples, queried by intent within a token budget"
+ :aslFirst true
+ :dependencies ["asl-checker"])

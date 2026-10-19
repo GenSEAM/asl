@@ -21,10 +21,11 @@
    "asl-forms/lens"
    "asl-forms/query"
    "asl-forms/repair"
+   "asl-forms/heal"
    "asl-forms/rewrite"
    "asl-forms/docOp"
    "asl-forms/evalOp"
    "asl-forms/foreignBlock"
    "asl-forms/memOp"
  ]
- :dependencies ["aslGateway" "asl-json" "asl-intel" "asl-proc" "asl-syntax" "asl-coord" "asl-gates" "asl-html" "asl-target-js" "asl-target-py" "asl-target-go" "asl-ir"])
+ :dependencies ["aslGateway" "asl-parser" "asl-checker" "asl-json" "asl-intel" "asl-proc" "asl-syntax" "asl-coord" "asl-gates" "asl-html" "asl-target-js" "asl-target-py" "asl-target-go" "asl-ir"])

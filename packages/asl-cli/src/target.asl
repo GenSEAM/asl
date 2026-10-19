@@ -8,7 +8,7 @@ fn targetList -> String
        "  • ps1, powershell, windows-powershell (Windows PowerShell via asl-target-sh/emitPs1)\n"
        "  • cmd, bat, windows-cmd (Windows Command Prompt batch via asl-target-sh/emitCmd)\n"
        "  • distrib (Universal SSOT distribution generator: install.sh, install.ps1, asl.cmd)\n"
-       "  • c, go, llvm, py, rs, swift, wat (Language targets via asl-target-*)")
+       "  • c, go, js, llvm, py, swift, ts (Language targets via asl-target-*)")
 
 fn rule -> String
   "# ============================================================================"
@@ -22,7 +22,7 @@ fn ps1Header -> String
        (rule) "\n")
 
 fn ! readText! path: String -> (Result String String)
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err _) (err (str "cannot read " path)))
     ((ok text) (ok (stringReplace (stringReplace text "\r\n" "\n") "\r" "\n"))))
 

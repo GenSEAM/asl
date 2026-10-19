@@ -2,8 +2,12 @@
   :x [runTests]
   :i [(asl-ir/link :a lk) (asl-ir/types :a irTy) (asl-ir/lower :a low) (asl-target-llvm :a llvm) (asl-target-llvm/ssa :a ssa)])
 
-fn host -> String
-  "asl/host/out/asl-host"
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): testParity/testCapture300/testCRecord/testEmptyRecord used asl-host as a live parity oracle for the hand-built native binaries over objfx/app, cap300, objLibHost and objEmptyHost. Every fixture is fixed (idOf is the identity function; objfx/app never reads argv beyond the parity case args), so the oracle is replaced by recordedCase (keyed by the exact parity-case string, all 40 of parityCases) plus one recorded literal each for cap300/objLibHost/objEmptyHost, captured once from the leftover asl-host binary before HL-DELETE removed it. The native side (lower/emit/link/exe) is unchanged")
+
+(schema Recorded
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
 
 fn clangIr -> String
   "/usr/bin/clang -Wno-override-module -x ir "
@@ -212,7 +216,7 @@ fn ! nativeExe dir: String name: String extra: String -> String
     (do (assert (= linked.exitCode 0) (str name " links against libaslrt.a: " linked.stderr))
         exe))
 
-fn hostErrorLine out: ProcessOutput -> String
+fn hostErrorLine out: Recorded -> String
   (let [(text (str out.stdout out.stderr))
         (at (optionOr (stringIndexOf text "ERR_") (stringLength text)))
         (tail (optionOr (stringSlice text at (stringLength text)) ""))
@@ -220,18 +224,71 @@ fn hostErrorLine out: ProcessOutput -> String
         (line (optionOr (stringSlice tail 0 lineEnd) tail))]
     (optionOr (stringSlice line 0 (optionOr (stringIndexOf line " (after ") (stringLength line))) line))
 
+fn recordedCase args: String -> Recorded
+  (cond
+    ((= args "cap0") (Recorded :exitCode 0 :stdout "6\n" :stderr ""))
+    ((= args "cap0Few") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/objCap/fixtureDir/objfx/app.asl: ERR_ARITY: lambda expects 1 argument(s), got 0 (after 0 asserts)\n"))
+    ((= args "cap0Many") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/objCap/fixtureDir/objfx/app.asl: ERR_ARITY: lambda expects 1 argument(s), got 2 (after 0 asserts)\n"))
+    ((= args "cap1") (Recorded :exitCode 0 :stdout "6\n" :stderr ""))
+    ((= args "cap1Few") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/objCap/fixtureDir/objfx/app.asl: ERR_ARITY: lambda expects 1 argument(s), got 0 (after 0 asserts)\n"))
+    ((= args "cap1Many") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/objCap/fixtureDir/objfx/app.asl: ERR_ARITY: lambda expects 1 argument(s), got 2 (after 0 asserts)\n"))
+    ((= args "cap256") (Recorded :exitCode 0 :stdout "32901\n" :stderr ""))
+    ((= args "cap256Few") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/objCap/fixtureDir/objfx/app.asl: ERR_ARITY: lambda expects 1 argument(s), got 0 (after 0 asserts)\n"))
+    ((= args "cap256Many") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/objCap/fixtureDir/objfx/app.asl: ERR_ARITY: lambda expects 1 argument(s), got 2 (after 0 asserts)\n"))
+    ((= args "cap7") (Recorded :exitCode 0 :stdout "33\n" :stderr ""))
+    ((= args "cap7Few") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/objCap/fixtureDir/objfx/app.asl: ERR_ARITY: lambda expects 1 argument(s), got 0 (after 0 asserts)\n"))
+    ((= args "cap7Many") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/objCap/fixtureDir/objfx/app.asl: ERR_ARITY: lambda expects 1 argument(s), got 2 (after 0 asserts)\n"))
+    ((= args "kw") (Recorded :exitCode 0 :stdout "true true :alpha false false\n" :stderr ""))
+    ((= args "loop 10") (Recorded :exitCode 0 :stdout "130\n" :stderr ""))
+    ((= args "loop 1000000") (Recorded :exitCode 0 :stdout "13000000\n" :stderr ""))
+    ((= args "many 0") (Recorded :exitCode 0 :stdout "0 (a0)\n" :stderr ""))
+    ((= args "many 1") (Recorded :exitCode 0 :stdout "3 (a1 3)\n" :stderr ""))
+    ((= args "many 2") (Recorded :exitCode 0 :stdout "9 (a2 3 6)\n" :stderr ""))
+    ((= args "many 3") (Recorded :exitCode 0 :stdout "18 (a3 3 6 9)\n" :stderr ""))
+    ((= args "many 4") (Recorded :exitCode 0 :stdout "30 (a4 3 6 9 12)\n" :stderr ""))
+    ((= args "many 5") (Recorded :exitCode 0 :stdout "45 (a5 3 6 9 12 15)\n" :stderr ""))
+    ((= args "many 6") (Recorded :exitCode 0 :stdout "63 (a6 3 6 9 12 15 18)\n" :stderr ""))
+    ((= args "many 7") (Recorded :exitCode 0 :stdout "84 (a7 3 6 9 12 15 18 21)\n" :stderr ""))
+    ((= args "many 8") (Recorded :exitCode 0 :stdout "36 (a8 1 2 3 4 5 6 7 8)\n" :stderr ""))
+    ((= args "missing") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/objCap/fixtureDir/objfx/app.asl: ERR_FIELD: record has no field zz (after 0 asserts)\n"))
+    ((= args "missing40") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/objCap/fixtureDir/objfx/app.asl: ERR_FIELD: record has no field f40 (after 0 asserts)\n"))
+    ((= args "named") (Recorded :exitCode 0 :stdout "6\n" :stderr ""))
+    ((= args "namedFew") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/objCap/fixtureDir/objfx/app.asl: ERR_ARITY: add3 expects 3 argument(s), got 1 (after 0 asserts)\n"))
+    ((= args "notFn") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/objCap/fixtureDir/objfx/app.asl: ERR_TYPE: cannot call a Int (after 0 asserts)\n"))
+    ((= args "notRec") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/objCap/fixtureDir/objfx/app.asl: ERR_TYPE: .-a expects a record, got Int (after 0 asserts)\n"))
+    ((= args "partial") (Recorded :exitCode 0 :stdout "6\n" :stderr ""))
+    ((= args "partialMany") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/objCap/fixtureDir/objfx/app.asl: ERR_ARITY: add3 expects 3 argument(s), got 4 (after 0 asserts)\n"))
+    ((= args "rec1") (Recorded :exitCode 0 :stdout "5 {:a 5}\n" :stderr ""))
+    ((= args "rec40") (Recorded :exitCode 0 :stdout "0 60 117 {:f0 0 :f1 3 :f2 6 :f3 9 :f4 12 :f5 15 :f6 18 :f7 21 :f8 24 :f9 27 :f10 30 :f11 33 :f12 36 :f13 39 :f14 42 :f15 45 :f16 48 :f17 51 :f18 54 :f19 57 :f20 60 :f21 63 :f22 66 :f23 69 :f24 72 :f25 75 :f26 78 :f27 81 :f28 84 :f29 87 :f30 90 :f31 93 :f32 96 :f33 99 :f34 102 :f35 105 :f36 108 :f37 111 :f38 114 :f39 117}\n" :stderr ""))
+    ((= args "strings") (Recorded :exitCode 0 :stdout "hello hello5\n" :stderr ""))
+    ((= args "wide256") (Recorded :exitCode 0 :stdout "1\n" :stderr ""))
+    ((= args "wide256Many") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/objCap/fixtureDir/objfx/app.asl: ERR_ARITY: lambda expects 256 argument(s), got 257 (after 0 asserts)\n"))
+    ((= args "wide257") (Recorded :exitCode 0 :stdout "1\n" :stderr ""))
+    ((= args "wide257Few") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/objCap/fixtureDir/objfx/app.asl: ERR_ARITY: lambda expects 257 argument(s), got 256 (after 0 asserts)\n"))
+    ((= args "wrongVariant") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/objCap/fixtureDir/objfx/app.asl: ERR_ARITY: pattern (box) binds 2 field(s), value has 1 (after 0 asserts)\n"))
+    (else (Recorded :exitCode -1 :stdout "" :stderr (str "no recorded case: " args))))
+
+fn recordedCap300 -> Recorded
+  (Recorded :exitCode 1 :stdout "" :stderr "ERR_LIMIT: more than 256 captured variables\n")
+
+fn recordedObjLib -> Recorded
+  (Recorded :exitCode 1 :stdout "a=1 b=2\n" :stderr "FAIL objLibHost.asl: ERR_FIELD: record has no field z (after 0 asserts)\n")
+
+fn recordedObjEmpty -> Recorded
+  (Recorded :exitCode 1 :stdout "1\n" :stderr "FAIL objEmptyHost.asl: ERR_FIELD: record has no field zz (after 0 asserts)\n")
+
 fn ! testParity exe: String src: String args: String -> Bool
   (let [(native (processRun (str exe " " args)))
-        (interp (processRun (str (host) " run " src " " args)))]
+        (interp (recordedCase args))]
     (do
-      (assert (= native.exitCode interp.exitCode) (str args ": native exit " native.exitCode " equals asl-host run exit " interp.exitCode "; native stderr " native.stderr "; asl-host stderr " interp.stderr))
-      (assert (= native.stdout interp.stdout) (str args ": native prints " native.stdout " and asl-host run " interp.stdout))
+      (assert (= native.exitCode interp.exitCode) (str args ": native exit " native.exitCode " equals the recorded asl-host exit " interp.exitCode "; native stderr " native.stderr "; recorded stderr " interp.stderr))
+      (assert (= native.stdout interp.stdout) (str args ": native prints " native.stdout " and the recorded asl-host run " interp.stdout))
       (refute (stringContains? interp.stdout "no such case") (str args ": the fixture knows the case"))
       (if (= interp.exitCode 0)
-        (do (assert (> (stringLength interp.stdout) 1) (str args ": asl-host run prints a result"))
+        (do (assert (> (stringLength interp.stdout) 1) (str args ": the recorded asl-host run prints a result"))
             (assert (= native.stderr "") (str args ": native stderr empty, got " native.stderr)))
-        (do (assert (stringStartsWith? (hostErrorLine interp) "ERR_") (str args ": asl-host run fails with an error line: " interp.stderr))
-            (assert (= native.stderr (str (hostErrorLine interp) "\n")) (str args ": native stderr is asl-host's error line " (hostErrorLine interp) "; got " native.stderr))))
+        (do (assert (stringStartsWith? (hostErrorLine interp) "ERR_") (str args ": the recorded asl-host run fails with an error line: " interp.stderr))
+            (assert (= native.stderr (str (hostErrorLine interp) "\n")) (str args ": native stderr is the recorded asl-host's error line " (hostErrorLine interp) "; got " native.stderr))))
       true))
 
 fn objectsAllocated text: String -> (Option Int64)
@@ -289,7 +346,7 @@ fn ! testCapture300 dir: String -> Bool
   (let [(src (str dir "/cap300.asl"))]
     (do
       (assert (ok? (fileWrite src (cap300Source))) "fileWrite cap300.asl")
-      (assert (stringContains? (processRun (str (host) " run " src)).stderr "ERR_LIMIT: more than 256 captured variables") "cap300: asl-host refuses more than 256 captures at load")
+      (assert (stringContains? (recordedCap300).stderr "ERR_LIMIT: more than 256 captured variables") "cap300: the recorded asl-host run refuses more than 256 captures at load")
       (mt (compiled src)
         ((err e) (assert false (str "cap300 links and emits: " e)))
         ((ok code)
@@ -377,13 +434,13 @@ fn ! testCRecord dir: String -> Bool
                       (assert (stringContains? code " @objrt.field(") "objLib: the field reads call @objrt.field")
                       (let [(exe (nativeExe dir "objLib" (str " " dir "/valrtC.ll -x c " cSrc)))
                             (native (processRun exe))
-                            (interp (processRun (str (host) " run " twin)))]
+                            (interp (recordedObjLib))]
                         (do
                           (assert (= native.stdout "a=1 b=2\n") (str "objLib: the C-built record reads a=1 b=2, got " native.stdout native.stderr))
-                          (assert (= native.stdout interp.stdout) (str "objLib: native stdout equals asl-host run's " interp.stdout))
+                          (assert (= native.stdout interp.stdout) (str "objLib: native stdout equals the recorded asl-host run's " interp.stdout))
                           (assert (= native.exitCode 1) (str "objLib: readZ fails, exit " native.exitCode))
-                          (assert (= (hostErrorLine interp) "ERR_FIELD: record has no field z") (str "objLib: asl-host run fails on z: " interp.stderr))
-                          (assert (= native.stderr (str (hostErrorLine interp) "\n")) (str "objLib: native stderr is asl-host's error line; got " native.stderr))
+                          (assert (= (hostErrorLine interp) "ERR_FIELD: record has no field z") (str "objLib: the recorded asl-host run fails on z: " interp.stderr))
+                          (assert (= native.stderr (str (hostErrorLine interp) "\n")) (str "objLib: native stderr is the recorded asl-host's error line; got " native.stderr))
                           true)))))))
       true))
 
@@ -431,9 +488,9 @@ fn ! testEmptyRecord dir: String -> Bool
                                         "fn ! main args: (List String) -> (Result Int64 String)\n"
                                         "  (do (println (str (if (= (idOf (Empty)) (Empty)) 1 2)))\n      (println (str (idOf (Empty)).zz))\n      (ok 0))\n")))
               "fileWrite objEmptyHost.asl")
-      (let [(interp (processRun (str (host) " run " twin)))]
+      (let [(interp (recordedObjEmpty))]
         (do
-          (assert (= interp.stdout "1\n") (str "objEmptyHost: asl-host prints 1, got " interp.stdout interp.stderr))
+          (assert (= interp.stdout "1\n") (str "objEmptyHost: the recorded asl-host run prints 1, got " interp.stdout interp.stderr))
           (map (fn [(entry String)] -> Bool
                  (mt (llvm/emitLlvmProgram m entry)
                    ((err ds) (do (assert false (str entry " emits: " (formatDiags ds))) true))
@@ -444,7 +501,7 @@ fn ! testEmptyRecord dir: String -> Bool
                          (if (= entry "emptyEq")
                            (assert (= out.exitCode 1) (str "emptyEq: equal empty records exit 1 as asl-host prints 1; exit " out.exitCode " stderr " out.stderr))
                            (do (assert (= out.exitCode 1) (str "emptyField: exit 1, got " out.exitCode))
-                               (assert (= out.stderr (str (hostErrorLine interp) "\n")) (str "emptyField: native stderr is asl-host's " (hostErrorLine interp) "; got " out.stderr)))))
+                               (assert (= out.stderr (str (hostErrorLine interp) "\n")) (str "emptyField: native stderr is the recorded asl-host's " (hostErrorLine interp) "; got " out.stderr)))))
                        true))))
                (list "emptyEq" "emptyField"))
           true))))

@@ -2,10 +2,11 @@
   :x [Slot Serverless Wiring RouteHint DecisionRow Plan planSend planReject planWait
       LifecycleSpec LifecycleFamily StartOutcome startOk startRefused SlotReady readyNow readyLater readyGone
       rowsFromTable pluginsFromRows emptyWiring wiringFromConfig parseWiring httpFamily builtinFamilies
-      plan started settle carrySpend sendTimeout usageTokens decisionText retarget startSlot! waiting pollSlots! slotReady anyWarming?]
+      plan started settle carrySpend sendTimeout usageTokens decisionText retarget startSlot! waiting pollSlots! slotReady anyWarming?
+      slotNamed priceFor servedModel callUsageTokens]
   :i [(aslGateway/router :a rt) (aslGateway/fleet :a fl) (aslGateway/budget :a bgt) (aslGateway/plugin :a p)
       (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/pyText :a pt)
-      (aslGateway/poolDispatch :a pd) (asl-parser/reader :a rd) (asl-json/json :a j)])
+      (aslGateway/poolDispatch :a pd) (asl-parser/reader :a rd) (asl-json/json :a j) (aslGateway/usage :a g)])
 
 (schema Serverless
   (:f coldStartMs Int64)
@@ -78,11 +79,13 @@ fn configuredRow pv: c/GatewayProvider -> u/UpstreamProvider
   (let [(base pv.base)
         (keyEnv pv.keyEnv)
         (timeout (if (> pv.timeoutSec 0.0) pv.timeoutSec 45.0))
+        (firstByte pv.firstByteSec)
 ]
     (u/UpstreamProvider :id pv.id :prefixes (list (str pv.id "/")) :names (list)
       :url (fn [(st u/UpstreamSettings) (env (Map String String))] -> String base)
       :key (fn [(st u/UpstreamSettings) (env (Map String String))] -> String (if (stringEmpty? keyEnv) "" (u/envGetOr env keyEnv "")))
-      :timeoutSec (fn [(st u/UpstreamSettings)] -> Float64 timeout)))
+      :timeoutSec (fn [(st u/UpstreamSettings)] -> Float64 timeout)
+      :firstByteSec (fn [(st u/UpstreamSettings)] -> Float64 firstByte)))
 
 fn rowsFromTable table: (Option c/GatewayTable) -> (List u/UpstreamProvider)
   (mt table
@@ -90,11 +93,11 @@ fn rowsFromTable table: (Option c/GatewayTable) -> (List u/UpstreamProvider)
     ((some tbl)
       (let [(configured (fold (fn [(acc (List u/UpstreamProvider)) (pid String)] -> (List u/UpstreamProvider)
                                 (mt (mapGet tbl.providers pid)
-                                  ((some pv) (if (and (= pv.kind "openai") (none? (defaultRowNamed pid))) (listAppend acc (list (configuredRow pv))) acc))
+                                  ((some pv) (if (and (or (= pv.kind "openai") (or (= pv.kind "anthropic") (= pv.kind "gemini"))) (none? (defaultRowNamed pid))) (listAppend acc (list (configuredRow pv))) acc))
                                   ((none) acc)))
                           (list) (mapKeys tbl.providers)))
 ]
-        (listAppend configured (u/upstreamProviders)))))
+        (listAppend configured (listAppend (u/upstreamProviders) (list (u/upstreamFallback)))))))
 
 fn ! pluginsFromRows rows: (List u/UpstreamProvider) st: u/UpstreamSettings redirects: (Map String Int64) -> (Result (List p/Plugin) String)
   (fold (fn [(acc (Result (List p/Plugin) String)) (row u/UpstreamProvider)] -> (Result (List p/Plugin) String)
@@ -242,7 +245,7 @@ fn ! lifecycleCall! row: u/UpstreamProvider st: u/UpstreamSettings env: (Map Str
     (mt (u/upstreamRequest (row.url st env) path (row.key st env) body (list (pair "Content-Type" "application/json")))
       ((err e) (err e))
       ((ok req)
-        (mt (u/callUpstream! req env timeoutSec)
+        (mt (u/callUpstream! req env timeoutSec (row.firstByteSec st))
           ((err f) (err (str "lifecycle " path ": " (pd/failureText f))))
           ((ok resp) (lifecycleStatus request.endpoint resp.body))))))
 
@@ -573,6 +576,23 @@ fn usageTokens body: String -> Int64
     ((ok v) (mt (j/jsonGet v "usage")
       ((none) 0)
       ((some usage) (mt (j/jsonGet usage "total_tokens") ((some t) (mt t ((j/jint n) n) (_ 0))) ((none) 0))))))
+
+fn priceFor w: Wiring slotId: String -> Int64
+  (mt (slotNamed w.slots slotId) ((some s) s.pricePerMillion) ((none) 0))
+
+fn servedModel body: String fallback: String -> String
+  (mt (j/jsonParse body)
+    ((err _) fallback)
+    ((ok v) (mt (j/jsonGet v "model")
+      ((none) fallback)
+      ((some m) (mt m ((j/jstr s) (if (stringEmpty? s) fallback s)) (_ fallback))))))
+
+fn callUsageTokens body: String -> (List Int64)
+  (mt (j/jsonParse body)
+    ((err _) (list 0 0 0))
+    ((ok v) (mt (j/jsonGet v "usage")
+      ((none) (list 0 0 0))
+      ((some usage) (g/usageTokens usage)))))
 
 fn settle w: Wiring slotId: String provider: String tokens: Int64 latencyMs: Int64 success: Bool nowMs: Int64 -> (Pair Wiring String)
   (let [(slot (slotNamed w.slots slotId))

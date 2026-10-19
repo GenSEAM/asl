@@ -2,8 +2,12 @@
   :x [runTests]
   :i [(asl-ir/link :a lk) (asl-ir/types :a irTy) (asl-ir/lower :a low) (asl-target-llvm :a llvm) (asl-target-llvm/ssa :a ssa)])
 
-fn host -> String
-  "asl/host/out/asl-host"
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): testParity used asl-host as a live parity oracle for the hand-built native binaries over valfx/app and valfx/many, keyed by an explicit case key rather than the raw args string because the same empty-args call is reused by both fixtures with different expected output. Every fixture is fixed (idOf is the identity function), so the oracle is replaced by a recordedCase table, captured once from the leftover asl-host binary before HL-DELETE removed it. testUnrouted's first two sub-checks (the unrouted sys-table and parallel-table links) are dropped, not weakened: both link against asl/host/out/libaslhost.a, which HL-DELETE's build.sh rewrite no longer produces anywhere (confirmed: ls asl/host/out/libaslhost.a -> no such file), the same gap already frozen for gcAslTest.asl and tests/host/gcPoolTest.asl -- a clang link failure, not a comparison-strategy issue. The third sub-check (routed par, linking only against libaslrt.a) is fully portable and kept, its recorded oracle captured the same way. testCorpus's live '(asl-host) test <path>' cross-check becomes './bin/asl test <path>', a genuinely independent code path (asl-cli's own native-self-build test runner, not this file's hand-rolled backend+clang pipeline) -- safe now that nativeFormatTest/nativeTrapTest/nativeOpsTest/nativeObjectTest are themselves host-free (see their own HL-E-LLVM commits)")
+
+(schema Recorded
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
 
 fn runtime -> String
   "asl/host/out/libaslrt.a"
@@ -169,7 +173,7 @@ fn ! build dir: String name: String -> String
             (do (assert (= linked.exitCode 0) (str name " links against libaslrt.a: " linked.stderr))
                 exe))))))
 
-fn hostErrorLine out: ProcessOutput -> String
+fn hostErrorLine out: Recorded -> String
   (let [(text (str out.stdout out.stderr))
         (at (optionOr (stringIndexOf text "ERR_") (stringLength text)))
         (tail (optionOr (stringSlice text at (stringLength text)) ""))
@@ -177,19 +181,36 @@ fn hostErrorLine out: ProcessOutput -> String
         (line (optionOr (stringSlice tail 0 lineEnd) tail))]
     (optionOr (stringSlice line 0 (optionOr (stringIndexOf line " (after ") (stringLength line))) line))
 
-fn ! testParity env: String exe: String src: String args: String want: String -> Bool
+fn recordedCase key: String -> Recorded
+  (cond
+    ((= key "kw") (Recorded :exitCode 0 :stdout "true true false true false :alpha (:alpha :beta :gamma)\n" :stderr ""))
+    ((= key "kwFresh") (Recorded :exitCode 0 :stdout ":onlyInOther true true\n" :stderr ""))
+    ((= key "ctor") (Recorded :exitCode 0 :stdout "(sq 7) (sq 3) (dot) true true\n" :stderr ""))
+    ((= key "field") (Recorded :exitCode 0 :stdout "{:x 1 :y :alpha} :beta true {:x 2 :y :beta}\n" :stderr ""))
+    ((= key "field2") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/valCap/valfx/app.asl: ERR_FIELD: record has no field z (after 0 asserts)\n"))
+    ((= key "appEmpty") (Recorded :exitCode 0 :stdout "0 0 []\n" :stderr ""))
+    ((= key "argv") (Recorded :exitCode 0 :stdout "0 0 []\n" :stderr ""))
+    ((= key "argvUnicode") (Recorded :exitCode 0 :stdout "5 22 [|héllo|日本語|𐍈|a b]\n" :stderr ""))
+    ((= key "argvMany") (Recorded :exitCode 0 :stdout "10000 48890 a0 a9999\n" :stderr ""))
+    ((= key "fits") (Recorded :exitCode 0 :stdout "1000\n" :stderr ""))
+    ((= key "oom") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/valCap/valfx/app.asl: ERR_OOM: live heap exceeds ASL_GC_MAX_MIB=8 (after 0 asserts)\n"))
+    ((= key "manyEmpty") (Recorded :exitCode 0 :stdout "100000 :w0 :w99999 :w54321\n1 1 1 true\ntrue true false :w54321\n" :stderr ""))
+    ((= key "routedPar") (Recorded :exitCode 1 :stdout "" :stderr "FAIL asl/tmp/valCap/valfx/par.asl: ERR_WORKER_TRAP: parMap element 1: ERR_DIV_ZERO: division by zero (after 0 asserts)\n"))
+    (else (Recorded :exitCode -1 :stdout "" :stderr (str "no recorded case: " key))))
+
+fn ! testParity key: String env: String exe: String src: String args: String want: String -> Bool
   (let [(native (sh (str env exe " " args)))
-        (interp (sh (str env (host) " run " src " " args)))
+        (interp (recordedCase key))
         (label (if (> (stringLength args) 60) (str (optionOr (stringSlice args 0 60) "") "...") args))]
     (do
-      (assert (= native.exitCode interp.exitCode) (str label ": native exit " native.exitCode " equals asl-host run exit " interp.exitCode "; native stderr " native.stderr "; asl-host stderr " interp.stderr))
-      (assert (= native.stdout interp.stdout) (str label ": native prints " native.stdout " and asl-host run " interp.stdout))
+      (assert (= native.exitCode interp.exitCode) (str label ": native exit " native.exitCode " equals the recorded asl-host exit " interp.exitCode "; native stderr " native.stderr "; recorded stderr " interp.stderr))
+      (assert (= native.stdout interp.stdout) (str label ": native prints " native.stdout " and the recorded asl-host run " interp.stdout))
       (refute (stringContains? interp.stdout "no such case") (str label ": the fixture knows the case"))
       (if (= interp.exitCode 0)
         (do (assert (stringContains? native.stdout want) (str label ": native prints " want "; got " native.stdout))
             (assert (= native.stderr "") (str label ": native stderr empty, got " native.stderr)))
-        (do (assert (stringStartsWith? (hostErrorLine interp) want) (str label ": asl-host run fails with " want "; got " interp.stderr))
-            (assert (= native.stderr (str (hostErrorLine interp) "\n")) (str label ": native stderr is asl-host's error line " (hostErrorLine interp) "; got " native.stderr))))
+        (do (assert (stringStartsWith? (hostErrorLine interp) want) (str label ": the recorded asl-host run fails with " want "; got " interp.stderr))
+            (assert (= native.stderr (str (hostErrorLine interp) "\n")) (str label ": native stderr is the recorded asl-host's error line " (hostErrorLine interp) "; got " native.stderr))))
       true))
 
 fn manyArgs -> String
@@ -203,17 +224,17 @@ fn ! testFixture dir: String -> Bool
       (let [(exe (build dir "valfx/app"))]
         (do
           (testSymbols exe)
-          (testParity "" exe src "kw" "true true false true false :alpha (:alpha :beta :gamma)")
-          (testParity "" exe src "kwFresh" ":onlyInOther true true")
-          (testParity "" exe src "ctor" "true")
-          (testParity "" exe src "field" ":beta true")
-          (testParity "" exe src "field2" "ERR_")
-          (testParity "" exe src "" "0 0 []")
-          (testParity "" exe src "argv" "0 0 []")
-          (testParity "" exe src "argv '' 'héllo' '日本語' '𐍈' 'a b'" "5 ")
-          (testParity "" exe src (str "argv " (manyArgs)) "10000 48890 a0 a9999")
-          (testParity (cap) exe src "fits" "1000")
-          (testParity (cap) exe src "oom" "ERR_OOM: ")
+          (testParity "kw" "" exe src "kw" "true true false true false :alpha (:alpha :beta :gamma)")
+          (testParity "kwFresh" "" exe src "kwFresh" ":onlyInOther true true")
+          (testParity "ctor" "" exe src "ctor" "true")
+          (testParity "field" "" exe src "field" ":beta true")
+          (testParity "field2" "" exe src "field2" "ERR_")
+          (testParity "appEmpty" "" exe src "" "0 0 []")
+          (testParity "argv" "" exe src "argv" "0 0 []")
+          (testParity "argvUnicode" "" exe src "argv '' 'héllo' '日本語' '𐍈' 'a b'" "5 ")
+          (testParity "argvMany" "" exe src (str "argv " (manyArgs)) "10000 48890 a0 a9999")
+          (testParity "fits" (cap) exe src "fits" "1000")
+          (testParity "oom" (cap) exe src "oom" "ERR_OOM: ")
           true))))
 
 fn ! testMany dir: String -> Bool
@@ -224,29 +245,8 @@ fn ! testMany dir: String -> Bool
       (let [(exe (build dir "valfx/many"))]
         (do
           (testSymbols exe)
-          (testParity "" exe src "" "100000 :w0 :w99999 :w54321\n1 1 1 true\ntrue true false :w54321\n")
+          (testParity "manyEmpty" "" exe src "" "100000 :w0 :w99999 :w54321\n1 1 1 true\ntrue true false :w54321\n")
           true))))
-
-fn hostLib -> String
-  "asl/host/out/libaslhost.a"
-
-fn unroutedSource -> String
-  (str (stringJoin (list
-    "(module valfx/unrouted :x [main] :i [])"
-    ""
-    "fn ! main args: (List String) -> (Result Int64 String)"
-    "  (do (mt (procRusage)"
-    "        ((err e) (println (str \"rusage err \" e)))"
-    "        ((ok r) (println (str \"rusage \" (> r.selfMaxRssKb 0) \" \" (>= r.selfUserUs 0)))))"
-    "      (mt (fdClose 987654)"
-    "        ((ok u) (println \"closed\"))"
-    "        ((err e) (println (str \"close err \" (> (stringLength e) 0)))))"
-    "      (mt (procSpawnv (list \"/bin/sh\" \"-c\" \"exit 3\") (some \"/\") (none))"
-    "        ((err e) (println (str \"spawn err \" e)))"
-    "        ((ok p) (mt (procWaitPid p.pid false)"
-    "                  ((err e) (println (str \"wait err \" e)))"
-    "                  ((ok w) (println (str \"waited \" w \" \" (= w (some 3))))))))"
-    "      (ok 0))") "\n") "\n")
 
 fn parSource -> String
   (str (stringJoin (list
@@ -255,13 +255,6 @@ fn parSource -> String
     "fn ! main args: (List String) -> (Result Int64 String)"
     "  (do (println (str (parMap (fn [(x Int64)] -> Int64 (/ 10 (- x 2))) (list 1 2 3))))"
     "      (ok 0))") "\n") "\n")
-
-fn ! unrouted path: String -> (Result String String)
-  (mt (lk/linkEntry! path)
-    ((err ds) (err (formatDiags ds)))
-    ((ok m) (mt (llvm/emitLlvmProgram m (str m.name ".main"))
-              ((err ds) (err (formatDiags ds)))
-              ((ok code) (ok code)))))
 
 fn ! linkWith dir: String name: String code: String libs: String -> String
   (let [(exe (str dir "/" name))]
@@ -272,29 +265,15 @@ fn ! linkWith dir: String name: String code: String libs: String -> String
             exe))))
 
 fn ! testUnrouted dir: String -> Bool
-  (let [(src (str dir "/valfx/unrouted.asl"))
-        (par (str dir "/valfx/par.asl"))]
+  (let [(par (str dir "/valfx/par.asl"))]
     (do
-      (assert (ok? (fileWrite src (unroutedSource))) (str "fileWrite " src))
       (assert (ok? (fileWrite par (parSource))) (str "fileWrite " par))
-      (mt (unrouted src)
-        ((err e) (assert false (str "valfx/unrouted links and emits unrouted: " e)))
-        ((ok code)
-          (do
-            (assert (stringContains? code "call %Val @asl_rt_builtin_sys(") "valfx/unrouted: procRusage, fdClose, procSpawnv and procWaitPid go to libaslhost.a's sys table")
-            (testParity "" (linkWith dir "valfx/unrouted" code (str (runtime) " " (hostLib))) src "" "rusage true true\nclose err true\nwaited (some 3) true\n"))))
-      (mt (unrouted par)
-        ((err e) (assert false (str "valfx/par links and emits unrouted: " e)))
-        ((ok code)
-          (do
-            (assert (stringContains? code "call %Val @asl_rt_builtin_parallel(") "valfx/par: parMap goes to libaslhost.a's parallel.c")
-            (testParity "" (linkWith dir "valfx/parUnrouted" code (str (runtime) " " (hostLib))) par "" "ERR_WORKER_TRAP: parMap element 1: ERR_DIV_ZERO: division by zero"))))
       (mt (compiled par)
         ((err e) (assert false (str "valfx/par links and emits routed: " e)))
         ((ok code)
           (do
             (refute (stringContains? code "@asl_rt_builtin_parallel(") "valfx/par routed: parMap runs as asl-target-llvm/parallel")
-            (testParity "" (linkWith dir "valfx/parRouted" code (runtime)) par "" "ERR_WORKER_TRAP: parMap element 1: ERR_DIV_ZERO: division by zero"))))
+            (testParity "routedPar" "" (linkWith dir "valfx/parRouted" code (runtime)) par "" "ERR_WORKER_TRAP: parMap element 1: ERR_DIV_ZERO: division by zero"))))
       true))
 
 fn floorLibSource -> String
@@ -353,7 +332,7 @@ fn ! testFloorCalls dir: String -> Bool
       true))
 
 fn ! testCorpus name: String -> Bool
-  (let [(out (sh (str "env -u ASL_ROOT -u ASL_LAUNCHED " (host) " test asl/packages/asl-target-llvm/tests/" name ".asl")))
+  (let [(out (sh (str "env -u ASL_ROOT -u ASL_LAUNCHED ./bin/asl test asl/packages/asl-target-llvm/tests/" name ".asl")))
         (text (str out.stdout out.stderr))]
     (do
       (assert (= out.exitCode 0) (str name ": exit " out.exitCode "; " text))

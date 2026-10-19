@@ -1,5 +1,5 @@
 (module asl/packages/asl-parser/tests/dyck1BalanceTest
-  :x [runTests RunTests testDyck1BalancePhysics testPureDyck1ParameterAndBindingConversion testBalanceDelimitersDyck1 testDualPolarityRefutations]
+  :x [runTests RunTests! testDyck1BalancePhysics testPureDyck1ParameterAndBindingConversion testBalanceDelimitersDyck1 testDualPolarityRefutations]
   :i [(asl-parser/reader :a rd)
       (asl-parser/balance :a bal)
       (asl-parser/astConverter :a cv)
@@ -134,5 +134,5 @@ fn runTests -> Bool
     (assert (testDualPolarityRefutations) "testDualPolarityRefutations passed")
     true)
 
-fn RunTests -> Bool
+fn RunTests! -> Bool
   (runTests)

@@ -1,5 +1,5 @@
 (module asl/agentLoop/runLoop
-  :x [LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision stateFor withHeadState withFindings withPrefetch wallSeconds setup! head! finish! runLoopWith! runLoopWithProvider!]
+  :x [LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withFindings withPrefetch wallSeconds setup! head! finish! runLoopWith! runLoopWithProvider! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
   :i [(asl/agentLoop/loopState :a s) (asl/agentLoop/loop :a lp)
       (asl/agentLoop/context :a ctx) (asl/agentLoop/journal :a jr)
       (asl/agentLoop/gitOps :a go) (asl/agentLoop/runOps :a ro) (asl/agentLoop/reply :a rp)
@@ -9,6 +9,7 @@
 schema LoopRun
   (:f state s/LoopState) (:f procs ro/Procs) (:f written jr/Written) (:f session String)
   (:f commitMessage (Option String)) (:f parseDefects Int64) (:f lastDefect Bool) (:f lastDefectTurn (Option Int64))
+  (:f parseDefectStreak Int64)
 
 schema ProviderRun
   (:f run LoopRun)
@@ -22,32 +23,34 @@ enum LoopSetup
 fn withState run: LoopRun state: s/LoopState -> LoopRun
   (LoopRun :state state :procs run.procs :written run.written :session run.session
     :commitMessage run.commitMessage :parseDefects run.parseDefects
-    :lastDefect run.lastDefect :lastDefectTurn run.lastDefectTurn)
+    :lastDefect run.lastDefect :lastDefectTurn run.lastDefectTurn :parseDefectStreak run.parseDefectStreak)
 
 fn withProcs run: LoopRun procs: ro/Procs -> LoopRun
   (LoopRun :state run.state :procs procs :written run.written :session run.session
     :commitMessage run.commitMessage :parseDefects run.parseDefects
-    :lastDefect run.lastDefect :lastDefectTurn run.lastDefectTurn)
+    :lastDefect run.lastDefect :lastDefectTurn run.lastDefectTurn :parseDefectStreak run.parseDefectStreak)
 
 fn withWritten run: LoopRun written: jr/Written -> LoopRun
   (LoopRun :state run.state :procs run.procs :written written :session run.session
     :commitMessage run.commitMessage :parseDefects run.parseDefects
-    :lastDefect run.lastDefect :lastDefectTurn run.lastDefectTurn)
+    :lastDefect run.lastDefect :lastDefectTurn run.lastDefectTurn :parseDefectStreak run.parseDefectStreak)
 
 fn writtenPaths written: jr/Written -> (List String)
   (mt written.files
     ((some files) (map pairFirst files))
     ((none) (list)))
 
+; (:m :ref LEON-TURN-RUNAWAY-20261017 :do "parseDefects is a lifetime count of non-actionable replies across the whole session; a long, mostly-healthy run can accumulate a handful of early slips without ever being stuck, so the cap that actually catches a model looping on inert prose has to reset on any turn that was not a defect, not alarm on a scattered lifetime total")
 fn noteParseTurn run: LoopRun turn: Int64 defect: Bool -> LoopRun
   (LoopRun :state run.state :procs run.procs :written run.written :session run.session
     :commitMessage run.commitMessage :parseDefects (if defect (+ run.parseDefects 1) run.parseDefects)
-    :lastDefect defect :lastDefectTurn (if defect (some turn) run.lastDefectTurn))
+    :lastDefect defect :lastDefectTurn (if defect (some turn) run.lastDefectTurn)
+    :parseDefectStreak (if defect (+ run.parseDefectStreak 1) 0))
 
 fn withCommitMessage run: LoopRun message: (Option String) -> LoopRun
   (LoopRun :state run.state :procs run.procs :written run.written :session run.session
     :commitMessage message :parseDefects run.parseDefects
-    :lastDefect run.lastDefect :lastDefectTurn run.lastDefectTurn)
+    :lastDefect run.lastDefect :lastDefectTurn run.lastDefectTurn :parseDefectStreak run.parseDefectStreak)
 
 fn coreHostZero -> j/Json
   (j/jobj (list (pair "calls" (j/jint 0)) (pair "cases" (j/jint 0)) (pair "sec" (j/jfloat 0.0)) (pair "built" (j/jint 0))))
@@ -233,6 +236,83 @@ fn withOwnsRejections state: s/LoopState rejections: (List j/Json) -> s/LoopStat
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
       :writtenFiles state.writtenFiles)
 
+; (:m :ref FREEBENCH-TOKENBUDGET-20261017 :do "usageTotals was declared on LoopState and threaded through every with* copier but never actually accumulated anywhere -- it stayed (j/jobj (list)) for the life of every run. usageTotalsPlus/withUsageTotals make it a real running sum, folded in once per turn in main.asl right after the provider reply's usage is known, so a per-case cumulative input-token cap has something real to check against")
+fn usageIntOf totals: j/Json key: String -> Int64
+  (intField totals key 0)
+
+fn usageTotalsPlus totals: j/Json inputDelta: Int64 cachedDelta: Int64 outputDelta: Int64 -> j/Json
+  (j/jobj (list
+    (pair "inputTokens" (j/jint (+ (usageIntOf totals "inputTokens") inputDelta)))
+    (pair "cachedTokens" (j/jint (+ (usageIntOf totals "cachedTokens") cachedDelta)))
+    (pair "outputTokens" (j/jint (+ (usageIntOf totals "outputTokens") outputDelta)))))
+
+fn withUsageTotals state: s/LoopState usageTotals: j/Json -> s/LoopState
+  (s/LoopState
+      :turn state.turn :contextTokens state.contextTokens :core state.core
+      :wallBudget state.wallBudget :intent state.intent :plan state.plan :mode state.mode
+      :sizingModel state.sizingModel :explicitContext state.explicitContext
+      :transcriptChars state.transcriptChars :readCap state.readCap :startHead state.startHead
+      :turnsWithoutEvidence state.turnsWithoutEvidence :readStreak state.readStreak
+      :phases state.phases :deliver state.deliver :gatewayIntent state.gatewayIntent
+      :researchKind state.researchKind :turnFacts state.turnFacts :reinforceWhy state.reinforceWhy
+      :advisorCalls state.advisorCalls :advisorAsked state.advisorAsked :gateSigHistory state.gateSigHistory
+      :executedSteps state.executedSteps :workspaceGen state.workspaceGen :failureCounts state.failureCounts
+      :ownsRejections state.ownsRejections :scope state.scope :signalName state.signalName
+      :runStarted state.runStarted :vendorRetryCount state.vendorRetryCount :vendorWaitUsed state.vendorWaitUsed
+      :seenEvidence state.seenEvidence :turnEvidence state.turnEvidence :writeTurn state.writeTurn
+      :coverage state.coverage :writesPersisted state.writesPersisted :wroteSinceGate state.wroteSinceGate
+      :allReceipts state.allReceipts :allGateResults state.allGateResults :needsConfirmList state.needsConfirmList
+      :escalateReceipt state.escalateReceipt :findingsList state.findingsList :possibleOpen state.possibleOpen
+      :possibleNotices state.possibleNotices :status state.status :error state.error
+      :totalQueueWaitSec state.totalQueueWaitSec :totalExecSec state.totalExecSec
+      :usageTotals usageTotals :batching state.batching :hasTiming state.hasTiming
+      :basePrompt state.basePrompt :briefCount state.briefCount :code state.code
+      :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
+      :header state.header :history state.history :lastGates state.lastGates
+      :missingGateIntro state.missingGateIntro :patchErr state.patchErr
+      :placeholderBriefs state.placeholderBriefs :prefetch state.prefetch :priorIds state.priorIds
+      :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
+      :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
+      :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
+      :writtenFiles state.writtenFiles)
+
+; (:m :ref LEON-BATCHING-DEAD-20261018 :do "batching was declared on LoopState and threaded through every with* copier but never actually accumulated anywhere -- it stayed all-zero for the life of every run, so opTurns/opsPerTurn/singleOpShare were 0 on every receipt regardless of how many ops a turn actually ran. batchingPlus/withBatching make it a real running count, folded in once per turn in main.asl right after that turn's operations list is known, beside the usageTotals fold")
+fn batchingPlus batching: j/Json opCount: Int64 -> j/Json
+  (j/jobj (list
+    (pair "ops" (j/jint (+ (intField batching "ops" 0) opCount)))
+    (pair "single" (j/jint (+ (intField batching "single" 0) (if (= opCount 1) 1 0))))
+    (pair "turns" (j/jint (+ (intField batching "turns" 0) 1)))))
+
+fn withBatching state: s/LoopState batching: j/Json -> s/LoopState
+  (s/LoopState
+      :turn state.turn :contextTokens state.contextTokens :core state.core
+      :wallBudget state.wallBudget :intent state.intent :plan state.plan :mode state.mode
+      :sizingModel state.sizingModel :explicitContext state.explicitContext
+      :transcriptChars state.transcriptChars :readCap state.readCap :startHead state.startHead
+      :turnsWithoutEvidence state.turnsWithoutEvidence :readStreak state.readStreak
+      :phases state.phases :deliver state.deliver :gatewayIntent state.gatewayIntent
+      :researchKind state.researchKind :turnFacts state.turnFacts :reinforceWhy state.reinforceWhy
+      :advisorCalls state.advisorCalls :advisorAsked state.advisorAsked :gateSigHistory state.gateSigHistory
+      :executedSteps state.executedSteps :workspaceGen state.workspaceGen :failureCounts state.failureCounts
+      :ownsRejections state.ownsRejections :scope state.scope :signalName state.signalName
+      :runStarted state.runStarted :vendorRetryCount state.vendorRetryCount :vendorWaitUsed state.vendorWaitUsed
+      :seenEvidence state.seenEvidence :turnEvidence state.turnEvidence :writeTurn state.writeTurn
+      :coverage state.coverage :writesPersisted state.writesPersisted :wroteSinceGate state.wroteSinceGate
+      :allReceipts state.allReceipts :allGateResults state.allGateResults :needsConfirmList state.needsConfirmList
+      :escalateReceipt state.escalateReceipt :findingsList state.findingsList :possibleOpen state.possibleOpen
+      :possibleNotices state.possibleNotices :status state.status :error state.error
+      :totalQueueWaitSec state.totalQueueWaitSec :totalExecSec state.totalExecSec
+      :usageTotals state.usageTotals :batching batching :hasTiming state.hasTiming
+      :basePrompt state.basePrompt :briefCount state.briefCount :code state.code
+      :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
+      :header state.header :history state.history :lastGates state.lastGates
+      :missingGateIntro state.missingGateIntro :patchErr state.patchErr
+      :placeholderBriefs state.placeholderBriefs :prefetch state.prefetch :priorIds state.priorIds
+      :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
+      :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
+      :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
+      :writtenFiles state.writtenFiles)
+
 fn withPlan state: s/LoopState plan: j/Json -> s/LoopState
   (s/LoopState
       :turn state.turn :contextTokens state.contextTokens :core state.core
@@ -402,7 +482,7 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
             :state (withPrefetch (withHeadState state state.turn state.readStreak (some? applied)
               state.deliver state.allGateResults state.lastGates state.status state.signalName
               state.escalateReceipt state.runStarted) prefetchText)
-            :procs (ro/newProcs) :written (pairFirst patchState) :session sid :commitMessage none :parseDefects 0 :lastDefect false :lastDefectTurn none))))))
+            :procs (ro/newProcs) :written (pairFirst patchState) :session sid :commitMessage none :parseDefects 0 :lastDefect false :lastDefectTurn none :parseDefectStreak 0))))))
 
 fn latestRed entry: j/Json -> Bool
   (mt entry
@@ -420,21 +500,22 @@ fn redGateOf gates: (List String) lastGates: (Map String j/Json) -> Bool
 fn declaredGatesGreen gates: (List String) lastGates: (Map String j/Json) -> Bool
   (lp/finalGatesGreen (map (fn [cmd] (mt (mapGet lastGates cmd) ((some entry) (if (latestRed entry) "0" "1")) ((none) "0"))) gates))
 
-fn headDecision env: s/LoopEnv state: s/LoopState -> String
+fn headDecision! env: s/LoopEnv state: s/LoopState parseDefects: Int64 -> String
   (let [runTurns (max 0 (- state.turn state.startTurn))
         elapsed (- (env.now) state.runStarted)
         noWriteTurnLimit (min (* (int64ToFloat64 env.budget) 0.5) (int64ToFloat64 (ctx/noWriteTurns)))]
     (lp/loopBoundary (redGateOf env.gates state.lastGates) state.readStreak (ctx/readStreakEscalate)
       (optionOr state.deliver "") state.writesPersisted (int64ToFloat64 runTurns) noWriteTurnLimit
-      (optionOr env.wallBudget 0) elapsed 0.5 (+ state.turn 1) env.budget))
+      (optionOr env.wallBudget 0) elapsed 0.5 (+ state.turn 1) env.budget parseDefects (ctx/parseDefectEscalateFor! env.rootDir)
+      (usageIntOf state.usageTotals "inputTokens") env.inputTokenBudget))
 
 fn ! journalSignal! env: s/LoopEnv turn: Int64 signal: String reason: String -> Bool
   (do
     (jr/journalWrite env.journalPath (str "(:turn " (stringFromInt64 turn) " :signal :" signal " :reason \"" (c/escapeAsn reason) "\")\n"))
     true)
 
-fn ! head! env: s/LoopEnv state: s/LoopState -> (Pair s/LoopState s/Step)
-  (let [decision (headDecision env state)
+fn ! head! env: s/LoopEnv state: s/LoopState parseDefects: Int64 -> (Pair s/LoopState s/Step)
+  (let [decision (headDecision! env state parseDefects)
         nextTurn (+ state.turn 1)]
     (cond
       ((= decision "budget")
@@ -447,6 +528,18 @@ fn ! head! env: s/LoopEnv state: s/LoopState -> (Pair s/LoopState s/Step)
         (pair (withHeadState state state.turn state.readStreak state.writesPersisted state.deliver
           state.allGateResults state.lastGates "escalated" (some "readStreak")
           (some (str "(:escalate :reason \"" (stringFromInt64 state.readStreak) " turns without a write while a gate is red\")")) state.runStarted) (stop))))
+      ((= decision "parseDefect")
+        (do
+        (journalSignal! env state.turn "parseDefect" (str (stringFromInt64 parseDefects) " replies in a row with no actionable operation and nothing written"))
+        (pair (withHeadState state state.turn state.readStreak state.writesPersisted state.deliver
+          state.allGateResults state.lastGates "escalated" (some "parseDefect")
+          (some (str "(:escalate :reason \"" (stringFromInt64 parseDefects) " replies in a row with no actionable operation and nothing written\")")) state.runStarted) (stop))))
+      ((= decision "tokenBudget")
+        (do
+        (journalSignal! env state.turn "tokenBudget" (str (stringFromInt64 (usageIntOf state.usageTotals "inputTokens")) " cumulative input tokens reached the " (stringFromInt64 env.inputTokenBudget) " token budget"))
+        (pair (withHeadState state state.turn state.readStreak state.writesPersisted state.deliver
+          state.allGateResults state.lastGates "escalated" (some "tokenBudget")
+          (some (str "(:escalate :reason \"" (stringFromInt64 (usageIntOf state.usageTotals "inputTokens")) " cumulative input tokens reached the " (stringFromInt64 env.inputTokenBudget) " token budget\")")) state.runStarted) (stop))))
       ((= decision "noWriteTurns")
         (do
         (journalSignal! env state.turn "noWrite" (str "nothing written by turn " (stringFromInt64 state.turn) " of " (stringFromInt64 env.budget)))
@@ -633,7 +726,7 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
                         ((ok _) (finalResult env run finalStatus finalUnbacked commit commitMissing preserve patch restored)))))))))))))
 
 fn ! runBody! env: s/LoopEnv run: LoopRun body: (fn [s/LoopEnv LoopRun] -> (Pair LoopRun s/Step)) -> LoopRun
-  (mt (head! env run.state)
+  (mt (head! env run.state run.parseDefectStreak)
     ((pair current step)
       (let [headed (withState run current)]
         (mt step
@@ -662,7 +755,7 @@ fn ! runLoopWith! env: s/LoopEnv body: (fn [s/LoopEnv LoopRun] -> (Pair LoopRun 
           ((ok _) result)))))
 
 fn ! runBodyWithProvider! env: s/LoopEnv wrapped: ProviderRun body: (fn [s/LoopEnv ProviderRun] -> (Pair ProviderRun s/Step)) -> ProviderRun
-  (mt (head! env wrapped.run.state)
+  (mt (head! env wrapped.run.state wrapped.run.parseDefectStreak)
     ((pair current step)
       (let [headed (ProviderRun :run (withState wrapped.run current) :provider wrapped.provider :history wrapped.history)]
         (mt step

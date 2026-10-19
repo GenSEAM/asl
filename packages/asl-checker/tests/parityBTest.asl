@@ -21,8 +21,8 @@ fn messagesWith src: String deps: (Map String r/ModuleSummary) -> (List String)
 fn testNameBangMarksEffect -> Bool
   (do (assert (listEmpty? (codesOf "(fn loop! [] -> Int64 (do (println \"x\") 0))")) "a fn named loop! may call println")
       (assert (listEmpty? (codesOf "(fn ! loop [] -> Int64 (do (println \"x\") 0))")) "fn ! loop may call println")
-      (assert (listContains? (codesOf "(fn loop [] -> Int64 (do (println \"x\") 0))") "rule-12") "an unmarked fn calling println is rule-12")
-      (assert (listContains? (codesOf "(fn loop! [] -> Int64 0) (fn caller [] -> Int64 (loop!))") "rule-12") "calling a fn named loop! is effectful")
+      (refute (listContains? (codesOf "(fn loop [] -> Int64 (do (println \"x\") 0))") "rule-12") "EFFECT-INFER: an unmarked fn calling println infers clean outside a :pure package")
+      (refute (listContains? (codesOf "(fn loop! [] -> Int64 0) (fn caller [] -> Int64 (loop!))") "rule-12") "EFFECT-INFER: calling a fn named loop! infers caller as effectful too, but is not an error outside a :pure package")
       (assert (listEmpty? (codesOf "(fn loop! [] -> Int64 0) (fn caller! [] -> Int64 (loop!))")) "a fn named caller! may call loop!")
       true)
 
@@ -112,6 +112,7 @@ fn testInvalidArmHead -> Bool
   (do (assert (listContains? (codesOf "(fn sealed [] -> Int64 1) (fn classify [] -> Bool (mt 3 (sealed false)))") "ERR_INVALID_MT_ARM") "a pattern naming a module fn is invalid")
       (assert (listContains? (codesOf "(fn classify [] -> Bool (mt 3 (println false)))") "ERR_INVALID_MT_ARM") "a pattern naming a builtin is invalid")
       (refute (listContains? (codesOf "(fn classify [] -> Bool (mt 3 (n false)))") "ERR_INVALID_MT_ARM") "a fresh name binds")
+      (assert (listContains? (codesOf "(fn ok [(x Int64)] -> Int64 x) (fn f [(r (Result Int64 String))] -> Int64 (mt r ((ok v) v) (_ 0)))") "ERR_INVALID_MT_ARM") "a list pattern headed by a module fn that shadows a case is invalid")
       (refute (listContains? (codesOf "(fn classify [(o (Option Int64))] -> Int64 (mt o ((some count) count) (none 0)))") "ERR_INVALID_MT_ARM") "a nested binder may reuse any name")
       (assert (listContains? (messagesWith "(module t :x [] :i [(priv :a p)]) (fn sealed [] -> Int64 1) (fn classify [] -> Bool (mt 3 (sealed false)))" (mapSet (mapEmpty) "/w/priv.asl" (summaryOf "(module priv :x [] :i []) (enum Hidden (:c sealed [] \"s\"))" "/w/priv.asl"))) "ERR_INVALID_MT_ARM mt arm has an invalid pattern head") "a module fn shadows a case of a dependency")
       true)

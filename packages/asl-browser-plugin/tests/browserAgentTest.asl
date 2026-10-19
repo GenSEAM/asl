@@ -3,10 +3,10 @@
   :i [(aslBrowserPlugin/safetyGate :a sg)])
 
 fn testBrowserPluginSourceIntegrity! -> Bool
-  (let [(bgRes (fileRead "asl/packages/asl-browser-plugin/src/background.asl"))
-        (cntRes (fileRead "asl/packages/asl-browser-plugin/src/content.asl"))
-        (sgRes (fileRead "asl/packages/asl-browser-plugin/src/safetyGate.asl"))
-        (rtRes (fileRead "asl/packages/asl-browser-plugin/src/runtime.asl"))]
+  (let [(bgRes (fileReadString "asl/packages/asl-browser-plugin/src/background.asl"))
+        (cntRes (fileReadString "asl/packages/asl-browser-plugin/src/content.asl"))
+        (sgRes (fileReadString "asl/packages/asl-browser-plugin/src/safetyGate.asl"))
+        (rtRes (fileReadString "asl/packages/asl-browser-plugin/src/runtime.asl"))]
     (mt bgRes
       ((err e1) (assert false (str "Failed to read background.asl: " e1)))
       ((ok bgSrc)
@@ -40,7 +40,7 @@ fn testBrowserPluginSourceIntegrity! -> Bool
     true)
 
 fn testBrowserPluginGrammarRegistration! -> Bool
-  (let [(gRes (fileRead "asl/packages/asl-browser-plugin/manifest.asn"))]
+  (let [(gRes (fileReadString "asl/packages/asl-browser-plugin/manifest.asn"))]
     (mt gRes
       ((err e) (assert false (str "Failed to read asl/packages/asl-browser-plugin/manifest.asn: " e)))
       ((ok gSrc)
@@ -68,7 +68,7 @@ fn testActionClassificationLogic -> Bool
     true)
 
 fn testMessageRoutingContracts! -> Bool
-  (mt (fileRead "asl/packages/asl-browser-plugin/src/background.asl")
+  (mt (fileReadString "asl/packages/asl-browser-plugin/src/background.asl")
     ((err e) (do (assert false (str "Failed to read background.asl: " e)) false))
     ((ok src)
      (do
@@ -81,8 +81,8 @@ fn testMessageRoutingContracts! -> Bool
        true)))
 
 fn testInPageAgentBridgeWithSafetyGate! -> Bool
-  (let [(cntRes (fileRead "asl/packages/asl-browser-plugin/src/content.asl"))
-        (bgRes (fileRead "asl/packages/asl-browser-plugin/src/background.asl"))]
+  (let [(cntRes (fileReadString "asl/packages/asl-browser-plugin/src/content.asl"))
+        (bgRes (fileReadString "asl/packages/asl-browser-plugin/src/background.asl"))]
     (mt cntRes
       ((err e) (assert false (str "Failed to read content.asl: " e)))
       ((ok cntSrc)

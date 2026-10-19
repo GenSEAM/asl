@@ -137,7 +137,7 @@ fn ! resolveHost repo: String -> (Option String)
                 (do (println (str "invalid environment variable: ASL_HOST path does not exist: " h))
                     (assert false (str "invalid environment variable: ASL_HOST path does not exist: " h))
                     (none))))
-    ((none) (let [p (resultOr (realPath "asl/host/out/asl-host") "asl/host/out/asl-host")]
+    ((none) (let [p (resultOr (realPath "bin/asl") "bin/asl")]
               (if (fileExists? p)
                 (some p)
                 (do (println (str "the stage-0 host is absent at " p "; build it with sh asl/host/build.sh or set ASL_HOST"))
@@ -438,6 +438,27 @@ fn ! checkSessionHeaderEmpty root: String -> Bool
       (check "OCSESSION: callProfile! sends no X-ASL-Session when cfg.sessionId is empty" "false"
         (if (stringContains? headers "x-asl-session") "true" "false"))))
 
+; (:m :ref FREEBULK-ROUTED-DEEPSEEK-20261017 :do "end-to-end gap: cfg/profilePinRead!/providerEnv! rootDir's own file-read was unit-tested in isolation (FREEPOOL-PROFILE-COLLISION) and the X-ASL-Profile header's send path was tested with a hand-given profile string (gw_profile_header, the session-header checks above) -- but every one of those tests builds ProviderEnv directly, bypassing providerEnv! itself, so nothing proved a freePool pin file's value actually reaches providerEnv!'s own :profile field through the real function for a real call. That is the exact gap a live FREEPOOL row hit: RETRY5/6/7 all resolved to deepseek/commandCode's default chain instead of freeBulk (PROFILE-PIN-NAME-20261018 renamed the pin file to .asl/gatewayProfilePin.asn, no longer free-pool-specific)")
+fn checkFreePoolProfilePin root: String -> Bool
+  (let [(stubDir (str root "/stub/freePoolProfilePin"))
+        (staged (setupStub stubDir "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}" "0" "" ""))
+        (_ (dirCreate (str root "/.asl")))
+        (_ (writeFile (str root "/.asl/gatewayProfilePin.asn") "(:profile \"freeBulk\")\n"))
+        (penv (pv/providerEnv! root))
+        (resolved penv.profile)
+        (env (envFor! root stubDir "stub" "http://127.0.0.1:8765/v1/chat/completions" resolved (str root "/none.asn")))
+        (made (pv/makeProvider! "agy" "scout" root "" 600 "gfreepool" 1200 true env "auto"))]
+    (match made
+      ((err e) (checkTrue (str "freePoolProfilePin provider made: " (pv/errorMessage e)) false))
+      ((ok p)
+        (let [(t (pv/nextTurn! p "s" "u"))
+              (config (resultOr (fileReadString (str stubDir "/stdin")) ""))
+              (headers (stringJoin (map headerRow (configRows config "header")) " | "))]
+          (and (checkTrue "freePoolProfilePin stub staged" staged)
+            (and (check "FREEBULK-ROUTED-DEEPSEEK: providerEnv! rootDir resolves :profile from the freePool pin file, not just the env var" "freeBulk" resolved)
+              (check "FREEBULK-ROUTED-DEEPSEEK: that resolved profile reaches the gateway as X-ASL-Profile" "true"
+                (if (stringContains? headers "x-asl-profile: freeBulk") "true" "false"))))))))
+
 fn ! checkFreshDir root: String -> Bool
   (let [(base (str root "/tmp"))
         (taken (ok? (dirCreate (str base "/aslFresh_same"))))
@@ -497,9 +518,10 @@ fn ! runTests -> Bool
            (intentPlan (checkIntentPlan root))
            (sessionHeader (checkSessionHeader root))
            (sessionHeaderEmpty (checkSessionHeaderEmpty root))
+           (freePoolProfilePin (checkFreePoolProfilePin root))
            (removed (ok? (pathRemove root)))]
        (and (checkTrue (str "the fixture holds at least 150 cases: " (stringFromInt64 (listLength lines))) (>= (listLength lines) 150))
          (and (checkTrue "scratch root and stub bin ready" ready)
            (and (checkTrue "every case passed"
-                  (and redirect (and temps (and freshOk (and intentPlan (and sessionHeader (and sessionHeaderEmpty (listAll? (fn [r] r) results))))))))
+                  (and redirect (and temps (and freshOk (and intentPlan (and sessionHeader (and sessionHeaderEmpty (and freePoolProfilePin (listAll? (fn [r] r) results)))))))))
              (checkTrue "scratch root removed" removed)))))))

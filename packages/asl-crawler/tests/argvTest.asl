@@ -12,7 +12,7 @@ fn childPassed out: String name: String -> Bool
   (listContains? (stringLines out) (checkLine name true))
 
 fn fileHas! path: String parts: (List String) -> Bool
-  (mt (fileRead path)
+  (mt (fileReadString path)
     ((err _) false)
     ((ok text) (listAll? (fn [(p String)] -> Bool (stringContains? text p)) parts)))
 

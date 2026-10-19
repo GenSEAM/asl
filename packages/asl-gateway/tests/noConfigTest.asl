@@ -59,7 +59,7 @@ fn ! runTests -> Bool
         (readyPath (str temp "/ready"))
         (command (str "exec " host " run " server " serve --port 0 --upstream http://127.0.0.1:" (stringFromInt64 providerPort) "/v1 --ready " readyPath " 2>" temp "/gateway.err"))
         (env (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" temp) (str "ASL_GATEWAY_ROOT=" temp)
-                   "OPENROUTER_API_KEY=fake-test-key" (str "OPENROUTER_BASE_URL=http://127.0.0.1:" (stringFromInt64 providerPort) "/v1")))
+                   "OPENROUTER_API_KEY=fake-test-key" (str "OPENROUTER_BASE_URL=http://127.0.0.1:" (stringFromInt64 providerPort) "/v1") (nativeCliCacheEnvRow!)))
         (spawned (procSpawnv (list "/bin/sh" "-c" command) (none) (some env)))
         (pid (mt spawned ((ok sp) sp.pid) ((err _) 0)))
         (gatewayPort (if (> pid 0) (waitPort! readyPath 500) 0))
@@ -88,4 +88,7 @@ fn ! waitPort! path: String attempts: Int64 -> Int64
       ((none) (do (sleepMs 20) (waitPort! path (- attempts 1))))))
 
 fn ! hostExe! -> String
-  (optionOr (envGet "ASL_HOST") (resultOr (realPath "asl/host/out/asl-host") "asl/host/out/asl-host"))
+  (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl"))
+
+fn ! nativeCliCacheEnvRow! -> String
+  (str "ASL_NATIVE_CLI_CACHE=" (optionOr (envGet "ASL_NATIVE_CLI_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli")))

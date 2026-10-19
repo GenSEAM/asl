@@ -3,7 +3,8 @@
   :i [(asl-syntax/tests/asl/layoutCorpusLib :a lay)
       (asl-parser/tests/printReparseLib :a pr)
       (asl-syntax/tests/asl/corpusCache :a cc)
-      (tools/fleet/run :a fr)])
+      (tools/fleet/run :a fr)
+      (asl-proc/runnerBin :a rb)])
 
 fn fixedFiles -> (List String)
   (list "asl/packages/asl-syntax/src/core/bytesText.asl"
@@ -71,23 +72,37 @@ fn testSecondRunHits! tmp: String fp: String -> Bool
       (assert (and (= off2.exitCode 0) (and (stringContains? off2.stdout "liftLower: cached=0") (stringContains? off2.stdout "bugs=0 cached=0"))) "ASL_CORPUS_CACHE=0 disables the cache: a repeated run hits nothing")
       (and (= lay2.cached n) (and (= pr2.cached n) (= coldCounts warmCounts)))))
 
+fn ! rawHost! root: String -> String
+  (rb/runnerBin! root)
+
+fn probeFile cwd: String -> String
+  (str cwd "/asl/packages/asl-parser/tests/corpusCacheProbe.asl")
+
+; (:m :ref CORPUSCACHE-CWD :do "snapshotProbe! and its siblings simulate a probe run from a distinct checkout (a cwd other than the real repo root); the native CLI's test verb only takes its fast native path when the invoking cwd equals ASL_CLI_ROOT, else it falls back to the legacy host dispatcher asl-host no longer provides, so these call the already-resolved native CLI binary directly (bypassing bin/asl, which would clobber ASL_CLI_ROOT back to its own script location) with ASL_CLI_ROOT set to the scratch cwd, making atRoot? true there; the probe path is read back through cwd's own symlinked asl/packages tree so module imports resolve under the new root; the wrapper's self-staleness rebuild gate is skipped too since it only fires when ASL_CLI_ENTRY_PID names the current process")
 fn snapshotProbe! root: String cwd: String home: String files: String -> ProcessOutput
-  (sh! (str "cd '" cwd "' && env -u ASL_CORPUS_CACHE HOME='" home "' CORPUS_CACHE_PROBE_FILES='" files "' '" (fr/nativeCliFor root) "' test '" root "/asl/packages/asl-parser/tests/corpusCacheProbe.asl' 2>&1"))
+  (sh! (str "cd '" cwd "' && env -u ASL_CORPUS_CACHE HOME='" home "' ASL_CLI_ROOT='" cwd "' CORPUS_CACHE_PROBE_FILES='" files "' '" (rawHost! root) "' test '" (probeFile cwd) "' 2>&1"))
 
 fn snapshotProbeNoHome! root: String cwd: String files: String -> ProcessOutput
-  (sh! (str "cd '" cwd "' && env -u ASL_CORPUS_CACHE -u HOME CORPUS_CACHE_PROBE_FILES='" files "' '" (fr/nativeCliFor root) "' test '" root "/asl/packages/asl-parser/tests/corpusCacheProbe.asl' 2>&1"))
+  (sh! (str "cd '" cwd "' && env -u ASL_CORPUS_CACHE -u HOME ASL_CLI_ROOT='" cwd "' CORPUS_CACHE_PROBE_FILES='" files "' '" (rawHost! root) "' test '" (probeFile cwd) "' 2>&1"))
 
 fn snapshotProbeEmptyHome! root: String cwd: String files: String -> ProcessOutput
-  (sh! (str "cd '" cwd "' && env -u ASL_CORPUS_CACHE HOME='' CORPUS_CACHE_PROBE_FILES='" files "' '" (fr/nativeCliFor root) "' test '" root "/asl/packages/asl-parser/tests/corpusCacheProbe.asl' 2>&1"))
+  (sh! (str "cd '" cwd "' && env -u ASL_CORPUS_CACHE HOME='' ASL_CLI_ROOT='" cwd "' CORPUS_CACHE_PROBE_FILES='" files "' '" (rawHost! root) "' test '" (probeFile cwd) "' 2>&1"))
 
 fn snapshotProbeEmptyCacheEnv! root: String cwd: String home: String files: String -> ProcessOutput
-  (sh! (str "cd '" cwd "' && ASL_CORPUS_CACHE='' HOME='" home "' CORPUS_CACHE_PROBE_FILES='" files "' '" (fr/nativeCliFor root) "' test '" root "/asl/packages/asl-parser/tests/corpusCacheProbe.asl' 2>&1"))
+  (sh! (str "cd '" cwd "' && ASL_CORPUS_CACHE='' HOME='" home "' ASL_CLI_ROOT='" cwd "' CORPUS_CACHE_PROBE_FILES='" files "' '" (rawHost! root) "' test '" (probeFile cwd) "' 2>&1"))
 
-fn probeFilesOnly! cwd: String -> ProcessOutput
-  (sh! (str "mkdir -p '" cwd "/probeFiles' && cp asl/packages/asl-syntax/src/core/bytesText.asl '" cwd "/probeFiles/bytesText.asl' && cp asl/packages/asl-syntax/src/core/print.asl '" cwd "/probeFiles/print.asl' && cp asl/packages/asl-syntax/src/core/outline.asl '" cwd "/probeFiles/outline.asl'"))
+fn linkFullTree cwd: String root: String -> String
+  (str "mkdir -p '" cwd "/asl' '" cwd "/asl/packages' && ln -s '" root "/.asl.config.asn' '" cwd "/.asl.config.asn' && ln -s '" root "/asl/prelude' '" cwd "/asl/prelude' && ln -s '" root "/asl/host' '" cwd "/asl/host' && ln -s '" root "/asl/packages/asl-parser' '" cwd "/asl/packages/asl-parser' && ln -s '" root "/asl/packages/asl-syntax' '" cwd "/asl/packages/asl-syntax' && ln -s '" root "/asl/packages/asl-json' '" cwd "/asl/packages/asl-json' && ln -s '" root "/asl/packages/asl-forms' '" cwd "/asl/packages/asl-forms'")
+
+fn linkProbeFiles cwd: String -> String
+  (str "mkdir -p '" cwd "/probeFiles' && cp asl/packages/asl-syntax/src/core/bytesText.asl '" cwd "/probeFiles/bytesText.asl' && cp asl/packages/asl-syntax/src/core/print.asl '" cwd "/probeFiles/print.asl' && cp asl/packages/asl-syntax/src/core/outline.asl '" cwd "/probeFiles/outline.asl'")
+
+; (:m :ref CORPUSCACHE-MISSINGROOTS :do "links everything compiling the probe needs (prelude, host/out for libaslrt.a, the parser/syntax/json/forms packages) but not asl/seed, which cc/defaultRoots also fingerprints and nothing here imports at compile time, so availableLines! still reports a missing root and the cache stays disabled while the probe itself still compiles and runs")
+fn probeFilesOnly! root: String cwd: String -> ProcessOutput
+  (sh! (str (linkFullTree cwd root) " && " (linkProbeFiles cwd)))
 
 fn snapshotFiles! root: String cwd: String -> ProcessOutput
-  (sh! (str "mkdir -p '" cwd "/asl' '" cwd "/asl/packages' && ln -s '" root "/asl/prelude' '" cwd "/asl/prelude' && ln -s '" root "/asl/host' '" cwd "/asl/host' && ln -s '" root "/asl/packages/asl-parser' '" cwd "/asl/packages/asl-parser' && ln -s '" root "/asl/packages/asl-syntax' '" cwd "/asl/packages/asl-syntax' && ln -s '" root "/asl/packages/asl-json' '" cwd "/asl/packages/asl-json' && ln -s '" root "/asl/packages/asl-forms' '" cwd "/asl/packages/asl-forms' && mkdir -p '" cwd "/probeFiles' && cp asl/packages/asl-syntax/src/core/bytesText.asl '" cwd "/probeFiles/bytesText.asl' && cp asl/packages/asl-syntax/src/core/print.asl '" cwd "/probeFiles/print.asl' && cp asl/packages/asl-syntax/src/core/outline.asl '" cwd "/probeFiles/outline.asl'"))
+  (sh! (str (linkFullTree cwd root) " && ln -s '" root "/asl/seed' '" cwd "/asl/seed' && " (linkProbeFiles cwd)))
 
 fn testDefaultSnapshotCache! tmp: String -> Bool
   (let [(root (stringTrim (sh! "pwd").stdout))
@@ -151,7 +166,7 @@ fn testMissingRootsDisableCache! tmp: String root: String files: String -> Bool
   (let [(cwd (str tmp "/missingRoots"))
         (home (str tmp "/missingRootsHome"))
         (made (sh! (str "mkdir -p '" cwd "' '" home "'")))
-        (copied (probeFilesOnly! cwd))
+        (copied (probeFilesOnly! root cwd))
         (first (snapshotProbe! root cwd home files))
         (second (snapshotProbe! root cwd home files))
         (cachePath (str home "/.asl/run/corpusCache"))]
@@ -179,8 +194,8 @@ fn ! testDefaultRootCoverage! tmp: String -> Bool
                        "asl/packages/asl-syntax/tests/asl/layoutCorpusLib.asl"
                        "asl/packages/asl-syntax/tests/asl/corpusCache.asl"
                        "asl/prelude/prelude.asl"
-                       "asl/host/src/loader.c"
-                       "asl/host/out/asl-host"
+                       "asl/seed/seed.asn"
+                       "asl/host/out/libaslrt.a"
                        "asl/packages/asl-json/src/json.asl"
                        "asl/packages/asl-forms/src/main.asl"))
         (uncovered (filter (fn [(path String)] -> Bool (not (pathCoveredByRoots? roots path))) closure))

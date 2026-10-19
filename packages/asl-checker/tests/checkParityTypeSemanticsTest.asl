@@ -1,6 +1,6 @@
 (module asl-checker/checkParityTypeSemanticsTest
   :x [runTests]
-  :i [(asl-checker/types :a ty) (asl-checker/unify :a u) (asl-checker/check :a c)])
+  :i [(asl-checker/types :a ty) (asl-checker/unify :a u) (asl-checker/check :a c) (asl-proc/jobPool :a jp)])
 
 fn sigText res: (Option (Pair (List String) (Pair Bool String))) -> String
   (mt res
@@ -132,12 +132,17 @@ fn testBodyDiagnosticColumnShift -> Bool
       ((some d) (and (= d.line 4) (= d.col 4)))
       ((none) false)))
 
-fn testEffectDiagnosticColumnShift -> Bool
-  (let [(ds (c/checkSource "(module m :x [f])\n\nfn f [] -> Int64\n  (println \"hi\")\n" (mapEmpty) "m.asl"))
-        (rule12Diags (filter (fn [(d ty/Diagnostic)] -> Bool (= d.code "rule-12")) ds))]
-    (mt (listHead rule12Diags)
-      ((some d) (and (= d.line 4) (= d.col 4)))
-      ((none) false)))
+; (:m :ref EFFECT-INFER :do "rule-12 only fires inside a :pure package now, so this probe needs a real manifest.asn to climb to")
+fn ! testEffectDiagnosticColumnShift -> Bool
+  (let [(made (jp/runOne (jp/job (list "mktemp" "-d") "." (jp/childEnv (list))))) (dir (stringReplace made.out "\n" ""))
+        (wrote (fileWrite (str dir "/manifest.asn") "(:package columnshift :pure true)\n"))
+        (ds (c/checkSource "(module m :x [f])\n\nfn f [] -> Int64\n  (println \"hi\")\n" (mapEmpty) (str dir "/m.asl")))
+        (rule12Diags (filter (fn [(d ty/Diagnostic)] -> Bool (= d.code "rule-12")) ds))
+        (result (mt (listHead rule12Diags)
+                  ((some d) (and (= d.line 4) (= d.col 4)))
+                  ((none) false)))
+        (cleaned (jp/runOne (jp/job (list "rm" "-rf" dir) "." (jp/childEnv (list)))))]
+    (and (ok? wrote) result))
 
 fn builtinValueProgram name: String -> String
   (str "(module m :x [f]) (fn f [] -> Int64 (let [(g " name ")] 0))")

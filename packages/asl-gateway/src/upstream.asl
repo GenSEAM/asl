@@ -46,21 +46,20 @@
       getUpstreamForModelIn
       upstreamTimeoutSec
       upstreamTimeoutSecIn
+      upstreamFirstByteSec
+      upstreamFirstByteSecIn
       makeTokenBucket
+      takeToken
       tokenBucketBegin
       tokenBucketFinish
       tokenBucketAcquire!
       emptyBucketRegistry
+      bucketKey
       geminiBucket
       bucketRegistryPut
       bucketRegistrySize
       geminiAcquire!
-      reasoningModels
-      coderCascade
-      plannerCascade
-      tokenFloorRoles
       minTokenFloor
-      modelTokenFloors
       replyCeiling
       roleTokenPolicyTable
       emptyContentRetries
@@ -68,12 +67,22 @@
       roleTokenPolicy
       emptyContentAction
       isEmptyContent?
+      looksProviderWideQuota?
+      looksTransientText?
+      retryableHttpStatus?
+      parseCurlExitCode
+      retryableTransportCode?
+      retryableRaised?
+      retryDelayMs
       isReasoningModel?
       prepareRequestPayload
       applyHarnessPolicy
       headerGet
+      headerPut
       harnessMode
       upstreamRequest
+      anthropicApiVersion
+      anthropicUpstreamRequest
       withSessionHeader
       childEnv
       curlArgv
@@ -90,7 +99,11 @@
       upstreamCallPump!
       upstreamCallFinish!
       upstreamCallAbort!
-      callUpstream!]
+      firstByteCapSec
+      upstreamCallLoop!
+      callUpstream!
+      wallSeconds!
+      ceilMs]
   :i [(asl-json/json :a j)])
 
 (schema UpstreamSettings
@@ -115,7 +128,8 @@
   (:f names (List String))
   (:f url (fn [UpstreamSettings (Map String String)] -> String))
   (:f key (fn [UpstreamSettings (Map String String)] -> String))
-  (:f timeoutSec (fn [UpstreamSettings] -> Float64)))
+  (:f timeoutSec (fn [UpstreamSettings] -> Float64))
+  (:f firstByteSec (fn [UpstreamSettings] -> Float64)))
 
 (schema TokenBucket
   (:f rate Float64)
@@ -146,12 +160,13 @@
 (schema UpstreamResponse
   (:f status Int64)
   (:f reason String)
-  (:f body String))
+  (:f body String)
+  (:f headers (List (Pair String String))))
 
 (enum UpstreamFailure
   (:c toolAbsent [(tool String) (detail String)])
   (:c transportFailure [(exitCode Int64) (stderr String)])
-  (:c httpFailure [(status Int64) (reason String) (body String)])
+  (:c httpFailure [(status Int64) (reason String) (body String) (headers (List (Pair String String)))])
   (:c protocolFailure [(detail String)]))
 
 (schema PipeState
@@ -461,11 +476,16 @@ fn oneOf? s: String xs: (List String) -> Bool
 fn defaultTimeoutSec st: UpstreamSettings -> Float64
   45.0
 
+; (:m :do "0.0 is the same unconfigured sentinel firstByteCapSec reads everywhere: none of these built-in rows name a :firstByteSec of their own, so every one of them takes firstByteCapSec's 60s floor default")
+fn unconfiguredFirstByteSec st: UpstreamSettings -> Float64
+  0.0
+
 fn cliProviderRow id: String url: String prefixes: (List String) names: (List String) -> UpstreamProvider
   (UpstreamProvider :id id :prefixes prefixes :names names
     :url (fn [(st UpstreamSettings) (env (Map String String))] -> String url)
     :key (fn [(st UpstreamSettings) (env (Map String String))] -> String "")
-    :timeoutSec defaultTimeoutSec)
+    :timeoutSec defaultTimeoutSec
+    :firstByteSec unconfiguredFirstByteSec)
 
 fn upstreamProviders -> (List UpstreamProvider)
   (list
@@ -476,21 +496,25 @@ fn upstreamProviders -> (List UpstreamProvider)
     (UpstreamProvider :id "gemini" :prefixes (list "gemini-") :names (list)
       :url (fn [(st UpstreamSettings) (env (Map String String))] -> String st.geminiUrl)
       :key (fn [(st UpstreamSettings) (env (Map String String))] -> String (envGetOr env "GEMINI_API_KEY" st.geminiKey))
-      :timeoutSec defaultTimeoutSec)
+      :timeoutSec defaultTimeoutSec
+      :firstByteSec unconfiguredFirstByteSec)
     (UpstreamProvider :id "ollama" :prefixes (list "ollama/") :names (list)
       :url (fn [(st UpstreamSettings) (env (Map String String))] -> String st.ollamaUrl)
       :key (fn [(st UpstreamSettings) (env (Map String String))] -> String (envGetOr env "OLLAMA_API_KEY" ""))
-      :timeoutSec (fn [(st UpstreamSettings)] -> Float64 st.ollamaTimeoutSec))
+      :timeoutSec (fn [(st UpstreamSettings)] -> Float64 st.ollamaTimeoutSec)
+      :firstByteSec unconfiguredFirstByteSec)
     (UpstreamProvider :id "groq" :prefixes (list "groq/" "qwen/") :names (list "groq" "qwen" "groq-qwen" "qwen-groq")
       :url (fn [(st UpstreamSettings) (env (Map String String))] -> String (envGetOr env "GROQ_BASE_URL" st.groqUrl))
       :key (fn [(st UpstreamSettings) (env (Map String String))] -> String (envGetOr env "GROQ_API_KEY" st.groqKey))
-      :timeoutSec defaultTimeoutSec))
+      :timeoutSec defaultTimeoutSec
+      :firstByteSec unconfiguredFirstByteSec))
 
 fn upstreamFallback -> UpstreamProvider
   (UpstreamProvider :id "openrouter" :prefixes (list) :names (list)
     :url (fn [(st UpstreamSettings) (env (Map String String))] -> String st.url)
     :key (fn [(st UpstreamSettings) (env (Map String String))] -> String st.key)
-    :timeoutSec defaultTimeoutSec)
+    :timeoutSec defaultTimeoutSec
+    :firstByteSec unconfiguredFirstByteSec)
 
 fn providerClaims? row: UpstreamProvider m: String -> Bool
   (or (listAny? (fn [(prefix String)] -> Bool (stringStartsWith? m prefix)) row.prefixes)
@@ -519,6 +543,15 @@ fn upstreamTimeoutSecIn providers: (List UpstreamProvider) st: UpstreamSettings 
   (mt (upstreamProviderNamed providers provider)
     ((some row) (row.timeoutSec st))
     ((none) 45.0))
+
+; (:m :do "0.0 (same as an unnamed provider) means nothing configured a :firstByteSec for this provider; firstByteCapSec reads that as its own 60s floor default, never a second hardcoded literal here")
+fn upstreamFirstByteSecIn providers: (List UpstreamProvider) st: UpstreamSettings provider: String -> Float64
+  (mt (upstreamProviderNamed providers provider)
+    ((some row) (row.firstByteSec st))
+    ((none) 0.0))
+
+fn upstreamFirstByteSec st: UpstreamSettings provider: String -> Float64
+  (upstreamFirstByteSecIn (upstreamProviders) st provider)
 
 fn upstreamTimeoutSec st: UpstreamSettings provider: String -> Float64
   (upstreamTimeoutSecIn (upstreamProviders) st provider)
@@ -606,27 +639,8 @@ fn ! geminiAcquire! reg: BucketRegistry model: String rpm: Float64 timeout: Floa
         (res (tokenBucketAcquire! (pairSecond got) timeout))]
     (pair (bucketRegistryPut (pairFirst got) model rpm (pairFirst res)) (pairSecond res)))
 
-fn reasoningModels -> (List String)
-  (list "cohere/north-mini-code:free" "google/gemma-4-26b-a4b-it:free" "google/gemma-4-31b-it:free" "liquid/lfm-2.5-2.6b:free"
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free" "nvidia/nemotron-3-super-120b-a12b:free" "nvidia/nemotron-3-ultra-550b-a55b:free"
-        "poolside/laguna-s-2.1:free" "poolside/laguna-xs-2.1:free")
-
-fn coderCascade -> (List String)
-  (list "groq/qwen/qwen3.8-27b" "gemini-3.8-flash" "poolside/laguna-s-2.1:free" "cohere/north-mini-code:free" "poolside/laguna-xs-2.1:free"
-        "google/gemma-4-31b-it:free" "google/gemma-4-26b-a4b-it:free" "qwen/qwen3.8-27b:free")
-
-fn plannerCascade -> (List String)
-  (list "gemini-3.8-flash" "groq/qwen/qwen3.8-27b" "nvidia/nemotron-3-ultra-550b-a55b:free" "nvidia/nemotron-3-super-120b-a12b:free"
-        "z-ai/glm-5.2:free" "nex-agi/nex-n2.5-pro:free")
-
-fn tokenFloorRoles -> (List String)
-  (list "coder" "planner")
-
 fn minTokenFloor -> Int64
   1500
-
-fn modelTokenFloors -> (List (Pair String Int64))
-  (list (pair "ollama/glm" 32768) (pair "glm-" 32768))
 
 fn replyCeiling mode: String -> (Option Int64)
   (cond
@@ -677,17 +691,64 @@ fn isEmptyContent? content: j/Json -> Bool
     ((j/jstr s) (stringEmpty? (pyStrip s)))
     (_ false))
 
-fn stripModelPrefixes model: String -> String
-  (let [(a (if (stringStartsWith? model "openai/") (slice model 7 (stringLength model)) model))]
-    (if (stringStartsWith? a "openrouter/") (slice a 11 (stringLength a)) a))
+; (:m :tags (retry) :do "duplicated from breaker.breakerIsProviderWideQuota (not imported, to keep upstream.asl free of a breaker dependency); keep both in sync")
+fn looksProviderWideQuota? body: String -> Bool
+  (let [(t (stringUpper body))]
+    (or (stringContains? t "INSUFFICIENT_QUOTA")
+      (or (stringContains? t "BILLING")
+        (and (stringContains? t "ACCOUNT") (stringContains? t "QUOTA")))))
 
-fn isReasoningModel? model: String -> Bool
-  (or (oneOf? model (reasoningModels))
-      (or (stringContains? (pyLower model) "reasoning")
-          (or (stringStartsWith? model "ollama/glm")
-              (or (stringStartsWith? model "glm-")
-                  (or (oneOf? model (coderCascade))
-                      (or (oneOf? model (plannerCascade)) (oneOf? model (tokenFloorRoles))))))))
+fn looksTransientText? body: String -> Bool
+  (let [(t (pyLower body))]
+    (or (stringContains? t "temporarily unavailable")
+      (or (stringContains? t "overloaded")
+        (stringContains? t "rate limit"))))
+
+; (:m :tags (retry) :do "429 retries only when the body reads as a transient per-model hiccup (not an account-wide quota/billing marker); 502/503/504 always retry; anything else does not")
+fn retryableHttpStatus? status: Int64 body: String -> Bool
+  (cond
+    ((= status 429) (and (not (looksProviderWideQuota? body)) (looksTransientText? body)))
+    ((or (= status 502) (or (= status 503) (= status 504))) true)
+    (else false))
+
+; (:m :tags (retry) :do "server.asl's failureReply renders a transportFailure as httpRaised false (str \"curl exit \" code \": \" stderr); this re-extracts the curl exit code from that text so chat.asl's raised can classify it without a new effect field")
+fn parseCurlExitCode text: String -> (Option Int64)
+  (if (not (stringStartsWith? text "curl exit "))
+    none
+    (let [(rest (slice text 10 (stringLength text)))
+          (i (stringIndexOf rest ":"))
+          (codeText (pyStrip (mt i ((some k) (slice rest 0 k)) ((none) rest))))]
+      (stringToInt64 codeText)))
+
+fn retryableTransportCode? code: Int64 -> Bool
+  (listContains? (list 7 52 56) code)
+
+fn retryableRaised? timeoutFlag: Bool text: String -> Bool
+  (or timeoutFlag
+    (mt (parseCurlExitCode text) ((some c) (retryableTransportCode? c)) ((none) false)))
+
+fn fracPart f: Float64 -> Float64
+  (- f (int64ToFloat64 (optionOr (float64ToInt64 f) 0)))
+
+fn pow2 n: Int64 -> Int64
+  (if (<= n 0) 1 (* 2 (pow2 (- n 1))))
+
+fn expBackoffMs baseMs: Int64 capMs: Int64 attemptNum: Int64 -> Int64
+  (let [(raw (* baseMs (pow2 (- attemptNum 1))))]
+    (if (> raw capMs) capMs raw))
+
+; (:m :tags (retry) :do "honours Retry-After exactly (capped); otherwise full-jitter exponential backoff, baseMs*2^(attempt-1) capped at capMs, scaled by the fractional part of jitterClock (an already-fetched wall-clock reading) so the delay is deterministic given the same clock in a test and decorrelated across concurrent callers in production")
+fn retryDelayMs baseMs: Int64 capMs: Int64 attemptNum: Int64 retryAfterSec: (Option Float64) jitterClock: Float64 -> Int64
+  (mt retryAfterSec
+    ((some s) (max 1 (let [(ms (ceilMs s))] (if (> ms capMs) capMs ms))))
+    ((none)
+     (let [(expMs (expBackoffMs baseMs capMs attemptNum))
+           (frac (fracPart jitterClock))]
+       (max 1 (optionOr (float64ToInt64 (* frac (int64ToFloat64 expMs))) 0)))))
+
+; (:m :do "GW-UPSTREAM-TABLES, rule LEON-ROLE/gateway-config-in-home: no model-name knowledge in code at all, not even a name-pattern fallback -- the floor applies only when the caller's own request body says :reasoning or the resolved model's config row (GatewayParams.reasoning) does; absent both, there is no floor and no guess")
+fn isReasoningModel? requestReasoning: (Option Bool) configReasoning: (Option Bool) -> Bool
+  (or (optionOr requestReasoning false) (optionOr configReasoning false))
 
 fn objGet kvs: (List (Pair String j/Json)) k: String -> (Option j/Json)
   (mt (listHead kvs)
@@ -698,6 +759,12 @@ fn objSet kvs: (List (Pair String j/Json)) k: String v: j/Json -> (List (Pair St
   (if (some? (objGet kvs k))
     (map (fn [(p (Pair String j/Json))] -> (Pair String j/Json) (if (= (pairFirst p) k) (pair k v) p)) kvs)
     (listAppend kvs (list (pair k v))))
+
+fn objDel kvs: (List (Pair String j/Json)) k: String -> (List (Pair String j/Json))
+  (filter (fn [(p (Pair String j/Json))] -> Bool (!= (pairFirst p) k)) kvs)
+
+fn boolOf v: j/Json -> (Option Bool)
+  (mt v ((j/jbool b) (some b)) (_ none))
 
 fn asFloat v: j/Json -> Float64
   (mt v
@@ -717,11 +784,6 @@ fn numberOf v: j/Json -> (Option j/Json)
     ((j/jfloat _) (some v))
     ((j/jnum _) (some v))
     (_ none))
-
-fn modelFloor model: String base: Int64 -> Int64
-  (fold (fn [(acc Int64) (p (Pair String Int64))] -> Int64
-          (if (and (stringStartsWith? model (pairFirst p)) (> (pairSecond p) acc)) (pairSecond p) acc))
-        base (modelTokenFloors))
 
 fn typeName v: j/Json -> String
   (mt v
@@ -744,20 +806,21 @@ fn cappedTokens asked: (Option j/Json) pol: (Option RoleTokenPolicy) floor: Int6
         (let [(cap (j/jint (max p.hardCap floor)))]
           (some (if (numberLess? cap v) cap v)))))))
 
-fn prepareRequestPayload payload: j/Json role: (Option String) -> (Result j/Json String)
+; (:m :do "a client may set :reasoning on the request body itself (an ASL-Gateway extension, never forwarded upstream -- objDel strips it before dispatch either way); it is one of the two signals isReasoningModel? ORs together, the other being the caller-resolved model config answer")
+fn prepareRequestPayload payload: j/Json role: (Option String) configReasoning: (Option Bool) -> (Result j/Json String)
   (mt payload
     ((j/jobj kvs)
      (let [(modelVal (optionOr (objGet kvs "model") (j/jstr "")))]
        (mt modelVal
          ((j/jstr raw)
-          (let [(model (stripModelPrefixes raw))
+          (let [(requestReasoning (mt (objGet kvs "reasoning") ((none) none) ((some v) (boolOf v))))
+                (kvs2 (if (some? (objGet kvs "reasoning")) (objDel kvs "reasoning") kvs))
                 (pol (roleTokenPolicy role))
-                (base (if (isReasoningModel? model) (mt pol ((some p) p.floorIfReasoning) ((none) (minTokenFloor))) 0))
-                (floor (modelFloor model base))
-                (asked (mt (objGet kvs "max_tokens") ((some v) (numberOf v)) ((none) none)))]
+                (floor (if (isReasoningModel? requestReasoning configReasoning) (mt pol ((some p) p.floorIfReasoning) ((none) (minTokenFloor))) 0))
+                (asked (mt (objGet kvs2 "max_tokens") ((some v) (numberOf v)) ((none) none)))]
             (mt (cappedTokens asked pol floor)
-              ((none) (ok (if (> floor 0) (j/jobj (objSet kvs "max_tokens" (j/jint floor))) payload)))
-              ((some v) (ok (j/jobj (objSet kvs "max_tokens" (if (numberLess? (j/jint floor) v) v (j/jint floor)))))))))
+              ((none) (ok (if (> floor 0) (j/jobj (objSet kvs2 "max_tokens" (j/jint floor))) (j/jobj kvs2))))
+              ((some v) (ok (j/jobj (objSet kvs2 "max_tokens" (if (numberLess? (j/jint floor) v) v (j/jint floor)))))))))
          (_ (err (str "AttributeError: '" (typeName modelVal) "' object has no attribute 'startswith'"))))))
     (_ (ok payload)))
 
@@ -882,6 +945,22 @@ fn upstreamRequest url: String path: String key: String data: String clientHeade
         (h3 (if (stringContains? url "openrouter.ai")
               (headerPut (headerPut h2 "HTTP-Referer" "https://aslang.dev") "X-Title" "ASL Gateway (OpenRouter Free Pool)")
               h2))]
+    (if (hasScheme? base)
+      (ok (UpstreamRequest :url base :fragment fragment :method "POST" :headers h3 :data data))
+      (err (str "ValueError: unknown url type: " full))))
+
+fn anthropicApiVersion -> String
+  "2023-06-01"
+
+; (:m :tags (anthropic) :do "the Anthropic Messages API authenticates with x-api-key plus anthropic-version, never Authorization: Bearer; kept as a sibling of upstreamRequest instead of a branch inside it since upstreamRequest's signature and behavior are pinned by upstreamParityTest.asl/upstreamParityFixtures.asn")
+fn anthropicUpstreamRequest url: String path: String key: String data: String clientHeaders: (List (Pair String String)) -> (Result UpstreamRequest String)
+  (let [(full (unwrapUrl (str url path)))
+        (hashAt (lastIndexOf full "#" (- (stringLength full) 1)))
+        (base (if (>= hashAt 0) (slice full 0 hashAt) full))
+        (fragment (if (>= hashAt 0) (slice full (+ hashAt 1) (stringLength full)) ""))
+        (h1 (forwardHeaders (headerPut (list) "User-Agent" "ASL-Gateway/1.0 (Darwin; macOS)") clientHeaders))
+        (h2 (headerPut h1 "Anthropic-Version" (anthropicApiVersion)))
+        (h3 (if (stringEmpty? key) h2 (headerPut h2 "X-Api-Key" key)))]
     (if (hasScheme? base)
       (ok (UpstreamRequest :url base :fragment fragment :method "POST" :headers h3 :data data))
       (err (str "ValueError: unknown url type: " full))))
@@ -1017,16 +1096,29 @@ fn statusCode line: String -> (Option (Pair Int64 String))
          ((some c) (if (and (= (stringLength codeText) 3) (>= c 100)) (some (pair c reason)) none))
          ((none) none)))))
 
+; (:m :tags (retry) :do "curl's --include prints the response headers it would otherwise discard; a line with no ':' (there should be none, but a malformed proxy is not this parser's problem to reject) is skipped rather than failing the whole response")
+fn httpHeaderLinePair line: String -> (Option (Pair String String))
+  (mt (stringIndexOf line ":")
+    ((none) none)
+    ((some at) (some (pair (stringTrim (optionOr (stringSlice line 0 at) ""))
+                           (stringTrim (optionOr (stringSlice line (+ at 1) (stringLength line)) ""))))))
+
+fn httpHeaderLines block: String -> (List (Pair String String))
+  (fold (fn [(acc (List (Pair String String))) (line String)] -> (List (Pair String String))
+          (mt (httpHeaderLinePair line) ((some p) (listAppend acc (list p))) ((none) acc)))
+    (list) (stringSplit block "\r\n"))
+
 fn afterHeaders raw: String eol: Int64 sc: (Pair Int64 String) -> (Result UpstreamResponse String)
   (let [(afterStatus (slice raw eol (stringLength raw)))]
     (mt (stringIndexOf afterStatus "\r\n\r\n")
       ((none) (err "curl output header block is unterminated"))
       ((some end)
-       (let [(body (slice afterStatus (+ end 4) (stringLength afterStatus)))]
+       (let [(headers (httpHeaderLines (slice afterStatus 2 end)))
+             (body (slice afterStatus (+ end 4) (stringLength afterStatus)))]
          (if (or (and (>= (pairFirst sc) 100) (< (pairFirst sc) 200))
                  (and (>= (pairFirst sc) 300) (and (< (pairFirst sc) 400) (stringStartsWith? body "HTTP/"))))
            (parseCurlOutput body)
-           (ok (UpstreamResponse :status (pairFirst sc) :reason (pairSecond sc) :body body)))))))
+           (ok (UpstreamResponse :status (pairFirst sc) :reason (pairSecond sc) :body body :headers headers)))))))
 
 fn parseCurlOutput raw: String -> (Result UpstreamResponse String)
   (if (not (stringStartsWith? raw "HTTP/"))
@@ -1107,7 +1199,7 @@ fn curlOutcome code: Int64 out: String errText: String -> (Result UpstreamRespon
       ((ok resp)
        (if (and (>= resp.status 200) (< resp.status 300))
          (ok resp)
-         (err (httpFailure resp.status resp.reason resp.body))))))
+         (err (httpFailure resp.status resp.reason resp.body resp.headers))))))
 
 fn ! finishCurl! sp: SpawnedProc st: PipeState -> (Result UpstreamResponse UpstreamFailure)
   (mt (procWaitPid sp.pid false)
@@ -1155,17 +1247,32 @@ fn ! upstreamCallPump! call: UpstreamCall ready: (List (Pair Int64 Int64)) -> (R
 fn ! upstreamCallFinish! call: UpstreamCall -> (Result UpstreamResponse UpstreamFailure)
   (finishCurl! call.process call.pipe)
 
-fn ! upstreamCallLoop! call: UpstreamCall -> (Result UpstreamResponse UpstreamFailure)
+; (:m :tags (retry) :do "GW-RETRY-OCGO-HANG: curl's own stall guard (curlConfigFollowing's speed-time/speed-limit) uses speed-time == the full per-attempt timeoutSec, so a provider that accepts the connection and sends zero bytes is invisible to curl until the ENTIRE timeout elapses -- e.g. 900s for a reasoning model's :timeoutSec -- well past any bench or outer caller's own deadline, and nothing is logged while fdPoll blocks (-1, no bound of its own). A separate, shorter first-byte deadline, never longer than the attempt's own timeout, fails fast on a totally silent connection and reports it as (transportFailure 28 ...), the exact shape failureReply already maps to httpRaised true (curl's own CURLE_OPERATION_TIMEDOUT exit code), so the existing :retry policy (retryableRaised? treats a timeout flag as always retryable) picks it up with no further changes. Once any byte of the response has arrived, curl's own speed-limit governs the rest -- this deadline only guards the silent-from-the-start case. configuredFirstByteSec is the caller's resolved :firstByteSec from the gateway config (model override, else provider default); 0.0 means neither set one, in which case 60s is the floor default -- never a bare literal at the call site")
+fn firstByteCapSec timeoutSec: Float64 configuredFirstByteSec: Float64 -> Float64
+  (let [(wanted (if (> configuredFirstByteSec 0.0) configuredFirstByteSec 60.0))]
+    (pyMin timeoutSec wanted))
+
+fn ! upstreamCallLoop! call: UpstreamCall firstByteDeadline: Float64 -> (Result UpstreamResponse UpstreamFailure)
   (if (not (upstreamCallOpen? call))
     (upstreamCallFinish! call)
-    (mt (fdPoll (upstreamCallWatch call) -1)
-      ((err e) (do (upstreamCallAbort! call) (err (protocolFailure (str "curl pipe poll: " e)))))
-      ((ok ready)
-       (mt (upstreamCallPump! call ready)
-         ((err e) (err e))
-         ((ok next) (upstreamCallLoop! next))))))
+    (if (not (listEmpty? call.pipe.out))
+      (mt (fdPoll (upstreamCallWatch call) -1)
+        ((err e) (do (upstreamCallAbort! call) (err (protocolFailure (str "curl pipe poll: " e)))))
+        ((ok ready)
+         (mt (upstreamCallPump! call ready)
+           ((err e) (err e))
+           ((ok next) (upstreamCallLoop! next firstByteDeadline)))))
+      (let [(remainSec (- firstByteDeadline (wallSeconds!)))]
+        (if (<= remainSec 0.0)
+          (do (upstreamCallAbort! call) (err (transportFailure 28 "no response bytes within the first-byte deadline")))
+          (mt (fdPoll (upstreamCallWatch call) (ceilMs remainSec))
+            ((err e) (do (upstreamCallAbort! call) (err (protocolFailure (str "curl pipe poll: " e)))))
+            ((ok ready)
+             (mt (upstreamCallPump! call ready)
+               ((err e) (err e))
+               ((ok next) (upstreamCallLoop! next firstByteDeadline)))))))))
 
-fn ! callUpstream! req: UpstreamRequest env: (Map String String) timeoutSec: Float64 -> (Result UpstreamResponse UpstreamFailure)
+fn ! callUpstream! req: UpstreamRequest env: (Map String String) timeoutSec: Float64 configuredFirstByteSec: Float64 -> (Result UpstreamResponse UpstreamFailure)
   (mt (upstreamCallStart! req env timeoutSec)
     ((err e) (err e))
-    ((ok call) (upstreamCallLoop! call)))
+    ((ok call) (upstreamCallLoop! call (+ (wallSeconds!) (firstByteCapSec timeoutSec configuredFirstByteSec)))))

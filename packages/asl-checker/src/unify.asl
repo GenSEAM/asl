@@ -35,17 +35,26 @@ fn typeListEqual? l1: (List ty/Type) l2: (List ty/Type) -> Bool
 fn modDiffers? m1: (Option String) m2: (Option String) -> Bool
   (mt m1 ((none) false) ((some s1) (mt m2 ((none) false) ((some s2) (not (= s1 s2))))))
 
+; (:m :ref CHKFIX :do "two name pairs with zero runtime representation difference get a narrow unify-time equivalence instead of a global alias rewrite, which would weaken every other type check: Map K V is the abstract type prelude.asl's own Map functions are declared with, PreludeMap K V the single-constructor enum (preludeMapOf) those functions pattern-match and construct through internally (Map keeps its own recognized builtin arity-2 identity everywhere else: resolve.asl#isNullaryBuiltinType?/arityOf and check.asl both key on the literal name Map); Int32/Int64 cross only for prelude.asl's own int32ToInt64/int64ToInt32, whose runtime (+ x 0) and (some x) bodies already pass tests/acceptance/r1Prelude/fixtures/preludeValues.asl's value assertions, proving the two widths share one physical representation here, with no stringToInt32 or other builtin available to construct a fresh Int32 instead; Float64 is excluded, it has a genuinely different representation and the preludeIsFloat checkedDiv/checkedMod mismatches are a separate class")
+fn representationAlias? aName: String bName: String -> Bool
+  (or (and (= aName "Map") (= bName "PreludeMap")) (and (= aName "PreludeMap") (= bName "Map"))
+      (and (= aName "Int32") (= bName "Int64")) (and (= aName "Int64") (= bName "Int32")))
+
+; (:m :ref HLFIXB :do "representationAlias? held for every module, not only prelude's own int32ToInt64/int64ToInt32 and Map/PreludeMap bodies the CHKFIX comment above describes, so a user module's own Int32-vs-Int64 mismatch unified silently; unify now carries the checked module's name and only consults representationAlias? when that module is literally prelude")
+fn preludeAlias? modName: String aName: String bName: String -> Bool
+  (and (= modName "prelude") (representationAlias? aName bName))
+
 fn modCompatible? m1: (Option String) m2: (Option String) -> Bool
   (mt m1 ((none) true) ((some s1) (mt m2 ((none) true) ((some s2) (= s1 s2)))))
 
 fn typeEqual? t1: ty/Type t2: ty/Type -> Bool
   (mt t1 ((ty/tyVar id1 _) (mt t2 ((ty/tyVar id2 _) (= id1 id2)) (_ false))) ((ty/tyCon n1 a1 m1 _) (mt t2 ((ty/tyCon n2 a2 m2 _) (and (= n1 n2) (and (modCompatible? m1 m2) (and (sameLength? a1 a2) (typeListEqual? a1 a2))))) (_ false))) ((ty/tyFun p1 r1) (mt t2 ((ty/tyFun p2 r2) (and (sameLength? p1 p2) (and (typeListEqual? p1 p2) (typeEqual? r1 r2)))) (_ false))))
 
-fn unifyListsStep l1: (List ty/Type) l2: (List ty/Type) curSubst: (Map Int64 ty/Type) -> UnifyOutcome
-  (mt (listHead l1) ((none) (uOk curSubst)) ((some t1) (let [(t2 (optionOr (listHead l2) (ty/tyVar -1 "any"))) (res (unify t1 t2 curSubst))] (mt res ((uOk nextSubst) (unifyListsStep (optionOr (listTail l1) (list)) (optionOr (listTail l2) (list)) nextSubst)) ((uErr _ _) res)))))
+fn unifyListsStep l1: (List ty/Type) l2: (List ty/Type) curSubst: (Map Int64 ty/Type) modName: String -> UnifyOutcome
+  (mt (listHead l1) ((none) (uOk curSubst)) ((some t1) (let [(t2 (optionOr (listHead l2) (ty/tyVar -1 "any"))) (res (unify t1 t2 curSubst modName))] (mt res ((uOk nextSubst) (unifyListsStep (optionOr (listTail l1) (list)) (optionOr (listTail l2) (list)) nextSubst modName)) ((uErr _ _) res)))))
 
-fn unifyLists l1: (List ty/Type) l2: (List ty/Type) subst: (Map Int64 ty/Type) -> UnifyOutcome
-  (if (diffLength? l1 l2) (uErr "type argument arity mismatch" false) (unifyListsStep l1 l2 subst))
+fn unifyLists l1: (List ty/Type) l2: (List ty/Type) subst: (Map Int64 ty/Type) modName: String -> UnifyOutcome
+  (if (diffLength? l1 l2) (uErr "type argument arity mismatch" false) (unifyListsStep l1 l2 subst modName))
 
 fn bindVarChecked id: Int64 target: ty/Type subst: (Map Int64 ty/Type) -> UnifyOutcome
   (if (occursIn? id target subst) (uErr "occurs check failed: cyclic substitution" false) (uOk (mapSet subst id target)))
@@ -68,5 +77,5 @@ fn bindVarConRev id: Int64 k: String wantTy: ty/Type wantName: String subst: (Ma
 fn unknownType? t: ty/Type -> Bool
   (mt t ((ty/tyCon name _ _ _) (= name "?")) (_ false))
 
-fn unify t1: ty/Type t2: ty/Type subst: (Map Int64 ty/Type) -> UnifyOutcome
-  (let [(a (applySubst subst t1)) (b (applySubst subst t2))] (if (or (typeEqual? a b) (or (unknownType? a) (unknownType? b))) (uOk subst) (mt a ((ty/tyVar id1 k1) (mt b ((ty/tyVar id2 k2) (mt (kindNarrow k1 k2) ((some nk) (if (= id1 id2) (uOk subst) (let [(s1 (mapSet subst id1 (ty/tyVar id2 nk)))] (uOk (mapSet s1 id2 (ty/tyVar id2 nk)))))) ((none) (uErr "kind mismatch" false)))) ((ty/tyCon bName _ _ _) (bindVarCon id1 k1 b bName subst)) ((ty/tyFun _ _) (bindVarFun id1 k1 b subst)))) ((ty/tyCon aName aArgs aMod aShown) (mt b ((ty/tyVar id2 k2) (bindVarConRev id2 k2 a aName subst)) ((ty/tyCon bName bArgs bMod bShown) (if (or (not (= aName bName)) (modDiffers? aMod bMod)) (let [(numMismatch (and (ty/isNumericType? aName) (ty/isNumericType? bName)))] (errExpectedFound a b numMismatch)) (if (diffLength? aArgs bArgs) (if (or (listEmpty? aArgs) (listEmpty? bArgs)) (uOk subst) (errExpectedFound a b false)) (unifyLists aArgs bArgs subst)))) ((ty/tyFun _ _) (errExpectedFound a b false)))) ((ty/tyFun aParams aRet) (mt b ((ty/tyVar _ _) (unify b a subst)) ((ty/tyCon _ _ _ _) (errExpectedFound a b false)) ((ty/tyFun bParams bRet) (if (diffLength? aParams bParams) (errExpectedFound a b false) (mt (unifyLists aParams bParams subst) ((uOk nextSubst) (unify aRet bRet nextSubst)) ((uErr msg num) (uErr msg num))))))))))
+fn unify t1: ty/Type t2: ty/Type subst: (Map Int64 ty/Type) modName: String -> UnifyOutcome
+  (let [(a (applySubst subst t1)) (b (applySubst subst t2))] (if (or (typeEqual? a b) (or (unknownType? a) (unknownType? b))) (uOk subst) (mt a ((ty/tyVar id1 k1) (mt b ((ty/tyVar id2 k2) (mt (kindNarrow k1 k2) ((some nk) (if (= id1 id2) (uOk subst) (let [(s1 (mapSet subst id1 (ty/tyVar id2 nk)))] (uOk (mapSet s1 id2 (ty/tyVar id2 nk)))))) ((none) (uErr "kind mismatch" false)))) ((ty/tyCon bName _ _ _) (bindVarCon id1 k1 b bName subst)) ((ty/tyFun _ _) (bindVarFun id1 k1 b subst)))) ((ty/tyCon aName aArgs aMod aShown) (mt b ((ty/tyVar id2 k2) (bindVarConRev id2 k2 a aName subst)) ((ty/tyCon bName bArgs bMod bShown) (if (and (not (preludeAlias? modName aName bName)) (or (not (= aName bName)) (modDiffers? aMod bMod))) (let [(numMismatch (and (ty/isNumericType? aName) (ty/isNumericType? bName)))] (errExpectedFound a b numMismatch)) (if (diffLength? aArgs bArgs) (if (or (listEmpty? aArgs) (listEmpty? bArgs)) (uOk subst) (errExpectedFound a b false)) (unifyLists aArgs bArgs subst modName)))) ((ty/tyFun _ _) (errExpectedFound a b false)))) ((ty/tyFun aParams aRet) (mt b ((ty/tyVar _ _) (unify b a subst modName)) ((ty/tyCon _ _ _ _) (errExpectedFound a b false)) ((ty/tyFun bParams bRet) (if (diffLength? aParams bParams) (errExpectedFound a b false) (mt (unifyLists aParams bParams subst modName) ((uOk nextSubst) (unify aRet bRet nextSubst modName)) ((uErr msg num) (uErr msg num))))))))))

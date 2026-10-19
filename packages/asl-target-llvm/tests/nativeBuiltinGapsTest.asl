@@ -2,8 +2,12 @@
   :x [runTests]
   :i [(asl-ir/link :a lk) (asl-ir/types :a irTy) (asl-proc/coreProcess :a proc) (asl-target-llvm :a llvm)])
 
-fn host -> String
-  "asl/host/out/asl-host"
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): fixtureSource is fixed and deterministic (self-checks its own SHA/NaN/infinity values before printing), so recordedInterp below is a one-time capture of asl-host's own output for this exact fixture, taken before HL-DELETE removed the binary (asl-host run <fixtureSource>: exit 0, stdout is the two SHA hex digests then true/true/true, stderr empty)")
+
+fn recordedInterp -> proc/ProcessOutput
+  (proc/ProcessOutput :exitCode 0
+    :stdout "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\nba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\ntrue\ntrue\ntrue\n"
+    :stderr "" :durationMs 0)
 
 fn fixtureSource -> String
   (str "(module nativeBuiltinGapFixture :x [main] :i [])\n"
@@ -64,7 +68,7 @@ fn ! testNativeParity -> Bool
         (written (fileWrite path (fixtureSource)))
         (native (if (and (ok? made) (ok? written)) (compileNative path llPath exePath)
                     (proc/ProcessOutput :exitCode 1 :stdout "" :stderr "fixture setup failed" :durationMs 0)))
-        (interp (processRun (str (host) " run " path)))
+        (interp (recordedInterp))
         (ran (if (= native.exitCode 0) (processRun exePath)
                  (proc/ProcessOutput :exitCode 1 :stdout "" :stderr native.stderr :durationMs 0)))
         (removedExe (if (fileExists? exePath) (pathRemove exePath) (ok ())))
@@ -75,9 +79,9 @@ fn ! testNativeParity -> Bool
       (assert (ok? made) "temporary fixture directory is created")
       (assert (ok? written) "fixture source is written")
       (assert (= native.exitCode 0) (str "LLVM fixture links with libaslrt.a: " native.stderr))
-      (assert (= interp.exitCode 0) (str "asl-host run exits 0: " interp.stderr))
-      (assert (= ran.exitCode interp.exitCode) "native exit matches asl-host run")
-      (assert (= ran.stdout interp.stdout) "native stdout matches asl-host run for SHA vectors, NaN, and infinities")
+      (assert (= interp.exitCode 0) "recorded asl-host output exits 0")
+      (assert (= ran.exitCode interp.exitCode) "native exit matches the recorded asl-host output")
+      (assert (= ran.stdout interp.stdout) "native stdout matches the recorded asl-host output for SHA vectors, NaN, and infinities")
       (assert (= ran.exitCode 0) (str "native fixture passes vector and float checks: " ran.stderr))
       (assert (ok? removedExe) "native executable is removed")
       (assert (ok? removedLl) "LLVM file is removed")
