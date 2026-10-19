@@ -1,0 +1,1 @@
+(:package asl-tz :version "0.1.0" :entry "src/tzif.asl" :description "Pure ASL TZif and POSIX timezone support" :aslFirst true :dependencies [])

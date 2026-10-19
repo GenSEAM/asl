@@ -1,0 +1,7 @@
+(:module "asl-sched/cron"
+ :mutants ((:mutant "accept minute 60" :red 1 :green 0)
+           (:mutant "treat restricted day fields as AND" :red 1 :green 0)
+           (:mutant "ignore Sunday 7 normalization" :red 1 :green 0)
+           (:mutant "allow same-minute next fire" :red 1 :green 0)
+           (:mutant "treat February 30 as a fire" :red 1 :green 0)
+           (:mutant "drop step expansion" :red 1 :green 0)))

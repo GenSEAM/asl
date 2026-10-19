@@ -1,0 +1,7 @@
+(:module "asl-sched/slots"
+ :mutants ((:mutant "claim before due" :red 1 :green 0)
+           (:mutant "allow concurrent active claim" :red 1 :green 0)
+           (:mutant "do not release at lease expiry" :red 1 :green 0)
+           (:mutant "recover an expired claim twice" :red 1 :green 0)
+           (:mutant "advance interval from completion instead of anchor" :red 1 :green 0)
+           (:mutant "corrupt ASN slot round trip" :red 1 :green 0)))

@@ -1,0 +1,31 @@
+(module asl-s3/tests/s3RequestTest
+  :x [runTests]
+  :i [(asl-s3/s3Request :a r)])
+
+fn runTests -> Bool
+  (let [(put (r/putObject "https://s3.example.test" "bucket" "a b.txt" false "text/plain" "data"))
+        (get (r/getObject "https://s3.example.test" "bucket" "a b.txt" true))
+        (percentKey (r/getObject "https://s3.example.test" "bucket" "%2F" false))
+        (listing (r/listObjectsV2 "https://s3.example.test" "bucket" false "photos/" "next" 20))
+        (deleting (r/deleteObject "s3.example.test" "bucket" "key" false))
+        (multipart (r/createMultipartUpload "s3.example.test" "bucket" "key" true "application/octet-stream"))
+        (part (r/uploadPart "s3.example.test" "bucket" "key" false "upload id" 2 "chunk"))
+        (complete (r/completeMultipartUpload "s3.example.test" "bucket" "key" false "id" "<CompleteMultipartUpload/>"))
+        (listXml "<ListBucketResult><Name>b</Name><Prefix>x</Prefix><IsTruncated>false</IsTruncated><Contents><Key>one</Key></Contents><Contents><Key>two</Key></Contents></ListBucketResult>")
+        (uploadXml "<InitiateMultipartUploadResult><Bucket>b</Bucket><Key>k</Key><UploadId>u-1</UploadId></InitiateMultipartUploadResult>")]
+    (assert (and (= put.method "PUT") (= put.host "s3.example.test") (= put.path "/bucket/a b.txt")) "path-style PUT request")
+    (assert (and (= get.method "GET") (= get.host "bucket.s3.example.test") (= get.path "/a b.txt")) "virtual hosted GET request")
+    (assert (= percentKey.path "/bucket/%252F") "raw object key percent escapes are encoded without becoming path separators")
+    (assert (and (= listing.path "/bucket/") (= (listLength listing.query) 4)) "ListObjectsV2 query fields")
+    (assert (and (= deleting.method "DELETE") (= deleting.path "/bucket/key")) "delete request")
+    (assert (and (= multipart.method "POST") (= (listLength multipart.query) 1)) "create multipart request")
+    (assert (and (= part.method "PUT") (= (listLength part.query) 2)) "upload part request")
+    (assert (and (= complete.method "POST") (= complete.body "<CompleteMultipartUpload/>")) "complete multipart request")
+    (assert (mt (r/parseListResponse listXml) ((err _) false) ((ok fields) (= (listLength fields) 5))) "list response parses names and all object keys")
+    (assert (mt (r/parseMultipartResponse uploadXml) ((err _) false) ((ok fields) (= (listLength fields) 3))) "multipart response parses upload id")
+    (assert (mt (r/parseErrorDocument "<Error><Code>NoSuchKey</Code><Message>missing</Message></Error>") ((ok _) false) ((err e) (and (= e.code "NoSuchKey") (= e.message "missing")))) "S3 error document becomes typed code/message")
+    (assert (mt (r/parseListResponse "<ListBucketResult><Contents><Key>a&amp;b&lt;c&gt;</Key></Contents></ListBucketResult>") ((err _) false) ((ok fields) (mt (listHead fields) ((none) false) ((some field) (= field.value "a&b<c>"))))) "list response decodes XML character references")
+    (assert (mt (r/parseListResponse "<ListBucketResult><Contents><Key>&amp;lt;</Key></Contents></ListBucketResult>") ((err _) false) ((ok fields) (mt (listHead fields) ((none) false) ((some field) (= field.value "&lt;"))))) "XML decoding does not recursively decode escaped ampersands")
+    (assert (mt (r/parseErrorDocument "<Error><Code>NoSuchKey</Code><Message>bad &lt;key&gt; &amp; value</Message></Error>") ((ok _) false) ((err e) (= e.message "bad <key> & value"))) "error response decodes XML character references")
+    (assert (mt (r/parseErrorDocument "<Error><Code>Entity</Code><Message>Tom &amp; &lt; &gt; &quot;quote&quot; &apos;apostrophe&apos; &#65; &#x3C;</Message></Error>") ((ok _) false) ((err e) (= e.message "Tom & < > \"quote\" 'apostrophe' A <"))) "XML text decodes predefined and decimal/hex numeric character references")
+    true)

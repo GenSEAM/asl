@@ -1,0 +1,3 @@
+GET /%20/foo HTTP/1.1
+Host:host.foo.com
+Date:Mon, 09 Sep 2011 23:36:00 GMT

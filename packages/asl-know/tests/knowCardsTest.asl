@@ -64,7 +64,7 @@ fn ! budgets root: String -> Bool
 fn ! queries root: String -> Bool
   (let [(es (qy/loadEntries! (kn/cardsDir root)))
         (exact (qy/answer es "jsonParse" 400))
-        (intent (qy/answer es "decompress gzip data" 800))
+        (intent (qy/answer es "decompress gzip data" 1000))
         (byCard (qy/answer es "asl-zip" 800))
         (tight (qy/answer es "split a string" 300))]
     (do

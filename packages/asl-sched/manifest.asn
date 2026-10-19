@@ -1,0 +1,6 @@
+(:package asl-sched
+ :version "0.1.0"
+ :entry "src/cron.asl"
+ :description "Pure cron, interval and persisted slot scheduling primitives"
+ :aslFirst true
+ :dependencies [])
