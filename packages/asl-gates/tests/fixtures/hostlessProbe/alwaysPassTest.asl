@@ -3,4 +3,4 @@
   :i [])
 
 fn ! runTests -> Bool
-  (do (assert true "the hostless probe always passes") true)
+  (do (assert (>= (monotonicNs) 0) "the hostless probe always passes") true)

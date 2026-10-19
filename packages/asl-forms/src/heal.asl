@@ -269,7 +269,7 @@ fn ruleBodyIndent text: String -> (List String)
         (next (stringJoin (fold reindentBlock lines hdrs) "\n"))]
     (if (= next text) (list) (list next)))
 
-; (:m :do "rule condClauses: [test expr] clauses become (test expr), a wrapped [(else x)] or ((else x)) loses its outer delimiters, an else swallowed by the last clause is hoisted out, and a flat (cond t1 e1 t2 e2 (else x)) is paired into clauses")
+; (:m :ref FIX-COND-SHAPE-20261016 :do "rule condClauses: [test expr] clauses become (test expr), a wrapped [(else x)] or ((else x)) loses its outer delimiters, an else swallowed by the last clause is hoisted out, a flat (cond t1 e1 t2 e2 (else x)) is paired into clauses, and a two-item clause whose test and value are reversed is tried swapped one clause at a time, kept only when the swap strictly lowers the diagnostic score")
 fn elseItem? x: Sx -> Bool
   (or (headIs? x "else") (headIs? x ":else"))
 
@@ -314,8 +314,28 @@ fn condRewrite text: String mode: String -> (List String)
         (es (fold (fn [(acc (List Edit)) (x Sx)] -> (List Edit) (listAppend acc (condEdits mode x))) (list) conds))]
     (if (listEmpty? es) (list) (list (applyEdits text es))))
 
+; (:m :do "rule condClauses, swap candidates: a two-item (test value) clause written (value test) is only ever a guess, one candidate text per clause rather than one combined edit, since swapping an already-correct clause would make a working cond worse; firstImproving keeps a candidate only when it strictly lowers the diagnostic score, so a wrong guess is dropped and the checker's own cond-test/else-branch diagnostic is what is left to name the shape")
+fn swappableClause? c: Sx -> Bool
+  (and (parenList? c) (and (not (elseItem? c)) (= (listLength (listItems c)) 2)))
+
+fn swapCandidateAt text: String c: Sx -> (Option String)
+  (match (listGet (listItems c) 0)
+    ((none) none)
+    ((some a)
+      (match (listGet (listItems c) 1)
+        ((none) none)
+        ((some b)
+          (some (applyEdits text (list (repl a (slice text (sxStart b) (sxEnd b))) (repl b (slice text (sxStart a) (sxEnd a))))))))))
+
+fn condSwapCandidates text: String -> (List String)
+  (let [(conds (filter (fn [(x Sx)] -> Bool (and (parenList? x) (headIs? x "cond"))) (forestLists (readSx text))))
+        (clauses (fold (fn [(acc (List Sx)) (x Sx)] -> (List Sx) (listAppend acc (optionOr (listTail (listItems x)) (list)))) (list) conds))
+        (swappable (filter swappableClause? clauses))]
+    (filter (fn [(s String)] -> Bool (!= s text))
+      (map (fn [(c Sx)] -> String (optionOr (swapCandidateAt text c) text)) swappable)))
+
 fn ruleCondClauses text: String -> (List String)
-  (listAppend (condRewrite text "brackets") (listAppend (condRewrite text "else") (condRewrite text "flat")))
+  (listAppend (condRewrite text "brackets") (listAppend (condRewrite text "else") (listAppend (condRewrite text "flat") (condSwapCandidates text))))
 
 ; (:m :do "rule letBindingVector: (let ((a 1) (b 2)) e) and (let (a 1 b 2) e) become (let [(a 1) (b 2)] e), the only let shape the native lowering takes")
 fn pairItem? x: Sx -> Bool

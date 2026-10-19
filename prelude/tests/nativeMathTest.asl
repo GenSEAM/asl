@@ -57,19 +57,11 @@ fn fixtureSrc -> String
       "    (str a \" \" b \" \" (>= (- t1 t0) 5000000)))"
       ""
       "fn ! failing op: String -> String"
-      "  (let [(toInt float64ToInt64) (toFloat int64ToFloat64)]"
-      "    (cond ((= op \"absMin\") (str (abs (- -9223372036854775807 1))))"
-      "          ((= op \"absStr\") (str (abs \"x\")))"
-      "          ((= op \"minMixed\") (str (min 1 2.0)))"
-      "          ((= op \"maxStr\") (str (max \"a\" \"b\")))"
-      "          ((= op \"clampHi\") (str (clamp 2.0 1.0 0.5)))"
-      "          ((= op \"clampNan\") (str (clamp (floatNan) 1.0 0.5)))"
-      "          ((= op \"clampType\") (str (clamp 1 2.0 0.5)))"
-      "          ((= op \"sleepNeg\") (str (sleepMs -1)))"
-      "          ((= op \"sleepType\") (str (sleepMs \"x\")))"
-      "          ((= op \"toIntType\") (str (toInt 1)))"
-      "          ((= op \"toFloatType\") (str (toFloat 1.5)))"
-      "          (else \"no such case\")))"
+      "  (cond ((= op \"absMin\") (str (abs (- -9223372036854775807 1))))"
+      "        ((= op \"clampHi\") (str (clamp 2.0 1.0 0.5)))"
+      "        ((= op \"clampNan\") (str (clamp (floatNan) 1.0 0.5)))"
+      "        ((= op \"sleepNeg\") (str (sleepMs -1)))"
+      "        (else \"no such case\"))"
       ""
       "fn ! main args: (List String) -> (Result Int64 String)"
       "  (let [(op (optionOr (listHead args) \"\"))]"
@@ -89,7 +81,43 @@ fn valueCases -> (List String)
   (list "values" "abs" "minMax" "clamp" "convert" "libm" "sleep")
 
 fn failingCases -> (List String)
-  (list "absMin" "absStr" "minMixed" "maxStr" "clampHi" "clampNan" "clampType" "sleepNeg" "sleepType" "toIntType" "toFloatType")
+  (list "absMin" "clampHi" "clampNan" "sleepNeg")
+
+; (:m :ref CLUSTER-U4GATE-RESTRUCTURE :do "absStr/minMixed/maxStr/clampType/sleepType/toIntType/toFloatType are statically ill-typed (confirmed via asl check on each in isolation), unlike absMin/clampHi/clampNan/sleepNeg which are well-typed and only trap at runtime (ERR_INT_OVERFLOW/ERR_RANGE); U4-MARKER-PARITY's whole-file gate correctly rejects the 7 static ones, but bundling them into one failing cond blocked the WHOLE fixture (every good case too) under asl run. Each gets its own single-purpose probe module (the nativeRun/nativeEval pattern) asserting rejection, not a runtime comparison")
+fn typeProbeCases -> (List String)
+  (list "absStr" "minMixed" "maxStr" "clampType" "sleepType" "toIntType" "toFloatType")
+
+fn typeProbeExpr name: String -> String
+  (cond ((= name "absStr") "(abs \"x\")")
+        ((= name "minMixed") "(min 1 2.0)")
+        ((= name "maxStr") "(max \"a\" \"b\")")
+        ((= name "clampType") "(clamp 1 2.0 0.5)")
+        ((= name "sleepType") "(sleepMs \"x\")")
+        ((= name "toIntType") "(float64ToInt64 1)")
+        ((= name "toFloatType") "(int64ToFloat64 1.5)")
+        (else ""))
+
+fn typeProbeWant name: String -> String
+  (cond ((= name "absStr") "ERR_TYPE_MISMATCH argument to abs: expected a number, found String")
+        ((= name "minMixed") "ERR_TYPE_MISMATCH argument to min: expected an integer, found Float64")
+        ((= name "maxStr") "ERR_TYPE_MISMATCH argument to max: expected a number, found String")
+        ((= name "clampType") "ERR_TYPE_MISMATCH argument to clamp: expected Float64, found an integer")
+        ((= name "sleepType") "ERR_TYPE_MISMATCH argument to sleepMs: expected Int64, found String")
+        ((= name "toIntType") "ERR_TYPE_MISMATCH argument to float64ToInt64: expected Float64, found an integer")
+        ((= name "toFloatType") "ERR_TYPE_MISMATCH argument to int64ToFloat64: expected Int64, found Float64")
+        (else ""))
+
+fn ! testTypeRejected dir: String name: String -> Bool
+  (let [(path (str dir "/" name ".asl"))
+        (src (str "(module mathTypeProbe/" name " :x [main] :i [])\n\nfn ! main args: (List String) -> (Result Int64 String)\n  (do (println (str " (typeProbeExpr name) "))\n      (ok 0))\n"))
+        (_ (fileWrite path src))
+        (r (processRun (str (host) " check " path)))
+        (want (typeProbeWant name))]
+    (do
+      (assert (!= r.exitCode 0) (str name ": asl check must reject " path ", got exit " r.exitCode))
+      (assert (stringContains? r.stderr "4:3: ") (str name ": error locus must be at the println line (4:3), got " r.stderr))
+      (assert (stringContains? r.stderr want) (str name ": expected '" want "' in check output, got " r.stderr))
+      true))
 
 fn formatDiags ds: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.locus ": [" d.code "] " d.message)) ds) "; ")
@@ -202,6 +230,7 @@ fn ! runTests -> Bool
               (do
                 (map (fn [(op String)] -> Bool (testValueParity exe src op)) (valueCases))
                 (map (fn [(op String)] -> Bool (testFailingParity exe src op)) (failingCases))
+                (map (fn [(n String)] -> Bool (testTypeRejected dir n)) (typeProbeCases))
                 (testNow exe))))))
       (assert (= (processRun (str "rm -rf " dir)).exitCode 0) "work directory removed")
       true))

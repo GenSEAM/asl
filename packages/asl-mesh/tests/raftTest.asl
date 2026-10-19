@@ -278,7 +278,10 @@ fn testCheckAndSendSnapshot -> Bool
                   :leaderId "leader-0"
                   :lastIncludedIndex 50
                   :lastIncludedTerm 2
-                  :snapshotData "snapshot-50"))
+                  :snapshotData "snapshot-50"
+                  :leaderLeaseExpiresAt 0
+                  :leaseTtlMs 500
+                  :readIndex 0))
         (reqBehind (raft/checkAndSendSnapshot leader 40))
         (reqCurrent (raft/checkAndSendSnapshot leader 55))]
     (do

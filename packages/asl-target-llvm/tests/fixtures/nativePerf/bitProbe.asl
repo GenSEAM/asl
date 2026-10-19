@@ -15,6 +15,7 @@ fn rawOp which: String a: Int64 b: Int64 -> Int64
     ((= which "shr") (>> a b))
     (else 0))
 
+; (:m :ref CLUSTER-U4GATE-RESTRUCTURE :do "andText/notText moved out to bitAndTextProbe.asl/bitNotTextProbe.asl: each applied &/~ to a String Val, a genuine static type error (confirmed via asl check in isolation), not a runtime trap like the rest of main's boxed cond; U4-MARKER-PARITY's whole-file gate on nativeTest run rejected the whole bitProbe.asl file over them, blocking every well-typed bitCases case in the same file")
 fn ! main args: (List String) -> (Result Unit String)
   (let [(which (optionOr (listHead args) ""))
         (a (arg args 1))
@@ -26,8 +27,6 @@ fn ! main args: (List String) -> (Result Unit String)
                  ((= which "not") ((fn [x] (~ x)) a))
                  ((= which "shl") ((fn [x y] (<< x y)) a b))
                  ((= which "shr") ((fn [x y] (>> x y)) a b))
-                 ((= which "andText") ((fn [x y] (& x y)) a which))
-                 ((= which "notText") ((fn [x] (~ x)) which))
                  (else 0)))]
     (do (println (str (rawOp which a b) " " boxed))
         (ok ())))

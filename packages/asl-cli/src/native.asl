@@ -147,7 +147,9 @@ fn ! suiteBuilt! ctx: sys/Context fp: String path: String rel: String -> Int64
               (eprintText v.stderr)
               (if (= v.exit 0) (println v.line) (eprintln v.line))
               v.exit)))
-      ((none) (hostSuite! ctx path built.reason))))
+      ((none) (if (= built.cache "checker-reject")
+                (do (eprintln (nt/failLine rel built.reason)) 1)
+                (hostSuite! ctx path built.reason)))))
 
 fn ! suites! ctx: sys/Context paths: (List String) -> Int64
   (if (not (sys/isFile? (str ctx.root "/asl/host/out/libaslrt.a")))
@@ -197,7 +199,8 @@ fn ! sweepDone! ctx: sys/Context ws: String timeoutS: Int64 k: Int64 files: (Lis
         (made (dirCreate tmp))
         (built (map (fn [(ip (Pair Int64 String))] -> (Pair (Pair Int64 String) nt/Built) (pair ip (nt/prepare (nt/relativeTo rootReal (str ws "/" (pairSecond ip))) fp))) (enumerate files)))
         (runnable (filter (fn [(b (Pair (Pair Int64 String) nt/Built))] -> Bool (some? (pairSecond b).binary)) built))
-        (unbuilt (filter (fn [(b (Pair (Pair Int64 String) nt/Built))] -> Bool (none? (pairSecond b).binary)) built))
+        (rejected (filter (fn [(b (Pair (Pair Int64 String) nt/Built))] -> Bool (and (none? (pairSecond b).binary) (= (pairSecond b).cache "checker-reject"))) built))
+        (unbuilt (filter (fn [(b (Pair (Pair Int64 String) nt/Built))] -> Bool (and (none? (pairSecond b).binary) (!= (pairSecond b).cache "checker-reject"))) built))
         (jobs (map (fn [(b (Pair (Pair Int64 String) nt/Built))] -> run/Job (sweepJob ctx ws tmp (pairFirst (pairFirst b)) (absolute (optionOr (pairSecond b).binary "")))) runnable))
         (ran (if (ok? made) (run/runPoolLimited jobs k (run/limits timeoutS 64)) (list)))
         (judged (map (fn [(p (Pair (Pair (Pair Int64 String) nt/Built) run/Done))] -> (Pair sw/Done String)
@@ -205,12 +208,16 @@ fn ! sweepDone! ctx: sys/Context ws: String timeoutS: Int64 k: Int64 files: (Lis
                              (absolute (optionOr (pairSecond (pairFirst p)).binary ""))))
                      (zip runnable ran)))
         (fromRuns (sweepInitProbes! ctx ws tmp timeoutS k judged))
+        (fromChecker (map (fn [(b (Pair (Pair Int64 String) nt/Built))] -> sw/Done
+                             (sw/Done :index (pairFirst (pairFirst b)) :path (pairSecond (pairFirst b)) :code 1
+                                      :last (nt/failLine (pairSecond (pairFirst b)) (pairSecond b).reason) :out ""))
+                           rejected))
         (fromBuilds (hostSweep! ctx ws tmp timeoutS k unbuilt))
         (lost (map (fn [(b (Pair (Pair Int64 String) nt/Built))] -> sw/Done
                      (sw/Done :index (pairFirst (pairFirst b)) :path (pairSecond (pairFirst b)) :code 127 :last (str "cannot create " tmp) :out ""))
                    (if (ok? made) (list) runnable)))
         (removed (pathRemove tmp))]
-    (listAppend fromRuns (listAppend fromBuilds lost)))
+    (listAppend fromRuns (listAppend fromChecker (listAppend fromBuilds lost))))
 
 fn ! hostSweep! ctx: sys/Context ws: String tmp: String timeoutS: Int64 k: Int64 unbuilt: (List (Pair (Pair Int64 String) nt/Built)) -> (List sw/Done)
   (let [(errOf (fn [(i Int64)] -> String (str tmp "/" (stringFromInt64 i) ".host.err")))
@@ -356,7 +363,7 @@ fn ! evalValue! ctx: sys/Context expr: String -> Int64
         (made (mt (dirCreate dir) ((err e) (str e)) ((ok _) (mt (fileWrite path src) ((err e) (str e)) ((ok _) (mt (dirCreate slot) ((err e) (str e)) ((ok _) "")))))))]
     (if (not (stringEmpty? made))
       (do (sys/sayErr! (str "asl eval: cannot prepare " path ": " made)) 1)
-      (let [(built (nt/compileIn cDir path src slot key fp "eval"))]
+      (let [(built (nt/compileIn cDir path path src slot key fp "eval"))]
                 (mt built.binary
                   ((none) (evalRejected! path built.reason))
                   ((some bin) (let [(out (nt/runProc (list bin) (some (nt/withEnvOverrides! (list (preludeOverride ctx))))))]

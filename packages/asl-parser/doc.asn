@@ -654,6 +654,8 @@
 (:doc :symbol "asl/packages/asl-parser/src/ast.asl#parseForTypeCheck" :text "Parses source for the checker: rejects retired syntax first, then parses for the checker's own AST shape.")
 (:doc :symbol "asl/packages/asl-parser/src/ast.asl#parseLegacy" :text "Parses source then desugars with-style param display for callers still expecting the legacy AST shape.")
 (:doc :symbol "asl/packages/asl-parser/src/ast.asl#parseForChecker" :text "Parses source with the fallback grammar path the type checker consumes.")
+(:doc :symbol "asl/packages/asl-parser/src/ast.asl#findTokenPos" :text "Finds a token's real line:col by word-boundary search forward from a coarse floor position, falling back to the floor if not found.")
+(:doc :symbol "asl/packages/asl-parser/src/ast.asl#findQualifiedTokenPos" :text "Like findTokenPos, but lands on the alias in alias/member when the needle is qualified, and also searches backward from the floor as a fallback.")
 (:doc :symbol "asl/packages/asl-parser/src/headerLines.asl#strictHeaders" :text "Toggle for the strict line-header grammar; false still accepts the retired paren header.")
 (:doc :symbol "asl/packages/asl-parser/src/headerLines.asl#lineHeader?" :text "True when the file's first content line starts the column-0 module line-header form.")
 (:doc :symbol "asl/packages/asl-parser/src/headerLines.asl#oldHeader?" :text "True when the file's first content line starts the retired (module ...) paren header.")

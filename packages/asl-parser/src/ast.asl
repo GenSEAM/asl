@@ -1,4 +1,4 @@
-(module asl-parser/ast :x [moduleNode ModuleNode SchemaNode EnumNode DefunNode EnumCase Param AstField TopForm ParseError PosForm KidForm readForms parse parseLegacy parseForTypeCheck retiredProse retiredSpelling retiredSource spellingErrors retiredFormErrors strictSpellingDefault bangedBuiltins parseForChecker renderNode AstLit litInt litFloat litString litBool litUnit AstPattern patWildcard patVar patLit patTuple patRecord patCtor AstMatchArm matchArm makeMatchArm AstExpr exprLit exprIdent exprMember exprCall exprLet exprIf exprMatch exprTry exprBlock exprRecord exprCond exprLambda exprInterpolation AstType typeNamed typeTuple typeRecord typeFn charsWithin? tailExprs sexprItems nthExpr hasTailrec? isInlineBodyCandidate? typeNodeText joinFnHeader readKidForms kidFormsFor] :i [(lexer :a lx) (reader :a rd) (indentParser :a ip) (asl-syntax/core/tree :a tr) (fnHeader :a fh)])
+(module asl-parser/ast :x [moduleNode ModuleNode SchemaNode EnumNode DefunNode EnumCase Param AstField TopForm ParseError PosForm KidForm readForms parse parseLegacy parseForTypeCheck retiredProse retiredSpelling retiredSource spellingErrors retiredFormErrors strictSpellingDefault bangedBuiltins parseForChecker renderNode AstLit litInt litFloat litString litBool litUnit AstPattern patWildcard patVar patLit patTuple patRecord patCtor AstMatchArm matchArm makeMatchArm AstExpr exprLit exprIdent exprMember exprCall exprLet exprIf exprMatch exprTry exprBlock exprRecord exprCond exprLambda exprInterpolation AstType typeNamed typeTuple typeRecord typeFn charsWithin? tailExprs sexprItems nthExpr hasTailrec? isInlineBodyCandidate? typeNodeText joinFnHeader readKidForms kidFormsFor findTokenPos findQualifiedTokenPos] :i [(lexer :a lx) (reader :a rd) (indentParser :a ip) (asl-syntax/core/tree :a tr) (fnHeader :a fh)])
 
 (schema ParseError (:f msg String) (:f line Int64) (:f col Int64))
 
@@ -250,6 +250,63 @@ fn perr msg: String pf: PosForm -> ParseError
 
 fn wordByte? c: Int64 -> Bool
   (or (and (>= c 97) (<= c 122)) (or (and (>= c 65) (<= c 90)) (or (and (>= c 48) (<= c 57)) (or (= c 45) (or (= c 95) (or (= c 63) (= c 33)))))))
+
+; (:m :ref CHECKER-R1GAPS :do "the type checker and constant-assert/export-resolution walks place a diagnostic at the enclosing statement's or function's position (the only position any of them track), never at the specific offending subform; findTokenPos recovers the real position by a plain word-boundary text search for the offending token's own source spelling, starting at or after a known floor position and falling back to that floor if the needle is not found, so a caller that already knows WHICH token is at fault (a literal, a name, an operator's opening paren) can report where it actually is without threading byte offsets through every expression-evaluation frame")
+fn wordChar? ch: String -> Bool
+  (and (= (stringLength ch) 1) (wordByte? (charCode ch)))
+
+fn lineColToOffset src: String line: Int64 col: Int64 -> Int64
+  (let [(lines (stringLines src))
+        (before (optionOr (listSlice lines 0 (- line 1)) (list)))
+        (sumBefore (fold (fn [(acc Int64) (l String)] -> Int64 (+ acc (+ (stringLength l) 1))) 0 before))]
+    (+ sumBefore (- col 1)))
+
+fn offsetToLineCol src: String offset: Int64 -> (Pair Int64 Int64)
+  (let [(pre (optionOr (stringSlice src 0 offset) src))
+        (lines (stringLines pre))
+        (n (listLength lines))]
+    (if (<= n 1) (pair 1 (+ (stringLength pre) 1)) (pair n (+ (stringLength (optionOr (listLast lines) "")) 1))))
+
+fn boundaryOk? src: String start: Int64 end: Int64 needle: String -> Bool
+  (let [(beforeCh (optionOr (stringSlice src (- start 1) start) ""))
+        (afterCh (optionOr (stringSlice src end (+ end 1)) ""))
+        (needleHeadWord (wordChar? (optionOr (stringSlice needle 0 1) "")))
+        (needleTailWord (wordChar? (optionOr (stringSlice needle (- (stringLength needle) 1) (stringLength needle)) "")))]
+    (and (or (not needleHeadWord) (not (wordChar? beforeCh))) (or (not needleTailWord) (not (wordChar? afterCh)))))
+
+fn tailrec findNeedleFrom src: String floorOffset: Int64 needle: String -> (Option Int64)
+  (if (or (> floorOffset (stringLength src)) (stringEmpty? needle)) (none)
+    (mt (stringIndexOf (optionOr (stringSlice src floorOffset (stringLength src)) "") needle)
+      ((none) (none))
+      ((some relIdx)
+        (let [(start (+ floorOffset relIdx)) (endOff (+ start (stringLength needle)))]
+          (if (boundaryOk? src start endOff needle) (some start) (findNeedleFrom src (+ start 1) needle))))))
+
+fn findTokenPos src: String floorLine: Int64 floorCol: Int64 needle: String -> (Pair Int64 Int64)
+  (mt (findNeedleFrom src (lineColToOffset src floorLine floorCol) needle)
+    ((some off) (offsetToLineCol src off))
+    ((none) (pair floorLine floorCol)))
+
+; (:m :ref CHECKER-R1GAPS :do "an unexported member is diagnosed by its bare name (member, case tag, or type name), but when the source wrote it qualified (alias/member) the expected position is the start of the whole qualified token, not just the member part; qualifierStart walks left from a found member's offset across a leading '/' and the alias's own word characters, so findQualifiedTokenPos lands on 'alias' in 'alias/member' while still landing on a bare 'member' when there is no alias to walk back across")
+fn tailrec qualifierStart src: String idx: Int64 -> Int64
+  (if (<= idx 0) 0
+    (if (wordChar? (optionOr (stringSlice src (- idx 1) idx) "")) (qualifierStart src (- idx 1)) idx))
+
+; (:m :ref CHECKER-R1GAPS :do "a parameter's type annotation is diagnosed at the function's first body statement (the only position resolve.asl's checkModuleRules tracks for it), which is textually AFTER the parameter list the offending type name lives in, so a forward-only search from that floor never finds it; lastNeedleBefore scans the whole prefix up to the floor and keeps the latest match, giving findQualifiedTokenPos a fallback for names that sit before their recorded floor as well as after it")
+fn tailrec lastNeedleBefore src: String needle: String searchFrom: Int64 ceilOffset: Int64 best: (Option Int64) -> (Option Int64)
+  (mt (findNeedleFrom src searchFrom needle)
+    ((none) best)
+    ((some off)
+      (if (>= off ceilOffset) best
+        (lastNeedleBefore src needle (+ off 1) ceilOffset (some off)))))
+
+fn findQualifiedTokenPos src: String floorLine: Int64 floorCol: Int64 needle: String -> (Pair Int64 Int64)
+  (let [(floorOff (lineColToOffset src floorLine floorCol))]
+    (mt (mt (findNeedleFrom src floorOff needle) ((some off) (some off)) ((none) (lastNeedleBefore src needle 0 floorOff (none))))
+      ((none) (pair floorLine floorCol))
+      ((some off)
+        (let [(extended (if (= (optionOr (stringSlice src (- off 1) off) "") "/") (qualifierStart src (- off 1)) off))]
+          (offsetToLineCol src extended)))))
 
 fn commentLeadEnd bs: Bytes e: Int64 i: Int64 -> Int64
   (if (and (< i e) (or (= (bytesGet bs i) 59) (or (= (bytesGet bs i) 32) (= (bytesGet bs i) 9)))) (commentLeadEnd bs e (+ i 1)) i)

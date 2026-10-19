@@ -63,6 +63,7 @@ fn ! fileCodes path: String -> (List String)
     ((ok ds) (map (fn [(d ty/Diagnostic)] -> String d.code) ds))
     ((err _) (list "READ_ERROR")))
 
+; (:m :ref CHECK-OPTION-ARITH-20261016 :do "typeBoundary used to be a single module-wide filter: any non-type diagnostic anywhere in the file dropped every ERR_TYPE_MISMATCH in the whole file, including one in a function the other diagnostic has nothing to do with; it now scopes to each function's own diagnostic list (checkModuleIn's defunDiags fold), so compileErrorKeepsTypeBoundary.asl's two unrelated functions each report their own real diagnostic")
 fn ! testTypeBoundary -> Bool
   (let [(both (fileCodes "tests/conformance/check/compileErrorKeepsTypeBoundary.asl"))
         (dir (optionOr (envGet "TMPDIR") "/tmp"))
@@ -71,7 +72,7 @@ fn ! testTypeBoundary -> Bool
         (only (fileCodes path))
         (removed (pathRemove path))]
     (do (assert (ok? written) "the type-only fixture is written")
-        (assert (= both (list "ERR_UNKNOWN_SYMBOL")) (str "an unknown symbol keeps the type mismatch behind it: " (stringJoin both " ")))
+        (assert (= (listSort both) (listSort (list "ERR_UNKNOWN_SYMBOL" "ERR_TYPE_MISMATCH"))) (str "an unrelated function's unknown symbol no longer hides this function's own type mismatch: " (stringJoin both " ")))
         (assert (= only (list "ERR_TYPE_MISMATCH")) (str "a file with only a type error reports it: " (stringJoin only " ")))
         (assert (ok? removed) "the type-only fixture is removed")
         true))
@@ -91,6 +92,14 @@ fn testTextKind -> Bool
       (assert (rejects? "(module b :x [f])\nfn ! f p: String n: Int64 -> (Result Unit String)\n  (fileWrite p n)\n" "expected String or Bytes, found Int64") "fileWrite of an Int64 is still a mismatch")
       (assert (rejects? "(module b :x [f])\nfn ! f p: String -> (Result Unit String)\n  (fileAppend p (list \"a\"))\n" "expected String or Bytes") "fileAppend of a List is still a mismatch")
       (assert (rejects? "(module b :x [f])\nfn ! f p: String -> (Result Unit String)\n  (fileWrite p (fn [(x Int64)] -> Int64 x))\n" "found a function") "fileWrite of a function is still a mismatch")
+      true)
+
+; (:m :ref CHECK-OPTION-ARITH-20261016 :do "float64ToInt64 returns (Option Int64); + requires both operands at the same numeric-or-integer kind (numBinopSig N N -> N), so an unguarded Option reaching it must stay a checker-time ERR_TYPE_MISMATCH naming the Option operand, never a value the native runtime discovers is wrong at ERR_TYPE")
+fn testOptionArith -> Bool
+  (do (assert (rejects? "(module b :x [f])\nfn f! x: Float64 -> Int64\n  (let [(acc 1)] (+ acc (float64ToInt64 x)))\n" "expected an integer, found (Option Int64)") "an Option operand on the right of + is still a mismatch")
+      (assert (rejects? "(module b :x [f])\nfn f! x: Float64 -> Int64\n  (+ (float64ToInt64 x) 1)\n" "expected a number, found (Option Int64)") "an Option operand on the left of + is still a mismatch")
+      (assert (rejects? "(module b :x [f])\nfn f! x: Float64 -> Int64\n  (- (float64ToInt64 x) 1)\n" "(Option Int64)") "the same gap in - is still a mismatch")
+      (assert (accepts? "(module b :x [f])\nfn f! x: Float64 -> Int64\n  (+ (optionOr (float64ToInt64 x) 0) 1)\n") "unwrapping the Option first still accepts")
       true)
 
 fn testMiscChecker -> Bool
@@ -116,5 +125,6 @@ fn ! runTests -> Bool
       (assert (testTypeBoundary) "bucket typeBoundary")
       (assert (testIoErrorPayloads) "bucket ioErrString")
       (assert (testTextKind) "bucket textKind")
+      (assert (testOptionArith) "bucket optionArith")
       (assert (testMiscChecker) "bucket misc")
       true)

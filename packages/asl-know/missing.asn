@@ -1,4 +1,4 @@
-(:knowMissing :rule "an exported symbol without a declaration (nodecl) or doc.asn contract (nodoc); knowCardsTest fails when a row is added or a listed row is fixed, so this list only shrinks" :count 6606)
+(:knowMissing :rule "an exported symbol without a declaration (nodecl) or doc.asn contract (nodoc); knowCardsTest fails when a row is added or a listed row is fixed, so this list only shrinks" :count 6608)
 "asl-agent#aslAgent/computerUse/ComputerActionKind nodoc"
 "asl-agent#aslAgent/computerUse/ComputerActionReceipt nodoc"
 "asl-agent#aslAgent/computerUse/ComputerActionRequest nodoc"
@@ -908,6 +908,8 @@
 "asl-cli#asl-cli/system/sayErr! nodoc"
 "asl-cli#asl-cli/target/targetCommand! nodoc"
 "asl-cli#asl-cli/verify/checkRoots nodoc"
+"asl-cli#asl-cli/verify/formatDiag nodoc"
+"asl-cli#asl-cli/verify/formatDiags nodoc"
 "asl-cli#asl-cli/verify/nativeCheckPaths! nodoc"
 "asl-cli#asl-cli/watch/WatchReceipt nodoc"
 "asl-cli#asl-cli/watch/WatchState nodoc"

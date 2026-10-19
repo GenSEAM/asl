@@ -65,49 +65,50 @@ fn patternNames pat: rd/SExpr -> (List String)
     ((rd/sexprAtom v) (list v))
     (_ (fold (fn [(acc (List String)) (x rd/SExpr)] -> (List String) (listAppend (patternNames x) acc)) (list) (dropN (kidsOf pat) 1))))
 
-fn checkCond isAssert: Bool cond: rd/SExpr env: (Map String Bool) funs: (List String) -> (List String)
+; (:m :ref CHECKER-R1GAPS :do "checkCond used to return bare messages, which forced constantAssertDiags to stamp every hit with the whole function's position; it now pairs each message with the exact source spelling of the offending condition (the bare true/false/literal-variable atom, or the full rendered text of a compound condition via rd/renderSexpr, needed to disambiguate repeated operators like two separate (= ...) conditions in the same function) so placeDiags can resolve the real line:col via a/findTokenPos instead of defunPos")
+fn checkCond isAssert: Bool cond: rd/SExpr env: (Map String Bool) funs: (List String) -> (List (Pair String String))
   (let [(name (if isAssert "assert" "refute"))
         (fails (if isAssert "false" "true"))]
     (mt (atomOf cond)
       ((some v) (cond
                   ((= v fails) (list))
-                  ((or (= v "true") (= v "false")) (list (str name " " v " can never fail; test a computed value (D152)")))
+                  ((or (= v "true") (= v "false")) (list (pair (str name " " v " can never fail; test a computed value (D152)") v)))
                   ((literalAtom? v) (list))
-                  ((foldsToConstant? cond env funs) (list (str name " condition folds to a constant; test a computed value (D152)")))
+                  ((foldsToConstant? cond env funs) (list (pair (str name " condition folds to a constant; test a computed value (D152)") v)))
                   (else (list))))
-      ((none) (if (foldsToConstant? cond env funs) (list (str name " condition folds to a constant; test a computed value (D152)")) (list)))))
+      ((none) (if (foldsToConstant? cond env funs) (list (pair (str name " condition folds to a constant; test a computed value (D152)") (rd/renderSexpr cond))) (list)))))
 
-fn walkAll xs: (List rd/SExpr) env: (Map String Bool) funs: (List String) -> (List String)
-  (fold (fn [(acc (List String)) (x rd/SExpr)] -> (List String) (listAppend acc (walk x env funs))) (list) xs)
+fn walkAll xs: (List rd/SExpr) env: (Map String Bool) funs: (List String) -> (List (Pair String String))
+  (fold (fn [(acc (List (Pair String String))) (x rd/SExpr)] -> (List (Pair String String)) (listAppend acc (walk x env funs))) (list) xs)
 
-fn letStep acc: (Pair (List String) (Map String Bool)) nameE: rd/SExpr valE: (Option rd/SExpr) funs: (List String) -> (Pair (List String) (Map String Bool))
+fn letStep acc: (Pair (List (Pair String String)) (Map String Bool)) nameE: rd/SExpr valE: (Option rd/SExpr) funs: (List String) -> (Pair (List (Pair String String)) (Map String Bool))
   (let [(env (pairSecond acc))
         (found (mt valE ((some v) (walk v env funs)) ((none) (list))))
         (lit (mt valE ((some v) (literal? v)) ((none) false)))
         (env2 (mt (atomOf nameE) ((some n) (mapSet env n lit)) ((none) env)))]
     (pair (listAppend (pairFirst acc) found) env2))
 
-fn walkLet xs: (List rd/SExpr) env: (Map String Bool) funs: (List String) -> (List String)
+fn walkLet xs: (List rd/SExpr) env: (Map String Bool) funs: (List String) -> (List (Pair String String))
   (let [(bs (mt (listGet xs 1) ((some b) (vectItems b)) ((none) (list))))
         (pairs (mt (listHead bs) ((some b) (rd/isList? b)) ((none) false)))
         (bound (if pairs
-                 (fold (fn [(acc (Pair (List String) (Map String Bool))) (b rd/SExpr)] -> (Pair (List String) (Map String Bool))
+                 (fold (fn [(acc (Pair (List (Pair String String)) (Map String Bool))) (b rd/SExpr)] -> (Pair (List (Pair String String)) (Map String Bool))
                          (let [(parts (kidsOf b))] (letStep acc (optionOr (listHead parts) b) (if (>= (listLength parts) 2) (listLast parts) (none)) funs)))
                        (pair (list) env) bs)
                  (flatLet (pair (list) env) bs funs)))]
     (listAppend (pairFirst bound) (walkAll (dropN xs 2) (pairSecond bound) funs)))
 
-fn flatLet acc: (Pair (List String) (Map String Bool)) bs: (List rd/SExpr) funs: (List String) -> (Pair (List String) (Map String Bool))
+fn flatLet acc: (Pair (List (Pair String String)) (Map String Bool)) bs: (List rd/SExpr) funs: (List String) -> (Pair (List (Pair String String)) (Map String Bool))
   (mt (listHead bs)
     ((none) acc)
     ((some nameE) (flatLet (letStep acc nameE (listGet bs 1) funs) (dropN bs 2) funs)))
 
-fn walkArm arm: rd/SExpr env: (Map String Bool) funs: (List String) -> (List String)
+fn walkArm arm: rd/SExpr env: (Map String Bool) funs: (List String) -> (List (Pair String String))
   (mt (listHead (kidsOf arm))
     ((none) (list))
     ((some pat) (walkAll (dropN (kidsOf arm) 1) (bindAll env (patternNames pat)) funs)))
 
-fn walkHeaded h: String xs: (List rd/SExpr) env: (Map String Bool) funs: (List String) -> (List String)
+fn walkHeaded h: String xs: (List rd/SExpr) env: (Map String Bool) funs: (List String) -> (List (Pair String String))
   (cond
     ((and (or (= h "assert") (= h "refute")) (not (mapHas? env h)))
       (listAppend (mt (listGet xs 1) ((some c) (checkCond (= h "assert") c env funs)) ((none) (list))) (walkAll (dropN xs 1) env funs)))
@@ -115,10 +116,10 @@ fn walkHeaded h: String xs: (List rd/SExpr) env: (Map String Bool) funs: (List S
     ((or (= h "fn") (= h "lambda")) (walkAll (dropN xs 2) (bindAll env (mt (listGet xs 1) ((some p) (paramNames p)) ((none) (list)))) funs))
     ((or (= h "mt") (= h "match"))
       (listAppend (mt (listGet xs 1) ((some s) (walk s env funs)) ((none) (list)))
-                  (fold (fn [(acc (List String)) (arm rd/SExpr)] -> (List String) (listAppend acc (walkArm arm env funs))) (list) (dropN xs 2))))
+                  (fold (fn [(acc (List (Pair String String))) (arm rd/SExpr)] -> (List (Pair String String)) (listAppend acc (walkArm arm env funs))) (list) (dropN xs 2))))
     (else (walkAll (dropN xs 1) env funs)))
 
-fn walk e: rd/SExpr env: (Map String Bool) funs: (List String) -> (List String)
+fn walk e: rd/SExpr env: (Map String Bool) funs: (List String) -> (List (Pair String String))
   (mt e
     ((rd/sexprAtom _) (list))
     ((rd/sexprVect xs) (walkAll xs env funs))
@@ -146,6 +147,14 @@ fn mkDiag path: String pos: (Pair Int64 Int64) msg: String -> ty/Diagnostic
 fn defunPos d: a/DefunNode -> (Pair Int64 Int64)
   (mt (listHead d.bodyPos) ((some p) (pair p.line p.col)) ((none) (pair 1 1)))
 
+; (:m :ref CHECKER-R1GAPS :do "placeDiags resolves each (message, needle) pair to the needle's real position via a/findTokenPos, starting the search at a floor (the function's or top-level expression's own start) and advancing the floor past every match in order, so two identical needles in the same function (two bare 'sealed' references, for example) still land on their own distinct occurrences rather than both collapsing onto the first")
+fn tailrec placeDiags path: String src: String floorLine: Int64 floorCol: Int64 ms: (List (Pair String String)) acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
+  (mt (listHead ms)
+    ((none) (listReverse acc))
+    ((some mn)
+      (let [(pos (a/findTokenPos src floorLine floorCol (pairSecond mn)))]
+        (placeDiags path src (pairFirst pos) (+ (pairSecond pos) 1) (optionOr (listTail ms) (list)) (cons (mkDiag path pos (pairFirst mn)) acc)))))
+
 fn constantAssertDiags forms: (List a/TopForm) src: String path: String -> (List ty/Diagnostic)
   (let [(funs (moduleFuns forms))
         (exempt (hostSubjectFns src))]
@@ -154,8 +163,9 @@ fn constantAssertDiags forms: (List a/TopForm) src: String path: String -> (List
               ((a/topDefun d)
                 (if (listContains? exempt d.name)
                   acc
-                  (let [(env (bindAll (mapEmpty) (map (fn [(p a/Param)] -> String p.name) d.params)))]
-                    (listAppend acc (map (fn [(m String)] -> ty/Diagnostic (mkDiag path (defunPos d) m)) (walkAll d.body env funs))))))
-              ((a/topExpr p) (listAppend acc (map (fn [(m String)] -> ty/Diagnostic (mkDiag path (pair p.line p.col) m)) (walk p.expr (mapEmpty) funs))))
+                  (let [(env (bindAll (mapEmpty) (map (fn [(p a/Param)] -> String p.name) d.params)))
+                        (fp (defunPos d))]
+                    (listAppend acc (placeDiags path src (pairFirst fp) (pairSecond fp) (walkAll d.body env funs) (list))))))
+              ((a/topExpr p) (listAppend acc (placeDiags path src p.line p.col (walk p.expr (mapEmpty) funs) (list))))
               (_ acc)))
           (list) forms))

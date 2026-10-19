@@ -117,6 +117,7 @@ fn ! testShape -> Bool
     ((err e) (do (assert false (str "the 3-wide synthetic module lowers: " e)) false))
     ((ok size) (do (assert (> size 6) (str "the lowered module has functions and types: " size)) true)))
 
+; (:m :ref HLAUDIT-LOWS :do "7d98442c3 re-pinned this digest straight from its own failing assertion's message, untraced; traced now: dumped pr/printSsa's n=2 text (2499 bytes) and fed it to a from-scratch Python xxh64 (seed 0) built from the published algorithm, not this codebase; that reference reproduces the documented empty-string vector xxh64('')=0xef46db3751d8e999 and, over the dumped text, returns unsigned 16111738321385737214 / signed -2335005752323814402, exactly the pinned value, so the digest is zstdAslXxhHash's real xxh64 of the current printer output, not an artifact of a bug reproducing itself")
 fn ! testLowerIsLinear -> Bool
   (let [(small (loweringBytes 400))
         (large (loweringBytes 800))
@@ -125,7 +126,7 @@ fn ! testLowerIsLinear -> Bool
                 (str "lowerLinked of a module with n enums, schemas and functions importing a module of n more allocates linearly: 2n "
                      large " bytes vs n " small ", above 2.15x"))
         (mt digestRes
-          ((ok d) (do (assert (= d "-2335005752323814402") (str "lowered module of n=2 digest " d " matches recorded")) true))
+          ((ok d) (do (assert (= d "-2335005752323814402") (str "lowered module of n=2 digest " d " matches recorded, traced to an independent xxh64(seed 0) of the printed SSA text")) true))
           ((err e) (do (assert false (str "lowerModuleDigest 2 failed: " e)) false)))))
 
 fn refSuccessorMap blocks: (List ty/SsaBlock) -> (Map String (List String))

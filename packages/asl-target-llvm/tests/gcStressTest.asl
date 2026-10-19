@@ -130,7 +130,7 @@ fn objectStressSource -> String
     "        (adders (map (fn [(i Int64)] -> T (makeAdder i (str \"s\" i))) (range 0 300)))"
     "        (applied (fold (fn [(acc Int64) (f T)] -> Int64 (+ acc (f 1))) 0 adders))"
     "        (shapes (fold (fn [(acc Int64) (i Int64)] -> Int64 (+ acc (weight (idOf (shape i))))) 0 (range 0 300)))"
-    "        (kws (filter (fn [(k T)] -> Bool (= k :alpha)) (map (fn [(i Int64)] -> T (if (= (mod i 2) 0) :alpha :beta)) (range 0 300))))"
+    "        (kws (filter (fn [(k Keyword)] -> Bool (= k :alpha)) (map (fn [(i Int64)] -> Keyword (if (= (mod i 2) 0) :alpha :beta)) (range 0 300))))"
     "        (texts (fold (fn [(acc String) (i Int64)] -> String (if (> (stringLength acc) 40) \"const\" (str acc \"const\"))) \"\" (range 0 300)))]"
     "    (do (println (str total \" \" applied \" \" shapes \" \" (listLength kws) \" \" texts))"
     "        (println (str (idOf (listHead recs))))"

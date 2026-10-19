@@ -38,7 +38,7 @@ fn testPortBindingGuard -> Bool
 
 fn testSessionStepDeadlineResurrectionFix! -> Bool
   (let [(cmd (proc/cmd "sleep" (list "100")))
-        (termSession (cp/ProcessSession :id "sess-term" :pid 9999 :state "terminated" :cmd cmd :stdinBuffer (list) :stdoutBuffer (list) :stderrBuffer (list) :exitCode (some -9) :idleMs 12500 :timeoutMs 10000 :deadlockDetected true :termDeadlineMs 10000 :killDeadlineMs 12000 :terminationReceipt (none)))
+        (termSession (cp/ProcessSession :id "sess-term" :pid 9999 :state "terminated" :cmd cmd :stdinBuffer (list) :stdoutBuffer (list) :stderrBuffer (list) :exitCode (some -9) :idleMs 12500 :timeoutMs 10000 :deadlockDetected true :deadlocked true :termDeadlineMs 10000 :killDeadlineMs 12000 :terminationReceipt (none)))
         (stepped (proc/sessionStepDeadline! termSession 1000 "tmp/deadline_test.spool"))]
     (assert (= stepped.state "terminated") "Terminated session remains strictly terminated after a deadline step")
     (refute (!= stepped.state "terminated") "Terminated session must not change state")
@@ -50,7 +50,7 @@ fn testSessionStepDeadlineResurrectionFix! -> Bool
 
 fn testDeadlockEscalation! -> Bool
   (let [(cmd (proc/cmd "worker" (list)))
-        (activeSession (cp/ProcessSession :id "sess-act" :pid 1001 :state "active" :cmd cmd :stdinBuffer (list) :stdoutBuffer (list) :stderrBuffer (list) :exitCode (none) :idleMs 0 :timeoutMs 10000 :deadlockDetected false :termDeadlineMs 10000 :killDeadlineMs 12000 :terminationReceipt (none)))
+        (activeSession (cp/ProcessSession :id "sess-act" :pid 1001 :state "active" :cmd cmd :stdinBuffer (list) :stdoutBuffer (list) :stderrBuffer (list) :exitCode (none) :idleMs 0 :timeoutMs 10000 :deadlockDetected false :deadlocked false :termDeadlineMs 10000 :killDeadlineMs 12000 :terminationReceipt (none)))
         (s1 (proc/sessionStepDeadline! activeSession 2000 "tmp/deadline_test.spool"))
         (s2 (proc/sessionStepDeadline! s1 8500 "tmp/deadline_test.spool"))
         (sKill (proc/sessionStepDeadline! activeSession 12500 "tmp/deadline_test.spool"))]

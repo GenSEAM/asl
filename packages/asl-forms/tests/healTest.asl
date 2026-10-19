@@ -49,11 +49,29 @@ fn testBodyIndent -> Bool
   (and (healsTo? "bodyIndent" (str (hdr) "fn f n: Int64 -> Int64\n(let [(a (+ n 1))]\n a)\n") (str (hdr) "fn f n: Int64 -> Int64\n  (let [(a (+ n 1))]\n   a)\n") (list))
        (untouched? "bodyIndent near-miss" (str (hdr) "fn f n: Int64 -> Int64\n   (let [(a (+ n 1))]\n    a)\n")))
 
+; (:m :ref FIX-COND-SHAPE-20261016 :do "staysDiagnosed?: a clause whose swap would not help (neither reading is a Bool test) is not guessed at; the diagnostic the checker already gives, naming cond, is what is left")
+fn staysDiagnosed? rule: String text: String needle: String -> Bool
+  (let [(res (h/healSourceWith text "m.asl" (mapEmpty) (list)))]
+    (do (assert (not res.changed) (str rule ": the ambiguous fixture is not rewritten, got " res.receipt))
+        (assert (not (listEmpty? res.left)) (str rule ": the ambiguous fixture keeps a real diagnostic, got " res.receipt))
+        (assert (listAny? (fn [(d ty/Diagnostic)] -> Bool (stringContains? (h/diagText d) needle)) res.left) (str rule ": the diagnostic names the cond shape, got " res.receipt))
+        true))
+
+; (:m :ref FIX-COND-SHAPE-20261016 :do "the 6 E11 checkFail shapes (SH/plan.asn amend rejudged: unmarked pooled checkFail 22, ERR_TYPE_MISMATCH 18 malformed cond test/value pairing, ERR_UNKNOWN_SYMBOL 4 else as a binding/seq); the raw cand.asl files under the SYN13 run dirs are gone, so these 6 are rebuilt from the classification: 4 shifted test/value pairs (3 heal, 1 genuinely ambiguous so it keeps the checker's own diagnostic naming cond) and 2 else-as-a-bare-atom-inside-brackets, both already covered by the brackets mode above")
+fn testCondShapeE11 -> Bool
+  (and (healsTo? "condClauses" (str (hdr) "fn f n: Int64 -> Int64\n  (cond\n    (1 (> n 0))\n    (else 0))\n") (str (hdr) "fn f n: Int64 -> Int64\n  (cond\n    ((> n 0) 1)\n    (else 0))\n") (list))
+       (healsTo? "condClauses" (str (hdr) "fn f n: Int64 -> Int64\n  (cond\n    (1 (> n 0))\n    (-1 (< n 0))\n    (else 0))\n") (str (hdr) "fn f n: Int64 -> Int64\n  (cond\n    ((> n 0) 1)\n    ((< n 0) -1)\n    (else 0))\n") (list))
+       (healsTo? "condClauses" (str (hdr) "fn f s: String -> String\n  (cond\n    ((stringEmpty? s) \"empty\")\n    (\"nonempty\" (not (stringEmpty? s)))\n    (else \"?\"))\n") (str (hdr) "fn f s: String -> String\n  (cond\n    ((stringEmpty? s) \"empty\")\n    ((not (stringEmpty? s)) \"nonempty\")\n    (else \"?\"))\n") (list))
+       (staysDiagnosed? "condClauses" (str (hdr) "fn f n: Int64 -> Int64\n  (cond\n    ((> n 0) \"x\")\n    (else 0))\n") "cond")
+       (healsTo? "condClauses" (str (hdr) "fn f n: Int64 -> Int64\n  (cond\n    [(> n 0) 1]\n    [(< n 0) -1]\n    [else 0])\n") (str (hdr) "fn f n: Int64 -> Int64\n  (cond\n    ((> n 0) 1)\n    ((< n 0) -1)\n    (else 0))\n") (list))
+       (healsTo? "condClauses" (str (hdr) "fn f n: Int64 -> Int64\n  (cond\n    ((> n 0) 1)\n    ((< n 0) -1)\n    [else 0])\n") (str (hdr) "fn f n: Int64 -> Int64\n  (cond\n    ((> n 0) 1)\n    ((< n 0) -1)\n    (else 0))\n") (list)))
+
 fn testCondClauses -> Bool
   (and (healsTo? "condClauses" (str (hdr) "fn f n: Int64 -> Int64\n  (cond [(> n 0) 1] [(else 0)])\n") (str (hdr) "fn f n: Int64 -> Int64\n  (cond ((> n 0) 1) (else 0))\n") (list))
        (healsTo? "condClauses" (str (hdr) "fn f n: Int64 -> Int64\n  (cond ((> n 0) 1) ((else 0)))\n") (str (hdr) "fn f n: Int64 -> Int64\n  (cond ((> n 0) 1) (else 0))\n") (list))
        (healsTo? "condClauses" (str (hdr) "fn f n: Int64 -> Int64\n  (cond ((> n 0) 1 (else 0)))\n") (str (hdr) "fn f n: Int64 -> Int64\n  (cond ((> n 0) 1) (else 0))\n") (list))
        (healsTo? "condClauses" (str (hdr) "fn f n: Int64 -> Int64\n  (cond (> n 0) 1 (< n 0) 2 (else 0))\n") (str (hdr) "fn f n: Int64 -> Int64\n  (cond ((> n 0) 1) ((< n 0) 2) (else 0))\n") (list))
+       (testCondShapeE11)
        (untouched? "condClauses near-miss" (str (hdr) "fn f n: Int64 -> Int64\n  (let [(b (> n 0))]\n    (cond (b 1) (else 0)))\n")))
 
 fn testLetBindingVector -> Bool

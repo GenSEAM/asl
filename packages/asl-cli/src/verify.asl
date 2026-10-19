@@ -1,9 +1,16 @@
 (module asl-cli/verify
-  :x [checkFiles! checkRoots nativeCheckPaths!]
+  :x [checkFiles! checkRoots nativeCheckPaths! formatDiag formatDiags]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-gates/src/dyck :a dyck) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
 
 fn checkRoots -> (List String)
   (list "." "asl/packages" "asl")
+
+; (:m :ref U4-MARKER-PARITY :do "the one shared formatter for a checker Diagnostic's path:line:col CODE message line; asl check (printDiag! below) and tools/nativeTest.asl's test/run checker gate both render through this, so a failing fixture names the same site in check, test and run alike")
+fn formatDiag d: ty/Diagnostic -> String
+  (str d.path ":" (stringFromInt64 d.line) ":" (stringFromInt64 d.col) ": " d.code " " d.message)
+
+fn formatDiags diags: (List ty/Diagnostic) -> String
+  (stringJoin (map formatDiag diags) "\n")
 
 fn balanceError rc: Int64 -> String
   (if (= rc 2) "ERR_NO_FILE" "ERR_UNBALANCED")
@@ -20,7 +27,7 @@ fn ! checkOther! paths: (List String) -> Int64
         (do (sys/say! "(:audit :sub check :status :passed (:check :id balance :status :passed))") 0))))
 
 fn ! printDiag! d: ty/Diagnostic -> Bool
-  (sys/sayErr! (str d.path ":" (stringFromInt64 d.line) ":" (stringFromInt64 d.col) ": " d.code " " d.message))
+  (sys/sayErr! (formatDiag d))
 
 fn ! reportOne! path: String verdict: (Result cc/Verdict String) -> Int64
   (mt verdict

@@ -7,10 +7,10 @@
 fn closureModules -> (List ClosureModule)
   (list
     (ClosureModule :path "asl/packages/asl-compiler/src/compiler.asl" :expected 21)
-    (ClosureModule :path "asl/packages/asl-parser/src/ast.asl" :expected 259)
+    (ClosureModule :path "asl/packages/asl-parser/src/ast.asl" :expected 268)
     (ClosureModule :path "asl/packages/asl-checker/src/types.asl" :expected 52)
-    (ClosureModule :path "asl/packages/asl-checker/src/check.asl" :expected 131)
-    (ClosureModule :path "asl/packages/asl-checker/src/resolve.asl" :expected 263)
+    (ClosureModule :path "asl/packages/asl-checker/src/check.asl" :expected 135)
+    (ClosureModule :path "asl/packages/asl-checker/src/resolve.asl" :expected 279)
     (ClosureModule :path "asl/packages/asl-codegen/src/c99Emit.asl" :expected 51)
     (ClosureModule :path "asl/packages/asl-codegen/src/c99Mangle.asl" :expected 9)
     (ClosureModule :path "asl/packages/asl-target-llvm/src/main.asl" :expected 30)

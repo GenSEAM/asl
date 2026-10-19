@@ -331,8 +331,9 @@ fn ! changedPlan! base: String -> (Result (Pair (List String) (Pair (List String
               (mt (impact/selectFiles allAsl changed)
                 ((err e) (err (str "ERR_SELECTION: " e)))
                 ((ok selected)
-                 (let [(kept (filter (fn [(p String)] -> Bool (not (runner/isFrozenPath! ws p))) selected))
-                       (frozen (- (listLength selected) (listLength kept)))]
+                 (let [(runnable (filter (fn [(p String)] -> Bool (and (not (runner/isExcludedSegment p)) (none? (runner/driverCorpus p)))) selected))
+                       (kept (filter (fn [(p String)] -> Bool (not (runner/isFrozenPath! ws p))) runnable))
+                       (frozen (- (listLength runnable) (listLength kept)))]
                    (ok (pair changed (pair kept frozen))))))))))))
 
 fn ! changedReport! base: String changed: (List String) selected: (List String) done: (List Done) frozen: Int64 -> Int64
