@@ -3,7 +3,7 @@
       ProviderEnv VendorConfig Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
       parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
-      curlConfig parseCurlResponse tempDir! freshDir! buildDryRunInfo! providerEnv! makeProvider! nextTurn! advise! review! providerName vendorName splitContext cleanup!]
+      curlConfig parseCurlResponse tempDir! freshDir! buildDryRunInfo! providerEnv! makeProvider! nextTurn! advise! review! providerName vendorName splitContext cleanup! toolsField]
   :i [(asl-json/json :a j) (asl-proc/coreProcess :a cp) (aslGateway/server :a gs) (aslGateway/dispatch :a gd) (aslGateway/upstream :a gu) (aslGateway/config :a cfg)])
 
 enum ProviderError
@@ -1226,6 +1226,10 @@ fn ! postGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String 
 fn msg role: String content: String -> j/Json
   (j/jobj (list (pair "role" (j/jstr role)) (pair "content" (j/jstr content))))
 
+; (:m :ref GW-EMPTY-TOOLS-20261019 :do "IFM ifmK2Horizon intermittently answers HTTP 400 'tools must not be an empty array' for a request carrying an empty tools array; callProfile! and callAgy! always sent one ((pair \"tools\" (j/jarr (list)))). Neither call site has a real tools source yet (no VendorConfig field, no caller ever builds a non-empty list), so today this always omits the key -- but the rule is general, not a special case for 'always empty': a tools list is only ever named in the body when it is non-empty")
+fn toolsField tools: (List j/Json) -> (List (Pair String j/Json))
+  (if (listEmpty? tools) (list) (list (pair "tools" (j/jarr tools))))
+
 ; (:m :effect net)
 fn ! callProfile! cfg: VendorConfig system: String user: String model: String -> Called
   (let [(ws (absPath (str cfg.rootDir "/.asl/run/agentLoop/agents/" cfg.sessionId)))
@@ -1234,11 +1238,11 @@ fn ! callProfile! cfg: VendorConfig system: String user: String model: String ->
                    (if (and (= model "profile") (not (stringEmpty? profile))) (list (pair "X-ASL-Profile" profile)) (list))
                    (if (stringEmpty? cfg.sessionId) (list) (list (pair "X-ASL-Session" cfg.sessionId)))))
         (payload (j/jobj (listAppend
-                           (list (pair "model" (j/jstr model))
-                                 (pair "intent" (j/jstr cfg.intent))
-                                 (pair "messages" (j/jarr (list (msg "system" system) (msg "user" user))))
-                                 (pair "tools" (j/jarr (list)))
-                                 (pair "workspace" (j/jstr ws)))
+                           (listAppend
+                             (list (pair "model" (j/jstr model))
+                                   (pair "intent" (j/jstr cfg.intent))
+                                   (pair "messages" (j/jarr (list (msg "system" system) (msg "user" user)))))
+                             (listAppend (toolsField (list)) (list (pair "workspace" (j/jstr ws)))))
                            (listAppend (if cfg.timeoutSet (list (pair "timeout" (j/jint cfg.timeout))) (list))
                                        (list (pair "queue_timeout" (j/jint cfg.queueTimeout)))))))]
     (mt (makeDirs ws)
@@ -1261,14 +1265,15 @@ fn ! callAgy! cfg: VendorConfig system: String user: String -> Called
         (let [(agent (str "aslLoop" (if (stringEmpty? cfg.mode) "Scout" (capitalize cfg.mode))))
               (root (absPath (str cfg.rootDir "/.asl/run/agentLoop/agents/" cfg.sessionId)))
               (pluginDir (str root "/.agents/plugins/aslLoop"))
-              (payload (j/jobj (list (pair "model" (j/jstr (if (stringStartsWith? model "agy/") model (str "agy/" model))))
-                                     (pair "messages" (j/jarr (list (msg "user" user))))
-                                     (pair "agent" (j/jstr agent))
-                                     (pair "tools" (j/jarr (list)))
-                                     (pair "addDirs" (j/jarr (list (j/jstr root))))
-                                     (pair "workspace" (j/jstr root))
-                                     (pair "timeout" (j/jint cfg.timeout))
-                                     (pair "queue_timeout" (j/jint cfg.queueTimeout)))))
+              (payload (j/jobj (listAppend
+                                 (list (pair "model" (j/jstr (if (stringStartsWith? model "agy/") model (str "agy/" model))))
+                                       (pair "messages" (j/jarr (list (msg "user" user))))
+                                       (pair "agent" (j/jstr agent)))
+                                 (listAppend (toolsField (list))
+                                   (list (pair "addDirs" (j/jarr (list (j/jstr root))))
+                                         (pair "workspace" (j/jstr root))
+                                         (pair "timeout" (j/jint cfg.timeout))
+                                         (pair "queue_timeout" (j/jint cfg.queueTimeout)))))))
               (written (mt (makeDirs (str pluginDir "/agents"))
                          ((err e) (err e))
                          ((ok _) (mt (writeText (str pluginDir "/plugin.json") (pyJsonDumps (j/jobj (list (pair "name" (j/jstr "aslLoop"))))))

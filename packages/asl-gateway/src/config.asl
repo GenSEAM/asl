@@ -79,6 +79,7 @@
       gatewaySharedUsagePathOverride
       gatewayDailyTokenBudget
       gatewayBreakerCooldownSecOverride
+      expandUserPath keyFileLookup! resolveProviderKey! gatewayKeyFilesFromProps keyFilesSuffix
       profilePinPath profilePinRead! writeProfilePin!
       gatewayConfigKey!
       configKeyEqual?
@@ -104,7 +105,8 @@
       (asl-parser/ast :a ast)
       (asl-parser/lexer :a lx)
       (asl-parser/reader :a rd)
-      (aslGateway/batchPool :a bp)])
+      (aslGateway/batchPool :a bp)
+      (aslGateway/usage :a ug)])
 
 (enum AsnScalar
   (:c scalarBool [(b Bool)])
@@ -247,8 +249,50 @@ fn noRetryPolicy -> RetryPolicy
   (:f registry String)
   (:f registryError (Option String))
   (:f warnings (List String))
-  (:f undeclaredIntents (Map String Int64)))
+  (:f undeclaredIntents (Map String Int64))
+  (:f keyFiles (List String)))
 
+; (:m :ref GW-KEYSTORE-20261019 :do "a provider's :keyEnv is resolved against (:gateway :keyFiles (path ...)) before the process environment, never the other way: a key file is this workspace's own secret store, checked into no repo, and should win over a stray inherited env var from the caller's shell. ~ expands against HOME; each path is read as dotenv-style NAME=value lines (export prefix and quotes stripped, # comments skipped -- aslGateway/usage's zshLine/loadZshEnvText already implements exactly that grammar for ~/.zshenv, reused here instead of a second parser) and searched in listed order, first match wins; a file that is missing, unreadable or lacks the name is silently skipped, not an error -- only exhausting every file and the environment is")
+fn expandUserPath p: String -> String
+  (cond
+    ((= p "~") (optionOr (envGet "HOME") p))
+    ((stringStartsWith? p "~/") (str (rstripSlash (optionOr (envGet "HOME") "")) (optionOr (stringSlice p 1 (stringLength p)) "")))
+    (else p))
+
+fn ! keyFileLookup! paths: (List String) keyEnv: String -> (Option String)
+  (mt (listHead paths)
+    ((none) none)
+    ((some p)
+     (let [(rest (optionOr (listTail paths) (list)))]
+       (mt (fileReadString (expandUserPath p))
+         ((err _) (keyFileLookup! rest keyEnv))
+         ((ok raw)
+          (mt (ug/loadZshEnvText (mapEmpty) raw)
+            ((err _) (keyFileLookup! rest keyEnv))
+            ((ok envMap)
+             (mt (mapGet envMap keyEnv)
+               ((some v) (if (stringEmpty? v) (keyFileLookup! rest keyEnv) (some v)))
+               ((none) (keyFileLookup! rest keyEnv))))))))))
+
+fn ! resolveProviderKey! keyFiles: (List String) keyEnv: String -> (Option String)
+  (if (stringEmpty? keyEnv)
+    none
+    (mt (keyFileLookup! keyFiles keyEnv)
+      ((some v) (some v))
+      ((none) (envGet keyEnv))))
+
+; (:m :ref GW-KEYSTORE-20261019 :do "a missing key names what was searched -- the env var always, the key files too when any were configured -- never the value")
+fn keyFilesSuffix keyFiles: (List String) -> String
+  (if (listEmpty? keyFiles) "" (str " (also checked " (stringJoin keyFiles ", ") ")"))
+
+fn gatewayKeyFilesFromProps g: (Map String rd/SExpr) -> (List String)
+  (mt (mapGet g "keyFiles")
+    ((none) (list))
+    ((some value)
+     (let [(items (mt value ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list))))]
+       (filter (fn [(s String)] -> Bool (not (stringEmpty? s)))
+         (map (fn [(it rd/SExpr)] -> String (mt (asn_scalar it) ((scalarStr s) s) (_ "")))
+           items)))))
 
 fn listAppendOne xs: (List T) x: T -> (List T)
   (listAppend xs (list x))
@@ -1508,12 +1552,13 @@ fn gateway_config_v2_build! g: (Map String rd/SExpr) source: String registryPath
         (allErrs2 (if (listEmpty? profileOrder)
                     (listAppendOne allErrs1 ":profiles must define at least one (:profile ...)")
                     allErrs1))
+        (keyFilesList (gatewayKeyFilesFromProps g))
         (envWarns (fold (fn [(acc (List String)) (pid String)] -> (List String)
                           (let [(pv (optionOr (mapGet providers pid) (GatewayProvider :id pid :kind "" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))]
                             (if (and (not (stringEmpty? pv.keyEnv)) (listAny? (fn [(m GatewayModel)] -> Bool (= m.provider pid)) (mapValues models)))
-                              (mt (envGet pv.keyEnv)
-                                ((none) (listAppendOne acc (str "provider " pid ": key env " pv.keyEnv " is not set")))
-                                ((some val) (if (stringEmpty? val) (listAppendOne acc (str "provider " pid ": key env " pv.keyEnv " is not set")) acc)))
+                              (mt (resolveProviderKey! keyFilesList pv.keyEnv)
+                                ((none) (listAppendOne acc (str "provider " pid ": key env " pv.keyEnv " is not set" (keyFilesSuffix keyFilesList))))
+                                ((some val) (if (stringEmpty? val) (listAppendOne acc (str "provider " pid ": key env " pv.keyEnv " is not set" (keyFilesSuffix keyFilesList))) acc)))
                               acc)))
                         (list)
                         (providerOrder! (pairFirst provForms))))
@@ -1533,14 +1578,15 @@ fn gateway_config_v2_build! g: (Map String rd/SExpr) source: String registryPath
                  :registry registryPath
                  :registryError regErr
                  :warnings allWarns
-                 :undeclaredIntents (mapEmpty)))]
+                 :undeclaredIntents (mapEmpty)
+                 :keyFiles keyFilesList))]
     (pair table allErrs2))
 
 fn gatewayConfigV2Build! g: (Map String rd/SExpr) source: String registryPath: String -> (Pair GatewayTable (List String))
   (gateway_config_v2_build! g source registryPath)
 
 
-fn convertV1ToTable! v1: GatewayV1Config source: String -> GatewayTable
+fn convertV1ToTable! v1: GatewayV1Config source: String keyFiles: (List String) -> GatewayTable
   (let [(profilesMap (fold (fn [(acc (Map String GatewayProfile)) (pairEntry (Pair String (List GatewayRoute)))] -> (Map String GatewayProfile)
                              (mapSet acc (pairFirst pairEntry) (GatewayProfile :id (pairFirst pairEntry) :routes (pairSecond pairEntry) :fallback (none))))
                            (mapEmpty)
@@ -1561,7 +1607,8 @@ fn convertV1ToTable! v1: GatewayV1Config source: String -> GatewayTable
       :registry ""
       :registryError (none)
       :warnings (list)
-      :undeclaredIntents (mapEmpty)))
+      :undeclaredIntents (mapEmpty)
+      :keyFiles keyFiles))
 
 fn gateway_config_parse! text: String source: String registryPath: String -> (Result GatewayTable String)
   (let [(toks (lx/tokenize text))]
@@ -1589,7 +1636,7 @@ fn gateway_config_parse! text: String source: String registryPath: String -> (Re
                         (ok tbl)))
                     (mt (gateway_profiles_parse text)
                       ((err e) (err e))
-                      ((ok v1) (ok (convertV1ToTable! v1 source)))))))))))))
+                      ((ok v1) (ok (convertV1ToTable! v1 source (gatewayKeyFilesFromProps g))))))))))))))
 
 fn gatewayConfigParse! text: String source: String registryPath: String -> (Result GatewayTable String)
   (gateway_config_parse! text source registryPath)
@@ -1672,7 +1719,7 @@ fn gateway_v2_entry! table: GatewayTable alias: String -> GatewayResolvedEntry
                              :rpm (none)
                              :pool none
                              :retry (none)))
-            (let [(key (if (stringEmpty? pv.keyEnv) "" (optionOr (envGet pv.keyEnv) "")))
+            (let [(key (optionOr (resolveProviderKey! table.keyFiles pv.keyEnv) ""))
                   (tSec (mt m.params.timeoutSec
                           ((some ts) ts)
                           ((none) pv.timeoutSec)))

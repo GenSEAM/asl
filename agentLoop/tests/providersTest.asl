@@ -459,6 +459,13 @@ fn checkFreePoolProfilePin root: String -> Bool
               (check "FREEBULK-ROUTED-DEEPSEEK: that resolved profile reaches the gateway as X-ASL-Profile" "true"
                 (if (stringContains? headers "x-asl-profile: freeBulk") "true" "false"))))))))
 
+; (:m :ref GW-EMPTY-TOOLS-20261019 :do "ifmK2Horizon intermittently 400s on 'tools must not be an empty array'; callProfile!/callAgy! always sent one. toolsField is the one place deciding whether the key appears at all, so this checks both halves of its contract directly rather than only by absence in the fixture-pinned bodies above (providersFixture.asn's 39 gateway cases all had their own pinned 'tools': [] fragment dropped by this same unit, which is thorough regression coverage but does not, on its own, prove a non-empty list still keeps the key)")
+fn checkToolsFieldOmitsWhenEmpty -> Bool
+  (let [(empty (pv/toolsField (list)))
+        (nonEmpty (pv/toolsField (list (j/jstr "x"))))]
+    (and (checkTrue "GW-EMPTY-TOOLS: an empty tools list carries no tools key in the request body" (listEmpty? empty))
+      (checkTrue "GW-EMPTY-TOOLS: a non-empty tools list keeps the tools key" (= (listLength nonEmpty) 1))))
+
 fn ! checkFreshDir root: String -> Bool
   (let [(base (str root "/tmp"))
         (taken (ok? (dirCreate (str base "/aslFresh_same"))))
@@ -519,9 +526,10 @@ fn ! runTests -> Bool
            (sessionHeader (checkSessionHeader root))
            (sessionHeaderEmpty (checkSessionHeaderEmpty root))
            (freePoolProfilePin (checkFreePoolProfilePin root))
+           (toolsFieldOk (checkToolsFieldOmitsWhenEmpty))
            (removed (ok? (pathRemove root)))]
        (and (checkTrue (str "the fixture holds at least 150 cases: " (stringFromInt64 (listLength lines))) (>= (listLength lines) 150))
          (and (checkTrue "scratch root and stub bin ready" ready)
            (and (checkTrue "every case passed"
-                  (and redirect (and temps (and freshOk (and intentPlan (and sessionHeader (and sessionHeaderEmpty (and freePoolProfilePin (listAll? (fn [r] r) results)))))))))
+                  (and redirect (and temps (and freshOk (and intentPlan (and sessionHeader (and sessionHeaderEmpty (and freePoolProfilePin (and toolsFieldOk (listAll? (fn [r] r) results))))))))))
              (checkTrue "scratch root removed" removed)))))))

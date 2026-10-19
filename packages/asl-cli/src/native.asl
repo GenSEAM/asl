@@ -60,6 +60,16 @@ fn ! runOutside! ctx: sys/Context file: String absFile: String args: (List Strin
         (do (eprintln (str "NATIVE-BYPASS " file " :reason absolute-path-outside-workspace :staged " rel))
             (nativeTest! (cons "run" (cons rel (rest args))))))))
 
+; (:m :ref R1-NATIVE-RECERT :do "nt/main prints its own 'FAIL path: ERR_NATIVE_UNSUPPORTED: path exports neither runTests nor main' when run! delegates straight to it, same generic wrap as the test-side gap but with no Built.reason string this layer could intercept; a cheap static nt/entryOf read of the file's own header, done here before delegating, catches the same no-entry case and reports it with the canonical ERR_NO_ENTRY CONTRACT.asn names, while any file that does declare an entry still goes to nativeTest! exactly as before")
+; (:m :ref POSTFIX :do "the early-intercept FAIL line reinvented nt/main's own construction and got it wrong on 3 points: it rooted (relative) both path mentions where nt/main's runFile uses the raw absFile for the FAIL prefix and only the relative logical path for the message body, it dropped the colon after ERR_NO_ENTRY, and it appended a bogus (after 0 asserts) suffix nt/main's run leg never prints (that suffix is test/eval-only, from failLine, not runFile's bare failReason); matched verbatim to nt/main's own text so nativeCliTest's native-equals-asl-host comparison holds")
+fn ! runEntryChecked! ctx: sys/Context absFile: String args: (List String) -> Int64
+  (mt (fileReadString absFile)
+    ((err _) (nativeTest! (cons "run" (cons absFile (rest args)))))
+    ((ok src)
+      (if (listContains? (nt/exportsOf src) "main")
+        (nativeTest! (cons "run" (cons absFile (rest args))))
+        (do (eprintln (str "FAIL " absFile ": ERR_NO_ENTRY: " (rooted ctx absFile) " exports neither runTests nor main")) 1))))
+
 ; (:m :ref OUT-OF-ROOT-USERPATH :do "an in-root file is run as absFile, not (rooted ctx absFile): nativeTest.asl's runFile now reads the path it is given against the caller's actual cwd (OUT-OF-ROOT-USERPATH), so a root-stripped name only resolves when cwd already equals root; absFile is cwd-independent and runFile derives its own logical/import name by stripping toolRoot internally")
 fn ! run! ctx: sys/Context args: (List String) -> Int64
   (let [(file (first args))
@@ -69,7 +79,7 @@ fn ! run! ctx: sys/Context args: (List String) -> Int64
       ((or (listEmpty? args) (or (= file "--help") (= file "-h"))) (cmd/dispatch! ctx "run" args))
       ((not inRoot) (runOutside! ctx file absFile args))
       ((= (rooted ctx absFile) "tools/nativeTest.asl") (nativeTool! (rest args)))
-      (else (nativeTest! (cons "run" (cons absFile (rest args)))))))
+      (else (runEntryChecked! ctx absFile args))))
 
 fn ! eprintText text: String -> Unit
   (if (stringEmpty? text) () (do (eprintln (if (stringEndsWith? text "\n") (optionOr (stringSlice text 0 (- (stringLength text) 1)) text) text)) ()))
@@ -84,12 +94,27 @@ fn ! hostJob ctx: sys/Context cwd: String path: String errFile: String -> run/Jo
 fn oneLine text: String -> String
   (stringReplace (stringTrim text) "\n" " ")
 
+; (:m :ref R1-NATIVE-RECERT :do "the lowering pass rejects an unbuilt file with its own ERR_LOWER_* vocabulary, wrapped generically as ERR_NATIVE_UNSUPPORTED by every caller below; CONTRACT.asn names the canonical code verbatim, so recognize the well-known lowering shapes and surface that code; an unrecognized shape keeps the generic tag")
+fn unsupportedCode reason: String -> String
+  (cond
+    ((stringContains? reason "exports neither runTests nor main") "ERR_NO_ENTRY")
+    ((and (stringContains? reason "imports ") (or (stringContains? reason "not declared") (stringContains? reason "has an empty, . or .. segment"))) "ERR_UNRESOLVED_IMPORT")
+    ((stringContains? reason "[ERR_LOWER_ARITY]") "ERR_ARITY")
+    ((stringContains? reason "is neither a module function nor a builtin") "ERR_UNKNOWN_SYMBOL")
+    ((stringContains? reason "unknown symbol '") "ERR_UNKNOWN_SYMBOL")
+    ((stringContains? reason "declares no '") "ERR_UNKNOWN_SYMBOL")
+    ((stringContains? reason "nested deeper than") "ERR_DEPTH")
+    (else ""))
+
+fn unsupportedTag reason: String -> String
+  (let [(code (unsupportedCode reason))] (if (stringEmpty? code) "ERR_NATIVE_UNSUPPORTED" code))
+
 fn ! gapNote path: String reason: String -> Unit
-  (do (eprintln (str "asl: " path " runs on asl-host: ERR_NATIVE_UNSUPPORTED: " (oneLine reason))) ())
+  (do (eprintln (str "asl: " path " runs on asl-host: " (unsupportedTag reason) ": " (oneLine reason))) ())
 
 fn ! hostSuite! ctx: sys/Context path: String reason: String -> Int64
   (if (not (sys/executable? ctx.hostBin))
-    (do (eprintln (nt/failLine path reason)) 1)
+    (do (eprintln (str "FAIL " path ": " (unsupportedTag reason) ": " reason " (after 0 asserts)")) 1)
     (let [(_ (gapNote path reason))
           (errFile (str "/tmp/aslNativeHost" (stringFromInt64 (procSelf)) ".err"))
           (timeoutS (resultOr (sw/timeoutWanted!) 1800))
@@ -195,7 +220,7 @@ fn ! hostSweep! ctx: sys/Context ws: String tmp: String timeoutS: Int64 k: Int64
     (if (not hosted)
       (map (fn [(b (Pair (Pair Int64 String) nt/Built))] -> sw/Done
              (sw/Done :index (pairFirst (pairFirst b)) :path (pairSecond (pairFirst b)) :code 1
-                      :last (nt/failLine (pairSecond (pairFirst b)) (pairSecond b).reason) :out ""))
+                      :last (str "FAIL " (pairSecond (pairFirst b)) ": " (unsupportedTag (pairSecond b).reason) ": " (pairSecond b).reason " (after 0 asserts)") :out ""))
            unbuilt)
       (map (fn [(p (Pair (Pair (Pair Int64 String) nt/Built) run/Done))] -> sw/Done
              (let [(i (pairFirst (pairFirst (pairFirst p))))

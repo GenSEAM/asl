@@ -250,7 +250,7 @@ fn testConfigAbsentKeepsOldBehaviour -> Bool
 fn emptyTable -> c/GatewayTable
   (c/GatewayTable :version 0 :defaultProfile "" :profiles (mapEmpty) :profileOrder (list) :models (mapEmpty) :modelOrder (list)
     :providers (mapEmpty) :intents (mapEmpty) :uses (mapEmpty) :useOrder (list) :source "" :registry "" :registryError (none)
-    :warnings (list) :undeclaredIntents (mapEmpty))
+    :warnings (list) :undeclaredIntents (mapEmpty) :keyFiles (list))
 
 fn tableWithRetry maxAttempts: Int64 -> c/GatewayTable
   (let [(text (str
