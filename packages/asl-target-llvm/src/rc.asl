@@ -25,11 +25,14 @@ schema Facts
   wrapAfter: (Map String Bool)
   borrowed: (Map String Bool)
   flow: (Map String Bool)
+  parts: (Map String (Pair String Int64))
+  cells: (Map String Bool)
 
 schema Walk
   live: (Map String Bool)
   out: (List ty/SsaInstr)
   n: Int64
+  pend: (List (Pair String Int64))
 
 schema Flow
   ok: Bool
@@ -253,7 +256,8 @@ fn functionFacts ctx: Ctx f: ty/SsaFunction -> Facts
         (immortal (union base0 (setOf (filter (fn [(n String)] -> Bool (let [(b (mt (mapGet defs n) ((some op) (sourceBase ctx op)) ((none) "")))] (and (!= b "") (immortalBase? ctx defs base0 b 64)))) sources))))
         (flow (if (mapHas? ctx.proj f.name) (flowOf ctx f) (flowNone)))
         (borrowed (union (borrowedParams ctx f) flow.names))
-        (probe (Facts :heap heap :immortal immortal :anchors (mapEmpty) :dupAfter (mapEmpty) :pinAfter (mapEmpty) :wrapAfter (mapEmpty) :borrowed borrowed :flow flow.keys))
+        (parts (partsOf instrs))
+        (probe (Facts :heap heap :immortal immortal :anchors (mapEmpty) :dupAfter (mapEmpty) :pinAfter (mapEmpty) :wrapAfter (mapEmpty) :borrowed borrowed :flow flow.keys :parts parts :cells (cellBases parts)))
         (useKinds (allUseKinds ctx probe f))
         (borrowOnly (fn [(n String)] -> Bool (listAll? (fn [(k String)] -> Bool (!= k "consume")) (optionOr (mapGet useKinds n) (list)))))
         (termConsumed (setOf (fold (fn [(acc (List String)) (b ty/SsaBlock)] -> (List String) (listAppend acc (map (fn [(u Use)] -> String u.name) (filter (fn [(u Use)] -> Bool (= u.kind "consume")) (termUses probe b.term))))) (list) f.blocks)))
@@ -266,7 +270,7 @@ fn functionFacts ctx: Ctx f: ty/SsaFunction -> Facts
         (dupAfter (setOf (filter (fn [(n String)] -> Bool (and (not (mapHas? immortal n)) (not (mapHas? derived n)))) sources)))
         (pinAfter (setOf (filter (fn [(n String)] -> Bool (= (optionOr (mapGet kinds n) "") "opaque")) (mapKeys heap))))
         (wrapAfter (setOf (filter (fn [(n String)] -> Bool (= (optionOr (mapGet kinds n) "") "wrap")) (mapKeys heap))))]
-    (Facts :heap heap :immortal immortal :anchors anchors :dupAfter dupAfter :pinAfter pinAfter :wrapAfter wrapAfter :borrowed borrowed :flow flow.keys))
+    (Facts :heap heap :immortal immortal :anchors anchors :dupAfter dupAfter :pinAfter pinAfter :wrapAfter wrapAfter :borrowed borrowed :flow flow.keys :parts parts :cells probe.cells))
 
 fn tracked? facts: Facts v: String -> Bool
   (and (mapHas? facts.heap v) (and (not (mapHas? facts.immortal v)) (and (not (mapHas? facts.anchors v)) (not (mapHas? facts.borrowed v)))))
@@ -309,10 +313,10 @@ fn fresh w: Walk -> String
   (str "rc." w.n)
 
 fn emitRc w: Walk callee: String v: String -> Walk
-  (Walk :live w.live :out (cons (rcCall (fresh w) callee v) w.out) :n (+ w.n 1))
+  (Walk :live w.live :out (cons (rcCall (fresh w) callee v) w.out) :n (+ w.n 1) :pend w.pend)
 
 fn prependAll w: Walk xs: (List ty/SsaInstr) -> Walk
-  (Walk :live w.live :out (listAppend xs w.out) :n w.n)
+  (Walk :live w.live :out (listAppend xs w.out) :n w.n :pend w.pend)
 
 fn rcInstrs label: String w0: Int64 calls: (List (Pair String String)) -> (List ty/SsaInstr)
   (map (fn [(i Int64)] -> ty/SsaInstr
@@ -358,20 +362,116 @@ fn deferCalls drops: (List String) -> (List (Pair String String))
   (map (fn [(k Int64)] -> (Pair String String) (pair (if (= k 0) (deferFirstName) (deferName)) (optionOr (listGet drops k) "")))
        (range 0 (listLength drops)))
 
+; (:m :ref RC-FBIP :do "a construct that allocates a pooled cell (a ctor of one to thirty-one fields, a cons) where an owned value read through its fields dies is preceded by a reset of that value: if it is unique its kids other than the fields moved into the construct are released and its cell becomes the construct's when the size class matches; moved fields are duplicated only when the value was shared")
+fn allocClass ins: ty/SsaInstr -> Int64
+  (mt ins.op
+    ((ty/opConstruct _ _ fields) (if (or (listEmpty? fields) (> (listLength fields) 31)) -1 (* 2 (listLength fields))))
+    ((ty/opEntry name _) (if (consumeEntry? name) 3 -1))
+    (_ -1))
+
+fn partOf op: ty/SsaOp -> (Option (Pair String Int64))
+  (mt op
+    ((ty/opVariantField b i) (some (pair b i)))
+    ((ty/opEntry name args) (cond ((= name "@listFirst") (mt (listHead args) ((some b) (some (pair b 0))) ((none) (none))))
+                                  ((= name "@listRest") (mt (listHead args) ((some b) (some (pair b 1))) ((none) (none))))
+                                  (else (none))))
+    (_ (none)))
+
+fn partsOf instrs: (List ty/SsaInstr) -> (Map String (Pair String Int64))
+  (fold (fn [(acc (Map String (Pair String Int64))) (i ty/SsaInstr)] -> (Map String (Pair String Int64))
+          (mt (partOf i.op) ((some p) (mapSet acc i.dest p)) ((none) acc)))
+        (mapEmpty) instrs)
+
+fn cellBases parts: (Map String (Pair String Int64)) -> (Map String Bool)
+  (setOf (map (fn [(p (Pair String Int64))] -> String (pairFirst p)) (mapValues parts)))
+
+fn tokenName dest: String -> String
+  (str "rcTok_" dest)
+
+fn resetName cls: Int64 mask: Int64 -> String
+  (str "aslRcReset_" cls "_" mask)
+
+fn dupSharedName -> String
+  "aslRcDupShared"
+
+fn reusableDest? dest: String -> Bool
+  (let [(b (stringToBytes dest))]
+    (and (> (bytesLength b) 0) (let [(c (bytesGet b 0))] (not (and (>= c 48) (<= c 57))))))
+
+fn movedFields facts: Facts x: String fields: (List String) -> (List String)
+  (filter (fn [(f String)] -> Bool
+            (and (= (listLength (filter (fn [(g String)] -> Bool (= g f)) fields)) 1)
+                 (and (= (optionOr (mapGet facts.anchors f) "") x)
+                      (mt (mapGet facts.parts f) ((some p) (and (= (pairFirst p) x) (< (pairSecond p) 62))) ((none) false)))))
+          fields)
+
+fn maskOf facts: Facts moved: (List String) -> Int64
+  (fold (fn [(acc Int64) (f String)] -> Int64 (| acc (<< 1 (mt (mapGet facts.parts f) ((some p) (pairSecond p)) ((none) 0))))) 0 moved)
+
+fn constructFields ins: ty/SsaInstr -> (List String)
+  (mt ins.op ((ty/opConstruct _ _ fields) fields) ((ty/opEntry _ args) args) (_ (list)))
+
+schema Reuse
+  cell: String
+  moved: (List String)
+  callee: String
+
+fn reusePlan facts: Facts ins: ty/SsaInstr dead: (List String) -> (Option Reuse)
+  (let [(cls (allocClass ins))]
+    (if (or (< cls 0) (or (listEmpty? dead) (not (reusableDest? ins.dest))))
+      (none)
+      (mt (listHead (filter (fn [(x String)] -> Bool (and (mapHas? facts.cells x) (tracked? facts x))) dead))
+        ((none) (none))
+        ((some x) (let [(moved (movedFields facts x (constructFields ins)))]
+                    (some (Reuse :cell x :moved moved :callee (resetName cls (maskOf facts moved)))))))))
+
+fn withoutDups calls: (List (Pair String String)) moved: (List String) -> (List (Pair String String))
+  (if (listEmpty? moved) calls (pairSecond (fold (fn [(acc (Pair (Map String Bool) (List (Pair String String)))) (c (Pair String String))] -> (Pair (Map String Bool) (List (Pair String String)))
+                      (let [(v (pairSecond c))]
+                        (if (and (= (pairFirst c) (dupName)) (and (listContains? moved v) (not (mapHas? (pairFirst acc) v))))
+                          (pair (mapSet (pairFirst acc) v true) (pairSecond acc))
+                          (pair (pairFirst acc) (listAppend (pairSecond acc) (list c))))))
+                    (pair (mapEmpty) (list)) calls)))
+
 fn rewriteInstr ctx: Ctx facts: Facts label: String tail: Bool w: Walk ins: ty/SsaInstr -> Walk
   (let [(after w.live)
         (uses (instrUses ctx facts ins))
-        (before (beforeCalls facts uses after))
         (results (resultCalls facts ins after))
-        (dead (dropsAfter facts uses after))
+        (dead0 (dropsAfter facts uses after))
+        (plan (if tail (none) (reusePlan facts ins dead0)))
+        (moved (mt plan ((some r) r.moved) ((none) (list))))
+        (before (withoutDups (beforeCalls facts uses after) moved))
+        (late (mt plan ((some _) (none)) ((none) (if tail (none) (latePlan facts w.pend dead0)))))
+        (gone (mt plan ((some r) (some r.cell)) ((none) (mt late ((some l) (some l.cell)) ((none) (none))))))
+        (dead (mt gone ((some c) (filter (fn [(n String)] -> Bool (!= n c)) dead0)) ((none) dead0)))
         (deferred (and tail (and (listEmpty? results) (not (listEmpty? dead)))))
         (pre (if deferred (listAppend before (deferCalls dead)) before))
         (post (if deferred (list) (listAppend results (map (fn [(n String)] -> (Pair String String) (pair (dropName) n)) dead))))
         (n0 w.n)
-        (beforeIs (rcInstrs label n0 pre))
-        (afterIs (rcInstrs label (+ n0 (listLength pre)) post))
+        (shared (map (fn [(f String)] -> (Pair String String) (pair (dupSharedName) (str (tokenName ins.dest) "\t" f))) moved))
+        (reuseIs (mt plan ((some r) (cons (rcCall (tokenName ins.dest) r.callee r.cell) (rcInstrs label (+ n0 (listLength pre)) shared))) ((none) (list))))
+        (lateIs (mt late ((some l) (list (rcCall (tokenName l.target) l.callee l.cell))) ((none) (list))))
+        (nPre (+ (listLength pre) (listLength shared)))
+        (beforeIs (listAppend (rcInstrs label n0 pre) reuseIs))
+        (afterIs (listAppend (rcInstrs label (+ n0 nPre) post) lateIs))
+        (pend (cond ((some? late) (optionOr (listTail w.pend) (list)))
+                    ((and (none? plan) (and (not tail) (and (>= (allocClass ins) 0) (reusableDest? ins.dest)))) (cons (pair ins.dest (allocClass ins)) w.pend))
+                    (else w.pend)))
         (live (union (mapRemove after ins.dest) (setOf (liveNames facts uses))))]
-    (Walk :live live :out (listAppend beforeIs (cons ins (listAppend afterIs w.out))) :n (+ n0 (+ (listLength pre) (listLength post)))))
+    (Walk :live live :out (listAppend beforeIs (cons ins (listAppend afterIs w.out))) :n (+ n0 (+ nPre (listLength post))) :pend pend))
+
+schema Late
+  cell: String
+  target: String
+  callee: String
+
+; (:m :ref RC-FBIP :do "an owned value read through its fields that dies before a later construct of the same block resets into the nearest such construct still without a cell; nothing it holds moves, so all its kids are released")
+fn latePlan facts: Facts pend: (List (Pair String Int64)) dead: (List String) -> (Option Late)
+  (mt (listHead pend)
+    ((none) (none))
+    ((some p) (mt (listHead (filter (fn [(x String)] -> Bool (and (mapHas? facts.cells x) (tracked? facts x))) dead))
+                ((none) (none))
+                ((some x) (some (Late :cell x :target (pairFirst p) :callee (resetName (pairSecond p) 0)))))))
 
 fn trapBlock? blocks: (Map String ty/SsaBlock) target: String -> Bool
   (mt (mapGet blocks target)
@@ -448,7 +548,7 @@ fn rewriteBlock ctx: Ctx facts: Facts liveIn: (Map String (Map String Bool)) byL
         (atTerm (union liveOut (setOf (liveNames facts termUsed))))
         (placed (placeEdges facts liveIn byLabel preds b atTerm prefix))
         (jumpCalls (jumpDups facts liveIn b.term))
-        (start (Walk :live atTerm :out (rcInstrs (str b.label ".j") 0 jumpCalls) :n 0))
+        (start (Walk :live atTerm :out (rcInstrs (str b.label ".j") 0 jumpCalls) :n 0 :pend (list)))
         (tailDest (tailClosureDest b))
         (walked (fold (fn [(w Walk) (ins ty/SsaInstr)] -> Walk (rewriteInstr ctx facts b.label (and (!= tailDest "") (and (= ins.dest tailDest) (listEmpty? w.out))) w ins)) start (listReverse b.instrs)))
         (defined (listAppend (blockParamNames facts b) (if entry fnParams (list))))
@@ -529,7 +629,7 @@ fn rcModule m: ty/SsaModule user: (Map String Bool) -> ty/SsaModule
         (wrappers (map (fn [(f ty/SsaFunction)] -> ty/SsaFunction (wrapperFunction f (not (counted f))))
                        (filter (fn [(f ty/SsaFunction)] -> Bool (mapHas? targets f.name)) m.functions)))
         (have (setOf (map (fn [(e ty/SsaExtern)] -> String e.name) m.externs)))
-        (externs (listAppend m.externs (filter (fn [(e ty/SsaExtern)] -> Bool (not (mapHas? have e.name))) (rcExterns))))]
+        (externs (listAppend m.externs (filter (fn [(e ty/SsaExtern)] -> Bool (not (mapHas? have e.name))) (listAppend (rcExterns) (reuseExterns bodies)))))]
     (ty/ssaModule m.name m.strings m.types m.records externs m.globals (listAppend bodies wrappers)))
 
 fn sticky -> Int64
@@ -599,11 +699,12 @@ fn liveCheckText -> String
                "  ret void"
                "}"))
 
-fn dupText -> String
+fn dupText asan: Bool -> String
   (lines (list (str "define internal tailcc i64 @" (dupName) "(%Val %v) alwaysinline {")
                "entry:"
                "  %o = call ptr @aslRc.obj(%Val %v)"
                "  %z = icmp eq ptr %o, null"
+               (opStats asan)
                "  br i1 %z, label %done, label %live"
                "live:"
                "  %h = load i64, ptr %o"
@@ -620,11 +721,12 @@ fn dupText -> String
                "  ret i64 0"
                "}"))
 
-fn dropText -> String
+fn dropText asan: Bool -> String
   (lines (list (str "define internal tailcc i64 @" (dropName) "(%Val %v) alwaysinline {")
                "entry:"
                "  %o = call ptr @aslRc.obj(%Val %v)"
                "  %z = icmp eq ptr %o, null"
+               (opStats asan)
                "  br i1 %z, label %done, label %live"
                "live:"
                "  %h = load i64, ptr %o"
@@ -670,40 +772,126 @@ fn claimText -> String
                "  ret i1 true"
                "}"))
 
-fn freeChainText -> String
-  (lines (list "define internal void @aslRc.freeChain(ptr %o) {"
-               "entry:"
-               "  br label %top"
-               "top:"
-               "  %p = phi ptr [ %o, %entry ], [ %t, %next ]"
-               "  %ph = load i64, ptr %p"
-               "  %ty = lshr i64 %ph, 32"
-               "  %ty8 = and i64 %ty, 255"
-               "  %isCons = icmp eq i64 %ty8, 1"
-               "  br i1 %isCons, label %cons, label %other"
-               "cons:"
-               "  %hp = getelementptr inbounds i8, ptr %p, i64 8"
-               "  %hd = load %Val, ptr %hp"
-               "  %tp = getelementptr inbounds i8, ptr %p, i64 24"
-               "  %tl = load %Val, ptr %tp"
-               "  call void @aslRc.releaseVal(%Val %hd)"
-               "  call void @aslRc.recycle(ptr %p, i64 %ph)"
-               "  %t = call ptr @aslRc.obj(%Val %tl)"
-               "  %tz = icmp eq ptr %t, null"
-               "  br i1 %tz, label %done, label %tail"
-               "tail:"
-               "  %free = call i1 @aslRc.claim(ptr %t)"
-               "  br i1 %free, label %next, label %done"
-               "next:"
-               "  br label %top"
-               "other:"
-               "  call void @aslRc.releaseKids(ptr %p, i64 %ph)"
-               "  call void @aslRc.recycle(ptr %p, i64 %ph)"
-               "  br label %done"
-               "done:"
-               "  ret void"
-               "}"))
 
+; (:m :ref RC-RELEASEKIDS :do "a freed object's dying kids never go through release: a kid without kids (string, bytes, box, array) is recycled on the spot, and of the kids that have kids one becomes the next turn of the loop while only the others are pushed, so a list spine, a tree path or a record chain frees with no pending-stack traffic")
+fn kidText p: String k: String go: String -> (List String)
+  (list (str p "Claim:")
+        (str "  %" p "Free = call i1 @aslRc.claim(ptr %" k ")")
+        (str "  br i1 %" p "Free, label %" p "Dies, label %" go)
+        (str p "Dies:")
+        (str "  %" p "H = load i64, ptr %" k)
+        (str "  %" p "Ty = lshr i64 %" p "H, 32")
+        (str "  %" p "Ty8 = and i64 %" p "Ty, 255")
+        (str "  %" p "Ty1 = sub i64 %" p "Ty8, 1")
+        (str "  %" p "Nest = icmp ult i64 %" p "Ty1, 4")
+        (str "  br i1 %" p "Nest, label %" p "Keep, label %" p "Leaf")
+        (str p "Leaf:")
+        (str "  call void @aslRc.recycle(ptr %" k ", i64 %" p "H)")
+        (str "  br label %" go))
+
+fn freeChainText asan: Bool -> String
+  (lines (listAppend
+           (list "define internal void @aslRc.freeChain(ptr %o) {"
+                 "entry:"
+                 "  br label %top"
+                 "top:"
+                 "  %p = phi ptr [ %o, %entry ], [ %t, %next ], [ %hn, %headNext ], [ %nx, %kidsNext ]"
+                 "  %ph = load i64, ptr %p"
+                 "  %ty = lshr i64 %ph, 32"
+                 "  %ty8 = and i64 %ty, 255"
+                 "  switch i64 %ty8, label %leaf [ i64 1, label %cons i64 2, label %rec i64 3, label %ctor i64 4, label %clo ]"
+                 "cons:"
+                 "  %hp = getelementptr inbounds i8, ptr %p, i64 8"
+                 "  %hd = load %Val, ptr %hp"
+                 "  %tp = getelementptr inbounds i8, ptr %p, i64 24"
+                 "  %tl = load %Val, ptr %tp"
+                 "  %h = call ptr @aslRc.obj(%Val %hd)"
+                 "  %hz = icmp eq ptr %h, null"
+                 "  br i1 %hz, label %consTail, label %headClaim")
+           (listAppend (kidText "head" "h" "consTail")
+           (listAppend
+             (list "headKeep:"
+                   "  br label %consTail"
+                   "consTail:"
+                   "  %hn = phi ptr [ null, %cons ], [ null, %headClaim ], [ null, %headLeaf ], [ %h, %headKeep ]"
+                   "  call void @aslRc.recycle(ptr %p, i64 %ph)"
+                   "  %t = call ptr @aslRc.obj(%Val %tl)"
+                   "  %tz = icmp eq ptr %t, null"
+                   "  br i1 %tz, label %headOnly, label %tail"
+                   "tail:"
+                   "  %free = call i1 @aslRc.claim(ptr %t)"
+                   "  br i1 %free, label %both, label %headOnly"
+                   "both:"
+                   "  %hk = icmp ne ptr %hn, null"
+                   "  br i1 %hk, label %headPush, label %next"
+                   "headPush:"
+                   "  call void @aslRc.push(ptr %hn)"
+                   (if asan (statBump "pushedHead" (statPushed)) "")
+                   "  br label %next"
+                   "next:"
+                   "  br label %top"
+                   "headOnly:"
+                   "  %hgo = icmp ne ptr %hn, null"
+                   "  br i1 %hgo, label %headNext, label %done"
+                   "headNext:"
+                   "  br label %top"
+                   "rec:"
+                   "  %rnp = getelementptr inbounds i8, ptr %p, i64 12"
+                   "  %rn32 = load i32, ptr %rnp"
+                   "  %rn = sext i32 %rn32 to i64"
+                   "  %rb = getelementptr inbounds i8, ptr %p, i64 24"
+                   "  br label %kids"
+                   "ctor:"
+                   "  %fnp = getelementptr inbounds i8, ptr %p, i64 12"
+                   "  %fn32 = load i32, ptr %fnp"
+                   "  %fn = sext i32 %fn32 to i64"
+                   "  %fb = getelementptr inbounds i8, ptr %p, i64 16"
+                   "  br label %kids"
+                   "clo:"
+                   "  %unp = getelementptr inbounds i8, ptr %p, i64 16"
+                   "  %un32 = load i32, ptr %unp"
+                   "  %un = sext i32 %un32 to i64"
+                   "  %ub = getelementptr inbounds i8, ptr %p, i64 24"
+                   "  br label %kids"
+                   "leaf:"
+                   "  br label %kids"
+                   "kids:"
+                   "  %base = phi ptr [ %rb, %rec ], [ %fb, %ctor ], [ %ub, %clo ], [ %p, %leaf ]"
+                   "  %n = phi i64 [ %rn, %rec ], [ %fn, %ctor ], [ %un, %clo ], [ 0, %leaf ]"
+                   "  br label %loop"
+                   "loop:"
+                   "  %i = phi i64 [ 0, %kids ], [ %i1, %step ]"
+                   "  %nx = phi ptr [ null, %kids ], [ %nx1, %step ]"
+                   "  %more = icmp slt i64 %i, %n"
+                   "  br i1 %more, label %body, label %kidsDone"
+                   "body:"
+                   "  %off = mul i64 %i, 16"
+                   "  %at = getelementptr inbounds i8, ptr %base, i64 %off"
+                   "  %kid = load %Val, ptr %at"
+                   "  %k = call ptr @aslRc.obj(%Val %kid)"
+                   "  %kz = icmp eq ptr %k, null"
+                   "  br i1 %kz, label %step, label %kidClaim")
+           (listAppend (kidText "kid" "k" "step")
+             (list "kidKeep:"
+                   "  %had = icmp ne ptr %nx, null"
+                   "  br i1 %had, label %kidPush, label %step"
+                   "kidPush:"
+                   "  call void @aslRc.push(ptr %nx)"
+                   (if asan (statBump "pushedKid" (statPushed)) "")
+                   "  br label %step"
+                   "step:"
+                   "  %nx1 = phi ptr [ %nx, %body ], [ %nx, %kidClaim ], [ %nx, %kidLeaf ], [ %k, %kidKeep ], [ %k, %kidPush ]"
+                   "  %i1 = add i64 %i, 1"
+                   "  br label %loop"
+                   "kidsDone:"
+                   "  call void @aslRc.recycle(ptr %p, i64 %ph)"
+                   "  %go = icmp ne ptr %nx, null"
+                   "  br i1 %go, label %kidsNext, label %done"
+                   "kidsNext:"
+                   "  br label %top"
+                   "done:"
+                   "  ret void"
+                   "}"))))))
 
 fn freeOneText -> String
   (lines (list "define internal void @aslRc.freeOne(ptr %o) noinline {"
@@ -714,29 +902,6 @@ fn freeOneText -> String
                "  br i1 %pending, label %drain, label %done"
                "drain:"
                "  call void @aslRc.drain()"
-               "  br label %done"
-               "done:"
-               "  ret void"
-               "}"))
-
-fn releaseText -> String
-  (lines (list "define internal void @aslRc.release(ptr %o) {"
-               "entry:"
-               "  %h = load i64, ptr %o"
-               "  call void @aslRc.live(ptr %o, i64 %h)"
-               "  %c = lshr i64 %h, 48"
-               "  %c8 = and i64 %c, 255"
-               "  %stuck = icmp eq i64 %c8, 255"
-               "  br i1 %stuck, label %done, label %count"
-               "count:"
-               "  %last = icmp eq i64 %c8, 0"
-               "  br i1 %last, label %queue, label %dec"
-               "dec:"
-               (str "  %h1 = sub i64 %h, " (countOne))
-               "  store i64 %h1, ptr %o"
-               "  br label %done"
-               "queue:"
-               "  call void @aslRc.push(ptr %o)"
                "  br label %done"
                "done:"
                "  ret void"
@@ -820,19 +985,6 @@ fn childrenText name: String visit: String -> String
                "  ret void"
                "}"))
 
-fn releaseValText -> String
-  (lines (list "define internal void @aslRc.releaseVal(%Val %v) {"
-               "entry:"
-               "  %o = call ptr @aslRc.obj(%Val %v)"
-               "  %z = icmp eq ptr %o, null"
-               "  br i1 %z, label %done, label %live"
-               "live:"
-               "  call void @aslRc.release(ptr %o)"
-               "  br label %done"
-               "done:"
-               "  ret void"
-               "}"))
-
 fn drainText -> String
   (lines (list "define internal void @aslRc.drain() {"
                "entry:"
@@ -874,14 +1026,43 @@ fn statLarge -> Int64
 fn statLargeFreed -> Int64
   6
 
-fn statSlots -> Int64
+fn statPushed -> Int64
   7
+
+fn statOps -> Int64
+  8
+
+fn statImmediate -> Int64
+  9
+
+fn statFbip -> Int64
+  10
+
+fn statResets -> Int64
+  11
+
+fn statSpare -> Int64
+  12
+
+fn statSlots -> Int64
+  13
 
 fn statBump p: String slot: Int64 -> String
   (lines (list (str "  %" p ".sp = getelementptr [" (statSlots) " x i64], ptr @aslRc.stats, i64 0, i64 " slot)
                (str "  %" p ".sv = load i64, ptr %" p ".sp")
                (str "  %" p ".sv1 = add i64 %" p ".sv, 1")
                (str "  store i64 %" p ".sv1, ptr %" p ".sp")))
+
+; (:m :ref RC-FBIP :do "under ASan every dup and drop is counted, and so is each one whose value is no heap object, so a gate can observe RC traffic on a fixed program without a counter on the production path")
+fn opStats asan: Bool -> String
+  (if asan
+    (lines (list (statBump "ops" (statOps))
+                 (str "  %imm.sp = getelementptr [" (statSlots) " x i64], ptr @aslRc.stats, i64 0, i64 " (statImmediate))
+                 "  %imm.sv = load i64, ptr %imm.sp"
+                 "  %imm.z = zext i1 %z to i64"
+                 "  %imm.sv1 = add i64 %imm.sv, %imm.z"
+                 "  store i64 %imm.sv1, ptr %imm.sp"))
+    "")
 
 fn poisonText asan: Bool -> (List String)
   (if asan
@@ -1117,7 +1298,7 @@ fn cString name: String plain: String -> String
   (str "@" name " = private unnamed_addr constant [" (+ (stringLength plain) 1) " x i8] c\"" (stringReplace plain "\n" "\\0A") "\\00\"")
 
 fn statsFormat -> String
-  "(:rcStats :freed %llu :stuck %llu :reused %llu :pinned %llu :fresh %llu :large %llu :largeFreed %llu)\n"
+  "(:rcStats :freed %llu :stuck %llu :reused %llu :pinned %llu :fresh %llu :large %llu :largeFreed %llu :pushed %llu :ops %llu :immediate %llu :fbip %llu :resets %llu :spare %llu)\n"
 
 fn statLoad k: Int64 -> String
   (lines (list (str "  %p" k " = getelementptr [" (statSlots) " x i64], ptr @aslRc.stats, i64 0, i64 " k)
@@ -1146,7 +1327,7 @@ fn statsText -> String
                "define internal void @aslRc.report() {"
                "entry:"
                (lines (map statLoad (range 0 (statSlots))))
-               "  %r = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @aslRc.statsFmt, i64 %v0, i64 %v1, i64 %v2, i64 %v3, i64 %v4, i64 %v5, i64 %v6)"
+               "  %r = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @aslRc.statsFmt, i64 %v0, i64 %v1, i64 %v2, i64 %v3, i64 %v4, i64 %v5, i64 %v6, i64 %v7, i64 %v8, i64 %v9, i64 %v10, i64 %v11, i64 %v12)"
                "  ret void"
                "}"))
 
@@ -1176,9 +1357,9 @@ fn runtimeTextWith text: String asan: Bool notrace: Bool -> String
                  "@aslRc.sp = internal global i64 0"
                  "@aslRc.cap = internal global i64 0"
                  (statsText)
-                 (objText notrace) (liveCheckText) (dupText) (dropText) (releaseText) (pushText) (releaseValText)
-                 (childrenText "releaseKids" "releaseVal") (childrenText "pinKids" "pinVal") (drainText) (recycleText asan rooted notrace) (pinValText notrace) (pinText) (deferText rooted)
-                 (dupValText) (childrenText "dupKids" "dupVal") (dupKidsText) (dupSameText) (freeOneText) (claimText) (freeChainText))
+                 (objText notrace) (liveCheckText) (dupText asan) (dropText asan) (pushText)
+                 (childrenText "pinKids" "pinVal") (drainText) (recycleText asan rooted notrace) (pinValText notrace) (pinText) (deferText rooted)
+                 (dupValText) (childrenText "dupKids" "dupVal") (dupKidsText) (dupSameText) (freeOneText) (claimText) (freeChainText asan))
            (listAppend (if rooted (listAppend (smallGlobals text) (list (smallSyncText) (smallPushText))) (list))
              (runtimeDecls section asan rooted))))))
 
@@ -1204,15 +1385,248 @@ fn routeArrayAlloc text: String -> String
 fn sanitized text: String asan: Bool -> String
   (if asan (stringReplace text " {\n" " sanitize_address {\n") text)
 
+fn reuseExterns bodies: (List ty/SsaFunction) -> (List ty/SsaExtern)
+  (let [(names (distinctNames (fold (fn [(acc (List String)) (f ty/SsaFunction)] -> (List String)
+                                      (fold (fn [(a (List String)) (ins ty/SsaInstr)] -> (List String)
+                                              (mt ins.op ((ty/opCall callee _) (if (stringStartsWith? callee "aslRcReset_") (cons callee a) a)) (_ a)))
+                                            acc (functionInstrs f)))
+                                    (list) bodies)))]
+    (if (listEmpty? names)
+      (list)
+      (cons (ty/ssaExternTyped (dupSharedName) (list (ty/tyI64) (ty/tyVal)) (ty/tyI64))
+            (map (fn [(n String)] -> ty/SsaExtern (ty/ssaExternTyped n (list (ty/tyVal)) (ty/tyI64))) names))))
+
+fn resetKidsText -> (List String)
+  (list "unique:"
+        "  %ty = lshr i64 %h, 32"
+        "  %ty8 = and i64 %ty, 255"
+        "  switch i64 %ty8, label %kidsDone [ i64 1, label %cons i64 2, label %rec i64 3, label %ctor i64 4, label %clo ]"
+        "cons:"
+        "  %cb = getelementptr inbounds i8, ptr %o, i64 8"
+        "  br label %kids"
+        "rec:"
+        "  %rnp = getelementptr inbounds i8, ptr %o, i64 12"
+        "  %rn32 = load i32, ptr %rnp"
+        "  %rn = sext i32 %rn32 to i64"
+        "  %rb = getelementptr inbounds i8, ptr %o, i64 24"
+        "  br label %kids"
+        "ctor:"
+        "  %fnp = getelementptr inbounds i8, ptr %o, i64 12"
+        "  %fn32 = load i32, ptr %fnp"
+        "  %fn = sext i32 %fn32 to i64"
+        "  %fb = getelementptr inbounds i8, ptr %o, i64 16"
+        "  br label %kids"
+        "clo:"
+        "  %unp = getelementptr inbounds i8, ptr %o, i64 16"
+        "  %un32 = load i32, ptr %unp"
+        "  %un = sext i32 %un32 to i64"
+        "  %ub = getelementptr inbounds i8, ptr %o, i64 24"
+        "  br label %kids"
+        "kids:"
+        "  %base = phi ptr [ %cb, %cons ], [ %rb, %rec ], [ %fb, %ctor ], [ %ub, %clo ]"
+        "  %n = phi i64 [ 2, %cons ], [ %rn, %rec ], [ %fn, %ctor ], [ %un, %clo ]"
+        "  br label %loop"
+        "loop:"
+        "  %i = phi i64 [ 0, %kids ], [ %i1, %step ]"
+        "  %more = icmp slt i64 %i, %n"
+        "  br i1 %more, label %body, label %kidsDone"
+        "body:"
+        "  %bit = shl i64 1, %i"
+        "  %kept = and i64 %mask, %bit"
+        "  %moved = icmp ne i64 %kept, 0"
+        "  br i1 %moved, label %step, label %release"
+        "release:"
+        "  %off = mul i64 %i, 16"
+        "  %at = getelementptr inbounds i8, ptr %base, i64 %off"
+        "  %kid = load %Val, ptr %at"
+        "  %k = call ptr @aslRc.obj(%Val %kid)"
+        "  %kz = icmp eq ptr %k, null"
+        "  br i1 %kz, label %step, label %claimKid"
+        "claimKid:"
+        "  %dies = call i1 @aslRc.claim(ptr %k)"
+        "  br i1 %dies, label %freeKid, label %step"
+        "freeKid:"
+        "  call void @aslRc.freeOne(ptr %k)"
+        "  br label %step"
+        "step:"
+        "  %i1 = add i64 %i, 1"
+        "  br label %loop")
+
+; (:m :ref RC-FBIP :do "a reset of a unique value releases its kids except the moved ones and hands its cell over when its size class is the construct's, else recycles it and answers 1 (moved, no cell); a shared value is decremented and answers 0, so the moved fields are then duplicated; the shared test is inlined and only a unique value calls out")
+fn resetText asan: Bool cls: Int64 mask: Int64 -> String
+  (let [(slow (str "@aslRc.resetSlow." cls "." mask))]
+    (lines (listAppend
+             (list (str "define internal tailcc i64 @" (resetName cls mask) "(%Val %v) alwaysinline {")
+                   "entry:"
+                   (if asan (statBump "resets" (statResets)) "")
+                   "  %o = call ptr @aslRc.obj(%Val %v)"
+                   "  %z = icmp eq ptr %o, null"
+                   "  br i1 %z, label %shared, label %live"
+                   "live:"
+                   "  %h = load i64, ptr %o"
+                   "  call void @aslRc.live(ptr %o, i64 %h)"
+                   "  %c = lshr i64 %h, 48"
+                   "  %c8 = and i64 %c, 255"
+                   "  %stuck = icmp eq i64 %c8, 255"
+                   "  br i1 %stuck, label %shared, label %count"
+                   "count:"
+                   "  %last = icmp eq i64 %c8, 0"
+                   "  br i1 %last, label %unique, label %dec"
+                   "dec:"
+                   (str "  %h1 = sub i64 %h, " (countOne))
+                   "  store i64 %h1, ptr %o"
+                   "  br label %shared"
+                   "shared:"
+                   "  ret i64 0"
+                   "unique:"
+                   (str "  %u = call i64 " slow "(ptr %o, i64 %h)")
+                   "  ret i64 %u"
+                   "}"
+                   (str "define internal i64 " slow "(ptr %o, i64 %h) {")
+                   "entry:"
+                   (str "  %mask = add i64 0, " mask)
+                   "  br label %unique")
+             (listAppend (resetKidsText)
+               (list "kidsDone:"
+                     "  %cls = lshr i64 %h, 56"
+                     (str "  %fits = icmp eq i64 %cls, " cls)
+                     "  br i1 %fits, label %give, label %spare"
+                     "give:"
+                     (if asan (statBump "fbip" (statFbip)) "")
+                     "  %w = ptrtoint ptr %o to i64"
+                     "  ret i64 %w"
+                     "spare:"
+                     (if asan (statBump "spare" (statSpare)) "")
+                     "  call void @aslRc.recycle(ptr %o, i64 %h)"
+                     "  ret i64 1"
+                     "}")))))
+
+
+fn reuseOrName cls: Int64 -> String
+  (if (= cls 3) "@aslRc.reuseOrCons" (str "@aslRc.reuseOr." cls))
+
+fn reuseOrText cls: Int64 -> String
+  (lines (list (str "define internal ptr " (reuseOrName cls) "(i64 %tok, i32 %t, i64 %n) alwaysinline {")
+               "entry:"
+               "  %has = icmp ugt i64 %tok, 1"
+               "  br i1 %has, label %reuse, label %fresh"
+               "reuse:"
+               "  %o = inttoptr i64 %tok to ptr"
+               "  %t64 = sext i32 %t to i64"
+               "  %ty = shl i64 %t64, 32"
+               "  %h1 = or i64 %n, %ty"
+               (str "  %h = or i64 %h1, " (* cls 72057594037927936))
+               "  store i64 %h, ptr %o"
+               "  ret ptr %o"
+               "fresh:"
+               (str "  %r = call ptr " (if (= cls 3) "@gcAsl.allocFastCons" (allocFastSym cls)) "(i32 %t, i64 %n)")
+               "  ret ptr %r"
+               "}"))
+
+fn dupSharedText -> String
+  (lines (list (str "define internal tailcc i64 @" (dupSharedName) "(i64 %tok, %Val %v) alwaysinline {")
+               "entry:"
+               "  %shared = icmp eq i64 %tok, 0"
+               "  br i1 %shared, label %dup, label %done"
+               "dup:"
+               (str "  %d = call tailcc i64 @" (dupName) "(%Val %v)")
+               "  br label %done"
+               "done:"
+               "  ret i64 0"
+               "}"))
+
+fn tokenOf line: String -> String
+  (let [(head (str "  %" (tokenName "")))]
+    (if (and (stringStartsWith? line head) (stringContains? line (str " = call tailcc i64 @aslRcReset_")))
+      (optionOr (listHead (stringSplit (optionOr (stringSlice line (stringLength head) (stringLength line)) "") " ")) "")
+      ""))
+
+fn resetOf line: String -> String
+  (mt (stringIndexOf line "@aslRcReset_")
+    ((none) "")
+    ((some at) (optionOr (listHead (stringSplit (optionOr (stringSlice line (+ at 1) (stringLength line)) "") "(")) "")))
+
+fn allocClassOf line: String -> Int64
+  (cond
+    ((stringContains? line "= call ptr @gcAsl.allocFastCons(") 3)
+    (else (mt (stringIndexOf line "= call ptr @gcAsl.allocFast.")
+            ((none) -1)
+            ((some at) (optionOr (stringToInt64 (optionOr (listHead (stringSplit (optionOr (stringSlice line (+ at 28) (stringLength line)) "") "(")) "")) -1)))))
+
+fn allocTarget line: String -> String
+  (if (and (>= (allocClassOf line) 0) (stringStartsWith? line "  %"))
+    (optionOr (listHead (stringSplit (optionOr (stringSlice line 3 (stringLength line)) "") ".objp = ")) "")
+    "")
+
+fn reroute line: String toks: (Map String Bool) -> String
+  (let [(x (allocTarget line))]
+    (if (or (= x "") (not (mapHas? toks x)))
+      line
+      (str "  %" x ".objp = call ptr " (reuseOrName (allocClassOf line)) "(i64 %" (tokenName x) ", " (optionOr (listHead (listReverse (stringSplit line "("))) ""))))
+
+fn unclaimed line: String consumed: (Map String Bool) -> String
+  (let [(t (tokenOf line))]
+    (if (or (= t "") (mapHas? consumed t))
+      line
+      (str (optionOr (listHead (stringSplit line "@aslRcReset_")) "") "@aslRcReset_" (noCell) "_" (optionOr (listGet (stringSplit (resetOf line) "_") 2) "0") "(" (optionOr (listHead (listReverse (stringSplit line "("))) ""))))
+
+fn noCell -> Int64
+  99
+
+; (:m :ref RC-FBIP :do "within one function the construct a reset precedes takes its cell through reuseOr, named by the token the reset defines; a reset whose construct allocates no pooled cell asks for a class no cell has, so it never hands one over; only functions that hold a reset are split into lines")
+fn routeChunk ls: (List String) -> (Pair (List String) (List Int64))
+  (let [(toks (setOf (filter (fn [(t String)] -> Bool (!= t "")) (map tokenOf ls))))]
+    (if (= (mapSize toks) 0)
+      (pair ls (list))
+      (let [(consumed (setOf (filter (fn [(x String)] -> Bool (mapHas? toks x)) (map allocTarget ls))))]
+        (pair (map (fn [(l String)] -> String (unclaimed (reroute l toks) consumed)) ls)
+              (map allocClassOf (filter (fn [(l String)] -> Bool (mapHas? consumed (allocTarget l))) ls))))))
+
+fn resetDecl? l: String -> Bool
+  (or (stringStartsWith? l "declare tailcc i64 @aslRcReset_") (stringStartsWith? l (str "declare tailcc i64 @" (dupSharedName) "(")))
+
+schema Routed
+  text: String
+  classes: (List Int64)
+  resets: (List String)
+
+fn routeFunction last: Bool part: String -> Routed
+  (if (not (or last (stringContains? part "= call tailcc i64 @aslRcReset_")))
+    (Routed :text part :classes (list) :resets (list))
+    (let [(r (routeChunk (filter (fn [(l String)] -> Bool (not (resetDecl? l))) (stringSplit part "\n"))))]
+      (Routed :text (stringJoin (pairFirst r) "\n") :classes (pairSecond r)
+              :resets (filter (fn [(x String)] -> Bool (!= x "")) (map resetOf (filter (fn [(l String)] -> Bool (!= (tokenOf l) "")) (pairFirst r)))))))
+
+fn routeReuse text: String asan: Bool -> (Pair String (List String))
+  (if (not (stringContains? text "= call tailcc i64 @aslRcReset_"))
+    (pair text (list))
+    (let [(parts (stringSplit text "\ndefine "))
+          (n (listLength parts))
+          (done (map (fn [(i Int64)] -> Routed (routeFunction (= i (- n 1)) (optionOr (listGet parts i) ""))) (range 0 n)))]
+      (pair (stringJoin (map (fn [(r Routed)] -> String r.text) done) "\ndefine ")
+            (cons (dupSharedText)
+                  (listAppend (map reuseOrText (distinctInts (fold (fn [(acc (List Int64)) (r Routed)] -> (List Int64) (listAppend r.classes acc)) (list) done)))
+                              (map (fn [(r String)] -> String (resetFrom asan r)) (distinctNames (fold (fn [(acc (List String)) (r Routed)] -> (List String) (listAppend r.resets acc)) (list) done))))))))
+
+
+fn distinctInts xs: (List Int64) -> (List Int64)
+  (fold (fn [(acc (List Int64)) (x Int64)] -> (List Int64) (if (listContains? acc x) acc (cons x acc))) (list) xs)
+
+fn resetFrom asan: Bool name: String -> String
+  (let [(parts (stringSplit name "_"))]
+    (resetText asan (optionOr (stringToInt64 (optionOr (listGet parts 1) "")) 0) (optionOr (stringToInt64 (optionOr (listGet parts 2) "")) 0)))
+
 fn rcFinishText text: String asan: Bool -> String
   (rcFinishTextWith text asan false)
 
 fn rcFinishTextWith text: String asan: Bool notrace: Bool -> String
   (let [(undeclared (stringReplace (fold (fn [(t String) (n String)] -> String (stringReplace t (str "declare tailcc i64 @" n "(%Val)\n") "")) text (rcNames))
                                     (str "declare tailcc i64 @" (dupSameName) "(%Val, %Val)\n") ""))
+        (reuse (routeReuse undeclared asan))
+        (reused (if (listEmpty? (pairSecond reuse)) undeclared (str (pairFirst reuse) "\n" (lines (pairSecond reuse)) "\n")))
         (routed (fold (fn [(acc (Pair String (List String))) (sc Int64)] -> (Pair String (List String))
                         (let [(r (routeAlloc (pairFirst acc) sc asan))] (pair (pairFirst r) (listAppend (pairSecond acc) (pairSecond r)))))
-                      (pair undeclared (list)) (range 2 (classes))))
+                      (pair reused (list)) (range 2 (classes))))
         (consCall "call ptr @gcAsl.allocFastCons(")
         (body (pairFirst routed))
         (consed (if (stringContains? body consCall) (stringReplace body consCall "call ptr @aslRc.allocFastCons(") body))

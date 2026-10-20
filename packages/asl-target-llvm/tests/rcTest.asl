@@ -258,6 +258,48 @@ fn ! testSpine libs: Libs dir: String -> Bool
                   (assert (stringContains? (runtimeBody b.code "aslRc.recycle") "call void @aslRc.recycleSlow(ptr %o, i64 %h)") "large, small and sticky cells take the outlined recycleSlow")
                   true))))
 
+fn ! testOpStats libs: Libs dir: String -> Bool
+  (mt (buildRun libs dir "rcTree" "asan")
+    ((err e) (do (assert false (str "RC ASan tree build: " e)) false))
+    ((ok a) (mt (buildRun libs dir "rcTree" "1")
+              ((err e) (do (assert false (str "RC tree build: " e)) false))
+              ((ok c) (let [(ops (statOf a.run.stderr "ops"))
+                            (imm (statOf a.run.stderr "immediate"))]
+                        (do (assert (> ops 10000) (str "ASan-mode RC counts every dup and drop rcTree runs, over ten thousand: " a.run.stderr))
+                            (assert (and (> imm 0) (< imm ops)) (str "ASan-mode RC counts the dups and drops whose value is no heap object, some but not all: " a.run.stderr))
+                            (assert (= (statOf c.run.stderr "ops") 0) (str "the production RC runtime carries no op counter: " c.run.stderr))
+                            (assert (= (statOf c.run.stderr "immediate") 0) (str "the production RC runtime carries no immediate counter: " c.run.stderr))
+                            true))))))
+
+fn ! pushedOf libs: Libs dir: String name: String -> Int64
+  (mt (buildRun libs dir name "asan")
+    ((err e) (do (assert false (str "RC ASan " name " build: " e)) -1))
+    ((ok a) (do (assert (= a.run.exitCode 0) (str name " RC under ASan exits 0: " a.run.stderr))
+                (statOf a.run.stderr "pushed"))))
+
+fn ! testFreeQueue libs: Libs dir: String -> Bool
+  (let [(tree (pushedOf libs dir "rcTree"))
+        (strs (pushedOf libs dir "rcBuiltins"))]
+    (do (assert (and (>= tree 0) (< tree 1000)) (str "a freed tree path frees each dying node as the next turn of the loop, not through the pending stack: rcTree pushed " tree " cells, base 6204"))
+        (assert (= strs 0) (str "dying kids with no kids (strings) are recycled on the spot, never pushed: rcBuiltins pushed " strs " cells, base 80000"))
+        true))
+
+fn ! testReuse libs: Libs dir: String -> Bool
+  (mt (buildRun libs dir "rcReuse" "asan")
+    ((err e) (do (assert false (str "RC ASan rcReuse build: " e)) false))
+    ((ok a) (let [(stats a.run.stderr)
+                  (hits (statOf stats "fbip"))
+                  (resets (statOf stats "resets"))
+                  (freed (statOf stats "freed"))
+                  (ops (statOf stats "ops"))]
+              (do (assert (= a.run.stdout "6008445041\n") (str "rcReuse prints its sum under RC ASan: " a.run.stdout " " stats))
+                  (assert (>= hits 9000) (str "a unique matched value dying at or before a construct of its size hands its cell over: widen, bump and flip reuse 3000 cells each, fbip " hits " (" stats ")"))
+                  (assert (= (- resets hits) 3000) (str "the value kept in a pair is shared at its reset, so its cell is not reused and its moved fields are duplicated: resets " resets " fbip " hits))
+                  (assert (and (> freed 0) (< freed 30000)) (str "a reused cell is never freed: rcReuse frees " freed " cells, base 37930"))
+                  (assert (and (> ops 0) (< ops 40000)) (str "moved fields of a reused cell skip their dup and release: rcReuse runs " ops " RC ops, base 51502"))
+                  true))))
+
+
 fn ! runTests -> Bool
   (mt (runtimes!)
     ((err e) (do (assert false (str "rcTest runtimes: " e)) false))
@@ -275,6 +317,10 @@ fn ! runWith libs: Libs -> Bool
         (assert (testSink libs dir) "a field consumed on one path is duplicated there, not where it is read")
         (assert (testHof libs dir) "a closure call in plain position does not tie the caller into the tail cycle of the lambdas it calls")
         (assert (testSpine libs dir) "a freed list spine is walked in one loop, not pushed cell by cell through the pending stack")
+        (assert (testOpStats libs dir) "ASan-mode RC counts dups, drops and those on immediates; production RC counts none")
+        (assert (testFreeQueue libs dir) "a freed object's dying kids continue the free loop or are recycled on the spot instead of queueing")
+        (assert (testReuse libs dir) "an owned matched value that dies at or before a construct of its size class lends its cell, moved fields skip dup and release")
+        (assert (checkFixture libs dir "rcReuse" "6008445041\n" 28000 28000 100 0) "reused cells, shared resets and moved fields stay correct and ASan-clean")
         (assert (checkFixture libs dir "rcSink" "2288\n" 500 400 2000 0) "names read from a tree and kept or replaced are freed once, ASan-clean")
         (assert (checkFixture libs dir "rcProject" "2572500 2400 600\n" 60000 59000 3500 0) "projections kept past their anchor are duplicated and freed once, ASan-clean")
         (assert (checkFixture libs dir "rcBorrow" "14999850000 1\n" 100000 0 200000 0) "borrowed parameters stay correct and ASan-clean")
