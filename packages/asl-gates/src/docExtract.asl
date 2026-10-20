@@ -365,11 +365,43 @@ fn zipTopsKids tops: (List ast/TopForm) kids: (List ast/KidForm) path: String te
           (zipTopsKids (optionOr (listTail tops) (list)) (optionOr (listTail kids) (list)) path text
             (listAppend (listReverse (candidatesFor path text top (kidOf k))) acc))))))
 
+(schema NoteKidRun (:f texts (List String)) (:f spanStart Int64) (:f spanEnd Int64) (:f restTops (List ast/TopForm)) (:f restKids (List ast/KidForm)))
+
+fn collectNoteKidRun tops: (List ast/TopForm) kids: (List ast/KidForm) acc: (List String) spanStart: Int64 spanEnd: Int64 -> NoteKidRun
+  (mt (listHead tops)
+    ((none) (NoteKidRun :texts (listReverse acc) :spanStart spanStart :spanEnd spanEnd :restTops (list) :restKids kids))
+    ((some t)
+      (if (not (isNoteForm? t))
+        (NoteKidRun :texts (listReverse acc) :spanStart spanStart :spanEnd spanEnd :restTops tops :restKids kids)
+        (mt (listHead kids)
+          ((none) (NoteKidRun :texts (listReverse acc) :spanStart spanStart :spanEnd spanEnd :restTops tops :restKids kids))
+          ((some k)
+            (let [(sp (kidOf k)) (ns (if (= spanStart -1) (pairFirst sp) spanStart))]
+              (collectNoteKidRun (optionOr (listTail tops) (list)) (optionOr (listTail kids) (list))
+                (cons (noteTextOf t) acc) ns (pairSecond sp))))))))
+
+; (:m :ref D150 :do "a bare top-level string-literal form (D140 'note') among a module's declarations is not itself a fn/schema/enum doc candidatesFor handles; a run of one or more consecutive notes is collected, its removable span widened to the whole lines it occupies, and the merged text keyed by whatever declaration follows it (or by the module symbol when nothing does, same as noteScanAll), so --apply actually strips it instead of leaving an ERR_READ_BARE_TOPLEVEL behind")
+fn declCandidates path: String text: String tops: (List ast/TopForm) kids: (List ast/KidForm) -> (List DocCandidate)
+  (mt (listHead tops)
+    ((none) (list))
+    ((some t)
+      (if (isNoteForm? t)
+        (let [(run (collectNoteKidRun tops kids (list) -1 -1))
+              (sym (symbolForNext path run.restTops))
+              (span (extendRemovalSpan text run.spanStart run.spanEnd))
+              (cand (DocCandidate :symbol sym :text (stringJoin run.texts " ") :spanStart (pairFirst span) :spanEnd (pairSecond span) :replacement ""))]
+          (cons cand (declCandidates path text run.restTops run.restKids)))
+        (mt (listHead kids)
+          ((none) (list))
+          ((some k)
+            (listAppend (candidatesFor path text t (kidOf k))
+                        (declCandidates path text (optionOr (listTail tops) (list)) (optionOr (listTail kids) (list)))))))))
+
 fn candidatesFromTops path: String text: String mk: ast/KidForm rest: (List ast/KidForm) tops: (List ast/TopForm) -> (List DocCandidate)
   (let [(modTop (optionOr (listHead tops) (ast/topExpr (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0))))
         (declTops (optionOr (listTail tops) (list)))
         (modCands (candidatesFor path text modTop (kidOf mk)))
-        (declCands (zipTopsKids declTops rest path text (list)))]
+        (declCands (declCandidates path text declTops rest))]
     (listAppend modCands declCands))
 
 fn findCandidatesWithTops! path: String text: String allKids: (List ast/KidForm) tops: (List ast/TopForm) -> (Result (List DocCandidate) String)

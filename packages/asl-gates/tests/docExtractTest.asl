@@ -1,6 +1,6 @@
 (module asl-gates/tests/docExtractTest
-  :x [testModuleDoc! testFnDoc! testFieldDoc! testEscaped! testComments! testDryRunNoWrite! testApplyRoundTrip! testMutantGuards! testNoteScan! testNoteMutantGuards! runTests]
-  :i [(asl-gates/docExtract :a dx) (asl-parser/ast :a ast)])
+  :x [testModuleDoc! testFnDoc! testFieldDoc! testEscaped! testComments! testDryRunNoWrite! testApplyRoundTrip! testMutantGuards! testNoteScan! testNoteMutantGuards! testNoteApply! runTests]
+  :i [(asl-gates/docExtract :a dx) (asl-parser/ast :a ast) (tools/fleet/run :a fr)])
 
 fn fixtureDir -> String
   "asl/packages/asl-gates/tests/fixtures/docExtract"
@@ -95,11 +95,12 @@ fn testComments! -> Bool
           (assert (not (stringContains? stripped "strip outer quotes")) "why-only comment line fully removed")
           true))))
 
+; (:m :ref NOSELFHOST-DOCEXTRACT-20261020 :do "mktemp/rm -rf migrated off bare processRun to fr/shellOut, so this test reaches zero bare child starts rather than adding a baseline row; rule spawnSafety's own frozen baseline is legacy debt for files that predate it, not a standing allowance new test code gets to claim")
 fn testDryRunNoWrite! -> Bool
-  (let [(made (processRun "mktemp -d")) (dir (stringTrim made.stdout))
+  (let [(made (fr/shellOut "mktemp -d" 5000)) (dir (stringTrim (resultOr made "")))
         (dst (str dir "/moduleDoc.asl")) (src (fixture "moduleDoc.asl.txt"))]
     (do
-      (assert (= made.exitCode 0) "temp dir made")
+      (assert (ok? made) "temp dir made")
       (assert (ok? (fileWrite dst (readFixture! "moduleDoc.asl.txt"))) "fixture copied")
       (mt (dx/extractFile! dir "moduleDoc.asl")
         ((err e) (assert false (str "extractFile! ok: " e)))
@@ -107,19 +108,20 @@ fn testDryRunNoWrite! -> Bool
           (do
             (assert (= r.unchanged false) "candidates were found")
             (assert (= (readFixture! "moduleDoc.asl.txt") (resultOr (fileReadString dst) src)) "dry run touched nothing on disk"))))
-      (assert (= (processRun (str "rm -rf '" dir "'")).exitCode 0) "temp dir removed")
+      (assert (ok? (fr/shellOut (str "rm -rf '" dir "'") 5000)) "temp dir removed")
       true))
 
 fn fileTextOr! path: String -> String
   (mt (fileReadString path) ((ok t) t) ((err _) ""))
 
+; (:m :ref NOSELFHOST-DOCEXTRACT-20261020 :do "mktemp/mkdir/check/rm -rf migrated off bare processRun to fr/shellOut, so this test reaches zero bare child starts rather than adding a baseline row")
 fn testApplyRoundTrip! -> Bool
-  (let [(made (processRun "mktemp -d")) (dir (stringTrim made.stdout))
-        (pkgDir (str dir "/asl/packages/fxpkg")) (mk (processRun (str "mkdir -p '" pkgDir "'")))
+  (let [(made (fr/shellOut "mktemp -d" 5000)) (dir (stringTrim (resultOr made "")))
+        (pkgDir (str dir "/asl/packages/fxpkg")) (mk (fr/shellOut (str "mkdir -p '" pkgDir "'") 5000))
         (dst (str pkgDir "/src.asl"))]
     (do
-      (assert (= made.exitCode 0) "temp dir made")
-      (assert (= mk.exitCode 0) "package dir made")
+      (assert (ok? made) "temp dir made")
+      (assert (ok? mk) "package dir made")
       (assert (ok? (fileWrite dst (readFixture! "fnDoc.asl.txt"))) "fixture copied into a package layout")
       (mt (dx/extractFile! dir "asl/packages/fxpkg/src.asl")
         ((err e) (assert false (str "extractFile! ok: " e)))
@@ -132,8 +134,8 @@ fn testApplyRoundTrip! -> Bool
                 (assert (= (fileTextOr! dst) r.stripped) "the file on disk matches the computed stripped text")
                 (assert (not (stringContains? (fileTextOr! dst) ":d ")) "the :d keyword is gone from the written file")
                 (assert (stringContains? (fileTextOr! (str dir "/" ledgerRel)) "Adds one to a") "the ledger on disk carries the doc text")
-                (assert (= (processRun (str "bin/asl check '" dst "'")).exitCode 0) "the native CLI check passes on the stripped file"))))))
-      (assert (= (processRun (str "rm -rf '" dir "'")).exitCode 0) "temp dir removed")
+                (assert (ok? (fr/shellOut (str "bin/asl check '" dst "'") 120000)) "the native CLI check passes on the stripped file"))))))
+      (assert (ok? (fr/shellOut (str "rm -rf '" dir "'") 5000)) "temp dir removed")
       true))
 
 fn testMutantGuards! -> Bool
@@ -170,6 +172,35 @@ fn testNoteMutantGuards! -> Bool
       (assert (listAll? (fn [(t String)] -> Bool (not (stringContains? t "\\\""))) (noteTextsOf cs)) "mutant guard: an escaped quote inside a note is unescaped to a plain quote, not left as a literal backslash-quote pair")
       true))
 
+; (:m :ref NOSELFHOST-DOCEXTRACT-20261020 :do "mktemp/mkdir/check/rm -rf migrated off bare processRun to fr/shellOut, so this test reaches zero bare child starts rather than adding a baseline row")
+fn testNoteApply! -> Bool
+  (let [(text (readFixture! "noteScan.asl.txt")) (cs (findCands! "fx/noteScan.asl" text)) (stripped (dx/stripSource text cs))
+        (made (fr/shellOut "mktemp -d" 5000)) (dir (stringTrim (resultOr made "")))
+        (pkgDir (str dir "/asl/packages/fxpkg")) (mk (fr/shellOut (str "mkdir -p '" pkgDir "'") 5000))
+        (dst (str pkgDir "/src.asl"))]
+    (do
+      (assert (= (symbolsOf cs) (list "fx/noteScan.asl#h" "fx/noteScan.asl#f" "fx/noteScan.asl#k" "fx/noteScan.asl#"))
+              (str "findCandidates! strips bare top-level notes too, keyed the same way noteScanAll keys them: " (stringJoin (symbolsOf cs) " ")))
+      (assert (listContains? (textsOf cs) "First note for f. Second note for f, still joined with a space.") "a consecutive run of notes before one decl becomes one merged, removable candidate")
+      (assert (not (stringContains? stripped "Banner note")) "the banner note's literal is gone from the stripped text")
+      (assert (not (stringContains? stripped "Trailing note")) "the trailing note's literal is gone from the stripped text")
+      (assert (ok? (ast/parse stripped)) "stripped source still parses")
+      (assert (not (ok? (ast/parse text))) "mutant guard: the ORIGINAL fixture text, un-stripped, must not parse as a native module (asl check would reject it as ERR_READ_BARE_TOPLEVEL)")
+      (assert (ok? made) "temp dir made")
+      (assert (ok? mk) "package dir made")
+      (assert (ok? (fileWrite dst text)) "fixture copied into a package layout")
+      (mt (dx/extractFile! dir "asl/packages/fxpkg/src.asl")
+        ((err e) (assert false (str "extractFile! ok: " e)))
+        ((ok r)
+          (mt (dx/applyExtract! dir r)
+            ((err e) (assert false (str "applyExtract! ok: " e)))
+            ((ok ledgerRel)
+              (do
+                (assert (stringContains? (fileTextOr! (str dir "/" ledgerRel)) "Trailing note with nothing after it.") "the ledger on disk carries the trailing note's text")
+                (assert (ok? (fr/shellOut (str "bin/asl check '" dst "'") 120000)) "the native CLI check passes on the note-stripped file"))))))
+      (assert (ok? (fr/shellOut (str "rm -rf '" dir "'") 5000)) "temp dir removed")
+      true))
+
 fn ! runTests -> Bool
   (do
     (assert (testModuleDoc!) "testModuleDoc!")
@@ -184,4 +215,5 @@ fn ! runTests -> Bool
     (assert (testMutantGuards!) "testMutantGuards!")
     (assert (testNoteScan!) "testNoteScan!")
     (assert (testNoteMutantGuards!) "testNoteMutantGuards!")
+    (assert (testNoteApply!) "testNoteApply!")
     true)
