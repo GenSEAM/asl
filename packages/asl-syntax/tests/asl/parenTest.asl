@@ -401,27 +401,9 @@ fn testTrackedParenAslFiles! -> Bool
     (assert (verifyFixtureFile! ".asl.config.asn" true 1) ".asl.config.asn has 1 top-level form")
     (assert (verifyFixtureFile! "asl/packages/asl-forms/tests/fixtures/formsCorpus.asn" true 179) "formsCorpus.asn has 179 top-level forms")
     (assert (verifyFixtureFile! "asl/packages/asl-forms/tests/fixtures/ws/symbols.asn" true 8) "symbols.asn has 8 top-level forms")
-    (assert (verifyFixtureFile! ".asl/mem/tasks/asl_language_and_runtime_audit_dossier.asn" true 23) "dossier.asn has 23 top-level forms")
     true)
 
-fn testBenchmarkPerformance! -> Bool
-  (let [(path ".asl/mem/notes.asn")]
-    (mt (fileReadBytes path)
-      ((err e) (assert false (str "benchmark file missing: " e)))
-      ((ok bs)
-       (let [(len (bytesLength bs))]
-         (assert (> len 100000) "benchmark file is >100 KB")
-         (let [(t0 (nowNs))
-               (root (prn/parseBytes bs))
-               (outBs (pr/printTreeBytes! bs root))
-               (t1 (nowNs))
-               (elapsedNs (- t1 t0))
-               (elapsedMs (/ elapsedNs 1000000))
-               (msPer100Kb (/ (* elapsedMs 102400) len))]
-           (assert (= outBs bs) "benchmark output matches input bytes")
-           (assert (not (prn/hasErrors root)) "benchmark file parses without errors")
-           (assert (<= msPer100Kb 200) (str "tokenize+CST <= 200 ms per 100 KB, took: " (stringFromInt64 msPer100Kb) " ms"))
-           true)))))
+; (:m :ref ORGPREMOVE-PARENTEST-PRIVATE :do "the dossier.asn form-count check and testBenchmarkPerformance! moved to tools/tests/privateCorpusFixturesTest.asl: both read .asl/mem/tasks/asl_language_and_runtime_audit_dossier.asn or .asl/mem/notes.asn, private workspace notes rather than public fixtures, which never ship with the published GenSEAM/asl repo; the checks are unchanged, just relocated. Left in place: the tests/acceptance/d81/Task58801IntermediatePolicyTest.asl and tests/fixtures/* entries above also read outside asl/ (top-level tests/, not .asl/mem) -- a separate, already-flagged public/private split gap in tests/ itself (ORG-SPLIT-SURVEY), out of this unit's scope")
 
 fn ! runTests -> Bool
   (and (testParseUnclosedParen)
@@ -431,5 +413,4 @@ fn ! runTests -> Bool
   (and (testDyckFixtures!)
   (and (testAcceptanceAndGrammarInvalidFixtures!)
   (and (testTrackedParenAslFiles!)
-  (and (testTrackedAsnSweep!)
-       (testBenchmarkPerformance!)))))))))
+       (testTrackedAsnSweep!))))))))

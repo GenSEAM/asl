@@ -1,15 +1,13 @@
+; (:m :ref ORGPREMOVE-GCPOLICYLOCK :do "testLock/adopted/baselinePath moved to tools/tests/privateGroundingTest.asl: they check that the shipped defaultMinMib matches an 'adopted' row in .asl/mem/bench/perfBaseline.asn, a private, machine-specific measurement ledger (its :host field literally records this machine's load average at measurement time) that never ships with the published GenSEAM/asl repo; the check itself is unchanged, just relocated")
 (module asl-target-llvm/tests/gcPolicyTest
   :x [runTests]
-  :i [(asl-ir/link :a lk) (asl-ir/types :a ty) (asl-target-llvm :a llvm) (asl-target-llvm/gcAsl :a gc) (tools/perfGate :a pg) (tools/fleet/run :a run)])
+  :i [(asl-ir/link :a lk) (asl-ir/types :a ty) (asl-target-llvm :a llvm) (asl-target-llvm/gcAsl :a gc) (tools/fleet/run :a run)])
 
 fn clangLink -> String
   "/usr/bin/clang -O2 -Wno-override-module -x ir "
 
 fn lib -> String
   " -x none asl/host/out/libaslrt.a -lm -o "
-
-fn baselinePath -> String
-  ".asl/mem/bench/perfBaseline.asn"
 
 (schema Captured
   (:f exitCode Int64)
@@ -41,22 +39,6 @@ fn statsLine text: String -> String
 fn policyPart line: String -> String
   (stringJoin (filter (fn [(f String)] -> Bool (not (stringStartsWith? f "totalGCNs "))) (stringSplit line ":")) ":")
 
-fn ! adopted -> (Option pg/GcPolicy)
-  (mt (pg/loadBaseline (baselinePath))
-    ((err e) (do (assert false (str "perfBaseline.asn loads: " e)) none))
-    ((ok b) (listHead b.gcPolicy)))
-
-fn ! testLock -> Bool
-  (mt (adopted)
-    ((none) (do (assert false "perfBaseline.asn has a (:gcPolicy ...) row") false))
-    ((some p)
-      (do (assert (= p.label "adopted") (str "gcPolicy: the default is labelled adopted; got " p.label))
-          (assert (> (stringLength p.method) 0) "gcPolicy: the row carries its method")
-          (assert (> (stringLength p.scope) 0) "gcPolicy: the row carries its scope")
-          (assert (= (stringLength p.date) 10) (str "gcPolicy: the row carries a yyyy-mm-dd date; got " p.date))
-          (assert (= (gc/defaultMinMib) p.minMib) (str "gcAsl defaultMinMib " (gc/defaultMinMib) " equals the adopted :minMib " p.minMib " in perfBaseline.asn"))
-          true)))
-
 fn ! emitted path: String -> String
   (mt (lk/linkEntry! path)
     ((err ds) (do (assert false (str path ": links; " (formatDiags ds))) ""))
@@ -87,7 +69,6 @@ fn ! runTests -> Bool
   (let [(made (sh "mktemp -d"))
         (work (stringReplace made.stdout "\n" ""))]
     (do (assert (= made.exitCode 0) "mktemp -d makes a work directory")
-        (testLock)
         (testEffective work)
         (assert (= (sh (str "rm -rf " work)).exitCode 0) "work directory removed")
         true))

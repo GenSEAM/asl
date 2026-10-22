@@ -94,52 +94,7 @@ fn testFullClaimsGroundingPass -> Bool
         ((err _) (assert false "verifyClaimsGrounding returned err")))
       true))
 
-fn basisTokens parts: (List Str) i: Int64 -> (List Str)
-  (filter (fn [(t Str)] -> Bool (not (stringEmpty? t)))
-    (stringSplit (optionOr (listHead (stringSplit (optionOr (listGet parts i) "") ")")) "") " "))
-
-fn isDecisionId tok: Str -> Bool
-  (and (stringStartsWith? tok "D") (and (> (stringLength tok) 1) (stringContains? "0123456789" (optionOr (stringSlice tok 1 2) "x"))))
-
-fn checkBasisToken! principles: Str acc: Int64 tok: Str -> Int64
-  (if (isDecisionId tok)
-    (let [(ls (processRun (str "/bin/ls .asl/mem/decisions/" tok "[A-Z]*.asn")))]
-      (do
-        (assert (= ls.exitCode 0) (str "rules basis " tok " must resolve to a decision record under .asl/mem/decisions"))
-        (+ acc 1)))
-    (do
-      (assert (stringContains? principles (str "(:principle :id \"" tok "\"")) (str "rules basis " tok " must resolve to a principle in .asl/mem/principles.asn"))
-      (+ acc 1)))
-
-fn testRulesClaimGrounding! -> Bool
-  (let [(readRes (fileReadString "asl/grammar/rules.asn"))
-        (principlesRes (fileReadString ".asl/mem/principles.asn"))
-        (wsRes (fileReadString ".asl/rules.asn"))
-        (wsContent (resultOr wsRes ""))]
-    (do
-      (assert (ok? readRes) "rules.asn must be readable on disk")
-      (refute (err? readRes) "rules.asn read must refute error")
-      (assert (ok? principlesRes) "principles.asn must be readable on disk")
-      (mt readRes
-        ((err _) false)
-        ((ok content)
-         (let [(principles (resultOr principlesRes ""))
-               (allContent (str content wsContent))
-               (parts (stringSplit allContent ":basis ("))
-               (tokens (fold (fn [(acc (List Str)) (i Int64)] -> (List Str) (listAppend acc (basisTokens parts i))) (list) (range 1 (listLength parts))))
-               (grounded (fold (fn [(acc Int64) (tok Str)] -> Int64 (checkBasisToken! principles acc tok)) 0 tokens))
-               (srcDecision (optionOr (listHead (stringSplit (optionOr (listGet (stringSplit content ":src ") 1) "") " ")) ""))]
-           (do
-             (assert (stringContains? content ":basis \".asl/mem/principles.asn\"") "rules.asn must name principles.asn as its basis")
-             (assert (isDecisionId srcDecision) "rules.asn :src must name a decision id")
-             (assert (= (checkBasisToken! principles 0 srcDecision) 1) "rules.asn :src decision must resolve")
-             (assert (> (listLength tokens) 0) "rules.asn and the workspace rules file together must cite at least one basis")
-             (assert (= grounded (listLength tokens)) "every basis across rules.asn and the workspace rules file, when present, must be grounded")
-             (refute (stringContains? allContent "%") "rules.asn and the workspace rules file must carry no figure; figures live in principles.asn entries or bench locks")
-             (refute (stringContains? allContent "arXiv") "rules.asn and the workspace rules file must refute unsourced paper citations")
-             (refute (stringContains? allContent "TODO") "rules.asn and the workspace rules file must refute ungrounded TODO citations")
-             true))))
-      true))
+; (:m :ref ORGPREMOVE-CLAIMSGROUNDING :do "testRulesClaimGrounding! (and its basisTokens/isDecisionId/checkBasisToken! helpers) moved to tools/tests/privateGroundingTest.asl: it reads .asl/mem/principles.asn and .asl/mem/decisions/ directly, which never ship with the published GenSEAM/asl repo (asl/grammar/rules.asn's own :basis citations are public, but their grounding evidence is this workspace's private memory by the 2026-09-22 decision), so a standalone asl/ clone could never satisfy it; the check itself is unchanged, just relocated to the private side where that evidence actually lives")
 
 fn testDualPolarityRefutations! -> Bool
   (let [(badRead (cl/groundClaims! "nonexistent/claims/registry.asn"))
@@ -160,7 +115,6 @@ fn ! runTests -> Bool
     (assert (testPublishedClaimsExtraction!) "testPublishedClaimsExtraction passed")
     (assert (testUnbackedClaimRefutation) "testUnbackedClaimRefutation passed")
     (assert (testFullClaimsGroundingPass) "testFullClaimsGroundingPass passed")
-    (assert (testRulesClaimGrounding!) "testRulesClaimGrounding passed")
     (assert (testDualPolarityRefutations!) "testDualPolarityRefutations passed")
     true)
 

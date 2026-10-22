@@ -1,4 +1,4 @@
-(module asl-transpile/multilensIntegrationTest :x [testDynamicMultilensExecution testMultilensRoundtripFidelity testMultilensRefutations testTaskRegistrationFile! runTests] :i [(asl-transpile/multilens :a ml) (asl-transpile/cssCascade :a cascade) (asl-transpile/transpile :a tr) (asl-transpile/yamlTranspile :a yt) (asl-transpile/tomlTranspile :a tt)])
+(module asl-transpile/multilensIntegrationTest :x [testDynamicMultilensExecution testMultilensRoundtripFidelity testMultilensRefutations runTests] :i [(asl-transpile/multilens :a ml) (asl-transpile/cssCascade :a cascade) (asl-transpile/transpile :a tr) (asl-transpile/yamlTranspile :a yt) (asl-transpile/tomlTranspile :a tt)])
 
 fn productionModelSexpr -> Str
   (str "(:doc " ":meta (:title \"Agent Telemetry Service\" :version \"1.0.0\" :author \"Agent\" :lang \"en\") " ":styles (:vars [(:primary \"#2563eb\") (:bg \"#f8fafc\")] " "         :rules [(:rule :selector \".service-card\" :props [(:padding \"16px\") (:border-radius \"8px\")])]) " ":content (div (:class \"service-card\") (h1 \"Telemetry Overview\") (p \"Status: Online\")) " ":data (:endpoints [(:path \"/health\" :status 200) (:path \"/metrics\" :status 200)]) " ":config (:port 9090 :host \"0.0.0.0\" :ssl (:enabled false :certPath \"/certs\")))")
@@ -12,8 +12,7 @@ fn testMultilensRoundtripFidelity -> Bool
 fn testMultilensRefutations -> Bool
   (let [(model (ml/parseUnifiedModel (productionModelSexpr))) (opts (ml/defaultLensOptions)) (rBad (ml/projectLens "bogus" model opts))] (refute rBad.success "unknown lens must refute success") (refute (!= rBad.output "") "unknown lens must not emit content") (assert (stringContains? rBad.errorMsg "Unsupported lens") "errorMsg identifies unsupported lens") true)
 
-fn testTaskRegistrationFile! -> Bool
-  (let [(res (processRun "test -f .asl/mem/tasks/Phase508MultilensEmitters.asn")) (code res.exitCode)] (assert (= code 0) "Phase508MultilensEmitters.asn must exist on disk") (refute (!= code 0) "Phase508MultilensEmitters.asn existence check must not fail") true)
+; (:m :ref ORGPREMOVE-TASKREGISTRATION :do "testTaskRegistrationFile! moved to tools/tests/privateTaskLedgerTest.asl: it checks this workspace's own private task-tracking bookkeeping (.asl/mem/tasks/Phase508MultilensEmitters.asn), unrelated to multilens projection correctness and absent from the published GenSEAM/asl repo; the check itself is unchanged, just relocated")
 
 fn ! runTests -> Bool
-  (do (assert (testDynamicMultilensExecution) "testDynamicMultilensExecution") (assert (testMultilensRoundtripFidelity) "testMultilensRoundtripFidelity") (assert (testMultilensRefutations) "testMultilensRefutations") (assert (testTaskRegistrationFile!) "testTaskRegistrationFile") true)
+  (do (assert (testDynamicMultilensExecution) "testDynamicMultilensExecution") (assert (testMultilensRoundtripFidelity) "testMultilensRoundtripFidelity") (assert (testMultilensRefutations) "testMultilensRefutations") true)

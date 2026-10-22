@@ -6,7 +6,6 @@
       (asl-syntax/core/symbols :a sym)
       (asl-syntax/core/outline :a otl)
       (asl-syntax/core/corpus :a crp)
-      (asl-syntax/core/bench :a bn)
       (asl-syntax/json :a jcst)
       (asl-json/json :a j)])
 
@@ -293,28 +292,7 @@ fn testUpstreamJsonTestSuite! -> Bool
               (assert (= passN 50) "all 50 n_ cases rejected")
               true))))))
 
-fn benchParseJson bs: Bytes -> Unit
-  (let [(root (jcst/parseJsonBytes bs))]
-    ())
-
-fn testPreflightInventoryPerf! -> Bool
-  (let [(path ".asl/mem/audits/preflight_inventory.json")
-        (readRes (fileReadBytes path))]
-    (do
-      (assert (ok? readRes) "preflight_inventory.json readable")
-      (let [(bs (resultOr readRes (stringToBytes "")))
-            (bytesCount (bytesLength bs))
-            (workload (fn [] -> Unit (benchParseJson bs)))
-            (fig (bn/benchMedian5! workload
-                                  bytesCount
-                                  "1 MB JSON preflight_inventory"
-                                  "2026-09-26"))
-            (msPer100Kb (bn/figureMsPer100Kb fig))]
-        (do
-          (println (bn/renderBenchFigure fig))
-          (assert (> (bn/figureMedianNs fig) 0) "median ns > 0")
-          (assert (<= msPer100Kb 60.0) (str "ms per 100 KB <= 60.0 target, measured: " (stringFromFloat64 msPer100Kb)))
-          true))))
+; (:m :ref ORGPREMOVE-PREFLIGHTPERF :do "testPreflightInventoryPerf! (and its benchParseJson helper) moved to tools/tests/privateCorpusFixturesTest.asl: it reads .asl/mem/audits/preflight_inventory.json, a private workspace audit artifact rather than a public fixture, which never ships with the published GenSEAM/asl repo; the check itself is unchanged, just relocated")
 
 fn ! runTests -> Bool
   (do
@@ -324,5 +302,4 @@ fn ! runTests -> Bool
     (assert (testSymbolsAndOutline) "symbols and outline")
     (assert (testTrackedJsonFiles!) "tracked json round-trip and lowering")
     (assert (testUpstreamJsonTestSuite!) "upstream json test suite")
-    (assert (testPreflightInventoryPerf!) "preflight inventory benchmark")
     true)
