@@ -91,4 +91,5 @@
   (:retired :path "tests/host/consArenaTest.asl" :allowed [".asl/mem/" "tests/acceptance/r1Host/fixtures/parity/parseCounts.tsv" "tools/tests/noSelfHostBaseline.asl"])
   (:retired :path "tests/conformance/bootstrap/cfreeLinkTest.asl" :allowed [".asl/mem/" "tests/acceptance/r1Host/fixtures/parity/parseCounts.tsv" "tools/tests/noSelfHostBaseline.asl" "asl/packages/asl-cli/src/build.asl"])
   (:retired :path "tests/host/gcHooksSplitTest.asl" :allowed [".asl/mem/" "tests/acceptance/r1Host/fixtures/parity/parseCounts.tsv" "tools/tests/noSelfHostBaseline.asl"])
+  (:retired :path "asl/packages/asl-target-llvm/tests/gcAslTest.asl" :allowed [".asl/mem/" "tests/acceptance/r1Host/fixtures/parity/parseCounts.tsv" "asl/packages/asl-target-llvm/tests/nativeValueTest.asl" "asl/packages/asl-target-llvm/tests/parRouteTest.asl" "asl/packages/asl-target-llvm/tests/sysNetRouteTest.asl" "asl/packages/asl-target-llvm/tests/sysRouteTest.asl"])
 )

@@ -20,12 +20,12 @@ fn warmupDeadlineS -> Int64
 fn sharedCache -> String
   (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli")
 
-; (:m :ref FROZENDIR-STALE :do "asl/grammar/frozen.asn freezes distribTest and installParityTest inside the live asl-target-sh/tests and the whole asl-vector/tests package; the other asl-target-sh suites unfroze on 2026-10-15")
+; (:m :ref FROZENDIR-STALE :do "asl/grammar/frozen.asn freezes distribTest inside the live asl-target-sh/tests (installParityTest unfroze with its fixture, so the directory run executes it as a live suite) and the whole asl-vector/tests package; the other asl-target-sh suites unfroze on 2026-10-15")
 fn mixedDir -> String
   "asl/packages/asl-target-sh/tests"
 
 fn frozenSuites -> (List String)
-  (list "asl/packages/asl-target-sh/tests/distribTest.asl" "asl/packages/asl-target-sh/tests/installParityTest.asl")
+  (list "asl/packages/asl-target-sh/tests/distribTest.asl")
 
 fn liveSuites -> (List String)
   (list "asl/packages/asl-target-sh/tests/astTest.asl" "asl/packages/asl-target-sh/tests/emitPs1Test.asl"

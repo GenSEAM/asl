@@ -238,7 +238,7 @@ fn replay! fx: Node blobs: (Map String Blob) repo: String host: String c: Node -
         (outGot (normalize env res.out))
         (errGot (normalize env res.errText))
         (outWant (atom (field c ":stdout")))
-        (rootSkip (if (= entry ":rules") (list "scripts/install.sh" "asl/dist/install.sh" "asl/web/dist/install.sh" "asl/web/public/install.sh" ".asl/tmp") (list "scripts/install.sh" ".asl/tmp" "asl/packages" "asl/host" ".asl.config.asn")))
+        (rootSkip (if (= entry ":rules") (list "scripts/install.sh" "asl/dist/install.sh" "asl/web/dist/install.sh" "asl/web/public/install.sh" ".asl/tmp") (list "scripts/install.sh" ".asl/tmp" "asl/packages" ".asl.config.asn" (if (= entry ":bootstrap") "bin/asl" "scripts/install.sh"))))
         (rootGot (listSort (walk! env env.root "" rootSkip (list))))
         (homeGot (listSort (walk! env env.home "" (list) (list))))
         (mode (optionOr (listHead args) ""))
@@ -260,8 +260,15 @@ fn bootstrapTree! env: Env repo: String -> Bool
   (let [(root env.root)]
     (and (ok? (dist/copyTree! (str repo "/asl/packages/asl-target-sh") (str root "/asl/packages/asl-target-sh")))
          (ok? (dist/copyTree! (str repo "/.asl.config.asn") (str root "/.asl.config.asn")))
-         (sh! (list "ln" "-s" (str repo "/asl/host") (str root "/asl/host")))
+         (forwardRun! env repo)
          (dist/isExecutable! "/bin/dash")))
+
+; (:m :ref REDS-MAIN-B :do "the bootstrap resolves its entry as root/bin/asl, which the fixture places as the logging stub; the stub forwards run to the real native CLI, with the script path moved from the root copy into this checkout (the CLI refuses a path outside its workspace), before it logs, so the installer itself runs while every other call is still recorded and answered by the stub")
+fn forwardRun! env: Env repo: String -> Bool
+  (let [(path (str env.root "/bin/asl"))]
+    (match (fileReadString path)
+      ((err _) false)
+      ((ok text) (ok? (fileWrite path (stringReplace text "#!/bin/sh\n" (str "#!/bin/sh\ncase \"$1\" in run) s=\"$2\"; case \"$s\" in '" env.root "'/asl/*) s='" repo "'\"/asl/${s#'" env.root "'/asl/}\" ;; esac; shift 2; exec '" repo "/bin/asl' run \"$s\" \"$@\" ;; esac\n")))))))
 
 fn repoRoot! -> String
   (resultOr (realPath ".") ".")
