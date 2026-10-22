@@ -1,5 +1,5 @@
 (module asl-target-llvm/rc
-  :x [rcModule rcFinishText rcFinishTextWith sanitized routeArrayAlloc dupName dropName pinName wrapperName runtimeText]
+  :x [rcModule rcFinishText rcFinishTextWith sanitized routeArrayAlloc dupName dropName pinName wrapperName runtimeText gcConsCall arenaCallText appendCallText]
   :i [(asl-ir/types :a ty)
       (asl-target-llvm/ssa :a ssa)
       (asl-target-llvm/ssaOpt :a opt)])
@@ -146,10 +146,10 @@ fn childOrEntry? name: String -> Bool
 
 fn instrUses ctx: Ctx facts: Facts ins: ty/SsaInstr -> (List Use)
   (match ins.op
-    ((ty/opCall callee args) (cond ((builderFunction? ctx callee) (heapUses facts args "borrow")) ((or (arrayFresh? callee) (borrowExtern? callee)) (heapUses facts args "borrow")) ((opaqueFunction? ctx callee) (heapUses facts args "pin")) (else (callUses ctx facts callee args))))
+    ((ty/opCall callee args) (cond ((= callee (arenaEntry)) (heapUses facts args "consume")) ((builderFunction? ctx callee) (heapUses facts args "borrow")) ((or (arrayFresh? callee) (borrowExtern? callee)) (heapUses facts args "borrow")) ((opaqueFunction? ctx callee) (heapUses facts args "pin")) (else (callUses ctx facts callee args))))
     ((ty/opBuiltin name args) (heapUses facts args (if (borrowBuiltin? name) "borrow" "pin")))
     ((ty/opEntry name args) (heapUses facts args (if (consumeEntry? name) "consume" "borrow")))
-    ((ty/opCallClosure c args) (heapUses facts (cons c args) "borrow"))
+    ((ty/opCallClosure c args) (if (ownedCall? facts ins) (ownedUses facts ins) (heapUses facts (cons c args) "borrow")))
     ((ty/opMakeClosure _ caps) (heapUses facts caps "consume"))
     ((ty/opConstruct _ _ fields) (heapUses facts fields "consume"))
     ((ty/opRecord _ _ values) (heapUses facts values "consume"))
@@ -185,7 +185,7 @@ fn resultKind ctx: Ctx ins: ty/SsaInstr -> String
     "raw"
     (match ins.op
       ((ty/opConst c) (match c ((ty/constStr _) "source") ((ty/constSymbol _) "source") (_ "immortal")))
-      ((ty/opCall callee _) (if (mapHas? ctx.proj callee) "source" (if (and (opaqueFunction? ctx callee) (and (not (builderFunction? ctx callee)) (not (or (arrayFresh? callee) (borrowExtern? callee))))) "opaque" "owned")))
+      ((ty/opCall callee _) (if (and (mapHas? ctx.proj callee) (!= callee (arenaEntry))) "source" (if (and (opaqueFunction? ctx callee) (and (not (builderFunction? ctx callee)) (not (or (arrayFresh? callee) (borrowExtern? callee))))) "opaque" "owned")))
       ((ty/opBuiltin name _) (if (borrowBuiltin? name) "owned" "opaque"))
       ((ty/opEntry name _) (cond ((consumeEntry? name) "owned") ((childEntry? name) "source") ((childOrEntry? name) "sourceDup") ((freshEntry? name) "owned") ((sameEntry? name) "owned") ((wrapEntry? name) "wrap") (else "opaque")))
       ((ty/opField _ _) "source")
@@ -433,9 +433,41 @@ fn withoutDups calls: (List (Pair String String)) moved: (List String) -> (List 
                           (pair (pairFirst acc) (listAppend (pairSecond acc) (list c))))))
                     (pair (mapEmpty) (list)) calls)))
 
+; (:m :ref RC-FBIP-CLOSURE :do "a closure call outside tail position with one or two arguments, all values (with the closure that keeps every parameter in a register, where a third argument would spill), goes through aslRcCallOwnedN, which hands the arguments over: an argument dying here moves to the callee without a drop after, any other is duplicated before, so a lambda sees a value its caller let go of as unique and its constructs can reuse the cell; the closure itself stays borrowed")
+fn ownedArity -> Int64
+  2
+
+fn callOwnedName n: Int64 -> String
+  (str "aslRcCallOwned" n)
+
+fn ownedName name: String -> String
+  (ssa/ownedEntryName (wrapperName name))
+
+fn ownedCall? facts: Facts ins: ty/SsaInstr -> Bool
+  (match ins.op
+    ((ty/opCallClosure c args) (and (mapHas? facts.heap c) (and (> (listLength args) 0) (and (<= (listLength args) (ownedArity)) (and (not (listContains? args c)) (listAll? (fn [(a String)] -> Bool (mapHas? facts.heap a)) args))))))
+    (_ false))
+
+fn ownedUses facts: Facts ins: ty/SsaInstr -> (List Use)
+  (match ins.op
+    ((ty/opCallClosure c args) (listAppend (heapUses facts (list c) "borrow") (heapUses facts args "consume")))
+    (_ (list)))
+
+fn closureCall? ins: ty/SsaInstr -> Bool
+  (match ins.op ((ty/opCallClosure _ _) true) (_ false))
+
+fn closureUses facts: Facts ins: ty/SsaInstr -> (List Use)
+  (match ins.op ((ty/opCallClosure c args) (heapUses facts (cons c args) "borrow")) (_ (list)))
+
+fn ownedInstr ins: ty/SsaInstr -> ty/SsaInstr
+  (match ins.op
+    ((ty/opCallClosure c args) (ty/ssaInstr ins.dest ins.ty (ty/opCall (callOwnedName (listLength args)) (cons c args))))
+    (_ ins))
+
 fn rewriteInstr ctx: Ctx facts: Facts label: String tail: Bool w: Walk ins: ty/SsaInstr -> Walk
   (let [(after w.live)
-        (uses (instrUses ctx facts ins))
+        (owned (and (not tail) (ownedCall? facts ins)))
+        (uses (cond (owned (ownedUses facts ins)) ((closureCall? ins) (closureUses facts ins)) (else (instrUses ctx facts ins))))
         (results (resultCalls facts ins after))
         (dead0 (dropsAfter facts uses after))
         (plan (if tail (none) (reusePlan facts ins dead0)))
@@ -458,7 +490,7 @@ fn rewriteInstr ctx: Ctx facts: Facts label: String tail: Bool w: Walk ins: ty/S
                     ((and (none? plan) (and (not tail) (and (>= (allocClass ins) 0) (reusableDest? ins.dest)))) (cons (pair ins.dest (allocClass ins)) w.pend))
                     (else w.pend)))
         (live (union (mapRemove after ins.dest) (setOf (liveNames facts uses))))]
-    (Walk :live live :out (listAppend beforeIs (cons ins (listAppend afterIs w.out))) :n (+ n0 (+ nPre (listLength post))) :pend pend))
+    (Walk :live live :out (listAppend beforeIs (cons (if owned (ownedInstr ins) ins) (listAppend afterIs w.out))) :n (+ n0 (+ nPre (listLength post))) :pend pend))
 
 schema Late
   cell: String
@@ -600,6 +632,35 @@ fn wrapperFunction f: ty/SsaFunction opaque: Bool -> ty/SsaFunction
     (ty/ssaFunction (wrapperName f.name) f.captures f.params f.retTy
       (list (ty/ssaBlock "entry" (list) (listAppend pre (cons call post)) (ty/termReturn "rc.r")))))
 
+; (:m :ref RC-FBIP-CLOSURE :do "the owned entry of a counted closure target: the closure keeps its captures, so they are duplicated, while the arguments arrive owned from aslRcCallOwnedN and pass straight on")
+fn ownedFunction f: ty/SsaFunction -> ty/SsaFunction
+  (let [(heapCaps (map (fn [(p ty/SsaParam)] -> String p.name) (filter (fn [(p ty/SsaParam)] -> Bool (heapTy? p.ty)) f.captures)))
+        (pre (map (fn [(i Int64)] -> ty/SsaInstr (rcCall (str "rc.o." i) (dupName) (optionOr (listGet heapCaps i) ""))) (range 0 (listLength heapCaps))))
+        (call (ty/ssaInstr "rc.r" f.retTy (ty/opCall f.name (map (fn [(p ty/SsaParam)] -> String p.name) (listAppend f.captures f.params)))))]
+    (ty/ssaFunction (ownedName f.name) f.captures f.params f.retTy
+      (list (ty/ssaBlock "entry" (list) (listAppend pre (list call)) (ty/termReturn "rc.r")))))
+
+fn ownedArities bodies: (List ty/SsaFunction) -> (List Int64)
+  (distinctInts (fold (fn [(acc (List Int64)) (f ty/SsaFunction)] -> (List Int64)
+                        (fold (fn [(a (List Int64)) (ins ty/SsaInstr)] -> (List Int64)
+                                (match ins.op ((ty/opCall callee args) (if (stringStartsWith? callee "aslRcCallOwned") (cons (- (listLength args) 1) a) a)) (_ a)))
+                              acc (functionInstrs f)))
+                      (list) bodies))
+
+fn ownedExterns bodies: (List ty/SsaFunction) -> (List ty/SsaExtern)
+  (map (fn [(n Int64)] -> ty/SsaExtern (ty/ssaExternTyped (callOwnedName n) (map (fn [(i Int64)] -> ty/SsaTy (ty/tyVal)) (range 0 (+ n 1))) (ty/tyVal))) (ownedArities bodies))
+
+fn slowName n: Int64 -> String
+  (str "aslRcCallOwnedSlow" n)
+
+; (:m :ref RC-FBIP-CLOSURE :do "the slow path of an owned call lives in SSA so its closure call pulls objrt.call into the module: it calls through the borrowing entry and then drops the owned arguments")
+fn ownedSlowFunction n: Int64 -> ty/SsaFunction
+  (let [(args (map (fn [(i Int64)] -> String (str "a" i)) (range 0 n)))
+        (call (ty/ssaInstr "rc.r" (ty/tyVal) (ty/opCallClosure "f" args)))
+        (drops (map (fn [(i Int64)] -> ty/SsaInstr (rcCall (str "rc.s." i) (dropName) (optionOr (listGet args i) ""))) (range 0 n)))]
+    (ty/ssaFunction (slowName n) (list) (map (fn [(a String)] -> ty/SsaParam (ty/ssaParam a (ty/tyVal))) (cons "f" args)) (ty/tyVal)
+      (list (ty/ssaBlock "entry" (list) (cons call drops) (ty/termReturn "rc.r")))))
+
 fn uncaptured f: ty/SsaFunction -> ty/SsaFunction
   (ty/ssaFunction f.name (list) (listAppend f.captures f.params) f.retTy f.blocks)
 
@@ -628,9 +689,10 @@ fn rcModule m: ty/SsaModule user: (Map String Bool) -> ty/SsaModule
                      m.functions))
         (wrappers (map (fn [(f ty/SsaFunction)] -> ty/SsaFunction (wrapperFunction f (not (counted f))))
                        (filter (fn [(f ty/SsaFunction)] -> Bool (mapHas? targets f.name)) m.functions)))
+        (owners (map ownedFunction (filter (fn [(f ty/SsaFunction)] -> Bool (and (mapHas? targets f.name) (counted f))) m.functions)))
         (have (setOf (map (fn [(e ty/SsaExtern)] -> String e.name) m.externs)))
-        (externs (listAppend m.externs (filter (fn [(e ty/SsaExtern)] -> Bool (not (mapHas? have e.name))) (listAppend (rcExterns) (reuseExterns bodies)))))]
-    (ty/ssaModule m.name m.strings m.types m.records externs m.globals (listAppend bodies wrappers)))
+        (externs (listAppend m.externs (filter (fn [(e ty/SsaExtern)] -> Bool (not (mapHas? have e.name))) (listAppend (rcExterns) (listAppend (reuseExterns bodies) (ownedExterns bodies))))))]
+    (ty/ssaModule m.name m.strings m.types m.records externs m.globals (listAppend bodies (listAppend wrappers (listAppend owners (map ownedSlowFunction (ownedArities bodies)))))))
 
 fn sticky -> Int64
   71776119061217280
@@ -1045,7 +1107,7 @@ fn statSpare -> Int64
   12
 
 fn statSlots -> Int64
-  13
+  17
 
 fn statBump p: String slot: Int64 -> String
   (lines (list (str "  %" p ".sp = getelementptr [" (statSlots) " x i64], ptr @aslRc.stats, i64 0, i64 " slot)
@@ -1298,7 +1360,7 @@ fn cString name: String plain: String -> String
   (str "@" name " = private unnamed_addr constant [" (+ (stringLength plain) 1) " x i8] c\"" (stringReplace plain "\n" "\\0A") "\\00\"")
 
 fn statsFormat -> String
-  "(:rcStats :freed %llu :stuck %llu :reused %llu :pinned %llu :fresh %llu :large %llu :largeFreed %llu :pushed %llu :ops %llu :immediate %llu :fbip %llu :resets %llu :spare %llu)\n"
+  "(:rcStats :freed %llu :stuck %llu :reused %llu :pinned %llu :fresh %llu :large %llu :largeFreed %llu :pushed %llu :ops %llu :immediate %llu :fbip %llu :resets %llu :spare %llu :arenas %llu :arenaCells %llu :promoted %llu :retained %llu)\n"
 
 fn statLoad k: Int64 -> String
   (lines (list (str "  %p" k " = getelementptr [" (statSlots) " x i64], ptr @aslRc.stats, i64 0, i64 " k)
@@ -1327,7 +1389,7 @@ fn statsText -> String
                "define internal void @aslRc.report() {"
                "entry:"
                (lines (map statLoad (range 0 (statSlots))))
-               "  %r = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @aslRc.statsFmt, i64 %v0, i64 %v1, i64 %v2, i64 %v3, i64 %v4, i64 %v5, i64 %v6, i64 %v7, i64 %v8, i64 %v9, i64 %v10, i64 %v11, i64 %v12)"
+               "  %r = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @aslRc.statsFmt, i64 %v0, i64 %v1, i64 %v2, i64 %v3, i64 %v4, i64 %v5, i64 %v6, i64 %v7, i64 %v8, i64 %v9, i64 %v10, i64 %v11, i64 %v12, i64 %v13, i64 %v14, i64 %v15, i64 %v16)"
                "  ret void"
                "}"))
 
@@ -1349,7 +1411,11 @@ fn runtimeText text: String asan: Bool -> String
   (runtimeTextWith text asan false)
 
 fn runtimeTextWith text: String asan: Bool notrace: Bool -> String
-  (let [(section (declareSection text)) (rooted (rootedRuntime? section))]
+  (runtimeTextIn text (declareSection text) asan notrace)
+
+fn runtimeTextIn text: String section: String asan: Bool notrace: Bool -> String
+  (let [(rooted (rootedRuntime? section))
+        (uses (stringContains? text (arenaRunCall))) (active (and uses notrace))]
     (liveChecked asan (lines (listAppend
            (list (str "@aslRc.free = internal global [" (classes) " x %Val] zeroinitializer, align 16")
                  (str "@aslRc.rooted = internal global [" (classes) " x i8] zeroinitializer")
@@ -1358,10 +1424,22 @@ fn runtimeTextWith text: String asan: Bool notrace: Bool -> String
                  "@aslRc.cap = internal global i64 0"
                  (statsText)
                  (objText notrace) (liveCheckText) (dupText asan) (dropText asan) (pushText)
-                 (childrenText "pinKids" "pinVal") (drainText) (recycleText asan rooted notrace) (pinValText notrace) (pinText) (deferText rooted)
-                 (dupValText) (childrenText "dupKids" "dupVal") (dupKidsText) (dupSameText) (freeOneText) (claimText) (freeChainText asan))
+                 (childrenText "pinKids" "pinVal") (drainText) (recycleText asan rooted notrace) (if active (arenaPinned (pinValText notrace)) (pinValText notrace)) (pinText)
+                 (if active (arenaDeferred (deferText rooted)) (deferText rooted))
+                 (dupValText) (childrenText "dupKids" "dupVal") (dupKidsText) (dupSameText) (freeOneText) (claimText) (freeChainText asan)
+                 (cond (active (arenaRuntimeText asan)) (uses (arenaRunText false)) (else "")))
            (listAppend (if rooted (listAppend (smallGlobals text) (list (smallSyncText) (smallPushText))) (list))
-             (runtimeDecls section asan rooted))))))
+             (listAppend (runtimeDecls section asan rooted)
+               (if active (listAppend (declIfAbsent section "@malloc" "declare ptr @malloc(i64)") (declIfAbsent section "@llvm.memcpy.p0.p0.i64" "declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)")) (list))))))))
+
+; (:m :ref MM-REGIONS :do "pinning a cell of an open arena retains the arena; a stuck value is never deferred, so no arena cell waits in the pending drops past its release")
+fn arenaPinned def: String -> String
+  (stringReplace def "  br i1 %stuck, label %done, label %stick"
+    "  br i1 %stuck, label %stuckSeen, label %stick\nstuckSeen:\n  %pinArena = call i1 @aslRc.arenaAny(%Val %v)\n  br i1 %pinArena, label %pinRetain, label %done\npinRetain:\n  call void @aslRc.arenaRetain()\n  br label %done")
+
+fn arenaDeferred def: String -> String
+  (stringReplace def "counted:\n  %n = load i64, ptr @aslRc.pendN"
+    "counted:\n  %dh = load i64, ptr %o\n  %dc = lshr i64 %dh, 48\n  %dc8 = and i64 %dc, 255\n  %dstuck = icmp eq i64 %dc8, 255\n  br i1 %dstuck, label %done, label %queue\nqueue:\n  %n = load i64, ptr @aslRc.pendN")
 
 fn liveChecked asan: Bool text: String -> String
   (if asan
@@ -1369,12 +1447,6 @@ fn liveChecked asan: Bool text: String -> String
     (fold (fn [(t String) (line String)] -> String (stringReplace t line ""))
           text
           (list "  call void @aslRc.live(ptr %o, i64 %h)\n" (str "  store i32 " (sentinel) ", ptr %idp\n") (str "  store i32 " (sentinel) ", ptr %sidp\n"))))
-
-fn routeAlloc text: String sc: Int64 asan: Bool -> (Pair String (List String))
-  (let [(callText (str "call ptr " (allocFastSym sc) "("))]
-    (if (stringContains? text callText)
-      (pair (stringReplace text callText (str "call ptr " (rcAllocSym sc) "(")) (list (allocText (rcAllocSym sc) (allocFastSym sc) sc asan)))
-      (pair text (list))))
 
 fn routeArrayAlloc text: String -> String
   (let [(plain "define internal ptr @aslArrAlloc(i32 %t, i64 %n) {\n  %o = call ptr @asl_alloc(i32 %t, i64 %n)")]
@@ -1546,9 +1618,13 @@ fn resetOf line: String -> String
     ((none) "")
     ((some at) (optionOr (listHead (stringSplit (optionOr (stringSlice line (+ at 1) (stringLength line)) "") "(")) "")))
 
+; (:m :ref MM-REGIONS :do "the collector cons call is spliced from its parts: routing rewrites whole module text, so a literal of it would rewrite this compiler's own constant when it compiles itself and an RC-built compiler would then never route cons; a line test uses the parts '= call ' and 'ptr @gcAsl.allocFastCons(', which that rewrite never matches")
+fn gcConsCall -> String
+  (str "call ptr @" (stringReplace "gcAsl+allocFastCons(" "+" "."))
+
 fn allocClassOf line: String -> Int64
   (cond
-    ((stringContains? line "= call ptr @gcAsl.allocFastCons(") 3)
+    ((and (stringContains? line "= call ") (stringContains? line "ptr @gcAsl.allocFastCons(")) 3)
     (else (match (stringIndexOf line "= call ptr @gcAsl.allocFast.")
             ((none) -1)
             ((some at) (optionOr (stringToInt64 (optionOr (listHead (stringSplit (optionOr (stringSlice line (+ at 28) (stringLength line)) "") "(")) "")) -1)))))
@@ -1616,34 +1692,830 @@ fn resetFrom asan: Bool name: String -> String
   (let [(parts (stringSplit name "_"))]
     (resetText asan (optionOr (stringToInt64 (optionOr (listGet parts 1) "")) 0) (optionOr (stringToInt64 (optionOr (listGet parts 2) "")) 0)))
 
+fn arenaEntry -> String
+  "prelude.arenaRun"
+
+; (:m :ref MM-REGIONS :do "built from arenaEntry, never a literal: the rename runs over whole module text, so a literal of the call would also rewrite this compiler's own string constant when it compiles itself")
+fn arenaCallText -> String
+  (str "call tailcc %Val @" (stringReplace (arenaEntry) "." "$2E") "(")
+
+fn arenaRunCall -> String
+  "call tailcc %Val @aslRc.arenaRun("
+
+; (:m :ref RC-LIST-RELINK :do "under untraced RC a listAppend call goes to aslRc.appendOwned, which owns both lists as listAppend does: it walks the unique leading cells of the left list and, when they reach its end, links the right list to the last cell in place with no copy; from the first shared cell on (count above zero, stuck or arena cells included) it hands that suffix to the copying listAppend and links the copy in; the callee and call texts are spliced at run time so an RC-built compiler still finds the calls in its own text; the entry is not internal, since musttail callers need its tailcc kept and LLVM turns internal functions to fastcc")
+fn appendCallee -> String
+  (str "@" (stringReplace "prelude+listAppend" "+" "$2E"))
+
+fn appendCallText -> String
+  (str "call tailcc %Val " (appendCallee) "(")
+
+fn appendOwnedCall -> String
+  "call tailcc %Val @aslRc.appendOwned("
+
+fn appendOwnedText asan: Bool -> String
+  (lines (list "define tailcc %Val @aslRc.appendOwned(%Val %a, %Val %b) {"
+               "entry:"
+               "  %aw = extractvalue %Val %a, 1"
+               "  %ap = inttoptr i64 %aw to ptr"
+               "  %empty = icmp eq ptr %ap, null"
+               "  br i1 %empty, label %none, label %walk"
+               "none:"
+               "  ret %Val %b"
+               "walk:"
+               "  %c = phi ptr [ %ap, %entry ], [ %np, %step ]"
+               "  %cv = phi %Val [ %a, %entry ], [ %t, %step ]"
+               "  %prev = phi ptr [ null, %entry ], [ %tp, %step ]"
+               "  %h = load i64, ptr %c"
+               (if asan "  call void @aslRc.live(ptr %c, i64 %h)" "")
+               "  %cn = lshr i64 %h, 48"
+               "  %c8 = and i64 %cn, 255"
+               "  %uniq = icmp eq i64 %c8, 0"
+               "  br i1 %uniq, label %own, label %copy"
+               "own:"
+               "  %tp = getelementptr inbounds i8, ptr %c, i64 24"
+               "  %t = load %Val, ptr %tp"
+               "  %tw = extractvalue %Val %t, 1"
+               "  %np = inttoptr i64 %tw to ptr"
+               "  %last = icmp eq ptr %np, null"
+               "  br i1 %last, label %link, label %step"
+               "step:"
+               "  br label %walk"
+               "link:"
+               "  store %Val %b, ptr %tp"
+               "  ret %Val %a"
+               "copy:"
+               (str "  %r = " (appendCallText) "%Val %cv, %Val %b)")
+               "  %first = icmp eq ptr %prev, null"
+               "  br i1 %first, label %whole, label %splice"
+               "whole:"
+               "  ret %Val %r"
+               "splice:"
+               "  store %Val %r, ptr %prev"
+               "  ret %Val %a"
+               "}"))
+
+fn arenaChunk -> Int64
+  262144
+
+fn arenaDeepest -> Int64
+  125
+
+fn retiredBits -> Int64
+  -144115188075855872
+
+fn forwardMask -> Int64
+  -71776119061217281
+
+fn forwardBits -> Int64
+  71494644084506624
+
+fn statArenas -> Int64
+  13
+
+fn statArenaCells -> Int64
+  14
+
+fn statPromoted -> Int64
+  15
+
+fn statRetained -> Int64
+  16
+
+fn heapTagText v: String p: String -> (List String)
+  (list (str "  %" p "w0 = extractvalue %Val " v ", 0")
+        (str "  %" p "tag = and i64 %" p "w0, 4294967295")
+        (str "  %" p "ow = extractvalue %Val " v ", 1")
+        (str "  %" p "lo = icmp sge i64 %" p "tag, 5")
+        (str "  %" p "hi = icmp sle i64 %" p "tag, 15")
+        (str "  %" p "nb = icmp ne i64 %" p "tag, 10")
+        (str "  %" p "nz = icmp ne i64 %" p "ow, 0")
+        (str "  %" p "a = and i1 %" p "lo, %" p "hi")
+        (str "  %" p "b = and i1 %" p "nb, %" p "nz")
+        (str "  %" p "has = and i1 %" p "a, %" p "b"))
+
+; (:m :ref MM-REGIONS :do "an arena cell carries count 255, so dup, drop, claim and reset leave it alone, and class byte 128 plus its arena's depth, so a promotion copies only the cells of the arena that closes; 254 marks the cells of a retained arena, alive for good")
+fn arenaTestText -> String
+  (lines (listAppend
+           (list "define internal i1 @aslRc.arenaIn(%Val %v, i64 %cls) alwaysinline {" "entry:")
+           (listAppend (heapTagText "%v" "")
+             (list "  br i1 %has, label %obj, label %no"
+                   "obj:"
+                   "  %o = inttoptr i64 %ow to ptr"
+                   "  %h = load i64, ptr %o"
+                   "  %c = lshr i64 %h, 56"
+                   "  %in = icmp eq i64 %c, %cls"
+                   "  ret i1 %in"
+                   "no:"
+                   "  ret i1 false"
+                   "}"
+                   "define internal i1 @aslRc.arenaAny(%Val %v) alwaysinline {"
+                   "entry:"
+                   (lines (heapTagText "%v" ""))
+                   "  br i1 %has, label %obj, label %no"
+                   "obj:"
+                   "  %o = inttoptr i64 %ow to ptr"
+                   "  %h = load i64, ptr %o"
+                   "  %c = lshr i64 %h, 56"
+                   "  %lo1 = icmp uge i64 %c, 128"
+                   "  %hi1 = icmp ult i64 %c, 254"
+                   "  %in = and i1 %lo1, %hi1"
+                   "  ret i1 %in"
+                   "no:"
+                   "  ret i1 false"
+                   "}"))))
+
+fn arenaAllocText -> String
+  (lines (list "define internal ptr @aslRc.arenaAlloc(ptr %a, i32 %t, i64 %n) {"
+               "entry:"
+               "  %small = icmp ult i64 %n, 16"
+               "  %n16 = select i1 %small, i64 16, i64 %n"
+               "  %r15 = add i64 %n16, 15"
+               "  %s = and i64 %r15, -16"
+               "  %bump = load ptr, ptr %a"
+               "  %limp = getelementptr inbounds i8, ptr %a, i64 8"
+               "  %lim = load ptr, ptr %limp"
+               "  %nb = getelementptr i8, ptr %bump, i64 %s"
+               "  %bi = ptrtoint ptr %nb to i64"
+               "  %li = ptrtoint ptr %lim to i64"
+               "  %fits = icmp ule i64 %bi, %li"
+               "  %live = icmp ne ptr %bump, null"
+               "  %ok = and i1 %fits, %live"
+               "  br i1 %ok, label %take, label %grow"
+               "take:"
+               "  store ptr %nb, ptr %a"
+               "  br label %init"
+               "grow:"
+               "  %g = call ptr @aslRc.arenaGrow(ptr %a, i64 %s)"
+               "  br label %init"
+               "init:"
+               "  %o = phi ptr [ %bump, %take ], [ %g, %grow ]"
+               "  %dp = getelementptr inbounds i8, ptr %a, i64 32"
+               "  %d = load i64, ptr %dp"
+               "  %cb = add i64 %d, 128"
+               "  %ch = shl i64 %cb, 56"
+               "  %t64 = zext i32 %t to i64"
+               "  %ty = shl i64 %t64, 32"
+               "  %h1 = or i64 %n, %ty"
+               (str "  %h2 = or i64 %h1, " (sticky))
+               "  %h = or i64 %h2, %ch"
+               "  store i64 %h, ptr %o"
+               "  %body = getelementptr inbounds i8, ptr %o, i64 8"
+               "  %blen = sub i64 %s, 8"
+               "  call void @llvm.memset.p0.i64(ptr %body, i8 0, i64 %blen, i1 false)"
+               "  ret ptr %o"
+               "}"))
+
+; (:m :ref MM-REGIONS :do "an arena is a chain of fixed chunks cut by a bump pointer, a cell too big for a quarter chunk getting a chunk of its own; under ASan a chunk is returned to malloc at release so a stale reference faults, otherwise a few are kept for the next arena")
+fn arenaGrowText asan: Bool -> String
+  (lines (list "define internal ptr @aslRc.arenaGrow(ptr %a, i64 %s) noinline {"
+               "entry:"
+               "  %cp = getelementptr inbounds i8, ptr %a, i64 16"
+               "  %c = load ptr, ptr %cp"
+               (str "  %big = icmp ugt i64 %s, " (/ (arenaChunk) 4))
+               "  br i1 %big, label %large, label %chunk"
+               "large:"
+               "  %lb = add i64 %s, 16"
+               "  %m = call ptr @malloc(i64 %lb)"
+               "  %mz = icmp eq ptr %m, null"
+               "  br i1 %mz, label %oom, label %lgot"
+               "lgot:"
+               "  %bp = getelementptr inbounds i8, ptr %a, i64 48"
+               "  %bh = load ptr, ptr %bp"
+               "  store ptr %bh, ptr %m"
+               "  %mend = getelementptr inbounds i8, ptr %m, i64 %lb"
+               "  %mep = getelementptr inbounds i8, ptr %m, i64 8"
+               "  store ptr %mend, ptr %mep"
+               "  store ptr %m, ptr %bp"
+               "  %lo = getelementptr inbounds i8, ptr %m, i64 16"
+               "  ret ptr %lo"
+               "chunk:"
+               "  %hasC = icmp ne ptr %c, null"
+               "  br i1 %hasC, label %close, label %fresh"
+               "close:"
+               "  %bump = load ptr, ptr %a"
+               "  %uep = getelementptr inbounds i8, ptr %c, i64 8"
+               "  store ptr %bump, ptr %uep"
+               "  br label %fresh"
+               "fresh:"
+               "  %sp = load ptr, ptr @aslRc.arenaSpare"
+               (if asan "  %hasS = icmp eq i1 false, true" "  %hasS = icmp ne ptr %sp, null")
+               "  br i1 %hasS, label %reuse, label %new"
+               "reuse:"
+               "  %nx = load ptr, ptr %sp"
+               "  store ptr %nx, ptr @aslRc.arenaSpare"
+               "  %sn = load i64, ptr @aslRc.arenaSpareN"
+               "  %sn1 = sub i64 %sn, 1"
+               "  store i64 %sn1, ptr @aslRc.arenaSpareN"
+               "  br label %got"
+               "new:"
+               (str "  %nm = call ptr @malloc(i64 " (arenaChunk) ")")
+               "  %nmz = icmp eq ptr %nm, null"
+               "  br i1 %nmz, label %oom, label %got"
+               "got:"
+               "  %k = phi ptr [ %sp, %reuse ], [ %nm, %new ]"
+               "  store ptr %c, ptr %k"
+               "  store ptr %k, ptr %cp"
+               "  %o = getelementptr inbounds i8, ptr %k, i64 16"
+               "  %nb = getelementptr inbounds i8, ptr %o, i64 %s"
+               "  store ptr %nb, ptr %a"
+               (str "  %lim = getelementptr inbounds i8, ptr %k, i64 " (arenaChunk))
+               "  %lp = getelementptr inbounds i8, ptr %a, i64 8"
+               "  store ptr %lim, ptr %lp"
+               "  ret ptr %o"
+               "oom:"
+               "  call void @llvm.trap()"
+               "  unreachable"
+               "}"))
+
+fn arenaChunkFreeText asan: Bool -> String
+  (lines (if asan
+           (list "define internal void @aslRc.arenaFreeChunk(ptr %k) {"
+                 "entry:"
+                 "  call void @free(ptr %k)"
+                 "  ret void"
+                 "}")
+           (list "define internal void @aslRc.arenaFreeChunk(ptr %k) {"
+                 "entry:"
+                 "  %sn = load i64, ptr @aslRc.arenaSpareN"
+                 "  %room = icmp ult i64 %sn, 64"
+                 "  br i1 %room, label %keep, label %free"
+                 "keep:"
+                 "  %sp = load ptr, ptr @aslRc.arenaSpare"
+                 "  store ptr %sp, ptr %k"
+                 "  store ptr %k, ptr @aslRc.arenaSpare"
+                 "  %sn1 = add i64 %sn, 1"
+                 "  store i64 %sn1, ptr @aslRc.arenaSpareN"
+                 "  ret void"
+                 "free:"
+                 "  call void @free(ptr %k)"
+                 "  ret void"
+                 "}")))
+
+; (:m :ref MM-REGIONS :do "release walks the arena's cells once: a cell a promotion moved (count 254) is skipped, any other drops its kids outside every arena; chunks are freed only after the whole walk, since a list builder links an older cell to a newer one and the walk reads each kid's header; retirement instead stamps each cell 254, so a later arena at the same depth never takes it for its own")
+fn arenaWalkText -> String
+  (lines (list "define internal void @aslRc.arenaCell(ptr %p, i64 %h, i64 %retire) {"
+               "entry:"
+               (statBump "cells" (statArenaCells))
+               "  %r = icmp ne i64 %retire, 0"
+               "  br i1 %r, label %stamp, label %kids"
+               "stamp:"
+               (str "  %hk = and i64 %h, 72057594037927935")
+               (str "  %hr = or i64 %hk, " (retiredBits))
+               "  store i64 %hr, ptr %p"
+               "  ret void"
+               "kids:"
+               "  %c = lshr i64 %h, 48"
+               "  %c8 = and i64 %c, 255"
+               "  %moved = icmp eq i64 %c8, 254"
+               "  br i1 %moved, label %done, label %drop"
+               "drop:"
+               "  call void @aslRc.arenaKids(ptr %p, i64 %h)"
+               "  br label %done"
+               "done:"
+               "  ret void"
+               "}"
+               "define internal void @aslRc.arenaDropKid(%Val %v) {"
+               "entry:"
+               "  %in = call i1 @aslRc.arenaAny(%Val %v)"
+               "  br i1 %in, label %done, label %drop"
+               "drop:"
+               (str "  %d = call tailcc i64 @" (dropName) "(%Val %v)")
+               "  br label %done"
+               "done:"
+               "  ret void"
+               "}"
+               "define internal void @aslRc.arenaWalk(ptr %a, i64 %retire) noinline {"
+               "entry:"
+               "  %cp = getelementptr inbounds i8, ptr %a, i64 16"
+               "  %c0 = load ptr, ptr %cp"
+               "  %e0 = load ptr, ptr %a"
+               "  br label %chunk"
+               "chunk:"
+               "  %c = phi ptr [ %c0, %entry ], [ %next, %nextEnd ], [ %next, %last ]"
+               "  %e = phi ptr [ %e0, %entry ], [ %ne, %nextEnd ], [ null, %last ]"
+               "  %more = icmp ne ptr %c, null"
+               "  br i1 %more, label %walk, label %bigs"
+               "walk:"
+               "  %first = getelementptr inbounds i8, ptr %c, i64 16"
+               "  br label %cell"
+               "cell:"
+               "  %p = phi ptr [ %first, %walk ], [ %pn, %visit ]"
+               "  %pi = ptrtoint ptr %p to i64"
+               "  %ei = ptrtoint ptr %e to i64"
+               "  %in = icmp ult i64 %pi, %ei"
+               "  br i1 %in, label %visit, label %chunkEnd"
+               "visit:"
+               "  %h = load i64, ptr %p"
+               "  call void @aslRc.arenaCell(ptr %p, i64 %h, i64 %retire)"
+               "  %n = and i64 %h, 4294967295"
+               "  %small = icmp ult i64 %n, 16"
+               "  %n16 = select i1 %small, i64 16, i64 %n"
+               "  %r15 = add i64 %n16, 15"
+               "  %s = and i64 %r15, -16"
+               "  %pn = getelementptr inbounds i8, ptr %p, i64 %s"
+               "  br label %cell"
+               "chunkEnd:"
+               "  %next = load ptr, ptr %c"
+               "  %hasNext = icmp ne ptr %next, null"
+               "  br i1 %hasNext, label %nextEnd, label %last"
+               "nextEnd:"
+               "  %nep = getelementptr inbounds i8, ptr %next, i64 8"
+               "  %ne = load ptr, ptr %nep"
+               "  br label %chunk"
+               "last:"
+               "  br label %chunk"
+               "bigs:"
+               "  %bp = getelementptr inbounds i8, ptr %a, i64 48"
+               "  %b0 = load ptr, ptr %bp"
+               "  br label %big"
+               "big:"
+               "  %b = phi ptr [ %b0, %bigs ], [ %bn, %bigCell ]"
+               "  %bmore = icmp ne ptr %b, null"
+               "  br i1 %bmore, label %bigCell, label %walked"
+               "bigCell:"
+               "  %bc = getelementptr inbounds i8, ptr %b, i64 16"
+               "  %bh = load i64, ptr %bc"
+               "  call void @aslRc.arenaCell(ptr %bc, i64 %bh, i64 %retire)"
+               "  %bn = load ptr, ptr %b"
+               "  br label %big"
+               "walked:"
+               "  %keep = icmp ne i64 %retire, 0"
+               "  br i1 %keep, label %done, label %free"
+               "free:"
+               "  %f = phi ptr [ %c0, %walked ], [ %fn, %freeOne ]"
+               "  %fmore = icmp ne ptr %f, null"
+               "  br i1 %fmore, label %freeOne, label %bigFree"
+               "freeOne:"
+               "  %fn = load ptr, ptr %f"
+               "  call void @aslRc.arenaFreeChunk(ptr %f)"
+               "  br label %free"
+               "bigFree:"
+               "  %g = phi ptr [ %b0, %free ], [ %gn, %bigOne ]"
+               "  %gmore = icmp ne ptr %g, null"
+               "  br i1 %gmore, label %bigOne, label %done"
+               "bigOne:"
+               "  %gn = load ptr, ptr %g"
+               "  call void @free(ptr %g)"
+               "  br label %bigFree"
+               "done:"
+               "  ret void"
+               "}"))
+
+; (:m :ref MM-REGIONS :do "promotion copies the closing arena's cells reachable from the result into the enclosing region through the ordinary allocator, depth-first over an explicit stack of slots; each copy takes over the cell's references, and the cell keeps a forward to it so shared structure is copied once")
+fn arenaPromoteText -> String
+  (lines (list "define internal %Val @aslRc.arenaPromote(%Val %r, i64 %cls) noinline {"
+               "entry:"
+               "  %root = alloca %Val"
+               "  store %Val %r, ptr %root"
+               "  %in = call i1 @aslRc.arenaIn(%Val %r, i64 %cls)"
+               "  br i1 %in, label %start, label %plain"
+               "plain:"
+               "  ret %Val %r"
+               "start:"
+               "  %sp0 = load i64, ptr @aslRc.sp"
+               "  call void @aslRc.push(ptr %root)"
+               "  br label %loop"
+               "loop:"
+               "  %sp = load i64, ptr @aslRc.sp"
+               "  %more = icmp ugt i64 %sp, %sp0"
+               "  br i1 %more, label %pop, label %done"
+               "pop:"
+               "  %sp1 = sub i64 %sp, 1"
+               "  store i64 %sp1, ptr @aslRc.sp"
+               "  %stk = load ptr, ptr @aslRc.stack"
+               "  %at = getelementptr ptr, ptr %stk, i64 %sp1"
+               "  %slot = load ptr, ptr %at"
+               "  call void @aslRc.arenaMove(ptr %slot, i64 %cls)"
+               "  br label %loop"
+               "done:"
+               "  %out = load %Val, ptr %root"
+               "  ret %Val %out"
+               "}"
+               "define internal void @aslRc.arenaMove(ptr %slot, i64 %cls) {"
+               "entry:"
+               "  %v = load %Val, ptr %slot"
+               "  %ow = extractvalue %Val %v, 1"
+               "  %o = inttoptr i64 %ow to ptr"
+               "  %h = load i64, ptr %o"
+               "  %c = lshr i64 %h, 48"
+               "  %c8 = and i64 %c, 255"
+               "  %fwd = icmp eq i64 %c8, 254"
+               "  %fp = getelementptr inbounds i8, ptr %o, i64 8"
+               "  br i1 %fwd, label %forwarded, label %copy"
+               "forwarded:"
+               "  %y0 = load i64, ptr %fp"
+               "  %fv = insertvalue %Val %v, i64 %y0, 1"
+               "  store %Val %fv, ptr %slot"
+               (str "  %fd = call tailcc i64 @" (dupName) "(%Val %fv)")
+               "  ret void"
+               "copy:"
+               "  %n = and i64 %h, 4294967295"
+               "  %ty = lshr i64 %h, 32"
+               "  %t16 = and i64 %ty, 65535"
+               "  %t = trunc i64 %t16 to i32"
+               "  %y = call ptr @aslRc.alloc(i32 %t, i64 %n)"
+               "  %yb = getelementptr inbounds i8, ptr %y, i64 8"
+               "  %len = sub i64 %n, 8"
+               "  call void @llvm.memcpy.p0.p0.i64(ptr %yb, ptr %fp, i64 %len, i1 false)"
+               (str "  %hm = and i64 %h, " (forwardMask))
+               (str "  %hf = or i64 %hm, " (forwardBits))
+               "  store i64 %hf, ptr %o"
+               "  %yi = ptrtoint ptr %y to i64"
+               "  store i64 %yi, ptr %fp"
+               "  %nv = insertvalue %Val %v, i64 %yi, 1"
+               "  store %Val %nv, ptr %slot"
+               (statBump "promoted" (statPromoted))
+               "  %yh = load i64, ptr %y"
+               "  call void @aslRc.arenaPushKids(ptr %y, i64 %yh, i64 %cls)"
+               "  ret void"
+               "}"
+               "define internal void @aslRc.arenaPushKids(ptr %o, i64 %h, i64 %cls) {"
+               "entry:"
+               "  %ty = lshr i64 %h, 32"
+               "  %ty8 = and i64 %ty, 255"
+               "  switch i64 %ty8, label %done [ i64 1, label %cons i64 2, label %rec i64 3, label %ctor i64 4, label %clo ]"
+               "cons:"
+               "  %cb = getelementptr inbounds i8, ptr %o, i64 8"
+               "  br label %kids"
+               "rec:"
+               "  %rnp = getelementptr inbounds i8, ptr %o, i64 12"
+               "  %rn32 = load i32, ptr %rnp"
+               "  %rn = sext i32 %rn32 to i64"
+               "  %rb = getelementptr inbounds i8, ptr %o, i64 24"
+               "  br label %kids"
+               "ctor:"
+               "  %fnp = getelementptr inbounds i8, ptr %o, i64 12"
+               "  %fn32 = load i32, ptr %fnp"
+               "  %fn = sext i32 %fn32 to i64"
+               "  %fb = getelementptr inbounds i8, ptr %o, i64 16"
+               "  br label %kids"
+               "clo:"
+               "  %unp = getelementptr inbounds i8, ptr %o, i64 16"
+               "  %un32 = load i32, ptr %unp"
+               "  %un = sext i32 %un32 to i64"
+               "  %ub = getelementptr inbounds i8, ptr %o, i64 24"
+               "  br label %kids"
+               "kids:"
+               "  %base = phi ptr [ %cb, %cons ], [ %rb, %rec ], [ %fb, %ctor ], [ %ub, %clo ]"
+               "  %n = phi i64 [ 2, %cons ], [ %rn, %rec ], [ %fn, %ctor ], [ %un, %clo ]"
+               "  br label %loop"
+               "loop:"
+               "  %i = phi i64 [ 0, %kids ], [ %i1, %next ]"
+               "  %more = icmp slt i64 %i, %n"
+               "  br i1 %more, label %body, label %done"
+               "body:"
+               "  %off = mul i64 %i, 16"
+               "  %at = getelementptr inbounds i8, ptr %base, i64 %off"
+               "  %kid = load %Val, ptr %at"
+               "  %inner = call i1 @aslRc.arenaIn(%Val %kid, i64 %cls)"
+               "  br i1 %inner, label %push, label %next"
+               "push:"
+               "  call void @aslRc.push(ptr %at)"
+               "  br label %next"
+               "next:"
+               "  %i1 = add i64 %i, 1"
+               "  br label %loop"
+               "done:"
+               "  ret void"
+               "}"))
+
+; (:m :ref MM-REGIONS :do "a value of an open arena that escapes (pinned for opaque code, stored in a global) retains every open arena, which then is never freed and is retired at close; lazy global initialisers and parallel kernels run with the arena paused, so what they allocate is ordinary heap")
+fn arenaEscapeText -> String
+  (lines (list "define internal void @aslRc.arenaRetain() noinline {"
+               "entry:"
+               "  %a0 = load ptr, ptr @aslRc.arenaTop"
+               "  br label %loop"
+               "loop:"
+               "  %a = phi ptr [ %a0, %entry ], [ %up, %mark ]"
+               "  %more = icmp ne ptr %a, null"
+               "  br i1 %more, label %mark, label %done"
+               "mark:"
+               "  %rp = getelementptr inbounds i8, ptr %a, i64 24"
+               "  store i64 1, ptr %rp"
+               "  %pp = getelementptr inbounds i8, ptr %a, i64 40"
+               "  %up = load ptr, ptr %pp"
+               "  br label %loop"
+               "done:"
+               "  ret void"
+               "}"
+               "define internal void @aslRc.arenaEscape(%Val %v) {"
+               "entry:"
+               "  %top = load ptr, ptr @aslRc.arenaTop"
+               "  %open = icmp ne ptr %top, null"
+               "  br i1 %open, label %check, label %done"
+               "check:"
+               "  %in = call i1 @aslRc.arenaAny(%Val %v)"
+               "  br i1 %in, label %retain, label %done"
+               "retain:"
+               "  call void @aslRc.arenaRetain()"
+               "  br label %done"
+               "done:"
+               "  ret void"
+               "}"
+               "define internal void @aslRc.arenaPause() {"
+               "entry:"
+               "  %n = load i64, ptr @aslRc.pausedN"
+               "  %full = icmp uge i64 %n, 64"
+               "  br i1 %full, label %oom, label %save"
+               "oom:"
+               "  call void @llvm.trap()"
+               "  unreachable"
+               "save:"
+               "  %cur = load ptr, ptr @aslRc.arenaCur"
+               "  %at = getelementptr [64 x ptr], ptr @aslRc.paused, i64 0, i64 %n"
+               "  store ptr %cur, ptr %at"
+               "  %n1 = add i64 %n, 1"
+               "  store i64 %n1, ptr @aslRc.pausedN"
+               "  store ptr null, ptr @aslRc.arenaCur"
+               "  ret void"
+               "}"
+               "define internal void @aslRc.arenaResume() {"
+               "entry:"
+               "  %n = load i64, ptr @aslRc.pausedN"
+               "  %n1 = sub i64 %n, 1"
+               "  store i64 %n1, ptr @aslRc.pausedN"
+               "  %at = getelementptr [64 x ptr], ptr @aslRc.paused, i64 0, i64 %n1"
+               "  %cur = load ptr, ptr %at"
+               "  store ptr %cur, ptr @aslRc.arenaCur"
+               "  ret void"
+               "}"
+               "define internal %Val @aslRc.initPaused(ptr %init) noinline {"
+               "entry:"
+               "  call void @aslRc.arenaPause()"
+               "  %v = call tailcc %Val %init()"
+               "  call void @aslRc.arenaResume()"
+               "  ret %Val %v"
+               "}"))
+
+; (:m :ref MM-REGIONS :do "arenaRun opens an arena one deeper than the innermost open one, runs the thunk with every allocation of this thread cut from it, then promotes the result into the enclosing region and releases the arena, or retires it when a value escaped; past the deepest depth it is a plain call")
+fn arenaRunText active: Bool -> String
+  (lines (if active
+           (list "define internal tailcc %Val @aslRc.arenaRun(%Val %f) {"
+                 "entry:"
+                 "  %d = load i64, ptr @aslRc.arenaDepth"
+                 (str "  %deep = icmp uge i64 %d, " (arenaDeepest))
+                 "  br i1 %deep, label %plain, label %open"
+                 "plain:"
+                 "  %pr = call %Val @objrt.call(%Val %f, i64 0, ptr null)"
+                 (str "  %pd = call tailcc i64 @" (dropName) "(%Val %f)")
+                 "  ret %Val %pr"
+                 "open:"
+                 "  %a = call ptr @malloc(i64 64)"
+                 "  %az = icmp eq ptr %a, null"
+                 "  br i1 %az, label %oom, label %init"
+                 "oom:"
+                 "  call void @llvm.trap()"
+                 "  unreachable"
+                 "init:"
+                 "  call void @llvm.memset.p0.i64(ptr %a, i8 0, i64 64, i1 false)"
+                 "  %d1 = add i64 %d, 1"
+                 "  %dp = getelementptr inbounds i8, ptr %a, i64 32"
+                 "  store i64 %d1, ptr %dp"
+                 "  %top = load ptr, ptr @aslRc.arenaTop"
+                 "  %pp = getelementptr inbounds i8, ptr %a, i64 40"
+                 "  store ptr %top, ptr %pp"
+                 "  %cur = load ptr, ptr @aslRc.arenaCur"
+                 "  store ptr %a, ptr @aslRc.arenaCur"
+                 "  store ptr %a, ptr @aslRc.arenaTop"
+                 "  store i64 %d1, ptr @aslRc.arenaDepth"
+                 (statBump "arenas" (statArenas))
+                 "  %r = call %Val @objrt.call(%Val %f, i64 0, ptr null)"
+                 "  store ptr %cur, ptr @aslRc.arenaCur"
+                 "  store ptr %top, ptr @aslRc.arenaTop"
+                 "  store i64 %d, ptr @aslRc.arenaDepth"
+                 "  %rp = getelementptr inbounds i8, ptr %a, i64 24"
+                 "  %kept = load i64, ptr %rp"
+                 "  %retained = icmp ne i64 %kept, 0"
+                 "  br i1 %retained, label %retire, label %release"
+                 "retire:"
+                 (statBump "retained" (statRetained))
+                 "  call void @aslRc.arenaWalk(ptr %a, i64 1)"
+                 (str "  %rd = call tailcc i64 @" (dropName) "(%Val %f)")
+                 "  ret %Val %r"
+                 "release:"
+                 "  %cls = add i64 %d1, 128"
+                 "  %out = call %Val @aslRc.arenaPromote(%Val %r, i64 %cls)"
+                 "  call void @aslRc.arenaWalk(ptr %a, i64 0)"
+                 "  call void @free(ptr %a)"
+                 (str "  %od = call tailcc i64 @" (dropName) "(%Val %f)")
+                 "  ret %Val %out"
+                 "}")
+           (list "define internal tailcc %Val @aslRc.arenaRun(%Val %f) {"
+                 "entry:"
+                 "  %r = call %Val @objrt.call(%Val %f, i64 0, ptr null)"
+                 (str "  %d = call tailcc i64 @" (dropName) "(%Val %f)")
+                 "  ret %Val %r"
+                 "}")))
+
+fn arenaGlobals -> (List String)
+  (list "@aslRc.arenaCur = internal global ptr null"
+        "@aslRc.arenaTop = internal global ptr null"
+        "@aslRc.arenaDepth = internal global i64 0"
+        "@aslRc.arenaSpare = internal global ptr null"
+        "@aslRc.arenaSpareN = internal global i64 0"
+        "@aslRc.paused = internal global [64 x ptr] zeroinitializer"
+        "@aslRc.pausedN = internal global i64 0")
+
+fn arenaRuntimeText asan: Bool -> String
+  (lines (listAppend (arenaGlobals)
+                     (list (arenaTestText) (arenaAllocText) (arenaGrowText asan) (arenaChunkFreeText asan) (childrenText "arenaKids" "arenaDropKid")
+                           (arenaWalkText) (arenaPromoteText) (arenaEscapeText) (arenaRunText true))))
+
+; (:m :ref MM-REGIONS :do "inside an open arena each allocation entry cuts its cell from the arena, except arrays and handles, which stay ordinary heap")
+fn arenaGuarded def: String -> String
+  (stringReplace def "(i32 %t, i64 %n) {\nentry:\n"
+    (str "(i32 %t, i64 %n) {\nentry:\n"
+         "  %arenaA = load ptr, ptr @aslRc.arenaCur\n"
+         "  %arenaOn = icmp ne ptr %arenaA, null\n"
+         "  br i1 %arenaOn, label %arenaKind, label %arenaPool\n"
+         "arenaKind:\n"
+         "  %arenaK = add i32 %t, -6\n"
+         "  %arenaOut = icmp ult i32 %arenaK, 2\n"
+         "  br i1 %arenaOut, label %arenaPool, label %arenaTake\n"
+         "arenaTake:\n"
+         "  %arenaO = tail call ptr @aslRc.arenaAlloc(ptr %arenaA, i32 %t, i64 %n)\n"
+         "  ret ptr %arenaO\n"
+         "arenaPool:\n"))
+
+fn arenaReset def: String -> String
+  (stringReplace def "  br i1 %fits, label %give, label %spare"
+    "  %arenaA = load ptr, ptr @aslRc.arenaCur\n  %arenaOff = icmp eq ptr %arenaA, null\n  %fitsHere = and i1 %fits, %arenaOff\n  br i1 %fitsHere, label %give, label %spare")
+
+fn parallelCallText -> String
+  "@asl$2Dtarget$2Dllvm$2Fparallel$2E"
+
+; (:m :ref MM-REGIONS :do "a store into a global outside a lazy initialiser checks its value for an open arena; a call into a parallel kernel runs paused, losing its tail position")
+fn arenaLine l: String -> String
+  (cond
+    ((and (stringStartsWith? l "  store %Val %") (and (stringContains? l ", ptr @global.") (not (or (stringStartsWith? l "  store %Val %v, ptr @global.") (stringStartsWith? l "  store %Val %g.")))))
+      (str "  call void @aslRc.arenaEscape(%Val " (optionOr (listHead (stringSplit (optionOr (stringSlice l 13 (stringLength l)) "") ",")) "") ")\n" l))
+    ((and (stringContains? l (parallelCallText)) (and (stringStartsWith? l "  ") (stringContains? l " call ")))
+      (str "  call void @aslRc.arenaPause()\n" (stringReplace l "musttail call " "call ") "\n  call void @aslRc.arenaResume()"))
+    (else l))
+
+; (:m :ref MM-REGIONS :do "lazy global caches (singleton getters, objrt.str constant cells) build outside any open arena, so a cached cell never points into a region that is later freed; a getter calls its initialiser through one shared paused entry, so it stays as small as before and still inlines")
+fn arenaGetters text: String -> String
+  (let [(pieces (stringSplit text "bb.init:\n  %v = call tailcc %Val "))
+        (getters (stringJoin (cons (optionOr (listHead pieces) "") (map arenaInitPaused (listDrop pieces 1))) ""))
+        (paused (stringReplace getters "build:\n  %size = add i64 %len, 17\n" "build:\n  call void @aslRc.arenaPause()\n  %size = add i64 %len, 17\n"))]
+    (stringReplace paused "  call void @asl_rt_global_root(ptr %cell)\n  ret %Val %str\n" "  call void @asl_rt_global_root(ptr %cell)\n  call void @aslRc.arenaResume()\n  ret %Val %str\n"))
+
+fn arenaInitPaused piece: String -> String
+  (let [(at (optionOr (stringIndexOf piece "()\n") -1))
+        (callee (if (< at 0) "" (optionOr (stringSlice piece 0 at) "")))]
+    (if (or (< at 0) (or (not (stringStartsWith? callee "@")) (or (stringContains? callee " ") (stringContains? callee "\n"))))
+      (str "bb.init:\n  call void @aslRc.arenaPause()\n  %v = call tailcc %Val " (stringReplace piece "\n  store %Val %v, ptr @global." "\n  call void @aslRc.arenaResume()\n  store %Val %v, ptr @global."))
+      (str "bb.init:\n  %v = call %Val @aslRc.initPaused(ptr " (optionOr (stringSlice piece 0 at) "") ")\n" (optionOr (stringSlice piece (+ at 3) (stringLength piece)) ""))))
+
+; (:m :ref RC-FBIP-CLOSURE :do "an owned closure call reads the fourth code pointer of a prototype ssa emits for a target with an owned entry, flagged by 1 in the i32 after the arity; prototypes without it (no owned entry, or modules built without RC such as the runtime archive) carry 0 there and take the slow path, objrt.call through the borrowing entry and then a drop of each argument")
+fn ownCodeOffset -> Int64
+  72
+
+fn ownMarkOffset -> Int64
+  20
+
+fn callOwnedText n: Int64 -> String
+  (lines (listAppend
+           (list (str "define internal tailcc %Val @" (callOwnedName n) "(%Val %f" (stringJoin (map (fn [(i Int64)] -> String (str ", %Val %a" i)) (range 0 n)) "") ") {")
+                 "entry:"
+                 (str "  %argv = alloca [" n " x %Val]"))
+           (listAppend
+             (map (fn [(i Int64)] -> String (str "  %slot" i " = getelementptr [" n " x %Val], ptr %argv, i64 0, i64 " i "\n  store %Val %a" i ", ptr %slot" i)) (range 0 n))
+             (list "  %tagw = extractvalue %Val %f, 0"
+                   "  %tag = trunc i64 %tagw to i32"
+                   "  %isFn = icmp eq i32 %tag, 9"
+                   "  br i1 %isFn, label %closure, label %slow"
+                   "closure:"
+                   "  %objw = extractvalue %Val %f, 1"
+                   "  %obj = inttoptr i64 %objw to ptr"
+                   "  %protop = getelementptr inbounds i8, ptr %obj, i64 8"
+                   "  %proto = load ptr, ptr %protop"
+                   "  %np = getelementptr inbounds i8, ptr %proto, i64 16"
+                   "  %n = load i32, ptr %np"
+                   (str "  %fits = icmp eq i32 %n, " n)
+                   "  br i1 %fits, label %arity, label %slow"
+                   "arity:"
+                   (str "  %markp = getelementptr inbounds i8, ptr %proto, i64 " (ownMarkOffset))
+                   "  %mark = load i32, ptr %markp"
+                   "  %isMarked = icmp eq i32 %mark, 1"
+                   "  br i1 %isMarked, label %fast, label %slow"
+                   "fast:"
+                   (str "  %ownp = getelementptr inbounds i8, ptr %proto, i64 " (ownCodeOffset))
+                   "  %own = load ptr, ptr %ownp"
+                   (str "  %r = call %Val %own(%Val %f, i64 " n ", ptr %argv)")
+                   "  ret %Val %r"
+                   "slow:"
+                   (str "  %s = call tailcc %Val @" (slowName n) "(%Val %f" (stringJoin (map (fn [(i Int64)] -> String (str ", %Val %a" i)) (range 0 n)) "") ")")
+                   "  ret %Val %s"
+                   "}"))))
+
+fn ownedDecl n: Int64 -> String
+  (str "declare tailcc %Val @" (callOwnedName n) "(" (stringJoin (map (fn [(i Int64)] -> String "%Val") (range 0 (+ n 1))) ", ") ")")
+
+fn ownedArityIn text: String -> (List Int64)
+  (filter (fn [(n Int64)] -> Bool (stringContains? text (str "call tailcc %Val @" (callOwnedName n) "("))) (range 1 (+ (ownedArity) 1)))
+
+; (:m :ref RC-FBIP-COST :do "the module text ends in its declare block, found from a bounded tail window instead of a scan of the whole text: the block starts at the first declare of the window when the line before it closes a function (or is the blank line after one) and no define follows; otherwise the whole text is scanned, and with a define after the declares there is no block and the declares are removed in place")
+fn declareWindow -> Int64
+  65536
+
+fn declareBlock? text: String cut: Int64 -> Bool
+  (and (> cut 0)
+       (and (or (= (optionOr (stringSlice text (- cut 1) cut) "") "}") (= (optionOr (stringSlice text (max 0 (- cut 2)) cut) "") "}\n"))
+            (not (stringContains? (optionOr (stringSlice text cut (stringLength text)) "") "\ndefine "))))
+
+fn declareCut text: String -> Int64
+  (let [(n (stringLength text))
+        (from (max 0 (- n (declareWindow))))
+        (near (match (stringIndexOf (optionOr (stringSlice text from n) "") "\ndeclare ") ((some at) (+ from at)) ((none) -1)))]
+    (if (declareBlock? text near)
+      near
+      (match (stringIndexOf text "\ndeclare ")
+        ((some at) (if (declareBlock? text at) at n))
+        ((none) n))))
+
+fn removedDecls arities: (List Int64) -> (Map String Bool)
+  (setOf (cons (str "declare tailcc i64 @" (dupSameName) "(%Val, %Val)")
+               (listAppend (map (fn [(n String)] -> String (str "declare tailcc i64 @" n "(%Val)")) (rcNames))
+                           (map ownedDecl arities))))
+
+fn keptDecls section: String removed: (Map String Bool) -> String
+  (stringJoin (filter (fn [(l String)] -> Bool (not (or (mapHas? removed l) (resetDecl? l)))) (stringSplit section "\n")) "\n")
+
+fn undeclaredInPlace text: String removed: (Map String Bool) -> String
+  (fold (fn [(t String) (d String)] -> String (stringReplace t (str d "\n") "")) text (mapKeys removed))
+
+; (:m :ref RC-FBIP-COST :do "every pooled allocation call is routed in one split of the text on the common call prefix instead of one replace per size class: classes 2 up and cons cells always, classes 0 and 1 only with the rooted runtime; the definitions come out in the order the per-class passes produced them")
+fn allocCallPrefix -> String
+  "call ptr @gcAsl.allocFast"
+
+fn routedCallPrefix -> String
+  "call ptr @aslRc.allocFast"
+
+fn allocKey piece: String -> Int64
+  (cond
+    ((stringStartsWith? piece "Cons(") -2)
+    ((stringStartsWith? piece ".")
+      (let [(head (optionOr (stringSlice piece 1 (min (stringLength piece) 5)) ""))
+            (paren (optionOr (stringIndexOf head "(") -1))]
+        (if (< paren 1) -1 (optionOr (stringToInt64 (optionOr (stringSlice head 0 paren) "")) -1))))
+    (else -1))
+
+fn routedKey? rooted: Bool k: Int64 -> Bool
+  (or (= k -2) (and (< k (classes)) (or (>= k (smallClasses)) (and rooted (>= k 0)))))
+
+schema AllocRoute
+  text: String
+  classes: (List Int64)
+  cons: Bool
+
+fn routeAllocs text: String rooted: Bool -> AllocRoute
+  (let [(pieces (stringSplit text (allocCallPrefix)))
+        (keys (map allocKey (listDrop pieces 1)))
+        (parts (map (fn [(p String)] -> String (str (if (routedKey? rooted (allocKey p)) (routedCallPrefix) (allocCallPrefix)) p)) (listDrop pieces 1)))]
+    (AllocRoute :text (stringJoin (cons (optionOr (listHead pieces) "") parts) "")
+                :classes (filter (fn [(c Int64)] -> Bool (and (listContains? keys c) (routedKey? rooted c))) (range 0 (classes)))
+                :cons (listContains? keys -2)))
+
 fn rcFinishText text: String asan: Bool -> String
   (rcFinishTextWith text asan false)
 
 fn rcFinishTextWith text: String asan: Bool notrace: Bool -> String
-  (let [(undeclared (stringReplace (fold (fn [(t String) (n String)] -> String (stringReplace t (str "declare tailcc i64 @" n "(%Val)\n") "")) text (rcNames))
-                                    (str "declare tailcc i64 @" (dupSameName) "(%Val, %Val)\n") ""))
+  (let [(n (stringLength text))
+        (cut (declareCut text))
+        (arities (ownedArityIn text))
+        (removed (removedDecls arities))
+        (code (if (< cut n) (optionOr (stringSlice text 0 cut) "") (undeclaredInPlace text removed)))
+        (section (if (< cut n) (keptDecls (optionOr (stringSlice text cut n) "") removed) ""))
+        (rooted (rootedRuntime? (if (< cut n) section (declareSection code))))
+        (uses (stringContains? code (arenaCallText)))
+        (active (and uses notrace))
+        (guard (fn [(d String)] -> String (if active (arenaGuarded d) d)))
+        (arenaed (if uses (stringReplace code (arenaCallText) (arenaRunCall)) code))
+        (relink (and notrace (stringContains? arenaed (appendCallText))))
+        (undeclared (if relink (stringReplace arenaed (appendCallText) (appendOwnedCall)) arenaed))
         (reuse (routeReuse undeclared asan))
-        (reused (if (listEmpty? (pairSecond reuse)) undeclared (str (pairFirst reuse) "\n" (lines (pairSecond reuse)) "\n")))
-        (routed (fold (fn [(acc (Pair String (List String))) (sc Int64)] -> (Pair String (List String))
-                        (let [(r (routeAlloc (pairFirst acc) sc asan))] (pair (pairFirst r) (listAppend (pairSecond acc) (pairSecond r)))))
-                      (pair reused (list)) (range 2 (classes))))
-        (consCall "call ptr @gcAsl.allocFastCons(")
-        (body (pairFirst routed))
-        (consed (if (stringContains? body consCall) (stringReplace body consCall "call ptr @aslRc.allocFastCons(") body))
-        (consDef (if (stringContains? body consCall) (list (allocText "@aslRc.allocFastCons" "@gcAsl.allocFastCons" 3 asan)) (list)))
-        (rooted (rootedRuntime? (declareSection consed)))
-        (sized (stringContains? consed (sizedCall)))
-        (small (if rooted (routeSmall (routeSized (filterDup consed))) (pair (routeSized (filterDup consed)) (list))))
-        (sizedDef (if sized (list (sizedAllocText asan rooted)) (list)))]
-    (str (pairFirst small) "\n" (runtimeTextWith (pairFirst small) asan notrace) "\n" (lines (listAppend (pairSecond routed) (listAppend consDef (listAppend (pairSecond small) sizedDef)))) "\n"))
+        (reused (if (listEmpty? (pairSecond reuse)) undeclared (str (pairFirst reuse) "\n" (lines (map (fn [(d String)] -> String (if active (arenaReset d) d)) (pairSecond reuse))) "\n")))
+        (route (routeAllocs reused rooted))
+        (large (filter (fn [(c Int64)] -> Bool (>= c (smallClasses))) route.classes))
+        (small (filter (fn [(c Int64)] -> Bool (< c (smallClasses))) route.classes))
+        (consDef (if route.cons (list (allocText "@aslRc.allocFastCons" "@gcAsl.allocFastCons" 3 asan)) (list)))
+        (sized (or active (stringContains? route.text (sizedCall))))
+        (dupped (if (stringContains? route.text (filterStore)) (filterDup route.text) route.text))
+        (body (routeSized active dupped))
+        (sizedDef (if sized (list (sizedAllocText asan rooted)) (list)))
+        (final (if active (arenaGetters body) body))]
+    (str final section "\n" (runtimeTextIn final (if (< cut n) section (declareSection final)) asan notrace) "\n"
+         (lines (map guard (listAppend (map (fn [(c Int64)] -> String (allocText (rcAllocSym c) (allocFastSym c) c asan)) large)
+                                       (listAppend consDef (listAppend (map smallAllocText small) sizedDef)))))
+         "\n" (lines (map callOwnedText arities)) "\n" (if relink (str (appendOwnedText asan) "\n") "")))
 
-fn routeSmall text: String -> (Pair String (List String))
-  (fold (fn [(acc (Pair String (List String))) (sc Int64)] -> (Pair String (List String))
-          (let [(callText (str "call ptr " (allocFastSym sc) "("))]
-            (if (stringContains? (pairFirst acc) callText)
-              (pair (stringReplace (pairFirst acc) callText (str "call ptr " (rcAllocSym sc) "(")) (listAppend (pairSecond acc) (list (smallAllocText sc))))
-              acc)))
-        (pair text (list)) (range 0 (smallClasses)))
+fn routeSized active: Bool text: String -> String
+  (stringJoin (map (fn [(l String)] -> String
+                     (let [(r (if (and (stringContains? l (sizedCall)) (stringStartsWith? l "  ")) (stringReplace l (sizedCall) "call ptr @aslRc.alloc(") l))]
+                       (if active (arenaLine r) r)))
+                   (stringSplit text "\n"))
+              "\n")
 
 fn pendSlots -> Int64
   16
@@ -1932,11 +2804,6 @@ fn sizedAllocText asan: Bool rooted: Bool -> String
 
 fn sizedCall -> String
   "call ptr @asl_alloc("
-
-fn routeSized text: String -> String
-  (stringJoin (map (fn [(l String)] -> String (if (and (stringContains? l (sizedCall)) (stringStartsWith? l "  ")) (stringReplace l (sizedCall) "call ptr @aslRc.alloc(") l))
-                   (stringSplit text "\n"))
-              "\n")
 
 fn dupSameText -> String
   (lines (list (str "define internal tailcc i64 @" (dupSameName) "(%Val %r, %Val %d) {")

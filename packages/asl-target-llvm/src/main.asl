@@ -82,13 +82,13 @@ fn ! emitLlvmProgramNativeWith! m: irTy/SsaModule entry: String mode: String -> 
                     (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag))
                       (cond
                         ((or (= mode "") (= mode "0")) (ssa/emitLlvmProgram (opt/hoistConstants r) entry))
-                        ((or (= mode "1") (or (= mode "asan") (= mode "notrace")))
+                        ((or (= mode "1") (or (= mode "asan") (or (= mode "notrace") (= mode "asanNotrace"))))
                           (match (ssa/emitLlvmProgram (rc/rcModule (opt/hoistConstants r) user) entry)
                             ((err ds) (err ds))
-                            ((ok text) (ok (rc/rcFinishTextWith text (= mode "asan") (= mode "notrace"))))))
-                        (else (err (list (irTy/makeIrDiag "ERR_LLVM_RC_MODE" (str "the RC mode (asl1 build --rc, .asl.config.asn :native :rc) must be 0, 1, asan or notrace, got " mode) "asl-target-llvm")))))))
+                            ((ok text) (ok (rc/rcFinishTextWith text (or (= mode "asan") (= mode "asanNotrace")) (or (= mode "notrace") (= mode "asanNotrace")))))))
+                        (else (err (list (irTy/makeIrDiag "ERR_LLVM_RC_MODE" (str "the RC mode (asl1 build --rc, .asl.config.asn :native :rc) must be 0, 1, asan, notrace or asanNotrace, got " mode) "asl-target-llvm")))))))
       ((err ds) (err ds))
-      ((ok text) (ok (rc/sanitized (if (or (= mode "") (= mode "0")) text (rc/routeArrayAlloc text)) (= mode "asan"))))))
+      ((ok text) (ok (rc/sanitized (if (or (= mode "") (= mode "0")) text (rc/routeArrayAlloc text)) (or (= mode "asan") (= mode "asanNotrace")))))))
 
 fn routeFor facts: libc/TripleFacts m: irTy/SsaModule -> (Result rt/Routed (List irTy/IrDiag))
   (thenPar (thenPar (rt/routeModule facts m) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (pr/routeModule facts r))) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (ar/routeModule r)))

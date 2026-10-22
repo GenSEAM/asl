@@ -49,7 +49,7 @@ fn ! runTests -> Bool
         (parseBytes (- (pairFirst parseRun) (pairFirst readRun)))]
     (do
       (println (str "parseAlloc read " (pairFirst readRun) " parse " (pairFirst parseRun) " delta " parseBytes))
-      (assert (stringContains? (pairSecond parseRun) "parseAlloc parse forms 263 28 12") (str "every workload module parses to its form count: " (pairSecond parseRun)))
+      (assert (stringContains? (pairSecond parseRun) "parseAlloc parse forms 264 28 12") (str "every workload module parses to its form count: " (pairSecond parseRun)))
       (assert (and (> (pairFirst readRun) 0) (> parseBytes 0)) "both runs report bytesAllocated and parsing allocates")
       (assert (< parseBytes 241000000) (str "parsing prelude and the jsonTest closure allocates < 241 MB (0.5x base 482 MB), got " parseBytes))
       true))

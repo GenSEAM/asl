@@ -1,5 +1,5 @@
 (module asl-target-llvm/ssa
-  :x [emitLlvmModule emitLlvmProgram emitLlvmModuleWasm32 emitLlvmProgramWasm32 trapLowering llvmName llvmBytes llvmFloat runtimeDecls cDeclFits? overwideCDecls cRuntimeModule ModEnv FnEnv NameIndex nameIndexSet tailCall? linkInits definesInit? ensureInit listBuilder?]
+  :x [emitLlvmModule emitLlvmProgram ownedEntryName emitLlvmModuleWasm32 emitLlvmProgramWasm32 trapLowering llvmName llvmBytes llvmFloat runtimeDecls cDeclFits? overwideCDecls cRuntimeModule ModEnv FnEnv NameIndex nameIndexSet tailCall? linkInits definesInit? ensureInit listBuilder?]
 
   :i [(asl-ir/types :a ty)
       (asl-ir/verify :a vfy)
@@ -268,6 +268,16 @@ fn codeSym name: String -> String
 
 fn tailCodeSym name: String -> String
   (str "@" (llvmName name) ".tailCode")
+
+; (:m :ref RC-FBIP-CLOSURE :do "a closure target whose module also defines its owned entry (the RC pass names it ownedEntryName) gets a prototype with a fourth code pointer, the owned trampoline, flagged by 1 in the i32 after the arity; aslRcCallOwnedN reads both")
+fn ownedEntryName name: String -> String
+  (str name "o")
+
+fn ownCodeSym name: String -> String
+  (str "@" (llvmName name) ".ownCode")
+
+fn owned? menv: ModEnv callee: String -> Bool
+  (match (nameIndexGet menv.functions (ownedEntryName callee)) ((some _) true) ((none) false))
 
 fn valSym name: String -> String
   (str "@" (llvmName name) ".val")
@@ -1992,6 +2002,11 @@ fn emitCaptureInline i: Int64 -> String
 fn emitTrampoline f: ty/SsaFunction -> String
   (emitTrampolineAs f (str "define internal %Val " (codeSym f.name)) "  %result = " f.retTy (fnSym f.name))
 
+fn emitOwnTrampoline menv: ModEnv f: ty/SsaFunction -> String
+  (if (owned? menv f.name)
+    (emitTrampolineAs f (str "define internal %Val " (ownCodeSym f.name)) "  %result = " f.retTy (fnSym (ownedEntryName f.name)))
+    "")
+
 fn emitTailTrampoline menv: ModEnv f: ty/SsaFunction -> String
   (if (nameIndexHas? menv.boxed f.name)
     (emitTrampolineAs f (str "define internal tailcc %Val " (tailCodeSym f.name)) "  %result = musttail " (ty/tyVal) (valSym f.name))
@@ -2199,8 +2214,11 @@ fn emitProto menv: ModEnv callee: String wasm: Bool -> String
     (if wasm
       (str (protoSym callee) " = private unnamed_addr constant { ptr, i32, ptr, i32, i32, i32, ptr, i32, i32, i32, ptr, i32, i32, i32, ptr, i32, ptr, i32 } "
            "{ ptr " name ", i32 0, ptr @protoFile.compiled, i32 0, i32 " arity ", i32 0, ptr null, i32 0, i32 0, i32 0, ptr null, i32 0, i32 0, i32 0, ptr " (codeSym callee) ", i32 0, ptr " (tailCodeSym callee) ", i32 0 }\n")
-      (str (protoSym callee) " = private unnamed_addr constant { ptr, ptr, i32, i32, ptr, i32, i32, ptr, i32, i32, ptr, ptr } "
-           "{ ptr " name ", ptr @protoFile.compiled, i32 " arity ", i32 0, ptr null, i32 0, i32 0, ptr null, i32 0, i32 0, ptr " (codeSym callee) ", ptr " (tailCodeSym callee) " }\n")))
+      (if (owned? menv callee)
+        (str (protoSym callee) " = private unnamed_addr constant { ptr, ptr, i32, i32, ptr, i32, i32, ptr, i32, i32, ptr, ptr, ptr } "
+             "{ ptr " name ", ptr @protoFile.compiled, i32 " arity ", i32 1, ptr null, i32 0, i32 0, ptr null, i32 0, i32 0, ptr " (codeSym callee) ", ptr " (tailCodeSym callee) ", ptr " (ownCodeSym callee) " }\n")
+        (str (protoSym callee) " = private unnamed_addr constant { ptr, ptr, i32, i32, ptr, i32, i32, ptr, i32, i32, ptr, ptr } "
+             "{ ptr " name ", ptr @protoFile.compiled, i32 " arity ", i32 0, ptr null, i32 0, i32 0, ptr null, i32 0, i32 0, ptr " (codeSym callee) ", ptr " (tailCodeSym callee) " }\n"))))
 
 fn byteArray bytes: String n: Int64 -> String
   (str "[" (+ n 1) " x i8] c\"" bytes "\x5c00\"")
@@ -3110,7 +3128,8 @@ fn emitDefinitionsRooted m: ty/SsaModule entryCalls: String rooted: Bool fieldId
         (framed (map (fn [(f ty/SsaFunction)] -> String (if (and (not rooted) (listBuilder? f)) (listBuilderText f) (emitFunctionRooted menv f rooted))) m.functions))
         (fns (if (listAny? (fn [(t String)] -> Bool (stringContains? t "@asl_gc_shadow_top")) framed) (cons (shadowTopDecl) framed) framed))
         (targets (closureTargets m))
-        (tramps (map (fn [(f ty/SsaFunction)] -> String (str (emitTrampoline f) (emitTailTrampoline menv f))) (filter (fn [(f ty/SsaFunction)] -> Bool (listContains? targets f.name)) m.functions)))
+        (targetSet (fold (fn [(acc (NameIndex Bool)) (t String)] -> (NameIndex Bool) (nameIndexSet acc t true)) (nameIndexEmpty) targets))
+        (tramps (map (fn [(f ty/SsaFunction)] -> String (str (emitTrampoline f) (emitTailTrampoline menv f) (emitOwnTrampoline menv f))) (filter (fn [(f ty/SsaFunction)] -> Bool (nameIndexHas? targetSet f.name)) m.functions)))
         (resolvers (map (fn [(t String)] -> String (emitVariantIdsInit menv t)) (switchTypes m)))
         (fieldResolvers (map emitFieldIdInit fieldIds))
         (ctorResolvers (map emitCtorIdInit (constructedVariants m)))

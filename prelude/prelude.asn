@@ -192,6 +192,8 @@
       :doc "Keep elements satisfying a predicate, which must return a Bool.")
     (:name "fold" :sec "List" :type "(fn [B A] -> B) B (List A) -> B" :src "asl/prelude/prelude.asl"
       :doc "Left fold with an initial accumulator.")
+    (:name "arenaRun" :sec "List" :type "(fn [] -> T) -> T" :src "asl/prelude/prelude.asl"
+      :doc "Call a thunk in its own memory region: under the untraced RC runtime its allocations are freed together on return and the result is copied out.")
     (:name "parMap" :sec "List" :type "(fn [A] -> B) (List A) [Int64] -> (List B)" :src "asl/host/src/parallel.c"
       :doc "Apply a function in parallel across worker processes via fork+pipe, preserving input order. If fork is unavailable, falls back to sequential map (D151). Propagates worker traps as ERR_WORKER_TRAP.")
     (:name "parFold" :sec "List" :type "(fn [B A] -> B) (fn [B B] -> B) B (List A) [Int64] -> B" :src "asl/host/src/parallel.c"

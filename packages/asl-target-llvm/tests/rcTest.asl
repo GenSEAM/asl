@@ -3,6 +3,7 @@
   :i [(asl-ir/link :a lk)
       (asl-ir/types :a irTy)
       (asl-target-llvm :a llvm)
+      (asl-target-llvm/rc :a rc)
       (asl/packages/asl-cli/src/system :a sys)
       (asl/packages/asl-cli/src/asl1Cache :a cache)
       (asl/packages/asl-cli/src/nativeBuild :a nb)
@@ -91,8 +92,8 @@ fn diagText diags: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.code ": " d.message)) diags) "; ")
 
 fn ! linkCmd libs: Libs mode: String ll: String exe: String -> String
-  (if (= mode "asan")
-    (str "/usr/bin/clang " (stringJoin (nb/sanitizeFlags) " ") " -Wno-override-module -x ir " (shellQuote ll) " -x none " (shellQuote libs.asan) " -lm -o " (shellQuote exe))
+  (if (or (= mode "asan") (= mode "asanNotrace"))
+    (str "/usr/bin/clang " (stringJoin (nb/sanitizeFlags) " ") " -Wno-override-module -x ir " (shellQuote ll) " -x none " (shellQuote (if (= mode "asan") libs.asan libs.notrace)) " -lm -o " (shellQuote exe))
     (str "/usr/bin/clang -O1 -Wno-override-module -x ir " (shellQuote ll) " -x none " (shellQuote (if (= mode "notrace") libs.notrace libs.plain)) " -lm -o " (shellQuote exe)))
 
 fn ! buildRun libs: Libs dir: String name: String mode: String -> (Result Built String)
@@ -159,6 +160,44 @@ fn ! checkFixture libs: Libs dir: String name: String want: String minFreed: Int
                    (assert (and (>= pinned 0) (<= pinned maxPinned)) (str name " RC pins at most " maxPinned " cells for the collector, pinned " pinned " (" stats ")"))
                    (assert (= stuck 0) (str name " RC leaves no freed cell sticky, small size classes included, stuck " stuck " (" stats ")"))
                    true)))))))))
+
+; (:m :ref RC-FBIP-COST :do "the finishing pass on a synthetic module: its declare block is found at the tail, the RC declares leave it, every pooled class from 2 up and cons cells are routed in one split, classes 0 and 1 only under the rooted runtime; a define after the declares takes the in-place path with the same result")
+fn finishSample rooted: Bool tail: String -> String
+  (str "define tailcc %Val @f() {\nentry:\n"
+       "  %a = call ptr @gcAsl.allocFast.0(i32 1, i64 16)\n"
+       "  %b = call ptr @gcAsl.allocFast.12(i32 1, i64 112)\n"
+       "  %c = call ptr @gcAsl.allocFastCons(i32 1, i64 40)\n"
+       "  %d = call ptr @gcAsl.allocFast.2(i32 1, i64 32)\n"
+       "  ret %Val zeroinitializer\n}\n\n"
+       "declare tailcc i64 @aslRcDup(%Val)\n"
+       "declare ptr @gcAsl.allocFast.0(i32, i64)\n"
+       (if rooted "declare void @asl_rt_init()\n" "")
+       tail)
+
+fn finishRouted? out: String -> Bool
+  (and (stringContains? out "  %b = call ptr @aslRc.allocFast.12(i32 1, i64 112)\n")
+       (and (stringContains? out "  %c = call ptr @aslRc.allocFastCons(i32 1, i64 40)\n")
+            (and (stringContains? out "  %d = call ptr @aslRc.allocFast.2(i32 1, i64 32)\n")
+                 (and (stringContains? out "define internal ptr @aslRc.allocFast.12(i32 %t, i64 %n) {")
+                      (and (stringContains? out "define internal ptr @aslRc.allocFast.2(i32 %t, i64 %n) {")
+                           (stringContains? out "define internal ptr @aslRc.allocFastCons(i32 %t, i64 %n) {"))))))
+
+fn ! testFinishText -> Bool
+  (let [(plain (rc/rcFinishTextWith (finishSample false "") false true))
+        (rooted (rc/rcFinishTextWith (finishSample true "") false true))
+        (inPlace (rc/rcFinishTextWith (finishSample true "define internal void @late() {\nentry:\n  ret void\n}\n") false true))]
+    (do (assert (finishRouted? plain) (str "classes 2 and 12 and cons cells are routed with their definitions: " plain))
+        (assert (stringContains? plain "  %a = call ptr @gcAsl.allocFast.0(i32 1, i64 16)\n") "class 0 stays on the GC allocator without the rooted runtime")
+        (refute (stringContains? plain "declare tailcc i64 @aslRcDup(%Val)") "the RC declare leaves the declare block")
+        (assert (stringContains? plain "declare ptr @gcAsl.allocFast.0(i32, i64)") "other declares stay")
+        (assert (finishRouted? rooted) "the rooted module routes the same classes")
+        (assert (stringContains? rooted "  %a = call ptr @aslRc.allocFast.0(i32 1, i64 16)\n") "class 0 is routed under the rooted runtime")
+        (assert (stringContains? rooted "define internal ptr @aslRc.allocFast.0(i32 %t, i64 %n) {") "and gets its small-class definition")
+        (assert (finishRouted? inPlace) "a define after the declares still routes every class")
+        (assert (stringContains? inPlace "  %a = call ptr @aslRc.allocFast.0(i32 1, i64 16)\n") "and sees the rooted runtime through the declares in place")
+        (refute (stringContains? inPlace "declare tailcc i64 @aslRcDup(%Val)") "and removes the RC declare in place")
+        (assert (stringContains? inPlace "define internal void @late() {") "the define after the declares is kept")
+        true))
 
 fn ! testRejectsUnknownMode -> Bool
   (match (lk/linkEntry! (fixture "rcLoop"))
@@ -236,7 +275,8 @@ fn ! testHof libs: Libs dir: String -> Bool
     ((ok b) (let [(walk (fnBodyOf b.code "%Val" "rcHof$2Ewalk"))]
               (do (assert (= b.run.stdout "897\n") (str "rcHof prints the nested list length under RC, got " b.run.stdout))
                   (assert (stringContains? walk "musttail call tailcc %Val @rcHof$2Ewalk(") (str "walk stays a musttail loop: " walk))
-                  (assert (= (- (listLength (stringSplit walk "@aslRcDup(")) 1) 1) (str "walk calls its closure only in plain position, so the lambda that tail-calls walk with an owned list is outside walk's tail cycle and walk borrows xs: it duplicates only the head it conses, not the rest it walks: " walk))
+                  (assert (= (- (listLength (stringSplit walk "@aslRcDup(")) 1) 2) (str "walk calls its closure only in plain position, so the lambda that tail-calls walk with an owned list is outside walk's tail cycle and walk borrows xs: it duplicates only the head, once for the cons and once for the owned closure call, not the rest it walks: " walk))
+                  (refute (stringContains? walk "@aslRcDrop(%Val %acc)") (str "the accumulator moves into the owned closure call, so walk never drops it: " walk))
                   (refute (stringContains? walk "@aslRcDrop(%Val %xs)") (str "walk borrows xs: it never drops it: " walk))
                   true))))
 
@@ -299,6 +339,81 @@ fn ! testReuse libs: Libs dir: String -> Bool
                   (assert (and (> ops 0) (< ops 40000)) (str "moved fields of a reused cell skip their dup and release: rcReuse runs " ops " RC ops, base 51502"))
                   true))))
 
+fn ! testFold libs: Libs dir: String -> Bool
+  (let [(want "499500 4501500 4522500 3000\n")]
+    (match (buildRun libs dir "rcFold" "asan")
+      ((err e) (do (assert false (str "RC ASan rcFold build: " e)) false))
+      ((ok a) (match (buildRun libs dir "rcFold" "notrace")
+                ((err e) (do (assert false (str "rcFold untraced RC build: " e)) false))
+                ((ok c) (let [(stats a.run.stderr)]
+                          (do (assert (= a.run.exitCode 0) (str "rcFold RC under ASan exits 0: " stats))
+                              (assert (= a.run.stdout want) (str "rcFold prints its folds under RC ASan: " a.run.stdout " " stats))
+                              (refute (stringContains? stats "Sanitizer") (str "an owned argument is never read after the callee consumed it: " stats))
+                              (assert (stringContains? a.code "call tailcc %Val @aslRcCallOwned2(") "a fold step calls its lambda through the owned closure call")
+                              (assert (stringContains? a.code "rc.ownCode }") "a counted lambda's prototype carries its owned trampoline")
+                              (assert (>= (statOf stats "fbip") 2990) (str "the tree a fold lambda receives is unique, so insert reuses its root: fbip " (statOf stats "fbip") ", base 0"))
+                              (assert (and (> (statOf stats "ops") 0) (< (statOf stats "ops") 165000)) (str "fold accumulators move into the lambda without a dup and a drop per step: ops " (statOf stats "ops") ", base 181755"))
+                              (assert (and (> (statOf stats "freed") 0) (< (statOf stats "freed") 53000)) (str "a reused root is never freed: freed " (statOf stats "freed") ", base 54591"))
+                              (assert (= c.run.exitCode 0) (str "rcFold untraced RC exits 0: " c.run.stderr))
+                              (assert (= c.run.stdout want) (str "rcFold prints its folds under untraced RC: " c.run.stdout))
+                              true)))))))
+
+fn ! testAppend libs: Libs dir: String -> Bool
+  (let [(want "1999000 2000 1999005 2001\n15 5 13 6 3\n")]
+    (match (buildRun libs dir "rcAppend" "asanNotrace")
+      ((err e) (do (assert false (str "rcAppend untraced RC ASan build: " e)) false))
+      ((ok a) (match (buildRun libs dir "rcAppend" "1")
+                ((err e) (do (assert false (str "rcAppend traced RC build: " e)) false))
+                ((ok t) (let [(stats a.run.stderr)]
+                          (do (assert (= a.run.exitCode 0) (str "rcAppend untraced RC under ASan exits 0: " stats))
+                              (assert (= a.run.stdout want) (str "appends that relink, splice a copied suffix or copy the whole left list print what copying prints: " a.run.stdout " " stats))
+                              (refute (stringContains? stats "Sanitizer") (str "no relinked cell is read after release and no shared cell is changed: " stats))
+                              (assert (stringContains? a.code (str "call tailcc %Val @aslRc.appendOwned(")) "untraced RC routes listAppend calls to the owned append")
+                              (assert (and (> (statOf stats "freed") 0) (< (statOf stats "freed") 10000)) (str "a fold growing a unique list relinks instead of copying it each step: freed " (statOf stats "freed") ", base 2007018"))
+                              (assert (= t.run.stdout want) (str "the traced build prints the same: " t.run.stdout))
+                              (refute (stringContains? t.code "@aslRc.appendOwned(") "traced RC keeps the copying listAppend")
+                              true)))))))
+
+fn ! testArena libs: Libs dir: String -> Bool
+  (let [(traced (buildRun libs dir "rcArena" "0"))
+        (counted (buildRun libs dir "rcArena" "notrace"))
+        (asan (buildRun libs dir "rcArena" "asanNotrace"))
+        (want "72073000\n")]
+    (match traced
+      ((err e) (do (assert false (str "rcArena tracing build: " e)) false))
+      ((ok t)
+       (match counted
+         ((err e) (do (assert false (str "rcArena untraced RC build: " e)) false))
+         ((ok c)
+          (match asan
+            ((err e) (do (assert false (str "rcArena untraced RC ASan build: " e)) false))
+            ((ok a)
+             (let [(stats c.run.stderr)]
+               (do (assert (= t.run.stdout want) (str "rcArena tracing prints " want ", got " t.run.stdout))
+                   (refute (stringContains? t.code "@aslRc.arenaRun(") "the tracing build calls arenaRun as a plain prelude function")
+                   (assert (= c.run.exitCode 0) (str "rcArena untraced RC exits 0, got " c.run.exitCode ": " stats))
+                   (assert (= c.run.stdout want) (str "values built in nested arenas and promoted out of them print what tracing prints: " c.run.stdout " (" stats ")"))
+                   (assert (stringContains? c.code "call tailcc %Val @aslRc.arenaRun(") "untraced RC routes arenaRun to the runtime region entry")
+                   (assert (= (statOf stats "arenas") 600) (str "each of 300 steps opens its arena and a nested one: " stats))
+                   (assert (> (statOf stats "arenaCells") 600000) (str "the tree, list and record cells of a step are bump-allocated in its arena: " stats))
+                   (assert (= (statOf stats "promoted") 3900) (str "only cells reachable from an arena's result are copied out: 13 per step, " stats))
+                   (assert (= (statOf stats "retained") 0) (str "no arena value escapes into a global or a pin, so no arena is retained: " stats))
+                   (assert (and (>= (statOf stats "freed") 0) (< (statOf stats "freed") 10000)) (str "arena cells are released with their chunks, not freed one by one: freed " (statOf stats "freed") ", base without arenas 623483"))
+                   (assert (= a.run.exitCode 0) (str "rcArena untraced RC under ASan exits 0, got " a.run.exitCode ": " a.run.stderr))
+                   (assert (= a.run.stdout want) (str "rcArena untraced RC under ASan prints " want ", got " a.run.stdout))
+                   (refute (stringContains? a.run.stderr "Sanitizer") (str "no promoted cell points into a released chunk and no arena cell is read after release: " a.run.stderr))
+                   (assert (= (statOf a.run.stderr "promoted") 3900) (str "ASan-mode promotes the same cells: " a.run.stderr))
+                   true)))))))))
+
+fn ! testSplice libs: Libs dir: String -> Bool
+  (match (buildRun libs dir "rcSplice" "notrace")
+    ((err e) (do (assert false (str "rcSplice untraced RC build: " e)) false))
+    ((ok b) (do (assert (= b.run.exitCode 0) (str "rcSplice exits 0 under untraced RC, got " b.run.exitCode ": " b.run.stderr))
+                (assert (= b.run.stdout "call ptr @gcAsl.allocFastCons(\ncall tailcc %Val @prelude$2EarenaRun(\ncall tailcc %Val @prelude$2ElistAppend(\n3\n") (str "the call texts routing rewrites survive routing of a module that holds them, so an RC-built compiler still routes cons, arenaRun and listAppend: " b.run.stdout))
+                (assert (stringContains? b.code "call ptr @aslRc.allocFastCons(") "the module's own cons cells are routed to the RC allocator")
+                (assert (stringContains? b.code "call tailcc %Val @aslRc.appendOwned(") "the module's own listAppend calls are routed to the owned append")
+                true)))
+
 
 fn ! runTests -> Bool
   (match (runtimes!)
@@ -310,6 +425,7 @@ fn ! runWith libs: Libs -> Bool
         (made (dirCreate dir))]
     (do (assert (ok? made) "rcTest work directory created")
         (assert (testRejectsUnknownMode) "unknown RC mode rejected")
+        (assert (testFinishText) "the finishing pass routes every pooled class in one split and trims the declare block")
         (assert (testPartialNames libs dir) "closure prototypes keep the source name under RC wrappers")
         (assert (testBorrow libs dir) "a read-only traversal borrows its parameters: no RC traffic in the loop")
         (assert (testBorrowTail libs dir) "a callee tail-called from outside its own cycle keeps its borrowed parameters")
@@ -320,6 +436,10 @@ fn ! runWith libs: Libs -> Bool
         (assert (testOpStats libs dir) "ASan-mode RC counts dups, drops and those on immediates; production RC counts none")
         (assert (testFreeQueue libs dir) "a freed object's dying kids continue the free loop or are recycled on the spot instead of queueing")
         (assert (testReuse libs dir) "an owned matched value that dies at or before a construct of its size class lends its cell, moved fields skip dup and release")
+        (assert (testFold libs dir) "a non-tail closure call hands owned arguments to the lambda's owned entry, so a fold accumulator stays unique")
+        (assert (testAppend libs dir) "an untraced listAppend relinks a unique left list, splices a copy at its first shared cell, and copies a shared one")
+        (assert (testArena libs dir) "a thunk run in its own arena frees its cells together and copies its result out, ASan-clean across nested domains")
+        (assert (testSplice libs dir) "routing never rewrites the call texts it searches for when they sit in the module as data")
         (assert (checkFixture libs dir "rcReuse" "6008445041\n" 28000 28000 100 0) "reused cells, shared resets and moved fields stay correct and ASan-clean")
         (assert (checkFixture libs dir "rcSink" "2288\n" 500 400 2000 0) "names read from a tree and kept or replaced are freed once, ASan-clean")
         (assert (checkFixture libs dir "rcProject" "2572500 2400 600\n" 60000 59000 3500 0) "projections kept past their anchor are duplicated and freed once, ASan-clean")

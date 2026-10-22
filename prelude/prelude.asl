@@ -148,6 +148,10 @@ fn filter f: (fn [T] -> Bool) xs: (List T) -> (List T)
 fn fold f: (fn [B A] -> B) init: B xs: (List A) -> B
   (match (listHead xs) ((some x) (match (listTail xs) ((some t) (fold f (f init x) t)))) (none init))
 
+; (:m :ref MM-REGIONS :do "run a thunk in its own memory region: under the untraced RC runtime what it allocates is freed together when it returns and its result is copied out; elsewhere it is a plain call")
+fn arenaRun f: (fn [] -> T) -> T
+  (f)
+
 fn preludeRevOnto xs: (List T) acc: (List T) -> (List T)
   (preludeReverseOnto xs acc)
 
