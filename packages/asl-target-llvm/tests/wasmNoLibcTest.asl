@@ -7,7 +7,7 @@
       (asl-target-llvm/target :a target)
       (asl-target-llvm/gcRoute :a gr)
       (asl-target-llvm/wasmLink :a wl)
-      (tools/fleet/run :a run)])
+      (asl-tools/fleet/run :a run)])
 
 fn ! node -> String
   (let [(candidates (list "/usr/local/bin/node" "/opt/homebrew/bin/node"))

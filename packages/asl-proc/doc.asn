@@ -327,7 +327,7 @@
 (:doc :symbol "asl/packages/asl-proc/src/spool.asl#DiskSpool.truncated" :text "True if the circular cap ever forced older bytes to be dropped")
 (:doc :symbol "asl/packages/asl-proc/src/spool.asl#TwoTierSpool.ring" :text "Tier 1 RAM ring buffer")
 (:doc :symbol "asl/packages/asl-proc/src/spool.asl#TwoTierSpool.disk" :text "Tier 2 ephemeral circular disk spool")
-(:doc :symbol "asl/packages/asl-proc/src/jobPool.asl#" :text "the bounded-job, process-tree-killing pool engine (watchdog timeout, descendant cap, group-wide SIGSTOP/SIGKILL), moved verbatim from tools/fleet/run.asl (HL-FIXWAVE-M4) so asl/ builds and runs its own native CLI without importing tools/")
+(:doc :symbol "asl/packages/asl-proc/src/jobPool.asl#" :text "the bounded-job, process-tree-killing pool engine (watchdog timeout, descendant cap, group-wide SIGSTOP/SIGKILL), moved verbatim from asl/tools/fleet/run.asl (HL-FIXWAVE-M4) so asl/ builds and runs its own native CLI without importing tools/")
 (:doc :symbol "asl/packages/asl-proc/src/jobPool.asl#Job" :text "one child invocation: argv, working directory, extra environment rows")
 (:doc :symbol "asl/packages/asl-proc/src/jobPool.asl#Done" :text "one finished job: its index, exit code, combined stdout+stderr, wall ms, and verdict (exit, timeout, runaway, spawnFailed)")
 (:doc :symbol "asl/packages/asl-proc/src/jobPool.asl#Limits" :text "a job's watchdog budget: wall-clock timeoutMs and the maxDesc descendant-process count before it is judged runaway")

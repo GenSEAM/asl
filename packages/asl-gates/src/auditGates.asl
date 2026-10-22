@@ -12,7 +12,7 @@
       (asl-gates/auditForeign :a af)
       (asl-proc/coreProcess :a p)
       (asl-proc/gitFixture :a gf)
-      (tools/agentSurfaceAudit :a asa)])
+      (asl-tools/agentSurfaceAudit :a asa)])
 
 (schema Check
   (:f id String)

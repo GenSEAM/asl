@@ -1,4 +1,4 @@
-(module asl-cli/irSplitTest :x [runTests] :i [(tools/fleet/run :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl/packages/asl-cli/src/nativeBuild :a nb)])
+(module asl-cli/irSplitTest :x [runTests] :i [(asl-tools/fleet/run :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl/packages/asl-cli/src/nativeBuild :a nb)])
 
 fn program -> String
   (stringJoin (list

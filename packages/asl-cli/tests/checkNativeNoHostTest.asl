@@ -1,6 +1,6 @@
 (module asl-cli/tests/checkNativeNoHostTest
   :x [runTests]
-  :i [(tools/nativeTest :a nt) (tools/fleet/run :a run) (asl-proc/gitFixture :a gf)])
+  :i [(asl-tools/nativeTest :a nt) (asl-tools/fleet/run :a run) (asl-proc/gitFixture :a gf)])
 
 fn ! scratchBase! -> String
   (str (optionOr (envGet "TMPDIR") "/tmp") "/checkNativeNoHostTest-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs)))

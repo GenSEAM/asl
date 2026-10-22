@@ -1,8 +1,8 @@
 (module asl-target-llvm/tests/nativeShaTest
   :x [runTests]
-  :i [(tools/nativeTest :a nt)])
+  :i [(asl-tools/nativeTest :a nt)])
 
-; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): hostRun used to re-derive the FIPS 180-4 vectors by interpreting the probe through asl-host, but the probe is fully deterministic (fixed 1 MiB affine fill, fixed algorithm) and its expected stdout was already pinned to the literal vectors() below, so the host round-trip is dropped and native.stdout is compared straight to vectors(). nativeRun used to shell out to asl-host to run tools/nativeTest.asl as a subprocess; it now calls tools/nativeTest's own prepareRun/runProc in-process (the same pipeline tools/nativeTest.asl would have driven), which has zero host dependency even on a cold cache")
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): hostRun used to re-derive the FIPS 180-4 vectors by interpreting the probe through asl-host, but the probe is fully deterministic (fixed 1 MiB affine fill, fixed algorithm) and its expected stdout was already pinned to the literal vectors() below, so the host round-trip is dropped and native.stdout is compared straight to vectors(). nativeRun used to shell out to asl-host to run asl/tools/nativeTest.asl as a subprocess; it now calls asl/tools/nativeTest's own prepareRun/runProc in-process (the same pipeline asl/tools/nativeTest.asl would have driven), which has zero host dependency even on a cold cache")
 
 fn probe -> String
   "asl/packages/asl-target-llvm/tests/fixtures/nativeSha/shaProbe.asl"

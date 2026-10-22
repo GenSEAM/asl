@@ -1,6 +1,6 @@
 (module asl-compiler/tests/checkCacheTest
   :x [runTests]
-  :i [(asl-compiler/checkCache :a cc) (tools/fleet/run :a fr) (tools/nativeTest :a nt)])
+  :i [(asl-compiler/checkCache :a cc) (asl-tools/fleet/run :a fr) (asl-tools/nativeTest :a nt)])
 
 fn asl1 -> String
   "asl/packages/asl-compiler/src/asl1.asl"

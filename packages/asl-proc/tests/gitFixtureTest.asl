@@ -1,6 +1,6 @@
 (module asl-proc/tests/gitFixtureTest
   :x [runTests]
-  :i [(asl-proc/gitFixture :a gf) (tools/fleet/run :a run)])
+  :i [(asl-proc/gitFixture :a gf) (asl-tools/fleet/run :a run)])
 
 fn ! rawGit! root: String args: (List String) -> Bool
   (= (run/runOneLimited (run/job (cons "git" args) root (run/childEnv (list))) (run/limits 10 8)).exit 0)

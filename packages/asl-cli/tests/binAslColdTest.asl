@@ -1,4 +1,4 @@
-(module asl-cli/binAslColdTest :x [runTests] :i [(tools/fleet/run :a run)])
+(module asl-cli/binAslColdTest :x [runTests] :i [(asl-tools/fleet/run :a run)])
 
 fn ! envFor cache: String extra: (List String) -> (List String)
   (listAppend (cons (str "SERVED_STOP_PID=" (stringFromInt64 (procSelf))) (cons (str "ASL_NATIVE_CLI_CACHE=" cache) (cons "ASL_NATIVE_CLI_TIMEOUT=1200" extra)))

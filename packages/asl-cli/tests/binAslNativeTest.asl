@@ -1,4 +1,4 @@
-(module asl-cli/binAslNativeTest :x [runTests] :i [(tools/fleet/run :a run)])
+(module asl-cli/binAslNativeTest :x [runTests] :i [(asl-tools/fleet/run :a run)])
 
 fn probe -> String
   "asl/packages/asl-cli/tests/fixtures/servedBy/servedProbe.asl"

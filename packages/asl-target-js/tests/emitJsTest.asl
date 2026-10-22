@@ -1,6 +1,6 @@
 (module asl-target-js/tests/emitJsTest
   :x [runTests]
-  :i [(asl-ir/types :a ty) (asl-target-js/main :a js) (tools/fleet/run :a run)])
+  :i [(asl-ir/types :a ty) (asl-target-js/main :a js) (asl-tools/fleet/run :a run)])
 
 (schema SplitOut (:f exitCode Int64) (:f stdout String) (:f stderr String))
 

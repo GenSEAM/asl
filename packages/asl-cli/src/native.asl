@@ -1,6 +1,6 @@
 (module asl-cli/native
   :x [main]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/command :a cmd) (tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/command :a cmd) (asl-tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
 
 fn rest args: (List String) -> (List String)
   (optionOr (listTail args) (list))
@@ -20,7 +20,7 @@ fn ! nativeTest! args: (List String) -> Int64
     ((ok code) code)
     ((err e) (do (sys/sayErr! (str "asl: nativeTest: " e)) 1)))
 
-; (:m :ref NATIVETEST-HOSTLESS :do "bin/asl run tools/nativeTest.asl runs the nativeTest this CLI is built from in place (bin/asl rebuilds the CLI when that source moves): no per-process compile of its ~60-module closure, and nothing of it in the suite cache")
+; (:m :ref NATIVETEST-HOSTLESS :do "bin/asl run asl/tools/nativeTest.asl runs the nativeTest this CLI is built from in place (bin/asl rebuilds the CLI when that source moves): no per-process compile of its ~60-module closure, and nothing of it in the suite cache")
 fn ! nativeTool! args: (List String) -> Int64
   (match (nt/main args)
     ((ok code) code)
@@ -78,7 +78,7 @@ fn ! run! ctx: sys/Context args: (List String) -> Int64
     (cond
       ((or (listEmpty? args) (or (= file "--help") (= file "-h"))) (cmd/dispatch! ctx "run" args))
       ((not inRoot) (runOutside! ctx file absFile args))
-      ((= (rooted ctx absFile) "tools/nativeTest.asl") (nativeTool! (rest args)))
+      ((= (rooted ctx absFile) "asl/tools/nativeTest.asl") (nativeTool! (rest args)))
       (else (runEntryChecked! ctx absFile args))))
 
 fn ! eprintText text: String -> Unit

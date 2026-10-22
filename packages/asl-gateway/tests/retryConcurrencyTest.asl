@@ -1,6 +1,6 @@
 (module aslGateway/tests/retryConcurrencyTest
   :x [runTests]
-  :i [(asl-json/json :a j) (aslGateway/pyText :a pt) (tools/fleet/run :a fr)])
+  :i [(asl-json/json :a j) (aslGateway/pyText :a pt) (asl-tools/fleet/run :a fr)])
 
 ; (:m :tags (retry) :do "an end-to-end sanity companion to serverTest.asl's testEffSleepMsDoesNotBlockReactor, which is the actual red/green proof of non-blocking (a deterministic 5000 ms timing bound with no network or jitter involved). Since GW-FREE-RETRY-3, the stub's Retry-After: 2 header is honored (headers now flow through u/UpstreamResponse/u/httpFailure into retryAfterSecOf), so aDoneMs below has a real minimum-wait assertion instead of only the always-true ordering check; this is still kept as a live-process check that the whole retry-then-succeed path (429, backoff, retried call, success) works end to end alongside a second concurrent client, not as the sole concurrency proof")
 
@@ -189,7 +189,7 @@ fn ! runTests -> Bool
         (command (str "exec " host " run " server " serve --port 0 --upstream " base " --ready " readyPath " 1>" temp "/gateway.out 2>" temp "/gateway.err"))
         (env (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" temp) (str "ASL_GATEWAY_ROOT=" temp)
                    (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") (nativeCliCacheEnvRow!)))
-        ; (:m :ref NOSELFHOST-RETRYCONC-20261017 :do "fix NOSELFHOST-RETRYCONC: a bare procSpawnv here was an un-bounded, un-tree-tracked child start (rule spawnSafety); fr/spawn is the same tools/fleet/run.asl every other fleet caller starts children through, and its killTree! below (rather than a bare negative-pid procKill) takes the whole process tree this one row of /bin/sh -c ... could have grown, not just the shell's own pid")
+        ; (:m :ref NOSELFHOST-RETRYCONC-20261017 :do "fix NOSELFHOST-RETRYCONC: a bare procSpawnv here was an un-bounded, un-tree-tracked child start (rule spawnSafety); fr/spawn is the same asl/tools/fleet/run.asl every other fleet caller starts children through, and its killTree! below (rather than a bare negative-pid procKill) takes the whole process tree this one row of /bin/sh -c ... could have grown, not just the shell's own pid")
         (running (fr/spawn 0 (fr/job (list "/bin/sh" "-c" command) (resultOr (realPath ".") ".") env)))
         (pid (match running ((ok r) r.pid) ((err _) 0)))
         (gatewayPort (if (> pid 0) (waitPort! readyPath 500) 0))

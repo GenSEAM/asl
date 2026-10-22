@@ -3,7 +3,7 @@
   :i [(asl-ir/lower :a low)
       (asl-ir/types :a irTy)
       (asl-target-llvm :a llvm)
-      (tools/nativeTest :a nt)])
+      (asl-tools/nativeTest :a nt)])
 
 fn ! asl1Bin! -> String
   (let [(built (nt/prepareRun "asl/packages/asl-compiler/src/asl1.asl" (nt/fingerprint)))]

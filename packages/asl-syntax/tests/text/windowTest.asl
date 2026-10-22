@@ -4,7 +4,7 @@
       (asl-syntax/text :a txt)
       (asl-syntax/textWindow :a win)
       (asl-syntax/core/bytesText :a btxt)
-      (tools/fleet/run :a run)])
+      (asl-tools/fleet/run :a run)])
 
 fn testWindowedRangeParity! -> Bool
   (let [(manifestPath "asl/packages/asl-syntax/manifest.asn")

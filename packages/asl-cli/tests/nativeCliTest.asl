@@ -1,6 +1,6 @@
 (module asl-cli/tests/nativeCliTest
   :x [runTests normalize telemetry? caseJob cliEnv Case caseLine readCases prepareSweep!]
-  :i [(tools/fleet/run :a run) (tools/nativeTest :a nt) (asl/packages/asl-cli/src/nativeCli :a nc)])
+  :i [(asl-tools/fleet/run :a run) (asl-tools/nativeTest :a nt) (asl/packages/asl-cli/src/nativeCli :a nc)])
 
 (schema Case
   (:f id String)

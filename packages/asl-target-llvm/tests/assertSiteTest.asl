@@ -1,6 +1,6 @@
 (module asl-target-llvm/tests/assertSiteTest
   :x [runTests]
-  :i [(tools/fleet/run :a run)])
+  :i [(asl-tools/fleet/run :a run)])
 
 fn workDir -> String
   "asl/packages/asl-target-llvm/tests/assertSiteWork"

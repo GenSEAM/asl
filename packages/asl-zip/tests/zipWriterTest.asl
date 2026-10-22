@@ -1,6 +1,6 @@
 (module asl-zip/tests/zipWriterTest
   :x [runTests]
-  :i [(asl-zip/zipWriter :a zw) (asl-zip/gzipWriter :a gw) (asl-zip/gzip :a gz) (tools/fleet/run :a run)])
+  :i [(asl-zip/zipWriter :a zw) (asl-zip/gzipWriter :a gw) (asl-zip/gzip :a gz) (asl-tools/fleet/run :a run)])
 
 fn ! sh! root: String argv: (List String) timeoutS: Int64 maxDesc: Int64 -> run/Done
   (run/runOneLimited (run/job argv root (run/childEnv (list))) (run/limits timeoutS maxDesc))

@@ -2,7 +2,7 @@
   :x [runTests]
   :i [(asl/packages/asl-cli/src/system :a sys)
       (asl/packages/asl-cli/src/rcConfig :a rcc)
-      (tools/fleet/run :a run)])
+      (asl-tools/fleet/run :a run)])
 
 fn fixtureSource -> String
   (stringJoin (list

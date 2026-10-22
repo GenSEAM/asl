@@ -1,7 +1,7 @@
 ; (:m :ref ORGPREMOVE-GCPOLICYLOCK :do "testLock/adopted/baselinePath moved to tools/tests/privateGroundingTest.asl: they check that the shipped defaultMinMib matches an 'adopted' row in .asl/mem/bench/perfBaseline.asn, a private, machine-specific measurement ledger (its :host field literally records this machine's load average at measurement time) that never ships with the published GenSEAM/asl repo; the check itself is unchanged, just relocated")
 (module asl-target-llvm/tests/gcPolicyTest
   :x [runTests]
-  :i [(asl-ir/link :a lk) (asl-ir/types :a ty) (asl-target-llvm :a llvm) (asl-target-llvm/gcAsl :a gc) (tools/fleet/run :a run)])
+  :i [(asl-ir/link :a lk) (asl-ir/types :a ty) (asl-target-llvm :a llvm) (asl-target-llvm/gcAsl :a gc) (asl-tools/fleet/run :a run)])
 
 fn clangLink -> String
   "/usr/bin/clang -O2 -Wno-override-module -x ir "

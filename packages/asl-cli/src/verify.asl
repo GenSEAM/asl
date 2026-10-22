@@ -5,7 +5,7 @@
 fn checkRoots -> (List String)
   (list "." "asl/packages" "asl")
 
-; (:m :ref U4-MARKER-PARITY :do "the one shared formatter for a checker Diagnostic's path:line:col CODE message line; asl check (printDiag! below) and tools/nativeTest.asl's test/run checker gate both render through this, so a failing fixture names the same site in check, test and run alike")
+; (:m :ref U4-MARKER-PARITY :do "the one shared formatter for a checker Diagnostic's path:line:col CODE message line; asl check (printDiag! below) and asl/tools/nativeTest.asl's test/run checker gate both render through this, so a failing fixture names the same site in check, test and run alike")
 fn formatDiag d: ty/Diagnostic -> String
   (str d.path ":" (stringFromInt64 d.line) ":" (stringFromInt64 d.col) ": " d.code " " d.message)
 

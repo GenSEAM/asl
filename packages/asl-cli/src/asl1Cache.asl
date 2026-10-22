@@ -238,7 +238,7 @@ fn ! ensureSeed! root: String lib: String clang: String -> (Result String String
 
 ; (:m :ref HL-FIXWAVE :do "this message told the reader to regenerate the seed with asl-host, retired for good by HL-DELETE; bin/asl is the only runner left")
 fn staleSeed reason: String -> String
-  (str "ERR_SEED_STALE: the bootstrap seed cannot build the compiler sources (" reason "); regenerate it with bin/asl run tools/seed.asl regen")
+  (str "ERR_SEED_STALE: the bootstrap seed cannot build the compiler sources (" reason "); regenerate it with bin/asl run asl/tools/seed.asl regen")
 
 fn ! nativeStage! compiler: String source: String lib: String clang: String -> (Result String String)
   (let [(ll (str compiler ".boot.ll"))

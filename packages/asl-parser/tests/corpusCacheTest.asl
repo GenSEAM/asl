@@ -3,7 +3,7 @@
   :i [(asl-syntax/tests/asl/layoutCorpusLib :a lay)
       (asl-parser/tests/printReparseLib :a pr)
       (asl-syntax/tests/asl/corpusCache :a cc)
-      (tools/fleet/run :a fr)
+      (asl-tools/fleet/run :a fr)
       (asl-proc/runnerBin :a rb)])
 
 fn fixedFiles -> (List String)

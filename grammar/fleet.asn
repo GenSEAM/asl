@@ -37,7 +37,7 @@
            :reads (Receipt Gate RedBefore Owns))
           (:tool docCoverage :file "tools/codemod/docCoverage.asl" :status works
            :ops (uncoveredTexts))
-          (:tool run :file "tools/fleet/run.asl" :status works
+          (:tool run :file "asl/tools/fleet/run.asl" :status works
            :ops (runPoolLimited killTree! nativeCliPath!))
           (:tool guard :file "tools/fleet/guard.asl" :status works
            :ops (guardOnce! killAll! procCounts!))

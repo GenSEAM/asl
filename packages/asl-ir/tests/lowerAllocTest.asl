@@ -3,8 +3,8 @@
   :i [(asl-ir/types :a ty)
       (asl-ir/lower :a low)
       (asl-ir/link :a lk)
-      (tools/nativeTest :a nt)
-      (tools/fleet/run :a fr)])
+      (asl-tools/nativeTest :a nt)
+      (asl-tools/fleet/run :a fr)])
 
 fn thisFile -> String
   "asl/packages/asl-ir/tests/lowerAllocTest.asl"

@@ -1,8 +1,8 @@
 (module asl-parser/tests/parseAllocTes
   :x [runTests main]
   :i [(asl-parser/ast :a ast)
-      (tools/nativeTest :a nt)
-      (tools/fleet/run :a fr)])
+      (asl-tools/nativeTest :a nt)
+      (asl-tools/fleet/run :a fr)])
 
 fn thisFile -> String
   "asl/packages/asl-parser/tests/parseAllocTest.asl"

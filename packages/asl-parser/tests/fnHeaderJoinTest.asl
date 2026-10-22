@@ -1,6 +1,6 @@
 (module asl-parser/tests/fnHeaderJoinTest
   :x [runTests]
-  :i [(ast :a a) (tools/nativeTest :a nt)])
+  :i [(ast :a a) (asl-tools/nativeTest :a nt)])
 
 fn ! asl1Bin! -> String
   (let [(built (nt/prepareRun "asl/packages/asl-compiler/src/asl1.asl" (nt/fingerprint)))]

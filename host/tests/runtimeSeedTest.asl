@@ -1,4 +1,4 @@
-(module asl/host/tests/runtimeSeedTest :x [runTests] :i [(tools/fleet/run :a run)])
+(module asl/host/tests/runtimeSeedTest :x [runTests] :i [(asl-tools/fleet/run :a run)])
 
 fn members -> (List String)
   (list "gcAsl.o" "rtAbi.o" "rtFloor.o")

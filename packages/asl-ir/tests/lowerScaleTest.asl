@@ -6,8 +6,8 @@
       (asl-ir/link :a lk)
       (asl-ir/printer :a pr)
       (asl-parser/ast :a ast)
-      (tools/fleet/run :a run)
-      (tools/nativeTest :a nt)])
+      (asl-tools/fleet/run :a run)
+      (asl-tools/nativeTest :a nt)])
 
 fn thisFile -> String
   "asl/packages/asl-ir/tests/lowerScaleTest.asl"

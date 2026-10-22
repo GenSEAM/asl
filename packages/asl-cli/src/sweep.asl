@@ -1,6 +1,6 @@
 (module asl-cli/sweep
   :x [main Done workspace! timeoutWanted! jobsWanted! plan! report! frozenCountFor! changedPlan! changedReport! changedDry! lastLine nativeCheckSweep!]
-  :i [(asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-gates/src/dyck :a dyck) (tools/testImpact :a impact) (asl-checker/checkCached :a cc)])
+  :i [(asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-gates/src/dyck :a dyck) (asl-tools/testImpact :a impact) (asl-checker/checkCached :a cc)])
 
 (schema Job
   (:f index Int64)

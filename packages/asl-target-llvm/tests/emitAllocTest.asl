@@ -6,8 +6,8 @@
       (asl-target-llvm :a nat)
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/sysRoute :a route)
-      (tools/nativeTest :a nt)
-      (tools/fleet/run :a fr)])
+      (asl-tools/nativeTest :a nt)
+      (asl-tools/fleet/run :a fr)])
 
 fn thisFile -> String
   "asl/packages/asl-target-llvm/tests/emitAllocTest.asl"

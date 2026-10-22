@@ -3,7 +3,7 @@
   :i [(asl-syntax/core/tree :a tr)
       (asl-syntax/asl/lex :a lx)
       (asl-syntax/asl/asn :a asn)
-      (tools/fleet/run :a run)])
+      (asl-tools/fleet/run :a run)])
 
 fn ! hostBin! -> String
   (run/legacyHost!)

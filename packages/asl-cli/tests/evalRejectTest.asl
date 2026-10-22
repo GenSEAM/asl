@@ -1,6 +1,6 @@
 (module asl-cli/tests/evalRejectTest
   :x [runTests]
-  :i [(tools/fleet/run :a run)])
+  :i [(asl-tools/fleet/run :a run)])
 
 fn workDir -> String
   "asl/packages/asl-cli/tests/evalRejectWork"

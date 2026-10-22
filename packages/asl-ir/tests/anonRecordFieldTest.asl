@@ -1,4 +1,4 @@
-(module asl-ir/tests/anonRecordFieldTest :x [runTests] :i [(tools/nativeTest :a nt) (tools/fleet/run :a fr)])
+(module asl-ir/tests/anonRecordFieldTest :x [runTests] :i [(asl-tools/nativeTest :a nt) (asl-tools/fleet/run :a fr)])
 
 fn ! nativeEval expr: String -> fr/Done
   (let [(probePath "asl/packages/asl-ir/tests/tmpAnonRecordProbe.asl")

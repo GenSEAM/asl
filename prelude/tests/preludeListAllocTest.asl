@@ -1,6 +1,6 @@
 (module prelude/tests/preludeListAllocTest
   :x [runTests main]
-  :i [(tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/run :a fr)])
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(sc (optionOr (listHead args) ""))

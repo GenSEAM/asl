@@ -1,7 +1,7 @@
 (module asl-gates/tests/suiteRunnerTest
   :x [runTests]
   :i [(asl-parser/reader :a p) (asl-gates/suiteRunner :a sr) (tests/parity/gates/runnerCorpus :a gr)
-      (tools/fleet/run :a fr) (asl-proc/runnerBin :a rb)])
+      (asl-tools/fleet/run :a fr) (asl-proc/runnerBin :a rb)])
 
 fn items node: p/SExpr -> (List p/SExpr)
   (p/sexprToList node)

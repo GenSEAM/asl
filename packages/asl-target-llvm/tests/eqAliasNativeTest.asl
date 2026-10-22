@@ -3,7 +3,7 @@
   :i [(asl-ir/lower :a low)
       (asl-ir/types :a irTy)
       (asl-target-llvm :a llvm)
-      (tools/fleet/run :a run)])
+      (asl-tools/fleet/run :a run)])
 
 (schema Captured
   (:f exitCode Int64)

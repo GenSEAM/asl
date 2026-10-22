@@ -5,7 +5,7 @@
       (asl-syntax/asl/lex :a lx)
       (asl-syntax/core/tree :a tr)
       (asl-syntax/core/bytesText :a bt)
-      (tools/fleet/run :a run)])
+      (asl-tools/fleet/run :a run)])
 
 (schema HostRun
   (:f exitCode Int64)

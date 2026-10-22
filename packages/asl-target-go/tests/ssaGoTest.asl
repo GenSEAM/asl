@@ -1,6 +1,6 @@
 (module asl-target-go/tests/ssaGoTest
   :x [runTests]
-  :i [(asl-ir/types :a ty) (asl-target-go/main :a go) (tools/fleet/run :a run)])
+  :i [(asl-ir/types :a ty) (asl-target-go/main :a go) (asl-tools/fleet/run :a run)])
 
 (schema SplitOut (:f exitCode Int64) (:f stdout String) (:f stderr String))
 

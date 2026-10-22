@@ -8,8 +8,8 @@
       (asl-target-llvm/ssaOpt :a opt)
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/sysRoute :a route)
-      (tools/nativeTest :a nt)
-      (tools/fleet/run :a run)])
+      (asl-tools/nativeTest :a nt)
+      (asl-tools/fleet/run :a run)])
 
 fn probeSource -> String
   (str "(module probe\n  :x [main pick again nothing adder apply]\n  :i [])\n\n"

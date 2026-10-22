@@ -49,11 +49,11 @@ asl/host/out/asl-host test asl/packages/asl-compiler/tests/<file>.asl
 
 | File | Result | Detail |
 |---|---|---|
-| `asl1Test.asl` | **fail** | needs the parent monorepo: imports `tools/nativeTest` |
+| `asl1Test.asl` | **fail** | needs the parent monorepo: imports `asl-tools/nativeTest` |
 | `c99AbiBridgeTest.asl` | pass | 18 assertions, 13 refutations |
 | `c99TargetTest.asl` | **fail** | needs the parent monorepo: reads `tests/acceptance/d81/ResolutionSample.asl` |
 | `calcFixture.asl` | pass | 2 assertions |
-| `checkCacheTest.asl` | **fail** | needs the parent monorepo: imports `tools/fleet/run` and `tools/nativeTest` |
+| `checkCacheTest.asl` | **fail** | needs the parent monorepo: imports `asl-tools/fleet/run` and `asl-tools/nativeTest` |
 | `coTest.asl` | pass | 32 assertions |
 | `compactRewriteTest.asl` | pass | 28 assertions |
 | `comptimeTest.asl` | pass | 54 assertions, 28 refutations |
@@ -78,7 +78,7 @@ asl/host/out/asl-host test asl/packages/asl-compiler/tests/<file>.asl
 | `wasmBinaryTargetTest.asl` | pass | 17 assertions, 5 refutations |
 | `wasmCodegenTest.asl` | pass | 15 assertions, 5 refutations |
 | `wasmLeb128Test.asl` | pass | 25 assertions, 9 refutations |
-| `wasmLoweringTest.asl` | **fail** | needs the parent monorepo: imports `tools/nativeTest` |
+| `wasmLoweringTest.asl` | **fail** | needs the parent monorepo: imports `asl-tools/nativeTest` |
 | `wasmOpcodesTest.asl` | pass | 31 assertions, 5 refutations |
 | `wasmSectionTest.asl` | pass | 29 assertions, 7 refutations |
 | `wasmTest.asl` | pass | 11 assertions, 6 refutations |

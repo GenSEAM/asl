@@ -3,7 +3,7 @@
   :i [(asl-ir/types :a ty)
       (asl-target-llvm :a llvm)
       (asl-target-llvm/emit :a em)
-      (tools/nativeTest :a nt)])
+      (asl-tools/nativeTest :a nt)])
 
 fn asl1Path -> String
   "asl/packages/asl-compiler/src/asl1.asl"

@@ -5,7 +5,7 @@
       (asl-syntax/core/print :a pr)
       (asl-syntax/asl/lex :a lx)
       (asl-syntax/asl/paren :a prn)
-      (tools/fleet/run :a run)])
+      (asl-tools/fleet/run :a run)])
 
 fn testParseUnclosedParen -> Bool
   (let [(s1 "(foo (bar 1 2)")

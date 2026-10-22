@@ -177,7 +177,7 @@ fn knownSourceInvalidPaths -> (List String)
     "tests/conformance/hostMigration/fixtures/fixtureTest.asl"
     "tests/conformance/hostMigration/fixtures/migration.asl"
     "tests/conformance/hostMigration/fixtures/numeric.asl"
-    ; (:m :ref NAMESFIX-FIX :do "the following 34 rows are pre-existing source-check failures, confirmed against base 010f3a1bc by a comprehensive methodology rather than piecemeal shard reruns: a single-shard (n=1 k=1) full-corpus run of printHostValidLib's runShard! on a disposable base-commit worktree found 111 files failing ./bin/asl check on base; a direct ./bin/asl check of each of those 111 against this merged tree found 77 now pass (fixed by EFFECT-INFER's ERR_EFFECT_UNMARKED work) and these 34 are still failing identically on both base and merge -- none are caused by any rename or by this merge's own edits. NAMES-FIX's merge of five parallel branches changed the total tracked-file count, which reshuffles printHostValid's n-of-16 sharding (shard index = position in the sorted all-files list mod 16), so a different, previously-masked pre-existing failure becomes each shard's first-encountered one; tools/fleet/run.asl carries the same poolLoop Unit/Result branch-type mismatch already fixed in asl-proc/src/jobPool.asl (commit 199db66d9), deliberately left unfixed here as out-of-scope for this unit")
+    ; (:m :ref NAMESFIX-FIX :do "the following 34 rows are pre-existing source-check failures, confirmed against base 010f3a1bc by a comprehensive methodology rather than piecemeal shard reruns: a single-shard (n=1 k=1) full-corpus run of printHostValidLib's runShard! on a disposable base-commit worktree found 111 files failing ./bin/asl check on base; a direct ./bin/asl check of each of those 111 against this merged tree found 77 now pass (fixed by EFFECT-INFER's ERR_EFFECT_UNMARKED work) and these 34 are still failing identically on both base and merge -- none are caused by any rename or by this merge's own edits. NAMES-FIX's merge of five parallel branches changed the total tracked-file count, which reshuffles printHostValid's n-of-16 sharding (shard index = position in the sorted all-files list mod 16), so a different, previously-masked pre-existing failure becomes each shard's first-encountered one; asl/tools/fleet/run.asl carries the same poolLoop Unit/Result branch-type mismatch already fixed in asl-proc/src/jobPool.asl (commit 199db66d9), deliberately left unfixed here as out-of-scope for this unit")
     "asl/packages/asl-codegen/tests/c99EmitTest.asl"
     "asl/packages/asl-codegen/tests/codegenTest.asl"
     "asl/packages/asl-gateway/src/router.asl"
@@ -203,7 +203,7 @@ fn knownSourceInvalidPaths -> (List String)
     "tests/acceptance/d81/Task52501.asl"
     "tests/acceptance/r1Host/sem/typePolymorphicTest.asl"
     "tests/acceptance/r1Prelude/fixtures/refuteEnum/enumImportTest.asl"
-    "tools/fleet/run.asl"
+    "asl/tools/fleet/run.asl"
     "tools/orch/main.asl"
     "tools/tests/aslRepoSyncTest.asl"
     )

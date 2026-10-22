@@ -4,8 +4,8 @@
       (asl-ir/link :a lk)
       (asl-ir/verify :a vfy)
       (asl-ir/printer :a prn)
-      (tools/nativeTest :a nt)
-      (tools/fleet/run :a fr)])
+      (asl-tools/nativeTest :a nt)
+      (asl-tools/fleet/run :a fr)])
 
 fn thisFile -> String
   "asl/packages/asl-ir/tests/quadScaleTest.asl"
@@ -43,7 +43,7 @@ fn workload m: ty/SsaModule -> Int64
                 (+ (listLength (vfy/verifySsaDiags rewritten))
                    (stringLength (prn/printSsa rewritten))))))))
 
-; (:m :ref HLAUDIT-LOWS :do "SCALE-TESTS-LOAD-20261017: testWorkloadIsLinear used to compare procRusage CPU-microsecond deltas (measureOnce/cpuUs, dropped); that is a wall/CPU-time assertion, and it was already borderline red running alone (n=3000 68225us vs n=6000 171168us, ratio 2.509 against an 'above 2.5x' gate, confirmed by hand before this fix), the same class of flake the audit saw go red under a loaded train and green alone; workloadBytes below replaces it with the GC's own :bytesAllocated count (ASL_GC_STATS=1 on a self-built child, the same tools/nativeTest/tools/fleet/run pattern asl-ir/tests/lowerAllocTest.asl and this package's own lowerScaleTest.asl already use), a deterministic function of n and the algorithm, not of scheduling or system load")
+; (:m :ref HLAUDIT-LOWS :do "SCALE-TESTS-LOAD-20261017: testWorkloadIsLinear used to compare procRusage CPU-microsecond deltas (measureOnce/cpuUs, dropped); that is a wall/CPU-time assertion, and it was already borderline red running alone (n=3000 68225us vs n=6000 171168us, ratio 2.509 against an 'above 2.5x' gate, confirmed by hand before this fix), the same class of flake the audit saw go red under a loaded train and green alone; workloadBytes below replaces it with the GC's own :bytesAllocated count (ASL_GC_STATS=1 on a self-built child, the same asl/tools/nativeTest/asl/tools/fleet/run pattern asl-ir/tests/lowerAllocTest.asl and this package's own lowerScaleTest.asl already use), a deterministic function of n and the algorithm, not of scheduling or system load")
 fn ! statsLine text: String -> String
   (optionOr (listHead (filter (fn [(line String)] -> Bool (stringStartsWith? line "(:gcStats ")) (stringSplit text "\n"))) "")
 

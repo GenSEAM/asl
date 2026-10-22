@@ -73,7 +73,7 @@ here is a claim about the future except the items themselves.
    `asl fetch` writes `asl.lock.asn` (git revision and tree hash, npm integrity) into a cache;
    the loader resolves only from the lock and cache, never the network. Make
    `asl-pack/src/packageAsl.asl` the one manifest parser.
-9. **Linux.** A linux-x86_64 seed (`asl1` and the runtime seed) and the `tools/seed.asl` that `seed/seed.asn`
+9. **Linux.** A linux-x86_64 seed (`asl1` and the runtime seed) and the `asl/tools/seed.asl` that `seed/seed.asn`
    names for `regen` and `check` but this tree does not have; the
    `verbs.c` `PATH_MAX` include (owned by the host work); layout-agnostic root discovery so a
    standalone clone works (`rules.asl`, `pack.asl`, `build.sh`, `distrib.asl`, the installer's

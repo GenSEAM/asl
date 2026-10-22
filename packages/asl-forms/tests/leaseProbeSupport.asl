@@ -1,6 +1,6 @@
 (module asl-forms/tests/leaseProbeSupport
   :x [leaseClaimWorks!]
-  :i [(asl-coord/claims :a coord) (tools/fleet/run :a fr)])
+  :i [(asl-coord/claims :a coord) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref HLLOWS-TRAINFIX :do "leaseClaimWorks! moved out of asl/grammar/tests/capabilitiesTruthTest.asl (the grammarExamples audit surface, meant to model clean idiomatic style for agents) into this sibling of asl-forms/tests/claimTest.asl, which already probes claim!/release! the same way; the throwaway-repo setup and teardown calls envGet/nowNs/pathRemove/fileExists? as raw host builtins, same as claimTest.asl's own tmp-root line, which the builtinBang codemod has not reached yet (plan row EFFECT-BUILTINS-BANG) -- keeping that debt out of the grammar surface instead of counting it there")
 fn leaseProbeRoot! -> String

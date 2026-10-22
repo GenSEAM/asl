@@ -1,7 +1,7 @@
 (module asl-target-llvm/tests/gcMarkSpeedTest
   :x [runTests]
   :i [(asl-ir/link :a lk) (asl-ir/types :a ty) (asl-target-llvm :a llvm) (asl-target-llvm/libc :a libc) (asl-target-llvm/gcRoute :a gr)
-      (asl-target-llvm/gcAsl :a gc) (tools/fleet/run :a run)])
+      (asl-target-llvm/gcAsl :a gc) (asl-tools/fleet/run :a run)])
 
 fn clangLink -> String
   "/usr/bin/clang -O2 -Wno-override-module -x ir "

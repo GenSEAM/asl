@@ -1,7 +1,7 @@
 (module asl-parser/fieldDotParityTest
   :x [runTests]
   :i [(asl-parser/ast :a ast) (asl-parser/lexer :a lx) (asl-parser/reader :a rd)
-      (tools/nativeTest :a nt) (tools/fleet/run :a fr)])
+      (asl-tools/nativeTest :a nt) (asl-tools/fleet/run :a fr)])
 
 fn tree e: rd/SExpr -> String
   (match e

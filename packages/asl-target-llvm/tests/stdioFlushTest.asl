@@ -1,6 +1,6 @@
 (module asl-target-llvm/tests/stdioFlushTest
   :x [runTests]
-  :i [(tools/fleet/run :a run) (asl-target-llvm/rtAbi :a rtAbi) (asl-cli/asl1Cache :a cache) (asl-cli/system :a sys)])
+  :i [(asl-tools/fleet/run :a run) (asl-target-llvm/rtAbi :a rtAbi) (asl-cli/asl1Cache :a cache) (asl-cli/system :a sys)])
 
 ; (:m :ref NATIVE-STDIO-FLUSH :do "native stdio is unbuffered for print/println (raw write(2) in rtFormat.asl), but a native process can still hold buffered libc stdio open across a fork/exec or exit if something upstream (a linked C library, or future code) ever buffers through FILE*; this matches the already-established fflush-before-fork/fflush-before-exit convention in parallel.asl's own native worker pool. Checked structurally against the generated LLVM IR text rather than by chasing a live repro, since every buffered-I/O path this codebase currently owns (print/println, processRun's open_memstream capture) was independently confirmed already correct; the fix is defensive parity with host semantics and with parallel.asl's own precedent for every other fork/exit site: rtAbi.asl's asl_rt_main body thread, processRunFn's shell-exec fork, and processSpawnFn's fork")
 

@@ -1,4 +1,4 @@
-(module asl-cli/tests/frozenDirTest :x [runTests] :i [(tools/fleet/run :a run)])
+(module asl-cli/tests/frozenDirTest :x [runTests] :i [(asl-tools/fleet/run :a run)])
 
 fn ! cliWithin! root: String cache: String timeoutS: Int64 argv: (List String) -> run/Done
   (run/runOneLimited

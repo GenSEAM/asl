@@ -1,6 +1,6 @@
 (module asl-target-llvm/tests/gcAslTest
   :x [runTests]
-  :i [(asl-target-llvm/gcRoute :a gr) (asl-target-llvm/ssa :a ssa) (tools/fleet/run :a run)])
+  :i [(asl-target-llvm/gcRoute :a gr) (asl-target-llvm/ssa :a ssa) (asl-tools/fleet/run :a run)])
 
 fn host -> String
   "asl/host/out/asl-host"

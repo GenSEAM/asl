@@ -1,4 +1,4 @@
-(module asl-parser/desugarHostTest :x [runTests] :i [(indentParser :a ip) (reader :a rd) (tools/nativeTest :a nt) (tools/fleet/run :a fr)])
+(module asl-parser/desugarHostTest :x [runTests] :i [(indentParser :a ip) (reader :a rd) (asl-tools/nativeTest :a nt) (asl-tools/fleet/run :a fr)])
 
 fn ! nativeEval expr: String -> fr/Done
   (let [(probePath "asl/packages/asl-parser/tests/tmpDesugarProbe.asl")

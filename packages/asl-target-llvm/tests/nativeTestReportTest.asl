@@ -1,6 +1,6 @@
 (module asl-target-llvm/tests/nativeTestReportTest
   :x [runTests]
-  :i [(tools/nativeTest :a nt)])
+  :i [(asl-tools/nativeTest :a nt)])
 
 ; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): compareSuite used to run each sample suite on a live asl-host and parse its own 'N assertion(s) executed[, M refutation(s) executed]' verdict line (hostCounts) as the expected count. Every sample path is a fixed, already-committed suite whose own assertion/refutation count only changes if its source changes (the same assumption any golden-value test makes), so the live host run is replaced by a recordedCounts table captured once from the leftover asl-host binary before HL-DELETE removed it. The fourth sample, tests/conformance/loader/workspaceNameImportTest.asl, is dropped: it is not owned by this unit and its OWN test body shells out to the now-deleted 'asl/host/out/asl-host run asl/packages/asl-compiler/src/asl1.asl build/check ...' as part of what it tests, so it fails under both host and native compilation regardless of this file's own port (an asl1.asl-build pattern matching the one this unit already replaced elsewhere via asl-cli/asl1Cache nativeAsl1!, but out of :owns here); swapped for asl-target-llvm/tests/nativeRtGapsTest.asl, this unit's own already-ported, now fully host-free suite, confirmed to report the same (12, 0) count whether loaded by the leftover host or compiled natively")
 

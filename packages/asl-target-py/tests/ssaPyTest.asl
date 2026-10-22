@@ -1,6 +1,6 @@
 (module asl-target-py/tests/ssaPyTest
   :x [runTests]
-  :i [(asl-ir/types :a ty) (asl-target-py/main :a py) (tools/fleet/run :a run)])
+  :i [(asl-ir/types :a ty) (asl-target-py/main :a py) (asl-tools/fleet/run :a run)])
 
 (schema SplitOut (:f exitCode Int64) (:f stdout String) (:f stderr String))
 

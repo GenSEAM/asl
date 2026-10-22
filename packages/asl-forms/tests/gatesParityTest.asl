@@ -1,4 +1,4 @@
-(module asl-forms/tests/gatesParityTest :x [runTests main] :i [(asl-forms/kernel :a k) (asl-forms/gate :a g) (asl-forms/ops :a ops) (asl-forms/wire :a w) (asl-forms/main :a m) (tools/nativeTest :a nt)])
+(module asl-forms/tests/gatesParityTest :x [runTests main] :i [(asl-forms/kernel :a k) (asl-forms/gate :a g) (asl-forms/ops :a ops) (asl-forms/wire :a w) (asl-forms/main :a m) (asl-tools/nativeTest :a nt)])
 
 
 (schema Case (:f id String) (:f kind String) (:f root String) (:f form String) (:f exit String) (:f stdout String) (:f log String) (:f lock String))

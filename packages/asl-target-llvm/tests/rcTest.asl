@@ -7,7 +7,7 @@
       (asl/packages/asl-cli/src/system :a sys)
       (asl/packages/asl-cli/src/asl1Cache :a cache)
       (asl/packages/asl-cli/src/nativeBuild :a nb)
-      (tools/fleet/run :a run)])
+      (asl-tools/fleet/run :a run)])
 
 (schema Libs
   (:f plain String)

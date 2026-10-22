@@ -62,7 +62,7 @@
       :examples ("(:eval :code \"(+ 1 2)\")")
       :errors (ERR_MISSING_ARG ERR_BAD_TIMEOUT ERR_TIMEOUT ERR_EVAL ERR_PROCESS)
       :related (run help)
-      :doc "Run the code through the native route when the workspace has tools/nativeTest.asl, else through asl-host eval (:via :host); returns :value (the last line printed), :stdout and status. Every failure exits 1.")
+      :doc "Run the code through the native route when the workspace has asl/tools/nativeTest.asl, else through asl-host eval (:via :host); returns :value (the last line printed), :stdout and status. Every failure exits 1.")
 
     (:op :mem
       :scope any

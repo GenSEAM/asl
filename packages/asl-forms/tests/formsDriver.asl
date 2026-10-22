@@ -1,4 +1,4 @@
-(module asl-forms/tests/formsDriver :x [formsBin!] :i [(tools/nativeTest :a nt)])
+(module asl-forms/tests/formsDriver :x [formsBin!] :i [(asl-tools/nativeTest :a nt)])
 
 fn ! formsBin! repo: String -> String
   (let [(built (nt/prepareRun "asl/packages/asl-forms/src/main.asl" (nt/fingerprint)))]

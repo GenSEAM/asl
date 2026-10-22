@@ -1,6 +1,6 @@
 (module asl-ir/tests/arityAllocTest
   :x [runTests main]
-  :i [(asl-ir/lower :a lw) (tools/nativeTest :a nt) (tools/fleet/run :a fr)])
+  :i [(asl-ir/lower :a lw) (asl-tools/nativeTest :a nt) (asl-tools/fleet/run :a fr)])
 
 fn thisFile -> String
   "asl/packages/asl-ir/tests/arityAllocTest.asl"

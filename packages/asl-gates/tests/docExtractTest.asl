@@ -1,6 +1,6 @@
 (module asl-gates/tests/docExtractTest
   :x [testModuleDoc! testFnDoc! testFieldDoc! testEscaped! testComments! testDryRunNoWrite! testApplyRoundTrip! testMutantGuards! testNoteScan! testNoteMutantGuards! testNoteApply! runTests]
-  :i [(asl-gates/docExtract :a dx) (asl-parser/ast :a ast) (tools/fleet/run :a fr)])
+  :i [(asl-gates/docExtract :a dx) (asl-parser/ast :a ast) (asl-tools/fleet/run :a fr)])
 
 fn fixtureDir -> String
   "asl/packages/asl-gates/tests/fixtures/docExtract"

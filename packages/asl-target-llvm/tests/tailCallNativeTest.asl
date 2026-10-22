@@ -2,7 +2,7 @@
   :x [runTests]
   :i [(asl-ir/types :a ty)
       (asl-target-llvm :a llvm)
-      (tools/nativeTest :a nt)])
+      (asl-tools/nativeTest :a nt)])
 
 fn probe -> String
   "asl/packages/asl-target-llvm/tests/fixtures/tailCall/tailProbe.asl"

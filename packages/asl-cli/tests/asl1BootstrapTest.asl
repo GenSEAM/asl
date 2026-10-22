@@ -367,7 +367,7 @@ fn ! testSeedSelection -> Bool
               (staleStages (stages! f))
               (_ (assert (exitedZero? stale) "a stale seed returns the typed error through the production entry point"))
               (_ (assert (printed? stale "ERR_SEED_STALE: ") "a seed that cannot build the sources is ERR_SEED_STALE"))
-              (_ (assert (printed? stale "tools/seed.asl regen") "the stale-seed error names the regeneration command"))
+              (_ (assert (printed? stale "asl/tools/seed.asl regen") "the stale-seed error names the regeneration command"))
               (_ (assert (= staleStages "stale\n") "a stale seed stops after its own stage"))
               (_ (assert (not (hasInstalledNative? (str root "/cacheD"))) "a stale seed installs nothing"))]
           (cleanup root true)))))

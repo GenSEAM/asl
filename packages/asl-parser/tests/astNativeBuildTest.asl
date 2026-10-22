@@ -1,4 +1,4 @@
-(module asl-parser/astNativeBuildTest :x [runTests] :i [(tools/nativeTest :a nt)])
+(module asl-parser/astNativeBuildTest :x [runTests] :i [(asl-tools/nativeTest :a nt)])
 
 fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)

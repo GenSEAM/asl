@@ -5,7 +5,7 @@
       (asl-target-llvm :a targetLlvm)
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/target :a target)
-      (tools/fleet/run :a run)])
+      (asl-tools/fleet/run :a run)])
 
 fn trapSource name: String expression: String -> String
   (str "(module " name " :x [main] :i [])\n\nfn ! main -> (Result Int64 String)\n  " expression)

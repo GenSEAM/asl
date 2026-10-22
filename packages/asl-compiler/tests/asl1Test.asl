@@ -1,7 +1,7 @@
 (module asl-compiler/tests/asl1Test
   :x [runTests]
   :i [(asl-checker/resolve :a r)
-      (tools/nativeTest :a nt)])
+      (asl-tools/nativeTest :a nt)])
 
 fn asl1 -> String
   "asl/packages/asl-compiler/src/asl1.asl"

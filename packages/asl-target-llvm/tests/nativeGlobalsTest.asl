@@ -1,6 +1,6 @@
 (module asl-target-llvm/tests/nativeGlobalsTest
   :x [runTests]
-  :i [(tools/nativeTest :a nt)
+  :i [(asl-tools/nativeTest :a nt)
       (asl-target-llvm/ssa :a llvm)])
 
 fn libSource name: String -> String
@@ -31,7 +31,7 @@ fn ! testLinkInits -> Bool
         (assert (= (llvm/ensureInit entryIr "e") entryIr) "ensureInit keeps an existing init")
         true))
 
-; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): libA/mainB is a fixed, deterministic fixture (only its generated path varies), so hostRun below is a one-time recorded capture of asl-host's own output for this exact fixture, taken before HL-DELETE removed the binary. The native side already builds through tools/nativeTest's own prepareRunIn, so it cannot also serve as this suite's independent oracle without comparing native against itself; the recorded capture is used instead")
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): libA/mainB is a fixed, deterministic fixture (only its generated path varies), so hostRun below is a one-time recorded capture of asl-host's own output for this exact fixture, taken before HL-DELETE removed the binary. The native side already builds through asl/tools/nativeTest's own prepareRunIn, so it cannot also serve as this suite's independent oracle without comparing native against itself; the recorded capture is used instead")
 
 fn recordedHostRun -> nt/ProcOut
   (nt/ProcOut :exitCode 0 :stdout "libA loaded\nshared\n" :stderr "")

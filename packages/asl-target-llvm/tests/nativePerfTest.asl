@@ -1,8 +1,8 @@
 (module asl-target-llvm/tests/nativePerfTest
   :x [runTests]
-  :i [(tools/nativeTest :a nt) (asl-target-llvm/tests/nativeOracle :a oracle)])
+  :i [(asl-tools/nativeTest :a nt) (asl-target-llvm/tests/nativeOracle :a oracle)])
 
-; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): nativeRun and the inline 'asl-host run tools/nativeTest.asl run ...' shells in testTypedFields/testListBuilders/testFloorFix/testBits used asl-host purely as a launcher for tools/nativeTest.asl's native-build-and-run pipeline, never as an oracle; they become '<selfBin> run ...' where selfBin is oracle/selfTestBinary!, a self-compiled native binary of tools/nativeTest.asl itself (confirmed drop-in identical behavior). hostRun, used only in testTraps/testGcStress as the live interpretation oracle compared against native output, has no replacement interpreter left; its results are fixed per case (trapProbe.asl and the bench/native fixtures are deterministic), so they become recordedTrap/recordedGc literal tables captured once from the leftover asl-host binary before HL-DELETE removed it")
+; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): nativeRun and the inline 'asl-host run asl/tools/nativeTest.asl run ...' shells in testTypedFields/testListBuilders/testFloorFix/testBits used asl-host purely as a launcher for asl/tools/nativeTest.asl's native-build-and-run pipeline, never as an oracle; they become '<selfBin> run ...' where selfBin is oracle/selfTestBinary!, a self-compiled native binary of asl/tools/nativeTest.asl itself (confirmed drop-in identical behavior). hostRun, used only in testTraps/testGcStress as the live interpretation oracle compared against native output, has no replacement interpreter left; its results are fixed per case (trapProbe.asl and the bench/native fixtures are deterministic), so they become recordedTrap/recordedGc literal tables captured once from the leftover asl-host binary before HL-DELETE removed it")
 
 (schema Recorded
   (:f exitCode Int64)
@@ -268,7 +268,7 @@ fn ! testBits ntBin: String cache: String -> Bool
 
 fn ! runTests -> Bool
   (match (oracle/selfTestBinary!)
-    ((err e) (do (assert false (str "self-building tools/nativeTest.asl: " e)) false))
+    ((err e) (do (assert false (str "self-building asl/tools/nativeTest.asl: " e)) false))
     ((ok ntBin)
      (let [(made (sh "mktemp -d"))
            (cache (stringTrim made.stdout))]

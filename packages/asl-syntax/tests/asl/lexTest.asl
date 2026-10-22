@@ -4,7 +4,7 @@
       (asl-syntax/core/tree :a tr)
       (asl-syntax/core/print :a pr)
       (asl-syntax/asl/lex :a lx)
-      (tools/fleet/run :a run)])
+      (asl-tools/fleet/run :a run)])
 
 fn testDelimitersAndTrivia -> Bool
   (let [(s "( [ { } ] ) , \n \r\n ; comment\n")

@@ -1,7 +1,7 @@
 (module aslGateway/tests/keyFilesTest
   :x [runTests]
   :i [(config :a cfg)
-      (tools/fleet/run :a fr)
+      (asl-tools/fleet/run :a fr)
       (asl-parser/ast :a ast)
       (asl-parser/lexer :a lx)
       (asl-parser/reader :a rd)])

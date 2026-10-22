@@ -1,6 +1,6 @@
 (module asl-target-llvm/tests/deepStackTest
   :x [runTests]
-  :i [(tools/fleet/run :a run) (asl-cli/asl1Cache :a cache) (asl-cli/system :a sys)])
+  :i [(asl-tools/fleet/run :a run) (asl-cli/asl1Cache :a cache) (asl-cli/system :a sys)])
 
 (schema Captured
   (:f exitCode Int64)
@@ -22,7 +22,7 @@ fn ! shWithin cmd: String timeoutS: Int64 -> Captured
 fn ! sh cmd: String -> Captured
   (shWithin cmd 120)
 
-; (:m :ref NATIVE-STACK-GUARD :do "beyond-limit case: recursion deep enough to exceed native's 1 GiB body-thread stack (rtAbi mainText). Runs as a real subprocess since a stack overflow cannot safely let the same process keep asserting afterward. Before NATIVE-STACK-GUARD: native died raw (SIGBUS/SIGSEGV, exit 128+signal, no message). After: rtAbi's guard-page sigaltstack handler (rtAbi.asl#locateDarwinText) reports ERR_STACK_DEPTH and exits 1. HL-E-LLVM (asl-host deleted): the build used to go through asl-host interpreting asl1.asl, now uses the cached native asl1 compiler (asl-cli/asl1Cache nativeAsl1!); the suite also used to assert that asl-host's own interpreter guards the identical recursion the same way, a claim about the deleted interpreter with no native analogue (tools/nativeTest.asl's -O2 native compile of the same source does not even hit the guard: 50000000 frames fit comfortably below 1 GiB at that optimization level), so that one assertion is dropped rather than ported; the native rtAbi guard-page assertions below are unchanged")
+; (:m :ref NATIVE-STACK-GUARD :do "beyond-limit case: recursion deep enough to exceed native's 1 GiB body-thread stack (rtAbi mainText). Runs as a real subprocess since a stack overflow cannot safely let the same process keep asserting afterward. Before NATIVE-STACK-GUARD: native died raw (SIGBUS/SIGSEGV, exit 128+signal, no message). After: rtAbi's guard-page sigaltstack handler (rtAbi.asl#locateDarwinText) reports ERR_STACK_DEPTH and exits 1. HL-E-LLVM (asl-host deleted): the build used to go through asl-host interpreting asl1.asl, now uses the cached native asl1 compiler (asl-cli/asl1Cache nativeAsl1!); the suite also used to assert that asl-host's own interpreter guards the identical recursion the same way, a claim about the deleted interpreter with no native analogue (asl/tools/nativeTest.asl's -O2 native compile of the same source does not even hit the guard: 50000000 frames fit comfortably below 1 GiB at that optimization level), so that one assertion is dropped rather than ported; the native rtAbi guard-page assertions below are unchanged")
 
 fn ! nativeAsl1Bin! -> (Result String String)
   (match (sys/context!)

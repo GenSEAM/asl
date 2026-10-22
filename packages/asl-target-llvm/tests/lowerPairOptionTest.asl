@@ -1,6 +1,6 @@
 (module asl-target-llvm/tests/lowerPairOptionTest
   :x [runTests]
-  :i [(asl-ir/link :a lk) (asl-ir/types :a ty) (asl-target-llvm :a llvm) (tools/fleet/run :a run)])
+  :i [(asl-ir/link :a lk) (asl-ir/types :a ty) (asl-target-llvm :a llvm) (asl-tools/fleet/run :a run)])
 
 (schema Captured
   (:f exitCode Int64)

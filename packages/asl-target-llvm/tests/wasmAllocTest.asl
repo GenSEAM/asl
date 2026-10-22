@@ -1,6 +1,6 @@
 (module asl-target-llvm/tests/wasmAllocTest
   :x [runTests]
-  :i [(asl-target-llvm/wasmAlloc :a wa) (tools/fleet/run :a run)])
+  :i [(asl-target-llvm/wasmAlloc :a wa) (asl-tools/fleet/run :a run)])
 
 (schema Captured
   (:f exitCode Int64)

@@ -1,6 +1,6 @@
 (module asl-parser/tests/checkSpeedParseTest
   :x [runTests main]
-  :i [(asl-parser/ast :a a) (asl-parser/reader :a rd) (tools/fleet/run :a fr)])
+  :i [(asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-tools/fleet/run :a fr)])
 
 fn sx e: rd/SExpr -> String
   (match e

@@ -1,5 +1,5 @@
 (module asl-forms/evalOp :x [evalStep! nativeEntry!]
-  :i [(asl-forms/kernel :a k) (asl-proc/coreProcess :a cp) (tools/nativeTest :a nt)])
+  :i [(asl-forms/kernel :a k) (asl-proc/coreProcess :a cp) (asl-tools/nativeTest :a nt)])
 
 fn outputLine id: Int64 status: String fields: String -> String
   (str "(:eval :id " (stringFromInt64 id) " :status :" status fields ")")

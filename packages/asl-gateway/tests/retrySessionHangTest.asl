@@ -1,6 +1,6 @@
 (module aslGateway/tests/retrySessionHangTest
   :x [runTests]
-  :i [(asl-json/json :a j) (aslGateway/pyText :a pt) (tools/fleet/run :a fr)])
+  :i [(asl-json/json :a j) (aslGateway/pyText :a pt) (asl-tools/fleet/run :a fr)])
 
 ; (:m :tags (retry) :do "GW-RETRY-OCGO-HANG: reproduces the reported hang for a provider that declares :sessionHeader (OpenCode's x-opencode-session) and a :pool batch window (mirroring the real modal provider's settings, which an opencodeGo-style scratch config can inherit by copying the same template) combined with :retry. Root cause confirmed by this test before the fix: a provider's :pool window exists to amortize a serverless cold start across concurrent arrivals, so the FIRST request into an idle lane deliberately waits up to :windowMs before dispatch. A retried attempt is not a sibling arrival -- retryOrFinish already slept once, so by the time it resubmits, the lane has gone idle again (the prior batch settled and scaled down), and the retry pays the full :windowMs a second time, parked in the pool's own queue (not connTimer/connBucketWait), with nothing logged while it waits. Across :max retries this compounds past any attempt timeout with little to no gateway output, matching the reported symptom exactly. The stub also records the session header it saw on each hit, confirming that header stays stable across the retry (it does -- the header was never the bug)")
 
@@ -201,7 +201,7 @@ fn ! runTests -> Bool
         (command (str "exec " host " run " server " serve --port 0 --upstream " base " --ready " readyPath " 1>" temp "/gateway.out 2>" temp "/gateway.err"))
         (env (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" temp) (str "ASL_GATEWAY_ROOT=" temp)
                    (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") (nativeCliCacheEnvRow!)))
-        ; (:m :ref NOSELFHOST-RETRYCONC-20261017 :do "fix NOSELFHOST-RETRYCONC: a bare procSpawnv here was an un-bounded, un-tree-tracked child start (rule spawnSafety); fr/spawn is the same tools/fleet/run.asl every other fleet caller starts children through, and its killTree! below (rather than a bare negative-pid procKill) takes the whole process tree this one row of /bin/sh -c ... could have grown, not just the shell's own pid")
+        ; (:m :ref NOSELFHOST-RETRYCONC-20261017 :do "fix NOSELFHOST-RETRYCONC: a bare procSpawnv here was an un-bounded, un-tree-tracked child start (rule spawnSafety); fr/spawn is the same asl/tools/fleet/run.asl every other fleet caller starts children through, and its killTree! below (rather than a bare negative-pid procKill) takes the whole process tree this one row of /bin/sh -c ... could have grown, not just the shell's own pid")
         (running (fr/spawn 0 (fr/job (list "/bin/sh" "-c" command) (resultOr (realPath ".") ".") env)))
         (pid (match running ((ok r) r.pid) ((err _) 0)))
         (gatewayPort (if (> pid 0) (waitPort! readyPath 500) 0))

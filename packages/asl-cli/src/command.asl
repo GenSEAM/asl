@@ -200,7 +200,7 @@ fn ! eval! ctx: sys/Context args: (List String) -> Int64
           (rootReal (resultOr (realPath ctx.root) ctx.root))]
       (if (or (listEmpty? (rest args)) (not (sys/executable? ctx.hostBin)) (!= cwdReal rootReal))
         (do (sys/sayErr! (str "usage: asl eval --native EXPR (requires asl-host and the workspace root " ctx.root ")")) 2)
-        (sys/execv! (list ctx.hostBin "run" (str ctx.root "/tools/nativeTest.asl") "eval" (stringJoin (rest args) " ")) (list))))
+        (sys/execv! (list ctx.hostBin "run" (str ctx.root "/asl/tools/nativeTest.asl") "eval" (stringJoin (rest args) " ")) (list))))
   (let [(expr (stringJoin args " "))]
     (if (not (sys/executable? ctx.hostBin))
       (do (sys/say! (sys/hostAbsent "eval")) 2)
@@ -387,7 +387,7 @@ fn ! test! ctx: sys/Context args: (List String) -> Int64
           (rootReal (resultOr (realPath ctx.root) ctx.root))]
       (if (or (listEmpty? suites) (!= cwdReal rootReal))
         (do (sys/say! (str "(:test :status :failed :error ERR_USAGE :message \"asl test --native SUITE... runs from the workspace root " ctx.root "\")")) 2)
-        (sys/execv! (cons ctx.hostBin (cons "run" (cons (str ctx.root "/tools/nativeTest.asl") suites)))
+        (sys/execv! (cons ctx.hostBin (cons "run" (cons (str ctx.root "/asl/tools/nativeTest.asl") suites)))
                     (list))))
     (let [(files (filter (fn [(a String)] -> Bool (!= a "--trace")) args))
           (tracing (or (listContains? args "--trace") (= (optionOr (envGet "ASL_TRACE") "0") "1")))
@@ -421,12 +421,12 @@ fn ! runFile! ctx: sys/Context args: (List String) -> Int64
     ((not (sys/executable? ctx.hostBin)) (do (sys/say! (sys/hostAbsent "run")) 2))
     (else
       (let [(argv (runArgv ctx args))]
-        (sys/execv! argv (if (listContains? argv (str ctx.root "/tools/nativeTest.asl")) (list) (preludeEnv))))))
+        (sys/execv! argv (if (listContains? argv (str ctx.root "/asl/tools/nativeTest.asl")) (list) (preludeEnv))))))
 
 fn ! runArgv ctx: sys/Context args: (List String) -> (List String)
   (let [(file (first args))
         (host ctx.hostBin)
-        (native (str ctx.root "/tools/nativeTest.asl"))
+        (native (str ctx.root "/asl/tools/nativeTest.asl"))
         (rootPrefix (str ctx.root "/"))
         (cwdReal (resultOr (realPath ".") "."))
         (rootReal (resultOr (realPath ctx.root) ctx.root))]

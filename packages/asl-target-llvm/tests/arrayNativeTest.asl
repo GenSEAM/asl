@@ -1,6 +1,6 @@
 (module asl-target-llvm/tests/arrayNativeTest
   :x [runTests]
-  :i [(tools/nativeTest :a nt)])
+  :i [(asl-tools/nativeTest :a nt)])
 
 fn clang -> String
   "/usr/bin/clang -Wno-override-module"
