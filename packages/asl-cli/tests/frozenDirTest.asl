@@ -16,6 +16,10 @@ fn ! cli! root: String cache: String argv: (List String) -> run/Done
 fn warmupDeadlineS -> Int64
   1200
 
+; (:m :ref TRAIN-SHARED-NATIVE-20261022 :do "the native CLI cache is the caller's shared one (the default $HOME/.asl/run/nativeCli that bin/asl uses), not a private /tmp dir: the suite asserts the frozen/live directory listing, so a private dir only made it cold-build the CLI (about 170s) on every run; the warm-up call stays so a cold shared cache still keeps its build banner out of the measured calls")
+fn sharedCache -> String
+  (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli")
+
 ; (:m :ref FROZENDIR-STALE :do "asl/grammar/frozen.asn freezes distribTest and installParityTest inside the live asl-target-sh/tests and the whole asl-vector/tests package; the other asl-target-sh suites unfroze on 2026-10-15")
 fn mixedDir -> String
   "asl/packages/asl-target-sh/tests"
@@ -47,14 +51,12 @@ fn ! checks! mode: String dir: run/Done explicit: run/Done live: run/Done -> Boo
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (configuredCache (optionOr (envGet "ASL_NATIVE_CLI_CACHE") ""))
-        (ownsCache (stringEmpty? configuredCache))
-        (cache (if ownsCache (str "/tmp/aslFrozenDirTest." (stringFromInt64 (procSelf))) configuredCache))
+        (cache (if (stringEmpty? configuredCache) (sharedCache) configuredCache))
         (liveDir "asl/packages/asl-cli/tests/fixtures/testChanged")
         (warm (cliWithin! root cache (warmupDeadlineS) (list "test" (mixedDir))))
         (nativeDir (cli! root cache (list "test" (mixedDir))))
         (nativeFile (cli! root cache (list "test" (frozenFile))))
         (nativeLive (cli! root cache (list "test" liveDir)))
-        (nativeChecks (checks! "bin/asl native path" nativeDir nativeFile nativeLive))
-        (removed (if ownsCache (pathRemove cache) (ok ()) ))]
+        (nativeChecks (checks! "bin/asl native path" nativeDir nativeFile nativeLive))]
     (do (assert (or (= warm.exit 0) (= warm.exit 1)) (str "the warm-up run of mixedDir (cold-start build) finished before any measured call: " warm.out))
-        (and nativeChecks (ok? removed))))
+        nativeChecks))

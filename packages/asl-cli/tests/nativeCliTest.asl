@@ -89,10 +89,14 @@ fn envName row: String -> String
   (optionOr (listHead (stringSplit row "=")) row)
 
 ; (:m :ref HL-FIXWAVE :do "HOSTBIN: host used to be the literal string /nonexistent/asl-host -- a path that merely happens not to exist, so replay! could not tell 'the build correctly never touched hostBin' apart from 'something else masked a touch that would otherwise have failed the same way'. host is now a real, executable witness stub (hostWitness!) that logs every invocation to ASL_HOST_WITNESS before exiting nonzero; runTests asserts that log stays empty across every replayed case, buildHostAbsent included, so a build that quietly execs ctx.hostBin is caught even if its exit code and output would otherwise have matched")
+; (:m :ref TRAIN-SHARED-NATIVE-20261022 :do "HOME=$ROOT made warmCli! and the one case that re-enters bin/asl build the whole native CLI into $ROOT/.asl/run/nativeCli, a per-tree cache; the caller's own cache dir is forwarded instead so both are cache hits, while an overriding case env still wins")
+fn sharedCli -> String
+  (optionOr (envGet "ASL_NATIVE_CLI_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli"))
+
 fn cliEnv root: String host: String errFile: String overrides: (List String) -> (List String)
   (listAppend (filter (fn [(row String)] -> Bool (not (listContains? (map envName overrides) (envName row))))
     (list "PATH=/usr/bin:/bin" (str "HOME=" root) "TMPDIR=/tmp" (str "ASL_ROOT=" root) (str "ASL_CLI_ROOT=" root) (str "ASL_CLI_SCRIPT_DIR=" root "/bin")
-        (str "ASL_CLI_ARGV0=" root "/bin/asl") (str "ASL_CLI_HOST_BIN=" host) (str "ASL_HOST=" host) (str "ASL_HOST_WITNESS=" host ".log") (str "NATIVE_CLI_ERR=" errFile)))
+        (str "ASL_CLI_ARGV0=" root "/bin/asl") (str "ASL_CLI_HOST_BIN=" host) (str "ASL_HOST=" host) (str "ASL_HOST_WITNESS=" host ".log") (str "NATIVE_CLI_ERR=" errFile) (str "ASL_NATIVE_CLI_CACHE=" (sharedCli))))
     overrides)
 
 fn ! hostWitness! path: String -> (Result Unit String)
