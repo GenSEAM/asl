@@ -1,13 +1,20 @@
 (module asl-cli/tests/frozenDirTest :x [runTests] :i [(tools/fleet/run :a run)])
 
-fn ! cli! root: String cache: String argv: (List String) -> run/Done
+fn ! cliWithin! root: String cache: String timeoutS: Int64 argv: (List String) -> run/Done
   (run/runOneLimited
     (run/job (listAppend (list "/usr/bin/nice" "-n" "15" (str root "/bin/asl")) argv) root
              (run/childEnv (list (str "ASL_ROOT=" root)
                                  (str "ASL_CLI_ROOT=" root)
                                  (str "ASL_PRELUDE=" root "/asl/prelude/prelude.asl")
                                  (str "ASL_NATIVE_CLI_CACHE=" cache))))
-    (run/limits 180 64))
+    (run/limits timeoutS 64))
+
+fn ! cli! root: String cache: String argv: (List String) -> run/Done
+  (cliWithin! root cache 180 argv)
+
+; (:m :ref FROZENDIR-COLDLIMIT-20261022 :do "the cold-start warm-up waits for the native build to finish under a hang guard, not a speed claim: the build took 184s under fleet load and the shared 180s kill limit made the suite red twice; measured calls after it keep 180s")
+fn warmupDeadlineS -> Int64
+  1200
 
 ; (:m :ref FROZENDIR-STALE :do "asl/grammar/frozen.asn freezes distribTest and installParityTest inside the live asl-target-sh/tests and the whole asl-vector/tests package; the other asl-target-sh suites unfroze on 2026-10-15")
 fn mixedDir -> String
@@ -43,7 +50,7 @@ fn ! runTests -> Bool
         (ownsCache (stringEmpty? configuredCache))
         (cache (if ownsCache (str "/tmp/aslFrozenDirTest." (stringFromInt64 (procSelf))) configuredCache))
         (liveDir "asl/packages/asl-cli/tests/fixtures/testChanged")
-        (warm (cli! root cache (list "test" (mixedDir))))
+        (warm (cliWithin! root cache (warmupDeadlineS) (list "test" (mixedDir))))
         (nativeDir (cli! root cache (list "test" (mixedDir))))
         (nativeFile (cli! root cache (list "test" (frozenFile))))
         (nativeLive (cli! root cache (list "test" liveDir)))
