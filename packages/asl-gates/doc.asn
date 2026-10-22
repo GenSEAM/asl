@@ -315,6 +315,7 @@
 (:doc :symbol "asl/packages/asl-gates/src/suiteTimes.asl#quotedLoop" :text "unescape to the closing quote; none if missing")
 (:doc :symbol "asl/packages/asl-gates/src/suiteTimes.asl#parseTimes" :text "a malformed row is an error, never skipped")
 (:doc :symbol "asl/packages/asl-gates/src/suiteTimes.asl#writeTimes!" :text "tmp then rename: readers never see half")
+(:doc :symbol "asl/packages/asl-gates/src/suiteTimes.asl#writeTimesIn!" :text "writeTimes! that drops rows whose suite file is gone under root")
 (:doc :symbol "asl/packages/asl-gates/src/suiteTimes.asl#startKey" :text "unknown first, then descending ms, then name")
 (:doc :symbol "asl/packages/asl-gates/src/suiteTimes.asl#startOrder" :text "job indices in start order")
 (:doc :symbol "asl/packages/asl-gates/src/vacuity.asl#" :text "Pure AgentSlang test vacuity detection port of scripts/audit/vacuity.py")
