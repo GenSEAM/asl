@@ -7,7 +7,7 @@ fn asl1 -> String
 
 fn ! asl1Bin! -> String
   (let [(built (nt/prepareRun (asl1) (nt/fingerprint)))]
-    (mt built.binary
+    (match built.binary
       ((some bin) bin)
       ((none) (do (assert false (str "asl1.asl builds natively: " built.reason)) ""))))
 
@@ -28,7 +28,7 @@ fn ! check cache: String entry: String -> fr/Done
   (fr/runOneLimited (fr/job (list (asl1Bin!) "check" entry) "." (fr/childEnv (list (str "ASL_CHECK_CACHE=" cache)))) (fr/limits 300 16))
 
 fn ! entriesIn dir: String -> (List String)
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err _) (list))
     ((ok names) (filter (fn [(n String)] -> Bool (stringEndsWith? n ".verdict")) names)))
 

@@ -6,7 +6,7 @@ fn srcDir -> String
   "asl/packages/asl-ir/src"
 
 fn ! sourceFiles -> (List String)
-  (mt (dirList (srcDir))
+  (match (dirList (srcDir))
     ((err _) (list))
     ((ok names) (map (fn [(n String)] -> String (str (srcDir) "/" n)) (filter (fn [(n String)] -> Bool (stringEndsWith? n ".asl")) names))))
 
@@ -22,7 +22,7 @@ fn rowDoc line: String -> (List (Pair String String))
     (list))
 
 fn ! ledgerDocs -> (List (Pair String String))
-  (mt (fileReadString (ledgerPath))
+  (match (fileReadString (ledgerPath))
     ((err _) (list))
     ((ok t) (fold (fn [(acc (List (Pair String String))) (line String)] -> (List (Pair String String)) (listAppend acc (rowDoc line))) (list) (stringSplit t "\n"))))
 
@@ -30,23 +30,23 @@ fn documented? docs: (List (Pair String String)) symbol: String -> Bool
   (listAny? (fn [(d (Pair String String))] -> Bool (and (= (pairFirst d) symbol) (> (stringLength (stringTrim (pairSecond d))) 2))) docs)
 
 fn undocumented docs: (List (Pair String String)) path: String t: a/TopForm -> (List String)
-  (mt t
+  (match t
     ((a/topDefun d) (if (and d.isExported (not (documented? docs (str path "#" d.name)))) (list (str path ": " d.name)) (list)))
     (_ (list)))
 
 fn ! missingIn docs: (List (Pair String String)) path: String -> (List String)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) (list (str path ": unreadable")))
-    ((ok src) (mt (a/parse src)
+    ((ok src) (match (a/parse src)
                 ((err pe) (list (str path ":" pe.line ":" pe.col ": parse error: " pe.msg)))
                 ((ok forms) (fold (fn [(acc (List String)) (t a/TopForm)] -> (List String) (listAppend acc (undocumented docs path t))) (list) forms)))))
 
 fn ! exportedCount path: String -> Int64
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) 0)
-    ((ok src) (mt (a/parse src)
+    ((ok src) (match (a/parse src)
                 ((err _) 0)
-                ((ok forms) (listLength (filter (fn [(t a/TopForm)] -> Bool (mt t ((a/topDefun d) d.isExported) (_ false))) forms))))))
+                ((ok forms) (listLength (filter (fn [(t a/TopForm)] -> Bool (match t ((a/topDefun d) d.isExported) (_ false))) forms))))))
 
 fn ! runTests -> Bool
   (let [(files (sourceFiles))

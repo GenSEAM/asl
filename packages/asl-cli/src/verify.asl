@@ -16,7 +16,7 @@ fn balanceError rc: Int64 -> String
   (if (= rc 2) "ERR_NO_FILE" "ERR_UNBALANCED")
 
 fn ! balance! paths: (List String) -> Int64
-  (mt (dyck/main paths) ((ok rc) rc) ((err e) (do (sys/sayErr! e) 2)))
+  (match (dyck/main paths) ((ok rc) rc) ((err e) (do (sys/sayErr! e) 2)))
 
 fn ! checkOther! paths: (List String) -> Int64
   (if (listEmpty? paths)
@@ -30,7 +30,7 @@ fn ! printDiag! d: ty/Diagnostic -> Bool
   (sys/sayErr! (formatDiag d))
 
 fn ! reportOne! path: String verdict: (Result cc/Verdict String) -> Int64
-  (mt verdict
+  (match verdict
     ((err _) (do (sys/sayErr! (str path ":0:0: ERR_IO cannot open file"))
                  (sys/sayErr! (str "check failed: " path ": 1 error(s)"))
                  1))
@@ -41,7 +41,7 @@ fn ! reportOne! path: String verdict: (Result cc/Verdict String) -> Int64
           (do (sys/sayErr! (str "check failed: " path ": " (stringFromInt64 (listLength v.diags)) " error(s)")) 1)))))
 
 fn ! nativeCheckStep! paths: (List String) cache: cc/Cache rc: Int64 -> Int64
-  (mt (listHead paths)
+  (match (listHead paths)
     ((none) rc)
     ((some p)
       (let [(r (cc/checkFileCached! p (checkRoots) cache))

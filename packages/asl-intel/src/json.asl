@@ -49,7 +49,7 @@ fn escLoop s: String b: Bytes n: Int64 i: Int64 start: Int64 acc: (List String) 
         (escLoop s b n (+ i k) (+ i k) (cons e (cons (t/sliceStr s start i) acc))))))
 
 fn emit v: Json level: Int64 acc: (List String) -> (List String)
-  (mt v
+  (match v
     ((jNull) (cons "null" acc))
     ((jBool x) (cons (if x "true" "false") acc))
     ((jInt x) (cons (t/intStr x) acc))

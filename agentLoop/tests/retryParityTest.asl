@@ -3,18 +3,18 @@
   :i [(asl/agentLoop/retry :a r) (asl/agentLoop/core :a c)])
 
 fn getKvStr kv: (List (Pair String c/KvVal)) k: String -> String
-  (mt (c/dictGet kv k)
-    ((some v) (mt v ((c/kvStr s) s) ((c/kvInt s) s)))
+  (match (c/dictGet kv k)
+    ((some v) (match v ((c/kvStr s) s) ((c/kvInt s) s)))
     (none ""))
 
 fn fixtureFloat cid: String s: String -> Float64
-  (mt (stringToFloat64 s)
+  (match (stringToFloat64 s)
     ((some f) f)
     ((none) (do (assert false (str cid " invalid float fixture: " s)) 0.0)))
 
 fn getKvInt kv: (List (Pair String c/KvVal)) k: String -> Int64
-  (mt (c/dictGet kv k)
-    ((some v) (mt v ((c/kvInt s) (optionOr (stringToInt64 s) 0)) ((c/kvStr s) (optionOr (stringToInt64 s) 0))))
+  (match (c/dictGet kv k)
+    ((some v) (match v ((c/kvInt s) (optionOr (stringToInt64 s) 0)) ((c/kvStr s) (optionOr (stringToInt64 s) 0))))
     (none 0))
 
 fn getKvBool kv: (List (Pair String c/KvVal)) k: String -> Bool
@@ -71,17 +71,17 @@ fn checkCase line: String -> Bool
           (do (assert (= got want) (str cid " advisorSkip should match")) true)))
 
       ((= fnName "parseAdvice")
-        (let [got (mt (r/parseAdvice (getKvStr kv "text"))
+        (let [got (match (r/parseAdvice (getKvStr kv "text"))
                     ((none) "(none)")
                     ((some a) (str "(some \"" (r/escapeAsn (r/adviceNext a)) "\" "
-                                    (mt (r/adviceWhy a) ((some w) (str "(some \"" (r/escapeAsn w) "\")")) ((none) "(none)"))
+                                    (match (r/adviceWhy a) ((some w) (str "(some \"" (r/escapeAsn w) "\")")) ((none) "(none)"))
                                     " "
-                                    (mt (r/adviceAvoid a) ((some w) (str "(some \"" (r/escapeAsn w) "\")")) ((none) "(none)"))
+                                    (match (r/adviceAvoid a) ((some w) (str "(some \"" (r/escapeAsn w) "\")")) ((none) "(none)"))
                                     ")")))]
           (do (assert (= got want) (str cid " parseAdvice should match")) true)))
 
       ((= fnName "parseSpecVerdict")
-        (let [got (mt (r/parseSpecVerdict (getKvStr kv "text"))
+        (let [got (match (r/parseSpecVerdict (getKvStr kv "text"))
                     ((none) "(none)")
                     ((some v) (str "(some " (if (r/verdictMet v) "true" "false") " ( "
                                     (stringJoin (map (fn [m] (str "\"" (r/escapeAsn m) "\"")) (r/verdictMissing v)) " ") "))")))]

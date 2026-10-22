@@ -50,18 +50,18 @@ fn cpSpan b: Bytes i: Int64 e: Int64 acc: Int64 -> Int64
     (let [(x (bytesGet b i))] (cpSpan b (+ i 1) e (if (and (>= x 128) (< x 192)) acc (+ acc 1)))))
 
 fn walkRel! ctx: h/Ctx dir: String root: String -> (Result (List String) String)
-  (mt (h/findTree! ctx dir false (list "*.asl"))
+  (match (h/findTree! ctx dir false (list "*.asl"))
     ((err e) (err e))
     ((ok tree) (ok (map (fn [(f String)] -> String (t/relPath f root ctx.cwd)) (h/walkFiles! tree)))))
 
 fn traceFiles! ctx: h/Ctx root: String target: String -> (Result (List String) String)
   (if (stringEmpty? target)
     (fold (fn [(acc (Result (List String) String)) (d String)] -> (Result (List String) String)
-            (mt acc
+            (match acc
               ((err e) (err e))
               ((ok xs) (let [(full (t/joinPath root d))]
                          (if (h/isDir? full)
-                           (mt (walkRel! ctx full root) ((ok ys) (ok (listAppend xs ys))) ((err e) (err e)))
+                           (match (walkRel! ctx full root) ((ok ys) (ok (listAppend xs ys))) ((err e) (err e)))
                            (ok xs))))))
           (ok (list)) (list "asl/packages/asl-intel" "tests/acceptance/d81"))
     (let [(full (if (stringStartsWith? target "/") target (t/joinPath root target)))]
@@ -77,7 +77,7 @@ fn hitOf name: String modName: String rel: String isTest: Bool branches: Int64 a
                        ((> branches 0) 3)
                        (else 1))))
         (taken (if isTest (min branches (max 1 branches))
-                 (if (> branches 0) (max 1 (mt (float64ToInt64 (* (int64ToFloat64 branches) 0.85)) ((some n) n) ((none) 0))) 0)))]
+                 (if (> branches 0) (max 1 (match (float64ToInt64 (* (int64ToFloat64 branches) 0.85)) ((some n) n) ((none) 0))) 0)))]
     (pair (FunctionHit :symbol name :module modName :file rel :calls calls :micros (* calls (+ 15 (/ bodyCps 20)))
                :status (cond ((>= calls 10) "hot") ((> calls 0) "warm") (else "cold"))
                :branches branches :asserts asserts)
@@ -92,12 +92,12 @@ fn hitOf name: String modName: String rel: String isTest: Bool branches: Int64 a
   (:f unique Int64))
 
 fn analyzeTrace! ctx: h/Ctx target: String -> (Result TraceSummary String)
-  (let [(root ctx.home) (brT (wordTable! (list "if" "cond" "mt" "when" "and" "or"))) (asT (wordTable! (list "assert" "refute")))]
-    (mt (traceFiles! ctx root target)
+  (let [(root ctx.home) (brT (wordTable! (list "if" "cond" "match" "when" "and" "or"))) (asT (wordTable! (list "assert" "refute")))]
+    (match (traceFiles! ctx root target)
       ((err e) (err e))
       ((ok files)
         (let [(acc (fold (fn [(a Acc) (rel String)] -> Acc
-                           (mt (h/readText! (t/joinPath root rel))
+                           (match (h/readText! (t/joinPath root rel))
                              ((err _) a)
                              ((ok code)
                                (let [(b (stringToBytes code)) (n (bytesLength b))
@@ -180,6 +180,6 @@ fn traceJson res: TraceSummary -> j/Json
                 (pair "assertCount" (j/jInt res.asserts))))
 
 fn runTrace! ctx: h/Ctx fmt: String target: String -> h/Outcome
-  (mt (analyzeTrace! ctx target)
+  (match (analyzeTrace! ctx target)
     ((err e) (h/outcome "" (str "Error: " e "\n") 1))
     ((ok res) (h/outcome (str (cond ((= fmt "json") (j/dumps (traceJson res))) ((= fmt "asn") (formatTraceAsn res)) (else (formatTraceSummary res))) "\n") "" 0)))

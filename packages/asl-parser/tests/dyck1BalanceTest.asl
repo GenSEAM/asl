@@ -47,7 +47,7 @@ fn testPureDyck1ParameterAndBindingConversion -> Bool
         (bodyExpr (rd/makeList (list (rd/makeAtom "+") (rd/makeAtom "x") (rd/makeAtom "y"))))
         (letSexpr (rd/makeList (list (rd/makeAtom "let") bindingsList bodyExpr)))
         (astExpr (cv/liftExpr letSexpr))]
-    (mt astExpr
+    (match astExpr
       ((a/exprLet bindings body)
         (assert (= (listLength bindings) 2) "pure Dyck-1 let lifts exactly 2 bindings")
         (refute (!= (listLength bindings) 2) "pure Dyck-1 let refutes wrong binding count")
@@ -80,9 +80,9 @@ fn testPureDyck1ParameterAndBindingConversion -> Bool
         (topRes (cv/sexprToTopForm fnSig))]
     (assert (ok? topRes) "sexprToTopForm accepts pure Dyck-1 parameter list")
     (refute (err? topRes) "sexprToTopForm refutes err on pure Dyck-1 params")
-    (mt topRes
+    (match topRes
       ((ok tf)
-        (mt tf
+        (match tf
           ((a/topDefun d)
             (assert (= d.name "compute") "defun name matches compute")
             (refute (!= d.name "compute") "defun name refutes divergence")

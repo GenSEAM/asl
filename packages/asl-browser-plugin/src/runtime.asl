@@ -63,7 +63,7 @@ fn listBrowserCapabilities -> (List BrowserCapability)
   (list (makeBrowserCapability "pathBoundary" "works" "") (makeBrowserCapability "wasmBatchRpc" "works" "") (makeBrowserCapability "vdomRender" "absent" "vdom is missing") (makeBrowserCapability "astParse" "works" "") (makeBrowserCapability "runCommand" "absent" "delegate to local or relay runtime via agent-bus") (makeBrowserCapability "procSpawn" "absent" "delegate to local or relay runtime via agent-bus") (makeBrowserCapability "netSocket" "absent" "use fetch or WebSockets via browser-bridge") (makeBrowserCapability "nativeFs" "absent" "use OPFS workspace"))
 
 fn findBrowserCapability caps: (List BrowserCapability) capId: Str -> (Option BrowserCapability)
-  (if (listEmpty? caps) none (let [(h (listHead caps)) (t (optionOr (listTail caps) (list)))] (mt h ((none) none) ((some c) (if (= c.id capId) (some c) (findBrowserCapability t capId))))))
+  (if (listEmpty? caps) none (let [(h (listHead caps)) (t (optionOr (listTail caps) (list)))] (match h ((none) none) ((some c) (if (= c.id capId) (some c) (findBrowserCapability t capId))))))
 
 fn queryBrowserCapability capId: Str -> (Option BrowserCapability)
   (findBrowserCapability (listBrowserCapabilities) capId)

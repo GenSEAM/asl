@@ -73,7 +73,7 @@ fn emptyMeta -> TurnMeta
   (TurnMeta :timing none :usage none :served none :finish none :truncated false)
 
 fn errorCode e: ProviderError -> String
-  (mt e
+  (match e
     ((providerError c _) c)
     ((valueError _) "ERR_VALUE")
     ((fileMissing _) "ERR_NOT_FOUND")
@@ -82,7 +82,7 @@ fn errorCode e: ProviderError -> String
     ((ioError _) "ERR_IO"))
 
 fn errorMessage e: ProviderError -> String
-  (mt e
+  (match e
     ((providerError _ m) m)
     ((valueError m) m)
     ((fileMissing m) m)
@@ -133,7 +133,7 @@ fn universalNewlines s: String -> String
   (stringReplace (stringReplace s "\r\n" "\n") "\r" "\n")
 
 fn indexFrom s: String t: String i: Int64 -> (Option Int64)
-  (mt (stringIndexOf (sub s i (stringLength s)) t)
+  (match (stringIndexOf (sub s i (stringLength s)) t)
     ((some k) (some (+ i k)))
     (none none))
 
@@ -148,10 +148,10 @@ fn dictPut kv: (List (Pair String T)) k: String v: T -> (List (Pair String T))
     (listAppend kv (list (pair k v))))
 
 fn groupLast xs: (List (Pair Int64 (Pair String T))) acc: (List (Pair Int64 (Pair String T))) -> (List (Pair Int64 (Pair String T)))
-  (mt (listHead xs)
+  (match (listHead xs)
     (none (listReverse acc))
     ((some x)
-      (mt (listHead acc)
+      (match (listHead acc)
         ((some a) (if (= (pairFirst (pairSecond a)) (pairFirst (pairSecond x)))
                     (groupLast (listDrop xs 1) (cons (pair (pairFirst a) (pairSecond x)) (listDrop acc 1)))
                     (groupLast (listDrop xs 1) (cons x acc))))
@@ -163,7 +163,7 @@ fn dictFromPairs ps: (List (Pair String T)) -> (List (Pair String T))
     (map pairSecond (listSortBy pairFirst (groupLast byKey (list)))))
 
 fn dictGet kv: (List (Pair String T)) k: String -> (Option T)
-  (mt (listHead (filter (fn [p] (= (pairFirst p) k)) kv))
+  (match (listHead (filter (fn [p] (= (pairFirst p) k)) kv))
     ((some p) (some (pairSecond p)))
     (none none))
 
@@ -244,7 +244,7 @@ fn pyReprBytes s: String -> String
     (str "b" qs (bytesReprLoop bs (bytesLength bs) 0 q (list)) qs))
 
 fn pyRepr v: j/Json -> String
-  (mt v
+  (match v
     ((j/jnull) "None")
     ((j/jbool b) (if b "True" "False"))
     ((j/jint i) (stringFromInt64 i))
@@ -255,12 +255,12 @@ fn pyRepr v: j/Json -> String
     ((j/jobj kvs) (str "{" (stringJoin (map (fn [p] (str (pyReprString (pairFirst p)) ": " (pyRepr (pairSecond p)))) kvs) ", ") "}")))
 
 fn pyStr v: j/Json -> String
-  (mt v
+  (match v
     ((j/jstr s) s)
     (_ (pyRepr v)))
 
 fn pyTruthy v: j/Json -> Bool
-  (mt v
+  (match v
     ((j/jnull) false)
     ((j/jbool b) b)
     ((j/jint i) (!= i 0))
@@ -302,7 +302,7 @@ fn jsonFloat f: Float64 -> String
     (cond ((= t "inf") "Infinity") ((= t "-inf") "-Infinity") ((= t "nan") "NaN") (else t)))
 
 fn pyJsonDumps v: j/Json -> String
-  (mt v
+  (match v
     ((j/jnull) "null")
     ((j/jbool b) (if b "true" "false"))
     ((j/jint i) (stringFromInt64 i))
@@ -313,17 +313,17 @@ fn pyJsonDumps v: j/Json -> String
     ((j/jobj kvs) (str "{" (stringJoin (map (fn [p] (str (jsonString (pairFirst p)) ": " (pyJsonDumps (pairSecond p)))) kvs) ", ") "}")))
 
 fn jsonLookup v: j/Json k: String -> (Option j/Json)
-  (mt v
+  (match v
     ((j/jobj kvs) (listLast (map pairSecond (filter (fn [p] (= (pairFirst p) k)) kvs))))
     (_ none))
 
 fn jsonDict v: j/Json -> (List (Pair String j/Json))
-  (mt v
+  (match v
     ((j/jobj kvs) (dictFromPairs kvs))
     (_ (list)))
 
 fn isObject v: j/Json -> Bool
-  (mt v ((j/jobj _) true) (_ false))
+  (match v ((j/jobj _) true) (_ false))
 
 fn asnStringEnd bs: Bytes n: Int64 j: Int64 -> (Result Int64 String)
   (cond
@@ -337,7 +337,7 @@ fn asnFormEnd bs: Bytes n: Int64 j: Int64 depth: Int64 -> (Result Int64 String)
     (err "unbalanced form")
     (let [(c (bytesGet bs j))]
       (cond
-        ((= c 34) (mt (asnStringEnd bs n (+ j 1)) ((ok k) (asnFormEnd bs n k depth)) ((err e) (err e))))
+        ((= c 34) (match (asnStringEnd bs n (+ j 1)) ((ok k) (asnFormEnd bs n k depth)) ((err e) (err e))))
         ((= c 40) (asnFormEnd bs n (+ j 1) (+ depth 1)))
         ((= c 41) (if (= depth 1) (ok (+ j 1)) (asnFormEnd bs n (+ j 1) (- depth 1))))
         (else (asnFormEnd bs n (+ j 1) depth)))))
@@ -371,14 +371,14 @@ fn fieldsLoop s: String bs: Bytes n: Int64 i: Int64 fields: (List (Pair String S
       ((>= i1 (- n 1)) (ok (dictFromPairs (listReverse fields))))
       ((!= (bytesGet bs i1) 58) (err (str "expected a keyword at offset " (stringFromInt64 (charIndex bs i1 0 0)))))
       (else
-        (mt (asnValueEnd bs n i1)
+        (match (asnValueEnd bs n i1)
           ((err e) (err e))
           ((ok keyEnd)
             (let [(key (sub s (+ i1 1) keyEnd))
                   (i2 (runWhile bs n keyEnd isPySpace))]
               (if (>= i2 (- n 1))
                 (err (str "keyword :" key " has no value"))
-                (mt (asnValueEnd bs n i2)
+                (match (asnValueEnd bs n i2)
                   ((err e) (err e))
                   ((ok valEnd)
                     (let [(raw (sub s i2 valEnd))
@@ -391,15 +391,15 @@ fn parseAsnReply text: String -> (Result (Pair String (List (Pair String String)
         (n (bytesLength bs))]
     (if (not (stringStartsWith? s "(:"))
       (err "not an ASN form")
-      (mt (asnValueEnd bs n 0)
+      (match (asnValueEnd bs n 0)
         ((err e) (err e))
         ((ok whole)
           (if (!= whole n)
             (err "trailing text after the form")
-            (mt (asnValueEnd bs n 2)
+            (match (asnValueEnd bs n 2)
               ((err e) (err e))
               ((ok headEnd)
-                (mt (fieldsLoop s bs n headEnd (list))
+                (match (fieldsLoop s bs n headEnd (list))
                   ((err e) (err e))
                   ((ok fields) (ok (pair (sub s 2 headEnd) fields)))))))))))
 
@@ -407,7 +407,7 @@ fn isNumByte b: Int64 -> Bool
   (or (isDigitByte b) (= b 46))
 
 fn floatValue v: String -> (Result j/Json ProviderError)
-  (mt (stringToFloat64 v)
+  (match (stringToFloat64 v)
     ((some f) (ok (j/jfloat f)))
     ((none) (err (valueError (str "could not convert string to float: " (pyReprString v))))))
 
@@ -416,7 +416,7 @@ fn numberValue v: String -> (Result j/Json ProviderError)
     (if (> (stringCountChar v ".") 1)
       (err (valueError (str "could not convert string to float: " (pyReprString v))))
       (floatValue v))
-    (mt (stringToInt64 v)
+    (match (stringToInt64 v)
       ((some i) (ok (j/jint i)))
       (none (floatValue v))))
 
@@ -431,7 +431,7 @@ fn numbersLoop s: String bs: Bytes n: Int64 i: Int64 acc: (List (Pair String j/J
         (if (or (= k1 (+ i 1)) (or (= w1 k1) (not (and (< d0 n) (isDigitByte (bytesGet bs d0))))))
           (numbersLoop s bs n (+ i 1) acc)
           (let [(e (runWhile bs n (+ d0 1) isNumByte))]
-            (mt (numberValue (sub s w1 e))
+            (match (numberValue (sub s w1 e))
               ((err x) (err x))
               ((ok num) (numbersLoop s bs n e (cons (pair (sub s (+ i 1) k1) num) acc)))))))))
 
@@ -440,8 +440,8 @@ fn asnNumbers form: String -> (Result (List (Pair String j/Json)) ProviderError)
     (numbersLoop form bs (bytesLength bs) 0 (list)))
 
 fn servedFields fields: (List (Pair String j/Json)) -> (Option (List (Pair String String)))
-  (let [(keep (fn [k] (mt (dictGet fields k)
-                        ((some v) (mt v ((j/jnull) false) ((j/jstr s) (not (stringEmpty? s))) (_ true)))
+  (let [(keep (fn [k] (match (dictGet fields k)
+                        ((some v) (match v ((j/jnull) false) ((j/jstr s) (not (stringEmpty? s))) (_ true)))
                         (none false))))
         (out (map (fn [k] (pair k (pyStr (optionOr (dictGet fields k) (j/jnull)))))
                   (filter keep (list "alias" "model" "effort" "temperature"))))]
@@ -471,7 +471,7 @@ fn urlHostname url: String -> (Result String String)
         (closes (stringContains? netloc "]"))]
     (if (!= opens closes)
       (err "Invalid IPv6 URL")
-      (let [(hostinfo (mt (listLast (stringSplit netloc "@")) ((some h) h) (none netloc)))
+      (let [(hostinfo (match (listLast (stringSplit netloc "@")) ((some h) h) (none netloc)))
             (host (if (stringContains? hostinfo "[")
                     (let [(br (sub hostinfo (+ (optionOr (stringIndexOf hostinfo "[") 0) 1) (stringLength hostinfo)))]
                       (sub br 0 (optionOr (stringIndexOf br "]") (stringLength br))))
@@ -479,7 +479,7 @@ fn urlHostname url: String -> (Result String String)
         (ok (stringLower host)))))
 
 fn isLoopback url: String -> Bool
-  (mt (urlHostname url)
+  (match (urlHostname url)
     ((ok h) (or (= h "127.0.0.1") (or (= h "localhost") (or (= h "::1") (stringStartsWith? h "127.")))))
     ((err _) false))
 
@@ -501,28 +501,28 @@ fn regexUnescape body: String -> String
   (stringReplace (stringReplace (stringReplace body "\\\"" "\"") "\\\\" "\\") "\\n" "\n")
 
 fn matchTurn s: String bs: Bytes n: Int64 p: Int64 -> (Option (Pair Int64 (Pair Int64 String)))
-  (mt (spacesThen s bs n (+ p 5) ":num")
+  (match (spacesThen s bs n (+ p 5) ":num")
     (none none)
     ((some a)
       (let [(w (runWhile bs n a isPySpace))
             (d (runWhile bs n w isDigitByte))]
         (if (or (= w a) (= d w))
           none
-          (mt (spacesThen s bs n d ":reply")
+          (match (spacesThen s bs n d ":reply")
             (none none)
             ((some r)
-              (mt (spacesThen s bs n r "\"")
+              (match (spacesThen s bs n r "\"")
                 (none none)
                 ((some q)
-                  (mt (quotedBodyEnd bs n q)
+                  (match (quotedBodyEnd bs n q)
                     (none none)
                     ((some e) (some (pair (optionOr (stringToInt64 (sub s w d)) 9223372036854775807) (pair (+ e 1) (sub s q e))))))))))))))
 
 fn turnsLoop s: String bs: Bytes n: Int64 i: Int64 acc: (List (Pair Int64 String)) -> (List (Pair Int64 String))
-  (mt (indexFrom s ":turn" i)
+  (match (indexFrom s ":turn" i)
     (none (listReverse acc))
     ((some p)
-      (mt (matchTurn s bs n p)
+      (match (matchTurn s bs n p)
         (none (turnsLoop s bs n (+ p 1) acc))
         ((some m) (turnsLoop s bs n (pairFirst (pairSecond m)) (cons (pair (pairFirst m) (regexUnescape (pairSecond (pairSecond m)))) acc))))))
 
@@ -533,7 +533,7 @@ fn parseScriptTurns text: String -> (List String)
 fn fixtureField text: String key: String from: Int64 limit: Int64 -> (Option String)
   (if (>= from limit)
     none
-    (mt (indexFrom text key from)
+    (match (indexFrom text key from)
       (none none)
       ((some p)
         (if (>= (+ p (stringLength key)) limit)
@@ -544,7 +544,7 @@ fn fixtureField text: String key: String from: Int64 limit: Int64 -> (Option Str
             (if (>= v limit)
               none
               (if (= (bytesGet bs v) 34)
-                (mt (quotedBodyEnd bs limit (+ v 1))
+                (match (quotedBodyEnd bs limit (+ v 1))
                   (none none)
                   ((some e) (some (regexUnescape (sub text (+ v 1) e)))))
                 (let [(e (runWhile bs limit v (fn [i] (and (not (isPySpace (bytesGet bs i)))
@@ -562,7 +562,7 @@ fn fixtureUsage text: String start: Int64 limit: Int64 -> (Option (List (Pair St
       none))
 
 fn fixtureSteps text: String bs: Bytes n: Int64 from: Int64 acc: (List ScriptStep) -> (List ScriptStep)
-  (mt (indexFrom text ":turn" from)
+  (match (indexFrom text ":turn" from)
     (none (listSortBy (fn [step] step.num) (listReverse acc)))
     ((some p)
       (if (>= (+ p 5) n)
@@ -578,7 +578,7 @@ fn fixtureSteps text: String bs: Bytes n: Int64 from: Int64 acc: (List ScriptSte
               (cons (ScriptStep :num (optionOr (stringToInt64 (optionOr num "0")) 0) :reply reply :error error :usage usage) acc)))))))
 
 fn stepsFromReplies replies: (List String) index: Int64 -> (List ScriptStep)
-  (mt (listGet replies index)
+  (match (listGet replies index)
     (none (list))
     ((some reply)
       (cons (ScriptStep :num index :reply (some reply) :error none :usage none)
@@ -618,21 +618,21 @@ fn pySplitLines s: String -> (List String)
     (splitLinesLoop s bs (bytesLength bs) 0 0 (list)))
 
 fn searchResponse s: String bs: Bytes n: Int64 i: Int64 -> (Option String)
-  (mt (indexFrom s ":response" i)
+  (match (indexFrom s ":response" i)
     (none none)
     ((some p)
-      (mt (mt (spacesThen s bs n (+ p 9) "\"")
+      (match (match (spacesThen s bs n (+ p 9) "\"")
             (none none)
-            ((some q) (mt (quotedBodyEnd bs n q) ((some e) (some (sub s q e))) (none none))))
+            ((some q) (match (quotedBodyEnd bs n q) ((some e) (some (sub s q e))) (none none))))
         ((some body) (some body))
         (none (searchResponse s bs n (+ p 1))))))
 
 fn jsonResponse line: String -> (Option String)
   (if (not (stringStartsWith? line "{"))
     none
-    (mt (j/jsonParse line)
-      ((ok obj) (mt (jsonLookup obj "response")
-                  ((some v) (mt v ((j/jstr r) (if (stringEmpty? r) none (some r))) (_ none)))
+    (match (j/jsonParse line)
+      ((ok obj) (match (jsonLookup obj "response")
+                  ((some v) (match v ((j/jstr r) (if (stringEmpty? r) none (some r))) (_ none)))
                   (none none)))
       ((err _) none)))
 
@@ -640,11 +640,11 @@ fn replayLine acc: (List String) raw: String -> (List String)
   (let [(line (pyStrip raw))]
     (if (stringEmpty? line)
       acc
-      (mt (jsonResponse line)
+      (match (jsonResponse line)
         ((some r) (cons (pyStrip r) acc))
         (none
           (let [(bs (stringToBytes line))]
-            (mt (searchResponse line bs (bytesLength bs) 0)
+            (match (searchResponse line bs (bytesLength bs) 0)
               ((some body) (cons (pyStrip (regexUnescape body)) acc))
               (none (if (stringStartsWith? line "exit=") acc (cons line acc)))))))))
 
@@ -684,7 +684,7 @@ fn idsLoop toks: (List String) n: Int64 i: Int64 prev: String acc: (List String)
         (else (idsLoop toks n (+ i 1) tok acc)))))
 
 fn ! gatewayModelIds! path: String -> (List String)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) (list))
     ((ok text)
       (let [(bs (stringToBytes text))
@@ -692,7 +692,7 @@ fn ! gatewayModelIds! path: String -> (List String)
         (listSort (idsLoop toks (listLength toks) 0 "" (list))))))
 
 fn envOr! name: String fallback: String -> String
-  (mt (envGet name)
+  (match (envGet name)
     ((some v) (if (stringEmpty? v) fallback v))
     (none fallback))
 
@@ -707,7 +707,7 @@ fn ! providerEnv! rootDir: String -> ProviderEnv
     :childEnv (mapEmpty))
 
 fn normParts parts: (List String) acc: (List String) -> (List String)
-  (mt (listHead parts)
+  (match (listHead parts)
     (none (listReverse acc))
     ((some p)
       (cond
@@ -730,27 +730,27 @@ fn ! saltedTag salt: String -> String
     (str (hexPad (& (fnv1a64 seed) 4294967295) 8 "") (hexPad (& (fnv1a64 (str seed "#")) 4294967295) 8 "")))
 
 fn ! isFile? path: String -> Bool
-  (mt (fileStat path) ((ok st) st.isFile) ((err _) false))
+  (match (fileStat path) ((ok st) st.isFile) ((err _) false))
 
 fn ! readText path: String -> (Result String ProviderError)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((ok t) (ok (universalNewlines t)))
     ((err e) (err (ioError e))))
 
 fn ! writeText path: String text: String -> (Result Int64 ProviderError)
-  (mt (fileWrite path text)
+  (match (fileWrite path text)
     ((ok _) (ok 0))
     ((err e) (err (ioError e))))
 
 fn ! makeDirs path: String -> (Result Int64 ProviderError)
-  (mt (dirCreate path)
+  (match (dirCreate path)
     ((ok _) (ok 0))
     ((err e) (err (ioError e))))
 
 fn ! loadTurns kind: String path: String parse: (fn [String] -> (List String)) -> (Result (List String) ProviderError)
   (if (not (isFile? path))
     (err (fileMissing (str kind " not found: " path)))
-    (mt (readText path)
+    (match (readText path)
       ((ok t) (ok (parse t)))
       ((err e) (err e))))
 
@@ -774,7 +774,7 @@ fn ! makeProvider! backend: String mode: String rootDir: String model: String ti
             (path (str rootDir "/tests/fixtures/agentLoop/mvp/" name ".asn"))]
         (if (not (isFile? path))
           (err (fileMissing (str "Script fixture not found: " path)))
-          (mt (readText path)
+          (match (readText path)
             ((err e) (err e))
             ((ok text) (ok (scriptFixtureProvider (str "script/" name)
               (parseScriptFixture text
@@ -782,7 +782,7 @@ fn ! makeProvider! backend: String mode: String rootDir: String model: String ti
                   (some (str path ".attempts")) none)) 0)))))))
     ((stringStartsWith? backend (str (replayBackendPrefix) "/"))
       (let [(name (sub backend 7 (stringLength backend)))]
-        (mt (loadTurns "Replay file" (str rootDir "/tests/fixtures/agentLoop/recorded/" name) parseReplayLines)
+        (match (loadTurns "Replay file" (str rootDir "/tests/fixtures/agentLoop/recorded/" name) parseReplayLines)
           ((ok turns) (ok (replayProvider (str "replay/" name) rootDir turns 0 (replayVendor name))))
           ((err e) (err e)))))
     ((or (= backend "agy") (or (= backend "codex") (= backend "claude")))
@@ -793,24 +793,24 @@ fn ! makeProvider! backend: String mode: String rootDir: String model: String ti
     (else (err (valueError (str "Unknown backend: " backend)))))
 
 fn providerName p: Provider -> String
-  (mt p
+  (match p
     ((scriptProvider name _ _) name)
     ((scriptFixtureProvider name _ _) name)
     ((replayProvider name _ _ _ _) name)
     ((vendorProvider cfg) cfg.vendor))
 
 fn vendorName p: Provider -> (Option String)
-  (mt p
+  (match p
     ((scriptProvider _ _ _) none)
     ((scriptFixtureProvider _ _ _) none)
     ((replayProvider _ _ _ _ v) (if (stringEmpty? v) none (some v)))
     ((vendorProvider cfg) (some cfg.vendor)))
 
 fn splitContext p: Provider -> Bool
-  (mt p ((vendorProvider _) true) (_ false))
+  (match p ((vendorProvider _) true) (_ false))
 
 fn ! lockLoop path: String -> (Result Int64 ProviderError)
-  (mt (fileLock path true)
+  (match (fileLock path true)
     ((ok fd) (ok fd))
     ((err e) (if (= e "busy") (do (sleepMs 20) (lockLoop path)) (err (ioError (str path ": " e))))))
 
@@ -818,7 +818,7 @@ fn ! replayLock root: String vendor: String -> (Result Int64 ProviderError)
   (if (stringEmpty? vendor)
     (ok -1)
     (let [(dir (str root "/.asl/run/agentLoop"))]
-      (mt (makeDirs dir)
+      (match (makeDirs dir)
         ((err e) (err e))
         ((ok _) (lockLoop (str dir "/" vendor ".lock"))))))
 
@@ -834,10 +834,10 @@ fn withLink cfg: VendorConfig link: gs/GatewayLoop -> VendorConfig
 fn ! runCli! cfg: VendorConfig tool: String args: (List String) cwd: String input: String -> (Result cp/ProcessOutput ProviderError)
   (let [(base (cp/withStdin (cp/withTimeout (cp/withCwd (cp/cmd tool args) cwd) (* cfg.timeout 1000)) input))
         (c (fold (fn [acc kv] (cp/withEnv acc (pairFirst kv) (pairSecond kv))) base (mapPairs cfg.env.childEnv)))]
-    (mt (cp/exec! c)
+    (match (cp/exec! c)
       ((ok out) (ok out))
       ((err pe)
-        (mt pe
+        (match pe
           ((cp/notFound _) (err (toolAbsent tool (str "[Errno 2] No such file or directory: " (pyReprString tool)))))
           ((cp/permissionDenied _) (err (toolAbsent tool (str "[Errno 13] Permission denied: " (pyReprString tool)))))
           ((cp/timeout _) (err (cliTimeout (cons tool args) cfg.timeout)))
@@ -848,20 +848,20 @@ fn ! freshDir! base: String prefix: String tagFor: (fn [Int64] -> String) attemp
     (cond
       ((>= attempt 1000) (err (ioError (str "no free scratch name under " base))))
       ((ok? (fileStat dir)) (freshDir! base prefix tagFor (+ attempt 1)))
-      (else (mt (makeDirs dir) ((ok _) (ok dir)) ((err e) (err e))))))
+      (else (match (makeDirs dir) ((ok _) (ok dir)) ((err e) (err e))))))
 
 fn ! tempDir! cfg: VendorConfig prefix: String -> (Result String ProviderError)
   (let [(base cfg.env.tmpDir)
-        (count (mt (dirList base) ((ok names) (listLength names)) ((err _) 0)))]
+        (count (match (dirList base) ((ok names) (listLength names)) ((err _) 0)))]
     (freshDir! base prefix (fn [attempt] (saltedTag (str (stringFromInt64 count) "." (stringFromInt64 attempt)))) 0))
 
 fn ! removeIfEmpty dir: String -> Bool
-  (mt (dirList dir)
+  (match (dirList dir)
     ((ok names) (if (listEmpty? names) (ok? (pathRemove dir)) false))
     ((err _) false))
 
 fn ! inTempDir! cfg: VendorConfig prefix: String tool: String args: (List String) input: String -> (Result cp/ProcessOutput ProviderError)
-  (mt (tempDir! cfg prefix)
+  (match (tempDir! cfg prefix)
     ((err e) (err e))
     ((ok cwd)
       (let [(r (runCli! cfg tool args cwd input))
@@ -875,29 +875,29 @@ fn ! callCodex! cfg: VendorConfig system: String user: String -> (Result (Option
         (args (listAppend (list "exec" "-" "--ephemeral" "--skip-git-repo-check" "-s" "read-only"
                                 "-c" (str "model_instructions_file=" instr) "-c" "project_doc_max_bytes=0" "--json" "-o" last)
                           (if (stringEmpty? cfg.model) (list) (list "-m" cfg.model))))]
-    (mt (makeDirs dir)
+    (match (makeDirs dir)
       ((err e) (err e))
       ((ok _)
-        (mt (writeText instr (str system "\n"))
+        (match (writeText instr (str system "\n"))
           ((err e) (err e))
           ((ok _)
-            (mt (inTempDir! cfg "asl_codex_cwd_" "codex" args user)
+            (match (inTempDir! cfg "asl_codex_cwd_" "codex" args user)
               ((err e) (err e))
               ((ok out)
                 (if (isFile? last)
-                  (mt (readText last) ((ok t) (ok (some (pyStrip t)))) ((err e) (err e)))
+                  (match (readText last) ((ok t) (ok (some (pyStrip t)))) ((err e) (err e)))
                   (ok (if (= out.exitCode 0) (some (pyStrip (universalNewlines out.stdout))) none))))))))))
 
 fn ! callClaude! cfg: VendorConfig system: String user: String -> (Result (Option String) ProviderError)
   (let [(args (listAppend (list "-p" "--system-prompt" system "--tools" "" "--setting-sources" "" "--output-format" "json" "--no-session-persistence")
                           (if (stringEmpty? cfg.model) (list) (list "--model" cfg.model))))]
-    (mt (inTempDir! cfg "asl_claude_cwd_" "claude" args user)
+    (match (inTempDir! cfg "asl_claude_cwd_" "claude" args user)
       ((err e) (err e))
       ((ok out)
         (if (!= out.exitCode 0)
           (ok none)
           (let [(text (universalNewlines out.stdout))]
-            (mt (j/jsonParse text)
+            (match (j/jsonParse text)
               ((err _) (ok (some (pyStrip text))))
               ((ok obj)
                 (cond
@@ -925,9 +925,9 @@ fn curlConfig url: String body: String headers: (List (Pair String String)) maxT
          (if loopback "noproxy = \"*\"\n" "")))
 
 fn headEnd out: String -> (Pair Int64 Int64)
-  (mt (stringIndexOf out "\r\n\r\n")
+  (match (stringIndexOf out "\r\n\r\n")
     ((some i) (pair i (+ i 4)))
-    (none (mt (stringIndexOf out "\n\n")
+    (none (match (stringIndexOf out "\n\n")
             ((some i) (pair i (+ i 2)))
             (none (pair (stringLength out) (stringLength out))))))
 
@@ -943,12 +943,12 @@ fn statusOf line: String -> (Option (Pair Int64 String))
         (r0 (runWhile bs n s1 isPySpace))]
     (if (not (stringStartsWith? line "HTTP/"))
       none
-      (mt (stringToInt64 (sub line s0 s1))
+      (match (stringToInt64 (sub line s0 s1))
         ((some code) (some (pair code (pyStrip (sub line r0 n)))))
         (none none))))
 
 fn headerValue lines: (List String) name: String -> String
-  (mt (listHead (filter (fn [l] (mt (stringIndexOf l ":")
+  (match (listHead (filter (fn [l] (match (stringIndexOf l ":")
                                    ((some c) (= (stringLower (pyStrip (sub l 0 c))) name))
                                    (none false)))
                         lines))
@@ -959,7 +959,7 @@ fn parseCurlResponse out: String -> (Result (Pair (Pair Int64 String) (Pair Stri
   (let [(he (headEnd out))
         (lines (headLines (sub out 0 (pairFirst he))))
         (rest (sub out (pairSecond he) (stringLength out)))]
-    (mt (statusOf (optionOr (listHead lines) ""))
+    (match (statusOf (optionOr (listHead lines) ""))
       (none (err "gateway reply has no HTTP status line"))
       ((some st)
         (if (and (>= (pairFirst st) 100) (< (pairFirst st) 200))
@@ -978,7 +978,7 @@ fn illegalHeaderValue v: String -> Bool
     (listAny? (fn [k] (illegalAt bs n k)) (range 0 n)))
 
 fn urlHasScheme url: String -> Bool
-  (mt (stringIndexOf url ":")
+  (match (stringIndexOf url ":")
     ((some c) (and (> c 0) (not (stringContains? (sub url 0 c) "/"))))
     (none false))
 
@@ -999,10 +999,10 @@ fn floatText s: String -> Bool
         (or (= word "inf") (or (= word "infinity") (= word "nan")))))
 
 fn pyTypeName v: j/Json -> String
-  (mt v ((j/jnull) "NoneType") ((j/jarr _) "list") ((j/jobj _) "dict") (_ "str"))
+  (match v ((j/jnull) "NoneType") ((j/jarr _) "list") ((j/jobj _) "dict") (_ "str"))
 
 fn pyFloat v: j/Json -> (Result Float64 ProviderError)
-  (mt v
+  (match v
     ((j/jint i) (ok (int64ToFloat64 i)))
     ((j/jfloat f) (ok f))
     ((j/jnum f) (ok f))
@@ -1015,15 +1015,15 @@ fn pyFloat v: j/Json -> (Result Float64 ProviderError)
           (cond
             ((or (= word "inf") (= word "infinity")) (ok (if neg (floatNegInf) (floatInf))))
             ((= word "nan") (ok (floatNan)))
-            (else (mt (stringToFloat64 t)
+            (else (match (stringToFloat64 t)
                     ((some f) (ok f))
                     ((none) (err (valueError (str "could not convert string to float: " (pyReprString s)))))))))
         (err (valueError (str "could not convert string to float: " (pyReprString s))))))
     (_ (err (valueError (str "float() argument must be a string or a real number, not '" (pyTypeName v) "'")))))
 
 fn numOr fields: (List (Pair String j/Json)) k: String -> Float64
-  (mt (dictGet fields k)
-    ((some v) (mt v ((j/jint i) (int64ToFloat64 i)) ((j/jfloat f) f) (_ 0.0)))
+  (match (dictGet fields k)
+    ((some v) (match v ((j/jint i) (int64ToFloat64 i)) ((j/jfloat f) f) (_ 0.0)))
     (none 0.0))
 
 fn numOrZero fields: (List (Pair String j/Json)) k: String -> j/Json
@@ -1033,7 +1033,7 @@ fn mkMeta timing: (Option Timing) usage: (Option (List (Pair String j/Json))) se
   (TurnMeta :timing timing :usage usage :served served :finish finish :truncated (= finish (some "length")))
 
 fn readAsnReply text: String -> (Pair (Result (Option String) ProviderError) TurnMeta)
-  (mt (parseAsnReply text)
+  (match (parseAsnReply text)
     ((err e) (pair (err (gatewayError "ERR_VENDOR" (str "Failed to parse gateway ASN response: " e) "")) (emptyMeta)))
     ((ok hf)
       (let [(head (pairFirst hf))
@@ -1045,16 +1045,16 @@ fn readAsnReply text: String -> (Pair (Result (Option String) ProviderError) Tur
           ((!= head "reply")
             (pair (err (gatewayError "ERR_VENDOR" (str "Unexpected gateway ASN form (:" head " ...)") "")) (emptyMeta)))
           (else
-            (let [(timingR (mt (dictGet fields "asl")
-                             ((some a) (mt (asnNumbers a)
+            (let [(timingR (match (dictGet fields "asl")
+                             ((some a) (match (asnNumbers a)
                                          ((ok nums) (ok (some (Timing :queueWaitSec (numOr nums "queueWaitSec") :execSec (numOr nums "execSec")))))
                                          ((err e) (err e))))
                              (none (ok none))))
                   (usageR (asnNumbers (field "usage" "")))]
-              (mt timingR
+              (match timingR
                 ((err e) (pair (err e) (emptyMeta)))
                 ((ok timing)
-                  (mt usageR
+                  (match usageR
                     ((err e) (pair (err e) (mkMeta timing none none none)))
                     ((ok usageNums)
                       (let [(usage (if (listEmpty? usageNums) none
@@ -1068,21 +1068,21 @@ fn readAsnReply text: String -> (Pair (Result (Option String) ProviderError) Tur
                           (pair (ok (some content)) meta)))))))))))))
 
 fn timingOf asl: j/Json -> (Result Timing ProviderError)
-  (let [(pick (fn [a b] (mt (jsonLookup asl a)
-                          ((some v) (mt v ((j/jnull) (optionOr (jsonLookup asl b) (j/jfloat 0.0))) (_ v)))
+  (let [(pick (fn [a b] (match (jsonLookup asl a)
+                          ((some v) (match v ((j/jnull) (optionOr (jsonLookup asl b) (j/jfloat 0.0))) (_ v)))
                           (none (optionOr (jsonLookup asl b) (j/jfloat 0.0))))))]
-    (mt (pyFloat (pick "queueWaitSec" "queue_wait_sec"))
+    (match (pyFloat (pick "queueWaitSec" "queue_wait_sec"))
       ((err e) (err e))
-      ((ok qw) (mt (pyFloat (pick "execSec" "exec_sec"))
+      ((ok qw) (match (pyFloat (pick "execSec" "exec_sec"))
                  ((err e) (err e))
                  ((ok es) (ok (Timing :queueWaitSec qw :execSec es)))))))
 
 fn replyContent resp: j/Json -> (Result (Option String) ProviderError)
   (let [(choices (optionOr (jsonLookup resp "choices") (j/jnull)))
         (noReply (fn [m] (err (gatewayError "ERR_NO_REPLY" m ""))))]
-    (mt choices
+    (match choices
       ((j/jarr xs)
-        (mt (listHead xs)
+        (match (listHead xs)
           (none (noReply "Empty choices in gateway response"))
           ((some c0)
             (if (not (isObject c0))
@@ -1090,25 +1090,25 @@ fn replyContent resp: j/Json -> (Result (Option String) ProviderError)
               (let [(msg (optionOr (jsonLookup c0 "message") (j/jobj (list))))]
                 (if (not (isObject msg))
                   (err (gatewayError "ERR_VENDOR" "Gateway message is not an object" ""))
-                  (mt (optionOr (jsonLookup msg "content") (j/jnull))
+                  (match (optionOr (jsonLookup msg "content") (j/jnull))
                     ((j/jnull) (noReply "Empty content in gateway response"))
                     ((j/jstr s) (if (stringEmpty? (pyStrip s)) (noReply "Empty content in gateway response") (ok (some (pyStrip s)))))
                     (v (ok (some (pyStrip (pyStr v))))))))))))
       (_ (noReply "Empty choices in gateway response"))))
 
 fn readJsonReply body: String -> (Pair (Result (Option String) ProviderError) TurnMeta)
-  (mt (j/jsonParse body)
+  (match (j/jsonParse body)
     ((err e) (pair (err (gatewayError "ERR_VENDOR" (str "Failed to parse gateway JSON response: " e) "")) (emptyMeta)))
     ((ok resp)
       (if (not (isObject resp))
         (pair (err (gatewayError "ERR_VENDOR" "Failed to parse gateway JSON response: not an object" "")) (emptyMeta))
         (let [(asl (optionOr (jsonLookup resp "asl") (j/jnull)))
               (aslIsDict (isObject asl))]
-          (mt (if aslIsDict (mt (timingOf asl) ((ok t) (ok (some t))) ((err e) (err e))) (ok none))
+          (match (if aslIsDict (match (timingOf asl) ((ok t) (ok (some t))) ((err e) (err e))) (ok none))
             ((err e) (pair (err e) (emptyMeta)))
             ((ok timing)
               (let [(usageV (if aslIsDict (jsonLookup asl "usage") none))
-                    (internalUsage (mt usageV
+                    (internalUsage (match usageV
                              ((some u) (if (isObject u)
                                          (some (map (fn [k] (pair k (optionOr (jsonLookup u k) (j/jint 0)))) (list "inputTokens" "cachedTokens" "outputTokens")))
                                          none))
@@ -1120,7 +1120,7 @@ fn readJsonReply body: String -> (Pair (Result (Option String) ProviderError) Tu
 
 fn httpErrorBody body: String -> String
   (if (stringStartsWith? (pyLstrip body) "(:error")
-    (mt (parseAsnReply body)
+    (match (parseAsnReply body)
       ((ok hf) (optionOr (dictGet (pairSecond hf) "reason") body))
       ((err _) body))
     body)
@@ -1146,7 +1146,7 @@ fn readCurl service: String hint: String url: String out: cp/ProcessOutput -> (P
     (else (readResponse service out.stdout)))
 
 fn readResponse service: String raw: String -> (Pair (Result (Option String) ProviderError) TurnMeta)
-  (mt (parseCurlResponse raw)
+  (match (parseCurlResponse raw)
     ((err e) (pair (err (gatewayError "ERR_VENDOR" (str service " reply unreadable: " e) "")) (emptyMeta)))
     ((ok r)
       (let [(code (pairFirst (pairFirst r)))
@@ -1169,22 +1169,22 @@ fn configHome path: String -> (Option String)
   (if (stringEndsWith? path "/.asl/gateway.asn") (some (sub path 0 (- (stringLength path) (stringLength "/.asl/gateway.asn")))) none)
 
 fn ! openLink! cfg: VendorConfig -> (Result gs/GatewayLoop ProviderError)
-  (mt cfg.link
+  (match cfg.link
     ((some l) (ok l))
     ((none)
       (let [(config cfg.env.gatewayConfig)
             (env (fold (fn [acc kv] (mapSet acc (pairFirst kv) (pairSecond kv))) (gu/envMapFromList (envList)) (mapPairs cfg.env.childEnv)))
             (root (optionOr (mapGet env "ASL_GATEWAY_ROOT") (optionOr (mapGet env "ROOT_DIR") cfg.rootDir)))]
-        (mt (configHome config)
+        (match (configHome config)
           ((none) (err (gatewayError "ERR_GATEWAY_CONFIG" (str "in-process gateway reads HOME/.asl/gateway.asn, not " config) "set ASL_GATEWAY_URL for an HTTP gateway")))
           ((some home)
-            (mt (gs/linkOpen! env home root (gd/builtinFamilies))
+            (match (gs/linkOpen! env home root (gd/builtinFamilies))
               ((err e) (err (gatewayError "ERR_GATEWAY_CONFIG" (str "in-process gateway: " e) "set ASL_GATEWAY_URL for an HTTP gateway")))
               ((ok l) (ok l))))))))
 
 ; (:m :effect net)
 fn ! linkGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String String)) -> Called
-  (mt (openLink! cfg)
+  (match (openLink! cfg)
     ((err e) (Called :reply (err e) :meta (emptyMeta) :cfg cfg))
     ((ok l)
       (let [(body (pyJsonDumps payload))
@@ -1192,7 +1192,7 @@ fn ! linkGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String 
                     (listAppend headers (list (pair "Content-Length" (stringFromInt64 (bytesLength (stringToBytes body))))))))
             (out (gs/linkSend! l "POST" "/v1/chat/completions" sent body (* (+ (+ cfg.timeout cfg.queueTimeout) 30) 1000)))
             (next (withLink cfg (pairFirst out)))]
-        (mt (pairSecond out)
+        (match (pairSecond out)
           ((err e) (Called :reply (err (gatewayError "ERR_VENDOR" (str "in-process gateway: " e) "")) :meta (emptyMeta) :cfg next))
           ((ok raw) (called next (readResponse "Gateway" raw)))))))
 
@@ -1211,10 +1211,10 @@ fn ! postUrl! cfg: VendorConfig url: String service: String hint: String payload
         (let [(conf (curlConfig url body headers maxTime (isLoopback url)))
               (c0 (cp/withStdin (cp/withTimeout (cp/cmd "curl" (list "--config" "-")) (* (+ (+ cfg.timeout cfg.queueTimeout) 60) 1000)) conf))
               (c (fold (fn [acc kv] (cp/withEnv acc (pairFirst kv) (pairSecond kv))) c0 (mapPairs cfg.env.childEnv)))]
-          (mt (cp/exec! c)
+          (match (cp/exec! c)
             ((ok out) (readCurl service hint url out))
             ((err pe)
-              (mt pe
+              (match pe
                 ((cp/notFound _) (pair (err (toolAbsent "curl" (str "curl is not installed; the " service " call needs it (capabilities.asn :externalTools curl)"))) (emptyMeta)))
                 ((cp/timeout _) (pair (err (gatewayError "ERR_VENDOR" (str service " timed out waiting for reply: curl did not exit") "")) (emptyMeta)))
                 (_ (pair (err (gatewayError "ERR_GATEWAY_OFFLINE" (str service " unreachable at " url ": curl could not start" (if (stringEmpty? hint) "" (str "; " hint))) hint)) (emptyMeta))))))))))
@@ -1245,7 +1245,7 @@ fn ! callProfile! cfg: VendorConfig system: String user: String model: String ->
                              (listAppend (toolsField (list)) (list (pair "workspace" (j/jstr ws)))))
                            (listAppend (if cfg.timeoutSet (list (pair "timeout" (j/jint cfg.timeout))) (list))
                                        (list (pair "queue_timeout" (j/jint cfg.queueTimeout)))))))]
-    (mt (makeDirs ws)
+    (match (makeDirs ws)
       ((err e) (Called :reply (err e) :meta (emptyMeta) :cfg cfg))
       ((ok _) (sendGateway! cfg payload headers))))
 
@@ -1274,12 +1274,12 @@ fn ! callAgy! cfg: VendorConfig system: String user: String -> Called
                                          (pair "workspace" (j/jstr root))
                                          (pair "timeout" (j/jint cfg.timeout))
                                          (pair "queue_timeout" (j/jint cfg.queueTimeout)))))))
-              (written (mt (makeDirs (str pluginDir "/agents"))
+              (written (match (makeDirs (str pluginDir "/agents"))
                          ((err e) (err e))
-                         ((ok _) (mt (writeText (str pluginDir "/plugin.json") (pyJsonDumps (j/jobj (list (pair "name" (j/jstr "aslLoop"))))))
+                         ((ok _) (match (writeText (str pluginDir "/plugin.json") (pyJsonDumps (j/jobj (list (pair "name" (j/jstr "aslLoop"))))))
                                    ((err e) (err e))
                                    ((ok _) (writeText (str pluginDir "/agents/" agent ".md") (agentFileText agent system)))))))]
-          (mt written
+          (match written
             ((err e) (Called :reply (err e) :meta (emptyMeta) :cfg cfg))
             ((ok _) (sendGateway! cfg payload (if (stringEmpty? cfg.sessionId) (list) (list (pair "X-ASL-Session" cfg.sessionId))))))))))
 
@@ -1291,47 +1291,47 @@ fn ! callVendor! cfg: VendorConfig system: String user: String -> Called
     (else (Called :reply (err (valueError (str "Unknown vendor: " cfg.vendor))) :meta (emptyMeta) :cfg cfg)))
 
 fn stepTurns turns: (List String) index: Int64 -> (Pair (Option String) Int64)
-  (mt (nth turns index)
+  (match (nth turns index)
     ((some r) (pair (some r) (+ index 1)))
     (none (pair none index)))
 
 fn ! nextTurn! p: Provider system: String user: String -> Turn
-  (mt p
+  (match p
     ((scriptProvider name turns index)
       (let [(s (stepTurns turns index))]
         (Turn :provider (scriptProvider name turns (pairSecond s)) :reply (ok (pairFirst s)) :meta (emptyMeta))))
     ((scriptFixtureProvider name fixture index)
-      (let [logged (mt fixture.attemptLogPath
+      (let [logged (match fixture.attemptLogPath
                     ((some logPath) (fileAppend logPath (str "(:attempt :ns " (stringFromInt64 (monotonicNs)) ")\n")))
                     ((none) (ok ())))]
-        (mt logged
+        (match logged
           ((err e) (Turn :provider p :reply (err (ioError e)) :meta (emptyMeta)))
-          ((ok _) (mt (listGet fixture.turns index)
+          ((ok _) (match (listGet fixture.turns index)
             (none (Turn :provider p :reply (ok none) :meta (emptyMeta)))
             ((some step)
               (Turn :provider (scriptFixtureProvider name fixture (+ index 1))
-                :reply (mt step.error
+                :reply (match step.error
                   (none (ok step.reply))
                   ((some code) (err (providerError code (str "scripted provider failure: " code)))))
                 :meta (TurnMeta :timing none :usage step.usage :served none :finish none :truncated false))))))))
     ((replayProvider name root turns index vendor)
-      (mt (replayLock root vendor)
+      (match (replayLock root vendor)
         ((err e) (Turn :provider p :reply (err e) :meta (emptyMeta)))
         ((ok fd)
           (let [(s (stepTurns turns index))
                 (released (if (>= fd 0) (fdClose fd) (ok ())))]
             (Turn :provider (replayProvider name root turns (pairSecond s) vendor)
-                  :reply (mt released ((ok _) (ok (pairFirst s))) ((err e) (err (ioError (str "unlock: " e)))))
+                  :reply (match released ((ok _) (ok (pairFirst s))) ((err e) (err (ioError (str "unlock: " e)))))
                   :meta (emptyMeta))))))
     ((vendorProvider cfg)
       (let [(r (callVendor! cfg system user))]
         (Turn :provider (vendorProvider r.cfg) :reply r.reply :meta r.meta))))
 
 fn ! advise! p: Provider system: String text: String -> (Option Turn)
-  (mt p
+  (match p
     ((scriptFixtureProvider name fixture index)
       (some (Turn :provider p :reply
-        (mt fixture.advisor
+        (match fixture.advisor
           ((some reply) (ok (some reply)))
           ((none) (err (providerError "ERR_NO_ADVISOR_CHANNEL" "ERR_NO_ADVISOR_CHANNEL provider has no advisor channel"))))
         :meta (emptyMeta))))
@@ -1341,17 +1341,17 @@ fn ! advise! p: Provider system: String text: String -> (Option Turn)
     (_ none))
 
 fn ! review! p: Provider system: String text: String -> Turn
-  (mt p
+  (match p
     ((scriptFixtureProvider scriptName fixture scriptIndex)
-      (mt fixture.reviewer
+      (match fixture.reviewer
         ((some reply) (Turn :provider p :reply (ok (some reply)) :meta (emptyMeta)))
         ((none) (Turn :provider p :reply
           (err (providerError "ERR_NO_REVIEWER_CHANNEL" "ERR_NO_REVIEWER_CHANNEL provider has no reviewer channel"))
           :meta (emptyMeta)))))
     ((vendorProvider vendorConfig) (let [turn (nextTurn! p system text)]
-      (mt turn.reply
+      (match turn.reply
         ((err e) turn)
-        ((ok reply) (mt reply
+        ((ok reply) (match reply
           ((some reviewerReply) turn)
           ((none) (Turn :provider turn.provider
             :reply (err (providerError "ERR_NO_REVIEWER_CHANNEL" "ERR_NO_REVIEWER_CHANNEL provider has no reviewer channel"))
@@ -1365,11 +1365,11 @@ fn ! review! p: Provider system: String text: String -> Turn
 
 fn ! removeTree path: String -> (Result Int64 ProviderError)
   (if (ok? (fileStat path))
-    (mt (pathRemove path) ((ok _) (ok 0)) ((err e) (err (ioError e))))
+    (match (pathRemove path) ((ok _) (ok 0)) ((err e) (err (ioError e))))
     (ok 0))
 
 fn ! cleanup! p: Provider -> (Result Int64 ProviderError)
-  (mt p
+  (match p
     ((vendorProvider cfg)
       (let [(run (str cfg.rootDir "/.asl/run/agentLoop"))
             (results (map removeTree (list (absPath (str run "/agents/" cfg.sessionId))
@@ -1388,7 +1388,7 @@ fn codexArgv instr: String last: String model: String -> j/Json
                 (if (stringEmpty? model) (list) (list "-m" model)))))
 
 fn ! buildDryRunInfo! vendor: String mode: String rootDir: String model: String timeout: Int64 queueTimeout: Int64 env: ProviderEnv -> (Result j/Json ProviderError)
-  (mt (makeProvider! vendor mode rootDir model timeout "" queueTimeout false env "auto")
+  (match (makeProvider! vendor mode rootDir model timeout "" queueTimeout false env "auto")
     ((err e) (err e))
     ((ok _) (buildDryRunInfoFor vendor mode rootDir model timeout queueTimeout env)))
 
@@ -1408,12 +1408,12 @@ fn ! buildDryRunInfoFor vendor: String mode: String rootDir: String model: Strin
               (dirs (j/jarr (list (j/jstr agents))))
               (text (str "---\nname: " agent "\ndescription: ASL agent loop endpoint\nmainAgent: true\nsubagent: false\ntools: []\n"
                          "inheritMcp: false\ninheritCustomizations: false\nexcludeDefaultComponents: true\n---\n\n# " agent "\n\n"))
-              (written (mt (makeDirs (str pluginDir "/agents"))
+              (written (match (makeDirs (str pluginDir "/agents"))
                          ((err e) (err e))
-                         ((ok _) (mt (writeText (str pluginDir "/plugin.json") (pyJsonDumps (j/jobj (list (pair "name" (j/jstr "aslLoop"))))))
+                         ((ok _) (match (writeText (str pluginDir "/plugin.json") (pyJsonDumps (j/jobj (list (pair "name" (j/jstr "aslLoop"))))))
                                    ((err e) (err e))
                                    ((ok _) (writeText agentFile text))))))]
-          (mt written
+          (match written
             ((err e) (err e))
             ((ok _)
               (ok (j/jobj (listAppend base
@@ -1426,7 +1426,7 @@ fn ! buildDryRunInfoFor vendor: String mode: String rootDir: String model: Strin
       ((= vendor "codex")
         (let [(dir (str rootDir "/.asl/run/agentLoop/codex"))
               (instr (str dir "/" mode ".md"))]
-          (mt (makeDirs dir)
+          (match (makeDirs dir)
             ((err e) (err e))
             ((ok _)
               (ok (j/jobj (listAppend base

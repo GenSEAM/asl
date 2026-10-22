@@ -23,7 +23,7 @@
   (:c nameIndexNode [(key String) (value V) (left NameIndex) (right NameIndex) (height Int64)]))
 
 fn nameIndexHeight tree: NameIndex -> Int64
-  (mt tree
+  (match tree
     ((nameIndexEmpty) 0)
     ((nameIndexNode _ _ _ _ height) height))
 
@@ -31,23 +31,23 @@ fn nameIndexNodeOf key: String value: V left: NameIndex right: NameIndex -> Name
   (nameIndexNode key value left right (+ 1 (max (nameIndexHeight left) (nameIndexHeight right))))
 
 fn nameIndexRotateRight key: String value: V left: NameIndex right: NameIndex -> NameIndex
-  (mt left
+  (match left
     ((nameIndexEmpty) (nameIndexNodeOf key value left right))
     ((nameIndexNode lk lv ll lr _)
       (if (>= (nameIndexHeight ll) (nameIndexHeight lr))
         (nameIndexNodeOf lk lv ll (nameIndexNodeOf key value lr right))
-        (mt lr
+        (match lr
           ((nameIndexEmpty) (nameIndexNodeOf key value left right))
           ((nameIndexNode pk pv pl pr _)
             (nameIndexNodeOf pk pv (nameIndexNodeOf lk lv ll pl) (nameIndexNodeOf key value pr right)))))))
 
 fn nameIndexRotateLeft key: String value: V left: NameIndex right: NameIndex -> NameIndex
-  (mt right
+  (match right
     ((nameIndexEmpty) (nameIndexNodeOf key value left right))
     ((nameIndexNode rk rv rl rr _)
       (if (>= (nameIndexHeight rr) (nameIndexHeight rl))
         (nameIndexNodeOf rk rv (nameIndexNodeOf key value left rl) rr)
-        (mt rl
+        (match rl
           ((nameIndexEmpty) (nameIndexNodeOf key value left right))
           ((nameIndexNode pk pv pl pr _)
             (nameIndexNodeOf pk pv (nameIndexNodeOf key value left pl) (nameIndexNodeOf rk rv pr rr)))))))
@@ -60,7 +60,7 @@ fn nameIndexBalance key: String value: V left: NameIndex right: NameIndex -> Nam
       (else (nameIndexNodeOf key value left right))))
 
 fn nameIndexSet tree: NameIndex key: String value: V -> NameIndex
-  (mt tree
+  (match tree
     ((nameIndexEmpty) (nameIndexNodeOf key value (nameIndexEmpty) (nameIndexEmpty)))
     ((nameIndexNode k v left right _)
       (cond
@@ -69,7 +69,7 @@ fn nameIndexSet tree: NameIndex key: String value: V -> NameIndex
         (else (nameIndexBalance k v left (nameIndexSet right key value))))))
 
 fn nameIndexGet tree: NameIndex key: String -> (Option V)
-  (mt tree
+  (match tree
     ((nameIndexEmpty) (none))
     ((nameIndexNode k v left right _)
       (cond
@@ -81,7 +81,7 @@ fn nameIndexHas? tree: NameIndex key: String -> Bool
   (some? (nameIndexGet tree key))
 
 fn nameIndexEmpty? tree: NameIndex -> Bool
-  (mt tree ((nameIndexEmpty) true) (_ false))
+  (match tree ((nameIndexEmpty) true) (_ false))
 
 fn nameIndexAdd tree: NameIndex key: String n: Int64 -> NameIndex
   (nameIndexSet tree key (+ n (optionOr (nameIndexGet tree key) 0)))
@@ -127,7 +127,7 @@ fn llvmFloat x: Float64 -> String
       (else (str s ".0"))))
 
 fn llTy t: ty/SsaTy -> String
-  (mt t ((ty/tyVal) "%Val") ((ty/tyRec _) "%Val") ((ty/tyI64) "i64") ((ty/tyF64) "double") ((ty/tyI1) "i1") ((ty/tyPtr) "ptr") ((ty/tyI32) "i32"))
+  (match t ((ty/tyVal) "%Val") ((ty/tyRec _) "%Val") ((ty/tyI64) "i64") ((ty/tyF64) "double") ((ty/tyI1) "i1") ((ty/tyPtr) "ptr") ((ty/tyI32) "i32"))
 
 fn nativeTy? t: ty/SsaTy -> Bool
   (let [(n (ty/ssaTyName t))] (or (= n "ptr") (= n "i32")))
@@ -146,7 +146,7 @@ fn valAux p: String base: String -> String
 
 fn boxInline lhs: String dest: String src: ty/SsaTy v: String -> String
   (let [(bits (str "%" (llvmName dest) ".bits"))]
-    (mt src
+    (match src
       ((ty/tyI64) (str lhs "insertvalue %Val { i64 2, i64 0 }, i64 " v ", 1\n"))
       ((ty/tyF64) (str "  " bits " = bitcast double " v " to i64\n" lhs "insertvalue %Val { i64 3, i64 0 }, i64 " bits ", 1\n"))
       ((ty/tyI1) (str "  " bits " = zext i1 " v " to i64\n" lhs "insertvalue %Val { i64 1, i64 0 }, i64 " bits ", 1\n"))
@@ -156,7 +156,7 @@ fn boxInline lhs: String dest: String src: ty/SsaTy v: String -> String
       ((ty/tyPtr) (str "  " bits " = ptrtoint ptr " v " to i64\n" lhs "insertvalue %Val { i64 2, i64 0 }, i64 " bits ", 1\n"))))
 
 fn rawKind t: ty/SsaTy -> String
-  (mt t ((ty/tyVal) "val") ((ty/tyRec _) "val") ((ty/tyI64) "int") ((ty/tyF64) "float") ((ty/tyI1) "bool") ((ty/tyI32) "int") ((ty/tyPtr) "val"))
+  (match t ((ty/tyVal) "val") ((ty/tyRec _) "val") ((ty/tyI64) "int") ((ty/tyF64) "float") ((ty/tyI1) "bool") ((ty/tyI32) "int") ((ty/tyPtr) "val"))
 
 fn val name: String -> String
   (str "%" (llvmName name))
@@ -243,15 +243,15 @@ fn wrappedCallee f: ty/SsaFunction -> (Option String)
     (none)
     (listHead (fold (fn [(acc (List String)) (b ty/SsaBlock)] -> (List String)
                       (listAppend acc (fold (fn [(found (List String)) (i ty/SsaInstr)] -> (List String)
-                                              (mt i.op ((ty/opCall callee _) (if (stringStartsWith? callee "aslRc") found (listAppend found (list callee)))) (_ found)))
+                                              (match i.op ((ty/opCall callee _) (if (stringStartsWith? callee "aslRc") found (listAppend found (list callee)))) (_ found)))
                                             (list) b.instrs)))
                     (list) f.blocks)))
 
 fn protoNameIn functions: NameIndex callee: String -> String
   (if (stringEndsWith? callee "@rc")
     (protoNameIn functions (optionOr (stringSlice callee 0 (- (stringLength callee) 3)) callee))
-    (mt (nameIndexGet functions callee)
-      ((some f) (mt (wrappedCallee f) ((some w) (protoName w)) ((none) (protoName callee))))
+    (match (nameIndexGet functions callee)
+      ((some f) (match (wrappedCallee f) ((some w) (protoName w)) ((none) (protoName callee))))
       ((none) (protoName callee))))
 
 fn protoNameSym name: String -> String
@@ -323,7 +323,7 @@ fn routedOnlyNames -> (List String)
         "tcpListen" "tcpConnect" "sockAccept" "sockLocalPort" "unixListen" "unixConnect" "parMap" "parFold")
 
 fn routedOnly? op: ty/SsaOp -> Bool
-  (mt op
+  (match op
     ((ty/opBuiltin name _) (listContains? (routedOnlyNames) name))
     ((ty/opEntry name _) (listContains? (routedOnlyNames) name))
     (_ false))
@@ -380,7 +380,7 @@ fn variantTag env: FnEnv typeName: String variant: String -> Int64
 
 fn termOperands t: ty/SsaTerm -> (List String)
   (listAppend
-    (mt t
+    (match t
       ((ty/termReturn v) (list v))
       ((ty/termBranch c _ _) (list c))
       ((ty/termSwitch s _ _ _) (list s))
@@ -400,10 +400,10 @@ fn useCounts f: ty/SsaFunction -> NameIndex
         (nameIndexEmpty) f.blocks)
 
 fn unboxedValues f: ty/SsaFunction -> NameIndex
-  (fold (fn [(acc NameIndex) (ins ty/SsaInstr)] -> NameIndex (mt ins.op ((ty/opUnbox v) (nameIndexSet acc v true)) (_ acc))) (nameIndexEmpty) (allInstrs f))
+  (fold (fn [(acc NameIndex) (ins ty/SsaInstr)] -> NameIndex (match ins.op ((ty/opUnbox v) (nameIndexSet acc v true)) (_ acc))) (nameIndexEmpty) (allInstrs f))
 
 fn fieldOrVariantField? op: ty/SsaOp -> Bool
-  (mt op ((ty/opField _ _) true) ((ty/opVariantField _ _) true) (_ false))
+  (match op ((ty/opField _ _) true) ((ty/opVariantField _ _) true) (_ false))
 
 fn fusedInstrs f: ty/SsaFunction -> (List ty/SsaInstr)
   (let [(uc (useCounts f)) (unboxed (unboxedValues f))]
@@ -416,7 +416,7 @@ fn fusedMap f: ty/SsaFunction -> NameIndex
   (fold (fn [(acc NameIndex) (ins ty/SsaInstr)] -> NameIndex (nameIndexSet acc ins.dest ins.op)) (nameIndexEmpty) (fusedInstrs f))
 
 fn fusedFieldNamesIn f: ty/SsaFunction -> (List String)
-  (listReverse (fold (fn [(acc (List String)) (ins ty/SsaInstr)] -> (List String) (mt ins.op ((ty/opField _ field) (cons field acc)) (_ acc))) (list) (fusedInstrs f)))
+  (listReverse (fold (fn [(acc (List String)) (ins ty/SsaInstr)] -> (List String) (match ins.op ((ty/opField _ field) (cons field acc)) (_ acc))) (list) (fusedInstrs f)))
 
 fn fusedFieldNames m: ty/SsaModule -> (List String)
   (distinct (fold (fn [(acc (List String)) (f ty/SsaFunction)] -> (List String) (listAppend acc (fusedFieldNamesIn f))) (list) m.functions))
@@ -424,7 +424,7 @@ fn fusedFieldNames m: ty/SsaModule -> (List String)
 fn typedFieldNamesIn menv: ModEnv f: ty/SsaFunction -> (List String)
   (let [(recs (recordMap f)) (defs (functionDefs f)) (fused (fusedMap f))]
     (listReverse (fold (fn [(acc (List String)) (ins ty/SsaInstr)] -> (List String)
-            (mt ins.op
+            (match ins.op
               ((ty/opField base field) (if (and (not (some? (nameIndexGet fused ins.dest))) (some? (typedFieldIndexFor menv recs defs base field)))
                                          (cons field acc)
                                          acc))
@@ -437,19 +437,19 @@ fn fieldIdNames m: ty/SsaModule -> (List String)
 
 fn recordMap f: ty/SsaFunction -> NameIndex
   (fold (fn [(acc NameIndex) (ins ty/SsaInstr)] -> NameIndex
-          (mt ins.op ((ty/opRecord _ _ _) (nameIndexSet acc ins.dest ins.op)) (_ acc)))
+          (match ins.op ((ty/opRecord _ _ _) (nameIndexSet acc ins.dest ins.op)) (_ acc)))
         (nameIndexEmpty) (allInstrs f))
 
 fn opRecordFields op: ty/SsaOp -> (Option (List String))
-  (mt op ((ty/opRecord _ fields _) (some fields)) (_ (none)))
+  (match op ((ty/opRecord _ fields _) (some fields)) (_ (none)))
 
 fn recordFieldsFor recs: NameIndex base: String -> (Option (List String))
-  (mt (nameIndexGet recs base)
+  (match (nameIndexGet recs base)
     ((some op) (opRecordFields op))
     ((none) (none)))
 
 fn fieldStaticIndexFor recs: NameIndex base: String field: String -> (Option Int64)
-  (mt (recordFieldsFor recs base)
+  (match (recordFieldsFor recs base)
     ((some fields) (listIndexOf fields field))
     ((none) (none)))
 
@@ -459,9 +459,9 @@ fn staticFieldIndex env: FnEnv base: String field: String -> (Option Int64)
 fn typedFieldIndexFor menv: ModEnv recs: NameIndex defs: NameIndex base: String field: String -> (Option Int64)
   (if (some? (nameIndexGet recs base))
     (none)
-    (mt (nameIndexGet defs base)
-      ((some t) (mt t
-                  ((ty/tyRec schema) (mt (nameIndexGet menv.records schema)
+    (match (nameIndexGet defs base)
+      ((some t) (match t
+                  ((ty/tyRec schema) (match (nameIndexGet menv.records schema)
                                        ((some fields) (listIndexOf fields field))
                                        ((none) (none))))
                   (_ (none))))
@@ -507,7 +507,7 @@ fn entryUnboxes f: ty/SsaFunction -> NameIndex
                                               (pair 0 (nameIndexEmpty)) b.instrs)))
                   (unboxed (fold (fn [(u NameIndex) (ins ty/SsaInstr)] -> NameIndex (if (plainUnbox? ins.op) (nameIndexSet u ins.dest true) u)) (nameIndexEmpty) b.instrs))]
               (fold (fn [(m NameIndex) (ins ty/SsaInstr)] -> NameIndex
-                      (mt ins.op
+                      (match ins.op
                         ((ty/opEntry name args)
                          (if (or (and (= name "stringFromInt64") (= (listLength args) 1)) (and (= name "stringSlice") (= (listLength args) 3)))
                            (let [(text (if (= name "stringSlice") (optionOr (listHead args) "") ""))
@@ -644,7 +644,7 @@ fn emitFusedFieldUnbox lhs: String dest: String t: ty/SsaTy base: String field: 
          "  " p ".isRec = icmp eq i32 " p ".vtag, 7\n"
          "  br i1 " p ".isRec, label %" lbl ".rec, label %" lbl ".slow\n"
          (recordKeysPrelude p lbl base field)
-         (mt static
+         (match static
            ((none) (str "  br label %" lbl ".loop\n"
                         lbl ".loop:\n"
                         "  " p ".i = phi i32 [ 0, %" lbl ".scan ], [ " p ".inext, %" lbl ".body ]\n"))
@@ -660,7 +660,7 @@ fn emitFusedFieldUnbox lhs: String dest: String t: ty/SsaTy base: String field: 
          "  " p ".match = icmp eq i32 " p ".key, " p ".fid\n"
          "  br i1 " p ".match, label %" lbl ".found, label %" lbl ".loop\n"
          lbl ".found:\n"
-         (mt static
+         (match static
            ((none) (str "  " p ".idx64 = sext i32 " p ".i to i64\n"))
            ((some idx) (str "  " p ".fi = phi i32 [ " p ".i, %" lbl ".body ], [ " idx ", %" lbl ".sprobe ]\n"
                             "  " p ".idx64 = sext i32 " p ".fi to i64\n")))
@@ -791,7 +791,7 @@ fn emitMakeClosure lhs: String dest: String callee: String caps: (List String) -
          lhs "insertvalue %Val { i64 9, i64 0 }, i64 " p ".objw, 1\n"))
 
 fn idResolvedOp? op: ty/SsaOp -> Bool
-  (mt op ((ty/opConstruct _ _ _) true) ((ty/opRecord _ _ _) true) ((ty/opBuiltin name args) (partialCtor? name (listLength args))) (_ false))
+  (match op ((ty/opConstruct _ _ _) true) ((ty/opRecord _ _ _) true) ((ty/opBuiltin name args) (partialCtor? name (listLength args))) (_ false))
 
 fn inlinedEntryName? name: String -> Bool
   (listContains? (list "cons" "listHead" "listTail" "listEmpty?" "@listHeadEmpty?" "@listTailEmpty?" "bytesLength" "bytesGet" "bytesSet") name)
@@ -822,7 +822,7 @@ fn helperEntrySym name: String -> String
         (else "@listrt.rest"))
 
 fn inlinedEntrySuffix op: ty/SsaOp -> String
-  (mt op
+  (match op
     ((ty/opEntry name _) (if (inlinedEntryName? name) "join" ""))
     (_ ""))
 
@@ -1034,18 +1034,18 @@ fn emitStaticFieldRead lhs: String env: FnEnv dest: String base: String index: I
          lhs "load %Val, ptr " p ".slotp\n"))
 
 fn staticFieldInstr? env: FnEnv ins: ty/SsaInstr -> Bool
-  (mt ins.op
+  (match ins.op
     ((ty/opField base field) (and (not (some? (nameIndexGet env.fused ins.dest))) (some? (staticFieldIndex env base field))))
     (_ false))
 
 fn typedFieldInstr? env: FnEnv ins: ty/SsaInstr -> Bool
-  (mt ins.op
+  (match ins.op
     ((ty/opField base field) (and (not (some? (nameIndexGet env.fused ins.dest)))
                                   (and (not (some? (staticFieldIndex env base field))) (some? (typedFieldIndex env base field)))))
     (_ false))
 
 fn arrayItems op: ty/SsaOp -> (List String)
-  (mt op
+  (match op
     ((ty/opBuiltin name args) (if (or (errorBuiltin? name (listLength args)) (or (mathBuiltin? name (listLength args)) (or (seqBuiltin? name (listLength args)) (opsrt/opsBuiltin? name (listLength args))))) (list) args))
     ((ty/opEntry name args) (if (some? (ty/builtinEntry name (listLength args))) (list) args))
     ((ty/opCallClosure _ args) args)
@@ -1087,13 +1087,13 @@ fn spillCapacity -> Int64
   1024
 
 fn gprWords t: ty/SsaTy -> Int64
-  (mt t ((ty/tyVal) 2) ((ty/tyRec _) 2) ((ty/tyI64) 1) ((ty/tyI1) 1) ((ty/tyF64) 0) ((ty/tyPtr) 1) ((ty/tyI32) 1))
+  (match t ((ty/tyVal) 2) ((ty/tyRec _) 2) ((ty/tyI64) 1) ((ty/tyI1) 1) ((ty/tyF64) 0) ((ty/tyPtr) 1) ((ty/tyI32) 1))
 
 fn fprWords t: ty/SsaTy -> Int64
-  (mt t ((ty/tyF64) 1) (_ 0))
+  (match t ((ty/tyF64) 1) (_ 0))
 
 fn spillSlotsFrom types: (List ty/SsaTy) i: Int64 gpr: Int64 fpr: Int64 slot: Int64 -> (List Int64)
-  (mt (listGet types i)
+  (match (listGet types i)
     ((none) (list))
     ((some t) (let [(g (+ gpr (gprWords t))) (fl (+ fpr (fprWords t)))]
                 (if (and (<= g (spillGprLimit)) (<= fl (spillFprLimit)))
@@ -1123,7 +1123,7 @@ fn tailCallArgs dest: String args: (List String) types: (List ty/SsaTy) -> (Pair
 fn spillLoads params: (List ty/SsaParam) -> String
   (let [(slots (spillSlots (map (fn [(p ty/SsaParam)] -> ty/SsaTy p.ty) params)))]
     (stringJoin (map (fn [(i Int64)] -> String
-                       (mt (listGet params i)
+                       (match (listGet params i)
                          ((none) "")
                          ((some p) (let [(k (optionOr (listGet slots i) -1)) (sp (str (val p.name) ".spillp"))]
                                      (if (< k 0) "" (str (spillSlotPtr sp k) "  " (val p.name) " = load " (llTy p.ty) ", ptr " sp "\n"))))))
@@ -1147,16 +1147,16 @@ fn externCallType e: ty/SsaExtern -> String
 fn nativeArgs env: FnEnv args: (List String) types: (List ty/SsaTy) -> String
   (stringJoin (map (fn [(i Int64)] -> String
                       (let [(nm (optionOr (listGet args i) ""))]
-                        (mt (listGet types i)
+                        (match (listGet types i)
                           ((some t) (str (llTy t) " " (val nm)))
                           ((none) (str (llTy (optionOr (nameIndexGet env.defs nm) (ty/tyVal))) " " (val nm))))))
                     (range 0 (listLength args))) ", ")
 
 fn emitCall env: FnEnv lhs: String dest: String callee: String args: (List String) -> String
-  (mt (nameIndexGet env.mod.functions callee)
+  (match (nameIndexGet env.mod.functions callee)
     ((some f) (tailCall lhs dest f.retTy callee args (signatureTypes f)))
     ((none)
-      (mt (nameIndexGet env.mod.externs callee)
+      (match (nameIndexGet env.mod.externs callee)
         ((some e)
           (cond
             ((not e.typed) (str lhs "call %Val " (fnSym callee) "(" (typedArgs args (list)) ")\n"))
@@ -1167,7 +1167,7 @@ fn emitCall env: FnEnv lhs: String dest: String callee: String args: (List Strin
 
 fn emitConst env: FnEnv lhs: String dest: String t: ty/SsaTy c: ty/SsaConst -> String
   (let [(tn (ty/ssaTyName t))]
-    (mt c
+    (match c
       ((ty/constInt n) (cond ((= tn "i64") (str lhs "bitcast i64 " n " to i64\n"))
                               ((= tn "i32") (str lhs "bitcast i32 " n " to i32\n"))
                               (else (str lhs "insertvalue %Val { i64 2, i64 0 }, i64 " n ", 1\n"))))
@@ -1184,13 +1184,13 @@ fn emitConst env: FnEnv lhs: String dest: String t: ty/SsaTy c: ty/SsaConst -> S
       ((ty/constSymbol n) (str lhs "call %Val @objrt.symbol(ptr " (nameSym n) ")\n"))))
 
 fn calleeArity menv: ModEnv callee: String -> Int64
-  (mt (nameIndexGet menv.functions callee) ((some f) (listLength f.params)) ((none) 0))
+  (match (nameIndexGet menv.functions callee) ((some f) (listLength f.params)) ((none) 0))
 
 fn primPart dest: String part: String -> String
   (str "%" (llvmName dest) ".p." part)
 
 fn trapping? op: ty/SsaOp -> Bool
-  (mt op
+  (match op
     ((ty/opPrim name _) (or (listContains? (list "addInt" "subInt" "mulInt" "quotInt" "remInt" "floatToInt" "addIntHost" "subIntHost" "mulIntHost" "divIntHost" "modIntHost" "negIntHost") name)
                              (= name "rawNarrowI32")))
     (_ false))
@@ -1396,13 +1396,13 @@ fn emitPrim lhs: String dest: String name: String args: (List String) -> String
       (else (str lhs (binaryInstr name) " " a ", " b "\n"))))
 
 fn fusedUnbox? env: FnEnv op: ty/SsaOp -> Bool
-  (mt op ((ty/opUnbox v) (some? (nameIndexGet env.fused v))) (_ false))
+  (match op ((ty/opUnbox v) (some? (nameIndexGet env.fused v))) (_ false))
 
 fn plainUnbox? op: ty/SsaOp -> Bool
-  (mt op ((ty/opUnbox _) true) (_ false))
+  (match op ((ty/opUnbox _) true) (_ false))
 
 fn unfusedVariantField? env: FnEnv ins: ty/SsaInstr -> Bool
-  (mt ins.op ((ty/opVariantField _ _) (not (some? (nameIndexGet env.fused ins.dest)))) (_ false))
+  (match ins.op ((ty/opVariantField _ _) (not (some? (nameIndexGet env.fused ins.dest)))) (_ false))
 
 fn exitLabel env: FnEnv b: ty/SsaBlock -> String
   (let [(afterInstrs (fold (fn [(acc String) (ins ty/SsaInstr)] -> String
@@ -1418,7 +1418,7 @@ fn exitLabel env: FnEnv b: ty/SsaBlock -> String
                                  ((!= entrySuffix "") (str (llvmName ins.dest) "." entrySuffix))
                                  (else acc))))
                            (label b.label) b.instrs))]
-    (mt b.term
+    (match b.term
       ((ty/termSwitch _ _ _ _) (str (label b.label) ".match"))
       ((ty/termBranch c _ _) (if (= (ty/ssaTyName (defType env c)) "i1") afterInstrs (str (label b.label) ".cond.ok")))
       (_ afterInstrs)))
@@ -1430,30 +1430,30 @@ fn emitInstr env: FnEnv ins: ty/SsaInstr -> String
         (lhs (str "  " (val d) " = "))
         (items (arrayItems op))
         (arr (arrayArg d (listLength items)))]
-    (mt op
+    (match op
       ((ty/opField base field) (if (some? (nameIndexGet env.fused d)) ""
-                                  (mt (staticFieldIndex env base field)
+                                  (match (staticFieldIndex env base field)
                                     ((some idx) (emitStaticFieldRead lhs env d base idx))
-                                    ((none) (mt (typedFieldIndex env base field)
+                                    ((none) (match (typedFieldIndex env base field)
                                               ((some idx) (emitTypedFieldRead lhs d (val base) field idx))
                                               ((none) (fieldMiss lhs (val base) field)))))))
       ((ty/opVariantField base i) (if (some? (nameIndexGet env.fused d)) "" (emitVariantFieldVal lhs d (val base) i)))
-      ((ty/opUnbox v) (mt (nameIndexGet env.fused v)
-                        ((none) (mt (nameIndexGet env.wants d)
+      ((ty/opUnbox v) (match (nameIndexGet env.fused v)
+                        ((none) (match (nameIndexGet env.wants d)
                                   ((some w) (emitEntryUnbox lhs d t v w))
                                   ((none) (emitUnboxInline lhs d t v))))
-                        ((some fusedOp) (mt fusedOp
+                        ((some fusedOp) (match fusedOp
                                           ((ty/opField base field) (emitFusedFieldUnbox lhs d t (val base) field (typedFieldIndex env base field)))
                                           ((ty/opVariantField base i) (emitFusedVariantUnbox lhs d t (val base) i))
                                           (_ (emitUnboxInline lhs d t v))))))
       ((ty/opConstruct _ variant fields) (emitConstruct lhs d variant fields))
       ((ty/opRecord schemaName fields values) (emitRecord lhs d schemaName fields values (optionOr (nameIndexGet env.mod.records schemaName) (list))))
       ((ty/opMakeClosure callee caps) (emitMakeClosure lhs d callee caps))
-      ((ty/opEntry name args) (mt (nativeEntry name (listLength args))
+      ((ty/opEntry name args) (match (nativeEntry name (listLength args))
                                  ((some b) (emitNativeEntry lhs d b args))
                                  ((none) (if (formatEntryName? name) (emitFormatEntry lhs name args)
                                            (str (fillArray d items)
-                                             (mt (ty/builtinEntry name (listLength args))
+                                             (match (ty/builtinEntry name (listLength args))
                                                ((some b) (str lhs "call " (llTy b.result) " @" (builtinSym b) "(" (typedArgs args b.args) ")\n"))
                                                ((none) "")))))))
       ((ty/opList xs) (emitListLiteral lhs d xs))
@@ -1471,7 +1471,7 @@ fn emitInstr env: FnEnv ins: ty/SsaInstr -> String
                                     (else (str (fillArray d items)
                                          (if (rtFormatBuiltin? name) (emitFormatBuiltin d name args arr) "")))))
       (_ (str (fillArray d items)
-         (mt op
+         (match op
            ((ty/opConst c) (emitConst env lhs d t c))
            ((ty/opCall callee args) (emitCall env lhs d callee args))
            ((ty/opCallClosure c args) (str lhs "call %Val @objrt.call(%Val " (val c) ", i64 " (listLength args) ", " arr ")\n"))
@@ -1485,7 +1485,7 @@ fn countTarget edges: (List ty/SsaEdge) target: String -> Int64
   (listLength (filter (fn [(e ty/SsaEdge)] -> Bool (= e.target target)) edges))
 
 fn blockParamCount env: FnEnv target: String -> Int64
-  (mt (nameIndexGet env.blocks target) ((some b) (listLength b.params)) ((none) 0))
+  (match (nameIndexGet env.blocks target) ((some b) (listLength b.params)) ((none) 0))
 
 fn splitEdge? env: FnEnv edges: (List ty/SsaEdge) e: ty/SsaEdge -> Bool
   (and (> (blockParamCount env e.target) 0) (> (countTarget edges e.target) 1))
@@ -1494,7 +1494,7 @@ fn edgeBlock from: String k: Int64 -> String
   (str (label from) ".e" k)
 
 fn edgeLabel env: FnEnv from: String edges: (List ty/SsaEdge) k: Int64 -> String
-  (mt (listGet edges k)
+  (match (listGet edges k)
     ((none) (label from))
     ((some e) (if (splitEdge? env edges e) (edgeBlock from k) (label e.target))))
 
@@ -1509,7 +1509,7 @@ fn predecessors blocks: (List ty/SsaBlock) -> NameIndex
 fn incoming env: FnEnv target: String index: Int64 -> (List String)
   (fold (fn [(acc (List String)) (p (Pair ty/SsaBlock Int64))] -> (List String)
           (let [(b (pairFirst p)) (k (pairSecond p)) (edges (ty/termEdges b.term))]
-            (mt (listGet edges k)
+            (match (listGet edges k)
               ((none) acc)
               ((some e) (if (tailCall? env b)
                           acc
@@ -1529,7 +1529,7 @@ fn emitPhis env: FnEnv b: ty/SsaBlock -> String
 fn emitTerm env: FnEnv from: String term: ty/SsaTerm -> String
   (let [(edges (ty/termEdges term))
         (to (fn [(k Int64)] -> String (str "%" (edgeLabel env from edges k))))]
-    (mt term
+    (match term
       ((ty/termReturn v) (let [(t (defType env v))]
                            (if (and (valContext? env) (not (sameAbi? t env.retTy)))
                              (let [(r (str v ".ret"))] (str (boxInline (str "  " (val r) " = ") r t (val v)) "  ret %Val " (val r) "\n"))
@@ -1548,9 +1548,9 @@ fn emitTerm env: FnEnv from: String term: ty/SsaTerm -> String
                  "  br i1 " p ".bit, label " (to 0) ", label " (to 1) "\n"))))
       ((ty/termSwitch s typeName cases d)
         (let [(n (listLength cases))
-              (fallback (mt d ((some e) (if (trapEdge? env e) (str "%" (label from) ".nomatch") (to n))) ((none) (str "%" (label from) ".nomatch"))))
+              (fallback (match d ((some e) (if (trapEdge? env e) (str "%" (label from) ".nomatch") (to n))) ((none) (str "%" (label from) ".nomatch"))))
               (arms (stringJoin (map (fn [(k Int64)] -> String
-                                        (mt (listGet cases k)
+                                        (match (listGet cases k)
                                           ((none) "")
                                           ((some c) (str "    i64 " (variantTag env typeName c.variant) ", label " (to k) "\n"))))
                                       (range 0 n)) ""))]
@@ -1642,22 +1642,22 @@ fn emitVariantIdsInit menv: ModEnv typeName: String -> String
 
 fn trapEdge? env: FnEnv e: ty/SsaEdge -> Bool
   (and (listEmpty? e.args)
-       (mt (nameIndexGet env.blocks e.target)
-         ((some b) (and (listEmpty? b.instrs) (and (listEmpty? b.params) (mt b.term ((ty/termUnreachable) true) (_ false)))))
+       (match (nameIndexGet env.blocks e.target)
+         ((some b) (and (listEmpty? b.instrs) (and (listEmpty? b.params) (match b.term ((ty/termUnreachable) true) (_ false)))))
          ((none) false)))
 
 fn emitEdgeBlocks env: FnEnv b: ty/SsaBlock -> String
   (let [(from b.label)
         (edges (ty/termEdges b.term))
         (splits (stringJoin (map (fn [(k Int64)] -> String
-                                    (mt (listGet edges k)
+                                    (match (listGet edges k)
                                       ((none) "")
                                       ((some e) (if (splitEdge? env edges e)
                                                   (str (edgeBlock from k) ":\n  br label %" (label e.target) "\n")
                                                   ""))))
                                   (range 0 (listLength edges))) ""))
-        (nomatch (mt b.term
-                   ((ty/termSwitch s _ _ d) (mt d ((some e) (if (trapEdge? env e) (str (label from) ".nomatch:\n  call void @rterr.matchValue(%Val " (val s) ", ptr " (nameSym env.name) ")\n  unreachable\n") "")) ((none) (str (label from) ".nomatch:\n  unreachable\n"))))
+        (nomatch (match b.term
+                   ((ty/termSwitch s _ _ d) (match d ((some e) (if (trapEdge? env e) (str (label from) ".nomatch:\n  call void @rterr.matchValue(%Val " (val s) ", ptr " (nameSym env.name) ")\n  unreachable\n") "")) ((none) (str (label from) ".nomatch:\n  unreachable\n"))))
                    (_ "")))]
     (str splits nomatch))
 
@@ -1665,13 +1665,13 @@ fn lastInstr b: ty/SsaBlock -> (Option ty/SsaInstr)
   (listGet b.instrs (- (listLength b.instrs) 1))
 
 fn returnsParam? env: FnEnv target: String fuel: Int64 -> Bool
-  (mt (nameIndexGet env.blocks target)
+  (match (nameIndexGet env.blocks target)
     ((none) false)
     ((some j) (and (listEmpty? j.instrs)
-                   (mt (listHead j.params)
+                   (match (listHead j.params)
                      ((none) false)
                      ((some p) (and (= (listLength j.params) 1)
-                                    (mt j.term
+                                    (match j.term
                                       ((ty/termReturn v) (= v p.name))
                                       ((ty/termJump e) (and (> fuel 0)
                                                             (and (= e.args (list p.name))
@@ -1679,25 +1679,25 @@ fn returnsParam? env: FnEnv target: String fuel: Int64 -> Bool
                                       (_ false))))))))
 
 fn returnsDest? env: FnEnv b: ty/SsaBlock dest: String -> Bool
-  (mt b.term
+  (match b.term
     ((ty/termReturn v) (= v dest))
     ((ty/termJump e) (and (= e.args (list dest)) (returnsParam? env e.target env.size)))
     (_ false))
 
 ; (:m :ref TCO-CLOSURE-ABI :do "a branch that jumps with a Val to a join block whose only work is unboxing its parameter for the return: in a Val-returning body that unbox is the return conversion, so the Val call ending the branch is a tail call")
 fn unboxesParam? env: FnEnv target: String -> Bool
-  (mt (nameIndexGet env.blocks target)
+  (match (nameIndexGet env.blocks target)
     ((none) false)
     ((some j) (and (= (listLength j.params) 1)
                    (and (= (listLength j.instrs) 1)
-                        (mt (listHead j.instrs)
+                        (match (listHead j.instrs)
                           ((some u) (and (plainUnbox? u.op)
                                          (and (= (ty/opOperands u.op) (map (fn [(p ty/SsaParam)] -> String p.name) j.params))
                                               (returnsDest? env j u.dest))))
                           ((none) false))))))
 
 fn returnsUnboxed? env: FnEnv b: ty/SsaBlock dest: String -> Bool
-  (mt b.term
+  (match b.term
     ((ty/termJump e) (and (= e.args (list dest)) (unboxesParam? env e.target)))
     (_ false))
 
@@ -1712,14 +1712,14 @@ fn boxedTarget? env: FnEnv callee: String -> Bool
 
 fn directTail? env: FnEnv callee: String -> Bool
   (and (not (stringContains? callee "sysRoute."))
-       (mt (nameIndexGet env.mod.functions callee)
+       (match (nameIndexGet env.mod.functions callee)
          ((some f) (sameAbi? f.retTy env.retTy))
-         ((none) (mt (nameIndexGet env.mod.externs callee)
+         ((none) (match (nameIndexGet env.mod.externs callee)
                    ((some e) (and e.typed (and (not (nativeExtern? e)) (and (not (hostDefined? callee)) (sameAbi? e.ret env.retTy)))))
                    ((none) false)))))
 
 fn tailCallOp? env: FnEnv op: ty/SsaOp -> Bool
-  (mt op
+  (match op
     ((ty/opCall callee _) (or (boxedTarget? env callee) (directTail? env callee)))
     ((ty/opCallClosure _ args) (and (valContext? env) (<= (listLength args) (spillCapacity))))
     (_ false))
@@ -1728,20 +1728,20 @@ fn tailCallOp? env: FnEnv op: ty/SsaOp -> Bool
 fn rewrapped? env: FnEnv op: ty/SsaOp call: ty/SsaInstr -> Bool
   (and (valContext? env)
        (and (= (ty/opOperands op) (list call.dest))
-            (mt op
+            (match op
               ((ty/opUnbox _) (tailCallOp? env call.op))
-              ((ty/opBox _) (mt call.op ((ty/opCall callee _) (boxedTarget? env callee)) (_ false)))
+              ((ty/opBox _) (match call.op ((ty/opCall callee _) (boxedTarget? env callee)) (_ false)))
               (_ false))))
 
 fn tailSpan env: FnEnv b: ty/SsaBlock -> Int64
-  (mt (lastInstr b)
+  (match (lastInstr b)
     ((none) 0)
     ((some ins)
       (cond
         ((returnsDest? env b ins.dest)
           (cond
             ((tailCallOp? env ins.op) 1)
-            (else (mt (listGet b.instrs (- (listLength b.instrs) 2))
+            (else (match (listGet b.instrs (- (listLength b.instrs) 2))
                     ((some call) (if (rewrapped? env ins.op call) 2 0))
                     ((none) 0)))))
         ((and (valContext? env) (and (tailCallOp? env ins.op) (returnsUnboxed? env b ins.dest))) 1)
@@ -1757,10 +1757,10 @@ fn closureTailArgs dest: String args: (List String) -> String
                    (range 0 (listLength args))) "")
 
 fn emitTailCall env: FnEnv ins: ty/SsaInstr -> String
-  (mt ins.op
+  (match ins.op
     ((ty/opCall callee args) (str (if (boxedTarget? env callee)
                                     (tailCallSym (str "  " (val ins.dest) " = musttail ") ins.dest (ty/tyVal) (valSym callee) args
-                                                 (mt (nameIndexGet env.mod.functions callee) ((some f) (signatureTypes f)) ((none) (list))))
+                                                 (match (nameIndexGet env.mod.functions callee) ((some f) (signatureTypes f)) ((none) (list))))
                                     (emitCall env (str "  " (val ins.dest) " = musttail ") ins.dest callee args))
                                   "  ret " (llTy env.retTy) " " (val ins.dest) "\n"))
     ((ty/opCallClosure c args) (str (closureTailArgs ins.dest args)
@@ -1775,9 +1775,9 @@ fn emitBlock env: FnEnv allocas: String isEntry: Bool frame: NameIndex b: ty/Ssa
         (body (if (> span 0) (listTake instrs (- n span)) instrs))
         (framed (not (nameIndexEmpty? frame)))
         (emitOne (fn [(ins ty/SsaInstr)] -> String
-                   (mt (nameIndexGet frame ins.dest)
+                   (match (nameIndexGet frame ins.dest)
                      ((none) (emitInstr env ins))
-                     ((some k) (mt ins.op
+                     ((some k) (match ins.op
                                  ((ty/opList xs) (str (rootSlot ins.dest k)
                                                       (emitListLiteralKept (str "  " (val ins.dest) " = ") ins.dest xs (rootSlotPtr ins.dest))
                                                       (rootStore ins.dest)))
@@ -1788,8 +1788,8 @@ fn emitBlock env: FnEnv allocas: String isEntry: Bool frame: NameIndex b: ty/Ssa
          (stringJoin (map (fn [(p ty/SsaParam)] -> String (rootKeep frame p.name)) b.params) "")
          (stringJoin (map emitOne body) "")
          (if (> span 0)
-           (str (if framed (rootPop) "") (mt (listGet instrs (- n span)) ((some ins) (emitTailCall env ins)) ((none) "")))
-           (str (mt b.term ((ty/termReturn _) (if framed (rootPop) "")) (_ ""))
+           (str (if framed (rootPop) "") (match (listGet instrs (- n span)) ((some ins) (emitTailCall env ins)) ((none) "")))
+           (str (match b.term ((ty/termReturn _) (if framed (rootPop) "")) (_ ""))
                 (emitTerm env b.label b.term) (emitEdgeBlocks env b)))))
 
 fn rootSlotPtr name: String -> String
@@ -1802,7 +1802,7 @@ fn rootStore name: String -> String
   (str "  store %Val " (val name) ", ptr " (rootSlotPtr name) "\n")
 
 fn rootKeep frame: NameIndex name: String -> String
-  (mt (nameIndexGet frame name) ((none) "") ((some k) (str (rootSlot name k) (rootStore name))))
+  (match (nameIndexGet frame name) ((none) "") ((some k) (str (rootSlot name k) (rootStore name))))
 
 fn rootPop -> String
   "  store i64 %rt.prev, ptr @asl_gc_shadow_top\n"
@@ -1826,7 +1826,7 @@ fn heapVal? t: ty/SsaTy -> Bool
 fn rootedInstr? env: FnEnv ins: ty/SsaInstr -> Bool
   (and (heapVal? ins.ty)
        (and (none? (nameIndexGet env.fused ins.dest))
-            (mt ins.op ((ty/opBox _) false) (_ true))))
+            (match ins.op ((ty/opBox _) false) (_ true))))
 
 fn rootSlots env: FnEnv f: ty/SsaFunction -> (List String)
   (let [(params (map (fn [(p ty/SsaParam)] -> String p.name)
@@ -1836,11 +1836,11 @@ fn rootSlots env: FnEnv f: ty/SsaFunction -> (List String)
                          (span (tailSpan env b))
                          (body (if (> span 0) (listTake instrs (- (listLength instrs) span)) instrs))
                          (phis (filter (fn [(i Int64)] -> Bool
-                                         (mt (listGet b.params i)
+                                         (match (listGet b.params i)
                                            ((none) false)
                                            ((some p) (and (heapVal? p.ty) (not (listEmpty? (incoming env b.label i)))))))
                                        (range 0 (listLength b.params))))]
-                     (listAppend (map (fn [(i Int64)] -> String (mt (listGet b.params i) ((some p) p.name) ((none) ""))) phis)
+                     (listAppend (map (fn [(i Int64)] -> String (match (listGet b.params i) ((some p) p.name) ((none) ""))) phis)
                                  (map (fn [(ins ty/SsaInstr)] -> String ins.dest) (filter (fn [(ins ty/SsaInstr)] -> Bool (rootedInstr? env ins)) body))))))]
     (listReverse (fold (fn [(acc (List String)) (b ty/SsaBlock)] -> (List String) (fold (fn [(a (List String)) (n String)] -> (List String) (cons n a)) acc (inBlock b))) (listReverse params) f.blocks)))
 
@@ -1885,7 +1885,7 @@ fn emitBodyAs menv: ModEnv f: ty/SsaFunction rooted: Bool retTy: ty/SsaTy head: 
                      (str (rootFrameSetup (listLength slotNames))
                           (stringJoin (map (fn [(p ty/SsaParam)] -> String (rootKeep frame p.name)) allParams) ""))))
         (entryText (str allocas (spillLoads allParams) frameText))
-        (body (mt (listHead blocks)
+        (body (match (listHead blocks)
                 ((none) "")
                 ((some first) (str (emitBlock env entryText true frame first)
                                    (stringJoin (map (fn [(b ty/SsaBlock)] -> String (emitBlock env entryText false frame b)) (optionOr (listTail blocks) (list))) "")))))]
@@ -2019,8 +2019,8 @@ fn allOps m: ty/SsaModule -> (List ty/SsaOp)
                      (list) m.functions))
 
 fn opNames op: ty/SsaOp -> (List String)
-  (mt op
-    ((ty/opConst c) (mt c ((ty/constKeyword n) (list n)) ((ty/constSymbol n) (list n)) (_ (list))))
+  (match op
+    ((ty/opConst c) (match c ((ty/constKeyword n) (list n)) ((ty/constSymbol n) (list n)) (_ (list))))
     ((ty/opBuiltin name args) (cond ((errorBuiltin? name (listLength args)) (list))
                                     ((mathBuiltin? name (listLength args)) (if (= name "float64ToInt64") (list "some" "none") (list)))
                                     ((partialCtor? name (listLength args)) (list "partial"))
@@ -2039,7 +2039,7 @@ fn distinct xs: (List String) -> (List String)
                                                 (pair 0 (list)) xs))))
         (byName (listSortBy (fn [(p (Pair String Int64))] -> String (pairFirst p)) indexed))
         (firsts (fold (fn [(acc (List (Pair String Int64))) (p (Pair String Int64))] -> (List (Pair String Int64))
-                        (mt (listHead acc)
+                        (match (listHead acc)
                           ((some q) (if (= (pairFirst q) (pairFirst p)) acc (cons p acc)))
                           ((none) (cons p acc))))
                       (list) byName))]
@@ -2054,7 +2054,7 @@ fn gather f: (fn [ty/SsaOp] -> (List String)) ops: (List ty/SsaOp) -> (List Stri
 fn switchTypes m: ty/SsaModule -> (List String)
   (distinct (listReverse (fold (fn [(acc (List String)) (f ty/SsaFunction)] -> (List String)
                     (fold (fn [(a (List String)) (b ty/SsaBlock)] -> (List String)
-                            (mt b.term ((ty/termSwitch _ typeName _ _) (cons typeName a)) (_ a)))
+                            (match b.term ((ty/termSwitch _ typeName _ _) (cons typeName a)) (_ a)))
                           acc f.blocks))
                   (list) m.functions)))
 
@@ -2074,14 +2074,14 @@ fn moduleNames m: ty/SsaModule -> (List String)
 fn hasStaticFieldRead? f: ty/SsaFunction -> Bool
   (let [(recs (recordMap f)) (fused (fusedMap f))]
     (not (listEmpty? (filter (fn [(ins ty/SsaInstr)] -> Bool
-                                (mt ins.op ((ty/opField base field) (and (not (some? (nameIndexGet fused ins.dest))) (some? (fieldStaticIndexFor recs base field)))) (_ false)))
+                                (match ins.op ((ty/opField base field) (and (not (some? (nameIndexGet fused ins.dest))) (some? (fieldStaticIndexFor recs base field)))) (_ false)))
                               (allInstrs f)))))
 
 fn trappingFunctions m: ty/SsaModule -> (List String)
   (map (fn [(f ty/SsaFunction)] -> String f.name)
        (filter (fn [(f ty/SsaFunction)] -> Bool
                  (or (not (listEmpty? (filter (fn [(b ty/SsaBlock)] -> Bool
-                                                (mt b.term
+                                                (match b.term
                                                   ((ty/termUnreachable) true)
                                                   ((ty/termSwitch _ _ _ _) true)
                                                   (_ false))) f.blocks)))
@@ -2100,26 +2100,26 @@ fn probeEnv menv: ModEnv f: ty/SsaFunction -> FnEnv
 
 fn rawCallee? env: FnEnv callee: String -> Bool
   (and (not (stringContains? callee "sysRoute."))
-       (mt (nameIndexGet env.mod.functions callee) ((some g) (boxableAbi? g.retTy)) ((none) false)))
+       (match (nameIndexGet env.mod.functions callee) ((some g) (boxableAbi? g.retTy)) ((none) false)))
 
 fn boxSeed? env: FnEnv b: ty/SsaBlock -> Bool
   (let [(span (tailSpan env b))]
     (and (> span 0)
-         (mt (listGet b.instrs (- (listLength b.instrs) span))
-           ((some call) (mt call.op ((ty/opCallClosure _ _) true) (_ false)))
+         (match (listGet b.instrs (- (listLength b.instrs) span))
+           ((some call) (match call.op ((ty/opCallClosure _ _) true) (_ false)))
            ((none) false))))
 
 fn rawTailCallees env: FnEnv f: ty/SsaFunction -> (List String)
   (fold (fn [(acc (List String)) (b ty/SsaBlock)] -> (List String)
-          (mt (lastInstr b)
-            ((some ins) (mt ins.op
+          (match (lastInstr b)
+            ((some ins) (match ins.op
                           ((ty/opCall callee _) (if (and (rawCallee? env callee) (returnsDest? env b ins.dest)) (cons callee acc) acc))
                           (_ acc)))
             ((none) acc)))
         (list) f.blocks)
 
 fn boxClose callers: NameIndex work: (List String) done: NameIndex -> NameIndex
-  (mt (listHead work)
+  (match (listHead work)
     ((none) done)
     ((some n) (let [(rest (optionOr (listTail work) (list)))]
                 (if (nameIndexHas? done n)
@@ -2143,14 +2143,14 @@ fn boxedEnv menv: ModEnv m: ty/SsaModule -> ModEnv
           :boxed (boxedBodies menv m))
 
 fn closureTargets m: ty/SsaModule -> (List String)
-  (distinct (gather (fn [(op ty/SsaOp)] -> (List String) (mt op ((ty/opMakeClosure callee _) (list callee)) (_ (list)))) (allOps m)))
+  (distinct (gather (fn [(op ty/SsaOp)] -> (List String) (match op ((ty/opMakeClosure callee _) (list callee)) (_ (list)))) (allOps m)))
 
 fn optionEntry? name: String -> Bool
   (listContains? (list "listHead" "listTail" "stringSlice") name)
 
 fn constructedVariants m: ty/SsaModule -> (List String)
   (distinct (gather (fn [(op ty/SsaOp)] -> (List String)
-                      (mt op
+                      (match op
                         ((ty/opConstruct _ variant _) (list variant))
                         ((ty/opEntry name _) (if (optionEntry? name) (list "some" "none") (list)))
                         ((ty/opBuiltin name args) (cond ((and (= name "float64ToInt64") (mathBuiltin? name (listLength args))) (list "some" "none"))
@@ -2160,20 +2160,20 @@ fn constructedVariants m: ty/SsaModule -> (List String)
                     (allOps m)))
 
 fn constructedSchemas m: ty/SsaModule -> (List String)
-  (distinct (gather (fn [(op ty/SsaOp)] -> (List String) (mt op ((ty/opRecord s _ _) (list s)) (_ (list)))) (allOps m)))
+  (distinct (gather (fn [(op ty/SsaOp)] -> (List String) (match op ((ty/opRecord s _ _) (list s)) (_ (list)))) (allOps m)))
 
 fn loadGlobalNames m: ty/SsaModule -> (List String)
-  (distinct (gather (fn [(op ty/SsaOp)] -> (List String) (mt op ((ty/opLoadGlobal name) (list name)) (_ (list)))) (allOps m)))
+  (distinct (gather (fn [(op ty/SsaOp)] -> (List String) (match op ((ty/opLoadGlobal name) (list name)) (_ (list)))) (allOps m)))
 
 fn recordSchemaFields m: ty/SsaModule schema: String -> (List String)
-  (mt (listHead (filter (fn [(r ty/SsaRecordDecl)] -> Bool (= r.name schema)) m.records))
+  (match (listHead (filter (fn [(r ty/SsaRecordDecl)] -> Bool (= r.name schema)) m.records))
     ((some r) r.fields)
     ((none) (list)))
 
 fn idCellNames m: ty/SsaModule -> (List String)
   (distinct (gather (fn [(op ty/SsaOp)] -> (List String)
-                      (mt op
-                        ((ty/opConst c) (mt c ((ty/constKeyword n) (list n)) (_ (list))))
+                      (match op
+                        ((ty/opConst c) (match c ((ty/constKeyword n) (list n)) (_ (list))))
                         ((ty/opField _ field) (list field))
                         (_ (list))))
                     (allOps m)))
@@ -2181,8 +2181,8 @@ fn idCellNames m: ty/SsaModule -> (List String)
 fn valStringIndices m: ty/SsaModule -> (List Int64)
   (listReverse (pairSecond (fold (fn [(acc (Pair NameIndex (List Int64))) (f ty/SsaFunction)] -> (Pair NameIndex (List Int64))
           (fold (fn [(a (Pair NameIndex (List Int64))) (ins ty/SsaInstr)] -> (Pair NameIndex (List Int64))
-                  (mt ins.op
-                    ((ty/opConst c) (mt c
+                  (match ins.op
+                    ((ty/opConst c) (match c
                                       ((ty/constStr i) (if (or (= (ty/ssaTyName ins.ty) "ptr") (nameIndexHas? (pairFirst a) (stringFromInt64 i))) a (pair (nameIndexSet (pairFirst a) (stringFromInt64 i) true) (cons i (pairSecond a)))))
                                       (_ a)))
                     (_ a)))
@@ -2262,7 +2262,7 @@ fn emitInit m: ty/SsaModule -> String
       (str "define void " (initSym m.name) "() {\nbb.entry:\n"
            (stringJoin (map (fn [(g ty/SsaGlobal)] -> String (if (sharedGlobal? g) "" (str "  call void @asl_rt_global_root(ptr " (globalSym g.name) ")\n"))) globals) "")
            (stringJoin (map (fn [(i Int64)] -> String
-                               (mt (listGet globals i)
+                               (match (listGet globals i)
                                  ((none) "")
                                  ((some g) (cond ((sharedGlobal? g) (emitSharedInit i g))
                                                  ((opt/singleton? g.name) "")
@@ -2320,7 +2320,7 @@ fn emitFormatEntry lhs: String name: String args: (List String) -> String
           (else (str lhs "call %Val @asl_rt_format_parse_value(%Val " a0 ")\n"))))
 
 fn formatOp? op: ty/SsaOp -> Bool
-  (mt op
+  (match op
     ((ty/opBuiltin name _) (rtFormatBuiltin? name))
     ((ty/opEntry name _) (formatEntryName? name))
     (_ false))
@@ -2356,8 +2356,8 @@ fn errorBuiltin? name: String n: Int64 -> Bool
 
 fn emitErrorBuiltin lhs: String dest: String name: String args: (List String) -> String
   (let [(a0 (val (optionOr (listGet args 0) "")))
-        (message (mt (listGet args 1) ((some m) (val m)) ((none) "zeroinitializer")))
-        (site (mt (listGet args 2) ((some s) (val s)) ((none) "zeroinitializer")))]
+        (message (match (listGet args 1) ((some m) (val m)) ((none) "zeroinitializer")))
+        (site (match (listGet args 2) ((some s) (val s)) ((none) "zeroinitializer")))]
     (if (= name "trap")
       (str lhs "call %Val @rterr.trap(%Val " a0 ", %Val " message ")\n")
       (str "  call void @rterr." name "(%Val " a0 ", %Val " message ", %Val " site ")\n"
@@ -3143,7 +3143,7 @@ fn valueExports defs: (List String) -> (List String)
 
 fn pieceAbsent? keys: (Map String Bool) text: String piece: String -> Bool
   (let [(trimmed (stringTrim piece))]
-    (mt (rterr/refFirstKey trimmed)
+    (match (rterr/refFirstKey trimmed)
       ((some k) (if (mapHas? keys k) (not (stringContains? text trimmed)) true))
       ((none) (not (stringContains? text trimmed)))))
 
@@ -3236,7 +3236,7 @@ fn nativeEntryCall? name: String n: Int64 -> Bool
           (some? (ty/builtinEntry name n))))
 
 fn unsupportedBuiltin op: ty/SsaOp -> (Option String)
-  (mt op
+  (match op
     ((ty/opBuiltin name args) (if (nativeBuiltin? name (listLength args)) (none) (some (str "'" name "' of " (listLength args) " operand(s)"))))
     ((ty/opEntry name args) (if (nativeEntryCall? name (listLength args)) (none) (some (str "'" name "' of " (listLength args) " operand(s)"))))
     (_ (none)))
@@ -3245,7 +3245,7 @@ fn builtinDiags m: ty/SsaModule -> (List ty/IrDiag)
   (fold (fn [(acc (List ty/IrDiag)) (f ty/SsaFunction)] -> (List ty/IrDiag)
           (fold (fn [(a (List ty/IrDiag)) (b ty/SsaBlock)] -> (List ty/IrDiag)
                   (fold (fn [(d (List ty/IrDiag)) (ins ty/SsaInstr)] -> (List ty/IrDiag)
-                          (mt (unsupportedBuiltin ins.op)
+                          (match (unsupportedBuiltin ins.op)
                             ((some what) (listAppend d (list (ty/makeIrDiag "ERR_LOWER_UNSUPPORTED" (str "builtin " what " has no native definition" (if (routedOnly? ins.op) "; it is native only through sysRoute, sysNet or parRoute, for a triple libc.asl has facts for" "")) f.name))))
                             ((none) d)))
                         a b.instrs))
@@ -3253,9 +3253,9 @@ fn builtinDiags m: ty/SsaModule -> (List ty/IrDiag)
         (list) m.functions)
 
 fn entryInstrs ins: ty/SsaInstr -> (List ty/SsaInstr)
-  (mt ins.op
+  (match ins.op
     ((ty/opBuiltin name args)
-      (mt (if (nativeBuiltin? name (listLength args)) (none) (ty/builtinEntry name (listLength args)))
+      (match (if (nativeBuiltin? name (listLength args)) (none) (ty/builtinEntry name (listLength args)))
         ((none) (list ins))
         ((some b)
           (let [(d ins.dest)
@@ -3272,7 +3272,7 @@ fn entryInstrs ins: ty/SsaInstr -> (List ty/SsaInstr)
     (_ (list ins)))
 
 fn entryBuiltin? ins: ty/SsaInstr -> Bool
-  (mt ins.op
+  (match ins.op
     ((ty/opBuiltin name args) (and (not (nativeBuiltin? name (listLength args))) (some? (ty/builtinEntry name (listLength args)))))
     (_ false))
 
@@ -3301,12 +3301,12 @@ fn emitLlvmModuleWasm32 m: ty/SsaModule -> (Result String (List ty/IrDiag))
   (emitModuleWith m true)
 
 fn emitModuleWith m: ty/SsaModule wasm: Bool -> (Result String (List ty/IrDiag))
-  (mt (vfy/verifySsa m)
+  (match (vfy/verifySsa m)
     ((err diags) (err diags))
     ((ok _) (let [(e (entryBuiltins m)) (bad (emitDiags e)) (fids (fieldIdNames e))] (if (listEmpty? bad) (ok (assemble e (emitDefinitionsRooted e "" wasm fids) wasm fids)) (err bad)))))
 
 fn replaceFunction text: String signature: String replacement: String -> String
-  (mt (stringIndexOf text signature)
+  (match (stringIndexOf text signature)
     ((none) text)
     ((some start)
       (let [(tail (optionOr (stringSlice text start (stringLength text)) ""))
@@ -3360,7 +3360,7 @@ fn emitMain m: ty/SsaModule f: ty/SsaFunction usesRuntime: Bool -> String
                        (if usesRuntime "  call void @asl_rt_init()\n" "")
                        (reportInit)
                        (if (listEmpty? m.globals) "" (str "  call void " (initSym m.name) "()\n"))))]
-    (mt retTy
+    (match retTy
       ((ty/tyVal)
         (str prologue
              "  %result = call tailcc %Val " (fnSym f.name) "()\n"
@@ -3375,7 +3375,7 @@ fn emitMain m: ty/SsaModule f: ty/SsaFunction usesRuntime: Bool -> String
              "  %code.res = call i32 @rterr.exit(%Val %result)\n"
              "  ret i32 %code.res\n}\n"))
       (_
-        (let [(convert (mt retTy
+        (let [(convert (match retTy
                          ((ty/tyI64) "  %code = trunc i64 %result to i32\n")
                          ((ty/tyI1) "  %code = zext i1 %result to i32\n")
                          ((ty/tyF64) "  %code = fptosi double %result to i32\n")
@@ -3392,17 +3392,17 @@ fn emitLlvmProgramWasm32 m: ty/SsaModule entry: String -> (Result String (List t
   (emitProgramWith m entry true)
 
 fn emitProgramWith m: ty/SsaModule entry: String wasm: Bool -> (Result String (List ty/IrDiag))
-  (mt (vfy/verifySsa m)
+  (match (vfy/verifySsa m)
     ((err diags) (err diags))
     ((ok _)
       (let [(found (filter (fn [(f ty/SsaFunction)] -> Bool (= f.name entry)) m.functions))]
-        (mt (listHead found)
+        (match (listHead found)
           ((none) (err (entryDiag (str "entry function '" entry "' is not defined in the module") entry)))
           ((some _) (let [(e (entryBuiltins m)) (bad (emitDiags e))] (if (not (listEmpty? bad)) (err bad) (emitEntry e entry wasm))))))))
 
 fn emitEntry m: ty/SsaModule entry: String wasm: Bool -> (Result String (List ty/IrDiag))
   (let [(found (filter (fn [(f ty/SsaFunction)] -> Bool (= f.name entry)) m.functions))]
-        (mt (listHead found)
+        (match (listHead found)
           ((none) (err (entryDiag (str "entry function '" entry "' is not defined in the module") entry)))
 
           ((some f)

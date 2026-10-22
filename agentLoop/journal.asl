@@ -91,7 +91,7 @@ fn writtenField written: (List String) -> String
   (if (listEmpty? written) "" (str " :written (" (quoteList written) ")"))
 
 fn handBackFields patch: (Option String) restored: (List String) -> String
-  (mt patch
+  (match patch
     ((none) "")
     ((some p)
       (if (stringEmpty? p)
@@ -179,16 +179,16 @@ fn ! statOf p: String -> (Option FileStat)
   (resultToOption (fileStat p))
 
 fn ! isFile? p: String -> Bool
-  (mt (statOf p) ((some st) st.isFile) ((none) false))
+  (match (statOf p) ((some st) st.isFile) ((none) false))
 
 fn ! isDir? p: String -> Bool
-  (mt (statOf p) ((some st) st.isDir) ((none) false))
+  (match (statOf p) ((some st) st.isDir) ((none) false))
 
 fn ! exists? p: String -> Bool
   (some? (statOf p))
 
 fn errKind msg: String -> String
-  (mt (stringIndexOf msg ":") ((some i) (sl msg 0 i)) ((none) msg))
+  (match (stringIndexOf msg ":") ((some i) (sl msg 0 i)) ((none) msg))
 
 fn pyQuote s: String -> String
   (str "'" (stringReplace (stringReplace s "\\" "\\\\") "'" "\\'") "'")
@@ -203,12 +203,12 @@ fn osError kind: String path: String -> String
     (else (str "OSError: " kind ": " (pyQuote path))))
 
 fn ! readText! p: String -> (Result String String)
-  (mt (fileReadString p)
+  (match (fileReadString p)
     ((ok t) (ok t))
     ((err e) (err (osError (errKind e) p))))
 
 fn ! writeText! p: String t: String -> (Result Int64 String)
-  (mt (fileWrite p t)
+  (match (fileWrite p t)
     ((ok _) (ok 0))
     ((err e) (err (osError (errKind e) p))))
 
@@ -225,19 +225,19 @@ fn ! makeDirs! p: String -> (Result Int64 String)
             parent (pathDirname first)]
         (if (and (not (= parent first)) (not (isDir? parent)))
           (err (osError "io:20" first))
-          (mt (dirCreate p)
+          (match (dirCreate p)
             ((ok _) (ok 0))
             ((err e) (err (osError (errKind e) first))))))))
 
 fn procError tool: String e: cp/ProcessError -> String
-  (mt e
+  (match e
     ((cp/notFound _) (str "FileNotFoundError: [Errno 2] No such file or directory: " (pyQuote tool)))
     ((cp/permissionDenied _) (str "PermissionError: [Errno 13] Permission denied: " (pyQuote tool)))
     ((cp/timeout ms) (str "TimeoutExpired: " tool " timed out after " (stringFromInt64 ms) " ms"))
     ((cp/executionFailed code msg) (str "OSError: " tool ": " msg)))
 
 fn ! run! tool: String args: (List String) cwd: String -> (Result cp/ProcessOutput String)
-  (mt (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd tool args) cwd) 120000))
+  (match (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd tool args) cwd) 120000))
     ((ok o) (ok o))
     ((err e) (err (procError tool e))))
 
@@ -248,11 +248,11 @@ fn octal m: Int64 acc: String -> String
   (if (= m 0) (if (stringEmpty? acc) "0" acc) (octal (/ m 8) (str (stringFromInt64 (mod m 8)) acc)))
 
 fn ! chmod! p: String mode: Int64 -> (Result Int64 String)
-  (mt (statOf p)
+  (match (statOf p)
     ((some st)
       (if (= (& st.mode 4095) mode)
         (ok 0)
-        (mt (run! "chmod" (list (octal mode "") p) "/")
+        (match (run! "chmod" (list (octal mode "") p) "/")
           ((ok o) (if (= o.exitCode 0) (ok 0) (err (str "PermissionError: chmod " (pyQuote p) ": " o.stderr))))
           ((err e) (err e)))))
     ((none) (err (osError "notFound" p))))
@@ -261,10 +261,10 @@ fn ! journalWrite path: String text: String -> (Result Int64 String)
   (if (stringEmpty? path)
     (ok 0)
     (let [dir (pathDirname path)]
-      (mt (if (stringEmpty? dir) (ok 0) (makeDirs! dir))
+      (match (if (stringEmpty? dir) (ok 0) (makeDirs! dir))
         ((err e) (err e))
         ((ok _)
-          (mt (if (isFile? path) (readText! path) (ok ""))
+          (match (if (isFile? path) (readText! path) (ok ""))
             ((err e) (err e))
             ((ok prev) (writeText! path (str prev text))))))))
 
@@ -278,13 +278,13 @@ fn ! missingDirs d: String root: String acc: (List String) -> (List String)
 
 fn ! takeSnapshot full: String root: String -> (Result Snapshot String)
   (if (isFile? full)
-    (mt (readText! full)
+    (match (readText! full)
       ((err e) (err e))
-      ((ok b) (ok (Snapshot :bytes (some b) :mode (some (mt (statOf full) ((some st) (& st.mode 4095)) ((none) 0))) :dirs (list)))))
+      ((ok b) (ok (Snapshot :bytes (some b) :mode (some (match (statOf full) ((some st) (& st.mode 4095)) ((none) 0))) :dirs (list)))))
     (ok (Snapshot :bytes none :mode none :dirs (missingDirs (pathDirname full) root (list)))))
 
 fn ! snapshotBeforeWrite w: Written filePath: String -> (Result Written String)
-  (mt w.files
+  (match w.files
     ((none) (ok w))
     ((some files)
       (if (stringEmpty? filePath)
@@ -294,12 +294,12 @@ fn ! snapshotBeforeWrite w: Written filePath: String -> (Result Written String)
               rel (pathRel full root)]
           (if (or (snapHas files rel) (or (= rel "..") (stringStartsWith? rel "../")))
             (ok w)
-            (mt (takeSnapshot full root)
+            (match (takeSnapshot full root)
               ((err e) (err e))
               ((ok s) (ok (with w :root root :files (some (listAppend files (list (pair rel s)))))))))))))
 
 fn patchLines data: (Option String) -> (List String)
-  (mt data
+  (match data
     ((none) (list))
     ((some s) (if (stringEmpty? s) (list) (d/splitLinesKeepEnds s))))
 
@@ -326,7 +326,7 @@ fn groupedOpcodes! a: (List String) b: (List String) n: Int64 -> (List (List d/D
   (let [raw (d/getOpcodes a b)
         codes0 (if (listEmpty? raw) (list (d/DiffOpcode :tag "equal" :i1 0 :i2 1 :j1 0 :j2 1)) raw)
         codes1 (if (= (opTag (c/firstOf codes0)) "equal") (cons (trimFirst (c/firstOf codes0) n) (c/restOf codes0)) codes0)
-        codes2 (mt (listLast codes1)
+        codes2 (match (listLast codes1)
                  ((some l) (if (= (opTag l) "equal") (listAppend (listTake codes1 (- (listLength codes1) 1)) (list (trimLast l n))) codes1))
                  ((none) codes1))]
     (groupLoop codes2 n (list) (list)))
@@ -345,10 +345,10 @@ enum Cur
   (cur rest: (List String) pos: Int64)
 
 fn advance c0: Cur target: Int64 -> Cur
-  (mt c0 ((cur xs pos) (if (or (>= pos target) (listEmpty? xs)) c0 (advance (cur (c/restOf xs) (+ pos 1)) target))))
+  (match c0 ((cur xs pos) (if (or (>= pos target) (listEmpty? xs)) c0 (advance (cur (c/restOf xs) (+ pos 1)) target))))
 
 fn emitRun c0: Cur stop: Int64 prefix: String out: (List String) -> (Pair Cur (List String))
-  (mt c0 ((cur xs pos)
+  (match c0 ((cur xs pos)
     (if (or (>= pos stop) (listEmpty? xs))
       (pair c0 out)
       (emitRun (cur (c/restOf xs) (+ pos 1)) stop prefix (cons (str prefix (c/firstOf xs)) out)))))
@@ -357,10 +357,10 @@ enum Emit
   (emitState ca: Cur cb: Cur out: (List String))
 
 fn opEmit st: Emit op: d/DiffOpcode -> Emit
-  (mt st ((emitState ca cb out)
+  (match st ((emitState ca cb out)
     (let [tag (opTag op)]
       (cond
-        ((= tag "equal") (mt (emitRun (advance ca op.i1) op.i2 " " out) ((pair ca2 o2) (emitState ca2 cb o2))))
+        ((= tag "equal") (match (emitRun (advance ca op.i1) op.i2 " " out) ((pair ca2 o2) (emitState ca2 cb o2))))
         (else
           (let [m (if (or (= tag "replace") (= tag "delete")) (emitRun (advance ca op.i1) op.i2 "-" out) (pair ca out))
                 pl (if (or (= tag "replace") (= tag "insert")) (emitRun (advance cb op.j1) op.j2 "+" (pairSecond m)) (pair cb (pairSecond m)))]
@@ -370,13 +370,13 @@ fn groupEmit st: Emit g: (List d/DiffOpcode) -> Emit
   (let [first (c/firstOf g)
         last (optionOr (listLast g) first)
         head (str "@@ -" (rangeText first.i1 last.i2) " +" (rangeText first.j1 last.j2) " @@\n")]
-    (mt st ((emitState ca cb out) (fold opEmit (emitState ca cb (cons head out)) g))))
+    (match st ((emitState ca cb out) (fold opEmit (emitState ca cb (cons head out)) g))))
 
 fn unifiedLines! a: (List String) b: (List String) fromName: String toName: String -> (List String)
   (let [groups (groupedOpcodes! a b 3)]
     (if (listEmpty? groups)
       (list)
-      (mt (fold groupEmit (emitState (cur a 0) (cur b 0) (list (str "+++ " toName "\n") (str "--- " fromName "\n"))) groups)
+      (match (fold groupEmit (emitState (cur a 0) (cur b 0) (list (str "+++ " toName "\n") (str "--- " fromName "\n"))) groups)
         ((emitState _ _ out) (listReverse out)))))
 
 fn filePatch! rel: String old: (Option String) new: (Option String) newMode: Int64 -> String
@@ -411,12 +411,12 @@ fn patchPath line: String -> (Option String)
     none)
 
 fn someOf xs: (List (Option String)) -> (List String)
-  (fold (fn [acc o] (mt o ((some v) (listAppend acc (list v))) ((none) acc))) (list) xs)
+  (fold (fn [acc o] (match o ((some v) (listAppend acc (list v))) ((none) acc))) (list) xs)
 
 fn ! snapshotAll w: Written rels: (List String) -> (Result Written String)
   (if (listEmpty? rels)
     (ok w)
-    (mt (snapshotBeforeWrite w (c/firstOf rels))
+    (match (snapshotBeforeWrite w (c/firstOf rels))
       ((err e) (err e))
       ((ok w2) (snapshotAll w2 (c/restOf rels)))))
 
@@ -425,7 +425,7 @@ fn cut300 s: String -> String
 
 fn ! journalSaysOk journalPath: String -> Bool
   (if (isFile? journalPath)
-    (mt (listLast (someOf (map resultStatus (stringLines (resultOr (fileReadString journalPath) ""))))) ((some m) (= m "ok")) ((none) false))
+    (match (listLast (someOf (map resultStatus (stringLines (resultOr (fileReadString journalPath) ""))))) ((some m) (= m "ok")) ((none) false))
     false)
 
 fn ! applyResumePatch w: Written rootDir: String journalPath: String sessionId: String -> (Result (Pair Written (Pair (Option String) (Option String))) String)
@@ -434,20 +434,20 @@ fn ! applyResumePatch w: Written rootDir: String journalPath: String sessionId: 
       ((not (isFile? patch)) (ok (pair w (pair none none))))
       ((journalSaysOk journalPath) (ok (pair w (pair none none))))
       (else
-        (mt (readText! patch)
+        (match (readText! patch)
           ((err e) (err e))
           ((ok text)
-            (mt (snapshotAll w (someOf (map patchPath (stringLines text))))
+            (match (snapshotAll w (someOf (map patchPath (stringLines text))))
               ((err e) (err e))
               ((ok w2)
-                (mt (git! rootDir (list "apply" "--whitespace=nowarn" (pathAbs! patch)))
+                (match (git! rootDir (list "apply" "--whitespace=nowarn" (pathAbs! patch)))
                   ((err e) (err e))
                   ((ok o)
                     (if (not (= o.exitCode 0))
                       (let [msg (cut300 (pyStrip (if (stringEmpty? o.stderr) o.stdout o.stderr)))]
                         (ok (pair w2 (pair none (some (str "git apply " (pathBasename patch) ": " msg))))))
                       (let [applied (pathRel patch rootDir)]
-                        (mt (pathRemove patch)
+                        (match (pathRemove patch)
                           ((ok _) (ok (pair w2 (pair (some applied) none))))
                           ((err e) (err (osError (errKind e) patch)))))))))))))))
 
@@ -455,17 +455,17 @@ fn ! currentBytes full: String -> (Option String)
   (if (isFile? full) (resultToOption (fileReadString full)) none)
 
 fn sameBytes a: (Option String) b: (Option String) -> Bool
-  (mt a
+  (match a
     ((none) (none? b))
-    ((some x) (mt b ((some y) (= x y)) ((none) false))))
+    ((some x) (match b ((some y) (= x y)) ((none) false))))
 
 fn ! headBytes! rootDir: String rel: String -> (Result (Option String) String)
-  (mt (git! rootDir (list "show" (str "HEAD:" rel)))
+  (match (git! rootDir (list "show" (str "HEAD:" rel)))
     ((err e) (err e))
     ((ok o)
       (if (not (= o.exitCode 0))
         (ok none)
-        (mt (git! rootDir (list "cat-file" "-s" (str "HEAD:" rel)))
+        (match (git! rootDir (list "cat-file" "-s" (str "HEAD:" rel)))
           ((err e) (err e))
           ((ok s)
             (let [size (optionOr (stringToInt64 (pyStrip s.stdout)) -1)
@@ -476,32 +476,32 @@ fn ! removeEmptyDirs dirs: (List String) -> Bool
   (fold (fn [acc dir] (if (and (isDir? dir) (listEmpty? (resultOr (dirList dir) (list "x")))) (and (ok? (pathRemove dir)) acc) acc)) true dirs)
 
 fn ! dropFile! rootDir: String rel: String full: String dirs: (List String) -> (Result Int64 String)
-  (mt (if (isFile? full) (pathRemove full) (ok ()))
+  (match (if (isFile? full) (pathRemove full) (ok ()))
     ((err e) (err (osError (errKind e) full)))
     ((ok _)
       (do
         (removeEmptyDirs dirs)
-        (mt (git! rootDir (list "rm" "--cached" "--quiet" "--ignore-unmatch" "--" rel))
+        (match (git! rootDir (list "rm" "--cached" "--quiet" "--ignore-unmatch" "--" rel))
           ((ok _) (ok 0))
           ((err e) (err e))))))
 
 fn ! putFile! rootDir: String rel: String full: String bytes: String mode: (Option Int64) -> (Result Int64 String)
   (let [dir (pathDirname full)]
-    (mt (makeDirs! (if (stringEmpty? dir) "." dir))
+    (match (makeDirs! (if (stringEmpty? dir) "." dir))
       ((err e) (err e))
       ((ok _)
-        (mt (writeText! full bytes)
+        (match (writeText! full bytes)
           ((err e) (err e))
           ((ok _)
-            (mt (mt mode ((some m) (chmod! full m)) ((none) (ok 0)))
+            (match (match mode ((some m) (chmod! full m)) ((none) (ok 0)))
               ((err e) (err e))
               ((ok _)
-                (mt (git! rootDir (list "reset" "-q" "--" rel))
+                (match (git! rootDir (list "reset" "-q" "--" rel))
                   ((ok _) (ok 0))
                   ((err e) (err e))))))))))
 
 fn ! restoreSnap! rootDir: String rel: String full: String snap: Snapshot -> (Result Bool String)
-  (mt (mt snap.bytes
+  (match (match snap.bytes
         ((none) (dropFile! rootDir rel full snap.dirs))
         ((some bytes) (putFile! rootDir rel full bytes (some (optionOr snap.mode 420)))))
     ((err e) (err e))
@@ -511,12 +511,12 @@ fn ! restoreOne! rootDir: String rel: String snap: Snapshot headMoved: Bool -> (
   (let [full (pathJoin rootDir rel)]
     (if (not headMoved)
       (restoreSnap! rootDir rel full snap)
-      (mt (headBytes! rootDir rel)
+      (match (headBytes! rootDir rel)
         ((err e) (err e))
         ((ok hb)
           (if (sameBytes hb snap.bytes)
             (restoreSnap! rootDir rel full snap)
-            (mt (mt hb
+            (match (match hb
                   ((none) (dropFile! rootDir rel full snap.dirs))
                   ((some bytes) (putFile! rootDir rel full bytes snap.mode)))
               ((err e) (err e))
@@ -526,12 +526,12 @@ fn ! restoreAll! rootDir: String changed: (List (Pair String Snapshot)) headMove
   (if (listEmpty? changed)
     (ok (listReverse acc))
     (let [pr (c/firstOf changed)]
-      (mt (restoreOne! rootDir (pairFirst pr) (pairSecond pr) headMoved)
+      (match (restoreOne! rootDir (pairFirst pr) (pairSecond pr) headMoved)
         ((err e) (err e))
         ((ok toHead) (restoreAll! rootDir (c/restOf changed) headMoved (if toHead (cons (pairFirst pr) acc) acc))))))
 
 fn ! modeOf full: String -> Int64
-  (mt (statOf full) ((some st) st.mode) ((none) 0))
+  (match (statOf full) ((some st) st.mode) ((none) 0))
 
 fn ! chunkOf rootDir: String pr: (Pair String Snapshot) -> String
   (let [full (pathJoin rootDir (pairFirst pr))
@@ -539,18 +539,18 @@ fn ! chunkOf rootDir: String pr: (Pair String Snapshot) -> String
     (filePatch! (pairFirst pr) (pairSecond pr).bytes now (if (none? now) 0 (modeOf full))))
 
 fn ! restoreAndReport! rootDir: String journalPath: String start: (Option String) changed: (List (Pair String Snapshot)) -> (Result Int64 String)
-  (mt (git! rootDir (list "rev-parse" "HEAD"))
+  (match (git! rootDir (list "rev-parse" "HEAD"))
     ((err e) (err e))
     ((ok o)
       (let [cur (if (= o.exitCode 0) (pyStrip o.stdout) "")
-            moved (mt start ((some s) (and (not (stringEmpty? s)) (and (not (stringEmpty? cur)) (not (= cur s))))) ((none) false))]
-        (mt (restoreAll! rootDir changed moved (list))
+            moved (match start ((some s) (and (not (stringEmpty? s)) (and (not (stringEmpty? cur)) (not (= cur s))))) ((none) false))]
+        (match (restoreAll! rootDir changed moved (list))
           ((err e) (err e))
           ((ok toHead)
             (if (listEmpty? toHead) (ok 0) (journalWrite journalPath (str "(:restoreToHead (" (quoteList toHead) "))\n"))))))))
 
 fn ! handBack w: Written rootDir: String journalPath: String sessionId: String restore: Bool startHead: (Option String) -> (Result (Pair Written (Pair (Option String) (List String))) String)
-  (let [start (mt startHead ((some h) (some h)) ((none) w.startHead))
+  (let [start (match startHead ((some h) (some h)) ((none) w.startHead))
         files (listSortBy pairFirst (optionOr w.files (list)))
         w2 (with w :files none)
         changed (filter (fn [pr] (not (sameBytes (currentBytes (pathJoin rootDir (pairFirst pr))) (pairSecond pr).bytes))) files)]
@@ -559,33 +559,33 @@ fn ! handBack w: Written rootDir: String journalPath: String sessionId: String r
       (let [chunks (map (fn [pr] (chunkOf rootDir pr)) changed)
             base (if (stringEmpty? journalPath) (pathJoin rootDir (str ".asl/run/agentLoop/" sessionId)) (splitExt journalPath))
             patchFile (str base ".patch")]
-        (mt (makeDirs! (pathDirname patchFile))
+        (match (makeDirs! (pathDirname patchFile))
           ((err e) (err e))
           ((ok _)
-            (mt (writeText! patchFile (c/joinAll chunks))
+            (match (writeText! patchFile (c/joinAll chunks))
               ((err e) (err e))
               ((ok _)
                 (if (not restore)
                   (ok (pair w2 (pair (some (pathRel patchFile rootDir)) (list))))
-                  (mt (restoreAndReport! rootDir journalPath start changed)
+                  (match (restoreAndReport! rootDir journalPath start changed)
                     ((err e) (err e))
                     ((ok _) (ok (pair w2 (pair (some (pathRel patchFile rootDir)) (map pairFirst changed))))))))))))))
 
 fn ! copyInto! src: String dest: String -> (Result Int64 String)
   (if (isFile? src)
-    (mt (readText! src)
+    (match (readText! src)
       ((err e) (err e))
       ((ok t) (writeText! (pathJoin dest (pathBasename src)) t)))
     (ok 0))
 
 fn errText e: String -> String
-  (mt (stringIndexOf e ": ") ((some i) (sl e (+ i 2) (stringLength e))) ((none) e))
+  (match (stringIndexOf e ": ") ((some i) (sl e (+ i 2) (stringLength e))) ((none) e))
 
 fn ! retainTo! journalPath: String dest: String patch: String -> (Result Int64 String)
-  (mt (makeDirs! dest)
+  (match (makeDirs! dest)
     ((err e) (err e))
     ((ok _)
-      (mt (copyInto! journalPath dest)
+      (match (copyInto! journalPath dest)
         ((err e) (err e))
         ((ok _) (copyInto! patch dest)))))
 
@@ -596,7 +596,7 @@ fn ! retainJournal journalPath: String rootDir: String sessionId: String -> (Res
             (or (not (isFile? journalPath))
                 (not (stringStartsWith? (resultOr (realPath journalPath) journalPath) (str root "/")))))
       (ok 0)
-      (mt (git! rd (list "rev-parse" "--path-format=absolute" "--git-dir" "--git-common-dir"))
+      (match (git! rd (list "rev-parse" "--path-format=absolute" "--git-dir" "--git-common-dir"))
         ((err e) (err e))
         ((ok o)
           (let [dirs (nonEmpty (stringSplit (stringReplace (stringReplace o.stdout "\n" " ") "\t" " ") " "))]
@@ -604,7 +604,7 @@ fn ! retainJournal journalPath: String rootDir: String sessionId: String -> (Res
               (ok 0)
               (let [dest (pathJoin (pathDirname (c/firstOf (c/restOf dirs))) ".asl/run/agentLoop")
                     patch (pathJoin (pathDirname journalPath) (str sessionId ".patch"))]
-                (mt (retainTo! journalPath dest patch)
+                (match (retainTo! journalPath dest patch)
                   ((ok _) (ok 0))
                   ((err e) (journalWrite journalPath (str "(:journalRetain :error \"" (escapeAsn (errText e)) "\" :dest \"" (escapeAsn dest) "\")\n")))))))))))
 
@@ -707,7 +707,7 @@ fn readLoop s: String n: Int64 i: Int64 stack: (List (Pair (List AsnNode) Int64)
                   e (emit (asnForm (listReverse (pairFirst top))) (c/restOf stack) out)]
               (readLoop s n (+ i 1) (pairFirst e) (pairSecond e)))))
         ((= x "\"")
-          (mt (readString s n i (+ i 1) (list))
+          (match (readString s n i (+ i 1) (list))
             ((err m) (err m))
             ((ok pr)
               (let [e (emit (asnStr (pairFirst pr)) stack out)]
@@ -721,10 +721,10 @@ fn asnRead text: String -> (Result (List AsnNode) String)
   (readLoop text (stringLength text) 0 (list) (list))
 
 fn isForm v: AsnNode -> Bool
-  (mt v ((asnForm _) true) ((asnKw _) false) ((asnSym _) false) ((asnStr _) false) ((asnNum _) false))
+  (match v ((asnForm _) true) ((asnKw _) false) ((asnSym _) false) ((asnStr _) false) ((asnNum _) false))
 
 fn asnReadOne text: String -> (Result AsnNode String)
-  (mt (asnRead text)
+  (match (asnRead text)
     ((err e) (err e))
     ((ok vs)
       (if (and (= (listLength vs) 1) (isForm (c/firstOf vs)))
@@ -732,13 +732,13 @@ fn asnReadOne text: String -> (Result AsnNode String)
         (err (str "expected one form, found " (stringFromInt64 (listLength vs)) " values")))))
 
 fn formItems v: AsnNode -> (List AsnNode)
-  (mt v ((asnForm xs) xs) ((asnKw _) (list)) ((asnSym _) (list)) ((asnStr _) (list)) ((asnNum _) (list)))
+  (match v ((asnForm xs) xs) ((asnKw _) (list)) ((asnSym _) (list)) ((asnStr _) (list)) ((asnNum _) (list)))
 
 fn strLike v: AsnNode -> (Option String)
-  (mt v ((asnKw k) (some k)) ((asnSym t) (some t)) ((asnStr t) (some t)) ((asnNum _) none) ((asnForm _) none))
+  (match v ((asnKw k) (some k)) ((asnSym t) (some t)) ((asnStr t) (some t)) ((asnNum _) none) ((asnForm _) none))
 
 fn strIs v: AsnNode s: String -> Bool
-  (mt (strLike v) ((some t) (= t s)) ((none) false))
+  (match (strLike v) ((some t) (= t s)) ((none) false))
 
 fn reprChar q: String x: String -> String
   (cond
@@ -757,7 +757,7 @@ fn pyReprList xs: (List String) -> String
   (str "[" (c/joinSep (map pyReprStr xs) ", ") "]")
 
 fn nodeRepr v: AsnNode -> String
-  (mt v
+  (match v
     ((asnKw k) (str ":" k))
     ((asnSym t) t)
     ((asnStr t) (pyReprStr t))
@@ -765,7 +765,7 @@ fn nodeRepr v: AsnNode -> String
     ((asnForm xs) (str "[" (c/joinSep (map nodeRepr xs) ", ") "]")))
 
 fn nodeStr v: AsnNode -> String
-  (mt v
+  (match v
     ((asnKw k) k)
     ((asnSym t) t)
     ((asnStr t) t)
@@ -773,10 +773,10 @@ fn nodeStr v: AsnNode -> String
     ((asnForm _) (nodeRepr v)))
 
 fn optStr o: (Option AsnNode) -> String
-  (mt o ((some v) (nodeStr v)) ((none) "None"))
+  (match o ((some v) (nodeStr v)) ((none) "None"))
 
 fn isKw v: AsnNode key: String -> Bool
-  (mt v ((asnKw k) (= k key)) ((asnSym _) false) ((asnStr _) false) ((asnNum _) false) ((asnForm _) false))
+  (match v ((asnKw k) (= k key)) ((asnSym _) false) ((asnStr _) false) ((asnNum _) false) ((asnForm _) false))
 
 fn getLoop xs: (List AsnNode) key: String found: (Option AsnNode) -> (Option AsnNode)
   (if (or (listEmpty? xs) (listEmpty? (c/restOf xs)))
@@ -787,7 +787,7 @@ fn formGet v: AsnNode key: String -> (Option AsnNode)
   (getLoop (formItems v) key none)
 
 fn truthy v: AsnNode -> Bool
-  (mt v
+  (match v
     ((asnForm xs) (not (listEmpty? xs)))
     ((asnStr t) (not (stringEmpty? t)))
     ((asnKw k) (not (stringEmpty? k)))
@@ -795,13 +795,13 @@ fn truthy v: AsnNode -> Bool
     ((asnNum t) (not (or (= t "0") (or (= t "0.0") (= t "-0.0"))))))
 
 fn pyType v: AsnNode -> String
-  (mt v ((asnForm _) "Form") ((asnNum t) (if (isIntTok t) "int" "float")) ((asnKw _) "Keyword") ((asnSym _) "Symbol") ((asnStr _) "str"))
+  (match v ((asnForm _) "Form") ((asnNum t) (if (isIntTok t) "int" "float")) ((asnKw _) "Keyword") ((asnSym _) "Symbol") ((asnStr _) "str"))
 
 fn headIs v: AsnNode head: String -> Bool
-  (mt (listHead (formItems v)) ((some h) (strIs h head)) ((none) false))
+  (match (listHead (formItems v)) ((some h) (strIs h head)) ((none) false))
 
 fn formsOf o: (Option AsnNode) head: String -> (Result (List AsnNode) String)
-  (mt o
+  (match o
     ((none) (ok (list)))
     ((some v)
       (cond
@@ -817,10 +817,10 @@ fn systemExit msg: String -> String
   (str "SystemExit: " msg)
 
 fn ! readTree! path: String -> (Result AsnNode String)
-  (mt (readText! path)
+  (match (readText! path)
     ((err e) (err e))
     ((ok text)
-      (mt (asnReadOne text)
+      (match (asnReadOne text)
         ((err e) (err (systemExit (str "launch: " path ": " e))))
         ((ok t) (ok t)))))
 
@@ -830,42 +830,42 @@ fn dictPut kv: (List (Pair String T)) k: String v: T -> (List (Pair String T))
     (listAppend kv (list (pair k v))))
 
 fn dictAt kv: (List (Pair String T)) k: String -> (Option T)
-  (mt (listHead (filter (fn [pr] (= (pairFirst pr) k)) kv)) ((some pr) (some (pairSecond pr))) ((none) none))
+  (match (listHead (filter (fn [pr] (= (pairFirst pr) k)) kv)) ((some pr) (some (pairSecond pr))) ((none) none))
 
 fn clientFields items: (List AsnNode) i: Int64 acc: (List (Pair String AsnNode)) -> (List (Pair String AsnNode))
   (if (>= i (- (listLength items) 1))
     acc
     (let [k (optionOr (listGet items i) (asnSym ""))
           v (optionOr (listGet items (+ i 1)) (asnSym ""))]
-      (clientFields items (+ i 2) (mt k ((asnKw name) (dictPut acc name v)) ((asnSym _) acc) ((asnStr _) acc) ((asnNum _) acc) ((asnForm _) acc)))))
+      (clientFields items (+ i 2) (match k ((asnKw name) (dictPut acc name v)) ((asnSym _) acc) ((asnStr _) acc) ((asnNum _) acc) ((asnForm _) acc)))))
 
 fn addClient acc: (Result (List (Pair String (List (Pair String AsnNode)))) String) f: AsnNode -> (Result (List (Pair String (List (Pair String AsnNode)))) String)
-  (mt acc
+  (match acc
     ((err e) (err e))
     ((ok cs)
       (let [fields (clientFields (formItems f) 1 (list))]
-        (mt (dictAt fields "id")
+        (match (dictAt fields "id")
           ((none) (err "KeyError: 'id'"))
           ((some idv) (ok (dictPut cs (nodeStr idv) (filter (fn [pr] (not (= (pairFirst pr) "id"))) fields))))))))
 
 fn ! loadClients! g: Grammar -> (Result (List (Pair String (List (Pair String AsnNode)))) String)
-  (mt (readTree! g.clients)
+  (match (readTree! g.clients)
     ((err e) (err e))
     ((ok tree)
-      (mt (formsOf (formGet tree "clients") "client")
+      (match (formsOf (formGet tree "clients") "client")
         ((err e) (err e))
         ((ok forms) (fold addClient (ok (list)) forms)))))
 
 fn ! clientField! g: Grammar client: String field: String -> (Result (Option String) String)
-  (mt (loadClients! g)
+  (match (loadClients! g)
     ((err e) (err e))
     ((ok cs)
-      (ok (mt (dictAt cs client)
+      (ok (match (dictAt cs client)
             ((none) none)
-            ((some fields) (mt (dictAt fields field) ((some v) (strLike v)) ((none) none)))))))
+            ((some fields) (match (dictAt fields field) ((some v) (strLike v)) ((none) none)))))))
 
 fn nodeIter o: (Option AsnNode) -> (Result (List String) String)
-  (mt o
+  (match o
     ((none) (ok (list)))
     ((some v)
       (cond
@@ -875,7 +875,7 @@ fn nodeIter o: (Option AsnNode) -> (Result (List String) String)
         (else (err (str "TypeError: '" (pyType v) "' object is not iterable"))))))
 
 fn notForm o: (Option AsnNode) -> Bool
-  (mt o ((some v) (not (isForm v))) ((none) false))
+  (match o ((some v) (not (isForm v))) ((none) false))
 
 fn layerCheck f: AsnNode -> (Result Layer String)
   (let [lid (optStr (formGet f "id"))
@@ -883,7 +883,7 @@ fn layerCheck f: AsnNode -> (Result Layer String)
         src (formGet f "from")
         whenV (formGet f "when")
         unlessV (formGet f "unless")
-        badText (mt text ((some t) (none? (strLike t))) ((none) false))]
+        badText (match text ((some t) (none? (strLike t))) ((none) false))]
     (cond
       ((or (= (none? text) (none? src)) badText)
         (err (systemExit (str "launch: layer " lid " needs exactly one of :text \"...\" or :from"))))
@@ -892,11 +892,11 @@ fn layerCheck f: AsnNode -> (Result Layer String)
       (else
         (let [cnd (listAppend (resultOr (nodeIter whenV) (list)) (map (fn [u] (str "!" u)) (resultOr (nodeIter unlessV) (list))))]
           (ok (layerOf lid (if (listEmpty? cnd) none (some cnd))
-                       (mt text ((some t) (strLike t)) ((none) none))
-                       (mt src ((some s) (some (nodeStr s))) ((none) none))))))))
+                       (match text ((some t) (strLike t)) ((none) none))
+                       (match src ((some s) (some (nodeStr s))) ((none) none))))))))
 
 fn attGet att: (Option AsnNode) key: String -> (Result (Option AsnNode) String)
-  (mt att
+  (match att
     ((none) (ok none))
     ((some v)
       (cond
@@ -908,74 +908,74 @@ fn missingOf items: (List (Pair String (Pair (Option AsnNode) (Option AsnNode)))
   (filter (fn [i] (none? (dictAt items i))) ids)
 
 fn modesMissing g: Grammar items: (List (Pair String (Pair (Option AsnNode) (Option AsnNode)))) modes: (List (Pair String (List String))) -> (Option String)
-  (mt (listHead (filter (fn [m] (not (listEmpty? (missingOf items (pairSecond m))))) modes))
+  (match (listHead (filter (fn [m] (not (listEmpty? (missingOf items (pairSecond m))))) modes))
     ((none) none)
     ((some m)
       (some (systemExit (str "launch: mode " (pairFirst m) " names unknown attractors "
                              (pyReprList (missingOf items (pairSecond m))) " in " g.harness)))))
 
 fn collect rs: (List (Result T String)) -> (Result (List T) String)
-  (fold (fn [acc r] (mt acc ((err e) (err e)) ((ok xs) (mt r ((err e) (err e)) ((ok x) (ok (listAppend xs (list x)))))))) (ok (list)) rs)
+  (fold (fn [acc r] (match acc ((err e) (err e)) ((ok xs) (match r ((err e) (err e)) ((ok x) (ok (listAppend xs (list x)))))))) (ok (list)) rs)
 
 fn modeOfForm m: AsnNode -> (Result (Pair String (List String)) String)
-  (mt (nodeIter (formGet m "attractors"))
+  (match (nodeIter (formGet m "attractors"))
     ((err e) (err e))
     ((ok ids) (ok (pair (optStr (formGet m "id")) ids))))
 
 fn ! attractorsOf! g: Grammar tree: AsnNode layers: (List Layer) -> (Result Harness String)
   (let [att (formGet tree "attractors")
         parts (collect (list (attGet att "items") (attGet att "modes") (attGet att "intro")))]
-    (mt parts
+    (match parts
       ((err e) (err e))
       ((ok nodes)
         (let [itemsNode (optionOr (listGet nodes 0) none)
               modesNode (optionOr (listGet nodes 1) none)
               introNode (optionOr (listGet nodes 2) none)]
-          (mt (formsOf itemsNode "attractor")
+          (match (formsOf itemsNode "attractor")
             ((err e) (err e))
             ((ok aforms)
-              (mt (formsOf modesNode "mode")
+              (match (formsOf modesNode "mode")
                 ((err e) (err e))
                 ((ok mforms)
-                  (mt (collect (map modeOfForm mforms))
+                  (match (collect (map modeOfForm mforms))
                     ((err e) (err e))
                     ((ok modeList)
                       (let [items (fold (fn [acc a] (dictPut acc (optStr (formGet a "id")) (pair (formGet a "goal") (formGet a "shadow")))) (list) aforms)
                             modes (fold (fn [acc m] (dictPut acc (pairFirst m) (pairSecond m))) (list) modeList)]
-                        (mt (modesMissing g items modes)
+                        (match (modesMissing g items modes)
                           ((some e) (err e))
                           ((none)
                             (ok (Harness :layers layers
-                                         :intro (mt introNode ((some v) (if (truthy v) (nodeStr v) "")) ((none) ""))
+                                         :intro (match introNode ((some v) (if (truthy v) (nodeStr v) "")) ((none) ""))
                                          :items items :modes modes)))))))))))))))
 
 fn ! loadHarness! g: Grammar -> (Result Harness String)
-  (mt (readTree! g.harness)
+  (match (readTree! g.harness)
     ((err e) (err e))
     ((ok tree)
       (if (not (headIs tree "harness"))
         (err (systemExit (str "launch: " g.harness " is not a (:harness ...) form")))
-        (mt (formsOf (formGet tree "layers") "layer")
+        (match (formsOf (formGet tree "layers") "layer")
           ((err e) (err e))
           ((ok lforms)
-            (mt (collect (map layerCheck lforms))
+            (match (collect (map layerCheck lforms))
               ((err e) (err e))
               ((ok layers)
                 (if (listEmpty? layers)
                   (err (systemExit (str "launch: " g.harness " has no :layers")))
-                  (mt (attractorsOf! g tree layers)
+                  (match (attractorsOf! g tree layers)
                     ((err e) (err e))
                     ((ok h)
-                      (mt (loadClients! g)
+                      (match (loadClients! g)
                         ((err e) (err e))
                         ((ok _) (ok h)))))))))))))
 
 fn ! whichAsl -> (Option String)
-  (listHead (filter (fn [p] (mt (statOf p) ((some st) (and st.isFile (not (= (& st.mode 73) 0)))) ((none) false)))
+  (listHead (filter (fn [p] (match (statOf p) ((some st) (and st.isFile (not (= (& st.mode 73) 0)))) ((none) false)))
                     (map (fn [dir] (pathJoin (if (stringEmpty? dir) "." dir) "asl")) (stringSplit (optionOr (envGet "PATH") "") ":"))))
 
 fn migrateTrue text: String i: Int64 -> Bool
-  (mt (stringIndexOf (sl text i (stringLength text)) ":migrate")
+  (match (stringIndexOf (sl text i (stringLength text)) ":migrate")
     ((none) false)
     ((some k)
       (let [n (stringLength text)
@@ -986,24 +986,24 @@ fn migrateTrue text: String i: Int64 -> Bool
           (migrateTrue text p)))))
 
 fn ! facts! g: Grammar client: String cwd: String mode: String -> (Result (List (Pair String Bool)) String)
-  (mt (git! cwd (list "rev-parse" "--show-toplevel"))
+  (match (git! cwd (list "rev-parse" "--show-toplevel"))
     ((err e) (err e))
     ((ok top)
       (let [root (if (= top.exitCode 0) (pyStrip top.stdout) "")
             hasRoot (not (stringEmpty? root))
             asex (and hasRoot (isFile? (pathJoin root "asl/grammar/rules.asn")))
             aslSrc (if hasRoot
-                     (mt (git! root (list "ls-files" "--" "*.asl")) ((ok o) (not (stringEmpty? (pyStrip o.stdout)))) ((err _) false))
+                     (match (git! root (list "ls-files" "--" "*.asl")) ((ok o) (not (stringEmpty? (pyStrip o.stdout)))) ((err _) false))
                      false)
             cfg (if hasRoot (pathJoin root ".asl.config.asn") "")
             migrate (and hasRoot (and (isFile? cfg) (migrateTrue (resultOr (fileReadString cfg) "") 0)))]
-        (mt (loadClients! g)
+        (match (loadClients! g)
           ((err e) (err e))
           ((ok cs)
-            (mt (clientField! g client "shell")
+            (match (clientField! g client "shell")
               ((err e) (err e))
               ((ok shell)
-                (mt (clientField! g client "subagent")
+                (match (clientField! g client "subagent")
                   ((err e) (err e))
                   ((ok sub)
                     (ok (list (pair "git" hasRoot) (pair "asex" asex) (pair "foreign" (and hasRoot (not asex)))
@@ -1016,41 +1016,41 @@ fn ! facts! g: Grammar client: String cwd: String mode: String -> (Result (List 
                               (pair "subagent" (some? sub)))))))))))))
 
 fn ! gitState! cwd: String -> (Result String String)
-  (mt (git! cwd (list "rev-parse" "--show-toplevel"))
+  (match (git! cwd (list "rev-parse" "--show-toplevel"))
     ((err e) (err e))
     ((ok top)
       (if (not (= top.exitCode 0))
         (ok "none")
-        (mt (git! cwd (list "branch" "--show-current"))
+        (match (git! cwd (list "branch" "--show-current"))
           ((err e) (err e))
           ((ok b)
             (let [branch (pyStrip b.stdout)]
               (ok (str (pyStrip top.stdout) " on " (if (stringEmpty? branch) "detached HEAD" branch)))))))))
 
 fn briefOf op: AsnNode -> (Option String)
-  (mt (formGet op "brief") ((some v) (strLike v)) ((none) none))
+  (match (formGet op "brief") ((some v) (strLike v)) ((none) none))
 
 fn ! toolBriefs! g: Grammar -> (Result String String)
-  (mt (readTree! g.tools)
+  (match (readTree! g.tools)
     ((err e) (err e))
     ((ok tree)
-      (mt (formsOf (formGet tree "entries") "op")
+      (match (formsOf (formGet tree "entries") "op")
         ((err e) (err e))
         ((ok ops) (ok (c/joinSep (someOf (map briefOf ops)) "; "))))))
 
 fn topicField t: AsnNode field: String -> (Option String)
   (if (= (optStr (formGet t "name")) "language")
-    (mt (formGet t field) ((some v) (strLike v)) ((none) none))
+    (match (formGet t field) ((some v) (strLike v)) ((none) none))
     none)
 
 fn ! languageText! g: Grammar field: String -> (Result String String)
-  (mt (readTree! g.tools)
+  (match (readTree! g.tools)
     ((err e) (err e))
     ((ok tree)
-      (mt (formsOf (formGet tree "topics") "topic")
+      (match (formsOf (formGet tree "topics") "topic")
         ((err e) (err e))
         ((ok topics)
-          (mt (listHead (someOf (map (fn [t] (topicField t field)) topics)))
+          (match (listHead (someOf (map (fn [t] (topicField t field)) topics)))
             ((some text) (ok text))
             ((none) (err (systemExit (str "launch: " g.tools " has no (:topic :name :language :" field " ...)")))))))))
 
@@ -1059,7 +1059,7 @@ fn attractorLine h: Harness i: String -> String
     (str i ": " (optStr (pairFirst gs)) ", overdone: " (optStr (pairSecond gs))))
 
 fn ! attractorsText! g: Grammar mode: String -> (Result String String)
-  (mt (loadHarness! g)
+  (match (loadHarness! g)
     ((err e) (err e))
     ((ok h)
       (let [ids (optionOr (dictAt h.modes mode) (list))]
@@ -1068,7 +1068,7 @@ fn ! attractorsText! g: Grammar mode: String -> (Result String String)
           (ok (str h.intro " " (c/joinSep (map (fn [i] (attractorLine h i)) ids) "; ")))))))
 
 fn ! stdoutOf! tool: String args: (List String) -> String
-  (mt (run! tool args "/") ((ok o) (pyStrip o.stdout)) ((err e) e))
+  (match (run! tool args "/") ((ok o) (pyStrip o.stdout)) ((err e) e))
 
 fn ! fillValue! key: String cwd: String gitState: String briefs: String shell: (Option String) sub: (Option String) -> (Option String)
   (cond
@@ -1127,7 +1127,7 @@ fn factOf have: (List (Pair String Bool)) w: String -> Bool
   (optionOr (dictAt have w) false)
 
 fn ! layerPart! g: Grammar mode: String lid: String text: (Option String) src: (Option String) lookup: (fn [String] -> (Option String)) -> (Result String String)
-  (mt src
+  (match src
     ((some s)
       (cond
         ((= s "attractors") (attractorsText! g mode))
@@ -1139,7 +1139,7 @@ fn ! layerPart! g: Grammar mode: String lid: String text: (Option String) src: (
 fn ! renderLayers! g: Grammar have: (List (Pair String Bool)) mode: String only: (List String) lookup: (fn [String] -> (Option String)) layers: (List Layer) acc: (List String) -> (Result (List String) String)
   (if (listEmpty? layers)
     (ok (listReverse acc))
-    (mt (c/firstOf layers)
+    (match (c/firstOf layers)
       ((layerOf lid cnd text src)
         (let [rest (c/restOf layers)
               conds (optionOr cnd (list))
@@ -1153,30 +1153,30 @@ fn ! renderLayers! g: Grammar have: (List (Pair String Bool)) mode: String only:
             ((and (not (listEmpty? pos)) (not (listAll? (fn [w] (factOf have w)) pos))) (renderLayers! g have mode only lookup rest acc))
             ((listAny? (fn [w] (factOf have w)) neg) (renderLayers! g have mode only lookup rest acc))
             (else
-              (mt (layerPart! g mode lid text src lookup)
+              (match (layerPart! g mode lid text src lookup)
                 ((err e) (err e))
                 ((ok p) (renderLayers! g have mode only lookup rest (cons p acc))))))))))
 
 fn layerId l: Layer -> String
-  (mt l ((layerOf lid _ _ _) lid))
+  (match l ((layerOf lid _ _ _) lid))
 
 fn ! render! g: Grammar cwd: String client: String mode: String only: (List String) -> (Result String String)
-  (mt (loadHarness! g)
+  (match (loadHarness! g)
     ((err e) (err e))
     ((ok h)
-      (mt (facts! g client cwd mode)
+      (match (facts! g client cwd mode)
         ((err e) (err e))
         ((ok have)
-          (mt (gitState! cwd)
+          (match (gitState! cwd)
             ((err e) (err e))
             ((ok gs)
-              (mt (clientField! g client "shell")
+              (match (clientField! g client "shell")
                 ((err e) (err e))
                 ((ok shell)
-                  (mt (toolBriefs! g)
+                  (match (toolBriefs! g)
                     ((err e) (err e))
                     ((ok briefs)
-                      (mt (clientField! g client "subagent")
+                      (match (clientField! g client "subagent")
                         ((err e) (err e))
                         ((ok sub)
                           (let [ids (map layerId h.layers)
@@ -1184,7 +1184,7 @@ fn ! render! g: Grammar cwd: String client: String mode: String only: (List Stri
                                 lookup (fn [key] (fillValue! key cwd gs briefs shell sub))]
                             (if (not (listEmpty? unknownOnly))
                               (err (systemExit (str "launch: cannot render unknown layers " (pyReprList unknownOnly))))
-                              (mt (renderLayers! g have mode only lookup h.layers (list))
+                              (match (renderLayers! g have mode only lookup h.layers (list))
                                 ((err e) (err e))
                                 ((ok parts) (ok (str (c/joinSep (map (fn [p] (hostPaths p g.host)) parts) "\n") "\n"))))))))))))))))))
 
@@ -1195,12 +1195,12 @@ fn harnessError e: String -> String
 
 fn ! harnessLayers repoRoot: String rootDir: String mode: String -> (Result String String)
   (let [g (grammarOf! repoRoot)]
-    (mt (clientField! g "leon" "layers")
+    (match (clientField! g "leon" "layers")
       ((err e) (err (harnessError e)))
       ((ok names)
         (if (stringEmpty? (optionOr names ""))
           (err "RuntimeError: ERR_HARNESS: asl/grammar/clients.asn has no (:client :id leon :layers ...)")
-          (mt (render! g rootDir "leon" mode (nonEmpty (map pyStrip (stringSplit (optionOr names "") ","))))
+          (match (render! g rootDir "leon" mode (nonEmpty (map pyStrip (stringSplit (optionOr names "") ","))))
             ((err e) (err (harnessError e)))
             ((ok text) (ok (pyStrip text))))))))
 
@@ -1214,18 +1214,18 @@ fn afterSpace s: String i: Int64 n: Int64 -> (Option Int64)
 fn effectAt s: String n: Int64 i: Int64 -> (Option (Pair (Pair String String) Int64))
   (if (not (= (sl s i (+ i 3)) ":op"))
     none
-    (mt (afterSpace s (+ i 3) n)
+    (match (afterSpace s (+ i 3) n)
       ((none) none)
       ((some a)
         (let [b (classEnd s (+ a 1) n)]
           (if (or (not (= (ch s a) "\"")) (or (>= b n) (= b (+ a 1))))
             none
-            (mt (afterSpace s (+ b 1) n)
+            (match (afterSpace s (+ b 1) n)
               ((none) none)
               ((some c1)
                 (if (not (= (sl s c1 (+ c1 6)) ":class"))
                   none
-                  (mt (afterSpace s (+ c1 6) n)
+                  (match (afterSpace s (+ c1 6) n)
                     ((none) none)
                     ((some c2)
                       (let [e (wordRun s (+ c2 1) n)]
@@ -1236,7 +1236,7 @@ fn effectAt s: String n: Int64 i: Int64 -> (Option (Pair (Pair String String) In
 fn effectsLoop s: String n: Int64 i: Int64 acc: (List (Pair String String)) -> (List (Pair String String))
   (if (>= i n)
     acc
-    (mt (effectAt s n i)
+    (match (effectAt s n i)
       ((some m) (effectsLoop s n (pairSecond m) (dictPut acc (pairFirst (pairFirst m)) (pairSecond (pairFirst m)))))
       ((none) (effectsLoop s n (+ i 1) acc))))
 
@@ -1363,10 +1363,10 @@ fn ! buildSystemPrompt repoRoot: String task: String rootDir: String base: Strin
                         (listAppend (list "each (:step ...) runs in the workspace; the next message carries the task, each earlier turn as (:turn n :sent <your forms> :got <its receipts>), and last (:now ...) with the files written, the newest gate runs and :last, the newest turn"
                                           (noteFact))
                           (opt (not (listEmpty? gates)) gateText)))))))
-        layers (mt contextTokens
+        layers (match contextTokens
                  ((some t) (if (>= t 8000) (harnessLayers repoRoot rootDir "implement") (ok "")))
                  ((none) (ok "")))]
-    (mt layers
+    (match layers
       ((err e) (err e))
       ((ok lay)
         (ok (c/joinSep (listAppend parts (listAppend (opt (not (stringEmpty? lay)) lay)

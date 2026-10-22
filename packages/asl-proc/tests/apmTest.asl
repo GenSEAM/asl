@@ -22,8 +22,8 @@ fn ! testShRunCmd! -> Bool
   (let [(res (sh/runCmd! "echo" (list "hello")))]
     (do
       (assert (ok? res) "run-cmd! must succeed")
-      (assert (mt res ((ok receipt) (and (= receipt.exitCode 0) (< (proc/receiptTokens receipt) 80))) ((err _) false)) "ProcessReceipt exit-code must be 0 and tokens must be <80")
-      (let [(_ (mt res ((ok receipt) (sh/releaseReceipt! receipt)) ((err _) (err "no receipt"))))] true)))
+      (assert (match res ((ok receipt) (and (= receipt.exitCode 0) (< (proc/receiptTokens receipt) 80))) ((err _) false)) "ProcessReceipt exit-code must be 0 and tokens must be <80")
+      (let [(_ (match res ((ok receipt) (sh/releaseReceipt! receipt)) ((err _) (err "no receipt"))))] true)))
 
 fn ! testOobStreamDemuxMemoryBound -> Bool
   (let [(spoolPathRes (spool/reserveSpoolPath! "oob-100mb" 0))]
@@ -36,8 +36,8 @@ fn ! testOobStreamDemuxMemoryBound -> Bool
           (assert (<= demuxer100.bufferBytes 68157440) "Active in-flight buffer must be strictly bounded near 64MB")
           (assert (= demuxer100.totalBytes 73400320) "Total processed bytes must equal exactly 70MB (73400320)")
           (assert (ok? finishRes) "oob-demux-finish! must succeed")
-          (assert (mt finishRes ((ok receipt) (and (= receipt.exitCode -9) (and (stringContains? receipt.summary "memory bound < 64MB exceeded") (< (proc/receiptTokens receipt) 80)))) ((err _) false)) "Terminated stream receipt must have exit -9, cite the memory bound, and stay under 80 tokens")
-          (let [(_ (mt finishRes ((ok receipt) (spool/spoolPathRelease! receipt.spoolPath)) ((err _) (err "no receipt"))))] true)))))
+          (assert (match finishRes ((ok receipt) (and (= receipt.exitCode -9) (and (stringContains? receipt.summary "memory bound < 64MB exceeded") (< (proc/receiptTokens receipt) 80)))) ((err _) false)) "Terminated stream receipt must have exit -9, cite the memory bound, and stay under 80 tokens")
+          (let [(_ (match finishRes ((ok receipt) (spool/spoolPathRelease! receipt.spoolPath)) ((err _) (err "no receipt"))))] true)))))
 
 fn ! runTests -> Bool
   (let [(r1 (testReceiptStructure)) (r2 (testTokenCeiling)) (r3 (testSummaryTruncation)) (r4 (testErrorExtraction)) (r5 (testExitPreservation)) (r6 (testDemuxStream)) (r7 (testShRunCmd!)) (r8 (testOobStreamDemuxMemoryBound))] (and r1 (and r2 (and r3 (and r4 (and r5 (and r6 (and r7 r8))))))))

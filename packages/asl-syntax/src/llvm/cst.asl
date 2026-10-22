@@ -111,7 +111,7 @@ fn attachTrailingTrivia blocks: (List tr/TreeElement) triviaToks: (List tr/Token
     (let [(rev (listReverse blocks))
           (lastElem (optionOr (listHead rev) (tr/elemToken (tr/makeToken "" 0 0))))
           (rest (optionOr (listTail rev) (list)))]
-      (mt lastElem
+      (match lastElem
         ((tr/elemToken _) (listAppend blocks (map (fn [(t tr/Token)] -> tr/TreeElement (tr/elemToken t)) triviaToks)))
         ((tr/elemNode bNode)
          (let [(oldChildren (tr/nodeChildren bNode))
@@ -198,11 +198,11 @@ fn buildFunctionNode split: FuncSplit -> tr/Node
         (blockElems (splitBlocks body (list) (list)))
         (missAt (lastSolidEnd allToks st))
         (closeElems (if split.opened
-                      (mt split.close
+                      (match split.close
                         ((some c) (list (tr/elemToken c)))
                         ((none) (list (tr/elemNode (tr/makeMissingNode missAt "}")))))
                       (list (tr/elemNode (tr/makeMissingNode missAt "{")))))
-        (en (mt split.close
+        (en (match split.close
               ((some c) (tr/tokenEnd c))
               ((none) (tr/tokenEnd (optionOr (listLast allToks) (tr/makeToken "" st st))))))]
     (tr/makeNode "llvmFunction" st en (listAppend hdrElems (listAppend blockElems closeElems))))
@@ -284,7 +284,7 @@ fn parseLlvm text: String -> tr/Node
 fn moduleFunctions root: tr/Node -> (List tr/Node)
   (listReverse
     (fold (fn [(acc (List tr/Node)) (elem tr/TreeElement)] -> (List tr/Node)
-            (mt elem
+            (match elem
               ((tr/elemToken _) acc)
               ((tr/elemNode n)
                (if (= (tr/nodeKind n) "llvmFunction")
@@ -296,7 +296,7 @@ fn moduleFunctions root: tr/Node -> (List tr/Node)
 fn moduleNodes root: tr/Node -> (List tr/Node)
   (listReverse
     (fold (fn [(acc (List tr/Node)) (elem tr/TreeElement)] -> (List tr/Node)
-            (mt elem
+            (match elem
               ((tr/elemToken _) acc)
               ((tr/elemNode n) (cons n acc))))
           (list)
@@ -308,7 +308,7 @@ fn functionHeaderTokens funcNode: tr/Node -> (List tr/Token)
       (fold (fn [(st (Pair Bool (List tr/Token))) (elem tr/TreeElement)] -> (Pair Bool (List tr/Token))
               (if (pairFirst st)
                 st
-                (mt elem
+                (match elem
                   ((tr/elemNode _) (pair true (pairSecond st)))
                   ((tr/elemToken t) (pair false (cons t (pairSecond st)))))))
             (pair false (list))
@@ -317,7 +317,7 @@ fn functionHeaderTokens funcNode: tr/Node -> (List tr/Token)
 fn moduleDeclarations root: tr/Node -> (List tr/Node)
   (listReverse
     (fold (fn [(acc (List tr/Node)) (elem tr/TreeElement)] -> (List tr/Node)
-            (mt elem
+            (match elem
               ((tr/elemToken _) acc)
               ((tr/elemNode n)
                (if (= (tr/nodeKind n) "llvmDeclare")
@@ -329,7 +329,7 @@ fn moduleDeclarations root: tr/Node -> (List tr/Node)
 fn functionBlocks funcNode: tr/Node -> (List tr/Node)
   (listReverse
     (fold (fn [(acc (List tr/Node)) (elem tr/TreeElement)] -> (List tr/Node)
-            (mt elem
+            (match elem
               ((tr/elemToken _) acc)
               ((tr/elemNode n)
                (if (= (tr/nodeKind n) "llvmBlock")
@@ -341,7 +341,7 @@ fn functionBlocks funcNode: tr/Node -> (List tr/Node)
 fn blockInstructions blockNode: tr/Node -> (List tr/Node)
   (listReverse
     (fold (fn [(acc (List tr/Node)) (elem tr/TreeElement)] -> (List tr/Node)
-            (mt elem
+            (match elem
               ((tr/elemToken _) acc)
               ((tr/elemNode n)
                (if (= (tr/nodeKind n) "llvmInstruction")
@@ -358,7 +358,7 @@ fn blockLabel blockNode: tr/Node text: String -> String
     (let [(found (fold (fn [(acc String) (el tr/TreeElement)] -> String
                          (if (!= acc "")
                            acc
-                           (mt el
+                           (match el
                              ((tr/elemNode _) "")
                              ((tr/elemToken t)
                               (if (= (tr/tokenKind t) "label")

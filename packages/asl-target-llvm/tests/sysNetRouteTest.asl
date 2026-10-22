@@ -24,12 +24,12 @@ fn lib -> String
   (:f stderr String))
 
 fn ! nativeAsl1Bin! -> (Result String String)
-  (mt (sys/context!)
+  (match (sys/context!)
     ((err e) (err e))
     ((ok ctx) (cache/nativeAsl1! ctx (str ctx.root "/asl/host/out/libaslrt.a") "/usr/bin/clang")))
 
 fn ! buildWithNativeAsl1! appPath: String ll: String -> Recorded
-  (mt (nativeAsl1Bin!)
+  (match (nativeAsl1Bin!)
     ((err e) (Recorded :exitCode 1 :stdout "" :stderr (str "native asl1 compiler: " e)))
     ((ok nativeAsl1) (let [(r (sh (str nativeAsl1 " build " appPath " -o " ll)))] (Recorded :exitCode r.exitCode :stdout r.stdout :stderr r.stderr))))
 
@@ -55,12 +55,12 @@ fn ! hostTriple -> String
       (else "")))
 
 fn ! hostFacts -> libc/TripleFacts
-  (mt (libc/libcFacts (hostTriple))
+  (match (libc/libcFacts (hostTriple))
     ((some f) f)
     ((none) (do (assert false (str "hostFacts: libc.asl has no row for this host's triple \"" (hostTriple) "\"")) (libc/emptyTripleFacts))))
 
 fn ! hostConst name: String -> String
-  (mt (libc/libcConst (hostFacts) name)
+  (match (libc/libcConst (hostFacts) name)
     ((some v) (str "io:" v))
     ((none) (do (assert false (str "libc.asl has no " name " row for " (hostTriple))) "")))
 
@@ -72,33 +72,33 @@ fn echoSource -> String
     "(module netEcho :x [main] :i [])"
     ""
     "fn ! roundTrip label: String lfd: Int64 cfd: Int64 -> Int64"
-    "  (mt (sockAccept lfd)"
+    "  (match (sockAccept lfd)"
     "    ((err e) (do (println label \"sockAccept\" e) 1))"
     "    ((ok afd)"
     "      (do (fdWrite cfd \"ping\")"
-    "          (let [(got (mt (fdRead afd 4) ((ok s) s) ((err e) (str \"err \" e))))]"
+    "          (let [(got (match (fdRead afd 4) ((ok s) s) ((err e) (str \"err \" e))))]"
     "            (do (println label \"echo\" got)"
     "                (fdClose afd) (fdClose cfd) (fdClose lfd)"
     "                (if (= got \"ping\") 0 1))))))"
     ""
     "fn ! tcpEcho -> Int64"
-    "  (mt (tcpListen 0)"
+    "  (match (tcpListen 0)"
     "    ((err e) (do (println \"tcp tcpListen\" e) 1))"
     "    ((ok lfd)"
-    "      (mt (sockLocalPort lfd)"
+    "      (match (sockLocalPort lfd)"
     "        ((err e) (do (println \"tcp sockLocalPort\" e) 1))"
     "        ((ok port)"
     "          (do (println \"tcp port in range\" (and (> port 0) (<= port 65535)))"
-    "              (mt (tcpConnect port)"
+    "              (match (tcpConnect port)"
     "                ((err e) (do (println \"tcp tcpConnect\" e) 1))"
     "                ((ok cfd) (roundTrip \"tcp\" lfd cfd))))))))"
     ""
     "fn ! unixEcho dir: String -> Int64"
     "  (let [(path (str dir \"/echo.sock\"))]"
-    "    (mt (unixListen path)"
+    "    (match (unixListen path)"
     "      ((err e) (do (println \"unix unixListen\" e) 1))"
     "      ((ok lfd)"
-    "        (mt (unixConnect path)"
+    "        (match (unixConnect path)"
     "          ((err e) (do (println \"unix unixConnect\" e) 1))"
     "          ((ok cfd) (let [(code (roundTrip \"unix\" lfd cfd))] (do (pathRemove path) code)))))))"
     ""
@@ -113,7 +113,7 @@ fn errorsSource -> String
     "(module netErrors :x [main] :i [])"
     ""
     "fn shape r: (Result Int64 String) -> String"
-    "  (mt r ((ok _) \"ok\") ((err e) e))"
+    "  (match r ((ok _) \"ok\") ((err e) e))"
     ""
     "fn ! report label: String r: (Result Int64 String) -> Int64"
     "  (do (println label (shape r)) 0)"
@@ -125,10 +125,10 @@ fn errorsSource -> String
     "  (unixListen x)"
     ""
     "fn ! boundCases -> Int64"
-    "  (mt (tcpListen 0)"
+    "  (match (tcpListen 0)"
     "    ((err e) (do (println \"tcpListen 0\" e) 1))"
     "    ((ok lfd)"
-    "      (mt (sockLocalPort lfd)"
+    "      (match (sockLocalPort lfd)"
     "        ((err e) (do (println \"sockLocalPort\" e) 1))"
     "        ((ok port)"
     "          (do (report \"tcpListen bound port\" (tcpListen port))"
@@ -159,12 +159,12 @@ fn sixSource -> String
     "(module netSix :x [main] :i [])"
     ""
     "fn ! main args: (List String) -> (Result Int64 String)"
-    "  (do (println (mt (tcpListen -1) ((ok _) \"ok\") ((err e) e)))"
-    "      (println (mt (tcpConnect 0) ((ok _) \"ok\") ((err e) e)))"
-    "      (println (mt (sockAccept -1) ((ok _) \"ok\") ((err e) e)))"
-    "      (println (mt (sockLocalPort -1) ((ok _) \"ok\") ((err e) e)))"
-    "      (println (mt (unixListen \"\") ((ok _) \"ok\") ((err e) e)))"
-    "      (println (mt (unixConnect \"\") ((ok _) \"ok\") ((err e) e)))"
+    "  (do (println (match (tcpListen -1) ((ok _) \"ok\") ((err e) e)))"
+    "      (println (match (tcpConnect 0) ((ok _) \"ok\") ((err e) e)))"
+    "      (println (match (sockAccept -1) ((ok _) \"ok\") ((err e) e)))"
+    "      (println (match (sockLocalPort -1) ((ok _) \"ok\") ((err e) e)))"
+    "      (println (match (unixListen \"\") ((ok _) \"ok\") ((err e) e)))"
+    "      (println (match (unixConnect \"\") ((ok _) \"ok\") ((err e) e)))"
     "      (ok 0))"))
 
 fn libSource -> String
@@ -172,7 +172,7 @@ fn libSource -> String
     "(module nrfx/netLib :x [listenShape])"
     ""
     "fn ! listenShape port: Int64 -> String"
-    "  (mt (tcpListen port) ((ok fd) \"ok\") ((err e) e))"))
+    "  (match (tcpListen port) ((ok fd) \"ok\") ((err e) e))"))
 
 fn appSource -> String
   (lines (list
@@ -181,7 +181,7 @@ fn appSource -> String
     "fn ! main args: (List String) -> (Result Int64 String)"
     "  (do (println (str \"lib \" (nl/listenShape -1)))"
     "      (println (str \"lib \" (nl/listenShape 0)))"
-    "      (println (str \"app \" (mt (tcpListen 70000) ((ok fd) \"ok\") ((err e) e))))"
+    "      (println (str \"app \" (match (tcpListen 70000) ((ok fd) \"ok\") ((err e) e))))"
     "      (ok 0))"))
 
 fn wrapperDef name: String -> String
@@ -194,7 +194,7 @@ fn cTableSymbols -> (List String)
   (list "bTcpListen" "bSockAccept" "bUnixListen" "sysNetBuiltins")
 
 fn ! fileText path: String -> String
-  (mt (fileReadString path) ((ok t) t) ((err e) (do (assert false (str path ": " e)) "")))
+  (match (fileReadString path) ((ok t) t) ((err e) (do (assert false (str path ": " e)) "")))
 
 fn ! build work: String name: String src: String -> String
   (let [(srcPath (str work "/" name ".asl"))
@@ -202,7 +202,7 @@ fn ! build work: String name: String src: String -> String
         (preludeText (resultOr (fileReadString (lk/preludePath)) ""))]
     (do (assert (ok? (fileWrite srcPath src)) (str name ".asl written"))
         (assert (not (stringEmpty? preludeText)) (str (lk/preludePath) " is readable"))
-        (mt (mt (lk/lowerSourceWith src preludeText) ((err ds) (err ds)) ((ok m) (llvm/emitLlvmProgramFor (hostFacts) m "main")))
+        (match (match (lk/lowerSourceWith src preludeText) ((err ds) (err ds)) ((ok m) (llvm/emitLlvmProgramFor (hostFacts) m "main")))
           ((err ds) (do (assert false (str name ": lowerSourceWith and emitLlvmProgramFor: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message)) ds) "; "))) ""))
           ((ok text) (do (assert (ok? (fileWrite ll text)) (str name ".ll written")) text)))))
 
@@ -293,17 +293,17 @@ fn ! testTwoModules work: String -> Bool
         (_ (if routedHere (checkSymbols "netLinked" (str work "/netLinked")) true))
         (linkedOut (checkParity "netLinked" (str work "/netLinked") appPath "" ""))
         (_ (assert (= linkedOut want) (str "two-module linked program prints " linkedOut)))]
-    (mt (lk/loadClosure! appPath)
+    (match (lk/loadClosure! appPath)
       ((err ds) (do (assert false (str "loadClosure! " appPath ": " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) ds) "; "))) false))
       ((ok units)
         (let [(lls (map (fn [(u lk/LinkUnit)] -> String
                           (let [(scope (low/LinkScope :path u.path :imports (lk/importForms units u) :prelude (list) :strings (list) :only (none)))
                                 (ll (str work "/sep." (stringReplace u.name "/" "_") ".ll"))]
-                            (mt (low/lowerLinked u.forms u.positions scope)
+                            (match (low/lowerLinked u.forms u.positions scope)
                               ((err ds) (do (assert false (str u.name " lowers: " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) ds) "; "))) ll))
                               ((ok m)
                                 (let [(res (if (= u.name "nrfx/netApp") (llvm/emitLlvmProgramFor (hostFacts) m (str m.name ".main")) (llvm/emitLlvmModuleFor (hostFacts) m)))]
-                                  (mt res
+                                  (match res
                                     ((err ds) (do (assert false (str u.name " emits: " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) ds) "; "))) ll))
                                     ((ok text)
                                       (do (assert (= (countOf text "define internal tailcc %Val @sysNetTcpListen(") 1) (str u.name ": its own internal sysNetTcpListen"))
@@ -322,10 +322,10 @@ fn ! optBin -> (Option String)
     (listHead known))
 
 fn ! testLinuxRouting work: String -> Bool
-  (mt (low/lowerSource (sixSource))
+  (match (low/lowerSource (sixSource))
     ((err ds) (do (assert false (str "netSix lowers: " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) ds) "; "))) false))
     ((ok m)
-      (mt (llvm/emitLlvmProgramFor (libc/linuxX8664Facts) m "main")
+      (match (llvm/emitLlvmProgramFor (libc/linuxX8664Facts) m "main")
         ((err ds) (do (assert false (str "netSix emits for linux-x86_64: " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) ds) "; "))) false))
         ((ok text)
           (do (checkIr "netSix linux-x86_64" text (routedNames))
@@ -333,16 +333,16 @@ fn ! testLinuxRouting work: String -> Bool
               (assert (stringContains? text "@accept4") "linux-x86_64 routing accepts through accept4")
               (assert (not (stringContains? text "@__error(")) "linux-x86_64 routing has no darwin __error")
               (assert (ok? (fileWrite (str work "/netSixLinux.ll") text)) "netSixLinux.ll written")
-              (mt (optBin)
+              (match (optBin)
                 ((none) (do (println "netSix linux-x86_64: no opt on this host, -passes=verify skipped") true))
                 ((some o) (do (assert (= (sh (str o " -passes=verify -disable-output " work "/netSixLinux.ll")).exitCode 0) "linux-x86_64 routed IR verifies") true))))))))
 
 fn backlogIn res: (Result ty/SsaFunction String) dest: String -> Int64
-  (mt res
+  (match res
     ((err _) -1)
     ((ok f) (fold (fn [(acc Int64) (b ty/SsaBlock)] -> Int64
                     (fold (fn [(acc2 Int64) (i ty/SsaInstr)] -> Int64
-                            (if (= i.dest dest) (mt i.op ((ty/opConst c) (mt c ((ty/constInt v) v) (_ acc2))) (_ acc2)) acc2))
+                            (if (= i.dest dest) (match i.op ((ty/opConst c) (match c ((ty/constInt v) v) (_ acc2))) (_ acc2)) acc2))
                           acc b.instrs))
                   -1 f.blocks)))
 
@@ -362,11 +362,11 @@ fn clashSource -> String
     ""
     "fn ! main args: (List String) -> (Result Int64 String)"
     "  (do (println (str (sysNetTcpListen 1)))"
-    "      (println (mt (tcpListen -1) ((ok _) \"ok\") ((err e) e)))"
+    "      (println (match (tcpListen -1) ((ok _) \"ok\") ((err e) e)))"
     "      (ok 0))"))
 
 fn diagCodes res: (Result rt/Routed (List ty/IrDiag)) -> (List String)
-  (mt res
+  (match res
     ((ok _) (list))
     ((err ds) (map (fn [(d ty/IrDiag)] -> String d.code) ds)))
 
@@ -382,40 +382,40 @@ fn withString m: ty/SsaModule s: String -> ty/SsaModule
 fn ! testRouteModule -> Bool
   (let [(facts (libc/darwinArm64Facts))
         (close (listHead (filter (fn [(e ty/SsaExtern)] -> Bool (= e.name "close")) (sysNet/sysNetExterns facts))))]
-    (mt (low/lowerSource (sixSource))
+    (match (low/lowerSource (sixSource))
       ((err ds) (do (assert false (str "netSix lowers: " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) ds) "; "))) false))
       ((ok m)
         (do (assert (some? close) "sysNetExterns declares close")
-            (mt (rt/routeModule facts m)
+            (match (rt/routeModule facts m)
               ((err _) (assert false "netSix routes"))
               ((ok r) (let [(out r.result)]
                         (do (assert (= (listLength out.strings) (+ (listLength m.strings) 1)) "io: is appended to a pool without it")
                             (assert (= (listGet out.strings (listLength m.strings)) (some "io:")) "the appended pool string is io:")
                             (assert (not (rt/routes? out)) "a routed module has no routed builtin call left")
-                            (mt (rt/routeModule facts out)
+                            (match (rt/routeModule facts out)
                               ((err _) (assert false "a routed module routes again"))
                               ((ok again) (assert (and (= again.result out) (listEmpty? again.internal)) "a module calling no routed builtin comes back unchanged, adding nothing")))))))
-            (mt (rt/routeModule facts (withString m "io:"))
+            (match (rt/routeModule facts (withString m "io:"))
               ((err _) (assert false "netSix with io: in its pool routes"))
               ((ok r) (assert (= (listLength r.result.strings) (+ (listLength m.strings) 1)) "io: already in the pool is reused, not appended")))
-            (mt close
+            (match close
               ((none) false)
               ((some c)
-                (do (mt (rt/routeModule facts (withExtern m c))
+                (do (match (rt/routeModule facts (withExtern m c))
                       ((err _) (assert false "netSix declaring sysNet's close extern routes"))
                       ((ok r) (assert (= (namedCount r.result.externs "close") 1) "an own extern identical to an added one is declared once")))
                     (assert (= (diagCodes (rt/routeModule facts (withExtern m (ty/ssaExtern "close" 1)))) (list "ERR_LLVM_SYSROUTE_EXTERN")) "an own close extern with another signature is ERR_LLVM_SYSROUTE_EXTERN")
                     true)))
-            (mt (low/lowerSource (clashSource))
+            (match (low/lowerSource (clashSource))
               ((err ds) (assert false (str "netClash lowers: " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) ds) "; "))))
               ((ok c) (assert (= (diagCodes (rt/routeModule facts c)) (list "ERR_LLVM_SYSROUTE_NAME")) "a module function named sysNetTcpListen is ERR_LLVM_SYSROUTE_NAME")))
             true))))
 
 fn ! testNativeEntries work: String -> Bool
-  (mt (low/lowerSource (sixSource))
+  (match (low/lowerSource (sixSource))
     ((err ds) (do (assert false (str "netSix lowers: " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) ds) "; "))) false))
     ((ok m)
-      (do (mt (llvm/emitLlvmProgram m "main")
+      (do (match (llvm/emitLlvmProgram m "main")
             ((err ds) (let [(t (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message)) ds) "; "))]
                         (assert (and (stringContains? t "ERR_LOWER_UNSUPPORTED") (and (stringContains? t "'tcpListen'") (stringContains? t "sysRoute, sysNet or parRoute")))
                                 (str "pure emitLlvmProgram rejects the unrouted socket builtins, naming their routes: " t))))
@@ -428,10 +428,10 @@ fn ! testNativeEntries work: String -> Bool
           (assert (= (optionMap (fn [(f libc/TripleFacts)] -> String f.triple) (rt/routeFactsFor "linux-x86_64")) (some "linux-x86_64")) "routeFactsFor linux-x86_64 is its measured row (SYSLINUX)")
           (assert (= (optionMap (fn [(f libc/TripleFacts)] -> String f.triple) (rt/routeFactsFor "linux-aarch64")) (some "linux-aarch64")) "routeFactsFor linux-aarch64 is its measured row (SYSLINUX)")
           (assert (not (some? (rt/routeFactsFor ""))) "routeFactsFor an unknown host is none")
-          (mt (platformInfo)
+          (match (platformInfo)
             ((err e) (assert false (str "platformInfo: " e)))
             ((ok p) (assert (= (rt/tripleOf p.os p.machine) (hostTriple)) (str "tripleOf platformInfo equals uname's triple " (hostTriple)))))
-          (mt (llvm/emitLlvmProgramNative! m "main")
+          (match (llvm/emitLlvmProgramNative! m "main")
             ((err ds) (assert false (str "netSix emitLlvmProgramNative!: " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) ds) "; "))))
             ((ok text)
               (if (some? (rt/routeFactsFor (hostTriple)))
@@ -585,7 +585,7 @@ fn withConst facts: libc/TripleFacts name: String delta: Int64 -> libc/TripleFac
     :variadic facts.variadic :structs facts.structs)
 
 fn ! emitRun work: String name: String facts: libc/TripleFacts m: ty/SsaModule -> String
-  (mt (llvm/emitLlvmProgramFor facts m "run")
+  (match (llvm/emitLlvmProgramFor facts m "run")
     ((err ds) (do (assert false (str name ": emitLlvmProgramFor: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message)) ds) "; "))) ""))
     ((ok text) (do (assert (ok? (fileWrite (str work "/" name ".ll") text)) (str name ".ll written")) text)))
 
@@ -624,12 +624,12 @@ fn ! testFdHandoffLinux work: String -> Bool
     (do (assert (stringContains? text "@recvmsg(") "linux-x86_64 fdHandoff calls recvmsg")
         (assert (stringContains? text "i32 1073741824") "linux-x86_64 recvmsg passes MSG_CMSG_CLOEXEC")
         (assert (stringContains? text "@__errno_location") "linux-x86_64 fdHandoff reads errno through __errno_location")
-        (mt (optBin)
+        (match (optBin)
           ((none) (do (println "fdHandoff linux-x86_64: no opt on this host, -passes=verify skipped") true))
           ((some o) (do (assert (= (sh (str o " -passes=verify -disable-output " work "/fdHandoffLinux.ll")).exitCode 0) "linux-x86_64 fdHandoff IR verifies") true)))))
 
 fn rowOf facts: libc/TripleFacts structName: String field: String -> Int64
-  (mt (libc/pairFind facts.structs structName)
+  (match (libc/pairFind facts.structs structName)
     ((none) -1)
     ((some sf) (optionOr (libc/structFieldOffset sf field) -1)))
 

@@ -3,7 +3,7 @@
   :i [])
 
 fn step x: (Option Int64) f: (fn [Int64] -> Int64) acc: Int64 -> Int64
-  (mt x ((none) (f acc)) ((some v) (+ v acc)))
+  (match x ((none) (f acc)) ((some v) (+ v acc)))
 
 fn spin i: Int64 n: Int64 acc: Int64 -> Int64
   (if (>= i n) acc (spin (+ i 1) n (step (none) (fn [(k Int64)] -> Int64 (+ k 1)) acc)))

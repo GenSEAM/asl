@@ -16,7 +16,7 @@ fn testPeerRegistrationValidation -> Bool
         (regRes (nb/bridgeRegisterPeer bridge0 "peer-beta" "10.0.0.2" 9100 12))]
     (assert (ok? regRes) "registering valid peer succeeds")
     (refute (err? regRes) "registering valid peer refutes error")
-    (mt regRes
+    (match regRes
       ((ok bridge1)
         (assert (= (nb/getPeerCount bridge1) 1) "bridge has 1 peer after registration")
         (assert (nb/isPeerRegistered? bridge1 "peer-beta") "peer-beta is registered")
@@ -37,11 +37,11 @@ fn testPeerRegistrationValidation -> Bool
 fn testSendRemoteMessage -> Bool
   (let [(bridge0 (nb/makeNetworkBridge "node-sender"))
         (regRes (nb/bridgeRegisterPeer bridge0 "peer-target" "127.0.0.1" 8888 10))
-        (bridge1 (mt regRes ((ok b) b) ((err _) bridge0)))
+        (bridge1 (match regRes ((ok b) b) ((err _) bridge0)))
         (sendRes (nb/bridgeSendRemote bridge1 "peer-target" "(:task :action \"ping\")"))]
     (assert (ok? sendRes) "send to registered peer succeeds")
     (refute (err? sendRes) "send to registered peer refutes error")
-    (mt sendRes
+    (match sendRes
       ((ok bridge2)
         (assert (= bridge2.sentCount 1) "sentCount incremented to 1")
         (refute (!= bridge2.sentCount 1) "sentCount refutes non-1"))
@@ -56,7 +56,7 @@ fn testReceiveRemoteFrame -> Bool
         (recvRes (nb/bridgeReceiveRemote bridge0 validFrame))]
     (assert (ok? recvRes) "receive valid frame succeeds")
     (refute (err? recvRes) "receive valid frame refutes error")
-    (mt recvRes
+    (match recvRes
       ((ok pairVal)
         (let [(bUpdated (pairFirst pairVal))
               (payload (pairSecond pairVal))]

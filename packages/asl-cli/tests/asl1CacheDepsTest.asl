@@ -12,7 +12,7 @@ fn ! runTests -> Bool
         (noHost (sys/Context :root root :scriptDir (str root "/bin") :argv0 (str root "/bin/asl") :hostBin "/nonexistent/asl-host"))
         (native (cache/closure! noHost compiler lib "clang"))
         (nativeLines (lines (resultOr native "")))]
-    (do (assert (ok? native) (str "the closure came from a native asl1 with no asl-host to fall back on: " (mt native ((ok _) "") ((err e) e))))
+    (do (assert (ok? native) (str "the closure came from a native asl1 with no asl-host to fall back on: " (match native ((ok _) "") ((err e) e))))
         (assert (> (listLength nativeLines) 10) "the asl1 closure spans the compiler packages")
         (assert (listContains? nativeLines "asl/packages/asl-target-llvm/src/main.asl") "paths are root-relative")
         true))

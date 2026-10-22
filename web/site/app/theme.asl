@@ -18,10 +18,10 @@ fn palette -> (List Swatch)
    (swatch "signal-wash" "rgba(255,90,168,.12)" "rgba(194,24,91,.08)")]
 
 fn swatchDark s: Swatch -> c/Decl
-  (mt s ((swatch name dark light) (c/decl (str "--" name) dark)))
+  (match s ((swatch name dark light) (c/decl (str "--" name) dark)))
 
 fn swatchLight s: Swatch -> c/Decl
-  (mt s ((swatch name dark light) (c/decl (str "--" name) light)))
+  (match s ((swatch name dark light) (c/decl (str "--" name) light)))
 
 fn tokenRules -> (List c/Rule)
   [(c/rule ":root" (listAppend (map swatchDark (palette)) [(c/decl "color-scheme" "dark")]))

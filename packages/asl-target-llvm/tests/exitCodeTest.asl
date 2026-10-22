@@ -18,7 +18,7 @@ fn ! sh cmd: String -> ProcessOutput
 
 fn ! asl1Bin! -> String
   (let [(built (nt/prepareRun (asl1Path) (nt/fingerprint)))]
-    (mt built.binary
+    (match built.binary
       ((some bin) bin)
       ((none) (do (assert false (str "asl1.asl builds natively: " built.reason)) ""))))
 
@@ -93,11 +93,11 @@ fn ! testMainEntry work: String -> Bool
         (do
           (assert (ok? emitRes)
                   (str "emitLlvmSource with entry main: "
-                       (mt emitRes
+                       (match emitRes
                          ((err ds) (str (optionOr (listHead ds) (ty/makeIrDiag "" "" "")).code " "
                                         (optionOr (listHead ds) (ty/makeIrDiag "" "" "")).message))
                          ((ok _) ""))))
-          (mt emitRes
+          (match emitRes
             ((err _) false)
             ((ok code)
               (do

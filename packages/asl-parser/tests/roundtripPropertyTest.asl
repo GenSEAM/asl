@@ -3,7 +3,7 @@
 fn verifyRoundtrip ast: rd/SExpr name: String -> Bool
   (let [(printed (ipr/formatIndented ast))
         (reparsedRes (ip/parseIndented printed))]
-    (mt reparsedRes
+    (match reparsedRes
       ((ok reparsed)
         (let [(rOrig (rd/renderSexpr ast))
               (rReparsed (rd/renderSexpr reparsed))]

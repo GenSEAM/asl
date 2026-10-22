@@ -9,7 +9,7 @@ fn makeBrowserAction actionName: Str targetTab: Str payload: Str isConfirmed: Bo
   (BrowserAction :actionName actionName :tier (classifyActionTier actionName) :targetTab targetTab :payload payload :isConfirmed isConfirmed)
 
 fn isActionPermitted? action: BrowserAction allowedDomains: (List Str) targetDomain: Str -> Bool
-  (mt action.tier ((safetySafe) true) ((safetyGuarded) (listContains? allowedDomains targetDomain)) ((safetyDangerous) (and action.isConfirmed (listContains? allowedDomains targetDomain))))
+  (match action.tier ((safetySafe) true) ((safetyGuarded) (listContains? allowedDomains targetDomain)) ((safetyDangerous) (and action.isConfirmed (listContains? allowedDomains targetDomain))))
 
 fn validateBrowserAction actionName: Str isConfirmed: Bool allowedDomains: (List Str) targetDomain: Str -> Bool
   (let [(act (makeBrowserAction actionName "tab-1" "" isConfirmed))] (isActionPermitted? act allowedDomains targetDomain))

@@ -6,7 +6,7 @@
       (asl-parser/reader :a rd)])
 
 fn isNone? expr: rd/SExpr -> Bool
-  (mt expr
+  (match expr
     ((rd/sexprAtom v) (= v ":none"))
     (_ false))
 
@@ -24,7 +24,7 @@ fn propOptStr props: (Map String rd/SExpr) key: String -> (Option String)
     (if (isNone? e) (none) (some (scalarText e))))
 
 fn items expr: rd/SExpr -> (List rd/SExpr)
-  (mt expr
+  (match expr
     ((rd/sexprList xs) xs)
     ((rd/sexprVect xs) xs)
     (_ (list)))
@@ -33,7 +33,7 @@ fn strs expr: rd/SExpr -> (List String)
   (map scalarText (items expr))
 
 fn atomText expr: rd/SExpr -> String
-  (mt expr
+  (match expr
     ((rd/sexprAtom v) v)
     (_ ""))
 
@@ -61,7 +61,7 @@ fn sub root: String s: String -> String
   (stringReplace s "@ROOT@" root)
 
 fn entryText e: cfg/GatewayResolvedEntry -> String
-  (mt e
+  (match e
     ((cfg/entryResolved en) (str en.alias "|" en.kind "|" en.dispatch "|" en.upstream.provider "|" en.upstream.url))
     ((cfg/entryUnresolved a) (str a "|string|||")))
 
@@ -80,16 +80,16 @@ fn fixtureUndeclaredText expr: rd/SExpr -> String
               ";")
 
 fn loadText r: (Result cfg/GatewayTable String) -> String
-  (mt r
+  (match r
     ((ok t) (str "ok " t.source " v" (stringFromInt64 t.version)))
     ((err e) (str "err " e)))
 
 fn keyText k: cfg/ConfigKey -> String
-  (mt k
+  (match k
     ((cfg/keyBuiltin) "builtin")
     ((cfg/keyFiles parts)
       (stringJoin (map (fn [(p (Pair String (Option (Pair Int64 Int64))))] -> String
-                         (mt (pairSecond p)
+                         (match (pairSecond p)
                            ((some st) (str (pairFirst p) " true " (stringFromInt64 (pairSecond st))))
                            ((none) (str (pairFirst p) " false 0"))))
                        parts)
@@ -125,12 +125,12 @@ fn checkQuery! root: String cid: String loaded: (Result cfg/GatewayTable String)
       (if prefixOnly
         (check (and (stringStartsWith? gotAsn (str "(:error \"" path ": ")) (stringEndsWith? gotAsn (str ":source \"" path "\")"))) (str what ": profile health error form " gotAsn))
         (check (= gotAsn wantAsn) (str what ": profile health asn " gotAsn " want " wantAsn)))
-      (mt loaded
+      (match loaded
         ((err _) (err? loaded))
         ((ok table)
           (let [(nameWant (propsOf (prop q "name")))
                 (nameGot (cfg/gatewayProfileName table headers env))
-                (nameGotText (mt nameGot ((ok n) (str "true " n)) ((err e) (str "false " e))))
+                (nameGotText (match nameGot ((ok n) (str "true " n)) ((err e) (str "false " e))))
                 (nameWantText (str (propStr nameWant "ok") " " (propStr nameWant "value")))]
             (allRun (list
               (check (= nameGotText nameWantText) (str what ": profile name " nameGotText " want " nameWantText))
@@ -138,19 +138,19 @@ fn checkQuery! root: String cid: String loaded: (Result cfg/GatewayTable String)
                 (check (err? (cfg/gatewayProfileSelect table headers env)) (str what ": select fails with the name"))
                 (let [(selWant (propsOf (prop q "select")))
                       (selGot (cfg/gatewayProfileSelect table headers env))
-                      (selText (mt selGot ((ok s) (str s.name " " s.source)) ((err e) (str "err " e))))
+                      (selText (match selGot ((ok s) (str s.name " " s.source)) ((err e) (str "err " e))))
                       (routed (cfg/gatewayRouteEntries! table headers env intent))
-                      (entriesGot (mt routed ((ok r) (stringJoin (map entryText r.entries) "\n")) ((err e) (str "err " e))))
+                      (entriesGot (match routed ((ok r) (stringJoin (map entryText r.entries) "\n")) ((err e) (str "err " e))))
                       (entriesWant (stringJoin (map fixtureEntryText (items (prop q "entries"))) "\n"))
-                      (undGot (mt routed ((ok r) (undeclaredText r.table.undeclaredIntents)) ((err e) (str "err " e))))
+                      (undGot (match routed ((ok r) (undeclaredText r.table.undeclaredIntents)) ((err e) (str "err " e))))
                       (undWant (fixtureUndeclaredText (prop q "undeclared")))
                       (modelsExpr (prop q "models"))
                       (modelsWant (cond ((isNone? modelsExpr) "none") ((= (scalarText modelsExpr) "skip") "skip") (else (stringJoin (strs modelsExpr) ","))))
                       (modelsGot (if (= modelsWant "skip")
                                    "skip"
-                                   (mt selGot
+                                   (match selGot
                                      ((err e) (str "err " e))
-                                     ((ok s) (mt (cfg/gatewayProfileModels s.profile.routes intent) ((none) "none") ((some ms) (stringJoin ms ",")))))))]
+                                     ((ok s) (match (cfg/gatewayProfileModels s.profile.routes intent) ((none) "none") ((some ms) (stringJoin ms ",")))))))]
                   (allRun (list
                     (check (= selText (str (propStr selWant "name") " " (if (= cid "builtin") path (sub root (propStr selWant "source"))))) (str what ": select " selText))
                     (check (= entriesGot entriesWant) (str what ": route entries " entriesGot " want " entriesWant))
@@ -181,12 +181,12 @@ fn checkCase! root: String cExpr: rd/SExpr -> Bool
         (gotLoad (loadText loaded))
         (health (cfg/gatewayConfigHealth loaded))
         (wantWarn (map (fn [(s String)] -> String (sub root s)) (strs (prop c "warnLines"))))
-        (gotWarn (mt loaded ((ok t) (if exists (cfg/gatewayLoadWarningLines path t) (list))) ((err _) (list))))
+        (gotWarn (match loaded ((ok t) (if exists (cfg/gatewayLoadWarningLines path t) (list))) ((err _) (list))))
         (cw (prop c "configWarnings"))
         (wantCw (if (isNone? cw) "none" (stringJoin (map (fn [(s String)] -> String (sub root s)) (strs cw)) "\n")))
-        (gotCw (mt health ((none) "none") ((some h) (stringJoin h.warnings "\n"))))
-        (wantRe (mt (propOptStr c "registryError") ((none) "none") ((some s) (sub root s))))
-        (gotRe (mt health ((none) "none") ((some h) (optionOr h.registryError "none"))))]
+        (gotCw (match health ((none) "none") ((some h) (stringJoin h.warnings "\n"))))
+        (wantRe (match (propOptStr c "registryError") ((none) "none") ((some s) (sub root s))))
+        (gotRe (match health ((none) "none") ((some h) (optionOr h.registryError "none"))))]
     (allRun (list
       (check (and filesOk builtinWritten) (str cid ": synthetic files written under " home))
       (check (= path (sub root (propStr c "path"))) (str cid ": profiles path " path))
@@ -206,7 +206,7 @@ fn checkCase! root: String cExpr: rd/SExpr -> Bool
       (allRun (map (fn [(qe rd/SExpr)] -> Bool (checkQuery! root cid loaded path exists prefixOnly qe)) (items (prop c "queries")))))))
 
 fn cacheResultText r: (Result cfg/GatewayTable String) -> String
-  (mt r
+  (match r
     ((ok t) t.source)
     ((err e) (str "error: " e)))
 
@@ -226,7 +226,7 @@ fn checkCache! root: String cacheList: (List rd/SExpr) -> Bool
       (check (listContains? recorded (str "hit=" hit)) (str "cache hit returns the cached table: " hit))
       (check (listContains? recorded (str "cachedError=" cachedErr)) (str "cached error is raised again: " cachedErr))
       (check (listContains? recorded (str "stale=" stale)) (str "stale key reloads: " stale))
-      (check (mt (pairFirst staleShell).key ((some k) (cfg/configKeyEqual? k key)) ((none) false)) "reload stores the current key"))))
+      (check (match (pairFirst staleShell).key ((some k) (cfg/configKeyEqual? k key)) ((none) false)) "reload stores the current key"))))
 
 fn routeOf expr: rd/SExpr -> cfg/GatewayRoute
   (let [(p (propsOf expr))]
@@ -238,7 +238,7 @@ fn checkModels mExpr: rd/SExpr -> Bool
         (intent (optionOr (propOptStr p "intent") ""))
         (r (prop p "result"))
         (want (if (isNone? r) "none" (stringJoin (strs r) ",")))
-        (got (mt (cfg/gatewayProfileModels routes intent) ((none) "none") ((some ms) (stringJoin ms ","))))]
+        (got (match (cfg/gatewayProfileModels routes intent) ((none) "none") ((some ms) (stringJoin ms ","))))]
     (check (= got want) (str "profile models intent=" intent ": " got " want " want)))
 
 fn checkReceipt rExpr: rd/SExpr -> Bool
@@ -296,10 +296,10 @@ fn runFixture! f: (Map String rd/SExpr) -> Bool
 
 fn ! runTests -> Bool
   (let [(textRes (fileReadString "asl/packages/asl-gateway/tests/profileParityFixture.asn"))
-        (formsRes (mt textRes ((ok text) (mt (ast/readForms (lx/tokenize text)) ((ok forms) (ok forms)) ((err e) (err e.msg)))) ((err e) (err e))))
-        (topRes (mt formsRes
+        (formsRes (match textRes ((ok text) (match (ast/readForms (lx/tokenize text)) ((ok forms) (ok forms)) ((err e) (err e.msg)))) ((err e) (err e))))
+        (topRes (match formsRes
                   ((err e) (err e))
-                  ((ok forms) (mt (listHead forms) ((none) (err "fixture has no form")) ((some top) (cfg/asnProps top.expr (some ":fixture")))))))]
-    (mt topRes
+                  ((ok forms) (match (listHead forms) ((none) (err "fixture has no form")) ((some top) (cfg/asnProps top.expr (some ":fixture")))))))]
+    (match topRes
       ((err e) (check (ok? topRes) (str "fixture readable and parsed: " e)))
       ((ok f) (runFixture! f))))

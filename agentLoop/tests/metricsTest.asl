@@ -85,7 +85,7 @@ fn testParseDefectsParity! -> Bool
 
 fn testEditMetricsParity! -> Bool
   (let [paths (fixturePaths)
-        res (mt (m/analyzeJournals! paths) ((ok value) value) ((err _) (m/analyzeEditJournals (list))))
+        res (match (m/analyzeJournals! paths) ((ok value) value) ((err _) (m/analyzeEditJournals (list))))
         fbk res.failuresByKind]
     (do
       (assert (= res.totalJournalsScanned 13) "total_journals_scanned")
@@ -125,7 +125,7 @@ fn testEditMetricsParity! -> Bool
       (let [j0cOpt (findJournalSummary res.byJournal "0c7910c37e984c14.journal")]
         (do
           (assert (some? j0cOpt) "0c summary found")
-          (mt j0cOpt
+          (match j0cOpt
             ((some j0c)
               (do
                 (assert (= j0c.totalSequences 4) "D3 total_sequences == 4")
@@ -137,7 +137,7 @@ fn testEditMetricsParity! -> Bool
       (let [j1aOpt (findJournalSummary res.byJournal "1a4ee5dab7014e08.journal")]
         (do
           (assert (some? j1aOpt) "1a summary found")
-          (mt j1aOpt
+          (match j1aOpt
             ((some j1a)
               (do
                 (assert (= j1a.totalSequences 1) "D4 total_sequences == 1")
@@ -152,7 +152,7 @@ fn testEditMetricsParity! -> Bool
       (let [j2fOpt (findJournalSummary res.byJournal "2f4ebb27296640bd.journal")]
         (do
           (assert (some? j2fOpt) "2f summary found")
-          (mt j2fOpt
+          (match j2fOpt
             ((some j2f)
               (do
                 (assert (= j2f.totalSequences 1) "D5 total_sequences == 1")
@@ -171,7 +171,7 @@ fn testEditMetricsParity! -> Bool
 
 fn testUnreadableJournal! -> Bool
   (let [result (m/analyzeJournals! (list "asl/agentLoop/tests/no-such-metrics-journal-LX5"))]
-    (mt result
+    (match result
       ((ok _) (do (assert false "unreadable journals must not produce empty metrics") false))
       ((err message) (do (assert (stringContains? message "no-such-metrics-journal-LX5") "read error identifies unreadable path") true))))
     (let [defects (m/analyzeDefectFiles! (list "asl/agentLoop/tests/no-such-metrics-journal-LX5"))]

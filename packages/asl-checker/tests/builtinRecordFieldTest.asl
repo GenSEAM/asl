@@ -15,7 +15,7 @@ fn spawnedProcSource -> String
     "(module probe :x [spawnFields] :i [])"
     ""
     "fn ! spawnFields argv: (List String) -> Int64"
-    "  (mt (procSpawnv argv (none) (none))"
+    "  (match (procSpawnv argv (none) (none))"
     "    ((err _) 0)"
     "    ((ok sp) (+ sp.pid (+ sp.stdin (+ sp.stdout sp.stderr)))))") "\n")
 
@@ -24,7 +24,7 @@ fn fileStatSource -> String
     "(module probe :x [statFields] :i [])"
     ""
     "fn ! statFields path: String -> Int64"
-    "  (mt (fileStat path)"
+    "  (match (fileStat path)"
     "    ((err _) 0)"
     "    ((ok st) (+ st.mode (+ st.mtime st.mtimeNs))))") "\n")
 
@@ -33,7 +33,7 @@ fn rusageSource -> String
     "(module probe :x [rusageFields] :i [])"
     ""
     "fn ! rusageFields -> Int64"
-    "  (mt (procRusage)"
+    "  (match (procRusage)"
     "    ((err _) 0)"
     "    ((ok u) (+ u.selfMaxRssKb (+ u.selfUserUs (+ u.selfSysUs (+ u.childrenMaxRssKb (+ u.childrenUserUs u.childrenSysUs)))))))") "\n")
 
@@ -42,7 +42,7 @@ fn platformInfoSource -> String
     "(module probe :x [platformFields] :i [])"
     ""
     "fn ! platformFields -> String"
-    "  (mt (platformInfo) ((ok p) (str p.os p.release p.machine)) ((err _) \"\"))") "\n")
+    "  (match (platformInfo) ((ok p) (str p.os p.release p.machine)) ((err _) \"\"))") "\n")
 
 fn ! runTests -> Bool
   (let [(spawnDiags (checkerProbe (spawnedProcSource)))

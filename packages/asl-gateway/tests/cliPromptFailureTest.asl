@@ -15,6 +15,6 @@ fn ! runTests -> Bool
     (do
       (assert (ok? good) "agy prompt setup succeeds when the client grammar exists")
       (assert (fileExists? (str goodDir "/.agents/plugins/aslGateway/agents/aslGateway.md")) "successful setup wrote its prompt file")
-      (assert (and (err? bad) (stringContains? (mt bad ((err e) e) ((ok _) "")) "/asl/grammar/clients.asn")) "agy prompt setup must return tool-loading errors instead of writing fallback configuration")
+      (assert (and (err? bad) (stringContains? (match bad ((err e) e) ((ok _) "")) "/asl/grammar/clients.asn")) "agy prompt setup must return tool-loading errors instead of writing fallback configuration")
       (refute (fileExists? badDir) "failed setup removes its temp directory")
       (let [(_cleanup (pathRemove goodDir))] true)))

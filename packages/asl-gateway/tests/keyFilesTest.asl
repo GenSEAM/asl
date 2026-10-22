@@ -89,11 +89,11 @@ fn testExpandUserPath -> Bool
 fn testGatewayKeyFilesFromPropsParsesList -> Bool
   (let [(text "(:gateway :v 2 :profile p1 :keyFiles (\"/a/one.env\" \"/b/two.env\")\n  :profiles ((:profile :id p1 :routes ((:intent any :chain ())))))")
         (parsed (ast/readForms (lx/tokenize text)))]
-    (mt parsed
+    (match parsed
       ((err e) (do (assert false (str "fixture text must parse: " e)) false))
       ((ok forms)
         (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-          (mt (cfg/asn_props top (some ":gateway"))
+          (match (cfg/asn_props top (some ":gateway"))
             ((err e) (do (assert false (str "fixture props must parse: " e)) false))
             ((ok g)
               (let [(got (cfg/gatewayKeyFilesFromProps g))]
@@ -103,11 +103,11 @@ fn testGatewayKeyFilesFromPropsParsesList -> Bool
 fn testGatewayKeyFilesFromPropsAbsentIsEmpty -> Bool
   (let [(text "(:gateway :v 2 :profile p1\n  :profiles ((:profile :id p1 :routes ((:intent any :chain ())))))")
         (parsed (ast/readForms (lx/tokenize text)))]
-    (mt parsed
+    (match parsed
       ((err e) (do (assert false (str "fixture text must parse: " e)) false))
       ((ok forms)
         (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-          (mt (cfg/asn_props top (some ":gateway"))
+          (match (cfg/asn_props top (some ":gateway"))
             ((err e) (do (assert false (str "fixture props must parse: " e)) false))
             ((ok g)
               (let [(got (cfg/gatewayKeyFilesFromProps g))]
@@ -121,7 +121,7 @@ fn ! testMissingKeyNamesFilesAndEnv! -> Bool
                     "  :profiles ((:profile :id p1 :routes ((:intent any :chain (probeModel)))))\n"
                     "  :uses ((:use :for default :profile p1)))\n"))
         (parsed (cfg/gateway_config_parse! text "keyFilesTest" ".asl/mem/calibration/index.asn"))]
-    (mt parsed
+    (match parsed
       ((err e) (do (assert false (str "a missing key is a warning on the parsed table, not a hard parse failure: " e)) false))
       ((ok tbl)
         (let [(w (stringJoin tbl.warnings "; "))]
@@ -139,7 +139,7 @@ fn ! testFileSatisfiesConfigCheck! root: String -> Bool
                     "  :profiles ((:profile :id p1 :routes ((:intent any :chain (probeModel)))))\n"
                     "  :uses ((:use :for default :profile p1)))\n"))
         (parsed (cfg/gateway_config_parse! text "keyFilesTest" ".asl/mem/calibration/index.asn"))]
-    (mt parsed
+    (match parsed
       ((err e) (do (assert false (str "a key present in a listed key file must satisfy the config check: " e)) false))
       ((ok tbl)
         (do

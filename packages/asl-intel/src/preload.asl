@@ -51,7 +51,7 @@
   (:c armDeepCallGraph [] "Deep transitive call-graph blast radius"))
 
 fn armToString arm: ContextBanditArm -> Str
-  (mt arm
+  (match arm
     ((armShallowSignature) "shallow-signature")
     ((armDeepCallGraph) "deep-callgraph"))
 
@@ -67,7 +67,7 @@ fn makeContextBanditModel -> ContextBanditModel
 
 fn updateBanditArmReward model: ContextBanditModel arm: ContextBanditArm reward: F64 alpha: F64 -> ContextBanditModel
   (let [(cnt (+ model.pullCount 1))]
-    (mt arm
+    (match arm
       ((armShallowSignature)
         (let [(oldW model.shallowWeight)
               (newW (+ oldW (* alpha (- reward oldW))))]
@@ -118,7 +118,7 @@ fn determineContextRoutingBandit entropy: F64 isRefactoring: Bool -> ContextBand
   (:f truncated Bool))
 
 fn preloadTierToString tier: PreloadTier -> Str
-  (mt tier ((tierMicroAst) "micro-ast") ((tierMesoSymbol) "meso-symbol") ((tierMacroTopology) "macro-topology"))
+  (match tier ((tierMicroAst) "micro-ast") ((tierMesoSymbol) "meso-symbol") ((tierMacroTopology) "macro-topology"))
 
 fn estimateStubTokens stub: SymbolStub -> I64
   (if (> stub.tokens 0) stub.tokens (let [(text (str stub.symbol " " stub.path " " stub.signature " " stub.docstring)) (toks (txt/estimateTokens text))] (if (<= toks 0) 1 toks)))
@@ -151,7 +151,7 @@ fn findDepth2Ids rootId: Str d1Ids: (List Str) edges: (List g/GraphEdge) -> (Lis
   (fold (fn [(acc (List Str)) (e g/GraphEdge)] -> (List Str) (let [(src e.src) (dst e.dst) (acc1 (if (and (idInList? src d1Ids) (not (matchesIdOrName? dst rootId)) (not (idInList? dst d1Ids)) (not (listContains? acc dst))) (listAppend acc (list dst)) acc))] (if (and (idInList? dst d1Ids) (not (matchesIdOrName? src rootId)) (not (idInList? src d1Ids)) (not (listContains? acc1 src))) (listAppend acc1 (list src)) acc1))) (list) edges)
 
 fn findNodesByIds ids: (List Str) allNodes: (List g/GraphNode) -> (List g/GraphNode)
-  (fold (fn [(acc (List g/GraphNode)) (id Str)] -> (List g/GraphNode) (let [(matched (findTargetNode allNodes id))] (mt matched ((some n) (listAppend acc (list n))) ((none) acc)))) (list) ids)
+  (fold (fn [(acc (List g/GraphNode)) (id Str)] -> (List g/GraphNode) (let [(matched (findTargetNode allNodes id))] (match matched ((some n) (listAppend acc (list n))) ((none) acc)))) (list) ids)
 
 fn scoreStubBm25 stub: SymbolStub target: Str -> I64
   (let [(sym stub.symbol)
@@ -234,7 +234,7 @@ fn rankStubsByRelevance stubs: (List SymbolStub) target: Str -> (List SymbolStub
   (rankStubsByRelevanceLoop stubs target (list))
 
 fn intelPreloadGraph g: g/SymbolGraph target: Str depth: I64 tokenBudget: I64 -> PreloadedHorizon
-  (cond ((stringEmpty? (stringTrim target)) (horizonCreate target depth tokenBudget)) ((<= tokenBudget 0) (PreloadedHorizon :targetSymbol target :maxDepth depth :tokenBudget tokenBudget :totalTokens 0 :stubs (list) :truncated true)) (true (let [(nodes g.nodes) (edges g.edges) (matched (findTargetNode nodes target))] (mt matched ((none) (horizonCreate target depth tokenBudget)) ((some rootN) (let [(rootStub (stubCreate rootN.id (tierMicroAst) rootN.file rootN.signature (str "Full AST for " rootN.name) 0)) (h0 (horizonCreate rootN.id depth tokenBudget)) (h1 (horizonAddStub h0 rootStub))] (if (or h1.truncated (<= depth 0)) h1 (let [(d1Ids (findDepth1Ids rootN.id edges)) (d1Nodes (findNodesByIds d1Ids nodes)) (d1Stubs (map (fn [(n g/GraphNode)] -> SymbolStub (stubCreate n.id (tierMesoSymbol) n.file n.signature "" 0)) d1Nodes)) (d1Dedup (dedupStubs d1Stubs)) (d1Ranked (rankStubsByRelevance d1Dedup target)) (h2 (fold (fn [(acc PreloadedHorizon) (s SymbolStub)] -> PreloadedHorizon (if acc.truncated acc (horizonAddStub acc s))) h1 d1Ranked))] (if (or h2.truncated (<= depth 1)) h2 (let [(d2Ids (findDepth2Ids rootN.id d1Ids edges)) (d2Nodes (findNodesByIds d2Ids nodes)) (d2Stubs (map (fn [(n g/GraphNode)] -> SymbolStub (stubCreate n.id (tierMacroTopology) n.file "" (str "Module/symbol: " n.name) 0)) d2Nodes)) (d2Dedup (dedupStubs d2Stubs)) (d2Ranked (rankStubsByRelevance d2Dedup target)) (h3 (fold (fn [(acc PreloadedHorizon) (s SymbolStub)] -> PreloadedHorizon (if acc.truncated acc (horizonAddStub acc s))) h2 d2Ranked))] h3))))))))))
+  (cond ((stringEmpty? (stringTrim target)) (horizonCreate target depth tokenBudget)) ((<= tokenBudget 0) (PreloadedHorizon :targetSymbol target :maxDepth depth :tokenBudget tokenBudget :totalTokens 0 :stubs (list) :truncated true)) (true (let [(nodes g.nodes) (edges g.edges) (matched (findTargetNode nodes target))] (match matched ((none) (horizonCreate target depth tokenBudget)) ((some rootN) (let [(rootStub (stubCreate rootN.id (tierMicroAst) rootN.file rootN.signature (str "Full AST for " rootN.name) 0)) (h0 (horizonCreate rootN.id depth tokenBudget)) (h1 (horizonAddStub h0 rootStub))] (if (or h1.truncated (<= depth 0)) h1 (let [(d1Ids (findDepth1Ids rootN.id edges)) (d1Nodes (findNodesByIds d1Ids nodes)) (d1Stubs (map (fn [(n g/GraphNode)] -> SymbolStub (stubCreate n.id (tierMesoSymbol) n.file n.signature "" 0)) d1Nodes)) (d1Dedup (dedupStubs d1Stubs)) (d1Ranked (rankStubsByRelevance d1Dedup target)) (h2 (fold (fn [(acc PreloadedHorizon) (s SymbolStub)] -> PreloadedHorizon (if acc.truncated acc (horizonAddStub acc s))) h1 d1Ranked))] (if (or h2.truncated (<= depth 1)) h2 (let [(d2Ids (findDepth2Ids rootN.id d1Ids edges)) (d2Nodes (findNodesByIds d2Ids nodes)) (d2Stubs (map (fn [(n g/GraphNode)] -> SymbolStub (stubCreate n.id (tierMacroTopology) n.file "" (str "Module/symbol: " n.name) 0)) d2Nodes)) (d2Dedup (dedupStubs d2Stubs)) (d2Ranked (rankStubsByRelevance d2Dedup target)) (h3 (fold (fn [(acc PreloadedHorizon) (s SymbolStub)] -> PreloadedHorizon (if acc.truncated acc (horizonAddStub acc s))) h2 d2Ranked))] h3))))))))))
 
 fn extractShortName fq: Str -> Str
   (if (stringContains? fq "/") (let [(parts (stringSplit fq "/")) (len (listLength parts))] (if (> len 0) (optionOr (listGet parts (- len 1)) fq) fq)) fq)
@@ -258,7 +258,7 @@ fn extractFnSymbols file: Str source: Str -> (List g/GraphNode)
   (let [(parts (stringSplit source "\n")) (mLine (optionOr (listHead (filter (fn [(l Str)] -> Bool (stringStartsWith? (stringTrim l) "(module ")) parts)) "")) (modName (if (stringEmpty? mLine) "" (let [(mToks (filter (fn [(t Str)] -> Bool (not (stringEmpty? (stringTrim t)))) (stringSplit (stringTrim mLine) " ")))] (stringReplace (stringReplace (optionOr (listGet mToks 1) "") "(" "") ")" "")))) (lines (stringSplit source "\n"))] (fold (fn [(acc (List g/GraphNode)) (line Str)] -> (List g/GraphNode) (let [(trimmed (stringTrim line))] (if (stringStartsWith? trimmed "fn ") (let [(toks (filter (fn [(t Str)] -> Bool (not (stringEmpty? (stringTrim t)))) (stringSplit trimmed " "))) (name (optionOr (listGet toks 1) ""))] (if (stringEmpty? name) acc (let [(fq (if (stringEmpty? modName) name (str modName "/" name))) (node (g/GraphNode :id fq :name name :kind "fn" :file file :startLine 1 :endLine 1 :signature trimmed :exported true))] (listAppend acc (list node))))) acc))) (list) lines))
 
 fn hydrateGraphFromFiles! filePaths: (List Str) -> g/SymbolGraph
-  (fold (fn [(accG g/SymbolGraph) (path Str)] -> g/SymbolGraph (mt (fileReadString path) ((err _) accG) ((ok src) (let [(fs (ex/extractAslSymbols path src)) (g1 (hydrateGraphInto accG (list fs))) (fnNodes (extractFnSymbols path src))] (fold (fn [(gCurr g/SymbolGraph) (node g/GraphNode)] -> g/SymbolGraph (g/graphAddNode gCurr node)) g1 fnNodes))))) (g/graphCreate) filePaths)
+  (fold (fn [(accG g/SymbolGraph) (path Str)] -> g/SymbolGraph (match (fileReadString path) ((err _) accG) ((ok src) (let [(fs (ex/extractAslSymbols path src)) (g1 (hydrateGraphInto accG (list fs))) (fnNodes (extractFnSymbols path src))] (fold (fn [(gCurr g/SymbolGraph) (node g/GraphNode)] -> g/SymbolGraph (g/graphAddNode gCurr node)) g1 fnNodes))))) (g/graphCreate) filePaths)
 
 fn defaultWorkspaceFiles! -> (List Str)
   (let [(modules (list "preload.asl" "symbolGraph.asl" "query.asl" "extractor.asl" "codec.asl" "diagram.asl" "health.asl" "intel.asl" "placement.asl" "stmBridge.asl" "textScan.asl" "xref.asl")) (prefix (cond ((fileExists? "asl/packages/asl-intel/src/preload.asl") "asl/packages/asl-intel/src/") ((fileExists? "intel/src/preload.asl") "intel/src/") (else "src/"))) (paths (map (fn [(m Str)] -> Str (str prefix m)) modules))] (filter (fn [(p Str)] -> Bool (fileExists? p)) paths))

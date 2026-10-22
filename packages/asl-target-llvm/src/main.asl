@@ -28,12 +28,12 @@ fn emitLlvmProgramFor facts: libc/TripleFacts m: irTy/SsaModule entry: String ->
   (emitRouted (routeFor facts m) (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (ssa/emitLlvmProgram (opt/hoistConstants r) entry)))
 
 fn emitLlvmModuleForTarget facts: libc/TripleFacts targetFacts: target/TargetFacts m: irTy/SsaModule -> (Result String (List irTy/IrDiag))
-  (mt (emitRouted (routeForTarget facts m) (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (if (target/isWasm32 targetFacts) (ssa/emitLlvmModuleWasm32 r) (ssa/emitLlvmModule r))))
+  (match (emitRouted (routeForTarget facts m) (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (if (target/isWasm32 targetFacts) (ssa/emitLlvmModuleWasm32 r) (ssa/emitLlvmModule r))))
     ((err ds) (err ds))
     ((ok text) (ok (ssa/trapLowering (target/lowerLlvmText text targetFacts) targetFacts))))
 
 fn emitLlvmProgramForTarget facts: libc/TripleFacts targetFacts: target/TargetFacts m: irTy/SsaModule entry: String -> (Result String (List irTy/IrDiag))
-  (mt (emitRouted (routeForTarget facts m) (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (if (target/isWasm32 targetFacts) (ssa/emitLlvmProgramWasm32 r entry) (ssa/emitLlvmProgram r entry))))
+  (match (emitRouted (routeForTarget facts m) (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (if (target/isWasm32 targetFacts) (ssa/emitLlvmProgramWasm32 r entry) (ssa/emitLlvmProgram r entry))))
     ((err ds) (err ds))
     ((ok text) (ok (ssa/trapLowering (target/lowerLlvmText text targetFacts) targetFacts))))
 
@@ -41,14 +41,14 @@ fn emitLlvmRuntimeForTarget facts: libc/TripleFacts targetFacts: target/TargetFa
   (gr/collectorTextForTarget facts targetFacts)
 
 fn emitLlvmSupportForTarget facts: libc/TripleFacts targetFacts: target/TargetFacts -> (Result String (List irTy/IrDiag))
-  (mt (libc/runtimeAbi facts.triple)
+  (match (libc/runtimeAbi facts.triple)
     ((none) (err (list (irTy/makeIrDiag "ERR_LLVM_WASM_RUNTIME" (str "libc.asl has no runtimeAbi row for " facts.triple) "asl-target-llvm"))))
     ((some abi) (if (target/isWasm32 targetFacts)
                   (ok (wr/supportText abi))
                   (err (list (irTy/makeIrDiag "ERR_LLVM_WASM_RUNTIME" (str "runtimeAbi support is emitted for wasm32 targets, not " targetFacts.triple) "asl-target-llvm"))))))
 
 fn routeForTarget facts: libc/TripleFacts m: irTy/SsaModule -> (Result rt/Routed (List irTy/IrDiag))
-  (mt (routeFor facts m)
+  (match (routeFor facts m)
     ((err ds) (err ds))
     ((ok r) (if (some? (libc/runtimeAbi facts.triple))
               (ok (rt/Routed :result (lowerWasmPrint r.result) :internal r.internal))
@@ -65,7 +65,7 @@ fn lowerWasmPrint m: irTy/SsaModule -> irTy/SsaModule
                (map (fn [(b irTy/SsaBlock)] -> irTy/SsaBlock
                       (irTy/ssaBlock b.label b.params
                         (map (fn [(i irTy/SsaInstr)] -> irTy/SsaInstr
-                               (mt i.op
+                               (match i.op
                                  ((irTy/opCall callee args) (if (= callee "print") (irTy/ssaInstr i.dest i.ty (irTy/opBuiltin "print" args)) i))
                                  (_ i)))
                              b.instrs)
@@ -78,12 +78,12 @@ fn ! emitLlvmProgramNative! m: irTy/SsaModule entry: String -> (Result String (L
 
 fn ! emitLlvmProgramNativeWith! m: irTy/SsaModule entry: String mode: String -> (Result String (List irTy/IrDiag))
   (let [(user (fold (fn [(acc (Map String Bool)) (f irTy/SsaFunction)] -> (Map String Bool) (mapSet acc f.name true)) (mapEmpty) m.functions))]
-    (mt (emitRouted (thenPar (thenPar (rt/routeHost! m) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (pr/routeHost! r))) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (ar/routeModule r)))
+    (match (emitRouted (thenPar (thenPar (rt/routeHost! m) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (pr/routeHost! r))) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (ar/routeModule r)))
                     (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag))
                       (cond
                         ((or (= mode "") (= mode "0")) (ssa/emitLlvmProgram (opt/hoistConstants r) entry))
                         ((or (= mode "1") (or (= mode "asan") (= mode "notrace")))
-                          (mt (ssa/emitLlvmProgram (rc/rcModule (opt/hoistConstants r) user) entry)
+                          (match (ssa/emitLlvmProgram (rc/rcModule (opt/hoistConstants r) user) entry)
                             ((err ds) (err ds))
                             ((ok text) (ok (rc/rcFinishTextWith text (= mode "asan") (= mode "notrace"))))))
                         (else (err (list (irTy/makeIrDiag "ERR_LLVM_RC_MODE" (str "the RC mode (asl1 build --rc, .asl.config.asn :native :rc) must be 0, 1, asan or notrace, got " mode) "asl-target-llvm")))))))
@@ -94,14 +94,14 @@ fn routeFor facts: libc/TripleFacts m: irTy/SsaModule -> (Result rt/Routed (List
   (thenPar (thenPar (rt/routeModule facts m) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (pr/routeModule facts r))) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (ar/routeModule r)))
 
 fn thenPar routed: (Result rt/Routed (List irTy/IrDiag)) par: (fn [irTy/SsaModule] -> (Result rt/Routed (List irTy/IrDiag))) -> (Result rt/Routed (List irTy/IrDiag))
-  (mt routed
+  (match routed
     ((err diags) (err diags))
-    ((ok r) (mt (par r.result)
+    ((ok r) (match (par r.result)
               ((err diags) (err diags))
               ((ok r2) (ok (rt/Routed :result r2.result :internal (listAppend r.internal r2.internal)))))))
 
 fn emitRouted routed: (Result rt/Routed (List irTy/IrDiag)) emit: (fn [irTy/SsaModule] -> (Result String (List irTy/IrDiag))) -> (Result String (List irTy/IrDiag))
-  (mt routed
+  (match routed
     ((err diags) (err diags))
     ((ok r) (rt/internalize (ar/finishText (ar/routedNames? r.internal) (pr/finishText (pr/routedNames? r.internal) (emit r.result))) r.internal)))
 
@@ -149,7 +149,7 @@ fn emitLlvmSourceWith src: String preludeSrc: String entry: String -> (Result St
   (llvmFromLowered (lk/lowerSourceWith src preludeSrc) entry)
 
 fn llvmFromLowered lowered: (Result irTy/SsaModule (List irTy/IrDiag)) entry: String -> (Result String (List irTy/IrDiag))
-  (mt lowered
+  (match lowered
     ((err diags) (err diags))
     ((ok m)
       (let [(actualEntry (if (= entry "") "main" entry))]

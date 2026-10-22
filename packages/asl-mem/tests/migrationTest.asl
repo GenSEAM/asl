@@ -7,7 +7,7 @@ fn testMigratePcpYaml -> Bool
   (let [(res (mig/migratePcpConstitution (sampleYamlConstitution)))] (assert res.success "migration succeeds") (assert (= res.totalRules 3) "total rules is 3") true)
 
 fn testQueryMemoryShortcode -> Bool
-  (let [(res (mig/migratePcpConstitution (sampleYamlConstitution))) (rules res.migratedRules) (codes (map (fn [(r rec/AdrRule)] -> Str r.code) rules)) (ledger (rec/RecordsLedger :rules rules :shortcodes codes)) (found (mig/queryMemoryShortcode ledger "l-0001"))] (mt found ((none) (do (assert false "rule not found") false)) ((some rule) (do (assert (= rule.code "l-0001") "code matches") (assert (= rule.title "Pure AgentSlang Invariant") "title matches") true))))
+  (let [(res (mig/migratePcpConstitution (sampleYamlConstitution))) (rules res.migratedRules) (codes (map (fn [(r rec/AdrRule)] -> Str r.code) rules)) (ledger (rec/RecordsLedger :rules rules :shortcodes codes)) (found (mig/queryMemoryShortcode ledger "l-0001"))] (match found ((none) (do (assert false "rule not found") false)) ((some rule) (do (assert (= rule.code "l-0001") "code matches") (assert (= rule.title "Pure AgentSlang Invariant") "title matches") true))))
 
 fn testSerializeLedgerAsn -> Bool
   (let [(res (mig/migratePcpConstitution (sampleYamlConstitution))) (rules res.migratedRules) (codes (map (fn [(r rec/AdrRule)] -> Str r.code) rules)) (ledger (rec/RecordsLedger :rules rules :shortcodes codes)) (asnStr (mig/serializeLedgerAsn ledger))] (assert (stringContains? asnStr "(:asl-mem-ledger") "contains ledger tag") (assert (stringContains? asnStr "(:rule :code \"l-0001\"") "contains rule l-0001") (assert (stringContains? asnStr "(:rule :code \"D0042\"") "contains rule D0042") true)

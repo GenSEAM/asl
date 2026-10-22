@@ -23,7 +23,7 @@ fn formatShArg arg: Str -> Str
   (cond ((stringEmpty? arg) "''") ((or (and (stringStartsWith? arg "\"") (stringEndsWith? arg "\"")) (and (stringStartsWith? arg "'") (stringEndsWith? arg "'"))) arg) (true (esc/escapeShCompact arg)))
 
 fn extractShLiteral s: Str -> Str
-  (let [(firstQ (stringIndexOf s "\""))] (mt firstQ ((none) (stringTrim (stringReplace (stringReplace s "(:sh" "") ")" ""))) ((some q1) (let [(restS (optionOr (stringSlice s (+ q1 1) (stringLength s)) "")) (revS (stringReverse restS)) (revQ (stringIndexOf revS "\""))] (mt revQ ((none) (esc/unescapeAsnStr restS)) ((some q2) (let [(len (- (stringLength restS) (+ q2 1))) (body (optionOr (stringSlice restS 0 len) ""))] (esc/unescapeAsnStr body))))))))
+  (let [(firstQ (stringIndexOf s "\""))] (match firstQ ((none) (stringTrim (stringReplace (stringReplace s "(:sh" "") ")" ""))) ((some q1) (let [(restS (optionOr (stringSlice s (+ q1 1) (stringLength s)) "")) (revS (stringReverse restS)) (revQ (stringIndexOf revS "\""))] (match revQ ((none) (esc/unescapeAsnStr restS)) ((some q2) (let [(len (- (stringLength restS) (+ q2 1))) (body (optionOr (stringSlice restS 0 len) ""))] (esc/unescapeAsnStr body))))))))
 
 fn transpileSingleCmd cmdStr: Str -> Str
   (let [(trimmed (stringTrim cmdStr))] (cond ((stringStartsWith? trimmed "(:sh") (extractShLiteral trimmed)) ((stringStartsWith? trimmed "(:cmd") (let [(toks (extractCmdTokens trimmed))] (if (listEmpty? toks) "" (let [(formatted (map (fn [(tok Str)] -> Str (formatShArg (esc/unescapeAsnStr tok))) toks))] (stringJoin formatted " "))))) (true (let [(toks (extractCmdTokens trimmed))] (if (listEmpty? toks) trimmed (let [(formatted (map (fn [(tok Str)] -> Str (formatShArg (esc/unescapeAsnStr tok))) toks))] (stringJoin formatted " ")))))))

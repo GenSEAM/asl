@@ -51,7 +51,7 @@ fn formatPresenceRoster room: SwarmRoom -> Str
   (let [(hdr (str "### Swarm Room: " room.roomName " (" room.topic ")
 " "| Agent ID | Role | Status | Capabilities | Claims |
 " "|---|---|---|---|---|
-"))] (fold (fn [(acc Str) (p SwarmPeer)] -> Str (let [(stStr (mt p.status ((statusIdle) "idle") ((statusBusy) "busy") ((statusListening) "listening") ((statusOffline) "offline"))) (capsStr (stringJoin p.capabilities ", ")) (claimsStr (if (listEmpty? p.claims) "none" (stringJoin (map (fn [(c PathClaim)] -> Str (str c.path " (" (mt c.mode ((claimRead) "r") ((claimWrite) "w")) ")")) p.claims) ", ")))] (str acc "| `" p.agentId "` | " p.role " | *" stStr "* | " capsStr " | " claimsStr " |
+"))] (fold (fn [(acc Str) (p SwarmPeer)] -> Str (let [(stStr (match p.status ((statusIdle) "idle") ((statusBusy) "busy") ((statusListening) "listening") ((statusOffline) "offline"))) (capsStr (stringJoin p.capabilities ", ")) (claimsStr (if (listEmpty? p.claims) "none" (stringJoin (map (fn [(c PathClaim)] -> Str (str c.path " (" (match c.mode ((claimRead) "r") ((claimWrite) "w")) ")")) p.claims) ", ")))] (str acc "| `" p.agentId "` | " p.role " | *" stStr "* | " capsStr " | " claimsStr " |
 "))) hdr room.peers))
 
 (schema PeerTraceAttachment (:f peerId Str) (:f sessionId Str) (:f runtimeTarget Str) (:f traceFrames (List mesh/CausalTraceFrame)))

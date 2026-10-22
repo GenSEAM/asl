@@ -14,7 +14,7 @@ fn entrySuffix -> String
   "/asl/packages/asl-engine/src/cli.asl"
 
 fn ! isFile? path: String -> Bool
-  (mt (fileStat path) ((ok st) st.isFile) ((err _) false))
+  (match (fileStat path) ((ok st) st.isFile) ((err _) false))
 
 fn ! entryPath! -> String
   (let [(given (optionOr (envGet "ASL_ENGINE_ENTRY") ""))
@@ -39,13 +39,13 @@ fn ! runnerBin! toolRoot: String -> String
 
 
 fn srcDirOf entry: String -> String
-  (mt (stringIndexOf (stringReverse entry) "/")
+  (match (stringIndexOf (stringReverse entry) "/")
     ((none) ".")
     ((some i) (optionOr (stringSlice entry 0 (- (stringLength entry) (+ i 1))) ".")))
 
 fn ! sourceVersion! entry: String -> String
   (let [(dir (srcDirOf entry))]
-    (mt (dirList dir)
+    (match (dirList dir)
       ((err _) "absent")
       ((ok names)
         (let [(sources (listSort (filter (fn [(n String)] -> Bool (stringEndsWith? n ".asl")) names)))
@@ -59,7 +59,7 @@ fn digitsOnly? s: String -> Bool
        (listAll? (fn [(c String)] -> Bool (and (>= c "0") (<= c "9"))) (stringChars s)))
 
 fn parseMs raw: String fallbackMs: Int64 -> Int64
-  (mt (stringToFloat64 (stringTrim raw))
+  (match (stringToFloat64 (stringTrim raw))
     ((none) fallbackMs)
     ((some sec) (optionOr (float64ToInt64 (* sec 1000.0)) fallbackMs)))
 

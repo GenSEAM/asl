@@ -37,7 +37,7 @@ fn ! hostTriple -> String
       (else "")))
 
 fn ! hostFacts -> libc/TripleFacts
-  (mt (libc/libcFacts (hostTriple))
+  (match (libc/libcFacts (hostTriple))
     ((some f) f)
     ((none) (do (assert false (str "hostFacts: libc.asl has no row for this host's triple \"" (hostTriple) "\"")) (libc/emptyTripleFacts))))
 
@@ -222,16 +222,16 @@ fn aritySource -> String
 fn ! lowered name: String src: String -> (Option ty/SsaModule)
   (let [(preludeText (resultOr (fileReadString (lk/preludePath)) ""))]
     (do (assert (not (stringEmpty? preludeText)) (str (lk/preludePath) " is readable"))
-        (mt (lk/lowerSourceWith src preludeText)
+        (match (lk/lowerSourceWith src preludeText)
           ((err ds) (do (assert false (str name ": lowerSourceWith: " (diagText ds))) (none)))
           ((ok m) (some m)))))
 
 fn ! build work: String name: String hostSrc: String nativeSrc: String -> String
   (let [(_ (assert (ok? (fileWrite (str work "/" name ".asl") hostSrc)) (str name ".asl written")))]
-    (mt (lowered name nativeSrc)
+    (match (lowered name nativeSrc)
       ((none) "")
       ((some m)
-        (mt (llvm/emitLlvmProgramFor (hostFacts) m "main")
+        (match (llvm/emitLlvmProgramFor (hostFacts) m "main")
           ((err ds) (do (assert false (str name ": emitLlvmProgramFor: " (diagText ds))) ""))
           ((ok text) (do (assert (ok? (fileWrite (str work "/" name ".ll") text)) (str name ".ll written")) text))))))
 
@@ -269,10 +269,10 @@ fn ! checkSymbols label: String bin: String forbidden: (List String) -> Bool
 
 fn ! hostError stderr: String path: String -> String
   (let [(prefix (str "FAIL " path ": "))]
-    (mt (stringIndexOf stderr prefix)
+    (match (stringIndexOf stderr prefix)
       ((none) "")
       ((some i) (let [(rest (optionOr (stringSlice stderr (+ i (stringLength prefix)) (stringLength stderr)) ""))]
-                  (mt (stringIndexOf rest " (after") ((none) rest) ((some j) (optionOr (stringSlice rest 0 j) "")))))))
+                  (match (stringIndexOf rest " (after") ((none) rest) ((some j) (optionOr (stringSlice rest 0 j) "")))))))
 
 fn otherLines text: String -> String
   (stringJoin (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringSplit text "\n")) "\n")
@@ -426,7 +426,7 @@ fn ! testArchive -> Bool
         true))
 
 fn ! testRouteModule work: String -> Bool
-  (mt (lowered "plain" "(module plain :x [main] :i [])\n\nfn ! main args: (List String) -> (Result Int64 String)\n  (do (println (map (fn [(x Int64)] -> Int64 (+ x 1)) (list 1 2))) (ok 0))\n")
+  (match (lowered "plain" "(module plain :x [main] :i [])\n\nfn ! main args: (List String) -> (Result Int64 String)\n  (do (println (map (fn [(x Int64)] -> Int64 (+ x 1)) (list 1 2))) (ok 0))\n")
     ((none) false)
     ((some m)
       (let [(routed (pr/routeModule (hostFacts) m))
@@ -434,12 +434,12 @@ fn ! testRouteModule work: String -> Bool
             (cut (pr/finishText true (ok text)))
             (unrouted (pr/finishText false (ok text)))
             (plainText (pr/finishText true (ok "define i64 @f() {\n  ret i64 0\n}")))]
-        (do (assert (mt routed ((ok r) (and (= r.result m) (listEmpty? r.internal))) ((err _) false)) "routeModule leaves a module without parMap or parFold unchanged")
-            (assert (mt cut ((ok _) false) ((err ds) (= (map (fn [(d ty/IrDiag)] -> String d.code) ds) (list "ERR_LLVM_PARROUTE_TEXT")))) "finishText rejects routed text without every helper declaration")
+        (do (assert (match routed ((ok r) (and (= r.result m) (listEmpty? r.internal))) ((err _) false)) "routeModule leaves a module without parMap or parFold unchanged")
+            (assert (match cut ((ok _) false) ((err ds) (= (map (fn [(d ty/IrDiag)] -> String d.code) ds) (list "ERR_LLVM_PARROUTE_TEXT")))) "finishText rejects routed text without every helper declaration")
             (assert (= unrouted (ok text)) "finishText leaves the text of a module it did not route unchanged, whatever it holds")
             (assert (pr/routedNames? (list "main" "asl-target-llvm/parallel.serVal")) "routedNames? sees a parallel function among the internal names")
             (refute (pr/routedNames? (list "main" "asl-target-llvm/sysRoute.fdRead")) "routedNames? ignores names other routings made internal")
-            (assert (mt plainText ((ok _) false) ((err ds) (= (map (fn [(d ty/IrDiag)] -> String d.code) ds) (list "ERR_LLVM_PARROUTE_TEXT")))) "finishText rejects routed text that declares no helper")
+            (assert (match plainText ((ok _) false) ((err ds) (= (map (fn [(d ty/IrDiag)] -> String d.code) ds) (list "ERR_LLVM_PARROUTE_TEXT")))) "finishText rejects routed text that declares no helper")
             true))))
 
 fn litSource routed: Bool -> String

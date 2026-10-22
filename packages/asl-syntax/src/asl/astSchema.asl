@@ -18,7 +18,7 @@
       (asl-json/json :a j)])
 
 fn findKey kvs: (List (Pair String j/Json)) key: String -> (Option j/Json)
-  (mt (listHead kvs)
+  (match (listHead kvs)
     ((none) (none))
     ((some p)
      (if (= (pairFirst p) key)
@@ -26,84 +26,84 @@ fn findKey kvs: (List (Pair String j/Json)) key: String -> (Option j/Json)
        (findKey (optionOr (listTail kvs) (list)) key))))
 
 fn getProp val: j/Json key: String -> (Option j/Json)
-  (mt val
+  (match val
     ((j/jobj kvs) (findKey kvs key))
     (_ (none)))
 
 fn getString val: j/Json key: String -> (Option String)
-  (mt (getProp val key)
+  (match (getProp val key)
     ((some pVal)
-     (mt pVal
+     (match pVal
        ((j/jstr s) (some s))
        (_ (none))))
     (_ (none)))
 
 fn getInt val: j/Json key: String -> (Option Int64)
-  (mt (getProp val key)
+  (match (getProp val key)
     ((some pVal)
-     (mt pVal
+     (match pVal
        ((j/jint i) (some i))
        (_ (none))))
     (_ (none)))
 
 fn getFloat val: j/Json key: String -> (Option Float64)
-  (mt (getProp val key)
+  (match (getProp val key)
     ((some pVal)
-     (mt pVal
+     (match pVal
        ((j/jfloat f) (some f))
        ((j/jint i) (some (int64ToFloat64 i)))
        (_ (none))))
     (_ (none)))
 
 fn getBool val: j/Json key: String -> (Option Bool)
-  (mt (getProp val key)
+  (match (getProp val key)
     ((some pVal)
-     (mt pVal
+     (match pVal
        ((j/jbool b) (some b))
        (_ (none))))
     (_ (none)))
 
 fn getArray val: j/Json key: String -> (Option (List j/Json))
-  (mt (getProp val key)
+  (match (getProp val key)
     ((some pVal)
-     (mt pVal
+     (match pVal
        ((j/jarr xs) (some xs))
        (_ (none))))
     (_ (none)))
 
 fn getObject val: j/Json key: String -> (Option (List (Pair String j/Json)))
-  (mt (getProp val key)
+  (match (getProp val key)
     ((some pVal)
-     (mt pVal
+     (match pVal
        ((j/jobj kvs) (some kvs))
        (_ (none))))
     (_ (none)))
 
 fn jsonEqual? a: j/Json b: j/Json -> Bool
-  (mt a
-    ((j/jnull) (mt b ((j/jnull) true) (_ false)))
-    ((j/jbool ba) (mt b ((j/jbool bb) (= ba bb)) (_ false)))
+  (match a
+    ((j/jnull) (match b ((j/jnull) true) (_ false)))
+    ((j/jbool ba) (match b ((j/jbool bb) (= ba bb)) (_ false)))
     ((j/jint ia)
-     (mt b
+     (match b
        ((j/jint ib) (= ia ib))
        ((j/jfloat fb) (= (int64ToFloat64 ia) fb))
        ((j/jnum nb) (= (int64ToFloat64 ia) nb))
        (_ false)))
     ((j/jfloat fa)
-     (mt b
+     (match b
        ((j/jfloat fb) (= fa fb))
        ((j/jint ib) (= fa (int64ToFloat64 ib)))
        ((j/jnum nb) (= fa nb))
        (_ false)))
     ((j/jnum na)
-     (mt b
+     (match b
        ((j/jnum nb) (= na nb))
        ((j/jint ib) (= na (int64ToFloat64 ib)))
        ((j/jfloat fb) (= na fb))
        (_ false)))
-    ((j/jstr sa) (mt b ((j/jstr sb) (= sa sb)) (_ false)))
+    ((j/jstr sa) (match b ((j/jstr sb) (= sa sb)) (_ false)))
     ((j/jarr xa)
-     (mt b
+     (match b
        ((j/jarr xb)
         (if (!= (listLength xa) (listLength xb))
           false
@@ -112,13 +112,13 @@ fn jsonEqual? a: j/Json b: j/Json -> Bool
                 true (zip xa xb))))
        (_ false)))
     ((j/jobj ka)
-     (mt b
+     (match b
        ((j/jobj kb)
         (if (!= (listLength ka) (listLength kb))
           false
           (fold (fn [(acc Bool) (p (Pair String j/Json))] -> Bool
                   (and acc
-                       (mt (findKey kb (pairFirst p))
+                       (match (findKey kb (pairFirst p))
                          ((none) false)
                          ((some v) (jsonEqual? (pairSecond p) v)))))
                 true ka)))
@@ -130,7 +130,7 @@ fn makeIndent n: Int64 -> String
     (stringRepeat " " n))
 
 fn prettyJson val: j/Json indent: Int64 -> String
-  (mt val
+  (match val
     ((j/jnull) "null")
     ((j/jbool b) (if b "true" "false"))
     ((j/jint i) (stringFromInt64 i))
@@ -185,7 +185,7 @@ fn isAuxiliaryType? name: String -> Bool
       (= name "FieldType"))))))
 
 fn nullableTypeName schema: j/Json -> (Option String)
-  (mt schema
+  (match schema
     ((j/jobj kvs)
      (if (= (listLength kvs) 1) (getString schema "type") (none)))
     (_ (none)))
@@ -198,17 +198,17 @@ fn typeToSchema schemaName: String fieldName: String t: String -> (Result j/Json
     ((= t "Float64") (ok (j/jobj (list (pair "type" (j/jstr "number"))))))
     ((and (stringStartsWith? t "(Map String ") (stringEndsWith? t ")"))
      (let [(valueT (optionOr (stringSlice t 12 (- (stringLength t) 1)) ""))]
-       (mt (typeToSchema schemaName fieldName valueT)
+       (match (typeToSchema schemaName fieldName valueT)
          ((err e) (err e))
          ((ok valueSchema)
           (ok (j/jobj (list (pair "type" (j/jstr "object"))
                             (pair "additionalProperties" valueSchema))))))))
     ((and (stringStartsWith? t "(Option ") (stringEndsWith? t ")"))
      (let [(innerT (optionOr (stringSlice t 8 (- (stringLength t) 1)) ""))]
-       (mt (typeToSchema schemaName fieldName innerT)
+       (match (typeToSchema schemaName fieldName innerT)
          ((err e) (err e))
          ((ok innerSchema)
-          (mt (nullableTypeName innerSchema)
+          (match (nullableTypeName innerSchema)
             ((some typeStr)
              (ok (j/jobj (list (pair "type" (j/jarr (list (j/jstr typeStr) (j/jstr "null"))))))))
             (_
@@ -236,7 +236,7 @@ fn typeToSchema schemaName: String fieldName: String t: String -> (Result j/Json
                        (pair "items" (j/jobj (list (pair "$ref" (j/jstr "#/$defs/AstExpr")))))))))
     ((and (stringStartsWith? t "(List ") (stringEndsWith? t ")"))
      (let [(innerT (optionOr (stringSlice t 6 (- (stringLength t) 1)) ""))]
-       (mt (typeToSchema schemaName fieldName innerT)
+       (match (typeToSchema schemaName fieldName innerT)
          ((err e) (err e))
          ((ok itemSchema)
           (ok (j/jobj (list (pair "type" (j/jstr "array"))
@@ -249,39 +249,39 @@ fn typeToSchema schemaName: String fieldName: String t: String -> (Result j/Json
      (err (str "unmapped type " t " in " schemaName "." fieldName))))
 
 fn fieldToProp schemaName: String f: a/AstField -> (Result (Pair String j/Json) String)
-  (mt (typeToSchema schemaName f.name f.type)
+  (match (typeToSchema schemaName f.name f.type)
     ((err e) (err e))
     ((ok baseSchema)
      (let [(doc (cleanDoc f.docstring))
            (withDoc (if (stringEmpty? doc)
                       baseSchema
-                      (mt baseSchema
+                      (match baseSchema
                         ((j/jobj kvs) (j/jobj (listAppend kvs (list (pair "description" (j/jstr doc))))))
                         (_ baseSchema))))]
        (ok (pair f.name withDoc)))))
 
 fn fieldsToProps schemaName: String fields: (List a/AstField) -> (Result (List (Pair String j/Json)) String)
   (fold (fn [(acc (Result (List (Pair String j/Json)) String)) (f a/AstField)] -> (Result (List (Pair String j/Json)) String)
-          (mt acc
+          (match acc
             ((err e) (err e))
             ((ok ps)
-             (mt (fieldToProp schemaName f)
+             (match (fieldToProp schemaName f)
                ((err e) (err e))
                ((ok p) (ok (listAppend ps (list p))))))))
         (ok (list)) fields)
 
 fn paramToProp schemaName: String p: a/Param -> (Result (Pair String j/Json) String)
-  (mt (typeToSchema schemaName p.name p.type)
+  (match (typeToSchema schemaName p.name p.type)
     ((err e) (err e))
     ((ok baseSchema)
      (ok (pair p.name baseSchema))))
 
 fn paramsToProps schemaName: String params: (List a/Param) -> (Result (List (Pair String j/Json)) String)
   (fold (fn [(acc (Result (List (Pair String j/Json)) String)) (p a/Param)] -> (Result (List (Pair String j/Json)) String)
-          (mt acc
+          (match acc
             ((err e) (err e))
             ((ok ps)
-             (mt (paramToProp schemaName p)
+             (match (paramToProp schemaName p)
                ((err e) (err e))
                ((ok prop) (ok (listAppend ps (list prop))))))))
         (ok (list)) params)
@@ -292,7 +292,7 @@ fn isInternalField? name: String -> Bool
 fn schemaToDef s: a/SchemaNode -> (Result (Pair String j/Json) String)
   (let [(validFields (filter (fn [(f a/AstField)] -> Bool (not (isInternalField? f.name))) s.fields))
         (reqNames (map (fn [(f a/AstField)] -> j/Json (j/jstr f.name)) validFields))]
-    (mt (fieldsToProps s.name validFields)
+    (match (fieldsToProps s.name validFields)
       ((err e) (err e))
       ((ok propPairs)
        (ok (pair s.name
@@ -306,7 +306,7 @@ fn enumCaseToArm enumName: String c: a/EnumCase -> (Result j/Json String)
         (kindProp (pair "kind" (j/jobj (list (pair "type" (j/jstr "string"))
                                              (pair "enum" (j/jarr (list (j/jstr c.name))))))))
         (reqNames (cons (j/jstr "kind") (map (fn [(p a/Param)] -> j/Json (j/jstr p.name)) validParams)))]
-    (mt (paramsToProps enumName validParams)
+    (match (paramsToProps enumName validParams)
       ((err e) (err e))
       ((ok otherProps)
        (let [(allProps (cons kindProp otherProps))]
@@ -318,19 +318,19 @@ fn enumCaseToArm enumName: String c: a/EnumCase -> (Result j/Json String)
 fn enumToDef e: a/EnumNode -> (Result (Pair String j/Json) String)
   (let [(eName e.name)]
     (fold (fn [(acc (Result (Pair String j/Json) String)) (c a/EnumCase)] -> (Result (Pair String j/Json) String)
-            (mt acc
+            (match acc
               ((err errStr) (err errStr))
               ((ok p)
                (let [(n (pairFirst p))
                      (v (pairSecond p))]
-                 (mt v
+                 (match v
                    ((j/jobj kvs)
-                    (mt (enumCaseToArm eName c)
+                    (match (enumCaseToArm eName c)
                       ((err errStr) (err errStr))
                       ((ok arm)
-                       (let [(arms (mt (findKey kvs "anyOf")
+                       (let [(arms (match (findKey kvs "anyOf")
                                      ((some v2)
-                                      (mt v2
+                                      (match v2
                                         ((j/jarr xs) xs)
                                         (_ (list))))
                                      (_ (list))))]
@@ -381,25 +381,25 @@ fn auxiliaryDefs -> (List (Pair String j/Json))
 
 fn buildSchemaJson forms: (List a/TopForm) -> (Result j/Json String)
   (let [(defsRes (fold (fn [(acc (Result (List (Pair String j/Json)) String)) (tf a/TopForm)] -> (Result (List (Pair String j/Json)) String)
-                         (mt acc
+                         (match acc
                            ((err e) (err e))
                            ((ok curDefs)
-                            (mt tf
+                            (match tf
                               ((a/topSchema s)
                                (if (isAstType? s.name)
-                                 (mt (schemaToDef s)
+                                 (match (schemaToDef s)
                                    ((err e) (err e))
                                    ((ok def) (ok (listAppend curDefs (list def)))))
                                  (ok curDefs)))
                               ((a/topEnum e)
                                (if (isAstType? e.name)
-                                 (mt (enumToDef e)
+                                 (match (enumToDef e)
                                    ((err e) (err e))
                                    ((ok def) (ok (listAppend curDefs (list def)))))
                                  (ok curDefs)))
                               (_ (ok curDefs))))))
                        (ok (list)) forms))]
-    (mt defsRes
+    (match defsRes
       ((err e) (err e))
       ((ok astSchemas)
        (let [(allDefs (listAppend (auxiliaryDefs) astSchemas))
@@ -413,108 +413,108 @@ fn buildSchemaJson forms: (List a/TopForm) -> (Result j/Json String)
          (ok root)))))
 
 fn generateAstSchema forms: (List a/TopForm) -> (Result String String)
-  (mt (buildSchemaJson forms)
+  (match (buildSchemaJson forms)
     ((err e) (err e))
     ((ok j) (ok (str (prettyJson j 0) "\n"))))
 
 fn generateAstSchemaFromAstFile! path: String -> (Result String String)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e) (err (str "Could not read " path ": " e)))
     ((ok src)
-     (mt (a/parse src)
+     (match (a/parse src)
        ((err e) (err (str "Parse error in " path ": " e.msg)))
        ((ok forms) (generateAstSchema forms)))))
 
 fn validateItems itemSchema: (Option j/Json) rootSchema: j/Json instance: j/Json -> (Result Bool String)
-  (mt itemSchema
+  (match itemSchema
     ((none) (ok true))
     ((some is)
-     (mt instance
+     (match instance
        ((j/jarr xs)
         (fold (fn [(acc (Result Bool String)) (x j/Json)] -> (Result Bool String)
-                (mt acc
+                (match acc
                   ((err e) (err e))
                   ((ok _) (validateJsonSchema is rootSchema x))))
               (ok true) xs))
        (_ (err "Expected array for items check")))))
 
 fn validateProperties propOpt: (Option (List (Pair String j/Json))) schema: j/Json rootSchema: j/Json instance: j/Json -> (Result Bool String)
-  (mt propOpt
+  (match propOpt
     ((none) (validateItems (getProp schema "items") rootSchema instance))
     ((some propKvs)
-     (mt instance
+     (match instance
        ((j/jobj instKvs)
         (let [(propErr (fold (fn [(acc (Option String)) (p (Pair String j/Json))] -> (Option String)
-                               (mt acc
+                               (match acc
                                  ((some _) acc)
                                  ((none)
-                                  (mt (findKey instKvs (pairFirst p))
+                                  (match (findKey instKvs (pairFirst p))
                                     ((some instVal)
-                                     (mt (validateJsonSchema (pairSecond p) rootSchema instVal)
+                                     (match (validateJsonSchema (pairSecond p) rootSchema instVal)
                                        ((ok _) (none))
                                        ((err e) (some (str "Property " (pairFirst p) ": " e)))))
                                     ((none) (none))))))
                              (none) propKvs))]
-          (mt propErr
+          (match propErr
             ((some pe) (err pe))
             ((none)
-             (let [(allowAdditional (mt (getProp schema "additionalProperties")
-                                      ((some apVal) (mt apVal ((j/jbool b) b) (_ true)))
+             (let [(allowAdditional (match (getProp schema "additionalProperties")
+                                      ((some apVal) (match apVal ((j/jbool b) b) (_ true)))
                                       (_ true)))]
                (if allowAdditional
                  (validateItems (getProp schema "items") rootSchema instance)
                  (let [(extraKey (fold (fn [(acc (Option String)) (p (Pair String j/Json))] -> (Option String)
-                                         (mt acc
+                                         (match acc
                                            ((some _) acc)
                                            ((none)
                                             (if (none? (findKey propKvs (pairFirst p)))
                                               (some (pairFirst p))
                                               (none)))))
                                        (none) instKvs))]
-                   (mt extraKey
+                   (match extraKey
                      ((some ek) (err (str "Additional property not allowed: " ek)))
                      ((none) (validateItems (getProp schema "items") rootSchema instance))))))))))
        (_ (err "Expected object for properties check")))))
 
 fn validateRequired reqOpt: (Option (List j/Json)) schema: j/Json rootSchema: j/Json instance: j/Json -> (Result Bool String)
-  (mt reqOpt
+  (match reqOpt
     ((none) (validateProperties (getObject schema "properties") schema rootSchema instance))
     ((some reqs)
-     (mt instance
+     (match instance
        ((j/jobj kvs)
         (let [(missing (fold (fn [(acc (Option String)) (r j/Json)] -> (Option String)
-                               (mt acc
+                               (match acc
                                  ((some _) acc)
                                  ((none)
-                                  (mt r
+                                  (match r
                                     ((j/jstr rKey)
                                      (if (none? (findKey kvs rKey)) (some rKey) (none)))
                                     (_ (none))))))
                              (none) reqs))]
-          (mt missing
+          (match missing
             ((some k) (err (str "Missing required property: " k)))
             ((none) (validateProperties (getObject schema "properties") schema rootSchema instance)))))
        (_ (err "Expected object for required properties")))))
 
 fn validateType typeOpt: (Option j/Json) schema: j/Json rootSchema: j/Json instance: j/Json -> (Result Bool String)
-  (mt typeOpt
+  (match typeOpt
     ((none) (validateRequired (getArray schema "required") schema rootSchema instance))
     ((some typeVal)
      (let [(typeMatch? (fn [(t String)] -> Bool
                          (cond
-                           ((= t "string") (mt instance ((j/jstr _) true) (_ false)))
-                           ((= t "boolean") (mt instance ((j/jbool _) true) (_ false)))
-                           ((= t "integer") (mt instance ((j/jint _) true) (_ false)))
-                           ((= t "number") (mt instance ((j/jint _) true) ((j/jfloat _) true) ((j/jnum _) true) (_ false)))
-                           ((= t "array") (mt instance ((j/jarr _) true) (_ false)))
-                           ((= t "object") (mt instance ((j/jobj _) true) (_ false)))
-                           ((= t "null") (mt instance ((j/jnull) true) (_ false)))
+                           ((= t "string") (match instance ((j/jstr _) true) (_ false)))
+                           ((= t "boolean") (match instance ((j/jbool _) true) (_ false)))
+                           ((= t "integer") (match instance ((j/jint _) true) (_ false)))
+                           ((= t "number") (match instance ((j/jint _) true) ((j/jfloat _) true) ((j/jnum _) true) (_ false)))
+                           ((= t "array") (match instance ((j/jarr _) true) (_ false)))
+                           ((= t "object") (match instance ((j/jobj _) true) (_ false)))
+                           ((= t "null") (match instance ((j/jnull) true) (_ false)))
                            (else false))))
-           (okType (mt typeVal
+           (okType (match typeVal
                      ((j/jstr t) (typeMatch? t))
                      ((j/jarr ts)
                       (fold (fn [(acc Bool) (tv j/Json)] -> Bool
-                              (or acc (mt tv ((j/jstr t) (typeMatch? t)) (_ false))))
+                              (or acc (match tv ((j/jstr t) (typeMatch? t)) (_ false))))
                             false ts))
                      (_ false)))]
        (if (not okType)
@@ -522,7 +522,7 @@ fn validateType typeOpt: (Option j/Json) schema: j/Json rootSchema: j/Json insta
          (validateRequired (getArray schema "required") schema rootSchema instance)))))
 
 fn validateEnum enumOpt: (Option (List j/Json)) schema: j/Json rootSchema: j/Json instance: j/Json -> (Result Bool String)
-  (mt enumOpt
+  (match enumOpt
     ((none) (validateType (getProp schema "type") schema rootSchema instance))
     ((some vals)
      (let [(inEnum (fold (fn [(acc Bool) (ev j/Json)] -> Bool
@@ -533,11 +533,11 @@ fn validateEnum enumOpt: (Option (List j/Json)) schema: j/Json rootSchema: j/Jso
          (err "Instance not in enum")))))
 
 fn validateOneOf oneOfOpt: (Option (List j/Json)) schema: j/Json rootSchema: j/Json instance: j/Json -> (Result Bool String)
-  (mt oneOfOpt
+  (match oneOfOpt
     ((none) (validateEnum (getArray schema "enum") schema rootSchema instance))
     ((some arms)
      (let [(matchCount (fold (fn [(acc Int64) (arm j/Json)] -> Int64
-                               (mt (validateJsonSchema arm rootSchema instance)
+                               (match (validateJsonSchema arm rootSchema instance)
                                  ((ok b) (if b (+ acc 1) acc))
                                  ((err _) acc)))
                              0 arms))]
@@ -546,11 +546,11 @@ fn validateOneOf oneOfOpt: (Option (List j/Json)) schema: j/Json rootSchema: j/J
          (err (str "Instance must match exactly one oneOf schema, matched " (stringFromInt64 matchCount)))))))
 
 fn validateAnyOf anyOfOpt: (Option (List j/Json)) schema: j/Json rootSchema: j/Json instance: j/Json -> (Result Bool String)
-  (mt anyOfOpt
+  (match anyOfOpt
     ((none) (validateOneOf (getArray schema "oneOf") schema rootSchema instance))
     ((some arms)
      (let [(anyOk (fold (fn [(acc Bool) (arm j/Json)] -> Bool
-                          (or acc (mt (validateJsonSchema arm rootSchema instance)
+                          (or acc (match (validateJsonSchema arm rootSchema instance)
                                     ((ok b) b)
                                     ((err _) false))))
                         false arms))]
@@ -559,14 +559,14 @@ fn validateAnyOf anyOfOpt: (Option (List j/Json)) schema: j/Json rootSchema: j/J
          (err "Instance does not match any schema in anyOf")))))
 
 fn validateJsonSchema schema: j/Json rootSchema: j/Json instance: j/Json -> (Result Bool String)
-  (mt (getString schema "$ref")
+  (match (getString schema "$ref")
     ((some refStr)
      (if (stringStartsWith? refStr "#/$defs/")
        (let [(defName (optionOr (stringSlice refStr 8 (stringLength refStr)) ""))
              (defsOpt (getProp rootSchema "$defs"))]
-         (mt defsOpt
+         (match defsOpt
            ((some defs)
-            (mt (getProp defs defName)
+            (match (getProp defs defName)
               ((some targetSchema) (validateJsonSchema targetSchema rootSchema instance))
               ((none) (err (str "Unresolved $ref def: " defName)))))
            ((none) (err "Root schema missing $defs"))))
@@ -581,13 +581,13 @@ fn validateTopFormWithSchema rootSchema: j/Json instance: j/Json -> (Result Bool
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(inPath (optionOr (listGet args 0) "asl/packages/asl-parser/src/ast.asl"))
         (outPath (optionOr (listGet args 1) "asl/grammar/aslAst.schema.json"))]
-    (mt (generateAstSchemaFromAstFile! inPath)
+    (match (generateAstSchemaFromAstFile! inPath)
       ((err e)
        (do
          (print (str "Schema generation failed: " e "\n"))
          (err e)))
       ((ok schemaStr)
-       (mt (fileWrite outPath schemaStr)
+       (match (fileWrite outPath schemaStr)
          ((err e)
           (do
             (print (str "Failed writing " outPath ": " e "\n"))

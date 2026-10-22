@@ -130,7 +130,7 @@ fn envOr! name: String fallback: String -> String
   (let [(v (optionOr (envGet name) ""))] (if (stringEmpty? v) fallback v))
 
 fn ! executable? p: String -> Bool
-  (mt (fileStat p) ((ok st) (and st.isFile (!= (& st.mode 73) 0))) ((err _) false))
+  (match (fileStat p) ((ok st) (and st.isFile (!= (& st.mode 73) 0))) ((err _) false))
 
 fn whichTool! name: String -> String
   (firstWhere (map (fn [(d String)] -> String (k/joinPath d name)) (filter (fn [(d String)] -> Bool (not (stringEmpty? d))) (stringSplit (envOr! "PATH" "") ":")))
@@ -146,20 +146,20 @@ fn makeTempDir! prefix: String -> (Result String String)
   (let [(d (tempName! prefix ""))]
     (if (fileExists? d)
       (makeTempDir! prefix)
-      (mt (dirCreate d) ((ok _) (ok (resultOr (realPath d) d))) ((err e) (err e)))))
+      (match (dirCreate d) ((ok _) (ok (resultOr (realPath d) d))) ((err e) (err e)))))
 
 fn makeTempFile! prefix: String suffix: String content: String -> (Result String String)
   (let [(p (tempName! prefix suffix))]
-    (mt (fileCreateExclusive p content) ((ok _) (ok p)) ((err e) (if (fileExists? p) (makeTempFile! prefix suffix content) (err e)))))
+    (match (fileCreateExclusive p content) ((ok _) (ok p)) ((err e) (if (fileExists? p) (makeTempFile! prefix suffix content) (err e)))))
 
 fn envKey row: String -> String
-  (mt (stringIndexOf row "=") ((some i) (sub row 0 i)) ((none) row))
+  (match (stringIndexOf row "=") ((some i) (sub row 0 i)) ((none) row))
 
 fn withEnv! name: String value: String -> (List String)
   (listAppend (filter (fn [(r String)] -> Bool (!= (envKey r) name)) (envList)) (list (str name "=" value)))
 
 fn pumpFd! fd: Int64 isOut: Bool st: PumpState -> PumpState
-  (mt (fdRead fd 65536)
+  (match (fdRead fd 65536)
     ((ok chunk)
       (cond
         ((and (stringEmpty? chunk) isOut) (do (fdClose fd) (with st :outOpen false :timedOut false :failure "")))
@@ -181,7 +181,7 @@ fn pumpUntil! sp: SpawnedProc st: PumpState deadlineNs: Int64 -> PumpState
     (let [(leftMs (/ (- deadlineNs (monotonicNs)) 1000000))]
       (if (<= leftMs 0)
         (with st :timedOut true :failure "")
-        (mt (fdPoll (listAppend (if st.outOpen (list (pair sp.stdout 1)) (list)) (if st.errOpen (list (pair sp.stderr 1)) (list))) leftMs)
+        (match (fdPoll (listAppend (if st.outOpen (list (pair sp.stdout 1)) (list)) (if st.errOpen (list (pair sp.stderr 1)) (list))) leftMs)
           ((err e) (with st :timedOut false :failure e))
           ((ok ready)
             (let [(s1 (if (and st.outOpen (ready? ready sp.stdout)) (pumpFd! sp.stdout true st) st))
@@ -200,7 +200,7 @@ fn afterTerm! sp: SpawnedProc st: PumpState graceMs: Int64 -> PumpState
               (PumpState :outOpen s2.outOpen :errOpen s2.errOpen :out s2.out :errText s2.errText :timedOut true :failure s2.failure)))))
 
 fn runArgv! argv: (List String) cwd: (Option String) env: (Option (List String)) timeoutMs: Int64 graceMs: Int64 -> RunOut
-  (mt (procSpawnv argv cwd env)
+  (match (procSpawnv argv cwd env)
     ((err e) (RunOut :code -1 :out "" :errText "" :timedOut false :failure e))
     ((ok sp)
       (let [(closed (fdClose sp.stdin))
@@ -208,7 +208,7 @@ fn runArgv! argv: (List String) cwd: (Option String) env: (Option (List String))
             (st1 (pumpUntil! sp st0 (+ (monotonicNs) (* timeoutMs 1000000))))
             (st2 (if st1.timedOut (afterTerm! sp st1 graceMs) st1))
             (done (closeLeft! sp st2))]
-        (mt (procWaitPid sp.pid false)
+        (match (procWaitPid sp.pid false)
           ((ok code) (RunOut :code (optionOr code -1) :out st2.out :errText st2.errText :timedOut st2.timedOut :failure st2.failure))
           ((err e) (RunOut :code -1 :out st2.out :errText st2.errText :timedOut st2.timedOut :failure e))))))
 
@@ -225,15 +225,15 @@ fn timeoutText argv: (List String) secs: Int64 -> String
   (str "Command '" (pyListRepr argv) "' timed out after " (stringFromInt64 secs) " seconds")
 
 fn readText! p: String -> (Result String String)
-  (mt (fileReadString p) ((ok t) (ok (k/universalNewlines t))) ((err e) (err e)))
+  (match (fileReadString p) ((ok t) (ok (k/universalNewlines t))) ((err e) (err e)))
 
 fn stagedContent env: GateEnv p: String -> (Option String)
-  (mt (listHead (filter (fn [(sp (Pair String String))] -> Bool (= (pairFirst sp) p)) env.staged))
+  (match (listHead (filter (fn [(sp (Pair String String))] -> Bool (= (pairFirst sp) p)) env.staged))
     ((some sp) (some (pairSecond sp)))
     ((none) (none)))
 
 fn guardParts! cur: String parts: (List String) -> Bool
-  (mt (listHead parts)
+  (match (listHead parts)
     ((none) true)
     ((some part)
       (cond
@@ -276,7 +276,7 @@ fn spaceWords s: String -> (List String)
           (stringSplit (stringReplace (stringReplace (stringReplace (stringReplace s "\t" " ") "\n" " ") "\r" " ") "\x0c" " ") " "))
 
 fn shebangWord words: (List String) -> String
-  (mt (listHead words)
+  (match (listHead words)
     ((none) "")
     ((some w)
       (if (or (= (k/baseName w) "env") (stringStartsWith? w "-"))
@@ -289,10 +289,10 @@ fn shebangProg text: String -> String
     "")
 
 fn headLine! p: String -> String
-  (mt (fileReadRange p 0 256)
+  (match (fileReadRange p 0 256)
     ((ok bs) (let [(t (resultOr (fileReadString p) ""))
                    (cut (sub t 0 (min 256 (stringLength t))))]
-               (mt (stringIndexOf cut "\n") ((some i) (sub cut 0 (+ i 1))) ((none) cut))))
+               (match (stringIndexOf cut "\n") ((some i) (sub cut 0 (+ i 1))) ((none) cut))))
     ((err _) ""))
 
 fn languageOf! path: String -> String
@@ -326,7 +326,7 @@ fn pythonCheck! lang: String path: String content: String -> (Pair String String
   (let [(py (whichTool! "python3"))]
     (if (stringEmpty? py)
       (pair "skipped" "python3 not found")
-      (mt (procSpawnv (list py "-c" (pyChecker) lang path) (none) (none))
+      (match (procSpawnv (list py "-c" (pyChecker) lang path) (none) (none))
         ((err e) (pair "skipped" (str "python3 did not run: " e)))
         ((ok sp)
           (let [(wrote (feedAll! sp.stdin content))
@@ -340,14 +340,14 @@ fn pythonCheck! lang: String path: String content: String -> (Pair String String
               (st2.timedOut (pair "skipped" "python3 timed out after 15s"))
               ((!= (optionOr code -1) 0) (pair "skipped" (str "python3 checker exit " (stringFromInt64 (optionOr code -1)) ": " (pyTrunc (stringTrim st2.errText) 300))))
               (else
-                (mt (stringIndexOf out "\n")
+                (match (stringIndexOf out "\n")
                   ((some i) (pair (sub out 0 i) (sub out (+ i 1) (stringLength out))))
                   ((none) (pair "skipped" "python3 checker printed no verdict"))))))))))
 
 fn feedAll! fd: Int64 text: String -> Bool
   (if (stringEmpty? text)
     true
-    (mt (fdWrite fd text)
+    (match (fdWrite fd text)
       ((ok n) (feedAll! fd (sub text n (stringLength text))))
       ((err _) false)))
 
@@ -355,7 +355,7 @@ fn relOf env: GateEnv p: String -> String
   (k/relToRoot env.root p)
 
 fn withTemp! content: String suffix: String run: (fn [String] -> (Pair String String)) failWord: String -> (Pair String String)
-  (mt (makeTempFile! "aslSyntax" suffix content)
+  (match (makeTempFile! "aslSyntax" suffix content)
     ((err e) (pair "skipped" (str failWord " did not run: " e)))
     ((ok tmp) (let [(r (run tmp))] (do (pathRemove tmp) r))))
 
@@ -398,7 +398,7 @@ fn bashCheck! env: GateEnv path: String content: String -> (Pair String String)
                 ((= r.code 0) (pair "ok" ""))
                 (else
                   (let [(lines (strippedLines r.errText))]
-                    (pair "error" (pyTrunc (mt (listHead lines) ((some l) (stringReplace l tmp (relOf env path))) ((none) (str "bash -n exit " (stringFromInt64 r.code)))) 300)))))))
+                    (pair "error" (pyTrunc (match (listHead lines) ((some l) (stringReplace l tmp (relOf env path))) ((none) (str "bash -n exit " (stringFromInt64 r.code)))) 300)))))))
           "bash -n"))))
 
 fn tsCodeAt l: String i: Int64 first: (fn [Int64] -> Bool) wantBoundary: Bool -> String
@@ -410,7 +410,7 @@ fn tsCodeAt l: String i: Int64 first: (fn [Int64] -> Bool) wantBoundary: Bool ->
       ""))
 
 fn tsCodes l: String from: Int64 first: (fn [Int64] -> Bool) wantBoundary: Bool acc: (List String) -> (List String)
-  (mt (stringIndexOf (sub l from (stringLength l)) "error TS")
+  (match (stringIndexOf (sub l from (stringLength l)) "error TS")
     ((none) (listReverse acc))
     ((some rel)
       (let [(at (+ from rel 8))
@@ -424,7 +424,7 @@ fn tsOptionCode? code: String -> Bool
   (listContains? (list "TS1205" "TS1208" "TS1269" "TS1286" "TS1287" "TS1371" "TS1448" "TS1484" "TS1485") code)
 
 fn syntaxDiag? l: String -> Bool
-  (mt (listHead (tsCodes l 0 (fn [(c Int64)] -> Bool (= c 49)) true (list)))
+  (match (listHead (tsCodes l 0 (fn [(c Int64)] -> Bool (= c 49)) true (list)))
     ((some code) (not (tsOptionCode? code)))
     ((none) false))
 
@@ -438,7 +438,7 @@ fn tscCheck! env: GateEnv path: String content: String -> (Pair String String)
         (tname (str "staged" ext))]
     (if (stringEmpty? tsc)
       (pair "skipped" "tsc not found")
-      (mt (makeTempDir! "aslSyntax")
+      (match (makeTempDir! "aslSyntax")
         ((err e) (pair "skipped" (str "tsc did not run: " e)))
         ((ok tdir)
           (let [(w1 (fileWrite (k/joinPath tdir tname) content))
@@ -456,7 +456,7 @@ fn tscCheck! env: GateEnv path: String content: String -> (Pair String String)
               (else (pair "ok" ""))))))))
 
 fn errorWord? l: String from: Int64 -> Bool
-  (mt (stringIndexOf (sub l from (stringLength l)) "error:")
+  (match (stringIndexOf (sub l from (stringLength l)) "error:")
     ((none) false)
     ((some rel)
       (let [(at (+ from rel))]
@@ -536,7 +536,7 @@ fn diagScan b: Bytes n: Int64 i: Int64 stack: (List (Pair Int64 Int64)) inStr: B
         ((= c 59) (diagScan b n (+ i 1) stack false strStart true))
         ((openByte? c) (diagScan b n (+ i 1) (cons (pair c i) stack) false strStart false))
         ((closeByte? c)
-          (mt (listHead stack)
+          (match (listHead stack)
             ((none) (some (DelimDiag :kind "unexpected" :byte i :expected "" :msg (str "unexpected closing delimiter '" (delimChar c) "' at byte " (stringFromInt64 i)))))
             ((some top)
               (if (!= (closerFor (pairFirst top)) c)
@@ -549,7 +549,7 @@ fn aslDelimiterDiag text: String -> (Option DelimDiag)
   (diagScan (stringToBytes text) (stringLength text) 0 (list) false -1 false)
 
 fn aslDelimiterError text: String -> String
-  (mt (aslDelimiterDiag text) ((some d) d.msg) ((none) ""))
+  (match (aslDelimiterDiag text) ((some d) d.msg) ((none) ""))
 
 fn atomByte? c: Int64 -> Bool
   (not (or (spaceByte? c) (openByte? c) (closeByte? c) (= c 34) (= c 59)))
@@ -586,7 +586,7 @@ fn lastNewline b: Bytes from: Int64 to: Int64 -> Int64
   (cond ((< to from) -1) ((= (bytesGet b to) 10) to) (else (lastNewline b from (- to 1))))
 
 fn indentScan b: Bytes toks: (List Tok) stack: (List (Pair Int64 Int64)) viol: Int64 lineStart: Int64 prevEnd: Int64 first: Bool lastClosed: Int64 -> Int64
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) viol)
     ((some t)
       (let [(j (lastNewline b prevEnd (- t.start 1)))
@@ -595,7 +595,7 @@ fn indentScan b: Bytes toks: (List Tok) stack: (List (Pair Int64 Int64)) viol: I
             (col (- t.start ls))
             (v1 (if isFirst
                   (+ viol
-                     (mt (listHead stack) ((some top) (if (<= col (pairFirst top)) 1 0)) ((none) (if (> col 0) 1 0)))
+                     (match (listHead stack) ((some top) (if (<= col (pairFirst top)) 1 0)) ((none) (if (> col 0) 1 0)))
                      (if (and (>= lastClosed 0) (> col lastClosed)) 1 0))
                   viol))
             (lc1 (if isFirst -1 lastClosed))
@@ -682,7 +682,7 @@ fn advance st: ScanState t: Tok -> ScanState
 fn scanSlots toks: (List Tok) rs: (List Suffix) st: ScanState textLen: Int64 -> ScanState
   (if (not st.ok)
     st
-    (mt (listHead toks)
+    (match (listHead toks)
       ((none) (slotCands st (optionOr (listHead rs) (Suffix :ok false :len 0 :stack (list))) st.prevEnd))
       ((some t)
         (let [(r (optionOr (listHead rs) (Suffix :ok false :len 0 :stack (list))))
@@ -699,7 +699,7 @@ fn candRepair c: Cand -> Repair
   (Repair :action c.action :byte c.byte :text c.text :rank (list))
 
 fn verifyCands text: String cands: (List Cand) seen: (List String) good: (List (Pair Repair String)) -> (Pair (List (Pair Repair String)) Bool)
-  (mt (listHead cands)
+  (match (listHead cands)
     ((none) (pair (listReverse good) false))
     ((some c)
       (if (>= (listLength good) 64)
@@ -722,14 +722,14 @@ fn rankKey fault: Int64 item: (Pair Repair String) -> (List Int64)
     (list (if (touchesOpener? r) 1 0) (indentationViolations (pairSecond item)) (if (<= b fault) 0 1) (if (<= b fault) (- fault b) (- b fault))))
 
 fn keyLess a: (List Int64) b: (List Int64) -> Bool
-  (mt (listHead a)
+  (match (listHead a)
     ((none) false)
     ((some x)
       (let [(y (optionOr (listHead b) 0))]
         (cond ((< x y) true) ((> x y) false) (else (keyLess (optionOr (listTail a) (list)) (optionOr (listTail b) (list))))))))
 
 fn insertBy less: (fn [(Pair (List Int64) (Pair Repair String)) (Pair (List Int64) (Pair Repair String))] -> Bool) x: (Pair (List Int64) (Pair Repair String)) xs: (List (Pair (List Int64) (Pair Repair String))) -> (List (Pair (List Int64) (Pair Repair String)))
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (list x))
     ((some h) (if (less x h) (cons x xs) (cons h (insertBy less x (optionOr (listTail xs) (list)))))))
 
@@ -758,7 +758,7 @@ fn sortCands cands: (List Cand) -> (List Cand)
     (listSortBy (fn [(c Cand)] -> Int64 (+ (* c.byte n) c.idx)) cands))
 
 fn aslRepair text: String heuristic: Bool -> RepairRun
-  (mt (aslDelimiterDiag text)
+  (match (aslDelimiterDiag text)
     ((none) (repairRun "none" text (none) (list) "" (list)))
     ((some d)
       (let [(toks (aslTokens text))
@@ -795,17 +795,17 @@ fn aslRepair text: String heuristic: Bool -> RepairRun
                         (repairRun "ambiguous" text (none) (map (fn [(g (Pair Repair String))] -> Int64 (pairFirst g).byte) good) "" (list)))))))))))))
 
 fn repairAsn r: (Option Repair) -> String
-  (mt r
+  (match r
     ((none) "(:none)")
     ((some x) (str "(:action :" x.action " :byte " (stringFromInt64 x.byte) " :text \"" (k/escapeAsnVal x.text) "\")")))
 
 fn rankAsn r: (Option Repair) -> String
-  (mt r
+  (match r
     ((some x) (if (listEmpty? x.rank) "" (str " :rank (" (stringJoin x.rank " ") ")")))
     ((none) ""))
 
 fn overlayWalk! env: GateEnv srcDir: String dstDir: String relDir: String stagedRel: (List String) realDirs: (List String) -> Bool
-  (mt (dirList srcDir)
+  (match (dirList srcDir)
     ((err _) true)
     ((ok names)
       (listAll? (fn [(name String)] -> Bool
@@ -818,7 +818,7 @@ fn overlayWalk! env: GateEnv srcDir: String dstDir: String relDir: String staged
                       ((and (k/isDir! sp) (or (listContains? realDirs r) (and (not (stringStartsWith? name ".")) (!= name "node_modules"))))
                         (do (dirCreate dp) (overlayWalk! env sp dp r stagedRel realDirs)))
                       ((and (k/isFile! sp) (or (stringEndsWith? name ".asl") (= name "manifest.asn") (= name ".asl.config.asn")))
-                        (mt (fileReadBytes sp) ((ok bs) (do (fileWrite dp bs) true)) ((err _) true)))
+                        (match (fileReadBytes sp) ((ok bs) (do (fileWrite dp bs) true)) ((err _) true)))
                       (else true))))
                 (listSort names))))
 
@@ -827,7 +827,7 @@ fn parents rel: String acc: (List String) -> (List String)
     (if (or (stringEmpty? p) (= p ".") (= p rel)) acc (parents p (cons p acc))))
 
 fn buildOverlay! env: GateEnv staged: (List (Pair String String)) -> (Result String String)
-  (mt (makeTempDir! "aslOverlay")
+  (match (makeTempDir! "aslOverlay")
     ((err e) (err e))
     ((ok tmp)
       (let [(rels (map (fn [(sp (Pair String String))] -> String (k/relPath (pairFirst sp) env.root)) staged))
@@ -847,7 +847,7 @@ fn runHost! env: GateEnv verb: String path: String timeoutS: Int64 -> (Result Ho
     (err "absent")
     (let [(staged (writableStaged! env))
           (ov (if (listEmpty? staged) (ok "") (buildOverlay! env staged)))]
-      (mt ov
+      (match ov
         ((err e) (err (str "exec:" e)))
         ((ok overlay)
           (let [(argv (list env.host verb (relOf env path)))
@@ -870,7 +870,7 @@ fn ! nativeCheck! base: String path: String -> HostRun
         (roots (list base (resultOr (realPath base) base)))
         (rel (unroot full roots))
         (r (cc/checkFileCached! full (list base (k/joinPath base "asl/packages") (k/joinPath base "asl")) (cc/emptyCache)))]
-    (mt (pairFirst r)
+    (match (pairFirst r)
       ((err _) (HostRun :code 1 :out "" :errText (str rel ":0:0: ERR_IO cannot open the file or resolve one of its imports\ncheck failed: " rel ": 1 error(s)") :source ""))
       ((ok v)
         (if (listEmpty? v.diags)
@@ -881,7 +881,7 @@ fn ! nativeCheck! base: String path: String -> HostRun
 
 fn checkNative! env: GateEnv path: String -> (Result HostRun String)
   (let [(staged (writableStaged! env))]
-    (mt (if (listEmpty? staged) (ok "") (buildOverlay! env staged))
+    (match (if (listEmpty? staged) (ok "") (buildOverlay! env staged))
       ((err e) (err e))
       ((ok overlay)
         (let [(h (nativeCheck! (if (stringEmpty? overlay) env.root overlay) (relOf env path)))
@@ -889,7 +889,7 @@ fn checkNative! env: GateEnv path: String -> (Result HostRun String)
           (ok (with h :source (if (stringEmpty? overlay) ":disk" ":staged")))))))
 
 fn checkOnce! overlay: String target: String rel: String text: String -> (Pair String String)
-  (mt (fileWrite target text)
+  (match (fileWrite target text)
     ((err e) (pair "skipped" (str "native check did not run: " e)))
     ((ok _)
       (let [(h (nativeCheck! overlay rel))]
@@ -900,8 +900,8 @@ fn checkOnce! overlay: String target: String rel: String text: String -> (Pair S
 
 fn aslCheck! env: GateEnv path: String after: String before: (Option String) -> (List String)
   (let [(others (filter (fn [(sp (Pair String String))] -> Bool (!= (pairFirst sp) path)) (writableStaged! env)))
-        (self (listAppend others (mt (stagedContent env path) ((some c) (list (pair path c))) ((none) (list)))))]
-    (mt (buildOverlay! env self)
+        (self (listAppend others (match (stagedContent env path) ((some c) (list (pair path c))) ((none) (list)))))]
+    (match (buildOverlay! env self)
       ((err e) (list "skipped" (str "native check did not run: " e) ""))
       ((ok overlay)
         (let [(rel (relOf env path))
@@ -915,7 +915,7 @@ fn aslCheck! env: GateEnv path: String after: String before: (Option String) -> 
 fn validateStaged! env: GateEnv path: String before: (Option String) after: String force: Bool -> (List String)
   (let [(lang (syntaxLang! path after))]
     (if (or (= lang "asl") (= lang "asn"))
-      (mt (aslDelimiterDiag after)
+      (match (aslDelimiterDiag after)
         ((none)
           (if (= lang "asn")
             (list "" "" " :balanced true")
@@ -929,7 +929,7 @@ fn validateStaged! env: GateEnv path: String before: (Option String) after: Stri
                 ((or pre force) (list "" "" (str " :balanced true :syntax :error" chk (if pre " :preexisting true" " :forced true") " :syntaxMessage " (q diag))))
                 (else (list ":ERR_CHECK_FAILED" diag (str " :balanced true :syntax :error" chk)))))))
         ((some d)
-          (let [(pre (mt before ((some bt) (some? (aslDelimiterDiag bt))) ((none) false)))
+          (let [(pre (match before ((some bt) (some? (aslDelimiterDiag bt))) ((none) false)))
                 (detail (str " :byte " (stringFromInt64 d.byte) (if (stringEmpty? d.expected) "" (str " :expected " (q d.expected)))))]
             (if (or pre force)
               (list "" "" (str " :balanced false" detail (if pre " :preexisting true" " :forced true")))
@@ -940,7 +940,7 @@ fn validateStaged! env: GateEnv path: String before: (Option String) after: Stri
             (hostF (str (syntaxHost! path) (checkerField lang)))]
         (if (!= st "error")
           (list "" "" (str " :syntax :" st hostF (if (and (= st "skipped") (not (stringEmpty? msg)) (not (stringEmpty? (checkerName lang)))) (str " :syntaxMessage " (q msg)) "")))
-          (let [(pre (mt before ((some bt) (= (pairFirst (foreignSyntax! env path bt)) "error")) ((none) false)))]
+          (let [(pre (match before ((some bt) (= (pairFirst (foreignSyntax! env path bt)) "error")) ((none) false)))]
             (if (or pre force)
               (list "" "" (str " :syntax :error" hostF (if pre " :preexisting true" " :forced true") " :syntaxMessage " (q msg)))
               (list ":ERR_SYNTAX" msg (str " :syntax :error" hostF))))))))
@@ -950,8 +950,8 @@ fn fileArg kw: (Map String String) args: (List String) -> String
 
 fn checkFile! env: GateEnv id: Int64 op: String raw: String resolved: String -> GateOutcome
   (let [(staged (stagedContent env resolved))
-        (read (mt staged ((some c) (ok c)) ((none) (readText! resolved))))]
-    (mt read
+        (read (match staged ((some c) (ok c)) ((none) (readText! resolved))))]
+    (match read
       ((err e) (rejectLine id op ":ERR_READ_FAILED" (msgTail e)))
       ((ok c)
         (let [(src (if (some? staged) ":staged" ":disk"))
@@ -970,7 +970,7 @@ fn checkFile! env: GateEnv id: Int64 op: String raw: String resolved: String -> 
                 ((not (stringEmpty? derr)) (rejectLine id op ":ERR_UNBALANCED_DELIMITERS" (str common (msgTail derr))))
                 ((= lang "asn") (okLine (str (head id op) " :status \"ok\"" common " :valid true :balanced true)")))
                 (else
-                  (mt (checkNative! env resolved)
+                  (match (checkNative! env resolved)
                     ((err e) (rejectLine id op ":ERR_READ_FAILED" (msgTail e)))
                     ((ok h)
                       (let [(hc (str " :file \"" rel "\" :language \"" lang "\" :source " h.source))]
@@ -1005,7 +1005,7 @@ fn checkWorkspace! env: GateEnv id: Int64 op: String -> GateOutcome
           ((= (pairFirst r) 0) (okLine (str (head id op) " :status \"ok\" :scope \"workspace\" :valid true :checkerExit 0)")))
           (else (rejectLine id op ":ERR_WORKSPACE_CHECK_FAILED" (str " :checkerExit " (stringFromInt64 (pairFirst r)) (msgTail (pairSecond r)))))))
       (let [(bad (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map (fn [(sp (Pair String String))] -> String (stagedFailure! env sp)) staged)))
-            (r (mt (buildOverlay! env staged)
+            (r (match (buildOverlay! env staged)
                  ((err e) (pair -1 e))
                  ((ok ov) (let [(res (workspaceCheck! env ov (some ov)))] (do (pathRemove ov) res)))))
             (n (stringFromInt64 (listLength staged)))]
@@ -1032,7 +1032,7 @@ fn spaceBack b: Bytes i: Int64 -> Int64
   (if (and (>= i 0) (spaceByte? (bytesGet b i))) (spaceBack b (- i 1)) i)
 
 fn countBefore text: String word: String from: Int64 -> (Option Int64)
-  (mt (stringIndexOf (sub text from (stringLength text)) word)
+  (match (stringIndexOf (sub text from (stringLength text)) word)
     ((none) (none))
     ((some rel)
       (let [(at (+ from rel))
@@ -1047,7 +1047,7 @@ fn digitsFwd b: Bytes n: Int64 i: Int64 -> Int64
   (if (and (< i n) (digit? (bytesGet b i))) (digitsFwd b n (+ i 1)) i)
 
 fn afterAsserts text: String from: Int64 -> String
-  (mt (stringIndexOf (sub text from (stringLength text)) "after ")
+  (match (stringIndexOf (sub text from (stringLength text)) "after ")
     ((none) "")
     ((some rel)
       (let [(at (+ from rel 6))
@@ -1066,7 +1066,7 @@ fn testStep! env: GateEnv id: Int64 kw: (Map String String) args: (List String) 
           ((not (stringEmpty? (pairSecond res))) (rejectLine id "test" ":ERR_EXEC_FAILED" (msgTail (pairSecond res))))
           ((and (not (k/isFile! resolved)) (none? (stagedContent env resolved))) (rejectLine id "test" ":ERR_EXEC_FAILED" (msgTail (str "test file not found: " raw))))
           (else
-            (mt (runHost! env "test" resolved 120)
+            (match (runHost! env "test" resolved 120)
               ((err e)
                 (if (= e "absent")
                   (rejectLine id "test" ":ERR_HOST_ABSENT" (msgTail (hostAbsent)))
@@ -1113,8 +1113,8 @@ fn fixStep! env: GateEnv id: Int64 kw: (Map String String) args: (List String) -
       ((and (not (k/isFile! path)) (none? (stagedContent env path))) (rejectLine id "fix" ":ERR_FILE_NOT_FOUND" (msgTail (str "File not found: " raw))))
       (else
         (let [(staged (stagedContent env path))
-              (read (mt staged ((some c) (ok c)) ((none) (readText! path))))]
-          (mt read
+              (read (match staged ((some c) (ok c)) ((none) (readText! path))))]
+          (match read
             ((err e) (rejectLine id "fix" ":ERR_READ_FAILED" (msgTail e)))
             ((ok text)
               (let [(src (if (some? staged) ":staged" ":disk"))
@@ -1167,7 +1167,7 @@ fn capAt text: String b: Bytes n: Int64 i: Int64 -> (Option CapRow)
         (if (and (>= ue 0) (lit? text ue "\" :status :"))
           (let [(ss (+ ue 11)) (se (wordEnd b n ss))]
             (if (> se ss)
-              (mt (probePart text b n se)
+              (match (probePart text b n se)
                 ((some p) (some (CapRow :id (sub text ids ide) :status (sub text ss se) :probe (some (k/asnUnescape (sub text (optionOr (listGet p 0) 0) (optionOr (listGet p 1) 0))))
                                          :expect (k/asnUnescape (sub text (optionOr (listGet p 2) 0) (optionOr (listGet p 3) 0))) :end (+ (optionOr (listGet p 3) 0) 1))))
                 ((none) (some (CapRow :id (sub text ids ide) :status (sub text ss se) :probe (none) :expect "" :end se))))
@@ -1176,11 +1176,11 @@ fn capAt text: String b: Bytes n: Int64 i: Int64 -> (Option CapRow)
       (none)))
 
 fn capRows text: String b: Bytes n: Int64 from: Int64 acc: (List CapRow) -> (List CapRow)
-  (mt (stringIndexOf (sub text from n) ":cap :id ")
+  (match (stringIndexOf (sub text from n) ":cap :id ")
     ((none) (listReverse acc))
     ((some rel)
       (let [(i (+ from rel))]
-        (mt (capAt text b n i)
+        (match (capAt text b n i)
           ((some row) (capRows text b n row.end (cons row acc)))
           ((none) (capRows text b n (+ i 1) acc))))))
 
@@ -1226,7 +1226,7 @@ fn binaryProbe! env: GateEnv name: String path: String -> (Pair Bool String)
     (pair present (str "(:capability :id \"" name "\" :binary " (q path) " :status " (if present ":present" ":absent") ")")))
 
 fn entryProbe! env: GateEnv name: String rel: String -> (Pair Bool String)
-  (let [(present (mt (fileStat (k/aslPath! env.rootDir (if (stringStartsWith? rel "asl/") (optionOr (stringSlice rel 4 (stringLength rel)) rel) rel))) ((ok st) st.isFile) ((err _) false)))]
+  (let [(present (match (fileStat (k/aslPath! env.rootDir (if (stringStartsWith? rel "asl/") (optionOr (stringSlice rel 4 (stringLength rel)) rel) rel))) ((ok st) st.isFile) ((err _) false)))]
     (pair present (str "(:capability :id \"" name "\" :binary " (q rel) " :status " (if present ":present" ":absent") ")")))
 
 fn remoteCount! env: GateEnv -> (Result Int64 String)
@@ -1240,7 +1240,7 @@ fn remoteCount! env: GateEnv -> (Result Int64 String)
           (else (ok (listLength (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (pySplitLines r.out false)))))))))
 
 fn probeRow run: (fn [Int64 String] -> (Pair (List String) Int64)) row: CapRow -> (List String)
-  (mt row.probe
+  (match row.probe
     ((none) (list row.id row.status "false" ""))
     ((some form)
       (let [(parsed (k/parseStep form))]
@@ -1263,14 +1263,14 @@ fn writeLock! env: GateEnv rows: (List (List String)) -> (Result String String)
         (text (str "(:capabilitiesLock\n  :version \"1.1.0\"\n  :source \"asl/grammar/capabilities.asn\"\n  :measuredBy \"(:doctor :write true)\"\n  :measuredAt " (stringFromInt64 (/ (nowNs) 1000000))
                    "\n  :summary (:total " (stringFromInt64 (listLength rows)) (lockCounts rows) ")\n  :capabilities (\n" body "  ))\n"))
         (lockPath (k/aslPath! env.rootDir "grammar/capabilities.lock"))]
-    (mt (fileWrite (str lockPath ".tmp") text)
+    (match (fileWrite (str lockPath ".tmp") text)
       ((err e) (err e))
-      ((ok _) (mt (pathRename (str lockPath ".tmp") lockPath) ((ok _) (ok lockPath)) ((err e) (err e))))))
+      ((ok _) (match (pathRename (str lockPath ".tmp") lockPath) ((ok _) (ok lockPath)) ((err e) (err e))))))
 
 fn doctorStep! env: GateEnv run: (fn [Int64 String] -> (Pair (List String) Int64)) id: Int64 kw: (Map String String) args: (List String) -> GateOutcome
   (let [(bins (list (binaryProbe! env "host" env.host) (binaryProbe! env "intel" "asl") (entryProbe! env "engine" "asl/packages/asl-engine/src/cli.asl") (binaryProbe! env "lens" "lens")))
         (remotes (remoteCount! env))
-        (remoteProbe (mt remotes
+        (remoteProbe (match remotes
                        ((ok n) (str "(:capability :id \"zeroRemote\" :remotesCount " (stringFromInt64 n) " :status " (if (= n 0) ":pass" ":fail") ")"))
                        ((err e) (str "(:capability :id \"zeroRemote\" :status :absent :error ERR_TOOL_ABSENT :message " (q e) ")"))))
         (vfsProbe (str "(:capability :id \"ramVfs\" :stagedFiles " (stringFromInt64 (listLength env.staged)) " :status :measured)"))
@@ -1282,14 +1282,14 @@ fn doctorStep! env: GateEnv run: (fn [Int64 String] -> (Pair (List String) Int64
         (mismatch (listAny? (fn [(p (Pair CapRow (List String)))] -> Bool (and (some? (pairFirst p).probe) (!= (optionOr (listGet (pairSecond p) 1) "") (pairFirst p).status))) (zip rows measured)))
         (wantLock (and (listContains? (list "true" "1") (k/lstripColons (optionOr (mapGet kw "write") ""))) (not (listEmpty? measured))))
         (lock (if wantLock (writeLock! env measured) (ok "")))
-        (lockOk (mt lock ((ok _) true) ((err _) false)))
+        (lockOk (match lock ((ok _) true) ((err _) false)))
         (healthy (and (listAll? pairFirst bins) (= (resultOr remotes 1) 0) (resultOr (resultMap capText (fn [(t String)] -> Bool true)) false) (not mismatch)
                       lockOk))
         (probes (listAppend (listAppend (map pairSecond bins) (list remoteProbe vfsProbe))
                             (listAppend (listAppend (if (resultOr (resultMap capText (fn [(t String)] -> Bool true)) false) (list) (list "(:capability :id \"registry\" :status :absent :file \"asl/grammar/capabilities.asn\")"))
                                                     (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map (fn [(m (List String))] -> String (optionOr (listGet m 3) "")) measured)))
                                         (listAppend (list (str "(:capability :id \"unprobed\" :count " (stringFromInt64 unprobed) " :status :declaredOnly)"))
-                                                    (mt lock
+                                                    (match lock
                                                       ((ok _) (if wantLock (list (str "(:capability :id \"lock\" :written \"asl/grammar/capabilities.lock\" :entries " (stringFromInt64 (listLength measured)) ")")) (list)))
                                                       ((err e) (list (str "(:capability :id \"lock\" :status :failed :error ERR_WRITE_FAILED :message " (q e) ")"))))))))]
     (GateOutcome :lines (list (str (head id "doctor") " :status \"" (if healthy "ok" "rejected") "\" :health " (if healthy ":nominal" ":degraded") " :probes [" (stringJoin probes " ") "])"))

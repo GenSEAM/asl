@@ -33,7 +33,7 @@ fn extractAgentDocStub doc: DocModule symbolName: Str -> (Option Str)
   (let [(matches (filter (fn [(s DocSymbol)] -> Bool (= s.name symbolName)) doc.symbols))]
     (if (listEmpty? matches)
       (none)
-      (mt (listHead matches)
+      (match (listHead matches)
         ((none) (none))
         ((some s)
           (let [(rules (stringJoin doc.invariants "; "))]
@@ -46,7 +46,7 @@ fn estimateDocTokenSavings doc: DocModule -> Float64
       0.0
       (let [(firstSym (if (listEmpty? doc.symbols) "" (optionOr (listHead doc.symbols) (DocSymbol :name "" :kind "" :signature "" :doc "")).name))
             (stubSample (extractAgentDocStub doc firstSym))]
-        (mt stubSample
+        (match stubSample
           ((none) 0.0)
           ((some stub)
             (let [(stubLen (stringLength stub))

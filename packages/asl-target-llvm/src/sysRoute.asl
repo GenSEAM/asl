@@ -21,48 +21,48 @@ fn routeTables -> (List RouteTable)
   (list (sysNetTable) (sysTable) (clockTable))
 
 fn tableBuiltins t: RouteTable -> (List String)
-  (mt t
+  (match t
     ((sysNetTable) (list "tcpListen" "tcpConnect" "sockAccept" "sockLocalPort" "unixListen" "unixConnect" "unixSocketPair" "sockSendFd" "sockRecvFd"))
     ((sysTable) (listAppend (list "fdRead" "fdWrite" "fdClose" "fdPoll" "fdNonBlocking" "cpuCount" "platformInfo" "localDate" "envList" "procSelf" "procAlive?" "procKill" "procExePath")
                   (listAppend (sys/fileRouteBuiltins) (proc/procRouteBuiltins))))
     ((clockTable) (list "nowNs" "monotonicNs" "sleepMs")))
 
 fn tableExterns facts: libc/TripleFacts t: RouteTable -> (List ty/SsaExtern)
-  (mt t
+  (match t
     ((sysNetTable) (sysNet/sysNetExterns facts))
     ((sysTable) (listAppend (sys/sysExterns facts) (cons (absExtern) (listAppend (environExterns facts) (listAppend (sys/fileRouteExterns facts) (proc/procRouteExterns facts))))))
     ((clockTable) (listAppend (sys/sysExterns facts) (list (absExtern) (ty/ssaExternTyped "strerror" (list (ty/tyI32)) (ty/tyPtr))))))
 
 fn tableStrings t: RouteTable -> (List String)
-  (mt t
+  (match t
     ((sysNetTable) (list "io:"))
     ((sysTable) (listAppend (sysStrings) (listAppend (sys/fileRouteStrings) (proc/procRouteStrings))))
     ((clockTable) (clockStrings)))
 
 fn tableTypes t: RouteTable -> (List ty/SsaTypeDecl)
-  (mt t
+  (match t
     ((sysNetTable) (list (sys/resultTypeDecl) (sys/optionTypeDecl) (pairTypeDecl)))
     ((sysTable) (list (sys/resultTypeDecl) (sys/optionTypeDecl) (pairTypeDecl)))
     ((clockTable) (list (sys/resultTypeDecl))))
 
 fn tableRecords t: RouteTable -> (List ty/SsaRecordDecl)
-  (mt t
+  (match t
     ((sysNetTable) (list))
     ((sysTable) (cons (platformInfoDecl) (listAppend (sys/fileRouteRecords) (proc/procRouteRecords))))
     ((clockTable) (list)))
 
 fn tableGlobals t: RouteTable -> (List ty/SsaGlobal)
-  (mt t
+  (match t
     ((sysNetTable) (list))
     ((sysTable) (listAppend (sys/fileRouteGlobals) (proc/procPreludeGlobals)))
     ((clockTable) (list)))
 
 fn tableFunctions facts: libc/TripleFacts t: RouteTable pool: (Map String Int64) -> (Result (List ty/SsaFunction) String)
-  (mt t
+  (match t
     ((sysNetTable)
-      (mt (sysNet/sysNetFunctions facts)
+      (match (sysNet/sysNetFunctions facts)
         ((err e) (err e))
-        ((ok raw) (mt (netWrappers facts (poolAt pool "io:"))
+        ((ok raw) (match (netWrappers facts (poolAt pool "io:"))
                     ((err e) (err e))
                     ((ok wrappers) (ok (listAppend raw wrappers)))))))
     ((sysTable) (sysTableAll facts pool))
@@ -75,7 +75,7 @@ fn int32Max -> Int64
   2147483647
 
 fn netWrappers facts: libc/TripleFacts ioIndex: Int64 -> (Result (List ty/SsaFunction) String)
-  (mt (libc/libcConst facts "EINVAL")
+  (match (libc/libcConst facts "EINVAL")
     ((none) (err (str "libc.asl has no EINVAL const row for triple " facts.triple)))
     ((some einval)
       (ok (list (intWrapper "tcpListen" "sysNetTcpListen" 0 65535 einval ioIndex)
@@ -187,7 +187,7 @@ fn builtinNames m: ty/SsaModule -> (Map String Bool)
   (fold (fn [(acc (Map String Bool)) (f ty/SsaFunction)] -> (Map String Bool)
           (fold (fn [(acc2 (Map String Bool)) (b ty/SsaBlock)] -> (Map String Bool)
                   (fold (fn [(acc3 (Map String Bool)) (i ty/SsaInstr)] -> (Map String Bool)
-                          (mt i.op
+                          (match i.op
                             ((ty/opBuiltin n _) (mapSet acc3 n true))
                             (_ acc3)))
                         acc2 b.instrs))
@@ -203,7 +203,7 @@ fn routes? m: ty/SsaModule -> Bool
   (not (listEmpty? (tablesUsed m)))
 
 fn rewriteOp names: (List String) op: ty/SsaOp -> ty/SsaOp
-  (mt op
+  (match op
     ((ty/opBuiltin n args) (if (listContains? names n) (ty/opCall (routedCallee n (listLength args)) (routedArgs n args)) op))
     (_ op))
 
@@ -267,7 +267,7 @@ fn stringIndex strings: (List String) -> (Map String Int64)
   (pairSecond
     (fold (fn [(acc (Pair Int64 (Map String Int64))) (s String)] -> (Pair Int64 (Map String Int64))
             (let [(i (pairFirst acc)) (m (pairSecond acc))]
-              (mt (mapGet m s)
+              (match (mapGet m s)
                 ((some _) (pair (+ i 1) m))
                 ((none) (pair (+ i 1) (mapSet m s i))))))
           (pair 0 (mapEmpty)) strings))
@@ -275,7 +275,7 @@ fn stringIndex strings: (List String) -> (Map String Int64)
 fn poolWith strings: (List String) wanted: (List String) -> (Pair (List String) (Map String Int64))
   (let [(grown (fold (fn [(acc (Pair (List String) (Map String Int64))) (s String)] -> (Pair (List String) (Map String Int64))
                         (let [(have (pairFirst acc)) (idx (pairSecond acc))]
-                          (mt (mapGet idx s)
+                          (match (mapGet idx s)
                             ((some _) acc)
                             ((none) (pair (listAppend have (list s)) (mapSet idx s (listLength have)))))))
                       (pair strings (stringIndex strings)) wanted))
@@ -285,9 +285,9 @@ fn poolWith strings: (List String) wanted: (List String) -> (Pair (List String) 
 
 fn tablesFunctions facts: libc/TripleFacts tables: (List RouteTable) pool: (Map String Int64) -> (Result (List ty/SsaFunction) String)
   (fold (fn [(acc (Result (List ty/SsaFunction) String)) (t RouteTable)] -> (Result (List ty/SsaFunction) String)
-          (mt acc
+          (match acc
             ((err e) (err e))
-            ((ok fns) (mt (tableFunctions facts t pool)
+            ((ok fns) (match (tableFunctions facts t pool)
                         ((err e) (err e))
                         ((ok more) (ok (listAppend fns more)))))))
         (ok (list)) tables)
@@ -295,7 +295,7 @@ fn tablesFunctions facts: libc/TripleFacts tables: (List RouteTable) pool: (Map 
 fn callNamesIn f: ty/SsaFunction -> (List String)
   (fold (fn [(acc (List String)) (b ty/SsaBlock)] -> (List String)
           (fold (fn [(acc2 (List String)) (i ty/SsaInstr)] -> (List String)
-                  (mt i.op
+                  (match i.op
                     ((ty/opCall n _) (cons n acc2))
                     ((ty/opMakeClosure n _) (cons n acc2))
                     (_ acc2)))
@@ -306,13 +306,13 @@ fn moduleCallNames fs: (List ty/SsaFunction) -> (List String)
   (fold (fn [(acc (List String)) (f ty/SsaFunction)] -> (List String) (listAppend acc (callNamesIn f))) (list) fs)
 
 fn growReachable toVisit: (List String) fnByName: (Map String ty/SsaFunction) seen: (Map String Bool) -> (Map String Bool)
-  (mt (listHead toVisit)
+  (match (listHead toVisit)
     ((none) seen)
     ((some n)
       (let [(rest (optionOr (listTail toVisit) (list)))]
         (if (some? (mapGet seen n))
           (growReachable rest fnByName seen)
-          (mt (mapGet fnByName n)
+          (match (mapGet fnByName n)
             ((none) (growReachable rest fnByName (mapSet seen n true)))
             ((some f) (growReachable (listAppend (callNamesIn f) rest) fnByName (mapSet seen n true))))))))
 
@@ -326,7 +326,7 @@ fn routeTablesInto facts: libc/TripleFacts m: ty/SsaModule tables: (List RouteTa
         (records (fold (fn [(acc (List ty/SsaRecordDecl)) (t RouteTable)] -> (List ty/SsaRecordDecl) (listAppend acc (tableRecords t))) (list) tables))
         (globals (fold (fn [(acc (List ty/SsaGlobal)) (t RouteTable)] -> (List ty/SsaGlobal) (listAppend acc (tableGlobals t))) (list) tables))
         (externs (dedupeExterns (fold (fn [(acc (List ty/SsaExtern)) (t RouteTable)] -> (List ty/SsaExtern) (listAppend acc (tableExterns facts t))) (list) tables)))]
-    (mt (tablesFunctions facts tables (pairSecond pooled))
+    (match (tablesFunctions facts tables (pairSecond pooled))
       ((err e) (err (list (routeDiag "ERR_LLVM_SYSROUTE_FACTS" e m.name))))
       ((ok fns)
         (let [(available (dedupeFunctions fns))
@@ -339,10 +339,10 @@ fn routeTablesInto facts: libc/TripleFacts m: ty/SsaModule tables: (List RouteTa
               (clashes (filter (fn [(f ty/SsaFunction)] -> Bool (listAny? (fn [(g ty/SsaFunction)] -> Bool (= g.name f.name)) m.functions)) added))]
           (if (not (listEmpty? clashes))
             (err (map (fn [(f ty/SsaFunction)] -> ty/IrDiag (routeDiag "ERR_LLVM_SYSROUTE_NAME" (str "module function '" f.name "' has the name of a routed syscall function") f.name)) clashes))
-            (mt (mergeExterns m.externs externs m.name)
+            (match (mergeExterns m.externs externs m.name)
               ((err diags) (err diags))
               ((ok merged)
-                (mt (mergeRecords m.records records m.name)
+                (match (mergeRecords m.records records m.name)
                   ((err diags) (err diags))
                   ((ok recs)
                     (ok (Routed :result (ty/ssaModule m.name (pairFirst pooled) (withTypes m.types types) recs merged (listAppend m.globals globals)
@@ -381,7 +381,7 @@ fn wasmPrintImportInstrs dest: String args: (List String) index: Int64 spaceInde
 
 fn rewriteImportInstr names: (List String) i: ty/SsaInstr spaceIndex: Int64 -> (List ty/SsaInstr)
   (let [(op i.op)]
-    (mt op
+    (match op
       ((ty/opBuiltin n args)
         (if (and (= n "print") (listContains? names n))
           (if (listEmpty? args)
@@ -416,14 +416,14 @@ fn wasmValParams arity: Int64 -> (List ty/SsaTy)
 fn wasmPrintStrings strings: (List String) names: (List String) -> (Pair (List String) Int64)
   (if (not (listContains? names "print"))
     (pair strings -1)
-    (mt (poolIndex strings " ")
+    (match (poolIndex strings " ")
       ((some index) (pair strings index))
       ((none) (pair (listAppend strings (list " ")) (listLength strings)))))
 
 fn wasmImportInstrDiags m: ty/SsaModule i: ty/SsaInstr -> (List ty/IrDiag)
-  (mt i.op
+  (match i.op
     ((ty/opBuiltin name args)
-      (mt (wasmImportArity name)
+      (match (wasmImportArity name)
         ((none) (list))
         ((some expected)
           (if (or (= name "print") (= (listLength args) expected))
@@ -451,9 +451,9 @@ fn wasmRouteModule facts: libc/TripleFacts m: ty/SsaModule -> (Result Routed (Li
       (err (map (fn [(name String)] -> ty/IrDiag (routeDiag "ERR_CAPABILITY_ABSENT" (str "builtin " name " is absent on target " facts.triple) m.name)) absent))
       (if (not (listEmpty? arityDiags))
         (err arityDiags)
-        (mt (vfy/verifySsa m)
+        (match (vfy/verifySsa m)
           ((err diags) (err diags))
-          ((ok _) (mt (mergeExterns m.externs (wasmImportExterns imports) m.name)
+          ((ok _) (match (mergeExterns m.externs (wasmImportExterns imports) m.name)
             ((err diags) (err diags))
             ((ok externs)
               (ok (Routed :result (ty/ssaModule m.name (pairFirst printStrings) m.types m.records externs m.globals (map (fn [(f ty/SsaFunction)] -> ty/SsaFunction (rewriteImports imports f spaceIndex)) m.functions)) :internal (list))))))))))
@@ -464,7 +464,7 @@ fn routeModule facts: libc/TripleFacts m: ty/SsaModule -> (Result Routed (List t
     (let [(tables (tablesUsed m))]
       (if (listEmpty? tables)
         (ok (Routed :result m :internal (list)))
-        (mt (vfy/verifySsa m)
+        (match (vfy/verifySsa m)
           ((err diags) (err diags))
           ((ok _) (routeTablesInto facts m tables))))))
 
@@ -481,13 +481,13 @@ fn routeFactsFor triple: String -> (Option libc/TripleFacts)
 fn unamePair text: String -> (Option (Pair String String))
   (let [(words (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringReplace text "\n" " ") " ")))]
     (if (= (listLength words) 2)
-      (mt (listHead words)
+      (match (listHead words)
         ((none) (none))
         ((some os) (optionMap (fn [(machine String)] -> (Pair String String) (pair os machine)) (listGet words 1))))
       (none)))
 
 fn hostFactsOf text: String -> (Result (Option libc/TripleFacts) String)
-  (mt (unamePair text)
+  (match (unamePair text)
     ((none) (err (str "uname -s -m printed '" text "', not a sysname and a machine")))
     ((some p) (ok (routeFactsFor (tripleOf (pairFirst p) (pairSecond p))))))
 
@@ -495,9 +495,9 @@ fn ! routeHost! m: ty/SsaModule -> (Result Routed (List ty/IrDiag))
   (if (routes? m)
     (let [(out (processRun "uname -s -m"))
           (host (if (= out.exitCode 0) (unamePair out.stdout) (none)))]
-      (mt host
+      (match host
         ((none) (err (list (routeDiag "ERR_LLVM_SYSROUTE_HOST" (str "uname -s -m exited " out.exitCode " printing '" out.stdout "' " out.stderr) m.name))))
-        ((some p) (mt (routeFactsFor (tripleOf (pairFirst p) (pairSecond p)))
+        ((some p) (match (routeFactsFor (tripleOf (pairFirst p) (pairSecond p)))
                     ((none) (ok (Routed :result m :internal (list))))
                     ((some facts) (routeModule facts m))))))
     (ok (Routed :result m :internal (list))))
@@ -509,7 +509,7 @@ fn internalizeNames names: (List String) -> (Map String Bool)
   (fold (fn [(acc (Map String Bool)) (n String)] -> (Map String Bool) (mapSet acc (ssa/llvmName n) true)) (mapEmpty) names)
 
 fn defineLineSymbol line: String -> String
-  (mt (listGet (stringSplit line "@") 1)
+  (match (listGet (stringSplit line "@") 1)
     ((none) "")
     ((some rest) (optionOr (listHead (stringSplit rest "(")) "")))
 
@@ -523,7 +523,7 @@ fn internalizeLine wanted: (Map String Bool) line: String -> String
 fn internalize res: (Result String (List ty/IrDiag)) names: (List String) -> (Result String (List ty/IrDiag))
   (if (listEmpty? names)
     res
-    (mt res
+    (match res
       ((err diags) (err diags))
       ((ok text)
         (let [(wanted (internalizeNames names))]
@@ -546,7 +546,7 @@ fn routeConst facts: libc/TripleFacts name: String -> (Option Int64)
 fn structFact facts: libc/TripleFacts structName: String field: String -> (Option Int64)
   (if (= field "size")
     (libc/structSize facts structName)
-    (mt (libc/pairFind facts.structs structName)
+    (match (libc/pairFind facts.structs structName)
       ((none) (none))
       ((some sf) (libc/structFieldOffset sf field))))
 
@@ -558,18 +558,18 @@ fn sysFactNames -> (List String)
 
 fn sysFacts facts: libc/TripleFacts -> (Result (Map String Int64) String)
   (let [(resolved (fold (fn [(acc (Result (Map String Int64) String)) (n String)] -> (Result (Map String Int64) String)
-                          (mt acc
+                          (match acc
                             ((err e) (err e))
                             ((ok m)
                               (let [(parts (stringSplit n "."))
                                     (v (if (= (listLength parts) 2)
                                          (structFact facts (optionOr (listGet parts 0) "") (optionOr (listGet parts 1) ""))
                                          (routeConst facts n)))]
-                                (mt v
+                                (match v
                                   ((none) (err (str "no " n " fact for triple " facts.triple)))
                                   ((some x) (ok (mapSet m n x))))))))
                         (ok (mapEmpty)) (sysFactNames)))]
-    (mt resolved
+    (match resolved
       ((err e) (err e))
       ((ok m) (if (= (fact m "pollfd.revents") (+ (fact m "pollfd.events") 2))
                 (ok m)
@@ -1333,26 +1333,26 @@ fn clockTagNameFn pool: (Map String Int64) -> ty/SsaFunction
           (list (sys/block "unknown" (list (poolStr pool "text.unknown" "?")) (ty/termReturn "text.unknown")))))))
 
 fn clockTableFunctions facts: libc/TripleFacts pool: (Map String Int64) -> (Result (List ty/SsaFunction) String)
-  (mt (sysFacts facts)
+  (match (sysFacts facts)
     ((err e) (err e))
     ((ok k)
-      (mt (sys/sysClockGettimeFn facts)
+      (match (sys/sysClockGettimeFn facts)
         ((err e) (err e))
         ((ok clockGettime)
           (ok (list (sys/sysErrnoValueFn facts) clockGettime (tagOfFn) (tagCheckFn pool) (clockTagNameFn pool)
                     (clockFn "nowNs" (fact k "CLOCK_REALTIME") pool) (clockFn "monotonicNs" (fact k "CLOCK_MONOTONIC") pool) (sleepMsFn k pool)))))))
 
 fn sysTableFunctions facts: libc/TripleFacts pool: (Map String Int64) -> (Result (List ty/SsaFunction) String)
-  (mt (sysFacts facts)
+  (match (sysFacts facts)
     ((err e) (err e))
     ((ok k)
-      (mt (sys/sysLocaltimeFn facts)
+      (match (sys/sysLocaltimeFn facts)
         ((err e) (err e))
         ((ok localtime)
-          (mt (sys/sysExePathFn facts)
+          (match (sys/sysExePathFn facts)
             ((err e) (err e))
             ((ok exePath)
-              (mt (sys/sysClockGettimeFn facts)
+              (match (sys/sysClockGettimeFn facts)
                 ((err e) (err e))
                 ((ok clockGettime)
               (ok (list (sys/sysErrnoValueFn facts) (sys/sysWriteFn) (sys/sysCloseFn) (sys/sysFcntlGetFn) (sys/sysFcntlSetFn) localtime exePath
@@ -1363,12 +1363,12 @@ fn sysTableFunctions facts: libc/TripleFacts pool: (Map String Int64) -> (Result
                         clockGettime (clockFn "nowNs" (fact k "CLOCK_REALTIME") pool)))))))))))
 
 fn sysTableAll facts: libc/TripleFacts pool: (Map String Int64) -> (Result (List ty/SsaFunction) String)
-  (mt (sysTableFunctions facts pool)
+  (match (sysTableFunctions facts pool)
     ((err e) (err e))
     ((ok base)
-      (mt (sys/fileRouteFunctions facts pool)
+      (match (sys/fileRouteFunctions facts pool)
         ((err e) (err e))
         ((ok files)
-          (mt (proc/procRouteFunctions facts pool)
+          (match (proc/procRouteFunctions facts pool)
             ((err e) (err e))
             ((ok procs) (ok (listAppend base (listAppend files procs)))))))))

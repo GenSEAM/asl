@@ -5,7 +5,7 @@
 fn readExact! fd: Int64 needed: Int64 acc: String -> (Result String String)
   (if (<= needed 0) (ok acc)
     (let [(r (fdRead fd needed))]
-      (mt r
+      (match r
         ((err e) (err e))
         ((ok s)
           (let [(got (stringLength s))]
@@ -15,7 +15,7 @@ fn readExact! fd: Int64 needed: Int64 acc: String -> (Result String String)
 
 fn readI32! fd: Int64 -> (Result Int64 String)
   (let [(r (readExact! fd 4 ""))]
-    (mt r
+    (match r
       ((err e) (err e))
       ((ok s)
         (let [(b (stringToBytes s))
@@ -25,18 +25,18 @@ fn readI32! fd: Int64 -> (Result Int64 String)
 
 fn serverLoop! tokenizer: tok/Tokenizer -> (Result Int64 String)
   (let [(rCmd (readExact! 0 1 ""))]
-    (mt rCmd
+    (match rCmd
       ((err e) (ok 0))
       ((ok cmd)
         (cond
           ((= cmd "Q") (ok 0))
           ((= cmd "T")
             (let [(rLen (readI32! 0))]
-              (mt rLen
+              (match rLen
                 ((err e) (err e))
                 ((ok len)
                   (let [(rText (readExact! 0 len ""))]
-                    (mt rText
+                    (match rText
                       ((err e) (err e))
                       ((ok text)
                         (let [(cnt (tok/countTokens! tokenizer text))]
@@ -45,15 +45,15 @@ fn serverLoop! tokenizer: tok/Tokenizer -> (Result Int64 String)
                             (serverLoop! tokenizer))))))))))
           ((= cmd "F")
             (let [(rLen (readI32! 0))]
-              (mt rLen
+              (match rLen
                 ((err e) (err e))
                 ((ok len)
                   (let [(rPath (readExact! 0 len ""))]
-                    (mt rPath
+                    (match rPath
                       ((err e) (err e))
                       ((ok path)
                         (let [(rBytes (fileReadBytes path))]
-                          (mt rBytes
+                          (match rBytes
                             ((err e) (err (str "fileReadBytes " path " failed: " e)))
                             ((ok bs)
                               (let [(cnt (tok/countTokensBytes! tokenizer bs))]
@@ -65,7 +65,7 @@ fn serverLoop! tokenizer: tok/Tokenizer -> (Result Int64 String)
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(dataDir (if (listEmpty? args) "data/tokenizers" (optionOr (listHead args) "data/tokenizers")))
         (resTok (tok/loadTokenizer! dataDir))]
-    (mt resTok
+    (match resTok
       ((err e) (err (str "loadTokenizer failed: " e)))
       ((ok tokenizer)
         (serverLoop! tokenizer))))

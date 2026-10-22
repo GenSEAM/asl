@@ -7,7 +7,7 @@ fn ! nativeEval expr: String -> fr/Done
     (do
       (assert (ok? wRes) "probe source must write")
       (let [(built (nt/prepareRun probePath (nt/fingerprint)))]
-        (mt built.binary
+        (match built.binary
           ((none) (do (assert false (str "probe builds natively: " built.reason)) (fr/Done :idx 0 :exit 1 :out "" :ms 0 :verdict "buildFailed")))
           ((some bin) (let [(res (fr/runOne (fr/job (list bin) "." (fr/childEnv (list))))) (_ (pathRemove probePath))] res))))))
 

@@ -37,7 +37,7 @@ fn source -> String
     "(module eqAlias :x [main])"
     "(schema Pt (:f x Int64) (:f y Int64))"
     "fn ! main -> Int64"
-    "  (let [(a (== 7 7)) (b (== 7 8)) (c (== 1.5 1.5)) (d (== \"hi\" \"hi\")) (e (== (Pt :x 1 :y 2) (Pt :x 1 :y 2))) (g (== (list 1 2 3) (list 1 2 3)))]"
+    "  (let [(a (= 7 7)) (b (= 7 8)) (c (= 1.5 1.5)) (d (= \"hi\" \"hi\")) (e (= (Pt :x 1 :y 2) (Pt :x 1 :y 2))) (g (= (list 1 2 3) (list 1 2 3)))]"
     "    (do (println (str a \" \" b \" \" c \" \" d \" \" e \" \" g)) 0))") "\n")
 
 fn diagText diags: (List irTy/IrDiag) -> String
@@ -52,10 +52,10 @@ fn ! testEqAliasAcrossTypes -> Bool
     (do
       (assert (ok? made) "eqAlias temporary fixture directory created")
       (assert (ok? (fileWrite src (source))) "eqAlias fixture source written")
-      (mt (low/lowerSource (source))
+      (match (low/lowerSource (source))
         ((err diags) (do (assert (listEmpty? diags) (str "eqAlias fixture lowers: " (diagText diags))) false))
         ((ok m)
-         (mt (llvm/emitLlvmProgramNative! m "main")
+         (match (llvm/emitLlvmProgramNative! m "main")
            ((err diags) (do (assert (listEmpty? diags) (str "eqAlias fixture emits: " (diagText diags))) false))
            ((ok code)
             (do
@@ -68,12 +68,12 @@ fn ! testEqAliasAcrossTypes -> Bool
                   (assert (= native.stderr "") (str "eqAlias native fixture prints no stderr: " native.stderr))
                   (assert (fileExists? exe) "eqAlias native binary exists on disk")
                   (assert (stringContains? code "define") "the emitted LLVM IR defines at least one function")
-                  (assert (= native.stdout "true false true true true true\n") (str "== on Int64, Float64, String, a record and a list all compute correctly natively: " native.stdout))
+                  (assert (= native.stdout "true false true true true true\n") (str "= on Int64, Float64, String, a record and a list all compute correctly natively: " native.stdout))
                   true)))))))
       (assert (ok? (pathRemove dir)) "eqAlias temporary fixture directory removed")
       true))
 
 fn ! runTests -> Bool
   (do
-    (assert (testEqAliasAcrossTypes) "== lowers natively on Int64, Float64, String, a record and a list, matching the interpreter")
+    (assert (testEqAliasAcrossTypes) "= lowers natively on Int64, Float64, String, a record and a list, matching the interpreter")
     true)

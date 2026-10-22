@@ -25,7 +25,7 @@ fn stripColon s: Str -> Str
   (if (stringStartsWith? s ":") (optionOr (stringSlice s 1 (stringLength s)) "") s)
 
 fn cleanTokenText t: lx/Token -> Str
-  (let [(raw t.rawText)] (mt t.kind ((lx/tokString _) (stripQuotes raw)) (_ raw)))
+  (let [(raw t.rawText)] (match t.kind ((lx/tokString _) (stripQuotes raw)) (_ raw)))
 
 fn lastSlashAt s: Str i: Int64 -> Int64
   (if (< i 0) -1 (if (= (optionOr (stringSlice s i (+ i 1)) "") "/") i (lastSlashAt s (- i 1))))
@@ -41,7 +41,7 @@ fn baseNameOf p: Str -> Str
 fn ! isDanglingComponent? p: Str -> Bool
   (let [(parent (parentDirOf p))
         (base (baseNameOf p))]
-    (mt (dirList parent)
+    (match (dirList parent)
       ((err _) false)
       ((ok entries)
         (and (listContains? entries base) (err? (fileStat p))))))
@@ -65,41 +65,41 @@ fn isSafePath! path: Str -> Bool
     false
     (if (hasDanglingSymlink? path)
       false
-      (mt (realPath ".")
+      (match (realPath ".")
         ((err _) false)
         ((ok wsRoot)
           (let [(target (existingAncestor! path))]
-            (mt (realPath target)
+            (match (realPath target)
               ((err _) false)
               ((ok canon)
                 (or (= canon wsRoot) (stringStartsWith? canon (str wsRoot "/"))))))))))
 
 fn findDefun forms: (List a/TopForm) -> (Option a/DefunNode)
-  (mt (listHead forms) ((some form) (mt form ((a/topDefun d) (some d)) (_ (mt (listTail forms) ((some rest) (findDefun rest)) ((none) (none)))))) ((none) (none)))
+  (match (listHead forms) ((some form) (match form ((a/topDefun d) (some d)) (_ (match (listTail forms) ((some rest) (findDefun rest)) ((none) (none)))))) ((none) (none)))
 
 fn evalSeq! body: (List rd/SExpr) env: ev/EvalEnv -> ev/EvalValue
-  (mt (listHead body) ((some firstExpr) (let [(val (ev/evalSexpr! firstExpr env))] (mt val ((ev/valError _) val) (_ (mt (listTail body) ((some rest) (if (listEmpty? rest) val (evalSeq! rest env))) ((none) val)))))) ((none) (ev/valNull)))
+  (match (listHead body) ((some firstExpr) (let [(val (ev/evalSexpr! firstExpr env))] (match val ((ev/valError _) val) (_ (match (listTail body) ((some rest) (if (listEmpty? rest) val (evalSeq! rest env))) ((none) val)))))) ((none) (ev/valNull)))
 
 fn getArgKwLoop args: (List BatchArg) key: Str idx: Int64 len: Int64 -> (Option Str)
-  (if (>= idx len) (none) (let [(arg (optionOr (listGet args idx) (argPos "")))] (mt arg ((argKw k v) (if (= k key) (some v) (getArgKwLoop args key (+ idx 1) len))) (_ (getArgKwLoop args key (+ idx 1) len)))))
+  (if (>= idx len) (none) (let [(arg (optionOr (listGet args idx) (argPos "")))] (match arg ((argKw k v) (if (= k key) (some v) (getArgKwLoop args key (+ idx 1) len))) (_ (getArgKwLoop args key (+ idx 1) len)))))
 
 fn getArgKw args: (List BatchArg) key: Str -> (Option Str)
   (getArgKwLoop args key 0 (listLength args))
 
 fn getArgPosLoop args: (List BatchArg) targetIdx: Int64 currPos: Int64 idx: Int64 len: Int64 -> (Option Str)
-  (if (>= idx len) (none) (let [(arg (optionOr (listGet args idx) (argPos "")))] (mt arg ((argPos v) (if (= currPos targetIdx) (some v) (getArgPosLoop args targetIdx (+ currPos 1) (+ idx 1) len))) (_ (getArgPosLoop args targetIdx currPos (+ idx 1) len)))))
+  (if (>= idx len) (none) (let [(arg (optionOr (listGet args idx) (argPos "")))] (match arg ((argPos v) (if (= currPos targetIdx) (some v) (getArgPosLoop args targetIdx (+ currPos 1) (+ idx 1) len))) (_ (getArgPosLoop args targetIdx currPos (+ idx 1) len)))))
 
 fn getArgPos args: (List BatchArg) posIdx: Int64 -> (Option Str)
   (getArgPosLoop args posIdx 0 0 (listLength args))
 
 fn getArgVal args: (List BatchArg) key: Str posIdx: Int64 fallback: Str -> Str
-  (let [(kwOpt (getArgKw args key))] (mt kwOpt ((some v) v) ((none) (let [(posOpt (getArgPos args posIdx))] (mt posOpt ((some pv) pv) ((none) fallback))))))
+  (let [(kwOpt (getArgKw args key))] (match kwOpt ((some v) v) ((none) (let [(posOpt (getArgPos args posIdx))] (match posOpt ((some pv) pv) ((none) fallback))))))
 
 fn executeEchoStep stepId: Int64 args: (List BatchArg) -> StepResult
   (let [(msg1 (getArgVal args "message" 0 "")) (msg (if (= msg1 "") (getArgVal args "echo" 0 "") msg1))] (StepResult :id stepId :op "echo" :status "ok" :isErr false :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"echo\" :status \"ok\" :message \"" (escapeStr msg) "\")")))
 
 fn executeEvalStep! stepId: Int64 args: (List BatchArg) -> StepResult
-  (let [(expr (getArgVal args "expr" 0 ""))] (if (= expr "") (StepResult :id stepId :op "eval" :status "rejected" :isErr true :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"eval\" :status \"rejected\" :error-code \":ERR_MISSING_ARG\" :message \"Missing expr argument\")")) (let [(wrapped (str "(fn eval-temp [] -> Any\n  " expr ")"))] (mt (a/parse wrapped) ((err pe) (StepResult :id stepId :op "eval" :status "rejected" :isErr true :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"eval\" :status \"rejected\" :error-code \":ERR_EVAL_FAILED\" :message \"" (escapeStr pe.msg) "\")"))) ((ok forms) (let [(dfOpt (findDefun forms))] (mt dfOpt ((none) (StepResult :id stepId :op "eval" :status "rejected" :isErr true :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"eval\" :status \"rejected\" :error-code \":ERR_EVAL_FAILED\" :message \"No expression found\")"))) ((some dfNode) (let [(body dfNode.body)] (if (listEmpty? body) (StepResult :id stepId :op "eval" :status "ok" :isErr false :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"eval\" :status \"ok\" :result \"null\")")) (let [(env (ev/makeRootEnv)) (lastVal (evalSeq! body env))] (mt lastVal ((ev/valError emsg) (StepResult :id stepId :op "eval" :status "rejected" :isErr true :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"eval\" :status \"rejected\" :error-code \":ERR_EVAL_FAILED\" :message \"" (escapeStr emsg) "\")"))) (_ (StepResult :id stepId :op "eval" :status "ok" :isErr false :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"eval\" :status \"ok\" :result \"" (escapeStr (ev/formatVal lastVal)) "\")")))))))))))))))
+  (let [(expr (getArgVal args "expr" 0 ""))] (if (= expr "") (StepResult :id stepId :op "eval" :status "rejected" :isErr true :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"eval\" :status \"rejected\" :error-code \":ERR_MISSING_ARG\" :message \"Missing expr argument\")")) (let [(wrapped (str "(fn eval-temp [] -> Any\n  " expr ")"))] (match (a/parse wrapped) ((err pe) (StepResult :id stepId :op "eval" :status "rejected" :isErr true :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"eval\" :status \"rejected\" :error-code \":ERR_EVAL_FAILED\" :message \"" (escapeStr pe.msg) "\")"))) ((ok forms) (let [(dfOpt (findDefun forms))] (match dfOpt ((none) (StepResult :id stepId :op "eval" :status "rejected" :isErr true :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"eval\" :status \"rejected\" :error-code \":ERR_EVAL_FAILED\" :message \"No expression found\")"))) ((some dfNode) (let [(body dfNode.body)] (if (listEmpty? body) (StepResult :id stepId :op "eval" :status "ok" :isErr false :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"eval\" :status \"ok\" :result \"null\")")) (let [(env (ev/makeRootEnv)) (lastVal (evalSeq! body env))] (match lastVal ((ev/valError emsg) (StepResult :id stepId :op "eval" :status "rejected" :isErr true :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"eval\" :status \"rejected\" :error-code \":ERR_EVAL_FAILED\" :message \"" (escapeStr emsg) "\")"))) (_ (StepResult :id stepId :op "eval" :status "ok" :isErr false :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"eval\" :status \"ok\" :result \"" (escapeStr (ev/formatVal lastVal)) "\")")))))))))))))))
 
 fn executeReadStep! stepId: Int64 args: (List BatchArg) staged: (Map Str Str) -> StepResult
   (let [(f1 (getArgVal args "file" 0 "")) (file (if (= f1 "") (getArgVal args "path" 0 "") f1))]
@@ -113,7 +113,7 @@ fn executeReadStep! stepId: Int64 args: (List BatchArg) staged: (Map Str Str) ->
           (if (not (fileExists? file))
             (makeStepResultErr stepId "read" ":ERR_FILE_NOT_FOUND" (str "File not found: " file))
             (let [(readRes (fileReadString file))]
-              (mt readRes
+              (match readRes
                 ((err _) (makeStepResultErr stepId "read" ":ERR_READ_FAILED" (str "Failed to read file: " file)))
                 ((ok content) (StepResult :id stepId :op "read" :status "ok" :isErr false :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"read\" :status \"ok\" :file \"" (escapeStr file) "\" :content \"" (escapeStr content) "\")"))))))))))
 
@@ -124,7 +124,7 @@ fn executeWriteStep! stepId: Int64 args: (List BatchArg) staged: (Map Str Str) -
       (if (not (isSafePath! file))
         (pair (makeStepResultErr stepId "write" ":ERR_BOUNDARY_VIOLATION" (str "Path escapes workspace boundary: " file)) staged)
         (let [(writeRes (fileWrite file content))]
-          (mt writeRes
+          (match writeRes
             ((err _) (pair (makeStepResultErr stepId "write" ":ERR_WRITE_FAILED" "Write failed") staged))
             ((ok _)
               (let [(newStaged (mapRemove staged file))
@@ -149,9 +149,9 @@ fn executeEditStep! stepId: Int64 args: (List BatchArg) staged: (Map Str Str) ->
         (let [(contentOpt (if (mapHas? staged file)
                             (some (optionOr (mapGet staged file) ""))
                             (if (fileExists? file)
-                              (mt (fileReadString file) ((ok s) (some s)) ((err _) (none)))
+                              (match (fileReadString file) ((ok s) (some s)) ((err _) (none)))
                               (none))))]
-          (mt contentOpt
+          (match contentOpt
             ((none)
               (if (and (not (mapHas? staged file)) (not (fileExists? file)))
                 (pair (makeStepResultErr stepId "edit" ":ERR_FILE_NOT_FOUND" (str "File not found: " file)) staged)
@@ -165,13 +165,13 @@ fn executeEditStep! stepId: Int64 args: (List BatchArg) staged: (Map Str Str) ->
                   (pair res nextStaged)))))))))
 
 fn renderLineDiff diskLines: (List Str) stagedLines: (List Str) -> Str
-  (mt (listHead diskLines)
+  (match (listHead diskLines)
     ((none)
-      (mt (listHead stagedLines)
+      (match (listHead stagedLines)
         ((none) "")
         ((some s) (str "+ " s "\n" (renderLineDiff (list) (optionOr (listTail stagedLines) (list)))))))
     ((some d)
-      (mt (listHead stagedLines)
+      (match (listHead stagedLines)
         ((none) (str "- " d "\n" (renderLineDiff (optionOr (listTail diskLines) (list)) (list))))
         ((some s)
           (let [(tailD (optionOr (listTail diskLines) (list)))
@@ -254,7 +254,7 @@ fn executePreflushStep! stepId: Int64 args: (List BatchArg) staged: (Map Str Str
           (if (not (fileExists? file))
             (makeStepResultErr stepId "preflush" ":ERR_FILE_NOT_FOUND" (str "File not found: " file))
             (let [(readRes (fileReadString file))]
-              (mt readRes
+              (match readRes
                 ((err _) (makeStepResultErr stepId "preflush" ":ERR_READ_FAILED" (str "Failed to read file: " file)))
                 ((ok content)
                   (if (not (isBalancedDyck1 content))
@@ -262,7 +262,7 @@ fn executePreflushStep! stepId: Int64 args: (List BatchArg) staged: (Map Str Str
                     (StepResult :id stepId :op "preflush" :status "ok" :isErr false :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"preflush\" :status \"ok\" :file \"" (escapeStr file) "\" :canFlush true :checksPassed [:dyck1Purity :syntaxIntegrity :zeroLineNumbers])")))))))))))
 
 fn validateAllStaged! pairs: (List (Pair Str Str)) -> (Option (Pair Str Str))
-  (mt (listHead pairs)
+  (match (listHead pairs)
     ((none) (none))
     ((some p)
       (let [(f (pairFirst p)) (content (pairSecond p))]
@@ -273,16 +273,16 @@ fn validateAllStaged! pairs: (List (Pair Str Str)) -> (Option (Pair Str Str))
             (validateAllStaged! (optionOr (listTail pairs) (list))))))))
 
 fn writeAllStaged! pairs: (List (Pair Str Str)) -> (Option (Pair Str Str))
-  (mt (listHead pairs)
+  (match (listHead pairs)
     ((none) (none))
     ((some p)
       (let [(f (pairFirst p)) (content (pairSecond p))]
-        (mt (fileWrite f content)
+        (match (fileWrite f content)
           ((err e) (some (pair ":ERR_WRITE_FAILED" (str "Failed to write file " f ": " e))))
           ((ok _) (writeAllStaged! (optionOr (listTail pairs) (list))))))))
 
 fn flushAllStaged! pairs: (List (Pair Str Str)) -> (Option (Pair Str Str))
-  (mt (validateAllStaged! pairs)
+  (match (validateAllStaged! pairs)
     ((some errPair) (some errPair))
     ((none) (writeAllStaged! pairs)))
 
@@ -292,7 +292,7 @@ fn executeFlushStep! stepId: Int64 args: (List BatchArg) staged: (Map Str Str) -
       (if (= (mapSize staged) 0)
         (pair (StepResult :id stepId :op "flush" :status "ok" :isErr false :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"flush\" :status \"ok\" :persisted true)")) staged)
         (let [(flushErr (flushAllStaged! (mapPairs staged)))]
-          (mt flushErr
+          (match flushErr
             ((some errPair)
               (pair (makeStepResultErr stepId "flush" (pairFirst errPair) (pairSecond errPair)) staged))
             ((none)
@@ -303,14 +303,14 @@ fn executeFlushStep! stepId: Int64 args: (List BatchArg) staged: (Map Str Str) -
           (let [(content (optionOr (mapGet staged file) ""))]
             (if (not (isBalancedDyck1 content))
               (pair (makeStepResultErr stepId "flush" ":ERR_SYNTAX_MALFORMATION" (str "Tier-0 preflush failed: unbalanced Dyck-1 delimiters in " file)) staged)
-              (mt (fileWrite file content)
+              (match (fileWrite file content)
                 ((err _) (pair (makeStepResultErr stepId "flush" ":ERR_WRITE_FAILED" "Write failed") staged))
                 ((ok _)
                   (pair (StepResult :id stepId :op "flush" :status "ok" :isErr false :output (str "  (:step :id " (stringFromInt64 stepId) " :op \"flush\" :status \"ok\" :file \"" (escapeStr file) "\" :persisted true)")) (mapRemove staged file))))))
           (if (not (fileExists? file))
             (pair (makeStepResultErr stepId "flush" ":ERR_FILE_NOT_FOUND" (str "File not found: " file)) staged)
             (let [(readRes (fileReadString file))]
-              (mt readRes
+              (match readRes
                 ((err _) (pair (makeStepResultErr stepId "flush" ":ERR_READ_FAILED" (str "Failed to read file: " file)) staged))
                 ((ok content)
                   (if (not (isBalancedDyck1 content))
@@ -353,13 +353,13 @@ fn executeSingleStep! stepId: Int64 op: Str args: (List BatchArg) -> StepResult
   (pairFirst (executeStepWithStaging! stepId op args (mapEmpty)))
 
 fn parseStepArgsLoop tokens: (List lx/Token) idx: Int64 len: Int64 acc: (List BatchArg) -> (Pair (List BatchArg) Int64)
-  (if (>= idx len) (pair (listReverse acc) idx) (let [(t (optionOr (listGet tokens idx) (lx/makeToken (lx/tokEof) "" 0 0)))] (mt t.kind ((lx/tokRparen) (pair (listReverse acc) (+ idx 1))) ((lx/tokKeyword key) (if (< (+ idx 1) len) (let [(valTok (optionOr (listGet tokens (+ idx 1)) (lx/makeToken (lx/tokEof) "" 0 0)))] (mt valTok.kind ((lx/tokRparen) (pair (listReverse (cons (argKw (stripColon key) "") acc)) (+ idx 1))) (_ (parseStepArgsLoop tokens (+ idx 2) len (cons (argKw (stripColon key) (cleanTokenText valTok)) acc))))) (parseStepArgsLoop tokens (+ idx 1) len (cons (argKw (stripColon key) "") acc)))) ((lx/tokLparen) (parseStepArgsLoop tokens (+ idx 1) len acc)) (_ (parseStepArgsLoop tokens (+ idx 1) len (cons (argPos (cleanTokenText t)) acc))))))
+  (if (>= idx len) (pair (listReverse acc) idx) (let [(t (optionOr (listGet tokens idx) (lx/makeToken (lx/tokEof) "" 0 0)))] (match t.kind ((lx/tokRparen) (pair (listReverse acc) (+ idx 1))) ((lx/tokKeyword key) (if (< (+ idx 1) len) (let [(valTok (optionOr (listGet tokens (+ idx 1)) (lx/makeToken (lx/tokEof) "" 0 0)))] (match valTok.kind ((lx/tokRparen) (pair (listReverse (cons (argKw (stripColon key) "") acc)) (+ idx 1))) (_ (parseStepArgsLoop tokens (+ idx 2) len (cons (argKw (stripColon key) (cleanTokenText valTok)) acc))))) (parseStepArgsLoop tokens (+ idx 1) len (cons (argKw (stripColon key) "") acc)))) ((lx/tokLparen) (parseStepArgsLoop tokens (+ idx 1) len acc)) (_ (parseStepArgsLoop tokens (+ idx 1) len (cons (argPos (cleanTokenText t)) acc))))))
 
 fn parseOneStep tokens: (List lx/Token) startIdx: Int64 len: Int64 stepId: Int64 -> (Pair (Option BatchStep) Int64)
-  (if (>= startIdx len) (pair (none) startIdx) (let [(t0 (optionOr (listGet tokens startIdx) (lx/makeToken (lx/tokEof) "" 0 0)))] (mt t0.kind ((lx/tokLparen) (if (< (+ startIdx 1) len) (let [(opTok (optionOr (listGet tokens (+ startIdx 1)) (lx/makeToken (lx/tokEof) "" 0 0))) (opName (stripColon (cleanTokenText opTok))) (argsParsed (parseStepArgsLoop tokens (+ startIdx 2) len (list)))] (pair (some (BatchStep :id stepId :op opName :args (pairFirst argsParsed))) (pairSecond argsParsed))) (pair (none) len))) (_ (pair (none) (+ startIdx 1))))))
+  (if (>= startIdx len) (pair (none) startIdx) (let [(t0 (optionOr (listGet tokens startIdx) (lx/makeToken (lx/tokEof) "" 0 0)))] (match t0.kind ((lx/tokLparen) (if (< (+ startIdx 1) len) (let [(opTok (optionOr (listGet tokens (+ startIdx 1)) (lx/makeToken (lx/tokEof) "" 0 0))) (opName (stripColon (cleanTokenText opTok))) (argsParsed (parseStepArgsLoop tokens (+ startIdx 2) len (list)))] (pair (some (BatchStep :id stepId :op opName :args (pairFirst argsParsed))) (pairSecond argsParsed))) (pair (none) len))) (_ (pair (none) (+ startIdx 1))))))
 
 fn parseBatchBodyLoop tokens: (List lx/Token) idx: Int64 len: Int64 seqFlag: Bool currId: Int64 acc: (List BatchStep) -> BatchRequest
-  (if (>= idx len) (BatchRequest :seq seqFlag :steps (listReverse acc)) (let [(t (optionOr (listGet tokens idx) (lx/makeToken (lx/tokEof) "" 0 0)))] (mt t.kind ((lx/tokRparen) (BatchRequest :seq seqFlag :steps (listReverse acc))) ((lx/tokEof) (BatchRequest :seq seqFlag :steps (listReverse acc))) ((lx/tokKeyword key) (let [(k (stripColon key))] (if (or (= k "seq") (= k "sequenced")) (if (< (+ idx 1) len) (let [(valTok (optionOr (listGet tokens (+ idx 1)) (lx/makeToken (lx/tokEof) "" 0 0))) (v (cleanTokenText valTok))] (parseBatchBodyLoop tokens (+ idx 2) len (or (= v "true") (= v ":true")) currId acc)) (parseBatchBodyLoop tokens (+ idx 1) len true currId acc)) (parseBatchBodyLoop tokens (+ idx 1) len seqFlag currId acc)))) ((lx/tokLparen) (let [(parsed (parseOneStep tokens idx len currId))] (mt (pairFirst parsed) ((some stp) (parseBatchBodyLoop tokens (pairSecond parsed) len seqFlag (+ currId 1) (cons stp acc))) ((none) (parseBatchBodyLoop tokens (pairSecond parsed) len seqFlag currId acc))))) (_ (parseBatchBodyLoop tokens (+ idx 1) len seqFlag currId acc)))))
+  (if (>= idx len) (BatchRequest :seq seqFlag :steps (listReverse acc)) (let [(t (optionOr (listGet tokens idx) (lx/makeToken (lx/tokEof) "" 0 0)))] (match t.kind ((lx/tokRparen) (BatchRequest :seq seqFlag :steps (listReverse acc))) ((lx/tokEof) (BatchRequest :seq seqFlag :steps (listReverse acc))) ((lx/tokKeyword key) (let [(k (stripColon key))] (if (or (= k "seq") (= k "sequenced")) (if (< (+ idx 1) len) (let [(valTok (optionOr (listGet tokens (+ idx 1)) (lx/makeToken (lx/tokEof) "" 0 0))) (v (cleanTokenText valTok))] (parseBatchBodyLoop tokens (+ idx 2) len (or (= v "true") (= v ":true")) currId acc)) (parseBatchBodyLoop tokens (+ idx 1) len true currId acc)) (parseBatchBodyLoop tokens (+ idx 1) len seqFlag currId acc)))) ((lx/tokLparen) (let [(parsed (parseOneStep tokens idx len currId))] (match (pairFirst parsed) ((some stp) (parseBatchBodyLoop tokens (pairSecond parsed) len seqFlag (+ currId 1) (cons stp acc))) ((none) (parseBatchBodyLoop tokens (pairSecond parsed) len seqFlag currId acc))))) (_ (parseBatchBodyLoop tokens (+ idx 1) len seqFlag currId acc)))))
 
 fn parseTokensToRequest tokens: (List lx/Token) -> BatchRequest
   (let [(len (listLength tokens))]
@@ -367,7 +367,7 @@ fn parseTokensToRequest tokens: (List lx/Token) -> BatchRequest
       (BatchRequest :seq false :steps (list))
       (let [(t0 (optionOr (listGet tokens 0) (lx/makeToken (lx/tokEof) "" 0 0)))
             (t1 (optionOr (listGet tokens 1) (lx/makeToken (lx/tokEof) "" 0 0)))]
-        (mt t0.kind
+        (match t0.kind
           ((lx/tokLparen)
             (let [(headName (stripColon (cleanTokenText t1)))]
               (if (= headName "batch")

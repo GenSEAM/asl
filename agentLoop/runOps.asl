@@ -113,7 +113,7 @@ fn rl k: String v: (List String) -> (Pair String RVal)
   (pair k (rList v))
 
 fn serVal v: RVal -> String
-  (mt v
+  (match v
     ((rStr s) (c/serString s))
     ((rInt n) (itos n))
     ((rBool b) (if b "true" "false"))
@@ -123,22 +123,22 @@ fn serRec rec: (List (Pair String RVal)) -> String
   (str "(r" (stringJoin (map (fn [p] (str " (" (pairFirst p) " " (serVal (pairSecond p)) ")")) rec) "") ")")
 
 fn opGet op: (List (Pair String c/KvVal)) key: String -> (Option c/KvVal)
-  (mt (listHead (filter (fn [p] (= (pairFirst p) key)) op))
+  (match (listHead (filter (fn [p] (= (pairFirst p) key)) op))
     ((some p) (some (pairSecond p)))
     ((none) (none)))
 
 fn kvText v: c/KvVal -> String
-  (mt v ((c/kvStr s) s) ((c/kvInt d) d))
+  (match v ((c/kvStr s) s) ((c/kvInt d) d))
 
 fn kvTruthy v: c/KvVal -> Bool
-  (mt v
+  (match v
     ((c/kvStr s) (not (stringEmpty? s)))
     ((c/kvInt d) (!= (optionOr (stringToInt64 d) 0) 0)))
 
 fn firstTruthy op: (List (Pair String c/KvVal)) keys: (List String) -> String
   (if (listEmpty? keys)
     ""
-    (mt (opGet op (c/firstOf keys))
+    (match (opGet op (c/firstOf keys))
       ((some v) (if (kvTruthy v) (kvText v) (firstTruthy op (c/restOf keys))))
       ((none) (firstTruthy op (c/restOf keys)))))
 
@@ -313,18 +313,18 @@ fn scanTokens toks: (List String) -> (Option (Pair String String))
         (else (scanTokens rest)))))
 
 fn checkRunGitGuard cmd: String -> (Option (Pair String String))
-  (scanTokens (mt (shellWords cmd) ((ok ws) ws) ((err _) (reSplitWs cmd))))
+  (scanTokens (match (shellWords cmd) ((ok ws) ws) ((err _) (reSplitWs cmd))))
 
 fn rootOrDot root: String -> String
   (if (stringEmpty? root) "." root)
 
 fn runOutward cmd: String owns: (List String) root: String -> (Result String String)
-  (mt (shellWords cmd)
+  (match (shellWords cmd)
     ((err e) (err e))
     ((ok ws) (ok (c/runOutward ws owns (rootOrDot root)))))
 
 fn runReadOnly cmd: String -> Bool
-  (mt (shellWords cmd)
+  (match (shellWords cmd)
     ((err _) false)
     ((ok ws) (and (not (listEmpty? ws)) (c/runReadOnly ws))))
 
@@ -433,7 +433,7 @@ fn joinPath a: String b: String -> String
     (else (str a "/" b)))
 
 fn parentDir p: String -> String
-  (mt (listLast (listIndexesOf p "/"))
+  (match (listLast (listIndexesOf p "/"))
     ((some i) (c/sliceOf p 0 i))
     ((none) ""))
 
@@ -444,10 +444,10 @@ fn listIndexesOf s: String sub: String -> (List Int64)
     (filter (fn [i] (= (byteAt bs i) b)) (range 0 n)))
 
 fn isFile! p: String -> Bool
-  (mt (fileStat p) ((ok st) st.isFile) ((err _) false))
+  (match (fileStat p) ((ok st) st.isFile) ((err _) false))
 
 fn isDir! p: String -> Bool
-  (mt (fileStat p) ((ok st) st.isDir) ((err _) false))
+  (match (fileStat p) ((ok st) st.isDir) ((err _) false))
 
 fn insideRoot! path: String rootDir: String -> Bool
   (let [root (rootOrDot rootDir)
@@ -481,7 +481,7 @@ fn readyOn ready: (List (Pair Int64 Int64)) fd: Int64 -> Bool
   (listAny? (fn [q] (= (pairFirst q) fd)) ready)
 
 fn readOne! fd: Int64 -> (Pair Bool String)
-  (mt (fdRead fd 65536)
+  (match (fdRead fd 65536)
     ((ok chunk) (if (stringEmpty? chunk) (do (fdClose fd) (pair false "")) (pair true chunk)))
     ((err e) (if (= e "wouldBlock") (pair true "") (do (fdClose fd) (pair false "")))))
 
@@ -489,7 +489,7 @@ fn pumpOnce! p: Proc ms: Int64 -> (Pair Bool Proc)
   (let [fds (pollSet p)]
     (if (listEmpty? fds)
       (do (if (> ms 0) (sleepMs ms) ()) (pair false p))
-      (mt (fdPoll fds ms)
+      (match (fdPoll fds ms)
         ((err _) (pair false p))
         ((ok ready)
           (if (listEmpty? ready)
@@ -511,8 +511,8 @@ fn closeIn! p: Proc -> Proc
 fn reap! p: Proc -> Proc
   (if (some? p.code)
     p
-    (mt (procWaitPid p.pid true)
-      ((ok got) (mt got ((some c) (closeIn! (withState p p.inOpen (some c) p.signalled))) ((none) p)))
+    (match (procWaitPid p.pid true)
+      ((ok got) (match got ((some c) (closeIn! (withState p p.inOpen (some c) p.signalled))) ((none) p)))
       ((err _) (closeIn! (withState p p.inOpen (some 255) p.signalled)))))
 
 fn refresh! p: Proc -> Proc
@@ -525,7 +525,7 @@ fn exitOf p: Proc -> (Option Int64)
   p.code
 
 fn stateOf p: Proc -> String
-  (mt p.code
+  (match p.code
     ((none) "running")
     ((some c) (if (= c 0) "completed" "failed")))
 
@@ -534,7 +534,7 @@ fn waitGone! p: Proc left: Int64 -> Proc
     (if (or (not (running q)) (<= left 0)) q (do (sleepMs 10) (waitGone! q (- left 10)))))
 
 fn signalGroup! pid: Int64 sig: String -> Bool
-  (mt (procKill (- 0 pid) sig)
+  (match (procKill (- 0 pid) sig)
     ((ok _) true)
     ((err e) (if (= e "noProcess") true (ok? (procKill pid "SIGKILL")))))
 
@@ -543,7 +543,7 @@ fn reapKilled! p: Proc killed: Bool -> Proc
     ((not (running p)) (withState p p.inOpen p.code true))
     ((not killed) (withState p p.inOpen p.code true))
     (else
-      (mt (procWaitPid p.pid false)
+      (match (procWaitPid p.pid false)
         ((ok got) (closeIn! (withState p p.inOpen (some (optionOr got -9)) true)))
         ((err _) (closeIn! (withState p p.inOpen (some -9) true))))))
 
@@ -577,7 +577,7 @@ fn removeFirst xs: (List String) x: String -> (List String)
     (if (= (c/firstOf xs) x) (c/restOf xs) (cons (c/firstOf xs) (removeFirst (c/restOf xs) x))))
 
 fn updateProc procs: Procs sid: String f: (fn [Proc] -> Proc) -> Procs
-  (mt (tableGet procs.table sid)
+  (match (tableGet procs.table sid)
     ((some p) (withTable procs (tablePut procs.table (f p))))
     ((none) procs))
 
@@ -585,7 +585,7 @@ fn drainProcs! procs: Procs -> Procs
   (withTable procs (map (fn [p] (if (or p.outOpen p.errOpen) (refresh! p) (reap! p))) procs.table))
 
 fn envKey row: String -> String
-  (mt (stringIndexOf row "=") ((some i) (c/sliceOf row 0 i)) ((none) row))
+  (match (stringIndexOf row "=") ((some i) (c/sliceOf row 0 i)) ((none) row))
 
 fn spawnEnv! ctx: RunCtx absRoot: String -> (List String)
   (let [base (listAppend (filter (fn [r] (!= (envKey r) "PWD")) (envList)) (list (str "PWD=" absRoot)))
@@ -596,7 +596,7 @@ fn spawnProc! sid: String cmd: String ctx: RunCtx stdin: Bool -> (Result Proc St
   (let [absRoot (pyAbspath! (rootOrDot ctx.root))]
     (if (not (isDir! absRoot))
       (err (str "no directory " absRoot))
-      (mt (procSpawnv (list "/bin/sh" "-c" cmd) (some absRoot) (some (spawnEnv! ctx absRoot)))
+      (match (procSpawnv (list "/bin/sh" "-c" cmd) (some absRoot) (some (spawnEnv! ctx absRoot)))
         ((err kind) (err kind))
         ((ok sp)
           (let [inOpen (if stdin (ok? (fdNonBlocking sp.stdin true)) (do (fdClose sp.stdin) false))]
@@ -613,19 +613,19 @@ fn nulSplit s: String -> (List String)
   (filter (fn [x] (not (stringEmpty? x))) (stringSplit s "\x00"))
 
 fn markOf! root: String rel: String -> (Result (Option Mark) String)
-  (mt (fileStat (joinPath root rel))
+  (match (fileStat (joinPath root rel))
     ((ok st) (ok (some (Mark :rel rel :size st.size :mtime st.mtime))))
     ((err e) (if (stringStartsWith? e "notFound") (ok (none)) (err e))))
 
 fn collectMarks! root: String rels: (List String) acc: (List Mark) -> (Result (List Mark) String)
   (if (listEmpty? rels)
     (ok (sortMarks acc))
-    (mt (markOf! root (c/firstOf rels))
+    (match (markOf! root (c/firstOf rels))
       ((err e) (err e))
-      ((ok m) (collectMarks! root (c/restOf rels) (mt m ((some x) (cons x acc)) ((none) acc))))))
+      ((ok m) (collectMarks! root (c/restOf rels) (match m ((some x) (cons x acc)) ((none) acc))))))
 
 fn worktreeMarks! root: String -> (Result (List Mark) String)
-  (mt (gitListing! (list "git" "ls-files" "-z" "-c" "-o" "--exclude-standard") root)
+  (match (gitListing! (list "git" "ls-files" "-z" "-c" "-o" "--exclude-standard") root)
     ((err e) (err e))
     ((ok b)
       (if (!= (optionOr b.code 1) 0)
@@ -644,7 +644,7 @@ fn readKept! root: String rels: (List String) acc: (List (Pair String (Option St
     (let [rel (c/firstOf rels)
           full (joinPath root rel)]
       (if (isFile! full)
-        (mt (fileReadString full)
+        (match (fileReadString full)
           ((ok bytes) (readKept! root (c/restOf rels) (cons (pair rel (some bytes)) acc)))
           ((err e) (err (errnoMessage e full))))
         (readKept! root (c/restOf rels) acc))))
@@ -654,23 +654,23 @@ fn nowSec! -> Int64
 
 fn treeSnapshot! root: String -> (Result Snap String)
   (let [at (nowSec!)]
-    (mt (worktreeMarks! root)
+    (match (worktreeMarks! root)
       ((err e) (err e))
       ((ok marks)
-        (mt (gitListing! (list "git" "status" "--porcelain" "-z" "-uall") root)
+        (match (gitListing! (list "git" "status" "--porcelain" "-z" "-uall") root)
           ((err e) (err e))
           ((ok b)
             (let [code (optionOr b.code 1)]
               (if (!= code 0)
                 (err (str "Command '['git', 'status', '--porcelain', '-z', '-uall']' returned non-zero exit status " (itos code) "."))
-                (mt (readKept! root (map (fn [e] (cpDrop e 3)) (nulSplit b.out)) (list))
+                (match (readKept! root (map (fn [e] (cpDrop e 3)) (nulSplit b.out)) (list))
                   ((err e) (err e))
                   ((ok kept) (ok (Snap :marks marks :kept kept :at at)))))))))))
 
 fn rawPump! outFd: Int64 errFd: Int64 outOpen: Bool errOpen: Bool acc: (List String) -> (List String)
   (if (not (or outOpen errOpen))
     acc
-    (mt (fdPoll (listAppend (if outOpen (list (pair outFd 1)) (list)) (if errOpen (list (pair errFd 1)) (list))) -1)
+    (match (fdPoll (listAppend (if outOpen (list (pair outFd 1)) (list)) (if errOpen (list (pair errFd 1)) (list))) -1)
       ((err _) (do (if outOpen (fdClose outFd) (ok ())) (if errOpen (fdClose errFd) (ok ())) acc))
       ((ok ready)
         (let [o (if (and outOpen (readyOn ready outFd)) (readOne! outFd) (pair outOpen ""))
@@ -678,17 +678,17 @@ fn rawPump! outFd: Int64 errFd: Int64 outOpen: Bool errOpen: Bool acc: (List Str
           (rawPump! outFd errFd (pairFirst o) (pairFirst e) (if (stringEmpty? (pairSecond o)) acc (cons (pairSecond o) acc)))))))
 
 fn preBytes! root: String rel: String -> (Result (Option String) String)
-  (mt (procSpawnv (list "git" "show" (str "HEAD:" rel)) (some root) (none))
+  (match (procSpawnv (list "git" "show" (str "HEAD:" rel)) (some root) (none))
     ((err kind) (err (errnoMessage kind "git")))
     ((ok sp)
       (let [closed (fdClose sp.stdin)
             out (c/joinAll (listReverse (rawPump! sp.stdout sp.stderr true true (list))))]
-        (mt (procWaitPid sp.pid false)
+        (match (procWaitPid sp.pid false)
           ((err e) (err e))
           ((ok got) (ok (if (= (optionOr got 1) 0) (some out) (none))))))))
 
 fn keptGet kept: (List (Pair String (Option String))) rel: String -> (Option (Option String))
-  (mt (listHead (filter (fn [p] (= (pairFirst p) rel)) kept))
+  (match (listHead (filter (fn [p] (= (pairFirst p) rel)) kept))
     ((some p) (some (pairSecond p)))
     ((none) (none)))
 
@@ -706,16 +706,16 @@ fn unionWalk bs: (List Mark) xs: (List Mark) acc: (List (Pair String (Pair (Opti
           (else (unionWalk bs (c/restOf xs) (cons (pair a.rel (pair (none) (some a))) acc)))))))
 
 fn sameMark bm: (Option Mark) am: (Option Mark) at: Int64 -> Bool
-  (mt bm
+  (match bm
     ((none) (none? am))
     ((some b)
-      (mt am
+      (match am
         ((none) false)
         ((some a) (and (= a.size b.size) (and (= a.mtime b.mtime) (< a.mtime at)))))))
 
 fn readNow! full: String -> (Result (Option String) String)
   (if (isFile! full)
-    (mt (fileReadString full) ((ok b) (ok (some b))) ((err e) (err (errnoMessage e full))))
+    (match (fileReadString full) ((ok b) (ok (some b))) ((err e) (err (errnoMessage e full))))
     (ok (none)))
 
 fn changes! root: String snap: Snap entries: (List (Pair String (Pair (Option Mark) (Option Mark)))) acc: (List (Pair String (Pair (Option String) (Option String)))) -> (Result (List (Pair String (Pair (Option String) (Option String)))) String)
@@ -727,18 +727,18 @@ fn changes! root: String snap: Snap entries: (List (Pair String (Pair (Option Ma
           am (pairSecond (pairSecond e))]
       (if (sameMark bm am snap.at)
         (changes! root snap (c/restOf entries) acc)
-        (let [pre (mt (keptGet snap.kept rel)
+        (let [pre (match (keptGet snap.kept rel)
                     ((some v) (ok v))
                     ((none) (if (some? bm) (preBytes! root rel) (ok (none)))))]
-          (mt pre
+          (match pre
             ((err m) (err m))
             ((ok preV)
-              (mt (readNow! (joinPath root rel))
+              (match (readNow! (joinPath root rel))
                 ((err m) (err m))
                 ((ok nowV) (changes! root snap (c/restOf entries) (if (= preV nowV) acc (cons (pair rel (pair preV nowV)) acc)))))))))))
 
 fn modeOf! full: String -> Int64
-  (mt (fileStat full) ((ok st) (mod st.mode 4096)) ((err _) 420))
+  (match (fileStat full) ((ok st) (mod st.mode 4096)) ((err _) 420))
 
 fn applyPlan! root: String items: (List (Pair (Pair String (Pair (Option String) (Option String))) String)) onKeep: (fn [String (Option String) Int64] -> Bool) restored: (List String) kept: (List String) -> (Result (Pair (List String) (List String)) String)
   (if (listEmpty? items)
@@ -757,46 +757,46 @@ fn applyPlan! root: String items: (List (Pair (Pair String (Pair (Option String)
             (applyPlan! root rest onKeep restored (cons rel kept))
             (err (str "the journal did not take " rel " before it was kept"))))
         (else
-          (mt preV
+          (match preV
             ((none)
-              (mt (pathRemove full)
+              (match (pathRemove full)
                 ((ok _) (applyPlan! root rest onKeep (cons rel restored) kept))
                 ((err e) (err e))))
             ((some bytes)
               (let [parent (parentDir full)
                     made (if (or (stringEmpty? parent) (isDir! parent)) (ok ()) (dirCreate parent))]
-                (mt made
+                (match made
                   ((err e) (err e))
                   ((ok _)
-                    (mt (fileWrite full bytes)
+                    (match (fileWrite full bytes)
                       ((ok _) (applyPlan! root rest onKeep (cons rel restored) kept))
                       ((err e) (err e))))))))))))
 
 fn settle! ctx: RunCtx procs: Procs onKeep: (fn [String (Option String) Int64] -> Bool) -> (Result Settled String)
-  (mt procs.base
+  (match procs.base
     ((none) (ok (Settled :restored (list) :kept (list) :procs procs)))
     ((some snap)
       (let [root ctx.root]
-        (mt (worktreeMarks! root)
+        (match (worktreeMarks! root)
           ((err e) (err e))
           ((ok after)
-            (mt (changes! root snap (unionWalk snap.marks after (list)) (list))
+            (match (changes! root snap (unionWalk snap.marks after (list)) (list))
               ((err e) (err e))
               ((ok changed)
                 (let [plan (if (listEmpty? changed) (list) (c/changePlan (map pairFirst changed) ctx.owns (rootOrDot root)))]
-                  (mt (applyPlan! root (zip changed plan) onKeep (list) (list))
+                  (match (applyPlan! root (zip changed plan) onKeep (list) (list))
                     ((err e) (err e))
                     ((ok done)
-                      (mt (treeSnapshot! root)
+                      (match (treeSnapshot! root)
                         ((err e) (err e))
                         ((ok fresh) (ok (Settled :restored (pairFirst done) :kept (pairSecond done) :procs (withBase procs (some fresh))))))))))))))))
 
 fn putMark marks: (List Mark) m: (Option Mark) rel: String -> (List Mark)
   (let [others (filter (fn [x] (!= x.rel rel)) marks)]
-    (mt m ((some x) (sortMarks (cons x others))) ((none) others)))
+    (match m ((some x) (sortMarks (cons x others))) ((none) others)))
 
 fn rebaseWritten! root: String paths: (List String) procs: Procs -> (Result Procs String)
-  (mt procs.base
+  (match procs.base
     ((none) (ok procs))
     ((some snap)
       (if (listEmpty? paths)
@@ -805,15 +805,15 @@ fn rebaseWritten! root: String paths: (List String) procs: Procs -> (Result Proc
               full (joinPath root p)
               rel (g/pyRelpath! (g/pyNormpath full) root)
               next (if (isFile! full)
-                     (mt (fileStat full)
+                     (match (fileStat full)
                        ((err e) (err e))
                        ((ok st)
-                         (mt (fileReadString full)
+                         (match (fileReadString full)
                            ((err e) (err (errnoMessage e full)))
                            ((ok bytes) (ok (Snap :marks (putMark snap.marks (some (Mark :rel rel :size st.size :mtime st.mtime)) rel)
                                              :kept (cons (pair rel (some bytes)) snap.kept) :at snap.at))))))
                      (ok (Snap :marks (putMark snap.marks (none) rel) :kept (cons (pair rel (none)) snap.kept) :at snap.at)))]
-          (mt next
+          (match next
             ((err e) (err e))
             ((ok s) (rebaseWritten! root (c/restOf paths) (withBase procs (some s)))))))))
 
@@ -824,18 +824,18 @@ enum Spawned
 
 fn spawnSession! sid: String cmd: String ctx: RunCtx stdin: Bool procs: Procs -> Spawned
   (let [snap (if (or (none? procs.base) (listEmpty? procs.ids))
-               (mt (treeSnapshot! ctx.root) ((ok s) (ok (withBase procs (some s)))) ((err e) (err e)))
+               (match (treeSnapshot! ctx.root) ((ok s) (ok (withBase procs (some s)))) ((err e) (err e)))
                (ok procs))]
-    (mt snap
+    (match snap
       ((err e) (spawnSnapFailed e))
       ((ok ps)
         (cond
           ((sessionBad ctx.session) (spawnEngineFailed ps (badSessionBody)))
           ((not (sidValid sid)) (spawnEngineFailed ps (invalidIdBody! sid ctx)))
           (else
-            (let [old (mt (tableGet ps.table sid) ((some p) (some (killProc! p))) ((none) (none)))
-                  ps1 (mt old ((some p) (withTable ps (tablePut ps.table p))) ((none) ps))]
-              (mt (spawnProc! sid cmd ctx stdin)
+            (let [old (match (tableGet ps.table sid) ((some p) (some (killProc! p))) ((none) (none)))
+                  ps1 (match old ((some p) (withTable ps (tablePut ps.table p))) ((none) ps))]
+              (match (spawnProc! sid cmd ctx stdin)
                 ((err m) (spawnEngineFailed ps1 (engineError! sid m ctx)))
                 ((ok p) (spawnedOk (Procs :ids (listAppend ps1.ids (list sid)) :table (tablePut ps1.table p) :base ps1.base) p)))))))))
 
@@ -856,13 +856,13 @@ fn execRunOp! op: (List (Pair String c/KvVal)) ctx: RunCtx procs: Procs rid: Str
   (let [cmd (firstTruthy op (list "argv" "cmd"))]
     (if (stringEmpty? (g/pyStrip cmd))
       (OpResult :rec (list (rs "id" rid) (rs "op" "run") (rs "status" "rejected") (rs "error" "ERR_MISSING_ARG") (rs "message" "run needs :argv")) :procs procs)
-      (mt (checkRunGitGuard cmd)
+      (match (checkRunGitGuard cmd)
         ((some g)
           (OpResult :rec (runReject rid "ERR_RUN_GIT" cmd
                            (str "not run: '" (pairFirst g) "' would discard working-tree changes or alter git history; use " (pairSecond g) " instead"))
             :procs procs))
         ((none)
-          (mt (runOutward cmd ctx.owns ctx.root)
+          (match (runOutward cmd ctx.owns ctx.root)
             ((err e)
               (OpResult :rec (runReject rid "ERR_RUN_QUOTING" cmd
                                (str "not run: the shell quoting does not parse (" e "); close every quote, or write a script file and run it"))
@@ -874,7 +874,7 @@ fn execRunOp! op: (List (Pair String c/KvVal)) ctx: RunCtx procs: Procs rid: Str
 
 fn runSpawned! cmd: String ctx: RunCtx procs: Procs rid: String onKeep: (fn [String (Option String) Int64] -> Bool) -> OpResult
   (let [sid (str (sidPrefix ctx) "-run" rid)]
-    (mt (spawnSession! sid cmd ctx false procs)
+    (match (spawnSession! sid cmd ctx false procs)
       ((spawnSnapFailed m)
         (OpResult :rec (runReject rid "ERR_RUN_SNAPSHOT" cmd (str "the workspace must be a git repo to undo what a run changes: " m)) :procs procs))
       ((spawnEngineFailed ps body) (OpResult :rec (runReject rid "ERR_ENGINE" cmd body) :procs ps))
@@ -886,7 +886,7 @@ fn runSpawned! cmd: String ctx: RunCtx procs: Procs rid: String onKeep: (fn [Str
               tail (opTail! final ctx)
               ps1 (withIds (withTable ps (tablePut ps.table final)) (removeFirst ps.ids sid))
               exitCode (if (or timedOut (none? final.code)) 1 (optionOr (exitOf final) 1))]
-          (mt (settle! ctx ps1 onKeep)
+          (match (settle! ctx ps1 onKeep)
             ((err e) (OpResult :rec (runReject rid "ERR_RUN_SETTLE" cmd e) :procs ps1))
             ((ok s)
               (OpResult
@@ -906,7 +906,7 @@ fn alphaEnd bs: Bytes n: Int64 i: Int64 -> Int64
   (if (and (< i n) (isAlpha (byteAt bs i))) (alphaEnd bs n (+ i 1)) i)
 
 fn actionAt s: String bs: Bytes n: Int64 i: Int64 -> String
-  (mt (stringIndexOf (c/sliceOf s i n) ":action")
+  (match (stringIndexOf (c/sliceOf s i n) ":action")
     ((none) "")
     ((some k)
       (let [at (+ i k)
@@ -930,8 +930,8 @@ fn mo rec: (List (Pair String RVal)) procs: Procs -> OpResult
   (OpResult :rec rec :procs procs)
 
 fn listLine sid: String procs: Procs -> String
-  (let [name (mt (stringIndexOf sid "-") ((some i) (c/sliceOf sid (+ i 1) (stringLength sid))) ((none) sid))]
-    (str name " " (mt (tableGet procs.table sid) ((some p) (stateOf p)) ((none) "None"))))
+  (let [name (match (stringIndexOf sid "-") ((some i) (c/sliceOf sid (+ i 1) (stringLength sid))) ((none) sid))]
+    (str name " " (match (tableGet procs.table sid) ((some p) (stateOf p)) ((none) "None"))))
 
 fn settleFields s: Settled -> (List (Pair String RVal))
   (list (rl "restored" s.restored) (rl "flushed" s.kept) (rb "persisted" (not (listEmpty? s.kept))))
@@ -964,7 +964,7 @@ fn manageNamed! op: (List (Pair String c/KvVal)) ctx: RunCtx procs: Procs rid: S
         (mo (listAppend res (list (rs "status" "rejected") (rs "error" "ERR_NOT_SPAWNED") (rs "message" (str name " is not a process this run spawned")))) procs))
       ((= action "send") (manageSend! op ctx procs sid res))
       ((= action "tail")
-        (mt (tableGet procs.table sid)
+        (match (tableGet procs.table sid)
           ((some p)
             (let [q (refresh! p)]
               (mo (listAppend res (list (rs "status" "ok") (rs "stdout" (opTail! q ctx)))) (withTable procs (tablePut procs.table q)))))
@@ -972,38 +972,38 @@ fn manageNamed! op: (List (Pair String c/KvVal)) ctx: RunCtx procs: Procs rid: S
       ((= action "kill")
         (let [ps (withIds (updateProc procs sid killProc!) (removeFirst procs.ids sid))
               rec (listAppend res (list (rs "status" "ok") (rs "message" "killed")))]
-          (mt (settle! ctx ps onKeep)
+          (match (settle! ctx ps onKeep)
             ((err e) (settleFailed rec e ps))
             ((ok s) (mo (listAppend rec (settleFields s)) s.procs)))))
       (else (managePoll! ctx procs sid res spawned onKeep))))
 
 fn managePoll! ctx: RunCtx procs: Procs sid: String res: (List (Pair String RVal)) spawned: Bool onKeep: (fn [String (Option String) Int64] -> Bool) -> OpResult
-  (mt (tableGet procs.table sid)
+  (match (tableGet procs.table sid)
     ((none) (mo (listAppend res (list (rs "status" "rejected") (rs "message" "state None"))) procs))
     ((some p)
       (let [q (refresh! p)
             ps (withTable procs (tablePut procs.table q))
             rec (listAppend res (list (rs "status" "ok") (rs "message" (str "state " (stateOf q)))))]
-        (mt (exitOf q)
+        (match (exitOf q)
           ((none) (mo rec ps))
           ((some code)
             (let [withExit (listAppend rec (list (ri "exit" code)))]
               (if (not spawned)
                 (mo withExit ps)
                 (let [ps1 (withIds ps (removeFirst ps.ids sid))]
-                  (mt (settle! ctx ps1 onKeep)
+                  (match (settle! ctx ps1 onKeep)
                     ((err e) (settleFailed withExit e ps1))
                     ((ok s) (mo (listAppend withExit (settleFields s)) s.procs)))))))))))
 
 fn manageSpawn! op: (List (Pair String c/KvVal)) ctx: RunCtx procs: Procs rid: String sid: String res: (List (Pair String RVal)) -> OpResult
   (let [cmd (firstTruthy op (list "cmd"))
         why (if (stringEmpty? (g/pyStrip cmd)) (ok "it names no :cmd") (runOutward cmd ctx.owns ctx.root))]
-    (mt why
+    (match why
       ((err e) (mo (listAppend res (list (rs "status" "rejected") (rs "error" "ERR_RUN_QUOTING") (rs "message" (str "not spawned: the shell quoting does not parse (" e ")")))) procs))
       ((ok w)
         (if (not (stringEmpty? w))
           (mo (needsConfirm rid "manage" (str "not spawned: " w "; the run goes on") cmd) procs)
-          (mt (spawnSession! sid cmd ctx true procs)
+          (match (spawnSession! sid cmd ctx true procs)
             ((spawnSnapFailed m) (mo (listAppend res (list (rs "status" "rejected") (rs "error" "ERR_RUN_SNAPSHOT") (rs "message" m))) procs))
             ((spawnEngineFailed ps body) (mo (listAppend res (list (rs "status" "rejected") (rs "error" "ERR_ENGINE") (rs "message" body))) ps))
             ((spawnedOk ps _) (mo (listAppend res (list (rs "status" "ok"))) ps)))))))
@@ -1011,7 +1011,7 @@ fn manageSpawn! op: (List (Pair String c/KvVal)) ctx: RunCtx procs: Procs rid: S
 fn writeAll! fd: Int64 data: String deadline: Int64 -> (Result Unit String)
   (if (stringEmpty? data)
     (ok ())
-    (mt (fdWrite fd data)
+    (match (fdWrite fd data)
       ((ok k) (writeAll! fd (c/sliceOf data k (stringLength data)) deadline))
       ((err e)
         (cond
@@ -1026,7 +1026,7 @@ fn sendMessage e: String t: Int64 -> String
     (else e))
 
 fn manageSend! op: (List (Pair String c/KvVal)) ctx: RunCtx procs: Procs sid: String res: (List (Pair String RVal)) -> OpResult
-  (mt (tableGet procs.table sid)
+  (match (tableGet procs.table sid)
     ((none) (mo (listAppend res (list (rs "status" "rejected") (rs "error" "ERR_ENGINE") (rs "message" (engineReject (str "(:receipt :status :notFound :id " (wireStrVal sid (wireRoots! ctx)) ")"))))) procs))
     ((some p)
       (let [q (reap! p)
@@ -1041,7 +1041,7 @@ fn manageSend! op: (List (Pair String c/KvVal)) ctx: RunCtx procs: Procs sid: St
                 wrote (writeAll! q.inFd data (+ (monotonicNs) (* t 1000000000)))
                 q1 (if (and close (ok? wrote)) (closeIn! q) q)
                 ps (withTable procs (tablePut procs.table q1))]
-            (mt wrote
+            (match wrote
               ((ok _) (mo (listAppend res (list (rs "status" "ok"))) ps))
               ((err e) (mo (listAppend res (list (rs "status" "rejected") (rs "error" "ERR_ENGINE") (rs "message" (engineError! sid (sendMessage e t) ctx)))) ps))))))))
 
@@ -1050,7 +1050,7 @@ fn killSpawned! ctx: RunCtx procs: Procs onKeep: (fn [String (Option String) Int
         ps (withIds (fold (fn [acc sid] (updateProc acc sid killProc!)) procs killed) (list))]
     (if (listEmpty? killed)
       (ok (KillOut :killed (list) :restored (list) :kept (list) :procs (withBase ps (none))))
-      (mt (settle! ctx ps onKeep)
+      (match (settle! ctx ps onKeep)
         ((err e) (err e))
         ((ok s) (ok (KillOut :killed killed :restored s.restored :kept s.kept :procs (withBase s.procs (none))))))))
 
@@ -1074,6 +1074,6 @@ fn execDeleteOp! op: (List (Pair String c/KvVal)) ctx: RunCtx rid: String snap: 
             ((not (isFile! full)) (list (rs "id" rid) (rs "op" "delete") (rs "status" "rejected") (rs "error" "ERR_NOT_FOUND") (rs "file" rel) (rs "message" (str "no file " rel))))
             ((not (snap rel)) (deleteReject rid "ERR_SNAPSHOT" rel (str "'" rel "' could not be journaled before the delete; nothing was deleted")))
             (else
-              (mt (pathRemove full)
+              (match (pathRemove full)
                 ((err e) (deleteReject rid "ERR_DELETE_FAILED" rel e))
                 ((ok _) (list (rs "id" rid) (rs "op" "delete") (rs "status" "ok") (rs "file" rel) (ri "exit" 0) (rl "flushed" (list rel)) (rb "persisted" true))))))))))

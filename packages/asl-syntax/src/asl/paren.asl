@@ -110,7 +110,7 @@ fn closeMatchingTopFrame stack: (List ParenFrame) topKids: (List tr/TreeElement)
 
 fn isImmediateMismatchFrame? frame: ParenFrame -> Bool
   (listEmpty? (filter (fn [(e tr/TreeElement)] -> Bool
-                        (mt e
+                        (match e
                           ((tr/elemToken tok) (not (tr/isTrivia tok)))
                           ((tr/elemNode _) true)))
                       frame.kids))
@@ -122,7 +122,7 @@ fn handleCloseDelim stack: (List ParenFrame) topKids: (List tr/TreeElement) tok:
     (let [(top (optionOr (listHead stack) (ParenFrame :kind "" :openTok (tr/makeToken "" 0 0) :kids (list))))]
       (if (closerMatchesFrame? closerKind top)
         (closeMatchingTopFrame stack topKids tok)
-        (mt (findMatchingFrameDepth stack closerKind 0)
+        (match (findMatchingFrameDepth stack closerKind 0)
           ((some depth)
            (let [(unwound (unwindStackToDepth stack topKids depth))]
              (closeMatchingTopFrame (pairFirst unwound) (pairSecond unwound) tok)))
@@ -195,7 +195,7 @@ fn parse text: String -> tr/Node
   (parseString text)
 
 fn collectErrorsInElement elem: tr/TreeElement acc: (List tr/Node) -> (List tr/Node)
-  (mt elem
+  (match elem
     ((elemToken tok)
      (if (tr/isErrorToken tok)
        (cons (tr/makeErrorNode tok.start tok.end (list (tr/elemToken tok))) acc)
@@ -223,7 +223,7 @@ fn hasErrors root: tr/Node -> Bool
   (not (listEmpty? (treeErrors root)))
 
 fn isTriviaElement elem: tr/TreeElement -> Bool
-  (mt elem
+  (match elem
     ((elemToken tok) (tr/isTrivia tok))
     ((elemNode _) false))
 
@@ -240,7 +240,7 @@ fn countCol0FormsLoop s: src/Source elems: (List tr/TreeElement) count: Int64 ->
           (rest (optionOr (listTail elems) (list)))
           (startOff (tr/elementStart elem))
           (colOpt (src/sourceByteColAt s startOff))]
-      (mt colOpt
+      (match colOpt
         ((some col)
          (if (= col 1)
            (countCol0FormsLoop s rest (+ count 1))

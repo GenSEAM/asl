@@ -6,10 +6,10 @@
 (schema DiffOpcode (:f tag String) (:f i1 Int64) (:f i2 Int64) (:f j1 Int64) (:f j2 Int64))
 
 fn firstOf xs: (List T) -> T
-  (mt (listHead xs) ((some x) x))
+  (match (listHead xs) ((some x) x))
 
 fn restOf xs: (List T) -> (List T)
-  (mt (listTail xs) ((some t) t))
+  (match (listTail xs) ((some t) t))
 
 fn sepLen b: Bytes n: Int64 i: Int64 c: Int64 -> Int64
   (cond
@@ -46,7 +46,7 @@ fn ! iaSet b: Bytes i: Int64 v: Int64 -> Bytes
   (:f val0 Bytes) (:f val1 Bytes) (:f st0 Bytes) (:f st1 Bytes) (:f seq Bytes))
 
 fn ! fillIds sorted: (List (Pair String Int64)) ids: Bytes prev: String next: Int64 first: Bool -> Int64
-  (mt (listHead sorted)
+  (match (listHead sorted)
     ((none) next)
     ((some p)
       (let [(k (pairFirst p))
@@ -56,7 +56,7 @@ fn ! fillIds sorted: (List (Pair String Int64)) ids: Bytes prev: String next: In
         (fillIds (restOf sorted) ids k (if fresh (+ next 1) next) false))))
 
 fn tagged xs: (List String) i: Int64 acc: (List (Pair String Int64)) -> (List (Pair String Int64))
-  (mt (listHead xs) ((none) acc) ((some x) (tagged (restOf xs) (+ i 1) (cons (pair x i) acc))))
+  (match (listHead xs) ((none) acc) ((some x) (tagged (restOf xs) (+ i 1) (cons (pair x i) acc))))
 
 fn ! countB idb: Bytes cnt: Bytes j: Int64 lb: Int64 -> Bytes
   (if (>= j lb) cnt
@@ -150,7 +150,7 @@ fn ! matchingBlocksRec sm: Sm alo: Int64 ahi: Int64 blo: Int64 bhi: Int64 -> (Li
         (listAppend left (cons m right)))))
 
 fn collapseAdjacent blocks: (List BestMatch) i1: Int64 j1: Int64 k1: Int64 acc: (List BestMatch) la: Int64 lb: Int64 -> (List BestMatch)
-  (mt (listHead blocks)
+  (match (listHead blocks)
     ((none)
       (let [(acc1 (if (> k1 0) (cons (BestMatch :i i1 :j j1 :size k1) acc) acc))
             (acc2 (cons (BestMatch :i la :j lb :size 0) acc1))]
@@ -169,7 +169,7 @@ fn ! getMatchingBlocks sm: Sm -> (List BestMatch)
   (collapseAdjacent (matchingBlocksRec sm 0 sm.la 0 sm.lb) 0 0 0 (list) sm.la sm.lb)
 
 fn sumMatches blocks: (List BestMatch) acc: Int64 -> Int64
-  (mt (listHead blocks)
+  (match (listHead blocks)
     ((none) acc)
     ((some blk)
       (sumMatches (optionOr (listTail blocks) (list)) (+ acc blk.size))))
@@ -184,7 +184,7 @@ fn ! ratio a: String b: String -> Float64
       (/ (* 2.0 (int64ToFloat64 (sumMatches (getMatchingBlocks (makeSm ca cb true)) 0))) (int64ToFloat64 (+ la lb)))))
 
 fn opcodesLoop blocks: (List BestMatch) i: Int64 j: Int64 acc: (List DiffOpcode) -> (List DiffOpcode)
-  (mt (listHead blocks)
+  (match (listHead blocks)
     ((none) (listReverse acc))
     ((some blk)
       (let [(ai blk.i)
@@ -240,7 +240,7 @@ fn fixupCodes codes: (List DiffOpcode) n: Int64 -> (List DiffOpcode)
         (cons fixedHd fixedTl))))
 
 fn groupCodes codes: (List DiffOpcode) n: Int64 currGroup: (List DiffOpcode) accGroups: (List (List DiffOpcode)) -> (List (List DiffOpcode))
-  (mt (listHead codes)
+  (match (listHead codes)
     ((none)
       (let [(revGroup (listReverse currGroup))
             (finalGroups (if (and (not (listEmpty? revGroup))
@@ -296,7 +296,7 @@ fn renderOp a: (List String) b: (List String) op: DiffOpcode -> (List String)
       (else (list))))
 
 fn renderHunkLines a: (List String) b: (List String) ops: (List DiffOpcode) acc: (List String) -> (List String)
-  (mt (listHead ops)
+  (match (listHead ops)
     ((none) acc)
     ((some op)
       (let [(opLines (renderOp a b op))
@@ -314,7 +314,7 @@ fn renderGroup a: (List String) b: (List String) group: (List DiffOpcode) -> (Li
     (cons hunkHeader lines))
 
 fn renderAllGroups a: (List String) b: (List String) groups: (List (List DiffOpcode)) acc: (List String) -> (List String)
-  (mt (listHead groups)
+  (match (listHead groups)
     ((none) acc)
     ((some g)
       (let [(glines (renderGroup a b g))

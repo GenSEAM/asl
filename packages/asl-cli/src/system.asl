@@ -30,18 +30,18 @@ fn envOr! name: String -> String
   (optionOr (envGet name) "")
 
 fn ! pathPresence! path: String -> (Result Bool String)
-  (mt (fileStat path)
+  (match (fileStat path)
     ((ok _) (ok true))
     ((err e) (if (stringStartsWith? e "notFound") (ok false) (err e))))
 
 fn ! realOrSelf! path: String -> (Result String String)
-  (mt (realPath path)
+  (match (realPath path)
     ((ok r) (ok r))
     ((err e) (if (stringStartsWith? e "notFound") (ok path) (err e))))
 
 fn ! rootMarkers! dir: String -> (Result Bool String)
   (let [(gitR (pathPresence! (str dir "/.git")))]
-    (mt gitR
+    (match gitR
       ((err e) (err e))
       ((ok hasGit) (ok (and hasGit (isFile? (str dir "/asl/grammar/rules.asn")))))))
 
@@ -49,7 +49,7 @@ fn ! walkToRoot! dir: String -> (Result (Option String) String)
   (if (stringEmpty? dir)
     (ok (none))
     (let [(markersR (rootMarkers! dir))]
-      (mt markersR
+      (match markersR
         ((err e) (err e))
         ((ok hasMarkers)
           (if hasMarkers
@@ -58,39 +58,39 @@ fn ! walkToRoot! dir: String -> (Result (Option String) String)
               (if (= parent dir) (ok (none)) (walkToRoot! parent))))))))
 
 fn ! exeCandidates! -> (List String)
-  (let [(fromSelf (mt (procExePath) ((ok p) (list p)) ((err _) (list))))
+  (let [(fromSelf (match (procExePath) ((ok p) (list p)) ((err _) (list))))
         (a (envOr! "ASL_CLI_ARGV0"))
         (fromArgv0 (if (stringEmpty? a) (list) (list a)))
-        (fromPath (mt (onPath! "asl-host") ((some p) (list p)) ((none) (list))))]
+        (fromPath (match (onPath! "asl-host") ((some p) (list p)) ((none) (list))))]
     (listAppend fromSelf (listAppend fromArgv0 fromPath)))
 
 fn ! tryCandidates! cands: (List String) lastErr: String -> (Result (Option String) String)
-  (mt (listHead cands)
+  (match (listHead cands)
     ((none) (if (stringEmpty? lastErr) (ok (none)) (err lastErr)))
     ((some c)
       (let [(rest (optionOr (listTail cands) (list)))
             (realR (realOrSelf! c))]
-        (mt realR
+        (match realR
           ((err e) (tryCandidates! rest e))
           ((ok real)
             (let [(walkR (walkToRoot! (parentOf real)))]
-              (mt walkR
+              (match walkR
                 ((err e) (tryCandidates! rest e))
                 ((ok found)
-                  (mt found
+                  (match found
                     ((some r) (ok (some r)))
                     ((none) (tryCandidates! rest lastErr)))))))))))
 
 fn ! discoverRoot! -> (Result (Option String) String)
   (let [(cwdR (realOrSelf! "."))]
-    (mt cwdR
+    (match cwdR
       ((err e) (err e))
       ((ok cwd)
         (let [(byCwdR (walkToRoot! cwd))]
-          (mt byCwdR
+          (match byCwdR
             ((err e) (err e))
             ((ok found)
-              (mt found
+              (match found
                 ((some r) (ok (some r)))
                 ((none) (tryCandidates! (exeCandidates!) "")))))))))
 
@@ -109,10 +109,10 @@ fn ! context! -> (Result Context String)
     (if (not (stringEmpty? envRoot))
       (ok (contextAt! envRoot))
       (let [(discoveredR (discoverRoot!))]
-        (mt discoveredR
+        (match discoveredR
           ((err e) (err (str "ASL_CLI_ROOT is unset and discovery failed: " e "; run the asl command through bin/asl")))
           ((ok found)
-            (mt found
+            (match found
               ((none) (err (giveUpMessage!)))
               ((some root) (ok (contextAt! root)))))))))
 
@@ -123,7 +123,7 @@ fn ! contextAt! root: String -> Context
            :hostBin (let [(h (envOr! "ASL_CLI_HOST_BIN"))] (if (stringEmpty? h) (str root "/asl/host/out/asl-host") h)))
 
 fn envName entry: String -> String
-  (mt (stringIndexOf entry "=") ((some i) (optionOr (stringSlice entry 0 i) entry)) ((none) entry))
+  (match (stringIndexOf entry "=") ((some i) (optionOr (stringSlice entry 0 i) entry)) ((none) entry))
 
 fn childEnv! extra: (List String) -> (List String)
   (let [(dropHost (= (envOr! "ASL_CLI_HOST_UNSET") "1"))
@@ -135,19 +135,19 @@ fn childEnv! extra: (List String) -> (List String)
     (listAppend kept extra))
 
 fn ! execv! argv: (List String) extra: (List String) -> Int64
-  (mt (procExecv argv (some (childEnv! extra)))
+  (match (procExecv argv (some (childEnv! extra)))
     ((ok _) 0)
     ((err e)
       (do (sayErr! (str "asl: cannot exec " (optionOr (listHead argv) "") ": " e))
           (if (= e "notFound") 127 126))))
 
 fn ! readSide! fd: Int64 -> (Result (Option String) String)
-  (mt (fdRead fd 65536)
+  (match (fdRead fd 65536)
     ((err e) (err (str "read fd " (stringFromInt64 fd) ": " e)))
     ((ok chunk)
       (if (> (stringLength chunk) 0)
         (ok (some chunk))
-        (mt (fdClose fd) ((err e) (err (str "close fd " (stringFromInt64 fd) ": " e))) ((ok _) (ok (none)))))))
+        (match (fdClose fd) ((err e) (err (str "close fd " (stringFromInt64 fd) ": " e))) ((ok _) (ok (none)))))))
 
 fn readyFd? ready: (List (Pair Int64 Int64)) fd: Int64 -> Bool
   (listAny? (fn [(p (Pair Int64 Int64))] -> Bool (= (pairFirst p) fd)) ready)
@@ -158,7 +158,7 @@ fn exitOf exited: (List (Pair Int64 Int64)) pid: Int64 -> (Option Int64)
 fn ! emit! chunk: String toErr: Bool mode: Int64 -> (Result Unit String)
   (cond
     ((or (= mode 0) (stringEmpty? chunk)) (ok ()))
-    ((and toErr (= mode 1)) (mt (fdWrite 2 chunk) ((err e) (err (str "write stderr: " e))) ((ok n) (if (< n (stringLength chunk)) (emit! (optionOr (stringSlice chunk n (stringLength chunk)) "") true 1) (ok ())))))
+    ((and toErr (= mode 1)) (match (fdWrite 2 chunk) ((err e) (err (str "write stderr: " e))) ((ok n) (if (< n (stringLength chunk)) (emit! (optionOr (stringSlice chunk n (stringLength chunk)) "") true 1) (ok ())))))
     (else (do (print chunk) (ok ()))))
 
 fn ! pump! sp: SpawnedProc st: Relay mode: Int64 -> (Result Relay String)
@@ -166,22 +166,22 @@ fn ! pump! sp: SpawnedProc st: Relay mode: Int64 -> (Result Relay String)
     (ok st)
     (let [(fds (listAppend (if st.outOpen (list (pair sp.stdout 1)) (list)) (if st.errOpen (list (pair sp.stderr 1)) (list))))
           (pids (if (none? st.code) (list sp.pid) (list)))]
-      (mt (procPoll fds pids -1)
+      (match (procPoll fds pids -1)
         ((err e) (err (str "procPoll: " e)))
         ((ok ready)
           (let [(outR (if (and st.outOpen (readyFd? (pairFirst ready) sp.stdout)) (readSide! sp.stdout) (ok (some ""))))
                 (errR (if (and st.errOpen (readyFd? (pairFirst ready) sp.stderr)) (readSide! sp.stderr) (ok (some ""))))
                 (code (if (some? st.code) st.code (exitOf (pairSecond ready) sp.pid)))]
-            (mt outR
+            (match outR
               ((err e) (err e))
               ((ok o)
-                (mt errR
+                (match errR
                   ((err e) (err e))
                   ((ok x)
-                    (mt (emit! (optionOr o "") false mode)
+                    (match (emit! (optionOr o "") false mode)
                       ((err e) (err e))
                       ((ok _)
-                        (mt (emit! (optionOr x "") true mode)
+                        (match (emit! (optionOr x "") true mode)
                           ((err e) (err e))
                           ((ok _)
                             (pump! sp (Relay :outOpen (and st.outOpen (some? o)) :errOpen (and st.errOpen (some? x)) :code code
@@ -189,10 +189,10 @@ fn ! pump! sp: SpawnedProc st: Relay mode: Int64 -> (Result Relay String)
                                    mode))))))))))))))
 
 fn ! spawn! argv: (List String) cwd: (Option String) mode: Int64 extra: (List String) -> (Result Relay String)
-  (mt (procSpawnv argv cwd (some (childEnv! extra)))
+  (match (procSpawnv argv cwd (some (childEnv! extra)))
     ((err e) (err (str (optionOr (listHead argv) "") ": " e)))
     ((ok sp)
-      (mt (fdClose sp.stdin)
+      (match (fdClose sp.stdin)
         ((err e) (err (str "close stdin: " e)))
         ((ok _) (pump! sp (Relay :outOpen true :errOpen true :code (none) :out "" :errText "") mode)))))
 
@@ -200,12 +200,12 @@ fn ! run! argv: (List String) -> Int64
   (runWith! argv (list))
 
 fn ! runWith! argv: (List String) extra: (List String) -> Int64
-  (mt (spawn! argv (none) 1 extra)
+  (match (spawn! argv (none) 1 extra)
     ((err e) (do (sayErr! (str "asl: cannot run " e)) 127))
     ((ok st) (optionOr st.code 1)))
 
 fn ! runMerged! argv: (List String) -> Int64
-  (mt (spawn! argv (none) 2 (list))
+  (match (spawn! argv (none) 2 (list))
     ((err e) (do (sayErr! (str "asl: cannot run " e)) 127))
     ((ok st) (optionOr st.code 1)))
 
@@ -213,21 +213,21 @@ fn ! capture! argv: (List String) cwd: (Option String) -> (Result Captured Strin
   (captureWith! argv cwd (list))
 
 fn ! captureWith! argv: (List String) cwd: (Option String) extra: (List String) -> (Result Captured String)
-  (mt (spawn! argv cwd 0 extra)
+  (match (spawn! argv cwd 0 extra)
     ((err e) (err e))
     ((ok st) (ok (Captured :exitCode (optionOr st.code 1) :stdout st.out :stderr st.errText))))
 
 fn ! isFile? path: String -> Bool
-  (mt (fileStat path) ((ok st) st.isFile) ((err _) false))
+  (match (fileStat path) ((ok st) st.isFile) ((err _) false))
 
 fn ! isDir? path: String -> Bool
-  (mt (fileStat path) ((ok st) st.isDir) ((err _) false))
+  (match (fileStat path) ((ok st) st.isDir) ((err _) false))
 
 fn ! executable? path: String -> Bool
-  (mt (fileStat path) ((ok st) (!= (& st.mode 73) 0)) ((err _) false))
+  (match (fileStat path) ((ok st) (!= (& st.mode 73) 0)) ((err _) false))
 
 fn onPathLoop! name: String dirs: (List String) -> (Option String)
-  (mt (listHead dirs)
+  (match (listHead dirs)
     ((none) (none))
     ((some d)
       (let [(p (str (if (stringEmpty? d) "." d) "/" name))]

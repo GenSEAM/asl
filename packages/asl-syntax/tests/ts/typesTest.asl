@@ -26,7 +26,7 @@ fn checkType! code: String expectedSExpr: String -> Bool
 
 fn checkTypeErr code: String expectedOffset: Int64 -> Bool
   (let [(res (ts/parseType code))]
-    (mt res
+    (match res
       ((ok _)
        (assert false (str "expected error for: " code)))
       ((err msg)

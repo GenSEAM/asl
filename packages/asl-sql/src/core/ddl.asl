@@ -37,7 +37,7 @@ fn normalizeDialect dialect: sql/SqlDialect -> sql/SqlDialect
   dialect
 
 fn typeToSqlString t: SqlColumnType dialect: sql/SqlDialect -> String
-  (let [(d (normalizeDialect dialect))] (mt t ((colInt64) (mt d ((clickhouse) "Int64") (_ "BIGINT"))) ((colFloat64) (mt d ((postgres) "DOUBLE PRECISION") ((mysql) "DOUBLE") ((clickhouse) "Float64") (_ "REAL"))) ((colText) (mt d ((clickhouse) "String") (_ "TEXT"))) ((colBoolean) (mt d ((postgres) "BOOLEAN") ((mysql) "BOOLEAN") ((clickhouse) "Bool") (_ "INTEGER"))) ((colTimestamp) (mt d ((postgres) "TIMESTAMPTZ") ((mysql) "DATETIME") ((clickhouse) "DateTime64") (_ "TEXT")))))
+  (let [(d (normalizeDialect dialect))] (match t ((colInt64) (match d ((clickhouse) "Int64") (_ "BIGINT"))) ((colFloat64) (match d ((postgres) "DOUBLE PRECISION") ((mysql) "DOUBLE") ((clickhouse) "Float64") (_ "REAL"))) ((colText) (match d ((clickhouse) "String") (_ "TEXT"))) ((colBoolean) (match d ((postgres) "BOOLEAN") ((mysql) "BOOLEAN") ((clickhouse) "Bool") (_ "INTEGER"))) ((colTimestamp) (match d ((postgres) "TIMESTAMPTZ") ((mysql) "DATETIME") ((clickhouse) "DateTime64") (_ "TEXT")))))
 
 fn renderColumnDef col: ColumnDef dialect: sql/SqlDialect -> String
   (let [(d (normalizeDialect dialect)) (tStr (typeToSqlString col.colType d)) (base (str col.name " " tStr)) (withPk (if col.isPrimary (str base " PRIMARY KEY") base)) (withNull (if col.isNullable withPk (str withPk " NOT NULL")))] (if (> (stringLength col.extraSql) 0) (str withNull " " col.extraSql) withNull))
@@ -46,7 +46,7 @@ fn formatAssignments cols: (List String) prefix: String suffix: String -> String
   (stringJoin (map (fn [c] (str c " = " prefix c suffix)) cols) ", ")
 
 fn renderPlaceholderItem idx: Int64 dialect: sql/SqlDialect -> String
-  (let [(d (normalizeDialect dialect))] (mt d ((postgres) (str "$" (stringFromInt64 idx))) (_ "?")))
+  (let [(d (normalizeDialect dialect))] (match d ((postgres) (str "$" (stringFromInt64 idx))) (_ "?")))
 
 fn renderPlaceholders count: Int64 dialect: sql/SqlDialect -> (List String)
   (if (<= count 0) (list) (let [(d (normalizeDialect dialect))] (map (fn [idx] (renderPlaceholderItem idx d)) (range 1 (+ count 1)))))
@@ -55,7 +55,7 @@ fn countColumns cols: (List String) vals: (List String) -> Int64
   (let [(cLen (listLength cols))] (if (> cLen 0) cLen (listLength vals)))
 
 fn renderUpsert q: UpsertQuery dialect: sql/SqlDialect -> String
-  (let [(d (normalizeDialect dialect)) (cLen (countColumns q.columns q.values)) (phList (renderPlaceholders cLen d)) (base (str "INSERT INTO " q.tableName " (" (stringJoin q.columns ", ") ") VALUES (" (stringJoin phList ", ") ") "))] (mt d ((mysql) (let [(upd (formatAssignments q.updateCols "VALUES(" ")"))] (str base "ON DUPLICATE KEY UPDATE " upd ";"))) (_ (let [(upd (formatAssignments q.updateCols "EXCLUDED." ""))] (str base "ON CONFLICT (" (stringJoin q.conflictCols ", ") ") DO UPDATE SET " upd ";")))))
+  (let [(d (normalizeDialect dialect)) (cLen (countColumns q.columns q.values)) (phList (renderPlaceholders cLen d)) (base (str "INSERT INTO " q.tableName " (" (stringJoin q.columns ", ") ") VALUES (" (stringJoin phList ", ") ") "))] (match d ((mysql) (let [(upd (formatAssignments q.updateCols "VALUES(" ")"))] (str base "ON DUPLICATE KEY UPDATE " upd ";"))) (_ (let [(upd (formatAssignments q.updateCols "EXCLUDED." ""))] (str base "ON CONFLICT (" (stringJoin q.conflictCols ", ") ") DO UPDATE SET " upd ";")))))
 
 fn renderCreateTable tbl: TableDef dialect: sql/SqlDialect -> String
   (let [(d (normalizeDialect dialect)) (renderedCols (map (fn [c] (renderColumnDef c d)) tbl.columns)) (colsBody (stringJoin renderedCols ", "))] (str "CREATE TABLE " tbl.tableName " (" colsBody ");"))

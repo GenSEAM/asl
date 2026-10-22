@@ -79,7 +79,7 @@ fn pyInt tok: String -> (Option String)
       (none)))
 
 fn mantissaOk m: String -> Bool
-  (mt (stringIndexOf m ".")
+  (match (stringIndexOf m ".")
     ((none) (digitRun m))
     ((some i)
       (let [(ip (slice m 0 i)) (fp (slice m (+ i 1) (stringLength m)))]
@@ -91,9 +91,9 @@ fn exponentOk e: String -> Bool
 
 fn firstExp s: String -> (Option Int64)
   (let [(a (stringIndexOf s "e")) (b (stringIndexOf s "E"))]
-    (mt a
+    (match a
       ((none) b)
-      ((some i) (mt b ((none) a) ((some j) (some (min i j)))))))
+      ((some i) (match b ((none) a) ((some j) (some (min i j)))))))
 
 fn pyFloat tok: String -> (Option String)
   (let [(sp (signSplit tok)) (neg (pairFirst sp)) (body (pairSecond sp)) (low (stringLower body))]
@@ -101,11 +101,11 @@ fn pyFloat tok: String -> (Option String)
       ((or (= low "inf") (= low "infinity")) (some (if neg "-inf" "inf")))
       ((= low "nan") (some "nan"))
       (else
-        (let [(ok (mt (firstExp body)
+        (let [(ok (match (firstExp body)
                     ((none) (mantissaOk body))
                     ((some i) (and (mantissaOk (slice body 0 i)) (exponentOk (slice body (+ i 1) (stringLength body)))))))]
           (if ok
-            (mt (stringToFloat64 (str (if neg "-" "") (stringReplace body "_" "")))
+            (match (stringToFloat64 (str (if neg "-" "") (stringReplace body "_" "")))
               ((some f) (some (stringFromFloat64 f)))
               ((none) (none)))
             (none))))))
@@ -113,12 +113,12 @@ fn pyFloat tok: String -> (Option String)
 fn atomOf tok: String -> Asn
   (if (and (stringStartsWith? tok ":") (> (stringLength tok) 1))
     (asnKw (slice tok 1 (stringLength tok)))
-    (mt (pyInt tok)
+    (match (pyInt tok)
       ((some t) (asnInt t))
-      ((none) (mt (pyFloat tok) ((some t) (asnFloat t)) ((none) (asnSym tok))))))
+      ((none) (match (pyFloat tok) ((some t) (asnFloat t)) ((none) (asnSym tok))))))
 
 fn emitInto stack: (List Frame) v: Asn -> (List Frame)
-  (mt (listHead stack)
+  (match (listHead stack)
     ((none) stack)
     ((some f) (cons (Frame :items (cons v f.items) :start f.start) (tailOf stack))))
 
@@ -150,7 +150,7 @@ fn scanStr text: String bs: Bytes n: Int64 open: Int64 j: Int64 pieceStart: Int6
 
 fn readLoop text: String bs: Bytes n: Int64 i: Int64 stack: (List Frame) out: (List Asn) -> (Result (List Asn) String)
   (if (>= i n)
-    (mt (listHead stack)
+    (match (listHead stack)
       ((some f) (err (str "unclosed ( at byte " (stringFromInt64 (cpIndex bs f.start)))))
       ((none) (ok (listReverse out))))
     (let [(b (bytesGet bs i)) (sp (spaceLen bs n i))]
@@ -159,13 +159,13 @@ fn readLoop text: String bs: Bytes n: Int64 i: Int64 stack: (List Frame) out: (L
         ((= b 59) (readLoop text bs n (lineEnd bs n i) stack out))
         ((= b 40) (readLoop text bs n (+ i 1) (cons (Frame :items (list) :start i) stack) out))
         ((= b 41)
-          (mt (listHead stack)
+          (match (listHead stack)
             ((none) (err (str "unmatched ) at byte " (stringFromInt64 (cpIndex bs i)))))
             ((some f)
               (let [(v (asnForm (listReverse f.items))) (rest (tailOf stack))]
                 (readLoop text bs n (+ i 1) (emitInto rest v) (emitOut rest out v))))))
         ((= b 34)
-          (mt (scanStr text bs n i (+ i 1) (+ i 1) (list))
+          (match (scanStr text bs n i (+ i 1) (+ i 1) (list))
             ((err e) (err e))
             ((ok p)
               (let [(v (asnStr (pairFirst p)))]
@@ -179,10 +179,10 @@ fn readAll text: String -> (Result (List Asn) String)
     (readLoop text bs (bytesLength bs) 0 (list) (list)))
 
 fn isForm v: Asn -> Bool
-  (mt v ((asnForm _) true) (_ false))
+  (match v ((asnForm _) true) (_ false))
 
 fn readOne text: String -> (Result Asn String)
-  (mt (readAll text)
+  (match (readAll text)
     ((err e) (err e))
     ((ok vs)
       (if (and (= (listLength vs) 1) (isForm (optionOr (listHead vs) (asnSym ""))))
@@ -190,36 +190,36 @@ fn readOne text: String -> (Result Asn String)
         (err (str "expected one form, found " (stringFromInt64 (listLength vs)) " values")))))
 
 fn itemsOf v: Asn -> (List Asn)
-  (mt v ((asnForm xs) xs) (_ (list)))
+  (match v ((asnForm xs) xs) (_ (list)))
 
 fn getLoop xs: (List Asn) key: String found: (Option Asn) -> (Option Asn)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) found)
     ((some h)
       (let [(rest (tailOf xs))]
-        (mt (listHead rest)
+        (match (listHead rest)
           ((none) found)
-          ((some v) (getLoop rest key (mt h ((asnKw k) (if (= k key) (some v) found)) (_ found))))))))
+          ((some v) (getLoop rest key (match h ((asnKw k) (if (= k key) (some v) found)) (_ found))))))))
 
 fn asnGet v: Asn key: String -> (Option Asn)
   (getLoop (itemsOf v) key (none))
 
 fn textOf v: Asn -> (Option String)
-  (mt v ((asnKw n) (some n)) ((asnSym n) (some n)) ((asnStr s) (some s)) (_ (none)))
+  (match v ((asnKw n) (some n)) ((asnSym n) (some n)) ((asnStr s) (some s)) (_ (none)))
 
 fn headIs v: Asn head: String -> Bool
-  (mt v
-    ((asnForm xs) (mt (listHead xs) ((some h) (= (textOf h) (some head))) ((none) false)))
+  (match v
+    ((asnForm xs) (match (listHead xs) ((some h) (= (textOf h) (some head))) ((none) false)))
     (_ false))
 
 fn asnForms v: Asn head: (Option String) -> (List Asn)
-  (filter (fn [(x Asn)] -> Bool (and (isForm x) (mt head ((none) true) ((some h) (headIs x h))))) (itemsOf v))
+  (filter (fn [(x Asn)] -> Bool (and (isForm x) (match head ((none) true) ((some h) (headIs x h))))) (itemsOf v))
 
 fn asnQuote s: String -> String
   (str "\"" (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\"")
 
 fn asnDump v: Asn -> String
-  (mt v
+  (match v
     ((asnForm xs) (str "(" (stringJoin (map asnDump xs) " ") ")"))
     ((asnKw n) (str ":" n))
     ((asnSym n) (str "s:" n))
@@ -249,7 +249,7 @@ fn pyStrRepr s: String -> String
     (str qs (stringJoin (reprPieces bs s (bytesLength bs) 0 (if dq 34 39) (list)) "") qs))
 
 fn pyRepr v: Asn -> String
-  (mt v
+  (match v
     ((asnForm xs) (str "[" (stringJoin (map pyRepr xs) ", ") "]"))
     ((asnKw n) (str ":" n))
     ((asnSym n) n)
@@ -258,7 +258,7 @@ fn pyRepr v: Asn -> String
     ((asnFloat t) t))
 
 fn pyStrV v: Asn -> String
-  (mt v
+  (match v
     ((asnForm xs) (str "[" (stringJoin (map pyRepr xs) ", ") "]"))
     ((asnKw n) n)
     ((asnSym n) n)
@@ -267,24 +267,24 @@ fn pyStrV v: Asn -> String
     ((asnFloat t) t))
 
 fn pyStr o: (Option Asn) -> String
-  (mt o ((none) "None") ((some v) (pyStrV v)))
+  (match o ((none) "None") ((some v) (pyStrV v)))
 
 fn pyListRepr xs: (List String) -> String
   (str "[" (stringJoin (map pyStrRepr xs) ", ") "]")
 
 fn truthy v: Asn -> Bool
-  (mt v
+  (match v
     ((asnForm xs) (not (listEmpty? xs)))
     ((asnStr s) (not (stringEmpty? s)))
     ((asnInt t) (!= t "0"))
     ((asnFloat t)
-      (mt (stringToFloat64 t)
+      (match (stringToFloat64 t)
         ((some f) (!= f 0.0))
         ((none) true)))
     (_ true))
 
 fn formsOf o: (Option Asn) head: String what: String -> (Result (List Asn) String)
-  (mt o
+  (match o
     ((none) (ok (list)))
     ((some v)
       (cond
@@ -293,7 +293,7 @@ fn formsOf o: (Option Asn) head: String what: String -> (Result (List Asn) Strin
         (else (err (str "launch: " what " is not a list"))))))
 
 fn formOr o: (Option Asn) what: String -> (Result Asn String)
-  (mt o
+  (match o
     ((none) (ok (asnForm (list))))
     ((some v)
       (cond
@@ -302,18 +302,18 @@ fn formOr o: (Option Asn) what: String -> (Result Asn String)
         (else (err (str "launch: " what " is not a list"))))))
 
 fn pyIter o: (Option Asn) what: String -> (Result (List String) String)
-  (mt o
+  (match o
     ((none) (ok (list)))
     ((some v)
       (cond
         ((not (truthy v)) (ok (list)))
         ((isForm v) (ok (map pyStrV (itemsOf v))))
-        (else (mt (textOf v)
+        (else (match (textOf v)
                 ((some t) (ok (stringChars t)))
                 ((none) (err (str "launch: " what " is not iterable"))))))))
 
 fn assocGet xs: (List (Pair String T)) k: String -> (Option T)
-  (mt (listHead (filter (fn [(p (Pair String T))] -> Bool (= (pairFirst p) k)) xs))
+  (match (listHead (filter (fn [(p (Pair String T))] -> Bool (= (pairFirst p) k)) xs))
     ((some p) (some (pairSecond p)))
     ((none) (none)))
 
@@ -336,7 +336,7 @@ fn pathsFor root: String host: String -> Paths
   (Paths :harness (str root "/asl/grammar/harness.asn") :clients (str root "/asl/grammar/clients.asn") :tools (str root "/asl/grammar/tools.asn") :host host)
 
 fn condList f: Asn lid: String key: String -> (Result (Option (List String)) String)
-  (mt (asnGet f key)
+  (match (asnGet f key)
     ((none) (ok (none)))
     ((some v) (if (isForm v) (ok (some (map pyStrV (itemsOf v)))) (err (str "launch: layer " lid " :" key " must be a list of facts")))))
 
@@ -344,38 +344,38 @@ fn parseLayer f: Asn -> (Result Layer String)
   (let [(lid (pyStr (asnGet f "id"))) (text (asnGet f "text")) (src (asnGet f "from"))]
     (if (or (= (none? text) (none? src)) (and (some? text) (none? (textOf (optionOr text (asnSym ""))))))
       (err (str "launch: layer " lid " needs exactly one of :text \"...\" or :from"))
-      (mt (condList f lid "when")
+      (match (condList f lid "when")
         ((err e) (err e))
         ((ok w)
-          (mt (condList f lid "unless")
+          (match (condList f lid "unless")
             ((err e) (err e))
             ((ok u)
               (let [(c (listAppend (optionOr w (list)) (map (fn [(x String)] -> String (str "!" x)) (optionOr u (list)))))]
                 (ok (Layer :id lid :cond (if (listEmpty? c) (none) (some c))
-                           :text (mt text ((some t) (textOf t)) ((none) (none)))
-                           :src (mt src ((some s) (some (pyStrV s))) ((none) (none))))))))))))
+                           :text (match text ((some t) (textOf t)) ((none) (none)))
+                           :src (match src ((some s) (some (pyStrV s))) ((none) (none))))))))))))
 
 fn parseLayers fs: (List Asn) acc: (List Layer) -> (Result (List Layer) String)
-  (mt (listHead fs)
+  (match (listHead fs)
     ((none) (ok (listReverse acc)))
-    ((some f) (mt (parseLayer f) ((err e) (err e)) ((ok l) (parseLayers (tailOf fs) (cons l acc))))))
+    ((some f) (match (parseLayer f) ((err e) (err e)) ((ok l) (parseLayers (tailOf fs) (cons l acc))))))
 
 fn parseItems fs: (List Asn) acc: (List (Pair String Attractor)) -> (List (Pair String Attractor))
-  (mt (listHead fs)
+  (match (listHead fs)
     ((none) acc)
     ((some a) (parseItems (tailOf fs) (assocSet acc (pyStr (asnGet a "id")) (Attractor :goal (pyStr (asnGet a "goal")) :shadow (pyStr (asnGet a "shadow")))))))
 
 fn parseModes fs: (List Asn) acc: (List (Pair String (List String))) -> (Result (List (Pair String (List String))) String)
-  (mt (listHead fs)
+  (match (listHead fs)
     ((none) (ok acc))
     ((some m)
       (let [(mid (pyStr (asnGet m "id")))]
-        (mt (pyIter (asnGet m "attractors") (str "mode " mid " :attractors"))
+        (match (pyIter (asnGet m "attractors") (str "mode " mid " :attractors"))
           ((err e) (err e))
           ((ok ids) (parseModes (tailOf fs) (assocSet acc mid ids)))))))
 
 fn checkModes ms: (List (Pair String (List String))) items: (List (Pair String Attractor)) hpath: String -> (Result Unit String)
-  (mt (listHead ms)
+  (match (listHead ms)
     ((none) (ok ()))
     ((some m)
       (let [(missing (filter (fn [(i String)] -> Bool (none? (assocGet items i))) (pairSecond m)))]
@@ -384,57 +384,57 @@ fn checkModes ms: (List (Pair String (List String))) items: (List (Pair String A
           (err (str "launch: mode " (pairFirst m) " names unknown attractors " (pyListRepr missing) " in " hpath))))))
 
 fn introOf att: Asn -> (Result String String)
-  (mt (asnGet att "intro")
+  (match (asnGet att "intro")
     ((none) (ok ""))
-    ((some v) (cond ((not (truthy v)) (ok "")) (else (mt (textOf v) ((some t) (ok t)) ((none) (err "launch: :attractors :intro is not a string")))))))
+    ((some v) (cond ((not (truthy v)) (ok "")) (else (match (textOf v) ((some t) (ok t)) ((none) (err "launch: :attractors :intro is not a string")))))))
 
 fn parseHarness paths: Paths text: String -> (Result Harness String)
   (let [(hp paths.harness)]
-    (mt (readOne text)
+    (match (readOne text)
       ((err e) (err (str "launch: " hp ": " e)))
       ((ok tree)
         (if (not (headIs tree "harness"))
           (err (str "launch: " hp " is not a (:harness ...) form"))
-          (mt (formsOf (asnGet tree "layers") "layer" (str hp " :layers"))
+          (match (formsOf (asnGet tree "layers") "layer" (str hp " :layers"))
             ((err e) (err e))
             ((ok lfs)
-              (mt (parseLayers lfs (list))
+              (match (parseLayers lfs (list))
                 ((err e) (err e))
                 ((ok layers)
                   (if (listEmpty? layers)
                     (err (str "launch: " hp " has no :layers"))
-                    (mt (formOr (asnGet tree "attractors") (str hp " :attractors"))
+                    (match (formOr (asnGet tree "attractors") (str hp " :attractors"))
                       ((err e) (err e))
                       ((ok att)
-                        (mt (formsOf (asnGet att "items") "attractor" (str hp " :items"))
+                        (match (formsOf (asnGet att "items") "attractor" (str hp " :items"))
                           ((err e) (err e))
                           ((ok ifs)
                             (let [(items (parseItems ifs (list)))]
-                              (mt (formsOf (asnGet att "modes") "mode" (str hp " :modes"))
+                              (match (formsOf (asnGet att "modes") "mode" (str hp " :modes"))
                                 ((err e) (err e))
                                 ((ok mfs)
-                                  (mt (parseModes mfs (list))
+                                  (match (parseModes mfs (list))
                                     ((err e) (err e))
                                     ((ok modes)
-                                      (mt (checkModes modes items hp)
+                                      (match (checkModes modes items hp)
                                         ((err e) (err e))
                                         ((ok _) (ok (Harness :layers layers :intro (introOf att) :items items :modes modes))))))))))))))))))))))
 
 fn fieldPairs xs: (List Asn) acc: (List (Pair String Asn)) -> (List (Pair String Asn))
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) acc)
     ((some k)
       (let [(rest (tailOf xs))]
-        (mt (listHead rest)
+        (match (listHead rest)
           ((none) acc)
-          ((some v) (fieldPairs (tailOf rest) (mt k ((asnKw n) (assocSet acc n v)) (_ acc))))))))
+          ((some v) (fieldPairs (tailOf rest) (match k ((asnKw n) (assocSet acc n v)) (_ acc))))))))
 
 fn parseClientList fs: (List Asn) cpath: String acc: (List Client) -> (Result (List Client) String)
-  (mt (listHead fs)
+  (match (listHead fs)
     ((none) (ok acc))
     ((some f)
       (let [(fields (fieldPairs (tailOf (itemsOf f)) (list)))]
-        (mt (assocGet fields "id")
+        (match (assocGet fields "id")
           ((none) (err (str "launch: " cpath ": a (:client ...) has no :id")))
           ((some idv)
             (let [(cid (pyStrV idv))
@@ -447,28 +447,28 @@ fn parseClientList fs: (List Asn) cpath: String acc: (List Client) -> (Result (L
 
 fn parseClients paths: Paths text: String -> (Result (List Client) String)
   (let [(cp paths.clients)]
-    (mt (readOne text)
+    (match (readOne text)
       ((err e) (err (str "launch: " cp ": " e)))
       ((ok tree)
-        (mt (formsOf (asnGet tree "clients") "client" (str cp " :clients"))
+        (match (formsOf (asnGet tree "clients") "client" (str cp " :clients"))
           ((err e) (err e))
           ((ok fs) (parseClientList fs cp (list)))))))
 
 fn loadSources paths: Paths harness: String clients: String tools: String -> Loaded
   (let [(cr (parseClients paths clients))
-        (hr (mt (parseHarness paths harness)
+        (hr (match (parseHarness paths harness)
               ((err e) (err e))
-              ((ok h) (mt cr ((err e) (err e)) ((ok _) (ok h))))))
-        (tr (mt (readOne tools) ((err e) (err (str "launch: " paths.tools ": " e))) ((ok t) (ok t))))]
+              ((ok h) (match cr ((err e) (err e)) ((ok _) (ok h))))))
+        (tr (match (readOne tools) ((err e) (err (str "launch: " paths.tools ": " e))) ((ok t) (ok t))))]
     (Loaded :paths paths :harness hr :clients cr :tools tr))
 
 fn findClient clients: (List Client) client: String -> (Option Client)
   (listHead (filter (fn [(c Client)] -> Bool (= c.id client)) clients))
 
 fn clientField clients: (List Client) client: String field: String -> (Option String)
-  (mt (findClient clients client)
+  (match (findClient clients client)
     ((none) (none))
-    ((some c) (mt (assocGet c.fields field) ((some v) (textOf v)) ((none) (none)))))
+    ((some c) (match (assocGet c.fields field) ((some v) (textOf v)) ((none) (none)))))
 
 (schema Probe (:f root String) (:f branch String) (:f rules Bool) (:f aslSrc Bool) (:f migrate Bool) (:f asl (Option String)) (:f session Bool))
 
@@ -490,7 +490,7 @@ fn skipSpaces bs: Bytes n: Int64 i: Int64 -> Int64
   (let [(k (spaceLen bs n i))] (if (> k 0) (skipSpaces bs n (+ i k)) i))
 
 fn migrateAt text: String bs: Bytes n: Int64 from: Int64 -> Bool
-  (mt (stringIndexOf (slice text from n) ":migrate")
+  (match (stringIndexOf (slice text from n) ":migrate")
     ((none) false)
     ((some rel)
       (let [(i (+ from (+ rel 8))) (j (skipSpaces bs n i))]
@@ -538,40 +538,40 @@ fn fillText text: String fill: (List (Pair String String)) -> String
   (let [(bs (stringToBytes text))] (fillScan text bs (bytesLength bs) fill 0 0 (list)))
 
 fn toolBriefs loaded: Loaded -> (Result String String)
-  (mt loaded.tools
+  (match loaded.tools
     ((err e) (err e))
     ((ok tree)
-      (mt (formsOf (asnGet tree "entries") "op" (str loaded.paths.tools " :entries"))
+      (match (formsOf (asnGet tree "entries") "op" (str loaded.paths.tools " :entries"))
         ((err e) (err e))
         ((ok ops)
           (ok (stringJoin (fold (fn [(acc (List String)) (op Asn)] -> (List String)
-                                  (mt (asnGet op "brief") ((some b) (mt (textOf b) ((some t) (listAppend acc (list t))) ((none) acc))) ((none) acc)))
+                                  (match (asnGet op "brief") ((some b) (match (textOf b) ((some t) (listAppend acc (list t))) ((none) acc))) ((none) acc)))
                                 (list) ops) "; "))))))
 
 fn languageText loaded: Loaded field: String -> (Result String String)
   (let [(tp loaded.paths.tools)]
-    (mt loaded.tools
+    (match loaded.tools
       ((err e) (err e))
       ((ok tree)
-        (mt (formsOf (asnGet tree "topics") "topic" (str tp " :topics"))
+        (match (formsOf (asnGet tree "topics") "topic" (str tp " :topics"))
           ((err e) (err e))
           ((ok ts)
             (let [(hits (filter (fn [(t Asn)] -> Bool (and (= (pyStr (asnGet t "name")) "language")
-                                                          (some? (mt (asnGet t field) ((some v) (textOf v)) ((none) (none))))))
+                                                          (some? (match (asnGet t field) ((some v) (textOf v)) ((none) (none))))))
                                 ts))]
-              (mt (listHead hits)
-                ((some t) (ok (optionOr (mt (asnGet t field) ((some v) (textOf v)) ((none) (none))) "")))
+              (match (listHead hits)
+                ((some t) (ok (optionOr (match (asnGet t field) ((some v) (textOf v)) ((none) (none))) "")))
                 ((none) (err (str "launch: " tp " has no (:topic :name :language :" field " ...)"))))))))))
 
 fn attractorsText h: Harness mode: String hpath: String -> (Result String String)
   (let [(ids (optionOr (assocGet h.modes mode) (list)))]
     (if (listEmpty? ids)
       (err (str "launch: no attractors for mode " mode " in " hpath))
-      (mt h.intro
+      (match h.intro
         ((err e) (err e))
         ((ok intro)
           (ok (str intro " " (stringJoin (map (fn [(i String)] -> String
-                                                (mt (assocGet h.items i)
+                                                (match (assocGet h.items i)
                                                   ((some a) (str i ": " a.goal ", overdone: " a.shadow))
                                                   ((none) (str i ": None, overdone: None"))))
                                               ids) "; ")))))))
@@ -595,7 +595,7 @@ fn layerPart loaded: Loaded h: Harness o: RenderOpts have: (List (Pair String Bo
           ((and (not (listEmpty? pos)) (or o.core (not (listAll? (fn [(w String)] -> Bool (factOf have w)) pos)))) (ok (none)))
           ((listAny? (fn [(w String)] -> Bool (factOf have w)) neg) (ok (none)))
           (else
-            (mt l.src
+            (match l.src
               ((none) (ok (some (fillText (optionOr l.text "") fill))))
               ((some s)
                 (cond
@@ -605,22 +605,22 @@ fn layerPart loaded: Loaded h: Harness o: RenderOpts have: (List (Pair String Bo
                   (else (err (str "launch: layer " lid " :from " s " is not a known source")))))))))))
 
 fn renderLayers loaded: Loaded h: Harness o: RenderOpts have: (List (Pair String Bool)) fill: (List (Pair String String)) ls: (List Layer) acc: (List String) -> (Result (List String) String)
-  (mt (listHead ls)
+  (match (listHead ls)
     ((none) (ok (listReverse acc)))
     ((some l)
-      (mt (layerPart loaded h o have fill l)
+      (match (layerPart loaded h o have fill l)
         ((err e) (err e))
-        ((ok part) (renderLayers loaded h o have fill (tailOf ls) (mt part ((some t) (cons t acc)) ((none) acc)))))))
+        ((ok part) (renderLayers loaded h o have fill (tailOf ls) (match part ((some t) (cons t acc)) ((none) acc)))))))
 
 ; (:m :gate launchTest)
 fn render loaded: Loaded p: Probe o: RenderOpts -> (Result String String)
-  (mt loaded.harness
+  (match loaded.harness
     ((err e) (err e))
     ((ok h)
       (let [(clients (resultOr loaded.clients (list)))
             (client o.client)
             (have (factsOf clients client o.mode o.once p))]
-        (mt (toolBriefs loaded)
+        (match (toolBriefs loaded)
           ((err e) (err e))
           ((ok briefs)
             (let [(pd o.promptDir)
@@ -629,7 +629,7 @@ fn render loaded: Loaded p: Probe o: RenderOpts -> (Result String String)
                                 (pair "shell" (optionOr (clientField clients client "shell") "shell"))
                                 (pair "asl" (optionOr p.asl "asl"))
                                 (pair "promptDir" (optionOr pd "the prompt dir"))
-                                (pair "note" (mt pd ((some d) (pathJoin d "note.md")) ((none) "note.md")))
+                                (pair "note" (match pd ((some d) (pathJoin d "note.md")) ((none) "note.md")))
                                 (pair "aslMore" briefs)
                                 (pair "subagent" (optionOr (clientField clients client "subagent") "a subagent tool")))
                           o.fills))
@@ -640,16 +640,16 @@ fn render loaded: Loaded p: Probe o: RenderOpts -> (Result String String)
                 ((not (listEmpty? unknownDrop)) (err (str "launch: cannot drop unknown layers " (pyListRepr unknownDrop))))
                 ((not (listEmpty? unknownOnly)) (err (str "launch: cannot render unknown layers " (pyListRepr unknownOnly))))
                 (else
-                  (mt (renderLayers loaded h o have fill h.layers (list))
+                  (match (renderLayers loaded h o have fill h.layers (list))
                     ((err e) (err e))
                     ((ok parts)
                       (ok (str (stringJoin (map (fn [(t String)] -> String (hostPaths t loaded.paths.host)) parts) "\n") "\n"))))))))))))
 
 fn layerText loaded: Loaded lid: String -> (Result String String)
-  (mt loaded.harness
+  (match loaded.harness
     ((err e) (err e))
     ((ok h)
-      (mt (listHead (filter (fn [(l Layer)] -> Bool (and (= l.id lid) (some? l.text))) h.layers))
+      (match (listHead (filter (fn [(l Layer)] -> Bool (and (= l.id lid) (some? l.text))) h.layers))
         ((some l) (ok (optionOr l.text "")))
         ((none) (err (str "launch: " loaded.paths.harness " has no :text layer " lid))))))
 
@@ -660,7 +660,7 @@ fn pathJoin a: String b: String -> String
     (else (str a "/" b)))
 
 fn normComps cs: (List String) initial: Int64 acc: (List String) -> (List String)
-  (mt (listHead cs)
+  (match (listHead cs)
     ((none) (listReverse acc))
     ((some c)
       (cond
@@ -744,7 +744,7 @@ fn claudeArgv clients: (List Client) cpath: String exe: String promptPath: Strin
       (shellOnly
         (if (or lean coord)
           (err "launch: --shell-only replaces --lean and --coord")
-          (mt (clientField clients "claude" "shell")
+          (match (clientField clients "claude" "shell")
             ((none) (err (str "launch: no :shell for claude in " cpath)))
             ((some sh) (ok (listAppend head (list "--tools" sh "--strict-mcp-config" "--disable-slash-commands")))))))
       (lean
@@ -761,10 +761,10 @@ fn claudeArgv clients: (List Client) cpath: String exe: String promptPath: Strin
 
 ; (:m :gate launchTest)
 fn buildArgv clients: (List Client) cpath: String client: String exe: (Option String) promptPath: String extraDir: String lean: Bool extra: (List String) coord: Bool cwd: String base: String ask: Bool shellOnly: Bool -> (Result (List String) String)
-  (mt exe
+  (match exe
     ((none) (err (str "launch: " client " not found on PATH")))
     ((some x)
-      (let [(sub (and (= client "codex") (mt (listHead extra) ((some a) (or (= a "exec") (or (= a "e") (= a "review")))) ((none) false))))
+      (let [(sub (and (= client "codex") (match (listHead extra) ((some a) (or (= a "exec") (or (= a "e") (= a "review")))) ((none) false))))
             (rest (if sub (tailOf extra) extra))
             (built (cond
                      ((= client "claude") (claudeArgv clients cpath x promptPath lean coord shellOnly))
@@ -774,7 +774,7 @@ fn buildArgv clients: (List Client) cpath: String client: String exe: (Option St
                                                      (list "-c" (str "model_instructions_file=" promptPath) "-c" (codexSkillOff)))
                                          (if (stringEmpty? mode) (list) (list "-c" (str "features.multi_agent_v2.multi_agent_mode_hint_text=" (jsonStr mode))))))))
                      (else (ok (list x "--agent" (agyAgent) "--add-dir" extraDir "--add-dir" (absPath (if (stringEmpty? cwd) base cwd) base))))))]
-        (mt built
+        (match built
           ((err e) (err e))
           ((ok argv)
             (cond
@@ -789,21 +789,21 @@ fn buildArgv clients: (List Client) cpath: String client: String exe: (Option St
 fn writeAll! fd: Int64 s: String -> (Result Unit String)
   (if (stringEmpty? s)
     (ok ())
-    (mt (fdWrite fd s)
+    (match (fdWrite fd s)
       ((err e) (err e))
       ((ok k) (writeAll! fd (slice s k (stringLength s))))))
 
 fn ! mkdirs dir: String -> (Result Unit String)
-  (mt (dirCreate dir) ((ok _) (ok ())) ((err e) (err (str "launch: cannot create " dir ": " e))))
+  (match (dirCreate dir) ((ok _) (ok ())) ((err e) (err (str "launch: cannot create " dir ": " e))))
 
 fn ! writeFile path: String text: String -> (Result Unit String)
-  (mt (fileWrite path text) ((ok _) (ok ())) ((err e) (err (str "launch: cannot write " path ": " e))))
+  (match (fileWrite path text) ((ok _) (ok ())) ((err e) (err (str "launch: cannot write " path ": " e))))
 
 fn toolLines tools: (List String) -> String
   (stringJoin (map (fn [(t String)] -> String (str "  - " t "\n")) tools) "")
 
 fn clientTools clients: (List Client) -> (List String)
-  (mt (clientField clients "agy" "tools")
+  (match (clientField clients "agy" "tools")
     ((none) (list))
     ((some t) (filter (fn [(x String)] -> Bool (not (stringEmpty? x))) (map stringTrim (stringSplit t ",")))))
 
@@ -813,20 +813,20 @@ fn workerReport -> String
   "this agent is a worker: its report to the main agent is its only output, it lists every file it changed, and it edits only the paths its task names"
 
 fn stripLayer loaded: Loaded prompt: String lid: String subagent: (Option String) -> (Result String String)
-  (mt (layerText loaded lid)
+  (match (layerText loaded lid)
     ((err e) (err e))
     ((ok t)
       (if (and (none? subagent) (stringContains? t "{subagent}"))
         (err (str "launch: agy has no :subagent in " loaded.paths.clients))
-        (let [(filled (fillText t (mt subagent ((some s) (list (pair "subagent" s))) ((none) (list)))))]
+        (let [(filled (fillText t (match subagent ((some s) (list (pair "subagent" s))) ((none) (list)))))]
           (ok (stringReplace prompt (str (hostPaths filled loaded.paths.host) "\n") ""))))))
 
 fn workerPrompt loaded: Loaded clients: (List Client) prompt: String runDir: String -> (Result String String)
   (let [(sub (clientField clients "agy" "subagent"))]
-    (mt (stripLayer loaded prompt "delegate" sub)
+    (match (stripLayer loaded prompt "delegate" sub)
       ((err e) (err e))
       ((ok p1)
-        (mt (stripLayer loaded p1 "agyOnce" sub)
+        (match (stripLayer loaded p1 "agyOnce" sub)
           ((err e) (err e))
           ((ok p2)
             (let [(note (pathJoin runDir "note.md"))]
@@ -838,45 +838,45 @@ fn ! writeWorker loaded: Loaded clients: (List Client) prompt: String runDir: St
   (let [(worker (pathJoin agentsDir (str (agyAgent) "-worker.md")))
         (head (str "---\nname: " (agyAgent) "-worker\ndescription: " (workerDescription) "\nmainAgent: false\nsubagent: true\ninheritCustomizations: false\ninheritMcp: false\ntools:\n"
                    (toolLines (filter (fn [(t String)] -> Bool (not (or (= t "invoke_subagent") (= t "manage_subagents")))) tools)) "---\n\n"))]
-    (mt (workerPrompt loaded clients prompt runDir)
-      ((err e) (mt (writeFile worker head) ((err e2) (err e2)) ((ok _) (err e))))
-      ((ok wp) (mt (writeFile worker (str head wp)) ((err e) (err e)) ((ok _) (ok (str "agents:\n  - " worker "\n")))))))
+    (match (workerPrompt loaded clients prompt runDir)
+      ((err e) (match (writeFile worker head) ((err e2) (err e2)) ((ok _) (err e))))
+      ((ok wp) (match (writeFile worker (str head wp)) ((err e) (err e)) ((ok _) (ok (str "agents:\n  - " worker "\n")))))))
 
 fn ! writeAgy loaded: Loaded clients: (List Client) prompt: String runDir: String bare: Bool shellOnly: Bool -> (Result (Pair String String) String)
   (let [(agentsDir (pathJoin runDir (str ".agents/plugins/" (agyAgent) "/agents")))
         (pluginDir (pathJoin runDir (str ".agents/plugins/" (agyAgent))))]
-    (mt (mkdirs agentsDir)
+    (match (mkdirs agentsDir)
       ((err e) (err e))
       ((ok _)
-        (mt (writeFile (pathJoin pluginDir "plugin.json") (str "{\"name\": \"" (agyAgent) "\"}\n"))
+        (match (writeFile (pathJoin pluginDir "plugin.json") (str "{\"name\": \"" (agyAgent) "\"}\n"))
           ((err e) (err e))
           ((ok _)
             (let [(shellTool (clientField clients "agy" "shell"))
-                  (tools (if shellOnly (mt shellTool ((some s) (list s)) ((none) (list ""))) (clientTools clients)))]
+                  (tools (if shellOnly (match shellTool ((some s) (list s)) ((none) (list ""))) (clientTools clients)))]
               (if (or (listEmpty? tools) (stringEmpty? (optionOr (listHead tools) "")))
                 (err (str "launch: no :tools for agy in " loaded.paths.clients "; without it agy gets no run_command or edit tools"))
-                (mt (if (listContains? tools "invoke_subagent") (writeWorker loaded clients prompt runDir agentsDir tools) (ok ""))
+                (match (if (listContains? tools "invoke_subagent") (writeWorker loaded clients prompt runDir agentsDir tools) (ok ""))
                   ((err e) (err e))
                   ((ok declared)
                     (let [(notePath (pathJoin runDir "note.md"))
                           (path (pathJoin agentsDir (str (agyAgent) ".md")))]
-                      (mt (if (fileExists? notePath) (ok ()) (writeFile notePath ""))
+                      (match (if (fileExists? notePath) (ok ()) (writeFile notePath ""))
                         ((err e) (err e))
                         ((ok _)
-                          (mt (writeFile path (str "---\nname: " (agyAgent) "\ndescription: asl harness\nmainAgent: true\nsubagent: false\ninheritCustomizations: false\ninheritMcp: false\n"
+                          (match (writeFile path (str "---\nname: " (agyAgent) "\ndescription: asl harness\nmainAgent: true\nsubagent: false\ninheritCustomizations: false\ninheritMcp: false\n"
                                                    (if bare "excludeDefaultComponents: true\n" "") declared "tools:\n" (toolLines tools) "---\n\n" prompt))
                             ((err e) (err e))
                             ((ok _) (ok (pair path runDir))))))))))))))))
 
 fn ! writePrompt! loaded: Loaded client: String prompt: String runDir: String bare: Bool shellOnly: Bool -> (Result (Pair String String) String)
   (let [(clients (resultOr loaded.clients (list)))]
-    (mt (mkdirs runDir)
+    (match (mkdirs runDir)
       ((err e) (err e))
       ((ok _)
         (if (= client "agy")
           (writeAgy loaded clients prompt runDir bare shellOnly)
           (let [(path (pathJoin runDir (str client ".md")))]
-            (mt (writeFile path prompt) ((err e) (err e)) ((ok _) (ok (pair path "")))))))))
+            (match (writeFile path prompt) ((err e) (err e)) ((ok _) (ok (pair path "")))))))))
 
 fn usageText -> String
   "asl launch: start claude, codex or agy with the asl harness as the system prompt.\n\nThe prompt is rendered from asl/grammar/harness.asn: its layers in order, each layer with :when only\nwhere its facts hold for this client and workspace, and the attractors of the mode, so the client\nneeds no toolbelt skill. Usage:\n  launch.py <claude|codex|agy> [--lean [--coord]] [--mode scout|implement|grade|distill] [--core]\n            [--bare] [--shell-only] [--ask] [--dry-run] [--print-prompt] [--prompt-only] [-- client args...]\n--lean (claude only) also narrows the tool set to the :lean list, drops MCP servers and skills;\n--coord adds the :coord tools (see and message peer sessions, about 2.4k tokens);\n--core renders only the layers without :when (no asl knowledge, no conditional layers);\n--ask keeps the client's permission prompts instead of its :auto mode (clients.asn);\n--bare (agy only) drops agy's default components too (workspace map, injected context);\n--shell-only (claude, agy) leaves the client its shell tool alone, so reads and edits go through the shell or asl;\n--prompt-only writes the rendered prompt and returns its path, freeze digest and requested client argv without launching;\nASL_LAUNCH_DROP removes one harness layer, ASL_LAUNCH_FILL_ASL substitutes the asl command path,\nASL_LAUNCH_ONCE omits the memory layer, and ASL_LAUNCH_PROMPT_DIR selects the prompt output directory."
@@ -894,12 +894,12 @@ fn stop code: Int64 msg: String -> Outcome
   (Outcome :exit code :out "" :errText msg :action "none" :argv (list) :launched "")
 
 fn usageOutcome args: (List String) -> (Option Outcome)
-  (mt (listHead args)
+  (match (listHead args)
     ((none) (some (stop 2 (str (usageText) "\n"))))
     ((some c) (if (listContains? (launchClients) c) (none) (some (stop 2 (str (usageText) "\n"))))))
 
 fn splitDashes xs: (List String) -> (Pair (List String) (List String))
-  (mt (listIndexOf xs "--")
+  (match (listIndexOf xs "--")
     ((none) (pair xs (list)))
     ((some i) (pair (listTake xs i) (listDrop xs (+ i 1)))))
 
@@ -907,26 +907,26 @@ fn withoutAt xs: (List String) i: Int64 k: Int64 -> (List String)
   (listAppend (listTake xs i) (listDrop xs (+ i k)))
 
 fn parseArgs loaded: Loaded args: (List String) -> (Result Plan Outcome)
-  (mt (usageOutcome args)
+  (match (usageOutcome args)
     ((some o) (err o))
     ((none)
       (let [(client (optionOr (listHead args) ""))
             (sp (splitDashes (tailOf args)))
             (rest0 (pairFirst sp))
             (extra (pairSecond sp))
-            (modePick (mt (listIndexOf rest0 "--mode")
+            (modePick (match (listIndexOf rest0 "--mode")
                         ((none) (ok (pair "implement" rest0)))
                         ((some i)
-                          (mt loaded.harness
+                          (match loaded.harness
                             ((err e) (err (stop 1 (str e "\n"))))
                             ((ok h)
                               (let [(known (listSort (map (fn [(m (Pair String (List String)))] -> String (pairFirst m)) h.modes)))
                                     (arg (listGet rest0 (+ i 1)))]
-                                (mt arg
+                                (match arg
                                   ((some m) (if (listContains? known m) (ok (pair m (withoutAt rest0 i 2)))
                                               (err (stop 2 (str "launch: --mode takes one of " (stringJoin known ", ") " (the :modes of harness.asn)\n")))))
                                   ((none) (err (stop 2 (str "launch: --mode takes one of " (stringJoin known ", ") " (the :modes of harness.asn)\n")))))))))))]
-        (mt modePick
+        (match modePick
           ((err o) (err o))
           ((ok mp)
             (let [(rest0 (pairSecond mp))
@@ -945,13 +945,13 @@ fn dryRunLine client: String lean: Bool path: String prompt: String argv: (List 
        " :argv (" (stringJoin (map asnQuote argv) " ") "))\n")
 
 fn ! freeze loaded: Loaded -> (Result String String)
-  (mt (fileReadString loaded.paths.harness)
+  (match (fileReadString loaded.paths.harness)
     ((err e) (err e))
     ((ok h)
-      (mt (fileReadString loaded.paths.clients)
+      (match (fileReadString loaded.paths.clients)
         ((err e) (err e))
         ((ok c)
-          (mt (fileReadString loaded.paths.tools)
+          (match (fileReadString loaded.paths.tools)
             ((err e) (err e))
             ((ok t) (ok (optionOr (stringSlice (bytesSha256 (stringToBytes (str h c t))) 0 8) ""))))))))
 
@@ -971,28 +971,28 @@ fn ! runPlan loaded: Loaded ctx: Ctx plan: Plan -> Outcome
         (has (fn [(f String)] -> Bool (listContains? rest f)))
         (once (or (listAny? (fn [(a String)] -> Bool (or (= a "-p") (= a "--print"))) extra)
                   (and (= client "codex") (or (= (listHead extra) (some "exec")) (= (listHead extra) (some "e"))))))
-        (drop (mt (envGet "ASL_LAUNCH_DROP") ((some lid) (list lid)) ((none) (list))))
+        (drop (match (envGet "ASL_LAUNCH_DROP") ((some lid) (list lid)) ((none) (list))))
         (aslFill (envGet "ASL_LAUNCH_FILL_ASL"))
-        (fills (mt aslFill ((some a) (cons (pair "asl" a) ctx.fills)) ((none) ctx.fills)))
+        (fills (match aslFill ((some a) (cons (pair "asl" a) ctx.fills)) ((none) ctx.fills)))
         (promptDir (optionOr (envGet "ASL_LAUNCH_PROMPT_DIR") ctx.runDir))
         (opts (RenderOpts :cwd ctx.cwd :client client :mode plan.mode :core (has "--core") :promptDir (some promptDir)
                           :drop drop :only (list) :fills fills :once (or once (= (optionOr (envGet "ASL_LAUNCH_ONCE") "") "true")) :platform ctx.platform :date ctx.date))]
-    (mt (render loaded ctx.probe opts)
+    (match (render loaded ctx.probe opts)
       ((err e) (stop 1 (str e "\n")))
       ((ok prompt)
         (if (has "--print-prompt")
           (Outcome :exit 0 :out prompt :errText "" :action "none" :argv (list) :launched "")
-          (mt (writePrompt! loaded client prompt promptDir (has "--bare") (has "--shell-only"))
+          (match (writePrompt! loaded client prompt promptDir (has "--bare") (has "--shell-only"))
             ((err e) (stop 1 (str e "\n")))
             ((ok written)
               (if plan.promptOnly
-                (mt (freeze loaded)
+                (match (freeze loaded)
                   ((err e) (stop 1 (str e "\n")))
                   ((ok digest)
-                    (mt (promptArgv loaded ctx plan written)
+                    (match (promptArgv loaded ctx plan written)
                       ((err e) (stop 1 (str e "\n")))
                       ((ok argv) (Outcome :exit 0 :out (promptOnlyLine (pairFirst written) (pairSecond written) digest argv) :errText "" :action "none" :argv (list) :launched "")))))
-                (mt (buildArgv (resultOr loaded.clients (list)) loaded.paths.clients client (assocGet ctx.exes client) (pairFirst written)
+                (match (buildArgv (resultOr loaded.clients (list)) loaded.paths.clients client (assocGet ctx.exes client) (pairFirst written)
                              (pairSecond written) (has "--lean") extra (has "--coord") "" ctx.cwd (has "--ask") (has "--shell-only"))
                 ((err e) (stop 1 (str e "\n")))
                 ((ok argv)
@@ -1002,7 +1002,7 @@ fn ! runPlan loaded: Loaded ctx: Ctx plan: Plan -> Outcome
 
 ; (:m :gate launchTest)
 fn ! mainWith! loaded: Loaded ctx: Ctx args: (List String) -> Outcome
-  (mt (parseArgs loaded args)
+  (match (parseArgs loaded args)
     ((err o) o)
     ((ok plan) (runPlan loaded ctx plan)))
 
@@ -1024,14 +1024,14 @@ fn readyOn ready: (List (Pair Int64 Int64)) fd: Int64 -> Bool
 
 fn ! stepFd sp: SpawnedProc pm: Pump isOut: Bool relay: Bool -> (Result Pump String)
   (let [(fd (if isOut sp.stdout sp.stderr))]
-    (mt (fdRead fd 65536)
+    (match (fdRead fd 65536)
       ((err e) (if (= e "wouldBlock") (ok pm) (err (str "read: " e))))
       ((ok chunk)
         (if (stringEmpty? chunk)
-          (mt (fdClose fd)
+          (match (fdClose fd)
             ((err e) (err (str "close: " e)))
             ((ok _) (ok (with pm :outOpen (if isOut false pm.outOpen) :errOpen (if isOut pm.errOpen false)))))
-          (mt (if relay (writeAll! (if isOut 1 2) chunk) (ok ()))
+          (match (if relay (writeAll! (if isOut 1 2) chunk) (ok ()))
             ((err e) (err (str "write: " e)))
             ((ok _)
               (let [(seen (str (if isOut pm.tailOut pm.tailErr) chunk))]
@@ -1040,13 +1040,13 @@ fn ! stepFd sp: SpawnedProc pm: Pump isOut: Bool relay: Bool -> (Result Pump Str
 fn ! pump sp: SpawnedProc pm: Pump relay: Bool -> (Result Pump String)
   (if (not (or pm.outOpen pm.errOpen))
     (ok pm)
-    (mt (fdPoll (pollSet sp pm) -1)
+    (match (fdPoll (pollSet sp pm) -1)
       ((err e) (err (str "poll: " e)))
       ((ok ready)
-        (mt (if (and pm.outOpen (readyOn ready sp.stdout)) (stepFd sp pm true relay) (ok pm))
+        (match (if (and pm.outOpen (readyOn ready sp.stdout)) (stepFd sp pm true relay) (ok pm))
           ((err e) (err e))
           ((ok p1)
-            (mt (if (and p1.errOpen (readyOn ready sp.stderr)) (stepFd sp p1 false relay) (ok p1))
+            (match (if (and p1.errOpen (readyOn ready sp.stderr)) (stepFd sp p1 false relay) (ok p1))
               ((err e) (err e))
               ((ok p2) (pump sp p2 relay))))))))
 
@@ -1054,34 +1054,34 @@ fn posixExitCode raw: Int64 -> Int64
   (if (< raw 0) (+ 128 (- 0 raw)) raw)
 
 fn ! reap sp: SpawnedProc -> (Result Int64 String)
-  (mt (procWaitPid sp.pid false)
+  (match (procWaitPid sp.pid false)
     ((err e) (err (str "wait: " e)))
-    ((ok c) (mt c ((some k) (ok (posixExitCode k))) ((none) (err "wait: no exit status")))))
+    ((ok c) (match c ((some k) (ok (posixExitCode k))) ((none) (err "wait: no exit status")))))
 
 fn ! abandon sp: SpawnedProc e: String -> (Result (Pair Int64 Pump) String)
-  (mt (procKill (- 0 sp.pid) "SIGKILL")
+  (match (procKill (- 0 sp.pid) "SIGKILL")
     ((err k) (err (str e "; kill: " k)))
-    ((ok _) (mt (reap sp) ((err w) (err (str e "; " w))) ((ok _) (err e)))))
+    ((ok _) (match (reap sp) ((err w) (err (str e "; " w))) ((ok _) (err e)))))
 
 fn ! spawnPump argv: (List String) cwd: (Option String) env: (Option (List String)) relay: Bool -> (Result (Pair Int64 Pump) String)
-  (mt (procSpawnv argv cwd env)
+  (match (procSpawnv argv cwd env)
     ((err e) (err (if (= e "notFound") (str (optionOr (listHead argv) "") " not found on PATH") (str "cannot start " (optionOr (listHead argv) "") ": " e))))
     ((ok sp)
-      (mt (fdClose sp.stdin)
+      (match (fdClose sp.stdin)
         ((err e) (abandon sp (str "close stdin: " e)))
         ((ok _)
-          (mt (pump sp (Pump :outOpen true :errOpen true :out "" :errText "" :tailOut "" :tailErr "" :empty false) relay)
+          (match (pump sp (Pump :outOpen true :errOpen true :out "" :errText "" :tailOut "" :tailErr "" :empty false) relay)
             ((err e) (abandon sp e))
-            ((ok pm) (mt (reap sp) ((err e) (err e)) ((ok k) (ok (pair k pm))))))))))
+            ((ok pm) (match (reap sp) ((err e) (err e)) ((ok k) (ok (pair k pm))))))))))
 
 fn ! runCapture! argv: (List String) cwd: (Option String) env: (Option (List String)) -> (Result Captured String)
-  (mt (spawnPump argv cwd env false)
+  (match (spawnPump argv cwd env false)
     ((err e) (err e))
     ((ok r) (ok (Captured :code (pairFirst r) :out (pairSecond r).out :errText (pairSecond r).errText))))
 
 ; (:m :gate launchTest)
 fn ! runChild! argv: (List String) env: (List String) -> Int64
-  (mt (spawnPump argv (none) (some env) true)
+  (match (spawnPump argv (none) (some env) true)
     ((err e) (do (writeAll! 2 (str "launch: " e "\n")) 1))
     ((ok r)
       (if (pairSecond r).empty
@@ -1089,12 +1089,12 @@ fn ! runChild! argv: (List String) env: (List String) -> Int64
         (pairFirst r))))
 
 fn ! accessOk path: String -> Bool
-  (mt (fileStat path)
+  (match (fileStat path)
     ((err _) false)
     ((ok st) (and (not st.isDir) (!= (& st.mode 73) 0))))
 
 fn ! whichDirs dirs: (List String) seen: (List String) name: String -> (Option String)
-  (mt (listHead dirs)
+  (match (listHead dirs)
     ((none) (none))
     ((some d)
       (if (listContains? seen d)
@@ -1112,7 +1112,7 @@ fn ! gitOut args: (List String) cwd: String -> (Result Captured String)
   (runCapture! (cons "git" args) (some cwd) (none))
 
 fn ! probe! cwd: String -> (Result Probe String)
-  (mt (gitOut (list "rev-parse" "--show-toplevel") cwd)
+  (match (gitOut (list "rev-parse" "--show-toplevel") cwd)
     ((err e) (err (str "launch: " e)))
     ((ok top)
       (let [(root (if (= top.code 0) (stringTrim top.out) ""))
@@ -1120,23 +1120,23 @@ fn ! probe! cwd: String -> (Result Probe String)
             (session (not (stringEmpty? (optionOr (envGet "ASL_SESSION") ""))))]
         (if (stringEmpty? root)
           (ok (Probe :root "" :branch "" :rules false :aslSrc false :migrate false :asl asl :session session))
-          (mt (gitOut (list "branch" "--show-current") cwd)
+          (match (gitOut (list "branch" "--show-current") cwd)
             ((err e) (err (str "launch: " e)))
             ((ok br)
-              (mt (gitOut (list "ls-files" "--" "*.asl") root)
+              (match (gitOut (list "ls-files" "--" "*.asl") root)
                 ((err e) (err (str "launch: " e)))
                 ((ok ls)
-                  (let [(rules (mt (fileStat (pathJoin root "asl/grammar/rules.asn")) ((ok st) st.isFile) ((err _) false)))
+                  (let [(rules (match (fileStat (pathJoin root "asl/grammar/rules.asn")) ((ok st) st.isFile) ((err _) false)))
                         (cfg (pathJoin root ".asl.config.asn"))
-                        (cfgFile (mt (fileStat cfg) ((ok st) st.isFile) ((err _) false)))]
-                    (mt (if cfgFile (mt (fileReadString cfg) ((ok t) (ok (migrateOn t))) ((err e) (err (str "launch: cannot read " cfg ": " e)))) (ok false))
+                        (cfgFile (match (fileStat cfg) ((ok st) st.isFile) ((err _) false)))]
+                    (match (if cfgFile (match (fileReadString cfg) ((ok t) (ok (migrateOn t))) ((err e) (err (str "launch: cannot read " cfg ": " e)))) (ok false))
                       ((err e) (err e))
                       ((ok migrate)
                         (ok (Probe :root root :branch (stringTrim br.out) :rules rules :aslSrc (not (stringEmpty? (stringTrim ls.out)))
                                    :migrate migrate :asl asl :session session)))))))))))))
 
 fn ! toolLine argv: (List String) -> (Result String String)
-  (mt (runCapture! argv (none) (none))
+  (match (runCapture! argv (none) (none))
     ((err e) (err (str "launch: " e)))
     ((ok c) (if (= c.code 0) (ok (stringTrim c.out)) (err (str "launch: " (stringJoin argv " ") " exited " (stringFromInt64 c.code) ": " (stringTrim c.errText))))))
 
@@ -1153,38 +1153,38 @@ fn lastDash s: String i: Int64 -> (Option Int64)
   (if (< i 0) (none) (if (= (slice s i (+ i 1)) "-") (some i) (lastDash s (- i 1))))
 
 fn ! pruneOne runRoot: String name: String -> (Result Unit String)
-  (mt (lastDash name (- (stringLength name) 1))
+  (match (lastDash name (- (stringLength name) 1))
     ((none) (ok ()))
     ((some i)
       (let [(client (slice name 0 i)) (pid (slice name (+ i 1) (stringLength name)))]
         (if (not (and (listContains? (launchClients) client) (allDigits pid)))
           (ok ())
-          (mt (runCapture! (list "ps" "-p" pid "-o" "pid=") (none) (none))
+          (match (runCapture! (list "ps" "-p" pid "-o" "pid=") (none) (none))
             ((err e) (err (str "launch: " e " (needed to prune " runRoot ")")))
             ((ok c)
               (if (= c.code 0)
                 (ok ())
-                (mt (pathRemove (pathJoin runRoot name))
+                (match (pathRemove (pathJoin runRoot name))
                   ((ok _) (ok ()))
                   ((err e) (do (writeAll! 2 (str "launch: cannot prune " (pathJoin runRoot name) ": " e "\n")) (ok ())))))))))))
 
 fn ! pruneList runRoot: String names: (List String) -> (Result Unit String)
-  (mt (listHead names)
+  (match (listHead names)
     ((none) (ok ()))
-    ((some n) (mt (pruneOne runRoot n) ((err e) (err e)) ((ok _) (pruneList runRoot (tailOf names))))))
+    ((some n) (match (pruneOne runRoot n) ((err e) (err e)) ((ok _) (pruneList runRoot (tailOf names))))))
 
 fn ! pruneRunDirs! runRoot: String -> (Result Unit String)
-  (mt (fileStat runRoot)
+  (match (fileStat runRoot)
     ((err _) (ok ()))
     ((ok st)
       (if (not st.isDir)
         (ok ())
-        (mt (dirList runRoot)
+        (match (dirList runRoot)
           ((err e) (err (str "launch: cannot list " runRoot ": " e)))
           ((ok names) (pruneList runRoot names))))))
 
 fn envKey row: String -> String
-  (mt (stringIndexOf row "=") ((some i) (slice row 0 i)) ((none) row))
+  (match (stringIndexOf row "=") ((some i) (slice row 0 i)) ((none) row))
 
 fn ! launchedEnv client: String -> (List String)
   (listAppend (filter (fn [(r String)] -> Bool (and (!= (envKey r) "ASL_LAUNCHED") (!= (envKey r) "ASL_LEASE_PID"))) (envList))
@@ -1192,79 +1192,79 @@ fn ! launchedEnv client: String -> (List String)
           (str "ASL_LEASE_PID=" (optionOr (envGet "ASL_LEASE_PID") (stringFromInt64 (procSelf))))))
 
 fn ! readSource path: String -> (Result String String)
-  (mt (fileReadString path) ((ok t) (ok t)) ((err e) (err (str "launch: cannot read " path ": " e))))
+  (match (fileReadString path) ((ok t) (ok t)) ((err e) (err (str "launch: cannot read " path ": " e))))
 
 fn ! runnerDisplay! root: String -> String
   (rb/runnerDisplay! root)
 
 fn ! loadRoot root: String -> (Result Loaded String)
   (let [(paths (pathsFor root (runnerDisplay! root)))]
-    (mt (readSource paths.harness)
+    (match (readSource paths.harness)
       ((err e) (err e))
       ((ok h)
-        (mt (readSource paths.clients)
+        (match (readSource paths.clients)
           ((err e) (err e))
           ((ok c)
-            (mt (readSource paths.tools)
+            (match (readSource paths.tools)
               ((err e) (err e))
               ((ok t) (ok (loadSources paths h c t)))))))))
 
 fn ! gatherCtx client: String -> (Result Ctx String)
-  (mt (envGet "HOME")
+  (match (envGet "HOME")
     ((none) (err "launch: HOME is not set"))
     ((some home)
       (let [(runRoot (pathJoin home ".asl/run/harness"))]
-        (mt (pruneRunDirs! runRoot)
+        (match (pruneRunDirs! runRoot)
           ((err e) (err e))
           ((ok _)
-            (mt (realPath ".")
+            (match (realPath ".")
               ((err e) (err (str "launch: cannot resolve the working directory: " e)))
               ((ok cwd)
-                (mt (probe! cwd)
+                (match (probe! cwd)
                   ((err e) (err e))
                   ((ok p)
-                    (mt (platform!)
+                    (match (platform!)
                       ((err e) (err e))
                       ((ok plat)
-                        (mt (today!)
+                        (match (today!)
                           ((err e) (err e))
                           ((ok day)
                             (let [(exe (whichIn! (envGet "PATH") client))]
                               (ok (Ctx :cwd cwd :runDir (pathJoin runRoot (str client "-" (stringFromInt64 (procSelf)))) :probe p
-                                       :exes (mt exe ((some x) (list (pair client x))) ((none) (list))) :platform plat :date day :fills (list)))))))))))))))))
+                                       :exes (match exe ((some x) (list (pair client x))) ((none) (list))) :platform plat :date day :fills (list)))))))))))))))))
 
 fn ! act o: Outcome -> Int64
   (cond
     ((= o.action "exec")
-      (mt (procExecv o.argv (some (launchedEnv o.launched)))
+      (match (procExecv o.argv (some (launchedEnv o.launched)))
         ((ok _) 0)
-        ((err e) (mt (writeAll! 2 (str "launch: cannot exec " (optionOr (listHead o.argv) "") ": " e "\n")) ((ok _) 1) ((err _) 1)))))
+        ((err e) (match (writeAll! 2 (str "launch: cannot exec " (optionOr (listHead o.argv) "") ": " e "\n")) ((ok _) 1) ((err _) 1)))))
     ((= o.action "child") (runChild! o.argv (launchedEnv o.launched)))
     (else o.exit))
 
 fn ! finish o: Outcome -> Int64
-  (mt (writeAll! 1 o.out)
+  (match (writeAll! 1 o.out)
     ((err _) 120)
-    ((ok _) (mt (writeAll! 2 o.errText) ((err _) 120) ((ok _) (act o)))))
+    ((ok _) (match (writeAll! 2 o.errText) ((err _) 120) ((ok _) (act o)))))
 
 fn ! main args: (List String) -> (Result Int64 String)
-  (mt (usageOutcome args)
+  (match (usageOutcome args)
     ((some o) (ok (finish o)))
     ((none)
-      (mt (envGet "ASL_ROOT")
+      (match (envGet "ASL_ROOT")
         ((none) (ok (finish (stop 1 "launch: ASL_ROOT is not set; bin/asl launch sets it to the repository root\n"))))
         ((some root) (mainIn! root args)))))
 
 fn ! mainIn! root: String args: (List String) -> (Result Int64 String)
-  (mt (usageOutcome args)
+  (match (usageOutcome args)
     ((some o) (ok (finish o)))
     ((none)
-      (mt (loadRoot root)
+      (match (loadRoot root)
         ((err e) (ok (finish (stop 1 (str e "\n")))))
         ((ok loaded)
-          (mt (parseArgs loaded args)
+          (match (parseArgs loaded args)
             ((err o) (ok (finish o)))
             ((ok plan)
-              (mt (gatherCtx plan.client)
+              (match (gatherCtx plan.client)
                 ((err e) (ok (finish (stop 1 (str e "\n")))))
                 ((ok ctx) (ok (finish (runPlan loaded ctx plan)))))))))))

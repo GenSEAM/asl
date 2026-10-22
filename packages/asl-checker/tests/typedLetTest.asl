@@ -16,7 +16,7 @@ fn testTypedLetResolves -> Bool
         true))
 
 fn testResolveOnlyTypedLet -> Bool
-  (mt (a/parseForChecker (typedLetSource))
+  (match (a/parseForChecker (typedLetSource))
     ((err e) (do (assert false (str "parses: " e.msg)) false))
     ((ok forms) (let [(ds (r/resolveModule (r/collectSummary forms "q/typed.asl") forms (mapEmpty)))]
                   (do (assert (listEmpty? ds) (str "name resolution of a typed let reports nothing: " (diagCodes ds)))

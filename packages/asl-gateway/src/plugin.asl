@@ -98,7 +98,7 @@
   (:f lifecycle (Option Lifecycle)))
 
 fn priceError price: PriceModel -> (Option String)
-  (mt price
+  (match price
     ((perToken inPerM outPerM) (if (or (< inPerM 0.0) (< outPerM 0.0)) (some "perToken price is negative") none))
     ((perGpuSecond rates)
       (cond
@@ -108,7 +108,7 @@ fn priceError price: PriceModel -> (Option String)
         (else none))))
 
 fn scaleError scale: ScaleModel -> (Option String)
-  (mt scale
+  (match scale
     ((serverless idleTimeoutSec coldStartMs)
       (if (or (< idleTimeoutSec 0) (< coldStartMs 0)) (some "serverless timings are negative") none))
     (_ none))
@@ -117,12 +117,12 @@ fn capabilitiesError caps: PluginCapabilities -> (Option String)
   (if (< caps.maxConcurrency 1)
     (some "maxConcurrency is below 1")
     (if (< caps.redirectAfterSec 0) (some "redirectAfterSec is negative")
-    (mt (priceError caps.priceModel)
+    (match (priceError caps.priceModel)
       ((some e) (some e))
       ((none) (scaleError caps.scaleModel)))))
 
 fn batchEndpoint? caps: PluginCapabilities -> Bool
-  (mt caps.batching ((batchEndpoint) true) (_ false))
+  (match caps.batching ((batchEndpoint) true) (_ false))
 
 fn makePlugin id: String caps: PluginCapabilities send: (fn [PluginRequest] -> (Result PluginReply PluginFailure)) sendBatch: (Option (fn [(List PluginRequest)] -> (Result (List PluginReply) PluginFailure))) health: (fn [(Map String String)] -> (Result String String)) lifecycle: (Option Lifecycle) -> (Result Plugin String)
   (cond
@@ -136,7 +136,7 @@ fn ! pluginSend! plugin: Plugin request: PluginRequest -> (Result PluginReply Pl
   (plugin.send request)
 
 fn ! pluginSendBatch! plugin: Plugin requests: (List PluginRequest) -> (Result (List PluginReply) PluginFailure)
-  (mt plugin.sendBatch
+  (match plugin.sendBatch
     ((some batch) (batch requests))
     ((none) (err (unsupported plugin.id "sendBatch"))))
 
@@ -144,18 +144,18 @@ fn ! pluginHealth! plugin: Plugin env: (Map String String) -> (Result String Str
   (plugin.health env)
 
 fn lifecycleResult result: (Result LifecycleStatus String) -> (Result LifecycleStatus PluginFailure)
-  (mt result
+  (match result
     ((ok status) (ok status))
     ((err reason) (err (lifecycleFailed reason))))
 
 fn ! gatedLifecycle! plugin: Plugin operation: String pick: (fn [Lifecycle] -> (fn [LifecycleRequest] -> (Result LifecycleStatus String))) action: budget/Action ledger: (Option budget/Ledger) request: LifecycleRequest nowMs: Int64 -> (Result LifecycleStatus PluginFailure)
-  (mt plugin.lifecycle
+  (match plugin.lifecycle
     ((none) (err (unsupported plugin.id operation)))
     ((some ops)
-      (mt ledger
+      (match ledger
         ((none) (err (spendGate (str operation " needs a budget ledger"))))
         ((some l)
-          (mt (budget/gate l action nowMs)
+          (match (budget/gate l action nowMs)
             ((budget/deny reason) (err (spendGate reason)))
             ((budget/allow) (lifecycleResult ((pick ops) request))))))))
 
@@ -168,7 +168,7 @@ fn ! pluginStart! plugin: Plugin ledger: (Option budget/Ledger) request: Lifecyc
     (budget/actionScaleUp request.endpoint plugin.id request.unit request.expectedCost) ledger request nowMs)
 
 fn ! ungatedLifecycle! plugin: Plugin operation: String pick: (fn [Lifecycle] -> (fn [LifecycleRequest] -> (Result LifecycleStatus String))) request: LifecycleRequest -> (Result LifecycleStatus PluginFailure)
-  (mt plugin.lifecycle
+  (match plugin.lifecycle
     ((none) (err (unsupported plugin.id operation)))
     ((some ops) (lifecycleResult ((pick ops) request))))
 
@@ -197,9 +197,9 @@ fn cliAgentCapabilities -> PluginCapabilities
 fn ! openaiCompat provider: up/UpstreamProvider st: up/UpstreamSettings caps: PluginCapabilities lifecycle: (Option Lifecycle) -> (Result Plugin String)
   (makePlugin provider.id caps
     (fn [(request PluginRequest)] -> (Result PluginReply PluginFailure)
-      (mt request
+      (match request
         ((httpSend req env timeoutSec)
-          (mt (up/upstreamCallStartFollowing! req env timeoutSec (maxRedirects caps timeoutSec))
+          (match (up/upstreamCallStartFollowing! req env timeoutSec (maxRedirects caps timeoutSec))
             ((ok call) (ok (httpStarted call)))
             ((err failure) (err (upstreamFailed failure)))))
         ((cliSend _ _) (err (unsupported provider.id "cliSend")))))
@@ -212,9 +212,9 @@ fn ! openaiCompat provider: up/UpstreamProvider st: up/UpstreamSettings caps: Pl
 fn ! cliPlugin row: cli/CliProvider dispatch: (fn [String cli/DispatchOptions] -> (Result cli/CliParseResult String)) caps: PluginCapabilities -> (Result Plugin String)
   (makePlugin row.id caps
     (fn [(request PluginRequest)] -> (Result PluginReply PluginFailure)
-      (mt request
+      (match request
         ((cliSend prompt options)
-          (mt (dispatch prompt options)
+          (match (dispatch prompt options)
             ((ok parsed) (ok (cliDone parsed)))
             ((err reason) (err (cliFailed reason)))))
         ((httpSend _ _ _) (err (unsupported row.id "httpSend")))))
@@ -223,7 +223,7 @@ fn ! cliPlugin row: cli/CliProvider dispatch: (fn [String cli/DispatchOptions] -
     none)
 
 fn ! cliRowPlugin id: String dispatch: (fn [String cli/DispatchOptions] -> (Result cli/CliParseResult String)) -> (Result Plugin String)
-  (mt (cli/cliProviderNamed id)
+  (match (cli/cliProviderNamed id)
     ((some row) (cliPlugin row dispatch (cliAgentCapabilities)))
     ((none) (err (str "no CLI provider row " id))))
 
@@ -237,7 +237,7 @@ fn ! agy -> (Result Plugin String)
   (cliRowPlugin "agy" cli/dispatchAgyFallback!)
 
 fn ! ollama st: up/UpstreamSettings -> (Result Plugin String)
-  (mt (up/upstreamProviderNamed (up/upstreamProviders) "ollama")
+  (match (up/upstreamProviderNamed (up/upstreamProviders) "ollama")
     ((some row) (openaiCompat row st (openaiCompatCapabilities 1 (alwaysOn) (perToken 0.0 0.0) (list)) none))
     ((none) (err "no upstream provider row ollama")))
 
@@ -249,9 +249,9 @@ fn ! defaultPlugins! st: up/UpstreamSettings -> (Result (List Plugin) String)
                 httpRows))
         (all (listAppend (list (claude) (codex) (agy)) http))]
     (fold (fn [(acc (Result (List Plugin) String)) (one (Result Plugin String))] -> (Result (List Plugin) String)
-            (mt acc
+            (match acc
               ((err e) (err e))
-              ((ok plugins) (mt one ((ok p) (ok (listAppend plugins (list p)))) ((err e) (err e))))))
+              ((ok plugins) (match one ((ok p) (ok (listAppend plugins (list p)))) ((err e) (err e))))))
       (ok (list)) all))
 
 fn pluginWithLifecycle plugin: Plugin scale: ScaleModel lifecycle: Lifecycle -> (Result Plugin String)
@@ -266,7 +266,7 @@ fn pluginNamed plugins: (List Plugin) id: String -> (Option Plugin)
     (if (= (preludeHead plugins).id id) (some (preludeHead plugins)) (pluginNamed (preludeTail plugins) id)))
 
 fn failureText failure: PluginFailure -> String
-  (mt failure
+  (match failure
     ((upstreamFailed _) "upstream failure")
     ((cliFailed reason) reason)
     ((unsupported plugin operation) (str plugin " does not support " operation))
@@ -274,9 +274,9 @@ fn failureText failure: PluginFailure -> String
     ((lifecycleFailed reason) reason))
 
 fn ! sendHttp! plugins: (List Plugin) provider: String request: up/UpstreamRequest env: (Map String String) timeoutSec: Float64 -> (Result up/UpstreamCall up/UpstreamFailure)
-  (mt (pluginNamed plugins provider)
+  (match (pluginNamed plugins provider)
     ((none) (err (up/protocolFailure (str "no plugin for provider " provider))))
     ((some plugin)
-      (mt (pluginSend! plugin (httpSend request env timeoutSec))
-        ((ok reply) (mt reply ((httpStarted call) (ok call)) ((cliDone _) (err (up/protocolFailure (str provider " answered an HTTP send without a call"))))))
-        ((err failure) (mt failure ((upstreamFailed f) (err f)) (_ (err (up/protocolFailure (failureText failure)))))))))
+      (match (pluginSend! plugin (httpSend request env timeoutSec))
+        ((ok reply) (match reply ((httpStarted call) (ok call)) ((cliDone _) (err (up/protocolFailure (str provider " answered an HTTP send without a call"))))))
+        ((err failure) (match failure ((upstreamFailed f) (err f)) (_ (err (up/protocolFailure (failureText failure)))))))))

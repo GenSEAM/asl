@@ -9,7 +9,7 @@ fn emitDiagnosticWithPatch code: Str symbol: Str anchor: Str message: Str sugges
   (makeSelfHealingDiagnostic code symbol anchor message suggestedPatch)
 
 fn safeStringSlice s: Str start: Int64 end: Int64 -> Str
-  (mt (stringSlice s start end) ((some res) res) ((none) ""))
+  (match (stringSlice s start end) ((some res) res) ((none) ""))
 
 fn insertImportIntoClause clause: Str importStr: Str -> Str
   (let [(trimmed (stringTrim clause)) (len (stringLength trimmed))] (cond ((and (>= len 2) (stringEndsWith? trimmed "])")) (let [(prefix (safeStringSlice trimmed 0 (- len 2))) (trimmedPrefix (stringTrim prefix))] (if (stringEndsWith? trimmedPrefix "[") (str trimmedPrefix importStr "])") (str trimmedPrefix " " importStr "])")))) ((and (>= len 2) (stringEndsWith? trimmed "]")) (let [(prefix (safeStringSlice trimmed 0 (- len 1))) (trimmedPrefix (stringTrim prefix))] (if (stringEndsWith? trimmedPrefix "[") (str trimmedPrefix importStr "]") (str trimmedPrefix " " importStr "]")))) (else (str "[" importStr "]"))))
@@ -33,7 +33,7 @@ fn suggestMissingExportPatch targetModule: Str existingExports: Str symbolToExpo
   (let [(newNode (insertExportIntoClause existingExports symbolToExport)) (op (patch/makePatchOpReplace targetModule "exports" existingExports newNode)) (patchId (str "fix-export-" targetModule))] (patch/makeAstPatch patchId targetModule (none) (none) (list op)))
 
 fn formatDiagnosticWithPatch d: SelfHealingDiagnostic -> Str
-  (let [(patchStr (mt d.suggestedPatch ((some p) (str "\n  :suggestedPatch " (patch/renderPatch p))) ((none) "")))] (str "(:diagnostic\n" "  :code \"" d.code "\"\n" "  :symbol \"" d.symbol "\"\n" "  :anchor \"" d.anchor "\"\n" "  :message \"" d.message "\"" patchStr ")"))
+  (let [(patchStr (match d.suggestedPatch ((some p) (str "\n  :suggestedPatch " (patch/renderPatch p))) ((none) "")))] (str "(:diagnostic\n" "  :code \"" d.code "\"\n" "  :symbol \"" d.symbol "\"\n" "  :anchor \"" d.anchor "\"\n" "  :message \"" d.message "\"" patchStr ")"))
 
 fn renderDiagnosticReceipt d: SelfHealingDiagnostic -> Str
   (formatDiagnosticWithPatch d)
@@ -54,7 +54,7 @@ fn extractSubform items: (List rd/SExpr) key: Str -> (Option rd/SExpr)
   (extractSubformStep items 0 (listLength items) key)
 
 fn parseSnippet s: Str -> (Result rd/SExpr Str)
-  (let [(toks (lx/tokenize s)) (res (ast/readForms toks))] (mt res ((ok forms) (mt (listHead forms) ((some pf) (ok pf.expr)) ((none) (ok (rd/makeAtom s))))) ((err e) (err e.msg))))
+  (let [(toks (lx/tokenize s)) (res (ast/readForms toks))] (match res ((ok forms) (match (listHead forms) ((some pf) (ok pf.expr)) ((none) (ok (rd/makeAtom s))))) ((err e) (err e.msg))))
 
 fn parseDiagnosticReceipt content: Str -> (Result SelfHealingDiagnostic Str)
-  (let [(parsedRes (parseSnippet content))] (mt parsedRes ((err e) (err (str "Diagnostic receipt syntax error: " e))) ((ok topExpr) (mt topExpr ((rd/sexprList items) (let [(tag (optionOr (listHead items) (rd/makeAtom "")))] (if (!= (rd/renderSexpr tag) ":diagnostic") (err "Receipt is not a :diagnostic form") (let [(code (extractField items ":code")) (sym (extractField items ":symbol")) (anc (extractField items ":anchor")) (msg (extractField items ":message")) (patchExpr (extractSubform items ":suggestedPatch"))] (if (or (stringEmpty? code) (stringEmpty? sym)) (err "Missing mandatory :code or :symbol in diagnostic receipt") (let [(optPatch (mt patchExpr ((some pExpr) (let [(pStr (rd/renderSexpr pExpr))] (mt (patch/parsePatch pStr) ((ok p) (some p)) ((err _) (none))))) ((none) (none))))] (ok (makeSelfHealingDiagnostic code sym anc msg optPatch)))))))) (_ (err "Diagnostic receipt must be an S-expression list"))))))
+  (let [(parsedRes (parseSnippet content))] (match parsedRes ((err e) (err (str "Diagnostic receipt syntax error: " e))) ((ok topExpr) (match topExpr ((rd/sexprList items) (let [(tag (optionOr (listHead items) (rd/makeAtom "")))] (if (!= (rd/renderSexpr tag) ":diagnostic") (err "Receipt is not a :diagnostic form") (let [(code (extractField items ":code")) (sym (extractField items ":symbol")) (anc (extractField items ":anchor")) (msg (extractField items ":message")) (patchExpr (extractSubform items ":suggestedPatch"))] (if (or (stringEmpty? code) (stringEmpty? sym)) (err "Missing mandatory :code or :symbol in diagnostic receipt") (let [(optPatch (match patchExpr ((some pExpr) (let [(pStr (rd/renderSexpr pExpr))] (match (patch/parsePatch pStr) ((ok p) (some p)) ((err _) (none))))) ((none) (none))))] (ok (makeSelfHealingDiagnostic code sym anc msg optPatch)))))))) (_ (err "Diagnostic receipt must be an S-expression list"))))))

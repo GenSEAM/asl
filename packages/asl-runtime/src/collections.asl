@@ -224,7 +224,7 @@ fn makeInitialRingSlots n: Int64 acc: (List Str) -> (List Str)
     (makeInitialRingSlots (- n 1) (cons "" acc)))
 
 fn listSetSlotHelper xs: (List Str) targetIdx: Int64 newItem: Str curIdx: Int64 -> (List Str)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (list))
     ((some h)
       (let [(val (if (= curIdx targetIdx) newItem h))

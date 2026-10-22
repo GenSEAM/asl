@@ -71,10 +71,10 @@ fn baseName p: String -> String
   (optionOr (listLast (stringSplit p "/")) p)
 
 fn commonLen a: (List String) b: (List String) n: Int64 -> Int64
-  (mt (listHead a)
+  (match (listHead a)
     ((none) n)
     ((some x)
-     (mt (listHead b)
+     (match (listHead b)
        ((none) n)
        ((some y) (if (= x y) (commonLen (optionOr (listTail a) (list)) (optionOr (listTail b) (list)) (+ n 1)) n)))))
 
@@ -140,7 +140,7 @@ fn getDriverCorpora -> (List (Pair String String))
   (list (pair "tests/acceptance/r1Host/" "tests/acceptance/r1Host/run.sh"))
 
 fn driverCorpus p: String -> (Option String)
-  (mt (listHead (filter (fn [(d (Pair String String))] -> Bool (stringStartsWith? p (pairFirst d))) (getDriverCorpora)))
+  (match (listHead (filter (fn [(d (Pair String String))] -> Bool (stringStartsWith? p (pairFirst d))) (getDriverCorpora)))
     ((some d) (some (pairFirst d)))
     ((none) (none)))
 
@@ -230,14 +230,14 @@ fn sourcedRel line: String -> (Option String)
     (if (or (< end 0) (<= end i9)) (none) (stringSlice line i9 end)))
 
 fn scanHelpersInFile! root: String path: String -> (List String)
-  (mt (fileReadString (str root "/" path))
+  (match (fileReadString (str root "/" path))
     ((err _) (list))
     ((ok content)
      (let [(dir (dirname path))
            (candidates (filter (fn [(l String)] -> Bool (stringContains? l "$(dirname"))
                                (if (stringContains? content "$(dirname") (stringSplit content "\n") (list))))]
        (fold (fn [(acc (List String)) (line String)] -> (List String)
-               (mt (sourcedRel line)
+               (match (sourcedRel line)
                  ((none) acc)
                  ((some rel)
                   (let [(target (normpath (if (stringEmpty? dir) rel (str dir "/" rel))))]
@@ -278,7 +278,7 @@ fn countDeclaredLoop data: Bytes n: Int64 i: Int64 inStr: Bool declared: Int64 g
         (else (countDeclaredLoop data n (+ i 1) false declared guards)))))
 
 fn declaredAsserts! path: String -> Int64
-  (mt (fileReadBytes path)
+  (match (fileReadBytes path)
     ((ok data) (countDeclaredLoop data (bytesLength data) 0 false 0 0))
     ((err _) 0))
 
@@ -337,8 +337,8 @@ fn slotWith s: Slot out: String errText: String merged: String outOpen: Bool err
   (with s :out out :errText errText :merged merged :outOpen outOpen :errOpen errOpen :code code :timedOut timedOut)
 
 fn ! appendLine! path: String line: String -> (Result Unit String)
-  (let [(old (mt (fileReadString path) ((ok s) (ok s)) ((err e) (if (stringStartsWith? e "notFound") (ok "") (err e)))))]
-    (mt old
+  (let [(old (match (fileReadString path) ((ok s) (ok s)) ((err e) (if (stringStartsWith? e "notFound") (ok "") (err e)))))]
+    (match old
       ((err e) (err e))
       ((ok s) (fileWrite path (str s line "\n")))))
 
@@ -350,12 +350,12 @@ fn spawnError argv0: String e: String -> String
 fn ! writeAll! fd: Int64 text: String -> (Result Unit String)
   (if (stringEmpty? text)
     (ok ())
-    (mt (fdWrite fd text)
+    (match (fdWrite fd text)
       ((err e) (err (str "write stdin: " e)))
       ((ok k) (if (<= k 0) (err "write stdin: no progress") (writeAll! fd (optionOr (stringSlice text k (stringLength text)) ""))))))
 
 fn resultErrOr r: (Result Unit String) fallback: String -> String
-  (mt r ((ok _) fallback) ((err e) e))
+  (match r ((ok _) fallback) ((err e) e))
 
 fn ! abandonSlot! s: Slot -> Bool
   (let [(killed (if (none? s.code) (do (procKill (- 0 s.pid) "SIGKILL") (procWaitPid s.pid false)) (ok (none))))
@@ -369,13 +369,13 @@ fn ! abandonAll! slots: (List Slot) -> Bool
 fn ! startSlot! idx: Int64 job: Job registry: (Option String) -> (Result Slot String)
   (let [(argv0 (optionOr (listHead job.argv) ""))
         (t0 (monotonicNs))]
-    (mt (procSpawnv job.argv job.cwd job.env)
+    (match (procSpawnv job.argv job.cwd job.env)
       ((err e) (err (spawnError argv0 e)))
       ((ok sp)
        (let [(wrote (if (stringEmpty? job.input) (ok ()) (writeAll! sp.stdin job.input)))
              (closedFd (fdClose sp.stdin))
              (closed (if (err? wrote) wrote closedFd))
-             (reg (mt registry ((some path) (appendLine! path (stringFromInt64 sp.pid))) ((none) (ok ()))))
+             (reg (match registry ((some path) (appendLine! path (stringFromInt64 sp.pid))) ((none) (ok ()))))
              (slot (Slot :index idx :pid sp.pid :outFd sp.stdout :errFd sp.stderr :out "" :errText "" :merged ""
                          :outOpen true :errOpen true :code (none)
                          :deadlineNs (if (> job.timeoutMs 0) (+ (monotonicNs) (* job.timeoutMs 1000000)) 0) :timedOut false :startNs t0))]
@@ -385,12 +385,12 @@ fn ! startSlot! idx: Int64 job: Job registry: (Option String) -> (Result Slot St
            (else (ok slot)))))))
 
 fn ! readSide! fd: Int64 -> (Result (Option String) String)
-  (mt (fdRead fd 65536)
+  (match (fdRead fd 65536)
     ((err e) (err (str "read fd " (stringFromInt64 fd) ": " e)))
     ((ok chunk)
      (if (> (stringLength chunk) 0)
        (ok (some chunk))
-       (mt (fdClose fd)
+       (match (fdClose fd)
          ((err e) (err (str "close fd " (stringFromInt64 fd) ": " e)))
          ((ok _) (ok (none)))))))
 
@@ -404,10 +404,10 @@ fn ! absorb! s: Slot ready: (List (Pair Int64 Int64)) exited: (List (Pair Int64 
   (let [(outR (if (and s.outOpen (fdReady? ready s.outFd)) (readSide! s.outFd) (ok (some ""))))
         (errR (if (and s.errOpen (fdReady? ready s.errFd)) (readSide! s.errFd) (ok (some ""))))
         (code (if (some? s.code) s.code (exitOf exited s.pid)))]
-    (mt outR
+    (match outR
       ((err e) (err e))
       ((ok oc)
-       (mt errR
+       (match errR
          ((err e) (err e))
          ((ok ec)
           (let [(o (optionOr oc ""))
@@ -421,25 +421,25 @@ fn finished? s: Slot -> Bool
 fn ! expire! s: Slot now: Int64 -> (Result Slot String)
   (if (or s.timedOut (= s.deadlineNs 0) (< now s.deadlineNs) (finished? s))
     (ok s)
-    (mt (procKill (- 0 s.pid) "SIGKILL")
+    (match (procKill (- 0 s.pid) "SIGKILL")
       ((err e) (if (= e "noProcess")
                  (ok (slotWith s s.out s.errText s.merged s.outOpen s.errOpen s.code true))
                  (err (str "kill process group " (stringFromInt64 s.pid) ": " e))))
       ((ok _) (ok (slotWith s s.out s.errText s.merged s.outOpen s.errOpen s.code true)))))
 
 fn ! expireAll! slots: (List Slot) now: Int64 acc: (List Slot) -> (Result (List Slot) String)
-  (mt (listHead slots)
+  (match (listHead slots)
     ((none) (ok (listReverse acc)))
     ((some s)
-     (mt (expire! s now)
+     (match (expire! s now)
        ((err e) (err e))
        ((ok s2) (expireAll! (optionOr (listTail slots) (list)) now (cons s2 acc))))))
 
 fn ! absorbAll! slots: (List Slot) ready: (List (Pair Int64 Int64)) exited: (List (Pair Int64 Int64)) acc: (List Slot) -> (Result (List Slot) String)
-  (mt (listHead slots)
+  (match (listHead slots)
     ((none) (ok (listReverse acc)))
     ((some s)
-     (mt (absorb! s ready exited)
+     (match (absorb! s ready exited)
        ((err e) (err e))
        ((ok s2) (absorbAll! (optionOr (listTail slots) (list)) ready exited (cons s2 acc))))))
 
@@ -462,23 +462,23 @@ fn livePids slots: (List Slot) -> (List Int64)
 fn pollTimeoutMs slots: (List Slot) guard: (Option Guard) now: Int64 -> Int64
   (let [(limits (listAppend (map (fn [(s Slot)] -> Int64 s.deadlineNs)
                                  (filter (fn [(s Slot)] -> Bool (and (> s.deadlineNs 0) (not s.timedOut))) slots))
-                            (mt guard ((some g) (list g.nextNs)) ((none) (list)))))]
+                            (match guard ((some g) (list g.nextNs)) ((none) (list)))))]
     (if (listEmpty? limits)
       -1
       (max 0 (+ 1 (/ (- (fold min (optionOr (listHead limits) 0) limits) now) 1000000)))))
 
 fn ! fill! k: Int64 st: Pool -> (Result Pool String)
-  (mt (listHead st.pending)
+  (match (listHead st.pending)
     ((none) (ok st))
     ((some job)
      (if (>= (listLength st.running) k)
        (ok st)
-       (mt (startSlot! (pairFirst job) (pairSecond job) st.registry)
+       (match (startSlot! (pairFirst job) (pairSecond job) st.registry)
          ((err e) (err e))
          ((ok slot) (fill! k (with st :pending (optionOr (listTail st.pending) (list)) :running (listAppend st.running (list slot)))))))))
 
 fn ! ppidOf! pid: Int64 -> Int64
-  (mt (runOne! (Job :input "" :argv (list "/bin/ps" "-o" "ppid=" "-p" (stringFromInt64 pid)) :cwd (none) :env (none) :timeoutMs 5000))
+  (match (runOne! (Job :input "" :argv (list "/bin/ps" "-o" "ppid=" "-p" (stringFromInt64 pid)) :cwd (none) :env (none) :timeoutMs 5000))
     ((err _) 0)
     ((ok d) (optionOr (stringToInt64 (pyStrip d.out)) 0)))
 
@@ -496,29 +496,29 @@ fn ! newGuard! -> Guard
 fn ! pollOnce! st: Pool -> (Result Pool String)
   (let [(running st.running)
         (now (monotonicNs))]
-    (mt (procPoll (watchFds running) (livePids running) (pollTimeoutMs running st.guard now))
+    (match (procPoll (watchFds running) (livePids running) (pollTimeoutMs running st.guard now))
       ((err e) (err (str "procPoll: " e)))
       ((ok ready)
-       (mt (absorbAll! running (pairFirst ready) (pairSecond ready) (list))
+       (match (absorbAll! running (pairFirst ready) (pairSecond ready) (list))
          ((err e) (err e))
          ((ok slots)
           (let [(now2 (monotonicNs))
-                (guardRes (mt st.guard ((some g) (resultMap (guardCheck! g now2) (fn [(x Guard)] -> (Option Guard) (some x)))) ((none) (ok (none)))))]
-            (mt guardRes
+                (guardRes (match st.guard ((some g) (resultMap (guardCheck! g now2) (fn [(x Guard)] -> (Option Guard) (some x)))) ((none) (ok (none)))))]
+            (match guardRes
               ((err e) (do (abandonAll! slots) (err e)))
               ((ok guard)
-               (mt (expireAll! slots now2 (list))
+               (match (expireAll! slots now2 (list))
                  ((err e) (do (abandonAll! slots) (err e)))
                  ((ok slots2)
                   (ok (with st :running (filter (fn [(s Slot)] -> Bool (not (finished? s))) slots2) :done (listAppend st.done (map (fn [(s Slot)] -> (Pair Int64 Done) (toDone now2 s)) (filter finished? slots2))) :guard guard))))))))))))
 
 fn ! poolLoop! k: Int64 st: Pool -> (Result (List Done) String)
-  (mt (fill! k st)
+  (match (fill! k st)
     ((err e) (do (abandonAll! st.running) (err e)))
     ((ok st1)
      (if (listEmpty? st1.running)
        (ok (map (fn [(p (Pair Int64 Done))] -> Done (pairSecond p)) (listSortBy (fn [(p (Pair Int64 Done))] -> Int64 (pairFirst p)) st1.done)))
-       (mt (pollOnce! st1)
+       (match (pollOnce! st1)
          ((err e) (err e))
          ((ok st2) (poolLoop! k st2))))))
 
@@ -539,9 +539,9 @@ fn ! runJobs! jobs: (List Job) k: Int64 guard: (Option Guard) registry: (Option 
   (runJobsBy! jobs (map (fn [(p (Pair Int64 Job))] -> Int64 (pairFirst p)) (enumerate jobs)) k guard registry)
 
 fn ! runOne! job: Job -> (Result Done String)
-  (mt (runJobs! (list job) 1 (none) (none))
+  (match (runJobs! (list job) 1 (none) (none))
     ((err e) (err e))
-    ((ok ds) (mt (listHead ds) ((some d) (ok d)) ((none) (err "runOne: no result")))))
+    ((ok ds) (match (listHead ds) ((some d) (ok d)) ((none) (err "runOne: no result")))))
 
 fn gitJob root: String args: (List String) -> Job
   (Job :input "" :argv (cons "/usr/bin/git" args) :cwd (if (stringEmpty? root) (none) (some root)) :env (none) :timeoutMs 0)
@@ -550,7 +550,7 @@ fn ! gitRun! root: String args: (List String) -> (Result Done String)
   (runOne! (gitJob root args))
 
 fn ! gitOut! root: String args: (List String) -> (Result String String)
-  (mt (gitRun! root args)
+  (match (gitRun! root args)
     ((err e) (err e))
     ((ok d) (if (= d.code 0) (ok d.out) (err (str "git " (stringJoin args " ") ": " (pyStrip d.errText))))))
 
@@ -558,10 +558,10 @@ fn ! gitRoot! -> (Result String String)
   (resultMap (gitOut! "" (list "rev-parse" "--show-toplevel")) pyStrip)
 
 fn isFile! path: String -> Bool
-  (mt (fileStat path) ((ok st) st.isFile) ((err _) false))
+  (match (fileStat path) ((ok st) st.isFile) ((err _) false))
 
 fn isExecutable! path: String -> Bool
-  (mt (fileStat path) ((ok st) (and st.isFile (!= (& st.mode 64) 0))) ((err _) false))
+  (match (fileStat path) ((ok st) (and st.isFile (!= (& st.mode 64) 0))) ((err _) false))
 
 fn absPath root: String p: String -> String
   (if (stringStartsWith? p "/") p (str root "/" p))
@@ -594,7 +594,7 @@ fn frozenRowsOf text: String -> (List (Pair String String))
       (stringSplit text "\n"))
 
 fn ! loadFrozenRows! root: String -> (List (Pair String String))
-  (mt (fileReadString (frozenLedgerPath root))
+  (match (fileReadString (frozenLedgerPath root))
     ((err _) (list))
     ((ok text) (frozenRowsOf text)))
 
@@ -625,7 +625,7 @@ fn ! selectDirectorySuites! root: String paths: (List String) dirs: (List String
     (pair (filter (fn [(p String)] -> Bool (not (listContains? frozen p))) paths) frozen))
 
 fn ! candidates root: String prefixes: (List String) -> (Result (List String) String)
-  (mt (gitOut! root (list "ls-files" "-s" "-z"))
+  (match (gitOut! root (list "ls-files" "-s" "-z"))
     ((err e) (err e))
     ((ok text)
      (let [(entries (map (fn [(l String)] -> (Pair String String)
@@ -649,14 +649,14 @@ fn ! candidates root: String prefixes: (List String) -> (Result (List String) St
        (ok (listSort (map pairSecond kept))))))
 
 fn ! discover root: String prefixes: (List String) -> (Result (List String) String)
-  (mt (candidates root prefixes)
+  (match (candidates root prefixes)
     ((err e) (err e))
     ((ok cs)
      (let [(rows (loadFrozenRows! root))]
        (ok (filter (fn [(p String)] -> Bool (or (explicitlyNamed p prefixes) (not (isFrozenAmong rows p)))) cs)))))
 
 fn ! frozenCount root: String prefixes: (List String) -> (Result Int64 String)
-  (mt (candidates root prefixes)
+  (match (candidates root prefixes)
     ((err e) (err e))
     ((ok cs)
      (let [(rows (loadFrozenRows! root))]
@@ -677,7 +677,7 @@ fn groupNonHermetic tracked: (List String) -> (List (Pair String (List String)))
         (getNonHermeticPairs))
 
 fn ! getExcludedForm root: String -> (Result String String)
-  (mt (gitOut! root (list "ls-files"))
+  (match (gitOut! root (list "ls-files"))
     ((err e) (err e))
     ((ok text)
      (let [(trackedList (pyLines text))
@@ -714,7 +714,7 @@ fn digitsEnd bs: Bytes n: Int64 j: Int64 -> Int64
   (if (and (< j n) (>= (bytesGet bs j) 48) (<= (bytesGet bs j) 57)) (digitsEnd bs n (+ j 1)) j)
 
 fn numberAfter line: String bs: Bytes n: Int64 key: String from: Int64 -> (Option (Pair Int64 Int64))
-  (mt (stringIndexOf (optionOr (stringSlice line from n) "") key)
+  (match (stringIndexOf (optionOr (stringSlice line from n) "") key)
     ((none) (none))
     ((some rel)
      (let [(at (+ from rel))
@@ -731,10 +731,10 @@ fn parseShellGateLine line: String -> (Option (Pair Int64 Int64))
         (i (skipSpaces bs n 0))]
     (if (not (and (litAt bs n i "(:gate") (or (>= (+ i 6) n) (not (isWordByte (bytesGet bs (+ i 6)))))))
       (none)
-      (mt (numberAfter line bs n ":asserts" (+ i 6))
+      (match (numberAfter line bs n ":asserts" (+ i 6))
         ((none) (none))
         ((some a)
-         (mt (numberAfter line bs n ":failed" (pairSecond a))
+         (match (numberAfter line bs n ":failed" (pairSecond a))
            ((none) (none))
            ((some f) (some (pair (pairFirst a) (pairFirst f)))))))))
 
@@ -761,7 +761,7 @@ fn afterSuitePrefix line: String suite: String -> (Option String)
     (else (none)))
 
 fn parseHostOkLine line: String suite: String -> (Option (Pair Int64 Int64))
-  (mt (afterSuitePrefix line suite)
+  (match (afterSuitePrefix line suite)
     ((none) (none))
     ((some rest)
      (let [(lit " assertion(s) executed")
@@ -779,7 +779,7 @@ fn parseHostOkLine line: String suite: String -> (Option (Pair Int64 Int64))
 fn parseHostFailLine line: String suite: String -> (Option (Pair String Int64))
   (if (not (stringStartsWith? line "FAIL "))
     (none)
-    (mt (afterSuitePrefix (optionOr (stringSlice line 5 (stringLength line)) "") suite)
+    (match (afterSuitePrefix (optionOr (stringSlice line 5 (stringLength line)) "") suite)
       ((none) (none))
       ((some rest)
        (let [(parts (stringSplit rest " (after "))
@@ -815,13 +815,13 @@ fn parseHostDiag line: String -> (Option (List String))
           (some (list path (optionOr (stringSlice after 0 codeEnd) "") (optionOr (stringSlice after codeEnd (stringLength after)) "")))))))
 
 fn firstDiagOf diags: (List (List String)) cls: String -> (Option String)
-  (mt (listHead (filter (fn [(d (List String))] -> Bool (or (stringEmpty? cls) (= (optionOr (listGet d 1) "") cls))) diags))
+  (match (listHead (filter (fn [(d (List String))] -> Bool (or (stringEmpty? cls) (= (optionOr (listGet d 1) "") cls))) diags))
     ((none) (none))
     ((some d) (some (str (optionOr (listGet d 0) "") ": " (optionOr (listGet d 1) "") (optionOr (listGet d 2) "")))))
 
 fn hostLoadVerdict before: (List String) asserts: Int64 failLine: String -> HostVerdict
   (let [(diags (fold (fn [(acc (List (List String))) (l String)] -> (List (List String))
-                       (mt (parseHostDiag l) ((none) acc) ((some d) (listAppend acc (list d)))))
+                       (match (parseHostDiag l) ((none) acc) ((some d) (listAppend acc (list d)))))
                      (list)
                      before))
         (imp (firstDiagOf diags "ERR_UNRESOLVED_IMPORT"))
@@ -836,23 +836,23 @@ fn hostLoadVerdict before: (List String) asserts: Int64 failLine: String -> Host
 fn hostVerdict code: Int64 out: String suite: String -> HostVerdict
   (let [(lines (pyLines out))
         (lastOk (fold (fn [(acc (Option (Pair Int64 Int64))) (l String)] -> (Option (Pair Int64 Int64))
-                        (mt (parseHostOkLine l suite) ((none) acc) ((some p) (some p))))
+                        (match (parseHostOkLine l suite) ((none) acc) ((some p) (some p))))
                       (none)
                       lines))
         (lastFail (fold (fn [(acc (Option (Pair Int64 String))) (e (Pair Int64 String))] -> (Option (Pair Int64 String))
-                          (mt (parseHostFailLine (pairSecond e) suite) ((none) acc) ((some _) (some e))))
+                          (match (parseHostFailLine (pairSecond e) suite) ((none) acc) ((some _) (some e))))
                         (none)
                         (enumerate lines)))]
     (cond
       ((= code 124) (HostVerdict :cause "ERR_TIMEOUT" :asserts 0 :refutes 0 :failLine "timeout"))
       ((and (= code 0) (some? lastOk) (none? lastFail))
-       (mt lastOk
+       (match lastOk
          ((some p) (HostVerdict :cause "OK" :asserts (pairFirst p) :refutes (pairSecond p) :failLine ""))
          ((none) (HostVerdict :cause "ERR_VACUOUS_SUITE" :asserts 0 :refutes 0 :failLine ""))))
       ((= code 0) (HostVerdict :cause "ERR_VACUOUS_SUITE" :asserts 0 :refutes 0 :failLine "exit 0 without an assertion(s) executed line"))
       ((none? lastFail) (HostVerdict :cause "ERR_RUNTIME" :asserts 0 :refutes 0 :failLine (str "exit " (stringFromInt64 code) ": " (lastLineOf out))))
       (else
-       (mt lastFail
+       (match lastFail
          ((none) (HostVerdict :cause "ERR_RUNTIME" :asserts 0 :refutes 0 :failLine ""))
          ((some e)
           (let [(at (pairFirst e))
@@ -873,13 +873,13 @@ fn red suite: String cause: String failLine: String asserts: Int64 failed: Int64
 
 fn shellResult suite: String code: Int64 out: String -> SuiteResult
   (let [(gates (fold (fn [(acc (List (Pair String (Pair Int64 Int64)))) (l String)] -> (List (Pair String (Pair Int64 Int64)))
-                       (mt (parseShellGateLine l) ((none) acc) ((some p) (cons (pair (pyStrip l) p) acc))))
+                       (match (parseShellGateLine l) ((none) acc) ((some p) (cons (pair (pyStrip l) p) acc))))
                      (list)
                      (pyLines out)))
         (last (listHead gates))
-        (gateText (mt last ((some g) (pairFirst g)) ((none) "")))
-        (asserts (mt last ((some g) (pairFirst (pairSecond g))) ((none) 0)))
-        (failed (mt last ((some g) (pairSecond (pairSecond g))) ((none) 0)))]
+        (gateText (match last ((some g) (pairFirst g)) ((none) "")))
+        (asserts (match last ((some g) (pairFirst (pairSecond g))) ((none) 0)))
+        (failed (match last ((some g) (pairSecond (pairSecond g))) ((none) 0)))]
     (cond
       ((= code 124) (red suite "ERR_TIMEOUT" "timeout" asserts failed))
       ((!= code 0) (red suite "SHELL_FAILED" (str "exit " (stringFromInt64 code) ": " (if (stringEmpty? gateText) (lastLineOf out) gateText)) asserts failed))
@@ -919,10 +919,10 @@ fn aslResult! snap: String suite: String code: Int64 out: String -> SuiteResult
   (:f registry String))
 
 fn envInt! name: String fallback: Int64 -> (Result Int64 String)
-  (mt (envGet name)
+  (match (envGet name)
     ((none) (ok fallback))
     ((some v)
-     (mt (stringToInt64 (pyStrip v))
+     (match (stringToInt64 (pyStrip v))
        ((some n) (ok n))
        ((none) (err (str name " is not an integer: " v))))))
 
@@ -943,7 +943,7 @@ fn slowSuiteTimeoutS suite: String -> (Option Int64)
     (else (none)))
 
 fn ! firstLineInt! argv: (List String) -> Int64
-  (mt (runOne! (Job :input "" :argv argv :cwd (none) :env (none) :timeoutMs 5000))
+  (match (runOne! (Job :input "" :argv argv :cwd (none) :env (none) :timeoutMs 5000))
     ((err _) 0)
     ((ok d) (if (= d.code 0) (optionOr (stringToInt64 (pyStrip d.out)) 0) 0)))
 
@@ -955,7 +955,7 @@ fn ! physicalCores! -> Int64
         (max 1 (/ (if (> online 0) online 2) 2)))))
 
 fn positiveCount v: (Option String) -> (Option Int64)
-  (mt v
+  (match v
     ((none) (none))
     ((some s) (if (allDigits s) (let [(n (optionOr (stringToInt64 s) 0))] (if (> n 0) (some n) (none))) (none))))
 
@@ -964,7 +964,7 @@ fn ! workerCount jobs: (Option String) -> Int64
         (asked (fold (fn [(acc (Option Int64)) (v (Option String))] -> (Option Int64) (if (some? acc) acc (positiveCount v)))
                      (none)
                      (list (if (some? jobs) jobs (envGet "ASL_JOBS")) (envGet "JOBS"))))]
-    (mt asked
+    (match asked
       ((some n) (min n cap))
       ((none) (max 1 (/ cap 2)))))
 
@@ -1014,10 +1014,10 @@ fn tail1500 s: String -> String
 
 ; (:m :ref SNAPSHOT-HOST-ABSENT :do "HL-C: the parent asl process sets ASL_CLI_ROOT (and friends) on itself to the REAL workspace root, not the snapshot; buildHost!'s build.sh/aslNativeBuild child used to inherit that unfiltered (:env (none)), so its own self-probe (a 'bin test' of a trivial fixture) resolved sys/context! and the native-test closure cache to the real tree's .asl/cache/nativeTest, racing every other concurrent process on this machine against the same path (ERR_NATIVE_UNSUPPORTED: closure load failed) instead of the snapshot's own isolated one; scrub the session keys and pin ASL_CLI_ROOT/ASL_NATIVE_TEST_CACHE to the snapshot the same way suiteJob! already does for the suites themselves")
 fn ! buildHost! snap: String real: String baseS: Int64 guard: (Option Guard) registry: (Option String) -> (Result Unit String)
-  (mt (envInt! "ASL_HOST_BUILD_TIMEOUT_S" 1800)
+  (match (envInt! "ASL_HOST_BUILD_TIMEOUT_S" 1800)
     ((err e) (err e))
     ((ok hostBuildS)
-     (mt (runJobs! (list (Job :input "" :argv (list "/bin/bash" "asl/host/build.sh") :cwd (some snap)
+     (match (runJobs! (list (Job :input "" :argv (list "/bin/bash" "asl/host/build.sh") :cwd (some snap)
                           :env (some (withEnv! (list "ASL_IN_RUNNER=1" (str "ASL_CLI_ROOT=" real) (str "ASL_NATIVE_TEST_CACHE=" (nativeTestCacheRoot!)) (nestedTimes snap))))
                           :timeoutMs (* (max baseS hostBuildS) 1000))) 1 guard registry)
        ((err e) (err e))
@@ -1032,7 +1032,7 @@ fn unquote s: String -> String
     (if (stringEndsWith? a "\"") (unquote (optionOr (stringSlice a 0 (- (stringLength a) 1)) "")) a))
 
 fn ! getDirt! snap: String -> (Result (Map String String) String)
-  (mt (gitOut! snap (list "status" "--porcelain" "-uall"))
+  (match (gitOut! snap (list "status" "--porcelain" "-uall"))
     ((err e) (err e))
     ((ok text)
      (ok (fold (fn [(acc (Map String String)) (l String)] -> (Map String String)
@@ -1040,7 +1040,7 @@ fn ! getDirt! snap: String -> (Result (Map String String) String)
                    acc
                    (let [(rel (unquote (optionOr (listLast (stringSplit (optionOr (stringSlice l 3 (stringLength l)) "") " -> ")) "")))
                          (full (str snap "/" rel))
-                         (hash (if (isFile! full) (mt (fileReadBytes full) ((ok b) (bytesSha256 b)) ((err _) "")) ""))]
+                         (hash (if (isFile! full) (match (fileReadBytes full) ((ok b) (bytesSha256 b)) ((err _) "")) ""))]
                      (mapSet acc l hash))))
                (mapEmpty)
                (pyLines text)))))
@@ -1060,7 +1060,7 @@ fn ! makeTempDir! prefix: String -> (Result String String)
       (resultMap (dirCreate path) (fn [(u Unit)] -> String path))))
 
 fn ! pidAlive! pid: Int64 -> Bool
-  (mt (procAlive? pid)
+  (match (procAlive? pid)
     ((ok alive) alive)
     ((err _) true))
 
@@ -1073,11 +1073,11 @@ fn stalePid name: String -> (Option Int64)
 
 fn ! sweepStaleTemps! -> Unit
   (let [(base (tempBase!))]
-    (mt (dirList base)
+    (match (dirList base)
       ((err _) ())
       ((ok names)
        (fold (fn [(u Unit) (name String)] -> Unit
-               (mt (stalePid name)
+               (match (stalePid name)
                  ((none) u)
                  ((some pid) (if (or (= pid (procSelf)) (pidAlive! pid)) u (do (pathRemove (str base "/" name)) u)))))
              ()
@@ -1089,23 +1089,23 @@ fn ! gitPathOf! root: String name: String -> (Result String String)
 fn ! copyIfPresent! src: String dst: String -> (Result Unit String)
   (if (not (isFile! src))
     (ok ())
-    (mt (fileReadBytes src)
+    (match (fileReadBytes src)
       ((err e) (err e))
-      ((ok data) (mt (dirCreate (dirname dst)) ((err e) (err e)) ((ok _) (fileWrite dst data))))))
+      ((ok data) (match (dirCreate (dirname dst)) ((err e) (err e)) ((ok _) (fileWrite dst data))))))
 
 fn ! steps! fs: (List (fn [] -> (Result Unit String))) -> (Result Unit String)
-  (mt (listHead fs)
+  (match (listHead fs)
     ((none) (ok ()))
-    ((some f) (mt (f) ((err e) (err e)) ((ok _) (steps! (optionOr (listTail fs) (list)))))))
+    ((some f) (match (f) ((err e) (err e)) ((ok _) (steps! (optionOr (listTail fs) (list)))))))
 
 fn ! gitDo! root: String args: (List String) -> (Result Unit String)
   (resultMap (gitOut! root args) (fn [(s String)] -> Unit ()))
 
 fn ! indexFromRoot! root: String snap: String gitDir: String -> (Result Unit String)
-  (mt (gitOut! root (list "ls-files" "-s" "-z"))
+  (match (gitOut! root (list "ls-files" "-s" "-z"))
     ((err e) (err e))
     ((ok info)
-     (mt (runOne! (Job :input info :argv (list "/usr/bin/git" (str "--git-dir=" gitDir) "update-index" "-z" "--index-info") :cwd (some snap) :env (none) :timeoutMs 0))
+     (match (runOne! (Job :input info :argv (list "/usr/bin/git" (str "--git-dir=" gitDir) "update-index" "-z" "--index-info") :cwd (some snap) :env (none) :timeoutMs 0))
        ((err e) (err e))
        ((ok d) (if (= d.code 0) (ok ()) (err (str "git update-index --index-info: " (pyStrip d.errText))))))))
 
@@ -1114,10 +1114,10 @@ fn ! fillSnapshot! root: String snap: String -> (Result Unit String)
     (steps! (list (fn [] -> (Result Unit String) (gitDo! root (list "clone" "-q" "--shared" "--no-checkout" root snap)))
                   (fn [] -> (Result Unit String) (resultMap (gitRun! snap (list "remote" "remove" "origin")) (fn [(d Done)] -> Unit ())))
                   (fn [] -> (Result Unit String) (indexFromRoot! root snap gitDir))
-                  (fn [] -> (Result Unit String) (mt (gitPathOf! root "info/exclude") ((err e) (err e)) ((ok p) (copyIfPresent! p (str gitDir "/info/exclude")))))
+                  (fn [] -> (Result Unit String) (match (gitPathOf! root "info/exclude") ((err e) (err e)) ((ok p) (copyIfPresent! p (str gitDir "/info/exclude")))))
                   (fn [] -> (Result Unit String) (gitDo! root (list (str "--git-dir=" gitDir) (str "--work-tree=" root) "add" "-A")))
                   (fn [] -> (Result Unit String)
-                    (mt (gitOut! snap (list "write-tree"))
+                    (match (gitOut! snap (list "write-tree"))
                       ((err e) (err e))
                       ((ok tree) (gitDo! snap (list "read-tree" (pyStrip tree))))))
                   (fn [] -> (Result Unit String) (gitDo! snap (list "checkout-index" "-a" "-f")))
@@ -1127,22 +1127,22 @@ fn ! fillSnapshot! root: String snap: String -> (Result Unit String)
 fn ! makeSnapshot! root: String -> (Result String String)
   (do
     (sweepStaleTemps!)
-    (mt (makeTempDir! "aslRunnerSnap")
+    (match (makeTempDir! "aslRunnerSnap")
       ((err e) (err e))
       ((ok snap)
-       (mt (fillSnapshot! root snap)
+       (match (fillSnapshot! root snap)
          ((err e) (do (pathRemove snap) (err e)))
          ((ok _) (ok snap))))))
 
 fn ! lockPaths! root: String -> (Result (Pair String String) String)
-  (mt (gitOut! root (list "rev-parse" "--git-dir"))
+  (match (gitOut! root (list "rev-parse" "--git-dir"))
     ((err e) (err e))
     ((ok d)
      (let [(gitDir (absPath root (pyStrip d)))]
        (ok (pair (str gitDir "/aslRunner.lock") (str gitDir "/aslRunner.pgids"))))))
 
 fn ! reapOrphans! registry: String -> (Result Unit String)
-  (mt (fileReadString registry)
+  (match (fileReadString registry)
     ((err _) (ok ()))
     ((ok text)
      (do
@@ -1150,7 +1150,7 @@ fn ! reapOrphans! registry: String -> (Result Unit String)
                (if (not (allDigits tok))
                  u
                  (let [(pgid (optionOr (stringToInt64 tok) 0))]
-                   (mt (runOne! (Job :input "" :argv (list "/bin/ps" "-o" "command=" "-p" tok) :cwd (none) :env (none) :timeoutMs 5000))
+                   (match (runOne! (Job :input "" :argv (list "/bin/ps" "-o" "command=" "-p" tok) :cwd (none) :env (none) :timeoutMs 5000))
                      ((err _) u)
                      ((ok d) (if (and (> pgid 1) (stringContains? d.out "aslRunnerSnap.")) (do (procKill (- 0 pgid) "SIGKILL") u) u))))))
              ()
@@ -1158,27 +1158,27 @@ fn ! reapOrphans! registry: String -> (Result Unit String)
        (fileWrite registry ""))))
 
 fn ! tryLock! path: String untilNs: Int64 -> (Result Int64 Fault)
-  (mt (fileLock path true)
+  (match (fileLock path true)
     ((ok fd) (ok fd))
     ((err e)
      (cond
        ((!= e "busy") (err (Fault :kind "runner" :msg (str "lock " path ": " e))))
        ((< (monotonicNs) untilNs) (do (sleepMs 500) (tryLock! path untilNs)))
        (else
-        (let [(text (mt (fileReadString path) ((ok s) s) ((err _) "")))
+        (let [(text (match (fileReadString path) ((ok s) s) ((err _) "")))
               (holder (pyStrip (optionOr (stringSlice text 0 (min 32 (stringLength text))) "")))]
           (err (Fault :kind "busy" :msg (str "a runner already holds " path ", holder pid " (if (stringEmpty? holder) "unknown" holder)))))))))
 
 fn ! acquireLock! root: String waitS: Int64 -> (Result Lock Fault)
-  (mt (lockPaths! root)
+  (match (lockPaths! root)
     ((err e) (err (Fault :kind "runner" :msg e)))
     ((ok paths)
-     (mt (tryLock! (pairFirst paths) (+ (monotonicNs) (* waitS 1000000000)))
+     (match (tryLock! (pairFirst paths) (+ (monotonicNs) (* waitS 1000000000)))
        ((err f) (err f))
        ((ok fd)
         (let [(reaped (reapOrphans! (pairSecond paths)))
               (mine (if (ok? reaped) (fileWrite (pairFirst paths) (stringFromInt64 (procSelf))) reaped))]
-          (mt mine
+          (match mine
             ((err e) (do (fdClose fd) (err (Fault :kind "runner" :msg e))))
             ((ok _) (ok (Lock :fd fd :registry (pairSecond paths))))))))))
 
@@ -1194,54 +1194,54 @@ fn suiteTimesOf suites: (List String) dones: (List Done) -> (List st/SuiteTime)
   (map (fn [(p (Pair String Done))] -> st/SuiteTime (st/SuiteTime :suite (pairFirst p) :ms (doneMs (pairSecond p)))) (zip suites dones))
 
 fn ! suitePhase! snap: String real: String baseS: Int64 suites: (List String) workers: Int64 guard: Guard registry: String -> (Result SnapRun String)
-  (mt (st/timesPath!)
+  (match (st/timesPath!)
     ((err e) (err e))
     ((ok timesPath)
-     (mt (st/readTimes! timesPath)
+     (match (st/readTimes! timesPath)
        ((err e) (err e))
        ((ok known)
-        (mt (if (listAny? (fn [(s String)] -> Bool (stringEndsWith? s ".asl")) suites) (buildHost! snap real baseS (some guard) (some registry)) (ok ()))
+        (match (if (listAny? (fn [(s String)] -> Bool (stringEndsWith? s ".asl")) suites) (buildHost! snap real baseS (some guard) (some registry)) (ok ()))
           ((err e) (err e))
           ((ok _)
-           (mt (getDirt! snap)
+           (match (getDirt! snap)
              ((err e) (err e))
              ((ok before)
               (let [(t0 (monotonicNs))]
-                (mt (runJobsBy! (map (fn [(s String)] -> Job (suiteJob! snap s baseS)) suites) (st/startOrder suites known) workers (some guard) (some registry))
+                (match (runJobsBy! (map (fn [(s String)] -> Job (suiteJob! snap s baseS)) suites) (st/startOrder suites known) workers (some guard) (some registry))
                   ((err e) (err e))
                   ((ok dones)
                    (let [(wallMs (/ (- (monotonicNs) t0) 1000000))
                          (times (suiteTimesOf suites dones))]
-                     (mt (st/writeTimes! timesPath times)
+                     (match (st/writeTimes! timesPath times)
                        ((err e) (err e))
                        ((ok _)
-                        (mt (getDirt! snap)
+                        (match (getDirt! snap)
                           ((err e) (err e))
                           ((ok after)
                            (ok (SnapRun :results (map (fn [(p (Pair String Done))] -> SuiteResult (toResult! snap real (pairFirst p) (pairSecond p))) (zip suites dones))
                                         :gained (checkGained before after) :wallMs wallMs :times times))))))))))))))))))
 
 fn ! snapRun root: String suites: (List String) workers: Int64 lockWaitS: Int64 -> (Result SnapRun Fault)
-  (mt (envInt! "ASL_SUITE_TIMEOUT_S" 300)
+  (match (envInt! "ASL_SUITE_TIMEOUT_S" 300)
     ((err e) (err (fault e)))
     ((ok baseS)
-     (mt (acquireLock! root lockWaitS)
+     (match (acquireLock! root lockWaitS)
        ((err f) (err f))
        ((ok lock)
         (let [(guard (newGuard!))
-              (res (mt (makeSnapshot! root)
+              (res (match (makeSnapshot! root)
                      ((err e) (err e))
                      ((ok snap)
                       (let [(real (resultOr (realPath snap) snap))
                             (ran (suitePhase! snap real baseS suites workers guard lock.registry))
                             (removed (pathRemove snap))]
-                        (mt ran
+                        (match ran
                           ((err e) (err e))
-                          ((ok r) (mt removed ((ok _) (ok r)) ((err e) (err (str "snapshot cleanup: " e))))))))))
+                          ((ok r) (match removed ((ok _) (ok r)) ((err e) (err (str "snapshot cleanup: " e))))))))))
               (released (releaseLock! lock))]
-          (mt res
+          (match res
             ((err e) (err (fault e)))
-            ((ok r) (mt released ((ok _) (ok r)) ((err e) (err (fault (str "lock release: " e))))))))))))
+            ((ok r) (match released ((ok _) (ok r)) ((err e) (err (fault (str "lock release: " e))))))))))))
 
 fn gainedPaths gained: (List String) -> String
   (stringJoin (map (fn [(g String)] -> String (optionOr (stringSlice g 3 (stringLength g)) "")) (listTake gained 10)) ", ")
@@ -1250,26 +1250,26 @@ fn runnerFailure suite: String cause: String why: String -> SuiteResult
   (SuiteResult :suite suite :cause cause :digest "" :failLine why :asserts 0 :refutes 0 :declared 0 :failed 0)
 
 fn notSuiteWhy suite: String -> String
-  (mt (nonHermeticReason suite)
+  (match (nonHermeticReason suite)
     ((some r) r)
     ((none)
-     (mt (driverCorpus suite)
+     (match (driverCorpus suite)
        ((some d) (str "driver corpus of " (optionOr (mapGet (mapFromPairs (getDriverCorpora)) d) "")))
        ((none) "not a tracked suite under the discovery rule (a tracked, non-helper *Test.asl, *_test.asl, *Test.sh, *_test.sh or Task*.asl)"))))
 
 fn ! gateResult! root: String suite: String -> (Result SuiteResult Fault)
-  (mt (discover root (list suite))
+  (match (discover root (list suite))
     ((err e) (ok (runnerFailure suite "ERR_RUNNER" e)))
     ((ok found)
      (if (not (listContains? found suite))
        (ok (runnerFailure suite "ERR_NOT_A_SUITE" (notSuiteWhy suite)))
-       (mt (envInt! "ASL_GATE_LOCK_WAIT_S" 900)
+       (match (envInt! "ASL_GATE_LOCK_WAIT_S" 900)
          ((err e) (ok (runnerFailure suite "ERR_RUNNER" e)))
          ((ok waitS)
-          (mt (snapRun root (list suite) 1 waitS)
+          (match (snapRun root (list suite) 1 waitS)
             ((err f) (if (= f.kind "terminated") (err f) (ok (runnerFailure suite (if (= f.kind "busy") "ERR_BUSY" "ERR_RUNNER") f.msg))))
             ((ok run)
-             (mt (listHead run.results)
+             (match (listHead run.results)
                ((none) (ok (runnerFailure suite "ERR_RUNNER" "no result")))
                ((some r)
                 (ok (if (listEmpty? run.gained)
@@ -1287,7 +1287,7 @@ fn ! gateSuitePath! root: String arg: String -> String
 
 fn ! gate root: String arg: String -> Int64
   (let [(suite (gateSuitePath! root arg))]
-    (mt (gateResult! root suite)
+    (match (gateResult! root suite)
       ((err _) 143)
       ((ok r)
        (let [(counts (gateCounts r.cause r.declared r.asserts r.refutes r.failed))]
@@ -1301,15 +1301,15 @@ fn printLines! lines: (List String) -> Unit
   (fold (fn [(u Unit) (l String)] -> Unit (println l)) () lines)
 
 fn ! main args: (List String) -> (Result Int64 String)
-  (mt (gitRoot!)
+  (match (gitRoot!)
     ((err e) (do (println (str "(:runner :status :failed :err ERR_RUNNER :ev \"" (esc e 400) "\")")) (ok 2)))
     ((ok root)
      (cond
        ((= args (list "discover"))
-        (mt (discover root (list))
+        (match (discover root (list))
           ((err e) (do (println (str "(:runner :status :failed :err ERR_RUNNER :ev \"" (esc e 400) "\")")) (ok 2)))
           ((ok suites)
-           (mt (getExcludedForm root)
+           (match (getExcludedForm root)
              ((err e) (do (println (str "(:runner :status :failed :err ERR_RUNNER :ev \"" (esc e 400) "\")")) (ok 2)))
              ((ok excluded)
               (let [(frozen (resultOr (frozenCount root (list)) 0))]

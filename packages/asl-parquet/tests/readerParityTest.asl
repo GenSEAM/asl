@@ -15,10 +15,10 @@ fn sameF64! a: F64Array b: F64Array i: Int64 -> Bool
     (and (= (f64ArrayGet a i) (f64ArrayGet b i)) (sameF64! a b (+ i 1))))
 
 fn checkColumn! path: String name: String rg: Int64 -> Bool
-  (mt (parquetOpen path)
+  (match (parquetOpen path)
     ((err e) (assert false (str "host open failed " path ": " e)))
     ((ok native)
-     (mt (r/parquetOpen path)
+     (match (r/parquetOpen path)
        ((err e) (assert false (str "ASL open failed " path ": " e)))
        ((ok pure)
         (let [(kind (parquetColumnType native name))]
@@ -45,7 +45,7 @@ fn checkGroup! path: String name: String group: Int64 groups: Int64 -> Bool
     (and (checkColumn! path name group) (checkGroup! path name (+ group 1) groups)))
 
 fn checkFixture! path: String columns: (List String) -> Bool
-  (mt (parquetOpen path)
+  (match (parquetOpen path)
     ((err e) (assert false (str "fixture native open: " path ": " e)))
     ((ok h) (checkColumns! path columns (parquetNumRowGroups h))))
 
@@ -68,7 +68,7 @@ fn checkWritten! path: String codec: String -> Bool
                        (list "dictionary" "false") (list "rowGroupRows" "3")))
         (written (pq/parquetWrite path columns options (list)))]
     (do
-      (assert (ok? written) (str "writer fixture " codec ": " (mt written ((ok _) "ok") ((err e) e))))
+      (assert (ok? written) (str "writer fixture " codec ": " (match written ((ok _) "ok") ((err e) e))))
       (let [(parity (checkFixture! path (list "ints" "floats" "small")))
             (removed (pathRemove path))]
         (do (assert (ok? removed) (str "remove temporary fixture " path)) parity))))
@@ -93,10 +93,10 @@ fn ! runTests -> Bool
     (checkWritten! "/tmp/aslParquetReaderNone.parquet" "none")
     (checkWritten! "/tmp/aslParquetReaderZstd.parquet" "zstd")
     (do
-      (mt (parquetOpen "tests/acceptance/r1Host/fixtures/parquet/seiSpotDeals10k-snappy.parquet")
+      (match (parquetOpen "tests/acceptance/r1Host/fixtures/parquet/seiSpotDeals10k-snappy.parquet")
         ((err e) (assert (= e "host does not support fixture") "host opens SNAPPY fixture"))
         ((ok native)
-         (mt (r/parquetOpen "tests/acceptance/r1Host/fixtures/parquet/seiSpotDeals10k-snappy.parquet")
+         (match (r/parquetOpen "tests/acceptance/r1Host/fixtures/parquet/seiSpotDeals10k-snappy.parquet")
            ((ok _) (assert false "SNAPPY must be rejected by the pure reader"))
            ((err e) (assert (= e "snappy unsupported") "SNAPPY reports unsupported")))))
       true))

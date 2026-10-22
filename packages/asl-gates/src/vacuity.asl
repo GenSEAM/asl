@@ -162,11 +162,11 @@ fn parseLinesLoop lines: (List String) acc: (Map String Bool) keys: (List String
     (let [(raw (optionOr (listHead lines) ""))
           (tail (optionOr (listTail lines) (list)))
           (line (stringTrim raw))]
-      (mt (parseLine line)
+      (match (parseLine line)
         ((none)
           (err (str "unrecognized output line: " line)))
         ((some optPair)
-          (mt optPair
+          (match optPair
             ((none)
               (parseLinesLoop tail acc keys count stderr))
             ((some p)
@@ -223,7 +223,7 @@ fn copyFilesLoop! repoRoot: String wtDir: String lines: (List String) -> Unit
               (let [(lower (stringLower pathClean))]
                 (if (or (stringContains? lower "test") (or (stringContains? lower "fixture") (stringContains? lower "fixtures")))
                   (if (stringContains? status "D")
-                    (mt (pathRemove (str wtDir "/" pathClean))
+                    (match (pathRemove (str wtDir "/" pathClean))
                       ((err e) (eprintln (str "vacuity: cannot remove " wtDir "/" pathClean ": " e)))
                       ((ok _) ()))
                     (let [(src (str repoRoot "/" pathClean))
@@ -255,7 +255,7 @@ fn nulLoop s: String bs: Bytes i: Int64 start: Int64 n: Int64 acc: (List String)
     (else (nulLoop s bs (+ i 1) start n acc)))
 
 fn renameOrigins records: (List String) acc: (List String) -> (List String)
-  (mt (listHead records)
+  (match (listHead records)
     ((none) (listReverse acc))
     ((some rec)
       (let [(rest (optionOr (listTail records) (list)))
@@ -280,15 +280,15 @@ fn copyFileTo! src: String dst: String -> Bool
         (parentParts (listReverse (optionOr (listTail (listReverse parts)) (list))))
         (parent (stringJoin parentParts "/"))
         (made (dirCreate parent))]
-    (mt made
+    (match made
       ((err e) (do (eprintln (str "cannot create copy directory " parent ": " e)) false))
       ((ok _)
-        (mt (fileStat src)
+        (match (fileStat src)
           ((err e) (do (eprintln (str "cannot copy " src " to " dst ": " e)) false))
           ((ok stat)
             (let [(isDir stat.isDir)
                   (prepared (if isDir (dirCreate dst) (ok ())))]
-              (mt prepared
+              (match prepared
                 ((err e) (do (eprintln (str "cannot create copy directory " dst ": " e)) false))
                 ((ok _)
                   (let [(source (if isDir (str src "/.") src))
@@ -298,7 +298,7 @@ fn copyFileTo! src: String dst: String -> Bool
                       true))))))))))
 
 fn ! removeTemp! dir: String -> Unit
-  (mt (pathRemove dir)
+  (match (pathRemove dir)
     ((err e) (eprintln (str "vacuity: cannot remove " dir ": " e)))
     ((ok _) ()))
 
@@ -315,13 +315,13 @@ fn ! runAt! argv: (List String) cwd: (Option String) -> VacuityProcessOutput
   (let [(bin (optionOr (listHead argv) ""))
         (args (optionOr (listTail argv) (list)))
         (base (cp/withTimeout (cp/cmd bin args) 1800000))
-        (configured (mt cwd ((some dir) (cp/withCwd base dir)) ((none) base)))]
-    (mt (cp/execRaw! configured)
+        (configured (match cwd ((some dir) (cp/withCwd base dir)) ((none) base)))]
+    (match (cp/execRaw! configured)
       ((err e) (VacuityProcessOutput :exitCode 127 :stdout "" :stderr (str e)))
       ((ok out) (VacuityProcessOutput :exitCode out.exitCode :stdout out.stdout :stderr out.stderr))))
 
 fn ! main argv: (List String) -> (Result Int64 String)
-  (mt (parseArgv argv)
+  (match (parseArgv argv)
     ((err msg)
       (if (= msg "HELP")
         (do
@@ -367,7 +367,7 @@ fn ! main argv: (List String) -> (Result Int64 String)
                                            (str wtDir "/" (optionOr (stringSlice curCwd (+ (stringLength repoRoot) 1) (stringLength curCwd)) ""))
                                            wtDir)))
                                 (workCwd curCwd)]
-                            (mt (dirCreate wtCwd)
+                            (match (dirCreate wtCwd)
                               ((err e)
                                 (do
                                   (cleanup! repoRoot wtDir tmpParent)
@@ -378,13 +378,13 @@ fn ! main argv: (List String) -> (Result Int64 String)
                                     (procWork (runAt! (list "/bin/sh" "-c" cfg.testCmd) (some workCwd)))]
                                 (do
                                   (cleanup! repoRoot wtDir tmpParent)
-                                  (mt (parseAssertions procBase.stdout procBase.stderr)
+                                  (match (parseAssertions procBase.stdout procBase.stderr)
                                     ((err baseErr)
                                       (do
                                         (println (str "(:vacuity :error ERR_UNPARSED :hint \"base run: " (escapeStr baseErr) "\")"))
                                         (ok 2)))
                                     ((ok baseResults)
-                                      (mt (parseAssertions procWork.stdout procWork.stderr)
+                                      (match (parseAssertions procWork.stdout procWork.stderr)
                                         ((err workErr)
                                           (do
                                             (println (str "(:vacuity :error ERR_UNPARSED :hint \"working tree run: " (escapeStr workErr) "\")"))

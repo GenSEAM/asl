@@ -11,7 +11,7 @@ fn ! runChildTest root: Str casePath: Str -> (List Str)
         (record (str root "/python-argv"))
         (mutant (ty/makeMutant "argv probe" "py" "argv probe" "div_mod_neg_neg"))
         (trial (mut/runIsolatedMutantTrial! mutant "tests/conformance/xplat/div_mod_neg_neg"))
-        (observed (mt (fileReadString record) ((ok value) value) ((err _) "")))
+        (observed (match (fileReadString record) ((ok value) value) ((err _) "")))
         (cleanup (proc/exec! (proc/cmd "rm" (list "-rf" "tmp/conform/mutants/argv probe"))))]
     (list (checkLine "routePassed" result.passed)
           (checkLine "stubRan" (= result.actualStdout "argv-stub-ran"))
@@ -36,12 +36,12 @@ fn ! runTests -> Bool
             (_w (fileWrite stub script))
             (expected (fileWrite (str casePath "/expect.stdout") "argv-stub-ran\n"))
             (_e (fileWrite (str casePath "/expect.exit") "0\n"))
-            (chmod (mt (proc/exec! (proc/cmd "chmod" (list "+x" stub))) ((ok out) out.exitCode) ((err _) 127)))
+            (chmod (match (proc/exec! (proc/cmd "chmod" (list "+x" stub))) ((ok out) out.exitCode) ((err _) 127)))
             (path (str stubDir ":" (optionOr (envGet "PATH") "/usr/bin:/bin")))
             (childCmd (proc/withEnv (proc/withEnv (proc/withEnv (proc/cmd "bin/asl" (list "run" "asl/packages/asl-conform/tests/argvTest.asl")) "PATH" path) "ASL_CONFORM_ARGV_CHILD" "1") "ASL_CONFORM_ARGV_ROOT" root))
             (childCmd (proc/withEnv childCmd "ASL_CONFORM_ARGV_CASE" casePath))
             (childCmd (proc/withEnv childCmd "ASL_CONFORM_ARGV_RECORD" record))
-            (child (mt (proc/exec! childCmd) ((ok out) out) ((err _) (proc/ProcessOutput :exitCode 127 :stdout "" :stderr "child test spawn failed" :durationMs 0))) )
+            (child (match (proc/exec! childCmd) ((ok out) out) ((err _) (proc/ProcessOutput :exitCode 127 :stdout "" :stderr "child test spawn failed" :durationMs 0))) )
             (cleanup (proc/exec! (proc/cmd "rm" (list "-rf" root))))]
         (do
           (assert (= chmod 0) "could not make python3 PATH stub executable")

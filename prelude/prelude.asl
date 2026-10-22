@@ -21,20 +21,20 @@ enum PreludeTree
   (preludeNode key: K value: V rank: Int64 left: (PreludeTree K V) right: (PreludeTree K V))
 
 fn preludeTrap message: String -> T
-  (mt message)
+  (match message)
 
 fn preludeIsFloat x: N -> Bool
   (let [s (str x)]
     (or (stringContains? s ".") (or (stringContains? s "e") (stringContains? s "n"))))
 
 fn preludeHead xs: (List T) -> T
-  (mt (listHead xs) ((some x) x))
+  (match (listHead xs) ((some x) x))
 
 fn preludeTail xs: (List T) -> (List T)
-  (mt (listTail xs) ((some t) t))
+  (match (listTail xs) ((some t) t))
 
 fn preludeSlice s: String i: Int64 j: Int64 -> String
-  (mt (stringSlice s i j) ((some t) t))
+  (match (stringSlice s i j) ((some t) t))
 
 fn preludeAsciiByte c: String -> Int64
   (bytesGet (stringToBytes c) 0)
@@ -83,46 +83,46 @@ fn int64ToInt32 x: Int64 -> (Option Int32)
   (if (and (>= x -2147483648) (<= x 2147483647)) (some x) none)
 
 fn some? o: (Option T) -> Bool
-  (mt o ((some _) true) (none false))
+  (match o ((some _) true) (none false))
 
 fn none? o: (Option T) -> Bool
-  (mt o ((some _) false) (none true))
+  (match o ((some _) false) (none true))
 
 fn ok? r: (Result T E) -> Bool
-  (mt r ((ok _) true) ((err _) false))
+  (match r ((ok _) true) ((err _) false))
 
 fn err? r: (Result T E) -> Bool
-  (mt r ((ok _) false) ((err _) true))
+  (match r ((ok _) false) ((err _) true))
 
 fn optionOr o: (Option T) fallback: T -> T
-  (mt o ((some x) x) (none fallback))
+  (match o ((some x) x) (none fallback))
 
 fn optionMap f: (fn [A] -> B) o: (Option A) -> (Option B)
-  (mt o ((some x) (some (f x))) (none none))
+  (match o ((some x) (some (f x))) (none none))
 
 fn resultMapErr f: (fn [E] -> F) r: (Result T E) -> (Result T F)
-  (mt r ((ok x) (ok x)) ((err e) (err (f e))))
+  (match r ((ok x) (ok x)) ((err e) (err (f e))))
 
 fn resultOr r: (Result T E) fallback: T -> T
-  (mt r ((ok x) x) ((err _) fallback))
+  (match r ((ok x) x) ((err _) fallback))
 
 fn resultMap r: (Result A E) f: (fn [A] -> B) -> (Result B E)
-  (mt r ((ok x) (ok (f x))) ((err e) (err e)))
+  (match r ((ok x) (ok (f x))) ((err e) (err e)))
 
 fn optionToResult o: (Option T) e: E -> (Result T E)
-  (mt o ((some x) (ok x)) (none (err e)))
+  (match o ((some x) (ok x)) (none (err e)))
 
 fn resultToOption r: (Result T E) -> (Option T)
-  (mt r ((ok x) (some x)) ((err _) none))
+  (match r ((ok x) (some x)) ((err _) none))
 
 fn preludeLengthFrom xs: (List T) n: Int64 -> Int64
-  (mt (listTail xs) ((some t) (preludeLengthFrom t (+ n 1))) (none n))
+  (match (listTail xs) ((some t) (preludeLengthFrom t (+ n 1))) (none n))
 
 fn listLength xs: (List T) -> Int64
   (preludeLengthFrom xs 0)
 
 fn preludeReverseOnto xs: (List T) acc: (List T) -> (List T)
-  (mt (listHead xs) ((some x) (mt (listTail xs) ((some t) (preludeReverseOnto t (cons x acc))))) (none acc))
+  (match (listHead xs) ((some x) (match (listTail xs) ((some t) (preludeReverseOnto t (cons x acc))))) (none acc))
 
 fn listReverse xs: (List T) -> (List T)
   (preludeReverseOnto xs (list))
@@ -134,19 +134,19 @@ fn range lo: Int64 hi: Int64 -> (List Int64)
   (preludeRangeDown lo (- hi 1) (list))
 
 fn preludeMapOnto f: (fn [A] -> B) xs: (List A) acc: (List B) -> (List B)
-  (mt (listHead xs) ((some x) (mt (listTail xs) ((some t) (preludeMapOnto f t (cons (f x) acc))))) (none (listReverse acc)))
+  (match (listHead xs) ((some x) (match (listTail xs) ((some t) (preludeMapOnto f t (cons (f x) acc))))) (none (listReverse acc)))
 
 fn map f: (fn [A] -> B) xs: (List A) -> (List B)
   (preludeMapOnto f xs (list))
 
 fn preludeFilterOnto f: (fn [T] -> Bool) xs: (List T) acc: (List T) -> (List T)
-  (mt (listHead xs) ((some x) (mt (listTail xs) ((some t) (preludeFilterOnto f t (if (f x) (cons x acc) acc))))) (none (listReverse acc)))
+  (match (listHead xs) ((some x) (match (listTail xs) ((some t) (preludeFilterOnto f t (if (f x) (cons x acc) acc))))) (none (listReverse acc)))
 
 fn filter f: (fn [T] -> Bool) xs: (List T) -> (List T)
   (preludeFilterOnto f xs (list))
 
 fn fold f: (fn [B A] -> B) init: B xs: (List A) -> B
-  (mt (listHead xs) ((some x) (mt (listTail xs) ((some t) (fold f (f init x) t)))) (none init))
+  (match (listHead xs) ((some x) (match (listTail xs) ((some t) (fold f (f init x) t)))) (none init))
 
 fn preludeRevOnto xs: (List T) acc: (List T) -> (List T)
   (preludeReverseOnto xs acc)
@@ -156,7 +156,7 @@ fn preludeAppendSpan -> Int64
 
 fn preludeDropSpan xs: (List T) n: Int64 -> (List T)
   (if (= n 0) xs
-    (mt (listTail xs) ((some t) (preludeDropSpan t (- n 1))) (none xs)))
+    (match (listTail xs) ((some t) (preludeDropSpan t (- n 1))) (none xs)))
 
 fn preludeChunkStarts xs: (List T) acc: (List (List T)) -> (List (List T))
   (if (listEmpty? xs) acc
@@ -164,12 +164,12 @@ fn preludeChunkStarts xs: (List T) acc: (List (List T)) -> (List (List T))
 
 fn preludeAppendBounded xs: (List T) n: Int64 rest: (List T) -> (List T)
   (if (= n 0) rest
-    (mt (listHead xs)
+    (match (listHead xs)
       ((some x) (cons x (preludeAppendBounded (preludeTail xs) (- n 1) rest)))
       (none rest)))
 
 fn preludeAppendChunks chunks: (List (List T)) rest: (List T) -> (List T)
-  (mt (listHead chunks)
+  (match (listHead chunks)
     ((some c) (preludeAppendChunks (preludeTail chunks) (preludeAppendBounded c (preludeAppendSpan) rest)))
     (none rest))
 
@@ -246,8 +246,8 @@ fn listSort xs: (List T) -> (List T)
   (preludeSort preludeLess xs (listLength xs))
 
 fn listSortBy f: (fn [T] -> K) xs: (List T) -> (List T)
-  (map (fn [p] (mt p ((pair _ x) x)))
-    (preludeSort (fn [p q] (mt p ((pair a _) (mt q ((pair b _) (preludeLess a b))))))
+  (map (fn [p] (match p ((pair _ x) x)))
+    (preludeSort (fn [p q] (match p ((pair a _) (match q ((pair b _) (preludeLess a b))))))
       (map (fn [x] (pair (f x) x)) xs)
       (listLength xs)))
 
@@ -293,74 +293,74 @@ fn preludeJoinShort xs: (List String) sep: String -> String
   (fold (fn [(acc String) (x String)] -> String (stringConcat (stringConcat acc sep) x)) (preludeHead xs) (preludeTail xs))
 
 fn preludeJoinRun xs: (List String) sep: String acc: (List String) -> (List String)
-  (mt (listHead xs)
+  (match (listHead xs)
     (none acc)
     ((some x0)
       (let [r1 (preludeTail xs)]
-      (mt (listHead r1)
+      (match (listHead r1)
         (none (cons (preludeJoinShort xs sep) acc))
         ((some x1)
           (let [r2 (preludeTail r1)]
-          (mt (listHead r2)
+          (match (listHead r2)
             (none (cons (preludeJoinShort xs sep) acc))
             ((some x2)
               (let [r3 (preludeTail r2)]
-              (mt (listHead r3)
+              (match (listHead r3)
                 (none (cons (preludeJoinShort xs sep) acc))
                 ((some x3)
                   (let [r4 (preludeTail r3)]
-                  (mt (listHead r4)
+                  (match (listHead r4)
                     (none (cons (preludeJoinShort xs sep) acc))
                     ((some x4)
                       (let [r5 (preludeTail r4)]
-                      (mt (listHead r5)
+                      (match (listHead r5)
                         (none (cons (preludeJoinShort xs sep) acc))
                         ((some x5)
                           (let [r6 (preludeTail r5)]
-                          (mt (listHead r6)
+                          (match (listHead r6)
                             (none (cons (preludeJoinShort xs sep) acc))
                             ((some x6)
                               (let [r7 (preludeTail r6)]
-                              (mt (listHead r7)
+                              (match (listHead r7)
                                 (none (cons (preludeJoinShort xs sep) acc))
                                 ((some x7)
                                   (let [r8 (preludeTail r7)]
-                                  (mt (listHead r8)
+                                  (match (listHead r8)
                                     (none (cons (preludeJoinShort xs sep) acc))
                                     ((some x8)
                                       (let [r9 (preludeTail r8)]
-                                      (mt (listHead r9)
+                                      (match (listHead r9)
                                         (none (cons (preludeJoinShort xs sep) acc))
                                         ((some x9)
                                           (let [r10 (preludeTail r9)]
-                                          (mt (listHead r10)
+                                          (match (listHead r10)
                                             (none (cons (preludeJoinShort xs sep) acc))
                                             ((some x10)
                                               (let [r11 (preludeTail r10)]
-                                              (mt (listHead r11)
+                                              (match (listHead r11)
                                                 (none (cons (preludeJoinShort xs sep) acc))
                                                 ((some x11)
                                                   (let [r12 (preludeTail r11)]
-                                                  (mt (listHead r12)
+                                                  (match (listHead r12)
                                                     (none (cons (preludeJoinShort xs sep) acc))
                                                     ((some x12)
                                                       (let [r13 (preludeTail r12)]
-                                                      (mt (listHead r13)
+                                                      (match (listHead r13)
                                                         (none (cons (preludeJoinShort xs sep) acc))
                                                         ((some x13)
                                                           (let [r14 (preludeTail r13)]
-                                                          (mt (listHead r14)
+                                                          (match (listHead r14)
                                                             (none (cons (preludeJoinShort xs sep) acc))
                                                             ((some x14)
                                                               (let [r15 (preludeTail r14)]
-                                                              (mt (listHead r15)
+                                                              (match (listHead r15)
                                                                 (none (cons (preludeJoinShort xs sep) acc))
                                                                 ((some x15)
                                                                   (preludeJoinRun (preludeTail r15) sep
                                                                     (cons (stringConcat (stringConcat (stringConcat (stringConcat (stringConcat x0 sep) (stringConcat x1 sep)) (stringConcat (stringConcat x2 sep) (stringConcat x3 sep))) (stringConcat (stringConcat (stringConcat x4 sep) (stringConcat x5 sep)) (stringConcat (stringConcat x6 sep) (stringConcat x7 sep)))) (stringConcat (stringConcat (stringConcat (stringConcat x8 sep) (stringConcat x9 sep)) (stringConcat (stringConcat x10 sep) (stringConcat x11 sep))) (stringConcat (stringConcat (stringConcat x12 sep) (stringConcat x13 sep)) (stringConcat (stringConcat x14 sep) x15)))) acc)))))))))))))))))))))))))))))))))))))))))))))))))
 
 fn preludeJoinAll xs: (List String) sep: String -> String
-  (mt (listHead xs)
+  (match (listHead xs)
     (none "")
     ((some a) (if (listEmpty? (preludeTail xs)) a (preludeJoinAll (listReverse (preludeJoinRun xs sep (list))) sep))))
 
@@ -450,7 +450,7 @@ fn stringToInt64 s: String -> (Option Int64)
             neg (= b0 45)
             start (if (or neg (= b0 43)) 1 0)]
         (if (>= start n) none
-          (mt (preludeDigitsB bs n start 0)
+          (match (preludeDigitsB bs n start 0)
             ((some v)
               (cond
                 (neg (some v))
@@ -492,19 +492,19 @@ fn preludeAbove r1: Int64 k1: K r2: Int64 k2: K -> Bool
   (or (> r1 r2) (and (= r1 r2) (< k1 k2)))
 
 fn preludeTreeInsert t: (PreludeTree K V) k: K v: V -> (PreludeTree K V)
-  (mt t
+  (match t
     ((preludeLeaf) (preludeNode k v (preludeRank k) t t))
     ((preludeNode nk nv r l g)
       (if (< k nk)
         (let [l2 (preludeTreeInsert l k v)]
-          (mt l2
+          (match l2
             ((preludeLeaf) (preludeNode nk nv r l2 g))
             ((preludeNode ck cv cr cl cg)
               (if (preludeAbove cr ck r nk)
                 (preludeNode ck cv cr cl (preludeNode nk nv r cg g))
                 (preludeNode nk nv r l2 g)))))
         (let [g2 (preludeTreeInsert g k v)]
-          (mt g2
+          (match g2
             ((preludeLeaf) (preludeNode nk nv r l g2))
             ((preludeNode ck cv cr cl cg)
               (if (preludeAbove cr ck r nk)
@@ -512,7 +512,7 @@ fn preludeTreeInsert t: (PreludeTree K V) k: K v: V -> (PreludeTree K V)
                 (preludeNode nk nv r l g2))))))))
 
 fn preludeTreeReplace t: (PreludeTree K V) k: K v: V -> (PreludeTree K V)
-  (mt t
+  (match t
     ((preludeLeaf) t)
     ((preludeNode nk nv r l g)
       (cond
@@ -521,7 +521,7 @@ fn preludeTreeReplace t: (PreludeTree K V) k: K v: V -> (PreludeTree K V)
         (else (preludeNode nk nv r l (preludeTreeReplace g k v))))))
 
 fn preludeTreeGet t: (PreludeTree K V) k: K -> (Option V)
-  (mt t
+  (match t
     ((preludeLeaf) none)
     ((preludeNode nk nv _ l g)
       (cond
@@ -530,10 +530,10 @@ fn preludeTreeGet t: (PreludeTree K V) k: K -> (Option V)
         (else (preludeTreeGet g k)))))
 
 fn preludeTreeMerge a: (PreludeTree K V) b: (PreludeTree K V) -> (PreludeTree K V)
-  (mt a
+  (match a
     ((preludeLeaf) b)
     ((preludeNode ak av ar al ag)
-      (mt b
+      (match b
         ((preludeLeaf) a)
         ((preludeNode bk bv br bl bg)
           (if (preludeAbove ar ak br bk)
@@ -541,7 +541,7 @@ fn preludeTreeMerge a: (PreludeTree K V) b: (PreludeTree K V) -> (PreludeTree K 
             (preludeNode bk bv br (preludeTreeMerge a bl) bg))))))
 
 fn preludeTreeRemove t: (PreludeTree K V) k: K -> (PreludeTree K V)
-  (mt t
+  (match t
     ((preludeLeaf) t)
     ((preludeNode nk nv r l g)
       (cond
@@ -550,22 +550,22 @@ fn preludeTreeRemove t: (PreludeTree K V) k: K -> (PreludeTree K V)
         (else (preludeNode nk nv r l (preludeTreeRemove g k))))))
 
 fn preludeTreePairs t: (PreludeTree K V) acc: (List (Pair K V)) -> (List (Pair K V))
-  (mt t
+  (match t
     ((preludeLeaf) acc)
     ((preludeNode k v _ l g) (preludeTreePairs l (cons (pair k v) (preludeTreePairs g acc)))))
 
 fn preludeTreeKeys t: (PreludeTree K V) acc: (List K) -> (List K)
-  (mt t
+  (match t
     ((preludeLeaf) acc)
     ((preludeNode k _ _ l g) (preludeTreeKeys l (cons k (preludeTreeKeys g acc)))))
 
 fn preludeTreeValues t: (PreludeTree K V) acc: (List V) -> (List V)
-  (mt t
+  (match t
     ((preludeLeaf) acc)
     ((preludeNode _ v _ l g) (preludeTreeValues l (cons v (preludeTreeValues g acc)))))
 
 fn preludeTree m: (Map K V) -> (PreludeTree K V)
-  (mt m ((preludeMapOf _ t) t))
+  (match m ((preludeMapOf _ t) t))
 
 fn mapEmpty -> (Map K V)
   (preludeMapOf 0 (preludeLeaf))
@@ -580,17 +580,17 @@ fn mapHas? m: (Map K V) k: K -> Bool
   (some? (mapGet m k))
 
 fn mapSize m: (Map K V) -> Int64
-  (mt m ((preludeMapOf n _) n))
+  (match m ((preludeMapOf n _) n))
 
 fn mapSet m: (Map K V) k: K v: V -> (Map K V)
-  (mt m
+  (match m
     ((preludeMapOf n t)
       (if (mapHas? m k)
         (preludeMapOf n (preludeTreeReplace t k v))
         (preludeMapOf (+ n 1) (preludeTreeInsert t k v)))))
 
 fn mapRemove m: (Map K V) k: K -> (Map K V)
-  (mt m
+  (match m
     ((preludeMapOf n t)
       (if (mapHas? m k) (preludeMapOf (- n 1) (preludeTreeRemove t k)) m)))
 
@@ -604,7 +604,7 @@ fn mapPairs m: (Map K V) -> (List (Pair K V))
   (preludeTreePairs (preludeTree m) (list))
 
 fn mapFromPairs ps: (List (Pair K V)) -> (Map K V)
-  (fold (fn [m p] (mt p ((pair k v) (mapSet m k v)))) (mapEmpty) ps)
+  (fold (fn [m p] (match p ((pair k v) (mapSet m k v)))) (mapEmpty) ps)
 
 fn preludeIoError message: String -> IoError
   (cond
@@ -622,30 +622,30 @@ fn isFinite? x: Float64 -> Bool
   (and (= x x) (and (!= x (floatInf)) (!= x (floatNegInf))))
 
 fn pairFirst p: (Pair A B) -> A
-  (mt p ((pair a _) a))
+  (match p ((pair a _) a))
 
 fn pairSecond p: (Pair A B) -> B
-  (mt p ((pair _ b) b))
+  (match p ((pair _ b) b))
 
 fn listAll? pred: (fn [T] -> Bool) xs: (List T) -> Bool
-  (mt (listTail xs)
+  (match (listTail xs)
     ((some t) (if (not (pred (preludeHead xs))) false (listAll? pred t)))
     ((none) true))
 
 fn listTake xs: (List T) n: Int64 -> (List T)
   (if (<= n 0) (list)
-    (mt (listTail xs)
+    (match (listTail xs)
       ((some t) (cons (preludeHead xs) (listTake t (- n 1))))
       ((none) (list))))
 
 fn listDrop xs: (List T) n: Int64 -> (List T)
   (if (<= n 0) xs
-    (mt (listTail xs)
+    (match (listTail xs)
       ((some t) (listDrop t (- n 1)))
       ((none) (list))))
 
 fn listAny? pred: (fn [T] -> Bool) xs: (List T) -> Bool
-  (mt (listTail xs)
+  (match (listTail xs)
     ((some t) (if (pred (preludeHead xs)) true (listAny? pred t)))
     ((none) false))
 
@@ -663,7 +663,7 @@ fn ! fileExists? path: String -> Bool
   (ok? (fileStat path))
 
 fn ! fileSize path: String -> (Result Int64 String)
-  (mt (fileStat path)
+  (match (fileStat path)
     ((ok st) (ok st.size))
     ((err m) (err m)))
 
@@ -731,7 +731,7 @@ fn bytesToBase64 b: Bytes -> String
   (preludeB64Enc b 0 (bytesLength b) (list))
 
 fn preludeB64At s: String i: Int64 padFrom: Int64 -> (Option Int64)
-  (mt (stringIndexOf "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" (preludeSlice s i (+ i 1)))
+  (match (stringIndexOf "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" (preludeSlice s i (+ i 1)))
     ((some v) (some v))
     (none (if (>= i padFrom) (some 0) none)))
 
@@ -778,7 +778,7 @@ fn stringLines s: String -> (List String)
   (stringSplit s "\n")
 
 fn preludeLastFrom xs: (List T) -> T
-  (mt (listTail xs)
+  (match (listTail xs)
     ((some t) (if (listEmpty? t) (preludeHead xs) (preludeLastFrom t)))
     (none (preludeHead xs)))
 
@@ -789,7 +789,7 @@ fn stringCountChar s: String ch: String -> Int64
   (listLength (filter (fn [c] (= c ch)) (stringChars s)))
 
 fn preludeEnumerateFrom xs: (List T) i: Int64 acc: (List (Pair Int64 T)) -> (List (Pair Int64 T))
-  (mt (listTail xs)
+  (match (listTail xs)
     ((some t) (preludeEnumerateFrom t (+ i 1) (cons (pair i (preludeHead xs)) acc)))
     (none (listReverse acc)))
 
@@ -797,7 +797,7 @@ fn enumerate xs: (List T) -> (List (Pair Int64 T))
   (preludeEnumerateFrom xs 0 (list))
 
 fn preludeFindLoop pred: (fn [T] -> Bool) xs: (List T) -> (Option T)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((some x) (if (pred x) (some x) (preludeFindLoop pred (preludeTail xs))))
     (none none))
 
@@ -805,7 +805,7 @@ fn listFind pred: (fn [T] -> Bool) xs: (List T) -> (Option T)
   (preludeFindLoop pred xs)
 
 fn preludeCountLoop pred: (fn [T] -> Bool) xs: (List T) acc: Int64 -> Int64
-  (mt (listHead xs)
+  (match (listHead xs)
     ((some x) (preludeCountLoop pred (preludeTail xs) (if (pred x) (+ acc 1) acc)))
     (none acc))
 
@@ -813,8 +813,8 @@ fn listCount pred: (fn [T] -> Bool) xs: (List T) -> Int64
   (preludeCountLoop pred xs 0)
 
 fn preludeFlatMapOnto f: (fn [A] -> (List B)) xs: (List A) acc: (List B) -> (List B)
-  (mt (listHead xs)
-    ((some x) (mt (listTail xs)
+  (match (listHead xs)
+    ((some x) (match (listTail xs)
                 ((some t) (preludeFlatMapOnto f t (fold (fn [acc2 b] (cons b acc2)) acc (f x))))))
     (none (listReverse acc)))
 
@@ -886,10 +886,10 @@ fn ! zstdAslLiteralBlock src: Bytes start: Int64 end: Int64 out: Bytes outAt: In
           (cond
             ((> typ 1)
               (let [lit (bytesAlloc 131072)]
-                (mt (zstdAslHufLiterals src start end lit 0 head sizeFlag hufState)
+                (match (zstdAslHufLiterals src start end lit 0 head sizeFlag hufState)
                   ((err message) (err message))
                   ((ok step)
-                    (mt step
+                    (match step
                       ((pair seqAt litCount)
                         (zstdAslSequences src seqAt end lit litCount out outAt baseOut window seqState reps countOnly)))))))
             ((> regenerated 131072) (err "ERR_ZSTD_CORRUPT: literals larger than a block"))
@@ -917,16 +917,16 @@ fn ! zstdAslHufLiterals src: Bytes start: Int64 end: Int64 out: Bytes outAt: Int
           ((> (+ dataAt compressed) end) (err "ERR_ZSTD_CORRUPT: compressed literals truncated"))
           ((> (+ outAt regenerated) (bytesLength out)) (err "ERR_ZSTD_CORRUPT: output exceeds the frame content size or 1 GiB"))
           ((= type 3)
-            (mt (zstdAslHufCached hufState src dataAt compressed out outAt regenerated sizeFlag)
+            (match (zstdAslHufCached hufState src dataAt compressed out outAt regenerated sizeFlag)
               ((err message) (err message))
               ((ok _) (ok (pair (+ dataAt compressed) regenerated)))))
           (else
-            (mt (zstdAslHufRead src dataAt compressed)
+            (match (zstdAslHufRead src dataAt compressed)
               ((err message) (err message))
               ((ok treeState)
-                (mt treeState
+                (match treeState
                   ((pair tableAndLog treeBytes)
-                    (mt tableAndLog
+                    (match tableAndLog
                       ((pair table log)
                         (let [streamAt (+ dataAt treeBytes) streamLen (- compressed treeBytes)
                               tableSize (bytesLength table)]
@@ -935,7 +935,7 @@ fn ! zstdAslHufLiterals src: Bytes start: Int64 end: Int64 out: Bytes outAt: Int
                               (zstdAslSetRaw table 0 hufState 2 tableSize)
                               (bytesSet hufState 0 1)
                               (bytesSet hufState 1 log)
-                              (mt (zstdAslHufCached hufState src streamAt streamLen out outAt regenerated sizeFlag)
+                              (match (zstdAslHufCached hufState src streamAt streamLen out outAt regenerated sizeFlag)
                                 ((err message) (err message))
                                 ((ok _) (ok (pair (+ dataAt compressed) regenerated))))))))))))))))))
 
@@ -947,7 +947,7 @@ fn ! zstdAslHufCached hufState: Bytes src: Bytes at: Int64 len: Int64 out: Bytes
         (zstdAslHufFour hufState 2 log src at len out outAt regenerated each))))
 
 fn ! zstdAslHufOne table: Bytes tableAt: Int64 log: Int64 src: Bytes at: Int64 len: Int64 out: Bytes outAt: Int64 regenerated: Int64 -> (Result Int64 String)
-  (mt (zstdAslBackwardInit src at len)
+  (match (zstdAslBackwardInit src at len)
     ((err message) (err message))
     ((ok pos) (zstdAslHufStream table tableAt log src at pos out outAt regenerated 0)))
 
@@ -961,13 +961,13 @@ fn ! zstdAslHufFour table: Bytes tableAt: Int64 log: Int64 src: Bytes at: Int64 
         ((> (+ 6 (+ s1 (+ s2 s3))) len) (err "ERR_ZSTD_CORRUPT: Huffman jump table beyond the literals"))
         ((> (* each 3) regenerated) (err "ERR_ZSTD_CORRUPT: literals too short for four streams"))
         (else
-          (mt (zstdAslHufOne table tableAt log src base s1 out outAt each)
+          (match (zstdAslHufOne table tableAt log src base s1 out outAt each)
             ((err message) (err message))
             ((ok _)
-              (mt (zstdAslHufOne table tableAt log src (+ base s1) s2 out (+ outAt each) each)
+              (match (zstdAslHufOne table tableAt log src (+ base s1) s2 out (+ outAt each) each)
                 ((err message) (err message))
                 ((ok _)
-                  (mt (zstdAslHufOne table tableAt log src (+ base (+ s1 s2)) s3 out (+ outAt (* each 2)) each)
+                  (match (zstdAslHufOne table tableAt log src (+ base (+ s1 s2)) s3 out (+ outAt (* each 2)) each)
                     ((err message) (err message))
                     ((ok _)
                       (zstdAslHufOne table tableAt log src (+ base (+ s1 (+ s2 s3))) s4 out (+ outAt (* each 3)) (- regenerated (* each 3)))))))))))))
@@ -993,10 +993,10 @@ fn ! zstdAslCountBlocks src: Bytes len: Int64 at: Int64 window: Int64 total: Int
             (zstdAslCountBlockDone src len last (+ dataAt 1) window total size hufState seqState reps)))
         (else
           (if (> (+ dataAt size) len) (err "ERR_ZSTD_CORRUPT: block truncated")
-            (mt (zstdAslLiteralBlock src dataAt (+ dataAt size) (bytesAlloc 131072) 0 total window hufState seqState reps true)
+            (match (zstdAslLiteralBlock src dataAt (+ dataAt size) (bytesAlloc 131072) 0 total window hufState seqState reps true)
               ((err e) (err e))
               ((ok step)
-                (mt step
+                (match step
                   ((pair nextAt produced)
                     (zstdAslCountBlockDone src len last nextAt window total produced hufState seqState reps))))))))))
 
@@ -1021,10 +1021,10 @@ fn ! zstdAslBlocks src: Bytes len: Int64 at: Int64 out: Bytes outAt: Int64 windo
         ((= typ 3) (err "ERR_ZSTD_CORRUPT: reserved block type"))
         ((= typ 2)
           (if (> (+ dataAt size) len) (err "ERR_ZSTD_CORRUPT: block truncated")
-            (mt (zstdAslLiteralBlock src dataAt (+ dataAt size) out outAt outAt window hufState seqState reps false)
+            (match (zstdAslLiteralBlock src dataAt (+ dataAt size) out outAt outAt window hufState seqState reps false)
               ((err e) (err e))
               ((ok step)
-                (mt step
+                (match step
                   ((pair endAt produced)
                     (if last
                     (if (= (+ outAt produced) outLen) (ok endAt)
@@ -1098,17 +1098,17 @@ fn ! zstdAslDecompress src: Bytes -> (Result Bytes String)
                     (do
                     (zstdAslRepSet countReps 0 1) (zstdAslRepSet countReps 1 4) (zstdAslRepSet countReps 2 8)
                     (zstdAslRepSet decodeReps 0 1) (zstdAslRepSet decodeReps 1 4) (zstdAslRepSet decodeReps 2 8)
-                    (mt (zstdAslCountBlocks src len blockAt blockWindow 0 countHufState countSeqState countReps)
+                    (match (zstdAslCountBlocks src len blockAt blockWindow 0 countHufState countSeqState countReps)
                       ((err message) (err message))
                       ((ok countPair)
-                        (mt countPair
+                        (match countPair
                           ((pair endAt actualSize)
                             (if (and (> fcsSize 0) (> actualSize fcs))
                               (zstdAslCorrupt "output exceeds the frame content size or 1 GiB")
                               (if (and (> fcsSize 0) (!= actualSize fcs))
                                 (zstdAslCorrupt "decoded size differs from the frame content size")
                                 (let [out (bytesAlloc actualSize)]
-                                  (mt (zstdAslBlocks src len blockAt out 0 blockWindow decodeHufState decodeSeqState decodeReps)
+                                  (match (zstdAslBlocks src len blockAt out 0 blockWindow decodeHufState decodeSeqState decodeReps)
                                     ((err message) (err message))
                                     ((ok writtenEnd)
                                       (if (!= endAt writtenEnd)
@@ -1179,18 +1179,18 @@ fn zstdAslXxhStripe src: Bytes at: Int64 end: Int64 v1: Int64 v2: Int64 v3: Int6
 fn zstdAslXxhHash src: Bytes -> Int64
   (let [n (bytesLength src)
         initial (if (>= n 32)
-          (mt (zstdAslXxhStripe src 0 n 6983438078262162902 -4417276706812531889 0 7046029288634856825)
+          (match (zstdAslXxhStripe src 0 n 6983438078262162902 -4417276706812531889 0 7046029288634856825)
             ((pair at rest1)
-              (mt rest1
+              (match rest1
                 ((pair v1 rest2)
-                  (mt rest2
+                  (match rest2
                     ((pair v2 rest3)
-                      (mt rest3
+                      (match rest3
                         ((pair v3 v4)
                           (let [combined (zstdAslAdd64 (zstdAslAdd64 (zstdAslRotateLeft64 v1 1) (zstdAslRotateLeft64 v2 7)) (zstdAslAdd64 (zstdAslRotateLeft64 v3 12) (zstdAslRotateLeft64 v4 18)))]
                             (pair at (zstdAslXxhMerge (zstdAslXxhMerge (zstdAslXxhMerge (zstdAslXxhMerge combined v1) v2) v3) v4)))))))))))
           (pair 0 2870177450012600261))]
-    (mt initial
+    (match initial
       ((pair at base)
         (let [h (zstdAslAdd64 base n)]
           (zstdAslXxhTail src at n h)))))
@@ -1268,33 +1268,33 @@ fn ! zstdAslFseCounts src: Bytes at: Int64 bit: Int64 maxSym: Int64 remaining: I
   (if (<= remaining 1) (if (= remaining 1) (ok (pair bit sym)) (err "ERR_ZSTD_CORRUPT: FSE probabilities do not sum to the table size"))
     (if (> sym maxSym) (err "ERR_ZSTD_CORRUPT: FSE table has too many symbols")
       (let [maximum (- (- (* 2 threshold) 1) remaining)]
-        (mt (zstdAslForwardBits src at bit (- nb 1))
+        (match (zstdAslForwardBits src at bit (- nb 1))
           ((err message) (err message))
           ((ok lowState)
-            (mt lowState
+            (match lowState
               ((pair low afterLow)
                 (if (< low maximum)
                   (zstdAslFseCountFinish src at afterLow maxSym remaining threshold nb sym norms low)
-                  (mt (zstdAslForwardBits src at afterLow 1)
+                  (match (zstdAslForwardBits src at afterLow 1)
                     ((err message) (err message))
                     ((ok highState)
-                      (mt highState
+                      (match highState
                         ((pair high afterHigh)
                           (let [combined (+ low (* high (zstdAslPow2 (- nb 1))))
                                 raw (if (>= combined threshold) (- combined maximum) combined)]
                             (zstdAslFseCountFinish src at afterHigh maxSym remaining threshold nb sym norms raw))))))))))))))
 
 fn ! zstdAslFseZeroRun src: Bytes at: Int64 bit: Int64 maxSym: Int64 sym: Int64 norms: Bytes -> (Result (Pair Int64 Int64) String)
-  (mt (zstdAslForwardBits src at bit 2)
+  (match (zstdAslForwardBits src at bit 2)
     ((err message) (err message))
     ((ok state)
-      (mt state
+      (match state
         ((pair rep nextBit)
           (if (> (+ sym rep) (+ maxSym 1)) (err "ERR_ZSTD_CORRUPT: FSE zero run past the alphabet")
             (do
               (zstdAslNormZeroRun norms sym rep)
               (if (= rep 3)
-                (mt (zstdAslFseZeroRun src at nextBit maxSym (+ sym rep) norms)
+                (match (zstdAslFseZeroRun src at nextBit maxSym (+ sym rep) norms)
                   ((err message) (err message))
                   ((ok nextState) (ok (pair (pairFirst nextState) (pairSecond nextState)))))
                 (ok (pair (+ sym rep) nextBit)))))))))
@@ -1309,7 +1309,7 @@ fn ! zstdAslFseCountFinish src: Bytes at: Int64 bit: Int64 maxSym: Int64 remaini
     (if (> magnitude remaining) (err "ERR_ZSTD_CORRUPT: FSE probabilities do not sum to the table size")
       (do
         (zstdAslNormSet norms sym (+ count 1))
-        (mt (if (= count 0) (zstdAslFseZeroRun src at bit maxSym (+ sym 1) norms) (ok (pair (+ sym 1) bit)))
+        (match (if (= count 0) (zstdAslFseZeroRun src at bit maxSym (+ sym 1) norms) (ok (pair (+ sym 1) bit)))
           ((err message) (err message))
           ((ok runState)
             (let [nextSym (pairFirst runState) nextBit (pairSecond runState) nextRemaining (- remaining magnitude)
@@ -1362,10 +1362,10 @@ fn ! zstdAslFseBuildCell table: Bytes syms: Bytes next: Bytes size: Int64 log: I
         (zstdAslFseBuildCell table syms next size log (+ idx 1)))))
 
 fn ! zstdAslFseRead src: Bytes at: Int64 len: Int64 maxSym: Int64 maxLog: Int64 -> (Result (Pair (Pair Bytes Int64) Int64) String)
-  (mt (zstdAslForwardBits src at 0 4)
+  (match (zstdAslForwardBits src at 0 4)
     ((err message) (err message))
     ((ok logState)
-      (mt logState
+      (match logState
         ((pair logCode afterLog)
           (let [log (+ 5 logCode) size (zstdAslPow2 (+ 5 logCode))]
             (cond
@@ -1375,7 +1375,7 @@ fn ! zstdAslFseRead src: Bytes at: Int64 len: Int64 maxSym: Int64 maxLog: Int64 
                 (let [norms (bytesAlloc (* (+ maxSym 1) 2))]
                   (do
                     (zstdAslNormInit norms 0)
-                    (mt (zstdAslFseCounts src at afterLog maxSym (+ size 1) size (+ log 1) 0 norms)
+                    (match (zstdAslFseCounts src at afterLog maxSym (+ size 1) size (+ log 1) 0 norms)
                       ((err message) (err message))
                       ((ok countState)
                         (let [bitsUsed (pairFirst countState) symbols (pairSecond countState)
@@ -1422,7 +1422,7 @@ fn ! zstdAslSeqTable mode: Int64 src: Bytes at: Int64 len: Int64 defaults: (List
       (let [norms (bytesAlloc (* (listLength defaults) 2))]
         (do
           (zstdAslFillFseNorms defaults norms 0)
-          (mt (zstdAslFseBuildNorms norms (listLength defaults) defaultLog)
+          (match (zstdAslFseBuildNorms norms (listLength defaults) defaultLog)
             ((err message) (err message))
             ((ok tableAndLog) (ok (pair tableAndLog 0)))))))
     ((= mode 1)
@@ -1518,20 +1518,20 @@ fn ! zstdAslSequenceRun src: Bytes bitsAt: Int64 bitsLen: Int64 pos: Int64 left:
       (cond
         ((or (> ofCode 31) (> mcode 52) (> lcode 35)) (err "ERR_ZSTD_CORRUPT: sequence code out of range"))
         (else
-          (mt (zstdAslBackwardRead src bitsAt pos ofCode)
+          (match (zstdAslBackwardRead src bitsAt pos ofCode)
             ((err message) (err message))
             ((ok ofBitsState)
-              (mt ofBitsState
+              (match ofBitsState
                 ((pair ofExtra pos1)
-                  (mt (zstdAslBackwardRead src bitsAt pos1 mbits)
+                  (match (zstdAslBackwardRead src bitsAt pos1 mbits)
                     ((err message) (err message))
                     ((ok mlBitsState)
-                      (mt mlBitsState
+                      (match mlBitsState
                         ((pair mlExtra pos2)
-                          (mt (zstdAslBackwardRead src bitsAt pos2 lbits)
+                          (match (zstdAslBackwardRead src bitsAt pos2 lbits)
                             ((err message) (err message))
                             ((ok llBitsState)
-                              (mt llBitsState
+                              (match llBitsState
                                 ((pair llExtra pos3)
                                   (let [ll (+ lbase llExtra) ml (+ mbase mlExtra)
                                         ofv (+ (zstdAslPow2 ofCode) ofExtra)
@@ -1562,13 +1562,13 @@ fn ! zstdAslSequenceAdvance src: Bytes bitsAt: Int64 bitsLen: Int64 pos3: Int64 
   lit: Bytes litCount: Int64 litPos: Int64 out: Bytes outAt: Int64 baseOut: Int64 produced: Int64 window: Int64 reps: Bytes countOnly: Bool
   ll: Int64 ml: Int64 off: Int64 -> (Result Int64 String)
   (if (and (> left 1) (>= pos3 0))
-    (mt (zstdAslFseDecodeStep llTable src bitsAt pos3 llState)
+    (match (zstdAslFseDecodeStep llTable src bitsAt pos3 llState)
       ((err message) (err message))
       ((ok llStep)
-        (mt (zstdAslFseDecodeStep mlTable src bitsAt (pairSecond llStep) mlState)
+        (match (zstdAslFseDecodeStep mlTable src bitsAt (pairSecond llStep) mlState)
           ((err message) (err message))
           ((ok mlStep)
-            (mt (zstdAslFseDecodeStep ofTable src bitsAt (pairSecond mlStep) ofState)
+            (match (zstdAslFseDecodeStep ofTable src bitsAt (pairSecond mlStep) ofState)
               ((err message) (err message))
               ((ok ofStep)
                 (do
@@ -1601,7 +1601,7 @@ fn ! zstdAslSequences src: Bytes start: Int64 end: Int64 lit: Bytes litCount: In
                     llMode (/ modes 64) ofMode (mod (/ modes 16) 4) mlMode (mod (/ modes 4) 4)
                     tablesAt (+ afterHead 1)]
                 (if (!= (mod modes 4) 0) (err "ERR_ZSTD_CORRUPT: reserved sequence mode bits set")
-                  (mt (zstdAslSeqLoad state 0 16)
+                  (match (zstdAslSeqLoad state 0 16)
                     ((some old) (zstdAslSequencesTables src start end tablesAt nseq lit litCount out outAt baseOut window state reps llMode ofMode mlMode (some old) countOnly))
                     ((none) (zstdAslSequencesTables src start end tablesAt nseq lit litCount out outAt baseOut window state reps llMode ofMode mlMode none countOnly)))))))))))
 
@@ -1611,15 +1611,15 @@ fn ! zstdAslSequencesTables src: Bytes seqStart: Int64 end: Int64 at: Int64 nseq
         mlPrevOpt (zstdAslSeqLoad state 2 3088)
         ofPrev (optionOr ofPrevOpt (pair (bytesAlloc 4) 0))
         mlPrev (optionOr mlPrevOpt (pair (bytesAlloc 4) 0))]
-    (mt (zstdAslSeqTable llMode src at end (zstdAslDefaultNorms 0) 6 35 9 (pairFirst llPrev) (pairSecond llPrev) (some? oldLl))
+    (match (zstdAslSeqTable llMode src at end (zstdAslDefaultNorms 0) 6 35 9 (pairFirst llPrev) (pairSecond llPrev) (some? oldLl))
       ((err message) (err message))
       ((ok llState)
         (let [llPair (pairFirst llState) afterLl (+ at (pairSecond llState))]
-          (mt (zstdAslSeqTable ofMode src afterLl end (zstdAslDefaultNorms 1) 5 31 8 (pairFirst ofPrev) (pairSecond ofPrev) (some? ofPrevOpt))
+          (match (zstdAslSeqTable ofMode src afterLl end (zstdAslDefaultNorms 1) 5 31 8 (pairFirst ofPrev) (pairSecond ofPrev) (some? ofPrevOpt))
             ((err message) (err message))
             ((ok ofState)
               (let [ofPair (pairFirst ofState) afterOf (+ afterLl (pairSecond ofState))]
-                (mt (zstdAslSeqTable mlMode src afterOf end (zstdAslDefaultNorms 2) 6 52 9 (pairFirst mlPrev) (pairSecond mlPrev) (some? mlPrevOpt))
+                (match (zstdAslSeqTable mlMode src afterOf end (zstdAslDefaultNorms 2) 6 52 9 (pairFirst mlPrev) (pairSecond mlPrev) (some? mlPrevOpt))
                   ((err message) (err message))
                   ((ok mlState)
               (let [mlPair (pairFirst mlState) bitAt (+ afterOf (pairSecond mlState))
@@ -1632,19 +1632,19 @@ fn ! zstdAslSequencesTables src: Bytes seqStart: Int64 end: Int64 at: Int64 nseq
                         ((not (zstdAslSeqSave state 1 2064 ofTable ofLog)) (err "ERR_ZSTD_CORRUPT: FSE table build failed"))
                         ((not (zstdAslSeqSave state 2 3088 mlTable mlLog)) (err "ERR_ZSTD_CORRUPT: FSE table build failed"))
                         (else
-                          (mt (zstdAslBackwardInit src bitAt (- end bitAt))
+                          (match (zstdAslBackwardInit src bitAt (- end bitAt))
                             ((err message) (err message))
                             ((ok pos)
-                              (mt (zstdAslBackwardRead src bitAt pos llLog)
+                              (match (zstdAslBackwardRead src bitAt pos llLog)
                                 ((err message) (err message))
                                 ((ok llInit)
-                                  (mt (zstdAslBackwardRead src bitAt (pairSecond llInit) ofLog)
+                                  (match (zstdAslBackwardRead src bitAt (pairSecond llInit) ofLog)
                                     ((err message) (err message))
                                     ((ok ofInit)
-                                      (mt (zstdAslBackwardRead src bitAt (pairSecond ofInit) mlLog)
+                                      (match (zstdAslBackwardRead src bitAt (pairSecond ofInit) mlLog)
                                         ((err message) (err message))
                                         ((ok mlInit)
-                                          (mt (zstdAslSequenceRun src bitAt (- end bitAt) (pairSecond mlInit) nseq
+                                          (match (zstdAslSequenceRun src bitAt (- end bitAt) (pairSecond mlInit) nseq
                                             llTable llLog ofTable ofLog mlTable mlLog
                                             (pairFirst llInit) (pairFirst ofInit) (pairFirst mlInit)
                                             lit litCount 0 out outAt baseOut 0 window reps countOnly)
@@ -1656,10 +1656,10 @@ fn ! zstdAslFseDecodeStep table: Bytes src: Bytes at: Int64 pos: Int64 state: In
     (err "ERR_ZSTD_CORRUPT: FSE state outside its table")
     (let [cell (* state 4) sym (bytesGet table cell) nb (bytesGet table (+ cell 1))
           base (+ (bytesGet table (+ cell 2)) (* (bytesGet table (+ cell 3)) 256))]
-      (mt (zstdAslBackwardRead src at pos nb)
+      (match (zstdAslBackwardRead src at pos nb)
         ((err message) (err message))
         ((ok bitsState)
-          (mt bitsState
+          (match bitsState
             ((pair bits nextPos)
               (let [nextState (+ base bits)]
                 (if (or (< nextState 0) (>= nextState (/ (bytesLength table) 4)))
@@ -1668,12 +1668,12 @@ fn ! zstdAslFseDecodeStep table: Bytes src: Bytes at: Int64 pos: Int64 state: In
 
 fn ! zstdAslFseWeightLoop table: Bytes src: Bytes at: Int64 pos: Int64 state1: Int64 state2: Int64 weights: Bytes count: Int64 -> (Result (Pair Bytes Int64) String)
   (if (>= count 255) (err "ERR_ZSTD_CORRUPT: too many Huffman weights")
-    (mt (zstdAslFseDecodeStep table src at pos state1)
+    (match (zstdAslFseDecodeStep table src at pos state1)
       ((err message) (err message))
       ((ok state1Step)
-        (mt state1Step
+        (match state1Step
           ((pair decoded nextPos)
-            (mt decoded
+            (match decoded
               ((pair weight nextState1)
                 (do
                   (bytesSet weights count weight)
@@ -1682,12 +1682,12 @@ fn ! zstdAslFseWeightLoop table: Bytes src: Bytes at: Int64 pos: Int64 state1: I
                       (do (bytesSet weights (+ count 1) (bytesGet table (* state2 4)))
                           (ok (pair weights (+ count 2)))))
                     (if (>= (+ count 1) 255) (err "ERR_ZSTD_CORRUPT: too many Huffman weights")
-                      (mt (zstdAslFseDecodeStep table src at nextPos state2)
+                      (match (zstdAslFseDecodeStep table src at nextPos state2)
                         ((err message) (err message))
                         ((ok state2Step)
-                          (mt state2Step
+                          (match state2Step
                             ((pair decoded2 nextPos2)
-                              (mt decoded2
+                              (match decoded2
                                 ((pair weight2 nextState2)
                                   (do
                                     (bytesSet weights (+ count 1) weight2)
@@ -1700,28 +1700,28 @@ fn ! zstdAslFseWeightLoop table: Bytes src: Bytes at: Int64 pos: Int64 state1: I
 fn ! zstdAslHufFseWeights src: Bytes at: Int64 len: Int64 -> (Result (Pair Bytes Int64) String)
   (if (= len 0) (err "ERR_ZSTD_CORRUPT: Huffman weight stream empty")
     (let [size len]
-        (mt (zstdAslFseRead src at size 255 6)
+        (match (zstdAslFseRead src at size 255 6)
           ((err message) (err message))
           ((ok fseState)
-            (mt fseState
+            (match fseState
               ((pair tableAndLog descBytes)
-                (mt tableAndLog
+                (match tableAndLog
                   ((pair table log)
                     (if (>= descBytes size) (err "ERR_ZSTD_CORRUPT: Huffman weight stream empty")
                       (let [streamAt (+ at descBytes) streamLen (- size descBytes)
                             weights (bytesAlloc 255)]
-                        (mt (zstdAslBackwardInit src streamAt streamLen)
+                        (match (zstdAslBackwardInit src streamAt streamLen)
                           ((err message) (err message))
                           ((ok initialPos)
-                            (mt (zstdAslBackwardRead src streamAt initialPos log)
+                            (match (zstdAslBackwardRead src streamAt initialPos log)
                               ((err message) (err message))
                               ((ok firstState)
-                                (mt firstState
+                                (match firstState
                                   ((pair s1 pos1)
-                                    (mt (zstdAslBackwardRead src streamAt pos1 log)
+                                    (match (zstdAslBackwardRead src streamAt pos1 log)
                                       ((err message) (err message))
                                       ((ok secondState)
-                                        (mt secondState
+                                        (match secondState
                                           ((pair s2 pos2)
                                             (if (< pos2 0) (err "ERR_ZSTD_CORRUPT: Huffman weight stream too short")
                                               (zstdAslFseWeightLoop table src streamAt pos2 s1 s2 weights 0))))))))))))))))))))))
@@ -1735,17 +1735,17 @@ fn ! zstdAslHufRead src: Bytes at: Int64 len: Int64 -> (Result (Pair (Pair Bytes
             (let [weights (bytesAlloc count)]
               (do
                 (zstdAslHufDirectWeights src (+ at 1) count weights 0)
-                (mt (zstdAslHufBuild weights count)
+                (match (zstdAslHufBuild weights count)
                   ((err message) (err message))
                   ((ok tableAndLog) (ok (pair tableAndLog used))))))))
         (let [used (+ 1 head)]
           (if (or (= head 0) (> used len)) (err "ERR_ZSTD_CORRUPT: Huffman FSE weights truncated")
-            (mt (zstdAslHufFseWeights src (+ at 1) head)
+            (match (zstdAslHufFseWeights src (+ at 1) head)
               ((err message) (err message))
               ((ok weightsState)
-                (mt weightsState
+                (match weightsState
                   ((pair weights count)
-                    (mt (zstdAslHufBuild weights count)
+                    (match (zstdAslHufBuild weights count)
                       ((err message) (err message))
                       ((ok tableAndLog) (ok (pair tableAndLog used)))))))))))))
 
@@ -1849,7 +1849,7 @@ fn ! zstdAslHufSpread table: Bytes starts: Bytes weights: Bytes count: Int64 max
             (zstdAslHufSpread table starts weights count maxBits (+ symbol 1)))))))
 
 fn ! zstdAslHufBuild weights: Bytes count: Int64 -> (Result (Pair Bytes Int64) String)
-  (mt (zstdAslHufCheckWeights weights 0 count 0)
+  (match (zstdAslHufCheckWeights weights 0 count 0)
     ((err message) (err message))
     ((ok sum)
       (if (= sum 0) (err "ERR_ZSTD_CORRUPT: Huffman weights all zero")

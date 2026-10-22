@@ -3,36 +3,36 @@
 fn items node: p/SExpr -> (List p/SExpr)
   (p/sexprToList node)
 fn atom node: p/SExpr -> String
-  (mt node ((p/sexprAtom value) value) (_ ""))
+  (match node ((p/sexprAtom value) value) (_ ""))
 fn field xs: (List p/SExpr) key: String -> (Option p/SExpr)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (none))
     ((some k)
-      (mt (listTail xs)
+      (match (listTail xs)
         ((none) (none))
         ((some afterKey)
-          (mt (listHead afterKey)
+          (match (listHead afterKey)
             ((none) (none))
             ((some value)
               (if (= (atom k) key) (some value)
                   (field (optionOr (listTail afterKey) (list)) key))))))))
 fn strField xs: (List p/SExpr) key: String -> String
-  (mt (field xs key) ((some value) (gr/decodeString (atom value))) ((none) ""))
+  (match (field xs key) ((some value) (gr/decodeString (atom value))) ((none) ""))
 fn listOf node: p/SExpr -> (List p/SExpr)
   (p/sexprToList node)
 fn argvField xs: (List p/SExpr) -> (List String)
-  (mt (field xs ":args")
+  (match (field xs ":args")
     ((some v) (map (fn [arg] (gr/decodeString (atom arg))) (listOf v)))
     ((none) (list)))
 fn findCase cases: (List p/SExpr) id: String -> (Option p/SExpr)
-  (mt (listHead cases)
+  (match (listHead cases)
     ((none) (none))
     ((some c)
       (if (= (strField (optionOr (listTail (items c)) (list)) ":id") id)
         (some c)
         (findCase (optionOr (listTail cases) (list)) id))))
 fn ! workspaceRoot -> String
-  (mt (envGet "ASL_CLI_ROOT")
+  (match (envGet "ASL_CLI_ROOT")
     ((some root) root)
     ((none) (resultOr (realPath ".") ".")))
 fn ! childEnv -> (List String)
@@ -47,15 +47,15 @@ fn ! testDecodeAndCapture -> Bool
     (do
       (assert (= (gr/decodeString "\"a\\\\nb\"") "a\\nb") "an escaped backslash before n decodes to a backslash and n")
       (assert (= (gr/decodeString "\"\\u0041\\t\"") "A\t") "a \\u escape decodes to its character")
-      (mt big
+      (match big
         ((err e) (assert false (str "200000-byte child ran: " e)))
         ((ok r) (assert (and (= r.exit 0) (= (stringLength r.stdout) 200000)) (str "all 200000 bytes captured, got " (stringFromInt64 (stringLength r.stdout))))))
-      (mt cat
+      (match cat
         ((err e) (assert false (str "cat ran: " e)))
         ((ok r) (assert (and (= r.exit 0) (= r.stdout "")) "a child reading stdin sees EOF")))
       true))
 fn ! replayCase! fixture: (List p/SExpr) caseId: String kind: String args: (List String) -> Bool
-  (mt (findCase fixture caseId)
+  (match (findCase fixture caseId)
     ((none) (assert false (str caseId ": recorded fixture case exists")))
     ((some caseForm)
       (let [fields (optionOr (listTail (items caseForm)) (list))
@@ -66,7 +66,7 @@ fn ! replayCase! fixture: (List p/SExpr) caseId: String kind: String args: (List
             got (runArgv (listAppend (list "bin/asl" "run" (str "asl/packages/asl-gates/src/" kind ".asl")) args))]
         (do
           (assert (= recordedArgs args) (str caseId ": fixture argv matches corpus"))
-          (mt got
+          (match got
             ((err e) (assert false (str caseId ": ASL process ran: " e)))
             ((ok result)
               (do
@@ -75,10 +75,10 @@ fn ! replayCase! fixture: (List p/SExpr) caseId: String kind: String args: (List
                 (assert (= result.exit recordedExit) (str caseId ": ASL exit equals pinned Python")))))
           true))))
 fn ! replayDyck! fixture: (List p/SExpr) ids: (List String) paths: (List String) -> Bool
-  (mt (listHead ids)
+  (match (listHead ids)
     ((none) (listEmpty? paths))
     ((some id)
-      (mt (listHead paths)
+      (match (listHead paths)
         ((none) false)
         ((some path)
           (and (replayCase! fixture id "dyck" (list path))
@@ -96,7 +96,7 @@ fn ! replayVacuity! fixture: (List p/SExpr) -> Bool
   (and (replayCase! fixture "v10" "vacuity" (list "--base"))
        (replayCase! fixture "v11" "vacuity" (list))))))))))))
 fn ! runTests -> Bool
-  (let [fixtureText (mt (fileReadString "tests/parity/gates/auditParityFixture.asn")
+  (let [fixtureText (match (fileReadString "tests/parity/gates/auditParityFixture.asn")
                          ((ok text) text)
                          ((err e) (do (assert false (str "fixture read: " e)) "")))
         root (items (p/parseSexpr fixtureText))

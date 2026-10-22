@@ -60,7 +60,7 @@ fn ! forms! ctx: sys/Context args: (List String) -> Int64
   (let [(entry (str ctx.root "/asl/packages/asl-forms/src/main.asl"))
         (selfBin (str ctx.root "/bin/asl"))]
     (if (sys/isFile? entry)
-      (mt (sys/captureWith! (cons selfBin (cons "run" (cons entry args))) (none)
+      (match (sys/captureWith! (cons selfBin (cons "run" (cons entry args))) (none)
                             (list (str "SCRIPT_DIR=" ctx.scriptDir) (str "ROOT_DIR=" ctx.root)))
         ((err e) (do (sys/sayErr! e) 1))
         ((ok out)
@@ -72,7 +72,7 @@ fn ! forms! ctx: sys/Context args: (List String) -> Int64
       (do (sys/sayErr! "Error: the asl-forms package entry was not found") 1)))
 
 fn ! delegate! ctx: sys/Context name: String args: (List String) missing: String -> Int64
-  (mt (sys/findCommand! ctx name)
+  (match (sys/findCommand! ctx name)
     ((some path) (sys/execv! (cons path args) (list)))
     ((none) (do (sys/sayErr! missing) 1)))
 
@@ -90,7 +90,7 @@ fn pySpace? c: String -> Bool
   (listContains? (list " " "\t" "\n" "\r" "\u{b}" "\u{c}" "\u{1c}" "\u{1d}" "\u{1e}" "\u{1f}" "\u{85}" "\u{a0}") c)
 
 fn dropSpace chars: (List String) -> (List String)
-  (mt (listHead chars) ((some c) (if (pySpace? c) (dropSpace (rest chars)) chars)) ((none) chars))
+  (match (listHead chars) ((some c) (if (pySpace? c) (dropSpace (rest chars)) chars)) ((none) chars))
 
 fn pyStrip chars: (List String) -> (List String)
   (listReverse (dropSpace (listReverse (dropSpace chars))))
@@ -99,7 +99,7 @@ fn closerOf c: String -> String
   (cond ((= c "(") ")") ((= c "[") "]") ((= c "{") "}") (else ""))
 
 fn scan chars: (List String) i: Int64 stack: (List Open) inStr: Bool escaped: Bool -> (Pair String (Pair Bool (List Open)))
-  (mt (listHead chars)
+  (match (listHead chars)
     ((none) (pair "" (pair inStr stack)))
     ((some c)
       (let [(more (rest chars))]
@@ -113,7 +113,7 @@ fn scan chars: (List String) i: Int64 stack: (List Open) inStr: Bool escaped: Bo
           ((= c "\"") (scan more (+ i 1) stack true false))
           ((not (stringEmpty? (closerOf c))) (scan more (+ i 1) (cons (Open :closer (closerOf c) :pos i :opener c) stack) false false))
           ((or (= c ")") (or (= c "]") (= c "}")))
-            (mt (listHead stack)
+            (match (listHead stack)
               ((none) (pair (str "unexpected " c " at byte " (stringFromInt64 i)) (pair false stack)))
               ((some top)
                 (if (!= top.closer c)
@@ -131,7 +131,7 @@ fn nameChar? c: String -> Bool
   (or (letter? c) (listContains? (list "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "_" "." "-") c))
 
 fn afterName chars: (List String) -> (List String)
-  (mt (listHead chars) ((some c) (if (nameChar? c) (afterName (rest chars)) chars)) ((none) chars))
+  (match (listHead chars) ((some c) (if (nameChar? c) (afterName (rest chars)) chars)) ((none) chars))
 
 fn keywordHead? chars: (List String) -> Bool
   (and (= (first chars) "(")
@@ -149,7 +149,7 @@ fn asnEcho text: String -> (Pair String Int64)
         (problem (cond
                    ((not (stringEmpty? found)) found)
                    (openString "unterminated string")
-                   ((not (listEmpty? stack)) (mt (listHead stack) ((some top) (str "unclosed " top.opener " at byte " (stringFromInt64 top.pos))) ((none) "")))
+                   ((not (listEmpty? stack)) (match (listHead stack) ((some top) (str "unclosed " top.opener " at byte " (stringFromInt64 top.pos))) ((none) "")))
                    ((not (keywordHead? chars)) "the head is not a keyword")
                    (else "")))]
     (if (stringEmpty? problem)
@@ -167,7 +167,7 @@ fn outputLine value: String -> String
   (if (stringEndsWith? value "\n") (optionOr (stringSlice value 0 (- (stringLength value) 1)) "") value)
 
 fn ! cliResult! cmd: String args: (List String) res: (Result String String) -> Int64
-  (mt res
+  (match res
     ((ok out) (do (sys/say! (outputLine out)) 0))
     ((err e)
      (let [(sub (optionOr (listHead args) ""))
@@ -213,14 +213,14 @@ fn ! browserUrl -> String
   (str "http://127.0.0.1:" (optionOr (envGet "ASL_GATEWAY_PORT") "8765") "/api/asl/browser")
 
 fn ! curl! argv: (List String) -> Int64
-  (mt (sys/onPath! "curl")
+  (match (sys/onPath! "curl")
     ((none) (do (sys/say! "(:browser :status :failed :error ERR_TOOL_ABSENT :message \"curl is not on PATH; asl browser reaches the gateway through curl\")") 1))
     ((some path)
       (let [(rc (sys/run! (cons path argv)))]
         (if (!= rc 0) rc (do (sys/say! "") 0)))))
 
 fn browserArgs args: (List String) target: String browser: String payload: String -> (Result (Pair String (Pair String String)) Int64)
-  (mt (listHead args)
+  (match (listHead args)
     ((none) (ok (pair target (pair browser payload))))
     ((some a)
       (cond
@@ -234,7 +234,7 @@ fn ! browser! args: (List String) -> Int64
       ((or (= sub "targets") (or (= sub "list") (= sub "")))
         (curl! (list "-s" "--noproxy" "*" "-H" "Accept: application/asn+sexpr" (str (browserUrl) "/target/list"))))
       ((= sub "exec")
-        (mt (browserArgs (rest args) "" "" "")
+        (match (browserArgs (rest args) "" "" "")
           ((err code) code)
           ((ok parsed)
             (let [(target (pairFirst parsed)) (browserName (pairFirst (pairSecond parsed))) (payload (pairSecond (pairSecond parsed)))]
@@ -246,7 +246,7 @@ fn ! browser! args: (List String) -> Int64
 
 fn ! cockpit! ctx: sys/Context args: (List String) -> Int64
   (do (sys/say! "[Cockpit] Opening Sovereign Cockpit at http://127.0.0.1:8765/cockpit")
-      (mt (sys/onPath! "open")
+      (match (sys/onPath! "open")
         ((some path) (sys/run! (list path "http://127.0.0.1:8765/cockpit")))
         ((none) 0)))
 
@@ -280,13 +280,13 @@ fn ! docCmd! ctx: sys/Context args: (List String) -> Int64
       (webDelegate! ctx "doc" (if (stringContains? arg "#") "symbol" "file") (list arg))))
 
 fn afterEquals a: String -> String
-  (mt (stringIndexOf a "=") ((some i) (optionOr (stringSlice a (+ i 1) (stringLength a)) "")) ((none) a))
+  (match (stringIndexOf a "=") ((some i) (optionOr (stringSlice a (+ i 1) (stringLength a)) "")) ((none) a))
 
 fn eqFlag? a: String names: (List String) -> Bool
   (listAny? (fn [(n String)] -> Bool (stringStartsWith? a (str n "="))) names)
 
 fn noteFields args: (List String) prev: String fields: (List String) -> (List String)
-  (mt (listHead args)
+  (match (listHead args)
     ((none) fields)
     ((some a)
       (let [(claim (optionOr (listGet fields 0) "")) (kind (optionOr (listGet fields 1) "")) (scope (optionOr (listGet fields 2) "")) (date (optionOr (listGet fields 3) ""))
@@ -328,12 +328,12 @@ fn aslName? n: String -> Bool
   (stringEndsWith? n ".asl")
 
 fn ! walk! dir: String dirReal: String suites: Bool acc: (List String) -> (List String)
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err _) acc)
     ((ok names)
       (fold (fn [(found (List String)) (n String)] -> (List String)
               (let [(p (str dir "/" n))]
-                (mt (realPath p)
+                (match (realPath p)
                   ((err _) found)
                   ((ok real)
                     (cond
@@ -344,12 +344,12 @@ fn ! walk! dir: String dirReal: String suites: Bool acc: (List String) -> (List 
             acc names)))
 
 fn ! findFiles! dir: String suites: Bool -> (List String)
-  (mt (realPath dir)
+  (match (realPath dir)
     ((err _) (list))
     ((ok real) (listSort (walk! (if (stringEndsWith? dir "/") (optionOr (stringSlice dir 0 (- (stringLength dir) 1)) dir) dir) real suites (list)))))
 
 fn ! testFiles! args: (List String) acc: (List String) -> (Result (List String) Int64)
-  (mt (listHead args)
+  (match (listHead args)
     ((none) (ok acc))
     ((some a)
       (cond
@@ -398,7 +398,7 @@ fn ! test! ctx: sys/Context args: (List String) -> Int64
           (let [(rc (sys/run! (list host "run" (str ctx.root "/asl/packages/asl-cli/src/sweep.asl") "test" host)))]
             (if tracing (trace! ctx (list) rc) rc)))
         (else
-          (mt (testFiles! files (list))
+          (match (testFiles! files (list))
             ((err code) code)
             ((ok paths)
               (let [(dirs (filter (fn [(a String)] -> Bool (sys/isDir? a)) files))
@@ -437,7 +437,7 @@ fn ! runArgv ctx: sys/Context args: (List String) -> (List String)
       ((and (= cwdReal rootReal) (not (stringStartsWith? file "/")))
         (cons host (cons "run" (cons native (cons "run" args)))))
       (else
-        (mt (if (stringStartsWith? file "/") (workspaceOf! (parentDir file)) (none))
+        (match (if (stringStartsWith? file "/") (workspaceOf! (parentDir file)) (none))
           ((some ws)
             (listAppend (list "/bin/sh" "-c" "cd -- \"$0\" && ASL_ROOT=\"$1\" && export ASL_ROOT && shift && exec \"$@\"" ws ctx.root host "run" native "run" (optionOr (stringSlice file (+ (stringLength ws) 1) (stringLength file)) "")) (rest args)))
           ((none)
@@ -520,7 +520,7 @@ fn ! dispatch! ctx: sys/Context cmd: String args: (List String) -> Int64
     (else (do (sys/say! (str "(:asl :status :failed :error ERR_UNKNOWN_COMMAND :message \"unknown command " cmd "; see asl help\")")) 2)))
 
 fn ! readStdin! acc: (List String) -> (Result String String)
-  (mt (fdRead 0 65536)
+  (match (fdRead 0 65536)
     ((err e) (err e))
     ((ok chunk) (if (stringEmpty? chunk) (ok (stringJoin (listReverse acc) "")) (readStdin! (cons chunk acc)))))
 
@@ -533,13 +533,13 @@ fn ! entry! ctx: sys/Context args: (List String) -> Int64
       ((= cmd "-f")
         (if (or (!= (listLength args) 2) (not (sys/isFile? (first (rest args)))))
           (batchUsage! "usage: asl -f FILE, one readable file of forms and no other argument")
-          (mt (fileReadString (first (rest args)))
+          (match (fileReadString (first (rest args)))
             ((err _) (batchUsage! "usage: asl -f FILE, one readable file of forms and no other argument"))
             ((ok text) (dispatch! ctx "rpc" (list (sys/stripTrailingNewlines text)))))))
       ((= cmd "-")
         (if (!= (listLength args) 1)
           (batchUsage! "usage: asl - reads forms from stdin and takes no other argument")
-          (mt (readStdin! (list))
+          (match (readStdin! (list))
             ((err e) (do (sys/sayErr! (str "asl -: stdin: " e)) 2))
             ((ok text) (dispatch! ctx "rpc" (list (sys/stripTrailingNewlines text)))))))
       (else
@@ -556,6 +556,6 @@ fn ! route! ctx: sys/Context args: (List String) -> (Pair String (List String))
       (pair lead (rest args))))
 
 fn ! main args: (List String) -> (Result Int64 String)
-  (mt (sys/context!)
+  (match (sys/context!)
     ((err e) (do (sys/sayErr! (str "(:asl :status :failed :error ERR_NO_WORKSPACE :message \"" e "\")")) (ok 2)))
     ((ok ctx) (do (nc/hostEntry! ctx args) (ok (entry! ctx args)))))

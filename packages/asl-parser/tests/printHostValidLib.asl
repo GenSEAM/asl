@@ -37,10 +37,10 @@ fn findHostFrom! dir: String -> (Result String String)
           (findHostFrom! up)))))
 
 fn hostBinary! -> (Result String String)
-  (mt (envGet "ASL_HOST")
+  (match (envGet "ASL_HOST")
     ((some h) (if (stringEmpty? h) (err "ASL_HOST is set but empty") (ok h)))
     ((none)
-     (mt (realPath ".")
+     (match (realPath ".")
        ((err _) (err "cannot canonicalize the working directory"))
        ((ok cwd) (findHostFrom! cwd)))))
 
@@ -51,7 +51,7 @@ fn createTemp! dir: String text: String attempt: Int64 -> (Result String String)
   (if (>= attempt 32)
     (err (str "no free temp name in " dir " after 32 attempts"))
     (let [(tmp (str dir "/.asl_chk_print_" (stringFromInt64 (monotonicNs)) "_" (stringFromInt64 attempt) ".asl"))]
-      (mt (fileCreateExclusive tmp text)
+      (match (fileCreateExclusive tmp text)
         ((ok _) (ok tmp))
         ((err e)
          (if (stringStartsWith? e "alreadyExists:")
@@ -61,7 +61,7 @@ fn createTemp! dir: String text: String attempt: Int64 -> (Result String String)
 fn firstHostError out: String -> String
   (let [(lines (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringSplit out "\n")))
         (errLines (filter (fn [(l String)] -> Bool (stringContains? l "ERR_")) lines))]
-    (mt (listHead errLines)
+    (match (listHead errLines)
       ((some l) l)
       ((none) (optionOr (listHead lines) "(no output)"))))
 
@@ -83,7 +83,7 @@ fn runCheck! host: String path: String -> HostRun
   (:f removeDetail String))
 
 fn hostCheck! host: String srcPath: String text: String -> (Result CheckOutcome String)
-  (mt (createTemp! (parentDir srcPath) text 0)
+  (match (createTemp! (parentDir srcPath) text 0)
     ((err e) (err e))
     ((ok tmp)
      (let [(printed (runCheck! host tmp))
@@ -93,22 +93,22 @@ fn hostCheck! host: String srcPath: String text: String -> (Result CheckOutcome 
              :source source
              :printed printed
              :removed (ok? removed)
-             :removeDetail (mt removed ((ok _) (str "removed " tmp)) ((err e) (str "remove " tmp ": " e))))))))
+             :removeDetail (match removed ((ok _) (str "removed " tmp)) ((err e) (str "remove " tmp ": " e))))))))
 
 fn printForms forms: (List a/TopForm) -> String
-  (mt (listHead forms)
+  (match (listHead forms)
     ((some tf)
-     (mt tf
+     (match tf
        ((a/topModule m) (ap/printAstModule m))
        (_ (stringJoin (map (fn [(t a/TopForm)] -> String (ap/printTopForm t)) forms) "\n\n"))))
     ((none) ""))
 
 fn checkFile! host: String root: String path: String -> (Result CheckOutcome String)
   (let [(abs (str root "/" path))]
-    (mt (fileReadString abs)
+    (match (fileReadString abs)
       ((err _) (err (str path ": read failed")))
       ((ok src)
-       (mt (a/parse src)
+       (match (a/parse src)
          ((err e) (err (str path ": parse error " e.msg)))
          ((ok forms) (hostCheck! host abs (printForms forms)))))))
 
@@ -120,22 +120,22 @@ fn inScope? o: CheckOutcome -> Bool
   o.source.valid
 
 fn fileFails? r: FileResult -> Bool
-  (mt r.outcome
+  (match r.outcome
     ((err _) true)
     ((ok o)
      (or (not o.removed)
-         (mt (knownHostInvalidReason r.path)
+         (match (knownHostInvalidReason r.path)
            ((some _) (or (not (inScope? o)) o.printed.valid))
            ((none) (if (inScope? o) (not o.printed.valid) (not (scope/knownSourceInvalid? r.path))))))))
 
 fn assertFile r: FileResult -> Bool
   (let [(path r.path)]
-    (mt r.outcome
+    (match r.outcome
       ((err e) (do (assert false (str path " host check could not run: " e)) false))
       ((ok o)
        (do
          (assert o.removed (str path " temp cleanup: " o.removeDetail))
-         (mt (knownHostInvalidReason path)
+         (match (knownHostInvalidReason path)
            ((some why)
             (do
               (assert (and (inScope? o) (not o.printed.valid)) (str path " is listed host-invalid (" why "): its source must pass and its printed output fail asl-host check, source " o.source.detail ", printed " o.printed.detail))
@@ -150,16 +150,16 @@ fn assertFile r: FileResult -> Bool
                 true))))))))
 
 fn sourceValid? r: FileResult -> Bool
-  (mt r.outcome ((ok o) o.source.valid) ((err _) false))
+  (match r.outcome ((ok o) o.source.valid) ((err _) false))
 
 fn runShard! label: String n: Int64 k: Int64 -> Bool
-  (mt (prl/allCorpusFiles!)
+  (match (prl/allCorpusFiles!)
     ((err e) (do (assert false (str "git ls-files failed: " e)) false))
     ((ok allFiles)
-     (mt (hostBinary!)
+     (match (hostBinary!)
        ((err e) (do (assert false (str "host binary: " e)) false))
        ((ok host)
-        (mt (realPath ".")
+        (match (realPath ".")
           ((err _) (do (assert false "cannot canonicalize the repo root") false))
           ((ok root)
            (let [(shard (prl/shardFiles allFiles n k))

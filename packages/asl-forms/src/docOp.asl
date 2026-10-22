@@ -18,17 +18,17 @@ fn rowLine r: dl/DocRow -> String
   (str "(:row :symbol " (q r.symbol) " :text " (q (dl/renderText r.text)) ")")
 
 fn ! symbolOp! id: Int64 root: String symbol: String -> k/EditOutcome
-  (mt (dl/findBySymbol! root symbol)
+  (match (dl/findBySymbol! root symbol)
     ((err e) (fail id ":ERR_DOC_READ" e))
     ((ok found) (symbolResult id symbol found)))
 
 fn symbolResult id: Int64 symbol: String found: (Option dl/DocRow) -> k/EditOutcome
-  (mt found
+  (match found
     ((none) (docOk id (str " :symbol " (q symbol) " :found false")))
     ((some row) (docOk id (str " :symbol " (q symbol) " :found true :text " (q (dl/renderText row.text))))))
 
 fn ! fileOp! id: Int64 root: String file: String -> k/EditOutcome
-  (mt (dl/findByFile! root file)
+  (match (dl/findByFile! root file)
     ((err e) (fail id ":ERR_DOC_READ" e))
     ((ok rows) (docOk id (str " :file " (q file) " :found " (stringFromInt64 (listLength rows)) " :rows [" (stringJoin (map rowLine rows) " ") "]"))))
 

@@ -70,13 +70,13 @@ fn readAt s: String bs: Bytes i: Int64 n: Int64 -> R
              :at e :bad "")))))
 
 fn items v: A -> (List A)
-  (mt v ((aList xs) xs) (_ (list)))
+  (match v ((aList xs) xs) (_ (list)))
 
 fn getKey xs: (List A) k: String -> (Option A)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (none))
     ((some x) (let [(rest (optionOr (listTail xs) (list)))]
-                (mt x
+                (match x
                   ((aKw kk) (if (= kk k) (listHead rest) (getKey rest k)))
                   (_ (getKey rest k))))))
 
@@ -84,10 +84,10 @@ fn fget v: A k: String -> A
   (optionOr (getKey (items v) k) (aList (list)))
 
 fn text v: A -> String
-  (mt v ((aStr s) s) ((aSym s) s) ((aKw s) s) ((aInt n) (stringFromInt64 n)) (_ ""))
+  (match v ((aStr s) s) ((aSym s) s) ((aKw s) s) ((aInt n) (stringFromInt64 n)) (_ ""))
 
 fn num v: A -> Int64
-  (mt v ((aInt n) n) (_ 0))
+  (match v ((aInt n) n) (_ 0))
 
 fn texts v: A -> (List String)
   (map text (items v))
@@ -108,12 +108,12 @@ fn parseFixture! s: String -> (Result Fx String)
                     :tool (resultOr (realPath ".") "."))))))
 
 fn loadText! -> (Result String String)
-  (mt (fileReadString (fixturePath))
+  (match (fileReadString (fixturePath))
     ((err e) (err (str (fixturePath) ": " e)))
     ((ok s) (ok s)))
 
 fn ! prefixRejected? s: String cut: Int64 -> Bool
-  (mt (parseFixture! (optionOr (stringSlice s 0 cut) ""))
+  (match (parseFixture! (optionOr (stringSlice s 0 cut) ""))
     ((ok _) false)
     ((err _) true))
 
@@ -121,24 +121,24 @@ fn envRows kv: (List (Pair String String)) -> (List String)
   (map (fn [(p (Pair String String))] -> String (str (pairFirst p) "=" (pairSecond p))) kv)
 
 fn runOk! argv: (List String) cwd: String env: (List (Pair String String)) -> (Result String String)
-  (mt (c/runArgv! argv cwd (c/Ctx :cwd cwd :env env :spawnEnv (some (envRows env)) :now 0 :date ""))
+  (match (c/runArgv! argv cwd (c/Ctx :cwd cwd :env env :spawnEnv (some (envRows env)) :now 0 :date ""))
     ((err e) (err (str (stringJoin argv " ") ": " e)))
     ((ok p) (if (= p.code 0) (ok p.out) (err (str (stringJoin argv " ") " exited " (stringFromInt64 p.code) ": " p.errText)))))
 
 fn writeFile! path: String data: String -> (Result Unit String)
-  (mt (dirCreate (c/dirName path))
+  (match (dirCreate (c/dirName path))
     ((err e) (err e))
     ((ok _) (fileWrite path data)))
 
 fn writeAll! base: String files: (List (Pair String A)) subst: (fn [String] -> String) -> (Result Unit String)
   (fold (fn [(acc (Result Unit String)) (p (Pair String A))] -> (Result Unit String)
-          (mt acc ((err e) (err e)) ((ok _) (writeFile! (c/joinPath base (subst (pairFirst p))) (text (pairSecond p))))))
+          (match acc ((err e) (err e)) ((ok _) (writeFile! (c/joinPath base (subst (pairFirst p))) (text (pairSecond p))))))
         (ok ()) files)
 
 fn writeFills! base: String rows: (List A) -> (Result Unit String)
   (fold (fn [(acc (Result Unit String)) (row A)] -> (Result Unit String)
           (let [(xs (items row))]
-            (mt acc
+            (match acc
               ((err e) (err e))
               ((ok _) (writeFile! (c/joinPath base (text (optionOr (listHead xs) (aStr "")))) (stringRepeat (text (optionOr (listGet xs 1) (aStr ""))) (num (optionOr (listGet xs 2) (aInt 0)))))))))
         (ok ()) rows)
@@ -167,11 +167,11 @@ fn setMtimes! base: String rows: (List (Pair String Int64)) tarPath: String env:
   (if (listEmpty? rows)
     (ok ())
     (let [(members (map (fn [(p (Pair String Int64))] -> String
-                          (tarMember (pairFirst p) (mt (fileReadString (c/joinPath base (pairFirst p))) ((ok d) d) ((err _) "")) (pairSecond p)))
+                          (tarMember (pairFirst p) (match (fileReadString (c/joinPath base (pairFirst p))) ((ok d) d) ((err _) "")) (pairSecond p)))
                         rows))]
-      (mt (fileWrite tarPath (str (c/catAll members) (nul 1024)))
+      (match (fileWrite tarPath (str (c/catAll members) (nul 1024)))
         ((err e) (err e))
-        ((ok _) (mt (runOk! (list "tar" "-xf" tarPath "-C" base) base env) ((err e) (err e)) ((ok _) (ok ())))))))
+        ((ok _) (match (runOk! (list "tar" "-xf" tarPath "-C" base) base env) ((err e) (err e)) ((ok _) (ok ())))))))
 
 fn hashOf s: String -> String
   (optionOr (stringSlice (bytesSha256 (stringToBytes s)) 0 16) "")
@@ -183,10 +183,10 @@ fn replaceAll s: String a: String b: String -> String
 
 fn ! build! fx: Fx cs: A base: String k: Int64 -> (Result Built String)
   (let [(rootRaw (c/joinPath base (str "w" (stringFromInt64 k)))) (homeRaw (c/joinPath base (str "h" (stringFromInt64 k))))]
-    (mt (dirCreate rootRaw)
+    (match (dirCreate rootRaw)
       ((err e) (err e))
       ((ok _)
-        (mt (dirCreate homeRaw)
+        (match (dirCreate homeRaw)
           ((err e) (err e))
           ((ok _)
             (let [(root (optionOr (resultToOption (realPath rootRaw)) rootRaw)) (home (optionOr (resultToOption (realPath homeRaw)) homeRaw))
@@ -195,21 +195,21 @@ fn ! build! fx: Fx cs: A base: String k: Int64 -> (Result Built String)
                   (genv (listAppend fx.env (list (pair "GIT_AUTHOR_DATE" fx.commitDate) (pair "GIT_COMMITTER_DATE" fx.commitDate))))
                   (git (fn [(args (List String))] -> (Result String String) (runOk! (listAppend fx.git args) root genv)))
                   (steps (list
-                    (fn [] -> (Result String String) (mt (writeAll! root (pairsOf (fget cs "files")) sub) ((ok _) (ok "")) ((err e) (err e))))
-                    (fn [] -> (Result String String) (mt (writeFills! root (items (fget cs "fills"))) ((ok _) (ok "")) ((err e) (err e))))
+                    (fn [] -> (Result String String) (match (writeAll! root (pairsOf (fget cs "files")) sub) ((ok _) (ok "")) ((err e) (err e))))
+                    (fn [] -> (Result String String) (match (writeFills! root (items (fget cs "fills"))) ((ok _) (ok "")) ((err e) (err e))))
                     (fn [] -> (Result String String) (if (= (text (fget cs "git")) "true") (git (list "init" "-q")) (ok "")))
                     (fn [] -> (Result String String) (if (= (text (fget cs "git")) "true") (git (list "add" "-A")) (ok "")))
                     (fn [] -> (Result String String) (if (= (text (fget cs "git")) "true") (git (list "commit" "-q" "--no-verify" "--allow-empty" "-m" "c0")) (ok "")))
                     (fn [] -> (Result String String)
-                      (fold (fn [(acc (Result String String)) (p (Pair String A))] -> (Result String String) (mt acc ((err e) (err e)) ((ok _) (git (list "mv" (pairFirst p) (text (pairSecond p)))))))
+                      (fold (fn [(acc (Result String String)) (p (Pair String A))] -> (Result String String) (match acc ((err e) (err e)) ((ok _) (git (list "mv" (pairFirst p) (text (pairSecond p)))))))
                             (ok "") (pairsOf (fget cs "renames"))))
-                    (fn [] -> (Result String String) (mt (writeAll! root (pairsOf (fget cs "after")) sub) ((ok _) (ok "")) ((err e) (err e))))
-                    (fn [] -> (Result String String) (mt (writeAll! home (pairsOf (fget cs "home")) sub) ((ok _) (ok "")) ((err e) (err e))))
+                    (fn [] -> (Result String String) (match (writeAll! root (pairsOf (fget cs "after")) sub) ((ok _) (ok "")) ((err e) (err e))))
+                    (fn [] -> (Result String String) (match (writeAll! home (pairsOf (fget cs "home")) sub) ((ok _) (ok "")) ((err e) (err e))))
                     (fn [] -> (Result String String)
                       (fold (fn [(acc (Result String String)) (p (Pair String A))] -> (Result String String)
-                              (mt acc ((err e) (err e))
+                              (match acc ((err e) (err e))
                                 ((ok _) (let [(dst (c/joinPath root (pairFirst p)))]
-                                          (mt (dirCreate (c/dirName dst))
+                                          (match (dirCreate (c/dirName dst))
                                             ((err e) (err e))
                                             ((ok _) (runOk! (list "ln" "-s" (sub (text (pairSecond p))) dst) root genv)))))))
                             (ok "") (pairsOf (fget cs "links"))))
@@ -218,10 +218,10 @@ fn ! build! fx: Fx cs: A base: String k: Int64 -> (Result Built String)
                             (homeRows (filter (fn [(p (Pair String Int64))] -> Bool (stringStartsWith? (pairFirst p) (str home "/"))) rows))
                             (rootRows (filter (fn [(p (Pair String Int64))] -> Bool (not (stringStartsWith? (pairFirst p) (str home "/")))) rows))
                             (rel (fn [(p (Pair String Int64))] -> (Pair String Int64) (pair (optionOr (stringSlice (pairFirst p) (+ (stringLength home) 1) (stringLength (pairFirst p))) "") (pairSecond p))))]
-                        (mt (setMtimes! root rootRows (c/joinPath base (str "r" (stringFromInt64 k) ".tar")) genv)
+                        (match (setMtimes! root rootRows (c/joinPath base (str "r" (stringFromInt64 k) ".tar")) genv)
                           ((err e) (err e))
-                          ((ok _) (mt (setMtimes! home (map rel homeRows) (c/joinPath base (str "m" (stringFromInt64 k) ".tar")) genv) ((err e) (err e)) ((ok _) (ok "")))))))))]
-              (mt (fold (fn [(acc (Result String String)) (step (fn [] -> (Result String String)))] -> (Result String String) (mt acc ((err e) (err e)) ((ok _) (step)))) (ok "") steps)
+                          ((ok _) (match (setMtimes! home (map rel homeRows) (c/joinPath base (str "m" (stringFromInt64 k) ".tar")) genv) ((err e) (err e)) ((ok _) (ok "")))))))))]
+              (match (fold (fn [(acc (Result String String)) (step (fn [] -> (Result String String)))] -> (Result String String) (match acc ((err e) (err e)) ((ok _) (step)))) (ok "") steps)
                 ((err e) (err e))
                 ((ok _) (ok (Built :root root :home home))))))))))
 
@@ -234,34 +234,34 @@ fn withPath env: (List (Pair String String)) path: String -> (List (Pair String 
   (listAppend (filter (fn [(p (Pair String String))] -> Bool (!= (pairFirst p) "PATH")) env) (list (pair "PATH" path)))
 
 fn ! findTool! name: String path: String -> (Result String String)
-  (mt (listHead (filter (fn [(d String)] -> Bool (and (not (stringEmpty? d)) (c/isFile? (c/joinPath d name)))) (stringSplit path ":")))
+  (match (listHead (filter (fn [(d String)] -> Bool (and (not (stringEmpty? d)) (c/isFile? (c/joinPath d name)))) (stringSplit path ":")))
     ((none) (err (str name " is not on PATH " path)))
     ((some d) (ok (c/joinPath d name))))
 
 fn ! makeTools! fx: Fx base: String -> (Result Tools String)
   (let [(py (c/joinPath base "py")) (noPy (c/joinPath base "nopy"))
         (fixPath (optionOr (listHead (map pairSecond (filter (fn [(p (Pair String String))] -> Bool (= (pairFirst p) "PATH")) fx.env))) ""))]
-    (mt (findTool! "python3" (optionOr (envGet "PATH") ""))
+    (match (findTool! "python3" (optionOr (envGet "PATH") ""))
       ((err e) (err e))
       ((ok pyBin)
-        (mt (findTool! "git" fixPath)
+        (match (findTool! "git" fixPath)
           ((err e) (err e))
           ((ok gitBin)
-            (mt (dirCreate py)
+            (match (dirCreate py)
               ((err e) (err e))
               ((ok _)
-                (mt (dirCreate noPy)
+                (match (dirCreate noPy)
                   ((err e) (err e))
                   ((ok _)
-                    (mt (runOk! (list "ln" "-s" pyBin (c/joinPath py "python3")) base fx.env)
+                    (match (runOk! (list "ln" "-s" pyBin (c/joinPath py "python3")) base fx.env)
                       ((err e) (err e))
                       ((ok _)
-                        (mt (runOk! (list "ln" "-s" gitBin (c/joinPath noPy "git")) base fx.env)
+                        (match (runOk! (list "ln" "-s" gitBin (c/joinPath noPy "git")) base fx.env)
                           ((err e) (err e))
                           ((ok _) (ok (Tools :py py :noPy noPy)))))))))))))))
 
 fn ! pythonVersion! tools: Tools base: String -> (Result String String)
-  (mt (runOk! (list (c/joinPath tools.py "python3") "-c" "import sys; print(sys.version.split()[0])") base (list))
+  (match (runOk! (list (c/joinPath tools.py "python3") "-c" "import sys; print(sys.version.split()[0])") base (list))
     ((err e) (err e))
     ((ok out) (ok (c/pyStrip out))))
 
@@ -270,7 +270,7 @@ fn casePath tools: Tools cs: A -> String
 
 fn ! checkCase fx: Fx tools: Tools base: String k: Int64 cs: A -> Bool
   (let [(cid (text (fget cs "id")))]
-    (mt (build! fx cs base k)
+    (match (build! fx cs base k)
       ((err e) (do (assert (= e "") (str cid ": workspace build failed: " e)) false))
       ((ok b)
         (let [(sub (fn [(s String)] -> String (replaceAll (replaceAll (replaceAll s "{root}" b.root) "{home}" b.home) "{tool}" fx.tool)))
@@ -301,21 +301,21 @@ fn tmpBase! -> String
     (c/joinPath (if (stringEmpty? t) "/tmp" t) (str "obsTest" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (/ (nowNs) 1000)))))
 
 fn ! runTests -> Bool
-  (mt (loadText!)
+  (match (loadText!)
     ((err e) (do (assert (= e "") e) false))
     ((ok text0)
-      (mt (parseFixture! text0)
+      (match (parseFixture! text0)
         ((err e) (do (assert (= e "") (str (fixturePath) ": " e)) false))
         ((ok fx)
       (let [(base (tmpBase!))
             (truncOk (and (prefixRejected? text0 (/ (stringLength text0) 2)) (prefixRejected? text0 (- (stringLength text0) 2))
-                          (mt (parseFixture! (str text0 " )")) ((ok _) false) ((err _) true))))]
-        (mt (dirCreate base)
+                          (match (parseFixture! (str text0 " )")) ((ok _) false) ((err _) true))))]
+        (match (dirCreate base)
           ((err e) (do (assert (= e "") (str "temp dir: " e)) false))
           ((ok _)
             (do
             (assert truncOk "a truncated or overlong fixture is rejected")
-            (mt (makeTools! fx base)
+            (match (makeTools! fx base)
               ((err e) (do (assert (= e "") (str "tools: " e)) (pathRemove base) false))
               ((ok tools)
                 (let [(ver (pythonVersion! tools base))
@@ -323,6 +323,6 @@ fn ! runTests -> Bool
                       (results (map (fn [(p (Pair Int64 A))] -> Bool (checkCase fx tools base (pairFirst p) (pairSecond p))) (enumerate fx.cases)))
                       (cleaned (pathRemove base))]
                   (do
-                    (assert okVer (str "python3 on PATH is " (mt ver ((ok v) v) ((err e) e)) "; the fixture was recorded with " fx.python))
+                    (assert okVer (str "python3 on PATH is " (match ver ((ok v) v) ((err e) e)) "; the fixture was recorded with " fx.python))
                     (assert (= (listLength fx.cases) (fixtureCases)) (str "fixture holds " (stringFromInt64 (listLength fx.cases)) " cases, want " (stringFromInt64 (fixtureCases))))
                     (and truncOk okVer (= (listLength fx.cases) (fixtureCases)) (listAll? (fn [(r Bool)] -> Bool r) results))))))))))))))

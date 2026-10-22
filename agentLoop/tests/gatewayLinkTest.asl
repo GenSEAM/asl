@@ -34,7 +34,7 @@ fn ready? ready: (List (Pair Int64 Int64)) fd: Int64 -> Bool
 
 fn ! writeAll! fd: Int64 data: String -> Bool
   (if (stringEmpty? data) true
-    (mt (fdWrite fd data)
+    (match (fdWrite fd data)
       ((err _) false)
       ((ok n) (if (<= n 0) false (writeAll! fd (optionOr (stringSlice data n (stringLength data)) ""))))))
 
@@ -45,7 +45,7 @@ fn headValue head: String name: String -> String
     "" (stringSplit head "\r\n"))
 
 fn parseStub raw: String -> (Option Seen)
-  (mt (stringIndexOf raw "\r\n\r\n")
+  (match (stringIndexOf raw "\r\n\r\n")
     ((none) none)
     ((some end)
       (let [(head (optionOr (stringSlice raw 0 end) ""))
@@ -62,11 +62,11 @@ fn completion -> String
 fn ! stepStub! r: Pump stub: Stub ready: (List (Pair Int64 Int64)) -> Pump
   (let [(keep (fn [(s Stub)] -> Pump (with r :stubs (listAppend r.stubs (list s)))))]
     (if (not (ready? ready stub.fd)) (keep stub)
-      (mt (fdRead stub.fd 65536)
+      (match (fdRead stub.fd 65536)
         ((err _) (do (fdClose stub.fd) r))
         ((ok chunk)
           (let [(input (str stub.input chunk))]
-            (mt (parseStub input)
+            (match (parseStub input)
               ((none) (if (stringEmpty? chunk) (do (fdClose stub.fd) r) (keep (with stub :input input))))
               ((some seen)
                 (do (writeAll! stub.fd (completion)) (fdClose stub.fd)
@@ -74,7 +74,7 @@ fn ! stepStub! r: Pump stub: Stub ready: (List (Pair Int64 Int64)) -> Pump
 
 fn ! stepPump! r: Pump ready: (List (Pair Int64 Int64)) -> Pump
   (let [(accepted (if (ready? ready r.listener)
-                    (mt (sockAccept r.listener)
+                    (match (sockAccept r.listener)
                       ((ok fd) (with r :stubs (listAppend r.stubs (list (Stub :fd fd :input "")))))
                       ((err _) r))
                     r))]
@@ -82,22 +82,22 @@ fn ! stepPump! r: Pump ready: (List (Pair Int64 Int64)) -> Pump
       (Pump :listener accepted.listener :stubs (list) :seen accepted.seen) accepted.stubs))
 
 fn ! pumpUntilExit! r: Pump pid: Int64 deadline: Int64 -> (Pair Pump Int64)
-  (mt (optionOr (resultToOption (procWaitPid pid true)) none)
+  (match (optionOr (resultToOption (procWaitPid pid true)) none)
     ((some code) (pair r code))
     ((none) (if (>= (nowMs!) deadline) (do (procKill pid "SIGTERM") (procWaitPid pid false) (pair r -1))
          (let [(watch (listAppend (list (pair r.listener 1)) (map (fn [(s Stub)] -> (Pair Int64 Int64) (pair s.fd 1)) r.stubs)))]
-           (mt (fdPoll watch 20)
+           (match (fdPoll watch 20)
              ((err _) (pumpUntilExit! r pid deadline))
              ((ok ready) (pumpUntilExit! (stepPump! r ready) pid deadline)))))))
 
 fn ! waitPort! path: String attempts: Int64 -> Int64
   (if (<= attempts 0) 0
-    (mt (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
+    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
       ((some port) (if (> port 0) port (do (sleepMs 20) (waitPort! path (- attempts 1)))))
       ((none) (do (sleepMs 20) (waitPort! path (- attempts 1))))))
 
 fn ! spawnSh! command: String env: (List String) -> Int64
-  (mt (procSpawnv (list "/bin/sh" "-c" command) (none) (some env)) ((ok sp) sp.pid) ((err _) 0))
+  (match (procSpawnv (list "/bin/sh" "-c" command) (none) (some env)) ((ok sp) sp.pid) ((err _) 0))
 
 fn ! readOr path: String -> String
   (resultOr (fileReadString path) "")

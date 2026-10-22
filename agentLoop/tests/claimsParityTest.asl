@@ -3,17 +3,17 @@
   :i [(asl/agentLoop/claims :a cl) (asl/agentLoop/plan :a p) (asl/agentLoop/core :a c)])
 
 fn fieldsOfLine line: String -> (List (Pair String p/SexpVal))
-  (mt (p/planTree line)
+  (match (p/planTree line)
     ((ok tree)
-      (let [items (mt (listHead tree)
-                    ((some h) (mt h ((p/sexpList it) it) ((p/sexpAtom _) (list)) ((p/sexpStr _) (list))))
+      (let [items (match (listHead tree)
+                    ((some h) (match h ((p/sexpList it) it) ((p/sexpAtom _) (list)) ((p/sexpStr _) (list))))
                     (none (list)))]
         (pairFirst (p/planFields items))))
     ((err _) (list)))
 
 fn getStr kv: (List (Pair String p/SexpVal)) k: String -> String
-  (mt (p/kvGet kv k)
-    ((some v) (mt v ((p/valStr s) s) ((p/valFlag b) (if b "true" "false")) ((p/valList _) "")))
+  (match (p/kvGet kv k)
+    ((some v) (match v ((p/valStr s) s) ((p/valFlag b) (if b "true" "false")) ((p/valList _) "")))
     (none ""))
 
 fn getInt kv: (List (Pair String p/SexpVal)) k: String -> Int64
@@ -23,18 +23,18 @@ fn getBool kv: (List (Pair String p/SexpVal)) k: String -> Bool
   (= (getStr kv k) "true")
 
 fn getNodes kv: (List (Pair String p/SexpVal)) k: String -> (List p/SexpNode)
-  (mt (p/kvGet kv k)
-    ((some v) (mt v ((p/valList items) items) ((p/valStr _) (list)) ((p/valFlag _) (list))))
+  (match (p/kvGet kv k)
+    ((some v) (match v ((p/valList items) items) ((p/valStr _) (list)) ((p/valFlag _) (list))))
     (none (list)))
 
 fn nodeFields node: p/SexpNode -> (List (Pair String p/SexpVal))
-  (mt node
+  (match node
     ((p/sexpList items) (pairFirst (p/planFields items)))
     ((p/sexpAtom _) (list))
     ((p/sexpStr _) (list)))
 
 fn nodeStr node: p/SexpNode -> String
-  (mt node
+  (match node
     ((p/sexpStr s) s)
     ((p/sexpAtom a) a)
     ((p/sexpList _) ""))

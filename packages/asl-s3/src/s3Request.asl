@@ -69,12 +69,12 @@ fn decodeXmlEntity entity: String -> String
 
 fn decodeXmlTextLoop text: String cursor: Int64 acc: String -> String
   (let [(tail (optionOr (stringSlice text cursor (stringLength text)) ""))]
-    (mt (stringIndexOf tail "&")
+    (match (stringIndexOf tail "&")
       ((none) (str acc tail))
       ((some ampAt)
         (let [(prefix (optionOr (stringSlice tail 0 ampAt) ""))
               (afterAmp (optionOr (stringSlice tail (+ ampAt 1) (stringLength tail)) ""))]
-          (mt (stringIndexOf afterAmp ";")
+          (match (stringIndexOf afterAmp ";")
             ((none) (str acc tail))
             ((some endAt)
               (let [(entity (optionOr (stringSlice afterAmp 0 endAt) ""))
@@ -133,58 +133,58 @@ fn completeMultipartUpload endpoint: String bucket: String key: String virtualHo
 
 fn tagText xmlText: String tag: String -> (Option String)
   (let [(opening (str "<" tag ">")) (closing (str "</" tag ">"))]
-    (mt (stringIndexOf xmlText opening)
+    (match (stringIndexOf xmlText opening)
       ((none) (none))
       ((some startAt)
         (let [(valueStart (+ startAt (stringLength opening)))]
-          (mt (stringIndexOf (optionOr (stringSlice xmlText valueStart (stringLength xmlText)) "") closing)
+          (match (stringIndexOf (optionOr (stringSlice xmlText valueStart (stringLength xmlText)) "") closing)
             ((none) (none))
             ((some endAt) (some (decodeXmlText (optionOr (stringSlice xmlText valueStart (+ valueStart endAt)) "")))))))))
 
 fn xmlWellFormed xmlText: String -> Bool
   (if (> (stringLength xmlText) 1048576) false
-    (mt (xml/parse xmlText) ((err _) false) ((ok _) true)))
+    (match (xml/parse xmlText) ((err _) false) ((ok _) true)))
 
 fn parseErrorDocument xmlText: String -> (Result S3Error S3Error)
   (if (not (xmlWellFormed xmlText)) (err (S3Error :code "MalformedXML" :message "malformed XML error document"))
-    (mt (tagText xmlText "Code")
+    (match (tagText xmlText "Code")
       ((none) (err (S3Error :code "MalformedError" :message "missing Error/Code")))
-      ((some code) (mt (tagText xmlText "Message")
+      ((some code) (match (tagText xmlText "Message")
         ((none) (err (S3Error :code "MalformedError" :message "missing Error/Message")))
         ((some message) (err (S3Error :code code :message message)))))))
 
 fn collectTag xmlText: String tag: String cursor: Int64 out: (List String) -> (List String)
   (let [(opening (str "<" tag ">")) (closing (str "</" tag ">"))
         (tail (optionOr (stringSlice xmlText cursor (stringLength xmlText)) ""))]
-    (mt (stringIndexOf tail opening)
+    (match (stringIndexOf tail opening)
       ((none) out)
       ((some relativeStart)
         (let [(start (+ cursor relativeStart (stringLength opening)))]
-          (mt (stringIndexOf (optionOr (stringSlice xmlText start (stringLength xmlText)) "") closing)
+          (match (stringIndexOf (optionOr (stringSlice xmlText start (stringLength xmlText)) "") closing)
             ((none) out)
             ((some relativeEnd)
               (collectTag xmlText tag (+ start relativeEnd (stringLength closing))
                 (listAppend out (list (decodeXmlText (optionOr (stringSlice xmlText start (+ start relativeEnd)) "")))))))))))
 
 fn keyFields values: (List String) -> (List XmlField)
-  (mt (listHead values)
+  (match (listHead values)
     ((none) (list))
     ((some value) (listAppend (list (XmlField :name "Key" :value value)) (keyFields (optionOr (listTail values) (list))))))
 
 fn parseListResponse xmlText: String -> (Result (List XmlField) String)
   (if (not (xmlWellFormed xmlText)) (err "malformed XML list response")
     (ok (listAppend
-      (mt (tagText xmlText "Name") ((none) (list)) ((some v) (list (XmlField :name "Name" :value v))))
+      (match (tagText xmlText "Name") ((none) (list)) ((some v) (list (XmlField :name "Name" :value v))))
       (listAppend
-        (mt (tagText xmlText "Prefix") ((none) (list)) ((some v) (list (XmlField :name "Prefix" :value v))))
+        (match (tagText xmlText "Prefix") ((none) (list)) ((some v) (list (XmlField :name "Prefix" :value v))))
         (listAppend
-          (mt (tagText xmlText "IsTruncated") ((none) (list)) ((some v) (list (XmlField :name "IsTruncated" :value v))))
+          (match (tagText xmlText "IsTruncated") ((none) (list)) ((some v) (list (XmlField :name "IsTruncated" :value v))))
           (keyFields (collectTag xmlText "Key" 0 (list))))))))
 
 fn parseMultipartResponse xmlText: String -> (Result (List XmlField) String)
   (if (not (xmlWellFormed xmlText)) (err "malformed XML multipart response")
     (ok (listAppend
-      (mt (tagText xmlText "Bucket") ((none) (list)) ((some v) (list (XmlField :name "Bucket" :value v))))
+      (match (tagText xmlText "Bucket") ((none) (list)) ((some v) (list (XmlField :name "Bucket" :value v))))
       (listAppend
-        (mt (tagText xmlText "Key") ((none) (list)) ((some v) (list (XmlField :name "Key" :value v))))
-        (mt (tagText xmlText "UploadId") ((none) (list)) ((some v) (list (XmlField :name "UploadId" :value v))))))))
+        (match (tagText xmlText "Key") ((none) (list)) ((some v) (list (XmlField :name "Key" :value v))))
+        (match (tagText xmlText "UploadId") ((none) (list)) ((some v) (list (XmlField :name "UploadId" :value v))))))))

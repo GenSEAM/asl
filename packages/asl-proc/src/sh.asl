@@ -5,14 +5,14 @@ fn boundPortHeadWindow s: String -> String
     (if (<= len 65536) s (optionOr (stringSlice s 0 65536) s)))
 
 fn ! execReceipt! c: cp/ProcessCmd -> (Result cp/ProcessReceipt cp/ProcessError)
-  (mt (proc/execRaw! c)
+  (match (proc/execRaw! c)
     ((err e) (err e))
     ((ok out)
-      (mt (spool/reserveSpoolPath! c.bin 0)
+      (match (spool/reserveSpoolPath! c.bin 0)
         ((err e) (err (cp/executionFailed out.exitCode (str "could not reserve a spool path: " e))))
         ((ok spoolPath)
-          (let [(demuxer (apm/makeOobDemuxer spoolPath 67108864)) (demuxed1 (if (stringEmpty? out.stdout) demuxer (apm/oobDemuxChunk demuxer out.stdout))) (demuxed2 (if (stringEmpty? out.stderr) demuxed1 (apm/oobDemuxChunk demuxed1 out.stderr))) (rssVerdict (wd/checkRssCeiling 0 512)) (deadlockVerdict (wd/detectDeadlock 0 10000)) (stdoutVerdict (wd/detectBoundPort (boundPortHeadWindow out.stdout))) (boundPort (if stdoutVerdict.detected (some stdoutVerdict.port) (let [(stderrVerdict (wd/detectBoundPort (boundPortHeadWindow out.stderr)))] (if stderrVerdict.detected (some stderrVerdict.port) (none))))) (_ (mt boundPort ((some p) (log/info! "asl-proc" (str ":port-bound " (stringFromInt64 p)))) ((none) ())))]
-            (mt (apm/oobDemuxFinish demuxed2 out.exitCode out.durationMs)
+          (let [(demuxer (apm/makeOobDemuxer spoolPath 67108864)) (demuxed1 (if (stringEmpty? out.stdout) demuxer (apm/oobDemuxChunk demuxer out.stdout))) (demuxed2 (if (stringEmpty? out.stderr) demuxed1 (apm/oobDemuxChunk demuxed1 out.stderr))) (rssVerdict (wd/checkRssCeiling 0 512)) (deadlockVerdict (wd/detectDeadlock 0 10000)) (stdoutVerdict (wd/detectBoundPort (boundPortHeadWindow out.stdout))) (boundPort (if stdoutVerdict.detected (some stdoutVerdict.port) (let [(stderrVerdict (wd/detectBoundPort (boundPortHeadWindow out.stderr)))] (if stderrVerdict.detected (some stderrVerdict.port) (none))))) (_ (match boundPort ((some p) (log/info! "asl-proc" (str ":port-bound " (stringFromInt64 p)))) ((none) ())))]
+            (match (apm/oobDemuxFinish demuxed2 out.exitCode out.durationMs)
               ((ok receipt) (ok receipt))
               ((err e) (err (cp/executionFailed out.exitCode (str "spool sync failed: " e))))))))))
 

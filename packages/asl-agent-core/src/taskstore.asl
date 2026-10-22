@@ -12,7 +12,7 @@ fn taskstoreGet store: TaskStore id: Str -> (Option tt/TaskRecord)
   (mapGet store.tasks id)
 
 fn isTaskQueued? task: tt/TaskRecord -> Bool
-  (mt task.state ((stateQueued) true) (_ false))
+  (match task.state ((stateQueued) true) (_ false))
 
 fn filterQueued tasks: (List tt/TaskRecord) -> (List tt/TaskRecord)
   (if (listEmpty? tasks) (list) (let [(h (optionOr (listHead tasks) (tt/taskRecordCreate "" "" "" (tt/priorityNormal) 0 ""))) (tailList (optionOr (listTail tasks) (list)))] (if (isTaskQueued? h) (cons h (filterQueued tailList)) (filterQueued tailList))))
@@ -36,10 +36,10 @@ fn taskstoreCountByState store: TaskStore state: tt/TaskState -> I64
   (let [(allTasks (mapValues store.tasks)) (matching (filter (fn [(t tt/TaskRecord)] -> Bool (= t.state state)) allTasks))] (listLength matching))
 
 fn taskstoreClaim! store: TaskStore id: Str -> (Result TaskStore Str)
-  (mt (taskstoreGet store id) ((none) (err "Task not found")) ((some t) (mt t.state ((stateQueued) (let [(claimed (tt/TaskRecord :id t.id :lane t.lane :projectPath t.projectPath :state (tt/stateRouting) :priority t.priority :createdAt t.createdAt :updatedAt t.updatedAt :payload t.payload))] (taskstorePut! store claimed))) (_ (err "Task is not in state-queued")))))
+  (match (taskstoreGet store id) ((none) (err "Task not found")) ((some t) (match t.state ((stateQueued) (let [(claimed (tt/TaskRecord :id t.id :lane t.lane :projectPath t.projectPath :state (tt/stateRouting) :priority t.priority :createdAt t.createdAt :updatedAt t.updatedAt :payload t.payload))] (taskstorePut! store claimed))) (_ (err "Task is not in state-queued")))))
 
 fn taskstoreTransition! store: TaskStore id: Str newState: tt/TaskState nowTs: I64 -> (Result TaskStore Str)
-  (mt (taskstoreGet store id) ((none) (err "Task not found")) ((some t) (if (sm/validTransition? t.state newState) (let [(updated (tt/TaskRecord :id t.id :lane t.lane :projectPath t.projectPath :state newState :priority t.priority :createdAt t.createdAt :updatedAt nowTs :payload t.payload))] (taskstorePut! store updated)) (err "Illegal state transition"))))
+  (match (taskstoreGet store id) ((none) (err "Task not found")) ((some t) (if (sm/validTransition? t.state newState) (let [(updated (tt/TaskRecord :id t.id :lane t.lane :projectPath t.projectPath :state newState :priority t.priority :createdAt t.createdAt :updatedAt nowTs :payload t.payload))] (taskstorePut! store updated)) (err "Illegal state transition"))))
 
 fn spawnRecursive! store: TaskStore parent: tt/TaskRecord payloads: (List Str) idx: I64 nowTs: I64 -> TaskStore
   (if (listEmpty? payloads) store (let [(payload (optionOr (listHead payloads) "")) (restPayloads (optionOr (listTail payloads) (list))) (childId (str parent.id "-child-" (stringFromInt64 idx))) (childTask (tt/taskRecordCreate childId parent.lane parent.projectPath parent.priority nowTs payload)) (putRes (taskstorePut! store childTask)) (nextStore (resultOr putRes store))] (spawnRecursive! nextStore parent restPayloads (+ idx 1) nowTs)))

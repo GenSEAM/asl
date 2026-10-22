@@ -13,7 +13,7 @@ fn firstBatchId state: bp/PoolState -> Int64
     batch.batchId)
 
 fn firstDispatchSize actions: (List bp/PoolAction) -> Int64
-  (mt (optionOr (listHead actions) (bp/reply 0 (ok "missing")))
+  (match (optionOr (listHead actions) (bp/reply 0 (ok "missing")))
     ((dispatch batch) (listLength batch.requests))
     (_ 0))
 
@@ -88,11 +88,11 @@ fn testRequestTimeoutTypedError -> Bool
         (expired (bp/poolStep (stepState arrived) bp/tick 10))]
     (assert (= (bp/poolActionReplyCount (stepActions expired)) 1) "expired request receives exactly one reply action")
     (assert (= (bp/poolStateQueued (stepState expired)) 0) "timed out request leaves queue")
-    (mt (optionOr (listHead (stepActions expired)) (bp/reply 0 (ok "missing")))
+    (match (optionOr (listHead (stepActions expired)) (bp/reply 0 (ok "missing")))
       ((reply requestId result)
        (do
          (assert (= requestId 7) "timeout reply identifies request")
-         (assert (mt result ((err error) (mt error ((requestTimedOut id) (= id 7)) (_ false))) (_ false)) "timeout is a typed requestTimedOut error")
+         (assert (match result ((err error) (match error ((requestTimedOut id) (= id 7)) (_ false))) (_ false)) "timeout is a typed requestTimedOut error")
          true))
       (_ false)))
 

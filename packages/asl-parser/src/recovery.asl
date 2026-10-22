@@ -5,7 +5,7 @@
 (schema DiagnosticRecord (:f code String) (:f line Int64) (:f col Int64) (:f severity DiagnosticSeverity) (:f msg String) (:f recovery String))
 
 fn severityName s: DiagnosticSeverity -> String
-  (mt s ((sevWarning) "WARNING") ((sevError) "ERROR"))
+  (match s ((sevWarning) "WARNING") ((sevError) "ERROR"))
 
 fn lookupSeverity code: String -> DiagnosticSeverity
   (if (stringStartsWith? code "W") (sevWarning) (sevError))

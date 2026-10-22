@@ -30,36 +30,36 @@ fn itemsEquivalent? xs: (List rd/SExpr) ys: (List rd/SExpr) -> Bool
           true (zip xs ys)))
 
 fn dropListHead items: (List rd/SExpr) -> (Option (List rd/SExpr))
-  (mt (listHead items)
+  (match (listHead items)
     ((some h) (if (and (rd/isAtom? h) (= (rd/sexprHead h) "list")) (some (optionOr (listTail items) (list))) (none)))
     ((none) (none)))
 
 fn vectListEquivalent? vItems: (List rd/SExpr) lItems: (List rd/SExpr) -> Bool
-  (mt (dropListHead lItems)
+  (match (dropListHead lItems)
     ((some rest) (itemsEquivalent? vItems rest))
     ((none) false))
 
 fn sexprEquivalent? x: rd/SExpr y: rd/SExpr -> Bool
-  (mt x
+  (match x
     ((rd/sexprAtom vx)
-     (mt y
+     (match y
        ((rd/sexprAtom vy) (atomEquivalent? vx vy))
        (_ false)))
     ((rd/sexprList lx)
-     (mt y
+     (match y
        ((rd/sexprList ly) (itemsEquivalent? lx ly))
        ((rd/sexprVect vy) (vectListEquivalent? vy lx))
        (_ false)))
     ((rd/sexprVect vx)
-     (mt y
+     (match y
        ((rd/sexprVect vy) (itemsEquivalent? vx vy))
        ((rd/sexprList ly) (vectListEquivalent? vx ly))
        (_ false))))
 
 fn topFormEffectEquivalent? x: a/TopForm y: a/TopForm -> Bool
-  (mt x
-    ((a/topDefun dx) (mt y ((a/topDefun dy) (= dx.effect dy.effect)) (_ false)))
-    ((a/topModule mx) (mt y ((a/topModule my) (topFormsEffectsEquivalent? mx.defs my.defs)) (_ false)))
+  (match x
+    ((a/topDefun dx) (match y ((a/topDefun dy) (= dx.effect dy.effect)) (_ false)))
+    ((a/topModule mx) (match y ((a/topModule my) (topFormsEffectsEquivalent? mx.defs my.defs)) (_ false)))
     (_ true))
 
 fn topFormsEffectsEquivalent? xs: (List a/TopForm) ys: (List a/TopForm) -> Bool
@@ -78,15 +78,15 @@ fn topFormsEquivalent? xs: (List a/TopForm) ys: (List a/TopForm) -> Bool
                true (zip xs ys))))
 
 fn loadAstSchema! -> (Result j/Json String)
-  (mt (fileReadString "asl/grammar/aslAst.schema.json")
+  (match (fileReadString "asl/grammar/aslAst.schema.json")
     ((err e) (err (str "Failed reading aslAst.schema.json: " e)))
     ((ok text)
-     (mt (j/jsonParse text)
+     (match (j/jsonParse text)
        ((err e) (err (str "Failed parsing aslAst.schema.json: " e)))
        ((ok root) (ok root)))))
 
 fn validateTopFormJson! j: j/Json -> (Result Bool String)
-  (mt (loadAstSchema!)
+  (match (loadAstSchema!)
     ((err e) (err e))
     ((ok root) (asch/validateTopFormWithSchema root j)))
 
@@ -108,7 +108,7 @@ fn testLiteralsRoundtrip! -> Bool
       (assert (ok? (fj/parseAstLit jBool)) "parseAstLit bool succeeds")
       (assert (ok? (fj/parseAstLit jUnit)) "parseAstLit unit succeeds")
       (let [(vLit (validateTopFormJson! (fj/topFormToJson (a/topDefun (a/DefunNode :name "valFn" :typeVars (list) :isExported false :effect false :params (list) :retType "Int64" :docstring "" :body (list (cv/lower (a/exprLit lInt))) :bodyPos (list))))))]
-        (assert (mt vLit ((ok b) b) ((err _) false)) (str "defun with literal satisfies schema topForm shape: " (mt vLit ((ok _) "ok") ((err e) e)))))
+        (assert (match vLit ((ok b) b) ((err _) false)) (str "defun with literal satisfies schema topForm shape: " (match vLit ((ok _) "ok") ((err e) e)))))
       true))
 
 fn testExpressionsRoundtrip -> Bool
@@ -164,10 +164,10 @@ fn testDeclarationsRoundtrip! -> Bool
             (vEnum (validateTopFormJson! jEnum))
             (vModule (validateTopFormJson! jModule))]
         (do
-          (assert (mt vFn ((ok b) b) ((err _) false)) (str "defun json satisfies topForm schema: " (mt vFn ((ok _) "ok") ((err e) e))))
-          (assert (mt vSchema ((ok b) b) ((err _) false)) (str "schema json satisfies topForm schema: " (mt vSchema ((ok _) "ok") ((err e) e))))
-          (assert (mt vEnum ((ok b) b) ((err _) false)) (str "enum json satisfies topForm schema: " (mt vEnum ((ok _) "ok") ((err e) e))))
-          (assert (mt vModule ((ok b) b) ((err _) false)) (str "module json satisfies topForm schema: " (mt vModule ((ok _) "ok") ((err e) e))))))
+          (assert (match vFn ((ok b) b) ((err _) false)) (str "defun json satisfies topForm schema: " (match vFn ((ok _) "ok") ((err e) e))))
+          (assert (match vSchema ((ok b) b) ((err _) false)) (str "schema json satisfies topForm schema: " (match vSchema ((ok _) "ok") ((err e) e))))
+          (assert (match vEnum ((ok b) b) ((err _) false)) (str "enum json satisfies topForm schema: " (match vEnum ((ok _) "ok") ((err e) e))))
+          (assert (match vModule ((ok b) b) ((err _) false)) (str "module json satisfies topForm schema: " (match vModule ((ok _) "ok") ((err e) e))))))
       (let [(aslFnRes (fj/fromJsonToAsl (fj/topFormToJsonString dFn)))]
         (do
           (assert (ok? aslFnRes) "defun serializes to canonical asl")
@@ -198,34 +198,34 @@ fn verifySingleTopForm! path: String idx: Int64 tf: a/TopForm -> Bool
   (let [(jVal (fj/topFormToJson tf))
         (vVal (validateTopFormJson! jVal))]
     (do
-      (assert (mt vVal ((ok b) b) ((err _) false)) (str path " form " (stringFromInt64 idx) " validates against TopForm schema: " (mt vVal ((ok _) "ok") ((err e) e))))
+      (assert (match vVal ((ok b) b) ((err _) false)) (str path " form " (stringFromInt64 idx) " validates against TopForm schema: " (match vVal ((ok _) "ok") ((err e) e))))
       (let [(jsonStr (fj/topFormToJsonString tf))]
-        (mt (fj/fromJsonToAsl jsonStr)
+        (match (fj/fromJsonToAsl jsonStr)
           ((err e)
            (do
              (assert false (str path " form " (stringFromInt64 idx) " fromJsonToAsl: " e))
              false))
           ((ok aslText)
-           (mt (a/parse aslText)
+           (match (a/parse aslText)
              ((err e)
               (do
                (assert false (str path " form " (stringFromInt64 idx) " reparse: " e.msg))
                false))
              ((ok reparsedForms)
-              (let [(expectedForms (mt tf
+              (let [(expectedForms (match tf
                                       ((a/topModule m)
                                        (if (listEmpty? m.defs) (list tf) (cons tf m.defs)))
                                       (_ (list tf))))
                     (equiv (topFormsEquivalent? expectedForms reparsedForms))]
                 (do
                   (if (not equiv)
-                    (print (str "DIFF in " path " form " (stringFromInt64 idx) ":\n  ORIG: " (rd/renderSexpr (cv/topFormToSexpr tf)) "\n  REPARSED: " (mt (listHead reparsedForms) ((some rf) (rd/renderSexpr (cv/topFormToSexpr rf))) ((none) "<empty>")) "\n  ASL:\n" aslText "\n"))
+                    (print (str "DIFF in " path " form " (stringFromInt64 idx) ":\n  ORIG: " (rd/renderSexpr (cv/topFormToSexpr tf)) "\n  REPARSED: " (match (listHead reparsedForms) ((some rf) (rd/renderSexpr (cv/topFormToSexpr rf))) ((none) "<empty>")) "\n  ASL:\n" aslText "\n"))
                     ())
                   (assert equiv (str path " form " (stringFromInt64 idx) " roundtrip equivalence"))
                   equiv)))))))))
 
 fn verifyTopFormsList! path: String idx: Int64 forms: (List a/TopForm) -> Bool
-  (mt (listHead forms)
+  (match (listHead forms)
     ((none) true)
     ((some tf)
      (let [(ok1 (verifySingleTopForm! path idx tf))
@@ -234,32 +234,32 @@ fn verifyTopFormsList! path: String idx: Int64 forms: (List a/TopForm) -> Bool
        (and ok1 okRest))))
 
 fn verifyCorpusFile! path: String -> Bool
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e)
      (do
        (assert false (str path " read error: " e))
        false))
     ((ok src)
-     (mt (a/parse src)
+     (match (a/parse src)
        ((err e)
         (do
           (assert false (str path " initial parse error: " e.msg))
           false))
        ((ok origForms)
         (let [(formsOk (verifyTopFormsList! path 0 origForms))
-              (jsonAll (mt (listHead origForms)
+              (jsonAll (match (listHead origForms)
                          ((some tf0)
-                          (mt tf0
+                          (match tf0
                             ((a/topModule _) (fj/topFormToJsonString tf0))
                             (_ (fj/topFormsToJsonString origForms))))
                          ((none) (fj/topFormsToJsonString origForms))))]
-          (mt (fj/fromJsonToAsl jsonAll)
+          (match (fj/fromJsonToAsl jsonAll)
             ((err e)
              (do
                (assert false (str path " whole-file fromJsonToAsl: " e))
                false))
             ((ok aslText)
-             (mt (a/parse aslText)
+             (match (a/parse aslText)
               ((err e)
                (do
                  (assert false (str path " whole-file reparse: " e.msg))
@@ -271,7 +271,7 @@ fn verifyCorpusFile! path: String -> Bool
                    (and formsOk equiv))))))))))))
 
 fn verifyCorpusFiles! files: (List String) -> Bool
-  (mt (listHead files)
+  (match (listHead files)
     ((none) true)
     ((some f)
      (let [(fOk (verifyCorpusFile! f))

@@ -13,7 +13,7 @@ fn testHasTryForm -> Bool
 
 fn testExpandTryMacro -> Bool
   (let [(expanded (tm/expandTryMacro "(readSocket fd)"))]
-    (assert (stringContains? expanded "(mt (readSocket fd)") "expanded contains mt on inner expr")
+    (assert (stringContains? expanded "(match (readSocket fd)") "expanded contains match on inner expr")
     (assert (stringContains? expanded "((ok __try_val) __try_val)") "expanded contains ok branch")
     (assert (stringContains? expanded "((err __try_err) (err __try_err))") "expanded contains err propagation")
     (refute (stringContains? expanded "(try ") "expanded refutes unexpanded try"))
@@ -22,7 +22,7 @@ fn testExpandTryMacro -> Bool
 fn testExpandTryInSource -> Bool
   (let [(src "fn process sock: I64 -> (Result Str Str) (let [(msg (try (recv sock)))] (ok msg))")
         (expanded (tm/expandTryInSource src))]
-    (assert (stringContains? expanded "(mt (recv sock)") "expanded source transforms try into mt")
+    (assert (stringContains? expanded "(match (recv sock)") "expanded source transforms try into match")
     (assert (not (stringContains? expanded "(try ")) "expanded source contains no remaining try forms")
     (refute (stringContains? expanded "(try ") "expanded source refutes unlowered try"))
   true

@@ -90,7 +90,7 @@ fn poolWatch reg: PoolRegistry -> (List (Pair Int64 Int64))
     (list) reg.calls)
 
 fn failureText f: u/UpstreamFailure -> String
-  (mt f
+  (match f
     ((u/toolAbsent tool detail) (str tool ": " detail))
     ((u/transportFailure code text) (str "curl exit " (stringFromInt64 code) ": " (stringTrim text)))
     ((u/httpFailure status reason _ _) (u/httpErrorText status reason))
@@ -103,7 +103,7 @@ fn laneState lane: PoolLane state: bp/PoolState -> PoolLane
   (with lane :state state)
 
 fn ! laneEvent! reg: PoolRegistry key: String event: bp/PoolEvent env: (Map String String) nowMs: Int64 replies: (List PoolReply) -> PoolOutput
-  (mt (mapGet reg.lanes key)
+  (match (mapGet reg.lanes key)
     ((none) (PoolOutput :registry reg :replies replies))
     ((some lane)
       (let [(step (bp/poolStep lane.state event nowMs))
@@ -111,27 +111,27 @@ fn ! laneEvent! reg: PoolRegistry key: String event: bp/PoolEvent env: (Map Stri
         (runActions! reg1 key step.actions env nowMs replies))))
 
 fn ! runActions! reg: PoolRegistry key: String actions: (List bp/PoolAction) env: (Map String String) nowMs: Int64 replies: (List PoolReply) -> PoolOutput
-  (mt (listHead actions)
+  (match (listHead actions)
     ((none) (PoolOutput :registry reg :replies replies))
     ((some action)
       (let [(out (runAction! reg key action env nowMs replies))]
         (runActions! out.registry key (optionOr (listTail actions) (list)) env nowMs out.replies))))
 
 fn laneTimeoutMs reg: PoolRegistry key: String -> Int64
-  (mt (mapGet reg.lanes key)
+  (match (mapGet reg.lanes key)
     ((some lane) lane.settings.config.requestTimeoutMs)
     ((none) 0))
 
 fn replyResult reg: PoolRegistry key: String id: Int64 result: (Result String bp/PoolError) -> (Result u/UpstreamResponse PoolFailure)
-  (mt result
+  (match result
     ((ok _) (optionOr (mapGet reg.results id) (err (poolRejected "pool batch finished without a result for this request"))))
     ((err e)
-      (mt e
+      (match e
         ((bp/requestTimedOut rid) (err (poolTimedOut rid (laneTimeoutMs reg key))))
         ((bp/batchRejected reason) (err (poolRejected reason))))))
 
 fn ! runAction! reg: PoolRegistry key: String action: bp/PoolAction env: (Map String String) nowMs: Int64 replies: (List PoolReply) -> PoolOutput
-  (mt action
+  (match action
     ((bp/dispatch batch) (startBatch! reg key batch env nowMs replies))
     ((bp/reply id result)
       (PoolOutput :registry (forget reg id)
@@ -140,7 +140,7 @@ fn ! runAction! reg: PoolRegistry key: String action: bp/PoolAction env: (Map St
 
 fn membersOf reg: PoolRegistry requests: (List bp/PoolRequest) -> (List PoolMember)
   (fold (fn [(acc (List PoolMember)) (r bp/PoolRequest)] -> (List PoolMember)
-          (mt (mapGet reg.members r.requestId) ((some m) (listAppend acc (list m))) ((none) acc)))
+          (match (mapGet reg.members r.requestId) ((some m) (listAppend acc (list m))) ((none) acc)))
     (list) requests)
 
 fn maxTimeout members: (List PoolMember) -> Float64
@@ -160,7 +160,7 @@ fn batchRequest members: (List PoolMember) -> u/UpstreamRequest
   (:f batched Bool))
 
 fn ! startBatch! reg: PoolRegistry key: String batch: bp/PoolBatch env: (Map String String) nowMs: Int64 replies: (List PoolReply) -> PoolOutput
-  (mt (mapGet reg.lanes key)
+  (match (mapGet reg.lanes key)
     ((none) (PoolOutput :registry reg :replies replies))
     ((some lane)
       (let [(members (membersOf reg batch.requests))
@@ -171,7 +171,7 @@ fn ! startBatch! reg: PoolRegistry key: String batch: bp/PoolBatch env: (Map Str
                             (PlannedCall :ids (list m.requestId) :request m.request :timeoutSec m.timeoutSec :batched false))
                        members)))
             (started (fold (fn [(acc PoolRegistry) (plan PlannedCall)] -> PoolRegistry
-                             (mt (p/sendHttp! acc.plugins lane.provider plan.request env plan.timeoutSec)
+                             (match (p/sendHttp! acc.plugins lane.provider plan.request env plan.timeoutSec)
                                ((ok call)
                                  (withCalls acc (listAppend acc.calls
                                    (list (PoolCall :role (roleBatch key batch.batchId plan.ids plan.batched) :call call)))))
@@ -183,13 +183,13 @@ fn ! startBatch! reg: PoolRegistry key: String batch: bp/PoolBatch env: (Map Str
 
 fn batchOpen? reg: PoolRegistry key: String batchId: Int64 -> Bool
   (listAny? (fn [(pc PoolCall)] -> Bool
-              (mt pc.role
+              (match pc.role
                 ((roleBatch lane id _ _) (and (= lane key) (= id batchId)))
                 ((roleHook _) false)))
     reg.calls)
 
 fn ! scaleDown! reg: PoolRegistry key: String env: (Map String String) replies: (List PoolReply) -> PoolOutput
-  (mt (mapGet reg.lanes key)
+  (match (mapGet reg.lanes key)
     ((none) (PoolOutput :registry reg :replies replies))
     ((some lane)
       (let [(counted (with reg :scaleDowns (+ reg.scaleDowns 1)))
@@ -202,7 +202,7 @@ fn ! scaleDown! reg: PoolRegistry key: String env: (Map String String) replies: 
                                                  (pair "model" (j/jstr lane.model)))) -1))
                 (request (u/UpstreamRequest :url (str base path) :fragment "" :method "POST"
                            :headers (list (pair "Content-Type" "application/json")) :data body))]
-            (mt (p/sendHttp! reg.plugins lane.provider request env 10.0)
+            (match (p/sendHttp! reg.plugins lane.provider request env 10.0)
               ((err f) (do (poolLog! (str "(:gateway :pool :scaleDownFailed :provider \"" lane.provider "\" :reason \"" (failureText f) "\")"))
                          (PoolOutput :registry counted :replies replies)))
               ((ok call) (PoolOutput :registry (withCalls counted (listAppend counted.calls (list (PoolCall :role (roleHook key) :call call))))
@@ -211,7 +211,7 @@ fn ! scaleDown! reg: PoolRegistry key: String env: (Map String String) replies: 
 fn ! poolSubmit! reg: PoolRegistry provider: String model: String base: String settings: c/GatewayPool request: u/UpstreamRequest timeoutSec: Float64 env: (Map String String) nowMs: Int64 -> (Pair Int64 PoolOutput)
   (let [(id reg.nextRequestId)
         (key (poolLaneKey provider model))
-        (state (mt (mapGet reg.lanes key)
+        (state (match (mapGet reg.lanes key)
                  ((some lane)
                    (let [(s lane.state)]
                      (bp/PoolState :config settings.config :queued s.queued :inFlight s.inFlight
@@ -222,14 +222,14 @@ fn ! poolSubmit! reg: PoolRegistry provider: String model: String base: String s
     (pair id (laneEvent! reg1 key (bp/arrive (bp/PoolRequest :requestId id :payload request.data :arrivedAt nowMs)) env nowMs (list))))
 
 fn splitBatch resp: u/UpstreamResponse count: Int64 -> (Result (List u/UpstreamResponse) String)
-  (mt (pt/jsonLoads resp.body)
+  (match (pt/jsonLoads resp.body)
     ((err _) (err "batch reply is not JSON"))
     ((ok v)
-      (mt v
+      (match v
         ((j/jobj kvs)
-          (mt (u/objGet kvs "batch")
+          (match (u/objGet kvs "batch")
             ((some items)
-              (mt items
+              (match items
                 ((j/jarr xs)
                   (if (= (listLength xs) count)
                     (ok (map (fn [(x j/Json)] -> u/UpstreamResponse
@@ -240,22 +240,22 @@ fn splitBatch resp: u/UpstreamResponse count: Int64 -> (Result (List u/UpstreamR
         (_ (err "batch reply is not an object")))))
 
 fn storeResults reg: PoolRegistry ids: (List Int64) batched: Bool result: (Result u/UpstreamResponse u/UpstreamFailure) -> PoolRegistry
-  (mt result
+  (match result
     ((err f) (fold (fn [(r PoolRegistry) (id Int64)] -> PoolRegistry (withResult r id (err (poolUpstream f)))) reg ids))
     ((ok resp)
       (if (not batched)
         (fold (fn [(r PoolRegistry) (id Int64)] -> PoolRegistry (withResult r id (ok resp))) reg ids)
-        (mt (splitBatch resp (listLength ids))
+        (match (splitBatch resp (listLength ids))
           ((err why) (fold (fn [(r PoolRegistry) (id Int64)] -> PoolRegistry (withResult r id (err (poolUpstream (u/protocolFailure why))))) reg ids))
           ((ok parts)
             (fold (fn [(r PoolRegistry) (p (Pair Int64 u/UpstreamResponse))] -> PoolRegistry (withResult r (pairFirst p) (ok (pairSecond p))))
               reg (zip ids parts)))))))
 
 fn ! completeCall! reg: PoolRegistry done: Finished env: (Map String String) nowMs: Int64 replies: (List PoolReply) -> PoolOutput
-  (mt done.role
+  (match done.role
     ((roleHook key)
       (do
-        (mt done.result
+        (match done.result
           ((ok _) true)
           ((err f) (poolLog! (str "(:gateway :pool :scaleDownFailed :lane \"" key "\" :reason \"" (failureText f) "\")"))))
         (PoolOutput :registry reg :replies replies)))
@@ -266,7 +266,7 @@ fn ! completeCall! reg: PoolRegistry done: Finished env: (Map String String) now
           (laneEvent! stored key (bp/batchDone batchId "") env nowMs replies)))))
 
 fn ! pumpCall! pc: PoolCall ready: (List (Pair Int64 Int64)) -> (Pair (Option PoolCall) (Option Finished))
-  (mt (u/upstreamCallPump! pc.call ready)
+  (match (u/upstreamCallPump! pc.call ready)
     ((err f) (pair none (some (Finished :role pc.role :result (err f)))))
     ((ok next)
       (if (u/upstreamCallOpen? next)
@@ -276,9 +276,9 @@ fn ! pumpCall! pc: PoolCall ready: (List (Pair Int64 Int64)) -> (Pair (Option Po
 fn ! poolAdvance! reg: PoolRegistry ready: (List (Pair Int64 Int64)) env: (Map String String) nowMs: Int64 -> PoolOutput
   (let [(pumped (map (fn [(pc PoolCall)] -> (Pair (Option PoolCall) (Option Finished)) (pumpCall! pc ready)) reg.calls))
         (open (fold (fn [(acc (List PoolCall)) (p (Pair (Option PoolCall) (Option Finished)))] -> (List PoolCall)
-                      (mt (pairFirst p) ((some pc) (listAppend acc (list pc))) ((none) acc))) (list) pumped))
+                      (match (pairFirst p) ((some pc) (listAppend acc (list pc))) ((none) acc))) (list) pumped))
         (finished (fold (fn [(acc (List Finished)) (p (Pair (Option PoolCall) (Option Finished)))] -> (List Finished)
-                          (mt (pairSecond p) ((some f) (listAppend acc (list f))) ((none) acc))) (list) pumped))
+                          (match (pairSecond p) ((some f) (listAppend acc (list f))) ((none) acc))) (list) pumped))
         (settled (fold (fn [(out PoolOutput) (f Finished)] -> PoolOutput (completeCall! out.registry f env nowMs out.replies))
                    (PoolOutput :registry (withCalls reg open) :replies (list)) finished))]
     (fold (fn [(out PoolOutput) (key String)] -> PoolOutput

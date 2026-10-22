@@ -27,7 +27,7 @@
 (schema Report (:f rc Int64) (:f lines (List String)))
 
 fn sortUnique xs: (List String) -> (List String)
-  (listReverse (fold (fn [acc x] (mt (listHead acc) ((some h) (if (= h x) acc (cons x acc))) ((none) (cons x acc)))) (list) (listSort xs)))
+  (listReverse (fold (fn [acc x] (match (listHead acc) ((some h) (if (= h x) acc (cons x acc))) ((none) (cons x acc)))) (list) (listSort xs)))
 
 fn spaceJoined xs: (List String) -> String
   (fold (fn [acc x] (str acc x " ")) "" xs)
@@ -87,7 +87,7 @@ fn litRun s: String lit: String cls: String -> (Option String)
   (litRunFrom s (stringToBytes s) lit cls 0)
 
 fn litRunFrom s: String bs: Bytes lit: String cls: String from: Int64 -> (Option String)
-  (mt (stringIndexOf (dist/sliceFrom s from) lit)
+  (match (stringIndexOf (dist/sliceFrom s from) lit)
     ((none) (none))
     ((some rel)
       (let [(start (+ from rel (stringLength lit)))
@@ -100,7 +100,7 @@ fn allRuns s: String prefix: String cls: String -> (List String)
   (listReverse (allRunsFrom s (stringToBytes s) prefix cls 0 (list)))
 
 fn allRunsFrom s: String bs: Bytes prefix: String cls: String from: Int64 acc: (List String) -> (List String)
-  (mt (stringIndexOf (dist/sliceFrom s from) prefix)
+  (match (stringIndexOf (dist/sliceFrom s from) prefix)
     ((none) acc)
     ((some rel)
       (let [(start (+ from rel (stringLength prefix)))
@@ -136,7 +136,7 @@ fn trimSpacesEnd s: String -> String
 
 fn opHeader line: String cls: String -> (Option String)
   (if (stringStartsWith? line "    (:op :")
-    (mt (litRun line ":op :" cls) ((some n) (if (stringStartsWith? line (str "    (:op :" n)) (some n) (none))) ((none) (none)))
+    (match (litRun line ":op :" cls) ((some n) (if (stringStartsWith? line (str "    (:op :" n)) (some n) (none))) ((none) (none)))
     (none))
 
 fn t0Lines tools: String unescape: Bool -> (List String)
@@ -151,7 +151,7 @@ fn toolT0 tools: String -> String
 fn publicNames tools: String -> (List String)
   (let [(flush (fn [(st OpScan)] -> (List String) (if (and (not (stringEmpty? st.name)) st.pub) (cons st.name st.out) st.out)))
         (final (fold (fn [(st OpScan) (l String)] -> OpScan
-                       (let [(st1 (mt (opHeader l "word")
+                       (let [(st1 (match (opHeader l "word")
                                     ((some n) (OpScan :name n :pub false :out (flush st)))
                                     ((none) st)))]
                          (if (spacedPrefix? l ":public \"") (OpScan :name st1.name :pub true :out st1.out) st1)))
@@ -170,8 +170,8 @@ fn toolbeltSkillAsn tools: String -> String
 (schema OpDoc (:f name String) (:f params String) (:f doc String) (:f enums String) (:f out (List String)))
 
 fn bracketWords s: String -> String
-  (let [(a (mt (stringIndexOf s "[") ((some i) (dist/sliceFrom s (+ i 1))) ((none) s)))
-        (b (mt (stringIndexOf a "]") ((some i) (dist/sliceTo a i)) ((none) a)))]
+  (let [(a (match (stringIndexOf s "[") ((some i) (dist/sliceFrom s (+ i 1))) ((none) s)))
+        (b (match (stringIndexOf a "]") ((some i) (dist/sliceTo a i)) ((none) a)))]
     (trimSpaces b))
 
 fn squeezeSpaces s: String -> String
@@ -191,14 +191,14 @@ fn flushDoc st: OpDoc -> (List String)
     st.out)
 
 fn opDocStep st: OpDoc l: String -> OpDoc
-  (let [(st1 (mt (opHeader l "alpha")
+  (let [(st1 (match (opHeader l "alpha")
                ((some n) (OpDoc :name n :params "" :doc "" :enums "" :out (flushDoc st)))
                ((none) st)))
         (named (not (stringEmpty? st1.name)))
         (st2 (if (and named (spacedPrefix? l ":params ["))
                (OpDoc :name st1.name :params (bracketWords l) :doc st1.doc :enums st1.enums :out st1.out)
                st1))
-        (st3 (mt (if named (enumKey l) (none))
+        (st3 (match (if named (enumKey l) (none))
                ((some k) (OpDoc :name st2.name :params st2.params :doc st2.doc
                            :enums (str st2.enums " " k ": " (squeezeSpaces (stringReplace (bracketWords l) ":" "")) ".") :out st2.out))
                ((none) st2)))]
@@ -211,7 +211,7 @@ fn toolOps tools: String -> String
 
 fn toolTopics tools: String -> String
   (str (stringJoin (fold (fn [acc l] (if (stringStartsWith? l "    (:topic :name :")
-                                        (mt (litRun l ":name :" "alpha") ((some t) (listAppend acc (list t))) ((none) acc))
+                                        (match (litRun l ":name :" "alpha") ((some t) (listAppend acc (list t))) ((none) acc))
                                         acc))
                      (list) (dist/splitLines tools)) ", ") "\n")
 
@@ -228,13 +228,13 @@ fn trimTrailingWsNoNl s: String -> String
 
 fn topicLine prefixLen: Int64 l: String -> String
   (let [(s (dist/sliceFrom l prefixLen))
-        (cut (mt (stringIndexOf s "\" :tools \"")
+        (cut (match (stringIndexOf s "\" :tools \"")
                ((none) (none))
-               ((some i) (mt (stringIndexOf (dist/sliceFrom s (+ i 10)) "\"")
+               ((some i) (match (stringIndexOf (dist/sliceFrom s (+ i 10)) "\"")
                            ((some j) (some (pair i j)))
                            ((none) (none))))))
-        (body (mt cut ((some p) (dist/sliceTo s (pairFirst p))) ((none) s)))
-        (tail (mt cut ((some p) (optionOr (stringSlice s (+ (pairFirst p) 10) (+ (pairFirst p) 10 (pairSecond p))) "")) ((none) "")))
+        (body (match cut ((some p) (dist/sliceTo s (pairFirst p))) ((none) s)))
+        (tail (match cut ((some p) (optionOr (stringSlice s (+ (pairFirst p) 10) (+ (pairFirst p) 10 (pairSecond p))) "")) ((none) "")))
         (text (unescapeQuotes (dropTopicTail body)))]
     (if (stringEmpty? tail) text (str text " " tail)))
 
@@ -271,7 +271,7 @@ fn renderTier rules: String tier: String -> String
                       (cond
                         ((stringStartsWith? l "(:rules") (pair inc (cons l out)))
                         ((stringStartsWith? l "  (:rule :id ")
-                          (let [(fc (mt (litRun l ":force :" "lower") ((some f) (str ":" f)) ((none) "")))
+                          (let [(fc (match (litRun l ":force :" "lower") ((some f) (str ":" f)) ((none) "")))
                                 (take (if (= tier "essential") (stringContains? l ":core true") (<= (forceRank fc) req)))]
                             (pair take (if take (cons l out) out))))
                         ((stringStartsWith? l "  (:pack ") (let [(take (>= req 5))] (pair take (if take (cons l out) out))))
@@ -307,9 +307,9 @@ fn sessEmpty out: (List String) -> Sess
   (Sess :h "" :d "" :e "" :out out)
 
 fn quotedAfter l: String key: String -> (Option String)
-  (mt (stringIndexOf l key)
+  (match (stringIndexOf l key)
     ((none) (none))
-    ((some i) (mt (stringIndexOf (dist/sliceFrom l (+ i (stringLength key))) "\"")
+    ((some i) (match (stringIndexOf (dist/sliceFrom l (+ i (stringLength key))) "\"")
                 ((some j) (some (optionOr (stringSlice l i (+ i (stringLength key) j 1)) "")))
                 ((none) (none)))))
 
@@ -320,7 +320,7 @@ fn sessStep st: Sess l: String -> Sess
     ((stringStartsWith? l "    :do \"") (with st :d (dropFinalQuote (dist/sliceFrom l 9))))
     ((stringStartsWith? l "    :refute ") st)
     ((stringStartsWith? l "    :enforcedBy ")
-      (let [(e1 (mt (quotedAfter l ":enforcedBy \"") ((some m) (str " " m)) ((none) st.e)))
+      (let [(e1 (match (quotedAfter l ":enforcedBy \"") ((some m) (str " " m)) ((none) st.e)))
             (e2 (if (stringContains? l ":coAuthor false") (str e1 " :coAuthor false") e1))]
         (with st :e e2)))
     (else (sessEmpty (cons l (sessFlush st)))))
@@ -330,7 +330,7 @@ fn sessionRules rules: String -> String
     (if (listEmpty? lines)
       ""
       (let [(first (optionOr (listHead lines) ""))
-            (head (mt (stringIndexOf first " :basis ") ((some i) (dist/sliceTo first i)) ((none) first)))
+            (head (match (stringIndexOf first " :basis ") ((some i) (dist/sliceTo first i)) ((none) first)))
             (start (list "  :form \":invariant names the command that exits non-zero on violation; :core true loads every session; :when lists phases, absent means all; the full edition adds each rule's refutation and basis\""
                          (str head " :full \"./scripts/install.sh --tier full\"")))
             (final (fold sessStep (sessEmpty start) (optionOr (listTail lines) (list))))]
@@ -345,12 +345,12 @@ fn realCommand? l: String -> Bool
   (realCommandFrom l 0)
 
 fn realCommandFrom l: String from: Int64 -> Bool
-  (mt (stringIndexOf (dist/sliceFrom l from) ":enforcedBy \"")
+  (match (stringIndexOf (dist/sliceFrom l from) ":enforcedBy \"")
     ((none) false)
     ((some rel)
       (let [(start (+ from rel 13))
             (rest (dist/sliceFrom l start))]
-        (mt (stringIndexOf rest "\"")
+        (match (stringIndexOf rest "\"")
           ((none) false)
           ((some j) (if (nonBlank? (dist/sliceTo rest j)) true (realCommandFrom l (+ from rel 1))))))))
 
@@ -363,7 +363,7 @@ fn invStep st: Inv l: String -> Inv
                (Inv :id (optionOr (litRun l ":id " "word") "") :force st1.force :cmd st1.cmd :out st1.out)
                st1))
         (named (not (stringEmpty? st2.id)))
-        (st3 (mt (if named (litRun l ":force :" "lower") (none))
+        (st3 (match (if named (litRun l ":force :" "lower") (none))
                ((some f) (Inv :id st2.id :force f :cmd st2.cmd :out st2.out))
                ((none) st2)))]
     (if (and named (realCommand? l)) (Inv :id st3.id :force st3.force :cmd true :out st3.out) st3))
@@ -401,7 +401,7 @@ fn renderBetween text: String startLine: String endLine: String body: String -> 
                                           (pair false (list)) (dist/splitLines text))))))
 
 fn ! gitOk? ctx: Ctx args: (List String) -> Bool
-  (mt (dist/runArgv! (listAppend (list "git" "-C" ctx.root) args) (none) (none) 60000)
+  (match (dist/runArgv! (listAppend (list "git" "-C" ctx.root) args) (none) (none) 60000)
     ((ok r) (= r.code 0))
     ((err e) (do (dist/writeErr! (str "rules: git unavailable (" e ")\n")) false)))
 
@@ -424,20 +424,20 @@ fn skipSurface! ctx: Ctx rep: Report name: String path: String -> Report
     (say rep (str "  skip " name " (missing " path ")")))
 
 fn resolveTarget! path: String -> String
-  (mt (realPath path) ((ok p) p) ((err _) path))
+  (match (realPath path) ((ok p) p) ((err _) path))
 
 fn writeAtomic! path: String text: String -> (Result Unit String)
   (let [(target (resolveTarget! path))
         (dirMade (dirCreate (dist/dirName target)))
         (wantExec (dist/isExecutable! target))
         (tmp (str target "." (stringFromInt64 (procSelf)) ".tmp"))]
-    (mt (fileWrite tmp text)
+    (match (fileWrite tmp text)
       ((err e) (err e))
       ((ok _)
         (let [(mode (& (dist/modeOf! tmp) 511))
               (want (if wantExec 493 420))
               (chmodded (if (= mode want) (ok ()) (dist/chmodTo! tmp want)))]
-          (mt chmodded
+          (match chmodded
             ((err e) (do (pathRemove tmp) (err e)))
             ((ok _) (pathRename tmp target)))))))
 
@@ -458,12 +458,12 @@ fn surfaceStep! ctx: Ctx body: String rep: Report row: (List String) -> Report
   (let [(name (rowAt row 0)) (f (rowAt row 1))]
     (if (not (dist/isRegular! f))
       (skipSurface! ctx rep name f)
-      (mt (dist/readText! f)
+      (match (dist/readText! f)
         ((err e) (fail rep (str "  DRIFT " name " (" f ")")))
         ((ok text)
           (if (= ctx.mode "check")
             (if (= (extractBetween text (startMarker) (endMarker)) body) (say rep (str "  ok   " name)) (fail rep (str "  DRIFT " name " (" f ")")))
-            (mt (writeAtomic! f (renderBetween text (startMarker) (endMarker) body))
+            (match (writeAtomic! f (renderBetween text (startMarker) (endMarker) body))
               ((ok _) (say rep (str "  rendered " name)))
               ((err e) (fail rep (str "  DRIFT " name " (" f ": " e ")")))))))))
 
@@ -480,7 +480,7 @@ fn unknownNames! ctx: Ctx text: String -> (List String)
       forms))
 
 fn helpCommands! entry: String -> (List String)
-  (let [(outText (mt (dist/runArgv! (list entry "help") (none) (none) 120000) ((ok r) r.out) ((err _) "")))]
+  (let [(outText (match (dist/runArgv! (list entry "help") (none) (none) 120000) ((ok r) r.out) ((err _) "")))]
     (listReverse (pairSecond (fold (fn [(acc (Pair Bool (List String))) (l String)] -> (Pair Bool (List String))
                                      (let [(c (pairFirst acc)) (out (pairSecond acc))]
                                        (cond
@@ -514,7 +514,7 @@ fn outputStep! ctx: Ctx rep: Report row: (List String) -> Report
         (rep2 (if (listEmpty? unknown) rep1 (fail rep1 (str "  UNKNOWN " name " names what does not exist: " (spaceJoined unknown)))))]
     (if (= ctx.mode "check")
       (if (= (dist/readText! f) (ok body)) (say rep2 (str "  ok   " name)) (fail rep2 (str "  DRIFT " name " (" f ")")))
-      (mt (writeAtomic! f body)
+      (match (writeAtomic! f body)
         ((ok _) (say rep2 (str "  rendered " name)))
         ((err e) (fail rep2 (str "  DRIFT " name " (" f ": " e ")"))))))
 
@@ -527,14 +527,14 @@ fn emitStep! ctx: Ctx rep: Report -> Report
         (want (dist/generateInstallSh))]
     (if (= ctx.mode "check")
       (if (= (dist/readText! f) (ok want)) (say rep (str "  ok   installer-emit (" f ")")) (fail rep (str "  DRIFT installer-emit (" f ")")))
-      (mt (writeAtomic! f want)
+      (match (writeAtomic! f want)
         ((ok _) (say rep "  rendered installer-emit"))
         ((err e) (fail rep (str "  DRIFT installer-emit (" f ": " e ")"))))))
 
 fn writeInPlace! path: String text: String -> (Result Unit String)
   (let [(existed (dist/isRegular! path))
         (dirMade (dirCreate (dist/dirName path)))]
-    (mt (fileWrite path text)
+    (match (fileWrite path text)
       ((err e) (err e))
       ((ok _) (if existed (ok ()) (dist/chmodTo! path 493)))))
 
@@ -554,9 +554,9 @@ fn homeStep! ctx: Ctx rep: Report d: String -> Report
         (target (str d "/asl-toolbelt/SKILL.md"))]
     (if (not (dist/isRegular! skill))
       rep
-      (mt (dirCreate (str d "/asl-toolbelt"))
+      (match (dirCreate (str d "/asl-toolbelt"))
         ((err e) (do (dist/writeErr! (str "rules: " e "\n")) rep))
-        ((ok _) (mt (fileWrite target (resultOr (dist/readText! skill) ""))
+        ((ok _) (match (fileWrite target (resultOr (dist/readText! skill) ""))
                   ((ok _) (say rep (str "  refreshed " target)))
                   ((err e) (do (dist/writeErr! (str "rules: " e "\n")) rep)))))))
 
@@ -595,25 +595,25 @@ fn lexiconRender! root: String -> Int64
 fn copyInstaller! src: String text: String target: String -> (Result Unit String)
   (let [(dirMade (dirCreate (dist/dirName target)))
         (tmp (str target ".tmp." (stringFromInt64 (procSelf))))]
-    (mt (fileWrite tmp text)
+    (match (fileWrite tmp text)
       ((err e) (err e))
       ((ok _)
-        (mt (dist/chmodTo! tmp (if (dist/isExecutable! src) 493 420))
+        (match (dist/chmodTo! tmp (if (dist/isExecutable! src) 493 420))
           ((err e) (do (pathRemove tmp) (err e)))
           ((ok _) (pathRename tmp target))))))
 
 fn renderInstallers! root: String -> Int64
   (let [(src (str root "/scripts/install.sh"))]
-    (mt (dist/readText! src)
+    (match (dist/readText! src)
       ((err e) (do (dist/writeErr! (str "installers: " e "\n")) 1))
       ((ok text)
         (let [(errs (filter err? (map (fn [t] (copyInstaller! src text t)) (installerCopies (Ctx :root root :mode "render" :src "" :tools "" :home "")))))]
           (if (listEmpty? errs)
             (do (dist/writeOut! (str "installers: synchronized byte-identical distribution copies from " src "\n")) 0)
-            (do (dist/writeErr! (str "installers: " (stringJoin (map (fn [r] (mt r ((err e) e) ((ok _) ""))) errs) "; ") "\n")) 1))))))
+            (do (dist/writeErr! (str "installers: " (stringJoin (map (fn [r] (match r ((err e) e) ((ok _) ""))) errs) "; ") "\n")) 1))))))
 
 fn nestedDist! dir: String acc: (List String) -> (List String)
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err _) acc)
     ((ok names)
       (fold (fn [a n]
@@ -635,7 +635,7 @@ fn checkInstallers! root: String -> Int64
         (e2 (if (listEmpty? nested) e1 (do (dist/writeErr! (str "installers: nested dist directory detected: " (stringJoin nested "\n") "\n")) true)))
         (ctx (Ctx :root root :mode "check" :src "" :tools "" :home ""))
         (e3 (if (gitOk? ctx (list "rev-parse" "--is-inside-work-tree"))
-              (mt (dist/runArgv! (list "git" "-C" root "ls-files" "*install.sh") (none) (none) 60000)
+              (match (dist/runArgv! (list "git" "-C" root "ls-files" "*install.sh") (none) (none) 60000)
                 ((err e) (do (dist/writeErr! (str "installers: git ls-files failed (" e ")\n")) true))
                 ((ok r) (fold (fn [bad t]
                                 (if (listContains? (list "scripts/install.sh" "asl/dist/install.sh" "asl/web/dist/install.sh" "asl/web/public/install.sh") t)
@@ -647,7 +647,7 @@ fn checkInstallers! root: String -> Int64
     (if (not (dist/isRegular! harness))
       (do (dist/writeErr! (str "installers: missing required third-party toolbelt harness test: " harness "\n")) 1)
       (let [(ran (dist/runArgv! (list "python3" harness) (none) (none) 3600000))
-            (e4 (mt ran
+            (e4 (match ran
                   ((err e) (do (dist/writeErr! (str "installers: ERR_TOOL_ABSENT python3 (" e ")\n")) true))
                   ((ok r) (do (dist/writeOut! r.out) (dist/writeErr! r.errText)
                               (if (= r.code 0) e3 (do (dist/writeErr! "installers: third-party toolbelt harness acceptance verification failed\n") true))))))]

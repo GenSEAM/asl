@@ -46,7 +46,7 @@ fn contentLength head: String -> Int64
     0 (stringSplit head "\r\n"))
 
 fn parseHttpBody raw: String -> (Option String)
-  (mt (stringIndexOf raw "\r\n\r\n")
+  (match (stringIndexOf raw "\r\n\r\n")
     ((none) none)
     ((some end)
       (let [(head (optionOr (stringSlice raw 0 end) ""))
@@ -56,13 +56,13 @@ fn parseHttpBody raw: String -> (Option String)
           (some (optionOr (stringSlice raw start (+ start want)) ""))))))
 
 fn field v: j/Json key: String -> j/Json
-  (mt v ((j/jobj kvs) (optionOr (optionMap pairSecond (listHead (filter (fn [(p (Pair String j/Json))] -> Bool (= (pairFirst p) key)) kvs))) (j/jnull))) (_ (j/jnull)))
+  (match v ((j/jobj kvs) (optionOr (optionMap pairSecond (listHead (filter (fn [(p (Pair String j/Json))] -> Bool (= (pairFirst p) key)) kvs))) (j/jnull))) (_ (j/jnull)))
 
 fn text v: j/Json -> String
-  (mt v ((j/jstr s) s) (_ ""))
+  (match v ((j/jstr s) s) (_ ""))
 
 fn modelOf body: String -> String
-  (text (field (mt (pt/jsonLoads body) ((ok v) v) ((err _) (j/jnull))) "model"))
+  (text (field (match (pt/jsonLoads body) ((ok v) v) ((err _) (j/jnull))) "model"))
 
 fn completion model: String -> String
   (str "{\"id\":\"stub\",\"object\":\"chat.completion\",\"model\":\"" model "\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"ok\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":2}}")
@@ -85,18 +85,18 @@ fn replyFor model: String occurrence: Int64 -> String
 
 fn ! writeAll! fd: Int64 data: String -> Bool
   (if (stringEmpty? data) true
-    (mt (fdWrite fd data)
+    (match (fdWrite fd data)
       ((err _) false)
       ((ok n) (if (<= n 0) false (writeAll! fd (optionOr (stringSlice data n (stringLength data)) ""))))))
 
 fn ! stepStub! w: World conn: StubConn ready: (List (Pair Int64 Int64)) -> World
   (if (not (ready? ready conn.fd)) (withStubs w (listAppend w.stubs (list conn)) w.seen)
-    (mt (fdRead conn.fd 65536)
+    (match (fdRead conn.fd 65536)
       ((err _) (do (fdClose conn.fd) w))
       ((ok chunk)
         (if (stringEmpty? chunk) (do (fdClose conn.fd) w)
           (let [(input (str conn.input chunk))]
-            (mt (parseHttpBody input)
+            (match (parseHttpBody input)
               ((none) (withStubs w (listAppend w.stubs (list (with conn :input input))) w.seen))
               ((some body)
                 (let [(model (modelOf body))
@@ -107,7 +107,7 @@ fn ! stepStub! w: World conn: StubConn ready: (List (Pair Int64 Int64)) -> World
 
 fn ! stepClient! c: Client ready: (List (Pair Int64 Int64)) -> Client
   (if (or c.done (not (ready? ready c.fd))) c
-    (mt (fdRead c.fd 65536)
+    (match (fdRead c.fd 65536)
       ((err _) (do (fdClose c.fd) (with c :done true :doneMs (nowMs!))))
       ((ok chunk)
         (if (stringEmpty? chunk)
@@ -116,7 +116,7 @@ fn ! stepClient! c: Client ready: (List (Pair Int64 Int64)) -> Client
 
 fn ! stepWorld! w: World ready: (List (Pair Int64 Int64)) -> World
   (let [(accepted (if (ready? ready w.listener)
-                    (mt (sockAccept w.listener)
+                    (match (sockAccept w.listener)
                       ((ok fd) (withStubs w (listAppend w.stubs (list (StubConn :fd fd :input ""))) w.seen))
                       ((err _) w))
                     w))
@@ -131,7 +131,7 @@ fn watchOf w: World -> (List (Pair Int64 Int64))
 
 fn ! pump! w: World until: (fn [World] -> Bool) deadline: Int64 -> World
   (if (or (until w) (>= (nowMs!) deadline)) w
-    (mt (fdPoll (watchOf w) 20)
+    (match (fdPoll (watchOf w) 20)
       ((err _) (pump! w until deadline))
       ((ok ready) (pump! (stepWorld! w ready) until deadline))))
 
@@ -139,7 +139,7 @@ fn ! send! w: World model: String tag: String -> World
   (let [(body (str "{\"model\":\"" model "\",\"messages\":[{\"role\":\"user\",\"content\":\"" tag "\"}]}"))
         (request (str "POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: "
                       (stringFromInt64 (stringLength body)) "\r\n\r\n" body))]
-    (mt (tcpConnect w.gatewayPort)
+    (match (tcpConnect w.gatewayPort)
       ((err _) (withClients w (listAppend w.clients (list (Client :fd -1 :tag tag :sentMs (nowMs!) :response "connect failed" :done true :doneMs (nowMs!))))))
       ((ok fd)
         (do (writeAll! fd request)
@@ -157,7 +157,7 @@ fn seenOnce? w: World model: String -> Bool
 
 fn ! waitPort! path: String attempts: Int64 -> Int64
   (if (<= attempts 0) 0
-    (mt (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
+    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
       ((some port) (if (> port 0) port (do (sleepMs 20) (waitPort! path (- attempts 1)))))
       ((none) (do (sleepMs 20) (waitPort! path (- attempts 1))))))
 
@@ -191,7 +191,7 @@ fn ! runTests -> Bool
                    (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") (nativeCliCacheEnvRow!)))
         ; (:m :ref NOSELFHOST-RETRYCONC-20261017 :do "fix NOSELFHOST-RETRYCONC: a bare procSpawnv here was an un-bounded, un-tree-tracked child start (rule spawnSafety); fr/spawn is the same tools/fleet/run.asl every other fleet caller starts children through, and its killTree! below (rather than a bare negative-pid procKill) takes the whole process tree this one row of /bin/sh -c ... could have grown, not just the shell's own pid")
         (running (fr/spawn 0 (fr/job (list "/bin/sh" "-c" command) (resultOr (realPath ".") ".") env)))
-        (pid (mt running ((ok r) r.pid) ((err _) 0)))
+        (pid (match running ((ok r) r.pid) ((err _) 0)))
         (gatewayPort (if (> pid 0) (waitPort! readyPath 500) 0))
         (w0 (World :listener listener :gatewayPort gatewayPort :stubs (list) :seen (list) :clients (list)))
 
@@ -207,7 +207,7 @@ fn ! runTests -> Bool
         (aDoneMs (- (clientOf w4 "a1").doneMs aStart))
 
         (killed (if (> pid 0) (do (fr/killTree! pid) true) false))
-        (pipesClosed (mt running ((ok r) (do (fdClose r.outFd) (fdClose r.errFd) true)) ((err _) true)))
+        (pipesClosed (match running ((ok r) (do (fdClose r.outFd) (fdClose r.errFd) true)) ((err _) true)))
         (closed (do (map (fn [(s StubConn)] -> Bool (do (fdClose s.fd) true)) w4.stubs)
                   (map (fn [(c Client)] -> Bool (if c.done true (do (fdClose c.fd) true))) w4.clients)
                   (fdClose listener) true))

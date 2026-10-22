@@ -3,7 +3,7 @@
   :i [])
 
 fn walk f: (fn [(List Int64) Int64] -> (List Int64)) acc: (List Int64) xs: (List Int64) -> (List Int64)
-  (mt (listHead xs) ((some x) (mt (listTail xs) ((some t) (walk f (f acc x) t)) ((none) (cons x acc)))) ((none) acc))
+  (match (listHead xs) ((some x) (match (listTail xs) ((some t) (walk f (f acc x) t)) ((none) (cons x acc)))) ((none) acc))
 
 fn push acc: (List Int64) x: Int64 -> (List Int64)
   (cons x acc)

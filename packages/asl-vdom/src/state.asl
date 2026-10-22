@@ -22,7 +22,7 @@ fn getState store: StateStore -> (Map String String)
   store.state
 
 fn getStateValue store: StateStore key: String defaultVal: String -> String
-  (mt (mapGet store.state key) ((some val) val) ((none) defaultVal))
+  (match (mapGet store.state key) ((some val) val) ((none) defaultVal))
 
 fn dispatchAction store: StateStore action: Action reducer: (fn [(Map String String) Action] -> (Map String String)) -> StateStore
   (let [(nextState (reducer store.state action))] (with store :state nextState :version (+ store.version 1)))
@@ -34,7 +34,7 @@ fn applyPatches store: StateStore patches: (List StatePatch) -> StateStore
   (fold (fn [(acc StateStore) (p StatePatch)] -> StateStore (applyPatch acc p)) store patches)
 
 fn computeStateDiff oldState: (Map String String) newState: (Map String String) -> (List StatePatch)
-  (let [(keysNew (mapKeys newState)) (keysOld (mapKeys oldState)) (updates (fold (fn [(acc (List StatePatch)) (k String)] -> (List StatePatch) (let [(newVal (mt (mapGet newState k) ((some nv) nv) ((none) "")))] (mt (mapGet oldState k) ((some oldV) (if (= oldV newVal) acc (cons (StatePatch :path k :op "set" :value newVal) acc))) ((none) (cons (StatePatch :path k :op "set" :value newVal) acc))))) (list) keysNew)) (removals (fold (fn [(acc (List StatePatch)) (k String)] -> (List StatePatch) (if (mapHas? newState k) acc (cons (StatePatch :path k :op "remove" :value "") acc))) (list) keysOld))] (listAppend updates removals))
+  (let [(keysNew (mapKeys newState)) (keysOld (mapKeys oldState)) (updates (fold (fn [(acc (List StatePatch)) (k String)] -> (List StatePatch) (let [(newVal (match (mapGet newState k) ((some nv) nv) ((none) "")))] (match (mapGet oldState k) ((some oldV) (if (= oldV newVal) acc (cons (StatePatch :path k :op "set" :value newVal) acc))) ((none) (cons (StatePatch :path k :op "set" :value newVal) acc))))) (list) keysNew)) (removals (fold (fn [(acc (List StatePatch)) (k String)] -> (List StatePatch) (if (mapHas? newState k) acc (cons (StatePatch :path k :op "remove" :value "") acc))) (list) keysOld))] (listAppend updates removals))
 
 fn subscribeStore store: StateStore subscriber: String -> StateStore
   (if (or (stringEmpty? subscriber) (listContains? store.subscribers subscriber)) store (with store :subscribers (listAppend store.subscribers (list subscriber))))

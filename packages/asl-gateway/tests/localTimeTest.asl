@@ -9,14 +9,14 @@ fn propIn props: (List (Pair String ck/AsnVal)) key: String -> (Option ck/AsnVal
     (if (= (pairFirst (preludeHead props)) key) (some (pairSecond (preludeHead props))) (propIn (preludeTail props) key)))
 
 fn atomOf v: (Option ck/AsnVal) -> String
-  (mt v ((some x) (mt x ((ck/asnAtom s) s) (_ ""))) ((none) ""))
+  (match v ((some x) (match x ((ck/asnAtom s) s) (_ ""))) ((none) ""))
 
 fn textOf v: (Option ck/AsnVal) -> String
-  (mt v ((some x) (mt x ((ck/asnText s) s) (_ ""))) ((none) ""))
+  (match v ((some x) (match x ((ck/asnText s) s) (_ ""))) ((none) ""))
 
 fn intsOf v: (Option ck/AsnVal) -> (List Int64)
-  (mt v
-    ((some x) (mt x ((ck/asnList items) (map (fn [(i ck/AsnVal)] -> Int64 (optionOr (stringToInt64 (atomOf (some i))) -1)) items)) (_ (list))))
+  (match v
+    ((some x) (match x ((ck/asnList items) (map (fn [(i ck/AsnVal)] -> Int64 (optionOr (stringToInt64 (atomOf (some i))) -1)) items)) (_ (list))))
     ((none) (list)))
 
 fn pad n: Int64 width: Int64 -> String
@@ -42,13 +42,13 @@ fn yearStartMisses starts: (List Int64) y: Int64 acc: Int64 -> Int64
       (yearStartMisses (preludeTail starts) (+ y 1) (if good acc (+ acc 1)))))
 
 fn testCivilDays! -> Bool
-  (mt (fileReadString "asl/packages/asl-gateway/tests/localTimeFixture.asn")
+  (match (fileReadString "asl/packages/asl-gateway/tests/localTimeFixture.asn")
     ((err e) (do (println (str "fixture: " e)) false))
     ((ok text)
-      (mt (ck/asnReadText text)
+      (match (ck/asnReadText text)
         ((err e) (do (println (str "fixture: " e)) false))
         ((ok forms)
-          (let [(p (mt (ck/asnProps (optionOr (listGet forms 0) (ck/asnList (list))) (some ":civilDays")) ((ok x) x) ((err _) (list))))
+          (let [(p (match (ck/asnProps (optionOr (listGet forms 0) (ck/asnList (list))) (some ":civilDays")) ((ok x) x) ((err _) (list))))
                 (count (optionOr (stringToInt64 (atomOf (propIn p "count"))) 0))
                 (starts (intsOf (propIn p "yearStarts")))
                 (lines (map (fn [(d Int64)] -> String (str (dayLine d) "\n")) (range 0 count)))
@@ -65,7 +65,7 @@ fn testCivilDays! -> Bool
               true))))))
 
 fn showIn! tz: String t: Int64 -> String
-  (mt (lt/zoneLoad! (some tz)) ((ok z) (lt/formatLocal z t true)) ((err e) (str "err " e)))
+  (match (lt/zoneLoad! (some tz)) ((ok z) (lt/formatLocal z t true)) ((err e) (str "err " e)))
 
 fn testUnknownZoneIsUtc! -> Bool
   (let [(t 1772953200)

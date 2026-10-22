@@ -12,7 +12,7 @@ fn getToolRunbook router: ToolRouter toolId: Str -> Option
   (mapGet router.runbooks toolId)
 
 fn getToolGuidance router: ToolRouter toolId: Str -> Str
-  (let [(matches (filter (fn [t] (= t.id toolId)) router.tools))] (if (listEmpty? matches) "" (mt (listHead matches) ((some t) t.guidance) ((none) ""))))
+  (let [(matches (filter (fn [t] (= t.id toolId)) router.tools))] (if (listEmpty? matches) "" (match (listHead matches) ((some t) t.guidance) ((none) ""))))
 
 fn isToolEligible? tool: ToolDescriptor ctx: ToolScopeContext -> Bool
   (and (tp/isToolInScope? tool ctx.activeRepo) (and (tp/isAgentAuthorized? tool ctx.agentRole) (tp/isSafetyPermitted? tool ctx.safetyCeiling)))

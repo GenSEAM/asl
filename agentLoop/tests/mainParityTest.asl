@@ -14,20 +14,20 @@ fn ! runAsl env: String form: String -> ProcessOutput
   (processRun (str env " nice -n 15 " (host) " run asl/agentLoop/tests/mainDriver.asl " (shellQuote form)))
 
 fn ! kvText value: c/KvVal -> String
-  (mt value ((c/kvStr text) text) ((c/kvInt _) ""))
+  (match value ((c/kvStr text) text) ((c/kvInt _) ""))
 
 fn ! fixtureField line: String key: String -> String
   (let [pairs (c/parseKv line)
         found (filter (fn [p] (= (pairFirst p) key)) pairs)]
-    (mt (listHead found)
+    (match (listHead found)
       ((some p) (kvText (pairSecond p)))
       ((none) "")))
 
 fn ! fixtureInt line: String key: String -> Int64
   (let [pairs (c/parseKv line)
         found (filter (fn [p] (= (pairFirst p) key)) pairs)]
-    (mt (listHead found)
-      ((some p) (mt (pairSecond p) ((c/kvInt digits) (optionOr (stringToInt64 digits) -999)) ((c/kvStr _) -999)))
+    (match (listHead found)
+      ((some p) (match (pairSecond p) ((c/kvInt digits) (optionOr (stringToInt64 digits) -999)) ((c/kvStr _) -999)))
       ((none) -999)))
 
 fn hexNibble d: Int64 -> String
@@ -92,7 +92,7 @@ fn ! matchesFixtureRow repo: String hostDisplay: String scope: String env: Strin
          (= actual.exitCode (fixtureInt row "exit"))))
 
 fn ! fixtureMismatchesAt repo: String hostDisplay: String scope: String env: String prefix: String index: Int64 forms: (List String) acc: (List String) -> (List String)
-  (mt (listHead forms)
+  (match (listHead forms)
     ((none) (listReverse acc))
     ((some form)
       (let [digit (stringFromInt64 index)
@@ -116,7 +116,7 @@ fn ! matchesNoArgFixture repo: String hostDisplay: String -> Bool
          (= actual.exitCode (fixtureInt row "exit"))))
 
 fn ! write path: String text: String -> Bool
-  (mt (fileWrite path text) ((ok _) true) ((err _) false))
+  (match (fileWrite path text) ((ok _) true) ((err _) false))
 
 fn rejectionForms -> (List String)
   (list "(:agent :task \"x\" :role :scout)"
@@ -232,12 +232,12 @@ fn ! tempDir tag: String -> String
   (stringTrim (processRun (str "mktemp -d /tmp/asl-main-" tag ".XXXXXX")).stdout)
 
 fn fieldAfter text: String key: String -> String
-  (mt (stringIndexOf text key)
+  (match (stringIndexOf text key)
     ((none) "")
     ((some at)
       (let [start (+ at (stringLength key))
             rest (c/sliceOf text start (stringLength text))]
-        (mt (stringIndexOf rest "\"") ((some e) (c/sliceOf rest 0 e)) ((none) "")))))
+        (match (stringIndexOf rest "\"") ((some e) (c/sliceOf rest 0 e)) ((none) "")))))
 
 fn isHex16 s: String -> Bool
   (and (= (stringLength s) 16)

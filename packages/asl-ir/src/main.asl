@@ -13,7 +13,7 @@ fn printIr m: ty/IrModule -> Str
   (prn/printIr m)
 
 fn compileToIr modName: Str profileId: Str funcs: (List ty/IrFunction) -> (Result Str (List ty/IrDiag))
-  (let [(m (lowerModule modName profileId funcs)) (vRes (verifyIr m))] (mt vRes ((ok _) (ok (printIr m))) ((err diags) (err diags))))
+  (let [(m (lowerModule modName profileId funcs)) (vRes (verifyIr m))] (match vRes ((ok _) (ok (printIr m))) ((err diags) (err diags))))
 
 fn parsePatch patchText: Str -> (Result patch/AstPatch patch/PatchDiag)
   (patch/parsePatch patchText)

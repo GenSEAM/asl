@@ -4,7 +4,7 @@
 
 fn testPreloadRankingSourceIntegrity! -> Bool
   (let [(pRes (fileReadString "asl/packages/asl-intel/src/preload.asl"))]
-    (mt pRes
+    (match pRes
       ((err e) (assert false (str "Failed to read asl/packages/asl-intel/src/preload.asl: " e)))
       ((ok src)
         (do
@@ -21,7 +21,7 @@ fn testPreloadRankingSourceIntegrity! -> Bool
 
 fn testPreloadGrammarRegistration! -> Bool
   (let [(gRes (fileReadString "asl/packages/asl-intel/manifest.asn"))]
-    (mt gRes
+    (match gRes
       ((err ge) (assert false (str "Failed to read asl/packages/asl-intel/manifest.asn: " ge)))
       ((ok gSrc)
         (do

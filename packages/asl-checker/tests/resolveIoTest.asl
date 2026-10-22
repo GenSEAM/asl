@@ -52,9 +52,9 @@ fn ! testUnreadableEntryIsAnIoLine dir: String -> Bool
         true))
 
 fn ! testLoadModuleDepsOkOnGoodImports dir: String -> Bool
-  (mt (r/loadModuleDeps! (list dir) (list "ioA"))
+  (match (r/loadModuleDeps! (list dir) (list "ioA"))
     ((err _) (do (assert false "loadModuleDeps! is ok when every import loads") false))
-    ((ok deps) (do (assert (mt (mapGet deps "ioA") ((some s) (= s.name "ioA")) ((none) false)) "the import path keys its summary") true)))
+    ((ok deps) (do (assert (match (mapGet deps "ioA") ((some s) (= s.name "ioA")) ((none) false)) "the import path keys its summary") true)))
 
 fn ! testLoadModuleDepsErrOnMissingImport dir: String -> Bool
   (let [(direct (r/loadModuleDeps! (list dir) (list "ioNope")))
@@ -108,7 +108,7 @@ fn ! testSysImportShortcuts dir: String -> Bool
         (assert (listEmpty? nestedCl.errors) (str "a dependency's sys import does not try to read a fake module: " (stringJoin nestedCl.errors "; ")))
         (assert (= (listLength nestedCl.paths) 1) (str "nested sys import retains only the real dependency: " (stringJoin nestedCl.paths "; ")))
         (assert (listAny? (fn [(p String)] -> Bool (stringEndsWith? p "/ioSysLeaf.asl")) nestedCl.paths) "nested sys import does not hide the real dependency")
-        (assert (mt leafSummary ((some summary) (mt (r/modImport summary "s") ((some path) (= path "sys")) ((none) false))) ((none) false)) "the sys import alias remains bound to the builtin module")
+        (assert (match leafSummary ((some summary) (match (r/modImport summary "s") ((some path) (= path "sys")) ((none) false))) ((none) false)) "the sys import alias remains bound to the builtin module")
         true))
 
 fn testParentDirOf -> Bool
@@ -125,9 +125,9 @@ fn testParentDirOf -> Bool
 fn ! testResolveImportFromRelativeImporter -> Bool
   (let [(bare (r/resolveImport! "resolveIoTestImporter.asl" "asl-checker/unify" (r/emptyModIndex)))
         (nested (r/resolveImport! "asl/packages/asl-checker/tests/resolveIoTest.asl" "unify" (r/emptyModIndex)))]
-    (do (assert (mt bare.status ((r/resOk) true) (_ false)) (str "a slashless importer resolves against the working directory: " bare.note))
+    (do (assert (match bare.status ((r/resOk) true) (_ false)) (str "a slashless importer resolves against the working directory: " bare.note))
         (assert (stringEndsWith? bare.path "/asl/packages/asl-checker/src/unify.asl") (str "to the unify module: " bare.path))
-        (assert (mt nested.status ((r/resOk) true) (_ false)) (str "a relative importer path resolves: " nested.note))
+        (assert (match nested.status ((r/resOk) true) (_ false)) (str "a relative importer path resolves: " nested.note))
         (assert (= nested.path bare.path) "both reach the same module")
         true))
 

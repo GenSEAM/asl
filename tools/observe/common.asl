@@ -28,7 +28,7 @@ fn limitMax -> Int64
   100
 
 fn mapGetOr kv: (List (Pair String String)) k: String -> (Option String)
-  (mt (listHead kv)
+  (match (listHead kv)
     ((none) (none))
     ((some p) (if (= (pairFirst p) k) (some (pairSecond p)) (mapGetOr (optionOr (listTail kv) (list)) k))))
 
@@ -62,7 +62,7 @@ fn byteLen s: String -> Int64
 (schema Pump (:f outOpen Bool) (:f errOpen Bool) (:f out (List String)) (:f errs (List String)))
 
 fn ! readSide fd: Int64 -> (Pair Bool String)
-  (mt (fdRead fd 65536)
+  (match (fdRead fd 65536)
     ((ok chunk) (if (stringEmpty? chunk) (do (fdClose fd) (pair false "")) (pair true chunk)))
     ((err e) (if (= e "wouldBlock") (pair true "") (do (fdClose fd) (pair false "")))))
 
@@ -70,7 +70,7 @@ fn ! pump sp: SpawnedProc st: Pump -> Pump
   (if (not (or st.outOpen st.errOpen))
     st
     (let [(fds (listAppend (if st.outOpen (list (pair sp.stdout 1)) (list)) (if st.errOpen (list (pair sp.stderr 1)) (list))))]
-      (mt (fdPoll fds 60000)
+      (match (fdPoll fds 60000)
         ((err e) (if (= e "interrupted") (pump sp st) (with st :outOpen false :errOpen false :errs (cons (str "poll: " e) st.errs))))
         ((ok ready)
           (let [(ro (and st.outOpen (listAny? (fn [(p (Pair Int64 Int64))] -> Bool (= (pairFirst p) sp.stdout)) ready)))
@@ -82,33 +82,33 @@ fn ! pump sp: SpawnedProc st: Pump -> Pump
                            :errs (if (stringEmpty? (pairSecond e2)) st.errs (cons (pairSecond e2) st.errs)))))))))
 
 fn ! runArgv! argv: (List String) cwd: String ctx: Ctx -> (Result Proc String)
-  (mt (procSpawnv argv (some cwd) ctx.spawnEnv)
+  (match (procSpawnv argv (some cwd) ctx.spawnEnv)
     ((err e) (err e))
     ((ok sp)
       (do
         (fdClose sp.stdin)
         (let [(st (pump sp (Pump :outOpen true :errOpen true :out (list) :errs (list))))]
-          (mt (procWaitPid sp.pid false)
+          (match (procWaitPid sp.pid false)
             ((err e) (err e))
             ((ok code) (ok (Proc :code (optionOr code -1) :out (catAll (listReverse st.out)) :errText (catAll (listReverse st.errs))))))))))
 
 fn ! git! args: (List String) root: String ctx: Ctx -> (Result (Pair Int64 String) String)
-  (mt (runArgv! (cons "git" args) root ctx)
+  (match (runArgv! (cons "git" args) root ctx)
     ((ok p) (ok (pair p.code p.out)))
     ((err e) (err (rejectLine "ERR_TOOL_ABSENT" (str "git could not be run (" e "); observe reads the workspace through git") ""))))
 
 fn ! workspace! ctx: Ctx -> (Result String String)
-  (mt (git! (list "rev-parse" "--show-toplevel") ctx.cwd ctx)
+  (match (git! (list "rev-parse" "--show-toplevel") ctx.cwd ctx)
     ((err e) (err e))
     ((ok p) (let [(top (pyStrip (pairSecond p)))] (ok (if (and (= (pairFirst p) 0) (not (stringEmpty? top))) top ctx.cwd)))))
 
 fn ! shortRev! root: String ctx: Ctx -> (Result String String)
-  (mt (git! (list "rev-parse" "--short" "HEAD") root ctx)
+  (match (git! (list "rev-parse" "--short" "HEAD") root ctx)
     ((err e) (err e))
     ((ok p) (let [(r (pyStrip (pairSecond p)))] (ok (if (and (= (pairFirst p) 0) (not (stringEmpty? r))) r "none")))))
 
 fn ! workspaceFiles! root: String ctx: Ctx -> (Result (List String) String)
-  (mt (git! (list "ls-files" "-z" "-co" "--exclude-standard") root ctx)
+  (match (git! (list "ls-files" "-z" "-co" "--exclude-standard") root ctx)
     ((err e) (err e))
     ((ok p)
       (if (!= (pairFirst p) 0)
@@ -150,21 +150,21 @@ fn ! lexists? p: String -> Bool
   (ok? (fileStat p))
 
 fn ! isDir? p: String -> Bool
-  (mt (fileStat p) ((ok s) s.isDir) ((err _) false))
+  (match (fileStat p) ((ok s) s.isDir) ((err _) false))
 
 fn ! isFile? p: String -> Bool
-  (mt (fileStat p) ((ok s) s.isFile) ((err _) false))
+  (match (fileStat p) ((ok s) s.isFile) ((err _) false))
 
 fn ! isLink? p: String -> Bool
   (let [(parent (dirName p)) (name (baseName p))]
-    (mt (realPath p)
+    (match (realPath p)
       ((err _) false)
-      ((ok r) (mt (realPath (if (stringEmpty? parent) "." parent))
+      ((ok r) (match (realPath (if (stringEmpty? parent) "." parent))
                 ((ok pr) (!= r (joinPath pr name)))
                 ((err _) false)))))
 
 fn loosePart! cur: String parts: (List String) -> String
-  (mt (listHead parts)
+  (match (listHead parts)
     ((none) (if (stringEmpty? cur) "/" cur))
     ((some c)
       (let [(rest (optionOr (listTail parts) (list)))]
@@ -172,7 +172,7 @@ fn loosePart! cur: String parts: (List String) -> String
           ((or (stringEmpty? c) (= c ".")) (loosePart! cur rest))
           ((= c "..") (loosePart! (let [(d (dirName cur))] (if (= d "/") "" d)) rest))
           (else (let [(nxt (str cur "/" c))]
-                  (mt (realPath nxt)
+                  (match (realPath nxt)
                     ((ok r) (loosePart! (if (= r "/") "" r) rest))
                     ((err _) (loosePart! nxt rest)))))))))
 
@@ -282,17 +282,17 @@ fn utf8Replace s: String -> String
   (let [(bs (stringToBytes s))] (catAll (replaceLoop s bs 0 (bytesLength bs) 0 (list))))
 
 fn pyStripStart codes: (List (Pair Int64 Int64)) -> (List (Pair Int64 Int64))
-  (mt (listHead codes)
+  (match (listHead codes)
     ((none) codes)
     ((some c) (if (pyIsSpaceCode (pairFirst c)) (pyStripStart (optionOr (listTail codes) (list))) codes)))
 
 fn pyStrip s: String -> String
   (let [(codes (pyStripStart (charCodes s)))]
-    (mt (listHead codes)
+    (match (listHead codes)
       ((none) "")
       ((some first)
         (let [(back (pyStripStart (listReverse codes)))]
-          (mt (listHead back)
+          (match (listHead back)
             ((none) "")
             ((some last) (let [(endAt (+ (pairSecond last) (pairSecond (codeAt (stringToBytes s) (pairSecond last) (stringLength s)))))]
                            (optionOr (stringSlice s (pairSecond first) endAt) ""))))))))
@@ -322,7 +322,7 @@ fn sortUnique xs: (List String) -> (List String)
   (dedupe (listSort xs) (list))
 
 fn dedupe xs: (List String) acc: (List String) -> (List String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (listReverse acc))
     ((some x) (dedupe (optionOr (listTail xs) (list)) (if (= (optionOr (listHead acc) "\x00none") x) acc (cons x acc)))))
 
@@ -347,7 +347,7 @@ fn catAll xs: (List String) -> String
           (else (let [(h (/ n 2))] (stringConcat (catAll (listTake xs h)) (catAll (listDrop xs h)))))))
 
 fn interleave xs: (List String) sep: String acc: (List String) -> (List String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (listReverse acc))
     ((some x) (interleave (optionOr (listTail xs) (list)) sep (cons x (if (listEmpty? acc) acc (cons sep acc))))))
 
@@ -389,12 +389,12 @@ fn sectionMore secs: (List Section) shown: (List Int64) -> String
 
 fn shrinkLast shown: (List Int64) -> (Option (List Int64))
   (let [(rev (listReverse shown))]
-    (mt (shrinkFirstPositive rev (list))
+    (match (shrinkFirstPositive rev (list))
       ((some r) (some (listReverse r)))
       ((none) (none))))
 
 fn shrinkFirstPositive xs: (List Int64) acc: (List Int64) -> (Option (List Int64))
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (none))
     ((some x) (if (> x 0)
                 (some (listAppend (listReverse acc) (cons (- x 1) (optionOr (listTail xs) (list)))))
@@ -404,7 +404,7 @@ fn fitLoop head: String secs: (List Section) tail: String what: String shown: (L
   (let [(receipt (str head (sectionBody secs shown) (sectionMore secs shown) tail ")"))]
     (if (< (byteLen receipt) (receiptMax))
       (ok receipt)
-      (mt (shrinkLast shown)
+      (match (shrinkLast shown)
         ((some next) (fitLoop head secs tail what next))
         ((none) (err (rejectLine "ERR_RECEIPT_TOO_LARGE" (str what " receipt exceeds " (stringFromInt64 (receiptMax)) " bytes with every list empty") ""))))))
 

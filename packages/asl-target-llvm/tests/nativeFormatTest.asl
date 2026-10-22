@@ -19,12 +19,12 @@ fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)
 
 fn ! nativeAsl1Bin! -> (Result String String)
-  (mt (sys/context!)
+  (match (sys/context!)
     ((err e) (err e))
     ((ok ctx) (cache/nativeAsl1! ctx (str ctx.root "/asl/host/out/libaslrt.a") "/usr/bin/clang")))
 
 fn ! buildWithNativeAsl1! label: String src: String ll: String -> Recorded
-  (mt (nativeAsl1Bin!)
+  (match (nativeAsl1Bin!)
     ((err e) (Recorded :exitCode 1 :stdout "" :stderr (str label ": native asl1 compiler: " e)))
     ((ok nativeAsl1) (let [(r (sh (str nativeAsl1 " build " src " -o " ll)))] (Recorded :exitCode r.exitCode :stdout r.stdout :stderr r.stderr))))
 
@@ -102,7 +102,7 @@ fn ! runTests -> Bool
       (let [(built (buildWithNativeAsl1! "nativeFormat" src ll))]
         (do
           (assert (= built.exitCode 0) (str "nativeFormat: asl1 emits IR; stderr " built.stderr))
-          (let [(ir (mt (fileReadString ll) ((ok t) t) ((err _) "")))]
+          (let [(ir (match (fileReadString ll) ((ok t) t) ((err _) "")))]
             (do
               (refute (stringContains? ir "@asl_rt_b_stringFromFloat64") "nativeFormat: IR has no float formatter wrapper")
               (refute (stringContains? ir "@asl_rt_b_stringToFloat64") "nativeFormat: IR has no float parser wrapper")
@@ -138,11 +138,11 @@ fn zeroDigits count: Int64 acc: String -> String
   (if (<= count 0) acc (zeroDigits (- count 1) (str acc "0")))
 
 fn formatFloatLoop ir: String -> String
-  (let [(body (mt (stringIndexOf ir "define internal %Val @asl_rt_format_float(")
+  (let [(body (match (stringIndexOf ir "define internal %Val @asl_rt_format_float(")
                 ((some at) (optionOr (stringSlice ir at (stringLength ir)) ""))
                 (_ "")))]
-    (mt (stringIndexOf body "\ntry:")
-      ((some start) (mt (stringIndexOf body "\ndone:")
+    (match (stringIndexOf body "\ntry:")
+      ((some start) (match (stringIndexOf body "\ndone:")
                       ((some stop) (optionOr (stringSlice body start stop) ""))
                       (_ "")))
       (_ "")))

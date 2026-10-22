@@ -17,7 +17,7 @@ fn chunkDagFind dag: ChunkDAG id: Str -> (Option vl/MemoryChunk)
   (mapGet dag.chunks id)
 
 fn collectAncestors dag: ChunkDAG id: Str visited: (List Str) -> (List Str)
-  (mt (chunkDagFind dag id) ((none) visited) ((some chunk) (let [(parents chunk.refs)] (fold (fn [(acc (List Str)) (pId Str)] -> (List Str) (if (listContains? acc pId) acc (let [(accWithP (collectAncestors dag pId acc))] (if (listContains? accWithP pId) accWithP (listAppend accWithP (list pId)))))) visited parents))))
+  (match (chunkDagFind dag id) ((none) visited) ((some chunk) (let [(parents chunk.refs)] (fold (fn [(acc (List Str)) (pId Str)] -> (List Str) (if (listContains? acc pId) acc (let [(accWithP (collectAncestors dag pId acc))] (if (listContains? accWithP pId) accWithP (listAppend accWithP (list pId)))))) visited parents))))
 
 fn chunkDagAncestors dag: ChunkDAG chunkId: Str -> (List Str)
   (collectAncestors dag chunkId (list))
@@ -43,7 +43,7 @@ fn evaluateRetirement chunk: vl/MemoryChunk closureCondition: Str isSatisfied: B
   (if isSatisfied (some (transitionToRetired chunk closureCondition nowTs)) (none))
 
 fn retireChunk dag: ChunkDAG chunkId: Str closureCondition: Str nowTs: I64 -> (Option RetiredChunk)
-  (mt (chunkDagFind dag chunkId) ((none) (none)) ((some c) (some (transitionToRetired c closureCondition nowTs))))
+  (match (chunkDagFind dag chunkId) ((none) (none)) ((some c) (some (transitionToRetired c closureCondition nowTs))))
 
 fn queryRetiredChunks retiredList: (List RetiredChunk) query: Str -> (List RetiredChunk)
   (filter (fn [(rc RetiredChunk)] -> Bool (let [(c rc.chunk)] (or (stringContains? c.id query) (or (stringContains? c.summary query) (stringContains? rc.closureCondition query))))) retiredList)

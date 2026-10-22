@@ -197,7 +197,7 @@ fn utf8FirstIssue bs: Bytes n: Int64 i: Int64 -> (Option Utf8Issue)
   (cond
     ((>= i n) (none))
     ((< (bytesGet bs i) 128) (utf8FirstIssue bs n (+ i 1)))
-    (else (mt (utf8Step bs n i) ((ok k) (utf8FirstIssue bs n k)) ((err issue) (some issue)))))
+    (else (match (utf8Step bs n i) ((ok k) (utf8FirstIssue bs n k)) ((err issue) (some issue)))))
 
 fn utf8IssueText bs: Bytes issue: Utf8Issue -> String
   (if (= (- issue.end issue.start) 1)
@@ -209,7 +209,7 @@ fn utf8ReplaceScan s: String bs: Bytes n: Int64 i: Int64 start: Int64 acc: (List
     ((>= i n) (stringJoin (listReverse (cons (sliceOr s start n) acc)) ""))
     ((< (bytesGet bs i) 128) (utf8ReplaceScan s bs n (+ i 1) start acc))
     (else
-      (mt (utf8Step bs n i)
+      (match (utf8Step bs n i)
         ((ok k) (utf8ReplaceScan s bs n k start acc))
         ((err issue) (utf8ReplaceScan s bs n issue.end issue.end (cons "\u{FFFD}" (cons (sliceOr s start i) acc)))))))
 
@@ -264,7 +264,7 @@ fn reprScan s: String bs: Bytes n: Int64 i: Int64 start: Int64 q: Int64 acc: (Li
           (if (stringEmpty? rep)
             (reprScan s bs n (+ i 1) start q acc)
             (reprScan s bs n (+ i 1) (+ i 1) q (cons rep (cons (sliceOr s start i) acc)))))
-        (mt (utf8Step bs n i)
+        (match (utf8Step bs n i)
           ((err _) (reprScan s bs n (+ i 1) (+ i 1) q (cons (str "\\udc" (hex2 b)) (cons (sliceOr s start i) acc))))
           ((ok k)
             (let [(cp (codePointAt bs i (- k i)))]
@@ -279,13 +279,13 @@ fn pyStrRepr s: String -> String
     (str quote (reprScan s bs (bytesLength bs) 0 0 q (list)) quote))
 
 fn pyRepr v: AsnVal -> String
-  (mt v
+  (match v
     ((asnAtom s) (pyStrRepr s))
     ((asnText s) (pyStrRepr s))
     ((asnList items) (str "[" (stringJoin (map pyRepr items) ", ") "]")))
 
 fn pyStr v: AsnVal -> String
-  (mt v
+  (match v
     ((asnAtom s) s)
     ((asnText s) s)
     ((asnList _) (pyRepr v)))
@@ -318,7 +318,7 @@ fn lstripColons s: String -> String
   (if (stringStartsWith? s ":") (lstripColons (sliceOr s 1 (stringLength s))) s)
 
 fn asnScalarText v: AsnVal -> String
-  (mt v
+  (match v
     ((asnAtom s)
       (cond ((= s "true") "True")
             ((= s "false") "False")
@@ -329,16 +329,16 @@ fn asnScalarText v: AsnVal -> String
     ((asnList _) (pyRepr v)))
 
 fn headIs? v: AsnVal head: String -> Bool
-  (mt v
+  (match v
     ((asnAtom s) (= s head))
     ((asnText s) (= s head))
     ((asnList _) false))
 
 fn listItems v: AsnVal -> (List AsnVal)
-  (mt v ((asnList items) items) (_ (list)))
+  (match v ((asnList items) items) (_ (list)))
 
 fn isList? v: AsnVal -> Bool
-  (mt v ((asnList _) true) (_ false))
+  (match v ((asnList _) true) (_ false))
 
 fn pushVal stack: (List (List AsnVal)) forms: (List AsnVal) v: AsnVal -> (Pair (List (List AsnVal)) (List AsnVal))
   (if (listEmpty? stack)
@@ -377,14 +377,14 @@ fn asnUnicodeEscape bs: Bytes n: Int64 slash: Int64 -> (Result (Pair String Int6
     (let [(braced (= (bytesGet bs (+ slash 2)) 123))
           (start (if braced (+ slash 3) (+ slash 2)))
           (endOpt (if braced (asnFindByte bs n start 125) (some (+ start 4))))]
-      (mt endOpt
+      (match endOpt
         ((none) (err "ERR_ASN_BAD_UNICODE_ESCAPE"))
         ((some end)
           (let [(count (- end start))
                 (next (if braced (+ end 1) end))]
             (if (or (if braced (or (< count 1) (> count 6)) (!= count 4)) (> end n))
               (err "ERR_ASN_BAD_UNICODE_ESCAPE")
-              (mt (asnHexRun bs start end 0)
+              (match (asnHexRun bs start end 0)
                 ((none) (err "ERR_ASN_BAD_UNICODE_ESCAPE"))
                 ((some cp)
                   (if (or (> cp 1114111) (and (>= cp 55296) (<= cp 57343)))
@@ -405,7 +405,7 @@ fn asnStringScan s: String bs: Bytes n: Int64 open: Int64 j: Int64 start: Int64 
       (cond
         ((= b 34) (ok (pair (stringJoin (listReverse (cons (sliceOr s start j) acc)) "") (+ j 1))))
         ((= b 92)
-          (mt (asnEscapeScan bs n j)
+          (match (asnEscapeScan bs n j)
             ((err _) (err (str "bad string escape at offset " (stringFromInt64 (charIndex bs j 0 0)))))
             ((ok decoded) (asnStringScan s bs n open (pairSecond decoded) (pairSecond decoded) (cons (pairFirst decoded) (cons (sliceOr s start j) acc))))))
         (else (asnStringScan s bs n open (+ j 1) start acc)))))
@@ -426,7 +426,7 @@ fn asnReadScan s: String bs: Bytes n: Int64 i: Int64 stack: (List (List AsnVal))
             (let [(p (pushVal (preludeTail stack) forms (asnList (listReverse (preludeHead stack)))))]
               (asnReadScan s bs n (+ i 1) (pairFirst p) (pairSecond p)))))
         ((= c 34)
-          (mt (asnStringScan s bs n i (+ i 1) (+ i 1) (list))
+          (match (asnStringScan s bs n i (+ i 1) (+ i 1) (list))
             ((err e) (err e))
             ((ok sp)
               (let [(p (pushVal stack forms (asnText (pairFirst sp))))]
@@ -441,7 +441,7 @@ fn asnReadText s: String -> (Result (List AsnVal) String)
     (asnReadScan s bs (bytesLength bs) 0 (list) (list)))
 
 fn keywordName? k: AsnVal -> Bool
-  (mt k
+  (match k
     ((asnAtom s) (and (stringStartsWith? s ":") (>= (stringLength s) 2)))
     (_ false))
 
@@ -458,12 +458,12 @@ fn propsPairs items: (List AsnVal) what: String acc: (List (Pair String AsnVal))
         (propsPairs (preludeTail rest) what (cons (pair (firstCharDropped (pyStr k)) (preludeHead rest)) acc)))))
 
 fn asnProps form: AsnVal head: (Option String) -> (Result (List (Pair String AsnVal)) String)
-  (let [(what (mt head ((some h) (str "(" h " ...)")) ((none) "a property list")))]
-    (mt form
+  (let [(what (match head ((some h) (str "(" h " ...)")) ((none) "a property list")))]
+    (match form
       ((asnList items)
-        (let [(headBad (mt head
+        (let [(headBad (match head
                          ((none) false)
-                         ((some h) (or (listEmpty? items) (mt (preludeHead items) ((asnAtom s) (not (= s h))) (_ true))))))]
+                         ((some h) (or (listEmpty? items) (match (preludeHead items) ((asnAtom s) (not (= s h))) (_ true))))))]
           (if headBad
             (err (str "expected " what ", found (" (if (listEmpty? items) "" (pyStr (preludeHead items))) " ...)"))
             (let [(rest (if (some? head) (preludeTail items) items))]
@@ -478,7 +478,7 @@ fn propGet props: (List (Pair String AsnVal)) key: String -> (Option AsnVal)
     (if (= (pairFirst (preludeHead props)) key) (some (pairSecond (preludeHead props))) (propGet (preludeTail props) key)))
 
 fn propText props: (List (Pair String AsnVal)) key: String -> String
-  (mt (propGet props key) ((some v) (asnScalarText v)) ((none) ""))
+  (match (propGet props key) ((some v) (asnScalarText v)) ((none) ""))
 
 fn pyJoin a: String b: String -> String
   (cond ((stringStartsWith? b "/") b)
@@ -487,7 +487,7 @@ fn pyJoin a: String b: String -> String
         (else (str a "/" b)))
 
 fn envRootDir env: CockpitEnv -> String
-  (mt env.rootEnv
+  (match env.rootEnv
     ((some r) (if (stringEmpty? r) env.cwd r))
     ((none) env.cwd))
 
@@ -507,27 +507,27 @@ fn errnoOf reason: String platform: String -> (Option Int64)
         (else (none)))
 
 fn osErrorText env: CockpitEnv shown: String used: String hostMsg: String -> (Result String String)
-  (let [(afterKind (mt (stringIndexOf hostMsg ": ") ((some k) (sliceOr hostMsg (+ k 2) (stringLength hostMsg))) ((none) "")))
+  (let [(afterKind (match (stringIndexOf hostMsg ": ") ((some k) (sliceOr hostMsg (+ k 2) (stringLength hostMsg))) ((none) "")))
         (reason (afterPrefix afterKind (str used ": ")))]
-    (mt reason
+    (match reason
       ((none) (err (str "cockpit: unrecognised host error for " shown ": " hostMsg)))
       ((some r)
-        (mt (errnoOf r env.platform)
+        (match (errnoOf r env.platform)
           ((some n) (ok (str "[Errno " (stringFromInt64 n) "] " r ": " (pyStrRepr shown))))
           ((none) (err (str "cockpit: no errno mapping for " shown ": " hostMsg)))))))
 
 fn readTextPy! env: CockpitEnv path: String -> (Result (Result String String) String)
   (let [(used (resolveAt env path))]
-    (mt (fileStat used)
-      ((err e) (mt (osErrorText env path used e) ((ok t) (ok (err t))) ((err h) (err h))))
+    (match (fileStat used)
+      ((err e) (match (osErrorText env path used e) ((ok t) (ok (err t))) ((err h) (err h))))
       ((ok st)
         (if st.isDir
           (ok (err (str "[Errno 21] Is a directory: " (pyStrRepr path))))
-          (mt (fileReadString used)
-            ((err e) (mt (osErrorText env path used e) ((ok t) (ok (err t))) ((err h) (err h))))
+          (match (fileReadString used)
+            ((err e) (match (osErrorText env path used e) ((ok t) (ok (err t))) ((err h) (err h))))
             ((ok raw)
               (let [(bs (stringToBytes raw))]
-                (mt (utf8FirstIssue bs (bytesLength bs) 0)
+                (match (utf8FirstIssue bs (bytesLength bs) 0)
                   ((some issue) (ok (err (utf8IssueText bs issue))))
                   ((none) (ok (ok (translateNewlines raw))))))))))))
 
@@ -535,21 +535,21 @@ fn findForm forms: (List AsnVal) head: String -> (Option AsnVal)
   (if (listEmpty? forms)
     (none)
     (let [(f (preludeHead forms))]
-      (mt f
+      (match f
         ((asnList items) (if (and (not (listEmpty? items)) (headIs? (preludeHead items) head)) (some f) (findForm (preludeTail forms) head)))
         (_ (findForm (preludeTail forms) head)))))
 
 fn cockpitReadForm! env: CockpitEnv path: String head: String -> (Result (Result AsnVal String) String)
-  (mt (readTextPy! env path)
+  (match (readTextPy! env path)
     ((err h) (err h))
     ((ok r)
-      (mt r
+      (match r
         ((err e) (ok (err (str path ": " e))))
         ((ok text)
-          (mt (asnReadText text)
+          (match (asnReadText text)
             ((err e) (ok (err (str path ": " e))))
             ((ok forms)
-              (mt (findForm forms head)
+              (match (findForm forms head)
                 ((some f) (ok (ok f)))
                 ((none) (ok (err (str path ": no (" head " ...) form")))))))))))
 
@@ -566,7 +566,7 @@ fn pairGet props: (List (Pair String String)) key: String -> (Option String)
 
 fn knownRedRow s: AsnVal -> KnownRedRow
   (let [(items (listItems s))
-        (props (mt (asnProps (asnList (listDrop items 2)) (none)) ((ok p) p) ((err _) (list))))]
+        (props (match (asnProps (asnList (listDrop items 2)) (none)) ((ok p) p) ((err _) (list))))]
     (KnownRedRow :suite (if (> (listLength items) 1) (pyStr (preludeHead (preludeTail items))) "")
                  :cause (propText props "cause")))
 
@@ -575,10 +575,10 @@ fn suiteForm? x: AsnVal -> Bool
 
 fn cockpitKnownRed! env: CockpitEnv -> (Result (Result KnownRed String) String)
   (let [(path (pyJoin (envRootDir env) ".asl/mem/knownRed.asn"))]
-    (mt (cockpitReadForm! env path ":knownRed")
+    (match (cockpitReadForm! env path ":knownRed")
       ((err h) (err h))
       ((ok r)
-        (mt r
+        (match r
           ((err e) (ok (err e)))
           ((ok form)
             (let [(items (listItems form))
@@ -603,7 +603,7 @@ fn statMtimes! env: CockpitEnv dir: String names: (List String) acc: (List (Pair
   (if (listEmpty? names)
     (ok (listReverse acc))
     (let [(name (preludeHead names))]
-      (mt (fileStat (resolveAt env (pyJoin dir name)))
+      (match (fileStat (resolveAt env (pyJoin dir name)))
         ((err e) (err e))
         ((ok st) (statMtimes! env dir (preludeTail names) (cons (pair name (mtimeFloat st)) acc))))))
 
@@ -612,13 +612,13 @@ fn asnName? name: String -> Bool
 
 fn cockpitGates! env: CockpitEnv -> (Result (Result GatesRecord String) String)
   (let [(d (pyJoin (envRootDir env) ".asl/mem/benchmarks/fullGreen"))]
-    (mt (dirList (resolveAt env d))
+    (match (dirList (resolveAt env d))
       ((err _) (ok (err (str "no fullGreen record directory " d))))
       ((ok names)
         (let [(files (filter asnName? names))]
           (if (listEmpty? files)
             (ok (err (str "no fullGreen record in " d)))
-            (mt (statMtimes! env d files (list))
+            (match (statMtimes! env d files (list))
               ((err e) (err e))
               ((ok stats)
                 (let [(best (maxByMtime (preludeTail stats) (preludeHead stats)))]
@@ -626,33 +626,33 @@ fn cockpitGates! env: CockpitEnv -> (Result (Result GatesRecord String) String)
                                        :mtime (lt/formatLocal env.zone (lt/floorSeconds (pairSecond best)) false))))))))))))
 
 fn calibrationIndexPath env: CockpitEnv -> String
-  (mt env.calibrationEnv
+  (match env.calibrationEnv
     ((some p) (if (stringEmpty? p) (pyJoin (envRootDir env) ".asl/mem/calibration/index.asn") p))
     ((none) (pyJoin (envRootDir env) ".asl/mem/calibration/index.asn")))
 
 fn calibrationRows models: (List AsnVal) acc: (List CalibrationRow) -> (List CalibrationRow)
   (if (listEmpty? models)
     (listReverse acc)
-    (mt (asnProps (preludeHead models) (some ":model"))
+    (match (asnProps (preludeHead models) (some ":model"))
       ((err _) (calibrationRows (preludeTail models) acc))
       ((ok mp) (calibrationRows (preludeTail models) (cons (CalibrationRow :id (propText mp "id") :status (propText mp "status") :date (propText mp "date")) acc)))))
 
 fn cockpitCalibration! env: CockpitEnv -> (Result (Result Calibration String) String)
   (let [(path (calibrationIndexPath env))]
-    (mt (cockpitReadForm! env path ":calibrationIndex")
+    (match (cockpitReadForm! env path ":calibrationIndex")
       ((err h) (err h))
       ((ok r)
-        (mt r
+        (match r
           ((err e) (ok (err e)))
           ((ok form)
-            (mt (asnProps form (some ":calibrationIndex"))
+            (match (asnProps form (some ":calibrationIndex"))
               ((err e) (ok (err (str path ": " e))))
               ((ok props)
-                (let [(models (mt (propGet props "models") ((some m) (listItems m)) ((none) (list))))]
+                (let [(models (match (propGet props "models") ((some m) (listItems m)) ((none) (list))))]
                   (ok (ok (Calibration :updated (propText props "updated") :rows (calibrationRows models (list)))))))))))))
 
 fn cockpitCell v: (Option String) -> String
-  (mt v
+  (match v
     ((none) (noSource))
     ((some s) (if (stringEmpty? s) (noSource) (htmlEscape s))))
 
@@ -673,7 +673,7 @@ fn intCell n: Int64 -> (Option String)
   (some (stringFromInt64 n))
 
 fn optIntCell n: (Option Int64) -> (Option String)
-  (mt n ((some v) (some (stringFromInt64 v))) ((none) (none)))
+  (match n ((some v) (some (stringFromInt64 v))) ((none) (none)))
 
 fn zeroCell n: (Option Int64) -> (Option String)
   (some (stringFromInt64 (optionOr n 0)))
@@ -725,7 +725,7 @@ fn firstSome opts: (List (Option String)) -> (Option String)
   (if (listEmpty? opts) (none) (if (some? (preludeHead opts)) (preludeHead opts) (firstSome (preludeTail opts))))
 
 fn statusMatch s: String bs: Bytes n: Int64 from: Int64 -> (Option String)
-  (mt (stringIndexOf (sliceOr s from n) ":status")
+  (match (stringIndexOf (sliceOr s from n) ":status")
     ((none) (none))
     ((some rel)
       (let [(at (+ from rel))
@@ -749,13 +749,13 @@ fn taskStatus raw: String -> String
     (optionOr (statusMatch head hbs (bytesLength hbs) 0) "unknown"))
 
 fn ! isDirAt? env: CockpitEnv p: String -> Bool
-  (mt (fileStat (resolveAt env p)) ((ok st) st.isDir) ((err _) false))
+  (match (fileStat (resolveAt env p)) ((ok st) st.isDir) ((err _) false))
 
 fn ! isFileAt? env: CockpitEnv p: String -> Bool
-  (mt (fileStat (resolveAt env p)) ((ok st) st.isFile) ((err _) false))
+  (match (fileStat (resolveAt env p)) ((ok st) st.isFile) ((err _) false))
 
 fn entryKey! env: CockpitEnv dir: String name: String -> (Pair String Float64)
-  (mt (fileStat (resolveAt env (pyJoin dir name)))
+  (match (fileStat (resolveAt env (pyJoin dir name)))
     ((ok st) (pair name (if st.isFile (mtimeFloat st) 0.0)))
     ((err _) (pair name 0.0)))
 
@@ -766,10 +766,10 @@ fn taskRows! env: CockpitEnv dir: String entries: (List (Pair String Float64)) a
           (fp (pyJoin dir name))]
       (if (not (isFileAt? env fp))
         (taskRows! env dir (preludeTail entries) acc)
-        (mt (fileReadString (resolveAt env fp))
+        (match (fileReadString (resolveAt env fp))
           ((err e) (err e))
           ((ok raw)
-            (mt (fileStat (resolveAt env fp))
+            (match (fileStat (resolveAt env fp))
               ((err e) (err e))
               ((ok st)
                 (taskRows! env dir (preludeTail entries)
@@ -780,11 +780,11 @@ fn getTasksData! env: CockpitEnv -> (Result TasksData String)
   (let [(dir (pyJoin (envRootDir env) ".asl/mem/tasks"))]
     (if (not (isDirAt? env dir))
       (ok (TasksData :totalTasks 0 :recentTasks (list)))
-      (mt (dirList (resolveAt env dir))
+      (match (dirList (resolveAt env dir))
         ((err e) (err e))
         ((ok names)
           (let [(keyed (listSortBy (fn [(p (Pair String Float64))] -> Float64 (- 0.0 (pairSecond p))) (map (fn [(nm String)] -> (Pair String Float64) (entryKey! env dir nm)) names)))]
-            (mt (taskRows! env dir (listTake keyed 10) (list))
+            (match (taskRows! env dir (listTake keyed 10) (list))
               ((err e) (err e))
               ((ok rows) (ok (TasksData :totalTasks (listLength names) :recentTasks rows)))))))))
 
@@ -797,16 +797,16 @@ fn tasksJson t: TasksData -> j/Json
 
 fn countIfDir! env: CockpitEnv p: String -> (Result (Option Int64) String)
   (if (isDirAt? env p)
-    (mt (dirList (resolveAt env p)) ((ok xs) (ok (some (listLength xs)))) ((err e) (err e)))
+    (match (dirList (resolveAt env p)) ((ok xs) (ok (some (listLength xs)))) ((err e) (err e)))
     (ok (none)))
 
 fn recentAdrs! env: CockpitEnv dir: String -> (Result (List String) String)
   (if (not (isDirAt? env dir))
     (ok (list))
-    (mt (dirList (resolveAt env dir))
+    (match (dirList (resolveAt env dir))
       ((err e) (err e))
       ((ok names)
-        (mt (statMtimes! env dir (filter asnName? names) (list))
+        (match (statMtimes! env dir (filter asnName? names) (list))
           ((err e) (err e))
           ((ok stats)
             (ok (map (fn [(p (Pair String Float64))] -> String (stringReplace (pairFirst p) ".asn" ""))
@@ -816,22 +816,22 @@ fn getMemData! env: CockpitEnv -> (Result MemData String)
   (let [(mem (pyJoin (envRootDir env) ".asl/mem"))
         (dec (pyJoin mem "decisions"))
         (notes (pyJoin mem "notes.asn"))]
-    (mt (countIfDir! env dec)
+    (match (countIfDir! env dec)
       ((err e) (err e))
       ((ok decisions)
-        (mt (countIfDir! env (pyJoin mem "tasks"))
+        (match (countIfDir! env (pyJoin mem "tasks"))
           ((err e) (err e))
           ((ok tasks)
-            (mt (countIfDir! env (pyJoin mem "receipts"))
+            (match (countIfDir! env (pyJoin mem "receipts"))
               ((err e) (err e))
               ((ok receipts)
-                (let [(notesSize (mt (fileStat (resolveAt env notes)) ((ok st) (if st.isFile (some st.size) (none))) ((err _) (none))))]
-                  (mt (recentAdrs! env dec)
+                (let [(notesSize (match (fileStat (resolveAt env notes)) ((ok st) (if st.isFile (some st.size) (none))) ((err _) (none))))]
+                  (match (recentAdrs! env dec)
                     ((err e) (err e))
                     ((ok adrs) (ok (MemData :decisionsCount decisions :tasksCount tasks :receiptsCount receipts :notesSizeBytes notesSize :recentAdrs adrs))))))))))))
 
 fn optIntJson n: (Option Int64) -> j/Json
-  (mt n ((some v) (j/jint v)) ((none) (j/jnull)))
+  (match n ((some v) (j/jint v)) ((none) (j/jnull)))
 
 fn memJson m: MemData -> j/Json
   (j/jobj (list (pair "status" (j/jstr "ok"))
@@ -852,7 +852,7 @@ fn emptyIntelCache -> IntelCache
   (IntelCache :timestamp 0.0 :data (none))
 
 fn jsonTruthy? v: j/Json -> Bool
-  (mt v
+  (match v
     ((j/jnull) false)
     ((j/jbool b) b)
     ((j/jint i) (not (= i 0)))
@@ -863,7 +863,7 @@ fn jsonTruthy? v: j/Json -> Bool
     ((j/jobj kvs) (not (listEmpty? kvs))))
 
 fn cacheHit cache: IntelCache now: Float64 ttl: Float64 -> (Option j/Json)
-  (mt cache.data
+  (match cache.data
     ((some d) (if (and (jsonTruthy? d) (< (- now cache.timestamp) ttl)) (some d) (none)))
     ((none) (none)))
 
@@ -878,7 +878,7 @@ fn uniqueKeys kvs: (List (Pair String j/Json)) seen: (List String) -> Int64
       (uniqueKeys (preludeTail kvs) (if (listContains? seen k) seen (cons k seen)))))
 
 fn pyLen v: j/Json -> (Option Int64)
-  (mt v
+  (match v
     ((j/jstr s) (some (codePointCount s)))
     ((j/jarr xs) (some (listLength xs)))
     ((j/jobj kvs) (some (uniqueKeys kvs (list))))
@@ -893,10 +893,10 @@ fn setPairs kvs: (List (Pair String j/Json)) key: String val: j/Json -> (List (P
     (listAppend kvs (list (pair key val))))
 
 fn jsonSet obj: j/Json key: String val: j/Json -> j/Json
-  (mt obj ((j/jobj kvs) (j/jobj (setPairs kvs key val))) (_ obj))
+  (match obj ((j/jobj kvs) (j/jobj (setPairs kvs key val))) (_ obj))
 
 fn isObj? v: j/Json -> Bool
-  (mt v ((j/jobj _) true) (_ false))
+  (match v ((j/jobj _) true) (_ false))
 
 fn couplingSummary parsed: j/Json -> (Option j/Json)
   (if (not (isObj? parsed))
@@ -923,13 +923,13 @@ fn couplingSummary parsed: j/Json -> (Option j/Json)
                                              (pair "totalFictions" (j/jint (+ (optionOr g 0) (+ (optionOr v 0) (optionOr u 0))))))))))))))))
 
 fn runIntel! env: CockpitEnv bin: String sub: String timeoutMs: Int64 -> (Option j/Json)
-  (mt (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd bin (list "intel" sub "--json")) env.cwd) timeoutMs))
+  (match (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd bin (list "intel" sub "--json")) env.cwd) timeoutMs))
     ((err _) (none))
     ((ok out)
       (let [(text out.stdout) (bs (stringToBytes text))]
         (if (or (not (= out.exitCode 0)) (stringEmpty? text) (some? (utf8FirstIssue bs (bytesLength bs) 0)))
           (none)
-          (mt (j/jsonParse text) ((ok v) (some v)) ((err _) (none)))))))
+          (match (j/jsonParse text) ((ok v) (some v)) ((err _) (none)))))))
 
 fn ! existsAt? env: CockpitEnv p: String -> Bool
   (ok? (fileStat (resolveAt env p)))
@@ -942,26 +942,26 @@ fn parentDir p: String -> String
     (if (stringEmpty? joined) "/" joined))
 
 fn getIntelCouplingData! cache: IntelCache now: Float64 env: CockpitEnv -> (Pair IntelCache j/Json)
-  (mt (cacheHit cache now 10.0)
+  (match (cacheHit cache now 10.0)
     ((some d) (pair cache d))
     ((none)
-      (let [(rootDir (mt env.rootEnv ((some r) (if (stringEmpty? r) (parentDir env.cwd) r)) ((none) (parentDir env.cwd))))
+      (let [(rootDir (match env.rootEnv ((some r) (if (stringEmpty? r) (parentDir env.cwd) r)) ((none) (parentDir env.cwd))))
             (primary (pyJoin rootDir "bin/asl"))
             (bin (if (and (not (existsAt? env primary)) (existsAt? env "./bin/asl")) "./bin/asl" primary))
-            (result (if (existsAt? env bin) (mt (runIntel! env bin "coupling" 5000) ((some p) (couplingSummary p)) ((none) (none))) (none)))]
-        (mt result
+            (result (if (existsAt? env bin) (match (runIntel! env bin "coupling" 5000) ((some p) (couplingSummary p)) ((none) (none))) (none)))]
+        (match result
           ((some p) (pair (IntelCache :timestamp now :data (some p)) p))
           ((none)
             (pair cache (j/jobj (list (pair "status" (j/jstr "unavailable")) (pair "reason" (j/jstr (str bin " intel coupling gave no result")))
                                       (pair "summary" (j/jobj (list (pair "status" (j/jstr "unavailable"))))) (pair "packages" (j/jarr (list)))))))))))
 
 fn intelSimple! cache: IntelCache now: Float64 env: CockpitEnv sub: String timeoutMs: Int64 ttl: Float64 missing: (fn [String] -> j/Json) -> (Pair IntelCache j/Json)
-  (mt (cacheHit cache now ttl)
+  (match (cacheHit cache now ttl)
     ((some d) (pair cache d))
     ((none)
       (let [(bin (pyJoin (pyJoin (envRootDir env) "bin") "asl"))
             (result (if (existsAt? env bin) (runIntel! env bin sub timeoutMs) (none)))]
-        (mt result
+        (match result
           ((some p) (pair (IntelCache :timestamp now :data (some p)) p))
           ((none) (pair cache (missing bin)))))))
 
@@ -984,7 +984,7 @@ fn usageCols -> (List String)
   (list "name" "requests" "ok" "errors" "fallbacks" "inputTokens" "cachedTokens" "outputTokens")
 
 fn knownRedBody kr: (Result KnownRed String) -> String
-  (mt kr
+  (match kr
     ((err e) (cockpitMissing e))
     ((ok k)
       (str (cockpitTable (list "known red suites" "date" "capturedFrom" "confirmation")
@@ -992,12 +992,12 @@ fn knownRedBody kr: (Result KnownRed String) -> String
            (cockpitTable (list "suite" "cause") (map (fn [(r KnownRedRow)] -> (List (Option String)) (list (some r.suite) (some r.cause))) k.rows)))))
 
 fn gatesBody g: (Result GatesRecord String) -> String
-  (mt g
+  (match g
     ((err e) (cockpitMissing e))
     ((ok r) (cockpitTable (list "fullGreen records" "latest" "written") (list (list (intCell r.count) (some r.latest) (some r.mtime))))))
 
 fn calibrationBody c: (Result Calibration String) -> String
-  (mt c
+  (match c
     ((err e) (cockpitMissing e))
     ((ok cal)
       (str (cockpitTable (list "updated") (list (list (some cal.updated))))
@@ -1005,7 +1005,7 @@ fn calibrationBody c: (Result Calibration String) -> String
                          (map (fn [(r CalibrationRow)] -> (List (Option String)) (list (some r.id) (some r.status) (some r.date))) cal.rows)))))
 
 fn profileCell p: ProfileHealth -> (Option String)
-  (mt p.name
+  (match p.name
     ((some n) (if (stringEmpty? n) p.error (some n)))
     ((none) p.error))
 
@@ -1024,7 +1024,7 @@ fn pageHead -> String
        "</style>\n</head>\n<body>\n")
 
 fn tasksTile r: (Result TasksData String) -> String
-  (mt r
+  (match r
     ((err e) (cockpitTile "Tasks" (cockpitMissing e) ".asl/mem/tasks :status of each file"))
     ((ok tk)
       (cockpitTile (str "Tasks (" (stringFromInt64 tk.totalTasks) " files)")
@@ -1033,7 +1033,7 @@ fn tasksTile r: (Result TasksData String) -> String
                    ".asl/mem/tasks :status of each file")))
 
 fn memTile r: (Result MemData String) -> String
-  (mt r
+  (match r
     ((err e) (cockpitTile "Memory" (cockpitMissing e) ".asl/mem"))
     ((ok mem)
       (cockpitTile "Memory" (cockpitTable (list "decisions" "tasks" "receipts" "notes bytes")
@@ -1058,13 +1058,13 @@ fn cockpitHtml! state: CockpitState env: CockpitEnv -> (Result String String)
                                 "/health :pools"))
         (providersTile (cockpitTile (str "Usage by provider since " since) (cockpitTable (usageCols) (cockpitUsageRows state.usage.providers)) "/health :usage :providers"))
         (aliasesTile (cockpitTile (str "Usage by alias since " since) (cockpitTable (usageCols) (cockpitUsageRows state.usage.aliases)) "/health :usage :aliases"))]
-    (mt (cockpitKnownRed! env)
+    (match (cockpitKnownRed! env)
       ((err h) (err h))
       ((ok kr)
-        (mt (cockpitGates! env)
+        (match (cockpitGates! env)
           ((err h) (err h))
           ((ok gt)
-            (mt (cockpitCalibration! env)
+            (match (cockpitCalibration! env)
               ((err h) (err h))
               ((ok cal)
                 (let [(tiles (list gatewayTile poolsTile providersTile aliasesTile
@@ -1080,13 +1080,13 @@ fn cockpitHtml! state: CockpitState env: CockpitEnv -> (Result String String)
                            "<main class=\"grid\">\n" (stringJoin tiles "\n") "\n</main>\n</body>\n</html>\n"))))))))))
 
 fn cockpitEnvFromProcess! -> (Result CockpitEnv String)
-  (mt (realPath ".")
+  (match (realPath ".")
     ((err e) (err e))
     ((ok cwd)
-      (mt (lt/zoneLoad! (envGet "TZ"))
+      (match (lt/zoneLoad! (envGet "TZ"))
         ((err e) (err e))
         ((ok zone)
-          (mt (platformInfo)
+          (match (platformInfo)
             ((err e) (err e))
             ((ok info) (ok (CockpitEnv :rootEnv (envGet "ROOT_DIR") :cwd cwd :calibrationEnv (envGet "ASL_CALIBRATION_INDEX") :zone zone :platform info.os))))))))
 
@@ -1098,9 +1098,9 @@ fn pyJsonDump val: j/Json -> String
   (pt/jsonDumps val -1)
 
 fn jsonIntOr vOpt: (Option j/Json) dflt: Int64 -> Int64
-  (mt vOpt
+  (match vOpt
     ((some v)
-      (mt v
+      (match v
         ((j/jint i) i)
         ((j/jfloat f) (optionOr (float64ToInt64 f) dflt))
         ((j/jnum n) (optionOr (float64ToInt64 n) dflt))
@@ -1108,9 +1108,9 @@ fn jsonIntOr vOpt: (Option j/Json) dflt: Int64 -> Int64
     ((none) dflt))
 
 fn jsonStrOr vOpt: (Option j/Json) dflt: String -> String
-  (mt vOpt
+  (match vOpt
     ((some v)
-      (mt v
+      (match v
         ((j/jstr s) s)
         (_ dflt)))
     ((none) dflt))
@@ -1128,7 +1128,7 @@ fn observatoryBlastRadius intel: j/Json -> j/Json
   (let [(statusVal (optionOr (j/jsonGet intel "status") (j/jstr "ok")))
         (summaryVal (optionOr (j/jsonGet intel "summary") (j/jobj (list))))
         (pkgsVal (optionOr (j/jsonGet intel "packages") (j/jarr (list))))
-        (blastNodes (mt pkgsVal
+        (blastNodes (match pkgsVal
                       ((j/jarr xs) (map blastNode (listTake xs 6)))
                       (_ (list))))]
     (j/jobj (list (pair "status" statusVal)
@@ -1140,7 +1140,7 @@ fn observatory_blast_radius intel: j/Json -> j/Json
   (observatoryBlastRadius intel)
 
 fn serveCockpitDashboard! state: CockpitState env: CockpitEnv -> (Result CockpitResponse String)
-  (mt (cockpitHtml! state env)
+  (match (cockpitHtml! state env)
     ((err e) (err e))
     ((ok page)
       (let [(bodyLen (bytesLength (stringToBytes page)))]
@@ -1218,7 +1218,7 @@ fn serve_cockpit_daemons_api pid: Int64 port: Int64 st: GatewayStatus -> Cockpit
   (serveCockpitDaemonsApi pid port st)
 
 fn serveCockpitTasksApi! env: CockpitEnv -> (Result CockpitResponse String)
-  (mt (getTasksData! env)
+  (match (getTasksData! env)
     ((err e) (err e))
     ((ok t)
       (let [(data (tasksJson t))
@@ -1232,7 +1232,7 @@ fn serve_cockpit_tasks_api! env: CockpitEnv -> (Result CockpitResponse String)
   (serveCockpitTasksApi! env)
 
 fn serveCockpitMemApi! env: CockpitEnv -> (Result CockpitResponse String)
-  (mt (getMemData! env)
+  (match (getMemData! env)
     ((err e) (err e))
     ((ok m)
       (let [(data (memJson m))

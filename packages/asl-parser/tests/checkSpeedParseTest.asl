@@ -3,7 +3,7 @@
   :i [(asl-parser/ast :a a) (asl-parser/reader :a rd) (tools/fleet/run :a fr)])
 
 fn sx e: rd/SExpr -> String
-  (mt e
+  (match e
     ((rd/sexprAtom v) (str "a" (stringFromInt64 (stringLength v)) ":" v))
     ((rd/sexprList items) (str "(" (stringJoin (map sx items) " ") ")"))
     ((rd/sexprVect items) (str "[" (stringJoin (map sx items) " ") "]")))
@@ -15,10 +15,10 @@ fn txts xs: (List String) -> String
   (str "{" (stringJoin (map txt xs) " ") "}")
 
 fn optSx o: (Option rd/SExpr) -> String
-  (mt o ((some v) (str "some " (sx v))) ((none) "none"))
+  (match o ((some v) (str "some " (sx v))) ((none) "none"))
 
 fn optTxt o: (Option String) -> String
-  (mt o ((some v) (str "some " (txt v))) ((none) "none"))
+  (match o ((some v) (str "some " (txt v))) ((none) "none"))
 
 fn posForm p: a/PosForm -> String
   (str "<" (stringFromInt64 p.line) ":" (stringFromInt64 p.col) " " (sx p.expr) ">")
@@ -33,7 +33,7 @@ fn enumCase c: a/EnumCase -> String
   (str "(" (txt c.name) " " (stringJoin (map param c.fields) " ") " " (txt c.docstring) ")")
 
 fn topForm t: a/TopForm -> String
-  (mt t
+  (match t
     ((a/topModule m) (str "module " (txt m.path) " " (txt m.docstring) " " (txts m.exported)
                           " " (stringJoin (map (fn [(p (Pair String String))] -> String (str (txt (pairFirst p)) "=" (txt (pairSecond p)))) m.imports) " ")
                           " defs{" (stringJoin (map topForm m.defs) " ") "}"))
@@ -48,7 +48,7 @@ fn parseErr e: a/ParseError -> String
   (str "err " (stringFromInt64 e.line) ":" (stringFromInt64 e.col) " " e.msg)
 
 fn tops r: (Result (List a/TopForm) a/ParseError) -> String
-  (mt r ((ok fs) (str "ok " (stringJoin (map topForm fs) "\n"))) ((err e) (parseErr e)))
+  (match r ((ok fs) (str "ok " (stringJoin (map topForm fs) "\n"))) ((err e) (parseErr e)))
 
 fn kidPair k: (Pair Int64 Int64) -> String
   (str (stringFromInt64 (pairFirst k)) "," (stringFromInt64 (pairSecond k)))
@@ -57,7 +57,7 @@ fn kidForm k: a/KidForm -> String
   (str (posForm k.pf) " kids{" (stringJoin (map kidPair k.kids) " ") "} " (stringFromInt64 k.startOffset) "-" (stringFromInt64 k.endOffset))
 
 fn kids r: (Result (List a/KidForm) a/ParseError) -> String
-  (mt r ((ok ks) (str "ok " (stringJoin (map kidForm ks) "\n"))) ((err e) (parseErr e)))
+  (match r ((ok ks) (str "ok " (stringJoin (map kidForm ks) "\n"))) ((err e) (parseErr e)))
 
 fn astText src: String -> String
   (str (tops (a/parse src)) "\n--\n" (tops (a/parseForChecker src)) "\n--\n" (kids (a/kidFormsFor src)))
@@ -66,12 +66,12 @@ fn digestOf text: String -> String
   (str (stringFromInt64 (fnv1a64 text)) ":" (stringFromInt64 (stringLength text)))
 
 fn ! walk dir: String -> (List String)
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err _) (list))
     ((ok names)
      (fold (fn [(acc (List String)) (name String)] -> (List String)
              (let [(child (str dir "/" name))]
-               (mt (fileStat child)
+               (match (fileStat child)
                  ((err _) acc)
                  ((ok st) (if st.isDir (listAppend acc (walk child)) (listAppend acc (list child)))))))
            (list) (listSort names))))
@@ -86,13 +86,13 @@ fn ! digestFiles -> (List String)
   (listAppend (srcFiles) (walk "asl/grammar/corpus"))
 
 fn ! fileDigest path: String -> String
-  (mt (fileReadString path) ((ok src) (str (digestOf src) " " (digestOf (astText src)))) ((err _) "unreadable"))
+  (match (fileReadString path) ((ok src) (str (digestOf src) " " (digestOf (astText src)))) ((err _) "unreadable"))
 
 fn srcPart row: String -> String
   (optionOr (listHead (stringSplit row " ")) "")
 
 fn ! compareRow p: (Pair String String) -> String
-  (mt (fileReadString (pairFirst p))
+  (match (fileReadString (pairFirst p))
     ((err _) "skipped")
     ((ok src) (cond
                 ((!= (digestOf src) (srcPart (pairSecond p))) "skipped")
@@ -104,7 +104,7 @@ fn ! digestRows -> (List (Pair String String))
 
 fn ! invalidRows -> (List (Pair String String))
   (map (fn [(p String)] -> (Pair String String)
-         (pair p (mt (fileReadString p) ((ok src) (mt (a/parse src) ((ok _) "ok") ((err e) (parseErr e)))) ((err _) "unreadable"))))
+         (pair p (match (fileReadString p) ((ok src) (match (a/parse src) ((ok _) "ok") ((err e) (parseErr e)))) ((err _) "unreadable"))))
        (walk "asl/grammar/corpus/invalid"))
 
 fn closureFiles -> (List String)
@@ -161,7 +161,7 @@ fn ! closureSources -> (List String)
   (map (fn [(p String)] -> String (resultOr (fileReadString p) "")) (closureFiles))
 
 fn formsOf src: String -> Int64
-  (mt (a/parseForChecker src) ((ok fs) (listLength fs)) ((err _) -1))
+  (match (a/parseForChecker src) ((ok fs) (listLength fs)) ((err _) -1))
 
 fn samples -> (List (Pair String String))
   (list (pair "calls" "fn f x: Int64 -> Int64\n  g(x)(y) h (k 1) [a (b c) [d]] x? foo? (bar)? m.n(1)\n")
@@ -172,10 +172,10 @@ fn samples -> (List (Pair String String))
         (pair "deep" (str "fn d -> Int64\n  " (stringRepeat "(" 1001) "1" (stringRepeat ")" 1001) "\n")))
 
 fn goldenSamples -> (List (Pair String String))
-  (list (pair "calls" "5438763481667693747:1147")
+  (list (pair "calls" "-398457125359445104:1162")
         (pair "escapes" "6093880271819110550:449")
         (pair "armSplit" "576973911935616476:467")
-        (pair "letLine" "-7659199021373354386:812")
+        (pair "letLine" "1877775320310221129:827")
         (pair "parenModule" "1404266677020221420:858")
         (pair "deep" "1652804251290068337:173"))
 
@@ -284,7 +284,7 @@ fn goldenDigests -> (List (Pair String String))
         (pair "asl/packages/asl-codegen/src/expr.asl" "3300098182909809867:14298 8516320340725959528:176443")
         (pair "asl/packages/asl-codegen/src/mangle.asl" "445797422265411964:1856 7187485952456362076:22354")
         (pair "asl/packages/asl-codegen/src/rtypes.asl" "6066960674294116829:3155 -6240878832407634167:37019")
-        (pair "asl/packages/asl-compiler/src/asl1.asl" "-6096269794044887045:4607 8754297333152045658:46576")
+        (pair "asl/packages/asl-compiler/src/asl1.asl" "-1296191450472287809:4646 8277927129343113103:46927")
         (pair "asl/packages/asl-compiler/src/checkCache.asl" "-6280627401990566076:4773 -6434524295646378822:50871")
         (pair "asl/packages/asl-compiler/src/compactRewrite.asl" "6663209258564284535:3676 -4702263380603592147:44225")
         (pair "asl/packages/asl-compiler/src/compiler.asl" "3995195688732398724:9573 5581547705433400014:107006")
@@ -923,7 +923,7 @@ fn statsLine text: String -> String
 
 fn bytesAllocated line: String -> Int64
   (let [(tokens (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit line " ")))]
-    (mt (listIndexOf tokens ":bytesAllocated")
+    (match (listIndexOf tokens ":bytesAllocated")
       ((some i) (optionOr (stringToInt64 (stringReplace (optionOr (listGet tokens (+ i 1)) "") ")" "")) -1))
       ((none) -1)))
 

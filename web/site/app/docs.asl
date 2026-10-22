@@ -40,16 +40,16 @@ fn body -> (List h/Node)
       (listAppend
         (topic "functions" "Functions"
           [(para "A function header is a bare line in column 0; its body is indented below and closes only its own parentheses. (let [(a 1) (b (+ a 1))] body) binds in sequence, (fn [x] body) is a value and cond ends with (else v).")
-           (listing ["fn area s: Shape -> Int64" "  (mt s ((circle r) (* 3 (* r r))) ((square a) (* a a)))"])
+           (listing ["fn area s: Shape -> Int64" "  (match s ((circle r) (* 3 (* r r))) ((square a) (* a a)))"])
            (para "Names are camelCase whole words and predicates end in ?: listLength, stringContains?, some?. len and head do not exist; + is not a value. Int and Float never mix; overflow and division by zero trap.")])
         (listAppend
           (topic "data" "Enums and records"
-            [(para "enum makes positional constructors, taken apart with mt; patterns nest one level. A record field reads as x.f, chains as a.b.c, and (with x :k v) is a copy of x with field k set to v.")
+            [(para "enum makes positional constructors, taken apart with match; patterns nest one level. A record field reads as x.f, chains as a.b.c, and (with x :k v) is a copy of x with field k set to v.")
              (listing ["enum Shape (circle r: Int64) (square side: Int64)" "" "(schema Point (:f x Int64) (:f y Int64))" "(with p :x 3)"])])
           (listAppend
             (topic "failure" "No nil, no exceptions"
-              [(para "There is no nil, exception or try. listHead, listGet, stringSlice and mapGet return (some v) or (none); a failure is (err e). They are unwrapped with mt, optionOr or resultOr, so the unhappy path is visible where it happens.")
-               (listing ["(mt (fileReadString path)" "  ((ok text) (stringLength text))" "  ((err e) 0))"])])
+              [(para "There is no nil, exception or try. listHead, listGet, stringSlice and mapGet return (some v) or (none); a failure is (err e). They are unwrapped with match, optionOr or resultOr, so the unhappy path is visible where it happens.")
+               (listing ["(match (fileReadString path)" "  ((ok text) (stringLength text))" "  ((err e) 0))"])])
             (listAppend
               (topic "effects" "Effects"
                 [(para "A function that prints, reads a file or runs a process marks it, either with ! after fn or as a name ending in !. The checker rejects an unmarked effect:")

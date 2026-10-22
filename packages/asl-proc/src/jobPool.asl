@@ -57,7 +57,7 @@ fn quoteArgv argv: (List String) -> String
 
 fn ! readChunk fd: Int64 isOpen: Bool -> (Pair Bool String)
   (if (not isOpen) (pair false "")
-    (mt (fdRead fd 65536)
+    (match (fdRead fd 65536)
       ((ok chunk) (if (stringEmpty? chunk) (let [(_ (fdClose fd))] (pair false "")) (pair true chunk)))
       ((err _) (pair true ""))))
 
@@ -72,9 +72,9 @@ fn psRow acc: (List (Pair Int64 Int64)) line: String -> (List (Pair Int64 Int64)
         (stat (optionOr (listGet ws 2) ""))]
     (if (stringStartsWith? stat "Z")
       acc
-      (mt (stringToInt64 (optionOr (listGet ws 0) ""))
+      (match (stringToInt64 (optionOr (listGet ws 0) ""))
         ((none) acc)
-        ((some pid) (mt (stringToInt64 (optionOr (listGet ws 1) ""))
+        ((some pid) (match (stringToInt64 (optionOr (listGet ws 1) ""))
                       ((none) acc)
                       ((some ppid) (cons (pair pid ppid) acc)))))))
 
@@ -96,9 +96,9 @@ fn descendantsOf pairs: (List (Pair Int64 Int64)) root: Int64 -> (List Int64)
   (walkDesc (childMap pairs) (list root) (list))
 
 fn ! shellOut cmd: String timeoutMs: Int64 -> (Result String String)
-  (mt (processSpawn cmd)
+  (match (processSpawn cmd)
     ((err e) (err (str "spawn failed: " e)))
-    ((ok h) (mt (processWait h timeoutMs)
+    ((ok h) (match (processWait h timeoutMs)
               ((err e) (err (str "wait failed: " e)))
               ((ok o) (if (= o.exitCode 0) (ok o.stdout) (err (str "exit " o.exitCode ": " (stringTrim o.stderr))))))))
 
@@ -123,7 +123,7 @@ fn addNew xs: (List Int64) ys: (List Int64) -> (List Int64)
   (fold (fn [(acc (List Int64)) (y Int64)] -> (List Int64) (if (listContains? acc y) acc (cons y acc))) xs ys)
 
 fn ownGroup procs: (List Proc) self: Int64 -> Int64
-  (mt (listHead (filter (fn [(p Proc)] -> Bool (= p.pid self)) procs)) ((some p) p.pgid) ((none) -1))
+  (match (listHead (filter (fn [(p Proc)] -> Bool (= p.pid self)) procs)) ((some p) p.pgid) ((none) -1))
 
 fn treeStep procs: (List Proc) members: (List Int64) groups: (List Int64) own: Int64 rounds: Int64 -> (Pair (List Int64) (List Int64))
   (let [(gs (addNew groups (filter (fn [(g Int64)] -> Bool (and (> g 1) (!= g own)))
@@ -149,7 +149,7 @@ fn treeOf procs: (List Proc) root: Int64 groups: (List Int64) known: (List Int64
     (pair (filter (fn [(p Int64)] -> Bool (!= p root)) (pairFirst t)) (pairSecond t)))
 
 fn ! signalAll pids: (List Int64) sig: String -> Int64
-  (fold (fn [(n Int64) (p Int64)] -> Int64 (mt (procKill p sig) ((ok _) (+ n 1)) ((err _) n))) 0 pids)
+  (fold (fn [(n Int64) (p Int64)] -> Int64 (match (procKill p sig) ((ok _) (+ n 1)) ((err _) n))) 0 pids)
 
 fn ! signalGroups groups: (List Int64) sig: String -> Int64
   (signalAll (map (fn [(g Int64)] -> Int64 (- 0 g)) (filter (fn [(g Int64)] -> Bool (> g 1)) groups)) sig)
@@ -216,14 +216,14 @@ fn killedExit verdict: String -> Int64
 fn ! finish r: Running -> Done
   (let [(_ (closeIfOpen r.outFd r.outOpen))
         (_ (closeIfOpen r.errFd r.errOpen))
-        (code (mt (procWaitPid r.pid false) ((ok status) (optionOr status 1)) ((err _) 1)))
+        (code (match (procWaitPid r.pid false) ((ok status) (optionOr status 1)) ((err _) 1)))
         (killed (not (stringEmpty? r.killed)))]
     (Done :idx r.idx :exit (if killed (killedExit r.killed) code) :out r.text :ms (/ (- (monotonicNs) r.startNs) 1000000)
           :verdict (if killed r.killed "exit")))
 
 fn ! spawn idx: Int64 j: Job -> (Result Running Done)
   (let [(start (monotonicNs))]
-    (mt (procSpawnv (listAppend (list "nice" "-n" "15") j.argv) (some j.cwd) (some (withPwd j.cwd j.env)))
+    (match (procSpawnv (listAppend (list "nice" "-n" "15") j.argv) (some j.cwd) (some (withPwd j.cwd j.env)))
       ((err e) (err (Done :idx idx :exit 127 :out (str "spawn failed: " (quoteArgv j.argv) ": " e) :ms 0 :verdict "spawnFailed")))
       ((ok p) (let [(_ (fdClose p.stdin)) (_ (fdNonBlocking p.stdout true)) (_ (fdNonBlocking p.stderr true))]
                 (ok (Running :idx idx :pid p.pid :outFd p.stdout :errFd p.stderr :text "" :outOpen true :errOpen true :startNs start :killed "" :groups (list p.pid) :known (list)))))))
@@ -240,7 +240,7 @@ fn ! poolLoop jobs: (List Job) next: Int64 slots: Int64 lim: Limits running: (Li
   (if (and (< (listLength running) slots) (< next (listLength jobs)))
     (if (not (admit next))
       (poolLoop jobs (listLength jobs) slots lim running done lastCheck admit onDone state)
-      (mt (spawn next (optionOr (listGet jobs next) (job (list) "." (list))))
+      (match (spawn next (optionOr (listGet jobs next) (job (list) "." (list))))
         ((err d) (poolLoop jobs (+ next 1) slots lim running (cons d done) lastCheck admit onDone (onDone state d)))
         ((ok r) (poolLoop jobs (+ next 1) slots lim (listAppend running (list r)) done lastCheck admit onDone state))))
     (if (listEmpty? running)
@@ -284,10 +284,10 @@ fn numberBefore text: String marker: String -> (Option Int64)
 
 fn executedOf text: String -> (Option Int64)
   (let [(lines (filter (fn [(l String)] -> Bool (or (stringContains? l " assertion(s) executed") (stringStartsWith? l "FAIL "))) (stringLines text)))]
-    (mt (listLast lines)
+    (match (listLast lines)
       ((none) (none))
       ((some l) (if (stringStartsWith? l "FAIL ")
-                  (mt (numberBefore text " asserts)") ((some n) (some n)) ((none) (some 0)))
+                  (match (numberBefore text " asserts)") ((some n) (some n)) ((none) (some 0)))
                   (numberBefore l " passed)")))))
 
 fn errorLinesOf text: String -> (List String)

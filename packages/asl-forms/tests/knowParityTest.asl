@@ -46,7 +46,7 @@ fn writeSpec! dir: String f: FileSpec -> Bool
   (let [(path (k/joinPath dir f.path))]
     (and (mkdirs! (k/dirName path))
          (cond
-           ((= f.kind "base64") (mt (bytesFromBase64 f.body) ((ok b) (ok? (fileWrite path b))) ((err _) false)))
+           ((= f.kind "base64") (match (bytesFromBase64 f.body) ((ok b) (ok? (fileWrite path b))) ((err _) false)))
            ((= f.kind "repeat") (ok? (fileWrite path (stringRepeat f.body f.times))))
            (else (ok? (fileWrite path f.body))))))
 
@@ -54,7 +54,7 @@ fn materializeTree! files: (List FileSpec) tree: String dir: String -> Bool
   (and (mkdirs! dir) (listAll? (fn [(f FileSpec)] -> Bool (writeSpec! dir f)) (filter (fn [(f FileSpec)] -> Bool (= f.tree tree)) files)))
 
 fn runGit! ws: String args: (List String) -> Bool
-  (mt (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd "git" args) ws) 60000))
+  (match (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd "git" args) ws) 60000))
     ((ok out) (= out.exitCode 0))
     ((err _) false))
 
@@ -84,7 +84,7 @@ fn prepareCase! repo: String base: String files: (List FileSpec) c: CaseSpec -> 
       (CaseDirs :dir "" :ws ws :tc tc :bin bin :toolsFile "")))
 
 fn uniqueRoots items: (List String) acc: (List String) -> (List String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (listSortBy (fn [(r String)] -> Int64 (- 0 (stringLength r))) (listReverse acc)))
     ((some r) (uniqueRoots (optionOr (listTail items) (list)) (if (or (stringEmpty? r) (= r "/") (listContains? acc r)) acc (cons r acc)))))
 
@@ -116,7 +116,7 @@ fn runForm! dirs: CaseDirs form: String -> (Pair String Int64)
     (pair (if (= (listLength wired) 1) (optionOr (listHead wired) "") (str "(:batch " (stringJoin wired " ") ")")) (if (> errs 0) 1 0)))
 
 fn walkFiles! dir: String rel: String acc: (List String) -> (List String)
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err _) acc)
     ((ok names)
       (fold (fn [(a (List String)) (nm String)] -> (List String)
@@ -142,7 +142,7 @@ fn removeTree! p: String -> Bool
   (cond
     ((not (or (fileExists? p) (k/isDir! p))) true)
     ((and (k/isDir! p) (k/realChild? (k/dirName p) (k/baseName p)))
-      (and (mt (dirList p) ((ok names) (listAll? (fn [(nm String)] -> Bool (removeTree! (k/joinPath p nm))) names)) ((err _) false))
+      (and (match (dirList p) ((ok names) (listAll? (fn [(nm String)] -> Bool (removeTree! (k/joinPath p nm))) names)) ((err _) false))
            (ok? (pathRemove p))))
     (else (ok? (pathRemove p))))
 

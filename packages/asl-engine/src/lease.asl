@@ -16,7 +16,7 @@ fn formatLeaseBusyMessage socketPath: String -> String
 
 fn acquireLease! socketPath: String -> (Result LeaseLock String)
   (let [(lPath (lockPathFor socketPath))]
-    (mt (fileLock lPath true)
+    (match (fileLock lPath true)
       ((ok fd)
         (ok (LeaseLock :acquired true :fd fd :lockPath lPath :error "")))
       ((err e)

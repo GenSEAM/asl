@@ -169,11 +169,11 @@ fn parentOf p: String -> String
     (if (<= n 1) "/" (str "/" (stringJoin (listTake comps (- n 1)) "/"))))
 
 fn baseOf p: String -> String
-  (mt (listLast (pathComps p)) ((some b) b) ((none) ""))
+  (match (listLast (pathComps p)) ((some b) b) ((none) ""))
 
 fn pyRealpath! p: String -> String
   (let [a (pyAbspath! p)]
-    (mt (realPath a)
+    (match (realPath a)
       ((ok r) r)
       ((err _) (if (= a "/") "/" (joinPath (pyRealpath! (parentOf a)) (baseOf a))))))
 
@@ -206,20 +206,20 @@ fn isPathInRepo! path: String rootDir: String -> Bool
               (isUnder (pyRealpath! root) (pyRealpath! absTarget))))))))
 
 fn opGet op: (List (Pair String c/KvVal)) key: String -> (Option c/KvVal)
-  (mt (listHead (filter (fn [p] (= (pairFirst p) key)) op))
+  (match (listHead (filter (fn [p] (= (pairFirst p) key)) op))
     ((some p) (some (pairSecond p)))
     ((none) (none)))
 
 fn kvText v: c/KvVal -> String
-  (mt v ((c/kvStr s) s) ((c/kvInt d) d))
+  (match v ((c/kvStr s) s) ((c/kvInt d) d))
 
 fn kvTruthy v: c/KvVal -> Bool
-  (mt v
+  (match v
     ((c/kvStr s) (not (stringEmpty? s)))
     ((c/kvInt d) (!= (optionOr (stringToInt64 d) 0) 0)))
 
 fn truthyText o: (Option c/KvVal) -> String
-  (mt o ((some v) (if (kvTruthy v) (kvText v) "")) ((none) ""))
+  (match o ((some v) (if (kvTruthy v) (kvText v) "")) ((none) ""))
 
 fn allDigits s: String -> Bool
   (and (not (stringEmpty? s)) (listAll? (fn [ch] (and (>= ch "0") (<= ch "9"))) (stringChars s)))
@@ -228,10 +228,10 @@ fn digitValue s: String -> Int64
   (fold (fn [acc ch] (+ (* acc 10) (- (charCode ch) 48))) 0 (stringChars s))
 
 fn lineArg o: (Option c/KvVal) -> LineArg
-  (mt o
+  (match o
     ((none) (laNone))
     ((some v)
-      (mt v
+      (match v
         ((c/kvInt d) (let [n (optionOr (stringToInt64 d) 0)] (if (>= n 1) (laNum n) (laBad))))
         ((c/kvStr s)
           (if (stringEmpty? s)
@@ -266,7 +266,7 @@ fn gitSlice text: String start: (Option Int64) end: (Option Int64) cap: Int64 ->
   (let [lines (pySplitLines text true)
         total (listLength lines)
         first (optionOr start 1)
-        stop (mt end ((some e) (min e total)) ((none) total))
+        stop (match end ((some e) (min e total)) ((none) total))
         shown (sliceWalk (listDrop lines (- first 1)) (- stop (- first 1)) cap (list) 0)]
     (pair (stringJoin shown "") (list first (+ (- first 1) (listLength shown)) total)))
 
@@ -275,23 +275,23 @@ fn gitNextForm opName: String rev: String path: String base: String limit: (Opti
     (if (= opName "gitShow") (str " :rev \"" (c/escapeAsn (if (stringEmpty? rev) "HEAD" rev)) "\"") "")
     (if (stringEmpty? path) "" (str " :path \"" (c/escapeAsn path) "\""))
     (if (and (= opName "gitDiff") (not (stringEmpty? base))) (str " :base \"" (c/escapeAsn base) "\"") "")
-    (mt limit
+    (match limit
       ((some l) (if (and (= opName "gitLog") (not (stringEmpty? l))) (str " :limit " l) ""))
       ((none) ""))
     " :start " (itos start) " :end n)")
 
 fn envBase! env: (Option (List String)) -> (List String)
-  (mt env ((some rows) rows) ((none) (envList)))
+  (match env ((some rows) rows) ((none) (envList)))
 
 fn envRowKey row: String -> String
-  (mt (stringIndexOf row "=") ((some i) (c/sliceOf row 0 i)) ((none) row))
+  (match (stringIndexOf row "=") ((some i) (c/sliceOf row 0 i)) ((none) row))
 
 fn envWith rows: (List String) key: String value: String -> (List String)
   (listAppend (filter (fn [r] (!= (envRowKey r) key)) rows) (list (str key "=" value)))
 
 fn cwdErrno! cwd: (Option String) -> Int64
-  (mt cwd
-    ((some d) (mt (fileStat d) ((ok st) (if st.isDir 0 20)) ((err _) 2)))
+  (match cwd
+    ((some d) (match (fileStat d) ((ok st) (if st.isDir 0 20)) ((err _) 2)))
     ((none) 0))
 
 fn errnoText code: Int64 -> String
@@ -319,7 +319,7 @@ fn readyOn ready: (List (Pair Int64 Int64)) fd: Int64 -> Bool
 fn readPipe! fd: Int64 open: Bool isReady: Bool text: String -> (Pair Bool String)
   (if (not (and open isReady))
     (pair open text)
-    (mt (fdRead fd 65536)
+    (match (fdRead fd 65536)
       ((ok chunk) (if (stringEmpty? chunk) (do (fdClose fd) (pair false text)) (pair true (str text chunk))))
       ((err e) (if (= e "wouldBlock") (pair true text) (do (fdClose fd) (pair false text))))))
 
@@ -330,7 +330,7 @@ fn closePipes! sp: SpawnedProc outOpen: Bool errOpen: Bool -> Bool
     true)
 
 fn leftMs! deadline: (Option Int64) -> Int64
-  (mt deadline ((some d) (max 0 (/ (- d (monotonicNs)) 1000000))) ((none) -1))
+  (match deadline ((some d) (max 0 (/ (- d (monotonicNs)) 1000000))) ((none) -1))
 
 fn pumpPipes! sp: SpawnedProc outOpen: Bool errOpen: Bool out: String errText: String deadline: (Option Int64) -> PumpEnd
   (if (not (or outOpen errOpen))
@@ -338,7 +338,7 @@ fn pumpPipes! sp: SpawnedProc outOpen: Bool errOpen: Bool out: String errText: S
     (let [ms (leftMs! deadline)]
       (if (= ms 0)
         (pumpLate outOpen errOpen out errText)
-        (mt (fdPoll (pollSet sp outOpen errOpen) ms)
+        (match (fdPoll (pollSet sp outOpen errOpen) ms)
           ((err e) (do (closePipes! sp outOpen errOpen) (pumpFailed (str "poll failed: " e))))
           ((ok ready)
             (let [o (readPipe! sp.stdout outOpen (readyOn ready sp.stdout) out)
@@ -346,43 +346,43 @@ fn pumpPipes! sp: SpawnedProc outOpen: Bool errOpen: Bool out: String errText: S
               (pumpPipes! sp (pairFirst o) (pairFirst r) (pairSecond o) (pairSecond r) deadline)))))))
 
 fn waitExit! pid: Int64 deadline: (Option Int64) -> (Result (Option Int64) String)
-  (mt deadline
+  (match deadline
     ((none) (procWaitPid pid false))
     ((some d)
-      (mt (procWaitPid pid true)
+      (match (procWaitPid pid true)
         ((err e) (err e))
         ((ok got)
-          (mt got
+          (match got
             ((some code) (ok (some code)))
             ((none) (if (>= (monotonicNs) d) (ok (none)) (do (sleepMs 5) (waitExit! pid deadline)))))))))
 
 fn killGroup! pid: Int64 -> Bool
-  (mt (procKill (- 0 pid) "SIGKILL") ((ok _) true) ((err _) false))
+  (match (procKill (- 0 pid) "SIGKILL") ((ok _) true) ((err _) false))
 
 fn afterKill! sp: SpawnedProc outOpen: Bool errOpen: Bool out: String errText: String -> (Result Bounded String)
   (let [drained (pumpPipes! sp outOpen errOpen out errText (some (+ (monotonicNs) 5000000000)))
-        texts (mt drained
+        texts (match drained
                 ((pumpDone o e) (pair o e))
                 ((pumpLate oo eo _ _) (do (closePipes! sp oo eo) (pair "" "")))
                 ((pumpFailed _) (pair "" "")))]
-    (mt (procWaitPid sp.pid false)
+    (match (procWaitPid sp.pid false)
       ((err e) (err e))
       ((ok _) (ok (Bounded :code (none) :out (universalNewlines (pairFirst texts)) :errText (universalNewlines (pairSecond texts)) :timedOut true)))))
 
 fn runBounded! argv: (List String) cwd: (Option String) timeoutSec: (Option Int64) env: (Option (List String)) -> (Result Bounded String)
-  (mt (procSpawnv argv cwd env)
+  (match (procSpawnv argv cwd env)
     ((err kind) (err (spawnMessage! kind cwd (c/firstOf argv))))
     ((ok sp)
       (let [closed (fdClose sp.stdin)
-            deadline (mt timeoutSec ((some t) (some (+ (monotonicNs) (* t 1000000000)))) ((none) (none)))]
-        (mt (pumpPipes! sp true true "" "" deadline)
+            deadline (match timeoutSec ((some t) (some (+ (monotonicNs) (* t 1000000000)))) ((none) (none)))]
+        (match (pumpPipes! sp true true "" "" deadline)
           ((pumpFailed m) (do (killGroup! sp.pid) (procWaitPid sp.pid false) (err m)))
           ((pumpLate oo eo o e) (do (killGroup! sp.pid) (afterKill! sp oo eo o e)))
           ((pumpDone o e)
-            (mt (waitExit! sp.pid deadline)
+            (match (waitExit! sp.pid deadline)
               ((err m) (err m))
               ((ok got)
-                (mt got
+                (match got
                   ((none) (do (killGroup! sp.pid) (afterKill! sp false false o e)))
                   ((some code) (ok (Bounded :code (some code) :out (universalNewlines o) :errText (universalNewlines e) :timedOut false)))))))))))
 
@@ -397,13 +397,13 @@ fn rejectRec rid: String opName: String err: String message: String path: String
     (if (stringEmpty? path) (list) (list (rs "path" path))))
 
 fn reprKv o: (Option c/KvVal) -> String
-  (mt o ((none) "None") ((some v) (mt v ((c/kvInt d) d) ((c/kvStr s) (pyRepr s)))))
+  (match o ((none) "None") ((some v) (match v ((c/kvInt d) d) ((c/kvStr s) (pyRepr s)))))
 
 fn dashArg args: (List (Pair String (Option String))) -> (Option (Pair String String))
   (if (listEmpty? args)
     (none)
     (let [a (c/firstOf args)]
-      (mt (pairSecond a)
+      (match (pairSecond a)
         ((some v) (let [t (pyStrip v)] (if (stringStartsWith? t "-") (some (pair (pairFirst a) t)) (dashArg (c/restOf args)))))
         ((none) (dashArg (c/restOf args))))))
 
@@ -432,18 +432,18 @@ fn gitRunRec rid: String opName: String argv: (List String) b: Bounded path: Str
   (let [code (optionOr b.code -1)
         stdout b.out
         okRun (= code 0)
-        startN (mt start ((laNum n) (some n)) (_ (none)))
-        endN (mt end ((laNum n) (some n)) (_ (none)))
+        startN (match start ((laNum n) (some n)) (_ (none)))
+        endN (match end ((laNum n) (some n)) (_ (none)))
         sl (gitSlice stdout startN endN cap)
         nums (pairSecond sl)
         first (c/firstOf nums)
         last (c/firstOf (c/restOf nums))
         total (c/firstOf (c/restOf (c/restOf nums)))
-        pastEnd (mt startN ((some s) (and (> total 0) (> s total))) ((none) false))
+        pastEnd (match startN ((some s) (and (> total 0) (> s total))) ((none) false))
         sliced (or (> first 1) (< last total))
         note (if sliced
                (str "\n... [lines " (itos first) "-" (itos last) " of " (itos total) " (" (itos (cpLength stdout)) " chars)"
-                 (if (and (< last total) (mt endN ((some e) (< last e)) ((none) true)))
+                 (if (and (< last total) (match endN ((some e) (< last e)) ((none) true)))
                    (str "; next: " (gitNextForm opName rev path rawBase limit (+ last 1)))
                    "")
                  "]")
@@ -466,7 +466,7 @@ fn gitRunRec rid: String opName: String argv: (List String) b: Bounded path: Str
                   (rs "message" (let [m (pyStrip b.errText)] (if (stringEmpty? m) (str "git " opName " failed") m)))))))))))
 
 fn execGitOp! op: (List (Pair String c/KvVal)) ctx: GitCtx rid: String -> (List (Pair String RVal))
-  (let [opName (mt (opGet op "op") ((some v) (kvText v)) ((none) ""))
+  (let [opName (match (opGet op "op") ((some v) (kvText v)) ((none) ""))
         path (let [p (truthyText (opGet op "path"))] (if (stringEmpty? p) (truthyText (opGet op "file")) p))
         rawBase (truthyText (opGet op "base"))
         mode ctx.mode
@@ -474,14 +474,14 @@ fn execGitOp! op: (List (Pair String c/KvVal)) ctx: GitCtx rid: String -> (List 
                ctx.defaultBase
                rawBase)
         rev (truthyText (opGet op "rev"))
-        limit (mt (opGet op "limit") ((some v) (some (kvText v))) ((none) (none)))
+        limit (match (opGet op "limit") ((some v) (some (kvText v))) ((none) (none)))
         start (lineArg (opGet op "start"))
         end (lineArg (opGet op "end"))
-        badLines (mt start
+        badLines (match start
                    ((laBad) true)
-                   (_ (mt end
+                   (_ (match end
                         ((laBad) true)
-                        ((laNum e) (mt start ((laNum s) (< e s)) (_ false)))
+                        ((laNum e) (match start ((laNum s) (< e s)) (_ false)))
                         (_ false))))
         dash (dashArg (list (pair "base" (some base)) (pair "rev" (some rev)) (pair "path" (some path)) (pair "limit" limit)))
         rootDir ctx.root]
@@ -497,11 +497,11 @@ fn execGitOp! op: (List (Pair String c/KvVal)) ctx: GitCtx rid: String -> (List 
           (rs "message" (str "Path '" path "' leaves repository boundary"))))
       (else
         (let [cp (cleanPath! path rootDir)
-              lim (mt limit ((some l) (pyInt l)) ((none) (some 10)))]
+              lim (match limit ((some l) (pyInt l)) ((none) (some 10)))]
           (cond
             ((= opName "gitDiff") (runGitArgv! rid opName (diffArgv base cp) ctx path base rev (truthyText (opGet op "base")) limit start end))
             ((= opName "gitLog")
-              (mt lim
+              (match lim
                 ((none) (rejectRec rid opName "ERR_BAD_ARG" (str "Invalid limit argument: " (optionOr limit "")) ""))
                 ((some n) (if (< n 0)
                             (rejectRec rid opName "ERR_BAD_ARG" (str "Argument 'limit' must be non-negative: " (optionOr limit "")) "")
@@ -511,7 +511,7 @@ fn execGitOp! op: (List (Pair String c/KvVal)) ctx: GitCtx rid: String -> (List 
 
 fn runGitArgv! rid: String opName: String argv: (List String) ctx: GitCtx path: String base: String rev: String rawBase: String limit: (Option String) start: LineArg end: LineArg -> (List (Pair String RVal))
   (let [t ctx.timeoutSec]
-    (mt (runBounded! argv (some ctx.root) (some t) ctx.env)
+    (match (runBounded! argv (some ctx.root) (some t) ctx.env)
       ((err m) (list (rs "id" rid) (rs "op" opName) (rs "status" "rejected") (rs "error" "ERR_GIT_FAILED") (rs "message" m) (ri "exit" 1)))
       ((ok b)
         (if b.timedOut
@@ -524,42 +524,42 @@ fn runGates! gates: (List (Pair String String)) root: String timeoutSec: Int64 e
     (map (fn [g]
            (let [rid (pairFirst g)
                  cmd (pairSecond g)]
-             (mt (runBounded! (list "sh" "-c" cmd) (some root) (some timeoutSec) childEnv)
+             (match (runBounded! (list "sh" "-c" cmd) (some root) (some timeoutSec) childEnv)
                ((err m) (list (rs "id" rid) (rs "cmd" cmd) (ri "exit" 1) (rs "stderr" m)))
                ((ok b)
                  (listAppend
-                   (list (rs "id" rid) (rs "cmd" cmd) (pair "exit" (mt b.code ((some x) (rInt x)) ((none) (rNull))))
+                   (list (rs "id" rid) (rs "cmd" cmd) (pair "exit" (match b.code ((some x) (rInt x)) ((none) (rNull))))
                      (rs "stdout" b.out) (rs "stderr" b.errText))
                    (if b.timedOut (list (pair "timeout" (rBool true)) (ri "seconds" timeoutSec)) (list)))))))
       gates))
 
 fn preflightOne! i: Int64 cmd: String root: String env: (Option (List String)) -> (Option (List (Pair String RVal)))
   (let [res (runBounded! (list "sh" "-n" "-c" cmd) (if (stringEmpty? root) (none) (some root)) (some 10) env)
-        code (mt res ((ok b) b.code) ((err _) (some 1)))
-        errText (mt res ((ok b) b.errText) ((err m) m))
-        timedOut (mt res ((ok b) b.timedOut) ((err _) false))]
+        code (match res ((ok b) b.code) ((err _) (some 1)))
+        errText (match res ((ok b) b.errText) ((err m) m))
+        timedOut (match res ((ok b) b.timedOut) ((err _) false))]
     (if (or timedOut (!= (optionOr code 0) 0))
       (let [m (pyStrip errText)]
         (some (list (ri "n" i) (rs "cmd" cmd)
-                (rs "message" (if (stringEmpty? m) (str "sh -n exited " (mt code ((some x) (itos x)) ((none) "None"))) m)))))
+                (rs "message" (if (stringEmpty? m) (str "sh -n exited " (match code ((some x) (itos x)) ((none) "None"))) m)))))
       (none)))
 
 fn gatePreflight! gates: (List String) root: String env: (Option (List String)) -> (List (List (Pair String RVal)))
   (let [numbered (enumerate gates)]
     (fold (fn [acc p]
-            (mt (preflightOne! (+ (pairFirst p) 1) (pairSecond p) root env)
+            (match (preflightOne! (+ (pairFirst p) 1) (pairSecond p) root env)
               ((some r) (listAppend acc (list r)))
               ((none) acc)))
       (list) numbered))
 
 fn recGet rec: (List (Pair String RVal)) key: String -> (Option RVal)
-  (mt (listHead (filter (fn [p] (= (pairFirst p) key)) rec))
+  (match (listHead (filter (fn [p] (= (pairFirst p) key)) rec))
     ((some p) (some (pairSecond p)))
     ((none) (none)))
 
 fn recText rec: (List (Pair String RVal)) key: String -> String
-  (mt (recGet rec key)
-    ((some v) (mt v ((rStr s) s) ((rInt n) (itos n)) (_ "")))
+  (match (recGet rec key)
+    ((some v) (match v ((rStr s) s) ((rInt n) (itos n)) (_ "")))
     ((none) ""))
 
 fn formatGatePreflight bad: (List (List (Pair String RVal))) -> String
@@ -570,14 +570,14 @@ fn formatGatePreflight bad: (List (List (Pair String RVal))) -> String
 fn changedOwnedFiles! owns: (List String) root: String env: (Option (List String)) -> (Result (List String) String)
   (if (listEmpty? owns)
     (ok (list))
-    (mt (runBounded! (listAppend (list "git" "status" "--porcelain" "--untracked-files=all" "--") owns) (some root) (none) env)
+    (match (runBounded! (listAppend (list "git" "status" "--porcelain" "--untracked-files=all" "--") owns) (some root) (none) env)
       ((err m) (err m))
       ((ok b)
         (ok (map (fn [l] (pyStrip (cpDrop l 3)))
               (filter (fn [l] (> (cpLength l) 3)) (pySplitLines b.out false)))))))
 
 fn serVal v: RVal -> String
-  (mt v
+  (match v
     ((rStr s) (c/serString s))
     ((rInt n) (itos n))
     ((rBool b) (if b "true" "false"))

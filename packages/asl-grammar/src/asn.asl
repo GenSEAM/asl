@@ -49,7 +49,7 @@ fn tailrec readString text: String bs: Bytes n: Int64 start: Int64 i: Int64 part
     ((= (bytesGet bs i) 92)
       (if (>= (+ i 1) n)
         (err (str "unterminated string at byte " start))
-        (mt (escapeText (bytesGet bs (+ i 1)))
+        (match (escapeText (bytesGet bs (+ i 1)))
           ((none) (err (str "unknown escape at byte " i)))
           ((some s) (readString text bs n (+ i 2) (+ i 2) (cons s (cons (textSlice text start i) parts)))))))
     (else (readString text bs n start (+ i 1) parts)))
@@ -58,7 +58,7 @@ fn readAtom text: String bs: Bytes n: Int64 p: Int64 -> (Result (Pair Sx Int64) 
   (let [(e (atomEnd bs n p)) (s (textSlice text p e))]
     (cond
       ((and (stringStartsWith? s ":") (> (stringLength s) 1)) (ok (pair (sxKw (textSlice s 1 (stringLength s))) e)))
-      (else (mt (stringToInt64 s)
+      (else (match (stringToInt64 s)
               ((some v) (ok (pair (sxInt v) e)))
               ((none) (ok (pair (sxSym s) e)))))))
 
@@ -79,7 +79,7 @@ fn readSeq text: String bs: Bytes n: Int64 i: Int64 close: Int64 isList: Bool ac
     (cond
       ((>= p n) (err "unclosed form at end of input"))
       ((= (bytesGet bs p) close) (ok (pair (if isList (sxList (listReverse acc)) (sxVec (listReverse acc))) (+ p 1))))
-      (else (mt (readDatum text bs n p)
+      (else (match (readDatum text bs n p)
               ((err e) (err e))
               ((ok r) (readSeq text bs n (pairSecond r) close isList (cons (pairFirst r) acc)))))))
 
@@ -87,7 +87,7 @@ fn readAll text: String bs: Bytes n: Int64 i: Int64 acc: (List Sx) -> (Result (L
   (let [(p (skipBlank bs n i))]
     (if (>= p n)
       (ok (listReverse acc))
-      (mt (readDatum text bs n p)
+      (match (readDatum text bs n p)
         ((err e) (err e))
         ((ok r) (readAll text bs n (pairSecond r) (cons (pairFirst r) acc))))))
 
@@ -96,14 +96,14 @@ fn asnReadAll text: String -> (Result (List Sx) String)
     (readAll text bs (bytesLength bs) 0 (list)))
 
 fn asnKeyValue items: (List Sx) key: String -> (Option Sx)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (none))
     ((some x) (let [(rest (optionOr (listTail items) (list)))]
-                (mt x
+                (match x
                   ((sxKw k) (if (= k key) (listHead rest) (asnKeyValue rest key)))
                   (_ (asnKeyValue rest key))))))
 
 fn asnKeyString items: (List Sx) key: String -> (Option String)
-  (mt (asnKeyValue items key)
-    ((some v) (mt v ((sxStr s) (some s)) ((sxSym s) (some s)) (_ (none))))
+  (match (asnKeyValue items key)
+    ((some v) (match v ((sxStr s) (some s)) ((sxSym s) (some s)) (_ (none))))
     ((none) (none)))

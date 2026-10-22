@@ -1,6 +1,6 @@
 (module asl-http/tests/wsProtocolTest
   :x [testParseFrameHeaderShort testParseFrameHeaderMedium testParseFrameHeaderExtended testControlFrames testPayloadMasking testFrameBuilders runTests]
-  :i [(../src/wsProtocol :a ws)])
+  :i [(asl-http/wsProtocol :a ws)])
 
 fn testParseFrameHeaderShort -> Bool
   (let [(frame (ws/parseFrameHeader 129 133 0 0))]

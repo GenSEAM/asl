@@ -719,7 +719,7 @@ fn collectBlocksLoop elems: (List tr/TreeElement) acc: (List MarkdownBlock) -> (
     (listReverse acc)
     (let [(head (optionOr (listHead elems) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (rest (optionOr (listTail elems) (list)))]
-      (mt head
+      (match head
         ((tr/elemToken _) (collectBlocksLoop rest acc))
         ((tr/elemNode node)
          (let [(b (MarkdownBlock :kind node.kind
@@ -738,7 +738,7 @@ fn extractHeadingNode node: tr/Node text: String -> (Option MarkdownHeading)
     (cond
       ((= k "atxHeading")
        (let [(line (optionOr (stringSlice text node.start node.end) ""))]
-         (mt (isAtxHeading? line)
+         (match (isAtxHeading? line)
            ((some p)
             (some (MarkdownHeading :title (pairSecond p)
                                    :level (pairFirst p)
@@ -767,10 +767,10 @@ fn collectHeadingsLoop elems: (List tr/TreeElement) text: String acc: (List Mark
     (listReverse acc)
     (let [(head (optionOr (listHead elems) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (rest (optionOr (listTail elems) (list)))]
-      (mt head
+      (match head
         ((tr/elemToken _) (collectHeadingsLoop rest text acc))
         ((tr/elemNode node)
-         (mt (extractHeadingNode node text)
+         (match (extractHeadingNode node text)
            ((some h) (collectHeadingsLoop rest text (cons h acc)))
            ((none) (collectHeadingsLoop rest text acc)))))))
 
@@ -839,20 +839,20 @@ fn findSection sections: (List MarkdownSection) title: String -> (Option Markdow
 fn markdownHeadingRange text: String query: String -> (Option (Pair Int64 Int64))
   (let [(root (parseMarkdown text))
         (secs (markdownSections root text))]
-    (mt (findSection secs query)
+    (match (findSection secs query)
       ((some sec) (some (pair sec.headingStart sec.headingEnd)))
       ((none) (none))))
 
 fn markdownSectionRange text: String query: String -> (Option (Pair Int64 Int64))
   (let [(root (parseMarkdown text))
         (secs (markdownSections root text))]
-    (mt (findSection secs query)
+    (match (findSection secs query)
       ((some sec) (some (pair sec.start sec.end)))
       ((none) (none))))
 
 fn markdownReadSection text: String query: String -> (Option String)
   (let [(root (parseMarkdown text))
         (secs (markdownSections root text))]
-    (mt (findSection secs query)
+    (match (findSection secs query)
       ((some sec) (stringSlice text sec.start sec.end))
       ((none) (none))))

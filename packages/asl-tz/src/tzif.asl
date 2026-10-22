@@ -10,7 +10,7 @@ fn tzifU32 bytes: Bytes p: Int64 -> (Result Int64 String)
     (ok (+ (* (bytesGet bytes p) 16777216) (* (bytesGet bytes (+ p 1)) 65536) (* (bytesGet bytes (+ p 2)) 256) (bytesGet bytes (+ p 3)))))
 
 fn tzifI32 bytes: Bytes p: Int64 -> (Result Int64 String)
-  (mt (tzifU32 bytes p) ((err e) (err e)) ((ok n) (ok (if (>= n 2147483648) (- n 4294967296) n))))
+  (match (tzifU32 bytes p) ((err e) (err e)) ((ok n) (ok (if (>= n 2147483648) (- n 4294967296) n))))
 
 fn tzifI64Loop bytes: Bytes p: Int64 i: Int64 value: Int64 -> Int64
   (if (>= i 8) value (tzifI64Loop bytes p (+ i 1) (+ (* value 256) (bytesGet bytes (+ p i)))))
@@ -27,7 +27,7 @@ fn tzifMagic? bytes: Bytes p: Int64 -> Bool
   (and (= (bytesGet bytes p) 84) (and (= (bytesGet bytes (+ p 1)) 90) (and (= (bytesGet bytes (+ p 2)) 105) (= (bytesGet bytes (+ p 3)) 102))))
 
 fn tzifHeaderLoop bytes: Bytes p: Int64 i: Int64 out: (List Int64) -> (List Int64)
-  (if (>= i 6) out (mt (tzifU32 bytes (+ p 20 (* i 4))) ((err _) out) ((ok n) (tzifHeaderLoop bytes p (+ i 1) (listAppend out [n])))))
+  (if (>= i 6) out (match (tzifU32 bytes (+ p 20 (* i 4))) ((err _) out) ((ok n) (tzifHeaderLoop bytes p (+ i 1) (listAppend out [n])))))
 
 fn tzifHeader bytes: Bytes p: Int64 -> (Result (List Int64) String)
   (if (or (< p 0) (> (+ p 44) (bytesLength bytes))) (err (tzifError p "truncatedHeader"))
@@ -135,7 +135,7 @@ fn tzifFooterValid? footer: String -> Bool
 
 fn tzifTimeLoop bytes: Bytes width: Int64 timeStart: Int64 times: Int64 i: Int64 out: (List Int64) -> (Result (List Int64) String)
   (if (>= i times) (ok out)
-    (mt (if (= width 8) (tzifI64 bytes (+ timeStart (* i 8))) (tzifI32 bytes (+ timeStart (* i 4))))
+    (match (if (= width 8) (tzifI64 bytes (+ timeStart (* i 8))) (tzifI32 bytes (+ timeStart (* i 4))))
       ((err e) (err e)) ((ok n) (tzifTimeLoop bytes width timeStart times (+ i 1) (listAppend out [n])))))
 
 fn tzifIndexLoop bytes: Bytes indexStart: Int64 types: Int64 times: Int64 i: Int64 out: (List Int64) -> (Result (List Int64) String)
@@ -144,10 +144,10 @@ fn tzifIndexLoop bytes: Bytes indexStart: Int64 types: Int64 times: Int64 i: Int
 
 fn tzifTypeLoop bytes: Bytes typeStart: Int64 types: Int64 charStart: Int64 chars: Int64 version: String footer: String i: Int64 offsets: (List Int64) dsts: (List Bool) names: (List String) transitions: (List Int64) indexes: (List Int64) -> (Result TzifData String)
   (if (>= i types) (ok (tzifData version transitions indexes offsets dsts names footer))
-    (mt (tzifI32 bytes (+ typeStart (* i 6))) ((err e) (err e))
+    (match (tzifI32 bytes (+ typeStart (* i 6))) ((err e) (err e))
       ((ok off) (let [(dst (bytesGet bytes (+ typeStart (* i 6) 4))) (ai (bytesGet bytes (+ typeStart (* i 6) 5)))]
         (if (> dst 1) (err (tzifError (+ typeStart (* i 6) 4) "invalidDstFlag"))
-          (mt (tzifAbbr bytes (+ charStart ai) (+ charStart chars)) ((err e) (err e))
+          (match (tzifAbbr bytes (+ charStart ai) (+ charStart chars)) ((err e) (err e))
             ((ok abbr) (tzifTypeLoop bytes typeStart types charStart chars version footer (+ i 1) (listAppend offsets [off]) (listAppend dsts [(= dst 1)]) (listAppend names [abbr]) transitions indexes))))))))
 
 fn tzifSection bytes: Bytes p: Int64 width: Int64 version: String c: (List Int64) -> (Result TzifData String)
@@ -159,17 +159,17 @@ fn tzifSection bytes: Bytes p: Int64 width: Int64 version: String c: (List Int64
     (if (or (= types 0) (or (> types 256) (or (> times 1000000) (> chars 1000000)))) (err (tzifError (+ p 20) "invalidCounts"))
       (if (> sectionEnd (bytesLength bytes)) (err (tzifError sectionEnd "truncatedSection"))
       (if (and (= width 8) (not (tzifFooterValid? footer))) (err (tzifError sectionEnd "invalidPosixFooter"))
-          (mt (tzifTimeLoop bytes width timeStart times 0 []) ((err e) (err e))
-            ((ok ts) (mt (tzifIndexLoop bytes indexStart types times 0 []) ((err e) (err e))
+          (match (tzifTimeLoop bytes width timeStart times 0 []) ((err e) (err e))
+            ((ok ts) (match (tzifIndexLoop bytes indexStart types times 0 []) ((err e) (err e))
               ((ok ix) (tzifTypeLoop bytes typeStart types charStart chars version footer 0 [] [] [] ts ix)))))))))
 
 fn tzifParse bytes: Bytes -> (Result TzifData String)
-  (mt (tzifHeader bytes 0) ((err e) (err e))
+  (match (tzifHeader bytes 0) ((err e) (err e))
     ((ok c) (let [(v (bytesGet bytes 4))]
       (if (not (or (= v 0) (or (= v 50) (or (= v 51) (= v 52))))) (err (tzifError 4 "unsupportedVersion"))
         (if (= v 0) (tzifSection bytes 0 4 "1" c)
           (let [(next (+ 44 (* (tzifCount c 3) 5) (* (tzifCount c 4) 6) (tzifCount c 5) (* (tzifCount c 2) 8) (tzifCount c 1) (tzifCount c 0)))]
-            (mt (tzifHeader bytes next) ((err e) (err e)) ((ok c2) (tzifSection bytes next 8 (tzifNameByte v) c2)))))))))
+            (match (tzifHeader bytes next) ((err e) (err e)) ((ok c2) (tzifSection bytes next 8 (tzifNameByte v) c2)))))))))
 
 fn safeZoneName? name: String -> Bool
   (and (not (stringEmpty? name)) (and (not (stringStartsWith? name "/")) (and (not (stringContains? name "..")) (and (not (stringContains? name "\\")) (not (stringContains? name ":"))))))
@@ -178,14 +178,14 @@ fn loadZoneBytes bytes: Bytes -> (Result TzifData String)
   (tzifParse bytes)
 
 fn tzifVersion data: TzifData -> String
-  (mt data ((tzifData version transitions typeIndexes offsets dstFlags abbreviations footer) version))
+  (match data ((tzifData version transitions typeIndexes offsets dstFlags abbreviations footer) version))
 
 fn tzifFooter data: TzifData -> String
-  (mt data ((tzifData version transitions typeIndexes offsets dstFlags abbreviations footer) footer))
+  (match data ((tzifData version transitions typeIndexes offsets dstFlags abbreviations footer) footer))
 
 fn tzifTransitionCount data: TzifData -> Int64
-  (mt data ((tzifData version transitions typeIndexes offsets dstFlags abbreviations footer) (listLength transitions)))
+  (match data ((tzifData version transitions typeIndexes offsets dstFlags abbreviations footer) (listLength transitions)))
 
 fn ! loadZone name: String -> (Result TzifData String)
   (if (not (safeZoneName? name)) (err "invalidZoneName")
-    (mt (fileReadBytes (str "/usr/share/zoneinfo/" name)) ((err _) (err "zoneFileReadFailed")) ((ok b) (tzifParse b))))
+    (match (fileReadBytes (str "/usr/share/zoneinfo/" name)) ((err _) (err "zoneFileReadFailed")) ((ok b) (tzifParse b))))

@@ -152,7 +152,7 @@ fn verify-one-case! c: TestCase oracleLine: String idx: Int64 -> Bool
         (status (optionOr (listHead parts) ""))
         (r (rx/regex-compile! c.pat))]
     (assert (ok? r) (str "Case " (stringFromInt64 idx) " compile should succeed: " c.pat))
-    (mt r
+    (match r
       ((err e) false)
       ((ok re)
         (let [(optM (rx/regex-search! re c.text))]
@@ -191,7 +191,7 @@ fn testCasesAgainstRecordedPythonRe! -> Bool
 fn testPathologicalLinear! -> Bool
   (let [(r (rx/regex-compile! "(a*)*b"))]
     (assert (ok? r) "compile (a*)*b should succeed")
-    (mt r
+    (match r
       ((err e) false)
       ((ok re)
         (let [(optM (rx/regex-search! re "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))]
@@ -205,7 +205,7 @@ fn testSuiteNameOverGitLsFiles! -> Bool
 "))
           (r (rx/regex-compile! "(Test\\.asl|_test\\.asl|Test\\.sh|_test\\.sh)$|(^|/)Task[^/]*\\.asl$"))]
       (assert (ok? r) "compile SUITE_NAME should succeed")
-      (mt r
+      (match r
         ((err e) false)
         ((ok re)
           (let [(matches (filter (fn [(p String)] -> Bool (rx/regex-match? re p)) lines))
@@ -219,7 +219,7 @@ fn testSuiteNameOverGitLsFiles! -> Bool
 fn testFullMatchAndFindReplace! -> Bool
   (let [(r (rx/regex-compile! "a(b+)a"))]
     (assert (ok? r) "compile should succeed")
-    (mt r
+    (match r
       ((err e) false)
       ((ok re)
         (let [(mFull (rx/regex-match-full! re "abba"))
@@ -239,7 +239,7 @@ fn testCompileErrors! -> Bool
     (refute (ok? e1) "unclosed ( should fail to compile")
     (refute (ok? e2) "leading * should fail to compile")
     (refute (ok? e3) "invalid repeat should fail to compile")
-    (mt e1
+    (match e1
       ((ok _) false)
       ((err msg)
         (assert (stringContains? msg "position") "error msg should contain position")

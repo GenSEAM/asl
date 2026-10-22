@@ -115,7 +115,7 @@ fn extractParameterType raw: String -> String
           param))))
 
 fn stripModifiersLoop words: (List String) modifiers: (List String) -> (List String)
-  (mt (listHead words)
+  (match (listHead words)
     ((none) (list))
     ((some w)
       (if (listContains? modifiers w)
@@ -132,9 +132,9 @@ fn extractReturnType prefix: String -> String
   (let [(trimmed (stringTrim prefix))
         (cleanPrefix (if (stringStartsWith? trimmed "define ")
                        (stringTrim (optionOr (stringSlice trimmed 7 (stringLength trimmed)) ""))
-                       (mt (stringIndexOf trimmed "musttail call ")
+                       (match (stringIndexOf trimmed "musttail call ")
                          ((some at) (stringTrim (optionOr (stringSlice trimmed (+ at 14) (stringLength trimmed)) "")))
-                         ((none) (mt (stringIndexOf trimmed "call ")
+                         ((none) (match (stringIndexOf trimmed "call ")
                                    ((some at) (stringTrim (optionOr (stringSlice trimmed (+ at 5) (stringLength trimmed)) "")))
                                    ((none) trimmed))))))
         (words (stringSplit cleanPrefix " "))
@@ -182,17 +182,17 @@ fn llvmCallSignature line: String -> (Option (Pair String (List String)))
                 (some (pair retTy paramTypes)))))))))
 
 fn signaturesMatch? callerSig: (Option (Pair String (List String))) calleeSig: (Option (Pair String (List String))) -> Bool
-  (mt callerSig
+  (match callerSig
     ((none) false)
     ((some c)
-      (mt calleeSig
+      (match calleeSig
         ((none) false)
         ((some k)
           (and (= (pairFirst c) (pairFirst k))
                (= (pairSecond c) (pairSecond k)))))))
 
 fn lowerLlvmLinesLoop facts: TargetFacts lines: (List String) currentSig: (Option (Pair String (List String))) acc: (List String) -> (List String)
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (listReverse acc))
     ((some line)
       (let [(definition (stringTrim line))

@@ -22,7 +22,7 @@ fn floatLiteral x: Float64 -> String
     (cond ((= s "inf") "math.Inf(1)") ((= s "-inf") "math.Inf(-1)") ((= s "nan") "math.NaN()") (else (str "float64(" s ")"))))
 
 fn constText c: ty/SsaConst -> String
-  (mt c
+  (match c
     ((ty/constInt n) (str "int64(" (stringFromInt64 n) ")"))
     ((ty/constFloat x) (floatLiteral x))
     ((ty/constBool b) (if b "true" "false"))
@@ -54,7 +54,7 @@ fn comparison name: String -> (Option String)
     (else (none)))
 
 fn primText name: String xs: (List String) -> (Result String String)
-  (mt (comparison name)
+  (match (comparison name)
     ((some op) (ok (infix op name xs)))
     ((none)
       (cond
@@ -96,7 +96,7 @@ fn closureText arity: (Map String Int64) callee: String caps: (List String) -> S
       (str "func(" (stringJoin capNames ", ") " V) Fn { return " body " }(" (args caps) ")")))
 
 fn opText arity: (Map String Int64) op: ty/SsaOp -> (Result String String)
-  (mt op
+  (match op
     ((ty/opConst c) (ok (constText c)))
     ((ty/opCall callee xs) (ok (str (f callee) "(" (args xs) ")")))
     ((ty/opBuiltin name xs) (entryCall name xs))
@@ -129,7 +129,7 @@ fn caseText ctx: bl/BlockCtx depth: Int64 k: ty/SsaCase -> String
   (str (line depth (str "case " (bl/quoted k.variant) ":")) (edgeText ctx (+ depth 1) k.edge))
 
 fn termText ctx: bl/BlockCtx depth: Int64 t: ty/SsaTerm -> String
-  (mt t
+  (match t
     ((ty/termReturn x) (line depth (str "return " (v x))))
     ((ty/termJump edge) (edgeText ctx depth edge))
     ((ty/termBranch c a b) (str (line depth (str "if " (v c) ".(bool) {")) (edgeText ctx (+ depth 1) a) (line depth "} else {") (edgeText ctx (+ depth 1) b) (line depth "}")))
@@ -137,23 +137,23 @@ fn termText ctx: bl/BlockCtx depth: Int64 t: ty/SsaTerm -> String
       (str (line depth (str "switch vname(" (v s) ") {"))
            (stringJoin (map (fn [(k ty/SsaCase)] -> String (caseText ctx depth k)) cases) "")
            (line depth "default:")
-           (mt d ((some edge) (edgeText ctx (+ depth 1) edge)) ((none) (line (+ depth 1) "return unreachable()")))
+           (match d ((some edge) (edgeText ctx (+ depth 1) edge)) ((none) (line (+ depth 1) "return unreachable()")))
            (line depth "}")))
     ((ty/termUnreachable) (line depth "return unreachable()")))
 
 fn instrLine arity: (Map String Int64) i: ty/SsaInstr -> (Result String String)
-  (mt (opText arity i.op) ((ok text) (ok (line 3 (str (v i.dest) " = " text)))) ((err x) (err x)))
+  (match (opText arity i.op) ((ok text) (ok (line 3 (str (v i.dest) " = " text)))) ((err x) (err x)))
 
 fn blockText arity: (Map String Int64) ctx: bl/BlockCtx index: Int64 b: ty/SsaBlock -> (Result String (List String))
   (let [(head (line 2 (str "case " (stringFromInt64 index) ":")))
         (lineOf (fn [(i ty/SsaInstr)] -> (Result String String) (instrLine arity i)))]
-    (mt (bl/tailCall ctx b)
+    (match (bl/tailCall ctx b)
       ((some xs)
-        (mt (bl/collect (map lineOf (optionOr (listSlice b.instrs 0 (- (listLength b.instrs) 1)) [])))
+        (match (bl/collect (map lineOf (optionOr (listSlice b.instrs 0 (- (listLength b.instrs) 1)) [])))
           ((err es) (err es))
           ((ok lines) (ok (str head (stringJoin lines "") (assignAll 3 ctx.params xs) (line 3 "b = 0") (line 3 "continue"))))))
       ((none)
-        (mt (bl/collect (map lineOf b.instrs))
+        (match (bl/collect (map lineOf b.instrs))
           ((err es) (err es))
           ((ok lines) (ok (str head (stringJoin lines "") (termText ctx 3 b.term))))))))
 
@@ -165,7 +165,7 @@ fn functionText arity: (Map String Int64) fn0: ty/SsaFunction -> (Result String 
         (params (listAppend (bl/paramNames fn0.captures) (bl/paramNames fn0.params)))
         (vars (filter (fn [(x String)] -> Bool (not (listContains? params x))) (bl/locals fn0)))
         (blocks (map (fn [(p (Pair Int64 ty/SsaBlock))] -> (Result String (List String)) (blockText arity ctx (pairFirst p) (pairSecond p))) (enumerate fn0.blocks)))
-        (bad (fold (fn [(acc (List String)) (r (Result String (List String)))] -> (List String) (mt r ((err es) (listAppend acc es)) ((ok _) acc))) [] blocks))]
+        (bad (fold (fn [(acc (List String)) (r (Result String (List String)))] -> (List String) (match r ((err es) (listAppend acc es)) ((ok _) acc))) [] blocks))]
     (if (not (listEmpty? bad))
       (err bad)
       (ok (str "func " (f fn0.name) "(" (paramList params) ") V {\n"
@@ -173,7 +173,7 @@ fn functionText arity: (Map String Int64) fn0: ty/SsaFunction -> (Result String 
                (line 1 "b := 0")
                (line 1 "for {")
                (line 1 "switch b {")
-               (stringJoin (map (fn [(r (Result String (List String)))] -> String (mt r ((ok s) s) ((err _) ""))) blocks) "")
+               (stringJoin (map (fn [(r (Result String (List String)))] -> String (match r ((ok s) s) ((err _) ""))) blocks) "")
                (line 2 "default:")
                (line 3 "return unreachable()")
                (line 1 "}")
@@ -190,7 +190,7 @@ fn exported s: String -> String
 
 fn exportText arity: (Map String Int64) m: ty/SsaModule -> String
   (fold (fn [(acc String) (fn0 ty/SsaFunction)] -> String
-          (mt (bl/exportName m.name fn0.name)
+          (match (bl/exportName m.name fn0.name)
             ((some short)
               (if (plainName? short)
                 (let [(ps (map (fn [(i Int64)] -> String (str "a" (stringFromInt64 i))) (range 0 (listLength fn0.params))))]
@@ -208,13 +208,13 @@ fn entryDecls -> String
 fn emitGoModule pkg: String m: ty/SsaModule -> (Result String (List ty/IrDiag))
   (let [(arity (fold (fn [(acc (Map String Int64)) (fn0 ty/SsaFunction)] -> (Map String Int64) (mapSet acc fn0.name (listLength fn0.params))) (mapEmpty) m.functions))
         (fns (map (fn [(fn0 ty/SsaFunction)] -> (Result String (List String)) (functionText arity fn0)) m.functions))
-        (bad (fold (fn [(acc (List String)) (r (Result String (List String)))] -> (List String) (mt r ((err es) (listAppend acc es)) ((ok _) acc))) [] fns))]
+        (bad (fold (fn [(acc (List String)) (r (Result String (List String)))] -> (List String) (match r ((err es) (listAppend acc es)) ((ok _) acc))) [] fns))]
     (if (not (listEmpty? bad))
       (err (map (fn [(name String)] -> ty/IrDiag (ty/makeIrDiag "ERR_CAPABILITY_ABSENT" (str name " is absent on target go") m.name)) bad))
       (ok (str "// Code generated by asl-target-go from " m.name ". DO NOT EDIT.\n\npackage " pkg "\n\n"
                (rt/runtimeText)
                "\n" (entryDecls)
                "\nvar S = []string{" (stringJoin (map bl/quoted m.strings) ", ") "}\n\n"
-               (stringJoin (map (fn [(r (Result String (List String)))] -> String (mt r ((ok s) (str s "\n")) ((err _) ""))) fns) "")
+               (stringJoin (map (fn [(r (Result String (List String)))] -> String (match r ((ok s) (str s "\n")) ((err _) ""))) fns) "")
                (exportText arity m)
                (if (and (= pkg "main") (hasMain? m)) "\nfunc main() { runMain(Main) }\n" "")))))

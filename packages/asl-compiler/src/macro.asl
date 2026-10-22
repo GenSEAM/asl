@@ -9,7 +9,7 @@ fn expandLetPair k: Str v: Str pairExpr: Str bodyExpr: Str -> Str
        "  " bodyExpr ")")
 
 fn expandIfLet bindingVar: Str optExpr: Str thenExpr: Str elseExpr: Str -> Str
-  (str "(mt " optExpr "\n"
+  (str "(match " optExpr "\n"
        "  ((some " bindingVar ") " thenExpr ")\n"
        "  ((none) " elseExpr "))")
 

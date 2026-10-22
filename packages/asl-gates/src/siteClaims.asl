@@ -22,19 +22,19 @@ fn publishedClaimsCandidates -> (List Str)
   (list "asl/bench/publishedClaims.asn" "bench/publishedClaims.asn")
 
 fn ! loadPublishedClaimsAt! candidates: (List Str) -> (Result (List Str) Str)
-  (mt (listHead (filter (fn [(p Str)] -> Bool (fileExists? p)) candidates))
+  (match (listHead (filter (fn [(p Str)] -> Bool (fileExists? p)) candidates))
     ((none) (err (str "No published claims file at " (stringJoin candidates " or "))))
     ((some target)
-      (mt (fileReadString target)
+      (match (fileReadString target)
         ((err e) (err (str "Failed to read published claims " target ": " e)))
         ((ok content)
           (fold (fn [(acc (Result (List Str) Str)) (chunk Str)] -> (Result (List Str) Str)
-                  (mt acc
+                  (match acc
                     ((err e) (err e))
                     ((ok metrics)
-                      (mt (stringIndexOf chunk "\"")
+                      (match (stringIndexOf chunk "\"")
                         ((none) (err (str target ": claim " (stringFromInt64 (+ (listLength metrics) 1)) " has an unterminated :metric string")))
-                        ((some idx) (mt (stringSlice chunk 0 idx) ((some m) (ok (listAppend metrics (list m)))) ((none) (err (str target ": claim " (stringFromInt64 (+ (listLength metrics) 1)) " :metric slice 0.." (stringFromInt64 idx) " is out of bounds")))))))))
+                        ((some idx) (match (stringSlice chunk 0 idx) ((some m) (ok (listAppend metrics (list m)))) ((none) (err (str target ": claim " (stringFromInt64 (+ (listLength metrics) 1)) " :metric slice 0.." (stringFromInt64 idx) " is out of bounds")))))))))
                 (ok (list))
                 (optionOr (listTail (stringSplit content "(:claim :metric \"")) (list)))))))
 
@@ -42,7 +42,7 @@ fn ! loadPublishedClaims! -> (Result (List Str) Str)
   (loadPublishedClaimsAt! (publishedClaimsCandidates))
 
 fn ! claimsGroundingAt! candidates: (List Str) -> (Result I64 Str)
-  (mt (loadPublishedClaimsAt! candidates)
+  (match (loadPublishedClaimsAt! candidates)
     ((err e) (err e))
     ((ok published)
       (let [(registry (standardClaims)) (ungrounded (filter (fn [(m Str)] -> Bool (not (isKnownMetric m registry))) published))]

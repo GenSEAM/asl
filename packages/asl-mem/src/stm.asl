@@ -10,13 +10,13 @@ fn stmBegin txId: Str agentId: Str epoch: I64 -> STMTransaction
   (STMTransaction :txId txId :agentId agentId :epoch epoch :snapshots (list) :status "active" :compensations (list))
 
 fn stmGetSnapshot tx: STMTransaction targetPath: Str -> (Option STMFileSnapshot)
-  (fold (fn [(acc (Option STMFileSnapshot)) (s STMFileSnapshot)] -> (Option STMFileSnapshot) (mt acc ((some found) (some found)) ((none) (if (= s.path targetPath) (some s) (none))))) (none) tx.snapshots)
+  (fold (fn [(acc (Option STMFileSnapshot)) (s STMFileSnapshot)] -> (Option STMFileSnapshot) (match acc ((some found) (some found)) ((none) (if (= s.path targetPath) (some s) (none))))) (none) tx.snapshots)
 
 fn stmRead tx: STMTransaction path: Str currentTrunk: Str -> STMTransaction
-  (let [(existing (stmGetSnapshot tx path))] (mt existing ((some _) tx) ((none) (let [(snap (STMFileSnapshot :path path :baseContent currentTrunk :stagedContent currentTrunk :baseHash (v/vfsCasHash currentTrunk) :dirty false)) (nextSnaps (listAppend tx.snapshots (list snap)))] (with tx :snapshots nextSnaps)))))
+  (let [(existing (stmGetSnapshot tx path))] (match existing ((some _) tx) ((none) (let [(snap (STMFileSnapshot :path path :baseContent currentTrunk :stagedContent currentTrunk :baseHash (v/vfsCasHash currentTrunk) :dirty false)) (nextSnaps (listAppend tx.snapshots (list snap)))] (with tx :snapshots nextSnaps)))))
 
 fn stmWrite! tx: STMTransaction path: Str newContent: Str -> STMTransaction
-  (let [(snaps tx.snapshots) (existing (stmGetSnapshot tx path))] (mt existing ((some curr) (let [(updated (STMFileSnapshot :path path :baseContent curr.baseContent :stagedContent newContent :baseHash curr.baseHash :dirty true)) (nextSnaps (fold (fn [(acc (List STMFileSnapshot)) (s STMFileSnapshot)] -> (List STMFileSnapshot) (if (= s.path path) (listAppend acc (list updated)) (listAppend acc (list s)))) (list) snaps))] (with tx :snapshots nextSnaps))) ((none) (let [(base (if (fileExists? path) (mt (fileReadString path) ((ok c) c) ((err _) "")) "")) (bHash (v/vfsCasHash base)) (snap (STMFileSnapshot :path path :baseContent base :stagedContent newContent :baseHash bHash :dirty true)) (nextSnaps (listAppend snaps (list snap)))] (with tx :snapshots nextSnaps)))))
+  (let [(snaps tx.snapshots) (existing (stmGetSnapshot tx path))] (match existing ((some curr) (let [(updated (STMFileSnapshot :path path :baseContent curr.baseContent :stagedContent newContent :baseHash curr.baseHash :dirty true)) (nextSnaps (fold (fn [(acc (List STMFileSnapshot)) (s STMFileSnapshot)] -> (List STMFileSnapshot) (if (= s.path path) (listAppend acc (list updated)) (listAppend acc (list s)))) (list) snaps))] (with tx :snapshots nextSnaps))) ((none) (let [(base (if (fileExists? path) (match (fileReadString path) ((ok c) c) ((err _) "")) "")) (bHash (v/vfsCasHash base)) (snap (STMFileSnapshot :path path :baseContent base :stagedContent newContent :baseHash bHash :dirty true)) (nextSnaps (listAppend snaps (list snap)))] (with tx :snapshots nextSnaps)))))
 
 fn stmRollback tx: STMTransaction reason: Str -> STMTransaction
   (with tx :status "aborted" :compensations (listAppend tx.compensations (list reason)))
@@ -25,7 +25,7 @@ fn stmDirtyFiles tx: STMTransaction -> (List Str)
   (fold (fn [(acc (List Str)) (s STMFileSnapshot)] -> (List Str) (if s.dirty (listAppend acc (list s.path)) acc)) (list) tx.snapshots)
 
 fn findTrunkContent paths: (List Str) contents: (List Str) target: Str -> (Option Str)
-  (let [(idxOpt (fold (fn [(acc (Option I64)) (p Str)] -> (Option I64) (mt acc ((some found) (some found)) ((none) (if (= p target) (some 0) (none))))) (none) paths))] (mt idxOpt ((none) (none)) ((some _) (let [(res (fold (fn [(acc (Option Str)) (pair Str)] -> (Option Str) (mt acc ((some found) (some found)) ((none) (if (stringStartsWith? pair (str target ":")) (some (let [(pref (str target ":")) (plen (stringLength pref))] (optionOr (stringSlice pair plen (stringLength pair)) ""))) (none))))) (none) contents))] res))))
+  (let [(idxOpt (fold (fn [(acc (Option I64)) (p Str)] -> (Option I64) (match acc ((some found) (some found)) ((none) (if (= p target) (some 0) (none))))) (none) paths))] (match idxOpt ((none) (none)) ((some _) (let [(res (fold (fn [(acc (Option Str)) (pair Str)] -> (Option Str) (match acc ((some found) (some found)) ((none) (if (stringStartsWith? pair (str target ":")) (some (let [(pref (str target ":")) (plen (stringLength pref))] (optionOr (stringSlice pair plen (stringLength pair)) ""))) (none))))) (none) contents))] res))))
 
 (schema OCCValidationAccumulator (:f touched (List Str)) (:f conflicts (List Str)) (:f reconciled (List Str)) (:f mergedTexts (List Str)) (:f ok Bool))
 

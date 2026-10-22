@@ -38,7 +38,7 @@ fn lowerTopForm form: Any -> (Option ast/ShFunction)
 
 fn lowerAslToSh forms: (List Any) -> ast/ShScript
   (let [(fns (map (fn [(o (Option ast/ShFunction))]
-                    (mt o
+                    (match o
                       ((some f) f)
                       (else (ast/makeShFunction "" (list)))))
                   (filter some? (map lowerTopForm forms))))
@@ -65,9 +65,9 @@ fn sampleLoweredScript -> ast/ShScript
 
 fn unpackForms forms: (List a/TopForm) -> (List a/TopForm)
   (if (= (listLength forms) 1)
-    (mt (listHead forms)
+    (match (listHead forms)
       ((some form)
-       (mt form
+       (match form
          ((a/topModule m) m.defs)
          (else forms)))
       (else forms))
@@ -81,7 +81,7 @@ fn defunToShFn d: a/DefunNode -> ast/ShFunction
 fn emitShSourceFromForms forms: (List a/TopForm) path: String -> String
   (let [(effForms (unpackForms forms))
         (shFns (fold (fn [(acc (List ast/ShFunction)) (form a/TopForm)]
-                       (mt form
+                       (match form
                          ((a/topDefun d) (listAppend acc (list (defunToShFn d))))
                          (else acc)))
                      (list) effForms))

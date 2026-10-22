@@ -22,7 +22,7 @@ fn viewToString v: StringView -> Str
 (schema ScanState (:f modName Str) (:f exports (List Str)) (:f currentCaller Str) (:f lineNo I64) (:f symbols (List SymbolDef)) (:f refs (List SymbolRef)))
 
 fn kindToString k: SymbolKind -> Str
-  (mt k ((symFn) "fn") ((symType) "type") ((symRecord) "record") ((symEnum) "enum") ((symMethod) "method") ((symClass) "class") ((symInterface) "interface") ((symVariable) "var"))
+  (match k ((symFn) "fn") ((symType) "type") ((symRecord) "record") ((symEnum) "enum") ((symMethod) "method") ((symClass) "class") ((symInterface) "interface") ((symVariable) "var"))
 
 fn stringToKind s: Str -> SymbolKind
   (cond ((= s "fn") (symFn)) ((= s "function") (symFn)) ((= s "defun") (symFn)) ((= s "type") (symType)) ((= s "record") (symRecord)) ((= s "enum") (symEnum)) ((= s "method") (symMethod)) ((= s "class") (symClass)) ((= s "interface") (symInterface)) (else (symVariable)))

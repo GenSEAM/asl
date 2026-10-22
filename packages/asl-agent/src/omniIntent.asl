@@ -100,22 +100,22 @@ fn classifyOmniIntent raw: Str -> OmniIntent
        (OmniIntent :intentId id :domain (domainResearch) :rawDirective raw :targetSubstrate "cognitive-fiber" :requiresGate false :requiresWorktree false :declaredOwns (list)))))
 
 fn isCodeTask? intent: OmniIntent -> Bool
-  (mt intent.domain
+  (match intent.domain
     ((domainCodeTask) true)
     (_ false))
 
 fn isResearch? intent: OmniIntent -> Bool
-  (mt intent.domain
+  (match intent.domain
     ((domainResearch) true)
     (_ false))
 
 fn isBrowserAction? intent: OmniIntent -> Bool
-  (mt intent.domain
+  (match intent.domain
     ((domainBrowserAction) true)
     (_ false))
 
 fn formatOmniIntentAsn intent: OmniIntent -> Str
-  (let [(dStr (mt intent.domain
+  (let [(dStr (match intent.domain
                 ((domainCodeTask) ":codeTask")
                 ((domainResearch) ":research")
                 ((domainBrowserAction) ":browserAction")
@@ -129,7 +129,7 @@ fn formatOmniIntentAsn intent: OmniIntent -> Str
          " :requires-worktree " (if intent.requiresWorktree "true" "false") ")"))
 
 fn domainToString domain: OmniDomain -> Str
-  (mt domain
+  (match domain
     ((domainCodeTask) ":codeTask")
     ((domainResearch) ":research")
     ((domainBrowserAction) ":browserAction")

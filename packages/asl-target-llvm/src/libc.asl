@@ -51,7 +51,7 @@ fn exePathSource triple: String -> String
         (else ""))
 
 fn libcVerified triple: String -> Bool
-  (mt (libcFacts triple) ((some f) f.verified) ((none) false))
+  (match (libcFacts triple) ((some f) f.verified) ((none) false))
 
 fn darwinArm64Facts -> TripleFacts
   (TripleFacts
@@ -387,6 +387,6 @@ fn runtimeAbi triple: String -> (Option RuntimeAbi)
     (none))
 
 fn hostImport service: String -> (Pair String String)
-  (mt (stringIndexOf service ".")
+  (match (stringIndexOf service ".")
     ((some at) (pair (optionOr (stringSlice service 0 at) "") (optionOr (stringSlice service (+ at 1) (stringLength service)) "")))
     ((none) (pair "" service)))

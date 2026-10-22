@@ -24,12 +24,12 @@ fn makeReceipt claimId: Str metric: Str receiptSource: Str executedAsserts: Int6
 
 fn extractField text: Str fieldKey: Str -> Str
   (let [(needle (str fieldKey " \""))]
-    (mt (stringIndexOf text needle)
+    (match (stringIndexOf text needle)
       ((none) "")
       ((some idx)
        (let [(startPos (+ idx (stringLength needle)))
              (tail (optionOr (stringSlice text startPos (stringLength text)) ""))]
-         (mt (stringIndexOf tail "\"")
+         (match (stringIndexOf tail "\"")
            ((none) "")
            ((some endIdx)
             (optionOr (stringSlice tail 0 endIdx) "")))))))
@@ -67,7 +67,7 @@ fn verifyClaimsGrounding claims: (List ClaimCitation) receipts: (List GroundedRe
 
 fn groundClaims! registryPath: Str -> (Result (List ClaimCitation) Str)
   (let [(readRes (fileReadString registryPath))]
-    (mt readRes
+    (match readRes
       ((err _) (err (str "Failed to read claims registry: " registryPath)))
       ((ok content)
        (let [(claims (extractClaimsFromRegistry content))]

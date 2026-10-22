@@ -49,7 +49,7 @@ fn ! statsLine text: String -> String
 
 fn ! bytesAllocated line: String -> Int64
   (let [(tokens (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit line " ")))]
-    (mt (listIndexOf tokens ":bytesAllocated")
+    (match (listIndexOf tokens ":bytesAllocated")
       ((some i) (optionOr (stringToInt64 (stringReplace (optionOr (listGet tokens (+ i 1)) "") ")" "")) -1))
       ((none) -1)))
 
@@ -62,7 +62,7 @@ fn ! main args: (List String) -> (Result Int64 String)
 
 fn ! workloadBytes n: Int64 -> Int64
   (let [(built (nt/prepareRun (thisFile) (nt/fingerprint)))]
-    (mt built.binary
+    (match built.binary
       ((none) (do (assert false (str "quadScaleTest builds natively: " built.reason)) -1))
       ((some bin)
        (let [(done (fr/runOneLimited (fr/job (list bin (stringFromInt64 n)) "." (fr/childEnv (list "ASL_GC_STATS=1"))) (fr/limits 300 4)))]

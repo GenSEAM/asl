@@ -25,7 +25,7 @@ fn hexPad2 val: Int -> String
   (let [(clamped (if (< val 0) 0 (if (> val 255) 255 val))) (hi (/ clamped 16)) (lo (mod clamped 16))] (str (nibbleToChar hi) (nibbleToChar lo)))
 
 fn nibbleToChar n: Int -> String
-  (if (< n 10) (str n) (if (== n 10) "a" (if (== n 11) "b" (if (== n 12) "c" (if (== n 13) "d" (if (== n 14) "e" "f"))))))
+  (if (< n 10) (str n) (if (= n 10) "a" (if (= n 11) "b" (if (= n 12) "c" (if (= n 13) "d" (if (= n 14) "e" "f"))))))
 
 fn parseHexColor hex: String -> (List Int)
   (let [(clean (if (stringStartsWith? hex "#") (optionOr (stringSlice hex 1 (stringLength hex)) "") hex))] (if (>= (stringLength clean) 6) (list (hexByteAt clean 0) (hexByteAt clean 2) (hexByteAt clean 4)) (list 0 0 0)))
@@ -34,4 +34,4 @@ fn hexByteAt s: String idx: Int -> Int
   (let [(h1 (charToNibble (optionOr (stringSlice s idx (+ idx 1)) "0"))) (h2 (charToNibble (optionOr (stringSlice s (+ idx 1) (+ idx 2)) "0")))] (+ (* h1 16) h2))
 
 fn charToNibble c: String -> Int
-  (if (== c "0") 0 (if (== c "1") 1 (if (== c "2") 2 (if (== c "3") 3 (if (== c "4") 4 (if (== c "5") 5 (if (== c "6") 6 (if (== c "7") 7 (if (== c "8") 8 (if (== c "9") 9 (if (or (== c "a") (== c "A")) 10 (if (or (== c "b") (== c "B")) 11 (if (or (== c "c") (== c "C")) 12 (if (or (== c "d") (== c "D")) 13 (if (or (== c "e") (== c "E")) 14 (if (or (== c "f") (== c "F")) 15 0))))))))))))))))
+  (if (= c "0") 0 (if (= c "1") 1 (if (= c "2") 2 (if (= c "3") 3 (if (= c "4") 4 (if (= c "5") 5 (if (= c "6") 6 (if (= c "7") 7 (if (= c "8") 8 (if (= c "9") 9 (if (or (= c "a") (= c "A")) 10 (if (or (= c "b") (= c "B")) 11 (if (or (= c "c") (= c "C")) 12 (if (or (= c "d") (= c "D")) 13 (if (or (= c "e") (= c "E")) 14 (if (or (= c "f") (= c "F")) 15 0))))))))))))))))

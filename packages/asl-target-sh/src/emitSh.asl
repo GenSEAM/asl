@@ -37,15 +37,15 @@ fn makeIndent level: Int64 -> String
     (else "                "))
 
 fn formatRedirect red: ast/ShRedirect -> String
-  (let [(fdStr (mt red.fd ((some f) (stringFromInt64 f)) ((none) "")))]
+  (let [(fdStr (match red.fd ((some f) (stringFromInt64 f)) ((none) "")))]
     (str " " fdStr red.op " " red.target))
 
 fn formatTestExpr expr: ast/ShExpr -> String
   (let [(op expr.op)
         (lOpt expr.left)
         (rOpt expr.right)]
-    (let [(leftStr (mt lOpt ((some l) (formatShExpr l)) ((none) "")))
-          (rightStr (mt rOpt ((some r) (formatShExpr r)) ((none) "")))]
+    (let [(leftStr (match lOpt ((some l) (formatShExpr l)) ((none) "")))
+          (rightStr (match rOpt ((some r) (formatShExpr r)) ((none) "")))]
       (cond
         ((= op "-n") (str "[ -n " leftStr " ]"))
         ((= op "-z") (str "[ -z " leftStr " ]"))
@@ -78,8 +78,8 @@ fn formatShExpr expr: ast/ShExpr -> String
       ((= tag "binOp")
         (let [(lOpt expr.left)
               (rOpt expr.right)]
-          (let [(l (mt lOpt ((some x) (formatShExpr x)) ((none) "")))
-                (r (mt rOpt ((some y) (formatShExpr y)) ((none) "")))]
+          (let [(l (match lOpt ((some x) (formatShExpr x)) ((none) "")))
+                (r (match rOpt ((some y) (formatShExpr y)) ((none) "")))]
             (str l " " expr.op " " r))))
       (else "")))
 

@@ -34,7 +34,7 @@ fn ! hostTriple -> String
       (else "")))
 
 fn ! hostFacts -> libc/TripleFacts
-  (mt (libc/libcFacts (hostTriple))
+  (match (libc/libcFacts (hostTriple))
     ((some f) f)
     ((none) (do (assert false (str "hostFacts: libc.asl has no row for this host's triple \"" (hostTriple) "\"")) (libc/emptyTripleFacts))))
 
@@ -47,16 +47,16 @@ fn diagText ds: (List ty/IrDiag) -> String
 fn ! lowered name: String src: String -> (Option ty/SsaModule)
   (let [(preludeText (resultOr (fileReadString (lk/preludePath)) ""))]
     (do (assert (not (stringEmpty? preludeText)) (str (lk/preludePath) " is readable"))
-        (mt (lk/lowerSourceWith src preludeText)
+        (match (lk/lowerSourceWith src preludeText)
           ((err ds) (do (assert false (str name ": lowerSourceWith: " (diagText ds))) (none)))
           ((ok m) (some m)))))
 
 fn ! build work: String name: String src: String -> String
   (let [(_ (assert (ok? (fileWrite (str work "/" name ".asl") src)) (str name ".asl written")))]
-    (mt (lowered name src)
+    (match (lowered name src)
       ((none) "")
       ((some m)
-        (mt (llvm/emitLlvmProgramFor (hostFacts) m "main")
+        (match (llvm/emitLlvmProgramFor (hostFacts) m "main")
           ((err ds) (do (assert false (str name ": emitLlvmProgramFor: " (diagText ds))) ""))
           ((ok text) (do (assert (ok? (fileWrite (str work "/" name ".ll") text)) (str name ".ll written")) text))))))
 
@@ -83,7 +83,7 @@ fn oneBuiltinSource -> String
     "(module sysOneBuiltin :x [main] :i [])"
     ""
     "fn ! main args: (List String) -> (Result Int64 String)"
-    "  (mt (cpuCount)"
+    "  (match (cpuCount)"
     "    ((ok c) (ok c))"
     "    ((err e) (ok -1)))"))
 
@@ -102,21 +102,21 @@ fn comboSource -> String
     "(module sysCombo :x [main] :i [])"
     ""
     "fn ! roundTrip lfd: Int64 cfd: Int64 -> Int64"
-    "  (mt (sockAccept lfd)"
+    "  (match (sockAccept lfd)"
     "    ((err e) (do (println \"sockAccept\" e) 1))"
     "    ((ok afd)"
     "      (do (fdWrite cfd \"hi\")"
-    "          (let [(got (mt (fdRead afd 2) ((ok s) s) ((err e) (str \"err \" e))))]"
+    "          (let [(got (match (fdRead afd 2) ((ok s) s) ((err e) (str \"err \" e))))]"
     "            (do (println \"echo\" got)"
     "                (fdClose afd) (fdClose cfd) (fdClose lfd)"
     "                (if (= got \"hi\") 0 1))))))"
     ""
     "fn ! netCheck dir: String -> Int64"
     "  (let [(path (str dir \"/combo.sock\"))]"
-    "    (mt (unixListen path)"
+    "    (match (unixListen path)"
     "      ((err e) (do (println \"unixListen\" e) 1))"
     "      ((ok lfd)"
-    "        (mt (unixConnect path)"
+    "        (match (unixConnect path)"
     "          ((err e) (do (println \"unixConnect\" e) 1))"
     "          ((ok cfd) (let [(code (roundTrip lfd cfd))] (do (pathRemove path) code)))))))"
     ""

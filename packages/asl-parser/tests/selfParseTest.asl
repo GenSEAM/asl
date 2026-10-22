@@ -7,7 +7,7 @@
 fn closureModules -> (List ClosureModule)
   (list
     (ClosureModule :path "asl/packages/asl-compiler/src/compiler.asl" :expected 21)
-    (ClosureModule :path "asl/packages/asl-parser/src/ast.asl" :expected 268)
+    (ClosureModule :path "asl/packages/asl-parser/src/ast.asl" :expected 264)
     (ClosureModule :path "asl/packages/asl-checker/src/types.asl" :expected 52)
     (ClosureModule :path "asl/packages/asl-checker/src/check.asl" :expected 135)
     (ClosureModule :path "asl/packages/asl-checker/src/resolve.asl" :expected 279)
@@ -28,10 +28,10 @@ fn closureModules -> (List ClosureModule)
     (ClosureModule :path "asl/packages/asl-ir/src/anf.asl" :expected 4))
 
 fn testOneModule! m: ClosureModule -> Bool
-  (mt (fileReadString m.path)
+  (match (fileReadString m.path)
     ((err e) (do (assert false (str "Failed to read " m.path ": " e)) false))
     ((ok src)
-      (mt (a/parse src)
+      (match (a/parse src)
         ((err pe) (do (assert false (str "Parse failed for " m.path ": " pe.msg " at " (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col))) false))
         ((ok forms)
           (do
@@ -47,20 +47,20 @@ fn testCompilerClosureModules! -> Bool
       true))
 
 fn getTopDefun forms: (List a/TopForm) idx: Int64 -> (Option a/DefunNode)
-  (mt (listGet forms idx)
+  (match (listGet forms idx)
     ((none) (none))
     ((some tf)
-      (mt tf
+      (match tf
         ((a/topDefun d) (some d))
         (_ (none)))))
 
 fn testComparisonOperators -> Bool
-  (let [(src (str "(module t/cmp :x [f])\n" "\n" "fn f n: Int64 -> Bool\n" "  (<= n 1)\n" "  (>= n 1)\n" "  (!= n 1)\n" "  (== n 1)\n"))
+  (let [(src (str "(module t/cmp :x [f])\n" "\n" "fn f n: Int64 -> Bool\n" "  (<= n 1)\n" "  (>= n 1)\n" "  (!= n 1)\n" "  (= n 1)\n"))
         (res (a/parse src))]
-    (mt res
+    (match res
       ((err pe) (do (assert false (str "Parse error in comparison operators: " pe.msg)) false))
       ((ok forms)
-        (mt (getTopDefun forms 1)
+        (match (getTopDefun forms 1)
           ((none) (do (assert false "Expected topDefun at index 1") false))
           ((some d)
             (let [(b d.body)]
@@ -69,17 +69,17 @@ fn testComparisonOperators -> Bool
                 (assert (= (rd/sexprHead (optionOr (listGet b 0) (rd/makeAtom ""))) "<=") "<= recognized")
                 (assert (= (rd/sexprHead (optionOr (listGet b 1) (rd/makeAtom ""))) ">=") ">= recognized")
                 (assert (= (rd/sexprHead (optionOr (listGet b 2) (rd/makeAtom ""))) "!=") "!= recognized")
-                (assert (= (rd/sexprHead (optionOr (listGet b 3) (rd/makeAtom ""))) "==") "== recognized")
+                (assert (= (rd/sexprHead (optionOr (listGet b 3) (rd/makeAtom ""))) "=") "= recognized")
                 true)))))))
 
 fn testMultilineLetAndDoBodies -> Bool
   (do
     (let [(srcLet (str "(module t/multilet :x [f])\n" "\n" "fn f x: Int64 -> Int64\n" "  (let [(y 1)]\n" "    (+ x y))\n"))
           (resLet (a/parse srcLet))]
-      (mt resLet
+      (match resLet
         ((err pe) (do (assert false (str "Parse error in multi-line let: " pe.msg)) false))
         ((ok forms)
-          (mt (getTopDefun forms 1)
+          (match (getTopDefun forms 1)
             ((none) (do (assert false "Expected topDefun for let") false))
             ((some d)
               (let [(b d.body)]
@@ -89,10 +89,10 @@ fn testMultilineLetAndDoBodies -> Bool
                   true)))))))
     (let [(srcDo (str "(module t/multido :x [g])\n" "\n" "fn g x: Int64 -> Int64\n" "  (do\n" "    (let [(a 1)]\n" "      (+ a x)))\n"))
           (resDo (a/parse srcDo))]
-      (mt resDo
+      (match resDo
         ((err pe) (do (assert false (str "Parse error in multi-line do: " pe.msg)) false))
         ((ok forms)
-          (mt (getTopDefun forms 1)
+          (match (getTopDefun forms 1)
             ((none) (do (assert false "Expected topDefun for do") false))
             ((some d)
               (let [(b d.body)]
@@ -105,10 +105,10 @@ fn testMultilineLetAndDoBodies -> Bool
 fn testRecordConstructors -> Bool
   (let [(src (str "(module t/rec :x [p])\n" "\n" "fn p -> Point\n" "  (Point\n" "    :x 10\n" "    :y 20)\n"))
         (res (a/parse src))]
-    (mt res
+    (match res
       ((err pe) (do (assert false (str "Parse error in record constructor: " pe.msg)) false))
       ((ok forms)
-        (mt (getTopDefun forms 1)
+        (match (getTopDefun forms 1)
           ((none) (do (assert false "Expected topDefun for rec") false))
           ((some d)
             (let [(b d.body)]
@@ -120,10 +120,10 @@ fn testRecordConstructors -> Bool
 fn testMultilineParenExpr -> Bool
   (let [(src (str "(module t/paren :x [calc])\n" "\n" "fn calc a: Int64 b: Int64 -> Int64\n" "  (+\n" "    (* a 2)\n" "    (* b 3))\n"))
         (res (a/parse src))]
-    (mt res
+    (match res
       ((err pe) (do (assert false (str "Parse error in multi-line paren expr: " pe.msg)) false))
       ((ok forms)
-        (mt (getTopDefun forms 1)
+        (match (getTopDefun forms 1)
           ((none) (do (assert false "Expected topDefun for paren") false))
           ((some d)
             (let [(b d.body)]
@@ -139,10 +139,10 @@ fn testMultilineParenExpr -> Bool
 fn testEscapeNewlineInString -> Bool
   (let [(src (str "(module t/str :x [s])\n" "\n" "fn s -> String\n" "  \"hello\\nworld\"\n"))
         (res (a/parse src))]
-    (mt res
+    (match res
       ((err pe) (do (assert false (str "Parse error in string with newline: " pe.msg)) false))
       ((ok forms)
-        (mt (getTopDefun forms 1)
+        (match (getTopDefun forms 1)
           ((none) (do (assert false "Expected topDefun for str") false))
           ((some d)
             (let [(b d.body)
@@ -155,10 +155,10 @@ fn testEscapeNewlineInString -> Bool
 fn testParamCompositeType -> Bool
   (let [(src (str "(module t/param :x [p])\n" "\n" "fn p opt: (Option Int64) -> Int64\n" "  0\n"))
         (res (a/parse src))]
-    (mt res
+    (match res
       ((err pe) (do (assert false (str "Parse error in composite param type: " pe.msg)) false))
       ((ok forms)
-        (mt (getTopDefun forms 1)
+        (match (getTopDefun forms 1)
           ((none) (do (assert false "Expected topDefun for param") false))
           ((some d)
             (let [(params d.params)]
@@ -171,48 +171,27 @@ fn testParamCompositeType -> Bool
                     (refute (= p0.type "Option") "Param type is not reduced to bare Option")
                     true)))))))))
 
-fn testMtPreservedNotRenamed -> Bool
-  (do
-    (let [(src (str "(module t/match :x [m])\n" "\n" "fn m o: (Option Int64) -> Int64\n" "  (mt o ((some v) v) ((none) 0))\n"))
-          (res (a/parse src))]
-      (mt res
-        ((err pe) (do (assert false (str "Parse error in mt preservation: " pe.msg)) false))
-        ((ok forms)
-          (mt (getTopDefun forms 1)
-            ((none) (do (assert false "Expected topDefun for mt") false))
-            ((some d)
-              (let [(b d.body)
-                    (firstExpr (optionOr (listHead b) (rd/makeAtom "")))]
-                (do
-                  (assert (= (rd/sexprHead firstExpr) "mt") "Head is mt, preserved exactly as written")
-                  (refute (= (rd/sexprHead firstExpr) "match") "mt is not renamed to match")
-                  true)))))))
-    (let [(srcParen (str "(module t/match :x [m])\n" "(fn m [o] -> Int64\n" "  (mt o ((some v) v) ((none) 0)))\n"))
-          (resParen (a/parse srcParen))]
-      (mt resParen
-        ((err pe) (do (assert false (str "Parse error in paren mt: " pe.msg)) false))
-        ((ok forms)
-          (mt (getTopDefun forms 1)
-            ((none) (do (assert false "Expected topDefun for paren mt") false))
-            ((some d)
-              (let [(b d.body)
-                    (firstExpr (optionOr (listHead b) (rd/makeAtom "")))]
-                (do
-                  (assert (= (rd/sexprHead firstExpr) "mt") "Head is mt in paren dialect")
-                  (refute (= (rd/sexprHead firstExpr) "match") "mt is not renamed to match in paren dialect")
-                  true)))))))
-    true)
+fn mtRejection src: String -> String
+  (match (a/parse src) ((ok _) "accepted") ((err pe) pe.msg))
+
+fn testMtRejectedNamingMatch -> Bool
+  (let [(want "ERR_READ_SPELLING (mt subject arm ...) is retired: write (match subject arm ...)")]
+    (do
+      (assert (= (mtRejection (str "(module t/match :x [m])\n" "\n" "fn m o: (Option Int64) -> Int64\n" "  (mt o ((some v) v) ((none) 0))\n")) want) "the reader rejects mt and names match")
+      (assert (= (mtRejection (str "(module t/match :x [m])\n" "(fn m [o] -> Int64\n" "  (mt o ((some v) v) ((none) 0)))\n")) want) "the paren dialect rejects mt too")
+      (assert (= (mtRejection (str "(module t/match :x [m])\n" "\n" "fn m o: (Option Int64) -> Int64\n" "  (match o ((some v) v) ((none) 0))\n")) "accepted") "match reads clean")
+      true))
 
 fn posText pf: a/PosForm -> String
   (str (stringFromInt64 pf.line) ":" (stringFromInt64 pf.col))
 
 fn bodyPosOf src: String -> (List String)
-  (mt (a/parse src)
+  (match (a/parse src)
     ((err pe) (list (str "parse error " pe.msg)))
-    ((ok forms) (mt (getTopDefun forms 1) ((none) (list "no defun")) ((some d) (map posText d.bodyPos)))))
+    ((ok forms) (match (getTopDefun forms 1) ((none) (list "no defun")) ((some d) (map posText d.bodyPos)))))
 
 fn docOf src: String -> String
-  (mt (a/parse src) ((err pe) (str "parse error " pe.msg)) ((ok forms) (mt (getTopDefun forms 1) ((none) "no defun") ((some d) d.docstring))))
+  (match (a/parse src) ((err pe) (str "parse error " pe.msg)) ((ok forms) (match (getTopDefun forms 1) ((none) "no defun") ((some d) d.docstring))))
 
 fn testBodySourcePositions -> Bool
   (let [(indented (str "(module t/pos :x [p])\n" "\n" "fn p x: Int64 -> Int64\n" "  (let [(y 1)]\n" "    (+ x y))\n" "  (+ x\n" "     2)\n" "  x\n"))
@@ -227,10 +206,10 @@ fn declLineCount src: String -> Int64
   (listLength (filter (fn [(l String)] -> Bool (or (stringStartsWith? l "fn ") (or (stringStartsWith? l "enum ") (stringStartsWith? l "schema ")))) (stringSplit src "\n")))
 
 fn testPreludeParses! -> Bool
-  (mt (fileReadString "asl/prelude/prelude.asl")
+  (match (fileReadString "asl/prelude/prelude.asl")
     ((err e) (do (assert false (str "read prelude: " e)) false))
     ((ok src)
-      (mt (a/parse src)
+      (match (a/parse src)
         ((err pe) (do (assert false (str "prelude.asl:" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": " pe.msg)) false))
         ((ok forms)
           (do
@@ -239,12 +218,12 @@ fn testPreludeParses! -> Bool
 
 fn testNonAsciiStringKeepsLine -> Bool
   (let [(src (str "(module t/u :x [f g])\n" "\n" "fn f -> String\n" "  (str \"À\" \"¿\")\n" "\n" "fn g -> Int64\n" "  1\n"))]
-    (mt (a/parse src)
+    (match (a/parse src)
       ((err pe) (do (assert false (str "non-ASCII string: " pe.msg)) false))
       ((ok forms)
         (do
           (assert (= (listLength forms) 3) (str "a line with multi-byte characters is read to its end, forms " (stringFromInt64 (listLength forms))))
-          (mt (getTopDefun forms 1)
+          (match (getTopDefun forms 1)
             ((none) (assert false "f is a defun"))
             ((some d) (assert (= (rd/renderSexpr (optionOr (listHead d.body) (rd/makeAtom ""))) "(str \"À\" \"¿\")") "the multi-byte string literals survive intact")))
           true))))
@@ -258,7 +237,7 @@ fn ! runTests -> Bool
     (assert (testMultilineParenExpr) "testMultilineParenExpr")
     (assert (testEscapeNewlineInString) "testEscapeNewlineInString")
     (assert (testParamCompositeType) "testParamCompositeType")
-    (assert (testMtPreservedNotRenamed) "testMtPreservedNotRenamed")
+    (assert (testMtRejectedNamingMatch) "testMtRejectedNamingMatch")
     (assert (testBodySourcePositions) "testBodySourcePositions")
     (assert (testPreludeParses!) "testPreludeParses")
     (assert (testNonAsciiStringKeepsLine) "testNonAsciiStringKeepsLine")

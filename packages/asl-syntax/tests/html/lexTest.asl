@@ -272,7 +272,7 @@ fn hasDataState states: (List json/Json) -> Bool
   (if (listEmpty? states)
     false
     (let [(hd (optionOr (listHead states) (json/jstr "")))]
-      (mt hd
+      (match hd
         ((json/jstr s)
          (if (= s "Data state")
            true
@@ -280,17 +280,17 @@ fn hasDataState states: (List json/Json) -> Bool
         (_ (hasDataState (optionOr (listTail states) (list)))))))
 
 fn isDoubleEscaped tc: json/Json -> Bool
-  (mt (json/jsonGet tc "doubleEscaped")
+  (match (json/jsonGet tc "doubleEscaped")
     ((some v)
-     (mt v
+     (match v
        ((json/jbool b) b)
        (_ false)))
     (_ false))
 
 fn isDataStateCase tc: json/Json -> Bool
-  (mt (json/jsonGet tc "initialStates")
+  (match (json/jsonGet tc "initialStates")
     ((some v)
-     (mt v
+     (match v
        ((json/jarr xs) (hasDataState xs))
        (_ true)))
     (_ true))
@@ -337,9 +337,9 @@ fn makeCommentJson data: String -> json/Json
   (json/jarr (list (json/jstr "Comment") (json/jstr data)))
 
 fn makeDoctypeJson nameOpt: (Option String) pubOpt: (Option String) sysOpt: (Option String) forceQuirks: Bool -> json/Json
-  (let [(nameJ (mt nameOpt ((some n) (json/jstr n)) (_ (json/jnull))))
-        (pubJ (mt pubOpt ((some p) (json/jstr p)) (_ (json/jnull))))
-        (sysJ (mt sysOpt ((some s) (json/jstr s)) (_ (json/jnull))))
+  (let [(nameJ (match nameOpt ((some n) (json/jstr n)) (_ (json/jnull))))
+        (pubJ (match pubOpt ((some p) (json/jstr p)) (_ (json/jnull))))
+        (sysJ (match sysOpt ((some s) (json/jstr s)) (_ (json/jnull))))
         (correctJ (json/jbool (not forceQuirks)))]
     (json/jarr (list (json/jstr "DOCTYPE") nameJ pubJ sysJ correctJ)))
 
@@ -516,7 +516,7 @@ fn collectTokensLoop text: String toks: (List tr/Token) charBuf: String acc: (Li
               (if (not (hlx/tagTokenClosed text tok))
                 (collectTokensLoop text rest charBuf acc)
                 (let [(tagName (hlx/endTagTokenName text tok))]
-                  (mt (makeEndTagJson tagName)
+                  (match (makeEndTagJson tagName)
                     ((some endJson)
                      (let [(acc1 (if (stringEmpty? charBuf) acc (cons (makeCharacterJson charBuf) acc)))]
                      (collectTokensLoop text rest "" (cons endJson acc1))))
@@ -538,7 +538,7 @@ fn collectTokensLoop text: String toks: (List tr/Token) charBuf: String acc: (Li
 fn jsonPairEqual? a: (Pair String json/Json) bObj: json/Json -> Bool
   (let [(k (pairFirst a))
         (v (pairSecond a))]
-    (mt (json/jsonGet bObj k)
+    (match (json/jsonGet bObj k)
       ((some bv) (jsonValueEqual? v bv))
       (_ false)))
 
@@ -568,37 +568,37 @@ fn jsonArrayEqual? xs: (List json/Json) ys: (List json/Json) -> Bool
           false))))
 
 fn jsonValueEqual? a: json/Json b: json/Json -> Bool
-  (mt a
+  (match a
     ((json/jnull)
-     (mt b ((json/jnull) true) (_ false)))
+     (match b ((json/jnull) true) (_ false)))
     ((json/jbool b1)
-     (mt b ((json/jbool b2) (= b1 b2)) (_ false)))
+     (match b ((json/jbool b2) (= b1 b2)) (_ false)))
     ((json/jint i1)
-     (mt b
+     (match b
        ((json/jint i2) (= i1 i2))
        ((json/jfloat f2) (= (int64ToFloat64 i1) f2))
        ((json/jnum n2) (= (int64ToFloat64 i1) n2))
        (_ false)))
     ((json/jfloat f1)
-     (mt b
+     (match b
        ((json/jfloat f2) (= f1 f2))
        ((json/jint i2) (= f1 (int64ToFloat64 i2)))
        ((json/jnum n2) (= f1 n2))
        (_ false)))
     ((json/jnum n1)
-     (mt b
+     (match b
        ((json/jnum n2) (= n1 n2))
        ((json/jint i2) (= n1 (int64ToFloat64 i2)))
        ((json/jfloat f2) (= n1 f2))
        (_ false)))
     ((json/jstr s1)
-     (mt b ((json/jstr s2) (= s1 s2)) (_ false)))
+     (match b ((json/jstr s2) (= s1 s2)) (_ false)))
     ((json/jarr xs1)
-     (mt b
+     (match b
        ((json/jarr xs2) (jsonArrayEqual? xs1 xs2))
        (_ false)))
     ((json/jobj kvs1)
-     (mt b
+     (match b
        ((json/jobj kvs2) (jsonObjectEqual? kvs1 kvs2 b a))
        (_ false))))
 
@@ -609,9 +609,9 @@ fn runOneHtml5libCase acc: Html5libStats tc: json/Json -> Html5libStats
       (with acc :exInitial (+ acc.exInitial 1))
       (if (isParseErrorOnlyCase tc)
         (with acc :exParseError (+ acc.exParseError 1))
-        (mt (json/jsonGet tc "input")
+        (match (json/jsonGet tc "input")
           ((some v)
-           (mt v
+           (match v
              ((json/jstr inp)
               (let [(toks (hlx/tokenize inp))
                     (len (stringLength inp))
@@ -621,7 +621,7 @@ fn runOneHtml5libCase acc: Html5libStats tc: json/Json -> Html5libStats
                     (rtPassed (and (ok? tiling) (= printed inp)))
                     (expVal (optionOr (json/jsonGet tc "output") (json/jarr (list))))
                     (actTokens (collectTokensLoop inp toks "" (list)))
-                    (toksPassed (mt expVal
+                    (toksPassed (match expVal
                                   ((json/jarr expList) (jsonArrayEqual? actTokens expList))
                                   (_ false)))
                     (casePassed (and rtPassed toksPassed))]
@@ -632,15 +632,15 @@ fn runOneHtml5libCase acc: Html5libStats tc: json/Json -> Html5libStats
           (_ acc)))))
 
 fn runHtml5libFile! path: String -> Html5libStats
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) (emptyStats))
     ((ok s)
-     (mt (json/jsonParse s)
+     (match (json/jsonParse s)
        ((err _) (emptyStats))
        ((ok jv)
-        (mt (json/jsonGet jv "tests")
+        (match (json/jsonGet jv "tests")
           ((some tv)
-           (mt tv
+           (match tv
              ((json/jarr cases)
               (fold runOneHtml5libCase (emptyStats) cases))
              (_ (emptyStats))))
@@ -720,13 +720,13 @@ fn testLosslessPrintReconstruction -> Bool
 fn checkOneHtmlFile! acc: (Pair Int64 Int64) path: String -> (Pair Int64 Int64)
   (let [(checked (pairFirst acc))
         (mismatches (pairSecond acc))]
-    (mt (fileReadBytes path)
+    (match (fileReadBytes path)
       ((err _) acc)
       ((ok bs)
        (let [(len (bytesLength bs))
              (toks (hlx/tokenizeBytes bs))
              (tilingRes (tr/checkTokensTiling toks len))]
-         (mt tilingRes
+         (match tilingRes
            ((err _) (pair (+ checked 1) (+ mismatches 1)))
            ((ok _)
             (let [(root (hlx/tokensToNode toks len))
@@ -736,7 +736,7 @@ fn checkOneHtmlFile! acc: (Pair Int64 Int64) path: String -> (Pair Int64 Int64)
                 (pair (+ checked 1) (+ mismatches 1))))))))))
 
 fn verifyTrackedFileKnownTokens! path: String htmlTagEnd: Int64 -> Bool
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) false)
     ((ok s)
      (let [(toks (hlx/tokenize s))
@@ -773,7 +773,7 @@ fn testAllTrackedHtmlFilesLossless! -> Bool
 
 fn testBenchmarkPerformance! -> Bool
   (let [(path "docs/diagrams/DiagramWorkbench.html")]
-    (mt (fileReadBytes path)
+    (match (fileReadBytes path)
       ((err e) (assert false (str "benchmark file missing: " e)))
       ((ok bs)
        (let [(len (bytesLength bs))]

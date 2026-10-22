@@ -6,7 +6,7 @@
 fn writeAll! fd: Int64 data: String offset: Int64 -> (Result Int64 String)
   (if (>= offset (stringLength data)) (ok offset)
     (let [(chunk (optionOr (stringSlice data offset (stringLength data)) ""))]
-      (mt (fdWrite fd chunk)
+      (match (fdWrite fd chunk)
         ((err e) (err e))
         ((ok n)
           (if (<= n 0) (err "ERR_WRITE_ZERO")
@@ -14,11 +14,11 @@ fn writeAll! fd: Int64 data: String offset: Int64 -> (Result Int64 String)
 
 fn readAll! fd: Int64 acc: String deadline: Int64 -> String
   (if (> (monotonicNs) deadline) acc
-    (mt (fdPoll (list (pair fd 1)) 50)
+    (match (fdPoll (list (pair fd 1)) 50)
       ((err _) acc)
       ((ok ready)
         (if (listEmpty? ready) acc
-          (mt (fdRead fd 4096)
+          (match (fdRead fd 4096)
             ((err _) acc)
             ((ok data)
               (if (= (stringLength data) 0) acc
@@ -26,11 +26,11 @@ fn readAll! fd: Int64 acc: String deadline: Int64 -> String
 
 fn waitForEof! fd: Int64 deadline: Int64 -> Bool
   (if (> (monotonicNs) deadline) false
-    (mt (fdPoll (list (pair fd 1)) 50)
+    (match (fdPoll (list (pair fd 1)) 50)
       ((err _) false)
       ((ok ready)
         (if (listEmpty? ready) (waitForEof! fd deadline)
-          (mt (fdRead fd 4096)
+          (match (fdRead fd 4096)
             ((err _) false)
             ((ok data)
               (if (= (stringLength data) 0) true
@@ -38,7 +38,7 @@ fn waitForEof! fd: Int64 deadline: Int64 -> Bool
 
 fn stepUntilEvents! server: r/Server maxSteps: Int64 -> (Pair r/Server (List r/HttpEvent))
   (if (<= maxSteps 0) (pair server (list))
-    (mt (r/reactorStep! server 100)
+    (match (r/reactorStep! server 100)
       ((err _) (pair server (list)))
       ((ok result)
         (let [(srv (pairFirst result))
@@ -49,7 +49,7 @@ fn stepUntilEvents! server: r/Server maxSteps: Int64 -> (Pair r/Server (List r/H
 
 fn stepCollectEvents! server: r/Server maxSteps: Int64 collected: (List r/HttpEvent) -> (Pair r/Server (List r/HttpEvent))
   (if (<= maxSteps 0) (pair server collected)
-    (mt (r/reactorStep! server 50)
+    (match (r/reactorStep! server 50)
       ((err _) (pair server collected))
       ((ok result)
         (let [(srv (pairFirst result))
@@ -59,13 +59,13 @@ fn stepCollectEvents! server: r/Server maxSteps: Int64 collected: (List r/HttpEv
 
 fn testPipelining! -> Bool
   (let [(cfg (r/ServerConfig :maxHeaderBytes 8192 :clientTimeoutMs 5000 :maxConnections 128))]
-    (mt (r/httpListen! 0 cfg)
+    (match (r/httpListen! 0 cfg)
       ((err e) (do (assert false (str "httpListen failed: " e)) false))
       ((ok server)
-        (mt (sockLocalPort server.listenerFd)
+        (match (sockLocalPort server.listenerFd)
           ((err e) (do (fdClose server.listenerFd) (assert false (str "sockLocalPort: " e)) false))
           ((ok port)
-            (mt (tcpConnect port)
+            (match (tcpConnect port)
               ((err e) (do (fdClose server.listenerFd) (assert false (str "tcpConnect: " e)) false))
               ((ok clientFd)
                 (let [(req1 "GET /first HTTP/1.1\r
@@ -97,13 +97,13 @@ Host: localhost\r
 
 fn testOversizedHeaders! -> Bool
   (let [(cfg (r/ServerConfig :maxHeaderBytes 128 :clientTimeoutMs 5000 :maxConnections 128))]
-    (mt (r/httpListen! 0 cfg)
+    (match (r/httpListen! 0 cfg)
       ((err e) (do (assert false (str "httpListen failed: " e)) false))
       ((ok server)
-        (mt (sockLocalPort server.listenerFd)
+        (match (sockLocalPort server.listenerFd)
           ((err e) (do (fdClose server.listenerFd) (assert false (str "sockLocalPort: " e)) false))
           ((ok port)
-            (mt (tcpConnect port)
+            (match (tcpConnect port)
               ((err e) (do (fdClose server.listenerFd) (assert false (str "tcpConnect: " e)) false))
               ((ok clientFd)
                 (let [(bigHeader (stringJoin (map (fn [_] "X") (range 0 300)) ""))
@@ -123,9 +123,9 @@ X-Big: " bigHeader "\r
                         (retryRes (stepCollectEvents! srv 1 (list)))
                         (srvRetry (pairFirst retryRes))
                         (repeatErrors (filter (fn [(e r/HttpEvent)] (= e.kind "error")) (pairSecond retryRes)))
-                        (sent (mt (r/httpRespond! srvRetry errEvent.connId 431 (list) "too large") ((err _) false) ((ok _) true)))
+                        (sent (match (r/httpRespond! srvRetry errEvent.connId 431 (list) "too large") ((err _) false) ((ok _) true)))
                         (closedRes (r/httpClose! srvRetry errEvent.connId))
-                        (srvClosed (mt closedRes ((err _) srvRetry) ((ok s) s)))
+                        (srvClosed (match closedRes ((err _) srvRetry) ((ok s) s)))
                         (reply (readAll! clientFd "" (+ (monotonicNs) 2000000000)))
                         (eof (waitForEof! clientFd (+ (monotonicNs) 1000000000)))]
                     (assert (= errEvent.statusCode 431) "oversized headers: status code 431")
@@ -140,13 +140,13 @@ X-Big: " bigHeader "\r
 
 fn testSlowClientTimeout! -> Bool
   (let [(cfg (r/ServerConfig :maxHeaderBytes 8192 :clientTimeoutMs 200 :maxConnections 128))]
-    (mt (r/httpListen! 0 cfg)
+    (match (r/httpListen! 0 cfg)
       ((err e) (do (assert false (str "httpListen failed: " e)) false))
       ((ok server)
-        (mt (sockLocalPort server.listenerFd)
+        (match (sockLocalPort server.listenerFd)
           ((err e) (do (fdClose server.listenerFd) (assert false (str "sockLocalPort: " e)) false))
           ((ok port)
-            (mt (tcpConnect port)
+            (match (tcpConnect port)
               ((err e) (do (fdClose server.listenerFd) (assert false (str "tcpConnect: " e)) false))
               ((ok clientFd)
                 (let [(r1 (stepCollectEvents! server 5 (list)))
@@ -162,16 +162,16 @@ fn testSlowClientTimeout! -> Bool
 
 
 fn respondChunked! srv: r/Server connId: Int64 clientFd: Int64 -> Bool
-  (mt (r/httpRespond! srv connId 200 (list (pair "Transfer-Encoding" "chunked")) "")
+  (match (r/httpRespond! srv connId 200 (list (pair "Transfer-Encoding" "chunked")) "")
     ((err e) (do (assert false (str "httpRespond: " e)) (fdClose clientFd) (fdClose srv.listenerFd) false))
     ((ok srv2)
-      (mt (r/httpStreamChunk! srv2 connId "hello world")
+      (match (r/httpStreamChunk! srv2 connId "hello world")
         ((err e) (do (assert false (str "chunk1: " e)) (fdClose clientFd) (fdClose srv2.listenerFd) false))
         ((ok srv3)
-          (mt (r/httpStreamChunk! srv3 connId "!")
+          (match (r/httpStreamChunk! srv3 connId "!")
             ((err e) (do (assert false (str "chunk2: " e)) (fdClose clientFd) (fdClose srv3.listenerFd) false))
             ((ok srv4)
-              (mt (r/httpStreamChunk! srv4 connId "")
+              (match (r/httpStreamChunk! srv4 connId "")
                 ((err e) (do (assert false (str "chunk-end: " e)) (fdClose clientFd) (fdClose srv4.listenerFd) false))
                 ((ok srv5)
                   (let [(deadline (+ (monotonicNs) 2000000000))
@@ -187,13 +187,13 @@ fn respondChunked! srv: r/Server connId: Int64 clientFd: Int64 -> Bool
 
 fn testChunkedTransfer! -> Bool
   (let [(cfg (r/ServerConfig :maxHeaderBytes 8192 :clientTimeoutMs 5000 :maxConnections 128))]
-    (mt (r/httpListen! 0 cfg)
+    (match (r/httpListen! 0 cfg)
       ((err e) (do (assert false (str "httpListen failed: " e)) false))
       ((ok server)
-        (mt (sockLocalPort server.listenerFd)
+        (match (sockLocalPort server.listenerFd)
           ((err e) (do (fdClose server.listenerFd) (assert false (str "sockLocalPort: " e)) false))
           ((ok port)
-            (mt (tcpConnect port)
+            (match (tcpConnect port)
               ((err e) (do (fdClose server.listenerFd) (assert false (str "tcpConnect: " e)) false))
               ((ok clientFd)
                 (let [(req "GET /stream HTTP/1.1\r
@@ -211,15 +211,15 @@ Host: localhost\r
 
 
 fn sendSSE! srv: r/Server connId: Int64 clientFd: Int64 -> Bool
-  (mt (r/httpRespond! srv connId 200 (list (pair "Content-Type" "text/event-stream") (pair "Transfer-Encoding" "chunked") (pair "Cache-Control" "no-cache")) "")
+  (match (r/httpRespond! srv connId 200 (list (pair "Content-Type" "text/event-stream") (pair "Transfer-Encoding" "chunked") (pair "Cache-Control" "no-cache")) "")
     ((err e) (do (assert false (str "SSE header: " e)) (fdClose clientFd) (fdClose srv.listenerFd) false))
     ((ok srv2)
-      (mt (r/httpStreamChunk! srv2 connId "data: {\"seq\":1}
+      (match (r/httpStreamChunk! srv2 connId "data: {\"seq\":1}
 
 ")
         ((err e) (do (assert false (str "SSE chunk1: " e)) (fdClose clientFd) (fdClose srv2.listenerFd) false))
         ((ok srv3)
-          (mt (r/httpStreamChunk! srv3 connId "data: {\"seq\":2}
+          (match (r/httpStreamChunk! srv3 connId "data: {\"seq\":2}
 
 ")
             ((err e) (do (assert false (str "SSE chunk2: " e)) (fdClose clientFd) (fdClose srv3.listenerFd) false))
@@ -233,13 +233,13 @@ fn sendSSE! srv: r/Server connId: Int64 clientFd: Int64 -> Bool
 
 fn testSSE! -> Bool
   (let [(cfg (r/ServerConfig :maxHeaderBytes 8192 :clientTimeoutMs 5000 :maxConnections 128))]
-    (mt (r/httpListen! 0 cfg)
+    (match (r/httpListen! 0 cfg)
       ((err e) (do (assert false (str "httpListen failed: " e)) false))
       ((ok server)
-        (mt (sockLocalPort server.listenerFd)
+        (match (sockLocalPort server.listenerFd)
           ((err e) (do (fdClose server.listenerFd) (assert false (str "sockLocalPort: " e)) false))
           ((ok port)
-            (mt (tcpConnect port)
+            (match (tcpConnect port)
               ((err e) (do (fdClose server.listenerFd) (assert false (str "tcpConnect: " e)) false))
               ((ok clientFd)
                 (let [(req "GET /events HTTP/1.1\r
@@ -258,15 +258,15 @@ Accept: text/event-stream\r
 
 
 fn spawnChild! script: String -> (Result (Pair Int64 (Pair Int64 Int64)) String)
-  (mt (procSpawnv (list "/bin/sh" "-c" script) (none) (none))
+  (match (procSpawnv (list "/bin/sh" "-c" script) (none) (none))
     ((err e) (err e))
     ((ok sp) (do (fdClose sp.stdin) (ok (pair sp.pid (pair sp.stdout sp.stderr))))))
 
 fn withChild! server: r/Server script: String timeoutMs: Int64 -> (Result (Pair r/Server Int64) String)
-  (mt (spawnChild! script)
+  (match (spawnChild! script)
     ((err e) (err e))
     ((ok child)
-      (mt (r/reactorAddProc! server (pairFirst child) (pairFirst (pairSecond child)) (pairSecond (pairSecond child)) timeoutMs)
+      (match (r/reactorAddProc! server (pairFirst child) (pairFirst (pairSecond child)) (pairSecond (pairSecond child)) timeoutMs)
         ((err e) (err e))
         ((ok srv) (ok (pair srv (pairFirst child)))))))
 
@@ -275,10 +275,10 @@ fn procEvents evts: (List r/HttpEvent) kind: String -> (List r/HttpEvent)
 
 fn testProcDone! -> Bool
   (let [(cfg (r/ServerConfig :maxHeaderBytes 8192 :clientTimeoutMs 5000 :maxConnections 128))]
-    (mt (r/httpListen! 0 cfg)
+    (match (r/httpListen! 0 cfg)
       ((err e) (do (assert false (str "httpListen failed: " e)) false))
       ((ok server)
-        (mt (withChild! server "echo hello-proc; echo to-err >&2; exit 3" 5000)
+        (match (withChild! server "echo hello-proc; echo to-err >&2; exit 3" 5000)
           ((err e) (do (fdClose server.listenerFd) (assert false (str "spawn: " e)) false))
           ((ok added)
             (let [(res (stepCollectEvents! (pairFirst added) 20 (list)))
@@ -295,16 +295,16 @@ fn testProcDone! -> Bool
 
 fn testProcTimeout! -> Bool
   (let [(cfg (r/ServerConfig :maxHeaderBytes 8192 :clientTimeoutMs 5000 :maxConnections 128))]
-    (mt (r/httpListen! 0 cfg)
+    (match (r/httpListen! 0 cfg)
       ((err e) (do (assert false (str "httpListen failed: " e)) false))
       ((ok server)
-        (mt (withChild! server "sleep 30 & echo $!; wait" 300)
+        (match (withChild! server "sleep 30 & echo $!; wait" 300)
           ((err e) (do (fdClose server.listenerFd) (assert false (str "spawn: " e)) false))
           ((ok added)
             (let [(t0 (monotonicNs))
                   (first (r/reactorStep! (pairFirst added) 10))
                   (firstMs (/ (- (monotonicNs) t0) 1000000))
-                  (srv1 (mt first ((ok p) (pairFirst p)) ((err _) (pairFirst added))))
+                  (srv1 (match first ((ok p) (pairFirst p)) ((err _) (pairFirst added))))
                   (res (stepCollectEvents! srv1 30 (list)))
                   (srv2 (pairFirst res))
                   (totalMs (/ (- (monotonicNs) t0) 1000000))
@@ -322,13 +322,13 @@ fn testProcTimeout! -> Bool
 
 fn testProcError! -> Bool
   (let [(cfg (r/ServerConfig :maxHeaderBytes 8192 :clientTimeoutMs 5000 :maxConnections 128))]
-    (mt (r/httpListen! 0 cfg)
+    (match (r/httpListen! 0 cfg)
       ((err e) (do (assert false (str "httpListen failed: " e)) false))
       ((ok server)
-        (mt (spawnChild! "exit 0")
+        (match (spawnChild! "exit 0")
           ((err e) (do (fdClose server.listenerFd) (assert false (str "spawn: " e)) false))
           ((ok child)
-            (mt (r/reactorAddProc! server (procSelf) (pairFirst (pairSecond child)) (pairSecond (pairSecond child)) 5000)
+            (match (r/reactorAddProc! server (procSelf) (pairFirst (pairSecond child)) (pairSecond (pairSecond child)) 5000)
               ((err e) (do (fdClose server.listenerFd) (assert false (str "reactorAddProc: " e)) false))
               ((ok srv1)
                 (let [(res (stepCollectEvents! srv1 3 (list)))
@@ -343,13 +343,13 @@ fn testProcError! -> Bool
 
 fn testRequestBodies! -> Bool
   (let [(cfg (r/ServerConfig :maxHeaderBytes 8192 :clientTimeoutMs 5000 :maxConnections 128))]
-    (mt (r/httpListen! 0 cfg)
+    (match (r/httpListen! 0 cfg)
       ((err e) (do (assert false (str "httpListen failed: " e)) false))
       ((ok server)
-        (mt (sockLocalPort server.listenerFd)
+        (match (sockLocalPort server.listenerFd)
           ((err e) (do (fdClose server.listenerFd) (assert false (str "sockLocalPort: " e)) false))
           ((ok port)
-            (mt (tcpConnect port)
+            (match (tcpConnect port)
               ((err e) (do (fdClose server.listenerFd) (assert false (str "tcpConnect: " e)) false))
               ((ok clientFd)
                 (let [(_ (writeAll! clientFd "POST /v1/chat/completions HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nhe" 0))
@@ -372,18 +372,18 @@ fn testRequestBodies! -> Bool
 
 fn ! testPeerDisconnectClosesServerFd! -> Bool
   (let [(cfg (r/ServerConfig :maxHeaderBytes 8192 :clientTimeoutMs 5000 :maxConnections 128))]
-    (mt (r/httpListen! 0 cfg)
+    (match (r/httpListen! 0 cfg)
       ((err e) (do (assert false (str "httpListen failed: " e)) false))
       ((ok server)
-        (mt (sockLocalPort server.listenerFd)
+        (match (sockLocalPort server.listenerFd)
           ((err e) (do (fdClose server.listenerFd) (assert false (str "sockLocalPort: " e)) false))
           ((ok port)
-            (mt (tcpConnect port)
+            (match (tcpConnect port)
               ((err e) (do (fdClose server.listenerFd) (assert false (str "tcpConnect: " e)) false))
               ((ok clientFd)
                 (let [(accepted (stepCollectEvents! server 10 (list)))
                       (srv1 (pairFirst accepted))
-                      (serverFd (mt (listHead srv1.connections) ((some c) c.fd) ((none) -1)))
+                      (serverFd (match (listHead srv1.connections) ((some c) c.fd) ((none) -1)))
                       (_ (fdClose clientFd))
                       (afterClose (stepCollectEvents! srv1 10 (list)))
                       (srv2 (pairFirst afterClose))

@@ -92,7 +92,7 @@ fn ! runConsiliumTarget action: Str args: (List Str) -> (Result Str Str)
   (let [(target (stringJoin args " "))]
     (if (stringEmpty? target)
       (err (str "Usage: consilium " action " <target>"))
-      (mt (consiliumRepoRoot!)
+      (match (consiliumRepoRoot!)
         ((err e) (err e))
         ((ok root)
          (let [(result (processRun (str (quoteConsiliumShell (str root "/bin/asl")) " " (quoteConsiliumShell (consiliumPayload target)))))]
@@ -108,7 +108,7 @@ fn consiliumTestResults first: ProcessOutput second: ProcessOutput -> (Result St
       (ok (str "--> Running asl-consilium pure ASL test suites...\n" first.stdout second.stdout "✓ [Consilium Test] All pure AgentSlang test suites passed cleanly.\n"))))
 
 fn runConsiliumTests! -> (Result Str Str)
-  (mt (consiliumRepoRoot!)
+  (match (consiliumRepoRoot!)
     ((err e) (err e))
     ((ok root)
      (let [(host (quoteConsiliumShell (str root "/bin/asl")))

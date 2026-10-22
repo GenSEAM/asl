@@ -13,7 +13,7 @@ fn runTests -> Bool
                        "OLLAMA_API_KEY" "testKey123")
                      "OLLAMA_TIMEOUT_SEC" "1"))
         (settingsRes (u/upstreamSettings env))]
-    (mt settingsRes
+    (match settingsRes
       ((err _) false)
       ((ok settings)
         (let [(endpoint (u/getUpstreamForModel settings env (some "ollama/glm-5.3")))
@@ -23,7 +23,7 @@ fn runTests -> Bool
                                              "{\"model\":\"glm-5.3\"}"
                                              (list)))
               (timeout settings.ollamaTimeoutSec)]
-          (mt requestRes
+          (match requestRes
             ((err _) false)
             ((ok request)
               (do

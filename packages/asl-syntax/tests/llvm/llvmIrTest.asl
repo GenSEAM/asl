@@ -11,7 +11,7 @@
       (asl-target-llvm/tests/sourceE2eTest :a sE2e)])
 
 fn readOrFail! path: String -> String
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((ok content) content)
     ((err msg) (do (assert false (str "failed reading " path ": " msg)) "")))
 
@@ -51,7 +51,7 @@ fn testGoldenTraps! -> Bool
 
 fn ! testSourceE2eProgram -> Bool
   (let [(res (llvm/emitLlvmSource (sE2e/fibSource) "fibMain"))]
-    (mt res
+    (match res
       ((err e) (do (assert false (str "emitLlvmSource failed: " e)) false))
       ((ok text)
        (let [(len (stringLength text))
@@ -85,7 +85,7 @@ fn testIrE2eProgram! name: String -> Bool
 
 fn testSeededMissingTerminator -> Bool
   (let [(bad "define i64 @f(i64 %a) {\nbb.entry:\n  %b = add i64 %a, 1\n}\n")]
-    (mt (val/llvmValidate bad)
+    (match (val/llvmValidate bad)
       ((ok _) (do (assert false "missing terminator must fail validation") false))
       ((err items)
        (do
@@ -99,7 +99,7 @@ fn testSeededMissingTerminator -> Bool
 
 fn testSeededUndefinedValue -> Bool
   (let [(bad "define i64 @f(i64 %a) {\nbb.entry:\n  %b = add i64 %ghost, 1\n  ret i64 %b\n}\n")]
-    (mt (val/llvmValidate bad)
+    (match (val/llvmValidate bad)
       ((ok _) (do (assert false "undefined local must fail validation") false))
       ((err items)
        (do
@@ -113,7 +113,7 @@ fn testSeededUndefinedValue -> Bool
 
 fn testSeededPhiMidBlock -> Bool
   (let [(bad "define i64 @f(i64 %a) {\nbb.entry:\n  %b = add i64 %a, 1\n  %p = phi i64 [ %b, %bb.entry ]\n  ret i64 %p\n}\n")]
-    (mt (val/llvmValidate bad)
+    (match (val/llvmValidate bad)
       ((ok _) (do (assert false "phi mid-block must fail validation") false))
       ((err items)
        (do
@@ -127,7 +127,7 @@ fn testSeededPhiMidBlock -> Bool
 
 fn testSeededArityMismatch -> Bool
   (let [(bad "declare ptr @asl_rt_int(i64)\n\ndefine ptr @f() {\nbb.entry:\n  %x = call ptr @asl_rt_int(i64 1, i64 2)\n  ret ptr %x\n}\n")]
-    (mt (val/llvmValidate bad)
+    (match (val/llvmValidate bad)
       ((ok _) (do (assert false "arity mismatch must fail validation") false))
       ((err items)
        (do
@@ -141,7 +141,7 @@ fn testSeededArityMismatch -> Bool
 
 fn testSeededDuplicateValue -> Bool
   (let [(bad "define i64 @f(i64 %a) {\nbb.entry:\n  %b = add i64 %a, 1\n  %b = add i64 %a, 2\n  ret i64 %b\n}\n")]
-    (mt (val/llvmValidate bad)
+    (match (val/llvmValidate bad)
       ((ok _) (do (assert false "duplicate value must fail validation") false))
       ((err items)
        (do
@@ -180,7 +180,7 @@ fn testLlvmAsOracle! -> Bool
         true)))
 
 fn itemsOf text: String -> (List val/Item)
-  (mt (val/llvmValidate text)
+  (match (val/llvmValidate text)
     ((ok _) (list))
     ((err items) items))
 
@@ -270,7 +270,7 @@ fn testLabelValueNamespaces -> Bool
     (expectOneItem "define i64 @f(i64 %a) {\nentry:\n  br label %a\n}\n" 3 "label '%a'" "value used as label"))
 
 fn expectEmitted res: (Result String (List ty/IrDiag)) label: String -> Bool
-  (mt res
+  (match res
     ((err ds) (do (assert false (str "emitLlvmProgram failed on " label ": " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) ds) "; "))) false))
     ((ok text) (expectClean text label)))
 

@@ -15,7 +15,7 @@ fn detectDivergence session: record/ReplaySession actualStates: (List String) ->
   (detectDivergenceLoop session.events actualStates)
 
 fn getDivergenceReport res: (Result Bool DivergenceReport) -> DivergenceReport
-  (mt res ((ok _val) (makeDivergenceReport false 0 "" "" "SUCCESS")) ((err report) report))
+  (match res ((ok _val) (makeDivergenceReport false 0 "" "" "SUCCESS")) ((err report) report))
 
 fn replayEventStream session: record/ReplaySession -> (Result String DivergenceReport)
   (ok session.sessionId)

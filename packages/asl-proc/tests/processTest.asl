@@ -1,10 +1,10 @@
 (module asl-proc/tests/processTest :x [runTests runTests!] :i [(asl-proc/process :a proc) (asl-proc/pipe :a pipe) (asl-proc/coreProcess :a cp)])
 
 fn outOf r: (Result cp/ProcessOutput cp/ProcessError) -> cp/ProcessOutput
-  (mt r ((ok o) o) ((err _) (cp/ProcessOutput :exitCode -1 :stdout "" :stderr "" :durationMs 0)))
+  (match r ((ok o) o) ((err _) (cp/ProcessOutput :exitCode -1 :stdout "" :stderr "" :durationMs 0)))
 
 fn isTimeout r: (Result cp/ProcessOutput cp/ProcessError) -> Bool
-  (mt r ((err e) (mt e ((timeout ms) true) (_ false))) (_ false))
+  (match r ((err e) (match e ((timeout ms) true) (_ false))) (_ false))
 
 fn testExecEcho! -> Bool
   (let [(res (proc/exec! (proc/cmd "echo" (list "hello" "world"))))] (assert (ok? res) "echo must succeed") (let [(out (outOf res))] (assert (= out.exitCode 0) "echo exit code 0") (assert (= out.stdout "hello world") "echo stdout match") (assert (= out.stderr "") "echo stderr empty") true))

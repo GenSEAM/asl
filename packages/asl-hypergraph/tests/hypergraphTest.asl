@@ -24,8 +24,8 @@ fn testFindNodeById -> Bool
     (do
       (assert (some? found) "found baz node")
       (refute (none? found) "found baz node refutes none")
-      (assert (= (mt found ((some n) n.symbol) (none "")) "baz") "symbol is baz")
-      (refute (!= (mt found ((some n) n.symbol) (none "")) "baz") "symbol refutes non-baz")
+      (assert (= (match found ((some n) n.symbol) (none "")) "baz") "symbol is baz")
+      (refute (!= (match found ((some n) n.symbol) (none "")) "baz") "symbol refutes non-baz")
       true))
 
 fn testFindEdgesByTarget -> Bool

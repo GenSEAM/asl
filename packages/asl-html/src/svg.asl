@@ -18,7 +18,7 @@ fn flagNum b: Bool -> String
   (if b "1" "0")
 
 fn cmdText c: PathCmd -> String
-  (mt c
+  (match c
     ((moveTo x y) (str "M" (nums [x y])))
     ((lineTo x y) (str "L" (nums [x y])))
     ((hLine x) (str "H" (num x)))

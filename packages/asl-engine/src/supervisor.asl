@@ -25,7 +25,7 @@
 fn makeSupervisorState -> SupervisorState
   (SupervisorState :sessions (list) :finished (list))
 fn findSessionLoop sessions: (List SessionRecord) id: String -> (Option SessionRecord)
-  (mt (listHead sessions)
+  (match (listHead sessions)
     ((none)
       (none))
     ((some s)
@@ -33,13 +33,13 @@ fn findSessionLoop sessions: (List SessionRecord) id: String -> (Option SessionR
         (some s)
         (findSessionLoop (optionOr (listTail sessions) (list)) id))))
 fn findSession state: SupervisorState id: String -> (Option SessionRecord)
-  (mt (findSessionLoop state.sessions id)
+  (match (findSessionLoop state.sessions id)
     ((some s)
       (some s))
     ((none)
       (findSessionLoop state.finished id)))
 fn removeSessionLoop sessions: (List SessionRecord) id: String acc: (List SessionRecord) -> (List SessionRecord)
-  (mt (listHead sessions)
+  (match (listHead sessions)
     ((none)
       (listReverse acc))
     ((some s)
@@ -49,7 +49,7 @@ fn removeSessionLoop sessions: (List SessionRecord) id: String acc: (List Sessio
 fn removeSession sessions: (List SessionRecord) id: String -> (List SessionRecord)
   (removeSessionLoop sessions id (list))
 fn envKey row: String -> String
-  (mt (stringIndexOf row "=") ((some i) (optionOr (stringSlice row 0 i) row)) ((none) row))
+  (match (stringIndexOf row "=") ((some i) (optionOr (stringSlice row 0 i) row)) ((none) row))
 
 fn spawnEnv rows: (List String) absCwd: String unset: String setenv: String -> (List String)
   (let [(hidden (filter (fn [(k String)] -> Bool (not (stringEmpty? k))) (stringSplit (stringReplace unset "\t" " ") " ")))
@@ -67,7 +67,7 @@ fn spawnSessionWith! state: SupervisorState id: String cmd: String cwd: String s
     (if (or (stringEmpty? id) (stringEmpty? cmd))
       (pair state (w/formatReceiptError (if (stringEmpty? id) "Missing :id for spawn" "Missing :cmd for spawn")))
       (let [(cwdStat (fileStat cwd))]
-        (if (not (mt (fileStat cwd) ((ok st) st.isDir) ((err _) false)))
+        (if (not (match (fileStat cwd) ((ok st) st.isDir) ((err _) false)))
           (pair state (str "(:receipt :status :error :id \"" (w/escapeStr id) "\" :message \"no directory " (w/escapeStr cwd) "\")"))
           (let [(_ (dirCreate "/tmp/asl-sessions"))
                 (logPath (str "/tmp/asl-sessions/" id ".log"))
@@ -75,7 +75,7 @@ fn spawnSessionWith! state: SupervisorState id: String cmd: String cwd: String s
                 (argv (list "/bin/sh" "-c" shCmd))
                 (absCwd (if (stringStartsWith? cwd "/") cwd (resultOr (realPath cwd) cwd)))
                 (spawnRes (procSpawnv argv (some cwd) (some (spawnEnv (envList) absCwd unset setenv))))]
-            (mt spawnRes
+            (match spawnRes
               ((ok sp)
                 (let [(pid sp.pid)
                       (inFd (if stdin sp.stdin -1))
@@ -92,13 +92,13 @@ fn spawnSessionWith! state: SupervisorState id: String cmd: String cwd: String s
 fn pollSession! state: SupervisorState id: String nowSec: Int64 -> (Pair SupervisorState String)
   (if (stringEmpty? id)
     (pair state (w/formatReceiptError "Missing id for poll"))
-    (mt (findSessionLoop state.sessions id)
+    (match (findSessionLoop state.sessions id)
       ((some sess)
         (let [(durMs (* (max 0 (- nowSec sess.startTimeSec)) 1000))
               (pollRes (procWaitPid sess.pid true))]
-          (mt pollRes
+          (match pollRes
             ((ok exitOpt)
-              (mt exitOpt
+              (match exitOpt
                 ((some code)
                   (let [(stateVal (if (= code 0) ":completed" ":failed"))
                         (_ (if sess.stdinOpen (fdClose sess.stdinFd) (ok ())))
@@ -117,7 +117,7 @@ fn pollSession! state: SupervisorState id: String nowSec: Int64 -> (Pair Supervi
                     (newState (SupervisorState :sessions (removeSession state.sessions id) :finished (cons finishedSess (removeSession state.finished id))))]
                 (pair newState (w/formatPollFinishedReceipt id ":failed" 1 durMs)))))))
       ((none)
-        (mt (findSessionLoop state.finished id)
+        (match (findSessionLoop state.finished id)
           ((some fs)
             (pair state (w/formatPollFinishedReceipt id fs.state fs.exitCode fs.durationMs)))
           ((none)
@@ -147,7 +147,7 @@ fn tailSession! state: SupervisorState id: String linesN: Int64 -> String
 fn killSession! state: SupervisorState id: String -> (Pair SupervisorState String)
   (if (stringEmpty? id)
     (pair state (w/formatReceiptError "Missing id for kill"))
-    (mt (findSessionLoop state.sessions id)
+    (match (findSessionLoop state.sessions id)
       ((some sess)
         (let [(_ (procKill (- 0 sess.pid) "SIGTERM"))
               (_ (if sess.stdinOpen (fdClose sess.stdinFd) (ok ())))
@@ -164,14 +164,14 @@ fn killSession! state: SupervisorState id: String -> (Pair SupervisorState Strin
 fn sendSession! state: SupervisorState id: String text: String closeStdin: Bool -> String
   (if (stringEmpty? id)
     (w/formatReceiptError "Missing id for send")
-    (mt (findSessionLoop state.sessions id)
+    (match (findSessionLoop state.sessions id)
       ((some sess)
         (if (not sess.stdinOpen)
           (str "(:receipt :status :error :id \"" (w/escapeStr id) "\" :message \"no open stdin: spawn with :stdin true, and the process must still run\")")
           (let [(payload (if (stringEndsWith? text "\n") text (str text "\n")))
                 (writeRes (fdWrite sess.stdinFd payload))
                 (_ (if closeStdin (fdClose sess.stdinFd) (ok ())))]
-            (mt writeRes
+            (match writeRes
               ((ok _)
                 (w/formatSendReceipt id (stringLength text)))
               ((err e)
@@ -192,9 +192,9 @@ fn finishSession sess: SessionRecord code: Int64 nowSec: Int64 -> SessionRecord
 
 fn ! reapSessions! state: SupervisorState nowSec: Int64 -> SupervisorState
   (fold (fn [(acc SupervisorState) (sess SessionRecord)] -> SupervisorState
-          (mt (procWaitPid sess.pid true)
+          (match (procWaitPid sess.pid true)
             ((ok got)
-              (mt got
+              (match got
                 ((some code)
                   (let [(_ (if sess.stdinOpen (fdClose sess.stdinFd) (ok ())))]
                     (SupervisorState :sessions (removeSession acc.sessions sess.id)
@@ -210,10 +210,10 @@ fn runningCount state: SupervisorState -> Int64
   (listLength state.sessions)
 
 fn signalled? r: (Result Unit String) -> Bool
-  (mt r ((ok _) true) ((err e) (= e "noProcess")))
+  (match r ((ok _) true) ((err e) (= e "noProcess")))
 
 fn ! awaitLeaders! pids: (List Int64) deadlineNs: Int64 -> (List Int64)
-  (let [(left (filter (fn [(pid Int64)] -> Bool (mt (procWaitPid pid true) ((ok got) (none? got)) ((err _) false))) pids))]
+  (let [(left (filter (fn [(pid Int64)] -> Bool (match (procWaitPid pid true) ((ok got) (none? got)) ((err _) false))) pids))]
     (if (or (listEmpty? left) (>= (monotonicNs) deadlineNs))
       left
       (do (sleepMs 20) (awaitLeaders! left deadlineNs))))
@@ -254,6 +254,6 @@ fn parseFinishedLine line: String -> (Option SessionRecord)
 fn loadFinished text: String -> SupervisorState
   (SupervisorState :sessions (list)
                    :finished (fold (fn [(acc (List SessionRecord)) (line String)] -> (List SessionRecord)
-                                     (mt (parseFinishedLine line) ((some s) (listAppend acc (list s))) ((none) acc)))
+                                     (match (parseFinishedLine line) ((some s) (listAppend acc (list s))) ((none) acc)))
                                    (list)
                                    (stringLines text)))

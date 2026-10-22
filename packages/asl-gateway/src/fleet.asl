@@ -74,7 +74,7 @@ fn copyState state: State lifecycle: Lifecycle flight: Int64 queued: Int64 used:
   (with state :lifecycle lifecycle :inFlight flight :queueLength queued :lastUsedMs used :ring ring :rollingTokens tokens :rollingElapsedMs elapsed :p50LatencyMs p50 :p95LatencyMs p95 :errorRatePpm errors :costSoFar cost :highQueueSinceMs high :quietSinceMs quiet :releasedOnWarm released)
 
 fn transition state: State event: Event -> (Result State FleetError)
-  (mt event
+  (match event
     ((demand)
       (if (or (= state.lifecycle cold) (= state.lifecycle warming))
         (ok (copyState state warming state.inFlight (+ state.queueLength 1) state.lastUsedMs state.ring
@@ -134,7 +134,7 @@ fn transition state: State event: Event -> (Result State FleetError)
 fn admit state: State nowMs: Int64 -> Admission
   (if (or (= state.lifecycle cold) (= state.lifecycle warming)) queue
     (if (or (= state.lifecycle down) (= state.lifecycle draining)) (reject endpointUnavailable)
-      (mt state.endpoint.admissionMode
+      (match state.endpoint.admissionMode
         ((ourBatch) queue)
         ((direct) (if (< state.inFlight state.endpoint.maxConcurrency) admitNow (reject atCapacity)))
         ((concurrencyCap) (if (< state.inFlight state.endpoint.maxConcurrency) admitNow queue)))))
@@ -158,8 +158,8 @@ fn decide state: State nowMs: Int64 -> ScaleDecision
           (if (> state.queueLength 0) warmUp keep)
           (if (and (= state.lifecycle warm) (= state.inFlight 0) (= state.queueLength 0)
               (>= state.quietSinceMs 0) (>= (- nowMs state.quietSinceMs) ep.idleStopMs))
-            (mt (expectedWarmCost ep) ((ok warmCost)
-              (mt (expectedIdleCost ep) ((ok idleCost) (if (> idleCost warmCost) stop keep)) (_ keep))) (_ keep))
+            (match (expectedWarmCost ep) ((ok warmCost)
+              (match (expectedIdleCost ep) ((ok idleCost) (if (> idleCost warmCost) stop keep)) (_ keep))) (_ keep))
             keep))))))
 
 fn waitScore state: State -> Int64

@@ -51,7 +51,7 @@ fn encodeEntries! entries: (List ZipEntry) level: Int64 pos: Int64 acc: (List En
           (encodeEntries! tail level (+ pos (+ 30 (+ nameSize size)))
             (cons (EncodedEntry :name name :body plain :plain plain :method 0 :crc (gw/crc32! plain) :offset pos) acc)))
         (else
-          (mt (df/deflateWithLevel! plain level)
+          (match (df/deflateWithLevel! plain level)
             ((err e) (err e))
             ((ok body)
               (if (> (bytesLength body) 4294967295)
@@ -119,7 +119,7 @@ fn zipArchive! entries: (List ZipEntry) level: Int64 -> (Result Bytes String)
     ((or (< level 0) (> level 9)) (err "invalid deflate level"))
     ((> (listLength entries) 65535) (err "zip64Required"))
     (else
-      (mt (encodeEntries! entries level 0 (list))
+      (match (encodeEntries! entries level 0 (list))
         ((err e) (err e))
         ((ok encoded)
           (let [(localsSize (fold (fn [(sum Int64) (e EncodedEntry)] -> Int64

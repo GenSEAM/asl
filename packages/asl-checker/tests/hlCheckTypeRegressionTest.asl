@@ -11,7 +11,7 @@ fn ! checkSnippet! tag: String src: String -> (List ty/Diagnostic)
     ds)
 
 fn ! testProcAliveReturnsResult! -> Bool
-  (let [(ds (checkSnippet! "procAlive" "(module m :x [f])\n\nfn ! f x: Int64 -> Bool\n  (mt (procAlive? x) ((ok v) v) ((err _) false))\n"))]
+  (let [(ds (checkSnippet! "procAlive" "(module m :x [f])\n\nfn ! f x: Int64 -> Bool\n  (match (procAlive? x) ((ok v) v) ((err _) false))\n"))]
     (do (assert (listEmpty? ds) (str "procAlive? is (Result Bool String), not Bool, so an ok/err match on its call is legal: " (diagnosticsText ds))) true))
 
 fn ! testSelfPassLambdaNeedsAnyAnnotation! -> Bool
@@ -31,7 +31,7 @@ fn ! testGenericHelperNotMonomorphic! -> Bool
     (do (assert (listEmpty? ds) (str "a local listAppendOne-style helper must stay generic (List T) T -> (List T), not hardcode one element type: " (diagnosticsText ds))) true))
 
 fn ! testFileLstatReturnsLinkStat! -> Bool
-  (let [(ds (checkSnippet! "lstat" "(module m :x [f])\n\nfn ! f path: String -> Bool\n  (mt (fileLstat path) ((ok ls) ls.isSymlink) ((err _) false))\n"))]
+  (let [(ds (checkSnippet! "lstat" "(module m :x [f])\n\nfn ! f path: String -> Bool\n  (match (fileLstat path) ((ok ls) ls.isSymlink) ((err _) false))\n"))]
     (do (assert (listEmpty? ds) (str "fileLstat is (Result LinkStat String), not (Result FileStat String); LinkStat alone carries isSymlink: " (diagnosticsText ds))) true))
 
 fn ! testMapLiteralKeysAreKeyword! -> Bool

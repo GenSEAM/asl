@@ -51,7 +51,7 @@ fn errnoName darwin: Bool n: Int64 -> String
 
 fn socketErrorText! code: String -> String
   (let [(n (if (stringStartsWith? code "io:") (optionOr (stringToInt64 (optionOr (stringSlice code 3 (stringLength code)) "")) -1) -1))
-        (darwin (mt (platformInfo) ((ok p) (= p.os "Darwin")) ((err _) false)))
+        (darwin (match (platformInfo) ((ok p) (= p.os "Darwin")) ((err _) false)))
         (name (if (< n 0) "" (errnoName darwin n)))]
     (if (stringEmpty? name) code (str "[Errno " (stringFromInt64 n) "] " name)))
 
@@ -59,19 +59,19 @@ fn leftMs! deadline: Int64 -> Int64
   (max 0 (/ (- deadline (monotonicNs)) 1000000))
 
 fn ! readFrame! fd: Int64 acc: String deadline: Int64 limit: Int64 -> (Result String String)
-  (mt (stringIndexOf acc "\n")
+  (match (stringIndexOf acc "\n")
     ((some i) (ok (optionOr (stringSlice acc 0 i) "")))
     ((none)
       (cond
         ((> (stringLength acc) limit) (err (str "frame exceeds " (stringFromInt64 limit) " bytes")))
         ((= (leftMs! deadline) 0) (err "timed out"))
         (else
-          (mt (fdPoll (list (pair fd 1)) (leftMs! deadline))
+          (match (fdPoll (list (pair fd 1)) (leftMs! deadline))
             ((err e) (err (socketErrorText! e)))
             ((ok ready)
               (if (listEmpty? ready)
                 (err "timed out")
-                (mt (fdRead fd 65536)
+                (match (fdRead fd 65536)
                   ((err e) (err (socketErrorText! e)))
                   ((ok chunk)
                     (if (stringEmpty? chunk)
@@ -81,7 +81,7 @@ fn ! readFrame! fd: Int64 acc: String deadline: Int64 limit: Int64 -> (Result St
 fn ! writeAllFd! fd: Int64 data: String -> (Result Unit String)
   (if (stringEmpty? data)
     (ok ())
-    (mt (fdWrite fd data)
+    (match (fdWrite fd data)
       ((err e) (err (socketErrorText! e)))
       ((ok n)
         (if (<= n 0)
@@ -89,11 +89,11 @@ fn ! writeAllFd! fd: Int64 data: String -> (Result Unit String)
           (writeAllFd! fd (optionOr (stringSlice data n (stringLength data)) ""))))))
 
 fn ! socketExchange! sockPath: String line: String timeoutMs: Int64 -> (Result String String)
-  (mt (unixConnect sockPath)
+  (match (unixConnect sockPath)
     ((err e) (err (socketErrorText! e)))
     ((ok fd)
       (let [(deadline (+ (monotonicNs) (* (max 1 timeoutMs) 1000000)))
-            (answer (mt (writeAllFd! fd (str line "\n"))
+            (answer (match (writeAllFd! fd (str line "\n"))
                       ((err e) (err e))
                       ((ok _) (readFrame! fd "" deadline 8388608))))
             (_ (fdClose fd))]

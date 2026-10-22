@@ -26,7 +26,7 @@
 (:doc :symbol "asl/packages/asl-hypergraph/src/model.asl#ImpactReceipt.tests" :text "Direct and transitive test dependencies")
 (:doc :symbol "asl/packages/asl-hypergraph/src/model.asl#ImpactReceipt.testsCount" :text "Total count of affected test suites")
 (:doc :symbol "asl/packages/asl-hypergraph/src/model.asl#ImpactReceipt.types" :text "Type signatures and referenced struct definitions")
-(:doc :symbol "asl/packages/asl-hypergraph/src/model.asl#ImpactReceipt.status" :text "Query status: ok, not-found, circular")
+(:doc :symbol "asl/packages/asl-hypergraph/src/model.asl#ImpactReceipt.status" :text "Query status: ok, notFound, circular")
 (:doc :symbol "asl/packages/asl-hypergraph/src/query.asl#" :text "Sub-80-token blast radius impact query engine and receipt formatter under ADR D94.")
 (:doc :symbol "asl/packages/asl-hypergraph/tests/hypergraphTest.asl#" :text "Unit tests for asl-hypergraph model and impact digest generation")
 (:doc :symbol "asl/packages/asl-hypergraph/tests/impactQueryTest.asl#" :text "Acceptance gate for Task 53603: Pure ASL Codebase Hypergraph Indexer and asl impact (<80 Tokens) under ADR D94.")

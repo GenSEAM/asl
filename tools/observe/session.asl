@@ -112,7 +112,7 @@ fn numberAt s: String bs: Bytes i: Int64 n: Int64 -> (Result JP String)
           (if (and (= fracEnd intEnd) (= expEnd fracEnd))
             (let [(mag (c/lstripChars (sliceOf s j intEnd) "0"))]
               (ok (JP :v (jInt (if (stringEmpty? mag) "0" (if neg (str "-" mag) mag))) :at expEnd)))
-            (mt (stringToFloat64 text)
+            (match (stringToFloat64 text)
               ((some f) (ok (JP :v (jFloat f) :at expEnd)))
               ((none) (err "Invalid number"))))))))
 
@@ -133,7 +133,7 @@ fn valueAt s: String bs: Bytes i: Int64 n: Int64 depth: Int64 -> (Result JP Stri
 fn arrayAt s: String bs: Bytes i: Int64 n: Int64 depth: Int64 acc: (List JVal) first: Bool -> (Result JP String)
   (if (and first (= (byteAt bs i n) 93))
     (ok (JP :v (jArr (list)) :at (+ i 1)))
-    (mt (valueAt s bs i n (+ depth 1))
+    (match (valueAt s bs i n (+ depth 1))
       ((err e) (err e))
       ((ok p)
         (let [(j (skipWs bs p.at n)) (b (byteAt bs j n)) (acc2 (cons p.v acc))]
@@ -153,16 +153,16 @@ fn objectAt s: String bs: Bytes i: Int64 n: Int64 depth: Int64 acc: (List (Pair 
       ((and first (= b 125)) (ok (JP :v (jObj (list)) :at (+ i 1))))
       ((!= b 34) (err "Expecting property name enclosed in double quotes"))
       (else
-        (mt (strBody s bs (+ i 1) n (+ i 1) (list))
+        (match (strBody s bs (+ i 1) n (+ i 1) (list))
           ((err e) (err e))
           ((ok kp)
             (let [(j (skipWs bs kp.at n))]
               (if (!= (byteAt bs j n) 58)
                 (err "Expecting ':' delimiter")
-                (mt (valueAt s bs (skipWs bs (+ j 1) n) n (+ depth 1))
+                (match (valueAt s bs (skipWs bs (+ j 1) n) n (+ depth 1))
                   ((err e) (err e))
                   ((ok vp)
-                    (let [(key (mt kp.v ((jStr k) k) (_ "")))
+                    (let [(key (match kp.v ((jStr k) k) (_ "")))
                           (acc2 (putKey acc key vp.v))
                           (m (skipWs bs vp.at n))
                           (d (byteAt bs m n))]
@@ -175,12 +175,12 @@ fn jsonParse s: String -> (Result JVal String)
   (let [(bs (stringToBytes s)) (n (bytesLength bs))]
     (if (and (>= n 3) (= (bytesGet bs 0) 239) (= (bytesGet bs 1) 187) (= (bytesGet bs 2) 191))
       (err "Unexpected UTF-8 BOM")
-      (mt (valueAt s bs (skipWs bs 0 n) n 0)
+      (match (valueAt s bs (skipWs bs 0 n) n 0)
         ((err e) (err e))
         ((ok p) (if (= (skipWs bs p.at n) n) (ok p.v) (err "Extra data"))))))
 
 fn truthy? v: JVal -> Bool
-  (mt v
+  (match v
     ((jNull) false)
     ((jBool b) b)
     ((jInt d) (!= d "0"))
@@ -213,14 +213,14 @@ fn cpLen bs: Bytes at: Int64 -> Int64
   (let [(b (bytesGet bs at))] (cond ((< b 128) 1) ((< b 224) 2) ((< b 240) 3) (else 4)))
 
 fn pyRepr v: JVal -> String
-  (mt v
+  (match v
     ((jStr s) (pyReprStr s))
     ((jArr xs) (str "[" (c/joinWith (map pyRepr xs) ", ") "]"))
     ((jObj kvs) (str "{" (c/joinWith (map (fn [(p (Pair String JVal))] -> String (str (pyReprStr (pairFirst p)) ": " (pyRepr (pairSecond p)))) kvs) ", ") "}"))
     (_ (pyStr v)))
 
 fn pyStr v: JVal -> String
-  (mt v
+  (match v
     ((jNull) "None")
     ((jBool b) (if b "True" "False"))
     ((jInt d) d)
@@ -229,10 +229,10 @@ fn pyStr v: JVal -> String
     (_ (pyRepr v)))
 
 fn typeName v: JVal -> String
-  (mt v ((jNull) "NoneType") ((jBool _) "bool") ((jInt _) "int") ((jFloat _) "float") ((jStr _) "str") ((jArr _) "list") ((jObj _) "dict"))
+  (match v ((jNull) "NoneType") ((jBool _) "bool") ((jInt _) "int") ((jFloat _) "float") ((jStr _) "str") ((jArr _) "list") ((jObj _) "dict"))
 
 fn objGet kvs: (List (Pair String JVal)) k: String -> (Option JVal)
-  (mt (listHead (filter (fn [(p (Pair String JVal))] -> Bool (= (pairFirst p) k)) kvs)) ((some p) (some (pairSecond p))) ((none) (none)))
+  (match (listHead (filter (fn [(p (Pair String JVal))] -> Bool (= (pairFirst p) k)) kvs)) ((some p) (some (pairSecond p))) ((none) (none)))
 
 fn vfsRoot! root: String ctx: c/Ctx -> (Option String)
   (let [(envDir (optionOr (c/ctxEnv ctx "ASL_VFS_DIR") ""))
@@ -254,32 +254,32 @@ fn validUtf8? s: String -> Bool
   (not (listAny? (fn [(cp (Pair Int64 Int64))] -> Bool (< (pairFirst cp) 0)) (c/charCodes s)))
 
 fn stagedPaths! store: String -> (Result (Pair (List String) Int64) String)
-  (mt (dirList store)
+  (match (dirList store)
     ((err e) (err (str (errClass e) ": " e)))
     ((ok names)
       (fold (fn [(acc (Result (Pair (List String) Int64) String)) (name String)] -> (Result (Pair (List String) Int64) String)
-              (mt acc
+              (match acc
                 ((err e) (err e))
                 ((ok st)
                   (let [(full (c/joinPath store name))]
                     (if (or (not (stringEndsWith? name ".meta")) (not (c/isFile? full)))
                       (ok st)
-                      (let [(mtime (mt (fileStat full) ((ok s) s.mtime) ((err _) 0)))
+                      (let [(mtime (match (fileStat full) ((ok s) s.mtime) ((err _) 0)))
                             (newest (max (pairSecond st) mtime))]
-                        (mt (fileReadString full)
+                        (match (fileReadString full)
                           ((err e) (ok (pair (cons (str name " (unreadable meta: " (errClass e) ")") (pairFirst st)) newest)))
                           ((ok text)
                             (if (not (validUtf8? text))
                               (ok (pair (cons (str name " (unreadable meta: UnicodeDecodeError)") (pairFirst st)) newest))
-                              (mt (jsonParse text)
+                              (match (jsonParse text)
                                 ((err e) (if (= e "RecursionError")
                                            (err "RecursionError: maximum recursion depth exceeded")
                                            (ok (pair (cons (str name " (unreadable meta: JSONDecodeError)") (pairFirst st)) newest))))
                                 ((ok v)
-                                  (mt v
+                                  (match v
                                     ((jObj kvs)
-                                      (let [(pick (fn [(k String)] -> (Option JVal) (mt (objGet kvs k) ((some x) (if (truthy? x) (some x) (none))) ((none) (none)))))
-                                            (rel (mt (pick "rel") ((some x) (pyStr x)) ((none) (mt (pick "path") ((some x) (pyStr x)) ((none) name)))))]
+                                      (let [(pick (fn [(k String)] -> (Option JVal) (match (objGet kvs k) ((some x) (if (truthy? x) (some x) (none))) ((none) (none)))))
+                                            (rel (match (pick "rel") ((some x) (pyStr x)) ((none) (match (pick "path") ((some x) (pyStr x)) ((none) name)))))]
                                         (ok (pair (cons rel (pairFirst st)) newest))))
                                     (_ (err (str "AttributeError: '" (typeName v) "' object has no attribute 'get'")))))))))))))))
             (ok (pair (list) 0)) names)))
@@ -366,7 +366,7 @@ fn dropTasks line: String bs: Bytes i: Int64 n: Int64 start: Int64 acc: (List St
 fn searchFrom line: String i: Int64 matcher: (fn [Int64] -> (Option String)) -> (Option String)
   (if (> i (stringLength line))
     (none)
-    (mt (matcher i) ((some v) (some v)) ((none) (searchFrom line (+ i 1) matcher))))
+    (match (matcher i) ((some v) (some v)) ((none) (searchFrom line (+ i 1) matcher))))
 
 fn quotedLetters line: String bs: Bytes n: Int64 key: String noAuto: Bool -> (fn [Int64] -> (Option String))
   (fn [(i Int64)] -> (Option String)
@@ -394,7 +394,7 @@ fn ownsGroup line: String bs: Bytes n: Int64 -> (fn [Int64] -> (Option String))
       (if (< a 0) (none)
         (let [(b (spaces1 bs a n))]
           (if (or (< b 0) (!= (byteAt bs b n) 40)) (none)
-            (mt (stringIndexOf (sliceOf line (+ b 1) n) ")")
+            (match (stringIndexOf (sliceOf line (+ b 1) n) ")")
               ((none) (none))
               ((some k) (some (sliceOf line (+ b 1) (+ b 1 k))))))))))
 
@@ -420,19 +420,19 @@ fn journalLine st: JState line: String -> JState
   (let [(j st.j)]
     (cond
       ((stringStartsWith? line "(:turn ")
-        (let [(t (mt (turnDigits line) ((some d) (maxDigits j.turns d)) ((none) j.turns)))
-              (dv (mt (deliverOf line) ((some d) (some d)) ((none) st.deliver)))]
+        (let [(t (match (turnDigits line) ((some d) (maxDigits j.turns d)) ((none) j.turns)))
+              (dv (match (deliverOf line) ((some d) (some d)) ((none) st.deliver)))]
           (JState :j (Journal :mode j.mode :owns j.owns :turns t :result j.result) :deliver dv)))
       ((stringStartsWith? line "(:session ")
         (let [(lb (stringToBytes line))
               (head (dropTasks line lb 0 (bytesLength lb) 0 (list)))
               (bs (stringToBytes head)) (n (bytesLength bs))
-              (mode (mt (searchFrom head 0 (quotedLetters head bs n ":modeHint" false))
+              (mode (match (searchFrom head 0 (quotedLetters head bs n ":modeHint" false))
                       ((some m) (some m))
-                      ((none) (mt (searchFrom head 0 (quotedLetters head bs n ":intent" true))
+                      ((none) (match (searchFrom head 0 (quotedLetters head bs n ":intent" true))
                                 ((some m) (some m))
                                 ((none) (searchFrom head 0 (kwLetters head bs n ":mode")))))))
-              (owns (mt (searchFrom head 0 (ownsGroup head bs n))
+              (owns (match (searchFrom head 0 (ownsGroup head bs n))
                       ((some g) (map unescapeOwn (let [(gb (stringToBytes g))] (findQuoted g gb 0 (bytesLength gb) (list)))))
                       ((none) j.owns)))]
           (with st :j (Journal :mode (optionOr mode j.mode) :owns owns :turns j.turns :result j.result))))
@@ -446,7 +446,7 @@ fn readJournal text: String -> Journal
   (let [(norm (c/universalNewlines (c/utf8Replace text)))
         (st (fold journalLine (JState :j (Journal :mode "unknown" :owns (list) :turns "0" :result (none)) :deliver (none)) (c/keepEndsLines norm)))
         (j st.j)]
-    (mt st.deliver
+    (match st.deliver
       ((some d) (Journal :mode d :owns j.owns :turns j.turns :result j.result))
       ((none) j)))
 
@@ -456,7 +456,7 @@ fn codesOf s: String -> (List Int64)
   (map (fn [(cp (Pair Int64 Int64))] -> Int64 (pairFirst cp)) (c/charCodes s))
 
 fn listFind xs: (List Int64) i: Int64 target: Int64 -> Int64
-  (mt (listGet xs i) ((none) -1) ((some x) (if (= x target) i (listFind xs (+ i 1) target))))
+  (match (listGet xs i) ((none) -1) ((some x) (if (= x target) i (listFind xs (+ i 1) target))))
 
 fn sub xs: (List Int64) a: Int64 b: Int64 -> (List Int64)
   (optionOr (listSlice xs a (max a b)) (list))
@@ -501,11 +501,11 @@ fn classOf pat: (List Int64) i: Int64 j: Int64 -> Glob
     (gClass neg body ranges))
 
 fn compileGlob pat: (List Int64) i: Int64 acc: (List Glob) -> (List Glob)
-  (mt (listGet pat i)
+  (match (listGet pat i)
     ((none) (listReverse acc))
     ((some ch)
       (cond
-        ((= ch 42) (compileGlob pat (+ i 1) (if (mt (listHead acc) ((some g) (mt g ((gStar) true) (_ false))) ((none) false)) acc (cons (gStar) acc))))
+        ((= ch 42) (compileGlob pat (+ i 1) (if (match (listHead acc) ((some g) (match g ((gStar) true) (_ false))) ((none) false)) acc (cons (gStar) acc))))
         ((= ch 63) (compileGlob pat (+ i 1) (cons (gAny) acc)))
         ((= ch 91)
           (let [(n (listLength pat))
@@ -526,16 +526,16 @@ fn classHit? neg: Bool chars: (List Int64) ranges: (List (Pair Int64 Int64)) k: 
       (else hit)))
 
 fn globMatch ps: (List Glob) ts: (List Int64) -> Bool
-  (mt (listHead ps)
+  (match (listHead ps)
     ((none) (listEmpty? ts))
     ((some p)
       (let [(prest (optionOr (listTail ps) (list)))]
-        (mt p
+        (match p
           ((gStar) (or (globMatch prest ts) (and (not (listEmpty? ts)) (globMatch ps (optionOr (listTail ts) (list))))))
-          (_ (mt (listHead ts)
+          (_ (match (listHead ts)
                ((none) false)
                ((some t)
-                 (and (mt p
+                 (and (match p
                         ((gAny) true)
                         ((gLit k) (= k t))
                         ((gClass neg chars ranges) (classHit? neg chars ranges t))
@@ -579,38 +579,38 @@ fn putSess ss: (List Sess) s: Sess -> (List Sess)
 fn journalSessions! jdir: String -> (Result (List Sess) String)
   (if (not (c/isDir? jdir))
     (ok (list))
-    (mt (dirList jdir)
+    (match (dirList jdir)
       ((err e) (err (str (errClass e) ": " e)))
       ((ok names)
         (fold (fn [(acc (Result (List Sess) String)) (name String)] -> (Result (List Sess) String)
-                (mt acc
+                (match acc
                   ((err e) (err e))
                   ((ok ss)
                     (let [(sid (sliceOf name 0 (- (stringLength name) 8))) (full (c/joinPath jdir name))]
                       (if (or (not (stringEndsWith? name ".journal")) (not (sessionId? sid)) (not (c/isFile? full)))
                         (ok ss)
-                        (mt (fileReadString full)
+                        (match (fileReadString full)
                           ((err e) (err (str (errClass e) ": " e)))
                           ((ok text)
                             (let [(j (readJournal text))
                                   (s0 (optionOr (findSess ss sid) (newSess sid)))
-                                  (mtime (mt (fileStat full) ((ok st) st.mtime) ((err _) 0)))]
+                                  (mtime (match (fileStat full) ((ok st) st.mtime) ((err _) 0)))]
                               (ok (putSess ss (Sess :id sid :mode j.mode :owns j.owns :turns j.turns :result j.result
                                                     :staged s0.staged :at (max s0.at mtime) :ago 0 :status "")))))))))))
               (ok (list)) names))))
 
 fn storeSessions! store: String ss0: (List Sess) -> (Result (List Sess) String)
-  (mt (dirList store)
+  (match (dirList store)
     ((err e) (err (str (errClass e) ": " e)))
     ((ok names)
       (fold (fn [(acc (Result (List Sess) String)) (sid String)] -> (Result (List Sess) String)
-              (mt acc
+              (match acc
                 ((err e) (err e))
                 ((ok ss)
                   (let [(full (c/joinPath store sid))]
                     (if (or (not (c/isDir? full)) (not (sessionId? sid)))
                       (ok ss)
-                      (mt (stagedPaths! full)
+                      (match (stagedPaths! full)
                         ((err e) (err e))
                         ((ok sp)
                           (let [(paths (listSort (pairFirst sp)))]
@@ -627,7 +627,7 @@ fn withStatus now: Int64 s: Sess -> Sess
     (with s :ago ago :status status))
 
 fn porcelainPaths recs: (List String) acc: (List String) -> (List String)
-  (mt (listHead recs)
+  (match (listHead recs)
     ((none) (listReverse acc))
     ((some rec)
       (let [(rest (optionOr (listTail recs) (list)))]
@@ -637,7 +637,7 @@ fn porcelainPaths recs: (List String) acc: (List String) -> (List String)
             (porcelainPaths (if (or (= x "R") (= x "C")) (optionOr (listTail rest) (list)) rest) acc2))))))
 
 fn overlapForms running: (List Sess) -> (List String)
-  (mt (listHead running)
+  (match (listHead running)
     ((none) (list))
     ((some a)
       (let [(rest (optionOr (listTail running) (list)))]
@@ -652,7 +652,7 @@ fn sessForm dirty: (List String) s: Sess -> String
   (let [(mine (listSort (filter (fn [(p String)] -> Bool (listAny? (fn [(o String)] -> Bool (ownsCover? o p)) s.owns)) dirty)))]
     (str "(:id " (c/quoted s.id) " :mode :" s.mode " :owns " (pathList s.owns) " :staged " (pathList s.staged)
          " :dirty " (pathList mine) " :turns " s.turns " :lastTurnAgo " (stringFromInt64 s.ago)
-         " :status :" s.status " :result " (mt s.result ((some r) (str ":" r)) ((none) "none")) ")"))
+         " :status :" s.status " :result " (match s.result ((some r) (str ":" r)) ((none) "none")) ")"))
 
 fn countStatus ss: (List Sess) st: String -> Int64
   (listLength (filter (fn [(s Sess)] -> Bool (= s.status st)) ss))
@@ -667,26 +667,26 @@ fn fitSessions head: String forms: (List String) shown: Int64 -> (Result String 
 fn dirtyPaths! root: String owns: (List String) ctx: c/Ctx -> (Result (List String) String)
   (if (listEmpty? owns)
     (ok (list))
-    (mt (c/git! (listAppend (list "status" "--porcelain" "-z" "--untracked-files=all" "--") owns) root ctx)
+    (match (c/git! (listAppend (list "status" "--porcelain" "-z" "--untracked-files=all" "--") owns) root ctx)
       ((err e) (err e))
       ((ok p) (if (!= (pairFirst p) 0)
                 (err (c/rejectLine "ERR_GIT" (str "git status failed in " root) ""))
                 (ok (porcelainPaths (c/splitByte (pairSecond p) 0) (list)))))))
 
 fn ! observeSession! root: String limit: Int64 ctx: c/Ctx -> (Result String String)
-  (mt (journalSessions! (c/joinPath root ".asl/run/agentLoop"))
+  (match (journalSessions! (c/joinPath root ".asl/run/agentLoop"))
     ((err e) (err e))
     ((ok js)
-      (mt (mt (vfsRoot! root ctx) ((some store) (storeSessions! store js)) ((none) (ok js)))
+      (match (match (vfsRoot! root ctx) ((some store) (storeSessions! store js)) ((none) (ok js)))
         ((err e) (err e))
         ((ok ss)
           (let [(stated (map (fn [(s Sess)] -> Sess (withStatus ctx.now s)) ss))
                 (ordered (listSortBy (fn [(s Sess)] -> Int64 (- 0 s.at)) (listSortBy (fn [(s Sess)] -> String s.id) stated)))
                 (ownsAll (c/sortUnique (fold (fn [(acc (List String)) (s Sess)] -> (List String) (listAppend acc s.owns)) (list) ordered)))]
-            (mt (dirtyPaths! root ownsAll ctx)
+            (match (dirtyPaths! root ownsAll ctx)
               ((err e) (err e))
               ((ok dirty)
-                (mt (c/shortRev! root ctx)
+                (match (c/shortRev! root ctx)
                   ((err e) (err e))
                   ((ok rev)
                     (let [(running (filter (fn [(s Sess)] -> Bool (= s.status "running")) ordered))

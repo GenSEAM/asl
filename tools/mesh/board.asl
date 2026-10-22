@@ -166,12 +166,12 @@ fn lower s: String -> String
   (stringLower s)
 
 fn dictGet es: (List (Pair String V)) k: String -> (Option V)
-  (mt (listHead es)
+  (match (listHead es)
     ((none) (none))
     ((some p) (if (= (pairFirst p) k) (some (pairSecond p)) (dictGet (rest es) k))))
 
 fn dictPutLoop es: (List (Pair String V)) k: String v: V acc: (List (Pair String V)) -> (List (Pair String V))
-  (mt (listHead es)
+  (match (listHead es)
     ((none) (listReverse (cons (pair k v) acc)))
     ((some p)
       (if (= (pairFirst p) k)
@@ -182,16 +182,16 @@ fn dictPut es: (List (Pair String V)) k: String v: V -> (List (Pair String V))
   (dictPutLoop es k v (list))
 
 fn dictOf v: AsnValue -> (Option (List (Pair String AsnValue)))
-  (mt v ((asnDict es) (some es)) (_ (none)))
+  (match v ((asnDict es) (some es)) (_ (none)))
 
 fn getOr es: (List (Pair String AsnValue)) k: String d: AsnValue -> AsnValue
   (optionOr (dictGet es k) d)
 
 fn subDict es: (List (Pair String AsnValue)) k: String -> (List (Pair String AsnValue))
-  (mt (dictGet es k) ((some v) (optionOr (dictOf v) (list))) ((none) (list)))
+  (match (dictGet es k) ((some v) (optionOr (dictOf v) (list))) ((none) (list)))
 
 fn truthy? v: AsnValue -> Bool
-  (mt v
+  (match v
     ((asnNone) false)
     ((asnBool b) b)
     ((asnInt i) (!= i 0))
@@ -228,10 +228,10 @@ fn pyReprStr s: String -> String
     (str qs (reprLoop s bs 0 (bytesLength bs) q (list)) qs))
 
 fn pyRepr v: AsnValue -> String
-  (mt v ((asnStr s) (pyReprStr s)) (_ (pyStr v)))
+  (match v ((asnStr s) (pyReprStr s)) (_ (pyStr v)))
 
 fn pyStr v: AsnValue -> String
-  (mt v
+  (match v
     ((asnNone) "None")
     ((asnBool b) (if b "True" "False"))
     ((asnInt i) (stringFromInt64 i))
@@ -245,7 +245,7 @@ fn pyStrOr v: AsnValue d: String -> String
   (if (truthy? v) (pyStr v) d)
 
 fn typeName v: AsnValue -> String
-  (mt v
+  (match v
     ((asnNone) "NoneType")
     ((asnBool _) "bool")
     ((asnInt _) "int")
@@ -273,7 +273,7 @@ fn pyInt s: String -> IntParse
         n (bytesLength bs)
         sign (if (> n 0) (bytesGet bs 0) 0)
         start (if (or (= sign 43) (= sign 45)) 1 0)]
-    (mt (intDigits bs start n 0 false false)
+    (match (intDigits bs start n 0 false false)
       ((intOk v) (intOk (if (= sign 45) (- 0 v) v)))
       (parsed parsed)))
 
@@ -313,7 +313,7 @@ fn pyFloat s: String -> (Option Float64)
               ok (and (or (>= ie 0) (>= fe 0)) (< start n))
               ee (if ok (exponentEnd bs afterFrac n) -1)]
           (if (and ok (= ee n))
-            (mt (stringToFloat64 (stringReplace t "_" ""))
+            (match (stringToFloat64 (stringReplace t "_" ""))
               ((some f) (some f))
               ((none) none))
             (none))))))
@@ -416,7 +416,7 @@ fn normalizeSeverity v: AsnValue -> String
     (if (or (= s "critical") (or (= s "high") (or (= s "medium") (= s "low")))) s "medium"))
 
 fn renderAttractor v: AsnValue -> String
-  (let [parts (mt v
+  (let [parts (match v
                 ((asnList xs) (map (fn [a] (lstripColon (pyStr a))) (filter (fn [a] (not (stringEmpty? (pyStrip (pyStr a))))) xs)))
                 ((asnTuple xs) (map (fn [a] (lstripColon (pyStr a))) (filter (fn [a] (not (stringEmpty? (pyStrip (pyStr a))))) xs)))
                 (_ (map lstripColon (filter (fn [p] (not (stringEmpty? (stripByte p 58))))
@@ -473,7 +473,7 @@ fn parseFinding text: String -> (Option AsnValue)
                            (pair "severity" (asnStr (normalizeSeverity (asnStr (optionOr (keyWord text ":severity") "medium")))))
                            (pair "hazard" (asnStr hazard))
                            (pair "evidence" (asnStr (optionOr (asnFieldString text "evidence") ""))))
-                withSp (mt sp ((some s) (listAppend base (list (pair "scratchpad" (asnStr (pyStrip s)))))) ((none) base))]
+                withSp (match sp ((some s) (listAppend base (list (pair "scratchpad" (asnStr (pyStrip s)))))) ((none) base))]
             (some (mkDict (listAppend withSp (list (pair "remediation" (asnStr (optionOr (asnFieldString text "remediation") ""))))))))))))
 
 fn witnessFrom text: String bs: Bytes n: Int64 i: Int64 -> (Option String)
@@ -502,8 +502,8 @@ fn parseVerdict text: String -> (Option AsnValue)
   (let [dec (lower (optionOr (keyWord text ":decision") ""))]
     (if (not (or (= dec "corroborate") (= dec "refute")))
       (none)
-      (let [ev (mt (asnFieldString text "evidence") ((some e) (list (pair "evidence" (asnStr e)))) ((none) (list)))
-            wit (mt (witnessOf text) ((some w) (list (pair "witness_test" (asnStr (pyStrip w))))) ((none) (list)))]
+      (let [ev (match (asnFieldString text "evidence") ((some e) (list (pair "evidence" (asnStr e)))) ((none) (list)))
+            wit (match (witnessOf text) ((some w) (list (pair "witness_test" (asnStr (pyStrip w))))) ((none) (list)))]
         (some (mkDict (listAppend (list (pair "decision" (asnStr dec))) (listAppend ev wit)))))))
 
 fn atomStop? b: Int64 -> Bool
@@ -547,11 +547,11 @@ fn tokenizeAsn text: String -> (Result (List String) String)
 
 fn numberOrAtom t: String -> AsnValue
   (if (stringContains? t ".")
-    (mt (pyFloat t) ((some f) (asnFloat f)) ((none) (asnStr t)))
-    (mt (pyInt t) ((intOk v) (asnInt v)) (_ (asnStr t))))
+    (match (pyFloat t) ((some f) (asnFloat f)) ((none) (asnStr t)))
+    (match (pyInt t) ((intOk v) (asnInt v)) (_ (asnStr t))))
 
 fn itemStep toks: (List String) -> ParseStep
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (ParseStep :value (asnNone) :used 0 :rest toks))
     ((some t)
       (cond
@@ -564,7 +564,7 @@ fn itemStep toks: (List String) -> ParseStep
         (else (ParseStep :value (numberOrAtom t) :used 1 :rest (rest toks))))))
 
 fn listStep toks: (List String) used: Int64 acc: (List AsnValue) -> ParseStep
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (ParseStep :value (asnList (listReverse acc)) :used used :rest toks))
     ((some t)
       (if (= t "]")
@@ -579,7 +579,7 @@ fn formValue es: (List (Pair String AsnValue)) items: (List AsnValue) -> AsnValu
     (else (asnDict es)))
 
 fn formLoop toks: (List String) used: Int64 es: (List (Pair String AsnValue)) items: (List AsnValue) -> ParseStep
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (ParseStep :value (formValue es (listReverse items)) :used used :rest toks))
     ((some t)
       (cond
@@ -595,7 +595,7 @@ fn formLoop toks: (List String) used: Int64 es: (List (Pair String AsnValue)) it
             (formLoop st.rest (+ used st.used) es (cons st.value items)))))))
 
 fn formStep toks: (List String) -> ParseStep
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (ParseStep :value (asnNone) :used 0 :rest toks))
     ((some t)
       (if (!= t "(")
@@ -662,10 +662,10 @@ fn recordTokens block: String -> (List RecordTok)
     (recTokLoop block bs 0 (bytesLength bs) (list)))
 
 fn close? t: RecordTok -> Bool
-  (mt t ((tokClose _) true) (_ false))
+  (match t ((tokClose _) true) (_ false))
 
 fn recItemsStep toks: (List RecordTok) used: Int64 acc: (List RecordValue) -> RecordStep
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (RecordStep :value (recForm (listReverse acc)) :used (+ used 1) :rest toks))
     ((some t)
       (if (close? t)
@@ -674,10 +674,10 @@ fn recItemsStep toks: (List RecordTok) used: Int64 acc: (List RecordValue) -> Re
           (recItemsStep st.rest (+ used st.used) (cons st.value acc))))))
 
 fn recStep toks: (List RecordTok) -> RecordStep
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (RecordStep :value (recForm (list)) :used 0 :rest toks))
     ((some t)
-      (mt t
+      (match t
         ((tokOpen _) (recItemsStep (rest toks) 1 (list)))
         (_ (RecordStep :value (recLeaf t) :used 1 :rest (rest toks))))))
 
@@ -686,15 +686,15 @@ fn recordValue toks: (List RecordTok) k: Int64 -> (Pair RecordValue Int64)
     (pair st.value (+ k st.used)))
 
 fn keyName v: RecordValue -> (Option String)
-  (mt v ((recLeaf t) (mt t ((tokKey k) (some k)) (_ (none)))) (_ (none)))
+  (match v ((recLeaf t) (match t ((tokKey k) (some k)) (_ (none)))) (_ (none)))
 
 fn ftmLoop items: (List RecordValue) acc: (List (Pair String RecordValue)) -> (List (Pair String RecordValue))
-  (mt (listHead items)
+  (match (listHead items)
     ((none) acc)
     ((some it)
       (let [after (rest items)]
-        (mt (keyName it)
-          ((some k) (mt (listHead after) ((some v) (ftmLoop (rest after) (dictPut acc k v))) ((none) acc)))
+        (match (keyName it)
+          ((some k) (match (listHead after) ((some v) (ftmLoop (rest after) (dictPut acc k v))) ((none) acc)))
           ((none) (ftmLoop after acc))))))
 
 fn formToMap items: (List RecordValue) start: Int64 -> (List (Pair String RecordValue))
@@ -702,38 +702,38 @@ fn formToMap items: (List RecordValue) start: Int64 -> (List (Pair String Record
 
 fn readRecord block: String -> (List (Pair String RecordValue))
   (let [toks (recordTokens block)]
-    (mt (listHead toks)
+    (match (listHead toks)
       ((some t)
-        (mt t
+        (match t
           ((tokOpen _)
-            (mt (recStep toks).value
+            (match (recStep toks).value
               ((recForm items)
-                (formToMap items (mt (listHead items) ((some h) (if (some? (keyName h)) 1 0)) ((none) 0))))
+                (formToMap items (match (listHead items) ((some h) (if (some? (keyName h)) 1 0)) ((none) 0))))
               (_ (list))))
           (_ (list))))
       ((none) (list))))
 
 fn tokText t: RecordTok -> String
-  (mt t ((tokOpen s) s) ((tokClose s) s) ((tokStr s) s) ((tokKey s) s) ((tokAtom s) s))
+  (match t ((tokOpen s) s) ((tokClose s) s) ((tokStr s) s) ((tokKey s) s) ((tokAtom s) s))
 
 fn recordScalar v: RecordValue -> String
-  (mt v
+  (match v
     ((recLeaf t) (tokText t))
     ((recForm items) (stringJoin (map recordScalar items) " ")))
 
 fn leafOf v: (Option RecordValue) -> (Option RecordTok)
-  (mt v ((some x) (mt x ((recLeaf t) (some t)) (_ (none)))) ((none) (none)))
+  (match v ((some x) (match x ((recLeaf t) (some t)) (_ (none)))) ((none) (none)))
 
 fn gapStrFields rec: (List (Pair String RecordValue)) -> (List (Pair String AsnValue))
-  (fold (fn [acc f] (mt (leafOf (dictGet rec f)) ((some t) (dictPut acc f (asnStr (tokText t)))) ((none) acc))) (list)
+  (fold (fn [acc f] (match (leafOf (dictGet rec f)) ((some t) (dictPut acc f (asnStr (tokText t)))) ((none) acc))) (list)
     (list "id" "target" "hazard" "evidence" "remediation" "auditor"))
 
 fn firstOfForm v: RecordValue -> (Option RecordValue)
-  (mt v ((recForm items) (listHead items)) (_ (some v)))
+  (match v ((recForm items) (listHead items)) (_ (some v)))
 
 fn gapKwFields rec: (List (Pair String RecordValue)) acc0: (List (Pair String AsnValue)) -> (List (Pair String AsnValue))
   (fold (fn [acc f]
-          (mt (leafOf (mt (dictGet rec f) ((some v) (firstOfForm v)) ((none) (none))))
+          (match (leafOf (match (dictGet rec f) ((some v) (firstOfForm v)) ((none) (none))))
             ((some t) (dictPut acc f (asnStr (lower (tokText t)))))
             ((none) acc)))
     acc0
@@ -744,26 +744,26 @@ fn parseGapBlock block: String -> AsnValue
         base (dictPut (list) "raw" (asnStr block))
         withStr (fold (fn [acc p] (dictPut acc (pairFirst p) (pairSecond p))) base (gapStrFields rec))
         withKw (gapKwFields rec withStr)
-        conf (mt (leafOf (dictGet rec "confirmations"))
-               ((some t) (mt (pyInt (tokText t)) ((intOk v) v) (_ 1)))
+        conf (match (leafOf (dictGet rec "confirmations"))
+               ((some t) (match (pyInt (tokText t)) ((intOk v) v) (_ 1)))
                ((none) 1))]
     (asnDict (dictPut withKw "confirmations" (asnInt conf))))
 
 fn formFields v: (Option RecordValue) -> (Option AsnValue)
-  (mt v
+  (match v
     ((some x)
-      (mt x
+      (match x
         ((recForm items) (some (asnDict (map (fn [p] (pair (pairFirst p) (asnStr (recordScalar (pairSecond p))))) (formToMap items 0)))))
         (_ (none))))
     ((none) (none)))
 
 fn parseVerification block: String -> AsnValue
   (let [rec (readRecord block)
-        base (list (pair "target" (asnStr (mt (dictGet rec "target") ((some v) (recordScalar v)) ((none) "")))))
-        withRem (mt (dictGet rec "remediatedBy") ((some v) (dictPut base "remediatedBy" (asnStr (recordScalar v)))) ((none) base))
-        withForms (fold (fn [acc f] (mt (formFields (dictGet rec f)) ((some m) (dictPut acc f m)) ((none) acc))) withRem
+        base (list (pair "target" (asnStr (match (dictGet rec "target") ((some v) (recordScalar v)) ((none) "")))))
+        withRem (match (dictGet rec "remediatedBy") ((some v) (dictPut base "remediatedBy" (asnStr (recordScalar v)))) ((none) base))
+        withForms (fold (fn [acc f] (match (formFields (dictGet rec f)) ((some m) (dictPut acc f m)) ((none) acc))) withRem
                     (list "verifiedBy" "reproduction" "refutedBy" "mutant"))]
-    (asnDict (mt (dictGet rec "demotedFrom") ((some v) (dictPut withForms "demotedFrom" (asnStr (recordScalar v)))) ((none) withForms))))
+    (asnDict (match (dictGet rec "demotedFrom") ((some v) (dictPut withForms "demotedFrom" (asnStr (recordScalar v)))) ((none) withForms))))
 
 fn normAgent a: AsnValue -> String
   (lower (stringJoin (pySplit (pyStrOr a "")) " "))
@@ -843,21 +843,21 @@ fn readTextFile! path: String -> (Result String String)
     (textOf! path))
 
 fn textOf! path: String -> (Result String String)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e) (err (str "OSError: " e)))
     ((ok s) (ok (if (stringContains? s "\r") (stringReplace (stringReplace s "\r\n" "\n") "\r" "\n") s))))
 
 fn ! isFile? path: String -> Bool
-  (mt (fileStat path) ((ok st) st.isFile) ((err _) false))
+  (match (fileStat path) ((ok st) st.isFile) ((err _) false))
 
 fn ! isDir? path: String -> Bool
-  (mt (fileStat path) ((ok st) st.isDir) ((err _) false))
+  (match (fileStat path) ((ok st) st.isDir) ((err _) false))
 
 fn ! stemReferenced? root: String stem: String toks: (List String) -> Bool
   (listAny? (fn [tok]
               (let [p (pyJoin root tok)]
                 (and (not (stringEmpty? stem)) (isFile? p)
-                     (mt (readTextFile! p) ((ok text) (stringContains? text stem)) ((err _) false)))))
+                     (match (readTextFile! p) ((ok text) (stringContains? text stem)) ((err _) false)))))
             toks)
 
 fn commandVacuity! cmd: AsnValue target: AsnValue root: String -> String
@@ -879,7 +879,7 @@ fn commandVacuity! cmd: AsnValue target: AsnValue root: String -> String
                 (str "command does not reference the record target " tfile))))))))
 
 fn getAttr v: AsnValue k: String -> (Result AsnValue String)
-  (mt v
+  (match v
     ((asnDict es) (ok (getOr es k (asnNone))))
     (_ (err (str "AttributeError: '" (typeName v) "' object has no attribute 'get'"))))
 
@@ -887,17 +887,17 @@ fn transitionAllowed! status: AsnValue rec: AsnValue root: String -> (Result (Pa
   (let [st (lstripColon (pyStrOr status ""))]
     (if (not (or (= st "remediated") (= st "certified")))
       (ok (pair true ""))
-      (mt (getAttr rec "verifiedBy")
+      (match (getAttr rec "verifiedBy")
         ((err e) (err e))
         ((ok vbRaw)
           (let [vb (if (truthy? vbRaw) vbRaw (asnDict (list)))]
-            (mt (getAttr rec "remediatedBy")
+            (match (getAttr rec "remediatedBy")
               ((err e) (err e))
               ((ok rbRaw)
                 (let [rb (normAgent rbRaw)]
                   (if (stringEmpty? rb)
                     (ok (pair false "missing :remediatedBy"))
-                    (mt (getAttr vb "agent")
+                    (match (getAttr vb "agent")
                       ((err e) (err e))
                       ((ok agent)
                         (let [command (optionOr (resultToOption (getAttr vb "command")) (asnNone))
@@ -966,7 +966,7 @@ fn setField block: String field: String valueText: String -> (Result String Stri
         n (bytesLength bs)
         hit (findField bs n (str ":" field))]
     (if (>= hit.nl 0)
-      (mt (valueEnd block hit.valueAt)
+      (match (valueEnd block hit.valueAt)
         ((err e) (err e))
         ((ok e) (ok (str (sub block 0 hit.valueAt) valueText (sub block e n)))))
       (let [idHit (findField bs n ":id")
@@ -1036,10 +1036,10 @@ fn absParts! p: String -> (List String)
     (pathParts (str (resultOr (realPath ".") "/") "/" p)))
 
 fn dropCommon a: (List String) b: (List String) -> (Pair (List String) (List String))
-  (mt (listHead a)
+  (match (listHead a)
     ((none) (pair a b))
     ((some x)
-      (mt (listHead b)
+      (match (listHead b)
         ((none) (pair a b))
         ((some y) (if (= x y) (dropCommon (rest a) (rest b)) (pair a b))))))
 
@@ -1055,26 +1055,26 @@ fn osErr e: String -> String
 fn makeDirs! dir: String -> (Result Unit String)
   (if (stringEmpty? dir)
     (err "OSError: notFound: '': No such file or directory")
-    (mt (dirCreate dir) ((ok _) (ok ())) ((err e) (err (osErr e)))))
+    (match (dirCreate dir) ((ok _) (ok ())) ((err e) (err (osErr e)))))
 
 fn atomicWriteFile! path: String content: String -> (Result Unit String)
   (let [dir (pyDirname path)
         tmp (pyJoin dir (str "." (pyBasename path) ".tmp." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs))))]
-    (mt (if (stringEmpty? dir) (ok ()) (makeDirs! dir))
+    (match (if (stringEmpty? dir) (ok ()) (makeDirs! dir))
       ((err e) (err e))
       ((ok _)
-        (mt (fileCreateExclusive tmp content)
+        (match (fileCreateExclusive tmp content)
           ((err e) (err (osErr e)))
           ((ok _)
-            (mt (fileFsync tmp)
+            (match (fileFsync tmp)
               ((err e) (do (pathRemove tmp) (err (osErr e))))
               ((ok _)
-                (mt (pathRename tmp path)
+                (match (pathRename tmp path)
                   ((ok _) (ok ()))
                   ((err e) (do (pathRemove tmp) (err (osErr e))))))))))))
 
 fn lockLoop! lockPath: String -> (Result Int64 String)
-  (mt (fileLock lockPath true)
+  (match (fileLock lockPath true)
     ((ok fd) (ok fd))
     ((err e)
       (if (= e "busy")
@@ -1086,45 +1086,45 @@ fn acquireFileLock! target: String -> (Result Int64 String)
     (ok -1)
     (let [lockPath (str target ".lock")
           dir (pyDirname lockPath)]
-      (mt (if (stringEmpty? dir) (ok ()) (makeDirs! dir))
+      (match (if (stringEmpty? dir) (ok ()) (makeDirs! dir))
         ((err e) (err e))
         ((ok _)
-          (mt (dirList lockPath)
+          (match (dirList lockPath)
             ((ok _) (err "lock path is a directory"))
             ((err _) (lockLoop! lockPath)))))))
 
 fn releaseFileLock! fd: Int64 -> (Result Unit String)
   (if (< fd 0)
     (ok ())
-    (mt (fdClose fd) ((ok _) (ok ())) ((err e) (err (osErr e)))))
+    (match (fdClose fd) ((ok _) (ok ())) ((err e) (err (osErr e)))))
 
 fn withFileLock! target: String body: (fn [] -> (Result T String)) -> (Result T String)
-  (mt (acquireFileLock! target)
+  (match (acquireFileLock! target)
     ((err e) (err e))
     ((ok fd)
       (let [r (body)]
-        (mt (releaseFileLock! fd)
-          ((err e) (mt r ((ok _) (err e)) ((err e2) (err e2))))
+        (match (releaseFileLock! fd)
+          ((err e) (match r ((ok _) (err e)) ((err e2) (err e2))))
           ((ok _) r)))))
 
 fn lockAtLoop! root: String lockPath: String -> (Result Int64 String)
-  (mt (fileLockAt root lockPath true)
+  (match (fileLockAt root lockPath true)
     ((ok fd) (ok fd))
     ((err e) (if (= e "busy") (do (sleepMs 5) (lockAtLoop! root lockPath)) (err e))))
 
 fn withSecureFileLock! root: String target: String body: (fn [] -> (Result T String)) -> (Result T String)
-  (mt (lockAtLoop! root (str target ".lock"))
+  (match (lockAtLoop! root (str target ".lock"))
     ((err e) (err e))
     ((ok fd)
       (let [r (body)]
-        (mt (releaseFileLock! fd)
-          ((err e) (mt r ((ok _) (err e)) ((err e2) (err e2))))
+        (match (releaseFileLock! fd)
+          ((err e) (match r ((ok _) (err e)) ((err e2) (err e2))))
           ((ok _) r)))))
 
 fn isProcessAlive! pid: Int64 -> (Result Bool String)
   (if (or (<= pid 0) (> pid 2147483647))
     (ok false)
-    (mt (procAlive? pid) ((ok b) (ok b)) ((err _) (ok false))))
+    (match (procAlive? pid) ((ok b) (ok b)) ((err _) (ok false))))
 
 fn digitEnd bs: Bytes i: Int64 n: Int64 -> Int64
   (if (and (< i n) (>= (bytesGet bs i) 48) (<= (bytesGet bs i) 57)) (digitEnd bs (+ i 1) n) i)
@@ -1148,25 +1148,25 @@ fn pidInName name: String -> (Option String)
 fn pidScan name: String bs: Bytes i: Int64 n: Int64 -> (Option String)
   (if (>= i n)
     (none)
-    (mt (pidAt name bs i n) ((some d) (some d)) ((none) (pidScan name bs (+ i 1) n))))
+    (match (pidAt name bs i n) ((some d) (some d)) ((none) (pidScan name bs (+ i 1) n))))
 
 fn pidAlive! p: IntParse -> (Result (Option Bool) String)
-  (mt p
-    ((intOk v) (mt (isProcessAlive! v) ((ok b) (ok (some b))) ((err e) (err e))))
+  (match p
+    ((intOk v) (match (isProcessAlive! v) ((ok b) (ok (some b))) ((err e) (err e))))
     ((intHuge) (ok (some false)))
     ((intBad) (ok (none))))
 
 fn cleanPidFile! pidFile: String rep: CleanupReport -> (Result CleanupReport String)
   (if (not (ok? (fileStat pidFile)))
     (ok rep)
-    (mt (readTextFile! pidFile)
+    (match (readTextFile! pidFile)
       ((err e) (ok (CleanupReport :scanned rep.scanned :cleanedFiles rep.cleanedFiles :cleanedLocks rep.cleanedLocks :failures (cons e rep.failures))))
       ((ok text)
-        (mt (pidAlive! (pyInt text))
+        (match (pidAlive! (pyInt text))
           ((err e) (err e))
           ((ok alive)
             (if (= alive (some false))
-              (mt (pathRemove pidFile)
+              (match (pathRemove pidFile)
                 ((ok _) (ok (CleanupReport :scanned rep.scanned :cleanedFiles (+ 1 rep.cleanedFiles) :cleanedLocks rep.cleanedLocks :failures rep.failures)))
                 ((err e) (ok (CleanupReport :scanned rep.scanned :cleanedFiles rep.cleanedFiles :cleanedLocks rep.cleanedLocks :failures (cons (osErr e) rep.failures)))))
               (ok rep)))))))
@@ -1176,15 +1176,15 @@ fn cleanEntry! dir: String entry: String rep: CleanupReport -> (Result CleanupRe
         seen (CleanupReport :scanned (+ 1 rep.scanned) :cleanedFiles rep.cleanedFiles :cleanedLocks rep.cleanedLocks :failures rep.failures)]
     (if (not (isFile? full))
       (ok seen)
-      (mt (pidInName entry)
+      (match (pidInName entry)
         ((none) (ok seen))
         ((some digits)
-          (mt (pidAlive! (pyInt digits))
+          (match (pidAlive! (pyInt digits))
             ((err e) (err e))
             ((ok alive)
               (if (!= alive (some false))
                 (ok seen)
-                (mt (pathRemove full)
+                (match (pathRemove full)
                   ((ok _)
                     (if (stringEndsWith? entry ".lock")
                       (ok (CleanupReport :scanned seen.scanned :cleanedFiles seen.cleanedFiles :cleanedLocks (+ 1 seen.cleanedLocks) :failures seen.failures))
@@ -1192,25 +1192,25 @@ fn cleanEntry! dir: String entry: String rep: CleanupReport -> (Result CleanupRe
                   ((err e) (ok (CleanupReport :scanned seen.scanned :cleanedFiles seen.cleanedFiles :cleanedLocks seen.cleanedLocks :failures (cons (osErr e) seen.failures))))))))))))
 
 fn cleanEntries! dir: String entries: (List String) rep: CleanupReport -> (Result CleanupReport String)
-  (mt (listHead entries)
+  (match (listHead entries)
     ((none) (ok rep))
-    ((some e) (mt (cleanEntry! dir e rep) ((err x) (err x)) ((ok r) (cleanEntries! dir (rest entries) r)))))
+    ((some e) (match (cleanEntry! dir e rep) ((err x) (err x)) ((ok r) (cleanEntries! dir (rest entries) r)))))
 
 fn cleanDirs! dirs: (List String) rep: CleanupReport -> (Result CleanupReport String)
-  (mt (listHead dirs)
+  (match (listHead dirs)
     ((none) (ok rep))
     ((some d)
       (if (not (ok? (fileStat d)))
         (cleanDirs! (rest dirs) rep)
-        (mt (dirList d)
+        (match (dirList d)
           ((err _) (cleanDirs! (rest dirs) rep))
-          ((ok entries) (mt (cleanEntries! d entries rep) ((err x) (err x)) ((ok r) (cleanDirs! (rest dirs) r))))))))
+          ((ok entries) (match (cleanEntries! d entries rep) ((err x) (err x)) ((ok r) (cleanDirs! (rest dirs) r))))))))
 
 fn defaultScanDirs root: String -> (List String)
   (map (fn [r] (pyJoin root r)) (list ".asl/mem" ".asl/log" "tmp" ".asl/mem/gaps" ".asl/mem/gaps/shards"))
 
 fn cleanupStaleTempFiles! root: String scanDirs: (Option (List String)) pidFile: String -> (Result CleanupReport String)
-  (mt (cleanPidFile! pidFile (CleanupReport :scanned 0 :cleanedFiles 0 :cleanedLocks 0 :failures (list)))
+  (match (cleanPidFile! pidFile (CleanupReport :scanned 0 :cleanedFiles 0 :cleanedLocks 0 :failures (list)))
     ((err e) (err e))
     ((ok rep) (cleanDirs! (optionOr scanDirs (defaultScanDirs root)) rep)))
 
@@ -1225,28 +1225,28 @@ fn cleanupMetrics r: CleanupReport -> AsnValue
   (asnDict (list (pair "scanned" (asnInt r.scanned)) (pair "cleaned_files" (asnInt r.cleanedFiles)) (pair "cleaned_locks" (asnInt r.cleanedLocks))))
 
 fn intOfValue v: AsnValue -> (Result Int64 String)
-  (mt v
+  (match v
     ((asnInt i) (ok i))
     ((asnBool b) (ok (if b 1 0)))
     ((asnFloat f)
       (if (not (isFinite? f))
         (err "ValueError: cannot convert float NaN or infinity to integer")
-        (mt (float64ToInt64 f)
+        (match (float64ToInt64 f)
           ((some n) (ok n))
           ((none) (err "OverflowError: float too large to convert to integer")))))
     ((asnStr s)
-      (mt (pyInt s)
+      (match (pyInt s)
         ((intOk n) (ok n))
         ((intHuge) (err (str "ValueError: integer beyond Int64: " (pyReprStr s))))
         ((intBad) (err (str "ValueError: invalid literal for int() with base 10: " (pyReprStr s))))))
     (_ (err (str "TypeError: int() argument must be a string, a bytes-like object or a real number, not '" (typeName v) "'"))))
 
 fn floatOfValue v: AsnValue -> (Result Float64 String)
-  (mt v
+  (match v
     ((asnFloat f) (ok f))
     ((asnInt i) (ok (int64ToFloat64 i)))
     ((asnBool b) (ok (if b 1.0 0.0)))
-    ((asnStr s) (mt (pyFloat s) ((some f) (ok f)) ((none) (err (str "ValueError: could not convert string to float: " (pyReprStr s))))))
+    ((asnStr s) (match (pyFloat s) ((some f) (ok f)) ((none) (err (str "ValueError: could not convert string to float: " (pyReprStr s))))))
     (_ (err (str "TypeError: float() argument must be a string or a real number, not '" (typeName v) "'"))))
 
 fn fallbackId! -> String
@@ -1260,14 +1260,14 @@ fn shardBody id: String target: String intent: String attractor: String auditor:
 fn saveDefectShard! d: AsnValue shardsDir: String root: String -> (Result String String)
   (if (stringEmpty? shardsDir)
     (err "ValueError: save_defect_shard needs a shards_dir; set ASL_MESH_STATE_DIR for scratch runs")
-    (mt (makeDirs! shardsDir)
+    (match (makeDirs! shardsDir)
       ((err e) (err e))
       ((ok _)
-        (mt (getAttr d "id")
+        (match (getAttr d "id")
           ((err e) (err e))
           ((ok idRaw)
             (let [idv (if (truthy? idRaw) idRaw (asnStr (fallbackId!)))]
-              (mt idv
+              (match idv
                 ((asnStr defId)
                   (let [es (optionOr (dictOf d) (list))
                         shardFile (pyJoin shardsDir (str "defect_" (safeDefectId defId) ".asn"))
@@ -1279,16 +1279,16 @@ fn saveDefectShard! d: AsnValue shardsDir: String root: String -> (Result String
                         hazard (sanitizeAsnString (getOr es "hazard" (asnStr "")))
                         evidence (sanitizeAsnString (getOr es "evidence" (asnStr "")))
                         status (lstripColon (pyStr (getOr es "status" (asnStr "candidate"))))]
-                    (mt (intOfValue (getOr es "confirmations" (asnInt 1)))
+                    (match (intOfValue (getOr es "confirmations" (asnInt 1)))
                       ((err e) (err e))
                       ((ok conf)
                         (let [remediation (sanitizeAsnString (getOr es "remediation" (asnStr "")))]
-                          (mt (transitionAllowed! (asnStr status) d root)
+                          (match (transitionAllowed! (asnStr status) d root)
                             ((err e) (err e))
                             ((ok verdict)
                               (if (not (pairFirst verdict))
                                 (err (str "ValueError: refusing to write " defId " as :" status ": " (pairSecond verdict)))
-                                (mt (atomicWriteFile! shardFile (shardBody defId target intent attractor auditor severity hazard evidence status conf remediation))
+                                (match (atomicWriteFile! shardFile (shardBody defId target intent attractor auditor severity hazard evidence status conf remediation))
                                   ((err e) (err e))
                                   ((ok _) (ok shardFile)))))))))))
                 (_ (err "TypeError: expected string or bytes-like object")))))))))
@@ -1310,13 +1310,13 @@ fn statusFrom text: String bs: Bytes n: Int64 i: Int64 -> (Option String)
         (if (> e (+ b 1)) (some (sub text (+ b 1) e)) (statusFrom text bs n (+ p 1))))))
 
 fn shardFromText content: String -> (Option AsnValue)
-  (mt (listHead (extractGapBlocks content "defect"))
+  (match (listHead (extractGapBlocks content "defect"))
     ((some b) (some (parseGapBlock b)))
     ((none)
-      (mt (plainField content ":id")
+      (match (plainField content ":id")
         ((none) (none))
         ((some id)
-          (mt (plainField content ":target")
+          (match (plainField content ":target")
             ((none) (none))
             ((some tgt)
               (let [bs (stringToBytes content)]
@@ -1328,31 +1328,31 @@ fn shardName? f: String -> Bool
   (and (stringEndsWith? f ".asn") (stringStartsWith? f "defect_"))
 
 fn loadShards! dir: String names: (List String) acc: ShardLoad -> ShardLoad
-  (mt (listHead names)
+  (match (listHead names)
     ((none) (ShardLoad :shards (listReverse acc.shards) :failures (listReverse acc.failures)))
     ((some f)
-      (mt (readTextFile! (pyJoin dir f))
+      (match (readTextFile! (pyJoin dir f))
         ((err e) (loadShards! dir (rest names) (ShardLoad :shards acc.shards :failures (cons e acc.failures))))
         ((ok content)
-          (mt (shardFromText content)
+          (match (shardFromText content)
             ((some s) (loadShards! dir (rest names) (ShardLoad :shards (cons s acc.shards) :failures acc.failures)))
             ((none) (loadShards! dir (rest names) acc)))))))
 
 fn loadShardedBlackboard! shardsDir: String -> ShardLoad
   (if (not (ok? (fileStat shardsDir)))
     (ShardLoad :shards (list) :failures (list))
-    (mt (dirList shardsDir)
+    (match (dirList shardsDir)
       ((err e) (ShardLoad :shards (list) :failures (list (osErr e))))
       ((ok names) (loadShards! shardsDir (filter shardName? names) (ShardLoad :shards (list) :failures (list))))))
 
 fn archiveOne! shardsDir: String archiveDir: String f: String r: CompactReport -> CompactReport
-  (mt (pathRename (pyJoin shardsDir f) (pyJoin archiveDir f))
+  (match (pathRename (pyJoin shardsDir f) (pyJoin archiveDir f))
     ((ok _) (CompactReport :archivedShards (+ 1 r.archivedShards) :compactedEvents r.compactedEvents :failures r.failures))
     ((err e) (CompactReport :archivedShards r.archivedShards :compactedEvents r.compactedEvents :failures (cons (osErr e) r.failures))))
 
 fn archiveClosed! shardsDir: String archiveDir: String names: (List String) r: CompactReport -> CompactReport
   (fold (fn [acc f]
-          (mt (readTextFile! (pyJoin shardsDir f))
+          (match (readTextFile! (pyJoin shardsDir f))
             ((err e) (CompactReport :archivedShards acc.archivedShards :compactedEvents acc.compactedEvents :failures (cons e acc.failures)))
             ((ok content)
               (if (or (stringContains? content ":status :applied") (stringContains? content ":status :refuted"))
@@ -1378,30 +1378,30 @@ fn tailSlice xs: (List T) m: Int64 -> (List T)
 fn compactTelemetry! telPath: String maxTel: Int64 r: CompactReport -> CompactReport
   (if (or (stringEmpty? telPath) (not (ok? (fileStat telPath))))
     r
-    (mt (readTextFile! telPath)
+    (match (readTextFile! telPath)
       ((err e) (CompactReport :archivedShards r.archivedShards :compactedEvents r.compactedEvents :failures (cons e r.failures)))
       ((ok text)
         (let [lines (keepEndsLines text)
               n (listLength lines)]
           (if (<= n maxTel)
             r
-            (mt (atomicWriteFile! telPath (stringJoin (tailSlice lines maxTel) ""))
+            (match (atomicWriteFile! telPath (stringJoin (tailSlice lines maxTel) ""))
               ((ok _) (CompactReport :archivedShards r.archivedShards :compactedEvents (+ r.compactedEvents (- n maxTel)) :failures r.failures))
               ((err e) (CompactReport :archivedShards r.archivedShards :compactedEvents r.compactedEvents :failures (cons e r.failures)))))))))
 
 fn shardNames! dir: String -> (Result (List String) String)
-  (mt (dirList dir) ((ok names) (ok (filter shardName? names))) ((err e) (err (osErr e))))
+  (match (dirList dir) ((ok names) (ok (filter shardName? names))) ((err e) (err (osErr e))))
 
 fn compactObservationMemory! shardsDir: String archiveDir: String maxActive: Int64 maxTel: Int64 telPath: String -> (Result CompactReport String)
-  (mt (makeDirs! shardsDir)
+  (match (makeDirs! shardsDir)
     ((err e) (err e))
     ((ok _)
-      (mt (makeDirs! archiveDir)
+      (match (makeDirs! archiveDir)
         ((err e) (err e))
         ((ok _)
           (let [r0 (CompactReport :archivedShards 0 :compactedEvents 0 :failures (list))
-                r1 (mt (shardNames! shardsDir) ((ok names) (archiveClosed! shardsDir archiveDir names r0)) ((err e) (CompactReport :archivedShards 0 :compactedEvents 0 :failures (list e))))]
-            (mt (shardNames! shardsDir)
+                r1 (match (shardNames! shardsDir) ((ok names) (archiveClosed! shardsDir archiveDir names r0)) ((err e) (CompactReport :archivedShards 0 :compactedEvents 0 :failures (list e))))]
+            (match (shardNames! shardsDir)
               ((err e) (err e))
               ((ok remaining)
                 (let [n (listLength remaining)
@@ -1415,31 +1415,31 @@ fn compactMetrics r: CompactReport -> AsnValue
   (asnDict (list (pair "status" (asnStr "ok")) (pair "archived_shards" (asnInt r.archivedShards)) (pair "compacted_events" (asnInt r.compactedEvents))))
 
 fn writeShardForBlock! defId: String block: String shardsDir: String -> (Result Unit String)
-  (mt (makeDirs! shardsDir)
+  (match (makeDirs! shardsDir)
     ((err e) (err e))
     ((ok _) (atomicWriteFile! (pyJoin shardsDir (str "defect_" (safeDefectId defId) ".asn")) (shardTextFromBlock block))))
 
 fn syncShards! shardsDir: String blocks: (List String) keep: (List String) -> (Result (List String) String)
-  (mt (listHead blocks)
+  (match (listHead blocks)
     ((none) (ok keep))
     ((some b)
-      (mt (getOr (optionOr (dictOf (parseGapBlock b)) (list)) "id" (asnNone))
+      (match (getOr (optionOr (dictOf (parseGapBlock b)) (list)) "id" (asnNone))
         ((asnStr did)
           (if (stringEmpty? did)
             (syncShards! shardsDir (rest blocks) keep)
             (let [name (str "defect_" (safeDefectId did) ".asn")
                   path (pyJoin shardsDir name)
                   want (shardTextFromBlock b)
-                  same (mt (readTextFile! path) ((ok have) (= have want)) ((err _) false))]
+                  same (match (readTextFile! path) ((ok have) (= have want)) ((err _) false))]
               (if same
                 (syncShards! shardsDir (rest blocks) (cons name keep))
-                (mt (atomicWriteFile! path want)
+                (match (atomicWriteFile! path want)
                   ((err e) (err e))
                   ((ok _) (syncShards! shardsDir (rest blocks) (cons name keep))))))))
         (_ (syncShards! shardsDir (rest blocks) keep)))))
 
 fn dropStale! shardsDir: String names: (List String) keep: (List String) -> (Result Unit String)
-  (mt (listHead names)
+  (match (listHead names)
     ((none) (ok ()))
     ((some f)
       (if (or (not (shardName? f)) (listContains? keep f))
@@ -1447,23 +1447,23 @@ fn dropStale! shardsDir: String names: (List String) keep: (List String) -> (Res
         (let [p (pyJoin shardsDir f)]
           (if (isDir? p)
             (err (str "OSError: unlink " p ": is a directory"))
-            (mt (pathRemove p)
+            (match (pathRemove p)
               ((err e) (err (osErr e)))
               ((ok _) (dropStale! shardsDir (rest names) keep))))))))
 
 fn writeBoard! bbPath: String content: String shardsDir: String -> (Result Unit String)
-  (mt (atomicWriteFile! bbPath content)
+  (match (atomicWriteFile! bbPath content)
     ((err e) (err e))
     ((ok _)
       (if (stringEmpty? shardsDir)
         (ok ())
-        (mt (makeDirs! shardsDir)
+        (match (makeDirs! shardsDir)
           ((err e) (err e))
           ((ok _)
-            (mt (syncShards! shardsDir (extractGapBlocks content "defect") (list))
+            (match (syncShards! shardsDir (extractGapBlocks content "defect") (list))
               ((err e) (err e))
               ((ok keep)
-                (mt (dirList shardsDir)
+                (match (dirList shardsDir)
                   ((err e) (err (osErr e)))
                   ((ok names) (dropStale! shardsDir names keep))))))))))
 
@@ -1499,7 +1499,7 @@ fn sigLine? stripped: String -> Bool
   (listAny? (fn [p] (stringStartsWith? stripped p)) (list "(module" "fn " "(schema" "(struct" "(enum" "(:" "(def"))
 
 fn sigLines lines: (List String) acc: (List String) -> (List String)
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (listReverse acc))
     ((some l)
       (if (or (sigLine? (pyStrip l)) (< (listLength acc) 20))
@@ -1519,7 +1519,7 @@ schema DigestState
   (:f failures (List String))
 
 fn fileItem! root: String fp: String -> (Result String String)
-  (mt (readTextFile! fp)
+  (match (readTextFile! fp)
     ((err e) (err e))
     ((ok text) (ok (str ";; Target: " (relPath! fp root) "\n" (fileSummary text) "\n"))))
 
@@ -1539,19 +1539,19 @@ fn prunedDir? d: String -> Bool
   (listContains? (list ".git" "node_modules" "dist" "tmp" ".asl" "target") d)
 
 fn walkFiles! root: String dir: String files: (List String) maxChars: Int64 st: DigestState -> DigestState
-  (mt (listHead files)
+  (match (listHead files)
     ((none) st)
     ((some f)
       (if (not (sourceFile? f))
         (walkFiles! root dir (rest files) maxChars st)
-        (mt (fileItem! root (pyJoin dir f))
+        (match (fileItem! root (pyJoin dir f))
           ((err e) (walkFiles! root dir (rest files) maxChars (addFailure st e)))
           ((ok item)
             (let [r (addItem st item maxChars)]
               (if (pairSecond r) (walkFiles! root dir (rest files) maxChars (pairFirst r)) (pairFirst r))))))))
 
 fn walkDir! root: String dir: String maxChars: Int64 st: DigestState -> (Pair DigestState Bool)
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err _) (pair st false))
     ((ok names)
       (let [dirs (filter (fn [x] (isDir? (pyJoin dir x))) names)
@@ -1562,7 +1562,7 @@ fn walkDir! root: String dir: String maxChars: Int64 st: DigestState -> (Pair Di
           (walkSubdirs! root dir (filter (fn [x] (not (prunedDir? x))) dirs) maxChars st1)))))
 
 fn walkSubdirs! root: String dir: String subs: (List String) maxChars: Int64 st: DigestState -> (Pair DigestState Bool)
-  (mt (listHead subs)
+  (match (listHead subs)
     ((none) (pair st false))
     ((some d)
       (let [r (walkDir! root (pyJoin dir d) maxChars st)]
@@ -1573,7 +1573,7 @@ fn distillPath! root: String p: String maxChars: Int64 st: DigestState -> Digest
     (cond
       ((not (ok? (fileStat full))) st)
       ((isFile? full)
-        (mt (fileItem! root full)
+        (match (fileItem! root full)
           ((err e) (addFailure st e))
           ((ok item) (pairFirst (addItem st item maxChars)))))
       (else (pairFirst (walkDir! root full maxChars st)))))
@@ -1610,31 +1610,31 @@ fn meshValue content: String resolved: String -> (Pair AsnValue String)
         e (if (< p 0) -1 (scanClose bs n p 0 false false false))]
     (if (< e 0)
       (pair (asnDict (list)) "")
-      (mt (tokenizeAsn (sub content p (+ e 1)))
+      (match (tokenizeAsn (sub content p (+ e 1)))
         ((err msg) (pair (asnDict (list)) (str "[Config Error] Failed to parse config from " resolved ": " msg "\n")))
         ((ok toks) (pair (pairFirst (parseAsnForm toks 0)) "")))))
 
 fn lstripAttr v: AsnValue -> (Result String String)
-  (mt v
+  (match v
     ((asnStr x) (ok (lstripColon x)))
     (_ (err (str "AttributeError: '" (typeName v) "' object has no attribute 'lstrip'"))))
 
 fn joinVal root: String v: AsnValue -> (Result AsnValue String)
-  (mt v
+  (match v
     ((asnStr x) (ok (asnStr (pyJoin root x))))
     (_ (err (str "TypeError: expected str, bytes or os.PathLike object, not '" (typeName v) "'"))))
 
 fn listItems v: AsnValue -> (Option (List AsnValue))
-  (mt v ((asnList xs) (some xs)) (_ (none)))
+  (match v ((asnList xs) (some xs)) (_ (none)))
 
 fn dictItems v: AsnValue -> (List (List (Pair String AsnValue)))
-  (fold (fn [acc x] (mt (dictOf x) ((some es) (cons es acc)) ((none) acc))) (list) (optionOr (listItems v) (list)))
+  (fold (fn [acc x] (match (dictOf x) ((some es) (cons es acc)) ((none) acc))) (list) (optionOr (listItems v) (list)))
 
 fn dictItemsInOrder v: AsnValue -> (List (List (Pair String AsnValue)))
   (listReverse (dictItems v))
 
 fn buildProfiles items: (List (List (Pair String AsnValue))) acc: (List (Pair String AsnValue)) active: (Option String) -> (Pair (List (Pair String AsnValue)) (Option String))
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (pair acc active))
     ((some p)
       (let [pid (lstripColon (pyStr (getOr p "id" (s ""))))
@@ -1655,17 +1655,17 @@ fn roleModel intent: String roles: (List (Pair String AsnValue)) model: AsnValue
       (else model)))
 
 fn buildShard sh: (List (Pair String AsnValue)) roles: (List (Pair String AsnValue)) -> (Result AsnValue String)
-  (mt (lstripAttr (getOr sh "intent" (s ":falsify")))
+  (match (lstripAttr (getOr sh "intent" (s ":falsify")))
     ((err e) (err e))
     ((ok intent)
       (let [model (roleModel intent roles (getOr sh "model" (s "qwen/qwen3.8-27b:free")))]
-        (mt (lstripAttr (getOr sh "attractor" (s ":verification")))
+        (match (lstripAttr (getOr sh "attractor" (s ":verification")))
           ((err e) (err e))
           ((ok attractor)
-            (mt (floatOfValue (getOr sh "temp" (asnFloat 0.55)))
+            (match (floatOfValue (getOr sh "temp" (asnFloat 0.55)))
               ((err e) (err e))
               ((ok temp)
-                (mt (lstripAttr (getOr sh "suggestedSeverity" (s ":medium")))
+                (match (lstripAttr (getOr sh "suggestedSeverity" (s ":medium")))
                   ((err e) (err e))
                   ((ok sev)
                     (ok (asnDict (list (pair "id" (getOr sh "id" (s "shard-unknown"))) (pair "name" (getOr sh "name" (s "Unnamed Shard")))
@@ -1674,9 +1674,9 @@ fn buildShard sh: (List (Pair String AsnValue)) roles: (List (Pair String AsnVal
                                        (pair "focus" (getOr sh "focus" (s "")))))))))))))))
 
 fn buildShards items: (List (List (Pair String AsnValue))) roles: (List (Pair String AsnValue)) acc: (List AsnValue) -> (Result (List AsnValue) String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (ok (listReverse acc)))
-    ((some sh) (mt (buildShard sh roles) ((err e) (err e)) ((ok v) (buildShards (rest items) roles (cons v acc))))))
+    ((some sh) (match (buildShard sh roles) ((err e) (err e)) ((ok v) (buildShards (rest items) roles (cons v acc))))))
 
 fn shardRow id: String name: String paths: (List String) intent: String attractor: String model: String temp: Float64 sev: String focus: String -> AsnValue
   (asnDict (list (pair "id" (s id)) (pair "name" (s name)) (pair "paths" (strs paths)) (pair "intent" (s intent)) (pair "attractor" (s attractor))
@@ -1694,15 +1694,15 @@ fn defaultShards -> (List AsnValue)
     (shardRow "shard-macro" "Macro Architecture & Invariant Boundary Isolation" (list "manifest.asn" ".asl.config.asn" "mesh.audit.aslconfig" "asl/grammar/rules.asn") "discover" "containment" "nvidia/nemotron-3-ultra-550b-a55b:free" 0.20 "critical" "Monorepo zero-remote invariant, cross-package boundary isolation, circular dependency cycles, and systemic architectural drift"))
 
 fn buildPeers items: (List (List (Pair String AsnValue))) acc: (List (Pair String AsnValue)) -> (Result (List (Pair String AsnValue)) String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (ok acc))
     ((some pr)
       (if (not (and (some? (dictGet pr "origin")) (some? (dictGet pr "peer"))))
         (buildPeers (rest items) acc)
-        (mt (floatOfValue (getOr pr "peerTemp" (asnFloat 0.50)))
+        (match (floatOfValue (getOr pr "peerTemp" (asnFloat 0.50)))
           ((err e) (err e))
           ((ok t)
-            (mt (getOr pr "origin" (asnNone))
+            (match (getOr pr "origin" (asnNone))
               ((asnStr o) (buildPeers (rest items) (dictPut acc o (asnTuple (list (getOr pr "peer" (asnNone)) (asnFloat t))))))
               (bad (err (str "TypeError: origin keys other than str are not supported, got '" (typeName bad) "'")))))))))
 
@@ -1720,12 +1720,12 @@ fn defaultPeers -> (List (Pair String AsnValue))
         (peerRow "nvidia/nemotron-3-ultra-550b-a55b:free" "z-ai/glm-5.2:free" 0.20))
 
 fn buildCascades items: (List (List (Pair String AsnValue))) acc: (List (Pair String AsnValue)) -> (Result (List (Pair String AsnValue)) String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (ok acc))
     ((some c)
       (if (not (and (some? (dictGet c "primary")) (some? (dictGet c "fallbackChain"))))
         (buildCascades (rest items) acc)
-        (mt (getOr c "primary" (asnNone))
+        (match (getOr c "primary" (asnNone))
           ((asnStr p) (buildCascades (rest items) (dictPut acc p (getOr c "fallbackChain" (asnNone)))))
           (bad (err (str "TypeError: primary keys other than str are not supported, got '" (typeName bad) "'")))))))
 
@@ -1740,10 +1740,10 @@ fn defaultCascades -> (List (Pair String AsnValue))
         (pair "nvidia/nemotron-3-ultra-550b-a55b:free" (strs (list "z-ai/glm-5.2:free" "nvidia/nemotron-3-super-120b-a12b:free" "qwen/qwen3.8-27b:free"))))
 
 fn buildPipeline items: (List (List (Pair String AsnValue))) acc: (List AsnValue) -> (Result (List AsnValue) String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (ok (listReverse acc)))
     ((some chk)
-      (mt (lstripAttr (getOr chk "id" (s ":check")))
+      (match (lstripAttr (getOr chk "id" (s ":check")))
         ((err e) (err e))
         ((ok cid)
           (let [cmd (getOr chk "cmd" (s ""))
@@ -1761,13 +1761,13 @@ fn defaultPipeline -> (List AsnValue)
         (asnDict (list (pair "id" (s "descriptorValidation")) (pair "eval" (s "(= (listLength (list 1 2 3)) 3)")) (pair "doc" (s "Pure ASL in-memory runtime structure verification")))))
 
 fn buildHooks items: (List (List (Pair String AsnValue))) acc: (List (Pair String AsnValue)) -> (Result (List (Pair String AsnValue)) String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (ok acc))
     ((some h)
-      (mt (lstripAttr (getOr h "event" (s "")))
+      (match (lstripAttr (getOr h "event" (s "")))
         ((err e) (err e))
         ((ok ev)
-          (mt (lstripAttr (getOr h "action" (s "")))
+          (match (lstripAttr (getOr h "action" (s "")))
             ((err e) (err e))
             ((ok act)
               (if (stringEmpty? ev)
@@ -1775,25 +1775,25 @@ fn buildHooks items: (List (List (Pair String AsnValue))) acc: (List (Pair Strin
                 (buildHooks (rest items) (dictPut acc ev (asnDict (list (pair "action" (s act)) (pair "eval" (getOr h "eval" (s ""))) (pair "doc" (getOr h "doc" (s ""))))))))))))))
 
 fn buildTaxonomy items: (List (List (Pair String AsnValue))) acc: (List AsnValue) -> (Result (List AsnValue) String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (ok (listReverse acc)))
     ((some t)
-      (mt (lstripAttr (getOr t "id" (s "")))
+      (match (lstripAttr (getOr t "id" (s "")))
         ((err e) (err e))
         ((ok id)
-          (mt (lstripAttr (getOr t "severity" (s "medium")))
+          (match (lstripAttr (getOr t "severity" (s "medium")))
             ((err e) (err e))
             ((ok sev) (buildTaxonomy (rest items) (cons (asnDict (list (pair "id" (s id)) (pair "severity" (s sev)) (pair "doc" (getOr t "doc" (s ""))))) acc))))))))
 
 fn strItems v: AsnValue f: (fn [String] -> String) -> (List AsnValue)
-  (fold (fn [acc x] (mt x ((asnStr y) (cons (asnStr (f y)) acc)) (_ acc))) (list) (optionOr (listItems v) (list)))
+  (fold (fn [acc x] (match x ((asnStr y) (cons (asnStr (f y)) acc)) (_ acc))) (list) (optionOr (listItems v) (list)))
 
 fn strItemsInOrder v: AsnValue f: (fn [String] -> String) -> (List AsnValue)
   (listReverse (strItems v f))
 
 fn nestedRows v: AsnValue -> (List AsnValue)
   (listReverse
-    (fold (fn [acc x] (mt x ((asnList _) (cons (asnList (strItemsInOrder x lstripColon)) acc)) (_ acc))) (list) (optionOr (listItems v) (list))))
+    (fold (fn [acc x] (match x ((asnList _) (cons (asnList (strItemsInOrder x lstripColon)) acc)) (_ acc))) (list) (optionOr (listItems v) (list))))
 
 fn orDefault xs: (List AsnValue) d: (List AsnValue) -> AsnValue
   (asnList (if (listEmpty? xs) d xs))
@@ -1803,7 +1803,7 @@ fn buildRotation rot: (List (Pair String AsnValue)) -> AsnValue
     (asnDict (list (pair "enabled" (getOr rot "enabled" (asnBool true)))
                    (pair "rotate_models" (getOr rot "rotateModels" (asnBool true)))
                    (pair "rotate_attractors" (getOr rot "rotateAttractors" (asnBool true)))
-                   (pair "attractor_regime" (mt regime ((asnStr x) (s (lstripColon x))) (_ regime)))
+                   (pair "attractor_regime" (match regime ((asnStr x) (s (lstripColon x))) (_ regime)))
                    (pair "cycle_models" (orDefault (strItemsInOrder (getOr rot "cycleModels" (asnList (list))) (fn [x] (stripByte x 34)))
                                           (map s (list "google/gemma-4-31b-it:free" "qwen/qwen3.8-27b:free" "nex-agi/nex-n2.5-pro:free" "nvidia/nemotron-3-super-120b-a12b:free" "cohere/north-mini-code:free" "z-ai/glm-5.2:free" "poolside/laguna-xs-2.1:free" "nvidia/nemotron-3-ultra-550b-a55b:free"))))
                    (pair "cycle_attractors" (orDefault (strItemsInOrder (getOr rot "cycleAttractors" (asnList (list))) lstripColon)
@@ -1814,13 +1814,13 @@ fn buildRotation rot: (List (Pair String AsnValue)) -> AsnValue
                                                   (list (strs (list "verification" "reversibility")) (strs (list "containment" "simplicity")) (strs (list "verification" "containment")) (strs (list "reversibility" "convergence")) (strs (list "simplicity" "reversibility"))))))))
 
 fn resolveConfig! root: String cands: (List String) -> (Option (Pair String String))
-  (mt (listHead cands)
+  (match (listHead cands)
     ((none) (none))
     ((some cp)
       (let [full (if (stringStartsWith? cp "/") cp (pyJoin root cp))]
         (if (not (ok? (fileStat full)))
           (resolveConfig! root (rest cands))
-          (mt (readTextFile! full)
+          (match (readTextFile! full)
             ((ok text) (some (pair full text)))
             ((err _) (resolveConfig! root (rest cands))))))))
 
@@ -1829,26 +1829,26 @@ fn expandHome home: String restPath: String -> String
     (if (stringEmpty? r) "/" r))
 
 fn firstErr rs: (List (Result AsnValue String)) -> (Result (List AsnValue) String)
-  (fold (fn [acc r] (mt acc ((err e) (err e)) ((ok xs) (mt r ((err e) (err e)) ((ok v) (ok (listAppend xs (list v)))))))) (ok (list)) rs)
+  (fold (fn [acc r] (match acc ((err e) (err e)) ((ok xs) (match r ((err e) (err e)) ((ok v) (ok (listAppend xs (list v)))))))) (ok (list)) rs)
 
 fn listRes r: (Result (List AsnValue) String) -> (Result AsnValue String)
-  (mt r ((ok xs) (ok (asnList xs))) ((err e) (err e)))
+  (match r ((ok xs) (ok (asnList xs))) ((err e) (err e)))
 
 fn dictRes r: (Result (List (Pair String AsnValue)) String) -> (Result AsnValue String)
-  (mt r ((ok es) (ok (asnDict es))) ((err e) (err e)))
+  (match r ((ok es) (ok (asnDict es))) ((err e) (err e)))
 
 fn intRes v: AsnValue -> (Result AsnValue String)
-  (mt (intOfValue v) ((ok i) (ok (asnInt i))) ((err e) (err e)))
+  (match (intOfValue v) ((ok i) (ok (asnInt i))) ((err e) (err e)))
 
 fn loadMeshConfig! root: String home: String configPath: String envConfig: String stateDir: String pidFileEnv: String profile: String -> (Result (Pair AsnValue String) String)
   (let [cands (listAppend (listAppend (if (stringEmpty? configPath) (list) (list configPath)) (if (stringEmpty? envConfig) (list) (list envConfig)))
                 (list (pyJoin root ".asl.config.asn") (pyJoin root "mesh.audit.aslconfig") (pyJoin root ".asl/mesh/mesh.audit.aslconfig")
                       (expandHome home "/.asl/config.asn") (expandHome home "/.asl/mesh.audit.aslconfig")))
         found (resolveConfig! root cands)
-        resolved (mt found ((some p) (pairFirst p)) ((none) (pyJoin root ".asl.config.asn")))
-        content (mt found ((some p) (pairSecond p)) ((none) ""))
+        resolved (match found ((some p) (pairFirst p)) ((none) (pyJoin root ".asl.config.asn")))
+        content (match found ((some p) (pairSecond p)) ((none) ""))
         parsed (if (stringEmpty? content) (pair (asnDict (list)) "") (meshValue content resolved))]
-    (mt (pairFirst parsed)
+    (match (pairFirst parsed)
       ((asnDict m) (meshFromDict! root m resolved stateDir pidFileEnv profile (pairSecond parsed)))
       (bad (err (str "AttributeError: '" (typeName bad) "' object has no attribute 'get'")))))
 
@@ -1864,15 +1864,15 @@ fn meshFromDict! root: String m: (List (Pair String AsnValue)) resolved: String 
         warning (if (and (not (stringEmpty? profile)) (not overrideOk))
                   (str "[Warning] Requested profile '" profile "' not found in configuration. Available: " (pyStr (strs (mapKeysInOrder profiles))) "\n")
                   "")
-        activeProfile (mt activeId ((some id) (mt (dictGet profiles id) ((some v) (optionOr (dictOf v) (list))) ((none) (list)))) ((none) (list)))
+        activeProfile (match activeId ((some id) (match (dictGet profiles id) ((some v) (optionOr (dictOf v) (list))) ((none) (list)))) ((none) (list)))
         roles (if (listEmpty? activeProfile) (list) (subDict activeProfile "roles"))
         shardsRaw (optionOr (listItems (getOr m "shards" (asnList (list)))) (list))
-        shardsR (mt (buildShards (dictItemsInOrder (asnList shardsRaw)) roles (list))
+        shardsR (match (buildShards (dictItemsInOrder (asnList shardsRaw)) roles (list))
                   ((ok xs) (ok (if (listEmpty? xs) (defaultShards) xs)))
                   ((err e) (err e)))
-        peersR (mt (buildPeers (dictItemsInOrder (getOr m "peerRotation" (asnList (list)))) (list)) ((ok ps) (ok (if (listEmpty? ps) (defaultPeers) ps))) ((err e) (err e)))
-        cascR (mt (buildCascades (dictItemsInOrder (getOr m "modelCascades" (asnList (list)))) (list)) ((ok cs) (ok (if (listEmpty? cs) (defaultCascades) cs))) ((err e) (err e)))
-        pipeR (mt (buildPipeline (dictItemsInOrder (getOr m "staticPipeline" (asnList (list)))) (list)) ((ok xs) (ok (if (listEmpty? xs) (defaultPipeline) xs))) ((err e) (err e)))
+        peersR (match (buildPeers (dictItemsInOrder (getOr m "peerRotation" (asnList (list)))) (list)) ((ok ps) (ok (if (listEmpty? ps) (defaultPeers) ps))) ((err e) (err e)))
+        cascR (match (buildCascades (dictItemsInOrder (getOr m "modelCascades" (asnList (list)))) (list)) ((ok cs) (ok (if (listEmpty? cs) (defaultCascades) cs))) ((err e) (err e)))
+        pipeR (match (buildPipeline (dictItemsInOrder (getOr m "staticPipeline" (asnList (list)))) (list)) ((ok xs) (ok (if (listEmpty? xs) (defaultPipeline) xs))) ((err e) (err e)))
         hooksR (buildHooks (dictItemsInOrder (getOr m "hooks" (asnList (list)))) (list))
         descriptors (map (fn [d] (asnDict (list (pair "schema" (getOr d "schema" (s ""))) (pair "package" (getOr d "package" (s "asl-mesh/descriptor"))) (pair "doc" (getOr d "doc" (s ""))))))
                       (dictItemsInOrder (getOr m "descriptors" (asnList (list)))))
@@ -1896,7 +1896,7 @@ fn meshFromDict! root: String m: (List (Pair String AsnValue)) resolved: String 
                              (joinVal root queueRel) (joinVal root telRel)
                              (intRes (getOr daemon "intervalSec" (asnInt 300))) (intRes (getOr daemon "leaseTtlSec" (asnInt 120)))
                              (intRes (getOr daemon "staleHorizonHours" (asnInt 24))) pidR (intRes (getOr m "concurrency" (asnInt 2)))))]
-    (mt vals
+    (match vals
       ((err e) (err e))
       ((ok vs)
         (let [fixed (zip keys vs)
@@ -1909,7 +1909,7 @@ fn mapKeysInOrder es: (List (Pair String AsnValue)) -> (List String)
 
 fn loadMeshConfigEnv! root: String configPath: String profile: String -> (Result AsnValue String)
   (let [env (fn [k] (optionOr (envGet k) ""))]
-    (mt (loadMeshConfig! root (env "HOME") configPath (env "ASL_MESH_CONFIG") (env "ASL_MESH_STATE_DIR") (env "ASL_MESH_PID_FILE") profile)
+    (match (loadMeshConfig! root (env "HOME") configPath (env "ASL_MESH_CONFIG") (env "ASL_MESH_STATE_DIR") (env "ASL_MESH_PID_FILE") profile)
       ((err e) (err e))
       ((ok r)
         (do

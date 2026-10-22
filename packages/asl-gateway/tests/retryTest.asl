@@ -12,7 +12,7 @@ fn get v: j/Json k: String -> j/Json
   (optionOr (pt/jget v k) (j/jnull))
 
 fn text v: j/Json -> String
-  (mt v ((j/jstr s) s) (_ ""))
+  (match v ((j/jstr s) s) (_ ""))
 
 ; (:m :tags (retry) :do "upstream.asl coverage")
 
@@ -49,10 +49,10 @@ fn testRetryableHttpStatus -> Bool
 
 fn testParseCurlExitCode -> Bool
   (do
-    (mt (u/parseCurlExitCode "curl exit 7: Failed to connect")
+    (match (u/parseCurlExitCode "curl exit 7: Failed to connect")
       ((some c) (assert (= c 7) "parses the connect-failure exit code"))
       ((none) (assert false "expected some code")))
-    (mt (u/parseCurlExitCode "curl exit 28: Operation timed out")
+    (match (u/parseCurlExitCode "curl exit 28: Operation timed out")
       ((some c) (assert (= c 28) "parses the timeout exit code"))
       ((none) (assert false "expected some code")))
     (refute (some? (u/parseCurlExitCode "curl: command not found")) "a toolAbsent-style message has no curl exit prefix")
@@ -97,36 +97,36 @@ fn retryMax policy: c/RetryPolicy -> Int64
 
 fn testRetryParseAndPrecedence -> Bool
   (let [(tblRes (c/gatewayConfigParse! (retryConfigText) "retryTest" ""))]
-    (mt tblRes
+    (match tblRes
       ((err e) (assert false (str "retryConfigText must parse: " e)))
       ((ok tbl)
        (do
          (assert (= tbl.version 2) "a :v 2 config parses to version 2")
-         (mt (mapGet tbl.providers "openrouter")
+         (match (mapGet tbl.providers "openrouter")
            ((none) (assert false "provider openrouter must be present"))
            ((some pv)
-            (mt pv.retry
+            (match pv.retry
               ((none) (assert false "provider openrouter must carry its own :retry"))
               ((some pr) (assert (= pr.maxAttempts 2) "provider-level :max parses to 2")))))
-         (mt (c/gatewayV2Entry! tbl "m1")
+         (match (c/gatewayV2Entry! tbl "m1")
            ((c/entryUnresolved _) (assert false "m1 must resolve"))
            ((c/entryResolved e1)
-            (mt e1.retry
+            (match e1.retry
               ((none) (assert false "m1 has no own :retry, so it must inherit the provider's"))
               ((some r1) (assert (= r1.maxAttempts 2) "m1 inherits provider :max 2 when it names none of its own")))))
-         (mt (c/gatewayV2Entry! tbl "m2")
+         (match (c/gatewayV2Entry! tbl "m2")
            ((c/entryUnresolved _) (assert false "m2 must resolve"))
            ((c/entryResolved e2)
-            (mt e2.retry
+            (match e2.retry
               ((none) (assert false "m2 must carry its own :retry"))
               ((some r2) (do
                            (assert (= r2.maxAttempts 5) "m2's own :max 5 wins over the provider's :max 2")
                            (assert (= r2.baseMs 500) "m2's own :baseMs wins too")
                            (assert (= r2.capMs 4000) "m2's own :capMs wins too"))))))
-         (mt (c/gatewayV2Entry! tbl "m3")
+         (match (c/gatewayV2Entry! tbl "m3")
            ((c/entryUnresolved _) (assert false "m3 must resolve"))
            ((c/entryResolved e3) (assert (none? e3.retry) "m3's provider (agy) names no :retry, so m3 has none")))
-         (mt (c/gatewayV2Entry! tbl "m1")
+         (match (c/gatewayV2Entry! tbl "m1")
            ((c/entryUnresolved _) (assert false "m1 must resolve"))
            ((c/entryResolved e1)
             (let [(viaEntry (c/mergedRetryPolicy (some tbl) "openrouter" (some e1)))
@@ -154,20 +154,20 @@ fn firstByteSecConfigText -> String
 
 fn testFirstByteSecParseAndPrecedence -> Bool
   (let [(tblRes (c/gatewayConfigParse! (firstByteSecConfigText) "retryTest" ""))]
-    (mt tblRes
+    (match tblRes
       ((err e) (assert false (str "firstByteSecConfigText must parse: " e)))
       ((ok tbl)
        (do
-         (mt (mapGet tbl.providers "openrouter")
+         (match (mapGet tbl.providers "openrouter")
            ((none) (assert false "provider openrouter must be present"))
            ((some pv) (assert (= pv.firstByteSec 20.0) "provider-level :firstByteSec parses to 20.0")))
-         (mt (c/gatewayV2Entry! tbl "m1")
+         (match (c/gatewayV2Entry! tbl "m1")
            ((c/entryUnresolved _) (assert false "m1 must resolve"))
            ((c/entryResolved e1) (assert (= e1.firstByteSec 20.0) "m1 names no :firstByteSec of its own, so it inherits the provider's 20.0")))
-         (mt (c/gatewayV2Entry! tbl "m2")
+         (match (c/gatewayV2Entry! tbl "m2")
            ((c/entryUnresolved _) (assert false "m2 must resolve"))
            ((c/entryResolved e2) (assert (= e2.firstByteSec 5.0) "m2's own :firstByteSec 5.0 wins over the provider's 20.0")))
-         (mt (c/gatewayV2Entry! tbl "m3")
+         (match (c/gatewayV2Entry! tbl "m3")
            ((c/entryUnresolved _) (assert false "m3 must resolve"))
            ((c/entryResolved e3) (assert (= e3.firstByteSec 0.0) "m3's provider (agy) names no :firstByteSec, so m3 gets the 0.0 unconfigured sentinel, never a baked-in 60.0 here")))
          (assert (= (u/firstByteCapSec 120.0 20.0) 20.0) "firstByteCapSec honours a configured value under the attempt's own timeout")
@@ -182,7 +182,7 @@ fn testMalformedRetryIsRejected -> Bool
                    "                :retry (:max 1 :baseMs 500 :capMs 100)))\n"
                    "  :models ((:model :id m1 :provider openrouter :name \"m1\"))\n"
                    "  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1))))))"))]
-    (mt (c/gatewayConfigParse! badText "retryTest" "")
+    (match (c/gatewayConfigParse! badText "retryTest" "")
       ((err e) (do (assert (stringContains? e "capMs") "a capMs below baseMs is rejected with a message naming capMs") true))
       ((ok _) (do (assert false "capMs < baseMs must not parse ok") true))))
 
@@ -193,7 +193,7 @@ fn emptySettings -> u/UpstreamSettings
 
 fn testWorld tbl: (Option c/GatewayTable) -> ch/ChatWorld
   (ch/ChatWorld :env (mapEmpty) :rootDir "/tmp" :settings (emptySettings) :agyPromptMaxBytes 188000
-    :table (mt tbl ((some t) (ok t)) ((none) (err "ERR_GATEWAY_NO_CONFIG: no config loaded"))))
+    :table (match tbl ((some t) (ok t)) ((none) (err "ERR_GATEWAY_NO_CONFIG: no config loaded"))))
 
 fn testCtx tbl: (Option c/GatewayTable) -> ch/Ctx
   (ch/Ctx :req (ch/ChatRequest :path "/chat/completions" :headers (list) :body "{}")
@@ -213,28 +213,28 @@ fn testAttempt providerId: String data: String -> ch/Attempt
     :retryUsed 0 :retryDeadline (none))
 
 fn opOf step: ch/ChatStep -> String
-  (mt step
+  (match step
     ((ch/stepEffect eff _) (text (get (ch/effectJson eff) "op")))
     ((ch/stepDone _) "done")
     ((ch/stepRaised kind _) (str "raised:" kind)))
 
 fn fieldOf step: ch/ChatStep key: String -> j/Json
-  (mt step
+  (match step
     ((ch/stepEffect eff _) (get (ch/effectJson eff) key))
     (_ (j/jnull)))
 
 fn feedDone step: ch/ChatStep -> ch/ChatStep
-  (mt step
+  (match step
     ((ch/stepEffect _ k) (k (ch/outDone)))
     (_ step))
 
 fn feedFloat step: ch/ChatStep f: Float64 -> ch/ChatStep
-  (mt step
+  (match step
     ((ch/stepEffect _ k) (k (ch/outFloat f)))
     (_ step))
 
 fn feedHttp step: ch/ChatStep reply: ch/HttpReply -> ch/ChatStep
-  (mt step
+  (match step
     ((ch/stepEffect _ k) (k (ch/outHttp reply)))
     (_ step))
 
@@ -259,7 +259,7 @@ fn tableWithRetry maxAttempts: Int64 -> c/GatewayTable
                 "                :retry (:max " (stringFromInt64 maxAttempts) " :baseMs 1000 :capMs 20000)))\n"
                 "  :models ((:model :id m1 :provider openrouter :name \"m1\"))\n"
                 "  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1))))))"))]
-    (mt (c/gatewayConfigParse! text "retryTest" "")
+    (match (c/gatewayConfigParse! text "retryTest" "")
       ((ok tbl) tbl)
       ((err e) (do (assert false (str "tableWithRetry text must parse: " e)) (emptyTable)))))
 
@@ -350,7 +350,7 @@ fn testRetryAfterHeaderSetsExactWait -> Bool
           (assert (= (opOf step1) "log") "logs the retry attempt next")
           (assert (= (opOf step2) "usageNote") "then records the retry attempt on the usage ledger")
           (assert (= (opOf step3) "sleepMs") "then sleeps for the Retry-After-driven wait before the next attempt")
-          (mt (fieldOf step3 "ms")
+          (match (fieldOf step3 "ms")
             ((j/jint ms) (do
                            (assert (= ms 3000) (str "Retry-After: 3 becomes exactly a 3000 ms parked wait, got " ms))
                            (assert (< ms 20000) (str "the parked wait (" ms " ms) still stays under capMs (20000 ms)"))))
@@ -370,7 +370,7 @@ fn testRetryAfterHttpDateFormResolvesAgainstNow -> Bool
             (step3 (feedDone step2))]
         (do
           (assert (= (opOf step3) "sleepMs") "resolves to a sleep, same as the delta-seconds form")
-          (mt (fieldOf step3 "ms")
+          (match (fieldOf step3 "ms")
             ((j/jint ms) (assert (= ms 3000) (str "the HTTP-date form 3 seconds ahead of now becomes a 3000 ms wait, got " ms)))
             (_ (assert false "effSleepMs must carry an integer ms field")))
           true))))

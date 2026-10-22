@@ -3,13 +3,13 @@
   :i [(asl/agentLoop/plan :a p) (asl/agentLoop/core :a c) (asl-proc/coreProcess :a cp) (asl-proc/gitFixture :a gf)])
 
 fn listOf n: p/SexpNode -> (List p/SexpNode)
-  (mt n ((p/sexpList xs) xs) ((p/sexpAtom _) (list)) ((p/sexpStr _) (list)))
+  (match n ((p/sexpList xs) xs) ((p/sexpAtom _) (list)) ((p/sexpStr _) (list)))
 
 fn atomOf n: p/SexpNode -> String
-  (mt n ((p/sexpAtom a) a) ((p/sexpStr _) "") ((p/sexpList _) ""))
+  (match n ((p/sexpAtom a) a) ((p/sexpStr _) "") ((p/sexpList _) ""))
 
 fn argStr n: p/SexpNode -> String
-  (mt n ((p/sexpStr s) s) ((p/sexpAtom a) a) ((p/sexpList _) ""))
+  (match n ((p/sexpStr s) s) ((p/sexpAtom a) a) ((p/sexpList _) ""))
 
 fn argAt xs: (List p/SexpNode) i: Int64 -> p/SexpNode
   (optionOr (listGet xs i) (p/sexpAtom "nil"))
@@ -24,7 +24,7 @@ fn field n: p/SexpNode key: String -> p/SexpNode
   (fieldIn (c/restOf (listOf n)) key)
 
 fn parseLine line: String -> (List p/SexpNode)
-  (mt (p/planTree line) ((ok ns) ns) ((err _) (list)))
+  (match (p/planTree line) ((ok ns) ns) ((err _) (list)))
 
 fn ! scenarioLines! path: String -> (List String)
   (filter (fn [line] (stringStartsWith? line "(:scenario "))
@@ -57,7 +57,7 @@ fn withEnv c: cp/ProcessCmd env: (List (Pair String String)) -> cp/ProcessCmd
 fn ! gitStep! root: String args: (List String) env: (List (Pair String String)) -> Bool
   (let [withCeiling (cp/withEnv (cp/withCwd (withEnv (cp/cmd "git" (listAppend (list "-C" root) args)) env) root)
                                 "GIT_CEILING_DIRECTORIES" (gf/ceilingFor! root))]
-    (mt (cp/exec! (cp/withTimeout withCeiling 60000))
+    (match (cp/exec! (cp/withTimeout withCeiling 60000))
       ((ok o) (= o.exitCode 0))
       ((err _) false)))
 

@@ -129,11 +129,11 @@ fn parse-regex! bs: Bytes n: Int64 pos: Int64 gc: Int64 classes: (List Bytes) ->
   (parse-alt! bs n pos gc classes)
 
 fn parse-alt! bs: Bytes n: Int64 pos: Int64 gc: Int64 classes: (List Bytes) -> ParseRes
-  (mt (parse-concat! bs n pos gc classes)
+  (match (parse-concat! bs n pos gc classes)
     ((parseErr ep em) (parseErr ep em))
     ((parseOk leftNode p1 gc1 cl1)
       (if (and (< p1 n) (= (bytesGet bs p1) 124))
-        (mt (parse-alt! bs n (+ p1 1) gc1 cl1)
+        (match (parse-alt! bs n (+ p1 1) gc1 cl1)
           ((parseErr ep em) (parseErr ep em))
           ((parseOk rightNode p2 gc2 cl2)
             (parseOk (astAlt leftNode rightNode) p2 gc2 cl2)))
@@ -145,7 +145,7 @@ fn parse-concat-loop! bs: Bytes n: Int64 pos: Int64 gc: Int64 classes: (List Byt
       ((listEmpty? acc) (parseOk (astEmpty) pos gc classes))
       ((= (listLength acc) 1) (parseOk (optionOr (listHead acc) (astEmpty)) pos gc classes))
       (else (parseOk (astSeq acc) pos gc classes)))
-    (mt (parse-piece! bs n pos gc classes)
+    (match (parse-piece! bs n pos gc classes)
       ((parseErr ep em) (parseErr ep em))
       ((parseOk piece p1 gc1 cl1)
         (parse-concat-loop! bs n p1 gc1 cl1 (listAppend acc (list piece))))))
@@ -217,7 +217,7 @@ fn parse-repeat bs: Bytes n: Int64 pos: Int64 atom: Ast gc: Int64 classes: (List
             (else (parseErr p1 "expected ',' or '}' in repeat")))))))
 
 fn parse-piece! bs: Bytes n: Int64 pos: Int64 gc: Int64 classes: (List Bytes) -> ParseRes
-  (mt (parse-atom! bs n pos gc classes)
+  (match (parse-atom! bs n pos gc classes)
     ((parseErr ep em) (parseErr ep em))
     ((parseOk atom p1 gc1 cl1)
       (if (>= p1 n)
@@ -341,14 +341,14 @@ fn parse-atom! bs: Bytes n: Int64 pos: Int64 gc: Int64 classes: (List Bytes) -> 
       (cond
         ((= b 40)
           (if (and (< (+ pos 2) n) (and (= (bytesGet bs (+ pos 1)) 63) (= (bytesGet bs (+ pos 2)) 58)))
-            (mt (parse-regex! bs n (+ pos 3) gc classes)
+            (match (parse-regex! bs n (+ pos 3) gc classes)
               ((parseErr ep em) (parseErr ep em))
               ((parseOk inner p1 gc1 cl1)
                 (if (and (< p1 n) (= (bytesGet bs p1) 41))
                   (parseOk (astGroup 0 inner) (+ p1 1) gc1 cl1)
                   (parseErr p1 "unclosed non-capturing group '(?:'"))))
             (let [(newGc (+ gc 1))]
-              (mt (parse-regex! bs n (+ pos 1) newGc classes)
+              (match (parse-regex! bs n (+ pos 1) newGc classes)
                 ((parseErr ep em) (parseErr ep em))
                 ((parseOk inner p1 gc1 cl1)
                   (if (and (< p1 n) (= (bytesGet bs p1) 41))
@@ -395,7 +395,7 @@ fn parse-atom! bs: Bytes n: Int64 pos: Int64 gc: Int64 classes: (List Bytes) -> 
         (else (parseOk (astChar b) (+ pos 1) gc classes)))))
 
 fn astSize node: Ast -> Int64
-  (mt node
+  (match node
     ((astChar c) 1)
     ((astDot) 1)
     ((astClass id) 1)
@@ -413,7 +413,7 @@ fn astSize node: Ast -> Int64
           (else (+ sz 2))))))
 
 fn compileAst node: Ast pc: Int64 dotall: Bool -> (List (List Int64))
-  (mt node
+  (match node
     ((astChar c) (list (list 1 c 0)))
     ((astDot) (list (list (if dotall 4 3) 0 0)))
     ((astClass id) (list (list 2 id 0)))
@@ -491,7 +491,7 @@ fn make-saved-init count: Int64 acc: (List Int64) -> (List Int64)
 fn saved-set lst: (List Int64) idx: Int64 val: Int64 -> (List Int64)
   (if (<= idx 0)
     (cons val (optionOr (listTail lst) (list)))
-    (mt (listHead lst)
+    (match (listHead lst)
       ((none) (list val))
       ((some h) (cons h (saved-set (optionOr (listTail lst) (list)) (- idx 1) val)))))
 
@@ -577,7 +577,7 @@ fn step-one-char! threads: (List Thread) b: Int64 nextPos: Int64 bytes: Bytes le
         (step-one-char! rest b nextPos bytes len visited code ninst classes multiline accThreads matched vpcs))))
 
 fn is-better-match newSaved: (List Int64) oldMatch: (Option (List Int64)) -> Bool
-  (mt oldMatch
+  (match oldMatch
     ((none) true)
     ((some oldSaved)
       (let [(newStart (optionOr (listGet newSaved 0) -1))
@@ -637,7 +637,7 @@ fn make-match-record text: String saved: (List Int64) nsub: Int64 -> Match
 fn regex-compile-flags! pattern: String multiline: Bool dotall: Bool ignoreCase: Bool -> (Result Regex String)
   (let [(bs (stringToBytes pattern))
         (n (bytesLength bs))]
-    (mt (parse-regex! bs n 0 0 (list))
+    (match (parse-regex! bs n 0 0 (list))
       ((parseErr ep em)
         (err (str "regex-compile: error at position " (stringFromInt64 ep) ": " em)))
       ((parseOk ast nextP gc classes)
@@ -677,7 +677,7 @@ fn regex-search! re: Regex s: String -> (Option Match)
     (if (and (some? matched0) (listEmpty? threads0))
       (some (make-match-record s (unwrap-saved matched0) re.nsub))
       (let [(finalMatched (vm-loop! 0 len bs visited code ninst re.classes re.multiline threads0 matched0))]
-        (mt finalMatched
+        (match finalMatched
           ((none) (none))
           ((some saved)
             (some (make-match-record s saved re.nsub)))))))
@@ -699,7 +699,7 @@ fn regex-match-full! re: Regex s: String -> (Option Match)
           (some (make-match-record s saved re.nsub))
           (none)))
       (let [(finalMatched (vm-loop! 0 len bs visited code ninst re.classes re.multiline threads0 matched0))]
-        (mt finalMatched
+        (match finalMatched
           ((none) (none))
           ((some saved)
             (if (= (optionOr (listGet saved 1) -1) len)
@@ -707,7 +707,7 @@ fn regex-match-full! re: Regex s: String -> (Option Match)
               (none)))))))
 
 fn unwrap-saved opt: (Option (List Int64)) -> (List Int64)
-  (mt opt
+  (match opt
     ((none) (list))
     ((some s) s))
 
@@ -728,7 +728,7 @@ fn find-all-from! re: Regex s: String pos: Int64 acc: (List Match) -> (List Matc
     (if (> pos slen)
       (listReverse acc)
       (let [(sub (optionOr (stringSlice s pos slen) ""))]
-        (mt (regex-search! re sub)
+        (match (regex-search! re sub)
           ((none) (listReverse acc))
           ((some m)
             (let [(realStart (+ pos m.start))

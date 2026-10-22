@@ -31,7 +31,7 @@ fn moduleOf strings: (List String) externs: (List ty/SsaExtern) functions: (List
   (ty/ssaModule "fixture" strings (list) (list) externs (list) functions)
 
 fn codes res: (Result Unit (List ty/IrDiag)) -> (List String)
-  (mt res ((ok _) (list)) ((err diags) (map (fn [(d ty/IrDiag)] -> String d.code) diags)))
+  (match res ((ok _) (list)) ((err diags) (map (fn [(d ty/IrDiag)] -> String d.code) diags)))
 
 fn getpidModule -> ty/SsaModule
   (moduleOf (list) (list (ty/ssaExternTyped "getpid" (list) (ty/tyI32)))

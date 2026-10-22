@@ -75,10 +75,10 @@ fn normalizeKw val: Str -> Str
   (if (stringStartsWith? val ":") (optionOr (stringSlice val 1 (stringLength val)) "") val)
 
 fn paramCountMatches? queryPc: (Option I64) actualPc: (Option I64) -> Bool
-  (mt queryPc ((none) true) ((some target) (mt actualPc ((none) false) ((some actual) (= target actual)))))
+  (match queryPc ((none) true) ((some target) (match actualPc ((none) false) ((some actual) (= target actual)))))
 
 fn formMatchesQuery? node: ASTMatchNode pCount: (Option I64) query: ASTQuery -> Bool
-  (let [(qFt (normalizeKw query.formType)) (nFt node.formType) (ftOk (or (= qFt "*") (= qFt nFt))) (symOk (mt query.symbolId ((none) true) ((some s) (= (normalizeKw s) node.symbolId)))) (pcOk (paramCountMatches? query.paramCount pCount)) (predOk (mt query.predicateToken ((none) true) ((some tok) (stringContains? node.rawForm tok))))] (and ftOk (and symOk (and pcOk predOk))))
+  (let [(qFt (normalizeKw query.formType)) (nFt node.formType) (ftOk (or (= qFt "*") (= qFt nFt))) (symOk (match query.symbolId ((none) true) ((some s) (= (normalizeKw s) node.symbolId)))) (pcOk (paramCountMatches? query.paramCount pCount)) (predOk (match query.predicateToken ((none) true) ((some tok) (stringContains? node.rawForm tok))))] (and ftOk (and symOk (and pcOk predOk))))
 
 fn parseMatchFromSpan span: RawSpan content: Str -> MatchParsed
   (let [(startC span.startIdx) (endC span.endIdx) (raw (optionOr (stringSlice content startC endC) "")) (toks (extractHeaderTokens raw 5)) (rawT0 (optionOr (listGet toks 0) "")) (t0 (normalizeKw rawT0)) (t1 (optionOr (listGet toks 1) "")) (t2 (optionOr (listGet toks 2) "")) (isEffectful (or (and (= t0 "df") (= t1 "!")) (and (= t0 "fn") (= t1 "!")))) (symId (if isEffectful t2 t1)) (pCnt (if (or (= t0 "fn") (or (= t0 "df") (or (= t0 "dfe") (= t0 "enum")))) (countParamsInForm raw) (none))) (node (ASTMatchNode :formType t0 :symbolId symId :startChar startC :endChar endC :rawForm raw :lineNumber span.lineNum))] (MatchParsed :node node :pCnt pCnt))

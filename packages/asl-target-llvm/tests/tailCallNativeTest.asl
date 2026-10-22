@@ -24,7 +24,7 @@ fn ! testNativeRuns -> Bool
   (let [(built (nt/prepareRun (probe) (nt/fingerprint)))]
     (do
       (assert (some? built.binary) (str "tailProbe builds natively: " built.reason))
-      (mt built.binary
+      (match built.binary
         ((none) false)
         ((some bin)
           (let [(arity (smallStack bin "arity" "3"))]
@@ -66,7 +66,7 @@ fn ! testClosureIrO0 -> Bool
   (let [(emitted (llvm/emitLlvmSource (closureSource) "main"))]
     (do
       (assert (ok? emitted) (str "closure tail source lowers: " emitted))
-      (mt emitted
+      (match emitted
         ((err _) false)
         ((ok ir)
           (let [(made (processRun "mktemp -d"))
@@ -113,7 +113,7 @@ fn testBoxedIr -> Bool
   (let [(emitted (llvm/emitLlvmSource (boxedSource) "main"))]
     (do
       (assert (ok? emitted) (str "boxed tail source lowers: " emitted))
-      (mt emitted
+      (match emitted
         ((err _) false)
         ((ok ir)
           (do
@@ -146,7 +146,7 @@ fn testExternIr -> Bool
   (let [(emitted (llvm/emitLlvmModule (externFixture)))]
     (do
       (assert (ok? emitted) (str "extern fixture emits: " emitted))
-      (mt emitted
+      (match emitted
         ((err _) false)
         ((ok ir)
           (do

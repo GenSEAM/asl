@@ -17,9 +17,9 @@ fn ! compileFixture dir: String -> (Result String String)
   (let [(path (str dir "/nativeGapRecord.asl"))]
     (do
       (assert (ok? (fileWrite path (fixtureSource))) "fixture source written")
-      (mt (lk/linkEntry! path)
+      (match (lk/linkEntry! path)
         ((err ds) (err (formatDiags ds)))
-        ((ok m) (mt (llvm/emitLlvmProgramNative! m (str m.name ".main"))
+        ((ok m) (match (llvm/emitLlvmProgramNative! m (str m.name ".main"))
                   ((err ds) (err (formatDiags ds)))
                   ((ok code) (ok code)))))))
 
@@ -28,8 +28,8 @@ fn ! testRecordNative dir: String -> Bool
         (exe (str dir "/nativeGapRecord"))
         (built (compileFixture dir))]
     (do
-      (assert (ok? built) (str "named record constructor lowers: " (mt built ((ok _) "ok") ((err e) e))))
-      (let [(code (mt built ((ok s) s) ((err _) "")))]
+      (assert (ok? built) (str "named record constructor lowers: " (match built ((ok _) "ok") ((err e) e))))
+      (let [(code (match built ((ok s) s) ((err _) "")))]
         (do
           (assert (ok? (fileWrite ll code)) "LLVM fixture written")
           (let [(linked (processRun (str "/usr/bin/clang -Wno-override-module -x ir " ll " -x none asl/host/out/libaslrt.a -lm -o " exe)))]

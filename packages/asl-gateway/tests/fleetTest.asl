@@ -20,7 +20,7 @@ fn value result: (Result f/State f/FleetError) -> f/State
   (optionOr (resultToOption result) (f/State :endpoint (endpoint f/direct) :lifecycle f/down :inFlight 0 :queueLength 0 :lastUsedMs 0 :ring (f/makeRing) :rollingTokens 0 :rollingElapsedMs 0 :p50LatencyMs 0 :p95LatencyMs 0 :errorRatePpm 0 :costSoFar 0 :highQueueSinceMs -1 :quietSinceMs -1 :releasedOnWarm 0))
 
 fn invalid result: (Result f/State f/FleetError) -> Bool
-  (mt result ((err e) (mt e ((invalidTransition _) true) ((invalidSample) true) ((costOverflow) true))) (_ false))
+  (match result ((err e) (match e ((invalidTransition _) true) ((invalidSample) true) ((costOverflow) true))) (_ false))
 
 fn testLifecycleTransitions -> Bool
   (let [(cold (f/emptyState (endpoint f/direct)))
@@ -86,9 +86,9 @@ fn testAdmission -> Bool
     (assert (= (f/admit atCap 0) f/queue) "concurrencyCap queues at cap")
     (assert (= (f/admit (warmedState f/ourBatch) 0) f/queue) "ourBatch delegates by queueing")
     (assert (= (f/admit (warmedState f/direct) 0) f/admitNow) "direct admits below cap")
-    (assert (mt (f/admit directCap 0) ((reject reason) (= reason f/atCapacity)) (_ false)) "direct rejects at cap")
+    (assert (match (f/admit directCap 0) ((reject reason) (= reason f/atCapacity)) (_ false)) "direct rejects at cap")
     (assert (= (f/admit (f/emptyState (endpoint f/direct)) 0) f/queue) "cold arrival queues during warmup")
-    (assert (mt (f/admit (value (f/transition (warmedState f/direct) f/drainRequested)) 0)
+    (assert (match (f/admit (value (f/transition (warmedState f/direct) f/drainRequested)) 0)
       ((reject reason) (= reason f/endpointUnavailable)) (_ false)) "draining endpoint rejects")
     true)
 
@@ -125,7 +125,7 @@ fn testStopCostDecision -> Bool
     (assert (= active.quietSinceMs -1) "requestStart resets the quiet timer")
     (assert (= (f/decide active 100) f/keep) "request activity resets the idle stop hold")
     (assert (= (f/decide keepState 10) f/keep) "expected rewarm cost above idle cost keeps endpoint")
-    (assert (mt (f/expectedWarmCost (f/Endpoint :provider "p" :model "m" :gpuTier "" :region "r" :engine "e"
+    (assert (match (f/expectedWarmCost (f/Endpoint :provider "p" :model "m" :gpuTier "" :region "r" :engine "e"
       :admissionMode f/direct :maxConcurrency 1 :idleStopMs 0 :warmupMs 9223372036854775807
       :upgradeQueueThreshold 0 :upgradeHoldMs 0 :downgradeQueueThreshold 0 :downgradeHoldMs 0
       :rewarmHourlyPrice 2 :idleHourlyPrice 0 :expectedDemandMs 0 :nextGpuTier "")) ((err e) (= e f/costOverflow)) (_ false))
@@ -166,7 +166,7 @@ fn testSpillover -> Bool
     (assert (= (f/spillover (list busy free)) (ok 1)) "spillover prefers warm endpoint under its cap")
     (assert (= (f/spillover (list busy warming)) (ok 0)) "spillover chooses shortest expected wait")
     (assert (= tie (ok 0)) "spillover breaks equal-score ties by declaration order")
-    (assert (mt (f/spillover (list down)) ((err e) true) (_ false)) "spillover refuses unavailable endpoints")
+    (assert (match (f/spillover (list down)) ((err e) true) (_ false)) "spillover refuses unavailable endpoints")
     true)
 
 fn runTests -> Bool

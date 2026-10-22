@@ -171,7 +171,7 @@ fn decodeBinaryFrame raw: String -> (Result Http2Frame String)
     (err "ERR_H2_INVALID_BINARY_PREFIX")
     (let [(sub (optionOr (stringSlice raw 7 (stringLength raw)) ""))
           (colonIdx (stringIndexOf sub ":"))]
-      (mt colonIdx
+      (match colonIdx
         ((none) (err "ERR_H2_TRUNCATED_BINARY_FRAME"))
         ((some idx)
           (if (!= idx 18)
@@ -198,7 +198,7 @@ fn findNthColon s: String pos: Int64 remaining: Int64 -> (Option Int64)
     (some pos)
     (let [(sub (optionOr (stringSlice s pos (stringLength s)) ""))
           (idx (stringIndexOf sub ":"))]
-      (mt idx
+      (match idx
         ((some off) (findNthColon s (+ (+ pos off) 1) (- remaining 1)))
         ((none) (none)))))
 
@@ -208,7 +208,7 @@ fn decodeHttp2Frame raw: String -> (Result Http2Frame String)
     (if (or (stringEmpty? raw) (not (stringStartsWith? raw "H2F:")))
       (err "ERR_H2_TRUNCATED_FRAME")
       (let [(fifthColonOpt (findNthColon raw 0 5))]
-        (mt fifthColonOpt
+        (match fifthColonOpt
           ((none) (err "ERR_H2_TRUNCATED_FRAME"))
           ((some headerEnd)
             (let [(headerPart (optionOr (stringSlice raw 0 (- headerEnd 1)) ""))
@@ -240,7 +240,7 @@ fn hpackTableEvict entries: (List HpackEntry) curSize: Int64 maxSize: Int64 -> (
   (if (or (listEmpty? entries) (<= curSize maxSize))
     (pair entries curSize)
     (let [(rev (listReverse entries))]
-      (mt (listHead rev)
+      (match (listHead rev)
         ((none) (pair (list) 0))
         ((some oldest)
           (let [(reducedSize (- curSize oldest.size))
@@ -273,7 +273,7 @@ fn encodeHpack tbl: HpackTable headers: http/HttpHeaders -> (Pair HpackTable Str
 
 fn parseHpackLine line: String -> (Option (Pair String String))
   (let [(eqPos (stringIndexOf line "="))]
-    (mt eqPos
+    (match eqPos
       ((some idx)
         (let [(k (optionOr (stringSlice line 0 idx) ""))
               (v (optionOr (stringSlice line (+ idx 1) (stringLength line)) ""))]
@@ -287,7 +287,7 @@ fn parseHpackLinesLoop lines: (List String) acc: (List (Pair String String)) -> 
       (if (stringEmpty? line)
         (parseHpackLinesLoop (optionOr (listTail lines) (list)) acc)
         (let [(pOpt (parseHpackLine line))]
-          (mt pOpt
+          (match pOpt
             ((some p) (parseHpackLinesLoop (optionOr (listTail lines) (list)) (cons p acc)))
             ((none) (parseHpackLinesLoop (optionOr (listTail lines) (list)) acc)))))))
 
@@ -295,7 +295,7 @@ fn decodeHpack tbl: HpackTable wireBlock: String -> (Result (Pair HpackTable htt
   (if (not (stringStartsWith? wireBlock "HPACK:"))
     (err "ERR_HPACK_INVALID_HEADER_BLOCK")
     (let [(newlinePos (stringIndexOf wireBlock "\n"))]
-      (mt newlinePos
+      (match newlinePos
         ((none) (err "ERR_HPACK_MALFORMED_FORMAT"))
         ((some idx)
           (let [(bodyPart (optionOr (stringSlice wireBlock (+ idx 1) (stringLength wireBlock)) ""))

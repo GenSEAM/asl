@@ -19,7 +19,7 @@ fn ! sh cmd: String -> ProcessOutput
 
 fn ! asl1Bin! -> String
   (let [(built (nt/prepareRun (asl1Path) (nt/fingerprint)))]
-    (mt built.binary
+    (match built.binary
       ((some bin) bin)
       ((none) (do (assert false (str "asl1.asl builds natively: " built.reason)) ""))))
 
@@ -140,7 +140,7 @@ fn ! testMainEntrySource work: String -> Bool
         (do
           (assert (ok? emitRes) "emitLlvmSource with explicit entry main succeeds")
           (assert (ok? emitDefault) "emitLlvmSource with empty string defaults to main and succeeds")
-          (mt emitRes
+          (match emitRes
             ((err _) false)
             ((ok code)
               (do
@@ -178,7 +178,7 @@ fn testEmitModuleMain -> Bool
         (res (em/emitLlvmModule m))]
     (do
       (assert (ok? res) "em/emitLlvmModule succeeds for module with main")
-      (mt res
+      (match res
         ((err _) false)
         ((ok code)
           (do
@@ -191,7 +191,7 @@ fn testEmitModuleMain -> Bool
 
 fn ! runParityBin! -> String
   (let [(built (nt/prepareRun "tests/acceptance/targetParity/runParity.asl" (nt/fingerprint)))]
-    (mt built.binary
+    (match built.binary
       ((some bin) bin)
       ((none) (do (assert false (str "runParity.asl builds natively: " built.reason)) ""))))
 

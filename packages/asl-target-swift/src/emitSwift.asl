@@ -115,7 +115,7 @@ fn emitSwiftTopDefun d: a/DefunNode -> Str
 
 
 fn emitSwiftTopForm tf: a/TopForm -> Str
-  (mt tf
+  (match tf
     ((a/topSchema s) (emitSwiftTopSchema s))
     ((a/topEnum e) (emitSwiftTopEnum e))
     ((a/topDefun d) (emitSwiftTopDefun d))
@@ -124,15 +124,15 @@ fn emitSwiftTopForm tf: a/TopForm -> Str
 
 fn unpackForms forms: (List a/TopForm) -> (List a/TopForm)
   (if (= (listLength forms) 1)
-    (mt (listHead forms)
-      ((some it) (mt it ((a/topModule m) m.defs) (_ forms)))
+    (match (listHead forms)
+      ((some it) (match it ((a/topModule m) m.defs) (_ forms)))
       ((none) forms))
     forms)
 
 fn extractModuleName forms: (List a/TopForm) defaultPath: Str -> Str
   (if (> (listLength forms) 0)
-    (mt (listHead forms)
-      ((some it) (mt it ((a/topModule m) m.path) (_ defaultPath)))
+    (match (listHead forms)
+      ((some it) (match it ((a/topModule m) m.path) (_ defaultPath)))
       ((none) defaultPath))
     defaultPath)
 

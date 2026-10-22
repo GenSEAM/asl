@@ -530,19 +530,19 @@ fn checkLine bs: Bytes text: String lstart: Int64 lend: Int64 -> (Option LineCan
       (none)
       (let [(indent (- i lstart))
             (fnCand (checkFunction bs text i lend lstart))]
-        (mt fnCand
+        (match fnCand
           ((some c) (some c))
           ((none)
            (let [(clsCand (checkClass bs text i lend lstart))]
-             (mt clsCand
+             (match clsCand
                ((some c) (some c))
                ((none)
                 (let [(ifaceCand (checkInterface bs text i lend lstart))]
-                  (mt ifaceCand
+                  (match ifaceCand
                     ((some c) (some c))
                     ((none)
                      (let [(typeCand (checkType bs text i lend lstart))]
-                       (mt typeCand
+                       (match typeCand
                          ((some c) (some c))
                          ((none)
                           (if (= indent 0)
@@ -580,7 +580,7 @@ fn scanLinesLoop s: src/Source text: String rawBs: Bytes maskedBs: Bytes len: In
       (if (= lstart -1)
         (scanLinesLoop s text rawBs maskedBs len lineCount (+ curLi 1) acc)
         (let [(cand (checkLine maskedBs text lstart lend))]
-          (mt cand
+          (match cand
             ((none)
              (scanLinesLoop s text rawBs maskedBs len lineCount (+ curLi 1) acc))
             ((some c)
@@ -604,10 +604,10 @@ fn tsSymbolSortBefore? a: TsSymbol b: TsSymbol -> Bool
       (> a.end b.end)))
 
 fn mergeTsSymbolLists left: (List TsSymbol) right: (List TsSymbol) acc: (List TsSymbol) -> (List TsSymbol)
-  (mt (listHead left)
+  (match (listHead left)
     ((none) (listAppend (listReverse acc) right))
     ((some lhd)
-     (mt (listHead right)
+     (match (listHead right)
        ((none) (listAppend (listReverse acc) left))
        ((some rhd)
         (if (tsSymbolSortBefore? lhd rhd)
@@ -646,7 +646,7 @@ fn tsSymbols! text: String -> (List sym/SymbolDef)
        (extractSymbols! text))
 
 fn findFirstTsSymbol syms: (List TsSymbol) start: Int64 end: Int64 -> (Option TsSymbol)
-  (mt (listHead (filter (fn [(s TsSymbol)] -> Bool
+  (match (listHead (filter (fn [(s TsSymbol)] -> Bool
                           (and (= s.start start) (= s.end end)))
                         syms))
     ((some s) (some s))
@@ -655,7 +655,7 @@ fn findFirstTsSymbol syms: (List TsSymbol) start: Int64 end: Int64 -> (Option Ts
 fn findSymbolDotted syms: (List TsSymbol) query: String -> (Option TsSymbol)
   (let [(defs (map (fn [(s TsSymbol)] -> sym/SymbolDef (tsSymbolToSymbolDef s)) syms))
         (foundDef (sym/findSymbolDotted defs query))]
-    (mt foundDef
+    (match foundDef
       ((none) (none))
       ((some d)
        (findFirstTsSymbol syms (sym/symbolStart d) (sym/symbolEnd d)))))

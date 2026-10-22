@@ -28,7 +28,7 @@ fn ! tempRoot -> String
 fn ! fixtureJournal id: String -> (List String)
   (let [path "asl/agentLoop/tests/loopRunFixtures.asn"
         line (optionOr (listHead (filter (fn [candidate] (stringContains? candidate (str ":id \"" id "\""))) (f/scenarioLines! path))) "")
-        scenario (mt (p/planTree line) ((ok nodes) (optionOr (listHead nodes) (p/sexpAtom "nil"))) ((err _) (p/sexpAtom "nil")))]
+        scenario (match (p/planTree line) ((ok nodes) (optionOr (listHead nodes) (p/sexpAtom "nil"))) ((err _) (p/sexpAtom "nil")))]
     (map f/argStr (c/restOf (f/listOf (f/field scenario ":journal")))))
 
 fn makeEnv id: String task: String root: String journal: String budget: Int64 wall: (Option Int64) gates: (List String) resume: (Option j/Json) -> s/LoopEnv
@@ -178,7 +178,7 @@ fn neverBody env: s/LoopEnv run: rl/LoopRun -> (Pair rl/LoopRun s/Step)
   (pair run (stop))
 
 fn onState f: (fn [s/LoopEnv s/LoopState] -> (Pair s/LoopState s/Step)) -> (fn [s/LoopEnv rl/LoopRun] -> (Pair rl/LoopRun s/Step))
-  (fn [env run] (mt (f env run.state) ((pair state step) (pair (rl/withState run state) step))))
+  (fn [env run] (match (f env run.state) ((pair state step) (pair (rl/withState run state) step))))
 
 fn countBody env: s/LoopEnv state: s/LoopState -> (Pair s/LoopState s/Step)
   (pair (rl/withHeadState state (+ state.turn 1) state.readStreak state.writesPersisted
@@ -202,15 +202,15 @@ fn wallBody env: s/LoopEnv state: s/LoopState -> (Pair s/LoopState s/Step)
     (pair state (stop)))
 
 fn ! gitOk! args: (List String) -> Bool
-  (mt (cp/exec! (cp/cmd "git" args))
+  (match (cp/exec! (cp/cmd "git" args))
     ((ok o) (= o.exitCode 0))
     ((err _) false))
 
 fn ! fileText path: String -> String
-  (mt (fileReadString path) ((ok content) content) ((err _) "ERR_READ"))
+  (match (fileReadString path) ((ok content) content) ((err _) "ERR_READ"))
 
 fn ! removeIfExists! path: String -> (Result Unit String)
-  (mt (fileStat path)
+  (match (fileStat path)
     ((ok _) (pathRemove path))
     ((err _) (ok ())))
 
@@ -283,7 +283,7 @@ fn runWith run: rl/LoopRun state: s/LoopState written: jr/Written procs: ro/Proc
     defects)
 
 fn ! writeRun! run: rl/LoopRun rel: String text: String -> jr/Written
-  (mt (jr/snapshotBeforeWrite run.written rel)
+  (match (jr/snapshotBeforeWrite run.written rel)
     ((err _) run.written)
     ((ok w) (do (fileWrite (str w.root "/" rel) text) w)))
 
@@ -292,7 +292,7 @@ fn ! writeBody text: String f: Final message: (Option String) defects: (List (Pa
     (pair (runWith run (finalState run.state f) (writeRun! run "subject.txt" text) run.procs message defects) (stop)))
 
 fn ! gitOut! root: String args: (List String) -> String
-  (mt (cp/exec! (cp/withCwd (cp/cmd "git" args) root)) ((ok o) (stringTrim o.stdout)) ((err _) "ERR_GIT"))
+  (match (cp/exec! (cp/withCwd (cp/cmd "git" args) root)) ((ok o) (stringTrim o.stdout)) ((err _) "ERR_GIT"))
 
 fn finishRow row: String -> Bool
   (listAny? (fn [prefix] (stringStartsWith? row prefix)) (list "(:result " "(:commit " "(:commitError " "(:commitMissing " "(:killed " "(:restoreToHead "))
@@ -307,7 +307,7 @@ fn ! scenarioRepo! tmp: String id: String dir: String -> (Option String)
 
 fn ! waitFile! path: String tries: Int64 -> Bool
   (cond
-    ((mt (fileReadString path) ((ok s) (stringContains? s "\n")) ((err _) false)) true)
+    ((match (fileReadString path) ((ok s) (stringContains? s "\n")) ((err _) false)) true)
     ((<= tries 0) false)
     (else (do (sleepMs 20) (waitFile! path (- tries 1)))))
 
@@ -507,10 +507,10 @@ fn ! runTests -> Bool
         prefetchFileReady (ok? (fileWrite prefetchFile "hello prefetch\n"))
         prefetchEnv (makeEnvOwns "loopRun20" "prefetch wiring test" tmp (str tmp "/loopRunTest-prefetch.asn") (list "prefetch.txt"))
         prefetchSetup (rl/setup! prefetchEnv)
-        prefetchState (mt prefetchSetup ((rl/ready run) run.state) ((rl/early _) (rl/stateFor prefetchEnv)))
+        prefetchState (match prefetchSetup ((rl/ready run) run.state) ((rl/early _) (rl/stateFor prefetchEnv)))
         noOwnsEnv (makeEnv "loopRun21" "prefetch wiring test no owns" tmp (str tmp "/loopRunTest-prefetch-none.asn") 4 none (list) none)
         noOwnsSetup (rl/setup! noOwnsEnv)
-        noOwnsState (mt noOwnsSetup ((rl/ready run) run.state) ((rl/early _) (rl/stateFor noOwnsEnv)))
+        noOwnsState (match noOwnsSetup ((rl/ready run) run.state) ((rl/early _) (rl/stateFor noOwnsEnv)))
         retainRoot (str tmp "/retain")
         retainMain (str retainRoot "/main")
         retainTree (str retainRoot "/tree")
@@ -520,7 +520,7 @@ fn ! runTests -> Bool
           (and (gitOk! (list "-C" retainMain "worktree" "add" "-q" "--detach" retainTree))
           (and (ok? (fileWrite (str retainMain "/.asl") "a file where the retained journal directory belongs\n"))
           (and (ok? (fileWrite retainJournalPath ""))
-            (mt (cp/exec! (cp/cmd "chmod" (list "444" retainJournalPath))) ((ok o) (= o.exitCode 0)) ((err _) false)))))))
+            (match (cp/exec! (cp/cmd "chmod" (list "444" retainJournalPath))) ((ok o) (= o.exitCode 0)) ((err _) false)))))))
         retainEnv (makeEnv "loopRun10" "retain failure" retainTree retainJournalPath 2 none (list "(") none)
         retainResult (rl/runLoopWith! retainEnv neverBody)
         wallEnv (makeEnv "loopRun09" "no write wall" tmp (str tmp "/loopRunTest-wall.asn") 10 (some 2) (list) none)
@@ -570,17 +570,17 @@ fn ! runTests -> Bool
             :written (list) :findings (list (j/jstr "(:findings (\"possible\"))")) :unbacked (list (j/jstr "claim a"))
             :writesPersisted false :commitRequested false :hasTiming false :queueWaitSec 0.0 :execSec 0.0 :usage (j/jobj (list)) :signal none)) (stop)))))]
 
-    (mt (fileStat patch)
+    (match (fileStat patch)
       ((ok _) false)
       ((err _)
-        (mt (fileWrite patch (stringToBytes "not a git patch\n"))
+        (match (fileWrite patch (stringToBytes "not a git patch\n"))
           ((err _) false)
           ((ok _)
             (let [resumeResult (rl/runLoopWith! resumeEnv neverBody)
                   resumeRows (f/maskJournal tmp (map (fn [row] (stringReplace row "loopRunTest-resume.patch" "loop.patch"))
                     (filter (fn [row] (not (stringEmpty? row))) (stringLines (fileText resumeJournal)))))
                   resumeExpected (f/maskJournal "<root>" (fixtureJournal "resumePatchReject"))]
-              (mt (pathRemove patch)
+              (match (pathRemove patch)
                 ((err _) false)
                 ((ok _)
                   (do
@@ -599,9 +599,9 @@ fn ! runTests -> Bool
                     (fileWrite (str tmp "/resume-good.txt") "before\n")
                     (fileWrite resumeGoodPatch "diff --git a/resume-good.txt b/resume-good.txt\n--- a/resume-good.txt\n+++ b/resume-good.txt\n@@ -1 +1 @@\n-before\n+after\n")
                     (let [resumeSetup (rl/setup! resumeGoodEnv)
-                          resumeState (mt resumeSetup ((rl/ready resumed) resumed.state) ((rl/early _) (rl/stateFor resumeGoodEnv)))]
+                          resumeState (match resumeSetup ((rl/ready resumed) resumed.state) ((rl/early _) (rl/stateFor resumeGoodEnv)))]
                       (do
-                        (assert (mt resumeSetup ((rl/ready _) true) ((rl/early _) false)) "valid resume patch passes setup")
+                        (assert (match resumeSetup ((rl/ready _) true) ((rl/early _) false)) "valid resume patch passes setup")
                         (assert (= resumeState.turn 7) "resume state starts at its recorded turn")
                         (assert resumeState.writesPersisted "resume state marks resumed writes persisted")
                         (assert (stringContains? (fileText resumeGoodJournal) "(:resumeApplied \"loopRunTest-resumeGood.patch\")") "successful resume journals the applied patch")
@@ -661,7 +661,7 @@ fn ! runTests -> Bool
                     (assert (= anonResult.status "failed") "findings without a claim fail an ok run")
                     (assert (= anonResult.session "loopRunTest") "a generated session id reaches the result")
                     (assert prefetchFileReady "prefetch fixture file is written inside the temporary root")
-                    (assert (mt prefetchSetup ((rl/ready _) true) ((rl/early _) false)) "a task with :owns passes setup")
+                    (assert (match prefetchSetup ((rl/ready _) true) ((rl/early _) false)) "a task with :owns passes setup")
                     (assert (= prefetchState.prefetch (str "prefetched before turn 1, so no read is needed for them: small files whole, larger ones as outlines "
                                "(start-end kind name) to read by :symbol or :start/:end; a file written since differs, so read it again before quoting :old"
                                "\n(:prefetch (:file \"prefetch.txt\" :lines (1 1) :content \"hello prefetch\\n\"))"))
@@ -672,5 +672,5 @@ fn ! runTests -> Bool
                     (assert (= deepseekExplicitState.contextTokens (some 50000)) "LEON-CONTEXT-WINDOW: an explicit contextTokens wins over the deepseek family default")
                     (finishPathTests tmp)
                     (assert (ok? (removeIfExists! tmp)) "the temporary test root is removed")
-                    (assert (mt (fileStat tmp) ((ok _) false) ((err _) true)) "no temporary test root is left behind")
+                    (assert (match (fileStat tmp) ((ok _) false) ((err _) true)) "no temporary test root is left behind")
                     true))))))))))

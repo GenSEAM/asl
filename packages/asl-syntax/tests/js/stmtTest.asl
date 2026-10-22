@@ -308,7 +308,7 @@ fn checkFileSuite! suiteName: String files: (List String) exclusions: (List (Pai
       true)
     (let [(path (optionOr (listHead files) ""))
           (rest (optionOr (listTail files) (list)))]
-      (mt (findExclusionReason path exclusions)
+      (match (findExclusionReason path exclusions)
         ((some _)
          (checkFileSuite! suiteName rest exclusions runCount passCount (+ excludedCount 1)))
         ((none)
@@ -338,7 +338,7 @@ fn testForHeaderAsi! -> Bool
     (let [(res (stmt/parse "for (a\n b\n c)"))]
       (do
         (refute (ok? res) "no ASI inside for header: for (a\n b\n c) is rejected")
-        (mt res
+        (match res
           ((ok _) (assert false "expected parse error"))
           ((err msg) (assert (= msg "Parse error at offset 6") "for (a\n b\n c) error has offset 6")))))
     (assert (checkScript! "for (\n;\n;\n) {}" "(script (for (block)))") "for empty parts with newlines parses")

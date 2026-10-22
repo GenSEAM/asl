@@ -99,7 +99,7 @@ fn timeoutText argv: (List String) seconds: Int64 -> String
   (str "Command '" (pyListRepr argv) "' timed out after " (stringFromInt64 seconds) " seconds")
 
 fn envRowKey row: String -> String
-  (mt (stringIndexOf row "=") ((some i) (optionOr (stringSlice row 0 i) row)) ((none) row))
+  (match (stringIndexOf row "=") ((some i) (optionOr (stringSlice row 0 i) row)) ((none) row))
 
 fn childEnv! overrides: (Map String String) -> (Option (List String))
   (let [(keys (mapKeys overrides))]
@@ -114,7 +114,7 @@ fn readyOn ready: (List (Pair Int64 Int64)) fd: Int64 -> Bool
 fn ! drainFd fd: Int64 open: Bool acc: (List String) -> (Pair Bool (List String))
   (if (not open)
     (pair false acc)
-    (mt (fdRead fd 65536)
+    (match (fdRead fd 65536)
       ((ok chunk) (if (stringEmpty? chunk) (do (fdClose fd) (pair false acc)) (pair true (cons chunk acc))))
       ((err e) (if (= e "wouldBlock") (pair true acc) (do (fdClose fd) (pair false acc))))))
 
@@ -125,7 +125,7 @@ fn ! pump sp: SpawnedProc st: Pump deadlineNs: Int64 -> Pump
       (if (<= leftMs 0)
         (with st :late true)
         (let [(watch (listAppend (if st.outOpen (list (pair sp.stdout 1)) (list)) (if st.errOpen (list (pair sp.stderr 1)) (list))))]
-          (mt (fdPoll watch leftMs)
+          (match (fdPoll watch leftMs)
             ((err _) (with st :late true))
             ((ok ready)
               (let [(o (if (readyOn ready sp.stdout) (drainFd sp.stdout st.outOpen st.out) (pair st.outOpen st.out)))
@@ -133,10 +133,10 @@ fn ! pump sp: SpawnedProc st: Pump deadlineNs: Int64 -> Pump
                 (pump sp (Pump :outOpen (pairFirst o) :errOpen (pairFirst e) :out (pairSecond o) :errText (pairSecond e) :late false) deadlineNs))))))))
 
 fn ! waitUntil pid: Int64 deadlineNs: Int64 -> (Result (Option Int64) String)
-  (mt (procWaitPid pid true)
+  (match (procWaitPid pid true)
     ((err e) (err e))
     ((ok got)
-      (mt got
+      (match got
         ((some code) (ok (some code)))
         ((none) (if (>= (monotonicNs) deadlineNs) (ok (none)) (do (sleepMs 5) (waitUntil pid deadlineNs)))))))
 
@@ -158,32 +158,32 @@ fn ! writeInputAll fd: Int64 input: String from: Int64 deadlineNs: Int64 -> (Res
     (let [(leftMs (/ (- deadlineNs (monotonicNs)) 1000000))]
       (if (<= leftMs 0)
         (err "subprocess stdin write timed out")
-        (mt (fdPoll (list (pair fd 2)) leftMs)
+        (match (fdPoll (list (pair fd 2)) leftMs)
           ((err e) (err e))
           ((ok ready)
             (if (not (readyOn ready fd))
               (do (sleepMs 5) (writeInputAll fd input from deadlineNs))
-              (mt (fdWrite fd (optionOr (stringSlice input from (stringLength input)) ""))
+              (match (fdWrite fd (optionOr (stringSlice input from (stringLength input)) ""))
                 ((err e) (if (= e "wouldBlock") (writeInputAll fd input from deadlineNs) (err e)))
                 ((ok n) (if (<= n 0) (err "subprocess stdin made no write progress") (writeInputAll fd input (+ from n) deadlineNs))))))))))
 
 fn ! spawnRunInput argv: (List String) cwd: (Option String) overrides: (Map String String) seconds: Int64 input: String -> Spawned
   (let [(startNs (monotonicNs))
         (deadline (+ startNs (* seconds 1000000000)))]
-    (mt (procSpawnv argv cwd (childEnv! overrides))
+    (match (procSpawnv argv cwd (childEnv! overrides))
       ((err e) (Spawned :code -1 :out "" :errText "" :failure (errnoText e (optionOr (listHead argv) ""))))
       ((ok sp)
-        (mt (writeInputAll sp.stdin input 0 deadline)
+        (match (writeInputAll sp.stdin input 0 deadline)
           ((err e) (do (fdClose sp.stdin) (procKill sp.pid "SIGKILL") (procWaitPid sp.pid false) (fdClose sp.stdout) (fdClose sp.stderr) (Spawned :code -1 :out "" :errText "" :failure e)))
           ((ok _)
               (let [(closed (fdClose sp.stdin))
                     (st (pump sp (Pump :outOpen true :errOpen true :out (list) :errText (list) :late false) deadline))]
                 (if st.late
                   (do (killAll sp st) (Spawned :code -1 :out "" :errText "" :failure (timeoutText argv seconds)))
-                  (mt (waitUntil sp.pid deadline)
+                  (match (waitUntil sp.pid deadline)
                     ((err e) (Spawned :code -1 :out "" :errText "" :failure e))
                     ((ok got)
-                      (mt got
+                      (match got
                         ((none) (do (killAll sp st) (Spawned :code -1 :out "" :errText "" :failure (timeoutText argv seconds))))
                         ((some code) (Spawned :code code :out (joined st.out) :errText (joined st.errText) :failure ""))))))))))))
 
@@ -226,13 +226,13 @@ fn failureCode text: String -> String
 
 fn envMapFromList! -> (Map String String)
   (fold (fn [(m (Map String String)) (row String)] -> (Map String String)
-          (mt (stringIndexOf row "=")
+          (match (stringIndexOf row "=")
             ((some i) (mapSet m (optionOr (stringSlice row 0 i) row) (optionOr (stringSlice row (+ i 1) (stringLength row)) "")))
             ((none) (mapSet m row ""))))
         (mapEmpty) (envList))
 
 fn listOf v: j/Json -> (List j/Json)
-  (mt v ((j/jarr xs) xs) (_ (list)))
+  (match v ((j/jarr xs) xs) (_ (list)))
 
 fn unwrapUrlError s: String -> String
   (let [(t (if (stringStartsWith? s "URLError: ") (optionOr (stringSlice s 10 (stringLength s)) s) s))]
@@ -263,7 +263,7 @@ fn ! searchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List S
             (now (monotonicNs))
             (st (srch/newHubState env (/ now 1000000) 0 (mapEmpty) (mapEmpty)))
             (step (srch/executeSearchHub! st q eng lim))]
-        (mt (pairFirst step)
+        (match (pairFirst step)
           ((err e) (rejectedLine id "search" (failureCode e.msg) (msgTail e.msg)))
           ((ok res)
             (let [(results (listOf (optionOr (pt/jget res "results") (j/jarr (list)))))
@@ -273,19 +273,19 @@ fn ! searchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List S
                       (rawMsg (pt/pyStr (optionOr (pt/jget e0 "error") (j/jnull))))
                       (msg (unwrapUrlError rawMsg))]
                   (rejectedLine id "search" (failureCode msg) (msgTail (if (stringEmpty? msg) "Search execution failed" msg))))
-                (mt (srch/formatSearchAsn res q)
+                (match (srch/formatSearchAsn res q)
                   ((err e) (rejectedLine id "search" (failureCode e.msg) (msgTail e.msg)))
                   ((ok text)
                     (okLine (str (stepHead id "search") " :status \"ok\" :results\n" (pyStrip text) ")")))))))))))
 
 fn researchTemp p: cfg/GatewayParams -> (List (Pair String j/Json))
-  (mt p.temperature ((some v) (list (pair "temperature" (j/jfloat v)))) ((none) (list)))
+  (match p.temperature ((some v) (list (pair "temperature" (j/jfloat v)))) ((none) (list)))
 
 fn researchEffort p: cfg/GatewayParams -> (List (Pair String j/Json))
-  (mt p.effort ((some v) (list (pair "effort" (j/jstr v)))) ((none) (list)))
+  (match p.effort ((some v) (list (pair "effort" (j/jstr v)))) ((none) (list)))
 
 fn researchMaxTokens p: cfg/GatewayParams -> (List (Pair String j/Json))
-  (mt p.maxTokens ((some v) (list (pair "maxTokens" (j/jint v)))) ((none) (list)))
+  (match p.maxTokens ((some v) (list (pair "maxTokens" (j/jint v)))) ((none) (list)))
 
 fn researchParams p: cfg/GatewayParams -> j/Json
   (j/jobj (listAppend (listAppend (researchTemp p) (researchEffort p)) (researchMaxTokens p)))
@@ -300,21 +300,21 @@ fn researchEntryJson e: cfg/GatewayEntry -> j/Json
         (pair "key" (j/jstr u.key)))))
       (pair "params" (researchParams e.params))
       (pair "timeoutSec" (j/jfloat e.timeoutSec))
-      (pair "rpm" (mt e.rpm ((some v) (j/jfloat v)) ((none) (j/jnull)))))))
+      (pair "rpm" (match e.rpm ((some v) (j/jfloat v)) ((none) (j/jnull)))))))
 
 fn resolvedResearchEntry r: cfg/GatewayResolvedEntry -> (Result j/Json pt/PyErr)
-  (mt r
+  (match r
     ((cfg/entryResolved e) (ok (researchEntryJson e)))
     ((cfg/entryUnresolved a) (err (pt/pyErr "ValueError" (str "unresolved research route " a)))))
 
 fn resolvedResearchEntries entries: (List cfg/GatewayResolvedEntry) -> (Result (List j/Json) pt/PyErr)
-  (mt (listHead entries)
+  (match (listHead entries)
     ((none) (ok (list)))
     ((some entry)
-      (mt (resolvedResearchEntry entry)
+      (match (resolvedResearchEntry entry)
         ((err e) (err e))
         ((ok json)
-          (mt (resolvedResearchEntries (optionOr (listTail entries) (list)))
+          (match (resolvedResearchEntries (optionOr (listTail entries) (list)))
             ((err e) (err e))
             ((ok rest) (ok (cons json rest))))))))
 
@@ -323,10 +323,10 @@ fn researchLabelMatches entry: j/Json model: String -> Bool
       (stringContains? (pt/pyStr (optionOr (pt/jget entry "dispatch") (j/jstr ""))) model))
 
 fn researchRoutesFor! table: cfg/GatewayTable profile: (Option String) intent: String model: String -> (Result (Pair String (List j/Json)) pt/PyErr)
-  (mt (cfg/gatewayRouteEntries! table (list) profile intent)
+  (match (cfg/gatewayRouteEntries! table (list) profile intent)
     ((err message) (err (pt/pyErr "ValueError" message)))
     ((ok routes)
-      (mt (resolvedResearchEntries routes.entries)
+      (match (resolvedResearchEntries routes.entries)
         ((err e) (err e))
         ((ok entries)
           (let [(selected (if (stringEmpty? model) entries (filter (fn [(e j/Json)] -> Bool (researchLabelMatches e model)) entries)))]
@@ -335,17 +335,17 @@ fn researchRoutesFor! table: cfg/GatewayTable profile: (Option String) intent: S
               (ok (pair routes.name selected))))))))
 
 fn researchGatewayRoutes! table: cfg/GatewayTable profile: (Option String) model: String -> (Result (Pair String (Pair (List j/Json) (List j/Json))) pt/PyErr)
-  (mt (researchRoutesFor! table profile "research" model)
+  (match (researchRoutesFor! table profile "research" model)
     ((err e) (err e))
     ((ok research)
-      (mt (researchRoutesFor! table (some (pairFirst research)) "audit" "")
+      (match (researchRoutesFor! table (some (pairFirst research)) "audit" "")
         ((err e) (err e))
         ((ok audit) (ok (pair (pairFirst research) (pair (pairSecond research) (pairSecond audit))))))))
 
 fn resolveResearchEntry! table: cfg/GatewayTable model: String profile: (Option String) -> (Result j/Json pt/PyErr)
-  (mt (researchRoutesFor! table profile "research" model)
+  (match (researchRoutesFor! table profile "research" model)
     ((err e) (err e))
-    ((ok routes) (mt (listHead (pairSecond routes)) ((none) (err (pt/pyErr "ValueError" "gateway profile has no research route"))) ((some entry) (ok entry)))))
+    ((ok routes) (match (listHead (pairSecond routes)) ((none) (err (pt/pyErr "ValueError" "gateway profile has no research route"))) ((some entry) (ok entry)))))
 
 ; (:m :ref PROFILE-PIN-NAME-20261018 :do "rule no-env-config: FREEBULK-ROUTED-DEEPSEEK-20261017 dropped ASL_PROFILE everywhere it was read, this included -- a (:research ...) op reads the same per-worktree pin file asl/agentLoop/providers.asl's providerEnv! and tools/fleet/freePool.asl's writeProfilePin! already use, instead of a process-wide env var; absent or unparseable, this returns none, same as an unset ASL_PROFILE did. Previously this was its own stringIndexOf/split scan of researchProfilePinPath; now it is cfg/profilePinRead!, the one shared reader every caller uses")
 fn researchProfileFromConfig! rootDir: String -> (Option String)
@@ -360,7 +360,7 @@ fn researchGatewayEntry! model: String rootDir: String -> (Result (Pair String (
         (profileText (if exists (fileReadString path) (err "gateway config unavailable")))
         (loaded (cfg/gatewayProfilesLoadText! path exists profileText registry))
         (profileName (researchProfileFromConfig! rootDir))]
-    (mt loaded
+    (match loaded
       ((err message) (err (pt/pyErr "ValueError" message)))
       ((ok table) (researchGatewayRoutes! table profileName model))))
 
@@ -380,11 +380,11 @@ fn researchCliArgvAt! cli: String model: j/Json effort: j/Json prompt: String pr
       (else (list))))
 
 fn codexTextFromLines lines: (List String) found: String -> String
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) found)
     ((some line)
       (let [(parsed (j/jsonParse line))]
-        (mt parsed
+        (match parsed
           ((err _) (codexTextFromLines (optionOr (listTail lines) (list)) found))
           ((ok event)
             (let [(typ (pt/pyStr (optionOr (pt/jget event "type") (j/jstr ""))))
@@ -399,7 +399,7 @@ fn researchCliText cli: String output: String -> String
       (pyStrip (if (stringEmpty? text) output text)))
     (let [(parsed (j/jsonParse output))
           (key (if (= cli "claude") "result" "response"))]
-      (mt parsed ((err _) (pyStrip output)) ((ok obj) (pyStrip (pt/pyStr (optionOr (pt/jget obj key) (j/jstr ""))))))))
+      (match parsed ((err _) (pyStrip output)) ((ok obj) (pyStrip (pt/pyStr (optionOr (pt/jget obj key) (j/jstr ""))))))))
 
 fn ! researchDispatchWith cli: String model: j/Json effort: j/Json prompt: String overrides: (Map String String) -> (Result j/Json pt/PyErr)
   (let [(tmpDir (k/joinPath (if (stringEmpty? (envOr! "TMPDIR")) "/tmp" (envOr! "TMPDIR")) (str "asl-gateway-research-" (stringFromInt64 (procSelf)))))
@@ -417,7 +417,7 @@ fn ! researchDispatchWith cli: String model: j/Json effort: j/Json prompt: Strin
         (written (if (and (stringEmpty? mkdir.failure) (= mkdir.code 0)) (fileWrite promptFile systemText) (err "failed to prepare CLI prompt directory")))]
     (if (listEmpty? argv)
       (do (spawnRun (list "rm" "-rf" tmpDir) (none) (mapEmpty) 5) (err (pt/pyErr "ValueError" (str "unsupported research CLI provider " cli))))
-      (mt written
+      (match written
         ((err e) (do (spawnRun (list "rm" "-rf" tmpDir) (none) (mapEmpty) 5) (err (pt/pyErr "RuntimeError" e))))
         ((ok _)
       (let [(sp (spawnRunInput argv (none) overrides (researchTimeoutSeconds) (if (= cli "agy") "" prompt)))
@@ -439,7 +439,7 @@ fn researchTimeoutSeconds -> Int64
   400
 
 fn routeUpstream entries: (List j/Json) name: String -> j/Json
-  (mt (listHead entries)
+  (match (listHead entries)
     ((none) (j/jnull))
     ((some entry)
       (if (or (= name (pt/pyStr (optionOr (pt/jget entry "dispatch") (j/jstr ""))))
@@ -460,7 +460,7 @@ fn ! researchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List
       ((stringEmpty? topic) (rejectedLine id "research" "ERR_MISSING_ARG" (msgTail "Missing topic argument")))
       ((stringEmpty? dTarget) (rejectedLine id "research" "ERR_INVALID_ARG" (msgTail (str "unknown depth :" depth "; allowed: :flash :deep :exhaustive"))))
       (else
-        (mt (researchGatewayEntry! model ctx.rootDir)
+        (match (researchGatewayEntry! model ctx.rootDir)
           ((err e) (rejectedLine id "research" (failureCode e.msg) (msgTail e.msg)))
           ((ok routes)
             (let [(env (envMapFromList!))
@@ -473,7 +473,7 @@ fn ! researchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List
                   (disp (fn [(cli String) (r j/Json) (eff j/Json) (prompt String)] -> (Result j/Json pt/PyErr) (researchDispatch cli r eff prompt)))
                   (auditOpt (if (listEmpty? auditEntries) (none) (some auditEntries)))
                   (resPair (rs/executeResearchHub! st topic dTarget entries (j/jstr "auto") triage auditOpt up disp))]
-              (mt (pairFirst resPair)
+              (match (pairFirst resPair)
                 ((err e) (rejectedLine id "research" (failureCode e.msg) (msgTail e.msg)))
                 ((ok rawRep)
                   (let [(rep (pt/jset rawRep "profile" (j/jstr (pairFirst routes))))
@@ -485,7 +485,7 @@ fn ! researchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List
                             (tErr (unwrapUrlError (pt/pyStr (optionOr (pt/jget t0 "error") (j/jnull)))))
                             (reason (if (not (stringEmpty? tErr)) tErr rawReason))]
                         (rejectedLine id "research" "ERR_EXEC_FAILED" (msgTail (if (stringEmpty? reason) "Research execution failed" reason))))
-                      (mt (rs/formatResearchAsn rep triage)
+                      (match (rs/formatResearchAsn rep triage)
                         ((err e) (rejectedLine id "research" (failureCode e.msg) (msgTail e.msg)))
                         ((ok text)
                           (okLine (str (stepHead id "research") " :status \"ok\" :report\n" (pyStrip text) ")"))))))))))))))
@@ -500,7 +500,7 @@ fn crawlMode raw: String -> String
 fn ! crawlerSpawn ctx: DelegateCtx args: (List String) timeoutSec: Int64 -> Spawned
   (let [(pkgEntry (k/aslPath! ctx.rootDir "packages/asl-crawler/src/crawler.asl"))]
     (if (fileExists? pkgEntry)
-      (mt (ev/nativeEntry! ctx.rootDir "asl/packages/asl-crawler/src/crawler" false)
+      (match (ev/nativeEntry! ctx.rootDir "asl/packages/asl-crawler/src/crawler" false)
         ((ok bin) (spawnRun (listAppend (list bin) args) (none) (mapEmpty) timeoutSec))
         ((err e) (Spawned :code -1 :out "" :errText "" :failure e)))
       (spawnRun (listAppend (list (str ctx.binDir "/asl-crawler")) args) (none) (mapEmpty) timeoutSec)))
@@ -558,7 +558,7 @@ fn fieldNumber text: String field: String signed: Bool -> (Option String)
   (fieldScan text (stringToBytes text) (str ":" field) signed 0)
 
 fn metaFields raw: String -> String
-  (k/concatAll (map (fn [(f String)] -> String (mt (fieldNumber raw f false) ((some v) (str " :" f " " v)) ((none) "")))
+  (k/concatAll (map (fn [(f String)] -> String (match (fieldNumber raw f false) ((some v) (str " :" f " " v)) ((none) "")))
                     (list "packagesTotal" "modulesTotal" "cyclesCount" "totalNodes" "totalEdges" "hotspotsCount")))
 
 fn outlineError? out: String -> Bool
@@ -569,7 +569,7 @@ fn outlineError? out: String -> Bool
     (and (stringStartsWith? t "(:outline") (> a 9) (> b (+ a 7)) (= (optionOr (stringSlice t b (+ b 6)) "") ":error")))
 
 fn strictFlag kw: (Map String String) -> Bool
-  (mt (mapGet kw "strict") ((none) false) ((some v) (listContains? (list "true" "1" ":true") (stringLower v))))
+  (match (mapGet kw "strict") ((none) false) ((some v) (listContains? (list "true" "1" ":true") (stringLower v))))
 
 fn intelArgs subop: String target: String kw: (Map String String) -> (List String)
   (let [(strict (if (strictFlag kw) (list "--strict") (list)))
@@ -612,7 +612,7 @@ fn ! intelStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List St
             (Outcome :line (str (stepHead id "intel") " :status \"rejected\" :subop \"outline\" :error-code \":ERR_FILE_NOT_FOUND\""
                                 (msgTail (if (stringEmpty? (pairSecond res)) (str "File not found: " target) (pairSecond res))) ")") :errCount 1))
           ((not (listContains? (list ".asl" ".asn") (stringLower (pyExt path))))
-            (mt (fileReadString path)
+            (match (fileReadString path)
               ((err e) (rejectedLine id "intel" "ERR_READ_FAILED" (msgTail (str "Failed to read file: " e))))
               ((ok text)
                 (let [(lang (ex/languageOf path text))
@@ -648,9 +648,9 @@ fn ! makeDirs path: String -> (Result Bool String)
     ((k/isDir! path) (ok true))
     ((or (stringEmpty? path) (= (k/dirName path) path)) (err (str "cannot create " path)))
     (else
-      (mt (makeDirs (k/dirName path))
+      (match (makeDirs (k/dirName path))
         ((err e) (err e))
-        ((ok _) (mt (dirCreate path) ((ok _) (ok true)) ((err e) (if (k/isDir! path) (ok true) (err (errnoText e path)))))))))
+        ((ok _) (match (dirCreate path) ((ok _) (ok true)) ((err e) (if (k/isDir! path) (ok true) (err (errnoText e path)))))))))
 
 fn ! engineRunner ctx: DelegateCtx -> String
   (let [(env (envOr! "ASL_HOST"))]
@@ -660,13 +660,13 @@ fn ! engineCli ctx: DelegateCtx args: (List String) seconds: Int64 -> Spawned
   (let [(entry (k/aslPath! ctx.rootDir "packages/asl-engine/src/cli.asl"))]
     (if (not (fileExists? entry))
       (Spawned :code -1 :out "" :errText "" :failure (errnoText "notFound" entry))
-      (mt (ev/nativeEntry! ctx.rootDir "asl/packages/asl-engine/src/cli" false)
+      (match (ev/nativeEntry! ctx.rootDir "asl/packages/asl-engine/src/cli" false)
         ((err e) (Spawned :code -1 :out "" :errText "" :failure e))
         ((ok bin) (spawnRun (listAppend (list bin) args) (some ctx.rootDir)
                             (mapSet (mapSet (mapEmpty) "ASL_ENGINE_ENTRY" entry) "ASL_HOST" (engineRunner ctx)) seconds)))))
 
 fn ! engineConnect ctx: DelegateCtx es: EngineScope tries: Int64 -> (Result Int64 String)
-  (mt (unixConnect es.sock)
+  (match (unixConnect es.sock)
     ((ok fd) (ok fd))
     ((err e)
       (do (engineCli ctx (list "start" "--scope" es.scope) 30)
@@ -675,7 +675,7 @@ fn ! engineConnect ctx: DelegateCtx es: EngineScope tries: Int64 -> (Result Int6
 
 fn engineFrameData acc: String chunk: String -> (Pair Bool String)
   (let [(data (stringConcat acc chunk))]
-    (mt (stringIndexOf data "\n")
+    (match (stringIndexOf data "\n")
       ((some i) (pair true (optionOr (stringSlice data 0 i) "")))
       ((none) (pair false data))))
 
@@ -689,12 +689,12 @@ fn ! engineFrame fd: Int64 acc: String deadline: Int64 -> (Result (Pair Bool Str
           (cond
             ((= left 0) (err "timed out"))
             (else
-              (mt (fdPoll (list (pair fd 1)) left)
+              (match (fdPoll (list (pair fd 1)) left)
                 ((err e) (err (etp/socketErrorText! e)))
                 ((ok ready)
                   (if (listEmpty? ready)
                     (err "timed out")
-                    (mt (fdRead fd 65536)
+                    (match (fdRead fd 65536)
                       ((err e) (err (etp/socketErrorText! e)))
                       ((ok chunk)
                         (let [(next (engineFrameData (pairSecond current) chunk))]
@@ -716,7 +716,7 @@ fn engineOk? resp: String -> Bool
          (or (>= e n) (not (it/isWordCp (it/cpAt bs n e))))))
 
 fn engineExchangeWith id: Int64 op: String stepStr: String exchange: (fn [String] -> (Result (Pair Bool String) String)) -> Outcome
-  (mt (exchange (str stepStr "\n"))
+  (match (exchange (str stepStr "\n"))
       ((err e) (rejectedLine id op "ERR_SOCKET_IO" (msgTail e)))
       ((ok got)
         (let [(resp (pyStrip (pairSecond got)))]
@@ -731,7 +731,7 @@ fn ! engineExchange id: Int64 op: String fd: Int64 stepStr: String -> Outcome
   (engineExchangeWith id op stepStr
     (fn [wire]
       (let [(sent (etp/writeAllFd! fd wire))
-            (framed (mt sent ((err e) (err e)) ((ok _) (engineFrame fd "" (+ (monotonicNs) 2500000000)))))
+            (framed (match sent ((err e) (err e)) ((ok _) (engineFrame fd "" (+ (monotonicNs) 2500000000)))))
             (closed (fdClose fd))]
         framed)))
 
@@ -745,7 +745,7 @@ fn ! engineStep ctx: DelegateCtx id: Int64 op: String kw: (Map String String) ar
         (rejectedLine id "engine" "ERR_UNKNOWN_ACTION" (str " :action \"" (k/escapeAsnVal action) "\" :message \"known actions: status ping start stop restart\"")))
       ((and (= op "engine") (not (or (stringEmpty? reqScope) (or (listContains? (list "workspace" "system") reqScope) (taskScope? reqScope)))))
         (rejectedLine id "engine" "ERR_BAD_SCOPE" (str " :scope \"" (k/escapeAsnVal reqScope) "\" :message \"known scopes: workspace system\"")))
-      ((err? made) (rejectedLine id op "ERR_EXEC_FAILED" (msgTail (mt made ((err e) e) ((ok _) "")))))
+      ((err? made) (rejectedLine id op "ERR_EXEC_FAILED" (msgTail (match made ((err e) e) ((ok _) "")))))
       ((and (= op "engine") (listContains? (list "stop" "restart") action) (= es.scope "system"))
         (rejectedLine id "engine" "ERR_PERMISSION_DENIED" " :message \"Agent workspace isolation boundary: mutating actions (:stop, :restart) on system-wide engine are restricted to human CLI operators; use :scope :workspace to manage workspace engine\""))
       ((and (= op "engine") (= action "restart"))
@@ -759,7 +759,7 @@ fn ! engineStep ctx: DelegateCtx id: Int64 op: String kw: (Map String String) ar
                     (msg (stringChars (if (stringEmpty? e) (pyStrip sp.out) e)))]
                 (rejectedLine id "engine" "ERR_RESTART_FAILED" (msgTail (k/concatAll (listDrop msg (max 0 (- (listLength msg) 200)))))))))))
       (else
-        (mt (engineConnect ctx es 3)
+        (match (engineConnect ctx es 3)
           ((err _) (rejectedLine id op "ERR_ENGINE_OFFLINE" (msgTail (str "Could not connect to asl-engine at " es.sock " (scope: " es.scope ")"))))
           ((ok fd) (engineExchange id op fd stepStr))))))
 
@@ -778,7 +778,7 @@ fn agentKillSeconds kw: (Map String String) -> Int64
 fn ! agentStep ctx: DelegateCtx id: Int64 kw: (Map String String) stepStr: String -> Outcome
   (let [(agentMain (k/aslPath! ctx.rootDir "agentLoop/main.asl"))
         (bin (if (k/isFile! agentMain) (ev/nativeEntry! ctx.rootDir "asl/agentLoop/main" true) (err (str "ASL agent loop not installed: " agentMain))))]
-    (mt bin
+    (match bin
       ((err e) (rejectedLine id "agent" "ERR_AGENT_DISPATCH" (msgTail e)))
       ((ok b)
       (let [(sp (spawnRun (list b stepStr) (some ctx.rootDir) (mapSet (mapEmpty) "ASL_ROOT_DIR" ctx.wsDir) (agentKillSeconds kw)))

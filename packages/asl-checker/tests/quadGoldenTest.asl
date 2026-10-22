@@ -18,9 +18,9 @@ fn diagLine d: ty/Diagnostic -> String
   (str d.path ":" d.line ":" d.col " " d.code " " d.message " | " d.msg)
 
 fn ! moduleText path: String deps: (Map String r/ModuleSummary) viaSource: Bool -> String
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) (str "(unreadable " path ")"))
-    ((ok src) (mt (a/parse src)
+    ((ok src) (match (a/parse src)
                 ((err e) (str "(parse " path " " e.msg ")"))
                 ((ok forms) (str "(module " path "\n"
                                  (str (r/collectSummary forms path)) "\n"
@@ -28,13 +28,13 @@ fn ! moduleText path: String deps: (Map String r/ModuleSummary) viaSource: Bool 
                                  (if viaSource (stringJoin (map diagLine (chk/checkSource src deps path)) "\n") "") ")")))))
 
 fn ! corpusText entry: String -> String
-  (mt (fileReadString entry)
+  (match (fileReadString entry)
     ((err _) (str "(unreadable " entry ")"))
-    ((ok src) (mt (a/parse src)
+    ((ok src) (match (a/parse src)
                 ((err e) (str "(parse " entry " " e.msg ")"))
                 ((ok forms) (let [(summary (r/collectSummary forms entry))
                                   (importPaths (r/mapValuesList summary.imports))]
-                              (mt (r/loadModuleDeps! (cons (r/parentDirOf entry) (checkerRoots)) importPaths)
+                              (match (r/loadModuleDeps! (cons (r/parentDirOf entry) (checkerRoots)) importPaths)
                                 ((err e) (str "(deps " entry " " e ")"))
                                 ((ok deps) (str (stringJoin (mapKeys deps) "\n") "\n"
                                                 (moduleText entry deps true) "\n"
@@ -44,7 +44,7 @@ fn rewritten? path: String -> Bool
   (or (stringContains? path "asl-checker/src/") (stringContains? path "asl-ir/src/"))
 
 fn ! rootRelative text: String -> String
-  (mt (realPath ".")
+  (match (realPath ".")
     ((ok root) (stringReplace text (str root "/") ""))
     ((err _) text))
 
@@ -73,7 +73,7 @@ fn ! goldenMismatch entry: String -> String
   (let [(text (rootRelative (corpusText entry)))
         (got (digestOf text))
         (path (goldenFileFor entry))
-        (want (mt (fileReadString path) ((ok s) s) ((err _) "")))]
+        (want (match (fileReadString path) ((ok s) s) ((err _) "")))]
     (do (print (str "(quadGolden :entry " entry " :digest \"" got "\")"))
         (assert (> (stringLength text) 10000) (str entry ": the corpus must load, not collapse: " (stringLength text)))
         (if (= want text) "" (str entry ": drifted from " path " (want " (digestOf want) ", got " got ")\n" (shortDiff want text)))))

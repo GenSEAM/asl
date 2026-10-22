@@ -45,7 +45,7 @@ fn extendRemovalSpan text: String spanStart: Int64 spanEnd: Int64 -> (Pair Int64
 fn indexOfFrom text: String needle: String from: Int64 -> (Option Int64)
   (if (or (< from 0) (> from (stringLength text)))
     (none)
-    (mt (stringIndexOf (optionOr (stringSlice text from (stringLength text)) "") needle)
+    (match (stringIndexOf (optionOr (stringSlice text from (stringLength text)) "") needle)
       ((none) (none))
       ((some rel) (some (+ from rel)))))
 
@@ -71,12 +71,12 @@ fn spanTooFar? litStart: Int64 literal: String hi: Int64 -> Bool
 fn dDocSpanAt text: String lo: Int64 hi: Int64 literal: String litStart: Int64 -> (Option (Pair Int64 Int64))
   (if (spanTooFar? litStart literal hi)
     (none)
-    (mt (colonDBefore text litStart lo)
+    (match (colonDBefore text litStart lo)
       ((none) (none))
       ((some kwStart) (some (extendRemovalSpan text kwStart (+ litStart (stringLength literal)))))))
 
 fn dDocSpan text: String lo: Int64 hi: Int64 literal: String -> (Option (Pair Int64 Int64))
-  (mt (indexOfFrom text literal lo)
+  (match (indexOfFrom text literal lo)
     ((none) (none))
     ((some litStart) (dDocSpanAt text lo hi literal litStart)))
 
@@ -87,7 +87,7 @@ fn fieldDocSpanAt text: String lo: Int64 hi: Int64 literal: String litStart: Int
       (some (extendRemovalSpan text wsStart (+ litStart (stringLength literal))))))
 
 fn fieldDocSpan text: String lo: Int64 hi: Int64 literal: String -> (Option (Pair Int64 Int64))
-  (mt (indexOfFrom text literal lo)
+  (match (indexOfFrom text literal lo)
     ((none) (none))
     ((some litStart) (fieldDocSpanAt text lo hi literal litStart)))
 
@@ -154,7 +154,7 @@ fn afterPrefix text: String prefix: String -> String
   (stringTrim (optionOr (stringSlice text (stringLength prefix) (stringLength text)) ""))
 
 fn firstPrefix text: String prefixes: (List String) -> (Option String)
-  (mt (listHead prefixes)
+  (match (listHead prefixes)
     ((none) (none))
     ((some p) (if (stringStartsWith? text p) (some p) (firstPrefix text (optionOr (listTail prefixes) (list))))))
 
@@ -162,12 +162,12 @@ fn aslDefHeads -> (List String)
   (list "fn ! " "fn tailrec " "fn " "(fn " "(schema " "(enum " "(module " "(def ")
 
 fn aslDefName text: String -> String
-  (mt (firstPrefix text (aslDefHeads))
+  (match (firstPrefix text (aslDefHeads))
     ((some p) (leadingIdent (afterPrefix text p)))
     ((none) ""))
 
 fn nextSubstantive lines: (List LineInfo) -> (Option LineInfo)
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (none))
     ((some li)
       (let [(t (stringTrim li.raw))]
@@ -176,7 +176,7 @@ fn nextSubstantive lines: (List LineInfo) -> (Option LineInfo)
           (some li)))))
 
 fn commentSymbol path: String commentLineNo: Int64 rest: (List LineInfo) -> String
-  (mt (nextSubstantive rest)
+  (match (nextSubstantive rest)
     ((none) (lineSymbol path commentLineNo))
     ((some li)
       (let [(name (aslDefName (stringTrim li.raw)))]
@@ -189,11 +189,11 @@ fn freeCommentCandidate path: String li: LineInfo rest: (List LineInfo) body: St
                          :spanStart li.start :spanEnd li.endIncl :replacement "")))
 
 fn dropWhyPairs items: (List rd/SExpr) acc: (List rd/SExpr) why: String -> (Pair (List rd/SExpr) String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (pair (listReverse acc) why))
     ((some k)
       (let [(rest (optionOr (listTail items) (list)))]
-        (mt (listHead rest)
+        (match (listHead rest)
           ((none) (pair (listReverse (cons k acc)) why))
           ((some v) (dropWhyStep k v (optionOr (listTail rest) (list)) acc why))))))
 
@@ -215,10 +215,10 @@ fn metaFormCandidate path: String li: LineInfo rest: (List LineInfo) remaining: 
                          :replacement (metaReplacement indent remaining))))
 
 fn metaCommentCandidate path: String li: LineInfo rest: (List LineInfo) body: String indent: String -> (Option DocCandidate)
-  (mt (meta/parseForms body)
+  (match (meta/parseForms body)
     ((err _) (none))
     ((ok forms)
-      (mt (listHead forms)
+      (match (listHead forms)
         ((none) (none))
         ((some form)
           (let [(items (optionOr (listTail (rd/sexprToList form)) (list)))
@@ -235,11 +235,11 @@ fn commentCandidate path: String li: LineInfo rest: (List LineInfo) -> (Option D
           (freeCommentCandidate path li rest body)))))
 
 fn commentScanAll path: String lines: (List LineInfo) -> (List DocCandidate)
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (list))
     ((some li)
       (let [(rest (optionOr (listTail lines) (list)))]
-        (mt (commentCandidate path li rest)
+        (match (commentCandidate path li rest)
           ((none) (commentScanAll path rest))
           ((some c) (cons c (commentScanAll path rest)))))))
 
@@ -247,12 +247,12 @@ fn isStringAtom? e: rd/SExpr -> Bool
   (and (rd/isAtom? e) (stringStartsWith? (rd/sexprHead e) "\""))
 
 fn isNoteForm? t: ast/TopForm -> Bool
-  (mt t
+  (match t
     ((ast/topExpr pf) (isStringAtom? pf.expr))
     (_ false))
 
 fn noteTextOf t: ast/TopForm -> String
-  (mt t
+  (match t
     ((ast/topExpr pf)
       (let [(raw (rd/sexprHead pf.expr)) (inner (optionOr (stringSlice raw 1 (- (stringLength raw) 1)) ""))]
         (resultOr (asn/asnUnescape inner) inner)))
@@ -261,10 +261,10 @@ fn noteTextOf t: ast/TopForm -> String
 (schema NoteCandidate (:f symbol String) (:f text String))
 
 fn symbolForNext path: String tops: (List ast/TopForm) -> String
-  (mt (listHead tops)
+  (match (listHead tops)
     ((none) (moduleSymbol path))
     ((some t)
-      (mt t
+      (match t
         ((ast/topModule _) (moduleSymbol path))
         ((ast/topDefun n) (fnSymbol path n.name))
         ((ast/topSchema n) (fnSymbol path n.name))
@@ -274,7 +274,7 @@ fn symbolForNext path: String tops: (List ast/TopForm) -> String
 (schema NoteRun (:f texts (List String)) (:f rest (List ast/TopForm)))
 
 fn collectNoteFormRun tops: (List ast/TopForm) acc: (List String) -> NoteRun
-  (mt (listHead tops)
+  (match (listHead tops)
     ((none) (NoteRun :texts (listReverse acc) :rest (list)))
     ((some t)
       (if (isNoteForm? t)
@@ -282,7 +282,7 @@ fn collectNoteFormRun tops: (List ast/TopForm) acc: (List String) -> NoteRun
         (NoteRun :texts (listReverse acc) :rest tops))))
 
 fn noteScanForms path: String tops: (List ast/TopForm) -> (List NoteCandidate)
-  (mt (listHead tops)
+  (match (listHead tops)
     ((none) (list))
     ((some t)
       (if (isNoteForm? t)
@@ -292,7 +292,7 @@ fn noteScanForms path: String tops: (List ast/TopForm) -> (List NoteCandidate)
         (noteScanForms path (optionOr (listTail tops) (list))))))
 
 fn noteScanAll path: String text: String -> (List NoteCandidate)
-  (mt (ast/parseLegacy text)
+  (match (ast/parseLegacy text)
     ((err _) (list))
     ((ok tops) (noteScanForms path tops)))
 
@@ -303,7 +303,7 @@ fn isModuleKid? k: ast/KidForm -> Bool
   (let [(e k.pf.expr)] (and (rd/isList? e) (= (rd/sexprHead e) "module")))
 
 fn moduleKidOf kids: (List ast/KidForm) -> (Option ast/KidForm)
-  (mt (listHead kids)
+  (match (listHead kids)
     ((none) (none))
     ((some k) (if (isModuleKid? k) (some k) (moduleKidOf (optionOr (listTail kids) (list))))))
 
@@ -324,29 +324,29 @@ fn fieldCandidatesStep path: String schemaName: String hi: Int64 f: ast/AstField
   (let [(doc f.docstring)]
     (if (not (isQuoted? doc))
       (fieldCandidates path schemaName hi rest text acc)
-      (mt (fieldDocSpan text acc.cursor hi doc)
+      (match (fieldDocSpan text acc.cursor hi doc)
         ((none) (fieldCandidates path schemaName hi rest text acc))
         ((some sp) (fieldCandidateFound path schemaName hi f doc rest text acc sp)))))
 
 fn fieldCandidates path: String schemaName: String hi: Int64 fields: (List ast/AstField) text: String acc: FieldAcc -> FieldAcc
-  (mt (listHead fields)
+  (match (listHead fields)
     ((none) acc)
     ((some f) (fieldCandidatesStep path schemaName hi f (optionOr (listTail fields) (list)) text acc)))
 
 fn candidatesFor path: String text: String top: ast/TopForm span: (Pair Int64 Int64) -> (List DocCandidate)
   (let [(lo (pairFirst span)) (hi (pairSecond span))]
-    (mt top
+    (match top
       ((ast/topModule node)
         (let [(doc node.docstring)]
           (if (not (isQuoted? doc)) (list)
-            (mt (dDocSpan text lo hi doc)
+            (match (dDocSpan text lo hi doc)
               ((none) (list))
               ((some sp) (list (DocCandidate :symbol (moduleSymbol path) :text (unquoteLiteral doc)
                                               :spanStart (pairFirst sp) :spanEnd (pairSecond sp) :replacement "")))))))
       ((ast/topDefun node)
         (let [(doc node.docstring)]
           (if (not (isQuoted? doc)) (list)
-            (mt (dDocSpan text lo hi doc)
+            (match (dDocSpan text lo hi doc)
               ((none) (list))
               ((some sp) (list (DocCandidate :symbol (fnSymbol path node.name) :text (unquoteLiteral doc)
                                               :spanStart (pairFirst sp) :spanEnd (pairSecond sp) :replacement "")))))))
@@ -356,10 +356,10 @@ fn candidatesFor path: String text: String top: ast/TopForm span: (Pair Int64 In
       ((ast/topExpr _) (list))))
 
 fn zipTopsKids tops: (List ast/TopForm) kids: (List ast/KidForm) path: String text: String acc: (List DocCandidate) -> (List DocCandidate)
-  (mt (listHead tops)
+  (match (listHead tops)
     ((none) (listReverse acc))
     ((some top)
-      (mt (listHead kids)
+      (match (listHead kids)
         ((none) (listReverse acc))
         ((some k)
           (zipTopsKids (optionOr (listTail tops) (list)) (optionOr (listTail kids) (list)) path text
@@ -368,12 +368,12 @@ fn zipTopsKids tops: (List ast/TopForm) kids: (List ast/KidForm) path: String te
 (schema NoteKidRun (:f texts (List String)) (:f spanStart Int64) (:f spanEnd Int64) (:f restTops (List ast/TopForm)) (:f restKids (List ast/KidForm)))
 
 fn collectNoteKidRun tops: (List ast/TopForm) kids: (List ast/KidForm) acc: (List String) spanStart: Int64 spanEnd: Int64 -> NoteKidRun
-  (mt (listHead tops)
+  (match (listHead tops)
     ((none) (NoteKidRun :texts (listReverse acc) :spanStart spanStart :spanEnd spanEnd :restTops (list) :restKids kids))
     ((some t)
       (if (not (isNoteForm? t))
         (NoteKidRun :texts (listReverse acc) :spanStart spanStart :spanEnd spanEnd :restTops tops :restKids kids)
-        (mt (listHead kids)
+        (match (listHead kids)
           ((none) (NoteKidRun :texts (listReverse acc) :spanStart spanStart :spanEnd spanEnd :restTops tops :restKids kids))
           ((some k)
             (let [(sp (kidOf k)) (ns (if (= spanStart -1) (pairFirst sp) spanStart))]
@@ -382,7 +382,7 @@ fn collectNoteKidRun tops: (List ast/TopForm) kids: (List ast/KidForm) acc: (Lis
 
 ; (:m :ref D150 :do "a bare top-level string-literal form (D140 'note') among a module's declarations is not itself a fn/schema/enum doc candidatesFor handles; a run of one or more consecutive notes is collected, its removable span widened to the whole lines it occupies, and the merged text keyed by whatever declaration follows it (or by the module symbol when nothing does, same as noteScanAll), so --apply actually strips it instead of leaving an ERR_READ_BARE_TOPLEVEL behind")
 fn declCandidates path: String text: String tops: (List ast/TopForm) kids: (List ast/KidForm) -> (List DocCandidate)
-  (mt (listHead tops)
+  (match (listHead tops)
     ((none) (list))
     ((some t)
       (if (isNoteForm? t)
@@ -391,7 +391,7 @@ fn declCandidates path: String text: String tops: (List ast/TopForm) kids: (List
               (span (extendRemovalSpan text run.spanStart run.spanEnd))
               (cand (DocCandidate :symbol sym :text (stringJoin run.texts " ") :spanStart (pairFirst span) :spanEnd (pairSecond span) :replacement ""))]
           (cons cand (declCandidates path text run.restTops run.restKids)))
-        (mt (listHead kids)
+        (match (listHead kids)
           ((none) (list))
           ((some k)
             (listAppend (candidatesFor path text t (kidOf k))
@@ -406,7 +406,7 @@ fn candidatesFromTops path: String text: String mk: ast/KidForm rest: (List ast/
 
 fn findCandidatesWithTops! path: String text: String allKids: (List ast/KidForm) tops: (List ast/TopForm) -> (Result (List DocCandidate) String)
   (let [(modKid (moduleKidOf allKids)) (rest (restKids allKids))]
-    (mt modKid
+    (match modKid
       ((none) (ok (list)))
       ((some mk) (ok (candidatesFromTops path text mk rest tops)))))
 
@@ -414,13 +414,13 @@ fn withComments path: String text: String dCands: (List DocCandidate) -> (List D
   (listAppend dCands (commentScanAll path (linesOf text)))
 
 fn findCandidates! path: String text: String -> (Result (List DocCandidate) String)
-  (mt (ast/kidFormsFor text)
+  (match (ast/kidFormsFor text)
     ((err e) (err e.msg))
     ((ok allKids)
-      (mt (ast/parseLegacy text)
+      (match (ast/parseLegacy text)
         ((err e) (err e.msg))
         ((ok tops)
-          (mt (findCandidatesWithTops! path text allKids tops)
+          (match (findCandidatesWithTops! path text allKids tops)
             ((err e) (err e))
             ((ok dCands) (ok (withComments path text dCands))))))))
 
@@ -437,7 +437,7 @@ fn sortedSpans cs: (List DocCandidate) -> (List DocCandidate)
   (listSortBy (fn [(c DocCandidate)] -> Int64 c.spanStart) cs)
 
 fn buildStripped text: String spans: (List DocCandidate) cursor: Int64 acc: String -> String
-  (mt (listHead spans)
+  (match (listHead spans)
     ((none) (str acc (optionOr (stringSlice text cursor (stringLength text)) "")))
     ((some c)
       (let [(rest (optionOr (listTail spans) (list)))
@@ -461,7 +461,7 @@ fn firstSeg path: String -> String
   (optionOr (listGet (stringSplit path "/") 0) "misc")
 
 fn ledgerPathFor path: String -> String
-  (mt (pkgOf path)
+  (match (pkgOf path)
     ((some pkg) (str "asl/packages/" pkg "/doc.asn"))
     ((none)
       (if (stringStartsWith? path "asl/")
@@ -469,10 +469,10 @@ fn ledgerPathFor path: String -> String
         (str ".asl/mem/docs/" (firstSeg path) ".asn"))))
 
 fn extractFile! root: String relPath: String -> (Result ExtractResult String)
-  (mt (fileReadString (str root "/" relPath))
+  (match (fileReadString (str root "/" relPath))
     ((err e) (err e))
     ((ok text)
-      (mt (findCandidates! relPath text)
+      (match (findCandidates! relPath text)
         ((err e) (err e))
         ((ok cands)
           (ok (ExtractResult :path relPath :candidates cands
@@ -485,7 +485,7 @@ fn dirOf p: String -> String
     (if (<= n 1) "" (stringJoin (listTake parts (- n 1)) "/")))
 
 fn appendToFile! path: String rows: String -> (Result Unit String)
-  (let [(existing (mt (fileReadString path) ((ok t) t) ((err _) "")))
+  (let [(existing (match (fileReadString path) ((ok t) t) ((err _) "")))
         (sep (if (or (stringEmpty? existing) (stringEndsWith? existing "\n")) "" "\n"))
         (next (str existing sep rows "\n"))]
     (fileWrite path next))
@@ -495,18 +495,18 @@ fn ensureLedgerDir! ledgerPath: String -> (Result Unit String)
     (if (stringEmpty? dir) (ok ()) (dirCreate dir)))
 
 fn writeFiles! srcPath: String stripped: String ledgerPath: String ledgerText: String ledgerRel: String -> (Result String String)
-  (mt (fileWrite srcPath stripped)
+  (match (fileWrite srcPath stripped)
     ((err e) (err e))
     ((ok _) (writeLedger! ledgerPath ledgerText ledgerRel)))
 
 fn writeLedger! ledgerPath: String ledgerText: String ledgerRel: String -> (Result String String)
-  (mt (appendToFile! ledgerPath ledgerText)
+  (match (appendToFile! ledgerPath ledgerText)
     ((err e) (err e))
     ((ok _) (ok ledgerRel)))
 
 fn writeStrippedAndLedger! root: String r: ExtractResult ledgerRel: String -> (Result String String)
   (let [(ledgerPath (str root "/" ledgerRel)) (srcPath (str root "/" r.path))]
-    (mt (ensureLedgerDir! ledgerPath)
+    (match (ensureLedgerDir! ledgerPath)
       ((err e) (err e))
       ((ok _) (writeFiles! srcPath r.stripped ledgerPath r.ledgerText ledgerRel))))
 
@@ -514,7 +514,7 @@ fn applyExtract! root: String r: ExtractResult -> (Result String String)
   (if r.unchanged (ok "") (writeStrippedAndLedger! root r (ledgerPathFor r.path)))
 
 fn reportApplied! r: ExtractResult root: String n: Int64 -> Int64
-  (mt (applyExtract! root r)
+  (match (applyExtract! root r)
     ((err e) (do (println (str "(:docExtract :file \"" r.path "\" :status :error :message \"" e "\")")) 1))
     ((ok ledgerPath) (do (println (str "(:docExtract :file \"" r.path "\" :found " (stringFromInt64 n) " :applied true :ledger \"" ledgerPath "\")")) 0)))
 
@@ -529,10 +529,10 @@ fn printResult! r: ExtractResult apply: Bool root: String -> Int64
       (else (reportDry! r n))))
 
 fn runFiles! root: String apply: Bool files: (List String) status: Int64 -> Int64
-  (mt (listHead files)
+  (match (listHead files)
     ((none) status)
     ((some f)
-      (mt (extractFile! root f)
+      (match (extractFile! root f)
         ((err e) (do (println (str "(:docExtract :file \"" f "\" :status :error :message \"" e "\")")) (runFiles! root apply (optionOr (listTail files) (list)) 1)))
         ((ok r)
           (let [(rc (printResult! r apply root))]

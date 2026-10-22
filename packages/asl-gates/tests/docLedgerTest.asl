@@ -15,7 +15,7 @@ fn textsOf rows: (List dl/DocRow) -> (List String)
   (map (fn [(r dl/DocRow)] -> String r.text) rows)
 
 fn testLoadValid! -> Bool
-  (mt (dl/loadLedger! (fixture "valid.asn"))
+  (match (dl/loadLedger! (fixture "valid.asn"))
     ((err e) (do (assert false (str "loadLedger! ok: " e)) false))
     ((ok rows)
       (do
@@ -24,7 +24,7 @@ fn testLoadValid! -> Bool
         true)))
 
 fn mustErr! path: String why: String -> Bool
-  (mt (dl/loadLedger! (fixture path))
+  (match (dl/loadLedger! (fixture path))
     ((err _) true)
     ((ok _) (do (assert false why) false)))
 
@@ -36,7 +36,7 @@ fn testMalformedRows! -> Bool
     true)
 
 fn testLoadMissingIsEmpty! -> Bool
-  (mt (dl/loadLedger! (fixture "noSuchLedger.asn"))
+  (match (dl/loadLedger! (fixture "noSuchLedger.asn"))
     ((err e) (do (assert false (str "loadLedger! ok on a missing file: " e)) false))
     ((ok rows) (do (assert (= (listLength rows) 0) "a ledger that was never written reads as empty, not an error") true)))
 
@@ -44,22 +44,22 @@ fn ! sandboxDir! -> String
   (stringTrim (processRun "mktemp -d").stdout)
 
 fn assertHitFound! found: (Option dl/DocRow) -> Bool
-  (mt found
+  (match found
     ((none) (do (assert false "addOne should be found") false))
     ((some row) (do (assert (= row.text "Adds one to a") "hit returns the exact ledgered text") true)))
 
 fn ! assertHit! dir: String -> Bool
-  (mt (dl/findBySymbol! dir "asl/packages/fxpkg/src/thing.asl#addOne")
+  (match (dl/findBySymbol! dir "asl/packages/fxpkg/src/thing.asl#addOne")
     ((err e) (assert false (str "findBySymbol! ok on a hit: " e)))
     ((ok found) (assertHitFound! found)))
 
 fn assertMissFound! found: (Option dl/DocRow) -> Bool
-  (mt found
+  (match found
     ((none) true)
     ((some _) (do (assert false "an unledgered symbol must miss, not hit") false)))
 
 fn ! assertMiss! dir: String -> Bool
-  (mt (dl/findBySymbol! dir "asl/packages/fxpkg/src/thing.asl#noSuchFn")
+  (match (dl/findBySymbol! dir "asl/packages/fxpkg/src/thing.asl#noSuchFn")
     ((err e) (assert false (str "findBySymbol! ok on a miss: " e)))
     ((ok found) (assertMissFound! found)))
 
@@ -97,7 +97,7 @@ fn assertFileRowsOk! rows: (List dl/DocRow) -> Bool
     true)
 
 fn ! assertFileRows! dir: String -> Bool
-  (mt (dl/findByFile! dir "asl/packages/fxpkg/src/a.asl")
+  (match (dl/findByFile! dir "asl/packages/fxpkg/src/a.asl")
     ((err e) (assert false (str "findByFile! ok: " e)))
     ((ok rows) (assertFileRowsOk! rows)))
 
@@ -113,7 +113,7 @@ fn assertUnresolvedRows! unresolved: (List String) -> Bool
     true)
 
 fn ! assertCheckLedger! dir: String -> Bool
-  (mt (dl/checkLedger! dir "asl/packages/fxpkg/doc.asn")
+  (match (dl/checkLedger! dir "asl/packages/fxpkg/doc.asn")
     ((err e) (assert false (str "checkLedger! ok: " e)))
     ((ok unresolved) (assertUnresolvedRows! unresolved)))
 
@@ -140,22 +140,22 @@ fn ! testResolveRows! -> Bool
       true))
 
 fn assertRecoveredFound! found: (Option dl/DocRow) -> Bool
-  (mt found
+  (match found
     ((none) (do (assert false "the extracted doc must be recoverable via (:doc) after --apply") false))
     ((some row) (do (assert (= row.text "Adds one to a") "the ledgered text matches the original :d exactly") true)))
 
 fn ! assertRecovered! dir: String -> Bool
-  (mt (dl/findBySymbol! dir "asl/packages/fxpkg/src/thing.asl#addOne")
+  (match (dl/findBySymbol! dir "asl/packages/fxpkg/src/thing.asl#addOne")
     ((err e) (assert false (str "findBySymbol! ok after apply: " e)))
     ((ok found) (assertRecoveredFound! found)))
 
 fn ! assertApplied! dir: String r: dx/ExtractResult -> Bool
-  (mt (dx/applyExtract! dir r)
+  (match (dx/applyExtract! dir r)
     ((err e) (assert false (str "applyExtract! ok: " e)))
     ((ok _) (assertRecovered! dir)))
 
 fn ! assertExtractedAndApplied! dir: String -> Bool
-  (mt (dx/extractFile! dir "asl/packages/fxpkg/src/thing.asl")
+  (match (dx/extractFile! dir "asl/packages/fxpkg/src/thing.asl")
     ((err e) (assert false (str "extractFile! ok: " e)))
     ((ok r) (assertApplied! dir r)))
 

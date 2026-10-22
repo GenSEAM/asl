@@ -113,29 +113,29 @@ fn foreignSyntax path: String content: String -> CheckVerdict
         (lang (languageOf path))]
     (cond
       ((= lang "json")
-       (mt (jcst/parse content)
+       (match (jcst/parse content)
          ((ok _) (CheckVerdict :status "ok" :message ""))
          ((err msg) (CheckVerdict :status "error" :message msg))))
       ((= ext ".jsx")
-       (mt (jsx/parse content)
+       (match (jsx/parse content)
          ((ok root)
           (if (sym/hasErrorNode root)
             (CheckVerdict :status "error" :message "JSX syntax error")
             (CheckVerdict :status "ok" :message "")))
          ((err msg) (CheckVerdict :status "error" :message msg))))
       ((= lang "javascript")
-       (mt (jsrec/check content)
+       (match (jsrec/check content)
          ((ok _) (CheckVerdict :status "ok" :message ""))
          ((err msg) (CheckVerdict :status "error" :message msg))))
       ((= ext ".tsx")
-       (mt (tsx/parse content)
+       (match (tsx/parse content)
          ((ok root)
           (if (sym/hasErrorNode root)
             (CheckVerdict :status "error" :message "TSX syntax error")
             (CheckVerdict :status "ok" :message "")))
          ((err msg) (CheckVerdict :status "error" :message msg))))
       ((= lang "typescript")
-       (mt (tsm/parse content)
+       (match (tsm/parse content)
          ((ok _) (CheckVerdict :status "ok" :message ""))
          ((err msg) (CheckVerdict :status "error" :message msg))))
       ((= lang "css")
@@ -149,7 +149,7 @@ fn foreignSyntax path: String content: String -> CheckVerdict
            (CheckVerdict :status "ok" :message "")
            (CheckVerdict :status "error" :message "HTML syntax error"))))
       ((= lang "xml")
-       (mt (xmltree/parse content)
+       (match (xmltree/parse content)
          ((ok _) (CheckVerdict :status "ok" :message ""))
          ((err msg) (CheckVerdict :status "error" :message msg))))
       (else
@@ -160,7 +160,7 @@ fn validateStaged path: String before: (Option String) after: String force: Bool
     (if (or (= lang "asl") (= lang "asn"))
       (if (k/isBalanced after)
         (StagedVerdict :rejectCode "" :rejectMessage "" :receiptFields " :balanced true")
-        (let [(pre (mt before
+        (let [(pre (match before
                      ((none) false)
                      ((some b) (not (k/isBalanced b)))))]
           (if (or pre force)
@@ -172,7 +172,7 @@ fn validateStaged path: String before: (Option String) after: String force: Bool
             (st syn.status)]
         (if (!= st "error")
           (StagedVerdict :rejectCode "" :rejectMessage "" :receiptFields (str " :syntax :" st))
-          (let [(pre (mt before
+          (let [(pre (match before
                        ((none) false)
                        ((some b) (= (foreignSyntax path b).status "error"))))]
             (if (or pre force)
@@ -183,7 +183,7 @@ fn validateStaged path: String before: (Option String) after: String force: Bool
                              :receiptFields " :syntax :error")))))))
 
 fn nearSnippet text: String s: src/Source line: Int64 col: Int64 -> String
-  (mt (src/sourceLineStart s line)
+  (match (src/sourceLineStart s line)
     ((some start)
      (let [(end (src/sourceLineEnd s line))
            (lineStr (optionOr (stringSlice text start end) ""))
@@ -210,7 +210,7 @@ fn diagItem text: String s: src/Source d: ty/Diagnostic -> LeftItem
 
 fn ! runNativeCheck! targetPath: String text: String -> (Result (List LeftItem) String)
   (let [(r (cc/checkFileCached! targetPath (list "." "asl/packages" "asl") (cc/emptyCache)))]
-    (mt (pairFirst r)
+    (match (pairFirst r)
       ((err _) (err (str "native check could not read " targetPath " or resolve one of its imports")))
       ((ok v)
         (let [(s (src/sourceFromString targetPath text))]
@@ -222,7 +222,7 @@ fn createAslTempFile! dir: String content: String counter: Int64 -> (Result Stri
     (let [(targetDir (if (stringEmpty? dir) "." dir))
           (tmpPath (str targetDir "/.asl_chk_" (stringFromInt64 (monotonicNs)) "_" (stringFromInt64 counter) ".asl"))
           (res (fileCreateExclusive tmpPath content))]
-      (mt res
+      (match res
         ((ok _) (ok tmpPath))
         ((err e)
          (if (stringContains? e "alreadyExists")
@@ -230,19 +230,19 @@ fn createAslTempFile! dir: String content: String counter: Int64 -> (Result Stri
            (err e))))))
 
 fn checkAslSemantic! path: String content: String -> (Result (List LeftItem) String)
-  (let [(diskMatch (mt (fileReadString path)
+  (let [(diskMatch (match (fileReadString path)
                      ((ok c) (= c content))
                      ((err _) false)))]
     (if diskMatch
       (runNativeCheck! path content)
       (let [(dir (pathDir path))
             (cRes (createAslTempFile! dir content 0))]
-        (mt cRes
+        (match cRes
           ((err e) (err (str "fileWrite failed: " e)))
           ((ok tmpPath)
            (let [(res (runNativeCheck! tmpPath content))
                  (rmRes (pathRemove tmpPath))]
-             (mt rmRes
+             (match rmRes
                ((err e) (err (str "pathRemove failed: " e)))
                ((ok _) res))))))))
 
@@ -278,7 +278,7 @@ fn pathDir p: String -> String
       (stringJoin (optionOr (listSlice parts 0 (- n 1)) (list)) "/")))
 
 fn ! fileExists? p: String -> Bool
-  (mt (fileStat p)
+  (match (fileStat p)
     ((ok st) st.isFile)
     ((err _) false))
 
@@ -347,7 +347,7 @@ fn exportHasFrom? elems: (List tr/TreeElement) text: String -> Bool
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (if (and (= (tr/tokenKind tok) "ident") (= (optionOr (stringSlice text (tr/tokenStart tok) (tr/tokenEnd tok)) "") "from"))
            true
@@ -360,7 +360,7 @@ fn findModuleStringTok elems: (List tr/TreeElement) text: String -> (Option tr/T
     (none)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (if (= (tr/tokenKind tok) "string")
            (let [(raw (optionOr (stringSlice text (tr/tokenStart tok) (tr/tokenEnd tok)) ""))
@@ -372,7 +372,7 @@ fn findModuleStringTok elems: (List tr/TreeElement) text: String -> (Option tr/T
         ((tr/elemNode node)
          (if (= (tr/nodeKind node) "importAttributes")
            (findModuleStringTok tl text)
-           (mt (findModuleStringTok (tr/nodeChildren node) text)
+           (match (findModuleStringTok (tr/nodeChildren node) text)
              ((some tok) (some tok))
              ((none) (findModuleStringTok tl text))))))))
 
@@ -381,7 +381,7 @@ fn findCalleeNode elems: (List tr/TreeElement) -> (Option tr/Node)
     (none)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken _) (findCalleeNode tl))
         ((tr/elemNode node) (some node)))))
 
@@ -390,7 +390,7 @@ fn findFirstArgNode elems: (List tr/TreeElement) afterCallee: Bool -> (Option tr
     (none)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken _)
          (findFirstArgNode tl afterCallee))
         ((tr/elemNode node)
@@ -403,30 +403,30 @@ fn findLiteralStringTok elems: (List tr/TreeElement) -> (Option tr/Token)
     (none)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (if (or (= (tr/tokenKind tok) "string") (= (tr/tokenKind tok) "templateNoSub"))
            (some tok)
            (findLiteralStringTok tl)))
         ((tr/elemNode node)
-         (mt (findLiteralStringTok (tr/nodeChildren node))
+         (match (findLiteralStringTok (tr/nodeChildren node))
            ((some tok) (some tok))
            ((none) (findLiteralStringTok tl)))))))
 
 fn checkDynamicCall node: tr/Node text: String -> (Option tr/Token)
-  (mt (findCalleeNode (tr/nodeChildren node))
+  (match (findCalleeNode (tr/nodeChildren node))
     ((none) (none))
     ((some callee)
      (let [(calleeText (stringTrim (optionOr (stringSlice text (tr/nodeStart callee) (tr/nodeEnd callee)) "")))]
        (if (and (!= calleeText "import") (!= calleeText "require"))
          (none)
-         (mt (findFirstArgNode (tr/nodeChildren node) false)
+         (match (findFirstArgNode (tr/nodeChildren node) false)
            ((none) (none))
            ((some argNode)
             (let [(k (tr/nodeKind argNode))]
               (if (and (!= k "literal") (!= k "templateLiteral"))
                 (none)
-                (mt (findLiteralStringTok (tr/nodeChildren argNode))
+                (match (findLiteralStringTok (tr/nodeChildren argNode))
                   ((none) (none))
                   ((some tok)
                    (let [(raw (optionOr (stringSlice text (tr/tokenStart tok) (tr/tokenEnd tok)) ""))
@@ -436,13 +436,13 @@ fn checkDynamicCall node: tr/Node text: String -> (Option tr/Token)
                        (none)))))))))))))
 
 fn isDynamicImportWithSub? node: tr/Node text: String -> Bool
-  (mt (findCalleeNode (tr/nodeChildren node))
+  (match (findCalleeNode (tr/nodeChildren node))
     ((none) false)
     ((some callee)
      (let [(calleeText (stringTrim (optionOr (stringSlice text (tr/nodeStart callee) (tr/nodeEnd callee)) "")))]
        (if (and (!= calleeText "import") (!= calleeText "require"))
          false
-         (mt (findFirstArgNode (tr/nodeChildren node) false)
+         (match (findFirstArgNode (tr/nodeChildren node) false)
            ((none) false)
            ((some argNode)
             (and (= (tr/nodeKind argNode) "templateLiteral")
@@ -453,7 +453,7 @@ fn countSkippedInElems elems: (List tr/TreeElement) text: String acc: Int64 -> I
     acc
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken _) (countSkippedInElems tl text acc))
         ((tr/elemNode node)
          (let [(extra (if (and (= (tr/nodeKind node) "callExpr") (isDynamicImportWithSub? node text)) 1 0))
@@ -468,30 +468,30 @@ fn collectImportsInElems elems: (List tr/TreeElement) text: String acc: (List tr
     acc
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken _)
          (collectImportsInElems tl text acc))
         ((tr/elemNode node)
          (let [(k (tr/nodeKind node))]
            (cond
              ((= k "importDecl")
-              (let [(newAcc (mt (findModuleStringTok (tr/nodeChildren node) text)
+              (let [(newAcc (match (findModuleStringTok (tr/nodeChildren node) text)
                               ((some tok) (cons tok acc))
                               ((none) acc)))]
                 (collectImportsInElems tl text newAcc)))
              ((= k "importEqualsDecl")
-              (let [(newAcc (mt (findModuleStringTok (tr/nodeChildren node) text)
+              (let [(newAcc (match (findModuleStringTok (tr/nodeChildren node) text)
                               ((some tok) (cons tok acc))
                               ((none) acc)))]
                 (collectImportsInElems tl text newAcc)))
              ((and (= k "exportDecl") (exportHasFrom? (tr/nodeChildren node) text))
-              (let [(newAcc (mt (findModuleStringTok (tr/nodeChildren node) text)
+              (let [(newAcc (match (findModuleStringTok (tr/nodeChildren node) text)
                               ((some tok) (cons tok acc))
                               ((none) acc)))]
                 (collectImportsInElems tl text newAcc)))
              ((= k "callExpr")
               (let [(accKids (collectImportsInElems (tr/nodeChildren node) text acc))
-                    (newAcc (mt (checkDynamicCall node text)
+                    (newAcc (match (checkDynamicCall node text)
                               ((some tok) (cons tok accKids))
                               ((none) accKids)))]
                 (collectImportsInElems tl text newAcc)))
@@ -522,15 +522,15 @@ fn resolveImportsLoop! tokens: (List tr/Token) path: String text: String s: src/
       (if (resolveRelativeTarget! target)
         (resolveImportsLoop! tl path text s acc)
         (let [(pos (src/sourcePosAt s (tr/tokenStart tok)))
-              (line (optionOr (mt pos ((some p) (some p.line)) ((none) (none))) 1))
-              (col (optionOr (mt pos ((some p) (some p.byteCol)) ((none) (none))) 1))
+              (line (optionOr (match pos ((some p) (some p.line)) ((none) (none))) 1))
+              (col (optionOr (match pos ((some p) (some p.byteCol)) ((none) (none))) 1))
               (near (nearSnippet text s line col))
               (item (LeftItem :line line :col col :expected "ERR_UNRESOLVED_IMPORT" :near near :kind "semantic"))]
           (resolveImportsLoop! tl path text s (cons item acc))))))
 
 fn checkJsTsSemantic! path: String ext: String lang: String content: String -> (List LeftItem)
   (let [(parseRes (parseJsOrTs ext lang content))]
-    (mt parseRes
+    (match parseRes
       ((err _) (list))
       ((ok root)
        (let [(tokens (collectModuleImports root content))
@@ -556,7 +556,7 @@ fn checkFileReceipt! id: Int64 op: String relPath: String source: String content
        (if (not (k/isBalanced content))
          (str "  (:step :id " (stringFromInt64 id) " :op \"" (k/escapeAsnVal op) "\" :status \"rejected\" :error-code \":ERR_UNBALANCED_DELIMITERS\" :file \""
               (k/escapeAsnVal relPath) "\" :language \"" lang "\" :source " source " :message \"Unbalanced Dyck-1 delimiters\")")
-         (mt (checkSemantic! relPath content)
+         (match (checkSemantic! relPath content)
            ((err e)
             (str "  (:step :id " (stringFromInt64 id) " :op \"" (k/escapeAsnVal op) "\" :status \"rejected\" :error-code \":ERR_HOST_CHECK\" :file \""
                  (k/escapeAsnVal relPath) "\" :language \"" lang "\" :source " source " :message \"" (k/escapeAsnVal e) "\")"))
@@ -582,8 +582,8 @@ fn checkFileReceipt! id: Int64 op: String relPath: String source: String content
                  (k/escapeAsnVal syn.message) "\")"))
            ((= st "ok")
             (let [(parseRes (parseJsOrTs (pathExtension relPath) lang content))
-                  (skipCount (mt parseRes ((ok r) (countSkippedImports r content)) ((err _) 0)))]
-              (mt (checkSemantic! relPath content)
+                  (skipCount (match parseRes ((ok r) (countSkippedImports r content)) ((err _) 0)))]
+              (match (checkSemantic! relPath content)
                 ((err e)
                  (str "  (:step :id " (stringFromInt64 id) " :op \"" (k/escapeAsnVal op) "\" :status \"rejected\" :error-code \":ERR_HOST_CHECK\" :file \""
                       (k/escapeAsnVal relPath) "\" :language \"" lang "\" :source " source " :message \"" (k/escapeAsnVal e) "\")"))

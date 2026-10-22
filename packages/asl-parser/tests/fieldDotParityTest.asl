@@ -4,18 +4,18 @@
       (tools/nativeTest :a nt) (tools/fleet/run :a fr)])
 
 fn tree e: rd/SExpr -> String
-  (mt e
+  (match e
     ((rd/sexprAtom v) v)
     ((rd/sexprList items) (str "(" (stringJoin (map tree items) " ") ")"))
     ((rd/sexprVect items) (str "[" (stringJoin (map tree items) " ") "]")))
 
 fn selfTree src: String -> (Result String String)
-  (mt (ast/readForms (lx/tokenize src))
+  (match (ast/readForms (lx/tokenize src))
     ((ok forms) (ok (stringJoin (map (fn [pf] (tree pf.expr)) forms) " ")))
     ((err e) (err e.msg)))
 
 fn selfRead src: String -> (Result String String)
-  (mt (ast/readForms (lx/tokenize src))
+  (match (ast/readForms (lx/tokenize src))
     ((ok forms) (ok (stringJoin (map (fn [pf] (rd/renderSexpr pf.expr)) forms) " ")))
     ((err e) (err e.msg)))
 
@@ -26,7 +26,7 @@ fn ! nativeRun expr: String -> fr/Done
     (do
       (assert (ok? wRes) "probe source must write")
       (let [(built (nt/prepareRun probePath (nt/fingerprint)))]
-        (mt built.binary
+        (match built.binary
           ((none) (do (assert false (str "probe builds natively: " built.reason)) (fr/Done :idx 0 :exit 1 :out "" :ms 0 :verdict "buildFailed")))
           ((some bin) (let [(res (fr/runOne (fr/job (list bin) "." (fr/childEnv (list))))) (_ (pathRemove probePath))] res))))))
 
@@ -50,7 +50,7 @@ fn ! agrees src: String want: String -> Bool
 fn ! rejects src: String -> Bool
   (let [(self (selfRead src))]
     (do
-      (assert (mt self ((err m) (stringContains? m "ERR_READ_FIELD")) ((ok s) false)) (str "self-hosted reader rejects " src " with ERR_READ_FIELD"))
+      (assert (match self ((err m) (stringContains? m "ERR_READ_FIELD")) ((ok s) false)) (str "self-hosted reader rejects " src " with ERR_READ_FIELD"))
       (assert (nativeBuildFails src) (str "a native build of " src " also fails"))
       true))
 

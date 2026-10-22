@@ -36,18 +36,18 @@ fn atomType name: String locals: (List String) known: (List String) -> String
     (else (str "AslOpaque<" (tsString name) ">")))
 
 fn atomText e: rd/SExpr -> String
-  (mt e ((rd/sexprAtom v) v) (_ ""))
+  (match e ((rd/sexprAtom v) v) (_ ""))
 
 fn generic name: String args: (List String) -> String
   (str name "<" (stringJoin args ", ") ">")
 
 fn fnType items: (List rd/SExpr) locals: (List String) known: (List String) -> String
-  (let [(params (mt (listGet items 1) ((some x) (mt x ((rd/sexprVect ps) ps) (_ []))) ((none) [])))
+  (let [(params (match (listGet items 1) ((some x) (match x ((rd/sexprVect ps) ps) (_ []))) ((none) [])))
         (ret (optionOr (listLast items) (rd/makeAtom "Unit")))]
     (str "((" (stringJoin (map (fn [(p (Pair Int64 rd/SExpr))] -> String (str "a" (stringFromInt64 (pairFirst p)) ": " (tsType (pairSecond p) locals known))) (enumerate params)) ", ") ") => " (tsType ret locals known) ")"))
 
 fn tsType e: rd/SExpr locals: (List String) known: (List String) -> String
-  (mt e
+  (match e
     ((rd/sexprAtom v) (atomType v locals known))
     ((rd/sexprVect items) "unknown")
     ((rd/sexprList items)
@@ -131,13 +131,13 @@ fn prologue moduleName: String -> String
     "\n")
 
 fn emitDts source: String -> (Result String String)
-  (mt (a/parse source)
+  (match (a/parse source)
     ((err pe) (err (str "parse: " pe.msg)))
     ((ok forms)
-      (let [(moduleName (fold (fn [(acc String) (f a/TopForm)] -> String (mt f ((a/topModule m) m.path) (_ acc))) "" forms))
-            (schemas (fold (fn [(acc (List a/SchemaNode)) (f a/TopForm)] -> (List a/SchemaNode) (mt f ((a/topSchema s) (listAppend acc [s])) (_ acc))) [] forms))
-            (enums (fold (fn [(acc (List a/EnumNode)) (f a/TopForm)] -> (List a/EnumNode) (mt f ((a/topEnum e) (listAppend acc [e])) (_ acc))) [] forms))
-            (defuns (fold (fn [(acc (List a/DefunNode)) (f a/TopForm)] -> (List a/DefunNode) (mt f ((a/topDefun d) (listAppend acc [d])) (_ acc))) [] forms))
+      (let [(moduleName (fold (fn [(acc String) (f a/TopForm)] -> String (match f ((a/topModule m) m.path) (_ acc))) "" forms))
+            (schemas (fold (fn [(acc (List a/SchemaNode)) (f a/TopForm)] -> (List a/SchemaNode) (match f ((a/topSchema s) (listAppend acc [s])) (_ acc))) [] forms))
+            (enums (fold (fn [(acc (List a/EnumNode)) (f a/TopForm)] -> (List a/EnumNode) (match f ((a/topEnum e) (listAppend acc [e])) (_ acc))) [] forms))
+            (defuns (fold (fn [(acc (List a/DefunNode)) (f a/TopForm)] -> (List a/DefunNode) (match f ((a/topDefun d) (listAppend acc [d])) (_ acc))) [] forms))
             (known (listAppend (map (fn [(s a/SchemaNode)] -> String s.name) schemas) (map (fn [(e a/EnumNode)] -> String e.name) enums)))]
         (ok (str (prologue moduleName)
                  (stringJoin (map (fn [(s a/SchemaNode)] -> String (schemaDecl s known)) schemas) "")

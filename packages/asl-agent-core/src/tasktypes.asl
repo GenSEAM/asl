@@ -22,4 +22,4 @@ fn makeTaskOutcome kind: TaskKind mutatedPaths: (List Str) spawnedTaskIds: (List
   (TaskOutcome :kind kind :mutatedPaths mutatedPaths :spawnedTaskIds spawnedTaskIds :artifactPath artifactPath :receipt receipt)
 
 fn taskStateInFlight? state: TaskState -> Bool
-  (mt state ((stateRouting) true) ((stateClarification) true) ((stateReady) true) ((stateExecuting) true) ((stateVerifying) true) ((stateQueued) false) ((stateDone) false) ((stateFailed) false) ((stateCancelled) false))
+  (match state ((stateRouting) true) ((stateClarification) true) ((stateReady) true) ((stateExecuting) true) ((stateVerifying) true) ((stateQueued) false) ((stateDone) false) ((stateFailed) false) ((stateCancelled) false))

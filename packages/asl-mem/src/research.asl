@@ -22,4 +22,4 @@ fn findMatchingFact q: Str facts: (List ResearchFact) -> (Option ResearchFact)
   (findMatchingFactLoop q facts)
 
 fn queryResearchMemory query: Str index: (List ResearchFact) threshold: F64 -> ResearchQueryOutcome
-  (let [(facts index) (minConf (if (<= threshold 0.0) 0.85 threshold)) (matchedOpt (findMatchingFact query facts))] (mt matchedOpt ((none) (ResearchQueryOutcome :isDirectHit false :fact "" :tokenCost 150 :delegated true)) ((some f) (if (>= f.confidence minConf) (ResearchQueryOutcome :isDirectHit true :fact f.fact :tokenCost 0 :delegated false) (ResearchQueryOutcome :isDirectHit false :fact f.fact :tokenCost 150 :delegated true)))))
+  (let [(facts index) (minConf (if (<= threshold 0.0) 0.85 threshold)) (matchedOpt (findMatchingFact query facts))] (match matchedOpt ((none) (ResearchQueryOutcome :isDirectHit false :fact "" :tokenCost 150 :delegated true)) ((some f) (if (>= f.confidence minConf) (ResearchQueryOutcome :isDirectHit true :fact f.fact :tokenCost 0 :delegated false) (ResearchQueryOutcome :isDirectHit false :fact f.fact :tokenCost 150 :delegated true)))))

@@ -60,10 +60,10 @@ fn ! engineLog! cfg: eng/EngineConfig line: String -> Bool
   (ok? (fileAppend cfg.logFile (str "[Engine] " line "\n")))
 
 fn mtimeOf! path: String -> Int64
-  (mt (fileStat path) ((ok s) s.mtimeNs) ((err _) -1))
+  (match (fileStat path) ((ok s) s.mtimeNs) ((err _) -1))
 
 fn ! isDir? path: String -> Bool
-  (mt (fileStat path) ((ok s) s.isDir) ((err _) false))
+  (match (fileStat path) ((ok s) s.isDir) ((err _) false))
 
 fn lifetimeBreak! st: ServerState -> String
   (let [(cfg st.rt.config)
@@ -82,7 +82,7 @@ fn ! removeIfOurs! st: ServerState -> Bool
     (and sockGone pidGone))
 
 fn ! cancelJobs! jobs: (List AsyncJob) -> Bool
-  (mt (listHead jobs)
+  (match (listHead jobs)
     ((none) true)
     ((some j)
       (let [(killed (if (and (= j.kind "forms") (none? j.code))
@@ -147,7 +147,7 @@ fn ! selfUpdate! st: ServerState disk: String -> String
         (argv (list b.host "run" b.entry "run" "--root" cfg.rootDir "--scope" cfg.scope))]
     (if (err? saved)
       (do (engineLog! cfg "self-update could not save finished sessions") (str "self-update failed: state file " (stateFile cfg)))
-      (mt (procExecv argv (some env4))
+      (match (procExecv argv (some env4))
         ((ok _) "self-update exec returned")
         ((err e) (do (engineLog! cfg (str "self-update exec failed: " e)) (str "self-update failed: " e))))))
 
@@ -159,7 +159,7 @@ fn ! pump! outFd: Int64 errFd: Int64 outOpen: Bool errOpen: Bool out: String err
     (pair true (pair out errText))
     (if (= (leftOf! deadlineMs) 0)
       (pair false (pair out errText))
-      (mt (fdPoll (listAppend (if outOpen (list (pair outFd 1)) (list)) (if errOpen (list (pair errFd 1)) (list))) (min 1000 (leftOf! deadlineMs)))
+      (match (fdPoll (listAppend (if outOpen (list (pair outFd 1)) (list)) (if errOpen (list (pair errFd 1)) (list))) (min 1000 (leftOf! deadlineMs)))
         ((err _) (pair false (pair out errText)))
         ((ok _)
           (let [(o (if outOpen (fdRead outFd 65536) (ok "")))
@@ -176,20 +176,20 @@ fn formsAnswer code: Int64 out: String errText: String -> String
   (j/jsonEmit (j/jobj (list (pair "exit" (j/jint code)) (pair "stdout" (j/jstr out)) (pair "stderr" (j/jstr errText)))))
 
 fn jsonText v: j/Json -> String
-  (mt v ((j/jstr s) s) (_ (j/jsonEmit v)))
+  (match v ((j/jstr s) s) (_ (j/jsonEmit v)))
 
 fn formsArgs v: (Option j/Json) -> (Result (List String) String)
-  (mt (optionOr v (j/jnull))
+  (match (optionOr v (j/jnull))
     ((j/jarr xs) (ok (map jsonText xs)))
     (_ (err "forms must be a JSON array")))
 
 fn envRows v: (Option j/Json) -> (List String)
-  (mt (optionOr v (j/jnull))
+  (match (optionOr v (j/jnull))
     ((j/jobj kvs) (map (fn [(p (Pair String j/Json))] -> String (str (pairFirst p) "=" (jsonText (pairSecond p)))) kvs))
     (_ (list)))
 
 fn ! sourcesCheck! b: bld/EngineBuild -> (Pair Bool String)
-  (mt (procSpawnv (list b.host "check" b.entry) (some b.toolRoot) (none))
+  (match (procSpawnv (list b.host "check" b.entry) (some b.toolRoot) (none))
     ((err e) (pair false (str "check spawn failed: " (tp/socketErrorText! e))))
     ((ok child)
       (let [(_ (fdClose child.stdin))
@@ -209,14 +209,14 @@ fn withPending st: ServerState pending: (List AsyncJob) -> ServerState
   (with st :pending pending)
 
 fn ! startFormsJob! build: bld/EngineBuild request: String clientFd: Int64 logFile: String -> (Pair (Option AsyncJob) String)
-  (mt (j/jsonParse request)
+  (match (j/jsonParse request)
     ((err e) (pair (none) (formsAnswer 2 "" (str "ERR_FORMS_REQUEST: " e))))
     ((ok req)
       (let [(forms (formsArgs (j/jsonGet req "forms")))
-            (root (mt (optionOr (j/jsonGet req "root") (j/jnull)) ((j/jstr s) s) (_ "")))
+            (root (match (optionOr (j/jsonGet req "root") (j/jnull)) ((j/jstr s) s) (_ "")))
             (aslBin (str build.toolRoot "/bin/asl"))]
         (cond
-          ((err? forms) (pair (none) (formsAnswer 2 "" (str "ERR_FORMS_REQUEST: " (mt forms ((err e) e) ((ok _) ""))))))
+          ((err? forms) (pair (none) (formsAnswer 2 "" (str "ERR_FORMS_REQUEST: " (match forms ((err e) e) ((ok _) ""))))))
           ((or (not (stringStartsWith? root "/")) (not (isDir? root)))
             (pair (none) (formsAnswer 2 "" (str "ERR_FORMS_ROOT: " root))))
           ((or (stringEmpty? build.toolRoot) (not (ok? (fileStat aslBin))))
@@ -226,14 +226,14 @@ fn ! startFormsJob! build: bld/EngineBuild request: String clientFd: Int64 logFi
                   (env1 (setEnvRow env0 "ASL_ROOT" root))
                   (env2 (setEnvRow env1 "ROOT_DIR" build.toolRoot))
                   (env3 (setEnvRow env2 "SCRIPT_DIR" (str build.toolRoot "/bin")))]
-              (mt (procSpawnv (cons aslBin (resultOr forms (list))) (some root) (some env3))
+              (match (procSpawnv (cons aslBin (resultOr forms (list))) (some root) (some env3))
                 ((err e) (pair (none) (formsAnswer 2 "" (str "ERR_FORMS_SPAWN: " (tp/socketErrorText! e)))))
                 ((ok child)
                   (do (fdClose child.stdin)
                       (pair (some (AsyncJob :kind "forms" :clientFd clientFd :logFile logFile :pid child.pid :outFd child.stdout :errFd child.stderr :out "" :errText "" :outOpen true :errOpen true :code (none) :deadlineMs (+ (nowMs!) 3600000) :response "")) ""))))))))))
 
 fn delayMsOf text: String -> (Option Int64)
-  (mt (stringToFloat64 text)
+  (match (stringToFloat64 text)
     ((none) (none))
     ((some sec)
       (if (or (< sec 0.0) (> sec 3600.0))
@@ -246,18 +246,18 @@ fn delayedRequest line: String -> (Option (Pair Int64 String))
         (args (pairSecond parsed))]
     (cond
       ((= op "ping")
-        (mt (w/getArg args "sleep")
+        (match (w/getArg args "sleep")
           ((none) (none))
-          ((some text) (mt (delayMsOf text) ((none) (none)) ((some ms) (some (pair ms "")))))))
+          ((some text) (match (delayMsOf text) ((none) (none)) ((some ms) (some (pair ms "")))))))
       ((or (= op "sleep") (= op "wait"))
         (let [(secStr (w/getArgOr args "sec" (w/getArgOr args "seconds" "3")))]
-          (mt (delayMsOf secStr) ((none) (none)) ((some ms) (some (pair ms (w/formatSleepReceipt secStr)))))))
+          (match (delayMsOf secStr) ((none) (none)) ((some ms) (some (pair ms (w/formatSleepReceipt secStr)))))))
       (else (none))))
 
 fn ! handleForms! st: ServerState line: String clientFd: Int64 -> (Pair ServerState String)
   (let [(started (startFormsJob! st.rt.build line clientFd st.rt.config.logFile))
         (startMs (nowMs!))]
-    (mt (pairFirst started)
+    (match (pairFirst started)
       ((some job) (pair (withPending (touched st st.rt startMs true) (listAppend st.pending (list job))) ""))
       ((none)
         (let [(response (pairSecond started))
@@ -266,7 +266,7 @@ fn ! handleForms! st: ServerState line: String clientFd: Int64 -> (Pair ServerSt
           (pair st response)))))
 
 fn ! handlePing! st: ServerState line: String clientFd: Int64 -> (Pair ServerState String)
-  (mt (delayedRequest line)
+  (match (delayedRequest line)
     ((some delayed)
       (let [(startMs (nowMs!))
             (delayMs (pairFirst delayed))
@@ -307,7 +307,7 @@ fn exitedCode exited: (List (Pair Int64 Int64)) pid: Int64 -> (Option Int64)
 fn ! readJobSide! fd: Int64 open: Bool ready: Bool old: String -> (Pair String Bool)
   (if (not (and open ready))
     (pair old open)
-    (mt (fdRead fd 65536)
+    (match (fdRead fd 65536)
       ((err e) (let [(closed (fdClose fd))] (pair (str old " ERR_FORMS_READ: " e (if (ok? closed) "" " ERR_FORMS_CLOSE")) false)))
       ((ok chunk)
         (if (stringEmpty? chunk)
@@ -335,14 +335,14 @@ fn ! abortFormsJob! j: AsyncJob reason: String -> AsyncJob
         (outClosed (if j.outOpen (fdClose j.outFd) (ok ())))
         (errClosed (if j.errOpen (fdClose j.errFd) (ok ())))
         (details (str reason
-                      (if (err? killed) (str "\nERR_FORMS_KILL: " (mt killed ((err e) e) ((ok _) "unknown"))) "")
-                      (if (err? waited) (str "\nERR_FORMS_WAIT: " (mt waited ((err e) e) ((ok _) ""))) "")
-                      (if (err? outClosed) (str "\nERR_FORMS_CLOSE_STDOUT: " (mt outClosed ((err e) e) ((ok _) "unknown"))) "")
-                      (if (err? errClosed) (str "\nERR_FORMS_CLOSE_STDERR: " (mt errClosed ((err e) e) ((ok _) "unknown"))) "")))]
+                      (if (err? killed) (str "\nERR_FORMS_KILL: " (match killed ((err e) e) ((ok _) "unknown"))) "")
+                      (if (err? waited) (str "\nERR_FORMS_WAIT: " (match waited ((err e) e) ((ok _) ""))) "")
+                      (if (err? outClosed) (str "\nERR_FORMS_CLOSE_STDOUT: " (match outClosed ((err e) e) ((ok _) "unknown"))) "")
+                      (if (err? errClosed) (str "\nERR_FORMS_CLOSE_STDERR: " (match errClosed ((err e) e) ((ok _) "unknown"))) "")))]
     (jobWith j j.out (str j.errText details) false false (some 1)))
 
 fn ! advanceJobs! cfg: eng/EngineConfig jobs: (List AsyncJob) ready: (List (Pair Int64 Int64)) exited: (List (Pair Int64 Int64)) now: Int64 -> (Pair (List AsyncJob) Bool)
-  (mt (listHead jobs)
+  (match (listHead jobs)
     ((none) (pair (list) false))
     ((some h)
       (let [(updated (updateJob! h ready exited))
@@ -360,7 +360,7 @@ fn ! advanceJobs! cfg: eng/EngineConfig jobs: (List AsyncJob) ready: (List (Pair
 
 fn ! serveClient! st: ServerState clientFd: Int64 -> (Pair ServerState String)
   (let [(frame (tp/readFrame! clientFd "" (+ (monotonicNs) 10000000000) 8388608))]
-    (mt frame
+    (match frame
       ((err _) (do (fdClose clientFd) (pair st "")))
       ((ok raw)
         (let [(line (stringTrim raw))]
@@ -407,7 +407,7 @@ fn ! loop! st0: ServerState -> String
       (else (accept! st))))
 
 fn ! acceptReady! st: ServerState -> String
-  (mt (sockAccept st.listener)
+  (match (sockAccept st.listener)
     ((err _) (loop! st))
     ((ok clientFd)
       (let [(served (serveClient! st clientFd))]
@@ -423,7 +423,7 @@ fn completedWork? before: (List AsyncJob) after: (List AsyncJob) -> Bool
               (and (!= j.kind "sleep") (not (containsJobClient? after j.clientFd)))) before)
 
 fn ! accept! st: ServerState -> String
-  (mt (procPoll (listAppend (list (pair st.listener 1)) (jobsWatchFds st.pending)) (jobsPids st.pending) 250)
+  (match (procPoll (listAppend (list (pair st.listener 1)) (jobsWatchFds st.pending)) (jobsPids st.pending) 250)
     ((err e) (shutdown! st (str "listener poll failed: " e)))
     ((ok polled)
       (let [(ready (pairFirst polled))
@@ -453,7 +453,7 @@ fn ! serve! rootDir: String scope: String build: bld/EngineBuild -> (Result Stri
         (_ (makeParents! cfg0.socketPath))
         (_ (makeParents! cfg0.pidFile))
         (_ (makeParents! cfg0.logFile))]
-    (mt (eng/cmdStart! rootDir scope true false)
+    (match (eng/cmdStart! rootDir scope true false)
       ((err e) (err e))
       ((ok rt0)
         (let [(cfg rt0.config)
@@ -461,7 +461,7 @@ fn ! serve! rootDir: String scope: String build: bld/EngineBuild -> (Result Stri
               (_ (pathRemove (stateFile cfg)))
               (rt (eng/withBuild (eng/withSupervisor rt0 carried) build))
               (_ (pathRemove cfg.socketPath))]
-          (mt (unixListen cfg.socketPath)
+          (match (unixListen cfg.socketPath)
             ((err e)
               (do (lse/releaseLease! rt.lease)
                   (pathRemove cfg.pidFile)

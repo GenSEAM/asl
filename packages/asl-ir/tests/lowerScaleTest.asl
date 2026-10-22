@@ -15,7 +15,7 @@ fn thisFile -> String
 fn depDecl i: Int64 -> String
   (str "(enum E" i " (:c a" i " [(x Int64)] \"a\") (:c b" i " [] \"b\"))\n"
        "(schema S" i " (:f x Int64) (:f y Int64 :default " i "))\n"
-       "fn d" i " e: E" i " -> Int64\n  (mt e ((a" i " x) x) ((b" i ") " i "))\n\n")
+       "fn d" i " e: E" i " -> Int64\n  (match e ((a" i " x) x) ((b" i ") " i "))\n\n")
 
 fn depSource n: Int64 -> String
   (str "(module q/dep :x [" (stringJoin (map (fn [(i Int64)] -> String (str "E" i " S" i " d" i)) (range 0 n)) " ") "] :i [])\n\n"
@@ -24,14 +24,14 @@ fn depSource n: Int64 -> String
 fn mainDecl i: Int64 -> String
   (str "(enum M" i " (:c m" i " [(x Int64)] \"m\") (:c n" i " [] \"n\"))\n"
        "(schema T" i " (:f x Int64) (:f z Int64 :default " i "))\n"
-       "fn u" i " -> Int64\n  (+ (dep/d" i " (a" i " " i ")) (mt (m" i " " i ") ((m" i " x) (+ x (T" i " :x 1).z)) ((n" i ") 0)))\n\n")
+       "fn u" i " -> Int64\n  (+ (dep/d" i " (a" i " " i ")) (match (m" i " " i ") ((m" i " x) (+ x (T" i " :x 1).z)) ((n" i ") 0)))\n\n")
 
 fn mainSource n: Int64 -> String
   (str "(module q/main :x [" (stringJoin (map (fn [(i Int64)] -> String (str "u" i)) (range 0 n)) " ") "] :i [(q/dep :a dep)])\n\n"
        (stringJoin (map mainDecl (range 0 n)) ""))
 
 fn parsed src: String -> (List ast/TopForm)
-  (mt (ast/parse src) ((ok forms) forms) ((err _) (list)))
+  (match (ast/parse src) ((ok forms) forms) ((err _) (list)))
 
 fn ! lowerOnce n: Int64 mode: String -> (Result Int64 String)
   (let [(depForms (parsed (depSource n)))
@@ -41,7 +41,7 @@ fn ! lowerOnce n: Int64 mode: String -> (Result Int64 String)
         (parsedSize (+ (listLength depForms) (+ (listLength mainForms) (listLength (mapKeys positions)))))]
     (if (= mode "build")
       (ok parsedSize)
-      (mt (low/lowerLinked mainForms positions (low/LinkScope :path "q/main.asl" :imports (mapSet (mapEmpty) "dep" depForms) :prelude (list) :strings (list) :only (none)))
+      (match (low/lowerLinked mainForms positions (low/LinkScope :path "q/main.asl" :imports (mapSet (mapEmpty) "dep" depForms) :prelude (list) :strings (list) :only (none)))
         ((ok m) (ok (+ (listLength m.functions) (listLength m.types))))
         ((err ds) (err (str (listLength ds) " diag(s), first " (optionOr (listHead (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message " @ " d.locus)) ds)) "")))))))
 
@@ -74,20 +74,20 @@ fn ! main args: (List String) -> (Result Int64 String)
         (n (optionOr (stringToInt64 (optionOr (listGet args 1) "")) -1))]
     (if (or (< n 0) (not (listContains? (list "build" "lower" "chainBuild" "chainVerify") mode)))
       (err "usage: lowerScaleTest build|lower|chainBuild|chainVerify N")
-      (mt (runMode mode n)
+      (match (runMode mode n)
         ((ok size) (do (println (str "(lowerScale :mode " mode " :n " n " :size " size ")")) (ok 0)))
         ((err e) (err e)))))
 
 fn bytesAllocated text: String -> Int64
   (let [(line (optionOr (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:gcStats ")) (stringSplit text "\n"))) ""))
         (tokens (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit line " ")))]
-    (mt (listIndexOf tokens ":bytesAllocated")
+    (match (listIndexOf tokens ":bytesAllocated")
       ((some i) (optionOr (stringToInt64 (stringReplace (optionOr (listGet tokens (+ i 1)) "") ")" "")) -1))
       ((none) -1)))
 
 fn ! childBytes mode: String n: Int64 -> Int64
   (let [(built (nt/prepareRun (thisFile) (nt/fingerprint)))]
-    (mt built.binary
+    (match built.binary
       ((none) (do (assert false (str "lowerScaleTest builds natively: " built.reason)) -1))
       ((some bin)
        (let [(done (run/runOneLimited (run/job (list bin mode (stringFromInt64 n)) "." (run/childEnv (list "ASL_GC_STATS=1"))) (run/limits 300 4)))]
@@ -108,12 +108,12 @@ fn ! lowerModuleDigest n: Int64 -> (Result String String)
         (mainSrc (mainSource n))
         (mainForms (parsed mainSrc))
         (positions (low/declPositions mainSrc))]
-    (mt (low/lowerLinked mainForms positions (low/LinkScope :path "q/main.asl" :imports (mapSet (mapEmpty) "dep" depForms) :prelude (list) :strings (list) :only (none)))
+    (match (low/lowerLinked mainForms positions (low/LinkScope :path "q/main.asl" :imports (mapSet (mapEmpty) "dep" depForms) :prelude (list) :strings (list) :only (none)))
       ((ok m) (ok (stringFromInt64 (zstdAslXxhHash (stringToBytes (pr/printSsa m))))))
       ((err ds) (err (str (listLength ds) " diag(s), first " (optionOr (listHead (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message " @ " d.locus)) ds)) ""))))))
 
 fn ! testShape -> Bool
-  (mt (lowerOnce 3 "lower")
+  (match (lowerOnce 3 "lower")
     ((err e) (do (assert false (str "the 3-wide synthetic module lowers: " e)) false))
     ((ok size) (do (assert (> size 6) (str "the lowered module has functions and types: " size)) true)))
 
@@ -125,7 +125,7 @@ fn ! testLowerIsLinear -> Bool
     (do (assert (<= (* large 100) (* small 215))
                 (str "lowerLinked of a module with n enums, schemas and functions importing a module of n more allocates linearly: 2n "
                      large " bytes vs n " small ", above 2.15x"))
-        (mt digestRes
+        (match digestRes
           ((ok d) (do (assert (= d "-2335005752323814402") (str "lowered module of n=2 digest " d " matches recorded, traced to an independent xxh64(seed 0) of the printed SSA text")) true))
           ((err e) (do (assert false (str "lowerModuleDigest 2 failed: " e)) false)))))
 
@@ -135,7 +135,7 @@ fn refSuccessorMap blocks: (List ty/SsaBlock) -> (Map String (List String))
         (mapEmpty) blocks)
 
 fn refReachable work: (List String) seen: (Map String Bool) succs: (Map String (List String)) -> (Map String Bool)
-  (mt (listHead work)
+  (match (listHead work)
     ((none) seen)
     ((some b) (let [(rest (optionOr (listTail work) (list)))]
                 (if (mapHas? seen b)
@@ -180,7 +180,7 @@ fn sameSets? a: (List String) b: (List String) -> Bool
   (and (listAll? (fn [(x String)] -> Bool (listContains? b x)) a) (listAll? (fn [(x String)] -> Bool (listContains? a x)) b))
 
 fn referenceSets f: ty/SsaFunction -> (Map String (List String))
-  (mt (listHead f.blocks)
+  (match (listHead f.blocks)
     ((none) (mapEmpty))
     ((some e) (let [(labels (map (fn [(b ty/SsaBlock)] -> String b.label) f.blocks))
                     (succs (refSuccessorMap f.blocks))
@@ -200,7 +200,7 @@ fn ! testDominatorsMatchReference -> Bool
                                             (ty/ssaBlock "body" (list) (list) (ty/termBranch "c" (ty/ssaEdge "head" (list)) (ty/ssaEdge "exit" (list))))
                                             (ty/ssaBlock "dead" (list) (list) (ty/termJump (ty/ssaEdge "exit" (list))))
                                             (ty/ssaBlock "exit" (list) (list) (ty/termReturn "c"))))))
-        (corpus (mt (lk/linkEntry! "asl/packages/asl-forms/tests/checkSemanticTest.asl") ((ok m) m.functions) ((err _) (list))))
+        (corpus (match (lk/linkEntry! "asl/packages/asl-forms/tests/checkSemanticTest.asl") ((ok m) m.functions) ((err _) (list))))
         (all (listAppend shapes corpus))
         (bad (filter (fn [(f ty/SsaFunction)] -> Bool (not (listEmpty? (mismatches f)))) all))
         (loopSets (vfy/dominatorSets (optionOr (listGet shapes 3) (chainFunction 0))))]

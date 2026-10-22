@@ -16,19 +16,19 @@ fn ! safeGitCmd! root: String args: (List String) -> cp/ProcessCmd
 
 fn ! gitExec! root: String args: (List String) stdin: (Option String) -> (Result cp/ProcessOutput String)
   (let [(c0 (safeGitCmd! root args))
-        (c1 (mt stdin ((some s) (cp/withStdin c0 s)) ((none) c0)))]
-    (mt (cp/exec! c1)
+        (c1 (match stdin ((some s) (cp/withStdin c0 s)) ((none) c0)))]
+    (match (cp/exec! c1)
       ((err _) (err (str "git " (stringJoin args " ") " could not run")))
       ((ok o) (ok o))))
 
 fn ! gitSafe! root: String args: (List String) -> (Result String String)
-  (mt (gitExec! root args (none))
+  (match (gitExec! root args (none))
     ((err e) (err e))
     ((ok o) (if (= o.exitCode 0) (ok (stringTrim o.stdout)) (err (str "git " (stringJoin args " ") ": " (stringTrim o.stderr))))))
 
 fn ! verifyContained! root: String -> (Result String String)
   (let [(real (resultOr (realPath root) root))]
-    (mt (gitSafe! root (list "rev-parse" "--show-toplevel"))
+    (match (gitSafe! root (list "rev-parse" "--show-toplevel"))
       ((err e) (err (str "fixture root " root " is not its own git repository: " e)))
       ((ok top)
        (let [(topReal (resultOr (realPath top) top))]
@@ -37,17 +37,17 @@ fn ! verifyContained! root: String -> (Result String String)
            (err (str "git toplevel " topReal " for fixture root " real " does not match; refusing to touch it")))))))
 
 fn ! gitWrite! root: String args: (List String) stdin: (Option String) -> (Result String String)
-  (mt (verifyContained! root)
+  (match (verifyContained! root)
     ((err e) (err e))
     ((ok _)
-     (mt (gitExec! root args stdin)
+     (match (gitExec! root args stdin)
        ((err e) (err e))
        ((ok o) (if (= o.exitCode 0) (ok (stringTrim o.stdout)) (err (str "git " (stringJoin args " ") ": " (stringTrim o.stderr))))))))
 
 fn ! initContained! root: String -> (Result String String)
-  (mt (dirCreate root)
+  (match (dirCreate root)
     ((err e) (err (str "cannot create fixture root " root ": " e)))
     ((ok _)
-     (mt (gitSafe! root (list "init" "-q"))
+     (match (gitSafe! root (list "init" "-q"))
        ((err e) (err (str "git init failed in " root ": " e)))
        ((ok _) (verifyContained! root)))))

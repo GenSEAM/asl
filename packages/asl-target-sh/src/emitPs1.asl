@@ -47,8 +47,8 @@ fn formatPs1Expr expr: ast/ShExpr -> String
       ((= tag "binOp")
         (let [(lOpt expr.left)
               (rOpt expr.right)]
-          (let [(l (mt lOpt ((some x) (formatPs1Expr x)) ((none) "")))
-                (r (mt rOpt ((some y) (formatPs1Expr y)) ((none) "")))]
+          (let [(l (match lOpt ((some x) (formatPs1Expr x)) ((none) "")))
+                (r (match rOpt ((some y) (formatPs1Expr y)) ((none) "")))]
             (str l " " expr.op " " r))))
       (else "")))
 

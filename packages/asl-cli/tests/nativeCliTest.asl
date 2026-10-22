@@ -38,17 +38,17 @@ fn tokens line: String b: Bytes i: Int64 n: Int64 acc: (List String) -> (Result 
     ((or (or (= (bytesGet b i) 32) (= (bytesGet b i) 9)) (or (= (bytesGet b i) 40) (= (bytesGet b i) 41))) (tokens line b (+ i 1) n acc))
     ((= (bytesGet b i) 91) (tokens line b (+ i 1) n (cons "[" acc)))
     ((= (bytesGet b i) 93) (tokens line b (+ i 1) n (cons "]" acc)))
-    ((= (bytesGet b i) 34) (mt (readText line b (+ i 1) n (+ i 1) (list)) ((err e) (err e)) ((ok p) (tokens line b (pairSecond p) n (cons (str "s:" (pairFirst p)) acc)))))
+    ((= (bytesGet b i) 34) (match (readText line b (+ i 1) n (+ i 1) (list)) ((err e) (err e)) ((ok p) (tokens line b (pairSecond p) n (cons (str "s:" (pairFirst p)) acc)))))
     (else (let [(j (atomStop b i n))] (tokens line b j n (cons (optionOr (stringSlice line i j) "") acc)))))
 
 fn textOf tok: String -> (Option String)
   (if (stringStartsWith? tok "s:") (stringSlice tok 2 (stringLength tok)) (none))
 
 fn after toks: (List String) key: String -> (List String)
-  (mt (listIndexOf toks key) ((some i) (listDrop toks (+ i 1))) ((none) (list)))
+  (match (listIndexOf toks key) ((some i) (listDrop toks (+ i 1))) ((none) (list)))
 
 fn untilClose toks: (List String) acc: (List String) -> (List String)
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (listReverse acc))
     ((some t) (if (= t "]") (listReverse acc) (untilClose (listDrop toks 1) (cons (optionOr (textOf t) t) acc)))))
 
@@ -56,7 +56,7 @@ fn vectorOf toks: (List String) -> (List String)
   (if (= (optionOr (listHead toks) "") "[") (untilClose (listDrop toks 1) (list)) (list))
 
 fn readCase line: String -> (Result Case String)
-  (mt (let [(b (stringToBytes line))] (tokens line b 0 (bytesLength b) (list)))
+  (match (let [(b (stringToBytes line))] (tokens line b 0 (bytesLength b) (list)))
     ((err e) (err e))
     ((ok toks)
       (let [(id (optionOr (textOf (optionOr (listHead (after toks ":id")) "")) ""))
@@ -70,10 +70,10 @@ fn readCase line: String -> (Result Case String)
 
 fn readCases text: String -> (Result (List Case) String)
   (fold (fn [(acc (Result (List Case) String)) (line String)] -> (Result (List Case) String)
-          (mt acc
+          (match acc
             ((err e) (err e))
             ((ok cs) (if (stringStartsWith? (stringTrim line) "(:case ")
-                       (mt (readCase (stringTrim line)) ((err e) (err e)) ((ok c) (ok (listAppend cs (list c)))))
+                       (match (readCase (stringTrim line)) ((err e) (err e)) ((ok c) (ok (listAppend cs (list c)))))
                        (ok cs)))))
         (ok (list)) (stringLines text))
 
@@ -96,9 +96,9 @@ fn cliEnv root: String host: String errFile: String overrides: (List String) -> 
     overrides)
 
 fn ! hostWitness! path: String -> (Result Unit String)
-  (mt (fileWrite path "#!/bin/sh\necho \"host-invoked $*\" >> \"$ASL_HOST_WITNESS\"\nexit 97\n")
+  (match (fileWrite path "#!/bin/sh\necho \"host-invoked $*\" >> \"$ASL_HOST_WITNESS\"\nexit 97\n")
     ((err e) (err e))
-    ((ok _) (mt (fileChmod path 493) ((err e) (err e)) ((ok _) (ok ())))))
+    ((ok _) (match (fileChmod path 493) ((err e) (err e)) ((ok _) (ok ())))))
 
 fn expand s: String root: String sweep: String -> String
   (stringReplace (stringReplace s "$SWEEP" sweep) "$ROOT" root)
@@ -128,20 +128,20 @@ fn ! git! dir: String args: (List String) -> (Result Unit String)
     (if (and (= d.verdict "exit") (= d.exit 0)) (ok ()) (err (str "git " (stringJoin args " ") ": " d.out))))
 
 fn ! copyFixture! root: String dir: String name: String -> (Result Unit String)
-  (mt (fileReadString (str root "/asl/packages/asl-cli/tests/fixtures/sweep/" name))
+  (match (fileReadString (str root "/asl/packages/asl-cli/tests/fixtures/sweep/" name))
     ((err e) (err (str "cannot read fixture " name)))
-    ((ok text) (mt (fileWrite (str dir "/tests/" name) text) ((err e) (err (str "cannot write " name))) ((ok _) (ok ())))))
+    ((ok text) (match (fileWrite (str dir "/tests/" name) text) ((err e) (err (str "cannot write " name))) ((ok _) (ok ())))))
 
 fn ! prepareSweep! root: String -> (Result String String)
   (let [(dir (str root "/.asl/cache/nativeCliSweep/" (stringFromInt64 (procSelf))))]
-    (mt (dirCreate (str dir "/tests"))
+    (match (dirCreate (str dir "/tests"))
       ((err e) (err (str "cannot create " dir)))
       ((ok _)
         (let [(steps (list (copyFixture! root dir "passTest.asl") (copyFixture! root dir "failTest.asl") (copyFixture! root dir "zeroTest.asl")
                            (git! dir (list "init" "-q")) (git! dir (list "add" "-A"))
                            (git! dir (list "-c" "user.name=nativeCliTest" "-c" "user.email=nativeCliTest@localhost" "commit" "-q" "-m" "sweep fixture"))))]
-          (mt (listHead (filter err? steps))
-            ((some bad) (mt bad ((err e) (err e)) ((ok _) (err "unreachable"))))
+          (match (listHead (filter err? steps))
+            ((some bad) (match bad ((err e) (err e)) ((ok _) (err "unreachable"))))
             ((none) (ok dir)))))))
 
 fn knownGapIds -> (List String)
@@ -161,7 +161,7 @@ fn testGatewayVerbsAreForms! -> Bool
 
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
-        (cases (mt (fileReadString (str root "/asl/packages/asl-cli/tests/fixtures/argv.asn")) ((err _) (err "argv.asn unreadable: run from the workspace root")) ((ok text) (readCases text))))
+        (cases (match (fileReadString (str root "/asl/packages/asl-cli/tests/fixtures/argv.asn")) ((err _) (err "argv.asn unreadable: run from the workspace root")) ((ok text) (readCases text))))
         (allCases (resultOr cases (list)))
         (liveCases (replayable allCases))
         (built (nt/prepareRun "asl/packages/asl-cli/src/native.asl" (nt/fingerprint)).binary)
@@ -172,7 +172,7 @@ fn ! runTests -> Bool
         (sweep (prepareSweep! root))
         (sweepDir (resultOr sweep "/nonexistent/sweep"))
         (warm (warmCli! root errFile host))
-        (found (mt (if (ok? sweep) built (none))
+        (found (match (if (ok? sweep) built (none))
                  ((none) (list))
                  ((some bin) (map (fn [(c Case)] -> (Pair String (List String)) (pair c.id (replay! c bin root errFile sweepDir host))) liveCases))))
         (problems (fold (fn [(acc (List String)) (p (Pair String (List String)))] -> (List String) (if (listEmpty? (pairSecond p)) acc (listAppend acc (list (str "case " (pairFirst p) ": " (stringJoin (pairSecond p) "; ")))))) (list) found))
@@ -182,11 +182,11 @@ fn ! runTests -> Bool
         (hostLogGone (if (fileExists? hostLog) (pathRemove hostLog) (ok ())))
         (sweepGone (if (ok? sweep) (pathRemove sweepDir) (ok ())))]
     (do
-      (assert (ok? cases) (mt cases ((err e) e) ((ok _) "cases read")))
+      (assert (ok? cases) (match cases ((err e) e) ((ok _) "cases read")))
       (assert (listAny? (fn [(c Case)] -> Bool (= c.id "buildHostAbsent")) allCases) "the known BUILD-HOSTBIN gap case stays in the fixture")
-      (assert (ok? witnessWritten) (mt witnessWritten ((err e) (str "host witness stub: " e)) ((ok _) "host witness stub written")))
+      (assert (ok? witnessWritten) (match witnessWritten ((err e) (str "host witness stub: " e)) ((ok _) "host witness stub written")))
       (assert (some? built) "asl/packages/asl-cli/src/native.asl builds natively")
-      (assert (ok? sweep) (mt sweep ((err e) (str "sweep workspace: " e)) ((ok _) "sweep workspace")))
+      (assert (ok? sweep) (match sweep ((err e) (str "sweep workspace: " e)) ((ok _) "sweep workspace")))
       (assert (and (= warm.verdict "exit") (= warm.exit 0)) (str "the workspace CLI that cases re-enter as $ROOT/bin/asl is built before replay: " warm.verdict " " (stringFromInt64 warm.exit) " " warm.out))
       (assert (> (listLength found) 0) "at least one case replayed")
       (assert (= (listLength found) (listLength liveCases)) "every live case replayed")

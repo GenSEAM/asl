@@ -140,30 +140,30 @@ fn tzifBlock bs: Bytes at: Int64 counts: (List Int64) timeSize: Int64 n: Int64 -
       ((< typecnt 1) (err "TZif file has no local time types"))
       ((> leap 0) (err "TZif leap-second tables are not supported"))
       (else
-        (mt (tzifTransitions bs at idxAt typesAt timeSize 0 timecnt typecnt (list))
+        (match (tzifTransitions bs at idxAt typesAt timeSize 0 timecnt typecnt (list))
           ((err e) (err e))
           ((ok trans)
-            (mt (if (= timeSize 8) (tzifFooter bs end) (ok ""))
+            (match (if (= timeSize 8) (tzifFooter bs end) (ok ""))
               ((err e) (err e))
               ((ok footer)
                 (if (stringEmpty? footer)
                   (ok (Zone :transitions trans :firstOff (be32 bs typesAt) :rule (none)))
-                  (mt (posixParse footer)
+                  (match (posixParse footer)
                     ((err e) (err (str "TZif footer: " e)))
                     ((ok r) (ok (Zone :transitions trans :firstOff (be32 bs typesAt) :rule (some r)))))))))))))
 
 fn zoneFromPosix s: String -> (Result Zone String)
-  (mt (posixParse s)
+  (match (posixParse s)
     ((err e) (err e))
     ((ok r) (ok (Zone :transitions (list) :firstOff r.stdOff :rule (some r)))))
 
 fn zoneFile! path: String -> (Result Zone String)
-  (mt (fileReadBytes path)
+  (match (fileReadBytes path)
     ((err e) (err e))
     ((ok bs) (zoneFromTzif bs)))
 
 fn zoneLoad! tz: (Option String) -> (Result Zone String)
-  (mt tz
+  (match tz
     ((none) (zoneOrUtc! "/etc/localtime" ""))
     ((some s)
       (cond
@@ -174,13 +174,13 @@ fn zoneLoad! tz: (Option String) -> (Result Zone String)
         (else (zoneOrUtc! (if (stringStartsWith? s "/") s (str "/usr/share/zoneinfo/" s)) s)))))
 
 fn zoneOrUtc! path: String posix: String -> (Result Zone String)
-  (let [(fromFile (mt (fileStat path) ((ok st) (if st.isFile (zoneFile! path) (err "not a file"))) ((err e) (err e))))]
-    (mt fromFile
+  (let [(fromFile (match (fileStat path) ((ok st) (if st.isFile (zoneFile! path) (err "not a file"))) ((err e) (err e))))]
+    (match fromFile
       ((ok z) (ok z))
       ((err _)
         (if (stringEmpty? posix)
           (ok (utcZone))
-          (mt (zoneFromPosix posix) ((ok z) (ok z)) ((err _) (ok (utcZone))))))))
+          (match (zoneFromPosix posix) ((ok z) (ok z)) ((err _) (ok (utcZone))))))))
 
 fn charAt s: String i: Int64 -> String
   (optionOr (stringSlice s i (+ i 1)) "")
@@ -208,13 +208,13 @@ fn posixNumber s: String i: Int64 -> (Result (Pair Int64 Int64) String)
   (let [(j (scanWhile s i isDigit?))]
     (if (= j i)
       (err (str "digits expected at " (stringFromInt64 i)))
-      (mt (stringToInt64 (optionOr (stringSlice s i j) ""))
+      (match (stringToInt64 (optionOr (stringSlice s i j) ""))
         ((some v) (ok (pair v j)))
         ((none) (err (str "number out of range at " (stringFromInt64 i)))))))
 
 fn posixClockPart s: String i: Int64 acc: Int64 -> (Result (Pair Int64 Int64) String)
   (if (= (charAt s i) ":")
-    (mt (posixNumber s (+ i 1))
+    (match (posixNumber s (+ i 1))
       ((err e) (err e))
       ((ok p) (if (> (pairFirst p) 59) (err (str "minutes or seconds above 59 at " (stringFromInt64 i))) (ok (pair (+ (* acc 60) (pairFirst p)) (pairSecond p))))))
     (ok (pair acc i)))
@@ -223,15 +223,15 @@ fn posixClock s: String i: Int64 maxHours: Int64 -> (Result (Pair Int64 Int64) S
   (let [(sign (charAt s i))
         (neg (= sign "-"))
         (at (if (or neg (= sign "+")) (+ i 1) i))]
-    (mt (posixNumber s at)
+    (match (posixNumber s at)
       ((err e) (err e))
       ((ok hp)
         (if (> (pairFirst hp) maxHours)
           (err (str "hours above " (stringFromInt64 maxHours) " at " (stringFromInt64 at)))
-          (mt (posixClockPart s (pairSecond hp) (pairFirst hp))
+          (match (posixClockPart s (pairSecond hp) (pairFirst hp))
             ((err e) (err e))
             ((ok mp)
-              (mt (posixClockPart s (pairSecond mp) (pairFirst mp))
+              (match (posixClockPart s (pairSecond mp) (pairFirst mp))
                 ((err e) (err e))
                 ((ok sp)
                   (let [(secs (if (= (pairSecond mp) (pairSecond hp)) (* (pairFirst hp) 3600) (if (= (pairSecond sp) (pairSecond mp)) (* (pairFirst mp) 60) (pairFirst sp))))]
@@ -240,54 +240,54 @@ fn posixClock s: String i: Int64 maxHours: Int64 -> (Result (Pair Int64 Int64) S
 fn posixDate s: String i: Int64 -> (Result (Pair RuleDate Int64) String)
   (cond
     ((= (charAt s i) "J")
-      (mt (posixNumber s (+ i 1))
+      (match (posixNumber s (+ i 1))
         ((err e) (err e))
         ((ok p) (if (or (< (pairFirst p) 1) (> (pairFirst p) 365)) (err "Jn day outside 1..365") (ok (pair (julianNoLeap (pairFirst p)) (pairSecond p)))))))
     ((= (charAt s i) "M")
-      (mt (posixNumber s (+ i 1))
+      (match (posixNumber s (+ i 1))
         ((err e) (err e))
         ((ok mp)
           (if (not (= (charAt s (pairSecond mp)) "."))
             (err "Mm.w.d expects . after the month")
-            (mt (posixNumber s (+ (pairSecond mp) 1))
+            (match (posixNumber s (+ (pairSecond mp) 1))
               ((err e) (err e))
               ((ok wp)
                 (if (not (= (charAt s (pairSecond wp)) "."))
                   (err "Mm.w.d expects . after the week")
-                  (mt (posixNumber s (+ (pairSecond wp) 1))
+                  (match (posixNumber s (+ (pairSecond wp) 1))
                     ((err e) (err e))
                     ((ok dp)
                       (if (or (< (pairFirst mp) 1) (> (pairFirst mp) 12) (< (pairFirst wp) 1) (> (pairFirst wp) 5) (> (pairFirst dp) 6))
                         (err "Mm.w.d field out of range")
                         (ok (pair (monthWeekDay (pairFirst mp) (pairFirst wp) (pairFirst dp)) (pairSecond dp)))))))))))))
     (else
-      (mt (posixNumber s i)
+      (match (posixNumber s i)
         ((err e) (err e))
         ((ok p) (if (> (pairFirst p) 365) (err "n day outside 0..365") (ok (pair (julianZero (pairFirst p)) (pairSecond p))))))))
 
 fn posixDateTime s: String i: Int64 -> (Result (List Int64) String)
-  (mt (posixDate s i)
+  (match (posixDate s i)
     ((err e) (err e))
     ((ok dp)
       (if (= (charAt s (pairSecond dp)) "/")
-        (mt (posixClock s (+ (pairSecond dp) 1) 167)
+        (match (posixClock s (+ (pairSecond dp) 1) 167)
           ((err e) (err e))
           ((ok tp) (ok (list (pairSecond tp) (pairFirst tp)))))
         (ok (list (pairSecond dp) 7200)))))
 
 fn posixDateAt s: String i: Int64 -> RuleDate
-  (mt (posixDate s i) ((ok dp) (pairFirst dp)) ((err _) (julianZero 0)))
+  (match (posixDate s i) ((ok dp) (pairFirst dp)) ((err _) (julianZero 0)))
 
 fn posixRules s: String i: Int64 stdOff: Int64 dstOff: Int64 -> (Result PosixRule String)
   (if (not (= (charAt s i) ","))
     (err (str "rule expects , at " (stringFromInt64 i)))
-    (mt (posixDateTime s (+ i 1))
+    (match (posixDateTime s (+ i 1))
       ((err e) (err e))
       ((ok st)
         (let [(afterStart (nth st 0))]
           (if (not (= (charAt s afterStart) ","))
             (err (str "rule expects , before the end date at " (stringFromInt64 afterStart)))
-            (mt (posixDateTime s (+ afterStart 1))
+            (match (posixDateTime s (+ afterStart 1))
               ((err e) (err e))
               ((ok en)
                 (if (not (= (nth en 0) (stringLength s)))
@@ -297,22 +297,22 @@ fn posixRules s: String i: Int64 stdOff: Int64 dstOff: Int64 -> (Result PosixRul
                                             :end (posixDateAt s (+ afterStart 1)) :endTime (nth en 1)))))))))))))
 
 fn posixParse s: String -> (Result PosixRule String)
-  (mt (posixName s 0)
+  (match (posixName s 0)
     ((err e) (err e))
     ((ok i)
-      (mt (posixClock s i 24)
+      (match (posixClock s i 24)
         ((err e) (err e))
         ((ok op)
           (let [(stdOff (- 0 (pairFirst op))) (j (pairSecond op))]
             (if (= j (stringLength s))
               (ok (PosixRule :stdOff stdOff :dst (none)))
-              (mt (posixName s j)
+              (match (posixName s j)
                 ((err e) (err e))
                 ((ok k)
                   (let [(c (charAt s k))
                         (hasOff (or (isDigit? c) (= c "+") (= c "-")))]
                     (if hasOff
-                      (mt (posixClock s k 24)
+                      (match (posixClock s k 24)
                         ((err e) (err e))
                         ((ok dp) (posixDstTail s (pairSecond dp) stdOff (- 0 (pairFirst dp)))))
                       (posixDstTail s k stdOff (+ stdOff 3600))))))))))))
@@ -324,7 +324,7 @@ fn posixDstTail s: String i: Int64 stdOff: Int64 dstOff: Int64 -> (Result PosixR
 
 fn ruleDays y: Int64 rd: RuleDate -> Int64
   (let [(jan1 (daysFromCivil y 1 1))]
-    (mt rd
+    (match rd
       ((julianNoLeap n) (+ jan1 (- n 1) (if (and (leapYear? y) (>= n 60)) 1 0)))
       ((julianZero n) (+ jan1 n))
       ((monthWeekDay m w d)
@@ -339,7 +339,7 @@ fn yearOf t: Int64 -> Int64
   (nth (civilFromDays (/ t 86400)) 0)
 
 fn ruleOffset r: PosixRule t: Int64 -> Int64
-  (mt r.dst
+  (match r.dst
     ((none) r.stdOff)
     ((some d)
       (let [(y (yearOf (+ t r.stdOff)))
@@ -403,22 +403,22 @@ fn parseHttpDateEpochSeconds text: String -> (Option Float64)
     (if (!= (listLength parts) 6) none
       (let [(clockParts (stringSplit (optionOr (listGet parts 4) "") ":"))]
         (if (!= (listLength clockParts) 3) none
-          (mt (stringToInt64 (optionOr (listGet parts 1) ""))
+          (match (stringToInt64 (optionOr (listGet parts 1) ""))
             ((none) none)
             ((some day)
-             (mt (httpDateMonthNumber (optionOr (listGet parts 2) ""))
+             (match (httpDateMonthNumber (optionOr (listGet parts 2) ""))
                ((none) none)
                ((some mon)
-                (mt (stringToInt64 (optionOr (listGet parts 3) ""))
+                (match (stringToInt64 (optionOr (listGet parts 3) ""))
                   ((none) none)
                   ((some year)
-                   (mt (stringToInt64 (optionOr (listGet clockParts 0) ""))
+                   (match (stringToInt64 (optionOr (listGet clockParts 0) ""))
                      ((none) none)
                      ((some hour)
-                      (mt (stringToInt64 (optionOr (listGet clockParts 1) ""))
+                      (match (stringToInt64 (optionOr (listGet clockParts 1) ""))
                         ((none) none)
                         ((some minute)
-                         (mt (stringToInt64 (optionOr (listGet clockParts 2) ""))
+                         (match (stringToInt64 (optionOr (listGet clockParts 2) ""))
                            ((none) none)
                            ((some sec)
                             (if (or (< day 1) (or (> day 31) (not (httpDateClockOk? hour minute sec))))

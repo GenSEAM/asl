@@ -13,22 +13,22 @@ fn fixturePath -> String
   "asl/packages/asl-gateway/tests/searchResearchFixture.asn"
 
 fn jstrOf v: j/Json -> String
-  (mt v ((j/jstr s) s) (_ ""))
+  (match v ((j/jstr s) s) (_ ""))
 
 fn arg args: j/Json i: Int64 -> j/Json
-  (mt args ((j/jarr xs) (optionOr (listGet xs i) (j/jnull))) (_ (j/jnull)))
+  (match args ((j/jarr xs) (optionOr (listGet xs i) (j/jnull))) (_ (j/jnull)))
 
 fn argS args: j/Json i: Int64 -> String
   (jstrOf (arg args i))
 
 fn argI args: j/Json i: Int64 -> Int64
-  (mt (arg args i) ((j/jint k) k) (_ 0))
+  (match (arg args i) ((j/jint k) k) (_ 0))
 
 fn argB args: j/Json i: Int64 -> Bool
   (pt/pyTruthy (arg args i))
 
 fn argL args: j/Json i: Int64 -> (List j/Json)
-  (mt (arg args i) ((j/jarr xs) xs) (_ (list)))
+  (match (arg args i) ((j/jarr xs) xs) (_ (list)))
 
 fn field v: j/Json k: String -> j/Json
   (optionOr (pt/jget v k) (j/jnull))
@@ -40,7 +40,7 @@ fn raisesOut e: pt/PyErr -> j/Json
   (j/jobj (list (pair "raises" (j/jstr e.kind)) (pair "message" (j/jstr e.msg))))
 
 fn resOut r: (Result j/Json pt/PyErr) -> j/Json
-  (mt r ((ok v) (valueOut v)) ((err e) (raisesOut e)))
+  (match r ((ok v) (valueOut v)) ((err e) (raisesOut e)))
 
 fn strsJ xs: (List String) -> j/Json
   (j/jarr (map (fn [(s String)] -> j/Json (j/jstr s)) xs))
@@ -52,7 +52,7 @@ fn pureCase fnName: String args: j/Json ups: j/Json -> j/Json
   (cond
     ((= fnName "clean_url") (valueOut (pt/cleanUrl (arg args 0))))
     ((= fnName "classify_source_kind") (valueOut (j/jstr (rs/classifySourceKind (argS args 0)))))
-    ((= fnName "extract_outermost_sexpr") (valueOut (mt (rs/extractOutermostSexpr (argS args 0)) ((some s) (j/jstr s)) ((none) (j/jnull)))))
+    ((= fnName "extract_outermost_sexpr") (valueOut (match (rs/extractOutermostSexpr (argS args 0)) ((some s) (j/jstr s)) ((none) (j/jnull)))))
     ((= fnName "strip_tags_and_whitespace") (valueOut (j/jstr (rs/stripTagsAndWhitespace (argS args 0)))))
     ((= fnName "html_unescape") (valueOut (j/jstr (pt/htmlUnescape (argS args 0)))))
     ((= fnName "extract_html_tables") (valueOut (rs/extractHtmlTables (argS args 0) (argI args 1) (argI args 2))))
@@ -66,44 +66,44 @@ fn pureCase fnName: String args: j/Json ups: j/Json -> j/Json
     ((= fnName "research_words") (valueOut (strsJ (rs/researchWords (arg args 0)))))
     ((= fnName "research_quote_found") (valueOut (j/jbool (rs/researchQuoteFound (arg args 0) (arg args 1)))))
     ((= fnName "research_relation")
-      (resOut (mt (rs/asnRead (argS args 0))
+      (resOut (match (rs/asnRead (argS args 0))
                 ((err e) (err e))
-                ((ok forms) (mt (rs/researchRelation (optionOr (listHead forms) (j/jnull))) ((err e) (err e)) ((ok r) (ok (strsJ r))))))))
+                ((ok forms) (match (rs/researchRelation (optionOr (listHead forms) (j/jnull))) ((err e) (err e)) ((ok r) (ok (strsJ r))))))))
     ((= fnName "research_parse")
-      (resOut (mt (rs/researchParse (arg args 0) (argB args 1)) ((err e) (err e)) ((ok p) (ok (j/jarr (list (pairFirst p) (pairSecond p))))))))
+      (resOut (match (rs/researchParse (arg args 0) (argB args 1)) ((err e) (err e)) ((ok p) (ok (j/jarr (list (pairFirst p) (pairSecond p))))))))
     ((= fnName "research_verify")
-      (resOut (mt (rs/researchParse (arg args 0) (argB args 3))
+      (resOut (match (rs/researchParse (arg args 0) (argB args 3))
                 ((err e) (err e))
-                ((ok p) (rs/researchVerify (pairFirst p) (mt (pairSecond p) ((j/jarr xs) xs) (_ (list))) (argS args 1) (argL args 2) (argB args 3))))))
+                ((ok p) (rs/researchVerify (pairFirst p) (match (pairSecond p) ((j/jarr xs) xs) (_ (list))) (argS args 1) (argL args 2) (argB args 3))))))
     ((= fnName "research_prompt") (valueOut (j/jstr (rs/researchPrompt (argS args 0) (argS args 1) (arg args 2) (argB args 3)))))
-    ((= fnName "research_audit_prompt") (resOut (mt (rs/researchAuditPrompt (argL args 0) (arg args 1)) ((ok s) (ok (j/jstr s))) ((err e) (err e)))))
-    ((= fnName "research_entry_label") (resOut (mt (rs/researchEntryLabel (arg args 0)) ((ok p) (ok (j/jarr (list (pairFirst p) (pairSecond p))))) ((err e) (err e)))))
+    ((= fnName "research_audit_prompt") (resOut (match (rs/researchAuditPrompt (argL args 0) (arg args 1)) ((ok s) (ok (j/jstr s))) ((err e) (err e)))))
+    ((= fnName "research_entry_label") (resOut (match (rs/researchEntryLabel (arg args 0)) ((ok p) (ok (j/jarr (list (pairFirst p) (pairSecond p))))) ((err e) (err e)))))
     ((= fnName "research_entry_provider") (resOut (rs/researchEntryProvider (arg args 0) (upFrom ups))))
-    ((= fnName "json_dumps") (valueOut (j/jstr (pt/jsonDumps (arg args 0) (mt (arg args 1) ((j/jint k) k) (_ -1))))))
+    ((= fnName "json_dumps") (valueOut (j/jstr (pt/jsonDumps (arg args 0) (match (arg args 1) ((j/jint k) k) (_ -1))))))
     ((= fnName "json_loads") (resOut (pt/jsonLoads (argS args 0))))
-    ((= fnName "format_search_asn") (resOut (mt (srch/formatSearchAsn (arg args 0) (argS args 1)) ((ok s) (ok (j/jstr s))) ((err e) (err e)))))
-    ((= fnName "format_research_asn") (resOut (mt (rs/formatResearchAsn (arg args 0) (argB args 1)) ((ok s) (ok (j/jstr s))) ((err e) (err e)))))
+    ((= fnName "format_search_asn") (resOut (match (srch/formatSearchAsn (arg args 0) (argS args 1)) ((ok s) (ok (j/jstr s))) ((err e) (err e)))))
+    ((= fnName "format_research_asn") (resOut (match (rs/formatResearchAsn (arg args 0) (argB args 1)) ((ok s) (ok (j/jstr s))) ((err e) (err e)))))
     (else (raisesOut (pt/pyErr "NoPort" (str "no replay for " fnName)))))
 
 fn cliFrom cli: (List j/Json) -> (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr))
   (fn [(prov String) (model j/Json) (effort j/Json) (prompt String)] -> (Result j/Json pt/PyErr)
-    (mt (listHead (filter (fn [(c j/Json)] -> Bool (and (pt/pyEq (field c "prov") (j/jstr prov)) (pt/pyEq (field c "model") model))) cli))
+    (match (listHead (filter (fn [(c j/Json)] -> Bool (and (pt/pyEq (field c "prov") (j/jstr prov)) (pt/pyEq (field c "model") model))) cli))
       ((none) (err (pt/pyErr "SystemExit" (str "case has no CLI reply for " prov " " (pt/pyStr model)))))
-      ((some c) (mt (pt/jget c "raise") ((some m) (err (pt/pyErr "RuntimeError" (pt/pyStr m)))) ((none) (ok (field c "reply")))))))
+      ((some c) (match (pt/jget c "raise") ((some m) (err (pt/pyErr "RuntimeError" (pt/pyStr m)))) ((none) (ok (field c "reply")))))))
 
 fn optList v: j/Json -> (Option (List j/Json))
-  (mt v ((j/jarr xs) (some xs)) (_ (none)))
+  (match v ((j/jarr xs) (some xs)) (_ (none)))
 
 fn asnWrap key: String r: (Result j/Json pt/PyErr) fmt: (fn [j/Json] -> (Result String pt/PyErr)) -> (Result j/Json pt/PyErr)
-  (mt r
+  (match r
     ((err e) (err e))
-    ((ok v) (mt (fmt v) ((err e) (err e)) ((ok s) (ok (j/jobj (list (pair key v) (pair "asn" (j/jstr s)))))))))
+    ((ok v) (match (fmt v) ((err e) (err e)) ((ok s) (ok (j/jobj (list (pair key v) (pair "asn" (j/jstr s)))))))))
 
 fn ! netCall! st: srch/HubState fnName: String args: j/Json ups: j/Json cli: (List j/Json) -> (Pair (Result j/Json pt/PyErr) srch/HubState)
   (let [(up (upFrom ups)) (disp (cliFrom cli))]
     (cond
-      ((= fnName "do_tavily_search") (pair (ok (srch/doTavilySearch! st (argS args 0) (argI args 1) (mt (arg args 2) ((j/jstr k) (some k)) (_ (none))))) st))
-      ((= fnName "do_serper_search") (pair (ok (srch/doSerperSearch! st (argS args 0) (argI args 1) (mt (arg args 2) ((j/jstr k) (some k)) (_ (none))))) st))
+      ((= fnName "do_tavily_search") (pair (ok (srch/doTavilySearch! st (argS args 0) (argI args 1) (match (arg args 2) ((j/jstr k) (some k)) (_ (none))))) st))
+      ((= fnName "do_serper_search") (pair (ok (srch/doSerperSearch! st (argS args 0) (argI args 1) (match (arg args 2) ((j/jstr k) (some k)) (_ (none))))) st))
       ((= fnName "do_wiki_search") (pair (ok (srch/doWikiSearch! st (argS args 0) (argI args 1))) st))
       ((= fnName "do_searxng_search") (pair (srch/doSearxngSearch! st (argS args 0) (argI args 1)) st))
       ((= fnName "do_ddg_search") (let [(p (srch/doDdgSearch! st (argS args 0) (argI args 1)))] (pair (ok (pairFirst p)) (pairSecond p))))
@@ -153,11 +153,11 @@ fn b64Decode! s: String -> Bytes
     (b64Loop! src (bytesAlloc n) 0 (/ len 4) n))
 
 fn ! must! r: (Result T E) what: String -> Bool
-  (mt r ((ok _) true) ((err e) (do (eprintln (str "setup failed: " what)) false)))
+  (match r ((ok _) true) ((err e) (do (eprintln (str "setup failed: " what)) false)))
 
 fn routeHead r: j/Json -> String
   (pt/treeJoin (listAppend (list "HTTP/1.1 " (pt/pyStr (field r "status")) " " (pt/pyStr (field r "reason")) "\r\n")
-                           (listAppend (map (fn [(h j/Json)] -> String (str (pt/pyStr (arg h 0)) ": " (pt/pyStr (arg h 1)) "\r\n")) (mt (field r "headers") ((j/jarr xs) xs) (_ (list))))
+                           (listAppend (map (fn [(h j/Json)] -> String (str (pt/pyStr (arg h 0)) ": " (pt/pyStr (arg h 1)) "\r\n")) (match (field r "headers") ((j/jarr xs) xs) (_ (list))))
                                        (list "\r\n"))))
 
 fn ! writeRoutes! dir: String routes: (List j/Json) -> Bool
@@ -170,7 +170,7 @@ fn ! writeRoutes! dir: String routes: (List j/Json) -> Bool
                    (if (some? (pt/jget r "transport"))
                      (and (must! (fileWrite (str base ".exit") (pt/pyStr (field r "exit"))) "exit") (must! (fileWrite (str base ".err") (jstrOf (field r "transport"))) "err"))
                      (and (must! (fileWrite (str base ".head") (routeHead r)) "head")
-                          (must! (mt (pt/jget r "bodyB64") ((some b) (fileWrite (str base ".body") (b64Decode! (jstrOf b)))) ((none) (fileWrite (str base ".body") (jstrOf (field r "body"))))) "body"))))))
+                          (must! (match (pt/jget r "bodyB64") ((some b) (fileWrite (str base ".body") (b64Decode! (jstrOf b)))) ((none) (fileWrite (str base ".body") (jstrOf (field r "body"))))) "body"))))))
           okUrls (enumerate urls)))
 
 fn unq s: String -> String
@@ -192,10 +192,10 @@ fn cfgValue line: String key: String -> (Option String)
 
 fn configToRequest cfg: String -> String
   (let [(lines (stringSplit cfg "\n"))
-        (pick (fn [(k String)] -> (List String) (fold (fn [(acc (List String)) (l String)] -> (List String) (mt (cfgValue l k) ((some v) (listAppend acc (list v))) ((none) acc))) (list) lines)))
+        (pick (fn [(k String)] -> (List String) (fold (fn [(acc (List String)) (l String)] -> (List String) (match (cfgValue l k) ((some v) (listAppend acc (list v))) ((none) acc))) (list) lines)))
         (url (unq (optionOr (listHead (pick "url")) "")))
-        (data (mt (listHead (pick "data-raw")) ((some d) (j/jstr (unq d))) ((none) (j/jnull))))
-        (timeout (mt (pt/jsonLoads (optionOr (listHead (pick "max-time")) "null")) ((ok v) v) ((err _) (j/jnull))))
+        (data (match (listHead (pick "data-raw")) ((some d) (j/jstr (unq d))) ((none) (j/jnull))))
+        (timeout (match (pt/jsonLoads (optionOr (listHead (pick "max-time")) "null")) ((ok v) v) ((err _) (j/jnull))))
         (hdrs (fold (fn [(acc (List (Pair String j/Json))) (h String)] -> (List (Pair String j/Json))
                       (let [(t (unq h))]
                         (if (or (= t "Accept:") (= t "Expect:"))
@@ -205,32 +205,32 @@ fn configToRequest cfg: String -> String
                                                         (j/jarr (list (j/jstr (pt/asciiLower (pairFirst p))) (j/jstr (optionOr (pairSecond p) "")))))))))))
                     (list) (pick "header")))
         (sorted (map (fn [(p (Pair String j/Json))] -> j/Json (pairSecond p)) (listSortBy (fn [(p (Pair String j/Json))] -> String (pairFirst p)) hdrs)))]
-    (pt/jsonDumps (j/jobj (list (pair "data" data) (pair "headers" (j/jarr sorted)) (pair "method" (j/jstr (if (pt/pyTruthy data) "POST" (mt data ((j/jstr _) "POST") (_ "GET")))))
+    (pt/jsonDumps (j/jobj (list (pair "data" data) (pair "headers" (j/jarr sorted)) (pair "method" (j/jstr (if (pt/pyTruthy data) "POST" (match data ((j/jstr _) "POST") (_ "GET")))))
                                 (pair "timeout" timeout) (pair "url" (j/jstr url))))
                   -1))
 
 fn filesWith! dir: String prefix: String -> (List String)
-  (mt (dirList dir)
+  (match (dirList dir)
     ((ok names) (map (fn [(nm String)] -> String (str dir "/" nm)) (filter (fn [(nm String)] -> Bool (stringStartsWith? nm prefix)) names)))
     ((err _) (list)))
 
 fn readAll! paths: (List String) -> (List String)
-  (map (fn [(p String)] -> String (mt (fileReadString p) ((ok s) s) ((err e) (str "unreadable " p)))) paths)
+  (map (fn [(p String)] -> String (match (fileReadString p) ((ok s) s) ((err e) (str "unreadable " p)))) paths)
 
 fn mapFromMs v: j/Json -> (Map String Int64)
-  (mt v ((j/jobj kvs) (fold (fn [(m (Map String Int64)) (p (Pair String j/Json))] -> (Map String Int64) (mapSet m (pairFirst p) (mt (pairSecond p) ((j/jint k) k) (_ 0)))) (mapEmpty) kvs)) (_ (mapEmpty)))
+  (match v ((j/jobj kvs) (fold (fn [(m (Map String Int64)) (p (Pair String j/Json))] -> (Map String Int64) (mapSet m (pairFirst p) (match (pairSecond p) ((j/jint k) k) (_ 0)))) (mapEmpty) kvs)) (_ (mapEmpty)))
 
 fn sortedObj m: (Map String Int64) keep: (fn [Int64] -> Bool) -> j/Json
   (j/jobj (map (fn [(k String)] -> (Pair String j/Json) (pair k (j/jint (optionOr (mapGet m k) 0))))
                (listSort (filter (fn [(k String)] -> Bool (keep (optionOr (mapGet m k) 0))) (mapKeys m)))))
 
 fn secretsOf input: j/Json -> (List String)
-  (let [(envKeys (mt (field input "env") ((j/jobj kvs) (map (fn [(p (Pair String j/Json))] -> String (jstrOf (pairSecond p))) (filter (fn [(p (Pair String j/Json))] -> Bool (stringEndsWith? (pairFirst p) "_API_KEY")) kvs))) (_ (list))))
+  (let [(envKeys (match (field input "env") ((j/jobj kvs) (map (fn [(p (Pair String j/Json))] -> String (jstrOf (pairSecond p))) (filter (fn [(p (Pair String j/Json))] -> Bool (stringEndsWith? (pairFirst p) "_API_KEY")) kvs))) (_ (list))))
         (argKeys (keysIn (field input "calls")))]
     (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (listAppend envKeys argKeys)))
 
 fn keysIn v: j/Json -> (List String)
-  (mt v
+  (match v
     ((j/jobj kvs) (fold (fn [(acc (List String)) (p (Pair String j/Json))] -> (List String)
                           (listAppend acc (if (= (pairFirst p) "key") (list (jstrOf (pairSecond p))) (keysIn (pairSecond p)))))
                         (list) kvs))
@@ -239,14 +239,14 @@ fn keysIn v: j/Json -> (List String)
     (_ (list)))
 
 fn ! chmodX! path: String -> Bool
-  (mt (procSpawnv (list "/bin/chmod" "755" path) (none) (some (list "PATH=/usr/bin:/bin")))
+  (match (procSpawnv (list "/bin/chmod" "755" path) (none) (some (list "PATH=/usr/bin:/bin")))
     ((err e) (do (eprintln (str "setup failed: chmod " e)) false))
     ((ok sp)
       (let [(c0 (fdClose sp.stdin))
             (w (procWaitPid sp.pid false))
             (c1 (fdClose sp.stdout))
             (c2 (fdClose sp.stderr))]
-        (mt w ((ok o) (= o (some 0))) ((err _) false)))))
+        (match w ((ok o) (= o (some 0))) ((err _) false)))))
 
 (schema Wire (:f argvOk Bool) (:f pathOk Bool) (:f leaked (List String)) (:f viaStdin Int64) (:f runs Int64) (:f unsafe Int64) (:f configs Int64))
 
@@ -269,19 +269,19 @@ fn wireOf! dir: String secrets: (List String) -> Wire
           :configs (listLength reqs)))
 
 fn envMap input: j/Json dir: String -> (Map String String)
-  (let [(base (mt (field input "env") ((j/jobj kvs) (fold (fn [(m (Map String String)) (p (Pair String j/Json))] -> (Map String String) (mapSet m (pairFirst p) (jstrOf (pairSecond p)))) (mapEmpty) kvs)) (_ (mapEmpty))))]
+  (let [(base (match (field input "env") ((j/jobj kvs) (fold (fn [(m (Map String String)) (p (Pair String j/Json))] -> (Map String String) (mapSet m (pairFirst p) (jstrOf (pairSecond p)))) (mapEmpty) kvs)) (_ (mapEmpty))))]
     (mapSet base "PATH" (str dir ":/usr/bin:/bin")))
 
 fn ! callsLoop! st: srch/HubState calls: (List j/Json) ups: j/Json cli: (List j/Json) acc: (List j/Json) -> (Pair (List j/Json) srch/HubState)
-  (mt (listHead calls)
+  (match (listHead calls)
     ((none) (pair acc st))
     ((some c)
-      (let [(st0 (srch/hubWithNow st (mt (field c "clockMs") ((j/jint k) k) (_ 0))))
+      (let [(st0 (srch/hubWithNow st (match (field c "clockMs") ((j/jint k) k) (_ 0))))
             (n0 (listLength st0.sleeps))
             (r (netCall! st0 (jstrOf (field c "fn")) (field c "args") ups cli))
             (st1 (pairSecond r))
             (sleeps (j/jarr (map (fn [(ms Int64)] -> j/Json (j/jint ms)) (listDrop st1.sleeps n0))))
-            (row (mt (pairFirst r)
+            (row (match (pairFirst r)
                    ((ok v) (j/jobj (list (pair "value" v) (pair "sleeps" sleeps))))
                    ((err e) (j/jobj (list (pair "raises" (j/jstr e.kind)) (pair "message" (j/jstr e.msg)) (pair "sleeps" sleeps))))))]
         (callsLoop! st1 (optionOr (listTail calls) (list)) ups cli (listAppend acc (list row))))))
@@ -290,10 +290,10 @@ fn ! netCase! input: j/Json dir: String -> (Pair j/Json Wire)
   (let [(made (and (must! (dirCreate dir) "dir")
                    (must! (fileWrite (str dir "/curl") (stubScript)) "stub")
                    (chmodX! (str dir "/curl"))))
-        (routesOk (writeRoutes! dir (mt (field input "routes") ((j/jarr xs) xs) (_ (list)))))
-        (st0 (srch/newHubState (envMap input dir) 0 (mt (field input "lastDdgMs") ((j/jint k) k) (_ 0))
+        (routesOk (writeRoutes! dir (match (field input "routes") ((j/jarr xs) xs) (_ (list)))))
+        (st0 (srch/newHubState (envMap input dir) 0 (match (field input "lastDdgMs") ((j/jint k) k) (_ 0))
                                (mapFromMs (field input "breaker")) (mapFromMs (field input "count503"))))
-        (run (callsLoop! st0 (mt (field input "calls") ((j/jarr xs) xs) (_ (list))) (field input "upstreams") (mt (field input "cli") ((j/jarr xs) xs) (_ (list))) (list)))
+        (run (callsLoop! st0 (match (field input "calls") ((j/jarr xs) xs) (_ (list))) (field input "upstreams") (match (field input "cli") ((j/jarr xs) xs) (_ (list))) (list)))
         (st (pairSecond run))
         (reqs (listSort (map configToRequest (readAll! (filesWith! dir "req.")))))
         (out (j/jobj (list (pair "results" (j/jarr (pairFirst run)))
@@ -309,13 +309,13 @@ fn ! netCase! input: j/Json dir: String -> (Pair j/Json Wire)
     (pair (if (and made routesOk) out (j/jobj (list (pair "setupFailed" (j/jstr dir))))) wire))
 
 fn caseOf line: String -> (Option Case)
-  (mt (rs/asnRead line)
+  (match (rs/asnRead line)
     ((err _) (none))
     ((ok forms)
-      (mt (rs/asnProps (optionOr (listHead forms) (j/jnull)) (some ":case"))
+      (match (rs/asnProps (optionOr (listHead forms) (j/jnull)) (some ":case"))
         ((err _) (none))
         ((ok p)
-          (mt (pt/jsonLoads (jstrOf (field p "in")))
+          (match (pt/jsonLoads (jstrOf (field p "in")))
             ((err _) (none))
             ((ok input) (some (Case :id (jstrOf (field p "id")) :kind (jstrOf (field p "kind")) :input input :out (jstrOf (field p "out"))))))))))
 
@@ -333,7 +333,7 @@ fn ! replay! cases: (List Case) base: String -> Run
             (do
               (if v.ok () (eprintln (str "MISMATCH " c.id " " fnName "\n got  " (pt/sliceB got 0 (min 2000 (stringLength got))) "\n want " (pt/sliceB c.out 0 (min 2000 (stringLength c.out))))))
               (Run :verdicts (listAppend acc.verdicts (list v))
-                   :wires (mt (pairSecond res) ((some w) (listAppend acc.wires (list w))) ((none) acc.wires))))))
+                   :wires (match (pairSecond res) ((some w) (listAppend acc.wires (list w))) ((none) acc.wires))))))
         (Run :verdicts (list) :wires (list)) cases)
 
 fn group run: Run fnName: String -> (List Verdict)
@@ -352,11 +352,11 @@ fn ! runTests -> Bool
   (let [(text (optionOr (resultToOption (fileReadString (fixturePath))) ""))
         (lines (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:case ")) (stringSplit text "\n")))
         (header (optionOr (listHead (stringSplit text "\n")) ""))
-        (declared (mt (rs/asnRead header)
-                    ((ok forms) (mt (rs/asnProps (optionOr (listHead forms) (j/jnull)) (some ":fixture")) ((ok p) (mt (rs/asnScalar (field p "caseCount")) ((j/jint k) k) (_ -1))) ((err _) -1)))
+        (declared (match (rs/asnRead header)
+                    ((ok forms) (match (rs/asnProps (optionOr (listHead forms) (j/jnull)) (some ":fixture")) ((ok p) (match (rs/asnScalar (field p "caseCount")) ((j/jint k) k) (_ -1))) ((err _) -1)))
                     ((err _) -1)))
-        (pin (mt (rs/asnRead header) ((ok forms) (mt (rs/asnProps (optionOr (listHead forms) (j/jnull)) (some ":fixture")) ((ok p) (jstrOf (field p "pin"))) ((err _) ""))) ((err _) "")))
-        (cases (fold (fn [(acc (List Case)) (l String)] -> (List Case) (mt (caseOf l) ((some c) (listAppend acc (list c))) ((none) acc))) (list) lines))
+        (pin (match (rs/asnRead header) ((ok forms) (match (rs/asnProps (optionOr (listHead forms) (j/jnull)) (some ":fixture")) ((ok p) (jstrOf (field p "pin"))) ((err _) ""))) ((err _) "")))
+        (cases (fold (fn [(acc (List Case)) (l String)] -> (List Case) (match (caseOf l) ((some c) (listAppend acc (list c))) ((none) acc))) (list) lines))
         (base (str "/tmp/aslU9parity." (stringFromInt64 (procSelf))))
         (cleanStart (pathRemove base))
         (run (replay! cases base))
@@ -369,11 +369,11 @@ fn ! runTests -> Bool
         (bigEsc (repeatJoin "\"\\" 8000))
         (t1 (monotonicNs))
         (escaped (srch/escapeAsnStr (j/jstr bigEsc)))
-        (cfg (mt (srch/curlConfig (srch/HttpReq :url "https://x/" :headers (list) :data (some bigEsc) :timeout (j/jint 5))) ((ok c) c) ((err e) e.msg)))
+        (cfg (match (srch/curlConfig (srch/HttpReq :url "https://x/" :headers (list) :data (some bigEsc) :timeout (j/jint 5))) ((ok c) c) ((err e) e.msg)))
         (roundTrip (configToRequest cfg))
         (escMs (elapsedMs! t1))
         (litCfg (srch/curlConfig (srch/HttpReq :url "https://api.example/s?q=x" :headers (list (pair "X-Key" "v\"w\\x")) :data (some "a\"b\\c\nd") :timeout (j/jfloat 3.5))))
-        (rejects (map (fn [(r srch/HttpReq)] -> String (mt (srch/curlConfig r) ((ok _) "accepted") ((err e) e.kind)))
+        (rejects (map (fn [(r srch/HttpReq)] -> String (match (srch/curlConfig r) ((ok _) "accepted") ((err e) e.kind)))
                       (list (srch/HttpReq :url "https://x/" :headers (list (pair "@/etc/passwd" "v")) :data (none) :timeout (j/jint 5))
                             (srch/HttpReq :url "https://x/" :headers (list (pair "X Bad" "v")) :data (none) :timeout (j/jint 5))
                             (srch/HttpReq :url "https://x/" :headers (list (pair "X-K\nInjected" "v")) :data (none) :timeout (j/jint 5))
@@ -451,22 +451,22 @@ fn ! runTests -> Bool
       (assert (pt/hasSubstr (pt/pyStr (optionOr (pt/jget absent "error") (j/jnull))) "ERR_TOOL_ABSENT") "a missing curl is an error, not a fallback")
       (assert (and (= (stringLength escaped) 32000) (pt/hasSubstr roundTrip (pt/jsonDumps (j/jstr bigEsc) -1))) "8000 escapes survive escape_asn_str and the curl config")
       (assert (< escMs 3000) "8000-escape string and config under 3 s")
-      (assert (mt readBig ((ok fs) (= (listLength fs) 4000)) ((err _) false)) "4000-line ASN text reads to 4000 forms")
+      (assert (match readBig ((ok fs) (= (listLength fs) 4000)) ((err _) false)) "4000-line ASN text reads to 4000 forms")
       (assert (< asnMs 3000) "4000-line ASN read under 3 s")
       (assert (and found (< wordsMs 3000)) "research_quote_found over 16000 words under 3 s")
       (assert (< (fold (fn [(acc Int64) (v Verdict)] -> Int64 (max acc v.ms)) 0 (group run "html_unescape")) 5000) "8000-reference html.unescape case under 5 s")
       (assert (< (fold (fn [(acc Int64) (v Verdict)] -> Int64 (max acc v.ms)) 0 (group run "strip_tags_and_whitespace")) 5000) "4000-line strip_tags case under 5 s")
       (assert (< (fold (fn [(acc Int64) (v Verdict)] -> Int64 (max acc v.ms)) 0 (group run "clean_url")) 5000) "4000-parameter clean_url case under 5 s")
       (assert (< (fold (fn [(acc Int64) (v Verdict)] -> Int64 (max acc v.ms)) 0 (group run "do_ddg_search")) 8000) "4000-result DDG page case under 8 s")
-      (assert (mt litCfg ((ok c) (= c "url = \"https://api.example/s?q=x\"\nproto = \"=http,https\"\ngloboff\nhttp1.1\ninclude\nsilent\nshow-error\nsuppress-connect-headers\nmax-time = 3.5\nheader = \"X-Key: v\\\"w\\\\x\"\nheader = \"Accept:\"\nheader = \"Expect:\"\ndata-raw = \"a\\\"b\\\\c\\nd\"\n")) ((err _) false)) "curl config equals the literal expected lines")
-      (assert (mt litCfg ((ok c) (not (unsafeConfig? c))) ((err _) false)) "config has proto =http,https and no insecure, -k or location line")
+      (assert (match litCfg ((ok c) (= c "url = \"https://api.example/s?q=x\"\nproto = \"=http,https\"\ngloboff\nhttp1.1\ninclude\nsilent\nshow-error\nsuppress-connect-headers\nmax-time = 3.5\nheader = \"X-Key: v\\\"w\\\\x\"\nheader = \"Accept:\"\nheader = \"Expect:\"\ndata-raw = \"a\\\"b\\\\c\\nd\"\n")) ((err _) false)) "curl config equals the literal expected lines")
+      (assert (match litCfg ((ok c) (not (unsafeConfig? c))) ((err _) false)) "config has proto =http,https and no insecure, -k or location line")
       (assert (= rejects (list "ValueError" "ValueError" "ValueError" "ValueError" "ValueError" "InvalidURL" "InvalidURL")) "bad header names, CR/LF values and control-char URLs are rejected")
-      (assert (mt rejectedRun ((ok v) (pt/hasSubstr (pt/pyStr (optionOr (pt/jget v "error") (j/jnull))) "URL can't contain control characters")) ((err _) false)) "an injected SEARXNG_URL fails before curl is spawned")
+      (assert (match rejectedRun ((ok v) (pt/hasSubstr (pt/pyStr (optionOr (pt/jget v "error") (j/jnull))) "URL can't contain control characters")) ((err _) false)) "an injected SEARXNG_URL fails before curl is spawned")
       (assert (= (fold (fn [(acc Int64) (w Wire)] -> Int64 (+ acc w.unsafe)) 0 wires) 0) "no recorded config has insecure, -k, location or a missing proto line")
       (assert (> (fold (fn [(acc Int64) (w Wire)] -> Int64 (+ acc w.configs)) 0 wires) 100) "configs were recorded for the net cases")
-      (assert (mt keyReject ((ok _) false) ((err e) (and (= e.kind "ValueError") (not (pt/hasSubstr e.msg "KEYMARK42"))))) "a rejected header value is not echoed in the error")
+      (assert (match keyReject ((ok _) false) ((err e) (and (= e.kind "ValueError") (not (pt/hasSubstr e.msg "KEYMARK42"))))) "a rejected header value is not echoed in the error")
       (assert (and (pt/hasSubstr keyRun "Invalid header value") (not (pt/hasSubstr keyRun "KEYMARK42"))) "a CR/LF Serper key fails without its value in the result")
       (assert (= names (list true true true false false false false false false)) "only strict charset names reach iconv argv")
-      (assert (mt noIconv ((ok _) false) ((err e) (and (= e.kind "ToolAbsent") (pt/hasSubstr e.msg "ERR_TOOL_ABSENT")))) "a missing iconv is an error")
+      (assert (match noIconv ((ok _) false) ((err e) (and (= e.kind "ToolAbsent") (pt/hasSubstr e.msg "ERR_TOOL_ABSENT")))) "a missing iconv is an error")
       (assert (ok? cleaned) "stub directories removed")
       true))

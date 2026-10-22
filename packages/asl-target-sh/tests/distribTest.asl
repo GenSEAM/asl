@@ -10,7 +10,7 @@ fn bytesFromInts ints: (List Int64) -> Bytes
 
 fn checkRunnableBytes! bs: Bytes os: String arch: String -> Bool
   (let [(tmp (str (optionOr (envGet "TMPDIR") "/tmp") "/distTest." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs))))]
-    (mt (fileWrite tmp bs)
+    (match (fileWrite tmp bs)
       ((err _) false)
       ((ok _)
         (do (fileChmod tmp 493)
@@ -245,39 +245,39 @@ fn testPortableWrapperExecution! -> Bool
       (cleanAndAssert (dist/isRegular! wrapper) "wrapper file must be emitted")
 
       (let [(resCli (dist/runArgv! (list wrapper "echo" "hello world with spaces" "another space arg") (some tmp) env 10000))
-            (outCli (mt resCli ((ok r) (str r.out r.errText)) ((err _) "")))]
+            (outCli (match resCli ((ok r) (str r.out r.errText)) ((err _) "")))]
         (do
           (cleanAndAssert (ok? resCli) "CLI exec wrapper invocation must succeed")
           (cleanAndAssert (stringContains? outCli "CLI_ARGS=echo|hello world with spaces|another space arg") "wrapper CLI exec must pass through arguments with spaces intact (Mutant 1 killed)")))
 
       (let [(resRun (dist/runArgv! (list wrapper "run" testScript "run first" "run second with spaces") (some tmp) env 10000))
-            (outRun (mt resRun ((ok r) (str r.out r.errText)) ((err _) "")))]
+            (outRun (match resRun ((ok r) (str r.out r.errText)) ((err _) "")))]
         (do
           (cleanAndAssert (ok? resRun) "wrapper run invocation must succeed")
-          (cleanAndAssert (= (mt resRun ((ok r) r.code) ((err _) 1)) 0) "wrapper run exit code must be 0")
+          (cleanAndAssert (= (match resRun ((ok r) r.code) ((err _) 1)) 0) "wrapper run exit code must be 0")
           (cleanAndAssert (stringContains? outRun "RUN_ARGS=run first|run second with spaces") "wrapper run must pass through arguments with spaces intact (Mutant 2 killed)")))
 
       (let [(resBad (dist/runArgv! (list wrapper "check" badCheck) (some tmp) env 10000))
             (resGood (dist/runArgv! (list wrapper "check" goodCheck) (some tmp) env 10000))]
         (do
           (cleanAndAssert (ok? resBad) "wrapper check bad invocation must return result")
-          (cleanAndAssert (!= (mt resBad ((ok r) r.code) ((err _) 0)) 0) "failing check must exit non-zero (exit code propagation)")
+          (cleanAndAssert (!= (match resBad ((ok r) r.code) ((err _) 0)) 0) "failing check must exit non-zero (exit code propagation)")
           (cleanAndAssert (ok? resGood) "wrapper check good invocation must return result")
-          (cleanAndAssert (= (mt resGood ((ok r) r.code) ((err _) 1)) 0) "passing check must exit 0")))
+          (cleanAndAssert (= (match resGood ((ok r) r.code) ((err _) 1)) 0) "passing check must exit 0")))
 
       (let [(symRes (dist/runArgv! (list "ln" "-s" wrapper symlinkWrapper) (none) (none) 5000))
             (resSym (dist/runArgv! (list symlinkWrapper "run" testScript "sym pass") (some tmp) env 10000))]
         (do
           (cleanAndAssert (ok? symRes) "symlink creation must succeed")
           (cleanAndAssert (ok? resSym) "symlinked wrapper invocation must succeed")
-          (cleanAndAssert (= (mt resSym ((ok r) r.code) ((err _) 1)) 0) "symlinked wrapper must exit 0")
-          (cleanAndAssert (stringContains? (mt resSym ((ok r) (str r.out r.errText)) ((err _) "")) "RUN_ARGS=sym pass") "symlinked wrapper must pass arguments through")))
+          (cleanAndAssert (= (match resSym ((ok r) r.code) ((err _) 1)) 0) "symlinked wrapper must exit 0")
+          (cleanAndAssert (stringContains? (match resSym ((ok r) (str r.out r.errText)) ((err _) "")) "RUN_ARGS=sym pass") "symlinked wrapper must pass arguments through")))
 
       (let [(resVer (dist/runArgv! (list wrapper "--version") (some tmp) env 10000))
-            (outVer (mt resVer ((ok r) (str r.out r.errText)) ((err _) "")))]
+            (outVer (match resVer ((ok r) (str r.out r.errText)) ((err _) "")))]
         (do
           (cleanAndAssert (ok? resVer) "wrapper --version must succeed")
-          (cleanAndAssert (= (mt resVer ((ok r) r.code) ((err _) 1)) 0) "wrapper --version exit code 0")
+          (cleanAndAssert (= (match resVer ((ok r) r.code) ((err _) 1)) 0) "wrapper --version exit code 0")
           (cleanAndAssert (stringContains? outVer "CLI_ARGS=--version") "wrapper --version must run host to invoke CLI main")))
 
       (let [(cloneDir (str tmp "/.asl/repo"))
@@ -298,8 +298,8 @@ fn testPortableWrapperExecution! -> Bool
                                     :dry false :autoYes true :filter "" :skip true :purge false :force false :sourceDir "" :entry "" :prebuilt false :links (list) :answeredOps ""))
             (resReal (dist/stepClone! stCloneReal))]
         (do
-          (cleanAndAssert (mt resDry ((dist/go s) (= s.entry (str cloneDir "/host/out/asl"))) ((dist/stop _) false)) "stepClone dry run must wire portable wrapper entry (Mutant 4 killed)")
-          (cleanAndAssert (mt resReal ((dist/go s) (= s.entry (str cloneDir "/host/out/asl"))) ((dist/stop _) false)) "stepClone real must wire portable wrapper entry")
+          (cleanAndAssert (match resDry ((dist/go s) (= s.entry (str cloneDir "/host/out/asl"))) ((dist/stop _) false)) "stepClone dry run must wire portable wrapper entry (Mutant 4 killed)")
+          (cleanAndAssert (match resReal ((dist/go s) (= s.entry (str cloneDir "/host/out/asl"))) ((dist/stop _) false)) "stepClone real must wire portable wrapper entry")
           (cleanAndAssert (dist/isRegular! (str cloneDir "/host/out/asl")) "stepClone real must emit wrapper to disk")
 
           (let [(envNoHost (some (list "PATH=/bin:/usr/bin:/usr/local/bin")))
@@ -314,29 +314,29 @@ fn testPortableWrapperExecution! -> Bool
               (cleanAndAssert (ok? cpRes) "wrapper copy to installed location bin/asl must succeed")
 
               (let [(resA (dist/runArgv! (list binWrapper "echo" "fallback host lookup" "with spaces") (some tmp) envNoHost 10000))
-                    (outA (mt resA ((ok r) (str r.out r.errText)) ((err _) "")))]
+                    (outA (match resA ((ok r) (str r.out r.errText)) ((err _) "")))]
                 (do
                   (cleanAndAssert (ok? resA) "wrapper at installed location with ../host/out fallback must succeed")
-                  (cleanAndAssert (= (mt resA ((ok r) r.code) ((err _) 1)) 0) "wrapper at installed location exit code must be 0")
+                  (cleanAndAssert (= (match resA ((ok r) r.code) ((err _) 1)) 0) "wrapper at installed location exit code must be 0")
                   (cleanAndAssert (stringContains? outA "CLI_ARGS=echo|fallback host lookup|with spaces") "wrapper at installed location must locate host via ../host/out fallback and pass arguments (Mutant corrupt ../host/out killed)")))
 
               (let [(resB (dist/runArgv! (list wrapper "echo" "here host lookup" "with spaces") (some tmp) envNoHost 10000))
-                    (outB (mt resB ((ok r) (str r.out r.errText)) ((err _) "")))]
+                    (outB (match resB ((ok r) (str r.out r.errText)) ((err _) "")))]
                 (do
                   (cleanAndAssert (ok? resB) "wrapper next to asl-host must succeed without ASL_HOST")
-                  (cleanAndAssert (= (mt resB ((ok r) r.code) ((err _) 1)) 0) "wrapper next to asl-host exit code must be 0")
+                  (cleanAndAssert (= (match resB ((ok r) r.code) ((err _) 1)) 0) "wrapper next to asl-host exit code must be 0")
                   (cleanAndAssert (stringContains? outB "CLI_ARGS=echo|here host lookup|with spaces") "wrapper must locate host via $HERE/asl-host and pass arguments (Mutant corrupt $HERE/asl-host killed)")))
 
               (let [(resRunNoHost (dist/runArgv! (list binWrapper "run" testScript "run no host") (some tmp) envNoHost 10000))
-                    (outRunNoHost (mt resRunNoHost ((ok r) (str r.out r.errText)) ((err _) "")))
+                    (outRunNoHost (match resRunNoHost ((ok r) (str r.out r.errText)) ((err _) "")))
                     (resVerNoHost (dist/runArgv! (list wrapper "--version") (some tmp) envNoHost 10000))
-                    (outVerNoHost (mt resVerNoHost ((ok r) (str r.out r.errText)) ((err _) "")))]
+                    (outVerNoHost (match resVerNoHost ((ok r) (str r.out r.errText)) ((err _) "")))]
                 (do
                   (cleanAndAssert (ok? resRunNoHost) "wrapper run without ASL_HOST must succeed")
-                  (cleanAndAssert (= (mt resRunNoHost ((ok r) r.code) ((err _) 1)) 0) "wrapper run without ASL_HOST exit code must be 0")
+                  (cleanAndAssert (= (match resRunNoHost ((ok r) r.code) ((err _) 1)) 0) "wrapper run without ASL_HOST exit code must be 0")
                   (cleanAndAssert (stringContains? outRunNoHost "RUN_ARGS=run no host") "wrapper run must pass arguments without ASL_HOST")
                   (cleanAndAssert (ok? resVerNoHost) "wrapper --version without ASL_HOST must succeed")
-                  (cleanAndAssert (= (mt resVerNoHost ((ok r) r.code) ((err _) 1)) 0) "wrapper --version without ASL_HOST exit code must be 0")
+                  (cleanAndAssert (= (match resVerNoHost ((ok r) r.code) ((err _) 1)) 0) "wrapper --version without ASL_HOST exit code must be 0")
                   (cleanAndAssert (stringContains? outVerNoHost "CLI_ARGS=--version") "wrapper --version without ASL_HOST must invoke CLI main")))))
           (cleanUp)
           true))))

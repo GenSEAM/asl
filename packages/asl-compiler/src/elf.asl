@@ -22,7 +22,7 @@ fn hostWasiAdapter -> Map
   (do {:os "wasi" :format "WASM" :abi "wasi-preview1" :clock "clock_time_get" :eventLoop "poll_oneoff" :capabilities (list "fsRead" "fsWrite" "fsStat" "timeMonotonic" "memAllocPage" "memFreePage")})
 
 fn normalizeWin32Path p: Any -> Str
-  (if (== (stringLength p) 0) "/" (let [(s1 (stringReplace p "\\" "/")) (len (stringLength s1))] (if (and (>= len 2) (== (optionOr (stringSlice s1 1 2) "") ":")) (let [(drive (stringLower (optionOr (stringSlice s1 0 1) ""))) (rest (optionOr (stringSlice s1 2 len) ""))] (let [(restWithSlash (if (stringStartsWith? rest "/") rest (str "/" rest)))] (str "/" drive restWithSlash))) s1)))
+  (if (= (stringLength p) 0) "/" (let [(s1 (stringReplace p "\\" "/")) (len (stringLength s1))] (if (and (>= len 2) (= (optionOr (stringSlice s1 1 2) "") ":")) (let [(drive (stringLower (optionOr (stringSlice s1 0 1) ""))) (rest (optionOr (stringSlice s1 2 len) ""))] (let [(restWithSlash (if (stringStartsWith? rest "/") rest (str "/" rest)))] (str "/" drive restWithSlash))) s1)))
 
 fn qpcToNanoseconds qpc: Any freq: Any -> Int64
   (if (or (<= freq 0) (<= qpc 0)) 0 (let [(quot (/ qpc freq)) (rem (mod qpc freq))] (+ (* quot 1000000000) (/ (* rem 1000000000) freq))))
@@ -34,7 +34,7 @@ fn iocpRingPush ring: Any event: Any -> Map
   (let [(cnt ring.count) (cap ring.capacity) (ovf ring.overflowCount) (evts ring.events)] (if (>= cnt cap) {:capacity cap :events evts :count cnt :overflowCount (+ ovf 1) :error "errPlatformBusy"} {:capacity cap :events (listAppend evts (list event)) :count (+ cnt 1) :overflowCount ovf}))
 
 fn iocpRingPop ring: Any -> Map
-  (let [(cnt ring.count) (evts ring.events) (cap ring.capacity) (ovf ring.overflowCount)] (if (== cnt 0) {:capacity cap :events evts :count cnt :overflowCount ovf :error "errPlatformEof"} (let [(firstEvt (optionOr (listHead evts) {})) (restEvts (optionOr (listTail evts) (list)))] {:capacity cap :events restEvts :count (- cnt 1) :overflowCount ovf :event firstEvt})))
+  (let [(cnt ring.count) (evts ring.events) (cap ring.capacity) (ovf ring.overflowCount)] (if (= cnt 0) {:capacity cap :events evts :count cnt :overflowCount ovf :error "errPlatformEof"} (let [(firstEvt (optionOr (listHead evts) {})) (restEvts (optionOr (listTail evts) (list)))] {:capacity cap :events restEvts :count (- cnt 1) :overflowCount ovf :event firstEvt})))
 
 fn translateIocpEvent ring: Any event: Any -> Map
   (let [(pushRes (iocpRingPush ring event))] (if (!= (optionOr (mapGet pushRes :error) "") "") {:ok false :error (optionOr (mapGet pushRes :error) "") :ring pushRes} {:ok true :ring pushRes :event event}))

@@ -154,13 +154,13 @@ fn dirOf p: String -> String
 fn writeEntry! root: String pid: String rel: String content: String -> (Result Unit String)
   (let [path (str root "/" rel)]
     (if (stringEndsWith? rel "/")
-      (mt (dirCreate path) ((ok _) (ok ())) ((err e) (err e)))
-      (mt (dirCreate (dirOf path))
+      (match (dirCreate path) ((ok _) (ok ())) ((err e) (err e)))
+      (match (dirCreate (dirOf path))
         ((err e) (err e))
         ((ok _)
           (if (stringStartsWith? content "@link:")
             (pathSymlink (subst (sub content 6 (stringLength content)) root pid) path)
-            (mt (fileWrite path (subst content root pid))
+            (match (fileWrite path (subst content root pid))
               ((err e) (err e))
               ((ok _) (if (stringStartsWith? content "#!") (fileChmod path 493) (ok ())))))))))
 
@@ -181,15 +181,15 @@ fn curlStub -> String
        "printf 'no scripted response\\n500'\n")
 
 fn writeResponses! stub: String http: (List String) k: Int64 -> (Result Unit String)
-  (mt (listHead http)
+  (match (listHead http)
     ((none) (ok ()))
     ((some item)
       (let [f (netstrings item)
             base (str stub "/resp_" (stringFromInt64 k))
             w (if (= (at f 0) "drop")
                 (fileWrite (str base ".drop") "")
-                (mt (fileWrite (str base ".code") (at f 0)) ((err e) (err e)) ((ok _) (fileWrite (str base ".body") (at f 1)))))]
-        (mt w ((err e) (err e)) ((ok _) (writeResponses! stub (rest http) (+ k 1)))))))
+                (match (fileWrite (str base ".code") (at f 0)) ((err e) (err e)) ((ok _) (fileWrite (str base ".body") (at f 1)))))]
+        (match w ((err e) (err e)) ((ok _) (writeResponses! stub (rest http) (+ k 1)))))))
 
 fn curlUnquote v: String -> String
   (let [bs (stringToBytes v)
@@ -223,8 +223,8 @@ fn walkTree! root: String tmp: String pid: String rel: String -> (List (Pair Str
     (fold (fn [acc name]
             (let [p (if (stringEmpty? rel) name (str rel "/" name))
                   full (str dir "/" name)
-                  isLink (mt (fileLstat full) ((ok st) st.isSymlink) ((err _) false))
-                  isDir (mt (fileStat full) ((ok st) st.isDir) ((err _) false))]
+                  isLink (match (fileLstat full) ((ok st) st.isSymlink) ((err _) false))
+                  isDir (match (fileStat full) ((ok st) st.isDir) ((err _) false))]
               (cond
                 ((= p "bin/asl-mesh") acc)
                 (isLink (listAppend acc (list (pair p (str "@link:" (normalize (resultOr (fileReadlink full) "") root tmp))))))
@@ -244,7 +244,7 @@ schema Run
   (:f code Int64)
 
 fn readReady! fd: Int64 -> (Option String)
-  (mt (fdRead fd 65536)
+  (match (fdRead fd 65536)
     ((ok chunk) (if (stringEmpty? chunk) (do (fdClose fd) (none)) (some chunk)))
     ((err _) (do (fdClose fd) (none))))
 
@@ -261,8 +261,8 @@ fn collect! pid: Int64 outFd: Int64 errFd: Int64 outs: (List String) errs: (List
           oc (if (and outOpen (ready? rs outFd)) (readReady! outFd) (some ""))
           ec (if (and errOpen (ready? rs errFd)) (readReady! errFd) (some ""))]
       (collect! pid outFd errFd
-               (mt oc ((some x) (if (stringEmpty? x) outs (cons x outs))) ((none) outs))
-               (mt ec ((some x) (if (stringEmpty? x) errs (cons x errs))) ((none) errs))
+               (match oc ((some x) (if (stringEmpty? x) outs (cons x outs))) ((none) outs))
+               (match ec ((some x) (if (stringEmpty? x) errs (cons x errs))) ((none) errs))
                (and outOpen (some? oc)) (and errOpen (some? ec)) code2)))
 
 ; (:m :ref FROZEN-HOSTLESS :do "children run bin/asl through /bin/bash (a case PATH may be empty, so the wrapper shebang cannot find bash) and share the already-built native CLI cache through ASL_NATIVE_CLI_CACHE, since each case has its own HOME")
@@ -270,7 +270,7 @@ fn ! nativeCache! -> String
   (str (optionOr (envGet "HOME") "") "/.asl/run/nativeCli")
 
 fn ! runChild! argv: (List String) cwd: String env: (List String) -> (Result Run String)
-  (mt (procSpawnv (cons "/bin/bash" argv) (some cwd) (some (cons (str "ASL_NATIVE_CLI_CACHE=" (nativeCache!)) env)))
+  (match (procSpawnv (cons "/bin/bash" argv) (some cwd) (some (cons (str "ASL_NATIVE_CLI_CACHE=" (nativeCache!)) env)))
     ((err e) (err e))
     ((ok sp)
       (do
@@ -279,8 +279,8 @@ fn ! runChild! argv: (List String) cwd: String env: (List String) -> (Result Run
 
 fn casePid! kind: String -> (Pair String Int64)
   (cond
-    ((= kind "alive") (mt (procSpawnv (list "sleep" "60") (none) (none)) ((ok sp) (pair (stringFromInt64 sp.pid) sp.pid)) ((err _) (pair "" -1))))
-    ((= kind "dead") (mt (procSpawnv (list "true") (none) (none)) ((ok sp) (do (procWaitPid sp.pid false) (pair (stringFromInt64 sp.pid) -1))) ((err _) (pair "" -1))))
+    ((= kind "alive") (match (procSpawnv (list "sleep" "60") (none) (none)) ((ok sp) (pair (stringFromInt64 sp.pid) sp.pid)) ((err _) (pair "" -1))))
+    ((= kind "dead") (match (procSpawnv (list "true") (none) (none)) ((ok sp) (do (procWaitPid sp.pid false) (pair (stringFromInt64 sp.pid) -1))) ((err _) (pair "" -1))))
     (else (pair "" -1)))
 
 fn stopSleeper! pid: Int64 -> Unit
@@ -307,9 +307,9 @@ fn checkCase! base: String k: Int64 line: String host: String cmdPath: String ->
         stub (str d "/s")
         pp (casePid! (at f 5))
         pidText (pairFirst pp)
-        made (fold (fn [acc p] (mt acc ((err e) (err e)) ((ok _) (dirCreate p)))) (ok ()) (list (str root "/bin") (str root "/home") tmp stub))
-        tree (fold (fn [acc p] (mt acc ((err e) (err e)) ((ok _) (writeEntry! root pidText (pairFirst p) (pairSecond p))))) (ok ()) (pairsOf (netstrings (at f 3))))
-        stubs (mt (fileWrite (str stub "/curl") (curlStub)) ((err e) (err e)) ((ok _) (mt (fileChmod (str stub "/curl") 493) ((err e) (err e)) ((ok _) (writeResponses! stub (netstrings (at f 4)) 1)))))
+        made (fold (fn [acc p] (match acc ((err e) (err e)) ((ok _) (dirCreate p)))) (ok ()) (list (str root "/bin") (str root "/home") tmp stub))
+        tree (fold (fn [acc p] (match acc ((err e) (err e)) ((ok _) (writeEntry! root pidText (pairFirst p) (pairSecond p))))) (ok ()) (pairsOf (netstrings (at f 3))))
+        stubs (match (fileWrite (str stub "/curl") (curlStub)) ((err e) (err e)) ((ok _) (match (fileChmod (str stub "/curl") 493) ((err e) (err e)) ((ok _) (writeResponses! stub (netstrings (at f 4)) 1)))))
         env (listAppend (list (str "PATH=" stub ":/usr/bin:/bin") (str "HOME=" root "/home") (str "TMPDIR=" tmp) (str "ROOT_DIR=" root)
                               "GATEWAY_URL=http://127.0.0.1:1/gw" (str "MESH_STUB_DIR=" stub))
                         (map (fn [p] (str (pairFirst p) "=" (subst (pairSecond p) root pidText))) (pairsOf (netstrings (at f 2)))))
@@ -317,8 +317,8 @@ fn checkCase! base: String k: Int64 line: String host: String cmdPath: String ->
         run (if (and (ok? made) (ok? tree) (ok? stubs)) (runChild! (listAppend (list host "run" cmdPath) argv) root env) (err "setup failed"))]
     (do
       (stopSleeper! (pairSecond pp))
-      (mt run
-        ((err e) (do (println (str "  SETUP " cid ": " e " " (resultOr (mt made ((err x) (ok x)) ((ok _) (ok ""))) "") " " (resultOr (mt tree ((err x) (ok x)) ((ok _) (ok ""))) ""))) false))
+      (match run
+        ((err e) (do (println (str "  SETUP " cid ": " e " " (resultOr (match made ((err x) (ok x)) ((ok _) (ok ""))) "") " " (resultOr (match tree ((err x) (ok x)) ((ok _) (ok ""))) ""))) false))
         ((ok r)
           (let [wantErr (at f 7)
                 gotErr (normalize r.err root tmp)
@@ -358,7 +358,7 @@ fn curlAbsent! base: String host: String cmdPath: String -> String
         w (fileWrite (str root "/.asl/mem/gaps/MeshDefectBlackboard.asn") board)
         env (list (str "PATH=" empty) (str "HOME=" root) (str "ROOT_DIR=" root) "GATEWAY_URL=http://127.0.0.1:1/gw")
         r (runChild! (list host "run" cmdPath "propose-fix" "--id" "DEF-Z-1") root env)]
-    (mt r ((ok x) (str x.out x.err)) ((err e) e)))
+    (match r ((ok x) (str x.out x.err)) ((err e) e)))
 
 fn escapeAttempt! base: String host: String cmdPath: String k: String target: String outside: String link: Bool -> (Pair String String)
   (let [d (str base "/escape" k)
@@ -366,14 +366,14 @@ fn escapeAttempt! base: String host: String cmdPath: String k: String target: St
         empty (str d "/emptybin")
         patch (str "(:replace :target \\\"" target "#f\\\" :old \\\"(+ x 1)\\\" :new \\\"(+ x 2)\\\")")
         board (str "(:meshDefectBlackboard\n  :defects (\n    (:defect\n      :id \"DEF-E-1\"\n      :target \"src/a.asl#f\"\n      :status :corroborated\n      :confirmations 1\n      :fixProposal (\n        :proposedPatch \"" patch "\"))\n  ))\n")
-        made (fold (fn [acc p] (mt acc ((err e) (err e)) ((ok _) (dirCreate p)))) (ok ()) (list (str root "/.asl/mem/gaps") (str root "/src") empty (dirOf outside)))
+        made (fold (fn [acc p] (match acc ((err e) (err e)) ((ok _) (dirCreate p)))) (ok ()) (list (str root "/.asl/mem/gaps") (str root "/src") empty (dirOf outside)))
         w1 (fileWrite (str root "/.asl/mem/gaps/MeshDefectBlackboard.asn") board)
         w2 (fileWrite (str root "/src/a.asl") "(+ x 1)\n")
         w3 (fileWrite outside "(+ x 1)\n")
         w4 (if link (pathSymlink (dirOf outside) (str root "/lnk")) (ok ()))
         env (list (str "PATH=" empty) (str "HOME=" root) (str "ROOT_DIR=" root) "GATEWAY_URL=http://127.0.0.1:1/gw")
         r (if (and (ok? made) (ok? w1) (ok? w2) (ok? w3) (ok? w4)) (runChild! (list host "run" cmdPath "apply-fix" "--id" "DEF-E-1") root env) (err "setup failed"))]
-    (pair (mt r ((ok x) (str x.out x.err)) ((err e) e)) (resultOr (fileReadString outside) "")))
+    (pair (match r ((ok x) (str x.out x.err)) ((err e) e)) (resultOr (fileReadString outside) "")))
 
 fn ! runTests -> Bool
   (let [text (resultOr (fileReadString (fixturePath)) "")

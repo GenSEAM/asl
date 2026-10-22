@@ -8,13 +8,13 @@ fn siteUrl -> String
   "https://aslang.dev"
 
 fn routePath r: Route -> String
-  (mt r ((home) "/") ((docs) "/docs") ((blog) "/blog") ((post slug) (str "/blog/" slug)) ((missing) "/404"))
+  (match r ((home) "/") ((docs) "/docs") ((blog) "/blog") ((post slug) (str "/blog/" slug)) ((missing) "/404"))
 
 fn current? r: Route target: Route -> Bool
-  (mt target
-    ((home) (mt r ((home) true) (_ false)))
-    ((docs) (mt r ((docs) true) (_ false)))
-    ((blog) (mt r ((blog) true) ((post s) true) (_ false)))
+  (match target
+    ((home) (match r ((home) true) (_ false)))
+    ((docs) (match r ((docs) true) (_ false)))
+    ((blog) (match r ((blog) true) ((post s) true) (_ false)))
     ((post s) false)
     ((missing) false))
 
@@ -69,10 +69,10 @@ fn headNodes here: Route pageTitle: String description: String -> (List h/Node)
    (h/meta [(h/attr "name" "viewport") (h/attr "content" "width=device-width, initial-scale=1")])
    (h/title [] [(h/text pageTitle)])
    (h/meta [(h/attr "name" "description") (h/attr "content" description)])
-   (mt here
+   (match here
      ((missing) (h/meta [(h/attr "name" "robots") (h/attr "content" "noindex")]))
      (_ (h/link [(h/attr "rel" "canonical") (h/href (str (siteUrl) (routePath here)))])))
-   (h/meta [(h/attr "property" "og:type") (h/attr "content" (mt here ((post s) "article") (_ "website")))])
+   (h/meta [(h/attr "property" "og:type") (h/attr "content" (match here ((post s) "article") (_ "website")))])
    (h/meta [(h/attr "property" "og:title") (h/attr "content" pageTitle)])
    (h/meta [(h/attr "property" "og:description") (h/attr "content" description)])
    (h/meta [(h/attr "property" "og:url") (h/attr "content" (str (siteUrl) (routePath here)))])

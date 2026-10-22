@@ -13,16 +13,16 @@ fn classifyMockAnomaly complexity: Int64 asserts: Int64 reachable: Bool -> Vacuo
   (if (and (= complexity 0) (not reachable)) (anomalyHollowMock) (if (= asserts 0) (anomalyZeroAssertions) (if (and (= complexity 0) reachable) (anomalyCleanConstant) (anomalyCleanConstant))))
 
 fn anomalyToString anomaly: VacuousMockAnomaly -> String
-  (mt anomaly ((anomalyHollowMock) "hollowMock") ((anomalyZeroAssertions) "zeroAssertions") ((anomalyTautologicalAssert) "tautologicalAssert") ((anomalyCleanConstant) "cleanConstant"))
+  (match anomaly ((anomalyHollowMock) "hollowMock") ((anomalyZeroAssertions) "zeroAssertions") ((anomalyTautologicalAssert) "tautologicalAssert") ((anomalyCleanConstant) "cleanConstant"))
 
 fn badgeStateToString state: BadgeState -> String
-  (mt state ((badgeVerified) "verified") ((badgeFailed) "failed") ((badgeIncomplete) "incomplete") ((badgeStale) "stale") ((badgeInconclusive) "inconclusive") ((badgeRunning) "running"))
+  (match state ((badgeVerified) "verified") ((badgeFailed) "failed") ((badgeIncomplete) "incomplete") ((badgeStale) "stale") ((badgeInconclusive) "inconclusive") ((badgeRunning) "running"))
 
 fn formatBadgeIndicator state: BadgeState -> String
-  (mt state ((badgeVerified) "[OK] Verified") ((badgeFailed) "[FAIL] Failed") ((badgeIncomplete) "[VACUOUS] Incomplete") ((badgeStale) "[STALE] Stale Snapshot") ((badgeInconclusive) "[WARN] Inconclusive") ((badgeRunning) "[RUN] Executing"))
+  (match state ((badgeVerified) "[OK] Verified") ((badgeFailed) "[FAIL] Failed") ((badgeIncomplete) "[VACUOUS] Incomplete") ((badgeStale) "[STALE] Stale Snapshot") ((badgeInconclusive) "[WARN] Inconclusive") ((badgeRunning) "[RUN] Executing"))
 
 fn renderMockItemCard item: VacuousMockItem -> ui/VNode
-  (let [(cue (mt item.anomaly ((anomalyHollowMock) "[VACUOUS] Hollow Mock") ((anomalyZeroAssertions) "[VACUOUS] 0 Assertions") ((anomalyTautologicalAssert) "[WARN] Tautological") ((anomalyCleanConstant) "[OK] Clean Constant"))) (titleText (str item.targetSymbol " (" cue ")")) (metaText (str "File: " item.filePath " | Asserts: " (stringFromInt64 item.assertCount))) (attrs (mapSet (mapSet (mapEmpty) "class" "sds1-mock-item") "data-symbol" item.targetSymbol))] (ui/makeContainer (str "mock-" item.targetSymbol) attrs (list (ui/makeText titleText "mock-title") (ui/makeText metaText "mock-meta"))))
+  (let [(cue (match item.anomaly ((anomalyHollowMock) "[VACUOUS] Hollow Mock") ((anomalyZeroAssertions) "[VACUOUS] 0 Assertions") ((anomalyTautologicalAssert) "[WARN] Tautological") ((anomalyCleanConstant) "[OK] Clean Constant"))) (titleText (str item.targetSymbol " (" cue ")")) (metaText (str "File: " item.filePath " | Asserts: " (stringFromInt64 item.assertCount))) (attrs (mapSet (mapSet (mapEmpty) "class" "sds1-mock-item") "data-symbol" item.targetSymbol))] (ui/makeContainer (str "mock-" item.targetSymbol) attrs (list (ui/makeText titleText "mock-title") (ui/makeText metaText "mock-meta"))))
 
 fn renderVacuousMockTile items: (List VacuousMockItem) -> ui/VNode
   (let [(count (listLength items)) (headerText (str "Vacuous Verification & Hollow Mock Detector (" (stringFromInt64 count) " findings)")) (headerNode (ui/makeText headerText "detector-title")) (cards (fold (fn [(acc (List ui/VNode)) (it VacuousMockItem)] -> (List ui/VNode) (listAppend acc (list (renderMockItemCard it)))) (list) items)) (tileAttrs (mapSet (mapSet (mapEmpty) "class" "sds1-vacuous-mock-card") "data-count" (stringFromInt64 count)))] (ui/makeContainer "vacuous-mock-root" tileAttrs (cons headerNode cards)))

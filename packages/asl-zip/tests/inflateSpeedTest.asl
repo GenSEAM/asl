@@ -3,10 +3,10 @@
   :i [(asl-zip/gzip :a gz)])
 
 fn ! readAll path: String -> (Result Bytes String)
-  (mt (fileSize path)
+  (match (fileSize path)
     ((err e) (err (str path ": " e)))
     ((ok n)
-     (mt (fileReadRange path 0 n)
+     (match (fileReadRange path 0 n)
        ((ok b) (ok b))
        ((err e) (err (str path ": " e))))))
 
@@ -20,13 +20,13 @@ fn fixture name: String -> String
   (str "asl/packages/asl-zip/tests/fixtures/" name)
 
 fn ! edgeOk! name: String plain: String -> String
-  (mt (readAll (fixture name))
+  (match (readAll (fixture name))
     ((err e) (str "unreadable " e))
     ((ok packed)
-     (mt (readAll (fixture plain))
+     (match (readAll (fixture plain))
        ((err e) (str "unreadable " e))
        ((ok want)
-        (mt (gz/gunzip! packed)
+        (match (gz/gunzip! packed)
           ((err e) (str "err " e))
           ((ok got)
            (if (= (firstMismatch got want 0 (min (bytesLength got) (bytesLength want))) -1)
@@ -34,27 +34,27 @@ fn ! edgeOk! name: String plain: String -> String
              "differs")))))))
 
 fn ! edgeErr! name: String -> String
-  (mt (readAll (fixture name))
+  (match (readAll (fixture name))
     ((err e) (str "unreadable " e))
     ((ok packed)
-     (mt (gz/gunzip! packed)
+     (match (gz/gunzip! packed)
        ((err e) e)
        ((ok _) "ok"))))
 
 fn ! main args: (List String) -> (Result Int64 String)
-  (mt (envGet "INFLATE_SPEED_DIR")
+  (match (envGet "INFLATE_SPEED_DIR")
     ((none) (err "INFLATE_SPEED_DIR is unset"))
     ((some dir)
-     (mt (readAll (str dir "/input.txt.gz"))
+     (match (readAll (str dir "/input.txt.gz"))
        ((err e) (err e))
        ((ok packed)
-        (mt (readAll (str dir "/reference.txt"))
+        (match (readAll (str dir "/reference.txt"))
           ((err e) (err e))
           ((ok want)
            (let [(t0 (monotonicNs))
                  (decoded (gz/gunzip! packed))
                  (t1 (monotonicNs))]
-             (mt decoded
+             (match decoded
                ((err e) (err e))
                ((ok got)
                 (do
@@ -77,7 +77,7 @@ fn cpuRunner -> String
   "perl -e 'my $p=fork; die unless defined $p; if (!$p) { exec @ARGV or exit 127 } waitpid($p,0); my @t=times; printf STDERR q{cpuSeconds=%.3f exit=%d}.chr(10), $t[2]+$t[3], $?>>8; exit($?>>8)'"
 
 fn field text: String key: String -> String
-  (mt (stringIndexOf text (str key "="))
+  (match (stringIndexOf text (str key "="))
     ((none) "")
     ((some at)
      (let [(from (+ at (+ (stringLength key) 1)))

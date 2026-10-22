@@ -19,13 +19,13 @@ fn knownMisparseSet -> (List String)
   (:f identical Int64))
 
 fn ! formatIdentical? path: String -> Bool
-  (let [(verdict (mt (fileReadString path)
+  (let [(verdict (match (fileReadString path)
                    ((err e) (err (str "read error: " e)))
                    ((ok content)
-                    (mt (fmt/formatRepair content "asl")
+                    (match (fmt/formatRepair content "asl")
                       ((err e) (err (str "formatter error: " e)))
                       ((ok out) (if (= out content) (ok true) (err "output differs from input")))))))]
-    (mt verdict
+    (match verdict
       ((ok _) true)
       ((err e) (do (print (str path ": " e "\n")) false))))
 
@@ -52,7 +52,7 @@ fn formatShard! allFiles: (List String) n: Int64 k: Int64 label: String -> Shard
                     :identical identical)))
 
 fn ! runTests -> Bool
-  (mt (lib/allCorpusFiles!)
+  (match (lib/allCorpusFiles!)
     ((err e) (do (assert false (str "git ls-files failed: " e)) false))
     ((ok allFiles)
      (let [(v (formatShard! allFiles 4 1 "formatCorpusShard1Test"))]

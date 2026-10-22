@@ -54,23 +54,23 @@ fn findChildAt offset: Int64 children: (List tr/TreeElement) -> (Option tr/TreeE
 fn nodeAt root: tr/Node offset: Int64 -> (Option tr/Node)
   (if (or (< offset root.start) (>= offset root.end))
     (none)
-    (mt (findChildAt offset root.children)
+    (match (findChildAt offset root.children)
       ((none) (some root))
       ((some child)
-       (mt child
+       (match child
          ((tr/elemToken _) (some root))
          ((tr/elemNode childNode)
-          (mt (nodeAt childNode offset)
+          (match (nodeAt childNode offset)
             ((some inner) (some inner))
             ((none) (some childNode))))))))
 
 fn tokenAt root: tr/Node offset: Int64 -> (Option tr/Token)
   (if (or (< offset root.start) (>= offset root.end))
     (none)
-    (mt (findChildAt offset root.children)
+    (match (findChildAt offset root.children)
       ((none) (none))
       ((some child)
-       (mt child
+       (match child
          ((tr/elemToken tok) (some tok))
          ((tr/elemNode childNode) (tokenAt childNode offset))))))
 
@@ -79,12 +79,12 @@ fn findAncestorsInChildren children: (List tr/TreeElement) target: tr/Node path:
     (none)
     (let [(head (optionOr (listHead children) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tail (optionOr (listTail children) (list)))]
-      (mt head
+      (match head
         ((tr/elemToken _) (findAncestorsInChildren tail target path))
         ((tr/elemNode childNode)
          (if (nodeEquals? childNode target)
            (some path)
-           (mt (findAncestorsInChildren childNode.children target (listAppend path (list childNode)))
+           (match (findAncestorsInChildren childNode.children target (listAppend path (list childNode)))
              ((some res) (some res))
              ((none) (findAncestorsInChildren tail target path))))))))
 
@@ -105,7 +105,7 @@ fn collectChildNodes children: (List tr/TreeElement) -> (List tr/Node)
     (let [(head (optionOr (listHead children) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tail (optionOr (listTail children) (list)))
           (rest (collectChildNodes tail))]
-      (mt head
+      (match head
         ((tr/elemToken _) rest)
         ((tr/elemNode n) (cons n rest)))))
 
@@ -113,7 +113,7 @@ fn filterOutNode nodes: (List tr/Node) target: tr/Node -> (List tr/Node)
   (filter (fn [(n tr/Node)] -> Bool (not (nodeEquals? n target))) nodes)
 
 fn siblings root: tr/Node target: tr/Node -> (List tr/Node)
-  (mt (parentNode root target)
+  (match (parentNode root target)
     ((none) (list))
     ((some parent)
      (filterOutNode (collectChildNodes parent.children) target)))
@@ -128,7 +128,7 @@ fn findNextInList nodes: (List tr/Node) target: tr/Node -> (Option tr/Node)
         (findNextInList tail target))))
 
 fn nextSibling root: tr/Node target: tr/Node -> (Option tr/Node)
-  (mt (parentNode root target)
+  (match (parentNode root target)
     ((none) (none))
     ((some parent)
      (findNextInList (collectChildNodes parent.children) target)))
@@ -143,7 +143,7 @@ fn findPrevInList nodes: (List tr/Node) prev: (Option tr/Node) target: tr/Node -
         (findPrevInList tail (some head) target))))
 
 fn prevSibling root: tr/Node target: tr/Node -> (Option tr/Node)
-  (mt (parentNode root target)
+  (match (parentNode root target)
     ((none) (none))
     ((some parent)
      (findPrevInList (collectChildNodes parent.children) (none) target)))
@@ -170,17 +170,17 @@ fn cursorPrevSibling c: Cursor -> (Option tr/Node)
   (prevSibling c.root c.node)
 
 fn cursorAt root: tr/Node offset: Int64 -> (Option Cursor)
-  (mt (nodeAt root offset)
+  (match (nodeAt root offset)
     ((some n) (some (makeCursor root n)))
     ((none) (none)))
 
 fn nodeLineRange s: src/Source node: tr/Node -> (Option LineRange)
   (let [(st node.start)
         (en node.end)]
-    (mt (src/sourceLineAt s st)
+    (match (src/sourceLineAt s st)
       ((some sl)
        (let [(endOff (if (> en st) (- en 1) st))]
-         (mt (src/sourceLineAt s endOff)
+         (match (src/sourceLineAt s endOff)
            ((some el) (some (LineRange :startLine sl :endLine el)))
            ((none) (some (LineRange :startLine sl :endLine sl))))))
       ((none) (none))))
@@ -189,11 +189,11 @@ fn lineRange s: src/Source node: tr/Node -> (Option LineRange)
   (nodeLineRange s node)
 
 fn nodeStartLine s: src/Source node: tr/Node -> (Option Int64)
-  (mt (nodeLineRange s node)
+  (match (nodeLineRange s node)
     ((some lr) (some lr.startLine))
     ((none) (none)))
 
 fn nodeEndLine s: src/Source node: tr/Node -> (Option Int64)
-  (mt (nodeLineRange s node)
+  (match (nodeLineRange s node)
     ((some lr) (some lr.endLine))
     ((none) (none)))

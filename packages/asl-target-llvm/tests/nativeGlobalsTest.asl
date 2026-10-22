@@ -11,9 +11,9 @@ fn libSource name: String -> String
 fn mainSource name: String libName: String -> String
   (str "(module " name "\n  :x [main]\n  :i [(" libName " :a a)])\n\n"
        "fn ! main -> (Result Int64 String)\n"
-       "  (mt (a/spawnEcho \"shared\")\n"
+       "  (match (a/spawnEcho \"shared\")\n"
        "    ((err e) (err e))\n"
-       "    ((ok h) (mt (processWait h 5000)\n"
+       "    ((ok h) (match (processWait h 5000)\n"
        "              ((err e) (err e))\n"
        "              ((ok out) (do (print out.stdout) (ok 0))))))\n")
 

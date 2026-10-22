@@ -50,7 +50,7 @@ fn readList s: String bs: Bytes n: Int64 i: Int64 acc: (List AVal) -> (Result (P
       ((>= j n) (err "unclosed list"))
       ((= (bytesGet bs j) 41) (ok (pair (aList (listReverse acc)) (+ j 1))))
       (else
-       (mt (readVal s bs n j)
+       (match (readVal s bs n j)
          ((err e) (err e))
          ((ok vr) (readList s bs n (pairSecond vr) (cons (pairFirst vr) acc)))))))
 
@@ -67,40 +67,40 @@ fn readVal s: String bs: Bytes n: Int64 i: Int64 -> (Result (Pair AVal Int64) St
          (cond
            ((= k j) (err (str "unexpected byte at " (stringFromInt64 j))))
            ((stringStartsWith? tok ":") (ok (pair (aKw (cut tok 1 (stringLength tok))) k)))
-           (else (mt (stringToInt64 tok) ((some v) (ok (pair (aNum v) k))) ((none) (ok (pair (aSym tok) k))))))))))
+           (else (match (stringToInt64 tok) ((some v) (ok (pair (aNum v) k))) ((none) (ok (pair (aSym tok) k))))))))))
 
 fn readAll s: String bs: Bytes n: Int64 i: Int64 acc: (List AVal) -> (Result (List AVal) String)
   (let [(j (spaceOrComment bs n i))]
     (if (>= j n)
       (ok (listReverse acc))
-      (mt (readVal s bs n j)
+      (match (readVal s bs n j)
         ((err e) (err e))
         ((ok vr) (readAll s bs n (pairSecond vr) (cons (pairFirst vr) acc))))))
 
 fn itemsOf v: AVal -> (List AVal)
-  (mt v ((aList xs) xs) ((aStr _) (list)) ((aKw _) (list)) ((aNum _) (list)) ((aSym _) (list)))
+  (match v ((aList xs) xs) ((aStr _) (list)) ((aKw _) (list)) ((aNum _) (list)) ((aSym _) (list)))
 
 fn kwName v: AVal -> String
-  (mt v ((aKw k) k) ((aStr _) "") ((aNum _) "") ((aSym _) "") ((aList _) ""))
+  (match v ((aKw k) k) ((aStr _) "") ((aNum _) "") ((aSym _) "") ((aList _) ""))
 
 fn symName v: AVal -> String
-  (mt v ((aSym k) k) ((aStr _) "") ((aNum _) "") ((aKw _) "") ((aList _) ""))
+  (match v ((aSym k) k) ((aStr _) "") ((aNum _) "") ((aKw _) "") ((aList _) ""))
 
 fn numOf v: AVal -> Int64
-  (mt v ((aNum k) k) ((aStr _) -1) ((aSym _) -1) ((aKw _) -1) ((aList _) -1))
+  (match v ((aNum k) k) ((aStr _) -1) ((aSym _) -1) ((aKw _) -1) ((aList _) -1))
 
 fn strRaw v: AVal -> (Option String)
-  (mt v ((aStr r) (some r)) ((aNum _) (none)) ((aSym _) (none)) ((aKw _) (none)) ((aList _) (none)))
+  (match v ((aStr r) (some r)) ((aNum _) (none)) ((aSym _) (none)) ((aKw _) (none)) ((aList _) (none)))
 
 fn headOf v: AVal -> String
-  (mt (listHead (itemsOf v)) ((some x) (kwName x)) ((none) ""))
+  (match (listHead (itemsOf v)) ((some x) (kwName x)) ((none) ""))
 
 fn plGet xs: (List AVal) key: String -> (Option AVal)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (none))
     ((some x)
      (let [(rest (optionOr (listTail xs) (list)))]
-       (mt x
+       (match x
          ((aKw k) (if (= k key) (listHead rest) (plGet (optionOr (listTail rest) (list)) key)))
          ((aStr _) (plGet rest key))
          ((aNum _) (plGet rest key))
@@ -173,18 +173,18 @@ fn decodeBytes! raw: String -> Bytes
     (fillBytes! bs n 0 (bytesAlloc (escLen bs n 0 0)) 0))
 
 fn rawOf v: (Option AVal) -> (Option String)
-  (mt v ((some x) (strRaw x)) ((none) (none)))
+  (match v ((some x) (strRaw x)) ((none) (none)))
 
 fn textField v: AVal key: String -> String
-  (mt (rawOf (field v key))
+  (match (rawOf (field v key))
     ((none) "")
     ((some r) (resultOr (decodeText r) (str "<undecodable " key ">"))))
 
 fn numField v: AVal key: String -> Int64
-  (mt (field v key) ((some x) (numOf x)) ((none) -1))
+  (match (field v key) ((some x) (numOf x)) ((none) -1))
 
 fn listField v: AVal key: String -> (List AVal)
-  (mt (field v key) ((some x) (itemsOf x)) ((none) (list)))
+  (match (field v key) ((some x) (itemsOf x)) ((none) (list)))
 
 fn gitArgs args: (List String) -> (List String)
   (listAppend (list "-c" "init.defaultBranch=work" "-c" "commit.gpgsign=false" "-c" "core.autocrlf=false" "-c" "core.symlinks=true"
@@ -194,12 +194,12 @@ fn gitArgs args: (List String) -> (List String)
 fn runGit! root: String args: (List String) stdin: (Option String) date: (Option String) -> (Result String String)
   (let [(c0 (p/withEnv (p/withTimeout (p/withCwd (p/cmd "git" (listAppend (list "-C" root) (gitArgs args))) root) 600000)
                        "GIT_CEILING_DIRECTORIES" (gf/ceilingFor! root)))
-        (c1 (mt stdin ((some s) (p/withStdin c0 s)) ((none) c0)))
-        (c2 (mt date
+        (c1 (match stdin ((some s) (p/withStdin c0 s)) ((none) c0)))
+        (c2 (match date
               ((none) c1)
               ((some d) (p/withEnv (p/withEnv (p/withEnv (p/withEnv (p/withEnv (p/withEnv c1 "GIT_AUTHOR_NAME" "parity") "GIT_AUTHOR_EMAIL" "parity@localhost") "GIT_AUTHOR_DATE" d)
                                                         "GIT_COMMITTER_NAME" "parity") "GIT_COMMITTER_EMAIL" "parity@localhost") "GIT_COMMITTER_DATE" d))))]
-    (mt (p/exec! c2)
+    (match (p/exec! c2)
       ((err _) (err (str "git " (stringJoin args " ") " could not run")))
       ((ok o) (if (= o.exitCode 0) (ok o.stdout) (err (str "git " (stringJoin args " ") ": " o.stderr))))))
 
@@ -209,47 +209,47 @@ fn parentDir path: String -> String
 
 fn writeOne! root: String f: AVal -> (Result Bool String)
   (let [(xs (itemsOf f))]
-    (mt (rawOf (listGet xs 1))
+    (match (rawOf (listGet xs 1))
       ((none) (err "file entry without a path"))
       ((some rawPath)
-       (mt (decodeText rawPath)
+       (match (decodeText rawPath)
          ((err e) (err e))
          ((ok rel)
           (let [(full (str root "/" rel))]
-            (mt (rawOf (listGet xs 2))
+            (match (rawOf (listGet xs 2))
               ((none) (resultMap (pathRemove full) (fn [(u Unit)] -> Bool true)))
               ((some rawData)
-               (mt (dirCreate (parentDir full))
+               (match (dirCreate (parentDir full))
                  ((err e) (err e))
-                 ((ok _) (mt (fileWrite full (decodeBytes! rawData)) ((ok _) (ok true)) ((err e) (err (str "write " full ": " e))))))))))))))
+                 ((ok _) (match (fileWrite full (decodeBytes! rawData)) ((ok _) (ok true)) ((err e) (err (str "write " full ": " e))))))))))))))
 
 fn writeAllFiles! root: String fs: (List AVal) -> (Result Bool String)
-  (mt (listHead fs)
+  (match (listHead fs)
     ((none) (ok true))
-    ((some f) (mt (writeOne! root f) ((err e) (err e)) ((ok _) (writeAllFiles! root (optionOr (listTail fs) (list)))))))
+    ((some f) (match (writeOne! root f) ((err e) (err e)) ((ok _) (writeAllFiles! root (optionOr (listTail fs) (list)))))))
 
 fn linkTarget l: AVal -> String
-  (mt (rawOf (listGet (itemsOf l) 2)) ((some r) (resultOr (decodeText r) "")) ((none) ""))
+  (match (rawOf (listGet (itemsOf l) 2)) ((some r) (resultOr (decodeText r) "")) ((none) ""))
 
 fn linkPath l: AVal -> String
-  (mt (rawOf (listGet (itemsOf l) 1)) ((some r) (resultOr (decodeText r) "")) ((none) ""))
+  (match (rawOf (listGet (itemsOf l) 1)) ((some r) (resultOr (decodeText r) "")) ((none) ""))
 
 fn addLinks! root: String ls: (List AVal) -> (Result Bool String)
-  (mt (listHead ls)
+  (match (listHead ls)
     ((none) (ok true))
     ((some l)
-     (mt (runGit! root (list "hash-object" "-w" "--stdin") (some (linkTarget l)) (none))
+     (match (runGit! root (list "hash-object" "-w" "--stdin") (some (linkTarget l)) (none))
        ((err e) (err e))
        ((ok blob)
-        (mt (runGit! root (list "update-index" "--add" "--cacheinfo" (str "120000," (stringTrim blob) "," (linkPath l))) (none) (none))
+        (match (runGit! root (list "update-index" "--add" "--cacheinfo" (str "120000," (stringTrim blob) "," (linkPath l))) (none) (none))
           ((err e) (err e))
           ((ok _) (addLinks! root (optionOr (listTail ls) (list)))))))))
 
 fn checkoutLinks! root: String ls: (List AVal) -> (Result Bool String)
-  (mt (listHead ls)
+  (match (listHead ls)
     ((none) (ok true))
     ((some l)
-     (mt (runGit! root (list "checkout" "--" (linkPath l)) (none) (none))
+     (match (runGit! root (list "checkout" "--" (linkPath l)) (none) (none))
        ((err e) (err e))
        ((ok _) (checkoutLinks! root (optionOr (listTail ls) (list)))))))
 
@@ -257,64 +257,64 @@ fn pad2 k: Int64 -> String
   (if (< k 10) (str "0" (stringFromInt64 k)) (stringFromInt64 k))
 
 fn commitAll! root: String cs: (List AVal) k: Int64 -> (Result Bool String)
-  (mt (listHead cs)
+  (match (listHead cs)
     ((none) (ok true))
     ((some c)
      (let [(links (listField c "links"))
            (date (str "2026-01-" (pad2 (+ k 1)) "T00:00:00+0000"))
-           (steps (mt (writeAllFiles! root (listField c "files"))
+           (steps (match (writeAllFiles! root (listField c "files"))
                     ((err e) (err e))
                     ((ok _)
-                     (mt (runGit! root (list "add" "-A") (none) (none))
+                     (match (runGit! root (list "add" "-A") (none) (none))
                        ((err e) (err e))
                        ((ok _)
-                        (mt (addLinks! root links)
+                        (match (addLinks! root links)
                           ((err e) (err e))
                           ((ok _)
-                           (mt (runGit! root (list "commit" "-q" "--no-verify" "--allow-empty" "-m" (str "c" (stringFromInt64 k))) (none) (some date))
+                           (match (runGit! root (list "commit" "-q" "--no-verify" "--allow-empty" "-m" (str "c" (stringFromInt64 k))) (none) (some date))
                              ((err e) (err e))
                              ((ok _) (checkoutLinks! root links))))))))))]
-       (mt steps ((err e) (err e)) ((ok _) (commitAll! root (optionOr (listTail cs) (list)) (+ k 1)))))))
+       (match steps ((err e) (err e)) ((ok _) (commitAll! root (optionOr (listTail cs) (list)) (+ k 1)))))))
 
 fn chmodFixture! root: String paths: (List AVal) -> (Result Bool String)
-  (mt (listHead paths)
+  (match (listHead paths)
     ((none) (ok true))
     ((some f)
-     (mt (rawOf (some f))
+     (match (rawOf (some f))
        ((none) (err "executable entry without a path"))
        ((some raw)
         (let [(path (resultOr (decodeText raw) ""))
               (cmd (p/withTimeout (p/withCwd (p/cmd "chmod" (list "+x" (str root "/" path))) root) 600000))]
-          (mt (p/exec! cmd)
+          (match (p/exec! cmd)
             ((err _) (err (str "chmod " path " could not run")))
             ((ok o) (if (= o.exitCode 0) (chmodFixture! root (optionOr (listTail paths) (list))) (err (str "chmod " path " failed"))))))))))
 
 fn configureFixture! root: String c: AVal -> (Result Bool String)
-  (let [(remote (mt (field c "remote") ((some x) (= (symName x) "true")) ((none) false)))
+  (let [(remote (match (field c "remote") ((some x) (= (symName x) "true")) ((none) false)))
         (addRemote (if remote (resultMap (runGit! root (list "remote" "add" "origin" "https://example.invalid/repo.git") (none) (none)) (fn [(s String)] -> Bool true)) (ok true)))]
-    (mt addRemote ((err e) (err e)) ((ok _) (chmodFixture! root (listField c "executable")))) )
+    (match addRemote ((err e) (err e)) ((ok _) (chmodFixture! root (listField c "executable")))) )
 
 fn buildTree! root: String c: AVal -> (Result Bool String)
-  (mt (dirCreate root)
+  (match (dirCreate root)
     ((err e) (err e))
     ((ok _)
-     (let [(isGit (mt (field c "git") ((some x) (= (symName x) "true")) ((none) false)))
+     (let [(isGit (match (field c "git") ((some x) (= (symName x) "true")) ((none) false)))
            (commits (listField c "commits"))
            (mainAt (numField c "main"))
            (made (if isGit
-                   (mt (runGit! root (list "init" "-q") (none) (none))
+                   (match (runGit! root (list "init" "-q") (none) (none))
                      ((err e) (err e))
                      ((ok _)
-                      (mt (commitAll! root commits 0)
+                      (match (commitAll! root commits 0)
                         ((err e) (err e))
                         ((ok _)
                          (if (>= mainAt 0)
                            (resultMap (runGit! root (list "branch" "-f" "main" (str "HEAD~" (stringFromInt64 (- (- (listLength commits) 1) mainAt)))) (none) (none)) (fn [(s String)] -> Bool true))
                            (ok true))))))
                    (ok true)))]
-       (mt made ((err e) (err e))
+       (match made ((err e) (err e))
          ((ok _)
-          (mt (writeAllFiles! root (listField c "edits"))
+          (match (writeAllFiles! root (listField c "edits"))
             ((err e) (err e))
             ((ok _) (configureFixture! root c))))))))
 
@@ -322,10 +322,10 @@ fn normRoot s: String root: String real: String -> String
   (stringReplace (if (stringEmpty? real) s (stringReplace s real "$ROOT")) root "$ROOT")
 
 fn envOf c: AVal -> String
-  (mt (rawOf (field c "env")) ((some r) (resultOr (decodeText r) "")) ((none) ""))
+  (match (rawOf (field c "env")) ((some r) (resultOr (decodeText r) "")) ((none) ""))
 
 fn argsOf c: AVal -> (List String)
-  (map (fn [(a AVal)] -> String (mt (rawOf (some a)) ((some r) (resultOr (decodeText r) "")) ((none) ""))) (listField c "args"))
+  (map (fn [(a AVal)] -> String (match (rawOf (some a)) ((some r) (resultOr (decodeText r) "")) ((none) ""))) (listField c "args"))
 
 fn normDate text: String -> String
   (let [(prefix "(:foreignBaseline :v 1 :owner \"GF2\" :date \"")
@@ -343,7 +343,7 @@ fn digitsEnd bs: Bytes n: Int64 i: Int64 -> Int64
 
 fn normWall text: String -> String
   (let [(key ":wallMs ")]
-    (mt (stringIndexOf text key)
+    (match (stringIndexOf text key)
       ((none) text)
       ((some at)
        (let [(start (+ at (stringLength key)))
@@ -362,7 +362,7 @@ fn compareRun! c: AVal root: String -> (List String)
         (lockWanted (= (symName (optionOr (field c "lock") (aSym "false"))) "true"))
         (lockHeld (if lockWanted (fileLock (str root "/.git/aslRunner.lock") true) (ok 0)))
         (r (am/runAudit! root args "" (stringContains? (envOf c) "ASL_IN_RUNNER=1")))
-        (released (if lockWanted (mt lockHeld ((ok fd) (fdClose fd)) ((err _) (ok ()))) (ok ())))
+        (released (if lockWanted (match lockHeld ((ok fd) (fdClose fd)) ((err _) (ok ()))) (ok ())))
         (real (resultOr (realPath root) ""))
         (stdout (str (normWall (normRoot r.receipt root real)) "\n"))
         (stderr (str (normWall (normRoot r.summary root real)) "\n"))
@@ -379,23 +379,23 @@ fn tallyAdd t: Tally cases: Int64 pinned: (List String) fails: (List String) -> 
 
 fn synthetic! tmp: String t: Tally c: AVal -> Tally
   (let [(root (str tmp "/" (textField c "id")))]
-    (mt (buildTree! root c)
+    (match (buildTree! root c)
       ((err e) (tallyAdd t 1 (list) (list (str (textField c "id") " tree: " e))))
       ((ok _) (tallyAdd t 1 (list) (compareRun! c root)))))
 
 fn pinned! tmp: String repo: String forms: (List AVal) t: Tally sha: String -> Tally
   (let [(root (str tmp "/pinned-" (cut sha 0 12)))
         (cases (filter (fn [(f AVal)] -> Bool (and (= (headOf f) "case") (= (textField f "sha") sha))) forms))
-        (made (mt (runGit! repo (list "clone" "-q" "--shared" "--no-checkout" repo root) (none) (none))
+        (made (match (runGit! repo (list "clone" "-q" "--shared" "--no-checkout" repo root) (none) (none))
                 ((err e) (err e))
                 ((ok _)
-                 (mt (runGit! root (list "checkout" "-q" "--detach" sha) (none) (none))
+                 (match (runGit! root (list "checkout" "-q" "--detach" sha) (none) (none))
                    ((err e) (err e))
                    ((ok _)
-                    (mt (runGit! root (list "branch" "-f" "main" sha) (none) (none))
+                    (match (runGit! root (list "branch" "-f" "main" sha) (none) (none))
                       ((err e) (err e))
                       ((ok _) (runGit! root (list "remote" "remove" "origin") (none) (none)))))))))]
-    (mt made
+    (match made
       ((err e) (tallyAdd t (listLength cases) (list sha) (list (str sha " clone: " e))))
       ((ok _)
        (let [(fails (fold (fn [(acc (List String)) (c AVal)] -> (List String) (listAppend acc (compareRun! c root))) (list) cases))]
@@ -405,15 +405,15 @@ fn uniq xs: (List String) -> (List String)
   (listReverse (fold (fn [(acc (List String)) (x String)] -> (List String) (if (listContains? acc x) acc (cons x acc))) (list) xs))
 
 fn replay! forms: (List AVal) repo: String tmp: String -> Tally
-  (let [(synth (filter (fn [(f AVal)] -> Bool (and (= (headOf f) "case") (= (mt (field f "tree") ((some x) (kwName x)) ((none) "")) "synthetic"))) forms))
+  (let [(synth (filter (fn [(f AVal)] -> Bool (and (= (headOf f) "case") (= (match (field f "tree") ((some x) (kwName x)) ((none) "")) "synthetic"))) forms))
         (shas (uniq (map (fn [(f AVal)] -> String (textField f "sha"))
-                         (filter (fn [(f AVal)] -> Bool (and (= (headOf f) "case") (= (mt (field f "tree") ((some x) (kwName x)) ((none) "")) "pinned"))) forms))))
+                         (filter (fn [(f AVal)] -> Bool (and (= (headOf f) "case") (= (match (field f "tree") ((some x) (kwName x)) ((none) "")) "pinned"))) forms))))
         (t0 (Tally :cases 0 :pinned (list) :fails (list)))
         (t1 (fold (fn [(t Tally) (c AVal)] -> Tally (synthetic! tmp t c)) t0 synth))]
     (fold (fn [(t Tally) (sha String)] -> Tally (pinned! tmp repo forms t sha)) t1 shas))
 
 fn loadFixture! -> (Result (List AVal) String)
-  (mt (fileReadString (fixturePath))
+  (match (fileReadString (fixturePath))
     ((err e) (err e))
     ((ok text)
      (let [(bs (stringToBytes text))]
@@ -421,22 +421,22 @@ fn loadFixture! -> (Result (List AVal) String)
 
 fn testRecordRefusal! tmp: String -> Bool
   (let [(root (str tmp "/recordRefusal"))
-        (setup (mt (gf/initContained! root)
+        (setup (match (gf/initContained! root)
                  ((err e) (err e))
                  ((ok _)
-                  (mt (fileWrite (str root "/README.md") (stringToBytes "clean\\n"))
+                  (match (fileWrite (str root "/README.md") (stringToBytes "clean\\n"))
                     ((err e) (err e))
                     ((ok _)
-                     (mt (runGit! root (list "add" "README.md") (none) (none))
+                     (match (runGit! root (list "add" "README.md") (none) (none))
                        ((err e) (err e))
                        ((ok _)
-                        (mt (runGit! root (list "commit" "-q" "-m" "base") (none) (none))
+                        (match (runGit! root (list "commit" "-q" "-m" "base") (none) (none))
                           ((err e) (err e))
                           ((ok _)
-                           (mt (fileWrite (str root "/README.md") (stringToBytes "dirty\\n"))
+                           (match (fileWrite (str root "/README.md") (stringToBytes "dirty\\n"))
                              ((err e) (err e))
                              ((ok _) (ok true))))))))))))
-        (c (mt setup
+        (c (match setup
              ((err e) (ag/failCheck "fullGreenRecord" "ERR_FIXTURE_SETUP" e (none) (none)))
              ((ok _) (ag/recordCheck! root ":full"))))
         (cleaned (pathRemove root))]
@@ -453,10 +453,10 @@ fn recordResult r: AVal -> sr/SuiteResult
 fn recordFails! tmp: String c: AVal -> (List String)
   (let [(id (textField c "id"))
         (root (str tmp "/record-" id))]
-    (mt (buildTree! root c)
+    (match (buildTree! root c)
       ((err e) (list (str id " tree: " e)))
       ((ok _)
-       (mt (ag/writeRecord! root (map recordResult (listField c "results")))
+       (match (ag/writeRecord! root (map recordResult (listField c "results")))
          ((err e) (list (str id " write: " e)))
          ((ok rel)
           (let [(content (resultOr (fileReadString (str root "/" rel)) ""))]
@@ -486,9 +486,9 @@ fn testRoot! tmp: String -> Bool
         (run (am/runAudit! root (list "steps") "" false))
         (repo (stringTrim (resultOr (runGit! "." (list "rev-parse" "--show-toplevel") (none) (none)) "")))
         (envRun (p/exec! (p/withCwd (p/cmd "env" (list (str "ROOT_DIR=" root) (str repo "/bin/asl") "run" (str repo "/asl/packages/asl-gates/src/auditMain.asl") "steps")) repo)))
-        (envOutput (mt envRun ((err _) "") ((ok o) o.stdout)))
+        (envOutput (match envRun ((err _) "") ((ok o) o.stdout)))
         (cliRoot (p/exec! (p/withCwd (p/cmd (str repo "/bin/asl") (list "run" (str repo "/asl/packages/asl-gates/src/auditMain.asl") "gates" "--static" "--root" root)) repo)))
-        (cliOutput (mt cliRoot ((err _) "") ((ok o) o.stdout)))
+        (cliOutput (match cliRoot ((err _) "") ((ok o) o.stdout)))
         (cleaned (pathRemove root))]
     (do
       (assert (and (ok? made) (and (ok? init) (and (ok? tasks) (and (ok? task) (and (ok? added) (ok? committed)))))) "explicit root is a committed fixture tree")
@@ -508,7 +508,7 @@ fn testFullAsync! tmp: String -> Bool
         (form (resultOr (fileReadString (str root "/spawn.receipt")) ""))
         (badStub (fileWrite (str root "/bin/asl") (stringToBytes "#!/bin/sh\nprintf 'head%0400d' 0\necho ' missing \"status\"'\nexit 7\n")))
         (badJob (ag/spawnFullJob! root (list "--full")))
-        (badEv (mt badJob ((ok _) "") ((err e) e)))
+        (badEv (match badJob ((ok _) "") ((err e) e)))
         (silentStub (fileWrite (str root "/bin/asl") (stringToBytes "#!/bin/sh\necho '(:manage :status :failed)'\n")))
         (silentJob (ag/spawnFullJob! root (list "--full")))
         (cleaned (pathRemove root))]

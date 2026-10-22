@@ -149,16 +149,16 @@ fn formatDiags ds: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.locus ": [" d.code "] " d.message)) ds) "; ")
 
 fn ! compiled path: String -> (Result String String)
-  (mt (lk/linkEntry! path)
+  (match (lk/linkEntry! path)
     ((err ds) (err (formatDiags ds)))
-    ((ok m) (mt (llvm/emitLlvmProgramNative! m (str m.name ".main"))
+    ((ok m) (match (llvm/emitLlvmProgramNative! m (str m.name ".main"))
               ((err ds) (err (formatDiags ds)))
               ((ok code) (ok code)))))
 
 fn ! optBin -> (Option String)
   (let [(known (filter (fn [(c String)] -> Bool (= (processRun (str "test -x " c)).exitCode 0))
                         (list "/opt/homebrew/opt/llvm/bin/opt" "/usr/local/opt/llvm/bin/opt")))]
-    (mt (listHead known)
+    (match (listHead known)
       ((some o) (some o))
       ((none) (if (= (processRun "command -v opt >/dev/null 2>&1").exitCode 0) (some "opt") (none)))))
 
@@ -189,7 +189,7 @@ fn sourceDirs -> (List (Pair String (List String)))
 
 fn ! sourceFiles -> (List String)
   (fold (fn [(acc (List String)) (d (Pair String (List String)))] -> (List String)
-          (mt (dirList (pairFirst d))
+          (match (dirList (pairFirst d))
             ((err e) (do (assert false (str "lists " (pairFirst d) ": " e)) acc))
             ((ok names) (listAppend acc (map (fn [(n String)] -> String (str (pairFirst d) "/" n))
                                              (filter (fn [(n String)] -> Bool (listAny? (fn [(s String)] -> Bool (stringEndsWith? n s)) (pairSecond d))) names))))))
@@ -199,7 +199,7 @@ fn ! testStaleNames -> Bool
   (let [(files (sourceFiles))
         (names (listAppend (map (fn [(p (Pair String String))] -> String (str "asl_rt_b_" (pairSecond p))) (opSymbols)) (list (str "OPEN" "TRY("))))
         (stale (fold (fn [(acc (List String)) (f String)] -> (List String)
-                       (mt (fileReadString f)
+                       (match (fileReadString f)
                          ((err e) (do (assert false (str "reads " f ": " e)) acc))
                          ((ok text) (listAppend acc (map (fn [(n String)] -> String (str f ": " n))
                                                          (filter (fn [(n String)] -> Bool (stringContains? text n)) names))))))
@@ -227,7 +227,7 @@ fn ! testIr dir: String name: String code: String helpers: (List String) -> Bool
                  true))
            helpers)
       (assert (ok? (fileWrite ll code)) (str "fileWrite " ll))
-      (mt (optBin)
+      (match (optBin)
         ((none) (do (println "opt not found on this host, skipping -passes=verify") true))
         ((some o) (let [(v (processRun (str o " -passes=verify -disable-output " ll)))]
                     (do (assert (= v.exitCode 0) (str name ": opt -passes=verify accepts the emitted IR: " v.stderr)) true))))
@@ -561,7 +561,7 @@ fn ! testValues dir: String -> Bool
     (do
       (assert (ok? (fileWrite nativeSrc (valuesSrc true))) (str "fileWrite " nativeSrc))
       (assert (ok? (fileWrite hostSrc (valuesSrc false))) (str "fileWrite " hostSrc))
-      (mt (compiled nativeSrc)
+      (match (compiled nativeSrc)
         ((err e) (do (assert false (str "opsValues links and emits: " e)) true))
         ((ok code)
           (do
@@ -611,7 +611,7 @@ fn ! testSsaBuiltins dir: String -> Bool
     (do
       (map (fn [(c (Pair irTy/SsaFunction String))] -> Bool
              (let [(name (pairFirst c).name)]
-               (mt (llvm/emitLlvmProgram m name)
+               (match (llvm/emitLlvmProgram m name)
                  ((err ds) (do (assert false (str name ": emits: " (formatDiags ds))) true))
                  ((ok code)
                    (do
@@ -695,9 +695,9 @@ fn keyOrderCaller -> String
     "") "\n")
 
 fn ! testKeyOrder dir: String -> Bool
-  (mt (low/lowerSource (keyOrderSource))
+  (match (low/lowerSource (keyOrderSource))
     ((err ds) (do (assert false (str "keyOrder: the source lowers: " (formatDiags ds))) true))
-    ((ok m) (mt (ssa/emitLlvmModule m)
+    ((ok m) (match (ssa/emitLlvmModule m)
               ((err ds) (do (assert false (str "keyOrder: emitLlvmModule emits same and differ: " (formatDiags ds))) true))
               ((ok ll)
                 (let [(lib (str dir "/keyOrderLib.ll"))
@@ -728,7 +728,7 @@ fn ! runTests -> Bool
       (testSsaBuiltins dir)
       (testKeyOrder dir)
       (assert (ok? (fileWrite src (fixtureSrc))) (str "fileWrite " src))
-      (mt (compiled src)
+      (match (compiled src)
         ((err e) (do (assert false (str "opsFixture links and emits: " e)) true))
         ((ok code)
           (do

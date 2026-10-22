@@ -4,7 +4,7 @@ fn libSrc -> Str
   "(module p/lib :x [R mkR] :i [])\n\n(schema R (:f x Int64 \"x\") (:f y Str \"y\"))\n\nfn mkR n: Int64 -> R\n  (R :x n :y \"lib\")\n"
 
 fn libDeps -> (Map Str r/ModuleSummary)
-  (mt (a/parse (libSrc)) ((ok forms) (mapSet (mapEmpty) "p/lib" (r/collectSummary forms "p/lib.asl"))) ((err _) (mapEmpty)))
+  (match (a/parse (libSrc)) ((ok forms) (mapSet (mapEmpty) "p/lib" (r/collectSummary forms "p/lib.asl"))) ((err _) (mapEmpty)))
 
 fn modSrc body: Str -> Str
   (str "(module m :x [] :i [(p/lib :a l)])\n\n(schema Loc (:f n Int64 \"n\") (:f s Str \"s\"))\n\n" body)
@@ -26,7 +26,7 @@ fn clean? body: Str label: Str -> Bool
 
 fn rejectedAt? body: Str code: Str needle: Str line: Int64 label: Str -> Bool
   (let [(ds (diagsOf body))]
-    (mt (found ds code needle)
+    (match (found ds code needle)
       ((none) (do (assert false (str label ": no [" code "] " needle "; got " (showDiags ds))) false))
       ((some d) (do (assert (= d.line line) (str label ": diagnostic at the body form's line " (stringFromInt64 line) "; got " (showDiags ds))) (refute (cascade? ds) (str label ": no cascade from dialect forms; got " (showDiags ds))) true))))
 

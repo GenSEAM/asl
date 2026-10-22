@@ -47,7 +47,7 @@
   (:f draining Bool))
 
 fn pyTruthy? v: j/Json -> Bool
-  (mt v
+  (match v
     ((j/jnull) false)
     ((j/jbool b) b)
     ((j/jint i) (not (= i 0)))
@@ -88,14 +88,14 @@ fn pyReprString s: String -> String
     (str quote (reprLoop s bs (bytesLength bs) 0 0 q (list)) quote))
 
 fn pyRepr v: j/Json -> String
-  (mt v
+  (match v
     ((j/jstr s) (pyReprString s))
     ((j/jarr xs) (str "[" (stringJoin (map (fn [(x j/Json)] -> String (pyRepr x)) xs) ", ") "]"))
     ((j/jobj kvs) (str "{" (stringJoin (map (fn [(p (Pair String j/Json))] -> String (str (pyReprString (pairFirst p)) ": " (pyRepr (pairSecond p)))) kvs) ", ") "}"))
     (_ (pyStr v)))
 
 fn pyStr v: j/Json -> String
-  (mt v
+  (match v
     ((j/jnull) "None")
     ((j/jbool b) (if b "True" "False"))
     ((j/jint i) (stringFromInt64 i))
@@ -151,19 +151,19 @@ fn pyRound3 x: Float64 -> Float64
           (optionOr (stringToFloat64 text) x)))))
 
 fn dedupPairs kvs: (List (Pair String j/Json)) acc: (List (Pair String j/Json)) -> (List (Pair String j/Json))
-  (mt (listHead kvs)
+  (match (listHead kvs)
     ((none) acc)
     ((some p) (dedupPairs (optionOr (listTail kvs) (list)) (u/objSet acc (pairFirst p) (pairSecond p)))))
 
 fn jsonDedup v: j/Json -> j/Json
-  (mt v
+  (match v
     ((j/jobj kvs) (j/jobj (map (fn [(p (Pair String j/Json))] -> (Pair String j/Json) (pair (pairFirst p) (jsonDedup (pairSecond p))))
                                (dedupPairs kvs (list)))))
     ((j/jarr xs) (j/jarr (map (fn [(x j/Json)] -> j/Json (jsonDedup x)) xs)))
     (_ v))
 
 fn objKvs v: j/Json -> (List (Pair String j/Json))
-  (mt v
+  (match v
     ((j/jobj kvs) kvs)
     (_ (list)))
 
@@ -174,35 +174,35 @@ fn usageInit since: Float64 -> j/Json
   (j/jobj (list (pair "since" (j/jfloat since)) (pair "providers" (j/jobj (list))) (pair "aliases" (j/jobj (list)))))
 
 fn positiveInt v: (Option j/Json) -> Int64
-  (mt v
-    ((some x) (mt x ((j/jint i) (if (> i 0) i 0)) (_ 0)))
+  (match v
+    ((some x) (match x ((j/jint i) (if (> i 0) i 0)) (_ 0)))
     ((none) 0))
 
 fn nullish? v: (Option j/Json) -> Bool
-  (mt v
+  (match v
     ((none) true)
     ((some x) (= x (j/jnull))))
 
 ; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "completion_tokens_details.reasoning_tokens (OpenAI/DeepSeek-shape) is a provider's own count of reasoning tokens, separate from completion_tokens; GW-USAGE-ACCOUNTING-20261017's dashboard gap (500M unaccounted tokens) was partly this count going unrecorded. The already-normalized inputTokens/cachedTokens/outputTokens shape some providers (agy, codex) are translated into has no reasoning count of its own yet, so it reads 0 there, same as an absent completion_tokens_details does for the OpenAI shape -- never guessed")
 fn reasoningTokensFrom kvs: (List (Pair String j/Json)) -> Int64
   (positiveInt
-    (mt (u/objGet kvs "completion_tokens_details")
-      ((some d) (mt d ((j/jobj dk) (u/objGet dk "reasoning_tokens")) (_ none)))
+    (match (u/objGet kvs "completion_tokens_details")
+      ((some d) (match d ((j/jobj dk) (u/objGet dk "reasoning_tokens")) (_ none)))
       ((none) none)))
 
 fn usageTokens usage: j/Json -> (List Int64)
-  (mt usage
+  (match usage
     ((j/jobj kvs)
      (if (some? (u/objGet kvs "inputTokens"))
        (list (positiveInt (u/objGet kvs "inputTokens")) (positiveInt (u/objGet kvs "cachedTokens")) (positiveInt (u/objGet kvs "outputTokens"))
              (positiveInt (u/objGet kvs "reasoningTokens")))
        (let [(cached (u/objGet kvs "cached_tokens"))
              (details (u/objGet kvs "prompt_tokens_details"))
-             (fromDetails (mt details
-                            ((some d) (mt d ((j/jobj dk) (some (u/objGet dk "cached_tokens"))) (_ none)))
+             (fromDetails (match details
+                            ((some d) (match d ((j/jobj dk) (some (u/objGet dk "cached_tokens"))) (_ none)))
                             ((none) none)))
              (c (if (nullish? cached)
-                  (mt fromDetails ((some x) x) ((none) cached))
+                  (match fromDetails ((some x) x) ((none) cached))
                   cached))]
          (list (positiveInt (u/objGet kvs "prompt_tokens")) (positiveInt c) (positiveInt (u/objGet kvs "completion_tokens"))
                (reasoningTokensFrom kvs)))))
@@ -216,8 +216,8 @@ fn setField v: j/Json k: String x: j/Json -> j/Json
   (j/jobj (u/objSet (objKvs v) k x))
 
 fn rowNames provider: (Option String) alias: (Option String) -> (List (Pair String String))
-  (let [(p (mt provider ((some s) (if (stringEmpty? s) (list) (list (pair "providers" s)))) ((none) (list))))
-        (a (mt alias ((some s) (if (stringEmpty? s) (list) (list (pair "aliases" s)))) ((none) (list))))]
+  (let [(p (match provider ((some s) (if (stringEmpty? s) (list) (list (pair "providers" s)))) ((none) (list))))
+        (a (match alias ((some s) (if (stringEmpty? s) (list) (list (pair "aliases" s)))) ((none) (list))))]
     (listAppend p a))
 
 fn ensureRows state: j/Json names: (List (Pair String String)) -> j/Json
@@ -229,12 +229,12 @@ fn ensureRows state: j/Json names: (List (Pair String String)) -> j/Json
         state names)
 
 fn subscript r: j/Json k: String -> (Result j/Json String)
-  (mt r
-    ((j/jobj kvs) (mt (u/objGet kvs k) ((some v) (ok v)) ((none) (err "KeyError"))))
+  (match r
+    ((j/jobj kvs) (match (u/objGet kvs k) ((some v) (ok v)) ((none) (err "KeyError"))))
     (_ (err "TypeError")))
 
 fn pyAddInt v: j/Json n: Int64 -> (Result j/Json String)
-  (mt v
+  (match v
     ((j/jint i) (ok (j/jint (+ i n))))
     ((j/jbool b) (ok (j/jint (+ (if b 1 0) n))))
     ((j/jfloat f) (ok (j/jfloat (+ f (int64ToFloat64 n)))))
@@ -242,28 +242,28 @@ fn pyAddInt v: j/Json n: Int64 -> (Result j/Json String)
     (_ (err "TypeError")))
 
 fn rowAdd r: j/Json k: String n: Int64 -> (Result j/Json String)
-  (mt (subscript r k)
+  (match (subscript r k)
     ((err e) (err e))
     ((ok v)
-     (mt (pyAddInt v n)
+     (match (pyAddInt v n)
        ((err e) (err e))
        ((ok nv) (ok (setField r k nv))))))
 
 fn rowSteps r: j/Json steps: (List (Pair String Int64)) -> (Pair j/Json (Option String))
-  (mt (listHead steps)
+  (match (listHead steps)
     ((none) (pair r none))
     ((some s)
-     (mt (rowAdd r (pairFirst s) (pairSecond s))
+     (match (rowAdd r (pairFirst s) (pairSecond s))
        ((err e) (pair r (some e)))
        ((ok r2) (rowSteps r2 (optionOr (listTail steps) (list)))))))
 
 fn rowError r: j/Json outcome: String now: Float64 -> (Pair j/Json (Option String))
-  (mt (subscript r "errors")
+  (match (subscript r "errors")
     ((err e) (pair r (some e)))
     ((ok errs)
-     (mt errs
+     (match errs
        ((j/jobj ekvs)
-        (mt (pyAddInt (optionOr (u/objGet ekvs outcome) (j/jint 0)) 1)
+        (match (pyAddInt (optionOr (u/objGet ekvs outcome) (j/jint 0)) 1)
           ((err e) (pair r (some e)))
           ((ok nv) (pair (setField (setField r "errors" (j/jobj (u/objSet ekvs outcome nv))) "lastErrorAt" (j/jfloat (pyRound3 now))) none))))
        (_ (pair r (some "AttributeError"))))))
@@ -273,7 +273,7 @@ fn noteRow r: j/Json outcome: String tokens: (List Int64) now: Float64 -> (Pair 
     (rowSteps r (list (pair "requests" 1) (pair "ok" 1) (pair "inputTokens" (optionOr (listGet tokens 0) 0))
                       (pair "cachedTokens" (optionOr (listGet tokens 1) 0)) (pair "outputTokens" (optionOr (listGet tokens 2) 0))))
     (let [(first (rowSteps r (list (pair "requests" 1))))]
-      (mt (pairSecond first)
+      (match (pairSecond first)
         ((some e) first)
         ((none) (rowError (pairFirst first) outcome now)))))
 
@@ -281,12 +281,12 @@ fn putRow state: j/Json n: (Pair String String) r: j/Json -> j/Json
   (setField state (pairFirst n) (setField (objField state (pairFirst n)) (pairSecond n) r))
 
 fn applyRows state: j/Json names: (List (Pair String String)) f: (fn [j/Json] -> (Pair j/Json (Option String))) -> (Pair j/Json (Option String))
-  (mt (listHead names)
+  (match (listHead names)
     ((none) (pair state none))
     ((some n)
      (let [(res (f (objField (objField state (pairFirst n)) (pairSecond n))))
            (st2 (putRow state n (pairFirst res)))]
-       (mt (pairSecond res)
+       (match (pairSecond res)
          ((some e) (pair st2 (some e)))
          ((none) (applyRows st2 (optionOr (listTail names) (list)) f))))))
 
@@ -306,19 +306,19 @@ fn usageHttpError code: Int64 -> String
     (else "4xx"))
 
 fn usageException failure: u/UpstreamFailure -> String
-  (mt failure
+  (match failure
     ((u/transportFailure code _) (if (= code 28) "timeout" "other"))
     (_ "other"))
 
 fn dispatchText d: j/Json -> (Result j/Json String)
   (if (not (pyTruthy? d))
     (ok (j/jnull))
-    (mt d
+    (match d
       ((j/jobj kvs) (ok (optionOr (u/objGet kvs "text") (j/jnull))))
       (_ (err "AttributeError"))))
 
 fn noteThen res: (Pair j/Json (Option String)) value: j/Json -> (Pair j/Json (Result j/Json String))
-  (mt (pairSecond res)
+  (match (pairSecond res)
     ((some e) (pair (pairFirst res) (err e)))
     ((none) (pair (pairFirst res) (ok value))))
 
@@ -328,7 +328,7 @@ fn usageAgyFallback state: j/Json prompt: String workspace: (Option String) down
     ((not (= (downFor "agy") 0))
      (noteThen (usageNote state (some "agy-cli") (some "agyFallback") "skipped-breaker" (j/jnull) now) (j/jnull)))
     (else
-     (mt (dispatchText (dispatch prompt workspace))
+     (match (dispatchText (dispatch prompt workspace))
        ((err e) (pair state (err e)))
        ((ok text) (noteThen (usageNote state (some "agy-cli") (some "agyFallback") (if (pyTruthy? text) "ok" "failed") (j/jnull) now) text)))))
 
@@ -336,7 +336,7 @@ fn asnStr s: String -> String
   (str "\"" (w/asnEscape s) "\"")
 
 fn pyRoundJson v: j/Json -> (Result j/Json String)
-  (mt v
+  (match v
     ((j/jint i) (ok v))
     ((j/jbool b) (ok (j/jint (if b 1 0))))
     ((j/jfloat f) (ok (j/jfloat (pyRound3 f))))
@@ -344,22 +344,22 @@ fn pyRoundJson v: j/Json -> (Result j/Json String)
     (_ (err "TypeError")))
 
 fn asnNumberText v: j/Json -> String
-  (mt v
+  (match v
     ((j/jint i) (stringFromInt64 i))
     ((j/jfloat f) (stringFromFloat64 f))
     ((j/jnum f) (stringFromFloat64 f))
     (_ "nil"))
 
 fn fieldTexts r: j/Json keys: (List String) acc: (List String) -> (Result (List String) String)
-  (mt (listHead keys)
+  (match (listHead keys)
     ((none) (ok (listReverse acc)))
     ((some k)
-     (mt (subscript r k)
+     (match (subscript r k)
        ((err e) (err e))
        ((ok v) (fieldTexts r (optionOr (listTail keys) (list)) (cons (pyStr v) acc))))))
 
 fn errorsText errs: j/Json -> (Result String String)
-  (mt errs
+  (match errs
     ((j/jobj kvs) (ok (stringJoin (map (fn [(p (Pair String j/Json))] -> String (str "(:status " (asnStr (pairFirst p)) " :count " (pyStr (pairSecond p)) ")")) kvs) " ")))
     (_ (err "AttributeError")))
 
@@ -367,37 +367,37 @@ fn nth xs: (List String) i: Int64 -> String
   (optionOr (listGet xs i) "")
 
 fn rowAsn head: String name: String r: j/Json -> (Result String String)
-  (mt (subscript r "errors")
+  (match (subscript r "errors")
     ((err e) (err e))
     ((ok errs)
-     (mt (errorsText errs)
+     (match (errorsText errs)
        ((err e) (err e))
        ((ok errText)
-        (mt (subscript r "lastErrorAt")
+        (match (subscript r "lastErrorAt")
           ((err e) (err e))
           ((ok lastVal)
-           (mt (fieldTexts r (list "requests" "ok" "fallbacks" "inputTokens" "cachedTokens" "outputTokens") (list))
+           (match (fieldTexts r (list "requests" "ok" "fallbacks" "inputTokens" "cachedTokens" "outputTokens") (list))
              ((err e) (err e))
              ((ok fs)
               (ok (str "(:" head " " (asnStr name) " :requests " (nth fs 0) " :ok " (nth fs 1) " :errors (" errText ") :fallbacks " (nth fs 2)
                        " :inputTokens " (nth fs 3) " :cachedTokens " (nth fs 4) " :outputTokens " (nth fs 5) " :lastErrorAt " (asnNumberText lastVal) ")"))))))))))
 
 fn rowsAsn kvs: (List (Pair String j/Json)) head: String acc: (List String) -> (Result String String)
-  (mt (listHead kvs)
+  (match (listHead kvs)
     ((none) (ok (stringJoin (listReverse acc) " ")))
     ((some p)
-     (mt (rowAsn head (pairFirst p) (pairSecond p))
+     (match (rowAsn head (pairFirst p) (pairSecond p))
        ((err e) (err e))
        ((ok t) (rowsAsn (optionOr (listTail kvs) (list)) head (cons t acc))))))
 
 fn usageAsn state: j/Json -> (Result String String)
-  (mt (pyRoundJson (objField state "since"))
+  (match (pyRoundJson (objField state "since"))
     ((err e) (err e))
     ((ok since)
-     (mt (rowsAsn (objKvs (objField state "providers")) "provider" (list))
+     (match (rowsAsn (objKvs (objField state "providers")) "provider" (list))
        ((err e) (err e))
        ((ok ps)
-        (mt (rowsAsn (objKvs (objField state "aliases")) "alias" (list))
+        (match (rowsAsn (objKvs (objField state "aliases")) "alias" (list))
           ((err e) (err e))
           ((ok as) (ok (str "(:since " (pyStr since) " :providers (" ps ") :aliases (" as "))"))))))))
 
@@ -414,18 +414,18 @@ fn validUtf8? s: String -> Bool
 fn usageRestoreParse raw: String -> (Option j/Json)
   (if (not (validUtf8? raw))
     none
-    (mt (j/jsonParse raw)
+    (match (j/jsonParse raw)
       ((ok v) (some (jsonDedup v)))
       ((err _) none)))
 
 fn isObj? v: (Option j/Json) -> Bool
-  (mt v
-    ((some x) (mt x ((j/jobj _) true) (_ false)))
+  (match v
+    ((some x) (match x ((j/jobj _) true) (_ false)))
     ((none) false))
 
 fn usageRestoreApply state: j/Json saved: j/Json -> (Option j/Json)
   (let [(kvs (objKvs saved))]
-    (mt saved
+    (match saved
       ((j/jobj _)
        (if (and (isObj? (u/objGet kvs "providers")) (isObj? (u/objGet kvs "aliases")))
          (some (setField (setField (setField state "since" (optionOr (u/objGet kvs "since") (objField state "since")))
@@ -435,21 +435,21 @@ fn usageRestoreApply state: j/Json saved: j/Json -> (Option j/Json)
       (_ none)))
 
 fn ! usageRestore! path: String state: j/Json -> (Pair j/Json String)
-  (mt (fileStat path)
+  (match (fileStat path)
     ((err e) (pair state (if (stringStartsWith? e "notFound") "absent" (str "unreadable: " e))))
     ((ok st)
      (if st.isDir
        (pair state (str "unreadable: " path " is a directory"))
-       (mt (fileReadString path)
+       (match (fileReadString path)
          ((err e) (pair state (str "unreadable: " e)))
          ((ok raw)
-          (mt (usageRestoreParse raw)
+          (match (usageRestoreParse raw)
             ((none) (pair state "unparsable"))
             ((some saved)
-             (mt (pathRemove path)
+             (match (pathRemove path)
                ((err e) (pair state (str "unlink failed: " e)))
                ((ok _)
-                (mt (usageRestoreApply state saved)
+                (match (usageRestoreApply state saved)
                   ((some s2) (pair s2 "restored"))
                   ((none) (pair state "rejected"))))))))))))
 
@@ -565,17 +565,17 @@ fn tailOf cs: (List Int64) -> (List Int64)
   (optionOr (listTail cs) (list))
 
 fn headIs? cs: (List Int64) opts: (List Int64) -> Bool
-  (mt (listHead cs)
+  (match (listHead cs)
     ((some c) (listContains? opts c))
     ((none) false))
 
 fn skipWhile cs: (List Int64) pred: (fn [Int64] -> Bool) -> (List Int64)
-  (mt (listHead cs)
+  (match (listHead cs)
     ((some c) (if (pred c) (skipWhile (tailOf cs) pred) cs))
     ((none) cs))
 
 fn oneOrMore cs: (List Int64) pred: (fn [Int64] -> Bool) -> (Option (List Int64))
-  (mt (listHead cs)
+  (match (listHead cs)
     ((some c) (if (pred c) (some (skipWhile (tailOf cs) pred)) none))
     ((none) none))
 
@@ -590,18 +590,18 @@ fn lineWord cs: (List Int64) -> (Option (List Int64))
     none)
 
 fn lineThenNumber? cs: (List Int64) -> Bool
-  (mt (lineWord cs)
+  (match (lineWord cs)
     ((none) false)
     ((some rest)
-     (mt (oneOrMore rest spaceCp?)
+     (match (oneOrMore rest spaceCp?)
        ((none) false)
        ((some r2) (some? (oneOrMore r2 isDigitCp?))))))
 
 fn lNumberWord? cs: (List Int64) -> Bool
   (and (headIs? cs (list 76 108))
-       (mt (oneOrMore (tailOf cs) isDigitCp?)
+       (match (oneOrMore (tailOf cs) isDigitCp?)
          ((none) false)
-         ((some rest) (mt (listHead rest) ((some c) (not (isWordCp? c))) ((none) true)))))
+         ((some rest) (match (listHead rest) ((some c) (not (isWordCp? c))) ((none) true)))))
 
 fn hunkHeader? cs: (List Int64) -> Bool
   (and (headIs? cs (list 64))
@@ -609,7 +609,7 @@ fn hunkHeader? cs: (List Int64) -> Bool
          (and (headIs? r (list 45)) (some? (oneOrMore (tailOf r) isDigitCp?)))))
 
 fn lineNumberScan prev: Int64 cs: (List Int64) -> Bool
-  (mt (listHead cs)
+  (match (listHead cs)
     ((none) false)
     ((some c)
      (let [(rest (tailOf cs))
@@ -660,7 +660,7 @@ fn letterRunLoop bs: Bytes i: Int64 n: Int64 run: Int64 -> Bool
     (else (letterRunLoop bs (+ i 1) n 0)))
 
 fn hasPreamble? raw: String -> Bool
-  (mt (stringIndexOf raw "(")
+  (match (stringIndexOf raw "(")
     ((some i) (if (> i 0) (letterRunLoop (stringToBytes (u/slice raw 0 i)) 0 i 0) false))
     ((none) false))
 
@@ -678,12 +678,12 @@ fn noneText v: (Option String) -> String
   (optionOr v "None")
 
 fn orText v: (Option String) fallback: String -> String
-  (mt v
+  (match v
     ((some s) (if (stringEmpty? s) fallback s))
     ((none) fallback))
 
 fn analyzeTelemetry content: j/Json intent: (Option String) role: (Option String) model: (Option String) workspace: (Option String) rootDir: String nowMs: Int64 -> (Option String)
-  (mt content
+  (match content
     ((j/jstr text)
      (let [(raw (u/pyStrip text))]
        (if (stringEmpty? raw)
@@ -725,7 +725,7 @@ fn normStep initial: Int64 acc: (List String) comp: String -> (List String)
   (cond
     ((or (= comp "") (= comp ".")) acc)
     ((= comp "..")
-     (mt (listHead acc)
+     (match (listHead acc)
        ((none) (if (= initial 0) (cons ".." acc) acc))
        ((some last) (if (= last "..") (cons ".." acc) (optionOr (listTail acc) (list))))))
     (else (cons comp acc)))
@@ -764,24 +764,24 @@ fn telemetryLogPath env: (Map String String) cwd: String script: String -> Strin
       set))
 
 fn ! drainFd! fd: Int64 -> (Result Bool String)
-  (mt (fdRead fd 16777216)
+  (match (fdRead fd 16777216)
     ((err e) (err e))
     ((ok chunk) (if (stringEmpty? chunk) (ok true) (drainFd! fd))))
 
 fn ! writeAll! fd: Int64 text: String -> (Result Bool String)
   (if (stringEmpty? text)
     (ok true)
-    (mt (fdWrite fd text)
+    (match (fdWrite fd text)
       ((err e) (err e))
       ((ok k) (writeAll! fd (u/slice text k (stringLength text))))))
 
 fn ! appendUnderLock! fd: Int64 text: String -> (Result Bool String)
-  (mt (drainFd! fd)
+  (match (drainFd! fd)
     ((err e) (err e))
     ((ok _) (writeAll! fd text)))
 
 fn ! appendFile! path: String text: String tries: Int64 -> (Result Bool String)
-  (mt (fileLock path true)
+  (match (fileLock path true)
     ((err e)
      (if (and (= e "busy") (> tries 0))
        (do (sleepMs 5) (appendFile! path text (- tries 1)))
@@ -789,17 +789,17 @@ fn ! appendFile! path: String text: String tries: Int64 -> (Result Bool String)
     ((ok fd)
      (let [(res (appendUnderLock! fd text))
            (closed (fdClose fd))]
-       (mt res
+       (match res
          ((err e) (err (str "telemetry log " path ": " e)))
-         ((ok _) (mt closed ((ok _) (ok true)) ((err e) (err (str "telemetry log close " path ": " e)))))))))
+         ((ok _) (match closed ((ok _) (ok true)) ((err e) (err (str "telemetry log close " path ": " e)))))))))
 
 fn ! logTelemetryEvent! path: String rec: (Option String) -> (Result Bool String)
-  (mt rec
+  (match rec
     ((none) (ok false))
     ((some text)
      (if (stringEmpty? text)
        (ok false)
-       (mt (dirCreate (posixDirname path))
+       (match (dirCreate (posixDirname path))
          ((err e) (err (str "telemetry log dir: " e)))
          ((ok _) (appendFile! path text 200))))))
 
@@ -834,13 +834,13 @@ fn allBytes? s: String pred: (fn [Int64] -> Bool) -> Bool
     (bytesAllLoop bs 0 (bytesLength bs) pred))
 
 fn splitFirst s: String sep: String -> (Pair String (Option String))
-  (mt (stringIndexOf s sep)
+  (match (stringIndexOf s sep)
     ((some i) (pair (u/slice s 0 i) (some (u/slice s (+ i (stringLength sep)) (stringLength s)))))
     ((none) (pair s none)))
 
 fn netlocEnd s: String -> Int64
   (fold (fn [(best Int64) (c String)] -> Int64
-          (mt (stringIndexOf s c) ((some i) (if (< i best) i best)) ((none) best)))
+          (match (stringIndexOf s c) ((some i) (if (< i best) i best)) ((none) best)))
         (stringLength s) (list "/" "?" "#"))
 
 fn hexDigit? b: Int64 -> Bool
@@ -891,12 +891,12 @@ fn ipv6Skip parts: (List String) skip: Int64 -> Bool
 
 fn ipv6Valid? s: String -> Bool
   (let [(sp (splitFirst s "%"))
-        (scopeOk (mt (pairSecond sp) ((some sc) (and (not (stringEmpty? sc)) (not (stringContains? sc "%")))) ((none) true)))
+        (scopeOk (match (pairSecond sp) ((some sc) (and (not (stringEmpty? sc)) (not (stringContains? sc "%")))) ((none) true)))
         (addr (pairFirst sp))
         (raw (stringSplit addr ":"))]
     (if (or (not scopeOk) (or (stringEmpty? addr) (< (listLength raw) 3)))
       false
-      (mt (ipv6Parts raw)
+      (match (ipv6Parts raw)
         ((none) false)
         ((some parts)
          (let [(skips (emptyIndexes parts))
@@ -912,7 +912,7 @@ fn ipv6Valid? s: String -> Bool
 
 fn vFuture? h: String -> Bool
   (let [(rest (u/slice h 1 (stringLength h)))]
-    (mt (stringIndexOf rest ".")
+    (match (stringIndexOf rest ".")
       ((none) false)
       ((some i) (and (> i 0) (and (allBytes? (u/slice rest 0 i) hexDigit?) (> (stringLength rest) (+ i 1)))))))
 
@@ -932,7 +932,7 @@ fn usesParams -> (List String)
   (list "" "ftp" "hdl" "prospero" "http" "imap" "https" "shttp" "rtsp" "rtsps" "rtspu" "sip" "sips" "mms" "sftp" "tel")
 
 fn schemeSplit url: String -> (Pair String String)
-  (mt (stringIndexOf url ":")
+  (match (stringIndexOf url ":")
     ((some i)
      (if (and (> i 0) (and (asciiLetter? (bytesGet (stringToBytes url) 0)) (allBytes? (u/slice url 0 i) schemeChar?)))
        (pair (stringLower (u/slice url 0 i)) (u/slice url (+ i 1) (stringLength url)))
@@ -967,7 +967,7 @@ fn urlSplit url: String -> (Result (List String) String)
 
 fn splitParams path: String -> (Pair String String)
   (let [(from (if (stringContains? path "/") (lastSlash path (- (stringLength path) 1)) 0))
-        (i (mt (stringIndexOf (u/slice path from (stringLength path)) ";") ((some k) (+ from k)) ((none) -1)))]
+        (i (match (stringIndexOf (u/slice path from (stringLength path)) ";") ((some k) (+ from k)) ((none) -1)))]
     (if (< i 0) (pair path "") (pair (u/slice path 0 i) (u/slice path (+ i 1) (stringLength path)))))
 
 fn hexVal b: Int64 -> Int64
@@ -1045,7 +1045,7 @@ fn urlUnparse scheme: String netloc: String path: String params: String query: S
     (if (stringEmpty? fragment) p4 (str p4 "#" fragment)))
 
 fn cleanUrl url: String -> String
-  (mt (urlSplit (urlPrep url))
+  (match (urlSplit (urlPrep url))
     ((err _) url)
     ((ok parts)
      (let [(scheme (nth parts 0))
@@ -1087,11 +1087,11 @@ fn zshLine line: String -> (Option (Pair String String))
       none))
 
 fn zshLoop lines: (List String) env: (Map String String) -> (Result (Map String String) (Pair (Map String String) String))
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (ok env))
     ((some line)
      (let [(rest (optionOr (listTail lines) (list)))]
-       (mt (zshLine line)
+       (match (zshLine line)
          ((none) (zshLoop rest env))
          ((some kv)
           (let [(k (pairFirst kv))
@@ -1105,25 +1105,25 @@ fn loadZshEnvText env: (Map String String) raw: String -> (Result (Map String St
   (zshLoop (universalLines (u/utf8Decode raw "")) env)
 
 fn ! zshFile! env: (Map String String) path: String errs: (List String) -> (Pair (Map String String) (List String))
-  (mt (fileStat path)
+  (match (fileStat path)
     ((err _) (pair env errs))
     ((ok st)
      (if (not st.isFile)
        (pair env errs)
-       (mt (fileReadString path)
+       (match (fileReadString path)
          ((err e) (pair env (listAppend errs (list (str path ": " e)))))
          ((ok raw)
-          (mt (loadZshEnvText env raw)
+          (match (loadZshEnvText env raw)
             ((ok env2) (pair env2 errs))
             ((err p) (pair (pairFirst p) (listAppend errs (list (str path ": " (pairSecond p))))))))))))
 
 fn expandHome env: (Map String String) name: String -> (Option String)
-  (mt (mapGet env "HOME")
+  (match (mapGet env "HOME")
     ((some h) (some (str (rstripSlashes h) name)))
     ((none) none))
 
 fn ! loadZshEnv! env: (Map String String) -> (Pair (Map String String) (List String))
-  (mt (expandHome env "/.zshenv")
+  (match (expandHome env "/.zshenv")
     ((none) (pair env (list "HOME is unset: ~/.zshenv and ~/.zshrc cannot be located")))
     ((some zshenv)
      (let [(first (zshFile! env zshenv (list)))]
@@ -1132,12 +1132,12 @@ fn ! loadZshEnv! env: (Map String String) -> (Pair (Map String String) (List Str
 fn ! gatewayFileVersion! path: String -> String
   (if (stringEmpty? path)
     "absent"
-    (mt (fileStat path)
+    (match (fileStat path)
       ((err _) "absent")
       ((ok st)
        (if st.isDir
          "absent"
-         (mt (fileReadBytes path)
+         (match (fileReadBytes path)
            ((ok b) (u/slice (bytesSha256 b) 0 12))
            ((err _) "absent"))))))
 

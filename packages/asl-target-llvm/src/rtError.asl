@@ -528,13 +528,13 @@ fn refKeys text: String -> (Map String Bool)
   (refKeysInto (mapEmpty) text false)
 
 fn refKeysJoin acc: (Map String Bool) chunks: (List String) -> (Map String Bool)
-  (mt (listHead chunks)
+  (match (listHead chunks)
     ((none) acc)
     ((some c) (let [(rest (optionOr (listTail chunks) (list)))]
                 (refKeysJoin (refKeysInto acc c (not (listEmpty? rest))) rest))))
 
 fn tailSuffix rev: (List String) acc: (List String) size: Int64 -> (List String)
-  (mt (listHead rev)
+  (match (listHead rev)
     ((none) acc)
     ((some c) (if (>= size 256)
                 acc

@@ -66,7 +66,7 @@ fn emitSwiftHeader includesUi: Bool -> Str
 
 fn emitSwiftBinop op: Str left: Str right: Str -> Str
   (let [(cleanOp (cond
-                  ((or (= op "=") (= op "==")) "==")
+                  ((= op "=") "==")
                   ((= op "!=") "!=")
                   ((= op "and") "&&")
                   ((= op "or") "||")

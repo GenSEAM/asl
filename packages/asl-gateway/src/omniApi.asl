@@ -59,7 +59,7 @@ fn withExtensions s: OmniState v: ExtensionStore -> OmniState
   (with s :extensions v)
 
 fn assocGet xs: (List (Pair String T)) k: String -> (Option T)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (none))
     ((some p) (if (= (pairFirst p) k) (some (pairSecond p)) (assocGet (preludeTail xs) k))))
 
@@ -86,10 +86,10 @@ fn queuePutAll qs: (List (Pair String (List String))) item: String -> (List (Pai
   (map (fn [(p (Pair String (List String)))] -> (Pair String (List String)) (pair (pairFirst p) (listAppend (pairSecond p) (list item)))) qs)
 
 fn queueTake qs: (List (Pair String (List String))) k: String -> (Pair (Option String) (List (Pair String (List String))))
-  (mt (assocGet qs k)
+  (match (assocGet qs k)
     ((none) (pair (none) qs))
     ((some items)
-      (mt (listHead items)
+      (match (listHead items)
         ((none) (pair (none) qs))
         ((some first) (pair (some first) (assocSet qs k (preludeTail items)))))))
 
@@ -123,14 +123,14 @@ fn ndZeros -> (List Int64)
         120792 120802 120812 120822 123200 123632 124144 125264 130032)
 
 fn digitValue cp: Int64 -> (Option Int64)
-  (mt (listHead (filter (fn [(z Int64)] -> Bool (and (>= cp z) (< cp (+ z 10)))) (ndZeros)))
+  (match (listHead (filter (fn [(z Int64)] -> Bool (and (>= cp z) (< cp (+ z 10)))) (ndZeros)))
     ((none) (none))
     ((some z) (some (- cp z))))
 
 fn digitsScan bs: Bytes n: Int64 i: Int64 acc: (List String) -> (Pair Int64 (List String))
   (if (>= i n)
     (pair i (listReverse acc))
-    (mt (digitValue (cpAtB bs n i))
+    (match (digitValue (cpAtB bs n i))
       ((none) (pair i (listReverse acc)))
       ((some d) (digitsScan bs n (stepAt bs n i) (cons (stringFromInt64 d) acc)))))
 
@@ -139,7 +139,7 @@ fn pyIntStr digits: (List String) -> String
     (if (listEmpty? trimmed) "0" (stringJoin trimmed "")))
 
 fn dropZeros ds: (List String) -> (List String)
-  (mt (listHead ds) ((some d) (if (= d "0") (dropZeros (preludeTail ds)) ds)) ((none) ds))
+  (match (listHead ds) ((some d) (if (= d "0") (dropZeros (preludeTail ds)) ds)) ((none) ds))
 
 fn captureAt s: String bs: Bytes n: Int64 j: Int64 kind: Int64 -> (Option String)
   (cond
@@ -165,7 +165,7 @@ fn litAt bs: Bytes n: Int64 i: Int64 lit: Bytes m: Int64 k: Int64 -> Bool
   (cond ((>= k m) true) ((>= (+ i k) n) false) ((= (bytesGet bs (+ i k)) (bytesGet lit k)) (litAt bs n i lit m (+ k 1))) (else false))
 
 fn altsAt s: String bs: Bytes n: Int64 i: Int64 alts: (List String) kind: Int64 -> (Option String)
-  (mt (listHead alts)
+  (match (listHead alts)
     ((none) (none))
     ((some a)
       (let [(lit (stringToBytes a)) (m (bytesLength lit))
@@ -305,7 +305,7 @@ fn afterPrefix s: String p: String -> String
   (pt/sliceB s (stringLength p) (stringLength s))
 
 fn queryGet target: String a: String b: String dflt: String -> (Result String String)
-  (mt (pt/urlparse target)
+  (match (pt/urlparse target)
     ((err e) (err (pt/pyErrText e)))
     ((ok parts)
       (let [(pairs (listReverse (pt/parseQsl (optionOr (listGet parts 4) ""))))]
@@ -338,12 +338,12 @@ fn targetListGet s: OmniState -> (Result OmniReply String)
     (asnOk s (str "(:browserTargets [" (stringJoin items " ") "])\n")))
 
 fn pollBody head: String idKey: String id: String item: (Option String) -> String
-  (mt item
+  (match item
     ((some a) (str "(" head "\n  :status :action\n  " idKey " \"" id "\"\n  :hasAction true\n  :action " a ")\n"))
     ((none) (str "(" head "\n  :status :idle\n  " idKey " \"" id "\"\n  :hasAction false)\n")))
 
 fn targetPollGet s: OmniState target: String -> (Result OmniReply String)
-  (mt (queryGet target "targetId" "target_id" "target-default")
+  (match (queryGet target "targetId" "target_id" "target-default")
     ((err e) (err e))
     ((ok tid)
       (let [(ts s.targets)
@@ -352,7 +352,7 @@ fn targetPollGet s: OmniState target: String -> (Result OmniReply String)
         (asnOk s2 (pollBody ":targetPollResponse" ":targetId" tid (pairFirst taken))))))
 
 fn extensionPollGet s: OmniState target: String -> (Result OmniReply String)
-  (mt (queryGet target "agentId" "agent_id" "ext-default")
+  (match (queryGet target "agentId" "agent_id" "ext-default")
     ((err e) (err e))
     ((ok aid)
       (let [(es s.extensions)
@@ -431,9 +431,9 @@ fn autoTarget targets: (List (Pair String BrowserTarget)) body: String -> String
         (steel (if (or (pt/hasSubstr lower "scrape") (pt/hasSubstr lower "crawl"))
                  (listHead (filter (fn [(p (Pair String BrowserTarget))] -> Bool (= (pairSecond p).kind "stealthSteel")) targets))
                  (none)))]
-    (mt steel
+    (match steel
       ((some p) (pairFirst p))
-      ((none) (mt (listHead targets) ((some p) (pairFirst p)) ((none) "target-auto-steel")))))
+      ((none) (match (listHead targets) ((some p) (pairFirst p)) ((none) "target-auto-steel")))))
 
 fn targetExecPost s: OmniState body: String nowMs: Int64 -> (Result OmniReply String)
   (let [(aid (optionOr (reQuoted body (list ":id")) (str "act-" (stringFromInt64 (mod nowMs 1000000)))))
@@ -486,8 +486,8 @@ fn sessionStep s: OmniState body: String nowMs: Int64 -> (Result OmniReply Strin
   (let [(sid (optionOr (reQuoted body (list ":sessionId")) ""))
         (found (assocGet s.sessions sid))
         (stepOp (optionOr (reLead body (list ":stepOp")) "navigate"))
-        (url (optionOr (reQuoted body (list ":url")) (mt found ((some x) x.currentUrl) ((none) "about:blank"))))
-        (sessions2 (mt found
+        (url (optionOr (reQuoted body (list ":url")) (match found ((some x) x.currentUrl) ((none) "about:blank"))))
+        (sessions2 (match found
                      ((some x) (assocSet s.sessions sid
                                  (BrowserSession :id x.id :createdMs x.createdMs :lastActiveMs nowMs :profile x.profile
                                                  :mode x.mode :currentUrl url :tabId x.tabId :status x.status
@@ -498,7 +498,7 @@ fn sessionStep s: OmniState body: String nowMs: Int64 -> (Result OmniReply Strin
 
 fn sessionSnapshot s: OmniState body: String -> (Result OmniReply String)
   (let [(sid (optionOr (reQuoted body (list ":sessionId")) ""))
-        (url (mt (assocGet s.sessions sid) ((some x) x.currentUrl) ((none) "https://example.com")))]
+        (url (match (assocGet s.sessions sid) ((some x) x.currentUrl) ((none) "https://example.com")))]
     (asnOk s (str "(:pageSnapshot\n  :sessionId \"" sid "\"\n  :url \"" url "\"\n  :title \"Session Document\"\n  :status :ok\n  :text \"Clean session page text content\")\n")))
 
 fn sessionClose s: OmniState body: String -> (Result OmniReply String)

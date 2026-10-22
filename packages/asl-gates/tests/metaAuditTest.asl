@@ -9,10 +9,10 @@ fn fixture name: String -> String
   (str (fixtureDir) "/" name)
 
 fn loadRealSpec! -> meta/MetaSpec
-  (mt (fileReadString "asl/grammar/meta.asn")
+  (match (fileReadString "asl/grammar/meta.asn")
     ((err _) (do (assert false "asl/grammar/meta.asn reads") (meta/MetaSpec :keys (list) :tags (list) :effects (list) :whyWords 0 :pragmas (list))))
     ((ok text)
-      (mt (meta/loadSpec text)
+      (match (meta/loadSpec text)
         ((err e) (do (assert false (str "meta.asn loads: " e)) (meta/MetaSpec :keys (list) :tags (list) :effects (list) :whyWords 0 :pragmas (list))))
         ((ok spec) spec))))
 
@@ -27,7 +27,7 @@ fn fixtureCtx! -> meta/Ctx
 
 fn scanFixture! name: String lang: String -> meta/FileScan
   (let [(path (fixture name))]
-    (mt (fileReadString path)
+    (match (fileReadString path)
       ((err _) (do (assert false (str path " reads")) (meta/FileScan :path path :plain -1 :metas -1 :violations (list))))
       ((ok text) (meta/scanText! (fixtureCtx!) path lang text))))
 
@@ -123,7 +123,7 @@ fn testCounting! -> Bool
     true)
 
 fn testGrowth! -> Bool
-  (let [(rows (mt (fileReadString (fixture "baseline.asn"))
+  (let [(rows (match (fileReadString (fixture "baseline.asn"))
                 ((ok t) (resultOr (meta/parseBaseline t) (list)))
                 ((err _) (list))))
         (grownScan (scanFixture! "growth.py.txt" "python"))
@@ -150,7 +150,7 @@ fn testRealTree! -> Bool
       true))
 
 fn copyTo! src: String dst: String -> Bool
-  (mt (fileReadString src)
+  (match (fileReadString src)
     ((err _) false)
     ((ok t) (ok? (fileWrite dst t))))
 
@@ -171,10 +171,10 @@ fn testMain! -> Bool
       true))
 
 fn testSeedCaseTokens! -> Bool
-  (mt (fileReadString "scripts/audit/cases.asn")
+  (match (fileReadString "scripts/audit/cases.asn")
     ((err _) false)
     ((ok cases)
-      (mt (meta/seedCaseReceipts cases)
+      (match (meta/seedCaseReceipts cases)
         ((err _) false)
         ((ok receipts)
           (and (seedTokensPresent receipts (list "ERR_UNBALANCED" "ERR_WORKSPACE_REMOTE" "ERR_SSOT_DRIFT" "ERR_EMOJI" "ERR_NEW_RED_SUITE" "ERR_DECLARED_GAP" "ERR_VACUOUS_SUITE" "ERR_STALE_KNOWN_RED" "ERR_BASE_UNVERIFIED" "ERR_TREE_DIRTIED" "ERR_TIMEOUT" "ERR_FOREIGN" "ERR_STALE_ALLOWLIST" "ERR_UNGROUNDED" "ERR_MANIFEST" "ERR_GRAMMAR_COUNT" "ERR_C4" "ERR_SKILL" "ERR_INSTALLER_DRIFT" "ERR_TIER_FAILED" "ERR_NOT_COMPUTED" "ERR_PLACEHOLDER_DIGEST" "ERR_UNIMPLEMENTED" ":knownRedDelta (:added" ":confirmation :unverified" ":removed (" ":added ("))
@@ -184,12 +184,12 @@ fn testSeedCaseTokens! -> Bool
                               (stringContains? receipts "(:seed :id multiCheckSecondBad :expect :red :token \"ERR_UNBALANCED\"")))))))))
 
 fn seedTokensPresent receipt: String tokens: (List String) -> Bool
-  (mt (listHead tokens)
+  (match (listHead tokens)
     ((none) true)
     ((some token) (and (stringContains? receipt token) (seedTokensPresent receipt (optionOr (listTail tokens) (list))))))
 
 fn seedIdsPresent receipt: String ids: (List String) -> Bool
-  (mt (listHead ids)
+  (match (listHead ids)
     ((none) true)
     ((some id) (and (stringContains? receipt (str ":id " id " ")) (seedIdsPresent receipt (optionOr (listTail ids) (list))))))
 

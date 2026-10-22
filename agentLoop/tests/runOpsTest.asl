@@ -3,15 +3,15 @@
   :i [(asl/agentLoop/runOps :a r) (asl/agentLoop/gitOps :a g) (asl/agentLoop/core :a c)])
 
 fn kvGet kv: (List (Pair String c/KvVal)) k: String -> (Option c/KvVal)
-  (mt (listHead (filter (fn [p] (= (pairFirst p) k)) kv))
+  (match (listHead (filter (fn [p] (= (pairFirst p) k)) kv))
     ((some p) (some (pairSecond p)))
     ((none) (none)))
 
 fn kvText v: c/KvVal -> String
-  (mt v ((c/kvStr s) s) ((c/kvInt d) d))
+  (match v ((c/kvStr s) s) ((c/kvInt d) d))
 
 fn getS kv: (List (Pair String c/KvVal)) k: String -> String
-  (mt (kvGet kv k) ((some v) (kvText v)) ((none) ""))
+  (match (kvGet kv k) ((some v) (kvText v)) ((none) ""))
 
 fn getI kv: (List (Pair String c/KvVal)) k: String -> Int64
   (optionOr (stringToInt64 (getS kv k)) 0)
@@ -20,7 +20,7 @@ fn listed kv: (List (Pair String c/KvVal)) prefix: String -> (List String)
   (map (fn [i] (getS kv (str prefix (stringFromInt64 i)))) (range 0 (getI kv (str "n" prefix))))
 
 fn envKey row: String -> String
-  (mt (stringIndexOf row "=") ((some i) (c/sliceOf row 0 i)) ((none) row))
+  (match (stringIndexOf row "=") ((some i) (c/sliceOf row 0 i)) ((none) row))
 
 fn setupStep! base: String setupEnv: (List String) line: String -> Bool
   (let [kv (c/parseKv line)
@@ -32,7 +32,7 @@ fn setupStep! base: String setupEnv: (List String) line: String -> Bool
       ((= step "run")
         (let [argv (map (fn [i] (getS kv (str "a" (stringFromInt64 i)))) (range 0 (getI kv "n")))
               env (listAppend (filter (fn [r] (not (stringStartsWith? (envKey r) "GIT_"))) (envList)) setupEnv)]
-          (mt (g/runBounded! argv (some (str base "/" (getS kv "cwd"))) (some 60) (some env))
+          (match (g/runBounded! argv (some (str base "/" (getS kv "cwd"))) (some 60) (some env))
             ((ok b) (= (optionOr b.code -1) 0))
             ((err e) (do (eprintln (str "setup run failed: " e)) false)))))
       (else false)))
@@ -55,7 +55,7 @@ fn pidAlive! pid: Int64 tries: Int64 -> Bool
 
 fn walk! root: String rel: String -> (List (Pair String String))
   (let [dir (if (stringEmpty? rel) root (str root "/" rel))]
-    (mt (dirList dir)
+    (match (dirList dir)
       ((err _) (list))
       ((ok names)
         (fold (fn [acc name]
@@ -63,7 +63,7 @@ fn walk! root: String rel: String -> (List (Pair String String))
                       full (str root "/" sub)]
                   (cond
                     ((and (stringEmpty? rel) (= name ".git")) acc)
-                    ((mt (fileStat full) ((ok st) st.isDir) ((err _) false)) (listAppend acc (walk! root sub)))
+                    ((match (fileStat full) ((ok st) st.isDir) ((err _) false)) (listAppend acc (walk! root sub)))
                     (else (listAppend acc (list (pair sub (resultOr (fileReadString full) "(unreadable)"))))))))
           (list) names))))
 
@@ -74,7 +74,7 @@ fn readOr! path: String -> String
   (resultOr (fileReadString path) "")
 
 fn journalAdd! logPath: String rel: String bytes: (Option String) mode: Int64 -> Bool
-  (let [entry (str (c/serString rel) "\t(j " (c/serString rel) " " (mt bytes ((some b) (c/serString b)) ((none) "nil")) " " (stringFromInt64 mode) ")\n")]
+  (let [entry (str (c/serString rel) "\t(j " (c/serString rel) " " (match bytes ((some b) (c/serString b)) ((none) "nil")) " " (stringFromInt64 mode) ")\n")]
     (ok? (fileWrite logPath (str (readOr! logPath) entry))))
 
 fn journalText! logPath: String -> String
@@ -87,8 +87,8 @@ fn journalText! logPath: String -> String
 
 fn snapFile! logPath: String root: String rel: String -> Bool
   (let [full (str root "/" rel)]
-    (mt (fileReadString full)
-      ((ok bytes) (journalAdd! logPath rel (some bytes) (mt (fileStat full) ((ok st) (mod st.mode 4096)) ((err _) 0))))
+    (match (fileReadString full)
+      ((ok bytes) (journalAdd! logPath rel (some bytes) (match (fileStat full) ((ok st) (mod st.mode 4096)) ((err _) 0))))
       ((err _) false)))
 
 fn runStep! base: String ctx: r/RunCtx logPath: String kv: (List (Pair String c/KvVal)) i: Int64 procs: r/Procs -> (Pair String r/Procs)
@@ -108,7 +108,7 @@ fn runStep! base: String ctx: r/RunCtx logPath: String kv: (List (Pair String c/
       ((= kind "delete")
         (pair (str head (r/serRec (r/execDeleteOp! (c/parseKv arg) ctx rid (fn [rel] (snapFile! logPath root rel)))) ")") procs))
       ((= kind "kill")
-        (mt (r/killSpawned! ctx procs onKeep)
+        (match (r/killSpawned! ctx procs onKeep)
           ((ok k) (pair (str "(killed " (serList k.killed) " " (serList k.restored) " " (serList k.kept) ")") k.procs))
           ((err e) (pair (str "(killFailed " (c/serString e) ")") procs))))
       ((= kind "wait") (do (sleepMs (optionOr (stringToInt64 arg) 0)) (pair "" procs)))
@@ -116,12 +116,12 @@ fn runStep! base: String ctx: r/RunCtx logPath: String kv: (List (Pair String c/
         (let [w (c/parseKv arg)
               rel (getS w "path")
               wrote (fileWrite (str root "/" rel) (getS w "text"))]
-          (mt (r/rebaseWritten! root (list rel) procs)
+          (match (r/rebaseWritten! root (list rel) procs)
             ((ok ps) (pair (if (ok? wrote) "(rebased)" "(writeFailed)") ps))
             ((err e) (pair (str "(rebaseFailed " (c/serString e) ")") procs)))))
       ((= kind "unlink")
         (let [removed (pathRemove (str root "/" arg))]
-          (mt (r/rebaseWritten! root (list arg) procs)
+          (match (r/rebaseWritten! root (list arg) procs)
             ((ok ps) (pair (if (ok? removed) "(rebased)" "(unlinkFailed)") ps))
             ((err e) (pair (str "(rebaseFailed " (c/serString e) ")") procs)))))
       ((= kind "alive")
@@ -141,14 +141,14 @@ fn scenario! base: String kv: (List (Pair String c/KvVal)) id: String -> String
         logPath (str base "/journal-" id ".log")
         cleared (fileWrite logPath "")
         steps (runSteps! base ctx logPath kv 0 (getI kv "steps") (r/newProcs) (list))
-        tree (if (mt (fileStat root) ((ok st) st.isDir) ((err _) false)) (treeText! root) "(tree)")
+        tree (if (match (fileStat root) ((ok st) st.isDir) ((err _) false)) (treeText! root) "(tree)")
         journal (journalText! logPath)
         cleanup (r/killSpawned! ctx (pairSecond steps) (fn [rel pre mode] true))]
     (str (if (ok? cleared) "" "(journalLogFailed) ") (stringJoin (pairFirst steps) " ") " " tree " " journal
       (if (ok? cleanup) "" " (cleanupFailed)")))
 
 fn wordsText res: (Result (List String) String) -> String
-  (mt res
+  (match res
     ((ok ws) (str "(words" (c/joinAll (map (fn [w] (str " " (c/serString w))) ws)) ")"))
     ((err e) (str "(error " (c/serString e) ")")))
 
@@ -157,13 +157,13 @@ fn runCase! base: String kv: (List (Pair String c/KvVal)) -> String
         cmd (withBase base (getS kv "cmd"))]
     (cond
       ((= fnName "guard")
-        (mt (r/checkRunGitGuard cmd)
+        (match (r/checkRunGitGuard cmd)
           ((none) "nil")
           ((some p) (str "(refuse " (c/serString (pairFirst p)) " " (c/serString (pairSecond p)) ")"))))
       ((= fnName "words") (wordsText (r/shellWords cmd)))
       ((= fnName "readOnly") (if (r/runReadOnly cmd) "true" "false"))
       ((= fnName "outward")
-        (mt (r/runOutward cmd (listed kv "o") (withBase base (getS kv "root")))
+        (match (r/runOutward cmd (listed kv "o") (withBase base (getS kv "root")))
           ((ok w) (if (stringEmpty? w) "nil" (str "(why " (c/serString w) ")")))
           ((err e) (str "(error " (c/serString e) ")"))))
       ((= fnName "hidden") (str "(vars" (c/joinAll (map (fn [v] (str " " (c/serString v))) (r/hiddenVars (getS kv "text")))) ")"))

@@ -28,77 +28,77 @@ enum Receipt
              file: String)
 
 fn receiptId r: Receipt -> String
-  (mt r ((receiptOf id _ _ _ _ _ _ _ _ _ _ _ _) id))
+  (match r ((receiptOf id _ _ _ _ _ _ _ _ _ _ _ _) id))
 
 fn receiptCmd r: Receipt -> String
-  (mt r ((receiptOf _ cmd _ _ _ _ _ _ _ _ _ _ _) cmd))
+  (match r ((receiptOf _ cmd _ _ _ _ _ _ _ _ _ _ _) cmd))
 
 fn receiptOp r: Receipt -> String
-  (mt r ((receiptOf _ _ op _ _ _ _ _ _ _ _ _ _) op))
+  (match r ((receiptOf _ _ op _ _ _ _ _ _ _ _ _ _) op))
 
 fn receiptStatus r: Receipt -> String
-  (mt r ((receiptOf _ _ _ status _ _ _ _ _ _ _ _ _) status))
+  (match r ((receiptOf _ _ _ status _ _ _ _ _ _ _ _ _) status))
 
 fn receiptError r: Receipt -> String
-  (mt r ((receiptOf _ _ _ _ error _ _ _ _ _ _ _ _) error))
+  (match r ((receiptOf _ _ _ _ error _ _ _ _ _ _ _ _) error))
 
 fn receiptNeedsConfirm r: Receipt -> Bool
-  (mt r ((receiptOf _ _ _ _ _ needsConfirm _ _ _ _ _ _ _) needsConfirm))
+  (match r ((receiptOf _ _ _ _ _ needsConfirm _ _ _ _ _ _ _) needsConfirm))
 
 fn receiptHasExit r: Receipt -> Bool
-  (mt r ((receiptOf _ _ _ _ _ _ hasExit _ _ _ _ _ _) hasExit))
+  (match r ((receiptOf _ _ _ _ _ _ hasExit _ _ _ _ _ _) hasExit))
 
 fn receiptExit r: Receipt -> Int64
-  (mt r ((receiptOf _ _ _ _ _ _ _ exit _ _ _ _ _) exit))
+  (match r ((receiptOf _ _ _ _ _ _ _ exit _ _ _ _ _) exit))
 
 fn receiptGateRuns r: Receipt -> (List (Pair String Int64))
-  (mt r ((receiptOf _ _ _ _ _ _ _ _ gateRuns _ _ _ _) gateRuns))
+  (match r ((receiptOf _ _ _ _ _ _ _ _ gateRuns _ _ _ _) gateRuns))
 
 fn receiptHasSpan r: Receipt -> Bool
-  (mt r ((receiptOf _ _ _ _ _ _ _ _ _ hasSpan _ _ _) hasSpan))
+  (match r ((receiptOf _ _ _ _ _ _ _ _ _ hasSpan _ _ _) hasSpan))
 
 fn receiptSpanStart r: Receipt -> Int64
-  (mt r ((receiptOf _ _ _ _ _ _ _ _ _ _ spanStart _ _) spanStart))
+  (match r ((receiptOf _ _ _ _ _ _ _ _ _ _ spanStart _ _) spanStart))
 
 fn receiptSpanEnd r: Receipt -> Int64
-  (mt r ((receiptOf _ _ _ _ _ _ _ _ _ _ _ spanEnd _) spanEnd))
+  (match r ((receiptOf _ _ _ _ _ _ _ _ _ _ _ spanEnd _) spanEnd))
 
 fn receiptFile r: Receipt -> String
-  (mt r ((receiptOf _ _ _ _ _ _ _ _ _ _ _ _ file) file))
+  (match r ((receiptOf _ _ _ _ _ _ _ _ _ _ _ _ file) file))
 
 enum Claim
   (evidenceClaim cmd: String receipt: (Option String) exit: (Option Int64) backed: Bool)
   (proseClaim text: String backed: Bool)
 
 fn claimBacked c: Claim -> Bool
-  (mt c ((evidenceClaim _ _ _ b) b) ((proseClaim _ b) b))
+  (match c ((evidenceClaim _ _ _ b) b) ((proseClaim _ b) b))
 
 fn claimCmd c: Claim -> String
-  (mt c ((evidenceClaim cmd _ _ _) cmd) ((proseClaim _ _) ""))
+  (match c ((evidenceClaim cmd _ _ _) cmd) ((proseClaim _ _) ""))
 
 fn claimReceiptOpt c: Claim -> (Option String)
-  (mt c ((evidenceClaim _ r _ _) r) ((proseClaim _ _) (none)))
+  (match c ((evidenceClaim _ r _ _) r) ((proseClaim _ _) (none)))
 
 fn claimExitOpt c: Claim -> (Option Int64)
-  (mt c ((evidenceClaim _ _ e _) e) ((proseClaim _ _) (none)))
+  (match c ((evidenceClaim _ _ e _) e) ((proseClaim _ _) (none)))
 
 fn claimText c: Claim -> String
-  (mt c ((evidenceClaim _ _ _ _) "") ((proseClaim t _) t))
+  (match c ((evidenceClaim _ _ _ _) "") ((proseClaim t _) t))
 
 fn claimIsEvidence? c: Claim -> Bool
-  (mt c ((evidenceClaim _ _ _ _) true) ((proseClaim _ _) false))
+  (match c ((evidenceClaim _ _ _ _) true) ((proseClaim _ _) false))
 
 enum ClaimsResult
   (claimsResult total: Int64 unbacked: Int64 claims: (List Claim))
 
 fn claimsResultTotal r: ClaimsResult -> Int64
-  (mt r ((claimsResult t _ _) t))
+  (match r ((claimsResult t _ _) t))
 
 fn claimsResultUnbacked r: ClaimsResult -> Int64
-  (mt r ((claimsResult _ u _) u))
+  (match r ((claimsResult _ u _) u))
 
 fn claimsResultClaims r: ClaimsResult -> (List Claim)
-  (mt r ((claimsResult _ _ cs) cs))
+  (match r ((claimsResult _ _ cs) cs))
 
 enum EvidenceUpdate
   (evidenceUpdate new: Bool
@@ -106,13 +106,13 @@ enum EvidenceUpdate
                   seenKeys: (List (List c/KvVal)))
 
 fn evidenceUpdateNew e: EvidenceUpdate -> Bool
-  (mt e ((evidenceUpdate n _ _) n))
+  (match e ((evidenceUpdate n _ _) n))
 
 fn evidenceUpdateCoverage e: EvidenceUpdate -> (List (Pair String (List (Pair Int64 Int64))))
-  (mt e ((evidenceUpdate _ cov _) cov))
+  (match e ((evidenceUpdate _ cov _) cov))
 
 fn evidenceUpdateSeenKeys e: EvidenceUpdate -> (List (List c/KvVal))
-  (mt e ((evidenceUpdate _ _ k) k))
+  (match e ((evidenceUpdate _ _ k) k))
 
 enum TurnEvidenceEntry
   (turnEvidenceEntry turn: Int64
@@ -120,13 +120,13 @@ enum TurnEvidenceEntry
                       keys: (List (List c/KvVal)))
 
 fn teTurn e: TurnEvidenceEntry -> Int64
-  (mt e ((turnEvidenceEntry t _ _) t))
+  (match e ((turnEvidenceEntry t _ _) t))
 
 fn teReads e: TurnEvidenceEntry -> (List (Pair String (Pair Int64 Int64)))
-  (mt e ((turnEvidenceEntry _ r _) r))
+  (match e ((turnEvidenceEntry _ r _) r))
 
 fn teKeys e: TurnEvidenceEntry -> (List (List c/KvVal))
-  (mt e ((turnEvidenceEntry _ _ k) k))
+  (match e ((turnEvidenceEntry _ _ k) k))
 
 enum ForgetCutResult
   (forgetCutResult text: String
@@ -134,22 +134,22 @@ enum ForgetCutResult
                    seenKeys: (List (List c/KvVal)))
 
 fn forgetCutResultText r: ForgetCutResult -> String
-  (mt r ((forgetCutResult t _ _) t))
+  (match r ((forgetCutResult t _ _) t))
 
 fn forgetCutResultCoverage r: ForgetCutResult -> (List (Pair String (List (Pair Int64 Int64))))
-  (mt r ((forgetCutResult _ cov _) cov))
+  (match r ((forgetCutResult _ cov _) cov))
 
 fn forgetCutResultSeenKeys r: ForgetCutResult -> (List (List c/KvVal))
-  (mt r ((forgetCutResult _ _ k) k))
+  (match r ((forgetCutResult _ _ k) k))
 
 enum UnwrapResult
   (unwrapResult ops: (List (List (Pair String c/KvVal))) count: Int64)
 
 fn unwrapResultOps r: UnwrapResult -> (List (List (Pair String c/KvVal)))
-  (mt r ((unwrapResult ops _) ops))
+  (match r ((unwrapResult ops _) ops))
 
 fn unwrapResultCount r: UnwrapResult -> Int64
-  (mt r ((unwrapResult _ n) n))
+  (match r ((unwrapResult _ n) n))
 
 
 fn negatorsList -> (List String)
@@ -184,18 +184,18 @@ fn saysPassedWords -> (List String)
 
 
 fn kvToStr v: c/KvVal -> String
-  (mt v ((c/kvStr t) t) ((c/kvInt t) t))
+  (match v ((c/kvStr t) t) ((c/kvInt t) t))
 
 fn kvGetText kv: (List (Pair String c/KvVal)) k: String -> String
   (kvToStr (c/dictOr kv k))
 
 fn kvGetInt kv: (List (Pair String c/KvVal)) k: String default: Int64 -> Int64
-  (mt (c/dictGet kv k)
+  (match (c/dictGet kv k)
     ((some v) (optionOr (stringToInt64 (kvToStr v)) default))
     (none default))
 
 fn kvGetStrOpt kv: (List (Pair String c/KvVal)) k: String -> (Option String)
-  (mt (c/dictGet kv k)
+  (match (c/dictGet kv k)
     ((some v) (some (kvToStr v)))
     (none (none)))
 
@@ -207,7 +207,7 @@ fn endsWith? s: String suffix: String -> Bool
     (and (>= sn fx) (= (c/sliceOf s (- sn fx) sn) suffix)))
 
 fn lowerByte ch: String -> String
-  (mt (stringIndexOf "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ch)
+  (match (stringIndexOf "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ch)
     ((some i) (c/sliceOf "abcdefghijklmnopqrstuvwxyz" i (+ i 1)))
     (none ch))
 
@@ -256,8 +256,8 @@ fn oldDelimUnitLen text: String n: Int64 i: Int64 -> (Option Int64)
       (if (or (= ch ".") (or (= ch ";") (= ch "\n"))) (some 1) (none))))
 
 fn oldDelimRunLen text: String n: Int64 i: Int64 -> (Option Int64)
-  (mt (oldDelimUnitLen text n i)
-    ((some l) (mt (oldDelimRunLen text n (+ i l)) ((some more) (some (+ l more))) ((none) (some l))))
+  (match (oldDelimUnitLen text n i)
+    ((some l) (match (oldDelimRunLen text n (+ i l)) ((some more) (some (+ l more))) ((none) (some l))))
     ((none) (none)))
 
 fn newDelimUnitLen text: String n: Int64 i: Int64 -> (Option Int64)
@@ -274,21 +274,21 @@ fn newDelimUnitLen text: String n: Int64 i: Int64 -> (Option Int64)
         (else (none)))))
 
 fn newDelimRunLen text: String n: Int64 i: Int64 -> (Option Int64)
-  (mt (newDelimUnitLen text n i)
-    ((some l) (mt (newDelimRunLen text n (+ i l)) ((some more) (some (+ l more))) ((none) (some l))))
+  (match (newDelimUnitLen text n i)
+    ((some l) (match (newDelimRunLen text n (+ i l)) ((some more) (some (+ l more))) ((none) (some l))))
     ((none) (none)))
 
 fn oldSplitLoop text: String n: Int64 i: Int64 segStart: Int64 acc: (List String) -> (List String)
   (if (>= i n)
     (listReverse (cons (c/sliceOf text segStart n) acc))
-    (mt (oldDelimRunLen text n i)
+    (match (oldDelimRunLen text n i)
       ((some len) (oldSplitLoop text n (+ i len) (+ i len) (cons (c/sliceOf text segStart i) acc)))
       ((none) (oldSplitLoop text n (+ i 1) segStart acc))))
 
 fn newSplitLoop text: String n: Int64 i: Int64 segStart: Int64 acc: (List String) -> (List String)
   (if (>= i n)
     (listReverse (cons (c/sliceOf text segStart n) acc))
-    (mt (newDelimRunLen text n i)
+    (match (newDelimRunLen text n i)
       ((some len) (newSplitLoop text n (+ i len) (+ i len) (cons (c/sliceOf text segStart i) acc)))
       ((none) (newSplitLoop text n (+ i 1) segStart acc))))
 
@@ -324,14 +324,14 @@ fn exitDigitsLenAt lc: String n: Int64 i: Int64 -> (Option Int64)
           (if (= digEnd wsEnd) (none) (some (- digEnd i)))))))
 
 fn matchLenAt lc: String n: Int64 i: Int64 includeFixed: Bool -> (Option Int64)
-  (mt (verbCoreLenAt lc n i includeFixed)
+  (match (verbCoreLenAt lc n i includeFixed)
     ((some len) (if (and (isWordBoundaryBefore lc i) (isWordBoundaryAfter lc n (+ i len))) (some len) (exitDigitsLenAt lc n i)))
     ((none) (exitDigitsLenAt lc n i)))
 
 fn findClaimVerbStarts lc: String n: Int64 i: Int64 includeFixed: Bool acc: (List Int64) -> (List Int64)
   (if (>= i n)
     (listReverse acc)
-    (mt (matchLenAt lc n i includeFixed)
+    (match (matchLenAt lc n i includeFixed)
       ((some len) (findClaimVerbStarts lc n (+ i len) includeFixed (cons i acc)))
       ((none) (findClaimVerbStarts lc n (+ i 1) includeFixed acc))))
 
@@ -374,7 +374,7 @@ fn collectLoop formText: String n: Int64 end: Int64 i: Int64 isEvidence: Bool st
     (let [ch (c/ch formText i)]
       (cond
         ((= ch "(")
-          (mt (c/formEnd formText n (+ i 1) 1 false false)
+          (match (c/formEnd formText n (+ i 1) 1 false false)
             ((pair j _)
               (let [sub (c/sliceOf formText i j)
                     out2 (collectProseStringsInner sub isEvidence structuralKeys planOn out)]
@@ -432,10 +432,10 @@ fn findReceiptById receipts: (List Receipt) rid: String -> (Option Receipt)
     (else (findReceiptById (c/restOf receipts) rid)))
 
 fn receiptBacks rid: String claimedExit: (Option Int64) receipts: (List Receipt) -> Bool
-  (mt (findReceiptById receipts rid)
+  (match (findReceiptById receipts rid)
     ((none) false)
     ((some r)
-      (mt claimedExit
+      (match claimedExit
         ((none) true)
         ((some ce)
           (let [exits0 (if (receiptHasExit r) (list (receiptExit r)) (map pairSecond (receiptGateRuns r)))
@@ -474,7 +474,7 @@ fn gatePassCoreLen lc: String n: Int64 p: Int64 -> (Option Int64)
           wsEnd (c/runEnd lc n afterGateS c/isSpace)]
       (if (= wsEnd afterGateS)
         (none)
-        (mt (gatePassAltLen lc n wsEnd)
+        (match (gatePassAltLen lc n wsEnd)
           ((some al) (some (- (+ wsEnd al) p)))
           ((none) (none))))))
 
@@ -491,7 +491,7 @@ fn tryPrefixList lc: String n: Int64 i: Int64 -> (List Int64)
 fn gatePassMatchAt lc: String n: Int64 i: Int64 -> Bool
   (if (not (isWordBoundaryBefore lc i))
     false
-    (listAny? (fn [pos] (mt (gatePassCoreLen lc n pos)
+    (listAny? (fn [pos] (match (gatePassCoreLen lc n pos)
                           ((some cl) (isWordBoundaryAfter lc n (+ pos cl)))
                           ((none) false)))
       (tryPrefixList lc n i)))
@@ -509,7 +509,7 @@ fn lastDotLoop s: String n: Int64 i: Int64 acc: (Option Int64) -> (Option Int64)
   (if (>= i n) acc (lastDotLoop s n (+ i 1) (if (= (c/ch s i) ".") (some i) acc)))
 
 fn beforeLastDot s: String -> String
-  (mt (lastDotLoop s (stringLength s) 0 (none))
+  (match (lastDotLoop s (stringLength s) 0 (none))
     ((some idx) (c/sliceOf s 0 idx))
     ((none) s))
 
@@ -597,7 +597,7 @@ fn extractProseClaimsOldLoop sentences: (List String) receipts: (List Receipt) c
         (let [lc (lowerStr sentence)
               starts (findClaimVerbStarts lc (stringLength lc) 0 false (list))
               firstOk (findFirstNonNegated sentence starts)]
-          (mt firstOk
+          (match firstOk
             ((none) (extractProseClaimsOldLoop rest receipts claims unbacked))
             ((some _)
               (let [backed (isProseClaimBacked sentence receipts (list) false)
@@ -622,7 +622,7 @@ fn extractProseClaimsNewLoop sentences: (List String) receipts: (List Receipt) g
         (let [lc (lowerStr sentence)
               starts (findClaimVerbStarts lc (stringLength lc) 0 true (list))
               firstOk (findFirstNonNegated sentence starts)]
-          (mt firstOk
+          (match firstOk
             ((none) (extractProseClaimsNewLoop rest receipts gates gatePassBacked claims unbacked))
             ((some _)
               (let [backed (isProseClaimBacked sentence receipts gates gatePassBacked)
@@ -704,7 +704,7 @@ fn findingKey kv: (List (Pair String c/KvVal)) -> (Option (Pair (Option String) 
       (let [fileOpt (kvGetStrOpt kv "file")
             anchorOpt (kvGetStrOpt kv "anchor")
             claimOpt (kvGetStrOpt kv "claim")
-            secondOpt (mt anchorOpt
+            secondOpt (match anchorOpt
                         ((some a) (if (= a "") claimOpt (some a)))
                         ((none) claimOpt))]
         (some (pair fileOpt secondOpt)))
@@ -715,11 +715,11 @@ fn isRetract kv: (List (Pair String c/KvVal)) -> Bool
     (= (stripLeadingColons (optionOr (kvGetStrOpt kv "retract") "")) "true"))
 
 fn isLastOccurrence kvs: (List (List (Pair String c/KvVal))) i: Int64 key: (Pair (Option String) (Option String)) -> Bool
-  (not (listAny? (fn [kv2] (mt (findingKey kv2) ((some k2) (= k2 key)) ((none) false)))
+  (not (listAny? (fn [kv2] (match (findingKey kv2) ((some k2) (= k2 key)) ((none) false)))
         (optionOr (listSlice kvs (+ i 1) (listLength kvs)) (list))))
 
 fn compactKeys kvs: (List (List (Pair String c/KvVal))) -> (List (Pair (Option String) (Option String)))
-  (fold (fn [acc kv] (mt (findingKey kv) ((some k) (listAppend acc (list k))) ((none) acc))) (list) kvs)
+  (fold (fn [acc kv] (match (findingKey kv) ((some k) (listAppend acc (list k))) ((none) acc))) (list) kvs)
 
 fn kvHeadIsClaimFindingRetract kv: (List (Pair String c/KvVal)) -> Bool
   (listContains? (list "claim" "finding" "retract") (optionOr (kvGetStrOpt kv "_head") ""))
@@ -749,7 +749,7 @@ fn mergeEarlierLoop earlier: (List String) keys: (List (Pair (Option String) (Op
                             (let [kv (optionOr (listGet oKvs idx) (list))
                                   txt (optionOr (listGet oItems idx) old)
                                   fk (findingKey kv)
-                                  keyOk (mt fk ((some k) (not (listContains? keys k))) ((none) true))
+                                  keyOk (match fk ((some k) (not (listContains? keys k))) ((none) true))
                                   supersededByWholeFile (and (listContains? newWholeFile (optionOr (kvGetStrOpt kv "file") "")) (kvAnchorFalsy? kv))
                                   keepIt (and keyOk (not supersededByWholeFile))]
                               (if keepIt (listAppend acc (list txt)) acc)))
@@ -775,7 +775,7 @@ fn mergeFindings form: String earlier: (List String) -> (Pair (List String) Int6
                                txt (optionOr (listGet items idx) form)
                                gone (isRetract kv)
                                fk (findingKey kv)
-                               keepIt (and (not gone) (mt fk ((some k) (isLastOccurrence kvs idx k)) ((none) true)))]
+                               keepIt (and (not gone) (match fk ((some k) (isLastOccurrence kvs idx k)) ((none) true)))]
                            (if keepIt (listAppend acc (list txt)) acc)))
                    (list) idxs)
         finalKept (if (and (not (listEmpty? newTexts)) (< (listLength kept0) 20))
@@ -815,11 +815,11 @@ fn applyReadsLoop reads: (List (Pair String (Pair Int64 Int64))) coverage: (List
                    -> (Pair Bool (List (Pair String (List (Pair Int64 Int64)))))
   (if (listEmpty? reads)
     (pair newFlag coverage)
-    (mt (c/firstOf reads)
+    (match (c/firstOf reads)
       ((pair path span)
-        (mt span
+        (match span
           ((pair a b)
-            (mt (c/recordRead coverage path a b)
+            (match (c/recordRead coverage path a b)
               ((pair isNew cov2) (applyReadsLoop (c/restOf reads) cov2 (or newFlag isNew)))))))))
 
 fn turnBringsEvidence ops: (List (List (Pair String c/KvVal))) receipts: (List Receipt)
@@ -846,7 +846,7 @@ fn assocAddSpan acc: (List (Pair String (List (Pair Int64 Int64)))) k: String sp
     (listAppend acc (list (pair k (list span)))))
 
 fn groupSpansByPath reads: (List (Pair String (Pair Int64 Int64))) -> (List (Pair String (List (Pair Int64 Int64))))
-  (fold (fn [acc r] (mt r ((pair path span) (assocAddSpan acc path span)))) (list) reads)
+  (fold (fn [acc r] (match r ((pair path span) (assocAddSpan acc path span)))) (list) reads)
 
 fn forgetCutEvidence turnEvidence: (List TurnEvidenceEntry) whole: (List Int64) -> ForgetCutResult
   (let [relevant (filter (fn [e] (listContains? whole (teTurn e))) turnEvidence)

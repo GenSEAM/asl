@@ -10,16 +10,16 @@ fn byIndex rs: (List pool/PoolResult) i: Int64 -> (Option pool/PoolResult)
   (fold (fn [(acc (Option pool/PoolResult)) (r pool/PoolResult)] -> (Option pool/PoolResult) (if (= r.index i) (some r) acc)) (none) rs)
 
 fn stdoutAt rs: (List pool/PoolResult) i: Int64 -> String
-  (mt (byIndex rs i) ((some r) r.stdout) ((none) "missing"))
+  (match (byIndex rs i) ((some r) r.stdout) ((none) "missing"))
 
 fn stderrAt rs: (List pool/PoolResult) i: Int64 -> String
-  (mt (byIndex rs i) ((some r) r.stderr) ((none) "missing"))
+  (match (byIndex rs i) ((some r) r.stderr) ((none) "missing"))
 
 fn codeAt rs: (List pool/PoolResult) i: Int64 -> Int64
-  (mt (byIndex rs i) ((some r) r.exitCode) ((none) -99))
+  (match (byIndex rs i) ((some r) r.exitCode) ((none) -99))
 
 fn spawnErrorAt rs: (List pool/PoolResult) i: Int64 -> (Option String)
-  (mt (byIndex rs i) ((some r) r.spawnError) ((none) (some "missing")))
+  (match (byIndex rs i) ((some r) r.spawnError) ((none) (some "missing")))
 
 fn ! runTests -> Bool
   (let [(t0 (monotonicNs))

@@ -8,7 +8,7 @@ fn makeEmptyMigrationResult -> PcpMigrationResult
 (schema ParseState (:f currentCode Str) (:f currentTitle Str) (:f currentWhy Str) (:f currentBasis Str) (:f currentStatus Str) (:f rules (List rec/AdrRule)))
 
 fn cleanVal line: Str prefix: Str -> Str
-  (let [(idx (stringIndexOf line prefix))] (mt idx ((none) "") ((some i) (let [(rest (optionOr (stringSlice line (+ i (stringLength prefix)) (stringLength line)) "")) (trimmed (stringTrim rest)) (noQuote (stringReplace trimmed "\"" "")) (clean (stringReplace noQuote "'" ""))] clean))))
+  (let [(idx (stringIndexOf line prefix))] (match idx ((none) "") ((some i) (let [(rest (optionOr (stringSlice line (+ i (stringLength prefix)) (stringLength line)) "")) (trimmed (stringTrim rest)) (noQuote (stringReplace trimmed "\"" "")) (clean (stringReplace noQuote "'" ""))] clean))))
 
 fn flushRule st: ParseState -> ParseState
   (if (stringEmpty? st.currentCode) st (let [(newRule (rec/makeRule st.currentCode (if (stringEmpty? st.currentTitle) "Untitled" st.currentTitle) (if (stringEmpty? st.currentWhy) "Rationale" st.currentWhy) (if (stringEmpty? st.currentBasis) "unspecified" st.currentBasis) (if (stringEmpty? st.currentStatus) "active" st.currentStatus))) (updatedRules (listAppend st.rules (list newRule)))] (ParseState :currentCode "" :currentTitle "" :currentWhy "" :currentBasis "" :currentStatus "" :rules updatedRules)))

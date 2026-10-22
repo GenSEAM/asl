@@ -20,7 +20,7 @@ fn checkLoop data: Bytes n: Int64 i: Int64 inStr: Bool inComment: Bool strStart:
     (if inStr
       (some (pair strStart "unterminated string"))
       (if (not (listEmpty? stack))
-        (mt (listHead stack)
+        (match (listHead stack)
           ((some p) (some (pair (pairSecond p) (str "unclosed " (delimToStr (pairFirst p))))))
           ((none) (none)))
         (none)))
@@ -49,7 +49,7 @@ fn checkLoop data: Bytes n: Int64 i: Int64 inStr: Bool inComment: Bool strStart:
           (let [(want (cond ((= c 41) 40) ((= c 93) 91) (else 123)))]
             (if (listEmpty? stack)
               (some (pair i (str "unexpected " (delimToStr c))))
-              (mt (listHead stack)
+              (match (listHead stack)
                 ((some p)
                   (if (!= (pairFirst p) want)
                     (some (pair i (str (delimToStr c) " closes " (delimToStr (pairFirst p)) " opened at byte " (stringFromInt64 (pairSecond p)))))
@@ -71,12 +71,12 @@ fn extractStrerror path: String err: String -> String
         (optionOr (stringSlice rest (+ pathLen 2) (stringLength rest)) rest))))
 
 fn checkFile! path: String -> (Result (Option (Pair Int64 String)) String)
-  (mt (fileStat path)
+  (match (fileStat path)
     ((ok st)
       (if st.isDir
         (err "Is a directory")
         (let [(r (fileReadBytes path))]
-          (mt r
+          (match r
             ((ok data) (ok (check data (not (stringEndsWith? path ".asl")))))
             ((err e) (err (extractStrerror path e)))))))
     ((err e)
@@ -91,12 +91,12 @@ fn processPaths! paths: (List String) rc: Int64 -> Int64
     (let [(p (optionOr (listHead paths) ""))
           (tail (optionOr (listTail paths) (list)))
           (r (checkFile! p))]
-      (mt r
+      (match r
         ((err errEv)
           (let [(_ (println (str "(:unreadable :file \"" (esc p) "\" :ev \"" (esc errEv) "\")")))]
             (processPaths! tail 2)))
         ((ok res)
-          (mt res
+          (match res
             ((none) (processPaths! tail rc))
             ((some unb)
               (let [(byteOff (pairFirst unb))

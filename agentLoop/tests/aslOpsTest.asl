@@ -5,8 +5,8 @@
       (asl/agentLoop/core :a c)])
 
 fn getStr kv: (List (Pair String c/KvVal)) key: String -> String
-  (mt (listHead (filter (fn [p] (= (pairFirst p) key)) kv))
-    ((some p) (mt (pairSecond p) ((c/kvStr s) s) ((c/kvInt s) s)))
+  (match (listHead (filter (fn [p] (= (pairFirst p) key)) kv))
+    ((some p) (match (pairSecond p) ((c/kvStr s) s) ((c/kvInt s) s)))
     (none ""))
 
 fn getInt kv: (List (Pair String c/KvVal)) key: String -> Int64
@@ -37,7 +37,7 @@ fn ! writeOk path: String text: String -> Bool
   (ok? (fileWrite path text))
 
 fn ! runOk argv: (List String) -> Bool
-  (mt (procSpawnv argv (none) (none))
+  (match (procSpawnv argv (none) (none))
     ((ok sp) (= (procWaitPid sp.pid false) (ok (some 0))))
     ((err _) false))
 
@@ -98,7 +98,7 @@ fn ! replayStepTimeoutCase form: String -> Bool
     (do (assert (= got wantTimeout) (str id ": stepTimeout matches")) true))
 
 fn ! darwin? -> Bool
-  (mt (platformInfo) ((ok p) (= p.os "Darwin")) ((err _) false))
+  (match (platformInfo) ((ok p) (= p.os "Darwin")) ((err _) false))
 
 fn ! replayTransportCase form: String real: String root: String -> Bool
   (let [kv (c/parseKv form)
@@ -139,7 +139,7 @@ fn ! replayNearestLinesCase form: String root: String -> Bool
     (if isNone
       (do (assert (none? got) (str id ": nearestLines is none")) true)
       (do (assert (some? got) (str id ": nearestLines is some"))
-          (mt (optionOr got (pair (pair 0 0) ""))
+          (match (optionOr got (pair (pair 0 0) ""))
             ((pair p cnt)
               (do (assert (= (pairFirst p) spanFirst) (str id ": spanFirst matches"))
                   (assert (= (pairSecond p) spanLast) (str id ": spanLast matches"))
@@ -170,7 +170,7 @@ fn ! replayRunBoundedCase form: String real: String root: String -> Bool
         res (o/runBounded argv (some root) timeoutSec (none))]
     (if hasError
       (do (assert (err? res) (str id ": runBounded spawn error expected"))
-          (mt res
+          (match res
             ((err m) (assert (= (unplace m real root) wantErrText) (str id ": spawn error text matches")))
             ((ok _) (assert (err? res) (str id ": spawn error text present"))))
           true)

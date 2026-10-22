@@ -201,7 +201,7 @@ fn parseJsxExprFromOffset text: String bs: Bytes len: Int64 cur: Int64 -> (Pair 
       (let [(b (bytesGet bs c))]
         (if (= b 60)
           (let [(elemRes (parseJsxElementOrFrag text bs len c))]
-            (mt elemRes
+            (match elemRes
               ((ok resPair)
                (let [(elemNode (pairFirst resPair))
                      (nextCur (pairSecond resPair))]
@@ -257,7 +257,7 @@ fn tokenizeJsxExprLoop text: String bs: Bytes len: Int64 cur: Int64 endOff: Int6
               (allToks (listAppend accToks shifted))]
           (pair allToks accMap))
         (let [(elemRes (parseJsxElementOrFrag text bs len nextLt))]
-          (mt elemRes
+          (match elemRes
             ((ok resPair)
              (let [(elemNode (pairFirst resPair))
                    (nextC (pairSecond resPair))]
@@ -294,7 +294,7 @@ fn lookupJsxNode start: Int64 end: Int64 entries: (List (Pair (Pair Int64 Int64)
         (lookupJsxNode start end tl))))
 
 fn substituteJsxInElement elem: tr/TreeElement entries: (List (Pair (Pair Int64 Int64) tr/Node)) -> tr/TreeElement
-  (mt elem
+  (match elem
     ((tr/elemToken tok) elem)
     ((tr/elemNode node) (tr/elemNode (substituteJsxNodes node entries))))
 
@@ -302,7 +302,7 @@ fn substituteJsxNodes node: tr/Node entries: (List (Pair (Pair Int64 Int64) tr/N
   (let [(s (tr/nodeStart node))
         (e (tr/nodeEnd node))
         (found (lookupJsxNode s e entries))]
-    (mt found
+    (match found
       ((some jsxN) jsxN)
       ((none)
        (let [(kids (tr/nodeChildren node))
@@ -443,7 +443,7 @@ fn parseJsxAttributesLoop bs: Bytes len: Int64 text: String cur: Int64 acc: (Lis
                                    (parseJsxAttributesLoop bs len text (+ cRb 1) (cons (tr/elemNode attrNode) acc))))))
                             ((= valB 60)
                              (let [(elemRes (parseJsxElementOrFrag text bs len cVal))]
-                               (mt elemRes
+                               (match elemRes
                                  ((ok resPair)
                                   (let [(valNode (pairFirst resPair))
                                         (nextC (pairSecond resPair))
@@ -506,7 +506,7 @@ fn parseJsxChildrenLoop bs: Bytes len: Int64 text: String cur: Int64 openTagName
                 (cGt (pairSecond spFrag))]
             (if (and (< cGt len) (= (bytesGet bs cGt) 62))
               (let [(fragRes (parseJsxFragmentFrom text bs len cur))]
-              (mt fragRes
+              (match fragRes
                 ((ok resPair)
                  (let [(fragNode (pairFirst resPair))
                        (nextCur (pairSecond resPair))]
@@ -514,7 +514,7 @@ fn parseJsxChildrenLoop bs: Bytes len: Int64 text: String cur: Int64 openTagName
                 ((err _)
                  (pair (listReverse acc) cur))))
             (let [(elemRes (parseJsxElementFrom text bs len cur))]
-              (mt elemRes
+              (match elemRes
                 ((ok resPair)
                  (let [(elemNode (pairFirst resPair))
                        (nextCur (pairSecond resPair))]
@@ -586,12 +586,12 @@ fn parseJsxElementWithTagParser text: String bs: Bytes len: Int64 i: Int64 tagPa
         (let [(attrRes (parseJsxAttributesLoop bs len text cAfterName (list)))
           (attrElems (pairFirst attrRes))
           (cAfterAttrs (pairSecond attrRes))]
-      (if (listAny? (fn [(el tr/TreeElement)] -> Bool (mt el ((tr/elemNode n) (= (tr/nodeKind n) "error")) ((tr/elemToken _) false))) attrElems)
+      (if (listAny? (fn [(el tr/TreeElement)] -> Bool (match el ((tr/elemNode n) (= (tr/nodeKind n) "error")) ((tr/elemToken _) false))) attrElems)
         (err (str "Invalid attribute at offset " (stringFromInt64 cAfterAttrs)))
         (if (>= cAfterAttrs len)
         (err (str "Unclosed JSX element at offset " (stringFromInt64 cAfterAttrs)))
         (let [(b (bytesGet bs cAfterAttrs))
-              (argsList (mt maybeArgs ((some an) (list (tr/elemNode an))) ((none) (list))))]
+              (argsList (match maybeArgs ((some an) (list (tr/elemNode an))) ((none) (list))))]
           (if (and (= b 47) (and (< (+ cAfterAttrs 1) len) (= (bytesGet bs (+ cAfterAttrs 1)) 62)))
             (let [(slashTok (tr/makeToken "slash" cAfterAttrs (+ cAfterAttrs 1)))
                   (gtTok (tr/makeToken "gt" (+ cAfterAttrs 1) (+ cAfterAttrs 2)))
@@ -619,7 +619,7 @@ fn parseJsxElementWithTagParser text: String bs: Bytes len: Int64 i: Int64 tagPa
                 (if (= (listLength chElems) 0)
                   (err (str "Missing closing tag for <" tagName "> at offset " (stringFromInt64 cAfterCh)))
                   (let [(lastElem (optionOr (listLast chElems) (tr/elemToken (tr/makeToken "" 0 0))))]
-                    (mt lastElem
+                    (match lastElem
                       ((tr/elemToken _)
                        (err (str "Missing closing tag for <" tagName "> at offset " (stringFromInt64 cAfterCh))))
                       ((tr/elemNode lastNode)
@@ -655,7 +655,7 @@ fn parseJsxFragmentFrom text: String bs: Bytes len: Int64 i: Int64 -> (Result (P
       (if (= (listLength chElems) 0)
         (err (str "Missing closing tag for fragment at offset " (stringFromInt64 cAfterCh)))
         (let [(lastElem (optionOr (listLast chElems) (tr/elemToken (tr/makeToken "" 0 0))))]
-          (mt lastElem
+          (match lastElem
             ((tr/elemToken _)
              (err (str "Missing closing tag for fragment at offset " (stringFromInt64 cAfterCh))))
             ((tr/elemNode lastNode)
@@ -671,7 +671,7 @@ fn findChildNodes elems: (List tr/TreeElement) -> (List tr/Node)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))
           (rest (findChildNodes tl))]
-      (mt hd
+      (match hd
         ((tr/elemNode n) (cons n rest))
         ((tr/elemToken _) rest))))
 
@@ -681,7 +681,7 @@ fn findDirectTokens elems: (List tr/TreeElement) -> (List tr/Token)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))
           (rest (findDirectTokens tl))]
-      (mt hd
+      (match hd
         ((tr/elemToken t) (cons t rest))
         ((tr/elemNode _) rest))))
 
@@ -691,7 +691,7 @@ fn findChildTokens elems: (List tr/TreeElement) -> (List tr/Token)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))
           (rest (findChildTokens tl))]
-      (mt hd
+      (match hd
         ((tr/elemToken t) (cons t rest))
         ((tr/elemNode n) (listAppend (findChildTokens (tr/nodeChildren n)) rest)))))
 
@@ -699,7 +699,7 @@ fn parseJsxElement text: String start: Int64 -> (Result tr/Node String)
   (let [(bs (stringToBytes text))
         (len (bytesLength bs))
         (res (parseJsxElementFrom text bs len start))]
-    (mt res
+    (match res
       ((ok p) (ok (pairFirst p)))
       ((err e) (err e))))
 
@@ -707,7 +707,7 @@ fn parseJsxFragment text: String start: Int64 -> (Result tr/Node String)
   (let [(bs (stringToBytes text))
         (len (bytesLength bs))
         (res (parseJsxFragmentFrom text bs len start))]
-    (mt res
+    (match res
       ((ok p) (ok (pairFirst p)))
       ((err e) (err e))))
 
@@ -742,7 +742,7 @@ fn parseJsxDocLoop bs: Bytes len: Int64 text: String cur: Int64 acc: (List tr/Tr
                   (cGt (pairSecond spFrag))]
               (if (and (< cGt len) (= (bytesGet bs cGt) 62))
                 (let [(fragRes (parseJsxFragmentFrom text bs len c))]
-                  (mt fragRes
+                  (match fragRes
                     ((ok p)
                      (let [(node (pairFirst p))
                            (cEnd (pairSecond p))
@@ -750,7 +750,7 @@ fn parseJsxDocLoop bs: Bytes len: Int64 text: String cur: Int64 acc: (List tr/Tr
                        (parseJsxDocLoop bs len text cEnd newAcc)))
                     ((err e) (err e))))
                 (let [(elemRes (parseJsxElementFrom text bs len c))]
-                  (mt elemRes
+                  (match elemRes
                     ((ok p)
                      (let [(node (pairFirst p))
                            (cEnd (pairSecond p))
@@ -769,12 +769,12 @@ fn parseJsx text: String -> (Result tr/Node String)
       (let [(b (bytesGet bs c))]
         (if (= b 60)
           (let [(docRes (parseJsxDocLoop bs len text 0 (list)))]
-            (mt docRes
+            (match docRes
               ((ok p)
                (let [(elems (pairFirst p))]
                  (if (= (listLength elems) 1)
                    (let [(firstEl (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))]
-                     (mt firstEl
+                     (match firstEl
                        ((tr/elemNode n) (ok n))
                        ((tr/elemToken _) (ok (tr/makeNode "document" 0 len elems)))))
                    (ok (tr/makeNode "document" 0 len elems)))))

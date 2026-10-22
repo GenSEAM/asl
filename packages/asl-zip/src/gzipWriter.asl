@@ -61,7 +61,7 @@ fn crc32! data: Bytes -> Int64
       (crcLoop data 0 4294967295 table)))
 
 fn gzip! data: Bytes level: Int64 -> (Result Bytes String)
-  (mt (df/deflateWithLevel! data level)
+  (match (df/deflateWithLevel! data level)
     ((err e) (err e))
     ((ok body)
       (let [(n (bytesLength data))

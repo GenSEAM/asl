@@ -13,8 +13,8 @@ fn asnAtom s: String -> j/Json
   (j/jobj (list (pair "atom" (j/jstr s))))
 
 fn atomOf v: j/Json -> (Option String)
-  (mt v
-    ((j/jobj kvs) (if (= (listLength kvs) 1) (mt (pt/jget v "atom") ((some a) (mt a ((j/jstr s) (some s)) (_ (none)))) ((none) (none))) (none)))
+  (match v
+    ((j/jobj kvs) (if (= (listLength kvs) 1) (match (pt/jget v "atom") ((some a) (match a ((j/jstr s) (some s)) (_ (none)))) ((none) (none))) (none)))
     (_ (none)))
 
 fn valueErr msg: String -> pt/PyErr
@@ -24,7 +24,7 @@ fn cpOffset text: String b: Int64 -> String
   (stringFromInt64 (pt/cpCount (pt/sliceB text 0 b)))
 
 fn pushForm stack: (List (List j/Json)) forms: (List j/Json) v: j/Json -> (Pair (List (List j/Json)) (List j/Json))
-  (mt (listHead stack)
+  (match (listHead stack)
     ((none) (pair stack (cons v forms)))
     ((some top) (pair (cons (cons v top) (optionOr (listTail stack) (list))) forms)))
 
@@ -57,13 +57,13 @@ fn readLoop text: String bs: Bytes n: Int64 i: Int64 stack: (List (List j/Json))
         ((= c 59) (let [(k (pt/findFrom bs n (stringToBytes "\n") 1 i))] (readLoop text bs n (if (< k 0) n (+ k 1)) stack forms)))
         ((= c 40) (readLoop text bs n (+ i 1) (cons (list) stack) forms))
         ((= c 41)
-          (mt (listHead stack)
+          (match (listHead stack)
             ((none) (err (valueErr (str "unbalanced ) at offset " (cpOffset text i)))))
             ((some top)
               (let [(p (pushForm (optionOr (listTail stack) (list)) forms (j/jarr (listReverse top))))]
                 (readLoop text bs n (+ i 1) (pairFirst p) (pairSecond p))))))
         ((= c 34)
-          (mt (strEnd text bs n i (+ i 1) (+ i 1) (list))
+          (match (strEnd text bs n i (+ i 1) (+ i 1) (list))
             ((err e) (err e))
             ((ok r) (let [(p (pushForm stack forms (j/jstr (pairFirst r))))] (readLoop text bs n (pairSecond r) (pairFirst p) (pairSecond p))))))
         (else
@@ -74,17 +74,17 @@ fn asnRead text: String -> (Result (List j/Json) pt/PyErr)
   (let [(bs (stringToBytes text))] (readLoop text bs (bytesLength bs) 0 (list) (list)))
 
 fn asnRepr v: j/Json -> String
-  (mt (atomOf v)
+  (match (atomOf v)
     ((some s) (pt/pyRepr (j/jstr s)))
-    ((none) (mt v ((j/jarr xs) (str "[" (pt/joinSep (map asnRepr xs) ", ") "]")) (_ (pt/pyRepr v)))))
+    ((none) (match v ((j/jarr xs) (str "[" (pt/joinSep (map asnRepr xs) ", ") "]")) (_ (pt/pyRepr v)))))
 
 fn asnText v: j/Json -> String
-  (mt (atomOf v)
+  (match (atomOf v)
     ((some s) s)
-    ((none) (mt v ((j/jstr s) s) ((j/jarr _) (asnRepr v)) (_ (pt/pyStr v)))))
+    ((none) (match v ((j/jstr s) s) ((j/jarr _) (asnRepr v)) (_ (pt/pyStr v)))))
 
 fn propsLoop what: String rest: (List j/Json) acc: j/Json -> (Result j/Json pt/PyErr)
-  (mt (listHead rest)
+  (match (listHead rest)
     ((none) (ok acc))
     ((some k)
       (let [(tail (optionOr (listTail rest) (list)))
@@ -95,16 +95,16 @@ fn propsLoop what: String rest: (List j/Json) acc: j/Json -> (Result j/Json pt/P
           (propsLoop what (optionOr (listTail tail) (list)) (pt/jset acc (pt/sliceB name 1 (stringLength name)) v))))))
 
 fn asnProps form: j/Json head: (Option String) -> (Result j/Json pt/PyErr)
-  (let [(what (mt head ((some h) (str "(" h " ...)")) ((none) "a property list")))]
-    (mt form
+  (let [(what (match head ((some h) (str "(" h " ...)")) ((none) "a property list")))]
+    (match form
       ((j/jarr xs)
-        (let [(headOk (mt head
+        (let [(headOk (match head
                         ((none) (ok xs))
                         ((some h)
-                          (mt (listHead xs)
+                          (match (listHead xs)
                             ((none) (err (valueErr (str "expected " what ", found ( ...)"))))
                             ((some f0) (if (= (atomOf f0) (some h)) (ok (optionOr (listTail xs) (list))) (err (valueErr (str "expected " what ", found (" (asnText f0) " ...)")))))))))]
-          (mt headOk
+          (match headOk
             ((err e) (err e))
             ((ok rest)
               (if (= (mod (listLength rest) 2) 1)
@@ -122,7 +122,7 @@ fn lstripColon s: String -> String
   (if (stringStartsWith? s ":") (lstripColon (pt/sliceB s 1 (stringLength s))) s)
 
 fn asnScalar v: j/Json -> j/Json
-  (mt (atomOf v)
+  (match (atomOf v)
     ((none) v)
     ((some s)
       (let [(neg (stringStartsWith? s "-"))
@@ -134,11 +134,11 @@ fn asnScalar v: j/Json -> j/Json
           ((= s "true") (j/jbool true))
           ((= s "false") (j/jbool false))
           ((and (> nb 0) (allDigits bb 0 nb))
-            (mt (stringToInt64 s)
+            (match (stringToInt64 s)
               ((some k) (j/jint k))
-              ((none) (mt (pt/jsonLoads (str (if neg "-" "") (stripLeadingZeros body) ".0")) ((ok f) f) ((err _) (j/jstr s))))))
+              ((none) (match (pt/jsonLoads (str (if neg "-" "") (stripLeadingZeros body) ".0")) ((ok f) f) ((err _) (j/jstr s))))))
           ((and (> dot 0) (< dot (- nb 1)) (allDigits bb 0 dot) (allDigits bb (+ dot 1) nb))
-            (mt (pt/jsonLoads (str (if neg "-" "") (stripLeadingZeros body))) ((ok f) f) ((err _) (j/jstr s))))
+            (match (pt/jsonLoads (str (if neg "-" "") (stripLeadingZeros body))) ((ok f) f) ((err _) (j/jstr s))))
           (else (j/jstr (lstripColon s)))))))
 
 fn anyIn u: String ds: (List String) -> Bool
@@ -165,7 +165,7 @@ fn sexprScan text: String bs: Bytes n: Int64 start: Int64 i: Int64 stack: (List 
         ((or (= c 40) (= c 91)) (sexprScan text bs n start (+ i 1) (cons c stack) inStr false))
         ((or (= c 41) (= c 93))
           (let [(want (if (= c 41) 40 91))]
-            (mt (listHead stack)
+            (match (listHead stack)
               ((none) (none))
               ((some top)
                 (if (not (= top want))
@@ -200,7 +200,7 @@ fn tagPass s: String bs: Bytes n: Int64 i: Int64 seg: Int64 acc: (List String) m
   (let [(k (findLit bs n "<" i))]
     (if (< k 0)
       (pt/treeJoin (listReverse (cons (pt/sliceB s seg n) acc)))
-      (mt (m k)
+      (match (m k)
         ((some r) (tagPass s bs n (pairFirst r) (pairFirst r) (cons (pairSecond r) (cons (pt/sliceB s seg k) acc)) m))
         ((none) (tagPass s bs n (+ k 1) seg acc m)))))
 
@@ -218,7 +218,7 @@ fn commentPass s: String bs: Bytes n: Int64 i: Int64 seg: Int64 acc: (List Strin
           (commentPass s bs n (+ c 3) (+ c 3) (cons " " (cons (pt/sliceB s seg k) acc)))))))
 
 fn blockTag s: String bs: Bytes n: Int64 k: Int64 -> (Option (Pair Int64 String))
-  (mt (listHead (filter (fn [(t String)] -> Bool (ciAt bs n (+ k 1) t)) (list "script" "style" "nav" "header" "footer" "noscript" "svg")))
+  (match (listHead (filter (fn [(t String)] -> Bool (ciAt bs n (+ k 1) t)) (list "script" "style" "nav" "header" "footer" "noscript" "svg")))
     ((none) (none))
     ((some t)
       (let [(e (findLit bs n ">" (+ k 1 (stringLength t))))]
@@ -265,7 +265,7 @@ fn brTag s: String bs: Bytes n: Int64 k: Int64 -> (Option (Pair Int64 String))
 
 fn blockBreakTag s: String bs: Bytes n: Int64 k: Int64 -> (Option (Pair Int64 String))
   (let [(j0 (if (and (< (+ k 1) n) (= (bytesGet bs (+ k 1)) 47)) (+ k 2) (+ k 1)))]
-    (mt (listHead (filter (fn [(t String)] -> Bool (ciAt bs n j0 t)) (list "p" "div" "section" "article" "li")))
+    (match (listHead (filter (fn [(t String)] -> Bool (ciAt bs n j0 t)) (list "p" "div" "section" "article" "li")))
       ((none) (none))
       ((some t)
         (let [(e (findLit bs n ">" (+ j0 (stringLength t))))]
@@ -321,7 +321,7 @@ fn tableOf tHtml: String maxRows: Int64 -> (Option j/Json)
       (some (j/jobj (list (pair "cols" (j/jarr (pairFirst acc))) (pair "rows" (j/jarr (pairSecond acc))))))))
 
 fn extractHtmlTables raw: String maxTables: Int64 maxRows: Int64 -> j/Json
-  (j/jarr (fold (fn [(acc (List j/Json)) (t String)] -> (List j/Json) (mt (tableOf t maxRows) ((some x) (listAppend acc (list x))) ((none) acc)))
+  (j/jarr (fold (fn [(acc (List j/Json)) (t String)] -> (List j/Json) (match (tableOf t maxRows) ((some x) (listAppend acc (list x))) ((none) acc)))
                 (list) (listTake (tagged raw "<table" "</table>") (max maxTables 0))))
 
 fn classChar b: Int64 -> Bool
@@ -334,7 +334,7 @@ fn isQuote bs: Bytes n: Int64 j: Int64 -> Bool
   (and (< j n) (or (= (bytesGet bs j) 34) (= (bytesGet bs j) 39)))
 
 fn classWithPrefix bs: Bytes n: Int64 q: Int64 prefixes: (List String) -> (Option (Pair Int64 Int64))
-  (mt (listHead prefixes)
+  (match (listHead prefixes)
     ((none) (none))
     ((some pfx)
       (let [(rest (optionOr (listTail prefixes) (list)))]
@@ -361,13 +361,13 @@ fn codeAt s: String bs: Bytes n: Int64 i: Int64 -> (Option (Pair String String))
             (c (if (< e 0) -1 (findCi bs n "</code>" (+ e 1))))]
         (if (< c 0)
           (codeAt s bs n (+ k 1))
-          (some (pair (mt cls ((some r) (pt/sliceB s (pairFirst r) (pairSecond r))) ((none) "")) (pt/sliceB s (+ e 1) c)))))))
+          (some (pair (match cls ((some r) (pt/sliceB s (pairFirst r) (pairSecond r))) ((none) "")) (pt/sliceB s (+ e 1) c)))))))
 
 fn extractHtmlCodeBlocks raw: String maxBlocks: Int64 -> j/Json
   (j/jarr (fold (fn [(acc (List j/Json)) (p String)] -> (List j/Json)
                   (let [(m (codeMatch p))
-                        (lang (mt m ((some x) (pairFirst x)) ((none) "")))
-                        (code (cellText (mt m ((some x) (pairSecond x)) ((none) p))))]
+                        (lang (match m ((some x) (pairFirst x)) ((none) "")))
+                        (code (cellText (match m ((some x) (pairSecond x)) ((none) p))))]
                     (if (stringEmpty? code) acc (listAppend acc (list (j/jobj (list (pair "lang" (j/jstr lang)) (pair "code" (j/jstr (pt/cpPrefix code 500))))))))))
                 (list) (listTake (tagged raw "<pre" "</pre>") (max maxBlocks 0))))
 
@@ -395,12 +395,12 @@ fn notCrawled url: String fallback: j/Json note: String -> j/Json
                 (pair "crawled" (j/jbool false)) (pair "note" (j/jstr note))))
 
 fn fetchResult url: String fallback: j/Json r: srch/HttpResult decoded: (Result String pt/PyErr) -> j/Json
-  (mt r
+  (match r
     ((srch/httpFail _ _) (notCrawled url fallback "fetchTimeoutOrError"))
     ((srch/httpResp code _ hs body)
       (if (not (srch/httpOk? code))
         (notCrawled url fallback "fetchTimeoutOrError")
-        (mt decoded
+        (match decoded
           ((err _) (notCrawled url fallback "fetchTimeoutOrError"))
           ((ok html)
             (if (isWafChallenge code html)
@@ -415,7 +415,7 @@ fn fetchResult url: String fallback: j/Json r: srch/HttpResult decoded: (Result 
                                 (pair "crawled" (j/jbool true))))))))))))
 
 fn ! fetchDecode! st: srch/HubState r: srch/HttpResult -> (Result String pt/PyErr)
-  (mt r
+  (match r
     ((srch/httpResp code _ hs body)
       (if (srch/httpOk? code)
         (srch/decodeBody! (pt/sliceB body 0 (min 150000 (stringLength body))) (optionOr (srch/contentCharset hs) "utf-8") st.env)
@@ -423,27 +423,27 @@ fn ! fetchDecode! st: srch/HubState r: srch/HttpResult -> (Result String pt/PyEr
     ((srch/httpFail e _) (err e)))
 
 fn ! fetchSinglePage! st: srch/HubState url: String fallback: j/Json timeout: j/Json -> (Result j/Json pt/PyErr)
-  (mt (srch/urlTypeCheck url)
+  (match (srch/urlTypeCheck url)
     ((err e) (err e))
     ((ok _) (let [(r (srch/runOne! st (fetchReq url timeout)))] (ok (fetchResult url fallback r (fetchDecode! st r))))))
 
 fn strOrErr v: j/Json what: String -> (Result String pt/PyErr)
-  (mt v ((j/jstr s) (ok s)) (_ (err (pt/pyErr "TypeError" (str what " must be str, not " (pt/pyTypeName v))))))
+  (match v ((j/jstr s) (ok s)) (_ (err (pt/pyErr "TypeError" (str what " must be str, not " (pt/pyTypeName v))))))
 
 fn ! parallelCrawlDistill! st: srch/HubState results: (List j/Json) maxUrls: Int64 timeout: j/Json -> (Result j/Json pt/PyErr)
   (let [(toFetch (listTake results (max maxUrls 0)))
         (targets (fold (fn [(acc (Result (List (Pair String j/Json)) pt/PyErr)) (r j/Json)] -> (Result (List (Pair String j/Json)) pt/PyErr)
-                         (mt acc
+                         (match acc
                            ((err e) (err e))
                            ((ok xs)
-                             (mt (srch/jreq r "url")
+                             (match (srch/jreq r "url")
                                ((err e) (err e))
                                ((ok u)
-                                 (mt (pt/jgetOr r "snippet" (j/jstr ""))
+                                 (match (pt/jgetOr r "snippet" (j/jstr ""))
                                    ((err e) (err e))
-                                   ((ok sn) (mt (strOrErr u "url") ((err e) (err e)) ((ok us) (ok (listAppend xs (list (pair us sn)))))))))))))
+                                   ((ok sn) (match (strOrErr u "url") ((err e) (err e)) ((ok us) (ok (listAppend xs (list (pair us sn)))))))))))))
                        (ok (list)) toFetch))]
-    (mt targets
+    (match targets
       ((err e) (err e))
       ((ok ts)
         (let [(valid (filter (fn [(t (Pair String j/Json))] -> Bool (ok? (srch/urlTypeCheck (pairFirst t)))) ts))
@@ -510,17 +510,17 @@ fn researchPrompt topic: String depth: String rawItems: j/Json triage: Bool -> S
         "Raw Evidence:\n" ev))))
 
 fn researchEntryLabel entry: j/Json -> (Result (Pair j/Json j/Json) pt/PyErr)
-  (mt entry
-    ((j/jobj _) (mt (srch/jreq entry "alias") ((err e) (err e)) ((ok a) (mt (srch/jreq entry "dispatch") ((err e) (err e)) ((ok d) (ok (pair a d)))))))
+  (match entry
+    ((j/jobj _) (match (srch/jreq entry "alias") ((err e) (err e)) ((ok a) (match (srch/jreq entry "dispatch") ((err e) (err e)) ((ok d) (ok (pair a d)))))))
     (_ (ok (pair entry entry))))
 
 fn cliName prov: j/Json -> (Option String)
-  (mt prov
+  (match prov
     ((j/jstr p) (cond ((= p "agy-cli") (some "agy")) ((= p "codex-cli") (some "codex")) ((= p "claude-cli") (some "claude")) (else (none))))
     (_ (none)))
 
 fn researchEntryProvider entry: j/Json up: (fn [String] -> j/Json) -> (Result j/Json pt/PyErr)
-  (let [(raw (mt entry
+  (let [(raw (match entry
                ((j/jobj _)
                  (let [(p (optionOr (pt/jget entry "provider") (j/jnull)))]
                    (if (pt/pyTruthy p)
@@ -529,9 +529,9 @@ fn researchEntryProvider entry: j/Json up: (fn [String] -> j/Json) -> (Result j/
                        (pt/jgetOr (if (pt/pyTruthy u) u (j/jobj (list))) "provider" (j/jnull))))))
                ((j/jstr s) (pt/jgetOr (up s) "provider" (j/jnull)))
                (_ (err (pt/pyErr "TypeError" (str "entry must be dict or str, not " (pt/pyTypeName entry)))))))]
-    (mt raw
+    (match raw
       ((err e) (err e))
-      ((ok p) (ok (mt (cliName p) ((some c) (j/jstr c)) ((none) p))))))
+      ((ok p) (ok (match (cliName p) ((some c) (j/jstr c)) ((none) p))))))
 
 fn provKey prov: j/Json -> String
   (pt/pyStr prov)
@@ -539,7 +539,7 @@ fn provKey prov: j/Json -> String
 fn breakerDownFor st: srch/HubState prov: j/Json -> (Pair Float64 srch/HubState)
   (if (not (pt/pyTruthy prov))
     (pair 0.0 st)
-    (mt (mapGet st.breakerUntil (provKey prov))
+    (match (mapGet st.breakerUntil (provKey prov))
       ((none) (pair 0.0 st))
       ((some until)
         (let [(left (- (/ (int64ToFloat64 until) 1000.0) (/ (int64ToFloat64 st.nowMs) 1000.0)))]
@@ -577,7 +577,7 @@ fn toSeconds ms: Int64 -> Float64
   (/ (int64ToFloat64 ms) 1000.0)
 
 fn roundHalfEven x: Float64 -> Int64
-  (mt (float64ToInt64 x)
+  (match (float64ToInt64 x)
     ((none) 0)
     ((some f) (let [(d (- x (int64ToFloat64 f)))]
       (cond ((> d 0.5) (+ f 1)) ((< d 0.5) f) ((= (mod f 2) 0) f) (else (+ f 1))))))
@@ -607,39 +607,39 @@ fn runtimeErr msg: String -> pt/PyErr
   (pt/pyErr "RuntimeError" msg)
 
 fn numF v: j/Json -> Float64
-  (mt v ((j/jint i) (int64ToFloat64 i)) ((j/jfloat f) f) ((j/jnum f) f) ((j/jbool b) (if b 1.0 0.0)) (_ 0.0))
+  (match v ((j/jint i) (int64ToFloat64 i)) ((j/jfloat f) f) ((j/jnum f) f) ((j/jbool b) (if b 1.0 0.0)) (_ 0.0))
 
 fn afterSlash s: String -> (Option String)
-  (mt (stringIndexOf s "/") ((some i) (some (pt/sliceB s (+ i 1) (stringLength s)))) ((none) (none)))
+  (match (stringIndexOf s "/") ((some i) (some (pt/sliceB s (+ i 1) (stringLength s)))) ((none) (none)))
 
 (schema Route (:f alias j/Json) (:f name String) (:f upv j/Json) (:f params j/Json) (:f rpm j/Json) (:f timeout j/Json) (:f prov j/Json))
 
 fn routeOf entry: j/Json up: (fn [String] -> j/Json) -> (Result Route pt/PyErr)
-  (mt entry
+  (match entry
     ((j/jobj _)
-      (mt (srch/jreq entry "alias")
+      (match (srch/jreq entry "alias")
         ((err e) (err e))
         ((ok alias)
-          (mt (srch/jreq entry "dispatch")
+          (match (srch/jreq entry "dispatch")
             ((err e) (err e))
             ((ok name)
-              (mt (srch/jreq entry "upstream")
+              (match (srch/jreq entry "upstream")
                 ((err e) (err e))
                 ((ok upv)
-                  (mt (srch/jreq entry "params")
+                  (match (srch/jreq entry "params")
                     ((err e) (err e))
                     ((ok params)
-                      (mt (srch/jreq upv "provider")
+                      (match (srch/jreq upv "provider")
                         ((err e) (err e))
                         ((ok prov)
                           (let [(t (optionOr (pt/jget entry "timeoutSec") (j/jnull)))]
-                            (mt (strOrErr name "dispatch")
+                            (match (strOrErr name "dispatch")
                               ((err e) (err e))
                               ((ok nm) (ok (Route :alias alias :name nm :upv upv :params params :rpm (optionOr (pt/jget entry "rpm") (j/jnull))
                                                   :timeout (if (pt/pyTruthy t) t (j/jint 45)) :prov prov))))))))))))))))
     ((j/jstr s)
       (let [(upv (up s))]
-        (mt (srch/jreq upv "provider")
+        (match (srch/jreq upv "provider")
           ((err e) (err e))
           ((ok prov)
             (let [(nm (if (or (stringStartsWith? s "groq/") (stringStartsWith? s "ollama/")) (optionOr (afterSlash s) s) s))]
@@ -648,26 +648,26 @@ fn routeOf entry: j/Json up: (fn [String] -> j/Json) -> (Result Route pt/PyErr)
     (_ (err (pt/pyErr "AttributeError" (str "'" (pt/pyTypeName entry) "' object has no attribute 'startswith'")))))
 
 fn poolOf prov: j/Json -> String
-  (mt (cliName prov) ((some c) c) ((none) (if (pt/pyTruthy prov) (provKey prov) "")))
+  (match (cliName prov) ((some c) c) ((none) (if (pt/pyTruthy prov) (provKey prov) "")))
 
 fn paramGet params: j/Json k: String d: j/Json -> (Result j/Json pt/PyErr)
   (pt/jgetOr params k d)
 
 fn ! cliCall! st: srch/HubState r: Route cli: String prompt: String dispatch: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) -> (Pair (Result j/Json pt/PyErr) srch/HubState)
-  (let [(sub (mt (afterSlash r.name) ((some x) (j/jstr x)) ((none) (j/jnull))))
+  (let [(sub (match (afterSlash r.name) ((some x) (j/jstr x)) ((none) (j/jnull))))
         (modelR (cond ((= cli "agy") (ok (if (pt/pyTruthy sub) sub (j/jstr "gemini-3.8-flash")))) (else (ok sub))))
         (effortR (cond ((= cli "agy") (paramGet r.params "effort" (j/jstr "low"))) ((= cli "codex") (paramGet r.params "effort" (j/jstr "medium"))) (else (ok (j/jnull)))))]
-    (mt modelR
+    (match modelR
       ((err e) (pair (err e) st))
       ((ok model)
-        (mt effortR
+        (match effortR
           ((err e) (pair (err e) st))
           ((ok effort)
             (let [(st1 (srch/hubCliCall st (j/jobj (list (pair "prov" (j/jstr cli)) (pair "model" model) (pair "effort" effort) (pair "noTools" (j/jbool true)) (pair "prompt" (j/jstr prompt))))))]
-              (mt (dispatch cli model effort prompt)
+              (match (dispatch cli model effort prompt)
                 ((err e) (pair (err e) st1))
                 ((ok res)
-                  (mt (if (pt/pyTruthy res) (pt/jgetOr res "text" (j/jnull)) (ok (j/jnull)))
+                  (match (if (pt/pyTruthy res) (pt/jgetOr res "text" (j/jnull)) (ok (j/jnull)))
                     ((err e) (pair (err e) st1))
                     ((ok text)
                       (if (not (pt/pyTruthy text))
@@ -675,13 +675,13 @@ fn ! cliCall! st: srch/HubState r: Route cli: String prompt: String dispatch: (f
                         (pair (ok text) (srch/hubNote st1 r.prov r.alias "ok" (optionOr (pt/jget res "usage") (j/jnull)))))))))))))))
 
 fn chatBody r: Route prompt: String -> (Result String pt/PyErr)
-  (mt (paramGet r.params "temperature" (j/jfloat 0.2))
+  (match (paramGet r.params "temperature" (j/jfloat 0.2))
     ((err e) (err e))
     ((ok temp)
       (let [(b0 (j/jobj (list (pair "model" (j/jstr r.name))
                               (pair "messages" (j/jarr (list (j/jobj (list (pair "role" (j/jstr "user")) (pair "content" (j/jstr prompt)))))))
                               (pair "temperature" temp))))
-            (b1 (mt (pt/jget r.params "maxTokens") ((some m) (pt/jset b0 "max_tokens" m)) ((none) b0)))
+            (b1 (match (pt/jget r.params "maxTokens") ((some m) (pt/jset b0 "max_tokens" m)) ((none) b0)))
             (eff (optionOr (pt/jget r.params "effort") (j/jnull)))
             (b2 (if (and (pt/pyEq r.prov (j/jstr "ollama")) (listAny? (fn [(x String)] -> Bool (pt/pyEq eff (j/jstr x))) (list "low" "medium" "high")))
                   (pt/jset b1 "reasoning_effort" eff)
@@ -692,30 +692,30 @@ fn rstripSlashes s: String -> String
   (if (stringEndsWith? s "/") (rstripSlashes (pt/sliceB s 0 (- (stringLength s) 1))) s)
 
 fn replyContent data: j/Json -> (Result j/Json pt/PyErr)
-  (mt (pt/jgetOr data "choices" (j/jnull))
+  (match (pt/jgetOr data "choices" (j/jnull))
     ((err e) (err e))
     ((ok ch)
-      (mt (pt/pyIndex (if (pt/pyTruthy ch) ch (j/jarr (list (j/jobj (list))))) 0)
+      (match (pt/pyIndex (if (pt/pyTruthy ch) ch (j/jarr (list (j/jobj (list))))) 0)
         ((err e) (err e))
         ((ok first)
-          (mt (pt/jgetOr first "message" (j/jnull))
+          (match (pt/jgetOr first "message" (j/jnull))
             ((err e) (err e))
             ((ok m) (pt/jgetOr (if (pt/pyTruthy m) m (j/jobj (list))) "content" (j/jnull))))))))
 
 fn ! httpCall! st: srch/HubState r: Route prompt: String -> (Pair (Result j/Json pt/PyErr) srch/HubState)
   (let [(pool (poolOf r.prov))]
-    (mt (chatBody r prompt)
+    (match (chatBody r prompt)
       ((err e) (pair (err e) st))
       ((ok body)
-        (mt (srch/jreq r.upv "url")
+        (match (srch/jreq r.upv "url")
           ((err e) (pair (err e) st))
           ((ok urlv)
-            (mt (strOrErr urlv "url")
+            (match (strOrErr urlv "url")
               ((err e) (pair (err e) st))
               ((ok u0)
                 (let [(url (str (rstripSlashes u0) "/chat/completions"))
                       (key (optionOr (pt/jget r.upv "key") (j/jnull)))]
-                  (mt (srch/urlTypeCheck url)
+                  (match (srch/urlTypeCheck url)
                     ((err e) (pair (err e) st))
                     ((ok _)
                       (let [(req (srch/HttpReq :url url
@@ -726,20 +726,20 @@ fn ! httpCall! st: srch/HubState r: Route prompt: String -> (Pair (Result j/Json
                         (httpOutcome st r pool res))))))))))))
 
 fn ! httpOutcome st: srch/HubState r: Route pool: String res: srch/HttpResult -> (Pair (Result j/Json pt/PyErr) srch/HubState)
-  (mt res
+  (match res
     ((srch/httpFail e timedOut)
       (pair (err e) (srch/hubNote (reset503 st pool) r.prov r.alias (if timedOut "timeout" "other") (j/jnull))))
     ((srch/httpResp code _ _ body)
       (if (not (srch/httpOk? code))
         (let [(st1 (cond ((or (= code 429) (isQuotaError (pt/decodeReplace body))) (markDown st pool)) ((= code 503) (note503 st pool)) (else (reset503 st pool))))]
           (pair (err (runtimeErr (str "HTTP " (stringFromInt64 code)))) (srch/hubNote st1 r.prov r.alias (usageHttpError code) (j/jnull))))
-        (mt (mt (pt/strictUtf8 body) ((err e) (err e)) ((ok text) (pt/jsonLoads text)))
+        (match (match (pt/strictUtf8 body) ((err e) (err e)) ((ok text) (pt/jsonLoads text)))
           ((err e) (pair (err e) (srch/hubNote (reset503 st pool) r.prov r.alias "other" (j/jnull))))
           ((ok data)
-            (mt (replyContent data)
+            (match (replyContent data)
               ((err e) (pair (err e) st))
               ((ok text)
-                (mt text
+                (match text
                   ((j/jstr s)
                     (if (stringEmpty? (pt/pyStrip s))
                       (pair (err (runtimeErr "empty content")) (srch/hubNote st r.prov r.alias "empty" (j/jnull)))
@@ -747,10 +747,10 @@ fn ! httpOutcome st: srch/HubState r: Route pool: String res: srch/HttpResult ->
                   (_ (pair (err (runtimeErr "empty content")) (srch/hubNote st r.prov r.alias "empty" (j/jnull))))))))))))
 
 fn ! researchCall! st: srch/HubState entry: j/Json prompt: String up: (fn [String] -> j/Json) dispatch: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) -> (Pair (Result j/Json pt/PyErr) srch/HubState)
-  (mt (routeOf entry up)
+  (match (routeOf entry up)
     ((err e) (pair (err e) st))
     ((ok r)
-      (mt (cliName r.prov)
+      (match (cliName r.prov)
         ((some cli) (cliCall! st r cli prompt dispatch))
         ((none)
           (if (pt/pyTruthy r.rpm)
@@ -778,22 +778,22 @@ fn researchDebracket text: String -> String
 fn researchParse text: j/Json triage: Bool -> (Result (Pair j/Json j/Json) pt/PyErr)
   (let [(head (if triage ":researchTriage" ":researchReport"))
         (noForm (valueErr (str "reply holds no (" head " ...) form")))]
-    (mt (if (pt/pyTruthy text) (strOrErr text "text") (ok ""))
+    (match (if (pt/pyTruthy text) (strOrErr text "text") (ok ""))
       ((err _) (err (pt/pyErr "AttributeError" (str "'" (pt/pyTypeName text) "' object has no attribute 'find'"))))
       ((ok t)
-        (mt (extractOutermostSexpr t)
+        (match (extractOutermostSexpr t)
           ((none) (err noForm))
           ((some sx)
             (if (not (stringStartsWith? sx (str "(" head)))
               (err noForm)
-              (mt (asnRead (researchDebracket sx))
+              (match (asnRead (researchDebracket sx))
                 ((err e) (err e))
                 ((ok forms)
-                  (mt (asnProps (optionOr (listHead forms) (j/jnull)) (some head))
+                  (match (asnProps (optionOr (listHead forms) (j/jnull)) (some head))
                     ((err e) (err e))
                     ((ok props)
                       (let [(facts (optionOr (pt/jget props "facts") (j/jarr (list))))]
-                        (mt facts
+                        (match facts
                           ((j/jarr _) (ok (pair props facts)))
                           (_ (err (valueErr ":facts is not a list")))))))))))))))
 
@@ -836,7 +836,7 @@ fn byUrlGet evidence: (List j/Json) u: String -> (Option j/Json)
   (fold (fn [(acc (Option j/Json)) (e j/Json)] -> (Option j/Json) (if (pt/pyEq (optionOr (pt/jget e "url") (j/jnull)) (j/jstr u)) (some e) acc)) (none) evidence)
 
 fn intLike v: j/Json -> (Option Int64)
-  (mt v ((j/jint i) (some i)) ((j/jbool b) (some (if b 1 0))) (_ (none)))
+  (match v ((j/jint i) (some i)) ((j/jbool b) (some (if b 1 0))) (_ (none)))
 
 fn whyRejected triage: Bool fp: j/Json claim: String subject: String obj: String src: String vstat: String titles: (List String) topicN: String evidence: (List j/Json) -> (Option String)
   (let [(evidenceV (propGet fp "evidence" (j/jstr "")))]
@@ -854,7 +854,7 @@ fn whyRejected triage: Bool fp: j/Json claim: String subject: String obj: String
       (else (none))))
 
 fn verifyOne triage: Bool head: String i: Int64 form: j/Json llmSources: (List j/Json) titles: (List String) topicN: String evidence: (List j/Json) -> (Result (Pair (Option j/Json) (Option String)) pt/PyErr)
-  (mt (mt (asnProps form (some head)) ((err e) (err e)) ((ok fp) (mt (researchRelation (propGet fp "predicate" (j/jnull))) ((err e) (err e)) ((ok rel) (ok (pair fp rel))))))
+  (match (match (asnProps form (some head)) ((err e) (err e)) ((ok fp) (match (researchRelation (propGet fp "predicate" (j/jnull))) ((err e) (err e)) ((ok rel) (ok (pair fp rel))))))
     ((err e) (if (= e.kind "ValueError") (ok (pair (none) (some (str "fact " (stringFromInt64 (+ i 1)) ": " e.msg)))) (err e)))
     ((ok p)
       (let [(fp (pairFirst p)) (rel (pairSecond p))
@@ -863,11 +863,11 @@ fn verifyOne triage: Bool head: String i: Int64 form: j/Json llmSources: (List j
             (claim (if triage "" (asnText (propGet fp "claim" (j/jstr "")))))
             (src0 (if triage "" (asnText (propGet fp "source" (j/jstr "")))))
             (sref (asnScalar (propGet fp "srcRef" (asnAtom "0"))))
-            (src (mt (intLike sref)
+            (src (match (intLike sref)
                    ((some k) (if (and (stringEmpty? src0) (>= k 1) (<= k (listLength llmSources))) (asnText (optionOr (listGet llmSources (- k 1)) (j/jnull))) src0))
                    ((none) src0)))
             (vstat (lstripColon (asnText (propGet fp "verificationStatus" (j/jstr "")))))]
-        (mt (whyRejected triage fp claim subject obj src vstat titles topicN evidence)
+        (match (whyRejected triage fp claim subject obj src vstat titles topicN evidence)
           ((some why) (ok (pair (none) (some (str fid ": " why)))))
           ((none)
             (let [(ev (optionOr (byUrlGet evidence src) (j/jnull)))]
@@ -879,53 +879,53 @@ fn verifyOne triage: Bool head: String i: Int64 form: j/Json llmSources: (List j
                         (none)))))))))
 
 fn verifyLoop triage: Bool head: String forms: (List (Pair Int64 j/Json)) llm: (List j/Json) titles: (List String) topicN: String evidence: (List j/Json) passed: (List j/Json) rejected: (List j/Json) -> (Result (Pair (List j/Json) (List j/Json)) pt/PyErr)
-  (mt (listHead forms)
+  (match (listHead forms)
     ((none) (ok (pair (listReverse passed) (listReverse rejected))))
     ((some f)
-      (mt (verifyOne triage head (pairFirst f) (pairSecond f) llm titles topicN evidence)
+      (match (verifyOne triage head (pairFirst f) (pairSecond f) llm titles topicN evidence)
         ((err e) (err e))
         ((ok r)
           (verifyLoop triage head (optionOr (listTail forms) (list)) llm titles topicN evidence
-                      (mt (pairFirst r) ((some x) (cons x passed)) ((none) passed))
-                      (mt (pairSecond r) ((some x) (cons (j/jstr x) rejected)) ((none) rejected)))))))
+                      (match (pairFirst r) ((some x) (cons x passed)) ((none) passed))
+                      (match (pairSecond r) ((some x) (cons (j/jstr x) rejected)) ((none) rejected)))))))
 
 fn collectR xs: (List j/Json) f: (fn [j/Json] -> (Result String pt/PyErr)) acc: (List String) -> (Result (List String) pt/PyErr)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (ok (listReverse acc)))
-    ((some x) (mt (f x) ((err e) (err e)) ((ok v) (collectR (optionOr (listTail xs) (list)) f (cons v acc))))))
+    ((some x) (match (f x) ((err e) (err e)) ((ok v) (collectR (optionOr (listTail xs) (list)) f (cons v acc))))))
 
 fn researchVerify props: j/Json rawFacts: (List j/Json) topic: String evidence: (List j/Json) triage: Bool -> (Result j/Json pt/PyErr)
-  (mt (collectR evidence (fn [(e j/Json)] -> (Result String pt/PyErr) (mt (srch/jreq e "title") ((err x) (err x)) ((ok t) (ok (researchNorm t))))) (list))
+  (match (collectR evidence (fn [(e j/Json)] -> (Result String pt/PyErr) (match (srch/jreq e "title") ((err x) (err x)) ((ok t) (ok (researchNorm t))))) (list))
     ((err e) (err e))
     ((ok titles)
-      (mt (collectR evidence (fn [(e j/Json)] -> (Result String pt/PyErr) (mt (srch/jreq e "url") ((err x) (err x)) ((ok u) (ok (pt/pyStr u))))) (list))
+      (match (collectR evidence (fn [(e j/Json)] -> (Result String pt/PyErr) (match (srch/jreq e "url") ((err x) (err x)) ((ok u) (ok (pt/pyStr u))))) (list))
         ((err e) (err e))
         ((ok _)
-          (let [(llm (mt (optionOr (pt/jget props "sources") (j/jnull))
-                       ((j/jarr xs) (filter (fn [(s j/Json)] -> Bool (or (some? (atomOf s)) (mt s ((j/jstr _) true) (_ false)))) xs))
+          (let [(llm (match (optionOr (pt/jget props "sources") (j/jnull))
+                       ((j/jarr xs) (filter (fn [(s j/Json)] -> Bool (or (some? (atomOf s)) (match s ((j/jstr _) true) (_ false)))) xs))
                        (_ (list))))]
-            (mt (verifyLoop triage (if triage ":p" ":fact") (enumerate rawFacts) llm titles (researchNorm (j/jstr topic)) evidence (list) (list))
+            (match (verifyLoop triage (if triage ":p" ":fact") (enumerate rawFacts) llm titles (researchNorm (j/jstr topic)) evidence (list) (list))
               ((err e) (err e))
               ((ok r) (ok (j/jarr (list (j/jarr (pairFirst r)) (j/jarr (pairSecond r))))))))))))
 
 fn researchAuditPrompt facts: (List j/Json) byUrl: j/Json -> (Result String pt/PyErr)
-  (mt (collectR facts
+  (match (collectR facts
         (fn [(f j/Json)] -> (Result String pt/PyErr)
-          (mt (srch/jreq f "id")
+          (match (srch/jreq f "id")
             ((err e) (err e))
             ((ok fid)
-              (mt (srch/jreq f "claim")
+              (match (srch/jreq f "claim")
                 ((err e) (err e))
                 ((ok claim)
-                  (mt (srch/jreq f "sourceUrl")
+                  (match (srch/jreq f "sourceUrl")
                     ((err e) (err e))
                     ((ok su)
-                      (mt (srch/jreq byUrl (pt/pyStr su))
+                      (match (srch/jreq byUrl (pt/pyStr su))
                         ((err e) (err e))
                         ((ok src)
-                          (mt (pt/jgetOr src "snippet" (j/jstr ""))
+                          (match (pt/jgetOr src "snippet" (j/jstr ""))
                             ((err e) (err e))
-                            ((ok sn) (mt (strOrErr sn "snippet")
+                            ((ok sn) (match (strOrErr sn "snippet")
                                        ((err e) (err e))
                                        ((ok s) (ok (str "(:fact :id \"" (pt/pyStr fid) "\" :claim \"" (pt/pyStr claim) "\")\nsource text: " (pt/cpPrefix s 1200) "\n")))))))))))))))
         (list))
@@ -983,8 +983,8 @@ fn checkAt s: String bs: Bytes n: Int64 k: Int64 -> (Option (Pair (Pair String (
                       (let [(d1 (if (and (< d n) (= (bytesGet bs d) 58)) (+ d 1) d)) (e (lowerRunEnd bs n d1))]
                         (if (> e d1)
                           (let [(w (whyGroup s bs n e))]
-                            (some (pair (pair (pt/sliceB s (+ b 1) q) (pair (pt/sliceB s d1 e) (mt w ((some x) (pairFirst x)) ((none) ""))))
-                                        (mt w ((some x) (pairSecond x)) ((none) e)))))
+                            (some (pair (pair (pt/sliceB s (+ b 1) q) (pair (pt/sliceB s d1 e) (match w ((some x) (pairFirst x)) ((none) ""))))
+                                        (match w ((some x) (pairSecond x)) ((none) e)))))
                           (none)))
                       (none)))
                   (none)))
@@ -996,7 +996,7 @@ fn checksLoop s: String bs: Bytes n: Int64 i: Int64 acc: j/Json -> j/Json
   (let [(k (findLit bs n "(:check" i))]
     (if (< k 0)
       acc
-      (mt (checkAt s bs n k)
+      (match (checkAt s bs n k)
         ((none) (checksLoop s bs n (+ k 1) acc))
         ((some m)
           (let [(id (pairFirst (pairFirst m))) (v (pairFirst (pairSecond (pairFirst m)))) (why (pairSecond (pairSecond (pairFirst m))))]
@@ -1015,7 +1015,7 @@ fn errWord e: pt/PyErr -> String
 fn breakerSkip st: srch/HubState prov: j/Json alias: j/Json name: j/Json -> (Pair (Option j/Json) srch/HubState)
   (let [(d (breakerDownFor st prov)) (down (pairFirst d)) (st1 (pairSecond d))]
     (if (> down 0.0)
-      (let [(secs (stringFromInt64 (mt (float64ToInt64 down) ((some i) i) ((none) 0))))]
+      (let [(secs (stringFromInt64 (match (float64ToInt64 down) ((some i) i) ((none) 0))))]
         (pair (some (triedRow alias name (str "breaker (" secs "s left)")))
               (srch/hubNote (srch/hubStderr st1 (str "[Gateway Breaker] skip " (pt/pyStr prov) " for " secs "s\n")) prov alias (str "breaker " secs "s") (j/jnull))))
       (pair (none) st1)))
@@ -1023,66 +1023,66 @@ fn breakerSkip st: srch/HubState prov: j/Json alias: j/Json name: j/Json -> (Pai
 (schema Attempt (:f tried (List j/Json)) (:f won (Option j/Json)))
 
 fn ! chainLoop! entries: (List j/Json) st: srch/HubState tried: (List j/Json) prompt: String up: (fn [String] -> j/Json) dispatch: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) finish: (fn [j/Json] -> (Result j/Json String)) -> (Pair (Result Attempt pt/PyErr) srch/HubState)
-  (mt (listHead entries)
+  (match (listHead entries)
     ((none) (pair (ok (Attempt :tried tried :won (none))) st))
     ((some entry)
       (let [(rest (optionOr (listTail entries) (list)))]
-        (mt (researchEntryLabel entry)
+        (match (researchEntryLabel entry)
           ((err e) (pair (err e) st))
           ((ok lab)
-            (mt (researchEntryProvider entry up)
+            (match (researchEntryProvider entry up)
               ((err e) (pair (err e) st))
               ((ok prov)
                 (let [(sk (breakerSkip st prov (pairFirst lab) (pairSecond lab)))]
-                  (mt (pairFirst sk)
+                  (match (pairFirst sk)
                     ((some row) (chainLoop! rest (pairSecond sk) (listAppend tried (list row)) prompt up dispatch finish))
                     ((none)
                       (let [(call (researchCall! (pairSecond sk) entry prompt up dispatch)) (st2 (pairSecond call))]
-                        (mt (pairFirst call)
+                        (match (pairFirst call)
                           ((err e) (chainLoop! rest st2 (listAppend tried (list (triedRow (pairFirst lab) (pairSecond lab) (errWord e)))) prompt up dispatch finish))
                           ((ok text)
-                            (mt (finish text)
+                            (match (finish text)
                               ((err why) (chainLoop! rest st2 (listAppend tried (list (triedRow (pairFirst lab) (pairSecond lab) why))) prompt up dispatch finish))
                               ((ok won) (pair (ok (Attempt :tried tried :won (some (pt/jset (pt/jset won "alias" (pairFirst lab)) "model" (pairSecond lab))))) st2))))))))))))))))
 
 fn withTried won: (Option j/Json) tried: (List j/Json) order: (List String) -> j/Json
-  (mt won
+  (match won
     ((none) (j/jobj (list (pair "tried" (j/jarr tried)))))
     ((some w) (j/jobj (listAppend (map (fn [(k String)] -> (Pair String j/Json) (pair k (optionOr (pt/jget w k) (j/jnull)))) order) (list (pair "tried" (j/jarr tried)))))))
 
 fn attemptJson r: (Pair (Result Attempt pt/PyErr) srch/HubState) order: (List String) -> (Pair (Result j/Json pt/PyErr) srch/HubState)
-  (mt (pairFirst r)
+  (match (pairFirst r)
     ((err e) (pair (err e) (pairSecond r)))
     ((ok a) (pair (ok (withTried a.won a.tried order)) (pairSecond r))))
 
 fn ! researchAudit! st: srch/HubState facts: (List j/Json) byUrl: j/Json entries: (List j/Json) up: (fn [String] -> j/Json) dispatch: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) -> (Pair (Result j/Json pt/PyErr) srch/HubState)
-  (mt (researchAuditPrompt facts byUrl)
+  (match (researchAuditPrompt facts byUrl)
     ((err e) (pair (err e) st))
     ((ok prompt)
       (attemptJson
         (chainLoop! entries st (list) prompt up dispatch
           (fn [(text j/Json)] -> (Result j/Json String)
             (let [(v (auditVerdicts (pt/pyStr text)))]
-              (if (= (listLength (mt v ((j/jobj kvs) kvs) (_ (list)))) 0) (err "no (:check) verdicts") (ok (j/jobj (list (pair "verdicts" v))))))))
+              (if (= (listLength (match v ((j/jobj kvs) kvs) (_ (list)))) 0) (err "no (:check) verdicts") (ok (j/jobj (list (pair "verdicts" v))))))))
         (list "alias" "model" "verdicts"))))
 
 fn researchRelation pred: j/Json -> (Result (List String) pt/PyErr)
   (let [(bad (valueErr "no (:relation ...) predicate"))]
-    (mt pred
+    (match pred
       ((j/jarr xs)
-        (mt (listHead xs)
+        (match (listHead xs)
           ((none) (err bad))
           ((some h)
             (if (not (= (atomOf h) (some ":relation")))
-              (mt h ((j/jstr s) (if (= s ":relation") (relationRest (optionOr (listTail xs) (list))) (err bad))) (_ (err bad)))
+              (match h ((j/jstr s) (if (= s ":relation") (relationRest (optionOr (listTail xs) (list))) (err bad))) (_ (err bad)))
               (relationRest (optionOr (listTail xs) (list)))))))
       (_ (err bad))))
 
 fn relationRest rest: (List j/Json) -> (Result (List String) pt/PyErr)
-  (let [(split (mt (listHead rest)
+  (let [(split (match (listHead rest)
                  ((some r0) (if (none? (atomOf r0)) (pair (asnText r0) (optionOr (listTail rest) (list))) (pair "" rest)))
                  ((none) (pair "" rest))))]
-    (mt (asnProps (j/jarr (pairSecond split)) (none))
+    (match (asnProps (j/jarr (pairSecond split)) (none))
       ((err e) (err e))
       ((ok props) (ok (list (pairFirst split) (asnText (propGet props "subject" (j/jstr ""))) (asnText (propGet props "object" (j/jstr ""))))))))
 
@@ -1090,7 +1090,7 @@ fn ! researchExtract! st: srch/HubState topic: String depth: String rawItems: j/
   (attemptJson
     (chainLoop! entries st (list) (researchPrompt topic depth rawItems triage) up dispatch
       (fn [(text j/Json)] -> (Result j/Json String)
-        (mt (researchParse text triage)
+        (match (researchParse text triage)
           ((err e) (err (errWord e)))
           ((ok p) (ok (j/jobj (list (pair "props" (pairFirst p)) (pair "facts" (pairSecond p)))))))))
     (list "alias" "model" "props" "facts"))
@@ -1107,7 +1107,7 @@ fn ! researchHubMain! st: srch/HubState topic: String depth: String entries: (Li
     (if (stringEmpty? topic)
       (done rep0 "failed" "no topic" st)
       (let [(sp (srch/executeSearchHub! st topic "auto" (if flash 3 5))) (st1 (pairSecond sp))]
-        (mt (pairFirst sp)
+        (match (pairFirst sp)
           ((err e) (pair (err e) st1))
           ((ok sd)
             (let [(results (listOf (optionOr (pt/jget sd "results") (j/jarr (list)))))
@@ -1118,20 +1118,20 @@ fn ! researchHubMain! st: srch/HubState topic: String depth: String entries: (Li
                             (srch/executeSearchHub! st1 (str topic " limitations drawbacks failure overhead criticisms") "auto" 3)
                             (pair (ok (j/jobj (list))) st1)))
                       (st2 (pairSecond np))]
-                  (mt (pairFirst np)
+                  (match (pairFirst np)
                     ((err e) (pair (err e) st2))
                     ((ok nd)
                       (let [(negResults (listOf (optionOr (pt/jget nd "results") (j/jarr (list)))))
                             (errors (mergeErrors errors0 (listOf (optionOr (pt/jget nd "errors") (j/jarr (list))))))]
-                        (mt (parallelCrawlDistill! st2 results (if flash 3 5) (j/jfloat 3.5))
+                        (match (parallelCrawlDistill! st2 results (if flash 3 5) (j/jfloat 3.5))
                           ((err e) (pair (err e) st2))
                           ((ok crawled0)
-                            (mt (if (listEmpty? negResults) (ok (j/jobj (list))) (parallelCrawlDistill! st2 negResults 2 (j/jfloat 3.5)))
+                            (match (if (listEmpty? negResults) (ok (j/jobj (list))) (parallelCrawlDistill! st2 negResults 2 (j/jfloat 3.5)))
                               ((err e) (pair (err e) st2))
                               ((ok crawledN)
-                                (let [(crawled (mt crawledN ((j/jobj kvs) (fold (fn [(acc j/Json) (p (Pair String j/Json))] -> j/Json (pt/jset acc (pairFirst p) (pairSecond p))) crawled0 kvs)) (_ crawled0)))
+                                (let [(crawled (match crawledN ((j/jobj kvs) (fold (fn [(acc j/Json) (p (Pair String j/Json))] -> j/Json (pt/jset acc (pairFirst p) (pairSecond p))) crawled0 kvs)) (_ crawled0)))
                                       (tagged (listAppend (map (fn [(r j/Json)] -> (Pair Bool j/Json) (pair false r)) results) (map (fn [(r j/Json)] -> (Pair Bool j/Json) (pair true r)) negResults)))]
-                                  (mt (buildEvidence tagged crawled (list))
+                                  (match (buildEvidence tagged crawled (list))
                                     ((err e) (pair (err e) st2))
                                     ((ok evidence)
                                       (let [(rep1 (pt/jset rep0 "searched" (j/jint (listLength evidence))))
@@ -1143,36 +1143,36 @@ fn ! researchHubMain! st: srch/HubState topic: String depth: String entries: (Li
                                           (else (researchTail! st2 rep2 topic depth evidence entries triage auditEntries up dispatch))))))))))))))))))))))
 
 fn listOf v: j/Json -> (List j/Json)
-  (mt v ((j/jarr xs) xs) (_ (list)))
+  (match v ((j/jarr xs) xs) (_ (list)))
 
 fn sliceHead v: j/Json k: Int64 -> (Result j/Json pt/PyErr)
-  (mt v
+  (match v
     ((j/jstr s) (ok (j/jstr (pt/cpPrefix s k))))
     ((j/jarr xs) (ok (j/jarr (listTake xs k))))
     (_ (err (pt/pyErr "TypeError" (str "'" (pt/pyTypeName v) "' object is not subscriptable")))))
 
 fn buildEvidence rs: (List (Pair Bool j/Json)) crawled: j/Json acc: (List j/Json) -> (Result (List j/Json) pt/PyErr)
-  (mt (listHead rs)
+  (match (listHead rs)
     ((none) (ok acc))
     ((some ar)
       (let [(rest (optionOr (listTail rs) (list))) (r (pairSecond ar))]
-        (mt (srch/jreq r "url")
+        (match (srch/jreq r "url")
           ((err e) (err e))
           ((ok u)
             (if (listAny? (fn [(e j/Json)] -> Bool (pt/pyEq (optionOr (pt/jget e "url") (j/jnull)) u)) acc)
               (buildEvidence rest crawled acc)
-              (let [(c (mt u ((j/jstr us) (optionOr (pt/jget crawled us) (j/jobj (list)))) (_ (j/jobj (list)))))]
-                (mt (srch/jreq r "title")
+              (let [(c (match u ((j/jstr us) (optionOr (pt/jget crawled us) (j/jobj (list)))) (_ (j/jobj (list)))))]
+                (match (srch/jreq r "title")
                   ((err e) (err e))
                   ((ok title)
                     (let [(dt (optionOr (pt/jget c "distilledText") (j/jnull)))]
-                      (mt (if (pt/pyTruthy dt) (ok dt) (srch/jreq r "snippet"))
+                      (match (if (pt/pyTruthy dt) (ok dt) (srch/jreq r "snippet"))
                         ((err e) (err e))
                         ((ok sv)
-                          (mt (sliceHead sv 1200)
+                          (match (sliceHead sv 1200)
                             ((err e) (err e))
                             ((ok snippet)
-                              (mt (mt u ((j/jstr us) (ok (classifySourceKind us))) (_ (err (pt/pyErr "AttributeError" (str "'" (pt/pyTypeName u) "' object has no attribute 'lower'")))))
+                              (match (match u ((j/jstr us) (ok (classifySourceKind us))) (_ (err (pt/pyErr "AttributeError" (str "'" (pt/pyTypeName u) "' object has no attribute 'lower'")))))
                                 ((err e) (err e))
                                 ((ok kind)
                                   (let [(item0 (j/jobj (list (pair "id" (j/jstr (str "item-" (stringFromInt64 (+ (listLength acc) 1))))) (pair "title" title) (pair "snippet" snippet)
@@ -1194,17 +1194,17 @@ fn assignRefs facts: (List j/Json) -> (Pair (List j/Json) (List j/Json))
 
 fn ! researchTail! st: srch/HubState rep: j/Json topic: String depth: String evidence: (List j/Json) entries: (List j/Json) triage: Bool auditEntries: (Option (List j/Json)) up: (fn [String] -> j/Json) dispatch: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) -> (Pair (Result j/Json pt/PyErr) srch/HubState)
   (let [(xp (researchExtract! st topic depth (j/jarr evidence) entries triage up dispatch)) (st1 (pairSecond xp))]
-    (mt (pairFirst xp)
+    (match (pairFirst xp)
       ((err e) (pair (err e) st1))
       ((ok ext)
         (let [(tried (optionOr (pt/jget ext "tried") (j/jarr (list))))
               (rep1 (pt/jset rep "tried" tried))]
-          (mt (pt/jget ext "props")
+          (match (pt/jget ext "props")
             ((none) (done rep1 "failed" (str "research chain exhausted after " (stringFromInt64 (listLength (listOf tried))) " model(s)") st1))
             ((some props)
               (let [(facts (listOf (optionOr (pt/jget ext "facts") (j/jarr (list)))))
                     (rep2 (pt/jset (pt/jset rep1 "alias" (optionOr (pt/jget ext "alias") (j/jnull))) "model" (optionOr (pt/jget ext "model") (j/jnull))))]
-                (mt (researchVerify props facts topic evidence triage)
+                (match (researchVerify props facts topic evidence triage)
                   ((err e) (pair (err e) st1))
                   ((ok vr)
                     (let [(passed0 (listOf (optionOr (listGet (listOf vr) 0) (j/jnull))))
@@ -1221,7 +1221,7 @@ fn finishVerified rep: j/Json props: j/Json triage: Bool -> j/Json
   (let [(r1 (pt/jset rep "status" (j/jstr "verified")))]
     (if triage
       r1
-      (fold (fn [(acc j/Json) (k String)] -> j/Json (mt (pt/jget props k) ((some v) (mt v ((j/jstr s) (pt/jset acc k v)) (_ acc))) ((none) acc))) r1 (list "summary" "positiveSynthesis" "falsificationCritique"))))
+      (fold (fn [(acc j/Json) (k String)] -> j/Json (match (pt/jget props k) ((some v) (match v ((j/jstr s) (pt/jset acc k v)) (_ acc))) ((none) acc))) r1 (list "summary" "positiveSynthesis" "falsificationCritique"))))
 
 fn auditSort verdicts: j/Json rejected: (List j/Json) passed: (List j/Json) -> (Pair (List j/Json) (List j/Json))
   (fold (fn [(acc (Pair (List j/Json) (List j/Json))) (f j/Json)] -> (Pair (List j/Json) (List j/Json))
@@ -1240,12 +1240,12 @@ fn ! auditStage! st: srch/HubState rep: j/Json props: j/Json evidence: (List j/J
   (let [(byUrl (fold (fn [(acc j/Json) (e j/Json)] -> j/Json (pt/jset acc (pt/pyStr (optionOr (pt/jget e "url") (j/jnull))) e)) (j/jobj (list)) evidence))
         (ap (researchAudit! st passed byUrl auditEntries up dispatch))
         (st1 (pairSecond ap))]
-    (mt (pairFirst ap)
+    (match (pairFirst ap)
       ((err e) (pair (err e) st1))
       ((ok aud)
         (let [(atried (optionOr (pt/jget aud "tried") (j/jarr (list))))
               (rep1 (pt/jset rep "auditTried" atried))]
-          (mt (pt/jget aud "verdicts")
+          (match (pt/jget aud "verdicts")
             ((none)
               (done (pt/jset rep1 "facts" (j/jarr (list))) "unverified"
                     (str "auditor unavailable after " (stringFromInt64 (listLength (listOf atried))) " model(s); " (stringFromInt64 (listLength passed)) " fact(s) not audited") st1))
@@ -1279,17 +1279,17 @@ fn triedLine key: String rows: j/Json -> String
 
 fn factLine f: j/Json triage: Bool -> (Result String pt/PyErr)
   (let [(fals (if (pt/pyTruthy (repGet f "isFalsifying")) "true" "false"))]
-    (mt (srch/jreq f "relation")
+    (match (srch/jreq f "relation")
       ((err x) (err x))
       ((ok rel)
         (let [(pred (researchRelationAsn (listOf rel)))]
           (if triage
-            (mt (srch/jreq f "id") ((err x) (err x)) ((ok fid)
-              (mt (srch/jreq f "srcRef") ((err x) (err x)) ((ok sref)
-                (mt (srch/jreq f "verificationStatus") ((err x) (err x)) ((ok vs)
+            (match (srch/jreq f "id") ((err x) (err x)) ((ok fid)
+              (match (srch/jreq f "srcRef") ((err x) (err x)) ((ok sref)
+                (match (srch/jreq f "verificationStatus") ((err x) (err x)) ((ok vs)
                   (ok (str "    (:p :id \"" (esc fid) "\" :predicate " pred " :srcRef " (pt/pyStr sref) " :verificationStatus :" (pt/pyStr vs) " :isFalsifying " fals ")"))))))))
-            (mt (srch/jreq f "evidence") ((err x) (err x)) ((ok ev)
-              (mt (sliceHead ev 800) ((err x) (err x)) ((ok ev8)
+            (match (srch/jreq f "evidence") ((err x) (err x)) ((ok ev)
+              (match (sliceHead ev 800) ((err x) (err x)) ((ok ev8)
                 (ok (str "    (:fact :id \"" (esc (repGet f "id")) "\" :predicate " pred " :claim \"" (esc (repGet f "claim")) "\" :evidence \"" (esc ev8)
                          "\" :srcRef " (pt/pyStr (repGet f "srcRef")) " :source \"" (esc (repGet f "sourceUrl")) "\" :sourceKind :" (pt/pyStr (repGet f "sourceKind"))
                          " :verificationStatus :" (pt/pyStr (repGet f "verificationStatus")) (if (pt/pyTruthy (repGet f "crawled")) " :crawled true" "")
@@ -1297,10 +1297,10 @@ fn factLine f: j/Json triage: Bool -> (Result String pt/PyErr)
 
 fn formatResearchAsn rep: j/Json triage: Bool -> (Result String pt/PyErr)
   (let [(t (fn [(k String)] -> Bool (pt/pyTruthy (repGet rep k))))]
-    (mt (srch/jreq rep "status")
+    (match (srch/jreq rep "status")
       ((err x) (err x))
       ((ok status)
-        (mt (collectR (listOf (repGet rep "facts")) (fn [(f j/Json)] -> (Result String pt/PyErr) (factLine f triage)) (list))
+        (match (collectR (listOf (repGet rep "facts")) (fn [(f j/Json)] -> (Result String pt/PyErr) (factLine f triage)) (list))
           ((err x) (err x))
           ((ok facts)
             (let [(head (if triage ":researchTriage" ":researchReport"))

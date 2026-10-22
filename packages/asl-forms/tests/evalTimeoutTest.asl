@@ -5,7 +5,7 @@ fn ! runTests -> Bool
         (tmp (str root "/evalTimeoutTest-" (stringFromInt64 (procSelf)) "_" (stringFromInt64 (nowNs))))
         (cache (str tmp "/cache"))
         (created (dirCreate cache))]
-    (mt created
+    (match created
       ((err e) (do (assert false (str "create the cold native cache " cache ": " e)) false))
       ((ok _)
         (let [(kw (mapSet (mapSet (mapEmpty) "nativeTestCache" cache) "timeoutMs" "1000"))

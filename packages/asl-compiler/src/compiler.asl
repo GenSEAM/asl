@@ -6,13 +6,13 @@ fn formatDiagnostic d: ty/Diagnostic -> Str
   (str d.path ":" (stringFromInt64 d.line) ":" (stringFromInt64 d.col) ": [" d.code "] " d.message)
 
 fn formatDiagnosticsStep diags: (List ty/Diagnostic) idx: Int64 len: Int64 acc: (List Str) -> (List Str)
-  (if (>= idx len) acc (mt (listGet diags idx) ((some d) (formatDiagnosticsStep diags (+ idx 1) len (listAppend acc (list (formatDiagnostic d))))) ((none) (formatDiagnosticsStep diags (+ idx 1) len acc))))
+  (if (>= idx len) acc (match (listGet diags idx) ((some d) (formatDiagnosticsStep diags (+ idx 1) len (listAppend acc (list (formatDiagnostic d))))) ((none) (formatDiagnosticsStep diags (+ idx 1) len acc))))
 
 fn formatDiagnostics diags: (List ty/Diagnostic) -> (List Str)
   (formatDiagnosticsStep diags 0 (listLength diags) (list))
 
 fn compileSourceToC99 src: Str path: Str isFreestanding: Bool -> CompileResult
-  (mt (a/parse src) ((err pe) (let [(msg (str path ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": [parse-error] " pe.msg))] (CompileResult :ok false :code "" :diagnostics (list msg)))) ((ok forms) (let [(diags (chk/checkModule forms (mapEmpty) path)) (fatal diags)] (if (not (listEmpty? fatal)) (let [(formatted (formatDiagnostics fatal))] (CompileResult :ok false :code "" :diagnostics formatted)) (CompileResult :ok true :code (c99/emitCStandalone forms "" isFreestanding) :diagnostics (list))))))
+  (match (a/parse src) ((err pe) (let [(msg (str path ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": [parse-error] " pe.msg))] (CompileResult :ok false :code "" :diagnostics (list msg)))) ((ok forms) (let [(diags (chk/checkModule forms (mapEmpty) path)) (fatal diags)] (if (not (listEmpty? fatal)) (let [(formatted (formatDiagnostics fatal))] (CompileResult :ok false :code "" :diagnostics formatted)) (CompileResult :ok true :code (c99/emitCStandalone forms "" isFreestanding) :diagnostics (list))))))
 
 fn compileSourceTarget src: Str target: Str deps: (Map Str r/ModuleSummary) path: Str -> CompileResult
   (if (or (or (= target "c99") (= target "c")) (= target "c-embedded")) (compileSourceToC99 src path (= target "c-embedded")) (CompileResult :ok false :code "" :diagnostics (list (str "Target '" target "' decoupled from core; use dynamic pluggable backend"))))
@@ -27,46 +27,46 @@ fn collectExpDefs al: Str exps: (List Str) idx: Int64 len: Int64 acc: (List Str)
   (if (>= idx len) acc (let [(fnName (optionOr (listGet exps idx) ""))] (collectExpDefs al exps (+ idx 1) len (listAppend acc (list (makeExpMacro al fnName))))))
 
 fn collectAliasMacrosStep aliases: (List Str) importsMap: (Map Str Str) deps: (Map Str r/ModuleSummary) idx: Int64 len: Int64 acc: (List Str) -> (List Str)
-  (if (>= idx len) acc (let [(al (optionOr (listGet aliases idx) ""))] (mt (mapGet importsMap al) ((none) (collectAliasMacrosStep aliases importsMap deps (+ idx 1) len acc)) ((some modPath) (mt (mapGet deps modPath) ((none) (collectAliasMacrosStep aliases importsMap deps (+ idx 1) len acc)) ((some s) (let [(exps s.exports) (defs (collectExpDefs al exps 0 (listLength exps) (list)))] (collectAliasMacrosStep aliases importsMap deps (+ idx 1) len (listAppend acc defs)))))))))
+  (if (>= idx len) acc (let [(al (optionOr (listGet aliases idx) ""))] (match (mapGet importsMap al) ((none) (collectAliasMacrosStep aliases importsMap deps (+ idx 1) len acc)) ((some modPath) (match (mapGet deps modPath) ((none) (collectAliasMacrosStep aliases importsMap deps (+ idx 1) len acc)) ((some s) (let [(exps s.exports) (defs (collectExpDefs al exps 0 (listLength exps) (list)))] (collectAliasMacrosStep aliases importsMap deps (+ idx 1) len (listAppend acc defs)))))))))
 
 fn collectAllAliasMacros summaries: (List r/ModuleSummary) deps: (Map Str r/ModuleSummary) idx: Int64 len: Int64 acc: (List Str) -> (List Str)
   (if (>= idx len) acc (let [(s (optionOr (listGet summaries idx) (r/emptyModuleSummary))) (impMap s.imports) (aliases (mapKeys impMap)) (macros (collectAliasMacrosStep aliases impMap deps 0 (listLength aliases) (list)))] (collectAllAliasMacros summaries deps (+ idx 1) len (listAppend acc macros))))
 
 fn renameTopFormMain tf: a/TopForm -> a/TopForm
-  (mt tf ((a/topDefun d) (if (= d.name "main") (a/topDefun (a/DefunNode :name "dep-main" :typeVars d.typeVars :isExported d.isExported :effect d.effect :params d.params :retType d.retType :docstring d.docstring :body d.body :bodyPos d.bodyPos)) tf)) (else tf))
+  (match tf ((a/topDefun d) (if (= d.name "main") (a/topDefun (a/DefunNode :name "dep-main" :typeVars d.typeVars :isExported d.isExported :effect d.effect :params d.params :retType d.retType :docstring d.docstring :body d.body :bodyPos d.bodyPos)) tf)) (else tf))
 
 fn collectRenamedForms fList: (List a/TopForm) idx: Int64 len: Int64 acc: (List a/TopForm) -> (List a/TopForm)
   (if (>= idx len) acc (let [(tf (optionOr (listGet fList idx) (a/topSchema (a/SchemaNode :name "" :typeVars (list) :fields (list) :jsonCase (none)))))] (collectRenamedForms fList (+ idx 1) len (listAppend acc (list (renameTopFormMain tf))))))
 
 fn ! collectDepFormsStep depSummaries: (List r/ModuleSummary) entryFile: Str idx: Int64 len: Int64 acc: (List a/TopForm) -> (Result (List a/TopForm) Str)
-  (if (>= idx len) (ok acc) (let [(s (optionOr (listGet depSummaries idx) (r/emptyModuleSummary))) (p s.path)] (if (or (= p "") (= p entryFile)) (collectDepFormsStep depSummaries entryFile (+ idx 1) len acc) (mt (fileReadString p) ((err _) (err (str "Failed to read dependency file: " p))) ((ok sSrc) (mt (a/parse sSrc) ((err pe) (err (str p ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": [parse-error] " pe.msg))) ((ok fList) (let [(renamedList (collectRenamedForms fList 0 (listLength fList) (list)))] (collectDepFormsStep depSummaries entryFile (+ idx 1) len (listAppend acc renamedList))))))))))
+  (if (>= idx len) (ok acc) (let [(s (optionOr (listGet depSummaries idx) (r/emptyModuleSummary))) (p s.path)] (if (or (= p "") (= p entryFile)) (collectDepFormsStep depSummaries entryFile (+ idx 1) len acc) (match (fileReadString p) ((err _) (err (str "Failed to read dependency file: " p))) ((ok sSrc) (match (a/parse sSrc) ((err pe) (err (str p ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": [parse-error] " pe.msg))) ((ok fList) (let [(renamedList (collectRenamedForms fList 0 (listLength fList) (list)))] (collectDepFormsStep depSummaries entryFile (+ idx 1) len (listAppend acc renamedList))))))))))
 
 fn ! compilePackageToC99! entryFile: Str roots: (List Str) isFreestanding: Bool -> (Result CompileResult Str)
-  (let [(readRes (fileReadString entryFile))] (mt readRes ((err _) (err (str "Failed to read entry file: " entryFile))) ((ok entrySrc) (mt (a/parse entrySrc) ((err pe) (let [(msg (str entryFile ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": [parse-error] " pe.msg))] (ok (CompileResult :ok false :code "" :diagnostics (list msg))))) ((ok entryForms) (let [(entrySummary (r/collectSummary entryForms entryFile)) (importPaths (r/mapValuesList entrySummary.imports)) (depsRes (r/loadModuleDeps! (cons (r/parentDirOf entryFile) roots) importPaths))] (mt depsRes ((err _) (err "Failed to load package dependencies")) ((ok deps) (let [(diags (chk/checkModule entryForms deps entryFile)) (fatal diags)] (if (not (listEmpty? fatal)) (let [(formatted (formatDiagnostics fatal))] (ok (CompileResult :ok false :code "" :diagnostics formatted))) (let [(depSummaries (mapValues deps)) (allSummaries (listAppend depSummaries (list entrySummary))) (aliasMacros (collectAllAliasMacros allSummaries deps 0 (listLength allSummaries) (list))) (macroHeader (if (listEmpty? aliasMacros) "" (str (stringJoin aliasMacros "\n") "\n\n"))) (depFormsRes (collectDepFormsStep depSummaries entryFile 0 (listLength depSummaries) (list)))] (mt depFormsRes ((err msg) (ok (CompileResult :ok false :code "" :diagnostics (list msg)))) ((ok depFormsList) (let [(allForms (listAppend depFormsList entryForms)) (cSource (str macroHeader (c99/emitCStandalone allForms "" isFreestanding)))] (ok (CompileResult :ok true :code cSource :diagnostics (list)))))))))))))))))
+  (let [(readRes (fileReadString entryFile))] (match readRes ((err _) (err (str "Failed to read entry file: " entryFile))) ((ok entrySrc) (match (a/parse entrySrc) ((err pe) (let [(msg (str entryFile ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": [parse-error] " pe.msg))] (ok (CompileResult :ok false :code "" :diagnostics (list msg))))) ((ok entryForms) (let [(entrySummary (r/collectSummary entryForms entryFile)) (importPaths (r/mapValuesList entrySummary.imports)) (depsRes (r/loadModuleDeps! (cons (r/parentDirOf entryFile) roots) importPaths))] (match depsRes ((err _) (err "Failed to load package dependencies")) ((ok deps) (let [(diags (chk/checkModule entryForms deps entryFile)) (fatal diags)] (if (not (listEmpty? fatal)) (let [(formatted (formatDiagnostics fatal))] (ok (CompileResult :ok false :code "" :diagnostics formatted))) (let [(depSummaries (mapValues deps)) (allSummaries (listAppend depSummaries (list entrySummary))) (aliasMacros (collectAllAliasMacros allSummaries deps 0 (listLength allSummaries) (list))) (macroHeader (if (listEmpty? aliasMacros) "" (str (stringJoin aliasMacros "\n") "\n\n"))) (depFormsRes (collectDepFormsStep depSummaries entryFile 0 (listLength depSummaries) (list)))] (match depFormsRes ((err msg) (ok (CompileResult :ok false :code "" :diagnostics (list msg)))) ((ok depFormsList) (let [(allForms (listAppend depFormsList entryForms)) (cSource (str macroHeader (c99/emitCStandalone allForms "" isFreestanding)))] (ok (CompileResult :ok true :code cSource :diagnostics (list)))))))))))))))))
 
 fn ! compilePackageToLlvm! entryFile: Str roots: (List Str) -> (Result CompileResult Str)
   (compilePackageToLlvmWith! entryFile roots "0")
 
 fn ! compilePackageToLlvmWith! entryFile: Str roots: (List Str) rcMode: Str -> (Result CompileResult Str)
   (let [(readRes (fileReadString entryFile))]
-    (mt readRes
+    (match readRes
       ((err _) (err (str "Failed to read entry file: " entryFile)))
       ((ok entrySrc)
-        (mt (a/parse entrySrc)
+        (match (a/parse entrySrc)
           ((err pe) (let [(msg (str entryFile ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": [parse-error] " pe.msg))] (ok (CompileResult :ok false :code "" :diagnostics (list msg)))))
           ((ok entryForms)
             (let [(entrySummary (r/collectSummary entryForms entryFile))
                   (importPaths (r/mapValuesList entrySummary.imports))]
-              (mt (r/loadModuleDeps! (cons (r/parentDirOf entryFile) roots) importPaths)
+              (match (r/loadModuleDeps! (cons (r/parentDirOf entryFile) roots) importPaths)
                 ((err _) (err (str "Failed to load package dependencies of " entryFile)))
                 ((ok deps)
                   (let [(diags (chk/checkModule entryForms deps entryFile)) (fatal diags)]
                     (if (not (listEmpty? fatal))
                       (ok (CompileResult :ok false :code "" :diagnostics (formatDiagnostics fatal)))
-                      (mt (lk/linkEntry! entryFile)
+                      (match (lk/linkEntry! entryFile)
                         ((err irDiags) (ok (CompileResult :ok false :code "" :diagnostics (formatIrDiagnostics irDiags))))
                         ((ok m)
-                          (mt (llvm/emitLlvmProgramNativeWith! m (str m.name ".main") rcMode)
+                          (match (llvm/emitLlvmProgramNativeWith! m (str m.name ".main") rcMode)
                             ((err irDiags) (ok (CompileResult :ok false :code "" :diagnostics (formatIrDiagnostics irDiags))))
                             ((ok llCode) (ok (CompileResult :ok true :code llCode :diagnostics (list)))))))))))))))))
 

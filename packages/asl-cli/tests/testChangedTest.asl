@@ -1,11 +1,11 @@
 (module asl-cli/tests/testChangedTest :x [runTests])
 
 fn ! shell! cwd: String script: String -> Int64
-  (mt (procSpawnv (list "/bin/sh" "-c" script) (some cwd) (none))
+  (match (procSpawnv (list "/bin/sh" "-c" script) (some cwd) (none))
     ((err _) 127)
     ((ok sp)
       (let [(closed (fdClose sp.stdin))]
-        (mt (procWaitPid sp.pid false)
+        (match (procWaitPid sp.pid false)
           ((ok status) (if (ok? closed) (optionOr status 1) 127))
           ((err _) 127)))))
 

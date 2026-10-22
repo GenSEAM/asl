@@ -52,7 +52,7 @@ fn hasNewlineElements elems: (List tr/TreeElement) text: String -> Bool
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (let [(k (tr/tokenKind tok))]
            (if (= k "newline")
@@ -1254,7 +1254,7 @@ fn hasDirectErrorToken elems: (List tr/TreeElement) -> Bool
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (if (= (tr/tokenKind tok) "error")
            true
@@ -1266,7 +1266,7 @@ fn firstErrorOffset elems: (List tr/TreeElement) -> (Option Int64)
     (none)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (if (= (tr/tokenKind tok) "error")
            (some (tr/tokenStart tok))
@@ -1274,14 +1274,14 @@ fn firstErrorOffset elems: (List tr/TreeElement) -> (Option Int64)
         ((tr/elemNode node)
          (if (tr/isErrorNode node)
            (some (tr/nodeStart node))
-           (mt (firstErrorOffset (tr/nodeChildren node))
+           (match (firstErrorOffset (tr/nodeChildren node))
              ((some off) (some off))
              ((none) (firstErrorOffset tl))))))))
 fn parseScript text: String -> (Result tr/Node String)
   (let [(tokens (lx/tokenize text))
         (elems (parseStatements tokens text false false))
         (root (tr/makeNode "script" 0 (stringLength text) elems))]
-    (mt (firstErrorOffset elems)
+    (match (firstErrorOffset elems)
       ((some off)
        (err (str "Parse error at offset " (stringFromInt64 off))))
       ((none)
@@ -1324,7 +1324,7 @@ fn findChildNodes elems: (List tr/TreeElement) -> (List tr/Node)
     (list)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken _) (findChildNodes tl))
         ((tr/elemNode node) (cons node (findChildNodes tl))))))
 fn findChildTokens elems: (List tr/TreeElement) -> (List tr/Token)
@@ -1332,7 +1332,7 @@ fn findChildTokens elems: (List tr/TreeElement) -> (List tr/Token)
     (list)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok) (cons tok (findChildTokens tl)))
         ((tr/elemNode _) (findChildTokens tl)))))
 fn findNonTriviaTokens elems: (List tr/TreeElement) -> (List tr/Token)
@@ -1340,7 +1340,7 @@ fn findNonTriviaTokens elems: (List tr/TreeElement) -> (List tr/Token)
     (list)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (if (isTriviaTok tok)
            (findNonTriviaTokens tl)

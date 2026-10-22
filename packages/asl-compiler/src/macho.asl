@@ -19,4 +19,4 @@ fn machTimeToNanoseconds ticks: Any numer: Any denom: Any -> Int64
   (if (<= denom 0) 0 (/ (* ticks numer) denom))
 
 fn canonicalizePathDarwin path: Any -> Str
-  (if (== (stringLength path) 0) "/" (let [(s1 (stringReplace path "//" "/"))] (if (stringEndsWith? s1 "/.") (optionOr (stringSlice s1 0 (- (stringLength s1) 2)) "/") s1)))
+  (if (= (stringLength path) 0) "/" (let [(s1 (stringReplace path "//" "/"))] (if (stringEndsWith? s1 "/.") (optionOr (stringSlice s1 0 (- (stringLength s1) 2)) "/") s1)))

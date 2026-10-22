@@ -12,19 +12,19 @@ fn allowed -> (List String)
 
 fn ! node -> String
   (let [(candidates (list "/usr/local/bin/node" "/opt/homebrew/bin/node"))]
-    (mt (listHead (filter fileExists? candidates))
+    (match (listHead (filter fileExists? candidates))
       ((some p) p)
       ((none) (stringReplace (processRun "command -v node 2>/dev/null").stdout "\n" ""))))
 
 fn ! llc -> String
   (let [(candidates (list "/opt/homebrew/opt/llvm/bin/llc" "/opt/homebrew/bin/llc" "/usr/local/opt/llvm/bin/llc" "/usr/lib/llvm-20/bin/llc" "/usr/lib/llvm-19/bin/llc" "/usr/lib/llvm-18/bin/llc"))]
-    (mt (listHead (filter fileExists? candidates))
+    (match (listHead (filter fileExists? candidates))
       ((some p) p)
       ((none) (stringReplace (processRun "command -v llc 2>/dev/null").stdout "\n" ""))))
 
 fn ! linker -> String
   (let [(candidates (list "/opt/homebrew/opt/lld/bin/wasm-ld" "/opt/homebrew/bin/wasm-ld" "/usr/local/opt/lld/bin/wasm-ld" "/usr/bin/wasm-ld"))]
-    (mt (listHead (filter fileExists? candidates))
+    (match (listHead (filter fileExists? candidates))
       ((some p) p)
       ((none) (stringReplace (processRun "command -v wasm-ld 2>/dev/null").stdout "\n" ""))))
 
@@ -35,10 +35,10 @@ fn diagText errors: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.code ": " d.message)) errors) "; ")
 
 fn textOf r: (Result String (List irTy/IrDiag)) -> String
-  (mt r ((ok t) t) ((err _) ""))
+  (match r ((ok t) t) ((err _) ""))
 
 fn whyOf r: (Result String (List irTy/IrDiag)) -> String
-  (mt r ((ok _) "ok") ((err ds) (diagText ds)))
+  (match r ((ok _) "ok") ((err ds) (diagText ds)))
 
 fn runnerJs -> String
   (stringJoin
@@ -131,7 +131,7 @@ fn variadicPrintSource -> String
     "\n")
 
 fn emitFor facts: libc/TripleFacts tf: target/TargetFacts source: String -> (Result String (List irTy/IrDiag))
-  (mt (low/lowerSource source)
+  (match (low/lowerSource source)
     ((err ds) (err ds))
     ((ok m) (targetLlvm/emitLlvmProgramForTarget facts tf m "main")))
 
@@ -149,7 +149,7 @@ fn ! writeAndCompile llcPath: String name: String part: String text: (Result Str
           (= compiled.exitCode 0)))))
 
 fn hasCapabilityAbsent res: (Result String (List irTy/IrDiag)) name: String -> Bool
-  (mt res
+  (match res
     ((err diags)
       (listAny? (fn [(d irTy/IrDiag)] -> Bool
                   (and (= d.code "ERR_CAPABILITY_ABSENT")
@@ -186,7 +186,7 @@ fn ! testFileReadStringBuild -> Bool
   (let [(facts (optionOr (libc/libcFacts "wasm32-unknown-unknown") (libc/emptyTripleFacts)))
         (tf (target/wasm32TargetFacts))
         (res (emitFor facts tf (fileReadSource)))]
-    (mt res
+    (match res
       ((err diags)
        (do
          (assert (hasCapabilityAbsent res "fileReadString") "compilation fails with ERR_CAPABILITY_ABSENT naming fileReadString")
@@ -216,8 +216,8 @@ fn ! testPrintImportsAndRun name: String source: String expectedOutput: String -
         (assert (= linked.exitCode 0) (str name " links: " linked.stderr)))
       (let [(read (wl/wasmImports nodePath wasm))]
         (do
-          (assert (ok? read) (str name " reads imports: " (mt read ((ok _) "ok") ((err e) e))))
-          (let [(imports (mt read ((ok xs) xs) ((err _) (list))))]
+          (assert (ok? read) (str name " reads imports: " (match read ((ok _) "ok") ((err e) e))))
+          (let [(imports (match read ((ok xs) xs) ((err _) (list))))]
             (do
               (assert (listContains? imports "asl.write") (str name " imports asl.write: " (stringJoin imports " ")))
               (assert (listEmpty? (wl/importsOutside (allowed) imports)) (str name " import section contains only allowlisted imports, outside: " (stringJoin (wl/importsOutside (allowed) imports) " ")))))))

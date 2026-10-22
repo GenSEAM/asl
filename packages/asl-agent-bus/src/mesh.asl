@@ -42,7 +42,7 @@ fn formatControlSignal frame: ControlSignalFrame -> Str
 (enum ComputeTier (:c tier0Deterministic [] "Deterministic ripgrep/AWK/syntax tools under 1ms") (:c tier1EdgeMediator [] "Edge SLM on WebGPU DOM accessibility tree 15-50ms") (:c tier2Workhorse [] "Gemma 31B/Haiku sub-second workhorse 400-900ms") (:c tier3FrontierReasoning [] "Frontier reasoning Claude 3.5 Sonnet/O1 2-8s"))
 
 fn getComputeTierName tier: ComputeTier -> Str
-  (mt tier ((tier0Deterministic) "tier-0-deterministic") ((tier1EdgeMediator) "tier-1-edge-mediator") ((tier2Workhorse) "tier-2-workhorse") ((tier3FrontierReasoning) "tier-3-frontier-reasoning"))
+  (match tier ((tier0Deterministic) "tier-0-deterministic") ((tier1EdgeMediator) "tier-1-edge-mediator") ((tier2Workhorse) "tier-2-workhorse") ((tier3FrontierReasoning) "tier-3-frontier-reasoning"))
 
 (schema DaemonPeer (:f daemonId Str) (:f workspaceHash Str) (:f pid I64) (:f socketPath Str) (:f port I64) (:f role Str) (:f heartbeatEpoch I64) (:f status Str))
 
@@ -80,7 +80,7 @@ fn acquireBufferLease reg: MutexRegistry bufferId: Str peerId: Str currentEpoch:
   (if (and (!= expectedEpoch -1) (!= reg.registryEpoch expectedEpoch))
     (none)
     (let [(existing (mapGet reg.leases bufferId))]
-      (mt existing
+      (match existing
         ((some lease)
           (if (or (= lease.holderId peerId) (leaseExpired? lease currentEpoch))
             (let [(newLease (makeBufferLease bufferId peerId currentEpoch ttlSeconds))
@@ -96,7 +96,7 @@ fn acquireBufferLease reg: MutexRegistry bufferId: Str peerId: Str currentEpoch:
 
 fn releaseBufferLease reg: MutexRegistry bufferId: Str peerId: Str -> MutexRegistry
   (let [(existing (mapGet reg.leases bufferId))]
-    (mt existing
+    (match existing
       ((some lease)
         (if (= lease.holderId peerId)
           (MutexRegistry :leases (mapRemove reg.leases bufferId) :registryEpoch (+ reg.registryEpoch 1))
@@ -107,7 +107,7 @@ fn getBufferLease reg: MutexRegistry bufferId: Str -> (Option BufferLease)
   (mapGet reg.leases bufferId)
 
 fn isBufferLocked? reg: MutexRegistry bufferId: Str currentEpoch: I64 -> Bool
-  (let [(existing (mapGet reg.leases bufferId))] (mt existing ((some lease) (not (leaseExpired? lease currentEpoch))) ((none) false)))
+  (let [(existing (mapGet reg.leases bufferId))] (match existing ((some lease) (not (leaseExpired? lease currentEpoch))) ((none) false)))
 
 fn evictDeadPeers reg: PeerRegistry currentEpoch: I64 ttlThreshold: I64 -> PeerRegistry
   (let [(alivePeers (filter (fn [(p DaemonPeer)] -> Bool (<= (- currentEpoch p.heartbeatEpoch) ttlThreshold)) (mapValues reg.peers))) (newMap (fold (fn [(acc (Map Str DaemonPeer)) (p DaemonPeer)] -> (Map Str DaemonPeer) (mapSet acc p.daemonId p)) (mapEmpty) alivePeers))] (with reg :peers newMap))
@@ -145,7 +145,7 @@ fn sortCausalFrames frames: (List CausalTraceFrame) -> (List CausalTraceFrame)
   (sortCausalFramesLoop frames (list))
 
 fn detectGapsLoop frames: (List CausalTraceFrame) seqMap: (Map Str I64) seenDigests: (Map Str Bool) gaps: (List CausalTraceGap) -> (List CausalTraceGap)
-  (if (listEmpty? frames) gaps (let [(f (optionOr (listHead frames) (emptyCausalTraceFrame))) (rest (optionOr (listTail frames) (list))) (key (str f.sessionId "::" f.runtimeTarget)) (curSeq f.sequence) (prevSeqOpt (mapGet seqMap key)) (expectedSeq (mt prevSeqOpt ((some prev) (+ prev 1)) ((none) 1))) (hasSeqGap (> curSeq expectedSeq)) (newGaps1 (if hasSeqGap (cons (makeCausalTraceGap f.sessionId f.runtimeTarget expectedSeq curSeq "sequence-gap-detected") gaps) gaps)) (pd f.parentDigest) (hasParentGap (and (!= pd "") (!= pd "root") (not (mapHas? seenDigests pd)))) (newGaps2 (if hasParentGap (cons (makeCausalTraceGap f.sessionId f.runtimeTarget 0 0 (str "missing-parent-digest-" pd)) newGaps1) newGaps1)) (nextSeqMap (mapSet seqMap key curSeq)) (nextSeen (if (!= f.digest "") (mapSet seenDigests f.digest true) seenDigests))] (detectGapsLoop rest nextSeqMap nextSeen newGaps2)))
+  (if (listEmpty? frames) gaps (let [(f (optionOr (listHead frames) (emptyCausalTraceFrame))) (rest (optionOr (listTail frames) (list))) (key (str f.sessionId "::" f.runtimeTarget)) (curSeq f.sequence) (prevSeqOpt (mapGet seqMap key)) (expectedSeq (match prevSeqOpt ((some prev) (+ prev 1)) ((none) 1))) (hasSeqGap (> curSeq expectedSeq)) (newGaps1 (if hasSeqGap (cons (makeCausalTraceGap f.sessionId f.runtimeTarget expectedSeq curSeq "sequence-gap-detected") gaps) gaps)) (pd f.parentDigest) (hasParentGap (and (!= pd "") (!= pd "root") (not (mapHas? seenDigests pd)))) (newGaps2 (if hasParentGap (cons (makeCausalTraceGap f.sessionId f.runtimeTarget 0 0 (str "missing-parent-digest-" pd)) newGaps1) newGaps1)) (nextSeqMap (mapSet seqMap key curSeq)) (nextSeen (if (!= f.digest "") (mapSet seenDigests f.digest true) seenDigests))] (detectGapsLoop rest nextSeqMap nextSeen newGaps2)))
 
 fn detectTraceGaps frames: (List CausalTraceFrame) -> (List CausalTraceGap)
   (detectGapsLoop frames (mapEmpty) (mapEmpty) (list))

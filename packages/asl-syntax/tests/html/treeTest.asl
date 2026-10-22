@@ -52,7 +52,7 @@ fn testVoidElementsFixtures -> Bool
           (root (htr/parseHtml s))
           (divOpt (htr/documentRootElement root))]
       (assert (some? divOpt) "root element found")
-      (mt divOpt
+      (match divOpt
         ((none) false)
         ((some divNode)
          (let [(children (htr/elementChildren divNode))]
@@ -86,7 +86,7 @@ fn testImpliedEndTagsFixtures -> Bool
           (ulOpt (htr/documentRootElement root3))]
       (verifyValidHtml s3)
       (assert (some? ulOpt) "ul found")
-      (mt ulOpt
+      (match ulOpt
         ((none) (assert false "missing ulNode"))
         ((some ulNode)
          (let [(items (htr/elementChildren ulNode))]
@@ -96,7 +96,7 @@ fn testImpliedEndTagsFixtures -> Bool
           (dlOpt (htr/documentRootElement root4))]
       (verifyValidHtml s4)
       (assert (some? dlOpt) "dl found")
-      (mt dlOpt
+      (match dlOpt
         ((none) (assert false "missing dlNode"))
         ((some dlNode)
          (let [(items (htr/elementChildren dlNode))]
@@ -106,7 +106,7 @@ fn testImpliedEndTagsFixtures -> Bool
           (tblOpt (htr/documentRootElement root5))]
       (verifyValidHtml s5)
       (assert (some? tblOpt) "table found")
-      (mt tblOpt
+      (match tblOpt
         ((none) (assert false "missing tblNode"))
         ((some tblNode)
          (let [(rows (htr/elementChildren tblNode))]
@@ -120,7 +120,7 @@ fn testImpliedEndTagsFixtures -> Bool
           (selOpt (htr/documentRootElement root6))]
       (verifyValidHtml s6)
       (assert (some? selOpt) "select found")
-      (mt selOpt
+      (match selOpt
         ((none) (assert false "missing selNode"))
         ((some selNode)
          (let [(opts (htr/elementChildren selNode))]
@@ -147,7 +147,7 @@ fn testRecoveryFixtures -> Bool
 
 fn testOutlineDiagramWorkbench! -> Bool
   (let [(path "docs/diagrams/DiagramWorkbench.html")]
-    (mt (fileReadString path)
+    (match (fileReadString path)
       ((err e) (assert false (str "missing DiagramWorkbench.html: " e)))
       ((ok text)
        (let [(len (stringLength text))
@@ -178,7 +178,7 @@ fn testOutlineDiagramWorkbench! -> Bool
 fn checkTrackedHtmlFile! acc: (Pair Int64 Int64) path: String -> (Pair Int64 Int64)
   (let [(checked (pairFirst acc))
         (mismatches (pairSecond acc))]
-    (mt (fileReadString path)
+    (match (fileReadString path)
       ((err _) acc)
       ((ok text)
        (let [(len (stringLength text))
@@ -205,7 +205,7 @@ fn testAllTrackedHtmlFiles! -> Bool
 
 fn testHeadingsInReviewHtml! -> Bool
   (let [(path "editorial-matrix/assets/review/index.html")]
-    (mt (fileReadString path)
+    (match (fileReadString path)
       ((err e) (assert false (str "missing review html: " e)))
       ((ok text)
        (let [(root (htr/parseHtml text))
@@ -229,7 +229,7 @@ fn testReparseGuardSpanEdit -> Bool
 
 fn testBenchmarkPerformance! -> Bool
   (let [(path "docs/diagrams/DiagramWorkbench.html")]
-    (mt (fileReadBytes path)
+    (match (fileReadBytes path)
       ((err e) (assert false (str "missing DiagramWorkbench: " e)))
       ((ok bs)
        (let [(len (bytesLength bs))]

@@ -34,12 +34,12 @@ fn underRoot root: String path: String -> String
   (if (stringStartsWith? path "/") path (str root "/" path))
 
 fn ! sameBytes? a: String b: String -> Bool
-  (mt (fileReadBytes a)
+  (match (fileReadBytes a)
     ((err _) false)
-    ((ok x) (mt (fileReadBytes b) ((err _) false) ((ok y) (= x y)))))
+    ((ok x) (match (fileReadBytes b) ((err _) false) ((ok y) (= x y)))))
 
 fn ! allSame? root: String dir: String paths: (List String) -> Bool
-  (mt (listHead paths)
+  (match (listHead paths)
     ((none) true)
     ((some p) (if (sameBytes? (underRoot root p) (str dir "/src/" p)) (allSame? root dir (optionOr (listTail paths) (list))) false)))
 
@@ -47,9 +47,9 @@ fn ! shQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
 
 fn ! boundedCapture! cmd: String timeoutMs: Int64 -> sys/Captured
-  (mt (processSpawn cmd)
+  (match (processSpawn cmd)
     ((err e) (sys/Captured :exitCode 127 :stdout "" :stderr e))
-    ((ok h) (mt (processWait h timeoutMs)
+    ((ok h) (match (processWait h timeoutMs)
               ((err e) (sys/Captured :exitCode 127 :stdout "" :stderr e))
               ((ok o) (sys/Captured :exitCode o.exitCode :stdout o.stdout :stderr o.stderr)))))
 
@@ -58,7 +58,7 @@ fn ! clangCommand! -> String
   (optionOr (envGet "CLANG") "clang")
 
 fn ! statStamp path: String -> String
-  (mt (fileStat path)
+  (match (fileStat path)
     ((ok st) (str path " " (stringFromInt64 st.size) " " (stringFromInt64 st.mtimeNs)))
     ((err _) (str path " absent")))
 
@@ -80,9 +80,9 @@ fn ! firstLine! cmd: String -> (Option String)
 fn ! recordClang! path: String version: String triple: String -> Bool
   (let [(made (dirCreate (str (cacheDir!) "/clang")))
         (part (str path ".part." (stringFromInt64 (procSelf))))]
-    (mt (fileWrite part (str version "\n" triple "\n"))
-      ((err e) (sys/sayErr! (str "asl: cannot record clang facts at " part ": " e (mt made ((err m) (str " (" m ")")) ((ok _) "")))))
-      ((ok _) (mt (pathRename part path)
+    (match (fileWrite part (str version "\n" triple "\n"))
+      ((err e) (sys/sayErr! (str "asl: cannot record clang facts at " part ": " e (match made ((err m) (str " (" m ")")) ((ok _) "")))))
+      ((ok _) (match (pathRename part path)
                 ((err e) (let [(gone (pathRemove part))]
                            (sys/sayErr! (str "asl: cannot record clang facts at " path ": " e (if (err? gone) (str "; " part " stays") "")))))
                 ((ok _) true)))))
@@ -93,21 +93,21 @@ fn ! clangFacts! -> (List String)
     (if (= (listLength recorded) 2)
       recorded
       (let [(q (shQuote (clangCommand!)))]
-        (mt (firstLine! (str q " --version"))
+        (match (firstLine! (str q " --version"))
           ((none) (list))
-          ((some version) (mt (firstLine! (str q " -dumpmachine"))
+          ((some version) (match (firstLine! (str q " -dumpmachine"))
                             ((none) (list))
                             ((some triple) (do (recordClang! path version triple) (list version triple)))))))))
 
 fn ! fresh? root: String dir: String -> Bool
   (if (or (stringEmpty? dir) (not (sys/executable? (str dir "/bin"))))
     false
-    (mt (fileReadString (str dir "/clang-version"))
+    (match (fileReadString (str dir "/clang-version"))
       ((err _) false)
       ((ok expected) (let [(actual (optionOr (listHead (clangFacts!)) ""))]
         (and (not (stringEmpty? actual))
           (and (= (stringTrim expected) actual)
-            (mt (fileReadString (str dir "/deps"))
+            (match (fileReadString (str dir "/deps"))
               ((err _) false)
               ((ok text) (let [(paths (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (stringLines text)))]
                            (if (listEmpty? paths) false (allSame? root dir paths)))))))))))
@@ -121,12 +121,12 @@ fn ! probe? root: String dir: String -> Bool
       (do (sys/sayErr! (str "native CLI self-probe: exit=" (stringFromInt64 result.exitCode) " stdout=" result.stdout " stderr=" result.stderr)) false)))
 
 fn envName row: String -> String
-  (mt (stringIndexOf row "=") ((some i) (optionOr (stringSlice row 0 i) row)) ((none) row))
+  (match (stringIndexOf row "=") ((some i) (optionOr (stringSlice row 0 i) row)) ((none) row))
 
 fn ! execWith! argv: (List String) drop: (List String) extra: (List String) -> Int64
   (let [(names (listAppend drop (map envName extra)))
         (kept (filter (fn [(row String)] -> Bool (not (listContains? names (envName row)))) (envList)))]
-    (mt (procExecv argv (some (listAppend kept extra)))
+    (match (procExecv argv (some (listAppend kept extra)))
       ((ok _) 0)
       ((err e) (do (sys/sayErr! (str "asl: cannot exec " (optionOr (listHead argv) "") ": " e)) (if (= e "notFound") 127 126)))))
 
@@ -152,7 +152,7 @@ fn leadingDigits s: String -> String
   (leadingDigitsAt s (stringLength s) 0)
 
 fn configInt text: String key: String -> (Option Int64)
-  (mt (stringIndexOf text (str ":" key " "))
+  (match (stringIndexOf text (str ":" key " "))
     ((none) (none))
     ((some i) (let [(after (+ i (+ (stringLength key) 2)))
                     (digits (leadingDigits (stringTrim (optionOr (stringSlice text after (stringLength text)) ""))))]
@@ -196,23 +196,23 @@ fn ! spawnBuilder! ctx: sys/Context cache: String lock: String -> String
     (if (not (nativeBuildReady? ctx native freshMark))
       (do (pathRemove lock) "its build helper is stale and the hostless refresh (sh asl/host/build.sh) did not restore it")
       (let [(argv (listAppend (list "/bin/sh" "-c" (detachScript) "sh" "nice" "-n" "15") (list native ctx.root cache)))
-            (d (mt (sys/captureWith! argv (some ctx.root) (list (str "NATIVE_CLI_LOG=" log)))
+            (d (match (sys/captureWith! argv (some ctx.root) (list (str "NATIVE_CLI_LOG=" log)))
                  ((ok c) c)
                  ((err e) (sys/Captured :exitCode 127 :stdout "" :stderr e))))
             (pid (optionOr (stringToInt64 (stringTrim d.stdout)) 0))
             (part (str lock "/pid.part"))]
         (if (or (!= d.exitCode 0) (<= pid 1))
           (do (pathRemove lock) (str "its build did not start: " (stringReplace (stringTrim (str d.stdout " " d.stderr)) "\n" " ")))
-          (do (mt (fileWrite part (str (stringFromInt64 pid) "\n")) ((ok _) (pathRename part (str lock "/pid"))) ((err e) (err e)))
+          (do (match (fileWrite part (str (stringFromInt64 pid) "\n")) ((ok _) (pathRename part (str lock "/pid"))) ((err e) (err e)))
               (str "its build started in the background (log " log ")"))))))
 
 fn ! startBuild! ctx: sys/Context cache: String tries: Int64 last: String -> String
   (let [(lock (str cache "/lock"))]
     (if (<= tries 0)
       last
-      (mt (dirCreate lock)
+      (match (dirCreate lock)
         ((err e) (str "cannot create " lock ": " e))
-        ((ok _) (mt (fileCreateExclusive (str lock "/pid") (str (stringFromInt64 (procSelf)) "\n"))
+        ((ok _) (match (fileCreateExclusive (str lock "/pid") (str (stringFromInt64 (procSelf)) "\n"))
           ((ok _) (spawnBuilder! ctx cache lock))
           ((err e) (let [(held (heldPid lock))]
                      (if (alive? held)

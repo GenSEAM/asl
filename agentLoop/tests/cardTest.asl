@@ -3,17 +3,17 @@
   :i [(asl/agentLoop/card :a card)])
 
 fn writeFixture! path: String content: String -> Bool
-  (mt (fileWrite path content)
+  (match (fileWrite path content)
     ((err _) false)
     ((ok _) true))
 
 fn cardText res: (Result card/AgentCard String) -> String
-  (mt res
+  (match res
     ((ok value) (card/formatCardAsn value))
     ((err e) e))
 
 fn cardFails! root: String -> Bool
-  (mt (card/buildCard root)
+  (match (card/buildCard root)
     ((ok _) false)
     ((err _) true))
 
@@ -102,7 +102,7 @@ fn ! runTests -> Bool
       (assert (and (stringContains? aslCard ":deliverables (:findings :patch :plan :verdict)") (and (stringContains? aslCard ":backend \"codex\"") (stringContains? aslCard ":backend \"claude\""))) "card output carries ASL deliverables and supported backends")
       (assert (stringContains? aslCard "(:backend \"script\")") "script provider prefix is exported as a card backend")
       (assert (stringContains? aslCard "(:backend \"replay\")") "replay provider prefix is exported as a card backend")
-      (assert (mt cardDataResult
+      (assert (match cardDataResult
         ((ok cardData) (and (= cardData.name "Leon") (and (listContains? cardData.deliverables "patch") (and (listContains? cardData.deliverables "findings") (and (listContains? cardData.allowlist "read") (and (listContains? cardData.allowlist "manage") (and (listContains? cardData.receiptFields "status") (listContains? cardData.receiptFields "journal"))))))))
         ((err _) false)) "card core fields derive from loaded sources")
       true))

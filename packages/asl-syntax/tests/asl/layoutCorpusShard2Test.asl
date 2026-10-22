@@ -10,7 +10,7 @@ fn runShardFiles! files: (List String) stats: lib/CorpusStats -> lib/CorpusStats
       (runShardFiles! rest (lib/verifyCorpusFile! f stats))))
 
 fn ! runTests -> Bool
-  (mt (lib/allCorpusFiles!)
+  (match (lib/allCorpusFiles!)
     ((err e) (do (assert false (str "git ls-files failed: " e)) false))
     ((ok allFiles)
      (let [(total (listLength allFiles))

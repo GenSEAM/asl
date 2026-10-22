@@ -19,9 +19,9 @@ fn ! nativeRun ntBin: String cache: String env: String path: String args: String
   (sh (str "ASL_NATIVE_TEST_CACHE='" cache "' " env " nice -n 15 " ntBin " run " path " " args " </dev/null"))
 
 fn errorTail text: String -> String
-  (mt (listHead (filter (fn [(l String)] -> Bool (stringContains? l "ERR_")) (stringLines text)))
+  (match (listHead (filter (fn [(l String)] -> Bool (stringContains? l "ERR_")) (stringLines text)))
     ((none) "")
-    ((some line) (mt (stringIndexOf line "ERR_")
+    ((some line) (match (stringIndexOf line "ERR_")
                    ((some i) (stringReplace (optionOr (stringSlice line i (stringLength line)) line) " (after 0 asserts)" ""))
                    ((none) line))))
 
@@ -169,7 +169,7 @@ fn ! testGcStress cache: String -> Bool
             (let [(path (str "bench/native/" name ".asl"))
                   (built (nt/prepareRunIn cache path fp))
                   (host (recordedGc name))]
-              (mt built.binary
+              (match built.binary
                 ((none) (do (assert false (str name ": native build falls back: " built.reason)) false))
                 ((some bin)
                  (let [(native (sh (str "ASL_GC_STRESS=1 ASL_GC_VERIFY=1 ASL_PRELUDE=asl/host/out/prelude.asl nice -n 15 " bin " 1500 </dev/null")))]
@@ -267,7 +267,7 @@ fn ! testBits ntBin: String cache: String -> Bool
         true))
 
 fn ! runTests -> Bool
-  (mt (oracle/selfTestBinary!)
+  (match (oracle/selfTestBinary!)
     ((err e) (do (assert false (str "self-building tools/nativeTest.asl: " e)) false))
     ((ok ntBin)
      (let [(made (sh "mktemp -d"))

@@ -18,7 +18,7 @@ fn firstQuoted text: String -> String
   (optionOr (listGet (stringSplit text "'") 1) "")
 
 fn ! sourcesOf units: (List lk/LinkUnit) -> (Map String String)
-  (fold (fn [(acc (Map String String)) (u lk/LinkUnit)] -> (Map String String) (mt (fileReadString u.path) ((ok src) (mapSet acc u.path src)) ((err _) acc)))
+  (fold (fn [(acc (Map String String)) (u lk/LinkUnit)] -> (Map String String) (match (fileReadString u.path) ((ok src) (mapSet acc u.path src)) ((err _) acc)))
         (mapEmpty) units)
 
 fn distinctPathsOf units: (List lk/LinkUnit) -> (List String)
@@ -48,7 +48,7 @@ fn ! testCorpus -> Bool
         (units (optionOr (resultToOption (lk/loadClosure! (entryPath))) (list)))
         (prelude (optionOr (resultToOption (lk/loadClosure! (lk/preludePath))) (list)))
         (sources (sourcesOf (listAppend units prelude)))
-        (diags (mt res ((ok _) (list)) ((err ds) ds)))
+        (diags (match res ((ok _) (list)) ((err ds) ds)))
         (blockers (map (fn [(d ty/IrDiag)] -> String (blockerOf sources d)) diags))
         (known (map (fn [(p (Pair String Int64))] -> String (pairFirst p)) (remainingTable)))
         (unknown (filter (fn [(b String)] -> Bool (not (listContains? known b))) blockers))

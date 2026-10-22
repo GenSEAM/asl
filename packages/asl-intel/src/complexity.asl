@@ -25,7 +25,7 @@ fn rating cc: Int64 -> String
   (cond ((<= cc 5) "low") ((<= cc 15) "moderate") ((<= cc 30) "high") (else "extreme"))
 
 fn analyzeComplexity! ctx: h/Ctx target: String limit: Int64 -> (Result ModuleComplexity String)
-  (mt (g/buildGraph! ctx (g/resolveWorkspace! ctx) false)
+  (match (g/buildGraph! ctx (g/resolveWorkspace! ctx) false)
     ((err e) (err e))
     ((ok g)
       (let [(tl (t/lowerAscii target))
@@ -109,6 +109,6 @@ fn complexityJson res: ModuleComplexity -> j/Json
                                                res.fns)))))
 
 fn runComplexity! ctx: h/Ctx fmt: String target: String limit: Int64 -> h/Outcome
-  (mt (analyzeComplexity! ctx target limit)
+  (match (analyzeComplexity! ctx target limit)
     ((err e) (h/outcome "" (str "Error: " e "\n") 1))
     ((ok res) (h/outcome (str (cond ((= fmt "json") (j/dumps (complexityJson res))) ((= fmt "summary") (formatComplexitySummary res)) (else (formatComplexityAsn res))) "\n") "" 0)))

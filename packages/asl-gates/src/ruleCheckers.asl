@@ -18,7 +18,7 @@ fn ownsCollide? a: (List Str) b: (List Str) -> Bool
   (not (listEmpty? (filter (fn [(p Str)] -> Bool (not (listEmpty? (filter (fn [(q Str)] -> Bool (pathsOverlap? p q)) b)))) a)))
 
 fn anyOwnsCollision? tasksOwns: (List (List Str)) -> Bool
-  (mt (listHead tasksOwns) ((none) false) ((some h) (let [(rest (optionOr (listTail tasksOwns) (list)))] (if (not (listEmpty? (filter (fn [(o (List Str))] -> Bool (ownsCollide? h o)) rest))) true (anyOwnsCollision? rest)))))
+  (match (listHead tasksOwns) ((none) false) ((some h) (let [(rest (optionOr (listTail tasksOwns) (list)))] (if (not (listEmpty? (filter (fn [(o (List Str))] -> Bool (ownsCollide? h o)) rest))) true (anyOwnsCollision? rest)))))
 
 fn auditOwnershipDisjointness tasksOwns: (List (List Str)) -> RuleCheckResult
   (if (anyOwnsCollision? tasksOwns) (makeRuleCheckResult "oneStep" false "a path is owned by two tasks") (makeRuleCheckResult "oneStep" true "ownership disjointness verified"))
@@ -48,7 +48,7 @@ fn auditC3Duplicates symbolDefs: (List (List Str)) allowlist: (List Str) canonic
   (let [(duplicates (filter (fn [(def (List Str))] -> Bool (isC3Violation? def allowlist canonicalHomes)) symbolDefs))] (if (not (listEmpty? duplicates)) (makeRuleCheckResult "c3" false "duplicate capability outside canonical home detected across packages") (makeRuleCheckResult "c3" true "c3 symbol uniqueness and canonical home invariant verified")))
 
 fn ! auditCheckScriptExistence scriptPaths: (List Str) -> RuleCheckResult
-  (let [(missing (filter (fn [(p Str)] -> Bool (mt (fileReadString p) ((ok _) false) ((err _) true))) scriptPaths))] (if (not (listEmpty? missing)) (makeRuleCheckResult "checkScriptExistence" false (str "declared verification script not found: " (stringJoin missing ", "))) (makeRuleCheckResult "checkScriptExistence" true "all declared verification check scripts exist on disk")))
+  (let [(missing (filter (fn [(p Str)] -> Bool (match (fileReadString p) ((ok _) false) ((err _) true))) scriptPaths))] (if (not (listEmpty? missing)) (makeRuleCheckResult "checkScriptExistence" false (str "declared verification script not found: " (stringJoin missing ", "))) (makeRuleCheckResult "checkScriptExistence" true "all declared verification check scripts exist on disk")))
 
 fn auditD51Convergence packageName: Str testFns: (List Str) asnKeys: (List Str) currentRatio: I64 baselineFloor: I64 -> RuleCheckResult
   (if (< currentRatio baselineFloor) (makeRuleCheckResult "d51" false (str "package " packageName " regressed below baseline floor")) (let [(kebabTests (filter (fn [(fnName Str)] -> Bool (stringContains? fnName "-")) testFns))] (if (and (> baselineFloor 80) (not (listEmpty? kebabTests))) (makeRuleCheckResult "d51" false (str "kebab-case test function detected in converged package " packageName)) (makeRuleCheckResult "d51" true (str "package " packageName " satisfies D51 convergence floor")))))

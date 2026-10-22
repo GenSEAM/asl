@@ -14,7 +14,7 @@ fn ! sh cmd: String -> ProcessOutput
 
 fn ! asl1Bin! -> String
   (let [(built (nt/prepareRun (asl1) (nt/fingerprint)))]
-    (mt built.binary
+    (match built.binary
       ((some bin) bin)
       ((none) (do (assert false (str "asl1.asl builds natively: " built.reason)) ""))))
 
@@ -121,7 +121,7 @@ fn ! testUsage -> Bool
         true))
 
 fn charAt s: String i: Int64 -> String
-  (mt (stringSlice s i (+ i 1)) ((some c) c) ((none) ""))
+  (match (stringSlice s i (+ i 1)) ((some c) c) ((none) ""))
 
 fn letterOrUnderscore? ch: String -> Bool
   (stringContains? "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_" ch)
@@ -134,7 +134,7 @@ fn scanCallFieldChain src: String i: Int64 n: Int64 -> Bool
       (scanCallFieldChain src (+ i 1) n)))
 
 fn ! testNoCallResultFieldChain -> Bool
-  (mt (fileReadString (asl1))
+  (match (fileReadString (asl1))
     ((err e) (do (assert false (str "cannot read " (asl1) ": " e)) false))
     ((ok src) (do (assert (not (scanCallFieldChain src 0 (stringLength src))) (str (asl1) " must bind a call's result with let before taking a .field off it (NATIVE-ASL1-FALLBACK via a stale native compiler otherwise)"))
                   true)))

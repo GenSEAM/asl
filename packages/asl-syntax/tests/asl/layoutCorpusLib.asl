@@ -116,7 +116,7 @@ fn formsMatch? lForms: (List rd/SExpr) iForms: (List rd/SExpr) -> Bool
           true (zip lForms iForms)))
 
 fn verifyAgainstReference! path: String src: String iForms: (List rd/SExpr) stats: CorpusStats -> CorpusStats
-  (mt (lay/lowerString src)
+  (match (lay/lowerString src)
     ((err e)
      (do
        (print (str path ": REAL BUG lowering failed while reference parser accepts: " e "\n"))
@@ -133,7 +133,7 @@ fn verifyAgainstReference! path: String src: String iForms: (List rd/SExpr) stat
 fn verifyExcludedMisparse! path: String src: String reason: String stats: CorpusStats -> CorpusStats
   (let [(lowered (lay/lowerString src))]
     (do
-      (mt lowered
+      (match lowered
         ((err e) (print (str path ": REAL BUG lowering failed while excluded as a known reference misparse: " e "\n")))
         ((ok _) (print (str path ": excluded (" reason ")\n"))))
       (assert (ok? lowered) (str path " lowers cleanly (excluded: " reason ")"))
@@ -141,7 +141,7 @@ fn verifyExcludedMisparse! path: String src: String reason: String stats: Corpus
       (bumpExcluded stats)))
 
 fn verifyUncached! path: String src: String stats: CorpusStats -> CorpusStats
-  (mt (ip/parseIndentedForms src)
+  (match (ip/parseIndentedForms src)
     ((err e)
      (do
        (print (str path ": reference parser rejects: " e "\n"))
@@ -149,7 +149,7 @@ fn verifyUncached! path: String src: String stats: CorpusStats -> CorpusStats
        (bumpExcluded stats)))
     ((ok rawForms)
      (let [(iForms (map ip/stripInferredUnit rawForms))]
-       (mt (knownMisparseReason path)
+       (match (knownMisparseReason path)
          ((some reason) (verifyExcludedMisparse! path src reason stats))
          ((none) (verifyAgainstReference! path src iForms stats))))))
 
@@ -163,13 +163,13 @@ fn verifyCached path: String outcome: String stats: CorpusStats -> CorpusStats
       (bumpCached (bumpExcluded stats))))
 
 fn verifyCorpusFile! path: String stats: CorpusStats -> CorpusStats
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e)
      (do
        (assert false (str path " read error: " e))
        (bumpBug stats)))
     ((ok src)
-     (mt (cc/lookupVerdict! stats.cache "layoutCorpus" path src (list "matched" "excluded"))
+     (match (cc/lookupVerdict! stats.cache "layoutCorpus" path src (list "matched" "excluded"))
        ((some outcome) (verifyCached path outcome stats))
        ((none) (verifyUncached! path src stats)))))
 

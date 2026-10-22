@@ -47,7 +47,7 @@ fn ! testRunAll -> Bool
     (assert (ok? failWritten) "failing scratch suite must be written")
     (assert (not verdict.passed) "a failing scratch suite must fail gate 5")
     (assert (stringContains? verdict.message "1 of 2 gate test suites failed") "gate 5 must count exactly one failed suite")
-    (assert (mt markerStat ((ok stat) stat.isFile) ((err _) false)) "gate 5 must run every suite after encountering a failure")
+    (assert (match markerStat ((ok stat) stat.isFile) ((err _) false)) "gate 5 must run every suite after encountering a failure")
     (assert (= (resultOr markerText "") "passed") "the passing suite after the failure must finish")
     (assert (and (= verdict.gateNum 5) (= verdict.gateName "Pure ASL Gate Test Suite")) "failure verdict must identify gate 5")
     (assert (stringContains? verdict.message "bin/asl test exited 1:") "gate 5 must report the command's failing exit line")

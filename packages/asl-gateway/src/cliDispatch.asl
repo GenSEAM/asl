@@ -172,7 +172,7 @@ fn gatewayJsonCountKvs kvs: (List (Pair String j/Json)) -> Int64
       (+ (gatewayJsonNumberCount (pairSecond kv)) (gatewayJsonCountKvs (preludeTail kvs)))))
 
 fn gatewayJsonNumberCount value: j/Json -> Int64
-  (mt value
+  (match value
     ((j/jint _) 1)
     ((j/jfloat _) 1)
     ((j/jnum _) 1)
@@ -199,7 +199,7 @@ fn gatewayJsonNumberToken text: String pos: Int64 len: Int64 inString: Bool esca
           (else (gatewayJsonNumberToken text (+ pos 1) len false false index))))))
 
 fn gatewayJsonFloatSource source: String index: Int64 value: Float64 -> String
-  (mt (gatewayJsonNumberToken source 0 (stringLength source) false false index)
+  (match (gatewayJsonNumberToken source 0 (stringLength source) false false index)
     ((some token)
       (if (or (stringContains? token ".") (or (stringContains? token "e") (stringContains? token "E")))
         (stringFromFloat64 value)
@@ -236,7 +236,7 @@ fn gatewayJsonObjectFieldsAt kvs: (List (Pair String j/Json)) seen: (List String
           (str field (gatewayJsonObjectFieldsAt rest (cons key seen) source nextIndex))))))
 
 fn gatewayJsonAsnSourceAt value: j/Json source: String index: Int64 -> String
-  (mt value
+  (match value
     ((j/jnull) "nil")
     ((j/jbool b) (if b "true" "false"))
     ((j/jint n) (stringFromInt64 n))
@@ -250,10 +250,10 @@ fn gatewayCliArg args: (List String) index: Int64 -> String
   (optionOr (listGet args index) "")
 
 fn ! gatewayCliConvert! path: String -> (Result Int64 String)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e) (do (sys/sayErr! (str "Conversion error: " e)) (ok 1)))
     ((ok text)
-      (mt (j/jsonParse text)
+      (match (j/jsonParse text)
         ((err e) (do (sys/sayErr! (str "Conversion error: " e)) (ok 1)))
         ((ok value) (do (sys/say! (gatewayJsonAsnSourceAt value text 0)) (ok 0))))))
 
@@ -375,7 +375,7 @@ fn ! gatewayConfigCheckCli! path: String -> (Result Int64 String)
         (home (optionOr (envGet "HOME") root))
         (source (if (stringEmpty? path) (cfg/gatewayProfilesPath home) path))
         (loaded (fileReadString source))]
-    (mt loaded
+    (match loaded
       ((err e)
         (if (not (fileExists? source))
           (let [(msg (str source " not found: the built-in default profiles apply"))]
@@ -384,15 +384,15 @@ fn ! gatewayConfigCheckCli! path: String -> (Result Int64 String)
       ((ok text)
         (let [(bytes (stringToBytes text))
               (invalidStart (gatewayUtf8InvalidStart bytes 0 (bytesLength bytes)))]
-          (mt invalidStart
+          (match invalidStart
             ((some pos)
              (do (sys/say! (cfg/gatewayConfigReceipt source registry "error" 0 (list (gatewayUtf8StartError bytes pos)) (list) "")) (ok 1)))
             ((none)
-             (mt (gatewayUtf8InvalidContinuation bytes 0 (bytesLength bytes))
+             (match (gatewayUtf8InvalidContinuation bytes 0 (bytesLength bytes))
                ((some pos)
                 (do (sys/say! (cfg/gatewayConfigReceipt source registry "error" 0 (list (gatewayUtf8ContinuationError bytes pos)) (list) "")) (ok 1)))
                ((none)
-                (mt (gatewayUtf8TruncatedStart bytes 0 (bytesLength bytes))
+                (match (gatewayUtf8TruncatedStart bytes 0 (bytesLength bytes))
                   ((some pos)
                    (do (sys/say! (cfg/gatewayConfigReceipt source registry "error" 0 (list (gatewayUtf8UnexpectedEndError bytes pos)) (list) "")) (ok 1)))
                   ((none)
@@ -402,7 +402,7 @@ fn ! gatewayConfigCheckCli! path: String -> (Result Int64 String)
                        (do (sys/say! (pairFirst result)) (ok (pairSecond result)))))))))))))))
 
 fn flagValue args: (List String) flag: String -> (Option String)
-  (mt (listIndexOf args flag)
+  (match (listIndexOf args flag)
     ((none) none)
     ((some i) (listGet args (+ i 1))))
 
@@ -415,13 +415,13 @@ fn ! gatewayStatsCli! args: (List String) -> (Result Int64 String)
         (configPath (cfg/gatewayProfilesPath home))
         (configText (if (fileExists? configPath) (resultOr (fileReadString configPath) "") ""))
         (path (optionOr (cfg/gatewayLedgerPathOverride configText) (ul/defaultLedgerPath home)))]
-    (mt (ul/windowMsOf windowText)
+    (match (ul/windowMsOf windowText)
       ((err e) (do (sys/sayErr! (str "gateway stats: " e)) (ok 2)))
       ((ok windowMs)
-       (mt (ul/keyFor byText)
+       (match (ul/keyFor byText)
          ((err e) (do (sys/sayErr! (str "gateway stats: " e)) (ok 2)))
          ((ok keyFn)
-          (mt (ul/readRows! path)
+          (match (ul/readRows! path)
             ((err e) (do (sys/sayErr! (str "gateway stats: " e)) (ok 1)))
             ((ok allRows)
              (let [(rows (ul/filterByTag allRows tagText))
@@ -437,7 +437,7 @@ fn ! gatewayUsageCli! args: (List String) -> (Result Int64 String)
         (configPath (cfg/gatewayProfilesPath home))
         (configText (if (fileExists? configPath) (resultOr (fileReadString configPath) "") ""))
         (path (optionOr (cfg/gatewaySharedUsagePathOverride configText) (ul/defaultSharedUsagePath home)))]
-    (mt (ul/readRows! path)
+    (match (ul/readRows! path)
       ((err e) (do (sys/sayErr! (str "gateway usage: " e)) (ok 1)))
       ((ok allRows)
        (let [(rows (ul/filterByTag allRows tagText))
@@ -501,7 +501,7 @@ fn resolveCliBinFromLocations! name: String legacy: String home: String path: St
       homeCand
       (let [(dirs (stringSplit path ":"))
             (whichCand (searchPathForBin! name dirs))]
-        (mt whichCand
+        (match whichCand
           ((some w) w)
           ((none)
            (if (and (not (stringEmpty? legacy)) (fileExists? legacy))
@@ -515,7 +515,7 @@ fn resolveCliBinAfterEnv! name: String legacy: String -> String
 
 fn resolveCliBin! envName: String name: String legacy: String -> String
   (let [(envCand (if (stringEmpty? envName) none (envGet envName)))]
-    (mt envCand
+    (match envCand
       ((some c)
        (if (and (not (stringEmpty? c)) (fileExists? c))
          c
@@ -547,18 +547,18 @@ fn extractTextFromParts parts: (List j/Json) -> (List String)
   (if (listEmpty? parts) (list)
     (let [(item (preludeHead parts))
           (rest (extractTextFromParts (preludeTail parts)))]
-      (mt item
+      (match item
         ((j/jobj kvs)
-         (mt (j/jsonGet (j/jobj kvs) "text")
+         (match (j/jsonGet (j/jobj kvs) "text")
            ((some val)
-            (mt val
+            (match val
               ((j/jstr s) (if (stringEmpty? s) rest (cons s rest)))
               (_ rest)))
            ((none) rest)))
         (_ rest))))
 
 fn cliMessageText content: j/Json -> String
-  (mt content
+  (match content
     ((j/jnull) "")
     ((j/jstr s) s)
     ((j/jint i) (stringFromInt64 i))
@@ -575,18 +575,18 @@ fn cli_message_text content: j/Json -> String
 
 fn parseAgyToolsFromText text: String -> (Result (List String) String)
   (let [(idIdx (stringIndexOf text ":id agy"))]
-    (mt idIdx
+    (match idIdx
       ((none) (err "no (:client :id agy ...) in grammar"))
       ((some i)
        (let [(restAfterId (optionOr (stringSlice text i (stringLength text)) ""))
              (toolsKeyIdx (stringIndexOf restAfterId ":tools \""))]
-         (mt toolsKeyIdx
+         (match toolsKeyIdx
            ((none) (err "no (:client :id agy :tools ...) in grammar"))
            ((some k)
             (let [(startQuote (+ k (stringLength ":tools \"")))
                   (afterQuote (optionOr (stringSlice restAfterId startQuote (stringLength restAfterId)) ""))
                   (endQuoteIdx (stringIndexOf afterQuote "\""))]
-              (mt endQuoteIdx
+              (match endQuoteIdx
                 ((none) (err "unclosed :tools quote"))
                 ((some eq)
                  (let [(toolsRaw (optionOr (stringSlice afterQuote 0 eq) ""))
@@ -603,7 +603,7 @@ fn cliAgyTools! -> (Result (List String) String)
 fn cliAgyToolsIn! rootDir: String -> (Result (List String) String)
   (let [(path (str rootDir "/asl/grammar/clients.asn"))
         (readRes (fileReadString path))]
-    (mt readRes
+    (match readRes
       ((ok content) (parseAgyToolsFromText content))
       ((err e) (err (str "could not read " path ": " e)))))
 
@@ -627,38 +627,38 @@ fn cliWritePromptDirAt! client: String systemPrompt: String noTools: Bool tmpDir
   (cliWritePromptDirFrom! (optionOr (envGet "ROOT_DIR") ".") client systemPrompt noTools tmpDir)
 
 fn cliWritePromptDirFrom! rootDir: String client: String systemPrompt: String noTools: Bool tmpDir: String -> (Result CliPromptDir String)
-  (if (mt (cliProviderNamed client) ((some row) row.agentLayout) ((none) false))
+  (if (match (cliProviderNamed client) ((some row) row.agentLayout) ((none) false))
     (let [(toolsRes (if noTools (ok (list)) (cliAgyToolsIn! rootDir)))]
-      (mt toolsRes
+      (match toolsRes
         ((err e)
          (do (pathRemove tmpDir) (err e)))
         ((ok tools)
          (let [(agentsDir (str tmpDir "/.agents/plugins/aslGateway/agents"))
                (pluginDir (str tmpDir "/.agents/plugins/aslGateway"))
                (dRes (dirCreate agentsDir))]
-           (mt dRes
+           (match dRes
              ((err e) (do (pathRemove tmpDir) (err (str "failed to create agents dir: " e))))
              ((ok _)
               (let [(wRes1 (fileWrite (str pluginDir "/plugin.json") "{\"name\": \"aslGateway\"}\n"))]
-                (mt wRes1
+                (match wRes1
                   ((err e) (do (pathRemove tmpDir) (err (str "failed to write plugin.json: " e))))
                   ((ok _)
                    (let [(promptPath (str agentsDir "/aslGateway.md"))
                          (mdContent (agyAgentMarkdown systemPrompt tools noTools))
                          (wRes2 (fileWrite promptPath mdContent))]
-                     (mt wRes2
+                     (match wRes2
                        ((err e) (do (pathRemove tmpDir) (err (str "failed to write aslGateway.md: " e))))
                        ((ok _) (ok (CliPromptDir :tmpDir tmpDir :promptPath promptPath))))))))))))))
     (let [(promptPath (str tmpDir "/system.md"))
           (wRes (fileWrite promptPath systemPrompt))]
-      (mt wRes
+      (match wRes
         ((err e) (do (pathRemove tmpDir) (err (str "failed to write system.md: " e))))
         ((ok _) (ok (CliPromptDir :tmpDir tmpDir :promptPath promptPath))))))
 
 fn cliWritePromptDir! client: String systemPrompt: String noTools: Bool -> (Result CliPromptDir String)
   (let [(tmpDir (str "/tmp/asl-gw-" client "-" (stringFromInt64 (nowNs))))
         (mkRes (dirCreate tmpDir))]
-    (mt mkRes
+    (match mkRes
       ((err e) (err (str "failed to create temp dir " tmpDir ": " e)))
       ((ok _) (cliWritePromptDirAt! client systemPrompt noTools tmpDir))))
 
@@ -695,12 +695,12 @@ fn findBalancedBrace text: String idx: Int64 len: Int64 depth: Int64 inStr: Bool
               (findBalancedBrace text (+ idx 1) len depth false false)))))))
 
 fn cliJsonParserOffset parserError: String -> Int64
-  (mt (stringIndexOf parserError "error at byte " )
+  (match (stringIndexOf parserError "error at byte " )
     ((none) 0)
     ((some prefixPos)
      (let [(rest (optionOr (stringSlice parserError (+ prefixPos (stringLength "error at byte ")) (stringLength parserError)) ""))
            (colon (stringIndexOf rest ":"))]
-       (mt colon
+       (match colon
          ((none) 0)
          ((some endPos)
           (optionOr (stringToInt64 (optionOr (stringSlice rest 0 endPos) "")) 0))))))
@@ -720,21 +720,21 @@ fn cliJsonMalformedObjectError text: String startPos: Int64 parserError: String 
 
 fn cliJsonObject text: String -> (Result j/Json String)
   (let [(tLen (stringLength text))]
-    (mt (findFirstBrace text 0 tLen)
+    (match (findFirstBrace text 0 tLen)
       ((none) (err "no JSON object in output"))
       ((some startPos)
-       (mt (findBalancedBrace text startPos tLen 0 false false)
+       (match (findBalancedBrace text startPos tLen 0 false false)
          ((none)
           (let [(sliced (optionOr (stringSlice text startPos tLen) ""))]
-            (mt (j/jsonParse sliced)
+            (match (j/jsonParse sliced)
               ((err e) (err (cliJsonMalformedObjectError text startPos e)))
               ((ok _) (err "no JSON object in output")))))
          ((some endPos)
           (let [(sliced (optionOr (stringSlice text startPos endPos) ""))]
-            (mt (j/jsonParse sliced)
+            (match (j/jsonParse sliced)
               ((err e) (err (cliJsonMalformedObjectError text startPos e)))
               ((ok val)
-               (mt val
+               (match val
                  ((j/jobj kvs) (ok val))
                  (_ (err "JSON output is not an object")))))))))))
 
@@ -742,9 +742,9 @@ fn cli_json_object text: String -> (Result j/Json String)
   (cliJsonObject text)
 
 fn jsonIntField obj: j/Json key: String -> Int64
-  (mt (j/jsonGet obj key)
+  (match (j/jsonGet obj key)
     ((some val)
-     (mt val
+     (match val
        ((j/jint n) n)
        (_ 0)))
     ((none) 0))
@@ -764,15 +764,15 @@ fn sumModelUsageKvs kvs: (List (Pair String j/Json)) inAcc: Int64 cacheAcc: Int6
                         (+ outAcc outTok))))
 
 fn sumModelUsage muObj: j/Json -> CliUsage
-  (mt muObj
+  (match muObj
     ((j/jobj kvs)
      (sumModelUsageKvs kvs 0 0 0))
     (_ (CliUsage :inputTokens 0 :cachedTokens 0 :outputTokens 0)))
 
 fn parseStandardUsage d: j/Json -> (Option CliUsage)
-  (mt (j/jsonGet d "usage")
+  (match (j/jsonGet d "usage")
     ((some val)
-     (mt val
+     (match val
        ((j/jobj uKvs)
         (let [(u (j/jobj uKvs))
               (cached (jsonIntField u "cache_read_input_tokens"))
@@ -785,19 +785,19 @@ fn parseStandardUsage d: j/Json -> (Option CliUsage)
 
 fn parseClaudeResult stdout: String -> CliParseResult
   (let [(raw (stringTrim stdout))]
-    (mt (cliJsonObject stdout)
+    (match (cliJsonObject stdout)
       ((err _) (CliParseResult :text raw :usage none :dedup false))
       ((ok d)
-       (let [(resText (mt (j/jsonGet d "result")
+       (let [(resText (match (j/jsonGet d "result")
                         ((some val)
-                         (mt val
+                         (match val
                            ((j/jstr s) (stringTrim s))
                            (_ (stringTrim (j/jsonEmit val)))))
                         ((none) "")))
              (muOpt (j/jsonGet d "modelUsage"))
-             (usage (mt muOpt
+             (usage (match muOpt
                       ((some val)
-                       (mt val
+                       (match val
                          ((j/jobj kvs)
                           (if (listEmpty? kvs)
                             (parseStandardUsage d)
@@ -817,20 +817,20 @@ fn scanCodexLines lines: (List String) acc: CodexScanAcc -> CodexScanAcc
   (if (listEmpty? lines) acc
     (let [(line (stringTrim (preludeHead lines)))
           (nextAcc (if (stringEmpty? line) acc
-                     (mt (j/jsonParse line)
+                     (match (j/jsonParse line)
                        ((err _) acc)
                        ((ok val)
-                        (mt val
+                        (match val
                           ((j/jobj kvs)
                            (let [(ev (j/jobj kvs))
-                                 (t (mt (j/jsonGet (j/jobj kvs) "type")
-                                      ((some tv) (mt tv ((j/jstr s) s) (_ "")))
+                                 (t (match (j/jsonGet (j/jobj kvs) "type")
+                                      ((some tv) (match tv ((j/jstr s) s) (_ "")))
                                       ((none) "")))]
                              (cond
                                ((and (= t "turn.completed") (some? (j/jsonGet ev "usage")))
-                                (mt (j/jsonGet ev "usage")
+                                (match (j/jsonGet ev "usage")
                                   ((some uv)
-                                   (mt uv
+                                   (match uv
                                      ((j/jobj uKvs)
                                       (let [(u (j/jobj uKvs))
                                             (inT (jsonIntField u "input_tokens"))
@@ -840,17 +840,17 @@ fn scanCodexLines lines: (List String) acc: CodexScanAcc -> CodexScanAcc
                                      (_ acc)))
                                   ((none) acc)))
                                ((= t "item.completed")
-                                (mt (j/jsonGet ev "item")
+                                (match (j/jsonGet ev "item")
                                   ((some iv)
-                                   (mt iv
+                                   (match iv
                                      ((j/jobj itemKvs)
                                       (let [(item (j/jobj itemKvs))
-                                            (itype (mt (j/jsonGet (j/jobj itemKvs) "type")
-                                                     ((some itv) (mt itv ((j/jstr s) s) (_ "")))
+                                            (itype (match (j/jsonGet (j/jobj itemKvs) "type")
+                                                     ((some itv) (match itv ((j/jstr s) s) (_ "")))
                                                      ((none) "")))]
                                         (if (= itype "agent_message")
-                                          (let [(txt (mt (j/jsonGet (j/jobj itemKvs) "text")
-                                                       ((some txtv) (mt txtv ((j/jstr s) s) (_ "")))
+                                          (let [(txt (match (j/jsonGet (j/jobj itemKvs) "text")
+                                                       ((some txtv) (match txtv ((j/jstr s) s) (_ "")))
                                                        ((none) "")))]
                                             (with acc :text (some txt)))
                                           acc)))
@@ -885,12 +885,12 @@ fn checkAgyDedup text: String -> (Pair String Bool)
 
 fn parseAgyResult stdout: String -> CliParseResult
   (let [(raw (stringTrim stdout))]
-    (mt (cliJsonObject stdout)
+    (match (cliJsonObject stdout)
       ((err _) (CliParseResult :text raw :usage none :dedup false))
       ((ok d)
-       (let [(usage (mt (j/jsonGet d "usage")
+       (let [(usage (match (j/jsonGet d "usage")
                       ((some val)
-                       (mt val
+                       (match val
                          ((j/jobj uKvs)
                           (let [(u (j/jobj uKvs))
                                 (inTok (jsonIntField u "input_tokens"))
@@ -900,9 +900,9 @@ fn parseAgyResult stdout: String -> CliParseResult
                             (some (CliUsage :inputTokens inTok :cachedTokens cacheTok :outputTokens (+ outTok thinkTok)))))
                          (_ none)))
                       ((none) none)))
-             (resp (mt (j/jsonGet d "response")
+             (resp (match (j/jsonGet d "response")
                      ((some val)
-                      (mt val
+                      (match val
                         ((j/jstr s) (stringTrim s))
                         (_ (stringTrim (j/jsonEmit val)))))
                      ((none) "")))
@@ -910,7 +910,7 @@ fn parseAgyResult stdout: String -> CliParseResult
          (CliParseResult :text (pairFirst dedupPair) :usage usage :dedup (pairSecond dedupPair))))))
 
 fn cliParseResult client: String stdout: String -> CliParseResult
-  (mt (cliProviderNamed client)
+  (match (cliProviderNamed client)
     ((some row) (row.parse stdout))
     ((none) (parseAgyResult stdout)))
 
@@ -920,13 +920,13 @@ fn cli_parse_result client: String stdout: String -> CliParseResult
 fn codexBuildCmd codexBin: String ws: String promptPath: String noTools: Bool effort: (Option String) model: (Option String) -> (List String)
   (let [(base (list codexBin "exec" "-C" ws "-" "--json" "--ephemeral" "--skip-git-repo-check" "-c" (str "model_instructions_file=" promptPath)))
         (withTools (if noTools (listAppend base (list "-c" "project_doc_max_bytes=0")) base))
-        (withEffort (mt effort
+        (withEffort (match effort
                       ((some eff)
                        (if (or (= eff "low") (or (= eff "medium") (= eff "high")))
                          (listAppend withTools (list "-c" (str "model_reasoning_effort=\"" eff "\"")))
                          withTools))
                       ((none) withTools)))
-        (withModel (mt model
+        (withModel (match model
                      ((some m)
                       (let [(cleanM (cond
                                       ((or (= m "luna") (or (= m "gpt-luna") (or (= m "codex/luna") (= m "gpt-5.6-luna")))) "gpt-5.6-luna")
@@ -969,7 +969,7 @@ fn agyBuildCmd! agyBin: String ws: String tmpDir: String rootDir: String timeout
                        (if (not (stringEmpty? cleanModel))
                          (listAppend base (list "--model" cleanModel "--effort" eff))
                          (listAppend base (list "--model" "gemini-3.8-flash" "--effort" eff))))))]
-    (mt agent
+    (match agent
       ((some ag)
        (let [(pluginRoot (str rootDir "/.asl/agy"))
              (cmdWithAgent (listAppend withModel (list "--agent" ag "--add-dir" pluginRoot "--add-dir" ws)))
@@ -990,8 +990,8 @@ fn claudeBuildCmd! claudeBin: String promptPath: String noTools: Bool model: (Op
         (unsafeFlag (optionOr (envGet "ASL_AGENT_UNSAFE") "0"))
         (withUnsafe (if (= unsafeFlag "1") (listAppend withTools (list "--dangerously-skip-permissions")) withTools))
         (withPlan (if (not noTools) (listAppend withUnsafe (list "--permission-mode" "plan")) withUnsafe))
-        (withModel (mt model ((some m) (listAppend withPlan (list "--model" m))) ((none) withPlan)))
-        (withEffort (mt effort
+        (withModel (match model ((some m) (listAppend withPlan (list "--model" m))) ((none) withPlan)))
+        (withEffort (match effort
                       ((some eff)
                        (if (or (= eff "low") (or (= eff "medium") (or (= eff "high") (or (= eff "xhigh") (= eff "max")))))
                          (listAppend withModel (list "--effort" eff))
@@ -1019,19 +1019,19 @@ fn readyOn ready: (List (Pair Int64 Int64)) fd: Int64 -> Bool
 fn ! stepStdin sp: SpawnedProc io: ExecIo -> ExecIo
   (if (stringEmpty? io.pending)
     (do (fdClose sp.stdin) (with io :pending "" :inOpen false))
-    (mt (fdWrite sp.stdin io.pending)
+    (match (fdWrite sp.stdin io.pending)
       ((ok n) (with io :pending (optionOr (stringSlice io.pending n (stringLength io.pending)) "") :inOpen true))
       ((err e) (if (= e "wouldBlock") io (do (fdClose sp.stdin) (with io :pending "" :inOpen false))))))
 
 fn ! stepOut sp: SpawnedProc io: ExecIo -> ExecIo
-  (mt (fdRead sp.stdout 65536)
+  (match (fdRead sp.stdout 65536)
     ((ok chunk) (if (stringEmpty? chunk)
       (do (fdClose sp.stdout) (with io :outOpen false))
       (with io :outOpen true :out (str io.out chunk))))
     ((err e) (if (= e "wouldBlock") io (do (fdClose sp.stdout) (with io :outOpen false)))))
 
 fn ! stepErr sp: SpawnedProc io: ExecIo -> ExecIo
-  (mt (fdRead sp.stderr 65536)
+  (match (fdRead sp.stderr 65536)
     ((ok chunk) (if (stringEmpty? chunk)
       (do (fdClose sp.stderr) (with io :errOpen false))
       (with io :errOpen true :errText (str io.errText chunk))))
@@ -1046,7 +1046,7 @@ fn ! pumpIo sp: SpawnedProc io: ExecIo deadlineNs: Int64 -> (Result ExecIo Int64
     (let [(leftMs (/ (- deadlineNs (monotonicNs)) 1000000))]
       (if (<= leftMs 0)
         (do (closeOpen sp io) (err 0))
-        (mt (fdPoll (pollSet sp io) leftMs)
+        (match (fdPoll (pollSet sp io) leftMs)
           ((err _) (do (closeOpen sp io) (err 1)))
           ((ok ready)
             (let [(io1 (if (and io.inOpen (readyOn ready sp.stdin)) (stepStdin sp io) io))
@@ -1064,7 +1064,7 @@ fn stripQuotes s: String -> String
       s))
 
 fn cleanEnvEntry entry: String -> String
-  (mt (stringIndexOf entry "=")
+  (match (stringIndexOf entry "=")
     ((none) entry)
     ((some eqIdx)
      (let [(k (optionOr (stringSlice entry 0 eqIdx) ""))
@@ -1078,10 +1078,10 @@ fn parseEnvLines s: String -> (List String)
 
 fn buildEnvString! provider: String -> String
   (let [(baseVars (list "PATH" "HOME" "USER" "LOGNAME" "TMPDIR" "SHELL" "TERM" "LANG" "LC_ALL" "ROOT_DIR" "ASL_AGENT_UNSAFE"))
-        (keyVars (mt (cliProviderNamed provider) ((some row) row.keyVars) ((none) (list))))
+        (keyVars (match (cliProviderNamed provider) ((some row) row.keyVars) ((none) (list))))
         (allVars (listAppend baseVars keyVars))
         (envAssignments (fold (fn [acc varName]
-                                (mt (envGet varName)
+                                (match (envGet varName)
                                   ((some v) (cons (str varName "=" v) acc))
                                   ((none) acc)))
                               (list)
@@ -1093,7 +1093,7 @@ fn runSpawnDispatch! cmdList: (List String) ws: String envStr: String stdinFile:
         (envOpt (if (listEmpty? envLines) none (some envLines)))
         (wsOpt (if (stringEmpty? ws) none (some ws)))
         (spawnRes (procSpawnv cmdList wsOpt envOpt))]
-    (mt spawnRes
+    (match spawnRes
       ((err e)
        (let [(_rm (pathRemove tmpDir))]
          (err (str "procSpawnv failed: " e))))
@@ -1102,7 +1102,7 @@ fn runSpawnDispatch! cmdList: (List String) ws: String envStr: String stdinFile:
          (if (not (stringEmpty? pidFile))
            (fileWrite pidFile (stringFromInt64 sp.pid))
            (ok ()))
-         (let [(stdinData (mt stdinFile
+         (let [(stdinData (match stdinFile
                             ((some sf) (resultOr (fileReadString sf) ""))
                             ((none) "")))
                (hasStdin (not (stringEmpty? stdinData)))
@@ -1117,7 +1117,7 @@ fn runSpawnDispatch! cmdList: (List String) ws: String envStr: String stdinFile:
                (timeoutEffective (if (<= timeoutSec 0) 300 timeoutSec))
                (deadlineNs (+ (monotonicNs) (* timeoutEffective 1000000000)))
                (pumpRes (pumpIo sp io0 deadlineNs))]
-           (mt pumpRes
+           (match pumpRes
              ((err _)
               (do
                 (procKill (- 0 sp.pid) "SIGTERM")
@@ -1128,7 +1128,7 @@ fn runSpawnDispatch! cmdList: (List String) ws: String envStr: String stdinFile:
                 (pathRemove tmpDir)
                 (err "timeout")))
              ((ok io)
-              (mt (procWaitPid sp.pid false)
+              (match (procWaitPid sp.pid false)
                 ((err e)
                  (let [(_rm (pathRemove tmpDir))]
                    (err (str "procWaitPid failed: " e))))
@@ -1143,40 +1143,40 @@ fn runSpawnDispatch! cmdList: (List String) ws: String envStr: String stdinFile:
                      (err (str client " exit " (stringFromInt64 exitCode) ": " io.errText)))))))))))))
 
 fn resolveWorkspace! workspace: (Option String) rootDir: String -> (Result String String)
-  (mt workspace
+  (match workspace
     ((some ws)
      (if (stringEmpty? ws)
        (resolveWorkspace! none rootDir)
-       (mt (realPath ws)
+       (match (realPath ws)
          ((ok p) (ok p))
          ((err _) (err "ERR_WORKSPACE")))))
     ((none)
      (let [(target (if (stringEmpty? rootDir) "." rootDir))]
-       (mt (realPath target)
+       (match (realPath target)
          ((ok p) (ok p))
          ((err _) (ok target))))))
 
 fn dispatchCodexFallback! prompt: String opts: DispatchOptions -> (Result CliParseResult String)
   (let [(rootDir (optionOr (envGet "ROOT_DIR") "."))
         (wsRes (resolveWorkspace! opts.workspace rootDir))]
-    (mt wsRes
+    (match wsRes
       ((err e) (err e))
       ((ok ws)
-       (let [(codexBin (mt opts.cliBin
+       (let [(codexBin (match opts.cliBin
                          ((some b) b)
                          ((none) (resolveCliBin! "CODEX_BIN" "codex" "/opt/homebrew/bin/codex"))))]
          (if (not (fileExists? codexBin))
            (err (str "CODEX_BIN not found: " codexBin))
            (let [(sysPrompt (optionOr opts.systemPrompt (proxySystemPrompt)))
                  (promptDirRes (cliWritePromptDir! "codex" sysPrompt opts.noTools))]
-             (mt promptDirRes
+             (match promptDirRes
                ((err e) (err e))
                ((ok promptDir)
                 (let [(tmpDir promptDir.tmpDir)
                       (promptPath promptDir.promptPath)
                       (promptFile (str tmpDir "/prompt.txt"))
                       (wRes (fileWrite promptFile prompt))]
-                  (mt wRes
+                  (match wRes
                     ((err e) (do (pathRemove tmpDir) (err (str "failed to write prompt: " e))))
                     ((ok _)
                      (let [(pidFile (str tmpDir "/child.pid"))
@@ -1199,10 +1199,10 @@ fn dispatch_codex_fallback! prompt: String model: (Option String) effort: (Optio
 fn dispatchAgyFallback! prompt: String opts: DispatchOptions -> (Result CliParseResult String)
   (let [(rootDir (optionOr (envGet "ROOT_DIR") "."))
         (wsRes (resolveWorkspace! opts.workspace rootDir))]
-    (mt wsRes
+    (match wsRes
       ((err e) (err e))
       ((ok ws)
-       (let [(agyBin (mt opts.cliBin
+       (let [(agyBin (match opts.cliBin
                        ((some b) b)
                        ((none) (resolveCliBin! "AGY_BIN" "agy" ""))))]
          (if (not (fileExists? agyBin))
@@ -1211,7 +1211,7 @@ fn dispatchAgyFallback! prompt: String opts: DispatchOptions -> (Result CliParse
              (if hasAgent
                (let [(tmpDir (str "/tmp/asl-gw-agy-" (stringFromInt64 (nowNs))))
                      (dRes (dirCreate tmpDir))]
-                 (mt dRes
+                 (match dRes
                    ((err e) (err (str "failed to create temp dir " tmpDir ": " e)))
                    ((ok _)
                     (let [(pidFile (str tmpDir "/child.pid"))
@@ -1221,7 +1221,7 @@ fn dispatchAgyFallback! prompt: String opts: DispatchOptions -> (Result CliParse
                (let [(sysText (optionOr opts.systemPrompt (proxySystemPrompt)))
                      (agentText (if (stringEmpty? prompt) sysText (str sysText "\n\n(:conversation)\n" prompt)))
                      (promptDirRes (cliWritePromptDir! "agy" agentText opts.noTools))]
-                 (mt promptDirRes
+                 (match promptDirRes
                    ((err e) (err e))
                    ((ok promptDir)
                     (let [(tmpDir promptDir.tmpDir)
@@ -1245,24 +1245,24 @@ fn dispatch_agy_fallback! prompt: String model: (Option String) effort: (Option 
 fn dispatchClaudeFallback! prompt: String opts: DispatchOptions -> (Result CliParseResult String)
   (let [(rootDir (optionOr (envGet "ROOT_DIR") "."))
         (wsRes (resolveWorkspace! opts.workspace rootDir))]
-    (mt wsRes
+    (match wsRes
       ((err e) (err e))
       ((ok ws)
-       (let [(claudeBin (mt opts.cliBin
+       (let [(claudeBin (match opts.cliBin
                           ((some b) b)
                           ((none) (resolveCliBin! "CLAUDE_BIN" "claude" "/usr/local/bin/claude"))))]
          (if (not (fileExists? claudeBin))
            (err (str "CLAUDE_BIN not found: " claudeBin))
            (let [(sysPrompt (optionOr opts.systemPrompt (proxySystemPrompt)))
                  (promptDirRes (cliWritePromptDir! "claude" sysPrompt opts.noTools))]
-             (mt promptDirRes
+             (match promptDirRes
                ((err e) (err e))
                ((ok promptDir)
                 (let [(tmpDir promptDir.tmpDir)
                       (promptPath promptDir.promptPath)
                       (promptFile (str tmpDir "/prompt.txt"))
                       (wRes (fileWrite promptFile prompt))]
-                  (mt wRes
+                  (match wRes
                     ((err e) (do (pathRemove tmpDir) (err (str "failed to write prompt: " e))))
                     ((ok _)
                      (let [(pidFile (str tmpDir "/child.pid"))

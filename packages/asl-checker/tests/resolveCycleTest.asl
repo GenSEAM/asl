@@ -31,7 +31,7 @@ fn cycleMessages diags: (List ty/Diagnostic) -> (List String)
   (map (fn [(d ty/Diagnostic)] -> String d.message) (filter (fn [(d ty/Diagnostic)] -> Bool (= d.code "rule-11")) diags))
 
 fn ! cyclesOf! dir: String name: String -> (List String)
-  (mt (c/checkFile! (str dir "/" name ".asl") (list))
+  (match (c/checkFile! (str dir "/" name ".asl") (list))
     ((err _) (do (assert false (str "checkFile! reads " name ".asl")) (list)))
     ((ok diags) (cycleMessages diags)))
 

@@ -74,7 +74,7 @@ fn extractFormSymbol formText: String -> (Pair String String)
 fn parseCachedForm formText: String cache: AstCache -> (Pair CachedAstEntry (Pair AstCache Bool))
   (let [(h (computeFormHash formText))
         (cachedOpt (mapGet cache.entries h))]
-    (mt cachedOpt
+    (match cachedOpt
       ((some entry)
         (if (= entry.rawText formText)
           (let [(updCache (with cache :hits (+ cache.hits 1)))]
@@ -83,7 +83,7 @@ fn parseCachedForm formText: String cache: AstCache -> (Pair CachedAstEntry (Pai
                 (k (pairFirst kn))
                 (n (pairSecond kn))
                 (parsedRes (ip/parseIndented formText))
-                (astNode (mt parsedRes
+                (astNode (match parsedRes
                            ((ok node) (ip/stripInferredUnit node))
                            ((err _) (rd/makeList (list (rd/makeAtom k) (rd/makeAtom n))))))
                 (newEntry (CachedAstEntry :hash h :symbol n :kind k :ast astNode :rawText formText :merkleParentHash (str "merkle-" h)))
@@ -95,7 +95,7 @@ fn parseCachedForm formText: String cache: AstCache -> (Pair CachedAstEntry (Pai
               (k (pairFirst kn))
               (n (pairSecond kn))
               (parsedRes (ip/parseIndented formText))
-              (astNode (mt parsedRes
+              (astNode (match parsedRes
                          ((ok node) (ip/stripInferredUnit node))
                          ((err _) (rd/makeList (list (rd/makeAtom k) (rd/makeAtom n))))))
               (formLen (stringLength formText))

@@ -64,17 +64,17 @@ fn openAfter s: String from: Int64 -> Bool
   (let [(b (stringToBytes s))] (< (quoteEnd b (bytesLength b) from) 0))
 
 fn firstContent lines: (List String) no: Int64 -> (Option (Pair String Int64))
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (none))
     ((some l) (if (or (blank? l) (comment? l)) (firstContent (optionOr (listTail lines) (list)) (+ no 1)) (some (pair l no)))))
 
 fn lineHeader? src: String -> Bool
-  (mt (firstContent (stringSplit src "\n") 1)
+  (match (firstContent (stringSplit src "\n") 1)
     ((some p) (keyLine? (pairFirst p) "module"))
     ((none) false))
 
 fn oldHeader? src: String -> Bool
-  (mt (firstContent (stringSplit src "\n") 1)
+  (match (firstContent (stringSplit src "\n") 1)
     ((some p) (stringStartsWith? (pairFirst p) "(module"))
     ((none) false))
 
@@ -102,7 +102,7 @@ fn kindOf l: String -> Int64
 
 fn docMore st: HScan open: Bool -> HScan
   (if (not open) st
-    (mt (listHead st.rest)
+    (match (listHead st.rest)
       ((none) (with st :err (bad "the doc string is not closed" st.no)))
       ((some l) (let [(b (stringToBytes l)) (e (quoteEnd b (bytesLength b) 0))
                       (next (HScan :lines (cons (HLine :kind (kDocMore) :text l :no st.no) st.lines) :rest (optionOr (listTail st.rest) (list)) :no (+ st.no 1) :err st.err))]
@@ -110,22 +110,22 @@ fn docMore st: HScan open: Bool -> HScan
 
 fn scanLines st: HScan first: Bool -> HScan
   (if (hasErr st.err) st
-    (mt (listHead st.rest)
+    (match (listHead st.rest)
       ((none) st)
       ((some l) (let [(k (if first (if (keyLine? l "module") (kModule) -1) (kindOf l)))]
                   (cond
                     ((or (< k 0) (and (not first) (= k (kModule)))) st)
-                    (else (mt (checkLine l st.no)
+                    (else (match (checkLine l st.no)
                             ((some e) (with st :err (some e)))
                             ((none) (let [(next (HScan :lines (cons (HLine :kind k :text l :no st.no) st.lines) :rest (optionOr (listTail st.rest) (list)) :no (+ st.no 1) :err st.err))
                                           (q (firstQuote l))]
                                       (scanLines (if (= k (kDoc)) (docMore next (openAfter l (+ q 1))) next) false))))))))))
 
 fn hasErr o: (Option HeaderError) -> Bool
-  (mt o ((some _) true) ((none) false))
+  (match o ((some _) true) ((none) false))
 
 fn leading lines: (List String) no: Int64 acc: (List String) -> (Pair (List String) (Pair (List String) Int64))
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (pair (listReverse acc) (pair (list) no)))
     ((some l) (if (or (blank? l) (comment? l)) (leading (optionOr (listTail lines) (list)) (+ no 1) (cons l acc)) (pair (listReverse acc) (pair lines no)))))
 
@@ -142,7 +142,7 @@ fn runs hs: (List HLine) k: Int64 -> Int64
 
 fn shapeError hs: (List HLine) -> (Option HeaderError)
   (let [(cs (contentKinds hs))
-        (lastNo (mt (listLast cs) ((some h) h.no) ((none) 1)))]
+        (lastNo (match (listLast cs) ((some h) h.no) ((none) 1)))]
     (cond
       ((> (listLength (filter (fn [h] (= h.kind (kDoc))) cs)) 1) (bad "a module has at most one doc line" lastNo))
       ((> (runs cs (kExports)) 1) (bad "exports lines must be adjacent" lastNo))
@@ -154,16 +154,16 @@ fn oldTypeDeclLine src: String -> Int64
 
 fn strictError src: String -> (Option HeaderError)
   (cond
-    ((oldHeader? src) (bad "the (module p :x [..] :i [..]) header is retired: write column-0 lines module p, exports a b, import q as c (tools/codemod/headers.asl --apply)" (mt (firstContent (stringSplit src "\n") 1) ((some p) (pairSecond p)) ((none) 1))))
+    ((oldHeader? src) (bad "the (module p :x [..] :i [..]) header is retired: write column-0 lines module p, exports a b, import q as c (tools/codemod/headers.asl --apply)" (match (firstContent (stringSplit src "\n") 1) ((some p) (pairSecond p)) ((none) 1))))
     ((> (oldTypeDeclLine src) 0) (bad "a (schema ..) or (enum ..) form is retired: write schema T then one name: Type field per indented line (tools/codemod/headers.asl --apply)" (oldTypeDeclLine src)))
     (else (none)))
 
 fn headerError src: String strict: Bool -> (Option HeaderError)
   (if (lineHeader? src)
     (let [(sc (pairSecond (scanSource src)))]
-      (mt sc.err
+      (match sc.err
         ((some e) (some e))
-        ((none) (mt (shapeError sc.lines) ((some e) (some e)) ((none) (if strict (strictError src) (none)))))))
+        ((none) (match (shapeError sc.lines) ((some e) (some e)) ((none) (if strict (strictError src) (none)))))))
     (if strict (strictError src) (none)))
 
 fn importText l: String -> String
@@ -186,10 +186,10 @@ fn lastContentNo hs: (List HLine) -> Int64
   (fold (fn [acc h] (if (or (= h.kind (kBlank)) (= h.kind (kComment))) acc h.no)) 0 hs)
 
 fn kindAfter hs: (List HLine) -> Int64
-  (mt (listHead (contentKinds hs)) ((some h) h.kind) ((none) -1))
+  (match (listHead (contentKinds hs)) ((some h) h.kind) ((none) -1))
 
 fn render hs: (List HLine) prev: Int64 endNo: Int64 acc: (List String) -> (List String)
-  (mt (listHead hs)
+  (match (listHead hs)
     ((none) (listReverse acc))
     ((some h) (let [(tail (optionOr (listTail hs) (list)))
                     (content (and (!= h.kind (kBlank)) (and (!= h.kind (kComment)) (!= h.kind (kDocMore)))))

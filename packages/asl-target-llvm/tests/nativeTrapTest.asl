@@ -8,7 +8,7 @@
 ; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): compare used to shell out to asl-host to interpret each case's fixture as an independent oracle; every case is a fixed, deterministic program (no inputs beyond the literal 'one' = (stringLength \"a\")), so the live host run is replaced by a recordedCase table captured once from the leftover asl-host binary before HL-DELETE removed it. buildChecked's asl1-build-via-host is replaced by the cached native asl1 compiler (asl-cli/asl1Cache nativeAsl1!), the same replacement this unit already used elsewhere. testRawTraps' '(host) run irE2eTest.asl trap:X > ll' is replaced by './bin/asl run' of the same in-root file (irE2eTest.asl lives under asl/packages/asl-target-llvm/tests, inside the workspace root, where bin/asl's native CLI self-build runs it with no host at all -- confirmed empirically; this differs from the out-of-root case this unit found blocked elsewhere)")
 
 fn asl1Bin! -> (Result String String)
-  (mt (sys/context!)
+  (match (sys/context!)
     ((err e) (err e))
     ((ok ctx) (cache/nativeAsl1! ctx (str ctx.root "/asl/host/out/libaslrt.a") "/usr/bin/clang")))
 
@@ -32,15 +32,15 @@ fn packageDirs -> (List String)
 
 fn ! packageFiles -> (List String)
   (fold (fn [(acc (List String)) (dir String)] -> (List String)
-          (mt (dirList dir)
+          (match (dirList dir)
             ((err _) acc)
             ((ok names) (listAppend acc (map (fn [(n String)] -> String (str dir "/" n)) (filter (fn [(n String)] -> Bool (stringEndsWith? n ".asl")) names))))))
         (list) (packageDirs))
 
 fn ! parsed path: String -> (Result (List a/TopForm) String)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e) (err (str path ": unreadable: " e)))
-    ((ok src) (mt (a/parse src)
+    ((ok src) (match (a/parse src)
                 ((err pe) (err (str path ":" pe.line ":" pe.col ": " pe.msg)))
                 ((ok forms) (ok forms)))))
 
@@ -56,12 +56,12 @@ fn rowDoc line: String -> (List (Pair String String))
     (list))
 
 fn ! ledgerDocs -> (List (Pair String String))
-  (mt (fileReadString (ledgerPath))
+  (match (fileReadString (ledgerPath))
     ((err _) (list))
     ((ok t) (fold (fn [(acc (List (Pair String String))) (line String)] -> (List (Pair String String)) (listAppend acc (rowDoc line))) (list) (stringSplit t "\n"))))
 
 fn ! parseFailures path: String -> (List String)
-  (mt (parsed path) ((err e) (list e)) ((ok _) (list)))
+  (match (parsed path) ((err e) (list e)) ((ok _) (list)))
 
 fn staleDocs docs: (List (Pair String String)) -> (List String)
   (map (fn [(d (Pair String String))] -> String (pairFirst d))
@@ -130,7 +130,7 @@ fn cases -> (List (Pair String String))
                                          "  (do (sleepMs n) n)"
                                          ""
                                          "fn ! main args: (List String) -> (Result Int64 String)"
-                                         "  (if (= (mt (listHead args) ((some a) a) ((none) \"\")) \"c\")"
+                                         "  (if (= (match (listHead args) ((some a) a) ((none) \"\")) \"c\")"
                                          "    (ok (pause (- 0 (stringLength \"a\"))))"
                                          "    (ok (+ 9223372036854775807 (stringLength \"a\"))))") "\n")))
 
@@ -148,7 +148,7 @@ fn uncheckedCases -> (List (Pair String String))
                                       "(enum Tri (:c one [] \"One\") (:c two [] \"Two\") (:c three [] \"Three\"))"
                                       ""
                                       "fn pick t: Tri -> Int64"
-                                      "  (mt t ((one) 1) ((two) 2))"
+                                      "  (match t ((one) 1) ((two) 2))"
                                       ""
                                       "fn ! main -> (Result Int64 String)"
                                       "  (ok (pick (if (= (stringLength \"a\") 1) (three) (one))))") "\n")))
@@ -208,7 +208,7 @@ fn ! buildChecked work: String name: String text: String -> String
   (let [(src (str work "/" name ".asl")) (ll (str work "/" name ".ll")) (bin (str work "/" name))]
     (do
       (assert (ok? (fileWrite src text)) (str name ": writes source"))
-      (mt (asl1Bin!)
+      (match (asl1Bin!)
         ((err e) (assert false (str name ": native asl1 compiler: " e)))
         ((ok asl1Bin)
           (let [(built (sh (str asl1Bin " build " src " -o " ll)))]
@@ -220,14 +220,14 @@ fn ! buildUnchecked work: String name: String text: String -> String
   (let [(src (str work "/" name ".asl")) (ll (str work "/" name ".ll")) (bin (str work "/" name))]
     (do
       (assert (ok? (fileWrite src text)) (str name ": writes source"))
-      (mt (llvm/emitLlvmSource text "main")
+      (match (llvm/emitLlvmSource text "main")
         ((ok code) (assert (ok? (fileWrite ll code)) (str name ": writes IR")))
         ((err _) (assert false (str name ": emitLlvmSource lowers it"))))
       (linkChecked name ll bin)
       bin))
 
 fn ! linkChecked name: String ll: String bin: String -> Bool
-  (let [(ir (mt (fileReadString ll) ((ok t) t) ((err _) "")))]
+  (let [(ir (match (fileReadString ll) ((ok t) t) ((err _) "")))]
     (do
       (assert (stringContains? ir "define i32 @main(") (str name ": IR defines @main"))
       (assert (listEmpty? (removedIn ir)) (str name ": IR declares or calls no removed abi.c entry; found " (stringJoin (removedIn ir) " ")))
@@ -247,7 +247,7 @@ fn ! testCases work: String -> Bool
 
 fn irConstants ir: String -> (List String)
   (fold (fn [(acc (List String)) (l String)] -> (List String)
-          (mt (stringIndexOf l " x i8] c\"")
+          (match (stringIndexOf l " x i8] c\"")
             ((none) acc)
             ((some at) (let [(body (optionOr (stringSlice l (+ at 9) (stringLength l)) ""))
                              (text (optionOr (stringSlice body 0 (optionOr (stringIndexOf body "\"") (stringLength body))) ""))]
@@ -255,7 +255,7 @@ fn irConstants ir: String -> (List String)
         (list) (stringSplit ir "\n"))
 
 fn specRest p: String -> String
-  (mt (stringSlice p 0 1)
+  (match (stringSlice p 0 1)
     ((none) "")
     ((some c) (if (stringContains? "0123456789.-+ #lhzjtL" c)
                 (specRest (optionOr (stringSlice p 1 (stringLength p)) ""))
@@ -277,9 +277,9 @@ fn fitsText line: String c: String -> Bool
         (last (fold (fn [(acc String) (p String)] -> String p) first rest))
         (walked (fold (fn [(at Int64) (p String)] -> Int64
                         (if (< at 0) at
-                            (mt (stringSlice line at (stringLength line))
+                            (match (stringSlice line at (stringLength line))
                               ((none) -1)
-                              ((some tail) (mt (stringIndexOf tail p) ((none) -1) ((some i) (+ at (+ i (stringLength p)))))))))
+                              ((some tail) (match (stringIndexOf tail p) ((none) -1) ((some i) (+ at (+ i (stringLength p)))))))))
                       (stringLength first) rest))]
     (and (>= literal 6)
          (stringStartsWith? line first)
@@ -290,7 +290,7 @@ fn fitsText line: String c: String -> Bool
 fn ! testMixed work: String -> Bool
   (let [(bin (buildChecked work "mixedRaise" (optionOr (mapGet (mapFromPairs (cases)) "mixedRaise") "")))
         (src (str work "/mixedRaise.asl"))
-        (ir (mt (fileReadString (str work "/mixedRaise.ll")) ((ok t) t) ((err _) "")))
+        (ir (match (fileReadString (str work "/mixedRaise.ll")) ((ok t) t) ((err _) "")))
         (line (recordedCase "mixedRaise c").errLine)
         (formats (irConstants ir))]
     (do
@@ -346,7 +346,7 @@ fn ! testRawTraps work: String -> Bool
     (map (fn [(fixture (Pair String String))] -> Bool
            (let [(name (pairFirst fixture)) (ll (str work "/" (pairFirst fixture) ".ll")) (bin (str work "/" (pairFirst fixture)))
                  (emitted (sh (str "./bin/asl run asl/packages/asl-target-llvm/tests/irE2eTest.asl trap:" name " > " ll)))
-                 (ir (mt (fileReadString ll) ((ok t) t) ((err _) "")))
+                 (ir (match (fileReadString ll) ((ok t) t) ((err _) "")))
                  (linked (sh (str (clang) " -x ir " ll " -lm -o " bin)))
                  (out (sh bin))]
              (do

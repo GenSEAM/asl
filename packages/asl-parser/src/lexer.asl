@@ -20,10 +20,10 @@ fn tokenKind atom: String -> TokenType
   (if (isDelimiter atom) (delimKind atom) (if (stringStartsWith? atom ":") (tokKeyword atom) (if (stringStartsWith? atom "\"") (tokString atom) (tokSymbol atom))))
 
 fn tokenTypeName tt: TokenType -> String
-  (mt tt ((tokLparen) "LPAREN") ((tokRparen) "RPAREN") ((tokLbracket) "LBRACKET") ((tokRbracket) "RBRACKET") ((tokSymbol _) "SYMBOL") ((tokKeyword _) "KEYWORD") ((tokString _) "STRING") ((tokInt _) "INT") ((tokFloat _) "FLOAT") ((tokError _) "ERROR") ((tokEof) "EOF"))
+  (match tt ((tokLparen) "LPAREN") ((tokRparen) "RPAREN") ((tokLbracket) "LBRACKET") ((tokRbracket) "RBRACKET") ((tokSymbol _) "SYMBOL") ((tokKeyword _) "KEYWORD") ((tokString _) "STRING") ((tokInt _) "INT") ((tokFloat _) "FLOAT") ((tokError _) "ERROR") ((tokEof) "EOF"))
 
 fn charAt s: String i: Int64 -> String
-  (mt (stringSlice s i (+ i 1)) ((some c) c) ((none) ""))
+  (match (stringSlice s i (+ i 1)) ((some c) c) ((none) ""))
 
 fn isDigit c: String -> Bool
   (stringContains? "0123456789" c)
@@ -42,7 +42,7 @@ fn isExpMarker? ch: String -> Bool
   (or (= ch "e") (= ch "E"))
 
 fn runNext mode: RunMode ch: String -> RunStep
-  (mt mode ((runComment) (if (= ch "\n") (stepEmit) (stepContinue (runComment)))) ((runString) (cond ((= ch "\\") (stepContinue (runStringEsc))) ((= ch "\"") (stepFinish)) (else (stepContinue (runString))))) ((runStringEsc) (stepContinue (runString))) ((runInt) (cond ((isDigit ch) (stepContinue (runInt))) ((= ch ".") (stepContinue (runIntDot))) ((isExpMarker? ch) (stepContinue (runExpSign))) (else (stepEmit)))) ((runIntDot) (if (isDigit ch) (stepContinue (runFloat)) (stepEmit))) ((runFloat) (cond ((isDigit ch) (stepContinue (runFloat))) ((isExpMarker? ch) (stepContinue (runExpSign))) (else (stepEmit)))) ((runExpSign) (cond ((isDigit ch) (stepContinue (runExp))) ((or (= ch "+") (= ch "-")) (stepContinue (runExpSigned))) (else (stepEmit)))) ((runExpSigned) (if (isDigit ch) (stepContinue (runExp)) (stepEmit))) ((runExp) (if (isDigit ch) (stepContinue (runExp)) (stepEmit))) ((runSign) (cond ((isDigit ch) (stepContinue (runInt))) ((isSymbolChar ch) (stepContinue (runSymbol))) (else (stepEmit)))) (_ (if (isSymbolChar ch) (stepContinue mode) (stepEmit))))
+  (match mode ((runComment) (if (= ch "\n") (stepEmit) (stepContinue (runComment)))) ((runString) (cond ((= ch "\\") (stepContinue (runStringEsc))) ((= ch "\"") (stepFinish)) (else (stepContinue (runString))))) ((runStringEsc) (stepContinue (runString))) ((runInt) (cond ((isDigit ch) (stepContinue (runInt))) ((= ch ".") (stepContinue (runIntDot))) ((isExpMarker? ch) (stepContinue (runExpSign))) (else (stepEmit)))) ((runIntDot) (if (isDigit ch) (stepContinue (runFloat)) (stepEmit))) ((runFloat) (cond ((isDigit ch) (stepContinue (runFloat))) ((isExpMarker? ch) (stepContinue (runExpSign))) (else (stepEmit)))) ((runExpSign) (cond ((isDigit ch) (stepContinue (runExp))) ((or (= ch "+") (= ch "-")) (stepContinue (runExpSigned))) (else (stepEmit)))) ((runExpSigned) (if (isDigit ch) (stepContinue (runExp)) (stepEmit))) ((runExp) (if (isDigit ch) (stepContinue (runExp)) (stepEmit))) ((runSign) (cond ((isDigit ch) (stepContinue (runInt))) ((isSymbolChar ch) (stepContinue (runSymbol))) (else (stepEmit)))) (_ (if (isSymbolChar ch) (stepContinue mode) (stepEmit))))
 
 fn symbolToken raw: String -> TokenType
   (cond
@@ -51,10 +51,10 @@ fn symbolToken raw: String -> TokenType
     (else (tokSymbol raw)))
 
 fn floatToken raw: String -> TokenType
-  (mt (stringToFloat64 raw) ((some f) (tokFloat f)) ((none) (tokError (str "malformed float literal " raw))))
+  (match (stringToFloat64 raw) ((some f) (tokFloat f)) ((none) (tokError (str "malformed float literal " raw))))
 
 fn runToken mode: RunMode raw: String -> TokenType
-  (mt mode ((runSymbol) (symbolToken raw)) ((runKeyword) (tokKeyword raw)) ((runSign) (tokSymbol raw)) ((runString) (tokError "unterminated string literal")) ((runStringEsc) (tokError "unterminated string literal")) ((runComment) (tokError "a comment emits no token")) ((runIntDot) (tokError "a float needs a digit after its decimal point")) ((runExpSign) (tokError "a float needs a digit after its e or E")) ((runExpSigned) (tokError "a float needs a digit after its exponent sign")) ((runExp) (floatToken raw)) ((runFloat) (floatToken raw)) ((runInt) (tokInt (optionOr (stringToInt64 raw) 0))))
+  (match mode ((runSymbol) (symbolToken raw)) ((runKeyword) (tokKeyword raw)) ((runSign) (tokSymbol raw)) ((runString) (tokError "unterminated string literal")) ((runStringEsc) (tokError "unterminated string literal")) ((runComment) (tokError "a comment emits no token")) ((runIntDot) (tokError "a float needs a digit after its decimal point")) ((runExpSign) (tokError "a float needs a digit after its e or E")) ((runExpSigned) (tokError "a float needs a digit after its exponent sign")) ((runExp) (floatToken raw)) ((runFloat) (floatToken raw)) ((runInt) (tokInt (optionOr (stringToInt64 raw) 0))))
 
 (schema RunState (:f mode RunMode) (:f raw (List String)) (:f startLine Int64) (:f startCol Int64))
 
@@ -75,7 +75,7 @@ fn closeRun st: ScanState run: RunState ch: String -> ScanState
     (with st :toks (cons (makeToken (tokString closed) closed run.startLine run.startCol) st.toks) :col (+ st.col 1) :run (none)))
 
 fn afterRparen? toks: (List Token) line: Int64 col: Int64 -> Bool
-  (mt (listHead toks) ((some t) (and (mt t.kind ((tokRparen) true) (_ false)) (and (= t.line line) (= t.col (- col 1))))) ((none) false))
+  (match (listHead toks) ((some t) (and (match t.kind ((tokRparen) true) (_ false)) (and (= t.line line) (= t.col (- col 1))))) ((none) false))
 
 fn postfixCheck st: ScanState run: RunState raw: String kind: TokenType -> TokenType
   (if (and (stringStartsWith? raw ".") (and (stringContains? "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_" (charAt raw 1)) (and (not (stringEmpty? (charAt raw 1))) (not (afterRparen? st.toks run.startLine run.startCol)))))
@@ -83,17 +83,17 @@ fn postfixCheck st: ScanState run: RunState raw: String kind: TokenType -> Token
     kind)
 
 fn emitRun st: ScanState run: RunState -> ScanState
-  (mt run.mode ((runComment) (with st :run (none))) (_ (let [(raw (stringJoin (listReverse run.raw) ""))]
+  (match run.mode ((runComment) (with st :run (none))) (_ (let [(raw (stringJoin (listReverse run.raw) ""))]
        (with st :toks (cons (makeToken (postfixCheck st run raw (runToken run.mode raw)) raw run.startLine run.startCol) st.toks) :run (none)))))
 
 fn openChar st: ScanState ch: String -> ScanState
   (cond ((isWhitespace ch) (advance st ch)) ((isDelimiter ch) (with st :toks (cons (makeToken (delimKind ch) ch st.line st.col) st.toks) :col (+ st.col 1) :run (none))) ((isBrace ch) (with st :toks (cons (makeToken (tokSymbol ch) ch st.line st.col) st.toks) :col (+ st.col 1) :run (none))) ((= ch "\"") (openRun st (runString) "\"" ch)) ((= ch ";") (openRun st (runComment) ";" ch)) ((= ch "@") (with st :toks (cons (makeToken (tokError "invalid character '@': sigils are forbidden in AgentSlang grammar") "@" st.line st.col) st.toks) :col (+ st.col 1) :run (none))) ((isDigit ch) (openRun st (runInt) ch ch)) ((= ch "-") (openRun st (runSign) ch ch)) ((= ch ":") (openRun st (runKeyword) ":" ch)) (else (openRun st (runSymbol) ch ch)))
 
 fn step st: ScanState ch: String -> ScanState
-  (mt st.run ((some run) (mt (runNext run.mode ch) ((stepContinue m) (consumeRun st run m ch)) ((stepFinish) (closeRun st run ch)) ((stepEmit) (openChar (emitRun st run) ch)))) ((none) (openChar st ch)))
+  (match st.run ((some run) (match (runNext run.mode ch) ((stepContinue m) (consumeRun st run m ch)) ((stepFinish) (closeRun st run ch)) ((stepEmit) (openChar (emitRun st run) ch)))) ((none) (openChar st ch)))
 
 fn flush st: ScanState -> (List Token)
-  (let [(closed (mt st.run ((some run) (emitRun st run)) ((none) st)))] (listReverse (cons (makeToken (tokEof) "" closed.line closed.col) closed.toks)))
+  (let [(closed (match st.run ((some run) (emitRun st run)) ((none) st)))] (listReverse (cons (makeToken (tokEof) "" closed.line closed.col) closed.toks)))
 
 fn tokenize s: String -> (List Token)
   (flush (fold step (ScanState :toks (list) :line 1 :col 1 :run (none)) (stringChars s)))

@@ -72,7 +72,7 @@ fn csvParseRows text: String -> (Result (List (List String)) String)
                 (if (and (< (+ pos 1) n) (= (bytesGet bytes (+ pos 1)) 10))
                   (step step (+ pos 2) width acc) (err "bare carriage return in CSV"))
                 (step step (+ pos 1) width acc))
-              (mt (csvScanRow text bytes pos)
+              (match (csvScanRow text bytes pos)
                 ((err e) (err e))
                 ((ok row)
                   (let [(fields row.fields)
@@ -88,7 +88,7 @@ fn csvRowsRest rows: (List (List String)) -> (List (List String))
 
 fn csvFloatArray rows: (List (List String)) col: Int64 -> F64Array
   (let [(step (fn [(step Any) rest acc] -> (List F64Array)
-          (mt (listHead rest)
+          (match (listHead rest)
             ((none) (listReverse acc))
             ((some row)
               (let [(value (optionOr (stringToFloat64 (optionOr (listGet row col) "")) 0.0))]
@@ -97,7 +97,7 @@ fn csvFloatArray rows: (List (List String)) col: Int64 -> F64Array
 
 fn csvIntArray rows: (List (List String)) col: Int64 -> I64Array
   (let [(step (fn [(step Any) rest acc] -> (List I64Array)
-          (mt (listHead rest)
+          (match (listHead rest)
             ((none) (listReverse acc))
             ((some row)
               (let [(value (optionOr (stringToInt64 (optionOr (listGet row col) "")) 0))]
@@ -106,7 +106,7 @@ fn csvIntArray rows: (List (List String)) col: Int64 -> I64Array
 
 fn csvByteArray rows: (List (List String)) col: Int64 -> I8Array
   (let [(step (fn [(step Any) rest acc] -> (List I8Array)
-          (mt (listHead rest)
+          (match (listHead rest)
             ((none) (listReverse acc))
             ((some row)
               (let [(value (optionOr (stringToInt64 (optionOr (listGet row col) "")) 0))]
@@ -125,10 +125,10 @@ fn csvValidateCell typeName: String value: String -> Bool
           false))))
 
 fn csvValidateRow types: (List String) row: (List String) col: Int64 rowIndex: Int64 -> (Result Bool String)
-  (mt (listHead types)
+  (match (listHead types)
     ((none) (ok true))
     ((some typeName)
-      (mt (listHead row)
+      (match (listHead row)
         ((none) (err "CSV internal column bounds error"))
         ((some value)
           (if (csvValidateCell typeName value)
@@ -136,23 +136,23 @@ fn csvValidateRow types: (List String) row: (List String) col: Int64 rowIndex: I
             (err (str "invalid " typeName " CSV value at row " (stringFromInt64 rowIndex) " column " (stringFromInt64 col))))))))
 
 fn csvValidateRows types: (List String) rows: (List (List String)) rowIndex: Int64 -> (Result Bool String)
-  (mt (listHead rows)
+  (match (listHead rows)
     ((none) (ok true))
     ((some row)
-      (mt (csvValidateRow types row 0 rowIndex)
+      (match (csvValidateRow types row 0 rowIndex)
         ((err e) (err e))
         ((ok _) (csvValidateRows types (csvRowsRest rows) (+ rowIndex 1))))))
 
 fn csvParseColumns typeSpec: String text: String -> (Result CsvTable String)
-  (mt (csvTypeList typeSpec)
+  (match (csvTypeList typeSpec)
     ((err e) (err e))
     ((ok types)
-      (mt (csvParseRows text)
+      (match (csvParseRows text)
         ((err e) (err e))
         ((ok rows)
           (if (and (not (listEmpty? rows)) (!= (csvCountFields rows) (listLength types)))
             (err "CSV row width does not match type specification")
-            (mt (csvValidateRows types rows 0)
+            (match (csvValidateRows types rows 0)
               ((err e) (err e))
               ((ok _) (ok (CsvTable :rows (listLength rows) :types types :rawRows rows)))))))))
 
@@ -172,16 +172,16 @@ fn csvColumnCheck table: CsvTable col: Int64 typeName: String -> (Result Bool St
           (err (str "CSV column " (stringFromInt64 col) " has type " declared ", not " typeName))))))
 
 fn csvColumnF64 table: CsvTable col: Int64 -> (Result F64Array String)
-  (mt (csvColumnCheck table col "f64")
+  (match (csvColumnCheck table col "f64")
     ((err e) (err e))
     ((ok _) (ok (csvFloatArray table.rawRows col))))
 
 fn csvColumnI64 table: CsvTable col: Int64 -> (Result I64Array String)
-  (mt (csvColumnCheck table col "i64")
+  (match (csvColumnCheck table col "i64")
     ((err e) (err e))
     ((ok _) (ok (csvIntArray table.rawRows col))))
 
 fn csvColumnI8 table: CsvTable col: Int64 -> (Result I8Array String)
-  (mt (csvColumnCheck table col "i8")
+  (match (csvColumnCheck table col "i8")
     ((err e) (err e))
     ((ok _) (ok (csvByteArray table.rawRows col))))

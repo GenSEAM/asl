@@ -26,7 +26,7 @@ fn testSysImportBuiltin -> Bool
     (do (assert (listEmpty? ds) (str "sys import alias resolves builtin signatures without module files: " (diagText ds))) true))
 
 fn testUnification -> Bool
-  (let [(i64 (ty/tyCon "Int64" (list) (none) (none))) (strTy (ty/tyCon "String" (list) (none) (none))) (v1 (ty/tyVar 1 "any")) (fn1 (ty/tyFun (list v1) v1)) (fn2 (ty/tyFun (list i64) i64))] (assert (u/typeEqual? i64 i64) "Concrete type equality") (refute (u/typeEqual? i64 strTy) "Distinct primitive inequality") (refute (not (u/typeEqual? i64 i64)) "Identical concrete types must not be unequal") (mt (u/unify v1 i64 (mapEmpty) "testMod") ((u/uOk s1) (assert (u/typeEqual? (u/applySubst s1 v1) i64) "Metavariable substituted to concrete type") (refute (u/typeEqual? (u/applySubst s1 v1) strTy) "Substituted variable must not equal distinct type")) ((u/uErr _ _) (assert false "Metavariable unification should succeed"))) (mt (u/unify fn1 fn2 (mapEmpty) "testMod") ((u/uOk s2) (assert (u/typeEqual? (u/applySubst s2 v1) i64) "HOF parameter type inferred") (refute (u/typeEqual? (u/applySubst s2 v1) strTy) "Inferred HOF parameter type must not equal String")) ((u/uErr _ _) (assert false "HOF unification should succeed"))) (mt (u/unify i64 strTy (mapEmpty) "testMod") ((u/uOk _) (assert false "Unifying Int64 and String must fail")) ((u/uErr msg _) (assert (stringContains? msg "expected") "Type error message contains expected") (refute (stringEmpty? msg) "Type error message must not be empty"))) true)
+  (let [(i64 (ty/tyCon "Int64" (list) (none) (none))) (strTy (ty/tyCon "String" (list) (none) (none))) (v1 (ty/tyVar 1 "any")) (fn1 (ty/tyFun (list v1) v1)) (fn2 (ty/tyFun (list i64) i64))] (assert (u/typeEqual? i64 i64) "Concrete type equality") (refute (u/typeEqual? i64 strTy) "Distinct primitive inequality") (refute (not (u/typeEqual? i64 i64)) "Identical concrete types must not be unequal") (match (u/unify v1 i64 (mapEmpty) "testMod") ((u/uOk s1) (assert (u/typeEqual? (u/applySubst s1 v1) i64) "Metavariable substituted to concrete type") (refute (u/typeEqual? (u/applySubst s1 v1) strTy) "Substituted variable must not equal distinct type")) ((u/uErr _ _) (assert false "Metavariable unification should succeed"))) (match (u/unify fn1 fn2 (mapEmpty) "testMod") ((u/uOk s2) (assert (u/typeEqual? (u/applySubst s2 v1) i64) "HOF parameter type inferred") (refute (u/typeEqual? (u/applySubst s2 v1) strTy) "Inferred HOF parameter type must not equal String")) ((u/uErr _ _) (assert false "HOF unification should succeed"))) (match (u/unify i64 strTy (mapEmpty) "testMod") ((u/uOk _) (assert false "Unifying Int64 and String must fail")) ((u/uErr msg _) (assert (stringContains? msg "expected") "Type error message contains expected") (refute (stringEmpty? msg) "Type error message must not be empty"))) true)
 
 ; (:m :ref HLFIXB :do "unify's representationAlias? equivalence (Map/PreludeMap, Int32/Int64) is scoped to the module literally named prelude; a user module declaring the same Int32-to-Int64 shape prelude's own int32ToInt64 uses must still get ERR_TYPE_MISMATCH, while prelude.asl itself stays at zero diagnostics (preludeZeroErrorsTest)")
 fn testIntWidthAliasScopedToPrelude -> Bool
@@ -34,7 +34,7 @@ fn testIntWidthAliasScopedToPrelude -> Bool
     (do (assert (not (listEmpty? ds)) (str "a user module's own Int32-returned-as-Int64 is not aliased the way prelude.asl's int32ToInt64 is: " (diagText ds))) true))
 
 fn testOccurs -> Bool
-  (let [(v1 (ty/tyVar 1 "any")) (i64 (ty/tyCon "Int64" (list) (none) (none))) (listV1 (ty/tyCon "List" (list v1) (none) (none))) (fnV1 (ty/tyFun (list v1) i64))] (assert (u/occursIn? 1 listV1 (mapEmpty)) "Metavariable occurs in constructed list") (refute (not (u/occursIn? 1 listV1 (mapEmpty))) "Metavariable must occur in recursive list type") (refute (u/occursIn? 1 i64 (mapEmpty)) "Metavariable does not occur in primitive Int64") (assert (not (u/occursIn? 1 i64 (mapEmpty))) "Metavariable must not occur in non-recursive primitive") (mt (u/unify v1 listV1 (mapEmpty) "testMod") ((u/uOk _) (assert false "Occurs check must reject v1 = List[v1]")) ((u/uErr msg _) (assert (stringContains? msg "occurs check") "Error message reports occurs check failure") (refute (stringEmpty? msg) "Occurs check error message must not be empty"))) (mt (u/unify v1 fnV1 (mapEmpty) "testMod") ((u/uOk _) (assert false "Occurs check must reject v1 = (fn [v1] -> Int64)")) ((u/uErr msg _) (assert (stringContains? msg "occurs check") "Function occurs check failure reported") (refute (stringEmpty? msg) "Function occurs check error message must not be empty"))) true)
+  (let [(v1 (ty/tyVar 1 "any")) (i64 (ty/tyCon "Int64" (list) (none) (none))) (listV1 (ty/tyCon "List" (list v1) (none) (none))) (fnV1 (ty/tyFun (list v1) i64))] (assert (u/occursIn? 1 listV1 (mapEmpty)) "Metavariable occurs in constructed list") (refute (not (u/occursIn? 1 listV1 (mapEmpty))) "Metavariable must occur in recursive list type") (refute (u/occursIn? 1 i64 (mapEmpty)) "Metavariable does not occur in primitive Int64") (assert (not (u/occursIn? 1 i64 (mapEmpty))) "Metavariable must not occur in non-recursive primitive") (match (u/unify v1 listV1 (mapEmpty) "testMod") ((u/uOk _) (assert false "Occurs check must reject v1 = List[v1]")) ((u/uErr msg _) (assert (stringContains? msg "occurs check") "Error message reports occurs check failure") (refute (stringEmpty? msg) "Occurs check error message must not be empty"))) (match (u/unify v1 fnV1 (mapEmpty) "testMod") ((u/uOk _) (assert false "Occurs check must reject v1 = (fn [v1] -> Int64)")) ((u/uErr msg _) (assert (stringContains? msg "occurs check") "Function occurs check failure reported") (refute (stringEmpty? msg) "Function occurs check error message must not be empty"))) true)
 
 fn testCheckSource -> Bool
   (let [(wellTyped "(module m :x [id foo]) (fn id [(x Int64)] -> Int64 x) (fn foo [] -> Int64 (id 42))") (dOk (c/checkSource wellTyped (mapEmpty) "m.asl")) (illTyped "(module m :x [helper g]) (fn helper [] -> String \"mismatch\") (fn g [] -> Int64 (helper))") (dErr (c/checkSource illTyped (mapEmpty) "m.asl")) (litErr "(module m :x [foo]) (fn foo [] -> Int64 \"bad\")") (dLit (c/checkSource litErr (mapEmpty) "m.asl")) (docErr (c/checkSource "(module m :x [foo]) (fn foo [] -> Int64 42)" (mapEmpty) "m.asl"))] (assert (listEmpty? dOk) "Well-typed source produces zero diagnostics") (refute (not (listEmpty? dOk)) "Well-typed source must not produce diagnostics") (refute (listEmpty? dErr) "Call return mismatch produces diagnostics") (assert (> (listLength dErr) 0) "Diagnostic count >= 1 for mismatch") (refute (listEmpty? dLit) "Literal type mismatch produces diagnostics") (assert (> (listLength dLit) 0) "Literal type mismatch diagnostic count >= 1") (assert (listEmpty? docErr) "an exported function without a source doc produces no diagnostics: docs live in doc.asn (D158)") (refute (> (listLength docErr) 0) "no rule-8 diagnostic for an exported function without a source doc") true)
@@ -77,14 +77,14 @@ fn testRed3BuiltinsAndQualifiedCtors -> Bool
         (assert (listEmpty? bytesSetOk) (str "bytesSet (Bytes, Int64, Int64) -> Unit well-typed: " (diagText bytesSetOk)))
         (assert (> (listLength badBytesSet) 0) "bytesSet type mismatch on non-Bytes first arg detected")
         (let [(depSrc "(module depMod :x [Point Color red green] :i []) (schema Point (:f x Int64 \"x\") (:f y Int64 \"y\")) (enum Color (:c red [] \"red\") (:c green [(code Int64)] \"green\")) (schema Secret (:f val Int64 \"secret\"))")
-              (depForms (mt (a/parse depSrc) ((ok f) f) ((err _) (list))))
+              (depForms (match (a/parse depSrc) ((ok f) f) ((err _) (list))))
               (depSummary (r/collectSummary depForms "/path/to/depMod.asl"))
               (deps (mapSet (mapEmpty) "/path/to/depMod.asl" depSummary))
-              (consumerSrc "(module consumer :x [makeGreen matchColor makePoint] :i [(depMod :a d)]) (fn makeGreen [] -> d/Color (d/green 42)) (fn matchColor [(c d/Color)] -> Int64 (mt c ((d/red) 0) ((d/green code) code))) (fn makePoint [(pt d/Point)] -> Int64 (let [(p2 (d/Point :x 10 :y 20))] (+ pt.x p2.y)))")
+              (consumerSrc "(module consumer :x [makeGreen matchColor makePoint] :i [(depMod :a d)]) (fn makeGreen [] -> d/Color (d/green 42)) (fn matchColor [(c d/Color)] -> Int64 (match c ((d/red) 0) ((d/green code) code))) (fn makePoint [(pt d/Point)] -> Int64 (let [(p2 (d/Point :x 10 :y 20))] (+ pt.x p2.y)))")
               (consumerOk (c/checkSource consumerSrc deps "consumer.asl"))
               (badArgSrc "(module consumer :x [makeGreen] :i [(depMod :a d)]) (fn makeGreen [] -> d/Color (d/green \"not-int\"))")
               (consumerBadArg (c/checkSource badArgSrc deps "consumer.asl"))
-              (badCtorSrc "(module consumer :x [matchColor] :i [(depMod :a d)]) (fn matchColor [(c d/Color)] -> Int64 (mt c ((d/blue) 0) ((d/red) 1)))")
+              (badCtorSrc "(module consumer :x [matchColor] :i [(depMod :a d)]) (fn matchColor [(c d/Color)] -> Int64 (match c ((d/blue) 0) ((d/red) 1)))")
               (consumerBadCtor (c/checkSource badCtorSrc deps "consumer.asl"))
               (badSchemaFieldSrc "(module consumer :x [makePoint] :i [(depMod :a d)]) (fn makePoint [] -> d/Point (d/Point :x \"not-int\" :y 20))")
               (consumerBadSchemaField (c/checkSource badSchemaFieldSrc deps "consumer.asl"))
@@ -92,23 +92,23 @@ fn testRed3BuiltinsAndQualifiedCtors -> Bool
               (consumerBadSchemaMissing (c/checkSource badSchemaMissingSrc deps "consumer.asl"))
               (badSchemaUnexportedSrc "(module consumer :x [leakSecret] :i [(depMod :a d)]) (fn leakSecret [] -> d/Secret (d/Secret :val 42))")
               (consumerBadSchemaUnexported (c/checkSource badSchemaUnexportedSrc deps "consumer.asl"))
-              (consumerSummary (r/collectSummary (mt (a/parse badSchemaUnexportedSrc) ((ok f) f) ((err _) (list))) "consumer.asl"))
+              (consumerSummary (r/collectSummary (match (a/parse badSchemaUnexportedSrc) ((ok f) f) ((err _) (list))) "consumer.asl"))
               (badEnumAritySrc "(module consumer :x [makeGreen] :i [(depMod :a d)]) (fn makeGreen [] -> d/Color (d/green 1 2))")
               (consumerBadEnumArity (c/checkSource badEnumAritySrc deps "consumer.asl"))
               (depModA "(module pkgA/util :x [foo] :i []) (fn foo [] -> Int64 1)")
-              (summaryA (r/collectSummary (mt (a/parse depModA) ((ok f) f) ((err _) (list))) "/pkgA/util.asl"))
+              (summaryA (r/collectSummary (match (a/parse depModA) ((ok f) f) ((err _) (list))) "/pkgA/util.asl"))
               (depModB "(module pkgB/util :x [bar] :i []) (fn bar [] -> Int64 2)")
-              (summaryB (r/collectSummary (mt (a/parse depModB) ((ok f) f) ((err _) (list))) "/pkgB/util.asl"))
+              (summaryB (r/collectSummary (match (a/parse depModB) ((ok f) f) ((err _) (list))) "/pkgB/util.asl"))
               (collidingDeps (mapSet (mapSet (mapEmpty) "/pkgA/util.asl" summaryA) "/pkgB/util.asl" summaryB))
               (ambigRes (r/resolveDepTarget "util" collidingDeps))
               (consumerCollisionSrc "(module consumer :x [callUtil] :i [(util :a u)]) (fn callUtil [] -> Int64 (u/foo))")
               (consumerCollision (c/checkSource consumerCollisionSrc collidingDeps "consumer.asl"))
               (nameOnlyMod "(module vendor/tool :x [go] :i []) (fn go [] -> Int64 1)")
-              (nameOnlySummary (r/collectSummary (mt (a/parse nameOnlyMod) ((ok f) f) ((err _) (list))) "/custom/store.asl"))
+              (nameOnlySummary (r/collectSummary (match (a/parse nameOnlyMod) ((ok f) f) ((err _) (list))) "/custom/store.asl"))
               (nameOnlyDeps (mapSet (mapEmpty) "/custom/store.asl" nameOnlySummary))
               (nameOnlyRes (r/resolveDepTarget "tool" nameOnlyDeps))
               (pathOnlyMod "(module Standalone :x [go] :i []) (fn go [] -> Int64 2)")
-              (pathOnlySummary (r/collectSummary (mt (a/parse pathOnlyMod) ((ok f) f) ((err _) (list))) "/some/path/helper.asl"))
+              (pathOnlySummary (r/collectSummary (match (a/parse pathOnlyMod) ((ok f) f) ((err _) (list))) "/some/path/helper.asl"))
               (pathOnlyDeps (mapSet (mapEmpty) "/some/path/helper.asl" pathOnlySummary))
               (pathOnlyRes (r/resolveDepTarget "helper" pathOnlyDeps))
               (dupDeps (mapSet (mapSet (mapEmpty) "/some/path/helper.asl" pathOnlySummary) "aliasKey" pathOnlySummary))
@@ -124,7 +124,7 @@ fn testRed3BuiltinsAndQualifiedCtors -> Bool
               (assert (none? (c/schemaOfCtor "d/Secret" consumerSummary deps)) "schemaOfCtor returns none for unexported schema")
               (assert (> (listLength consumerBadEnumArity) 0) "qualified enum constructor arity mismatch detected")
               (assert (err? ambigRes) "ambiguous dependency match returns err")
-              (assert (stringContains? (mt ambigRes ((err msg) msg) ((ok _) "")) "ERR_AMBIGUOUS_MODULE") "ambiguous dependency error names ERR_AMBIGUOUS_MODULE")
+              (assert (stringContains? (match ambigRes ((err msg) msg) ((ok _) "")) "ERR_AMBIGUOUS_MODULE") "ambiguous dependency error names ERR_AMBIGUOUS_MODULE")
               (assert (> (listLength consumerCollision) 0) "ambiguous module import produces diagnostic")
               (assert (stringContains? (diagText consumerCollision) "ERR_AMBIGUOUS_MODULE") "collision diagnostic names ERR_AMBIGUOUS_MODULE")
               (assert (ok? nameOnlyRes) "module name suffix matches dependency target")
@@ -144,10 +144,10 @@ fn testRed4Class1EnumSchemaAndAmbiguousTarget -> Bool
         (assert (ok? uniqRes) "unique suffix match succeeds")
         (assert (= (resultOr uniqRes mod1).name "pkg3/unique") "unique match resolved correct module")
         (let [(depSrc "(module depMod :x [Color Point] :i []) (enum Color (:c red [] \"red\") (:c green [(code Int64)] \"green\")) (schema Point (:f x Int64) (:f y Int64))")
-              (depForms (mt (a/parse depSrc) ((ok f) f) ((err _) (list))))
+              (depForms (match (a/parse depSrc) ((ok f) f) ((err _) (list))))
               (depSummary (r/collectSummary depForms "/path/to/depMod.asl"))
               (deps (mapSet (mapEmpty) "/path/to/depMod.asl" depSummary))
-              (consumerSrc "(module consumer :x [matchColor makePoint getX] :i [(depMod :a d)]) (fn matchColor [(c d/Color)] -> Int64 (mt c ((red) 0) ((green code) code))) (fn makePoint [] -> d/Point (Point :x 10 :y 20)) (fn getX [(p d/Point)] -> Int64 p.x)")
+              (consumerSrc "(module consumer :x [matchColor makePoint getX] :i [(depMod :a d)]) (fn matchColor [(c d/Color)] -> Int64 (match c ((red) 0) ((green code) code))) (fn makePoint [] -> d/Point (Point :x 10 :y 20)) (fn getX [(p d/Point)] -> Int64 p.x)")
               (consumerDiags (c/checkSource consumerSrc deps "consumer.asl"))
               (badPointSrc "(module consumer :x [makePoint] :i [(depMod :a d)]) (fn makePoint [] -> d/Point (Point :x \"not-int\" :y 20))")
               (badPointDiags (c/checkSource badPointSrc deps "consumer.asl"))]
@@ -156,7 +156,7 @@ fn testRed4Class1EnumSchemaAndAmbiguousTarget -> Bool
               true))))
 
 fn testRed4Class2ScopeTracking -> Bool
-  (let [(src "(module m :x [foo bar]) (fn foo [(x Int64)] -> Int64 (mt x ((unknownCtor a b) (+ a b)) ((otherCtor [v1 v2]) (+ v1 v2)) ([w1 w2] (+ w1 w2)) (_ 0))) (fn bar [(opt (Option Int64))] -> Int64 (mt opt ((some y z) (+ y z)) (_ 0)))")
+  (let [(src "(module m :x [foo bar]) (fn foo [(x Int64)] -> Int64 (match x ((unknownCtor a b) (+ a b)) ((otherCtor [v1 v2]) (+ v1 v2)) ([w1 w2] (+ w1 w2)) (_ 0))) (fn bar [(opt (Option Int64))] -> Int64 (match opt ((some y z) (+ y z)) (_ 0)))")
         (diags (c/checkSource src (mapEmpty) "m.asl"))
         (dStr (diagText diags))]
     (do (assert (stringContains? dStr "unknown constructor in match pattern: unknownCtor") "reports unknown constructor")
@@ -179,7 +179,7 @@ fn testRed7Builtins -> Bool
     (let [(badAnd (c/checkSource "(module m :x [f]) (fn f [] -> Bool (and true 1))" (mapEmpty) "m.asl")) (badOr (c/checkSource "(module m :x [f]) (fn f [] -> Bool (or false true \"x\"))" (mapEmpty) "m.asl"))] (do (assert (listEmpty? ok) (str "host prelude and variadic booleans typecheck: " (diagText ok))) (assert (> (listLength bad) 0) "incorrect listAny predicate remains diagnostic") (assert (stringContains? (diagText badAnd) "Bool") (str "and checks every variadic argument: " (diagText badAnd))) (assert (stringContains? (diagText badOr) "Bool") (str "or checks every variadic argument: " (diagText badOr))) (assert (listEmpty? (c/checkSource "(module m :x [f]) (fn f [(n Int64)] -> String (str n \" of \" 2.5 \" \" true))" (mapEmpty) "m.asl")) "str interpolates arguments of any type, as bStr does at runtime") true)))
 
 fn testRed7FileStat -> Bool
-  (let [(good (c/checkSource "(module m :x [f]) (fn ! f [(p String)] -> Int64 (mt (fileStat p) ((ok st) st.size) ((err _) 0)))" (mapEmpty) "m.asl")) (bad (c/checkSource "(module m :x [f]) (fn ! f [(p String)] -> Bool (mt (fileStat p) ((ok st) st.size) ((err _) false)))" (mapEmpty) "m.asl"))] (do (assert (listEmpty? good) (str "FileStat size field resolves: " (diagText good))) (assert (> (listLength bad) 0) "FileStat size Int64 shape rejects Bool return") true))
+  (let [(good (c/checkSource "(module m :x [f]) (fn ! f [(p String)] -> Int64 (match (fileStat p) ((ok st) st.size) ((err _) 0)))" (mapEmpty) "m.asl")) (bad (c/checkSource "(module m :x [f]) (fn ! f [(p String)] -> Bool (match (fileStat p) ((ok st) st.size) ((err _) false)))" (mapEmpty) "m.asl"))] (do (assert (listEmpty? good) (str "FileStat size field resolves: " (diagText good))) (assert (> (listLength bad) 0) "FileStat size Int64 shape rejects Bool return") true))
 
 fn testHostRecordProcessOutput -> Bool
   (let [(good (c/checkSource "(module m :x [f g]) (fn ! f [(c String)] -> Int64 (processRun c).exitCode) (fn g [(r ProcessOutput)] -> String (str r.stdout r.stderr))" (mapEmpty) "m.asl")) (bad (c/checkSource "(module m :x [f]) (fn ! f [(c String)] -> Int64 (processRun c).stdout)" (mapEmpty) "m.asl"))]
@@ -300,7 +300,7 @@ fn testKeywordCallRejected -> Bool
         (nestedArg (c/checkSource (kwCallProgram "(+ 1 (:k 2))") (mapEmpty) "m.asl"))
         (nestedCond (c/checkSource (kwCallProgram "(cond ((:k 1) 0) (else 1))") (mapEmpty) "m.asl"))
         (depSrc "(module depMod :x [Point] :i []) (schema Point (:f x Int64 \"x\") (:f y Int64 \"y\"))")
-        (depForms (mt (a/parse depSrc) ((ok f) f) ((err _) (list))))
+        (depForms (match (a/parse depSrc) ((ok f) f) ((err _) (list))))
         (depSummary (r/collectSummary depForms "/path/to/depMod.asl"))
         (deps (mapSet (mapEmpty) "/path/to/depMod.asl" depSummary))
         (realCtor (c/checkSource "(module consumer :x [f] :i [(depMod :a d)]) (fn f [] -> d/Point (d/Point :x 10 :y 20))" deps "consumer.asl"))

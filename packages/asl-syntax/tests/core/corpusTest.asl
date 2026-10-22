@@ -130,7 +130,7 @@ fn testUpstreamEntryInvalidSha! -> Bool
                  "asl/packages/asl-syntax/manifest.asn"))
         (res (crp/verifyUpstreamEntry! entry))]
     (assert (err? res) "corrupted sha256 fails verification")
-    (mt res
+    (match res
       ((ok _) (assert false "expected sha mismatch error"))
       ((err msg)
        (do
@@ -147,7 +147,7 @@ fn testUpstreamEntryMissingFile! -> Bool
                  "nonexistent/file/path/sample.asn"))
         (res (crp/verifyUpstreamEntry! entry))]
     (assert (err? res) "missing file fails verification")
-    (mt res
+    (match res
       ((ok _) (assert false "expected file missing error"))
       ((err msg)
        (assert (stringContains? msg "not found") "error reports file not found")))
@@ -266,7 +266,7 @@ fn testBrokenManifestUnbalanced! -> Bool
         (parseRes (crp/parseUpstreamManifest content))
         (verifyRes (crp/verifyUpstreamManifestFile! path))]
     (assert (err? parseRes) "unbalanced manifest parse rejected")
-    (mt parseRes
+    (match parseRes
       ((ok _) (assert false "expected unbalanced manifest parse error"))
       ((err msg) (assert (stringContains? msg "byte") "unbalanced parse error names byte offset")))
     (assert (err? verifyRes) "unbalanced manifest verify rejected")

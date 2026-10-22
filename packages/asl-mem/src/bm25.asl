@@ -22,7 +22,7 @@ fn termFrequency terms: (List Str) target: Str -> I64
   (countTermFreqLoop terms target 0)
 
 fn updateDfCountsLoop uniqueTerms: (List Str) dfMap: (Map Str I64) -> (Map Str I64)
-  (if (listEmpty? uniqueTerms) dfMap (let [(t (optionOr (listHead uniqueTerms) "")) (rest (optionOr (listTail uniqueTerms) (list))) (currDf (mt (mapGet dfMap t) ((some c) c) ((none) 0)))] (updateDfCountsLoop rest (mapSet dfMap t (+ currDf 1)))))
+  (if (listEmpty? uniqueTerms) dfMap (let [(t (optionOr (listHead uniqueTerms) "")) (rest (optionOr (listTail uniqueTerms) (list))) (currDf (match (mapGet dfMap t) ((some c) c) ((none) 0)))] (updateDfCountsLoop rest (mapSet dfMap t (+ currDf 1)))))
 
 fn buildDfMapLoop docs: (List Bm25Doc) dfMap: (Map Str I64) -> (Map Str I64)
   (if (listEmpty? docs) dfMap (let [(d (optionOr (listHead docs) (Bm25Doc :id "" :terms (list) :length 0))) (rest (optionOr (listTail docs) (list))) (uniqueTerms (dedupTerms d.terms)) (nextDf (updateDfCountsLoop uniqueTerms dfMap))] (buildDfMapLoop rest nextDf)))
@@ -40,7 +40,7 @@ fn calcIdf dfCount: I64 totalDocs: I64 -> F64
   (computeIdf dfCount totalDocs)
 
 fn scoreBm25Term term: Str doc: Bm25Doc index: Bm25Index k1: F64 b: F64 -> F64
-  (let [(tf (termFrequency doc.terms term))] (if (<= tf 0) 0.0 (let [(tfF (int64ToFloat64 tf)) (df-c (mt (mapGet index.termDocCounts term) ((some c) c) ((none) 0))) (idf (computeIdf df-c index.docCount)) (docLen (int64ToFloat64 doc.length)) (avgLen index.avgDocLength) (lenRatio (if (<= avgLen 0.0) 1.0 (/ docLen avgLen))) (kVal (* k1 (+ (- 1.0 b) (* b lenRatio)))) (num (* tfF (+ k1 1.0))) (denom (+ tfF kVal))] (if (<= denom 0.0) 0.0 (* idf (/ num denom))))))
+  (let [(tf (termFrequency doc.terms term))] (if (<= tf 0) 0.0 (let [(tfF (int64ToFloat64 tf)) (df-c (match (mapGet index.termDocCounts term) ((some c) c) ((none) 0))) (idf (computeIdf df-c index.docCount)) (docLen (int64ToFloat64 doc.length)) (avgLen index.avgDocLength) (lenRatio (if (<= avgLen 0.0) 1.0 (/ docLen avgLen))) (kVal (* k1 (+ (- 1.0 b) (* b lenRatio)))) (num (* tfF (+ k1 1.0))) (denom (+ tfF kVal))] (if (<= denom 0.0) 0.0 (* idf (/ num denom))))))
 
 fn scoreBm25Loop qTerms: (List Str) doc: Bm25Doc index: Bm25Index k1: F64 b: F64 acc: F64 -> F64
   (if (listEmpty? qTerms) acc (let [(t (optionOr (listHead qTerms) "")) (rest (optionOr (listTail qTerms) (list))) (termScore (scoreBm25Term t doc index k1 b))] (scoreBm25Loop rest doc index k1 b (+ acc termScore))))

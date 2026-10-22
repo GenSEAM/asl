@@ -16,12 +16,12 @@ fn synthSource d: Int64 q: Int64 extra: String -> String
        (stringJoin (map (fn [(i Int64)] -> String (str "(m" (stringFromInt64 (mod i d)) "/f)")) (range 0 q)) " ") " " extra " 0)\n")
 
 fn synthDiags d: Int64 q: Int64 extra: String deps: (Map String r/ModuleSummary) -> (List ty/Diagnostic)
-  (mt (a/parse (synthSource d q extra))
+  (match (a/parse (synthSource d q extra))
     ((err _) (list (ty/Diagnostic :code "parse" :message "synthetic source did not parse" :msg "" :line 0 :col 0 :path "syn.asl")))
     ((ok forms) (r/resolveModule (r/collectSummary forms "syn.asl") forms deps)))
 
 fn synthDiagsIn d: Int64 q: Int64 extra: String ix: r/DepIndex -> (List ty/Diagnostic)
-  (mt (a/parse (synthSource d q extra))
+  (match (a/parse (synthSource d q extra))
     ((err _) (list (ty/Diagnostic :code "parse" :message "synthetic source did not parse" :msg "" :line 0 :col 0 :path "syn.asl")))
     ((ok forms) (r/resolveModuleIn (r/collectSummary forms "syn.asl") forms ix)))
 
@@ -44,7 +44,7 @@ fn probes -> (List String)
         "c" "b/c" "a/b/c" "r/a/b/c" "missing" "" "pkg" "x/pkg/src/mod1" "/x/pkg/src/mod1.asl")
 
 fn resultText res: (Result r/ModuleSummary String) -> String
-  (mt res ((ok m) (str "ok " m.name " @ " m.path)) ((err msg) (str "err " msg)))
+  (match res ((ok m) (str "ok " m.name " @ " m.path)) ((err msg) (str "err " msg)))
 
 fn testIndexAgreesWithScan -> Bool
   (let [(deps (trickyDeps)) (ix (r/depIndexOf deps)) (scan (r/depScanOf deps))
@@ -103,5 +103,5 @@ fn ! runTests -> Bool
       true)
 
 fn ! main args: (List String) -> (Result Int64 String)
-  (let [(d (optionOr (mt (listHead args) ((some s) (stringToInt64 s)) ((none) (none))) 50))]
+  (let [(d (optionOr (match (listHead args) ((some s) (stringToInt64 s)) ((none) (none))) 50))]
     (do (println (str "diags " (stringFromInt64 (listLength (synthDiags d 2000 "" (synthDeps d)))))) (ok 0)))

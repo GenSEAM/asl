@@ -16,19 +16,19 @@ fn checkAccept input: String msg: String -> Bool
   (ok? (j/jsonParse input))
 
 fn checkRejectWith input: String expectedSubstr: String -> Bool
-  (mt (j/jsonParse input)
+  (match (j/jsonParse input)
     ((ok _) false)
     ((err msg)
      (and (stringContains? msg "at byte ")
           (stringContains? msg expectedSubstr))))
 
 fn checkReject input: String msg: String -> Bool
-  (mt (j/jsonParse input)
+  (match (j/jsonParse input)
     ((ok _) false)
     ((err msg) (stringContains? msg "at byte ")))
 
 fn checkParity! input: String -> Bool
-  (mt (j/jsonParse input)
+  (match (j/jsonParse input)
     ((ok parsed)
      (let [(aslEmit (j/jsonEmit parsed))
            (pyEmit (runPythonJson! input))]
@@ -157,24 +157,24 @@ fn testParityCases! -> Bool
 
 fn testApiAndInspection -> Bool
   (let [(parsed (j/jsonParse "{\"name\": \"Alice\", \"age\": 30, \"active\": true, \"scores\": [95, 87], \"extra\": null}"))]
-    (mt parsed
+    (match parsed
       ((err e) (assert false (str "API test parse failed: " e)))
       ((ok obj)
        (do
-         (mt (j/jsonGet obj "name")
-           ((some v) (mt v ((j/jstr s) (assert (= s "Alice") "name Alice")) (_ (assert false "expected jstr"))))
+         (match (j/jsonGet obj "name")
+           ((some v) (match v ((j/jstr s) (assert (= s "Alice") "name Alice")) (_ (assert false "expected jstr"))))
            ((none) (assert false "name not found")))
-         (mt (j/jsonGet obj "age")
-           ((some v) (mt v ((j/jint i) (assert (= i 30) "age 30")) (_ (assert false "expected jint"))))
+         (match (j/jsonGet obj "age")
+           ((some v) (match v ((j/jint i) (assert (= i 30) "age 30")) (_ (assert false "expected jint"))))
            ((none) (assert false "age not found")))
-         (mt (j/jsonGet obj "active")
-           ((some v) (mt v ((j/jbool b) (assert b "active true")) (_ (assert false "expected jbool"))))
+         (match (j/jsonGet obj "active")
+           ((some v) (match v ((j/jbool b) (assert b "active true")) (_ (assert false "expected jbool"))))
            ((none) (assert false "active not found")))
-         (mt (j/jsonGet obj "scores")
-           ((some v) (mt v ((j/jarr xs) (assert (= (listLength xs) 2) "scores len 2")) (_ (assert false "expected jarr"))))
+         (match (j/jsonGet obj "scores")
+           ((some v) (match v ((j/jarr xs) (assert (= (listLength xs) 2) "scores len 2")) (_ (assert false "expected jarr"))))
            ((none) (assert false "scores not found")))
-         (mt (j/jsonGet obj "extra")
-           ((some v) (mt v ((j/jnull) (assert (= (j/jsonEmit v) "null") "extra is null")) (_ (assert false "expected jnull"))))
+         (match (j/jsonGet obj "extra")
+           ((some v) (match v ((j/jnull) (assert (= (j/jsonEmit v) "null") "extra is null")) (_ (assert false "expected jnull"))))
            ((none) (assert false "extra not found")))
          (assert (none? (j/jsonGet obj "missing")) "missing is none")
          (assert (none? (j/jsonGet (j/jint 42) "k")) "non-object get is none")

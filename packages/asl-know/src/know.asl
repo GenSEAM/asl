@@ -20,7 +20,7 @@ fn ! staleFiles! root: String -> (List String)
         (dir (cardsDir root))
         (names (resultOr (dirList dir) (list)))
         (drift (listFlatMap (fn [(p (Pair String String))] -> (List String)
-                              (mt (fileReadString (str dir "/" (pairFirst p)))
+                              (match (fileReadString (str dir "/" (pairFirst p)))
                                 ((err _) (list (str (pairFirst p) " absent")))
                                 ((ok t) (if (= t (pairSecond p)) (list) (list (str (pairFirst p) " differs"))))))
                             want))
@@ -39,7 +39,7 @@ fn ratchetDiff listed: (List String) computed: (List String) -> (Pair (List Stri
 
 fn ! writeCards! root: String -> (Result Int64 String)
   (let [(files (rendered! root)) (dir (cardsDir root))]
-    (mt (dirCreate dir)
+    (match (dirCreate dir)
       ((err e) (err e))
       ((ok _)
         (let [(bad (filter (fn [(p (Pair String String))] -> Bool (err? (fileWrite (str dir "/" (pairFirst p)) (pairSecond p)))) files))]
@@ -47,7 +47,7 @@ fn ! writeCards! root: String -> (Result Int64 String)
 
 fn ! writeRatchet! root: String -> (Result Int64 String)
   (let [(rows (r/missingOf (r/allCards! root)))]
-    (mt (fileWrite (str root "/asl/packages/asl-know/missing.asn")
+    (match (fileWrite (str root "/asl/packages/asl-know/missing.asn")
                    (str "(:knowMissing :rule \"an exported symbol without a declaration (nodecl) or doc.asn contract (nodoc); knowCardsTest fails when a row is added or a listed row is fixed, so this list only shrinks\" :count " (listLength rows) ")\n"
                         (stringJoin (map r/q rows) "\n") "\n"))
       ((err e) (err e))
@@ -57,16 +57,16 @@ fn ! know! root: String query: String budget: Int64 -> String
   (qy/answer (qy/loadEntries! (cardsDir root)) query budget)
 
 fn budgetArg args: (List String) -> Int64
-  (mt (listIndexOf args "--budget")
+  (match (listIndexOf args "--budget")
     ((none) 1200)
-    ((some i) (optionOr (mt (listGet args (+ i 1)) ((some s) (stringToInt64 s)) ((none) (none))) 1200)))
+    ((some i) (optionOr (match (listGet args (+ i 1)) ((some s) (stringToInt64 s)) ((none) (none))) 1200)))
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(cmd (optionOr (listGet args 0) "help"))
         (root (resultOr (realPath (optionOr (listGet args 1) ".")) "."))]
     (cond
-      ((= cmd "gen") (mt (writeCards! root) ((err e) (err e)) ((ok n) (do (println (str "(:know :gen :files " n ")")) (ok 0)))))
-      ((= cmd "ratchet") (mt (writeRatchet! root) ((err e) (err e)) ((ok n) (do (println (str "(:know :ratchet :rows " n ")")) (ok 0)))))
+      ((= cmd "gen") (match (writeCards! root) ((err e) (err e)) ((ok n) (do (println (str "(:know :gen :files " n ")")) (ok 0)))))
+      ((= cmd "ratchet") (match (writeRatchet! root) ((err e) (err e)) ((ok n) (do (println (str "(:know :ratchet :rows " n ")")) (ok 0)))))
       ((= cmd "check")
         (let [(stale (staleFiles! root))]
           (if (listEmpty? stale)

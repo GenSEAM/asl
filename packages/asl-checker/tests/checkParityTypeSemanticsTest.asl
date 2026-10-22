@@ -3,7 +3,7 @@
   :i [(asl-checker/types :a ty) (asl-checker/unify :a u) (asl-checker/check :a c) (asl-proc/jobPool :a jp)])
 
 fn sigText res: (Option (Pair (List String) (Pair Bool String))) -> String
-  (mt res
+  (match res
     ((none) "none")
     ((some sig)
       (str (if (pairFirst (pairSecond sig)) "variadic " "")
@@ -61,7 +61,7 @@ fn ! testGenericBuiltinReferenceFiltered -> Bool
       (assert (ok? written) "generic builtin-reference fixture is written")
       (assert (ok? removed) "generic builtin-reference fixture is removed")
       (assert (listAny? (fn [(d ty/Diagnostic)] -> Bool (and (= d.code "builtin-reference") (stringContains? d.message "is a builtin, not a value"))) raw) "fixture emits builtin-reference lint before filtering")
-      (mt checked
+      (match checked
         ((err e) (do (assert false (str "checkFile! succeeds: " e)) false))
         ((ok ds) (do (assert (listEmpty? ds) (str "generic builtin-reference lint is filtered from check errors; diagnostics=" (stringFromInt64 (listLength ds)))) true)))))
 
@@ -78,7 +78,7 @@ fn ! testUndefinedExportLintFiltered -> Bool
       (assert (ok? written) "undefined-export fixture is written")
       (assert (ok? removed) "undefined-export fixture is removed")
       (assert (listAny? (fn [(d ty/Diagnostic)] -> Bool (stringContains? d.message "is exported but not defined in this module")) raw) "fixture emits exported-but-undefined lint before filtering")
-      (mt checked
+      (match checked
         ((err e) (do (assert false (str "checkFile! succeeds: " e)) false))
         ((ok ds) (do (assert (listEmpty? ds) (str "undefined-export lint is filtered from check errors; diagnostics=" (stringFromInt64 (listLength ds)))) true)))))
 
@@ -91,7 +91,7 @@ fn testBareNoneAtomOption -> Bool
     (listEmpty? ds))
 
 fn testPairPatternConstructor -> Bool
-  (let [(ds (c/checkSource "(module m :x [sum]) (fn sum [(p (Pair Int64 Int64))] -> Int64 (mt p ((pair left right) (+ left right))))" (mapEmpty) "m.asl"))]
+  (let [(ds (c/checkSource "(module m :x [sum]) (fn sum [(p (Pair Int64 Int64))] -> Int64 (match p ((pair left right) (+ left right))))" (mapEmpty) "m.asl"))]
     (do (assert (listEmpty? ds) (stringJoin (map (fn [(d ty/Diagnostic)] -> String (str d.code ": " d.message)) ds) "; ")) true))
 
 fn hasUntypedParamDiag ds: (List ty/Diagnostic) -> Bool
@@ -128,7 +128,7 @@ fn testMalformedFlatLet -> Bool
 fn testBodyDiagnosticColumnShift -> Bool
   (let [(ds (c/checkSource "(module m :x [f])\n\nfn f [] -> Int64\n  (undefinedProbe 1)\n" (mapEmpty) "m.asl"))
         (rule2Diags (filter (fn [(d ty/Diagnostic)] -> Bool (= d.code "rule-2")) ds))]
-    (mt (listHead rule2Diags)
+    (match (listHead rule2Diags)
       ((some d) (and (= d.line 4) (= d.col 4)))
       ((none) false)))
 
@@ -138,7 +138,7 @@ fn ! testEffectDiagnosticColumnShift -> Bool
         (wrote (fileWrite (str dir "/manifest.asn") "(:package columnshift :pure true)\n"))
         (ds (c/checkSource "(module m :x [f])\n\nfn f [] -> Int64\n  (println \"hi\")\n" (mapEmpty) (str dir "/m.asl")))
         (rule12Diags (filter (fn [(d ty/Diagnostic)] -> Bool (= d.code "rule-12")) ds))
-        (result (mt (listHead rule12Diags)
+        (result (match (listHead rule12Diags)
                   ((some d) (and (= d.line 4) (= d.col 4)))
                   ((none) false)))
         (cleaned (jp/runOne (jp/job (list "rm" "-rf" dir) "." (jp/childEnv (list)))))]

@@ -44,7 +44,7 @@ fn better? x: Scored y: Scored -> Bool
   (or (> x.score y.score) (and (= x.score y.score) (> x.text y.text)))
 
 fn insertScored item: Scored items: (List Scored) -> (List Scored)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (list item))
     ((some hd) (if (better? item hd) (cons item items) (cons hd (insertScored item (optionOr (listTail items) (list)))))))
 
@@ -57,13 +57,13 @@ fn getCloseMatches word: String possibilities: (List String) n: Int64 cutoff: Fl
     (map (fn [(s Scored)] -> String s.text) (listTake scored n)))
 
 fn dedupSorted items: (List String) acc: (List String) -> (List String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (listReverse acc))
     ((some x)
       (dedupSorted (optionOr (listTail items) (list)) (if (and (not (listEmpty? acc)) (= (optionOr (listHead acc) "") x)) acc (cons x acc)))))
 
 fn fillNear names: (List String) low: String near: (List String) k: Int64 -> (List String)
-  (mt (listHead names)
+  (match (listHead names)
     ((none) near)
     ((some nm)
       (if (>= (listLength near) k)

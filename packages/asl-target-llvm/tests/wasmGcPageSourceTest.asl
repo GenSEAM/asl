@@ -15,12 +15,12 @@ fn diagText errors: (List irTy/IrDiag) -> String
 fn ! llcBin -> String
   (let [(known (filter (fn [(c String)] -> Bool (= (sh (str "test -x " c)).exitCode 0))
                         (list "/opt/homebrew/opt/llvm/bin/llc" "/usr/local/opt/llvm/bin/llc" "/usr/lib/llvm-20/bin/llc" "/usr/lib/llvm-19/bin/llc" "/usr/lib/llvm-18/bin/llc")))]
-    (mt (listHead known)
+    (match (listHead known)
       ((some c) c)
       ((none) (stringReplace (sh "command -v llc 2>/dev/null").stdout "\n" ""))))
 
 fn wasmGcText -> (Result String (List irTy/IrDiag))
-  (mt (libc/libcFacts "darwin-arm64")
+  (match (libc/libcFacts "darwin-arm64")
     ((none) (err (list (irTy/makeIrDiag "ERR_TEST" "libc.asl has no darwin-arm64 facts" "wasmGcPageSourceTest"))))
     ((some facts) (gr/collectorTextForTarget facts (target/wasm32TargetFacts))))
 
@@ -32,7 +32,7 @@ fn helloModule -> irTy/SsaModule
         (irTy/termReturn "zero"))))))
 
 fn wasmHelloText -> (Result String (List irTy/IrDiag))
-  (mt (libc/libcFacts "darwin-arm64")
+  (match (libc/libcFacts "darwin-arm64")
     ((none) (err (list (irTy/makeIrDiag "ERR_TEST" "libc.asl has no darwin-arm64 facts" "wasmGcPageSourceTest"))))
     ((some facts) (targetLlvm/emitLlvmProgramForTarget facts (target/wasm32TargetFacts) (helloModule) "main")))
 
@@ -45,12 +45,12 @@ fn ! testWasmText work: String -> Bool
   (let [(llc (llcBin))
         (gcText (wasmGcText))
         (helloText (wasmHelloText))
-        (gc (mt gcText ((ok t) t) ((err _) "")))
-        (hello (mt helloText ((ok t) t) ((err _) "")))]
+        (gc (match gcText ((ok t) t) ((err _) "")))
+        (hello (match helloText ((ok t) t) ((err _) "")))]
     (do
       (assert (not (stringEmpty? llc)) "llc is installed (homebrew, /usr/lib/llvm-NN or PATH)")
-      (assert (ok? gcText) (str "wasm collector emission: " (mt gcText ((ok _) "ok") ((err es) (diagText es)))))
-      (assert (ok? helloText) (str "wasm hello emission: " (mt helloText ((ok _) "ok") ((err es) (diagText es)))))
+      (assert (ok? gcText) (str "wasm collector emission: " (match gcText ((ok _) "ok") ((err es) (diagText es)))))
+      (assert (ok? helloText) (str "wasm hello emission: " (match helloText ((ok _) "ok") ((err es) (diagText es)))))
       (assert (stringContains? gc "@llvm.wasm.memory.grow.i32") "wasm collector calls the linear-memory growth intrinsic")
       (refute (stringContains? gc "@mmap") "wasm collector has no mmap declaration or call")
       (refute (stringContains? gc "@munmap") "wasm collector has no munmap declaration or call")
@@ -149,14 +149,14 @@ fn nativeGrowFacts triple: String -> target/TargetFacts
 fn ! buildDriver work: String -> String
   (let [(triple (gr/hostTriple (sh "uname -s -m").stdout))
         (facts (libc/libcFacts triple))
-        (text (mt facts ((none) (err (list))) ((some f) (gr/collectorTextForTarget f (nativeGrowFacts triple)))))
-        (gc (mt text ((ok t) t) ((err _) "")))
+        (text (match facts ((none) (err (list))) ((some f) (gr/collectorTextForTarget f (nativeGrowFacts triple)))))
+        (gc (match text ((ok t) t) ((err _) "")))
         (ll (str work "/growGc.ll"))
         (c (str work "/wasmGrowDriver.c"))
         (exe (str work "/wasmGrowDriver"))]
     (do
       (assert (some? facts) (str "libc.asl has facts for this host's triple '" triple "'"))
-      (assert (ok? text) (str "host-triple memory.grow collector emission: " (mt text ((ok _) "ok") ((err es) (diagText es)))))
+      (assert (ok? text) (str "host-triple memory.grow collector emission: " (match text ((ok _) "ok") ((err es) (diagText es)))))
       (assert (stringContains? gc "@llvm.wasm.memory.grow.i32(") "the host-triple collector grows memory through the intrinsic")
       (refute (stringContains? gc "@mmap(") "the memory.grow page source never maps")
       (assert (ok? (fileWrite ll (stringReplace gc "@llvm.wasm.memory.grow.i32(" "@wasmGrowEmulated("))) (str "fileWrite " ll))

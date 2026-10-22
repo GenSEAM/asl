@@ -7,7 +7,7 @@ fn testBrowserPluginSourceIntegrity! -> Bool
         (cntRes (fileReadString "asl/packages/asl-browser-plugin/src/content.asl"))
         (sgRes (fileReadString "asl/packages/asl-browser-plugin/src/safetyGate.asl"))
         (rtRes (fileReadString "asl/packages/asl-browser-plugin/src/runtime.asl"))]
-    (mt bgRes
+    (match bgRes
       ((err e1) (assert false (str "Failed to read background.asl: " e1)))
       ((ok bgSrc)
         (do
@@ -15,21 +15,21 @@ fn testBrowserPluginSourceIntegrity! -> Bool
           (assert (stringContains? bgSrc "fn handleMessage") "background defines handleMessage")
           (refute (stringContains? bgSrc "Mach-O") "Zero Mach-O in background")
           (refute (stringContains? bgSrc "ELF64") "Zero ELF64 in background"))))
-    (mt cntRes
+    (match cntRes
       ((err e2) (assert false (str "Failed to read content.asl: " e2)))
       ((ok cntSrc)
         (do
           (assert (stringContains? cntSrc "fn extractPageContext") "content defines extractPageContext")
           (assert (stringContains? cntSrc "fn dispatchAction") "content defines dispatchAction")
           (refute (= cntSrc "") "content source refutes empty"))))
-    (mt sgRes
+    (match sgRes
       ((err e3) (assert false (str "Failed to read safetyGate.asl: " e3)))
       ((ok sgSrc)
         (do
           (assert (stringContains? sgSrc "fn isActionPermitted?") "safetyGate defines isActionPermitted?")
           (assert (stringContains? sgSrc "fn validateBrowserAction") "safetyGate defines validateBrowserAction")
           (refute (= sgSrc "") "safetyGate source refutes empty"))))
-    (mt rtRes
+    (match rtRes
       ((err e4) (assert false (str "Failed to read runtime.asl: " e4)))
       ((ok rtSrc)
         (do
@@ -41,7 +41,7 @@ fn testBrowserPluginSourceIntegrity! -> Bool
 
 fn testBrowserPluginGrammarRegistration! -> Bool
   (let [(gRes (fileReadString "asl/packages/asl-browser-plugin/manifest.asn"))]
-    (mt gRes
+    (match gRes
       ((err e) (assert false (str "Failed to read asl/packages/asl-browser-plugin/manifest.asn: " e)))
       ((ok gSrc)
         (do
@@ -68,7 +68,7 @@ fn testActionClassificationLogic -> Bool
     true)
 
 fn testMessageRoutingContracts! -> Bool
-  (mt (fileReadString "asl/packages/asl-browser-plugin/src/background.asl")
+  (match (fileReadString "asl/packages/asl-browser-plugin/src/background.asl")
     ((err e) (do (assert false (str "Failed to read background.asl: " e)) false))
     ((ok src)
      (do
@@ -83,14 +83,14 @@ fn testMessageRoutingContracts! -> Bool
 fn testInPageAgentBridgeWithSafetyGate! -> Bool
   (let [(cntRes (fileReadString "asl/packages/asl-browser-plugin/src/content.asl"))
         (bgRes (fileReadString "asl/packages/asl-browser-plugin/src/background.asl"))]
-    (mt cntRes
+    (match cntRes
       ((err e) (assert false (str "Failed to read content.asl: " e)))
       ((ok cntSrc)
         (do
           (assert (stringContains? cntSrc "extractMedia") "content recognizes extractMedia action")
           (assert (stringContains? cntSrc "execInPageAgent") "content recognizes execInPageAgent action")
           (assert (stringContains? cntSrc "window.__aslAgent") "content hooks into window.__aslAgent"))))
-    (mt bgRes
+    (match bgRes
       ((err e2) (assert false (str "Failed to read background.asl: " e2)))
       ((ok bgSrc)
         (do

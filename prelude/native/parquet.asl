@@ -170,7 +170,7 @@ fn ! pqTrSkipPairs tr: PqTr kv: Int64 i: Int64 n: Int64 depth: Int64 -> Bool
         (pqTrSkipPairs tr kv (+ i 1) n depth)))
 
 fn ! pqTrSkipStruct tr: PqTr last: Int64 depth: Int64 -> Bool
-  (mt (pqTrField tr last)
+  (match (pqTrField tr last)
     ((none) true)
     ((some f) (do (pqTrSkip tr (pairSecond f) (+ depth 1)) (pqTrSkipStruct tr (pairFirst f) depth))))
 
@@ -190,7 +190,7 @@ fn ! pqTrSkip tr: PqTr ty: Int64 depth: Int64 -> Bool
       (else (do (pqTrFail tr) false))))
 
 fn ! pqIntType tr: PqTr s: Bytes last: Int64 bits: Int64 -> Bool
-  (mt (pqTrField tr last)
+  (match (pqTrField tr last)
     ((none) (if (= bits 8) (pqSlotSet s 3 1) true))
     ((some f)
       (if (= (pairFirst f) 1)
@@ -198,14 +198,14 @@ fn ! pqIntType tr: PqTr s: Bytes last: Int64 bits: Int64 -> Bool
         (do (pqTrSkip tr (pairSecond f) 0) (pqIntType tr s (pairFirst f) bits)))))
 
 fn ! pqLogical tr: PqTr s: Bytes last: Int64 -> Bool
-  (mt (pqTrField tr last)
+  (match (pqTrField tr last)
     ((none) true)
     ((some f)
       (do (if (and (= (pairFirst f) 10) (= (pairSecond f) 12)) (pqIntType tr s 0 0) (pqTrSkip tr (pairSecond f) 0))
           (pqLogical tr s (pairFirst f)))))
 
 fn ! pqSchemaElem tr: PqTr s: Bytes last: Int64 name: String -> String
-  (mt (pqTrField tr last)
+  (match (pqTrField tr last)
     ((none) name)
     ((some f)
       (let [(id (pairFirst f))
@@ -239,7 +239,7 @@ fn ! pqEncodings tr: PqTr et: Int64 i: Int64 k: Int64 acc: (List Int64) -> (List
       (pqEncodings tr et (+ i 1) k (if (< (listLength acc) 16) (listAppend acc (list enc)) acc))))
 
 fn ! pqColumnMeta tr: PqTr s: Bytes last: Int64 encs: (List Int64) -> (List Int64)
-  (mt (pqTrField tr last)
+  (match (pqTrField tr last)
     ((none) encs)
     ((some f)
       (let [(id (pairFirst f))
@@ -254,7 +254,7 @@ fn ! pqColumnMeta tr: PqTr s: Bytes last: Int64 encs: (List Int64) -> (List Int6
           (else (do (pqTrSkip tr ty 0) (pqColumnMeta tr s id encs)))))))
 
 fn ! pqColumnChunk tr: PqTr s: Bytes last: Int64 encs: (List Int64) -> (List Int64)
-  (mt (pqTrField tr last)
+  (match (pqTrField tr last)
     ((none) encs)
     ((some f)
       (if (and (= (pairFirst f) 3) (= (pairSecond f) 12))
@@ -271,7 +271,7 @@ fn ! pqChunks tr: PqTr j: Int64 c: Int64 acc: (List PqChunk) -> (List PqChunk)
     (pqChunks tr (+ j 1) c (cons (pqChunk tr) acc)))
 
 fn ! pqRowGroup tr: PqTr ncols: Int64 r: Int64 last: Int64 seen: Bool rows: Int64 chunks: (List PqChunk) -> (Result (Pair Int64 (List PqChunk)) String)
-  (mt (pqTrField tr last)
+  (match (pqTrField tr last)
     ((none) (if seen (ok (pair rows chunks)) (err (str "ERR_PARQUET: row group " (stringFromInt64 r) " without columns"))))
     ((some f)
       (let [(id (pairFirst f))
@@ -287,12 +287,12 @@ fn ! pqRowGroup tr: PqTr ncols: Int64 r: Int64 last: Int64 seen: Bool rows: Int6
 
 fn ! pqRowGroups tr: PqTr ncols: Int64 r: Int64 g: Int64 rows: (List Int64) chunks: (List PqChunk) -> (Result (Pair (List Int64) (List PqChunk)) String)
   (if (or (>= r g) (pqTrErr? tr)) (ok (pair (listReverse rows) (listReverse chunks)))
-    (mt (pqRowGroup tr ncols r 0 false 0 chunks)
+    (match (pqRowGroup tr ncols r 0 false 0 chunks)
       ((err e) (err e))
       ((ok p) (pqRowGroups tr ncols (+ r 1) g (cons (pairFirst p) rows) (pairSecond p)))))
 
 fn ! pqKv tr: PqTr last: Int64 k: (Option String) v: (Option String) -> (Pair (Option String) (Option String))
-  (mt (pqTrField tr last)
+  (match (pqTrField tr last)
     ((none) (pair k v))
     ((some f)
       (let [(id (pairFirst f))
@@ -307,12 +307,12 @@ fn ! pqKvs tr: PqTr i: Int64 n: Int64 acc: (List (Pair String String)) -> (List 
   (if (or (>= i n) (pqTrErr? tr)) (listReverse acc)
     (let [(kv (pqKv tr 0 (none) (none)))]
       (pqKvs tr (+ i 1) n
-        (mt (pairFirst kv)
+        (match (pairFirst kv)
           ((none) acc)
           ((some k) (cons (pair k (optionOr (pairSecond kv) "")) acc))))))
 
 fn ! pqPageInner tr: PqTr s: Bytes outer: Int64 last: Int64 -> Bool
-  (mt (pqTrField tr last)
+  (match (pqTrField tr last)
     ((none) true)
     ((some f)
       (let [(id (pairFirst f))
@@ -329,7 +329,7 @@ fn ! pqPageInner tr: PqTr s: Bytes outer: Int64 last: Int64 -> Bool
           (pqPageInner tr s outer id)))))
 
 fn ! pqPageFields tr: PqTr s: Bytes last: Int64 -> Bool
-  (mt (pqTrField tr last)
+  (match (pqTrField tr last)
     ((none) true)
     ((some f)
       (let [(id (pairFirst f))
@@ -355,12 +355,12 @@ fn ! pqPageHeader tr: PqTr -> (Option PqPage)
                       :defLen (pqSlotGet s 5) :repLen (pqSlotGet s 6) :compressed (!= (pqSlotGet s 7) 0))))))
 
 fn pqColAt q: PqFile col: Int64 -> PqCol
-  (mt (listGet q.cols col)
+  (match (listGet q.cols col)
     ((some c) c)
     ((none) (trap "ERR_PARQUET" "column index outside the schema")))
 
 fn pqChunkAt q: PqFile col: Int64 rg: Int64 -> PqChunk
-  (mt (listGet q.chunks (+ (* rg (listLength q.cols)) col))
+  (match (listGet q.chunks (+ (* rg (listLength q.cols)) col))
     ((some c) c)
     ((none) (trap "ERR_PARQUET" "column chunk outside the footer")))
 
@@ -380,12 +380,12 @@ fn ! pqScanPages q: PqFile c: PqChunk name: String rg: Int64 start: Int64 pos: I
   (if (>= pos c.compSize) (ok true)
     (let [(rem (- c.compSize pos))
           (toRead (min rem 128))]
-      (mt (fileReadRange q.path (+ start pos) toRead)
+      (match (fileReadRange q.path (+ start pos) toRead)
         ((err _) (err "ERR_IO: cannot read column chunk"))
         ((ok hb)
           (if (!= (bytesLength hb) toRead) (err "ERR_IO: cannot read column chunk")
             (let [(tr (pqTrAt hb 0 toRead))]
-              (mt (pqPageHeader tr)
+              (match (pqPageHeader tr)
                 ((none) (err (str "ERR_PARQUET: malformed page header in column " name " row group " (stringFromInt64 rg))))
                 ((some ph)
                   (let [(hl (pqTrPos tr))]
@@ -412,10 +412,10 @@ fn ! pqValidate q: PqFile i: Int64 n: Int64 -> (Result Bool String)
         ((and (!= c.codec 0) (and (!= c.codec 1) (!= c.codec 6)))
           (err (str "ERR_PARQUET_UNSUPPORTED: column " cd.name " row group " (stringFromInt64 rg) " codec " (stringFromInt64 c.codec))))
         (else
-          (mt (pqBadEncoding c.encodings)
+          (match (pqBadEncoding c.encodings)
             ((some e) (err (str "ERR_PARQUET_UNSUPPORTED: column " cd.name " row group " (stringFromInt64 rg) " encoding " (stringFromInt64 e))))
             ((none)
-              (mt (pqScanPages q c cd.name rg start 0)
+              (match (pqScanPages q c cd.name rg start 0)
                 ((err e) (err e))
                 ((ok _) (pqValidate q (+ i 1) n)))))))))
 
@@ -424,12 +424,12 @@ fn ! pqFooterDone tr: PqTr q: PqFile -> (Result PqFile String)
     ((pqTrErr? tr) (err "ERR_PARQUET: malformed footer"))
     ((listEmpty? q.cols) (err "ERR_PARQUET: footer without a schema"))
     (else
-      (mt (pqValidate q 0 (* (listLength q.groupRows) (listLength q.cols)))
+      (match (pqValidate q 0 (* (listLength q.groupRows) (listLength q.cols)))
         ((err e) (err e))
         ((ok _) (ok q)))))
 
 fn ! pqFooter tr: PqTr q: PqFile last: Int64 -> (Result PqFile String)
-  (mt (pqTrField tr last)
+  (match (pqTrField tr last)
     ((none) (pqFooterDone tr q))
     ((some f)
       (let [(id (pairFirst f))
@@ -438,7 +438,7 @@ fn ! pqFooter tr: PqTr q: PqFile last: Int64 -> (Result PqFile String)
           ((and (= id 2) (= ty 9))
             (let [(k (pairFirst (pqTrList tr)))]
               (if (or (< k 2) (> k 4096)) (err (str "ERR_PARQUET: schema with " (stringFromInt64 k) " elements"))
-                (mt (pqSchema tr 0 k (list))
+                (match (pqSchema tr 0 k (list))
                   ((err e) (err e))
                   ((ok cs) (pqFooter tr (with q :cols cs) id))))))
           ((= id 3)
@@ -448,7 +448,7 @@ fn ! pqFooter tr: PqTr q: PqFile last: Int64 -> (Result PqFile String)
             (if (listEmpty? q.cols) (err "ERR_PARQUET: row groups before schema")
               (let [(g (pairFirst (pqTrList tr)))]
                 (if (> g 65536) (err (str "ERR_PARQUET: " (stringFromInt64 g) " row groups"))
-                  (mt (pqRowGroups tr (listLength q.cols) 0 g (list) (list))
+                  (match (pqRowGroups tr (listLength q.cols) 0 g (list) (list))
                     ((err e) (err e))
                     ((ok rg) (pqFooter tr (with q :groupRows (pairFirst rg) :chunks (pairSecond rg)) id)))))))
           ((and (= id 5) (= ty 9))
@@ -459,7 +459,7 @@ fn ! pqFooter tr: PqTr q: PqFile last: Int64 -> (Result PqFile String)
           (else (do (pqTrSkip tr ty 0) (pqFooter tr q id)))))))
 
 fn ! pqReadExact path: String off: Int64 n: Int64 -> (Option Bytes)
-  (mt (fileReadRange path off n)
+  (match (fileReadRange path off n)
     ((ok b) (if (= (bytesLength b) n) (some b) (none)))
     ((err _) (none)))
 
@@ -467,22 +467,22 @@ fn pqMagic? b: Bytes at: Int64 -> Bool
   (and (and (= (bytesGet b at) 80) (= (bytesGet b (+ at 1)) 65)) (and (= (bytesGet b (+ at 2)) 82) (= (bytesGet b (+ at 3)) 49)))
 
 fn ! parquetOpen path: String -> (Result PqFile String)
-  (mt (fileStat path)
+  (match (fileStat path)
     ((err _) (err (str "ERR_IO: cannot open " path)))
     ((ok st)
       (let [(size st.size)
             (head (if (>= size 12) (pqReadExact path 0 4) (none)))
             (tail (if (>= size 12) (pqReadExact path (- size 8) 8) (none)))]
-        (mt head
+        (match head
           ((none) (err (str "ERR_PARQUET: " path " is too short for a parquet file")))
           ((some hb)
-            (mt tail
+            (match tail
               ((none) (err (str "ERR_PARQUET: " path " is too short for a parquet file")))
               ((some tb)
                 (if (or (not (pqMagic? hb 0)) (not (pqMagic? tb 4))) (err (str "ERR_PARQUET: " path " has no PAR1 magic"))
                   (let [(flen (pqLoadUAt tb 3 4 0))]
                     (if (or (> flen (- size 12)) (= flen 0)) (err (str "ERR_PARQUET: footer length " (stringFromInt64 flen) " outside " path))
-                      (mt (pqReadExact path (- (- size 8) flen) flen)
+                      (match (pqReadExact path (- (- size 8) flen) flen)
                         ((none) (err (str "ERR_IO: cannot read the footer of " path)))
                         ((some fb)
                           (pqFooter (pqTrAt fb 0 flen) (PqFile :path path :size size :rows 0 :cols (list) :groupRows (list) :chunks (list) :kv (list)) 0)))))))))))))
@@ -494,7 +494,7 @@ fn parquetNumRows h: PqFile -> Int64
   h.rows
 
 fn pqColIndexFrom cols: (List PqCol) name: String i: Int64 -> Int64
-  (mt (listHead cols)
+  (match (listHead cols)
     ((none) -1)
     ((some c) (if (= c.name name) i (pqColIndexFrom (optionOr (listTail cols) (list)) name (+ i 1)))))
 
@@ -511,7 +511,7 @@ fn parquetColumnType h: PqFile name: String -> String
       (else "other")))
 
 fn parquetKvMetadata h: PqFile key: String -> (Result String String)
-  (mt (listHead (filter (fn [(kv (Pair String String))] -> Bool (= (pairFirst kv) key)) h.kv))
+  (match (listHead (filter (fn [(kv (Pair String String))] -> Bool (= (pairFirst kv) key)) h.kv))
     ((some kv) (ok (pairSecond kv)))
     ((none) (err "key not found")))
 
@@ -667,7 +667,7 @@ fn ! pqDecompress codec: Int64 src: Bytes off: Int64 n: Int64 want: Int64 -> (Re
       (let [(dst (bytesAlloc want))]
         (if (pqSnappy src off n dst want) (ok (pair dst 0)) (err "ERR_PARQUET: corrupt snappy page"))))
     ((= codec 6)
-      (mt (zstdDecompress (pqSlice src off n))
+      (match (zstdDecompress (pqSlice src off n))
         ((err e) (err e))
         ((ok d) (if (!= (bytesLength d) want) (err "ERR_PARQUET: zstd page size mismatch") (ok (pair d 0))))))
     (else (err (str "ERR_PARQUET_UNSUPPORTED: codec " (stringFromInt64 codec)))))
@@ -686,7 +686,7 @@ fn ! pqDecodeValues cd: PqCol enc: Int64 vals: Bytes off: Int64 vlen: Int64 n: I
                     (fn [(i Int64) (v Int64)] -> Bool
                       (if (>= v ndict) false (pqCopy dict (* v 8) out (* (+ at i) 8) 8)))))))
             (else (none))))]
-    (mt good
+    (match good
       ((none) (err (str "ERR_PARQUET_UNSUPPORTED: encoding " (stringFromInt64 enc))))
       ((some g) (if g (ok true) (err "ERR_PARQUET: corrupt data page")))))
 
@@ -698,7 +698,7 @@ fn ! pqDataPage c: PqChunk cd: PqCol buf: Bytes p: Int64 h: PqPage dict: Bytes n
         (n h.nvals)
         (body
           (if (= h.kind 0)
-            (mt (pqDecompress c.codec buf p h.comp h.uncomp)
+            (match (pqDecompress c.codec buf p h.comp h.uncomp)
               ((err e) (err e))
               ((ok d)
                 (let [(dv (pairFirst d))
@@ -716,10 +716,10 @@ fn ! pqDataPage c: PqChunk cd: PqCol buf: Bytes p: Int64 h: PqPage dict: Bytes n
                 (else
                   (let [(clen (- h.comp lev))
                         (vlen (if h.compressed (- h.uncomp lev) clen))]
-                    (mt (pqDecompress (if h.compressed c.codec 0) buf (+ p lev) clen vlen)
+                    (match (pqDecompress (if h.compressed c.codec 0) buf (+ p lev) clen vlen)
                       ((err e) (err e))
                       ((ok d) (ok (pair (pairFirst d) (pair (pairSecond d) vlen)))))))))))]
-    (mt body
+    (match body
       ((err e) (err e))
       ((ok b)
         (if (= (bytesGet nulls 0) 1) (err (str "ERR_PARQUET_NULL: column " cd.name " has null values"))
@@ -731,7 +731,7 @@ fn ! pqPages c: PqChunk cd: PqCol buf: Bytes out: Bytes want: Int64 pos: Int64 g
     ((>= pos c.compSize) (err "ERR_PARQUET: malformed page header"))
     (else
       (let [(tr (pqTrAt buf pos c.compSize))]
-        (mt (pqPageHeader tr)
+        (match (pqPageHeader tr)
           ((none) (err "ERR_PARQUET: malformed page header"))
           ((some h)
             (let [(p (pqTrPos tr))
@@ -739,7 +739,7 @@ fn ! pqPages c: PqChunk cd: PqCol buf: Bytes out: Bytes want: Int64 pos: Int64 g
               (cond
                 ((> h.comp (- c.compSize p)) (err "ERR_PARQUET: page beyond the column chunk"))
                 ((= h.kind 2)
-                  (mt (pqDecompress c.codec buf p h.comp h.uncomp)
+                  (match (pqDecompress c.codec buf p h.comp h.uncomp)
                     ((err e) (err e))
                     ((ok d)
                       (let [(w (if (= cd.ptype 1) 4 8))]
@@ -751,7 +751,7 @@ fn ! pqPages c: PqChunk cd: PqCol buf: Bytes out: Bytes want: Int64 pos: Int64 g
                 ((and (!= h.kind 0) (!= h.kind 3)) (pqPages c cd buf out want next got dict ndict))
                 ((> h.nvals (- want got)) (err "ERR_PARQUET: page values beyond the row group"))
                 (else
-                  (mt (pqDataPage c cd buf p h dict ndict out got)
+                  (match (pqDataPage c cd buf p h dict ndict out got)
                     ((err e) (err e))
                     ((ok _) (pqPages c cd buf out want next (+ got h.nvals) dict ndict)))))))))))
 
@@ -761,11 +761,11 @@ fn ! pqReadChunk q: PqFile col: Int64 rg: Int64 -> (Result (Pair Bytes Int64) St
         (want (pqGroupRows q rg))]
     (if (or (or (< want 0) (> want 2147483648)) (!= c.nvals want))
       (err (str "ERR_PARQUET: chunk value count " (stringFromInt64 c.nvals) " differs from " (stringFromInt64 want) " rows"))
-      (mt (pqReadExact q.path (pqChunkStart c) c.compSize)
+      (match (pqReadExact q.path (pqChunkStart c) c.compSize)
         ((none) (err "ERR_IO: cannot read column chunk"))
         ((some buf)
           (let [(out (bytesAlloc (* want 8)))]
-            (mt (pqPages c cd buf out want 0 0 (bytesAlloc 0) -1)
+            (match (pqPages c cd buf out want 0 0 (bytesAlloc 0) -1)
               ((err e) (err e))
               ((ok got) (ok (pair out got)))))))))
 
@@ -777,7 +777,7 @@ fn ! pqReadAs h: PqFile name: String rg: Int64 kind: Int64 who: String -> (Pair 
             (pt cd.ptype)]
         (if (or (and (= kind 5) (!= pt 5)) (or (and (= kind 2) (!= pt 2)) (and (= kind 1) (not (and (= pt 1) cd.int8)))))
           (trap "ERR_TYPE" (str who ": column " cd.name " is not of that type"))
-          (mt (pqReadChunk h col rg)
+          (match (pqReadChunk h col rg)
             ((err e) (trap "ERR_PARQUET" (str who ": " e)))
             ((ok r) r))))))
 

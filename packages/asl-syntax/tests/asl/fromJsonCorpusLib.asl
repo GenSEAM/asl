@@ -42,10 +42,10 @@ fn expectedShardCount total: Int64 n: Int64 k: Int64 -> Int64
   (lib/expectedShardCount total n k)
 
 fn loadRootSchema! -> (Result j/Json String)
-  (mt (fileReadString "asl/grammar/aslAst.schema.json")
+  (match (fileReadString "asl/grammar/aslAst.schema.json")
     ((err e) (err (str "Failed reading aslAst.schema.json: " e)))
     ((ok text)
-     (mt (j/jsonParse text)
+     (match (j/jsonParse text)
        ((err e) (err (str "Failed parsing aslAst.schema.json: " e)))
        ((ok root) (ok root)))))
 
@@ -65,7 +65,7 @@ fn atomEquivalent? a: String b: String -> Bool
                 (and (some? (stringToFloat64 a)) (= (stringToFloat64 a) (stringToFloat64 b))))))
 
 fn dropListHead items: (List rd/SExpr) -> (Option (List rd/SExpr))
-  (mt (listHead items)
+  (match (listHead items)
     ((some h) (if (and (rd/isAtom? h) (= (rd/sexprHead h) "list")) (some (optionOr (listTail items) (list))) (none)))
     ((none) (none)))
 
@@ -77,31 +77,31 @@ fn itemsEquivalent? xs: (List rd/SExpr) ys: (List rd/SExpr) -> Bool
           true (zip xs ys)))
 
 fn vectListEquivalent? vItems: (List rd/SExpr) lItems: (List rd/SExpr) -> Bool
-  (mt (dropListHead lItems)
+  (match (dropListHead lItems)
     ((some rest) (itemsEquivalent? vItems rest))
     ((none) false))
 
 fn sexprEquivalent? x: rd/SExpr y: rd/SExpr -> Bool
-  (mt x
+  (match x
     ((rd/sexprAtom vx)
-     (mt y
+     (match y
        ((rd/sexprAtom vy) (atomEquivalent? vx vy))
        (_ false)))
     ((rd/sexprList lx)
-     (mt y
+     (match y
        ((rd/sexprList ly) (itemsEquivalent? lx ly))
        ((rd/sexprVect vy) (vectListEquivalent? vy lx))
        (_ false)))
     ((rd/sexprVect vx)
-     (mt y
+     (match y
        ((rd/sexprVect vy) (itemsEquivalent? vx vy))
        ((rd/sexprList ly) (vectListEquivalent? vx ly))
        (_ false))))
 
 fn topFormEffectEquivalent? x: a/TopForm y: a/TopForm -> Bool
-  (mt x
-    ((a/topDefun dx) (mt y ((a/topDefun dy) (= dx.effect dy.effect)) (_ false)))
-    ((a/topModule mx) (mt y ((a/topModule my) (topFormsEffectsEquivalent? mx.defs my.defs)) (_ false)))
+  (match x
+    ((a/topDefun dx) (match y ((a/topDefun dy) (= dx.effect dy.effect)) (_ false)))
+    ((a/topModule mx) (match y ((a/topModule my) (topFormsEffectsEquivalent? mx.defs my.defs)) (_ false)))
     (_ true))
 
 fn topFormsEffectsEquivalent? xs: (List a/TopForm) ys: (List a/TopForm) -> Bool
@@ -121,46 +121,46 @@ fn topFormsEquivalent? xs: (List a/TopForm) ys: (List a/TopForm) -> Bool
 
 fn validateTopForms rootSchema: j/Json forms: (List a/TopForm) -> (Result Bool String)
   (fold (fn [(acc (Result Bool String)) (tf a/TopForm)] -> (Result Bool String)
-          (mt acc
+          (match acc
             ((err e) (err e))
             ((ok _) (asch/validateTopFormWithSchema rootSchema (fj/topFormToJson tf)))))
         (ok true) forms)
 
 fn formsToJsonString forms: (List a/TopForm) -> String
-  (mt (listHead forms)
+  (match (listHead forms)
     ((some tf0)
-     (mt tf0
+     (match tf0
        ((a/topModule _) (fj/topFormToJsonString tf0))
        (_ (fj/topFormsToJsonString forms))))
     ((none) (fj/topFormsToJsonString forms)))
 
 fn verifyCorpusFile! path: String stats: CorpusStats rootSchema: j/Json -> CorpusStats
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e)
      (do
        (assert false (str path " read error: " e))
        (bumpBug stats)))
     ((ok src)
-     (mt (a/parse src)
+     (match (a/parse src)
        ((err e)
         (do
           (assert false (str path " initial parse error: " e.msg))
           (bumpBug stats)))
        ((ok origForms)
-        (mt (validateTopForms rootSchema origForms)
+        (match (validateTopForms rootSchema origForms)
           ((err e)
            (do
              (assert false (str path " top forms failed schema validation: " e))
              (bumpBug stats)))
           ((ok _)
            (let [(jsonAll (formsToJsonString origForms))]
-             (mt (fj/fromJsonToAsl jsonAll)
+             (match (fj/fromJsonToAsl jsonAll)
                ((err e)
                 (do
                   (assert false (str path " fromJsonToAsl failed: " e))
                   (bumpBug stats)))
                ((ok aslText)
-                (mt (a/parse aslText)
+                (match (a/parse aslText)
                   ((err e)
                    (do
                      (assert false (str path " reparse failed: " e.msg))
@@ -187,13 +187,13 @@ fn reportCorpusStats! label: String s: CorpusStats -> Bool
     (= s.bugs 0))
 
 fn runCorpusShard! label: String n: Int64 k: Int64 -> Bool
-  (mt (allCorpusFiles!)
+  (match (allCorpusFiles!)
     ((err e)
      (do
        (assert false (str label " git ls-files failed: " e))
        false))
     ((ok allFiles)
-     (mt (loadRootSchema!)
+     (match (loadRootSchema!)
        ((err e)
         (do
           (assert false (str label " root schema: " e))

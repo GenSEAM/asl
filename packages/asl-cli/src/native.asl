@@ -16,13 +16,13 @@ fn rooted ctx: sys/Context file: String -> String
     (if (stringStartsWith? file prefix) (optionOr (stringSlice file (stringLength prefix) (stringLength file)) file) file))
 
 fn ! nativeTest! args: (List String) -> Int64
-  (mt (nt/main (cons "--self-fp" (cons (nt/fingerprint) args)))
+  (match (nt/main (cons "--self-fp" (cons (nt/fingerprint) args)))
     ((ok code) code)
     ((err e) (do (sys/sayErr! (str "asl: nativeTest: " e)) 1)))
 
 ; (:m :ref NATIVETEST-HOSTLESS :do "bin/asl run tools/nativeTest.asl runs the nativeTest this CLI is built from in place (bin/asl rebuilds the CLI when that source moves): no per-process compile of its ~60-module closure, and nothing of it in the suite cache")
 fn ! nativeTool! args: (List String) -> Int64
-  (mt (nt/main args)
+  (match (nt/main args)
     ((ok code) code)
     ((err e) (do (sys/sayErr! (str "asl: nativeTest: " e)) 1)))
 
@@ -36,25 +36,25 @@ fn ! ensureDir! dir: String -> (Result Unit String)
   (if (sys/isDir? dir) (ok ()) (dirCreate dir))
 
 fn ! stageOutside! ctx: sys/Context absFile: String -> (Result String String)
-  (mt (fileReadString absFile)
+  (match (fileReadString absFile)
     ((err e) (err (str "cannot read " absFile ": " e)))
     ((ok src)
       (let [(digest (bytesSha256 (stringToBytes src)))
             (rel (outsideRelPath digest))
             (dest (str ctx.root "/" rel))]
-        (mt (ensureDir! (outsideStageDir ctx))
+        (match (ensureDir! (outsideStageDir ctx))
           ((err e2) (err (str "cannot create " (outsideStageDir ctx) ": " e2)))
           ((ok _)
             (if (sys/isFile? dest)
               (ok rel)
-              (mt (fileWrite dest src)
+              (match (fileWrite dest src)
                 ((err e3) (err (str "cannot write " dest ": " e3)))
                 ((ok _) (ok rel)))))))))
 
 fn ! runOutside! ctx: sys/Context file: String absFile: String args: (List String) -> Int64
   (if (not (sys/isFile? absFile))
     (do (sys/sayErr! (str "(:run :status :failed :error ERR_NO_FILE :message \"file not found: " file "\")")) 1)
-    (mt (stageOutside! ctx absFile)
+    (match (stageOutside! ctx absFile)
       ((err e) (do (sys/sayErr! (str "(:run :status :failed :error ERR_BUILD :message \"cannot stage " file ": " e "\")")) 1))
       ((ok rel)
         (do (eprintln (str "NATIVE-BYPASS " file " :reason absolute-path-outside-workspace :staged " rel))
@@ -63,7 +63,7 @@ fn ! runOutside! ctx: sys/Context file: String absFile: String args: (List Strin
 ; (:m :ref R1-NATIVE-RECERT :do "nt/main prints its own 'FAIL path: ERR_NATIVE_UNSUPPORTED: path exports neither runTests nor main' when run! delegates straight to it, same generic wrap as the test-side gap but with no Built.reason string this layer could intercept; a cheap static nt/entryOf read of the file's own header, done here before delegating, catches the same no-entry case and reports it with the canonical ERR_NO_ENTRY CONTRACT.asn names, while any file that does declare an entry still goes to nativeTest! exactly as before")
 ; (:m :ref POSTFIX :do "the early-intercept FAIL line reinvented nt/main's own construction and got it wrong on 3 points: it rooted (relative) both path mentions where nt/main's runFile uses the raw absFile for the FAIL prefix and only the relative logical path for the message body, it dropped the colon after ERR_NO_ENTRY, and it appended a bogus (after 0 asserts) suffix nt/main's run leg never prints (that suffix is test/eval-only, from failLine, not runFile's bare failReason); matched verbatim to nt/main's own text so nativeCliTest's native-equals-asl-host comparison holds")
 fn ! runEntryChecked! ctx: sys/Context absFile: String args: (List String) -> Int64
-  (mt (fileReadString absFile)
+  (match (fileReadString absFile)
     ((err _) (nativeTest! (cons "run" (cons absFile (rest args)))))
     ((ok src)
       (if (listContains? (nt/exportsOf src) "main")
@@ -132,14 +132,14 @@ fn ! suiteRelPath! ctx: sys/Context path: String -> (Result String String)
       (stageOutside! ctx absPath)))
 
 fn ! suite! ctx: sys/Context fp: String path: String -> Int64
-  (mt (suiteRelPath! ctx path)
+  (match (suiteRelPath! ctx path)
     ((err e) (do (eprintln (str "FAIL " path ": ERR_BUILD cannot stage " path ": " e " (after 0 asserts)")) 1))
     ((ok rel) (suiteBuilt! ctx fp path rel)))
 
 ; (:m :ref OUT-OF-ROOT-USERPATH :do "rel is always root-relative (rooted for an in-root file, stageOutside!'s rel for a staged one); nt/prepare would read it bare against the actual cwd (OUT-OF-ROOT-USERPATH), wrong whenever test! skipped reexecTestAtRoot! (anyOutOfRoot?) and cwd never became ctx.root, so prepareSourceIn reads the absolute ctx.root-anchored path while keeping rel as the logical/import name")
 fn ! suiteBuilt! ctx: sys/Context fp: String path: String rel: String -> Int64
   (let [(built (nt/prepareTestSource (str ctx.root "/" rel) rel fp))]
-    (mt built.binary
+    (match built.binary
       ((some bin)
         (let [(out (nt/runProc (list "nice" "-n" "15" bin) (some (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff))))))
               (v (nt/judgeInit! bin path (preludeOverride ctx) (nt/verdictOf path out.exitCode out.stderr)))]
@@ -172,7 +172,7 @@ fn ! initProbeJob ctx: sys/Context ws: String tmp: String i: Int64 bin: String -
 fn ! initProbed tmp: String timeoutS: Int64 done: sw/Done d: run/Done -> sw/Done
   (if (!= d.verdict "exit")
     (sw/Done :index done.index :path done.path :code 124 :last (str "module-initialization probe timed out after " (stringFromInt64 timeoutS) "s") :out done.out)
-    (mt (nt/initVerdict done.path d.exit (resultOr (fileReadString (str tmp "/" (stringFromInt64 done.index) ".init.err")) ""))
+    (match (nt/initVerdict done.path d.exit (resultOr (fileReadString (str tmp "/" (stringFromInt64 done.index) ".init.err")) ""))
       ((none) done)
       ((some v) (sw/Done :index done.index :path done.path :code v.exit :last v.line :out ""))))
 
@@ -242,16 +242,16 @@ fn ! sweepFailed! verb: String e: String -> Int64
   (do (eprintln (str "(:" verb " :status :failed :error ERR_NOT_A_WORKSPACE :message \"" e "\")")) 1)
 
 fn ! sweepTest! ctx: sys/Context -> Int64
-  (mt (sw/workspace!)
+  (match (sw/workspace!)
     ((err e) (sweepFailed! "sweep" e))
     ((ok ws)
-      (mt (sw/timeoutWanted!)
+      (match (sw/timeoutWanted!)
         ((err e) (sweepFailed! "sweep" e))
         ((ok timeoutS)
-          (mt (sw/jobsWanted!)
+          (match (sw/jobsWanted!)
             ((err e) (sweepFailed! "sweep" e))
             ((ok jobs)
-              (mt (sw/plan! "test" ws)
+              (match (sw/plan! "test" ws)
                 ((err e) (sweepFailed! "sweep" e))
                 ((ok plan) (sw/report! "test" "native" (pairFirst plan) (pairSecond plan) (sweepDone! ctx ws timeoutS (max 1 jobs) (pairFirst plan)) (sw/frozenCountFor! "test" ws))))))))))
 
@@ -264,7 +264,7 @@ fn ! changedTest! ctx: sys/Context args: (List String) -> Int64
     (if (> (listLength restArgs) 1)
       (do (sys/say! "(:changed :status :failed :error ERR_USAGE :message \"asl test --changed [BASE] [--dry-run]\")") 2)
       (let [(base (optionOr (listHead restArgs) "main"))]
-        (mt (sw/changedPlan! base)
+        (match (sw/changedPlan! base)
           ((err e) (changedFailed! e))
           ((ok plan)
            (let [(changed (pairFirst plan))
@@ -272,17 +272,17 @@ fn ! changedTest! ctx: sys/Context args: (List String) -> Int64
                  (frozen (pairSecond (pairSecond plan)))]
             (if dryRun
               (sw/changedDry! base changed selected frozen)
-              (mt (sw/workspace!)
+              (match (sw/workspace!)
                 ((err e) (changedFailed! e))
                 ((ok ws)
-                  (mt (sw/timeoutWanted!)
+                  (match (sw/timeoutWanted!)
                     ((err e) (changedFailed! (str "ERR_TIMEOUT: " e)))
                     ((ok timeoutS) (sw/changedReport! base changed selected (sweepDone! ctx ws timeoutS 2 selected) frozen))))))))))))
 
 fn ! check! ctx: sys/Context args: (List String) -> Int64
   (if (not (listEmpty? args))
     (cmd/dispatch! ctx "check" args)
-    (mt (sw/nativeCheckSweep!) ((ok code) code) ((err e) (do (sys/sayErr! e) 1))))
+    (match (sw/nativeCheckSweep!) ((ok code) code) ((err e) (do (sys/sayErr! e) 1))))
 
 fn ! rootRelativeArg ctx: sys/Context a: String -> String
   (rooted ctx (resultOr (realPath a) a))
@@ -309,7 +309,7 @@ fn ! test! ctx: sys/Context args: (List String) -> Int64
       ((listContains? args "--changed") (changedTest! ctx args))
       ((listEmpty? args) (sweepTest! ctx))
       ((= (first args) "--native") (if (listEmpty? (rest args)) (cmd/dispatch! ctx "test" args) (suites! ctx (rest args))))
-      (else (mt (cmd/testFiles! args (list))
+      (else (match (cmd/testFiles! args (list))
               ((err code) code)
               ((ok paths)
                 (let [(dirs (filter (fn [(a String)] -> Bool (sys/isDir? a)) args))
@@ -328,9 +328,9 @@ fn ! parse! ctx: sys/Context args: (List String) -> Int64
   (if (listEmpty? args)
     (cmd/dispatch! ctx "parse" args)
     (let [(path (first args))]
-      (mt (fileReadString path)
+      (match (fileReadString path)
         ((err _) (do (sys/sayErr! (str path ": ERR_IO cannot read file")) 1))
-        ((ok src) (mt (ip/parseIndentedFormsPos src)
+        ((ok src) (match (ip/parseIndentedFormsPos src)
                     ((err e) (do (sys/sayErr! (str path ":" (stringFromInt64 e.line) ":" (stringFromInt64 e.col) ": " (readCode e.msg) " " e.msg)) 1))
                     ((ok forms) (do (sys/say! (str (stringFromInt64 (listLength forms)) " top-level form(s)")) 0)))))))
 
@@ -345,7 +345,7 @@ fn ! printDiag! d: ty/Diagnostic -> Bool
 
 fn ! evalRejected! path: String reason: String -> Int64
   (let [(verdict (pairFirst (cc/checkFileCached! path (verify/checkRoots) (cc/emptyCache))))
-        (diags (mt verdict ((err _) (list)) ((ok v) v.diags)))]
+        (diags (match verdict ((err _) (list)) ((ok v) v.diags)))]
     (if (listEmpty? diags)
       (do (sys/sayErr! (str "asl eval: " reason)) 1)
       (do (map printDiag! diags) 1)))
@@ -360,11 +360,11 @@ fn ! evalValue! ctx: sys/Context expr: String -> Int64
                 (if (stringEmpty? configured) (str ctx.root "/.asl/cache/nativeTest") configured)))
         (key (nt/slotKey (str "eval:" (nt/importPathOf path)) digest))
         (slot (str cDir "/" fp "/" key))
-        (made (mt (dirCreate dir) ((err e) (str e)) ((ok _) (mt (fileWrite path src) ((err e) (str e)) ((ok _) (mt (dirCreate slot) ((err e) (str e)) ((ok _) "")))))))]
+        (made (match (dirCreate dir) ((err e) (str e)) ((ok _) (match (fileWrite path src) ((err e) (str e)) ((ok _) (match (dirCreate slot) ((err e) (str e)) ((ok _) "")))))))]
     (if (not (stringEmpty? made))
       (do (sys/sayErr! (str "asl eval: cannot prepare " path ": " made)) 1)
       (let [(built (nt/compileIn cDir path path src slot key fp "eval"))]
-                (mt built.binary
+                (match built.binary
                   ((none) (evalRejected! path built.reason))
                   ((some bin) (let [(out (nt/runProc (list bin) (some (nt/withEnvOverrides! (list (preludeOverride ctx))))))]
                                 (do (print out.stdout)
@@ -382,7 +382,7 @@ fn ! eval! ctx: sys/Context args: (List String) -> Int64
       (else (evalValue! ctx expr))))
 
 fn ! launch! ctx: sys/Context args: (List String) -> Int64
-  (mt (launch/mainIn! ctx.root args) ((ok code) code) ((err e) (do (sys/sayErr! (str "asl launch: " e)) 1)))
+  (match (launch/mainIn! ctx.root args) ((ok code) code) ((err e) (do (sys/sayErr! (str "asl launch: " e)) 1)))
 
 fn ! forms! args: (List String) -> Int64
   (let [(result (forms/mainText! args))]
@@ -417,11 +417,11 @@ fn ! dispatch! ctx: sys/Context verb: String args: (List String) -> Int64
 fn ! entry! ctx: sys/Context args: (List String) -> Int64
   (let [(head (first args))]
     (if (or (= head "-f") (= head "-"))
-      (mt (cmd/main args) ((ok code) code) ((err _) 2))
+      (match (cmd/main args) ((ok code) code) ((err _) 2))
       (let [(r (cmd/route! ctx args))]
         (dispatch! ctx (pairFirst r) (pairSecond r)))))
 
 fn ! main args: (List String) -> (Result Int64 String)
-  (mt (sys/context!)
+  (match (sys/context!)
     ((err e) (do (sys/sayErr! (str "(:asl :status :failed :error ERR_NO_WORKSPACE :message \"" e "\")")) (ok 2)))
-    ((ok ctx) (mt (nc/nativeGate! ctx args) ((some code) (ok code)) ((none) (ok (entry! ctx args))))))
+    ((ok ctx) (match (nc/nativeGate! ctx args) ((some code) (ok code)) ((none) (ok (entry! ctx args))))))

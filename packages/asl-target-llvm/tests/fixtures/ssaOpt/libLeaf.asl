@@ -14,7 +14,7 @@ fn light -> Shade
   (shadeLight)
 
 fn shadeName s: Shade -> String
-  (mt s ((shadeDark) "dark") ((shadeLight) "light") ((shadeTinted n) (str "tinted" n)))
+  (match s ((shadeDark) "dark") ((shadeLight) "light") ((shadeTinted n) (str "tinted" n)))
 
 fn noneOf -> (Option Int64)
   (none)

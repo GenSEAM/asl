@@ -44,7 +44,7 @@ fn findTool reg: AgentRegistry name: Str -> (Option ToolDef)
   (let [(matches (filter (fn [(t ToolDef)] -> Bool (= t.name name)) reg.tools))] (listHead matches))
 
 fn hasTool? reg: AgentRegistry name: Str -> Bool
-  (mt (findTool reg name) ((some _) true) ((none) false))
+  (match (findTool reg name) ((some _) true) ((none) false))
 
 fn formatMessage msg: AgentMessage -> Str
   (str "(:msg :" msg.role " " msg.content ")")

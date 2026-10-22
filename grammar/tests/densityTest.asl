@@ -2,12 +2,12 @@
   :x [runTests])
 
 fn symTokens body: String -> Int64
-  (mt (listGet (stringSplit body ":tokens ") 1)
-    ((some rest) (mt (listHead (stringSplit rest " ")) ((some word) (optionOr (stringToInt64 (stringTrim word)) 0)) ((none) 0)))
+  (match (listGet (stringSplit body ":tokens ") 1)
+    ((some rest) (match (listHead (stringSplit rest " ")) ((some word) (optionOr (stringToInt64 (stringTrim word)) 0)) ((none) 0)))
     ((none) 0))
 
 fn symBody entry: String -> String
-  (mt (stringIndexOf entry ")")
+  (match (stringIndexOf entry ")")
     ((some i) (optionOr (stringSlice entry 0 i) entry))
     ((none) entry))
 
@@ -18,7 +18,7 @@ fn symBodies text: String -> (List String)
   (map (fn [e] (symBody e)) (optionOr (listTail (stringSplit text "(:sym ")) (list)))
 
 fn grammarText! -> String
-  (mt (fileReadString "asl/grammar/grammar.asn")
+  (match (fileReadString "asl/grammar/grammar.asn")
     ((ok text) text)
     ((err e) ""))
 

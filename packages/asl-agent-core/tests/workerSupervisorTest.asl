@@ -10,7 +10,7 @@ fn testWorkerPoolLifecycle -> Bool
         (wId1 (pairSecond s1))]
     (assert (= (mapSize p1.workers) 1) "Worker pool has 1 worker")
     (assert (= wId1 "worker-1") "Worker ID is worker-1")
-    (mt (mapGet p1.workers wId1)
+    (match (mapGet p1.workers wId1)
       ((some rec)
         (do
           (assert (= rec.pid 12345) "Worker PID matches 12345")

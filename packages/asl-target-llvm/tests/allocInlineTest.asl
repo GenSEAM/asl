@@ -15,9 +15,9 @@ fn formatDiags ds: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.locus ": [" d.code "] " d.message)) ds) "; ")
 
 fn ! emitted path: String -> String
-  (mt (lk/linkEntry! path)
+  (match (lk/linkEntry! path)
     ((err ds) (do (assert false (str path ": links; " (formatDiags ds))) ""))
-    ((ok m) (mt (llvm/emitLlvmProgramNative! m (str m.name ".main"))
+    ((ok m) (match (llvm/emitLlvmProgramNative! m (str m.name ".main"))
               ((err ds) (do (assert false (str path ": emits; " (formatDiags ds))) ""))
               ((ok code) code))))
 
@@ -25,7 +25,7 @@ fn occurrences text: String piece: String -> Int64
   (- (listLength (stringSplit text piece)) 1)
 
 fn functionText text: String head: String -> String
-  (mt (stringIndexOf text head)
+  (match (stringIndexOf text head)
     ((none) "")
     ((some at) (let [(rest (optionOr (stringSlice text at (stringLength text)) ""))]
                  (optionOr (stringSlice rest 0 (optionOr (stringIndexOf rest "\n}\n") (stringLength rest))) rest))))
@@ -40,7 +40,7 @@ fn statsField text: String key: String -> Int64
 fn lineField text: String head: String key: String -> Int64
   (let [(line (optionOr (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? l head)) (stringLines text))) ""))
         (tokens (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit line " ")))]
-    (mt (listIndexOf tokens key)
+    (match (listIndexOf tokens key)
       ((some i) (optionOr (stringToInt64 (stringReplace (optionOr (listGet tokens (+ i 1)) "") ")" "")) -1))
       ((none) -1)))
 

@@ -6,11 +6,11 @@ fn readFileSafe! p: String -> String
   (resultOr (fileReadString p) "")
 
 fn dictField v: board/AsnValue key: String -> String
-  (mt v
+  (match v
     ((board/asnDict entries)
-      (mt (board/dictGet entries key)
+      (match (board/dictGet entries key)
         ((some val)
-          (mt val
+          (match val
             ((board/asnStr s) s)
             (_ "")))
         ((none) "")))

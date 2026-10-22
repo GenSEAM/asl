@@ -151,13 +151,13 @@ fn ! testStackScan work: String -> Bool
 fn ! testAbiModule work: String -> Bool
   (let [(triple (hostTriple))
         (facts (libc/libcFacts triple))]
-    (mt facts
+    (match facts
       ((none) (assert false (str "libc.asl has facts for " triple)))
       ((some f)
         (let [(plain (abi/abiText f false))
               (asan (abi/abiText f true))
-              (text (mt plain ((ok t) t) ((err e) e)))
-              (asanText (mt asan ((ok t) t) ((err e) e)))
+              (text (match plain ((ok t) t) ((err e) e)))
+              (asanText (match asan ((ok t) t) ((err e) e)))
               (externalRoots (optionOr (stringSlice text (optionOr (stringIndexOf text "define internal void @rtAbi.externalRoots") 0) (stringLength text)) ""))
               (ll (str work "/rtAbiAsan.ll"))
               (written (fileWrite ll asanText))
@@ -171,11 +171,11 @@ fn ! testAbiModule work: String -> Bool
               (assert (stringContains? text (str "@asl_rt_spill = global [" (abi/spillSlots) " x %Val]")) "asl_rt_spill holds spillSlots Vals")
               (assert (ok? written) "the ASan module written")
               (assert (= compiled.exitCode 0) (str "clang compiles the ASan module; " compiled.stderr))
-              (mt (libc/libcFacts "linux-x86_64")
+              (match (libc/libcFacts "linux-x86_64")
                 ((none) (assert false "libc.asl has linux-x86_64 facts"))
-                ((some lf) (assert (stringContains? (mt (abi/abiText lf false) ((ok t) t) ((err e) e)) "call i32 @pthread_getattr_np(")
+                ((some lf) (assert (stringContains? (match (abi/abiText lf false) ((ok t) t) ((err e) e)) "call i32 @pthread_getattr_np(")
                              "linux-x86_64 locates the stack through pthread_getattr_np")))
-              (mt (libc/libcFacts "wasm32-unknown-unknown")
+              (match (libc/libcFacts "wasm32-unknown-unknown")
                 ((none) (assert false "libc.asl has wasm32 facts"))
                 ((some wf) (refute (ok? (abi/abiText wf false)) "wasm32 has no native stack lookup, so abiText refuses it")))
               true)))))

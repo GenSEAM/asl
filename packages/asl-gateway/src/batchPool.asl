@@ -64,19 +64,19 @@ fn poolActionReplyCount actions: (List PoolAction) -> Int64
   (if (listEmpty? actions) 0
     (let [(head (optionOr (listHead actions) (reply 0 (err (batchRejected "invalid")))))
           (tail (optionOr (listTail actions) (list)))]
-      (+ (mt head ((reply _ _) 1) (_ 0)) (poolActionReplyCount tail))))
+      (+ (match head ((reply _ _) 1) (_ 0)) (poolActionReplyCount tail))))
 
 fn poolActionDispatchCount actions: (List PoolAction) -> Int64
   (if (listEmpty? actions) 0
     (let [(head (optionOr (listHead actions) (reply 0 (err (batchRejected "invalid")))))
           (tail (optionOr (listTail actions) (list)))]
-      (+ (mt head ((dispatch _) 1) (_ 0)) (poolActionDispatchCount tail))))
+      (+ (match head ((dispatch _) 1) (_ 0)) (poolActionDispatchCount tail))))
 
 fn poolActionScaleDownCount actions: (List PoolAction) -> Int64
   (if (listEmpty? actions) 0
     (let [(head (optionOr (listHead actions) (reply 0 (err (batchRejected "invalid")))))
           (tail (optionOr (listTail actions) (list)))]
-      (+ (mt head ((scaleDown) 1) (_ 0)) (poolActionScaleDownCount tail))))
+      (+ (match head ((scaleDown) 1) (_ 0)) (poolActionScaleDownCount tail))))
 
 fn isTimedOut request: PoolRequest nowMs: Int64 timeoutMs: Int64 -> Bool
   (>= (- nowMs request.arrivedAt) timeoutMs)
@@ -114,7 +114,7 @@ fn flushQueued state: PoolState -> PoolStep
   (dispatchBatch state state.queued)
 
 fn poolStep state: PoolState event: PoolEvent nowMs: Int64 -> PoolStep
-  (mt event
+  (match event
     ((arrive request)
       (let [(config state.config)
             (busy (not (listEmpty? state.inFlight)))

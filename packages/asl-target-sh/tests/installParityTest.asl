@@ -52,16 +52,16 @@ fn readList text: String bs: Bytes i0: Int64 acc: (List Node) -> (Pair Node Int6
       (let [(r (readNode text bs i))] (readList text bs (pairSecond r) (cons (pairFirst r) acc)))))
 
 fn items n: Node -> (List Node)
-  (mt n ((nList xs) xs) ((nStr _) (list)) ((nSym _) (list)))
+  (match n ((nList xs) xs) ((nStr _) (list)) ((nSym _) (list)))
 
 fn atom n: Node -> String
-  (mt n ((nStr s) s) ((nSym s) s) ((nList _) ""))
+  (match n ((nStr s) s) ((nSym s) s) ((nList _) ""))
 
 fn field n: Node key: String -> Node
   (fieldIn (items n) key)
 
 fn fieldIn xs: (List Node) key: String -> Node
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (nList (list)))
     ((some h) (let [(rest (optionOr (listTail xs) (list)))]
                 (if (= (atom h) key) (optionOr (listHead rest) (nList (list))) (fieldIn rest key)))))
@@ -80,7 +80,7 @@ fn blobMap! blobs: Node -> (Map String Blob)
 (schema Env (:f sandbox String) (:f root String) (:f home String) (:f host String) (:f repo String))
 
 fn sh! cmd: (List String) -> Bool
-  (mt (dist/runArgv! cmd (none) (none) 60000) ((ok r) (= r.code 0)) ((err _) false))
+  (match (dist/runArgv! cmd (none) (none) 60000) ((ok r) (= r.code 0)) ((err _) false))
 
 fn place! blobs: (Map String Blob) env: Env base: String row: Node -> Bool
   (let [(rel (atom (nth row 0)))
@@ -95,7 +95,7 @@ fn place! blobs: (Map String Blob) env: Env base: String row: Node -> Bool
         (let [(wrote (cond
                        ((= kind ":installer") (fileWrite path (dist/generateInstallSh)))
                        ((= kind ":installerDrift") (fileWrite path (str (dist/generateInstallSh) blob.text)))
-                       (else (mt blob.bytes
+                       (else (match blob.bytes
                                ((some b) (fileWrite path b))
                                ((none) (fileWrite path (stringReplace blob.text "@HOME" env.home)))))))]
           (and (ok? wrote) (ok? (dist/chmodTo! path (if exec 493 420))))))))
@@ -108,7 +108,7 @@ fn digitRun s: String i: Int64 -> Int64
     (if (digits? c) (digitRun s (+ i 1)) i))
 
 fn normStamp s: String prefix: String from: Int64 -> String
-  (mt (stringIndexOf (optionOr (stringSlice s from (stringLength s)) "") prefix)
+  (match (stringIndexOf (optionOr (stringSlice s from (stringLength s)) "") prefix)
     ((none) s)
     ((some rel)
       (let [(at (+ from rel (stringLength prefix)))
@@ -123,7 +123,7 @@ fn normalize env: Env s: String -> String
   (normStamp (normStamp (stringReplace s env.sandbox "<S>") "directives-" 0) "skills-" 0)
 
 fn bashLine l: String -> String
-  (mt (stringIndexOf l "install.sh: line ")
+  (match (stringIndexOf l "install.sh: line ")
     ((none) l)
     ((some i)
       (let [(after (+ i 17))
@@ -143,7 +143,7 @@ fn otherCalls s: String -> (List String)
   (sortUniq (map maskTemp (filter (fn [l] (not (stringStartsWith? l "git "))) (dist/splitLines s))))
 
 fn maskTemp l: String -> String
-  (mt (stringIndexOf l " -o ")
+  (match (stringIndexOf l " -o ")
     ((none) l)
     ((some i) (let [(path (optionOr (stringSlice l (+ i 4) (stringLength l)) ""))
                     (cut (lastSlashAt path (- (stringLength path) 1)))]
@@ -153,7 +153,7 @@ fn lastSlashAt s: String i: Int64 -> Int64
   (cond ((< i 0) -1) ((= (optionOr (stringSlice s i (+ i 1)) "") "/") i) (else (lastSlashAt s (- i 1))))
 
 fn sortUniq xs: (List String) -> (List String)
-  (listReverse (fold (fn [acc x] (mt (listHead acc) ((some h) (if (= h x) acc (cons x acc))) ((none) (cons x acc)))) (list) (listSort xs)))
+  (listReverse (fold (fn [acc x] (match (listHead acc) ((some h) (if (= h x) acc (cons x acc))) ((none) (cons x acc)))) (list) (listSort xs)))
 
 (schema Row (:f rel String) (:f kind String) (:f value String))
 
@@ -161,7 +161,7 @@ fn rowText r: Row -> String
   (str r.rel " " r.kind " " r.value)
 
 fn walk! env: Env dir: String rel: String skip: (List String) acc: (List String) -> (List String)
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err _) acc)
     ((ok names)
       (fold (fn [a n]
@@ -170,9 +170,9 @@ fn walk! env: Env dir: String rel: String skip: (List String) acc: (List String)
                     (shown (normalize env r))]
                 (cond
                   ((listContains? skip r) a)
-                  ((dist/symlink? dir n) (cons (str shown " :link " (mt (realPath p) ((ok t) (normalize env t)) ((err _) "<dangling>"))) a))
+                  ((dist/symlink? dir n) (cons (str shown " :link " (match (realPath p) ((ok t) (normalize env t)) ((err _) "<dangling>"))) a))
                   ((dist/isDir! p) (walk! env p r skip a))
-                  (else (cons (str shown " :file " (mt (fileReadString p) ((ok t) (bytesSha256 (stringToBytes (stringReplace t env.sandbox "<S>")))) ((err _) "<unreadable>"))) a)))))
+                  (else (cons (str shown " :file " (match (fileReadString p) ((ok t) (bytesSha256 (stringToBytes (stringReplace t env.sandbox "<S>")))) ((err _) "<unreadable>"))) a)))))
             acc names)))
 
 fn treeRows n: Node -> (List String)

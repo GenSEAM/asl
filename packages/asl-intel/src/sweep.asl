@@ -61,27 +61,27 @@ fn scan b: Bytes n: Int64 i: Int64 ci: Int64 inStr: Bool esc: Bool inComment: Bo
         (else (scan b n (+ i 1) ci2 false false false comments stack)))))
 
 fn sweepFiles! ctx: h/Ctx root: String -> (Result (List String) String)
-  (mt (h/gitLsFiles! ctx root)
+  (match (h/gitLsFiles! ctx root)
     ((ok fs) (ok (filter (fn [(f String)] -> Bool (or (stringEndsWith? f ".asl") (stringEndsWith? f ".asn"))) fs)))
     ((err _)
-      (mt (h/findTree! ctx root true (list "*.asl" "*.asn"))
+      (match (h/findTree! ctx root true (list "*.asl" "*.asn"))
         ((err e) (err e))
         ((ok tree) (ok (map (fn [(f String)] -> String (t/relPath f root ctx.cwd)) (h/walkFiles! tree)))))))
 
 fn checkFile! root: String f: String -> (Option String)
   (let [(full (t/joinPath root f))]
     (if (h/isDir? full) (some (str "[Errno 21] Is a directory: " (t/pyReprStr full)))
-      (mt (h/readText! full)
+      (match (h/readText! full)
         ((err e) (some (pyOsError full e)))
         ((ok s) (balanceError s (not (stringEndsWith? f ".asl")))))))
 
 fn sweepMonorepo! ctx: h/Ctx root: String verbose: Bool -> (Result Sweep String)
-  (mt (sweepFiles! ctx root)
+  (match (sweepFiles! ctx root)
     ((err e) (err e))
     ((ok files)
       (let [(errs (listReverse (fold (fn [(acc (List (Pair String String))) (f String)] -> (List (Pair String String))
                                        (if (stringContains? f "/invalid/") acc
-                                         (mt (checkFile! root f) ((some m) (cons (pair f m) acc)) ((none) acc))))
+                                         (match (checkFile! root f) ((some m) (cons (pair f m) acc)) ((none) acc))))
                                      (list) files)))
             (k (listLength files))
             (head "--> Checking monorepo-wide S-expression delimiter balance across all git-tracked files...")]
@@ -95,6 +95,6 @@ fn sweepMonorepo! ctx: h/Ctx root: String verbose: Bool -> (Result Sweep String)
                             "")))))))
 
 fn runSweep! ctx: h/Ctx -> h/Outcome
-  (mt (sweepMonorepo! ctx ctx.home true)
+  (match (sweepMonorepo! ctx ctx.home true)
     ((err e) (h/outcome "" (str "Error: " e "\n") 1))
     ((ok sw) (h/outcome sw.out sw.err (if sw.ok 0 1))))

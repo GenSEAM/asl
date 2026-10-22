@@ -107,7 +107,7 @@ fn ! runTests -> Bool
         (assert (= (ir/declOf "define internal i64 @f(i64 %a, ...) noinline cold {") (some "declare i64 @f(i64, ...)")) "a declaration keeps varargs and drops attributes")
         (assert (= (ir/declOf "define weak ptr @g() {") (some "declare ptr @g()")) "a declaration of a weak function with no parameters")
         (assert (= (ir/externOf "@x = internal global %Val zeroinitializer") (some "@x = external hidden global %Val")) "an internal %Val global becomes an external hidden declaration")
-        (assert (mt linked ((ok _) true) ((err e) (do (eprintln e) false))) "nb/link! builds the fixture through its parts")
+        (assert (match linked ((ok _) true) ((err e) (do (eprintln e) false))) "nb/link! builds the fixture through its parts")
         (assert (= (listLength objects) 4) (str "nb/link! compiled each of the four parts to an object: " (stringFromInt64 (listLength objects))))
         (assert (= ran.exit 6) (str "the linked program returns the cell its tailcc step stored (6): " (stringFromInt64 ran.exit) " " ran.out))
         (assert (= (stringTrim ran.out) "hello 1114") (str "the linked program sees one counter, one ready flag and one weak base across the parts: " ran.out))

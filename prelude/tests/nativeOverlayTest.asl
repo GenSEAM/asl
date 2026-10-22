@@ -57,9 +57,9 @@ fn hugeFixtureSrc -> String
 
 fn ! compiled dir: String name: String src: String -> (Result String String)
   (do (assert (ok? (fileWrite (str dir "/" name ".asl") src)) (str "fileWrite " dir "/" name ".asl"))
-      (mt (lk/linkEntry! (str dir "/" name ".asl"))
+      (match (lk/linkEntry! (str dir "/" name ".asl"))
         ((err ds) (err (formatDiags ds)))
-        ((ok m) (mt (llvm/emitLlvmProgramNative! m (str m.name ".main"))
+        ((ok m) (match (llvm/emitLlvmProgramNative! m (str m.name ".main"))
                   ((err ds) (err (formatDiags ds)))
                   ((ok code) (ok code))))))
 
@@ -67,7 +67,7 @@ fn formatDiags ds: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.locus ": [" d.code "] " d.message)) ds) "; ")
 
 fn codeOf res: (Result String String) -> String
-  (mt res
+  (match res
     ((ok code) code)
     ((err e) (str "error: " e)))
 
@@ -83,7 +83,7 @@ fn ! runNative dir: String name: String src: String -> ProcessOutput
   (processRun (buildNative dir name src))
 
 fn ! childCpuUs -> Int64
-  (mt (procRusage) ((ok u) (+ u.childrenUserUs u.childrenSysUs)) ((err _) -1))
+  (match (procRusage) ((ok u) (+ u.childrenUserUs u.childrenSysUs)) ((err _) -1))
 
 fn ! testOverlayLinked dir: String -> Bool
   (let [(code (codeOf (compiled dir "overlayFixture" (fixtureSrc))))]
@@ -148,12 +148,12 @@ fn ! testRewriteRawSignature -> Bool
         (verified (vfy/verifySsa rw))
         (dests (map (fn [(i irTy/SsaInstr)] -> String i.dest) (instrsOf caller)))]
     (do
-      (assert (ok? verified) (str "rewritten module verifies: " (mt verified ((ok _) "ok") ((err ds) (formatDiags ds)))))
+      (assert (ok? verified) (str "rewritten module verifies: " (match verified ((ok _) "ok") ((err ds) (formatDiags ds)))))
       (assert (= caller.name "m.caller") "m.caller survives the rewrite")
-      (assert (= (countOps caller (fn [(o irTy/SsaOp)] -> Bool (mt o ((irTy/opBuiltin _ _) true) (_ false)))) 0) "no opBuiltin rawId remains")
-      (assert (= (countOps caller (fn [(o irTy/SsaOp)] -> Bool (mt o ((irTy/opCall c _) (= c "m.raw")) (_ false)))) 3) "three calls of m.raw")
-      (assert (= (countOps caller (fn [(o irTy/SsaOp)] -> Bool (mt o ((irTy/opUnbox _) true) (_ false)))) 3) "three argument unboxes to i64")
-      (assert (= (countOps caller (fn [(o irTy/SsaOp)] -> Bool (mt o ((irTy/opBox _) true) (_ false)))) 3) "three result reboxes to Val")
+      (assert (= (countOps caller (fn [(o irTy/SsaOp)] -> Bool (match o ((irTy/opBuiltin _ _) true) (_ false)))) 0) "no opBuiltin rawId remains")
+      (assert (= (countOps caller (fn [(o irTy/SsaOp)] -> Bool (match o ((irTy/opCall c _) (= c "m.raw")) (_ false)))) 3) "three calls of m.raw")
+      (assert (= (countOps caller (fn [(o irTy/SsaOp)] -> Bool (match o ((irTy/opUnbox _) true) (_ false)))) 3) "three argument unboxes to i64")
+      (assert (= (countOps caller (fn [(o irTy/SsaOp)] -> Bool (match o ((irTy/opBox _) true) (_ false)))) 3) "three result reboxes to Val")
       (assert (= (listLength dests) (listLength (distinct dests))) (str "every value is defined once in m.caller: " (stringJoin dests " ")))
       true))
 
@@ -161,20 +161,20 @@ fn distinct names: (List String) -> (List String)
   (fold (fn [(acc (List String)) (n String)] -> (List String) (if (listContains? acc n) acc (listAppend acc (list n)))) (list) names)
 
 fn hasCode? res: (Result lk/LinkUnit (List irTy/IrDiag)) code: String -> Bool
-  (mt res ((ok _) false) ((err ds) (listAny? (fn [(d irTy/IrDiag)] -> Bool (= d.code code)) ds)))
+  (match res ((ok _) false) ((err ds) (listAny? (fn [(d irTy/IrDiag)] -> Bool (= d.code code)) ds)))
 
 fn builtinNames m: irTy/SsaModule -> (List String)
   (fold (fn [(acc (List String)) (f irTy/SsaFunction)] -> (List String)
-          (listAppend acc (fold (fn [(names (List String)) (i irTy/SsaInstr)] -> (List String) (mt i.op ((irTy/opBuiltin n _) (listAppend names (list n))) (_ names))) (list) (instrsOf f))))
+          (listAppend acc (fold (fn [(names (List String)) (i irTy/SsaInstr)] -> (List String) (match i.op ((irTy/opBuiltin n _) (listAppend names (list n))) (_ names))) (list) (instrsOf f))))
         (list) m.functions)
 
 fn functionNamed m: irTy/SsaModule name: String -> (Option irTy/SsaFunction)
   (listHead (filter (fn [(f irTy/SsaFunction)] -> Bool (= f.name name)) m.functions))
 
 fn callsIn f: (Option irTy/SsaFunction) callee: String -> Bool
-  (mt f
+  (match f
     ((none) false)
-    ((some g) (> (countOps g (fn [(o irTy/SsaOp)] -> Bool (mt o ((irTy/opCall c _) (= c callee)) (_ false)))) 0)))
+    ((some g) (> (countOps g (fn [(o irTy/SsaOp)] -> Bool (match o ((irTy/opCall c _) (= c callee)) (_ false)))) 0)))
 
 fn ! testRequestedBuiltin dir: String -> Bool
   (let [(src (stringJoin (list "(module overlayRequested :x [main] :i [])"
@@ -185,7 +185,7 @@ fn ! testRequestedBuiltin dir: String -> Bool
         (path (str dir "/overlayRequested.asl"))]
     (do
       (assert (ok? (fileWrite path src)) (str "fileWrite " path))
-      (mt (lk/linkEntry! path)
+      (match (lk/linkEntry! path)
         ((err ds) (assert false (str "overlayRequested links: " (formatDiags ds))))
         ((ok m) (do
                   (assert (callsIn (functionNamed m "prelude.isFinite?") "prelude.floatInf") "precondition: prelude.isFinite? reaches floatInf by an ordinary call of prelude.floatInf")
@@ -200,7 +200,7 @@ fn ! testRequestedBuiltin dir: String -> Bool
 
 fn ! testLateBuiltin dir: String -> Bool
   (let [(real (fileReadString "asl/prelude/prelude.asl"))
-        (realText (mt real ((ok t) t) ((err _) "")))
+        (realText (match real ((ok t) t) ((err _) "")))
         (customText (stringReplace realText "fn floatInf -> Float64\n  (/ 1.0 0.0)" "fn floatInf -> Float64\n  (do (bytesSha256 (bytesAlloc 0)) (/ 1.0 0.0))"))
         (preludeFile (str dir "/latePrelude.asl"))
         (path (str dir "/overlayLate.asl"))]
@@ -209,7 +209,7 @@ fn ! testLateBuiltin dir: String -> Bool
       (refute (= customText realText) "the custom prelude's floatInf body calls bytesSha256")
       (assert (ok? (fileWrite preludeFile customText)) (str "fileWrite " preludeFile))
       (assert (ok? (fileWrite path "(module overlayLate :x [main] :i [])\n\nfn ! main -> (Result Int64 String)\n  (do (println (str (floatInf))) (ok 0))\n")) (str "fileWrite " path))
-      (mt (lk/linkWith! path preludeFile)
+      (match (lk/linkWith! path preludeFile)
         ((err ds) (assert false (str "overlayLate links: " (formatDiags ds))))
         ((ok m) (do
                   (assert (callsIn (functionNamed m "prelude.floatInf") "native.bytesSha256") "prelude.floatInf's opBuiltin bytesSha256 is rewritten into a call of native.bytesSha256")
@@ -218,7 +218,7 @@ fn ! testLateBuiltin dir: String -> Bool
 
 fn ! testCollidingDefinitionName dir: String -> Bool
   (let [(real (fileReadString "asl/prelude/prelude.asl"))
-        (realText (mt real ((ok t) t) ((err _) "")))
+        (realText (match real ((ok t) t) ((err _) "")))
         (customText (str realText "\nfn mask32 x: Int64 -> Int64\n  (+ x 1)\n\nfn ! triggerMask32 -> Int64\n  (mask32 7)\n"))
         (preludeFile (str dir "/collidingPrelude.asl"))
         (path (str dir "/overlayCollide.asl"))]
@@ -227,7 +227,7 @@ fn ! testCollidingDefinitionName dir: String -> Bool
       (refute (stringContains? realText "mask32") "precondition: the real prelude does not already define mask32")
       (assert (ok? (fileWrite preludeFile customText)) (str "fileWrite " preludeFile))
       (assert (ok? (fileWrite path "(module overlayCollide :x [main] :i [])\n\nfn ! main -> (Result Int64 String)\n  (do (println (bytesSha256 (stringToBytes \"abc\"))) (println (str (triggerMask32))) (ok 0))\n")) (str "fileWrite " path))
-      (mt (lk/linkWith! path preludeFile)
+      (match (lk/linkWith! path preludeFile)
         ((err ds) (assert false (str "overlayCollide links: " (formatDiags ds))))
         ((ok m) (do
                   (assert (someOf? (functionNamed m "native.mask32")) "the overlay's own internal mask32 is still lowered")
@@ -237,7 +237,7 @@ fn ! testCollidingDefinitionName dir: String -> Bool
       true))
 
 fn someOf? o: (Option irTy/SsaFunction) -> Bool
-  (mt o ((some _) true) ((none) false))
+  (match o ((some _) true) ((none) false))
 
 fn ! testOverlayErrors dir: String -> Bool
   (let [(bad (str dir "/ovlBad/")) (unreadable (str dir "/ovlUnreadable/")) (good (str dir "/ovlGood/")) (missing (str dir "/ovlMissing/"))]
@@ -254,11 +254,11 @@ fn ! testOverlayErrors dir: String -> Bool
         (do
           (assert (hasCode? badRes "ERR_LOWER_PARSE") "a parse error in an overlay file is ERR_LOWER_PARSE")
           (assert (hasCode? unreadableRes "ERR_LINK_READ") "an unreadable overlay *.asl file is ERR_LINK_READ")
-          (assert (= (mt goodRes ((ok u) (listLength u.forms)) ((err _) -1)) 2) "a good overlay file gives its header plus its one defun")
-          (assert (= (mt missingRes ((ok u) (listLength u.forms)) ((err _) -1)) 1) "a missing overlay directory is the bare header")
-          (mt (lk/loadClosure! (str dir "/overlayFixture.asl"))
+          (assert (= (match goodRes ((ok u) (listLength u.forms)) ((err _) -1)) 2) "a good overlay file gives its header plus its one defun")
+          (assert (= (match missingRes ((ok u) (listLength u.forms)) ((err _) -1)) 1) "a missing overlay directory is the bare header")
+          (match (lk/loadClosure! (str dir "/overlayFixture.asl"))
             ((err ds) (assert false (str "loadClosure overlayFixture: " (formatDiags ds))))
-            ((ok units) (assert (mt (lk/linkUnitsWith units (err (list)) badRes) ((ok _) false) ((err ds) (listAny? (fn [(d irTy/IrDiag)] -> Bool (= d.code "ERR_LOWER_PARSE")) ds)))
+            ((ok units) (assert (match (lk/linkUnitsWith units (err (list)) badRes) ((ok _) false) ((err ds) (listAny? (fn [(d irTy/IrDiag)] -> Bool (= d.code "ERR_LOWER_PARSE")) ds)))
                                 "linkUnitsWith fails with the overlay's ERR_LOWER_PARSE rather than linking past it")))
           true))))
 

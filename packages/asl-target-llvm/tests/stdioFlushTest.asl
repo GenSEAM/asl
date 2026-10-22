@@ -24,7 +24,7 @@ fn ! sh cmd: String -> Captured
 ; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): regenRtAbi! used to shell out to asl-host to interpret rtAbi.asl as a CLI script (its own fn ! main, writing the generated .ll to the given path); this is not a host-vs-native parity check, just a CLI wrapper around rtAbi/abiText, so it now calls rtAbi/main directly in-process (the exact same exported entry point) instead of spawning anything. buildProcFixture! used to run asl1.asl's build command interpreted by asl-host; it now uses the cached native asl1 compiler (asl-cli/asl1Cache nativeAsl1!), the same replacement used by deepStackTest")
 
 fn ! nativeAsl1Bin! -> (Result String String)
-  (mt (sys/context!)
+  (match (sys/context!)
     ((err e) (err e))
     ((ok ctx) (cache/nativeAsl1! ctx (str ctx.root "/asl/host/out/libaslrt.a") "/usr/bin/clang")))
 
@@ -47,7 +47,7 @@ fn ! buildProcFixture! work: String -> Bool
         (ll (str work "/procFlushFixture.ll"))
         (wrote (ok? (fileWrite src (procFixtureSource))))
         (compiler (nativeAsl1Bin!))]
-    (mt compiler
+    (match compiler
       ((err e) (do (assert false (str "procFlushFixture: native asl1 compiler: " e)) false))
       ((ok nativeAsl1)
         (let [(built (sh (str nativeAsl1 " build " src " -o " ll)))]
@@ -56,7 +56,7 @@ fn ! buildProcFixture! work: String -> Bool
               true)))))
 
 fn ! textOf path: String -> String
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((ok t) t)
     ((err e) (str "unreadable " path ": " e)))
 

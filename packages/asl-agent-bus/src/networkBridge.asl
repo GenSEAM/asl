@@ -47,7 +47,7 @@ fn findPeer peers: (List RemotePeer) targetId: String -> (Option RemotePeer)
 
 fn bridgeSendRemote bridge: NetworkBridge targetPeerId: String payload: String -> (Result NetworkBridge String)
   (let [(peerOpt (findPeer bridge.peers targetPeerId))]
-    (mt peerOpt
+    (match peerOpt
       ((none)
         (err "ERR_PEER_NOT_FOUND"))
       ((some peer)

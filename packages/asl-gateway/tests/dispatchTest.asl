@@ -61,36 +61,36 @@ fn header request: u/UpstreamRequest name: String -> String
   (optionOr (optionMap pairSecond (listHead (filter (fn [(h (Pair String String))] -> Bool (= (stringLower (pairFirst h)) (stringLower name))) request.headers))) "")
 
 fn bodyModel data: String -> String
-  (mt (j/jsonParse data) ((ok v) (mt (j/jsonGet v "model") ((some m) (mt m ((j/jstr s) s) (_ ""))) ((none) ""))) ((err _) ""))
+  (match (j/jsonParse data) ((ok v) (match (j/jsonGet v "model") ((some m) (match m ((j/jstr s) s) (_ ""))) ((none) ""))) ((err _) ""))
 
 fn sentSlot planned: dp/Plan -> String
-  (mt planned ((dp/planSend slot _ _ _) slot) (_ ""))
+  (match planned ((dp/planSend slot _ _ _) slot) (_ ""))
 
 fn sentRequest planned: dp/Plan -> (Option u/UpstreamRequest)
-  (mt planned ((dp/planSend _ _ request _) (some request)) (_ none))
+  (match planned ((dp/planSend _ _ request _) (some request)) (_ none))
 
 fn rowOf planned: dp/Plan -> dp/DecisionRow
-  (mt planned ((dp/planSend _ _ _ row) row) ((dp/planReject _ _ row) row) ((dp/planWait _ _ _ row _ _) row))
+  (match planned ((dp/planSend _ _ _ row) row) ((dp/planReject _ _ row) row) ((dp/planWait _ _ _ row _ _) row))
 
 fn refusedOf planned: dp/Plan -> (List String)
   (rowOf planned).refused
 
 fn ! wiringFor text: String -> (Result dp/Wiring String)
-  (mt (cfg/gatewayProfilesLoadText! "/tmp/dispatchTest/.asl/gateway.asn" true (ok text) "")
+  (match (cfg/gatewayProfilesLoadText! "/tmp/dispatchTest/.asl/gateway.asn" true (ok text) "")
     ((err e) (err e))
     ((ok table)
-      (mt (u/upstreamSettings (testEnv))
+      (match (u/upstreamSettings (testEnv))
         ((err e) (err e))
         ((ok st) (dp/wiringFromConfig (some table) text st (testEnv) (listAppend (dp/builtinFamilies) (list (lf/fixtureFamily))))))))
 
 fn ! testRowsFromTableIncludesGeminiProvider -> Bool
   (let [(text "(:gateway :v 2\n  :providers ((:provider :id testGeminiRow :kind gemini :base \"https://example.test/v1\" :keyEnv TESTGEMINIROW_API_KEY))\n  :models ((:model :id testGeminiRowModel :provider testGeminiRow :name \"m\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (testGeminiRowModel)))))\n  :uses ((:use :for default :profile p1)))")
         (res (cfg/gateway_config_parse! text "rowsFromTableGemini" ".asl/mem/calibration/index.asn"))]
-    (mt res
+    (match res
       ((err e) (assert false (str "ROWSFROMTABLE: config must parse: " e)))
       ((ok tbl)
         (let [(rows (dp/rowsFromTable (some tbl)))]
-          (mt (u/upstreamProviderNamed rows "testGeminiRow")
+          (match (u/upstreamProviderNamed rows "testGeminiRow")
             ((none) (assert false "ROWSFROMTABLE: a configured :kind gemini provider must appear in the dispatch row list, not be silently dropped"))
             ((some _) true))))))
 
@@ -98,11 +98,11 @@ fn ! testRowsFromTableIncludesGeminiProvider -> Bool
 fn ! testRowsFromTableIncludesOpenrouterProvider -> Bool
   (let [(text "(:gateway :v 2\n  :models ((:model :id testOpenrouterModel :provider openrouter :name \"m\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (testOpenrouterModel)))))\n  :uses ((:use :for default :profile p1)))")
         (res (cfg/gateway_config_parse! text "rowsFromTableOpenrouter" ".asl/mem/calibration/index.asn"))]
-    (mt res
+    (match res
       ((err e) (assert false (str "ROWSFROMTABLE: config must parse: " e)))
       ((ok tbl)
         (let [(rows (dp/rowsFromTable (some tbl)))]
-          (mt (u/upstreamProviderNamed rows "openrouter")
+          (match (u/upstreamProviderNamed rows "openrouter")
             ((none) (assert false "ROWSFROMTABLE: the built-in openrouter fallback provider must appear in the dispatch row list when a real config table is present, not only when table is none"))
             ((some _) true))))))
 
@@ -110,7 +110,7 @@ fn ! unitChecks -> Bool
   (let [(base "http://127.0.0.1:9")
         (routed (wiringFor (wiringConfig base true)))
         (plain (wiringFor (wiringConfig base false)))]
-    (mt routed
+    (match routed
       ((err e) (do (assert false (str "routed wiring builds: " e)) false))
       ((ok w)
         (do
@@ -123,9 +123,9 @@ fn ! unitChecks -> Bool
           (let [(first (dp/plan w (hint) (chatRequest) (testEnv) 1000))]
             (do
               (assert (= (sentSlot first) "epRunpod") "route: the router rule picks the cheaper endpoint")
-              (assert (mt (sentRequest first) ((some r) (= r.url (str base "/runpod/v1/chat/completions"))) ((none) false)) "send: a routed request goes to the endpoint's row URL")
-              (assert (mt (sentRequest first) ((some r) (= (header r "Authorization") "Bearer rpKey")) ((none) false)) "send: a routed request carries the endpoint row's key")
-              (assert (mt (sentRequest first) ((some r) (= (bodyModel r.data) "bonsai2")) ((none) false)) "send: a routed request names the candidate model")
+              (assert (match (sentRequest first) ((some r) (= r.url (str base "/runpod/v1/chat/completions"))) ((none) false)) "send: a routed request goes to the endpoint's row URL")
+              (assert (match (sentRequest first) ((some r) (= (header r "Authorization") "Bearer rpKey")) ((none) false)) "send: a routed request carries the endpoint row's key")
+              (assert (match (sentRequest first) ((some r) (= (bodyModel r.data) "bonsai2")) ((none) false)) "send: a routed request names the candidate model")
               (let [(busy (dp/started w "epRunpod"))
                     (atCapacity (dp/plan busy (hint) (chatRequest) (testEnv) 1000))]
                 (do
@@ -133,7 +133,7 @@ fn ! unitChecks -> Bool
                   (assert (= (refusedOf atCapacity) (list)) "pick: spillover needs no refusal to avoid a full endpoint")
                   (let [(full (dp/plan (dp/started busy "epA") (hint) (chatRequest) (testEnv) 1000))]
                     (do
-                      (assert (mt full ((dp/planReject status _ _) (= status 503)) (_ false)) "admission: when every endpoint is full the request is refused with 503")
+                      (assert (match full ((dp/planReject status _ _) (= status 503)) (_ false)) "admission: when every endpoint is full the request is refused with 503")
                       (assert (= (listLength (refusedOf full)) 2) "admission: each refused endpoint is recorded")
                       (assert (listAll? (fn [(r String)] -> Bool (stringEndsWith? r ":rejectAtCapacity")) (refusedOf full)) "admission: the refusals name the capacity reason")))))
               (let [(charged (dp/settle (dp/started w "epRunpod") "epRunpod" "runpod" 1000 50 true 1000))
@@ -144,20 +144,20 @@ fn ! unitChecks -> Bool
                   (assert (= (sentSlot after) "epA") "budget: a spent endpoint is skipped for the next candidate")
                   (assert (= (refusedOf after) (list "epRunpod:budget")) "budget: the budget refusal is recorded in the decision row")
                   (assert (stringContains? (pairSecond again) ":status overCap") "charge: a charge past the cap is refused by the ledger")
-                  (mt (wiringFor (str (wiringConfig base true) " "))
+                  (match (wiringFor (str (wiringConfig base true) " "))
                     ((err e) (assert false (str "reloaded wiring builds: " e)))
                     ((ok fresh)
                       (do
                         (assert (= (sentSlot (dp/plan fresh (hint) (chatRequest) (testEnv) 2000)) "epRunpod") "a rebuilt ledger alone starts empty")
                         (assert (= (refusedOf (dp/plan (dp/carrySpend (pairFirst charged) fresh) (hint) (chatRequest) (testEnv) 2000)) (list "epRunpod:budget")) "reload: spend on a surviving line carries into the rebuilt ledger"))))))
               (assert (stringContains? (dp/decisionText (rowOf first)) ":rule \"cheap\" :candidates (\"epRunpod\" \"epA\")") "the decision row names the rule and the ranked candidates")))
-          (mt plain
+          (match plain
             ((err e) (assert false (str "plain wiring builds: " e)))
             ((ok wp)
               (let [(through (dp/plan wp (hint) (chatRequest) (testEnv) 1000))]
                 (do
                   (assert (= (sentSlot through) "fixa") "without a router profile the chat's own endpoint is used")
-                  (assert (mt (sentRequest through) ((some r) (= r.url (chatRequest).url)) ((none) false)) "passthrough sends the chat-built request unchanged")))))
+                  (assert (match (sentRequest through) ((some r) (= r.url (chatRequest).url)) ((none) false)) "passthrough sends the chat-built request unchanged")))))
           true))))
 
 
@@ -173,25 +173,25 @@ fn redirectChecks -> Bool
       (assert (stringContains? followCfg "location\nmax-redirs = 8\n") "a following call passes curl --location with max-redirs")
       (assert (not (stringContains? followCfg "request = ")) "a following POST leaves the method to curl so a 303 becomes a GET")
       (assert (and (stringContains? plainCfg "request = \"POST\"") (not (stringContains? plainCfg "location"))) "a plain call keeps its method and does not follow")
-      (assert (mt (u/parseCurlOutput "HTTP/1.1 303 See Other\r\nLocation: /a\r\n\r\nHTTP/1.1 303 See Other\r\nLocation: /b\r\n\r\nHTTP/1.1 200 OK\r\n\r\nfinal")
+      (assert (match (u/parseCurlOutput "HTTP/1.1 303 See Other\r\nLocation: /a\r\n\r\nHTTP/1.1 303 See Other\r\nLocation: /b\r\n\r\nHTTP/1.1 200 OK\r\n\r\nfinal")
                 ((ok r) (and (= r.status 200) (= r.body "final"))) ((err _) false)) "the 3xx blocks a followed redirect prints are skipped")
       true))
 
 
 fn slotLifecycle w: dp/Wiring id: String -> String
-  (mt (listHead (filter (fn [(s dp/Slot)] -> Bool (= s.id id)) w.slots))
+  (match (listHead (filter (fn [(s dp/Slot)] -> Bool (= s.id id)) w.slots))
     ((none) "absent")
-    ((some s) (mt s.state.lifecycle ((fl/cold) "cold") ((fl/warming) "warming") ((fl/warm) "warm") ((fl/draining) "draining") ((fl/down) "down"))))
+    ((some s) (match s.state.lifecycle ((fl/cold) "cold") ((fl/warming) "warming") ((fl/warm) "warm") ((fl/draining) "draining") ((fl/down) "down"))))
 
 fn waitOf planned: dp/Plan -> String
-  (mt planned ((dp/planWait slot _ _ _ cold deadline) (str slot (if cold " cold " " warming ") (stringFromInt64 deadline))) (_ ""))
+  (match planned ((dp/planWait slot _ _ _ cold deadline) (str slot (if cold " cold " " warming ") (stringFromInt64 deadline))) (_ ""))
 
 fn readyText r: dp/SlotReady -> String
-  (mt r ((dp/readyNow) "now") ((dp/readyLater) "later") ((dp/readyGone _) "gone"))
+  (match r ((dp/readyNow) "now") ((dp/readyLater) "later") ((dp/readyGone _) "gone"))
 
 fn ! coldChecks -> Bool
   (let [(base "http://127.0.0.1:9")]
-    (mt (wiringFor (coldConfig base "fixture" true "epCold" false))
+    (match (wiringFor (coldConfig base "fixture" true "epCold" false))
       ((err e) (do (assert false (str "cold wiring builds: " e)) false))
       ((ok w)
         (let [(spilled (dp/plan w (hint) (chatRequest) (testEnv) 1000))
@@ -200,16 +200,16 @@ fn ! coldChecks -> Bool
           (do
             (assert (= (slotLifecycle w "epCold") "cold") "a serverless endpoint starts cold")
             (assert (= (slotLifecycle w "epA") "warm") "an always-on endpoint starts warm")
-            (assert (mt (p/pluginNamed w.plugins "coldp") ((some pl) (some? pl.lifecycle)) ((none) false)) "the lifecycle row attaches to the provider's plugin")
+            (assert (match (p/pluginNamed w.plugins "coldp") ((some pl) (some? pl.lifecycle)) ((none) false)) "the lifecycle row attaches to the provider's plugin")
             (assert (= (sentSlot spilled) "epA") "a cold serverless endpoint spills over to a warm candidate")
             (assert (= (waitOf parked) "epCold cold 6000") (str "with no other candidate the request waits on the cold endpoint until coldStartMs: " (waitOf parked)))
             (assert (= (rowOf parked).admission "wait") "the decision row records the wait")
-            (mt (dp/startSlot! full "epCold" 1000 6000)
+            (match (dp/startSlot! full "epCold" 1000 6000)
               ((dp/startRefused _ reason _) (assert false (str "a covered start is allowed: " reason)))
               ((dp/startOk started row)
                 (do
                   (assert (= (slotLifecycle started "epCold") "warming") "an allowed start moves the endpoint warming")
-                  (assert (mt started.ledger ((some l) (= (map (fn [(b bgt/Bucket)] -> Int64 b.amount) l.buckets) (list 500))) ((none) false)) "the start's expected cost is charged to the covering line")
+                  (assert (match started.ledger ((some l) (= (map (fn [(b bgt/Bucket)] -> Int64 b.amount) l.buckets) (list 500))) ((none) false)) "the start's expected cost is charged to the covering line")
                   (assert (stringContains? row ":op start :endpoint \"epCold\" :result started :state warming :cost 500 :charge charged") (str "the start row records the gate, state and charge: " row))
                   (assert (= (waitOf (dp/plan started (hint) (chatRequest) (testEnv) 1050)) "epCold warming 6050") "a later request joins the warming endpoint without a second start")
                   (assert (= (readyText (dp/slotReady started "epCold" 1050)) "later") "a warming endpoint keeps parked requests waiting")
@@ -225,23 +225,23 @@ fn ! coldChecks -> Bool
                       (assert (= (slotLifecycle (pairFirst late) "epCold") "warm") "a warm status moves the endpoint warm")
                       (assert (stringContains? (stringJoin (pairSecond late) " ") ":op status :endpoint \"epCold\" :state warm") "the warm transition is logged")
                       (assert (= (readyText (dp/slotReady (pairFirst late) "epCold" 1200)) "now") "a parked request sends once the endpoint is warm"))))))
-            (mt (wiringFor (coldConfig base "fixture" false "epA" false))
+            (match (wiringFor (coldConfig base "fixture" false "epA" false))
               ((err e) (assert false (str "uncovered wiring builds: " e)))
               ((ok wu)
-                (mt (dp/startSlot! wu "epCold" 1000 6000)
+                (match (dp/startSlot! wu "epCold" 1000 6000)
                   ((dp/startOk _ row) (assert false (str "a start without a covering budget line is denied: " row)))
                   ((dp/startRefused status reason row)
                     (do
                       (assert (= status 429) "a spend-gate denial answers 429")
                       (assert (= reason "spendGate: no budget line covers this spend") (str "the denial names the missing line: " reason))
                       (assert (stringContains? row ":result denied") "the denied start is logged"))))))
-            (mt (wiringFor (coldConfig base "fixture" false "" false))
+            (match (wiringFor (coldConfig base "fixture" false "" false))
               ((err e) (assert false (str "ledgerless wiring builds: " e)))
               ((ok wn)
-                (mt (dp/startSlot! wn "epCold" 1000 6000)
+                (match (dp/startSlot! wn "epCold" 1000 6000)
                   ((dp/startOk _ row) (assert false (str "a start without a ledger is denied: " row)))
                   ((dp/startRefused status reason _) (assert (and (= status 429) (= reason "spendGate: start needs a budget ledger")) (str "no ledger means no start: " reason))))))
-            (assert (mt (wiringFor (coldConfig base "nosuch" false "epCold" false)) ((err e) (stringContains? e "unknown family nosuch")) ((ok _) false)) "an unknown lifecycle family is a wiring error")
+            (assert (match (wiringFor (coldConfig base "nosuch" false "epCold" false)) ((err e) (stringContains? e "unknown family nosuch")) ((ok _) false)) "an unknown lifecycle family is a wiring error")
             true)))))
 
 
@@ -270,7 +270,7 @@ fn ready? ready: (List (Pair Int64 Int64)) fd: Int64 -> Bool
 
 fn ! writeAll! fd: Int64 data: String -> Bool
   (if (stringEmpty? data) true
-    (mt (fdWrite fd data)
+    (match (fdWrite fd data)
       ((err _) false)
       ((ok n) (if (<= n 0) false (writeAll! fd (optionOr (stringSlice data n (stringLength data)) ""))))))
 
@@ -281,7 +281,7 @@ fn headValue head: String name: String -> String
     "" (stringSplit head "\r\n"))
 
 fn parseStub raw: String -> (Option Seen)
-  (mt (stringIndexOf raw "\r\n\r\n")
+  (match (stringIndexOf raw "\r\n\r\n")
     ((none) none)
     ((some end)
       (let [(head (optionOr (stringSlice raw 0 end) ""))
@@ -321,11 +321,11 @@ fn pathsFrom seen: (List Seen) skip: Int64 -> (List String)
 fn ! stepStub! r: Run stub: Stub ready: (List (Pair Int64 Int64)) -> Run
   (let [(keep (fn [(s Stub)] -> Run (with r :stubs (listAppend r.stubs (list s)))))]
     (if (not (ready? ready stub.fd)) (keep stub)
-      (mt (fdRead stub.fd 65536)
+      (match (fdRead stub.fd 65536)
         ((err _) (do (fdClose stub.fd) r))
         ((ok chunk)
           (let [(input (str stub.input chunk))]
-            (mt (parseStub input)
+            (match (parseStub input)
               ((none) (if (stringEmpty? chunk) (do (fdClose stub.fd) r) (keep (with stub :input input))))
               ((some seen)
                 (do (writeAll! stub.fd (stubReply r.seen seen)) (fdClose stub.fd)
@@ -333,7 +333,7 @@ fn ! stepStub! r: Run stub: Stub ready: (List (Pair Int64 Int64)) -> Run
 
 fn ! stepRun! r: Run ready: (List (Pair Int64 Int64)) -> Run
   (let [(accepted (if (ready? ready r.listener)
-                    (mt (sockAccept r.listener)
+                    (match (sockAccept r.listener)
                       ((ok fd) (with r :stubs (listAppend r.stubs (list (Stub :fd fd :input "")))))
                       ((err _) r))
                     r))
@@ -341,14 +341,14 @@ fn ! stepRun! r: Run ready: (List (Pair Int64 Int64)) -> Run
                    (Run :listener accepted.listener :client accepted.client :response accepted.response :done accepted.done :stubs (list) :seen accepted.seen)
                    accepted.stubs))]
     (if (or stubbed.done (not (ready? ready stubbed.client))) stubbed
-      (mt (fdRead stubbed.client 65536)
+      (match (fdRead stubbed.client 65536)
         ((err _) (Run :listener stubbed.listener :client stubbed.client :response stubbed.response :done true :stubs stubbed.stubs :seen stubbed.seen))
         ((ok chunk) (Run :listener stubbed.listener :client stubbed.client :response (str stubbed.response chunk) :done (stringEmpty? chunk) :stubs stubbed.stubs :seen stubbed.seen)))))
 
 fn ! pumpRun! r: Run deadline: Int64 -> Run
   (if (or r.done (>= (nowMs!) deadline)) r
     (let [(watch (listAppend (list (pair r.listener 1) (pair r.client 1)) (map (fn [(s Stub)] -> (Pair Int64 Int64) (pair s.fd 1)) r.stubs)))]
-      (mt (fdPoll watch 20)
+      (match (fdPoll watch 20)
         ((err _) (pumpRun! r deadline))
         ((ok ready) (pumpRun! (stepRun! r ready) deadline)))))
 
@@ -356,7 +356,7 @@ fn ! exchange! listener: Int64 gatewayPort: Int64 seen: (List Seen) -> Run
   (let [(body "{\"messages\":[{\"role\":\"user\",\"content\":\"route me\"}]}")
         (request (str "POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: "
                       (stringFromInt64 (stringLength body)) "\r\nConnection: close\r\n\r\n" body))]
-    (mt (tcpConnect gatewayPort)
+    (match (tcpConnect gatewayPort)
       ((err e) (Run :listener listener :client -1 :response (str "connect failed: " e) :done true :stubs (list) :seen seen))
       ((ok fd)
         (let [(run (pumpRun! (Run :listener listener :client fd :response "" :done (not (writeAll! fd request)) :stubs (list) :seen seen) (+ (nowMs!) 15000)))]
@@ -364,7 +364,7 @@ fn ! exchange! listener: Int64 gatewayPort: Int64 seen: (List Seen) -> Run
 
 fn ! waitPort! path: String attempts: Int64 -> Int64
   (if (<= attempts 0) 0
-    (mt (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
+    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
       ((some port) (if (> port 0) port (do (sleepMs 20) (waitPort! path (- attempts 1)))))
       ((none) (do (sleepMs 20) (waitPort! path (- attempts 1))))))
 
@@ -384,7 +384,7 @@ fn ! socketChecks -> Bool
         (env (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" temp) (str "ASL_GATEWAY_ROOT=" temp)
                    (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") "FIXA_KEY=aKey" "RUNPOD_API_KEY=rpKey" (nativeCliCacheEnvRow!)))
         (spawned (procSpawnv (list "/bin/sh" "-c" command) (none) (some env)))
-        (pid (mt spawned ((ok sp) sp.pid) ((err _) 0)))
+        (pid (match spawned ((ok sp) sp.pid) ((err _) 0)))
         (gatewayPort (if (> pid 0) (waitPort! readyPath 500) 0))
         (first (exchange! listener gatewayPort (list)))
         (second (exchange! listener gatewayPort first.seen))

@@ -196,10 +196,10 @@
 ; (:m :do "role/intent cascades and their calibrated default temperatures come from the gateway config's profile routes, never from a built-in list in source; a role or intent string is resolved the same way an intent is for the profile-routed path (c/gatewayRouteEntries!), so a config-only change to a route's :chain or :temperature changes the chosen model with no rebuild")
 fn configuredRoute! world: ChatWorld headers: (List (Pair String String)) key: String -> (Option c/RouteEntries)
   (if (stringEmpty? key) none
-    (mt world.table
+    (match world.table
       ((err _) none)
       ((ok tbl)
-       (mt (c/gatewayRouteEntriesExact! tbl headers (mapGet world.env "ASL_GATEWAY_PROFILE") key)
+       (match (c/gatewayRouteEntriesExact! tbl headers (mapGet world.env "ASL_GATEWAY_PROFILE") key)
          ((err _) none)
          ((ok re) (if (listEmpty? re.entries) none (some re)))))))
 
@@ -207,12 +207,12 @@ fn cxConfiguredRoute! cx: Ctx key: String -> (Option c/RouteEntries)
   (configuredRoute! cx.world cx.req.headers key)
 
 fn cxRouteTemperature! cx: Ctx key: String -> (Option Float64)
-  (mt (cxConfiguredRoute! cx key) ((some re) re.temperature) ((none) none))
+  (match (cxConfiguredRoute! cx key) ((some re) re.temperature) ((none) none))
 
 ; (:m :do "if the caller's literal model string is itself a member of some configured route's :chain, treat it as a request for that whole cascade (try it, then its configured siblings) instead of a single dead end; a reverse lookup against config, never a built-in model list")
 fn modelCascade cx: Ctx model: String -> (Option (List String))
   (if (stringEmpty? model) none
-    (mt cx.world.table
+    (match cx.world.table
       ((err _) none)
       ((ok tbl) (c/gatewayChainContainingModel! tbl cx.req.headers (mapGet cx.world.env "ASL_GATEWAY_PROFILE") model))))
 
@@ -221,7 +221,7 @@ fn raise e: pt/PyErr -> ChatStep
   (stepRaised e.kind e.msg)
 
 fn splitErr s: String -> pt/PyErr
-  (mt (stringIndexOf s ": ")
+  (match (stringIndexOf s ": ")
     ((some i) (pt/pyErr (u/slice s 0 i) (u/slice s (+ i 2) (stringLength s))))
     ((none) (pt/pyErr "Exception" s)))
 
@@ -232,10 +232,10 @@ fn itemErr v: j/Json -> pt/PyErr
   (pt/pyErr "TypeError" (str "'" (pt/pyTypeName v) "' object does not support item assignment"))
 
 fn isObj? v: j/Json -> Bool
-  (mt v ((j/jobj _) true) (_ false))
+  (match v ((j/jobj _) true) (_ false))
 
 fn isNull? v: j/Json -> Bool
-  (mt v ((j/jnull) true) (_ false))
+  (match v ((j/jnull) true) (_ false))
 
 fn has? v: j/Json k: String -> Bool
   (some? (pt/jget v k))
@@ -244,15 +244,15 @@ fn getOr v: j/Json k: String d: j/Json -> j/Json
   (optionOr (pt/jget v k) d)
 
 fn jdel v: j/Json k: String -> j/Json
-  (mt v
+  (match v
     ((j/jobj kvs) (j/jobj (filter (fn [(p (Pair String j/Json))] -> Bool (!= (pairFirst p) k)) kvs)))
     (_ v))
 
 fn keysOf v: j/Json -> (List String)
-  (mt v ((j/jobj kvs) (map (fn [(p (Pair String j/Json))] -> String (pairFirst p)) kvs)) (_ (list)))
+  (match v ((j/jobj kvs) (map (fn [(p (Pair String j/Json))] -> String (pairFirst p)) kvs)) (_ (list)))
 
 fn strOr v: j/Json d: String -> String
-  (mt v ((j/jstr s) s) (_ d))
+  (match v ((j/jstr s) s) (_ d))
 
 fn lstripColons s: String -> String
   (if (stringStartsWith? s ":") (lstripColons (u/slice s 1 (stringLength s))) s)
@@ -264,7 +264,7 @@ fn truncInt f: Float64 -> Int64
   (optionOr (float64ToInt64 f) 0)
 
 fn present v: (Option String) -> (Option String)
-  (mt v ((some s) (if (stringEmpty? s) none (some s))) ((none) none))
+  (match v ((some s) (if (stringEmpty? s) none (some s))) ((none) none))
 
 fn fieldIfBody body: j/Json key: String -> (Result j/Json pt/PyErr)
   (if (pt/pyTruthy body)
@@ -272,28 +272,28 @@ fn fieldIfBody body: j/Json key: String -> (Result j/Json pt/PyErr)
     (ok (j/jstr "")))
 
 fn normField hdr: (Option String) body: j/Json key: String -> (Result String pt/PyErr)
-  (mt (present hdr)
+  (match (present hdr)
     ((some h) (ok (norm h)))
     ((none)
-     (mt (fieldIfBody body key)
+     (match (fieldIfBody body key)
        ((err e) (err e))
        ((ok v)
         (if (pt/pyTruthy v)
-          (mt v ((j/jstr s) (ok (norm s))) (_ (err (attrErr v "lstrip"))))
+          (match v ((j/jstr s) (ok (norm s))) (_ (err (attrErr v "lstrip"))))
           (ok ""))))))
 
 fn roleField world: ChatWorld headers: (List (Pair String String)) body: j/Json -> (Result String pt/PyErr)
-  (mt (present (u/headerGet headers "X-ASL-Role"))
+  (match (present (u/headerGet headers "X-ASL-Role"))
     ((some h) (ok (norm h)))
     ((none)
-     (mt (fieldIfBody body "role")
+     (match (fieldIfBody body "role")
        ((err e) (err e))
        ((ok v)
         (if (pt/pyTruthy v)
-          (mt v ((j/jstr s) (ok (norm s))) (_ (err (attrErr v "lstrip"))))
+          (match v ((j/jstr s) (ok (norm s))) (_ (err (attrErr v "lstrip"))))
           (if (pt/pyTruthy body)
             (let [(model (getOr body "model" (j/jnull)))]
-              (mt model
+              (match model
                 ((j/jstr s) (ok (if (some? (configuredRoute! world headers (norm s))) (norm s) "")))
                 ((j/jarr _) (err (pt/pyErr "TypeError" "unhashable type: 'list'")))
                 ((j/jobj _) (err (pt/pyErr "TypeError" "unhashable type: 'dict'")))
@@ -301,16 +301,16 @@ fn roleField world: ChatWorld headers: (List (Pair String String)) body: j/Json 
             (ok "")))))))
 
 fn floatOf v: j/Json -> (Result Float64 pt/PyErr)
-  (mt v
+  (match v
     ((j/jint i) (ok (int64ToFloat64 i)))
     ((j/jfloat f) (ok f))
     ((j/jnum f) (ok f))
     ((j/jbool b) (ok (if b 1.0 0.0)))
-    ((j/jstr s) (mt (u/pyFloat s) ((ok f) (ok f)) ((err _) (err (pt/pyErr "ValueError" (str "could not convert string to float: " (pt/pyRepr v)))))))
+    ((j/jstr s) (match (u/pyFloat s) ((ok f) (ok f)) ((err _) (err (pt/pyErr "ValueError" (str "could not convert string to float: " (pt/pyRepr v)))))))
     (_ (err (pt/pyErr "TypeError" (str "float() argument must be a string or a real number, not '" (pt/pyTypeName v) "'")))))
 
 fn numberOf v: j/Json -> (Option Float64)
-  (mt v
+  (match v
     ((j/jint i) (some (int64ToFloat64 i)))
     ((j/jfloat f) (some f))
     ((j/jnum f) (some f))
@@ -321,15 +321,15 @@ fn escapeAsnStr v: j/Json -> String
   (u/replaceAll (u/replaceAll (u/replaceAll (u/replaceAll (u/replaceAll (pt/pyStr v) "\\" "\\\\") "\"" "\\\"") "\n" " ") "\r" " ") "\t" " ")
 
 fn messageText content: j/Json -> (Result String pt/PyErr)
-  (mt content
+  (match content
     ((j/jnull) (ok ""))
     ((j/jarr parts)
-     (mt (fold (fn [(acc (Result (List String) pt/PyErr)) (p j/Json)] -> (Result (List String) pt/PyErr)
-                 (mt acc
+     (match (fold (fn [(acc (Result (List String) pt/PyErr)) (p j/Json)] -> (Result (List String) pt/PyErr)
+                 (match acc
                    ((err e) (err e))
                    ((ok xs)
                     (if (and (isObj? p) (pt/pyTruthy (getOr p "text" (j/jnull))))
-                      (mt (getOr p "text" (j/jnull))
+                      (match (getOr p "text" (j/jnull))
                         ((j/jstr t) (ok (cons t xs)))
                         (_ (err (pt/pyErr "TypeError" "sequence item: expected str instance"))))
                       (ok xs)))))
@@ -339,7 +339,7 @@ fn messageText content: j/Json -> (Result String pt/PyErr)
     (_ (ok (pt/pyStr content))))
 
 fn messageList v: j/Json -> (Result (List j/Json) pt/PyErr)
-  (mt v
+  (match v
     ((j/jarr xs) (ok xs))
     ((j/jstr _) (err (attrErr (j/jstr "") "get")))
     ((j/jobj _) (err (attrErr (j/jstr "") "get")))
@@ -349,19 +349,19 @@ fn msgGet msg: j/Json key: String d: j/Json -> (Result j/Json pt/PyErr)
   (if (isObj? msg) (ok (getOr msg key d)) (err (attrErr msg "get")))
 
 fn promptOf msgs: (List j/Json) keep: (fn [j/Json] -> (Result Bool pt/PyErr)) -> (Result String pt/PyErr)
-  (mt (fold (fn [(acc (Result (List String) pt/PyErr)) (msg j/Json)] -> (Result (List String) pt/PyErr)
-              (mt acc
+  (match (fold (fn [(acc (Result (List String) pt/PyErr)) (msg j/Json)] -> (Result (List String) pt/PyErr)
+              (match acc
                 ((err e) (err e))
                 ((ok parts)
-                 (mt (keep msg)
+                 (match (keep msg)
                    ((err e) (err e))
                    ((ok kept)
                     (if (not kept)
                       (ok parts)
-                      (mt (msgGet msg "role" (j/jstr "user"))
+                      (match (msgGet msg "role" (j/jstr "user"))
                         ((err e) (err e))
                         ((ok role)
-                         (mt (msgGet msg "content" (j/jstr ""))
+                         (match (msgGet msg "content" (j/jstr ""))
                            ((err e) (err e))
                            ((ok content) (ok (cons (str "[" (pt/pyStr role) "]:\n" (pt/pyStr content)) parts))))))))))))
             (ok (list)) msgs)
@@ -369,11 +369,11 @@ fn promptOf msgs: (List j/Json) keep: (fn [j/Json] -> (Result Bool pt/PyErr)) ->
     ((ok parts) (ok (stringJoin (listReverse parts) "\n\n"))))
 
 fn contentKept msg: j/Json -> (Result Bool pt/PyErr)
-  (mt (msgGet msg "content" (j/jnull)) ((err e) (err e)) ((ok c) (ok (pt/pyTruthy c))))
+  (match (msgGet msg "content" (j/jnull)) ((err e) (err e)) ((ok c) (ok (pt/pyTruthy c))))
 
 fn fallbackPrompt body: j/Json -> (Result String pt/PyErr)
   (if (and (pt/pyTruthy body) (pt/pyTruthy (getOr body "messages" (j/jnull))))
-    (mt (messageList (getOr body "messages" (j/jnull)))
+    (match (messageList (getOr body "messages" (j/jnull)))
       ((err e) (err e))
       ((ok msgs) (promptOf msgs contentKept)))
     (ok ""))
@@ -418,39 +418,39 @@ fn mismatch want: String -> ChatStep
   (stepRaised "ProtocolError" (str "effect answered without the " want " outcome it needs"))
 
 fn tell eff: ChatEffect k: (fn [] -> ChatStep) -> ChatStep
-  (stepEffect eff (fn [(o ChatOutcome)] -> ChatStep (mt o ((outDone) (k)) (_ (mismatch "done")))))
+  (stepEffect eff (fn [(o ChatOutcome)] -> ChatStep (match o ((outDone) (k)) (_ (mismatch "done")))))
 
 fn tellAll effs: (List ChatEffect) k: (fn [] -> ChatStep) -> ChatStep
-  (mt (listHead effs)
+  (match (listHead effs)
     ((none) (k))
     ((some e) (tell e (fn [] -> ChatStep (tellAll (optionOr (listTail effs) (list)) k)))))
 
 fn askPath eff: ChatEffect k: (fn [String] -> ChatStep) -> ChatStep
-  (stepEffect eff (fn [(o ChatOutcome)] -> ChatStep (mt o ((outPath p) (k p)) (_ (mismatch "path")))))
+  (stepEffect eff (fn [(o ChatOutcome)] -> ChatStep (match o ((outPath p) (k p)) (_ (mismatch "path")))))
 
 fn askBool eff: ChatEffect k: (fn [Bool] -> ChatStep) -> ChatStep
-  (stepEffect eff (fn [(o ChatOutcome)] -> ChatStep (mt o ((outBool b) (k b)) (_ (mismatch "bool")))))
+  (stepEffect eff (fn [(o ChatOutcome)] -> ChatStep (match o ((outBool b) (k b)) (_ (mismatch "bool")))))
 
 fn askFloat eff: ChatEffect k: (fn [Float64] -> ChatStep) -> ChatStep
-  (stepEffect eff (fn [(o ChatOutcome)] -> ChatStep (mt o ((outFloat f) (k f)) (_ (mismatch "float")))))
+  (stepEffect eff (fn [(o ChatOutcome)] -> ChatStep (match o ((outFloat f) (k f)) (_ (mismatch "float")))))
 
 fn askFloats eff: ChatEffect k: (fn [(List Float64)] -> ChatStep) -> ChatStep
-  (stepEffect eff (fn [(o ChatOutcome)] -> ChatStep (mt o ((outFloats fs) (k fs)) (_ (mismatch "floats")))))
+  (stepEffect eff (fn [(o ChatOutcome)] -> ChatStep (match o ((outFloats fs) (k fs)) (_ (mismatch "floats")))))
 
 fn askStrings eff: ChatEffect k: (fn [(List String)] -> ChatStep) -> ChatStep
-  (stepEffect eff (fn [(o ChatOutcome)] -> ChatStep (mt o ((outStrings xs) (k xs)) (_ (mismatch "strings")))))
+  (stepEffect eff (fn [(o ChatOutcome)] -> ChatStep (match o ((outStrings xs) (k xs)) (_ (mismatch "strings")))))
 
 fn askCli eff: ChatEffect k: (fn [(Option CliReply)] -> ChatStep) -> ChatStep
-  (stepEffect eff (fn [(o ChatOutcome)] -> ChatStep (mt o ((outCli r) (k r)) (_ (mismatch "cli")))))
+  (stepEffect eff (fn [(o ChatOutcome)] -> ChatStep (match o ((outCli r) (k r)) (_ (mismatch "cli")))))
 
 fn askHttp eff: ChatEffect k: (fn [HttpReply] -> ChatStep) -> ChatStep
-  (stepEffect eff (fn [(o ChatOutcome)] -> ChatStep (mt o ((outHttp r) (k r)) (_ (mismatch "http")))))
+  (stepEffect eff (fn [(o ChatOutcome)] -> ChatStep (match o ((outHttp r) (k r)) (_ (mismatch "http")))))
 
 fn usageNote provider: String alias: String outcome: String -> ChatEffect
   (effUsageNote provider alias outcome (j/jnull))
 
 fn telemetry cx: Ctx content: j/Json model: String k: (fn [(Option String)] -> ChatStep) -> ChatStep
-  (let [(blank (mt content ((j/jstr s) (stringEmpty? (u/pyStrip s))) (_ true)))]
+  (let [(blank (match content ((j/jstr s) (stringEmpty? (u/pyStrip s))) (_ true)))]
     (if blank
       (tell (effTelemetry none) (fn [] -> ChatStep (k none)))
       (askFloat (effClock)
@@ -476,7 +476,7 @@ fn agyFallback cx: Ctx prompt: String k: (fn [(Option CliReply)] -> ChatStep) ->
                                       (pair "add_dirs" (j/jnull)) (pair "workspace" (j/jstr cx.workspace)) (pair "system_prompt" (j/jnull))
                                       (pair "no_tools" (j/jbool false))))
             (fn [(r (Option CliReply))] -> ChatStep
-              (let [(text (mt r ((some x) (if (stringEmpty? x.text) none (some x))) ((none) none)))]
+              (let [(text (match r ((some x) (if (stringEmpty? x.text) none (some x))) ((none) none)))]
                 (tell (usageNote "agy-cli" "agyFallback" (if (some? text) "ok" "failed")) (fn [] -> ChatStep (k text))))))))))
 
 fn round3 f: Float64 -> j/Json
@@ -506,28 +506,28 @@ fn agyReply cx: Ctx l: Loop r: CliReply -> ChatStep
 
 
 fn shownParam table: (Option c/GatewayTable) e: c/GatewayEntry key: String -> (Option j/Json)
-  (mt table
+  (match table
     ((none) none)
     ((some tbl)
-     (mt (mapGet tbl.models e.alias)
+     (match (mapGet tbl.models e.alias)
        ((none) none)
        ((some m)
-        (mt (listHead (filter (fn [(p (Pair String String))] -> Bool (= (pairFirst p) key)) m.shown))
+        (match (listHead (filter (fn [(p (Pair String String))] -> Bool (= (pairFirst p) key)) m.shown))
           ((none) none)
-          ((some p) (mt (pt/jsonLoads (pairSecond p)) ((ok v) (some v)) ((err _) none))))))))
+          ((some p) (match (pt/jsonLoads (pairSecond p)) ((ok v) (some v)) ((err _) none))))))))
 
 fn paramJson cx: Ctx e: c/GatewayEntry key: String typed: j/Json -> j/Json
   (optionOr (shownParam cx.table e key) typed)
 
 fn floatJson v: (Option Float64) -> j/Json
-  (mt v ((some f) (j/jfloat f)) ((none) (j/jnull)))
+  (match v ((some f) (j/jfloat f)) ((none) (j/jnull)))
 
 fn entryBody cx: Ctx e: c/GatewayEntry -> j/Json
   (let [(ep e.params)
         (b0 cx.baseBody)
         (b1 (if (and (some? ep.temperature) (not cx.tempExplicit)) (pt/jset b0 "temperature" (paramJson cx e "temperature" (floatJson ep.temperature))) b0))
-        (b2 (mt ep.effort ((some s) (pt/jset b1 "effort" (j/jstr s))) ((none) b1)))
-        (b3 (mt ep.maxTokens
+        (b2 (match ep.effort ((some s) (pt/jset b1 "effort" (j/jstr s))) ((none) b1)))
+        (b3 (match ep.maxTokens
               ((some n) (if (listContains? cx.reqKeys "max_tokens") b2 (pt/jset b2 "max_tokens" (paramJson cx e "maxTokens" (j/jint n)))))
               ((none) b2)))
         (b4 (if (and (optionOr ep.reasoning false) (not (pt/pyTruthy (getOr b3 "max_tokens" (j/jnull))))) (pt/jset b3 "max_tokens" (j/jint (u/minTokenFloor))) b3))
@@ -536,9 +536,9 @@ fn entryBody cx: Ctx e: c/GatewayEntry -> j/Json
 
 fn entryUpstream cx: Ctx e: c/GatewayEntry -> u/UpstreamEndpoint
   (let [(up e.upstream)
-        (pv (mt cx.table ((some tbl) (mapGet tbl.providers e.provider)) ((none) none)))
-        (keyEnv (mt pv ((some p) p.keyEnv) ((none) "")))
-        (sessionHeader (mt pv ((some p) p.sessionHeader) ((none) "")))
+        (pv (match cx.table ((some tbl) (mapGet tbl.providers e.provider)) ((none) none)))
+        (keyEnv (match pv ((some p) p.keyEnv) ((none) "")))
+        (sessionHeader (match pv ((some p) p.sessionHeader) ((none) "")))
         (key (if (= e.kind "cli") "" (optionOr (mapGet cx.world.env keyEnv) "")))]
     (u/UpstreamEndpoint :provider up.provider :url up.url :key key :sessionHeader sessionHeader))
 
@@ -549,12 +549,12 @@ fn cliProvider? p: String -> Bool
   (or (= p "agy-cli") (or (= p "codex-cli") (= p "claude-cli")))
 
 fn validEffort? v: (Option String) -> Bool
-  (mt v ((some s) (or (= s "low") (or (= s "medium") (= s "high")))) ((none) false))
+  (match v ((some s) (or (= s "low") (or (= s "medium") (= s "high")))) ((none) false))
 
 
 fn chatStart! req: ChatRequest world: ChatWorld -> ChatStep
   (let [(path (if (stringStartsWith? req.path "/v1/chat/completions") "/chat/completions" req.path))
-        (body (mt (pt/jsonLoads req.body) ((ok v) v) ((err _) (j/jnull))))
+        (body (match (pt/jsonLoads req.body) ((ok v) v) ((err _) (j/jnull))))
         (wsRaw (if (isObj? body) (getOr body "workspace" (j/jnull)) (j/jnull)))]
     (if (isNull? wsRaw)
       (askPath (effRealpath world.rootDir) (fn [(ws String)] -> ChatStep (identify! req world path body ws)))
@@ -570,10 +570,10 @@ fn chatStart! req: ChatRequest world: ChatWorld -> ChatStep
 
 fn identify! req: ChatRequest world: ChatWorld path: String body: j/Json ws: String -> ChatStep
   (let [(hs req.headers)]
-    (mt (normField (u/headerGet hs "X-ASL-Intent") body "intent")
+    (match (normField (u/headerGet hs "X-ASL-Intent") body "intent")
       ((err e) (raise e))
       ((ok intent)
-       (mt (roleField world hs body)
+       (match (roleField world hs body)
          ((err e) (raise e))
          ((ok explicitRole)
           (let [(role (if (stringEmpty? explicitRole) (if (stringEmpty? intent) "coder" "") explicitRole))
@@ -581,11 +581,11 @@ fn identify! req: ChatRequest world: ChatWorld path: String body: j/Json ws: Str
                 (reqKeys (keysOf body))
                 ; (:m :do "GW-UPSTREAM-TABLES: the pre-resolution max-tokens floor used to guess reasoning-ness from hardcoded free-model lists; now, when the caller already named a registered model id, its own config :reasoning answers the question instead -- aliasRoute!/profileRoute! still resolve the real cascade entry afterward and apply the same param via entryBody, this is only for the literal-model case prepareRequestPayload sees before that resolution happens")
                 (explicitModelRaw (if (isObj? body) (strOr (getOr body "model" (j/jstr "")) "") ""))
-                (configReasoning (mt world.table ((err _) none) ((ok tbl) (mt (mapGet tbl.models explicitModelRaw) ((none) none) ((some m) m.params.reasoning)))))]
-            (mt (if (pt/pyTruthy body) (mt (u/prepareRequestPayload body roleOpt configReasoning) ((ok b) (ok b)) ((err s) (err (splitErr s)))) (ok body))
+                (configReasoning (match world.table ((err _) none) ((ok tbl) (match (mapGet tbl.models explicitModelRaw) ((none) none) ((some m) m.params.reasoning)))))]
+            (match (if (pt/pyTruthy body) (match (u/prepareRequestPayload body roleOpt configReasoning) ((ok b) (ok b)) ((err s) (err (splitErr s)))) (ok body))
               ((err e) (raise e))
               ((ok prepared)
-               (mt (normField (u/headerGet hs "X-ASL-Lens") prepared "lens")
+               (match (normField (u/headerGet hs "X-ASL-Lens") prepared "lens")
                  ((err e) (raise e))
                  ((ok lens)
                   (let [(composite (if (stringEmpty? lens)
@@ -596,10 +596,10 @@ fn identify! req: ChatRequest world: ChatWorld path: String body: j/Json ws: Str
                         (cx (Ctx :req req :world world :path path :asn (wantsAsn? hs)
                                  :sanitize (listContains? (list "true" "1") (u/pyLower (optionOr (u/headerGet hs "X-Sanitize-ASN") "")))
                                  :intent intent :role role :workspace ws :explicitModel explicitModel :profileRouted routed
-                                 :profileName "" :table (mt world.table ((ok t) (some t)) ((err _) none)) :reqKeys reqKeys
+                                 :profileName "" :table (match world.table ((ok t) (some t)) ((err _) none)) :reqKeys reqKeys
                                  :headerEff (u/headerGet hs "X-ASL-Effort") :envEff (mapGet world.env "ASL_EFFORT")
                                  :tempExplicit false :timeoutExplicit false :baseBody prepared :cascadeLen 0 :spread (list) :cooldownSec 60))]
-                    (mt world.table
+                    (match world.table
                       ((err e) (if (stringStartsWith? e "ERR_GATEWAY_NO_CONFIG")
                                   (sendError cx (list) 503 e true)
                                   (if routed
@@ -615,10 +615,10 @@ fn withProfile cx: Ctx re: c/RouteEntries -> Ctx
   (with cx :profileName re.name :spread re.spread :cooldownSec re.cooldownSec)
 
 fn profileRoute! cx: Ctx body: j/Json explicitRole: String composite: String -> ChatStep
-  (mt cx.world.table
+  (match cx.world.table
     ((err e) (sendError cx (list) (if (stringStartsWith? e "ERR_GATEWAY_NO_CONFIG") 503 500) e true))
     ((ok tbl)
-     (mt (c/gatewayRouteEntries! tbl cx.req.headers (mapGet cx.world.env "ASL_GATEWAY_PROFILE") cx.intent)
+     (match (c/gatewayRouteEntries! tbl cx.req.headers (mapGet cx.world.env "ASL_GATEWAY_PROFILE") cx.intent)
        ((err e) (sendError cx (list) 400 e true))
        ((ok re)
         (let [(i cx.intent)
@@ -631,10 +631,10 @@ fn profileRoute! cx: Ctx body: j/Json explicitRole: String composite: String -> 
 
 fn selectTemp cx: Ctx composite: String -> Float64
   (let [(i cx.intent)]
-    (mt (cxRouteTemperature! cx i)
+    (match (cxRouteTemperature! cx i)
       ((some t) t)
       ((none)
-       (mt (cxRouteTemperature! cx composite)
+       (match (cxRouteTemperature! cx composite)
          ((some t) t)
          ((none) (optionOr (cxRouteTemperature! cx cx.role) 0.2))))))
 
@@ -658,16 +658,16 @@ fn aliasRoute! cx: Ctx body: j/Json explicitRole: String composite: String -> Ch
                         (roleRoute (if roleOk (cxConfiguredRoute! cx role) none))]
                     (if (or (some? alias) (cliProvider? prov))
                       (cascadeChosen cx body explicitRole composite (list (optionOr alias (c/entryUnresolved model))) (selectTemp cx composite))
-                      (mt iRoute
+                      (match iRoute
                         ((some re) (fromRoute cx body explicitRole composite re))
                         ((none)
-                         (mt compositeRoute
+                         (match compositeRoute
                            ((some re) (fromRoute cx body explicitRole composite re))
                            ((none)
-                            (mt roleRoute
+                            (match roleRoute
                               ((some re) (fromRoute cx body explicitRole composite re))
                               ((none)
-                               (mt (modelCascade cx model)
+                               (match (modelCascade cx model)
                                  ((some chain)
                                   (cascadeChosen cx body explicitRole composite
                                                  (unresolved (cons model (filter (fn [(x String)] -> Bool (!= x model)) chain))) 0.2))
@@ -681,13 +681,13 @@ fn aliasRoute! cx: Ctx body: j/Json explicitRole: String composite: String -> Ch
                                       true))))))))))))))]
     (if (stringEmpty? model)
       (choose none)
-      (mt world.table
+      (match world.table
         ((err e) (tell (effLog (str "[Gateway Config] " model " dispatched raw: " e "\n")) (fn [] -> ChatStep (choose none))))
         ((ok tbl) (choose (c/gatewayV2AliasEntry! tbl model))))))
 
 ; (:m :ref GW-SPREAD-LIVE-20261018 :do "the pool key a spread member's breaker availability is checked under, identical to prepareAttempt's own providerPool:alias for a v2-resolved entry (spread members are only ever v2-resolved, drawn from the same route's :chain); an unresolved entry has no provider to key on and is simply never breaker-checked, available by default like every other field this reorder leaves alone")
 fn poolKeyForEntry e: c/GatewayResolvedEntry -> String
-  (mt e
+  (match e
     ((c/entryResolved g) (if (stringEmpty? g.provider) "" (str g.provider ":" g.alias)))
     ((c/entryUnresolved _) ""))
 
@@ -700,7 +700,7 @@ fn spreadPools models: (List c/GatewayResolvedEntry) spread: (List (Pair String 
 ; (:m :ref GW-SPREAD-LIVE-20261018 :do "order is the server's available-spread-member sequence; every entry it names is moved to the front in that sequence, every other entry (not in spread, or in spread but currently unavailable) keeps its original relative order after -- same multiset of aliases as models, never a duplicate or a drop, so the plain-chain fallback still reaches an unavailable spread member later instead of losing it")
 fn reorderBySpread models: (List c/GatewayResolvedEntry) order: (List String) -> (List c/GatewayResolvedEntry)
   (let [(picked (fold (fn [(acc (List c/GatewayResolvedEntry)) (alias String)] -> (List c/GatewayResolvedEntry)
-                        (mt (listHead (filter (fn [(e c/GatewayResolvedEntry)] -> Bool (= (c/gatewayEntryLabel e) alias)) models))
+                        (match (listHead (filter (fn [(e c/GatewayResolvedEntry)] -> Bool (= (c/gatewayEntryLabel e) alias)) models))
                           ((some e) (listAppend acc (list e)))
                           ((none) acc)))
                  (list) order))
@@ -722,16 +722,16 @@ fn cascadeChosen cx: Ctx body: j/Json explicitRole: String composite: String mod
         (hs cx.req.headers)
         (mode (u/harnessMode hs world.env))
         (roleOpt (if (stringEmpty? explicitRole) none (some explicitRole)))]
-    (mt (if (and (pt/pyTruthy body) (or (= mode "override") (= mode "minimal")))
-          (mt (u/applyHarnessPolicy body mode roleOpt) ((ok b) (ok b)) ((err s) (err (splitErr s))))
+    (match (if (and (pt/pyTruthy body) (or (= mode "override") (= mode "minimal")))
+          (match (u/applyHarnessPolicy body mode roleOpt) ((ok b) (ok b)) ((err s) (err (splitErr s))))
           (ok body))
       ((err e) (raise e))
       ((ok harnessed)
        (let [(hTemp (u/headerGet hs "X-ASL-Temperature"))
              (envTemp (mapGet world.env "ASL_TEMPERATURE"))
-             (envTempSet (mt envTemp ((some s) (not (stringEmpty? (u/pyStrip s)))) ((none) false)))
+             (envTempSet (match envTemp ((some s) (not (stringEmpty? (u/pyStrip s)))) ((none) false)))
              (assign (fn [(text String)] -> j/Json
-                       (mt (u/pyFloat text)
+                       (match (u/pyFloat text)
                          ((ok f) (if (isObj? harnessed) (pt/jset harnessed "temperature" (j/jfloat f)) harnessed))
                          ((err _) harnessed))))
              (tempered (cond
@@ -741,11 +741,11 @@ fn cascadeChosen cx: Ctx body: j/Json explicitRole: String composite: String mod
                          (else harnessed)))
              (hEff cx.headerEff)
              (eEff cx.envEff)]
-         (mt (cond
+         (match (cond
                ((validEffort? hEff) (if (isObj? tempered) (ok (pt/jset tempered "effort" (j/jstr (optionOr hEff "")))) (err (itemErr tempered))))
                ((validEffort? eEff) (if (isObj? tempered) (ok (pt/jset tempered "effort" (j/jstr (optionOr eEff "")))) (err (itemErr tempered))))
                ((and (pt/pyTruthy tempered) (not (has? tempered "effort")))
-                (mt (numberOf (getOr tempered "temperature" (j/jfloat 0.2)))
+                (match (numberOf (getOr tempered "temperature" (j/jfloat 0.2)))
                   ((some t) (ok (pt/jset tempered "effort" (j/jstr (cond ((<= t 0.15) "low") ((<= t 0.35) "medium") (else "high"))))))
                   ((none) (err (pt/pyErr "TypeError" (str "'<=' not supported between instances of '" (pt/pyTypeName (getOr tempered "temperature" (j/jnull))) "' and 'float'"))))))
                (else (ok tempered)))
@@ -767,24 +767,24 @@ fn failed l: Loop err: String -> Loop
   (with l :lastErr (some err))
 
 fn loopStep cx: Ctx l: Loop -> ChatStep
-  (mt (listGet l.models l.idx)
+  (match (listGet l.models l.idx)
     ((none) (afterLoop cx l))
     ((some entry) (attempt cx l entry)))
 
 fn respSystemJoin msgs: (List j/Json) acc: (List String) -> String
-  (mt (listHead msgs)
+  (match (listHead msgs)
     ((none) (stringJoin (listReverse acc) "\n\n"))
     ((some msg)
      (let [(rest (optionOr (listTail msgs) (list)))
            (role (getOr msg "role" (j/jnull)))]
        (if (and (= role (j/jstr "system")) (pt/pyTruthy (getOr msg "content" (j/jnull))))
-         (mt (getOr msg "content" (j/jnull))
+         (match (getOr msg "content" (j/jnull))
            ((j/jstr s) (respSystemJoin rest (cons s acc)))
            (_ (respSystemJoin rest acc)))
          (respSystemJoin rest acc)))))
 
 fn respInputItems msgs: (List j/Json) acc: (List j/Json) -> (List j/Json)
-  (mt (listHead msgs)
+  (match (listHead msgs)
     ((none) (listReverse acc))
     ((some msg)
      (let [(rest (optionOr (listTail msgs) (list)))
@@ -794,11 +794,11 @@ fn respInputItems msgs: (List j/Json) acc: (List j/Json) -> (List j/Json)
          (respInputItems rest (cons (j/jobj (list (pair "role" role) (pair "content" (getOr msg "content" (j/jstr ""))))) acc))))))
 
 fn responsesBody body: j/Json target: String -> j/Json
-  (let [(msgs (mt (getOr body "messages" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
+  (let [(msgs (match (getOr body "messages" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
         (sys (respSystemJoin msgs (list)))
         (b0 (j/jobj (list (pair "model" (j/jstr target)) (pair "input" (j/jarr (respInputItems msgs (list)))))))
         (b1 (if (not (stringEmpty? sys)) (pt/jset b0 "instructions" (j/jstr sys)) b0))]
-    (mt (getOr body "max_tokens" (j/jnull))
+    (match (getOr body "max_tokens" (j/jnull))
       ((j/jint n) (pt/jset b1 "max_output_tokens" (j/jint n)))
       ((j/jfloat f) (pt/jset b1 "max_output_tokens" (j/jint (optionOr (float64ToInt64 f) 0))))
       (_ b1)))
@@ -810,7 +810,7 @@ fn anthropicToolOf t: j/Json -> j/Json
                   (pair "input_schema" (getOr fn_ "parameters" (j/jobj (list)))))))
 
 fn jsonStopSequencesOf v: j/Json -> j/Json
-  (mt v
+  (match v
     ((j/jstr s) (j/jarr (list (j/jstr s))))
     ((j/jarr xs) (j/jarr xs))
     (_ (j/jarr (list))))
@@ -820,16 +820,16 @@ fn anthropicToolCallBlock tc: j/Json -> j/Json
         (fn_ (getOr tc "function" (j/jobj (list))))
         (name (strOr (getOr fn_ "name" (j/jstr "")) ""))
         (argsText (strOr (getOr fn_ "arguments" (j/jstr "{}")) "{}"))
-        (input (mt (pt/jsonLoads argsText) ((ok v) v) ((err _) (j/jobj (list)))))]
+        (input (match (pt/jsonLoads argsText) ((ok v) v) ((err _) (j/jobj (list)))))]
     (j/jobj (list (pair "type" (j/jstr "tool_use")) (pair "id" (j/jstr id)) (pair "name" (j/jstr name)) (pair "input" input))))
 
 ; (:m :tags (anthropic) :do "an OpenAI assistant message carries plain text content plus a sibling tool_calls array; Anthropic wants both folded into one content block list on the same message")
 fn anthropicAssistantContent msg: j/Json -> j/Json
   (let [(content (getOr msg "content" (j/jnull)))
-        (textBlocks (mt content
+        (textBlocks (match content
                       ((j/jstr s) (if (stringEmpty? s) (list) (list (j/jobj (list (pair "type" (j/jstr "text")) (pair "text" (j/jstr s)))))))
                       (_ (list))))
-        (calls (mt (getOr msg "tool_calls" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
+        (calls (match (getOr msg "tool_calls" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
         (callBlocks (map anthropicToolCallBlock calls))]
     (j/jarr (listAppend textBlocks callBlocks)))
 
@@ -864,20 +864,20 @@ fn anthropicMessagesOf msgs: (List j/Json) -> (List j/Json)
     (anthropicFlushToolResults (pairFirst folded) (pairSecond folded)))
 
 fn anthropicBody body: j/Json target: String -> j/Json
-  (let [(msgs (mt (getOr body "messages" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
+  (let [(msgs (match (getOr body "messages" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
         (sys (respSystemJoin msgs (list)))
         (b0 (j/jobj (list (pair "model" (j/jstr target)) (pair "messages" (j/jarr (anthropicMessagesOf msgs))))))
         (b1 (if (not (stringEmpty? sys)) (pt/jset b0 "system" (j/jstr sys)) b0))
-        (b2 (mt (getOr body "max_tokens" (j/jnull))
+        (b2 (match (getOr body "max_tokens" (j/jnull))
               ((j/jint n) (pt/jset b1 "max_tokens" (j/jint n)))
               ((j/jfloat f) (pt/jset b1 "max_tokens" (j/jint (optionOr (float64ToInt64 f) 0))))
               (_ (pt/jset b1 "max_tokens" (j/jint (u/minTokenFloor))))))
         (tempV (getOr body "temperature" (j/jnull)))
-        (b3 (mt tempV ((j/jnull) b2) (_ (pt/jset b2 "temperature" tempV))))
+        (b3 (match tempV ((j/jnull) b2) (_ (pt/jset b2 "temperature" tempV))))
         (stopV (getOr body "stop" (j/jnull)))
-        (b4 (mt stopV ((j/jnull) b3) (_ (pt/jset b3 "stop_sequences" (jsonStopSequencesOf stopV)))))
+        (b4 (match stopV ((j/jnull) b3) (_ (pt/jset b3 "stop_sequences" (jsonStopSequencesOf stopV)))))
         (toolsV (getOr body "tools" (j/jnull)))
-        (b5 (mt toolsV ((j/jarr xs) (pt/jset b4 "tools" (j/jarr (map anthropicToolOf xs)))) (_ b4)))]
+        (b5 (match toolsV ((j/jarr xs) (pt/jset b4 "tools" (j/jarr (map anthropicToolOf xs)))) (_ b4)))]
     b5)
 
 fn geminiFunctionDeclarationOf t: j/Json -> j/Json
@@ -890,15 +890,15 @@ fn geminiFunctionCallPart tc: j/Json -> j/Json
   (let [(fn_ (getOr tc "function" (j/jobj (list))))
         (name (strOr (getOr fn_ "name" (j/jstr "")) ""))
         (argsText (strOr (getOr fn_ "arguments" (j/jstr "{}")) "{}"))
-        (args (mt (pt/jsonLoads argsText) ((ok v) v) ((err _) (j/jobj (list)))))]
+        (args (match (pt/jsonLoads argsText) ((ok v) v) ((err _) (j/jobj (list)))))]
     (j/jobj (list (pair "functionCall" (j/jobj (list (pair "name" (j/jstr name)) (pair "args" args)))))))
 
 fn geminiAssistantParts msg: j/Json -> (List j/Json)
   (let [(content (getOr msg "content" (j/jnull)))
-        (textParts (mt content
+        (textParts (match content
                      ((j/jstr s) (if (stringEmpty? s) (list) (list (j/jobj (list (pair "text" (j/jstr s)))))))
                      (_ (list))))
-        (calls (mt (getOr msg "tool_calls" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
+        (calls (match (getOr msg "tool_calls" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
         (callParts (map geminiFunctionCallPart calls))]
     (listAppend textParts callParts))
 
@@ -906,7 +906,7 @@ fn geminiAssistantParts msg: j/Json -> (List j/Json)
 fn geminiToolNamesFold acc: (List (Pair String String)) msg: j/Json -> (List (Pair String String))
   (let [(role (strOr (getOr msg "role" (j/jnull)) ""))]
     (if (!= role "assistant") acc
-      (let [(calls (mt (getOr msg "tool_calls" (j/jnull)) ((j/jarr xs) xs) (_ (list))))]
+      (let [(calls (match (getOr msg "tool_calls" (j/jnull)) ((j/jarr xs) xs) (_ (list))))]
         (fold (fn [(acc2 (List (Pair String String))) (tc j/Json)] -> (List (Pair String String))
                 (let [(id (strOr (getOr tc "id" (j/jstr "")) ""))
                       (fn_ (getOr tc "function" (j/jobj (list))))
@@ -918,7 +918,7 @@ fn geminiToolNamesOf msgs: (List j/Json) -> (List (Pair String String))
   (fold geminiToolNamesFold (list) msgs)
 
 fn geminiNameForCallId names: (List (Pair String String)) id: String -> String
-  (mt (listHead (filter (fn [(p (Pair String String))] -> Bool (= (pairFirst p) id)) names))
+  (match (listHead (filter (fn [(p (Pair String String))] -> Bool (= (pairFirst p) id)) names))
     ((some p) (pairSecond p))
     ((none) ""))
 
@@ -926,7 +926,7 @@ fn geminiFunctionResponsePart msg: j/Json names: (List (Pair String String)) -> 
   (let [(id (strOr (getOr msg "tool_call_id" (j/jstr "")) ""))
         (name (geminiNameForCallId names id))
         (contentText (strOr (getOr msg "content" (j/jstr "")) ""))
-        (contentValue (mt (pt/jsonLoads contentText) ((ok v) v) ((err _) (j/jstr contentText))))]
+        (contentValue (match (pt/jsonLoads contentText) ((ok v) v) ((err _) (j/jstr contentText))))]
     (j/jobj (list (pair "functionResponse" (j/jobj (list (pair "name" (j/jstr name))
                                                            (pair "response" (j/jobj (list (pair "content" contentValue))))))))))
 
@@ -959,18 +959,18 @@ fn geminiMessagesOf msgs: (List j/Json) -> (List j/Json)
 
 fn geminiGenerationConfig body: j/Json -> j/Json
   (let [(c0 (j/jobj (list)))
-        (c1 (mt (getOr body "max_tokens" (j/jnull))
+        (c1 (match (getOr body "max_tokens" (j/jnull))
               ((j/jint n) (pt/jset c0 "maxOutputTokens" (j/jint n)))
               ((j/jfloat f) (pt/jset c0 "maxOutputTokens" (j/jint (optionOr (float64ToInt64 f) 0))))
               (_ c0)))
         (tempV (getOr body "temperature" (j/jnull)))
-        (c2 (mt tempV ((j/jnull) c1) (_ (pt/jset c1 "temperature" tempV))))
+        (c2 (match tempV ((j/jnull) c1) (_ (pt/jset c1 "temperature" tempV))))
         (stopV (getOr body "stop" (j/jnull)))
-        (c3 (mt stopV ((j/jnull) c2) (_ (pt/jset c2 "stopSequences" (jsonStopSequencesOf stopV)))))]
+        (c3 (match stopV ((j/jnull) c2) (_ (pt/jset c2 "stopSequences" (jsonStopSequencesOf stopV)))))]
     c3)
 
 fn geminiBody body: j/Json target: String -> j/Json
-  (let [(msgs (mt (getOr body "messages" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
+  (let [(msgs (match (getOr body "messages" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
         (sys (respSystemJoin msgs (list)))
         (b0 (j/jobj (list (pair "contents" (j/jarr (geminiMessagesOf msgs))))))
         (b1 (if (not (stringEmpty? sys))
@@ -978,15 +978,15 @@ fn geminiBody body: j/Json target: String -> j/Json
               b0))
         (b2 (pt/jset b1 "generationConfig" (geminiGenerationConfig body)))
         (toolsV (getOr body "tools" (j/jnull)))
-        (b3 (mt toolsV
+        (b3 (match toolsV
               ((j/jarr xs) (pt/jset b2 "tools" (j/jarr (list (j/jobj (list (pair "functionDeclarations" (j/jarr (map geminiFunctionDeclarationOf xs)))))))))
               (_ b2)))]
     b3)
 
 fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json Attempt)
-  (let [(v2 (mt entry ((c/entryResolved e) (some e)) ((c/entryUnresolved _) none)))
-        (m (mt entry ((c/entryResolved e) e.dispatch) ((c/entryUnresolved a) a)))
-        (body0 (mt v2 ((some e) (if (isObj? cx.baseBody) (entryBody cx e) l.body)) ((none) l.body)))
+  (let [(v2 (match entry ((c/entryResolved e) (some e)) ((c/entryUnresolved _) none)))
+        (m (match entry ((c/entryResolved e) e.dispatch) ((c/entryUnresolved a) a)))
+        (body0 (match v2 ((some e) (if (isObj? cx.baseBody) (entryBody cx e) l.body)) ((none) l.body)))
         (target (cond
                   ((some? v2) m)
                   ((stringStartsWith? m "groq/") (u/slice m 5 (stringLength m)))
@@ -994,11 +994,11 @@ fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json 
                   ((= m "qwen") "qwen/qwen3.8-27b")
                   (else m)))
         (world cx.world)
-        (upstream (mt v2 ((some e) (entryUpstream cx e)) ((none) (upstreamFor cx m))))
+        (upstream (match v2 ((some e) (entryUpstream cx e)) ((none) (upstreamFor cx m))))
         (prov upstream.provider)
-        (alias (mt v2 ((some e) e.alias) ((none) m)))
+        (alias (match v2 ((some e) e.alias) ((none) m)))
         (providerPool (cond
-                ((and (some? v2) (not (stringEmpty? (mt v2 ((some e) e.provider) ((none) ""))))) (mt v2 ((some e) e.provider) ((none) "")))
+                ((and (some? v2) (not (stringEmpty? (match v2 ((some e) e.provider) ((none) ""))))) (match v2 ((some e) e.provider) ((none) "")))
                 ((= prov "agy-cli") "agy")
                 ((= prov "codex-cli") "codex")
                 ((= prov "claude-cli") "claude")
@@ -1007,26 +1007,26 @@ fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json 
         (pool (if (stringEmpty? providerPool) "" (str providerPool ":" alias)))
         (truthy (pt/pyTruthy body0))
         (body1 (if truthy (pt/jset body0 "model" (j/jstr target)) body0))
-        (ollama (or (= prov "ollama") (mt v2 ((some e) (= e.provider "ollama")) ((none) false))))
-        (entryEff (mt v2 ((some e) e.params.effort) ((none) none)))
+        (ollama (or (= prov "ollama") (match v2 ((some e) (= e.provider "ollama")) ((none) false))))
+        (entryEff (match v2 ((some e) e.params.effort) ((none) none)))
         (reqHasEff (or (listContains? cx.reqKeys "effort") (or (some? cx.headerEff) (some? cx.envEff))))
-        (chosen (mt entryEff ((some s) (j/jstr s)) ((none) (if reqHasEff (getOr body1 "effort" (j/jnull)) (j/jnull)))))
-        (chosenValid (mt chosen ((j/jstr s) (validEffort? (some s))) (_ false)))
+        (chosen (match entryEff ((some s) (j/jstr s)) ((none) (if reqHasEff (getOr body1 "effort" (j/jnull)) (j/jnull)))))
+        (chosenValid (match chosen ((j/jstr s) (validEffort? (some s))) (_ false)))
         (out0 (jdel body1 "effort"))
         (out1 (if (and ollama chosenValid) (pt/jset out0 "reasoning_effort" chosen) out0))
         (out2 (jdel (jdel (jdel (jdel out1 "role") "intent") "lens") "workspace"))
         (out3 (if (some? v2) (jdel (jdel out2 "timeout") "queue_timeout") out2))
         (sent (if (and truthy ollama) (if chosenValid (some (some (strOr chosen ""))) (some none)) none))
-        (respApi (mt v2 ((some e) (cond ((= e.kind "anthropic") "anthropic") ((= e.kind "gemini") "gemini") (else (optionOr e.params.api "chat")))) ((none) "chat")))
+        (respApi (match v2 ((some e) (cond ((= e.kind "anthropic") "anthropic") ((= e.kind "gemini") "gemini") (else (optionOr e.params.api "chat")))) ((none) "chat")))
         (upBody (cond ((= respApi "anthropic") (anthropicBody out3 target)) ((= respApi "gemini") (geminiBody out3 target)) ((= respApi "responses") (responsesBody out3 target)) (else out3)))
         (data (if truthy (pt/jsonDumps upBody -1) cx.req.body))]
     (pair body1 (Attempt :entry entry :v2 v2 :model m :target target :upstream upstream :alias alias :pool pool :providerPool providerPool :sentEffort sent
-      :poolConfig (mt v2 ((some e) e.pool) ((none) none)) :data data :api respApi
+      :poolConfig (match v2 ((some e) e.pool) ((none) none)) :data data :api respApi
       :path (cond ((= respApi "anthropic") "/messages") ((= respApi "gemini") (str "/models/" target ":generateContent")) ((= respApi "responses") "/responses") (else cx.path)) :retryUsed 0 :retryDeadline none)))
 
 ; (:m :tags (breaker pool) :do "checks each candidate pool key in order and stops at the first one that is down, so a provider-wide trip (401/402/provider marker) and a per-model trip are both honored")
 fn withBreakerPools pools: (List String) k: (fn [Float64 String] -> ChatStep) -> ChatStep
-  (mt (listHead pools)
+  (match (listHead pools)
     ((none) (k 0.0 ""))
     ((some p)
      (let [(rest (optionOr (listTail pools) (list)))]
@@ -1056,15 +1056,15 @@ fn attempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> ChatStep
 
 
 fn systemPrompt msgs: (List j/Json) -> (Result String pt/PyErr)
-  (mt (fold (fn [(acc (Result (List String) pt/PyErr)) (msg j/Json)] -> (Result (List String) pt/PyErr)
-              (mt acc
+  (match (fold (fn [(acc (Result (List String) pt/PyErr)) (msg j/Json)] -> (Result (List String) pt/PyErr)
+              (match acc
                 ((err e) (err e))
                 ((ok xs)
-                 (mt (msgGet msg "role" (j/jnull))
+                 (match (msgGet msg "role" (j/jnull))
                    ((err e) (err e))
                    ((ok role)
                     (if (and (= role (j/jstr "system")) (pt/pyTruthy (getOr msg "content" (j/jnull))))
-                      (mt (messageText (getOr msg "content" (j/jnull)))
+                      (match (messageText (getOr msg "content" (j/jnull)))
                         ((err e) (err e))
                         ((ok t) (ok (cons t xs))))
                       (ok xs)))))))
@@ -1081,36 +1081,36 @@ fn cliAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
         (agent (if (= prov "agy-cli") (getOr bodyObj "agent" (j/jnull)) (j/jnull)))
         (agentOn (pt/pyTruthy agent))
         (msgsVal (let [(v (getOr bodyObj "messages" (j/jnull)))] (if (pt/pyTruthy v) v (j/jarr (list)))))]
-    (mt (messageList msgsVal)
+    (match (messageList msgsVal)
       ((err e) (raise e))
       ((ok msgs)
-       (mt (if agentOn (ok "") (systemPrompt msgs))
+       (match (if agentOn (ok "") (systemPrompt msgs))
          ((err e) (raise e))
          ((ok system)
-          (mt (promptOf msgs (fn [(msg j/Json)] -> (Result Bool pt/PyErr)
-                               (mt (msgGet msg "content" (j/jnull))
+          (match (promptOf msgs (fn [(msg j/Json)] -> (Result Bool pt/PyErr)
+                               (match (msgGet msg "content" (j/jnull))
                                  ((err e) (err e))
                                  ((ok c) (ok (and (pt/pyTruthy c) (or agentOn (!= (getOr msg "role" (j/jnull)) (j/jstr "system")))))))))
             ((err e) (raise e))
             ((ok prompt)
              (let [(tools (getOr bodyObj "tools" (j/jnull)))
-                   (noTools (or (mt tools ((j/jarr xs) (listEmpty? xs)) (_ false))
+                   (noTools (or (match tools ((j/jarr xs) (listEmpty? xs)) (_ false))
                                 (= (u/pyLower (u/pyStrip (optionOr (u/headerGet hs "X-ASL-Tools") ""))) "none")))
                    (truthy (pt/pyTruthy body))
                    (effort (if truthy (getOr body "effort" (j/jstr "low")) (j/jstr "low")))
                    (temp (if truthy (getOr body "temperature" (j/jfloat 0.2)) (j/jfloat 0.2)))
-                   (execRaw (mt (u/headerGet hs "X-ASL-Timeout")
+                   (execRaw (match (u/headerGet hs "X-ASL-Timeout")
                               ((some h) (j/jstr h))
-                              ((none) (mt (u/headerGet hs "X-ASL-Execution-Timeout")
+                              ((none) (match (u/headerGet hs "X-ASL-Execution-Timeout")
                                         ((some h) (j/jstr h))
                                         ((none) (if truthy (getOr body "timeout" (getOr body "execution_timeout" (j/jint 300))) (j/jint 300)))))))
-                   (queueRaw (mt (u/headerGet hs "X-ASL-Queue-Timeout")
+                   (queueRaw (match (u/headerGet hs "X-ASL-Queue-Timeout")
                                ((some h) (j/jstr h))
                                ((none) (if truthy (getOr body "queue_timeout" (j/jint 1200)) (j/jint 1200)))))]
-               (mt (floatOf execRaw)
+               (match (floatOf execRaw)
                  ((err e) (raise e))
                  ((ok execT)
-                  (mt (floatOf queueRaw)
+                  (match (floatOf queueRaw)
                     ((err e) (raise e))
                     ((ok queueT)
                      (let [(promptBytes (bytesLength (stringToBytes prompt)))]
@@ -1132,20 +1132,20 @@ fn cliDispatch cx: Ctx l: Loop a: Attempt prompt: String system: String noTools:
                 ((= prov "codex-cli")
                  (let [(sub (cond ((stringStartsWith? m "codex/") (some (u/slice m 6 (stringLength m)))) ((= m "codex") none) (else (some m))))]
                    (pair (pair "codex" (str "codex:" (optionOr sub "default")))
-                         (list (pair "prompt" (j/jstr prompt)) (pair "model" (mt sub ((some s) (j/jstr s)) ((none) (j/jnull)))) (pair "temp" temp)
+                         (list (pair "prompt" (j/jstr prompt)) (pair "model" (match sub ((some s) (j/jstr s)) ((none) (j/jnull)))) (pair "temp" temp)
                                (pair "effort" effort) (pair "timeout" (j/jfloat execT)) (pair "queue_timeout" (j/jfloat queueT))
                                (pair "workspace" (j/jstr ws)) (pair "system_prompt" sysJ) (pair "no_tools" (j/jbool noTools))))))
                 (else
                  (let [(sub (if (stringStartsWith? m "claude/") (some (u/slice m 7 (stringLength m))) none))]
                    (pair (pair "claude" (str "claude:" (optionOr sub "default")))
-                         (list (pair "prompt" (j/jstr prompt)) (pair "model" (mt sub ((some s) (j/jstr s)) ((none) (j/jnull))))
+                         (list (pair "prompt" (j/jstr prompt)) (pair "model" (match sub ((some s) (j/jstr s)) ((none) (j/jnull))))
                                (pair "timeout" (j/jfloat execT)) (pair "queue_timeout" (j/jfloat queueT)) (pair "workspace" (j/jstr ws))
                                (pair "system_prompt" sysJ) (pair "no_tools" (j/jbool noTools)) (pair "effort" effort)))))))
         (client (pairFirst (pairFirst plan)))
         (telModel (pairSecond (pairFirst plan)))
-        (sentEffort (mt effort ((j/jstr s) (if (listContains? (list "low" "medium" "high" "xhigh" "max") s) (some s) none)) (_ none)))
+        (sentEffort (match effort ((j/jstr s) (if (listContains? (list "low" "medium" "high" "xhigh" "max") s) (some s) none)) (_ none)))
         (onReply (fn [(r (Option CliReply))] -> ChatStep
-                   (mt r
+                   (match r
                      ((some reply) (cliReplied cx l a reply client telModel sentEffort))
                      ((none)
                       (tell (usageNote prov a.alias "failed")
@@ -1158,7 +1158,7 @@ fn cliDispatch cx: Ctx l: Loop a: Attempt prompt: String system: String noTools:
       (askCli (effCli client (pairSecond plan)) onReply)))
 
 fn usageInt u: j/Json k: String -> Int64
-  (mt (getOr u k (j/jnull)) ((j/jint n) n) (_ 0))
+  (match (getOr u k (j/jnull)) ((j/jint n) n) (_ 0))
 
 fn cliReplied cx: Ctx l: Loop a: Attempt reply: CliReply client: String telModel: String sentEffort: (Option String) -> ChatStep
   (let [(prov a.upstream.provider)
@@ -1176,7 +1176,7 @@ fn cliReplied cx: Ctx l: Loop a: Attempt reply: CliReply client: String telModel
                   (asl1 (if hasUsage (listAppend asl0 (list (pair "usage" usage))) asl0))
                   (asl2 (if reply.dedup (listAppend asl1 (list (pair "dedup" (j/jbool true)))) asl1))
                   (asl3 (u/objSet asl2 "alias" (j/jstr a.alias)))
-                  (asl4 (mt sentEffort ((some s) (u/objSet asl3 "effort" (j/jstr s))) ((none) asl3)))
+                  (asl4 (match sentEffort ((some s) (u/objSet asl3 "effort" (j/jstr s))) ((none) asl3)))
                   (resp0 (completionJson (str "chatcmpl-" tag "-" (stringFromInt64 ts)) ts telModel text asl4))
                   (resp (if hasUsage
                           (pt/jset resp0 "usage" (j/jobj (list (pair "prompt_tokens" (getOr usage "inputTokens" (j/jnull)))
@@ -1192,8 +1192,8 @@ fn cliReplied cx: Ctx l: Loop a: Attempt reply: CliReply client: String telModel
 
 fn rateAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
   (let [(prov a.upstream.provider)
-        (rpm (mt a.v2 ((some e) e.rpm) ((none) (if (= prov "gemini") (some 15.0) none))))]
-    (mt rpm
+        (rpm (match a.v2 ((some e) e.rpm) ((none) (if (= prov "gemini") (some 15.0) none))))]
+    (match rpm
       ((some r)
        (if (!= r 0.0)
          (askBool (effBucket a.target r 0.5)
@@ -1207,12 +1207,12 @@ fn rateAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
                        (fn [] -> ChatStep (loopStep cx (failed (advance l l.body) (str "gemini rate limit for " a.alias)))))
                      (tell (effLog (str "[Gateway RateLimit] Gemini token bucket depleted for " a.model ". Cascading to agy fallback...\n"))
                        (fn [] -> ChatStep
-                         (mt (fallbackPrompt l.body)
+                         (match (fallbackPrompt l.body)
                            ((err e) (raise e))
                            ((ok prompt)
                             (agyFallback cx prompt
                               (fn [(r (Option CliReply))] -> ChatStep
-                                (mt r
+                                (match r
                                   ((some reply) (agyReply cx l reply))
                                   ((none) (loopStep cx (advance l l.body))))))))))))))))
          (httpAttempt cx l a)))
@@ -1221,7 +1221,7 @@ fn rateAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
 fn upTimeout cx: Ctx l: Loop a: Attempt -> (Result Float64 pt/PyErr)
   (let [(body l.body)
         (fallback (fn [] -> Float64
-                    (mt a.v2
+                    (match a.v2
                       ((some e) (if (!= e.timeoutSec 0.0) e.timeoutSec (u/upstreamTimeoutSec cx.world.settings a.upstream.provider)))
                       ((none) (u/upstreamTimeoutSec cx.world.settings a.upstream.provider)))))]
     (if (and (some? a.v2) (and (isObj? body) (pt/pyTruthy (getOr body "timeout" (j/jnull)))))
@@ -1238,17 +1238,17 @@ fn httpAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
         (reqResult (if (= a.api "anthropic")
                      (u/anthropicUpstreamRequest up.url a.path up.key a.data reqHeaders)
                      (u/upstreamRequest up.url a.path up.key a.data reqHeaders)))]
-    (mt reqResult
+    (match reqResult
       ((err s) (raise (splitErr s)))
       ((ok request)
-       (mt (upTimeout cx l a)
+       (match (upTimeout cx l a)
          ((err e) (raised cx l a false e.msg))
          ((ok timeout)
-          (askHttp (mt (poolConfigFor a)
+          (askHttp (match (poolConfigFor a)
             ((some poolConfig) (effPoolHttp up.provider a.model up.url poolConfig request timeout))
             ((none) (effHttp up.provider a.target cx.intent cx.role request timeout cx.profileName)))
             (fn [(r HttpReply)] -> ChatStep
-              (mt r
+              (match r
                 ((httpOk status headers body) (httpAnswered cx l a status headers body))
                 ((httpError status reason headers body) (httpFailed cx l a status reason headers body))
                 ((httpRaised timeout text) (raised cx l a timeout text))))))))))
@@ -1304,17 +1304,17 @@ fn raisedFinal cx: Ctx l: Loop a: Attempt timeout: Bool text: String -> ChatStep
 
 ; (:m :tags (chat parser) :do "a reasoning-tuned model may answer only into message.reasoning or message.reasoning_details, leaving message.content empty with finish_reason stop (not length): ERR_EMPTY_CONTENT fired on a real answer the parser never looked at. reasoningFallbackText below is that fallback, used only when content is empty")
 fn reasoningDetailsTexts items: (List j/Json) acc: (List String) -> (List String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (listReverse acc))
     ((some o)
      (let [(rest (optionOr (listTail items) (list)))
            (tx (getOr o "text" (j/jnull)))]
-       (mt tx
+       (match tx
          ((j/jstr s) (reasoningDetailsTexts rest (if (stringEmpty? (pt/pyStrip s)) acc (cons s acc))))
          (_ (reasoningDetailsTexts rest acc))))))
 
 fn reasoningDetailsFallback msg: j/Json -> (Option String)
-  (mt (getOr msg "reasoning_details" (j/jnull))
+  (match (getOr msg "reasoning_details" (j/jnull))
     ((j/jarr xs)
      (let [(texts (reasoningDetailsTexts xs (list)))]
        (if (listEmpty? texts) none (some (stringJoin texts "\n")))))
@@ -1322,34 +1322,34 @@ fn reasoningDetailsFallback msg: j/Json -> (Option String)
 
 ; (:m :tags (chat parser reasoning) :do "opencodeGo's cat-jam-free names the same field reasoning_content (vLLM/DeepSeek-style), a third spelling beside commandCode's reasoning/reasoning_details; tried after reasoning, before reasoning_details")
 fn reasoningContentFallback msg: j/Json -> (Option String)
-  (mt (getOr msg "reasoning_content" (j/jnull))
+  (match (getOr msg "reasoning_content" (j/jnull))
     ((j/jstr s) (if (stringEmpty? (pt/pyStrip s)) (reasoningDetailsFallback msg) (some s)))
     (_ (reasoningDetailsFallback msg)))
 
 fn reasoningFallbackText msg: j/Json -> (Option String)
-  (mt (getOr msg "reasoning" (j/jnull))
+  (match (getOr msg "reasoning" (j/jnull))
     ((j/jstr s) (if (stringEmpty? (pt/pyStrip s)) (reasoningContentFallback msg) (some s)))
     (_ (reasoningContentFallback msg)))
 
 fn projectChoiceList choices: j/Json -> (List j/Json)
-  (mt choices ((j/jarr xs) xs) (_ (list)))
+  (match choices ((j/jarr xs) xs) (_ (list)))
 
 fn project body: String -> (Option Projection)
-  (mt (pt/jsonLoads body)
+  (match (pt/jsonLoads body)
     ((err _) none)
     ((ok resp)
      (if (not (isObj? resp))
        none
        (let [(choices (getOr resp "choices" (j/jarr (list (j/jobj (list))))))
-             (first (mt choices ((j/jarr xs) (listHead xs)) (_ none)))]
-         (mt first
+             (first (match choices ((j/jarr xs) (listHead xs)) (_ none)))]
+         (match first
            ((some c)
             (if (isObj? c)
               (let [(msg (getOr c "message" (j/jobj (list))))]
                 (if (isObj? msg)
                   (let [(raw (getOr msg "content" (j/jnull)))]
                     (if (emptyContent? raw)
-                      (mt (reasoningFallbackText msg)
+                      (match (reasoningFallbackText msg)
                         ((none) (some (Projection :resp resp :content raw)))
                         ((some fb)
                          (let [(newMsg (pt/jset msg "content" (j/jstr fb)))
@@ -1363,18 +1363,18 @@ fn project body: String -> (Option Projection)
            ((none) none))))))
 
 fn emptyContent? v: j/Json -> Bool
-  (mt v ((j/jnull) true) ((j/jstr s) (stringEmpty? (u/pyStrip s))) (_ false))
+  (match v ((j/jnull) true) ((j/jstr s) (stringEmpty? (u/pyStrip s))) (_ false))
 
 fn sanitizeFirst resp: j/Json f: (fn [String] -> String) -> j/Json
-  (mt (getOr resp "choices" (j/jnull))
+  (match (getOr resp "choices" (j/jnull))
     ((j/jarr xs)
-     (mt (listHead xs)
+     (match (listHead xs)
        ((some c)
-        (mt (getOr c "message" (j/jnull))
+        (match (getOr c "message" (j/jnull))
           ((j/jobj _)
            (let [(msg (getOr c "message" (j/jnull)))
                  (content (getOr msg "content" (j/jnull)))
-                 (newMsg (mt content ((j/jstr s) (pt/jset msg "content" (j/jstr (f s)))) (_ msg)))]
+                 (newMsg (match content ((j/jstr s) (pt/jset msg "content" (j/jstr (f s)))) (_ msg)))]
              (pt/jset resp "choices" (j/jarr (cons (pt/jset c "message" newMsg) (optionOr (listTail xs) (list)))))))
           (_ resp)))
        ((none) resp)))
@@ -1382,14 +1382,14 @@ fn sanitizeFirst resp: j/Json f: (fn [String] -> String) -> j/Json
 
 fn servedBy a: Attempt body: j/Json -> (List (Pair String j/Json))
   (let [(base (list (pair "alias" (j/jstr a.alias))))
-        (withEffort (mt a.sentEffort
-                      ((some e) (mt e ((some s) (listAppend base (list (pair "effort" (j/jstr s))))) ((none) base)))
+        (withEffort (match a.sentEffort
+                      ((some e) (match e ((some s) (listAppend base (list (pair "effort" (j/jstr s))))) ((none) base)))
                       ((none) base)))
         (temp (if (isObj? body) (getOr body "temperature" (j/jnull)) (j/jnull)))]
     (if (isNull? temp) withEffort (listAppend withEffort (list (pair "temperature" temp)))))
 
 fn mergeAsl resp: j/Json served: (List (Pair String j/Json)) -> j/Json
-  (let [(existing (mt (getOr resp "asl" (j/jnull)) ((j/jobj kvs) kvs) (_ (list))))]
+  (let [(existing (match (getOr resp "asl" (j/jnull)) ((j/jobj kvs) kvs) (_ (list))))]
     (pt/jset resp "asl" (j/jobj (fold (fn [(acc (List (Pair String j/Json))) (p (Pair String j/Json))] -> (List (Pair String j/Json))
                                         (u/objSet acc (pairFirst p) (pairSecond p)))
                                       existing served))))
@@ -1398,27 +1398,27 @@ fn dropHeaders hs: (List (Pair String String)) names: (List String) -> (List (Pa
   (filter (fn [(p (Pair String String))] -> Bool (not (listContains? names (u/pyLower (pairFirst p))))) hs)
 
 fn respTexts items: (List j/Json) acc: (List String) -> (List String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (listReverse acc))
     ((some o)
      (let [(rest (optionOr (listTail items) (list)))
            (isMsg (= (getOr o "type" (j/jnull)) (j/jstr "message")))
-           (cItems (mt (getOr o "content" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
+           (cItems (match (getOr o "content" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
            (texts (fold (fn [(acc2 (List String)) (c j/Json)] -> (List String)
                           (let [(ct (getOr c "type" (j/jnull)))
                                 (tx (getOr c "text" (j/jnull)))]
                             (if (and (= ct (j/jstr "output_text")) (pt/pyTruthy tx))
-                              (mt tx ((j/jstr s) (cons s acc2)) (_ acc2))
+                              (match tx ((j/jstr s) (cons s acc2)) (_ acc2))
                               acc2)))
                         acc cItems))]
        (if isMsg (respTexts rest texts) (respTexts rest acc)))))
 
 fn responsesToChat body: String -> (Option String)
-  (mt (pt/jsonLoads body)
+  (match (pt/jsonLoads body)
     ((err _) none)
     ((ok resp)
      (if (and (isObj? resp) (pt/pyTruthy (getOr resp "output" (j/jnull))))
-       (let [(itemsL (mt (getOr resp "output" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
+       (let [(itemsL (match (getOr resp "output" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
              (content (stringJoin (respTexts itemsL (list)) ""))
              (usage (getOr resp "usage" (j/jnull)))
              (msg (j/jobj (list (pair "role" (j/jstr "assistant")) (pair "content" (j/jstr content)))))
@@ -1458,11 +1458,11 @@ fn anthropicStopReasonToFinish v: j/Json -> String
       (else "stop")))
 
 fn anthropicToChat body: String -> (Option String)
-  (mt (pt/jsonLoads body)
+  (match (pt/jsonLoads body)
     ((err _) none)
     ((ok resp)
      (if (not (isObj? resp)) none
-       (let [(blocks (mt (getOr resp "content" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
+       (let [(blocks (match (getOr resp "content" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
              (folded (fold anthropicContentBlocksFold (AnthropicFold :texts (list) :calls (list) :thinking (list)) blocks))
              (contentText (stringJoin folded.texts ""))
              (msg0 (j/jobj (list (pair "role" (j/jstr "assistant")) (pair "content" (j/jstr contentText)))))
@@ -1487,7 +1487,7 @@ fn anthropicToChat body: String -> (Option String)
 
 ; (:m :tags (gemini) :do "a part is text (the normal case), text with :thought true (Gemini's reasoning trace, becomes reasoning_content like Anthropic's thinking blocks), or a functionCall (becomes an OpenAI tool_calls entry; Gemini never sends a call id, so one is synthesized from the position in acc.calls)")
 fn geminiPartsFold acc: GeminiFold part: j/Json -> GeminiFold
-  (let [(isThought (mt (getOr part "thought" (j/jnull)) ((j/jbool b) b) (_ false)))
+  (let [(isThought (match (getOr part "thought" (j/jnull)) ((j/jbool b) b) (_ false)))
         (textV (getOr part "text" (j/jnull)))
         (fc (getOr part "functionCall" (j/jnull)))]
     (cond
@@ -1511,13 +1511,13 @@ fn geminiFinishReasonToFinish fr: String hasCalls: Bool -> String
       (else "stop")))
 
 fn geminiToChat body: String -> (Option String)
-  (mt (pt/jsonLoads body)
+  (match (pt/jsonLoads body)
     ((err _) none)
     ((ok resp)
      (if (not (isObj? resp)) none
-       (let [(cands (mt (getOr resp "candidates" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
+       (let [(cands (match (getOr resp "candidates" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
              (cand0 (optionOr (listGet cands 0) (j/jnull)))
-             (parts (mt (getOr (getOr cand0 "content" (j/jnull)) "parts" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
+             (parts (match (getOr (getOr cand0 "content" (j/jnull)) "parts" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
              (folded (fold geminiPartsFold (GeminiFold :texts (list) :calls (list) :thinking (list)) parts))
              (contentText (stringJoin folded.texts ""))
              (msg0 (j/jobj (list (pair "role" (j/jstr "assistant")) (pair "content" (j/jstr contentText)))))
@@ -1545,7 +1545,7 @@ fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair St
                          ((= a.api "gemini") (optionOr (geminiToChat body) body))
                          (else body)))
         (proj (project chatBody))]
-    (mt proj
+    (match proj
       ((some p)
        (if (emptyContent? p.content)
          (tell (usageNote prov alias "empty")
@@ -1574,7 +1574,7 @@ fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair St
 
 ; (:m :tags (breaker pool) :do "a success clears both the model pool and the provider pool: it proves the account and this model both work, so any stale account-wide trip (from a sibling model's 401/402) is cleared too")
 fn clearBreakerPools pools: (List String) k: (fn [] -> ChatStep) -> ChatStep
-  (mt (listHead pools)
+  (match (listHead pools)
     ((none) (k))
     ((some p)
      (let [(rest (optionOr (listTail pools) (list)))]
@@ -1584,9 +1584,9 @@ fn clearBreakerPools pools: (List String) k: (fn [] -> ChatStep) -> ChatStep
 
 fn answered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair String String)) respBody: String resp: (Option j/Json) rec: (Option String) -> ChatStep
   (let [(prov a.upstream.provider)
-        (usage (mt resp ((some r) (getOr r "usage" (j/jnull))) ((none) (j/jnull))))
+        (usage (match resp ((some r) (getOr r "usage" (j/jnull))) ((none) (j/jnull))))
         (finish (fn [] -> ChatStep
-                  (mt resp
+                  (match resp
                     ((some r)
                      (if cx.asn
                        (sendReply cx l.head status r (telemetryHeader rec))
@@ -1616,13 +1616,13 @@ fn retryAfterHeaderOf headers: (List (Pair String String)) -> (Option String)
 
 ; (:m :tags (retry) :do "Retry-After is either delta-seconds (\"120\") or the RFC 7231 preferred HTTP-date (\"Wed, 21 Oct 2026 07:28:00 GMT\"); delta-seconds is tried first since it is overwhelmingly the common form and is unambiguous, falling back to the date form resolved against now; a header present but unparseable by either form is none, same as absent, so retryDelayMs falls back to the jittered exponential window instead of guessing")
 fn retryAfterSecondsFromNow headerText: (Option String) now: Float64 -> (Option Float64)
-  (mt headerText
+  (match headerText
     ((none) none)
     ((some raw)
      (let [(s (u/pyStrip raw))]
-       (mt (u/pyFloat s)
+       (match (u/pyFloat s)
          ((ok f) (if (>= f 0.0) (some f) none))
-         ((err _) (mt (lt/parseHttpDateEpochSeconds s)
+         ((err _) (match (lt/parseHttpDateEpochSeconds s)
                     ((some epoch) (some (- epoch now)))
                     ((none) none)))))))
 
@@ -1671,12 +1671,12 @@ fn httpFailedFinal cx: Ctx l: Loop a: Attempt status: Int64 reason: String heade
                         (tellAll (list (effUsageFallback prov alias)
                                        (effLog (str "[Gateway Cascade] Model " a.model " returned HTTP " (stringFromInt64 status) ". Checking agy fallback...\n")))
                           (fn [] -> ChatStep
-                            (mt (fallbackPrompt l1.body)
+                            (match (fallbackPrompt l1.body)
                               ((err e) (raise e))
                               ((ok prompt)
                                (agyFallback cx prompt
                                  (fn [(r (Option CliReply))] -> ChatStep
-                                   (mt r
+                                   (match r
                                      ((some reply) (agyReply cx l1 reply))
                                      ((none) (if (> cx.cascadeLen 1) (loopStep cx (advance l1 l1.body)) (relay)))))))))))
                        (else (relay)))))))
@@ -1690,7 +1690,7 @@ fn labels models: (List c/GatewayResolvedEntry) -> String
   (stringJoin (map c/gatewayEntryLabel models) ", ")
 
 fn lastErrSuffix l: Loop -> String
-  (mt l.lastErr ((some e) (str "; last error: " e)) ((none) ""))
+  (match l.lastErr ((some e) (str "; last error: " e)) ((none) ""))
 
 fn uniqueSorted xs: (List String) -> (List String)
   (listSort (fold (fn [(acc (List String)) (x String)] -> (List String) (if (listContains? acc x) acc (cons x acc))) (list) xs))
@@ -1713,28 +1713,28 @@ fn afterLoop cx: Ctx l: Loop -> ChatStep
       ((and (not (stringEmpty? model)) (not (or (= model "agy") (stringStartsWith? model "agy/"))))
        (sendError cx l.head 502 (str "ERR_NO_UPSTREAM: model " model " failed" (lastErrSuffix l)) true))
       (else
-       (mt (fallbackPrompt l.body)
+       (match (fallbackPrompt l.body)
          ((err e) (raise e))
          ((ok prompt)
           (agyFallback cx prompt
             (fn [(r (Option CliReply))] -> ChatStep
-              (mt r
+              (match r
                 ((some reply) (agyReply cx l reply))
                 ((none)
-                 (mt l.lastErr
+                 (match l.lastErr
                    ((some e) (sendError cx l.head 500 e false))
                    ((none) (done l.head ""))))))))))))
 
 
 fn optJson v: (Option String) -> j/Json
-  (mt v ((some s) (j/jstr s)) ((none) (j/jnull)))
+  (match v ((some s) (j/jstr s)) ((none) (j/jnull)))
 
 fn pairsJson hs: (List (Pair String String)) -> j/Json
   (j/jarr (map (fn [(p (Pair String String))] -> j/Json (j/jarr (list (j/jstr (pairFirst p)) (j/jstr (pairSecond p))))) hs))
 
 fn effectJson eff: ChatEffect -> j/Json
   (let [(op (fn [(name String) (rest (List (Pair String j/Json)))] -> j/Json (j/jobj (cons (pair "op" (j/jstr name)) rest))))]
-    (mt eff
+    (match eff
       ((effRealpath p) (op "realpath" (list (pair "path" (j/jstr p)))))
       ((effIsDir p) (op "isDir" (list (pair "path" (j/jstr p)))))
       ((effClock) (op "clock" (list)))
@@ -1771,7 +1771,7 @@ fn effectJson eff: ChatEffect -> j/Json
 
 fn headJson head: (List HeadItem) -> j/Json
   (j/jarr (map (fn [(h HeadItem)] -> j/Json
-                 (mt h
+                 (match h
                    ((headStatus c) (j/jarr (list (j/jstr ":status") (j/jstr (stringFromInt64 c)))))
                    ((headField n v) (j/jarr (list (j/jstr n) (j/jstr v))))))
                head))

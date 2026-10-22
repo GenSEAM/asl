@@ -6,12 +6,12 @@
 fn readExactly! fd: Int64 size: Int64 acc: String -> (Result String String)
   (if (>= (stringLength acc) size)
     (ok acc)
-    (mt (sock/pollSocket fd 5000)
+    (match (sock/pollSocket fd 5000)
       ((err e) (err e))
       ((ok state)
         (if (= state "idle")
           (err (str "no bytes within 5 s after " (stringFromInt64 (stringLength acc)) " bytes"))
-          (mt (sock/readSocketBytes fd (- size (stringLength acc)))
+          (match (sock/readSocketBytes fd (- size (stringLength acc)))
             ((err e) (err e))
             ((ok chunk)
               (if (= (stringLength chunk) 0)
@@ -19,24 +19,24 @@ fn readExactly! fd: Int64 size: Int64 acc: String -> (Result String String)
                 (readExactly! fd size (str acc chunk)))))))))
 
 fn openErr res: (Result sock/ServerSocket String) -> String
-  (mt res ((ok _) "") ((err e) e))
+  (match res ((ok _) "") ((err e) e))
 
 fn unixErr res: (Result unx/UnixServerSocket String) -> String
-  (mt res ((ok _) "") ((err e) e))
+  (match res ((ok _) "") ((err e) e))
 
 fn ! unixPath tag: String -> String
   (str "/tmp/asl-net-" (stringFromInt64 (procSelf)) "-" tag ".sock")
 
 fn testLoopbackEcho! -> Bool
-  (mt (sock/openServerSocket (sock/makeSocketConfig "127.0.0.1" 0 false))
+  (match (sock/openServerSocket (sock/makeSocketConfig "127.0.0.1" 0 false))
     ((err e) (do (assert false (str "openServerSocket on an ephemeral loopback port: " e)) false))
     ((ok srv)
       (do
         (assert (> srv.port 0) "the listener reports the kernel-assigned port")
-        (mt (sock/connectSocket srv.port)
+        (match (sock/connectSocket srv.port)
           ((err e) (do (sock/closeSocket srv.fd) (assert false (str "connectSocket: " e)) false))
           ((ok client)
-            (mt (sock/acceptSocketConnection srv.fd)
+            (match (sock/acceptSocketConnection srv.fd)
               ((err e) (do (sock/closeSocket client) (sock/closeSocket srv.fd) (assert false (str "acceptSocketConnection: " e)) false))
               ((ok conn)
                 (let [(payload "asl-net loopback echo 0123456789\n")
@@ -50,20 +50,20 @@ fn testLoopbackEcho! -> Bool
                       (_l (sock/closeSocket srv.fd))]
                   (do
                     (assert (= (resultOr sent 0) (stringLength payload)) "client write reports every payload byte")
-                    (assert (= (resultOr got "") payload) (str "server reads the bytes the client wrote: " (mt got ((ok s) s) ((err e) e))))
+                    (assert (= (resultOr got "") payload) (str "server reads the bytes the client wrote: " (match got ((ok s) s) ((err e) e))))
                     (assert (= (resultOr back 0) (stringLength payload)) "server write reports every echoed byte")
                     (assert (= (resultOr echoed "") payload) "client reads back the bytes the server echoed")
                     (assert (= (resultOr eof "unread") "") "server read after the client closed returns end of stream")
                     true)))))))))
 
 fn testReadBound! -> Bool
-  (mt (sock/openServerSocket (sock/makeSocketConfig "127.0.0.1" 0 false))
+  (match (sock/openServerSocket (sock/makeSocketConfig "127.0.0.1" 0 false))
     ((err e) (do (assert false (str "openServerSocket: " e)) false))
     ((ok srv)
-      (mt (sock/connectSocket srv.port)
+      (match (sock/connectSocket srv.port)
         ((err e) (do (sock/closeSocket srv.fd) (assert false (str "connectSocket: " e)) false))
         ((ok client)
-          (mt (sock/acceptSocketConnection srv.fd)
+          (match (sock/acceptSocketConnection srv.fd)
             ((err e) (do (sock/closeSocket client) (sock/closeSocket srv.fd) (assert false (str "acceptSocketConnection: " e)) false))
             ((ok conn)
               (let [(sent (sock/writeSocketBytes client "abcdef"))
@@ -75,12 +75,12 @@ fn testReadBound! -> Bool
                     (_l (sock/closeSocket srv.fd))]
                 (do
                   (assert (= (resultOr sent 0) 6) "client writes six bytes")
-                  (assert (= (resultOr head "") "ab") (str "a 2-byte read returns the first 2 buffered bytes only: " (mt head ((ok s) s) ((err e) e))))
-                  (assert (= (resultOr rest "") "cdef") (str "the remaining bytes stay buffered for the next read: " (mt rest ((ok s) s) ((err e) e))))
+                  (assert (= (resultOr head "") "ab") (str "a 2-byte read returns the first 2 buffered bytes only: " (match head ((ok s) s) ((err e) e))))
+                  (assert (= (resultOr rest "") "cdef") (str "the remaining bytes stay buffered for the next read: " (match rest ((ok s) s) ((err e) e))))
                   true))))))))
 
 fn testPollAndNonBlockingAccept! -> Bool
-  (mt (sock/openServerSocket (sock/makeSocketConfig "localhost" 0 true))
+  (match (sock/openServerSocket (sock/makeSocketConfig "localhost" 0 true))
     ((err e) (do (assert false (str "openServerSocket non-blocking: " e)) false))
     ((ok srv)
       (let [(lfd srv.fd)]
@@ -88,12 +88,12 @@ fn testPollAndNonBlockingAccept! -> Bool
           (assert (= (resultOr (sock/pollSocket lfd 0) "") "idle") "a listener with no pending connection polls idle")
           (assert (err? (sock/pollSocket lfd -1)) "a negative poll timeout is rejected")
           (assert (err? (sock/acceptSocketConnection lfd)) "a non-blocking listener fails accept with nothing pending instead of blocking")
-          (mt (sock/connectSocket srv.port)
+          (match (sock/connectSocket srv.port)
             ((err e) (do (sock/closeSocket lfd) (assert false (str "connectSocket: " e)) false))
             ((ok client)
               (do
                 (assert (= (resultOr (sock/pollSocket lfd 1000) "") "readable") "a pending connection makes the listener readable")
-                (mt (sock/acceptSocketConnection lfd)
+                (match (sock/acceptSocketConnection lfd)
                   ((err e) (do (sock/closeSocket client) (sock/closeSocket lfd) (assert false (str "accept after poll: " e)) false))
                   ((ok conn)
                     (let [(idle (sock/pollSocket conn 0))
@@ -108,11 +108,11 @@ fn testPollAndNonBlockingAccept! -> Bool
                         true)))))))))))
 
 fn testClosedDescriptorErrors! -> Bool
-  (mt (sock/openServerSocket (sock/makeSocketConfig "127.0.0.1" 0 false))
+  (match (sock/openServerSocket (sock/makeSocketConfig "127.0.0.1" 0 false))
     ((err e) (do (assert false (str "openServerSocket: " e)) false))
     ((ok srv)
       (let [(fd srv.fd)
-            (sizeErr (mt (sock/readSocketBytes fd 0) ((ok _) "") ((err e) e)))
+            (sizeErr (match (sock/readSocketBytes fd 0) ((ok _) "") ((err e) e)))
             (firstClose (sock/closeSocket fd))]
         (do
           (assert (= sizeErr "ERR_SOCKET_INVALID_BUFFER_SIZE") "a non-positive read size is rejected")
@@ -134,16 +134,16 @@ fn ! testConfigValidation -> Bool
 
 fn testUnixEcho! -> Bool
   (let [(path (unixPath "echo"))]
-    (mt (unx/openUnixServerSocket (unx/makeUnixSocketConfig path true 432))
+    (match (unx/openUnixServerSocket (unx/makeUnixSocketConfig path true 432))
       ((err e) (do (assert false (str "openUnixServerSocket: " e)) false))
       ((ok srv)
         (do
           (assert (= srv.path path) "the server records its socket path")
-          (assert (= (mt (fileStat path) ((ok st) (mod st.mode 512)) ((err _) -1)) 432) "the socket file carries the configured 0660 mode")
-          (mt (unx/connectUnixSocket path)
+          (assert (= (match (fileStat path) ((ok st) (mod st.mode 512)) ((err _) -1)) 432) "the socket file carries the configured 0660 mode")
+          (match (unx/connectUnixSocket path)
             ((err e) (do (unx/closeUnixSocket srv) (assert false (str "connectUnixSocket: " e)) false))
             ((ok client)
-              (mt (sock/acceptSocketConnection srv.fd)
+              (match (sock/acceptSocketConnection srv.fd)
                 ((err e) (do (sock/closeSocket client) (unx/closeUnixSocket srv) (assert false (str "accept on unix listener: " e)) false))
                 ((ok conn)
                   (let [(payload "unix echo\n")
@@ -164,7 +164,7 @@ fn testUnixEcho! -> Bool
 fn testUnixStalePath! -> Bool
   (let [(path (unixPath "stale"))
         (plain (unixPath "plain"))]
-    (mt (unx/openUnixServerSocket (unx/makeUnixSocketConfig path true 384))
+    (match (unx/openUnixServerSocket (unx/makeUnixSocketConfig path true 384))
       ((err e) (do (assert false (str "openUnixServerSocket: " e)) false))
       ((ok first)
         (let [(_f (sock/closeSocket first.fd))
@@ -182,7 +182,7 @@ fn testUnixStalePath! -> Bool
             (assert plainKept "the non-socket file is left in place")
             (assert (= (unixErr (unx/openUnixServerSocket (unx/makeUnixSocketConfig "" true 384))) "ERR_UNIX_SOCKET_EMPTY_PATH") "an empty unix socket path is rejected")
             (assert (= (unixErr (unx/openUnixServerSocket (unx/makeUnixSocketConfig (unixPath "mode") true 4096))) "ERR_UNIX_SOCKET_INVALID_PERMISSIONS") "permissions beyond 0777 are rejected")
-            (mt again
+            (match again
               ((ok s) (assert (resultOr (unx/closeUnixSocket s) false) "the rebound socket closes"))
               ((err _) (do (pathRemove path) ())))
             true)))))

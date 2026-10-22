@@ -82,7 +82,7 @@ fn clsSpace! -> Cls
 fn clsStep c: Cls b: Bytes n: Int64 i: Int64 -> Int64
   (if (>= i n) -1
     (let [(x (bytesGet b i))]
-      (mt c
+      (match c
         ((clsSetOf tbl space)
           (if (< x 128)
             (if (= (bytesGet tbl x) 1) (+ i 1) -1)
@@ -97,7 +97,7 @@ fn capSet caps: (List Int64) k: Int64 v: Int64 -> (List Int64)
   (capSetLoop caps k v 0 (list))
 
 fn capSetLoop caps: (List Int64) k: Int64 v: Int64 i: Int64 acc: (List Int64) -> (List Int64)
-  (mt (listHead caps)
+  (match (listHead caps)
     ((none) (listReverse acc))
     ((some x) (capSetLoop (optionOr (listTail caps) (list)) k v (+ i 1) (cons (if (= i k) v x) acc))))
 
@@ -125,7 +125,7 @@ fn rowLen n: Int64 mb: Int64 -> Int64
   (+ 24 (* 8 (/ (+ (- n mb) 8) 8)))
 
 fn triedLow id: Int64 n: Int64 mb: Int64 mo: Bytes -> Int64
-  (- (mt (float64ToInt64 (bytesGetFloat64 mo (+ (/ (* id (rowLen n mb)) 8) 2))) ((some i) i) ((none) 0)) 1)
+  (- (match (float64ToInt64 (bytesGetFloat64 mo (+ (/ (* id (rowLen n mb)) 8) 2))) ((some i) i) ((none) 0)) 1)
 
 fn setTried! id: Int64 n: Int64 mb: Int64 mo: Bytes t: Int64 -> Unit
   (bytesSetFloat64 mo (+ (/ (* id (rowLen n mb)) 8) 2) (int64ToFloat64 (+ t 1)))
@@ -135,8 +135,8 @@ fn memoAlloc r: Rex n: Int64 mb: Int64 -> Bytes
 
 fn runEndCached! id: Int64 c: Cls b: Bytes n: Int64 i: Int64 mo: Bytes mb: Int64 -> Int64
   (let [(slot (/ (* id (rowLen n mb)) 8))
-        (s0 (- (mt (float64ToInt64 (bytesGetFloat64 mo slot)) ((some i) i) ((none) 0)) 1))
-        (e0 (- (mt (float64ToInt64 (bytesGetFloat64 mo (+ slot 1))) ((some i) i) ((none) 0)) 1))]
+        (s0 (- (match (float64ToInt64 (bytesGetFloat64 mo slot)) ((some i) i) ((none) 0)) 1))
+        (e0 (- (match (float64ToInt64 (bytesGetFloat64 mo (+ slot 1))) ((some i) i) ((none) 0)) 1))]
     (if (and (>= e0 0) (and (>= i s0) (<= i e0))) e0
       (let [(e (runEnd c b n i))]
         (do (bytesSetFloat64 mo slot (int64ToFloat64 (+ i 1)))
@@ -147,24 +147,24 @@ fn runEndCached! id: Int64 c: Cls b: Bytes n: Int64 i: Int64 mo: Bytes mb: Int64
 fn memoRun! id: Int64 k: (Fn Bytes Int64 Int64 (List Int64) Bytes Int64 (Option (List Int64))) b: Bytes n: Int64 e: Int64 caps: (List Int64) mo: Bytes mb: Int64 -> (Option (List Int64))
   (let [(ix (memoIdx id n mb e))]
     (if (= (bytesGet mo ix) 1) (none)
-      (mt (k b n e caps mo mb)
+      (match (k b n e caps mo mb)
         ((some r) (some r))
         ((none) (do (bytesSet mo ix 1) (none))))))
 
 fn greedyFrom! id: Int64 c: Cls k: (Fn Bytes Int64 Int64 (List Int64) Bytes Int64 (Option (List Int64))) b: Bytes n: Int64 low: Int64 caps: (List Int64) mo: Bytes mb: Int64 -> (Option (List Int64))
   (let [(e (runEndCached! id c b n low mo mb)) (t (triedLow id n mb mo))]
     (if (and (>= t 0) (<= t low)) (none)
-      (mt (repBack! id k b n low (if (>= t 0) (prevStart b t) e) caps mo mb)
+      (match (repBack! id k b n low (if (>= t 0) (prevStart b t) e) caps mo mb)
         ((some r) (some r))
         ((none) (do (setTried! id n mb mo low) (none))))))
 
 fn repBack! id: Int64 k: (Fn Bytes Int64 Int64 (List Int64) Bytes Int64 (Option (List Int64))) b: Bytes n: Int64 low: Int64 e: Int64 caps: (List Int64) mo: Bytes mb: Int64 -> (Option (List Int64))
-  (mt (memoRun! id k b n e caps mo mb)
+  (match (memoRun! id k b n e caps mo mb)
     ((some r) (some r))
     ((none) (if (<= e low) (none) (repBack! id k b n low (prevStart b e) caps mo mb))))
 
 fn lazyTry! id: Int64 c: Cls k: (Fn Bytes Int64 Int64 (List Int64) Bytes Int64 (Option (List Int64))) b: Bytes n: Int64 i: Int64 caps: (List Int64) mo: Bytes mb: Int64 -> (Option (List Int64))
-  (mt (memoRun! id k b n i caps mo mb)
+  (match (memoRun! id k b n i caps mo mb)
     ((some r) (some r))
     ((none)
       (let [(j (clsStep c b n i))]
@@ -173,7 +173,7 @@ fn lazyTry! id: Int64 c: Cls k: (Fn Bytes Int64 Int64 (List Int64) Bytes Int64 (
 fn lazyToByte! id: Int64 k: (Fn Bytes Int64 Int64 (List Int64) Bytes Int64 (Option (List Int64))) x: Int64 b: Bytes n: Int64 i: Int64 caps: (List Int64) mo: Bytes mb: Int64 -> (Option (List Int64))
   (let [(j (byteFrom b n x i))]
     (if (< j 0) (none)
-      (mt (memoRun! id k b n j caps mo mb)
+      (match (memoRun! id k b n j caps mo mb)
         ((some r) (some r))
         ((none) (lazyToByte! id k x b n (+ j 1) caps mo mb)))))
 
@@ -184,19 +184,19 @@ fn byteFrom b: Bytes n: Int64 x: Int64 i: Int64 -> Int64
     (else (byteFrom b n x (+ i 1))))
 
 fn firstByte x: Rx -> Int64
-  (mt x
+  (match x
     ((rxLit bs) (if (> (bytesLength bs) 0) (bytesGet bs 0) -1))
     ((rxGroup g y) (firstByte y))
     ((rxLook y) (firstByte y))
-    ((rxSeq xs) (mt (listHead xs) ((some y) (firstByte y)) ((none) -1)))
+    ((rxSeq xs) (match (listHead xs) ((some y) (firstByte y)) ((none) -1)))
     (else -1))
 
 fn altTable! xs: (List Rx) -> (Option Bytes)
   (fold (fn [(acc (Option Bytes)) (y Rx)] -> (Option Bytes)
-          (mt acc
+          (match acc
             ((none) (none))
             ((some tb)
-              (mt y
+              (match y
                 ((rxEos) (some tb))
                 (else (let [(f (firstByte y))] (if (< f 0) (none) (do (bytesSet tb f 1) (some tb)))))))))
         (some (bytesAlloc 256)) xs)
@@ -206,15 +206,15 @@ fn stepN c: Cls b: Bytes n: Int64 i: Int64 lo: Int64 -> Int64
     (stepN c b n (clsStep c b n i) (- lo 1)))
 
 fn altTry ms: (List (Fn Bytes Int64 Int64 (List Int64) Bytes Int64 (Option (List Int64)))) b: Bytes n: Int64 i: Int64 caps: (List Int64) mo: Bytes mb: Int64 -> (Option (List Int64))
-  (mt (listHead ms)
+  (match (listHead ms)
     ((none) (none))
     ((some m)
-      (mt (m b n i caps mo mb)
+      (match (m b n i caps mo mb)
         ((some r) (some r))
         ((none) (altTry (optionOr (listTail ms) (list)) b n i caps mo mb)))))
 
 fn compileNode! x: Rx k: (Fn Bytes Int64 Int64 (List Int64) Bytes Int64 (Option (List Int64))) kFirst: Int64 id: Int64 -> (Pair (Fn Bytes Int64 Int64 (List Int64) Bytes Int64 (Option (List Int64))) Int64)
-  (mt x
+  (match x
     ((rxLit bs)
       (let [(len (bytesLength bs))]
         (pair (fn [(b Bytes) (n Int64) (i Int64) (caps (List Int64)) (mo Bytes) (mb Int64)] -> (Option (List Int64))
@@ -266,7 +266,7 @@ fn compileNode! x: Rx k: (Fn Bytes Int64 Int64 (List Int64) Bytes Int64 (Option 
     ((rxOpt y)
       (let [(c (compileNode! y k kFirst id)) (m (pairFirst c))]
         (pair (fn [(b Bytes) (n Int64) (i Int64) (caps (List Int64)) (mo Bytes) (mb Int64)] -> (Option (List Int64))
-                (mt (m b n i caps mo mb)
+                (match (m b n i caps mo mb)
                   ((some r) (some r))
                   ((none) (k b n i caps mo mb))))
               (pairSecond c))))
@@ -315,7 +315,7 @@ fn firstTable! leads: (List String) -> Bytes
         (bytesAlloc 256) leads)
 
 fn anyCls? c: Cls -> Bool
-  (mt c ((clsAnyOf) true) (else false))
+  (match c ((clsAnyOf) true) (else false))
 
 fn skipWs b: Bytes n: Int64 i: Int64 -> Int64
   (if (>= i n) i
@@ -363,7 +363,7 @@ fn searchFrom r: Rex b: Bytes n: Int64 i: Int64 mo: Bytes mb: Int64 -> (Option (
   (let [(s (nextStart r b n i))]
     (if (< s 0) (none)
       (let [(caps (capSet (emptyCaps (* 2 (+ r.groups 1)) (list)) 0 s))]
-        (mt (r.m b n s caps mo mb)
+        (match (r.m b n s caps mo mb)
           ((some c) (some c))
           ((none) (searchFrom r b n (+ s 1) mo mb))))))
 
@@ -372,7 +372,7 @@ fn rexFindAll r: Rex b: Bytes n: Int64 -> (List (List Int64))
 
 fn findLoop r: Rex b: Bytes n: Int64 i: Int64 mo: Bytes acc: (List (List Int64)) -> (List (List Int64))
   (if (> i n) acc
-    (mt (searchFrom r b n i mo 0)
+    (match (searchFrom r b n i mo 0)
       ((none) acc)
       ((some c)
         (let [(s (optionOr (listGet c 0) 0)) (e (optionOr (listGet c 1) 0))]
@@ -383,7 +383,7 @@ fn rexCount r: Rex b: Bytes n: Int64 -> Int64
 
 fn countLoop r: Rex b: Bytes n: Int64 i: Int64 mo: Bytes acc: Int64 -> Int64
   (if (> i n) acc
-    (mt (searchFrom r b n i mo 0)
+    (match (searchFrom r b n i mo 0)
       ((none) acc)
       ((some c)
         (let [(s (optionOr (listGet c 0) 0)) (e (optionOr (listGet c 1) 0))]
@@ -397,6 +397,6 @@ fn rexGroupSpan caps: (List Int64) g: Int64 -> (Option (Pair Int64 Int64))
     (if (or (< s 0) (< e 0)) (none) (some (pair s e))))
 
 fn rexGroup s: String caps: (List Int64) g: Int64 -> (Option String)
-  (mt (rexGroupSpan caps g)
+  (match (rexGroupSpan caps g)
     ((none) (none))
     ((some p) (some (t/sliceStr s (pairFirst p) (pairSecond p)))))

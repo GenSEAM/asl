@@ -16,7 +16,7 @@ fn ! hostProbe! source: String -> (Pair String ProcessOutput)
         (removed (if owned (processRun (str "rm -rf " dir)).exitCode 1))]
     (do
       (assert owned (str "host probe gets its own temporary directory: " dir made.stderr))
-      (assert (mt written ((ok _) true) ((err _) false)) "host probe source is written")
+      (assert (match written ((ok _) true) ((err _) false)) "host probe source is written")
       (assert (and (= removed 0) (not (fileExists? path))) "host probe directory is removed")
       (pair dir result)))
 
@@ -52,7 +52,7 @@ fn good -> Int64
     (do
       (assert (and (stringContains? badCheckerText "ERR_UNTYPED_PARAM") (stringContains? badCheckerText "item") (stringContains? badCheckerText "bad")) (str "checker rejects an untyped top-level parameter and names it and its function: " badCheckerText))
       (assert (= (listLength checkerBad) 1) (str "checker emits one missing-parameter diagnostic: " badCheckerText))
-      (assert (mt (listHead checkerPlaced) ((some d) (and (= d.code "ERR_UNTYPED_PARAM") (= d.line 4) (= d.col 5))) ((none) false)) (str "checker places the diagnostic at the function's first body form, line 4 col 5: " (stringJoin (map (fn [(d ty/Diagnostic)] -> String (str d.code "@" d.line ":" d.col)) checkerPlaced) "; ")))
+      (assert (match (listHead checkerPlaced) ((some d) (and (= d.code "ERR_UNTYPED_PARAM") (= d.line 4) (= d.col 5))) ((none) false)) (str "checker places the diagnostic at the function's first body form, line 4 col 5: " (stringJoin (map (fn [(d ty/Diagnostic)] -> String (str d.code "@" d.line ":" d.col)) checkerPlaced) "; ")))
       (assert (= (listLength (mapKeys (fold (fn [(seen (Map String Bool)) (dir String)] -> (Map String Bool) (mapSet seen dir true)) (mapEmpty) probeDirs))) 3) (str "each host probe uses a distinct temporary directory: " (stringJoin probeDirs " ")))
       (assert (listEmpty? checkerTyped) (str "checker accepts typed top-level params: " (diagnosticText checkerTyped)))
       (assert (listEmpty? checkerLambda) (str "checker exempts untyped lambda params: " (diagnosticText checkerLambda)))

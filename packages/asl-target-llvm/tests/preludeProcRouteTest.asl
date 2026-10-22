@@ -48,7 +48,7 @@ fn ! hostTriple -> String
       (else "")))
 
 fn ! hostFacts -> libc/TripleFacts
-  (mt (libc/libcFacts (hostTriple))
+  (match (libc/libcFacts (hostTriple))
     ((some f) f)
     ((none) (do (assert false (str "unsupported host triple: " (hostTriple))) (libc/emptyTripleFacts))))
 
@@ -64,19 +64,19 @@ fn diagText ds: (List ty/IrDiag) -> String
 fn ! lowered src: String -> (Option ty/SsaModule)
   (let [(preludeText (resultOr (fileReadString (lk/preludePath)) ""))]
     (do (assert (not (stringEmpty? preludeText)) "host prelude is readable")
-        (mt (lk/lowerSourceWith src preludeText)
+        (match (lk/lowerSourceWith src preludeText)
           ((err ds) (do (assert false (str "lowerSourceWith: " (diagText ds))) (none)))
           ((ok m)
-            (mt (rt/routeModule (hostFacts) m)
+            (match (rt/routeModule (hostFacts) m)
               ((err ds) (do (assert false (str "routeModule: " (diagText ds))) (none)))
               ((ok routed) (some routed.result)))))))
 
 fn ! emit work: String name: String src: String -> String
   (do (assert (ok? (fileWrite (str work "/" name ".asl") src)) (str name " source written"))
-      (mt (lowered src)
+      (match (lowered src)
         ((none) "")
         ((some m)
-          (mt (llvm/emitLlvmProgramFor (hostFacts) m "main")
+          (match (llvm/emitLlvmProgramFor (hostFacts) m "main")
             ((err ds) (do (assert false (str "emitLlvmProgramFor: " (diagText ds))) ""))
             ((ok ll) (do (assert (ok? (fileWrite (str work "/" name ".ll") ll)) (str name " IR written")) ll))))))
 
@@ -104,10 +104,10 @@ fn ! source scriptPath: String -> String
     "  (do (println label r.exitCode r.stdout r.stderr) true)"
     ""
     "fn ! showWait label: String r: (Result ProcessOutput String) -> Bool"
-    "  (do (mt r ((ok o) (println label \"ok\" o.exitCode o.stdout o.stderr)) ((err e) (println label \"err\" e))) true)"
+    "  (do (match r ((ok o) (println label \"ok\" o.exitCode o.stdout o.stderr)) ((err e) (println label \"err\" e))) true)"
     ""
     "fn ! showSpawn label: String r: (Result Int64 String) -> Int64"
-    "  (mt r ((ok h) (do (println label \"ok\" h) h)) ((err e) (do (println label \"err\" e) -1)))"
+    "  (match r ((ok h) (do (println label \"ok\" h) h)) ((err e) (do (println label \"err\" e) -1)))"
     ""
     "fn ! main -> (Result Int64 String)"
     "  (do"
@@ -318,7 +318,7 @@ fn ! testCaptureWriteFailure work: String shim: String name: String cmd: String 
 fn ! testExternsCalled -> Bool
   (let [(facts (hostFacts))
         (pool (fold (fn [(m (Map String Int64)) (s String)] -> (Map String Int64) (mapSet m s (mapSize m))) (mapEmpty) (proc/procRouteStrings)))]
-    (mt (proc/procRouteFunctions facts pool)
+    (match (proc/procRouteFunctions facts pool)
       ((err e) (do (assert false (str "procRouteFunctions: " e)) false))
       ((ok fs)
         (let [(called (fold functionCalls (list) fs))]
@@ -329,7 +329,7 @@ fn ! testExternsCalled -> Bool
 
 fn factReads text: String -> (List String)
   (fold (fn [(acc (List String)) (chunk String)] -> (List String)
-          (mt (listGet (stringSplit chunk "\"") 0)
+          (match (listGet (stringSplit chunk "\"") 0)
             ((some n) (if (or (stringContains? n ".") (listContains? acc n)) acc (cons n acc)))
             ((none) acc)))
         (list) (listDrop (stringSplit text "(kf k \"") 1))
@@ -339,7 +339,7 @@ fn ! testFactsDeclared -> Bool
         (text (fileText path))
         (reads (factReads text))
         (declared (fold (fn [(acc (List String)) (triple String)] -> (List String)
-                          (mt (libc/libcFacts triple)
+                          (match (libc/libcFacts triple)
                             ((some f) (listAppend acc (proc/procFactNames f)))
                             ((none) (do (assert false (str "libc facts for " triple)) acc))))
                         (list) (list "darwin-arm64" "linux-x86_64" "linux-aarch64")))]
@@ -349,7 +349,7 @@ fn ! testFactsDeclared -> Bool
         true))
 
 fn instrCalls acc: (List String) i: ty/SsaInstr -> (List String)
-  (mt i.op ((ty/opCall n _) (cons n acc)) (_ acc))
+  (match i.op ((ty/opCall n _) (cons n acc)) (_ acc))
 
 fn functionCalls acc: (List String) f: ty/SsaFunction -> (List String)
   (fold (fn [(a (List String)) (b ty/SsaBlock)] -> (List String) (fold instrCalls a b.instrs)) acc f.blocks)
@@ -364,43 +364,43 @@ fn instrByDest name: String instrs: (List ty/SsaInstr) -> (Option ty/SsaInstr)
   (fold (fn [(acc (Option ty/SsaInstr)) (i ty/SsaInstr)] -> (Option ty/SsaInstr) (if (= i.dest name) (some i) acc)) (none) instrs)
 
 fn constStrIndex op: ty/SsaOp -> (Option Int64)
-  (mt op
-    ((ty/opConst c) (mt c ((ty/constStr idx) (some idx)) (_ (none))))
+  (match op
+    ((ty/opConst c) (match c ((ty/constStr idx) (some idx)) (_ (none))))
     (_ (none)))
 
 fn globalDestNamed f: ty/SsaFunction namePart: String -> (Option String)
   (fold (fn [(acc (Option String)) (b ty/SsaBlock)] -> (Option String)
           (fold (fn [(acc2 (Option String)) (i ty/SsaInstr)] -> (Option String)
-                  (mt i.op ((ty/opGlobal g) (if (stringContains? g namePart) (some i.dest) acc2)) (_ acc2)))
+                  (match i.op ((ty/opGlobal g) (if (stringContains? g namePart) (some i.dest) acc2)) (_ acc2)))
                 acc b.instrs))
         (none) f.blocks)
 
 fn unboxDestOf f: ty/SsaFunction v: String -> (Option String)
   (fold (fn [(acc (Option String)) (b ty/SsaBlock)] -> (Option String)
           (fold (fn [(acc2 (Option String)) (i ty/SsaInstr)] -> (Option String)
-                  (mt i.op ((ty/opUnbox u) (if (= u v) (some i.dest) acc2)) (_ acc2)))
+                  (match i.op ((ty/opUnbox u) (if (= u v) (some i.dest) acc2)) (_ acc2)))
                 acc b.instrs))
         (none) f.blocks)
 
 fn eqIntDestOn f: ty/SsaFunction v: String -> (Option String)
   (fold (fn [(acc (Option String)) (b ty/SsaBlock)] -> (Option String)
           (fold (fn [(acc2 (Option String)) (i ty/SsaInstr)] -> (Option String)
-                  (mt i.op ((ty/opPrim n args) (if (and (= n "eqInt") (listContains? args v)) (some i.dest) acc2)) (_ acc2)))
+                  (match i.op ((ty/opPrim n args) (if (and (= n "eqInt") (listContains? args v)) (some i.dest) acc2)) (_ acc2)))
                 acc b.instrs))
         (none) f.blocks)
 
 fn branchBlockOn f: ty/SsaFunction cond: String -> (Option ty/SsaBlock)
   (fold (fn [(acc (Option ty/SsaBlock)) (b ty/SsaBlock)] -> (Option ty/SsaBlock)
-          (mt b.term ((ty/termBranch c _ _) (if (= c cond) (some b) acc)) (_ acc)))
+          (match b.term ((ty/termBranch c _ _) (if (= c cond) (some b) acc)) (_ acc)))
         (none) f.blocks)
 
 fn argIsOomConst instrs: (List ty/SsaInstr) oomIdx: Int64 a: String -> Bool
-  (mt (instrByDest a instrs)
+  (match (instrByDest a instrs)
     ((some ai) (= (optionOr (constStrIndex ai.op) -998) oomIdx))
     ((none) false))
 
 fn callIsFormatErrOom instrs: (List ty/SsaInstr) oomIdx: Int64 i: ty/SsaInstr -> Bool
-  (mt i.op
+  (match i.op
     ((ty/opCall callee args)
       (and (stringContains? callee "processFormatErr")
            (fold (fn [(hit Bool) (a String)] -> Bool (if hit true (argIsOomConst instrs oomIdx a))) false args)))
@@ -412,36 +412,36 @@ fn blockHasFormatErrOom pool: (Map String Int64) instrs: (List ty/SsaInstr) -> B
 
 fn reachesFormatErrOom f: ty/SsaFunction pool: (Map String Int64) label: String fuel: Int64 -> Bool
   (if (<= fuel 0) false
-    (mt (findBlock label f.blocks)
+    (match (findBlock label f.blocks)
       ((none) false)
       ((some b)
         (if (blockHasFormatErrOom pool b.instrs) true
-          (mt b.term
+          (match b.term
             ((ty/termJump e) (reachesFormatErrOom f pool e.target (- fuel 1)))
             (_ false))))))
 
 fn ! testWaitStateGuard -> Bool
   (let [(facts (hostFacts))
         (pool (fold (fn [(m (Map String Int64)) (s String)] -> (Map String Int64) (mapSet m s (mapSize m))) (mapEmpty) (proc/procRouteStrings)))]
-    (mt (proc/procRouteFunctions facts pool)
+    (match (proc/procRouteFunctions facts pool)
       ((err e) (do (assert false (str "procRouteFunctions: " e)) false))
       ((ok fs)
-        (mt (findByName "asl-target-llvm/sysRoute.processWait" fs)
+        (match (findByName "asl-target-llvm/sysRoute.processWait" fs)
           ((none) (do (assert false "processWait is present in procRouteFunctions") false))
           ((some f)
-            (mt (globalDestNamed f "processHandleState")
+            (match (globalDestNamed f "processHandleState")
               ((none) (do (assert false "processWait reads the processHandleState global") false))
               ((some g)
-                (mt (unboxDestOf f g)
+                (match (unboxDestOf f g)
                   ((none) (do (assert false "processWait unboxes the processHandleState global value") false))
                   ((some stateId)
-                    (mt (eqIntDestOn f stateId)
+                    (match (eqIntDestOn f stateId)
                       ((none) (do (assert false "processWait compares the unboxed state value with eqInt") false))
                       ((some cond)
-                        (mt (branchBlockOn f cond)
+                        (match (branchBlockOn f cond)
                           ((none) (do (assert false "processWait branches on the state-missing comparison") false))
                           ((some b)
-                            (mt b.term
+                            (match b.term
                               ((ty/termBranch _ thenE elseE)
                                 (do (assert (or (reachesFormatErrOom f pool thenE.target 4) (reachesFormatErrOom f pool elseE.target 4))
                                             "one arm of the state-missing branch reaches processFormatErr(processWait, -, out of memory) instead of dereferencing the state pointer")

@@ -2,7 +2,7 @@
   :x [runTests]
   :i [(asl-ir/link :a lk) (asl-ir/types :a ty)])
 
-; (:m :ref HL-GAPS-C :do "regression for the literal-pattern native-lowering gap: a bare Int64 or String literal match arm (mt x (1 \"one\") (2 \"two\") (_ \"other\")) fell through every classifyArm branch (not wild, not a 0-arity ctor, excluded from bindName? by design, not a list) and was rejected ERR_LOWER_UNSUPPORTED; fixed by giving classifyArm a 'lit' arm kind and lowerMatch a termBranch chain (upToLitCatchAll + lowerLitArms) that compares the scrutinee to each literal by the generic '=' entry in source order, ending at a trailing wild/var catch-all or a prebuilt unreachable trap when none is present")
+; (:m :ref HL-GAPS-C :do "regression for the literal-pattern native-lowering gap: a bare Int64 or String literal match arm (match x (1 \"one\") (2 \"two\") (_ \"other\")) fell through every classifyArm branch (not wild, not a 0-arity ctor, excluded from bindName? by design, not a list) and was rejected ERR_LOWER_UNSUPPORTED; fixed by giving classifyArm a 'lit' arm kind and lowerMatch a termBranch chain (upToLitCatchAll + lowerLitArms) that compares the scrutinee to each literal by the generic '=' entry in source order, ending at a trailing wild/var catch-all or a prebuilt unreachable trap when none is present")
 
 fn configText -> String
   "(:aslConfig)\n"
@@ -12,7 +12,7 @@ fn literalIntFixtureSource -> String
     "(module gapfxc/literalInt :x [describe] :i [])"
     ""
     "fn describe n: Int64 -> String"
-    "  (mt n"
+    "  (match n"
     "    (1 \"one\")"
     "    (2 \"two\")"
     "    (_ \"other\"))") "\n")
@@ -22,7 +22,7 @@ fn literalStringFixtureSource -> String
     "(module gapfxc/literalString :x [score] :i [])"
     ""
     "fn score s: String -> Int64"
-    "  (mt s"
+    "  (match s"
     "    (\"alpha\" 1)"
     "    (\"beta\" 2)"
     "    (_ 0))") "\n")
@@ -32,7 +32,7 @@ fn literalNoCatchAllFixtureSource -> String
     "(module gapfxc/literalNoCatchAll :x [pick] :i [])"
     ""
     "fn pick n: Int64 -> String"
-    "  (mt n"
+    "  (match n"
     "    (1 \"one\")"
     "    (2 \"two\"))") "\n")
 
@@ -41,7 +41,7 @@ fn literalMixedCtorFixtureSource -> String
     "(module gapfxc/literalMixedCtor :x [bad] :i [])"
     ""
     "fn bad v: (Option Int64) -> String"
-    "  (mt v"
+    "  (match v"
     "    ((some x) \"some\")"
     "    (1 \"one\"))") "\n")
 
@@ -57,10 +57,10 @@ fn ! writeFixtures! base: String -> Bool
                       (writeOne! base "gapfxc/literalMixedCtor" (literalMixedCtorFixtureSource)))))))
 
 fn diagCodes res: (Result ty/SsaModule (List ty/IrDiag)) -> (List String)
-  (mt res ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> String d.code) ds)))
+  (match res ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> String d.code) ds)))
 
 fn diagMessages res: (Result ty/SsaModule (List ty/IrDiag)) -> (List String)
-  (mt res ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> String d.message) ds)))
+  (match res ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> String d.message) ds)))
 
 fn ! testLiteralIntArmsLower base: String -> Bool
   (let [(res (lk/linkEntry! (str base "/gapfxc/literalInt.asl")))]

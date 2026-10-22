@@ -17,14 +17,14 @@ fn elementsHaveError? elems: (List tr/TreeElement) -> Bool
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemNode n) (if (treeHasError? n) true (elementsHaveError? tl)))
         ((tr/elemToken t) (if (tr/isErrorToken t) true (elementsHaveError? tl))))))
 
 fn checkDeclRoundTrip! code: String -> Bool
   (let [(res (decl/parse code))]
     (do
-      (mt res
+      (match res
         ((ok _) ())
         ((err msg)
          (println (str "PARSE ERROR: " msg " FOR: " code))))
@@ -153,7 +153,7 @@ fn findFirstNode elems: (List tr/TreeElement) -> tr/Node
     (tr/makeErrorNode 0 0 (list))
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemNode n) n)
         ((tr/elemToken _) (findFirstNode tl)))))
 
@@ -322,7 +322,7 @@ fn findExclusionReason path: String exclusions: (List (Pair String String)) -> (
 fn checkFileExactRoundTrip! path: String content: String -> Bool
   (let [(len (stringLength content))
         (parseRes (decl/parse content))]
-    (mt parseRes
+    (match parseRes
       ((err msg)
        (do
          (println (str "PARSE ERROR [" path "]: " msg))
@@ -352,7 +352,7 @@ fn checkBabelTsSuite! suiteName: String files: (List String) exclusions: (List (
       true)
     (let [(path (optionOr (listHead files) ""))
           (rest (optionOr (listTail files) (list)))]
-      (mt (findExclusionReason path exclusions)
+      (match (findExclusionReason path exclusions)
         ((some _)
          (checkBabelTsSuite! suiteName rest exclusions runCount passCount (+ excludedCount 1)))
         ((none)

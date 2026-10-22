@@ -48,10 +48,10 @@ fn directFloatModule -> irTy/SsaModule
             (irTy/termReturn "%valid"))))))
 
 fn ! compileNative path: String llPath: String exePath: String -> proc/ProcessOutput
-  (mt (lk/linkEntry! path)
+  (match (lk/linkEntry! path)
     ((err ds) (proc/ProcessOutput :exitCode 1 :stdout "" :stderr (str "link failed: " (formatDiags ds)) :durationMs 0))
     ((ok m)
-      (mt (llvm/emitLlvmProgramNative! m "nativeBuiltinGapFixture.main")
+      (match (llvm/emitLlvmProgramNative! m "nativeBuiltinGapFixture.main")
         ((err ds) (proc/ProcessOutput :exitCode 1 :stdout "" :stderr (str "LLVM emission failed: " (formatDiags ds)) :durationMs 0))
         ((ok code)
           (do
@@ -95,7 +95,7 @@ fn ! testDirectFloatBuiltin -> Bool
         (llPath (str dir "/floatBuiltin.ll"))
         (exePath (str dir "/floatBuiltin"))
         (emitted (llvm/emitLlvmProgramNative! (directFloatModule) "nativeBuiltinGapFixture.main"))
-        (code (mt emitted ((ok s) s) ((err _) "")))
+        (code (match emitted ((ok s) s) ((err _) "")))
         (written (if (and (ok? made) (ok? emitted)) (fileWrite llPath code) (err "emission failed")))
         (linked (if (ok? written)
                     (processRun (str "/usr/bin/clang -Wno-override-module -x ir " llPath
@@ -108,7 +108,7 @@ fn ! testDirectFloatBuiltin -> Bool
         (removedDir (if (fileExists? dir) (pathRemove dir) (ok ())))]
     (do
       (assert (ok? made) "direct-float temporary directory is created")
-      (assert (ok? emitted) (str "floatNan/floatInf/floatNegInf emit directly: " (mt emitted ((ok _) "ok") ((err ds) (formatDiags ds)))))
+      (assert (ok? emitted) (str "floatNan/floatInf/floatNegInf emit directly: " (match emitted ((ok _) "ok") ((err ds) (formatDiags ds)))))
       (assert (ok? written) "direct-float LLVM module is written")
       (assert (= linked.exitCode 0) (str "direct-float LLVM links: " linked.stderr))
       (assert (= ran.exitCode 1) (str "native direct float builtins make NaN unequal to itself and infinities equal to themselves: " ran.stderr))

@@ -12,7 +12,7 @@ fn decodeHtmlEntities text: Str -> Str
   (let [(s1 (stringReplace text "&amp;" "&")) (s2 (stringReplace s1 "&lt;" "<")) (s3 (stringReplace s2 "&gt;" ">")) (s4 (stringReplace s3 "&quot;" "\"")) (s5 (stringReplace s4 "&#39;" "'")) (s6 (stringReplace s5 "&apos;" "'"))] (stringReplace s6 "&nbsp;" " "))
 
 fn stripEnclosed src: Str openDelim: Str closeDelim: Str -> Str
-  (mt (stringIndexOf src openDelim) ((none) src) ((some startIdx) (let [(prefix (optionOr (stringSlice src 0 startIdx) "")) (tailStart (+ startIdx (stringLength openDelim))) (tail (optionOr (stringSlice src tailStart (stringLength src)) ""))] (mt (stringIndexOf tail closeDelim) ((none) prefix) ((some closeIdx) (let [(remStart (+ closeIdx (stringLength closeDelim))) (remainder (optionOr (stringSlice tail remStart (stringLength tail)) ""))] (str prefix (stripEnclosed remainder openDelim closeDelim))))))))
+  (match (stringIndexOf src openDelim) ((none) src) ((some startIdx) (let [(prefix (optionOr (stringSlice src 0 startIdx) "")) (tailStart (+ startIdx (stringLength openDelim))) (tail (optionOr (stringSlice src tailStart (stringLength src)) ""))] (match (stringIndexOf tail closeDelim) ((none) prefix) ((some closeIdx) (let [(remStart (+ closeIdx (stringLength closeDelim))) (remainder (optionOr (stringSlice tail remStart (stringLength tail)) ""))] (str prefix (stripEnclosed remainder openDelim closeDelim))))))))
 
 fn collapseSpacesLine line: Str -> Str
   (let [(words (filter (fn [(w Str)] -> Bool (not (stringEmpty? (stringTrim w)))) (stringSplit line " ")))] (stringJoin words " "))
@@ -39,16 +39,16 @@ fn cleanHtml htmlSrc: Str -> Str
     (normalizeWhitespace s10))
 
 fn sliceAfterTag s: Str tag: Str -> (Option Str)
-  (mt (stringIndexOf s tag) ((none) (none)) ((some idx) (let [(len (stringLength s))] (stringSlice s idx len))))
+  (match (stringIndexOf s tag) ((none) (none)) ((some idx) (let [(len (stringLength s))] (stringSlice s idx len))))
 
 fn sliceTagBody s: Str -> (Option Str)
-  (mt (stringIndexOf s ">") ((none) (none)) ((some openEnd) (let [(contentStart (+ openEnd 1)) (len (stringLength s))] (stringSlice s contentStart len))))
+  (match (stringIndexOf s ">") ((none) (none)) ((some openEnd) (let [(contentStart (+ openEnd 1)) (len (stringLength s))] (stringSlice s contentStart len))))
 
 fn sliceBeforeClose body: Str endTag: Str -> Str
-  (mt (stringIndexOf body endTag) ((none) (stringTrim (decodeHtmlEntities body))) ((some closeIdx) (mt (stringSlice body 0 closeIdx) ((none) "") ((some rawT) (stringTrim (decodeHtmlEntities rawT))))))
+  (match (stringIndexOf body endTag) ((none) (stringTrim (decodeHtmlEntities body))) ((some closeIdx) (match (stringSlice body 0 closeIdx) ((none) "") ((some rawT) (stringTrim (decodeHtmlEntities rawT))))))
 
 fn extractTitleFromHtml html: Str -> Str
-  (mt (sliceAfterTag html "<title") ((some afterOpen) (mt (sliceTagBody afterOpen) ((some body) (sliceBeforeClose body "</title")) ((none) ""))) ((none) (mt (sliceAfterTag html "<TITLE") ((some afterOpen) (mt (sliceTagBody afterOpen) ((some body) (sliceBeforeClose body "</TITLE")) ((none) ""))) ((none) ""))))
+  (match (sliceAfterTag html "<title") ((some afterOpen) (match (sliceTagBody afterOpen) ((some body) (sliceBeforeClose body "</title")) ((none) ""))) ((none) (match (sliceAfterTag html "<TITLE") ((some afterOpen) (match (sliceTagBody afterOpen) ((some body) (sliceBeforeClose body "</TITLE")) ((none) ""))) ((none) ""))))
 
 fn extractHtml rawHtml: Str source: Str -> ExtractedDoc
   (let [(t1 (extractTitleFromHtml rawHtml)) (t2 (if (stringEmpty? t1) (extractTitleFromHtml (stringReplace (stringReplace rawHtml "<h1>" "<title>") "</h1>" "</title>")) t1)) (finalTitle (if (stringEmpty? t2) source t2)) (cleanedBody (cleanHtml rawHtml))] (ExtractedDoc :title finalTitle :content cleanedBody :format "html" :source source :charCount (stringLength cleanedBody)))
@@ -63,13 +63,13 @@ fn extractPlaintext rawTxt: Str source: Str -> ExtractedDoc
   (let [(cleaned (normalizeWhitespace rawTxt))] (ExtractedDoc :title source :content cleaned :format "text" :source source :charCount (stringLength cleaned)))
 
 fn extractJsonField rawJson: Str fieldKey: Str -> Str
-  (let [(needle (str "\"" fieldKey "\": \""))] (mt (stringIndexOf rawJson needle) ((none) "") ((some idx) (let [(tailStart (+ idx (stringLength needle))) (tail (optionOr (stringSlice rawJson tailStart (stringLength rawJson)) ""))] (mt (stringIndexOf tail "\"") ((none) tail) ((some endIdx) (optionOr (stringSlice tail 0 endIdx) "")))))))
+  (let [(needle (str "\"" fieldKey "\": \""))] (match (stringIndexOf rawJson needle) ((none) "") ((some idx) (let [(tailStart (+ idx (stringLength needle))) (tail (optionOr (stringSlice rawJson tailStart (stringLength rawJson)) ""))] (match (stringIndexOf tail "\"") ((none) tail) ((some endIdx) (optionOr (stringSlice tail 0 endIdx) "")))))))
 
 fn extractJsonKv rawJson: Str source: Str -> ExtractedDoc
   (let [(c1 (extractJsonField rawJson "content")) (c2 (if (stringEmpty? c1) (extractJsonField rawJson "text") c1)) (c3 (if (stringEmpty? c2) (extractJsonField rawJson "snippet") c2)) (c4 (if (stringEmpty? c3) (extractJsonField rawJson "body") c3)) (finalContent (if (stringEmpty? c4) (normalizeWhitespace rawJson) c4)) (t (extractJsonField rawJson "title")) (finalTitle (if (stringEmpty? t) source t))] (ExtractedDoc :title finalTitle :content finalContent :format "json" :source source :charCount (stringLength finalContent)))
 
 fn extractTitleFromTag src: Str openTag: Str closeTag: Str -> Str
-  (mt (sliceAfterTag src openTag) ((none) "") ((some afterOpen) (mt (stringIndexOf afterOpen closeTag) ((none) "") ((some closeIdx) (let [(rawT (optionOr (stringSlice afterOpen 0 closeIdx) ""))] (decodeHtmlEntities (stringTrim rawT)))))))
+  (match (sliceAfterTag src openTag) ((none) "") ((some afterOpen) (match (stringIndexOf afterOpen closeTag) ((none) "") ((some closeIdx) (let [(rawT (optionOr (stringSlice afterOpen 0 closeIdx) ""))] (decodeHtmlEntities (stringTrim rawT)))))))
 
 fn extractXmlAtom rawXml: Str source: Str -> ExtractedDoc
   (let [(t (extractTitleFromTag rawXml "<title>" "</title>")) (s1 (extractTitleFromTag rawXml "<summary>" "</summary>")) (s2 (if (stringEmpty? s1) (extractTitleFromTag rawXml "<content>" "</content>") s1)) (finalContent (if (stringEmpty? s2) (cleanHtml rawXml) (cleanHtml s2))) (finalTitle (if (stringEmpty? t) source t))] (ExtractedDoc :title finalTitle :content finalContent :format "xml" :source source :charCount (stringLength finalContent)))
@@ -131,7 +131,7 @@ fn emitClauseRecord docTitle: Str path: (List Str) text: Str source: Str idx: I6
   (ContextualClause :id (str source "#clause-" (stringFromInt64 idx)) :docTitle docTitle :sectionPath path :clauseText text :charCount (stringLength text) :source source)
 
 fn extractClausesLoop lines: (List Str) path: (List Str) paraAcc: (List Str) docTitle: Str source: Str minChars: I64 maxChars: I64 clauseIdx: I64 -> (List ContextualClause)
-  (if (listEmpty? lines) (if (listEmpty? paraAcc) (list) (let [(text (stringJoin paraAcc " "))] (if (> (stringLength (stringTrim text)) 0) (list (emitClauseRecord docTitle path (stringTrim text) source clauseIdx)) (list)))) (let [(line (optionOr (listHead lines) "")) (rest (optionOr (listTail lines) (list))) (trimmed (stringTrim line)) (headingOpt (detectHeading trimmed))] (mt headingOpt ((some h) (let [(hLevel h.level) (hText h.text) (newPath (updateBreadcrumbPath path hLevel hText))] (if (listEmpty? paraAcc) (extractClausesLoop rest newPath (list) docTitle source minChars maxChars clauseIdx) (let [(paraStr (stringTrim (stringJoin paraAcc " ")))] (if (> (stringLength paraStr) 0) (cons (emitClauseRecord docTitle path paraStr source clauseIdx) (extractClausesLoop rest newPath (list) docTitle source minChars maxChars (+ clauseIdx 1))) (extractClausesLoop rest newPath (list) docTitle source minChars maxChars clauseIdx)))))) ((none) (if (stringEmpty? trimmed) (if (listEmpty? paraAcc) (extractClausesLoop rest path (list) docTitle source minChars maxChars clauseIdx) (let [(paraStr (stringTrim (stringJoin paraAcc " ")))] (if (>= (stringLength paraStr) minChars) (cons (emitClauseRecord docTitle path paraStr source clauseIdx) (extractClausesLoop rest path (list) docTitle source minChars maxChars (+ clauseIdx 1))) (extractClausesLoop rest path paraAcc docTitle source minChars maxChars clauseIdx)))) (let [(nextPara (listAppend paraAcc (list trimmed))) (currText (stringJoin nextPara " "))] (if (>= (stringLength currText) maxChars) (cons (emitClauseRecord docTitle path (stringTrim currText) source clauseIdx) (extractClausesLoop rest path (list) docTitle source minChars maxChars (+ clauseIdx 1))) (extractClausesLoop rest path nextPara docTitle source minChars maxChars clauseIdx))))))))
+  (if (listEmpty? lines) (if (listEmpty? paraAcc) (list) (let [(text (stringJoin paraAcc " "))] (if (> (stringLength (stringTrim text)) 0) (list (emitClauseRecord docTitle path (stringTrim text) source clauseIdx)) (list)))) (let [(line (optionOr (listHead lines) "")) (rest (optionOr (listTail lines) (list))) (trimmed (stringTrim line)) (headingOpt (detectHeading trimmed))] (match headingOpt ((some h) (let [(hLevel h.level) (hText h.text) (newPath (updateBreadcrumbPath path hLevel hText))] (if (listEmpty? paraAcc) (extractClausesLoop rest newPath (list) docTitle source minChars maxChars clauseIdx) (let [(paraStr (stringTrim (stringJoin paraAcc " ")))] (if (> (stringLength paraStr) 0) (cons (emitClauseRecord docTitle path paraStr source clauseIdx) (extractClausesLoop rest newPath (list) docTitle source minChars maxChars (+ clauseIdx 1))) (extractClausesLoop rest newPath (list) docTitle source minChars maxChars clauseIdx)))))) ((none) (if (stringEmpty? trimmed) (if (listEmpty? paraAcc) (extractClausesLoop rest path (list) docTitle source minChars maxChars clauseIdx) (let [(paraStr (stringTrim (stringJoin paraAcc " ")))] (if (>= (stringLength paraStr) minChars) (cons (emitClauseRecord docTitle path paraStr source clauseIdx) (extractClausesLoop rest path (list) docTitle source minChars maxChars (+ clauseIdx 1))) (extractClausesLoop rest path paraAcc docTitle source minChars maxChars clauseIdx)))) (let [(nextPara (listAppend paraAcc (list trimmed))) (currText (stringJoin nextPara " "))] (if (>= (stringLength currText) maxChars) (cons (emitClauseRecord docTitle path (stringTrim currText) source clauseIdx) (extractClausesLoop rest path (list) docTitle source minChars maxChars (+ clauseIdx 1))) (extractClausesLoop rest path nextPara docTitle source minChars maxChars clauseIdx))))))))
 
 fn extractClauses doc: ExtractedDoc minChars: I64 maxChars: I64 -> (List ContextualClause)
   (let [(title (if (stringEmpty? (stringTrim doc.title)) "Document" (stringTrim doc.title))) (source (if (stringEmpty? (stringTrim doc.source)) "doc" (stringTrim doc.source))) (safeMin (max 1 minChars)) (safeMax (max safeMin maxChars)) (initPath (list title)) (lines (stringSplit doc.content "\n"))] (extractClausesLoop lines initPath (list) title source safeMin safeMax 1))
@@ -152,19 +152,19 @@ fn calcSavings orig: I64 asn: I64 -> F64
   (if (<= orig 0) 0.0 (let [(diff (- orig asn))] (if (<= diff 0) 0.0 (/ (* (int64ToFloat64 diff) 100.0) (int64ToFloat64 orig)))))
 
 fn extractBetween text: Str prefix: Str suffix: Str -> (Option Str)
-  (mt (stringIndexOf text prefix) ((none) (none)) ((some startIdx) (let [(startPos (+ startIdx (stringLength prefix))) (remaining (optionOr (stringSlice text startPos (stringLength text)) ""))] (mt (stringIndexOf remaining suffix) ((none) (none)) ((some endIdx) (stringSlice remaining 0 endIdx))))))
+  (match (stringIndexOf text prefix) ((none) (none)) ((some startIdx) (let [(startPos (+ startIdx (stringLength prefix))) (remaining (optionOr (stringSlice text startPos (stringLength text)) ""))] (match (stringIndexOf remaining suffix) ((none) (none)) ((some endIdx) (stringSlice remaining 0 endIdx))))))
 
 fn isNumeric s: Str -> Bool
   (let [(chars (stringChars s))] (if (listEmpty? chars) false (numericLoop chars true false)))
 
 fn numericLoop chars: (List Str) isFirst: Bool hasDot: Bool -> Bool
-  (mt (listHead chars) ((none) true) ((some c) (if (stringContains? "0123456789" c) (numericLoop (optionOr (listTail chars) (list)) false hasDot) (if (and isFirst (= c "-")) (numericLoop (optionOr (listTail chars) (list)) false hasDot) (if (and (not hasDot) (= c ".")) (numericLoop (optionOr (listTail chars) (list)) false true) false)))))
+  (match (listHead chars) ((none) true) ((some c) (if (stringContains? "0123456789" c) (numericLoop (optionOr (listTail chars) (list)) false hasDot) (if (and isFirst (= c "-")) (numericLoop (optionOr (listTail chars) (list)) false hasDot) (if (and (not hasDot) (= c ".")) (numericLoop (optionOr (listTail chars) (list)) false true) false)))))
 
 fn stripComment line: Str commentChar: Str -> Str
   (let [(chars (stringChars line))] (stripCommentLoop chars commentChar false ""))
 
 fn stripCommentLoop chars: (List Str) commentChar: Str inQuote: Bool acc: Str -> Str
-  (mt (listHead chars) ((none) acc) ((some c) (if inQuote (if (or (= c "\"") (= c "'")) (stripCommentLoop (optionOr (listTail chars) (list)) commentChar false (str acc c)) (stripCommentLoop (optionOr (listTail chars) (list)) commentChar true (str acc c))) (if (or (= c "\"") (= c "'")) (stripCommentLoop (optionOr (listTail chars) (list)) commentChar true (str acc c)) (if (= c commentChar) acc (stripCommentLoop (optionOr (listTail chars) (list)) commentChar false (str acc c)))))))
+  (match (listHead chars) ((none) acc) ((some c) (if inQuote (if (or (= c "\"") (= c "'")) (stripCommentLoop (optionOr (listTail chars) (list)) commentChar false (str acc c)) (stripCommentLoop (optionOr (listTail chars) (list)) commentChar true (str acc c))) (if (or (= c "\"") (= c "'")) (stripCommentLoop (optionOr (listTail chars) (list)) commentChar true (str acc c)) (if (= c commentChar) acc (stripCommentLoop (optionOr (listTail chars) (list)) commentChar false (str acc c)))))))
 
 schema TableData { id: Str cols: (List Str) rows: (List (List Str)) }
 
@@ -180,17 +180,17 @@ schema InternResult { text: Str sources: (List Str) }
 
 fn extractTagContents html: Str tagName: Str -> (List Str)
   (let [(needle (str "<" tagName))]
-    (mt (stringIndexOf html needle)
+    (match (stringIndexOf html needle)
       ((none) (list))
       ((some tagIdx)
         (let [(fromTag (optionOr (stringSlice html tagIdx (stringLength html)) ""))]
-          (mt (stringIndexOf fromTag ">")
+          (match (stringIndexOf fromTag ">")
             ((none) (list))
             ((some openBracketEnd)
               (let [(contentStart (+ openBracketEnd 1))
                     (afterOpen (optionOr (stringSlice fromTag contentStart (stringLength fromTag)) ""))
                     (closeNeedle (str "</" tagName ">"))]
-                (mt (stringIndexOf afterOpen closeNeedle)
+                (match (stringIndexOf afterOpen closeNeedle)
                   ((none) (list))
                   ((some closeIdx)
                     (let [(inner (optionOr (stringSlice afterOpen 0 closeIdx) ""))
@@ -230,7 +230,7 @@ fn parseTableInner tableHtml: Str idx: I64 -> TableData
             (TableData :id tblId :cols (list) :rows rows))))))
 
 fn extractTablesLoop tablesHtml: (List Str) idx: I64 -> (List TableData)
-  (mt (listHead tablesHtml)
+  (match (listHead tablesHtml)
     ((none) (list))
     ((some tblHtml)
       (cons (parseTableInner tblHtml idx)
@@ -250,26 +250,26 @@ fn tableToAsn table: TableData -> Str
     (str "    (:table" idStr " :cols " colsAsn " :rows " rowsAsn ")"))
 
 fn extractLangFromTag tagHeader: Str -> Str
-  (mt (extractBetween tagHeader "class=\"language-" "\"")
+  (match (extractBetween tagHeader "class=\"language-" "\"")
     ((some lang) lang)
     ((none)
-      (mt (extractBetween tagHeader "class=\"lang-" "\"")
+      (match (extractBetween tagHeader "class=\"lang-" "\"")
         ((some lang2) lang2)
         ((none) ""))))
 
 fn extractCodeBlocksLoop html: Str idx: I64 -> (List CodeBlockData)
   (let [(needle "<pre")]
-    (mt (stringIndexOf html needle)
+    (match (stringIndexOf html needle)
       ((none) (list))
       ((some preIdx)
         (let [(fromPre (optionOr (stringSlice html preIdx (stringLength html)) ""))]
-          (mt (stringIndexOf fromPre ">")
+          (match (stringIndexOf fromPre ">")
             ((none) (list))
             ((some headerEnd)
               (let [(header (optionOr (stringSlice fromPre 0 headerEnd) ""))
                     (afterHeader (optionOr (stringSlice fromPre (+ headerEnd 1) (stringLength fromPre)) ""))
                     (lang (extractLangFromTag header))]
-                (mt (stringIndexOf afterHeader "</pre>")
+                (match (stringIndexOf afterHeader "</pre>")
                   ((none) (list))
                   ((some closeIdx)
                     (let [(rawInner (optionOr (stringSlice afterHeader 0 closeIdx) ""))
@@ -291,7 +291,7 @@ fn codeBlockToAsn cb: CodeBlockData -> Str
     (str "    (:codeBlock" idStr langStr " :code \"" escCode "\")"))
 
 fn sanitizeUrlTracking url: Str -> Str
-  (mt (stringIndexOf url "?")
+  (match (stringIndexOf url "?")
     ((none) url)
     ((some qIdx)
       (let [(base (optionOr (stringSlice url 0 qIdx) ""))
@@ -310,7 +310,7 @@ fn sanitizeUrlTracking url: Str -> Str
           (str base "?" (stringJoin cleanParams "&"))))))
 
 fn findSourceIndex sources: (List Str) target: Str idx: I64 -> (Option I64)
-  (mt (listHead sources)
+  (match (listHead sources)
     ((none) (none))
     ((some h)
       (if (= h target)
@@ -319,7 +319,7 @@ fn findSourceIndex sources: (List Str) target: Str idx: I64 -> (Option I64)
 
 fn internSource sources: (List Str) rawUrl: Str -> SourceIndexResult
   (let [(cleanUrl (sanitizeUrlTracking (stringTrim rawUrl)))]
-    (mt (findSourceIndex sources cleanUrl 1)
+    (match (findSourceIndex sources cleanUrl 1)
       ((some foundIdx)
         (SourceIndexResult :sources sources :index foundIdx))
       ((none)
@@ -329,26 +329,26 @@ fn internSource sources: (List Str) rawUrl: Str -> SourceIndexResult
 fn internUrlsLoop remainder: Str sources: (List Str) accText: Str remainingBudget: I64 -> InternResult
   (if (<= remainingBudget 0)
     (InternResult :text (str accText remainder) :sources sources)
-    (mt (stringIndexOf remainder "<a ")
+    (match (stringIndexOf remainder "<a ")
       ((none)
         (InternResult :text (str accText remainder) :sources sources))
       ((some aIdx)
         (let [(prefix (optionOr (stringSlice remainder 0 aIdx) ""))
               (fromA (optionOr (stringSlice remainder aIdx (stringLength remainder)) ""))]
-          (mt (stringIndexOf fromA ">")
+          (match (stringIndexOf fromA ">")
             ((none)
               (InternResult :text (str accText remainder) :sources sources))
             ((some tagEnd)
               (let [(header (optionOr (stringSlice fromA 0 tagEnd) ""))
                     (afterTag (optionOr (stringSlice fromA (+ tagEnd 1) (stringLength fromA)) ""))]
-                (mt (stringIndexOf afterTag "</a>")
+                (match (stringIndexOf afterTag "</a>")
                   ((none)
                     (InternResult :text (str accText remainder) :sources sources))
                   ((some closeIdx)
                     (let [(anchorText (optionOr (stringSlice afterTag 0 closeIdx) ""))
                           (nextRem (optionOr (stringSlice afterTag (+ closeIdx 4) (stringLength afterTag)) ""))
                           (urlOpt (extractBetween header "href=\"" "\""))]
-                      (mt urlOpt
+                      (match urlOpt
                         ((none)
                           (let [(nextAcc (str accText prefix anchorText))]
                             (internUrlsLoop nextRem sources nextAcc (- remainingBudget 1))))
@@ -376,7 +376,7 @@ fn detectSpaEmptyDom html: Str -> Bool
                              (stringContains? html "id='__next'"))))))))
 
 fn makeDistilledSections clauses: (List ContextualClause) idx: I64 -> (List DistilledSection)
-  (mt (listHead clauses)
+  (match (listHead clauses)
     ((none) (list))
     ((some c)
       (let [(secId (str "sec-" (stringFromInt64 idx)))

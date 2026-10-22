@@ -48,7 +48,7 @@ fn ! hostTriple -> String
       (else "")))
 
 fn ! hostFacts -> libc/TripleFacts
-  (mt (libc/libcFacts (hostTriple))
+  (match (libc/libcFacts (hostTriple))
     ((some f) f)
     ((none) (do (assert false (str "hostFacts: libc.asl has no row for this host's triple \"" (hostTriple) "\"")) (libc/emptyTripleFacts))))
 
@@ -65,16 +65,16 @@ fn diagText ds: (List ty/IrDiag) -> String
 fn ! lowered src: String -> (Option ty/SsaModule)
   (let [(preludeText (resultOr (fileReadString (lk/preludePath)) ""))]
     (do (assert (not (stringEmpty? preludeText)) (str (lk/preludePath) " is readable"))
-        (mt (lk/lowerSourceWith src preludeText)
+        (match (lk/lowerSourceWith src preludeText)
           ((err ds) (do (assert false (str "lowerSourceWith: " (diagText ds))) (none)))
           ((ok m) (some m)))))
 
 fn ! build work: String src: String -> String
   (do (assert (ok? (fileWrite (str work "/fsRoute.asl") src)) "fsRoute.asl written")
-      (mt (lowered src)
+      (match (lowered src)
         ((none) "")
         ((some m)
-          (mt (llvm/emitLlvmProgramFor (hostFacts) m "main")
+          (match (llvm/emitLlvmProgramFor (hostFacts) m "main")
             ((err ds) (do (assert false (str "emitLlvmProgramFor: " (diagText ds))) ""))
             ((ok text) (do (assert (ok? (fileWrite (str work "/fsRoute.ll") text)) "fsRoute.ll written") text))))))
 
@@ -103,19 +103,19 @@ fn fsSource -> String
     "  (if (>= i (bytesLength b)) acc (bytesText b (+ i 1) (str acc (bytesGet b i) \",\")))"
     ""
     "fn ! showBytes label: String r: (Result Bytes String) -> Bool"
-    "  (do (mt r ((ok b) (println label \"ok\" (bytesLength b) (bytesText b 0 \"\"))) ((err e) (println label \"err\" e))) true)"
+    "  (do (match r ((ok b) (println label \"ok\" (bytesLength b) (bytesText b 0 \"\"))) ((err e) (println label \"err\" e))) true)"
     ""
     "fn ! showSize label: String r: (Result Bytes String) -> Bool"
-    "  (do (mt r ((ok b) (println label \"ok\" (bytesLength b) (bytesGet b 0) (bytesGet b 1048576) (bytesGet b (- (bytesLength b) 1)))) ((err e) (println label \"err\" e))) true)"
+    "  (do (match r ((ok b) (println label \"ok\" (bytesLength b) (bytesGet b 0) (bytesGet b 1048576) (bytesGet b (- (bytesLength b) 1)))) ((err e) (println label \"err\" e))) true)"
     ""
     "fn ! showStat label: String r: (Result FileStat String) -> Bool"
-    "  (do (mt r ((ok s) (println label \"ok\" s.isFile s.isDir s.size (mod s.mode 4096) (/ s.mode 4096))) ((err e) (println label \"err\" e))) true)"
+    "  (do (match r ((ok s) (println label \"ok\" s.isFile s.isDir s.size (mod s.mode 4096) (/ s.mode 4096))) ((err e) (println label \"err\" e))) true)"
     ""
     "fn ! showLink label: String r: (Result LinkStat String) -> Bool"
-    "  (do (mt r ((ok s) (println label \"ok\" s.isFile s.isDir s.isSymlink s.size (/ s.mode 4096))) ((err e) (println label \"err\" e))) true)"
+    "  (do (match r ((ok s) (println label \"ok\" s.isFile s.isDir s.isSymlink s.size (/ s.mode 4096))) ((err e) (println label \"err\" e))) true)"
     ""
     "fn ! showFresh label: String before: Int64 r: (Result FileStat String) -> Bool"
-    "  (do (mt r ((ok s) (println label \"ok\" (= s.mtime (/ s.mtimeNs 1000000000)) (>= s.mtimeNs (- before 2000000000)) (<= s.mtimeNs (+ (nowNs) 2000000000))))"
+    "  (do (match r ((ok s) (println label \"ok\" (= s.mtime (/ s.mtimeNs 1000000000)) (>= s.mtimeNs (- before 2000000000)) (<= s.mtimeNs (+ (nowNs) 2000000000))))"
     "            ((err e) (println label \"err\" e)))"
     "      true)"
     ""
@@ -152,15 +152,15 @@ fn fsSource -> String
     "      (showBytes \"one bytes\" (fileReadBytes (str root \"/one\")))"
     "      (println \"one string\" (fileReadString (str root \"/one\")))"
     "      (showSize \"large bytes\" (fileReadBytes (str root \"/large\")))"
-    "      (println \"large string\" (mt (fileReadString (str root \"/large\")) ((ok s) (stringLength s)) ((err e) e)))"
-    "      (println \"missing bytes\" (mt (fileReadBytes (str root \"/missing\")) ((ok b) (bytesLength b)) ((err e) e)))"
+    "      (println \"large string\" (match (fileReadString (str root \"/large\")) ((ok s) (stringLength s)) ((err e) e)))"
+    "      (println \"missing bytes\" (match (fileReadBytes (str root \"/missing\")) ((ok b) (bytesLength b)) ((err e) e)))"
     "      (println \"missing string\" (fileReadString (str root \"/missing\")))"
     "      (showBytes \"directory bytes\" (fileReadBytes root))"
     "      (println \"directory string\" (fileReadString root))"
     "      (println \"fifo string\" (fileReadString (str root \"/fifo\")))"
     "      (println \"nul string\" (fileReadString (str root \"/one\\x00tail\")))"
     "      (showStat \"nul stat\" (fileStat (str root \"/one\\x00tail\")))"
-    "      (println \"long stat\" (mt (fileStat (str root \"/\" (longName 1500 \"\"))) ((ok s) \"ok\") ((err e) (str (stringLength e) \" \" e))))"
+    "      (println \"long stat\" (match (fileStat (str root \"/\" (longName 1500 \"\"))) ((ok s) \"ok\") ((err e) (str (stringLength e) \" \" e))))"
     "      true)"
     ""
     "fn ! ranges root: String -> Bool"
@@ -221,7 +221,7 @@ fn fsSource -> String
     "fn ! modes root: String -> Bool"
     "  (do (println \"chmod zero\" (fileChmod (str root \"/locked\") 0))"
     "      (println \"read chmod zero\" (fileReadString (str root \"/locked\")))"
-    "      (println \"range chmod zero\" (mt (fileReadRange (str root \"/locked\") 0 1) ((ok b) (bytesLength b)) ((err e) e)))"
+    "      (println \"range chmod zero\" (match (fileReadRange (str root \"/locked\") 0 1) ((ok b) (bytesLength b)) ((err e) e)))"
     "      (showStat \"stat chmod zero\" (fileStat (str root \"/locked\")))"
     "      (println \"chmod restore\" (fileChmod (str root \"/locked\") 420) (fileReadString (str root \"/locked\")))"
     "      (println \"chmod bad mode\" (fileChmod (str root \"/locked\") 5000))"
@@ -242,7 +242,7 @@ fn fsSource -> String
     "      (println \"symlink nul link\" (pathSymlink \"one\" (str root \"/li\\x00nk2\")))"
     "      (println \"symlink dangling\" (pathSymlink \"nowhere\" (str root \"/dangling\")))"
     "      (println \"readlink\" (fileReadlink (str root \"/link\")))"
-    "      (println \"readlink long\" (mt (fileReadlink (str root \"/longlink\")) ((ok t) (stringLength t)) ((err e) e)))"
+    "      (println \"readlink long\" (match (fileReadlink (str root \"/longlink\")) ((ok t) (stringLength t)) ((err e) e)))"
     "      (println \"readlink file\" (fileReadlink (str root \"/one\")))"
     "      (println \"readlink missing\" (fileReadlink (str root \"/missing\")))"
     "      (println \"readlink nul\" (fileReadlink (str root \"/link\\x00x\")))"
@@ -260,8 +260,8 @@ fn fsSource -> String
     "  (do (println \"utime\" (fileUtime (str root \"/one\") 1767225600123456789))"
     "      (println \"utime stat\" (fileStat (str root \"/one\")))"
     "      (println \"utime lstat\" (fileLstat (str root \"/one\")))"
-    "      (println \"utime negative\" (fileUtime (str root \"/two\") -1500000000) (mt (fileStat (str root \"/two\")) ((ok s) (str s.mtime \" \" s.mtimeNs)) ((err e) e)))"
-    "      (println \"utime through link\" (fileUtime (str root \"/link\") 1000000000000000001) (mt (fileStat (str root \"/one\")) ((ok s) s.mtimeNs) ((err e) e)))"
+    "      (println \"utime negative\" (fileUtime (str root \"/two\") -1500000000) (match (fileStat (str root \"/two\")) ((ok s) (str s.mtime \" \" s.mtimeNs)) ((err e) e)))"
+    "      (println \"utime through link\" (fileUtime (str root \"/link\") 1000000000000000001) (match (fileStat (str root \"/one\")) ((ok s) s.mtimeNs) ((err e) e)))"
     "      (println \"utime missing\" (fileUtime (str root \"/missing\") 0))"
     "      (println \"utime nul\" (fileUtime (str root \"/one\\x00tail\") 0))"
     "      true)"
@@ -291,9 +291,9 @@ fn fsSource -> String
     "      (println \"value fileCreateExclusive\" (viaPair fileCreateExclusive (str root \"/valueExcl\") \"w\"))"
     "      (println \"value fileChmod\" (viaUnit (fn [(p String)] -> (Result Unit String) (fileChmod p 384)) (str root \"/valueExcl\")))"
     "      (println \"value fileFsync\" (viaUnit fileFsync (str root \"/valueExcl\")))"
-    "      (showLink \"value fileLstat\" (mt (viaUnit (fn [(p String)] -> (Result Unit String) (mt (fileLstat p) ((ok _) (ok ())) ((err e) (err e)))) (str root \"/link\")) ((ok _) (fileLstat (str root \"/link\"))) ((err e) (err e))))"
+    "      (showLink \"value fileLstat\" (match (viaUnit (fn [(p String)] -> (Result Unit String) (match (fileLstat p) ((ok _) (ok ())) ((err e) (err e)))) (str root \"/link\")) ((ok _) (fileLstat (str root \"/link\"))) ((err e) (err e))))"
     "      (println \"value pathSymlink\" (viaPair pathSymlink \"one\" (str root \"/valueLink\")))"
-    "      (println \"value fileUtime\" (viaUnit (fn [(p String)] -> (Result Unit String) (fileUtime p 5000000000)) (str root \"/valueExcl\")) (mt (fileStat (str root \"/valueExcl\")) ((ok s) s.mtimeNs) ((err e) e)))"
+    "      (println \"value fileUtime\" (viaUnit (fn [(p String)] -> (Result Unit String) (fileUtime p 5000000000)) (str root \"/valueExcl\")) (match (fileStat (str root \"/valueExcl\")) ((ok s) s.mtimeNs) ((err e) e)))"
     "      true)"
     ""
     "fn ! main args: (List String) -> (Result Int64 String)"

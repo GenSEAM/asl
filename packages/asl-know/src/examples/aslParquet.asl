@@ -1,7 +1,7 @@
 (module asl-know/examples/aslParquet :x [rowCount! selfTest] :i [])
 
 fn ! rowCount! path: String -> Int64
-  (mt (parquetOpen path)
+  (match (parquetOpen path)
     ((err _) -1)
     ((ok h) (parquetNumRows h)))
 

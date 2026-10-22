@@ -26,7 +26,7 @@ fn ! runOf argv: (List String) cwd: String -> run/Done
   (run/runOneLimited (run/job argv cwd (run/childEnv (list))) (run/limits 60 16))
 
 fn ! okMsg r: (Result String String) label: String -> Bool
-  (mt r
+  (match r
     ((ok _) true)
     ((err e) (do (eprintln (str label ": " e)) false)))
 
@@ -45,7 +45,7 @@ fn ! cliBuild! bin: String src: String out: String cwd: String env: (List String
 
 ; (:m :ref RC-DEFAULT :do "the work dir (fixtures, binaries, dSYM bundles, the ASan runtime cache) is removed in the let, before the asserts, so a failing run leaves nothing behind")
 fn ! removeAll! path: String -> (Result Unit String)
-  (mt (dirList path)
+  (match (dirList path)
     ((err _) (pathRemove path))
     ((ok names) (do (map (fn [(n String)] -> (Result Unit String) (removeAll! (str path "/" n))) names)
                     (pathRemove path))))

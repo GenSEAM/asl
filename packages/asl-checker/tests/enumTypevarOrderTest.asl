@@ -15,7 +15,7 @@ fn nestedPairSrc -> String
     "  (pair (pair x x) x)\n")
 
 fn checkDiags src: String -> (List ty/Diagnostic)
-  (mt (a/parseForChecker src)
+  (match (a/parseForChecker src)
     ((err pe) (list (ty/Diagnostic :code "parse" :message pe.msg :msg pe.msg :line pe.line :col pe.col :path "m.asl")))
     ((ok forms) (chk/checkModule forms (mapEmpty) "m.asl")))
 

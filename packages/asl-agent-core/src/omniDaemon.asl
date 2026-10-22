@@ -63,7 +63,7 @@ fn daemonShutdown state: DaemonState -> DaemonState
   (with state :status (daemonStopped) :activeIngressChannels (list))
 
 fn formatDaemonStatus state: DaemonState -> Str
-  (let [(stStr (mt state.status
+  (let [(stStr (match state.status
                  ((daemonBooting) "booting")
                  ((daemonRunning) "running")
                  ((daemonDraining) "draining")

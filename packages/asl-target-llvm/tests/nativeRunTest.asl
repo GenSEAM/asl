@@ -31,7 +31,7 @@ fn ! exitOf cmd: String -> Int64
 ; (:m :ref HLFIX-C :do "./bin/asl run on an absolute path outside the workspace root (every work/*.asl fixture here, since work is mktemp -d) prints one NATIVE-BYPASS banner line (reason absolute-path-outside-workspace) before running the staged copy; the three call sites below that merge stderr into stdout with 2>&1 and then do an exact stdout comparison strip that one leading line first, a cosmetic side effect of running outside the root rather than a real output difference")
 fn stripNativeBypass text: String -> String
   (if (stringStartsWith? text "NATIVE-BYPASS ")
-    (mt (stringIndexOf text "\n")
+    (match (stringIndexOf text "\n")
       ((some i) (optionOr (stringSlice text (+ i 1) (stringLength text)) ""))
       ((none) text))
     text)
@@ -50,12 +50,12 @@ fn ! link work: String file: String extra: String -> Bool
 fn ! optBin -> (Option String)
   (let [(known (filter (fn [(c String)] -> Bool (= (exitOf (str "test -x " c)) 0))
                         (list "/opt/homebrew/opt/llvm/bin/opt" "/opt/homebrew/opt/llvm@22/bin/opt" "/usr/local/opt/llvm/bin/opt")))]
-    (mt (listGet known 0)
+    (match (listGet known 0)
       ((some o) (some o))
       ((none) (if (= (exitOf "command -v opt >/dev/null 2>&1") 0) (some "opt") (none)))))
 
 fn ! verifyLl label: String work: String file: String -> Bool
-  (mt (optBin)
+  (match (optBin)
     ((none) (do (println (str label ": opt not found on this host, skipping -passes=verify")) true))
     ((some o) (expectExit (str label ": opt -passes=verify accepts the emitted IR") (str o " -passes=verify -disable-output " work "/" file ".ll") 0)))
 
@@ -133,23 +133,23 @@ fn ! testAlloc work: String -> Bool
     (emit work (abiTest) "allocSmall" "allocSmall")
     (link work "alloc" (lib))
     (expectClean "alloc: 100k-element list, closures over fold and map, 20k concatenations" (str work "/alloc") (allocLine))
-    (mt (sys/context!)
+    (match (sys/context!)
       ((err e) (assert false (str "alloc: ASan setup needs an asl-cli context: " e)))
       ((ok ctx)
         (let [(plainLib (str ctx.root "/" (lib)))]
-          (mt (cache/nativeAsl1! ctx plainLib "/usr/bin/clang")
+          (match (cache/nativeAsl1! ctx plainLib "/usr/bin/clang")
             ((err e) (assert false (str "alloc: ASan setup needs a native asl1 compiler: " e)))
             ((ok asl1)
               (let [(b (nb/Build :root ctx.root :cache work :tmp work :lib plainLib :base "" :clangVersion "" :owner ""
                                  :deadlineNs (+ (monotonicNs) 900000000000) :maxDesc 16))]
-                (mt (nb/asanRuntime! b asl1 (str ctx.root "/asl/packages"))
+                (match (nb/asanRuntime! b asl1 (str ctx.root "/asl/packages"))
                   ((err e) (assert false (str "alloc: the ASan runtime archive did not build: " e)))
                   ((ok asanLib)
                     (do
-                      (mt (nb/linkSanitized! b (str work "/alloc.ll") asanLib (str work "/allocAsan") true)
+                      (match (nb/linkSanitized! b (str work "/alloc.ll") asanLib (str work "/allocAsan") true)
                         ((err e) (assert false (str "alloc: links against the ASan runtime: " e)))
                         ((ok _) (expectClean "alloc under ASan" (str work "/allocAsan") (allocLine))))
-                      (mt (nb/linkSanitized! b (str work "/allocSmall.ll") asanLib (str work "/allocSmallAsan") true)
+                      (match (nb/linkSanitized! b (str work "/allocSmall.ll") asanLib (str work "/allocSmallAsan") true)
                         ((err e) (assert false (str "allocSmall: links against the ASan runtime: " e)))
                         ((ok _) (expectClean "allocSmall under ASan collecting on every allocation" (str "ASL_GC_STRESS=1 " work "/allocSmallAsan") (smallLine))))
                       true)))))))))
@@ -170,7 +170,7 @@ fn sysTableSource -> String
     "  :i [])"
     ""
     "fn ! main -> (Result Int64 String)"
-    "  (mt (fileAppend (optionOr (envGet \"SYS_TABLE_OUT\") \"\") \"sysTable:appended\\n\")"
+    "  (match (fileAppend (optionOr (envGet \"SYS_TABLE_OUT\") \"\") \"sysTable:appended\\n\")"
     "    ((ok _) (ok 0))"
     "    ((err e) (err (str e))))")
     "\n")
@@ -209,7 +209,7 @@ fn ! testRuntimeLink work: String -> Bool
       true))
 
 fn ! fileText path: String -> String
-  (mt (fileReadString path) ((ok t) t) ((err e) (str "unreadable " path ": " e)))
+  (match (fileReadString path) ((ok t) t) ((err e) (str "unreadable " path ": " e)))
 
 fn ! testByValueAbi work: String -> Bool
   (let [(ops (fileText (str work "/ops.ll")))
@@ -273,7 +273,7 @@ fn ! testInlineTag work: String -> Bool
   (do
     (emit work (abiTest) "switchPick" "switchPick")
     (link work "switchPick" (lib))
-    (let [(ll (mt (fileReadString (str work "/switchPick.ll")) ((ok t) t) ((err e) e)))]
+    (let [(ll (match (fileReadString (str work "/switchPick.ll")) ((ok t) t) ((err e) e)))]
       (do (assert (stringContains? ll "%bb.entry.ctorp = getelementptr inbounds i8, ptr %bb.entry.obj, i64 8") "switchPick: the constructor id is read inline by getelementptr")
           (assert (stringContains? ll "%bb.entry.tag = select i1 %bb.entry.eq0, i64 0, i64 %bb.entry.sel1") "switchPick: the tag is selected inline against @variantIds.Tri")
           (refute (stringContains? ll "@asl_rt_tag") "switchPick: no emitted program IR declares or calls asl_rt_tag")
@@ -289,12 +289,12 @@ fn ! testFusedFields work: String -> Bool
     (expectExit "fusedVariantFloat: Float field of a variant reads inline, no box; 41.5 + 0.5 = 42.0" (str work "/fusedVariantFloat") 0)
     (expectExit "fusedVariantBool: Bool field of a variant reads inline, no box" (str work "/fusedVariantBool") 0)
     (expectExit "fusedRecordInt: two Int fields of a record each read inline, sum matches the closed form" (str work "/fusedRecordInt") 0)
-    (let [(ll (mt (fileReadString (str work "/fusedVariantInt.ll")) ((ok t) t) ((err e) e)))]
+    (let [(ll (match (fileReadString (str work "/fusedVariantInt.ll")) ((ok t) t) ((err e) e)))]
       (do (assert (stringContains? ll "%xi.rightTag = icmp eq i32 %xi.ftag, 2") "fusedVariantInt: the field's own Val tag is checked inline against T_INT")
           (assert (stringContains? ll "%xi.fastval = load i64, ptr %xi.valp") "fusedVariantInt: the raw i64 is loaded inline on the fast path")
           (assert (stringContains? ll "xi.fast:\n  %xi.valp = getelementptr inbounds i8, ptr %xi.obj, i64 24\n  %xi.fastval = load i64, ptr %xi.valp\n  br label %xi.join\n")
                   "fusedVariantInt: the fast block's whole body is the address, the load and the jump to join, no runtime call inside it")))
-    (let [(ll (mt (fileReadString (str work "/fusedRecordInt.ll")) ((ok t) t) ((err e) e)))]
+    (let [(ll (match (fileReadString (str work "/fusedRecordInt.ll")) ((ok t) t) ((err e) e)))]
       (do (assert (stringContains? ll "%xi.keysp = getelementptr inbounds i8, ptr %xi.obj, i64 16") "fusedRecordInt: Rec.keys is read inline at offset 16")
           (assert (stringContains? ll "%xi.valoff = add i64 32, %xi.off") "fusedRecordInt: a record field's Val is addressed inline at v[idx], offset 24 + idx*16 + 8")))
     (expectTrap work "fusedVariantRange" "ERR_RANGE: variant some has 1 field(s), no field 1")
@@ -313,7 +313,7 @@ fn ! testStaticFields work: String -> Bool
     (emit work (abiTest) "staticFieldRecord" "staticFieldRecord")
     (link work "staticFieldRecord" (lib))
     (expectExit "staticFieldRecord: two record fields read straight as Val equal what was stored" (str work "/staticFieldRecord") 0)
-    (let [(ll (mt (fileReadString (str work "/staticFieldRecord.ll")) ((ok t) t) ((err e) e)))
+    (let [(ll (match (fileReadString (str work "/staticFieldRecord.ll")) ((ok t) t) ((err e) e)))
           (frag (functionIr ll "staticFieldRecord"))]
       (do (assert (stringContains? frag "%xv.isRec = icmp eq i32 %xv.vtag, 7") "staticFieldRecord: the base's Val tag is checked inline against T_REC")
           (assert (stringContains? frag "%xv.slotp = getelementptr inbounds i8, ptr %xv.obj, i64 24") "staticFieldRecord: field a's static slot is addressed at offset 24 (index 0)")
@@ -352,7 +352,7 @@ fn typedFieldSource -> String
     "  v"
     ""
     "fn ! main args: (List String) -> (Result Int64 String)"
-    "  (let [(mode (mt (listHead args) ((some a) a) ((none) \"read\")))]"
+    "  (let [(mode (match (listHead args) ((some a) a) ((none) \"read\")))]"
     "    (cond"
     "      ((= mode \"nonRecordY\") (do (println (str (getY (asAny 7)))) (ok 0)))"
     "      ((= mode \"nonRecordName\") (do (println (nameOf (asAny 7))) (ok 0)))"
@@ -370,7 +370,7 @@ fn variantBoundarySource -> String
     "(enum Foreign (:c first [] \"Foreign value\"))"
     ""
     "fn switchForeign x: Expected -> Int64"
-    "  (mt x ((expected) 1))"
+    "  (match x ((expected) 1))"
     ""
     "fn asAny x: Any -> Any"
     "  x"
@@ -393,9 +393,9 @@ fn ! testVariantBoundary work: String -> Bool
           (assert linkedRef "variant boundary: switchForeign reference fixture links")
           (assert (= ref.exitCode 1) (str "variant boundary: switchForeign reference exit " ref.exitCode ", want 1; output " ref.stdout ref.stderr))
           (assert (stringStartsWith? want "ERR_MATCH_NONEXHAUSTIVE:") (str "variant boundary: switchForeign reference reports an unmatched foreign variant; got " ref.stdout ref.stderr))
-          (mt (low/lowerSource (variantBoundarySource))
+          (match (low/lowerSource (variantBoundarySource))
             ((err ds) (assert false (str "variant boundary: the source lowers: " (diagText ds))))
-            ((ok m) (mt (llvm/emitLlvmProgram m "main")
+            ((ok m) (match (llvm/emitLlvmProgram m "main")
                       ((err ds) (assert false (str "variant boundary: emitLlvmProgram emits the program: " (diagText ds))))
                       ((ok ll) (do (assert (ok? (fileWrite (str work "/variantBoundary.ll") ll)) "variant boundary: .ll written")
                                    (refute (stringContains? ll "@asl_rt_tag") "variant boundary: the source program's IR neither declares nor calls asl_rt_tag")
@@ -418,7 +418,7 @@ fn hostErrorLine out: ProcessOutput -> String
     (optionOr (stringSlice line 0 (optionOr (stringIndexOf line " (after ") (stringLength line))) line))
 
 fn defineIr ll: String header: String -> String
-  (mt (stringIndexOf ll header)
+  (match (stringIndexOf ll header)
     ((none) "")
     ((some at) (let [(tail (optionOr (stringSlice ll at (stringLength ll)) ""))]
                  (optionOr (stringSlice tail 0 (optionOr (stringIndexOf tail "\n}\n") (stringLength tail))) tail))))
@@ -428,7 +428,7 @@ fn beforeSlow frag: String -> String
 
 fn probeBranch frag: String miss: String -> String
   (let [(mark ".sIn = icmp slt i32 1, %")]
-    (mt (stringIndexOf frag mark)
+    (match (stringIndexOf frag mark)
       ((none) "<no .sIn bound compare>")
       ((some at) (let [(tail (optionOr (stringSlice frag (+ at (stringLength mark)) (stringLength frag)) ""))
                        (r (optionOr (stringSlice tail 0 (optionOr (stringIndexOf tail ".n\n") 0)) ""))]
@@ -446,11 +446,11 @@ fn ! testTypedFields work: String -> Bool
   (let [(src (str work "/typedFieldMod.asl"))]
     (do
       (assert (ok? (fileWrite src (typedFieldSource))) "typedField: source written")
-      (mt (low/lowerSource (typedFieldSource))
+      (match (low/lowerSource (typedFieldSource))
         ((err ds) (assert false (str "typedField: the source lowers: " (diagText ds))))
         ((ok m)
           (do
-            (mt (llvm/emitLlvmProgram m "main")
+            (match (llvm/emitLlvmProgram m "main")
               ((err ds) (assert false (str "typedField: emitLlvmProgram emits the program: " (diagText ds))))
               ((ok ll) (let [(getY (defineIr ll "define tailcc i64 @getY("))
                              (nameOf (defineIr ll "define tailcc %Val @nameOf("))]
@@ -480,7 +480,7 @@ fn ! testTypedFields work: String -> Bool
                              (expectSameError work "typedFieldMod" src "nonRecordName" "ERR_TYPE: .-name expects a record, got Int")
                              (expectSameError work "typedFieldMod" src "missingY" "ERR_FIELD: record has no field y")
                              true))))
-            (mt (ssa/emitLlvmModule m)
+            (match (ssa/emitLlvmModule m)
               ((err ds) (assert false (str "typedField: emitLlvmModule emits the functions: " (diagText ds))))
               ((ok ll) (do (assert (ok? (fileWrite (str work "/typedFieldLib.ll") ll)) "typedField: library .ll written")
                            (assert (ok? (fileWrite (str work "/valrtC.ll") (ssa/cRuntimeModule))) "typedField: the C main's intern and C floor definitions written")
@@ -547,7 +547,7 @@ fn hostArithmeticSource -> String
     "        (ints (list (optionOr (listHead xs) -1) (optionOr (listHead (list)) -1)"
     "                    (listLength (optionOr (listTail xs) (list))) (listLength (optionOr (listTail (list)) (list 7 7)))"
     "                    (optionOr (listGet xs (+ n 1)) -1) (optionOr (listGet xs (- 0 n)) -1) (optionOr (listGet xs 5) -1)"
-    "                    (mt (listHead xs) ((some x) x) ((none) 0)) (mt (listTail (list)) ((some t) (listLength t)) (_ 99))))]"
+    "                    (match (listHead xs) ((some x) x) ((none) 0)) (match (listTail (list)) ((some t) (listLength t)) (_ 99))))]"
     "    (str (stringJoin (map (fn [(i Int64)] -> String (stringFromInt64 i)) ints) \" \") \"|\""
     "         (optionOr (stringSlice s n (+ n 1)) \"?\") (optionOr (stringSlice s 1 4) \"?\") (optionOr (stringSlice s 3 9) \"?\") (optionOr (stringSlice s 2 2) \"?\")))"
     ""
@@ -613,7 +613,7 @@ fn readlinkFixtureSource -> String
     ""
     "fn ! main args: (List String) -> (Result Int64 String)"
     "  (let [(path (optionOr (listHead args) \"\"))]"
-    "    (do (println (mt (fileReadlink path) ((ok t) (str \"ok:\" t)) ((err e) (str \"err:\" e))))"
+    "    (do (println (match (fileReadlink path) ((ok t) (str \"ok:\" t)) ((err e) (str \"err:\" e))))"
     "        (ok 0)))")
     "\n")
 
@@ -670,7 +670,7 @@ fn frontEndSource -> String
     "fn sumBy pipeline: (fn [Int64] -> Int64)"
     "          xs: (List Int64)"
     "          acc: Int64 -> Int64"
-    "  (mt (listHead xs)"
+    "  (match (listHead xs)"
     "    ((none) acc)"
     "    ((some x) (sumBy pipeline (optionOr (listTail xs) (list)) (+ acc (pipeline x)))))"
     ""
@@ -680,10 +680,10 @@ fn frontEndSource -> String
     ""
     "fn ! files dir: String -> String"
     "  (let [(t0 (monotonicNs))"
-    "        (made (mt (dirCreate dir) ((ok _) \"made\") ((err _) \"notMade\")))"
-    "        (again (mt (dirCreate dir) ((ok _) \"again\") ((err _) \"exists\")))"
-    "        (moved (mt (pathRename dir (str dir \"2\")) ((ok _) \"moved\") ((err _) \"stuck\")))"
-    "        (gone (mt (pathRemove (str dir \"2\")) ((ok _) \"removed\") ((err _) \"kept\")))"
+    "        (made (match (dirCreate dir) ((ok _) \"made\") ((err _) \"notMade\")))"
+    "        (again (match (dirCreate dir) ((ok _) \"again\") ((err _) \"exists\")))"
+    "        (moved (match (pathRename dir (str dir \"2\")) ((ok _) \"moved\") ((err _) \"stuck\")))"
+    "        (gone (match (pathRemove (str dir \"2\")) ((ok _) \"removed\") ((err _) \"kept\")))"
     "        (t1 (monotonicNs))]"
     "    (do (when (>= t1 t0) (print \"monotonic \"))"
     "        (stringJoin (list made again moved gone) \" \")))"
@@ -722,18 +722,18 @@ fn hostFloatSource -> String
     "  :i [])"
     ""
     "fn optF o: (Option Float64) -> String"
-    "  (mt o ((some x) (str \"some \" (stringFromFloat64 x))) ((none) \"none\"))"
+    "  (match o ((some x) (str \"some \" (stringFromFloat64 x))) ((none) \"none\"))"
     ""
     "fn optI o: (Option Int64) -> String"
-    "  (mt o ((some n) (str \"some \" (stringFromInt64 n))) ((none) \"none\"))"
+    "  (match o ((some n) (str \"some \" (stringFromInt64 n))) ((none) \"none\"))"
     ""
     "fn parsed s: String -> Float64"
     "  (optionOr (stringToFloat64 s) 0.0)"
     ""
     "fn modPairs xs: (List String) -> (List String)"
-    "  (mt (listHead xs)"
+    "  (match (listHead xs)"
     "    ((none) (list))"
-    "    ((some a) (mt (listGet xs 1)"
+    "    ((some a) (match (listGet xs 1)"
     "                ((none) (list))"
     "                ((some b) (cons (stringFromFloat64 (mod (parsed a) (parsed b))) (modPairs (optionOr (listTail (optionOr (listTail xs) (list))) (list))))))))"
     ""
@@ -998,7 +998,7 @@ fn schemaDefaultsSource -> String
     "  (:f code String :default \"\\u{62}\"))"
     ""
     "fn optStr o: (Option String) -> String"
-    "  (mt o ((some s) s) ((none) \"none\"))"
+    "  (match o ((some s) s) ((none) \"none\"))"
     ""
     "fn ! main args: (List String) -> (Result Int64 String)"
     "  (let [(p (Person :name \"Alice\"))]"
@@ -1499,10 +1499,10 @@ fn ! testPreludeSingleModule work: String -> Bool
       (refute (stringEmpty? preludeText) (str "preludeSingle: " (lk/preludePath) " is readable"))
       (let [(hosted (sh (str (host) " run " src)))]
         (assert (and (= hosted.exitCode 0) (= hosted.stdout want)) (str "preludeSingle: asl-host prints the expected lines, got " hosted.stdout hosted.stderr)))
-      (mt (low/lowerSource (preludeSingleSource))
+      (match (low/lowerSource (preludeSingleSource))
         ((ok _) (assert false "preludeSingle: plain lowerSource has no prelude, so stringJoin is outside its subset"))
         ((err ds) (assert (stringContains? (diagText ds) "'stringJoin' is neither a module function nor a builtin") (str "preludeSingle: plain lowerSource rejects stringJoin: " (diagText ds)))))
-      (mt (lk/lowerSourceLinked! (preludeSingleSource))
+      (match (lk/lowerSourceLinked! (preludeSingleSource))
         ((err ds) (assert false (str "preludeSingle: lowerSourceLinked! lowers the module: " (diagText ds))))
         ((ok m) (let [(text (prn/printSsa m))]
                   (do (assert (stringContains? text "(fn main ") (str "preludeSingle: the module's main stays unqualified:\n" text))
@@ -1512,7 +1512,7 @@ fn ! testPreludeSingleModule work: String -> Bool
                            (list "stringSplit" "stringJoin" "resultOr" "listContains?" "preludeSplit" "preludeSlice"))
                       (refute (stringContains? text "(fn prelude.listSort ") "preludeSingle: an unreached prelude function stays out")
                       true))))
-      (mt (llvm/emitLlvmSourceWith (preludeSingleSource) preludeText "main")
+      (match (llvm/emitLlvmSourceWith (preludeSingleSource) preludeText "main")
         ((err ds) (assert false (str "preludeSingle: emitLlvmSourceWith emits the program: " (diagText ds))))
         ((ok ll) (do (assert (ok? (fileWrite (str work "/preludeSingleLl.ll") ll)) "preludeSingle: .ll written")
                      (assert (stringContains? ll "@prelude$2EstringSplit(") "preludeSingle: the .ll defines prelude.stringSplit")
@@ -1520,7 +1520,7 @@ fn ! testPreludeSingleModule work: String -> Bool
                      (link work "preludeSingleLl" (lib))
                      (let [(out (sh (str "ASL_PRELUDE=" work "/absent.asl " work "/preludeSingleLl")))]
                        (assert (and (= out.exitCode 0) (= out.stdout want)) (str "preludeSingle: LLVM native prints " out.stdout " exit " out.exitCode " with prelude.asl absent; stderr " out.stderr))))))
-      (mt (cem/emitC11SourceWith (preludeSingleSource) preludeText src)
+      (match (cem/emitC11SourceWith (preludeSingleSource) preludeText src)
         ((err m) (assert false (str "preludeSingle: emitC11SourceWith emits the program: " m)))
         ((ok code) (do (assert (ok? (fileWrite (str work "/preludeSingleC.c") code)) "preludeSingle: .c written")
                        (assert (stringContains? code "fn_prelude_2estringSplit(") (str "preludeSingle: the C11 program carries prelude.stringSplit; its native link retired with the C backend (ruling TARGETC, ABIVAL-2 deletes the abi.c entries it calls)")))))

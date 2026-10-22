@@ -102,7 +102,7 @@ fn heapSource -> String
     "(enum Shape (:c circle [(r Int64)] \"Round\") (:c rect [(w Int64) (h Int64)] \"Rectangle\"))"
     ""
     "fn area s: Shape -> Int64"
-    "  (mt s ((circle r) (* r r)) ((rect w h) (* w h)))"
+    "  (match s ((circle r) (* r r)) ((rect w h) (* w h)))"
     ""
     "fn wide a: String b: String c: String d: String it: Item -> String"
     "  (str a b c d it.name (stringFromInt64 it.n))"

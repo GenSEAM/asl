@@ -4,20 +4,20 @@
   :i [(asl/agentLoop/plan :a p) (asl/agentLoop/core :a c)])
 
 fn atomOf n: p/SexpNode -> String
-  (mt n ((p/sexpAtom a) a) ((p/sexpStr _) "") ((p/sexpList _) ""))
+  (match n ((p/sexpAtom a) a) ((p/sexpStr _) "") ((p/sexpList _) ""))
 
 fn listOf n: p/SexpNode -> (List p/SexpNode)
-  (mt n ((p/sexpList xs) xs) ((p/sexpAtom _) (list)) ((p/sexpStr _) (list)))
+  (match n ((p/sexpList xs) xs) ((p/sexpAtom _) (list)) ((p/sexpStr _) (list)))
 
 fn headOf n: p/SexpNode -> String
   (let [xs (listOf n)]
     (if (listEmpty? xs) "" (atomOf (c/firstOf xs))))
 
 fn argAt args: (List p/SexpNode) i: Int64 -> p/SexpNode
-  (mt (listGet args i) ((some v) v) (none (p/sexpAtom "nil")))
+  (match (listGet args i) ((some v) v) (none (p/sexpAtom "nil")))
 
 fn argStr n: p/SexpNode -> String
-  (mt n
+  (match n
     ((p/sexpStr s) s)
     ((p/sexpAtom a) (if (= a "nil") "" a))
     ((p/sexpList xs)
@@ -87,16 +87,16 @@ fn sPair a: String b: String -> String
   (sList (list a b))
 
 fn sOpt o: (Option String) -> String
-  (mt o ((some s) (sStr s)) (none "nil"))
+  (match o ((some s) (sStr s)) (none "nil"))
 
 fn sOptInt o: (Option Int64) -> String
-  (mt o ((some i) (sInt i)) (none "nil"))
+  (match o ((some i) (sInt i)) (none "nil"))
 
 fn sDict kv: (List (Pair String String)) -> String
   (str "(d" (c/joinAll (map (fn [pr] (str " (" (c/serString (pairFirst pr)) " " (pairSecond pr) ")")) (listSortBy pairFirst kv))) ")")
 
 fn canon n: p/SexpNode -> String
-  (mt n
+  (match n
     ((p/sexpAtom a) a)
     ((p/sexpStr s) (c/serString s))
     ((p/sexpList xs) (str "(" (c/joinSep (map canon xs) " ") ")")))
@@ -112,7 +112,7 @@ fn cut s: String -> String
   (if (> (stringLength s) 300) (str (c/sliceOf s 0 300) "...") s)
 
 fn ! checkLine line: String dispatch: (fn [String (List p/SexpNode)] -> String) -> Bool
-  (mt (p/planTree line)
+  (match (p/planTree line)
     ((err e) (do (assert (= e "") (str "fixture line parses: " (cut line))) false))
     ((ok nodes)
       (let [xs (listOf (c/firstOf nodes))
@@ -127,7 +127,7 @@ fn ! replay! path: String fns: (List String) dispatch: (fn [String (List p/SexpN
         lines (stringLines content)
         header (filter (fn [l] (stringStartsWith? l "(:fixture ")) lines)
         cases (filter (fn [l] (stringStartsWith? l "(:case ")) lines)
-        declared (mt (p/planTree (if (listEmpty? header) "()" (c/firstOf header)))
+        declared (match (p/planTree (if (listEmpty? header) "()" (c/firstOf header)))
                    ((ok ns) (argInt (kvField (listOf (c/firstOf ns)) ":cases")))
                    ((err _) -1))
         present (fn [f] (listAny? (fn [l] (stringContains? l (str ":fn \"" f "\" "))) cases))]

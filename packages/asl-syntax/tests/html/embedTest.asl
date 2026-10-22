@@ -10,7 +10,7 @@
       (asl-syntax/html/embed :a emb)])
 
 fn findEmbeddedSymbol syms: (List emb/EmbeddedSymbol) name: String -> (Option emb/EmbeddedSymbol)
-  (mt (listHead syms)
+  (match (listHead syms)
     ((none) (none))
     ((some s)
      (if (= (emb/embeddedSymbolName s) name)
@@ -18,15 +18,15 @@ fn findEmbeddedSymbol syms: (List emb/EmbeddedSymbol) name: String -> (Option em
        (findEmbeddedSymbol (optionOr (listTail syms) (list)) name))))
 
 fn findFirstElementByTag elems: (List tr/TreeElement) tag: String -> (Option tr/Node)
-  (mt (listHead elems)
+  (match (listHead elems)
     ((none) (none))
     ((some elem)
-     (mt elem
+     (match elem
        ((elemToken _) (findFirstElementByTag (optionOr (listTail elems) (list)) tag))
        ((elemNode n)
         (if (= (htr/elementName n) tag)
           (some n)
-          (mt (findFirstElementByTag (tr/nodeChildren n) tag)
+          (match (findFirstElementByTag (tr/nodeChildren n) tag)
             ((some found) (some found))
             ((none) (findFirstElementByTag (optionOr (listTail elems) (list)) tag))))))))
 
@@ -84,7 +84,7 @@ fn testMultipleScriptsOneBrokenOneValid! -> Bool
 
 fn testDiagramWorkbenchScriptSymbols! -> Bool
   (let [(path "docs/diagrams/DiagramWorkbench.html")]
-    (mt (fileReadString path)
+    (match (fileReadString path)
       ((err e) (assert false (str "missing DiagramWorkbench.html: " e)))
       ((ok text)
        (let [(len (stringLength text))
@@ -117,7 +117,7 @@ fn testDiagramWorkbenchScriptSymbols! -> Bool
 
 fn testOrchestrationTopologyScriptSymbols! -> Bool
   (let [(path "docs/diagrams/OrchestrationTopology.html")]
-    (mt (fileReadString path)
+    (match (fileReadString path)
       ((err e) (assert false (str "missing OrchestrationTopology.html: " e)))
       ((ok text)
        (let [(len (stringLength text))
@@ -142,7 +142,7 @@ fn testOrchestrationTopologyScriptSymbols! -> Bool
 
 fn testPopupHtmlFile! -> Bool
   (let [(path "asl/packages/asl-browser-plugin/src/popup.html")]
-    (mt (fileReadString path)
+    (match (fileReadString path)
       ((err e) (assert false (str "missing popup.html: " e)))
       ((ok text)
        (let [(len (stringLength text))
@@ -173,7 +173,7 @@ fn testPopupHtmlFile! -> Bool
 
 fn testReviewHtmlFile! -> Bool
   (let [(path "editorial-matrix/assets/review/index.html")]
-    (mt (fileReadString path)
+    (match (fileReadString path)
       ((err e) (assert false (str "missing review index.html: " e)))
       ((ok text)
        (let [(len (stringLength text))
@@ -204,7 +204,7 @@ fn testReviewHtmlFile! -> Bool
 
 fn testUnifiedExtractSymbolsIncludesHtmlAndEmbedded! -> Bool
   (let [(path "docs/diagrams/DiagramWorkbench.html")]
-    (mt (fileReadString path)
+    (match (fileReadString path)
       ((err e) (assert false (str "missing DiagramWorkbench.html: " e)))
       ((ok text)
        (let [(root (emb/parseHtmlWithEmbedded text))
@@ -221,7 +221,7 @@ fn testUnifiedExtractSymbolsIncludesHtmlAndEmbedded! -> Bool
            true)))))
 
 fn checkSingleTrackedHtmlFile! path: String -> Bool
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e) (assert false (str "missing tracked file: " path " err: " e)))
     ((ok text)
      (let [(len (stringLength text))

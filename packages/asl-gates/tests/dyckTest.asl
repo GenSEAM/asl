@@ -33,28 +33,28 @@ fn testUnbalanced -> Bool
         (r4 (dyck/check b4 true))]
     (do
       (assert (some? r1) "extra open detected")
-      (mt r1
+      (match r1
         ((some p)
           (do
             (assert (= (pairFirst p) 0) "extra open byte")
             (assert (= (pairSecond p) "unclosed (") "extra open message")))
         ((none) (assert false "expected extra open")))
       (assert (some? r2) "extra close detected")
-      (mt r2
+      (match r2
         ((some p)
           (do
             (assert (= (pairFirst p) 0) "extra close byte")
             (assert (= (pairSecond p) "unexpected )") "extra close message")))
         ((none) (assert false "expected extra close")))
       (assert (some? r3) "mismatched close detected")
-      (mt r3
+      (match r3
         ((some p)
           (do
             (assert (= (pairFirst p) 1) "mismatched close byte")
             (assert (= (pairSecond p) "] closes ( opened at byte 0") "mismatched message")))
         ((none) (assert false "expected mismatched close")))
       (assert (some? r4) "unterminated string detected")
-      (mt r4
+      (match r4
         ((some p)
           (do
             (assert (= (pairFirst p) 0) "unterminated string byte")
@@ -67,7 +67,7 @@ fn testByteOffsets -> Bool
         (r (dyck/check b true))]
     (do
       (assert (some? r) "stray close detected")
-      (mt r
+      (match r
         ((some p)
           (do
             (assert (= (pairFirst p) 28) "stray close at byte 28")
@@ -84,7 +84,7 @@ fn testEsc -> Bool
 
 fn testDirectoryRejected! -> Bool
   (let [(r (dyck/checkFile! "asl/packages/asl-gates/src"))]
-    (mt r
+    (match r
       ((err ev) (do (assert (= ev "Is a directory") "directory returns Is a directory error") true))
       ((ok _) (assert false "expected directory to return err"))))
 

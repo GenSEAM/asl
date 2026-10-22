@@ -7,13 +7,13 @@ fn joinLoop parts: (List String) sep: String k: Int64 total: Int64 -> Int64
 fn pairwisePass xs: (List String) -> (List String)
   (let [(folded (fold
                   (fn [(acc (Pair (List String) (Option String))) (x String)] -> (Pair (List String) (Option String))
-                    (mt (pairSecond acc)
+                    (match (pairSecond acc)
                       ((some left) (pair (cons (stringConcat left x) (pairFirst acc)) none))
                       ((none) (pair (pairFirst acc) (some x)))))
                   (pair (list) none)
                   xs))
         (merged (listReverse (pairFirst folded)))]
-    (mt (pairSecond folded)
+    (match (pairSecond folded)
       ((some leftover) (listAppend merged (list leftover)))
       ((none) merged)))
 

@@ -10,9 +10,9 @@ fn rest s: String from: Int64 -> String
 
 fn earliest s: String marks: (List String) -> (Option (Pair Int64 String))
   (fold (fn [(best (Option (Pair Int64 String))) (mark String)] -> (Option (Pair Int64 String))
-          (mt (stringIndexOf s mark)
+          (match (stringIndexOf s mark)
             ((none) best)
-            ((some at) (mt best ((none) (some (pair at mark))) ((some b) (if (< at (pairFirst b)) (some (pair at mark)) best))))))
+            ((some at) (match best ((none) (some (pair at mark))) ((some b) (if (< at (pairFirst b)) (some (pair at mark)) best))))))
         (none) marks)
 
 fn closeAfter s: String start: Int64 mark: String -> (Option Int64)
@@ -24,17 +24,17 @@ fn span s: String at: Int64 mark: String -> (Option (Pair h/Node Int64))
     ((= mark "*") (optionMap (fn [(e Int64)] -> (Pair h/Node Int64) (pair (h/em [] (inline (cut s (+ at 1) e))) (+ e 1))) (closeAfter s (+ at 1) "*")))
     ((= mark "**") (optionMap (fn [(e Int64)] -> (Pair h/Node Int64) (pair (h/strong [] (inline (cut s (+ at 2) e))) (+ e 2))) (closeAfter s (+ at 2) "**")))
     (else
-      (mt (closeAfter s at "](")
+      (match (closeAfter s at "](")
         ((none) (none))
         ((some mid) (optionMap (fn [(e Int64)] -> (Pair h/Node Int64) (pair (h/a [(h/href (cut s (+ mid 2) e))] (inline (cut s (+ at 1) mid))) (+ e 1))) (closeAfter s (+ mid 2) ")"))))))
 
 fn inline s: String -> (List h/Node)
-  (mt (earliest s ["`" "**" "[" "*"])
+  (match (earliest s ["`" "**" "[" "*"])
     ((none) (if (stringEmpty? s) [] [(h/text s)]))
     ((some found)
       (let [(at (pairFirst found)) (mark (pairSecond found)) (before (cut s 0 at))
             (lead (if (stringEmpty? before) [] [(h/text before)]))]
-        (mt (span s at mark)
+        (match (span s at mark)
           ((some done) (listAppend lead (cons (pairFirst done) (inline (rest s (pairSecond done))))))
           ((none) (listAppend lead (cons (h/text mark) (inline (rest s (+ at (stringLength mark)))))))))))
 
@@ -42,7 +42,7 @@ fn listItem? line: String -> Bool
   (or (stringStartsWith? line "- ") (stringStartsWith? line "* "))
 
 fn digitsThenDot? line: String -> Bool
-  (mt (stringIndexOf line ". ")
+  (match (stringIndexOf line ". ")
     ((none) false)
     ((some at) (and (> at 0) (and (< at 4) (some? (stringToInt64 (cut line 0 at)))))))
 
@@ -50,12 +50,12 @@ fn special? line: String -> Bool
   (or (stringStartsWith? line "#") (or (stringStartsWith? line "```") (or (stringStartsWith? line "|") (or (listItem? line) (or (digitsThenDot? line) (or (stringStartsWith? line ">") (= line "---")))))))
 
 fn takeWhile lines: (List String) keep: (fn [String] -> Bool) acc: (List String) -> (Pair (List String) (List String))
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (pair (listReverse acc) []))
     ((some line) (if (keep line) (takeWhile (listDrop lines 1) keep (cons line acc)) (pair (listReverse acc) lines))))
 
 fn afterMarker line: String -> String
-  (mt (stringIndexOf line " ") ((some at) (stringTrim (rest line (+ at 1)))) ((none) line))
+  (match (stringIndexOf line " ") ((some at) (stringTrim (rest line (+ at 1)))) ((none) line))
 
 fn cells line: String -> (List String)
   (let [(trimmed (stringTrim line))
@@ -84,7 +84,7 @@ fn fence lines: (List String) -> (Pair h/Node (List String))
           (listDrop (pairSecond split) 1)))
 
 fn blocks lines: (List String) -> (List h/Node)
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) [])
     ((some line)
       (cond

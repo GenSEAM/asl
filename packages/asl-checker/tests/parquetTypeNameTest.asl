@@ -4,7 +4,7 @@ fn checkHasCode diags: (List ty/Diagnostic) wantCode: String -> Bool
   (fold (fn [(acc Bool) (d ty/Diagnostic)] -> Bool (or acc (= d.code wantCode))) false diags)
 
 fn resolveProbe src: String wantCode: String -> Bool
-  (mt (a/parse src) ((err _) false) ((ok forms) (let [(summary (r/collectSummary forms "test.asl")) (diags (r/resolveModule summary forms (mapEmpty)))] (checkHasCode diags wantCode))))
+  (match (a/parse src) ((err _) false) ((ok forms) (let [(summary (r/collectSummary forms "test.asl")) (diags (r/resolveModule summary forms (mapEmpty)))] (checkHasCode diags wantCode))))
 
 fn testParquetHandleParamNotUnknown -> Bool
   (do (refute (resolveProbe "(fn pqRows [(h ParquetHandle)] -> Int64 1)" "rule-10") "ParquetHandle param is a known builtin type") true)

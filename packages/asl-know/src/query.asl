@@ -34,22 +34,22 @@ fn rowOf card: String line: String -> Row
 fn entryOf text: String -> (Option Entry)
   (let [(lines (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines text)))
         (head (optionOr (listHead lines) ""))]
-    (mt (sc/fieldAfter head "(:card")
+    (match (sc/fieldAfter head "(:card")
       ((none) (none))
       ((some id)
         (some (Entry :id id :line head :terms (termsOf (str id " " (optionOr (sc/fieldAfter head ":purpose") "")))
                      :rows (map (fn [(l String)] -> Row (rowOf id l)) (optionOr (listTail lines) (list))))))))
 
 fn ! loadEntries! dir: String -> (List Entry)
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err _) (list))
     ((ok names)
       (listFlatMap (fn [(n String)] -> (List Entry)
                      (if (or (= n "index.asn") (not (stringEndsWith? n ".asn")))
                        (list)
-                       (mt (fileReadString (str dir "/" n))
+                       (match (fileReadString (str dir "/" n))
                          ((err _) (list))
-                         ((ok t) (mt (entryOf t) ((some e) (list e)) ((none) (list)))))))
+                         ((ok t) (match (entryOf t) ((some e) (list e)) ((none) (list)))))))
                    names)))
 
 fn hit? t: String w: String -> Bool
@@ -75,7 +75,7 @@ fn weights qs: (List String) es: (List Entry) -> (List (Pair String Float64))
     (map (fn [(t String)] -> (Pair String Float64) (pair t (idfOf n (listCount (fn [(ws (List String))] -> Bool (has? ws t)) rows)))) qs))
 
 fn dedupe xs: (List String) acc: (List String) -> (List String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (listReverse acc))
     ((some x) (dedupe (optionOr (listTail xs) (list)) (if (listContains? acc x) acc (cons x acc)))))
 
@@ -91,7 +91,7 @@ fn scored es: (List Entry) qs: (List (Pair String Float64)) -> (List (Pair Entry
        es)
 
 fn fillRows rows: (List String) room: Int64 acc: (List String) -> (List String)
-  (mt (listHead rows)
+  (match (listHead rows)
     ((none) (listReverse acc))
     ((some l)
       (let [(t (r/tokensOf l))]
@@ -109,7 +109,7 @@ fn exactAnswer es: (List Entry) query: String -> (Option (Pair (List Entry) (Lis
       (else (none))))
 
 fn fillCards cs: (List Entry) room: Int64 acc: (List Entry) -> (List Entry)
-  (mt (listHead cs)
+  (match (listHead cs)
     ((none) (listReverse acc))
     ((some c)
       (if (> (r/tokensOf c.line) room)
@@ -125,7 +125,7 @@ fn render query: String budget: Int64 cards: (List Entry) rows: (List String) ho
     (stringJoin (cons head (listAppend cardLines shown)) "\n"))
 
 fn answer es: (List Entry) query: String budget: Int64 -> String
-  (mt (exactAnswer es query)
+  (match (exactAnswer es query)
     ((some hit) (render query budget (fillCards (listTake (pairFirst hit) 2) budget (list)) (pairSecond hit) "exact"))
     ((none)
       (let [(qs (weights (dedupe (termsOf query) (list)) es))

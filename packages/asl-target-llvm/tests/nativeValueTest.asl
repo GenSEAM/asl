@@ -115,9 +115,9 @@ fn formatDiags ds: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.locus ": [" d.code "] " d.message)) ds) "; ")
 
 fn ! compiled path: String -> (Result String String)
-  (mt (lk/linkEntry! path)
+  (match (lk/linkEntry! path)
     ((err ds) (err (formatDiags ds)))
-    ((ok m) (mt (llvm/emitLlvmProgramNative! m (str m.name ".main"))
+    ((ok m) (match (llvm/emitLlvmProgramNative! m (str m.name ".main"))
               ((err ds) (err (formatDiags ds)))
               ((ok code) (ok code)))))
 
@@ -126,7 +126,7 @@ fn ! sh cmd: String -> ProcessOutput
 
 fn memberName line: String -> String
   (let [(head (optionOr (stringSlice line 0 (- (stringLength line) 1)) line))]
-    (mt (stringIndexOf head "[")
+    (match (stringIndexOf head "[")
       ((none) head)
       ((some at) (optionOr (stringSlice head (+ at 1) (optionOr (stringIndexOf head "]") (stringLength head))) head))))
 
@@ -163,7 +163,7 @@ fn ! testSymbols exe: String -> Bool
 
 fn ! build dir: String name: String -> String
   (let [(exe (str dir "/" name))]
-    (mt (compiled (str exe ".asl"))
+    (match (compiled (str exe ".asl"))
       ((err e) (do (assert false (str name " links and emits: " e)) exe))
       ((ok code)
         (do
@@ -268,7 +268,7 @@ fn ! testUnrouted dir: String -> Bool
   (let [(par (str dir "/valfx/par.asl"))]
     (do
       (assert (ok? (fileWrite par (parSource))) (str "fileWrite " par))
-      (mt (compiled par)
+      (match (compiled par)
         ((err e) (assert false (str "valfx/par links and emits routed: " e)))
         ((ok code)
           (do
@@ -317,9 +317,9 @@ fn ! testFloorCalls dir: String -> Bool
     (do
       (assert (ok? (fileWrite cSrc (floorMain))) "fileWrite valFloorMain.c")
       (assert (ok? (fileWrite (str dir "/valRuntime.ll") (ssa/cRuntimeModule))) "fileWrite valRuntime.ll, the C main's runtime definitions")
-      (mt (low/lowerSource (floorLibSource))
+      (match (low/lowerSource (floorLibSource))
         ((err ds) (assert false (str "valLib lowers: " (formatDiags ds))))
-        ((ok m) (mt (ssa/emitLlvmModule m)
+        ((ok m) (match (ssa/emitLlvmModule m)
                   ((err ds) (assert false (str "valLib emits: " (formatDiags ds))))
                   ((ok code)
                     (let [(exe (linkWith dir "valLib" code (str dir "/valRuntime.ll -x c " cSrc " -x none " (runtime))))

@@ -3,7 +3,7 @@
   :i [(asl/agentLoop/main :a m) (asl/agentLoop/plan :a pl) (asl/agentLoop/gitOps :a go) (asl-json/json :a j)])
 
 fn ! write path: String content: String -> Bool
-  (mt (fileWrite path content)
+  (match (fileWrite path content)
     ((err _) false)
     ((ok _) true))
 
@@ -11,19 +11,19 @@ fn jsonOf text: String -> j/Json
   (resultOr (j/jsonParse text) (j/jnull))
 
 fn jsonItems v: j/Json -> (List j/Json)
-  (mt v ((j/jarr xs) xs) (_ (list)))
+  (match v ((j/jarr xs) xs) (_ (list)))
 
 fn optText o: (Option String) -> j/Json
-  (mt o ((some s) (j/jstr s)) ((none) (j/jnull)))
+  (match o ((some s) (j/jstr s)) ((none) (j/jnull)))
 
 fn optInt o: (Option Int64) -> j/Json
-  (mt o ((some n) (j/jint n)) ((none) (j/jnull)))
+  (match o ((some n) (j/jint n)) ((none) (j/jnull)))
 
 fn strings xs: (List String) -> j/Json
   (j/jarr (map (fn [x] (j/jstr x)) xs))
 
 fn resumeLine r: (Result m/ResumeState String) -> String
-  (mt r
+  (match r
     ((err e) e)
     ((ok st)
       (j/jsonEmit
@@ -32,7 +32,7 @@ fn resumeLine r: (Result m/ResumeState String) -> String
                       (j/jstr st.note) (optText st.result)
                       (j/jarr (map (fn [h] (j/jarr (list (j/jint h.turn) (j/jstr h.sent) (j/jstr h.got)))) st.history))
                       (j/jint st.turn) (j/jstr st.reply)
-                      (j/jbool (mt st.plan ((some _) true) ((none) false))))))))
+                      (j/jbool (match st.plan ((some _) true) ((none) false))))))))
 
 fn minimalResult -> m/LoopResult
   (m/LoopResult :status "ok" :modeHint none :deliver none :phases (list) :session none :journal none :unbacked 0
@@ -105,7 +105,7 @@ fn ! aslLines root: String -> (List String)
   (listAppend
     (map m/formatReceipt (list (minimalResult) (fullResult) (edgeResult)))
     (listAppend
-      (list (mt (m/receiptFieldNames ".") ((ok fs) (stringJoin fs " ")) ((err e) e)))
+      (list (match (m/receiptFieldNames ".") ((ok fs) (stringJoin fs " ")) ((err e) e)))
       (listAppend
         (map (fn [s] (resumeLine (m/journalResume s root))) (sessions))
         (listAppend
@@ -129,8 +129,8 @@ fn ! runTests -> Bool
       (assert (stringContains? (optionOr (listGet asl 1) "") ":status :partial") "full receipt preserves its recorded status")
       (assert (= (optionOr (listGet asl 0) "") "(:agentReceipt :status :ok :phases () :unbacked 0)") "minimal receipt holds status, phases and unbacked only")
       (assert (stringContains? (optionOr (listGet asl 1) "") " :needsConfirm ((:op \"push\" :blocked true) (:op \"deploy\" :error ERR_X))") "needsConfirm keeps blocked and failed ops")
-      (assert (mt synthetic ((ok fs) (= fs (list "status" "alpha" "gates" "beta"))) ((err _) false)) "receipt fields follow a changed formatReceipt source, once each, nested cmd and exit dropped")
-      (assert (mt noFn ((ok _) false) ((err e) (stringContains? e "no fn formatReceipt"))) "a source without fn formatReceipt is an error")
-      (assert (mt noHead ((ok _) false) ((err e) (stringContains? e "(:agentReceipt"))) "a formatReceipt without (:agentReceipt is an error")
+      (assert (match synthetic ((ok fs) (= fs (list "status" "alpha" "gates" "beta"))) ((err _) false)) "receipt fields follow a changed formatReceipt source, once each, nested cmd and exit dropped")
+      (assert (match noFn ((ok _) false) ((err e) (stringContains? e "no fn formatReceipt"))) "a source without fn formatReceipt is an error")
+      (assert (match noHead ((ok _) false) ((err e) (stringContains? e "(:agentReceipt"))) "a formatReceipt without (:agentReceipt is an error")
       (assert (ok? removed) "fixture root removed")
       true))

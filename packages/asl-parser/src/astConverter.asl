@@ -21,17 +21,17 @@ fn liftLit s: String -> (Option a/AstLit)
     ((= s "()") (some (a/litUnit)))
     ((isQuotedString? s) (some (a/litString (unquoteString s))))
     ((and (hasDigit? s) (stringContains? s "."))
-     (mt (stringToFloat64 s)
+     (match (stringToFloat64 s)
        ((some f) (some (a/litFloat f)))
        ((none) (none))))
     ((hasDigit? s)
-     (mt (stringToInt64 s)
+     (match (stringToInt64 s)
        ((some i) (some (a/litInt i)))
        ((none) (none))))
     (else (none)))
 
 fn lowerLit lit: a/AstLit -> rd/SExpr
-  (mt lit
+  (match lit
     ((a/litInt i) (rd/makeAtom (stringFromInt64 i)))
     ((a/litFloat f) (rd/makeAtom (stringFromFloat64 f)))
     ((a/litString s) (rd/makeAtom (quoteString s)))
@@ -39,7 +39,7 @@ fn lowerLit lit: a/AstLit -> rd/SExpr
     ((a/litUnit) (rd/makeList (list))))
 
 fn lowerPattern pat: a/AstPattern -> rd/SExpr
-  (mt pat
+  (match pat
     ((a/patWildcard) (rd/makeAtom "_"))
     ((a/patVar name) (rd/makeAtom name))
     ((a/patLit lit) (lowerLit lit))
@@ -47,22 +47,22 @@ fn lowerPattern pat: a/AstPattern -> rd/SExpr
     ((a/patRecord fields) (rd/makeList (cons (rd/makeAtom "record") (map (fn [(f (Pair String a/AstPattern))] -> rd/SExpr (rd/makeList (list (rd/makeAtom (pairFirst f)) (lowerPattern (pairSecond f))))) fields))))
     ((a/patCtor name arg)
      (cond
-       ((or (= name ":flat") (or (= name ":nested-list") (or (= name ":vect") (or (= name ":match") (= name ":multi")))))
-        (mt arg
+       ((or (= name ":flat") (or (= name ":nested-list") (or (= name ":vect") (= name ":multi"))))
+        (match arg
           ((some a) (lowerPattern a))
           ((none) (rd/makeAtom "_"))))
        (else
-        (mt arg
+        (match arg
           ((some a)
-           (mt a
+           (match a
              ((a/patTuple elements)
               (rd/makeList (cons (rd/makeAtom name) (map (fn [(p a/AstPattern)] -> rd/SExpr (lowerPattern p)) elements))))
              (_ (rd/makeList (list (rd/makeAtom name) (lowerPattern a))))))
           ((none) (rd/makeList (list (rd/makeAtom name)))))))))
 
 fn liftPattern s: rd/SExpr -> a/AstPattern
-  (mt s
-    ((rd/sexprAtom v) (if (= v "_") (a/patWildcard) (mt (liftLit v) ((some lit) (a/patLit lit)) ((none) (a/patVar v)))))
+  (match s
+    ((rd/sexprAtom v) (if (= v "_") (a/patWildcard) (match (liftLit v) ((some lit) (a/patLit lit)) ((none) (a/patVar v)))))
     ((rd/sexprVect items) (a/patTuple (map (fn [(it rd/SExpr)] -> a/AstPattern (liftPattern it)) items)))
     ((rd/sexprList items)
      (if (listEmpty? items) (a/patLit (a/litUnit))
@@ -82,14 +82,14 @@ fn liftPattern s: rd/SExpr -> a/AstPattern
                   (a/patCtor h (some (a/patTuple (map (fn [(it rd/SExpr)] -> a/AstPattern (liftPattern it)) args)))))))))))))
 
 fn lowerType t: a/AstType -> rd/SExpr
-  (mt t
+  (match t
     ((a/typeNamed name) (rd/makeAtom name))
     ((a/typeTuple elements) (rd/makeList (cons (rd/makeAtom "tuple") (map (fn [(e a/AstType)] -> rd/SExpr (lowerType e)) elements))))
     ((a/typeRecord fields) (rd/makeList (cons (rd/makeAtom "record") (map (fn [(f (Pair String a/AstType))] -> rd/SExpr (rd/makeList (list (rd/makeAtom (pairFirst f)) (lowerType (pairSecond f))))) fields))))
     ((a/typeFn paramTypes retType) (rd/makeList (list (rd/makeAtom "fn") (rd/makeVect (map (fn [(p a/AstType)] -> rd/SExpr (lowerType p)) paramTypes)) (rd/makeAtom "->") (lowerType retType)))))
 
 fn liftType s: rd/SExpr -> a/AstType
-  (mt s
+  (match s
     ((rd/sexprAtom v) (a/typeNamed v))
     ((rd/sexprVect items) (a/typeTuple (map (fn [(it rd/SExpr)] -> a/AstType (liftType it)) items)))
     ((rd/sexprList items)
@@ -111,10 +111,10 @@ fn liftType s: rd/SExpr -> a/AstType
            (else (a/typeNamed (rd/renderSexpr s))))))))
 
 fn isBraceOpen? s: rd/SExpr -> Bool
-  (mt s ((rd/sexprAtom v) (= v "{")) (_ false))
+  (match s ((rd/sexprAtom v) (= v "{")) (_ false))
 
 fn isBraceClose? s: rd/SExpr -> Bool
-  (mt s ((rd/sexprAtom v) (= v "}")) (_ false))
+  (match s ((rd/sexprAtom v) (= v "}")) (_ false))
 
 fn collectBraceGroupLoop items: (List rd/SExpr) depth: Int64 acc: (List rd/SExpr) -> (Pair (List rd/SExpr) (List rd/SExpr))
   (if (listEmpty? items)
@@ -137,7 +137,7 @@ fn isFullRecordList? items: (List rd/SExpr) -> Bool
             (isBraceClose? (optionOr (listGet items (- (listLength items) 1)) (rd/makeAtom "")))))
 
 fn groupRecordInSexpr s: rd/SExpr -> rd/SExpr
-  (mt s
+  (match s
     ((rd/sexprList items)
      (if (isFullRecordList? items)
        s
@@ -171,17 +171,17 @@ fn groupRecordTokens items: (List rd/SExpr) -> (List rd/SExpr)
     (groupRecordTokensLoop items (list)))
 
 fn lowerSpliced expr: a/AstExpr -> (List rd/SExpr)
-  (mt expr
+  (match expr
     ((a/exprRecord _ rawTokens)
      (let [(loweredInner (map (fn [(e a/AstExpr)] -> rd/SExpr (lowerExpr e)) rawTokens))]
        (cons (rd/makeAtom "{") (listAppend loweredInner (list (rd/makeAtom "}"))))))
     (_ (list (lowerExpr expr))))
 
 fn isTypedMarker? func: a/AstExpr -> Bool
-  (mt func ((a/exprIdent name) (= name ":typed")) (_ false))
+  (match func ((a/exprIdent name) (= name ":typed")) (_ false))
 
 fn lowerBindingValue val: a/AstExpr -> (List rd/SExpr)
-  (mt val
+  (match val
     ((a/exprCall func parts)
      (if (isTypedMarker? func)
        (fold (fn [(acc (List rd/SExpr)) (e a/AstExpr)] -> (List rd/SExpr) (listAppend acc (lowerSpliced e))) (list) parts)
@@ -197,11 +197,11 @@ fn lowerBindingFlat b: (Pair a/AstPattern a/AstExpr) -> (List rd/SExpr)
 fn lowerMatchArm arm: a/AstMatchArm -> rd/SExpr
   (let [(rawPat arm.pat)
         (body arm.body)]
-    (mt rawPat
+    (match rawPat
       ((a/patCtor name arg)
        (if (= name ":multi")
          (let [(patSexpr (lowerPattern (optionOr arg (a/patWildcard))))]
-           (mt body
+           (match body
              ((a/exprBlock exprs)
               (let [(bNodes (fold (fn [(acc (List rd/SExpr)) (e a/AstExpr)] -> (List rd/SExpr)
                                     (listAppend acc (lowerSpliced e)))
@@ -214,7 +214,7 @@ fn lowerMatchArm arm: a/AstMatchArm -> rd/SExpr
        (rd/makeList (cons (lowerPattern rawPat) (lowerSpliced body))))))
 
 fn lowerExpr expr: a/AstExpr -> rd/SExpr
-  (mt expr
+  (match expr
     ((a/exprLit lit) (lowerLit lit))
     ((a/exprIdent name) (rd/makeAtom name))
     ((a/exprMember target field) (rd/makeList (list (rd/makeAtom (str ".-" field)) (lowerExpr target))))
@@ -232,7 +232,7 @@ fn lowerExpr expr: a/AstExpr -> rd/SExpr
          (rd/makeList (cons (rd/makeAtom "let") (cons (rd/makeList (list)) bodyNodes)))
          (let [(firstB (optionOr (listHead bindings) (pair (a/patWildcard) (a/exprLit (a/litUnit)))))
                (firstPat (pairFirst firstB))]
-           (mt firstPat
+           (match firstPat
              ((a/patCtor name _)
               (cond
                 ((= name ":empty-list")
@@ -261,7 +261,7 @@ fn lowerExpr expr: a/AstExpr -> rd/SExpr
     ((a/exprIf cond thenBranch elseBranch)
      (let [(cNode (lowerExpr cond))
            (tNodes (lowerSpliced thenBranch))]
-       (mt elseBranch
+       (match elseBranch
          ((a/exprIdent name)
           (if (= name ":empty-else")
             (rd/makeList (cons (rd/makeAtom "if") (cons cNode tNodes)))
@@ -271,24 +271,15 @@ fn lowerExpr expr: a/AstExpr -> rd/SExpr
           (let [(eNodes (lowerSpliced elseBranch))]
             (rd/makeList (cons (rd/makeAtom "if") (cons cNode (listAppend tNodes eNodes)))))))))
     ((a/exprMatch target arms)
-     (let [(isMatchHead
-             (match (listHead arms)
-               ((some firstArm)
-                (match firstArm.pat
-                  ((a/patCtor name _) (= name ":match"))
-                  (_ false)))
-               ((none) false)))
-           (headStr (if isMatchHead "match" "mt"))
-           (armNodes (map lowerMatchArm arms))]
-       (rd/makeList (cons (rd/makeAtom headStr) (cons (lowerExpr target) armNodes)))))
+     (rd/makeList (cons (rd/makeAtom "match") (cons (lowerExpr target) (map lowerMatchArm arms)))))
     ((a/exprTry inner)
-     (mt inner
+     (match inner
        ((a/exprCall f args)
-        (mt f
+        (match f
           ((a/exprIdent n)
            (if (= n ":raw-try")
              (rd/makeList (list (rd/makeAtom "try") (lowerExpr (optionOr (listHead args) (a/exprLit (a/litUnit))))))
-             (rd/makeList (list (rd/makeAtom "mt") (lowerExpr inner)
+             (rd/makeList (list (rd/makeAtom "match") (lowerExpr inner)
                                 (rd/makeList (list (rd/makeList (list (rd/makeAtom "ok") (rd/makeAtom "__v"))) (rd/makeAtom "__v")))
                                 (rd/makeList (list (rd/makeList (list (rd/makeAtom "err") (rd/makeAtom "__e"))) (rd/makeList (list (rd/makeAtom "err") (rd/makeAtom "__e")))))))))
           (_ (rd/makeList (list (rd/makeAtom "try") (lowerExpr inner))))))
@@ -311,7 +302,7 @@ fn lowerExpr expr: a/AstExpr -> rd/SExpr
                              clauses))]
        (rd/makeList (cons (rd/makeAtom "cond") clauseNodes))))
     ((a/exprLambda params retType body rawParams)
-     (let [(retSexprs (mt retType ((some r) (list (rd/makeAtom "->") (rd/makeAtom r))) ((none) (list))))
+     (let [(retSexprs (match retType ((some r) (list (rd/makeAtom "->") (rd/makeAtom r))) ((none) (list))))
            (bodySexprs (map (fn [(b a/AstExpr)] -> rd/SExpr (lowerExpr b)) body))]
        (rd/makeList (cons (rd/makeAtom "fn") (cons rawParams (listAppend retSexprs bodySexprs))))))
     ((a/exprInterpolation parts)
@@ -359,7 +350,7 @@ fn liftFlatBindings items: (List rd/SExpr) -> (List (Pair a/AstPattern a/AstExpr
 
 fn liftNestedListBindings items: (List rd/SExpr) -> (List (Pair a/AstPattern a/AstExpr))
   (let [(pairs (map liftBindingPair items))]
-    (mt (listHead pairs)
+    (match (listHead pairs)
       ((some firstPair)
        (let [(firstPat (pairFirst firstPair))
              (markedPat (a/patCtor ":nested-list" (some firstPat)))
@@ -409,8 +400,8 @@ fn isDesugaredTryMatch? items: (List rd/SExpr) -> Bool
                                                  (= (rd/sexprHead (a/nthExpr p2Items 1)) (rd/sexprHead (a/nthExpr b2Items 1))))))))))))))))
 
 fn liftExpr s: rd/SExpr -> a/AstExpr
-  (mt s
-    ((rd/sexprAtom v) (mt (liftLit v) ((some lit) (a/exprLit lit)) ((none) (a/exprIdent v))))
+  (match s
+    ((rd/sexprAtom v) (match (liftLit v) ((some lit) (a/exprLit lit)) ((none) (a/exprIdent v))))
     ((rd/sexprVect items) (if (listEmpty? items) (a/exprBlock (list)) (a/exprBlock (map (fn [(it rd/SExpr)] -> a/AstExpr (liftExpr it)) items))))
     ((rd/sexprList rawItems)
      (if (listEmpty? rawItems) (a/exprLit (a/litUnit))
@@ -445,7 +436,7 @@ fn liftExpr s: rd/SExpr -> a/AstExpr
            ((and (rd/isAtom? headNode) (= h "let"))
             (let [(bindingsNode (a/nthExpr items 1))
                   (bindings
-                    (mt bindingsNode
+                    (match bindingsNode
                       ((rd/sexprVect vItems)
                        (if (listEmpty? vItems)
                          (list (pair (a/patCtor ":empty-vect" (none)) (a/exprLit (a/litUnit))))
@@ -466,31 +457,17 @@ fn liftExpr s: rd/SExpr -> a/AstExpr
                   (bodyNodes (if (> (listLength items) 2) (optionOr (listSlice items 2 (listLength items)) (list)) (list)))
                   (body (map (fn [(e rd/SExpr)] -> a/AstExpr (liftExpr e)) bodyNodes))]
               (a/exprLet bindings body)))
-           ((and (rd/isAtom? headNode) (or (= h "match") (= h "mt")))
+           ((and (rd/isAtom? headNode) (= h "match"))
             (if (isDesugaredTryMatch? items)
               (a/exprTry (liftExpr (a/nthExpr items 1)))
-              (let [(target (liftExpr (a/nthExpr items 1)))
-                    (rawArms (if (> (listLength items) 2) (optionOr (listSlice items 2 (listLength items)) (list)) (list)))
-                    (arms (map liftMatchArmForm rawArms))
-                    (markedArms
-                      (cond
-                        ((= h "match")
-                         (mt (listHead arms)
-                           ((some firstArm)
-                            (let [(firstPat firstArm.pat)
-                                  (mPat (a/patCtor ":match" (some firstPat)))
-                                  (mArm (a/matchArm mPat firstArm.body))
-                                  (tailArms (optionOr (listTail arms) (list)))]
-                              (cons mArm tailArms)))
-                           ((none) arms)))
-                        (else arms)))]
-                (a/exprMatch target markedArms))))
+              (a/exprMatch (liftExpr (a/nthExpr items 1))
+                           (map liftMatchArmForm (if (> (listLength items) 2) (optionOr (listSlice items 2 (listLength items)) (list)) (list))))))
            ((and (rd/isAtom? headNode) (= h "|>"))
             (let [(subExprs (a/tailExprs items))]
               (if (listEmpty? subExprs) (a/exprLit (a/litUnit))
                 (fold (fn [(acc a/AstExpr) (step rd/SExpr)] -> a/AstExpr
                         (let [(stepAst (liftExpr step))]
-                          (mt stepAst
+                          (match stepAst
                             ((a/exprCall f args) (a/exprCall f (cons acc args)))
                             (_ (a/exprCall stepAst (list acc))))))
                       (liftExpr (a/nthExpr subExprs 0)) (a/tailExprs subExprs)))))
@@ -508,7 +485,7 @@ fn lift s: rd/SExpr -> a/AstExpr
   (liftExpr (groupRecordInSexpr s))
 
 fn nthString items: (List rd/SExpr) i: Int64 -> String
-  (mt (listGet items i) ((some node) (mt node ((rd/sexprAtom v) v) (_ (rd/renderSexpr node)))) ((none) ""))
+  (match (listGet items i) ((some node) (match node ((rd/sexprAtom v) v) (_ (rd/renderSexpr node)))) ((none) ""))
 
 fn sexprToTopForm s: rd/SExpr -> (Result a/TopForm String)
   (let [(h (rd/sexprHead s))]
@@ -568,7 +545,7 @@ fn sexprToTopForm s: rd/SExpr -> (Result a/TopForm String)
       (else (err (str "Unrecognized declaration head: " h)))))
 
 fn topFormToSexpr tf: a/TopForm -> rd/SExpr
-  (mt tf
+  (match tf
     ((a/topDefun d)
      (let [(paramsSexpr (rd/makeVect (map (fn [(p a/Param)] -> rd/SExpr (rd/makeList (list (rd/makeAtom p.name) (rd/makeAtom p.type)))) d.params)))]
        (rd/makeList (listAppend (list (rd/makeAtom "fn") (rd/makeAtom d.name) paramsSexpr (rd/makeAtom "->") (rd/makeAtom d.retType)) d.body))))

@@ -22,47 +22,47 @@ fn ps1Header -> String
        (rule) "\n")
 
 fn ! readText! path: String -> (Result String String)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) (err (str "cannot read " path)))
     ((ok text) (ok (stringReplace (stringReplace text "\r\n" "\n") "\r" "\n"))))
 
 fn ! writeText! path: String text: String -> (Result Unit String)
-  (mt (fileWrite path text) ((err _) (err (str "cannot write " path))) ((ok _) (ok ())))
+  (match (fileWrite path text) ((err _) (err (str "cannot write " path))) ((ok _) (ok ())))
 
 fn ! stampPs1! root: String -> (Result Unit String)
   (let [(path (str root "/scripts/install.ps1"))]
     (if (not (fileExists? path))
       (ok ())
-      (mt (readText! path)
+      (match (readText! path)
         ((err e) (err e))
         ((ok current)
           (if (stringStartsWith? current (rule))
             (do (sys/say! "✓ scripts/install.ps1 synchronized with ASL Windows PowerShell target.") (ok ()))
-            (mt (writeText! path (str (ps1Header) current))
+            (match (writeText! path (str (ps1Header) current))
               ((err e) (err e))
               ((ok _) (do (sys/say! "✓ Generated scripts/install.ps1 from ASL Windows PowerShell target.") (ok ())))))))))
 
 fn ! syncInstallers! source: String dests: (List String) -> (Result Unit String)
-  (mt (listHead dests)
+  (match (listHead dests)
     ((none) (ok ()))
     ((some dest)
       (let [(rest (optionOr (listTail dests) (list)))]
         (if (not (and (fileExists? dest) (fileExists? source)))
           (syncInstallers! source rest)
-          (mt (readText! source)
+          (match (readText! source)
             ((err e) (err e))
             ((ok content)
-              (mt (writeText! dest content)
+              (match (writeText! dest content)
                 ((err e) (err e))
                 ((ok _) (do (sys/say! (str "✓ Synchronized distribution installer: " dest)) (syncInstallers! source rest))))))))))
 
 fn ! distrib! ctx: sys/Context -> Int64
   (let [(root ctx.root)
-        (result (mt (stampPs1! root)
+        (result (match (stampPs1! root)
                   ((err e) (err e))
                   ((ok _) (syncInstallers! (str root "/scripts/install.sh")
                                            (list (str root "/asl/web/public/install.sh") (str root "/asl/dist/install.sh") (str root "/asl/web/dist/install.sh"))))))]
-    (mt result
+    (match result
       ((err e) (do (sys/sayErr! (str "asl target distrib: " e)) 1))
       ((ok _) (do (sys/say! "✓ All distribution targets compiled and synchronized with ASL SSOT.") 0))))
 

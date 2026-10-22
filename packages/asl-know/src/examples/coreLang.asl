@@ -7,7 +7,7 @@ enum Shape
   (rect w: Int64 h: Int64)
 
 fn area s: Shape -> Int64
-  (mt s
+  (match s
     ((circle r) (* 3 (* r r)))
     ((rect w h) (* w h)))
 
@@ -32,4 +32,4 @@ fn ! selfTest -> Bool
       (and (= (area (rect 2 3)) 6) (= (area (circle 1)) 3) (= q.y 5) (= p.y 2)
            (= (describe 0) "zero") (= (total [1 2 3 4]) 7)
            (= (mapGetOr m "k" 0) 7)
-           (= (mt (mapGet m "z") ((some v) v) ((none) -1)) -1))))
+           (= (match (mapGet m "z") ((some v) v) ((none) -1)) -1))))

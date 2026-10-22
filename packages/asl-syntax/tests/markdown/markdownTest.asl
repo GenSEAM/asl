@@ -16,7 +16,7 @@ fn fetchCommonMarkSpec! scratchPath: String -> (Result Bool String)
         (res (processRun cmd))]
     (if (!= res.exitCode 0)
       (err (str "fetch failed (exit " (stringFromInt64 res.exitCode) "): " res.stderr))
-      (mt (fileReadBytes scratchPath)
+      (match (fileReadBytes scratchPath)
         ((err e) (err (str "read failed after fetch: " e)))
         ((ok bs)
          (let [(actualSha (bytesSha256 bs))
@@ -26,7 +26,7 @@ fn fetchCommonMarkSpec! scratchPath: String -> (Result Bool String)
              (ok true)))))))
 
 fn ensureCommonMarkSpec! scratchPath: String -> (Result Bool String)
-  (mt (fileReadBytes scratchPath)
+  (match (fileReadBytes scratchPath)
     ((ok bs)
      (let [(actualSha (bytesSha256 bs))
            (expectedSha "d431b29d97b6f73e69d547109cf5081578fac931e72afe95639ebe766c1b2a20")]
@@ -37,14 +37,14 @@ fn ensureCommonMarkSpec! scratchPath: String -> (Result Bool String)
      (fetchCommonMarkSpec! scratchPath)))
 
 fn testCommonMarkSpecFetchAndVerification! scratchPath: String -> Bool
-  (mt (ensureCommonMarkSpec! scratchPath)
+  (match (ensureCommonMarkSpec! scratchPath)
     ((err msg)
      (do
        (println (str "CommonMark spec 0.31.2 fetch failed (offline: skipped, never passed): " msg))
        (assert false (str "CommonMark spec fetch failed (offline: skipped, never passed): " msg))
        false))
     ((ok _)
-     (mt (fileReadBytes scratchPath)
+     (match (fileReadBytes scratchPath)
        ((err e) (do (assert false (str "read error on scratch spec: " e)) false))
        ((ok bs)
         (let [(actualSha (bytesSha256 bs))
@@ -68,7 +68,7 @@ fn checkFilesLoop! files: (List String) count: Int64 -> Int64
     count
     (let [(head (optionOr (listHead files) ""))
           (tail (optionOr (listTail files) (list)))]
-      (mt (fileReadString head)
+      (match (fileReadString head)
         ((err e)
          (do
            (assert false (str "read error on " head ": " e))
@@ -86,7 +86,7 @@ fn checkFilesLoop! files: (List String) count: Int64 -> Int64
                (checkFilesLoop! tail count))))))))
 
 fn testTrackedMarkdownRoundTrip! -> Bool
-  (mt (crp/gitTrackedFiles! "md")
+  (match (crp/gitTrackedFiles! "md")
     ((err msg) (do (assert false msg) false))
     ((ok files)
      (let [(total (listLength files))
@@ -113,7 +113,7 @@ fn formatSections secs: (List md/MarkdownSection) acc: (List String) -> String
       (formatSections rest (cons line acc))))
 
 fn getAslSections! path: String -> String
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) "")
     ((ok content)
      (let [(root (md/parseMarkdown content))
@@ -121,7 +121,7 @@ fn getAslSections! path: String -> String
        (formatSections secs (list)))))
 
 fn testSectionQueries! -> Bool
-  (mt (fileReadString "README.md")
+  (match (fileReadString "README.md")
     ((err _) false)
     ((ok content)
      (let [(hr (md/markdownHeadingRange content "Gates"))
@@ -131,7 +131,7 @@ fn testSectionQueries! -> Bool
          (assert (some? hr) "Gates heading range found")
          (assert (some? sr) "Gates section range found")
          (assert (some? secText) "Gates section content found")
-         (mt secText
+         (match secText
            ((some s)
             (do
               (assert (stringStartsWith? s "## Gates") "section content starts with heading")
@@ -150,17 +150,17 @@ fn isBlockSection? sec: String -> Bool
       (= sec "Blank lines"))))))))
 
 fn getJsonString obj: j/Json key: String -> String
-  (mt (j/jsonGet obj key)
+  (match (j/jsonGet obj key)
     ((some val)
-     (mt val
+     (match val
        ((j/jstr s) s)
        (_ "")))
     ((none) ""))
 
 fn getJsonInt obj: j/Json key: String -> Int64
-  (mt (j/jsonGet obj key)
+  (match (j/jsonGet obj key)
     ((some val)
-     (mt val
+     (match val
        ((j/jint i) i)
        (_ 0)))
     ((none) 0))
@@ -187,20 +187,20 @@ fn checkExamplesLoop items: (List j/Json) totalTested: Int64 passCount: Int64 ->
               (checkExamplesLoop tail (+ totalTested 1) passCount)))))))
 
 fn testCommonMarkSubset! scratchPath: String -> Bool
-  (mt (ensureCommonMarkSpec! scratchPath)
+  (match (ensureCommonMarkSpec! scratchPath)
     ((err msg)
      (do
        (println (str "CommonMark spec 0.31.2 unavailable (offline: skipped, never passed): " msg))
        (assert false (str "CommonMark spec unavailable (offline: skipped, never passed): " msg))
        false))
     ((ok _)
-     (mt (fileReadString scratchPath)
+     (match (fileReadString scratchPath)
        ((err e) (do (assert false (str "read error on scratch spec: " e)) false))
        ((ok content)
         (let [(parseRes (j/jsonParse content))]
           (do
             (assert (ok? parseRes) "spec.json parses")
-            (mt (resultOr parseRes (j/jnull))
+            (match (resultOr parseRes (j/jnull))
               ((j/jarr items)
                (let [(res (checkExamplesLoop items 0 0))
                      (tested (pairFirst res))

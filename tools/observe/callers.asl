@@ -28,7 +28,7 @@ fn putFound found: (h/HMap ai/Mention) accounted: (h/HMap Bool) m: ai/Mention ->
   (let [(k (keyOf m.rel m.line))]
     (if (h/hmHas? accounted k)
       found
-      (mt (h/hmGet found k)
+      (match (h/hmGet found k)
         ((none) (h/hmPut found k m))
         ((some cur) (if (< (rankOf m.why) (rankOf cur.why)) (h/hmPut found k m) found)))))
 
@@ -43,12 +43,12 @@ fn textMentions! root: String files: (List String) sym: String accounted: (h/HMa
           (if (not (listContains? (textExt) (stringLower (pairSecond (c/splitExt rel)))))
             acc
             (let [(full (c/joinPath root rel))]
-              (mt (fileStat full)
+              (match (fileStat full)
                 ((err _) acc)
                 ((ok st)
                   (if (> st.size (textMaxBytes))
                     acc
-                    (mt (fileReadString full)
+                    (match (fileReadString full)
                       ((err _) acc)
                       ((ok text)
                         (if (or (not (stringContains? text sym)) (not (c/utf8Valid? text)))
@@ -67,16 +67,16 @@ fn sortMentions ms: (List ai/Mention) -> (List ai/Mention)
   (listSortBy mentionKey ms)
 
 fn dedupeMentions ms: (List ai/Mention) acc: (List ai/Mention) -> (List ai/Mention)
-  (mt (listHead ms)
+  (match (listHead ms)
     ((none) (listReverse acc))
     ((some m) (dedupeMentions (optionOr (listTail ms) (list))
-                              (if (mt (listHead acc) ((some h) (= (mentionKey h) (mentionKey m))) ((none) false)) acc (cons m acc)))))
+                              (if (match (listHead acc) ((some h) (= (mentionKey h) (mentionKey m))) ((none) false)) acc (cons m acc)))))
 
 fn sortedSet ms: (List ai/Mention) -> (List ai/Mention)
   (dedupeMentions (sortMentions ms) (list))
 
 fn firstPerLine ms: (List ai/Mention) seen: (h/HMap Bool) acc: (List ai/Mention) -> (List ai/Mention)
-  (mt (listHead ms)
+  (match (listHead ms)
     ((none) (listReverse acc))
     ((some m) (let [(k (keyOf m.rel m.line))]
                 (if (h/hmHas? seen k)
@@ -88,8 +88,8 @@ fn callKey r: ai/CallRow -> String
 
 fn callForm ambiguous: Bool r: ai/CallRow -> String
   (str "(:at " (c/atStr r.rel r.line) " :kind " r.kind
-       (mt r.via ((some v) (if (stringEmpty? v) "" (str " :via " (c/quoted v)))) ((none) ""))
-       (mt r.through ((some t) (str " :through " t)) ((none) ""))
+       (match r.via ((some v) (if (stringEmpty? v) "" (str " :via " (c/quoted v)))) ((none) ""))
+       (match r.through ((some t) (str " :through " t)) ((none) ""))
        (if (and ambiguous (not (stringEmpty? r.of))) (str " :of " (c/quoted r.of)) "")
        ")")
 
@@ -154,15 +154,15 @@ fn pyCallKey cs: p/CallSite -> String
 
 fn pyCallForm ambiguous: Bool pi: p/PyIndex cs: p/CallSite -> String
   (str "(:at " (c/atStr cs.rel cs.line) " :kind " cs.kind
-       (mt cs.via ((some v) (if (stringEmpty? v) "" (str " :via " (c/quoted v)))) ((none) ""))
-       (mt cs.through ((some t) (if (stringEmpty? t) "" (str " :through " t))) ((none) ""))
+       (match cs.via ((some v) (if (stringEmpty? v) "" (str " :via " (c/quoted v)))) ((none) ""))
+       (match cs.through ((some t) (if (stringEmpty? t) "" (str " :through " t))) ((none) ""))
        (if (and ambiguous (not (stringEmpty? (p/keyMod cs.callee)))) (str " :of " (c/quoted (p/keyMod cs.callee))) "")
        ")")
 
 fn dynHit? targets: (List p/PyDef) dy: p/Dyn -> Bool
   (listAny? (fn [(dd p/PyDef)] -> Bool
               (or (and (= dy.tag "mod") (= dd.modName dy.base) (listContains? (list "function" "class" "lambda") dd.kind))
-                  (and (= dy.tag "inst") (mt dd.cls ((some cq) (= (p/defKey dd.modName cq) dy.base)) ((none) false)))))
+                  (and (= dy.tag "inst") (match dd.cls ((some cq) (= (p/defKey dd.modName cq) dy.base)) ((none) false)))))
             targets)
 
 fn defLineKey dd: p/PyDef -> String
@@ -198,7 +198,7 @@ fn ! callersOver! root: String files: (List String) pi: p/PyIndex symbol: String
             (excludedAll (sortMentions (h/hmValues found)))
             (excluded (listAppend excludedAll (sortedSet res.excluded)))
             (possible (listAppend (firstPerLine (sortedSet (listAppend poss2 ms.possible)) (h/hmEmpty) (list)) (sortedSet res.possible)))
-            (aslDefMods (map (fn [(d0 (Pair String Int64))] -> String (optionOr (mt (listHead (filter (fn [(m ai/AslMod)] -> Bool (= m.rel (pairFirst d0))) index.mods)) ((some m) (some m.name)) ((none) (none))) "")) res.defs))
+            (aslDefMods (map (fn [(d0 (Pair String Int64))] -> String (optionOr (match (listHead (filter (fn [(m ai/AslMod)] -> Bool (= m.rel (pairFirst d0))) index.mods)) ((some m) (some m.name)) ((none) (none))) "")) res.defs))
             (defMods (c/sortUnique (listAppend (map (fn [(dd p/PyDef)] -> String dd.modName) targets) aslDefMods)))
             (ambiguous (> (listLength defMods) 1))
             (callItems (listAppend (map (fn [(cs p/CallSite)] -> String (pyCallForm ambiguous pi cs)) calls)
@@ -208,12 +208,12 @@ fn ! callersOver! root: String files: (List String) pi: p/PyIndex symbol: String
                              (listSortBy defLineKey targets))
                         (map (fn [(d0 (Pair String Int64))] -> String
                                (str "(:at " (c/atStr (pairFirst d0) (pairSecond d0)) " :kind fn :module "
-                                    (c/quoted (optionOr (mt (listHead (filter (fn [(m ai/AslMod)] -> Bool (= m.rel (pairFirst d0))) index.mods)) ((some m) (some m.name)) ((none) (none))) "")) ")"))
+                                    (c/quoted (optionOr (match (listHead (filter (fn [(m ai/AslMod)] -> Bool (= m.rel (pairFirst d0))) index.mods)) ((some m) (some m.name)) ((none) (none))) "")) ")"))
                              res.defs)))
             (possItems (map (fn [(m ai/Mention)] -> String (str "(:at " (c/atStr m.rel m.line) " :why " (c/quoted m.why) ")")) possible))
             (exclItems (map (fn [(m ai/Mention)] -> String (str "(:at " (c/atStr m.rel m.line) " :why " m.why ")")) excluded))
             (langs (c/joinWith (listAppend (if (listEmpty? (h/omValues pi.ix.mods)) (list) (list "python")) (if (listEmpty? index.mods) (list) (list "asl"))) " "))]
-        (mt (c/shortRev! root ctx)
+        (match (c/shortRev! root ctx)
           ((err e) (err e))
           ((ok rev)
             (let [(head (str "(:observe :dim callers :v 1 :symbol " (c/quoted symbol) (if (stringEmpty? module) "" (str " :module " (c/quoted module)))
@@ -232,12 +232,12 @@ fn ! callersOver! root: String files: (List String) pi: p/PyIndex symbol: String
 
 fn ! observeCallers! root: String symbolArg: String moduleArg: String limit: Int64 ctx: c/Ctx -> (Pair String (Result String String))
   (let [(sm (splitSymbol symbolArg moduleArg)) (symbol (pairFirst sm)) (module (pairSecond sm))]
-    (mt (c/workspaceFiles! root ctx)
+    (match (c/workspaceFiles! root ctx)
       ((err e) (pair "" (err e)))
       ((ok files)
-        (mt (p/buildPyIndex root (str "=" (p/lastSeg symbol)) files ctx)
+        (match (p/buildPyIndex root (str "=" (p/lastSeg symbol)) files ctx)
           ((err e) (pair "" (err e)))
           ((ok b)
-            (mt b
+            (match b
               ((p/pyAbsent why) (pair "" (err (absentLine "callers" why))))
               ((p/built pi) (pair pi.warnings (callersOver! root files pi symbol module limit ctx)))))))))

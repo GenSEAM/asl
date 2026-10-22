@@ -82,13 +82,13 @@ fn defOfLine raw: String -> (Option String)
             (if (= e sp) (none) (some (sliceOf raw sp e))))))))
 
 fn pairGet kv: (List (Pair String Int64)) k: String -> (Option Int64)
-  (mt (listHead (filter (fn [(p (Pair String Int64))] -> Bool (= (pairFirst p) k)) kv)) ((some p) (some (pairSecond p))) ((none) (none)))
+  (match (listHead (filter (fn [(p (Pair String Int64))] -> Bool (= (pairFirst p) k)) kv)) ((some p) (some (pairSecond p))) ((none) (none)))
 
 fn strGet kv: (List (Pair String String)) k: String -> (Option String)
   (c/mapGetOr kv k)
 
 fn optGet kv: (List (Pair String (Option String))) k: String -> (Option String)
-  (mt (listHead (filter (fn [(p (Pair String (Option String)))] -> Bool (= (pairFirst p) k)) kv)) ((some p) (pairSecond p)) ((none) (none)))
+  (match (listHead (filter (fn [(p (Pair String (Option String)))] -> Bool (= (pairFirst p) k)) kv)) ((some p) (pairSecond p)) ((none) (none)))
 
 fn setKv kv: (List (Pair String String)) k: String v: String -> (List (Pair String String))
   (if (some? (strGet kv k)) (map (fn [(p (Pair String String))] -> (Pair String String) (if (= (pairFirst p) k) (pair k v) p)) kv) (listAppend kv (list (pair k v))))
@@ -104,7 +104,7 @@ fn defsLoop text: String bs: Bytes i: Int64 n: Int64 line: Int64 acc: (List (Pai
     acc
     (let [(e (lineEnd bs i n))
           (acc2 (if (and (< i n) (defStart? (bytesGet bs i)))
-                  (mt (defOfLine (sliceOf text i e))
+                  (match (defOfLine (sliceOf text i e))
                     ((some name) (if (some? (pairGet acc name)) acc (cons (pair name line) acc)))
                     ((none) acc))
                   acc))]
@@ -123,22 +123,22 @@ fn tail xs: (List Tok) -> (List Tok)
   (optionOr (listTail xs) (list))
 
 fn headKind xs: (List Tok) -> String
-  (mt (listHead xs) ((some t) t.kind) ((none) ""))
+  (match (listHead xs) ((some t) t.kind) ((none) ""))
 
 fn headVal xs: (List Tok) -> String
-  (mt (listHead xs) ((some t) t.val) ((none) ""))
+  (match (listHead xs) ((some t) t.val) ((none) ""))
 
 (schema Imp (:f rest (List Tok)) (:f alias (Option String)) (:f named (List (Pair String String))) (:f imported (List Int64)))
 
 fn namedAtoms toks: (List Tok) target: String named: (List (Pair String String)) imported: (List Int64) -> Imp
-  (mt (listHead toks)
+  (match (listHead toks)
     ((some t) (if (= t.kind "atom")
                 (namedAtoms (tail toks) target (setKv named t.val target) (cons t.idx imported))
                 (Imp :rest toks :alias (none) :named named :imported imported)))
     ((none) (Imp :rest toks :alias (none) :named named :imported imported)))
 
 fn importForm toks: (List Tok) target: String st: Imp -> Imp
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (with st :rest (list)))
     ((some t)
       (if (= t.kind ")")
@@ -153,7 +153,7 @@ fn importForm toks: (List Tok) target: String st: Imp -> Imp
 fn hdrLoop toks: (List Tok) depth: Int64 key: String h: Hdr -> Hdr
   (if (<= depth 0)
     h
-    (mt (listHead toks)
+    (match (listHead toks)
       ((none) h)
       ((some t)
         (let [(kind t.kind) (val t.val) (imp? (or (= key ":i") (= key ":import")))]
@@ -175,7 +175,7 @@ fn hdrLoop toks: (List Tok) depth: Int64 key: String h: Hdr -> Hdr
             (else (hdrLoop (tail toks) depth key h)))))))
 
 fn header toks: (List Tok) -> Hdr
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (emptyHdr))
     ((some t0)
       (let [(r1 (tail toks)) (r2 (tail r1))]
@@ -221,14 +221,14 @@ fn moduleOf idx: (h/HMap (List AslMod)) near: Near target: String importer: Stri
   (let [(parts (let [(ps (stringSplit importer "/"))] (listTake ps (- (listLength ps) 1))))
         (names (cons target (map (fn [(k Int64)] -> String (c/joinWith (listAppend (listTake parts k) (list target)) "/")) (listReverse (range 1 (+ (listLength parts) 1))))))
         (hit (listHead (filter (fn [(nm String)] -> Bool (not (listEmpty? (byNameGet idx nm)))) names)))]
-    (mt hit
+    (match hit
       ((some nm) (some (bestNear (byNameGet idx nm) importerRel)))
       ((none)
         (let [(cands (c/sortUnique (listAppend (optionOr (h/hmGet near.suffix target) (list)) (optionOr (h/hmGet near.stem target) (list)))))]
           (if (= (listLength cands) 1) (listHead cands) (none))))))
 
 fn loadMod! root: String rel: String sym: String -> (Option AslMod)
-  (mt (fileReadString (c/joinPath root rel))
+  (match (fileReadString (c/joinPath root rel))
     ((err _) (none))
     ((ok raw)
       (if (not (c/utf8Valid? raw))
@@ -240,7 +240,7 @@ fn loadMod! root: String rel: String sym: String -> (Option AslMod)
 
 fn buildAslIndex! root: String files: (List String) sym: String -> AslIndex
   (let [(mods0 (fold (fn [(acc (List AslMod)) (rel String)] -> (List AslMod)
-                       (if (stringEndsWith? rel ".asl") (mt (loadMod! root rel sym) ((some m) (cons m acc)) ((none) acc)) acc))
+                       (if (stringEndsWith? rel ".asl") (match (loadMod! root rel sym) ((some m) (cons m acc)) ((none) acc)) acc))
                      (list) files))
         (mods1 (listReverse mods0))
         (byName (fold byNameAdd (h/hmEmpty) mods1))
@@ -281,12 +281,12 @@ fn beforeSlash val: String -> String
 (schema Walk (:f frames (List (Option String))) (:f calls (List CallRow)) (:f possible (List Mention)) (:f excluded (List Mention)) (:f prev (Option Tok)))
 
 fn modNameOf ai: AslIndex rel: String -> String
-  (mt (listHead (filter (fn [(m AslMod)] -> Bool (= m.rel rel)) ai.mods)) ((some m) m.name) ((none) ""))
+  (match (listHead (filter (fn [(m AslMod)] -> Bool (= m.rel rel)) ai.mods)) ((some m) m.name) ((none) ""))
 
 fn onAtom ai: AslIndex m: AslMod sym: String targets: (List String) defLine: (Option Int64) t: Tok w: Walk -> Walk
   (let [(val t.val) (line t.line) (rel m.rel)
-        (prevAtomKw (mt w.prev ((some p) (and (= p.kind "atom") (listContains? (list "fn" "defn" "const" "test") p.val))) ((none) false)))
-        (isDef (and prevAtomKw (mt defLine ((some d) (= d line)) ((none) false))))
+        (prevAtomKw (match w.prev ((some p) (and (= p.kind "atom") (listContains? (list "fn" "defn" "const" "test") p.val))) ((none) false)))
+        (isDef (and prevAtomKw (match defLine ((some d) (= d line)) ((none) false))))
         (ex (fn [(why String)] -> Walk (with w :excluded (cons (Mention :rel rel :line line :why why) w.excluded) :prev (some t))))
         (po (fn [(why String)] -> Walk (with w :possible (cons (Mention :rel rel :line line :why why) w.possible) :prev (some t))))
         (same (with w :prev (some t)))]
@@ -303,7 +303,7 @@ fn onAtom ai: AslIndex m: AslMod sym: String targets: (List String) defLine: (Op
                          (pair tr (if (= (optionOr tr "\x00") rel) (none) (some (str "import " (optionOr (strGet m.named sym) "")))))))
                      (else (pair (none) (none)))))
               (targetRel (pairFirst res)) (via (pairSecond res))]
-          (mt targetRel
+          (match targetRel
             ((none)
               (cond
                 ((or (= val sym) (= (afterSlash val) sym))
@@ -317,8 +317,8 @@ fn onAtom ai: AslIndex m: AslMod sym: String targets: (List String) defLine: (Op
                 ((not (listContains? targets tr)) (ex "otherDefinition"))
                 (isDef same)
                 (else
-                  (let [(isHead (and (mt w.prev ((some p) (= p.kind "(")) ((none) false))
-                                     (mt (listHead w.frames) ((some fh) (= (optionOr fh "\x00") val)) ((none) false))))]
+                  (let [(isHead (and (match w.prev ((some p) (= p.kind "(")) ((none) false))
+                                     (match (listHead w.frames) ((some fh) (= (optionOr fh "\x00") val)) ((none) false))))]
                     (if (not isHead)
                       (po "value reference")
                       (let [(ctx (listAny? (fn [(h (Option String))] -> Bool (= (optionOr h "") "fn")) (optionOr (listTail w.frames) (list))))
@@ -328,7 +328,7 @@ fn onAtom ai: AslIndex m: AslMod sym: String targets: (List String) defLine: (Op
                         (with w :calls (cons row w.calls) :prev (some t)))))))))))))
 
 fn walkToks ai: AslIndex m: AslMod sym: String targets: (List String) defLine: (Option Int64) toks: (List Tok) w: Walk -> Walk
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) w)
     ((some t)
       (let [(rest (tail toks)) (kind t.kind)]
@@ -348,7 +348,7 @@ fn aslCallers ai: AslIndex sym: String module: String -> AslCallers
                                 (filter (fn [(m AslMod)] -> Bool (and (some? (pairGet m.defs sym))
                                                                       (or (stringEmpty? module) (= module m.rel) (= module m.name) (stringEndsWith? m.name (str "/" module)))))
                                         ai.mods))))
-        (defs (map (fn [(rel String)] -> (Pair String Int64) (pair rel (optionOr (mt (listHead (filter (fn [(m AslMod)] -> Bool (= m.rel rel)) ai.mods)) ((some m) (pairGet m.defs sym)) ((none) (none))) 0))) targets))
+        (defs (map (fn [(rel String)] -> (Pair String Int64) (pair rel (optionOr (match (listHead (filter (fn [(m AslMod)] -> Bool (= m.rel rel)) ai.mods)) ((some m) (pairGet m.defs sym)) ((none) (none))) 0))) targets))
         (sorted (listSortBy (fn [(m AslMod)] -> String m.rel) (filter (fn [(m AslMod)] -> Bool m.full) ai.mods)))
         (w (fold (fn [(acc Walk) (m AslMod)] -> Walk
                    (let [(r (walkToks ai m sym targets (pairGet m.defs sym) m.toks (Walk :frames (list) :calls acc.calls :possible acc.possible :excluded acc.excluded :prev (none))))]

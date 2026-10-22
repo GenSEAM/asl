@@ -15,13 +15,13 @@ fn loci diags: (List ty/IrDiag) -> (List String)
   (map (fn [(d ty/IrDiag)] -> String d.locus) diags)
 
 fn printed res: (Result ty/SsaModule (List ty/IrDiag)) -> String
-  (mt res ((ok m) (prn/printSsa m)) ((err ds) (str "lowering failed: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message " " d.locus)) ds) "; "))))
+  (match res ((ok m) (prn/printSsa m)) ((err ds) (str "lowering failed: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message " " d.locus)) ds) "; "))))
 
 fn verified? res: (Result ty/SsaModule (List ty/IrDiag)) -> Bool
-  (mt res ((ok m) (ok? (vfy/verifySsa m))) ((err _) false))
+  (match res ((ok m) (ok? (vfy/verifySsa m))) ((err _) false))
 
 fn diagsOf res: (Result ty/SsaModule (List ty/IrDiag)) -> (List ty/IrDiag)
-  (mt res ((ok _) (list)) ((err ds) ds))
+  (match res ((ok _) (list)) ((err ds) ds))
 
 fn fibSource -> String
   (joinLines (list
@@ -245,7 +245,7 @@ fn fallSource -> String
     "  (cond ((= n 1) 10) ((= n 2) 20)))"
     ""
     "(fn first [(o (Option Int64))] -> Int64"
-    "  (mt o (_ 1) ((some x) x) ((none) 0)))"))
+    "  (match o (_ 1) ((some x) x) ((none) 0)))"))
 
 fn fallGolden -> String
   (joinLines (list
@@ -301,7 +301,7 @@ fn hostBuiltinSource -> String
     ""
     "(fn lineCount [(xs I64Array) (key String)] -> Int64"
     "  (+ (i64ArrayLen (i64ArrayConcat (list xs (i64ArrayGenerate 2 (fn [(i Int64)] -> Int64 i)))))"
-    "     (+ (i64ArrayGet xs 0) (mt (envGet key) ((some _) 1) ((none) 0)))))"
+    "     (+ (i64ArrayGet xs 0) (match (envGet key) ((some _) 1) ((none) 0)))))"
     "(fn network [(port Int64) (path String)] -> (Result Int64 String)"
     "  (do (tcpListen port) (tcpConnect port) (sockAccept port) (sockLocalPort port) (unixListen path) (unixConnect path)))"))
 
@@ -391,16 +391,16 @@ fn typedSource -> String
     "  (map bump xs))"
     ""
     "(fn head [(xs (List String))] -> String"
-    "  (mt (listHead xs) ((some x) x) ((none) \"\")))"
+    "  (match (listHead xs) ((some x) x) ((none) \"\")))"
     ""
     "(fn rest [(xs (List String))] -> (List String)"
-    "  (mt (listTail xs) ((some t) t)))"
+    "  (match (listTail xs) ((some t) t)))"
     ""
     "(fn known [(n Int64) (o (Option Int64))] -> Bool"
-    "  (mt o ((some v) (< n v)) ((none) false)))"
+    "  (match o ((some v) (< n v)) ((none) false)))"
     ""
     "(fn eqVal [(n Int64) (o (Option Int64))] -> Bool"
-    "  (mt o ((some v) (= v n)) ((none) false)))"
+    "  (match o ((some v) (= v n)) ((none) false)))"
     ""
     "(fn neg [(n Int64) (x Float64)] -> Float64"
     "  (if (< (- n) 0) (- x) x))"

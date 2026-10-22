@@ -72,11 +72,11 @@ fn concatAll parts: (List String) -> String
     (concatAll (pairUp parts (list))))
 
 fn pairUp parts: (List String) acc: (List String) -> (List String)
-  (mt (listHead parts)
+  (match (listHead parts)
     ((none) (listReverse acc))
     ((some a)
       (let [(rest (optionOr (listTail parts) (list)))]
-        (mt (listHead rest)
+        (match (listHead rest)
           ((none) (listReverse (cons a acc)))
           ((some b) (pairUp (optionOr (listTail rest) (list)) (cons (stringConcat a b) acc)))))))
 
@@ -187,7 +187,7 @@ fn seqTrueAt head: String i: Int64 -> Bool
 
 fn seqScan head: String from: Int64 -> Bool
   (let [(rest (optionOr (stringSlice head from (stringLength head)) ""))]
-    (mt (stringIndexOf rest ":seq")
+    (match (stringIndexOf rest ":seq")
       ((none) false)
       ((some p) (or (seqTrueAt head (+ from p)) (seqScan head (+ from p 1))))))
 
@@ -249,17 +249,17 @@ fn lstripColons s: String -> String
   (if (stringStartsWith? s ":") (lstripColons (optionOr (stringSlice s 1 (stringLength s)) "")) s)
 
 fn parseArgs toks: (List String) kw: (Map String String) args: (List String) -> (Pair (Map String String) (List String))
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (pair kw (listReverse args)))
     ((some tok)
       (let [(rest (optionOr (listTail toks) (list)))]
         (if (stringStartsWith? tok ":")
           (let [(key (lstripColons tok))]
-            (mt (listHead rest)
+            (match (listHead rest)
               ((none) (parseArgs rest (mapSet kw key "true") args))
               ((some nextTok)
                 (let [(after (optionOr (listTail rest) (list)))
-                      (hasSubArg (mt (listHead after) ((none) false) ((some t2) (not (stringStartsWith? t2 ":")))))
+                      (hasSubArg (match (listHead after) ((none) false) ((some t2) (not (stringStartsWith? t2 ":")))))
                       (takes (or (not (stringStartsWith? nextTok ":"))
                                  (and (not hasSubArg) (or (subArgKey? key) (listEmpty? after)))))]
                   (if takes
@@ -273,7 +273,7 @@ fn parseStep stepStr: String -> ParsedStep
              (stringTrim (optionOr (stringSlice t 1 (- (stringLength t) 1)) ""))
              t))
         (toks (tokenize s 0 (stringLength s) (list)))]
-    (mt (listHead toks)
+    (match (listHead toks)
       ((none) (ParsedStep :op "" :kwargs (mapEmpty) :args (list)))
       ((some first)
         (let [(parsed (parseArgs (optionOr (listTail toks) (list)) (mapEmpty) (list)))]
@@ -284,7 +284,7 @@ fn kwOr kw: (Map String String) key: String fallback: String -> String
     (if (stringEmpty? v) fallback v))
 
 fn normParts parts: (List String) isAbs: Bool acc: (List String) -> (List String)
-  (mt (listHead parts)
+  (match (listHead parts)
     ((none) (listReverse acc))
     ((some p)
       (let [(rest (optionOr (listTail parts) (list)))]
@@ -322,10 +322,10 @@ fn baseName p: String -> String
   (optionOr (stringSlice p (+ (lastSlash p (- (stringLength p) 1)) 1) (stringLength p)) "")
 
 fn commonLen a: (List String) b: (List String) n: Int64 -> Int64
-  (mt (listHead a)
+  (match (listHead a)
     ((none) n)
     ((some x)
-      (mt (listHead b)
+      (match (listHead b)
         ((none) n)
         ((some y) (if (= x y) (commonLen (optionOr (listTail a) (list)) (optionOr (listTail b) (list)) (+ n 1)) n)))))
 
@@ -344,10 +344,10 @@ fn relToRoot root: String p: String -> String
   (relPath p root)
 
 fn isFile! p: String -> Bool
-  (mt (fileStat p) ((ok st) st.isFile) ((err _) false))
+  (match (fileStat p) ((ok st) st.isFile) ((err _) false))
 
 fn isDir! p: String -> Bool
-  (mt (fileStat p) ((ok st) st.isDir) ((err _) false))
+  (match (fileStat p) ((ok st) st.isDir) ((err _) false))
 
 fn existingProbe! p: String -> String
   (if (fileExists? p)
@@ -386,7 +386,7 @@ fn excludedEditDir? name: String -> Bool
   (or (= name ".git") (= name "node_modules") (= name ".asl"))
 
 fn findNamed! dir: String target: String acc: (List String) -> (List String)
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err _) acc)
     ((ok names)
       (fold (fn [(a (List String)) (name String)] -> (List String)

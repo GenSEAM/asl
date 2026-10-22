@@ -6,16 +6,16 @@ fn ! tempRoot -> String
   (str "/tmp/asl1BootstrapTest_" (stringFromInt64 (monotonicNs)))
 
 fn ! main -> (Result Int64 String)
-  (mt (envGet "ASL1_BOOT_ROOT")
+  (match (envGet "ASL1_BOOT_ROOT")
     ((none) (err "missing ASL1_BOOT_ROOT"))
     ((some root)
-      (mt (envGet "ASL1_FAKE_HOST")
+      (match (envGet "ASL1_FAKE_HOST")
         ((none) (err "missing ASL1_FAKE_HOST"))
         ((some fakeHost)
-          (mt (envGet "ASL1_FAKE_CLANG")
+          (match (envGet "ASL1_FAKE_CLANG")
             ((none) (err "missing ASL1_FAKE_CLANG"))
             ((some clang)
-              (mt (sys/context!)
+              (match (sys/context!)
                 ((err e) (err e))
                 ((ok original)
                   (let [(ctx (sys/Context :root (optionOr (envGet "ASL1_CTX_ROOT") original.root)
@@ -24,10 +24,10 @@ fn ! main -> (Result Int64 String)
                               :hostBin fakeHost))
                         (compiler (str root "/asl/packages/asl-compiler/src/asl1.asl"))
                         (lib (str root "/asl/packages/asl-compiler/src/asl1.asl"))]
-                    (mt (envGet "ASL1_EXPECT")
+                    (match (envGet "ASL1_EXPECT")
                       ((none) (err "missing ASL1_EXPECT"))
                       ((some expected)
-                        (mt (cache/nativeAsl1! ctx lib clang)
+                        (match (cache/nativeAsl1! ctx lib clang)
                           ((err e) (if (or (or (and (= expected "missing") (= e "ERR_NO_NATIVE_SEED"))
                                                (and (= expected "stageFailed") (= e "native asl1 stage failed (exit 7)")))
                                            (or (or (and (= expected "retried") (stringContains? e "native asl1 stage failed (exit 7); retried from the seed: native asl1 stage failed (exit 7)"))
@@ -46,30 +46,30 @@ fn ! cleanup path: String passed: Bool -> Bool
   (do (pathRemove path) passed)
 
 fn ! emptyDirectory? path: String -> Bool
-  (mt (sys/capture! (list "ls" "-A" path) (none))
+  (match (sys/capture! (list "ls" "-A" path) (none))
     ((err _) false)
     ((ok captured) (and (= captured.exitCode 0) (stringEmpty? (sys/stripTrailingNewlines captured.stdout)))))
 
 fn ! onlyEmptyCacheEntry? path: String -> Bool
-  (mt (sys/capture! (list "ls" "-A" path) (none))
+  (match (sys/capture! (list "ls" "-A" path) (none))
     ((err _) false)
     ((ok listing)
       (let [(entries (stringLines (sys/stripTrailingNewlines listing.stdout)))]
         (and (= listing.exitCode 0)
           (and (= (listLength entries) 1)
-            (mt (listHead entries)
+            (match (listHead entries)
               ((none) false)
               ((some entry)
-                (mt (sys/capture! (list "ls" "-A" (str path "/" entry)) (none))
+                (match (sys/capture! (list "ls" "-A" (str path "/" entry)) (none))
                   ((err _) false)
                   ((ok files) (and (= files.exitCode 0)
                     (= (sys/stripTrailingNewlines files.stdout) "build.lock.takeover")))))))))))
 
 fn ! hasInstalledNative? path: String -> Bool
-  (mt (sys/capture! (list "ls" "-A" path) (none))
+  (match (sys/capture! (list "ls" "-A" path) (none))
     ((err _) false)
     ((ok listing)
-      (mt (listHead (stringLines (sys/stripTrailingNewlines listing.stdout)))
+      (match (listHead (stringLines (sys/stripTrailingNewlines listing.stdout)))
         ((none) false)
         ((some entry)
           (and (fileExists? (str path "/" entry "/asl1-native"))
@@ -119,18 +119,18 @@ fn ! testColdBootstrapRequiresSeedBeforeStages -> Bool
           "chmod +x \"$out\"\n"
           "exit 0\n")))
         (seedWritten (fileWrite seedFixture seedScript))
-        (seedMode (mt seedWritten ((err e) (err e)) ((ok _) (fileChmod seedFixture 493))))
+        (seedMode (match seedWritten ((err e) (err e)) ((ok _) (fileChmod seedFixture 493))))
         (nativeWritten (fileWrite (str fixture "/native-compiler") nativeScript))
         (failingNativeWritten (fileWrite (str fixture "/failing-native-compiler") failingNativeScript))
         (alternateSourceWritten (fileWrite alternateSource "(module fixture/alternateAsl1)\n"))
-        (nativeMode (mt nativeWritten ((err e) (err e)) ((ok _) (fileChmod (str fixture "/native-compiler") 493))))
-        (failingNativeMode (mt failingNativeWritten ((err e) (err e)) ((ok _) (fileChmod (str fixture "/failing-native-compiler") 493))))
+        (nativeMode (match nativeWritten ((err e) (err e)) ((ok _) (fileChmod (str fixture "/native-compiler") 493))))
+        (failingNativeMode (match failingNativeWritten ((err e) (err e)) ((ok _) (fileChmod (str fixture "/failing-native-compiler") 493))))
         (seedBytes (fileReadBytes seedFixture))
-        (seedDigest (mt seedBytes ((err e) (err e)) ((ok bytes) (fileWrite (str seedFixture ".sha256") (str (bytesSha256 bytes) "\n")))))
-        (hostMode (mt hostWritten ((err e) (err e)) ((ok _) (fileChmod fakeHost 493))))
-        (clangMode (mt clangWritten ((err e) (err e)) ((ok _) (fileChmod fakeClang 493))))
+        (seedDigest (match seedBytes ((err e) (err e)) ((ok bytes) (fileWrite (str seedFixture ".sha256") (str (bytesSha256 bytes) "\n")))))
+        (hostMode (match hostWritten ((err e) (err e)) ((ok _) (fileChmod fakeHost 493))))
+        (clangMode (match clangWritten ((err e) (err e)) ((ok _) (fileChmod fakeClang 493))))
         (ctxR (sys/context!))]
-    (mt ctxR
+    (match ctxR
       ((err e) (do (pathRemove root) (assert false (str "context unavailable: " e))))
       ((ok ctx)
         (let [(_ (assert (fileExists? root) "temporary bootstrap root is created"))
@@ -164,11 +164,11 @@ fn ! testColdBootstrapRequiresSeedBeforeStages -> Bool
                     (str "ASL_NATIVE_ASL1_SEED=" seed)
                     (str "ASL_NATIVE_ASL1_SOURCE=" source)
                     "ASL1_EXPECT=missing")))]
-          (let [(childResult (mt child ((err _) (none)) ((ok captured) (some captured))))
+          (let [(childResult (match child ((err _) (none)) ((ok captured) (some captured))))
                 (_ (assert (some? childResult) "isolated nativeAsl1! process starts"))
-                (_ (assert (mt childResult ((none) false) ((some captured) (= captured.exitCode 0))) "cold request returns the expected typed missing-seed result"))
-                (_ (assert (mt childResult ((none) false) ((some captured) (= captured.stdout "ERR_NO_NATIVE_SEED\n"))) "child reports the exact missing-seed error"))
-                (_ (assert (mt childResult ((none) false) ((some captured) (stringEmpty? captured.stderr))) "expected missing-seed path emits no diagnostic error"))
+                (_ (assert (match childResult ((none) false) ((some captured) (= captured.exitCode 0))) "cold request returns the expected typed missing-seed result"))
+                (_ (assert (match childResult ((none) false) ((some captured) (= captured.stdout "ERR_NO_NATIVE_SEED\n"))) "child reports the exact missing-seed error"))
+                (_ (assert (match childResult ((none) false) ((some captured) (stringEmpty? captured.stderr))) "expected missing-seed path emits no diagnostic error"))
                 (_ (assert (not (fileExists? seed)) "failed cold selection does not create a seed"))
                 (_ (assert (stageCountAbsent? stageLog) "a missing seed never invokes a compiler stage"))
                 (_ (assert (not (fileExists? hostLog)) "cold request reads the source dependency closure in-process, never through a host"))
@@ -189,11 +189,11 @@ fn ! testColdBootstrapRequiresSeedBeforeStages -> Bool
                     (str "ASL_NATIVE_ASL1_SEED=" seedFixture)
                     (str "ASL_NATIVE_ASL1_SOURCE=" source)
                     "ASL1_EXPECT=staged")))]
-            (let [(seedResult (mt seededChild ((err _) (none)) ((ok captured) (some captured))))
+            (let [(seedResult (match seededChild ((err _) (none)) ((ok captured) (some captured))))
                   (_ (assert (some? seedResult) "seeded nativeAsl1! process starts"))
-                  (_ (assert (mt seedResult ((none) false) ((some captured) (= captured.exitCode 0))) "seeded nativeAsl1! produces an installed compiler"))
-                  (_ (assert (mt seedResult ((none) false) ((some captured) (stringContains? captured.stdout "BUILT"))) "seeded bootstrap reports its installed result"))
-                  (_ (assert (mt seedResult ((none) false) ((some captured) (not (stringContains? captured.stderr "ERR_MAIN_FAILED")))) "seeded bootstrap has no main failure diagnostic"))
+                  (_ (assert (match seedResult ((none) false) ((some captured) (= captured.exitCode 0))) "seeded nativeAsl1! produces an installed compiler"))
+                  (_ (assert (match seedResult ((none) false) ((some captured) (stringContains? captured.stdout "BUILT"))) "seeded bootstrap reports its installed result"))
+                  (_ (assert (match seedResult ((none) false) ((some captured) (not (stringContains? captured.stderr "ERR_MAIN_FAILED")))) "seeded bootstrap has no main failure diagnostic"))
                   (_ (assert (= (resultOr (fileReadString stageLog) "") "seed\nnative\n") "both native stages run in order, seed then stage one"))
                   (_ (assert (not (stringContains? (resultOr (fileReadString hostLog) "") " build ")) "seeded bootstrap does not interpret the compiler build"))
                   (_ (assert (stringStartsWith? (resultOr (fileReadString clangLog) "") "--version\n--version\n") "both native requests query toolchain version before linking"))
@@ -212,11 +212,11 @@ fn ! testColdBootstrapRequiresSeedBeforeStages -> Bool
                       (str "ASL_NATIVE_ASL1_SEED=" seed)
                       (str "ASL_NATIVE_ASL1_SOURCE=" alternateSource)
                       "ASL1_EXPECT=staged")))
-                  (priorResult (mt priorChild ((err _) (none)) ((ok captured) (some captured))))
+                  (priorResult (match priorChild ((err _) (none)) ((ok captured) (some captured))))
                   (_ (assert (ok? clearedStages) "prior-cache stage log starts empty"))
                   (_ (assert (some? priorResult) "cold request with a prior cache entry starts"))
-                  (_ (assert (mt priorResult ((none) false) ((some captured) (= captured.exitCode 0))) "prior cached native binary bootstraps a distinct cold key"))
-                  (_ (assert (mt priorResult ((none) false) ((some captured) (stringContains? captured.stdout "BUILT"))) "prior-cache bootstrap returns its installed compiler"))
+                  (_ (assert (match priorResult ((none) false) ((some captured) (= captured.exitCode 0))) "prior cached native binary bootstraps a distinct cold key"))
+                  (_ (assert (match priorResult ((none) false) ((some captured) (stringContains? captured.stdout "BUILT"))) "prior-cache bootstrap returns its installed compiler"))
                   (_ (assert (= (resultOr (fileReadString stageLog) "") "native\nnative\nnative\n") "a deps probe on the cached compiler precedes both build stages, without falling back to the seed"))
                   (_ (assert (not (fileExists? seed)) "a cached compiler is never promoted to the bootstrap seed"))
                   (_ (assert (not (fileExists? (str seed ".sha256"))) "no seed digest is written for a cached compiler"))
@@ -235,11 +235,11 @@ fn ! testColdBootstrapRequiresSeedBeforeStages -> Bool
                       (str "ASL_NATIVE_ASL1_SEED=" seedFixture)
                       (str "ASL_NATIVE_ASL1_SOURCE=" source)
                       "ASL1_EXPECT=stageFailed")))
-                  (failedResult (mt failedChild ((err _) (none)) ((ok captured) (some captured))))
+                  (failedResult (match failedChild ((err _) (none)) ((ok captured) (some captured))))
                   (_ (assert (ok? clearedFailureStages) "failing-stage log starts empty"))
                   (_ (assert (some? failedResult) "failing native stage process starts"))
-                  (_ (assert (mt failedResult ((none) false) ((some captured) (= captured.exitCode 0))) "native-stage failure is returned through the production entry point"))
-                  (_ (assert (mt failedResult ((none) false) ((some captured) (stringContains? captured.stdout "native asl1 stage failed (exit 7)"))) "native-stage failure reports its exact process error"))
+                  (_ (assert (match failedResult ((none) false) ((some captured) (= captured.exitCode 0))) "native-stage failure is returned through the production entry point"))
+                  (_ (assert (match failedResult ((none) false) ((some captured) (stringContains? captured.stdout "native asl1 stage failed (exit 7)"))) "native-stage failure reports its exact process error"))
                   (_ (assert (= (resultOr (fileReadString stageLog) "") "seed\nnative-failed\n") "failing stage follows the successful seed stage and stops before stage two"))
                   (_ (assert (not (hasInstalledNative? failedCacheRoot)) "failed native stage installs no cache binary"))
                   (relativeChild (sys/captureWith! (list host "run" testPath "main") (some fixture)
@@ -256,9 +256,9 @@ fn ! testColdBootstrapRequiresSeedBeforeStages -> Bool
                       (str "ASL_NATIVE_ASL1_SEED=" seedFixture)
                       (str "ASL_NATIVE_ASL1_SOURCE=" source)
                       "ASL1_EXPECT=staged")))
-                  (relativeResult (mt relativeChild ((err _) (none)) ((ok captured) (some captured))))
+                  (relativeResult (match relativeChild ((err _) (none)) ((ok captured) (some captured))))
                   (_ (assert (ok? relativeCacheMade) "root-relative deps case has its own cache directory"))
-                  (_ (assert (mt relativeResult ((none) false) ((some captured) (and (= captured.exitCode 0) (stringContains? captured.stdout "BUILT")))) (str "root-relative deps lines (asl1 deps since ASL1SELF) hash under the workspace root even when the caller runs elsewhere: " (mt relativeResult ((none) "no child") ((some captured) (str captured.stdout captured.stderr))))))
+                  (_ (assert (match relativeResult ((none) false) ((some captured) (and (= captured.exitCode 0) (stringContains? captured.stdout "BUILT")))) (str "root-relative deps lines (asl1 deps since ASL1SELF) hash under the workspace root even when the caller runs elsewhere: " (match relativeResult ((none) "no child") ((some captured) (str captured.stdout captured.stderr))))))
                   (_ (assert (hasInstalledNative? relativeCacheRoot) "root-relative deps key installs its compiler"))
                   (passed true)]
               (cleanup root passed)))))))
@@ -274,7 +274,7 @@ fn ! executable! path: String text: String -> Bool
 
 fn ! pinned! path: String text: String -> Bool
   (and (executable! path text)
-       (mt (fileReadBytes path) ((err _) false) ((ok b) (ok? (fileWrite (str path ".sha256") (str (bytesSha256 b) "\n"))))))
+       (match (fileReadBytes path) ((err _) false) ((ok b) (ok? (fileWrite (str path ".sha256") (str (bytesSha256 b) "\n"))))))
 
 fn ! seedRepo! dir: String shaOk: Bool -> Bool
   (let [(ir (str dir "/asl/seed/fixture-arch-os/asl1.ll"))
@@ -283,24 +283,24 @@ fn ! seedRepo! dir: String shaOk: Bool -> Bool
         (written (fileWrite ir irText))
         (zipped (sys/capture! (list "gzip" "-n" "-f" ir) (none)))
         (gz (fileReadBytes (str ir ".gz")))]
-    (mt gz
+    (match gz
       ((err _) false)
       ((ok b) (let [(sha (bytesSha256 b))
                     (recorded (if shaOk sha (str (if (stringStartsWith? sha "0") "1" "0") (optionOr (stringSlice sha 1 64) ""))))]
                 (and (ok? written)
-                     (and (mt zipped ((ok c) (= c.exitCode 0)) ((err _) false))
+                     (and (match zipped ((ok c) (= c.exitCode 0)) ((err _) false))
                           (ok? (fileWrite (str dir "/asl/seed/seed.asn")
                                  (str "(:seeds :v 1\n  (:seed :triple \"fixture-arch-os\" :file \"asl/seed/fixture-arch-os/asl1.ll.gz\" :bytes " (stringFromInt64 (bytesLength b))
                                       " :sha256 \"" recorded "\" :llBytes " (stringFromInt64 (stringLength irText)) " :llSha256 \"" (bytesSha256 (stringToBytes irText)) "\"))\n")))))))))
 
 fn ! seedChild! ctx: sys/Context f: String cache: String seed: (Option String) source: String script: String expect: String ctxRoot: String -> (Option sys/Captured)
-  (mt (sys/captureWith! (list (str ctx.root "/bin/asl") "run" (str ctx.root "/asl/packages/asl-cli/tests/asl1BootstrapTest.asl") "main") (none)
+  (match (sys/captureWith! (list (str ctx.root "/bin/asl") "run" (str ctx.root "/asl/packages/asl-cli/tests/asl1BootstrapTest.asl") "main") (none)
         (listAppend (list (str "ASL1_BOOT_ROOT=" ctx.root) (str "ASL1_CTX_ROOT=" ctxRoot)
                           (str "ASL1_FAKE_HOST=" f "/host") (str "ASL1_FAKE_CLANG=" f "/clang") (str "ASL1_FAKE_SOURCE=" source)
                           (str "ASL1_NATIVE_SCRIPT=" f "/" script) (str "ASL1_STAGE_LOG=" f "/stages") (str "ASL1_HOST_LOG=" f "/host-calls")
                           (str "ASL1_CLANG_LOG=" f "/clang-calls") (str "ASL_NATIVE_ASL1_CACHE=" cache) (str "ASL_NATIVE_ASL1_SOURCE=" source)
                           (str "ASL1_EXPECT=" expect))
-                    (mt seed ((some p) (list (str "ASL_NATIVE_ASL1_SEED=" p))) ((none) (list)))))
+                    (match seed ((some p) (list (str "ASL_NATIVE_ASL1_SEED=" p))) ((none) (list)))))
     ((err _) (none))
     ((ok c) (some c)))
 
@@ -310,10 +310,10 @@ fn ! stages! f: String -> String
     text)
 
 fn ! exitedZero? c: (Option sys/Captured) -> Bool
-  (mt c ((some x) (= x.exitCode 0)) ((none) false))
+  (match c ((some x) (= x.exitCode 0)) ((none) false))
 
 fn ! printed? c: (Option sys/Captured) text: String -> Bool
-  (mt c ((some x) (stringContains? x.stdout text)) ((none) false))
+  (match c ((some x) (stringContains? x.stdout text)) ((none) false))
 
 fn ! testSeedSelection -> Bool
   (let [(root (str (tempRoot) "_seed"))
@@ -337,7 +337,7 @@ fn ! testSeedSelection -> Bool
         (_ (map (fn [(p String)] -> Bool (ok? (fileWrite p (str "(module fixture/" (sys/baseName p) ")\n")))) sources))
         (src (fn [(i Int64)] -> String (optionOr (listGet sources i) "")))
         (ctxR (sys/context!))]
-    (mt ctxR
+    (match ctxR
       ((err e) (do (pathRemove root) (assert (stringEmpty? e) (str "context unavailable: " e)) false))
       ((ok ctx)
         (let [(_ (assert made "seed selection fixtures are written"))
@@ -374,7 +374,7 @@ fn ! testSeedSelection -> Bool
 
 fn ! validSeedFile? path: String -> Bool
   (and (sys/executable? path)
-       (mt (fileReadBytes path)
+       (match (fileReadBytes path)
          ((err _) false)
          ((ok b) (= (sys/stripTrailingNewlines (resultOr (fileReadString (str path ".sha256")) "")) (bytesSha256 b)))))
 

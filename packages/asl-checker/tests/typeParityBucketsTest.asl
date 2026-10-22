@@ -26,9 +26,9 @@ fn testUnknownTypeName -> Bool
       true)
 
 fn testAssertTrap -> Bool
-  (do (assert (accepts? "(module b :x [f])\nfn f o: (Option Int64) -> Bool\n  (mt o ((some _) true) ((none) (assert false \"no value\")))\n") "an assert false arm joins a Bool arm")
-      (assert (accepts? "(module b :x [f])\nfn f o: (Option Int64) -> Bool\n  (mt o ((none) (refute true \"no value\")) ((some _) true))\n") "a refute true arm joins a Bool arm")
-      (assert (rejects? "(module b :x [f])\nfn f o: (Option Int64) -> Bool\n  (mt o ((some _) true) ((none) (assert true \"value\")))\n" "Unit") "an assert that can pass is Unit, not Bool")
+  (do (assert (accepts? "(module b :x [f])\nfn f o: (Option Int64) -> Bool\n  (match o ((some _) true) ((none) (assert false \"no value\")))\n") "an assert false arm joins a Bool arm")
+      (assert (accepts? "(module b :x [f])\nfn f o: (Option Int64) -> Bool\n  (match o ((none) (refute true \"no value\")) ((some _) true))\n") "a refute true arm joins a Bool arm")
+      (assert (rejects? "(module b :x [f])\nfn f o: (Option Int64) -> Bool\n  (match o ((some _) true) ((none) (assert true \"value\")))\n" "Unit") "an assert that can pass is Unit, not Bool")
       true)
 
 fn testPrintReturnsUnit -> Bool
@@ -59,7 +59,7 @@ fn testUnitParensAnnotation -> Bool
       true)
 
 fn ! fileCodes path: String -> (List String)
-  (mt (c/checkFile! path (list "."))
+  (match (c/checkFile! path (list "."))
     ((ok ds) (map (fn [(d ty/Diagnostic)] -> String d.code) ds))
     ((err _) (list "READ_ERROR")))
 
@@ -78,9 +78,9 @@ fn ! testTypeBoundary -> Bool
         true))
 
 fn testIoErrorPayloads -> Bool
-  (do (assert (accepts? "(module b :x [f])\nfn ! f p: String -> (Result String String)\n  (mt (fileReadString p) ((ok s) (ok s)) ((err e) (err e)))\n") "a fileReadString error is a String")
-      (assert (accepts? "(module b :x [f])\nfn ! f p: String -> (Result Int64 String)\n  (mt (fileReadBytes p) ((ok b) (ok (bytesLength b))) ((err e) (err e)))\n") "a fileReadBytes error is a String")
-      (assert (accepts? "(module b :x [f])\nfn ! f p: String -> (Result Unit String)\n  (mt (fileWrite p \"x\") ((ok u) (ok u)) ((err e) (err (str \"write: \" e))))\n") "a fileWrite error is a String")
+  (do (assert (accepts? "(module b :x [f])\nfn ! f p: String -> (Result String String)\n  (match (fileReadString p) ((ok s) (ok s)) ((err e) (err e)))\n") "a fileReadString error is a String")
+      (assert (accepts? "(module b :x [f])\nfn ! f p: String -> (Result Int64 String)\n  (match (fileReadBytes p) ((ok b) (ok (bytesLength b))) ((err e) (err e)))\n") "a fileReadBytes error is a String")
+      (assert (accepts? "(module b :x [f])\nfn ! f p: String -> (Result Unit String)\n  (match (fileWrite p \"x\") ((ok u) (ok u)) ((err e) (err (str \"write: \" e))))\n") "a fileWrite error is a String")
       (assert (rejects? "(module b :x [f])\nfn ! f p: String -> (Result String String)\n  (err (notFound))\n" "IoError") "a literal IoError still mismatches a declared String error")
       true)
 
@@ -109,8 +109,8 @@ fn testMiscChecker -> Bool
       (assert (rejects? "(module b :x [g])\nfn g -> Int64\n  (stringLength (quote a))\n" "SExpr") "without a fn quote, quote is still the SExpr form")
       (assert (accepts? "(module b :x [f])\nfn f fs: (List (fn [] -> Int64)) -> (List Int64)\n  (map (fn [g] (g)) fs)\n") "(g) of an unannotated g yields the closure result")
       (assert (rejects? "(module b :x [f])\nfn f fs: (List (fn [] -> Int64)) -> (List String)\n  (map (fn [g] (g)) fs)\n" "Int64") "the closure result still has its type")
-      (assert (accepts? "(module b :x [f])\nfn ! f -> Int64\n  (mt (procSpawnv (list \"true\") (none) (none)) ((ok p) p.pid) ((err _) 0))\n") "SpawnedProc has pid")
-      (assert (rejects? "(module b :x [f])\nfn ! f -> Int64\n  (mt (procSpawnv (list \"true\") (none) (none)) ((ok p) p.name) ((err _) 0))\n" "no field name") "SpawnedProc has no field name")
+      (assert (accepts? "(module b :x [f])\nfn ! f -> Int64\n  (match (procSpawnv (list \"true\") (none) (none)) ((ok p) p.pid) ((err _) 0))\n") "SpawnedProc has pid")
+      (assert (rejects? "(module b :x [f])\nfn ! f -> Int64\n  (match (procSpawnv (list \"true\") (none) (none)) ((ok p) p.name) ((err _) 0))\n" "no field name") "SpawnedProc has no field name")
       (assert (accepts? "(module b :x [f])\nfn ! f -> Int64\n  (resultOr (cpuCount) 1)\n") "cpuCount is a Result")
       (assert (rejects? "(module b :x [f])\nfn ! f -> Int64\n  (cpuCount)\n" "Result") "cpuCount is not a bare Int64")
       true)

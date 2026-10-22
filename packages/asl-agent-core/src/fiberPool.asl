@@ -54,15 +54,15 @@ fn fiberSpawn pool: FiberPool prio: FiberPriority directive: Str nowMs: I64 -> (
         (frame (FiberFrame :frameId (str "frame-" fiberId) :instruction directive :fuelRemaining 100 :output ""))
         (record (FiberRecord :id fiberId :priority prio :state (fiberPending) :frame frame :mailbox (list) :createdAt nowMs :totalFuelConsumed 0))
         (updatedActive (mapSet pool.activeFibers fiberId record))
-        (updatedCrit (mt prio ((prioCritical) (listAppend pool.criticalQueue (list fiberId))) (_ pool.criticalQueue)))
-        (updatedInter (mt prio ((prioInteractive) (listAppend pool.interactiveQueue (list fiberId))) (_ pool.interactiveQueue)))
-        (updatedBack (mt prio ((prioBackground) (listAppend pool.backgroundQueue (list fiberId))) (_ pool.backgroundQueue)))]
+        (updatedCrit (match prio ((prioCritical) (listAppend pool.criticalQueue (list fiberId))) (_ pool.criticalQueue)))
+        (updatedInter (match prio ((prioInteractive) (listAppend pool.interactiveQueue (list fiberId))) (_ pool.interactiveQueue)))
+        (updatedBack (match prio ((prioBackground) (listAppend pool.backgroundQueue (list fiberId))) (_ pool.backgroundQueue)))]
     (pair
       (with pool :activeFibers updatedActive :criticalQueue updatedCrit :interactiveQueue updatedInter :backgroundQueue updatedBack)
       fiberId))
 
 fn fiberPostMessage pool: FiberPool fiberId: Str msg: Str -> FiberPool
-  (mt (mapGet pool.activeFibers fiberId)
+  (match (mapGet pool.activeFibers fiberId)
     ((some rec)
       (let [(updatedMailbox (listAppend rec.mailbox (list msg)))
             (updatedRec (FiberRecord
@@ -78,7 +78,7 @@ fn fiberPostMessage pool: FiberPool fiberId: Str msg: Str -> FiberPool
     ((none) pool))
 
 fn fiberStep pool: FiberPool fiberId: Str fuel: I64 stepOutput: Str -> FiberPool
-  (mt (mapGet pool.activeFibers fiberId)
+  (match (mapGet pool.activeFibers fiberId)
     ((some rec)
       (let [(oldFrame rec.frame)
             (newFrame (FiberFrame
@@ -99,7 +99,7 @@ fn fiberStep pool: FiberPool fiberId: Str fuel: I64 stepOutput: Str -> FiberPool
     ((none) pool))
 
 fn fiberYield pool: FiberPool fiberId: Str -> FiberPool
-  (mt (mapGet pool.activeFibers fiberId)
+  (match (mapGet pool.activeFibers fiberId)
     ((some rec)
       (let [(updatedRec (FiberRecord
                           :id rec.id
@@ -114,7 +114,7 @@ fn fiberYield pool: FiberPool fiberId: Str -> FiberPool
     ((none) pool))
 
 fn fiberComplete pool: FiberPool fiberId: Str finalOutput: Str -> FiberPool
-  (mt (mapGet pool.activeFibers fiberId)
+  (match (mapGet pool.activeFibers fiberId)
     ((some rec)
       (let [(oldFrame rec.frame)
             (newFrame (FiberFrame

@@ -204,12 +204,12 @@ fn pyIntText s: String -> (Option Int64)
         n (bytesLength bs)]
     (if (= n 0)
       none
-      (mt (underscoreDigits bs n 0 (list))
+      (match (underscoreDigits bs n 0 (list))
         ((some digits) (stringToInt64 (str sign digits)))
         ((none) none))))
 
 fn truthy v: j/Json -> Bool
-  (mt v
+  (match v
     ((j/jnull) false)
     ((j/jbool b) b)
     ((j/jint i) (!= i 0))
@@ -220,20 +220,20 @@ fn truthy v: j/Json -> Bool
     ((j/jobj kvs) (not (listEmpty? kvs))))
 
 fn pyIntOf v: j/Json -> (Option Int64)
-  (mt v
+  (match v
     ((j/jint i) (some i))
     ((j/jbool b) (some (if b 1 0)))
     ((j/jstr s) (pyIntText s))
     (_ none))
 
 fn intValue v: j/Json -> (Option Int64)
-  (mt v ((j/jint i) (some i)) (_ none))
+  (match v ((j/jint i) (some i)) (_ none))
 
 fn textValue v: j/Json -> String
   (pv/pyStr v)
 
 fn listValue v: j/Json -> (List String)
-  (mt v
+  (match v
     ((j/jarr xs) (map (fn [x] (pv/pyStr x)) xs))
     (_ (list)))
 
@@ -265,7 +265,7 @@ fn tokenScan s: String bs: Bytes n: Int64 i: Int64 acc: (List String) -> (Result
         ((= b 59) (tokenScan s bs n (lineEnd bs n i) acc))
         ((or (= b 40) (= b 41) (= b 91) (= b 93)) (tokenScan s bs n (+ i 1) (cons (c/sliceOf s i (+ i 1)) acc)))
         ((= b 34)
-          (mt (stringTokenEnd bs n (+ i 1) false)
+          (match (stringTokenEnd bs n (+ i 1) false)
             ((none) (err "Unclosed string in ASN form"))
             ((some e) (tokenScan s bs n e (cons (c/sliceOf s i e) acc)))))
         (else (let [e (atomEnd bs n i)] (tokenScan s bs n e (cons (c/sliceOf s i e) acc)))))))
@@ -293,7 +293,7 @@ fn parseItems toks: (List String) closing: String acc: (List j/Json) -> (Pair j/
   (cond
     ((listEmpty? toks) (pair (j/jarr (listReverse acc)) toks))
     ((= (c/firstOf toks) closing) (pair (j/jarr (listReverse acc)) (c/restOf toks)))
-    (else (mt (parseValue toks) ((pair v rest) (parseItems rest closing (cons v acc))))))
+    (else (match (parseValue toks) ((pair v rest) (parseItems rest closing (cons v acc))))))
 
 fn parseValue toks: (List String) -> (Pair j/Json (List String))
   (let [tok (c/firstOf toks)
@@ -303,12 +303,12 @@ fn parseValue toks: (List String) -> (Pair j/Json (List String))
       ((and (stringStartsWith? tok "\"") (stringEndsWith? tok "\"")) (pair (j/jstr (unescapeToken tok)) rest))
       ((= tok "true") (pair (j/jbool true) rest))
       ((= tok "false") (pair (j/jbool false) rest))
-      (else (mt (pyIntText tok)
+      (else (match (pyIntText tok)
               ((some v) (pair (j/jint v) rest))
               ((none) (pair (j/jstr tok) rest))))))
 
 fn paramGet ps: (List (Pair String j/Json)) key: String -> (Option j/Json)
-  (mt (listHead (filter (fn [p] (= (pairFirst p) key)) ps))
+  (match (listHead (filter (fn [p] (= (pairFirst p) key)) ps))
     ((some p) (some (pairSecond p)))
     ((none) none))
 
@@ -322,7 +322,7 @@ fn paramSet ps: (List (Pair String j/Json)) key: String v: j/Json -> (List (Pair
   (listAppend (filter (fn [p] (!= (pairFirst p) key)) ps) (list (pair key v)))
 
 fn listParam v: j/Json -> j/Json
-  (mt v
+  (match v
     ((j/jarr xs) (j/jarr (map (fn [x] (j/jstr (pv/pyStr x))) xs)))
     (_ (j/jarr (if (truthy v) (list (j/jstr (pv/pyStr v))) (list)))))
 
@@ -330,7 +330,7 @@ fn intParam v: j/Json fallback: Int64 -> j/Json
   (j/jint (optionOr (pyIntOf v) fallback))
 
 fn intOrNull v: j/Json -> j/Json
-  (mt v ((j/jint i) (j/jint i)) (_ (j/jnull)))
+  (match v ((j/jint i) (j/jint i)) (_ (j/jnull)))
 
 fn strParam v: j/Json -> j/Json
   (j/jstr (pv/pyStr v))
@@ -347,11 +347,11 @@ fn applyKey ps: (List (Pair String j/Json)) key: String v: j/Json -> (Pair (List
     ((= key "timeout") (pair (paramSet ps key (intParam v 600)) none))
     ((= key "queueTimeout") (pair (paramSet ps key (intParam v 1200)) none))
     ((= key "dryRun")
-      (pair (paramSet ps key (j/jbool (mt v ((j/jbool b) b) ((j/jstr s) (= s "true")) (_ false)))) none))
+      (pair (paramSet ps key (j/jbool (match v ((j/jbool b) b) ((j/jstr s) (= s "true")) (_ false)))) none))
     ((= key "contextTokens")
-      (pair (paramSet ps key (mt (pyIntOf v) ((some i) (j/jint i)) ((none) (j/jnull)))) none))
+      (pair (paramSet ps key (match (pyIntOf v) ((some i) (j/jint i)) ((none) (j/jnull)))) none))
     ((or (= key "gateTimeout") (= key "wallBudget")) (pair (paramSet ps key (intOrNull v)) none))
-    ((= key "plan") (pair (paramSet ps key (mt v ((j/jbool b) (j/jbool b)) (_ (j/jnull)))) none))
+    ((= key "plan") (pair (paramSet ps key (match v ((j/jbool b) (j/jbool b)) (_ (j/jnull)))) none))
     ((= key "agent") (pair ps none))
     (else (pair ps (some key))))
 
@@ -370,17 +370,17 @@ fn paramLoop toks: (List String) ps: (List (Pair String j/Json)) unknown: (List 
                                  (not (listContains? (keywordValued) key)))
                           (pair (j/jbool true) rest)
                           (parseValue rest))))]
-          (mt taken
+          (match taken
             ((pair v after)
-              (mt (applyKey ps key v)
+              (match (applyKey ps key v)
                 ((pair next unk)
-                  (paramLoop after next (mt unk ((some k) (cons k unknown)) ((none) unknown)))))))))))
+                  (paramLoop after next (match unk ((some k) (cons k unknown)) ((none) unknown)))))))))))
 
 fn ! isDir path: String -> Bool
-  (mt (fileStat path) ((ok st) st.isDir) ((err _) false))
+  (match (fileStat path) ((ok st) st.isDir) ((err _) false))
 
 fn ! isFile path: String -> Bool
-  (mt (fileStat path) ((ok st) st.isFile) ((err _) false))
+  (match (fileStat path) ((ok st) st.isFile) ((err _) false))
 
 fn pyJoin a: String b: String -> String
   (cond
@@ -405,7 +405,7 @@ fn ! applyContextFile ps: (List (Pair String j/Json)) rootDir: String -> (Pair (
       ((stringStartsWith? rel "..") (pair ps (some (pair "outside_repo" cf))))
       ((not (isFile full)) (pair ps (some (pair "not_found" cf))))
       (else
-        (mt (fileReadString full)
+        (match (fileReadString full)
           ((err e) (pair ps (some (pair "read_error" e))))
           ((ok content)
             (pair (paramSet ps "task" (j/jstr (joinTask (textValue (paramOr ps "task" (j/jstr ""))) content))) none))))))
@@ -416,7 +416,7 @@ fn invocationOf ps: (List (Pair String j/Json)) unknown: (List String) syntax: (
 fn ! parseInvocation formText: String rootDir: String -> Invocation
   (if (stringEmpty? (pv/pyStrip formText))
     (invocationOf (list) (list) none none)
-    (mt (tokenizeAsn formText)
+    (match (tokenizeAsn formText)
       ((err e) (invocationOf (list) (list) (some e) none))
       ((ok toks)
         (if (or (listEmpty? toks) (!= (c/firstOf toks) "("))
@@ -425,10 +425,10 @@ fn ! parseInvocation formText: String rootDir: String -> Invocation
                 start (if (and (not (listEmpty? body)) (or (= (c/firstOf body) ":agent") (= (c/firstOf body) "agent")))
                         (c/restOf body)
                         body)]
-            (mt (paramLoop start (list) (list))
+            (match (paramLoop start (list) (list))
               ((pair ps unknown)
                 (if (paramHas ps "contextFile")
-                  (mt (applyContextFile ps rootDir) ((pair ps2 cfErr) (invocationOf ps2 unknown none cfErr)))
+                  (match (applyContextFile ps rootDir) ((pair ps2 cfErr) (invocationOf ps2 unknown none cfErr)))
                   (invocationOf ps unknown none none)))))))))
 
 
@@ -443,7 +443,7 @@ fn quotedEnd bs: Bytes n: Int64 i: Int64 -> (Option Int64)
 fn quotedAt s: String bs: Bytes n: Int64 i: Int64 -> (Option (Pair String Int64))
   (if (!= (byteAt bs n i) 34)
     none
-    (mt (quotedEnd bs n (+ i 1))
+    (match (quotedEnd bs n (+ i 1))
       ((some e) (some (pair (c/sliceOf s (+ i 1) (- e 1)) e)))
       ((none) none)))
 
@@ -456,11 +456,11 @@ fn litAt s: String i: Int64 lit: String -> Bool
   (= (optionOr (stringSlice s i (+ i (stringLength lit))) "") lit)
 
 fn searchFrom s: String lit: String start: Int64 matcher: (fn [Int64] -> (Option T)) -> (Option T)
-  (mt (stringIndexOf (c/sliceOf s start (stringLength s)) lit)
+  (match (stringIndexOf (c/sliceOf s start (stringLength s)) lit)
     ((none) none)
     ((some off)
       (let [p (+ start off)]
-        (mt (matcher p)
+        (match (matcher p)
           ((some v) (some v))
           ((none) (searchFrom s lit (+ p 1) matcher))))))
 
@@ -468,9 +468,9 @@ fn quotedField s: String key: String anySpace: Bool -> (Option String)
   (let [bs (stringToBytes s)
         n (bytesLength bs)]
     (searchFrom s key 0
-      (fn [p] (mt (gapEnd bs n (+ p (stringLength key)) anySpace)
+      (fn [p] (match (gapEnd bs n (+ p (stringLength key)) anySpace)
                 ((none) none)
-                ((some q) (mt (quotedAt s bs n q) ((some hit) (some (pairFirst hit))) ((none) none)))))))
+                ((some q) (match (quotedAt s bs n q) ((some hit) (some (pairFirst hit))) ((none) none)))))))
 
 fn removeQuotedField s: String key: String anySpace: Bool -> String
   (let [bs (stringToBytes s)
@@ -478,14 +478,14 @@ fn removeQuotedField s: String key: String anySpace: Bool -> String
     (removeLoop s bs n key anySpace 0 0 (list)))
 
 fn removeLoop s: String bs: Bytes n: Int64 key: String anySpace: Bool from: Int64 kept: Int64 acc: (List String) -> String
-  (mt (stringIndexOf (c/sliceOf s from n) key)
+  (match (stringIndexOf (c/sliceOf s from n) key)
     ((none) (stringJoin (listReverse (cons (c/sliceOf s kept n) acc)) ""))
     ((some off)
       (let [p (+ from off)
-            hit (mt (gapEnd bs n (+ p (stringLength key)) anySpace)
+            hit (match (gapEnd bs n (+ p (stringLength key)) anySpace)
                   ((none) none)
-                  ((some q) (mt (quotedAt s bs n q) ((some h) (some (pairSecond h))) ((none) none))))]
-        (mt hit
+                  ((some q) (match (quotedAt s bs n q) ((some h) (some (pairSecond h))) ((none) none))))]
+        (match hit
           ((some e) (removeLoop s bs n key anySpace e e (cons (c/sliceOf s kept p) acc)))
           ((none) (removeLoop s bs n key anySpace (+ p 1) kept acc))))))
 
@@ -493,7 +493,7 @@ fn keywordField s: String key: String -> (Option String)
   (let [bs (stringToBytes s)
         n (bytesLength bs)]
     (searchFrom s key 0
-      (fn [p] (mt (gapEnd bs n (+ p (stringLength key)) true)
+      (fn [p] (match (gapEnd bs n (+ p (stringLength key)) true)
                 ((none) none)
                 ((some q)
                   (if (!= (byteAt bs n q) 58)
@@ -503,10 +503,10 @@ fn keywordField s: String key: String -> (Option String)
 
 fn journalModeHint header: String -> (Option String)
   (let [head (removeQuotedField header ":task" true)]
-    (mt (quotedField head ":modeHint" true)
+    (match (quotedField head ":modeHint" true)
       ((some raw) (some (c/asnUnescape raw)))
       ((none)
-        (mt (keywordField head ":mode")
+        (match (keywordField head ":mode")
           ((some m) (if (= m "auto") none (some m)))
           ((none) none)))))
 
@@ -522,7 +522,7 @@ fn turnAtStart s: String -> (Option Int64)
         n (bytesLength bs)]
     (if (not (litAt s 0 "(:turn"))
       none
-      (mt (gapEnd bs n 6 true)
+      (match (gapEnd bs n 6 true)
         ((none) none)
         ((some q)
           (let [e (runEnd bs n q isDigitByte)]
@@ -533,21 +533,21 @@ fn noteLine s: String -> (Option String)
         n (bytesLength bs)]
     (if (not (litAt s 0 "(:turn"))
       none
-      (mt (gapEnd bs n 6 true)
+      (match (gapEnd bs n 6 true)
         ((none) none)
         ((some q)
           (let [e (runEnd bs n q isDigitByte)]
             (if (= e q)
               none
-              (mt (gapEnd bs n e true)
+              (match (gapEnd bs n e true)
                 ((none) none)
                 ((some k)
                   (if (not (litAt s k ":note"))
                     none
-                    (mt (gapEnd bs n (+ k 5) true)
+                    (match (gapEnd bs n (+ k 5) true)
                       ((none) none)
                       ((some v)
-                        (mt (quotedAt s bs n v)
+                        (match (quotedAt s bs n v)
                           ((some hit) (if (= (+ (pairSecond hit) 1) n) (if (litAt s (pairSecond hit) ")") (some (pairFirst hit)) none) none))
                           ((none) none)))))))))))))
 
@@ -556,23 +556,23 @@ fn gateLine s: String -> (Option (Pair String String))
         n (bytesLength bs)]
     (if (not (litAt s 0 "(:gate"))
       none
-      (mt (gapEnd bs n 6 true)
+      (match (gapEnd bs n 6 true)
         ((none) none)
         ((some a)
           (if (not (litAt s a ":cmd"))
             none
-            (mt (gapEnd bs n (+ a 4) true)
+            (match (gapEnd bs n (+ a 4) true)
               ((none) none)
               ((some b)
-                (mt (quotedAt s bs n b)
+                (match (quotedAt s bs n b)
                   ((none) none)
                   ((some hit)
-                    (mt (gapEnd bs n (pairSecond hit) true)
+                    (match (gapEnd bs n (pairSecond hit) true)
                       ((none) none)
                       ((some k)
                         (if (not (litAt s k ":exit"))
                           none
-                          (mt (gapEnd bs n (+ k 5) true)
+                          (match (gapEnd bs n (+ k 5) true)
                             ((none) none)
                             ((some v)
                               (let [neg (= (byteAt bs n v) 45)
@@ -586,7 +586,7 @@ fn statusField s: String -> (Option String)
   (let [bs (stringToBytes s)
         n (bytesLength bs)]
     (searchFrom s ":status" 0
-      (fn [p] (mt (gapEnd bs n (+ p 7) true)
+      (fn [p] (match (gapEnd bs n (+ p 7) true)
                 ((none) none)
                 ((some q)
                   (if (!= (byteAt bs n q) 58)
@@ -630,9 +630,9 @@ fn reportLine st: ReportState line: String -> ReportState
       ((stringStartsWith? s "(:session ")
         (with st :task (optionOr (quotedField s ":task" true) st.task) :hint (journalModeHint s) :prevGate false))
       ((stringStartsWith? s "(:turn ")
-        (with st :lastTurn (mt (turnAtStart s) ((some t) (max t st.lastTurn)) ((none) st.lastTurn)) :note (mt (noteLine s) ((some raw) (some raw)) ((none) st.note)) :prevGate false))
+        (with st :lastTurn (match (turnAtStart s) ((some t) (max t st.lastTurn)) ((none) st.lastTurn)) :note (match (noteLine s) ((some raw) (some raw)) ((none) st.note)) :prevGate false))
       ((stringStartsWith? s "(:gate ")
-        (mt (gateLine s)
+        (match (gateLine s)
           ((none) st)
           ((some g)
             (with st :gates (listAppend (if st.prevGate st.gates (list)) (list g)) :prevGate true))))
@@ -641,12 +641,12 @@ fn reportLine st: ReportState line: String -> ReportState
       (else st)))
 
 fn ! stagedUnder dir: String rel: String -> (List String)
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err _) (list))
     ((ok names)
       (let [kinds (map (fn [name]
                          (let [path (pyJoin dir name)
-                               isLink (mt (fileLstat path) ((ok ls) ls.isSymlink) ((err _) false))
+                               isLink (match (fileLstat path) ((ok ls) ls.isSymlink) ((err _) false))
                                dirLike (isDir path)]
                            (pair name (if dirLike (if isLink "skip" "dir") "file"))))
                        names)
@@ -662,7 +662,7 @@ fn ! resumeReport session: String rootDir: String -> MainResult
   (let [path (journalPathOf rootDir session)]
     (if (or (not (sessionOk session)) (not (isFile path)))
       (noJournal session 1)
-      (mt (fileReadString path)
+      (match (fileReadString path)
         ((err e)
           (MainResult :stdout (str "(:agentReceipt :status :rejected :error ERR_JOURNAL_READ :session \"" (c/escapeAsn session)
                                    "\" :message \"" (c/escapeAsn e) "\")")
@@ -671,18 +671,18 @@ fn ! resumeReport session: String rootDir: String -> MainResult
           (let [st (fold reportLine
                          (ReportState :task "" :hint none :lastTurn 0 :note none :gates (list) :prevGate false :result none)
                          (go/pySplitLines (pv/universalNewlines text) false))
-                status (mt st.result ((none) "resumable") ((some r) (if (= r "ok") "done" "escalated")))
+                status (match st.result ((none) "resumable") ((some r) (if (= r "ok") "done" "escalated")))
                 stageDir (pyJoin (pyJoin rootDir ".asl/vfs") session)
                 staged (if (isDir stageDir) (stagedUnder stageDir "") (list))
                 shown (listTake staged 20)]
             (MainResult
               :stdout (str "(:agentReceipt :status :" status " :session \"" (c/escapeAsn session) "\""
                            " :task \"" st.task "\""
-                           (mt st.hint ((some h) (if (stringEmpty? h) "" (str " :modeHint \"" (c/escapeAsn h) "\""))) ((none) ""))
+                           (match st.hint ((some h) (if (stringEmpty? h) "" (str " :modeHint \"" (c/escapeAsn h) "\""))) ((none) ""))
                            " :lastTurn " (stringFromInt64 st.lastTurn)
-                           (mt st.note ((some raw) (str " :note \"" raw "\"")) ((none) ""))
+                           (match st.note ((some raw) (str " :note \"" raw "\"")) ((none) ""))
                            " :lastGates (" (stringJoin (map (fn [g] (str "(:cmd \"" (pairFirst g) "\" :exit " (pairSecond g) ")")) st.gates) " ") ")"
-                           " :result " (mt st.result ((some r) (str ":" r)) ((none) "none"))
+                           " :result " (match st.result ((some r) (str ":" r)) ((none) "none"))
                            " :staged " (stringFromInt64 (listLength staged))
                            " :stagedPaths (" (quoteEach shown) ")"
                            " :more " (stringFromInt64 (- (listLength staged) (listLength shown))) ")")
@@ -714,18 +714,18 @@ fn turnEntry s: String -> (Option (Pair Int64 (Pair String String)))
                 kind (c/sliceOf s (+ e 2) kindEnd)]
             (if (or (not (listContains? (list "reply" "observation" "retryBrief" "answer" "note") kind)) (not (litAt s kindEnd " ")))
               none
-              (mt (quotedAt s bs n (+ kindEnd 1))
+              (match (quotedAt s bs n (+ kindEnd 1))
                 ((none) none)
                 ((some hit)
                   (if (and (= (+ (pairSecond hit) 1) n) (litAt s (pairSecond hit) ")"))
-                    (mt (stringToInt64 (c/sliceOf s 7 e))
+                    (match (stringToInt64 (c/sliceOf s 7 e))
                       ((some t) (some (pair t (pair kind (pairFirst hit)))))
                       ((none) none))
                     none)))))))))
 
 fn listStrings s: String bs: Bytes n: Int64 i: Int64 acc: (List String) -> (Option (List String))
   (let [k (spacesEnd bs n i)]
-    (mt (quotedAt s bs n k)
+    (match (quotedAt s bs n k)
       ((some hit) (listStrings s bs n (pairSecond hit) (cons (pairFirst hit) acc)))
       ((none) (if (= (byteAt bs n k) 41) (some (listReverse acc)) none))))
 
@@ -744,14 +744,14 @@ fn contextTokensField s: String -> (Option Int64)
                 (if (> e q) (stringToInt64 (c/sliceOf s q e)) none)))))
 
 fn headerOf session: String journal: String line: String text: String -> (Result ResumeState String)
-  (mt (quotedField line ":task" false)
+  (match (quotedField line ":task" false)
     ((none) (err "the session header has no :task string"))
     ((some rawTask)
       (let [intent (quotedField (removeQuotedField line ":task" false) ":intent" false)]
         (ok (ResumeState :session session :journal journal :task (c/asnUnescape rawTask) :modeHint (journalModeHint line)
-                         :intent (mt intent ((some raw) (if (= raw "auto") none (some (c/asnUnescape raw)))) ((none) none))
+                         :intent (match intent ((some raw) (if (= raw "auto") none (some (c/asnUnescape raw)))) ((none) none))
                          :owns (listField line ":owns") :gates (listField line ":gates")
-                         :base (mt (quotedField line ":base" false) ((some raw) (c/asnUnescape raw)) ((none) ""))
+                         :base (match (quotedField line ":base" false) ((some raw) (c/asnUnescape raw)) ((none) ""))
                          :contextTokens (contextTokensField line) :note "" :result none :history (list) :turn 0 :reply ""
                          :plan (if (stringEndsWith? line " :plan true)") (some (pl/planReplay text)) none))))))
 
@@ -767,11 +767,11 @@ fn scanLine session: String journal: String sc: ResumeScan line: String -> Resum
   (if (some? sc.malformed)
     sc
     (let [withHeader (if (and (stringStartsWith? line "(:session ") (none? sc.header))
-                       (mt (headerOf session journal line sc.text)
+                       (match (headerOf session journal line sc.text)
                          ((ok h) (with sc :header (some h) :malformed none))
                          ((err e) (with sc :header none :malformed (some e))))
                        sc)
-          withTurn (mt (turnEntry line)
+          withTurn (match (turnEntry line)
                      ((none) withHeader)
                      ((some entry)
                        (let [turn (pairFirst entry)
@@ -782,7 +782,7 @@ fn scanLine session: String journal: String sc: ResumeScan line: String -> Resum
                                      :note (if (= kind "note") (str "(:note \"" (c/escapeAsn text) "\")") withHeader.note)
                                      :result withHeader.result :text text))))]
       (if (stringStartsWith? line "(:result ")
-        (mt (keywordField line ":status")
+        (match (keywordField line ":status")
           ((some r) (ResumeScan :header withTurn.header :malformed withTurn.malformed :slots withTurn.slots
                                 :note withTurn.note :result (some r) :text withTurn.text))
           ((none) (ResumeScan :header withTurn.header :malformed (some "a result line has no :status keyword") :slots withTurn.slots
@@ -796,7 +796,7 @@ fn ! journalResume session: String rootDir: String -> (Result ResumeState String
   (let [path (journalPathOf rootDir session)]
     (if (or (not (sessionOk session)) (not (isFile path)))
       (err (noJournal session 2).stdout)
-      (mt (fileReadString path)
+      (match (fileReadString path)
         ((err e) (err (str "(:agentReceipt :status :rejected :error ERR_JOURNAL_READ :session \"" (c/escapeAsn session) "\" :message \"" (c/escapeAsn e) "\")")))
         ((ok raw)
           (let [text (pv/universalNewlines raw)
@@ -804,10 +804,10 @@ fn ! journalResume session: String rootDir: String -> (Result ResumeState String
                          (ResumeScan :header none :malformed none :slots (list) :note "" :result none :text text)
                          (go/pySplitLines text false))
                 replied (listSortBy (fn [t] t.turn) (filter (fn [t] (some? t.sent)) sc.slots))]
-            (mt sc.malformed
+            (match sc.malformed
               ((some m) (err (str "(:agentReceipt :status :rejected :error ERR_JOURNAL_READ :session \"" (c/escapeAsn session) "\" :message \"" (c/escapeAsn m) "\")")))
               ((none)
-                (mt sc.header
+                (match sc.header
                   ((none) (err (resumeError session "the journal holds no session header or no turn")))
                   ((some h)
                     (cond
@@ -827,28 +827,28 @@ fn unbackedList texts: (List String) -> String
   (if (listEmpty? texts) "" (str " :unbackedClaims (" (quoteEach texts) ")"))
 
 fn nonEmpty o: (Option String) -> (Option String)
-  (mt o ((some s) (if (stringEmpty? s) none (some s))) ((none) none))
+  (match o ((some s) (if (stringEmpty? s) none (some s))) ((none) none))
 
 fn gateCmd g: j/Json -> String
-  (mt (j/jsonGet g "cmd") ((some v) (pv/pyStr v)) ((none) ""))
+  (match (j/jsonGet g "cmd") ((some v) (pv/pyStr v)) ((none) ""))
 
 fn keptFindings xs: (List String) -> (List String)
   (filter (fn [f] (not (stringEmpty? f))) (map pv/pyStrip xs))
 
 fn formatReceipt r: LoopResult -> String
   (str "(:agentReceipt :status :" r.status
-       (mt (nonEmpty r.modeHint) ((some m) (str " :modeHint \"" (c/escapeAsn m) "\"")) ((none) ""))
-       (mt (nonEmpty r.deliver) ((some d) (str " :deliver :" d)) ((none) ""))
+       (match (nonEmpty r.modeHint) ((some m) (str " :modeHint \"" (c/escapeAsn m) "\"")) ((none) ""))
+       (match (nonEmpty r.deliver) ((some d) (str " :deliver :" d)) ((none) ""))
        " :phases (" (stringJoin r.phases " ") ")"
-       (mt (nonEmpty r.session) ((some s) (str " :session \"" s "\"")) ((none) ""))
-       (mt (nonEmpty r.journal) ((some p) (str " :journal \"" p "\"")) ((none) ""))
+       (match (nonEmpty r.session) ((some s) (str " :session \"" s "\"")) ((none) ""))
+       (match (nonEmpty r.journal) ((some p) (str " :journal \"" p "\"")) ((none) ""))
        " :unbacked " (stringFromInt64 r.unbacked) (unbackedList r.unbackedClaims)
-       (mt r.contextTokens ((some t) (if (= t 0) "" (str " :contextTokens " (stringFromInt64 t)))) ((none) ""))
-       (mt r.turns ((some t) (str " :turns " (stringFromInt64 t))) ((none) ""))
+       (match r.contextTokens ((some t) (if (= t 0) "" (str " :contextTokens " (stringFromInt64 t)))) ((none) ""))
+       (match r.turns ((some t) (str " :turns " (stringFromInt64 t))) ((none) ""))
        (if (listEmpty? r.gates)
          ""
          (str " :gates (" (stringJoin (map (fn [g] (str "(:cmd \"" (c/escapeAsn (gateCmd g)) "\" " (ctx/gateOutcome g) ")")) r.gates) " ") ")"))
-       (mt (nonEmpty r.escalate) ((some e) (str " :escalate (" e ")")) ((none) ""))
+       (match (nonEmpty r.escalate) ((some e) (str " :escalate (" e ")")) ((none) ""))
        (jr/handBackFields (nonEmpty r.patch) r.restored) (jr/writtenField r.written)
        (if (listEmpty? r.needsConfirm)
          ""
@@ -866,38 +866,38 @@ fn formatReceipt r: LoopResult -> String
                                r.ownsRejected)
                           " ")
               ")"))
-       (mt (nonEmpty r.error) ((some e) (str " :error " e)) ((none) ""))
+       (match (nonEmpty r.error) ((some e) (str " :error " e)) ((none) ""))
        (if (listEmpty? r.gatePreflight) "" (str " :gatePreflight (" (go/formatGatePreflight r.gatePreflight) ")"))
        (if r.parseDefect
-         (str " :turn " (stringFromInt64 (mt r.parseDefectTurn ((some t) (if (= t 0) 1 t)) ((none) 1))) " :parse-defect true")
+         (str " :turn " (stringFromInt64 (match r.parseDefectTurn ((some t) (if (= t 0) 1 t)) ((none) 1))) " :parse-defect true")
          "")
-       (mt r.findings ((some fs) (str " :findings (" (stringJoin (keptFindings fs) " ") ")")) ((none) ""))
-       (mt r.queueWaitSec ((some q) (str " :queueWaitSec " (stringFromFloat64 q))) ((none) ""))
-       (mt r.execSec ((some e) (str " :execSec " (stringFromFloat64 e))) ((none) ""))
-       (mt r.usage
+       (match r.findings ((some fs) (str " :findings (" (stringJoin (keptFindings fs) " ") ")")) ((none) ""))
+       (match r.queueWaitSec ((some q) (str " :queueWaitSec " (stringFromFloat64 q))) ((none) ""))
+       (match r.execSec ((some e) (str " :execSec " (stringFromFloat64 e))) ((none) ""))
+       (match r.usage
          ((some u) (str " :usage (:input " (stringFromInt64 u.input) " :cached " (stringFromInt64 u.cached)
                         " :output " (stringFromInt64 u.output) ")"))
          ((none) ""))
-       (mt r.batching
+       (match r.batching
          ((some b)
            (let [rates (rt/batchingRates b.turns b.ops b.single)]
              (str " :batching (:opsPerTurn " (stringFromFloat64 (pairFirst rates)) " :singleOpShare " (stringFromFloat64 (pairSecond rates))
                   " :opTurns " (stringFromInt64 b.turns) ")")))
          ((none) ""))
-       (mt r.plan ((some p) (pl/planField p)) ((none) ""))
+       (match r.plan ((some p) (pl/planField p)) ((none) ""))
        ")")
 
 
 fn blockEnd source: String from: Int64 -> Int64
   (let [tail (c/sliceOf source from (stringLength source))
         ends (map (fn [o] (optionOr o 0)) (filter (fn [o] (some? o)) (map (fn [m] (stringIndexOf tail m)) (list "\nfn " "\n(schema " "\nenum "))))]
-    (mt (listMin ends)
+    (match (listMin ends)
       ((some e) (+ from e))
       ((none) (stringLength source))))
 
 fn fnBody source: String name: String -> (Option String)
   (let [src (str "\n" source)]
-    (mt (stringIndexOf src (str "\nfn " name " "))
+    (match (stringIndexOf src (str "\nfn " name " "))
       ((none) none)
       ((some at) (some (c/sliceOf src (+ at 1) (blockEnd src (+ at 1)))))))
 
@@ -906,7 +906,7 @@ fn literalsIn s: String bs: Bytes n: Int64 i: Int64 acc: (List String) -> (List 
     ((>= i n) (listReverse acc))
     ((= (bytesGet bs i) 59) (literalsIn s bs n (lineEnd bs n i) acc))
     ((= (bytesGet bs i) 34)
-      (mt (stringTokenEnd bs n (+ i 1) false)
+      (match (stringTokenEnd bs n (+ i 1) false)
         ((some e) (literalsIn s bs n e (cons (c/sliceOf s (+ i 1) (- e 1)) acc)))
         ((none) (listReverse acc))))
     (else (literalsIn s bs n (+ i 1) acc)))
@@ -938,36 +938,36 @@ fn afterHead keys: (List String) -> (Option (List String))
     (else (afterHead (c/restOf keys))))
 
 fn receiptFieldsIn source: String -> (Result (List String) String)
-  (mt (fnBody source "formatReceipt")
+  (match (fnBody source "formatReceipt")
     ((none) (err "asl/agentLoop/main.asl has no fn formatReceipt"))
     ((some body)
       (let [bs (stringToBytes body)
             keys (fold (fn [acc lit] (listAppend acc (keysOf lit))) (list) (literalsIn body bs (bytesLength bs) 0 (list)))]
-        (mt (afterHead keys)
+        (match (afterHead keys)
           ((none) (err "formatReceipt writes no (:agentReceipt form"))
           ((some fields) (ok (dedupe (filter (fn [k] (not (listContains? (list "cmd" "exit" "op" "blocked") k))) fields) (list))))))))
 
 fn ! receiptFieldNames rootDir: String -> (Result (List String) String)
-  (mt (fileReadString (pyJoin rootDir "asl/agentLoop/main.asl"))
+  (match (fileReadString (pyJoin rootDir "asl/agentLoop/main.asl"))
     ((err e) (err e))
     ((ok source) (receiptFieldsIn source)))
 
 
 fn infoText info: j/Json key: String -> String
-  (mt (j/jsonGet info key) ((some v) (pv/pyStr v)) ((none) ""))
+  (match (j/jsonGet info key) ((some v) (pv/pyStr v)) ((none) ""))
 
 fn infoItems v: (Option j/Json) -> (List j/Json)
-  (mt v ((some x) (mt x ((j/jarr xs) xs) (_ (list)))) ((none) (list)))
+  (match v ((some x) (match x ((j/jarr xs) xs) (_ (list)))) ((none) (list)))
 
 fn infoFlag info: j/Json key: String -> String
-  (mt (j/jsonGet info key)
+  (match (j/jsonGet info key)
     ((some v) (if (truthy v) (str " :" key " \"" (pv/pyStr v) "\"") ""))
     ((none) ""))
 
 fn formatDryRun info: j/Json systemPrompt: String owns: (List String) -> String
   (str "(:dryRunReceipt :vendor \"" (infoText info "vendor") "\" :owns (" (quoteEach owns) ")"
        " :cwd \"" (infoText info "cwd") "\""
-       (mt (j/jsonGet info "request")
+       (match (j/jsonGet info "request")
          ((some req)
            (str " :request (:url \"" (infoText req "url") "\" :model \"" (infoText req "model") "\" :agent \"" (infoText req "agent") "\""
                 " :addDirs (" (stringJoin (map (fn [d] (str "\"" (pv/pyStr d) "\"")) (infoItems (j/jsonGet req "addDirs"))) " ") ")"
@@ -975,11 +975,11 @@ fn formatDryRun info: j/Json systemPrompt: String owns: (List String) -> String
                 " :queue_timeout " (infoText req "queue_timeout") ")"
                 " :note \"gateway replaces --agent aslLoop --print-timeout --output-format json\""))
          ((none)
-           (mt (j/jsonGet info "argv")
+           (match (j/jsonGet info "argv")
              ((some a) (if (truthy a) (str " :argv \"" (c/escapeAsn (stringJoin (map pv/pyStr (infoItems (some a))) " ")) "\"") ""))
              ((none) ""))))
        (infoFlag info "agentFile") (infoFlag info "agentFrontmatter") (infoFlag info "modelInstructionsFile")
-       (mt (j/jsonGet info "stdinRedirected") ((some v) (if (truthy v) " :stdinRedirected true" "")) ((none) ""))
+       (match (j/jsonGet info "stdinRedirected") ((some v) (if (truthy v) " :stdinRedirected true" "")) ((none) ""))
        " :systemPrompt \"" (c/escapeAsn systemPrompt) "\")")
 
 
@@ -1000,7 +1000,7 @@ fn contextFileRejection kind: String path: String -> MainResult
     (rejectWith (str ":error ERR_CONTEXT_FILE :path \"" (c/escapeAsn path) "\" :message \"" (c/escapeAsn message) "\"") 2))
 
 fn inRange o: (Option Int64) lo: Int64 hi: Int64 -> Bool
-  (mt o ((some v) (and (>= v lo) (<= v hi))) ((none) false))
+  (match o ((some v) (and (>= v lo) (<= v hi))) ((none) false))
 
 fn rstripSlash s: String -> String
   (if (and (stringEndsWith? s "/") (> (stringLength s) 0)) (rstripSlash (c/sliceOf s 0 (- (stringLength s) 1))) s)
@@ -1008,10 +1008,10 @@ fn rstripSlash s: String -> String
 fn ! expandUser p: String -> String
   (if (not (stringStartsWith? p "~"))
     p
-    (let [cut (mt (stringIndexOf (c/sliceOf p 1 (stringLength p)) "/") ((some off) (+ off 1)) ((none) (stringLength p)))]
+    (let [cut (match (stringIndexOf (c/sliceOf p 1 (stringLength p)) "/") ((some off) (+ off 1)) ((none) (stringLength p)))]
       (if (!= cut 1)
         p
-        (mt (envGet "HOME")
+        (match (envGet "HOME")
           ((some home) (let [r (str (rstripSlash home) (c/sliceOf p cut (stringLength p)))] (if (stringEmpty? r) "/" r)))
           ((none) p)))))
 
@@ -1022,16 +1022,16 @@ fn defaultModel backend: String -> String
   (if (= backend "agy") "gemini-3.8-flash" backend)
 
 fn optText v: (Option j/Json) -> (Option String)
-  (mt v ((some x) (some (textValue x))) ((none) none))
+  (match v ((some x) (some (textValue x))) ((none) none))
 
 fn modeOf hint: (Option String) -> (Option String)
-  (mt hint ((some m) (if (or (= m "auto") (= m "")) none (some m))) ((none) none))
+  (match hint ((some m) (if (or (= m "auto") (= m "")) none (some m))) ((none) none))
 
 fn hexByte b: Int64 -> String
   (str (c/sliceOf "0123456789abcdef" (/ b 16) (+ (/ b 16) 1)) (c/sliceOf "0123456789abcdef" (mod b 16) (+ (mod b 16) 1)))
 
 fn ! newSessionId -> (Result String String)
-  (mt (fileReadRange "/dev/urandom" 0 8)
+  (match (fileReadRange "/dev/urandom" 0 8)
     ((err e) (err e))
     ((ok bs)
       (if (= (bytesLength bs) 8)
@@ -1039,71 +1039,71 @@ fn ! newSessionId -> (Result String String)
         (err "/dev/urandom gave fewer than 8 bytes"))))
 
 fn liveOpName op: (List (Pair String c/KvVal)) -> String
-  (mt (c/dictGet op "op")
-    ((some value) (mt value ((c/kvStr name) name) (_ "")))
+  (match (c/dictGet op "op")
+    ((some value) (match value ((c/kvStr name) name) (_ "")))
     ((none) ""))
 
 fn liveOpPath op: (List (Pair String c/KvVal)) -> String
-  (mt (c/dictGet op "file")
-    ((some value) (mt value ((c/kvStr path) path) (_ "")))
-    ((none) (mt (c/dictGet op "path") ((some value) (mt value ((c/kvStr path) path) (_ ""))) ((none) ""))))
+  (match (c/dictGet op "file")
+    ((some value) (match value ((c/kvStr path) path) (_ "")))
+    ((none) (match (c/dictGet op "path") ((some value) (match value ((c/kvStr path) path) (_ ""))) ((none) ""))))
 
 fn liveConfirmReceipt out: ex/ExecOut -> (Option j/Json)
   (let [rec out.rec]
-    (mt (ex/recGet rec "needsConfirm")
-      ((some value) (mt value ((ex/vBool requested) (if requested (some (ls/execRecJson rec)) none)) (_ none)))
+    (match (ex/recGet rec "needsConfirm")
+      ((some value) (match value ((ex/vBool requested) (if requested (some (ls/execRecJson rec)) none)) (_ none)))
       ((none) none)))
 
 fn liveConfirmStr row: j/Json key: String fallback: String -> String
-  (mt (j/jsonGet row key) ((some v) (mt v ((j/jstr s) s) (_ fallback))) ((none) fallback))
+  (match (j/jsonGet row key) ((some v) (match v ((j/jstr s) s) (_ fallback))) ((none) fallback))
 
 fn liveConfirmItems value: (Option j/Json) -> (List NeedsConfirm)
-  (mt value
-    ((some raw) (mt raw
+  (match value
+    ((some raw) (match raw
       ((j/jarr items) (map (fn [item] (NeedsConfirm :op (liveConfirmStr item "op" "unknown") :error (liveConfirmStr item "error" ""))) items))
       (_ (list))))
     ((none) (list)))
 
 fn ! liveAdvisor provider: pv/Provider sys: String msg: String -> (Result (Option String) String)
-  (mt (pv/advise! provider sys msg)
+  (match (pv/advise! provider sys msg)
     ((none) (err "provider has no advisor channel"))
     ((some turn)
-      (mt turn.reply
+      (match turn.reply
         ((err e) (err (pv/errorMessage e)))
         ((ok reply) (ok reply)))))
 
 fn ! liveReviewer provider: pv/Provider sys: String msg: String -> (Result (Option String) String)
   (let [turn (pv/review! provider sys msg)]
-    (mt turn.reply
+    (match turn.reply
       ((err e) (err (pv/errorMessage e)))
         ((ok reply) (ok reply))))
 
 fn liveReviewerAvailable? provider: pv/Provider -> Bool
-  (mt provider
+  (match provider
     ((pv/vendorProvider _) true)
     ((pv/scriptFixtureProvider _ fixture _) (some? fixture.reviewer))
     (_ false))
 
 fn liveHookOk? result: (Result (Option String) String) -> Bool
-  (mt result ((err _) false) ((ok _) true))
+  (match result ((err _) false) ((ok _) true))
 
 fn liveReviewAccepts? result: (Result (Option String) String) -> Bool
-  (mt result
+  (match result
     ((err _) false)
     ((ok reply)
-      (mt reply
+      (match reply
         ((none) false)
         ((some text)
-          (mt (ctx/parseSpecVerdict (some text))
+          (match (ctx/parseSpecVerdict (some text))
             ((some verdict) (pairFirst verdict))
             ((none) false))))))
 
 fn ! appendLiveHook! path: String turn: Int64 name: String result: (Result (Option String) String) -> Bool
-  (mt result
+  (match result
     ((err e) (ok? (fileAppend path (str "(:liveHook :turn " (stringFromInt64 turn) " :name \"" name
       "\" :error \"" (c/escapeAsn e) "\")\n"))))
     ((ok text)
-      (mt text
+      (match text
         ((some value) (ok? (fileAppend path (str "(:liveHook :turn " (stringFromInt64 turn) " :name \"" name
           "\" :text \"" (c/escapeAsn value) "\")\n"))))
         ((none) (ok? (fileAppend path (str "(:liveHook :turn " (stringFromInt64 turn) " :name \"" name "\" :text \"\")\n")))))))
@@ -1118,7 +1118,7 @@ fn liveOwnsItems items: (List j/Json) -> (List OwnsRejection)
       :op (liveConfirmStr item "op" "unknown") :file (liveConfirmStr item "file" ""))) items)
 
 fn liveUsage value: (Option j/Json) -> (Option Usage)
-  (mt value
+  (match value
     ((some raw)
       (some (Usage
         :input (optionOr (intValue (optionOr (j/jsonGet raw "inputTokens") (j/jint 0))) 0)
@@ -1127,33 +1127,33 @@ fn liveUsage value: (Option j/Json) -> (Option Usage)
     ((none) none))
 
 fn providerUsageInt fields: (List (Pair String j/Json)) key: String -> Int64
-  (mt (listHead (filter (fn [p] (= (pairFirst p) key)) fields))
+  (match (listHead (filter (fn [p] (= (pairFirst p) key)) fields))
     ((some p) (optionOr (intValue (pairSecond p)) 0))
     ((none) 0))
 
 fn providerUsageLine meta: pv/TurnMeta -> (Option String)
-  (mt meta.usage
+  (match meta.usage
     ((some fields) (some (str "(:liveUsage :input " (stringFromInt64 (providerUsageInt fields "inputTokens"))
       " :cached " (stringFromInt64 (providerUsageInt fields "cachedTokens"))
       " :output " (stringFromInt64 (providerUsageInt fields "outputTokens")) ")")))
     ((none) none))
 
 fn liveUsageInt line: String key: String -> Int64
-  (mt (listHead (filter (fn [field] (= (pairFirst field) key)) (c/parseKv line)))
-    ((some field) (mt (pairSecond field)
+  (match (listHead (filter (fn [field] (= (pairFirst field) key)) (c/parseKv line)))
+    ((some field) (match (pairSecond field)
       ((c/kvInt digits) (optionOr (stringToInt64 digits) 0))
       ((c/kvStr _) 0)))
     ((none) 0))
 
 fn ! liveJournalUsage! rootDir: String journal: (Option String) -> (Option Usage)
-  (mt journal
+  (match journal
     ((some journalPath)
       (let [path (pyJoin rootDir journalPath)]
-      (mt (fileReadString path)
+      (match (fileReadString path)
         ((err _) none)
         ((ok text)
           (let [lines (filter (fn [line] (stringStartsWith? line "(:liveUsage ")) (stringSplit text "\n"))]
-            (mt (listLast lines)
+            (match (listLast lines)
               ((some line)
                 (some (Usage
                   :input (liveUsageInt line "input")
@@ -1163,7 +1163,7 @@ fn ! liveJournalUsage! rootDir: String journal: (Option String) -> (Option Usage
     ((none) none))
 
 fn livePlan value: (Option j/Json) -> (Option pl/PlanSummary)
-  (mt value
+  (match value
     ((some raw)
       (some (pl/summaryOf
         (optionOr (intValue (optionOr (j/jsonGet raw "steps") (j/jint 0))) 0)
@@ -1173,7 +1173,7 @@ fn livePlan value: (Option j/Json) -> (Option pl/PlanSummary)
     ((none) none))
 
 fn livePlanJson forms: (List String) -> (Option j/Json)
-  (mt (listHead (filter (fn [form] (stringStartsWith? (stringTrim form) "(:plan")) forms))
+  (match (listHead (filter (fn [form] (stringStartsWith? (stringTrim form) "(:plan")) forms))
     ((some form)
       (let [summary (pl/planSummary (pl/parsePlanState form))]
         (some (j/jobj (list
@@ -1194,27 +1194,27 @@ fn ! liveProviderRetry! provider: pv/Provider call: (fn [pv/Provider Int64] -> p
   (rt/retryTurn! provider call 3 (list 1 2 4) wallBudget sleep)
 
 fn liveWriteStatus out: ex/ExecOut -> Bool
-  (mt (ex/recGet out.rec "status")
-    ((some value) (mt value ((ex/vStr status) (= status "ok")) (_ false)))
+  (match (ex/recGet out.rec "status")
+    ((some value) (match value ((ex/vStr status) (= status "ok")) (_ false)))
     ((none) false))
 
 fn liveUnwritten written: jr/Written target: String -> jr/Written
   (jr/Written :root written.root
-    :files (mt written.files
+    :files (match written.files
       ((some files) (some (filter (fn [entry] (!= (pairFirst entry) target)) files)))
       ((none) none))
     :startHead written.startHead)
 
 fn liveOwnsRejected? out: ex/ExecOut -> Bool
-  (mt (ex/recGet out.rec "error")
-    ((some value) (mt value ((ex/vStr code) (= code "ERR_OWNS")) (_ false)))
+  (match (ex/recGet out.rec "error")
+    ((some value) (match value ((ex/vStr code) (= code "ERR_OWNS")) (_ false)))
     ((none) false))
 
 fn ! liveOwnsField! rootDir: String journal: (Option String) -> String
-  (mt journal
+  (match journal
     ((some journalPath)
       (let [path (pyJoin rootDir journalPath)]
-      (mt (fileReadString path)
+      (match (fileReadString path)
         ((err _) "")
         ((ok text)
           (let [rows (filter (fn [line] (stringStartsWith? line "(:liveOwnsRejected ")) (stringSplit text "\n"))
@@ -1236,7 +1236,7 @@ fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: 
           before (if owned (jr/snapshotBeforeWrite run.written target) (ok run.written))
           runOp (fn [form root] (let [r (ao/runAsl repoRoot form root ra.timeout none "subprocess")]
                                   (tx/aslRun (ao/runExit r) (ao/runStdout r) (ao/runStderr r))))
-          out (mt before
+          out (match before
             ((err e) (ex/ExecOut :rec (list (pair "id" (ex/vStr sid)) (pair "op" (ex/vStr opName))
                 (pair "status" (ex/vStr "rejected")) (pair "error" (ex/vStr "ERR_JOURNAL"))
                 (pair "message" (ex/vStr e))) :procs run.procs))
@@ -1250,7 +1250,7 @@ fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: 
               " :op \"" (c/escapeAsn opName) "\" :file \"" (c/escapeAsn target) "\" :error ERR_OWNS))\n")))
             true)
           wrote (and owned (and (listContains? (list "write" "edit") opName) (liveWriteStatus out)))
-          snapWritten (mt before
+          snapWritten (match before
             ((err _) run.written)
             ((ok written)
               (if (and (and owned (listContains? (list "write" "edit") opName))
@@ -1264,12 +1264,12 @@ fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: 
             (some (j/jobj (list (pair "turn" (j/jint run.state.turn))
               (pair "op" (j/jstr opName)) (pair "file" (j/jstr target)))))
             none)
-          nextRunRejected (mt rejection
+          nextRunRejected (match rejection
             ((some item) (let [state nextRun.state
               updated (rl/withOwnsRejections state (listAppend state.ownsRejections (list item)))]
               (rl/withState nextRun updated)))
             ((none) nextRun))
-          nextRunConfirm (mt (liveConfirmReceipt out)
+          nextRunConfirm (match (liveConfirmReceipt out)
             ((some confirm) (rl/withState nextRunRejected
               (rl/withFindings nextRunRejected.state nextRunRejected.state.findingsList
                 (listAppend nextRunRejected.state.needsConfirmList (list confirm)))))
@@ -1280,18 +1280,18 @@ fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: 
               (or wrote (pairSecond (pairSecond rest)))))))
 
 fn liveGateStr row: (List (Pair String go/RVal)) key: String fallback: String -> String
-  (mt (listHead (filter (fn [p] (= (pairFirst p) key)) row))
-    ((some p) (mt (pairSecond p) ((go/rStr v) v) (_ fallback)))
+  (match (listHead (filter (fn [p] (= (pairFirst p) key)) row))
+    ((some p) (match (pairSecond p) ((go/rStr v) v) (_ fallback)))
     ((none) fallback))
 
 fn liveGateInt row: (List (Pair String go/RVal)) key: String fallback: Int64 -> Int64
-  (mt (listHead (filter (fn [p] (= (pairFirst p) key)) row))
-    ((some p) (mt (pairSecond p) ((go/rInt v) v) (_ fallback)))
+  (match (listHead (filter (fn [p] (= (pairFirst p) key)) row))
+    ((some p) (match (pairSecond p) ((go/rInt v) v) (_ fallback)))
     ((none) fallback))
 
 fn liveGateBool row: (List (Pair String go/RVal)) key: String -> Bool
-  (mt (listHead (filter (fn [p] (= (pairFirst p) key)) row))
-    ((some p) (mt (pairSecond p) ((go/rBool v) v) (_ false)))
+  (match (listHead (filter (fn [p] (= (pairFirst p) key)) row))
+    ((some p) (match (pairSecond p) ((go/rBool v) v) (_ false)))
     ((none) false))
 
 fn liveGateResult row: (List (Pair String go/RVal)) -> g/GateResult
@@ -1316,7 +1316,7 @@ fn liveGateSummary gates: (List g/GateResult) -> String
           (c/joinSep (map g/gateCmd (filter (fn [gt] (!= (g/gateExit gt) 0)) gates)) "; ")))))
 
 fn liveDoneOps? ops: (List (List (Pair String c/KvVal))) -> Bool
-  (listAny? (fn [op] (mt (c/dictGet op "type") ((some v) (mt v ((c/kvStr t) (= t "done")) (_ false))) ((none) false))) ops)
+  (listAny? (fn [op] (match (c/dictGet op "type") ((some v) (match v ((c/kvStr t) (= t "done")) (_ false))) ((none) false))) ops)
 
 fn liveIntentDeliver ops: (List (List (Pair String c/KvVal))) current: (Option String) -> (Option String)
   (if (listEmpty? ops)
@@ -1324,9 +1324,9 @@ fn liveIntentDeliver ops: (List (List (Pair String c/KvVal))) current: (Option S
     (let [op (c/firstOf ops)
           next (if (= (liveOpName op) "intent")
             (let [rec (ex/intentReceipt op "intent")
-                  okStatus (mt (ex/recGet rec "status") ((some v) (mt v ((ex/vStr s) (= s "ok")) (_ false))) ((none) false))]
+                  okStatus (match (ex/recGet rec "status") ((some v) (match v ((ex/vStr s) (= s "ok")) (_ false))) ((none) false))]
               (if okStatus
-                (mt (ex/recGet rec "deliver") ((some v) (mt v ((ex/vStr d) (some d)) (_ current))) ((none) current))
+                (match (ex/recGet rec "deliver") ((some v) (match v ((ex/vStr d) (some d)) (_ current))) ((none) current))
                 current))
             current)]
       (liveIntentDeliver (c/restOf ops) next)))
@@ -1335,11 +1335,11 @@ fn liveCommitMessage ops: (List (List (Pair String c/KvVal))) -> (Option String)
   (if (listEmpty? ops)
     none
     (let [op (c/firstOf ops)
-          done (mt (c/dictGet op "type") ((some v) (mt v ((c/kvStr t) (= t "done")) (_ false))) ((none) false))]
+          done (match (c/dictGet op "type") ((some v) (match v ((c/kvStr t) (= t "done")) (_ false))) ((none) false))]
       (if done
-        (let [form (mt (c/dictGet op "form") ((some v) (mt v ((c/kvStr text) text) (_ ""))) ((none) ""))
+        (let [form (match (c/dictGet op "form") ((some v) (match v ((c/kvStr text) text) (_ ""))) ((none) ""))
               fields (c/parseKv form)]
-          (mt (c/dictGet fields "commit") ((some v) (mt v ((c/kvStr message) (some message)) (_ none))) ((none) none)))
+          (match (c/dictGet fields "commit") ((some v) (match v ((c/kvStr message) (some message)) (_ none))) ((none) none)))
         (liveCommitMessage (c/restOf ops)))))
 
 fn liveGateResultsGreen? gates: (List g/GateResult) -> Bool
@@ -1359,7 +1359,7 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
           (env.advise (ctx/advisorSystem) (str "Task: " ra.task "\n\n" transcript))
           (ok none))
         advisorLogged (if advisorInvoked (appendLiveHook! path turn "advisor" advisorResult) true)
-        advisorText (mt advisorResult ((ok value) (optionOr value "")) ((err _) ""))
+        advisorText (match advisorResult ((ok value) (optionOr value "")) ((err _) ""))
         turnsSoFar (max 0 (- turn 1))
         writeNudge (if (and (= (optionOr state.deliver "") "patch")
                         (and (not state.writesPersisted) (>= turnsSoFar (ctx/noWriteNudgeTurns))))
@@ -1380,9 +1380,9 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
           (fn [p attempt] (providerCall p system user)) env.wallBudget env.sleep)
         _retryLogged (appendRetryLines! path turn (pairSecond retried))
         response (pairFirst retried)
-        _usageLogged (mt (providerUsageLine response.meta)
+        _usageLogged (match (providerUsageLine response.meta)
           ((some form) (ok? (fileAppend path (str form "\n")))) ((none) true))]
-    (mt response.reply
+    (match response.reply
       ((err e)
         (do
           (fileAppend path (str "(:turn " (stringFromInt64 turn) " :error :" (pv/errorCode e) " :message \"" (c/escapeAsn (pv/errorMessage e)) "\")\n"))
@@ -1391,7 +1391,7 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
                 nextRun (rl/withState run nextState)]
             (pair (rl/ProviderRun :run nextRun :provider response.provider :history wrapped.history) (stop)))))
       ((ok replyOpt)
-        (mt replyOpt
+        (match replyOpt
           ((none)
             (do
               (fileAppend path (str "(:turn " (stringFromInt64 turn) " :error :ERR_NO_REPLY)\n"))
@@ -1416,12 +1416,12 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
                   execResult (if parseDefect (pair run (pair "" false))
                     (liveExecOps! operations ra rootDir repoRoot run.session path execEnv run))
                   executedRaw (pairFirst execResult)
-                  executed0 (mt (if ra.plan (livePlanJson facts.forms) none)
+                  executed0 (match (if ra.plan (livePlanJson facts.forms) none)
                     ((some planState) (rl/withState executedRaw (rl/withPlan executedRaw.state planState)))
                     ((none) executedRaw))
-                  turnUsageIn (mt response.meta.usage ((some fields) (providerUsageInt fields "inputTokens")) ((none) 0))
-                  turnUsageCached (mt response.meta.usage ((some fields) (providerUsageInt fields "cachedTokens")) ((none) 0))
-                  turnUsageOut (mt response.meta.usage ((some fields) (providerUsageInt fields "outputTokens")) ((none) 0))
+                  turnUsageIn (match response.meta.usage ((some fields) (providerUsageInt fields "inputTokens")) ((none) 0))
+                  turnUsageCached (match response.meta.usage ((some fields) (providerUsageInt fields "cachedTokens")) ((none) 0))
+                  turnUsageOut (match response.meta.usage ((some fields) (providerUsageInt fields "outputTokens")) ((none) 0))
                   executedUsage (rl/withState executed0 (rl/withUsageTotals executed0.state
                     (rl/usageTotalsPlus executed0.state.usageTotals turnUsageIn turnUsageCached turnUsageOut)))
                   executed (rl/withState executedUsage (rl/withBatching executedUsage.state
@@ -1481,7 +1481,7 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
                     status none none state.runStarted)
                   nextState (rl/withFindings nextState0 (map (fn [form] (j/jstr form)) mergedFindingForms)
                     executed.state.needsConfirmList)
-                  withCommit (mt (liveCommitMessage operations)
+                  withCommit (match (liveCommitMessage operations)
                     ((some message) (rl/withCommitMessage executed (some message)))
                     ((none) executed))
                   notedRun (rl/noteParseTurn (rl/withState withCommit nextState) turn parseDefect)
@@ -1493,21 +1493,21 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
                     (if terminal (stop) (nextTurn)))))))))
 
 fn ! liveJournal ra: RunArgs rootDir: String -> (Result (Pair String String) String)
-  (mt (dirCreate (pyJoin rootDir ".asl/run/agentLoop"))
+  (match (dirCreate (pyJoin rootDir ".asl/run/agentLoop"))
     ((err e) (err e))
     ((ok _)
-      (let [chosen (mt ra.resume
+      (let [chosen (match ra.resume
                      ((some st) (ok (pair st.session st.journal)))
-                     ((none) (mt (newSessionId) ((err e) (err e)) ((ok sid) (ok (pair sid (journalPathOf rootDir sid)))))))]
-        (mt chosen
+                     ((none) (match (newSessionId) ((err e) (err e)) ((ok sid) (ok (pair sid (journalPathOf rootDir sid)))))))]
+        (match chosen
           ((err e) (err e))
-          ((ok sp) (mt (fileAppend (pairSecond sp) "") ((err e) (err e)) ((ok _) (ok sp))))))))
+          ((ok sp) (match (fileAppend (pairSecond sp) "") ((err e) (err e)) ((ok _) (ok sp))))))))
 
 fn receiptPhases result: ls/RunResult -> (List String)
   (let [findingsReceipt (if (listEmpty? result.findings)
                           none
                           (ctx/receiptPhase (j/jobj (list (pair "type" (j/jstr "findings"))))))]
-    (mt findingsReceipt
+    (match findingsReceipt
       ((some phase) (if (listContains? result.phases phase) result.phases (listAppend result.phases (list phase))))
       ((none) result.phases)))
 
@@ -1521,29 +1521,29 @@ fn loopResultOf ra: RunArgs rootDir: String result: ls/RunResult usage: (Option 
     :journal result.journal :unbacked result.unbacked
     :unbackedClaims (map pv/pyStr result.unbackedClaims) :contextTokens result.contextTokens
     :turns (some result.turns) :gates (map ls/gateJson result.gates)
-    :escalate (mt result.escalate ((some e) (some (pv/pyStr e))) ((none) none))
+    :escalate (match result.escalate ((some e) (some (pv/pyStr e))) ((none) none))
     :patch result.patch :restored result.restored :written result.written
     :needsConfirm (liveConfirmItems result.needsConfirm) :ownsRejected (liveOwnsItems result.ownsRejected) :error result.error :gatePreflight (list)
     :parseDefect result.parseDefect :parseDefectTurn result.parseDefectTurn
     :findings (some (map pv/pyStr result.findings)) :queueWaitSec result.queueWaitSec
-    :execSec result.execSec :usage (mt (liveUsage result.usage) ((some u) (some u)) ((none) usage))
+    :execSec result.execSec :usage (match (liveUsage result.usage) ((some u) (some u)) ((none) usage))
     :batching batching :plan (livePlan result.planSummary)))
 
 fn ! executeLive ra: RunArgs repoRoot: String rootDir: String env: pv/ProviderEnv -> MainResult
-  (mt (pv/makeProvider! ra.backend "auto" rootDir ra.model ra.timeout "" ra.queueTimeout ra.timeoutSet env (optionOr ra.intent "auto"))
+  (match (pv/makeProvider! ra.backend "auto" rootDir ra.model ra.timeout "" ra.queueTimeout ra.timeoutSet env (optionOr ra.intent "auto"))
     ((err e) (rejectWith (str ":error ERR_BACKEND :message \"" (c/escapeAsn (pv/errorMessage e)) "\"") 1))
     ((ok provider)
-      (mt (liveJournal ra rootDir)
+      (match (liveJournal ra rootDir)
         ((err e) (rejectWith (str ":error ERR_JOURNAL :message \"" (c/escapeAsn e) "\"") 1))
         ((ok sp)
           (let [session (pairFirst sp)
                 path (pairSecond sp)
                 model (if (stringEmpty? ra.model) (defaultModel ra.backend) ra.model)
-                tokens (ctx/contextTokensFor (some model) (mt ra.contextTokens ((some t) (j/jint t)) ((none) (j/jnull)))
+                tokens (ctx/contextTokensFor (some model) (match ra.contextTokens ((some t) (j/jint t)) ((none) (j/jnull)))
                   (listContains? (supportedBackends) ra.backend))
                 prompt (jr/buildSystemPrompt repoRoot ra.task rootDir ra.base
                          ra.gates (some tokens) ra.plan)]
-            (mt prompt
+            (match prompt
               ((err e) (rejectWith (str ":error ERR_HARNESS :message \"" (c/escapeAsn e) "\"") 1))
               ((ok system)
                 (let [call (fn [sys user] (pv/nextTurn! provider sys user))
@@ -1563,14 +1563,14 @@ fn ! executeLive ra: RunArgs repoRoot: String rootDir: String env: pv/ProviderEn
                   (MainResult :stdout line :exitCode (if (and (= receipt.status "ok") (= receipt.unbacked 0)) 0 1))))))))))
 
 fn ! executeDryRun ra: RunArgs repoRoot: String rootDir: String env: pv/ProviderEnv -> MainResult
-  (mt (pv/buildDryRunInfo! ra.backend "auto" rootDir ra.model ra.timeout ra.queueTimeout env)
+  (match (pv/buildDryRunInfo! ra.backend "auto" rootDir ra.model ra.timeout ra.queueTimeout env)
     ((err e) (rejectWith (str ":error ERR_BACKEND :message \"" (c/escapeAsn (pv/errorMessage e)) "\"") 1))
     ((ok info)
       (let [backend ra.backend
             model (if (stringEmpty? ra.model) (defaultModel backend) ra.model)
-            tokens (ctx/contextTokensFor (some model) (mt ra.contextTokens ((some t) (j/jint t)) ((none) (j/jnull)))
+            tokens (ctx/contextTokensFor (some model) (match ra.contextTokens ((some t) (j/jint t)) ((none) (j/jnull)))
                                          (listContains? (supportedBackends) backend))]
-        (mt (jr/buildSystemPrompt repoRoot ra.task rootDir ra.base ra.gates (some tokens) ra.plan)
+        (match (jr/buildSystemPrompt repoRoot ra.task rootDir ra.base ra.gates (some tokens) ra.plan)
           ((err e) (rejectWith (str ":error ERR_HARNESS :message \"" (c/escapeAsn e) "\"") 1))
           ((ok prompt)
             (let [receipt (formatDryRun info prompt ra.owns)
@@ -1589,9 +1589,9 @@ fn resumed ra: RunArgs st: ResumeState -> RunArgs
   (RunArgs :task st.task :modeHint st.modeHint :owns st.owns :gates st.gates :backend ra.backend
            :model ra.model :timeout ra.timeout :timeoutSet ra.timeoutSet :queueTimeout ra.queueTimeout
            :budget ra.budget :inputTokenBudget ra.inputTokenBudget :gateTimeout ra.gateTimeout :wallBudget ra.wallBudget
-           :intent (mt ra.intent ((some i) (some i)) ((none) st.intent))
+           :intent (match ra.intent ((some i) (some i)) ((none) st.intent))
            :base st.base
-           :contextTokens (mt ra.contextTokens ((some t) (if (= t 0) st.contextTokens (some t))) ((none) st.contextTokens))
+           :contextTokens (match ra.contextTokens ((some t) (if (= t 0) st.contextTokens (some t))) ((none) st.contextTokens))
            :plan ra.plan :resume (some st))
 
 fn ! dispatch ps: (List (Pair String j/Json)) repoRoot: String rootDir: String timeout: Int64 queueTimeout: Int64 plan: Bool -> MainResult
@@ -1608,11 +1608,11 @@ fn ! dispatch ps: (List (Pair String j/Json)) repoRoot: String rootDir: String t
                     :intent (optText (paramGet ps "intent"))
                     :base (textValue (paramOr ps "base" (j/jstr ""))) :contextTokens (intValue (paramOr ps "contextTokens" (j/jnull)))
                     :plan plan :resume none)
-        dry (mt (paramOr ps "dryRun" (j/jbool false)) ((j/jbool b) b) (_ false))]
+        dry (match (paramOr ps "dryRun" (j/jbool false)) ((j/jbool b) b) (_ false))]
     (cond
       ((and (truthy resumeV) (not (paramHas ps "answer"))) (resumeReport (textValue resumeV) rootDir))
       ((truthy resumeV)
-        (mt (journalResume (textValue resumeV) rootDir)
+        (match (journalResume (textValue resumeV) rootDir)
           ((err receipt) (MainResult :stdout receipt :exitCode 2))
           ((ok st) (execute (resumed ra st) dry repoRoot rootDir))))
       (else (execute ra dry repoRoot rootDir))))
@@ -1621,11 +1621,11 @@ fn ! checkWall ps: (List (Pair String j/Json)) repoRoot: String rootDir: String 
   (let [given (optionOr (intValue (paramOr ps "timeout" (j/jint 600))) 600)
         queueTimeout (optionOr (intValue (paramOr ps "queueTimeout" (j/jint 1200))) 1200)
         wall (intValue (paramOr ps "wallBudget" (j/jnull)))
-        timeout (mt wall ((some w) (if (paramHas ps "timeout") given (max given (- w queueTimeout)))) ((none) given))
+        timeout (match wall ((some w) (if (paramHas ps "timeout") given (max given (- w queueTimeout)))) ((none) given))
         limit (min 86400 (+ timeout queueTimeout))
         planEnv (optionOr (envGet "ASL_LEON_PLAN") "")
-        planNull (mt (paramGet ps "plan") ((some v) (mt v ((j/jnull) true) (_ false))) ((none) false))
-        plan (mt (paramGet ps "plan") ((some v) (mt v ((j/jbool b) b) (_ false))) ((none) (= planEnv "1")))]
+        planNull (match (paramGet ps "plan") ((some v) (match v ((j/jnull) true) (_ false))) ((none) false))
+        plan (match (paramGet ps "plan") ((some v) (match v ((j/jbool b) b) (_ false))) ((none) (= planEnv "1")))]
     (cond
       ((or planNull (not (listContains? (list "" "0" "1") planEnv)))
         (rejectWith (str ":error ERR_INVALID_ARG :key \"" (if planNull "plan" "ASL_LEON_PLAN") "\" :value \"" (c/escapeAsn (if planNull "" planEnv)) "\""
@@ -1674,7 +1674,7 @@ fn ! mainWithRoots argv: (List String) repoRoot: String rootDir: String -> MainR
 
 fn ! mainCli argv: (List String) -> Int64
   (let [repoRoot (resultOr (realPath ".") ".")
-        rootDir (mt (envGet "ASL_ROOT_DIR") ((some r) (if (stringEmpty? r) repoRoot r)) ((none) repoRoot))
+        rootDir (match (envGet "ASL_ROOT_DIR") ((some r) (if (stringEmpty? r) repoRoot r)) ((none) repoRoot))
         res (mainWithRoots argv repoRoot rootDir)]
     (do
       (println res.stdout)

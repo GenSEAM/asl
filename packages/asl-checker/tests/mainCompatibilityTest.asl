@@ -15,7 +15,7 @@ fn testLegacyCheckerCodes -> Bool
 
 fn testFixedPlusSignature -> Bool
   (let [(sig (ty/builtinSig "+"))]
-    (mt sig
+    (match sig
       ((none) (do (assert false "plus has a signature") false))
       ((some s) (do (assert (not (pairFirst (pairSecond s))) "plus is fixed-arity in the exported builtin signature")
                     (assert (= (pairSecond (pairSecond s)) "N") "plus retains its numeric result type") true))))
@@ -26,7 +26,7 @@ fn testLambdaUnknownTypeRule -> Bool
 
 fn testImportedUnqualifiedSchemaAnnotation -> Bool
   (let [(depSrc "(module depMod :x [Point] :i []) (schema Point (:f x Int64) (:f y Int64))")
-        (depForms (mt (a/parse depSrc) ((ok f) f) ((err _) (list))))
+        (depForms (match (a/parse depSrc) ((ok f) f) ((err _) (list))))
         (depSummary (r/collectSummary depForms "/path/to/depMod.asl"))
         (deps (mapSet (mapEmpty) "/path/to/depMod.asl" depSummary))
         (consumerSrc "(module consumer :x [getUnqualifiedX] :i [(depMod :a d)]) (fn getUnqualifiedX [(p Point)] -> Int64 p.x)")

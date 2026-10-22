@@ -3,7 +3,7 @@
   :i [(asl-checker/check :a c)])
 
 fn sourceIsClean! path: String -> Bool
-  (mt (c/checkFile! path (list "."))
+  (match (c/checkFile! path (list "."))
     ((err _) false)
     ((ok ds) (listEmpty? ds)))
 

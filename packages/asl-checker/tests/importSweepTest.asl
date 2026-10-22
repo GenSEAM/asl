@@ -7,10 +7,10 @@ fn ! isUnimportedAlias? d: ty/Diagnostic -> Bool
   (and (= d.code "rule-9") (stringContains? d.message "is not imported"))
 
 fn ! hitsInFile! path: String -> (List String)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) (list))
     ((ok src)
-     (mt (a/parse src)
+     (match (a/parse src)
        ((err _) (list))
        ((ok forms)
         (let [(mod (r/collectSummary forms path))
@@ -24,12 +24,12 @@ fn ! checkOneFile! path: String n: Int64 -> Int64
       (+ n 1)))
 
 fn ! checkAllFiles! paths: (List String) n: Int64 -> Int64
-  (mt (listHead paths)
+  (match (listHead paths)
     ((none) n)
     ((some p) (checkAllFiles! (optionOr (listTail paths) (list)) (checkOneFile! p n))))
 
 fn ! runTests -> Bool
-  (mt (cl/allCorpusFiles!)
+  (match (cl/allCorpusFiles!)
     ((err e) (do (assert false (str "git ls-files failed: " e)) false))
     ((ok files)
      (let [(n (checkAllFiles! files 0))]

@@ -60,7 +60,7 @@
 
 fn firstGroup rex: r/Rex s: String -> (Option String)
   (let [(b (stringToBytes s))]
-    (mt (r/rexSearch rex b (bytesLength b) 0)
+    (match (r/rexSearch rex b (bytesLength b) 0)
       ((none) (none))
       ((some caps) (r/rexGroup s caps 1))))
 
@@ -70,7 +70,7 @@ fn allGroups rex: r/Rex s: String -> (List String)
          (r/rexFindAll rex b (bytesLength b))))
 
 fn declaredList! block: (Option String) key: String wordRex: r/Rex -> (List String)
-  (mt block
+  (match block
     ((none) (list))
     ((some g)
       (let [(quoted (allGroups (p/patQuoted!) g))]
@@ -80,15 +80,15 @@ fn declaredList! block: (Option String) key: String wordRex: r/Rex -> (List Stri
 fn scanModule! sf: String pkgRoot: String cwd: String -> (Result (Option ModInfo) String)
   (let [(relPkg (t/relPath sf pkgRoot cwd))
         (rel (if (stringStartsWith? relPkg "src/") (t/sliceStr relPkg 4 (stringLength relPkg)) relPkg))]
-    (mt (h/readText! sf)
+    (match (h/readText! sf)
       ((err e) (err (str "cannot read " sf ": " e)))
       ((ok code)
         (let [(b (stringToBytes code)) (n (bytesLength b))
               (modId (firstGroup (p/patModuleId!) code))]
           (if (and (none? modId) (or (stringEndsWith? sf "package.asl") (stringEndsWith? sf "target.asl")))
             (ok (none))
-            (let [(exports (mt (firstGroup (p/patExports!) code) ((some g) (t/pySplit g)) ((none) (list))))
-                  (imports (mt (firstGroup (p/patImportsBlock!) code) ((some g) (allGroups (p/patImportName!) g)) ((none) (list))))
+            (let [(exports (match (firstGroup (p/patExports!) code) ((some g) (t/pySplit g)) ((none) (list))))
+                  (imports (match (firstGroup (p/patImportsBlock!) code) ((some g) (allGroups (p/patImportName!) g)) ((none) (list))))
                   (defs (+ (+ (r/rexCount (p/patFnParen!) b n) (r/rexCount (p/patFnNewline!) b n))
                            (+ (r/rexCount (p/patSchemaParen!) b n) (r/rexCount (p/patMacroParen!) b n))))]
               (ok (some (ModInfo :file sf :rel rel :id (optionOr modId rel) :exports exports :imports imports :totalDefs defs)))))))))
@@ -102,14 +102,14 @@ fn dedupeByRel mods: (List ModInfo) -> (List ModInfo)
                                     (if (listContains? acc m.rel) acc (cons m.rel acc)))
                                   (list) mods)))]
     (fold (fn [(acc (List ModInfo)) (rel String)] -> (List ModInfo)
-            (mt (listHead (filter (fn [(x ModInfo)] -> Bool (= x.rel rel)) (listReverse mods)))
+            (match (listHead (filter (fn [(x ModInfo)] -> Bool (= x.rel rel)) (listReverse mods)))
               ((some m) (listAppend acc (list m)))
               ((none) acc)))
           (list) order))
 
 fn scanPackage! ctx: h/Ctx root: String tree: h/Tree d: String -> (Result PkgInfo String)
   (let [(pkgRoot (t/joinPath root d))]
-    (mt (h/readText! (t/joinPath pkgRoot "manifest.asn"))
+    (match (h/readText! (t/joinPath pkgRoot "manifest.asn"))
       ((err e) (err (str "cannot read manifest of " d ": " e)))
       ((ok c)
         (let [(name (optionOr (firstGroup (p/patPackage!) c) d))
@@ -119,14 +119,14 @@ fn scanPackage! ctx: h/Ctx root: String tree: h/Tree d: String -> (Result PkgInf
               (srcFiles (filter (fn [(sf String)] -> Bool (not (skippedPart? (t/relPath sf pkgRoot ctx.cwd))))
                                 (h/globFiles! tree (t/normPath pkgRoot))))
               (scanned (fold (fn [(acc (Result (List ModInfo) String)) (sf String)] -> (Result (List ModInfo) String)
-                               (mt acc
+                               (match acc
                                  ((err e) (err e))
                                  ((ok ms)
-                                   (mt (scanModule! sf pkgRoot ctx.cwd)
+                                   (match (scanModule! sf pkgRoot ctx.cwd)
                                      ((err e) (err e))
-                                     ((ok om) (mt om ((some m) (ok (cons m ms))) ((none) (ok ms))))))))
+                                     ((ok om) (match om ((some m) (ok (cons m ms))) ((none) (ok ms))))))))
                              (ok (list)) srcFiles))]
-          (mt scanned
+          (match scanned
             ((err e) (err e))
             ((ok ms) (ok (PkgInfo :dir d :name name :entry entry :deps deps :declMods declMods :mods (dedupeByRel (listReverse ms))))))))))
 
@@ -134,18 +134,18 @@ fn scanCodebase! ctx: h/Ctx -> (Result (Option Scan) String)
   (let [(root0 (t/normPath (t/joinPath ctx.home "asl/packages")))
         (root (if (h/isDir? root0) root0 (t/joinPath (t/joinPath ctx.cwd "asl") "packages")))]
     (if (not (h/isDir? root)) (ok (none))
-      (let [(realRoot (mt (realPath root) ((ok x) x) ((err _) root)))
+      (let [(realRoot (match (realPath root) ((ok x) x) ((err _) root)))
             (dirs (filter (fn [(d String)] -> Bool
                             (and (h/isDir? (t/joinPath root d))
                                  (and (not (h/isLink? realRoot d)) (h/isFile? (t/joinPath (t/joinPath root d) "manifest.asn")))))
                           (h/listSorted! root)))]
-        (mt (h/findTree! ctx (t/normPath root) false (list "*.asl"))
+        (match (h/findTree! ctx (t/normPath root) false (list "*.asl"))
           ((err e) (err e))
           ((ok tree)
-            (mt (fold (fn [(acc (Result (List PkgInfo) String)) (d String)] -> (Result (List PkgInfo) String)
-                        (mt acc
+            (match (fold (fn [(acc (Result (List PkgInfo) String)) (d String)] -> (Result (List PkgInfo) String)
+                        (match acc
                           ((err e) (err e))
-                          ((ok ps) (mt (scanPackage! ctx root tree d) ((err e) (err e)) ((ok pk) (ok (cons pk ps)))))))
+                          ((ok ps) (match (scanPackage! ctx root tree d) ((err e) (err e)) ((ok pk) (ok (cons pk ps)))))))
                       (ok (list)) dirs)
               ((err e) (err e))
               ((ok ps) (ok (some (Scan :pkgs (listReverse ps)))))))))))
@@ -178,7 +178,7 @@ fn cohesionOf count: Int64 edges: Int64 -> Float
         1.0)))
 
 fn afterSlash dm: String -> String
-  (mt (stringIndexOf dm "/")
+  (match (stringIndexOf dm "/")
     ((some i) (t/sliceStr dm (+ i 1) (stringLength dm)))
     ((none) dm))
 
@@ -202,12 +202,12 @@ fn ghostsOf pk: PkgInfo -> (List (Pair String String))
               pk.declMods)))
 
 fn toDir pkgs: (List PkgInfo) name: String -> String
-  (mt (listHead (filter (fn [(pk PkgInfo)] -> Bool (= pk.name name)) (listReverse pkgs)))
+  (match (listHead (filter (fn [(pk PkgInfo)] -> Bool (= pk.name name)) (listReverse pkgs)))
     ((some pk) pk.dir)
     ((none) name))
 
 fn toName pkgs: (List PkgInfo) dir: String -> String
-  (mt (listHead (filter (fn [(pk PkgInfo)] -> Bool (= pk.dir dir)) pkgs))
+  (match (listHead (filter (fn [(pk PkgInfo)] -> Bool (= pk.dir dir)) pkgs))
     ((some pk) pk.name)
     ((none) dir))
 
@@ -237,17 +237,17 @@ fn depsOf pkgs: (List PkgInfo) dirs: (List String) pk: PkgInfo -> (Pair (List St
           (pair declared (list)) pk.mods))
 
 fn succOf graph: (List (Pair String (List String))) node: String -> (List String)
-  (mt (listHead (filter (fn [(e (Pair String (List String)))] -> Bool (= (pairFirst e) node)) graph))
+  (match (listHead (filter (fn [(e (Pair String (List String)))] -> Bool (= (pairFirst e) node)) graph))
     ((some e) (pairSecond e))
     ((none) (list)))
 
 fn colourOf seen: (List (Pair String Int64)) node: String -> Int64
-  (mt (listHead (filter (fn [(e (Pair String Int64))] -> Bool (= (pairFirst e) node)) seen))
+  (match (listHead (filter (fn [(e (Pair String Int64))] -> Bool (= (pairFirst e) node)) seen))
     ((some e) (pairSecond e))
     ((none) 0))
 
 fn fromNode path: (List String) node: String -> (List String)
-  (mt (listHead path)
+  (match (listHead path)
     ((none) (list))
     ((some x) (if (= x node) path (fromNode (optionOr (listTail path) (list)) node))))
 
@@ -392,10 +392,10 @@ fn couplingJson res: CouplingResult -> j/Json
       (pair "undeclaredImports" (j/jArr (map (fn [(u Undeclared)] -> j/Json (j/jObj (list (pair "fromPackage" (j/jStr u.from)) (pair "file" (j/jStr u.file)) (pair "importedPackage" (j/jStr u.imported))))) res.undeclared))))))))
 
 fn runCoupling! ctx: h/Ctx fmt: String strict: Bool -> h/Outcome
-  (mt (scanCodebase! ctx)
+  (match (scanCodebase! ctx)
     ((err e) (h/outcome "" (str "Error: " e "\n") 1))
     ((ok os)
-      (mt os
+      (match os
         ((none) (h/outcome "" "Error: Could not locate asl/packages directory.\n" 1))
         ((some scan)
           (let [(res (analyzeCoupling scan))

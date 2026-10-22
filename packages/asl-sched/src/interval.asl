@@ -10,7 +10,7 @@ fn interval everySeconds: Int64 startSeconds: Int64 -> (Result Interval String)
     (ok (intervalValue everySeconds startSeconds)))
 
 fn intervalNextFire schedule: Interval afterSeconds: Int64 -> (Result Int64 String)
-  (mt schedule
+  (match schedule
     ((intervalValue step start)
       (let [(elapsed (- afterSeconds start))
             (n (if (< elapsed 0) 0 (+ (/ elapsed step) 1)))

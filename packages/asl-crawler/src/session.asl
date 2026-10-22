@@ -21,21 +21,21 @@ fn makeServicePreset name: Str url: Str domain: Str cookies: (List Str) sel: Str
 fn getServicePreset service: Str -> ServicePreset
   (let [(clean (stringLower (stringTrim service)))]
     (cond
-      ((or (== clean "tiktok") (== clean "tt"))
+      ((or (= clean "tiktok") (= clean "tt"))
         (ServicePreset
           :serviceName "tiktok"
           :loginUrl "https://www.tiktok.com/login"
           :domain ".tiktok.com"
           :sessionCookieNames (list "sessionid" "sid_tt" "sid_guard")
           :checkSelector "[data-e2e='profile-icon']"))
-      ((or (== clean "github") (== clean "gh"))
+      ((or (= clean "github") (= clean "gh"))
         (ServicePreset
           :serviceName "github"
           :loginUrl "https://github.com/login"
           :domain "github.com"
           :sessionCookieNames (list "user_session" "__Host-user_session_same_site")
           :checkSelector "summary[aria-label='View profile and more']"))
-      ((or (== clean "x") (== clean "twitter"))
+      ((or (= clean "x") (= clean "twitter"))
         (ServicePreset
           :serviceName "x"
           :loginUrl "https://x.com/i/flow/login"

@@ -14,7 +14,7 @@ fn found i: Int64 n: Int64 m: (Map Int64 Int64) acc: Int64 -> Int64
     (found (+ i 1) n m (+ acc (if (= (mapGet m (mod (* i 7919) 1000003)) (some i)) 1 0))))
 
 fn depth t: (PreludeTree K V) -> Int64
-  (mt t
+  (match t
     ((preludeLeaf) 0)
     ((preludeNode _ _ _ l g) (+ 1 (max (depth l) (depth g)))))
 
@@ -34,9 +34,9 @@ fn churn keys: (List K) drop: (List K) seed: Int64 -> (Map K Int64)
     (fold (fn [acc k] (mapSet acc k 1)) cut (shuffle drop (+ seed 57))))
 
 fn sorted? xs: (List Int64) -> Bool
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) true)
-    ((some a) (mt (listGet xs 1)
+    ((some a) (match (listGet xs 1)
                 ((none) true)
                 ((some b) (and (< a b) (sorted? (listDrop xs 1)))))))
 

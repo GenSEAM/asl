@@ -6,27 +6,27 @@
 fn items node: p/SExpr -> (List p/SExpr)
   (p/sexprToList node)
 fn atom node: p/SExpr -> String
-  (mt node ((p/sexprAtom value) value) (_ ""))
+  (match node ((p/sexprAtom value) value) (_ ""))
 fn field xs: (List p/SExpr) key: String -> (Option p/SExpr)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (none))
     ((some k)
-      (mt (listTail xs)
+      (match (listTail xs)
         ((none) (none))
         ((some afterKey)
-          (mt (listHead afterKey)
+          (match (listHead afterKey)
             ((none) (none))
             ((some value)
               (if (= (atom k) key) (some value)
                   (field (optionOr (listTail afterKey) (list)) key))))))))
 fn strField xs: (List p/SExpr) key: String -> String
-  (mt (field xs key) ((some value) (gr/decodeString (atom value))) ((none) ""))
+  (match (field xs key) ((some value) (gr/decodeString (atom value))) ((none) ""))
 fn listOf node: p/SExpr -> (List p/SExpr)
   (p/sexprToList node)
 fn numField xs: (List p/SExpr) key: String -> Int64
   (optionOr (stringToInt64 (atom (optionOr (field xs key) (p/sexprAtom "-1")))) -1)
 fn findGate records: (List p/SExpr) suite: String -> (Option p/SExpr)
-  (mt (listHead records)
+  (match (listHead records)
     ((none) (none))
     ((some record)
       (let [fields (optionOr (listTail (items record)) (list))]
@@ -34,11 +34,11 @@ fn findGate records: (List p/SExpr) suite: String -> (Option p/SExpr)
           (some record)
           (findGate (optionOr (listTail records) (list)) suite)))))
 fn gateExit records: (List p/SExpr) suite: String -> Int64
-  (mt (findGate records suite)
+  (match (findGate records suite)
     ((none) -1)
     ((some record) (numField (optionOr (listTail (items record)) (list)) ":exit")))
 fn gateOutput records: (List p/SExpr) suite: String -> String
-  (mt (findGate records suite)
+  (match (findGate records suite)
     ((none) "")
     ((some record) (strField (optionOr (listTail (items record)) (list)) ":stdout")))
 
@@ -46,7 +46,7 @@ fn ! timesLedger! -> String
   (str (optionOr (envGet "TMPDIR") "/tmp") "/aslSuiteRunnerTimes." (stringFromInt64 (procSelf)) ".asn")
 
 fn ! replayTimeouts! records: (List p/SExpr) -> Bool
-  (mt (listHead records)
+  (match (listHead records)
     ((none) true)
     ((some record)
       (let [fields (optionOr (listTail (items record)) (list))
@@ -67,7 +67,7 @@ fn timeoutSuites records: (List p/SExpr) -> (List String)
   (map (fn [record] (strField (optionOr (listTail (items record)) (list)) ":suite")) records)
 
 fn ! lsFilesModes! root: String -> (List (Pair String String))
-  (let [text (mt (sr/gitOut! root (list "ls-files" "-s")) ((ok t) t) ((err _) ""))
+  (let [text (match (sr/gitOut! root (list "ls-files" "-s")) ((ok t) t) ((err _) ""))
         lines (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (sr/pyLines text))]
     (map (fn [(l String)] -> (Pair String String)
            (let [tab (optionOr (stringIndexOf l "\t") (stringLength l))
@@ -99,7 +99,7 @@ fn ! expectedDiscovered! root: String tracked: (List String) -> (List String)
             (candidateSuites! root tracked symlinks)))
 
 fn ! replayGates! records: (List p/SExpr) -> Bool
-  (mt (listHead records)
+  (match (listHead records)
     ((none) true)
     ((some record)
       (let [fields (optionOr (listTail (items record)) (list))
@@ -145,16 +145,16 @@ fn ! runViaFleet! job: sr/Job snap: String -> fr/Done
     (fr/Limits :timeoutMs job.timeoutMs :maxDesc 32))
 
 fn ! hostlessProbe! -> Bool
-  (mt (sr/gitRoot!)
+  (match (sr/gitRoot!)
     ((err e) (do (assert false (str "hostless probe: git root: " e)) false))
     ((ok root)
      (let [(rootReal (resultOr (realPath root) root))]
-      (mt (sr/makeSnapshot! root)
+      (match (sr/makeSnapshot! root)
        ((err e) (do (assert false (str "hostless probe: make snapshot: " e)) false))
        ((ok snap)
         (let [(real (resultOr (realPath snap) snap))
               (built (ensureNativeCli! snap real rootReal))]
-          (mt built
+          (match built
             ((err e) (do (assert false (str "hostless probe: native CLI ready for the snapshot: " e)) (pathRemove snap) false))
             ((ok _)
              (let [(hidden (hideHostIn! snap))
@@ -169,7 +169,7 @@ fn ! hostlessProbe! -> Bool
                  true))))))))))
 
 fn ! runTests -> Bool
-  (let [fixtureText (mt (fileReadString "tests/parity/audit/suiteRunner.asn")
+  (let [fixtureText (match (fileReadString "tests/parity/audit/suiteRunner.asn")
                          ((ok text) text)
                          ((err e) (do (assert false (str "suite runner fixture read: " e)) "")))
         root (items (p/parseSexpr fixtureText))
@@ -185,8 +185,8 @@ fn ! runTests -> Bool
         suiteLines (listTake discoveryLines (- discoveredCount 2))
         excludedLine (optionOr (listGet discoveryLines (- discoveredCount 2)) "")
         frozenLine (optionOr (listLast discoveryLines) "")
-        gitTreeRoot (mt (sr/gitRoot!) ((ok r) r) ((err _) ""))
-        trackedText (mt (sr/gitOut! gitTreeRoot (list "ls-files")) ((ok t) t) ((err _) ""))
+        gitTreeRoot (match (sr/gitRoot!) ((ok r) r) ((err _) ""))
+        trackedText (match (sr/gitOut! gitTreeRoot (list "ls-files")) ((ok t) t) ((err _) ""))
         tracked (sr/pyLines trackedText)
         helperFixture "tests/acceptance/r1Prelude/helperDiscoveryFixture.sh"
         expected (listSort (expectedDiscovered! gitTreeRoot tracked))

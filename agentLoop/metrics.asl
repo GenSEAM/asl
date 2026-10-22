@@ -188,7 +188,7 @@ fn findFenceMarks text: String n: Int64 i: Int64 atLineStart: Bool acc: (List In
       (if (isFenceLine text n i)
         (let [sub (optionOr (stringSlice text i n) "")
               nl (stringIndexOf sub "\n")
-              nextI (mt nl ((some off) (+ (+ i off) 1)) ((none) n))]
+              nextI (match nl ((some off) (+ (+ i off) 1)) ((none) n))]
           (findFenceMarks text n nextI true (cons i acc)))
         (let [c (c/sliceOf text i (+ i 1))]
           (findFenceMarks text n (+ i 1) (= c "\n") acc))))
@@ -213,7 +213,7 @@ fn fencePartsLoop marks: (List Int64) k: Int64 text: String n: Int64 pos: Int64 
         (let [markK1 (c/firstOf marksRest)
               sub (optionOr (stringSlice text markK1 n) "")
               nl (stringIndexOf sub "\n")
-              nextPos (mt nl ((some off) (+ markK1 off)) ((none) n))]
+              nextPos (match nl ((some off) (+ markK1 off)) ((none) n))]
           (fencePartsLoop (c/restOf marksRest) (+ k 2) text n nextPos (cons part acc))))))
 
 
@@ -262,7 +262,7 @@ fn scanLoop body: String n: Int64 i: Int64 stack: (List String) inStr: Bool esc:
           ((and (= c ";") (listEmpty? stack))
             (let [sub (optionOr (stringSlice body i n) "")
                   nl (stringIndexOf sub "\n")
-                  nextI (mt nl ((some off) (+ i off)) ((none) n))]
+                  nextI (match nl ((some off) (+ i off)) ((none) n))]
               (scanLoop body n nextI stack false false stray quote heads outsideAcc)))
           ((stringContains? "([{" c)
             (let [newHeads (if (and (listEmpty? stack) (= c "("))
@@ -327,13 +327,13 @@ fn countRawMarkersLoop body: String n: Int64 i: Int64 acc: Int64 -> Int64
               matchNew (if (and (<= (+ i 4) n) (= (c/sliceOf body i (+ i 4)) ":new"))
                          (checkRawMarkerAt body n i 4)
                          (none))]
-          (mt matchContent
+          (match matchContent
             ((some nextI) (countRawMarkersLoop body n nextI (+ acc 1)))
             ((none)
-              (mt matchOld
+              (match matchOld
                 ((some nextI) (countRawMarkersLoop body n nextI (+ acc 1)))
                 ((none)
-                  (mt matchNew
+                  (match matchNew
                     ((some nextI) (countRawMarkersLoop body n nextI (+ acc 1)))
                     ((none) (countRawMarkersLoop body n (+ i 1) acc))))))))
         (countRawMarkersLoop body n (+ i 1) acc))))
@@ -388,7 +388,7 @@ fn hasUnknownStepOpLoop body: String n: Int64 i: Int64 -> Bool
         (let [afterStep (+ i 6)
               hasBoundary (or (>= afterStep n) (or (isSpace (c/sliceOf body afterStep (+ afterStep 1))) (= (c/sliceOf body afterStep (+ afterStep 1)) ")")))]
           (if hasBoundary
-            (mt (findOpInStep body n afterStep)
+            (match (findOpInStep body n afterStep)
               ((some op)
                 (if (not (isStepShape op))
                   true
@@ -493,7 +493,7 @@ fn matchesDefectBrief text: String -> Bool
       (let [n (stringLength text)
             sub (optionOr (stringSlice text 6 n) "")
             colon (stringIndexOf sub ":")]
-        (mt colon
+        (match colon
           ((some off)
             (let [afterColon (+ (+ 6 off) 1)]
               (checkAfterRetry text n afterColon)))
@@ -517,7 +517,7 @@ fn readJournalLines lines: (List String) turnsSet: (List Int64) replies: (Map In
       (pair turnsSet entries))
     (let [line (c/firstOf lines)
           tlOpt (parseTurnLine line)]
-      (mt tlOpt
+      (match tlOpt
         ((none)
           (readJournalLines (c/restOf lines) turnsSet replies defects cutFlags))
         ((some tl)
@@ -546,7 +546,7 @@ fn readJournalLines lines: (List String) turnsSet: (List Int64) replies: (Map In
 
 fn readJournalDefects content: String -> JournalDefects
   (let [lines (stringLines content)]
-    (mt (readJournalLines lines (list) (mapEmpty) (list) (mapEmpty))
+    (match (readJournalLines lines (list) (mapEmpty) (list) (mapEmpty))
       ((pair turns entries)
         (JournalDefects :turns (listLength turns) :defects (map (fn [p] (pairSecond p)) entries)))))
 
@@ -596,11 +596,11 @@ fn collectDefectsJournals journals: (List (Pair String String)) runs: Int64 tota
 
 
 fn analyzeDefects journals: (List (Pair String String)) unreadable: Int64 -> ParseDefectsResult
-  (mt (collectDefectsJournals journals 0 0 (list))
+  (match (collectDefectsJournals journals 0 0 (list))
     ((pair pRunsTurns allEntries)
       (let [runs (pairFirst pRunsTurns)
             totalTurns (pairSecond pRunsTurns)]
-        (mt (tallyDefects allEntries (mapEmpty) (mapEmpty))
+        (match (tallyDefects allEntries (mapEmpty) (mapEmpty))
           ((pair counts samples)
             (let [causesPresent (filter (fn [c] (> (optionOr (mapGet counts c) 0) 0)) (allDefectCauses))
                   causeCounts (map (fn [c]
@@ -615,7 +615,7 @@ fn collectDefectFiles! paths: (List String) journals: (List (Pair String String)
   (if (listEmpty? paths)
     (pair journals unreadable)
     (let [path (c/firstOf paths)]
-      (mt (fileReadString path)
+      (match (fileReadString path)
         ((ok content) (collectDefectFiles! (c/restOf paths) (listAppend journals (list (pair path content))) unreadable))
         ((err _) (collectDefectFiles! (c/restOf paths) journals (+ unreadable 1))))))
 
@@ -641,7 +641,7 @@ fn extractAllQuotedStringsLoop s: String n: Int64 i: Int64 acc: (List String) ->
       (if (= c "\"")
         (let [sub (optionOr (stringSlice s (+ i 1) n) "")
               nextQ (stringIndexOf sub "\"")]
-          (mt nextQ
+          (match nextQ
             ((some off)
               (let [val (c/sliceOf s (+ i 1) (+ (+ i 1) off))]
                 (extractAllQuotedStringsLoop s n (+ (+ (+ i 1) off) 1) (cons val acc))))
@@ -657,12 +657,12 @@ fn extractFieldStr form: String field: String -> String
   (let [target (str field " \"")
         n (stringLength form)
         idx (stringIndexOf form target)]
-    (mt idx
+    (match idx
       ((some start)
         (let [valStart (+ start (stringLength target))
               sub (optionOr (stringSlice form valStart n) "")
               endQuote (stringIndexOf sub "\"")]
-          (mt endQuote
+          (match endQuote
             ((some off) (c/sliceOf form valStart (+ valStart off)))
             ((none) ""))))
       ((none) "")))
@@ -672,7 +672,7 @@ fn extractFieldKw form: String field: String -> String
   (let [target (str field " :")
         n (stringLength form)
         idx (stringIndexOf form target)]
-    (mt idx
+    (match idx
       ((some start)
         (let [valStart (+ start (stringLength target))
               endWord (scanWordOrHyphen form n valStart)]
@@ -684,12 +684,12 @@ fn extractQuotedList form: String field: String -> (List String)
   (let [target (str field " (")
         n (stringLength form)
         idx (stringIndexOf form target)]
-    (mt idx
+    (match idx
       ((some start)
         (let [valStart (+ start (stringLength target))
               sub (optionOr (stringSlice form valStart n) "")
               closeParen (stringIndexOf sub ")")]
-          (mt closeParen
+          (match closeParen
             ((some off)
               (let [inner (c/sliceOf form valStart (+ valStart off))]
                 (extractAllQuotedStrings inner)))
@@ -742,7 +742,7 @@ fn findReceiptForms text: String n: Int64 i: Int64 acc: (List String) -> (List S
     (listReverse acc)
     (let [sub (optionOr (stringSlice text i n) "")
           idx (stringIndexOf sub "(:receipt")]
-      (mt idx
+      (match idx
         ((some off)
           (let [start (+ i off)
                 formEnd (formParenEnd text n (+ start 9) 1)]
@@ -762,7 +762,7 @@ fn extractIntField s: String key: String -> Int64
   (let [target (str key " ")
         n (stringLength s)
         idx (stringIndexOf s target)]
-    (mt idx
+    (match idx
       ((some start)
         (let [valStart (skipWhitespace s n (+ start (stringLength target)))
               valEnd (scanDigits s n valStart)]
@@ -779,7 +779,7 @@ fn unescapeIfQuoted s: String -> String
 
 fn pathBasename path: String -> String
   (let [sub (stringReplace path "\\" "/")]
-    (mt (stringIndexOf sub "/")
+    (match (stringIndexOf sub "/")
       ((none) sub)
       ((some _)
         (let [parts (stringSplit sub "/")
@@ -790,12 +790,12 @@ fn pathBasename path: String -> String
 fn extractResultWritten content: String -> (List String)
   (let [idx (stringIndexOf content ":written (")
         n (stringLength content)]
-    (mt idx
+    (match idx
       ((some start)
         (let [valStart (+ start 10)
               sub (optionOr (stringSlice content valStart n) "")
               closeParen (stringIndexOf sub ")")]
-          (mt closeParen
+          (match closeParen
             ((some off)
               (let [inner (c/sliceOf content valStart (+ valStart off))]
                 (extractAllQuotedStrings inner)))
@@ -827,7 +827,7 @@ fn extractEditFilesFromReplyLoop s: String n: Int64 i: Int64 acc: (List String) 
                         header (c/sliceOf s afterStep endP)
                         hasEditOp (or (stringContains? header ":op \"edit\"") (stringContains? header ":op \"write\""))
                         fileIdx (stringIndexOf header ":file \"")]
-                    (mt fileIdx
+                    (match fileIdx
                       ((none) (extractEditFilesFromReplyLoop s n (+ i 1) acc))
                       ((some start)
                         (if (not hasEditOp)
@@ -835,7 +835,7 @@ fn extractEditFilesFromReplyLoop s: String n: Int64 i: Int64 acc: (List String) 
                           (let [valStart (+ start 7)
                                 sub (optionOr (stringSlice header valStart (stringLength header)) "")
                                 qIdx (stringIndexOf sub "\"")]
-                            (mt qIdx
+                            (match qIdx
                               ((none) (extractEditFilesFromReplyLoop s n (+ i 1) acc))
                               ((some qOff)
                                 (let [fn (c/sliceOf header valStart (+ valStart qOff))]
@@ -851,13 +851,13 @@ fn extractEditFilesFromReplyLoop s: String n: Int64 i: Int64 acc: (List String) 
                   (let [endP (findNextParen s n afterCmd)
                         header (c/sliceOf s afterCmd endP)
                         fileIdx (stringIndexOf header ":file \"")]
-                    (mt fileIdx
+                    (match fileIdx
                       ((none) (extractEditFilesFromReplyLoop s n (+ i 1) acc))
                       ((some start)
                         (let [valStart (+ start 7)
                               sub (optionOr (stringSlice header valStart (stringLength header)) "")
                               qIdx (stringIndexOf sub "\"")]
-                          (mt qIdx
+                          (match qIdx
                             ((none) (extractEditFilesFromReplyLoop s n (+ i 1) acc))
                             ((some qOff)
                               (let [fn (c/sliceOf header valStart (+ valStart qOff))]
@@ -942,7 +942,7 @@ fn parseJournalLinesLoop lines: (List String) state: ParseJournalState -> ParseJ
       (cond
         ((stringStartsWith? line "(:turn ")
           (let [tlOpt (parseTurnLine line)]
-            (mt tlOpt
+            (match tlOpt
               ((none) (parseJournalLinesLoop (c/restOf lines) state))
               ((some tl)
                 (let [t tl.turn
@@ -1012,8 +1012,8 @@ fn buildReceiptsMap turns: (List Int64) obs: (Map Int64 String) retryBriefs: (Ma
   (if (listEmpty? turns)
     acc
     (let [t (c/firstOf turns)
-          obsText (mt (mapGet obs t) ((some s) (unescapeIfQuoted s)) ((none) ""))
-          briefText (mt (mapGet retryBriefs t) ((some s) (unescapeIfQuoted s)) ((none) ""))
+          obsText (match (mapGet obs t) ((some s) (unescapeIfQuoted s)) ((none) ""))
+          briefText (match (mapGet retryBriefs t) ((some s) (unescapeIfQuoted s)) ((none) ""))
           r1 (if (!= obsText "") (parseReceiptsFromText obsText) (list))
           r2 (if (!= briefText "") (parseReceiptsFromText briefText) (list))
           allR (listAppend r1 r2)]
@@ -1056,7 +1056,7 @@ fn updateActiveSequences files: (List String) journalBase: String turnFailed: Bo
   (if (listEmpty? files)
     (TurnProcessResult :sequences seqs :jSequences jSeqs :activeSeqs activeSeqs :fbk fbk :totalAttempts totAtt :acceptedAttempts accAtt :failedAttempts failAtt :hadAslAsn true)
     (let [fn (c/firstOf files)
-          curSeq (mt (mapGet activeSeqs fn) ((some s) s) ((none) (SeqState :retries 0 :tokens 0 :failures (list))))
+          curSeq (match (mapGet activeSeqs fn) ((some s) s) ((none) (SeqState :retries 0 :tokens 0 :failures (list))))
           newTokens (+ curSeq.tokens totTokens)
           nextTotAtt (+ totAtt 1)]
       (if turnFailed
@@ -1094,7 +1094,7 @@ fn processJournalTurns turns: (List Int64) lastTurn: Int64 pjState: ParseJournal
     (let [t (c/firstOf turns)
           rawReply (optionOr (mapGet pjState.replies t) "")
           unescReply (c/asnUnescape rawReply)
-          retryBrief (mt (mapGet pjState.retryBriefs t) ((some b) b) ((none) ""))
+          retryBrief (match (mapGet pjState.retryBriefs t) ((some b) b) ((none) ""))
           isParseDefect (or (listContains? pjState.parseDefects t) (stringContains? retryBrief "reply was not parseable"))
           isFormatNudged (listContains? pjState.formatNudges t)
           turnRecs (optionOr (mapGet receiptsMap t) (list))
@@ -1140,13 +1140,13 @@ fn processJournalTurns turns: (List Int64) lastTurn: Int64 pjState: ParseJournal
           targetFiles (listSort (filter (fn [f] (!= f "")) (mapKeys (mapFromPairs (map (fn [f] (pair f true)) allTargetsRaw)))))]
       (if (listEmpty? targetFiles)
         (processJournalTurns (c/restOf turns) lastTurn pjState receiptsMap journalBase hasCommit isResOk resultWritten cur)
-        (let [usageT (mt (mapGet pjState.usages t) ((some u) u) ((none) (UsageTokens :input 0 :cached 0 :output 0)))
+        (let [usageT (match (mapGet pjState.usages t) ((some u) u) ((none) (UsageTokens :input 0 :cached 0 :output 0)))
               totTokens (+ (+ usageT.input usageT.cached) usageT.output)
               errStr (str (stringJoin turnErrors " ") " " (stringJoin (map (fn [r] r.error) turnRecs) " "))
               sigStr (optionOr (mapGet pjState.signals t) "")
               obsStr (optionOr (mapGet pjState.observations t) "")
               failTypeOpt (determineFailType isParseDefect errStr sigStr obsStr turnGates retryBrief failed3 turnRecs finalStaged)]
-          (mt failTypeOpt
+          (match failTypeOpt
             ((none)
               (processJournalTurns (c/restOf turns) lastTurn pjState receiptsMap journalBase hasCommit isResOk resultWritten cur))
             ((some ft)
@@ -1262,12 +1262,12 @@ fn readJournalContents! paths: (List String) acc: (List (Pair String String)) ->
   (if (listEmpty? paths)
     (ok acc)
     (let [path (c/firstOf paths)]
-      (mt (fileReadString path)
+      (match (fileReadString path)
         ((ok content) (readJournalContents! (c/restOf paths) (listAppend acc (list (pair path content)))))
         ((err e) (err (str path ": " e))))))
 
 fn analyzeJournals! paths: (List String) -> (Result EditMetricsResult String)
-  (mt (readJournalContents! paths (list))
+  (match (readJournalContents! paths (list))
     ((ok pairs) (ok (analyzeEditJournals pairs)))
     ((err e) (err e)))
 

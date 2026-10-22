@@ -29,7 +29,7 @@ fn elementName name: String -> String
   (optionOr (a/lookup (elementAliases) name) name)
 
 fn attributeName name: String -> String
-  (mt (a/lookup (attributeAliases) name)
+  (match (a/lookup (attributeAliases) name)
     ((some full) full)
     ((none) (if (listContains? (keepCamel) name) name (a/kebab name))))
 
@@ -42,22 +42,22 @@ fn known? name: String -> Bool
 (schema Built (:f attrs (List h/Attr)) (:f kids (List h/Node)) (:f errors (List String)))
 
 fn addViewBox tag: String attrs: (List h/Attr) -> (List h/Attr)
-  (let [(names (map (fn [(a h/Attr)] -> String (mt a ((h/attrPair k v) k) ((h/attrFlag k) k))) attrs))
-        (valueOf (fn [(k String)] -> String (fold (fn [(acc String) (a h/Attr)] -> String (mt a ((h/attrPair n v) (if (= n k) v acc)) ((h/attrFlag n) acc))) "" attrs)))]
+  (let [(names (map (fn [(a h/Attr)] -> String (match a ((h/attrPair k v) k) ((h/attrFlag k) k))) attrs))
+        (valueOf (fn [(k String)] -> String (fold (fn [(acc String) (a h/Attr)] -> String (match a ((h/attrPair n v) (if (= n k) v acc)) ((h/attrFlag n) acc))) "" attrs)))]
     (if (and (= tag "svg") (and (not (listContains? names "viewBox")) (and (listContains? names "width") (listContains? names "height"))))
       (listAppend attrs [(h/attr "viewBox" (str "0 0 " (valueOf "width") " " (valueOf "height")))])
       attrs))
 
 fn buildItems tag: String where: String items: (List rd/SExpr) acc: Built -> Built
-  (mt (listHead items)
+  (match (listHead items)
     ((none) acc)
     ((some item)
       (let [(rest (listDrop items 1))]
-        (mt item
+        (match item
           ((rd/sexprAtom a)
             (if (a/keywordAtom? a)
               (let [(name (attributeName (a/bare a)))]
-                (mt (mt (listHead rest) ((some x) (a/atomOf x)) ((none) (none)))
+                (match (match (listHead rest) ((some x) (a/atomOf x)) ((none) (none)))
                   ((none) (buildItems tag where (listDrop rest 1) (with acc :errors (listAppend acc.errors [(str where ": attribute :" (a/bare a) " needs a single value")]))))
                   ((some v)
                     (if (known? name)
@@ -71,7 +71,7 @@ fn buildItems tag: String where: String items: (List rd/SExpr) acc: Built -> Bui
               (buildItems tag where rest (with acc :kids (listAppend acc.kids [(pairFirst child)]) :errors (listAppend acc.errors (pairSecond child))))))))))
 
 fn buildElement parent: String index: Int64 e: rd/SExpr -> (Pair h/Node (List String))
-  (mt e
+  (match e
     ((rd/sexprList items)
       (let [(head (optionOr (a/atomOf (optionOr (listHead items) (rd/makeAtom ""))) ""))
             (tag (elementName (a/bare head)))
@@ -84,16 +84,16 @@ fn buildElement parent: String index: Int64 e: rd/SExpr -> (Pair h/Node (List St
 
 fn drawingToNode source: String -> (Result h/Node (List String))
   (let [(root (rd/parseSexpr source))
-        (head (mt root ((rd/sexprList items) (optionOr (a/atomOf (optionOr (listHead items) (rd/makeAtom ""))) "")) (_ "")))]
+        (head (match root ((rd/sexprList items) (optionOr (a/atomOf (optionOr (listHead items) (rd/makeAtom ""))) "")) (_ "")))]
     (if (not (= (elementName (a/bare head)) "svg"))
       (err ["the drawing must be one (:svg ...) form"])
       (let [(built (buildElement "" 0 root))]
         (if (listEmpty? (pairSecond built)) (ok (pairFirst built)) (err (pairSecond built))))))
 
 fn asnToSvg source: String -> (Result String (List String))
-  (mt (a/unbalanced source)
+  (match (a/unbalanced source)
     ((some es) (err es))
     ((none)
-      (mt (drawingToNode source)
+      (match (drawingToNode source)
         ((ok node) (ok (str "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" (h/render node) "\n")))
         ((err es) (err es)))))

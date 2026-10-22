@@ -117,7 +117,7 @@ fn lookupBinding bindings: (List Binding) name: String -> (Option String)
         (lookupBinding rest name))))
 
 fn isTriviaElem elem: tr/TreeElement -> Bool
-  (mt elem
+  (match elem
     ((elemToken tok) (tr/isTrivia tok))
     ((elemNode _) false))
 
@@ -153,7 +153,7 @@ fn collapseCssPatternElements elems: (List tr/TreeElement) patText: String -> (L
     (list)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((elemNode n)
          (let [(newKids (collapseCssPatternElements (tr/nodeChildren n) patText))
                (newN (tr/makeNode (tr/nodeKind n) (tr/nodeStart n) (tr/nodeEnd n) newKids))]
@@ -189,20 +189,20 @@ fn matchSingleElement pHead: tr/TreeElement tHead: tr/TreeElement patText: Strin
   (let [(pStr (elementSliceText patText pHead))]
     (if (isSingleMetaVar pStr)
       (let [(tStr (elementSliceText targetText tHead))]
-        (mt (lookupBinding bindings pStr)
+        (match (lookupBinding bindings pStr)
           ((some bound)
            (if (= bound tStr) (some bindings) (none)))
           ((none)
            (some (cons (makeBinding pStr tStr) bindings)))))
-      (mt pHead
+      (match pHead
         ((elemToken pTok)
-         (mt tHead
+         (match tHead
            ((elemToken tTok)
             (let [(tStr (elementSliceText targetText tHead))]
               (if (= pStr tStr) (some bindings) (none))))
            ((elemNode _) (none))))
         ((elemNode pNode)
-         (mt tHead
+         (match tHead
            ((elemToken _) (none))
            ((elemNode tNode)
             (if (!= (tr/nodeKind pNode) (tr/nodeKind tNode))
@@ -218,16 +218,16 @@ fn trySeqMatch varName: String pTail: (List tr/TreeElement) targetList: (List tr
           (rem (optionOr (listSlice targetList k (listLength targetList)) (list)))
           (cText (elementsSpanText targetText consumed))
           (boundOpt (lookupBinding bindings varName))
-          (consistent (mt boundOpt
+          (consistent (match boundOpt
                         ((some b) (= b cText))
                         ((none) true)))]
       (if (not consistent)
         (trySeqMatch varName pTail targetList patText targetText bindings (+ k 1) maxK)
-        (let [(nextBindings (mt boundOpt
+        (let [(nextBindings (match boundOpt
                               ((some _) bindings)
                               ((none) (cons (makeBinding varName cText) bindings))))
               (recRes (matchElements pTail rem patText targetText nextBindings))]
-          (mt recRes
+          (match recRes
             ((some pairVal)
              (some (pair (listAppend consumed (pairFirst pairVal)) (pairSecond pairVal))))
             ((none)
@@ -245,16 +245,16 @@ fn matchElements patList: (List tr/TreeElement) targetList: (List tr/TreeElement
           (none)
           (let [(tHead (optionOr (listHead targetList) (tr/elemToken (tr/makeToken "" 0 0))))
                 (tTail (optionOr (listTail targetList) (list)))]
-            (mt (matchSingleElement pHead tHead patText targetText bindings)
+            (match (matchSingleElement pHead tHead patText targetText bindings)
               ((none) (none))
               ((some nextBindings)
-               (mt (matchElements pTail tTail patText targetText nextBindings)
+               (match (matchElements pTail tTail patText targetText nextBindings)
                  ((some pairVal)
                   (some (pair (cons tHead (pairFirst pairVal)) (pairSecond pairVal))))
                  ((none) (none))))))))))
 
 fn matchElementsStrict patList: (List tr/TreeElement) targetList: (List tr/TreeElement) patText: String targetText: String bindings: (List Binding) -> (Option (List Binding))
-  (mt (matchElements patList targetList patText targetText bindings)
+  (match (matchElements patList targetList patText targetText bindings)
     ((none) (none))
     ((some pairVal)
      (let [(matched (pairFirst pairVal))]
@@ -267,7 +267,7 @@ fn scanSiblingsLoop kids: (List tr/TreeElement) patElements: (List tr/TreeElemen
     acc
     (let [(suffix (optionOr (listSlice kids idx maxIdx) (list)))
           (mRes (matchElements patElements suffix patText targetText (list)))]
-      (mt mRes
+      (match mRes
         ((some pairVal)
          (let [(matched (pairFirst pairVal))
                (bindings (pairSecond pairVal))
@@ -285,7 +285,7 @@ fn scanSiblingsLoop kids: (List tr/TreeElement) patElements: (List tr/TreeElemen
              (scanSiblingsLoop kids patElements patText targetText (+ idx 1) maxIdx acc))))
         ((none)
          (let [(curElem (optionOr (listGet kids idx) (tr/elemToken (tr/makeToken "" 0 0))))
-               (childAcc (mt curElem
+               (childAcc (match curElem
                            ((elemNode childNode)
                             (collectMatchesInNode childNode patElements patText targetText acc))
                            ((elemToken _) acc)))]
@@ -303,12 +303,12 @@ fn parsePatternElements pattern: String lang: String -> (List tr/TreeElement)
          (list)
          (filterNonTrivia (tr/nodeChildren root)))))
     ((or (= lang "javascript") (or (= lang "js") (= lang "jsx")))
-     (mt (jsMod/parse pattern)
+     (match (jsMod/parse pattern)
        ((ok root)
         (let [(kids (filterNonTrivia (tr/nodeChildren root)))]
           (if (and (= (listLength kids) 1) (not (stringEndsWith? (stringTrim pattern) ";")))
             (let [(singleChild (optionOr (listHead kids) (tr/elemToken (tr/makeToken "" 0 0))))]
-              (mt singleChild
+              (match singleChild
                 ((elemNode sn)
                  (if (or (= (tr/nodeKind sn) "exprStmt") (= (tr/nodeKind sn) "expressionStatement"))
                    (filterNonTrivia (tr/nodeChildren sn))
@@ -317,12 +317,12 @@ fn parsePatternElements pattern: String lang: String -> (List tr/TreeElement)
             kids)))
        ((err _) (list))))
     ((or (= lang "typescript") (or (= lang "ts") (= lang "tsx")))
-     (mt (tsMod/parse pattern)
+     (match (tsMod/parse pattern)
        ((ok root)
         (let [(kids (filterNonTrivia (tr/nodeChildren root)))]
           (if (and (= (listLength kids) 1) (not (stringEndsWith? (stringTrim pattern) ";")))
             (let [(singleChild (optionOr (listHead kids) (tr/elemToken (tr/makeToken "" 0 0))))]
-              (mt singleChild
+              (match singleChild
                 ((elemNode sn)
                  (if (or (= (tr/nodeKind sn) "exprStmt") (= (tr/nodeKind sn) "expressionStatement"))
                    (filterNonTrivia (tr/nodeChildren sn))
@@ -352,11 +352,11 @@ fn parseSourceNode sourceText: String lang: String -> (Option tr/Node)
          (none)
          (some root))))
     ((or (= lang "javascript") (or (= lang "js") (= lang "jsx")))
-     (mt (jsMod/parse sourceText)
+     (match (jsMod/parse sourceText)
        ((ok root) (some root))
        ((err _) (none))))
     ((or (= lang "typescript") (or (= lang "ts") (= lang "tsx")))
-     (mt (tsMod/parse sourceText)
+     (match (tsMod/parse sourceText)
        ((ok root) (some root))
        ((err _) (none))))
     ((= lang "css")
@@ -371,7 +371,7 @@ fn findMatches sourceText: String pattern: String lang: String -> (List Match)
   (let [(patElems (parsePatternElements pattern lang))]
     (if (listEmpty? patElems)
       (list)
-      (mt (parseSourceNode sourceText lang)
+      (match (parseSourceNode sourceText lang)
         ((none) (list))
         ((some root)
          (let [(matchesRev (collectMatchesInNode root patElems pattern sourceText (list)))
@@ -439,7 +439,7 @@ fn substituteReplacementLoop tmpl: String i: Int64 len: Int64 bindings: (List Bi
             (substituteReplacementLoop tmpl (+ i 1) len bindings (cons c acc) col)
             (let [(varName (optionOr (stringSlice tmpl i identEnd) ""))
                   (boundOpt (lookupBinding bindings varName))]
-              (mt boundOpt
+              (match boundOpt
                 ((none)
                  (substituteReplacementLoop tmpl identEnd len bindings (cons varName acc) col))
                 ((some bVal)

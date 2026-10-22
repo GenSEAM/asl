@@ -21,10 +21,10 @@ fn testEmpty! -> Bool
     (do
       (assert (ok? defRes) "empty deflate ok")
       (assert (ok? gzRes) "empty gunzip ok")
-      (mt defRes
+      (match defRes
         ((err _) false)
         ((ok b) (assertShaMatches! plainPath b "empty deflate")))
-      (mt gzRes
+      (match gzRes
         ((err _) false)
         ((ok b) (assertShaMatches! plainPath b "empty gunzip")))
       true))
@@ -36,10 +36,10 @@ fn testShort! -> Bool
     (do
       (assert (ok? defRes) "short deflate ok")
       (assert (ok? gzRes) "short gunzip ok")
-      (mt defRes
+      (match defRes
         ((err _) false)
         ((ok b) (assertShaMatches! plainPath b "short deflate")))
-      (mt gzRes
+      (match gzRes
         ((err _) false)
         ((ok b) (assertShaMatches! plainPath b "short gunzip")))
       true))
@@ -51,10 +51,10 @@ fn testRepeats! -> Bool
     (do
       (assert (ok? defRes) "repeats deflate ok")
       (assert (ok? gzRes) "repeats gunzip ok")
-      (mt defRes
+      (match defRes
         ((err _) false)
         ((ok b) (assertShaMatches! plainPath b "repeats deflate")))
-      (mt gzRes
+      (match gzRes
         ((err _) false)
         ((ok b) (assertShaMatches! plainPath b "repeats gunzip")))
       true))
@@ -71,10 +71,10 @@ fn testLarge64k! -> Bool
     (do
       (assert (ok? defRes) "large 64k deflate ok")
       (assert (ok? gzRes) "large 64k gunzip ok")
-      (mt defRes
+      (match defRes
         ((err _) false)
         ((ok b) (assertShaMatches! plainPath b "large 64k deflate")))
-      (mt gzRes
+      (match gzRes
         ((err _) false)
         ((ok b) (assertShaMatches! plainPath b "large 64k gunzip")))
       (let [(t1 (monotonicNs))
@@ -91,10 +91,10 @@ fn testRandomStored! -> Bool
     (do
       (assert (ok? defRes) "random stored deflate ok")
       (assert (ok? gzRes) "random stored gunzip ok")
-      (mt defRes
+      (match defRes
         ((err _) false)
         ((ok b) (assertShaMatches! plainPath b "random stored deflate")))
-      (mt gzRes
+      (match gzRes
         ((err _) false)
         ((ok b) (assertShaMatches! plainPath b "random stored gunzip")))
       true))
@@ -106,10 +106,10 @@ fn testLevel1! -> Bool
     (do
       (assert (ok? defRes) "level 1 deflate ok")
       (assert (ok? gzRes) "level 1 gunzip ok")
-      (mt defRes
+      (match defRes
         ((err _) false)
         ((ok b) (assertShaMatches! plainPath b "level 1 deflate")))
-      (mt gzRes
+      (match gzRes
         ((err _) false)
         ((ok b) (assertShaMatches! plainPath b "level 1 gunzip")))
       true))
@@ -121,10 +121,10 @@ fn testLevel9! -> Bool
     (do
       (assert (ok? defRes) "level 9 deflate ok")
       (assert (ok? gzRes) "level 9 gunzip ok")
-      (mt defRes
+      (match defRes
         ((err _) false)
         ((ok b) (assertShaMatches! plainPath b "level 9 deflate")))
-      (mt gzRes
+      (match gzRes
         ((err _) false)
         ((ok b) (assertShaMatches! plainPath b "level 9 gunzip")))
       true))
@@ -134,7 +134,7 @@ fn testConcatGzip! -> Bool
         (gzRes (gz/gunzip! (readFixture! "asl/packages/asl-zip/tests/fixtures/concat.gz")))]
     (do
       (assert (ok? gzRes) "concatenated gunzip ok")
-      (mt gzRes
+      (match gzRes
         ((err _) false)
         ((ok b) (assertShaMatches! plainPath b "concatenated gunzip")))
       true))
@@ -160,19 +160,19 @@ fn testCorruptedVariants! -> Bool
         (resTruncDef (inf/inflate! (readFixture! "asl/packages/asl-zip/tests/fixtures/corrupt_truncated.deflate")))]
     (do
       (assert (err? resBit) "corrupt bit returns err")
-      (mt resBit ((ok _) (assert false "expected err")) ((err m) (assert (stringContains? m "offset") "corrupt bit mentions offset")))
+      (match resBit ((ok _) (assert false "expected err")) ((err m) (assert (stringContains? m "offset") "corrupt bit mentions offset")))
       (assert (err? resCrc) "corrupt CRC returns err")
-      (mt resCrc ((ok _) (assert false "expected err")) ((err m) (do (assert (stringContains? m "CRC") "corrupt CRC mentions CRC") (assert (stringContains? m "offset") "corrupt CRC mentions offset"))))
+      (match resCrc ((ok _) (assert false "expected err")) ((err m) (do (assert (stringContains? m "CRC") "corrupt CRC mentions CRC") (assert (stringContains? m "offset") "corrupt CRC mentions offset"))))
       (assert (err? resIsize) "corrupt ISIZE returns err")
-      (mt resIsize ((ok _) (assert false "expected err")) ((err m) (do (assert (stringContains? m "ISIZE") "corrupt ISIZE mentions ISIZE") (assert (stringContains? m "offset") "corrupt ISIZE mentions offset"))))
+      (match resIsize ((ok _) (assert false "expected err")) ((err m) (do (assert (stringContains? m "ISIZE") "corrupt ISIZE mentions ISIZE") (assert (stringContains? m "offset") "corrupt ISIZE mentions offset"))))
       (assert (err? resTruncGz) "truncated gzip returns err")
-      (mt resTruncGz ((ok _) (assert false "expected err")) ((err m) (do (assert (stringContains? m "truncated") "truncated gzip mentions truncated") (assert (stringContains? m "offset") "truncated gzip mentions offset"))))
+      (match resTruncGz ((ok _) (assert false "expected err")) ((err m) (do (assert (stringContains? m "truncated") "truncated gzip mentions truncated") (assert (stringContains? m "offset") "truncated gzip mentions offset"))))
       (assert (err? resBadBlock) "bad block type returns err")
-      (mt resBadBlock ((ok _) (assert false "expected err")) ((err m) (do (assert (stringContains? m "block") "bad block mentions block") (assert (stringContains? m "offset") "bad block mentions offset"))))
+      (match resBadBlock ((ok _) (assert false "expected err")) ((err m) (do (assert (stringContains? m "block") "bad block mentions block") (assert (stringContains? m "offset") "bad block mentions offset"))))
       (assert (err? resBadDist) "distance beyond window returns err")
-      (mt resBadDist ((ok _) (assert false "expected err")) ((err m) (do (assert (stringContains? m "distance") "bad dist mentions distance") (assert (stringContains? m "offset") "bad dist mentions offset"))))
+      (match resBadDist ((ok _) (assert false "expected err")) ((err m) (do (assert (stringContains? m "distance") "bad dist mentions distance") (assert (stringContains? m "offset") "bad dist mentions offset"))))
       (assert (err? resTruncDef) "truncated deflate returns err")
-      (mt resTruncDef ((ok _) (assert false "expected err")) ((err m) (do (assert (stringContains? m "truncated") "truncated deflate mentions truncated") (assert (stringContains? m "offset") "truncated deflate mentions offset"))))
+      (match resTruncDef ((ok _) (assert false "expected err")) ((err m) (do (assert (stringContains? m "truncated") "truncated deflate mentions truncated") (assert (stringContains? m "offset") "truncated deflate mentions offset"))))
       true))
 
 fn testDistanceEqualsOutput! -> Bool
@@ -182,7 +182,7 @@ fn testDistanceEqualsOutput! -> Bool
     (do
       (assert fill "fixed block bytes built")
       (assert (ok? res) "match distance equal to decoded length so far is accepted")
-      (mt res ((err m) (assert false m)) ((ok b) (do (assert (= (bytesLength b) 4) "literal plus overlapping match decodes four bytes") (assert (= (bytesGet b 3) 97) "last byte copied from distance one"))))
+      (match res ((err m) (assert false m)) ((ok b) (do (assert (= (bytesLength b) 4) "literal plus overlapping match decodes four bytes") (assert (= (bytesGet b 3) 97) "last byte copied from distance one"))))
       true))
 
 fn testGunzipLimit! -> Bool
@@ -196,11 +196,11 @@ fn testGunzipLimit! -> Bool
         (exactShort (gz/gunzipWithLimit! shortGz shortSize))]
     (do
       (assert (err? over) "output above the limit returns err")
-      (mt over ((ok _) (assert false "expected err")) ((err m) (assert (stringContains? m "limit") "limit error mentions limit")))
+      (match over ((ok _) (assert false "expected err")) ((err m) (assert (stringContains? m "limit") "limit error mentions limit")))
       (assert (err? overShort) "literal output above the limit returns err")
       (assert (ok? exactShort) "literal output at exactly the limit is accepted")
       (assert (ok? exact) "output at exactly the limit is accepted")
-      (mt exact ((err m) (assert false m)) ((ok b) (assert (= (bytesLength b) size) "output at the limit has full length")))
+      (match exact ((err m) (assert false m)) ((ok b) (assert (= (bytesLength b) size) "output at the limit has full length")))
       true))
 
 fn ! runTests -> Bool

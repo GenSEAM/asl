@@ -3,11 +3,11 @@
   :i [(asl-forms/repair :a rep) (asl-forms/gate :a g) (asl-parser/indentParser :a ip)])
 
 fn ! nativeRunText! content: String tmpPath: String cmd: String -> (Pair Int64 String)
-  (mt (fileWrite tmpPath content)
+  (match (fileWrite tmpPath content)
     ((err e) (do (assert false (str "failed to write " tmpPath ": " e)) (pair -1 e)))
     ((ok _)
      (let [(res (if (= cmd "parse")
-                  (mt (ip/parseIndentedFormsPos content)
+                  (match (ip/parseIndentedFormsPos content)
                     ((ok _) (pair 0 ""))
                     ((err e) (pair 1 (str tmpPath ":" (stringFromInt64 e.line) ":" (stringFromInt64 e.col) ": ERR_READ " e.msg))))
                   (let [(h (g/nativeCheck! (resultOr (realPath ".") ".") tmpPath))] (pair h.code (str h.out h.errText)))))
@@ -96,7 +96,7 @@ fn testAslLayoutRepairs -> Bool
       true))
 
 fn checkFixtureRepair! path: String isAsl: Bool tmpPath: String -> Bool
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e) (do (assert false (str "read error for " path ": " e)) false))
     ((ok content)
      (let [(lang (if isAsl "asl" "asn"))
@@ -111,7 +111,7 @@ fn checkFixtureRepair! path: String isAsl: Bool tmpPath: String -> Bool
          true))))
 
 fn checkFixtureLeft! path: String lang: String firstLeft: String -> Bool
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e) (do (assert false (str "read error for " path ": " e)) false))
     ((ok content)
      (let [(res (rep/repair content lang))]
@@ -219,7 +219,7 @@ fn testLayoutTieBreakLetSibling -> Bool
 
 fn testLayoutTieBreakMtIfArm -> Bool
   (let [(src "fn testArm v: Int64 -> String
-  (mt v
+  (match v
     (0 (if (> v 0) (str \"pos\"
            (str \"nonpos\")))
     (_ \"other\"))
@@ -365,7 +365,7 @@ fn testFlushLeftSegments -> Bool
       true))
 
 fn replayFixture! name: String -> String
-  (mt (fileReadString (str "asl/packages/asl-forms/tests/fixtures/unbalanced/g3real/" name ".txt"))
+  (match (fileReadString (str "asl/packages/asl-forms/tests/fixtures/unbalanced/g3real/" name ".txt"))
     ((ok t) t)
     ((err e) (do (assert false (str "missing fixture " name ": " e)) "")))
 

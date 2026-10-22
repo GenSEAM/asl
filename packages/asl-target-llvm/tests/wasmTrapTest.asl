@@ -18,9 +18,9 @@ fn compiledNativeTrap source: String -> (Result String (List irTy/IrDiag))
 
 fn compiledTrapFor source: String factsTarget: target/TargetFacts -> (Result String (List irTy/IrDiag))
   (let [(facts (libc/libcFacts "darwin-arm64"))]
-    (mt facts
+    (match facts
       ((none) (err (list (irTy/makeIrDiag "ERR_TEST" "native facts unavailable" "compiledTrap"))))
-      ((some f) (mt (low/lowerSource source)
+      ((some f) (match (low/lowerSource source)
         ((err ds) (err ds))
         ((ok m) (targetLlvm/emitLlvmProgramForTarget f factsTarget m "main"))))))
 
@@ -36,7 +36,7 @@ fn ! wasmTrapCode name: String source: String code: String -> Bool
   (let [(compiled (compiledTrap source))]
     (do
       (assert (ok? compiled) (str name " source compiles for wasm32"))
-      (let [(text (mt compiled ((ok t) t) ((err _) "")))]
+      (let [(text (match compiled ((ok t) t) ((err _) "")))]
         (do
           (assert (or (stringContains? text (str "call void @rterr.raise(ptr @.rterr.c." code))
                       (or (stringContains? text (str "call void @rterr.raiseText(ptr @.rterr.c." code))
@@ -85,7 +85,7 @@ fn ! nodeBin -> String
   (let [(candidates (list "/usr/local/bin/node" "/opt/homebrew/bin/node"))
         (pathDirs (stringSplit (optionOr (envGet "PATH") "") ":"))
         (allCandidates (listAppend candidates (map (fn [(dir String)] -> String (str dir "/node")) pathDirs)))]
-    (mt (listHead (filter fileExists? allCandidates))
+    (match (listHead (filter fileExists? allCandidates))
       ((some p) p)
       ((none) "")))
 
@@ -107,13 +107,13 @@ fn ! wasmTrapCase name: String source: String expectedMessage: String -> Bool
       (assert (ok? (dirCreate work)) "creates the wasm trap test directory")
       (let [(ir (compiledTrap source))]
         (do
-          (assert (ok? ir) (str "compiles real ASL source for wasm32: " (mt ir ((ok _) "ok") ((err ds) (stringJoin (map (fn [(d irTy/IrDiag)] -> String d.message) ds) "; ")))))
+          (assert (ok? ir) (str "compiles real ASL source for wasm32: " (match ir ((ok _) "ok") ((err ds) (stringJoin (map (fn [(d irTy/IrDiag)] -> String d.message) ds) "; ")))))
           (let [(nativeIr (compiledNativeTrap source))]
-            (assert (ok? nativeIr) (str "compiles same ASL source for native: " (mt nativeIr ((ok _) "ok") ((err ds) (stringJoin (map (fn [(d irTy/IrDiag)] -> String d.message) ds) "; ")))))
-            (let [(text (mt ir ((ok t) t) ((err _) "")))
+            (assert (ok? nativeIr) (str "compiles same ASL source for native: " (match nativeIr ((ok _) "ok") ((err ds) (stringJoin (map (fn [(d irTy/IrDiag)] -> String d.message) ds) "; ")))))
+            (let [(text (match ir ((ok t) t) ((err _) "")))
                 (writeSource (fileWrite src source))
-                (writeIr (fileWrite ll (mt ir ((ok t) t) ((err _) ""))))
-                (writeNativeIr (fileWrite nativeLl (mt nativeIr ((ok t) t) ((err _) ""))))
+                (writeIr (fileWrite ll (match ir ((ok t) t) ((err _) ""))))
+                (writeNativeIr (fileWrite nativeLl (match nativeIr ((ok t) t) ((err _) ""))))
                 (nativeLinked (sh (str clang " -x ir " nativeLl " -x none asl/host/out/libaslrt.a -lm -o " nativeBin)))
                 (native (sh nativeBin))
                 (nativeLine (errorLine native))

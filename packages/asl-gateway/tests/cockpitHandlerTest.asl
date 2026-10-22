@@ -32,25 +32,25 @@ fn propIn props: (List (Pair String ck/AsnVal)) key: String -> (Option ck/AsnVal
       (propIn (preludeTail props) key)))
 
 fn textOf v: (Option ck/AsnVal) -> (Option String)
-  (mt v
-    ((some x) (mt x ((ck/asnText s) (some s)) (_ (none))))
+  (match v
+    ((some x) (match x ((ck/asnText s) (some s)) (_ (none))))
     ((none) (none)))
 
 fn atomOf v: (Option ck/AsnVal) -> String
-  (mt v
-    ((some x) (mt x ((ck/asnAtom s) s) (_ "")))
+  (match v
+    ((some x) (match x ((ck/asnAtom s) s) (_ "")))
     ((none) ""))
 
 fn intOf v: (Option ck/AsnVal) -> Int64
   (optionOr (stringToInt64 (atomOf v)) 0)
 
 fn boolOf v: (Option ck/AsnVal) -> Bool
-  (mt v
-    ((some x) (mt x ((ck/asnAtom s) (= s "true")) (_ false)))
+  (match v
+    ((some x) (match x ((ck/asnAtom s) (= s "true")) (_ false)))
     ((none) false))
 
 fn headProps v: ck/AsnVal head: String -> (List (Pair String ck/AsnVal))
-  (mt (ck/asnProps v (some head)) ((ok p) p) ((err _) (list)))
+  (match (ck/asnProps v (some head)) ((ok p) p) ((err _) (list)))
 
 fn toCase v: ck/AsnVal -> Case
   (let [(p (headProps v ":case"))]
@@ -65,10 +65,10 @@ fn toParityCase v: ck/AsnVal -> ParityCase
                 :want (optionOr (textOf (propIn p "want")) "")))
 
 fn headerPairs v: ck/AsnVal -> (List (Pair String String))
-  (mt v
+  (match v
     ((ck/asnList items)
       (map (fn [(item ck/AsnVal)] -> (Pair String String)
-             (mt item
+             (match item
                ((ck/asnList pairItems)
                  (let [(k (optionOr (textOf (listGet pairItems 0)) (atomOf (listGet pairItems 0))))
                        (val (optionOr (textOf (listGet pairItems 1)) (atomOf (listGet pairItems 1))))]
@@ -100,13 +100,13 @@ fn testObservatoryCases! cases: (List Case) -> Bool
                         (gotSnakeJson (ck/pyJsonDump transformedSnake))
                         (wantJson (optionOr (textOf (prop c "body")) ""))
                         (limitOk (if (= c.id "obs_over6")
-                                   (mt (j/jsonGet intelJson "packages")
+                                   (match (j/jsonGet intelJson "packages")
                                      ((some packagesVal)
-                                      (mt packagesVal
+                                      (match packagesVal
                                         ((j/jarr packages)
-                                         (mt (j/jsonGet transformed "blastRadius")
+                                         (match (j/jsonGet transformed "blastRadius")
                                            ((some blastVal)
-                                            (mt blastVal
+                                            (match blastVal
                                               ((j/jarr blastNodes)
                                                (check! (and (> (listLength packages) 6)
                                                            (= (listLength blastNodes) 6))
@@ -326,22 +326,22 @@ fn ! runTests -> Bool
   (let [(dirsOk (setupTestDirs!))]
     (if (not (check! dirsOk "test directories initialized"))
       false
-      (mt (fileReadString (fixturePath))
+      (match (fileReadString (fixturePath))
         ((err e) (do (eprintln (str "cannot read fixture: " e)) false))
         ((ok text)
-          (mt (ck/asnReadText text)
+          (match (ck/asnReadText text)
             ((err e) (do (eprintln (str "cannot parse fixture ASN: " e)) false))
             ((ok forms)
               (let [(cases (map toCase (filter (fn [(v ck/AsnVal)] -> Bool
-                                                 (mt v ((ck/asnList items)
-                                                        (mt (listHead items)
-                                                          ((some h) (mt h ((ck/asnAtom a) (= a ":case")) (_ false)))
+                                                 (match v ((ck/asnList items)
+                                                        (match (listHead items)
+                                                          ((some h) (match h ((ck/asnAtom a) (= a ":case")) (_ false)))
                                                           (_ false)))
                                                        (_ false))) forms)))
                     (pcases (map toParityCase (filter (fn [(v ck/AsnVal)] -> Bool
-                                                        (mt v ((ck/asnList items)
-                                                               (mt (listHead items)
-                                                                 ((some h) (mt h ((ck/asnAtom a) (= a ":parityCase")) (_ false)))
+                                                        (match v ((ck/asnList items)
+                                                               (match (listHead items)
+                                                                 ((some h) (match h ((ck/asnAtom a) (= a ":parityCase")) (_ false)))
                                                                  (_ false)))
                                                                (_ false))) forms)))
                     (pOk (testParityCases! pcases))

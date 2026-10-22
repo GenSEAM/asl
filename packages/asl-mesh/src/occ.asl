@@ -14,7 +14,7 @@ fn validateMerkleCommit claim: coord/SwarmClaim state: OccState candidateRoot: S
   (if (not (= claim.baseMerkleRoot state.currentRoot)) (err (makeConflictReport "conflict" "ERR_OCC_MERKLE_ROOT_DIVERGED" claim.baseMerkleRoot state.currentRoot claim.workerId 0)) (ok (makeOccState candidateRoot state.activeLeases)))
 
 fn getCommitConflictReport res: (Result OccState ConflictReport) -> ConflictReport
-  (mt res ((ok _val) (makeConflictReport "ok" "SUCCESS" "" "" "" 0)) ((err report) report))
+  (match res ((ok _val) (makeConflictReport "ok" "SUCCESS" "" "" "" 0)) ((err report) report))
 
 fn resolveLeaseConflict c1: coord/SwarmClaim c2: coord/SwarmClaim -> coord/SwarmClaim
   (if (< c1.leaseTimestamp c2.leaseTimestamp)

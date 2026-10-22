@@ -82,7 +82,7 @@ asl/host/out/asl-host test asl/packages/asl-gateway/tests/<file>.asl
 | `cliDispatchTest.asl` | **fail** | load error: its imports reach `src/server.asl` or `src/cliDispatch.asl`, which import `asl/packages/asl-cli/src/system` by path; the host resolves only the declared name `asl-cli/system` |
 | `cliPromptFailureTest.asl` | **fail** | load error: its imports reach `src/server.asl` or `src/cliDispatch.asl`, which import `asl/packages/asl-cli/src/system` by path; the host resolves only the declared name `asl-cli/system` |
 | `cockpitHandlerTest.asl` | pass | 305 assertions |
-| `cockpitTest.asl` | **fail** | 5 of 103 replay cases fail; all 5 are permission-denied cases (`krPermission`, `gatesPermission`, `tasksListPermission`, `tasksFilePermission`, `memDecisionsPermission`), and this run was as root, which ignores file permissions |
+| `cockpitTest.asl` | **fail** | 5 of 103 replay cases fail; all 5 are permissionDenied cases (`krPermission`, `gatesPermission`, `tasksListPermission`, `tasksFilePermission`, `memDecisionsPermission`), and this run was as root, which ignores file permissions |
 | `configTest.asl` | pass | 82 assertions, 44 refutations |
 | `dispatchTest.asl` | **fail** | load error: its imports reach `src/server.asl` or `src/cliDispatch.asl`, which import `asl/packages/asl-cli/src/system` by path; the host resolves only the declared name `asl-cli/system` |
 | `fleetTest.asl` | pass | 52 assertions |

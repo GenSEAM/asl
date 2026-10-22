@@ -16,7 +16,7 @@ fn arrayCalls m: ty/SsaModule -> (List (Pair String Int64))
   (fold (fn [(acc (List (Pair String Int64))) (f ty/SsaFunction)] -> (List (Pair String Int64))
           (fold (fn [(acc2 (List (Pair String Int64))) (b ty/SsaBlock)] -> (List (Pair String Int64))
                   (fold (fn [(acc3 (List (Pair String Int64))) (i ty/SsaInstr)] -> (List (Pair String Int64))
-                          (mt i.op
+                          (match i.op
                             ((ty/opBuiltin n args)
                               (let [(p (pair n (listLength args)))]
                                 (if (and (listContains? (arr/arrayBuiltinNames) n) (not (listContains? acc3 p))) (listAppend acc3 (list p)) acc3)))
@@ -29,7 +29,7 @@ fn routes? m: ty/SsaModule -> Bool
   (not (listEmpty? (arrayCalls m)))
 
 fn rewriteOp op: ty/SsaOp -> ty/SsaOp
-  (mt op
+  (match op
     ((ty/opBuiltin n args) (if (listContains? (arr/arrayBuiltinNames) n) (ty/opCall (arr/functionName n) args) op))
     (_ op))
 
@@ -47,7 +47,7 @@ fn diag code: String message: String locus: String -> ty/IrDiag
 fn poolWith strings: (List String) wanted: (List String) -> (Pair (List String) (Map String Int64))
   (fold (fn [(acc (Pair (List String) (Map String Int64))) (s String)] -> (Pair (List String) (Map String Int64))
           (let [(have (pairFirst acc))]
-            (mt (listIndexOf have s)
+            (match (listIndexOf have s)
               ((some i) (pair have (mapSet (pairSecond acc) s i)))
               ((none) (pair (listAppend have (list s)) (mapSet (pairSecond acc) s (listLength have)))))))
         (pair strings (mapEmpty)) wanted)
@@ -67,7 +67,7 @@ fn arityDiags m: ty/SsaModule calls: (List (Pair String Int64)) -> (List ty/IrDi
 fn callees f: ty/SsaFunction -> (List String)
   (fold (fn [(acc (List String)) (b ty/SsaBlock)] -> (List String)
           (fold (fn [(acc2 (List String)) (i ty/SsaInstr)] -> (List String)
-                  (mt i.op ((ty/opCall n _) (if (listContains? acc2 n) acc2 (listAppend acc2 (list n)))) (_ acc2)))
+                  (match i.op ((ty/opCall n _) (if (listContains? acc2 n) acc2 (listAppend acc2 (list n)))) (_ acc2)))
                 acc b.instrs))
         (list) f.blocks)
 
@@ -90,7 +90,7 @@ fn routeVerified m: ty/SsaModule calls: (List (Pair String Int64)) -> (Result rt
         (clashes (filter (fn [(f ty/SsaFunction)] -> Bool (listContains? names f.name)) m.functions))]
     (if (not (listEmpty? clashes))
       (err (map (fn [(f ty/SsaFunction)] -> ty/IrDiag (diag "ERR_LLVM_ARRROUTE_NAME" (str "module function '" f.name "' has the name of a routed arrays function") f.name)) clashes))
-      (mt (mergeExterns m.externs (arr/arrExterns) m.name)
+      (match (mergeExterns m.externs (arr/arrExterns) m.name)
         ((err ds) (err ds))
         ((ok externs)
           (ok (rt/Routed :result (ty/ssaModule m.name (pairFirst pooled) m.types m.records externs m.globals
@@ -101,7 +101,7 @@ fn routeModule m: ty/SsaModule -> (Result rt/Routed (List ty/IrDiag))
   (let [(calls (arrayCalls m))]
     (if (listEmpty? calls)
       (ok (rt/Routed :result m :internal (list)))
-      (mt (vfy/verifySsa m)
+      (match (vfy/verifySsa m)
         ((err ds) (err ds))
         ((ok _)
           (let [(bad (arityDiags m calls))]
@@ -130,11 +130,11 @@ fn finishLines lines: (List String) -> (Result (List String) String)
           (ok (listAppend replaced (filter (fn [(d String)] -> Bool (not (listContains? lines d))) (extraDecls))))))))
 
 fn finishText routed: Bool res: (Result String (List ty/IrDiag)) -> (Result String (List ty/IrDiag))
-  (mt res
+  (match res
     ((err ds) (err ds))
     ((ok text)
       (if (not routed)
         (ok text)
-        (mt (finishLines (stringSplit text "\n"))
+        (match (finishLines (stringSplit text "\n"))
           ((err e) (err (list (diag "ERR_LLVM_ARRROUTE_TEXT" e "asl-target-llvm/arrayRoute"))))
           ((ok lines) (ok (stringJoin lines "\n")))))))

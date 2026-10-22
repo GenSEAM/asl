@@ -12,7 +12,7 @@ fn opfsWriteRecord st: OpfsStorageState path: Str content: Str -> (Result OpfsSt
   (if (not (isValidOpfsPath? path)) (err "Sandbox path violation: invalid path") (let [(updatedFiles (mapSet st.files path content)) (currentRecords st.records) (updatedRecords (if (listContains? currentRecords path) currentRecords (listAppend currentRecords (list path))))] (ok (with st :records updatedRecords :files updatedFiles))))
 
 fn opfsReadRecord st: OpfsStorageState path: Str -> (Result Str Str)
-  (if (not (isValidOpfsPath? path)) (err "Sandbox path violation: invalid path") (mt (mapGet st.files path) ((some content) (ok content)) ((none) (err "Record not found"))))
+  (if (not (isValidOpfsPath? path)) (err "Sandbox path violation: invalid path") (match (mapGet st.files path) ((some content) (ok content)) ((none) (err "Record not found"))))
 
 fn opfsFlush st: OpfsStorageState -> (Result OpfsStorageState Str)
   (ok st)

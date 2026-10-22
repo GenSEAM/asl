@@ -16,26 +16,26 @@ fn entryPath -> String
   "asl/packages/asl-target-llvm/tests/fixtures/emitAlloc/entry.asl"
 
 fn facts -> (Option libc/TripleFacts)
-  (mt (route/hostFactsOf "Darwin arm64")
+  (match (route/hostFactsOf "Darwin arm64")
     ((ok o) o)
     ((err _) (none)))
 
 fn lowerUnit units: (List lk/LinkUnit) prelude: lk/LinkUnit acc: lk/LinkAcc u: lk/LinkUnit -> lk/LinkAcc
-  (mt (low/lowerLinked u.forms u.positions (low/LinkScope :path u.path :imports (lk/importForms units u) :prelude prelude.forms :strings acc.strings :only (none)))
+  (match (low/lowerLinked u.forms u.positions (low/LinkScope :path u.path :imports (lk/importForms units u) :prelude prelude.forms :strings acc.strings :only (none)))
     ((ok m) (lk/LinkAcc :strings m.strings :modules (listAppend acc.modules (list m)) :requested acc.requested :diags acc.diags))
     ((err ds) (lk/LinkAcc :strings acc.strings :modules acc.modules :requested acc.requested :diags (listAppend acc.diags ds))))
 
 fn emitted res: (Result String (List irTy/IrDiag)) -> Int64
-  (mt res ((ok text) (stringLength text)) ((err _) -1))
+  (match res ((ok text) (stringLength text)) ((err _) -1))
 
 fn ! emittedBytes emit: Bool -> Int64
-  (mt (lk/loadClosure! (entryPath))
+  (match (lk/loadClosure! (entryPath))
     ((err _) -1)
     ((ok units)
-      (mt (lk/loadClosure! (lk/preludePath))
+      (match (lk/loadClosure! (lk/preludePath))
         ((err _) -1)
         ((ok pUnits)
-          (mt (facts)
+          (match (facts)
             ((none) -1)
             ((some f)
               (let [(prelude (optionOr (listHead pUnits) (lk/emptyUnit "prelude")))
@@ -68,13 +68,13 @@ fn statsLine text: String -> String
 
 fn bytesAllocated line: String -> Int64
   (let [(tokens (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit line " ")))]
-    (mt (listIndexOf tokens ":bytesAllocated")
+    (match (listIndexOf tokens ":bytesAllocated")
       ((some i) (optionOr (stringToInt64 (stringReplace (optionOr (listGet tokens (+ i 1)) "") ")" "")) -1))
       ((none) -1)))
 
 fn ! runMode mode: String -> Int64
   (let [(built (nt/prepareRun (thisFile) (nt/fingerprint)))]
-    (mt built.binary
+    (match built.binary
       ((none) (do (assert false (str "emitAllocTest builds natively: " built.reason)) -1))
       ((some bin)
        (let [(done (fr/runOneLimited (fr/job (list bin mode) "." (fr/childEnv (list "ASL_GC_STATS=1"))) (fr/limits 300 4)))]

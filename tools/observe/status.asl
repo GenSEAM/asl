@@ -46,7 +46,7 @@ fn statusForm pi: p/PyIndex dd: p/PyDef callsBy: (h/HMap Int64) refsBy: (h/HMap 
         (shown (listTake all (testsPerDef)))
         (decos (map (fn [(x d/PyNode)] -> String (optionOr x.u "")) (d/kids dd.node "decorator_list")))]
     (str "(:symbol " (c/quoted dd.qual) " :at " (c/atStr dd.rel dd.line) " :kind " dd.kind " :stub "
-         (mt why ((some w) (str "true :stubWhy " (c/quoted w))) ((none) "false"))
+         (match why ((some w) (str "true :stubWhy " (c/quoted w))) ((none) "false"))
          " :callers " (stringFromInt64 (count callsBy dd.key)) " :refs " (stringFromInt64 (count refsBy dd.key))
          (if (listEmpty? decos) "" (str " :decorators (" (c/joinWith (map (fn [(x String)] -> String (c/quoted (p/pyPrefix x 40))) decos) " ") ")"))
          " :tests (" (c/joinWith shown " ") ")"
@@ -59,7 +59,7 @@ fn padLine n: Int64 -> String
 (schema Const (:f mod p/PyMod) (:f name String) (:f line Int64))
 
 fn constOf m: p/PyMod n: String -> Const
-  (Const :mod m :name n :line (mt (h/omGet m.vars n) ((some pr) (pairFirst pr)) ((none) 0)))
+  (Const :mod m :name n :line (match (h/omGet m.vars n) ((some pr) (pairFirst pr)) ((none) 0)))
 
 fn flagForm pi: p/PyIndex k: Const -> String
   (let [(reads (optionOr (h/hmGet pi.w.varReads (p/defKey k.mod.name k.name)) (list)))
@@ -71,7 +71,7 @@ fn flagForm pi: p/PyIndex k: Const -> String
 (schema Sel (:f defs (List p/PyDef)) (:f consts (List Const)))
 
 fn ! selectPath pi: p/PyIndex path: String -> (Result Sel String)
-  (mt (listHead (filter (fn [(m p/PyMod)] -> Bool (= m.rel path)) (h/omValues pi.ix.mods)))
+  (match (listHead (filter (fn [(m p/PyMod)] -> Bool (= m.rel path)) (h/omValues pi.ix.mods)))
     ((none)
       (if (listContains? pi.unparsed path)
         (err (c/rejectLine "ERR_PARSE" (str path " does not parse as Python") ""))
@@ -97,7 +97,7 @@ fn ! selectSymbol pi: p/PyIndex symbol: String -> (Result Sel String)
       (ok (Sel :defs defs :consts consts))))
 
 fn ! statusOver! root: String pi: p/PyIndex symbol: String path: String limit: Int64 ctx: c/Ctx -> (Result String String)
-  (mt (if (stringEmpty? path) (selectSymbol pi symbol) (selectPath pi path))
+  (match (if (stringEmpty? path) (selectSymbol pi symbol) (selectPath pi path))
     ((err e) (err e))
     ((ok sel)
       (let [(callsBy (fold (fn [(acc (h/HMap Int64)) (cs p/CallSite)] -> (h/HMap Int64) (bump acc cs.callee)) (h/hmEmpty) pi.w.calls))
@@ -108,7 +108,7 @@ fn ! statusOver! root: String pi: p/PyIndex symbol: String path: String limit: I
             (flagItems (map (fn [(k Const)] -> String (flagForm pi k)) consts))
             (stubs (listLength (filter (fn [(dd p/PyDef)] -> Bool (some? (q/stubWhy pi dd))) sel.defs)))
             (unread (listLength (filter (fn [(f String)] -> Bool (stringContains? f ":flagUnread true")) flagItems)))]
-        (mt (c/shortRev! root ctx)
+        (match (c/shortRev! root ctx)
           ((err e) (err e))
           ((ok rev)
             (let [(head (str "(:observe :dim status :v 1" (if (stringEmpty? symbol) (str " :path " (c/quoted path)) (str " :symbol " (c/quoted symbol)))
@@ -118,12 +118,12 @@ fn ! statusOver! root: String pi: p/PyIndex symbol: String path: String limit: I
                             (str " :limits " (c/quoted (statusLimits))) "status")))))))
 
 fn ! observeStatus! root: String symbol: String path: String limit: Int64 ctx: c/Ctx -> (Pair String (Result String String))
-  (mt (c/workspaceFiles! root ctx)
+  (match (c/workspaceFiles! root ctx)
     ((err e) (pair "" (err e)))
     ((ok files)
-      (mt (p/buildPyIndex root "" files ctx)
+      (match (p/buildPyIndex root "" files ctx)
         ((err e) (pair "" (err e)))
         ((ok b)
-          (mt b
+          (match b
             ((p/pyAbsent why) (pair "" (err (cal/absentLine "status" why))))
             ((p/built pi) (pair pi.warnings (statusOver! root pi symbol path limit ctx))))))))

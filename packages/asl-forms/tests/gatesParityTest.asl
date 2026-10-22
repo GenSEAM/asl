@@ -28,7 +28,7 @@ fn materialize! work: String text: String -> Bool
               (let [(p (k/parseStep row).kwargs)
                     (target (str (wsDir work (optionOr (mapGet p "ws") "")) "/" (optionOr (mapGet p "path") "")))]
                 (do (dirCreate (k/dirName target))
-                    (mt (fileWrite target (optionOr (mapGet p "content") "")) ((ok _) true) ((err _) false)))))
+                    (match (fileWrite target (optionOr (mapGet p "content") "")) ((ok _) true) ((err _) false)))))
             (rowsOf text "(:tree "))
 
 fn dropKey? row: String -> Bool
@@ -58,7 +58,7 @@ fn masked out: String work: String stubs: String -> String
   (stringReplace (stringReplace out work "@WORK@") stubs "@STUBS@")
 
 fn lockMasked text: String -> String
-  (mt (stringIndexOf text ":measuredAt ")
+  (match (stringIndexOf text ":measuredAt ")
     ((none) text)
     ((some i)
       (let [(b (stringToBytes text))
@@ -103,7 +103,7 @@ fn checkCase! repo: String work: String bin: String text: String row: String t: 
 
 fn ! driver! repo: String -> (Result String String)
   (let [(built (nt/prepareRun "asl/packages/asl-forms/tests/gatesParityTest.asl" (nt/fingerprint)))]
-    (mt built.binary ((some b) (ok (if (stringStartsWith? b "/") b (str repo "/" b)))) ((none) (err built.reason))))
+    (match built.binary ((some b) (ok (if (stringStartsWith? b "/") b (str repo "/" b)))) ((none) (err built.reason))))
 
 fn doctorUsesUnifiedIntel! repo: String dir: String host: String -> Bool
   (let [(bin (str dir "/staleBin"))
@@ -117,7 +117,7 @@ fn doctorUsesUnifiedIntel! repo: String dir: String host: String -> Bool
 
 fn ! runTests -> Bool
   (let [(repo (resultOr (realPath ".") "."))]
-    (mt (driver! repo)
+    (match (driver! repo)
       ((err e) (do (assert false (str "gatesParityTest builds natively in run mode as the per-case driver: " e)) false))
       ((ok bin)
        (let [(host (str repo "/asl/packages/asl-forms/tests/fixtures/recorded/gatesStubs/bin/asl-host"))
@@ -172,7 +172,7 @@ fn runForm! env: g/GateEnv root: String id: Int64 form: String -> (Pair (List St
         (pair o.lines o.errCount))))
 
 fn walkFiles! base: String rel: String -> (List String)
-  (mt (dirList base)
+  (match (dirList base)
     ((err _) (list))
     ((ok names)
       (let [(sorted (listSort names))
@@ -193,7 +193,7 @@ fn fnCase! env: g/GateEnv root: String args: (List (Option String)) -> String
         (let [(r (g/validateStaged! env path (optionOr (listGet args 2) (none)) (optionOr (optionOr (listGet args 3) (none)) "") (= (optionOr (optionOr (listGet args 4) (none)) "") "true")))]
           (str "(:code \"" (optionOr (listGet r 0) "") "\" :message \"" (k/escapeAsnVal (optionOr (listGet r 1) "")) "\" :fields \"" (k/escapeAsnVal (optionOr (listGet r 2) "")) "\")")))
       ((= name "overlay")
-        (mt (g/buildOverlay! env (filter (fn [(sp (Pair String String))] -> Bool (g/stagedWritable! root (pairFirst sp))) env.staged))
+        (match (g/buildOverlay! env (filter (fn [(sp (Pair String String))] -> Bool (g/stagedWritable! root (pairFirst sp))) env.staged))
           ((err e) (str "(:overlayError \"" (k/escapeAsnVal e) "\")"))
           ((ok tmp) (let [(rows (walkFiles! tmp ""))] (do (pathRemove tmp) (str "(:files \"" (k/escapeAsnVal (stringJoin rows "\n--\n")) "\")"))))))
       (else (str "(:unknownHelper \"" (k/escapeAsnVal name) "\")"))))
@@ -215,6 +215,6 @@ fn ! main args: (List String) -> (Result Int64 String)
             (failed (> o.errCount 0))
             (wire (map (fn [(l String)] -> String (w/wireReceipt! ws l failed p.op)) o.lines))
             (stageFile (str work "/stage" id))]
-        (do (mt o.stage ((some sp) (fileWrite stageFile (str (k/relToRoot root (pairFirst sp)) "\n" (pairSecond sp)))) ((none) (ok ())))
+        (do (match o.stage ((some sp) (fileWrite stageFile (str (k/relToRoot root (pairFirst sp)) "\n" (pairSecond sp)))) ((none) (ok ())))
             (println (if (= (listLength wire) 1) (optionOr (listHead wire) "") (str "(:batch " (stringJoin wire " ") ")")))
             (ok (if (g/linesFailed? o.lines o.errCount) 1 0))))))

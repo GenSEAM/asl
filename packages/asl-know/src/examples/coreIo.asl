@@ -1,7 +1,7 @@
 (module asl-know/examples/coreIo :x [lineCount! selfTest] :i [])
 
 fn ! lineCount! path: String -> Int64
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) -1)
     ((ok text) (listCount (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines text))))
 

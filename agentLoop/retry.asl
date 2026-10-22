@@ -9,21 +9,21 @@ fn providerRetryPause errorCode: String retryCount: Int64 configured: (List Int6
   (let [transient (listContains? (list "ERR_VENDOR" "ERR_QUEUE_TIMEOUT" "ERR_GATEWAY_OFFLINE") errorCode)
         slot (min retryCount (listLength configured))
         pause (if (and transient (> slot 0)) (optionOr (listGet configured (- slot 1)) 0) 0)]
-    (mt budgetLeft ((some left) (max 0 (min pause left))) ((none) pause)))
+    (match budgetLeft ((some left) (max 0 (min pause left))) ((none) pause)))
 
 fn ! retryTurn! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) maxRetries: Int64 configured: (List Int64) budgetLeft: (Option Int64) sleep: (fn [Int64] -> Bool) -> (Pair pv/Turn Int64)
   (retryTurnLoop! provider call (max 0 maxRetries) configured budgetLeft sleep 0)
 
 fn ! retryTurnLoop! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) maxRetries: Int64 configured: (List Int64) budgetLeft: (Option Int64) sleep: (fn [Int64] -> Bool) retries: Int64 -> (Pair pv/Turn Int64)
   (let [turn (call provider retries)]
-    (mt turn.reply
+    (match turn.reply
       ((ok _) (pair turn retries))
       ((err error)
         (let [code (pv/errorCode error)
               pause (providerRetryPause code (+ retries 1) configured budgetLeft)]
           (if (and (< retries maxRetries) (listContains? (list "ERR_VENDOR" "ERR_QUEUE_TIMEOUT" "ERR_GATEWAY_OFFLINE") code))
             (let [waited (if (> pause 0) (sleep pause) true)
-                  left (mt budgetLeft ((some n) (some (max 0 (- n pause)))) ((none) none))]
+                  left (match budgetLeft ((some n) (some (max 0 (- n pause)))) ((none) none))]
               (if waited
                 (retryTurnLoop! turn.provider call maxRetries configured left sleep (+ retries 1))
                 (pair turn retries)))
@@ -95,7 +95,7 @@ fn charSuffix s: String k: Int64 -> String
 
 fn pySplitLines s: String -> (List String)
   (let [parts (stringSplit s "\n")]
-    (mt (listLast parts)
+    (match (listLast parts)
       ((some last) (if (stringEmpty? last) (listTake parts (- (listLength parts) 1)) parts))
       ((none) parts)))
 
@@ -109,10 +109,10 @@ fn stripLeadingColons s: String -> String
   (if (and (> (stringLength s) 0) (= (charAt s 0) ":")) (stripLeadingColons (slice s 1 (stringLength s))) s)
 
 fn firstSomeStr xs: (List (Option String)) -> (Option String)
-  (fold (fn [acc o] (mt acc ((some _) acc) ((none) o))) none xs)
+  (fold (fn [acc o] (match acc ((some _) acc) ((none) o))) none xs)
 
 fn assocLookup xs: (List (Pair String Int64)) k: String -> (Option Int64)
-  (fold (fn [acc p] (mt acc ((some _) acc) ((none) (if (= (pairFirst p) k) (some (pairSecond p)) none)))) none xs)
+  (fold (fn [acc p] (match acc ((some _) acc) ((none) (if (= (pairFirst p) k) (some (pairSecond p)) none)))) none xs)
 
 fn maxOfPairs xs: (List (Pair String Int64)) -> Int64
   (optionOr (listMax (map pairSecond xs)) 0)
@@ -120,7 +120,7 @@ fn maxOfPairs xs: (List (Pair String Int64)) -> Int64
 
 fn findTagStart s: String tag: String from: Int64 -> (Option Int64)
   (let [n (stringLength s)]
-    (mt (stringIndexOf (slice s from n) "(")
+    (match (stringIndexOf (slice s from n) "(")
       ((none) none)
       ((some relIdx)
         (let [openIdx (+ from relIdx)
@@ -141,11 +141,11 @@ fn lastCloseParenFrom text: String start: Int64 -> (Option Int64)
 
 fn findQuotedField s: String key: String from: Int64 -> (Option String)
   (let [n (stringLength s) pat (str ":" key)]
-    (mt (stringIndexOf (slice s from n) pat)
+    (match (stringIndexOf (slice s from n) pat)
       ((none) none)
       ((some relIdx)
         (let [idx (+ from relIdx) after (+ idx (stringLength pat))]
-          (mt (skipSpacesRequireOne s after n)
+          (match (skipSpacesRequireOne s after n)
             ((none) (findQuotedField s key (+ idx 1)))
             ((some q)
               (if (and (< q n) (= (charAt s q) "\""))
@@ -155,11 +155,11 @@ fn findQuotedField s: String key: String from: Int64 -> (Option String)
 
 fn findWordFieldFrom s: String tag: String from: Int64 -> (Option String)
   (let [n (stringLength s)]
-    (mt (stringIndexOf (slice s from n) tag)
+    (match (stringIndexOf (slice s from n) tag)
       ((none) none)
       ((some relIdx)
         (let [idx (+ from relIdx) after (+ idx (stringLength tag))]
-          (mt (skipSpacesRequireOne s after n)
+          (match (skipSpacesRequireOne s after n)
             ((none) (findWordFieldFrom s tag (+ idx 1)))
             ((some q)
               (let [wEnd (wordRunEnd s q n)]
@@ -167,11 +167,11 @@ fn findWordFieldFrom s: String tag: String from: Int64 -> (Option String)
 
 fn findMetValue form: String from: Int64 -> (Option Bool)
   (let [n (stringLength form)]
-    (mt (stringIndexOf (slice form from n) ":met")
+    (match (stringIndexOf (slice form from n) ":met")
       ((none) none)
       ((some relIdx)
         (let [idx (+ from relIdx) after (+ idx 4)]
-          (mt (skipSpacesRequireOne form after n)
+          (match (skipSpacesRequireOne form after n)
             ((none) (findMetValue form (+ idx 1)))
             ((some q)
               (cond
@@ -197,7 +197,7 @@ fn extractDepthStrings form: String i: Int64 n: Int64 depth: Int64 acc: (List St
 
 fn scanMissingOccurrences form: String from: Int64 -> (List String)
   (let [n (stringLength form)]
-    (mt (stringIndexOf (slice form from n) ":missing")
+    (match (stringIndexOf (slice form from n) ":missing")
       ((none) (list))
       ((some relIdx)
         (let [idx (+ from relIdx) afterKey (+ idx 8) afterSpace (skipSpaces form afterKey n)]
@@ -257,7 +257,7 @@ fn escalationNear turnNum: Int64 budget: Int64 retries: (List (Pair String Int64
         (else ""))))
 
 fn firstOfPairs xs: (List (Pair String Int64)) -> (Pair String Int64)
-  (mt (listHead xs) ((some x) x))
+  (match (listHead xs) ((some x) x))
 
 fn lastTwoIntersectionSorted history: (List (List String)) -> (List String)
   (let [n (listLength history)]
@@ -283,18 +283,18 @@ fn reinforceWhyFor parseDefect: Bool gateSigHistory: (List (List String)) delive
       (else (escalationNear turnNum budget retries maxRetries failureCounts turnsWithoutEvidence parseDefectCount
                              (and (= deliver "patch") (not writesPersisted)) readStreak (some? redGate)))))
 
-fn gCmd g: GateRec -> String (mt g ((gateRec c _ _ _ _ _) c))
-fn gExit g: GateRec -> (Option Int64) (mt g ((gateRec _ e _ _ _ _) e))
-fn gTimeout g: GateRec -> Bool (mt g ((gateRec _ _ t _ _ _) t))
-fn gSeconds g: GateRec -> (Option Int64) (mt g ((gateRec _ _ _ s _ _) s))
-fn gStdout g: GateRec -> String (mt g ((gateRec _ _ _ _ o _) o))
-fn gStderr g: GateRec -> String (mt g ((gateRec _ _ _ _ _ e) e))
+fn gCmd g: GateRec -> String (match g ((gateRec c _ _ _ _ _) c))
+fn gExit g: GateRec -> (Option Int64) (match g ((gateRec _ e _ _ _ _) e))
+fn gTimeout g: GateRec -> Bool (match g ((gateRec _ _ t _ _ _) t))
+fn gSeconds g: GateRec -> (Option Int64) (match g ((gateRec _ _ _ s _ _) s))
+fn gStdout g: GateRec -> String (match g ((gateRec _ _ _ _ o _) o))
+fn gStderr g: GateRec -> String (match g ((gateRec _ _ _ _ _ e) e))
 
 fn makeGateRec cmd: String exit: Int64 timeout: Bool seconds: Int64 stdout: String stderr: String -> GateRec
   (gateRec cmd (if (< exit 0) none (some exit)) timeout (if (< seconds 0) none (some seconds)) stdout stderr)
 
 fn optDisplayInt o: (Option Int64) -> String
-  (mt o ((some v) (stringFromInt64 v)) ((none) "None"))
+  (match o ((some v) (stringFromInt64 v)) ((none) "None"))
 
 fn gateOutcome g: GateRec -> String
   (if (gTimeout g)
@@ -302,7 +302,7 @@ fn gateOutcome g: GateRec -> String
     (str ":exit " (optDisplayInt (gExit g))))
 
 fn assertsFailedOnLine line: String -> (Option (Pair String String))
-  (mt (stringIndexOf line ":asserts ")
+  (match (stringIndexOf line ":asserts ")
     ((none) none)
     ((some idx)
       (let [n (stringLength line) digStart (+ idx 9) digEnd (digitRunEnd line digStart n)]
@@ -315,12 +315,12 @@ fn assertsFailedOnLine line: String -> (Option (Pair String String))
               none))))))
 
 fn gateNowCounts stdoutText: String -> (Option (Pair String String))
-  (fold (fn [acc line] (if (stringStartsWith? line "(:gate ") (mt (assertsFailedOnLine line) ((some m) (some m)) ((none) acc)) acc))
+  (fold (fn [acc line] (if (stringStartsWith? line "(:gate ") (match (assertsFailedOnLine line) ((some m) (some m)) ((none) acc)) acc))
     none (stringSplit stdoutText "\n"))
 
 fn gateNow turn: Int64 g: GateRec -> String
   (let [countsOpt (gateNowCounts (gStdout g))
-        tail (mt countsOpt ((some cp) (str " :asserts " (pairFirst cp) " :failed " (pairSecond cp))) ((none) ""))]
+        tail (match countsOpt ((some cp) (str " :asserts " (pairFirst cp) " :failed " (pairSecond cp))) ((none) ""))]
     (str "(:cmd \"" (escapeAsn (gCmd g)) "\" :turn " (stringFromInt64 turn) " " (gateOutcome g) tail ")"))
 
 ; (:m :tags (leon signals))
@@ -340,7 +340,7 @@ fn noWriteNudge deliver: String wrote: Bool done: Int64 files: (List String) win
 fn nowForm turn: Int64 contextTokens: Int64 win: (Option (Pair Int64 String)) written: (List String)
            lastGates: (List (Pair Int64 GateRec)) retriesLeft: (List (Pair String Int64))
            nudge: String cost: String plan: String -> String
-  (let [usedBytes (mt win ((some p) (pairFirst p)) ((none) 0))
+  (let [usedBytes (match win ((some p) (pairFirst p)) ((none) 0))
         head (str "(:now :turn " (stringFromInt64 turn) " :context (:tokens " (stringFromInt64 contextTokens)
                   " :usedBytes " (stringFromInt64 usedBytes) ")")
         costPart (if (stringEmpty? cost) "" (str " :cost " cost))
@@ -349,11 +349,11 @@ fn nowForm turn: Int64 contextTokens: Int64 win: (Option (Pair Int64 String)) wr
         writtenPart (if (listEmpty? written) "" (str " :written (" (stringJoin (map (fn [p] (str "\"" (escapeAsn p) "\"")) written) " ") ")"))
         gatesPart (if (listEmpty? lastGates) "" (str " :gates (" (stringJoin (map (fn [tg] (gateNow (pairFirst tg) (pairSecond tg))) lastGates) " ") ")"))
         retriesPart (str " :retriesLeft (" (stringJoin (map (fn [p] (str ":" (pairFirst p) " " (stringFromInt64 (max 0 (pairSecond p))))) retriesLeft) " ") ")")
-        lastPart (mt win ((some p) (str " :last " (pairSecond p))) ((none) ""))]
+        lastPart (match win ((some p) (str " :last " (pairSecond p))) ((none) ""))]
     (str head costPart planPart nudgePart writtenPart gatesPart retriesPart lastPart ")"))
 
 fn gateFailingBool g: GateRec -> Bool
-  (mt (gExit g) ((some e) (!= e 0)) ((none) true))
+  (match (gExit g) ((some e) (!= e 0)) ((none) true))
 
 fn gateTail g: GateRec -> String
   (let [combined (stringTrim (str (gStdout g) "\n" (gStderr g)))
@@ -407,13 +407,13 @@ fn buildRetryBrief retryCount: Int64 truncated: Bool parseDefectReply: (Option S
                      ((some? parseDefectReply)
                        (let [quoted (charPrefix (optionOr parseDefectReply "") 200)
                              base (list (str "reply was not parseable ASN: \"" quoted "\""))]
-                         (mt parseFailureWhere ((some w) (listAppend base (list w))) ((none) base))))
+                         (match parseFailureWhere ((some w) (listAppend base (list w))) ((none) base))))
                      (else (list)))
-        swallowedParts (mt swallowedFile
+        swallowedParts (match swallowedFile
                           ((some f) (list (str "swallowed error in " f " line " (stringFromInt64 swallowedLine) ": " (optionOr swallowedRule ""))))
                           ((none) (list)))
         gateParts (gateResultParts gates)
-        placeholderParts (mt placeholderFile
+        placeholderParts (match placeholderFile
                             ((some f) (list (str "the failing assert is one this run wrote in " f " line " (stringFromInt64 placeholderLine)
                                                   ": " (optionOr placeholderText "") "; if it is a placeholder, replace it with a real check of the behaviour")))
                             ((none) (list)))
@@ -446,7 +446,7 @@ fn advisorSkipParseCheck why: String parseDefectCount: Int64 -> String
     "")
 
 fn advisorSkip why: String retries: (List (Pair String Int64)) parseDefectCount: Int64 -> String
-  (mt (matchOneMoreMiss why)
+  (match (matchOneMoreMiss why)
     ((some kind)
       (if (= (optionOr (assocLookup retries kind) 0) 0)
         (str kind " retry cap reached with no " kind " miss: a provider or retry limit, not the model")
@@ -454,61 +454,61 @@ fn advisorSkip why: String retries: (List (Pair String Int64)) parseDefectCount:
     ((none) (advisorSkipParseCheck why parseDefectCount)))
 
 fn parseAdviceField form: String key: String -> (Option String)
-  (mt (findQuotedField form key 0)
+  (match (findQuotedField form key 0)
     ((some raw) (some (charPrefix (stringTrim (specUnescape raw)) 400)))
     ((none) none))
 
 ; (:m :tags (reinforce advisor))
 fn parseAdvice text: String -> (Option AdviceRec)
-  (mt (findTagStart text ":advice" 0)
+  (match (findTagStart text ":advice" 0)
     ((none) none)
     ((some start)
       (let [form (slice text start (stringLength text)) nextOpt (parseAdviceField form "next")]
-        (mt nextOpt
+        (match nextOpt
           ((none) none)
           ((some nextVal)
             (if (stringEmpty? nextVal)
               none
               (some (adviceRec nextVal (parseAdviceField form "why") (parseAdviceField form "avoid")))))))))
 
-fn adviceNext a: AdviceRec -> String (mt a ((adviceRec n _ _) n))
-fn adviceWhy a: AdviceRec -> (Option String) (mt a ((adviceRec _ w _) w))
-fn adviceAvoid a: AdviceRec -> (Option String) (mt a ((adviceRec _ _ av) av))
+fn adviceNext a: AdviceRec -> String (match a ((adviceRec n _ _) n))
+fn adviceWhy a: AdviceRec -> (Option String) (match a ((adviceRec _ w _) w))
+fn adviceAvoid a: AdviceRec -> (Option String) (match a ((adviceRec _ _ av) av))
 
 fn parseSpecVerdict text: String -> (Option SpecVerdict)
   (if (stringEmpty? (stringTrim text))
     none
-    (mt (findTagStart text ":verdict" 0)
+    (match (findTagStart text ":verdict" 0)
       ((none) none)
       ((some start)
-        (mt (lastCloseParenFrom text start)
+        (match (lastCloseParenFrom text start)
           ((none) none)
           ((some lastP)
             (let [form (slice text start (+ lastP 1))]
-              (mt (findMetValue form 0)
+              (match (findMetValue form 0)
                 ((none) none)
                 ((some met)
                   (let [missing (scanMissingOccurrences form 0)]
                     (if (and (not met) (listEmpty? missing)) none (some (specVerdict met missing))))))))))))
 
-fn verdictMet v: SpecVerdict -> Bool (mt v ((specVerdict m _) m))
-fn verdictMissing v: SpecVerdict -> (List String) (mt v ((specVerdict _ m) m))
+fn verdictMet v: SpecVerdict -> Bool (match v ((specVerdict m _) m))
+fn verdictMissing v: SpecVerdict -> (List String) (match v ((specVerdict _ m) m))
 
-fn recId r: ReceiptRec -> String (mt r ((receiptRec i _ _ _ _ _ _ _ _ _ _ _ _ _ _) i))
-fn recOp r: ReceiptRec -> (Option String) (mt r ((receiptRec _ o _ _ _ _ _ _ _ _ _ _ _ _ _) o))
-fn recKind r: ReceiptRec -> (Option String) (mt r ((receiptRec _ _ k _ _ _ _ _ _ _ _ _ _ _ _) k))
-fn recCmd r: ReceiptRec -> (Option String) (mt r ((receiptRec _ _ _ c _ _ _ _ _ _ _ _ _ _ _) c))
-fn recStdout r: ReceiptRec -> (Option String) (mt r ((receiptRec _ _ _ _ o _ _ _ _ _ _ _ _ _ _) o))
-fn recFile r: ReceiptRec -> (Option String) (mt r ((receiptRec _ _ _ _ _ f _ _ _ _ _ _ _ _ _) f))
-fn recPath r: ReceiptRec -> (Option String) (mt r ((receiptRec _ _ _ _ _ _ p _ _ _ _ _ _ _ _) p))
-fn recSymbol r: ReceiptRec -> (Option String) (mt r ((receiptRec _ _ _ _ _ _ _ s _ _ _ _ _ _ _) s))
-fn recQuery r: ReceiptRec -> (Option String) (mt r ((receiptRec _ _ _ _ _ _ _ _ q _ _ _ _ _ _) q))
-fn recTopic r: ReceiptRec -> (Option String) (mt r ((receiptRec _ _ _ _ _ _ _ _ _ t _ _ _ _ _) t))
-fn recUrl r: ReceiptRec -> (Option String) (mt r ((receiptRec _ _ _ _ _ _ _ _ _ _ u _ _ _ _) u))
-fn recExit r: ReceiptRec -> (Option Int64) (mt r ((receiptRec _ _ _ _ _ _ _ _ _ _ _ e _ _ _) e))
-fn recStatus r: ReceiptRec -> (Option String) (mt r ((receiptRec _ _ _ _ _ _ _ _ _ _ _ _ s _ _) s))
-fn recError r: ReceiptRec -> (Option String) (mt r ((receiptRec _ _ _ _ _ _ _ _ _ _ _ _ _ e _) e))
-fn recContent r: ReceiptRec -> (Option String) (mt r ((receiptRec _ _ _ _ _ _ _ _ _ _ _ _ _ _ c) c))
+fn recId r: ReceiptRec -> String (match r ((receiptRec i _ _ _ _ _ _ _ _ _ _ _ _ _ _) i))
+fn recOp r: ReceiptRec -> (Option String) (match r ((receiptRec _ o _ _ _ _ _ _ _ _ _ _ _ _ _) o))
+fn recKind r: ReceiptRec -> (Option String) (match r ((receiptRec _ _ k _ _ _ _ _ _ _ _ _ _ _ _) k))
+fn recCmd r: ReceiptRec -> (Option String) (match r ((receiptRec _ _ _ c _ _ _ _ _ _ _ _ _ _ _) c))
+fn recStdout r: ReceiptRec -> (Option String) (match r ((receiptRec _ _ _ _ o _ _ _ _ _ _ _ _ _ _) o))
+fn recFile r: ReceiptRec -> (Option String) (match r ((receiptRec _ _ _ _ _ f _ _ _ _ _ _ _ _ _) f))
+fn recPath r: ReceiptRec -> (Option String) (match r ((receiptRec _ _ _ _ _ _ p _ _ _ _ _ _ _ _) p))
+fn recSymbol r: ReceiptRec -> (Option String) (match r ((receiptRec _ _ _ _ _ _ _ s _ _ _ _ _ _ _) s))
+fn recQuery r: ReceiptRec -> (Option String) (match r ((receiptRec _ _ _ _ _ _ _ _ q _ _ _ _ _ _) q))
+fn recTopic r: ReceiptRec -> (Option String) (match r ((receiptRec _ _ _ _ _ _ _ _ _ t _ _ _ _ _) t))
+fn recUrl r: ReceiptRec -> (Option String) (match r ((receiptRec _ _ _ _ _ _ _ _ _ _ u _ _ _ _) u))
+fn recExit r: ReceiptRec -> (Option Int64) (match r ((receiptRec _ _ _ _ _ _ _ _ _ _ _ e _ _ _) e))
+fn recStatus r: ReceiptRec -> (Option String) (match r ((receiptRec _ _ _ _ _ _ _ _ _ _ _ _ s _ _) s))
+fn recError r: ReceiptRec -> (Option String) (match r ((receiptRec _ _ _ _ _ _ _ _ _ _ _ _ _ e _) e))
+fn recContent r: ReceiptRec -> (Option String) (match r ((receiptRec _ _ _ _ _ _ _ _ _ _ _ _ _ _ c) c))
 
 fn optStr s: String -> (Option String)
   (if (stringEmpty? s) none (some s))
@@ -521,50 +521,50 @@ fn makeReceiptRec id: String op: String kind: String cmd: String stdout: String 
               (optStr content))
 
 fn opOf r: ReceiptRec -> String
-  (mt (recOp r) ((some o) o) ((none) (mt (recKind r) ((some k) k) ((none) (if (some? (recCmd r)) "gate" "")))))
+  (match (recOp r) ((some o) o) ((none) (match (recKind r) ((some k) k) ((none) (if (some? (recCmd r)) "gate" "")))))
 
 fn outOf r: ReceiptRec -> String
   (optionOr (recStdout r) "")
 
 fn hasDimCallersFrom out: String from: Int64 -> Bool
   (let [n (stringLength out)]
-    (mt (stringIndexOf (slice out from n) ":dim")
+    (match (stringIndexOf (slice out from n) ":dim")
       ((none) false)
       ((some relIdx)
         (let [idx (+ from relIdx) after (+ idx 4)]
-          (mt (skipSpacesRequireOne out after n)
+          (match (skipSpacesRequireOne out after n)
             ((none) (hasDimCallersFrom out (+ idx 1)))
             ((some q)
               (let [wEnd (wordRunEnd out q n)]
                 (if (= (slice out q wEnd) "callers") true (hasDimCallersFrom out (+ idx 1))))))))))
 
 fn findFirstCharFrom s: String ch: String from: Int64 -> (Option Int64)
-  (let [n (stringLength s)] (mt (stringIndexOf (slice s from n) ch) ((none) none) ((some r) (some (+ from r)))))
+  (let [n (stringLength s)] (match (stringIndexOf (slice s from n) ch) ((none) none) ((some r) (some (+ from r)))))
 
 fn findCountContent out: String from: Int64 -> (Option String)
   (let [n (stringLength out) tag ":count"]
-    (mt (stringIndexOf (slice out from n) tag)
+    (match (stringIndexOf (slice out from n) tag)
       ((none) none)
       ((some relIdx)
         (let [idx (+ from relIdx) after (+ idx (stringLength tag))]
-          (mt (skipSpacesRequireOne out after n)
+          (match (skipSpacesRequireOne out after n)
             ((none) (findCountContent out (+ idx 1)))
             ((some q)
               (if (and (< q n) (= (charAt out q) "("))
-                (mt (findFirstCharFrom out ")" (+ q 1))
+                (match (findFirstCharFrom out ")" (+ q 1))
                   ((none) none)
                   ((some cIdx) (some (slice out (+ q 1) cIdx))))
                 (findCountContent out (+ idx 1)))))))))
 
 fn scanWordDigitPairs content: String from: Int64 -> (List (Pair String String))
   (let [n (stringLength content)]
-    (mt (stringIndexOf (slice content from n) ":")
+    (match (stringIndexOf (slice content from n) ":")
       ((none) (list))
       ((some relIdx)
         (let [idx (+ from relIdx) wStart (+ idx 1) wEnd (wordRunEnd content wStart n)]
           (if (= wEnd wStart)
             (scanWordDigitPairs content (+ idx 1))
-            (mt (skipSpacesRequireOne content wEnd n)
+            (match (skipSpacesRequireOne content wEnd n)
               ((none) (scanWordDigitPairs content (+ idx 1)))
               ((some dStart)
                 (let [dEnd (digitRunEnd content dStart n)]
@@ -576,7 +576,7 @@ fn lookupOr pairs: (List (Pair String String)) key: String default: String -> St
   (optionOr (fold (fn [acc p] (if (= (pairFirst p) key) (some (pairSecond p)) acc)) none pairs) default)
 
 fn countBlock out: String -> String
-  (mt (findCountContent out 0)
+  (match (findCountContent out 0)
     ((none) "")
     ((some content)
       (let [pairs (scanWordDigitPairs content 0)]
@@ -588,7 +588,7 @@ fn observeDimSymbol out: String -> String
   (stringJoin (filterSomeStr (list (findWordFieldFrom out ":dim" 0) (findQuotedField out "symbol" 0))) " ")
 
 fn filterSomeStr xs: (List (Option String)) -> (List String)
-  (fold (fn [acc o] (mt o ((some v) (listAppend acc (list v))) ((none) acc))) (list) xs)
+  (fold (fn [acc o] (match o ((some v) (listAppend acc (list v))) ((none) acc))) (list) xs)
 
 fn firstTruthyField r: ReceiptRec -> String
   (optionOr (firstSomeStr (list (recFile r) (recPath r) (recSymbol r) (recQuery r) (recTopic r) (recUrl r) (recCmd r))) "")
@@ -598,7 +598,7 @@ fn digestTarget r: ReceiptRec op: String out: String -> String
     (if (not (stringEmpty? observeTarget)) observeTarget (firstTruthyField r)))
 
 fn collapseWsLoop cs: (List String) acc: (List String) inWs: Bool -> String
-  (mt (listHead cs)
+  (match (listHead cs)
     ((some c)
       (if (isSpaceChar c)
         (collapseWsLoop (optionOr (listTail cs) (list)) (if inWs acc (cons " " acc)) true)
@@ -616,7 +616,7 @@ fn digestExcerptSrc r: ReceiptRec op: String -> (Option String)
 
 ; (:m :tags (findingsCheck))
 fn digestExcerptPart r: ReceiptRec op: String -> String
-  (mt (digestExcerptSrc r op)
+  (match (digestExcerptSrc r op)
     ((none) "")
     ((some src)
       (let [excerpt (charPrefix (stringTrim (collapseWs src)) 100)]
@@ -629,7 +629,7 @@ fn digestLine r: ReceiptRec -> String
         target (charPrefix (stringReplace (digestTarget r op out) "\n" " ") 200)
         idPart (str "(:receipt :id \"" (escapeAsn (recId r)) "\" :op \"" (escapeAsn op) "\"")
         targetPart (if (stringEmpty? target) "" (str " :target \"" (escapeAsn target) "\""))
-        statusPart (mt (recExit r)
+        statusPart (match (recExit r)
                      ((some e) (str " :exit " (stringFromInt64 e)))
                      ((none) (str " :" (stripLeadingColons (optionOr (recStatus r) "ok")))))
         countPart (if (and (= op "observe") (hasDimCallersFrom out 0)) (countBlock out) "")
@@ -656,34 +656,34 @@ fn advisorGateOutput g: GateRec -> String
   (stringJoin (filter (fn [s] (not (stringEmpty? s))) (list (gStdout g) (gStderr g))) "\n")
 
 fn opLineOp r: ReceiptRec -> String
-  (mt (recOp r) ((some o) o) ((none) (if (and (some? (recCmd r)) (some? (recExit r))) "gate" (optionOr (recKind r) "?"))))
+  (match (recOp r) ((some o) o) ((none) (if (and (some? (recCmd r)) (some? (recExit r))) "gate" (optionOr (recKind r) "?"))))
 
 fn opLineTarget r: ReceiptRec -> String
   (optionOr (firstSomeStr (list (recFile r) (recCmd r) (recPath r) (recQuery r) (recSymbol r))) "")
 
 fn opLineOutcome r: ReceiptRec -> String
-  (let [base (mt (recExit r) ((some e) (str ":exit " (stringFromInt64 e))) ((none) (str ":" (optionOr (recStatus r) "ok"))))]
-    (mt (recError r) ((some e) (str base " " e)) ((none) base)))
+  (let [base (match (recExit r) ((some e) (str ":exit " (stringFromInt64 e))) ((none) (str ":" (optionOr (recStatus r) "ok"))))]
+    (match (recError r) ((some e) (str base " " e)) ((none) base)))
 
 fn advisorOpLine r: ReceiptRec -> String
   (let [op (opLineOp r) target (charPrefix (opLineTarget r) 120) outcome (opLineOutcome r)]
     (stringJoin (filter (fn [s] (not (stringEmpty? s))) (list op target outcome)) " "))
 
 fn lookupLastGate lastGates: (List (Pair String (Pair Int64 GateRec))) cmd: String -> (Option (Pair Int64 GateRec))
-  (fold (fn [acc p] (mt acc ((some _) acc) ((none) (if (= (pairFirst p) cmd) (some (pairSecond p)) none)))) none lastGates)
+  (fold (fn [acc p] (match acc ((some _) acc) ((none) (if (= (pairFirst p) cmd) (some (pairSecond p)) none)))) none lastGates)
 
 fn advisorGateLine i: Int64 g: String lastGates: (List (Pair String (Pair Int64 GateRec))) -> String
   (let [seen (lookupLastGate lastGates g)
-        exStr (mt seen ((some sp) (mt (gExit (pairSecond sp)) ((some e) (stringFromInt64 e)) ((none) "not run"))) ((none) "not run"))]
+        exStr (match seen ((some sp) (match (gExit (pairSecond sp)) ((some e) (stringFromInt64 e)) ((none) "not run"))) ((none) "not run"))]
     (str (stringFromInt64 i) " " g " :exit " exStr))
 
 fn isRedGate seen: (Option (Pair Int64 GateRec)) -> Bool
-  (mt seen ((some sp) (mt (gExit (pairSecond sp)) ((some e) (!= e 0)) ((none) true))) ((none) false))
+  (match seen ((some sp) (match (gExit (pairSecond sp)) ((some e) (!= e 0)) ((none) true))) ((none) false))
 
 fn advisorRedFold acc: (Option (Pair Int64 GateRec)) g: String lastGates: (List (Pair String (Pair Int64 GateRec))) -> (Option (Pair Int64 GateRec))
   (let [seen (lookupLastGate lastGates g)]
     (if (isRedGate seen)
-      (mt seen ((some sp) (mt acc ((none) (some sp)) ((some accSp) (if (>= (pairFirst sp) (pairFirst accSp)) (some sp) acc)))) ((none) acc))
+      (match seen ((some sp) (match acc ((none) (some sp)) ((some accSp) (if (>= (pairFirst sp) (pairFirst accSp)) (some sp) acc)))) ((none) acc))
       acc))
 
 fn advisorRedTail rp: (Pair Int64 GateRec) -> String
@@ -702,7 +702,7 @@ fn advisorSummary task: String deliver: String why: String gates: (List String)
   (let [indexedGates (enumerate gates)
         gateLines (map (fn [ig] (advisorGateLine (+ (pairFirst ig) 1) (pairSecond ig) lastGates)) indexedGates)
         redSel (fold (fn [acc ig] (advisorRedFold acc (pairSecond ig) lastGates)) none indexedGates)
-        tail (mt redSel ((none) "") ((some rp) (advisorRedTail rp)))
+        tail (match redSel ((none) "") ((some rp) (advisorRedTail rp)))
         n (listLength receipts)
         lastOps (listDrop receipts (max 0 (- n 8)))
         opsText (stringJoin (map advisorOpLine lastOps) "\n")

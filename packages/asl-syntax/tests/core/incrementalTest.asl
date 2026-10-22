@@ -36,7 +36,7 @@ fn firstFatalLoop! state: inc/IncrementalState bs: Bytes len: Int64 offset: Int6
     (let [(rem (- len offset))
           (n (if (< rem chunkSize) rem chunkSize))
           (nextState (inc/incrementalFeed! state (sliceBytes! bs offset n)))]
-      (mt (inc/incrementalFatalError nextState)
+      (match (inc/incrementalFatalError nextState)
         ((some fe) (pair chunkIdx (inc/fatalErrorOffset fe)))
         ((none) (firstFatalLoop! nextState bs len (+ offset n) chunkSize (+ chunkIdx 1))))))
 
@@ -277,7 +277,7 @@ fn verifyCorpusChunkSize! path: String bs: Bytes whole: tr/Node chunkSize: Int64
     true)
 
 fn verifyOneCorpusFile! path: String -> Bool
-  (mt (fileReadBytes path)
+  (match (fileReadBytes path)
     ((err msg)
      (do
        (assert false (str "Failed to read file " path ": " msg))
@@ -289,7 +289,7 @@ fn verifyOneCorpusFile! path: String -> Bool
             (verifyCorpusChunkSize! path bs whole 64))))))
 
 fn fileSizeOr! path: String -> Int64
-  (mt (fileSize path)
+  (match (fileSize path)
     ((ok n) n)
     ((err _) -1))
 
@@ -313,7 +313,7 @@ fn verifyFilesLoop! files: (List String) -> Bool
          (verifyFilesLoop! (optionOr (listTail files) (list)))))
 
 fn testCorpusFiles! -> Bool
-  (mt (lib/allCorpusFiles!)
+  (match (lib/allCorpusFiles!)
     ((err e)
      (do
        (assert false (str "corpus listing failed: " e))

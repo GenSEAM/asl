@@ -4,7 +4,7 @@
 
 fn testRuntimeSourceIntegrity! -> Bool
   (let [(rRes (fileReadString "asl/packages/asl-browser-plugin/src/runtime.asl"))]
-    (mt rRes
+    (match rRes
       ((err e) (assert false (str "Failed to read runtime.asl: " e)))
       ((ok rSrc)
         (do
@@ -21,7 +21,7 @@ fn testRuntimeSourceIntegrity! -> Bool
 
 fn testRuntimeGrammarRegistration! -> Bool
   (let [(gRes (fileReadString "asl/packages/asl-browser-plugin/manifest.asn"))]
-    (mt gRes
+    (match gRes
       ((err e) (assert false (str "Failed to read asl/packages/asl-browser-plugin/manifest.asn: " e)))
       ((ok gSrc)
         (do
@@ -44,7 +44,7 @@ fn testZeroSocketContract -> Bool
     true)
 
 fn testLinearMemoryBounds! -> Bool
-  (mt (fileReadString "asl/packages/asl-browser-plugin/src/runtime.asl")
+  (match (fileReadString "asl/packages/asl-browser-plugin/src/runtime.asl")
     ((err e) (do (assert false (str "Failed to read runtime.asl: " e)) false))
     ((ok src)
      (do

@@ -48,7 +48,7 @@ fn ! examplesEmbedded root: String -> Bool
       true))
 
 fn ! budgets root: String -> Bool
-  (mt (tok/loadTokenizer! (str root "/data/tokenizers"))
+  (match (tok/loadTokenizer! (str root "/data/tokenizers"))
     ((err e) (do (assert false (str "o200k tokenizer loads: " e)) false))
     ((ok t)
       (let [(index (resultOr (fileReadString (str (kn/cardsDir root) "/index.asn")) ""))

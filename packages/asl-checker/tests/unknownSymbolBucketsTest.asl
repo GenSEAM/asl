@@ -23,8 +23,8 @@ fn testMissingBuiltinSig -> Bool
       (assert (accepts? "(module b :x [f])\nfn ! f -> (Result Rusage String)\n  (procRusage)\n") "procRusage takes no arguments")
       (assert (accepts? "(module b :x [f])\nfn f b: Bytes -> (Result Bytes String)\n  (zstdDecompress b)\n") "zstdDecompress takes Bytes")
       (assert (accepts? "(module b :x [f])\nfn f n: Int64 -> Int64\n  (popcount64 n)\n") "popcount64 takes Int64")
-      (assert (accepts? "(module b :x [f])\nfn ! f p: String -> Int64\n  (mt (parquetOpen p) ((ok h) (+ (parquetNumRows h) (parquetNumRowGroups h))) ((err _) 0))\n") "parquetOpen/parquetNumRows/parquetNumRowGroups take a ParquetHandle")
-      (assert (accepts? "(module b :x [f])\nfn ! f p: String -> String\n  (mt (parquetOpen p) ((ok h) (parquetColumnType h \"c\")) ((err _) \"\"))\n") "parquetColumnType takes a ParquetHandle and a column name")
+      (assert (accepts? "(module b :x [f])\nfn ! f p: String -> Int64\n  (match (parquetOpen p) ((ok h) (+ (parquetNumRows h) (parquetNumRowGroups h))) ((err _) 0))\n") "parquetOpen/parquetNumRows/parquetNumRowGroups take a ParquetHandle")
+      (assert (accepts? "(module b :x [f])\nfn ! f p: String -> String\n  (match (parquetOpen p) ((ok h) (parquetColumnType h \"c\")) ((err _) \"\"))\n") "parquetColumnType takes a ParquetHandle and a column name")
       true)
 
 fn testCmpAliasOperators -> Bool

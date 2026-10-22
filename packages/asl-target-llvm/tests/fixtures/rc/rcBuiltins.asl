@@ -6,10 +6,10 @@ fn longer w: String -> Bool
   (> (stringLength w) 1)
 
 fn piece s: String -> String
-  (mt (stringSlice s 0 4) ((some p) p) ((none) "none"))
+  (match (stringSlice s 0 4) ((some p) p) ((none) "none"))
 
 fn tailLength xs: (List String) -> Int64
-  (mt (listTail xs) ((some t) (listLength t)) ((none) 0))
+  (match (listTail xs) ((some t) (listLength t)) ((none) 0))
 
 fn step i: Int64 -> Int64
   (let [(s (str "item-" i "-" (stringConcat "a" "b")))

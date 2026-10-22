@@ -193,7 +193,7 @@ fn cmScan text: String bs: Bytes n: Int64 i: Int64 depth: Int64 closed: Int64 cn
             (cmScan text bs n j depth closed (+ cnt 1) (cons (pair "atom" (sl text i j)) toks)))))))
 
 fn tokAt toks: (List (Pair String String)) k: Int64 -> (Pair String String)
-  (mt (listGet toks k) ((some t) t) (none (pair "" "")))
+  (match (listGet toks k) ((some t) t) (none (pair "" "")))
 
 ; (:m :ref COMMITMSG-CMKEYS-LISTVALUE-20261017 :do "skips a key's parenthesized list value (open...close, any nesting) to find the next key; used only from cmKeys's open-value branch below")
 fn skipListValue toks: (List (Pair String String)) len: Int64 k: Int64 depth: Int64 -> Int64
@@ -236,10 +236,10 @@ fn commitMessageError msg: String -> (Option String)
             bs (stringToBytes text)]
         (if (not (stringStartsWith? text "("))
           (some "the message must be one (:c ...) form")
-          (mt (cmScan text bs (bytesLength bs) 0 0 -1 0 (list))
+          (match (cmScan text bs (bytesLength bs) 0 0 -1 0 (list))
             ((err e) (some e))
             ((ok r)
-              (mt r
+              (match r
                 ((pair toks st)
                   (let [depth (pairFirst st)
                         closed (pairSecond st)
@@ -250,7 +250,7 @@ fn commitMessageError msg: String -> (Option String)
                         (some "the message must be one balanced (:c ...) form"))
                       ((!= (tokAt toks 1) (pair "atom" ":c")) (some "the form's head must be :c"))
                       (else
-                        (mt (cmKeys toks len 2 (list))
+                        (match (cmKeys toks len 2 (list))
                           ((err e) (some e))
                           ((ok keys)
                             (cond
@@ -262,7 +262,7 @@ fn allHex bs: Bytes n: Int64 i: Int64 -> Bool
   (cond ((>= i n) true) ((isHexB (bytesGet bs i)) (allHex bs n (+ i 1))) (else false))
 
 fn procError e: cp/ProcessError -> String
-  (mt e
+  (match e
     ((cp/notFound b) (str "git not found: " b))
     ((cp/timeout ms) (str "git timed out after " (stringFromInt64 ms) " ms"))
     ((cp/permissionDenied p) (str "git not executable: " p))
@@ -274,7 +274,7 @@ fn ! commitNamesHead! msg: String rootDir: String -> (Result Bool String)
         n (bytesLength bs)]
     (if (or (< n 7) (or (> n 40) (or (not (allHex bs n 0)) (= rootDir ""))))
       (ok false)
-      (mt (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd "git" (list "rev-parse" "HEAD")) rootDir) 60000))
+      (match (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd "git" (list "rev-parse" "HEAD")) rootDir) 60000))
         ((err e) (err (procError e)))
         ((ok out)
           (let [head (if (= out.exitCode 0) (pyStrip out.stdout) "")]
@@ -347,11 +347,11 @@ fn chunksLoop bs: Bytes n: Int64 i: Int64 acc: (List (Pair Int64 Int64)) -> (Lis
         ((= b 59) (chunksLoop bs n (skipComment bs n i) acc))
         ((!= b 40) (chunksLoop bs n (+ i 1) acc))
         (else
-          (mt (formClose bs n (+ i 1) 1 false false)
+          (match (formClose bs n (+ i 1) 1 false false)
             ((pair j depth)
               (if (= depth 0)
                 (chunksLoop bs n j (cons (pair i j) acc))
-                (mt (nextLineForm bs n (+ i 1))
+                (match (nextLineForm bs n (+ i 1))
                   ((some m) (chunksLoop bs n m (cons (pair i m) acc)))
                   (none (chunksLoop bs n n (cons (pair i n) acc)))))))))))
 
@@ -437,7 +437,7 @@ fn rxItems s: String bs: Bytes n: Int64 p: Int64 acc: (List RepairItem) -> (List
   (cond
     ((>= p n) (listReverse acc))
     ((litAt bs n p ":kind")
-      (mt (rxItem s bs n p)
+      (match (rxItem s bs n p)
         ((some r) (rxItems s bs n (pairSecond r) (cons (pairFirst r) acc)))
         (none (rxItems s bs n (+ p 1) acc))))
     (else (rxItems s bs n (+ p 1) acc)))
@@ -490,7 +490,7 @@ fn isCloserTok t: String -> Bool
   (or (= t "") (stringContains? ")]}" t))
 
 fn fixPart it: RepairItem -> String
-  (mt it ((repairItem kind tok _ _)
+  (match it ((repairItem kind tok _ _)
     (cond
       ((and (= kind "insert") (isCloserTok tok)) (str "close " tok))
       ((= kind "insert") (str "insert " tok))
@@ -500,12 +500,12 @@ fn delimiterFixDesc items: (List RepairItem) -> String
   (charCut (joinWith (map fixPart (listTake items 5)) "; ") 120)
 
 fn lineForms bs: Bytes n: Int64 p: Int64 acc: (List Int64) -> (List Int64)
-  (mt (nextLineForm bs n p)
+  (match (nextLineForm bs n p)
     ((some m) (lineForms bs n (+ m 1) (cons m acc)))
     (none (listReverse acc)))
 
 fn pieceStep acc: (Pair Int64 (Pair Bool (List String))) m: Int64 text: String -> (Pair Int64 (Pair Bool (List String)))
-  (mt acc ((pair prev pr)
+  (match acc ((pair prev pr)
     (if (and (pairFirst pr) (> m prev))
       (pair m (pair true (cons (sl text prev m) (pairSecond pr))))
       (pair prev (pair true (pairSecond pr))))))
@@ -514,7 +514,7 @@ fn splitChunkLines text: String -> (List String)
   (let [bs (stringToBytes text)
         starts (lineForms bs (bytesLength bs) 0 (list))
         st (fold (fn [acc m] (pieceStep acc m text)) (pair 0 (pair false (list))) starts)]
-    (mt st ((pair prev pr) (listReverse (cons (sl text prev (stringLength text)) (pairSecond pr))))))
+    (match st ((pair prev pr) (listReverse (cons (sl text prev (stringLength text)) (pairSecond pr))))))
 
 fn unclosedLoop bs: Bytes n: Int64 i: Int64 depth: Int64 inStr: Bool esc: Bool -> Int64
   (if (>= i n)
@@ -559,18 +559,18 @@ fn lpfLoop bs: Bytes n: Int64 i: Int64 -> (Option (Pair Int64 String))
     ((>= i n) none)
     ((!= (bytesGet bs i) 40) (lpfLoop bs n (+ i 1)))
     (else
-      (mt (lpfForm bs n i (+ i 1) 1 false false -1)
-        ((pair j found) (mt found ((some f) (some f)) (none (lpfLoop bs n j)))))))
+      (match (lpfForm bs n i (+ i 1) 1 false false -1)
+        ((pair j found) (match found ((some f) (some f)) (none (lpfLoop bs n j)))))))
 
 fn locateParseFailure text: String -> (Option (Pair Int64 String))
   (let [bs (stringToBytes text)]
     (lpfLoop bs (bytesLength bs) 0))
 
 fn describeParseFailure text: String -> (Option String)
-  (mt (locateParseFailure text)
+  (match (locateParseFailure text)
     (none none)
     ((some loc)
-      (mt loc ((pair boff what)
+      (match loc ((pair boff what)
         (let [off (charsBefore text boff)
               excerpt (stringReplace (sl text (byteOfChar text (max 0 (- off 30))) (byteOfChar text (+ off 30))) "\n" "\\n")
               tail (if (!= what "string closed") " and never closes" "")]
@@ -589,10 +589,10 @@ fn leftItem idx: Int64 why: String chunk: String -> String
   (str "(:at " (stringFromInt64 idx) " :why \"" (c/escapeAsn why) "\" :near \"" (nearOf chunk) "\")")
 
 fn errText r: (Result (List (List (Pair String c/KvVal))) String) -> String
-  (mt r ((err e) e) ((ok _) ""))
+  (match r ((err e) e) ((ok _) ""))
 
 fn arFinal st: Ar chunk: String s: Int64 e: Int64 idx: Int64 why0: String -> Ar
-  (mt st ((ar kept rep left spans kinds q)
+  (match st ((ar kept rep left spans kinds q)
     (let [pieces (splitChunkLines chunk)
           pk (filter (fn [p] (ok? (chunkOps p))) pieces)]
       (if (and (> (listLength pieces) 1) (not (listEmpty? pk)))
@@ -600,14 +600,14 @@ fn arFinal st: Ar chunk: String s: Int64 e: Int64 idx: Int64 why0: String -> Ar
           (if (< (listLength pk) (listLength pieces))
             (ar kept2 rep (cons (leftItem idx "unreadable form" chunk) left) (cons (pair s e) spans) kinds q)
             (ar kept2 rep left spans kinds q)))
-        (let [why (mt (describeParseFailure chunk) ((some d) d) (none (if (= why0 "") "form does not parse" why0)))]
+        (let [why (match (describeParseFailure chunk) ((some d) d) (none (if (= why0 "") "form does not parse" why0)))]
           (ar kept rep (cons (leftItem idx (charCut why 120) chunk) left) (cons (pair s e) spans) kinds q))))))
 
 fn itemCloser it: RepairItem -> Bool
-  (mt it ((repairItem k t _ _) (and (= k "insert") (isCloserTok t))))
+  (match it ((repairItem k t _ _) (and (= k "insert") (isCloserTok t))))
 
 fn itemAt it: RepairItem ref: (Pair Int64 Int64) -> Bool
-  (mt it ((repairItem _ _ l co) (and (= l (pairFirst ref)) (= co (pairSecond ref)))))
+  (match it ((repairItem _ _ l co) (and (= l (pairFirst ref)) (= co (pairSecond ref)))))
 
 fn arDelim st: Ar chunk: String s: Int64 e: Int64 idx: Int64 why0: String -> Ar
   (let [fixed (coreRepairDelimiters chunk "asn")
@@ -618,12 +618,12 @@ fn arDelim st: Ar chunk: String s: Int64 e: Int64 idx: Int64 why0: String -> Ar
         ref (offsetToLinecol chunk (repairRefOffset chunk))
         local (and closerOnly (listAll? (fn [it] (itemAt it ref)) items))
         would (and closerOnly (and (stringContains? receipt ":left ()") (ok? (chunkOps newText))))]
-    (mt st ((ar kept rep left spans kinds q)
+    (match st ((ar kept rep left spans kinds q)
       (cond
         ((and would local)
           (ar (cons newText kept) (cons (str "(\"delimiter\" :at " (stringFromInt64 idx) " :fix \"" (c/escapeAsn (delimiterFixDesc items)) "\")") rep) left spans (addKind kinds "delimiter") q))
         (would
-          (mt (c/firstOf items) ((repairItem _ _ ln0 co0)
+          (match (c/firstOf items) ((repairItem _ _ ln0 co0)
             (ar kept rep (cons (leftItem idx (str "delimiter repair not local: insert at line " (stringFromInt64 ln0) " col " (stringFromInt64 co0) " swallows later content") chunk) left) (cons (pair s e) spans) kinds q))))
         (else (arFinal st chunk s e idx why0))))))
 
@@ -631,26 +631,26 @@ fn arChunk reply: String st: Ar s: Int64 e: Int64 idx: Int64 -> Ar
   (let [chunk (sl reply s e)
         first (chunkOps chunk)]
     (if (ok? first)
-      (mt st ((ar kept rep left spans kinds q) (ar (cons chunk kept) rep left spans kinds q)))
+      (match st ((ar kept rep left spans kinds q) (ar (cons chunk kept) rep left spans kinds q)))
       (let [qr (repairInnerQuotes chunk)
             qText (pairFirst qr)
             qCount (pairSecond qr)]
         (if (and (> qCount 0) (ok? (chunkOps qText)))
-          (mt st ((ar kept rep left spans kinds q)
+          (match st ((ar kept rep left spans kinds q)
             (ar (cons qText kept) (cons (str "(\"quote\" :at " (stringFromInt64 idx) ")") rep) left spans (addKind kinds "quote") (+ q qCount))))
           (arDelim st chunk s e idx (errText first))))))
 
 fn arLoop reply: String spans: (List (Pair Int64 Int64)) idx: Int64 st: Ar -> Ar
   (if (listEmpty? spans)
     st
-    (mt (c/firstOf spans) ((pair s e)
+    (match (c/firstOf spans) ((pair s e)
       (arLoop reply (c/restOf spans) (+ idx 1) (arChunk reply st s e idx)))))
 
 fn autoRepairReply reply: String -> AutoRepair
   (let [spans (formChunks reply)]
     (if (listEmpty? spans)
       (AutoRepair :text "" :notice (some (str "(:left ((:why \"no forms\" :near \"" (c/escapeAsn (charCut (pyStrip reply) 60)) "\")))")) :kinds (list) :left 1 :quoteCount 0 :leftSpans none)
-      (mt (arLoop reply spans 1 (ar (list) (list) (list) (list) (list) 0))
+      (match (arLoop reply spans 1 (ar (list) (list) (list) (list) (list) 0))
         ((ar kept rep left sp kinds q)
           (AutoRepair :text (joinWith (listReverse kept) "\n")
                       :notice (if (and (listEmpty? rep) (listEmpty? left)) none (some (str "(:repaired (" (joinWith (listReverse rep) " ") ") :left (" (joinWith (listReverse left) " ") "))")))
@@ -737,7 +737,7 @@ fn parseCutInfo cutStart: Int64 cutText: String fullText: String -> CutInfo
         toks (ctToks prefix pb (bytesLength pb) 0 (list))
         of (ctFields toks none none)
         op0 (pairFirst of)
-        op (if (and (none? op0) (mt head ((some h) (member h (list "read" "write" "edit" "run" "tree" "outline"))) (none false))) head op0)]
+        op (if (and (none? op0) (match head ((some h) (member h (list "read" "write" "edit" "run" "tree" "outline"))) (none false))) head op0)]
     (CutInfo :offset (stringLength (sl fullText 0 cutStart)) :bytes n :head head :op op :file (pairSecond of) :start cutStart :text cutText))
 
 fn dcLoop text: String bs: Bytes n: Int64 i: Int64 last: Int64 -> (Option CutInfo)
@@ -749,7 +749,7 @@ fn dcLoop text: String bs: Bytes n: Int64 i: Int64 last: Int64 -> (Option CutInf
         ((= b 59) (dcLoop text bs n (skipComment bs n i) last))
         ((!= b 40) (dcLoop text bs n (+ i 1) last))
         (else
-          (mt (formClose bs n (+ i 1) 1 false false)
+          (match (formClose bs n (+ i 1) 1 false false)
             ((pair j depth)
               (if (= depth 0)
                 (dcLoop text bs n j j)
@@ -792,21 +792,21 @@ enum SpanCp
 fn cpLoop reply: String spans: (List (Pair Int64 Int64)) prev: Int64 cprev: Int64 acc: (List SpanCp) -> (List SpanCp)
   (if (listEmpty? spans)
     (listReverse acc)
-    (mt (c/firstOf spans) ((pair a b)
+    (match (c/firstOf spans) ((pair a b)
       (let [ca (+ cprev (c/charLen (sl reply prev a)))
             cb (+ ca (c/charLen (sl reply a b)))]
         (cpLoop reply (c/restOf spans) b cb (cons (spanCp a b ca cb) acc))))))
 
 fn spA x: SpanCp -> Int64
-  (mt x ((spanCp a _ _ _) a))
+  (match x ((spanCp a _ _ _) a))
 
 fn spB x: SpanCp -> Int64
-  (mt x ((spanCp _ b _ _) b))
+  (match x ((spanCp _ b _ _) b))
 
 fn blockEnd xs: (List SpanCp) ca: Int64 -> (Option Int64)
   (cond
     ((listEmpty? xs) none)
-    ((>= (- (mt (c/firstOf xs) ((spanCp _ _ _ cb) cb)) ca) 400) (some (spB (c/firstOf xs))))
+    ((>= (- (match (c/firstOf xs) ((spanCp _ _ _ cb) cb)) ca) 400) (some (spB (c/firstOf xs))))
     (else (blockEnd (c/restOf xs) ca)))
 
 fn dropBelow es: (List Int64) t: Int64 -> (List Int64)
@@ -828,12 +828,12 @@ fn occLoop reply: String block: String len: Int64 xs: (List SpanCp) es: (List In
 fn dgLoop reply: String rest: (List SpanCp) all: (List SpanCp) ends: (List Int64) best: (Option (Pair Int64 Int64)) -> (Option (Pair Int64 Int64))
   (if (listEmpty? rest)
     best
-    (mt (c/firstOf rest) ((spanCp a _ ca _)
-      (mt (blockEnd rest ca)
+    (match (c/firstOf rest) ((spanCp a _ ca _)
+      (match (blockEnd rest ca)
         (none (dgLoop reply (c/restOf rest) all ends best))
         ((some e)
           (let [block (sl reply a e)
-                bestPos (mt best ((some bp) (pairFirst bp)) (none -1))
+                bestPos (match best ((some bp) (pairFirst bp)) (none -1))
                 r (occLoop reply block (- e a) all ends 0 -1 -1 bestPos)
                 count (pairFirst r)
                 second (pairSecond r)]
@@ -887,7 +887,7 @@ fn replyFacts replyText: String declared: (Option (List String)) -> ReplyFacts
         parsed (c/parseReply text)
         ops (c/uniqueSteps parsed)]
     (ReplyFacts :ops ops :repeated (- (listLength parsed) (listLength ops)) :forms (c/parseForms text) :prose (c/isProseWrapped text)
-                :dataFindings (mt declared ((some d) (c/dataFindings text d)) (none (list))) :cut (detectCutForm text)))
+                :dataFindings (match declared ((some d) (c/dataFindings text d)) (none (list))) :cut (detectCutForm text)))
 
 fn ! receiptId! -> String
   (sl (bytesSha256 (stringToBytes (str (stringFromInt64 (nowNs)) ":" (stringFromInt64 (procSelf)) ":" (stringFromInt64 (monotonicNs))))) 0 12)
@@ -947,10 +947,10 @@ fn baseName p: String -> String
     (sl p k (stringLength p)))
 
 fn kvText v: c/KvVal -> String
-  (mt v ((c/kvStr t) t) ((c/kvInt t) (mt (stringToInt64 t) ((some i) (stringFromInt64 i)) (none t))))
+  (match v ((c/kvStr t) t) ((c/kvInt t) (match (stringToInt64 t) ((some i) (stringFromInt64 i)) (none t))))
 
 fn opStr op: (List (Pair String c/KvVal)) k: String -> String
-  (mt (c/dictGet op k) ((some v) (kvText v)) (none ""))
+  (match (c/dictGet op k) ((some v) (kvText v)) (none ""))
 
 fn isDigits s: String -> Bool
   (let [bs (stringToBytes s)
@@ -964,7 +964,7 @@ fn joinRoot root: String a: String -> String
     (else (str root "/" a)))
 
 fn ! isFile? path: String -> Bool
-  (mt (fileStat path) ((ok st) st.isFile) ((err _) false))
+  (match (fileStat path) ((ok st) st.isFile) ((err _) false))
 
 fn lineCount bs: Bytes n: Int64 i: Int64 k: Int64 open: Bool -> Int64
   (if (>= i n)
@@ -979,12 +979,12 @@ fn indexIn xs: (List String) x: String i: Int64 -> Int64
   (cond ((listEmpty? xs) -1) ((= (c/firstOf xs) x) i) (else (indexIn (c/restOf xs) x (+ i 1))))
 
 fn firstSome xs: (List String) f: (fn [String] -> (Option String)) -> (Option String)
-  (if (listEmpty? xs) none (mt (f (c/firstOf xs)) ((some v) (some v)) (none (firstSome (c/restOf xs) f))))
+  (if (listEmpty? xs) none (match (f (c/firstOf xs)) ((some v) (some v)) (none (firstSome (c/restOf xs) f))))
 
 fn countArg rest: (List String) -> String
   (let [c1 (optionOr (firstSome rest (fn [a] (if (and (stringStartsWith? a "-") (isDigits (sl a 1 (stringLength a)))) (some (sl a 1 (stringLength a))) none))) "")
         ni (indexIn rest "-n" 0)
-        c2 (if (and (>= ni 0) (< (+ ni 1) (listLength rest))) (mt (listGet rest (+ ni 1)) ((some v) v) (none c1)) c1)]
+        c2 (if (and (>= ni 0) (< (+ ni 1) (listLength rest))) (match (listGet rest (+ ni 1)) ((some v) v) (none c1)) c1)]
     (if (!= c2 "")
       c2
       (optionOr (firstSome rest (fn [a] (if (and (stringStartsWith? a "-n") (isDigits (lstripPlus (sl a 2 (stringLength a))))) (some (sl a 2 (stringLength a))) none))) "")))
@@ -1007,7 +1007,7 @@ fn sedSpan a: String -> (Option (Pair Int64 Int64))
         (else none))))
 
 fn firstSpan xs: (List String) -> (Option (Pair Int64 Int64))
-  (if (listEmpty? xs) none (mt (sedSpan (c/firstOf xs)) ((some v) (some v)) (none (firstSpan (c/restOf xs)))))
+  (if (listEmpty? xs) none (match (sedSpan (c/firstOf xs)) ((some v) (some v)) (none (firstSpan (c/restOf xs)))))
 
 fn hasMeta cmd: String -> Bool
   (listAny? (fn [m] (stringContains? cmd m)) (list "|" ";" "&" ">" "<" "`" "$"))
@@ -1026,7 +1026,7 @@ fn ! runAsRead! op: (List (Pair String c/KvVal)) rootDir: String -> (Result RunR
     (ok (runUnchanged))
     (let [cmd (cond ((c/truthy (c/dictGet op "argv")) (opStr op "argv")) ((c/truthy (c/dictGet op "cmd")) (opStr op "cmd")) (else ""))
           form (opStr op "form")]
-      (mt (shlexSplit cmd)
+      (match (shlexSplit cmd)
         ((err _) (ok (runUnchanged)))
         ((ok words)
           (let [tool (if (listEmpty? words) "" (baseName (c/firstOf words)))]
@@ -1046,7 +1046,7 @@ fn ! readStep! tool: String cmd: String form: String file: String rest: (List St
     (cond
       ((= tool "head") (ok (step (some (pair 1 (max 1 (if (isDigits count) (toInt count) 10)))))))
       ((= tool "tail")
-        (mt (fileReadBytes (joinRoot rootDir file))
+        (match (fileReadBytes (joinRoot rootDir file))
           ((err e) (err e))
           ((ok data)
             (let [total (lineCount data (bytesLength data) 0 0 false)
@@ -1054,7 +1054,7 @@ fn ! readStep! tool: String cmd: String form: String file: String rest: (List St
                   start (if (and (stringStartsWith? count "+") (isDigits tailArg)) (toInt tailArg) (+ (- total (if (isDigits count) (toInt count) 10)) 1))]
               (ok (step (some (pair (max 1 start) (max 1 total)))))))))
       ((= tool "sed")
-        (mt (firstSpan rest)
+        (match (firstSpan rest)
           ((some sp) (if (member "-n" rest) (ok (step (some sp))) (ok (runUnchanged))))
           (none (ok (runUnchanged)))))
       ((or (listEmpty? rest) (= tool "nl")) (ok (step none)))
@@ -1118,14 +1118,14 @@ fn fenceAt s: String bs: Bytes n: Int64 p: Int64 -> (Option Fence)
             r2 (if (= (at bs n r) 13) (+ r 1) r)]
         (if (!= (at bs n r2) 10)
           none
-          (mt (findClose bs n (+ r2 1) (- e q))
+          (match (findClose bs n (+ r2 1) (- e q))
             ((pair l end) (if (< l 0) none (some (fence p end (sl s (+ r2 1) l))))))))))
 
 fn rfLoop s: String bs: Bytes n: Int64 p: Int64 acc: (List Fence) -> (List Fence)
   (if (> p n)
     (listReverse acc)
-    (mt (fenceAt s bs n p)
-      ((some f) (mt f ((fence _ end _) (rfLoop s bs n (if (> end p) end (nextLineStart bs n p)) (cons f acc)))))
+    (match (fenceAt s bs n p)
+      ((some f) (match f ((fence _ end _) (rfLoop s bs n (if (> end p) end (nextLineStart bs n p)) (cons f acc)))))
       (none (rfLoop s bs n (nextLineStart bs n p) acc))))
 
 fn rawFences reply: String -> (List Fence)
@@ -1133,10 +1133,10 @@ fn rawFences reply: String -> (List Fence)
     (rfLoop reply bs (bytesLength bs) 0 (list)))
 
 fn fStart f: Fence -> Int64
-  (mt f ((fence a _ _) a))
+  (match f ((fence a _ _) a))
 
 fn fEnd f: Fence -> Int64
-  (mt f ((fence _ b _) b))
+  (match f ((fence _ b _) b))
 
 fn afterRaw bs: Bytes p: Int64 -> Bool
   (let [k (backWhile bs p isSpaceB)]
@@ -1182,8 +1182,8 @@ fn hoistInlineRaw reply: String -> String
     (if (listEmpty? inline)
       reply
       (let [st (fold (fn [acc f]
-                       (mt acc ((pair pos pr)
-                         (mt pr ((pair kept blocks)
+                       (match acc ((pair pos pr)
+                         (match pr ((pair kept blocks)
                            (let [piece (sl reply pos (fStart f))
                                  klen (+ (listLength kept) 0)]
                              (pair (fEnd f) (pair (cons piece kept) (cons (pair (c/joinAll (listReverse (cons piece kept))) (str (rstripNl (sl reply (fStart f) (fEnd f))) "\n")) blocks)))))))))
@@ -1207,7 +1207,7 @@ fn dropFences fences: (List Fence) i: Int64 -> (List Fence)
 fn brForms s: String bs: Bytes n: Int64 i: Int64 fences: (List Fence) acc: (List (Pair Int64 Int64)) -> (List (Pair Int64 Int64))
   (if (>= i n)
     (listReverse acc)
-    (mt (skipFence fences i)
+    (match (skipFence fences i)
       ((pair jump fs)
         (if (>= jump 0)
           (brForms s bs n jump fs acc)
@@ -1217,11 +1217,11 @@ fn brForms s: String bs: Bytes n: Int64 i: Int64 fences: (List Fence) acc: (List
               ((= b 59) (brForms s bs n (skipComment bs n i) fs acc))
               ((!= b 40) (brForms s bs n (+ i 1) fs acc))
               (else
-                (mt (formClose bs n (+ i 1) 1 false false)
+                (match (formClose bs n (+ i 1) 1 false false)
                   ((pair j depth) (brForms s bs n j fs (if (= depth 0) (cons (pair i j) acc) acc)))))))))))
 
 fn tokT t: FormTok -> String
-  (mt t ((formTok x _ _) x))
+  (match t ((formTok x _ _) x))
 
 fn stripQuotes s: String -> String
   (let [bs (stringToBytes s)
@@ -1234,7 +1234,7 @@ enum RawField
   (rawField name: String start: Int64 end: Int64)
 
 fn rfName r: RawField -> String
-  (mt r ((rawField nm _ _) nm))
+  (match r ((rawField nm _ _) nm))
 
 fn scanFields toks: (List FormTok) op: (Option String) file: (Option String) raws: (List RawField) -> (Pair (Pair (Option String) (Option String)) (List RawField))
   (if (or (listEmpty? toks) (listEmpty? (c/restOf toks)))
@@ -1248,14 +1248,14 @@ fn scanFields toks: (List FormTok) op: (Option String) file: (Option String) raw
         ((and (= t ":op") (none? op)) (scanFields rest (some val) file raws))
         ((and (or (= t ":file") (= t ":path")) (none? file)) (scanFields rest op (some val) raws))
         ((and (member t (list ":content" ":old" ":new")) (= nxt ":raw"))
-          (mt nx ((formTok _ ns ne) (scanFields rest op file (cons (rawField (sl t 1 (stringLength t)) ns ne) raws)))))
+          (match nx ((formTok _ ns ne) (scanFields rest op file (cons (rawField (sl t 1 (stringLength t)) ns ne) raws)))))
         (else (scanFields rest op file raws)))))
 
 enum Repl
   (repl start: Int64 end: Int64 text: String)
 
 fn rStart r: Repl -> Int64
-  (mt r ((repl a _ _) a))
+  (match r ((repl a _ _) a))
 
 fn lastParen s: String -> Int64
   (let [bs (stringToBytes s)
@@ -1273,11 +1273,11 @@ fn indexed xs: (List Fence) i: Int64 -> (List (Pair Int64 Fence))
   (if (listEmpty? xs) (list) (cons (pair i (c/firstOf xs)) (indexed (c/restOf xs) (+ i 1))))
 
 fn applyTok s: String reps: (List Repl) -> String
-  (fold (fn [acc r] (mt r ((repl a b t) (str (sl acc 0 a) t (sl acc b (stringLength acc)))))) s
+  (fold (fn [acc r] (match r ((repl a b t) (str (sl acc 0 a) t (sl acc b (stringLength acc)))))) s
     (listReverse (listSortBy rStart reps)))
 
 fn brForm reply: String fences: (List (Pair Int64 Fence)) st: BrState span: (Pair Int64 Int64) -> BrState
-  (mt span ((pair fs fe)
+  (match span ((pair fs fe)
     (let [ftext (sl reply fs fe)
           toks (tokenizeForm ftext)
           head (if (> (listLength toks) 1) (lstripColons (tokT (c/firstOf (c/restOf toks)))) "")
@@ -1287,7 +1287,7 @@ fn brForm reply: String fences: (List (Pair Int64 Fence)) st: BrState span: (Pai
           file (optionOr (pairSecond (pairFirst scanned)) "")
           raws0 (pairSecond scanned)
           raws (if (= op "edit") (listAppend (filter (fn [r] (= (rfName r) "old")) raws0) (filter (fn [r] (!= (rfName r) "old")) raws0)) raws0)]
-      (mt st ((brState consumed count missing repls)
+      (match st ((brState consumed count missing repls)
         (if (or (not (member op (list "write" "edit"))) (listEmpty? raws))
           st
           (let [avail (filter (fn [p] (and (not (listAny? (fn [c] (= c (pairFirst p))) consumed)) (>= (fStart (pairSecond p)) fe))) fences)]
@@ -1295,7 +1295,7 @@ fn brForm reply: String fences: (List (Pair Int64 Fence)) st: BrState span: (Pai
               (brState consumed count (cons (pair op file) missing) (cons (repl fs fe (insertBeforeLast ftext " :error \"ERR_RAW_MISSING\"")) repls))
               (let [used (listTake avail (listLength raws))
                     pairs (zip raws used)
-                    tokReps (map (fn [pr] (mt pr ((pair r fp) (mt r ((rawField _ ns ne) (mt (pairSecond fp) ((fence _ _ content) (repl ns ne (str "\"" (c/escapeAsn content) "\""))))))))) pairs)
+                    tokReps (map (fn [pr] (match pr ((pair r fp) (match r ((rawField _ ns ne) (match (pairSecond fp) ((fence _ _ content) (repl ns ne (str "\"" (c/escapeAsn content) "\""))))))))) pairs)
                     fenceReps (map (fn [fp] (repl (fStart (pairSecond fp)) (fEnd (pairSecond fp)) "")) used)
                     bound (applyTok ftext tokReps)
                     tagged (insertBeforeLast bound (str " :rawFields \"" (joinWith (map rfName raws) " ") "\""))]
@@ -1305,7 +1305,7 @@ fn brForm reply: String fences: (List (Pair Int64 Fence)) st: BrState span: (Pai
 fn assemble reply: String reps: (List Repl) last: Int64 acc: (List String) -> String
   (if (listEmpty? reps)
     (c/joinAll (listReverse (cons (sl reply last (stringLength reply)) acc)))
-    (mt (c/firstOf reps) ((repl a b t)
+    (match (c/firstOf reps) ((repl a b t)
       (assemble reply (c/restOf reps) b (cons t (cons (sl reply last a) acc))))))
 
 fn bindRawBlocks reply: String -> RawBind
@@ -1316,7 +1316,7 @@ fn bindRawBlocks reply: String -> RawBind
           fences (rawFences text)
           forms (brForms text bs (bytesLength bs) 0 fences (list))
           st (fold (fn [acc sp] (brForm text (indexed fences 0) acc sp)) (brState (list) 0 (list) (list)) forms)]
-      (mt st ((brState _ count missing repls)
+      (match st ((brState _ count missing repls)
         (RawBind :text (assemble text (listSortBy rStart repls) 0 (list)) :count count :missing (listReverse missing))))))
 
 fn tagEnd bs: Bytes n: Int64 i: Int64 -> Int64

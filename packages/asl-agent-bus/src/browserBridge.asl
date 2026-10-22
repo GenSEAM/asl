@@ -16,10 +16,10 @@ fn bridgeEnqueueCommand state: BrowserBridgeState cmd: BridgeCommand -> BrowserB
   (with state :commands (listAppend state.commands (list cmd)))
 
 fn bridgePollCommands state: BrowserBridgeState tabId: Str -> (Pair BrowserBridgeState (List BridgeCommand))
-  (let [(pendingCmds (filter (fn [(c BridgeCommand)] -> Bool (and (== c.tabId tabId) (== c.status "pending"))) state.commands)) (updatedCommands (map (fn [(c BridgeCommand)] -> BridgeCommand (if (and (== c.tabId tabId) (== c.status "pending")) (BridgeCommand :id c.id :tabId c.tabId :action c.action :payload c.payload :status "dispatched" :result c.result) c)) state.commands))] (pair (with state :commands updatedCommands) pendingCmds))
+  (let [(pendingCmds (filter (fn [(c BridgeCommand)] -> Bool (and (= c.tabId tabId) (= c.status "pending"))) state.commands)) (updatedCommands (map (fn [(c BridgeCommand)] -> BridgeCommand (if (and (= c.tabId tabId) (= c.status "pending")) (BridgeCommand :id c.id :tabId c.tabId :action c.action :payload c.payload :status "dispatched" :result c.result) c)) state.commands))] (pair (with state :commands updatedCommands) pendingCmds))
 
 fn bridgeCompleteCommand state: BrowserBridgeState cmdId: Str status: Str result: Str -> BrowserBridgeState
-  (let [(updatedCommands (map (fn [(c BridgeCommand)] -> BridgeCommand (if (== c.id cmdId) (BridgeCommand :id c.id :tabId c.tabId :action c.action :payload c.payload :status status :result result) c)) state.commands))] (with state :commands updatedCommands))
+  (let [(updatedCommands (map (fn [(c BridgeCommand)] -> BridgeCommand (if (= c.id cmdId) (BridgeCommand :id c.id :tabId c.tabId :action c.action :payload c.payload :status status :result result) c)) state.commands))] (with state :commands updatedCommands))
 
 fn formatCorsHttpResponse statusCode: I64 contentType: Str body: Str -> Str
   (let [(corsHeaders "Access-Control-Allow-Origin: http://localhost\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS, PUT, DELETE\r\nAccess-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With")] (if (= statusCode 204) (str "HTTP/1.1 204 No Content\r\n" corsHeaders "\r\nContent-Length: 0\r\n\r\n") (let [(statusLine (cond ((= statusCode 200) "HTTP/1.1 200 OK") ((= statusCode 400) "HTTP/1.1 400 Bad Request") ((= statusCode 404) "HTTP/1.1 404 Not Found") (else "HTTP/1.1 500 Internal Server Error"))) (bodyLen (stringLength body))] (str statusLine "\r\n" corsHeaders "\r\nContent-Type: " contentType "\r\nContent-Length: " bodyLen "\r\n\r\n" body))))

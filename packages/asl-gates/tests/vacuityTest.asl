@@ -11,7 +11,7 @@ fn testParseArgv -> Bool
         (r4 (vac/parseArgv a4))]
     (do
       (assert (ok? r1) "parseArgv simple ok")
-      (mt r1
+      (match r1
         ((ok cfg)
           (do
             (assert (= cfg.testCmd "python foo.py") "cmd matches")
@@ -19,7 +19,7 @@ fn testParseArgv -> Bool
             (assert (not cfg.failOnVacuous) "default failOnVacuous false")))
         ((err _) (assert false "expected ok r1")))
       (assert (ok? r2) "parseArgv all flags ok")
-      (mt r2
+      (match r2
         ((ok cfg)
           (do
             (assert (= cfg.testCmd "foo") "cmd matches r2")
@@ -35,7 +35,7 @@ fn testParseAssertionsTap -> Bool
         (res (vac/parseAssertions out ""))]
     (do
       (assert (ok? res) "parseAssertions TAP ok")
-      (mt res
+      (match res
         ((ok m)
           (do
             (assert (= (mapSize m) 3) "parsed 3 assertions")
@@ -50,7 +50,7 @@ fn testParseAssertionsMvp -> Bool
         (res (vac/parseAssertions out ""))]
     (do
       (assert (ok? res) "parseAssertions MVP ok")
-      (mt res
+      (match res
         ((ok m)
           (do
             (assert (= (mapSize m) 4) "parsed 4 assertions")
@@ -66,7 +66,7 @@ fn testParseAssertionsUnrecognized -> Bool
         (res (vac/parseAssertions out ""))]
     (do
       (assert (err? res) "unrecognized line gives error")
-      (mt res
+      (match res
         ((ok _) (assert false "expected err"))
         ((err e) (assert (stringContains? e "unrecognized output line") "error hint matches")))
       true))

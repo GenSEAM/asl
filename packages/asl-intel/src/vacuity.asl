@@ -57,12 +57,12 @@ fn assertWords code: String -> Int64
 
 ; (:m :ref MAINFIX14-TRACKEDASL-20261019 :do "dc/trackedAsl! (git ls-files, not find) so a gitignored fixture artifact left in .asl/cache/<suite>/*.asl by another suite running in parallel is never in scope -- see deadcode.asl MAINFIX14-TRACKEDASL-20261019")
 fn analyzeVacuity! ctx: h/Ctx root: String -> (Result VacuitySummary String)
-  (mt (dc/trackedAsl! ctx root)
+  (match (dc/trackedAsl! ctx root)
     ((err e) (err e))
     ((ok files)
       (ok (fold (fn [(st VacuitySummary) (rel String)] -> VacuitySummary
                   (let [(full (if (stringStartsWith? rel "/") rel (t/joinPath root rel)))]
-                    (mt (h/readText! full)
+                    (match (h/readText! full)
                       ((err _) st)
                       ((ok code)
                         ; (:m :ref MAINFIX1-VACFIXTURE-20261018 :do "the fixtures/corpus-invalid exclusion used to come second in this cond, so it was dead for any fixture whose path also contains /tests/ or whose name ends Test.asl -- true of every deliberate negative-control fixture built to BE vacuous for the scanner's own test suite (noAsserts.asl, zeroTest.asl, zeroAssertsTest.asl, zeroAssertTest.asl all live under a tests/ or fixtures/ dir and are conventionally *Test.asl so suite runners can find them), so all four were scanned as real test files and flagged as production vacuous-test debt instead of being skipped. Checking the exclusion first restores the intended precedence: a fixture is a fixture first, a test-suite candidate only once it is not one. tests/acceptance/r1Host/runner/ is the same kind of fixture set under a different name: 9 negative-control files run.sh drives to probe the R1 runner's own honesty (documented 'U4 I5' in .asl/mem/docs/tests.asn), zeroAssertsTest.asl among them deliberately returning true after zero asserts -- added alongside /fixtures/ rather than invented as a new convention")
@@ -115,7 +115,7 @@ fn vacuityJson res: VacuitySummary -> j/Json
                 (pair "trivialStubs" (j/jArr (map (fn [(s Triv)] -> j/Json (j/jObj (list (pair "file" (j/jStr s.file)) (pair "function" (j/jStr s.function)) (pair "returnType" (j/jStr s.returnType)) (pair "body" (j/jStr s.body)) (pair "reason" (j/jStr (trivReason)))))) res.trivial)))))
 
 fn runVacuity! ctx: h/Ctx fmt: String strict: Bool -> h/Outcome
-  (mt (analyzeVacuity! ctx ctx.home)
+  (match (analyzeVacuity! ctx ctx.home)
     ((err e) (h/outcome "" (str "Error: " e "\n") 1))
     ((ok res)
       (let [(out (str (cond ((= fmt "json") (j/dumps (vacuityJson res))) ((= fmt "summary") (formatVacuitySummary res)) (else (formatVacuityAsn res))) "\n"))

@@ -10,7 +10,7 @@ fn testAmbientFrameTokenEconomy -> Bool
   (let [(frame (amb/createAmbientFrame "d-751f1272" 0.05 (list "buf-01" "buf-02") 1757160000)) (encoded (amb/encodeAmbientAsn frame)) (emptyFrame (amb/createAmbientFrame "d-idle" 0.0 (list) 1000)) (emptyEncoded (amb/encodeAmbientAsn emptyFrame))] (assert (stringContains? encoded "(:ambient :peer-id \"d-751f1272\"")) (assert (stringContains? encoded ":load 0.05")) (assert (stringContains? encoded ":claimed [\"buf-01\" \"buf-02\"]")) (assert (stringContains? encoded ":ts 1757160000")) (assert (stringContains? emptyEncoded ":claimed []")) (assert (< (stringLength encoded) 200)) (assert (< (stringLength emptyEncoded) 200)) true)
 
 fn testDaemonPeerRegistration -> Bool
-  (let [(reg0 (m/createPeerRegistry "751f1272")) (peerA (m/makeDaemonPeer "d-a" "751f1272" 1001 "/tmp/sock_a" 0 ":master" 1000)) (peerB (m/makeDaemonPeer "d-b" "751f1272" 1002 "/tmp/sock_b" 0 ":secondary" 1000)) (reg1 (m/registerDaemonPeer reg0 peerA)) (reg2 (m/registerDaemonPeer reg1 peerB)) (foundA (m/findDaemonPeer reg2 "d-a")) (missing (m/findDaemonPeer reg2 "unknown"))] (assert (= reg0.localWorkspaceHash "751f1272")) (assert (= (mapSize reg1.peers) 1)) (assert (= (mapSize reg2.peers) 2)) (assert (some? foundA)) (assert (none? missing)) (assert (mt foundA ((some p) (and (= p.role ":master") (= p.pid 1001))) (_ false))) true)
+  (let [(reg0 (m/createPeerRegistry "751f1272")) (peerA (m/makeDaemonPeer "d-a" "751f1272" 1001 "/tmp/sock_a" 0 ":master" 1000)) (peerB (m/makeDaemonPeer "d-b" "751f1272" 1002 "/tmp/sock_b" 0 ":secondary" 1000)) (reg1 (m/registerDaemonPeer reg0 peerA)) (reg2 (m/registerDaemonPeer reg1 peerB)) (foundA (m/findDaemonPeer reg2 "d-a")) (missing (m/findDaemonPeer reg2 "unknown"))] (assert (= reg0.localWorkspaceHash "751f1272")) (assert (= (mapSize reg1.peers) 1)) (assert (= (mapSize reg2.peers) 2)) (assert (some? foundA)) (assert (none? missing)) (assert (match foundA ((some p) (and (= p.role ":master") (= p.pid 1001))) (_ false))) true)
 
 fn testWorkspaceCollisionDetection -> Bool
   (let [(peerA (m/makeDaemonPeer "d-a" "ws-alpha" 1001 "/tmp/sock_a" 0 ":master" 1000)) (peerB (m/makeDaemonPeer "d-b" "ws-alpha" 1002 "/tmp/sock_b" 0 ":secondary" 1000)) (peerC (m/makeDaemonPeer "d-c" "ws-beta" 1003 "/tmp/sock_c" 0 ":master" 1000)) (peers (list peerA peerB peerC)) (collisions (m/detectWorkspaceCollisions peers "ws-alpha")) (disjoint (m/detectWorkspaceCollisions peers "ws-gamma"))] (assert (= (listLength collisions) 2)) (assert (= (listLength disjoint) 0)) true)
@@ -20,14 +20,14 @@ fn testBufferLeaseLifecycle -> Bool
         (optReg1 (m/acquireBufferLease reg0 "buf-alpha" "peer-a" 1000 30 0))]
     (do
       (assert (some? optReg1))
-      (let [(reg1 (mt optReg1 ((some r) r) (_ reg0)))]
+      (let [(reg1 (match optReg1 ((some r) r) (_ reg0)))]
         (do
           (assert (= reg1.registryEpoch 1))
           (assert (m/isBufferLocked? reg1 "buf-alpha" 1010))
           (let [(leaseOpt (m/getBufferLease reg1 "buf-alpha"))]
             (do
               (assert (some? leaseOpt))
-              (assert (mt leaseOpt ((some l) (= l.holderId "peer-a")) (_ false)))))
+              (assert (match leaseOpt ((some l) (= l.holderId "peer-a")) (_ false)))))
           (let [(optStale (m/acquireBufferLease reg1 "buf-beta" "peer-c" 1010 30 0))]
             (assert (none? optStale)))
           (let [(optConflict (m/acquireBufferLease reg1 "buf-alpha" "peer-b" 1010 30 1))]

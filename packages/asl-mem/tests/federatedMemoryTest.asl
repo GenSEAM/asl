@@ -29,9 +29,9 @@ fn testFederatedMemoryQueryFiltering -> Bool
         (filtered (fmem/filterMemoriesByPackage allMemories "asl-mesh"))]
     (do
       (assert (= (listLength filtered) 2) "Filtered list must contain exactly 2 records for asl-mesh")
-      (assert (mt (listGet filtered 0) ((some v) (= v.package "asl-mesh")) ((none) false)) "First filtered package must be asl-mesh")
-      (assert (mt (listGet filtered 1) ((some v) (= v.package "asl-mesh")) ((none) false)) "Second filtered package must be asl-mesh")
-      (refute (mt (listGet filtered 0) ((some v) (= v.package "asl-compiler")) ((none) true)) "Compiler memory must be filtered out")
+      (assert (match (listGet filtered 0) ((some v) (= v.package "asl-mesh")) ((none) false)) "First filtered package must be asl-mesh")
+      (assert (match (listGet filtered 1) ((some v) (= v.package "asl-mesh")) ((none) false)) "Second filtered package must be asl-mesh")
+      (refute (match (listGet filtered 0) ((some v) (= v.package "asl-compiler")) ((none) true)) "Compiler memory must be filtered out")
       (refute (= (listLength filtered) 3) "Must not return all 3 memories")
       true))
 
@@ -43,8 +43,8 @@ fn testBoundedFederatedMemoryQuery -> Bool
         (resultsBounded (fmem/queryFederatedPackageMemory allMemories "asl-mesh" "roadmap" 2))]
     (do
       (assert (= (listLength resultsBounded) 2) "Bounded query must return at most limit records (2)")
-      (assert (mt (listGet resultsBounded 0) ((some v) (= v.category "roadmap")) ((none) false)) "Category must match")
-      (assert (mt (listGet resultsBounded 0) ((some v) (= v.package "asl-mesh")) ((none) false)) "Package must match")
+      (assert (match (listGet resultsBounded 0) ((some v) (= v.category "roadmap")) ((none) false)) "Category must match")
+      (assert (match (listGet resultsBounded 0) ((some v) (= v.package "asl-mesh")) ((none) false)) "Package must match")
       (refute (= (listLength resultsBounded) 3) "Query must not exceed limit 2")
       (refute (listEmpty? resultsBounded) "Results must not be empty")
       true))
@@ -58,10 +58,10 @@ fn testPackageMemoryDiscovery -> Bool
         (discovered (fmem/discoverPackageMemories mockPaths))]
     (do
       (assert (= (listLength discovered) 2) "Must discover exactly 2 valid package memory files")
-      (assert (mt (listGet discovered 0) ((some v) (stringContains? v "asl-mesh/mem/roadmap.asn")) ((none) false)) "First must be asl-mesh roadmap")
-      (assert (mt (listGet discovered 1) ((some v) (stringContains? v "asl-pack/mem/adr.asn")) ((none) false)) "Second must be asl-pack adr")
-      (refute (mt (listGet discovered 0) ((some v) (stringContains? v "src")) ((none) true)) "Source file must be filtered out")
-      (refute (mt (listGet discovered 1) ((some v) (stringContains? v "scratch")) ((none) true)) "Scratch path must be filtered out")
+      (assert (match (listGet discovered 0) ((some v) (stringContains? v "asl-mesh/mem/roadmap.asn")) ((none) false)) "First must be asl-mesh roadmap")
+      (assert (match (listGet discovered 1) ((some v) (stringContains? v "asl-pack/mem/adr.asn")) ((none) false)) "Second must be asl-pack adr")
+      (refute (match (listGet discovered 0) ((some v) (stringContains? v "src")) ((none) true)) "Source file must be filtered out")
+      (refute (match (listGet discovered 1) ((some v) (stringContains? v "scratch")) ((none) true)) "Scratch path must be filtered out")
       true))
 
 fn runTests -> Bool

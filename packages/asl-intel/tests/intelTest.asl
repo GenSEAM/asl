@@ -15,7 +15,7 @@
 
 fn span rex: r/Rex s: String -> (Pair Int64 Int64)
   (let [(b (stringToBytes s))]
-    (mt (r/rexSearch rex b (bytesLength b) 0)
+    (match (r/rexSearch rex b (bytesLength b) 0)
       ((some c) (pair (optionOr (listGet c 0) -1) (optionOr (listGet c 1) -1)))
       ((none) (pair -1 -1))))
 
@@ -85,7 +85,7 @@ fn testSweep -> Bool
     (= (sw/balanceError "([{" true) (some "unclosed delimiters: ([{")))
 
 fn testReader! -> Bool
-  (mt (fx/readAsn ";; c\n(:case :id \"a\\\"b\\n\" :n -3 :v [1 x \"y\"] :k :init)")
+  (match (fx/readAsn ";; c\n(:case :id \"a\\\"b\\n\" :n -3 :v [1 x \"y\"] :k :init)")
     ((err e) (do (eprintln "reader parses:" e) false))
     ((ok forms)
       (let [(c (optionOr (listHead forms) (fx/aList (list))))]
@@ -109,7 +109,7 @@ fn msSince! t0: Int64 -> Int64
 
 fn synthSource k: Int64 -> String
   (t/concatAll (map (fn [(i Int64)] -> String
-                      (str "fn f" (t/intStr i) " a: Int64 b: (List Int64) -> Int64\n  (if (> a " (t/intStr i) ") (fold (fn [(x Int64) (y Int64)] -> Int64 (+ x y)) a b) (mt (some a) ((some v) v) ((none) 0)))\n\n"))
+                      (str "fn f" (t/intStr i) " a: Int64 b: (List Int64) -> Int64\n  (if (> a " (t/intStr i) ") (fold (fn [(x Int64) (y Int64)] -> Int64 (+ x y)) a b) (match (some a) ((some v) v) ((none) 0)))\n\n"))
                     (range 0 k)))
 
 fn testLargeInputs! -> Bool
@@ -168,8 +168,8 @@ fn testWholeRepo! -> Bool
         (t1 (monotonicNs))
         (cxr (cx/analyzeComplexity! ctx "" 10))
         (tCx (msSince! t1))
-        (nodes (mt gr ((ok r) r.totalNodes) ((err _) 0)))
-        (fns (mt cxr ((ok r) r.total) ((err _) 0)))]
+        (nodes (match gr ((ok r) r.totalNodes) ((err _) 0)))
+        (fns (match cxr ((ok r) r.total) ((err _) 0)))]
     (do
       (println "whole repo:" nodes "graph nodes in" tGraph "ms;" fns "functions ranked in" tCx "ms")
       (assert (> nodes 1000) "the repo graph holds over 1000 nodes")

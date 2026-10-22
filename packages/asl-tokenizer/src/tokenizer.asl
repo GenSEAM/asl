@@ -120,7 +120,7 @@ fn scanUpper bs: Bytes j: Int64 n: Int64 at: Bytes ut: Bytes nr: Int64 -> Int64
           (scanUpper bs (+ j 1) n at ut nr)
           j)
         (let [(p (decodeUtf8 bs j n))]
-          (mt p
+          (match p
             ((pair cp charLen)
               (if (isUpperOrMark (getClass at ut nr cp))
                 (scanUpper bs (+ j charLen) n at ut nr)
@@ -134,7 +134,7 @@ fn scanLower bs: Bytes j: Int64 n: Int64 at: Bytes ut: Bytes nr: Int64 -> Int64
           (scanLower bs (+ j 1) n at ut nr)
           j)
         (let [(p (decodeUtf8 bs j n))]
-          (mt p
+          (match p
             ((pair cp charLen)
               (if (isLowerOrMark (getClass at ut nr cp))
                 (scanLower bs (+ j charLen) n at ut nr)
@@ -148,7 +148,7 @@ fn scanNum bs: Bytes j: Int64 n: Int64 count: Int64 at: Bytes ut: Bytes nr: Int6
           (scanNum bs (+ j 1) n (+ count 1) at ut nr)
           j)
         (let [(p (decodeUtf8 bs j n))]
-          (mt p
+          (match p
             ((pair cp charLen)
               (if (= (getClass at ut nr cp) 7)
                 (scanNum bs (+ j charLen) n (+ count 1) at ut nr)
@@ -162,7 +162,7 @@ fn scanOther bs: Bytes j: Int64 n: Int64 at: Bytes ut: Bytes nr: Int64 -> Int64
           (scanOther bs (+ j 1) n at ut nr)
           j)
         (let [(p (decodeUtf8 bs j n))]
-          (mt p
+          (match p
             ((pair cp charLen)
               (if (isPunctOrSymbol (getClass at ut nr cp))
                 (scanOther bs (+ j charLen) n at ut nr)
@@ -185,7 +185,7 @@ fn scanSpaceWithNl bs: Bytes j: Int64 n: Int64 lastNl: Int64 at: Bytes ut: Bytes
             (scanSpaceWithNl bs (+ j 1) n lastNl at ut nr)
             (pair j lastNl))
           (let [(p (decodeUtf8 bs j n))]
-            (mt p
+            (match p
               ((pair cp charLen)
                 (if (= (getClass at ut nr cp) 2)
                   (scanSpaceWithNl bs (+ j charLen) n lastNl at ut nr)
@@ -199,7 +199,7 @@ fn tryOtherBranches bs: Bytes i: Int64 n: Int64 at: Bytes ut: Bytes nr: Int64 c0
          (and (= (bytesGet bs i) 32)
               (and (< (+ i 1) n)
                    (let [(pSp (decodeUtf8 bs (+ i 1) n))]
-                     (mt pSp
+                     (match pSp
                        ((pair cpSp _)
                          (isPunctOrSymbol (getClass at ut nr cpSp))))))))
       (let [(hasSp (= (bytesGet bs i) 32))
@@ -208,7 +208,7 @@ fn tryOtherBranches bs: Bytes i: Int64 n: Int64 at: Bytes ut: Bytes nr: Int64 c0
         (scanSlashNl bs jP n)))
     ((isSpace c0)
       (let [(pairSp (scanSpaceWithNl bs i n -1 at ut nr))]
-        (mt pairSp
+        (match pairSp
           ((pair endSp lastNl)
             (if (> lastNl 0)
               lastNl
@@ -222,7 +222,7 @@ fn tryOtherBranches bs: Bytes i: Int64 n: Int64 at: Bytes ut: Bytes nr: Int64 c0
 fn matchNextChunk bs: Bytes i: Int64 n: Int64 at: Bytes ut: Bytes nr: Int64 -> Int64
   (if (>= i n) i
     (let [(p0 (decodeUtf8 bs i n))]
-      (mt p0
+      (match p0
         ((pair cp0 charLen0)
           (let [(c0 (getClass at ut nr cp0))]
             (if (or (isLetterOrMark c0) (isOptLead c0))
@@ -230,7 +230,7 @@ fn matchNextChunk bs: Bytes i: Int64 n: Int64 at: Bytes ut: Bytes nr: Int64 -> I
                     (letStart (if optLead (+ i charLen0) i))]
                 (if (< letStart n)
                   (let [(p1 (decodeUtf8 bs letStart n))]
-                    (mt p1
+                    (match p1
                       ((pair cp1 len1)
                         (let [(c1 (getClass at ut nr cp1))]
                           (if (isLetterOrMark c1)
@@ -315,7 +315,7 @@ fn parseAll! bs: Bytes i: Int64 n: Int64 b64t: Bytes tokenBytes: Bytes tbOff: In
         (parseAll! bs (+ i 1) n b64t tokenBytes tbOff table mask count)
         (let [(sp (findSpace bs i))
               (pRank (parseRank bs (+ sp 1) 0))]
-          (mt pRank
+          (match pRank
             ((pair rank nextI)
               (let [(newTbOff (decodeB64! bs i sp b64t tokenBytes tbOff))
                     (tokLen (- newTbOff tbOff))
@@ -541,11 +541,11 @@ fn loadTokenizer! dataDir: String -> (Result Tokenizer String)
   (let [(tiktokenPath (str dataDir "/o200k_base.tiktoken"))
         (classesPath (str dataDir "/unicode_classes.bin"))
         (resUt (fileReadBytes classesPath))]
-    (mt resUt
+    (match resUt
       ((err e) (err (str "loadTokenizer: cannot read " classesPath ": " e)))
       ((ok ut)
         (let [(resTk (fileReadBytes tiktokenPath))]
-          (mt resTk
+          (match resTk
             ((err e) (err (str "loadTokenizer: cannot read " tiktokenPath ": " e)))
             ((ok bsTk)
               (let [(nr (/ (bytesLength ut) 7))

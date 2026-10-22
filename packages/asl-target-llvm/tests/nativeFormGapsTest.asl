@@ -18,10 +18,10 @@ fn source -> String
     "(schema GapWire (:f valid? Bool) (:f errorKind String) (:f message String))"
     "(enum GapChoice (:c chosen [(text String)]))"
     "fn pick choice: GapChoice -> String"
-    "  (mt choice ((chosen text) text))"
+    "  (match choice ((chosen text) text))"
     "fn ! main -> Int64"
     "  (let [(session (GapSession :id \"s\")) (wire (GapWire :valid? true :errorKind \"\" :message \"ok\"))]"
-    "    (do (println session.id) (println (if (== wire.valid? true) \"true\" \"false\")) (println (pick (chosen \"variant\"))) 0))") "\n")
+    "    (do (println session.id) (println (if (= wire.valid? true) \"true\" \"false\")) (println (pick (chosen \"variant\"))) 0))") "\n")
 
 fn omittedBoolSource -> String
   (stringJoin (list
@@ -42,7 +42,7 @@ fn diagText diags: (List irTy/IrDiag) -> String
 
 fn ! testQuestionKeyedRecord -> Bool
   (let [(completeSource (stringReplace (source) "(GapSession :id \"s\")" "(GapSession :id \"s\" :deadlocked false)"))
-        (src (stringReplace completeSource "(GapWire :valid? true" "(GapWire (mt :valid) true"))
+        (src (stringReplace completeSource "(GapWire :valid? true" "(GapWire (match :valid) true"))
         (made (processRun "mktemp -d"))
         (dir (stringReplace made.stdout "\n" ""))
         (srcPath (str dir "/questionKeyed.asl"))
@@ -50,12 +50,12 @@ fn ! testQuestionKeyedRecord -> Bool
         (exePath (str dir "/questionKeyed"))]
     (do
       (assert (= made.exitCode 0) "question-keyed temporary fixture directory created")
-      (assert (stringContains? src "(mt :valid)") "question-keyed fixture uses the mt field marker")
+      (assert (stringContains? src "(match :valid)") "question-keyed fixture uses the mt field marker")
       (assert (ok? (fileWrite srcPath src)) "question-keyed fixture source written")
-      (mt (low/lowerSource src)
+      (match (low/lowerSource src)
         ((err diags) (do (assert (listEmpty? diags) (str "question-keyed fixture lowers: " (diagText diags))) false))
         ((ok m)
-         (mt (llvm/emitLlvmProgramNative! m "main")
+         (match (llvm/emitLlvmProgramNative! m "main")
            ((err diags) (do (assert (listEmpty? diags) (str "question-keyed fixture emits: " (diagText diags))) false))
            ((ok code)
             (do
@@ -83,10 +83,10 @@ fn ! testNativeParity -> Bool
     (do
       (assert (= made.exitCode 0) "temporary fixture directory created")
       (assert (ok? (fileWrite src (source))) "native fixture source written")
-      (mt (low/lowerSource (source))
+      (match (low/lowerSource (source))
         ((err diags) (do (assert (listEmpty? diags) (str "fixture lowers: " (diagText diags))) false))
         ((ok m)
-         (mt (llvm/emitLlvmProgramNative! m "main")
+         (match (llvm/emitLlvmProgramNative! m "main")
            ((err diags) (do (assert (listEmpty? diags) (str "fixture emits: " (diagText diags))) false))
            ((ok code)
             (do
@@ -111,10 +111,10 @@ fn ! testOmittedBool dir: String -> Bool
         (exe (str dir "/omittedBool"))]
     (do
       (assert (ok? (fileWrite src (omittedBoolSource))) "omitted-Bool fixture source written")
-      (mt (low/lowerSource (omittedBoolSource))
+      (match (low/lowerSource (omittedBoolSource))
         ((err diags) (do (assert (listEmpty? diags) (str "omitted-Bool fixture lowers: " (diagText diags))) false))
         ((ok m)
-         (mt (llvm/emitLlvmProgramNative! m "main")
+         (match (llvm/emitLlvmProgramNative! m "main")
            ((err diags) (do (assert (listEmpty? diags) (str "omitted-Bool fixture emits: " (diagText diags))) false))
            ((ok code)
             (do

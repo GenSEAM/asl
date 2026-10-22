@@ -26,7 +26,7 @@ fn isSubcommandIdent? s: String -> Bool
           (identLoop bs n 1)))))
 
 fn rootArg args: (List String) -> (Option String)
-  (mt (listHead args)
+  (match (listHead args)
     ((none) (none))
     ((some a)
      (if (stringStartsWith? a "--root=")
@@ -36,7 +36,7 @@ fn rootArg args: (List String) -> (Option String)
          (rootArg (optionOr (listTail args) (list)))))))
 
 fn stripRootArgs args: (List String) -> (List String)
-  (mt (listHead args)
+  (match (listHead args)
     ((none) (list))
     ((some a)
      (if (= a "--root")
@@ -46,7 +46,7 @@ fn stripRootArgs args: (List String) -> (List String)
          (cons a (stripRootArgs (optionOr (listTail args) (list))))))))
 
 fn runAudit! root: String args: (List String) baseEnv: String inRunner: Bool -> ag/AuditRun
-  (mt (listHead args)
+  (match (listHead args)
     ((none)
      (ag/emit "none" (list (ag/failCheck "usage" "ERR_USAGE" "subcommands: build check closure consistency foreign gates steps" (none) (none))) "" "" false))
     ((some sub)
@@ -70,7 +70,7 @@ fn ! main args: (List String) -> (Result Int64 String)
   (let [(envRoot (optionOr (envGet "ROOT_DIR") ""))
         (argRoot0 (optionOr (rootArg args) ""))
         (configuredRoot (if (not (stringEmpty? argRoot0)) argRoot0 envRoot))]
-  (mt (if (stringEmpty? configuredRoot) (ag/discoverRoot! ".") (ok configuredRoot))
+  (match (if (stringEmpty? configuredRoot) (ag/discoverRoot! ".") (ok configuredRoot))
     ((err e)
      (let [(r (ag/emit "none" (list (ag/failCheck "internal" "ERR_AUDIT_INTERNAL" e (none) (none))) "" "" false))]
        (do (eprintln r.summary) (println r.receipt) (ok r.exitCode))))

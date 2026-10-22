@@ -62,7 +62,7 @@ fn nameValue text: String field: Int64 -> (Option Int64)
 
 fn fieldNumber text: String field: Int64 -> (Option Int64)
   (let [(v (nameValue (stringUpper text) field))]
-    (mt v ((some n)
+    (match v ((some n)
       (if (and (>= n (if (or (= field 2) (= field 3)) 1 0)) (<= n (if (= field 0) 59 (if (= field 1) 23 (if (= field 2) 31 (if (= field 3) 12 7))))))
         (some (if (and (= field 4) (= n 7)) 0 n))
         none))
@@ -73,7 +73,7 @@ fn fieldStart text: String field: Int64 -> (Option Int64)
     (fieldNumber text field))
 
 fn fieldRangeNumber text: String field: Int64 -> (Option Int64)
-  (mt (stringToInt64 text) ((some n)
+  (match (stringToInt64 text) ((some n)
     (if (and (>= n (if (= field 2) 1 (if (= field 3) 1 0)))
              (<= n (if (= field 0) 59 (if (= field 1) 23 (if (= field 2) 31 (if (= field 3) 12 7))))))
       (some n) none))
@@ -111,7 +111,7 @@ fn fieldLabel field: Int64 -> String
 
 fn parseFieldAt parts: (List String) field: Int64 index: Int64 accumulated: (List Int64) -> (Result (List Int64) String)
   (if (>= index (listLength parts)) (ok accumulated)
-    (mt (parsePart (optionOr (listGet parts index) "") field (+ index 1))
+    (match (parsePart (optionOr (listGet parts index) "") field (+ index 1))
       ((ok values) (parseFieldAt parts field (+ index 1) (listAppend accumulated values)))
       ((err e) (err (stringConcat "field " (stringConcat (fieldLabel field) (stringConcat " " e)))))))
 
@@ -130,15 +130,15 @@ fn parseCron expression: String -> (Result Cron String)
                         (else expression)))
         (fields (stringSplit (stringTrim expanded) " "))]
     (if (not (= (listLength fields) 5)) (err "field 0 position 1: expected five fields")
-      (mt (parseField (optionOr (listGet fields 0) "") 0)
+      (match (parseField (optionOr (listGet fields 0) "") 0)
         ((ok minutes)
-          (mt (parseField (optionOr (listGet fields 1) "") 1)
+          (match (parseField (optionOr (listGet fields 1) "") 1)
             ((ok hours)
-              (mt (parseField (optionOr (listGet fields 2) "") 2)
+              (match (parseField (optionOr (listGet fields 2) "") 2)
                 ((ok days)
-                  (mt (parseField (optionOr (listGet fields 3) "") 3)
+                  (match (parseField (optionOr (listGet fields 3) "") 3)
                     ((ok months)
-                      (mt (parseField (optionOr (listGet fields 4) "") 4)
+                      (match (parseField (optionOr (listGet fields 4) "") 4)
                         ((ok weekdays) (ok (cron minutes hours days months weekdays
                           (= (optionOr (listGet fields 2) "") "*")
                           (= (optionOr (listGet fields 4) "") "*"))))
@@ -149,7 +149,7 @@ fn parseCron expression: String -> (Result Cron String)
         ((err e) (err e)))))
 
 fn dateMatches value: Cron days: Int64 -> Bool
-  (mt value ((cron _ _ dom months dow domStar dowStar)
+  (match value ((cron _ _ dom months dow domStar dowStar)
     (let [(parts (civilFromDays days))
           (year (optionOr (listGet parts 0) 1970))
           (month (optionOr (listGet parts 1) 1))
@@ -164,7 +164,7 @@ fn dateMatches value: Cron days: Int64 -> Bool
 
 fn minuteOnDay value: Cron day: Int64 afterSeconds: Int64 minuteOfDay: Int64 -> (Option Int64)
   (if (>= minuteOfDay 1440) none
-    (mt value ((cron minutes hours _ _ _ _ _)
+    (match value ((cron minutes hours _ _ _ _ _)
       (let [(hour (/ minuteOfDay 60))
             (minute (mod minuteOfDay 60))
             (candidate (+ (* day 86400) (* minuteOfDay 60)))]
@@ -176,7 +176,7 @@ fn searchDay value: Cron afterSeconds: Int64 startDay: Int64 offset: Int64 -> (R
   (if (> offset 1827) (err "no fire within five years")
     (let [(day (+ startDay offset))]
       (if (not (dateMatches value day)) (searchDay value afterSeconds startDay (+ offset 1))
-        (mt (minuteOnDay value day afterSeconds 0)
+        (match (minuteOnDay value day afterSeconds 0)
           ((some fire) (ok fire))
           ((none) (searchDay value afterSeconds startDay (+ offset 1)))))))
 

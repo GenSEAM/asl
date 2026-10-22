@@ -16,24 +16,24 @@ fn findTool reg: ToolRegistry name: Str -> (Option proto/ToolDef)
   (let [(matches (filter (fn [(t proto/ToolDef)] -> Bool (= t.name name)) reg.tools))] (listHead matches))
 
 fn checkRequiredParams params: (List proto/ToolParam) args: (List proto/ToolArg) -> (Option Str)
-  (let [(missing (filter (fn [(p proto/ToolParam)] -> Bool (and p.required (mt (proto/getArgValue args p.name) ((none) true) ((some _) false)))) params))] (mt (listHead missing) ((none) (none)) ((some p) (some p.name))))
+  (let [(missing (filter (fn [(p proto/ToolParam)] -> Bool (and p.required (match (proto/getArgValue args p.name) ((none) true) ((some _) false)))) params))] (match (listHead missing) ((none) (none)) ((some p) (some p.name))))
 
 fn validateInvocation reg: ToolRegistry inv: proto/ToolInvocation -> (Result proto/ToolInvocation Str)
-  (mt (findTool reg inv.toolName) ((none) (err (str "Unknown tool: " inv.toolName))) ((some tdef) (mt (checkRequiredParams tdef.params inv.args) ((some missingParam) (err (str "Missing required argument: " missingParam))) ((none) (ok inv)))))
+  (match (findTool reg inv.toolName) ((none) (err (str "Unknown tool: " inv.toolName))) ((some tdef) (match (checkRequiredParams tdef.params inv.args) ((some missingParam) (err (str "Missing required argument: " missingParam))) ((none) (ok inv)))))
 
 fn findHandler handlers: (List ToolHandler) name: Str -> (Option ToolHandler)
-  (mt (listHead handlers) ((none) (none)) ((some handler) (if (= handler.name name) (some handler) (findHandler (optionOr (listTail handlers) (list)) name))))
+  (match (listHead handlers) ((none) (none)) ((some handler) (if (= handler.name name) (some handler) (findHandler (optionOr (listTail handlers) (list)) name))))
 
 fn executeTool reg: ToolRegistry inv: proto/ToolInvocation -> proto/ToolResult
   (let [(toolName inv.toolName)]
-    (mt (findTool reg toolName)
+    (match (findTool reg toolName)
       ((none) (proto/ToolResult :toolName toolName :success false :output "" :errorMsg (str "Unknown tool: " toolName)))
-      ((some _) (mt (findHandler reg.handlers toolName)
+      ((some _) (match (findHandler reg.handlers toolName)
         ((none) (proto/ToolResult :toolName toolName :success false :output "" :errorMsg (str "Missing handler: " toolName)))
         ((some handler) (handler.run inv))))))
 
 fn dispatchCall reg: ToolRegistry rawCall: Str -> Str
-  (mt (proto/parseInvocation rawCall) ((err parseErr) (proto/formatResult (proto/ToolResult :toolName "unknown" :success false :output "" :errorMsg parseErr))) ((ok inv) (mt (validateInvocation reg inv) ((err valErr) (proto/formatResult (proto/ToolResult :toolName inv.toolName :success false :output "" :errorMsg valErr))) ((ok validInv) (let [(res (executeTool reg validInv))] (proto/formatResult res))))))
+  (match (proto/parseInvocation rawCall) ((err parseErr) (proto/formatResult (proto/ToolResult :toolName "unknown" :success false :output "" :errorMsg parseErr))) ((ok inv) (match (validateInvocation reg inv) ((err valErr) (proto/formatResult (proto/ToolResult :toolName inv.toolName :success false :output "" :errorMsg valErr))) ((ok validInv) (let [(res (executeTool reg validInv))] (proto/formatResult res))))))
 
 fn dispatchBatchCalls reg: ToolRegistry calls: (List Str) -> (List Str)
   (map (fn [(rawCall Str)] -> Str (dispatchCall reg rawCall)) calls)
@@ -62,7 +62,7 @@ fn ! dispatchCanonicalToolWithRegistry! reg: ToolRegistry toolName: Str targetFi
         (if (and (= toolName "exec-cmd") (not canExecute))
           (DispatchResult :status "denied" :success false :output "" :errorMsg "exec-cmd is not authorized")
           (let [(inv (proto/ToolInvocation :toolName toolName :args (list (proto/ToolArg :key "targetFile" :val targetFile) (proto/ToolArg :key "payload" :val payload)) :rawCall ""))]
-            (mt (findHandler reg.handlers toolName)
+            (match (findHandler reg.handlers toolName)
               ((none) (DispatchResult :status "error" :success false :output "" :errorMsg (str "Missing handler: " toolName)))
               ((some handler) (let [(result (handler.run inv))]
                 (if result.success

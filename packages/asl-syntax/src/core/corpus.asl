@@ -131,7 +131,7 @@ fn findFirstDiffOffset expected: Bytes actual: Bytes -> (Option Int64)
   (let [(lenA (bytesLength expected))
         (lenB (bytesLength actual))
         (minLen (min lenA lenB))]
-    (mt (findDiffLoop expected actual 0 minLen)
+    (match (findDiffLoop expected actual 0 minLen)
       ((some diffAt) (some diffAt))
       ((none)
        (if (!= lenA lenB)
@@ -164,19 +164,19 @@ fn corpusFilesLoop! pipeline: (fn [Bytes] -> (Result Bytes String))
     (CorpusReport :files totalFiles :bytes totalBytes :mismatches (listReverse mismatches))
     (let [(head (optionOr (listHead files) ""))
           (tail (optionOr (listTail files) (list)))]
-      (mt (fileReadBytes head)
+      (match (fileReadBytes head)
         ((err ioErr)
          (let [(m (CorpusMismatch :path head :firstDiffOffset -1 :expectedLength 0 :actualLength 0 :reason (str "read error: " ioErr)))]
            (corpusFilesLoop! pipeline tail (+ totalFiles 1) totalBytes (cons m mismatches))))
         ((ok bs)
          (let [(fileLen (bytesLength bs))
                (newBytes (+ totalBytes fileLen))]
-           (mt (pipeline bs)
+           (match (pipeline bs)
              ((err parseErr)
               (let [(m (CorpusMismatch :path head :firstDiffOffset -1 :expectedLength fileLen :actualLength 0 :reason (str "parse error: " parseErr)))]
                 (corpusFilesLoop! pipeline tail (+ totalFiles 1) newBytes (cons m mismatches))))
              ((ok printed)
-              (mt (findFirstDiffOffset bs printed)
+              (match (findFirstDiffOffset bs printed)
                 ((none)
                  (corpusFilesLoop! pipeline tail (+ totalFiles 1) newBytes mismatches))
                 ((some diffOff)
@@ -187,19 +187,19 @@ fn runCorpusOnFiles! pipeline: (fn [Bytes] -> (Result Bytes String)) files: (Lis
   (corpusFilesLoop! pipeline files 0 0 (list))
 
 fn runCorpus! pipeline: (fn [Bytes] -> (Result Bytes String)) ext: String -> (Result CorpusReport String)
-  (mt (gitTrackedFiles! ext)
+  (match (gitTrackedFiles! ext)
     ((ok files) (ok (runCorpusOnFiles! pipeline files)))
     ((err msg) (err msg)))
 
 fn runCorpusTreeOnFiles! parse: (fn [Bytes] -> (Result tr/Node String)) print: (fn [Bytes tr/Node] -> Bytes) files: (List String) -> CorpusReport
   (let [(pipeline (fn [(bs Bytes)] -> (Result Bytes String)
-                    (mt (parse bs)
+                    (match (parse bs)
                       ((ok root) (ok (print bs root)))
                       ((err e) (err e)))))]
     (runCorpusOnFiles! pipeline files))
 
 fn runCorpusTree! parse: (fn [Bytes] -> (Result tr/Node String)) print: (fn [Bytes tr/Node] -> Bytes) ext: String -> (Result CorpusReport String)
-  (mt (gitTrackedFiles! ext)
+  (match (gitTrackedFiles! ext)
     ((ok files) (ok (runCorpusTreeOnFiles! parse print files)))
     ((err msg) (err msg)))
 
@@ -214,7 +214,7 @@ fn verifyUpstreamEntry! entry: UpstreamEntry -> (Result Bool String)
           (err "missing required field: license")
           (if (stringEmpty? entry.path)
             (err "missing required field: path")
-            (mt (fileReadBytes entry.path)
+            (match (fileReadBytes entry.path)
               ((err ioErr)
                (err (str "upstream file not found: " entry.path " (" ioErr ")")))
               ((ok bs)
@@ -230,7 +230,7 @@ fn verifyEntriesLoop! entries: (List UpstreamEntry) errors: (List String) -> (Re
       (err (listReverse errors)))
     (let [(head (optionOr (listHead entries) (UpstreamEntry :url "" :commit "" :sha256 "" :license "" :path "")))
           (tail (optionOr (listTail entries) (list)))]
-      (mt (verifyUpstreamEntry! head)
+      (match (verifyUpstreamEntry! head)
         ((ok _) (verifyEntriesLoop! tail errors))
         ((err e) (verifyEntriesLoop! tail (cons e errors))))))
 
@@ -378,7 +378,7 @@ fn parseEntriesListLoop text: String toks: (List tr/Token) acc: (List UpstreamEn
     (let [(tok (optionOr (listHead toks) (tr/makeToken "" 0 0)))]
       (if (lex/isRbracket tok)
         (ok (pair (listReverse acc) (optionOr (listTail toks) (list))))
-        (mt (parseOneEntry text toks)
+        (match (parseOneEntry text toks)
           ((err e) (err e))
           ((ok resPair)
            (parseEntriesListLoop text (pairSecond resPair) (cons (pairFirst resPair) acc)))))))
@@ -388,14 +388,14 @@ fn parseManifestTopLoop text: String toks: (List tr/Token) entriesOpt: (Option (
     (err "unexpected end of manifest")
     (let [(tok (optionOr (listHead toks) (tr/makeToken "" 0 0)))]
       (if (lex/isRparen tok)
-        (mt entriesOpt
+        (match entriesOpt
           ((none) (err "missing :entries in manifest"))
           ((some entries) (ok (UpstreamManifest :entries entries))))
         (if (not (lex/isKeywordToken tok))
           (err (str "unexpected token in manifest: " (lex/tokenSliceString text tok)))
           (let [(kw (lex/tokenSliceString text tok))]
             (if (= kw ":entries")
-              (mt entriesOpt
+              (match entriesOpt
                 ((some _) (err "duplicate :entries in manifest"))
                 ((none)
                  (let [(afterKw (optionOr (listTail toks) (list)))]
@@ -404,7 +404,7 @@ fn parseManifestTopLoop text: String toks: (List tr/Token) entriesOpt: (Option (
                      (let [(openTok (optionOr (listHead afterKw) (tr/makeToken "" 0 0)))]
                        (if (not (lex/isLbracket openTok))
                          (err "expected [ after :entries")
-                         (mt (parseEntriesListLoop text (optionOr (listTail afterKw) (list)) (list))
+                         (match (parseEntriesListLoop text (optionOr (listTail afterKw) (list)) (list))
                            ((err e) (err e))
                            ((ok pairRes)
                             (parseManifestTopLoop text (pairSecond pairRes) (some (pairFirst pairRes)))))))))))
@@ -424,7 +424,7 @@ fn filterSignificantTokens toks: (List tr/Token) -> (List tr/Token)
 fn parseUpstreamManifest text: String -> (Result UpstreamManifest String)
   (let [(bs (stringToBytes text))
         (len (bytesLength bs))]
-    (mt (checkDyckBalance bs len)
+    (match (checkDyckBalance bs len)
       ((some dyckErr)
        (err (str "unbalanced manifest at byte " dyckErr.offset ": " dyckErr.msg)))
       ((none)
@@ -446,11 +446,11 @@ fn parseUpstreamManifest text: String -> (Result UpstreamManifest String)
                        (parseManifestTopLoop text (optionOr (listTail tail0) (list)) (none)))))))))))))
 
 fn verifyUpstreamManifestFile! path: String -> (Result Bool (List String))
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err ioErr)
      (err (list (str "cannot read manifest file: " path " (" ioErr ")"))))
     ((ok content)
-     (mt (parseUpstreamManifest content)
+     (match (parseUpstreamManifest content)
        ((err parseErr)
         (err (list (str "manifest parse error: " parseErr))))
        ((ok manifest)

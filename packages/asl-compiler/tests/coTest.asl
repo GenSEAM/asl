@@ -1,10 +1,10 @@
 (module asl-compiler/coTest :x [testCoAlgebraicParity! testCoComparisonParity! testCoLogicParity! testCoControlParity! testCoWasmLoweringParity runTests] :i [(evaluator :a ev) (reader :a rd)])
 
 fn evalIntExpr! expr: rd/SExpr -> Int64
-  (let [(env (ev/makeRootEnv)) (res (ev/evalSexpr! expr env))] (mt res ((ev/valInt n) n) (_ 0)))
+  (let [(env (ev/makeRootEnv)) (res (ev/evalSexpr! expr env))] (match res ((ev/valInt n) n) (_ 0)))
 
 fn evalBoolExpr! expr: rd/SExpr -> Bool
-  (let [(env (ev/makeRootEnv)) (res (ev/evalSexpr! expr env))] (mt res ((ev/valBool b) b) (_ false)))
+  (let [(env (ev/makeRootEnv)) (res (ev/evalSexpr! expr env))] (match res ((ev/valBool b) b) (_ false)))
 
 fn lowerWatBinop op: Str ty: Str -> Str
   (let [(pfx (if (= ty "I32") "i32" (if (= ty "F64") "f64" "i64")))] (cond ((= op "+") (str pfx ".add")) ((= op "-") (str pfx ".sub")) ((= op "*") (str pfx ".mul")) ((= op "/") (if (= pfx "f64") "f64.div" (str pfx ".div_s"))) ((= op "mod") (str pfx ".rem_s")) ((= op "=") (str pfx ".eq")) ((= op "!=") (str pfx ".ne")) ((= op "<") (if (= pfx "f64") "f64.lt" (str pfx ".lt_s"))) ((= op "<=") (if (= pfx "f64") "f64.le" (str pfx ".le_s"))) ((= op ">") (if (= pfx "f64") "f64.gt" (str pfx ".gt_s"))) ((= op ">=") (if (= pfx "f64") "f64.ge" (str pfx ".ge_s"))) ((= op "and") "i32.and") ((= op "or") "i32.or") (else (str pfx ".add"))))

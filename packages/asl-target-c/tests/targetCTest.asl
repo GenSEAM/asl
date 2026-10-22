@@ -72,25 +72,25 @@ fn testC11SourceCompiles -> Bool
   (let [(src (stringJoin (list "(module smoke :x [main] :i [])" "" "fn ! main -> (Result Int64 String)" "  (ok 42)") "\n"))
         (res (em/emitC11Source src "smoke.asl"))]
     (do
-      (assert (mt res ((ok _) true) ((err _) false)) "emitC11Source compiles a real main returning (ok 42)")
-      (assert (mt res ((ok code) (stringContains? code "asl_rt_exit_code")) ((err _) false)) "emitted program routes the exit code through asl_rt_exit_code")
-      (assert (mt res ((ok code) (stringContains? code "int main(void)")) ((err _) false)) "emitted program defines a C main entry point")
-      (assert (mt res ((ok code) (stringContains? code "INT64_C(42)")) ((err _) false)) "emitted program contains the literal the source returns")
+      (assert (match res ((ok _) true) ((err _) false)) "emitC11Source compiles a real main returning (ok 42)")
+      (assert (match res ((ok code) (stringContains? code "asl_rt_exit_code")) ((err _) false)) "emitted program routes the exit code through asl_rt_exit_code")
+      (assert (match res ((ok code) (stringContains? code "int main(void)")) ((err _) false)) "emitted program defines a C main entry point")
+      (assert (match res ((ok code) (stringContains? code "INT64_C(42)")) ((err _) false)) "emitted program contains the literal the source returns")
       true))
 
 fn testC11SourceMissingMain -> Bool
   (let [(src (stringJoin (list "(module noMain :x [helper] :i [])" "" "fn helper -> Int64" "  1") "\n"))
         (res (em/emitC11Source src "noMain.asl"))]
     (do
-      (assert (mt res ((ok _) false) ((err m) (stringContains? m "entry function 'main' is not defined"))) "a module without main is refused naming the missing entry")
+      (assert (match res ((ok _) false) ((err m) (stringContains? m "entry function 'main' is not defined"))) "a module without main is refused naming the missing entry")
       true))
 
 fn testC11SourceNullaryConstruct -> Bool
-  (let [(src (stringJoin (list "(module flagMod :x [main] :i [])" "" "(enum Flag (:c on []) (:c off []))" "" "fn ! main -> (Result Int64 String)" "  (mt on" "    (on (ok 1))" "    (off (ok 0)))") "\n"))
+  (let [(src (stringJoin (list "(module flagMod :x [main] :i [])" "" "(enum Flag (:c on []) (:c off []))" "" "fn ! main -> (Result Int64 String)" "  (match on" "    (on (ok 1))" "    (off (ok 0)))") "\n"))
         (res (em/emitC11Source src "flagMod.asl"))]
     (do
-      (assert (mt res ((ok _) true) ((err _) false)) "emitC11Source compiles a nullary enum variant construction")
-      (assert (mt res ((ok code) (stringContains? code "(AslVal*)0")) ((err _) false)) "a 0-field construct emits a typed null pointer, not an empty compound literal")
+      (assert (match res ((ok _) true) ((err _) false)) "emitC11Source compiles a nullary enum variant construction")
+      (assert (match res ((ok code) (stringContains? code "(AslVal*)0")) ((err _) false)) "a 0-field construct emits a typed null pointer, not an empty compound literal")
       true))
 
 fn testC11MainWrapperRecordReturn -> Bool

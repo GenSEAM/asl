@@ -20,23 +20,23 @@ fn ! node -> String
 fn ! llc -> String
   (let [(known (filter (fn [(c String)] -> Bool (= (sh (str "test -x " (shellQuote c))).exitCode 0))
                         (list "/opt/homebrew/opt/llvm/bin/llc" "/usr/local/opt/llvm/bin/llc" "/usr/lib/llvm-23/bin/llc" "/usr/lib/llvm-22/bin/llc" "/usr/lib/llvm-21/bin/llc" "/usr/lib/llvm-20/bin/llc" "/usr/lib/llvm-19/bin/llc" "/usr/lib/llvm-18/bin/llc")))]
-    (mt (listHead known) ((some c) c) ((none) (toolPath "llc"))))
+    (match (listHead known) ((some c) c) ((none) (toolPath "llc"))))
 
 fn ! linker -> String
   (let [(known (filter (fn [(c String)] -> Bool (= (sh (str "test -x " (shellQuote c))).exitCode 0))
                         (list "/opt/homebrew/bin/wasm-ld" "/opt/homebrew/opt/lld/bin/wasm-ld" "/usr/local/bin/wasm-ld" "/usr/local/opt/lld/bin/wasm-ld" "/usr/bin/wasm-ld" "/usr/lib/llvm-23/bin/wasm-ld" "/usr/lib/llvm-22/bin/wasm-ld" "/usr/lib/llvm-21/bin/wasm-ld" "/usr/lib/llvm-20/bin/wasm-ld" "/usr/lib/llvm-19/bin/wasm-ld" "/usr/lib/llvm-18/bin/wasm-ld")))]
-    (mt (listHead known) ((some c) c) ((none) (toolPath "wasm-ld"))))
+    (match (listHead known) ((some c) c) ((none) (toolPath "wasm-ld"))))
 
 fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
 
 fn ! emitLinked facts: libc/TripleFacts tf: target/TargetFacts source: String -> (Result String (List irTy/IrDiag))
-  (mt (lk/lowerSourceLinked! source)
+  (match (lk/lowerSourceLinked! source)
     ((err ds) (err ds))
     ((ok m) (llvm/emitLlvmProgramForTarget facts tf m "main")))
 
 fn text r: (Result String (List irTy/IrDiag)) -> String
-  (mt r ((ok s) s) ((err ds) (str "LOWERING ERROR: " (diag ds))))
+  (match r ((ok s) s) ((err ds) (str "LOWERING ERROR: " (diag ds))))
 
 fn diag ds: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.code ": " d.message)) ds) "; ")
@@ -58,7 +58,7 @@ fn ! nativeRun name: String source: String work: String -> ProcessOutput
         (bin (str work "/" name ".native"))]
     (do
       (assert (some? (libc/libcFacts triple)) (str name " has native facts for " triple))
-      (assert (ok? nativeText) (str name " native lowering: " (mt nativeText ((ok _) "ok") ((err ds) (diag ds)))))
+      (assert (ok? nativeText) (str name " native lowering: " (match nativeText ((ok _) "ok") ((err ds) (diag ds)))))
       (assert (ok? (fileWrite ll (text nativeText))) (str name " writes native IR"))
       (let [(linked (sh (str "/usr/bin/cc -Wno-override-module -x ir " (shellQuote ll) " -x none asl/host/out/libaslrt.a -lm -o " (shellQuote bin))))]
         (assert (= linked.exitCode 0) (str name " native link: " linked.stderr))
@@ -67,7 +67,7 @@ fn ! nativeRun name: String source: String work: String -> ProcessOutput
 fn ! runCase name: String -> Bool
   (let [(path (str "asl/packages/asl-target-llvm/tests/fixtures/wasmE2e/" name ".asl"))
         (read (fileReadString path))
-        (source (mt read ((ok s) s) ((err e) (str "FIXTURE READ ERROR: " e))))
+        (source (match read ((ok s) s) ((err e) (str "FIXTURE READ ERROR: " e))))
         (work (str "/tmp/asl-wasm-e2e/" name))
         (mainText (emitLinked (optionOr (libc/libcFacts "wasm32-unknown-unknown") (libc/emptyTripleFacts)) (target/wasm32TargetFacts) source))
         (runtime (llvm/emitLlvmRuntimeForTarget (optionOr (libc/libcFacts "wasm32-unknown-unknown") (libc/emptyTripleFacts)) (target/wasm32TargetFacts)))
@@ -76,9 +76,9 @@ fn ! runCase name: String -> Bool
     (do
       (assert (ok? read) (str name " reads fixture"))
       (assert (= (sh (str "mkdir -p " (shellQuote work))).exitCode 0) (str name " creates work directory"))
-      (assert (ok? mainText) (str name " wasm lowering: " (mt mainText ((ok _) "ok") ((err ds) (diag ds)))))
-      (assert (ok? runtime) (str name " emits wasm runtime: " (mt runtime ((ok _) "ok") ((err ds) (diag ds)))))
-      (assert (ok? support) (str name " emits wasm support: " (mt support ((ok _) "ok") ((err ds) (diag ds)))))
+      (assert (ok? mainText) (str name " wasm lowering: " (match mainText ((ok _) "ok") ((err ds) (diag ds)))))
+      (assert (ok? runtime) (str name " emits wasm runtime: " (match runtime ((ok _) "ok") ((err ds) (diag ds)))))
+      (assert (ok? support) (str name " emits wasm support: " (match support ((ok _) "ok") ((err ds) (diag ds)))))
       (assert (compile name "main" (text mainText) work) (str name " main object"))
       (assert (compile name "runtime" (text runtime) work) (str name " runtime object"))
       (assert (compile name "support" (text support) work) (str name " support object"))
@@ -86,7 +86,7 @@ fn ! runCase name: String -> Bool
             (linked (wl/linkWasm32 (linker) (list (str work "/main.o") (str work "/runtime.o") (str work "/support.o")) exports wasm))]
         (assert (= linked.exitCode 0) (str name " links without undefined imports: " linked.stderr)))
       (let [(imports (wl/wasmImports (node) wasm))]
-        (assert (ok? imports) (str name " import section reads: " (mt imports ((ok _) "ok") ((err e) e)))))
+        (assert (ok? imports) (str name " import section reads: " (match imports ((ok _) "ok") ((err e) e)))))
       (let [(native (nativeRun name source work))
             (gcCheck (if (= name "gcLoop") " --assert-gc" ""))
             (wasmRun (sh (str (shellQuote (node)) " tools/wasm/run.mjs " (shellQuote wasm) gcCheck)))]
@@ -131,7 +131,7 @@ fn ! absentCapabilityRejected -> Bool
         (read (fileReadString path))]
     (do
       (assert (ok? read) "reads tcpListen absent-capability fixture")
-      (mt (emitLinked (optionOr (libc/libcFacts "wasm32-unknown-unknown") (libc/emptyTripleFacts)) (target/wasm32TargetFacts) (mt read ((ok s) s) ((err e) (str "FIXTURE READ ERROR: " e))))
+      (match (emitLinked (optionOr (libc/libcFacts "wasm32-unknown-unknown") (libc/emptyTripleFacts)) (target/wasm32TargetFacts) (match read ((ok s) s) ((err e) (str "FIXTURE READ ERROR: " e))))
         ((ok _) false)
         ((err ds) (listAny? (fn [(d irTy/IrDiag)] -> Bool (and (= d.code "ERR_CAPABILITY_ABSENT") (stringContains? d.message "tcpListen"))) ds)))))
 

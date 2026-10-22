@@ -16,19 +16,19 @@ fn rowOf path: String hit: lint/LintHit -> LintRow
   (LintRow :file path :fnName hit.fnName :line hit.line :hint hit.message)
 
 fn ! lintHitsForFile! path: String -> (List LintRow)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) (list))
-    ((ok src) (mt (a/parseForChecker src)
+    ((ok src) (match (a/parseForChecker src)
                 ((err _) (list))
                 ((ok forms) (map (fn [(hit lint/LintHit)] -> LintRow (rowOf path hit)) (lint/lintModule forms path))))))
 
 fn ! lintTreeStep! files: (List String) acc: (List LintRow) -> (List LintRow)
-  (mt (listHead files)
+  (match (listHead files)
     ((none) acc)
     ((some p) (lintTreeStep! (optionOr (listTail files) (list)) (listAppend acc (lintHitsForFile! p)))))
 
 fn ! lintTree! ctx: h/Ctx -> (Result (List LintRow) String)
-  (mt (dc/walkIgnoring! ctx ctx.home)
+  (match (dc/walkIgnoring! ctx ctx.home)
     ((err e) (err e))
     ((ok files) (ok (lintTreeStep! files (list)))))
 
@@ -57,6 +57,6 @@ fn renderRows fmt: String rows: (List LintRow) -> String
   (cond ((= fmt "json") (j/dumps (lintJson rows))) ((= fmt "summary") (formatLintSummary rows)) (else (formatLintAsn rows)))
 
 fn ! runLint! ctx: h/Ctx fmt: String target: String -> h/Outcome
-  (mt (if (stringEmpty? target) (lintTree! ctx) (ok (lintHitsForFile! (t/absPath target ctx.cwd))))
+  (match (if (stringEmpty? target) (lintTree! ctx) (ok (lintHitsForFile! (t/absPath target ctx.cwd))))
     ((err e) (h/outcome "" (str "Error: " e "\n") 1))
     ((ok rows) (h/outcome (str (renderRows fmt rows) "\n") "" 0)))

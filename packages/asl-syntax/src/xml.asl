@@ -79,7 +79,7 @@ fn isNameByte b: Int64 -> Bool
       (= b 46))))
 
 fn sliceString bs: Bytes start: Int64 end: Int64 textOpt: (Option String) -> String
-  (mt textOpt
+  (match textOpt
     ((some text)
      (optionOr (stringSlice text start end) ""))
     ((none)
@@ -217,7 +217,7 @@ fn textHasInvalidAmpersand bs: Bytes idx: Int64 endIdx: Int64 len: Int64 -> Bool
   (if (>= idx endIdx)
     false
     (if (= (bytesGet bs idx) 38)
-      (mt (isValidRefAt bs len idx endIdx)
+      (match (isValidRefAt bs len idx endIdx)
         ((none) true)
         ((some nextIdx) (textHasInvalidAmpersand bs nextIdx endIdx len)))
       (textHasInvalidAmpersand bs (+ idx 1) endIdx len)))
@@ -230,7 +230,7 @@ fn textHasNonWhitespace bs: Bytes idx: Int64 endIdx: Int64 -> Bool
       true))
 
 fn attrListHasName attrs: (List XmlAttr) name: String -> Bool
-  (mt (listHead attrs)
+  (match (listHead attrs)
     ((none) false)
     ((some a)
      (if (= a.name name)
@@ -283,7 +283,7 @@ fn parseAttrNodeKind k: String start: Int64 end: Int64 -> (Option XmlAttr)
     (let [(c1 4)
           (lenK (stringLength k))
           (c2Opt (findCharInString k ":" 5 lenK))]
-      (mt c2Opt
+      (match c2Opt
         ((none) (none))
         ((some c2)
          (let [(nameLen (optionOr (stringSlice k 5 c2) ""))
@@ -334,7 +334,7 @@ fn parseAttributesLoop bs: Bytes len: Int64 idx: Int64 textOpt: (Option String)
                             (let [(valEnd (scanUnquotedVal bs len afterEq))
                                   (errTok (tr/makeToken "error" nameStart valEnd))]
                               (parseAttributesLoop bs len valEnd textOpt (cons (tr/elemToken errTok) tokAcc1) attrAcc true))
-                            (mt (scanAttrValLoop bs len (+ afterEq 1) q false)
+                            (match (scanAttrValLoop bs len (+ afterEq 1) q false)
                               ((none)
                                (let [(errTok (tr/makeToken "error" nameStart len))]
                                  (pair (listReverse (cons (tr/elemToken errTok) tokAcc1)) (pair (listReverse attrAcc) (pair len true)))))
@@ -381,7 +381,7 @@ fn parseTag bs: Bytes len: Int64 start: Int64 textOpt: (Option String) -> TagPar
               (node (tr/makeNode (str "endTag:" tagName) start (+ wsEnd 1) allToks))]
           (TagParseResult :kind "endTag" :tag tagName :node node :attrs (list) :endIdx (+ wsEnd 1) :error? false))
         (let [(closeOpt (scanUntilSubLoop bs len start (stringToBytes ">") 1))
-              (endPos (mt closeOpt ((some c) (+ c 1)) ((none) len)))
+              (endPos (match closeOpt ((some c) (+ c 1)) ((none) len)))
               (errTok (tr/makeToken "error" start endPos))
               (node (tr/makeErrorNode start endPos (list (tr/elemToken errTok))))]
           (TagParseResult :kind "endTag" :tag tagName :node node :attrs (list) :endIdx endPos :error? true))))
@@ -390,7 +390,7 @@ fn parseTag bs: Bytes len: Int64 start: Int64 textOpt: (Option String) -> TagPar
           (tagName (sliceString bs nameStart nameEnd textOpt))]
       (if (<= nameEnd nameStart)
         (let [(closeOpt (scanUntilSubLoop bs len start (stringToBytes ">") 1))
-              (endPos (mt closeOpt ((some c) (+ c 1)) ((none) len)))
+              (endPos (match closeOpt ((some c) (+ c 1)) ((none) len)))
               (errTok (tr/makeToken "error" start endPos))
               (node (tr/makeErrorNode start endPos (list (tr/elemToken errTok))))]
           (TagParseResult :kind "startTag" :tag "" :node node :attrs (list) :endIdx endPos :error? true))
@@ -420,7 +420,7 @@ fn parseTag bs: Bytes len: Int64 start: Int64 textOpt: (Option String) -> TagPar
                                 (tr/makeNode (str "startTag:" tagName) start (+ afterAttrs 1) allToks)))]
                     (TagParseResult :kind "startTag" :tag tagName :node node :attrs attrs :endIdx (+ afterAttrs 1) :error? attrErr?))
                   (let [(closeOpt (scanUntilSubLoop bs len afterAttrs (stringToBytes ">") 1))
-                        (endPos (mt closeOpt ((some c) (+ c 1)) ((none) len)))
+                        (endPos (match closeOpt ((some c) (+ c 1)) ((none) len)))
                         (errTok (tr/makeToken "error" afterAttrs endPos))
                         (allToks (listAppend allLeadingToks (list (tr/elemToken errTok))))
                         (node (tr/makeErrorNode start endPos allToks))]
@@ -428,7 +428,7 @@ fn parseTag bs: Bytes len: Int64 start: Int64 textOpt: (Option String) -> TagPar
 
 fn parseComment bs: Bytes len: Int64 start: Int64 -> (Pair tr/Node Int64)
   (let [(closeOpt (scanUntilSubLoop bs len (+ start 4) (stringToBytes "-->") 3))]
-    (mt closeOpt
+    (match closeOpt
       ((none)
        (let [(errTok (tr/makeToken "error" start len))
              (node (tr/makeErrorNode start len (list (tr/elemToken errTok))))]
@@ -449,7 +449,7 @@ fn parseComment bs: Bytes len: Int64 start: Int64 -> (Pair tr/Node Int64)
 
 fn parseCData bs: Bytes len: Int64 start: Int64 -> (Pair tr/Node Int64)
   (let [(closeOpt (scanUntilSubLoop bs len (+ start 9) (stringToBytes "]]>") 3))]
-    (mt closeOpt
+    (match closeOpt
       ((none)
        (let [(errTok (tr/makeToken "error" start len))
              (node (tr/makeErrorNode start len (list (tr/elemToken errTok))))]
@@ -461,7 +461,7 @@ fn parseCData bs: Bytes len: Int64 start: Int64 -> (Pair tr/Node Int64)
          (pair node endIdx)))))
 
 fn parseDoctype bs: Bytes len: Int64 start: Int64 -> (Pair tr/Node Int64)
-  (mt (scanDoctypeLoop bs len (+ start 9) false)
+  (match (scanDoctypeLoop bs len (+ start 9) false)
     ((none)
      (let [(errTok (tr/makeToken "error" start len))
            (node (tr/makeErrorNode start len (list (tr/elemToken errTok))))]
@@ -473,7 +473,7 @@ fn parseDoctype bs: Bytes len: Int64 start: Int64 -> (Pair tr/Node Int64)
 
 fn parsePI bs: Bytes len: Int64 start: Int64 isStart: Bool textOpt: (Option String) -> (Pair tr/Node Int64)
   (let [(closeOpt (scanUntilSubLoop bs len (+ start 2) (stringToBytes "?>") 2))]
-    (mt closeOpt
+    (match closeOpt
       ((none)
        (let [(errTok (tr/makeToken "error" start len))
              (node (tr/makeErrorNode start len (list (tr/elemToken errTok))))]
@@ -507,7 +507,7 @@ fn addChildToOpenElem top: OpenElem elem: tr/TreeElement -> OpenElem
   (with top :children (cons elem top.children))
 
 fn addTreeElem openStack: (List OpenElem) topElems: (List tr/TreeElement) elem: tr/TreeElement -> (Pair (List OpenElem) (List tr/TreeElement))
-  (mt (listHead openStack)
+  (match (listHead openStack)
     ((none) (pair openStack (cons elem topElems)))
     ((some top)
      (let [(updatedTop (addChildToOpenElem top elem))
@@ -515,13 +515,13 @@ fn addTreeElem openStack: (List OpenElem) topElems: (List tr/TreeElement) elem: 
        (pair newStack topElems))))
 
 fn unwindStackAtEof stack: (List OpenElem) len: Int64 -> (Option tr/TreeElement)
-  (mt (listHead stack)
+  (match (listHead stack)
     ((none) (none))
     ((some top)
      (let [(tail (optionOr (listTail stack) (list)))
            (children (listReverse top.children))
            (errNode (tr/makeErrorNode top.start len children))]
-       (mt (listHead tail)
+       (match (listHead tail)
          ((none) (some (tr/elemNode errNode)))
          ((some parent)
           (let [(updatedParent (addChildToOpenElem parent (tr/elemNode errNode)))
@@ -534,7 +534,7 @@ fn parseXmlLoop bs: Bytes len: Int64 idx: Int64 textOpt: (Option String)
                 rootSeen: Bool -> tr/Node
   (if (>= idx len)
     (let [(unwoundOpt (unwindStackAtEof openStack len))
-          (allElems (mt unwoundOpt
+          (allElems (match unwoundOpt
                       ((none) (listReverse topElems))
                       ((some elem) (listReverse (cons elem topElems)))))]
       (tr/makeNode "document" 0 len allElems))
@@ -542,7 +542,7 @@ fn parseXmlLoop bs: Bytes len: Int64 idx: Int64 textOpt: (Option String)
       (cond
         ((!= b 60)
          (let [(nextLt (scanUntilSubLoop bs len idx (stringToBytes "<") 1))
-               (textEnd (mt nextLt ((some n) n) ((none) len)))
+               (textEnd (match nextLt ((some n) n) ((none) len)))
                (isWsOnly (not (textHasNonWhitespace bs idx textEnd)))
                (hasBadCData (textContainsCDataEnd bs idx textEnd))
                (hasBadAmp (textHasInvalidAmpersand bs idx textEnd len))
@@ -606,7 +606,7 @@ fn parseXmlLoop bs: Bytes len: Int64 idx: Int64 textOpt: (Option String)
                         (res (addTreeElem openStack topElems (tr/elemNode finalElemNode)))]
                     (parseXmlLoop bs len nextIdx textOpt (pairFirst res) (pairSecond res) true)))))
              ((= tKind "endTag")
-              (mt (listHead openStack)
+              (match (listHead openStack)
                 ((none)
                  (let [(errNode (tr/makeErrorNode idx nextIdx (list (tr/elemNode tNode))))
                        (res (addTreeElem openStack topElems (tr/elemNode errNode)))]
@@ -651,17 +651,17 @@ fn firstErrorOffset node: tr/Node -> (Option Int64)
     (firstErrorElementList (tr/nodeChildren node)))
 
 fn firstErrorElementList elems: (List tr/TreeElement) -> (Option Int64)
-  (mt (listHead elems)
+  (match (listHead elems)
     ((none) (none))
     ((some elem)
      (let [(tail (optionOr (listTail elems) (list)))]
-       (mt elem
+       (match elem
          ((elemToken tok)
           (if (tr/isErrorToken tok)
             (some (tr/tokenStart tok))
             (firstErrorElementList tail)))
          ((elemNode n)
-          (mt (firstErrorOffset n)
+          (match (firstErrorOffset n)
             ((some off) (some off))
             ((none) (firstErrorElementList tail))))))))
 
@@ -689,10 +689,10 @@ fn isWellFormed root: tr/Node -> Bool
   (not (sym/hasErrorNode root))
 
 fn findFirstElement elems: (List tr/TreeElement) -> (Option tr/Node)
-  (mt (listHead elems)
+  (match (listHead elems)
     ((none) (none))
     ((some elem)
-     (mt elem
+     (match elem
        ((elemToken _) (findFirstElement (optionOr (listTail elems) (list))))
        ((elemNode n)
         (if (stringStartsWith? (tr/nodeKind n) "element:")
@@ -713,10 +713,10 @@ fn elementName node: tr/Node -> String
           ""))))
 
 fn filterElementChildren elems: (List tr/TreeElement) acc: (List tr/Node) -> (List tr/Node)
-  (mt (listHead elems)
+  (match (listHead elems)
     ((none) (listReverse acc))
     ((some elem)
-     (mt elem
+     (match elem
        ((elemToken _) (filterElementChildren (optionOr (listTail elems) (list)) acc))
        ((elemNode n)
         (if (stringStartsWith? (tr/nodeKind n) "element:")
@@ -727,10 +727,10 @@ fn elementChildren node: tr/Node -> (List tr/Node)
   (filterElementChildren (tr/nodeChildren node) (list))
 
 fn findTagNodeInElem elems: (List tr/TreeElement) -> (Option tr/Node)
-  (mt (listHead elems)
+  (match (listHead elems)
     ((none) (none))
     ((some elem)
-     (mt elem
+     (match elem
        ((elemToken _) (findTagNodeInElem (optionOr (listTail elems) (list))))
        ((elemNode n)
         (let [(k (tr/nodeKind n))]
@@ -739,24 +739,24 @@ fn findTagNodeInElem elems: (List tr/TreeElement) -> (Option tr/Node)
             (findTagNodeInElem (optionOr (listTail elems) (list)))))))))
 
 fn collectAttrsFromElements elems: (List tr/TreeElement) acc: (List XmlAttr) -> (List XmlAttr)
-  (mt (listHead elems)
+  (match (listHead elems)
     ((none) (listReverse acc))
     ((some elem)
-     (mt elem
+     (match elem
        ((elemToken _) (collectAttrsFromElements (optionOr (listTail elems) (list)) acc))
        ((elemNode n)
-        (mt (parseAttrNodeKind (tr/nodeKind n) (tr/nodeStart n) (tr/nodeEnd n))
+        (match (parseAttrNodeKind (tr/nodeKind n) (tr/nodeStart n) (tr/nodeEnd n))
           ((none) (collectAttrsFromElements (optionOr (listTail elems) (list)) acc))
           ((some a) (collectAttrsFromElements (optionOr (listTail elems) (list)) (cons a acc))))))))
 
 fn elementAttributes node: tr/Node -> (List XmlAttr)
-  (mt (findTagNodeInElem (tr/nodeChildren node))
+  (match (findTagNodeInElem (tr/nodeChildren node))
     ((none) (list))
     ((some tagNode)
      (collectAttrsFromElements (tr/nodeChildren tagNode) (list))))
 
 fn findNamedAttr attrs: (List XmlAttr) name: String -> (Option String)
-  (mt (listHead attrs)
+  (match (listHead attrs)
     ((none) (none))
     ((some a)
      (if (= a.name name)
@@ -764,7 +764,7 @@ fn findNamedAttr attrs: (List XmlAttr) name: String -> (Option String)
        (findNamedAttr (optionOr (listTail attrs) (list)) name))))
 
 fn findIdAttr attrs: (List XmlAttr) -> (Option String)
-  (mt (listHead attrs)
+  (match (listHead attrs)
     ((none) (none))
     ((some a)
      (if (or (= a.name "id") (= a.name "xml:id"))
@@ -786,7 +786,7 @@ fn collectSymbolsLoop node: tr/Node parentTag: String depth: Int64 acc: (List sy
             (end (tr/nodeEnd node))
             (elemSym (sym/makeScopedSymbolDef tag "element" start end parentTag depth))
             (acc1 (cons elemSym acc))
-            (acc2 (mt (elementId node)
+            (acc2 (match (elementId node)
                     ((none) acc1)
                     ((some idVal)
                      (cons (sym/makeScopedSymbolDef idVal "id" start end tag (+ depth 1)) acc1))))
@@ -797,7 +797,7 @@ fn collectSymbolsLoop node: tr/Node parentTag: String depth: Int64 acc: (List sy
               children))))
 
 fn extractSymbols root: tr/Node -> (List sym/SymbolDef)
-  (mt (documentRootElement root)
+  (match (documentRootElement root)
     ((none) (list))
     ((some rootElem)
      (listReverse (collectSymbolsLoop rootElem "" 0 (list)))))

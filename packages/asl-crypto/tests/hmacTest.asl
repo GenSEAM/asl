@@ -3,7 +3,7 @@
   :i [(asl-crypto/hmac :a h)] )
 
 fn decoded text: String -> Bytes
-  (mt (h/hexToBytes text) ((ok b) b) ((err _) (bytesAlloc 0)))
+  (match (h/hexToBytes text) ((ok b) b) ((err _) (bytesAlloc 0)))
 
 fn repeatedByte value: Int64 count: Int64 -> Bytes
   (let [(out (bytesAlloc count))
@@ -32,5 +32,5 @@ fn runTests -> Bool
     (assert (not (h/constantTimeEqual (decoded "00ff10") (decoded "01ff10"))) "first-byte difference")
     (assert (not (h/constantTimeEqual (decoded "00ff10") (decoded "00ff"))) "different length")
     (assert (= (h/bytesToHex (decoded "ab12cd")) "ab12cd") "hex round trip")
-    (assert (mt (h/hexToBytes "0xz1") ((ok _) false) ((err _) true)) "hex rejects invalid characters")
+    (assert (match (h/hexToBytes "0xz1") ((ok _) false) ((err _) true)) "hex rejects invalid characters")
     true)

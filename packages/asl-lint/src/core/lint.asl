@@ -9,10 +9,10 @@
 (schema QualityMetrics (:f totalNodes I64) (:f maxNesting I64) (:f errorCount I64) (:f warningCount I64) (:f score I64))
 
 fn isError sev: SmellSeverity -> Bool
-  (mt sev ((error) true) (_ false))
+  (match sev ((error) true) (_ false))
 
 fn severityPenalty sev: SmellSeverity -> I64
-  (mt sev ((error) 25) ((warning) 5) ((info) 0))
+  (match sev ((error) 25) ((warning) 5) ((info) 0))
 
 fn calculateQualityScore errorCount: I64 warningCount: I64 -> I64
   (let [(penalty (+ (* errorCount 25) (* warningCount 5)))] (if (>= penalty 100) 0 (- 100 penalty)))
@@ -24,7 +24,7 @@ fn shouldBlockGate metrics: QualityMetrics -> Bool
   (if (> metrics.errorCount 0) true (< metrics.score 70))
 
 fn canAutofix code: SmellCode -> Bool
-  (mt code ((duplicateMatchArm) true) ((unusedBinding) true) ((excessiveNesting) false) ((deadBranch) false) ((bareResultDiscard) false) ((fileTooLarge) false) ((microFragmentation) false) ((excessiveComments) false))
+  (match code ((duplicateMatchArm) true) ((unusedBinding) true) ((excessiveNesting) false) ((deadBranch) false) ((bareResultDiscard) false) ((fileTooLarge) false) ((microFragmentation) false) ((excessiveComments) false))
 
 fn checkC1Balance code: Str -> bal/BalanceResult
   (bal/checkDyck1Balance code)

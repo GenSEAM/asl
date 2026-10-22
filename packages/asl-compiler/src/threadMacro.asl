@@ -22,7 +22,7 @@ fn threadFirstStep acc: String step: String -> String
     (if (and (stringStartsWith? clean "(") (stringEndsWith? clean ")"))
       (let [(inner (optionOr (stringSlice clean 1 (- (stringLength clean) 1)) ""))
             (spaceIdx (stringIndexOf inner " "))]
-        (mt spaceIdx
+        (match spaceIdx
           ((none) (str "(" inner " " acc ")"))
           ((some idx)
             (let [(head (optionOr (stringSlice inner 0 idx) ""))
@@ -110,7 +110,7 @@ fn expandThreadMacro innerExpr: String -> String
           (foldThreadFirst initial steps 0 (listLength steps))))))
 
 fn expandThreadInSourceHelper src: String prefix: String -> String
-  (mt (stringIndexOf src prefix)
+  (match (stringIndexOf src prefix)
     ((none) src)
     ((some idx)
       (let [(before (optionOr (stringSlice src 0 idx) ""))

@@ -57,18 +57,18 @@ fn tailOf xs: (List String) -> (List String)
   (optionOr (listTail xs) (list))
 
 fn parseForms src: String -> (Result (List rd/SExpr) String)
-  (mt (ast/readForms (lx/tokenize src))
+  (match (ast/readForms (lx/tokenize src))
     ((err e) (err e.msg))
     ((ok pfs) (ok (map (fn [(pf ast/PosForm)] -> rd/SExpr pf.expr) pfs))))
 
 fn atomText s: rd/SExpr -> String
-  (mt s ((rd/sexprAtom v) v) (_ ""))
+  (match s ((rd/sexprAtom v) v) (_ ""))
 
 fn itemsOf s: rd/SExpr -> (List rd/SExpr)
-  (mt s ((rd/sexprList xs) xs) ((rd/sexprVect xs) xs) (_ (list)))
+  (match s ((rd/sexprList xs) xs) ((rd/sexprVect xs) xs) (_ (list)))
 
 fn isSeq s: rd/SExpr -> Bool
-  (mt s ((rd/sexprAtom _) false) (_ true))
+  (match s ((rd/sexprAtom _) false) (_ true))
 
 fn unquote v: String -> String
   (if (and (stringStartsWith? v "\"") (and (stringEndsWith? v "\"") (>= (stringLength v) 2)))
@@ -79,7 +79,7 @@ fn stripColon v: String -> String
   (if (stringStartsWith? v ":") (optionOr (stringSlice v 1 (stringLength v)) v) v)
 
 fn kvGet items: (List rd/SExpr) key: String -> (Option rd/SExpr)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (none))
     ((some it)
       (let [(rest (optionOr (listTail items) (list)))]
@@ -94,10 +94,10 @@ fn keyIds forms: (List rd/SExpr) -> (List String)
   (map (fn [(k rd/SExpr)] -> String (stripColon (atomText (optionOr (listGet (itemsOf k) 1) (rd/makeAtom ""))))) forms)
 
 fn loadSpec text: String -> (Result MetaSpec String)
-  (mt (parseForms text)
+  (match (parseForms text)
     ((err e) (err (str "meta.asn does not read: " e)))
     ((ok forms)
-      (mt (listHead forms)
+      (match (listHead forms)
         ((none) (err "meta.asn is empty"))
         ((some top)
           (let [(items (itemsOf top))]
@@ -116,20 +116,20 @@ fn loadSpec text: String -> (Result MetaSpec String)
                   (else (ok (MetaSpec :keys keys :tags tags :effects effects :whyWords why :pragmas pragmas)))))))))))
 
 fn readOr! path: String fallback: String -> String
-  (mt (fileReadString path) ((ok s) s) ((err _) fallback))
+  (match (fileReadString path) ((ok s) s) ((err _) fallback))
 
 fn joinPath dir: String name: String -> String
   (if (or (stringEmpty? dir) (= dir ".")) name (str dir "/" name))
 
 fn walkEntries! dir: String names: (List String) depth: Int64 acc: (List String) -> (List String)
-  (mt (listHead names)
+  (match (listHead names)
     ((none) acc)
     ((some n) (walkEntries! dir (tailOf names) depth (walkEntry! (joinPath dir n) n depth acc))))
 
 fn walkEntry! path: String name: String depth: Int64 acc: (List String) -> (List String)
   (if (or (stringStartsWith? name ".") (= name "node_modules"))
     acc
-    (mt (fileStat path)
+    (match (fileStat path)
       ((err _) acc)
       ((ok st)
         (cond
@@ -140,11 +140,11 @@ fn walkEntry! path: String name: String depth: Int64 acc: (List String) -> (List
 fn walkDir! dir: String depth: Int64 acc: (List String) -> (List String)
   (if (>= depth 32)
     acc
-    (mt (dirList dir) ((err _) acc) ((ok names) (walkEntries! dir names depth acc))))
+    (match (dirList dir) ((err _) acc) ((ok names) (walkEntries! dir names depth acc))))
 
 fn packageTests! root: String -> (List String)
   (let [(pkgDir (joinPath root "asl/packages"))]
-    (mt (dirList pkgDir)
+    (match (dirList pkgDir)
       ((err _) (list))
       ((ok names) (fold (fn [(acc (List String)) (n String)] -> (List String) (walkDir! (str pkgDir "/" n "/tests") 0 acc)) (list) names))))
 
@@ -158,7 +158,7 @@ fn loadCtx! root: String spec: MetaSpec tracked: (List String) -> Ctx
                   (readOr! (joinPath root ".asl/rules.asn") ""))
        :principles (readOr! (joinPath root ".asl/mem/principles.asn") "")
        :decisions (readOr! (joinPath root ".asl/mem/decisions/decisions.asn") "")
-       :decisionFiles (mt (dirList (joinPath root ".asl/mem/decisions")) ((ok ns) ns) ((err _) (list)))
+       :decisionFiles (match (dirList (joinPath root ".asl/mem/decisions")) ((ok ns) ns) ((err _) (list)))
        :tests (walkDir! (joinPath root "tests") 0 (packageTests! root))
        :tracked tracked)
 
@@ -207,13 +207,13 @@ fn violation path: String line: Int64 kind: String ev: String -> Violation
   (Violation :file path :line line :kind kind :ev ev)
 
 fn isAtomOrDotChain? e: rd/SExpr -> Bool
-  (mt e ((rd/sexprAtom _) true) (_ (isDotChain? e)))
+  (match e ((rd/sexprAtom _) true) (_ (isDotChain? e)))
 
 fn isDotChain? e: rd/SExpr -> Bool
-  (mt e
+  (match e
     ((rd/sexprList items)
       (and (= (listLength items) 2)
-           (mt (optionOr (listHead items) (rd/makeAtom ""))
+           (match (optionOr (listHead items) (rd/makeAtom ""))
              ((rd/sexprAtom h) (and (stringStartsWith? h ".-") (isAtomOrDotChain? (optionOr (listGet items 1) (rd/makeAtom "")))))
              (_ false))))
     (_ false))
@@ -256,7 +256,7 @@ fn checkValue! ctx: Ctx path: String line: Int64 key: String val: rd/SExpr -> (L
       (else (list (violation path line "keyUnchecked" key)))))
 
 fn checkPairs! ctx: Ctx path: String line: Int64 items: (List rd/SExpr) seen: (List String) acc: (List Violation) gate: String -> (Pair (List Violation) String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (pair acc gate))
     ((some k)
       (let [(rest (optionOr (listTail items) (list)))
@@ -270,7 +270,7 @@ fn checkPairs! ctx: Ctx path: String line: Int64 items: (List rd/SExpr) seen: (L
           ((listContains? seen key)
             (checkPairs! ctx path line (optionOr (listTail rest) (list)) seen (cons (violation path line "keyRepeated" kt) acc) gate))
           (else
-            (mt (listHead rest)
+            (match (listHead rest)
               ((none) (pair (cons (violation path line "valueMissing" kt) acc) gate))
               ((some v)
                 (checkPairs! ctx path line (optionOr (listTail rest) (list)) (cons key seen)
@@ -278,7 +278,7 @@ fn checkPairs! ctx: Ctx path: String line: Int64 items: (List rd/SExpr) seen: (L
                   (if (= key "gate") (atomText v) gate)))))))))
 
 fn checkMeta! ctx: Ctx path: String line: Int64 body: String -> (Pair (List Violation) String)
-  (mt (parseForms body)
+  (match (parseForms body)
     ((err e) (pair (list (violation path line "formUnreadable" body)) ""))
     ((ok forms)
       (if (!= (listLength forms) 1)
@@ -310,7 +310,7 @@ fn afterPrefix text: String prefix: String -> String
   (stringTrim (optionOr (stringSlice text (stringLength prefix) (stringLength text)) ""))
 
 fn firstPrefix text: String prefixes: (List String) -> (Option String)
-  (mt (listHead prefixes)
+  (match (listHead prefixes)
     ((none) (none))
     ((some p) (if (stringStartsWith? text p) (some p) (firstPrefix text (tailOf prefixes)))))
 
@@ -326,11 +326,11 @@ fn assignedName text: String -> String
 fn definedSymbol lang: String text: String -> String
   (cond
     ((= lang "python")
-      (mt (firstPrefix text (list "async def " "def " "class "))
+      (match (firstPrefix text (list "async def " "def " "class "))
         ((some p) (leadingIdent (afterPrefix text p)))
         ((none) (assignedName text))))
     ((= lang "shell")
-      (let [(t (mt (firstPrefix text (list "function " "readonly " "export " "local " "declare "))
+      (let [(t (match (firstPrefix text (list "function " "readonly " "export " "local " "declare "))
                  ((some p) (afterPrefix text p))
                  ((none) text)))
             (name (leadingIdent t))
@@ -342,7 +342,7 @@ fn definedSymbol lang: String text: String -> String
           ((stringStartsWith? (stringTrim rest) "()") name)
           (else ""))))
     ((= lang "asl")
-      (mt (firstPrefix text (list "fn ! " "fn " "(fn " "(schema " "(enum " "(module " "(def "))
+      (match (firstPrefix text (list "fn ! " "fn " "(fn " "(schema " "(enum " "(module " "(def "))
         ((some p) (leadingIdent (afterPrefix text p)))
         ((none) "")))
     (else ""))
@@ -403,7 +403,7 @@ fn openQuote text: String -> String
       (else "")))
 
 fn resolvePending! ctx: Ctx path: String lang: String st: Scan text: String -> Scan
-  (mt st.pending
+  (match st.pending
     ((none) st)
     ((some p)
       (cond
@@ -436,11 +436,11 @@ fn scanLine! ctx: Ctx path: String lang: String lineNo: Int64 st: Scan raw: Stri
               (st1 (if st.docstring (addPlain st) st))]
           (if closes (setQuote st1 "" false) st1)))
       ((stringEmpty? text)
-        (mt st.pending
+        (match st.pending
           ((none) st)
           ((some p) (withViolations (setPending st (none)) (list (violation path p.line "definitionMissing" "blank line"))))))
       ((stringStartsWith? text (marker lang))
-        (let [(st0 (mt st.pending
+        (let [(st0 (match st.pending
                      ((none) st)
                      ((some p) (withViolations (setPending st (none)) (list (violation path p.line "definitionMissing" text))))))]
           (scanComment! ctx path lang lineNo st0 text)))
@@ -467,14 +467,14 @@ fn splitLines bs: Bytes text: String -> (List String)
   (splitLoop bs text 0 (bytesLength bs) (list))
 
 fn scanLines! ctx: Ctx path: String lang: String lines: (List String) lineNo: Int64 st: Scan -> Scan
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) st)
     ((some l) (scanLines! ctx path lang (tailOf lines) (+ lineNo 1) (scanLine! ctx path lang lineNo st l))))
 
 fn scanText! ctx: Ctx path: String lang: String text: String -> FileScan
   (let [(st0 (Scan :plain 0 :metas 0 :violations (list) :pending (none) :quote "" :docstring false))
         (st (scanLines! ctx path lang (splitLines (stringToBytes text) text) 1 st0))
-        (final (mt st.pending
+        (final (match st.pending
                  ((none) st)
                  ((some p) (withViolations (setPending st (none)) (list (violation path p.line "definitionMissing" "end of file"))))))]
     (FileScan :path path :plain final.plain :metas final.metas :violations (listReverse final.violations)))
@@ -486,19 +486,19 @@ fn scanFile! ctx: Ctx path: String -> (Option (Result FileScan String))
   (let [(extLang (fileLang path ""))]
     (if (and (stringEmpty? extLang)
              (or (stringContains? (lastSegment path) ".")
-                 (mt (fileStat path) ((ok st) (not st.isFile)) ((err _) true))))
+                 (match (fileStat path) ((ok st) (not st.isFile)) ((err _) true))))
       (none)
-      (mt (fileReadString path)
+      (match (fileReadString path)
         ((err _) (some (err path)))
         ((ok text)
           (let [(lang (if (stringEmpty? extLang) (fileLang path (firstLineOf text)) extLang))]
             (if (stringEmpty? lang) (none) (some (ok (scanText! ctx path lang text)))))))))
 
 fn parseBaseline text: String -> (Result (List (Pair String Int64)) String)
-  (mt (parseForms text)
+  (match (parseForms text)
     ((err e) (err (str "baseline does not read: " e)))
     ((ok forms)
-      (mt (listHead forms)
+      (match (listHead forms)
         ((none) (ok (list)))
         ((some top)
           (ok (fold (fn [(acc (List (Pair String Int64))) (f rd/SExpr)] -> (List (Pair String Int64))
@@ -511,24 +511,24 @@ fn parseBaseline text: String -> (Result (List (Pair String Int64)) String)
                     (list) (itemsOf top)))))))
 
 fn rowFor rows: (List (Pair String Int64)) path: String -> (Option Int64)
-  (mt (listHead rows)
+  (match (listHead rows)
     ((none) (none))
     ((some r) (if (= (pairFirst r) path) (some (pairSecond r)) (rowFor (optionOr (listTail rows) (list)) path))))
 
 fn ratchet row: (Option Int64) fs: FileScan -> (List Violation)
   (let [(n fs.plain)]
-    (mt row
+    (match row
       ((none) (if (> n 0) (list (violation fs.path 0 "plainGrowth" (str (stringFromInt64 n) " over none"))) (list)))
       ((some b) (if (> n b) (list (violation fs.path 0 "plainGrowth" (str (stringFromInt64 n) " over " (stringFromInt64 b)))) (list)))))
 
 fn auditPaths! ctx: Ctx rows: (List (Pair String Int64)) paths: (List String) -> Audit
   (let [(results (fold (fn [(acc (List (Result FileScan String))) (p String)] -> (List (Result FileScan String))
-                         (mt (scanFile! ctx p) ((none) acc) ((some r) (cons r acc))))
+                         (match (scanFile! ctx p) ((none) acc) ((some r) (cons r acc))))
                        (list) paths))
         (scans (fold (fn [(acc (List FileScan)) (r (Result FileScan String))] -> (List FileScan)
-                       (mt r ((ok s) (cons s acc)) ((err _) acc))) (list) results))
+                       (match r ((ok s) (cons s acc)) ((err _) acc))) (list) results))
         (unreadable (fold (fn [(acc (List Violation)) (r (Result FileScan String))] -> (List Violation)
-                            (mt r ((err p) (cons (violation p 0 "unreadable" p) acc)) ((ok _) acc))) (list) results))]
+                            (match r ((err p) (cons (violation p 0 "unreadable" p) acc)) ((ok _) acc))) (list) results))]
     (tally rows scans unreadable))
 
 fn tally rows: (List (Pair String Int64)) scans: (List FileScan) unreadable: (List Violation) -> Audit
@@ -575,7 +575,7 @@ fn baselineText a: Audit date: String -> String
   (:f paths (List String)))
 
 fn parseArgs args: (List String) a: Args -> (Result Args String)
-  (mt (listHead args)
+  (match (listHead args)
     ((none) (ok a))
     ((some x)
       (let [(rest (tailOf args)) (v (optionOr (listHead (tailOf args)) "")) (rest2 (tailOf (tailOf args)))]
@@ -610,17 +610,17 @@ fn seedCaseLine item: rd/SExpr -> String
          ")"))
 
 fn seedCaseItems items: (List rd/SExpr) acc: (List String) -> (List String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (listReverse acc))
     ((some item)
       (let [(isCase (= (atomText (optionOr (listHead (itemsOf item)) (rd/makeAtom ""))) ":case"))]
         (seedCaseItems (optionOr (listTail items) (list)) (if isCase (cons (seedCaseLine item) acc) acc)))))
 
 fn seedCaseReceipts cases: String -> (Result String String)
-  (mt (parseForms cases)
+  (match (parseForms cases)
     ((err e) (err (str "cases.asn does not read: " e)))
     ((ok forms)
-      (mt (listHead forms)
+      (match (listHead forms)
         ((none) (err "cases.asn is empty"))
         ((some top)
           (let [(rows (seedCaseItems (itemsOf top) (list)))]
@@ -629,30 +629,30 @@ fn seedCaseReceipts cases: String -> (Result String String)
               (ok (fold (fn [(acc String) (row String)] -> String (str acc row "\n")) "" rows))))))))
 
 fn ! main args: (List String) -> (Result Int64 String)
-  (mt (parseArgs args (Args :root "." :meta "" :baseline "" :list "" :seed "" :paths (list)))
+  (match (parseArgs args (Args :root "." :meta "" :baseline "" :list "" :seed "" :paths (list)))
     ((err e) (fail! (str e "; usage: metaAudit.asl [--root DIR] [--meta FILE] [--baseline FILE] [--list FILE] [--seed DATE] PATH...") 64))
     ((ok a)
       (let [(root a.root)
-            (listed (if (stringEmpty? a.list) (ok (list)) (mt (fileReadString a.list) ((ok t) (ok (listLines t))) ((err _) (err a.list)))))]
-        (mt listed
+            (listed (if (stringEmpty? a.list) (ok (list)) (match (fileReadString a.list) ((ok t) (ok (listLines t))) ((err _) (err a.list)))))]
+        (match listed
           ((err p) (fail! (str "cannot read list file " p) 2))
           ((ok tracked)
             (let [(paths (listAppend tracked (listReverse a.paths)))]
               (if (listEmpty? paths)
                 (fail! "no paths; usage: metaAudit.asl [--root DIR] [--meta FILE] [--baseline FILE] [--list FILE] [--seed DATE] PATH..." 64)
-                (mt (fileReadString (orDefault a.meta (joinPath root "asl/grammar/meta.asn")))
+                (match (fileReadString (orDefault a.meta (joinPath root "asl/grammar/meta.asn")))
                   ((err _) (fail! "cannot read meta.asn" 2))
                   ((ok metaText)
-                    (mt (loadSpec metaText)
+                    (match (loadSpec metaText)
                       ((err e) (fail! e 2))
                       ((ok spec)
                         (let [(ctx (loadCtx! root spec tracked))]
                           (if (not (stringEmpty? a.seed))
                             (do (print (baselineText (auditPaths! ctx (list) paths) a.seed)) (ok 0))
-                            (mt (fileReadString (orDefault a.baseline (joinPath root "scripts/audit/metaBaseline.asn")))
+                            (match (fileReadString (orDefault a.baseline (joinPath root "scripts/audit/metaBaseline.asn")))
                               ((err _) (fail! "cannot read the baseline" 2))
                               ((ok baseText)
-                                (mt (parseBaseline baseText)
+                                (match (parseBaseline baseText)
                                   ((err e) (fail! e 2))
                                   ((ok rows)
                                     (let [(audit (auditPaths! ctx rows paths))]

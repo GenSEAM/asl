@@ -1,7 +1,7 @@
 (module asl-know/examples/coreOption :x [parsePort selfTest] :i [])
 
 fn parsePort s: String -> (Result Int64 String)
-  (mt (stringToInt64 s)
+  (match (stringToInt64 s)
     ((none) (err (str "not a number: " s)))
     ((some n) (if (and (> n 0) (< n 65536)) (ok n) (err "out of range"))))
 

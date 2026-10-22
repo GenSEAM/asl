@@ -192,17 +192,17 @@ fn sourcePosAt s: Source offset: Int64 -> (Option SourcePos)
         (some (SourcePos :line line :byteCol byteCol :charCol charCol)))))
 
 fn sourceLineAt s: Source offset: Int64 -> (Option Int64)
-  (mt (sourcePosAt s offset)
+  (match (sourcePosAt s offset)
     ((some p) (some p.line))
     ((none) (none)))
 
 fn sourceByteColAt s: Source offset: Int64 -> (Option Int64)
-  (mt (sourcePosAt s offset)
+  (match (sourcePosAt s offset)
     ((some p) (some p.byteCol))
     ((none) (none)))
 
 fn sourceCharColAt s: Source offset: Int64 -> (Option Int64)
-  (mt (sourcePosAt s offset)
+  (match (sourcePosAt s offset)
     ((some p) (some p.charCol))
     ((none) (none)))
 
@@ -327,7 +327,7 @@ fn sourceBinaryKind s: Source -> String
   (binaryKind s.bytes)
 
 fn binaryKindFile! path: String -> (Result String String)
-  (mt (fileReadBytes path)
+  (match (fileReadBytes path)
     ((ok bs) (ok (binaryKind bs)))
     ((err e) (err e)))
 

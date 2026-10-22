@@ -14,17 +14,17 @@ fn straightSource n: Int64 -> String
 
 fn ! cpuMicros -> Int64
   (let [(usageResult (procRusage))]
-    (mt usageResult
+    (match usageResult
       ((err e) (do (assert (ok? usageResult) (str "procRusage failed: " e)) 0))
       ((ok usage) (+ usage.selfUserUs usage.selfSysUs))))
 
 fn ! emitCpu source: String -> Int64
-  (mt (low/lowerSource source)
+  (match (low/lowerSource source)
     ((err ds) (do (println "emitScale lower diagnostic:" ds) -1))
     ((ok m) (let [(startEmit (cpuMicros))
                   (emitted (llvm/emitLlvmProgram m "main"))
                   (endEmit (cpuMicros))]
-              (mt emitted
+              (match emitted
                 ((err ds) (do (println "emitScale emit diagnostic:" ds) -1))
                 ((ok text) (- endEmit startEmit))))))
 

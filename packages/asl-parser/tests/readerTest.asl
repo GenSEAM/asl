@@ -11,16 +11,16 @@ fn errText e: a/ParseError -> String
   (str (stringFromInt64 e.line) ":" (stringFromInt64 e.col) ": " e.msg)
 
 fn projParse src: String -> String
-  (mt (a/parse src) ((err e) (errText e)) ((ok forms) (if (listEmpty? forms) "none" (stringJoin (map (fn [(t a/TopForm)] -> String (projForm t)) forms) "|"))))
+  (match (a/parse src) ((err e) (errText e)) ((ok forms) (if (listEmpty? forms) "none" (stringJoin (map (fn [(t a/TopForm)] -> String (projForm t)) forms) "|"))))
 
 fn projForm t: a/TopForm -> String
-  (mt t ((a/topModule m) (projModule m)) ((a/topSchema s) (projSchema s)) ((a/topEnum e) (projEnum e)) ((a/topDefun d) (projDefun d)) ((a/topExpr p) (str "expr|" (rd/renderSexpr p.expr))))
+  (match t ((a/topModule m) (projModule m)) ((a/topSchema s) (projSchema s)) ((a/topEnum e) (projEnum e)) ((a/topDefun d) (projDefun d)) ((a/topExpr p) (str "expr|" (rd/renderSexpr p.expr))))
 
 fn projModule m: a/ModuleNode -> String
   (str "module|" m.path "|" m.docstring "|" (stringFromInt64 (listLength m.exported)) "|" (stringFromInt64 (listLength m.imports)) "|" (stringFromInt64 (listLength m.defs)))
 
 fn projSchema s: a/SchemaNode -> String
-  (let [(jc (mt s.jsonCase ((some v) v) ((none) "none")))] (str "schema|" s.name "|" (stringFromInt64 (listLength s.fields)) "|" jc))
+  (let [(jc (match s.jsonCase ((some v) v) ((none) "none")))] (str "schema|" s.name "|" (stringFromInt64 (listLength s.fields)) "|" jc))
 
 fn projEnum e: a/EnumNode -> String
   (str "enum|" e.name "|" (stringFromInt64 (listLength e.cases)))
@@ -29,7 +29,7 @@ fn projDefun d: a/DefunNode -> String
   (str "defun|" d.name "|" (if d.effect "T" "F") "|" (stringFromInt64 (listLength d.params)) "|" d.retType "|" (if d.isExported "T" "F"))
 
 fn projHeads src: String -> String
-  (mt (a/parse src) ((err e) (errText e)) ((ok forms) (str (mt (listHead forms) ((some t) (mt t ((a/topModule mn) (projModuleHeads mn)) ((a/topSchema _) "") ((a/topEnum _) "") ((a/topDefun _) "") ((a/topExpr _) ""))) ((none) "")) (headDecls (tailForms forms)))))
+  (match (a/parse src) ((err e) (errText e)) ((ok forms) (str (match (listHead forms) ((some t) (match t ((a/topModule mn) (projModuleHeads mn)) ((a/topSchema _) "") ((a/topEnum _) "") ((a/topDefun _) "") ((a/topExpr _) ""))) ((none) "")) (headDecls (tailForms forms)))))
 
 fn projModuleHeads mn: a/ModuleNode -> String
   (str mn.docstring "|" (stringJoin mn.exported ",") "|" (stringJoin (map (fn [(p (pair String String))] -> String (str (pairFirst p) ":" (pairSecond p))) mn.imports) ","))
@@ -38,25 +38,25 @@ fn headDecls forms: (List a/TopForm) -> String
   (if (listEmpty? forms) "" (str "|" (stringJoin (map (fn [(t a/TopForm)] -> String (headDecl t)) forms) "|")))
 
 fn headDecl t: a/TopForm -> String
-  (mt t ((a/topModule _) "module") ((a/topSchema s) (str "schema|" s.name "|" (stringJoin (map (fn [(f a/AstField)] -> String (str f.name ":" f.type ":" f.docstring)) s.fields) ",") "|" (mt s.jsonCase ((some v) v) ((none) "none")))) ((a/topEnum e) (str "enum|" e.name "|" (stringJoin (map (fn [(c a/EnumCase)] -> String (str c.name ":" c.docstring)) e.cases) ","))) ((a/topDefun d) (str "defun|" d.name "|" (if d.effect "T" "F") "|" (stringFromInt64 (listLength d.params)) "|" d.retType "|" d.docstring "|" (stringJoin (map (fn [(b rd/SExpr)] -> String (rd/renderSexpr b)) d.body) " "))) ((a/topExpr p) (str "expr|" (rd/renderSexpr p.expr))))
+  (match t ((a/topModule _) "module") ((a/topSchema s) (str "schema|" s.name "|" (stringJoin (map (fn [(f a/AstField)] -> String (str f.name ":" f.type ":" f.docstring)) s.fields) ",") "|" (match s.jsonCase ((some v) v) ((none) "none")))) ((a/topEnum e) (str "enum|" e.name "|" (stringJoin (map (fn [(c a/EnumCase)] -> String (str c.name ":" c.docstring)) e.cases) ","))) ((a/topDefun d) (str "defun|" d.name "|" (if d.effect "T" "F") "|" (stringFromInt64 (listLength d.params)) "|" d.retType "|" d.docstring "|" (stringJoin (map (fn [(b rd/SExpr)] -> String (rd/renderSexpr b)) d.body) " "))) ((a/topExpr p) (str "expr|" (rd/renderSexpr p.expr))))
 
 fn renderAll src: String -> (Result String a/ParseError)
-  (mt (a/parse src) ((err e) (err e)) ((ok forms) (ok (stringJoin (map (fn [(t a/TopForm)] -> String (a/renderNode t)) forms) "\n"))))
+  (match (a/parse src) ((err e) (err e)) ((ok forms) (ok (stringJoin (map (fn [(t a/TopForm)] -> String (a/renderNode t)) forms) "\n"))))
 
 fn tailExprs items: (List rd/SExpr) -> (List rd/SExpr)
   (optionOr (listTail items) (list))
 
 fn sexprItems s: rd/SExpr -> (List rd/SExpr)
-  (mt s ((rd/sexprList items) items) ((rd/sexprVect items) items) ((rd/sexprAtom _) (list)))
+  (match s ((rd/sexprList items) items) ((rd/sexprVect items) items) ((rd/sexprAtom _) (list)))
 
 fn nthExpr items: (List rd/SExpr) i: Int64 -> rd/SExpr
-  (mt (listGet items i) ((some s) s) ((none) (rd/makeAtom "")))
+  (match (listGet items i) ((some s) s) ((none) (rd/makeAtom "")))
 
 fn firstItem items: (List rd/SExpr) -> rd/SExpr
-  (mt (listHead items) ((some s) s) ((none) (rd/makeAtom "")))
+  (match (listHead items) ((some s) s) ((none) (rd/makeAtom "")))
 
 fn firstChar s: String -> String
-  (mt (stringSlice s 0 1) ((some c) c) ((none) ""))
+  (match (stringSlice s 0 1) ((some c) c) ((none) ""))
 
 fn charsIn? allowed: String s: String -> Bool
   (fold (fn [(acc Bool) (c String)] -> Bool (and acc (stringContains? allowed c))) true (stringChars s))
@@ -80,7 +80,7 @@ fn slashHead? h: String -> Bool
   (let [(segs (stringSplit h "/"))] (and (> (listLength segs) 1) (not (stringEmpty? (lastOf segs)))))
 
 fn lastOf xs: (List String) -> String
-  (mt (listHead (listReverse xs)) ((some s) s) ((none) ""))
+  (match (listHead (listReverse xs)) ((some s) s) ((none) ""))
 
 fn pascalHead? h: String -> Bool
   (and (not (stringEmpty? h)) (stringContains? "ABCDEFGHIJKLMNOPQRSTUVWXYZ" (firstChar h)))
@@ -140,22 +140,22 @@ fn cList st: CState items: (List rd/SExpr) -> CState
   (if (listEmpty? items) st (let [(h0 (rd/sexprHead (firstItem items)))] (if (or (rd/isList? (firstItem items)) (rd/isVect? (firstItem items))) (cWalkTails (cEnqueueMany st (list (firstItem items))) items) (cAtomicHead st h0 items))))
 
 fn cClassify st: CState s: rd/SExpr -> CState
-  (mt s ((rd/sexprAtom _) st) ((rd/sexprVect _) st) ((rd/sexprList items) (cList st items)))
+  (match s ((rd/sexprAtom _) st) ((rd/sexprVect _) st) ((rd/sexprList items) (cList st items)))
 
 fn cPop st: CState -> CState
   (with st :work (tailExprs st.work))
 
 fn cTick st: CState n: Int64 -> CState
-  (mt (listHead st.work) ((some item) (cClassify (cPop st) item)) ((none) st))
+  (match (listHead st.work) ((some item) (cClassify (cPop st) item)) ((none) st))
 
 fn cRun st: CState budget: Int64 -> CState
-  (if (listEmpty? st.work) st (let [(batch (range 0 budget)) (stepped (fold cTick st batch))] (mt (listEmpty? stepped.work) (true stepped) (false (cRun stepped (+ budget budget))))))
+  (if (listEmpty? st.work) st (let [(batch (range 0 budget)) (stepped (fold cTick st batch))] (match (listEmpty? stepped.work) (true stepped) (false (cRun stepped (+ budget budget))))))
 
 fn cTop st: CState t: a/TopForm -> CState
-  (mt t ((a/topModule _) st) ((a/topSchema _) st) ((a/topEnum e) (fold (fn [(acc CState) (c a/EnumCase)] -> CState (c-def acc c.name)) st e.cases)) ((a/topDefun d) (cEnqueueMany (c-def st d.name) d.body)) ((a/topExpr p) (cClassify st p.expr)))
+  (match t ((a/topModule _) st) ((a/topSchema _) st) ((a/topEnum e) (fold (fn [(acc CState) (c a/EnumCase)] -> CState (c-def acc c.name)) st e.cases)) ((a/topDefun d) (cEnqueueMany (c-def st d.name) d.body)) ((a/topExpr p) (cClassify st p.expr)))
 
 fn closureHeads src: String -> (Result ClosureHeads a/ParseError)
-  (mt (a/parse src) ((err e) (err e)) ((ok forms) (let [(done (cRun (fold cTop (CState :work (list) :calls (list) :defs (list) :qualified (list)) forms) 64))] (ok (ClosureHeads :calls (listReverse done.calls) :defs (listReverse done.defs) :qualified (listReverse done.qualified))))))
+  (match (a/parse src) ((err e) (err e)) ((ok forms) (let [(done (cRun (fold cTop (CState :work (list) :calls (list) :defs (list) :qualified (list)) forms) 64))] (ok (ClosureHeads :calls (listReverse done.calls) :defs (listReverse done.defs) :qualified (listReverse done.qualified))))))
 
 fn testReaderSeparatedRendering -> Bool
   (let [(a1 (rd/makeAtom "first"))
@@ -175,6 +175,6 @@ fn runTests -> Bool
     (assert (stringContains? parsed "module|m|") "module projection")
     (assert (stringContains? parsed "defun|f|F|0|Int64|F") "defun projection")
     (assert (stringStartsWith? heads "||") (str "heads projection has no source doc, exports or imports: " heads))
-    (assert (mt closed ((ok _) true) ((err _) false)) "closure heads ok")
+    (assert (match closed ((ok _) true) ((err _) false)) "closure heads ok")
     (assert (testReaderSeparatedRendering) "testReaderSeparatedRendering")
     true)

@@ -72,7 +72,7 @@ fn verifyAnfFunction func: IrFunction -> (Option IrDiag)
     (some (makeIrDiag "ERR_ANF_ANONYMOUS_FN" "Function missing identifier" "fn"))
     (let [(stmts func.body)]
       (fold (fn [(errOpt (Option IrDiag)) (s IrStmt)] -> (Option IrDiag)
-              (mt errOpt
+              (match errOpt
                 ((some _) errOpt)
                 ((none) (verifyAnfStmt s))))
             (none) stmts)))
@@ -82,7 +82,7 @@ fn verifyAnfModule moduleObj: IrModule -> (Option IrDiag)
     (some (makeIrDiag "ERR_ANF_ANONYMOUS_MODULE" "Module missing identifier" "module"))
     (let [(funcs moduleObj.funcs)]
       (fold (fn [(errOpt (Option IrDiag)) (f IrFunction)] -> (Option IrDiag)
-              (mt errOpt
+              (match errOpt
                 ((some _) errOpt)
                 ((none) (verifyAnfFunction f))))
             (none) funcs)))
@@ -197,27 +197,27 @@ fn ssaModule name: String strings: (List String) types: (List SsaTypeDecl) recor
   (SsaModule :name name :strings strings :types types :records records :externs externs :globals globals :functions functions)
 
 fn ssaTyName t: SsaTy -> String
-  (mt t ((tyVal) "val") ((tyRec schema) (str "rec:" schema)) ((tyI64) "i64") ((tyF64) "f64") ((tyI1) "i1") ((tyPtr) "ptr") ((tyI32) "i32"))
+  (match t ((tyVal) "val") ((tyRec schema) (str "rec:" schema)) ((tyI64) "i64") ((tyF64) "f64") ((tyI1) "i1") ((tyPtr) "ptr") ((tyI32) "i32"))
 
 fn ssaAbiName t: SsaTy -> String
-  (mt t ((tyRec _) "val") (_ (ssaTyName t)))
+  (match t ((tyRec _) "val") (_ (ssaTyName t)))
 
 fn ssaIsRec? t: SsaTy -> Bool
-  (mt t ((tyRec _) true) (_ false))
+  (match t ((tyRec _) true) (_ false))
 
 fn ssaIsRaw? t: SsaTy -> Bool
   (!= (ssaAbiName t) "val")
 
 fn termEdges t: SsaTerm -> (List SsaEdge)
-  (mt t
+  (match t
     ((termReturn _) (list))
     ((termJump e) (list e))
     ((termBranch _ a b) (list a b))
-    ((termSwitch _ _ cases d) (listAppend (map (fn [(c SsaCase)] -> SsaEdge c.edge) cases) (mt d ((some e) (list e)) ((none) (list)))))
+    ((termSwitch _ _ cases d) (listAppend (map (fn [(c SsaCase)] -> SsaEdge c.edge) cases) (match d ((some e) (list e)) ((none) (list)))))
     ((termUnreachable) (list)))
 
 fn opOperands op: SsaOp -> (List String)
-  (mt op
+  (match op
     ((opConst _) (list))
     ((opCall _ args) args)
     ((opBuiltin _ args) args)

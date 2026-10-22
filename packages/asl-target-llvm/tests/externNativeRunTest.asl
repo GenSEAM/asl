@@ -39,12 +39,12 @@ fn ! probeMode work: String path: String -> Int64
 fn ! optBin -> (Option String)
   (let [(known (filter (fn [(c String)] -> Bool (= (sh (str "test -x " c)).exitCode 0))
                         (list "/opt/homebrew/opt/llvm/bin/opt" "/opt/homebrew/opt/llvm@22/bin/opt" "/usr/local/opt/llvm/bin/opt")))]
-    (mt (listGet known 0)
+    (match (listGet known 0)
       ((some o) (some o))
       ((none) (if (= (sh "command -v opt >/dev/null 2>&1").exitCode 0) (some "opt") (none)))))
 
 fn ! verifyLl label: String work: String file: String -> Bool
-  (mt (optBin)
+  (match (optBin)
     ((none) (do (println (str label ": opt not found on this host, skipping -passes=verify")) true))
     ((some o) (expectExit (str label ": opt -passes=verify accepts the emitted IR") (str o " -passes=verify -disable-output " work "/" file ".ll") 0)))
 
@@ -227,7 +227,7 @@ fn ! testRawPrims work: String -> Bool
               true))))
 
 fn textOf res: (Result String (List ty/IrDiag)) -> String
-  (mt res ((ok text) text) ((err diags) (str "ERR: " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.code) diags) ", "))))
+  (match res ((ok text) text) ((err diags) (str "ERR: " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.code) diags) ", "))))
 
 fn ! testGetpidWrite work: String -> Bool
   (let [(text (textOf (llvm/emitLlvmProgram (getpidWriteModule) "run")))]

@@ -181,7 +181,7 @@ fn testReconcileTreeDirtied! -> Bool
           true))))
 
 fn excludedHere! -> String
-  (mt (sr/getExcludedForm ".") ((ok x) x) ((err e) (do (assert false (str "excluded form: " e)) "")))
+  (match (sr/getExcludedForm ".") ((ok x) x) ((err e) (do (assert false (str "excluded form: " e)) "")))
 
 fn testReceiptFormatting! -> Bool
   (let [(r1 (sr/makeSuiteResult "suite1.asl" "OK" "" "" 10 0 10 0))

@@ -6,7 +6,7 @@ fn diagText ds: (List ty/IrDiag) -> String
   (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code ": " d.message)) ds) "\n")
 
 fn compilePackage! pkg: String entryPath: String -> (Result String (List ty/IrDiag))
-  (mt (lk/linkEntry! entryPath)
+  (match (lk/linkEntry! entryPath)
     ((err ds) (err ds))
     ((ok m) (em/emitGoModule pkg m)))
 

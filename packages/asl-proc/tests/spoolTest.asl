@@ -13,7 +13,7 @@ fn ! testDiskSpoolAutoUnlink -> Bool
       (let [(spoolW (spool/spoolWrite spool "ephemeral-payload")) (unlinkRes (spool/spoolUnlink! spoolW))]
         (do
           (assert (ok? unlinkRes) "spool-unlink! must succeed even when no backing file was ever synced to disk")
-          (assert (mt unlinkRes ((ok unlinked) (and (spool/spoolIsUnlinked? unlinked) (and (= unlinked.currentBytes 0) (= unlinked.content "")))) ((err _) false)) "Unlinked spool must be flagged unlinked with cleared bytes and content")
+          (assert (match unlinkRes ((ok unlinked) (and (spool/spoolIsUnlinked? unlinked) (and (= unlinked.currentBytes 0) (= unlinked.content "")))) ((err _) false)) "Unlinked spool must be flagged unlinked with cleared bytes and content")
           true))))
 
 fn testTwoTierSpoolIntegration -> Bool
@@ -36,7 +36,7 @@ fn ! testTwoTierCloseSync! -> Bool
         (do
           (refute (spool/spoolIsUnlinked? closed.disk) "Disk spool must remain linked (file present on disk) right after sync-close")
           (assert (ok? readRes) "fileRead of the synced two-tier spool must succeed while it is still linked")
-          (assert (mt readRes ((ok diskData) (and (stringContains? diskData "msg-0") (stringContains? diskData "msg-2"))) ((err _) false)) "Synced disk file must contain the pushed messages")
+          (assert (match readRes ((ok diskData) (and (stringContains? diskData "msg-0") (stringContains? diskData "msg-2"))) ((err _) false)) "Synced disk file must contain the pushed messages")
           (let [(unlinkRes (spool/spoolUnlink! closed.disk))]
             (do
               (assert (ok? unlinkRes) "spool-unlink! must succeed")
@@ -47,12 +47,12 @@ fn ! testShLifecycleWiring! -> Bool
   (let [(expectedPrefix (str (optionOr (envGet "TMPDIR") "/tmp") "/asl-proc/asl-proc-echo-")) (res (sh/runCmd! "echo" (list "hi")))]
     (do
       (assert (ok? res) "run-cmd! execution must succeed")
-      (assert (mt res ((ok receipt) (and (= receipt.exitCode 0) (and (stringStartsWith? receipt.spoolPath expectedPrefix) (and (stringEndsWith? receipt.spoolPath ".spool") (< (proc/receiptTokens receipt) 80))))) ((err _) false)) "ProcessReceipt must have exit-code 0, an absolute spool path under TMPDIR/asl-proc, and stay under 80 tokens")
-      (let [(spoolPath (mt res ((ok receipt) receipt.spoolPath) ((err _) ""))) (readRes (fileReadString spoolPath))]
+      (assert (match res ((ok receipt) (and (= receipt.exitCode 0) (and (stringStartsWith? receipt.spoolPath expectedPrefix) (and (stringEndsWith? receipt.spoolPath ".spool") (< (proc/receiptTokens receipt) 80))))) ((err _) false)) "ProcessReceipt must have exit-code 0, an absolute spool path under TMPDIR/asl-proc, and stay under 80 tokens")
+      (let [(spoolPath (match res ((ok receipt) receipt.spoolPath) ((err _) ""))) (readRes (fileReadString spoolPath))]
         (do
           (assert (ok? readRes) "fileRead of the documented spoolPath must succeed")
-          (assert (mt readRes ((ok content) (= content "hi\n")) ((err _) false)) "Spool file at the documented spoolPath must hold the command's exact raw output byte-for-byte")
-          (let [(releaseRes (mt res ((ok receipt) (sh/releaseReceipt! receipt)) ((err _) (err "no receipt"))))]
+          (assert (match readRes ((ok content) (= content "hi\n")) ((err _) false)) "Spool file at the documented spoolPath must hold the command's exact raw output byte-for-byte")
+          (let [(releaseRes (match res ((ok receipt) (sh/releaseReceipt! receipt)) ((err _) (err "no receipt"))))]
             (do
               (assert (ok? releaseRes) "release-receipt! must succeed")
               (refute (ok? (fileReadString spoolPath)) "fileRead must fail once the receipt's spool path has been released")
@@ -62,11 +62,11 @@ fn ! testRawByteFidelity! -> Bool
   (let [(res (sh/runCmd! "sh" (list "-c" "printf '%s' no-trailing-newline")))]
     (do
       (assert (ok? res) "run-cmd! of a command with no trailing newline must still succeed")
-      (let [(spoolPath (mt res ((ok receipt) receipt.spoolPath) ((err _) ""))) (readRes (fileReadString spoolPath))]
+      (let [(spoolPath (match res ((ok receipt) receipt.spoolPath) ((err _) ""))) (readRes (fileReadString spoolPath))]
         (do
           (assert (ok? readRes) "fileRead of the no-trailing-newline command's spool path must succeed")
-          (assert (mt readRes ((ok content) (= content "no-trailing-newline")) ((err _) false)) "Spool content must be the exact raw bytes with no newline normalization added")
-          (let [(_ (mt res ((ok receipt) (sh/releaseReceipt! receipt)) ((err _) (err "no receipt"))))] true)))))
+          (assert (match readRes ((ok content) (= content "no-trailing-newline")) ((err _) false)) "Spool content must be the exact raw bytes with no newline normalization added")
+          (let [(_ (match res ((ok receipt) (sh/releaseReceipt! receipt)) ((err _) (err "no receipt"))))] true)))))
 
 fn ! testUniqueSpoolPathsAndRelease! -> Bool
   (let [(labels (map (fn [(i Int64)] -> String (str "spool-fidelity-" (stringFromInt64 i))) (range 0 100))) (receiptResults (map (fn [(label String)] -> (Result cp/ProcessReceipt cp/ProcessError) (sh/runCmd! "echo" (list label))) labels))]
@@ -76,7 +76,7 @@ fn ! testUniqueSpoolPathsAndRelease! -> Bool
         (do
           (assert (= distinctCount 100) "100 runCmd! calls must produce 100 distinct spool paths, not a handful reused across calls")
           (let [(pairs (zip receipts labels))]
-            (assert (listAll? (fn [(pr (Pair cp/ProcessReceipt String))] -> Bool (let [(rc (pairFirst pr)) (label (pairSecond pr))] (mt (fileReadString rc.spoolPath) ((ok content) (stringContains? content label)) ((err _) false)))) pairs) "every receipt's spool file must contain that call's own output, not another run's"))
+            (assert (listAll? (fn [(pr (Pair cp/ProcessReceipt String))] -> Bool (let [(rc (pairFirst pr)) (label (pairSecond pr))] (match (fileReadString rc.spoolPath) ((ok content) (stringContains? content label)) ((err _) false)))) pairs) "every receipt's spool file must contain that call's own output, not another run's"))
           (assert (listAll? (fn [(rc cp/ProcessReceipt)] -> Bool (ok? (sh/releaseReceipt! rc))) receipts) "release must succeed for every receipt")
           (refute (listAny? (fn [(p String)] -> Bool (ok? (fileReadString p))) paths) "no spool files must remain readable after every receipt has been released")
           true))))
@@ -89,17 +89,17 @@ fn ! testDiskSpool50mbHardCap! -> Bool
       (assert (stringEndsWith? spool50.content "FINAL_BYTES_50MB") "Tail of spool content must match the final bytes of 50MB stream")
       (assert spool50.truncated "A 50MB stream into a 10MB cap must be flagged truncated")
       (assert (ok? syncRes) "spool-sync! must succeed")
-      (mt syncRes
+      (match syncRes
         ((err _) false)
         ((ok synced)
           (let [(readRes (fileReadString path))]
             (do
               (assert (ok? readRes) "fileRead of synced spool must succeed")
-              (assert (mt readRes ((ok diskData) (and (<= (stringLength diskData) 10485760) (and (= (stringLength diskData) 10485760) (stringEndsWith? diskData "FINAL_BYTES_50MB")))) ((err _) false)) "Synced disk file size must be exactly 10485760 bytes and preserve trailing stream bytes")
+              (assert (match readRes ((ok diskData) (and (<= (stringLength diskData) 10485760) (and (= (stringLength diskData) 10485760) (stringEndsWith? diskData "FINAL_BYTES_50MB")))) ((err _) false)) "Synced disk file size must be exactly 10485760 bytes and preserve trailing stream bytes")
               (let [(unlinkRes (spool/spoolUnlink! synced))]
                 (do
                   (assert (ok? unlinkRes) "spool-unlink! must succeed")
-                  (assert (mt unlinkRes ((ok unlinked) (spool/spoolIsUnlinked? unlinked)) ((err _) false)) "Spool must be unlinked after test")
+                  (assert (match unlinkRes ((ok unlinked) (spool/spoolIsUnlinked? unlinked)) ((err _) false)) "Spool must be unlinked after test")
                   (let [(_ (pathRemove tmpDir))] true)))))))))
 
 fn ! runTests -> Bool

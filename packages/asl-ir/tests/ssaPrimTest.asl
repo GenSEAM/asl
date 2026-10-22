@@ -23,7 +23,7 @@ fn verifyOne ins: ty/SsaInstr -> (Result Unit (List ty/IrDiag))
   (vfy/verifySsa (moduleOf (mixedParams) (list ins) ins.dest ins.ty))
 
 fn codes res: (Result Unit (List ty/IrDiag)) -> (List String)
-  (mt res ((ok _) (list)) ((err diags) (map (fn [(d ty/IrDiag)] -> String d.code) diags)))
+  (match res ((ok _) (list)) ((err diags) (map (fn [(d ty/IrDiag)] -> String d.code) diags)))
 
 fn accepts? ins: ty/SsaInstr -> Bool
   (ok? (verifyOne ins))

@@ -14,10 +14,10 @@ fn convertJsonToAsnToolcall toolName: Str jsonArgsStr: Str -> Str
   (str "(:call :tool \"" toolName "\" :args " jsonArgsStr ")")
 
 fn targetToString target: BrowserInferenceTarget -> Str
-  (mt target ((targetWebgpu) "target-webgpu") ((targetWasm) "target-wasm") ((targetLocalOllama) "target-local-ollama") ((targetLocalVllm) "target-local-vllm"))
+  (match target ((targetWebgpu) "target-webgpu") ((targetWasm) "target-wasm") ((targetLocalOllama) "target-local-ollama") ((targetLocalVllm) "target-local-vllm"))
 
 fn browserTargetKindToString kind: BrowserTargetKind -> Str
-  (mt kind ((targetStealthSteel) "stealthSteel") ((targetExtensionChrome) "extensionChrome") ((targetExtensionSafari) "extensionSafari") ((targetCdpDirect) "cdpDirect"))
+  (match kind ((targetStealthSteel) "stealthSteel") ((targetExtensionChrome) "extensionChrome") ((targetExtensionSafari) "extensionSafari") ((targetCdpDirect) "cdpDirect"))
 
 fn parseBrowserTargetKind s: Str -> BrowserTargetKind
   (cond ((or (= s "stealthSteel") (= s "steel")) (targetStealthSteel)) ((or (= s "extensionChrome") (= s "chrome")) (targetExtensionChrome)) ((or (= s "extensionSafari") (= s "safari")) (targetExtensionSafari)) (else (targetCdpDirect)))

@@ -27,13 +27,13 @@ fn formatSseEvent eventName: Str data: Str -> Str
   (s/concat (s/concat (s/concat "event: " eventName) "\ndata: ") (s/concat data "\n\n"))
 
 fn isBroadcast event: BusEvent -> Bool
-  (mt event ((broadcast msg) true) (_ false))
+  (match event ((broadcast msg) true) (_ false))
 
 fn channelToStr ch: BusChannel -> Str
-  (mt ch ((lifecycle) "lifecycle") ((telemetry) "telemetry") ((control) "control") ((audit) "audit"))
+  (match ch ((lifecycle) "lifecycle") ((telemetry) "telemetry") ((control) "control") ((audit) "audit"))
 
 fn lifecycleToStr state: TaskLifecycleState -> Str
-  (mt state ((queued) "QUEUED") ((routing) "ROUTING") ((executing) "EXECUTING") ((verifying) "VERIFYING") ((done) "DONE") ((failed) "FAILED"))
+  (match state ((queued) "QUEUED") ((routing) "ROUTING") ((executing) "EXECUTING") ((verifying) "VERIFYING") ((done) "DONE") ((failed) "FAILED"))
 
 fn makeLifecycleEvent taskId: Str state: TaskLifecycleState detail: Str -> AgentMessage
   (AgentMessage :sender "kernel" :target "bus" :payload (str "(:lifecycle :task \"" taskId "\" :state \"" (lifecycleToStr state) "\" :detail \"" detail "\")") :timestamp 1725800000)
@@ -57,7 +57,7 @@ fn formatLifecycleSse taskId: Str state: TaskLifecycleState detail: Str -> Str
   (let [(data (str "(:lifecycle :task \"" taskId "\" :state \"" (lifecycleToStr state) "\" :detail \"" detail "\")"))] (formatSseEvent "lifecycle" data))
 
 fn isHighPriorityChannel? ch: BusChannel -> Bool
-  (mt ch
+  (match ch
     ((telemetry) false)
     (_ true))
 
@@ -108,7 +108,7 @@ fn pushPriorityEvent q: PriorityBusQueue msg: AgentMessage -> PriorityBusQueue
         (infl q.inFlight)
         (dlq q.dlq)
         (rc q.retryCounts)]
-    (mt prio
+    (match prio
       ((prioP0Control) (with q :p0Lanes (listAppend q.p0Lanes (list msg)) :inFlight infl :dlq dlq :retryCounts rc :starvationCount sc))
       ((prioP1Audit) (with q :p1Lanes (listAppend q.p1Lanes (list msg)) :inFlight infl :dlq dlq :retryCounts rc :starvationCount sc))
       ((prioP2Data) (with q :p2Lanes (listAppend q.p2Lanes (list msg)) :inFlight infl :dlq dlq :retryCounts rc :starvationCount sc))
@@ -176,7 +176,7 @@ fn popPriorityEventLeased q: PriorityBusQueue msgId: Str now: I64 -> (Pair Prior
   (let [(poppedPair (popPriorityEvent q))
         (qPopped (pairFirst poppedPair))
         (optMsg (pairSecond poppedPair))]
-    (mt optMsg
+    (match optMsg
       ((some m)
         (let [(priorRetries (optionOr (mapGet qPopped.retryCounts msgId) 0))
               (inflight (InFlightMessage :id msgId :message m :leasedAt now :retryCount priorRetries))

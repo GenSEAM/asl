@@ -315,24 +315,24 @@ fn dynamicTables! inp: Bytes inLen: Int64 b: Bits out: Bytes op: Int64 memBase: 
     (if (or (> hlit 29) (> hdist 29))
       (err (failText pos cnt inLen "bad code lengths"))
       (let [(cl (bytesAlloc 19))]
-        (mt (readCl! inp inLen pos (>> buf 14) cnt cl 0 numCl)
+        (match (readCl! inp inLen pos (>> buf 14) cnt cl 0 numCl)
           ((err e) (err e))
           ((ok b1)
-           (mt (buildTable! cl 0 19)
+           (match (buildTable! cl 0 19)
              ((err e) (err (failText b1.bPos b1.bCnt inLen e)))
              ((ok ct)
               (let [(numLit (+ hlit 257))
                     (total (+ numLit (+ hdist 1)))
                     (lens (bytesAlloc total))]
-                (mt (readLens! inp inLen b1.bPos b1.bBuf b1.bCnt ct lens 0 total 0)
+                (match (readLens! inp inLen b1.bPos b1.bBuf b1.bCnt ct lens 0 total 0)
                   ((err e) (err e))
                   ((ok b2)
                    (if (= (bytesGet lens 256) 0)
                      (err (failText b2.bPos b2.bCnt inLen "bad code lengths"))
-                     (mt (buildTable! lens 0 numLit)
+                     (match (buildTable! lens 0 numLit)
                        ((err e) (err (failText b2.bPos b2.bCnt inLen e)))
                        ((ok lt)
-                        (mt (buildTable! lens numLit (+ hdist 1))
+                        (match (buildTable! lens numLit (+ hdist 1))
                           ((err e) (err (failText b2.bPos b2.bCnt inLen e)))
                           ((ok dt) (huff! inp b2.bPos b2.bBuf b2.bCnt out op memBase limit (joinTables lt dt)))))))))))))))))
 
@@ -368,7 +368,7 @@ fn fixedLens! lens: Bytes i: Int64 -> Unit
       (fixedLens! lens (+ i 1))))
 
 fn blocks! inp: Bytes inLen: Int64 pos: Int64 buf: Int64 cnt: Int64 out: Bytes op: Int64 memBase: Int64 limit: Int64 ftabs: Bytes -> (Result InflateState String)
-  (mt (refill inp inLen pos buf cnt)
+  (match (refill inp inLen pos buf cnt)
     ((err e) (err e))
     ((ok b)
      (let [(hb b.bBuf)
@@ -382,7 +382,7 @@ fn blocks! inp: Bytes inLen: Int64 pos: Int64 buf: Int64 cnt: Int64 out: Bytes o
                   ((= btype 1) (huff! inp p1 buf1 cnt1 out op memBase limit ftabs))
                   ((= btype 2) (dynamicTables! inp inLen (Bits :bPos p1 :bBuf buf1 :bCnt cnt1) out op memBase limit))
                   (else (err (failText p1 cnt1 inLen "bad block type")))))]
-       (mt res
+       (match res
          ((err e) (err e))
          ((ok be)
           (if (= final 1)
@@ -396,10 +396,10 @@ fn inflateAppend! data: Bytes start: Int64 out: Bytes op: Int64 limit: Int64 -> 
       (let [(fixed (bytesAlloc 320))]
         (do
           (fixedLens! fixed 0)
-          (mt (buildTable! fixed 0 288)
+          (match (buildTable! fixed 0 288)
             ((err e) (err e))
             ((ok flt)
-             (mt (buildTable! fixed 288 32)
+             (match (buildTable! fixed 288 32)
                ((err e) (err e))
                ((ok fdt) (blocks! data inLen start 0 0 out op op limit (joinTables flt fdt))))))))))
 
@@ -413,11 +413,11 @@ fn exact! out: Bytes n: Int64 -> Bytes
 fn inflateInternal! data: Bytes startOffset: Int64 -> (Result InflateResult String)
   (let [(inLen (bytesLength data))
         (initCap (min (defaultLimit) (+ 1024 (* 4 (max 0 (- inLen startOffset))))))]
-    (mt (inflateAppend! data startOffset (bytesAlloc initCap) 0 (defaultLimit))
+    (match (inflateAppend! data startOffset (bytesAlloc initCap) 0 (defaultLimit))
       ((err e) (err e))
       ((ok st) (ok (InflateResult :bytes (exact! st.stOut st.stPos) :nextOffset st.stNext)))))
 
 fn inflate! data: Bytes -> (Result Bytes String)
-  (mt (inflateInternal! data 0)
+  (match (inflateInternal! data 0)
     ((err e) (err e))
     ((ok res) (ok res.bytes)))

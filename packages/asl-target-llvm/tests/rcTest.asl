@@ -39,11 +39,11 @@ fn ! runtimes! -> (Result Libs String)
                      :deadlineNs (+ (monotonicNs) 900000000000) :maxDesc 16))]
     (if (not (sys/isFile? plain))
       (err (str plain " is absent: the native build (sh asl/host/build.sh) makes it"))
-      (mt (cache/nativeAsl1! ctx plain (optionOr (envGet "CLANG") "clang"))
+      (match (cache/nativeAsl1! ctx plain (optionOr (envGet "CLANG") "clang"))
         ((err e) (err (str "native asl1: " e)))
-        ((ok asl1) (mt (nb/asanRuntime! b asl1 (str r "/asl/packages"))
+        ((ok asl1) (match (nb/asanRuntime! b asl1 (str r "/asl/packages"))
                      ((err e) (err (str "ASan runtime: " e)))
-                     ((ok asan) (mt (nb/notraceRuntime! b asl1 (str r "/asl/packages"))
+                     ((ok asan) (match (nb/notraceRuntime! b asl1 (str r "/asl/packages"))
                                   ((err e) (err (str "untraced runtime: " e)))
                                   ((ok notrace) (ok (Libs :plain plain :asan asan :notrace notrace))))))))))
 
@@ -55,10 +55,10 @@ fn ! testVariantTmpCleared dir: String -> Bool
         (ctx (sys/Context :root r :scriptDir "" :argv0 "" :hostBin ""))
         (b (nb/Build :root r :cache cacheDir :tmp cacheDir :lib plain :base "" :clangVersion "" :owner ""
                      :deadlineNs (+ (monotonicNs) 900000000000) :maxDesc 16))]
-    (mt (cache/nativeAsl1! ctx plain (optionOr (envGet "CLANG") "clang"))
+    (match (cache/nativeAsl1! ctx plain (optionOr (envGet "CLANG") "clang"))
       ((err e) (do (assert false (str "native asl1: " e)) false))
       ((ok asl1)
-        (mt (nb/notraceRuntime! b asl1 (str r "/asl/packages"))
+        (match (nb/notraceRuntime! b asl1 (str r "/asl/packages"))
           ((err e) (do (assert false (str "untraced runtime in a fresh cache: " e)) false))
           ((ok lib)
             (let [(entries (resultOr (dirList cacheDir) (list)))
@@ -96,15 +96,15 @@ fn ! linkCmd libs: Libs mode: String ll: String exe: String -> String
     (str "/usr/bin/clang -O1 -Wno-override-module -x ir " (shellQuote ll) " -x none " (shellQuote (if (= mode "notrace") libs.notrace libs.plain)) " -lm -o " (shellQuote exe)))
 
 fn ! buildRun libs: Libs dir: String name: String mode: String -> (Result Built String)
-  (mt (lk/linkEntry! (fixture name))
+  (match (lk/linkEntry! (fixture name))
     ((err ds) (err (str name " links: " (diagText ds))))
     ((ok m)
-     (mt (llvm/emitLlvmProgramNativeWith! m (str m.name ".main") mode)
+     (match (llvm/emitLlvmProgramNativeWith! m (str m.name ".main") mode)
        ((err ds) (err (str name " emits in mode " mode ": " (diagText ds))))
        ((ok code)
         (let [(ll (str dir "/" name "." mode ".ll"))
               (exe (str dir "/" name "." mode))]
-          (mt (fileWrite ll code)
+          (match (fileWrite ll code)
             ((err e) (err (str "cannot write " ll ": " e)))
             ((ok _)
              (let [(linked (sh (linkCmd libs mode ll exe)))]
@@ -113,7 +113,7 @@ fn ! buildRun libs: Libs dir: String name: String mode: String -> (Result Built 
                  (ok (Built :code code :run (sh (shellQuote exe)))))))))))))
 
 fn statOf text: String key: String -> Int64
-  (mt (stringIndexOf text (str ":" key " "))
+  (match (stringIndexOf text (str ":" key " "))
     ((none) -1)
     ((some at) (let [(rest (optionOr (stringSlice text (+ at (+ (stringLength key) 2)) (stringLength text)) ""))
                      (digits (optionOr (listHead (stringSplit (optionOr (listHead (stringSplit rest ")")) rest) " ")) ""))]
@@ -126,13 +126,13 @@ fn ! checkFixture libs: Libs dir: String name: String want: String minFreed: Int
   (let [(traced (buildRun libs dir name "0"))
         (counted (buildRun libs dir name "1"))
         (asan (buildRun libs dir name "asan"))]
-    (mt traced
+    (match traced
       ((err e) (do (assert false (str "tracing build: " e)) false))
       ((ok t)
-       (mt counted
+       (match counted
          ((err e) (do (assert false (str "RC build: " e)) false))
          ((ok c)
-          (mt asan
+          (match asan
             ((err e) (do (assert false (str "RC ASan build: " e)) false))
             ((ok a)
              (let [(stats c.run.stderr)
@@ -161,16 +161,16 @@ fn ! checkFixture libs: Libs dir: String name: String want: String minFreed: Int
                    true)))))))))
 
 fn ! testRejectsUnknownMode -> Bool
-  (mt (lk/linkEntry! (fixture "rcLoop"))
+  (match (lk/linkEntry! (fixture "rcLoop"))
     ((err ds) (do (assert false (str "rcLoop links: " (diagText ds))) false))
     ((ok m)
-     (mt (llvm/emitLlvmProgramNativeWith! m (str m.name ".main") "yes")
+     (match (llvm/emitLlvmProgramNativeWith! m (str m.name ".main") "yes")
        ((ok _) (do (assert false "an unknown RC mode is rejected, not silently traced") false))
        ((err ds) (do (assert (listAny? (fn [(d irTy/IrDiag)] -> Bool (= d.code "ERR_LLVM_RC_MODE")) ds) (str "unknown mode reports ERR_LLVM_RC_MODE: " (diagText ds)))
                      true)))))
 
 fn ! testPartialNames libs: Libs dir: String -> Bool
-  (mt (buildRun libs dir "rcPartial" "1")
+  (match (buildRun libs dir "rcPartial" "1")
     ((err e) (do (assert false (str "RC partial build: " e)) false))
     ((ok b) (do (assert (= b.run.exitCode 1) (str "over-applied partial exits 1 under RC, got " b.run.exitCode))
                 (assert (stringStartsWith? b.run.stderr "ERR_ARITY: add3 expects 3 argument(s), got 4\n") (str "the arity error names add3, not an RC wrapper call: " b.run.stderr))
@@ -180,13 +180,13 @@ fn fnBody code: String sym: String -> String
   (fnBodyOf code "i64" sym)
 
 fn fnBodyOf code: String ret: String sym: String -> String
-  (mt (stringIndexOf code (str "define tailcc " ret " @" sym "("))
+  (match (stringIndexOf code (str "define tailcc " ret " @" sym "("))
     ((none) "")
     ((some at) (let [(rest (optionOr (stringSlice code at (stringLength code)) ""))]
-                 (mt (stringIndexOf rest "\n}\n") ((some e) (optionOr (stringSlice rest 0 e) "")) ((none) rest)))))
+                 (match (stringIndexOf rest "\n}\n") ((some e) (optionOr (stringSlice rest 0 e) "")) ((none) rest)))))
 
 fn ! testBorrow libs: Libs dir: String -> Bool
-  (mt (buildRun libs dir "rcBorrow" "1")
+  (match (buildRun libs dir "rcBorrow" "1")
     ((err e) (do (assert false (str "RC borrow build: " e)) false))
     ((ok b) (let [(walk (fnBody b.code "rcBorrow$2Ewalk"))]
               (do (assert (= b.run.stdout "14999850000 1\n") (str "rcBorrow prints the sum under RC, got " b.run.stdout))
@@ -196,7 +196,7 @@ fn ! testBorrow libs: Libs dir: String -> Bool
                   true))))
 
 fn ! testBorrowTail libs: Libs dir: String -> Bool
-  (mt (buildRun libs dir "rcBorrowTail" "1")
+  (match (buildRun libs dir "rcBorrowTail" "1")
     ((err e) (do (assert false (str "RC borrow tail build: " e)) false))
     ((ok b) (let [(total (fnBody b.code "rcBorrowTail$2Etotal"))]
               (do (assert (= b.run.stdout "149850000\n") (str "rcBorrowTail sums a fresh list three hundred times under RC, got " b.run.stdout))
@@ -209,7 +209,7 @@ fn rcCalls body: String -> Int64
   (+ (- (listLength (stringSplit body "@aslRcDup(")) 1) (- (listLength (stringSplit body "@aslRcDrop(")) 1))
 
 fn ! testProject libs: Libs dir: String -> Bool
-  (mt (buildRun libs dir "rcProject" "1")
+  (match (buildRun libs dir "rcProject" "1")
     ((err e) (do (assert false (str "RC projection build: " e)) false))
     ((ok b) (let [(dropN (fnBodyOf b.code "%Val" "rcProject$2EdropN"))
                   (second (fnBodyOf b.code "%Val" "rcProject$2Esecond"))
@@ -222,7 +222,7 @@ fn ! testProject libs: Libs dir: String -> Bool
                   true))))
 
 fn ! testSink libs: Libs dir: String -> Bool
-  (mt (buildRun libs dir "rcSink" "1")
+  (match (buildRun libs dir "rcSink" "1")
     ((err e) (do (assert false (str "RC sink build: " e)) false))
     ((ok b) (let [(lookup (fnBodyOf b.code "%Val" "rcSink$2Elookup"))]
               (do (assert (= b.run.stdout "2288\n") (str "rcSink prints the found name lengths under RC, got " b.run.stdout))
@@ -231,7 +231,7 @@ fn ! testSink libs: Libs dir: String -> Bool
                   true))))
 
 fn ! testHof libs: Libs dir: String -> Bool
-  (mt (buildRun libs dir "rcHof" "1")
+  (match (buildRun libs dir "rcHof" "1")
     ((err e) (do (assert false (str "RC higher-order build: " e)) false))
     ((ok b) (let [(walk (fnBodyOf b.code "%Val" "rcHof$2Ewalk"))]
               (do (assert (= b.run.stdout "897\n") (str "rcHof prints the nested list length under RC, got " b.run.stdout))
@@ -241,13 +241,13 @@ fn ! testHof libs: Libs dir: String -> Bool
                   true))))
 
 fn runtimeBody code: String sym: String -> String
-  (mt (stringIndexOf code (str "define internal void @" sym "("))
+  (match (stringIndexOf code (str "define internal void @" sym "("))
     ((none) "")
     ((some at) (let [(rest (optionOr (stringSlice code at (stringLength code)) ""))]
-                 (mt (stringIndexOf rest "\n}\n") ((some e) (optionOr (stringSlice rest 0 e) "")) ((none) rest)))))
+                 (match (stringIndexOf rest "\n}\n") ((some e) (optionOr (stringSlice rest 0 e) "")) ((none) rest)))))
 
 fn ! testSpine libs: Libs dir: String -> Bool
-  (mt (buildRun libs dir "rcList" "1")
+  (match (buildRun libs dir "rcList" "1")
     ((err e) (do (assert false (str "RC spine build: " e)) false))
     ((ok b) (let [(chain (runtimeBody b.code "aslRc.freeChain"))]
               (do (assert (= b.run.stdout "834000\n") (str "rcList prints its sum under RC, got " b.run.stdout))
@@ -259,9 +259,9 @@ fn ! testSpine libs: Libs dir: String -> Bool
                   true))))
 
 fn ! testOpStats libs: Libs dir: String -> Bool
-  (mt (buildRun libs dir "rcTree" "asan")
+  (match (buildRun libs dir "rcTree" "asan")
     ((err e) (do (assert false (str "RC ASan tree build: " e)) false))
-    ((ok a) (mt (buildRun libs dir "rcTree" "1")
+    ((ok a) (match (buildRun libs dir "rcTree" "1")
               ((err e) (do (assert false (str "RC tree build: " e)) false))
               ((ok c) (let [(ops (statOf a.run.stderr "ops"))
                             (imm (statOf a.run.stderr "immediate"))]
@@ -272,7 +272,7 @@ fn ! testOpStats libs: Libs dir: String -> Bool
                             true))))))
 
 fn ! pushedOf libs: Libs dir: String name: String -> Int64
-  (mt (buildRun libs dir name "asan")
+  (match (buildRun libs dir name "asan")
     ((err e) (do (assert false (str "RC ASan " name " build: " e)) -1))
     ((ok a) (do (assert (= a.run.exitCode 0) (str name " RC under ASan exits 0: " a.run.stderr))
                 (statOf a.run.stderr "pushed"))))
@@ -285,7 +285,7 @@ fn ! testFreeQueue libs: Libs dir: String -> Bool
         true))
 
 fn ! testReuse libs: Libs dir: String -> Bool
-  (mt (buildRun libs dir "rcReuse" "asan")
+  (match (buildRun libs dir "rcReuse" "asan")
     ((err e) (do (assert false (str "RC ASan rcReuse build: " e)) false))
     ((ok a) (let [(stats a.run.stderr)
                   (hits (statOf stats "fbip"))
@@ -301,7 +301,7 @@ fn ! testReuse libs: Libs dir: String -> Bool
 
 
 fn ! runTests -> Bool
-  (mt (runtimes!)
+  (match (runtimes!)
     ((err e) (do (assert false (str "rcTest runtimes: " e)) false))
     ((ok libs) (runWith libs)))
 

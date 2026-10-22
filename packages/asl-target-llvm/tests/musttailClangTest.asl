@@ -73,12 +73,12 @@ fn returnAbiMismatchUsesOrdinaryCall? -> Bool
     (not (ssa/tailCall? env block)))
 
 fn ! runDarwinTests -> Bool
-  (let [(emitted (mt (libc/libcFacts "darwin-arm64")
+  (let [(emitted (match (libc/libcFacts "darwin-arm64")
                   ((none) (err (list)))
                   ((some facts) (llvm/emitLlvmProgramFor facts (fixture) "main"))))]
     (do
       (assert (ok? emitted) (str "fixture emits LLVM: " emitted))
-      (mt emitted
+      (match emitted
         ((err _) false)
         ((ok ir)
           (let [(workOut (processRun "mktemp -d"))

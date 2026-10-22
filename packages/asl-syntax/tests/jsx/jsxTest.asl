@@ -173,14 +173,14 @@ fn elementsHaveError? elems: (List tr/TreeElement) -> Bool
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemNode n) (if (treeHasError? n) true (elementsHaveError? tl)))
         ((tr/elemToken t) (if (tr/isErrorToken t) true (elementsHaveError? tl))))))
 
 fn checkFileExactRoundTrip! path: String content: String -> Bool
   (let [(len (stringLength content))
         (parseRes (jsx/parse content))]
-    (mt parseRes
+    (match parseRes
       ((err msg)
        (do
          (println (str "PARSE ERROR [" path "]: " msg))
@@ -228,7 +228,7 @@ fn checkBabelJsxSuite! suiteName: String files: (List String) exclusions: (List 
       true)
     (let [(path (optionOr (listHead files) ""))
           (rest (optionOr (listTail files) (list)))]
-      (mt (findExclusionReason path exclusions)
+      (match (findExclusionReason path exclusions)
         ((some _)
          (checkBabelJsxSuite! suiteName rest exclusions runCount passCount (+ excludedCount 1)))
         ((none)

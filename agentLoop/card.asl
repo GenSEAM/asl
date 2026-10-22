@@ -24,12 +24,12 @@ fn extractLocalOps text: String n: Int64 i: Int64 acc: (List String) -> (List St
   (if (>= i n)
     (listReverse acc)
     (let [marker "(:effect :op \""]
-      (mt (stringIndexOf (c/sliceOf text i n) marker)
+      (match (stringIndexOf (c/sliceOf text i n) marker)
         ((none) (listReverse acc))
         ((some subPos)
           (let [pos (+ i subPos)
                 startOp (+ pos (stringLength marker))]
-            (mt (stringIndexOf (c/sliceOf text startOp n) "\"")
+            (match (stringIndexOf (c/sliceOf text startOp n) "\"")
               ((none) (listReverse acc))
               ((some subEnd)
                 (let [endOp (+ startOp subEnd)
@@ -44,20 +44,20 @@ fn ! getAllowlist rootDir: String -> (Result (List String) String)
   (let [selfHostedPath (str rootDir "/asl/agentLoop/effects.asn")
         legacyPath (str rootDir "/scripts/agentLoop/effects.asn")
         path (if (fileExists? selfHostedPath) selfHostedPath legacyPath)]
-    (mt (fileReadString path)
+    (match (fileReadString path)
       ((err e) (err e))
       ((ok text) (ok (extractLocalOps text (stringLength text) 0 (list))))))
 
 fn poolRows text: String n: Int64 i: Int64 acc: (List Pool) -> (List Pool)
-  (mt (stringIndexOf (c/sliceOf text i n) "TrackedSemaphore(int(os.environ.get(")
+  (match (stringIndexOf (c/sliceOf text i n) "TrackedSemaphore(int(os.environ.get(")
     ((none) (listSortBy (fn [p] p.name) (listReverse acc)))
     ((some found)
       (let [a (+ i found (stringLength "TrackedSemaphore(int(os.environ.get("))
-            comma (mt (stringIndexOf (c/sliceOf text a n) ",") ((some p) (+ a p)) (none -1))
-            close (if (< comma 0) -1 (mt (stringIndexOf (c/sliceOf text comma n) ")") ((some p) (+ comma p)) (none -1)))
+            comma (match (stringIndexOf (c/sliceOf text a n) ",") ((some p) (+ a p)) (none -1))
+            close (if (< comma 0) -1 (match (stringIndexOf (c/sliceOf text comma n) ")") ((some p) (+ comma p)) (none -1)))
             size (if (< close 0) -1 (optionOr (stringToInt64 (stringTrim (c/sliceOf text (+ comma 1) close))) -1))
-            nameAt (if (< close 0) -1 (mt (stringIndexOf (c/sliceOf text close n) "name=\"") ((some p) (+ close p 6)) (none -1)))
-            nameEnd (if (< nameAt 0) -1 (mt (stringIndexOf (c/sliceOf text nameAt n) "\"") ((some p) (+ nameAt p)) (none -1)))
+            nameAt (if (< close 0) -1 (match (stringIndexOf (c/sliceOf text close n) "name=\"") ((some p) (+ close p 6)) (none -1)))
+            nameEnd (if (< nameAt 0) -1 (match (stringIndexOf (c/sliceOf text nameAt n) "\"") ((some p) (+ nameAt p)) (none -1)))
             name (if (< nameEnd 0) "" (c/sliceOf text nameAt nameEnd))
             rows (if (and (>= size 0) (not (stringEmpty? name))) (cons (Pool :name name :size size) acc) acc)
             next (if (> nameEnd 0) (+ nameEnd 1) a)]
@@ -66,7 +66,7 @@ fn poolRows text: String n: Int64 i: Int64 acc: (List Pool) -> (List Pool)
 fn concurrencyRows text: String n: Int64 i: Int64 acc: (List Pool) -> (List Pool)
   (if (>= i n) (listSortBy (fn [p] p.name) (listReverse acc))
     (let [markerText "os.environ.get("
-          found (mt (stringIndexOf (c/sliceOf text i n) markerText) ((some p) (+ i p)) (none -1))]
+          found (match (stringIndexOf (c/sliceOf text i n) markerText) ((some p) (+ i p)) (none -1))]
       (if (< found 0) (listSortBy (fn [p] p.name) (listReverse acc))
         (let [after (+ found (stringLength markerText))
               dq (optionOr (stringIndexOf (c/sliceOf text after n) "\"") -1)
@@ -74,9 +74,9 @@ fn concurrencyRows text: String n: Int64 i: Int64 acc: (List Pool) -> (List Pool
               q (if (< dq 0) sq (if (< sq 0) dq (min dq sq)))
               quote (if (= q dq) "\"" "'")
               envStart (+ after q 1)
-              envEnd (if (< q 0) -1 (mt (stringIndexOf (c/sliceOf text envStart n) quote) ((some p) (+ envStart p)) (none -1)))
-              comma (if (< envEnd 0) -1 (mt (stringIndexOf (c/sliceOf text envEnd n) ",") ((some p) (+ envEnd p)) (none -1)))
-              close (if (< comma 0) -1 (mt (stringIndexOf (c/sliceOf text comma n) ")") ((some p) (+ comma p)) (none -1)))
+              envEnd (if (< q 0) -1 (match (stringIndexOf (c/sliceOf text envStart n) quote) ((some p) (+ envStart p)) (none -1)))
+              comma (if (< envEnd 0) -1 (match (stringIndexOf (c/sliceOf text envEnd n) ",") ((some p) (+ envEnd p)) (none -1)))
+              close (if (< comma 0) -1 (match (stringIndexOf (c/sliceOf text comma n) ")") ((some p) (+ comma p)) (none -1)))
               env (if (< envEnd 0) "" (c/sliceOf text envStart envEnd))
               suffix "_CONCURRENCY"
               envLen (stringLength env)
@@ -89,7 +89,7 @@ fn concurrencyRows text: String n: Int64 i: Int64 acc: (List Pool) -> (List Pool
           (concurrencyRows text n next rows)))))
 
 fn ! getGatewayPools rootDir: String -> (Result (List Pool) String)
-  (mt (fileReadString (str rootDir "/bin/asl-gateway"))
+  (match (fileReadString (str rootDir "/bin/asl-gateway"))
     ((err e) (err e))
     ((ok text)
       (let [pools (poolRows text (stringLength text) 0 (list))]
@@ -100,7 +100,7 @@ fn backendData! rootDir: String -> (Result (List Backend) String)
     (listAppend (m/supportedBackends) (pv/testBackendPrefixes))))
 
 fn shapeFor name: String shapes: (List (Pair String String)) -> String
-  (mt (listHead shapes)
+  (match (listHead shapes)
     ((none) "(:escalate :reason s)")
     ((some entry) (if (= (pairFirst entry) name) (pairSecond entry) (shapeFor name (optionOr (listTail shapes) (list))))))
 
@@ -108,19 +108,19 @@ fn deliverableData! rootDir: String -> (Result (Pair (List String) String) Strin
   (ok (pair (ex/deliverables) (shapeFor "escalate" (ex/opShapes))))
 
 fn ! buildCard rootDir: String -> (Result AgentCard String)
-  (mt (getAllowlist rootDir)
+  (match (getAllowlist rootDir)
     ((err e) (err e))
     ((ok allowlist)
-      (mt (deliverableData! rootDir)
+      (match (deliverableData! rootDir)
         ((err e) (err e))
         ((ok loopFacts)
-          (mt (backendData! rootDir)
+          (match (backendData! rootDir)
             ((err e) (err e))
             ((ok backends)
-              (mt (getGatewayPools rootDir)
+              (match (getGatewayPools rootDir)
                 ((err e) (err e))
                 ((ok gatewayPools)
-                  (mt (m/receiptFieldNames rootDir)
+                  (match (m/receiptFieldNames rootDir)
                     ((err e) (err e))
                     ((ok receiptFields)
                       (ok (AgentCard
@@ -161,7 +161,7 @@ fn ! main argv: (List String) -> (Result Int64 String)
                (c/firstOf argv)
                (optionOr (envGet "ASL_ROOT_DIR") "."))
         cardResult (buildCard root)]
-    (mt cardResult
+    (match cardResult
       ((err e) (err e))
       ((ok card)
         (do

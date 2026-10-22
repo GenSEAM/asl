@@ -305,7 +305,7 @@ fn resolveHeadingSymbol text: String query: String -> (Result MarkdownHeadingSym
                          (MarkdownHeadingSymbol :name "" :kind "" :level 0 :path "" :container "" :depth 0 :start 0 :end 0 :headingStart 0 :headingEnd 0 :startLine 0 :endLine 0))))))))
 
 fn resolveSection text: String query: String -> (Result md/MarkdownSection String)
-  (mt (resolveHeadingSymbol text query)
+  (match (resolveHeadingSymbol text query)
     ((err msg) (err msg))
     ((ok sym)
      (ok (md/MarkdownSection :title sym.name
@@ -325,18 +325,18 @@ fn findHeadingSymbol text: String query: String -> (Result MarkdownHeadingSymbol
   (resolveHeadingSymbol text query)
 
 fn findSymbol text: String query: String -> (Result sym/SymbolDef String)
-  (mt (resolveHeadingSymbol text query)
+  (match (resolveHeadingSymbol text query)
     ((err msg) (err msg))
     ((ok sym) (ok (headingSymbolToSymbolDef sym))))
 
 fn markdownReadSymbol text: String query: String -> (Result String String)
-  (mt (resolveHeadingSymbol text query)
+  (match (resolveHeadingSymbol text query)
     ((err msg) (err msg))
     ((ok sym)
      (ok (optionOr (stringSlice text sym.start sym.end) ""))))
 
 fn markdownReadSymbolReceipt file: String text: String query: String -> String
-  (mt (resolveHeadingSymbol text query)
+  (match (resolveHeadingSymbol text query)
     ((err msg)
      (if (stringContains? msg "ambiguous")
        (let [(matches (filterHeadings (markdownHeadingSymbols text) (splitHeadingQuery query)))
@@ -361,7 +361,7 @@ fn extractFenceFromNode node: tr/Node text: String -> (Option MarkdownFence)
             (e0 (tr/elementEnd firstElem))
             (firstLine (optionOr (stringSlice text s0 e0) ""))
             (fcPairOpt (md/isFencedCodeStart? firstLine))]
-        (mt fcPairOpt
+        (match fcPairOpt
           ((none) (none))
           ((some fcPair)
            (let [(fenceChar (pairFirst fcPair))
@@ -388,11 +388,11 @@ fn collectFencesLoop elems: (List tr/TreeElement) text: String acc: (List Markdo
     (listReverse acc)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken _) (collectFencesLoop tl text acc))
         ((tr/elemNode node)
          (if (= node.kind "fencedCode")
-           (mt (extractFenceFromNode node text)
+           (match (extractFenceFromNode node text)
              ((some f) (collectFencesLoop tl text (cons f acc)))
              ((none) (collectFencesLoop tl text acc)))
            (let [(inner (collectFencesLoop node.children text (list)))]
@@ -411,7 +411,7 @@ fn delegateLanguageContent lang: String content: String -> (Option tr/Node)
 
 fn delegateFence fence: MarkdownFence -> MarkdownFence
   (let [(lang fence.language)]
-    (mt (delegateLanguageContent lang fence.content)
+    (match (delegateLanguageContent lang fence.content)
       ((some tree)
        (with fence :subtree (some tree)))
       ((none) fence)))
@@ -421,17 +421,17 @@ fn delegateMarkdownFences root: tr/Node text: String -> (List MarkdownFence)
        (extractFences root text))
 
 fn delegateFenceNode node: tr/Node text: String -> (Option tr/Node)
-  (mt (extractFenceFromNode node text)
+  (match (extractFenceFromNode node text)
     ((none) (none))
     ((some f)
      (delegateLanguageContent f.language f.content)))
 
 fn delegateTreeElement elem: tr/TreeElement text: String -> tr/TreeElement
-  (mt elem
+  (match elem
     ((tr/elemToken _) elem)
     ((tr/elemNode node)
      (if (= node.kind "fencedCode")
-       (mt (delegateFenceNode node text)
+       (match (delegateFenceNode node text)
          ((some sub)
           (tr/elemNode (tr/makeNode "fencedCode" node.start node.end
                                     (list (tr/elemNode sub)))))

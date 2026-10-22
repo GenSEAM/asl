@@ -13,7 +13,7 @@ fn ! node -> String
   (let [(candidates (list "/usr/local/bin/node" "/opt/homebrew/bin/node"))
         (pathDirs (stringSplit (optionOr (envGet "PATH") "") ":"))
         (allCandidates (listAppend candidates (map (fn [(dir String)] -> String (str dir "/node")) pathDirs)))]
-    (mt (listHead (filter fileExists? allCandidates))
+    (match (listHead (filter fileExists? allCandidates))
       ((some p) p)
       ((none) "")))
 
@@ -60,13 +60,13 @@ fn diagText errors: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.code ": " d.message)) errors) "; ")
 
 fn textOf r: (Result String (List irTy/IrDiag)) -> String
-  (mt r ((ok t) t) ((err _) ""))
+  (match r ((ok t) t) ((err _) ""))
 
 fn whyOf r: (Result String (List irTy/IrDiag)) -> String
-  (mt r ((ok _) "ok") ((err ds) (diagText ds)))
+  (match r ((ok _) "ok") ((err ds) (diagText ds)))
 
 fn importName entry: String -> String
-  (mt (stringIndexOf entry ".")
+  (match (stringIndexOf entry ".")
     ((some at) (optionOr (stringSlice entry (+ at 1) (stringLength entry)) ""))
     ((none) entry))
 
@@ -143,7 +143,7 @@ fn stringSource -> String
     "\n")
 
 fn emitFor facts: libc/TripleFacts tf: target/TargetFacts source: String -> (Result String (List irTy/IrDiag))
-  (mt (low/lowerSource source)
+  (match (low/lowerSource source)
     ((err ds) (err ds))
     ((ok m) (targetLlvm/emitLlvmProgramForTarget facts tf m "main")))
 
@@ -195,9 +195,9 @@ fn ! wasmCase name: String source: String -> Bool
       (let [(linked (wl/linkWasm32 (linker) (list (str work "/main.o") (str work "/runtime.o") (str work "/support.o")) (list "gcFreedObjects") wasm))]
         (assert (= linked.exitCode 0) (str name " links without --allow-undefined: " linked.stderr)))
       (let [(read (wl/wasmImports (node) wasm))
-            (imports (mt read ((ok xs) xs) ((err _) (list))))]
+            (imports (match read ((ok xs) xs) ((err _) (list))))]
         (do
-          (assert (ok? read) (str name " import section reads: " (mt read ((ok _) "ok") ((err e) e))))
+          (assert (ok? read) (str name " import section reads: " (match read ((ok _) "ok") ((err e) e))))
           (assert (listContains? imports "asl.write") (str name " imports asl.write: " (stringJoin imports " ")))
           (assert (listEmpty? (wl/importsOutside (allowed) imports)) (str name " imports only the allowlist, outside: " (stringJoin (wl/importsOutside (allowed) imports) " ")))
           (assert (listEmpty? (envImports imports)) (str name " has no env import: " (stringJoin (envImports imports) " ")))
@@ -246,7 +246,7 @@ fn ! controlCase -> Bool
       (let [(linked (wl/linkWasm32 (linker) (list obj) (list) wasm))]
         (assert (= linked.exitCode 0) (str "control links: " linked.stderr)))
       (let [(read (wl/wasmImports (node) wasm))
-            (imports (mt read ((ok xs) xs) ((err _) (list))))]
+            (imports (match read ((ok xs) xs) ((err _) (list))))]
         (do
           (assert (= (wl/importsOutside (allowed) imports) (list "env.malloc" "asl.snprintf")) (str "control's renamed libc imports are outside the allowlist: " (stringJoin imports " ")))
           (assert (= (envImports imports) (list "env.malloc")) "control's env import is flagged")
@@ -256,7 +256,7 @@ fn ! controlCase -> Bool
 fn ! runTests -> Bool
   (let [(row (libc/libcFacts "wasm32-unknown-unknown"))
         (abi (libc/runtimeAbi "wasm32-unknown-unknown"))
-        (services (mt abi ((some a) (list a.output a.exit a.clock a.trap)) ((none) (list))))]
+        (services (match abi ((some a) (list a.output a.exit a.clock a.trap)) ((none) (list))))]
     (do
       (assert (listContains? (libc/libcTriples) "wasm32-unknown-unknown") "wasm32 is a libc.asl triple")
       (assert (some? row) "wasm32 has a facts row")
@@ -267,7 +267,7 @@ fn ! runTests -> Bool
           (assert (listEmpty? facts.structs) "wasm32 declares no libc struct layouts")))
       (assert (none? (libc/runtimeAbi "darwin-arm64")) "a libc triple has no host runtime ABI")
       (assert (= services (allowed)) (str "wasm32 runtime services are exactly the allowlist: " (stringJoin services " ")))
-      (assert (= (mt abi ((some a) a.memory) ((none) "")) "memory.grow") "wasm32 memory is memory.grow")
+      (assert (= (match abi ((some a) a.memory) ((none) "")) "memory.grow") "wasm32 memory is memory.grow")
       (assert (= (libc/hostImport "asl.nowNs") (pair "asl" "nowNs")) "a service splits into import module and name")
       (assert (controlCase) "the import check flags a renamed libc")
       (assert (wasmCase "hello" (helloSource)) "hello")

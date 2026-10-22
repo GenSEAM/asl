@@ -69,7 +69,7 @@ fn exportShim e: (Pair String String) -> String
   (stringJoin ["" (str "define i64 @" (pairFirst e) "(" (pairSecond e) ") {") "entry:" (str "  %r = call i64 @aslSite$2Fmain$2E" (pairFirst e) "(" (argList (pairSecond e)) ")") "  ret i64 %r" "}"] "\n")
 
 fn withExports part: String ir: (Result String (List irTy/IrDiag)) -> (Result String (List irTy/IrDiag))
-  (mt ir
+  (match ir
     ((err ds) (err ds))
     ((ok text)
       (let [(missing (filter (fn [(e (Pair String String))] -> Bool (not (stringContains? text (exportDefine e)))) (exports)))]
@@ -79,7 +79,7 @@ fn withExports part: String ir: (Result String (List irTy/IrDiag)) -> (Result St
           (else (err (map (fn [(e (Pair String String))] -> irTy/IrDiag (irTy/makeIrDiag "ERR_SITE_EXPORT" (str "aslSite/main no longer defines " (exportDefine e) "...), which boot.js calls") "asl/web/site/main.asl")) missing)))))))
 
 fn ! object! llc: String work: String part: String lowered: (Result String (List irTy/IrDiag)) -> Bool
-  (mt (withExports part lowered)
+  (match (withExports part lowered)
     ((err ds) (do (eprintln (str "build: lowering " part " failed\n" (diagText ds))) false))
     ((ok text)
       (let [(ll (str work "/" part ".ll"))]
@@ -89,7 +89,7 @@ fn ! object! llc: String work: String part: String lowered: (Result String (List
 
 fn ! compileWasm! work: String out: String -> Bool
   (let [(llc (llc!))
-        (program (mt (lk/linkEntry! (str (web) "/site/main.asl"))
+        (program (match (lk/linkEntry! (str (web) "/site/main.asl"))
                    ((err ds) (err ds))
                    ((ok m) (llvm/emitLlvmProgramForTarget (wasmFacts) (target/wasm32TargetFacts) m (str m.name ".main")))))]
     (and (object! llc work "main" program)
@@ -98,7 +98,7 @@ fn ! compileWasm! work: String out: String -> Bool
           (ok! "wasm-ld" (wl/linkWasm32 (wasmLd!) [(str work "/main.ll.o") (str work "/runtime.ll.o") (str work "/support.ll.o")] (map pairFirst (exports)) out))))))
 
 fn ! lineCount! path: String -> Int64
-  (mt (fileReadString path) ((ok s) (stringCountChar s "\n")) ((err e) 0))
+  (match (fileReadString path) ((ok s) (stringCountChar s "\n")) ((err e) 0))
 
 fn ! aslLines! -> Int64
   (let [(files (filter (fn [(f String)] -> Bool (not (stringEmpty? f))) (stringSplit (sh! (str "find " (web) "/site asl/packages/asl-html/src -name '*.asl'")).stdout "\n")))]

@@ -61,7 +61,7 @@
 (:sym "emptyModIndex" :mod "asl-checker/resolve" :sig "emptyModIndex -> ModIndex" :doc "A module index not yet built for any root.")
 (:sym "ModIndex" :mod "asl-checker/resolve" :kind type :sig "(schema ModIndex (:f root String) (:f mods (List IdxMod)) (:f pkgs (List IdxPkg)) (:f skipped Int64) (:f skippedAt String) (:f workspaces (Map String String)))" :pit (record))
 (:sym "Resolution" :mod "asl-checker/resolve" :kind type :sig "(schema Resolution (:f status ResStatus) (:f path String) (:f note String) (:f index ModIndex))" :pit (record))
-(:sym "ResStatus" :mod "asl-checker/resolve" :kind type :sig "(enum ResStatus (:c resOk [] \"Exactly one candidate module\") (:c resDeprecated [] \"A leading ../ path resolved against the importer's directory\") (:c resAmbiguous [] \"Several candidate modules\") (:c resMissing [] \"No candidate module\"))")
+(:sym "ResStatus" :mod "asl-checker/resolve" :kind type :sig "(enum ResStatus (:c resOk [] \"Exactly one candidate module\") (:c resAmbiguous [] \"Several candidate modules\") (:c resMissing [] \"No candidate module\"))")
 (:sym "ModuleClosure" :mod "asl-checker/resolve" :kind type :sig "(schema ModuleClosure (:f deps (Map String ModuleSummary)) (:f paths (List String)) (:f unresolved (List String)) (:f errors (List String)) (:f index ModIndex))" :pit (record))
 (:sym "mapValuesList" :mod "asl-checker/resolve" :sig "mapValuesList m: (Map String String) -> (List String)" :doc "The values of a string map.")
 (:sym "modEnum" :mod "asl-checker/resolve" :sig "modEnum m: ModuleSummary name: String -> (Option EnumSummary)" :doc "The enum summary named name in m." :pit (option))

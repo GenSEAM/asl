@@ -9,10 +9,10 @@ fn joinLines xs: (List String) -> String
   (stringJoin xs "\n")
 
 fn printed res: (Result ty/SsaModule (List ty/IrDiag)) -> String
-  (mt res ((ok m) (prn/printSsa m)) ((err ds) (str "lowering failed: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message " " d.locus)) ds) "; "))))
+  (match res ((ok m) (prn/printSsa m)) ((err ds) (str "lowering failed: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message " " d.locus)) ds) "; "))))
 
 fn verified? res: (Result ty/SsaModule (List ty/IrDiag)) -> Bool
-  (mt res ((ok m) (ok? (vfy/verifySsa m))) ((err _) false))
+  (match res ((ok m) (ok? (vfy/verifySsa m))) ((err _) false))
 
 fn valuesSource -> String
   (joinLines (list
@@ -31,10 +31,10 @@ fn patternSource -> String
   (joinLines (list
     "(module demo/patterns :x [radius])"
     "(enum Shape (:c circle [(r Int64)] \"round\") (:c rect [(w Int64) (h Int64)] \"box\") (:c empty [] \"nothing\"))"
-    "(fn radius [(s Shape)] -> Int64 (mt s ((circle r) r) (else 0)))"
-    "(fn blank? [(s Shape)] -> Bool (mt s (empty true) (else false)))"
-    "(fn width [(s Shape)] -> Int64 (mt s ((rect w _) w)))"
-    "(fn fail [(m String)] -> Int64 (mt m))"))
+    "(fn radius [(s Shape)] -> Int64 (match s ((circle r) r) (else 0)))"
+    "(fn blank? [(s Shape)] -> Bool (match s (empty true) (else false)))"
+    "(fn width [(s Shape)] -> Int64 (match s ((rect w _) w)))"
+    "(fn fail [(m String)] -> Int64 (match m))"))
 
 fn escapeSource -> String
   (joinLines (list
@@ -48,7 +48,7 @@ fn indentSource -> String
     "(enum Shape (:c circle [(r Int64)] \"round\") (:c rect [(w Int64) (h Int64)] \"box\"))"
     ""
     "fn area s: Shape -> Int64"
-    "  (mt s ((circle r) (* r r)) ((rect w h) (* w h)))"))
+    "  (match s ((circle r) (* r r)) ((rect w h) (* w h)))"))
 
 fn valuesGolden -> String
   (joinLines (list
@@ -274,10 +274,10 @@ fn indentGolden -> String
     "      (return %6))))"))
 
 fn poolOf res: (Result ty/SsaModule (List ty/IrDiag)) -> (List String)
-  (mt res ((ok m) m.strings) ((err _) (list)))
+  (match res ((ok m) m.strings) ((err _) (list)))
 
 fn arityOf res: (Result ty/SsaModule (List ty/IrDiag)) -> (List Int64)
-  (mt res
+  (match res
     ((ok m) (fold (fn [(acc (List Int64)) (d ty/SsaTypeDecl)] -> (List Int64) (listAppend acc (map (fn [(v ty/SsaVariant)] -> Int64 v.arity) d.variants))) (list) m.types))
     ((err _) (list)))
 
@@ -306,10 +306,10 @@ fn elseKeywordSource -> String
   (joinLines (list
     "(module demo/elseKeyword :x [pick])"
     "(enum Shape (:c circle [(r Int64)] \"round\") (:c square [(q Int64)] \"flat\"))"
-    "(fn pick [(s Shape)] -> Int64 (mt s ((circle r) r) (:else 0)))"))
+    "(fn pick [(s Shape)] -> Int64 (match s ((circle r) r) (:else 0)))"))
 
 fn diagCodes res: (Result ty/SsaModule (List ty/IrDiag)) -> (List String)
-  (mt res ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> String d.code) ds)))
+  (match res ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> String d.code) ds)))
 
 fn ! testStrictEscapes -> Bool
   (do (assert (= (poolOf (lk/lowerSourceLinked! (literalSource "\\u{62}\\u{1F600}\\u{10FFFF}\\u00e9\\xff"))) (list "\u{62}\u{1F600}\u{10FFFF}\u00e9\xff")) "braced, 4-digit and byte escapes pool the bytes the host reader makes")

@@ -10,7 +10,7 @@ fn makeReleasePlan version: Str -> ReleasePlan
   (ReleasePlan :version version :tag (str "v" version) :releaseDate "2026-09-08" :targetPlatforms (list "darwin-arm64" "darwin-x64" "linux-x64" "linux-arm64" "windows-x64") :distDir "dist")
 
 fn executeReleaseStep! name: Str binary: Str args: (List Str) -> ReleaseStepResult
-  (mt (sh/runCmd! binary args) ((ok r) (let [(exitCode r.exitCode) (dur r.durationMs) (summary r.summary) (_ (sh/releaseReceipt! r))] (ReleaseStepResult :name name :ok (== exitCode 0) :message summary :durationMs dur))) ((err _) (ReleaseStepResult :name name :ok false :message "Process execution failed" :durationMs 0)))
+  (match (sh/runCmd! binary args) ((ok r) (let [(exitCode r.exitCode) (dur r.durationMs) (summary r.summary) (_ (sh/releaseReceipt! r))] (ReleaseStepResult :name name :ok (= exitCode 0) :message summary :durationMs dur))) ((err _) (ReleaseStepResult :name name :ok false :message "Process execution failed" :durationMs 0)))
 
 fn runVerificationGate! plan: ReleasePlan -> ReleaseStepResult
   (executeReleaseStep! "verificationGate" "./bin/asl" (list "audit" "gates"))

@@ -61,7 +61,7 @@ fn ! hostTriple -> String
       (else "")))
 
 fn ! hostFacts -> libc/TripleFacts
-  (mt (libc/libcFacts (hostTriple))
+  (match (libc/libcFacts (hostTriple))
     ((some f) f)
     ((none) (do (assert false (str "hostFacts: no verified libc.asl row for this host's triple (uname says \"" (hostTriple) "\")")) (libc/emptyTripleFacts))))
 
@@ -79,16 +79,16 @@ fn ! mutantSockaddrInFacts base: libc/TripleFacts -> libc/TripleFacts
 
 
 fn tcpEchoRunFn facts: libc/TripleFacts -> (Result (List ty/SsaFunction) String)
-  (mt (sysNet/tcpListenFn facts)
+  (match (sysNet/tcpListenFn facts)
     ((err e) (err e))
     ((ok tcpListen)
-     (mt (sysNet/tcpConnectFn facts)
+     (match (sysNet/tcpConnectFn facts)
        ((err e) (err e))
        ((ok tcpConnect)
-        (mt (sysNet/sockAcceptFn facts)
+        (match (sysNet/sockAcceptFn facts)
           ((err e) (err e))
           ((ok sockAccept)
-           (mt (sysNet/sockLocalPortFn facts)
+           (match (sysNet/sockLocalPortFn facts)
              ((err e) (err e))
              ((ok sockLocalPort)
               (ok (list (sys/sysErrnoValueFn facts) tcpListen tcpConnect sockAccept sockLocalPort (sys/sysWriteFn) (sys/sysReadFn)
@@ -147,13 +147,13 @@ fn tcpEchoRunFn facts: libc/TripleFacts -> (Result (List ty/SsaFunction) String)
 
 
 fn unixEchoRunFn facts: libc/TripleFacts path: String -> (Result (List ty/SsaFunction) String)
-  (mt (sysNet/unixListenFn facts)
+  (match (sysNet/unixListenFn facts)
     ((err e) (err e))
     ((ok unixListen)
-     (mt (sysNet/unixConnectFn facts)
+     (match (sysNet/unixConnectFn facts)
        ((err e) (err e))
        ((ok unixConnect)
-        (mt (sysNet/sockAcceptFn facts)
+        (match (sysNet/sockAcceptFn facts)
           ((err e) (err e))
           ((ok sockAccept)
            (ok (list (sys/sysErrnoValueFn facts) unixListen unixConnect sockAccept (sys/sysWriteFn) (sys/sysReadFn)
@@ -212,13 +212,13 @@ fn moduleOf facts: libc/TripleFacts strings: (List String) functions: (List ty/S
     (dedupExternsByName (listAppend (sys/sysExterns facts) (sysNet/sysNetExterns facts))) (list) functions)
 
 fn textOf res: (Result String (List ty/IrDiag)) -> String
-  (mt res ((ok text) text) ((err diags) (str "ERR: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code "@" d.locus ": " d.message)) diags) " || "))))
+  (match res ((ok text) text) ((err diags) (str "ERR: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code "@" d.locus ": " d.message)) diags) " || "))))
 
 fn ! unwrapFn label: String res: (Result ty/SsaFunction String) -> ty/SsaFunction
-  (mt res ((ok f) f) ((err e) (do (assert false (str label ": " e)) (sys/sysGetpidFn))))
+  (match res ((ok f) f) ((err e) (do (assert false (str label ": " e)) (sys/sysGetpidFn))))
 
 fn ! unwrapFns label: String res: (Result (List ty/SsaFunction) String) -> (List ty/SsaFunction)
-  (mt res ((ok fs) fs) ((err e) (do (assert false (str label ": " e)) (list))))
+  (match res ((ok fs) fs) ((err e) (do (assert false (str label ": " e)) (list))))
 
 fn ! asciiA -> String
   "A"
@@ -246,10 +246,10 @@ fn ! emitAndVerifyOnly work: String name: String facts: libc/TripleFacts runFn: 
             (verifies? work name)))))
 
 fn ! nulPathRunFn facts: libc/TripleFacts -> (Result (List ty/SsaFunction) String)
-  (mt (sysNet/unixListenFn facts)
+  (match (sysNet/unixListenFn facts)
     ((err e) (err e))
     ((ok unixListen)
-     (mt (libc/libcConst facts "EINVAL")
+     (match (libc/libcConst facts "EINVAL")
        ((none) (err "hostFacts: no EINVAL const"))
        ((some einval)
         (ok (list (sys/sysErrnoValueFn facts) unixListen
@@ -277,13 +277,13 @@ fn ! nulPathRunFn facts: libc/TripleFacts -> (Result (List ty/SsaFunction) Strin
              (sys/block "n.bad" (list (sys/int64Const "n.0" 0)) (ty/termReturn "n.0"))))))))))
 
 fn ! portRangeRunFn facts: libc/TripleFacts -> (Result (List ty/SsaFunction) String)
-  (mt (sysNet/tcpListenFn facts)
+  (match (sysNet/tcpListenFn facts)
     ((err e) (err e))
     ((ok tcpListen)
-     (mt (sysNet/tcpConnectFn facts)
+     (match (sysNet/tcpConnectFn facts)
        ((err e) (err e))
        ((ok tcpConnect)
-        (mt (libc/libcConst facts "EINVAL")
+        (match (libc/libcConst facts "EINVAL")
           ((none) (err "hostFacts: no EINVAL const"))
           ((some einval)
            (ok (list (sys/sysErrnoValueFn facts) tcpListen tcpConnect

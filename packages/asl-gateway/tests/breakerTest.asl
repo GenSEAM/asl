@@ -5,7 +5,7 @@
 fn testFixtureLoaded! -> Bool
   (let [(fixtureRes (fileReadString "asl/packages/asl-gateway/tests/breakerFixture.asn"))]
     (assert (ok? fixtureRes) "breakerFixture.asn must be readable from disk")
-    (mt fixtureRes
+    (match fixtureRes
       ((err _) false)
       ((ok text)
        (do
@@ -34,7 +34,7 @@ fn testQuotaDetectionParity -> Bool
           (st1 (pairFirst s1))
           (s2 (brk/stepBreaker st1 (brk/evCheckDown "agy") 100))
           (decDown (pairSecond s2))]
-      (mt decDown
+      (match decDown
         ((decDownFor left)
          (do
            (assert (= left 600) "markdown on quota sets 600s cooldown")
@@ -48,9 +48,9 @@ fn test503CountersAndTrip -> Bool
         (st1 (pairFirst s1))
         (d1 (pairSecond s1))]
     (assert (= (brk/breaker503Count st1 "agy") 1) "seq06: 503 count is 1 after first failure")
-    (mt d1 ((decTripped tr) (refute tr "seq06: single 503 does not trip")) (_ (assert false "unexpected branch")))
+    (match d1 ((decTripped tr) (refute tr "seq06: single 503 does not trip")) (_ (assert false "unexpected branch")))
     (let [(sCheck (brk/stepBreaker st1 (brk/evCheckDown "agy") 100))]
-      (mt (pairSecond sCheck) ((decDownFor sec) (assert (= sec 0) "seq06: down_for is 0")) (_ (assert false "unexpected branch")))))
+      (match (pairSecond sCheck) ((decDownFor sec) (assert (= sec 0) "seq06: down_for is 0")) (_ (assert false "unexpected branch")))))
 
   (let [(st0 (brk/defaultBreakerState))
         (s1 (brk/stepBreaker st0 (brk/evNote503 "agy") 100))
@@ -58,9 +58,9 @@ fn test503CountersAndTrip -> Bool
         (st2 (pairFirst s2))
         (d2 (pairSecond s2))]
     (assert (= (brk/breaker503Count st2 "agy") 2) "seq07: 503 count is 2 after second failure")
-    (mt d2 ((decTripped tr) (refute tr "seq07: two 503s do not trip")) (_ (assert false "unexpected branch")))
+    (match d2 ((decTripped tr) (refute tr "seq07: two 503s do not trip")) (_ (assert false "unexpected branch")))
     (let [(sCheck (brk/stepBreaker st2 (brk/evCheckDown "agy") 105))]
-      (mt (pairSecond sCheck) ((decDownFor sec) (assert (= sec 0) "seq07: down_for is 0")) (_ (assert false "unexpected branch")))))
+      (match (pairSecond sCheck) ((decDownFor sec) (assert (= sec 0) "seq07: down_for is 0")) (_ (assert false "unexpected branch")))))
 
   (let [(st0 (brk/defaultBreakerState))
         (s1 (brk/stepBreaker st0 (brk/evNote503 "agy") 100))
@@ -69,9 +69,9 @@ fn test503CountersAndTrip -> Bool
         (st3 (pairFirst s3))
         (d3 (pairSecond s3))]
     (assert (= (brk/breaker503Count st3 "agy") 0) "seq08: 503 count resets to 0 on trip")
-    (mt d3 ((decTripped tr) (assert tr "seq08: 3rd 503 trips breaker")) (_ (assert false "unexpected branch")))
+    (match d3 ((decTripped tr) (assert tr "seq08: 3rd 503 trips breaker")) (_ (assert false "unexpected branch")))
     (let [(sCheck (brk/stepBreaker st3 (brk/evCheckDown "agy") 110))]
-      (mt (pairSecond sCheck) ((decDownFor sec) (assert (= sec 600) "seq08: down_for is 600 on trip")) (_ (assert false "unexpected branch")))))
+      (match (pairSecond sCheck) ((decDownFor sec) (assert (= sec 600) "seq08: down_for is 600 on trip")) (_ (assert false "unexpected branch")))))
 
   (let [(st0 (brk/defaultBreakerState))
         (s1 (brk/stepBreaker st0 (brk/evNote503 "agy") 100))
@@ -81,12 +81,12 @@ fn test503CountersAndTrip -> Bool
         (s5 (brk/stepBreaker (pairFirst s4) (brk/evNote503 "agy") 104))
         (stFinal (pairFirst s5))
         (dAgy (pairSecond s5))]
-    (mt dAgy ((decTripped tr) (assert tr "seq09: agy trips on 3rd failure")) (_ (assert false "unexpected branch")))
+    (match dAgy ((decTripped tr) (assert tr "seq09: agy trips on 3rd failure")) (_ (assert false "unexpected branch")))
     (assert (= (brk/breaker503Count stFinal "codex") 2) "seq09: codex count remains 2")
     (let [(cAgy (brk/stepBreaker stFinal (brk/evCheckDown "agy") 104))
           (cCodex (brk/stepBreaker (pairFirst cAgy) (brk/evCheckDown "codex") 104))]
-      (mt (pairSecond cAgy) ((decDownFor sec) (assert (= sec 600) "seq09: agy is down 600s")) (_ (assert false "unexpected branch")))
-      (mt (pairSecond cCodex) ((decDownFor sec) (assert (= sec 0) "seq09: codex is not down")) (_ (assert false "unexpected branch")))))
+      (match (pairSecond cAgy) ((decDownFor sec) (assert (= sec 600) "seq09: agy is down 600s")) (_ (assert false "unexpected branch")))
+      (match (pairSecond cCodex) ((decDownFor sec) (assert (= sec 0) "seq09: codex is not down")) (_ (assert false "unexpected branch")))))
 
   (let [(st0 (brk/defaultBreakerState))
         (s1 (brk/stepBreaker st0 (brk/evNote503 "agy") 100))
@@ -96,7 +96,7 @@ fn test503CountersAndTrip -> Bool
         (stFinal (pairFirst s4))
         (dFinal (pairSecond s4))]
     (assert (= (brk/breaker503Count stFinal "agy") 1) "seq10: 503 count is 1 after reset and 1 new failure")
-    (mt dFinal ((decTripped tr) (refute tr "seq10: reset prevented trip")) (_ (assert false "unexpected branch"))))
+    (match dFinal ((decTripped tr) (refute tr "seq10: reset prevented trip")) (_ (assert false "unexpected branch"))))
 
   (let [(st0 (brk/defaultBreakerState))
         (s1 (brk/stepBreaker st0 (brk/evNote503 "codex") 100))
@@ -106,9 +106,9 @@ fn test503CountersAndTrip -> Bool
         (stFinal (pairFirst s4))
         (d4 (pairSecond s4))]
     (assert (= (brk/breaker503Count stFinal "codex") 1) "seq11: 4th failure starts count at 1")
-    (mt d4 ((decTripped tr) (refute tr "seq11: 4th failure does not report tripped")) (_ (assert false "unexpected branch")))
+    (match d4 ((decTripped tr) (refute tr "seq11: 4th failure does not report tripped")) (_ (assert false "unexpected branch")))
     (let [(sCheck (brk/stepBreaker stFinal (brk/evCheckDown "codex") 103))]
-      (mt (pairSecond sCheck) ((decDownFor sec) (assert (= sec 599) "seq11: 599s left")) (_ (assert false "unexpected branch")))))
+      (match (pairSecond sCheck) ((decDownFor sec) (assert (= sec 599) "seq11: 599s left")) (_ (assert false "unexpected branch")))))
   true
 
 fn testTimeoutCountersAndTrip -> Bool
@@ -117,7 +117,7 @@ fn testTimeoutCountersAndTrip -> Bool
         (st1 (pairFirst s1))
         (d1 (pairSecond s1))]
     (assert (= (brk/breakerTimeoutCount st1 "claude") 1) "seq12: timeout count is 1")
-    (mt d1 ((decTripped tr) (refute tr "seq12: single timeout does not trip")) (_ (assert false "unexpected branch"))))
+    (match d1 ((decTripped tr) (refute tr "seq12: single timeout does not trip")) (_ (assert false "unexpected branch"))))
 
   (let [(st0 (brk/defaultBreakerState))
         (s1 (brk/stepBreaker st0 (brk/evNoteTimeout "claude") 200))
@@ -125,7 +125,7 @@ fn testTimeoutCountersAndTrip -> Bool
         (st2 (pairFirst s2))
         (d2 (pairSecond s2))]
     (assert (= (brk/breakerTimeoutCount st2 "claude") 2) "seq13: timeout count is 2")
-    (mt d2 ((decTripped tr) (refute tr "seq13: two timeouts do not trip")) (_ (assert false "unexpected branch"))))
+    (match d2 ((decTripped tr) (refute tr "seq13: two timeouts do not trip")) (_ (assert false "unexpected branch"))))
 
   (let [(st0 (brk/defaultBreakerState))
         (s1 (brk/stepBreaker st0 (brk/evNoteTimeout "claude") 200))
@@ -134,9 +134,9 @@ fn testTimeoutCountersAndTrip -> Bool
         (st3 (pairFirst s3))
         (d3 (pairSecond s3))]
     (assert (= (brk/breakerTimeoutCount st3 "claude") 0) "seq14: timeout count resets on trip")
-    (mt d3 ((decTripped tr) (assert tr "seq14: 3rd timeout trips breaker")) (_ (assert false "unexpected branch")))
+    (match d3 ((decTripped tr) (assert tr "seq14: 3rd timeout trips breaker")) (_ (assert false "unexpected branch")))
     (let [(sCheck (brk/stepBreaker st3 (brk/evCheckDown "claude") 210))]
-      (mt (pairSecond sCheck) ((decDownFor sec) (assert (= sec 600) "seq14: down_for is 600")) (_ (assert false "unexpected branch")))))
+      (match (pairSecond sCheck) ((decDownFor sec) (assert (= sec 600) "seq14: down_for is 600")) (_ (assert false "unexpected branch")))))
 
   (let [(st0 (brk/defaultBreakerState))
         (s1 (brk/stepBreaker st0 (brk/evNoteTimeout "claude") 200))
@@ -146,7 +146,7 @@ fn testTimeoutCountersAndTrip -> Bool
         (stFinal (pairFirst s4))
         (dFinal (pairSecond s4))]
     (assert (= (brk/breakerTimeoutCount stFinal "claude") 1) "seq15: timeout count is 1 after reset and new failure")
-    (mt dFinal ((decTripped tr) (refute tr "seq15: reset prevented trip")) (_ (assert false "unexpected branch"))))
+    (match dFinal ((decTripped tr) (refute tr "seq15: reset prevented trip")) (_ (assert false "unexpected branch"))))
 
   (let [(st0 (brk/defaultBreakerState))
         (s1 (brk/stepBreaker st0 (brk/evNoteTimeout "agy") 100))
@@ -157,7 +157,7 @@ fn testTimeoutCountersAndTrip -> Bool
     (assert (= (brk/breakerTimeoutCount stFinal "agy") 2) "seq16: timeout count is 2")
     (assert (= (brk/breaker503Count stFinal "agy") 2) "seq16: 503 count is 2")
     (let [(sCheck (brk/stepBreaker stFinal (brk/evCheckDown "agy") 103))]
-      (mt (pairSecond sCheck) ((decDownFor sec) (assert (= sec 0) "seq16: interleaved failures do not trip")) (_ (assert false "unexpected branch")))))
+      (match (pairSecond sCheck) ((decDownFor sec) (assert (= sec 0) "seq16: interleaved failures do not trip")) (_ (assert false "unexpected branch")))))
   true
 
 fn testSuccessResetsAndClear -> Bool
@@ -165,7 +165,7 @@ fn testSuccessResetsAndClear -> Bool
         (s1 (brk/stepBreaker st0 (brk/evMarkDown "agy") 100))
         (s2 (brk/stepBreaker (pairFirst s1) (brk/evClear "agy") 150))
         (sCheck (brk/stepBreaker (pairFirst s2) (brk/evCheckDown "agy") 150))]
-    (mt (pairSecond sCheck) ((decDownFor sec) (assert (= sec 0) "seq17: clear makes down_for 0 immediately")) (_ (assert false "unexpected branch"))))
+    (match (pairSecond sCheck) ((decDownFor sec) (assert (= sec 0) "seq17: clear makes down_for 0 immediately")) (_ (assert false "unexpected branch"))))
 
   (let [(st0 (brk/defaultBreakerState))
         (s1 (brk/stepBreaker st0 (brk/evNote503 "codex") 200))
@@ -187,7 +187,7 @@ fn testSuccessResetsAndClear -> Bool
     (assert (= (brk/breaker503Count stFinal "claude") 0) "seq19: mark_down resets 503 count")
     (assert (= (brk/breakerTimeoutCount stFinal "claude") 0) "seq19: mark_down resets timeout count")
     (let [(sCheck (brk/stepBreaker stFinal (brk/evCheckDown "claude") 305))]
-      (mt (pairSecond sCheck) ((decDownFor sec) (assert (= sec 600) "seq19: mark_down sets 600s")) (_ (assert false "unexpected branch")))))
+      (match (pairSecond sCheck) ((decDownFor sec) (assert (= sec 600) "seq19: mark_down sets 600s")) (_ (assert false "unexpected branch")))))
 
   (let [(st0 (brk/defaultBreakerState))
         (s1 (brk/stepBreaker st0 (brk/evNoteTimeout "agy") 100))
@@ -198,7 +198,7 @@ fn testSuccessResetsAndClear -> Bool
         (stFinal (pairFirst s5))
         (dFinal (pairSecond s5))]
     (assert (= (brk/breakerTimeoutCount stFinal "agy") 2) "seq20: count is 2, not 4")
-    (mt dFinal ((decTripped tr) (refute tr "seq20: clear between prevented trip")) (_ (assert false "unexpected branch"))))
+    (match dFinal ((decTripped tr) (refute tr "seq20: clear between prevented trip")) (_ (assert false "unexpected branch"))))
   true
 
 fn testCooldownExpiryAndSnapshot -> Bool
@@ -211,8 +211,8 @@ fn testCooldownExpiryAndSnapshot -> Bool
         (sExact (brk/stepBreaker stBefore (brk/evCheckDown "agy") 1600))
         (stExact (pairFirst sExact))
         (dExact (pairSecond sExact))]
-    (mt dBefore ((decDownFor sec) (assert (= sec 1) "seq21: 1s remaining at t=1599")) (_ (assert false "unexpected branch")))
-    (mt dExact ((decDownFor sec) (assert (= sec 0) "seq21: 0s remaining at t=1600 (expired)")) (_ (assert false "unexpected branch")))
+    (match dBefore ((decDownFor sec) (assert (= sec 1) "seq21: 1s remaining at t=1599")) (_ (assert false "unexpected branch")))
+    (match dExact ((decDownFor sec) (assert (= sec 0) "seq21: 0s remaining at t=1600 (expired)")) (_ (assert false "unexpected branch")))
     (refute (mapHas? stExact.breakers "agy") "seq21: expired breaker pruned from map"))
 
   (let [(st0 (brk/defaultBreakerState))
@@ -220,7 +220,7 @@ fn testCooldownExpiryAndSnapshot -> Bool
         (sCheck (brk/stepBreaker (pairFirst s1) (brk/evCheckDown "codex") 1700))
         (stCheck (pairFirst sCheck))
         (dCheck (pairSecond sCheck))]
-    (mt dCheck ((decDownFor sec) (assert (= sec 0) "seq22: 0s past expiry")) (_ (assert false "unexpected branch")))
+    (match dCheck ((decDownFor sec) (assert (= sec 0) "seq22: 0s past expiry")) (_ (assert false "unexpected branch")))
     (refute (mapHas? stCheck.breakers "codex") "seq22: pruned past expiry"))
 
   (let [(st0 (brk/defaultBreakerState))
@@ -228,7 +228,7 @@ fn testCooldownExpiryAndSnapshot -> Bool
         (s2 (brk/stepBreaker (pairFirst s1) (brk/evMarkDown "codex") 1000))
         (sSnap (brk/stepBreaker (pairFirst s2) (brk/evSnapshot) 1200))
         (decSnap (pairSecond sSnap))]
-    (mt decSnap
+    (match decSnap
       ((decSnapshot snap)
        (do
          (assert (mapHas? snap "agy") "seq23: agy in snapshot")
@@ -251,7 +251,7 @@ fn testCooldownExpiryAndSnapshot -> Bool
         (s2 (brk/stepBreaker (pairFirst s1) (brk/evMarkDown "codex") 1200))
         (sSnap (brk/stepBreaker (pairFirst s2) (brk/evSnapshot) 1650))
         (decSnap (pairSecond sSnap))]
-    (mt decSnap
+    (match decSnap
       ((decSnapshot snap)
        (let [(stAgy (optionOr (mapGet snap "agy") (brk/ProviderStatus :down false :secondsLeft 0)))
              (stCodex (optionOr (mapGet snap "codex") (brk/ProviderStatus :down false :secondsLeft 0)))]
@@ -266,8 +266,8 @@ fn testCooldownExpiryAndSnapshot -> Bool
         (s1 (brk/stepBreaker stCustom (brk/evMarkDown "agy") 50))
         (sCheck1 (brk/stepBreaker (pairFirst s1) (brk/evCheckDown "agy") 100))
         (sCheck2 (brk/stepBreaker (pairFirst sCheck1) (brk/evCheckDown "agy") 170))]
-    (mt (pairSecond sCheck1) ((decDownFor sec) (assert (= sec 70) "seq25: 70s left at t=100")) (_ (assert false "unexpected branch")))
-    (mt (pairSecond sCheck2) ((decDownFor sec) (assert (= sec 0) "seq25: expired at t=170")) (_ (assert false "unexpected branch"))))
+    (match (pairSecond sCheck1) ((decDownFor sec) (assert (= sec 70) "seq25: 70s left at t=100")) (_ (assert false "unexpected branch")))
+    (match (pairSecond sCheck2) ((decDownFor sec) (assert (= sec 0) "seq25: expired at t=170")) (_ (assert false "unexpected branch"))))
 
   (let [(st0 (brk/defaultBreakerState))
         (sEmptyDown (brk/stepBreaker st0 (brk/evCheckDown "") 100))
@@ -277,11 +277,11 @@ fn testCooldownExpiryAndSnapshot -> Bool
         (sDyn (brk/stepBreaker (pairFirst sEmptyTimeout) (brk/evNote503 "gemini") 100))
         (stDyn (pairFirst sDyn))
         (sSnap (brk/stepBreaker stDyn (brk/evSnapshot) 100))]
-    (mt (pairSecond sEmptyDown) ((decDownFor sec) (assert (= sec 0) "seq26: empty down_for is 0")) (_ (assert false "unexpected branch")))
-    (mt (pairSecond sEmpty503) ((decTripped tr) (refute tr "seq26: empty 503 is false")) (_ (assert false "unexpected branch")))
-    (mt (pairSecond sEmptyTimeout) ((decTripped tr) (refute tr "seq26: empty timeout is false")) (_ (assert false "unexpected branch")))
+    (match (pairSecond sEmptyDown) ((decDownFor sec) (assert (= sec 0) "seq26: empty down_for is 0")) (_ (assert false "unexpected branch")))
+    (match (pairSecond sEmpty503) ((decTripped tr) (refute tr "seq26: empty 503 is false")) (_ (assert false "unexpected branch")))
+    (match (pairSecond sEmptyTimeout) ((decTripped tr) (refute tr "seq26: empty timeout is false")) (_ (assert false "unexpected branch")))
     (assert (= (brk/breaker503Count stDyn "gemini") 1) "seq26: gemini count is 1")
-    (mt (pairSecond sSnap)
+    (match (pairSecond sSnap)
       ((decSnapshot snap)
        (do
          (assert (mapHas? snap "gemini") "seq26: gemini dynamically included in snapshot")

@@ -42,7 +42,7 @@ fn lineIndexLineOffset index: LineIndex lineNum: Int64 -> (Option Int64)
       (some (i64ArrayGet index.lineStarts (- lineNum 1)))))
 
 fn checkBinaryPrefix! path: String -> (Option String)
-  (mt (fileReadRange path 0 8192)
+  (match (fileReadRange path 0 8192)
     ((ok bs)
      (let [(kind (src/binaryKind bs))]
        (if (!= kind "") (some kind) (none))))
@@ -87,7 +87,7 @@ fn buildLineIndexWindows! path: String offset: Int64 fileSize: Int64 winSize: In
       (ok (LineIndex :path path :fileSize fileSize :totalLines lineCount :lineStarts allStarts)))
     (let [(curLen (if (< (- fileSize offset) winSize) (- fileSize offset) winSize))
           (readRes (fileReadRange path offset curLen))]
-      (mt readRes
+      (match readRes
         ((err e) (err e))
         ((ok bs)
          (let [(stepRes (scanWindowLineStarts bs (bytesLength bs) 0 offset fileSize curChunk curCount chunks))
@@ -98,7 +98,7 @@ fn buildLineIndexWindows! path: String offset: Int64 fileSize: Int64 winSize: In
            (buildLineIndexWindows! path (+ offset curLen) fileSize winSize newChunk newCount newChunks))))))
 
 fn buildLineIndex! path: String windowSize: Int64 -> (Result LineIndex String)
-  (mt (fileSize path)
+  (match (fileSize path)
     ((err e) (err e))
     ((ok sz)
      (if (= sz 0)
@@ -124,7 +124,7 @@ fn countLinesWindows! path: String offset: Int64 fileSize: Int64 winSize: Int64 
       (ok (+ totalNl extra)))
     (let [(curLen (if (< (- fileSize offset) winSize) (- fileSize offset) winSize))
           (readRes (fileReadRange path offset curLen))]
-      (mt readRes
+      (match readRes
         ((err e) (err e))
         ((ok bs)
          (let [(blen (bytesLength bs))
@@ -133,7 +133,7 @@ fn countLinesWindows! path: String offset: Int64 fileSize: Int64 winSize: Int64 
            (countLinesWindows! path (+ offset curLen) fileSize winSize (+ totalNl nl) lb))))))
 
 fn countLinesInFile! path: String windowSize: Int64 -> (Result Int64 String)
-  (mt (fileSize path)
+  (match (fileSize path)
     ((err e) (err e))
     ((ok sz)
      (if (= sz 0)
@@ -155,7 +155,7 @@ fn readIndexedRange! index: LineIndex startLine: Int64 endLine: Int64 limit: Int
                        index.fileSize))
             (byteLen (- endByte startByte))
             (readRes (fileReadRange index.path startByte byteLen))]
-        (mt readRes
+        (match readRes
           ((err e) (err e))
           ((ok bs)
            (let [(rawText (btxt/bytesToString bs))
@@ -188,7 +188,7 @@ fn readIndexedRangeReceipt! index: LineIndex startLine: Int64 endLine: Int64 lim
                        index.fileSize))
             (byteLen (- endByte startByte))
             (readRes (fileReadRange index.path startByte byteLen))]
-        (mt readRes
+        (match readRes
           ((err e) (str "(:read :status :rejected :error ERR_IO :file \"" (out/escapeAsnValue rel) "\" :message \"" (out/escapeAsnValue e) "\")"))
           ((ok bs)
            (let [(rawText (btxt/bytesToString bs))
@@ -215,22 +215,22 @@ fn readIndexedRangeReceipt! index: LineIndex startLine: Int64 endLine: Int64 lim
                   " :content \"" (out/escapeAsnValue content) "\")")))))))
 
 fn readWindowedRange! file: String startLine: Int64 endLine: Int64 limit: Int64 maxBytes: Int64 windowSize: Int64 -> (Result String String)
-  (mt (buildLineIndex! file windowSize)
+  (match (buildLineIndex! file windowSize)
     ((err e) (err e))
     ((ok idx)
      (readIndexedRange! idx startLine endLine limit maxBytes)))
 
 fn readWindowedRangeReceipt! file: String startLine: Int64 endLine: Int64 limit: Int64 maxBytes: Int64 windowSize: Int64 -> (Result String String)
-  (mt (buildLineIndex! file windowSize)
+  (match (buildLineIndex! file windowSize)
     ((err e) (err e))
     ((ok idx)
      (ok (readIndexedRangeReceipt! idx startLine endLine limit maxBytes))))
 
 fn readWindowedRangeFileReceipt! file: String startLine: Int64 endLine: Int64 limit: Int64 maxBytes: Int64 -> (Result String String)
-  (mt (fileSize file)
+  (match (fileSize file)
     ((err e) (err e))
     ((ok sz)
-     (mt (checkBinaryPrefix! file)
+     (match (checkBinaryPrefix! file)
        ((some kind)
         (ok (str "(:read :status :rejected :error ERR_BINARY :file \"" (out/escapeAsnValue (txt/cleanPath file))
                  "\" :bytes " (stringFromInt64 sz)
@@ -260,7 +260,7 @@ fn searchAnchorWindows! path: String offset: Int64 fileSize: Int64 winSize: Int6
     (ok (listReverse acc))
     (let [(curLen (if (< (- fileSize offset) winSize) (- fileSize offset) winSize))
           (readRes (fileReadRange path offset curLen))]
-      (mt readRes
+      (match readRes
         ((err e) (err e))
         ((ok bs)
          (let [(matches (findAnchorInWindow bs (bytesLength bs) 0 pat patLen offset (list)))
@@ -275,7 +275,7 @@ fn findAnchorInStream! file: String anchor: String windowSize: Int64 -> (Result 
         (patLen (bytesLength pat))]
     (if (= patLen 0)
       (ok (list))
-      (mt (fileSize file)
+      (match (fileSize file)
         ((err e) (err e))
         ((ok sz)
          (let [(win (if (> windowSize (* patLen 2)) windowSize (* patLen 4)))]
@@ -286,7 +286,7 @@ fn findPrecedingNewline! file: String targetOffset: Int64 -> Int64
         (scanStart (- targetOffset scanLen))]
     (if (<= scanLen 0)
       0
-      (mt (fileReadRange file scanStart scanLen)
+      (match (fileReadRange file scanStart scanLen)
         ((err _) 0)
         ((ok bs)
          (let [(p (txt/rfindNewline bs (- scanLen 1)))]
@@ -295,10 +295,10 @@ fn findPrecedingNewline! file: String targetOffset: Int64 -> Int64
              (+ (+ scanStart p) 1)))))))
 
 fn readWindowedAnchor! file: String anchor: String occurrence: Int64 limit: Int64 -> (Result String String)
-  (mt (fileSize file)
+  (match (fileSize file)
     ((err e) (err e))
     ((ok sz)
-     (mt (findAnchorInStream! file anchor 65536)
+     (match (findAnchorInStream! file anchor 65536)
     ((err e) (err e))
     ((ok matches)
      (let [(cnt (listLength matches))]
@@ -316,7 +316,7 @@ fn readWindowedAnchor! file: String anchor: String occurrence: Int64 limit: Int6
                 (lim (if (> limit 0) limit 1000))
                 (readRawLen (let [(avail (- sz startPos))] (if (< avail (* lim 2)) avail (* lim 2))))
                 (readRes (fileReadRange file startPos readRawLen))]
-            (mt readRes
+            (match readRes
               ((err e) (err e))
               ((ok bs)
                (let [(rawText (btxt/bytesToString bs))
@@ -347,7 +347,7 @@ fn readWindowedAnchorReceipt! file: String sz: Int64 anchor: String occurrence: 
              (lim (if (> limit 0) limit 1000))
              (readRawLen (let [(avail (- sz startPos))] (if (< avail (* lim 2)) avail (* lim 2))))
              (readRes (fileReadRange file startPos readRawLen))]
-         (mt readRes
+         (match readRes
            ((err e) (err e))
            ((ok bs)
             (let [(rawText (btxt/bytesToString bs))
@@ -359,17 +359,17 @@ fn readWindowedAnchorReceipt! file: String sz: Int64 anchor: String occurrence: 
                        " :content \"" (out/escapeAsnValue content) "\")")))))))))
 
 fn readWindowedAnchorFileReceipt! file: String anchor: String occurrence: Int64 limit: Int64 -> (Result String String)
-  (mt (fileSize file)
+  (match (fileSize file)
     ((err e) (err e))
     ((ok sz)
-     (mt (checkBinaryPrefix! file)
+     (match (checkBinaryPrefix! file)
        ((some kind)
         (ok (str "(:read :status :rejected :error ERR_BINARY :file \"" (out/escapeAsnValue (txt/cleanPath file))
                  "\" :bytes " (stringFromInt64 sz)
                  " :kind \"" kind
                  "\" :hint \"binary files are never returned as text; inspect them with a native tool such as file, otool or xxd\" :see \"(:help :op read)\")")))
        ((none)
-        (mt (findAnchorInStream! file anchor 65536)
+        (match (findAnchorInStream! file anchor 65536)
           ((err e) (err e))
           ((ok matches)
            (readWindowedAnchorReceipt! file sz anchor occurrence limit matches)))))))
@@ -390,7 +390,7 @@ fn scanTailWindowsBackwards! file: String curEnd: Int64 winSize: Int64 targetLin
     (let [(curStart (if (> curEnd winSize) (- curEnd winSize) 0))
           (curLen (- curEnd curStart))
           (readRes (fileReadRange file curStart curLen))]
-      (mt readRes
+      (match readRes
         ((err e) (err e))
         ((ok bs)
          (let [(blen (bytesLength bs))
@@ -407,19 +407,19 @@ fn scanTailWindowsBackwards! file: String curEnd: Int64 winSize: Int64 targetLin
 fn readWindowedTail! file: String lineCount: Int64 windowSize: Int64 -> (Result String String)
   (if (<= lineCount 0)
     (ok "")
-    (mt (fileSize file)
+    (match (fileSize file)
       ((err e) (err e))
       ((ok sz)
        (if (= sz 0)
          (ok "")
          (let [(win (if (> windowSize 0) windowSize 65536))
                (tailRes (scanTailWindowsBackwards! file sz win (+ lineCount 1) 0))]
-           (mt tailRes
+           (match tailRes
              ((err e) (err e))
              ((ok tailStart)
               (let [(readLen (- sz tailStart))
                     (readRes (fileReadRange file tailStart readLen))]
-                (mt readRes
+                (match readRes
                   ((err e) (err e))
                   ((ok bs)
                    (let [(rawText (btxt/bytesToString bs))
@@ -428,7 +428,7 @@ fn readWindowedTail! file: String lineCount: Int64 windowSize: Int64 -> (Result 
                      (ok text))))))))))))
 
 fn readWindowedTailReceipt! file: String lineCount: Int64 -> (Result String String)
-  (mt (readWindowedTail! file lineCount 65536)
+  (match (readWindowedTail! file lineCount 65536)
     ((err e) (err e))
     ((ok content)
      (let [(rel (txt/cleanPath file))]
@@ -436,10 +436,10 @@ fn readWindowedTailReceipt! file: String lineCount: Int64 -> (Result String Stri
                 " :content \"" (out/escapeAsnValue content) "\")")))))
 
 fn readWindowedTailFileReceipt! file: String lineCount: Int64 -> (Result String String)
-  (mt (fileSize file)
+  (match (fileSize file)
     ((err e) (err e))
     ((ok sz)
-     (mt (checkBinaryPrefix! file)
+     (match (checkBinaryPrefix! file)
        ((some kind)
         (ok (str "(:tail :status :rejected :error ERR_BINARY :file \"" (out/escapeAsnValue (txt/cleanPath file))
                  "\" :bytes " (stringFromInt64 sz)

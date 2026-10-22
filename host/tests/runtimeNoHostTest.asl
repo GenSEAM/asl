@@ -16,9 +16,9 @@ fn ! sh! root: String argv: (List String) -> run/Done
   (run/runOneLimited (run/job argv root (run/childEnv (list))) (run/limits 60 8))
 
 fn ! sameMember? a: String b: String name: String -> Bool
-  (mt (fileReadBytes (str a "/" name))
+  (match (fileReadBytes (str a "/" name))
     ((err _) false)
-    ((ok x) (mt (fileReadBytes (str b "/" name)) ((err _) false) ((ok y) (= (bytesSha256 x) (bytesSha256 y))))))
+    ((ok x) (match (fileReadBytes (str b "/" name)) ((err _) false) ((ok y) (= (bytesSha256 x) (bytesSha256 y))))))
 
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))

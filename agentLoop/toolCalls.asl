@@ -18,7 +18,7 @@ fn scan s: String n: Int64 i: Int64 q: Bool e: Bool a: (List Evt) -> (List Evt)
       ((at s i "]]>") (scan s n (+ i 3) false false (cons (evt (+ i 3) false) a)))
       (else (scan s n (+ i 1) false false a)))))
 fn hasOpen es: (List Evt) -> Bool
-  (if (listEmpty? es) false (mt (c/firstOf es) ((evt end open) (or open (hasOpen (c/restOf es))))))
+  (if (listEmpty? es) false (match (c/firstOf es) ((evt end open) (or open (hasOpen (c/restOf es))))))
 fn depth s: String n: Int64 i: Int64 d: Int64 q: Bool e: Bool -> Int64
   (if (>= i n) d (let [c0 (c/ch s i)]
     (cond (q (cond (e (depth s n (+ i 1) d true false))
@@ -39,19 +39,19 @@ fn pyGapEnd b: String n: Int64 i: Int64 -> Int64
   (let [tail (c/sliceOf b i n) trimmed (cx/pyStrip tail)]
     (+ i (- (stringLength tail) (stringLength trimmed))))
 fn keyClose b: String n: Int64 from: Int64 -> (Option (Pair Int64 Int64))
-  (mt (stringIndexOf (c/sliceOf b from n) "</arg_key>")
+  (match (stringIndexOf (c/sliceOf b from n) "</arg_key>")
     ((none) (none))
     ((some rel)
       (let [ke (+ from rel) ws (pyGapEnd b n (+ ke 10))]
         (if (at b ws "<arg_value>") (some (pair ke ws)) (keyClose b n (+ ke 10))))))
 fn argFields b: String n: Int64 i: Int64 acc: (List String) -> (List String)
-  (mt (stringIndexOf (c/sliceOf b i n) "<arg_key>")
+  (match (stringIndexOf (c/sliceOf b i n) "<arg_key>")
     ((none) (listReverse acc))
     ((some rel)
       (let [ks (+ i rel 9)]
-        (mt (keyClose b n ks) ((none) (listReverse acc)) ((some kw)
+        (match (keyClose b n ks) ((none) (listReverse acc)) ((some kw)
           (let [ke (pairFirst kw) vs (+ (pairSecond kw) 11) vr (stringIndexOf (c/sliceOf b vs n) "</arg_value>")]
-            (mt vr ((none) (listReverse acc)) ((some endrel)
+            (match vr ((none) (listReverse acc)) ((some endrel)
               (let [ve (+ vs endrel) key (cx/pyStrip (c/sliceOf b ks ke))
                     v (c/sliceOf b vs ve) bare (cx/pyStrip v)
                     field (if (integerText bare) (str ":" key " " bare)
@@ -60,7 +60,7 @@ fn argFields b: String n: Int64 i: Int64 acc: (List String) -> (List String)
 fn rewrite raw: String -> String
   (let [b (cx/pyStrip raw) n (stringLength b) a (stringIndexOf b "<arg_key>")]
     (cond ((= n 0) "")
-      ((and (some? a) (not (listEmpty? (argFields b n (optionOr a 0) (list))))) (mt a ((some p)
+      ((and (some? a) (not (listEmpty? (argFields b n (optionOr a 0) (list))))) (match a ((some p)
         (let [name (cx/pyStrip (c/sliceOf b 0 p)) fields (argFields b n p (list))]
           (if (stringEmpty? name) "" (str "(:step :op \"" (c/escapeAsn name) "\" " (stringJoin fields " ") ")"))))
         ((none) b)))
@@ -78,7 +78,7 @@ fn run s: String es: (List Evt) cur: Int64 active: Int64 out: (List String) coun
       xs (if (stringEmpty? tail) out (cons tail out))
       n (if (and (>= active 0) (not (stringEmpty? tail))) 1 0)]
       (pair (stringJoin (listReverse xs) "") (+ count n)))
-    (mt (c/firstOf es) ((evt end open)
+    (match (c/firstOf es) ((evt end open)
       (if open
         (if (>= active 0) (let [r (wrap (c/sliceOf s active (- end 11))) xs (if (stringEmpty? r) out (cons r out))]
           (run s (c/restOf es) end end xs (+ count (if (stringEmpty? r) 0 1))))

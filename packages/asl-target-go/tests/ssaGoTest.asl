@@ -11,7 +11,7 @@ fn fixture name: String -> String
   (str "asl/packages/asl-target-js/tests/fixtures/" name ".asl")
 
 fn errCode text: String -> String
-  (mt (stringIndexOf text "ERR_")
+  (match (stringIndexOf text "ERR_")
     ((none) "")
     ((some at) (let [(rest (optionOr (stringSlice text at (stringLength text)) ""))] (optionOr (listHead (stringSplit (optionOr (listHead (stringSplit rest ":")) "") " ")) ""))))
 
@@ -37,10 +37,10 @@ fn ! build! dir: String files: (List (Pair String String)) -> (Result String Str
 fn ! sameAsHost! name: String -> Bool
   (let [(compiled (go/compileEntry! (fixture name)))]
     (do
-      (assert (ok? compiled) (str name " compiles to go: " (mt compiled ((ok _) "ok") ((err ds) (go/diagText ds)))))
-      (let [(built (build! (str "/tmp/asl-target-go/" name) [(pair "main.go" (mt compiled ((ok t) t) ((err _) "")))]))]
+      (assert (ok? compiled) (str name " compiles to go: " (match compiled ((ok _) "ok") ((err ds) (go/diagText ds)))))
+      (let [(built (build! (str "/tmp/asl-target-go/" name) [(pair "main.go" (match compiled ((ok t) t) ((err _) "")))]))]
         (do
-          (assert (ok? built) (str name " builds with go: " (mt built ((ok _) "ok") ((err e) e))))
+          (assert (ok? built) (str name " builds with go: " (match built ((ok _) "ok") ((err e) e))))
           (let [(errBase (str "/tmp/asl-target-go/" name))
                 (viaGo (splitSh! "." (shellQuote (resultOr built "false")) (str errBase "/go.stderr") 30 16))
                 (viaHost (splitSh! "." (str "./bin/asl run " (shellQuote (fixture name))) (str errBase "/host.stderr") 60 32))]
@@ -60,10 +60,10 @@ fn ! suiteUnderGo! suite: String -> Bool
   (let [(path (str "asl/packages/asl-html/tests/" suite ".asl"))
         (compiled (go/compileEntry! path))]
     (do
-      (assert (ok? compiled) (str suite " compiles to go: " (mt compiled ((ok _) "ok") ((err ds) (go/diagText ds)))))
-      (let [(built (build! (str "/tmp/asl-target-go/" suite) [(pair "suite.go" (mt compiled ((ok t) t) ((err _) ""))) (pair "runner.go" (suiteRunner))]))]
+      (assert (ok? compiled) (str suite " compiles to go: " (match compiled ((ok _) "ok") ((err ds) (go/diagText ds)))))
+      (let [(built (build! (str "/tmp/asl-target-go/" suite) [(pair "suite.go" (match compiled ((ok t) t) ((err _) ""))) (pair "runner.go" (suiteRunner))]))]
         (do
-          (assert (ok? built) (str suite " builds with go: " (mt built ((ok _) "ok") ((err e) e))))
+          (assert (ok? built) (str suite " builds with go: " (match built ((ok _) "ok") ((err e) e))))
           (let [(errBase (str "/tmp/asl-target-go/" suite))
                 (viaGo (splitSh! "." (shellQuote (resultOr built "false")) (str errBase "/go.stderr") 30 16))
                 (viaHost (splitSh! "." (str "./bin/asl test " (shellQuote path)) (str errBase "/host.stderr") 120 32))]
@@ -77,5 +77,5 @@ fn ! runTests -> Bool
     (assert (listAll? sameAsHost! ["hello" "arithmetic" "string" "list" "map" "gcLoop" "trap" "overflow" "shapes" "text" "deep" "printArgs"]) "every fixture runs the same compiled with go as on the host")
     (assert (listAll? suiteUnderGo! ["htmlTest" "cssTest" "markdownTest"]) "asl-html's suites pass compiled to go")
     (let [(absent (go/compileEntry! (fixture "needsFile")))]
-      (assert (mt absent ((ok _) false) ((err ds) (listAny? (fn [(d ty/IrDiag)] -> Bool (= d.code "ERR_CAPABILITY_ABSENT")) ds))) "a program that reads a file does not compile to go: ERR_CAPABILITY_ABSENT"))
+      (assert (match absent ((ok _) false) ((err ds) (listAny? (fn [(d ty/IrDiag)] -> Bool (= d.code "ERR_CAPABILITY_ABSENT")) ds))) "a program that reads a file does not compile to go: ERR_CAPABILITY_ABSENT"))
     true)

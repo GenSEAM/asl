@@ -1,16 +1,16 @@
 (module asl-ir/verify :x [verifyIr verifyStmt verifyFunction verifyModule verifySsa verifySsaDiags dominatorSets] :i [(asl-ir/types :a ty) (asl-ir/anf :a anf)])
 
 fn revOnto xs: (List T) acc: (List T) -> (List T)
-  (mt (listHead xs) ((some x) (revOnto (optionOr (listTail xs) (list)) (cons x acc))) ((none) acc))
+  (match (listHead xs) ((some x) (revOnto (optionOr (listTail xs) (list)) (cons x acc))) ((none) acc))
 
 fn concatOnto rlists: (List (List T)) acc: (List T) -> (List T)
-  (mt (listHead rlists) ((some xs) (concatOnto (optionOr (listTail rlists) (list)) (listAppend xs acc))) ((none) acc))
+  (match (listHead rlists) ((some xs) (concatOnto (optionOr (listTail rlists) (list)) (listAppend xs acc))) ((none) acc))
 
 fn concatLists lists: (List (List T)) -> (List T)
   (concatOnto (listReverse lists) (list))
 
 fn verifyStmt s: ty/IrStmt env: (Map Str ty/IrType) -> (List ty/IrDiag)
-  (let [(k s.kind)] (cond ((= k "switch") (if (listEmpty? s.defaultBody) (list (ty/makeIrDiag "ERR_IR_MISSING_DEFAULT" "Switch statement lacks mandatory default branch" s.scrutinee)) (list))) ((= k "let") (let [(target s.target) (expr s.expr)] (cond ((some? (mapGet env target)) (list (ty/makeIrDiag "ERR_IR_DUPLICATE_BINDING" (str "Variable '" target "' bound more than once in same scope") target))) ((and (!= expr.left "") (not (anf/isTerminalAtom? expr.left))) (list (ty/makeIrDiag "ERR_IR_NON_ANF" "Compound expression in operand position is not in ANF" target))) ((and (!= expr.right "") (not (anf/isTerminalAtom? expr.right))) (list (ty/makeIrDiag "ERR_IR_NON_ANF" "Compound expression in operand position is not in ANF" target))) ((and (= s.ty.kind "option") (= s.ty.repr "nullable") (or (= expr.left "unit") (= expr.left "Unit"))) (list (ty/makeIrDiag "ERR_IR_INVALID_OPTION_REPR" "Option Unit cannot have nullable representation" target))) ((and (!= expr.left "") (none? (mapGet env expr.left)) (not (isLiteral? expr.left))) (list (ty/makeIrDiag "ERR_IR_UNBOUND_VAR" (str "Variable '" expr.left "' is unbound") expr.left))) ((and (!= expr.ty.kind "") (!= s.ty.kind "") (!= s.ty.kind expr.ty.kind)) (list (ty/makeIrDiag "ERR_IR_TYPE_MISMATCH" (str "Type mismatch: statement type '" s.ty.kind "' does not match expression type '" expr.ty.kind "'") target))) ((and (= s.ty.kind "buf") s.ty.isSecondClass (= expr.kind "alloc")) (list)) (else (list))))) ((= k "return") (let [(val s.value)] (if (and (!= val "") (none? (mapGet env val)) (not (isLiteral? val))) (list (ty/makeIrDiag "ERR_IR_UNBOUND_VAR" (str "Returned variable '" val "' is unbound") val)) (let [(valTy (if (!= val "") (mapGet env val) (none)))] (if (mt valTy ((some t) t.isSecondClass) ((none) false)) (list (ty/makeIrDiag "ERR_IR_BUF_ESCAPE" "Second-class buffer escapes local scope via return" val)) (list)))))) (else (list))))
+  (let [(k s.kind)] (cond ((= k "switch") (if (listEmpty? s.defaultBody) (list (ty/makeIrDiag "ERR_IR_MISSING_DEFAULT" "Switch statement lacks mandatory default branch" s.scrutinee)) (list))) ((= k "let") (let [(target s.target) (expr s.expr)] (cond ((some? (mapGet env target)) (list (ty/makeIrDiag "ERR_IR_DUPLICATE_BINDING" (str "Variable '" target "' bound more than once in same scope") target))) ((and (!= expr.left "") (not (anf/isTerminalAtom? expr.left))) (list (ty/makeIrDiag "ERR_IR_NON_ANF" "Compound expression in operand position is not in ANF" target))) ((and (!= expr.right "") (not (anf/isTerminalAtom? expr.right))) (list (ty/makeIrDiag "ERR_IR_NON_ANF" "Compound expression in operand position is not in ANF" target))) ((and (= s.ty.kind "option") (= s.ty.repr "nullable") (or (= expr.left "unit") (= expr.left "Unit"))) (list (ty/makeIrDiag "ERR_IR_INVALID_OPTION_REPR" "Option Unit cannot have nullable representation" target))) ((and (!= expr.left "") (none? (mapGet env expr.left)) (not (isLiteral? expr.left))) (list (ty/makeIrDiag "ERR_IR_UNBOUND_VAR" (str "Variable '" expr.left "' is unbound") expr.left))) ((and (!= expr.ty.kind "") (!= s.ty.kind "") (!= s.ty.kind expr.ty.kind)) (list (ty/makeIrDiag "ERR_IR_TYPE_MISMATCH" (str "Type mismatch: statement type '" s.ty.kind "' does not match expression type '" expr.ty.kind "'") target))) ((and (= s.ty.kind "buf") s.ty.isSecondClass (= expr.kind "alloc")) (list)) (else (list))))) ((= k "return") (let [(val s.value)] (if (and (!= val "") (none? (mapGet env val)) (not (isLiteral? val))) (list (ty/makeIrDiag "ERR_IR_UNBOUND_VAR" (str "Returned variable '" val "' is unbound") val)) (let [(valTy (if (!= val "") (mapGet env val) (none)))] (if (match valTy ((some t) t.isSecondClass) ((none) false)) (list (ty/makeIrDiag "ERR_IR_BUF_ESCAPE" "Second-class buffer escapes local scope via return" val)) (list)))))) (else (list))))
 
 fn isLiteral? s: Str -> Bool
   (or (= s "true") (= s "false") (= s "None") (= s "unit") (= s "Unit") (= s "()") (stringStartsWith? s "\"") (stringStartsWith? s "-") (and (>= (optionOr (stringSlice s 0 1) "") "0") (<= (optionOr (stringSlice s 0 1) "") "9")))
@@ -50,7 +50,7 @@ fn verifyIr m: ty/IrModule -> (Result Unit (List ty/IrDiag))
 (schema DomTree (:f labels (Map String Bool)) (:f entry String) (:f idom (Map String String)) (:f pre (Map String Int64)) (:f post (Map String Int64)))
 
 fn defIndexHeight tree: DefIndex -> Int64
-  (mt tree ((defIndexEmpty) 0) ((defIndexNode _ _ _ _ height) height))
+  (match tree ((defIndexEmpty) 0) ((defIndexNode _ _ _ _ height) height))
 
 fn defIndexNodeOf key: String site: DefSite left: DefIndex right: DefIndex -> DefIndex
   (defIndexNode key site left right (+ 1 (max (defIndexHeight left) (defIndexHeight right))))
@@ -59,24 +59,24 @@ fn defIndexBalance key: String site: DefSite left: DefIndex right: DefIndex -> D
   (let [(lh (defIndexHeight left)) (rh (defIndexHeight right))]
     (cond
       ((> lh (+ rh 1))
-        (mt left
+        (match left
           ((defIndexEmpty) (defIndexNodeOf key site left right))
           ((defIndexNode leftKey leftSite leftLeft leftRight _)
             (if (>= (defIndexHeight leftLeft) (defIndexHeight leftRight))
               (defIndexNodeOf leftKey leftSite leftLeft (defIndexNodeOf key site leftRight right))
-              (mt leftRight
+              (match leftRight
                 ((defIndexEmpty) (defIndexNodeOf key site left right))
                 ((defIndexNode pivotKey pivotSite pivotLeft pivotRight _)
                   (defIndexNodeOf pivotKey pivotSite
                     (defIndexNodeOf leftKey leftSite leftLeft pivotLeft)
                     (defIndexNodeOf key site pivotRight right))))))))
       ((> rh (+ lh 1))
-        (mt right
+        (match right
           ((defIndexEmpty) (defIndexNodeOf key site left right))
           ((defIndexNode rightKey rightSite rightLeft rightRight _)
             (if (>= (defIndexHeight rightRight) (defIndexHeight rightLeft))
               (defIndexNodeOf rightKey rightSite (defIndexNodeOf key site left rightLeft) rightRight)
-              (mt rightLeft
+              (match rightLeft
                 ((defIndexEmpty) (defIndexNodeOf key site left right))
                 ((defIndexNode pivotKey pivotSite pivotLeft pivotRight _)
                   (defIndexNodeOf pivotKey pivotSite
@@ -85,7 +85,7 @@ fn defIndexBalance key: String site: DefSite left: DefIndex right: DefIndex -> D
       (else (defIndexNodeOf key site left right))))
 
 fn defIndexSet tree: DefIndex key: String site: DefSite -> DefIndex
-  (mt tree
+  (match tree
     ((defIndexEmpty) (defIndexNodeOf key site (defIndexEmpty) (defIndexEmpty)))
     ((defIndexNode currentKey currentSite left right _)
       (cond
@@ -94,7 +94,7 @@ fn defIndexSet tree: DefIndex key: String site: DefSite -> DefIndex
         (else (defIndexBalance currentKey currentSite left (defIndexSet right key site))))))
 
 fn defIndexGet tree: DefIndex key: String -> (Option DefSite)
-  (mt tree
+  (match tree
     ((defIndexEmpty) (none))
     ((defIndexNode currentKey site left right _)
       (cond
@@ -127,7 +127,7 @@ fn buildCtx m: ty/SsaModule -> SsaCtx
 
 fn checkGlobal ctx: SsaCtx locus: String g: ty/SsaGlobal -> (List ty/IrDiag)
   (let [(at (str locus g.name))]
-    (mt (mapGet ctx.functions g.init)
+    (match (mapGet ctx.functions g.init)
       ((none) (list (ssaDiag "ERR_IR_UNKNOWN_FUNCTION" (str "global '" g.name "' is initialised by '" g.init "', which is not a module function") at)))
       ((some f) (cond
                   ((not (and (listEmpty? f.params) (listEmpty? f.captures))) (list (ssaDiag "ERR_IR_ARITY" (str "global initialiser '" g.init "' must take no params and no captures") at)))
@@ -165,7 +165,7 @@ fn successorMap blocks: (List ty/SsaBlock) -> (Map String (List String))
         (mapEmpty) blocks)
 
 fn reachable work: (List String) seen: (Map String Bool) succs: (Map String (List String)) -> (Map String Bool)
-  (mt (listHead work)
+  (match (listHead work)
     ((none) seen)
     ((some b) (let [(rest (optionOr (listTail work) (list)))]
                 (if (mapHas? seen b)
@@ -185,11 +185,11 @@ fn labelSet labels: (List String) -> (Map String Bool)
   (fold (fn [(m (Map String Bool)) (l String)] -> (Map String Bool) (mapSet m l true)) (mapEmpty) labels)
 
 fn dfsLoop stack: (List (Pair String (List String))) seen: (Map String Bool) out: (List String) succs: (Map String (List String)) -> (List String)
-  (mt (listHead stack)
+  (match (listHead stack)
     ((none) out)
     ((some top) (let [(rest (optionOr (listTail stack) (list)))
                       (todo (pairSecond top))]
-                  (mt (listHead todo)
+                  (match (listHead todo)
                     ((none) (dfsLoop rest seen (cons (pairFirst top) out) succs))
                     ((some s) (let [(kept (cons (pair (pairFirst top) (optionOr (listTail todo) (list))) rest))]
                                 (if (mapHas? seen s)
@@ -210,7 +210,7 @@ fn idomRound rest: (List String) order: (Map String Int64) preds: (Map String (L
   (fold (fn [(acc (Pair (Map String String) Bool)) (b String)] -> (Pair (Map String String) Bool)
           (let [(m (pairFirst acc))
                 (done (filter (fn [(p String)] -> Bool (mapHas? m p)) (optionOr (mapGet preds b) (list))))]
-            (mt (listHead done)
+            (match (listHead done)
               ((none) acc)
               ((some first) (let [(chosen (fold (fn [(cur String) (p String)] -> String (intersect m order p cur)) first (optionOr (listTail done) (list))))]
                               (if (= (mapGet m b) (some chosen)) acc (pair (mapSet m b chosen) true)))))))
@@ -221,7 +221,7 @@ fn idomFix rest: (List String) order: (Map String Int64) preds: (Map String (Lis
     (if (pairSecond round) (idomFix rest order preds (pairFirst round)) (pairFirst round)))
 
 fn numberLoop stack: (List (Pair String Bool)) children: (Map String (List String)) n: Int64 pre: (Map String Int64) post: (Map String Int64) -> (Pair (Map String Int64) (Map String Int64))
-  (mt (listHead stack)
+  (match (listHead stack)
     ((none) (pair pre post))
     ((some top) (let [(rest (optionOr (listTail stack) (list))) (b (pairFirst top))]
                   (if (pairSecond top)
@@ -235,20 +235,20 @@ fn domTree labels: (List String) entry: String succs: (Map String (List String))
         (order (pairFirst (fold (fn [(acc (Pair (Map String Int64) Int64)) (b String)] -> (Pair (Map String Int64) Int64) (pair (mapSet (pairFirst acc) b (pairSecond acc)) (+ (pairSecond acc) 1))) (pair (mapEmpty) 0) rpo)))
         (idom (idomFix (optionOr (listTail rpo) (list)) order preds (mapSet (mapEmpty) entry entry)))
         (children (fold (fn [(m (Map String (List String))) (b String)] -> (Map String (List String))
-                          (mt (mapGet idom b) ((some d) (if (= d b) m (mapSet m d (cons b (optionOr (mapGet m d) (list)))))) ((none) m)))
+                          (match (mapGet idom b) ((some d) (if (= d b) m (mapSet m d (cons b (optionOr (mapGet m d) (list)))))) ((none) m)))
                         (mapEmpty) (listReverse rpo)))
         (numbers (numberLoop (list (pair entry false)) children 0 (mapEmpty) (mapEmpty)))]
     (DomTree :labels (labelSet labels) :entry entry :idom idom :pre (pairFirst numbers) :post (pairSecond numbers)))
 
 fn dominates? t: DomTree a: String b: String -> Bool
-  (mt (mapGet t.pre b)
+  (match (mapGet t.pre b)
     ((none) (mapHas? t.labels a))
-    ((some pb) (mt (mapGet t.pre a)
+    ((some pb) (match (mapGet t.pre a)
                  ((none) false)
                  ((some pa) (and (<= pa pb) (<= (optionOr (mapGet t.post b) 0) (optionOr (mapGet t.post a) 0)))))))
 
 fn idomChain t: DomTree b: String acc: (List String) -> (List String)
-  (mt (mapGet t.idom b)
+  (match (mapGet t.idom b)
     ((none) acc)
     ((some d) (if (= d b) (cons b acc) (idomChain t d (cons b acc)))))
 
@@ -258,7 +258,7 @@ fn functionDomTree f: ty/SsaFunction entry: String -> DomTree
     (domTree (map (fn [(b ty/SsaBlock)] -> String b.label) f.blocks) entry succs (predecessorMap succs reach)))
 
 fn dominatorSets f: ty/SsaFunction -> (Map String (List String))
-  (mt (listHead f.blocks)
+  (match (listHead f.blocks)
     ((none) (mapEmpty))
     ((some e) (let [(labels (map (fn [(b ty/SsaBlock)] -> String b.label) f.blocks))
                     (t (functionDomTree f e.label))]
@@ -267,7 +267,7 @@ fn dominatorSets f: ty/SsaFunction -> (Map String (List String))
                       (mapEmpty) labels))))
 
 fn checkUse fc: FnCtx label: String index: Int64 name: String locus: String -> (List ty/IrDiag)
-  (mt (defIndexGet fc.defs name)
+  (match (defIndexGet fc.defs name)
     ((none) (list (ssaDiag "ERR_IR_UNDEFINED_VALUE" (str "value '" name "' is not defined") locus)))
     ((some d) (cond
                 ((= d.block "") (list))
@@ -276,7 +276,7 @@ fn checkUse fc: FnCtx label: String index: Int64 name: String locus: String -> (
                 (else (list (ssaDiag "ERR_IR_UNDEFINED_VALUE" (str "value '" name "' is defined in block '" d.block "', which does not dominate '" label "'") locus))))))
 
 fn expectTy fc: FnCtx name: String want: ty/SsaTy locus: String -> (List ty/IrDiag)
-  (mt (defIndexGet fc.defs name)
+  (match (defIndexGet fc.defs name)
     ((none) (list))
     ((some d) (if (= (ty/ssaAbiName d.ty) (ty/ssaAbiName want))
                 (list)
@@ -289,7 +289,7 @@ fn variadicArgAllowed? n: String -> Bool
   (or (= n "i32") (= n "i64") (= n "f64") (= n "ptr"))
 
 fn expectVariadicArg fc: FnCtx name: String locus: String -> (List ty/IrDiag)
-  (mt (defIndexGet fc.defs name)
+  (match (defIndexGet fc.defs name)
     ((none) (list))
     ((some d) (if (variadicArgAllowed? (ty/ssaTyName d.ty))
                 (list)
@@ -299,7 +299,7 @@ fn classicRawName? n: String -> Bool
   (or (= n "i64") (= n "f64") (= n "i1"))
 
 fn expectRaw fc: FnCtx name: String locus: String -> (List ty/IrDiag)
-  (mt (defIndexGet fc.defs name)
+  (match (defIndexGet fc.defs name)
     ((none) (list))
     ((some d) (if (classicRawName? (ty/ssaTyName d.ty)) (list) (list (ssaDiag "ERR_IR_TYPE_MISMATCH" (str "box of '" name "', which is " (ty/ssaTyName d.ty) ", not i64, f64 or i1") locus)))))
 
@@ -317,7 +317,7 @@ fn i32Range? n: Int64 -> Bool
 
 fn checkConst ctx: SsaCtx locus: String t: ty/SsaTy c: ty/SsaConst -> (List ty/IrDiag)
   (let [(tn (ty/ssaTyName t))]
-    (mt c
+    (match c
       ((ty/constInt n) (listAppend (constAllowsAny tn (list "i64" "i32") locus)
                                     (if (and (= tn "i32") (not (i32Range? n)))
                                       (list (ssaDiag "ERR_IR_TYPE_MISMATCH" (str "i32 constant " n " is outside -2147483648..2147483647") locus))
@@ -330,10 +330,10 @@ fn checkConst ctx: SsaCtx locus: String t: ty/SsaTy c: ty/SsaConst -> (List ty/I
       ((ty/constSymbol _) (constAllows tn "val" locus))))
 
 fn argTypesFrom fc: FnCtx args: (List String) params: (List ty/SsaParam) locus: String out: (List (List ty/IrDiag)) -> (List ty/IrDiag)
-  (mt (listHead args)
+  (match (listHead args)
     ((none) (concatDiags (listReverse out)))
     ((some a) (argTypesFrom fc (optionOr (listTail args) (list)) (optionOr (listTail params) (list)) locus
-                (cons (mt (listHead params) ((none) (list)) ((some p) (expectTy fc a p.ty locus))) out))))
+                (cons (match (listHead params) ((none) (list)) ((some p) (expectTy fc a p.ty locus))) out))))
 
 fn argTypes fc: FnCtx args: (List String) params: (List ty/SsaParam) locus: String -> (List ty/IrDiag)
   (argTypesFrom fc args params locus (list))
@@ -342,12 +342,12 @@ fn resultTy t: ty/SsaTy want: ty/SsaTy locus: String -> (List ty/IrDiag)
   (if (= (ty/ssaAbiName t) (ty/ssaAbiName want)) (list) (list (ssaDiag "ERR_IR_TYPE_MISMATCH" (str "result is " (ty/ssaTyName t) " where the callee returns " (ty/ssaTyName want)) locus)))
 
 fn checkCall ctx: SsaCtx fc: FnCtx t: ty/SsaTy callee: String args: (List String) locus: String -> (List ty/IrDiag)
-  (mt (mapGet ctx.functions callee)
+  (match (mapGet ctx.functions callee)
     ((some f) (cond
                 ((not (listEmpty? f.captures)) (list (ssaDiag "ERR_IR_CLOSURE_CODE" (str "'" callee "' has captures and is reached only through make-closure") locus)))
                 ((!= (listLength f.params) (listLength args)) (list (ssaDiag "ERR_IR_ARITY" (str "'" callee "' takes " (listLength f.params) " argument(s), got " (listLength args)) locus)))
                 (else (listAppend (argTypes fc args f.params locus) (resultTy t f.retTy locus)))))
-    ((none) (mt (mapGet ctx.externs callee)
+    ((none) (match (mapGet ctx.externs callee)
               ((some e)
                 (cond
                   ((if e.variadic (< (listLength args) e.arity) (!= e.arity (listLength args)))
@@ -358,17 +358,17 @@ fn checkCall ctx: SsaCtx fc: FnCtx t: ty/SsaTy callee: String args: (List String
                       (externArgTypes fc args e.params e.variadic locus (list))
                       (resultTy t e.ret locus)))))
               ((none)
-                (mt (mapGet ctx.arities callee)
+                (match (mapGet ctx.arities callee)
                   ((none) (list (ssaDiag "ERR_IR_UNKNOWN_FUNCTION" (str "call of undeclared function '" callee "'") locus)))
                   ((some n) (if (= n (listLength args))
                               (listAppend (expectVals fc args locus) (resultVal t locus))
                               (list (ssaDiag "ERR_IR_ARITY" (str "extern '" callee "' takes " n " argument(s), got " (listLength args)) locus)))))))))
 
 fn externArgTypes fc: FnCtx args: (List String) params: (List ty/SsaTy) variadic: Bool locus: String out: (List (List ty/IrDiag)) -> (List ty/IrDiag)
-  (mt (listHead args)
+  (match (listHead args)
     ((none) (concatDiags (listReverse out)))
     ((some a) (externArgTypes fc (optionOr (listTail args) (list)) (optionOr (listTail params) (list)) variadic locus
-                (cons (mt (listHead params)
+                (cons (match (listHead params)
                         ((none) (if variadic (expectVariadicArg fc a locus) (list)))
                         ((some pTy) (expectTy fc a pTy locus)))
                       out))))
@@ -377,7 +377,7 @@ fn allVal params: (List ty/SsaParam) -> Bool
   (listEmpty? (filter (fn [(p ty/SsaParam)] -> Bool (ty/ssaIsRaw? p.ty)) params))
 
 fn checkClosure ctx: SsaCtx fc: FnCtx callee: String caps: (List String) locus: String -> (List ty/IrDiag)
-  (mt (mapGet ctx.functions callee)
+  (match (mapGet ctx.functions callee)
     ((none) (list (ssaDiag "ERR_IR_UNKNOWN_FUNCTION" (str "make-closure of '" callee "', which is not a module function") locus)))
     ((some f) (cond
                 ((!= (listLength f.captures) (listLength caps)) (list (ssaDiag "ERR_IR_ARITY" (str "'" callee "' captures " (listLength f.captures) " value(s), got " (listLength caps)) locus)))
@@ -385,23 +385,23 @@ fn checkClosure ctx: SsaCtx fc: FnCtx callee: String caps: (List String) locus: 
                 (else (argTypes fc caps f.captures locus)))))
 
 fn checkConstruct ctx: SsaCtx typeName: String variant: String fields: (List String) locus: String -> (List ty/IrDiag)
-  (mt (mapGet ctx.types typeName)
+  (match (mapGet ctx.types typeName)
     ((none) (list (ssaDiag "ERR_IR_UNKNOWN_TYPE" (str "construct of undeclared type '" typeName "'") locus)))
-    ((some variants) (mt (findVariant variants variant)
+    ((some variants) (match (findVariant variants variant)
                        ((none) (list (ssaDiag "ERR_IR_UNKNOWN_VARIANT" (str "type '" typeName "' has no variant '" variant "'") locus)))
                        ((some v) (if (= v.arity (listLength fields)) (list) (list (ssaDiag "ERR_IR_ARITY" (str "variant '" variant "' has " v.arity " field(s), got " (listLength fields)) locus)))))))
 
 fn recordKeysInOrder? declared: (List String) keys: (List String) -> Bool
-  (mt (listHead keys)
+  (match (listHead keys)
     ((none) true)
-    ((some key) (mt (listHead declared)
+    ((some key) (match (listHead declared)
                   ((none) false)
                   ((some field) (if (= key field)
                                  (recordKeysInOrder? (optionOr (listTail declared) (list)) (optionOr (listTail keys) (list)))
                                  (recordKeysInOrder? (optionOr (listTail declared) (list)) keys))))))
 
 fn checkRecord ctx: SsaCtx schemaName: String keys: (List String) values: (List String) locus: String -> (List ty/IrDiag)
-  (mt (mapGet ctx.records schemaName)
+  (match (mapGet ctx.records schemaName)
     ((none) (list (ssaDiag "ERR_IR_UNKNOWN_RECORD" (str "record of undeclared schema '" schemaName "'") locus)))
     ((some declared)
      (if (!= (listLength keys) (listLength values))
@@ -413,7 +413,7 @@ fn checkRecord ctx: SsaCtx schemaName: String keys: (List String) values: (List 
            (list (ssaDiag "ERR_IR_UNKNOWN_FIELD" (str "record '" schemaName "' fields must be an ordered subset of " (stringJoin declared " ")) locus)))))))
 
 fn checkPrim fc: FnCtx t: ty/SsaTy name: String args: (List String) locus: String -> (List ty/IrDiag)
-  (mt (ty/primSignature name)
+  (match (ty/primSignature name)
     ((none) (list (ssaDiag "ERR_IR_UNKNOWN_PRIM" (str "unknown primitive '" name "'") locus)))
     ((some sig) (if (= (listLength sig.args) (listLength args))
                   (listAppend (argTypes fc args (map (fn [(a ty/SsaTy)] -> ty/SsaParam (ty/ssaParam "" a)) sig.args) locus)
@@ -421,13 +421,13 @@ fn checkPrim fc: FnCtx t: ty/SsaTy name: String args: (List String) locus: Strin
                   (list (ssaDiag "ERR_IR_ARITY" (str "primitive '" name "' takes " (listLength sig.args) " operand(s), got " (listLength args)) locus)))))
 
 fn checkEntry fc: FnCtx t: ty/SsaTy name: String args: (List String) locus: String -> (List ty/IrDiag)
-  (mt (ty/builtinEntry name (listLength args))
+  (match (ty/builtinEntry name (listLength args))
     ((none) (list (ssaDiag "ERR_IR_UNKNOWN_FUNCTION" (str "no runtime entry '" name "' takes " (listLength args) " operand(s)") locus)))
     ((some b) (listAppend (argTypes fc args (map (fn [(a ty/SsaTy)] -> ty/SsaParam (ty/ssaParam "" a)) b.args) locus)
                           (if (= (ty/ssaTyName t) (ty/ssaTyName b.result)) (list) (list (ssaDiag "ERR_IR_TYPE_MISMATCH" (str "entry '" name "' yields " (ty/ssaTyName b.result) ", not " (ty/ssaTyName t)) locus))))))
 
 fn checkOp ctx: SsaCtx fc: FnCtx locus: String t: ty/SsaTy op: ty/SsaOp -> (List ty/IrDiag)
-  (mt op
+  (match op
     ((ty/opConst c) (checkConst ctx locus t c))
     ((ty/opCall callee args) (checkCall ctx fc t callee args locus))
     ((ty/opBuiltin name args) (concatDiags (list (resultVal t locus) (expectVals fc args locus) (if (stringEmpty? name) (list (ssaDiag "ERR_IR_UNKNOWN_FUNCTION" "builtin call without a name" locus)) (list)))))
@@ -456,7 +456,7 @@ fn checkEdge fc: FnCtx label: String index: Int64 e: ty/SsaEdge locus: String ->
         (args e.args)
         (uses (concatDiags (map (fn [(a String)] -> (List ty/IrDiag) (checkUse fc label index a locus)) args)))]
     (listAppend uses
-      (mt (mapGet fc.blocks target)
+      (match (mapGet fc.blocks target)
         ((none) (list (ssaDiag "ERR_IR_MISSING_BLOCK" (str "edge to missing block '" target "'") locus)))
         ((some dest) (cond
                        ((= target fc.entry) (list (ssaDiag "ERR_IR_ENTRY_TARGET" "the entry block cannot be an edge target" locus)))
@@ -464,20 +464,20 @@ fn checkEdge fc: FnCtx label: String index: Int64 e: ty/SsaEdge locus: String ->
                        (else (argTypes fc args dest.params locus)))))))
 
 fn checkCondition fc: FnCtx name: String locus: String -> (List ty/IrDiag)
-  (mt (defIndexGet fc.defs name)
+  (match (defIndexGet fc.defs name)
     ((none) (list))
     ((some d) (let [(tn (ty/ssaTyName d.ty))]
                 (if (or (= tn "val") (= tn "i1")) (list) (list (ssaDiag "ERR_IR_TYPE_MISMATCH" (str "branch condition '" name "' is " tn " where i1 or val is required") locus))))))
 
 fn unknownCases typeName: String variants: (List ty/SsaVariant) names: (List String) locus: String -> (List ty/IrDiag)
   (concatDiags (map (fn [(n String)] -> (List ty/IrDiag)
-                      (mt (findVariant variants n)
+                      (match (findVariant variants n)
                         ((some _) (list))
                         ((none) (list (ssaDiag "ERR_IR_UNKNOWN_VARIANT" (str "type '" typeName "' has no variant '" n "'") locus)))))
                     names))
 
 fn checkSwitch ctx: SsaCtx typeName: String cases: (List ty/SsaCase) defaultEdge: (Option ty/SsaEdge) locus: String -> (List ty/IrDiag)
-  (mt (mapGet ctx.types typeName)
+  (match (mapGet ctx.types typeName)
     ((none) (list (ssaDiag "ERR_IR_UNKNOWN_TYPE" (str "switch over undeclared type '" typeName "'") locus)))
     ((some variants) (let [(names (map (fn [(c ty/SsaCase)] -> String c.variant) cases))
                            (covered (filter (fn [(v ty/SsaVariant)] -> Bool (listContains? names v.name)) variants))
@@ -487,7 +487,7 @@ fn checkSwitch ctx: SsaCtx typeName: String cases: (List ty/SsaCase) defaultEdge
                        (concatDiags (list (unknownCases typeName variants names locus) (duplicateNames "switch case" names (str locus "/")) missing)))))
 
 fn checkTermOwn ctx: SsaCtx fc: FnCtx label: String index: Int64 term: ty/SsaTerm locus: String -> (List ty/IrDiag)
-  (mt term
+  (match term
     ((ty/termReturn v) (listAppend (checkUse fc label index v locus) (expectTy fc v fc.retTy locus)))
     ((ty/termJump _) (list))
     ((ty/termBranch c _ _) (listAppend (checkUse fc label index c locus) (checkCondition fc c locus)))
@@ -520,7 +520,7 @@ fn verifySsaBlocks ctx: SsaCtx f: ty/SsaFunction entryBlock: ty/SsaBlock -> (Lis
     (concatDiags (list labelDiags entryDiags defState.diags blockDiags)))
 
 fn verifySsaFunction ctx: SsaCtx f: ty/SsaFunction -> (List ty/IrDiag)
-  (mt (listHead f.blocks)
+  (match (listHead f.blocks)
     ((none) (list (ssaDiag "ERR_IR_EMPTY_FUNCTION" (str "function '" f.name "' has no blocks") f.name)))
     ((some entryBlock) (verifySsaBlocks ctx f entryBlock)))
 

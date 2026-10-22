@@ -11,10 +11,10 @@ fn parseSearchLineLocal cleanLine: String -> (Option GitSearchMatch)
   (let [(parts (stringSplit cleanLine ":"))] (if (>= (listLength parts) 3) (let [(f (stringTrim (optionOr (listGet parts 0) ""))) (lStr (stringTrim (optionOr (listGet parts 1) "0"))) (lNum (optionOr (stringToInt64 lStr) 0)) (p0Len (+ (stringLength f) 1)) (p1Len (+ (stringLength lStr) 1)) (prefixLen (+ p0Len p1Len)) (c (if (> (stringLength cleanLine) prefixLen) (optionOr (stringSlice cleanLine prefixLen (stringLength cleanLine)) "") ""))] (if (> lNum 0) (some (GitSearchMatch :ref "HEAD" :file f :line lNum :content c)) (none))) (none)))
 
 fn parseSingleSearchLine line: String defaultRef: String -> (Option GitSearchMatch)
-  (let [(clean (stringTrim line))] (if (stringEmpty? clean) (none) (mt (parseSearchLineWithRef clean) ((some m) (some m)) ((none) (mt (parseSearchLineLocal clean) ((some m2) (some (GitSearchMatch :ref defaultRef :file m2.file :line m2.line :content m2.content))) ((none) (none)))))))
+  (let [(clean (stringTrim line))] (if (stringEmpty? clean) (none) (match (parseSearchLineWithRef clean) ((some m) (some m)) ((none) (match (parseSearchLineLocal clean) ((some m2) (some (GitSearchMatch :ref defaultRef :file m2.file :line m2.line :content m2.content))) ((none) (none)))))))
 
 fn gitSearchParse rawOutput: String defaultRef: String -> (List GitSearchMatch)
-  (let [(clean (stringReplace rawOutput "\r" "")) (lines (stringSplit clean "\n")) (reversed (fold (fn [(acc (List GitSearchMatch)) (ln String)] -> (List GitSearchMatch) (mt (parseSingleSearchLine ln defaultRef) ((some m) (cons m acc)) ((none) acc))) (list) lines))] (listReverse reversed))
+  (let [(clean (stringReplace rawOutput "\r" "")) (lines (stringSplit clean "\n")) (reversed (fold (fn [(acc (List GitSearchMatch)) (ln String)] -> (List GitSearchMatch) (match (parseSingleSearchLine ln defaultRef) ((some m) (cons m acc)) ((none) acc))) (list) lines))] (listReverse reversed))
 
 fn formatSearchMatchItem m: GitSearchMatch -> String
   (let [(escContent (stringReplace m.content "\"" "\\\""))] (str "(:match :ref \"" m.ref "\"" " :file \"" m.file "\"" " :line " (stringFromInt64 m.line) " :content \"" escContent "\")"))
@@ -29,7 +29,7 @@ fn parseSingleBranchLine line: String -> (Option GitBranchRecord)
   (let [(clean (stringTrim line))] (if (or (stringEmpty? clean) (stringContains? clean " -> ")) (none) (let [(isCur (stringStartsWith? line "*")) (afterStar (if isCur (stringTrim (optionOr (stringSlice line 1 (stringLength line)) "")) clean)) (rawToks (stringSplit afterStar " ")) (toks (filter (fn [(t String)] -> Bool (not (stringEmpty? (stringTrim t)))) rawToks)) (rawName (stringTrim (optionOr (listGet toks 0) "")))] (if (stringEmpty? rawName) (none) (let [(isRem (stringStartsWith? rawName "remotes/")) (cleanName (if isRem (optionOr (stringSlice rawName 8 (stringLength rawName)) rawName) rawName)) (commitHash (if (> (listLength toks) 1) (stringTrim (optionOr (listGet toks 1) "")) "")) (up (parseBranchUpstream line))] (some (GitBranchRecord :name cleanName :commit commitHash :upstream up :current isCur :remote isRem)))))))
 
 fn gitBranchesParse rawBranches: String -> (List GitBranchRecord)
-  (let [(clean (stringReplace rawBranches "\r" "")) (lines (stringSplit clean "\n")) (reversed (fold (fn [(acc (List GitBranchRecord)) (ln String)] -> (List GitBranchRecord) (mt (parseSingleBranchLine ln) ((some b) (cons b acc)) ((none) acc))) (list) lines))] (listReverse reversed))
+  (let [(clean (stringReplace rawBranches "\r" "")) (lines (stringSplit clean "\n")) (reversed (fold (fn [(acc (List GitBranchRecord)) (ln String)] -> (List GitBranchRecord) (match (parseSingleBranchLine ln) ((some b) (cons b acc)) ((none) acc))) (list) lines))] (listReverse reversed))
 
 fn formatBranchItem b: GitBranchRecord -> String
   (let [(curPart (if b.current " :current true" "")) (remPart (if b.remote " :remote true" "")) (upPart (if (stringEmpty? b.upstream) "" (str " :upstream \"" b.upstream "\"")))] (str "(:branch :name \"" b.name "\"" " :commit \"" b.commit "\"" curPart remPart upPart ")"))

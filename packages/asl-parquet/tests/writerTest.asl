@@ -44,7 +44,7 @@ fn testVaryingDeltaBlocks! -> Bool
         (probe (processRun "python3 -c 'import pyarrow.parquet'"))]
     (do
       (assert (ok? written) "varying multi-block deltas write")
-      (mt (parquetOpen path)
+      (match (parquetOpen path)
         ((err e) (assert false (str "varying-delta host open failed: " e)))
         ((ok h)
           (let [(actual (parquetReadI64 h "tsUs" 0))
@@ -86,7 +86,7 @@ fn testDeltaSmallGap! -> Bool
         (written (pq/parquetWrite path columns options (list)))]
     (do
       (assert (ok? written) "three-row timestamp with 10ms gap writes")
-      (mt (parquetOpen path)
+      (match (parquetOpen path)
         ((err e) (assert false (str "small-gap host open failed: " e)))
         ((ok h)
           (do
@@ -103,7 +103,7 @@ fn testDeltaHundredMillisecondGaps! -> Bool
         (written (pq/parquetWrite path columns options (list)))]
     (do
       (assert (ok? written) "128 microsecond timestamps with alternating 100ms/300ms gaps write")
-      (mt (parquetOpen path)
+      (match (parquetOpen path)
         ((err e) (assert false (str "100ms-gap host open failed: " e)))
         ((ok h) (do
           (assert (assertI64Array! values (parquetReadI64 h "tsUs" 0) 0) "100ms-gap timestamps round trip")
@@ -119,7 +119,7 @@ fn testLongNameFooter! -> Bool
         (written (pq/parquetWrite path columns options (list)))]
     (do
       (assert (ok? written) "long-name six-row-group Parquet write succeeds")
-      (mt (parquetOpen path)
+      (match (parquetOpen path)
         ((err e) (assert false (str "long-name footer host open failed: " e)))
         ((ok h) (do
           (assert (= (parquetNumRowGroups h) 6) "long-name footer retains six row groups")
@@ -139,7 +139,7 @@ fn testZigzagBoundary! -> Bool
         (written (pq/parquetWrite path columns options (list)))]
     (do
       (assert (ok? written) "delta streams with positive and negative 2^62-scale values write without zigzag overflow")
-      (mt (parquetOpen path)
+      (match (parquetOpen path)
         ((err e) (assert false (str "wide-value host open failed: " e)))
         ((ok h) (do
           (assert (assertI64Array! positive (parquetReadI64 h "widePositive" 0) 0) "positive 2^62-scale values round trip")
@@ -161,7 +161,7 @@ fn testFifteenElementCompactList! -> Bool
         (written (pq/parquetWrite path columns options (list)))]
     (do
       (assert (ok? written) "14-column file with 15-element schema list writes")
-      (mt (parquetOpen path)
+      (match (parquetOpen path)
         ((err e) (assert false (str "15-element schema list host open failed: " e)))
         ((ok h) (do
           (assert (= (parquetNumRows h) 2) "14-column file row count")
@@ -177,7 +177,7 @@ fn testDecreasingDelta! -> Bool
         (written (pq/parquetWrite path columns options (list)))]
     (do
       (assert (ok? written) "decreasing delta values write")
-      (mt (parquetOpen path)
+      (match (parquetOpen path)
         ((err e) (assert false (str "decreasing-delta host open failed: " e)))
         ((ok h)
           (do
@@ -200,7 +200,7 @@ fn testManyColumns! -> Bool
         (written (pq/parquetWrite path columns options (list)))]
     (do
       (assert (ok? written) "16-column Parquet write succeeds")
-      (mt (parquetOpen path)
+      (match (parquetOpen path)
         ((err e) (assert false (str "16-column host open failed: " e)))
         ((ok h)
           (do
@@ -255,7 +255,7 @@ fn testCanonical! -> Bool
     (do
       (assert (ok? written) "canonical Parquet write succeeds")
       (let [(opened (parquetOpen path))]
-        (mt opened
+        (match opened
           ((err e) (assert false (str "host parquet open failed: " e)))
           ((ok h) (do
             (checkCanonical! h path)
@@ -301,12 +301,12 @@ fn testZstdFrameSizes! -> Bool
       (assert (< (resultOr (fileSize largePath) 1000000) (resultOr (fileSize largePlain) 0)) "ZSTD compresses a 65752-byte page")
       (assert (= (resultOr (foot/parquetKvMetadata smallPath "asl.parquet.zstd.level") "") "19") "small ZSTD frame records applied level")
       (assert (= (resultOr (foot/parquetKvMetadata largePath "asl.parquet.zstd.level") "") "19") "large ZSTD frame records applied level")
-      (mt (parquetOpen smallPath)
+      (match (parquetOpen smallPath)
         ((err e) (assert false (str "256-byte ZSTD page host open failed: " e)))
         ((ok smallHandle)
           (do
             (assert (= (i64ArraySum (parquetReadI64 smallHandle "x" 0)) 0) "host reads compressed 256-byte page")
-            (mt (parquetOpen largePath)
+            (match (parquetOpen largePath)
               ((err e) (assert false (str "65752-byte ZSTD page host open failed: " e)))
               ((ok largeHandle)
                 (do
@@ -365,7 +365,7 @@ fn testUncompressed! -> Bool
         (written (pq/parquetWrite path columns options (list))) ]
     (do
       (assert (ok? written) "uncompressed write succeeds")
-      (mt (parquetOpen path)
+      (match (parquetOpen path)
         ((err e) (assert false (str "uncompressed output open failed: " e)))
         ((ok h) (do
           (assert (= (parquetNumRows h) 3) "uncompressed row count")

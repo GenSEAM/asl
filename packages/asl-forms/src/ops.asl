@@ -74,7 +74,7 @@ fn relJoin relDir: String name: String -> String
   (if (stringEmpty? relDir) name (str relDir "/" name))
 
 fn walkTree! maxDepth: Int64 dir: String relDir: String depth: Int64 acc: TreeAcc -> TreeAcc
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err _) acc)
     ((ok names)
       (let [(isDirs (map (fn [(nm String)] -> Bool (k/isDir! (k/joinPath dir nm))) names))
@@ -116,7 +116,7 @@ fn charCount b: Bytes i: Int64 e: Int64 acc: Int64 -> Int64
   (if (>= i e) acc (charCount b (+ i 1) e (if (= (& (bytesGet b i) 192) 128) acc (+ acc 1))))
 
 fn pageKeep b: Bytes ends: (List Int64) start: Int64 cap: Int64 byteCap: Int64 keep: Int64 used: Int64 -> Int64
-  (mt (listHead ends)
+  (match (listHead ends)
     ((none) keep)
     ((some e)
       (let [(len (charCount b start e 0))]
@@ -156,7 +156,7 @@ fn emitRead req: ReadReq content: String sliceInfo: String baseLine: Int64 -> St
 fn readSymbol req: ReadReq c: String lang: String sym: String -> StepOutcome
   (let [(found (sy/findSymbol c sym))
         (syms (pairSecond found))]
-    (mt (pairFirst found)
+    (match (pairFirst found)
       ((none)
         (let [(near (sm/nearestSymbols sym (map (fn [(d sy/SymbolDef)] -> String d.name) syms) 5))]
           (failedStep (str (stepHead req.id "read") " :status \"rejected\" :error-code \":ERR_SYMBOL_NOT_FOUND\" :file \"" req.rel "\" :symbol \"" (k/escapeAsnVal sym)
@@ -216,16 +216,16 @@ fn readStep! root: String id: Int64 kw: (Map String String) args: (List String) 
       ((not (k/isFile! fpath)) (rejected id "read" "ERR_FILE_NOT_FOUND" (msgTail (str "File not found: " raw))))
       ((not numOk) (rejected id "read" "ERR_INVALID_ARG" " :message \":limit, :start and :end must be integers\""))
       (else
-        (mt (fileReadString fpath)
+        (match (fileReadString fpath)
           ((err e) (rejected id "read" "ERR_READ_FAILED" (msgTail (str "Failed to read file: " e))))
           ((ok bytesText)
             (let [(kind (k/binaryKind bytesText))
                   (rel (k/escapeAsnVal (k/relToRoot root fpath)))]
               (if (not (stringEmpty? kind))
                 (failedStep (str (stepHead id "read") " :status \"rejected\" :error-code \":ERR_BINARY\" :file \"" rel "\" :bytes "
-                                 (stringFromInt64 (mt (fileStat fpath) ((ok st) st.size) ((err _) (stringLength bytesText)))) " :kind \"" kind "\")"))
+                                 (stringFromInt64 (match (fileStat fpath) ((ok st) st.size) ((err _) (stringLength bytesText)))) " :kind \"" kind "\")"))
                 (let [(c (k/universalNewlines bytesText))
-                      (byteCap (mt (pyInt (k/kwOr kw "maxBytes" "12000")) ((some v) (max 256 v)) ((none) 12000)))
+                      (byteCap (match (pyInt (k/kwOr kw "maxBytes" "12000")) ((some v) (max 256 v)) ((none) 12000)))
                       (req (ReadReq :id id :rel rel :anchor anchor :limit (optionOr lim 0) :byteCap byteCap))
                       (lang (sy/languageOf! fpath))
                       (s0 (optionOr rs 0))
@@ -279,10 +279,10 @@ fn targetSource! root: String kw: (Map String String) args: (List String) -> (Re
     (cond
       ((not (stringEmpty? (pairSecond target))) (err (pairSecond target)))
       ((not (k/isFile! (pairFirst target))) (err (str "File not found: " raw)))
-      (else (mt (fileReadString (pairFirst target)) ((ok text) (ok (pair (pairFirst target) text))) ((err e) (err (str "Failed to read " raw ": " e)))))))
+      (else (match (fileReadString (pairFirst target)) ((ok text) (ok (pair (pairFirst target) text))) ((err e) (err (str "Failed to read " raw ": " e)))))))
 
 fn irErrors r: (Result String (List ty/IrDiag)) -> (Result String (List String))
-  (mt r
+  (match r
     ((ok text) (ok text))
     ((err ds) (err (map (fn [(d ty/IrDiag)] -> String (str d.code ": " d.message)) ds))))
 
@@ -292,7 +292,7 @@ fn compiled! kind: String path: String source: String -> (Result String (List St
     ((= kind "py") (irErrors (pyc/compileEntry! path)))
     ((= kind "go") (irErrors (goc/compileEntry! path)))
     (else
-      (mt (jsc/compileWithTypes! path)
+      (match (jsc/compileWithTypes! path)
         ((err ds) (err (map (fn [(d ty/IrDiag)] -> String (str d.code ": " d.message)) ds)))
         ((ok both) (ok (if (= kind "ts") (pairSecond both) (pairFirst both)))))))
 
@@ -305,10 +305,10 @@ fn ! aslChecked! root: String kind: String path: String -> (Result Unit (List St
         (err (filter (fn [(l String)] -> Bool (stringContains? l "ERR_")) (stringSplit (str h.errText "\n" h.out) "\n"))))))
 
 fn targetConverted! root: String id: Int64 tname: String kw: (Map String String) args: (List String) -> (Result String StepOutcome)
-  (mt (targetSource! root kw args)
+  (match (targetSource! root kw args)
     ((err e) (err (rejected id "target" "ERR_MISSING_ARG" (msgTail e))))
     ((ok found)
-      (mt (mt (aslChecked! root tname (pairFirst found)) ((err es) (err es)) ((ok _) (compiled! tname (pairFirst found) (pairSecond found))))
+      (match (match (aslChecked! root tname (pairFirst found)) ((err es) (err es)) ((ok _) (compiled! tname (pairFirst found) (pairSecond found))))
         ((ok text) (ok text))
         ((err es) (err (rejected id "target" "ERR_TARGET" (str " :target \"" tname "\" :errors (" (stringJoin (map (fn [(e String)] -> String (str "\"" (k/escapeAsnVal e) "\"")) es) " ") ")")))))))
 
@@ -431,11 +431,11 @@ fn gateContext! root: String -> g/GateEnv
     (g/GateEnv :root root :rootDir toolRoot :binDir bin :host host :staged staged))
 
 fn stagedCheckFiles! vs: v/Vfs paths: (List String) -> (List (Pair String String))
-  (mt (listHead paths)
+  (match (listHead paths)
     ((none) (list))
     ((some path)
       (let [(rest (optionOr (listTail paths) (list)))]
-        (mt (v/stagedContent! vs path)
+        (match (v/stagedContent! vs path)
           ((some content) (cons (pair path content) (stagedCheckFiles! vs rest)))
           ((none) (stagedCheckFiles! vs rest))))))
 
@@ -467,12 +467,12 @@ fn runNested! root: String id: Int64 form: String held: (List String) -> StepOut
 fn targetRun! root: String id: Int64 kw: (Map String String) args: (List String) held: (List String) -> StepOutcome
   (let [(tname (k/lstripColons (k/kwOr kw "name" (k/kwOr kw "target" (k/kwOr kw "to" (optionOr (listHead args) ""))))))
         (out (k/kwOr kw "out" ""))]
-    (mt (targetConverted! root id tname kw args)
+    (match (targetConverted! root id tname kw args)
       ((err refusal) refusal)
       ((ok text)
         (if (stringEmpty? out)
           (done (str (stepHead id "target") " :status \"ok\" :target \"" tname "\" :bytes " (stringFromInt64 (stringLength text)) " :output \"" (k/escapeAsnVal text) "\")"))
-          (mt (e/editOp! (resultOr (v/vfsContext! root) (v/vfsAt root (v/vfsRoot! root (envOr! "ASL_VFS_DIR") (envOr! "HOME")) (envOr! "ASL_SESSION")))
+          (match (e/editOp! (resultOr (v/vfsContext! root) (v/vfsAt root (v/vfsRoot! root (envOr! "ASL_VFS_DIR") (envOr! "HOME")) (envOr! "ASL_SESSION")))
                         (editCheckers! (gateContext! root))
                         (fn [(n Int64) (form String) (h (List String))] -> k/EditOutcome
                           (let [(r (runNested! root n form h))] (k/EditOutcome :lines r.lines :errCount r.errCount)))
@@ -529,7 +529,7 @@ fn runStepHeld! root: String id: Int64 op: String kw: (Map String String) args: 
                                   (let [(r (runNested! root n form (list)))] (pair r.lines r.errCount))) id op kw args))]
         (StepOutcome :lines out.lines :errCount out.errCount)))
     (else
-      (mt (e/editOp! (resultOr (v/vfsContext! root) (v/vfsAt root (v/vfsRoot! root (envOr! "ASL_VFS_DIR") (envOr! "HOME")) (envOr! "ASL_SESSION")))
+      (match (e/editOp! (resultOr (v/vfsContext! root) (v/vfsAt root (v/vfsRoot! root (envOr! "ASL_VFS_DIR") (envOr! "HOME")) (envOr! "ASL_SESSION")))
                     (editCheckers! (gateContext! root))
                     (fn [(n Int64) (form String) (held (List String))] -> k/EditOutcome
                       (let [(r (runNested! root n form held))] (k/EditOutcome :lines r.lines :errCount r.errCount)))

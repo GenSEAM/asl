@@ -106,7 +106,7 @@ fn collectDeclTokens toks: (List tr/Token) depth: Int64 curLineStart: Int64 isFi
 
 fn lastNonTriviaKind toks: (List tr/Token) -> String
   (let [(nonTrivia (filter (fn [(t tr/Token)] -> Bool (not (tr/isTrivia t))) toks))]
-    (mt (listLast nonTrivia)
+    (match (listLast nonTrivia)
       ((some t) t.kind)
       ((none) "")))
 
@@ -157,7 +157,7 @@ fn splitHeaderAndBody toks: (List tr/Token) acc: (List tr/Token) -> HeaderSplitR
         (splitHeaderAndBody rest (cons t acc)))))
 
 fn lastTokenEnd toks: (List tr/Token) fallback: Int64 -> Int64
-  (mt (listLast toks)
+  (match (listLast toks)
     ((some t) t.end)
     ((none) fallback))
 
@@ -196,7 +196,7 @@ fn parseLayoutLoop bs: Bytes tokens: (List tr/Token) curLineStart: Int64 topKids
                     (formLen (- formLast.end formFirst.start))
                     (subNode (prn/parseTokens formToks formLen))
                     (subForms (prn/topLevelForms subNode))]
-                (mt (listHead subForms)
+                (match (listHead subForms)
                   ((some formElem)
                    (parseLayoutLoop bs remToks nxtLineStart (cons formElem topKidsAcc)))
                   ((none)
@@ -218,8 +218,8 @@ fn parseLayoutLoop bs: Bytes tokens: (List tr/Token) curLineStart: Int64 topKids
                         (headerNode (tr/makeNode "header" hStart hEnd hKids))
                         (declKind (declKindFromBytes bs hFirst))]
                     (if (listEmpty? bToks)
-                      (let [(dEnd (mt hNl ((some nl) nl.end) ((none) hEnd)))
-                            (kids (mt hNl ((some nl) (list (tr/elemNode headerNode) (tr/elemToken nl))) ((none) (list (tr/elemNode headerNode)))))
+                      (let [(dEnd (match hNl ((some nl) nl.end) ((none) hEnd)))
+                            (kids (match hNl ((some nl) (list (tr/elemNode headerNode) (tr/elemToken nl))) ((none) (list (tr/elemNode headerNode)))))
                             (declNode (tr/makeNode declKind hStart dEnd kids))]
                         (parseLayoutLoop bs remToks afterLineStart (cons (tr/elemNode declNode) topKidsAcc)))
                       (let [(bFirst (optionOr (listHead bToks) t))
@@ -228,7 +228,7 @@ fn parseLayoutLoop bs: Bytes tokens: (List tr/Token) curLineStart: Int64 topKids
                             (bEnd bLast.end)
                             (bKids (prn/parseTokens bToks (- bEnd bStart)).children)
                             (bodyNode (tr/makeNode "body" bStart bEnd bKids))
-                            (kids (mt hNl ((some nl) (list (tr/elemNode headerNode) (tr/elemToken nl) (tr/elemNode bodyNode))) ((none) (list (tr/elemNode headerNode) (tr/elemNode bodyNode)))))
+                            (kids (match hNl ((some nl) (list (tr/elemNode headerNode) (tr/elemToken nl) (tr/elemNode bodyNode))) ((none) (list (tr/elemNode headerNode) (tr/elemNode bodyNode)))))
                             (declNode (tr/makeNode declKind hStart bEnd kids))]
                         (parseLayoutLoop bs remToks afterLineStart (cons (tr/elemNode declNode) topKidsAcc))))))))
             (parseLayoutLoop bs rest nxtLineStart (cons (tr/elemToken t) topKidsAcc)))))))
@@ -255,7 +255,7 @@ fn parse text: String -> tr/Node
   (parseString text)
 
 fn collectErrorsInElement elem: tr/TreeElement acc: (List tr/Node) -> (List tr/Node)
-  (mt elem
+  (match elem
     ((elemToken tok)
      (if (tr/isErrorToken tok)
        (cons (tr/makeErrorNode tok.start tok.end (list (tr/elemToken tok))) acc)
@@ -283,7 +283,7 @@ fn hasErrors root: tr/Node -> Bool
   (not (listEmpty? (treeErrors root)))
 
 fn isTriviaElement elem: tr/TreeElement -> Bool
-  (mt elem
+  (match elem
     ((elemToken tok) (tr/isTrivia tok))
     ((elemNode _) false))
 
@@ -379,7 +379,7 @@ fn lowerTopFormText text: String node: tr/Node -> (Result rd/SExpr String)
           (formBs (stringToBytes formText))
           (escapedText (if (formHasMultilineString? formBs) (escapeFormStringNewlines formText) formText))
           (cleanText (a/joinFnHeader escapedText))]
-      (mt (ip/parseIndented cleanText)
+      (match (ip/parseIndented cleanText)
         ((ok form) (ok (ip/stripInferredUnit form)))
         ((err e) (err e)))))
 
@@ -395,9 +395,9 @@ fn lowerFormsList text: String forms: (List tr/TreeElement) acc: (List rd/SExpr)
     (ok (listReverse acc))
     (let [(elem (optionOr (listHead forms) (tr/elemToken (tr/makeToken "" 0 0))))
           (rest (optionOr (listTail forms) (list)))]
-      (mt elem
+      (match elem
         ((elemNode node)
-         (mt (lowerTopFormText text node)
+         (match (lowerTopFormText text node)
            ((ok sexpr) (lowerFormsList text rest (cons sexpr acc)))
            ((err msg) (err msg))))
         ((elemToken _)

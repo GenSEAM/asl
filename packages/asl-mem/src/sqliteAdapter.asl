@@ -17,7 +17,7 @@ fn sqliteWriteRecord st: SqliteStorageState table: Str id: Str phase: Str status
   (if (not (hasTable? st table)) (err "Table does not exist") (if (= id "") (err "Empty ID") (let [(tableMap (optionOr (mapGet st.tables table) (mapEmpty))) (newRow (SqliteRow :id id :phase phase :status status :payload payload)) (updatedTableMap (mapSet tableMap id newRow)) (updatedTables (mapSet st.tables table updatedTableMap))] (ok (with st :tables updatedTables)))))
 
 fn sqliteReadRecord st: SqliteStorageState table: Str id: Str -> (Result SqliteRow Str)
-  (if (not (hasTable? st table)) (err "Table does not exist") (if (= id "") (err "Empty ID") (let [(tableMap (optionOr (mapGet st.tables table) (mapEmpty)))] (mt (mapGet tableMap id) ((some row) (ok row)) ((none) (err "Record not found"))))))
+  (if (not (hasTable? st table)) (err "Table does not exist") (if (= id "") (err "Empty ID") (let [(tableMap (optionOr (mapGet st.tables table) (mapEmpty)))] (match (mapGet tableMap id) ((some row) (ok row)) ((none) (err "Record not found"))))))
 
 fn filterRowsLoop rows: (List SqliteRow) phase: Str status: Str acc: (List SqliteRow) -> (List SqliteRow)
   (if (listEmpty? rows) acc (let [(headRow (optionOr (listHead rows) (makeEmptyRow))) (tailRows (optionOr (listTail rows) (list)))] (if (and (= headRow.phase phase) (= headRow.status status)) (filterRowsLoop tailRows phase status (listAppend acc (list headRow))) (filterRowsLoop tailRows phase status acc))))

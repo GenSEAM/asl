@@ -17,7 +17,7 @@ fn threadLinkFollowup parentTh: ThreadRecord childTask: tt/TaskRecord handoff: T
   (let [(parentId handoff.parentTaskId) (summary handoff.terminalSummary) (updatedTh (with parentTh :taskIds (listAppend parentTh.taskIds (list childTask.id)) :parentId (some parentId) :handoff (some handoff) :active true :updatedAt nowMs)) (briefBlock (str "[Parent Task Handoff: " parentId "]\n" summary)) (augmentedPayload (if (stringEmpty? childTask.payload) briefBlock (str briefBlock "\n\n" childTask.payload))) (updatedChild (tt/TaskRecord :id childTask.id :lane parentTh.lane :projectPath childTask.projectPath :state childTask.state :priority childTask.priority :createdAt childTask.createdAt :updatedAt nowMs :payload augmentedPayload))] (pair updatedTh updatedChild))
 
 fn threadGetParentBrief th: ThreadRecord -> (Option Str)
-  (mt th.handoff ((some h) (some h.terminalSummary)) ((none) (none)))
+  (match th.handoff ((some h) (some h.terminalSummary)) ((none) (none)))
 
 fn threadIsActive? th: ThreadRecord -> Bool
   th.active

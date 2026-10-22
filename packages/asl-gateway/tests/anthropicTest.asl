@@ -10,16 +10,16 @@ fn get v: j/Json k: String -> j/Json
   (optionOr (pt/jget v k) (j/jnull))
 
 fn text v: j/Json -> String
-  (mt v ((j/jstr s) s) (_ ""))
+  (match v ((j/jstr s) s) (_ ""))
 
 fn int v: j/Json -> Int64
-  (mt v ((j/jint n) n) (_ -1))
+  (match v ((j/jint n) n) (_ -1))
 
 fn num v: j/Json -> Float64
-  (mt v ((j/jfloat f) f) ((j/jint n) (int64ToFloat64 n)) (_ -1.0))
+  (match v ((j/jfloat f) f) ((j/jint n) (int64ToFloat64 n)) (_ -1.0))
 
 fn items v: j/Json -> (List j/Json)
-  (mt v ((j/jarr xs) xs) (_ (list)))
+  (match v ((j/jarr xs) xs) (_ (list)))
 
 fn nth v: (List j/Json) i: Int64 -> j/Json
   (optionOr (listGet v i) (j/jnull))
@@ -118,10 +118,10 @@ fn sampleAnthropicResponse -> String
     "\"usage\":{\"input_tokens\":10,\"output_tokens\":20,\"cache_read_input_tokens\":5,\"cache_creation_input_tokens\":3}}")
 
 fn testAnthropicToChatMapsContentBlocks -> Bool
-  (mt (ch/anthropicToChat (sampleAnthropicResponse))
+  (match (ch/anthropicToChat (sampleAnthropicResponse))
     ((none) (assert false "anthropicToChat must parse a well-formed Anthropic response"))
     ((some text_)
-     (mt (pt/jsonLoads text_)
+     (match (pt/jsonLoads text_)
        ((err e) (assert false (str "anthropicToChat must produce valid JSON: " e)))
        ((ok chat)
         (let [(choice (nth (items (get chat "choices")) 0))
@@ -138,10 +138,10 @@ fn testAnthropicToChatMapsContentBlocks -> Bool
             true))))))
 
 fn testAnthropicToChatMapsCacheUsage -> Bool
-  (mt (ch/anthropicToChat (sampleAnthropicResponse))
+  (match (ch/anthropicToChat (sampleAnthropicResponse))
     ((none) (assert false "anthropicToChat must parse a well-formed Anthropic response"))
     ((some text_)
-     (mt (pt/jsonLoads text_)
+     (match (pt/jsonLoads text_)
        ((err e) (assert false (str "anthropicToChat must produce valid JSON: " e)))
        ((ok chat)
         (let [(usage (get chat "usage"))]

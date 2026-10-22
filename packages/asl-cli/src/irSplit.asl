@@ -18,16 +18,16 @@ fn paramType p: String -> String
 
 fn declOf head: String -> (Option String)
   (let [(rest (stringReplace (stringReplace (optionOr (stringSlice head 7 (stringLength head)) "") "internal " "") "weak " ""))]
-    (mt (stringIndexOf rest "(")
+    (match (stringIndexOf rest "(")
       ((none) (none))
-      ((some open) (mt (stringIndexOf rest ")")
+      ((some open) (match (stringIndexOf rest ")")
         ((none) (none))
         ((some close) (let [(params (optionOr (stringSlice rest (+ open 1) close) ""))]
                         (some (str "declare " (optionOr (stringSlice rest 0 open) "") "("
                                    (if (stringEmpty? params) "" (stringJoin (map paramType (stringSplit params ", ")) ", ")) ")"))))))))
 
 fn externOf line: String -> (Option String)
-  (mt (stringIndexOf line " global ")
+  (match (stringIndexOf line " global ")
     ((none) (none))
     ((some at) (let [(name (optionOr (stringSlice line 0 (optionOr (stringIndexOf line " = ") 0)) ""))
                      (init (optionOr (stringSlice line (+ at 8) (stringLength line)) ""))
@@ -40,29 +40,29 @@ fn externOf line: String -> (Option String)
                    (else (some (str name " = external hidden global " ty)))))))
 
 fn definition line: String -> String
-  (mt (stringIndexOf line " = ") ((none) "") ((some i) (optionOr (stringSlice line (+ i 3) (stringLength line)) "")))
+  (match (stringIndexOf line " = ") ((none) "") ((some i) (optionOr (stringSlice line (+ i 3) (stringLength line)) "")))
 
 fn owned? line: String -> Bool
   (and (stringStartsWith? line "@") (or (stringStartsWith? (definition line) "internal global ") (stringStartsWith? (definition line) "weak global ")))
 
 fn bodyOf piece: String -> (Result (Pair Body String) String)
   (let [(whole (str piece "\n"))]
-    (mt (stringIndexOf whole "\n}\n")
+    (match (stringIndexOf whole "\n}\n")
       ((none) (err "a define has no closing brace line"))
       ((some end) (let [(text (str "define " (optionOr (stringSlice whole 0 (+ end 3)) "")))
                         (head (optionOr (stringSlice text 0 (optionOr (stringIndexOf text "\n") (stringLength text))) ""))]
                     (ok (pair (Body :head head :text text :size (stringLength text)) (optionOr (stringSlice whole (+ end 3) (stringLength whole)) "")))))))
 
 fn bodiesOf pieces: (List String) bodies: (List Body) tails: (List String) -> (Result (Pair (List Body) (List String)) String)
-  (mt (listHead pieces)
+  (match (listHead pieces)
     ((none) (ok (pair (listReverse bodies) tails)))
-    ((some p) (mt (bodyOf p)
+    ((some p) (match (bodyOf p)
       ((err e) (err e))
       ((ok u) (bodiesOf (optionOr (listTail pieces) (list)) (cons (pairFirst u) bodies) (cons (pairSecond u) tails))))))
 
 fn parse text: String -> (Result Split String)
   (let [(pieces (stringSplit text "\ndefine "))]
-    (mt (bodiesOf (optionOr (listTail pieces) (list)) (list) (list))
+    (match (bodiesOf (optionOr (listTail pieces) (list)) (list) (list))
       ((err e) (err e))
       ((ok found) (let [(lines (filter (fn [(l String)] -> Bool (not (stringEmpty? l)))
                                        (stringLines (stringJoin (cons (str (optionOr (listHead pieces) "") "\n") (pairSecond found)) "\n"))))]
@@ -86,7 +86,7 @@ fn otherText u: Body -> (Result String String)
     ((stringStartsWith? u.head "define linkonce_odr ") (ok u.text))
     ((and (stringStartsWith? u.head "define internal ") (stringEndsWith? u.head " alwaysinline {"))
       (ok (str "define available_externally " (optionOr (stringSlice u.text 16 (stringLength u.text)) ""))))
-    (else (mt (declOf u.head)
+    (else (match (declOf u.head)
             ((none) (err (str "cannot declare " u.head)))
             ((some d) (ok (if (stringStartsWith? u.head "define internal ") (str "declare hidden " (optionOr (stringSlice d 8 (stringLength d)) "")) d))))))
 
@@ -96,24 +96,24 @@ fn ownedText k: Int64 line: String -> (Result String String)
       (ok (if (stringStartsWith? rhs "internal global ")
             (str (optionOr (stringSlice line 0 (- (stringLength line) (stringLength rhs))) "") "hidden global " (optionOr (stringSlice rhs 16 (stringLength rhs)) ""))
             line)))
-    (mt (externOf line) ((none) (err (str "cannot declare " line))) ((some d) (ok d))))
+    (match (externOf line) ((none) (err (str "cannot declare " line))) ((some d) (ok d))))
 
 fn collect xs: (List (Result String String)) acc: (List String) -> (Result (List String) String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (ok (listReverse acc)))
-    ((some r) (mt r ((err e) (err e)) ((ok s) (collect (optionOr (listTail xs) (list)) (cons s acc))))))
+    ((some r) (match r ((err e) (err e)) ((ok s) (collect (optionOr (listTail xs) (list)) (cons s acc))))))
 
 fn part s: Split owners: (List Int64) k: Int64 -> (Result String String)
-  (mt (collect (map (fn [(l String)] -> (Result String String) (ownedText k l)) s.owned) (list))
+  (match (collect (map (fn [(l String)] -> (Result String String) (ownedText k l)) s.owned) (list))
     ((err e) (err e))
-    ((ok globals) (mt (collect (map (fn [(p (Pair Int64 Body))] -> (Result String String)
+    ((ok globals) (match (collect (map (fn [(p (Pair Int64 Body))] -> (Result String String)
                                        (if (= (pairFirst p) k) (ok (ownText (pairSecond p))) (otherText (pairSecond p))))
                                      (zip owners s.bodies)) (list))
       ((err e) (err e))
       ((ok bodies) (ok (str (stringJoin s.shared "\n") "\n" (stringJoin globals "\n") "\n" (stringJoin bodies "\n") "\n"))))))
 
 fn split text: String n: Int64 -> (Result (List String) String)
-  (mt (parse text)
+  (match (parse text)
     ((err e) (err e))
     ((ok s) (let [(parts (max 1 (min n (listLength s.bodies))))
                   (owners (assign s.bodies parts))]

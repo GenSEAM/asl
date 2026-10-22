@@ -2,7 +2,7 @@
 
 fn countVisits node: rd/SExpr visitorFn: Any -> Int64
   (let [(ownVisits (listLength (visitorFn node)))
-        (childVisits (mt node
+        (childVisits (match node
           ((rd/sexprAtom _) 0)
           ((rd/sexprList items)
             (fold (fn [(acc Int64) (child rd/SExpr)] -> Int64

@@ -134,17 +134,17 @@ fn makeMissingNode offset: Int64 text: String -> Node
   (Node :kind "missing" :start offset :end offset :children (list) :missing (some (Missing :offset offset :text text)) :stray false)
 
 fn missingNodeText node: Node -> String
-  (mt node.missing
+  (match node.missing
     ((some m) m.text)
     ((none) ""))
 
 fn missingNodeOffset node: Node -> Int64
-  (mt node.missing
+  (match node.missing
     ((some m) m.offset)
     ((none) node.start))
 
 fn collectMissingInElement elem: TreeElement acc: (List Missing) -> (List Missing)
-  (mt elem
+  (match elem
     ((elemToken _) acc)
     ((elemNode node) (collectMissingInNode node acc)))
 
@@ -157,7 +157,7 @@ fn collectMissingInChildren children: (List TreeElement) acc: (List Missing) -> 
 
 fn collectMissingInNode node: Node acc: (List Missing) -> (List Missing)
   (let [(kidsAcc (collectMissingInChildren node.children acc))]
-    (mt node.missing
+    (match node.missing
       ((some m) (cons m kidsAcc))
       ((none) kidsAcc)))
 
@@ -165,7 +165,7 @@ fn treeMissing root: Node -> (List Missing)
   (listReverse (collectMissingInNode root (list)))
 
 fn collectMissingNodesInElement elem: TreeElement acc: (List Node) -> (List Node)
-  (mt elem
+  (match elem
     ((elemToken _) acc)
     ((elemNode node) (collectMissingNodesInNode node acc)))
 
@@ -186,7 +186,7 @@ fn treeMissingNodes root: Node -> (List Node)
   (listReverse (collectMissingNodesInNode root (list)))
 
 fn collectDeletesInElement elem: TreeElement acc: (List Delete) -> (List Delete)
-  (mt elem
+  (match elem
     ((elemToken _) acc)
     ((elemNode node) (collectDeletesInNode node acc)))
 
@@ -207,7 +207,7 @@ fn treeDeletes root: Node -> (List Delete)
   (listReverse (collectDeletesInNode root (list)))
 
 fn collectStrayNodesInElement elem: TreeElement acc: (List Node) -> (List Node)
-  (mt elem
+  (match elem
     ((elemToken _) acc)
     ((elemNode node) (collectStrayNodesInNode node acc)))
 
@@ -279,12 +279,12 @@ fn nodeLength node: Node -> Int64
   (- node.end node.start)
 
 fn elementStart elem: TreeElement -> Int64
-  (mt elem
+  (match elem
     ((elemToken tok) tok.start)
     ((elemNode node) node.start))
 
 fn elementEnd elem: TreeElement -> Int64
-  (mt elem
+  (match elem
     ((elemToken tok) tok.end)
     ((elemNode node) node.end))
 
@@ -292,7 +292,7 @@ fn elementLength elem: TreeElement -> Int64
   (- (elementEnd elem) (elementStart elem))
 
 fn collectLeafTokens elem: TreeElement acc: (List Token) -> (List Token)
-  (mt elem
+  (match elem
     ((elemToken tok) (cons tok acc))
     ((elemNode node)
      (if (= node.kind "missing")

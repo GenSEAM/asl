@@ -131,7 +131,7 @@ fn shouldCloseOnStartTag? topTag: String incomingTag: String -> Bool
 fn addTreeElement state: ParseState elem: tr/TreeElement -> ParseState
   (let [(stack state.openStack)
         (roots state.rootElems)]
-    (mt (listHead stack)
+    (match (listHead stack)
       ((none)
        (ParseState :openStack (list) :rootElems (cons elem roots)))
       ((some top)
@@ -144,7 +144,7 @@ fn addTreeElement state: ParseState elem: tr/TreeElement -> ParseState
 
 fn closeTopImplicitly state: ParseState closeOffset: Int64 -> ParseState
   (let [(stack state.openStack)]
-    (mt (listHead stack)
+    (match (listHead stack)
       ((none) state)
       ((some top)
        (let [(restStack (optionOr (listTail stack) (list)))
@@ -155,7 +155,7 @@ fn closeTopImplicitly state: ParseState closeOffset: Int64 -> ParseState
 
 fn closeImpliedBeforeStartTag state: ParseState incomingTag: String startOffset: Int64 -> ParseState
   (let [(stack state.openStack)]
-    (mt (listHead stack)
+    (match (listHead stack)
       ((none) state)
       ((some top)
        (if (shouldCloseOnStartTag? top.tag incomingTag)
@@ -164,7 +164,7 @@ fn closeImpliedBeforeStartTag state: ParseState incomingTag: String startOffset:
          state))))
 
 fn stackContainsTag? stack: (List OpenElem) targetTag: String -> Bool
-  (mt (listHead stack)
+  (match (listHead stack)
     ((none) false)
     ((some top)
      (if (= top.tag targetTag)
@@ -173,7 +173,7 @@ fn stackContainsTag? stack: (List OpenElem) targetTag: String -> Bool
 
 fn unwindToTargetTag state: ParseState targetTag: String endTok: tr/Token -> ParseState
   (let [(stack state.openStack)]
-    (mt (listHead stack)
+    (match (listHead stack)
       ((none) state)
       ((some top)
        (let [(restStack (optionOr (listTail stack) (list)))]
@@ -193,7 +193,7 @@ fn unwindToTargetTag state: ParseState targetTag: String endTok: tr/Token -> Par
 
 fn unwindStackAtEof state: ParseState totalLen: Int64 -> (List tr/TreeElement)
   (let [(stack state.openStack)]
-    (mt (listHead stack)
+    (match (listHead stack)
       ((none) state.rootElems)
       ((some top)
        (let [(restStack (optionOr (listTail stack) (list)))
@@ -247,7 +247,7 @@ fn scanSelfClosingFromBytes bs: Bytes start: Int64 end: Int64 -> Bool
          (= (bytesGet bs (- end 1)) 62)))
 
 fn resolveTagName bs: Bytes tok: tr/Token textOpt: (Option String) isEnd: Bool -> String
-  (mt textOpt
+  (match textOpt
     ((some text)
      (if isEnd
        (hlx/endTagTokenName text tok)
@@ -256,14 +256,14 @@ fn resolveTagName bs: Bytes tok: tr/Token textOpt: (Option String) isEnd: Bool -
      (scanTagNameFromBytes bs tok.start tok.end isEnd)))
 
 fn resolveTagSelfClosing bs: Bytes tok: tr/Token textOpt: (Option String) -> Bool
-  (mt textOpt
+  (match textOpt
     ((some text)
      (hlx/tagTokenSelfClosing text tok))
     ((none)
      (scanSelfClosingFromBytes bs tok.start tok.end)))
 
 fn parseTokensLoop toks: (List tr/Token) state: ParseState bs: Bytes textOpt: (Option String) totalLen: Int64 -> tr/Node
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none)
      (let [(roots (listReverse (unwindStackAtEof state totalLen)))]
        (tr/makeNode "document" 0 totalLen roots)))
@@ -333,10 +333,10 @@ fn isWellFormed root: tr/Node -> Bool
   (not (sym/hasErrorNode root))
 
 fn findFirstElement elems: (List tr/TreeElement) -> (Option tr/Node)
-  (mt (listHead elems)
+  (match (listHead elems)
     ((none) (none))
     ((some elem)
-     (mt elem
+     (match elem
        ((elemToken _) (findFirstElement (optionOr (listTail elems) (list))))
        ((elemNode n)
         (if (stringStartsWith? (tr/nodeKind n) "element:")
@@ -353,10 +353,10 @@ fn elementName node: tr/Node -> String
       ""))
 
 fn filterElementChildren elems: (List tr/TreeElement) acc: (List tr/Node) -> (List tr/Node)
-  (mt (listHead elems)
+  (match (listHead elems)
     ((none) (listReverse acc))
     ((some elem)
-     (mt elem
+     (match elem
        ((elemToken _) (filterElementChildren (optionOr (listTail elems) (list)) acc))
        ((elemNode n)
         (if (stringStartsWith? (tr/nodeKind n) "element:")
@@ -367,20 +367,20 @@ fn elementChildren node: tr/Node -> (List tr/Node)
   (filterElementChildren (tr/nodeChildren node) (list))
 
 fn elementFirstTagToken node: tr/Node -> (Option tr/Token)
-  (mt (listHead (tr/nodeChildren node))
+  (match (listHead (tr/nodeChildren node))
     ((none) (none))
     ((some elem)
-     (mt elem
+     (match elem
        ((elemToken tok) (some tok))
        ((elemNode _) (none)))))
 
 fn elementAttributes node: tr/Node text: String -> (List hlx/HtmlAttribute)
-  (mt (elementFirstTagToken node)
+  (match (elementFirstTagToken node)
     ((none) (list))
     ((some tok) (hlx/tagTokenAttrs text tok)))
 
 fn attributeValue node: tr/Node text: String name: String -> (Option String)
-  (mt (elementFirstTagToken node)
+  (match (elementFirstTagToken node)
     ((none) (none))
     ((some tok) (hlx/tagTokenAttrValue text tok name)))
 
@@ -404,7 +404,7 @@ fn isHeadingTag tag: String -> Bool
       (= tag "h6"))))))
 
 fn collectTextFromElem elem: tr/TreeElement text: String acc: (List String) -> (List String)
-  (mt elem
+  (match elem
     ((elemToken tok)
      (if (hlx/isCharacterToken tok)
        (cons (optionOr (stringSlice text tok.start tok.end) "") acc)
@@ -429,13 +429,13 @@ fn collectNodeSymbols node: tr/Node text: String container: String depth: Int64 
             (end (tr/nodeEnd node))
             (idOpt (elementId node text))
             (nameOpt (elementNameAttr node text))
-            (acc1 (mt idOpt
+            (acc1 (match idOpt
                     ((none) acc)
                     ((some idVal)
                      (if (stringEmpty? idVal)
                        acc
                        (cons (sym/makeScopedSymbolDef idVal "id" start end container depth) acc)))))
-            (acc2 (mt nameOpt
+            (acc2 (match nameOpt
                     ((none) acc1)
                     ((some nameVal)
                      (if (stringEmpty? nameVal)
@@ -446,20 +446,20 @@ fn collectNodeSymbols node: tr/Node text: String container: String depth: Int64 
                           (hName (if (stringEmpty? hText) tag hText))]
                       (cons (sym/makeScopedSymbolDef hName "heading" start end container depth) acc2))
                     (if (= tag "script")
-                      (let [(sName (mt idOpt
+                      (let [(sName (match idOpt
                                      ((some idVal) (if (stringEmpty? idVal) "script" idVal))
                                      ((none)
-                                      (mt (attributeValue node text "src")
+                                      (match (attributeValue node text "src")
                                         ((some s) (let [(base (pathBasename s))] (if (stringEmpty? base) s base)))
                                         ((none) "script")))))]
                         (cons (sym/makeScopedSymbolDef sName "script" start end container depth) acc2))
                       (if (= tag "style")
-                        (let [(stName (mt idOpt
+                        (let [(stName (match idOpt
                                         ((some idVal) (if (stringEmpty? idVal) "style" idVal))
                                         ((none) "style")))]
                           (cons (sym/makeScopedSymbolDef stName "style" start end container depth) acc2))
                         acc2))))
-            (nextContainer (mt idOpt
+            (nextContainer (match idOpt
                              ((some idVal) (if (stringEmpty? idVal) tag idVal))
                              ((none) tag)))
             (nextDepth (+ depth 1))

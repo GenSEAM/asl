@@ -3419,7 +3419,7 @@ fn ! compiled dir: String entry: String -> (Result comp/CompileResult String)
   (comp/compilePackageToLlvm! (str dir "/linkfx/" entry ".asl") (list dir))
 
 fn codeOf res: (Result comp/CompileResult String) -> String
-  (mt res
+  (match res
     ((ok cr) (if cr.ok cr.code (str "diagnostics: " (stringJoin cr.diagnostics "; "))))
     ((err e) (str "error: " e)))
 
@@ -3443,7 +3443,7 @@ fn ! testNativeRun dir: String -> Bool
       true))
 
 fn ! testUnexportedDiagnostic dir: String -> Bool
-  (mt (compiled dir "badHidden")
+  (match (compiled dir "badHidden")
     ((err e) (do (assert false (str "compilePackageToLlvm! badHidden: " e)) false))
     ((ok cr)
       (do

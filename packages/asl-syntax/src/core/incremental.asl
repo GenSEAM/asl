@@ -149,7 +149,7 @@ fn invalidTokenError offset: Int64 -> FatalError
               :message (str "Invalid escape in string at offset " (stringFromInt64 offset)))
 
 fn closerFatal tok: tr/Token stack: (List prn/ParenFrame) -> (Option FatalError)
-  (mt (listHead stack)
+  (match (listHead stack)
     ((none)
      (some (FatalError :kind "unmatchedCloser"
                        :offset tok.start
@@ -231,7 +231,7 @@ fn incrementalTree state: IncrementalState -> tr/Node
     (tr/makeNode "asl" 0 len (listReverse kids)))
 
 fn incrementalVerdict state: IncrementalState -> IncrementalVerdict
-  (mt state.fatalError
+  (match state.fatalError
     ((some fe)
      (IncrementalVerdict :ok false
                          :message fe.message

@@ -11,10 +11,10 @@ fn workload -> (List String)
   (list "asl/prelude/prelude.asl" "asl/packages/asl-json/src/json.asl" "asl/packages/asl-json/tests/jsonTest.asl")
 
 fn ! sources -> (List String)
-  (map (fn [(p String)] -> String (mt (fileReadString p) ((ok s) s) ((err _) ""))) (workload))
+  (map (fn [(p String)] -> String (match (fileReadString p) ((ok s) s) ((err _) ""))) (workload))
 
 fn formCount src: String -> Int64
-  (mt (ast/parse src) ((ok forms) (listLength forms)) ((err _) -1))
+  (match (ast/parse src) ((ok forms) (listLength forms)) ((err _) -1))
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(mode (optionOr (listGet args 0) "parse"))
@@ -30,13 +30,13 @@ fn statsLine text: String -> String
 
 fn bytesAllocated line: String -> Int64
   (let [(tokens (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit line " ")))]
-    (mt (listIndexOf tokens ":bytesAllocated")
+    (match (listIndexOf tokens ":bytesAllocated")
       ((some i) (optionOr (stringToInt64 (stringReplace (optionOr (listGet tokens (+ i 1)) "") ")" "")) -1))
       ((none) -1)))
 
 fn ! runMode mode: String -> (Pair Int64 String)
   (let [(built (nt/prepareRun (thisFile) (nt/fingerprint)))]
-    (mt built.binary
+    (match built.binary
       ((none) (do (assert false (str "parseAllocTest builds natively: " built.reason)) (pair -1 "")))
       ((some bin)
        (let [(done (fr/runOneLimited (fr/job (list bin mode) "." (fr/childEnv (list "ASL_GC_STATS=1"))) (fr/limits 300 4)))]

@@ -15,7 +15,7 @@ fn healTarget args: (List String) -> (Option String)
   (listLast (filter (fn [(a String)] -> Bool (not (stringStartsWith? a "-"))) args))
 
 fn maxAttempts args: (List String) -> Int64
-  (mt (listHead (filter (fn [(a String)] -> Bool (stringStartsWith? a "--max-attempts=")) args))
+  (match (listHead (filter (fn [(a String)] -> Bool (stringStartsWith? a "--max-attempts=")) args))
     ((none) 24)
     ((some a) (max 0 (optionOr (stringToInt64 (optionOr (stringSlice a 15 (stringLength a)) "")) 24))))
 
@@ -27,15 +27,15 @@ fn ! preludePath! -> String
     (if (stringEmpty? p) "asl/prelude/prelude.asl" p))
 
 fn ! healFile! path: String dryRun: Bool rounds: Int64 -> (Result String String)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e) (err (str "(:heal :file " (quoted path) " :status :failed :error ERR_IO :message " (quoted e) ")")))
     ((ok text)
-      (mt (heal/heal! path text (verify/checkRoots) (preludePath!) rounds)
+      (match (heal/heal! path text (verify/checkRoots) (preludePath!) rounds)
         ((err e) (err (str "(:heal :file " (quoted path) " :status :failed :error ERR_HEAL :message " (quoted e) ")")))
         ((ok res)
           (let [(write (and res.changed (not dryRun)))
-                (written (if write (mt (fileWrite path res.text) ((ok _) (ok true)) ((err e) (err e))) (ok false)))]
-            (mt written
+                (written (if write (match (fileWrite path res.text) ((ok _) (ok true)) ((err e) (err e))) (ok false)))]
+            (match written
               ((err e) (err (str "(:heal :file " (quoted path) " :status :failed :error ERR_IO :message " (quoted e) ")")))
               ((ok w)
                 (let [(body (stringReplace res.receipt "(:repaired" (str "(:heal :file " (quoted path) " :written " (if w "true" "false") " :repaired")))]
@@ -45,6 +45,6 @@ fn ! runHealCommand! args: (List String) -> (Result String String)
   (cond
     ((or (listContains? args "-h") (listContains? args "--help")) (ok (formatHealHelp)))
     (else
-      (mt (healTarget args)
+      (match (healTarget args)
         ((none) (err "(:heal :status :failed :error ERR_MISSING_ARG :message \"Usage: asl heal [--dry-run] [--max-attempts=<n>] <file.asl>\")"))
         ((some path) (healFile! path (listContains? args "--dry-run") (maxAttempts args))))))

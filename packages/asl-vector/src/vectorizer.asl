@@ -62,15 +62,15 @@ fn processContours contours: (List (List (List F64))) color: String acc: (List S
       (if (< area 2.0)
         (processContours tail color acc)
         (let [(primOpt (p/detectPrimitive poly 1.5))
-              (elementStr (mt primOpt
+              (elementStr (match primOpt
                 ((some primData)
                   (let [(kind (optionOr (listGet primData 0) ""))
                         (p1 (optionOr (listGet primData 1) 0.0))
                         (p2 (optionOr (listGet primData 2) 0.0))
                         (p3 (optionOr (listGet primData 3) 0.0))]
-                    (if (== kind ":circle")
+                    (if (= kind ":circle")
                       (e/emitCircleElement p1 p2 p3 color "none" 0.0)
-                      (if (== kind ":rect")
+                      (if (= kind ":rect")
                         (let [(p4 (optionOr (listGet primData 4) 0.0))]
                           (e/emitRectElement p1 p2 p3 p4 color "none" 0.0))
                         (e/emitPathElement poly color "none" 0.0)))))

@@ -67,12 +67,12 @@ fn dec s: String bs: Bytes i: Int64 n: Int64 -> (Pair board/AsnValue Int64)
       ((= b 70) (pair (board/asnBool false) (+ i 1)))
       ((= b 105)
         (let [j (tokEnd bs i n)]
-          (mt (stringToInt64 (optionOr (stringSlice s (+ i 1) j) ""))
+          (match (stringToInt64 (optionOr (stringSlice s (+ i 1) j) ""))
             ((some v) (pair (board/asnInt v) j))
             ((none) (pair (board/asnNone) j)))))
       ((= b 102)
         (let [j (tokEnd bs i n)]
-          (mt (stringToFloat64 (optionOr (stringSlice s (+ i 1) j) ""))
+          (match (stringToFloat64 (optionOr (stringSlice s (+ i 1) j) ""))
             ((some v) (pair (board/asnFloat v) j))
             ((none) (pair (board/asnNone) j)))))
       ((= b 115) (let [r (decStr s bs (+ i 2) n (list))] (pair (board/asnStr (pairFirst r)) (pairSecond r))))
@@ -88,7 +88,7 @@ fn encStr s: String -> String
   (str "s\"" (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\"")
 
 fn enc v: board/AsnValue -> String
-  (mt v
+  (match v
     ((board/asnNone) "N")
     ((board/asnBool b) (if b "T" "F"))
     ((board/asnInt i) (str "i" (stringFromInt64 i)))
@@ -107,19 +107,19 @@ fn encErr e: String -> String
     (if (= cls "ValueError") (str "!ValueError:" msg) (str "!" cls)))
 
 fn encStrRes r: (Result String String) -> String
-  (mt r ((ok x) (encStr x)) ((err e) (encErr e)))
+  (match r ((ok x) (encStr x)) ((err e) (encErr e)))
 
 fn encOptStr o: (Option String) -> String
-  (mt o ((some x) (encStr x)) ((none) "N"))
+  (match o ((some x) (encStr x)) ((none) "N"))
 
 fn encOpt o: (Option board/AsnValue) -> String
-  (mt o ((some x) (enc x)) ((none) "N"))
+  (match o ((some x) (enc x)) ((none) "N"))
 
 fn strList xs: (List String) -> board/AsnValue
   (board/asnList (map (fn [x] (board/asnStr x)) xs))
 
 fn tokValue t: board/RecordTok -> board/AsnValue
-  (let [kv (mt t
+  (let [kv (match t
              ((board/tokOpen x) (pair "open" x))
              ((board/tokClose x) (pair "close" x))
              ((board/tokStr x) (pair "s" x))
@@ -128,7 +128,7 @@ fn tokValue t: board/RecordTok -> board/AsnValue
     (board/asnTuple (list (board/asnStr (pairFirst kv)) (board/asnStr (pairSecond kv)))))
 
 fn recValue v: board/RecordValue -> board/AsnValue
-  (mt v
+  (match v
     ((board/recLeaf t) (tokValue t))
     ((board/recForm items) (board/asnList (map recValue items))))
 
@@ -136,22 +136,22 @@ fn recMap es: (List (Pair String board/RecordValue)) -> board/AsnValue
   (board/asnDict (map (fn [p] (pair (pairFirst p) (recValue (pairSecond p)))) es))
 
 fn argStr args: (List board/AsnValue) k: Int64 -> String
-  (mt (optionOr (listGet args k) (board/asnNone)) ((board/asnStr x) x) (_ ""))
+  (match (optionOr (listGet args k) (board/asnNone)) ((board/asnStr x) x) (_ ""))
 
 fn argInt args: (List board/AsnValue) k: Int64 -> Int64
-  (mt (optionOr (listGet args k) (board/asnNone)) ((board/asnInt x) x) (_ 0))
+  (match (optionOr (listGet args k) (board/asnNone)) ((board/asnInt x) x) (_ 0))
 
 fn arg args: (List board/AsnValue) k: Int64 -> board/AsnValue
   (optionOr (listGet args k) (board/asnNone))
 
 fn argStrs args: (List board/AsnValue) k: Int64 -> (List String)
-  (mt (arg args k) ((board/asnList xs) (map (fn [x] (mt x ((board/asnStr y) y) (_ ""))) xs)) (_ (list)))
+  (match (arg args k) ((board/asnList xs) (map (fn [x] (match x ((board/asnStr y) y) (_ ""))) xs)) (_ (list)))
 
 fn argDict args: (List board/AsnValue) k: Int64 -> (List (Pair String board/AsnValue))
-  (mt (arg args k) ((board/asnDict es) es) (_ (list)))
+  (match (arg args k) ((board/asnDict es) es) (_ (list)))
 
 fn relOrEmpty root: String v: board/AsnValue -> String
-  (mt v ((board/asnStr x) (board/pyJoin root x)) (_ ""))
+  (match v ((board/asnStr x) (board/pyJoin root x)) (_ ""))
 
 fn toksOf b: String -> (List board/RecordTok)
   (board/recordTokens b)
@@ -173,7 +173,7 @@ fn runPure fnName: String args: (List board/AsnValue) root: String -> (Option St
     ((= fnName "insertIntoDefects") (some (encStrRes (board/insertIntoDefects (argStr args 0) (argStr args 1)))))
     ((= fnName "parseFinding") (some (encOpt (board/parseFinding (argStr args 0)))))
     ((= fnName "parseVerdict") (some (encOpt (board/parseVerdict (argStr args 0)))))
-    ((= fnName "tokenizeAsn") (some (mt (board/tokenizeAsn (argStr args 0)) ((ok ts) (enc (strList ts))) ((err e) (encErr e)))))
+    ((= fnName "tokenizeAsn") (some (match (board/tokenizeAsn (argStr args 0)) ((ok ts) (enc (strList ts))) ((err e) (encErr e)))))
     ((= fnName "parseAsnItem") (some (let [r (board/parseAsnItem (argStrs args 0) (argInt args 1))] (enc (board/asnTuple (list (pairFirst r) (board/asnInt (pairSecond r))))))))
     ((= fnName "parseAsnForm") (some (let [r (board/parseAsnForm (argStrs args 0) (argInt args 1))] (enc (board/asnTuple (list (pairFirst r) (board/asnInt (pairSecond r))))))))
     ((= fnName "extractGapBlocks") (some (enc (strList (board/extractGapBlocks (argStr args 0) (argStr args 1))))))
@@ -184,7 +184,7 @@ fn runPure fnName: String args: (List board/AsnValue) root: String -> (Option St
     ((= fnName "parseVerification") (some (enc (board/parseVerification (argStr args 0)))))
     ((= fnName "recordValue") (some (let [r (board/recordValue (toksOf (argStr args 0)) (argInt args 1))] (enc (board/asnTuple (list (recValue (pairFirst r)) (board/asnInt (pairSecond r))))))))
     ((= fnName "formToMap")
-      (some (mt (pairFirst (board/recordValue (toksOf (argStr args 0)) 0))
+      (some (match (pairFirst (board/recordValue (toksOf (argStr args 0)) 0))
               ((board/recForm items) (enc (recMap (board/formToMap items (argInt args 1)))))
               (_ "!TypeError"))))
     ((= fnName "formFields") (some (encOpt (board/formFields (board/dictGet (board/readRecord (argStr args 0)) (argStr args 1))))))
@@ -192,11 +192,11 @@ fn runPure fnName: String args: (List board/AsnValue) root: String -> (Option St
     ((= fnName "asnList") (some (encStr (board/asnListText (argStrs args 0)))))
     ((= fnName "shardTextFromBlock") (some (encStr (board/shardTextFromBlock (argStr args 0)))))
     ((= fnName "setField") (some (encStrRes (board/setField (argStr args 0) (argStr args 1) (argStr args 2)))))
-    ((= fnName "valueEnd") (some (mt (board/valueEnd (argStr args 0) (argInt args 1)) ((ok i) (str "i" (stringFromInt64 i))) ((err e) (encErr e)))))
+    ((= fnName "valueEnd") (some (match (board/valueEnd (argStr args 0) (argInt args 1)) ((ok i) (str "i" (stringFromInt64 i))) ((err e) (encErr e)))))
     (else (none)))
 
 fn deadPid! -> Int64
-  (mt (procSpawnv (list "true") (none) (none))
+  (match (procSpawnv (list "true") (none) (none))
     ((ok sp) (do (fdClose sp.stdin) (fdClose sp.stdout) (fdClose sp.stderr) (procWaitPid sp.pid false) sp.pid))
     ((err _) -1))
 
@@ -211,18 +211,18 @@ fn makeTree! root: String es: (List (Pair String board/AsnValue)) subst: (fn [St
                 (if (stringEndsWith? rel "/")
                   (ok? (dirCreate path))
                   (and (ok? (dirCreate (board/pyDirname path)))
-                       (ok? (fileWrite path (mt (pairSecond p) ((board/asnStr x) x) (_ ""))))))))
+                       (ok? (fileWrite path (match (pairSecond p) ((board/asnStr x) x) (_ ""))))))))
             (listSortBy pairFirst es))
 
 fn readTreeAt! root: String rel: String unsubst: (fn [String] -> String) acc: (List (Pair String board/AsnValue)) -> (List (Pair String board/AsnValue))
   (let [dir (if (stringEmpty? rel) root (str root "/" rel))]
-    (mt (dirList dir)
+    (match (dirList dir)
       ((err _) acc)
       ((ok names)
         (fold (fn [a nm]
                 (let [r (if (stringEmpty? rel) nm (str rel "/" nm))
                       full (str root "/" r)]
-                  (mt (fileStat full)
+                  (match (fileStat full)
                     ((err _) a)
                     ((ok st)
                       (if st.isDir
@@ -240,7 +240,7 @@ fn hideRoot s: String root: String -> String
   (stringReplace s root "<R>")
 
 fn encUnitRes r: (Result Unit String) -> String
-  (mt r ((ok _) "N") ((err e) (encErr e)))
+  (match r ((ok _) "N") ((err e) (encErr e)))
 
 fn runFileCase! fnName: String args: (List board/AsnValue) root: String -> (Option String)
   (cond
@@ -252,10 +252,10 @@ fn runFileCase! fnName: String args: (List board/AsnValue) root: String -> (Opti
     ((= fnName "saveDefectShard")
       (some (encStrRes (board/saveDefectShard! (arg args 1) (relOrEmpty root (arg args 2)) root))))
     ((= fnName "loadShardedBlackboard")
-      (some (let [dir (mt (arg args 1) ((board/asnStr x) (board/pyJoin root x)) (_ (board/pyJoin root ".asl/mem/gaps/shards")))]
+      (some (let [dir (match (arg args 1) ((board/asnStr x) (board/pyJoin root x)) (_ (board/pyJoin root ".asl/mem/gaps/shards")))]
               (enc (board/asnList (board/loadShardedBlackboard! dir).shards)))))
     ((= fnName "compactObservationMemory")
-      (some (mt (board/compactObservationMemory! (board/pyJoin root "sh") (board/pyJoin root "ar") (argInt args 1) (argInt args 2) (relOrEmpty root (arg args 3)))
+      (some (match (board/compactObservationMemory! (board/pyJoin root "sh") (board/pyJoin root "ar") (argInt args 1) (argInt args 2) (relOrEmpty root (arg args 3)))
               ((ok r) (enc (board/compactMetrics r)))
               ((err e) (encErr e)))))
     ((= fnName "writeShardForBlock") (some (encUnitRes (board/writeShardForBlock! (argStr args 1) (argStr args 2) (relOrEmpty root (arg args 3))))))
@@ -280,9 +280,9 @@ fn cleanupCase! args: (List board/AsnValue) root: String -> String
         subst (fn [r] (stringReplace (stringReplace r "{SELF}" selfPid) "{DEAD}" dead))
         unsubst (fn [r] (stringReplace (stringReplace r selfPid "{SELF}") dead "{DEAD}"))
         built (makeTree! root (argDict args 0) subst)
-        dirs (mt (arg args 1) ((board/asnList _) (some (map (fn [d] (board/pyJoin root d)) (argStrs args 1)))) (_ (none)))
-        envRel (mt (arg args 2) ((board/asnStr x) (some (board/pyJoin root x))) (_ (none)))
-        res (mt (board/cleanupStaleTempFiles! root dirs (board/pidFileFor root envRel))
+        dirs (match (arg args 1) ((board/asnList _) (some (map (fn [d] (board/pyJoin root d)) (argStrs args 1)))) (_ (none)))
+        envRel (match (arg args 2) ((board/asnStr x) (some (board/pyJoin root x))) (_ (none)))
+        res (match (board/cleanupStaleTempFiles! root dirs (board/pidFileFor root envRel))
               ((ok r) (enc (board/cleanupMetrics r)))
               ((err e) (encErr e)))]
     (if built (str (hideRoot res root) "|" (readTree! root unsubst)) "!setupFailed"))
@@ -292,12 +292,12 @@ fn treeCase! fnName: String args: (List board/AsnValue) root: String -> String
     "!setupFailed"
     (if (= fnName "commandVacuity")
       (encStr (board/commandVacuity! (arg args 1) (arg args 2) root))
-      (mt (board/transitionAllowed! (arg args 1) (arg args 2) root)
+      (match (board/transitionAllowed! (arg args 1) (arg args 2) root)
         ((ok r) (enc (board/asnTuple (list (board/asnBool (pairFirst r)) (board/asnStr (pairSecond r))))))
         ((err e) (encErr e)))))
 
 fn placeRoots v: board/AsnValue root: String home: String -> String
-  (mt v ((board/asnStr x) (stringReplace (stringReplace x "@ROOT" root) "@HOME" home)) (_ ""))
+  (match v ((board/asnStr x) (stringReplace (stringReplace x "@ROOT" root) "@HOME" home)) (_ ""))
 
 fn configCase! args: (List board/AsnValue) base: String -> String
   (let [root (str base "/root")
@@ -309,12 +309,12 @@ fn configCase! args: (List board/AsnValue) base: String -> String
                                 path (if (stringStartsWith? rel "@HOME") (stringReplace rel "@HOME" home) (str root "/" rel))]
                             (if (stringEndsWith? rel "/")
                               (ok? (dirCreate path))
-                              (and (ok? (dirCreate (board/pyDirname path))) (ok? (fileWrite path (mt (pairSecond p) ((board/asnStr x) x) (_ ""))))))))
+                              (and (ok? (dirCreate (board/pyDirname path))) (ok? (fileWrite path (match (pairSecond p) ((board/asnStr x) x) (_ ""))))))))
                         (listSortBy pairFirst tree))
         res (board/loadMeshConfig! root home (argStr args 1) (placeRoots (arg args 2) root home) (placeRoots (arg args 3) root home)
               (placeRoots (arg args 4) root home) (argStr args 5))]
     (if (and mk built)
-      (mt res
+      (match res
         ((ok r) (stringReplace (str (enc (pairFirst r)) "|" (encStr (pairSecond r))) base "<B>"))
         ((err e) (str (encErr e) "|" (encStr ""))))
       "!setupFailed"))
@@ -327,7 +327,7 @@ fn largeBoard n: Int64 -> String
        "  ))\n")
 
 fn fieldInt v: board/AsnValue k: String -> Int64
-  (mt v ((board/asnDict es) (mt (board/dictGet es k) ((some x) (mt x ((board/asnInt i) i) (_ 0))) ((none) 0))) (_ 0))
+  (match v ((board/asnDict es) (match (board/dictGet es k) ((some x) (match x ((board/asnInt i) i) (_ 0))) ((none) 0))) (_ 0))
 
 fn largeCase n: Int64 -> String
   (let [text (largeBoard n)
@@ -335,18 +335,18 @@ fn largeCase n: Int64 -> String
         infos (map board/parseGapBlock blocks)
         ins (resultOr (board/insertIntoDefects text "\n    (:defect :id \"NEW\")") "")
         insLen (stringLength ins)
-        lastInfo (mt (optionOr (listLast infos) (board/asnDict (list))) ((board/asnDict es) (board/asnDict (filter (fn [p] (!= (pairFirst p) "raw")) es))) (x x))
-        remediated (listLength (filter (fn [v] (mt v ((board/asnDict es) (= (board/dictGet es "status") (some (board/asnStr "remediated")))) (_ false))) infos))]
+        lastInfo (match (optionOr (listLast infos) (board/asnDict (list))) ((board/asnDict es) (board/asnDict (filter (fn [p] (!= (pairFirst p) "raw")) es))) (x x))
+        remediated (listLength (filter (fn [v] (match v ((board/asnDict es) (= (board/dictGet es "status") (some (board/asnStr "remediated")))) (_ false))) infos))]
     (enc (board/asnList (list (board/asnInt (board/cpLength text)) (board/asnInt (listLength blocks))
                               (board/asnInt (fold (fn [acc v] (+ acc (fieldInt v "confirmations"))) 0 infos))
                               (board/asnInt remediated) (board/asnInt (board/cpLength ins))
                               (board/asnStr (optionOr (stringSlice ins (- insLen 40) insLen) ""))
                               lastInfo
                               (board/asnInt (listLength (resultOr (board/tokenizeAsn text) (list))))
-                              (mt (board/asnFieldString text "hazard") ((some h) (board/asnStr h)) ((none) (board/asnNone)))))))
+                              (match (board/asnFieldString text "hazard") ((some h) (board/asnStr h)) ((none) (board/asnNone)))))))
 
 fn runCase! fnName: String args: (List board/AsnValue) dir: String -> String
-  (mt (runPure fnName args dir)
+  (match (runPure fnName args dir)
     ((some text) text)
     ((none) (runImpure! fnName args dir)))
 
@@ -356,7 +356,7 @@ fn runImpure! fnName: String args: (List board/AsnValue) dir: String -> String
     ((= fnName "isProcessAlive")
       (let [sym (argStr args 0)
             pid (cond ((= sym "self") (procSelf)) ((= sym "dead") (deadPid!)) ((= sym "zero") 0) ((= sym "neg") -5) ((= sym "negOne") -1) ((= sym "one") 1) (else 99999999999))]
-        (mt (board/isProcessAlive! pid) ((ok b) (if b "T" "F")) ((err e) (encErr e)))))
+        (match (board/isProcessAlive! pid) ((ok b) (if b "T" "F")) ((err e) (encErr e)))))
     ((= fnName "cleanupStaleTempFiles") (cleanupCase! args dir))
     ((= fnName "loadMeshConfig") (configCase! args dir))
     ((= fnName "largeBoard") (largeCase (argInt args 0)))

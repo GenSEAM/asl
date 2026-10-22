@@ -39,7 +39,7 @@ fn positionalEnumFixtureSource -> String
     "  (ready p)"
     ""
     "fn unwrap s: Setup -> Int64"
-    "  (mt s"
+    "  (match s"
     "    ((ready p) p.code)"
     "    ((early p) p.code))") "\n")
 
@@ -69,10 +69,10 @@ fn ! writeFixtures! base: String -> Bool
                       (writeOne! base "gapfxb/positionalEnumBad" (positionalEnumWrongArityFixtureSource)))))))
 
 fn diagCodes res: (Result ty/SsaModule (List ty/IrDiag)) -> (List String)
-  (mt res ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> String d.code) ds)))
+  (match res ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> String d.code) ds)))
 
 fn diagMessages res: (Result ty/SsaModule (List ty/IrDiag)) -> (List String)
-  (mt res ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> String d.message) ds)))
+  (match res ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> String d.message) ds)))
 
 fn ! testParenLetStillRejected base: String -> Bool
   (let [(res (lk/linkEntry! (str base "/gapfxb/parenLet.asl")))]

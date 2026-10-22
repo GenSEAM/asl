@@ -21,10 +21,10 @@ fn formatDiags ds: (List irTy/IrDiag) -> String
 
 
 fn ! compileNative path: String moduleName: String llPath: String exePath: String -> proc/ProcessOutput
-  (mt (lk/linkEntry! path)
+  (match (lk/linkEntry! path)
     ((err ds) (proc/ProcessOutput :exitCode 1 :stdout "" :stderr (str "link failed: " (formatDiags ds)) :durationMs 0))
     ((ok m)
-      (mt (llvm/emitLlvmProgramNative! m (str moduleName ".main"))
+      (match (llvm/emitLlvmProgramNative! m (str moduleName ".main"))
         ((err ds) (proc/ProcessOutput :exitCode 1 :stdout "" :stderr (str "LLVM emission failed: " (formatDiags ds)) :durationMs 0))
         ((ok code)
           (do

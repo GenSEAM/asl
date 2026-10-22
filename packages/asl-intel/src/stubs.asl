@@ -91,10 +91,10 @@ fn placeholder? b: Bytes hits: (List (Pair Int64 Int64)) s: Int64 e: Int64 -> Bo
             hits)
 
 fn trackedAsl! ctx: h/Ctx root: String -> (Result (List String) String)
-  (mt (h/gitLsFiles! ctx root)
+  (match (h/gitLsFiles! ctx root)
     ((ok fs) (ok (filter (fn [(f String)] -> Bool (and (stringEndsWith? f ".asl") (not (stringContains? f "/invalid/")))) fs)))
     ((err _)
-      (mt (dc/walkIgnoring! ctx root)
+      (match (dc/walkIgnoring! ctx root)
         ((err e) (err e))
         ((ok fs) (ok (map (fn [(f String)] -> String (t/relPath f root ctx.cwd)) fs))))))
 
@@ -128,18 +128,18 @@ fn constStub rel: String isTest: Bool name: String code: String body: String b: 
       (else (none))))
 
 fn analyzeStubs! ctx: h/Ctx root: String -> (Result StubSummary String)
-  (mt (trackedAsl! ctx root)
+  (match (trackedAsl! ctx root)
     ((err e) (err e))
     ((ok files)
       (ok (inOrder (fold (fn [(st StubSummary) (rel String)] -> StubSummary
-                  (mt (h/readText! (if (stringStartsWith? rel "/") rel (t/joinPath root rel)))
+                  (match (h/readText! (if (stringStartsWith? rel "/") rel (t/joinPath root rel)))
                     ((err _) st)
                     ((ok code)
                       (let [(b (stringToBytes code)) (hs (headersOf! code b (bytesLength b)))
                             (hits (sigilHits b (bytesLength b) (sigilFirsts) (sigils) 0 (list)))
                             (isTest (or (stringContains? rel "/tests/") (stringEndsWith? rel "Test.asl")))
                             (found (fold (fn [(acc (List StubFinding)) (hd Header)] -> (List StubFinding)
-                                           (mt (classify rel isTest code b hits hd) ((some s) (cons s acc)) ((none) acc)))
+                                           (match (classify rel isTest code b hits hd) ((some s) (cons s acc)) ((none) acc)))
                                          (list) hs))]
                         (StubSummary :files st.files :functions (+ st.functions (listLength hs))
                                     :stubs (listAppend found st.stubs))))))
@@ -185,7 +185,7 @@ fn stubsJson res: StubSummary -> j/Json
                 (pair "assertCount" (j/jInt res.functions))))
 
 fn runStubs! ctx: h/Ctx fmt: String strict: Bool -> h/Outcome
-  (mt (analyzeStubs! ctx ctx.home)
+  (match (analyzeStubs! ctx ctx.home)
     ((err e) (h/outcome "" (str "Error: " e "\n") 1))
     ((ok res)
       (let [(out (str (cond ((= fmt "json") (j/dumps (stubsJson res))) ((= fmt "summary") (formatStubsSummary res)) (else (formatStubsAsn res))) "\n"))

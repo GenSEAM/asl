@@ -35,10 +35,10 @@ Checked on the host on 2026-10-14 (the importing project names the package in it
 (module example/regexUsage :x [runTests] :i [(asl-regex/regex :a rx)])
 
 fn runTests -> Bool
-  (mt (rx/regex-compile! "\\b(\\w+?)@(?:[a-z]+\\.)+[a-z]{2,3}\\b")
+  (match (rx/regex-compile! "\\b(\\w+?)@(?:[a-z]+\\.)+[a-z]{2,3}\\b")
     ((err e) (do (assert false e) false))
     ((ok re)
-      (mt (rx/regex-search! re "mail ann@example.org now")
+      (match (rx/regex-search! re "mail ann@example.org now")
         ((none) (do (assert false "no match") false))
         ((some m) (do (assert (= m.text "ann@example.org") "whole match")
                       (assert (= (rx/regex-group m 1) (some "ann")) "group 1")

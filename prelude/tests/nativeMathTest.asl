@@ -123,16 +123,16 @@ fn formatDiags ds: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.locus ": [" d.code "] " d.message)) ds) "; ")
 
 fn ! compiled path: String -> (Result String String)
-  (mt (lk/linkEntry! path)
+  (match (lk/linkEntry! path)
     ((err ds) (err (formatDiags ds)))
-    ((ok m) (mt (llvm/emitLlvmProgramNative! m (str m.name ".main"))
+    ((ok m) (match (llvm/emitLlvmProgramNative! m (str m.name ".main"))
               ((err ds) (err (formatDiags ds)))
               ((ok code) (ok code)))))
 
 fn ! optBin -> (Option String)
   (let [(known (filter (fn [(c String)] -> Bool (= (processRun (str "test -x " c)).exitCode 0))
                         (list "/opt/homebrew/opt/llvm/bin/opt" "/usr/local/opt/llvm/bin/opt")))]
-    (mt (listHead known)
+    (match (listHead known)
       ((some o) (some o))
       ((none) (if (= (processRun "command -v opt >/dev/null 2>&1").exitCode 0) (some "opt") (none)))))
 
@@ -166,7 +166,7 @@ fn ! testIr dir: String code: String -> Bool
                  true))
            (list "nowNs" "monotonicNs" "sleepMs"))
       (assert (ok? (fileWrite ll code)) (str "fileWrite " ll))
-      (mt (optBin)
+      (match (optBin)
         ((none) (do (println "opt not found on this host, skipping -passes=verify") true))
         ((some o) (let [(v (processRun (str o " -passes=verify -disable-output " ll)))]
                     (do (assert (= v.exitCode 0) (str "opt -passes=verify accepts the emitted IR: " v.stderr)) true))))
@@ -221,7 +221,7 @@ fn ! runTests -> Bool
       (assert (ok? made) "dirCreate makes a work directory inside the workspace root")
       (testRuntimeDecls)
       (assert (ok? (fileWrite src (fixtureSrc))) (str "fileWrite " src))
-      (mt (compiled src)
+      (match (compiled src)
         ((err e) (do (assert false (str "mathFixture links and emits: " e)) true))
         ((ok code)
           (do

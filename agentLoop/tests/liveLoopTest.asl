@@ -6,7 +6,7 @@ fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
 
 fn ! resolveHost hOpt: (Option String) defaultRel: String -> (Option String)
-  (mt hOpt
+  (match hOpt
     ((some h) (if (fileExists? h)
                 (some (resultOr (realPath h) h))
                 (do (println (str "invalid environment variable: ASL_HOST path does not exist: " h))
@@ -34,7 +34,7 @@ fn ! readOr path: String -> String
 fn attemptNsAt text: String from: Int64 -> Int64
   (let [tail (optionOr (stringSlice text from (stringLength text)) "")
         marker (stringIndexOf tail ":ns ")]
-    (mt marker
+    (match marker
       ((none) 0)
       ((some at)
         (let [nums (optionOr (stringSlice tail (+ at 4) (stringLength tail)) "")
@@ -44,7 +44,7 @@ fn attemptNsAt text: String from: Int64 -> Int64
 fn ! stageFixture root: String name: String -> Bool
   (let [fixture (str "asl/agentLoop/tests/fixtures/liveLoop/" name ".asn")
         target (str root "/tests/fixtures/agentLoop/mvp/" name ".asn")]
-    (mt (fileReadString fixture)
+    (match (fileReadString fixture)
       ((err _) false)
       ((ok text) (write target text))))
 
@@ -64,15 +64,15 @@ fn ! initGateScript root: String -> Bool
         (= (processRun (str "git -C " (shellQuote root) " commit -q -m gate")).exitCode 0))))
 
 fn fieldAfter text: String key: String -> String
-  (mt (stringIndexOf text key)
+  (match (stringIndexOf text key)
     ((none) "")
     ((some at)
       (let [start (+ at (stringLength key))
             rest (c/sliceOf text start (stringLength text))]
-        (mt (stringIndexOf rest "\"") ((some e) (c/sliceOf rest 0 e)) ((none) "")))))
+        (match (stringIndexOf rest "\"") ((some e) (c/sliceOf rest 0 e)) ((none) "")))))
 
 fn ! runMain root: String task: String backend: String extra: String -> ProcessOutput
-  (mt (host)
+  (match (host)
     ((none) (processRun "exit 127"))
     ((some h)
      (let [form (str "(:agent :task \"" task "\" :backend \"script/" backend "\" :root \"" root "\" " extra ")")
@@ -85,7 +85,7 @@ fn ! runMain root: String task: String backend: String extra: String -> ProcessO
        (processRun (str prefix (if niceOk (str "nice -n 15 " args) args))))))
 
 fn ! runTests -> Bool
-  (mt (host)
+  (match (host)
     ((none) false)
     ((some _)
   (let [oneRoot (tempDir)
@@ -180,8 +180,8 @@ fn ! runTests -> Bool
         threeSession (fieldAfter three.stdout ":session \"")
         threeJournal (readOr (str threeRoot "/.asl/run/agentLoop/" threeSession ".journal"))
         threeFile (readOr (str threeRoot "/subject.txt"))
-        threeSent3 (mt (stringIndexOf threeJournal "(:turn 3 :sent ") ((some at) (c/sliceOf threeJournal at (stringLength threeJournal))) ((none) ""))
-        threeSent2 (mt (stringIndexOf threeJournal "(:turn 2 :sent ") ((some at) (c/sliceOf threeJournal at (stringLength threeJournal))) ((none) ""))
+        threeSent3 (match (stringIndexOf threeJournal "(:turn 3 :sent ") ((some at) (c/sliceOf threeJournal at (stringLength threeJournal))) ((none) ""))
+        threeSent2 (match (stringIndexOf threeJournal "(:turn 2 :sent ") ((some at) (c/sliceOf threeJournal at (stringLength threeJournal))) ((none) ""))
         cap (runMain capRoot "budget boundary" "cap" ":budget 1")
         capSession (fieldAfter cap.stdout ":session \"")
         capJournal (readOr (str capRoot "/.asl/run/agentLoop/" capSession ".journal"))

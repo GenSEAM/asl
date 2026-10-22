@@ -27,7 +27,7 @@ fn ! asanRuntime! -> (Result String String)
         (ctx (sys/Context :root r :scriptDir "" :argv0 "" :hostBin ""))
         (b (nb/Build :root r :cache cacheDir :tmp cacheDir :lib plain :base "" :clangVersion "" :owner ""
                      :deadlineNs (+ (monotonicNs) 900000000000) :maxDesc 16))]
-    (mt (cache/nativeAsl1! ctx plain (optionOr (envGet "CLANG") "clang"))
+    (match (cache/nativeAsl1! ctx plain (optionOr (envGet "CLANG") "clang"))
       ((err e) (err (str "native asl1: " e)))
       ((ok asl1) (nb/asanRuntime! b asl1 (str r "/asl/packages")))))
 
@@ -85,9 +85,9 @@ fn formatDiags ds: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.locus ": [" d.code "] " d.message)) ds) "; ")
 
 fn ! compiledText path: String -> (Result String String)
-  (mt (lk/linkEntry! path)
+  (match (lk/linkEntry! path)
     ((err ds) (err (formatDiags ds)))
-    ((ok m) (mt (llvm/emitLlvmProgramNative! m (str m.name ".main"))
+    ((ok m) (match (llvm/emitLlvmProgramNative! m (str m.name ".main"))
               ((err ds) (err (formatDiags ds)))
               ((ok code) (ok code)))))
 
@@ -158,7 +158,7 @@ fn ! spillRuns work: String asan: String -> SpillRuns
 
 fn testSpillSurvivesStress r: SpillRuns -> Bool
   (do (assert r.sourceWritten "tailSpillMod: source written")
-      (mt r.code
+      (match r.code
         ((err e) (assert false (str "tailSpillMod: links and emits; " e)))
         ((ok code)
           (do (assert r.llWritten "tailSpillMod: .ll written")
@@ -175,18 +175,18 @@ fn ! mutantRuns work: String asan: String -> MutantRuns
         (bin (str work "/tailSpillMutant.asan"))
         (sourceWritten (ok? (fileWrite src (fixtureSource))))
         (code (compiledText src))
-        (mutated (mt code ((ok c) (plantSlowAlloc c)) ((err _) (none))))
-        (llWritten (mt mutated ((some m) (ok? (fileWrite ll m))) ((none) false)))
+        (mutated (match code ((ok c) (plantSlowAlloc c)) ((err _) (none))))
+        (llWritten (match mutated ((some m) (ok? (fileWrite ll m))) ((none) false)))
         (linked (if llWritten (sh (str (asanLink) ll (asanLib asan) bin)) (notRun "no mutated .ll")))]
     (MutantRuns :sourceWritten sourceWritten :code code :mutated mutated :llWritten llWritten :linked linked
                 :run (if (= linked.exitCode 0) (sh (str (asanStress) bin)) (notRun "mutant link failed"))))
 
 fn testMutantIsCaught r: MutantRuns -> Bool
   (do (assert r.sourceWritten "tailSpillMutant: source written")
-      (mt r.code
+      (match r.code
         ((err e) (assert false (str "tailSpillMutant: links and emits; " e)))
         ((ok _)
-          (mt r.mutated
+          (match r.mutated
             ((none) (assert false "tailrt.closure's slow: anchor text found in the emitted IR (codegen shape changed; update the anchor)"))
             ((some _)
               (do (assert r.llWritten "tailSpillMutant: mutated .ll written")

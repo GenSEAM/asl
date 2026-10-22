@@ -14,19 +14,19 @@ fn workName path: String -> String
   (stringReplace (stringReplace path "/" "_") "." "_")
 
 fn ! emitAndCheckSyntax work: String path: String -> (Result ProcessOutput String)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e) (err (str path ": read failed: " e)))
     ((ok src)
-      (mt (mt (fileReadString "asl/prelude/prelude.asl") ((err e) (err (str "prelude read failed: " e))) ((ok preludeText) (em/emitC11SourceWith src preludeText path)))
+      (match (match (fileReadString "asl/prelude/prelude.asl") ((err e) (err (str "prelude read failed: " e))) ((ok preludeText) (em/emitC11SourceWith src preludeText path)))
         ((err m) (err (str path ": emit failed: " m)))
         ((ok code)
           (let [(cFile (str work "/" (workName path) ".c"))]
-            (mt (fileWrite cFile code)
+            (match (fileWrite cFile code)
               ((err e) (err (str path ": write failed: " e)))
               ((ok _) (ok (processRun (str "/usr/bin/cc -fsyntax-only " cFile))))))))))
 
 fn ! testCorpusFile work: String path: String -> Bool
-  (mt (emitAndCheckSyntax work path)
+  (match (emitAndCheckSyntax work path)
     ((err m) (do (assert false m) false))
     ((ok checked)
       (let [(passed (= checked.exitCode 0))]

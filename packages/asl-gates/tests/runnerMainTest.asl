@@ -5,7 +5,7 @@
 fn testParseDependenciesValid -> Bool
   (let [(text "(:package foo :version \"0.1.0\" :dependencies [\"dep-a\" \"dep-b\"])")
         (res (rm/parseDependencies text))]
-    (mt res
+    (match res
       ((err e) false)
       ((ok deps)
        (do
@@ -17,7 +17,7 @@ fn testParseDependenciesValid -> Bool
 fn testParseDependenciesEmpty -> Bool
   (let [(text "(:package bar :version \"0.1.0\" :dependencies [])")
         (res (rm/parseDependencies text))]
-    (mt res
+    (match res
       ((err e) false)
       ((ok deps)
        (do
@@ -27,7 +27,7 @@ fn testParseDependenciesEmpty -> Bool
 fn testParseDependenciesMissing -> Bool
   (let [(text "(:package baz :version \"0.1.0\")")
         (res (rm/parseDependencies text))]
-    (mt res
+    (match res
       ((ok _) false)
       ((err why)
        (do
@@ -37,7 +37,7 @@ fn testParseDependenciesMissing -> Bool
 fn testParseDependenciesNonString -> Bool
   (let [(text "(:package bad :version \"0.1.0\" :dependencies [123])")
         (res (rm/parseDependencies text))]
-    (mt res
+    (match res
       ((ok _) false)
       ((err why)
        (do
@@ -100,7 +100,7 @@ fn treeOf! dir: String sha: String -> String
   (sh! dir (str "/usr/bin/git rev-parse " sha "^{tree}"))
 
 fn renderChooseBase res: (Pair (Option rm/FullGreenRecord) (List String)) -> String
-  (str (mt (pairFirst res) ((some b) b.sha) ((none) "none")) "\n" (stringJoin (pairSecond res) "\n") "\n")
+  (str (match (pairFirst res) ((some b) b.sha) ((none) "none")) "\n" (stringJoin (pairSecond res) "\n") "\n")
 
 fn testChooseBaseScratch! -> Bool
   (let [(dir (scratchDir! "aslChooseBase"))
@@ -129,7 +129,7 @@ fn testChooseBaseScratch! -> Bool
         (aslOut (renderChooseBase res))]
     (do
       (assert (ok? badWrite) "bad record written")
-      (assert (= (mt (pairFirst res) ((some b) b.sha) ((none) "none")) shaB) "base is the newest ancestor record, B")
+      (assert (= (match (pairFirst res) ((some b) b.sha) ((none) "none")) shaB) "base is the newest ancestor record, B")
       (assert (listContains? problems ".asl/mem/benchmarks/fullGreen/bad.asn does not re-hash to its :receiptDigest") "bad digest named")
       (assert (listContains? problems ".asl/mem/benchmarks/fullGreen/misnamed.asn is not named for its :sha") "misnamed record named")
       (assert (listContains? problems (str ".asl/mem/benchmarks/fullGreen/" shaC ".asn :tree is not the tree of its :sha")) "wrong tree named")
@@ -173,26 +173,26 @@ fn testParseRunArgs -> Bool
         (bare (rm/parseRunArgs (list "--path" "p" "--suite") empty))
         (full (rm/parseRunArgs (list "--full") empty))]
     (do
-      (mt good
+      (match good
         ((err _) (assert false "well-formed run arguments parse"))
         ((ok a)
          (do
            (assert (= a.suites (list "s2.asl" "s1.asl")) "suites kept in argument order")
            (assert (= a.paths (list "p")) "path parsed")
            (assert (= a.base (some "HEAD~1")) "base parsed"))))
-      (mt stray
+      (match stray
         ((ok _) (assert false "a bare positional is refused"))
         ((err e)
          (do
            (assert (= e.code 64) "bare positional exits 64")
            (assert (= e.line "(:runner :status :failed :err ERR_USAGE :ev \"s2.asl\")") "bare positional names the argument"))))
-      (mt bare
+      (match bare
         ((ok _) (assert false "--suite without a value is refused"))
         ((err e)
          (do
            (assert (= e.code 2) "--suite without a value exits 2")
            (assert (= e.line "(:runner :status :failed :err ERR_RUNNER :ev \"\")") "--suite without a value is ERR_RUNNER"))))
-      (mt full
+      (match full
         ((ok _) (assert false "--full is not a runner.py run flag"))
         ((err e) (assert (= e.code 64) "--full exits 64")))
       true))
@@ -221,12 +221,12 @@ fn testBaselineAsserts -> Bool
   (:f errText String))
 
 fn command! argv: (List String) cwd: String env: (Option (List String)) -> Outcome
-  (mt (gr/runCommand! argv cwd env)
+  (match (gr/runCommand! argv cwd env)
     ((err e) (Outcome :code 127 :out "" :errText e))
     ((ok captured) (Outcome :code captured.exit :out captured.stdout :errText captured.stderr)))
 
 fn workRoot! -> String
-  (mt (realPath ".")
+  (match (realPath ".")
     ((ok p) p)
     ((err e) (do (assert false (str "realPath . fails: " e)) "")))
 
@@ -307,7 +307,7 @@ fn makeClone! -> String
       scratch))
 
 fn readText! path: String -> String
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((ok s) s)
     ((err e) (do (assert false (str "read " path ": " e)) "")))
 

@@ -6,7 +6,7 @@ fn quadSrc -> String
   "(module q/quad :x [walkByIndex])\n\nfn walkByIndex xs: (List Int64) i: Int64 -> Int64\n  (if (>= i (listLength xs)) 0\n    (+ (optionOr (listGet xs i) 0) (walkByIndex xs (+ i 1))))\n"
 
 fn cleanSrc -> String
-  "(module q/clean :x [sumList])\n\nfn sumList xs: (List Int64) -> Int64\n  (mt (listHead xs)\n    ((none) 0)\n    ((some h) (+ h (sumList (optionOr (listTail xs) (list))))))\n"
+  "(module q/clean :x [sumList])\n\nfn sumList xs: (List Int64) -> Int64\n  (match (listHead xs)\n    ((none) 0)\n    ((some h) (+ h (sumList (optionOr (listTail xs) (list))))))\n"
 
 fn ! fixtureDir! tag: String -> String
   (let [(base (optionOr (envGet "TMPDIR") "/tmp"))

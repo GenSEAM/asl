@@ -15,7 +15,7 @@ fn viaCond n: Int64 acc: Int64 -> Int64
   (cond ((= n 0) acc) ((= (mod n 2) 0) (viaCond (- n 1) (+ acc 1))) (else (viaCond (- n 1) (+ acc 1))))
 
 fn viaMt n: Int64 acc: Int64 -> Int64
-  (mt (if (= n 0) (none) (some (- n 1))) ((none) acc) ((some m) (viaMt m (+ acc 1))))
+  (match (if (= n 0) (none) (some (- n 1))) ((none) acc) ((some m) (viaMt m (+ acc 1))))
 
 fn viaLet n: Int64 acc: Int64 -> Int64
   (if (= n 0) acc (let [(m (- n 1)) (next (+ acc 1))] (viaLet m next)))

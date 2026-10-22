@@ -14,7 +14,7 @@ fn makeSkillRecord path: Str name: Str desc: Str hasFm: Bool -> SkillRecord
   (let [(valid (and hasFm (and (> (stringLength name) 0) (> (stringLength desc) 0))))] (SkillRecord :path path :name name :description desc :hasFrontmatter hasFm :isValid valid))
 
 fn parseFrontmatterField content: Str prefix: Str -> Str
-  (let [(lines (stringSplit content "\n")) (matched (filter (fn [(line Str)] -> Bool (stringStartsWith? (stringTrim line) prefix)) lines))] (mt (listHead matched) ((none) "") ((some l) (let [(trimmed (stringTrim l)) (val (optionOr (stringSlice trimmed (stringLength prefix) (stringLength trimmed)) ""))] (stringTrim val)))))
+  (let [(lines (stringSplit content "\n")) (matched (filter (fn [(line Str)] -> Bool (stringStartsWith? (stringTrim line) prefix)) lines))] (match (listHead matched) ((none) "") ((some l) (let [(trimmed (stringTrim l)) (val (optionOr (stringSlice trimmed (stringLength prefix) (stringLength trimmed)) ""))] (stringTrim val)))))
 
 fn isCleanOfLegacy? content: Str -> Bool
   (let [(lower (stringLower content))] (if (stringContains? lower "skyloom") (stringContains? lower "alias") true))

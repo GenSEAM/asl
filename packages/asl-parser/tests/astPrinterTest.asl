@@ -13,13 +13,13 @@ fn testLetDestructuring -> Bool
   (let [(letList (a/exprLet (list (pair (a/patTuple (list (a/patVar "a") (a/patVar "b"))) (a/exprIdent "pair"))) (list (a/exprCall (a/exprIdent "+") (list (a/exprIdent "a") (a/exprIdent "b")))))) (letRec (a/exprLet (list (pair (a/patRecord (list (pair "name" (a/patVar "name")) (pair "age" (a/patVar "age")))) (a/exprIdent "person"))) (list (a/exprCall (a/exprIdent "format") (list (a/exprIdent "name") (a/exprIdent "age")))))) (letMultiList (a/exprLet (list (pair (a/patTuple (list (a/patVar "x") (a/patVar "y") (a/patVar "z"))) (a/exprIdent "coords"))) (list (a/exprCall (a/exprIdent "+") (list (a/exprIdent "x") (a/exprCall (a/exprIdent "+") (list (a/exprIdent "y") (a/exprIdent "z"))))))))] (let [(sList (ap/printAstExpr letList 0)) (sRec (ap/printAstExpr letRec 0)) (sMulti (ap/printAstExpr letMultiList 0))] (assert (stringContains? sList "let [a b] = pair") "List destructuring must format let [a b] = pair") (assert (stringContains? sList "\n  + a b") "Body of let must be indented by 2 spaces") (refute (stringContains? sList "(listGet") "List destructuring must refute desugared listGet") (refute (stringContains? sList "let a =") "List destructuring must refute decomposed let a =") (assert (stringContains? sRec "let {name age} = person") "Record destructuring must format let {name age} = person") (assert (stringContains? sRec "\n  format name age") "Body of record let must be indented by 2 spaces") (refute (stringContains? sRec "(.-name") "Record destructuring must refute desugared .-name accessor") (refute (stringContains? sRec ",") "Record destructuring must refute commas") (assert (stringContains? sMulti "let [x y z] = coords") "3-element list destructuring must format let [x y z] = coords") (let [(reList (ip/parseIndented sList)) (reRec (ip/parseIndented sRec)) (reMulti (ip/parseIndented sMulti))] (assert (ok? reList) "Printed list destructuring must parse back cleanly") (assert (ok? reRec) "Printed record destructuring must parse back cleanly") (assert (ok? reMulti) "Printed 3-element list destructuring must parse back cleanly") true)))
 
 fn testMatchWithArms -> Bool
-  (let [(arm1 (a/makeMatchArm (a/patCtor "Ok" (some (a/patVar "res"))) (a/exprIdent "res"))) (arm2 (a/makeMatchArm (a/patCtor "Err" (some (a/patVar "msg"))) (a/exprCall (a/exprIdent "print") (list (a/exprIdent "msg"))))) (matchExpr (a/exprMatch (a/exprIdent "val") (list arm1 arm2))) (armCircle (a/makeMatchArm (a/patCtor "Circle" (some (a/patVar "r"))) (a/exprCall (a/exprIdent "mul") (list (a/exprIdent "pi") (a/exprCall (a/exprIdent "mul") (list (a/exprIdent "r") (a/exprIdent "r"))))))) (matchShape (a/exprMatch (a/exprIdent "s") (list armCircle)))] (let [(sMatch (ap/printAstExpr matchExpr 0)) (sShape (ap/printAstExpr matchShape 0))] (assert (stringContains? sMatch "mt val") "Match expression must start with mt val") (assert (stringContains? sMatch "((Ok res) res)") "Must format Ok arm as a (pattern body) pair") (assert (stringContains? sMatch "((Err msg) (print msg))") "Must format Err arm as a (pattern body) pair") (refute (stringContains? sMatch " -> ") "Match expression must not use arrow arms, which are not ASL") (refute (stringContains? sMatch "=>") "Match expression must refute fat arrow =>") (refute (stringContains? sMatch "Ok res res") "Match arm must refute missing arrow") (assert (stringContains? sShape "mt s") "Match shape must start with mt s") (assert (stringContains? sShape "((Circle r) (mul pi (mul r r)))") "Match arm must format ((Circle r) (mul pi (mul r r)))") (let [(reMatch (ip/parseIndented sMatch)) (reShape (ip/parseIndented sShape))] (assert (ok? reMatch) "Printed match form must parse back cleanly") (assert (ok? reShape) "Printed shape match form must parse back cleanly") true)))
+  (let [(arm1 (a/makeMatchArm (a/patCtor "Ok" (some (a/patVar "res"))) (a/exprIdent "res"))) (arm2 (a/makeMatchArm (a/patCtor "Err" (some (a/patVar "msg"))) (a/exprCall (a/exprIdent "print") (list (a/exprIdent "msg"))))) (matchExpr (a/exprMatch (a/exprIdent "val") (list arm1 arm2))) (armCircle (a/makeMatchArm (a/patCtor "Circle" (some (a/patVar "r"))) (a/exprCall (a/exprIdent "mul") (list (a/exprIdent "pi") (a/exprCall (a/exprIdent "mul") (list (a/exprIdent "r") (a/exprIdent "r"))))))) (matchShape (a/exprMatch (a/exprIdent "s") (list armCircle)))] (let [(sMatch (ap/printAstExpr matchExpr 0)) (sShape (ap/printAstExpr matchShape 0))] (assert (stringContains? sMatch "match val") "Match expression must start with match val") (assert (stringContains? sMatch "((Ok res) res)") "Must format Ok arm as a (pattern body) pair") (assert (stringContains? sMatch "((Err msg) (print msg))") "Must format Err arm as a (pattern body) pair") (refute (stringContains? sMatch " -> ") "Match expression must not use arrow arms, which are not ASL") (refute (stringContains? sMatch "=>") "Match expression must refute fat arrow =>") (refute (stringContains? sMatch "Ok res res") "Match arm must refute missing arrow") (assert (stringContains? sShape "match s") "Match shape must start with match s") (assert (stringContains? sShape "((Circle r) (mul pi (mul r r)))") "Match arm must format ((Circle r) (mul pi (mul r r)))") (let [(reMatch (ip/parseIndented sMatch)) (reShape (ip/parseIndented sShape))] (assert (ok? reMatch) "Printed match form must parse back cleanly") (assert (ok? reShape) "Printed shape match form must parse back cleanly") true)))
 
 fn testIfAndBlockExpressions -> Bool
   (let [(ifInline (a/exprIf (a/exprCall (a/exprIdent ">") (list (a/exprIdent "x") (a/exprLit (a/litInt 0)))) (a/exprLit (a/litInt 10)) (a/exprLit (a/litInt 20)))) (blockExpr (a/exprBlock (list (a/exprCall (a/exprIdent "step1") (list (a/exprIdent "a"))) (a/exprCall (a/exprIdent "step2") (list (a/exprIdent "b"))))))] (let [(sIf (ap/printAstExpr ifInline 0)) (sBlock0 (ap/printAstExpr blockExpr 0)) (sBlock1 (ap/printAstExpr blockExpr 1))] (assert (= sIf "if (> x 0) 10 20") "Inline if must format as if (> x 0) 10 20") (refute (stringContains? sIf "\n") "Inline simple if must refute newlines") (assert (= sBlock0 "step1 a\nstep2 b") "Block at level 0 must separate lines by newline") (assert (= sBlock1 "  step1 a\n  step2 b") "Block at level 1 must indent lines by 2 spaces") (refute (stringStartsWith? sBlock0 " ") "Block at level 0 must refute leading spaces") (refute (not (stringStartsWith? sBlock1 "  ")) "Block at level 1 must refute unindented line") (let [(reIf (ip/parseIndented sIf))] (assert (ok? reIf) "Printed if expression must parse back cleanly") true)))
 
 fn testTopFormsAndModule -> Bool
-  (let [(fnAdd (a/DefunNode :name "add" :typeVars (list) :isExported true :effect false :params (list (a/Param :name "x" :type "Int") (a/Param :name "y" :type "Int")) :retType "Int" :docstring "\"Adds x and y\"" :body (list (rd/makeList (list (rd/makeAtom "+") (rd/makeAtom "x") (rd/makeAtom "y")))) :bodyPos (list))) (pSchema (a/SchemaNode :name "Point" :typeVars (list) :fields (list (a/AstField :name "x" :type "Int64" :docstring "\"Horizontal\"" :default (none) :json (none)) (a/AstField :name "y" :type "Int64" :docstring "\"Vertical\"" :default (none) :json (none))) :jsonCase (none))) (eColor (a/EnumNode :name "Color" :typeVars (list) :cases (list (a/EnumCase :name "Red" :fields (list) :docstring "\"Red case\"") (a/EnumCase :name "Blue" :fields (list) :docstring "\"Blue case\"")))) (tfFn (a/topDefun fnAdd)) (tfSchema (a/topSchema pSchema)) (tfEnum (a/topEnum eColor)) (modNode (a/ModuleNode :path "geometry/shapes" :docstring "\"Geometry service\"" :exported (list "Point" "add") :imports (list (pair "algebra/vector" "vec")) :defs (list tfSchema tfFn)))] (let [(sFn (ap/printTopForm tfFn)) (sSchema (ap/printTopForm tfSchema)) (sEnum (ap/printTopForm tfEnum)) (sMod (ap/printAstModule modNode))] (assert (stringContains? sFn "fn add x: Int y: Int -> Int") "Top function must format fn add signature") (assert (stringContains? sFn "\n  (+ x y)") "Top function body must be indented with 2 spaces and keep its call parenthesized") (refute (stringStartsWith? sFn "(df") "Top function must refute verbose df") (refute (stringStartsWith? sFn (str "(" "defun")) "Top function must refute verbose defun") (refute (not (stringContains? sFn " -> ")) "Top function must refute missing return arrow") (assert (stringContains? sSchema "schema Point") "Schema must format schema Point") (assert (stringContains? sSchema "(:f x Int64 \"Horizontal\")") "Schema must format x field with the corpus :f key") (assert (stringContains? sSchema "(:f y Int64 \"Vertical\")") "Schema must format y field with the corpus :f key") (refute (not (stringContains? sSchema "Point")) "Schema must refute missing name") (assert (stringContains? sEnum "enum Color") "Enum must format enum Color") (assert (stringContains? sEnum "(:c Red [] \"Red case\")") "Enum must format Red case with the corpus :c key") (assert (stringContains? sEnum "(:c Blue [] \"Blue case\")") "Enum must format Blue case with the corpus :c key") (assert (stringContains? sMod "module geometry/shapes") "Module must format module header") (assert (stringContains? sMod ":x [Point add]") "Module must format exports with the corpus :x key") (assert (stringContains? sMod ":i [(algebra/vector :a vec)]") "Module must format imports with the corpus :i and :a keys") (assert (stringContains? sMod "schema Point") "Module text must embed schema") (assert (stringContains? sMod "fn add x: Int y: Int -> Int") "Module text must embed fn add") (refute (stringContains? sMod (str "(" "defun add")) "Module text must refute verbose defun add") (let [(reFn (ip/parseIndented sFn)) (reSchema (ip/parseIndented sSchema)) (reForms (ip/parseIndentedForms (str sSchema "\n" sFn)))] (assert (ok? reFn) "Printed top function must parse back cleanly") (assert (ok? reSchema) "Printed top schema must parse back cleanly") (assert (ok? reForms) "Printed schema and fn sequence must parse back cleanly via parseIndentedForms") (mt reForms ((ok forms) (assert (= (listLength forms) 2) "Sequence must yield exactly 2 parsed forms")) ((err msg) (refute true (str "Failed to parse forms: " msg)))) true)))
+  (let [(fnAdd (a/DefunNode :name "add" :typeVars (list) :isExported true :effect false :params (list (a/Param :name "x" :type "Int") (a/Param :name "y" :type "Int")) :retType "Int" :docstring "\"Adds x and y\"" :body (list (rd/makeList (list (rd/makeAtom "+") (rd/makeAtom "x") (rd/makeAtom "y")))) :bodyPos (list))) (pSchema (a/SchemaNode :name "Point" :typeVars (list) :fields (list (a/AstField :name "x" :type "Int64" :docstring "\"Horizontal\"" :default (none) :json (none)) (a/AstField :name "y" :type "Int64" :docstring "\"Vertical\"" :default (none) :json (none))) :jsonCase (none))) (eColor (a/EnumNode :name "Color" :typeVars (list) :cases (list (a/EnumCase :name "Red" :fields (list) :docstring "\"Red case\"") (a/EnumCase :name "Blue" :fields (list) :docstring "\"Blue case\"")))) (tfFn (a/topDefun fnAdd)) (tfSchema (a/topSchema pSchema)) (tfEnum (a/topEnum eColor)) (modNode (a/ModuleNode :path "geometry/shapes" :docstring "\"Geometry service\"" :exported (list "Point" "add") :imports (list (pair "algebra/vector" "vec")) :defs (list tfSchema tfFn)))] (let [(sFn (ap/printTopForm tfFn)) (sSchema (ap/printTopForm tfSchema)) (sEnum (ap/printTopForm tfEnum)) (sMod (ap/printAstModule modNode))] (assert (stringContains? sFn "fn add x: Int y: Int -> Int") "Top function must format fn add signature") (assert (stringContains? sFn "\n  (+ x y)") "Top function body must be indented with 2 spaces and keep its call parenthesized") (refute (stringStartsWith? sFn "(df") "Top function must refute verbose df") (refute (stringStartsWith? sFn (str "(" "defun")) "Top function must refute verbose defun") (refute (not (stringContains? sFn " -> ")) "Top function must refute missing return arrow") (assert (stringContains? sSchema "schema Point") "Schema must format schema Point") (assert (stringContains? sSchema "(:f x Int64 \"Horizontal\")") "Schema must format x field with the corpus :f key") (assert (stringContains? sSchema "(:f y Int64 \"Vertical\")") "Schema must format y field with the corpus :f key") (refute (not (stringContains? sSchema "Point")) "Schema must refute missing name") (assert (stringContains? sEnum "enum Color") "Enum must format enum Color") (assert (stringContains? sEnum "(:c Red [] \"Red case\")") "Enum must format Red case with the corpus :c key") (assert (stringContains? sEnum "(:c Blue [] \"Blue case\")") "Enum must format Blue case with the corpus :c key") (assert (stringContains? sMod "module geometry/shapes") "Module must format module header") (assert (stringContains? sMod ":x [Point add]") "Module must format exports with the corpus :x key") (assert (stringContains? sMod ":i [(algebra/vector :a vec)]") "Module must format imports with the corpus :i and :a keys") (assert (stringContains? sMod "schema Point") "Module text must embed schema") (assert (stringContains? sMod "fn add x: Int y: Int -> Int") "Module text must embed fn add") (refute (stringContains? sMod (str "(" "defun add")) "Module text must refute verbose defun add") (let [(reFn (ip/parseIndented sFn)) (reSchema (ip/parseIndented sSchema)) (reForms (ip/parseIndentedForms (str sSchema "\n" sFn)))] (assert (ok? reFn) "Printed top function must parse back cleanly") (assert (ok? reSchema) "Printed top schema must parse back cleanly") (assert (ok? reForms) "Printed schema and fn sequence must parse back cleanly via parseIndentedForms") (match reForms ((ok forms) (assert (= (listLength forms) 2) "Sequence must yield exactly 2 parsed forms")) ((err msg) (refute true (str "Failed to parse forms: " msg)))) true)))
 
 fn testAstTypeAndPatternPrinting -> Bool
   (let [(tNamed (a/typeNamed "Int64")) (tTuple (a/typeTuple (list (a/typeNamed "String") (a/typeNamed "Bool")))) (tRecord (a/typeRecord (list (pair "x" (a/typeNamed "Float64")) (pair "y" (a/typeNamed "Float64"))))) (tFn (a/typeFn (list (a/typeNamed "Int64") (a/typeNamed "Int64")) (a/typeNamed "Bool"))) (pWild (a/patWildcard)) (pVar (a/patVar "myVar")) (pLit (a/patLit (a/litInt 123))) (pTup (a/patTuple (list (a/patVar "a") (a/patVar "b")))) (pRec (a/patRecord (list (pair "width" (a/patVar "width")) (pair "height" (a/patVar "height"))))) (pCtorSome (a/patCtor "Some" (some (a/patVar "v")))) (pCtorNone (a/patCtor "None" (none)))] (let [(stNamed (ap/printAstType tNamed)) (stTuple (ap/printAstType tTuple)) (stRecord (ap/printAstType tRecord)) (stFn (ap/printAstType tFn)) (spWild (ap/printAstPattern pWild)) (spVar (ap/printAstPattern pVar)) (spLit (ap/printAstPattern pLit)) (spTup (ap/printAstPattern pTup)) (spRec (ap/printAstPattern pRec)) (spCtorSome (ap/printAstPattern pCtorSome)) (spCtorNone (ap/printAstPattern pCtorNone))] (assert (= stNamed "Int64") "Named type must format as Int64") (assert (= stTuple "[String Bool]") "Tuple type must format as [String Bool]") (assert (= stRecord "{x: Float64 y: Float64}") "Record type must format as {x: Float64 y: Float64}") (assert (= stFn "fn [Int64 Int64] -> Bool") "Function type must format as fn [Int64 Int64] -> Bool") (refute (= stNamed "Float64") "Int64 must refute Float64") (refute (= stTuple "{String Bool}") "Tuple type must refute curly braces") (refute (stringContains? stRecord ",") "Record type must refute commas") (refute (not (stringContains? stFn " -> ")) "Function type must refute missing arrow") (assert (= spWild "_") "Wildcard pattern must format as _") (assert (= spVar "myVar") "Variable pattern must format as myVar") (assert (= spLit "123") "Literal pattern must format as 123") (assert (= spTup "[a b]") "Tuple pattern must format as [a b]") (assert (= spRec "{width height}") "Record pattern must format as {width height}") (assert (= spCtorSome "Some v") "Constructor pattern must format as Some v") (assert (= spCtorNone "None") "Nullary constructor pattern must format as None") (refute (= spWild "*") "Wildcard must refute asterisk") (refute (stringContains? spTup ",") "Tuple pattern must refute commas") (refute (stringContains? spRec ",") "Record pattern must refute commas") (refute (= spCtorNone "None()") "Nullary constructor must refute trailing parens") true))
@@ -27,12 +27,12 @@ fn testAstTypeAndPatternPrinting -> Bool
 fn testHostDialectTopForms -> Bool
   (let [(src "(module probe/hostDialect :x [foo bar] :i [(ast :a a)])\n\nfn foo x: Int64 -> Int64\n  (let [(a 1) (b [x 2])] (listLength (map (fn [(p Int64)] -> Int64 (+ p a)) b)))\n\nfn bar -> Rec\n  (Rec :done? true)\n")
         (parsed (a/parse src))]
-    (mt parsed
+    (match parsed
       ((err e) (do (assert false (str "host dialect probe source must parse: " e.msg)) false))
       ((ok forms)
-       (mt (listHead forms)
+       (match (listHead forms)
          ((some tf)
-          (mt tf
+          (match tf
             ((a/topModule m)
              (let [(printed (ap/printAstModule m))
                    (reparsed (a/parse printed))]
@@ -44,29 +44,29 @@ fn testHostDialectTopForms -> Bool
                  (assert (stringContains? printed "(fn [(p Int64)] -> Int64 (+ p a))") (str "fn parameter slot prints as a bracket vector: " printed))
                  (refute (stringContains? printed "(fn (list") (str "fn parameter slot must not print as a (list ..) call: " printed))
                  (assert (stringContains? printed "\n  (Rec :done? true)") (str "a ?-suffixed keyword prints back as written: " printed))
-                 (refute (stringContains? printed "(mt :done") (str "a ?-suffixed keyword must not print as a try match: " printed))
+                 (refute (stringContains? printed "(match :done") (str "a ?-suffixed keyword must not print as a try match: " printed))
                  (assert (ok? reparsed) "printed host dialect module must reparse")
-                 (assert (= (mt reparsed ((ok rf) (listLength rf)) ((err _) -1)) (listLength forms)) "printed host dialect module reparses to the same number of top forms")
+                 (assert (= (match reparsed ((ok rf) (listLength rf)) ((err _) -1)) (listLength forms)) "printed host dialect module reparses to the same number of top forms")
                  true)))
             (_ (do (assert false "host dialect probe must parse to a module first") false))))
          ((none) (do (assert false "host dialect probe must yield forms") false))))))
 
 fn testEffectMarkerAndTryGuard -> Bool
-  (let [(src "(module probe/effect :x [go!] :i [])\n\nfn ! go! x: (Result Int64 String) -> (Result Int64 String)\n  (mt x ((ok __v) __v) ((err __e) (err __e)))\n")]
-    (mt (a/parse src)
+  (let [(src "(module probe/effect :x [go!] :i [])\n\nfn ! go! x: (Result Int64 String) -> (Result Int64 String)\n  (match x ((ok __v) __v) ((err __e) (err __e)))\n")]
+    (match (a/parse src)
       ((err e) (do (assert false (str "effect probe source must parse: " e.msg)) false))
       ((ok forms)
-       (mt (listHead forms)
+       (match (listHead forms)
          ((some tf)
-          (mt tf
+          (match tf
             ((a/topModule m)
              (let [(printed (ap/printAstModule m))
-                   (again (mt (a/parse printed)
-                            ((ok rf) (mt (listHead rf) ((some rtf) (mt rtf ((a/topModule rm) (ap/printAstModule rm)) (_ ""))) ((none) "")))
+                   (again (match (a/parse printed)
+                            ((ok rf) (match (listHead rf) ((some rtf) (match rtf ((a/topModule rm) (ap/printAstModule rm)) (_ ""))) ((none) "")))
                             ((err _) "")))]
                (do
                  (assert (stringContains? printed "\nfn ! go! x: (Result Int64 String) -> (Result Int64 String)\n") (str "fn keeps its ! effect marker: " printed))
-                 (assert (stringContains? printed "\n  (mt x ((ok __v) __v) ((err __e) (err __e)))") (str "a try match on a symbol target prints as written: " printed))
+                 (assert (stringContains? printed "\n  (match x ((ok __v) __v) ((err __e) (err __e)))") (str "a try match on a symbol target prints as written: " printed))
                  (refute (stringContains? printed "x?") (str "a try match on a symbol target must not print as x?: " printed))
                  (assert (= again printed) (str "printing the reparsed module reproduces the text, marker included: " again))
                  true)))
@@ -83,16 +83,16 @@ fn testTypedBindingPrinting -> Bool
 
 fn testUntypedParamBeforeTyped -> Bool
   (let [(src "(module probe/untypedParam :x [f] :i [])\n\nfn f text n: Int64 -> Int64\n  n\n")]
-    (mt (a/parse src)
+    (match (a/parse src)
       ((err e) (do (assert false (str "untyped-param probe source must parse: " e.msg)) false))
       ((ok forms)
-       (mt (listHead forms)
+       (match (listHead forms)
          ((some tf)
-          (mt tf
+          (match tf
             ((a/topModule m)
-             (mt (listHead m.defs)
+             (match (listHead m.defs)
                ((some tfDefun)
-                (mt tfDefun
+                (match tfDefun
                   ((a/topDefun d)
                    (let [(params d.params)
                          (printed (ap/printAstModule m))
@@ -105,7 +105,7 @@ fn testUntypedParamBeforeTyped -> Bool
                        (assert (= (optionOr (listGet params 1) (a/Param :name "" :type "")).type "Int64") "second param keeps its explicit type Int64")
                        (assert (stringContains? printed "fn f text: Any n: Int64 -> Int64") (str "printed signature must keep both params: " printed))
                        (assert (ok? reparsed) (str "printed untyped-param module must reparse: " printed))
-                       (assert (= (mt reparsed ((ok rf) (listLength rf)) ((err _) -1)) (listLength forms)) "printed untyped-param module reparses to the same number of top forms")
+                       (assert (= (match reparsed ((ok rf) (listLength rf)) ((err _) -1)) (listLength forms)) "printed untyped-param module reparses to the same number of top forms")
                        true)))
                   (_ (do (assert false "untyped-param probe's first def must be a fn") false))))
                ((none) (do (assert false "untyped-param probe module must have a def") false))))
@@ -114,16 +114,16 @@ fn testUntypedParamBeforeTyped -> Bool
 
 fn testInferredReturnTypeNoArrow -> Bool
   (let [(src "(module probe/inferredRet :x [f] :i [])\n\nfn f x: Any\n  (str \"hi \" x)\n")]
-    (mt (a/parse src)
+    (match (a/parse src)
       ((err e) (do (assert false (str "inferred-return probe source must parse: " e.msg)) false))
       ((ok forms)
-       (mt (listHead forms)
+       (match (listHead forms)
          ((some tf)
-          (mt tf
+          (match tf
             ((a/topModule m)
-             (mt (listHead m.defs)
+             (match (listHead m.defs)
                ((some tfDefun)
-                (mt tfDefun
+                (match tfDefun
                   ((a/topDefun d)
                    (let [(printed (ap/printAstModule m))
                          (reparsed (a/parse printed))]
@@ -133,7 +133,7 @@ fn testInferredReturnTypeNoArrow -> Bool
                        (refute (stringContains? printed "-> Unit") (str "printed header must refute a false -> Unit: " printed))
                        (refute (stringContains? printed "-> :inferredUnit") (str "printed header must refute leaking the internal sentinel: " printed))
                        (assert (ok? reparsed) (str "printed no-arrow module must reparse: " printed))
-                       (assert (= (mt reparsed ((ok rf) (listLength rf)) ((err _) -1)) (listLength forms)) "printed no-arrow module reparses to the same number of top forms")
+                       (assert (= (match reparsed ((ok rf) (listLength rf)) ((err _) -1)) (listLength forms)) "printed no-arrow module reparses to the same number of top forms")
                        true)))
                   (_ (do (assert false "inferred-return probe's first def must be a fn") false))))
                ((none) (do (assert false "inferred-return probe module must have a def") false))))
@@ -142,12 +142,12 @@ fn testInferredReturnTypeNoArrow -> Bool
 
 fn testDottedModulePath -> Bool
   (let [(src "(module bench.aep.tests.ablationTest :x [f] :i [(bench.aep.ablation :a abl)])\n\nfn f -> Int64\n  1\n")]
-    (mt (a/parse src)
+    (match (a/parse src)
       ((err e) (do (assert false (str "dotted-path probe source must parse: " e.msg)) false))
       ((ok forms)
-       (mt (listHead forms)
+       (match (listHead forms)
          ((some tf)
-          (mt tf
+          (match tf
             ((a/topModule m)
              (let [(printed (ap/printAstModule m))
                    (reparsed (a/parse printed))
@@ -161,19 +161,19 @@ fn testDottedModulePath -> Bool
                  (assert (stringContains? printed ":i [(bench.aep.ablation :a abl)]") (str "printed header must keep the dotted import path: " printed))
                  (refute (stringContains? printed ".-") (str "printed module header must refute a leaked member-access accessor: " printed))
                  (assert (ok? reparsed) (str "printed dotted-path module must reparse: " printed))
-                 (assert (= (mt reparsed ((ok rf) (listLength rf)) ((err _) -1)) (listLength forms)) "printed dotted-path module reparses to the same number of top forms")
+                 (assert (= (match reparsed ((ok rf) (listLength rf)) ((err _) -1)) (listLength forms)) "printed dotted-path module reparses to the same number of top forms")
                  true)))
             (_ (do (assert false "dotted-path probe must parse to a module first") false))))
          ((none) (do (assert false "dotted-path probe must yield forms") false))))))
 
 fn testInlineEnumCasePrinting -> Bool
   (let [(src "(module probe/inlineEnum :x [f] :i [])\n\nenum TestColor (colorRed) (colorGreen) (colorBlue)\n\nfn f -> Int64\n  1\n")]
-    (mt (a/parse src)
+    (match (a/parse src)
       ((err e) (do (assert false (str "inline enum probe source must parse: " e.msg)) false))
       ((ok forms)
-       (mt (listHead forms)
+       (match (listHead forms)
          ((some tf)
-          (mt tf
+          (match tf
             ((a/topModule m)
              (let [(printed (ap/printAstModule m))
                    (reparsed (a/parse printed))]
@@ -183,19 +183,19 @@ fn testInlineEnumCasePrinting -> Bool
                  (assert (stringContains? printed "(:c colorBlue [] \"\")") (str "inline enum case must print as a canonical :c form: " printed))
                  (refute (stringContains? printed "(colorRed)") (str "inline enum case must not print as a bare uncanonicalized group: " printed))
                  (assert (ok? reparsed) (str "printed inline-enum module must reparse: " printed))
-                 (assert (= (mt reparsed ((ok rf) (listLength rf)) ((err _) -1)) (listLength forms)) "printed inline-enum module reparses to the same number of top forms")
+                 (assert (= (match reparsed ((ok rf) (listLength rf)) ((err _) -1)) (listLength forms)) "printed inline-enum module reparses to the same number of top forms")
                  true)))
             (_ (do (assert false "inline enum probe must parse to a module first") false))))
          ((none) (do (assert false "inline enum probe must yield forms") false))))))
 
 fn testInlineSchemaFieldPrinting -> Bool
   (let [(src "(module probe/inlineSchema :x [f] :i [])\n\nschema Point x: Int64 (y Int64)\n\nfn f -> Int64\n  1\n")]
-    (mt (a/parse src)
+    (match (a/parse src)
       ((err e) (do (assert false (str "inline schema probe source must parse: " e.msg)) false))
       ((ok forms)
-       (mt (listHead forms)
+       (match (listHead forms)
          ((some tf)
-          (mt tf
+          (match tf
             ((a/topModule m)
              (let [(printed (ap/printAstModule m))
                    (reparsed (a/parse printed))]
@@ -204,19 +204,19 @@ fn testInlineSchemaFieldPrinting -> Bool
                  (assert (stringContains? printed "(:f y Int64 \"\")") (str "inline schema field must print as a canonical :f form: " printed))
                  (refute (stringContains? printed "(y Int64)") (str "inline schema field must not print as a bare uncanonicalized group: " printed))
                  (assert (ok? reparsed) (str "printed inline-schema module must reparse: " printed))
-                 (assert (= (mt reparsed ((ok rf) (listLength rf)) ((err _) -1)) (listLength forms)) "printed inline-schema module reparses to the same number of top forms")
+                 (assert (= (match reparsed ((ok rf) (listLength rf)) ((err _) -1)) (listLength forms)) "printed inline-schema module reparses to the same number of top forms")
                  true)))
             (_ (do (assert false "inline schema probe must parse to a module first") false))))
          ((none) (do (assert false "inline schema probe must yield forms") false))))))
 
 fn testInlineEnumCaseFieldsDocOrder -> Bool
   (let [(src "(module probe/inlineEnumFields :x [f] :i [])\n\nenum Box (box value: Int64 label: String) \"a box\" (empty) \"nothing\" spare \"extra\"\n\nfn f -> Int64\n  1\n")]
-    (mt (a/parse src)
+    (match (a/parse src)
       ((err e) (do (assert false (str "inline enum fields probe source must parse: " e.msg)) false))
       ((ok forms)
-       (mt (listHead forms)
+       (match (listHead forms)
          ((some tf)
-          (mt tf
+          (match tf
             ((a/topModule m)
              (let [(printed (ap/printAstModule m))
                    (reparsed (a/parse printed))
@@ -237,12 +237,12 @@ fn testInlineEnumCaseFieldsDocOrder -> Bool
 
 fn testInlineEnumCaseFormPassthrough -> Bool
   (let [(src "(module probe/inlineEnumForms :x [f] :i [])\n\nenum Tint : (:case red [] \"r\") (:c green [(n Int64)] \"g\")\n\nfn f -> Int64\n  1\n")]
-    (mt (a/parse src)
+    (match (a/parse src)
       ((err e) (do (assert false (str "inline enum case-form probe source must parse: " e.msg)) false))
       ((ok forms)
-       (mt (listHead forms)
+       (match (listHead forms)
          ((some tf)
-          (mt tf
+          (match tf
             ((a/topModule m)
              (let [(printed (ap/printAstModule m))
                    (reparsed (a/parse printed))]
@@ -258,12 +258,12 @@ fn testInlineEnumCaseFormPassthrough -> Bool
 
 fn testArraySugarParamPrinting -> Bool
   (let [(src "(module probe/arrParam :x [f] :i [])\n\nfn f args: [Str] n: Int64 -> Int64\n  (+ (listLength args) n)\n")]
-    (mt (a/parse src)
+    (match (a/parse src)
       ((err e) (do (assert false (str "array-sugar param probe source must parse: " e.msg)) false))
       ((ok forms)
-       (mt (listHead forms)
+       (match (listHead forms)
          ((some tf)
-          (mt tf
+          (match tf
             ((a/topModule m)
              (let [(printed (ap/printAstModule m))
                    (reparsed (a/parse printed))]
@@ -273,7 +273,7 @@ fn testArraySugarParamPrinting -> Bool
                  (refute (stringContains? printed "Str: Any") (str "array-sugar param must not split into bogus stray params such as Str: Any: " printed))
                  (refute (stringContains? printed "]: Any") (str "array-sugar param must not split into a bogus ']' typed param: " printed))
                  (assert (ok? reparsed) (str "printed array-sugar-param module must reparse: " printed))
-                 (assert (= (mt reparsed ((ok rf) (listLength rf)) ((err _) -1)) (listLength forms)) "printed array-sugar-param module reparses to the same number of top forms")
+                 (assert (= (match reparsed ((ok rf) (listLength rf)) ((err _) -1)) (listLength forms)) "printed array-sugar-param module reparses to the same number of top forms")
                  true)))
             (_ (do (assert false "array-sugar param probe must parse to a module first") false))))
          ((none) (do (assert false "array-sugar param probe must yield forms") false))))))

@@ -32,7 +32,7 @@ fn bytesToHex bytes: Bytes -> String
 fn hmacSha256 key: Bytes msg: Bytes -> Bytes
   (let [(keyLength (bytesLength key))
         (normalized (if (> keyLength 64)
-          (mt (hexToBytes (bytesSha256 key)) ((ok digest) digest) ((err _) key)) key))
+          (match (hexToBytes (bytesSha256 key)) ((ok digest) digest) ((err _) key)) key))
         (keyLength2 (bytesLength normalized))
         (inner (bytesAlloc (+ 64 (bytesLength msg))))
         (outer (bytesAlloc 96))]
@@ -47,9 +47,9 @@ fn hmacSha256 key: Bytes msg: Bytes -> Bytes
           (copyOuter (fn [(copyOuter Any) i digest] -> Unit
             (if (< i 32) (do (bytesSet outer (+ i 64) (bytesGet digest i)) (copyOuter copyOuter (+ i 1) digest)) ()))) ]
       (do (fill fill 0) (copyMsg copyMsg 0)
-        (let [(innerDigest (mt (hexToBytes (bytesSha256 inner)) ((ok digest) digest) ((err _) (bytesAlloc 32))))]
+        (let [(innerDigest (match (hexToBytes (bytesSha256 inner)) ((ok digest) digest) ((err _) (bytesAlloc 32))))]
           (copyOuter copyOuter 0 innerDigest)
-          (mt (hexToBytes (bytesSha256 outer)) ((ok result) result) ((err _) (bytesAlloc 32)))))))
+          (match (hexToBytes (bytesSha256 outer)) ((ok result) result) ((err _) (bytesAlloc 32)))))))
 
 fn hmacSha256Hex key: Bytes msg: Bytes -> String
   (bytesToHex (hmacSha256 key msg))

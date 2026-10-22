@@ -84,6 +84,10 @@ fn testTestPredicate -> Bool
        (healsTo? "testPredicate" (str (hdr) "fn f n: Int64 -> Int64\n  (let [(o (some n))]\n    (if (none o) 0 1))\n") (str (hdr) "fn f n: Int64 -> Int64\n  (let [(o (some n))]\n    (if (none? o) 0 1))\n") (list))
        (untouched? "testPredicate near-miss" (str (hdr) "fn f n: Int64 -> Int64\n  (let [(o (some n))]\n    (cond ((some? o) 1) (else 0)))\n")))
 
+fn testRetiredSpelling -> Bool
+  (and (healsTo? "retiredSpelling" (str (hdr) "fn f n: Int64 -> Int64\n  (mt n (1 2) (_ (if (== n 3) 4 (if (not= n 5) 6 7))))\n") (str (hdr) "fn f n: Int64 -> Int64\n  (match n (1 2) (_ (if (= n 3) 4 (if (!= n 5) 6 7))))\n") (list))
+       (untouched? "retiredSpelling near-miss" (str (hdr) "fn f n: Int64 -> String\n  (if (= n 1) \"(mt (== x))\" \"match\")\n")))
+
 fn testSymbolRename -> Bool
   (and (healsTo? "symbolRename" (str (hdr) "fn f n: Int64 -> Int64\n  (if (isSome (some n)) 1 0)\n") (str (hdr) "fn f n: Int64 -> Int64\n  (if (some? (some n)) 1 0)\n") (list))
        (healsTo? "symbolRename" (str (hdr) "fn ! f n: Int64 -> Int64\n  (let [(p (println! n))]\n    n)\n") (str (hdr) "fn ! f n: Int64 -> Int64\n  (let [(p (println n))]\n    n)\n") (list))
@@ -136,5 +140,5 @@ fn testEdits -> Bool
     true)
 
 fn runTests -> Bool
-  (and (testDelimiterBalance) (testLineHeader) (testFreeComment) (testFnHeaderUnwrap) (testBodyIndent) (testCondClauses)
+  (and (testDelimiterBalance) (testLineHeader) (testFreeComment) (testRetiredSpelling) (testFnHeaderUnwrap) (testBodyIndent) (testCondClauses)
        (testLetBindingVector) (testTestPredicate) (testSymbolRename) (testEffectMark) (testEffectMarkPure) (testUnrepairableIsReported) (testEdits))

@@ -28,11 +28,11 @@ fn cpEncode cp: Int64 -> String
     (else (str (byteStr (| 240 (/ cp 262144))) (byteStr (| 128 (mod (/ cp 4096) 64))) (byteStr (| 128 (mod (/ cp 64) 64))) (byteStr (| 128 (mod cp 64))))))
 
 fn pairUp xs: (List String) acc: (List String) -> (List String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (listReverse acc))
     ((some a)
       (let [(r1 (optionOr (listTail xs) (list)))]
-        (mt (listHead r1)
+        (match (listHead r1)
           ((none) (listReverse (cons a acc)))
           ((some b) (pairUp (optionOr (listTail r1) (list)) (cons (stringConcat a b) acc)))))))
 
@@ -43,7 +43,7 @@ fn treeJoin xs: (List String) -> String
     (else (treeJoin (pairUp xs (list)))))
 
 fn interleave xs: (List String) sep: String acc: (List String) first: Bool -> (List String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (listReverse acc))
     ((some x) (interleave (optionOr (listTail xs) (list)) sep (if first (cons x acc) (cons x (cons sep acc))) false)))
 
@@ -267,7 +267,7 @@ fn strictLoop bs: Bytes n: Int64 i: Int64 -> (Option String)
                     (str "'utf-8' codec can't decode bytes in position " (stringFromInt64 i) "-" (stringFromInt64 (- (+ i k) 1)) ": " reason))))))))
 
 fn strictUtf8 raw: String -> (Result String PyErr)
-  (mt (strictLoop (stringToBytes raw) (bytesLength (stringToBytes raw)) 0)
+  (match (strictLoop (stringToBytes raw) (bytesLength (stringToBytes raw)) 0)
     ((none) (ok raw))
     ((some m) (err (pyErr "UnicodeDecodeError" m))))
 
@@ -378,12 +378,12 @@ fn jsonNumber text: String bs: Bytes n: Int64 start: Int64 -> (Result (Pair j/Js
                 (iEnd (if expOk iExpEnd iFrac))
                 (lit (sliceB text start iEnd))]
             (if (or hasFrac expOk)
-              (mt (stringToFloat64 lit)
+              (match (stringToFloat64 lit)
                 ((some f) (ok (pair (j/jfloat f) iEnd)))
                 ((none) (err (jexpect bs start))))
-              (mt (stringToInt64 lit)
+              (match (stringToInt64 lit)
                 ((some v) (ok (pair (j/jint v) iEnd)))
-                ((none) (mt (stringToFloat64 lit)
+                ((none) (match (stringToFloat64 lit)
                   ((some f) (ok (pair (j/jfloat f) iEnd)))
                   ((none) (err (jexpect bs start))))))))))))
 
@@ -423,7 +423,7 @@ fn jsonStrLoop text: String bs: Bytes n: Int64 begin: Int64 seg: Int64 i: Int64 
         (else (jsonStrLoop text bs n begin seg (+ i 1) acc)))))
 
 fn jset obj: j/Json k: String v: j/Json -> j/Json
-  (mt obj
+  (match obj
     ((j/jobj kvs)
       (if (listAny? (fn [(p (Pair String j/Json))] -> Bool (= (pairFirst p) k)) kvs)
         (j/jobj (map (fn [(p (Pair String j/Json))] -> (Pair String j/Json) (if (= (pairFirst p) k) (pair k v) p)) kvs))
@@ -435,7 +435,7 @@ fn jsonValue text: String bs: Bytes n: Int64 i: Int64 -> (Result (Pair j/Json In
     (err (jexpect bs i))
     (let [(c (bytesGet bs i))]
       (cond
-        ((= c 34) (mt (jsonStrLoop text bs n i (+ i 1) (+ i 1) (list)) ((ok p) (ok (pair (j/jstr (pairFirst p)) (pairSecond p)))) ((err e) (err e))))
+        ((= c 34) (match (jsonStrLoop text bs n i (+ i 1) (+ i 1) (list)) ((ok p) (ok (pair (j/jstr (pairFirst p)) (pairSecond p)))) ((err e) (err e))))
         ((= c 123) (jsonObject text bs n (jsonWs bs n (+ i 1)) (list)))
         ((= c 91) (jsonArray text bs n (jsonWs bs n (+ i 1)) (list)))
         ((and (= c 110) (litAt bs n i "null")) (ok (pair (j/jnull) (+ i 4))))
@@ -450,7 +450,7 @@ fn jsonValue text: String bs: Bytes n: Int64 i: Int64 -> (Result (Pair j/Json In
 fn jsonArray text: String bs: Bytes n: Int64 i: Int64 acc: (List j/Json) -> (Result (Pair j/Json Int64) PyErr)
   (if (and (listEmpty? acc) (< i n) (= (bytesGet bs i) 93))
     (ok (pair (j/jarr (list)) (+ i 1)))
-    (mt (jsonValue text bs n i)
+    (match (jsonValue text bs n i)
       ((err e) (err e))
       ((ok p)
         (let [(acc1 (cons (pairFirst p) acc)) (k (jsonWs bs n (pairSecond p)))]
@@ -468,13 +468,13 @@ fn jsonObject text: String bs: Bytes n: Int64 i: Int64 acc: (List (Pair String j
     ((and (listEmpty? acc) (< i n) (= (bytesGet bs i) 125)) (ok (pair (j/jobj (list)) (+ i 1))))
     ((or (>= i n) (not (= (bytesGet bs i) 34))) (err (pyErr "JSONDecodeError" (jsonErrAt bs "Expecting property name enclosed in double quotes" i))))
     (else
-      (mt (jsonStrLoop text bs n i (+ i 1) (+ i 1) (list))
+      (match (jsonStrLoop text bs n i (+ i 1) (+ i 1) (list))
         ((err e) (err e))
         ((ok kp)
           (let [(k (jsonWs bs n (pairSecond kp)))]
             (if (or (>= k n) (not (= (bytesGet bs k) 58)))
               (err (pyErr "JSONDecodeError" (jsonErrAt bs "Expecting ':' delimiter" k)))
-              (mt (jsonValue text bs n (jsonWs bs n (+ k 1)))
+              (match (jsonValue text bs n (jsonWs bs n (+ k 1)))
                 ((err e) (err e))
                 ((ok vp)
                   (let [(acc1 (objPut acc (pairFirst kp) (pairFirst vp))) (m (jsonWs bs n (pairSecond vp)))]
@@ -496,7 +496,7 @@ fn jsonLoads text: String -> (Result j/Json PyErr)
   (let [(bs (stringToBytes text)) (n (bytesLength bs))]
     (if (and (>= n 3) (= (bytesGet bs 0) 239) (= (bytesGet bs 1) 187) (= (bytesGet bs 2) 191))
       (err (pyErr "JSONDecodeError" (jsonErrAt bs "Unexpected UTF-8 BOM (decode using utf-8-sig)" 0)))
-      (mt (jsonValue text bs n (jsonWs bs n 0))
+      (match (jsonValue text bs n (jsonWs bs n 0))
         ((err e) (err e))
         ((ok p)
           (let [(e (jsonWs bs n (pairSecond p)))]
@@ -532,7 +532,7 @@ fn jsonReprFloat f: Float64 -> String
   (cond ((isNan? f) "NaN") ((= f (floatInf)) "Infinity") ((= f (floatNegInf)) "-Infinity") (else (stringFromFloat64 f)))
 
 fn dumpsPieces v: j/Json indent: Int64 level: Int64 acc: (List String) -> (List String)
-  (mt v
+  (match v
     ((j/jnull) (cons "null" acc))
     ((j/jbool b) (cons (if b "true" "false") acc))
     ((j/jint i) (cons (stringFromInt64 i) acc))
@@ -564,7 +564,7 @@ fn jsonDumps v: j/Json indent: Int64 -> String
   (treeJoin (listReverse (dumpsPieces v indent 0 (list))))
 
 fn pyTypeName v: j/Json -> String
-  (mt v ((j/jnull) "NoneType") ((j/jbool _) "bool") ((j/jint _) "int") ((j/jfloat _) "float") ((j/jnum _) "float") ((j/jstr _) "str") ((j/jarr _) "list") ((j/jobj _) "dict"))
+  (match v ((j/jnull) "NoneType") ((j/jbool _) "bool") ((j/jint _) "int") ((j/jfloat _) "float") ((j/jnum _) "float") ((j/jstr _) "str") ((j/jarr _) "list") ((j/jobj _) "dict"))
 
 fn pyFloatStr f: Float64 -> String
   (cond ((isNan? f) "nan") ((= f (floatInf)) "inf") ((= f (floatNegInf)) "-inf") (else (stringFromFloat64 f)))
@@ -591,12 +591,12 @@ fn reprStr s: String -> String
     (str (byteStr q) (treeJoin (map (fn [(cp Int64)] -> String (reprCp cp q)) (cpList s))) (byteStr q)))
 
 fn pyRepr v: j/Json -> String
-  (mt v
+  (match v
     ((j/jstr s) (reprStr s))
     (_ (pyStr v)))
 
 fn pyStr v: j/Json -> String
-  (mt v
+  (match v
     ((j/jnull) "None")
     ((j/jbool b) (if b "True" "False"))
     ((j/jint i) (stringFromInt64 i))
@@ -607,7 +607,7 @@ fn pyStr v: j/Json -> String
     ((j/jobj kvs) (str "{" (joinSep (map (fn [(p (Pair String j/Json))] -> String (str (reprStr (pairFirst p)) ": " (pyRepr (pairSecond p)))) kvs) ", ") "}")))
 
 fn pyTruthy v: j/Json -> Bool
-  (mt v
+  (match v
     ((j/jnull) false)
     ((j/jbool b) b)
     ((j/jint i) (not (= i 0)))
@@ -618,7 +618,7 @@ fn pyTruthy v: j/Json -> Bool
     ((j/jobj kvs) (not (listEmpty? kvs))))
 
 fn numOf v: j/Json -> (Option Float64)
-  (mt v
+  (match v
     ((j/jbool b) (some (if b 1.0 0.0)))
     ((j/jint i) (some (int64ToFloat64 i)))
     ((j/jfloat f) (some f))
@@ -630,47 +630,47 @@ fn listEq xs: (List j/Json) ys: (List j/Json) -> Bool
 
 fn objEq a: (List (Pair String j/Json)) b: (List (Pair String j/Json)) -> Bool
   (and (= (listLength a) (listLength b))
-       (listAll? (fn [(p (Pair String j/Json))] -> Bool (mt (jget (j/jobj b) (pairFirst p)) ((some v) (pyEq (pairSecond p) v)) ((none) false))) a))
+       (listAll? (fn [(p (Pair String j/Json))] -> Bool (match (jget (j/jobj b) (pairFirst p)) ((some v) (pyEq (pairSecond p) v)) ((none) false))) a))
 
 fn pyEq a: j/Json b: j/Json -> Bool
-  (mt (numOf a)
-    ((some x) (mt (numOf b) ((some y) (= x y)) ((none) false)))
+  (match (numOf a)
+    ((some x) (match (numOf b) ((some y) (= x y)) ((none) false)))
     ((none)
-      (mt a
-        ((j/jnull) (mt b ((j/jnull) true) (_ false)))
-        ((j/jstr s) (mt b ((j/jstr t) (= s t)) (_ false)))
-        ((j/jarr xs) (mt b ((j/jarr ys) (listEq xs ys)) (_ false)))
-        ((j/jobj kvs) (mt b ((j/jobj k2) (objEq kvs k2)) (_ false)))
+      (match a
+        ((j/jnull) (match b ((j/jnull) true) (_ false)))
+        ((j/jstr s) (match b ((j/jstr t) (= s t)) (_ false)))
+        ((j/jarr xs) (match b ((j/jarr ys) (listEq xs ys)) (_ false)))
+        ((j/jobj kvs) (match b ((j/jobj k2) (objEq kvs k2)) (_ false)))
         (_ false))))
 
 fn jget v: j/Json k: String -> (Option j/Json)
-  (mt v
-    ((j/jobj kvs) (mt (listHead (filter (fn [(p (Pair String j/Json))] -> Bool (= (pairFirst p) k)) kvs)) ((some p) (some (pairSecond p))) ((none) (none))))
+  (match v
+    ((j/jobj kvs) (match (listHead (filter (fn [(p (Pair String j/Json))] -> Bool (= (pairFirst p) k)) kvs)) ((some p) (some (pairSecond p))) ((none) (none))))
     (_ (none)))
 
 fn jgetOr v: j/Json k: String d: j/Json -> (Result j/Json PyErr)
-  (mt v
+  (match v
     ((j/jobj _) (ok (optionOr (jget v k) d)))
     (_ (err (pyErr "AttributeError" (str "'" (pyTypeName v) "' object has no attribute 'get'")))))
 
 fn jlen v: j/Json -> (Result Int64 PyErr)
-  (mt v
+  (match v
     ((j/jstr s) (ok (cpCount s)))
     ((j/jarr xs) (ok (listLength xs)))
     ((j/jobj kvs) (ok (listLength kvs)))
     (_ (err (pyErr "TypeError" (str "object of type '" (pyTypeName v) "' has no len()")))))
 
 fn pyIter v: j/Json -> (Result (List j/Json) PyErr)
-  (mt v
+  (match v
     ((j/jarr xs) (ok xs))
     ((j/jobj kvs) (ok (map (fn [(p (Pair String j/Json))] -> j/Json (j/jstr (pairFirst p))) kvs)))
     ((j/jstr s) (ok (map (fn [(cp Int64)] -> j/Json (j/jstr (cpEncode cp))) (cpList s))))
     (_ (err (pyErr "TypeError" (str "'" (pyTypeName v) "' object is not iterable")))))
 
 fn pyIndex v: j/Json i: Int64 -> (Result j/Json PyErr)
-  (mt v
-    ((j/jarr xs) (mt (listGet xs i) ((some x) (ok x)) ((none) (err (pyErr "IndexError" "list index out of range")))))
-    ((j/jstr s) (let [(cps (cpList s))] (mt (listGet cps i) ((some c) (ok (j/jstr (cpEncode c)))) ((none) (err (pyErr "IndexError" "string index out of range"))))))
+  (match v
+    ((j/jarr xs) (match (listGet xs i) ((some x) (ok x)) ((none) (err (pyErr "IndexError" "list index out of range")))))
+    ((j/jstr s) (let [(cps (cpList s))] (match (listGet cps i) ((some c) (ok (j/jstr (cpEncode c)))) ((none) (err (pyErr "IndexError" "string index out of range"))))))
     ((j/jobj _) (err (pyErr "KeyError" (stringFromInt64 i))))
     (_ (err (pyErr "TypeError" (str "'" (pyTypeName v) "' object is not subscriptable")))))
 
@@ -729,7 +729,7 @@ fn urlUnquotePlus s: String -> String
   (urlUnquote (replaceAll s "+" " "))
 
 fn partition s: String sep: String -> (Pair String (Option String))
-  (mt (stringIndexOf s sep)
+  (match (stringIndexOf s sep)
     ((none) (pair s (none)))
     ((some i) (pair (sliceB s 0 i) (some (sliceB s (+ i (stringLength sep)) (stringLength s))))))
 
@@ -803,7 +803,7 @@ fn validIpv6Addr s: String -> Bool
 fn validIpv6 s: String -> Bool
   (and (not (hasSubstr s "/"))
        (let [(p (partition s "%"))]
-         (mt (pairSecond p)
+         (match (pairSecond p)
            ((none) (validIpv6Addr s))
            ((some scope) (and (not (stringEmpty? scope)) (not (hasSubstr scope "%")) (validIpv6Addr (pairFirst p)))))))
 
@@ -813,7 +813,7 @@ fn allHex s: String -> Bool
 fn bracketedHostOk h: String -> Bool
   (if (stringStartsWith? h "v")
     (let [(p (partition (sliceB h 1 (stringLength h)) "."))]
-      (and (allHex (pairFirst p)) (mt (pairSecond p) ((some rest) (and (not (stringEmpty? rest)) (not (hasSubstr rest "\n")))) ((none) false))))
+      (and (allHex (pairFirst p)) (match (pairSecond p) ((some rest) (and (not (stringEmpty? rest)) (not (hasSubstr rest "\n")))) ((none) false))))
     (and (not (validIpv4 h)) (validIpv6 h)))
 
 fn minFound a: Int64 b: Int64 -> Int64
@@ -857,7 +857,7 @@ fn rfind bs: Bytes n: Int64 b: Int64 i: Int64 acc: Int64 -> Int64
   (if (>= i n) acc (rfind bs n b (+ i 1) (if (= (bytesGet bs i) b) i acc)))
 
 fn urlparse url: String -> (Result (List String) PyErr)
-  (mt (urlsplit url)
+  (match (urlsplit url)
     ((err e) (err e))
     ((ok parts)
       (let [(scheme (optionOr (listGet parts 0) "")) (path (optionOr (listGet parts 2) ""))]
@@ -884,7 +884,7 @@ fn trackingKey k: String -> Bool
   (or (stringStartsWith? k "utm_") (= k "ref") (= k "fbclid") (= k "gclid"))
 
 fn cleanUrlStr url: String -> (Result String PyErr)
-  (mt (urlparse url)
+  (match (urlparse url)
     ((err e) (err e))
     ((ok p)
       (let [(g (fn [(i Int64)] -> String (optionOr (listGet p i) "")))
@@ -892,8 +892,8 @@ fn cleanUrlStr url: String -> (Result String PyErr)
         (ok (urlunparse (g 0) (g 1) (g 2) (g 3) (urlencodePairs kept) (g 5))))))
 
 fn cleanUrl v: j/Json -> j/Json
-  (mt v
-    ((j/jstr s) (mt (cleanUrlStr s) ((ok r) (j/jstr r)) ((err _) v)))
+  (match v
+    ((j/jstr s) (match (cleanUrlStr s) ((ok r) (j/jstr r)) ((err _) v)))
     (_ (if (pyTruthy v) v (j/jstr ""))))
 
 fn refEnd bs: Bytes n: Int64 i: Int64 f: (fn [Int64] -> Bool) -> Int64
@@ -926,7 +926,7 @@ fn entityLookup name: String -> (Option String)
   (if (stringEmpty? name)
     (none)
     (let [(tbl (ent/entityBucket (sliceB name 0 1))) (key (str "\n" name " "))]
-      (mt (stringIndexOf tbl key)
+      (match (stringIndexOf tbl key)
         ((none) (none))
         ((some i)
           (let [(start (+ i (stringLength key))) (rest (sliceB tbl start (min (stringLength tbl) (+ start 64))))]
@@ -949,7 +949,7 @@ fn numericRef digits: String radix: Int64 -> String
     (if (or (= num 0) (= num 13) (and (>= num 128) (<= num 159)))
       (let [(inv (ent/invalidCharrefTable))
             (key (str " " (hexOf num) ":"))]
-        (mt (stringIndexOf inv key)
+        (match (stringIndexOf inv key)
           ((some i) (let [(start (+ i (stringLength key)))] (hexCpsDecode (pairFirst (partition (sliceB inv start (stringLength inv)) " ")))))
           ((none) (numericCodepoint num))))
       (numericCodepoint num)))
@@ -965,12 +965,12 @@ fn prefixLookup s: String cps: (List Int64) x: Int64 -> String
   (if (< x 2)
     (str "&" s)
     (let [(pre (treeJoin (map cpEncode (listTake cps x))))]
-      (mt (entityLookup pre)
+      (match (entityLookup pre)
         ((some v) (str v (treeJoin (map cpEncode (listDrop cps x)))))
         ((none) (prefixLookup s cps (- x 1))))))
 
 fn namedRef s: String -> String
-  (mt (entityLookup s)
+  (match (entityLookup s)
     ((some v) v)
     ((none) (let [(cps (cpList s))] (prefixLookup s cps (- (listLength cps) 1)))))
 

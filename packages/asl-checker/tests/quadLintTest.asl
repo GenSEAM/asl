@@ -14,7 +14,7 @@ fn headTailSrc -> String
   "(module q/walk :x [sumList])
 
 fn sumList xs: (List Int64) -> Int64
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) 0)
     ((some h) (+ h (sumList (optionOr (listTail xs) (list))))))
 "
@@ -27,14 +27,14 @@ fn third xs: (List Int64) n: Int64 -> Int64
 "
 
 fn hitsFor src: String -> (List lint/LintHit)
-  (mt (a/parseForChecker src)
+  (match (a/parseForChecker src)
     ((ok forms) (lint/lintModule forms "probe.asl"))
     ((err _) (list)))
 
 fn ! testFlagsListGetByCounter -> Bool
   (let [(hits (hitsFor (quadraticSrc)))]
     (do (assert (= (listLength hits) 1) (str "exactly one hit on the counter-walk fn, got " (listLength hits)))
-        (mt (listHead hits)
+        (match (listHead hits)
           ((some h) (do (assert (= h.code "LINT_QUADRATIC_LISTGET") (str "code is LINT_QUADRATIC_LISTGET, got " h.code))
                         (assert (= h.fnName "walkByIndex") (str "names the offending fn, got " h.fnName))
                         (assert (stringContains? h.message "listGet") "message mentions listGet")

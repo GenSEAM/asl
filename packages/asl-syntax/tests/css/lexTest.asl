@@ -174,29 +174,29 @@ fn findSubString text: String needle: String from: Int64 -> (Option Int64)
   (let [(len (stringLength text))]
     (if (>= from len)
       (none)
-      (mt (stringSlice text from len)
+      (match (stringSlice text from len)
         ((none) (none))
         ((some sub)
-         (mt (stringIndexOf sub needle)
+         (match (stringIndexOf sub needle)
            ((none) (none))
            ((some rel) (some (+ from rel))))))))
 
 fn extractStyleBodies html: String idx: Int64 acc: (List String) -> (List String)
   (let [(lower (stringLower html))
         (openPos (findSubString lower "<style" idx))]
-    (mt openPos
+    (match openPos
       ((none) (listReverse acc))
       ((some o)
        (let [(tagClose (findSubString lower ">" o))]
-         (mt tagClose
+         (match tagClose
            ((none) (listReverse acc))
            ((some tc)
             (let [(bodyStart (+ tc 1))
                   (endPos (findSubString lower "</style>" bodyStart))]
-              (mt endPos
+              (match endPos
                 ((none) (listReverse acc))
                 ((some ep)
-                 (mt (stringSlice html bodyStart ep)
+                 (match (stringSlice html bodyStart ep)
                    ((none) (listReverse acc))
                    ((some b) (extractStyleBodies html (+ ep 8) (cons b acc)))))))))))))
 
@@ -212,7 +212,7 @@ fn checkStyleBlock path: String style: String -> Bool
       true))
 
 fn testHtmlStyleBodies! path: String -> Bool
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e) (do (assert false (str "failed to read html file " path ": " e)) false))
     ((ok html)
      (let [(styles (extractStyleBodies html 0 (list)))]
@@ -237,7 +237,7 @@ fn testAllHtmlStyles! -> Bool
                 files)))))
 
 fn testIndexCss! -> Bool
-  (mt (fileReadBytes "asl/packages/asl-syntax/tests/fixtures/css/tailwindIndex.css.sample")
+  (match (fileReadBytes "asl/packages/asl-syntax/tests/fixtures/css/tailwindIndex.css.sample")
     ((err e) (do (assert false (str "failed to read index.css: " e)) false))
     ((ok bs)
      (let [(len (bytesLength bs))
@@ -260,7 +260,7 @@ fn testAllTrackedCss! -> Bool
         (do
           (assert (> (listLength files) 0) "found tracked css files")
           (fold (fn [(prev Bool) (file String)] -> Bool
-                  (mt (fileReadBytes file)
+                  (match (fileReadBytes file)
                     ((err e) (do (assert false (str "failed to read css file " file ": " e)) false))
                     ((ok bs)
                      (let [(len (bytesLength bs))
@@ -308,7 +308,7 @@ fn appendList xs: (List String) ys: (List String) -> (List String)
   (appendRev (listReverse xs) ys)
 
 fn flattenExpectedItem item: j/Json -> (List String)
-  (mt item
+  (match item
     ((j/jstr s)
      (cond
        ((= s " ") (list "whitespace"))
@@ -331,7 +331,7 @@ fn flattenExpectedItem item: j/Json -> (List String)
      (if (listEmpty? xs)
        (list)
        (let [(firstVal (optionOr (listHead xs) (j/jstr "")))
-             (tag (mt firstVal ((j/jstr t) t) (_ "")))]
+             (tag (match firstVal ((j/jstr t) t) (_ "")))]
          (cond
            ((= tag "{}")
             (let [(inner (flattenExpectedList (optionOr (listTail xs) (list))))]
@@ -349,7 +349,7 @@ fn flattenExpectedItem item: j/Json -> (List String)
               (cons "function" (appendList inner (list "rparen")))))
            ((= tag "error")
             (let [(errNameVal (optionOr (listGet xs 1) (j/jstr "")))
-                  (errName (mt errNameVal ((j/jstr e) e) (_ "")))]
+                  (errName (match errNameVal ((j/jstr e) e) (_ "")))]
               (cond
                 ((= errName "bad-string") (list "bad-string"))
                 ((= errName "bad-url") (list "bad-url"))
@@ -427,7 +427,7 @@ fn checkUpstreamRoundTrip items: (List j/Json) idx: Int64 maxIdx: Int64 -> Bool
   (if (>= idx maxIdx)
     true
     (let [(inVal (optionOr (listGet items idx) (j/jstr "")))
-          (inputStr (mt inVal ((j/jstr s) s) (_ "")))
+          (inputStr (match inVal ((j/jstr s) s) (_ "")))
           (tokens (lex/tokenizeText inputStr))
           (len (stringLength inputStr))
           (tree (lex/tokenizeToTree inputStr))]
@@ -452,9 +452,9 @@ fn checkUpstreamComponentValues! items: (List j/Json) caseIdx: Int64 totalCases:
     (if (isCaseExcluded caseIdx)
       (checkUpstreamComponentValues! items (+ caseIdx 1) totalCases passCount (+ excludedCount 1))
       (let [(inVal (optionOr (listGet items (* caseIdx 2)) (j/jstr "")))
-            (inputStr (mt inVal ((j/jstr s) s) (_ "")))
+            (inputStr (match inVal ((j/jstr s) s) (_ "")))
             (outVal (optionOr (listGet items (+ (* caseIdx 2) 1)) (j/jarr (list))))
-            (expectedList (mt outVal ((j/jarr xs) xs) (_ (list))))
+            (expectedList (match outVal ((j/jarr xs) xs) (_ (list))))
             (tokens (filterCommentTokens (lex/tokenizeText inputStr) (list)))
             (expectedKinds (flattenExpectedList expectedList))
             (kindsMatch (compareKinds tokens expectedKinds 0))]
@@ -490,7 +490,7 @@ fn testUpstreamSuite! -> Bool
       (let [(jsonStr (resultOr contentRes ""))
             (parseRes (j/jsonParse jsonStr))]
         (assert (ok? parseRes) "fixture parses as JSON")
-        (mt (resultOr parseRes (j/jnull))
+        (match (resultOr parseRes (j/jnull))
           ((j/jarr items)
            (do
              (assert (= (listLength items) 100) "100 items in component_value_list.json")

@@ -16,7 +16,7 @@ fn singleton? name: String -> Bool
 fn constantKey ins: ty/SsaInstr -> (Option String)
   (if (!= (ty/ssaTyName ins.ty) "val")
     (none)
-    (mt ins.op
+    (match ins.op
       ((ty/opConstruct t v fields) (if (listEmpty? fields) (some (str "c " t " " v)) (none)))
       ((ty/opMakeClosure callee caps) (if (listEmpty? caps) (some (str "k " callee)) (none)))
       (_ (none))))
@@ -28,7 +28,7 @@ fn globalName prefix: String i: Int64 -> String
   (str (initName prefix i) "$g")
 
 fn noteInstr acc: Hoisted ins: ty/SsaInstr -> Hoisted
-  (mt (constantKey ins)
+  (match (constantKey ins)
     ((none) acc)
     ((some k) (if (mapHas? acc.keys k)
                 acc
@@ -40,9 +40,9 @@ fn collect fs: (List ty/SsaFunction) -> Hoisted
         (Hoisted :keys (mapEmpty) :ops (list) :count 0) fs)
 
 fn rewriteInstr prefix: String keys: (Map String Int64) ins: ty/SsaInstr -> ty/SsaInstr
-  (mt (constantKey ins)
+  (match (constantKey ins)
     ((none) ins)
-    ((some k) (mt (mapGet keys k)
+    ((some k) (match (mapGet keys k)
                 ((none) ins)
                 ((some i) (ty/ssaInstr ins.dest ins.ty (ty/opGlobal (globalName prefix i)))))))
 

@@ -54,7 +54,7 @@ fn hasNewlineElements elems: (List tr/TreeElement) text: String -> Bool
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (if (= (tr/tokenKind tok) "newline")
            true
@@ -179,7 +179,7 @@ fn findChildNodes elems: (List tr/TreeElement) -> (List tr/Node)
     (list)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemNode n) (cons n (findChildNodes tl)))
         ((tr/elemToken _) (findChildNodes tl)))))
 fn findChildTokens elems: (List tr/TreeElement) -> (List tr/Token)
@@ -187,7 +187,7 @@ fn findChildTokens elems: (List tr/TreeElement) -> (List tr/Token)
     (list)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok) (cons tok (findChildTokens tl)))
         ((tr/elemNode _) (findChildTokens tl)))))
 fn findNonTriviaTokens elems: (List tr/TreeElement) -> (List tr/Token)
@@ -195,7 +195,7 @@ fn findNonTriviaTokens elems: (List tr/TreeElement) -> (List tr/Token)
     (list)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (if (isTriviaTok tok)
            (findNonTriviaTokens tl)
@@ -234,7 +234,7 @@ fn parseBlock toks: (List tr/Token) text: String -> tr/ParseResult
               (lastElem (optionOr (listLast elems) (tr/elemToken hd)))
               (endOffset (tr/elementEnd lastElem))
               (hasErr (listAny? (fn [(e tr/TreeElement)] -> Bool
-                                  (mt e
+                                  (match e
                                     ((tr/elemToken t) (= (tr/tokenKind t) "error"))
                                     ((tr/elemNode n) (= (tr/nodeKind n) "error"))))
                                 elems))
@@ -258,7 +258,7 @@ fn refineAssignToPattern node: tr/Node text: String -> (Result tr/Node String)
       (err "missing left hand side of assignment")
       (let [(left (optionOr (listHead childNodes) (tr/makeErrorNode 0 0 (list))))
             (refL (refineNodeToPattern left text))]
-        (mt refL
+        (match refL
           ((ok patLeft)
            (ok (tr/makeNode "assignmentPattern" (tr/nodeStart node) (tr/nodeEnd node) kids)))
           ((err e) (err e))))))
@@ -267,7 +267,7 @@ fn replaceNodeElement elems: (List tr/TreeElement) oldNode: tr/Node newNode: tr/
     (list)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken _)
          (cons hd (replaceNodeElement tl oldNode newNode)))
         ((tr/elemNode n)
@@ -281,7 +281,7 @@ fn refinePropertyToPattern node: tr/Node text: String -> (Result tr/Node String)
       (ok node)
       (let [(valNode (optionOr (listLast childNodes) (tr/makeErrorNode 0 0 (list))))
             (refVal (refineNodeToPattern valNode text))]
-        (mt refVal
+        (match refVal
           ((ok patVal)
            (let [(newKids (replaceNodeElement kids valNode patVal))]
              (ok (tr/makeNode "property" (tr/nodeStart node) (tr/nodeEnd node) newKids))))
@@ -313,11 +313,11 @@ fn refineNodeToPattern node: tr/Node text: String -> (Result tr/Node String)
       (else
        (err (str "invalid pattern element: " k)))))
 fn refineElementToPattern elem: tr/TreeElement text: String -> (Result tr/TreeElement String)
-  (mt elem
+  (match elem
     ((tr/elemToken tok)
      (ok (tr/elemToken tok)))
     ((tr/elemNode node)
-     (mt (refineNodeToPattern node text)
+     (match (refineNodeToPattern node text)
        ((ok patNode) (ok (tr/elemNode patNode)))
        ((err e) (err e)))))
 fn hasSubsequentNodeElements rem: (List tr/TreeElement) -> Bool
@@ -325,7 +325,7 @@ fn hasSubsequentNodeElements rem: (List tr/TreeElement) -> Bool
     false
     (let [(hd (optionOr (listHead rem) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail rem) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemNode _) true)
         ((tr/elemToken _) (hasSubsequentNodeElements tl)))))
 
@@ -335,7 +335,7 @@ fn isRestNode node: tr/Node -> Bool
         (= k "restProperty")))
 
 fn isRestElement elem: tr/TreeElement -> Bool
-  (mt elem
+  (match elem
     ((tr/elemNode n) (isRestNode n))
     ((tr/elemToken _) false))
 fn refineElementsList elems: (List tr/TreeElement) text: String acc: (List tr/TreeElement) -> (Result (List tr/TreeElement) String)
@@ -343,7 +343,7 @@ fn refineElementsList elems: (List tr/TreeElement) text: String acc: (List tr/Tr
     (ok (listReverse acc))
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt (refineElementToPattern hd text)
+      (match (refineElementToPattern hd text)
         ((ok patElem)
          (if (and (isRestElement patElem) (hasSubsequentNodeElements tl))
            (err "rest element must be in trailing position")
@@ -352,14 +352,14 @@ fn refineElementsList elems: (List tr/TreeElement) text: String acc: (List tr/Tr
          (err e)))))
 fn refineArrayToPattern node: tr/Node text: String -> (Result tr/Node String)
   (let [(kids (tr/nodeChildren node))]
-    (mt (refineElementsList kids text (list))
+    (match (refineElementsList kids text (list))
       ((ok newKids)
        (ok (tr/makeNode "arrayPattern" (tr/nodeStart node) (tr/nodeEnd node) newKids)))
       ((err e)
        (err e))))
 fn refineObjectToPattern node: tr/Node text: String -> (Result tr/Node String)
   (let [(kids (tr/nodeChildren node))]
-    (mt (refineElementsList kids text (list))
+    (match (refineElementsList kids text (list))
       ((ok newKids)
        (ok (tr/makeNode "objectPattern" (tr/nodeStart node) (tr/nodeEnd node) newKids)))
       ((err e)
@@ -985,7 +985,7 @@ fn parseParenOrArrow lparenTok: tr/Token tl: (List tr/Token) text: String isAsyn
                 (bodyRes (parseArrowBody (pairSecond spBody) text isAsync false bodyParser))
                 (bodyNode bodyRes.node)
                 (refinedElems (refineElementsList allElems text (list)))]
-            (mt refinedElems
+            (match refinedElems
               ((ok okElems)
                (let [(paramsNode (tr/makeNode "parameters" (tr/tokenStart lparenTok) closeEnd okElems))
                      (allKids (cons (tr/elemNode paramsNode)
@@ -1003,7 +1003,7 @@ fn parseParenOrArrow lparenTok: tr/Token tl: (List tr/Token) text: String isAsyn
                      (errNode (tr/makeErrorNode (tr/tokenStart lparenTok) (tr/nodeEnd bodyNode) allKids))]
                  (tr/ParseResult :node errNode :rest bodyRes.rest)))))
           (let [(hasSpread (listAny? (fn [(elem tr/TreeElement)] -> Bool
-                                       (mt elem
+                                       (match elem
                                          ((tr/elemNode n) (= (tr/nodeKind n) "spreadExpr"))
                                          ((tr/elemToken _) false)))
                                      allElems))]
@@ -1372,7 +1372,7 @@ fn parsePrattLoop left: tr/Node toks: (List tr/Token) text: String minPrec: Int6
                (let [(patLeft (if (= k "assign")
                                 (let [(lk (tr/nodeKind left))]
                                   (if (or (= lk "arrayLiteral") (= lk "objectLiteral"))
-                                    (mt (refineToPattern left)
+                                    (match (refineToPattern left)
                                       ((ok pat) pat)
                                       ((err _) (tr/makeErrorNode (tr/nodeStart left) (tr/nodeEnd left) (tr/nodeChildren left))))
                                     left))
@@ -1453,7 +1453,7 @@ fn hasDirectErrorToken elems: (List tr/TreeElement) -> Bool
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (if (= (tr/tokenKind tok) "error")
            true
@@ -1465,7 +1465,7 @@ fn firstErrorOffset elems: (List tr/TreeElement) -> (Option Int64)
     (none)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (if (= (tr/tokenKind tok) "error")
            (some (tr/tokenStart tok))
@@ -1475,7 +1475,7 @@ fn firstErrorOffset elems: (List tr/TreeElement) -> (Option Int64)
            (some (tr/nodeStart node))
            (if (hasDirectErrorToken (tr/nodeChildren node))
              (some (tr/nodeStart node))
-             (mt (firstErrorOffset (tr/nodeChildren node))
+             (match (firstErrorOffset (tr/nodeChildren node))
                ((some off) (some off))
                ((none) (firstErrorOffset tl)))))))))
 fn firstTrailingOffset elems: (List tr/TreeElement) seenExpr: Bool -> (Option Int64)
@@ -1483,7 +1483,7 @@ fn firstTrailingOffset elems: (List tr/TreeElement) seenExpr: Bool -> (Option In
     (none)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemNode node)
          (firstTrailingOffset tl true))
         ((tr/elemToken tok)
@@ -1493,11 +1493,11 @@ fn firstTrailingOffset elems: (List tr/TreeElement) seenExpr: Bool -> (Option In
 fn parseCtx text: String inAsync: Bool inGen: Bool -> (Result tr/Node String)
   (let [(root (parseTextCtx text inAsync inGen))
         (elems (tr/nodeChildren root))]
-    (mt (firstErrorOffset elems)
+    (match (firstErrorOffset elems)
       ((some off)
        (err (str "Parse error at offset " (stringFromInt64 off))))
       ((none)
-       (mt (firstTrailingOffset elems false)
+       (match (firstTrailingOffset elems false)
          ((some off)
           (err (str "Unexpected token at offset " (stringFromInt64 off))))
          ((none)
@@ -1547,7 +1547,7 @@ fn formatParamList elems: (List tr/TreeElement) text: String acc: (List String) 
     (listReverse acc)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (let [(k (tr/tokenKind tok))]
            (if (or (isTriviaTok tok) (or (= k "comma") (or (= k "lparen") (or (= k "rparen") (or (= k "lbracket") (or (= k "rbracket") (or (= k "lbrace") (= k "rbrace"))))))))

@@ -152,7 +152,7 @@ fn languageByShebang line: String -> String
     ""
     (let [(rest (stringTrim (optionOr (stringSlice line 2 (stringLength line)) "")))]
       (let [(words (splitWhitespace rest))]
-        (mt (listHead words)
+        (match (listHead words)
           ((none) "")
           ((some firstWord)
            (let [(interp (if (= (pathBasename firstWord) "env")
@@ -258,7 +258,7 @@ fn languageOf! path: String -> String
         (if (!= lang "")
           lang
           "text"))
-      (mt (fileReadBytes path)
+      (match (fileReadBytes path)
         ((ok bs)
          (let [(magic (languageByMagic bs))]
            (if (!= magic "")
@@ -267,7 +267,7 @@ fn languageOf! path: String -> String
                (if (and (>= len 2)
                         (= (bytesGet bs 0) 35)
                         (= (bytesGet bs 1) 33))
-                 (mt (fileReadString path)
+                 (match (fileReadString path)
                    ((ok content)
                     (let [(firstLine (optionOr (listHead (stringLines content)) ""))]
                       (let [(shLang (languageByShebang firstLine))]

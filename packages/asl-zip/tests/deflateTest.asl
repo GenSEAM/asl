@@ -10,10 +10,10 @@ fn sameBytes? a: Bytes b: Bytes i: Int64 -> Bool
     (else (sameBytes? a b (+ i 1))))
 
 fn ! roundTrip? plain: Bytes level: Int64 -> Bool
-  (mt (df/deflateWithLevel! plain level)
+  (match (df/deflateWithLevel! plain level)
     ((err _) false)
     ((ok encoded)
-      (mt (inf/inflate! encoded)
+      (match (inf/inflate! encoded)
         ((err _) false)
         ((ok decoded) (sameBytes? plain decoded 0)))))
 
@@ -94,16 +94,16 @@ fn ! testDynamicAndFixed! -> Bool
             (compressed (df/deflateWithLevel! text 6))
             (fixed (df/deflateWithLevel! text 1))]
       (assert (and (and (ok? stored) (ok? compressed)) (ok? fixed)) "stored, fixed and dynamic encodings are returned")
-      (mt stored
+      (match stored
         ((err _) (assert false "stored encoding exists"))
         ((ok s)
-          (mt compressed
+          (match compressed
             ((err _) (assert false "dynamic text encoding exists"))
             ((ok c)
               (do
                 (assert (= (lowBits (bytesGet c 0) 3) 5) "dynamic-Huffman block is selected for compressible text")
                 (assert (< (bytesLength c) (bytesLength s)) "dynamic-Huffman text is smaller than stored")
-                (mt fixed
+                (match fixed
                   ((err _) (assert false "fixed encoding exists"))
                   ((ok f) (assert (= (lowBits (bytesGet f 0) 3) 3) "fixed-Huffman block is chosen at fast level")))
                 true))))))
@@ -114,10 +114,10 @@ fn ! testFixedCostSelection! -> Bool
         (random (bytesAlloc 256))]
     (do
       (fillDistinct! random 0)
-      (mt (df/deflateWithLevel! tiny 1)
+      (match (df/deflateWithLevel! tiny 1)
         ((err _) (assert false "fixed-cost tiny encoding exists"))
         ((ok f) (assert (= (lowBits (bytesGet f 0) 3) 3) "fixed block remains selected when cheaper")))
-      (mt (df/deflateWithLevel! random 1)
+      (match (df/deflateWithLevel! random 1)
         ((err _) (assert false "stored-cost random encoding exists"))
         ((ok s)
           (do
@@ -127,7 +127,7 @@ fn ! testFixedCostSelection! -> Bool
 
 fn ! testFixedCostSelectionAtLevelSix! -> Bool
   (let [(tiny (stringToBytes "x"))]
-    (mt (df/deflateWithLevel! tiny 6)
+    (match (df/deflateWithLevel! tiny 6)
       ((err _) (assert false "level-six tiny encoding exists"))
       ((ok encoded)
         (assert (= (lowBits (bytesGet encoded 0) 3) 3)
@@ -140,10 +140,10 @@ fn ! testFrequencyDerivedDynamic! -> Bool
     (do
       (fillSymbol! skewed 0 600 65) (fillSymbol! skewed 600 650 66) (fillSymbol! skewed 650 700 67)
       (fillSymbol! balanced 0 200 65) (fillSymbol! balanced 200 450 66) (fillSymbol! balanced 450 700 67)
-      (mt (df/deflateWithLevel! skewed 6)
+      (match (df/deflateWithLevel! skewed 6)
         ((err _) (assert false "skewed dynamic encoding exists"))
         ((ok a)
-          (mt (df/deflateWithLevel! balanced 6)
+          (match (df/deflateWithLevel! balanced 6)
             ((err _) (assert false "balanced dynamic encoding exists"))
             ((ok b)
               (assert (!= (bytesLength a) (bytesLength b)) "dynamic representation changes with token frequency distribution")))))
@@ -153,7 +153,7 @@ fn ! testDynamicUsesMatches! -> Bool
   (let [(repeat (bytesAlloc 8192))]
     (do
       (fillRepeat! repeat 0 65)
-      (mt (df/deflateWithLevel! repeat 6)
+      (match (df/deflateWithLevel! repeat 6)
         ((err _) (assert false "dynamic repeated input encoding exists"))
         ((ok encoded)
           (do
@@ -168,7 +168,7 @@ fn ! testMaximumWindowMatch! -> Bool
     (do
       (fillXor! input 0 314159265)
       (copyPrefix! input 0 32767)
-      (mt (df/deflateWithLevel! input 6)
+      (match (df/deflateWithLevel! input 6)
         ((err _) (assert false "maximum-window input encodes"))
         ((ok encoded)
           (do

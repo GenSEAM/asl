@@ -9,7 +9,7 @@ fn sh! command: String -> String
       (stringTrim res.stdout)))
 
 fn readText! path: String -> String
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((ok text) text)
     ((err _) ""))
 
@@ -26,7 +26,7 @@ fn testSnapshotSharesCommittedObjects! -> Bool
         (dirtyWrite (fileWrite (str root "/object-1.txt") "dirty tracked content\\n"))
         (seededBlob (sh! (str "cd " root " && git hash-object -w object-1.txt")))
         (dirtyPaths (dirtyPathCount! root))
-        (snapshot (optionOr (mt (sr/makeSnapshot! root) ((ok path) (some path)) ((err _) (none))) ""))]
+        (snapshot (optionOr (match (sr/makeSnapshot! root) ((ok path) (some path)) ((err _) (none))) ""))]
     (do
       (assert (>= before 200) "fixture contains at least 200 loose committed objects")
       (assert (ok? dirtyWrite) "dirty one tracked fixture path")

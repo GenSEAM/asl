@@ -23,7 +23,7 @@ fn unescape s: String -> String
   (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace s "\\\\" "\x01") "\\\"" "\"") "\\n" " ") "\\t" " ") "\x01" "\\")
 
 fn fieldAfter line: String key: String -> (Option String)
-  (mt (stringIndexOf line (str key " \""))
+  (match (stringIndexOf line (str key " \""))
     ((none) (none))
     ((some at)
       (let [(start (+ at (+ (stringLength key) 2)))
@@ -42,18 +42,18 @@ fn compact s: String -> String
 fn retiredModuleOf path: String -> (List String)
   (if (and (stringStartsWith? path "asl/packages/") (stringEndsWith? path ".asl"))
     (let [(rest (optionOr (stringSlice path 13 (- (stringLength path) 4)) ""))]
-      (mt (stringIndexOf rest "/src/")
+      (match (stringIndexOf rest "/src/")
         ((none) (list))
         ((some i) (list (str (optionOr (stringSlice rest 0 i) "") "/" (optionOr (stringSlice rest (+ i 5) (stringLength rest)) ""))))))
     (list))
 
 fn ! retiredNames! root: String -> (List String)
-  (mt (fileReadString (str root "/asl/grammar/retired.asn"))
+  (match (fileReadString (str root "/asl/grammar/retired.asn"))
     ((err _) (list))
     ((ok text)
       (listFlatMap (fn [(line String)] -> (List String)
                      (if (stringContains? line "(:retired ")
-                       (mt (fieldAfter line ":path") ((none) (list)) ((some p) (cons p (retiredModuleOf p))))
+                       (match (fieldAfter line ":path") ((none) (list)) ((some p) (cons p (retiredModuleOf p))))
                        (list)))
                    (stringLines text))))
 
@@ -61,13 +61,13 @@ fn mentionsRetired? text: String retired: (List String) -> Bool
   (listAny? (fn [(n String)] -> Bool (stringContains? text n)) retired)
 
 fn ! docRows! path: String retired: (List String) -> (Map String String)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) (mapEmpty))
     ((ok text)
       (fold (fn [(acc (Map String String)) (line String)] -> (Map String String)
-              (mt (fieldAfter line ":symbol")
+              (match (fieldAfter line ":symbol")
                 ((none) acc)
-                ((some sym) (mt (fieldAfter line ":text")
+                ((some sym) (match (fieldAfter line ":text")
                               ((none) acc)
                               ((some t) (if (mentionsRetired? t retired) acc (mapSet acc sym t)))))))
             (mapEmpty) (stringLines text))))
@@ -76,7 +76,7 @@ fn parenDepth s: String -> Int64
   (- (stringCountChar s "(") (stringCountChar s ")"))
 
 fn headerText lines: (List String) acc: String -> String
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) acc)
     ((some l)
       (let [(next (str acc " " l))]
@@ -88,8 +88,8 @@ fn words s: String -> (List String)
 fn bracketAfter text: String key: String -> String
   (let [(sq (stringIndexOf text (str key " [")))
         (pa (stringIndexOf text (str key " (")))
-        (at (mt sq ((some i) (some (pair i "]"))) ((none) (mt pa ((some j) (some (pair j ")"))) ((none) (none))))))]
-    (mt at
+        (at (match sq ((some i) (some (pair i "]"))) ((none) (match pa ((some j) (some (pair j ")"))) ((none) (none))))))]
+    (match at
       ((none) "")
       ((some p)
         (let [(start (+ (pairFirst p) (+ (stringLength key) 2)))
@@ -110,7 +110,7 @@ fn indented? line: String -> Bool
   (or (stringStartsWith? line " ") (stringStartsWith? line "\t"))
 
 fn blockLines lines: (List String) acc: (List String) -> (List String)
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (listReverse acc))
     ((some l)
       (if (or (indented? l) (stringEmpty? (stringTrim l)))
@@ -136,7 +136,7 @@ fn inlineCtors owner: String text: String -> (List Decl)
        (optionOr (listTail (stringSplit text "(:c ")) (list)))
 
 fn declsAt lines: (List String) acc: (List Decl) -> (List Decl)
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (listReverse acc))
     ((some line)
       (let [(rest (optionOr (listTail lines) (list)))]
@@ -169,10 +169,10 @@ fn moduleOf path: String text: String -> Module
             :decls (fold (fn [(m (Map String Decl)) (d Decl)] -> (Map String Decl) (if (mapHas? m d.name) m (mapSet m d.name d))) (mapEmpty) decls)))
 
 fn ! isDir? path: String -> Bool
-  (mt (fileStat path) ((ok st) st.isDir) ((err _) false))
+  (match (fileStat path) ((ok st) st.isDir) ((err _) false))
 
 fn ! sourceFiles! dir: String -> (List String)
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err _) (list))
     ((ok names)
       (listFlatMap (fn [(n String)] -> (List String)
@@ -188,7 +188,7 @@ fn relTo root: String p: String -> String
 
 fn ! packageOf! root: String retired: (List String) name: String -> (Option Package)
   (let [(dir (str root "/asl/packages/" name))]
-    (mt (fileReadString (str dir "/manifest.asn"))
+    (match (fileReadString (str dir "/manifest.asn"))
       ((err _) (none))
       ((ok manifest)
         (let [(files (sourceFiles! (str dir "/src")))
@@ -201,12 +201,12 @@ fn ! packageOf! root: String retired: (List String) name: String -> (Option Pack
 
 fn ! packagesOf! root: String -> (List Package)
   (let [(retired (retiredNames! root))]
-    (mt (dirList (str root "/asl/packages"))
+    (match (dirList (str root "/asl/packages"))
       ((err _) (list))
-      ((ok names) (listFlatMap (fn [(n String)] -> (List Package) (mt (packageOf! root retired n) ((some p) (list p)) ((none) (list)))) (listSort names)))))
+      ((ok names) (listFlatMap (fn [(n String)] -> (List Package) (match (packageOf! root retired n) ((some p) (list p)) ((none) (list)))) (listSort names)))))
 
 fn checkerType name: String fallback: String -> String
-  (mt (ty/builtinSig name)
+  (match (ty/builtinSig name)
     ((none) fallback)
     ((some sig)
       (let [(params (pairFirst sig)) (variadic (pairFirst (pairSecond sig))) (ret (pairSecond (pairSecond sig)))
@@ -216,14 +216,14 @@ fn checkerType name: String fallback: String -> String
         (str (if (listEmpty? shown) "()" (stringJoin shown " ")) " -> " ret))))
 
 fn absentOf text: String -> (List String)
-  (mt (stringIndexOf text ":absent (")
+  (match (stringIndexOf text ":absent (")
     ((none) (list))
     ((some a)
       (let [(rest (optionOr (stringSlice text a (stringLength text)) ""))]
         (map (fn [(w String)] -> String (stringReplace w "\"" "")) (words (bracketAfter rest ":names"))))))
 
 fn builtinRows lines: (List String) acc: (List Builtin) -> (List Builtin)
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (listReverse acc))
     ((some line)
       (let [(rest (optionOr (listTail lines) (list)))
@@ -243,7 +243,7 @@ fn ! builtinsOf! root: String -> (List Builtin)
   (builtinsFrom (resultOr (fileReadString (str root "/asl/prelude/prelude.asn")) ""))
 
 fn returnType sig: String -> String
-  (mt (stringIndexOf sig " -> ")
+  (match (stringIndexOf sig " -> ")
     ((none) "")
     ((some i) (stringTrim (optionOr (stringSlice sig (+ i 4) (stringLength sig)) ""))))
 

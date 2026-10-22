@@ -13,14 +13,14 @@ fn getMutantKilledCase m: ty/SemanticsMutant -> Str
   m.kills
 
 fn mutantProcessError e: proc/ProcessError -> Str
-  (mt e
+  (match e
     ((proc/notFound bin) (str "sh: " bin ": command not found"))
     ((proc/timeout ms) (str "process timed out after " (stringFromInt64 ms) "ms"))
     ((proc/permissionDenied path) (str "sh: " path ": Permission denied"))
     ((proc/executionFailed code msg) (str "process failed (" (stringFromInt64 code) "): " msg)))
 
 fn ! runArgv! bin: Str args: (List Str) -> proc/ProcessOutput
-  (mt (proc/exec! (proc/cmd bin args))
+  (match (proc/exec! (proc/cmd bin args))
     ((ok output) output)
     ((err e) (proc/ProcessOutput :exitCode 127 :stdout "" :stderr (mutantProcessError e) :durationMs 0)))
 
@@ -28,9 +28,9 @@ fn pyQuoted s: Str -> Str
   (str "\"" (stringReplace (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\n" "\\n") "\"")
 
 fn ! pyCaseSource! casePath: Str -> Str
-  (mt (py/compileEntry! (str casePath "/case.asl"))
+  (match (py/compileEntry! (str casePath "/case.asl"))
     ((ok code) code)
     ((err ds) (str "import sys\nsys.exit(" (pyQuoted (py/diagText ds)) ")\n")))
 
 fn runIsolatedMutantTrial! m: ty/SemanticsMutant casePath: Str -> ty/ConformanceResult
-  (let [(mid m.id) (target m.target) (wsDir (str "tmp/conform/mutants/" mid)) (_ (runArgv! "mkdir" (list "-p" wsDir))) (expectOutPath (str casePath "/expect.stdout")) (expOut (stringTrim (mt (fileReadString expectOutPath) ((ok s) s) ((err _) ""))))] (if (= target "asl-target-c") (let [(caseId (stringReplace casePath "tests/conformance/xplat/" "")) (baseCCode (c11/emitC11StandaloneCase caseId)) (mutCCode (applyMutant m baseCCode)) (cPath (str wsDir "/run.c")) (binPath (str wsDir "/run")) (_w (fileWrite cPath mutCCode)) (compRes (runArgv! "clang" (list "-std=c11" "-Wall" "-Werror" "-fsanitize=undefined,address" "-fno-sanitize-recover=all" "-ffp-contract=off" cPath "-o" binPath)))] (if (!= compRes.exitCode 0) (ty/makeResult (str "mutant:" mid) target true compRes.stderr compRes.exitCode (str "Mutant '" mid "' killed at compilation stage under Address/Undefined Sanitizer flags")) (let [(runRes (runArgv! binPath (list))) (mutStdout (stringTrim runRes.stdout)) (runExit runRes.exitCode) (killed (or (!= runExit 0) (verifyMutantKilled m mutStdout expOut)))] (ty/makeResult (str "mutant:" mid) target killed mutStdout runExit (if killed (str "Mutant '" mid "' successfully killed under C11 runtime sanitizer trap or output divergence") (str "Mutant '" mid "' survived: output matched expected")))))) (let [(caseId (stringReplace casePath "tests/conformance/xplat/" "")) (basePy (pyCaseSource! casePath)) (mutatedPy (applyMutant m basePy)) (pyPath (str wsDir "/run.py")) (_wp (fileWrite pyPath mutatedPy)) (res (runArgv! "python3" (list pyPath))) (mutStdout (stringTrim res.stdout)) (killed (verifyMutantKilled m mutStdout expOut))] (ty/makeResult (str "mutant:" mid) target killed mutStdout res.exitCode (if killed (str "Mutant '" mid "' successfully killed in isolated workspace: output diverged") (str "Mutant '" mid "' survived: output matched expected"))))))
+  (let [(mid m.id) (target m.target) (wsDir (str "tmp/conform/mutants/" mid)) (_ (runArgv! "mkdir" (list "-p" wsDir))) (expectOutPath (str casePath "/expect.stdout")) (expOut (stringTrim (match (fileReadString expectOutPath) ((ok s) s) ((err _) ""))))] (if (= target "asl-target-c") (let [(caseId (stringReplace casePath "tests/conformance/xplat/" "")) (baseCCode (c11/emitC11StandaloneCase caseId)) (mutCCode (applyMutant m baseCCode)) (cPath (str wsDir "/run.c")) (binPath (str wsDir "/run")) (_w (fileWrite cPath mutCCode)) (compRes (runArgv! "clang" (list "-std=c11" "-Wall" "-Werror" "-fsanitize=undefined,address" "-fno-sanitize-recover=all" "-ffp-contract=off" cPath "-o" binPath)))] (if (!= compRes.exitCode 0) (ty/makeResult (str "mutant:" mid) target true compRes.stderr compRes.exitCode (str "Mutant '" mid "' killed at compilation stage under Address/Undefined Sanitizer flags")) (let [(runRes (runArgv! binPath (list))) (mutStdout (stringTrim runRes.stdout)) (runExit runRes.exitCode) (killed (or (!= runExit 0) (verifyMutantKilled m mutStdout expOut)))] (ty/makeResult (str "mutant:" mid) target killed mutStdout runExit (if killed (str "Mutant '" mid "' successfully killed under C11 runtime sanitizer trap or output divergence") (str "Mutant '" mid "' survived: output matched expected")))))) (let [(caseId (stringReplace casePath "tests/conformance/xplat/" "")) (basePy (pyCaseSource! casePath)) (mutatedPy (applyMutant m basePy)) (pyPath (str wsDir "/run.py")) (_wp (fileWrite pyPath mutatedPy)) (res (runArgv! "python3" (list pyPath))) (mutStdout (stringTrim res.stdout)) (killed (verifyMutantKilled m mutStdout expOut))] (ty/makeResult (str "mutant:" mid) target killed mutStdout res.exitCode (if killed (str "Mutant '" mid "' successfully killed in isolated workspace: output diverged") (str "Mutant '" mid "' survived: output matched expected"))))))

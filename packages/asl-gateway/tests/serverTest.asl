@@ -59,7 +59,7 @@ fn ! testEffSleepMsDoesNotBlockReactor -> Bool
         (after1 (srv/drive! loop0 42 "" step))
         (elapsedMs (- (/ (monotonicNs) 1000000) before))
         (parked (listHead (filter (fn [(cn srv/GatewayConn)] -> Bool (= cn.fd 42)) after1.conns)))
-        (parkedIsTimer (mt parked ((some cn) (mt cn.phase ((srv/connTimer _ _ _) true) (_ false))) ((none) false)))]
+        (parkedIsTimer (match parked ((some cn) (match cn.phase ((srv/connTimer _ _ _) true) (_ false))) ((none) false)))]
     (do
       (assert (< elapsedMs 500) (str "drive! returns immediately for a 5000 ms effSleepMs (it parks a connTimer instead of sleeping), took " elapsedMs " ms"))
       (assert parkedIsTimer "the connection for fd 42 is parked in connTimer, not resolved or dropped")
@@ -79,16 +79,16 @@ fn ! testEffBucketWaitDoesNotBlockReactor -> Bool
         (after1 (srv/drive! loop0 43 "" step))
         (elapsedMs (- (/ (monotonicNs) 1000000) before))
         (parked (listHead (filter (fn [(cn srv/GatewayConn)] -> Bool (= cn.fd 43)) after1.conns)))
-        (parkedIsBucketWait (mt parked ((some cn) (mt cn.phase ((srv/connBucketWait _ _ _) true) (_ false))) ((none) false)))]
+        (parkedIsBucketWait (match parked ((some cn) (match cn.phase ((srv/connBucketWait _ _ _) true) (_ false))) ((none) false)))]
     (do
       (assert (< elapsedMs 500) (str "drive! returns immediately for an empty token bucket needing a ~5 s wait (it parks a connBucketWait instead of blocking in geminiAcquire!), took " elapsedMs " ms"))
       (assert parkedIsBucketWait "the connection for fd 43 is parked in connBucketWait, not resolved or dropped")
       true))
 
 fn bucketWaitDeadlineOf conns: (List srv/GatewayConn) fd: Int64 -> Int64
-  (mt (listHead (filter (fn [(cn srv/GatewayConn)] -> Bool (= cn.fd fd)) conns))
+  (match (listHead (filter (fn [(cn srv/GatewayConn)] -> Bool (= cn.fd fd)) conns))
     ((none) -1)
-    ((some cn) (mt cn.phase ((srv/connBucketWait d _ _) d) (_ -1))))
+    ((some cn) (match cn.phase ((srv/connBucketWait d _ _) d) (_ -1))))
 
 ; (:m :tags (retry) :do "GW-BUCKET-RESERVE: three requests arriving at the same instant for one empty bucket (0 tokens, 0.2/s refill => 1/rate = 5000 ms) must not all wake at the same deadline (that would let all three through together, over-acquiring past the rate limit); each reservation debits the bucket before the next one reads it, so the three deadlines come out strictly increasing and spaced ~5000 ms apart")
 fn ! testBucketWaitReservationsAreSpaced -> Bool
@@ -188,7 +188,7 @@ fn ! loopForSpread -> srv/GatewayLoop
     :wiringText none :families (list) :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)))
 
 fn stringsOutcome o: ch/ChatOutcome -> (List String)
-  (mt o ((ch/outStrings xs) xs) (_ (list)))
+  (match o ((ch/outStrings xs) xs) (_ (list)))
 
 ; (:m :ref GW-SPREAD-LIVE-20261018 :do "drives 8 real effSpreadOrder calls through the SAME GatewayLoop, threading srv forward exactly as drive! would across 8 separate chat requests, so the SWRR rotation is proven to live in GatewayLoop.spreadState rather than reset per call")
 fn ! pickOverCalls! srv: srv/GatewayLoop n: Int64 acc: (List String) -> (List String)

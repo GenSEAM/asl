@@ -48,7 +48,7 @@ fn escapeAsnString s: String -> String
     s4)
 
 fn nearSnippet text: String s: src/Source line: Int64 col: Int64 -> String
-  (mt (src/sourceLineStart s line)
+  (match (src/sourceLineStart s line)
     ((some start)
      (let [(end (src/sourceLineEnd s line))
            (lineStr (optionOr (stringSlice text start end) ""))
@@ -82,8 +82,8 @@ fn formatReceipt items: (List Item) -> String
 
 fn makeItemAt text: String s: src/Source offset: Int64 expected: String -> Item
   (let [(posOpt (src/sourcePosAt s offset))
-        (line (mt posOpt ((some p) p.line) ((none) 1)))
-        (col (mt posOpt ((some p) p.byteCol) ((none) 1)))
+        (line (match posOpt ((some p) p.line) ((none) 1)))
+        (col (match posOpt ((some p) p.byteCol) ((none) 1)))
         (near (nearSnippet text s line col))]
     (makeItem "llvm" line col expected near))
 
@@ -211,7 +211,7 @@ fn afterFirstGlobal toks: (List tr/Token) text: String -> (Option (Pair String (
         (afterFirstGlobal tl text))))
 
 fn headerShape toks: (List tr/Token) text: String -> (Option (Pair String ParamShape))
-  (mt (afterFirstGlobal toks text)
+  (match (afterFirstGlobal toks text)
     ((none) (none))
     ((some p)
      (some (pair (pairFirst p)
@@ -246,7 +246,7 @@ fn collectModulePrototypes root: tr/Node text: String -> (List (Pair String Para
           (let [(k (tr/nodeKind n))
                 (toks (if (= k "llvmFunction") (cst/functionHeaderTokens n) (tr/nodeLeaves n)))]
             (if (or (= k "llvmFunction") (= k "llvmDeclare"))
-              (mt (headerShape (cst/nonTriviaTokens toks) text)
+              (match (headerShape (cst/nonTriviaTokens toks) text)
                 ((none) acc)
                 ((some p) (cons p acc)))
               acc)))
@@ -254,7 +254,7 @@ fn collectModulePrototypes root: tr/Node text: String -> (List (Pair String Para
         (cst/moduleNodes root))
 
 fn lookupPrototype protos: (List (Pair String ParamShape)) callee: String -> (Option ParamShape)
-  (mt (listHead (filter (fn [(p (Pair String ParamShape))] -> Bool (= (pairFirst p) callee)) protos))
+  (match (listHead (filter (fn [(p (Pair String ParamShape))] -> Bool (= (pairFirst p) callee)) protos))
     ((some p) (some (pairSecond p)))
     ((none) (none)))
 
@@ -318,13 +318,13 @@ fn blockNames blocks: (List tr/Node) text: String entryNumber: Int64 -> (List St
        (range 0 (listLength blocks)))
 
 fn blockSuccessors block: tr/Node names: (List String) text: String -> (List Int64)
-  (mt (listLast (cst/blockInstructions block))
+  (match (listLast (cst/blockInstructions block))
     ((none) (list))
     ((some ins)
      (if (isTerminator (instructionOpcode ins text))
        (fold (fn [(acc (List Int64)) (u Use)] -> (List Int64)
                (if (= u.role "label")
-                 (mt (listIndexOf names (cst/tokenSlice u.tok text))
+                 (match (listIndexOf names (cst/tokenSlice u.tok text))
                    ((some j) (cons j acc))
                    ((none) acc))
                  acc))
@@ -427,7 +427,7 @@ fn checkValueUse ctx: FnCtx bi: Int64 local: (List String) u: Use -> (Option Ite
              ((= di bi) (if (listContains? local nm) (none) (at (str "local %value '" nm "' is used before its definition"))))
              ((or (unreachable? cfg bi) (dominates cfg di bi)) (none))
              (else (at (str "local %value '" nm "' is used where its definition does not dominate"))))
-           (mt (listIndexOf cfg.names u.pred)
+           (match (listIndexOf cfg.names u.pred)
              ((none) (none))
              ((some pi)
               (if (or (unreachable? cfg pi) (dominates cfg di pi))
@@ -437,12 +437,12 @@ fn checkValueUse ctx: FnCtx bi: Int64 local: (List String) u: Use -> (Option Ite
 fn checkCall ctx: FnCtx instr: tr/Node -> (Option Item)
   (let [(text ctx.text)
         (toks (cst/nonTriviaTokens (cst/instructionTokens instr)))]
-    (mt (findCallee (afterCallKeyword toks text) 0)
+    (match (findCallee (afterCallKeyword toks text) 0)
       ((none) (none))
       ((some c)
        (let [(callee (cst/tokenSlice (pairFirst c) text))
              (got (scanParams (pairSecond c) text 0 "" 0 false (ParamShape :names (list) :fixed 0 :vararg false :nextNumber 0)).fixed)]
-         (mt (if (= (tr/tokenKind (pairFirst c)) "global") (lookupPrototype ctx.protos callee) (none))
+         (match (if (= (tr/tokenKind (pairFirst c)) "global") (lookupPrototype ctx.protos callee) (none))
            ((none) (none))
            ((some want)
             (let [(need want.fixed)
@@ -456,7 +456,7 @@ fn ccKeyword? t: String -> Bool
   (listContains? (list "ccc" "fastcc" "coldcc" "tailcc" "swiftcc" "swifttailcc" "ghccc" "cfguard_checkcc" "preserve_mostcc" "preserve_allcc" "cxx_fast_tlscc" "webkit_jscc" "anyregcc") t)
 
 fn callingConv toks: (List tr/Token) text: String -> String
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) "ccc")
     ((some hd) (cond
                  ((= (tr/tokenKind hd) "global") "ccc")
@@ -475,10 +475,10 @@ fn checkMusttail ctx: FnCtx instr: tr/Node next: (Option tr/Node) -> (Option Ite
       (let [(afterCall (afterCallKeyword toks text))
             (cc (callingConv afterCall text))
             (dest (instructionDest instr text))
-            (nextToks (mt next ((some n) (cst/nonTriviaTokens (cst/instructionTokens n))) ((none) (list))))
-            (nextOp (mt next ((some n) (instructionOpcode n text)) ((none) "")))
+            (nextToks (match next ((some n) (cst/nonTriviaTokens (cst/instructionTokens n))) ((none) (list))))
+            (nextOp (match next ((some n) (instructionOpcode n text)) ((none) "")))
             (retValue (cst/tokenSlice (optionOr (listGet nextToks (- (listLength nextToks) 1)) (tr/makeToken "" 0 0)) text))
-            (got (mt (findCallee afterCall 0)
+            (got (match (findCallee afterCall 0)
                    ((some c) (scanParams (pairSecond c) text 0 "" 0 false (ParamShape :names (list) :fixed 0 :vararg false :nextNumber 0)).fixed)
                    ((none) ctx.arity)))]
         (cond
@@ -489,7 +489,7 @@ fn checkMusttail ctx: FnCtx instr: tr/Node next: (Option tr/Node) -> (Option Ite
           (else (none))))))
 
 fn withItem opt: (Option Item) items: (List Item) -> (List Item)
-  (mt opt ((some i) (cons i items)) ((none) items))
+  (match opt ((some i) (cons i items)) ((none) items))
 
 fn validateInstruction ctx: FnCtx bi: Int64 isLast: Bool st: BlockState ins: tr/Node -> BlockState
   (let [(text ctx.text)
@@ -507,7 +507,7 @@ fn validateInstruction ctx: FnCtx bi: Int64 isLast: Bool st: BlockState ins: tr/
                    (cons (makeItemAt text srcObj (tr/nodeStart ins) "expected terminator instruction at end of block") items1))
                   (else items1)))
         (destOpt (instructionDest ins text))
-        (items3 (mt destOpt
+        (items3 (match destOpt
                   ((none) items2)
                   ((some d)
                    (if (listContains? st.seen d)
@@ -524,7 +524,7 @@ fn validateInstruction ctx: FnCtx bi: Int64 isLast: Bool st: BlockState ins: tr/
                       items3
                       (instructionUses ins text isPhi)))
         (items5 (if (or (= op "call") (= op "invoke")) (withItem (checkCall ctx ins) items4) items4))
-        (addDef (fn [(xs (List String))] -> (List String) (mt destOpt ((some d) (cons d xs)) ((none) xs))))]
+        (addDef (fn [(xs (List String))] -> (List String) (match destOpt ((some d) (cons d xs)) ((none) xs))))]
     (BlockState :seenNonPhi (if isPhi st.seenNonPhi true) :local (addDef st.local) :seen (addDef st.seen) :items items5))
 
 fn validateBlock ctx: FnCtx bi: Int64 block: tr/Node seen: (List String) items: (List Item) -> (Pair (List String) (List Item))
@@ -543,7 +543,7 @@ fn validateBlock ctx: FnCtx bi: Int64 block: tr/Node seen: (List String) items: 
 fn collectDefs blocks: (List tr/Node) text: String -> (Pair (List String) (List Int64))
   (let [(res (fold (fn [(acc (Pair (List String) (List Int64))) (i Int64)] -> (Pair (List String) (List Int64))
                      (fold (fn [(a (Pair (List String) (List Int64))) (ins tr/Node)] -> (Pair (List String) (List Int64))
-                             (mt (instructionDest ins text)
+                             (match (instructionDest ins text)
                                ((some d) (if (listContains? (pairFirst a) d) a (pair (cons d (pairFirst a)) (cons i (pairSecond a)))))
                                ((none) a)))
                            acc
@@ -553,7 +553,7 @@ fn collectDefs blocks: (List tr/Node) text: String -> (Pair (List String) (List 
     (pair (listReverse (pairFirst res)) (listReverse (pairSecond res))))
 
 fn validateFunction funcNode: tr/Node text: String srcObj: src/Source protos: (List (Pair String ParamShape)) typeNames: (List String) acc: (List Item) -> (List Item)
-  (let [(shape (mt (headerShape (cst/nonTriviaTokens (cst/functionHeaderTokens funcNode)) text)
+  (let [(shape (match (headerShape (cst/nonTriviaTokens (cst/functionHeaderTokens funcNode)) text)
                  ((some p) (pairSecond p))
                  ((none) (ParamShape :names (list) :fixed 0 :vararg false :nextNumber 0))))
         (blocks (cst/functionBlocks funcNode))

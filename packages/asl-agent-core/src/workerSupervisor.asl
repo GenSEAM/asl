@@ -61,7 +61,7 @@ fn workerSpawn pool: WorkerPool mode: WorkerSandboxMode ownsPaths: (List Str) pi
       wId))
 
 fn workerHeartbeat pool: WorkerPool wId: Str nowMs: I64 memMb: I64 -> WorkerPool
-  (mt (mapGet pool.workers wId)
+  (match (mapGet pool.workers wId)
     ((some rec)
       (let [(updatedRec (WorkerRecord
                           :workerId rec.workerId
@@ -86,7 +86,7 @@ fn workerCheckLimits pool: WorkerPool nowMs: I64 -> (Pair WorkerPool (List Str))
         (slidingLimit cfg.slidingIdleMs)
         (stalledIds
           (fold (fn [(acc (List Str)) (wId Str)] -> (List Str)
-                  (mt (mapGet pool.workers wId)
+                  (match (mapGet pool.workers wId)
                     ((some rec)
                       (if (workerIsStalled? rec slidingLimit nowMs)
                         (listAppend acc (list wId))
@@ -96,7 +96,7 @@ fn workerCheckLimits pool: WorkerPool nowMs: I64 -> (Pair WorkerPool (List Str))
                 (mapKeys pool.workers)))
         (updatedWorkers
           (fold (fn [(acc (Map Str WorkerRecord)) (sId Str)] -> (Map Str WorkerRecord)
-                  (mt (mapGet acc sId)
+                  (match (mapGet acc sId)
                     ((some rec)
                       (mapSet acc sId
                                (WorkerRecord

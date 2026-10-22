@@ -117,7 +117,7 @@ fn scanStatementTokensLoop toks: (List tr/Token) text: String parenDepth: Int64 
          (pair (listReverse (cons hd acc)) tl))
         ((and (and (= parenDepth 0) (= bracketDepth 0)) (and (= braceDepth 1) (= k "rbrace")))
          (let [(nextOpt (nextNonTriviaTok tl))
-               (nextSlice (mt nextOpt ((some nt) (tokenSlice nt text)) ((none) "")))]
+               (nextSlice (match nextOpt ((some nt) (tokenSlice nt text)) ((none) "")))]
            (if (or (and (= newStartKw "if") (= nextSlice "else"))
                (or (and (= newStartKw "try") (or (= nextSlice "catch") (= nextSlice "finally")))
                (or (and (= newStartKw "do") (= nextSlice "while"))
@@ -126,7 +126,7 @@ fn scanStatementTokensLoop toks: (List tr/Token) text: String parenDepth: Int64 
              (pair (listReverse (cons hd acc)) tl))))
         ((and (and atZero (not (listEmpty? acc))) (= k "newline"))
          (let [(nextOpt (nextNonTriviaTok tl))]
-           (mt nextOpt
+           (match nextOpt
              ((none)
               (pair (listReverse (cons hd acc)) tl))
              ((some nt)
@@ -169,7 +169,7 @@ fn hasParamAfterRest elems: (List tr/TreeElement) foundRest: Bool -> Bool
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (let [(k tok.kind)]
            (if (or (isTriviaTok tok) (or (= k "lparen") (= k "rparen")))
@@ -201,7 +201,7 @@ fn checkAnyParamAfterRestElems elems: (List tr/TreeElement) -> Bool
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken _) (checkAnyParamAfterRestElems tl))
         ((tr/elemNode n)
          (if (checkAnyParamAfterRest n)
@@ -212,7 +212,7 @@ fn hasSemiInFieldKids kids: (List tr/TreeElement) -> Bool
   (if (listEmpty? kids)
     false
     (let [(hd (optionOr (listLast kids) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok) (= tok.kind "semicolon"))
         ((tr/elemNode _) false))))
 
@@ -221,7 +221,7 @@ fn checkClassBodyASI elements: (List tr/TreeElement) text: String inMember: Bool
     false
     (let [(hd (optionOr (listHead elements) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tl (optionOr (listTail elements) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (let [(k tok.kind)]
            (if (= k "newline")
@@ -254,7 +254,7 @@ fn checkClassAsiEarlyErrorElems elems: (List tr/TreeElement) text: String -> Boo
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken _) (checkClassAsiEarlyErrorElems tl text))
         ((tr/elemNode n)
          (if (checkClassAsiEarlyError n text)
@@ -300,7 +300,7 @@ fn checkDeclaratorReservedWord node: tr/Node text: String -> Bool
       (if (listEmpty? kids)
         false
         (let [(firstElem (optionOr (listHead kids) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))]
-          (mt firstElem
+          (match firstElem
             ((tr/elemToken tok)
              (isReservedWord (tokenSlice tok text)))
             ((tr/elemNode _) false)))))
@@ -316,7 +316,7 @@ fn checkReservedWordsElems elems: (List tr/TreeElement) text: String -> Bool
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken _) (checkReservedWordsElems tl text))
         ((tr/elemNode n)
          (if (checkReservedWords n text)
@@ -347,7 +347,7 @@ fn hasInInKids kids: (List tr/TreeElement) text: String -> Bool
     false
     (let [(hd (optionOr (listHead kids) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tl (optionOr (listTail kids) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (if (= (tokenSlice tok text) "in")
            true
@@ -367,7 +367,7 @@ fn checkYieldInForInElems elems: (List tr/TreeElement) text: String -> Bool
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken _) (checkYieldInForInElems tl text))
         ((tr/elemNode n)
          (if (checkYieldInForIn n text)
@@ -399,11 +399,11 @@ fn parseStatementsWithRecovery toks: (List tr/Token) text: String inAsync: Bool 
             (firstSlice (tokenSlice firstTok text))
             (stmtRes (cond
                        ((and isMod (= firstSlice "import"))
-                        (mt (mod/parseImportDecl rem text)
+                        (match (mod/parseImportDecl rem text)
                           ((ok pr) pr)
                           ((err _) (stmt/parseStatement rem text inAsync inGen))))
                        ((and isMod (= firstSlice "export"))
-                        (mt (mod/parseExportDecl rem text)
+                        (match (mod/parseExportDecl rem text)
                           ((ok pr) pr)
                           ((err _) (stmt/parseStatement rem text inAsync inGen))))
                        (else
@@ -449,16 +449,16 @@ fn parseWithRecovery text: String -> tr/Node
 
 fn checkScript text: String -> (Result tr/Node String)
   (let [(toks (lx/tokenize text))]
-    (mt (hasLexError toks)
+    (match (hasLexError toks)
       ((some errTok)
        (err (str "Lexical syntax error at offset " (stringFromInt64 errTok.start))))
       ((none)
        (if (hasHashbangError toks text)
          (err "Hashbang comment only allowed at start of file")
-         (mt (stmt/parseScript text)
+         (match (stmt/parseScript text)
            ((err msg) (err msg))
            ((ok root)
-            (mt (checkEarlyErrors root text)
+            (match (checkEarlyErrors root text)
               ((some earlyMsg) (err earlyMsg))
               ((none)
                (if (sym/hasErrorNode root)
@@ -467,16 +467,16 @@ fn checkScript text: String -> (Result tr/Node String)
 
 fn checkModule text: String -> (Result tr/Node String)
   (let [(toks (lx/tokenize text))]
-    (mt (hasLexError toks)
+    (match (hasLexError toks)
       ((some errTok)
        (err (str "Lexical syntax error at offset " (stringFromInt64 errTok.start))))
       ((none)
        (if (hasHashbangError toks text)
          (err "Hashbang comment only allowed at start of file")
-         (mt (mod/parseModule text)
+         (match (mod/parseModule text)
            ((err msg) (err msg))
            ((ok root)
-            (mt (checkEarlyErrors root text)
+            (match (checkEarlyErrors root text)
               ((some earlyMsg) (err earlyMsg))
               ((none)
                (if (sym/hasErrorNode root)
@@ -486,7 +486,7 @@ fn checkModule text: String -> (Result tr/Node String)
 fn check text: String -> (Result tr/Node String)
   (if (isModuleText text)
     (checkModule text)
-    (mt (checkScript text)
+    (match (checkScript text)
       ((ok root) (ok root))
       ((err scriptErr)
        (if (or (stringContains? text "import") (stringContains? text "export"))
@@ -494,7 +494,7 @@ fn check text: String -> (Result tr/Node String)
          (err scriptErr)))))
 
 fn checkVerdict text: String -> CheckVerdict
-  (mt (check text)
+  (match (check text)
     ((ok root)
      (CheckVerdict :ok true :message "OK" :errorOffset (none) :root (some root)))
     ((err msg)

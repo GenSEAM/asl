@@ -14,37 +14,37 @@ fn diagnosticSource -> String
   "(module demo/diagnostic)\n(fn tailrec bad [] -> Int64 (return 1))"
 
 fn hasFunctionName? forms: (List ast/TopForm) -> Bool
-  (mt (listGet forms 1)
+  (match (listGet forms 1)
     ((some form)
-      (mt form
+      (match form
         ((topDefun f) (= f.name "f"))
         (_ false)))
     ((none) false))
 
 fn parsedAsOrdinaryFunction? -> Bool
-  (mt (ast/parse (source))
+  (match (ast/parse (source))
     ((ok forms) (hasFunctionName? forms))
     ((err _) false))
 
 fn parsedModifierIsFlagged? -> Bool
-  (mt (ast/readForms (lx/tokenize (source)))
+  (match (ast/readForms (lx/tokenize (source)))
     ((ok forms)
-      (mt (listGet forms 1)
+      (match (listGet forms 1)
         ((some positioned)
-          (mt (listGet (ast/sexprItems positioned.expr) 1)
+          (match (listGet (ast/sexprItems positioned.expr) 1)
             ((some modifier) (ast/hasTailrec? (some modifier)))
             ((none) false)))
         ((none) false)))
     ((err _) false))
 
 fn lowersAsOrdinaryFunction? -> Bool
-  (mt (low/lowerSource (source))
+  (match (low/lowerSource (source))
     ((ok ir)
       (stringContains? (prn/printSsa ir) "(fn f "))
     ((err _) false))
 
 fn modifierPreservesDiagnosticName? -> Bool
-  (mt (low/lowerSource (diagnosticSource))
+  (match (low/lowerSource (diagnosticSource))
     ((ok _) false)
     ((err ds)
       (= (optionOr (listHead ds) (ty/makeIrDiag "" "" "")).locus "bad@2:1")))

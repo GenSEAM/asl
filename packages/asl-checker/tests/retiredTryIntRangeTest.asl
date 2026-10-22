@@ -3,7 +3,7 @@
   :i [(asl-parser/ast :a a) (asl-checker/check :a c) (asl-checker/types :a ty)])
 
 fn diagsOf src: String -> (List ty/Diagnostic)
-  (mt (a/parseForTypeCheck src)
+  (match (a/parseForTypeCheck src)
     ((ok forms) (c/checkModuleSource forms (mapEmpty) "probe.asl" src))
     ((err _) (list)))
 

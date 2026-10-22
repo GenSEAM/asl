@@ -15,7 +15,7 @@ fn parseTimestamps text: String -> (List Int64)
             (let [(trimmed (stringTrim line))]
               (if (stringEmpty? trimmed)
                 acc
-                (mt (stringToInt64 trimmed)
+                (match (stringToInt64 trimmed)
                   ((some ts) (cons ts acc))
                   ((none) acc)))))
           (list)

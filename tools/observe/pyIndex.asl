@@ -51,10 +51,10 @@ fn defKey m: String q: String -> String
   (str m "\x01" q)
 
 fn keyMod k: String -> String
-  (mt (stringIndexOf k "\x01") ((some i) (optionOr (stringSlice k 0 i) "")) ((none) k))
+  (match (stringIndexOf k "\x01") ((some i) (optionOr (stringSlice k 0 i) "")) ((none) k))
 
 fn keyQual k: String -> String
-  (mt (stringIndexOf k "\x01") ((some i) (optionOr (stringSlice k (+ i 1) (stringLength k)) "")) ((none) ""))
+  (match (stringIndexOf k "\x01") ((some i) (optionOr (stringSlice k (+ i 1) (stringLength k)) "")) ((none) ""))
 
 fn lastDotIn s: String i: Int64 -> Int64
   (cond ((< i 0) -1) ((= (optionOr (stringSlice s i (+ i 1)) "") ".") i) (else (lastDotIn s (- i 1))))
@@ -75,7 +75,7 @@ fn defOf ix: Ix key: String -> (Option PyDef)
   (h/omGet ix.defs key)
 
 fn defKind ix: Ix key: String -> String
-  (mt (defOf ix key) ((some dd) dd.kind) ((none) ""))
+  (match (defOf ix key) ((some dd) dd.kind) ((none) ""))
 
 fn nameOf n: d/PyNode -> String
   (optionOr (d/sfield n "name") "")
@@ -96,7 +96,7 @@ fn stmtTypes -> (List String)
 
 fn pyPrefix s: String n: Int64 -> String
   (let [(cs (c/charCodes s))]
-    (if (<= (listLength cs) n) s (mt (listGet cs n) ((some p) (optionOr (stringSlice s 0 (pairSecond p)) s)) ((none) s))))
+    (if (<= (listLength cs) n) s (match (listGet cs n) ((some p) (optionOr (stringSlice s 0 (pairSecond p)) s)) ((none) s))))
 
 fn pyLen s: String -> Int64
   (listLength (c/charCodes s))
@@ -126,7 +126,7 @@ fn importBindings pkg: String st: d/PyNode -> (List (Pair String Binding))
   (cond
     ((d/isType? st "Import")
       (map (fn [(al d/PyNode)] -> (Pair String Binding)
-             (mt (d/sfield al "asname")
+             (match (d/sfield al "asname")
                ((some a) (pair a (bMod (aliasName al) "alias")))
                ((none) (let [(head (optionOr (listHead (stringSplit (aliasName al) ".")) ""))] (pair head (bMod head "direct"))))))
            (d/kids st "names")))
@@ -138,13 +138,13 @@ fn importBindings pkg: String st: d/PyNode -> (List (Pair String Binding))
         (if (and (> level 0) (> up (listLength parts)))
           (list)
           (let [(base (if (> level 0)
-                        (c/joinWith (listAppend (listTake parts (- (listLength parts) up)) (mt module ((some m) (list m)) ((none) (list)))) ".")
+                        (c/joinWith (listAppend (listTake parts (- (listLength parts) up)) (match module ((some m) (list m)) ((none) (list)))) ".")
                         (optionOr module "")))]
             (map (fn [(al d/PyNode)] -> (Pair String Binding)
                    (let [(nm (aliasName al)) (asn (d/sfield al "asname"))]
                      (if (= nm "*")
                        (pair "*" (bStar base))
-                       (pair (optionOr asn nm) (bSym base nm (mt asn ((some a) (if (!= a nm) "alias" "direct")) ((none) "direct")))))))
+                       (pair (optionOr asn nm) (bSym base nm (match asn ((some a) (if (!= a nm) "alias" "direct")) ((none) "direct")))))))
                  (d/kids st "names"))))))
     (else (list)))
 
@@ -160,7 +160,7 @@ fn mcDefs st: MC defs: (h/OMap PyDef) top: (h/HMap String) own: (h/HMap (Option 
 fn addDef st: MC b: Base qual: String node: d/PyNode kind: String cls: (Option String) topName: (Option String) -> MC
   (let [(dd (PyDef :key (defKey b.name qual) :modName b.name :rel b.rel :qual qual :name (lastSeg qual) :kind kind :node node
                    :cls cls :line node.line :end (endOf node)))]
-    (mcDefs st (h/omPut st.defs dd.key dd) (mt topName ((some t) (h/hmPut st.top t qual)) ((none) st.top))
+    (mcDefs st (h/omPut st.defs dd.key dd) (match topName ((some t) (h/hmPut st.top t qual)) ((none) st.top))
             (h/hmPut st.own dd.key (if (= kind "lambda") (none) (some node)))))
 
 fn lineRange a: Int64 b: Int64 acc: (h/HMap Bool) -> (h/HMap Bool)
@@ -170,14 +170,14 @@ fn importInto st: MC b: Base node: d/PyNode topLevel: Bool -> MC
   (let [(lines (lineRange node.line (endOf node) st.importLines))
         (pairs (if topLevel (importBindings b.pkg node) (list)))
         (binds (fold (fn [(acc (h/HMap Binding)) (p (Pair String Binding))] -> (h/HMap Binding) (if (= (pairFirst p) "*") acc (h/hmPut acc (pairFirst p) (pairSecond p)))) st.bindings pairs))
-        (stars (fold (fn [(acc (List String)) (p (Pair String Binding))] -> (List String) (mt (pairSecond p) ((bStar base) (cons base acc)) (_ acc))) st.stars pairs))]
+        (stars (fold (fn [(acc (List String)) (p (Pair String Binding))] -> (List String) (match (pairSecond p) ((bStar base) (cons base acc)) (_ acc))) st.stars pairs))]
     (with st :bindings binds :stars stars :importLines lines))
 
 fn assignInto st: MC b: Base node: d/PyNode -> MC
-  (let [(targets (if (d/isType? node "Assign") (d/kids node "targets") (mt (d/kid node "target") ((some t) (list t)) ((none) (list)))))
+  (let [(targets (if (d/isType? node "Assign") (d/kids node "targets") (match (d/kid node "target") ((some t) (list t)) ((none) (list)))))
         (value (d/kid node "value"))]
     (fold (fn [(acc MC) (t d/PyNode)] -> MC
-            (mt value
+            (match value
               ((none) acc)
               ((some v)
                 (if (not (d/isType? t "Name"))
@@ -189,7 +189,7 @@ fn assignInto st: MC b: Base node: d/PyNode -> MC
           st targets))
 
 fn stmtList? xs: (List d/PyNode) -> Bool
-  (mt (listHead xs) ((some x) (listContains? (stmtTypes) x.type)) ((none) false))
+  (match (listHead xs) ((some x) (listContains? (stmtTypes) x.type)) ((none) false))
 
 fn collect b: Base body: (List d/PyNode) prefix: String cls: (Option String) inFunc: Bool st: MC -> MC
   (fold (fn [(acc MC) (node d/PyNode)] -> MC (collectStmt b node prefix cls inFunc acc)) st body)
@@ -217,43 +217,43 @@ fn collectStmt b: Base node: d/PyNode prefix: String cls: (Option String) inFunc
           (fold (fn [(acc MC) (hd d/PyNode)] -> MC (collect b (d/kids hd "body") prefix cls inFunc acc)) st2 (d/kids node "handlers"))))))
 
 fn docLine n: d/PyNode -> (Option Int64)
-  (mt (listHead (d/kids n "body"))
-    ((some b0) (if (and (d/isType? b0 "Expr") (mt (d/kid b0 "value") ((some v) (some? (d/constStr v))) ((none) false))) (some b0.line) (none)))
+  (match (listHead (d/kids n "body"))
+    ((some b0) (if (and (d/isType? b0 "Expr") (match (d/kid b0 "value") ((some v) (some? (d/constStr v))) ((none) false))) (some b0.line) (none)))
     ((none) (none)))
 
 fn commentToks toks: (List d/PyTok) -> (List (Pair Int64 String))
   (listReverse (fold (fn [(acc (List (Pair Int64 String))) (t d/PyTok)] -> (List (Pair Int64 String)) (if (= t.kind "COMMENT") (cons (pair t.line t.text) acc) acc)) (list) toks))
 
 fn docstringsOf tree: d/PyNode nodes: (List d/PyNode) -> (h/HMap Bool)
-  (fold (fn [(acc (h/HMap Bool)) (n d/PyNode)] -> (h/HMap Bool) (mt (docLine n) ((some l) (h/hmPut acc (stringFromInt64 l) true)) ((none) acc)))
+  (fold (fn [(acc (h/HMap Bool)) (n d/PyNode)] -> (h/HMap Bool) (match (docLine n) ((some l) (h/hmPut acc (stringFromInt64 l) true)) ((none) acc)))
         (h/hmEmpty) (cons tree nodes))
 
 fn resolveBinding ix: Ix b: Binding depth: Int64 -> (Option Res)
-  (mt b
+  (match b
     ((bMod name how) (some (Res :tag "mod" :val name :how "" :hops 0)))
     ((bSym base name how) (resolveSym ix base name depth))
     ((bStar base) (none)))
 
 fn bindingHow b: Binding -> String
-  (mt b ((bMod name how) how) ((bSym base name how) how) ((bStar base) ""))
+  (match b ((bMod name how) how) ((bSym base name how) how) ((bStar base) ""))
 
 fn bumped r: Res -> Res
   (with r :hops (+ r.hops 1))
 
 fn symInMod ix: Ix mod: PyMod m: String n: String depth: Int64 -> (Option Res)
-  (mt (h/hmGet mod.top n)
+  (match (h/hmGet mod.top n)
     ((some q) (some (Res :tag "def" :val (defKey m q) :how "" :hops 0)))
     ((none)
-      (let [(viaBinding (mt (h/hmGet mod.bindings n) ((some b) (optionMap bumped (resolveBinding ix b (+ depth 1)))) ((none) (none))))]
-        (mt viaBinding
+      (let [(viaBinding (match (h/hmGet mod.bindings n) ((some b) (optionMap bumped (resolveBinding ix b (+ depth 1)))) ((none) (none))))]
+        (match viaBinding
           ((some r) (some r))
           ((none) (if (h/omHas? mod.vars n) (some (Res :tag "var" :val (defKey m n) :how "" :hops 0)) (none)))))))
 
 fn starDef ix: Ix stars: (List String) n: String depth: Int64 -> (Option Res)
-  (mt (listHead stars)
+  (match (listHead stars)
     ((none) (none))
     ((some base)
-      (mt (resolveSym ix base n (+ depth 1))
+      (match (resolveSym ix base n (+ depth 1))
         ((some r) (if (= r.tag "def") (some (bumped r)) (starDef ix (optionOr (listTail stars) (list)) n depth)))
         ((none) (starDef ix (optionOr (listTail stars) (list)) n depth)))))
 
@@ -261,34 +261,34 @@ fn resolveSym ix: Ix m: String n: String depth: Int64 -> (Option Res)
   (if (> depth 16)
     (none)
     (let [(modO (modOf ix m))
-          (fromMod (mt modO ((some mod) (symInMod ix mod m n depth)) ((none) (none))))]
-      (mt fromMod
+          (fromMod (match modO ((some mod) (symInMod ix mod m n depth)) ((none) (none))))]
+      (match fromMod
         ((some r) (some r))
         ((none)
           (let [(sub (if (stringEmpty? m) n (str m "." n)))]
             (if (or (h/omHas? ix.mods sub) (h/hmHas? ix.pkgs sub))
               (some (Res :tag "mod" :val sub :how "" :hops 0))
-              (mt modO ((some mod) (starDef ix mod.stars n depth)) ((none) (none)))))))))
+              (match modO ((some mod) (starDef ix mod.stars n depth)) ((none) (none)))))))))
 
 fn baseMethod ix: Ix bases: (List d/PyNode) mod: PyMod name: String depth: Int64 -> (Option String)
-  (mt (listHead bases)
+  (match (listHead bases)
     ((none) (none))
     ((some base)
-      (let [(found (mt (resolveExpr ix mod base (list))
+      (let [(found (match (resolveExpr ix mod base (list))
                      ((some r) (if (and (= r.tag "def") (= (defKind ix r.val) "class")) (methodOf ix r.val name (+ depth 1)) (none)))
                      ((none) (none))))]
-        (mt found ((some k) (some k)) ((none) (baseMethod ix (optionOr (listTail bases) (list)) mod name depth))))))
+        (match found ((some k) (some k)) ((none) (baseMethod ix (optionOr (listTail bases) (list)) mod name depth))))))
 
 fn methodOf ix: Ix clsKey: String name: String depth: Int64 -> (Option String)
   (let [(key (str clsKey "." name))]
     (if (h/omHas? ix.defs key)
       (some key)
-      (mt (defOf ix clsKey)
+      (match (defOf ix clsKey)
         ((none) (none))
         ((some dd)
           (if (> depth 8)
             (none)
-            (mt (modOf ix dd.modName)
+            (match (modOf ix dd.modName)
               ((some mod) (baseMethod ix (d/kids dd.node "bases") mod name depth))
               ((none) (none))))))))
 
@@ -296,19 +296,19 @@ fn fromBinding ix: Ix b: Binding -> (Option Res)
   (optionMap (fn [(r Res)] -> Res (Res :tag r.tag :val r.val :how (bindingHow b) :hops r.hops)) (resolveBinding ix b 0))
 
 fn inScopes ix: Ix name: String stack: (List Scope) first: Bool -> (Option (Option Res))
-  (mt (listHead stack)
+  (match (listHead stack)
     ((none) (none))
     ((some sc)
       (let [(rest (optionOr (listTail stack) (list)))]
         (if (and (= sc.kind "class") (not first))
           (inScopes ix name rest false)
-          (mt (h/hmGet sc.bindings name)
+          (match (h/hmGet sc.bindings name)
             ((some b) (some (fromBinding ix b)))
             ((none)
-              (mt (h/hmGet sc.defs name)
+              (match (h/hmGet sc.defs name)
                 ((some k) (some (some (Res :tag "def" :val k :how "direct" :hops 0))))
                 ((none)
-                  (mt (h/hmGet sc.types name)
+                  (match (h/hmGet sc.types name)
                     ((some t) (some (some (Res :tag "inst" :val t :how "local" :hops 0))))
                     ((none)
                       (if (= sc.selfName (some name))
@@ -316,24 +316,24 @@ fn inScopes ix: Ix name: String stack: (List Scope) first: Bool -> (Option (Opti
                         (if (h/hmHas? sc.names name) (some (none)) (inScopes ix name rest false)))))))))))))
 
 fn starAny ix: Ix stars: (List String) name: String -> (Option Res)
-  (mt (listHead stars)
+  (match (listHead stars)
     ((none) (none))
     ((some base)
-      (mt (resolveSym ix base name 0)
+      (match (resolveSym ix base name 0)
         ((some r) (some (Res :tag r.tag :val r.val :how "direct" :hops (+ r.hops 1))))
         ((none) (starAny ix (optionOr (listTail stars) (list)) name)))))
 
 fn resolveName ix: Ix mod: PyMod name: String stack: (List Scope) -> (Option Res)
-  (mt (inScopes ix name stack true)
+  (match (inScopes ix name stack true)
     ((some decided) decided)
     ((none)
-      (mt (h/hmGet mod.top name)
+      (match (h/hmGet mod.top name)
         ((some q) (some (Res :tag "def" :val (defKey mod.name q) :how "direct" :hops 0)))
         ((none)
-          (mt (h/hmGet mod.bindings name)
+          (match (h/hmGet mod.bindings name)
             ((some b) (fromBinding ix b))
             ((none)
-              (mt (h/hmGet mod.varTypes name)
+              (match (h/hmGet mod.varTypes name)
                 ((some t) (some (Res :tag "inst" :val t :how "var" :hops 0)))
                 ((none)
                   (if (h/omHas? mod.vars name)
@@ -342,17 +342,17 @@ fn resolveName ix: Ix mod: PyMod name: String stack: (List Scope) -> (Option Res
 
 fn attrOf ix: Ix mod: PyMod expr: d/PyNode stack: (List Scope) -> (Option Res)
   (let [(attr (optionOr (d/sfield expr "attr") ""))]
-    (mt (d/kid expr "value")
+    (match (d/kid expr "value")
       ((none) (none))
       ((some v)
-        (mt (resolveExpr ix mod v stack)
+        (match (resolveExpr ix mod v stack)
           ((none) (none))
           ((some base)
             (cond
               ((= base.tag "mod")
                 (optionMap (fn [(r Res)] -> Res (Res :tag r.tag :val r.val :how "attribute" :hops r.hops)) (resolveSym ix base.val attr 0)))
               ((= base.tag "inst")
-                (mt (methodOf ix base.val attr 0)
+                (match (methodOf ix base.val attr 0)
                   ((some k) (some (Res :tag "def" :val k :how "method" :hops 0)))
                   ((none) (optionMap (fn [(t String)] -> Res (Res :tag "inst" :val t :how "attr" :hops 0)) (h/hmGet ix.attrTypes (attrKey base.val attr))))))
               ((and (= base.tag "def") (= (defKind ix base.val) "class"))
@@ -364,10 +364,10 @@ fn resolveExpr ix: Ix mod: PyMod expr: d/PyNode stack: (List Scope) -> (Option R
     ((d/isType? expr "Name") (resolveName ix mod (idOf expr) stack))
     ((d/isType? expr "Attribute") (attrOf ix mod expr stack))
     ((d/isType? expr "Call")
-      (mt (d/kid expr "func")
+      (match (d/kid expr "func")
         ((none) (none))
         ((some f)
-          (mt (resolveExpr ix mod f stack)
+          (match (resolveExpr ix mod f stack)
             ((some r) (if (and (= r.tag "def") (= (defKind ix r.val) "class")) (some (Res :tag "inst" :val r.val :how "new" :hops 0)) (none)))
             ((none) (none))))))
     (else (none)))
@@ -382,20 +382,20 @@ fn withAttrTypes ix: Ix at: (h/HMap String) -> Ix
   (with ix :attrTypes at)
 
 fn firstArg fnNode: d/PyNode -> (Option String)
-  (mt (d/kid fnNode "args")
-    ((some a) (mt (listHead (d/kids a "args")) ((some p) (d/sfield p "arg")) ((none) (none))))
+  (match (d/kid fnNode "args")
+    ((some a) (match (listHead (d/kids a "args")) ((some p) (d/sfield p "arg")) ((none) (none))))
     ((none) (none)))
 
 fn selfAttrTypes ix: Ix mod: PyMod dd: PyDef -> Ix
-  (mt (firstArg dd.node)
+  (match (firstArg dd.node)
     ((none) ix)
     ((some selfName)
       (fold (fn [(acc Ix) (n d/PyNode)] -> Ix
-              (if (not (and (d/isType? n "Assign") (mt (d/kid n "value") ((some v) (d/isType? v "Call")) ((none) false))))
+              (if (not (and (d/isType? n "Assign") (match (d/kid n "value") ((some v) (d/isType? v "Call")) ((none) false))))
                 acc
                 (fold (fn [(a2 Ix) (t d/PyNode)] -> Ix
-                        (if (and (d/isType? t "Attribute") (mt (d/kid t "value") ((some tv) (and (d/isType? tv "Name") (= (idOf tv) selfName))) ((none) false)))
-                          (mt (resolveExpr a2 mod (optionOr (d/kid n "value") n) (list))
+                        (if (and (d/isType? t "Attribute") (match (d/kid t "value") ((some tv) (and (d/isType? tv "Name") (= (idOf tv) selfName))) ((none) false)))
+                          (match (resolveExpr a2 mod (optionOr (d/kid n "value") n) (list))
                             ((some r) (if (= r.tag "inst")
                                         (withAttrTypes a2 (h/hmPut a2.attrTypes (attrKey (defKey mod.name (optionOr dd.cls "")) (optionOr (d/sfield t "attr") "")) r.val))
                                         a2))
@@ -405,17 +405,17 @@ fn selfAttrTypes ix: Ix mod: PyMod dd: PyDef -> Ix
             ix (d/walkBfs dd.node))))
 
 fn typesOf methods: (h/HMap (List PyDef)) ix: Ix name: String -> Ix
-  (mt (modOf ix name)
+  (match (modOf ix name)
     ((none) ix)
     ((some mod0)
       (let [(ix1 (fold (fn [(acc Ix) (p (Pair String (Pair Int64 d/PyNode)))] -> Ix
                          (let [(value (pairSecond (pairSecond p)))]
                            (if (not (d/isType? value "Call"))
                              acc
-                             (mt (modOf acc name)
+                             (match (modOf acc name)
                                ((none) acc)
                                ((some cur)
-                                 (mt (resolveExpr acc cur value (list))
+                                 (match (resolveExpr acc cur value (list))
                                    ((some r) (if (= r.tag "inst")
                                                (withMods acc (h/omPut acc.mods name (withVarTypes cur (h/hmPut cur.varTypes (pairFirst p) r.val))))
                                                acc))
@@ -426,11 +426,11 @@ fn typesOf methods: (h/HMap (List PyDef)) ix: Ix name: String -> Ix
               ix1 (optionOr (h/hmGet methods name) (list))))))
 
 fn paramNodes fnNode: d/PyNode -> (List d/PyNode)
-  (mt (d/kid fnNode "args")
+  (match (d/kid fnNode "args")
     ((none) (list))
     ((some a)
       (listAppend (listAppend (listAppend (d/kids a "posonlyargs") (d/kids a "args")) (d/kids a "kwonlyargs"))
-                  (listAppend (mt (d/kid a "vararg") ((some v) (list v)) ((none) (list))) (mt (d/kid a "kwarg") ((some v) (list v)) ((none) (list)))))))
+                  (listAppend (match (d/kid a "vararg") ((some v) (list v)) ((none) (list))) (match (d/kid a "kwarg") ((some v) (list v)) ((none) (list)))))))
 
 fn localWalk n: d/PyNode acc: (h/HMap Bool) -> (h/HMap Bool)
   (let [(t n.type)]
@@ -449,7 +449,7 @@ fn localWalk n: d/PyNode acc: (h/HMap Bool) -> (h/HMap Bool)
 
 fn localNames fnNode: d/PyNode -> (h/HMap Bool)
   (let [(params (fold (fn [(acc (h/HMap Bool)) (p d/PyNode)] -> (h/HMap Bool) (h/hmPut acc (optionOr (d/sfield p "arg") "") true)) (h/hmEmpty) (paramNodes fnNode)))
-        (body (if (d/isType? fnNode "Lambda") (mt (d/kid fnNode "body") ((some b) (list b)) ((none) (list))) (d/kids fnNode "body")))]
+        (body (if (d/isType? fnNode "Lambda") (match (d/kid fnNode "body") ((some b) (list b)) ((none) (list))) (d/kids fnNode "body")))]
     (fold (fn [(acc (h/HMap Bool)) (n d/PyNode)] -> (h/HMap Bool) (localWalk n acc)) params body))
 
 fn emptyScope kind: String key: (Option String) names: (h/HMap Bool) -> Scope
@@ -506,12 +506,12 @@ fn wRead w: W key: String rel: String line: Int64 -> W
   (with w :varReads (h/hmPut w.varReads key (cons (pair rel line) (optionOr (h/hmGet w.varReads key) (list)))))
 
 fn callerOf mod: PyMod stack: (List Scope) -> String
-  (mt (listHead (filter (fn [(sc Scope)] -> Bool (and (some? sc.key) (!= sc.kind "class"))) stack))
+  (match (listHead (filter (fn [(sc Scope)] -> Bool (and (some? sc.key) (!= sc.kind "class"))) stack))
     ((some sc) (optionOr sc.key ""))
     ((none) (defKey mod.name "<module>")))
 
 fn contextOf stack: (List Scope) -> (Option String)
-  (mt (listHead stack)
+  (match (listHead stack)
     ((none) (none))
     ((some sc)
       (cond
@@ -523,36 +523,36 @@ fn record ix: Ix mod: PyMod node: d/PyNode stack: (List Scope) key: String how: 
   (let [(caller (callerOf mod stack))
         (kind0 (cond ((> hops 0) "reexport") ((listContains? (list "alias" "attribute" "method" "stringKey") how) how) (else "direct")))
         (cx (contextOf stack))
-        (through (mt cx ((some x) (if (!= kind0 "direct") (some kind0) (none))) ((none) (none))))
+        (through (match cx ((some x) (if (!= kind0 "direct") (some kind0) (none))) ((none) (none))))
         (kind (optionOr cx kind0))
         (w1 (wEdge (wCall w (CallSite :rel mod.rel :line node.line :caller caller :callee key :kind kind :via via :through through)) caller key))]
     (if (= (defKind ix key) "class")
-      (mt (methodOf ix key "__init__" 0) ((some init) (wEdge w1 caller init)) ((none) w1))
+      (match (methodOf ix key "__init__" 0) ((some init) (wEdge w1 caller init)) ((none) w1))
       w1))
 
 fn bindingOf mod: PyMod name: String stack: (List Scope) -> (Option Binding)
-  (mt (listHead stack)
+  (match (listHead stack)
     ((none) (h/hmGet mod.bindings name))
     ((some sc)
-      (mt (h/hmGet sc.bindings name)
+      (match (h/hmGet sc.bindings name)
         ((some b) (some b))
         ((none) (if (or (h/hmHas? sc.names name) (h/hmHas? sc.defs name)) (none) (bindingOf mod name (optionOr (listTail stack) (list))))))))
 
 fn strsOf values: (List d/PyNode) -> (Option (List String))
-  (let [(vals (fold (fn [(acc (List String)) (v d/PyNode)] -> (List String) (mt (d/constStr v) ((some s) (cons s acc)) ((none) acc))) (list) values))]
+  (let [(vals (fold (fn [(acc (List String)) (v d/PyNode)] -> (List String) (match (d/constStr v) ((some s) (cons s acc)) ((none) acc))) (list) values))]
     (if (and (= (listLength vals) (listLength values)) (not (listEmpty? vals))) (some (listReverse vals)) (none)))
 
 fn tableOf node0: d/PyNode mod: PyMod -> (Option (List String))
-  (let [(node (if (d/isType? node0 "Name") (mt (h/omGet mod.vars (idOf node0)) ((some p) (pairSecond p)) ((none) node0)) node0))]
+  (let [(node (if (d/isType? node0 "Name") (match (h/omGet mod.vars (idOf node0)) ((some p) (pairSecond p)) ((none) node0)) node0))]
     (cond
       ((d/isType? node "Dict") (strsOf (d/kids node "values")))
       ((or (d/isType? node "Tuple") (d/isType? node "List") (d/isType? node "Set")) (strsOf (d/kids node "elts")))
       (else (none))))
 
 fn literalNames expr: d/PyNode mod: PyMod -> (Option (List String))
-  (mt (d/constStr expr)
+  (match (d/constStr expr)
     ((some s) (some (list s)))
-    ((none) (if (d/isType? expr "Subscript") (mt (d/kid expr "value") ((some v) (tableOf v mod)) ((none) (none))) (none))))
+    ((none) (if (d/isType? expr "Subscript") (match (d/kid expr "value") ((some v) (tableOf v mod)) ((none) (none))) (none))))
 
 fn argAt n: d/PyNode i: Int64 -> (Option d/PyNode)
   (listGet (d/kids n "args") i)
@@ -565,21 +565,21 @@ fn getattrName? ix: Ix mod: PyMod f: d/PyNode stack: (List Scope) -> Bool
 fn stringKeyCalls ix: Ix mod: PyMod node: d/PyNode stack: (List Scope) base: Res names: (List String) w: W -> W
   (fold (fn [(acc W) (n String)] -> W
           (if (= base.tag "mod")
-            (mt (resolveSym ix base.val n 0)
+            (match (resolveSym ix base.val n 0)
               ((some r)
                 (cond
                   ((= r.tag "def") (record ix mod node stack r.val "stringKey" 0 (some (str "getattr " n)) acc))
                   ((= r.tag "var") (wRead acc r.val mod.rel node.line))
                   (else acc)))
               ((none) acc))
-            (mt (methodOf ix base.val n 0)
+            (match (methodOf ix base.val n 0)
               ((some k) (record ix mod node stack k "stringKey" 0 (some (str "getattr " n)) acc))
               ((none) acc))))
         w names)
 
 fn viaOf ix: Ix mod: PyMod f: d/PyNode stack: (List Scope) r: Res -> (Option String)
   (let [(b (if (d/isType? f "Name") (bindingOf mod (idOf f) stack) (none)))
-        (symVia (mt b ((some bb) (mt bb ((bSym base name how) (some (str base "." name))) (_ (none)))) ((none) (none))))]
+        (symVia (match b ((some bb) (match bb ((bSym base name how) (some (str base "." name))) (_ (none)))) ((none) (none))))]
     (if (and (> r.hops 0) (some? symVia))
       symVia
       (if (or (!= r.how "direct") (> r.hops 0))
@@ -587,36 +587,36 @@ fn viaOf ix: Ix mod: PyMod f: d/PyNode stack: (List Scope) r: Res -> (Option Str
         (none))))
 
 fn onCall ix: Ix mod: PyMod node: d/PyNode stack: (List Scope) w: W -> OC
-  (mt (d/kid node "func")
+  (match (d/kid node "func")
     ((none) (OC :w w :marks (list)))
     ((some f)
       (let [(inner (if (d/isType? f "Call") (d/kid f "func") (none)))]
         (cond
           ((and (some? inner) (getattrName? ix mod (optionOr inner f) stack) (>= (listLength (d/kids f "args")) 2))
             (let [(marks (list f.id (optionOr inner f).id))]
-              (mt (resolveExpr ix mod (optionOr (argAt f 0) f) stack)
+              (match (resolveExpr ix mod (optionOr (argAt f 0) f) stack)
                 ((none) (OC :w w :marks marks))
                 ((some base)
                   (if (not (or (= base.tag "mod") (= base.tag "inst")))
                     (OC :w w :marks marks)
-                    (mt (literalNames (optionOr (argAt f 1) f) mod)
+                    (match (literalNames (optionOr (argAt f 1) f) mod)
                       ((none) (OC :w (wDyn w (Dyn :rel mod.rel :line node.line :tag base.tag :base base.val)) :marks marks))
                       ((some names) (OC :w (stringKeyCalls ix mod node stack base names w) :marks marks))))))))
           ((and (getattrName? ix mod f stack) (>= (listLength (d/kids node "args")) 2))
             (let [(base (resolveExpr ix mod (optionOr (argAt node 0) f) stack))
                   (names (literalNames (optionOr (argAt node 1) f) mod))]
-              (mt base
+              (match base
                 ((some bs)
                   (if (and (= bs.tag "mod") (some? names))
                     (OC :w (fold (fn [(acc W) (n String)] -> W
-                                   (mt (resolveSym ix bs.val n 0) ((some r) (if (= r.tag "var") (wRead acc r.val mod.rel node.line) acc)) ((none) acc)))
+                                   (match (resolveSym ix bs.val n 0) ((some r) (if (= r.tag "var") (wRead acc r.val mod.rel node.line) acc)) ((none) acc)))
                                  w (optionOr names (list)))
                         :marks (list f.id))
                     (OC :w w :marks (list f.id))))
                 ((none) (OC :w w :marks (list f.id))))))
           (else
             (let [(r (resolveExpr ix mod f stack))
-                  (w1 (mt r
+                  (w1 (match r
                         ((some rr) (if (= rr.tag "def") (record ix mod node stack rr.val rr.how rr.hops (viaOf ix mod f stack rr) w) (untypedOr ix mod node f stack w)))
                         ((none) (untypedOr ix mod node f stack w))))]
               (OC :w w1
@@ -625,12 +625,12 @@ fn onCall ix: Ix mod: PyMod node: d/PyNode stack: (List Scope) w: W -> OC
                            (list f.id)))))))))
 
 fn untypedOr ix: Ix mod: PyMod node: d/PyNode f: d/PyNode stack: (List Scope) w: W -> W
-  (if (and (d/isType? f "Attribute") (mt (d/kid f "value") ((some v) (not (some? (resolveExpr ix mod v stack)))) ((none) false)))
+  (if (and (d/isType? f "Attribute") (match (d/kid f "value") ((some v) (not (some? (resolveExpr ix mod v stack)))) ((none) false)))
     (wUntyped w (Untyped :rel mod.rel :line node.line :attr (optionOr (d/sfield f "attr") "")))
     w)
 
 fn defKeyAt mod: PyMod node: d/PyNode stack: (List Scope) -> String
-  (let [(q (mt (listHead (filter (fn [(sc Scope)] -> Bool (and (mt sc.key ((some k) (= (keyMod k) mod.name)) ((none) false)) (!= sc.kind "lambda"))) stack))
+  (let [(q (match (listHead (filter (fn [(sc Scope)] -> Bool (and (match sc.key ((some k) (= (keyMod k) mod.name)) ((none) false)) (!= sc.kind "lambda"))) stack))
              ((some sc) (str (keyQual (optionOr sc.key "")) "."))
              ((none) "")))]
     (defKey mod.name (str q (nameOf node))))
@@ -641,13 +641,13 @@ fn walkAll ix: Ix mod: PyMod nodes: (List d/PyNode) stack: (List Scope) called: 
 fn walkDef ix: Ix mod: PyMod node: d/PyNode stack: (List Scope) called: (List Int64) w: W -> WS
   (let [(pre (listAppend (d/kids node "decorator_list")
                          (if (d/isType? node "ClassDef")
-                           (listAppend (d/kids node "bases") (fold (fn [(acc (List d/PyNode)) (k d/PyNode)] -> (List d/PyNode) (mt (d/kid k "value") ((some v) (cons v acc)) ((none) acc))) (list) (listReverse (d/kids node "keywords"))))
-                           (mt (d/kid node "args")
+                           (listAppend (d/kids node "bases") (fold (fn [(acc (List d/PyNode)) (k d/PyNode)] -> (List d/PyNode) (match (d/kid k "value") ((some v) (cons v acc)) ((none) acc))) (list) (listReverse (d/kids node "keywords"))))
+                           (match (d/kid node "args")
                              ((some a) (listAppend (d/kids a "defaults") (d/kids a "kw_defaults")))
                              ((none) (list))))))
         (ws1 (walkAll ix mod pre stack called w))
         (key (defKeyAt mod node ws1.stack))]
-    (mt (defOf ix key)
+    (match (defOf ix key)
       ((none) ws1)
       ((some dd)
         (let [(scw (if (= dd.kind "class")
@@ -660,12 +660,12 @@ fn withTypes sc: Scope types: (h/HMap String) -> Scope
   (with sc :types types)
 
 fn assignTypes ix: Ix mod: PyMod node: d/PyNode stack: (List Scope) -> (List Scope)
-  (mt (listHead stack)
+  (match (listHead stack)
     ((none) stack)
     ((some top)
-      (if (not (and (d/isType? node "Assign") (= top.kind "function") (mt (d/kid node "value") ((some v) (d/isType? v "Call")) ((none) false))))
+      (if (not (and (d/isType? node "Assign") (= top.kind "function") (match (d/kid node "value") ((some v) (d/isType? v "Call")) ((none) false))))
         stack
-        (mt (resolveExpr ix mod (optionOr (d/kid node "value") node) stack)
+        (match (resolveExpr ix mod (optionOr (d/kid node "value") node) stack)
           ((some r)
             (if (= r.tag "inst")
               (cons (withTypes top (fold (fn [(acc (h/HMap String)) (t d/PyNode)] -> (h/HMap String) (if (d/isType? t "Name") (h/hmPut acc (idOf t) r.val) acc))
@@ -680,7 +680,7 @@ fn walk ix: Ix mod: PyMod node: d/PyNode stack: (List Scope) called: (List Int64
       ((defLike? t) (walkDef ix mod node stack called w))
       ((= t "Lambda")
         (let [(sc (emptyScope "lambda" (h/hmGet ix.lambdaKeys (stringFromInt64 node.id)) (localNames node)))
-              (inner (walkAll ix mod (mt (d/kid node "body") ((some b) (list b)) ((none) (list))) (cons sc stack) called w))]
+              (inner (walkAll ix mod (match (d/kid node "body") ((some b) (list b)) ((none) (list))) (cons sc stack) called w))]
           (WS :w inner.w :stack stack)))
       (else
         (let [(stack1 (assignTypes ix mod node stack))
@@ -693,14 +693,14 @@ fn walk ix: Ix mod: PyMod node: d/PyNode stack: (List Scope) called: (List Int64
                     (let [(o (onCall ix mod node stack1 w1))] (OC :w o.w :marks (listAppend o.marks called)))
                     (if (and (or (= t "Name") (= t "Attribute")) (= (d/sfield node "ctx") (some "Load")) (not (listContains? called node.id)))
                       (let [(r (resolveExpr ix mod node stack1))
-                            (w2 (mt r
+                            (w2 (match r
                                   ((some rr) (cond
                                                ((= rr.tag "def") (wRef w1 (Ref :rel mod.rel :line node.line :key rr.val)))
                                                ((= rr.tag "var") (wRead w1 rr.val mod.rel node.line))
                                                (else w1)))
                                   ((none) w1)))
-                            (more (mt r
-                                    ((some rr) (if (and (= t "Attribute") (or (= rr.tag "def") (= rr.tag "var"))) (mt (d/kid node "value") ((some v) (list v.id)) ((none) (list))) (list)))
+                            (more (match r
+                                    ((some rr) (if (and (= t "Attribute") (or (= rr.tag "def") (= rr.tag "var"))) (match (d/kid node "value") ((some v) (list v.id)) ((none) (list))) (list)))
                                     ((none) (list))))]
                         (OC :w w2 :marks (listAppend more called)))
                       (OC :w w1 :marks called))))]
@@ -726,13 +726,13 @@ fn childrenOf defs: (List PyDef) -> (h/HMap (List String))
 
 fn ! loadMods! root: String files: (List d/PyFile) -> (Result (Pair (h/OMap PyMod) (List String)) String)
   (fold (fn [(acc (Result (Pair (h/OMap PyMod) (List String)) String)) (f d/PyFile)] -> (Result (Pair (h/OMap PyMod) (List String)) String)
-          (mt acc
+          (match acc
             ((err e) (err e))
             ((ok st)
-              (mt f.tree
+              (match f.tree
                 ((none) (ok (pair (pairFirst st) (cons f.rel (pairSecond st)))))
                 ((some tree)
-                  (mt (fileReadString (c/joinPath root f.rel))
+                  (match (fileReadString (c/joinPath root f.rel))
                     ((err e) (err (str "cannot read " f.rel ": " e)))
                     ((ok raw)
                       (let [(mn (moduleName f.rel)) (name (pairFirst mn)) (isPkg (pairSecond mn))
@@ -748,18 +748,18 @@ fn collectMod st: (Pair (h/OMap PyMod) (h/OMap PyDef)) m: PyMod -> (Pair (h/OMap
                      (MC :top (h/hmEmpty) :bindings (h/hmEmpty) :vars (h/omEmpty) :stars (list) :importLines (h/hmEmpty) :defs (pairSecond st) :own (h/hmEmpty))))
         (m2 (PyMod :rel m.rel :name m.name :isPkg m.isPkg :pkg m.pkg :src m.src :tree m.tree :isTest m.isTest :toks m.toks
                    :top mc.top :bindings mc.bindings :vars mc.vars :varTypes (h/hmEmpty) :stars (listReverse mc.stars)
-                   :docstrings (docstringsOf m.tree (fold (fn [(acc (List d/PyNode)) (o (Option d/PyNode))] -> (List d/PyNode) (mt o ((some n) (cons n acc)) ((none) acc))) (list) (h/hmValues mc.own))) :importLines mc.importLines :comments m.comments))]
+                   :docstrings (docstringsOf m.tree (fold (fn [(acc (List d/PyNode)) (o (Option d/PyNode))] -> (List d/PyNode) (match o ((some n) (cons n acc)) ((none) acc))) (list) (h/hmValues mc.own))) :importLines mc.importLines :comments m.comments))]
     (pair (h/omPut (pairFirst st) m.name m2) mc.defs))
 
 fn ! buildPyIndex root: String want: String files: (List String) ctx: c/Ctx -> (Result Built String)
   (let [(rels (filter (fn [(f String)] -> Bool (stringEndsWith? f ".py")) files))]
-    (mt (d/runDump! root want rels ctx)
+    (match (d/runDump! root want rels ctx)
       ((err e) (err e))
       ((ok dump)
-        (mt dump
+        (match dump
           ((d/absent why) (ok (pyAbsent why)))
           ((d/dumped pfiles warnings)
-            (mt (loadMods! root pfiles)
+            (match (loadMods! root pfiles)
               ((err e) (err e))
               ((ok lm)
                 (let [(mods0 (pairFirst lm))

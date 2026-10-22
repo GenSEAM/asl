@@ -290,7 +290,7 @@ fn pyHeredoc? bs: Bytes n: Int64 t: String delim: String all: (List String) -> B
              (or (stringContains? lv "py") (stringContains? lv "server_script") (usedInPy? all (str "$" v))))))
 
 fn heredocBody lines: (List String) delim: String tabs: Bool count: Int64 -> (Pair Int64 (List String))
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (pair count (list)))
     ((some line)
      (let [(rest (optionOr (listTail lines) (list)))
@@ -314,7 +314,7 @@ fn optionStarts bs: Bytes n: Int64 p: Int64 acc: (List Int64) -> (List Int64)
     (if (< q 0) (cons p acc) (optionStarts bs n q (cons p acc))))
 
 fn dashCFrom starts: (List Int64) bs: Bytes n: Int64 -> Int64
-  (mt (listHead starts)
+  (match (listHead starts)
     ((none) -1)
     ((some p) (if (litAt bs n p "-c") (skipSpace bs n (+ p 2)) (dashCFrom (optionOr (listTail starts) (list)) bs n))))
 
@@ -354,7 +354,7 @@ fn pyCMatch bs: Bytes n: Int64 s: Int64 -> (Option (Pair Int64 Int64))
       (if (>= r 0) (some (pair s r)) (pyCMatch bs n (+ s 1)))))
 
 fn commentBefore? pre: String -> Bool
-  (mt (stringIndexOf pre "#")
+  (match (stringIndexOf pre "#")
     ((none) false)
     ((some k) (or (= k 0) (listContains? (list " " "\t" ";" "&") (cut pre (- k 1) k)))))
 
@@ -366,11 +366,11 @@ fn skipQuotes bs: Bytes n: Int64 i: Int64 -> Int64
   (if (= (byteAt bs n i) 34) (skipQuotes bs n (+ i 1)) i)
 
 fn singleQuoted lines: (List String) acc: (List String) -> (Pair String (List String))
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (pair (stringJoin (listReverse acc) "") (list)))
     ((some l)
      (let [(rest (optionOr (listTail lines) (list)))]
-       (mt (stringIndexOf l "'")
+       (match (stringIndexOf l "'")
          ((some q) (pair (stringJoin (listReverse (cons (cut l 0 q) acc)) "") rest))
          ((none) (singleQuoted rest (cons l acc)))))))
 
@@ -385,12 +385,12 @@ fn doubleQuoted cur: String lines: (List String) acc: (List String) -> (Pair Str
   (let [(bs (stringToBytes cur)) (k (dqClose bs (bytesLength bs) 0))]
     (if (>= k 0)
       (pair (stringJoin (listReverse (cons (cut cur 0 k) acc)) "") lines)
-      (mt (listHead lines)
+      (match (listHead lines)
         ((none) (pair (stringJoin (listReverse (cons cur acc)) "") (list)))
         ((some l) (doubleQuoted l (optionOr (listTail lines) (list)) (cons cur acc))))))
 
 fn pyCStep t: String bs: Bytes n: Int64 rest: (List String) all: (List String) acc: Int64 -> Int64
-  (mt (pyCMatch bs n 0)
+  (match (pyCMatch bs n 0)
     ((none) (embeddedLoop rest all acc))
     ((some m)
      (let [(code (cut t (pairSecond m) n))]
@@ -399,7 +399,7 @@ fn pyCStep t: String bs: Bytes n: Int64 rest: (List String) all: (List String) a
          ((varRefRest? code) (embeddedLoop rest all acc))
          ((stringStartsWith? code "'")
           (let [(after (cut code 1 (stringLength code)))]
-            (mt (stringIndexOf after "'")
+            (match (stringIndexOf after "'")
               ((some q) (embeddedLoop rest all (+ acc (countLines (cut after 0 q)))))
               ((none)
                (let [(r (singleQuoted rest (list (str after "\n"))))]
@@ -410,7 +410,7 @@ fn pyCStep t: String bs: Bytes n: Int64 rest: (List String) all: (List String) a
          (else (embeddedLoop rest all acc))))))
 
 fn embeddedLoop lines: (List String) all: (List String) acc: Int64 -> Int64
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) acc)
     ((some line)
      (let [(rest (optionOr (listTail lines) (list)))
@@ -419,7 +419,7 @@ fn embeddedLoop lines: (List String) all: (List String) acc: Int64 -> Int64
            (n (bytesLength bs))]
        (if (commentLine? bs n)
          (embeddedLoop rest all acc)
-         (mt (heredocDelim bs n t 0)
+         (match (heredocDelim bs n t 0)
            ((some delim)
             (if (pyHeredoc? bs n t delim all)
               (let [(r (heredocBody rest delim (stringContains? t "<<-") 0))]
@@ -511,7 +511,7 @@ fn inlineLoop text: String bs: Bytes n: Int64 i: Int64 alias: String acc: (Map S
     ((= (byteAt bs n i) 34) (inlineLoop text bs n (inlineStringEnd bs n (+ i 1)) alias acc))
     ((= (byteAt bs n i) 59) (inlineLoop text bs n (inlineLineEnd bs n i) alias acc))
     ((= (byteAt bs n i) 40)
-     (mt (inlineCall text bs n i alias)
+     (match (inlineCall text bs n i alias)
        ((none) (inlineLoop text bs n (+ i 1) alias acc))
        ((some call)
         (let [(lang (pairFirst call)) (expr (pairSecond call)) (k (pairSecond expr)) (v (pairFirst expr))]
@@ -574,15 +574,15 @@ fn inlineAddCounts acc: (Map String Int64) counts: (Map String Int64) -> (Map St
           (addLang m k (optionOr (mapGet counts k) 0))) acc (mapKeys counts))
 
 fn inlineAll! root: String paths: (List String) acc: InlineReport -> (Result InlineReport String)
-  (mt (listHead paths)
+  (match (listHead paths)
     ((none) (ok acc))
     ((some rel)
      (if (not (stringEndsWith? rel ".asl"))
        (inlineAll! root (optionOr (listTail paths) (list)) acc)
-       (mt (readText! (str root "/" rel))
+       (match (readText! (str root "/" rel))
          ((err e) (err e))
          ((ok maybe)
-          (mt maybe
+          (match maybe
             ((none) (inlineAll! root (optionOr (listTail paths) (list)) acc))
             ((some text)
              (let [(counts (inlineForeignCounts text rel)) (n (inlineTotal counts))
@@ -606,7 +606,7 @@ fn extTable -> (List (Pair String String))
         (pair ".php" "php") (pair ".ps1" "powershell"))
 
 fn lookup table: (List (Pair String String)) key: String -> String
-  (mt (listHead (filter (fn [(kv (Pair String String))] -> Bool (= (pairFirst kv) key)) table))
+  (match (listHead (filter (fn [(kv (Pair String String))] -> Bool (= (pairFirst kv) key)) table))
     ((some kv) (pairSecond kv))
     ((none) ""))
 
@@ -661,7 +661,7 @@ fn shebangLang name: String -> String
                        (and (stringStartsWith? lower (pairFirst kv))
                             (versionSuffix? (cut lower (stringLength (pairFirst kv)) (stringLength lower)))))
                      (shebangNames)))]
-    (mt (listHead hit)
+    (match (listHead hit)
       ((some kv) (pairSecond kv))
       ((none) (let [(a (alnumOnly name))] (str "shebang." (if (stringEmpty? a) "empty" a))))))
 
@@ -692,14 +692,14 @@ fn osError e: String path: String -> String
     (if (stringEmpty? errno) e (str "[Errno " errno "] " why ": '" path "'")))
 
 fn foreignLangOf! full: String rel: String -> (Result String String)
-  (mt (fileReadRange full 0 256)
+  (match (fileReadRange full 0 256)
     ((err e) (err (osError e full)))
     ((ok hb) (ok (langFromHead hb (baseName rel)))))
 
 fn measureForeign! full: String lang: String -> (Result (Pair Int64 Int64) String)
   (if (binaryLang? lang)
     (ok (pair 0 0))
-    (mt (fileReadString full)
+    (match (fileReadString full)
       ((err e) (err (osError e full)))
       ((ok raw)
        (let [(text (normalizeNewlines raw))
@@ -799,7 +799,7 @@ fn entryAt text: String bs: Bytes n: Int64 at: Int64 -> (Option (Pair String Ent
       (else (none))))
 
 fn addEntry text: String bs: Bytes n: Int64 acc: Allow at: Int64 -> Allow
-  (mt (entryAt text bs n at)
+  (match (entryAt text bs n at)
     ((none) (with acc :bad (cons (unparsed "allowlist" text bs n at) acc.bad)))
     ((some pe)
      (let [(path (pairFirst pe)) (seen (mapHas? acc.entries path))]
@@ -852,14 +852,14 @@ fn raiseAt text: String bs: Bytes n: Int64 at: Int64 -> (Option Raise)
                    :reason (unesc (cut text i j)) :date (cut text k d1) :form (cut text at z)))))
 
 fn addRow text: String bs: Bytes n: Int64 acc: Baseline at: Int64 -> Baseline
-  (mt (fileRowAt text bs n at)
+  (match (fileRowAt text bs n at)
     ((none) (with acc :bad (cons (unparsed "baseline :file" text bs n at) acc.bad)))
     ((some pr)
      (let [(path (pairFirst pr)) (seen (mapHas? acc.rows path))]
        (with acc :order (if seen acc.order (cons path acc.order)) :rows (mapSet acc.rows path (pairSecond pr)) :bad (if seen (cons (str "duplicate baseline row " path) acc.bad) acc.bad)))))
 
 fn addRaise text: String bs: Bytes n: Int64 acc: Baseline at: Int64 -> Baseline
-  (mt (raiseAt text bs n at)
+  (match (raiseAt text bs n at)
     ((none) (with acc :bad (cons (unparsed "baseline :raise (needs :path :lang :lines :py :reason :date)" text bs n at) acc.bad)))
     ((some r) (with acc :raises (cons r acc.raises))))
 
@@ -899,7 +899,7 @@ fn perItem id: String bad: (List String) err: String n: Int64 -> (List Check)
 
 fn fmtCheck c: Check -> String
   (str "(:check :id " c.id " :status " c.status
-       (mt c.n ((some k) (str " :n " (itos k))) ((none) ""))
+       (match c.n ((some k) (str " :n " (itos k))) ((none) ""))
        (if (stringEmpty? c.err) "" (str " :err " c.err))
        (if (stringEmpty? c.ev) "" (str " :ev \"" (esc c.ev 400) "\""))
        ")")
@@ -924,63 +924,63 @@ fn gitCmd root: String args: (List String) -> p/ProcessCmd
   (p/withTimeout (p/withCwd (p/cmd "git" args) root) 600000)
 
 fn gitRun! root: String args: (List String) -> (Result p/ProcessOutput String)
-  (mt (p/exec! (gitCmd root args))
+  (match (p/exec! (gitCmd root args))
     ((ok o) (ok o))
     ((err pe) (err (procErrText args pe))))
 
 fn procErrText args: (List String) pe: p/ProcessError -> String
-  (mt pe
+  (match pe
     ((p/notFound b) (str "ERR_TOOL_ABSENT: " b " is not on PATH"))
     ((p/permissionDenied b) (str "ERR_TOOL_ABSENT: " b " is not executable"))
     ((p/timeout ms) (str "git " (stringJoin args " ") ": timeout after " (itos ms) "ms"))
     ((p/executionFailed code msg) (str "git " (stringJoin args " ") ": " msg)))
 
 fn git! root: String args: (List String) -> (Result String String)
-  (mt (gitRun! root args)
+  (match (gitRun! root args)
     ((err e) (err e))
     ((ok o) (if (= o.exitCode 0) (ok (normalizeNewlines o.stdout)) (err (str "git " (stringJoin args " ") ": " (stringTrim o.stderr))))))
 
 fn gitLoose! root: String args: (List String) -> (Result String String)
-  (mt (gitRun! root args)
+  (match (gitRun! root args)
     ((err e) (err e))
     ((ok o) (ok (if (= o.exitCode 0) (normalizeNewlines o.stdout) ""))))
 
 fn gitOk! root: String args: (List String) -> (Result Bool String)
-  (mt (gitRun! root args)
+  (match (gitRun! root args)
     ((err e) (err e))
     ((ok o) (ok (= o.exitCode 0))))
 
 fn foreignBase! root: String baseEnv: String -> (Result String String)
   (let [(given (stringTrim baseEnv))]
-    (mt (if (stringEmpty? given)
-          (mt (gitOk! root (list "rev-parse" "--verify" "-q" "refs/heads/main"))
+    (match (if (stringEmpty? given)
+          (match (gitOk! root (list "rev-parse" "--verify" "-q" "refs/heads/main"))
             ((err e) (err e))
             ((ok hasMain) (if hasMain (resultMap (gitLoose! root (list "merge-base" "HEAD" "main")) (fn [(s String)] -> String (stringTrim s))) (ok ""))))
           (ok given))
       ((err e) (err e))
       ((ok found)
        (let [(rev (if (stringEmpty? found) "HEAD" found))]
-         (mt (gitLoose! root (list "rev-parse" "--verify" "-q" (str rev "^{commit}")))
+         (match (gitLoose! root (list "rev-parse" "--verify" "-q" (str rev "^{commit}")))
            ((err e) (err e))
            ((ok out)
             (let [(sha (stringTrim out))]
               (if (stringEmpty? sha) (err (str "foreign ratchet base " rev " does not name a commit")) (ok sha)))))))))
 
 fn atRevision! root: String sha: String rel: String -> (Result (Option String) String)
-  (mt (gitRun! root (list "show" (str sha ":" rel)))
+  (match (gitRun! root (list "show" (str sha ":" rel)))
     ((err e) (err e))
     ((ok o) (ok (if (= o.exitCode 0) (some (normalizeNewlines o.stdout)) (none)))))
 
 fn ! plainFile? full: String dirReal: String -> Bool
-  (mt (realPath full)
+  (match (realPath full)
     ((err _) false)
     ((ok rp)
      (and (not (stringEmpty? dirReal))
           (= rp (str (if (= dirReal "/") "" dirReal) "/" (baseName full)))
-          (mt (fileStat full) ((ok st) st.isFile) ((err _) false)))))
+          (match (fileStat full) ((ok st) st.isFile) ((err _) false)))))
 
 fn dropBelow xs: (List String) p: String -> (List String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((some x) (if (< x p) (dropBelow (optionOr (listTail xs) (list)) p) xs))
     ((none) xs))
 
@@ -998,7 +998,7 @@ fn scanFile! root: String sorted: (List String) sc: Scan rel: String -> (Result 
         (sc1 (with sc :allowRest (pairSecond member) :prev rel :dir dir :dirReal dirReal))]
     (if (not (plainFile? full dirReal))
       (ok sc1)
-      (mt (foreignLangOf! full rel)
+      (match (foreignLangOf! full rel)
         ((err e) (err e))
         ((ok lang)
          (cond
@@ -1011,22 +1011,22 @@ fn addFound t: Tracked f: (Pair String String) -> Tracked
     (with t :order (if seen t.order (cons rel t.order)) :langs (mapSet t.langs rel (pairSecond f))))
 
 fn scanFiles! root: String sorted: (List String) files: (List String) sc: Scan -> (Result Tracked String)
-  (mt (listHead files)
+  (match (listHead files)
     ((none)
      (let [(t (fold addFound (Tracked :order (list) :langs (mapEmpty) :unlisted (list)) (listReverse sc.found)))]
        (ok (Tracked :order (listReverse t.order) :langs t.langs :unlisted (listReverse sc.unlisted)))))
     ((some rel)
-     (mt (scanFile! root sorted sc rel)
+     (match (scanFile! root sorted sc rel)
        ((err e) (err e))
        ((ok sc1) (scanFiles! root sorted (optionOr (listTail files) (list)) sc1)))))
 
 fn readText! full: String -> (Result (Option String) String)
-  (mt (fileStat full)
+  (match (fileStat full)
     ((err _) (ok (none)))
     ((ok st)
      (if (not st.isFile)
        (ok (none))
-       (mt (fileReadString full)
+       (match (fileReadString full)
          ((err e) (err (osError e full)))
          ((ok s) (ok (some (normalizeNewlines s))))))))
 
@@ -1061,10 +1061,10 @@ fn lookupKind k: String -> (Option (List String))
     (else (none)))
 
 fn measureAll! root: String t: Tracked paths: (List String) acc: (Map String (Pair Int64 Int64)) -> (Result (Map String (Pair Int64 Int64)) String)
-  (mt (listHead paths)
+  (match (listHead paths)
     ((none) (ok acc))
     ((some rel)
-     (mt (measureForeign! (str root "/" rel) (langsOf t rel))
+     (match (measureForeign! (str root "/" rel) (langsOf t rel))
        ((err e) (err e))
        ((ok m) (measureAll! root t (optionOr (listTail paths) (list)) (mapSet acc rel m))))))
 
@@ -1072,7 +1072,7 @@ fn measuredOf ms: (Map String (Pair Int64 Int64)) p: String -> (Pair Int64 Int64
   (optionOr (mapGet ms p) (pair 0 0))
 
 fn growthOf t: Tracked b: Baseline ms: (Map String (Pair Int64 Int64)) p: String -> (List String)
-  (mt (mapGet b.rows p)
+  (match (mapGet b.rows p)
     ((none) (list))
     ((some row)
      (let [(m (measuredOf ms p)) (lines (pairFirst m)) (py (pairSecond m)) (lang (langsOf t p))]
@@ -1088,10 +1088,10 @@ fn covered? raises: (List Raise) p: String row: Row -> Bool
 fn raisedFinding b: Baseline baseRows: (Map String Row) base: String p: String -> (List String)
   (let [(row (optionOr (mapGet b.rows p) (Row :lang "" :lines 0 :py 0)))
         (old (mapGet baseRows p))
-        (kept (mt old ((some o) (and (= row.lang o.lang) (<= row.lines o.lines) (<= row.py o.py))) ((none) false)))]
+        (kept (match old ((some o) (and (= row.lang o.lang) (<= row.lines o.lines) (<= row.py o.py))) ((none) false)))]
     (if (or kept (covered? b.raises p row))
       (list)
-      (let [(was (mt old ((some o) (str ":" o.lang " :lines " (itos o.lines) " :py " (itos o.py))) ((none) "absent")))]
+      (let [(was (match old ((some o) (str ":" o.lang " :lines " (itos o.lines) " :py " (itos o.py))) ((none) "absent")))]
         (list (str p " raised to :" row.lang " :lines " (itos row.lines) " :py " (itos row.py) " from " was " at " (cut base 0 12) " without a covering (:raise ... :reason :date)")))))
 
 fn sumBy xs: (List Int64) -> Int64
@@ -1117,23 +1117,23 @@ fn sortedKeys ks: (List String) -> (List String)
   (listSort ks)
 
 fn foreignAudit! root: String showAll: Bool baseEnv: String -> (Result Audit String)
-  (mt (readText! (str root "/" (allowlistRel)))
+  (match (readText! (str root "/" (allowlistRel)))
     ((err e) (err e))
     ((ok maybe)
-     (mt maybe
+     (match maybe
        ((none) (ok (Audit :checks (list (failCheck "gate4Foreign" "ERR_FOREIGN" "scripts/audit/foreignAllowlist.asn absent")) :head "" :tail "")))
        ((some text) (auditAllowlist! root showAll baseEnv text)))))
 
 fn auditAllowlist! root: String showAll: Bool baseEnv: String text: String -> (Result Audit String)
      (let [(allow (parseAllowlist text))]
-       (mt (git! root (list "ls-files" "-z"))
+       (match (git! root (list "ls-files" "-z"))
          ((err e) (err e))
          ((ok listing)
           (let [(files (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (stringSplit listing "\u0000")))]
-            (mt (inlineAll! root files (InlineReport :counts (mapEmpty) :files (list) :total 0))
+            (match (inlineAll! root files (InlineReport :counts (mapEmpty) :files (list) :total 0))
               ((err e) (err e))
               ((ok inline)
-               (mt (scanFiles! root (listSort allow.order) files (Scan :found (list) :unlisted (list) :allowRest (listSort allow.order) :prev "" :dir "" :dirReal ""))
+               (match (scanFiles! root (listSort allow.order) files (Scan :found (list) :unlisted (list) :allowRest (listSort allow.order) :prev "" :dir "" :dirReal ""))
                  ((err e) (err e))
                  ((ok t) (auditTracked! root showAll baseEnv allow files t inline)))))))))
 
@@ -1144,16 +1144,16 @@ fn auditTracked! root: String showAll: Bool baseEnv: String allow: Allow files: 
         (langPaths (sortedKeys t.order))
         (kindBad (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (kindFinding allow t p))) (list) langPaths))
         (c2 (listAppend c1 (perItem "foreignKind" kindBad "ERR_FOREIGN_KIND" (listLength t.order))))]
-    (mt (readText! (str root "/" (baselineRel)))
+    (match (readText! (str root "/" (baselineRel)))
       ((err e) (err e))
       ((ok maybe)
-       (mt maybe
+       (match maybe
          ((none) (ok (Audit :checks (listAppend c2 (list (failCheck "foreignBaseline" "ERR_FOREIGN_BASELINE" (str (baselineRel) " absent; seed it with audit foreign --lower")))) :head "" :tail "")))
          ((some btext) (auditMeasured! root showAll baseEnv allow t btext c2 inline))))))
 
 fn auditMeasured! root: String showAll: Bool baseEnv: String allow: Allow t: Tracked btext: String c2: (List Check) inline: InlineReport -> (Result Audit String)
        (let [(b (parseBaseline btext))]
-         (mt (measureAll! root t t.order (mapEmpty))
+         (match (measureAll! root t t.order (mapEmpty))
            ((err e) (err e))
            ((ok ms) (auditBaseline! root showAll baseEnv allow t b ms c2 inline))))
 
@@ -1182,28 +1182,28 @@ fn auditBaseline! root: String showAll: Bool baseEnv: String allow: Allow t: Tra
                    (listAppend (if (> totalLines limitLines) (list (str "total foreign lines " (itos totalLines) " > baseline " (itos limitLines) " (+" (itos (- totalLines limitLines)) ")")) (list))
                                (if (> totalPy limitPy) (list (str "total embedded python lines " (itos totalPy) " > baseline " (itos limitPy) " (+" (itos (- totalPy limitPy)) ")")) (list))))))
         (c4 (listAppend c3 (perItem "foreignGrowth" grown "ERR_FOREIGN_GROWTH" rowCount)))]
-    (mt (foreignBase! root baseEnv)
+    (match (foreignBase! root baseEnv)
       ((err e) (err e))
       ((ok base)
-       (mt (atRevision! root base (baselineRel))
+       (match (atRevision! root base (baselineRel))
          ((err e) (err e))
          ((ok baseText)
-          (mt (atRevision! root base (allowlistRel))
+          (match (atRevision! root base (allowlistRel))
             ((err e) (err e))
             ((ok baseAllow) (ok (auditRatchet showAll allow t b ms c4 base baseText baseAllow totalLines limitLines totalPy inline)))))))))
 
 fn auditRatchet showAll: Bool allow: Allow t: Tracked b: Baseline ms: (Map String (Pair Int64 Int64)) c4: (List Check) base: String baseText: (Option String) baseAllow: (Option String) totalLines: Int64 limitLines: Int64 totalPy: Int64 inline: InlineReport -> Audit
   (let [(rowCount (listLength b.order))
-        (baseB (mt baseText ((some bt) (parseBaseline bt)) ((none) (Baseline :order (list) :rows (mapEmpty) :raises (list) :bad (list)))))
-        (raisedBad (mt baseText
+        (baseB (match baseText ((some bt) (parseBaseline bt)) ((none) (Baseline :order (list) :rows (mapEmpty) :raises (list) :bad (list)))))
+        (raisedBad (match baseText
                      ((none) (list))
                      ((some _) (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (raisedFinding b baseB.rows base p))) (list) (sortedKeys b.order)))))
         (c5 (listAppend c4 (perItem "foreignRaise" raisedBad "ERR_BASELINE_RAISED" rowCount)))
-        (baseEntries (mt baseAllow ((some ba) (parseAllowlist ba).entries) ((none) (mapEmpty))))
+        (baseEntries (match baseAllow ((some ba) (parseAllowlist ba).entries) ((none) (mapEmpty))))
         (fresh (filter (fn [(p String)] -> Bool (not (mapHas? baseEntries p))) (sortedKeys allow.order)))
         (untilBad (map (fn [(p String)] -> String (str "new entry " p " has :until :none and no :reason"))
                        (filter (fn [(p String)] -> Bool
-                                 (mt (mapGet allow.entries p)
+                                 (match (mapGet allow.entries p)
                                    ((some e) (and (= e.until "none") (stringEmpty? (stripAll e.reason))))
                                    ((none) false)))
                                fresh)))
@@ -1234,7 +1234,7 @@ fn pad2 k: Int64 -> String
   (if (< k 10) (str "0" (itos k)) (itos k))
 
 fn localOffsetS! root: String -> (Result Int64 String)
-  (mt (git! root (list "-c" "user.name=aslAudit" "-c" "user.email=aslAudit@localhost" "var" "GIT_COMMITTER_IDENT"))
+  (match (git! root (list "-c" "user.name=aslAudit" "-c" "user.email=aslAudit@localhost" "var" "GIT_COMMITTER_IDENT"))
     ((err e) (err e))
     ((ok ident)
      (let [(tz (optionOr (listLast (stringSplit (stringTrim ident) " ")) ""))
@@ -1246,7 +1246,7 @@ fn localOffsetS! root: String -> (Result Int64 String)
          (err (str "git var GIT_COMMITTER_IDENT: no timezone in " ident))))))
 
 fn localDate! root: String -> (Result String String)
-  (mt (localOffsetS! root)
+  (match (localOffsetS! root)
     ((err e) (err e))
     ((ok off)
      (let [(secs (+ (/ (nowNs) 1000000000) off))
@@ -1266,18 +1266,18 @@ fn lowerRow! root: String seeded: Bool b: Baseline acc: Lowered rel: String -> (
   (let [(full (str root "/" rel))]
     (if (not (plainFile? full (resultOr (realPath (dirName full)) "")))
       (ok acc)
-      (mt (foreignLangOf! full rel)
+      (match (foreignLangOf! full rel)
         ((err e) (err e))
         ((ok found)
          (let [(lang (langOr found "none"))]
-           (mt (measureForeign! full lang)
+           (match (measureForeign! full lang)
              ((err e) (err e))
              ((ok m)
               (let [(lines (pairFirst m)) (py (pairSecond m)) (row (mapGet b.rows rel))]
                 (cond
                   (seeded (ok (with acc :rows (cons (baselineRow rel lang lines py) acc.rows))))
                   (else
-                   (mt row
+                   (match row
                      ((none) (ok acc))
                      ((some r)
                       (if (and (= r.lang lang) (<= lines r.lines) (<= py r.py))
@@ -1286,10 +1286,10 @@ fn lowerRow! root: String seeded: Bool b: Baseline acc: Lowered rel: String -> (
                         (ok (with acc :rows (cons (baselineRow rel r.lang r.lines r.py) acc.rows))))))))))))))))
 
 fn lowerRows! root: String seeded: Bool b: Baseline paths: (List String) acc: Lowered -> (Result Lowered String)
-  (mt (listHead paths)
+  (match (listHead paths)
     ((none) (ok (with acc :rows (listReverse acc.rows))))
     ((some rel)
-     (mt (lowerRow! root seeded b acc rel)
+     (match (lowerRow! root seeded b acc rel)
        ((err e) (err e))
        ((ok a1) (lowerRows! root seeded b (optionOr (listTail paths) (list)) a1)))))
 
@@ -1297,36 +1297,36 @@ fn rstripNewlines s: String -> String
   (if (stringEndsWith? s "\n") (rstripNewlines (cut s 0 (- (stringLength s) 1))) s)
 
 fn lowerBaseline! root: String -> (Result (Pair Int64 Int64) String)
-  (mt (readText! (str root "/" (allowlistRel)))
+  (match (readText! (str root "/" (allowlistRel)))
     ((err e) (err e))
     ((ok maybe)
-     (mt maybe
+     (match maybe
        ((none) (err "scripts/audit/foreignAllowlist.asn absent"))
        ((some text) (lowerFrom! root text)))))
 
 fn lowerFrom! root: String text: String -> (Result (Pair Int64 Int64) String)
      (let [(allow (parseAllowlist text))
            (bpath (str root "/" (baselineRel)))]
-       (mt (readText! bpath)
+       (match (readText! bpath)
          ((err e) (err e))
          ((ok btext)
-          (let [(b (mt btext ((some bt) (parseBaseline bt)) ((none) (Baseline :order (list) :rows (mapEmpty) :raises (list) :bad (list)))))
+          (let [(b (match btext ((some bt) (parseBaseline bt)) ((none) (Baseline :order (list) :rows (mapEmpty) :raises (list) :bad (list)))))
                 (bad (listAppend allow.bad b.bad))]
             (if (not (listEmpty? bad))
               (err (str "allowlist or baseline does not parse: " (optionOr (listHead bad) "")))
-              (mt (lowerRows! root (none? btext) b allow.order (Lowered :rows (list) :lowered 0))
+              (match (lowerRows! root (none? btext) b allow.order (Lowered :rows (list) :lowered 0))
                 ((err e) (err e))
                 ((ok low)
-                 (mt (localDate! root)
+                 (match (localDate! root)
                    ((err e) (err e))
                    ((ok date)
                     (let [(body (str (stringJoin (map (fn [(r String)] -> String (str "  " r "\n")) low.rows) "")
                                      (stringJoin (map (fn [(r Raise)] -> String (str "  " r.form "\n")) b.raises) "")))
                           (tmp (str bpath ".tmp"))]
-                      (mt (fileWrite tmp (str (baselineHead date) (rstripNewlines body) ")\n"))
+                      (match (fileWrite tmp (str (baselineHead date) (rstripNewlines body) ")\n"))
                         ((err e) (err (osError (str e) tmp)))
                         ((ok _)
-                         (mt (pathRename tmp bpath)
+                         (match (pathRename tmp bpath)
                            ((err e) (err (osError e tmp)))
                            ((ok _) (ok (pair low.lowered (listLength low.rows)))))))))))))))))
 
@@ -1337,17 +1337,17 @@ fn usageOk? args: (List String) -> Bool
 fn runForeign! root: String args: (List String) baseEnv: String -> ForeignRun
   (if (not (usageOk? args))
     (emit "foreign" (list (failCheck "usage" "ERR_USAGE" (str "foreign takes --lower and --raises, got " (stringJoin args " ")))) "" "")
-    (mt (if (listContains? args "--lower")
+    (match (if (listContains? args "--lower")
           (resultMap (lowerBaseline! root) (fn [(lw (Pair Int64 Int64))] -> String (str ":lowered " (itos (pairFirst lw)) " :written " (itos (pairSecond lw)) " ")))
           (ok ""))
       ((err e) (internal e))
       ((ok lowHead)
-       (mt (foreignAudit! root (listContains? args "--raises") baseEnv)
+       (match (foreignAudit! root (listContains? args "--raises") baseEnv)
          ((err e) (internal e))
          ((ok a) (emit "foreign" a.checks (str lowHead a.head) a.tail))))))
 
 fn ! main args: (List String) -> (Result Int64 String)
-  (mt (git! "." (list "rev-parse" "--show-toplevel"))
+  (match (git! "." (list "rev-parse" "--show-toplevel"))
     ((err e) (let [(r (internal e))] (do (eprintln r.summary) (println r.receipt) (ok r.exitCode))))
     ((ok top)
      (let [(r (runForeign! (stringTrim top) args (optionOr (envGet "ASL_FOREIGN_BASE") "")))]

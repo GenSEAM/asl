@@ -103,10 +103,10 @@ fn formatRssMb kb: Int64 -> String
   (str (stringFromInt64 (/ kb 1024)) "." (stringFromInt64 (/ (* (mod kb 1024) 10) 1024)))
 
 fn rssKb! -> Int64
-  (mt (procRusage) ((ok u) u.selfMaxRssKb) ((err _) 0))
+  (match (procRusage) ((ok u) u.selfMaxRssKb) ((err _) 0))
 
 fn sleepSeconds! raw: String -> (Result String String)
-  (mt (stringToFloat64 raw)
+  (match (stringToFloat64 raw)
     ((none) (err (str "sleep needs a number of seconds, got " raw)))
     ((some sec)
       (if (or (< sec 0.0) (> sec 3600.0))
@@ -119,15 +119,15 @@ fn dispatchRequest! rt: EngineRuntime line: String nowSec: Int64 -> (Pair Engine
         (args (pairSecond parsed))]
     (cond
       ((= op "ping")
-        (let [(slept (mt (w/getArg args "sleep") ((some raw) (sleepSeconds! raw)) ((none) (ok ""))))
+        (let [(slept (match (w/getArg args "sleep") ((some raw) (sleepSeconds! raw)) ((none) (ok ""))))
               (uptime (- nowSec rt.startTimeSec))
               (newRt (withActivity rt (wd/activityOnRequestStart rt.activity nowSec)))]
-          (mt slept
+          (match slept
             ((err e) (pair newRt (w/formatReceiptError e)))
             ((ok _) (pair newRt (w/formatPongOk (procSelf) uptime rt.config.scope))))))
       ((or (= op "sleep") (= op "wait"))
         (let [(secStr (w/getArgOr args "sec" (w/getArgOr args "seconds" "3")))]
-          (mt (sleepSeconds! secStr)
+          (match (sleepSeconds! secStr)
             ((err e) (pair rt (w/formatReceiptError e)))
             ((ok _) (pair rt (w/formatSleepReceipt secStr))))))
       ((= op "engine")
@@ -211,14 +211,14 @@ fn cmdPing! rootDir: String scopeOpt: String -> String
       (w/formatPongOffline cfg.scope)))
 fn cmdStart! rootDir: String scopeOpt: String foreground: Bool force: Bool -> (Result EngineRuntime String)
   (let [(cfg (resolveScope! rootDir scopeOpt))
-        (isDarwin (mt (platformInfo) ((ok p) (= p.os "Darwin")) ((err _) true)))
+        (isDarwin (match (platformInfo) ((ok p) (= p.os "Darwin")) ((err _) true)))
         (pathCheck (checkSocketPath cfg.socketPath isDarwin))]
-    (mt pathCheck
+    (match pathCheck
       ((err e)
         (err e))
       ((ok _)
         (let [(leaseRes (lse/acquireLease! cfg.socketPath))]
-          (mt leaseRes
+          (match leaseRes
             ((err e)
               (err e))
             ((ok lease)
@@ -247,13 +247,13 @@ fn cmdStop! rootDir: String scopeOpt: String -> String
 fn cmdRestart! rootDir: String scopeOpt: String force: Bool -> (Result String String)
   (let [(cfg (resolveScope! rootDir scopeOpt))
         (brkRes (brk/checkBreakerFile! cfg.socketPath force cfg.logFile))]
-    (mt brkRes
+    (match brkRes
       ((err e)
         (err e))
       ((ok _)
         (let [(_ (cmdStop! rootDir scopeOpt))
               (startRes (cmdStart! rootDir scopeOpt false force))]
-          (mt startRes
+          (match startRes
             ((err e)
               (err e))
             ((ok rt)

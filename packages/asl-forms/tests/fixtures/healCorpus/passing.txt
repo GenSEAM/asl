@@ -130,7 +130,7 @@ fn solve n: Int64 -> Int64
 fn solve n: Int64 -> Int64
   (let [(a (+ n 5)) (b (* n 1)) (ws [a b (+ a b)])
         (opt (cond ((> b 0) (some b)) (else none)))]
-    (mt opt
+    (match opt
       ((some v) (+ (listSum ws) 1))
       (none (listSum ws))))
 
@@ -224,7 +224,7 @@ fn solve n: Int64 -> Int64
         (b (* n 2))
         (ws [a b (+ a b)])
         (opt (cond ((> b 0) (some b)) (else none)))]
-    (mt opt
+    (match opt
       ((some v) (+ (listSum ws) 1))
       (none (listSum ws))))
 
@@ -493,7 +493,7 @@ fn solve n: Int64 -> Int64
 
 fn solve n: Int64 -> Int64
   (let [(a (+ n 5)) (b (* n 1)) (ws [a b (+ a b)]) (opt (if (> b 0) (some b) none))]
-    (mt opt
+    (match opt
       ((some v) (+ (listSum ws) 1))
       (none (listSum ws))))
 
@@ -502,19 +502,19 @@ fn solve n: Int64 -> Int64
 
 fn solve n: Int64 -> Int64
   (let [(a (+ n 3)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
-    (mt opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
+    (match opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
 
 ;;; case E3_bare_t20
 (module cand :x [solve])
 
 fn solve n: Int64 -> Int64
-  (let [(a (+ n 2)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))] (mt opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
+  (let [(a (+ n 2)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))] (match opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
 
 ;;; case E3_bare_t25
 (module cand :x [solve])
 
 fn solve n: Int64 -> Int64
-  (let [(a (+ n 1)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))] (mt opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
+  (let [(a (+ n 1)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))] (match opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
 
 ;;; case E3_bare_t49
 (module cand :x [solve])
@@ -642,7 +642,7 @@ fn solve n: Int64 -> Int64
 
 fn solve n: Int64 -> Int64
   (let [(a (+ n 1)) (b (* n 3)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
-    (mt opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
+    (match opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
 
 ;;; case E3_qmark_t32
 (module cand :x [solve])
@@ -665,7 +665,7 @@ fn solve n: Int64 -> Int64
 
 fn solve n: Int64 -> Int64
   (let [(a (+ n 1)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
-    (mt opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
+    (match opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
 
 ;;; case E3_qmark_t45
 (module cand :x [solve])
@@ -696,7 +696,7 @@ fn solve n: Int64 -> Int64
 (module cand :x [solve])
 fn solve n: Int64 -> Int64
   (let [(a (+ n 1)) (b (* n 1)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
-    (mt opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
+    (match opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
 
 ;;; case E7_currentHeader_t04
 (module cand :x [solve])
@@ -709,7 +709,7 @@ fn solve n: Int64 -> Int64
 
 fn solve n: Int64 -> Int64
   (let [(a (+ n 6)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
-    (mt opt
+    (match opt
       ((some v) (+ (listSum ws) 1))
       (none (listSum ws))))
 
@@ -845,7 +845,7 @@ fn solve n: Int64 -> Int64
 (module cand :x [solve])
 fn solve n: Int64 -> Int64
   (let [(a (+ n 6)) (b (* n 4)) (ws [a b (+ a b)]) (opt (cond ((> b 0) (some b)) (else none)))]
-    (mt opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
+    (match opt ((some v) (+ (listSum ws) 1)) (none (listSum ws))))
 
 ;;; case E7_currentHeader_t49
 (module cand :x [solve])

@@ -78,7 +78,7 @@ fn aslOpNames -> (List String)
 
 
 fn recGet rec: (List (Pair String Val)) k: String -> (Option Val)
-  (mt (listHead (filter (fn [p] (= (pairFirst p) k)) rec))
+  (match (listHead (filter (fn [p] (= (pairFirst p) k)) rec))
     ((some p) (some (pairSecond p)))
     ((none) (none)))
 
@@ -94,7 +94,7 @@ fn vs k: String v: String -> (Pair String Val)
   (pair k (vStr v))
 
 fn serVal v: Val -> String
-  (mt v
+  (match v
     ((vStr s) (c/serString s))
     ((vInt n) (stringFromInt64 n))
     ((vBool b) (if b "true" "false"))
@@ -107,7 +107,7 @@ fn serRec rec: (List (Pair String Val)) -> String
   (str "(r" (c/joinAll (map (fn [p] (str " (" (pairFirst p) " " (serVal (pairSecond p)) ")")) rec)) ")")
 
 fn pyStr v: Val -> String
-  (mt v
+  (match v
     ((vStr s) s)
     ((vInt n) (stringFromInt64 n))
     ((vBool b) (if b "True" "False"))
@@ -117,7 +117,7 @@ fn pyStr v: Val -> String
     ((vRecs rs) (str "[" (stringJoin (map (fn [x] "{...}") rs) ", ") "]")))
 
 fn truthyVal v: Val -> Bool
-  (mt v
+  (match v
     ((vStr s) (not (stringEmpty? s)))
     ((vInt n) (!= n 0))
     ((vBool b) b)
@@ -127,16 +127,16 @@ fn truthyVal v: Val -> Bool
     ((vRecs rs) (not (listEmpty? rs))))
 
 fn truthyField rec: (List (Pair String Val)) k: String -> Bool
-  (mt (recGet rec k) ((some v) (truthyVal v)) ((none) false))
+  (match (recGet rec k) ((some v) (truthyVal v)) ((none) false))
 
 fn notNone rec: (List (Pair String Val)) k: String -> Bool
-  (mt (recGet rec k) ((some v) (mt v ((vNone) false) (_ true))) ((none) false))
+  (match (recGet rec k) ((some v) (match v ((vNone) false) (_ true))) ((none) false))
 
 fn fieldStr rec: (List (Pair String Val)) k: String dflt: String -> String
-  (mt (recGet rec k) ((some v) (pyStr v)) ((none) dflt))
+  (match (recGet rec k) ((some v) (pyStr v)) ((none) dflt))
 
 fn fromAsl v: o/RVal -> Val
-  (mt v
+  (match v
     ((o/rStr s) (vStr s))
     ((o/rInt n) (vInt n))
     ((o/rBool b) (vBool b))
@@ -145,7 +145,7 @@ fn fromAsl v: o/RVal -> Val
     ((o/rNone) (vNone)))
 
 fn fromTxn v: t/RVal -> Val
-  (mt v
+  (match v
     ((t/rStr s) (vStr s))
     ((t/rInt n) (vInt n))
     ((t/rBool b) (vBool b))
@@ -153,7 +153,7 @@ fn fromTxn v: t/RVal -> Val
     ((t/rNone) (vNone)))
 
 fn fromGit v: g/RVal -> Val
-  (mt v
+  (match v
     ((g/rStr s) (vStr s))
     ((g/rInt n) (vInt n))
     ((g/rBool b) (vBool b))
@@ -161,7 +161,7 @@ fn fromGit v: g/RVal -> Val
     ((g/rPair a b) (vPair a b)))
 
 fn fromRun v: r/RVal -> Val
-  (mt v
+  (match v
     ((r/rStr s) (vStr s))
     ((r/rInt n) (vInt n))
     ((r/rBool b) (vBool b))
@@ -172,32 +172,32 @@ fn mapRec rec: (List (Pair String T)) conv: (fn [T] -> Val) -> (List (Pair Strin
 
 
 fn kvToVal v: c/KvVal -> Val
-  (mt v
+  (match v
     ((c/kvStr s) (vStr s))
-    ((c/kvInt d) (mt (stringToInt64 d) ((some n) (vInt n)) ((none) (vStr d)))))
+    ((c/kvInt d) (match (stringToInt64 d) ((some n) (vInt n)) ((none) (vStr d)))))
 
 fn kvText v: c/KvVal -> String
-  (mt v ((c/kvStr s) s) ((c/kvInt d) (pyStr (kvToVal (c/kvInt d)))))
+  (match v ((c/kvStr s) s) ((c/kvInt d) (pyStr (kvToVal (c/kvInt d)))))
 
 fn opGet op: (List (Pair String c/KvVal)) k: String -> (Option c/KvVal)
   (c/dictGet op k)
 
 fn opStr op: (List (Pair String c/KvVal)) k: String dflt: String -> String
-  (mt (opGet op k) ((some v) (kvText v)) ((none) dflt))
+  (match (opGet op k) ((some v) (kvText v)) ((none) dflt))
 
 fn opTruthy op: (List (Pair String c/KvVal)) k: String -> Bool
-  (mt (opGet op k) ((some v) (truthyVal (kvToVal v))) ((none) false))
+  (match (opGet op k) ((some v) (truthyVal (kvToVal v))) ((none) false))
 
 fn opFirst op: (List (Pair String c/KvVal)) keys: (List String) dflt: String -> String
-  (mt (listHead (filter (fn [k] (opTruthy op k)) keys))
+  (match (listHead (filter (fn [k] (opTruthy op k)) keys))
     ((some k) (opStr op k ""))
     ((none) dflt))
 
 fn opIsStr op: (List (Pair String c/KvVal)) k: String -> Bool
-  (mt (opGet op k) ((some v) (mt v ((c/kvStr _) true) ((c/kvInt _) false))) ((none) true))
+  (match (opGet op k) ((some v) (match v ((c/kvStr _) true) ((c/kvInt _) false))) ((none) true))
 
 fn opVal op: (List (Pair String c/KvVal)) k: String dflt: Val -> Val
-  (mt (opGet op k) ((some v) (kvToVal v)) ((none) dflt))
+  (match (opGet op k) ((some v) (kvToVal v)) ((none) dflt))
 
 
 fn isCont b: Int64 -> Bool
@@ -229,19 +229,19 @@ fn escapeAsn s: String -> String
   (c/escapeAsn s)
 
 fn escVal v: Val -> String
-  (mt v ((vNone) "") (_ (c/escapeAsn (pyStr v))))
+  (match v ((vNone) "") (_ (c/escapeAsn (pyStr v))))
 
 fn escField rec: (List (Pair String Val)) k: String -> String
-  (mt (recGet rec k) ((some v) (escVal v)) ((none) ""))
+  (match (recGet rec k) ((some v) (escVal v)) ((none) ""))
 
 fn strItems v: Val -> (List String)
-  (mt v ((vStrs xs) xs) ((vStr s) (stringChars s)) (_ (list)))
+  (match v ((vStrs xs) xs) ((vStr s) (stringChars s)) (_ (list)))
 
 fn quotedList v: Val -> String
   (stringJoin (map (fn [x] (str "\"" (c/escapeAsn x) "\"")) (strItems v)) " ")
 
 fn itemAt v: Val i: Int64 -> String
-  (mt v
+  (match v
     ((vPair a b) (stringFromInt64 (if (= i 0) a b)))
     ((vStrs xs) (optionOr (listGet xs i) "None"))
     (_ "None"))
@@ -268,7 +268,7 @@ fn capped s: String cap: Int64 cut: Int64 tail: String -> String
   (if (> (cpLen s) cap) (str (cpTake s cut) tail) s)
 
 fn gateRunsOf v: Val -> (List (List (Pair String Val)))
-  (mt v ((vRecs rs) rs) (_ (list)))
+  (match v ((vRecs rs) rs) (_ (list)))
 
 fn formatOpReceipt rec: (List (Pair String Val)) readCap: Int64 -> String
   (let [op (fieldStr rec "op" "")
@@ -410,12 +410,12 @@ fn wordEnd s: String n: Int64 i: Int64 -> Int64
 fn indexFrom s: String needle: String i: Int64 -> (Option Int64)
   (if (> i (stringLength s))
     (none)
-    (mt (stringIndexOf (c/sliceOf s i (stringLength s)) needle)
+    (match (stringIndexOf (c/sliceOf s i (stringLength s)) needle)
       ((some k) (some (+ i k)))
       ((none) (none))))
 
 fn wordAfterKey s: String key: String i: Int64 -> (Option String)
-  (mt (indexFrom s key i)
+  (match (indexFrom s key i)
     ((none) (none))
     ((some at)
       (let [n (stringLength s)
@@ -437,7 +437,7 @@ fn quotedEnd s: String n: Int64 j: Int64 -> Int64
     (else (quotedEnd s n (+ j 1))))
 
 fn quotedAfterKey s: String key: String i: Int64 -> (Option String)
-  (mt (indexFrom s key i)
+  (match (indexFrom s key i)
     ((none) (none))
     ((some at)
       (let [n (stringLength s)
@@ -454,7 +454,7 @@ fn intentReceipt op: (List (Pair String c/KvVal)) rid: String -> (List (Pair Str
       (list (vs "id" rid) (vs "op" "intent") (vs "status" "rejected") (vs "error" "ERR_INVALID_ARG")
         (vs "message" (str ":deliver is one of " (stringJoin (deliverables) ", ") ", not '" deliver "'")))
       (list (vs "id" rid) (vs "op" "intent") (vs "status" "ok") (vs "deliver" deliver)
-        (vs "why" (mt (quotedAfterKey form ":why" 0) ((some w) (c/asnUnescape w)) ((none) "")))
+        (vs "why" (match (quotedAfterKey form ":why" 0) ((some w) (c/asnUnescape w)) ((none) "")))
         (vs "kind" (optionOr (wordAfterKey form ":kind" 0) "")))))
 
 fn needsConfirmRec rid: String opName: String -> (List (Pair String Val))
@@ -462,20 +462,20 @@ fn needsConfirmRec rid: String opName: String -> (List (Pair String Val))
     (vs "message" (str "not executed: '" opName "' is an outward effect that needs the principal's confirmation; the run goes on")))
 
 fn nodeAtom n: p/SexpNode -> (Option String)
-  (mt n ((p/sexpAtom a) (some a)) (_ (none)))
+  (match n ((p/sexpAtom a) (some a)) (_ (none)))
 
 fn nodeStr n: p/SexpNode -> (Option String)
-  (mt n ((p/sexpStr s) (some s)) (_ (none)))
+  (match n ((p/sexpStr s) (some s)) (_ (none)))
 
 fn execNoteOp op: (List (Pair String c/KvVal)) rid: String -> (List (Pair String Val))
   (let [answer (c/noteStep (opStr op "form" "") (noteMaxChars))
-        items (mt (p/planTree answer)
-                ((ok nodes) (mt (listHead nodes) ((some nd) (mt nd ((p/sexpList xs) xs) (_ (list)))) ((none) (list))))
+        items (match (p/planTree answer)
+                ((ok nodes) (match (listHead nodes) ((some nd) (match nd ((p/sexpList xs) xs) (_ (list)))) ((none) (list))))
                 ((err _) (list)))
-        status (optionOr (mt (listGet items 1) ((some x) (nodeAtom x)) ((none) (none))) "")
-        chars (mt (listGet items 2) ((some x) (mt (nodeAtom x) ((some a) (stringToInt64 a)) ((none) (none)))) ((none) (none)))
-        text (mt (listGet items 3) ((some x) (nodeStr x)) ((none) (none)))
-        slot (mt (listGet items 4) ((some x) (nodeStr x)) ((none) (none)))]
+        status (optionOr (match (listGet items 1) ((some x) (nodeAtom x)) ((none) (none))) "")
+        chars (match (listGet items 2) ((some x) (match (nodeAtom x) ((some a) (stringToInt64 a)) ((none) (none)))) ((none) (none)))
+        text (match (listGet items 3) ((some x) (nodeStr x)) ((none) (none)))
+        slot (match (listGet items 4) ((some x) (nodeStr x)) ((none) (none)))]
     (if (or (!= (listLength items) 5)
             (or (not (listContains? (list "ok" "rejected" "missing") status)) (or (none? chars) (or (none? text) (none? slot)))))
       (list (vs "id" rid) (vs "op" "note") (vs "status" "rejected") (vs "error" "ERR_CORE_HOST_MALFORMED")
@@ -503,13 +503,13 @@ fn opWords op: (List (Pair String c/KvVal)) -> (List String)
         split (fold (fn [acc k]
                       (if (opTruthy op k)
                         (let [v (opStr op k "")]
-                          (listAppend acc (mt (rp/shlexSplit v) ((ok ws) ws) ((err _) (list v)))))
+                          (listAppend acc (match (rp/shlexSplit v) ((ok ws) ws) ((err _) (list v)))))
                         acc))
                 (list) (list "argv" "cmd"))]
     (listAppend named split))
 
 fn namesVar w: String name: String i: Int64 -> Bool
-  (mt (indexFrom w "$" i)
+  (match (indexFrom w "$" i)
     ((none) false)
     ((some at)
       (let [n (stringLength w)
@@ -526,7 +526,7 @@ fn ! hiddenTouched op: (List (Pair String c/KvVal)) env: ExecEnv -> Bool
       false
       (or (listAny? (fn [nm] (listAny? (fn [w] (namesVar w nm 0)) words)) names)
           (let [dirs (filter (fn [d] (not (stringEmpty? d)))
-                       (map (fn [nm] (mt (listHead (filter (fn [p] (= (pairFirst p) nm)) env.hiddenValues))
+                       (map (fn [nm] (match (listHead (filter (fn [p] (= (pairFirst p) nm)) env.hiddenValues))
                                        ((some p) (pairSecond p)) ((none) "")))
                          names))
                 root (absRoot! env.root)]
@@ -553,7 +553,7 @@ fn quotedRun s: String n: Int64 i: Int64 acc: (List String) -> (Pair (List Strin
       (pair (listReverse acc) i)))
 
 fn entriesMatch s: String i: Int64 -> (Option (List Int64))
-  (mt (indexFrom s ":entries (" i)
+  (match (indexFrom s ":entries (" i)
     ((none) (none))
     ((some at)
       (let [n (stringLength s)
@@ -567,7 +567,7 @@ fn entriesMatch s: String i: Int64 -> (Option (List Int64))
 
 fn ! hideHarnessEntries rec: (List (Pair String Val)) path: String root: String -> (List (Pair String Val))
   (let [out (if (truthyField rec "stdout") (fieldStr rec "stdout" "") "")]
-    (mt (entriesMatch out 0)
+    (match (entriesMatch out 0)
       ((none) rec)
       ((some m)
         (let [at (optionOr (listGet m 0) 0)
@@ -594,15 +594,15 @@ fn ! execGateOp! n: (Option c/KvVal) env: ExecEnv newId: (fn [] -> String) -> (L
         count (listLength gates)]
     (if (listEmpty? gates)
       (list (vs "id" rid) (vs "op" "gate") (vs "status" "rejected") (vs "error" "ERR_NO_GATES") (vs "message" "this run declares no :gates"))
-      (let [all (mt n ((none) true) ((some v) (mt v ((c/kvStr s) (stringEmpty? s)) ((c/kvInt _) false))))
-            i (mt n
+      (let [all (match n ((none) true) ((some v) (match v ((c/kvStr s) (stringEmpty? s)) ((c/kvInt _) false))))
+            i (match n
                 ((none) 0)
-                ((some v) (mt v
+                ((some v) (match v
                             ((c/kvInt d) (optionOr (stringToInt64 d) 0))
                             ((c/kvStr s) (if (allDigits s) (optionOr (stringToInt64 s) 0) 0)))))]
         (if (and (not all) (or (< i 1) (> i count)))
           (list (vs "id" rid) (vs "op" "gate") (vs "status" "rejected") (vs "error" "ERR_GATE_INDEX")
-            (vs "message" (str ":n " (mt n ((some v) (kvText v)) ((none) "")) " names no gate; the declared gates are 1 to " (stringFromInt64 count))))
+            (vs "message" (str ":n " (match n ((some v) (kvText v)) ((none) "")) " names no gate; the declared gates are 1 to " (stringFromInt64 count))))
           (let [picked (if all
                          (map (fn [k] (pair (+ k 1) (optionOr (listGet gates k) ""))) (range 0 count))
                          (list (pair i (optionOr (listGet gates (- i 1)) ""))))
@@ -633,7 +633,7 @@ fn ! writeCheck op: (List (Pair String c/KvVal)) opName: String env: ExecEnv new
         hasEscapes (and (or (stringContains? val "\"") (stringContains? val "\\"))
                         (or (stringContains? form "\\\"") (or (stringContains? form "\\\\") (or (stringContains? form "\\n") (stringContains? form "\\t")))))
         useRaw (and (not (listContains? rawFields field)) (and (opIsStr op field) (and (> (stringLength val) (rawRequiredBytes)) hasEscapes)))
-        isRaw (fn [k] (mt (opGet op k) ((some v) (= v (c/kvStr ":raw"))) ((none) false)))
+        isRaw (fn [k] (match (opGet op k) ((some v) (= v (c/kvStr ":raw"))) ((none) false)))
         rawMissing (or (= (opGet op "error") (some (c/kvStr "ERR_RAW_MISSING"))) (or (isRaw "content") (or (isRaw "old") (isRaw "new"))))
         owns env.owns
         effOwns (c/effectiveOwns owns)]
@@ -678,11 +678,11 @@ fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId:
                   (none))]
     (cond
       ((and step (= opName "intent")) (eo (intentReceipt op (newId)) procs))
-      ((mt effect ((t/effectUndeclared) true) (_ false))
+      ((match effect ((t/effectUndeclared) true) (_ false))
         (eo (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_EFFECT_UNDECLARED")
               (vs "message" (str "Operation '" opName "' not declared in effects registry")))
           procs))
-      ((mt effect ((t/effectConfirm) true) (_ false)) (eo (needsConfirmRec (newId) opName) procs))
+      ((match effect ((t/effectConfirm) true) (_ false)) (eo (needsConfirmRec (newId) opName) procs))
       ((and step (= opName "gate")) (eo (execGateOp! (opGet op "n") env newId) procs))
       ((some? gateIdx)
         (let [k (optionOr gateIdx 0)

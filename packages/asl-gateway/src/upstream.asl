@@ -182,11 +182,11 @@
   (:f pipe PipeState))
 
 fn pairUp xs: (List String) acc: (List String) -> (List String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (listReverse acc))
     ((some a)
      (let [(rest (optionOr (listTail xs) (list)))]
-       (mt (listHead rest)
+       (match (listHead rest)
          ((none) (listReverse (cons a acc)))
          ((some b) (pairUp (optionOr (listTail rest) (list)) (cons (stringConcat a b) acc)))))))
 
@@ -273,7 +273,7 @@ fn codepoints s: String -> (List Int64)
     (codepointsLoop bs 0 (bytesLength bs) (list)))
 
 fn inRangesLoop cp: Int64 rs: (List Int64) -> Bool
-  (mt (listHead rs)
+  (match (listHead rs)
     ((none) false)
     ((some lo)
      (let [(rest (optionOr (listTail rs) (list)))
@@ -302,7 +302,7 @@ fn isPySpace? cp: Int64 -> Bool
   (inRanges? cp (unicodeSpaceRanges))
 
 fn digitBlockLoop cp: Int64 rs: (List Int64) -> Int64
-  (mt (listHead rs)
+  (match (listHead rs)
     ((none) -1)
     ((some lo)
      (let [(rest (optionOr (listTail rs) (list)))
@@ -351,14 +351,14 @@ fn pyLower s: String -> String
   (let [(ups (upperChars))
         (lows (lowerChars))]
     (joinAll (map (fn [(c String)] -> String
-                    (mt (listIndexOf ups c)
+                    (match (listIndexOf ups c)
                       ((some i) (optionOr (listGet lows i) c))
                       ((none) c)))
                   (stringChars s))))
 
 fn envMapFromList rows: (List String) -> (Map String String)
   (fold (fn [(m (Map String String)) (row String)] -> (Map String String)
-          (mt (stringIndexOf row "=")
+          (match (stringIndexOf row "=")
             ((some i) (mapSet m (slice row 0 i) (slice row (+ i 1) (stringLength row))))
             ((none) m)))
         (mapEmpty) rows)
@@ -387,7 +387,7 @@ fn replaceAll s: String old: String new: String -> String
   (replaceAllLoop s old new 0 0 (list))
 
 fn floatCharsLoop cps: (List Int64) acc: (List String) -> (Result (List String) String)
-  (mt (listHead cps)
+  (match (listHead cps)
     ((none) (ok (listReverse acc)))
     ((some cp)
      (let [(rest (optionOr (listTail cps) (list)))
@@ -402,7 +402,7 @@ fn digitChar? c: String -> Bool
   (and (= (stringLength c) 1) (stringContains? "0123456789" c))
 
 fn underscoresLoop cs: (List String) prev: String acc: (List String) -> (Result (List String) String)
-  (mt (listHead cs)
+  (match (listHead cs)
     ((none) (ok (listReverse acc)))
     ((some c)
      (let [(rest (optionOr (listTail cs) (list)))]
@@ -436,15 +436,15 @@ fn specialLiteral? s: String -> Bool
 
 fn pyFloat text: String -> (Result Float64 String)
   (let [(fail (str "ValueError: could not convert string to float: " text))]
-    (mt (floatCharsLoop (codepoints text) (list))
+    (match (floatCharsLoop (codepoints text) (list))
       ((err _) (err fail))
       ((ok cs)
-       (mt (underscoresLoop cs "" (list))
+       (match (underscoresLoop cs "" (list))
          ((err _) (err fail))
          ((ok kept)
           (let [(s (stringTrim (joinAll kept)))]
             (if (or (decimalLiteral? s) (specialLiteral? s))
-              (mt (stringToFloat64 s)
+              (match (stringToFloat64 s)
                 ((some f) (ok f))
                 ((none) (err fail)))
               (err fail))))))))
@@ -457,7 +457,7 @@ fn upstreamSettings env: (Map String String) -> (Result UpstreamSettings String)
         (key (if openrouter
                (envGetOr env "OPENROUTER_API_KEY" "")
                (envGetOr env "OPENAI_API_KEY" (envGetOr env "LLM_GATEWAY_API_KEY" ""))))]
-    (mt (pyFloat (envGetOr env "OLLAMA_TIMEOUT_SEC" "300"))
+    (match (pyFloat (envGetOr env "OLLAMA_TIMEOUT_SEC" "300"))
       ((err e) (err e))
       ((ok timeout)
        (ok (UpstreamSettings
@@ -531,7 +531,7 @@ fn upstreamProviderEndpoint row: UpstreamProvider st: UpstreamSettings env: (Map
   (UpstreamEndpoint :provider row.id :url (row.url st env) :key (row.key st env) :sessionHeader "")
 
 fn getUpstreamForModelIn providers: (List UpstreamProvider) fallback: UpstreamProvider st: UpstreamSettings env: (Map String String) model: (Option String) -> UpstreamEndpoint
-  (let [(row (mt model
+  (let [(row (match model
                ((none) fallback)
                ((some m) (optionOr (firstProvider (fn [(r UpstreamProvider)] -> Bool (providerClaims? r m)) providers) fallback))))]
     (upstreamProviderEndpoint row st env))
@@ -540,13 +540,13 @@ fn getUpstreamForModel st: UpstreamSettings env: (Map String String) model: (Opt
   (getUpstreamForModelIn (upstreamProviders) (upstreamFallback) st env model)
 
 fn upstreamTimeoutSecIn providers: (List UpstreamProvider) st: UpstreamSettings provider: String -> Float64
-  (mt (upstreamProviderNamed providers provider)
+  (match (upstreamProviderNamed providers provider)
     ((some row) (row.timeoutSec st))
     ((none) 45.0))
 
 ; (:m :do "0.0 (same as an unnamed provider) means nothing configured a :firstByteSec for this provider; firstByteCapSec reads that as its own 60s floor default, never a second hardcoded literal here")
 fn upstreamFirstByteSecIn providers: (List UpstreamProvider) st: UpstreamSettings provider: String -> Float64
-  (mt (upstreamProviderNamed providers provider)
+  (match (upstreamProviderNamed providers provider)
     ((some row) (row.firstByteSec st))
     ((none) 0.0))
 
@@ -595,10 +595,10 @@ fn ceilMs secs: Float64 -> Int64
 fn ! tokenBucketAcquire! b: TokenBucket timeout: Float64 -> (Pair TokenBucket (Result Bool String))
   (let [(step (tokenBucketBegin b timeout (wallSeconds!)))
         (b1 (pairFirst step))]
-    (mt (pairSecond step)
+    (match (pairSecond step)
       ((err e) (pair b1 (err e)))
       ((ok s)
-       (mt s
+       (match s
          ((bucketAcquired) (pair b1 (ok true)))
          ((bucketRefused) (pair b1 (ok false)))
          ((bucketWait secs)
@@ -613,13 +613,13 @@ fn bucketKey model: String rpm: Float64 -> String
   (str model "\u{0}" (stringFromFloat64 rpm))
 
 fn findBucket xs: (List (Pair String TokenBucket)) k: String -> (Option TokenBucket)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) none)
     ((some p) (if (= (pairFirst p) k) (some (pairSecond p)) (findBucket (optionOr (listTail xs) (list)) k))))
 
 fn geminiBucket reg: BucketRegistry model: String rpm: Float64 now: Float64 -> (Pair BucketRegistry TokenBucket)
   (let [(k (bucketKey model rpm))]
-    (mt (findBucket reg.buckets k)
+    (match (findBucket reg.buckets k)
       ((some b) (pair reg b))
       ((none)
        (let [(b (makeTokenBucket (/ rpm 60.0) 1.0 now))]
@@ -670,13 +670,13 @@ fn lstripColons s: String -> String
   (if (stringStartsWith? s ":") (lstripColons (slice s 1 (stringLength s))) s)
 
 fn lookupPolicy xs: (List (Pair String RoleTokenPolicy)) k: String -> (Option RoleTokenPolicy)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) none)
     ((some p) (if (= (pairFirst p) k) (some (pairSecond p)) (lookupPolicy (optionOr (listTail xs) (list)) k))))
 
 fn roleTokenPolicy role: (Option String) -> (Option RoleTokenPolicy)
   (let [(lowered (pyLower (lstripColons (optionOr role ""))))
-        (base (mt (stringIndexOf lowered ":") ((some i) (slice lowered 0 i)) ((none) lowered)))]
+        (base (match (stringIndexOf lowered ":") ((some i) (slice lowered 0 i)) ((none) lowered)))]
     (lookupPolicy (roleTokenPolicyTable) base))
 
 fn emptyContentAction cascadeLen: Int64 retriesDone: Int64 -> String
@@ -686,7 +686,7 @@ fn emptyContentAction cascadeLen: Int64 retriesDone: Int64 -> String
     (else "fail"))
 
 fn isEmptyContent? content: j/Json -> Bool
-  (mt content
+  (match content
     ((j/jnull) true)
     ((j/jstr s) (stringEmpty? (pyStrip s)))
     (_ false))
@@ -717,7 +717,7 @@ fn parseCurlExitCode text: String -> (Option Int64)
     none
     (let [(rest (slice text 10 (stringLength text)))
           (i (stringIndexOf rest ":"))
-          (codeText (pyStrip (mt i ((some k) (slice rest 0 k)) ((none) rest))))]
+          (codeText (pyStrip (match i ((some k) (slice rest 0 k)) ((none) rest))))]
       (stringToInt64 codeText)))
 
 fn retryableTransportCode? code: Int64 -> Bool
@@ -725,7 +725,7 @@ fn retryableTransportCode? code: Int64 -> Bool
 
 fn retryableRaised? timeoutFlag: Bool text: String -> Bool
   (or timeoutFlag
-    (mt (parseCurlExitCode text) ((some c) (retryableTransportCode? c)) ((none) false)))
+    (match (parseCurlExitCode text) ((some c) (retryableTransportCode? c)) ((none) false)))
 
 fn fracPart f: Float64 -> Float64
   (- f (int64ToFloat64 (optionOr (float64ToInt64 f) 0)))
@@ -739,7 +739,7 @@ fn expBackoffMs baseMs: Int64 capMs: Int64 attemptNum: Int64 -> Int64
 
 ; (:m :tags (retry) :do "honours Retry-After exactly (capped); otherwise full-jitter exponential backoff, baseMs*2^(attempt-1) capped at capMs, scaled by the fractional part of jitterClock (an already-fetched wall-clock reading) so the delay is deterministic given the same clock in a test and decorrelated across concurrent callers in production")
 fn retryDelayMs baseMs: Int64 capMs: Int64 attemptNum: Int64 retryAfterSec: (Option Float64) jitterClock: Float64 -> Int64
-  (mt retryAfterSec
+  (match retryAfterSec
     ((some s) (max 1 (let [(ms (ceilMs s))] (if (> ms capMs) capMs ms))))
     ((none)
      (let [(expMs (expBackoffMs baseMs capMs attemptNum))
@@ -751,7 +751,7 @@ fn isReasoningModel? requestReasoning: (Option Bool) configReasoning: (Option Bo
   (or (optionOr requestReasoning false) (optionOr configReasoning false))
 
 fn objGet kvs: (List (Pair String j/Json)) k: String -> (Option j/Json)
-  (mt (listHead kvs)
+  (match (listHead kvs)
     ((none) none)
     ((some p) (if (= (pairFirst p) k) (some (pairSecond p)) (objGet (optionOr (listTail kvs) (list)) k))))
 
@@ -764,29 +764,29 @@ fn objDel kvs: (List (Pair String j/Json)) k: String -> (List (Pair String j/Jso
   (filter (fn [(p (Pair String j/Json))] -> Bool (!= (pairFirst p) k)) kvs)
 
 fn boolOf v: j/Json -> (Option Bool)
-  (mt v ((j/jbool b) (some b)) (_ none))
+  (match v ((j/jbool b) (some b)) (_ none))
 
 fn asFloat v: j/Json -> Float64
-  (mt v
+  (match v
     ((j/jint x) (int64ToFloat64 x))
     ((j/jfloat x) x)
     ((j/jnum x) x)
     (_ 0.0))
 
 fn numberLess? a: j/Json b: j/Json -> Bool
-  (mt a
-    ((j/jint x) (mt b ((j/jint y) (< x y)) (_ (< (int64ToFloat64 x) (asFloat b)))))
+  (match a
+    ((j/jint x) (match b ((j/jint y) (< x y)) (_ (< (int64ToFloat64 x) (asFloat b)))))
     (_ (< (asFloat a) (asFloat b))))
 
 fn numberOf v: j/Json -> (Option j/Json)
-  (mt v
+  (match v
     ((j/jint _) (some v))
     ((j/jfloat _) (some v))
     ((j/jnum _) (some v))
     (_ none))
 
 fn typeName v: j/Json -> String
-  (mt v
+  (match v
     ((j/jnull) "NoneType")
     ((j/jbool _) "bool")
     ((j/jint _) "int")
@@ -797,10 +797,10 @@ fn typeName v: j/Json -> String
     ((j/jobj _) "dict"))
 
 fn cappedTokens asked: (Option j/Json) pol: (Option RoleTokenPolicy) floor: Int64 -> (Option j/Json)
-  (mt asked
+  (match asked
     ((none) none)
     ((some v)
-     (mt pol
+     (match pol
        ((none) (some v))
        ((some p)
         (let [(cap (j/jint (max p.hardCap floor)))]
@@ -808,17 +808,17 @@ fn cappedTokens asked: (Option j/Json) pol: (Option RoleTokenPolicy) floor: Int6
 
 ; (:m :do "a client may set :reasoning on the request body itself (an ASL-Gateway extension, never forwarded upstream -- objDel strips it before dispatch either way); it is one of the two signals isReasoningModel? ORs together, the other being the caller-resolved model config answer")
 fn prepareRequestPayload payload: j/Json role: (Option String) configReasoning: (Option Bool) -> (Result j/Json String)
-  (mt payload
+  (match payload
     ((j/jobj kvs)
      (let [(modelVal (optionOr (objGet kvs "model") (j/jstr "")))]
-       (mt modelVal
+       (match modelVal
          ((j/jstr raw)
-          (let [(requestReasoning (mt (objGet kvs "reasoning") ((none) none) ((some v) (boolOf v))))
+          (let [(requestReasoning (match (objGet kvs "reasoning") ((none) none) ((some v) (boolOf v))))
                 (kvs2 (if (some? (objGet kvs "reasoning")) (objDel kvs "reasoning") kvs))
                 (pol (roleTokenPolicy role))
-                (floor (if (isReasoningModel? requestReasoning configReasoning) (mt pol ((some p) p.floorIfReasoning) ((none) (minTokenFloor))) 0))
-                (asked (mt (objGet kvs2 "max_tokens") ((some v) (numberOf v)) ((none) none)))]
-            (mt (cappedTokens asked pol floor)
+                (floor (if (isReasoningModel? requestReasoning configReasoning) (match pol ((some p) p.floorIfReasoning) ((none) (minTokenFloor))) 0))
+                (asked (match (objGet kvs2 "max_tokens") ((some v) (numberOf v)) ((none) none)))]
+            (match (cappedTokens asked pol floor)
               ((none) (ok (if (> floor 0) (j/jobj (objSet kvs2 "max_tokens" (j/jint floor))) (j/jobj kvs2))))
               ((some v) (ok (j/jobj (objSet kvs2 "max_tokens" (if (numberLess? (j/jint floor) v) v (j/jint floor)))))))))
          (_ (err (str "AttributeError: '" (typeName modelVal) "' object has no attribute 'startswith'"))))))
@@ -828,20 +828,20 @@ fn systemMessage content: String -> j/Json
   (j/jobj (list (pair "role" (j/jstr "system")) (pair "content" (j/jstr content))))
 
 fn messageRole msg: j/Json -> (Result (Option j/Json) String)
-  (mt msg
+  (match msg
     ((j/jobj kvs) (ok (objGet kvs "role")))
     (_ (err (str "AttributeError: '" (typeName msg) "' object has no attribute 'get'"))))
 
 fn isSystemRole? role: (Option j/Json) -> Bool
-  (mt role
+  (match role
     ((some v) (= v (j/jstr "system")))
     ((none) false))
 
 fn overrideLoop msgs: (List j/Json) harness: String found: Bool acc: (List j/Json) -> (Result (List j/Json) String)
-  (mt (listHead msgs)
+  (match (listHead msgs)
     ((none) (ok (if found (listReverse acc) (cons (systemMessage harness) (listReverse acc)))))
     ((some m)
-     (mt (messageRole m)
+     (match (messageRole m)
        ((err e) (err e))
        ((ok role)
         (if (isSystemRole? role)
@@ -849,15 +849,15 @@ fn overrideLoop msgs: (List j/Json) harness: String found: Bool acc: (List j/Jso
           (overrideLoop (optionOr (listTail msgs) (list)) harness found (cons m acc)))))))
 
 fn minimalLoop msgs: (List j/Json) acc: (List j/Json) -> (Result (List j/Json) String)
-  (mt (listHead msgs)
+  (match (listHead msgs)
     ((none) (ok (listReverse acc)))
     ((some m)
-     (mt (messageRole m)
+     (match (messageRole m)
        ((err e) (err e))
        ((ok role) (minimalLoop (optionOr (listTail msgs) (list)) (if (isSystemRole? role) acc (cons m acc)))))))
 
 fn harnessText role: (Option String) -> String
-  (mt (roleTokenPolicy role)
+  (match (roleTokenPolicy role)
     ((some p) (str (aslMinimalHarness) "\n;; Reply Ceiling: one ASN form, no preamble or file bodies, under "
                    (stringFromInt64 (optionOr (replyCeiling p.mode) 0)) " tok."))
     ((none) (aslMinimalHarness)))
@@ -865,46 +865,46 @@ fn harnessText role: (Option String) -> String
 fn applyHarnessMessages kvs: (List (Pair String j/Json)) msgs: (List j/Json) mode: String role: (Option String) payload: j/Json -> (Result j/Json String)
   (cond
     ((= mode "override")
-     (mt (overrideLoop msgs (harnessText role) false (list))
+     (match (overrideLoop msgs (harnessText role) false (list))
        ((err e) (err e))
        ((ok out) (ok (j/jobj (objSet kvs "messages" (j/jarr out)))))))
     ((= mode "minimal")
-     (mt (minimalLoop msgs (list))
+     (match (minimalLoop msgs (list))
        ((err e) (err e))
        ((ok out) (ok (j/jobj (objSet kvs "messages" (j/jarr (cons (systemMessage (harnessText role)) out))))))))
     (else (ok payload)))
 
 fn applyHarnessPolicy payload: j/Json mode: String role: (Option String) -> (Result j/Json String)
-  (mt payload
+  (match payload
     ((j/jobj kvs)
-     (mt (objGet kvs "messages")
+     (match (objGet kvs "messages")
        ((some v)
-        (mt v
+        (match v
           ((j/jarr msgs) (applyHarnessMessages kvs msgs mode role payload))
           (_ (ok payload))))
        ((none) (ok payload))))
     (_ (ok payload)))
 
 fn headerGet headers: (List (Pair String String)) name: String -> (Option String)
-  (mt (listHead headers)
+  (match (listHead headers)
     ((none) none)
     ((some p) (if (= (pyLower (pairFirst p)) (pyLower name)) (some (pairSecond p)) (headerGet (optionOr (listTail headers) (list)) name))))
 
 fn nonEmpty v: (Option String) -> (Option String)
-  (mt v
+  (match v
     ((some s) (if (stringEmpty? s) none (some s)))
     ((none) none))
 
 fn harnessMode headers: (List (Pair String String)) env: (Map String String) -> String
-  (pyLower (mt (nonEmpty (headerGet headers "X-ASL-Harness"))
+  (pyLower (match (nonEmpty (headerGet headers "X-ASL-Harness"))
              ((some s) s)
-             ((none) (mt (nonEmpty (headerGet headers "X-ASL-Harness-Mode"))
+             ((none) (match (nonEmpty (headerGet headers "X-ASL-Harness-Mode"))
                        ((some s) s)
                        ((none) (envGetOr env "ASL_HARNESS_MODE" "passthrough"))))))
 
 fn capitalize s: String -> String
   (let [(cs (stringChars s))]
-    (mt (listHead cs)
+    (match (listHead cs)
       ((none) "")
       ((some c) (str (stringUpper c) (pyLower (joinAll (optionOr (listTail cs) (list))))))))
 
@@ -926,7 +926,7 @@ fn lastIndexOf s: String c: String i: Int64 -> Int64
     (else (lastIndexOf s c (- i 1))))
 
 fn hasScheme? u: String -> Bool
-  (mt (stringIndexOf u ":")
+  (match (stringIndexOf u ":")
     ((some i) (and (> i 0) (not (stringContains? (slice u 0 i) "/"))))
     ((none) false))
 
@@ -967,7 +967,7 @@ fn anthropicUpstreamRequest url: String path: String key: String data: String cl
 
 fn withSessionHeader clientHeaders: (List (Pair String String)) sessionHeader: String -> (List (Pair String String))
   (if (stringEmpty? sessionHeader) clientHeaders
-    (mt (nonEmpty (headerGet clientHeaders "X-ASL-Session"))
+    (match (nonEmpty (headerGet clientHeaders "X-ASL-Session"))
       ((none) clientHeaders)
       ((some sid) (headerPut clientHeaders sessionHeader sid))))
 
@@ -977,7 +977,7 @@ fn childEnvNames -> (List String)
 
 fn childEnv env: (Map String String) -> (List String)
   (fold (fn [(acc (List String)) (k String)] -> (List String)
-          (mt (mapGet env k)
+          (match (mapGet env k)
             ((some v) (listAppend acc (list (str k "=" v))))
             ((none) acc)))
         (list) (childEnvNames))
@@ -1007,7 +1007,7 @@ fn quoteLoop s: String bs: Bytes n: Int64 i: Int64 start: Int64 acc: (List Strin
 
 fn configLine name: String value: String -> (Result String String)
   (let [(bs (stringToBytes value))]
-    (mt (quoteLoop value bs (bytesLength bs) 0 0 (list))
+    (match (quoteLoop value bs (bytesLength bs) 0 0 (list))
       ((ok q) (ok (str name " = \"" q "\"\n")))
       ((err e) (err e))))
 
@@ -1015,10 +1015,10 @@ fn curlConfigLine name: String value: String -> (Result String String)
   (configLine name value)
 
 fn collectLines xs: (List (Result String String)) acc: (List String) -> (Result String String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (ok (joinAll (listReverse acc))))
     ((some r)
-     (mt r
+     (match r
        ((ok l) (collectLines (optionOr (listTail xs) (list)) (cons l acc)))
        ((err e) (err e)))))
 
@@ -1079,38 +1079,38 @@ fn curlConfigFollowing req: UpstreamRequest timeoutSec: Float64 caFile: (Option 
                      (ok "speed-limit = 1\n")))
         (headerLines (map (fn [(p (Pair String String))] -> (Result String String) (configLine "header" (str (pairFirst p) ": " (pairSecond p)))) hs))
         (tail (list (configLine "data-raw" req.data)
-                    (mt caFile ((some f) (configLine "cacert" f)) ((none) (ok "")))))]
-    (mt (checkRequest req)
+                    (match caFile ((some f) (configLine "cacert" f)) ((none) (ok "")))))]
+    (match (checkRequest req)
       ((err e) (err e))
       ((ok _) (collectLines (listAppend fixed (listAppend headerLines (listAppend (transportLines hs) tail))) (list)))))
 
 fn statusCode line: String -> (Option (Pair Int64 String))
-  (mt (stringIndexOf line " ")
+  (match (stringIndexOf line " ")
     ((none) none)
     ((some i)
      (let [(rest (stringTrim (slice line i (stringLength line))))
            (sp (stringIndexOf rest " "))
-           (codeText (mt sp ((some k) (slice rest 0 k)) ((none) rest)))
-           (reason (mt sp ((some k) (stringTrim (slice rest k (stringLength rest)))) ((none) "")))]
-       (mt (stringToInt64 codeText)
+           (codeText (match sp ((some k) (slice rest 0 k)) ((none) rest)))
+           (reason (match sp ((some k) (stringTrim (slice rest k (stringLength rest)))) ((none) "")))]
+       (match (stringToInt64 codeText)
          ((some c) (if (and (= (stringLength codeText) 3) (>= c 100)) (some (pair c reason)) none))
          ((none) none)))))
 
 ; (:m :tags (retry) :do "curl's --include prints the response headers it would otherwise discard; a line with no ':' (there should be none, but a malformed proxy is not this parser's problem to reject) is skipped rather than failing the whole response")
 fn httpHeaderLinePair line: String -> (Option (Pair String String))
-  (mt (stringIndexOf line ":")
+  (match (stringIndexOf line ":")
     ((none) none)
     ((some at) (some (pair (stringTrim (optionOr (stringSlice line 0 at) ""))
                            (stringTrim (optionOr (stringSlice line (+ at 1) (stringLength line)) ""))))))
 
 fn httpHeaderLines block: String -> (List (Pair String String))
   (fold (fn [(acc (List (Pair String String))) (line String)] -> (List (Pair String String))
-          (mt (httpHeaderLinePair line) ((some p) (listAppend acc (list p))) ((none) acc)))
+          (match (httpHeaderLinePair line) ((some p) (listAppend acc (list p))) ((none) acc)))
     (list) (stringSplit block "\r\n"))
 
 fn afterHeaders raw: String eol: Int64 sc: (Pair Int64 String) -> (Result UpstreamResponse String)
   (let [(afterStatus (slice raw eol (stringLength raw)))]
-    (mt (stringIndexOf afterStatus "\r\n\r\n")
+    (match (stringIndexOf afterStatus "\r\n\r\n")
       ((none) (err "curl output header block is unterminated"))
       ((some end)
        (let [(headers (httpHeaderLines (slice afterStatus 2 end)))
@@ -1123,10 +1123,10 @@ fn afterHeaders raw: String eol: Int64 sc: (Pair Int64 String) -> (Result Upstre
 fn parseCurlOutput raw: String -> (Result UpstreamResponse String)
   (if (not (stringStartsWith? raw "HTTP/"))
     (err "curl output has no HTTP status line")
-    (mt (stringIndexOf raw "\r\n")
+    (match (stringIndexOf raw "\r\n")
       ((none) (err "curl output status line is unterminated"))
       ((some eol)
-       (mt (statusCode (slice raw 0 eol))
+       (match (statusCode (slice raw 0 eol))
          ((none) (err (str "curl output status line is malformed: " (slice raw 0 eol))))
          ((some sc) (afterHeaders raw eol sc))))))
 
@@ -1141,28 +1141,28 @@ fn readyFd? ready: (List (Pair Int64 Int64)) fd: Int64 -> Bool
 
 fn ! pumpStdin! sp: SpawnedProc st: PipeState -> (Result PipeState String)
   (if (stringEmpty? st.pending)
-    (mt (fdClose sp.stdin)
+    (match (fdClose sp.stdin)
       ((ok _) (ok (pipeWith st "" false st.outOpen st.errOpen st.out st.errText)))
       ((err e) (err (str "curl stdin close: " e))))
-    (mt (fdWrite sp.stdin st.pending)
+    (match (fdWrite sp.stdin st.pending)
       ((ok k) (ok (pipeWith st (slice st.pending k (stringLength st.pending)) true st.outOpen st.errOpen st.out st.errText)))
       ((err e) (if (= e "wouldBlock") (ok st) (err (str "curl stdin write: " e))))))
 
 fn ! pumpRead! fd: Int64 -> (Result (Option String) String)
-  (mt (fdRead fd 1048576)
+  (match (fdRead fd 1048576)
     ((ok chunk)
      (if (stringEmpty? chunk)
-       (mt (fdClose fd) ((ok _) (ok none)) ((err e) (err e)))
+       (match (fdClose fd) ((ok _) (ok none)) ((err e) (err e)))
        (ok (some chunk))))
     ((err e) (if (= e "wouldBlock") (ok (some "")) (err e))))
 
 fn absorbOut st: PipeState got: (Option String) -> PipeState
-  (mt got
+  (match got
     ((none) (pipeWith st st.pending st.inOpen false st.errOpen st.out st.errText))
     ((some c) (if (stringEmpty? c) st (pipeWith st st.pending st.inOpen true st.errOpen (cons c st.out) st.errText))))
 
 fn absorbErr st: PipeState got: (Option String) -> PipeState
-  (mt got
+  (match got
     ((none) (pipeWith st st.pending st.inOpen st.outOpen false st.out st.errText))
     ((some c) (if (stringEmpty? c) st (pipeWith st st.pending st.inOpen st.outOpen true st.out (cons c st.errText)))))
 
@@ -1172,14 +1172,14 @@ fn watchSet sp: SpawnedProc st: PipeState -> (List (Pair Int64 Int64))
                           (if st.errOpen (list (pair sp.stderr 1)) (list))))
 
 fn ! pumpReady! sp: SpawnedProc st: PipeState ready: (List (Pair Int64 Int64)) -> (Result PipeState String)
-  (mt (if (and st.inOpen (readyFd? ready sp.stdin)) (pumpStdin! sp st) (ok st))
+  (match (if (and st.inOpen (readyFd? ready sp.stdin)) (pumpStdin! sp st) (ok st))
     ((err e) (err e))
     ((ok s1)
-     (mt (if (and s1.outOpen (readyFd? ready sp.stdout)) (pumpRead! sp.stdout) (ok (some "")))
+     (match (if (and s1.outOpen (readyFd? ready sp.stdout)) (pumpRead! sp.stdout) (ok (some "")))
        ((err e) (err (str "curl stdout read: " e)))
        ((ok o)
         (let [(s2 (absorbOut s1 o))]
-          (mt (if (and s2.errOpen (readyFd? ready sp.stderr)) (pumpRead! sp.stderr) (ok (some "")))
+          (match (if (and s2.errOpen (readyFd? ready sp.stderr)) (pumpRead! sp.stderr) (ok (some "")))
             ((err e) (err (str "curl stderr read: " e)))
             ((ok r) (ok (absorbErr s2 r)))))))))
 
@@ -1194,7 +1194,7 @@ fn ! closeOpen! sp: SpawnedProc -> Bool
 fn curlOutcome code: Int64 out: String errText: String -> (Result UpstreamResponse UpstreamFailure)
   (if (!= code 0)
     (err (transportFailure code errText))
-    (mt (parseCurlOutput out)
+    (match (parseCurlOutput out)
       ((err e) (err (protocolFailure e)))
       ((ok resp)
        (if (and (>= resp.status 200) (< resp.status 300))
@@ -1202,10 +1202,10 @@ fn curlOutcome code: Int64 out: String errText: String -> (Result UpstreamRespon
          (err (httpFailure resp.status resp.reason resp.body resp.headers))))))
 
 fn ! finishCurl! sp: SpawnedProc st: PipeState -> (Result UpstreamResponse UpstreamFailure)
-  (mt (procWaitPid sp.pid false)
+  (match (procWaitPid sp.pid false)
     ((err e) (err (protocolFailure (str "curl wait: " e))))
     ((ok status)
-     (mt status
+     (match status
        ((none) (err (protocolFailure "curl wait returned no status")))
        ((some code) (curlOutcome code (joinAll (listReverse st.out)) (joinAll (listReverse st.errText)))))))
 
@@ -1213,13 +1213,13 @@ fn ! upstreamCallStart! req: UpstreamRequest env: (Map String String) timeoutSec
   (upstreamCallStartFollowing! req env timeoutSec 0)
 
 fn ! upstreamCallStartFollowing! req: UpstreamRequest env: (Map String String) timeoutSec: Float64 maxRedirects: Int64 -> (Result UpstreamCall UpstreamFailure)
-  (mt (curlConfigFollowing req timeoutSec (nonEmpty (mapGet env "SSL_CERT_FILE")) maxRedirects)
+  (match (curlConfigFollowing req timeoutSec (nonEmpty (mapGet env "SSL_CERT_FILE")) maxRedirects)
     ((err e) (err (protocolFailure e)))
     ((ok cfg)
-     (mt (procSpawnv (curlArgv) (none) (some (childEnv env)))
+     (match (procSpawnv (curlArgv) (none) (some (childEnv env)))
        ((err e) (err (toolAbsent "curl" (if (= e "notFound") "curl is not on PATH" e))))
        ((ok sp)
-        (mt (fdNonBlocking sp.stdin true)
+        (match (fdNonBlocking sp.stdin true)
           ((err e) (do (upstreamCallAbort! (UpstreamCall :process sp :pipe (PipeState :pending "" :inOpen true :outOpen true :errOpen true :out (list) :errText (list))))
                      (err (protocolFailure (str "curl stdin nonblocking: " e)))))
           ((ok _) (ok (UpstreamCall :process sp :pipe (PipeState :pending cfg :inOpen true :outOpen true :errOpen true :out (list) :errText (list))))))))))
@@ -1240,7 +1240,7 @@ fn ! upstreamCallAbort! call: UpstreamCall -> Bool
       true))
 
 fn ! upstreamCallPump! call: UpstreamCall ready: (List (Pair Int64 Int64)) -> (Result UpstreamCall UpstreamFailure)
-  (mt (pumpReady! call.process call.pipe ready)
+  (match (pumpReady! call.process call.pipe ready)
     ((err e) (do (upstreamCallAbort! call) (err (protocolFailure e))))
     ((ok st) (ok (with call :pipe st))))
 
@@ -1256,23 +1256,23 @@ fn ! upstreamCallLoop! call: UpstreamCall firstByteDeadline: Float64 -> (Result 
   (if (not (upstreamCallOpen? call))
     (upstreamCallFinish! call)
     (if (not (listEmpty? call.pipe.out))
-      (mt (fdPoll (upstreamCallWatch call) -1)
+      (match (fdPoll (upstreamCallWatch call) -1)
         ((err e) (do (upstreamCallAbort! call) (err (protocolFailure (str "curl pipe poll: " e)))))
         ((ok ready)
-         (mt (upstreamCallPump! call ready)
+         (match (upstreamCallPump! call ready)
            ((err e) (err e))
            ((ok next) (upstreamCallLoop! next firstByteDeadline)))))
       (let [(remainSec (- firstByteDeadline (wallSeconds!)))]
         (if (<= remainSec 0.0)
           (do (upstreamCallAbort! call) (err (transportFailure 28 "no response bytes within the first-byte deadline")))
-          (mt (fdPoll (upstreamCallWatch call) (ceilMs remainSec))
+          (match (fdPoll (upstreamCallWatch call) (ceilMs remainSec))
             ((err e) (do (upstreamCallAbort! call) (err (protocolFailure (str "curl pipe poll: " e)))))
             ((ok ready)
-             (mt (upstreamCallPump! call ready)
+             (match (upstreamCallPump! call ready)
                ((err e) (err e))
                ((ok next) (upstreamCallLoop! next firstByteDeadline)))))))))
 
 fn ! callUpstream! req: UpstreamRequest env: (Map String String) timeoutSec: Float64 configuredFirstByteSec: Float64 -> (Result UpstreamResponse UpstreamFailure)
-  (mt (upstreamCallStart! req env timeoutSec)
+  (match (upstreamCallStart! req env timeoutSec)
     ((err e) (err e))
     ((ok call) (upstreamCallLoop! call (+ (wallSeconds!) (firstByteCapSec timeoutSec configuredFirstByteSec)))))

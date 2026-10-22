@@ -270,7 +270,7 @@ fn parseArrLoop bs: Bytes len: Int64 pos: Int64 jsonc: Bool depth: Int64 arrStar
               (finalAcc (listAppend acc1 (list (tr/elemToken rTok))))]
           (ParseValResult :elem (some (tr/elemNode (tr/makeNode "array" arrStart (+ p1 1) finalAcc))) :pos (+ p1 1)))
         (let [(valRes (parseVal bs len p1 jsonc (+ depth 1)))]
-          (mt valRes.elem
+          (match valRes.elem
             ((none)
              (ParseValResult :elem (some (tr/elemNode (tr/makeErrorNode arrStart len acc1))) :pos len))
             ((some vElem)
@@ -335,7 +335,7 @@ fn parseProp bs: Bytes len: Int64 pos: Int64 jsonc: Bool depth: Int64 -> ParseVa
             (acc4 (listAppend acc3 ts2.elems))
             (pVal ts2.pos)
             (valRes (parseVal bs len pVal jsonc (+ depth 1)))]
-        (mt valRes.elem
+        (match valRes.elem
           ((none)
            (ParseValResult :elem (some (tr/elemNode (tr/makeErrorNode propStart len acc4))) :pos len))
           ((some vElem)
@@ -354,7 +354,7 @@ fn parseObjLoop bs: Bytes len: Int64 pos: Int64 jsonc: Bool depth: Int64 objStar
               (finalAcc (listAppend acc1 (list (tr/elemToken rTok))))]
           (ParseValResult :elem (some (tr/elemNode (tr/makeNode "object" objStart (+ p1 1) finalAcc))) :pos (+ p1 1)))
         (let [(propRes (parseProp bs len p1 jsonc depth))]
-          (mt propRes.elem
+          (match propRes.elem
             ((none)
              (ParseValResult :elem (some (tr/elemNode (tr/makeErrorNode objStart len acc1))) :pos len))
             ((some pElem)
@@ -410,7 +410,7 @@ fn parseDocBytes bs: Bytes jsonc: Bool -> tr/Node
     (if (>= p1 len)
       (tr/makeNode "document" 0 len (list (tr/elemNode (tr/makeErrorNode 0 len acc1))))
       (let [(valRes (parseVal bs len p1 jsonc 0))]
-        (mt valRes.elem
+        (match valRes.elem
           ((none)
            (let [(errTok (tr/makeToken "error" p1 len))]
              (tr/makeNode "document" 0 len (listAppend acc1 (list (tr/elemToken errTok))))))
@@ -460,13 +460,13 @@ fn firstErrorOffsetList elems: (List tr/TreeElement) -> (Option Int64)
     (none)
     (let [(head (optionOr (listHead elems) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tail (optionOr (listTail elems) (list)))]
-      (mt head
+      (match head
         ((tr/elemToken tok)
          (if (tr/isErrorToken tok)
            (some (tr/tokenStart tok))
            (firstErrorOffsetList tail)))
         ((elemNode n)
-         (mt (firstErrorOffsetNode n)
+         (match (firstErrorOffsetNode n)
            ((some off) (some off))
            ((none) (firstErrorOffsetList tail)))))))
 
@@ -541,7 +541,7 @@ fn findPropValue elems: (List tr/TreeElement) colonSeen: Bool -> (Option tr/Tree
     (none)
     (let [(head (optionOr (listHead elems) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tail (optionOr (listTail elems) (list)))]
-      (mt head
+      (match head
         ((tr/elemToken tok)
          (if (tr/isTrivia tok)
            (findPropValue tail colonSeen)
@@ -560,7 +560,7 @@ fn findPropKey elems: (List tr/TreeElement) -> (Option tr/Token)
     (none)
     (let [(head (optionOr (listHead elems) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tail (optionOr (listTail elems) (list)))]
-      (mt head
+      (match head
         ((tr/elemToken tok)
          (if (tr/isTrivia tok)
            (findPropKey tail)
@@ -571,7 +571,7 @@ fn findPropKey elems: (List tr/TreeElement) -> (Option tr/Token)
          (findPropKey tail)))))
 
 fn lowerElem elem: tr/TreeElement text: String -> (Result j/Json String)
-  (mt elem
+  (match elem
     ((tr/elemToken tok)
      (let [(k tok.kind)]
        (cond
@@ -584,12 +584,12 @@ fn lowerElem elem: tr/TreeElement text: String -> (Result j/Json String)
                 (hasFrac (stringContains? numStr "."))
                 (hasExp (or (stringContains? numStr "e") (stringContains? numStr "E")))]
             (if (or hasFrac hasExp)
-              (mt (stringToFloat64 numStr)
+              (match (stringToFloat64 numStr)
                 ((some f) (ok (j/jfloat f)))
                 ((none) (err (str "malformed number " numStr))))
-              (mt (stringToInt64 numStr)
+              (match (stringToInt64 numStr)
                 ((some i) (ok (j/jint i)))
-                ((none) (mt (stringToFloat64 numStr)
+                ((none) (match (stringToFloat64 numStr)
                           ((some f) (ok (j/jfloat f)))
                           ((none) (err (str "malformed number " numStr)))))))))
          ((= k "true") (ok (j/jbool true)))
@@ -604,7 +604,7 @@ fn lowerElem elem: tr/TreeElement text: String -> (Result j/Json String)
          ((= k "array")
           (lowerArr n.children text (list)))
          ((= k "document")
-          (mt (findDocValue n.children)
+          (match (findDocValue n.children)
             ((none) (err "empty JSON document"))
             ((some v) (lowerElem v text))))
          (else
@@ -615,19 +615,19 @@ fn lowerObj elems: (List tr/TreeElement) text: String acc: (List (Pair String j/
     (ok (j/jobj (listReverse acc)))
     (let [(head (optionOr (listHead elems) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tail (optionOr (listTail elems) (list)))]
-      (mt head
+      (match head
         ((tr/elemToken _) (lowerObj tail text acc))
         ((elemNode n)
          (if (= n.kind "property")
-           (mt (findPropKey n.children)
+           (match (findPropKey n.children)
              ((none) (err "missing property key"))
              ((some keyTok)
               (let [(rawKey (optionOr (stringSlice text keyTok.start keyTok.end) ""))
                     (key (decodeJsonString rawKey))]
-                (mt (findPropValue n.children false)
+                (match (findPropValue n.children false)
                   ((none) (err (str "missing value for key " key)))
                   ((some valElem)
-                   (mt (lowerElem valElem text)
+                   (match (lowerElem valElem text)
                      ((err e) (err e))
                      ((ok val)
                       (lowerObj tail text (cons (pair key val) acc)))))))))
@@ -638,16 +638,16 @@ fn lowerArr elems: (List tr/TreeElement) text: String acc: (List j/Json) -> (Res
     (ok (j/jarr (listReverse acc)))
     (let [(head (optionOr (listHead elems) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tail (optionOr (listTail elems) (list)))]
-      (mt head
+      (match head
         ((tr/elemToken tok)
          (let [(k tok.kind)]
            (if (or (tr/isTrivia tok) (or (= k "lbracket") (or (= k "rbracket") (= k "comma"))))
              (lowerArr tail text acc)
-             (mt (lowerElem head text)
+             (match (lowerElem head text)
                ((err e) (err e))
                ((ok val) (lowerArr tail text (cons val acc)))))))
         ((elemNode _)
-         (mt (lowerElem head text)
+         (match (lowerElem head text)
            ((err e) (err e))
            ((ok val) (lowerArr tail text (cons val acc))))))))
 
@@ -656,7 +656,7 @@ fn findDocValue elems: (List tr/TreeElement) -> (Option tr/TreeElement)
     (none)
     (let [(head (optionOr (listHead elems) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tail (optionOr (listTail elems) (list)))]
-      (mt head
+      (match head
         ((tr/elemToken tok)
          (if (tr/isTrivia tok)
            (findDocValue tail)
@@ -677,18 +677,18 @@ fn lowerJson text: String -> (Result j/Json String)
     (lower root text))
 
 fn valueElementKind elem: tr/TreeElement -> String
-  (mt elem
+  (match elem
     ((tr/elemToken tok) tok.kind)
     ((elemNode n) n.kind))
 
 fn collectSymbolsFromElem elem: tr/TreeElement container: String depth: Int64 text: String acc: (List sym/SymbolDef) -> (List sym/SymbolDef)
-  (mt elem
+  (match elem
     ((tr/elemToken _) acc)
     ((elemNode n)
      (let [(k n.kind)]
        (cond
          ((= k "document")
-          (mt (findDocValue n.children)
+          (match (findDocValue n.children)
             ((none) acc)
             ((some v) (collectSymbolsFromElem v "" 1 text acc))))
          ((= k "object")
@@ -702,7 +702,7 @@ fn collectObjectSymbols elems: (List tr/TreeElement) container: String depth: In
     acc
     (let [(head (optionOr (listHead elems) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tail (optionOr (listTail elems) (list)))]
-      (mt head
+      (match head
         ((tr/elemToken _) (collectObjectSymbols tail container depth text acc))
         ((elemNode n)
          (if (= n.kind "property")
@@ -711,12 +711,12 @@ fn collectObjectSymbols elems: (List tr/TreeElement) container: String depth: In
            (collectObjectSymbols tail container depth text acc))))))
 
 fn collectPropertySymbol propNode: tr/Node container: String depth: Int64 text: String acc: (List sym/SymbolDef) -> (List sym/SymbolDef)
-  (mt (findPropKey propNode.children)
+  (match (findPropKey propNode.children)
     ((none) acc)
     ((some keyTok)
      (let [(rawKey (optionOr (stringSlice text keyTok.start keyTok.end) ""))
            (key (decodeJsonString rawKey))]
-       (mt (findPropValue propNode.children false)
+       (match (findPropValue propNode.children false)
          ((none) acc)
          ((some valElem)
           (let [(vKind (valueElementKind valElem))
@@ -732,7 +732,7 @@ fn collectArraySymbols elems: (List tr/TreeElement) container: String depth: Int
     acc
     (let [(head (optionOr (listHead elems) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tail (optionOr (listTail elems) (list)))]
-      (mt head
+      (match head
         ((tr/elemToken tok)
          (let [(k tok.kind)]
            (if (or (tr/isTrivia tok) (or (= k "lbracket") (or (= k "rbracket") (= k "comma"))))

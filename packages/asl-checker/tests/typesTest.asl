@@ -1,16 +1,16 @@
 (module asl-checker/typesTest :x [testTypes runTests RunTests] :i [(asl-checker/types :a ty)])
 
 fn checkBounds res: (Option (Pair Int64 Int64)) -> Bool
-  (mt res ((none) false) ((some b) (and (= (pairFirst b) -2147483648) (= (pairSecond b) 2147483647))))
+  (match res ((none) false) ((some b) (and (= (pairFirst b) -2147483648) (= (pairSecond b) 2147483647))))
 
 fn checkSigPlus res: (Option (Pair (List String) (Pair Bool String))) -> Bool
-  (mt res ((none) false) ((some sig) (let [(args (pairFirst sig)) (variadic (pairFirst (pairSecond sig))) (ret (pairSecond (pairSecond sig)))] (and (not variadic) (and (= ret "N") (= (listLength args) 2))))))
+  (match res ((none) false) ((some sig) (let [(args (pairFirst sig)) (variadic (pairFirst (pairSecond sig))) (ret (pairSecond (pairSecond sig)))] (and (not variadic) (and (= ret "N") (= (listLength args) 2))))))
 
 fn checkSigStr res: (Option (Pair (List String) (Pair Bool String))) -> Bool
-  (mt res ((none) false) ((some sig) (let [(variadic (pairFirst (pairSecond sig)))] variadic)))
+  (match res ((none) false) ((some sig) (let [(variadic (pairFirst (pairSecond sig)))] variadic)))
 
 fn checkSigShift res: (Option (Pair (List String) (Pair Bool String))) -> Bool
-  (mt res ((none) false) ((some sig) (let [(args (pairFirst sig)) (variadic (pairFirst (pairSecond sig))) (ret (pairSecond (pairSecond sig)))] (and (not variadic) (and (= ret "Int64") (= args (list "Int64" "Int64")))))))
+  (match res ((none) false) ((some sig) (let [(args (pairFirst sig)) (variadic (pairFirst (pairSecond sig))) (ret (pairSecond (pairSecond sig)))] (and (not variadic) (and (= ret "Int64") (= args (list "Int64" "Int64")))))))
 
 fn testTypes -> Bool
   (let [(t1 (ty/parseTypeStr "Int" (list))) (t2 (ty/parseTypeStr "(List Int)" (list))) (t3 (ty/parseTypeStr "(fn [Int64] -> Bool)" (list))) (t4 (ty/parseTypeStr "(Result A String)" (list "A")))] (assert (= (ty/showType t1) "Int64") "t1 alias") (refute (= (ty/showType t1) "String") "t1 is not String") (assert (= (ty/showType t2) "(List Int64)") "t2 list") (assert (= (ty/showType t3) "(fn [Int64] -> Bool)") "t3 fn") (assert (ty/unorderedType? "Float64") "unordered float") (assert (ty/unorderedType? "IoError") "unordered io") (refute (ty/unorderedType? "Int64") "Int64 is not unordered") (refute (ty/unorderedType? "String") "String is not unordered") (assert (checkBounds (ty/intRangeBounds "Int32")) "int32 bounds") (refute (none? (ty/intRangeBounds "Int32")) "Int32 bounds must exist") (refute (some? (ty/intRangeBounds "UnknownInt")) "UnknownInt must not have bounds") (assert (= (ty/preludeUnionCases "some") (some "Option")) "some union") (assert (= (ty/preludeUnionCases "notFound") (some "IoError")) "notFound union") (assert (checkSigPlus (ty/builtinSig "+")) "builtin + sig") (assert (checkSigStr (ty/builtinSig "str")) "builtin str sig") (assert (checkSigShift (ty/builtinSig "<<")) "builtin << sig is (Int64 Int64) -> Int64") (assert (checkSigShift (ty/builtinSig ">>")) "builtin >> sig is (Int64 Int64) -> Int64") (assert (= (ty/showType (ty/tyVar 1 "any")) "_") "show var any") (assert (= (ty/showType (ty/tyVar 1 "num")) "a number") "show var num") (assert (= (ty/showType (ty/tyVar 1 "int")) "an integer") "show var int") true)
@@ -47,7 +47,7 @@ fn testCamelCaseBuiltins -> Bool
     true)
 
 fn sigText res: (Option (Pair (List String) (Pair Bool String))) -> String
-  (mt res ((none) "none") ((some sig) (str (if (pairFirst (pairSecond sig)) "variadic " "") (stringJoin (pairFirst sig) " ") " -> " (pairSecond (pairSecond sig)))))
+  (match res ((none) "none") ((some sig) (str (if (pairFirst (pairSecond sig)) "variadic " "") (stringJoin (pairFirst sig) " ") " -> " (pairSecond (pairSecond sig)))))
 
 fn arraySigTable -> (List (Pair String String))
   (list (pair "f64ArrayLen" "F64Array -> Int64") (pair "f64ArrayGet" "F64Array Int64 -> Float64") (pair "f64ArraySlice" "F64Array Int64 Int64 -> F64Array")

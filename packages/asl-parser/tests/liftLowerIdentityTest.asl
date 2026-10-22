@@ -15,13 +15,13 @@ fn atomEquivalent? a: String b: String -> Bool
                 (and (some? (stringToFloat64 a)) (= (stringToFloat64 a) (stringToFloat64 b))))))
 
 fn sexprEquivalent? a: rd/SExpr b: rd/SExpr -> Bool
-  (mt a
+  (match a
     ((rd/sexprAtom va)
-     (mt b
+     (match b
        ((rd/sexprAtom vb) (atomEquivalent? va vb))
        (_ false)))
     ((rd/sexprList la)
-     (mt b
+     (match b
        ((rd/sexprList lb)
         (if (!= (listLength la) (listLength lb))
           false
@@ -30,7 +30,7 @@ fn sexprEquivalent? a: rd/SExpr b: rd/SExpr -> Bool
                 true (zip la lb))))
        (_ false)))
     ((rd/sexprVect va)
-     (mt b
+     (match b
        ((rd/sexprVect vb)
         (if (!= (listLength va) (listLength vb))
           false
@@ -47,21 +47,21 @@ fn braceList? xs: (List rd/SExpr) -> Bool
 
 fn flatItems items: (List rd/SExpr) -> (List rd/SExpr)
   (listFlatMap (fn [(e rd/SExpr)] -> (List rd/SExpr)
-                 (mt e
+                 (match e
                    ((rd/sexprList xs) (if (braceList? xs) (flatItems xs) (list (rd/makeList (flatItems xs)))))
                    ((rd/sexprVect xs) (list (rd/makeVect (flatItems xs))))
                    ((rd/sexprAtom _) (list e))))
                items)
 
 fn flatBraces s: rd/SExpr -> rd/SExpr
-  (mt s
+  (match s
     ((rd/sexprList xs) (rd/makeList (flatItems xs)))
     ((rd/sexprVect xs) (rd/makeVect (flatItems xs)))
     ((rd/sexprAtom _) s))
 
 fn checkBodyForms name: String body: (List rd/SExpr) -> (Option String)
   (fold (fn [(errOpt (Option String)) (b rd/SExpr)] -> (Option String)
-          (mt errOpt
+          (match errOpt
             ((some _) errOpt)
             ((none)
              (let [(orig b)
@@ -73,17 +73,17 @@ fn checkBodyForms name: String body: (List rd/SExpr) -> (Option String)
 
 fn checkFileDefuns forms: (List a/TopForm) -> (Option String)
   (fold (fn [(errOpt (Option String)) (tf a/TopForm)] -> (Option String)
-          (mt errOpt
+          (match errOpt
             ((some _) errOpt)
             ((none)
-             (mt tf
+             (match tf
                ((a/topDefun d)
                 (checkBodyForms d.name d.body))
                (_ (none))))))
         (none) forms)
 
 fn verifySource! cache: cc/Cache path: String src: String -> Bool
-  (mt (a/parse src)
+  (match (a/parse src)
     ((err e)
      (do
        (assert false (str path " parse error: " e.msg))
@@ -92,23 +92,23 @@ fn verifySource! cache: cc/Cache path: String src: String -> Bool
      (let [(diffOpt (checkFileDefuns forms))]
        (do
          (assert (none? diffOpt)
-           (mt diffOpt
+           (match diffOpt
              ((some diff) (str path " diff: " diff))
              ((none) (str path " lift/lower identity preserved"))))
          (if (none? diffOpt) (cc/storeVerdict! cache "liftLower" path src "passed") false)
          (none? diffOpt)))))
 
 fn verifyCorpusFile! cache: cc/Cache path: String -> (Pair Bool Bool)
-  (mt (lib/knownMisparseReason path)
+  (match (lib/knownMisparseReason path)
     ((some _) (pair true false))
     ((none)
-     (mt (fileReadString path)
+     (match (fileReadString path)
        ((err e)
         (do
           (assert false (str path " read error: " e))
           (pair false false)))
        ((ok src)
-        (mt (cc/lookupVerdict! cache "liftLower" path src (list "passed"))
+        (match (cc/lookupVerdict! cache "liftLower" path src (list "passed"))
           ((some outcome)
            (do
              (assert (= outcome "passed") (str path " lift/lower identity preserved (cached)"))
@@ -122,7 +122,7 @@ fn runCorpusFilesLoop! cache: cc/Cache files: (List String) runCount: Int64 pass
       (= runCount passCount))
     (let [(f (optionOr (listHead files) ""))
           (rest (optionOr (listTail files) (list)))]
-      (mt (lib/knownMisparseReason f)
+      (match (lib/knownMisparseReason f)
         ((some _)
          (runCorpusFilesLoop! cache rest runCount passCount cachedCount))
         ((none)
@@ -149,20 +149,20 @@ fn testConverterMutants -> Bool
       true))
 
 fn envInt! key: String defaultVal: Int64 -> Int64
-  (mt (envGet key)
+  (match (envGet key)
     ((some v) (optionOr (stringToInt64 v) defaultVal))
     ((none) defaultVal))
 
 fn testTailrecTestRoundtrip! -> Bool
   (let [(path "tests/host/tailrecTest.asl")]
-    (mt (fileReadString path)
+    (match (fileReadString path)
       ((err e) (do (assert false (str path " read error: " e)) false))
       ((ok src) (verifySource! (cc/cacheFromEnv!) path src))))
 
 fn ! runTests -> Bool
   (let [(tailrecOk (testTailrecTestRoundtrip!))
         (mutantsOk (testConverterMutants))]
-    (mt (lib/allCorpusFiles!)
+    (match (lib/allCorpusFiles!)
       ((err e)
        (do
          (assert false (str "git ls-files failed: " e))

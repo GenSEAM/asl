@@ -17,10 +17,10 @@ fn listDims? dim: String -> Bool
   (or (= dim "callers") (= dim "status") (= dim "coverage"))
 
 fn finish r: (Result String String) -> c/Outcome
-  (mt r ((ok receipt) (c/Outcome :out (str receipt "\n") :err "" :code 0)) ((err line) (c/rejected line)))
+  (match r ((ok receipt) (c/Outcome :out (str receipt "\n") :err "" :code 0)) ((err line) (c/rejected line)))
 
 fn crashOr r: (Result String String) -> c/Outcome
-  (mt r
+  (match r
     ((ok receipt) (c/Outcome :out (str receipt "\n") :err "" :code 0))
     ((err line) (if (stringStartsWith? line "(:observe ") (c/rejected line) (c/crashed line))))
 
@@ -29,11 +29,11 @@ fn warned wr: (Pair String (Result String String)) -> c/Outcome
     (c/Outcome :out o.out :err (str (pairFirst wr) o.err) :code o.code))
 
 fn parseLimit raw: String -> (Result Int64 String)
-  (mt (c/pyIntText (c/lstripChars raw ":"))
+  (match (c/pyIntText (c/lstripChars raw ":"))
     ((none) (err (c/rejectLine "ERR_BAD_ARG" (str ":limit must be an integer, got " raw) "")))
     ((some n)
       (let [(v (if (or (stringStartsWith? n "-") (> (stringLength n) 3)) (none) (stringToInt64 n)))]
-        (mt v
+        (match v
           ((some k) (if (or (< k 1) (> k (c/limitMax))) (err (c/rejectLine "ERR_BAD_ARG" (str ":limit must be within 1.." (stringFromInt64 (c/limitMax)) ", got " n) "")) (ok k)))
           ((none) (err (c/rejectLine "ERR_BAD_ARG" (str ":limit must be within 1.." (stringFromInt64 (c/limitMax)) ", got " n) "")))))))
 
@@ -49,20 +49,20 @@ fn ! dispatch! ctx: c/Ctx args: a/Args dim: String limit: Int64 root: String sco
       ((= dim "status")
         (if (= (not (stringEmpty? symbol)) (not (stringEmpty? pathArg)))
           (c/rejected (c/rejectLine "ERR_BAD_ARG" "status needs exactly one of :symbol <name> or :path <file>" ""))
-          (mt (if (stringEmpty? pathArg) (ok "") (c/relPath! root pathArg ":path"))
+          (match (if (stringEmpty? pathArg) (ok "") (c/relPath! root pathArg ":path"))
             ((err line) (c/rejected line))
             ((ok path) (warned (sts/observeStatus! root symbol path limit ctx))))))
       ((= dim "coverage")
         (if (stringEmpty? (c/pyStrip args.spec))
           (c/rejected (c/rejectLine "ERR_BAD_ARG" "coverage needs :spec <file>" ""))
-          (mt (c/relPath! root (c/pyStrip args.spec) ":spec")
+          (match (c/relPath! root (c/pyStrip args.spec) ":spec")
             ((err line) (c/rejected line))
             ((ok spec)
               (if (not (c/isFile? (c/joinPath root spec)))
                 (c/rejected (c/rejectLine "ERR_BAD_ARG" (str ":spec is not a file: " args.spec) ""))
                 (if (stringEmpty? args.id)
                   (warned (cov/observeCoverage! root spec (none) limit ctx))
-                  (mt (mt (unbalancedAt (stringToBytes args.id) 0 (bytesLength (stringToBytes args.id)) 0)
+                  (match (match (unbalancedAt (stringToBytes args.id) 0 (bytesLength (stringToBytes args.id)) 0)
                         ((some i) (err (str "regex-compile: error at position " (stringFromInt64 i) ": unmatched close parenthesis ')'")))
                         ((none) (re/regex-compile! args.id)))
                     ((err e) (c/rejected (c/rejectLine "ERR_BAD_ARG" (str ":id is not a regular expression: " (pyRegexError e)) "")))
@@ -104,7 +104,7 @@ fn pyRegexError e: String -> String
       (else (str what " at position " pos))))
 
 fn ! runObserve ctx: c/Ctx argv: (List String) -> c/Outcome
-  (mt (a/parseArgs argv)
+  (match (a/parseArgs argv)
     ((err o) o)
     ((ok args)
       (let [(dim (c/lstripChars (optionOr args.dim "") ":"))]
@@ -112,24 +112,24 @@ fn ! runObserve ctx: c/Ctx argv: (List String) -> c/Outcome
           (c/rejected (c/rejectLine "ERR_UNKNOWN_DIM" (str "unknown dimension " dim "; known: " (c/joinWith (dims) " "))
                                     (str " :dim " (c/quoted dim) " :nearest (" (c/joinWith (c/closeMatches dim (dims) 2 0.0) " ") ")")))
           (let [(rawLimit (if (stringEmpty? (c/pyStrip args.limit)) (if (listDims? dim) "100" "20") args.limit))]
-            (mt (parseLimit rawLimit)
+            (match (parseLimit rawLimit)
               ((err line) (c/rejected line))
               ((ok limit)
-                (mt (c/workspace! ctx)
+                (match (c/workspace! ctx)
                   ((err line) (c/rejected line))
                   ((ok root)
                     (let [(scopeArg (c/pyStrip args.scope))]
-                      (mt (if (stringEmpty? scopeArg) (ok "") (c/relPath! root scopeArg ":scope"))
+                      (match (if (stringEmpty? scopeArg) (ok "") (c/relPath! root scopeArg ":scope"))
                         ((err line) (c/rejected line))
                         ((ok scope) (dispatch! ctx args dim limit root scope)))))))))))))
 
 fn envPair row: String -> (Pair String String)
-  (mt (stringIndexOf row "=")
+  (match (stringIndexOf row "=")
     ((some i) (pair (optionOr (stringSlice row 0 i) row) (optionOr (stringSlice row (+ i 1) (stringLength row)) "")))
     ((none) (pair row "")))
 
 fn ! main args: (List String) -> (Result Int64 String)
-  (mt (realPath ".")
+  (match (realPath ".")
     ((err e) (err e))
     ((ok cwd)
       (let [(ctx (c/Ctx :cwd cwd :env (map envPair (envList)) :spawnEnv (none) :now (/ (nowNs) 1000000000) :date ""))

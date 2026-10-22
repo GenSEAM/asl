@@ -22,7 +22,7 @@ fn cosineSimilarity a: (List F64) b: (List F64) -> F64
   (vectorCosineSim a b)
 
 fn bytesFromListLoop! b: Bytes xs: (List F64) idx: I64 -> Bytes
-  (mt (listHead xs) ((none) b) ((some h) (do (bytesSetFloat64 b idx h) (mt (listTail xs) ((some rest) (bytesFromListLoop! b rest (+ idx 1))) ((none) b)))))
+  (match (listHead xs) ((none) b) ((some h) (do (bytesSetFloat64 b idx h) (match (listTail xs) ((some rest) (bytesFromListLoop! b rest (+ idx 1))) ((none) b)))))
 
 fn bytesFromListF64! xs: (List F64) -> Bytes
   (let [(count (listLength xs)) (b (bytesAlloc (* count 8)))] (bytesFromListLoop! b xs 0))

@@ -14,13 +14,13 @@ fn declsSource n: Int64 -> String
     (str "(module q/escale :x [" names "] :i [])\n\n" decls))
 
 fn ! cpuUs -> Int64
-  (mt (procRusage)
+  (match (procRusage)
     ((err e) (do (assert false (str "procRusage failed: " e)) 0))
     ((ok usage) (+ usage.selfUserUs usage.selfSysUs)))
 
 fn ! parseWorkload n: Int64 -> Int64
   (let [(src (declsSource n))]
-    (mt (a/parseForChecker src)
+    (match (a/parseForChecker src)
       ((ok forms) (listLength forms))
       ((err e) (do (assert false (str "declsSource(" (stringFromInt64 n) ") parses: " e.msg)) 0))))
 
@@ -38,23 +38,23 @@ fn blankDefun -> a/DefunNode
   (a/DefunNode :name "" :typeVars (list) :isExported false :effect false :params (list) :retType "" :docstring "" :body (list) :bodyPos (list))
 
 fn asDefun t: a/TopForm -> a/DefunNode
-  (mt t ((a/topDefun d) d) (_ (blankDefun)))
+  (match t ((a/topDefun d) d) (_ (blankDefun)))
 
 fn isDefun? t: a/TopForm -> Bool
-  (mt t ((a/topDefun _) true) (_ false))
+  (match t ((a/topDefun _) true) (_ false))
 
 fn defsOf forms: (List a/TopForm) -> (List a/DefunNode)
-  (mt (listHead forms)
+  (match (listHead forms)
     ((none) (list))
-    ((some t) (mt t
+    ((some t) (match t
                 ((a/topModule m) (map asDefun (filter isDefun? m.defs)))
                 (_ (list)))))
 
 fn ! testExportFlagsAreExact -> Bool
   (let [(src (str "(module q/esel :x [f0 f2] :i [])\n\n" (fnDeclText 0) (fnDeclText 1) (fnDeclText 2)))
-        (forms (mt (a/parseForChecker src) ((ok fs) fs) ((err e) (do (assert false (str "q/esel parses: " e.msg)) (list)))))
+        (forms (match (a/parseForChecker src) ((ok fs) fs) ((err e) (do (assert false (str "q/esel parses: " e.msg)) (list)))))
         (defs (defsOf forms))
-        (byName (fn [(n String)] -> Bool (optionOr (mt (listHead (filter (fn [(d a/DefunNode)] -> Bool (= d.name n)) defs)) ((some d) (some d.isExported)) ((none) (none))) false)))]
+        (byName (fn [(n String)] -> Bool (optionOr (match (listHead (filter (fn [(d a/DefunNode)] -> Bool (= d.name n)) defs)) ((some d) (some d.isExported)) ((none) (none))) false)))]
     (do (assert (= (listLength defs) 3) (str "q/esel has 3 fn decls, got " (listLength defs)))
         (assert (byName "f0") "f0 is in :x and must be isExported")
         (assert (not (byName "f1")) "f1 is not in :x and must not be isExported")

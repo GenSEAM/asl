@@ -41,7 +41,7 @@ fn diagText ds: (List ty/IrDiag) -> String
   (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.locus ": [" d.code "] " d.message)) ds) "; ")
 
 fn arityRows text: String -> (List (Pair String Int64))
-  (mt (stringIndexOf text "fn builtinArity name: String")
+  (match (stringIndexOf text "fn builtinArity name: String")
     ((none) (list))
     ((some start)
       (let [(body (optionOr (stringSlice text start (stringLength text)) ""))
@@ -79,9 +79,9 @@ fn diagFunction d: ty/IrDiag -> String
   (optionOr (listHead (stringSplit d.locus "@")) "")
 
 fn ! nativeOnHost triple: String m: ty/SsaModule -> (Result String (List ty/IrDiag))
-  (mt (rt/hostFactsOf (unameText triple))
+  (match (rt/hostFactsOf (unameText triple))
     ((err e) (err (list (ty/makeIrDiag "ERR_TEST_UNAME" e triple))))
-    ((ok found) (mt found
+    ((ok found) (match found
                   ((some facts) (llvm/emitLlvmProgramFor facts m (str m.name ".main")))
                   ((none) (llvm/emitLlvmProgram m (str m.name ".main"))))))
 
@@ -96,7 +96,7 @@ fn tripleOfFacts row: (Option libc/TripleFacts) -> (Option String)
   (optionMap (fn [(f libc/TripleFacts)] -> String f.triple) row)
 
 fn hostTripleOf text: String -> (Option String)
-  (mt (rt/hostFactsOf text) ((ok f) (tripleOfFacts f)) ((err e) (some e)))
+  (match (rt/hostFactsOf text) ((ok f) (tripleOfFacts f)) ((err e) (some e)))
 
 fn ! testRouteFacts -> Bool
   (do (map (fn [(t String)] -> Bool
@@ -134,7 +134,7 @@ fn ! objectFor work: String triple: String -> Bool
 
 fn ! testBuiltins work: String rows: (List (Pair String Int64)) m: ty/SsaModule -> (List String)
   (fold (fn [(acc (List String)) (t String)] -> (List String)
-          (mt (nativeOnHost t m)
+          (match (nativeOnHost t m)
             ((err ds) (let [(gaps (gapFunctions rows))
                             (stray (filter (fn [(d ty/IrDiag)] -> Bool (not (listContains? gaps (diagFunction d)))) ds))]
                         (do (assert (listEmpty? stray) (str t ": every builtin lowers or is a documented gap; failing: " (diagText stray)))
@@ -208,7 +208,7 @@ fn factValue facts: libc/TripleFacts name: String -> (Option Int64)
       (let [(structName (optionOr (listGet parts 0) "")) (field (optionOr (listGet parts 1) ""))]
         (if (= field "size")
           (libc/structSize facts structName)
-          (mt (libc/pairFind facts.structs structName)
+          (match (libc/pairFind facts.structs structName)
             ((none) (none))
             ((some sf) (libc/structFieldOffset sf field)))))
       (libc/libcConst facts name)))
@@ -223,14 +223,14 @@ fn ! irConsts work: String triple: String -> (Map String (List Int64))
     (do (assert (= out.exitCode 0) (str triple ": awk scans the IR: " out.stderr))
         (fold (fn [(acc (Map String (List Int64))) (line String)] -> (Map String (List Int64))
                 (let [(parts (stringSplit line " "))]
-                  (mt (stringToInt64 (optionOr (listGet parts 1) ""))
+                  (match (stringToInt64 (optionOr (listGet parts 1) ""))
                     ((none) acc)
                     ((some v) (let [(k (optionOr (listGet parts 0) ""))]
                                 (mapSet acc k (listAppend (optionOr (mapGet acc k) (list)) (list v))))))))
               (mapEmpty) (stringLines out.stdout))))
 
 fn ! testFacts work: String triple: String emitted: Bool -> Bool
-  (mt (libc/libcFacts triple)
+  (match (libc/libcFacts triple)
     ((none) (do (assert false (str "libcFacts " triple)) false))
     ((some facts)
       (let [(consts (if emitted (irConsts work triple) (mapEmpty)))]
@@ -252,19 +252,19 @@ fn ! runTests -> Bool
   (let [(made (sh "mktemp -d"))
         (work (stringReplace made.stdout "\n" ""))
         (src (str work "/linuxAll.asl"))
-        (rows (mt (fileReadString "asl/packages/asl-ir/src/lower.asl") ((ok t) (arityRows t)) ((err e) (do (assert false (str "reads lower.asl: " e)) (list)))))]
+        (rows (match (fileReadString "asl/packages/asl-ir/src/lower.asl") ((ok t) (arityRows t)) ((err e) (do (assert false (str "reads lower.asl: " e)) (list)))))]
     (do (assert (= made.exitCode 0) "mktemp -d makes a work directory")
         (assert (> (listLength rows) 150) (str "builtinArity yields its rows, got " (listLength rows)))
         (assert (listAll? (fn [(r (Pair String Int64))] -> Bool (and (not (stringEmpty? (pairFirst r))) (>= (pairSecond r) -1))) rows) "every builtinArity row parses to a name and an arity")
         (assert (listContains? (map (fn [(r (Pair String Int64))] -> String (pairFirst r)) rows) "envGet") "builtinArity lists envGet")
         (testRouteFacts)
         (assert (ok? (fileWrite src (fixtureSrc rows))) (str "fileWrite " src))
-        (mt (lk/linkEntry! src)
+        (match (lk/linkEntry! src)
           ((err ds) (assert false (str "the builtin fixture links: " (diagText ds))))
           ((ok m)
             (let [(linux (testBuiltins work rows m))]
               (do (map (fn [(t String)] -> Bool (testFacts work t (listContains? linux t))) (linuxTriples))
-                  (mt (llvm/emitLlvmProgramFor (libc/darwinArm64Facts) m (str m.name ".main"))
+                  (match (llvm/emitLlvmProgramFor (libc/darwinArm64Facts) m (str m.name ".main"))
                     ((err ds) (assert false (str "darwin-arm64 emits: " (diagText ds))))
                     ((ok text) (do (assert (ok? (fileWrite (str work "/darwin-arm64.ll") text)) "darwin-arm64.ll written")
                                    (testFacts work "darwin-arm64" true))))

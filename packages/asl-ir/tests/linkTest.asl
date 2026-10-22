@@ -17,16 +17,16 @@ fn geomSource -> String
     "(schema Box (:f w Int64 \"width\") (:f h Int64 \"height\"))"
     ""
     "(fn area [(s Shape)] -> Int64"
-    "  (mt s ((circle r) (* 3 (* r r))) ((rect w h) (* w h))))"
+    "  (match s ((circle r) (* 3 (* r r))) ((rect w h) (* w h))))"
     ""
     "(fn size [(s Shape)] -> Int64"
-    "  (mt s ((circle r) r) ((rect w h) (+ w h))))"
+    "  (match s ((circle r) r) ((rect w h) (+ w h))))"
     ""
     "(fn boxArea [(b Box)] -> Int64"
     "  (* b.w b.h))"
     ""
     "(fn firstSide [(s Shape)] -> (Option Int64)"
-    "  (mt s ((circle r) (some r)) ((rect w _) (some w))))"))
+    "  (match s ((circle r) (some r)) ((rect w _) (some w))))"))
 
 fn utilSource -> String
   (joinLines (list
@@ -39,7 +39,7 @@ fn utilSource -> String
     "  (* n 2))"
     ""
     "(fn widen [(s g/Shape)] -> g/Box"
-    "  (mt s ((g/circle r) (g/Box :w r :h r)) ((g/rect w h) (g/Box :h h :w (+ w 1)))))"
+    "  (match s ((g/circle r) (g/Box :w r :h r)) ((g/rect w h) (g/Box :h h :w (+ w 1)))))"
     ""
     "(fn describe [(s g/Shape)] -> String"
     "  (str \"shape \" (g/size s)))"))
@@ -52,7 +52,7 @@ fn appSource -> String
     "  (+ n 5))"
     ""
     "(fn pick [(o (Option Int64))] -> Int64"
-    "  (mt o ((some v) v) ((none) 0)))"
+    "  (match o ((some v) v) ((none) 0)))"
     ""
     "(fn main [] -> Int64"
     "  (let [(box (u/widen (g/rect 3 4)))"
@@ -111,7 +111,7 @@ fn bareSource -> String
     "(module linkfx/bare :x [main] :i [(linkfx/geom :a g)])"
     ""
     "(fn main [] -> Int64"
-    "  (mt (rect 6 7) ((circle r) r) ((rect w h) (* w h))))"))
+    "  (match (rect 6 7) ((circle r) r) ((rect w h) (* w h))))"))
 
 fn fusedSource -> String
   (joinLines (list
@@ -141,7 +141,7 @@ fn fixturePreludeSource -> String
     "  (+ x x))"
     ""
     "(fn unwrapOr [(w Wrap)] -> Int64"
-    "  (mt w ((wrap v) v)))"
+    "  (match w ((wrap v) v)))"
     ""
     "(fn unused [] -> Int64"
     "  (twice 0))"))
@@ -384,12 +384,12 @@ fn preludeGolden -> String
     "      (return %0))))"))
 
 fn printed res: (Result ty/SsaModule (List ty/IrDiag)) -> String
-  (mt res
+  (match res
     ((ok m) (prn/printSsa m))
     ((err ds) (str "link failed: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.locus ": " d.message)) ds) "; "))))
 
 fn diagsOf res: (Result ty/SsaModule (List ty/IrDiag)) -> (List ty/IrDiag)
-  (mt res ((ok _) (list)) ((err ds) ds))
+  (match res ((ok _) (list)) ((err ds) ds))
 
 fn ! testAppLinks dir: String -> Bool
   (let [(res (lk/linkEntry! (str dir "/linkfx/app.asl")))
@@ -463,7 +463,7 @@ fn ! testSysImport dir: String -> Bool
     (do
       (assert (= written.exitCode 0) "directory for sys import fixture is created")
       (assert (ok? saved) "sys import fixture is written")
-      (assert (ok? linked) (str "IR linker accepts sys imports without resolving a module: " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) (mt linked ((ok _) (list)) ((err ds) ds))) "; ")))
+      (assert (ok? linked) (str "IR linker accepts sys imports without resolving a module: " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) (match linked ((ok _) (list)) ((err ds) ds))) "; ")))
       true))
 
 fn ! testUnresolvedImport dir: String -> Bool
@@ -488,7 +488,7 @@ fn twinSource body: String -> String
   (joinLines (list "(module linkfx/twin :x [f])" "" "(fn f [] -> Int64" (str "  " body ")")))
 
 fn sourceUnit path: String src: String -> (List lk/LinkUnit)
-  (mt (ast/parse src)
+  (match (ast/parse src)
     ((err _) (list))
     ((ok forms) (list (lk/LinkUnit :path path :name "linkfx/twin" :forms forms :positions (mapEmpty) :imports (list)))))
 

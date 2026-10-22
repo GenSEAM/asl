@@ -5,7 +5,7 @@
 (schema LintHit (:f code String) (:f fnName String) (:f message String) (:f line Int64) (:f col Int64) (:f path String))
 
 fn containsHeadMatch? name: String node: rd/SExpr -> Bool
-  (mt node
+  (match node
     ((rd/sexprAtom _) false)
     ((rd/sexprList items) (or (= (rd/sexprHead node) name) (listAny? (fn [(it rd/SExpr)] -> Bool (containsHeadMatch? name it)) items)))
     ((rd/sexprVect items) (listAny? (fn [(it rd/SExpr)] -> Bool (containsHeadMatch? name it)) items)))
@@ -14,25 +14,25 @@ fn intParamNames params: (List a/Param) -> (List String)
   (map (fn [(p a/Param)] -> String p.name) (filter (fn [(p a/Param)] -> Bool (stringContains? p.type "Int")) params))
 
 fn isListGetByCounter? counterNames: (List String) node: rd/SExpr -> Bool
-  (mt node
+  (match node
     ((rd/sexprList items)
       (and (= (rd/sexprHead node) "listGet")
-           (mt (listGet items 2)
+           (match (listGet items 2)
              ((some idxNode) (and (rd/isAtom? idxNode) (listContains? counterNames (rd/sexprHead idxNode))))
              ((none) false))))
     (_ false))
 
 fn anyListGetByCounter? counterNames: (List String) node: rd/SExpr -> Bool
   (or (isListGetByCounter? counterNames node)
-      (mt node
+      (match node
         ((rd/sexprList items) (listAny? (fn [(it rd/SExpr)] -> Bool (anyListGetByCounter? counterNames it)) items))
         ((rd/sexprVect items) (listAny? (fn [(it rd/SExpr)] -> Bool (anyListGetByCounter? counterNames it)) items))
         ((rd/sexprAtom _) false)))
 
 fn hasListAppendAccum? node: rd/SExpr -> Bool
-  (mt node
+  (match node
     ((rd/sexprList items)
-      (or (and (= (rd/sexprHead node) "listAppend") (mt (listGet items 2) ((some arg2) (= (rd/sexprHead arg2) "list")) ((none) false)))
+      (or (and (= (rd/sexprHead node) "listAppend") (match (listGet items 2) ((some arg2) (= (rd/sexprHead arg2) "list")) ((none) false)))
           (listAny? (fn [(it rd/SExpr)] -> Bool (hasListAppendAccum? it)) items)))
     ((rd/sexprVect items) (listAny? (fn [(it rd/SExpr)] -> Bool (hasListAppendAccum? it)) items))
     ((rd/sexprAtom _) false))
@@ -56,7 +56,7 @@ fn lintHitFor d: a/DefunNode path: String -> LintHit
 
 fn lintModuleStep forms: (List a/TopForm) path: String acc: (List LintHit) -> (List LintHit)
   (fold (fn [(a (List LintHit)) (form a/TopForm)] -> (List LintHit)
-          (mt form
+          (match form
             ((a/topDefun d) (if (quadraticListGetHit? d) (cons (lintHitFor d path) a) a))
             (_ a)))
         acc forms)

@@ -7,7 +7,7 @@ enum Claim
 
 fn ! bumpMtime! path: String -> Bool
   (let [stat (fileStat path)]
-    (mt stat
+    (match stat
       ((ok st) (ok? (fileUtime path (+ (nowNs) 2000000000))))
       ((err _) false)))
 
@@ -33,35 +33,35 @@ fn cutParsePrefix reply: String cut: Int64 -> String
     (optionOr (stringSlice reply 0 boundary) ""))
 
 fn evidenceForm claim: Claim -> String
-  (mt claim
+  (match claim
     ((claimOf _ receipt cmd exit _)
-      (mt receipt
+      (match receipt
         ((some value) (str "(:evidence (:receipt \"" (c/escapeAsn value) "\""
-          (mt exit ((some n) (str " :exit " (stringFromInt64 n))) ((none) "")) "))"))
+          (match exit ((some n) (str " :exit " (stringFromInt64 n))) ((none) "")) "))"))
         ((none) (str "(:evidence (:cmd \"" (optionOr cmd "") "\" :exit " (stringFromInt64 (optionOr exit 0)) "))"))))
     )
 
 fn claimText claim: Claim -> String
-  (mt claim ((claimOf txt _ _ _ _)
-    (mt txt ((some value) (if (stringEmpty? value) (evidenceForm claim) value)) ((none) (evidenceForm claim)))))
+  (match claim ((claimOf txt _ _ _ _)
+    (match txt ((some value) (if (stringEmpty? value) (evidenceForm claim) value)) ((none) (evidenceForm claim)))))
 
 fn unbackedTexts claims: (List Claim) -> (List String)
   (map (fn [claim]
          (let [txt (claimText claim)]
            (c/sliceOf txt 0 (min 120 (stringLength txt)))))
-    (filter (fn [claim] (mt claim ((claimOf _ _ _ _ backed) (not backed)))) claims))
+    (filter (fn [claim] (match claim ((claimOf _ _ _ _ backed) (not backed)))) claims))
 
 fn noteUnbacked runClaims: (List String) claims: (List Claim) -> (List String)
   (fold (fn [acc t] (if (listContains? acc t) acc (listAppend acc (list t)))) runClaims (unbackedTexts claims))
 
 fn storedBytes files: (List (Pair String (Option String))) rel: String -> (Option String)
-  (mt (listHead (filter (fn [p] (= (pairFirst p) rel)) files))
+  (match (listHead (filter (fn [p] (= (pairFirst p) rel)) files))
     ((some p) (pairSecond p)) ((none) (none)))
 
 fn ! scanOneSwallowed! root: String rel: String old: (Option String) -> (List (Pair String Int64))
   (let [full (io/pyNormpath (str root "/" rel))
-        now (mt (fileReadString full) ((ok s) (some s)) ((err _) (none)))]
-    (mt now
+        now (match (fileReadString full) ((ok s) (some s)) ((err _) (none)))]
+    (match now
       ((none) (list))
       ((some current)
         (if (and (some? old) (= current (optionOr old "")))
@@ -97,20 +97,20 @@ fn ! scanSwallowedErrors! root: String written: (List (Pair String (Option Strin
     (scanSwallowedLoop! root normalizedWritten all))
 
 fn ! rawHead! root: String rel: String timeout: Int64 env: (Option (List String)) -> (Option String)
-  (mt (io/runBounded! (list "git" "show" (str "HEAD:" rel)) (some root) (some timeout) env)
+  (match (io/runBounded! (list "git" "show" (str "HEAD:" rel)) (some root) (some timeout) env)
     ((ok b) (if (= (optionOr b.code 1) 0) (some b.out) (none)))
     ((err _) (none)))
 
 fn rstr rec: (List (Pair String io/RVal)) key: String -> String
-  (mt (io/recGet rec key)
-    ((some v) (mt v
+  (match (io/recGet rec key)
+    ((some v) (match v
       ((io/rStr s) s) ((io/rInt n) (stringFromInt64 n)) ((io/rBool b) (if b "true" "false"))
       ((io/rNull) "") ((io/rPair _ _) "")))
     ((none) ""))
 
 fn rint rec: (List (Pair String io/RVal)) key: String -> Int64
-  (mt (io/recGet rec key)
-    ((some v) (mt v ((io/rInt n) n) ((io/rNull) -1) ((io/rStr s) (optionOr (stringToInt64 s) -1))
+  (match (io/recGet rec key)
+    ((some v) (match v ((io/rInt n) n) ((io/rNull) -1) ((io/rStr s) (optionOr (stringToInt64 s) -1))
       ((io/rBool _) -1) ((io/rPair _ _) -1)))
     ((none) -1))
 
@@ -123,7 +123,7 @@ fn ! runIntegrityGates! gates: (List String) root: String timeout: Int64 env: (O
 
 fn ! writeTexts! root: String files: (List (Pair String (Option String))) -> Bool
   (fold (fn [ok p]
-    (and ok (mt (pairSecond p)
+    (and ok (match (pairSecond p)
       ((some s) (ok? (fileWrite (str root "/" (pairFirst p)) (stringToBytes s))))
       ((none) true))))
     true files)
@@ -134,11 +134,11 @@ fn ! bumpTexts! root: String files: (List (Pair String (Option String))) -> Bool
 fn ! removeNames! root: String files: (List String) -> Bool
   (fold (fn [ok f]
     (and ok (or (ok? (pathRemove (str root "/" f)))
-      (not (mt (fileStat (str root "/" f)) ((ok _) true) ((err _) false))))))
+      (not (match (fileStat (str root "/" f)) ((ok _) true) ((err _) false))))))
     true files)
 
 fn ! gateIntegrity! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) -> (Pair Bool String)
-  (mt (io/changedOwnedFiles! owns root env)
+  (match (io/changedOwnedFiles! owns root env)
     ((err message) (pair false (str "changedOwnedFiles failed: " message)))
     ((ok changed) (gateIntegrityWithChanged! gates root gateResults timeout env changed)))
 
@@ -147,12 +147,12 @@ fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (L
         impl (pairSecond split)
         verdicts (g/gateVerdicts gateResults false)
         vac (g/gateVacuousMessage gateResults verdicts)]
-    (mt vac
+    (match vac
       ((some msg) (pair false msg))
       ((none)
         (if (listEmpty? impl)
           (pair true "revertCheck skipped: the change is only the gate files")
-          (let [saved (map (fn [f] (pair f (mt (fileReadBytes (str root "/" f)) ((ok b) (some b)) ((err _) (none))))) impl)
+          (let [saved (map (fn [f] (pair f (match (fileReadBytes (str root "/" f)) ((ok b) (some b)) ((err _) (none))))) impl)
               headText (map (fn [f] (pair f (rawHead! root f timeout env))) impl)
               existing (filter (fn [p] (some? (pairSecond p))) headText)
               newFiles (map pairFirst (filter (fn [p] (not (some? (pairSecond p)))) headText))
@@ -166,7 +166,7 @@ fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (L
                       removedNew (removeNames! root newFiles)
                       secondRun (if (and headRestored removedNew) (runIntegrityGates! gates root timeout env) (list))]
                   (g/gateRevertVerdict secondRun (g/gateVerdicts secondRun true) impl (list))))
-              restored (fold (fn [ok p] (and ok (mt (pairSecond p)
+              restored (fold (fn [ok p] (and ok (match (pairSecond p)
                 ((some b) (and (ok? (fileWrite (str root "/" (pairFirst p)) b)) (bumpMtime! (str root "/" (pairFirst p)))))
                 ((none) (removeNames! root (list (pairFirst p))))))) true saved)]
           (if restored answer (pair false "restore failed")))))))

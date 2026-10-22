@@ -31,7 +31,7 @@ fn aslSymbols text: String -> (List SymbolDef)
 
 fn findInDefs syms: (List csym/SymbolDef) sym: String -> (Pair (Option SymbolDef) (List SymbolDef))
   (let [(hit (csym/findSymbolDotted syms sym))]
-    (pair (mt hit ((some h) (some (fromSyntaxDef h))) ((none) (none)))
+    (pair (match hit ((some h) (some (fromSyntaxDef h))) ((none) (none)))
           (map fromSyntaxDef syms)))
 
 fn textSymbols text: String -> (List csym/SymbolDef)
@@ -45,7 +45,7 @@ fn findSymbolInLang text: String lang: String sym: String -> (Pair (Option Symbo
     ((or (= lang "markdown") (= lang "md"))
      (let [(syms (mdsym/markdownSymbols text))
            (hit (mdsym/findSymbol text sym))]
-       (pair (mt hit ((ok h) (some (fromSyntaxDef h))) ((err _) (none)))
+       (pair (match hit ((ok h) (some (fromSyntaxDef h))) ((err _) (none)))
              (map fromSyntaxDef syms))))
     ((= lang "text")
      (findInDefs (textSymbols text) sym))
@@ -56,7 +56,7 @@ fn findSymbolInLang text: String lang: String sym: String -> (Pair (Option Symbo
          (let [(mdList (mdsym/markdownSymbols text))]
            (if (not (listEmpty? mdList))
              (let [(hit (mdsym/findSymbol text sym))]
-               (pair (mt hit ((ok h) (some (fromSyntaxDef h))) ((err _) (none)))
+               (pair (match hit ((ok h) (some (fromSyntaxDef h))) ((err _) (none)))
                      (map fromSyntaxDef mdList)))
              (findInDefs (textSymbols text) sym)))))))
 
@@ -90,7 +90,7 @@ fn readSymbolReceipt file: String lang: String text: String sym: String -> Strin
      (let [(found (findSymbolInLang text lang sym))
            (hit (pairFirst found))
            (syms (pairSecond found))]
-       (mt hit
+       (match hit
          ((none)
           (let [(names (map (fn [(d SymbolDef)] -> String d.name) syms))
                 (near (csym/nearestNames sym names 5))]

@@ -6,6 +6,6 @@ fn diagText ds: (List ty/IrDiag) -> String
   (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code ": " d.message)) ds) "\n")
 
 fn compileEntry! entryPath: String -> (Result String (List ty/IrDiag))
-  (mt (lk/linkEntry! entryPath)
+  (match (lk/linkEntry! entryPath)
     ((err ds) (err ds))
     ((ok m) (em/emitPyModule m)))

@@ -3,12 +3,12 @@
   :i [(asl-cli/command :a cmd)])
 
 fn checkRejected res: (Result (List String) Int64) label: String -> Bool
-  (mt res
+  (match res
     ((ok _) (do (assert false (str label ": must be rejected, not resolved to a file list")) false))
     ((err code) (do (assert (= code 2) (str label ": exits 2")) true)))
 
 fn checkRealPathOk res: (Result (List String) Int64) -> Bool
-  (mt res
+  (match res
     ((ok found) (do (assert (= (listLength found) 1) "a real, non-empty path still resolves normally") true))
     ((err _) (do (assert false "a real path must not be rejected") false)))
 

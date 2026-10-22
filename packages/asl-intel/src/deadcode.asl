@@ -20,22 +20,22 @@
   (:f dead (List Def)))
 
 fn walkIgnoring! ctx: h/Ctx root: String -> (Result (List String) String)
-  (mt (h/findTree! ctx root true (list "*.asl"))
+  (match (h/findTree! ctx root true (list "*.asl"))
     ((err e) (err e))
     ((ok tree) (ok (h/walkFiles! tree))))
 
 ; (:m :ref MAINFIX14-TRACKEDASL-20261019 :do "walkIgnoring! shells out to find, which has no notion of .gitignore and descends into gitignored dirs such as .asl/cache -- harmless for lint (working tree, no claim of truth) but wrong for any audit that reports a production-truth count: a fixture artifact another suite happens to leave in .asl/cache/<suite>/*.asl (nativeTest.asl, nativeTestReportTest.asl -- both gitignored by .gitignore:9) gets scanned and counted as a real production stub. trackedAsl! asks git ls-files instead, so only committed source is ever in scope; same pattern already proven in asl-intel/stubs.asl trackedAsl!")
 fn trackedAsl! ctx: h/Ctx root: String -> (Result (List String) String)
-  (mt (h/gitLsFiles! ctx root)
+  (match (h/gitLsFiles! ctx root)
     ((ok fs) (ok (filter (fn [(f String)] -> Bool (and (stringEndsWith? f ".asl") (not (stringContains? f "/invalid/")))) fs)))
     ((err _)
-      (mt (walkIgnoring! ctx root)
+      (match (walkIgnoring! ctx root)
         ((err e) (err e))
         ((ok fs) (ok (map (fn [(f String)] -> String (t/relPath f root ctx.cwd)) fs))))))
 
 fn fileDefs! code: String rel: String -> (List Def)
   (let [(b (stringToBytes code)) (n (bytesLength b))
-        (exports (mt (c/firstGroup (p/patExports!) code) ((some g) (t/pySplit g)) ((none) (list))))
+        (exports (match (c/firstGroup (p/patExports!) code) ((some g) (t/pySplit g)) ((none) (list))))
         (fns (fold (fn [(acc (List Def)) (caps (List Int64))] -> (List Def)
                      (let [(name (t/pyStrip (optionOr (r/rexGroup code caps 1) "")))]
                        (if (or (listContains? (list "main" "RunTests" "runTests") name) (stringStartsWith? name "!")) acc
@@ -86,11 +86,11 @@ fn runStop b: Bytes n: Int64 i: Int64 -> Int64
   (if (t/wordAt? b n i) (runStop b n (+ i (max 1 (t/utf8Len (bytesGet b i))))) i)
 
 fn analyzeDeadcode! ctx: h/Ctx root: String pkgFilter: String -> (Result DeadCodeSummary String)
-  (mt (walkIgnoring! ctx root)
+  (match (walkIgnoring! ctx root)
     ((err e) (err e))
     ((ok files)
       (let [(res (fold (fn [(st (Pair Int64 (Pair Int64 (List Def)))) (f String)] -> (Pair Int64 (Pair Int64 (List Def)))
-                         (mt (h/readText! f)
+                         (match (h/readText! f)
                            ((err _) st)
                            ((ok code)
                              (let [(scanned (+ (pairFirst st) 1)) (rel (t/relPath f root ctx.cwd))]
@@ -133,7 +133,7 @@ fn deadcodeJson res: DeadCodeSummary -> j/Json
                 (pair "deadPrivateSymbols" (j/jArr (map (fn [(d Def)] -> j/Json (j/jObj (list (pair "file" (j/jStr d.file)) (pair "name" (j/jStr d.name)) (pair "kind" (j/jStr d.kind))))) res.dead)))))
 
 fn runDeadcode! ctx: h/Ctx fmt: String pkgFilter: String -> h/Outcome
-  (mt (analyzeDeadcode! ctx ctx.home pkgFilter)
+  (match (analyzeDeadcode! ctx ctx.home pkgFilter)
     ((err e) (h/outcome "" (str "Error: " e "\n") 1))
     ((ok res)
       (h/outcome (str (cond ((= fmt "json") (j/dumps (deadcodeJson res))) ((= fmt "summary") (formatDeadcodeSummary res)) (else (formatDeadcodeAsn res))) "\n") "" 0)))

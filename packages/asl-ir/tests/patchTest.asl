@@ -9,7 +9,7 @@ fn treeFg -> Str
   (str "(defun f [(x Int64)] -> Int64 (println \"a\") (+ x 1) (* x 2))" "\n\n" "(defun g [(y Int64)] -> Int64 (let [(z (+ y 1))] z) (if (> y 0) y (- 0 y)))")
 
 fn splicePatch id: Str ops: Str -> patch/AstPatch
-  (mt (patch/parsePatch (str "(:astPatch :id \"" id "\" :targetModule \"m\" :ops [" ops "])"))
+  (match (patch/parsePatch (str "(:astPatch :id \"" id "\" :targetModule \"m\" :ops [" ops "])"))
     ((ok p) p)
     ((err d) (do (assert false (str "patch text parses: " d.message)) (patch/makeAstPatch id "m" (none) (none) (list)))))
 
@@ -18,7 +18,7 @@ fn roundTrip label: Str src: Str p: patch/AstPatch expected: Str -> Bool
     (do
       (assert fwd.success (str label ": forward splice applies"))
       (assert (= fwd.patchedSource expected) (str label ": forward splice yields the expected tree"))
-      (mt fwd.inversePatch
+      (match fwd.inversePatch
         ((none) (do (assert false (str label ": forward result carries an inverse")) false))
         ((some inv)
           (let [(back (patch/applyPatch inv fwd.patchedSource))]
@@ -43,7 +43,7 @@ fn testSpliceStandaloneInverse -> Bool
     (do
       (assert (= fwd.patchedSource "(defun f [(x Int64)] -> Int64 (- x 3))") "forward splice replaces three nodes by one")
       (assert (= (patch/applyPatch inv fwd.patchedSource).patchedSource (treeF)) "invertPatch alone restores the deleted nodes")
-      (mt reparsed
+      (match reparsed
         ((err d) (do (assert false (str "rendered inverse parses: " d.message)) false))
         ((ok inv2)
           (do

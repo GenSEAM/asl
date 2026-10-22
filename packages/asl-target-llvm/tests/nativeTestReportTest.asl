@@ -19,7 +19,7 @@ fn ! freshCacheDir -> String
 
 fn ! compareSuite cacheDir: String path: String -> Bool
   (let [(built (nt/prepareIn cacheDir path "nativeReportTest" "test"))]
-    (mt built.binary
+    (match built.binary
       ((none) (do (assert (stringEmpty? built.reason) (str path " native build reason: " built.reason)) false))
       ((some bin)
        (let [(env (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" "ASL_PRELUDE=asl/host/out/prelude.asl")))
@@ -43,7 +43,7 @@ fn ! testZeroSuite cacheDir: String -> Bool
         (built (nt/prepareIn cacheDir path "nativeReportTest-zero" "test"))]
     (do (assert (ok? made) (str "the zero-assertion fixture directory is created: " made))
         (assert (ok? written) (str "the zero-assertion fixture is written: " written))
-        (mt built.binary
+        (match built.binary
           ((none) (do (assert (stringEmpty? built.reason) (str "the zero-assertion suite builds natively: " built.reason)) false))
           ((some bin)
            (let [(env (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" "ASL_PRELUDE=asl/host/out/prelude.asl")))
@@ -67,7 +67,7 @@ fn ! testReportOrder cacheDir: String -> Bool
         (built (nt/prepareIn cacheDir path "nativeReportTest-order" "test"))]
     (do (assert (ok? made) (str "the report-order fixture directory is created: " made))
         (assert (ok? written) (str "the report-order fixture is written: " written))
-        (mt built.binary
+        (match built.binary
           ((none) (do (assert (stringEmpty? built.reason) (str "the report-order suite builds natively: " built.reason)) false))
           ((some bin)
            (let [(env (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" "ASL_ASSERT_FAIL_EMPTY=1" "ASL_PRELUDE=asl/host/out/prelude.asl")))
@@ -92,7 +92,7 @@ fn ! testMissingReport cacheDir: String -> Bool
         (built (nt/prepareIn cacheDir path "nativeReportTest-no-report" "test"))]
     (do (assert (ok? made) (str "the no-report fixture directory is created: " made))
         (assert (ok? written) (str "the no-report fixture is written: " written))
-        (mt built.binary
+        (match built.binary
           ((none) (do (assert (stringEmpty? built.reason) (str "the no-report suite builds natively: " built.reason)) false))
           ((some bin)
            (let [(env (nt/withEnvOverrides! (list "ASL_PRELUDE=asl/host/out/prelude.asl")))

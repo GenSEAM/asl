@@ -30,14 +30,14 @@ fn ! columnLine h: ParquetHandle name: String rg: Int64 -> String
 fn ! probe path: String cols: (List String) -> Bool
   (do
     (println (str "file " path))
-    (mt (parquetOpen path)
+    (match (parquetOpen path)
       ((err e) (do (println (str "open err " e)) true))
       ((ok h)
         (let [(groups (parquetNumRowGroups h))]
           (do
             (println (str "rows " (parquetNumRows h) " groups " groups))
             (println (str "kv " (resultOr (parquetKvMetadata h "vtbot.dataset") "missing")))
-            (println (str "kvAbsent " (mt (parquetKvMetadata h "noSuchKey") ((ok v) (str "ok " v)) ((err e) (str "err " e)))))
+            (println (str "kvAbsent " (match (parquetKvMetadata h "noSuchKey") ((ok v) (str "ok " v)) ((err e) (str "err " e)))))
             (fold (fn [(acc Bool) (c String)] -> Bool
                     (fold (fn [(a Bool) (rg Int64)] -> Bool (do (println (columnLine h c rg)) a)) acc (range 0 groups)))
                   true cols))))))

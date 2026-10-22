@@ -230,7 +230,7 @@ fn testAsiNewlineFlags -> Bool
 
 fn testTrackedFile! path: String -> Bool
   (let [(res (fileReadString path))]
-    (mt res
+    (match res
       ((err msg) (assert false (str "failed to read file: " path " error: " msg)))
       ((ok content)
        (let [(len (stringLength content))
@@ -389,7 +389,7 @@ fn checkTest262Files! files: (List String) runCount: Int64 passCount: Int64 excl
       true)
     (let [(path (optionOr (listHead files) ""))
           (rest (optionOr (listTail files) (list)))]
-      (mt (test262ExclusionReason path (test262Exclusions))
+      (match (test262ExclusionReason path (test262Exclusions))
         ((some _)
          (checkTest262Files! rest runCount passCount (+ excludedCount 1)))
         ((none)

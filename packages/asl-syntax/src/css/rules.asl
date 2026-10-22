@@ -80,7 +80,7 @@ fn consumeSimpleBlockLoop kind: String closeKind: String openTok: tr/Token acc: 
               (all (cons (tr/elemToken openTok) (listAppend revAcc (list (tr/elemToken hd)))))
               (node (tr/makeNode kind st en all))]
           (pair (tr/elemNode node) tl))
-        (mt (consumeComponentValue toks text)
+        (match (consumeComponentValue toks text)
           ((none)
            (let [(st (tr/tokenStart openTok))
                  (revAcc (listReverse acc))
@@ -119,7 +119,7 @@ fn consumeBlockLoop kind: String closeKind: String openTok: tr/Token acc: (List 
          (let [(p (consumeDeclaration toks text))]
            (consumeBlockLoop kind closeKind openTok (cons (pairFirst p) acc) (pairSecond p) text)))
         (else
-         (mt (consumeComponentValue toks text)
+         (match (consumeComponentValue toks text)
            ((none)
             (let [(st (tr/tokenStart openTok))
                   (revAcc (listReverse acc))
@@ -155,7 +155,7 @@ fn consumeComponentValuesUntilLoop toks: (List tr/Token) stopPred: (fn [tr/Token
     (let [(hd (optionOr (listHead toks) (tr/makeToken "" 0 0)))]
       (if (stopPred hd)
         (pair (listReverse acc) toks)
-        (mt (consumeComponentValue toks text)
+        (match (consumeComponentValue toks text)
           ((none) (pair (listReverse acc) (list)))
           ((some p)
            (consumeComponentValuesUntilLoop (pairSecond p) stopPred (cons (pairFirst p) acc) text))))))
@@ -238,7 +238,7 @@ fn findColonIndexLoop elems: (List tr/TreeElement) idx: Int64 -> (Option Int64)
     (none)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((elemToken t)
          (let [(k (tr/tokenKind t))]
            (cond
@@ -261,7 +261,7 @@ fn filterTrailingWhitespace xs: (List tr/TreeElement) -> (List tr/TreeElement)
     (list)
     (let [(hd (optionOr (listHead xs) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail xs) (list)))]
-      (mt hd
+      (match hd
         ((elemToken t)
          (if (= (tr/tokenKind t) "whitespace")
            (filterTrailingWhitespace tl)
@@ -274,9 +274,9 @@ fn checkImportant elems: (List tr/TreeElement) text: String -> Bool
       (let [(e1 (optionOr (listHead rev) (tr/elemToken (tr/makeToken "" 0 0))))
             (r1 (optionOr (listTail rev) (list)))
             (e2 (optionOr (listHead r1) (tr/elemToken (tr/makeToken "" 0 0))))]
-        (mt e1
+        (match e1
           ((elemToken t1)
-           (mt e2
+           (match e2
              ((elemToken t2)
               (and (= (tr/tokenKind t1) "ident")
               (and (= (stringLower (tokenSlice t1 text)) "important")
@@ -303,7 +303,7 @@ fn consumeDeclaration tokens: (List tr/Token) text: String -> (Pair tr/TreeEleme
         (valElems (pairFirst pVals))
         (remToks (pairSecond pVals))
         (colonOpt (findColonIndex valElems))]
-    (mt colonOpt
+    (match colonOpt
       ((none)
        (let [(all (cons (tr/elemToken identTok) valElems))
              (st (tr/tokenStart identTok))]
@@ -383,7 +383,7 @@ fn blockInteriorElems node: tr/Node -> (List tr/TreeElement)
           (list)
           (let [(rev (listReverse afterOpen))
                 (lastChild (optionOr (listHead rev) (tr/elemToken (tr/makeToken "" 0 0))))]
-            (mt lastChild
+            (match lastChild
               ((elemToken t)
                (let [(k (tr/tokenKind t))]
                  (if (or (= k "rbrace") (or (= k "rbracket") (= k "rparen")))
@@ -391,7 +391,7 @@ fn blockInteriorElems node: tr/Node -> (List tr/TreeElement)
                    afterOpen)))
               ((elemNode _) afterOpen)))))))
 fn componentValueToJson elem: tr/TreeElement text: String -> (Option j/Json)
-  (mt elem
+  (match elem
     ((elemToken tok)
      (let [(k (tr/tokenKind tok))]
        (cond
@@ -447,14 +447,14 @@ fn componentValueToJson elem: tr/TreeElement text: String -> (Option j/Json)
          ((= nk "qualified-rule")
           (let [(pre (componentValuesToJson (rulePreludeElems node) text))
                 (bOpt (ruleBlockNode node))
-                (bJson (mt bOpt
+                (bJson (match bOpt
                          ((none) (j/jarr (list)))
                          ((some bn) (j/jarr (cons (j/jstr "{}") (componentValuesToJson (blockInteriorElems bn) text))))))]
             (some (j/jarr (list (j/jarr pre) bJson)))))
          ((= nk "function")
           (let [(children (tr/nodeChildren node))
                 (fnTok (optionOr (listHead children) (tr/elemToken (tr/makeToken "" 0 0))))
-                (fnName (mt fnTok ((elemToken t) (tokenSlice t text)) ((elemNode _) "")))
+                (fnName (match fnTok ((elemToken t) (tokenSlice t text)) ((elemNode _) "")))
                 (inner (componentValuesToJson (blockInteriorElems node) text))]
             (some (j/jarr (cons (j/jstr "function") (cons (j/jstr fnName) inner))))))
          (else (none))))))
@@ -463,7 +463,7 @@ fn componentValuesToJsonLoop elems: (List tr/TreeElement) text: String acc: (Lis
     (listReverse acc)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((elemNode n)
          (let [(nk (tr/nodeKind n))]
            (cond
@@ -474,17 +474,17 @@ fn componentValuesToJsonLoop elems: (List tr/TreeElement) text: String acc: (Lis
              ((= nk "qualified-rule")
               (let [(pre (componentValuesToJson (rulePreludeElems n) text))
                     (bOpt (ruleBlockNode n))
-                    (bJson (mt bOpt
+                    (bJson (match bOpt
                              ((none) (j/jarr (list (j/jstr "{}"))))
                              ((some bn) (j/jarr (cons (j/jstr "{}") (componentValuesToJson (blockInteriorElems bn) text))))))
                     (ruleJsons (listAppend pre (list bJson)))]
                 (componentValuesToJsonLoop tl text (listAppend (listReverse ruleJsons) acc))))
              (else
-              (mt (componentValueToJson hd text)
+              (match (componentValueToJson hd text)
                 ((none) (componentValuesToJsonLoop tl text acc))
                 ((some v) (componentValuesToJsonLoop tl text (cons v acc))))))))
         ((elemToken _)
-         (mt (componentValueToJson hd text)
+         (match (componentValueToJson hd text)
            ((none) (componentValuesToJsonLoop tl text acc))
            ((some v) (componentValuesToJsonLoop tl text (cons v acc))))))))
 fn componentValuesToJson elems: (List tr/TreeElement) text: String -> (List j/Json)
@@ -494,21 +494,21 @@ fn ruleKind node: tr/Node -> String
 fn rulePreludeElems node: tr/Node -> (List tr/TreeElement)
   (let [(children (tr/nodeChildren node))]
     (filter (fn [(e tr/TreeElement)] -> Bool
-              (mt e
+              (match e
                 ((elemToken t) (!= (tr/tokenKind t) "semicolon"))
                 ((elemNode n) (!= (tr/nodeKind n) "block"))))
             children))
 fn ruleBlockNode node: tr/Node -> (Option tr/Node)
   (let [(children (tr/nodeChildren node))
         (blockElems (filter (fn [(e tr/TreeElement)] -> Bool
-                              (mt e
+                              (match e
                                 ((elemToken _) false)
                                 ((elemNode n) (= (tr/nodeKind n) "block"))))
                             children))]
     (if (listEmpty? blockElems)
       (none)
       (let [(hd (optionOr (listHead blockElems) (tr/elemToken (tr/makeToken "" 0 0))))]
-        (mt hd
+        (match hd
           ((elemNode n) (some n))
           ((elemToken _) (none))))))
 fn rulePreludeText node: tr/Node text: String -> String
@@ -519,7 +519,7 @@ fn rulePreludeText node: tr/Node text: String -> String
             (en (lastElementEnd elems st))]
         (stringTrim (optionOr (stringSlice text st en) "")))))
 fn ruleToJson elem: tr/TreeElement text: String -> (Option j/Json)
-  (mt elem
+  (match elem
     ((elemToken _) (none))
     ((elemNode node)
      (let [(k (tr/nodeKind node))]
@@ -529,21 +529,21 @@ fn ruleToJson elem: tr/TreeElement text: String -> (Option j/Json)
          ((= k "qualified-rule")
           (let [(prelude (componentValuesToJson (rulePreludeElems node) text))
                 (bOpt (ruleBlockNode node))
-                (blockJson (mt bOpt
+                (blockJson (match bOpt
                              ((none) (j/jarr (list)))
                              ((some bn) (j/jarr (componentValuesToJson (blockInteriorElems bn) text)))))]
             (some (j/jarr (list (j/jstr "qualified rule") (j/jarr prelude) blockJson)))))
          ((= k "at-rule")
           (let [(children (tr/nodeChildren node))
                 (firstElem (optionOr (listHead children) (tr/elemToken (tr/makeToken "" 0 0))))
-                (atName (mt firstElem
+                (atName (match firstElem
                           ((elemToken t)
                            (let [(s (tokenSlice t text))]
                              (if (stringStartsWith? s "@") (optionOr (stringSlice s 1 (stringLength s)) "") s)))
                           ((elemNode _) "")))
                 (prelude (componentValuesToJson (optionOr (listTail (rulePreludeElems node)) (list)) text))
                 (bOpt (ruleBlockNode node))
-                (blockJson (mt bOpt
+                (blockJson (match bOpt
                              ((none) (j/jnull))
                              ((some bn) (j/jarr (componentValuesToJson (blockInteriorElems bn) text)))))]
             (some (j/jarr (list (j/jstr "at-rule") (j/jstr atName) (j/jarr prelude) blockJson)))))
@@ -551,7 +551,7 @@ fn ruleToJson elem: tr/TreeElement text: String -> (Option j/Json)
 fn rulesToJson root: tr/Node text: String -> j/Json
   (let [(children (tr/nodeChildren root))
         (rules (filter (fn [(e tr/TreeElement)] -> Bool
-                         (mt e
+                         (match e
                            ((elemToken _) false)
                            ((elemNode n)
                             (let [(k (tr/nodeKind n))]
@@ -566,13 +566,13 @@ fn declarationName node: tr/Node text: String -> String
     (if (listEmpty? children)
       ""
       (let [(hd (optionOr (listHead children) (tr/elemToken (tr/makeToken "" 0 0))))]
-        (mt hd
+        (match hd
           ((elemToken t) (tokenSlice t text))
           ((elemNode _) "")))))
 fn declarationValueElems node: tr/Node -> (List tr/TreeElement)
   (let [(children (tr/nodeChildren node))
         (afterIdent (optionOr (listTail children) (list)))]
-    (mt (findColonIndex afterIdent)
+    (match (findColonIndex afterIdent)
       ((none) (list))
       ((some cIdx)
        (let [(p (splitListAt afterIdent (+ cIdx 1)))
@@ -581,7 +581,7 @@ fn declarationValueElems node: tr/Node -> (List tr/TreeElement)
          (if (listEmpty? rev)
            (list)
            (let [(hd (optionOr (listHead rev) (tr/elemToken (tr/makeToken "" 0 0))))]
-             (mt hd
+             (match hd
                ((elemToken t)
                 (if (= (tr/tokenKind t) "semicolon")
                   (listReverse (optionOr (listTail rev) (list)))
@@ -591,7 +591,7 @@ fn isImportantDeclaration? node: tr/Node text: String -> Bool
   (let [(valElems (declarationValueElems node))]
     (checkImportant valElems text))
 fn declarationToJson elem: tr/TreeElement text: String -> (Option j/Json)
-  (mt elem
+  (match elem
     ((elemToken _) (none))
     ((elemNode node)
      (let [(k (tr/nodeKind node))]
@@ -611,7 +611,7 @@ fn declarationToJson elem: tr/TreeElement text: String -> (Option j/Json)
 fn declarationsToJson root: tr/Node text: String -> j/Json
   (let [(children (tr/nodeChildren root))
         (items (filter (fn [(e tr/TreeElement)] -> Bool
-                         (mt e
+                         (match e
                            ((elemToken _) false)
                            ((elemNode n)
                             (let [(k (tr/nodeKind n))]
@@ -629,14 +629,14 @@ fn extractSymbolsFromNode node: tr/Node text: String container: String depth: In
              (symDef (sym/makeScopedSymbolDef sel "selector" (tr/nodeStart node) (tr/nodeEnd node) container depth))
              (acc1 (cons symDef acc))
              (bOpt (ruleBlockNode node))]
-         (mt bOpt
+         (match bOpt
            ((none) acc1)
            ((some bn)
             (extractSymbolsFromElems (tr/nodeChildren bn) text sel (+ depth 1) acc1)))))
       ((= k "at-rule")
        (let [(children (tr/nodeChildren node))
              (firstElem (optionOr (listHead children) (tr/elemToken (tr/makeToken "" 0 0))))
-             (atName (mt firstElem
+             (atName (match firstElem
                        ((elemToken t)
                         (let [(s (tokenSlice t text))]
                           (if (stringStartsWith? s "@") (optionOr (stringSlice s 1 (stringLength s)) "") s)))
@@ -664,7 +664,7 @@ fn extractSymbolsFromNode node: tr/Node text: String container: String depth: In
              (symDef (sym/makeScopedSymbolDef symName symKind (tr/nodeStart node) (tr/nodeEnd node) container depth))
              (acc1 (cons symDef acc))
              (bOpt (ruleBlockNode node))]
-         (mt bOpt
+         (match bOpt
            ((none) acc1)
            ((some bn)
             (extractSymbolsFromElems (tr/nodeChildren bn) text symName (+ depth 1) acc1)))))
@@ -682,7 +682,7 @@ fn extractSymbolsFromElems elems: (List tr/TreeElement) text: String container: 
     acc
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((elemToken _) (extractSymbolsFromElems tl text container depth acc))
         ((elemNode n)
          (let [(acc1 (extractSymbolsFromNode n text container depth acc))]

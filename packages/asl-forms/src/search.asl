@@ -184,7 +184,7 @@ fn digitsUnderscored? s: String -> Bool
     (and (not (stringEmpty? s)) (listAll? allDigits? parts)))
 
 fn parseDigits cs: (List String) acc: Int64 -> Int64
-  (mt (listHead cs)
+  (match (listHead cs)
     ((none) acc)
     ((some c) (parseDigits (tailOf cs) (if (= c "_") acc (+ (* acc 10) (- (charCode c) 48))))))
 
@@ -204,19 +204,19 @@ fn pyRepr s: String -> String
     (if dq (str "\"" e2 "\"") (str "'" (stringReplace e2 "'" "\\'") "'")))
 
 fn procErrorMessage argv: (List String) e: cp/ProcessError -> String
-  (mt e
+  (match e
     ((cp/notFound b) (str "[Errno 2] No such file or directory: " (pyRepr b)))
     ((cp/permissionDenied b) (str "[Errno 13] Permission denied: " (pyRepr b)))
     ((cp/timeout ms) (str "Command '[" (stringJoin (map pyRepr argv) ", ") "]' timed out after " (stringFromInt64 (/ ms 1000)) " seconds"))
     ((cp/executionFailed code msg) msg))
 
 fn runArgv! argv: (List String) cwd: String timeoutMs: Int64 -> (Result cp/ProcessOutput cp/ProcessError)
-  (mt (listHead argv)
+  (match (listHead argv)
     ((none) (err (cp/executionFailed -1 "empty argv")))
     ((some bin) (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd bin (tailOf argv)) cwd) timeoutMs))))
 
 fn runObserveArgv! argv: (List String) cwd: String root: String timeoutMs: Int64 -> (Result cp/ProcessOutput cp/ProcessError)
-  (mt (listHead argv)
+  (match (listHead argv)
     ((none) (runArgv! argv cwd timeoutMs))
     ((some bin)
       (let [(base (cp/withCwd (cp/cmd bin (tailOf argv)) cwd))
@@ -224,17 +224,17 @@ fn runObserveArgv! argv: (List String) cwd: String root: String timeoutMs: Int64
         (cp/exec! (cp/withTimeout withRoot timeoutMs)))))
 
 fn readText! p: String -> (Option String)
-  (mt (fileReadString p)
+  (match (fileReadString p)
     ((ok t) (some (k/universalNewlines (pyDecode t))))
     ((err _) (none)))
 
 fn binaryOf! p: String -> Bool
-  (mt (fileReadRange p 0 8192)
+  (match (fileReadRange p 0 8192)
     ((err _) false)
     ((ok head) (headBinary? head (bytesLength head))))
 
 fn startsBytes? b: Bytes n: Int64 magic: (List Int64) i: Int64 -> Bool
-  (mt (listHead magic)
+  (match (listHead magic)
     ((none) true)
     ((some m) (and (< i n) (= (bytesGet b i) m) (startsBytes? b n (optionOr (listTail magic) (list)) (+ i 1)))))
 
@@ -276,7 +276,7 @@ fn stripVersion s: String -> String
       s))
 
 fn shebangWord words: (List String) -> String
-  (mt (listHead words)
+  (match (listHead words)
     ((none) "text")
     ((some w)
       (let [(prog (k/baseName w))]
@@ -290,7 +290,7 @@ fn firstLineEnd b: Bytes n: Int64 i: Int64 -> Int64
   (cond ((>= i n) n) ((= (bytesGet b i) 10) (+ i 1)) (else (firstLineEnd b n (+ i 1))))
 
 fn shebangLanguage! path: String -> String
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) "text")
     ((ok t)
       (let [(head (slice t 0 (firstLineEnd (stringToBytes t) (min 256 (stringLength t)) 0)))]
@@ -302,7 +302,7 @@ fn blankSegment s: String -> String
   (stringJoin (map (fn [(part String)] -> String (stringRepeat " " (stringLength part))) (stringSplit s "\n")) "\n")
 
 fn applyBlanks text: String ranges: (List (Pair Int64 Int64)) at: Int64 acc: (List String) -> String
-  (mt (listHead ranges)
+  (match (listHead ranges)
     ((none) (stringJoin (listReverse (cons (slice text at (stringLength text)) acc)) ""))
     ((some r)
       (let [(a (max at (pairFirst r))) (e (min (stringLength text) (pairSecond r)))]
@@ -460,7 +460,7 @@ fn maskPython b: Bytes n: Int64 i: Int64 acc: (List (Pair Int64 Int64)) -> (List
     (listReverse acc)
     (if (= (bytesGet b i) 35)
       (let [(j (lineEndFrom b n i))] (maskPython b n j (cons (pair i j) acc)))
-      (mt (pyStrStart b n i)
+      (match (pyStrStart b n i)
         ((none) (maskPython b n (+ i 1) acc))
         ((some m)
           (if (and (> (pairFirst m) 0) (> i 0) (let [(p (bytesGet b (- i 1)))] (or (alnumB? p) (= p 95))))
@@ -528,7 +528,7 @@ fn optKws b: Bytes n: Int64 i: Int64 words: (List String) -> Int64
   (fold (fn [(p Int64) (w String)] -> Int64 (optKw b n p w)) i words)
 
 fn anyWordWs b: Bytes n: Int64 i: Int64 words: (List String) -> Int64
-  (mt (listHead words)
+  (match (listHead words)
     ((none) -1)
     ((some w)
       (let [(e (litAt b n i w)) (s (if (< e 0) -1 (spTab1 b n e)))]
@@ -615,7 +615,7 @@ fn methodRest? b: Bytes n: Int64 e: Int64 -> Bool
          (anyCloseParen? b n (- (lineEndFrom b n p1) 1) p1)))
 
 fn methodAt s: String b: Bytes n: Int64 starts: (List Int64) -> (Option String)
-  (mt (listHead starts)
+  (match (listHead starts)
     ((none) (none))
     ((some a)
       (let [(e (jsIdentEnd b n a))]
@@ -731,10 +731,10 @@ fn notMethodName? nm: String -> Bool
   (listContains? (list "if" "for" "while" "switch" "catch" "function" "return" "with" "else" "do" "try" "new" "typeof" "await" "super") nm)
 
 fn firstPattern line: String pats: (List (fn [String Bytes Int64] -> (Option String))) idx: Int64 -> (Option (Pair Int64 String))
-  (mt (listHead pats)
+  (match (listHead pats)
     ((none) (none))
     ((some p)
-      (mt (p line (stringToBytes line) (stringLength line))
+      (match (p line (stringToBytes line) (stringLength line))
         ((some nm) (some (pair idx nm)))
         ((none) (firstPattern line (optionOr (listTail pats) (list)) (+ idx 1))))))
 
@@ -815,7 +815,7 @@ fn definitionName line: String lang: String -> String
                           (fn [] -> (Option String) (orElse (aslIndentDef line b n)
                             (fn [] -> (Option String) (aslKwDef line b n 0 true)))))))
                 "")
-      (mt (firstPattern line (linePatterns lang) 0)
+      (match (firstPattern line (linePatterns lang) 0)
         ((none) "")
         ((some hit) (if (notMethodName? (pairSecond hit)) "" (pairSecond hit))))))
 
@@ -845,17 +845,17 @@ fn aslScanStep s: String b: Bytes n: Int64 i: Int64 st: AslScan -> AslScan
         ((or (= c 40) (= c 91) (= c 123))
           (aslScanStep s b n (+ i 1) (with st :stack (cons (pair c (pair i st.line)) st.stack) :inStr false :esc false :inComment false)))
         ((or (= c 41) (= c 93) (= c 125))
-          (mt (listHead st.stack)
+          (match (listHead st.stack)
             ((none) (aslScanStep s b n (+ i 1) st))
             ((some top)
               (let [(rest (optionOr (listTail st.stack) (list)))
                     (found (if (= (pairFirst top) 40) (parenSym s b n (pairFirst (pairSecond top))) (none)))
-                    (syms (mt found ((some nm) (cons (pair (+ (pairSecond (pairSecond top)) 1) nm) st.syms)) ((none) st.syms)))]
+                    (syms (match found ((some nm) (cons (pair (+ (pairSecond (pairSecond top)) 1) nm) st.syms)) ((none) st.syms)))]
                 (aslScanStep s b n (+ i 1) (with st :stack rest :inStr false :esc false :inComment false :syms syms))))))
         (else (aslScanStep s b n (+ i 1) st)))))
 
 fn indentSyms lines: (List String) depths: (List Int64) li: Int64 acc: (List (Pair Int64 String)) -> (List (Pair Int64 String))
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) acc)
     ((some ln)
       (let [(d (optionOr (listHead depths) -1))
@@ -864,7 +864,7 @@ fn indentSyms lines: (List String) depths: (List Int64) li: Int64 acc: (List (Pa
                    (aslIndentDef ln (stringToBytes ln) (stringLength ln))
                    (none)))]
         (indentSyms (tailOf lines) (optionOr (listTail depths) (list)) (+ li 1)
-                    (mt hit ((some nm) (cons (pair (+ li 1) nm) acc)) ((none) acc))))))
+                    (match hit ((some nm) (cons (pair (+ li 1) nm) acc)) ((none) acc))))))
 
 fn aslDefLines text: String -> (List (Pair Int64 String))
   (let [(b (stringToBytes text)) (n (stringLength text))
@@ -872,12 +872,12 @@ fn aslDefLines text: String -> (List (Pair Int64 String))
     (listAppend st.syms (indentSyms (stringSplit text "\n") (listReverse st.depths) 0 (list))))
 
 fn patternDefLines lines: (List String) lang: String li: Int64 acc: (List (Pair Int64 String)) -> (List (Pair Int64 String))
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) acc)
     ((some ln)
       (let [(hit (firstPattern ln (linePatterns lang) 0))
-            (keep (mt hit ((none) (none)) ((some h) (if (and (= (pairFirst h) 5) (notMethodName? (pairSecond h))) (none) (some (pairSecond h))))))]
-        (patternDefLines (tailOf lines) lang (+ li 1) (mt keep ((some nm) (cons (pair (+ li 1) nm) acc)) ((none) acc))))))
+            (keep (match hit ((none) (none)) ((some h) (if (and (= (pairFirst h) 5) (notMethodName? (pairSecond h))) (none) (some (pairSecond h))))))]
+        (patternDefLines (tailOf lines) lang (+ li 1) (match keep ((some nm) (cons (pair (+ li 1) nm) acc)) ((none) acc))))))
 
 fn defLines text: String lang: String -> (List (Pair Int64 String))
   (cond
@@ -906,10 +906,10 @@ fn binaryMatch line: String -> String
     "")
 
 fn gitScan! ws: String lines: (List String) cap: Int64 acc: ScanAcc -> ScanAcc
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) acc)
     ((some line)
-      (let [(next (mt (gitHitOf line)
+      (let [(next (match (gitHitOf line)
                     ((some h) (if (binaryOf! (k/joinPath ws h.rel)) (addSkipped acc h.rel) (addHit acc h cap)))
                     ((none) (let [(bin (binaryMatch line))] (if (stringEmpty? bin) acc (addSkipped acc bin))))))]
         (if next.capped next (gitScan! ws (tailOf lines) cap next)))))
@@ -919,26 +919,26 @@ fn textLines text: String -> (List String)
     (if (stringEndsWith? text "\n") (listTake parts (- (listLength parts) 1)) (if (stringEmpty? text) (list) parts)))
 
 fn scanTextLines rel: String lines: (List String) no: Int64 low: String cap: Int64 acc: ScanAcc -> ScanAcc
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) acc)
     ((some ln)
       (let [(next (if (stringContains? (stringLower ln) low) (addHit acc (Hit :rel rel :no no :line ln) cap) acc))]
         (if next.capped next (scanTextLines rel (tailOf lines) (+ no 1) low cap next)))))
 
 fn scanFile! fp: String rel: String low: String cap: Int64 acc: ScanAcc -> ScanAcc
-  (mt (fileSize fp)
+  (match (fileSize fp)
     ((err _) acc)
     ((ok size)
       (cond
         ((> size (* 2 1048576)) acc)
-        ((binaryOf! fp) (mt (fileReadString fp) ((ok raw) (if (stringContains? (stringLower raw) low) (addSkipped acc rel) acc)) ((err _) acc)))
-        (else (mt (readText! fp) ((some t) (scanTextLines rel (textLines t) 1 low cap acc)) ((none) acc))))))
+        ((binaryOf! fp) (match (fileReadString fp) ((ok raw) (if (stringContains? (stringLower raw) low) (addSkipped acc rel) acc)) ((err _) acc)))
+        (else (match (readText! fp) ((some t) (scanTextLines rel (textLines t) 1 low cap acc)) ((none) acc))))))
 
 fn querySkipDir? name: String -> Bool
   (listContains? (list ".git" "node_modules" ".asl" "dist" "build" "target" "__pycache__" ".venv" "venv" ".next" "vendor") name)
 
 fn walkScan! ws: String dir: String low: String cap: Int64 acc: ScanAcc -> ScanAcc
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err _) acc)
     ((ok raw)
       (let [(names (listSort raw))
@@ -960,13 +960,13 @@ fn queryLines! ws: String q: String cap: Int64 -> ScanAcc
   (let [(isGit (or (k/isDir! (k/joinPath ws ".git")) (k/isFile! (k/joinPath ws ".git"))))
         (argv (list "git" "-C" ws "grep" "-n" "-i" "-F" "--no-color" "--untracked" "-e" q))
         (viaGit (if isGit (some (runArgv! argv ws 600000)) (none)))]
-    (mt viaGit
+    (match viaGit
       ((none) (walkFallback! ws q cap))
       ((some res)
-        (mt res
+        (match res
           ((ok out) (gitScan! ws (stringSplit (k/universalNewlines (pyDecode out.stdout)) "\n") cap (emptyScan)))
           ((err e)
-            (mt e
+            (match e
               ((cp/timeout ms) (ScanAcc :hits (list) :count 0 :capped false :skipped (list) :failed (procErrorMessage argv e)))
               (_ (walkFallback! ws q cap))))))))
 
@@ -986,7 +986,7 @@ fn queryKind! ws: String rel: String -> String
 fn viewOf! ws: String rel: String -> FileView
   (let [(t (readText! (k/joinPath ws rel))) (lang (languageOf! (k/joinPath ws rel)))]
     (FileView :rel rel :text t
-              :masked (mt t ((some x) (stringSplit (if (= lang "asl") (maskAsl x) (maskCode x lang)) "\n")) ((none) (list)))))
+              :masked (match t ((some x) (stringSplit (if (= lang "asl") (maskAsl x) (maskCode x lang)) "\n")) ((none) (list)))))
 
 fn codeUse? v: FileView h: Hit low: String -> Bool
   (if (or (none? v.text) (>= (- h.no 1) (listLength v.masked)))
@@ -998,7 +998,7 @@ fn codeUse? v: FileView h: Hit low: String -> Bool
 fn splitHit! ws: String low: String sp: Split h: Hit -> Split
   (let [(kind (queryKind! ws h.rel))]
     (if (= kind "code")
-      (let [(v (mt sp.view ((some cur) (if (= cur.rel h.rel) cur (viewOf! ws h.rel))) ((none) (viewOf! ws h.rel))))]
+      (let [(v (match sp.view ((some cur) (if (= cur.rel h.rel) cur (viewOf! ws h.rel))) ((none) (viewOf! ws h.rel))))]
         (if (codeUse? v h low)
           (with sp :code (cons h sp.code) :view (some v))
           (with sp :comment (cons h sp.comment) :view (some v))))
@@ -1016,14 +1016,14 @@ fn candKey c: Cand -> String
 (schema Confirm (:f defs (List Cand)) (:f rejected (List Hit)) (:f index (Map String (List (Pair Int64 String)))))
 
 fn confirmCands! ws: String cands: (List Cand) limit: Int64 st: Confirm -> Confirm
-  (mt (listHead cands)
+  (match (listHead cands)
     ((none) st)
     ((some c)
       (if (>= (listLength st.defs) limit)
         st
-        (let [(idx (mt (mapGet st.index c.rel)
+        (let [(idx (match (mapGet st.index c.rel)
                      ((some x) x)
-                     ((none) (mt (readText! (k/joinPath ws c.rel)) ((some t) (defLines t (languageOf! (k/joinPath ws c.rel)))) ((none) (list))))))
+                     ((none) (match (readText! (k/joinPath ws c.rel)) ((some t) (defLines t (languageOf! (k/joinPath ws c.rel)))) ((none) (list))))))
               (index (mapSet st.index c.rel idx))
               (ok (listAny? (fn [(p (Pair Int64 String))] -> Bool (and (= (pairFirst p) c.no) (= (pairSecond p) c.name))) idx))]
           (confirmCands! ws (optionOr (listTail cands) (list)) limit
@@ -1042,7 +1042,7 @@ fn countAnchor t: String b: Bytes anchor: String pos: Int64 i: Int64 k: Int64 ->
   (if (or (= i -1) (> i pos)) k (countAnchor t b anchor pos (k/findFrom t b anchor (+ i 1)) (+ k 1)))
 
 fn occurrence! ws: String h: Hit anchor: String -> Int64
-  (mt (readText! (k/joinPath ws h.rel))
+  (match (readText! (k/joinPath ws h.rel))
     ((none) 1)
     ((some t)
       (let [(b (stringToBytes t))
@@ -1055,7 +1055,7 @@ fn cellOf! ws: String h: Hit -> String
     (if (> n 1) (str "(" cell " " (stringFromInt64 n) ")") cell))
 
 fn groupCells! ws: String hits: (List Hit) order: (List String) cells: (Map String (List String)) -> (List String)
-  (mt (listHead hits)
+  (match (listHead hits)
     ((none) (map (fn [(rel String)] -> String (str (quoted rel) " (" (stringJoin (optionOr (mapGet cells rel) (list)) " ") ")")) (listReverse order)))
     ((some h)
       (let [(rel h.rel) (have (mapGet cells rel))]
@@ -1211,7 +1211,7 @@ fn delimError b: Bytes n: Int64 i: Int64 st: DelimScan -> String
         ((= c 59) (delimError b n (+ i 1) (with st :inStr false :inComment true)))
         ((or (= c 40) (= c 91) (= c 123)) (delimError b n (+ i 1) (with st :stack (cons (pair c i) st.stack) :inStr false :inComment false)))
         ((or (= c 41) (= c 93) (= c 125))
-          (mt (listHead st.stack)
+          (match (listHead st.stack)
             ((none) (str "unexpected closing delimiter '" (charOf c) "' at byte " (stringFromInt64 i)))
             ((some top)
               (if (= (closerOf (pairFirst top)) c)
@@ -1223,11 +1223,11 @@ fn delimiterError text: String -> String
   (delimError (stringToBytes text) (stringLength text) 0 (DelimScan :stack (list) :inStr false :strStart -1 :inComment false))
 
 fn ! linkAt? p: String -> Bool
-  (let [(name (k/baseName p)) (listed (mt (dirList (k/dirName p)) ((ok names) (listContains? names name)) ((err _) false)))]
+  (let [(name (k/baseName p)) (listed (match (dirList (k/dirName p)) ((ok names) (listContains? names name)) ((err _) false)))]
     (and listed (!= (resultOr (realPath p) "") p)))
 
 fn guardParts! root: String cur: String parts: (List String) -> String
-  (mt (listHead parts)
+  (match (listHead parts)
     ((none) "")
     ((some part)
       (if (or (stringEmpty? part) (= part "."))
@@ -1251,17 +1251,17 @@ fn mkdirs! p: String -> (Result Unit String)
   (cond
     ((k/isDir! p) (ok ()))
     ((= (k/dirName p) p) (err (str "cannot create " p)))
-    (else (mt (mkdirs! (k/dirName p)) ((err e) (err e)) ((ok _) (if (k/isDir! p) (ok ()) (dirCreate p))))))
+    (else (match (mkdirs! (k/dirName p)) ((err e) (err e)) ((ok _) (if (k/isDir! p) (ok ()) (dirCreate p))))))
 
 fn lockLoop! path: String left: Int64 -> (Result Int64 String)
-  (mt (fileLock path true)
+  (match (fileLock path true)
     ((ok fd) (ok fd))
     ((err e) (if (and (= e "busy") (> left 0)) (do (sleepMs 20) (lockLoop! path (- left 1))) (err (str "notes ledger lock " e ": " path)))))
 
 (schema Appended (:f id String) (:f before Int64) (:f after Int64))
 
 fn withLock! path: String body: (fn [] -> (Result Appended String)) -> (Result Appended String)
-  (mt (lockLoop! path 1500)
+  (match (lockLoop! path 1500)
     ((err e) (err e))
     ((ok fd) (let [(r (body))] (do (fdClose fd) r))))
 
@@ -1269,11 +1269,11 @@ fn appendNote! ctx: KnowCtx kind: String scope: String date: String claim: Strin
   (let [(path (ledgerPath ctx)) (root ctx.ws) (g (writeGuard! root path))]
     (if (not (stringEmpty? g))
       (err g)
-      (mt (mkdirs! (k/dirName path))
+      (match (mkdirs! (k/dirName path))
         ((err e) (err e))
         ((ok _)
           (let [(vroot (v/vfsRoot! ctx.ws ctx.vfsDir ctx.home))]
-            (mt (mkdirs! vroot)
+            (match (mkdirs! vroot)
               ((err e) (err e))
               ((ok _) (withLock! (k/joinPath vroot "notesLedger.lock") (fn [] -> (Result Appended String) (appendLocked! root path kind scope date claim))))))))))
 
@@ -1296,7 +1296,7 @@ fn appendLocked! root: String path: String kind: String scope: String date: Stri
           ((not (stringEmpty? derr)) (err (str "appending would corrupt the ledger: " derr)))
           ((not (stringEmpty? g)) (err g))
           (else
-            (mt (v/atomicWrite! path newText)
+            (match (v/atomicWrite! path newText)
               ((err e) (err e))
               ((ok _)
                 (let [(check (optionOr (readText! path) "")) (after (notesCount check))]
@@ -1323,7 +1323,7 @@ fn noteStep! ctx: KnowCtx id: Int64 kw: (Map String String) args: (List String) 
             ((and (= action "query") (stringEmpty? q)) (badLine (str (stepHead id "note") " :action \"query\" :status \"rejected\" :error-code \":ERR_MISSING_ARG\" :message \"Missing :query argument\")")))
             (else
               (let [(ltext (if (k/isFile! lpath) (readText! lpath) (some "")))]
-                (mt ltext
+                (match ltext
                   ((none) (badLine (str (stepHead id "note") " :action \"" action "\" :status \"rejected\" :error-code \":ERR_READ_FAILED\" :message " (quoted (str "cannot read " lpath)) ")")))
                   ((some t)
                     (if (= action "list")
@@ -1338,7 +1338,7 @@ fn noteStep! ctx: KnowCtx id: Int64 kw: (Map String String) args: (List String) 
               (date (k/kwOr kw "date" (localDate! (/ (nowNs) 1000000000))))]
           (if (stringEmpty? (pyStrip claim))
             (badLine (str (stepHead id "note") " :action \"write\" :status \"rejected\" :error-code \":ERR_MISSING_ARG\" :message \"Missing :claim argument\")"))
-            (mt (appendNote! ctx (k/lstripColons kind) (k/lstripColons scope) date claim)
+            (match (appendNote! ctx (k/lstripColons kind) (k/lstripColons scope) date claim)
               ((ok r) (okLine (str (stepHead id "note") " :action \"write\" :status \"ok\" :id \"" r.id "\" :ledger " (quoted (k/relToRoot ctx.ws lpath))
                                    " :countBefore " (stringFromInt64 r.before) " :countAfter " (stringFromInt64 r.after) " :persisted true)")))
               ((err e) (badLine (str (stepHead id "note") " :action \"write\" :status \"rejected\" :error-code \":ERR_NOT_PERSISTED\" :message " (quoted e) ")")))))))
@@ -1352,7 +1352,7 @@ fn whereStep! ctx: KnowCtx id: Int64 kw: (Map String String) args: (List String)
       ((stringEmpty? sym) (rejectedLine id "where" "ERR_MISSING_ARG" " :message \"Missing symbol argument\""))
       ((not (k/isFile! intel)) (rejectedLine id "where" "ERR_BACKEND_UNAVAILABLE" " :message \"asl intel backend not available; cannot resolve symbol\""))
       (else
-        (mt (runArgv! argv ctx.toolRoot 120000)
+        (match (runArgv! argv ctx.toolRoot 120000)
           ((err e) (rejectedLine id "where" "ERR_EXEC_FAILED" (str " :message " (quoted (procErrorMessage argv e)))))
           ((ok out)
             (if (!= out.exitCode 0)
@@ -1397,7 +1397,7 @@ fn subArgKey? key: String -> Bool
   (listContains? (list "mode" "action" "status" "distill" "engine" "op" "stepOp" "direction" "kind" "format" "role" "depth" "service" "type" "profile" "lenses" "target" "model" "subcmd" "tier" "level" "scope" "topic") key)
 
 fn keyOrder toks: (List String) acc: (List String) -> (List String)
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (listReverse acc))
     ((some tok)
       (let [(rest (tailOf toks))]
@@ -1405,10 +1405,10 @@ fn keyOrder toks: (List String) acc: (List String) -> (List String)
           (keyOrder rest acc)
           (let [(key (k/lstripColons tok))
                 (acc2 (if (listContains? acc key) acc (cons key acc)))
-                (takes (mt (listHead rest)
+                (takes (match (listHead rest)
                          ((none) false)
                          ((some nx) (let [(after (tailOf rest))
-                                          (hasSub (mt (listHead after) ((none) false) ((some t2) (not (stringStartsWith? t2 ":")))))]
+                                          (hasSub (match (listHead after) ((none) false) ((some t2) (not (stringStartsWith? t2 ":")))))]
                                       (or (not (stringStartsWith? nx ":")) (and (not hasSub) (or (subArgKey? key) (listEmpty? after))))))))]
             (keyOrder (if takes (tailOf rest) rest) acc2))))))
 
@@ -1432,7 +1432,7 @@ fn alphaRunAscii b: Bytes n: Int64 j: Int64 -> Int64
 
 fn observeResult id: Int64 code: Int64 stdout: String stderr: String -> KnowOutcome
   (let [(obOut (pyStrip stdout)) (body (observeBody obOut))]
-    (mt body
+    (match body
       ((some rest) (if (= code 0)
                      (okLine (str (stepHead id "observe") " :status \"ok\"" rest ")"))
                      (badLine (str (stepHead id "observe") " :status \"rejected\"" rest ")"))))
@@ -1445,7 +1445,7 @@ fn safeObserveInProcessDim? dim: String -> Bool
   (listContains? (list "memory" "session" "tokenCost") dim)
 
 fn obsEnvPair row: String -> (Pair String String)
-  (mt (stringIndexOf row "=")
+  (match (stringIndexOf row "=")
     ((some i) (pair (optionOr (stringSlice row 0 i) row) (optionOr (stringSlice row (+ i 1) (stringLength row)) "")))
     ((none) (pair row "")))
 
@@ -1468,11 +1468,11 @@ fn observeStep! ctx: KnowCtx id: Int64 kw: (Map String String) args: (List Strin
         (root ctx.toolRoot)]
     (if (safeObserveInProcessDim? dim)
       (observeInProcess! root ctx.ws (listAppend (list "--dim" dim) extra) id)
-      (mt (ev/nativeEntry! root "asl/tools/observe/observe" false)
+      (match (ev/nativeEntry! root "asl/tools/observe/observe" false)
         ((err e) (rejectedLine id "observe" "ERR_EXEC_FAILED" (str " :message " (quoted e))))
         ((ok bin)
           (let [(argv (listAppend (list bin "--dim" dim) extra))]
-            (mt (runObserveArgv! argv ctx.ws root 300000)
+            (match (runObserveArgv! argv ctx.ws root 300000)
               ((err e) (rejectedLine id "observe" "ERR_EXEC_FAILED" (str " :message " (quoted (procErrorMessage argv e)))))
               ((ok out) (observeResult id out.exitCode out.stdout out.stderr))))))))
 
@@ -1643,12 +1643,12 @@ fn zoneFile! name: String -> String
     (optionOr (listHead (filter k/isFile! cands)) ""))
 
 fn utcOffset! tz: (Option String) t: Int64 -> Int64
-  (let [(spec (mt tz ((none) "/etc/localtime") ((some v) (if (stringStartsWith? v ":") (slice v 1 (stringLength v)) v))))
+  (let [(spec (match tz ((none) "/etc/localtime") ((some v) (if (stringStartsWith? v ":") (slice v 1 (stringLength v)) v))))
         (file (if (stringEmpty? spec) "" (zoneFile! spec)))]
     (cond
       ((stringEmpty? spec) 0)
-      ((not (stringEmpty? file)) (mt (fileReadBytes file) ((ok b) (tzifOffset b (bytesLength b) t)) ((err _) 0)))
-      (else (mt (parseTzRule spec) ((some r) (ruleOffset r t)) ((none) 0)))))
+      ((not (stringEmpty? file)) (match (fileReadBytes file) ((ok b) (tzifOffset b (bytesLength b) t)) ((err _) 0)))
+      (else (match (parseTzRule spec) ((some r) (ruleOffset r t)) ((none) 0)))))
 
 fn localDateAt! tz: (Option String) t: Int64 -> String
   (isoDate (floorDiv (+ t (utcOffset! tz t)) 86400))

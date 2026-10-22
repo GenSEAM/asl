@@ -72,7 +72,7 @@ fn extractToolName text: Str -> Str
     (if (not (= prefix ""))
       (let [(after (optionOr (stringSlice trimmed (stringLength prefix) (stringLength trimmed)) ""))
             (quoteIdx (stringIndexOf after "\""))]
-        (mt quoteIdx
+        (match quoteIdx
           ((some q) (optionOr (stringSlice after 0 q) "tool"))
           ((none) "tool")))
       "tool"))
@@ -183,7 +183,7 @@ fn is_balanced_asn_form text: String -> Bool
   (isBalancedAsnForm? text)
 
 fn asnNumber j: j/Json -> (Option String)
-  (mt j
+  (match j
     ((j/jint i) (some (stringFromInt64 i)))
     ((j/jfloat f) (some (stringFromFloat64 f)))
     ((j/jnum n) (some (stringFromFloat64 n)))
@@ -193,7 +193,7 @@ fn asn_number j: j/Json -> (Option String)
   (asnNumber j)
 
 fn asnNumberOpt opt: (Option j/Json) -> (Option String)
-  (mt opt
+  (match opt
     ((some v) (asnNumber v))
     ((none) none))
 
@@ -203,7 +203,7 @@ fn getHeaderValLoop headers: (List String) targetLower: String -> (Option String
     (let [(h (optionOr (listHead headers) ""))
           (rest (optionOr (listTail headers) (list)))
           (colonIdx (stringIndexOf h ":"))]
-      (mt colonIdx
+      (match colonIdx
         ((some idx)
          (let [(name (stringTrim (stringLower (optionOr (stringSlice h 0 idx) ""))))
                (val (stringTrim (optionOr (stringSlice h (+ idx 1) (stringLength h)) "")))]
@@ -240,12 +240,12 @@ fn wantsAsnPairs? pairs: (List (Pair String String)) -> Bool
     (or (stringContains? acceptVal "application/asn+sexpr") (= wireVal "asn")))
 
 fn asJobj j: j/Json -> (Option (List (Pair String j/Json)))
-  (mt j
+  (match j
     ((j/jobj kvs) (some kvs))
     (_ none))
 
 fn asJstr j: j/Json -> (Option String)
-  (mt j
+  (match j
     ((j/jstr s) (some s))
     (_ none))
 
@@ -259,53 +259,53 @@ fn getPropLoop kvs: (List (Pair String j/Json)) key: String -> (Option j/Json)
         (getPropLoop rest key))))
 
 fn getObjProp obj: j/Json key: String -> (Option j/Json)
-  (mt (asJobj obj)
+  (match (asJobj obj)
     ((some kvs) (getPropLoop kvs key))
     ((none) none))
 
 fn getObjObj obj: j/Json key: String -> (Option (List (Pair String j/Json)))
-  (mt (getObjProp obj key)
+  (match (getObjProp obj key)
     ((some j) (asJobj j))
     ((none) none))
 
 fn chatReplyUsageStandard respJson: j/Json -> (Option String)
-  (mt (getObjObj respJson "usage")
+  (match (getObjObj respJson "usage")
     ((some uKvs)
      (let [(inOpt (asnNumberOpt (getPropLoop uKvs "prompt_tokens")))
            (outOpt (asnNumberOpt (getPropLoop uKvs "completion_tokens")))
            (directCachedOpt (asnNumberOpt (getPropLoop uKvs "cached_tokens")))
            (ptdOpt (getPropLoop uKvs "prompt_tokens_details"))
-           (ptdCachedOpt (mt ptdOpt
+           (ptdCachedOpt (match ptdOpt
                            ((some ptdVal)
-                            (mt (asJobj ptdVal)
+                            (match (asJobj ptdVal)
                               ((some ptdKvs) (asnNumberOpt (getPropLoop ptdKvs "cached_tokens")))
                               ((none) none)))
                            ((none) none)))
-           (cachedStr (mt directCachedOpt
+           (cachedStr (match directCachedOpt
                         ((some c) c)
                         ((none) (optionOr ptdCachedOpt "0"))))]
-       (mt inOpt
+       (match inOpt
          ((some inNum)
-          (mt outOpt
+          (match outOpt
             ((some outNum) (some (str "(:input " inNum " :cached " cachedStr " :output " outNum ")")))
             ((none) none)))
          ((none) none))))
     ((none) none))
 
 fn chatReplyUsage respJson: j/Json -> (Option String)
-  (mt (getObjObj respJson "asl")
+  (match (getObjObj respJson "asl")
     ((some aslKvs)
-     (mt (getPropLoop aslKvs "usage")
+     (match (getPropLoop aslKvs "usage")
        ((some uVal)
-        (mt (asJobj uVal)
+        (match (asJobj uVal)
           ((some uKvs)
            (let [(inOpt (asnNumberOpt (getPropLoop uKvs "inputTokens")))
                  (cachedOpt (asnNumberOpt (getPropLoop uKvs "cachedTokens")))
                  (outOpt (asnNumberOpt (getPropLoop uKvs "outputTokens")))
                  (cachedStr (optionOr cachedOpt "0"))]
-             (mt inOpt
+             (match inOpt
                ((some inNum)
-                (mt outOpt
+                (match outOpt
                   ((some outNum) (some (str "(:input " inNum " :cached " cachedStr " :output " outNum ")")))
                   ((none) none)))
                ((none) none))))
@@ -317,16 +317,16 @@ fn chat_reply_usage respJson: j/Json -> (Option String)
   (chatReplyUsage respJson)
 
 fn chatReplyUsageStr jsonStr: String -> (Option String)
-  (mt (j/jsonParse jsonStr)
+  (match (j/jsonParse jsonStr)
     ((ok parsed) (chatReplyUsage parsed))
     ((err _) none))
 
 fn gatewayEntryLabel e: j/Json -> String
-  (mt e
+  (match e
     ((j/jobj kvs)
-     (mt (getPropLoop kvs "alias")
+     (match (getPropLoop kvs "alias")
        ((some val)
-        (mt val
+        (match val
           ((j/jstr a) a)
           (_ (j/jsonEmit val))))
        ((none) "")))
@@ -336,17 +336,17 @@ fn gatewayEntryLabel e: j/Json -> String
 fn servedBy entry: j/Json v2Entry: Bool fallbackModel: String body: (Option j/Json) sentEffort: (Option String) -> j/Json
   (let [(aliasStr (if v2Entry (gatewayEntryLabel entry) fallbackModel))
         (baseKvs (list (pair "alias" (j/jstr aliasStr))))
-        (kvsWithEffort (mt sentEffort
+        (kvsWithEffort (match sentEffort
                          ((some eff)
                           (if (not (stringEmpty? eff))
                             (listAppend baseKvs (list (pair "effort" (j/jstr eff))))
                             baseKvs))
                          ((none) baseKvs)))
-        (finalKvs (mt body
+        (finalKvs (match body
                     ((some b)
-                     (mt (asJobj b)
+                     (match (asJobj b)
                        ((some bodyKvs)
-                        (mt (getPropLoop bodyKvs "temperature")
+                        (match (getPropLoop bodyKvs "temperature")
                           ((some temp) (listAppend kvsWithEffort (list (pair "temperature" temp))))
                           ((none) kvsWithEffort)))
                        ((none) kvsWithEffort)))
@@ -360,7 +360,7 @@ fn servedBySimple entryAlias: String v2Entry: Bool fallbackModel: String body: (
   (servedBy (j/jstr entryAlias) v2Entry fallbackModel body sentEffort)
 
 fn asnValue j: j/Json -> String
-  (mt j
+  (match j
     ((j/jbool b) (if b "true" "false"))
     ((j/jint i) (stringFromInt64 i))
     ((j/jfloat f) (stringFromFloat64 f))
@@ -370,9 +370,9 @@ fn asnValue j: j/Json -> String
     (_ (str "\"" (asnEscape (j/jsonEmit j)) "\"")))
 
 fn extractFirstChoice respJson: j/Json -> (Option (List (Pair String j/Json)))
-  (mt (getObjProp respJson "choices")
+  (match (getObjProp respJson "choices")
     ((some cJson)
-     (mt cJson
+     (match cJson
        ((j/jarr cs)
         (if (listEmpty? cs)
           none
@@ -448,11 +448,11 @@ fn emitPythonJsonString s: String -> String
     (scanPythonJsonStr s bs len 0 0 (list)))
 
 fn emitPythonJsonPair p: (Pair String j/Json) -> String
-  (mt p
+  (match p
     ((pair k v) (str (emitPythonJsonString k) ": " (pyJsonEmit v))))
 
 fn pyJsonEmit val: j/Json -> String
-  (mt val
+  (match val
     ((j/jnull) "null")
     ((j/jbool b) (if b "true" "false"))
     ((j/jint i) (stringFromInt64 i))
@@ -469,11 +469,11 @@ fn pyJsonEmit val: j/Json -> String
        (str "{" (stringJoin (map emitPythonJsonPair kvs) ", ") "}"))))
 
 fn extractContentStr msgOpt: (Option (List (Pair String j/Json))) -> String
-  (mt msgOpt
+  (match msgOpt
     ((some mkvs)
-     (mt (getPropLoop mkvs "content")
+     (match (getPropLoop mkvs "content")
        ((some val)
-        (mt val
+        (match val
           ((j/jstr s) s)
           ((j/jnull) "")
           (_ (pyJsonEmit val))))
@@ -481,13 +481,13 @@ fn extractContentStr msgOpt: (Option (List (Pair String j/Json))) -> String
     ((none) ""))
 
 fn chatReplyAsn respJson: j/Json -> String
-  (let [(modelStr (mt (getObjProp respJson "model")
+  (let [(modelStr (match (getObjProp respJson "model")
                     ((some mJson) (optionOr (asJstr mJson) ""))
                     ((none) "")))
         (choiceOpt (extractFirstChoice respJson))
-        (msgOpt (mt choiceOpt
+        (msgOpt (match choiceOpt
                   ((some ckvs)
-                   (mt (getPropLoop ckvs "message")
+                   (match (getPropLoop ckvs "message")
                      ((some mJson) (asJobj mJson))
                      ((none) none)))
                   ((none) none)))
@@ -495,11 +495,11 @@ fn chatReplyAsn respJson: j/Json -> String
         (contentAsn (if (isBalancedAsnForm? contentStr)
                       (stringTrim contentStr)
                       (str "\"" (asnEscape contentStr) "\"")))
-        (finishStr (mt choiceOpt
+        (finishStr (match choiceOpt
                      ((some ckvs)
-                      (mt (getPropLoop ckvs "finish_reason")
+                      (match (getPropLoop ckvs "finish_reason")
                         ((some frJson)
-                         (mt (asJstr frJson)
+                         (match (asJstr frJson)
                            ((some fr) (if (stringEmpty? fr) "stop" fr))
                            ((none) "stop")))
                         ((none) "stop")))
@@ -507,38 +507,38 @@ fn chatReplyAsn respJson: j/Json -> String
         (servedOpt (getObjObj respJson "asl"))
         (partModel (list (str ":model \"" (asnEscape modelStr) "\"")))
         (partContent (list (str ":content " contentAsn)))
-        (partServed (mt servedOpt
+        (partServed (match servedOpt
                       ((some aslKvs)
-                       (let [(aPart (mt (getPropLoop aslKvs "alias")
-                                      ((some v) (if (mt v ((j/jnull) true) (_ false)) (list) (list (str ":alias " (asnValue v)))))
+                       (let [(aPart (match (getPropLoop aslKvs "alias")
+                                      ((some v) (if (match v ((j/jnull) true) (_ false)) (list) (list (str ":alias " (asnValue v)))))
                                       ((none) (list))))
-                             (ePart (mt (getPropLoop aslKvs "effort")
-                                      ((some v) (if (mt v ((j/jnull) true) (_ false)) (list) (list (str ":effort " (asnValue v)))))
+                             (ePart (match (getPropLoop aslKvs "effort")
+                                      ((some v) (if (match v ((j/jnull) true) (_ false)) (list) (list (str ":effort " (asnValue v)))))
                                       ((none) (list))))
-                             (tPart (mt (getPropLoop aslKvs "temperature")
-                                      ((some v) (if (mt v ((j/jnull) true) (_ false)) (list) (list (str ":temperature " (asnValue v)))))
+                             (tPart (match (getPropLoop aslKvs "temperature")
+                                      ((some v) (if (match v ((j/jnull) true) (_ false)) (list) (list (str ":temperature " (asnValue v)))))
                                       ((none) (list))))]
                          (listAppend aPart (listAppend ePart tPart))))
                       ((none) (list))))
         (partFinish (list (str ":finish \"" (asnEscape finishStr) "\"")))
         (usageOpt (chatReplyUsage respJson))
-        (partUsage (mt usageOpt
+        (partUsage (match usageOpt
                      ((some u) (list (str ":usage " u)))
                      ((none) (list))))
-        (partAsl (mt servedOpt
+        (partAsl (match servedOpt
                    ((some aslKvs)
-                    (let [(poolPart (mt (getPropLoop aslKvs "pool")
+                    (let [(poolPart (match (getPropLoop aslKvs "pool")
                                       ((some pJson)
-                                       (mt (asJstr pJson)
+                                       (match (asJstr pJson)
                                          ((some p) (list (str ":pool \"" (asnEscape p) "\"")))
-                                         ((none) (if (mt pJson ((j/jnull) true) (_ false))
+                                         ((none) (if (match pJson ((j/jnull) true) (_ false))
                                                    (list)
                                                    (list (str ":pool \"" (asnEscape (pyJsonEmit pJson)) "\""))))))
                                       ((none) (list))))
-                          (qPart (mt (asnNumberOpt (getPropLoop aslKvs "queueWaitSec"))
+                          (qPart (match (asnNumberOpt (getPropLoop aslKvs "queueWaitSec"))
                                    ((some q) (list (str ":queueWaitSec " q)))
                                    ((none) (list))))
-                          (execPart (mt (asnNumberOpt (getPropLoop aslKvs "execSec"))
+                          (execPart (match (asnNumberOpt (getPropLoop aslKvs "execSec"))
                                       ((some e) (list (str ":execSec " e)))
                                       ((none) (list))))
                           (aslItems (listAppend poolPart (listAppend qPart execPart)))]
@@ -557,7 +557,7 @@ fn chat_reply_asn respJson: j/Json -> String
   (chatReplyAsn respJson)
 
 fn chatReplyAsnStr jsonStr: String -> String
-  (mt (j/jsonParse jsonStr)
+  (match (j/jsonParse jsonStr)
     ((ok parsed) (chatReplyAsn parsed))
     ((err _) "(:reply :model \"\" :content \"\" :finish \"stop\")\n"))
 
@@ -570,17 +570,17 @@ fn fallbackErrorText errData: String fallbackErr: String -> String
         trimmed)))
 
 fn upstreamErrorReason errData: String fallbackErr: String -> String
-  (mt (j/jsonParse errData)
+  (match (j/jsonParse errData)
     ((ok parsed)
-     (mt (asJobj parsed)
+     (match (asJobj parsed)
        ((some kvs)
-        (mt (getPropLoop kvs "error")
+        (match (getPropLoop kvs "error")
           ((some errVal)
-           (mt errVal
+           (match errVal
              ((j/jobj errKvs)
-              (mt (getPropLoop errKvs "message")
+              (match (getPropLoop errKvs "message")
                 ((some msgVal)
-                 (mt (asJstr msgVal)
+                 (match (asJstr msgVal)
                    ((some msg) msg)
                    ((none) (fallbackErrorText errData fallbackErr))))
                 ((none) (fallbackErrorText errData fallbackErr))))
@@ -617,7 +617,7 @@ fn extractOutermostSexpLoop text: String idx: Int64 len: Int64 start: Int64 dept
                 (extractOutermostSexpLoop text (+ idx 1) len start depth false false))))))))
 
 fn extractOutermostSexp text: String -> (Option String)
-  (mt (stringIndexOf text "(")
+  (match (stringIndexOf text "(")
     ((some start) (extractOutermostSexpLoop text start (stringLength text) start 0 false false))
     ((none) none))
 
@@ -644,7 +644,7 @@ fn skipFenceSpaces text: String pos: Int64 len: Int64 -> Int64
         pos)))
 
 fn extractFenceCandidate s: String -> String
-  (mt (stringIndexOf s "```")
+  (match (stringIndexOf s "```")
     ((some openIdx)
      (let [(len (stringLength s))
            (afterOpen (+ openIdx 3))
@@ -658,7 +658,7 @@ fn extractFenceCandidate s: String -> String
                         afterCr))
            (remaining (optionOr (stringSlice s bodyStart len) ""))
            (closeRel (stringIndexOf remaining "```"))]
-       (mt closeRel
+       (match closeRel
          ((some relIdx)
           (stringTrim (optionOr (stringSlice s bodyStart (+ bodyStart relIdx)) "")))
          ((none) s))))
@@ -668,13 +668,13 @@ fn sanitizeAsnContent content: String -> String
   (let [(s (stringTrim content))
         (candidate (extractFenceCandidate s))
         (extractedCand (extractOutermostSexp candidate))
-        (extracted (mt extractedCand
+        (extracted (match extractedCand
                      ((some e) (some e))
                      ((none)
                       (if (!= candidate s)
                         (extractOutermostSexp s)
                         none))))]
-    (mt extracted
+    (match extracted
       ((some found) (stringTrim found))
       ((none)
        (let [(escaped (stringReplace (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\n" " "))
@@ -691,7 +691,7 @@ fn findRootIndex text: String roots: (List String) -> (Option Int64)
     none
     (let [(root (optionOr (listHead roots) ""))
           (idx (stringIndexOf text root))]
-      (mt idx
+      (match idx
         ((some i) (some i))
         ((none) (findRootIndex text (optionOr (listTail roots) (list)))))))
 
@@ -729,7 +729,7 @@ fn extractOutermostSexpr text: String -> (Option String)
     none
     (let [(roots (list "(:researchReport" "(:researchTriage" "(:searchResults" "(:rawEvidence" "(:"))
           (startOpt (findRootIndex text roots))]
-      (mt startOpt
+      (match startOpt
         ((some start)
          (extractOutermostSexprLoop text start (stringLength text) start (list) false false))
         ((none) none))))

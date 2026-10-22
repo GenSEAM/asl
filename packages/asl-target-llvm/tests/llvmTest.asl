@@ -82,7 +82,7 @@ fn testLlvmModule -> Bool
         (fnCalc (irTy/makeIrFunction "asl_main" (list paramA paramB) (irTy/makeIrType "i64" "raw" false) (list stmtAdd stmtRet)))
         (mod (irTy/makeIrModule "calcMod" "llvm" (list fnCalc)))
         (emitRes (em/emitLlvmModule mod))]
-    (mt emitRes
+    (match emitRes
       ((err diags) (do (assert false "emitLlvmModule returned error") false))
       ((ok modStr)
         (do
@@ -118,7 +118,7 @@ fn divModSource -> String
   (stringJoin (list "(module dm :x [dm])" "" "(fn dm [] -> Int64" "  (+ (/ -7 3) (mod -7 3)))") "\n")
 
 fn testLlvmSourceLowering -> Bool
-  (mt (llvm/emitLlvmSource (divModSource) "dm")
+  (match (llvm/emitLlvmSource (divModSource) "dm")
     ((err diags) (do (assert false (str "divMod source lowers: " (stringJoin (map (fn [(d irTy/IrDiag)] -> String d.message) diags) "; "))) false))
     ((ok code)
       (let [(divAt (stringIndexOf code "select i1 %$252.p.zero, i32 5, i32 3"))
@@ -137,7 +137,7 @@ fn testLlvmSourceLowering -> Bool
           true))))
 
 fn testLlvmSourceMissingEntry -> Bool
-  (mt (llvm/emitLlvmSource (divModSource) "absent")
+  (match (llvm/emitLlvmSource (divModSource) "absent")
     ((ok _) (do (assert false "a missing entry function is refused") false))
     ((err diags)
       (do

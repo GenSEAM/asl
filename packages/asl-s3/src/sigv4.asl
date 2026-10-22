@@ -50,7 +50,7 @@ fn queryLine item: QueryParam -> String
   (str (uriEncode item.name) "=" (uriEncode item.value))
 
 fn queryLinesLoop rest: (List QueryParam) out: (List String) -> (List String)
-  (mt (listHead rest) ((none) out) ((some item) (queryLinesLoop (optionOr (listTail rest) (list)) (listAppend out (list (queryLine item))))))
+  (match (listHead rest) ((none) out) ((some item) (queryLinesLoop (optionOr (listTail rest) (list)) (listAppend out (list (queryLine item))))))
 
 fn queryLines query: (List QueryParam) -> (List String)
   (queryLinesLoop query (list))
@@ -89,7 +89,7 @@ fn canonicalHeaderLine name: String values: (List String) -> String
   (str name ":" (stringJoin values ",") "\n")
 
 fn mergedHeaderLines headers: (List Header) name: String values: (List String) out: (List String) -> (List String)
-  (mt (listHead headers)
+  (match (listHead headers)
     ((none) (listAppend out (list (canonicalHeaderLine name values))))
     ((some item)
       (let [(nextName (stringLower (stringTrim item.name)))
@@ -102,20 +102,20 @@ fn mergedHeaderLines headers: (List Header) name: String values: (List String) o
 
 fn headerLines headers: (List Header) -> (List String)
   (let [(sorted (sortedHeaders headers))]
-    (mt (listHead sorted)
+    (match (listHead sorted)
       ((none) (list))
       ((some item) (mergedHeaderLines (optionOr (listTail sorted) (list))
         (stringLower (stringTrim item.name))
         (list (collapseHeaderWhitespace item.value)) (list)))))
 
 fn headerNamesLoop rest: (List Header) out: (List String) -> (List String)
-  (mt (listHead rest) ((none) out) ((some item) (headerNamesLoop (optionOr (listTail rest) (list)) (listAppend out (list (stringLower (stringTrim item.name)))))))
+  (match (listHead rest) ((none) out) ((some item) (headerNamesLoop (optionOr (listTail rest) (list)) (listAppend out (list (stringLower (stringTrim item.name)))))))
 
 fn headerNames headers: (List Header) -> (List String)
   (headerNamesLoop (sortedHeaders headers) (list))
 
 fn uniqueHeaderNames names: (List String) previous: String started: Bool out: (List String) -> (List String)
-  (mt (listHead names)
+  (match (listHead names)
     ((none) out)
     ((some name)
       (let [(rest (optionOr (listTail names) (list)))]

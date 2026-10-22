@@ -36,7 +36,7 @@ fn withWritten run: LoopRun written: jr/Written -> LoopRun
     :lastDefect run.lastDefect :lastDefectTurn run.lastDefectTurn :parseDefectStreak run.parseDefectStreak)
 
 fn writtenPaths written: jr/Written -> (List String)
-  (mt written.files
+  (match written.files
     ((some files) (map pairFirst files))
     ((none) (list)))
 
@@ -105,8 +105,8 @@ fn taskRequestsCommit task: String -> Bool
     (taskCommitScan bs (bytesLength bs) 0))
 
 fn stateFor env: s/LoopEnv -> s/LoopState
-  (let [tokens (ctx/contextTokensFor env.model (mt env.contextTokens ((some n) (j/jint n)) ((none) (j/jnull))) false)
-        resumeTurn (mt env.resume ((some resume) (intField resume "turn" 0)) ((none) 0))]
+  (let [tokens (ctx/contextTokensFor env.model (match env.contextTokens ((some n) (j/jint n)) ((none) (j/jnull))) false)
+        resumeTurn (match env.resume ((some resume) (intField resume "turn" 0)) ((none) 0))]
     (s/LoopState :turn resumeTurn :contextTokens (some tokens) :core (j/jobj (list)) :wallBudget env.wallBudget
       :intent env.intent :plan (j/jobj (list)) :mode "auto"
       :sizingModel (optionOr env.model "") :explicitContext (some? env.contextTokens)
@@ -409,25 +409,25 @@ fn preflightJson bad: (List (List (Pair String go/RVal))) -> j/Json
     (j/jobj (map (fn [field] (pair (pairFirst field) (s/gitRValJson (pairSecond field)))) rec))) bad))
 
 fn stringField obj: j/Json key: String fallback: String -> String
-  (mt (j/jsonGet obj key)
-    ((some v) (mt v ((j/jstr s) s) ((j/jnum _) fallback) ((j/jint _) fallback) ((j/jbool _) fallback) ((j/jnull) fallback) ((j/jarr _) fallback) (_ fallback)))
+  (match (j/jsonGet obj key)
+    ((some v) (match v ((j/jstr s) s) ((j/jnum _) fallback) ((j/jint _) fallback) ((j/jbool _) fallback) ((j/jnull) fallback) ((j/jarr _) fallback) (_ fallback)))
     ((none) fallback))
 
 fn intField obj: j/Json key: String fallback: Int64 -> Int64
-  (mt (j/jsonGet obj key)
-    ((some v) (mt v ((j/jint n) n) (_ fallback)))
+  (match (j/jsonGet obj key)
+    ((some v) (match v ((j/jint n) n) (_ fallback)))
     ((none) fallback))
 
 fn wallSeconds elapsed: Float64 -> String
   (stringFromInt64 (optionOr (float64ToInt64 (ctx/pyRound elapsed 0)) 0))
 
 fn ! resumeJournal! path: (Option String) journal: String -> Bool
-  (mt path
+  (match path
     ((some patchPath) (ok? (jr/journalWrite journal (str "(:resumeApplied \"" (c/escapeAsn patchPath) "\")\n"))))
     ((none) true))
 
 fn ! startHead! rootDir: String -> (Result (Option String) String)
-  (mt (jr/git! rootDir (list "rev-parse" "HEAD"))
+  (match (jr/git! rootDir (list "rev-parse" "HEAD"))
     ((err e) (err e))
     ((ok o) (ok (if (= o.exitCode 0) (some (ctx/pyStrip o.stdout)) none))))
 
@@ -439,24 +439,24 @@ fn ! setup! env: s/LoopEnv -> LoopSetup
   (let [state (stateFor env)
         sid (optionOr env.sessionId (env.newId))
         rootDir (absoluteRoot! env.rootDir)]
-    (mt (startHead! rootDir)
+    (match (startHead! rootDir)
       ((err e) (early (emptyResult env sid "failed" (some e) 0 none (list) none none none)))
       ((ok head) (setupAt! env state sid rootDir head))))
 
 fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head: (Option String) -> LoopSetup
   (let [timeout (optionOr env.gateTimeout 10)
-        header (mt env.resume
+        header (match env.resume
           ((some resume) (str "(:turn " (stringFromInt64 (intField resume "turn" 0)) " :answer \""
             (c/escapeAsn (stringField resume "answer" "")) "\")\n(:transport :subprocess :transportWhy \"ASL_TRANSPORT=subprocess\")\n"))
           ((none) (lp/sessionHeader sid env.task (optionOr env.modeHint "")
             (optionOr env.intent "auto") rootDir env.owns env.gates
             (optionOr env.base "") (optionOr env.model "") "default" ":transport :subprocess :transportWhy \"ASL_TRANSPORT=subprocess\""
             (stringFromInt64 timeout) (stringFromInt64 (optionOr env.contextTokens 24000))
-            (mt env.wallBudget ((some n) (stringFromInt64 n)) ((none) "")) env.plan)))
+            (match env.wallBudget ((some n) (stringFromInt64 n)) ((none) "")) env.plan)))
         preflight (go/gatePreflight! env.gates rootDir none)
         fresh (jr/newWritten rootDir head)
-        patchState (mt env.resume
-          ((some _) (mt (jr/applyResumePatch fresh rootDir env.journalPath sid)
+        patchState (match env.resume
+          ((some _) (match (jr/applyResumePatch fresh rootDir env.journalPath sid)
             ((err e) (pair fresh (pair none (some e)))) ((ok applied) applied)))
           ((none) (pair fresh (pair none none))))
         applied (pairFirst (pairSecond patchState))
@@ -485,20 +485,20 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
             :procs (ro/newProcs) :written (pairFirst patchState) :session sid :commitMessage none :parseDefects 0 :lastDefect false :lastDefectTurn none :parseDefectStreak 0))))))
 
 fn latestRed entry: j/Json -> Bool
-  (mt entry
-    ((j/jobj _) (mt (optionOr (j/jsonGet entry "exit") (j/jnull))
+  (match entry
+    ((j/jobj _) (match (optionOr (j/jsonGet entry "exit") (j/jnull))
       ((j/jint n) (!= n 0)) ((j/jnum x) (!= x 0.0)) ((j/jfloat x) (!= x 0.0)) (_ true)))
     ((j/jarr items)
-      (mt (listHead (if (listEmpty? items) (list) (c/restOf items)))
-        ((some gate) (mt (optionOr (j/jsonGet gate "exit") (j/jnull)) ((j/jint n) (!= n 0)) ((j/jnum x) (!= x 0.0)) ((j/jfloat x) (!= x 0.0)) (_ true)))
+      (match (listHead (if (listEmpty? items) (list) (c/restOf items)))
+        ((some gate) (match (optionOr (j/jsonGet gate "exit") (j/jnull)) ((j/jint n) (!= n 0)) ((j/jnum x) (!= x 0.0)) ((j/jfloat x) (!= x 0.0)) (_ true)))
         ((none) true)))
     (_ true))
 
 fn redGateOf gates: (List String) lastGates: (Map String j/Json) -> Bool
-  (listAny? (fn [cmd] (mt (mapGet lastGates cmd) ((some entry) (latestRed entry)) ((none) false))) gates)
+  (listAny? (fn [cmd] (match (mapGet lastGates cmd) ((some entry) (latestRed entry)) ((none) false))) gates)
 
 fn declaredGatesGreen gates: (List String) lastGates: (Map String j/Json) -> Bool
-  (lp/finalGatesGreen (map (fn [cmd] (mt (mapGet lastGates cmd) ((some entry) (if (latestRed entry) "0" "1")) ((none) "0"))) gates))
+  (lp/finalGatesGreen (map (fn [cmd] (match (mapGet lastGates cmd) ((some entry) (if (latestRed entry) "0" "1")) ((none) "0"))) gates))
 
 fn headDecision! env: s/LoopEnv state: s/LoopState parseDefects: Int64 -> String
   (let [runTurns (max 0 (- state.turn state.startTurn))
@@ -569,20 +569,20 @@ fn stripColons s: String -> String
   (if (stringStartsWith? s ":") (stripColons (optionOr (stringSlice s 1 (stringLength s)) "")) s)
 
 fn usageAny usage: j/Json -> Bool
-  (mt usage ((j/jobj kvs) (listAny? (fn [kv] (ctx/pyTruthy (pairSecond kv))) kvs)) (_ false))
+  (match usage ((j/jobj kvs) (listAny? (fn [kv] (ctx/pyTruthy (pairSecond kv))) kvs)) (_ false))
 
 fn usageInt usage: j/Json key: String -> String
   (stringFromInt64 (intField usage key 0))
 
 fn ! journaled! env: s/LoopEnv text: String value: T -> (Result T String)
-  (mt (jr/journalWrite env.journalPath text)
+  (match (jr/journalWrite env.journalPath text)
     ((err e) (err e))
     ((ok _) (ok value)))
 
 fn ! killRun! env: s/LoopEnv run: LoopRun rootDir: String -> (Result (List String) String)
   (let [state run.state
         runCtx (ro/makeRunCtx rootDir state.scope run.session (optionOr env.gateTimeout 10) (list) rootDir)]
-    (mt (ro/killSpawned! runCtx run.procs (fn [rel pre mode] true))
+    (match (ro/killSpawned! runCtx run.procs (fn [rel pre mode] true))
       ((err e) (err e))
       ((ok out)
         (if (listEmpty? out.killed)
@@ -590,12 +590,12 @@ fn ! killRun! env: s/LoopEnv run: LoopRun rootDir: String -> (Result (List Strin
           (journaled! env (str "(:killed (" (quoted out.killed) "))\n") out.killed)))))
 
 fn ! headSha! rootDir: String -> (Result String String)
-  (mt (jr/git! rootDir (list "rev-parse" "HEAD"))
+  (match (jr/git! rootDir (list "rev-parse" "HEAD"))
     ((err e) (err e))
     ((ok o) (ok (ctx/pyStrip o.stdout))))
 
 fn ! committed! env: s/LoopEnv rootDir: String -> (Result (Pair (Option String) (Option String)) String)
-  (mt (headSha! rootDir)
+  (match (headSha! rootDir)
     ((err e) (err e))
     ((ok sha) (journaled! env (str "(:commit \"" sha "\")\n") (pair (some sha) none))))
 
@@ -613,14 +613,14 @@ fn ! commitWritten! env: s/LoopEnv run: LoopRun rootDir: String message: String 
     (listAppend run.state.writtenFiles (writtenPaths run.written))))]
     (if (listEmpty? paths)
       (commitFailed! env "the run wrote no path to commit")
-      (mt (jr/git! rootDir (listAppend (list "ls-files" "--others" "--exclude-standard" "--") paths))
+      (match (jr/git! rootDir (listAppend (list "ls-files" "--others" "--exclude-standard" "--") paths))
         ((err e) (err e))
         ((ok listed)
           (let [newFiles (filter (fn [f] (not (stringEmpty? f))) (map ctx/pyStrip (stringLines listed.stdout)))]
-            (mt (if (listEmpty? newFiles) (ok 0) (mt (jr/git! rootDir (listAppend (list "add" "--") newFiles)) ((err e) (err e)) ((ok o) (ok o.exitCode))))
+            (match (if (listEmpty? newFiles) (ok 0) (match (jr/git! rootDir (listAppend (list "add" "--") newFiles)) ((err e) (err e)) ((ok o) (ok o.exitCode))))
               ((err e) (err e))
               ((ok _)
-                (mt (jr/git! rootDir (listAppend (list "commit" "-m" message "--") paths))
+                (match (jr/git! rootDir (listAppend (list "commit" "-m" message "--") paths))
                   ((err e) (err e))
                   ((ok done)
                     (if (= done.exitCode 0)
@@ -632,7 +632,7 @@ fn ! commit! env: s/LoopEnv run: LoopRun rootDir: String status: String gatesGre
     (if (or (stringEmpty? message) (or (!= status "ok") (not gatesGreen)))
       (ok (pair none none))
       (let [invalid (rp/commitMessageError message)]
-        (mt (if (some? invalid) (rp/commitNamesHead! message rootDir) (ok false))
+        (match (if (some? invalid) (rp/commitNamesHead! message rootDir) (ok false))
           ((err e) (err e))
           ((ok namesHead)
             (cond
@@ -650,12 +650,12 @@ fn resultText state: s/LoopState session: String status: String unbacked: Int64 
       " :unbacked " (stringFromInt64 unbacked)
       (if (listEmpty? claims) "" (str " :unbackedClaims (" (quoted claims) ")"))
       " :contextTokens " (stringFromInt64 (optionOr state.contextTokens 0))
-      (mt state.error ((some e) (str " :error :" (stripColons e))) ((none) ""))
-      (mt (pairFirst commit)
+      (match state.error ((some e) (str " :error :" (stripColons e))) ((none) ""))
+      (match (pairFirst commit)
         ((some sha) (str " :commit \"" sha "\""))
-        ((none) (mt (pairSecond commit) ((some why) (str " :commitError \"" (c/escapeAsn why) "\"")) ((none) ""))))
+        ((none) (match (pairSecond commit) ((some why) (str " :commitError \"" (c/escapeAsn why) "\"")) ((none) ""))))
       (if commitMissing " :commitMissing true" "")
-      (mt state.deliver ((some d) (if (stringEmpty? d) "" (str " :deliver :" d))) ((none) ""))
+      (match state.deliver ((some d) (if (stringEmpty? d) "" (str " :deliver :" d))) ((none) ""))
       " :phases (" (phasesText state.phases) ")"
       (if preserve " :gatesGreen true" "")
       (if (listEmpty? findings) "" (str " :findings (" (c/joinSep findings " ") ")"))
@@ -670,7 +670,7 @@ fn ! finalResult env: s/LoopEnv run: LoopRun status: String unbacked: Int64 comm
     (s/RunResult
       :status status :unbacked unbacked :unbackedClaims state.runUnbackedClaims
       :gates state.allGateResults :turns state.turn
-      :escalate (mt state.escalateReceipt ((some receipt) (some (j/jstr receipt))) ((none) none))
+      :escalate (match state.escalateReceipt ((some receipt) (some (j/jstr receipt))) ((none) none))
       :needsConfirm (if (listEmpty? state.needsConfirmList) none (some (j/jarr state.needsConfirmList)))
       :error state.error :sessionId run.session :session run.session
       :journal (journalOf env) :findings state.findingsList :parseDefect run.lastDefect
@@ -684,12 +684,12 @@ fn ! finalResult env: s/LoopEnv run: LoopRun status: String unbacked: Int64 comm
       :execSec (if state.hasTiming (some state.totalExecSec) none)
       :usage (if (usageAny usage) (some usage) none) :signal state.signalName
       :ownsRejected state.ownsRejections
-      :planSummary (mt (j/jsonGet state.plan "steps") ((some _) (some state.plan)) ((none) none))
+      :planSummary (match (j/jsonGet state.plan "steps") ((some _) (some state.plan)) ((none) none))
       :coreHost (coreHostZero) :openPossible (list)
       :gatePreflight none :message none))
 
 fn ! failedAfterKill! env: s/LoopEnv run: LoopRun rootDir: String e: String -> s/RunResult
-  (mt (jr/handBack run.written rootDir env.journalPath run.session true run.written.startHead)
+  (match (jr/handBack run.written rootDir env.journalPath run.session true run.written.startHead)
     ((err handErr) (emptyResult env run.session "failed" (some handErr) run.state.turn none (list) none none none))
     ((ok hand) (emptyResult env run.session "failed" (some e) run.state.turn (pairFirst (pairSecond hand)) (pairSecond (pairSecond hand)) none none none)))
 
@@ -702,7 +702,7 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
         finalStatus (c/firstOf outcome)
         finalUnbacked (optionOr (stringToInt64 (optionOr (listGet outcome 1) "")) 0)
         failed (fn [e patch restored] (emptyResult env run.session "failed" (some e) state.turn patch restored none none none))]
-    (mt (killRun! env run rootDir)
+    (match (killRun! env run rootDir)
       ((err e) (failedAfterKill! env run rootDir e))
       ((ok _)
         (let [gatesGreen (declaredGatesGreen env.gates state.lastGates)
@@ -710,72 +710,72 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
               preserve (lp/preserveFiles finalStatus (optionOr state.escalateReceipt "")
                 (intField state.retries "gates" 0) (intField state.retries "steps" 0) run.parseDefects preserveGreen)
               restore (lp/handBackRestore finalStatus preserve)]
-          (mt (jr/handBack run.written rootDir env.journalPath run.session restore run.written.startHead)
+          (match (jr/handBack run.written rootDir env.journalPath run.session restore run.written.startHead)
             ((err e) (failed e none (list)))
             ((ok hand)
               (let [patch (pairFirst (pairSecond hand))
                     restored (pairSecond (pairSecond hand))]
-                (mt (commit! env run rootDir finalStatus gatesGreen)
+                (match (commit! env run rootDir finalStatus gatesGreen)
                   ((err e) (failed e patch restored))
                   ((ok commit)
                     (let [commitMissing (and (= finalStatus "ok") (and state.commitRequested (and (none? run.commitMessage) state.writesPersisted)))]
-                      (mt (journaled! env (str (if commitMissing "(:commitMissing true)\n" "")
+                      (match (journaled! env (str (if commitMissing "(:commitMissing true)\n" "")
                             (ctx/coreStatsLine (coreHostZero))
                             (resultText state run.session finalStatus finalUnbacked commit commitMissing preserve patch restored)) true)
                         ((err e) (failed e patch restored))
                         ((ok _) (finalResult env run finalStatus finalUnbacked commit commitMissing preserve patch restored)))))))))))))
 
 fn ! runBody! env: s/LoopEnv run: LoopRun body: (fn [s/LoopEnv LoopRun] -> (Pair LoopRun s/Step)) -> LoopRun
-  (mt (head! env run.state run.parseDefectStreak)
+  (match (head! env run.state run.parseDefectStreak)
     ((pair current step)
       (let [headed (withState run current)]
-        (mt step
+        (match step
           ((proceed)
-            (mt (body env headed)
+            (match (body env headed)
               ((pair next nextStep)
-                (mt nextStep ((stop) next) ((nextTurn) (runBody! env next body)) ((proceed) (runBody! env next body))))))
+                (match nextStep ((stop) next) ((nextTurn) (runBody! env next body)) ((proceed) (runBody! env next body))))))
           ((nextTurn) headed)
           ((stop) headed)))))
 
 fn ! cleanup! env: s/LoopEnv sid: String -> (Result Bool String)
-  (mt (jr/retainJournal env.journalPath env.rootDir sid)
+  (match (jr/retainJournal env.journalPath env.rootDir sid)
     ((err e) (err e)) ((ok _) (ok true)))
 
 fn ! runLoopWith! env: s/LoopEnv body: (fn [s/LoopEnv LoopRun] -> (Pair LoopRun s/Step)) -> s/RunResult
-  (mt (setup! env)
+  (match (setup! env)
     ((early result)
-      (mt (cleanup! env result.session)
+      (match (cleanup! env result.session)
         ((err e) (emptyResult env result.session "failed" (some e) result.turns none (list) none none none))
         ((ok _) result)))
     ((ready run)
       (let [finished (runBody! env run body)
             result (finish! env finished)]
-        (mt (cleanup! env finished.session)
+        (match (cleanup! env finished.session)
           ((err e) (emptyResult env finished.session "failed" (some e) finished.state.turn none (list) none none none))
           ((ok _) result)))))
 
 fn ! runBodyWithProvider! env: s/LoopEnv wrapped: ProviderRun body: (fn [s/LoopEnv ProviderRun] -> (Pair ProviderRun s/Step)) -> ProviderRun
-  (mt (head! env wrapped.run.state wrapped.run.parseDefectStreak)
+  (match (head! env wrapped.run.state wrapped.run.parseDefectStreak)
     ((pair current step)
       (let [headed (ProviderRun :run (withState wrapped.run current) :provider wrapped.provider :history wrapped.history)]
-        (mt step
+        (match step
           ((proceed)
-            (mt (body env headed)
+            (match (body env headed)
               ((pair next nextStep)
-                (mt nextStep ((stop) next) ((nextTurn) (runBodyWithProvider! env next body)) ((proceed) (runBodyWithProvider! env next body))))))
+                (match nextStep ((stop) next) ((nextTurn) (runBodyWithProvider! env next body)) ((proceed) (runBodyWithProvider! env next body))))))
           ((nextTurn) headed)
           ((stop) headed)))))
 
 fn ! runLoopWithProvider! env: s/LoopEnv provider: pv/Provider body: (fn [s/LoopEnv ProviderRun] -> (Pair ProviderRun s/Step)) -> s/RunResult
-  (mt (setup! env)
+  (match (setup! env)
     ((early result)
-      (mt (cleanup! env result.session)
+      (match (cleanup! env result.session)
         ((err e) (emptyResult env result.session "failed" (some e) result.turns none (list) none none none))
         ((ok _) result)))
     ((ready run)
       (let [finished (runBodyWithProvider! env (ProviderRun :run run :provider provider :history run.state.history) body)
             completed finished.run
             result (finish! env completed)]
-        (mt (cleanup! env completed.session)
+        (match (cleanup! env completed.session)
           ((err e) (emptyResult env completed.session "failed" (some e) completed.state.turn none (list) none none none))
           ((ok _) result)))))

@@ -10,9 +10,9 @@ fn self -> String
 
 fn ! score -> Int64
   (let [(stat (if (ok? (fileStat (dir))) 1 0))
-        (real (mt (realPath (self)) ((ok p) (if (stringEndsWith? p "/rcSys.asl") 1 0)) ((err _) 0)))
-        (text (mt (fileReadString (self)) ((ok s) (if (stringContains? s "fn ! score") 1 0)) ((err _) 0)))
-        (listed (mt (dirList (dir)) ((ok names) (if (listContains? names "rcSys.asl") 1 0)) ((err _) 0)))
+        (real (match (realPath (self)) ((ok p) (if (stringEndsWith? p "/rcSys.asl") 1 0)) ((err _) 0)))
+        (text (match (fileReadString (self)) ((ok s) (if (stringContains? s "fn ! score") 1 0)) ((err _) 0)))
+        (listed (match (dirList (dir)) ((ok names) (if (listContains? names "rcSys.asl") 1 0)) ((err _) 0)))
         (exists (if (fileExists? (self)) 1 0))]
     (+ stat (+ real (+ text (+ listed exists)))))
 

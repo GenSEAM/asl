@@ -16,12 +16,12 @@ fn statsLine text: String -> String
   (optionOr (listHead (filter (fn [(line String)] -> Bool (stringStartsWith? line "(:gcStats ")) (stringLines text))) "")
 
 fn tokenAfter tokens: (List String) key: String -> (Option String)
-  (mt (listIndexOf tokens key)
+  (match (listIndexOf tokens key)
     ((some i) (listGet tokens (+ i 1)))
     (none none))
 
 fn objectsAllocated line: String -> Int64
-  (optionOr (mt (tokenAfter (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit line " ")) ":objectsAllocated")
+  (optionOr (match (tokenAfter (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit line " ")) ":objectsAllocated")
               ((some v) (stringToInt64 (stringReplace v ")" "")))
               (none none))
             -1)
@@ -41,7 +41,7 @@ fn ! testArityCorrectness -> Bool
 
 fn ! testArityAllocation -> Bool
   (let [(built (nt/prepareRun (thisFile) (nt/fingerprint)))]
-    (mt built.binary
+    (match built.binary
       ((none) (do (assert false (str "arityAllocTest builds natively: " built.reason)) false))
       ((some bin)
        (let [(done (fr/runOneLimited (fr/job (list bin "arity") "." (fr/childEnv (list "ASL_GC_STATS=1"))) (fr/limits 300 4)))

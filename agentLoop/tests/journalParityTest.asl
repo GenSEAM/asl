@@ -21,18 +21,18 @@ fn gitEnv c: cp/ProcessCmd -> cp/ProcessCmd
               (pair "GIT_COMMITTER_DATE" "2026-01-01T00:00:00Z")))
 
 fn ! gitRun! cwd: String args: (List String) -> (Result String String)
-  (mt (cp/exec! (gitEnv (cp/withTimeout (cp/withCwd (cp/cmd "git" (listAppend (list "-c" "commit.gpgsign=false" "-c" "core.hooksPath=/dev/null" "-c" "init.defaultBranch=main") args)) cwd) 60000)))
+  (match (cp/exec! (gitEnv (cp/withTimeout (cp/withCwd (cp/cmd "git" (listAppend (list "-c" "commit.gpgsign=false" "-c" "core.hooksPath=/dev/null" "-c" "init.defaultBranch=main") args)) cwd) 60000)))
     ((ok o) (if (= o.exitCode 0) (ok o.stdout) (err (str "git " (c/joinSep args " ") ": " o.stderr))))
     ((err _) (err "git did not start")))
 
 fn ! baseBlob! rel: String -> (Result String String)
   (let [spec (str (baseSha) ":" rel)]
-    (mt (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd "git" (list "show" spec)) (repoRoot)) 60000))
+    (match (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd "git" (list "show" spec)) (repoRoot)) 60000))
       ((err _) (err "git did not start"))
       ((ok o)
         (if (not (= o.exitCode 0))
           (err (str "git show " spec " failed"))
-          (mt (cp/exec! (cp/withCwd (cp/cmd "git" (list "cat-file" "-s" spec)) (repoRoot)))
+          (match (cp/exec! (cp/withCwd (cp/cmd "git" (list "cat-file" "-s" spec)) (repoRoot)))
             ((err _) (err "git did not start"))
             ((ok s)
               (let [size (optionOr (stringToInt64 (stringTrim s.stdout)) -1)]
@@ -40,12 +40,12 @@ fn ! baseBlob! rel: String -> (Result String String)
 
 fn ! writeUnder! root: String rel: String text: String -> (Result String String)
   (let [path (str root "/" rel)]
-    (mt (dirCreate (j/pathDirname path))
+    (match (dirCreate (j/pathDirname path))
       ((err e) (err e))
-      ((ok _) (mt (fileWrite path text) ((ok _) (ok "")) ((err e) (err e))))))
+      ((ok _) (match (fileWrite path text) ((ok _) (ok "")) ((err e) (err e))))))
 
 fn ! chmodPath! path: String mode: String -> (Result String String)
-  (mt (cp/exec! (cp/cmd "chmod" (list mode path)))
+  (match (cp/exec! (cp/cmd "chmod" (list mode path)))
     ((ok o) (if (= o.exitCode 0) (ok "") (err o.stderr)))
     ((err _) (err "chmod did not start")))
 
@@ -54,16 +54,16 @@ fn ! setupStep! root: String step: (List String) -> (Result String String)
         a1 (optionOr (listGet step 1) "")
         a2 (optionOr (listGet step 2) "")]
     (cond
-      ((= kind "dir") (mt (dirCreate (str root "/" a1)) ((ok _) (ok "")) ((err e) (err e))))
+      ((= kind "dir") (match (dirCreate (str root "/" a1)) ((ok _) (ok "")) ((err e) (err e))))
       ((= kind "file") (writeUnder! root a1 a2))
       ((= kind "mode") (chmodPath! (str root "/" a1) a2))
-      ((= kind "base") (mt (baseBlob! a2) ((err e) (err e)) ((ok text) (writeUnder! root a1 text))))
+      ((= kind "base") (match (baseBlob! a2) ((err e) (err e)) ((ok text) (writeUnder! root a1 text))))
       ((= kind "git") (gitRun! (str root "/" a1) (listDrop step 2)))
-      ((= kind "rm") (mt (pathRemove (str root "/" a1)) ((ok _) (ok "")) ((err e) (err e))))
+      ((= kind "rm") (match (pathRemove (str root "/" a1)) ((ok _) (ok "")) ((err e) (err e))))
       (else (err (str "unknown setup step " kind)))))
 
 fn ! setup! root: String steps: (List p/SexpNode) -> (Result String String)
-  (fold (fn [acc st] (mt acc ((err e) (err e)) ((ok _) (setupStep! root (t/argStrs st))))) (ok "") steps)
+  (fold (fn [acc st] (match acc ((err e) (err e)) ((ok _) (setupStep! root (t/argStrs st))))) (ok "") steps)
 
 fn ! tempRoot! n: Int64 -> String
   (let [base (optionOr (envGet "TMPDIR") "/tmp")
@@ -82,7 +82,7 @@ fn ! walk! root: String rel: String -> (List (Pair String String))
     (fold (fn [acc nm]
             (let [r (if (stringEmpty? rel) nm (str rel "/" nm))
                   full (str root "/" r)]
-              (mt (fileStat full)
+              (match (fileStat full)
                 ((ok st)
                   (if st.isDir
                     (listAppend (listAppend acc (list (pair (str r "/") (t/sList (list (t/sStr (str r "/")) "nil" "nil"))))) (walk! root r))
@@ -94,17 +94,17 @@ fn ! tree! root: String -> String
   (t/sList (map pairSecond (listSortBy pairFirst (walk! root ""))))
 
 fn ! status! root: String rel: String -> String
-  (mt (cp/exec! (cp/withCwd (cp/cmd "git" (list "status" "--porcelain=v1" "--untracked-files=all")) (str root "/" rel)))
+  (match (cp/exec! (cp/withCwd (cp/cmd "git" (list "status" "--porcelain=v1" "--untracked-files=all")) (str root "/" rel)))
     ((ok o) (t/sStr (if (= o.exitCode 0) (if (stringEmpty? o.stdout) "" (str o.stdout "\n")) "not a repo")))
     ((err _) (t/sStr "not a repo")))
 
 fn snapSer root: String s: j/Snapshot -> String
-  (t/sDict (list (pair "bytes" (mt s.bytes ((some b) (t/sStr (norm root b))) ((none) "nil")))
+  (t/sDict (list (pair "bytes" (match s.bytes ((some b) (t/sStr (norm root b))) ((none) "nil")))
                  (pair "mode" (t/sOptInt s.mode))
                  (pair "dirs" (t/sStrs (map (fn [d] (norm root d)) s.dirs)))))
 
 fn filesSer root: String w: j/Written -> String
-  (mt w.files
+  (match w.files
     ((none) "nil")
     ((some fs) (t/sDict (map (fn [pr] (pair (pairFirst pr) (snapSer root (pairSecond pr)))) fs))))
 
@@ -112,54 +112,54 @@ fn raised root: String e: String -> String
   (t/sDict (list (pair "raise" (t/sStr (norm root e)))))
 
 fn optNorm root: String o: (Option String) -> String
-  (mt o ((some s) (t/sStr (norm root s))) ((none) "nil"))
+  (match o ((some s) (t/sStr (norm root s))) ((none) "nil"))
 
 fn ! snapCalls! root: String w: j/Written calls: (List p/SexpNode) -> (Result j/Written String)
   (fold (fn [acc call]
-          (mt acc
+          (match acc
             ((err e) (err e))
             ((ok w1)
               (let [parts (t/argItems call)]
-                (mt (j/snapshotBeforeWrite w1 (subRoot root (t/argStr (t/argAt parts 0))))
+                (match (j/snapshotBeforeWrite w1 (subRoot root (t/argStr (t/argAt parts 0))))
                   ((err e) (err e))
-                  ((ok w2) (mt (setup! root (t/argItems (t/argAt parts 1))) ((err e) (err e)) ((ok _) (ok w2)))))))))
+                  ((ok w2) (match (setup! root (t/argItems (t/argAt parts 1))) ((err e) (err e)) ((ok _) (ok w2)))))))))
         (ok w) calls)
 
 fn ! snapPaths! w: j/Written paths: (List String) -> (Result j/Written String)
-  (fold (fn [acc path] (mt acc ((err e) (err e)) ((ok w1) (j/snapshotBeforeWrite w1 path)))) (ok w) paths)
+  (fold (fn [acc path] (match acc ((err e) (err e)) ((ok w1) (j/snapshotBeforeWrite w1 path)))) (ok w) paths)
 
 fn ! headOf! dir: String -> String
-  (mt (cp/exec! (cp/withCwd (cp/cmd "git" (list "rev-parse" "HEAD")) dir)) ((ok o) (stringTrim o.stdout)) ((err _) ""))
+  (match (cp/exec! (cp/withCwd (cp/cmd "git" (list "rev-parse" "HEAD")) dir)) ((ok o) (stringTrim o.stdout)) ((err _) ""))
 
 fn pickHead head: String n: p/SexpNode -> (Option String)
   (if (t/argNil? n) none (some (if (= (t/argStr n) "@HEAD@") head (t/argStr n))))
 
 fn ! fsCase! n: Int64 args: (List p/SexpNode) body: (fn [String (List p/SexpNode)] -> String) -> String
   (let [root (tempRoot! n)
-        out (mt (setup! root (t/argItems (t/argAt args 0)))
+        out (match (setup! root (t/argItems (t/argAt args 0)))
               ((err e) (str "(setup failed " (t/sStr e) ")"))
               ((ok _) (body root (listDrop args 1))))]
     (do (pathRemove root) out))
 
 fn ! journalWriteCase root: String a: (List p/SexpNode) -> String
-  (mt (j/journalWrite (subRoot root (t/argStr (t/argAt a 0))) (t/argStr (t/argAt a 1)))
+  (match (j/journalWrite (subRoot root (t/argStr (t/argAt a 0))) (t/argStr (t/argAt a 1)))
     ((err e) (raised root e))
     ((ok _) (t/sDict (list (pair "tree" (tree! root))))))
 
 fn ! snapshotCase root: String a: (List p/SexpNode) -> String
   (let [w0 (if (t/argBool (t/argAt a 0)) (j/newWritten root none) (j/idleWritten root))]
-    (mt (snapCalls! root w0 (t/argItems (t/argAt a 1)))
+    (match (snapCalls! root w0 (t/argItems (t/argAt a 1)))
       ((err e) (raised root e))
       ((ok w) (t/sDict (list (pair "files" (filesSer root w)) (pair "tree" (tree! root)))))))
 
 fn ! retainCase root: String a: (List p/SexpNode) -> String
-  (mt (j/retainJournal (subRoot root (t/argStr (t/argAt a 0))) (subRoot root (t/argStr (t/argAt a 1))) (t/argStr (t/argAt a 2)))
+  (match (j/retainJournal (subRoot root (t/argStr (t/argAt a 0))) (subRoot root (t/argStr (t/argAt a 1))) (t/argStr (t/argAt a 2)))
     ((err e) (raised root e))
     ((ok _) (t/sDict (list (pair "tree" (tree! root))))))
 
 fn ! resumeCase root: String a: (List p/SexpNode) -> String
   (let [rootDir (subRoot root (t/argStr (t/argAt a 2)))]
-    (mt (j/applyResumePatch (j/newWritten rootDir none) rootDir (subRoot root (t/argStr (t/argAt a 0))) (t/argStr (t/argAt a 1)))
+    (match (j/applyResumePatch (j/newWritten rootDir none) rootDir (subRoot root (t/argStr (t/argAt a 0))) (t/argStr (t/argAt a 1)))
       ((err e) (raised root e))
       ((ok res)
         (t/sDict (list (pair "ret" (t/sList (list (optNorm root (pairFirst (pairSecond res))) (optNorm root (pairSecond (pairSecond res))))))
@@ -171,13 +171,13 @@ fn ! handBackCase root: String a: (List p/SexpNode) -> String
   (let [rdir (str root "/r")
         head (headOf! rdir)
         w0 (j/newWritten rdir (pickHead head (t/argAt a 0)))]
-    (mt (snapPaths! w0 (t/argStrs (t/argAt a 1)))
+    (match (snapPaths! w0 (t/argStrs (t/argAt a 1)))
       ((err e) (raised root e))
       ((ok w1)
-        (mt (setup! root (t/argItems (t/argAt a 2)))
+        (match (setup! root (t/argItems (t/argAt a 2)))
           ((err e) (str "(mutate failed " (t/sStr e) ")"))
           ((ok _)
-            (mt (j/handBack w1 rdir (subRoot root (t/argStr (t/argAt a 3))) (t/argStr (t/argAt a 4)) (t/argBool (t/argAt a 5)) (pickHead head (t/argAt a 6)))
+            (match (j/handBack w1 rdir (subRoot root (t/argStr (t/argAt a 3))) (t/argStr (t/argAt a 4)) (t/argBool (t/argAt a 5)) (pickHead head (t/argAt a 6)))
               ((err e) (raised root e))
               ((ok res)
                 (t/sDict (list (pair "ret" (t/sList (list (optNorm root (pairFirst (pairSecond res))) (t/sStrs (map (fn [x] (norm root x)) (pairSecond (pairSecond res)))))))
@@ -186,7 +186,7 @@ fn ! handBackCase root: String a: (List p/SexpNode) -> String
                                (pair "status" (status! root "r")))))))))))
 
 fn retSer root: String r: (Result String String) -> String
-  (mt r
+  (match r
     ((ok s) (t/sDict (list (pair "ret" (t/sStr (norm root s))))))
     ((err e) (raised root e)))
 

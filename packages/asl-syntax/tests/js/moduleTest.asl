@@ -92,7 +92,7 @@ fn testSymbolQueries! -> Bool
 
 fn checkModuleErr! code: String expectedOffset: Int64 label: String -> Bool
   (let [(res (jsm/parseModule code))]
-    (mt res
+    (match res
       ((ok _)
        (do
          (println (str "EXPECTED ERROR BUT GOT OK FOR: " label " -> " code))
@@ -112,7 +112,7 @@ fn checkModuleErr! code: String expectedOffset: Int64 label: String -> Bool
 fn checkImportDeclErr code: String expectedOffset: Int64 label: String -> Bool
   (let [(toks (lx/tokenize code))
         (res (jsm/parseImportDecl toks code))]
-    (mt res
+    (match res
       ((ok _)
        (assert false (str "expected parseImportDecl error for: " label)))
       ((err msg)
@@ -124,7 +124,7 @@ fn checkImportDeclErr code: String expectedOffset: Int64 label: String -> Bool
 fn checkExportDeclErr code: String expectedOffset: Int64 label: String -> Bool
   (let [(toks (lx/tokenize code))
         (res (jsm/parseExportDecl toks code))]
-    (mt res
+    (match res
       ((ok _)
        (assert false (str "expected parseExportDecl error for: " label)))
       ((err msg)

@@ -63,12 +63,12 @@ fn driverSource -> String
     "      (else (do (println (str name \": unsupported type \" kind)) true))))"
     ""
     "fn ! printColumns! h: H cols: (List C) groups: Int64 -> Bool"
-    "  (mt (listHead cols)"
+    "  (match (listHead cols)"
     "    ((some c) (and (printColumn! h c.name groups) (printColumns! h (optionOr (listTail cols) (list)) groups)))"
     "    (none true))"
     ""
     "fn ! main -> (Result Int64 String)"
-    (str "  (mt (r/parquetOpen \"" (fixturePath) "\")")
+    (str "  (match (r/parquetOpen \"" (fixturePath) "\")")
     "    ((err e) (err (str \"parquetOpen failed: \" e)))"
     "    ((ok h)"
     "     (do (println (str \"rows: \" h.rows))"
@@ -84,10 +84,10 @@ fn ! clangBin -> String
   (let [(c (optionOr (envGet "CLANG") ""))] (if (stringEmpty? c) "clang" c))
 
 fn ! compileNative path: String llPath: String exePath: String -> Captured
-  (mt (lk/linkEntry! path)
+  (match (lk/linkEntry! path)
     ((err ds) (Captured :exitCode 1 :stdout "" :stderr (str "link failed: " (formatDiags ds))))
     ((ok m)
-      (mt (llvm/emitLlvmProgramNative! m "readerNativeDriver.main")
+      (match (llvm/emitLlvmProgramNative! m "readerNativeDriver.main")
         ((err ds) (Captured :exitCode 1 :stdout "" :stderr (str "LLVM emission failed: " (formatDiags ds))))
         ((ok code)
           (do

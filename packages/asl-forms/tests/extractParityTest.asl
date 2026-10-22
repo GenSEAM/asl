@@ -5,7 +5,7 @@
 fn expectedReceipt output: String -> String
   (let [(marker ":receipt ")
         (found (stringIndexOf output marker))]
-    (mt found
+    (match found
       ((none) output)
       ((some at)
         (let [(start (+ at (stringLength marker)))
@@ -21,7 +21,7 @@ fn ! symbolPass source: String lang: String symbol: String legacy: String -> Boo
         (error (optionOr (mapGet kw "error") ""))]
     (if (= error "ERR_SYMBOL_NOT_FOUND")
       (none? (pairFirst found))
-      (mt (pairFirst found)
+      (match (pairFirst found)
         ((none) false)
         ((some d)
           (and (= d.name symbol)
@@ -49,7 +49,7 @@ fn ! casePass root: String rows: (List String) -> Bool
           (symbol (optionOr (mapGet kw "symbol") ""))
           (outline (optionOr (mapGet kw "outline") ""))
           (read (optionOr (mapGet kw "read") ""))
-          (writeOk (mt (fileWrite (str root "/" file) source) ((ok _) true) ((err _) false)))
+          (writeOk (match (fileWrite (str root "/" file) source) ((ok _) true) ((err _) false)))
           (outlineOk (outlinePass root file source outline))
           (symbolOk (or (stringEmpty? symbol) (symbolPass source (ex/languageOf file source) symbol read)))]
       (do
@@ -80,10 +80,10 @@ fn ! runTests -> Bool
         (rows (filter (fn [(line String)] -> Bool (stringStartsWith? line "(:case")) (stringSplit data "\n")))
         (tmp (optionOr (envGet "TMPDIR") "/tmp"))
         (tempPath (str tmp "/aslForms1-outline-" (stringFromInt64 (monotonicNs))))
-        (made (mt (dirCreate tempPath) ((ok _) true) ((err _) false)))
+        (made (match (dirCreate tempPath) ((ok _) true) ((err _) false)))
         (temp (if made (resultOr (realPath tempPath) tempPath) tempPath))
         (casesOk (and made (casePass temp rows)))
-        (removed (mt (pathRemove temp) ((ok _) true) ((err _) false)))
+        (removed (match (pathRemove temp) ((ok _) true) ((err _) false)))
         (langMap (= (stringJoin
                       (map (fn [(p String)] -> String (ex/languageOf p "#!/usr/bin/env python3\ndef alpha():\n  pass\n"))
                         (list "x.asl" "x.asn" "x.ts" "x.tsx" "x.mts" "x.cts" "x.js" "x.jsx" "x.mjs" "x.cjs"

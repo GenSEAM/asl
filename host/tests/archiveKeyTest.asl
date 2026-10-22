@@ -11,7 +11,7 @@ fn ! sh! root: String argv: (List String) -> run/Done
   (run/runOneLimited (run/job argv root (run/childEnv (list))) (run/limits 120 8))
 
 fn ! digest path: String -> String
-  (mt (fileReadBytes path) ((err _) "") ((ok x) (bytesSha256 x)))
+  (match (fileReadBytes path) ((err _) "") ((ok x) (bytesSha256 x)))
 
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))

@@ -1,4 +1,4 @@
-(module asl/packages/asl-compiler/tests/c99AbiBridgeTest :x [testLiveC99Emission testClangStrictCompilation! testC99DualPolarityRefutations runTests] :i [(../src/compiler :a comp)])
+(module asl/packages/asl-compiler/tests/c99AbiBridgeTest :x [testLiveC99Emission testClangStrictCompilation! testC99DualPolarityRefutations runTests] :i [(asl-compiler/compiler :a comp)])
 
 fn bridgeSource -> Str
   (str "(module plugin/bridge :x [PluginBuffer DispatchReceipt dispatchCall main] :i [])\n\n" "(defschema PluginBuffer\n" "  (:field ptr Int64 \"Buffer memory pointer\")\n" "  (:field size Int64 \"Buffer size in bytes\"))\n\n" "(defschema DispatchReceipt\n" "  (:field invocationCount Int64 \"Updated invocation sequence counter\")\n" "  (:field memoryHandle Int64 \"Opaque native memory handle\"))\n\n" "(df dispatchCall [(ptr Int64) (count Int64)] -> Int64\n" "  (+ ptr (+ count 1)))\n\n" "(df main [] -> Int64\n" "  (dispatchCall 4096 0))\n")

@@ -54,7 +54,7 @@ fn ! testModeOf -> Bool
       (assert (= (rcc/rcModeOf "(:aslConfig :native (:rc :notrace))" "notrace") (ok "notrace")) ":rc :notrace selects the untraced mode")
       (assert (= (rcc/rcModeOf "(:aslConfig :native (:rc :asan))" "notrace") (ok "asan")) ":rc :asan selects the sanitized mode")
       (assert (= (rcc/rcModeOf "(:aslConfig :native (:rc :tracing))" "notrace") (ok "0")) ":rc :tracing selects mode 0")
-      (mt (rcc/rcModeOf "(:aslConfig :native (:rc :fast))" "notrace")
+      (match (rcc/rcModeOf "(:aslConfig :native (:rc :fast))" "notrace")
         ((ok m) (do (assert false (str "an unknown :rc value is rejected, got " m)) false))
         ((err e) (do (assert (stringStartsWith? e "ERR_CONFIG: ") (str "an unknown :rc value is an ERR_CONFIG: " e))
                      (assert (stringContains? e ":fast") (str "the rejection names the value: " e))

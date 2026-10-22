@@ -7,16 +7,16 @@ fn roots -> (List String)
   (list ".")
 
 fn ! report diags: (List String) -> (Result Int64 String)
-  (mt (listHead diags)
+  (match (listHead diags)
     ((none) (ok 1))
     ((some d) (do (eprintln d)
                   (report (optionOr (listTail diags) (list))))))
 
 fn ! build entry: String out: String rcMode: String -> (Result Int64 String)
-  (mt (comp/compilePackageToLlvmWith! entry (roots) rcMode)
+  (match (comp/compilePackageToLlvmWith! entry (roots) rcMode)
     ((err e) (report (list e)))
     ((ok cr) (if cr.ok
-               (mt (fileWrite out cr.code)
+               (match (fileWrite out cr.code)
                  ((err _) (report (list (str out ": [ERR_IO] cannot write the LLVM IR"))))
                  ((ok _) (ok 0)))
                (report cr.diagnostics))))
@@ -31,26 +31,26 @@ fn checkRoots -> (List String)
   (list "." "asl/packages" "asl")
 
 fn ! verdictOf entry: String -> (Option cc/Verdict)
-  (mt (fileReadString entry)
+  (match (fileReadString entry)
     ((err _) (failed (list (str entry ": [ERR_IO] cannot read the entry"))))
-    ((ok _) (mt (chk/checkFile! entry (checkRoots))
+    ((ok _) (match (chk/checkFile! entry (checkRoots))
               ((err _) (none))
               ((ok diags) (if (listEmpty? diags)
                             (some (cc/Verdict :exitCode 0 :body ""))
                             (failed (map comp/formatDiagnostic diags)))))))
 
 fn ! remember key: (Option String) v: cc/Verdict -> Unit
-  (mt key
+  (match key
     ((none) ())
-    ((some k) (mt (cc/store! k v)
+    ((some k) (match (cc/store! k v)
       ((ok _) ())
       ((err e) (do (eprintln (str "asl1: [cache] verdict not stored: " e)) ())))))
 
 fn ! check entry: String -> (Result Int64 String)
   (let [(key (cc/verdictKey! entry))]
-    (mt (mt key ((some k) (cc/lookup! k)) ((none) (none)))
+    (match (match key ((some k) (cc/lookup! k)) ((none) (none)))
       ((some v) (cc/replay! v))
-      ((none) (mt (verdictOf entry)
+      ((none) (match (verdictOf entry)
         ((none) (report (list (str entry ": [ERR_LOAD] its imports do not load"))))
         ((some v) (let [(out (cc/replay! v))] (do (remember key v) out)))))))
 
@@ -62,12 +62,12 @@ fn rootRelative root: String p: String -> String
     (if (stringStartsWith? p prefix) (optionOr (stringSlice p (stringLength prefix) (stringLength p)) p) p))
 
 fn ! deps entry: String -> (Result Int64 String)
-  (mt (fileReadString entry)
+  (match (fileReadString entry)
     ((err _) (report (list (str entry ": [ERR_IO] cannot read the entry"))))
-    ((ok src) (mt (a/parse src)
+    ((ok src) (match (a/parse src)
                 ((err pe) (report (list (str entry ":" pe.line ":" pe.col ": [parse-error] " pe.msg))))
                 ((ok forms) (let [(summary (r/collectSummary forms entry))]
-                              (mt (r/loadModuleDeps! (cons (r/parentDirOf entry) (roots)) (r/mapValuesList summary.imports))
+                              (match (r/loadModuleDeps! (cons (r/parentDirOf entry) (roots)) (r/mapValuesList summary.imports))
                                 ((err _) (report (list (str entry ": [ERR_LOAD] its imports do not load"))))
                                 ((ok closure) (let [(root (resultOr (realPath ".") ""))
                                                      (absPaths (filter (fn [(k String)] -> Bool (stringStartsWith? k "/")) (mapKeys closure)))

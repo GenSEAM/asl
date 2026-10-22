@@ -13,7 +13,7 @@ fn makeDiagnostic code: String msg: String l: Int64 c: Int64 -> LexerDiagnostic
   (LexerDiagnostic :code code :msg msg :line l :col c)
 
 fn tokenTypeName tt: IndentTokenType -> String
-  (mt tt ((tokIndent l) (str "INDENT(" (stringFromInt64 l) ")")) ((tokDedent l) (str "DEDENT(" (stringFromInt64 l) ")")) ((tokNewline) "NEWLINE") ((tokSymbol s) (str "SYMBOL(" s ")")) ((tokKeyword k) (str "KEYWORD(" k ")")) ((tokString s) (str "STRING(" s ")")) ((tokInt n) (str "INT(" (stringFromInt64 n) ")")) ((tokFloat f) "FLOAT") ((tokLparen) "LPAREN") ((tokRparen) "RPAREN") ((tokLbracket) "LBRACKET") ((tokRbracket) "RBRACKET") ((tokLbrace) "LBRACE") ((tokRbrace) "RBRACE") ((tokColon) "COLON") ((tokArrow) "ARROW") ((tokEqual) "EQUAL") ((tokBullet) "BULLET") ((tokQuestion) "?") ((tokCoalesce) "??") ((tokOptChain) "?.") ((tokPipe) "|>") ((tokError c m) (str "ERROR(" c ":" m ")")) ((tokEof) "EOF"))
+  (match tt ((tokIndent l) (str "INDENT(" (stringFromInt64 l) ")")) ((tokDedent l) (str "DEDENT(" (stringFromInt64 l) ")")) ((tokNewline) "NEWLINE") ((tokSymbol s) (str "SYMBOL(" s ")")) ((tokKeyword k) (str "KEYWORD(" k ")")) ((tokString s) (str "STRING(" s ")")) ((tokInt n) (str "INT(" (stringFromInt64 n) ")")) ((tokFloat f) "FLOAT") ((tokLparen) "LPAREN") ((tokRparen) "RPAREN") ((tokLbracket) "LBRACKET") ((tokRbracket) "RBRACKET") ((tokLbrace) "LBRACE") ((tokRbrace) "RBRACE") ((tokColon) "COLON") ((tokArrow) "ARROW") ((tokEqual) "EQUAL") ((tokBullet) "BULLET") ((tokQuestion) "?") ((tokCoalesce) "??") ((tokOptChain) "?.") ((tokPipe) "|>") ((tokError c m) (str "ERROR(" c ":" m ")")) ((tokEof) "EOF"))
 
 fn sliceStr s: String start: Int64 end: Int64 -> String
   (optionOr (stringSlice s start end) "")
@@ -63,7 +63,7 @@ fn scanKeywordRun content: String bs: Bytes startIdx: Int64 len: Int64 -> Symbol
 (schema TokenScanResult (:f nextIdx Int64) (:f tok IndentToken))
 
 fn scanNumberOrSymbol content: String bs: Bytes startIdx: Int64 len: Int64 lineNum: Int64 colOffset: Int64 -> TokenScanResult
-  (let [(run (scanSymbolRun content bs startIdx len)) (endK run.nextIdx) (raw run.sym)] (let [(isNum (or (and (> (stringLength raw) 0) (isDigitChar (charAt raw 0))) (and (> (stringLength raw) 1) (= (charAt raw 0) "-") (isDigitChar (charAt raw 1)))))] (if isNum (if (or (stringContains? raw ".") (or (stringContains? raw "e") (stringContains? raw "E"))) (let [(tok (makeIndentToken (mt (stringToFloat64 raw) ((some f) (tokFloat f)) ((none) (tokSymbol raw))) raw lineNum (+ colOffset startIdx 1)))] (TokenScanResult :nextIdx endK :tok tok)) (let [(ival (optionOr (stringToInt64 raw) 0)) (tok (makeIndentToken (tokInt ival) raw lineNum (+ colOffset startIdx 1)))] (TokenScanResult :nextIdx endK :tok tok))) (let [(tok (makeIndentToken (tokSymbol raw) raw lineNum (+ colOffset startIdx 1)))] (TokenScanResult :nextIdx endK :tok tok)))))
+  (let [(run (scanSymbolRun content bs startIdx len)) (endK run.nextIdx) (raw run.sym)] (let [(isNum (or (and (> (stringLength raw) 0) (isDigitChar (charAt raw 0))) (and (> (stringLength raw) 1) (= (charAt raw 0) "-") (isDigitChar (charAt raw 1)))))] (if isNum (if (or (stringContains? raw ".") (or (stringContains? raw "e") (stringContains? raw "E"))) (let [(tok (makeIndentToken (match (stringToFloat64 raw) ((some f) (tokFloat f)) ((none) (tokSymbol raw))) raw lineNum (+ colOffset startIdx 1)))] (TokenScanResult :nextIdx endK :tok tok)) (let [(ival (optionOr (stringToInt64 raw) 0)) (tok (makeIndentToken (tokInt ival) raw lineNum (+ colOffset startIdx 1)))] (TokenScanResult :nextIdx endK :tok tok))) (let [(tok (makeIndentToken (tokSymbol raw) raw lineNum (+ colOffset startIdx 1)))] (TokenScanResult :nextIdx endK :tok tok)))))
 
 (schema StringScanResult (:f rawVal String) (:f consumed Int64) (:f closed Bool) (:f escOpen Bool))
 
@@ -179,10 +179,10 @@ fn scanLineContent content: String lineNum: Int64 colOffset: Int64 -> LineTokens
 (schema TokenizeState (:f stack (List Int64)) (:f tokens (List IndentToken)) (:f diagnostics (List LexerDiagnostic)) (:f lineCount Int64) (:f hasEmitted Bool) (:f depth Int64) (:f pendingString (Option PendingString)))
 
 fn delimDelta toks: (List IndentToken) -> Int64
-  (fold (fn [(acc Int64) (t IndentToken)] -> Int64 (mt t.kind ((tokLparen) (+ acc 1)) ((tokLbracket) (+ acc 1)) ((tokLbrace) (+ acc 1)) ((tokRparen) (- acc 1)) ((tokRbracket) (- acc 1)) ((tokRbrace) (- acc 1)) (_ acc))) 0 toks)
+  (fold (fn [(acc Int64) (t IndentToken)] -> Int64 (match t.kind ((tokLparen) (+ acc 1)) ((tokLbracket) (+ acc 1)) ((tokLbrace) (+ acc 1)) ((tokRparen) (- acc 1)) ((tokRbracket) (- acc 1)) ((tokRbrace) (- acc 1)) (_ acc))) 0 toks)
 
 fn pendingFromLine p: (Option PendingRaw) lNum: Int64 -> (Option PendingString)
-  (mt p ((some pr) (some (PendingString :buf pr.buf :esc pr.esc :startLine lNum :startCol pr.startCol))) ((none) (none)))
+  (match p ((some pr) (some (PendingString :buf pr.buf :esc pr.esc :startLine lNum :startCol pr.startCol))) ((none) (none)))
 
 fn tokenizeLineNormal st: TokenizeState line: String lNum: Int64 -> TokenizeState
   (let [(meas (measureIndent line lNum)) (content meas.rest) (diags (listAppend meas.diagnostics st.diagnostics))]
@@ -207,10 +207,10 @@ fn tokenizeLineContinuation st: TokenizeState pend: PendingString line: String l
       (with st :lineCount lNum :pendingString (some (with pend :buf r.rawVal :esc r.escOpen)))))
 
 fn tokenizeLines lines: (List String) -> (Pair (List IndentToken) (List LexerDiagnostic))
-  (let [(finalState (fold (fn [(st TokenizeState) (line String)] -> TokenizeState (let [(lNum (+ st.lineCount 1))] (mt st.pendingString ((some pend) (tokenizeLineContinuation st pend line lNum)) ((none) (tokenizeLineNormal st line lNum))))) (TokenizeState :stack (list 0) :tokens (list) :diagnostics (list) :lineCount 0 :hasEmitted false :depth 0 :pendingString (none)) lines))]
+  (let [(finalState (fold (fn [(st TokenizeState) (line String)] -> TokenizeState (let [(lNum (+ st.lineCount 1))] (match st.pendingString ((some pend) (tokenizeLineContinuation st pend line lNum)) ((none) (tokenizeLineNormal st line lNum))))) (TokenizeState :stack (list 0) :tokens (list) :diagnostics (list) :lineCount 0 :hasEmitted false :depth 0 :pendingString (none)) lines))]
     (let [(finalLine finalState.lineCount) (finalStack finalState.stack) (unterminated finalState.pendingString)
-          (openTok (mt unterminated ((some pend) (let [(decoded (pairFirst (decodeEscapes pend.buf)))] (list (makeIndentToken (tokString decoded) decoded pend.startLine pend.startCol)))) ((none) (list))))
-          (openDiag (mt unterminated ((some pend) (list (makeDiagnostic "E010" "unterminated string literal" pend.startLine pend.startCol))) ((none) (list))))
+          (openTok (match unterminated ((some pend) (let [(decoded (pairFirst (decodeEscapes pend.buf)))] (list (makeIndentToken (tokString decoded) decoded pend.startLine pend.startCol)))) ((none) (list))))
+          (openDiag (match unterminated ((some pend) (list (makeDiagnostic "E010" "unterminated string literal" pend.startLine pend.startCol))) ((none) (list))))
           (remainingDedent (fold (fn [(acc (List IndentToken)) (lvl Int64)] -> (List IndentToken) (if (> lvl 0) (cons (makeIndentToken (tokDedent 0) "" (+ finalLine 1) 1) acc) acc)) (list) finalStack))
           (eofTok (makeIndentToken (tokEof) "" (+ finalLine 1) 1))
           (allTokens (listReverse (cons eofTok (listAppend remainingDedent (listAppend openTok finalState.tokens)))))]

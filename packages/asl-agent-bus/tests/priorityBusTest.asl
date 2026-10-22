@@ -19,17 +19,17 @@ fn testMessagePriorityClassification -> Bool
         (p2Data (b/classifyMessagePriority msgP2Data))
         (p3Telem (b/classifyMessagePriority msgP3Telem))
         (p3Metric (b/classifyMessagePriority msgP3Metric))]
-    (assert (mt p0Abort ((prioP0Control) true) (_ false)) "msgP0Abort classified as P0 Control")
-    (assert (mt p0Cancel ((prioP0Control) true) (_ false)) "msgP0Cancel classified as P0 Control")
-    (assert (mt p0Breaker ((prioP0Control) true) (_ false)) "msgP0Breaker classified as P0 Control")
-    (assert (mt p1Audit ((prioP1Audit) true) (_ false)) "msgP1Audit classified as P1 Audit")
-    (assert (mt p1Wake ((prioP1Audit) true) (_ false)) "msgP1Wake classified as P1 Audit")
-    (assert (mt p2Data ((prioP2Data) true) (_ false)) "msgP2Data classified as P2 Data")
-    (assert (mt p3Telem ((prioP3Telemetry) true) (_ false)) "msgP3Telem classified as P3 Telemetry")
-    (assert (mt p3Metric ((prioP3Telemetry) true) (_ false)) "msgP3Metric classified as P3 Telemetry")
-    (refute (mt p0Abort ((prioP2Data) true) (_ false)) "Refutation: P0 Abort cannot be P2 Data")
-    (refute (mt p1Audit ((prioP3Telemetry) true) (_ false)) "Refutation: P1 Audit cannot be P3 Telemetry")
-    (refute (mt p3Telem ((prioP0Control) true) (_ false)) "Refutation: P3 Telem cannot be P0 Control")
+    (assert (match p0Abort ((prioP0Control) true) (_ false)) "msgP0Abort classified as P0 Control")
+    (assert (match p0Cancel ((prioP0Control) true) (_ false)) "msgP0Cancel classified as P0 Control")
+    (assert (match p0Breaker ((prioP0Control) true) (_ false)) "msgP0Breaker classified as P0 Control")
+    (assert (match p1Audit ((prioP1Audit) true) (_ false)) "msgP1Audit classified as P1 Audit")
+    (assert (match p1Wake ((prioP1Audit) true) (_ false)) "msgP1Wake classified as P1 Audit")
+    (assert (match p2Data ((prioP2Data) true) (_ false)) "msgP2Data classified as P2 Data")
+    (assert (match p3Telem ((prioP3Telemetry) true) (_ false)) "msgP3Telem classified as P3 Telemetry")
+    (assert (match p3Metric ((prioP3Telemetry) true) (_ false)) "msgP3Metric classified as P3 Telemetry")
+    (refute (match p0Abort ((prioP2Data) true) (_ false)) "Refutation: P0 Abort cannot be P2 Data")
+    (refute (match p1Audit ((prioP3Telemetry) true) (_ false)) "Refutation: P1 Audit cannot be P3 Telemetry")
+    (refute (match p3Telem ((prioP0Control) true) (_ false)) "Refutation: P3 Telem cannot be P0 Control")
     true)
 
 fn testPriorityQueueOrderingAndPreemption -> Bool
@@ -59,14 +59,14 @@ fn testPriorityQueueOrderingAndPreemption -> Bool
         (optMsg5 (pairSecond popRes5))
         (lenFinal (b/priorityQueueLength (pairFirst popRes5)))]
     (assert (= len4 4) "Queue length is 4 after pushing 4 distinct priority events")
-    (assert (mt optMsg1 ((some m) (stringContains? m.payload ":abort")) ((none) false)) "First popped message is P0 Abort supervisory signal")
-    (assert (mt optMsg2 ((some m) (stringContains? m.payload ":audit")) ((none) false)) "Second popped message is P1 Audit verification signal")
-    (assert (mt optMsg3 ((some m) (stringContains? m.payload ":ast")) ((none) false)) "Third popped message is P2 Data standard payload")
-    (assert (mt optMsg4 ((some m) (stringContains? m.payload ":sparkline")) ((none) false)) "Fourth popped message is P3 Telemetry low-priority metric")
-    (assert (mt optMsg5 ((some _) false) ((none) true)) "Fifth pop on empty queue returns none")
+    (assert (match optMsg1 ((some m) (stringContains? m.payload ":abort")) ((none) false)) "First popped message is P0 Abort supervisory signal")
+    (assert (match optMsg2 ((some m) (stringContains? m.payload ":audit")) ((none) false)) "Second popped message is P1 Audit verification signal")
+    (assert (match optMsg3 ((some m) (stringContains? m.payload ":ast")) ((none) false)) "Third popped message is P2 Data standard payload")
+    (assert (match optMsg4 ((some m) (stringContains? m.payload ":sparkline")) ((none) false)) "Fourth popped message is P3 Telemetry low-priority metric")
+    (assert (match optMsg5 ((some _) false) ((none) true)) "Fifth pop on empty queue returns none")
     (assert (= lenFinal 0) "Queue length is 0 after draining all lanes")
     (refute (= len4 0) "Refutation: Queue length cannot be 0 after 4 pushes")
-    (refute (mt optMsg1 ((some m) (stringContains? m.payload ":sparkline")) ((none) false)) "Refutation: Telemetry must never preempt supervisory control")
+    (refute (match optMsg1 ((some m) (stringContains? m.payload ":sparkline")) ((none) false)) "Refutation: Telemetry must never preempt supervisory control")
     true)
 
 fn testAntiStarvationSlot -> Bool
@@ -88,9 +88,9 @@ fn testAntiStarvationSlot -> Bool
         (p5 (b/popPriorityEvent (pairFirst p4)))
         (opt4 (pairSecond p4))
         (opt5 (pairSecond p5))]
-    (assert (mt opt4 ((some m) (stringContains? m.payload ":sparkline")) ((none) false)) "Pop 4 serves P3 telemetry after 3 consecutive high-priority events (anti-starvation)")
-    (assert (mt opt5 ((some m) (stringContains? m.payload ":diff :hunk 4")) ((none) false)) "Pop 5 serves remaining P2 data event")
-    (refute (mt opt4 ((some m) (stringContains? m.payload ":diff :hunk 4")) ((none) false)) "Refutation: P3 must not be starved indefinitely")
+    (assert (match opt4 ((some m) (stringContains? m.payload ":sparkline")) ((none) false)) "Pop 4 serves P3 telemetry after 3 consecutive high-priority events (anti-starvation)")
+    (assert (match opt5 ((some m) (stringContains? m.payload ":diff :hunk 4")) ((none) false)) "Pop 5 serves remaining P2 data event")
+    (refute (match opt4 ((some m) (stringContains? m.payload ":diff :hunk 4")) ((none) false)) "Refutation: P3 must not be starved indefinitely")
     true)
 
 fn testMessageTtlExpiration -> Bool
@@ -108,9 +108,9 @@ fn testMessageTtlExpiration -> Bool
     (refute isFreshExpired "Refutation: Fresh message must not be flagged as expired")
     (assert isOldExpired "Old message exceeding TTL is expired")
     (refute (not isOldExpired) "Refutation: Stale message must be flagged as expired")
-    (assert (mt poppedMsg ((some m) (stringContains? m.payload ":fresh")) ((none) false)) "Timed pop drops expired message and pops fresh message")
+    (assert (match poppedMsg ((some m) (stringContains? m.payload ":fresh")) ((none) false)) "Timed pop drops expired message and pops fresh message")
     (assert (= (b/priorityQueueLength qRemaining) 0) "Queue is empty after dropping expired and popping fresh")
-    (refute (mt poppedMsg ((some m) (stringContains? m.payload ":expired")) ((none) false)) "Refutation: Expired message must never be popped")
+    (refute (match poppedMsg ((some m) (stringContains? m.payload ":expired")) ((none) false)) "Refutation: Expired message must never be popped")
     true)
 
 fn testFairQueuingUnderP0Flood -> Bool
@@ -130,8 +130,8 @@ fn testFairQueuingUnderP0Flood -> Bool
         (p3 (b/popPriorityEvent (pairFirst p2)))
         (p4 (b/popPriorityEvent (pairFirst p3)))
         (optP4 (pairSecond p4))]
-    (assert (mt optP4 ((some m) (stringContains? m.payload ":audit :id 1")) ((none) false)) "Pop 4 serves P1 audit during continuous P0 flood (multi-lane anti-starvation)")
-    (refute (mt optP4 ((some m) (stringContains? m.payload ":abort :id 4")) ((none) false)) "Refutation: P1 audit must not be starved by P0 flood")
+    (assert (match optP4 ((some m) (stringContains? m.payload ":audit :id 1")) ((none) false)) "Pop 4 serves P1 audit during continuous P0 flood (multi-lane anti-starvation)")
+    (refute (match optP4 ((some m) (stringContains? m.payload ":abort :id 4")) ((none) false)) "Refutation: P1 audit must not be starved by P0 flood")
     true)
 
 fn testIpcMessageFrameSerialization -> Bool
@@ -170,7 +170,7 @@ fn testInFlightAckProtocol -> Bool
         (qAcked (b/busAckMessage qPopped "inflight-1"))
         (inFlightCountAfter (listLength qAcked.inFlight))]
     (do
-      (assert (mt optPopped ((some m) (= m.sender "w1")) ((none) false)) "Message was popped and leased")
+      (assert (match optPopped ((some m) (= m.sender "w1")) ((none) false)) "Message was popped and leased")
       (assert (= inFlightCountBefore 1) "In-flight message list has 1 element before ACK")
       (assert (= inFlightCountAfter 0) "In-flight message list is empty after ACK")
       (refute (= inFlightCountBefore 0) "Refutation: In-flight count must not be 0 before ACK")
@@ -226,8 +226,8 @@ fn testStarvationEscapeStrictPriorityOrdering -> Bool
         (p4 (b/popPriorityEvent (pairFirst p3)))
         (optP4 (pairSecond p4))]
     (do
-      (assert (mt optP4 ((some m) (stringContains? m.payload ":audit :receipt \"p1-critical\"")) ((none) false)) "Starvation escape serves P1 audit before P3 telemetry under P0 flood")
-      (refute (mt optP4 ((some m) (stringContains? m.payload ":sparkline")) ((none) false)) "Refutation: P3 telemetry must not steal starvation slot ahead of P1 audit")
+      (assert (match optP4 ((some m) (stringContains? m.payload ":audit :receipt \"p1-critical\"")) ((none) false)) "Starvation escape serves P1 audit before P3 telemetry under P0 flood")
+      (refute (match optP4 ((some m) (stringContains? m.payload ":sparkline")) ((none) false)) "Refutation: P3 telemetry must not steal starvation slot ahead of P1 audit")
       true))
 
 fn RunTests -> Bool

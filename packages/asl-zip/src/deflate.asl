@@ -17,7 +17,7 @@ fn deflateBitWrite! out: Bytes pos: Int64 bit: Int64 -> (Result Int64 String)
       (ok (+ pos 1))))
 
 fn emitBit! out: Bytes pos: Int64 bit: Int64 -> Int64
-  (mt (deflateBitWrite! out pos bit)
+  (match (deflateBitWrite! out pos bit)
     ((err _) (assert false "internal DEFLATE bit write exceeded its buffer"))
     ((ok next) next))
 

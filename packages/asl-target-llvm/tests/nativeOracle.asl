@@ -27,6 +27,6 @@ fn ! independentRun! src: String args: (List String) label: String -> ProcOut
 
 fn ! selfTestBinary! -> (Result String String)
   (let [(built (nt/prepareRun "tools/nativeTest.asl" "selfBuild"))]
-    (mt built.binary
+    (match built.binary
       ((none) (err built.reason))
       ((some bin) (realPath bin))))

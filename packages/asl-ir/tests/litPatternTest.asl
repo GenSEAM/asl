@@ -4,13 +4,13 @@
 
 ; (:m :ref LOWER-LITPAT :do "native lowering of constructor arms with literal or constructor payload patterns, first match wins, a miss falls through to the later arms; every case runs natively under asl test")
 fn tag r: (Result String String) -> String
-  (mt r ((ok "0") "") ((ok m) (str ":rc=" m)) ((err _) ":rc=invalid"))
+  (match r ((ok "0") "") ((ok m) (str ":rc=" m)) ((err _) ":rc=invalid"))
 
 fn sizeOf o: (Option Int64) -> String
-  (mt o ((some 0) "zero") ((some 1) "one") ((some n) (str "many " n)) ((none) "nothing"))
+  (match o ((some 0) "zero") ((some 1) "one") ((some n) (str "many " n)) ((none) "nothing"))
 
 fn area s: Shape -> Int64
-  (mt s
+  (match s
     ((Rect 0 _) 0)
     ((Rect w 1) w)
     ((Rect w h) (* w h))
@@ -20,14 +20,14 @@ fn area s: Shape -> Int64
     ((Circle r) (* 3 (* r r))))
 
 fn pairKind p: (Option (Pair Int64 String)) -> String
-  (mt p
+  (match p
     ((some (pair 1 "a")) "one-a")
     ((some (pair 1 b)) (str "one-" b))
     ((some (pair n _)) (str "n" n))
     (_ "empty"))
 
 fn kw k: (Option Keyword) -> Int64
-  (mt k ((some :left) 1) ((some :right) 2) (_ 0))
+  (match k ((some :left) 1) ((some :right) 2) (_ 0))
 
 fn ! runTests -> Bool
   (do (assert (= (tag (ok "0")) "") "ok \"0\" takes the literal arm")

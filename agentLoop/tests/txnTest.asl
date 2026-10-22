@@ -4,8 +4,8 @@
       (asl/agentLoop/core :a c)])
 
 fn getStr kv: (List (Pair String c/KvVal)) key: String -> String
-  (mt (listHead (filter (fn [p] (= (pairFirst p) key)) kv))
-    ((some p) (mt (pairSecond p) ((c/kvStr s) s) ((c/kvInt s) s)))
+  (match (listHead (filter (fn [p] (= (pairFirst p) key)) kv))
+    ((some p) (match (pairSecond p) ((c/kvStr s) s) ((c/kvInt s) s)))
     (none ""))
 
 fn getInt kv: (List (Pair String c/KvVal)) key: String -> Int64
@@ -24,7 +24,7 @@ fn unplace s: String real: String link: String -> String
   (stringReplace (stringReplace s real "@REAL@") link "@ROOT@")
 
 fn optStr o: (Option String) -> String
-  (mt o ((some x) (str "some:" x)) (none "none"))
+  (match o ((some x) (str "some:" x)) (none "none"))
 
 fn wantOpt kv: (List (Pair String c/KvVal)) -> String
   (if (getBool kv "none") "none" (str "some:" (getStr kv "want")))
@@ -53,7 +53,7 @@ fn ! buildTree real: String entries: (List String) -> Bool
     true entries)
 
 fn ! symlink target: String link: String -> Bool
-  (mt (procSpawnv (list "ln" "-s" target link) none none)
+  (match (procSpawnv (list "ln" "-s" target link) none none)
     ((ok sp) (= (procWaitPid sp.pid false) (ok (some 0))))
     ((err e) (check false (str "ln -s failed to start: " e))))
 
@@ -70,8 +70,8 @@ fn subsOf forms: String -> (List String)
   (filter (fn [f] (stringStartsWith? f "(:")) (c/parseForms forms))
 
 fn aidStr a: (Option t/AbortAid) -> String
-  (mt a
-    ((some x) (mt x ((t/abortAidOf k arr h) (str (stringFromInt64 k) "|" arr "|" h))))
+  (match a
+    ((some x) (match x ((t/abortAidOf k arr h) (str (stringFromInt64 k) "|" arr "|" h))))
     (none "none"))
 
 fn ! checkAbort kv: (List (Pair String c/KvVal)) real: String link: String -> Bool
@@ -84,8 +84,8 @@ fn ! checkIntel kv: (List (Pair String c/KvVal)) -> Bool
     (check (= got (getStr kv "want")) (str "intelSubop parity: " (getStr kv "id") " got " got)))
 
 fn widenStr w: (Option t/WidenItem) -> String
-  (mt w
-    ((some x) (mt x ((t/widenItem a b n k) (str "some:" (stringFromInt64 a) " " (stringFromInt64 b) " " n " " k))))
+  (match w
+    ((some x) (match x ((t/widenItem a b n k) (str "some:" (stringFromInt64 a) " " (stringFromInt64 b) " " n " " k))))
     (none "none"))
 
 fn ! checkWiden kv: (List (Pair String c/KvVal)) base: String link: String -> Bool
@@ -105,7 +105,7 @@ fn probes -> (List String)
   (list "read" "push" "agent" "nope" "a" "b" "c" "d" "e" "f" "")
 
 fn effectRow table: (List (Pair String String)) op: String -> String
-  (let [r (mt (t/checkEffect table op)
+  (let [r (match (t/checkEffect table op)
             ((t/effectAllowed) ":allowed true :err \"\" :confirm false")
             ((t/effectUndeclared) ":allowed false :err \"ERR_EFFECT_UNDECLARED\" :confirm false")
             ((t/effectConfirm) ":allowed false :err \"\" :confirm true"))]
@@ -116,7 +116,7 @@ fn ! checkEffects kv: (List (Pair String c/KvVal)) base: String -> Bool
         dir (str repo "/scripts/agentLoop")
         made (and (ok? (dirCreate dir)) (or (getBool kv "missing") (writeOk (str dir "/effects.asn") (getStr kv "text"))))
         loaded (t/loadEffects! repo)]
-    (mt loaded
+    (match loaded
       ((ok table)
         (let [tab (c/joinAll (map (fn [p] (str "(:t :op \"" (c/escapeAsn (pairFirst p)) "\" :class \"" (pairSecond p) "\")")) table))
               rows (c/joinAll (map (fn [op] (effectRow table op)) (probes)))]

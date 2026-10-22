@@ -53,10 +53,10 @@ fn helpText -> String
               "\n")
 
 fn afterEq s: String -> String
-  (mt (stringIndexOf s "=") ((some i) (optionOr (stringSlice s (+ i 1) (stringLength s)) "")) ((none) ""))
+  (match (stringIndexOf s "=") ((some i) (optionOr (stringSlice s (+ i 1) (stringLength s)) "")) ((none) ""))
 
 fn parseArgs args: (List String) acc: CliArgs -> CliArgs
-  (mt (listHead args)
+  (match (listHead args)
     ((none) (with acc :rest (listReverse acc.rest)))
     ((some a)
       (let [(more (optionOr (listTail args) (list)))
@@ -104,25 +104,25 @@ fn ! waitSocket! path: String pid: Int64 tries: Int64 -> Bool
     ((exists! path) true)
     ((<= tries 0) false)
     (else
-      (mt (procWaitPid pid true)
+      (match (procWaitPid pid true)
         ((ok got) (if (some? got) false (do (sleepMs 100) (waitSocket! path pid (- tries 1)))))
         ((err _) (do (sleepMs 100) (waitSocket! path pid (- tries 1)))))))
 
 fn statusField answer: String key: String -> String
-  (mt (stringIndexOf answer (str ":" key " "))
+  (match (stringIndexOf answer (str ":" key " "))
     ((none) "")
     ((some i)
       (let [(tail (optionOr (stringSlice answer (+ i (+ (stringLength key) 2)) (stringLength answer)) ""))]
-        (mt (stringIndexOf tail " ")
+        (match (stringIndexOf tail " ")
           ((some k) (optionOr (stringSlice tail 0 k) ""))
           ((none) (stringReplace tail ")" ""))))))
 
 fn ! daemonRssMb! cfg: eng/EngineConfig -> Int64
-  (mt (tp/socketExchange! cfg.socketPath "(:engine :action status)" 2000)
+  (match (tp/socketExchange! cfg.socketPath "(:engine :action status)" 2000)
     ((err _) 0)
     ((ok answer)
       (let [(raw (statusField answer "rssMb"))
-            (whole (mt (stringIndexOf raw ".") ((some i) (optionOr (stringSlice raw 0 i) "")) ((none) raw)))]
+            (whole (match (stringIndexOf raw ".") ((some i) (optionOr (stringSlice raw 0 i) "")) ((none) raw)))]
         (optionOr (stringToInt64 whole) 0))))
 
 fn ! status! cfg: eng/EngineConfig -> Int64
@@ -133,7 +133,7 @@ fn ! status! cfg: eng/EngineConfig -> Int64
 
 fn ! ping! cfg: eng/EngineConfig -> Int64
   (if (and (exists! cfg.socketPath) (alive! (pidOf! cfg)))
-    (mt (tp/socketExchange! cfg.socketPath "(:ping)" 10000)
+    (match (tp/socketExchange! cfg.socketPath "(:ping)" 10000)
       ((ok answer) (say! (stringTrim answer)))
       ((err e) (do (say! (w/formatPongUnresponsive e)) 1)))
     (say! (w/formatPongOffline cfg.scope)))
@@ -142,12 +142,12 @@ fn setEnvRow rows: (List String) key: String val: String -> (List String)
   (cons (str key "=" val) (filter (fn [(r String)] -> Bool (not (stringStartsWith? r (str key "=")))) rows))
 
 fn isDarwin! -> Bool
-  (mt (platformInfo) ((ok p) (= p.os "Darwin")) ((err _) true))
+  (match (platformInfo) ((ok p) (= p.os "Darwin")) ((err _) true))
 
 fn ! spawnDaemon! cfg: eng/EngineConfig build: bld/EngineBuild root: String -> (Result Int64 String)
   (let [(env (setEnvRow (setEnvRow (envList) "ASL_ENGINE_ENTRY" build.entry) "ASL_HOST" build.host))
         (argv (list build.host "run" build.entry "run" "--root" root "--scope" cfg.scope))]
-    (mt (procSpawnv argv (some root) (some env))
+    (match (procSpawnv argv (some root) (some env))
       ((err e) (err (str "ERR_ENGINE_START: cannot run " build.host ": " (tp/socketErrorText! e))))
       ((ok child)
         (let [(_ (fdClose child.stdin))
@@ -160,14 +160,14 @@ fn ! spawnDaemon! cfg: eng/EngineConfig build: bld/EngineBuild root: String -> (
 
 fn ! foreground! cfg: eng/EngineConfig build: bld/EngineBuild root: String -> Int64
   (do (println (str "Starting ASL Engine (foreground) on " cfg.socketPath " (Scope: " cfg.scope ")..."))
-      (mt (srv/serve! root cfg.scope build)
+      (match (srv/serve! root cfg.scope build)
         ((ok reason) (do (println (str "ASL Engine exited: " reason)) 0))
         ((err e) (sayErr! e 1))))
 
 fn ! preflight! cfg: eng/EngineConfig build: bld/EngineBuild -> (Result Unit String)
   (cond
     ((err? (eng/checkSocketPath cfg.socketPath (isDarwin!)))
-      (mt (eng/checkSocketPath cfg.socketPath (isDarwin!)) ((err e) (err e)) ((ok _) (ok ()))))
+      (match (eng/checkSocketPath cfg.socketPath (isDarwin!)) ((err e) (err e)) ((ok _) (ok ()))))
     ((stringEmpty? build.entry) (err "ERR_ENGINE_ENTRY: set ASL_ENGINE_ENTRY to asl/packages/asl-engine/src/cli.asl or run from the toolchain root"))
     ((stringEmpty? build.host) (err "ERR_ENGINE_HOST: no runner; set ASL_HOST or build asl/host"))
     (else (ok ())))
@@ -184,12 +184,12 @@ fn ! start! cfg: eng/EngineConfig build: bld/EngineBuild root: String fg: Bool -
                      (pathRemove cfg.pidFile)
                      (pathRemove sock))
                  (ok ())))]
-        (mt (preflight! cfg build)
+        (match (preflight! cfg build)
           ((err e) (sayErr! e 2))
           ((ok _)
             (if fg
               (foreground! cfg build root)
-              (mt (spawnDaemon! cfg build root)
+              (match (spawnDaemon! cfg build root)
                 ((err e) (sayErr! e 1))
                 ((ok child)
                   (say! (str "Starting ASL Engine on " sock " (PID " (stringFromInt64 child) ")...\n"
@@ -216,7 +216,7 @@ fn ! stop! cfg: eng/EngineConfig -> Int64
         (say! (str "ASL Engine is not running (Scope: " cfg.scope ").")))))
 
 fn ! restart! cfg: eng/EngineConfig build: bld/EngineBuild root: String force: Bool -> Int64
-  (mt (brk/checkBreakerFile! cfg.socketPath force cfg.logFile)
+  (match (brk/checkBreakerFile! cfg.socketPath force cfg.logFile)
     ((err e) (sayErr! e 1))
     ((ok _)
       (let [(_ (println (str "Restarting ASL Engine (Scope: " cfg.scope ")...")))
@@ -224,10 +224,10 @@ fn ! restart! cfg: eng/EngineConfig build: bld/EngineBuild root: String force: B
             (_ (if (alive! pid) (halt! cfg pid) true))
             (_ (pathRemove cfg.pidFile))
             (_ (pathRemove cfg.socketPath))]
-        (mt (preflight! cfg build)
+        (match (preflight! cfg build)
           ((err e) (sayErr! e 2))
           ((ok _)
-            (mt (spawnDaemon! cfg build root)
+            (match (spawnDaemon! cfg build root)
               ((err e) (sayErr! e 1))
               ((ok child)
                 (say! (str "✓ ASL Engine restarted cleanly on " cfg.socketPath " (PID " (stringFromInt64 child) ", Scope: " cfg.scope ").")))))))))
@@ -235,7 +235,7 @@ fn ! restart! cfg: eng/EngineConfig build: bld/EngineBuild root: String force: B
 fn ! eval! build: bld/EngineBuild exprs: (List String) -> Int64
   (if (stringEmpty? build.host)
     (sayErr! "ERR_ENGINE_HOST: no runner; set ASL_HOST or build asl/host" 2)
-    (mt (procExecv (list build.host "eval" (stringJoin exprs " ")) (none))
+    (match (procExecv (list build.host "eval" (stringJoin exprs " ")) (none))
       ((ok _) 0)
       ((err e) (sayErr! (str "asl engine eval: cannot exec " build.host ": " e) 126))))
 

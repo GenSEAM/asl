@@ -79,42 +79,42 @@ fn itemsEquivalent? xs: (List rd/SExpr) ys: (List rd/SExpr) -> Bool
           true (zip xs ys)))
 
 fn dropListHead items: (List rd/SExpr) -> (Option (List rd/SExpr))
-  (mt (listHead items)
+  (match (listHead items)
     ((some h) (if (and (rd/isAtom? h) (= (rd/sexprHead h) "list")) (some (optionOr (listTail items) (list))) (none)))
     ((none) (none)))
 
 fn vectListEquivalent? vItems: (List rd/SExpr) lItems: (List rd/SExpr) -> Bool
-  (mt (dropListHead lItems)
+  (match (dropListHead lItems)
     ((some rest) (itemsEquivalent? vItems rest))
     ((none) false))
 
 fn sexprEquivalent? x: rd/SExpr y: rd/SExpr -> Bool
-  (mt x
+  (match x
     ((rd/sexprAtom vx)
-     (mt y
+     (match y
        ((rd/sexprAtom vy) (atomEquivalent? vx vy))
        (_ false)))
     ((rd/sexprList lx)
-     (mt y
+     (match y
        ((rd/sexprList ly) (itemsEquivalent? lx ly))
        ((rd/sexprVect vy) (vectListEquivalent? vy lx))
        (_ false)))
     ((rd/sexprVect vx)
-     (mt y
+     (match y
        ((rd/sexprVect vy) (itemsEquivalent? vx vy))
        ((rd/sexprList ly) (vectListEquivalent? vx ly))
        (_ false))))
 
 fn getModule forms: (List a/TopForm) -> (Option a/ModuleNode)
-  (mt (listHead forms)
-    ((some tf) (mt tf ((a/topModule m) (some m)) (_ (none))))
+  (match (listHead forms)
+    ((some tf) (match tf ((a/topModule m) (some m)) (_ (none))))
     ((none) (none)))
 
 fn firstDiffIndexLoop xs: (List a/TopForm) ys: (List a/TopForm) i: Int64 -> Int64
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) -1)
     ((some x)
-     (mt (listHead ys)
+     (match (listHead ys)
        ((none) i)
        ((some y)
         (if (sexprEquivalent? (ac/topFormToSexpr x) (ac/topFormToSexpr y))
@@ -129,9 +129,9 @@ fn diffSummary orig: (List a/TopForm) reparsed: (List a/TopForm) -> String
         "no divergence found"
         (let [(ox (listGet orig i)) (oy (listGet reparsed i))]
           (str "form " (stringFromInt64 i) " diff:\n  ORIG: "
-               (mt ox ((some t) (rd/renderSexpr (ac/topFormToSexpr t))) ((none) "?"))
+               (match ox ((some t) (rd/renderSexpr (ac/topFormToSexpr t))) ((none) "?"))
                "\n  REPARSED: "
-               (mt oy ((some t) (rd/renderSexpr (ac/topFormToSexpr t))) ((none) "?")))))))
+               (match oy ((some t) (rd/renderSexpr (ac/topFormToSexpr t))) ((none) "?")))))))
 
 fn topFormsEquivalent? xs: (List a/TopForm) ys: (List a/TopForm) -> Bool
   (if (!= (listLength xs) (listLength ys))
@@ -163,7 +163,7 @@ fn bumpCached s: CorpusStats -> CorpusStats
   (with s :cached (+ s.cached 1))
 
 fn reparseCheck path: String orig: (List a/TopForm) printed: String stats: CorpusStats -> CorpusStats
-  (mt (a/parse printed)
+  (match (a/parse printed)
     ((err e)
      (do
        (assert false (str path " printed output failed to reparse: " e.msg))
@@ -175,13 +175,13 @@ fn reparseCheck path: String orig: (List a/TopForm) printed: String stats: Corpu
          (if equiv? (bumpPassed stats) (bumpBug stats))))))
 
 fn moduleCheck path: String forms: (List a/TopForm) stats: CorpusStats -> CorpusStats
-  (let [(printed (mt (getModule forms)
+  (let [(printed (match (getModule forms)
                    ((some m) (ap/printAstModule m))
                    ((none) (stringJoin (map (fn [(tf a/TopForm)] -> String (ap/printTopForm tf)) forms) "\n\n"))))]
     (reparseCheck path forms printed stats))
 
 fn parseCheck path: String src: String stats: CorpusStats -> CorpusStats
-  (mt (a/parse src)
+  (match (a/parse src)
     ((err e)
      (do
        (assert false (str path " initial parse error: " e.msg))
@@ -189,13 +189,13 @@ fn parseCheck path: String src: String stats: CorpusStats -> CorpusStats
     ((ok forms) (moduleCheck path forms stats)))
 
 fn verifyCorpusFile! path: String stats: CorpusStats -> CorpusStats
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e)
      (do
        (assert false (str path " read error: " e))
        (bumpBug stats)))
     ((ok src)
-     (mt (cc/lookupVerdict! stats.cache "printReparse" path src (list "passed"))
+     (match (cc/lookupVerdict! stats.cache "printReparse" path src (list "passed"))
        ((some outcome)
         (do
           (assert (= outcome "passed") (str path " print/reparse SExpr identity (cached)"))
@@ -226,7 +226,7 @@ fn testIfLetPrinting -> Bool
     (do
       (assert (stringContains? printed "\n") "an if with a let branch must print the let on its own line, not glued inline")
       (assert (ok? parseRes)
-        (mt parseRes
+        (match parseRes
           ((ok _) "if/let printer reparses cleanly")
           ((err e) (str "if/let printer must reparse: " e.msg))))
       (ok? parseRes)))
@@ -238,7 +238,7 @@ fn testCondPrinting -> Bool
     (do
       (assert (stringStartsWith? condPrinted "(cond") "a cond expression must print as a canonical parenthesized form")
       (assert (ok? parseRes)
-        (mt parseRes
+        (match parseRes
           ((ok _) "cond printer reparses cleanly")
           ((err e) (str "cond printer must reparse: " e.msg))))
       (ok? parseRes)))

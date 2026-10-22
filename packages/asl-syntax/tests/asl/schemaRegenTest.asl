@@ -5,11 +5,11 @@
       (asl-json/json :a j)])
 
 fn collectRefs val: j/Json -> (List String)
-  (mt val
+  (match val
     ((j/jobj kvs)
-     (let [(directRef (mt (s/findKey kvs "$ref")
+     (let [(directRef (match (s/findKey kvs "$ref")
                         ((some v)
-                         (mt v
+                         (match v
                            ((j/jstr r) (list r))
                            (_ (list))))
                         (_ (list))))
@@ -24,7 +24,7 @@ fn collectRefs val: j/Json -> (List String)
     (_ (list)))
 
 fn unresolvedRefs schema: j/Json -> (List String)
-  (let [(defsKvs (mt (s/getObject schema "$defs") ((some kvs) kvs) ((none) (list))))
+  (let [(defsKvs (match (s/getObject schema "$defs") ((some kvs) kvs) ((none) (list))))
         (defsKeys (map (fn [(p (Pair String j/Json))] -> String (pairFirst p)) defsKvs))]
     (filter (fn [(r String)] -> Bool
               (not (and (stringStartsWith? r "#/$defs/")
@@ -32,24 +32,24 @@ fn unresolvedRefs schema: j/Json -> (List String)
             (collectRefs schema)))
 
 fn loadCommittedSchema! -> (Result j/Json String)
-  (mt (fileReadString "asl/grammar/aslAst.schema.json")
+  (match (fileReadString "asl/grammar/aslAst.schema.json")
     ((err e) (err (str "read asl/grammar/aslAst.schema.json: " e)))
     ((ok text)
-     (mt (j/jsonParse text)
+     (match (j/jsonParse text)
        ((err e) (err (str "parse asl/grammar/aslAst.schema.json: " e)))
        ((ok root) (ok root)))))
 
 fn loadAstForms! -> (Result (List a/TopForm) String)
-  (mt (fileReadString "asl/packages/asl-parser/src/ast.asl")
+  (match (fileReadString "asl/packages/asl-parser/src/ast.asl")
     ((err e) (err (str "read asl/packages/asl-parser/src/ast.asl: " e)))
     ((ok src)
-     (mt (a/parse src)
+     (match (a/parse src)
        ((err e) (err (str "parse asl/packages/asl-parser/src/ast.asl: " e.msg)))
        ((ok forms) (ok forms)))))
 
 fn addParamField forms: (List a/TopForm) field: a/AstField -> (List a/TopForm)
   (map (fn [(tf a/TopForm)] -> a/TopForm
-         (mt tf
+         (match tf
            ((a/topSchema sn)
             (if (= sn.name "Param")
               (a/topSchema (a/SchemaNode :name sn.name :typeVars sn.typeVars :fields (cons field sn.fields) :jsonCase sn.jsonCase))
@@ -59,7 +59,7 @@ fn addParamField forms: (List a/TopForm) field: a/AstField -> (List a/TopForm)
 
 fn addAstLitCase forms: (List a/TopForm) extraCase: a/EnumCase -> (List a/TopForm)
   (map (fn [(tf a/TopForm)] -> a/TopForm
-         (mt tf
+         (match tf
            ((a/topEnum en)
             (if (= en.name "AstLit")
               (a/topEnum (a/EnumNode :name en.name :typeVars en.typeVars :cases (cons extraCase en.cases)))
@@ -68,13 +68,13 @@ fn addAstLitCase forms: (List a/TopForm) extraCase: a/EnumCase -> (List a/TopFor
        forms)
 
 fn testSchemaDrift! -> Bool
-  (mt (fileReadString "asl/grammar/aslAst.schema.json")
+  (match (fileReadString "asl/grammar/aslAst.schema.json")
     ((err e)
      (do
        (assert false (str "Failed reading committed schema: " e))
        false))
     ((ok committedStr)
-     (mt (s/generateAstSchemaFromAstFile! "asl/packages/asl-parser/src/ast.asl")
+     (match (s/generateAstSchemaFromAstFile! "asl/packages/asl-parser/src/ast.asl")
        ((err e)
         (do
           (assert false (str "Failed generating schema: " e))
@@ -86,7 +86,7 @@ fn testSchemaDrift! -> Bool
             matches))))))
 
 fn testAstTypeMutationChangesSchema! -> Bool
-  (mt (loadAstForms!)
+  (match (loadAstForms!)
     ((err e)
      (do
        (assert false (str "changing AST type must change generated schema: " e))
@@ -95,13 +95,13 @@ fn testAstTypeMutationChangesSchema! -> Bool
      (let [(mutatedForms (addAstLitCase
                            (addParamField origForms (a/AstField :name "testMutantField" :type "String" :docstring "\"extra field for mutation test\"" :default (none) :json (none)))
                            (a/EnumCase :name "litMutantExtra" :fields (list (a/Param :name "extraVal" :type "String")) :docstring "\"mutant case\"")))]
-       (mt (s/generateAstSchema origForms)
+       (match (s/generateAstSchema origForms)
          ((err e)
           (do
             (assert false (str "original schema generation failed: " e))
             false))
          ((ok origSchema)
-          (mt (s/generateAstSchema mutatedForms)
+          (match (s/generateAstSchema mutatedForms)
             ((err e)
              (do
                (assert false (str "mutated schema generation failed: " e))
@@ -127,7 +127,7 @@ fn testRefCheckerFlagsDangling -> Bool
       flagged))
 
 fn testCommittedSchemaRefsResolve! -> Bool
-  (mt (loadCommittedSchema!)
+  (match (loadCommittedSchema!)
     ((err e)
      (do
        (assert false (str "every $ref in committed schema resolves: " e))
@@ -141,12 +141,12 @@ fn testCommittedSchemaRefsResolve! -> Bool
          (and (> refCount 0) (listEmpty? dangling))))))
 
 fn generationError res: (Result String String) -> String
-  (mt res
+  (match res
     ((err msg) msg)
     (_ "no error"))
 
 fn testUnmappedTypeFails! -> Bool
-  (mt (loadAstForms!)
+  (match (loadAstForms!)
     ((err e)
      (do
        (assert false (str "unmapped type yields exact error: " e))
@@ -162,34 +162,34 @@ fn testUnmappedTypeFails! -> Bool
          (and fieldOk caseOk)))))
 
 fn testOptionInt64Maps! -> Bool
-  (mt (loadAstForms!)
+  (match (loadAstForms!)
     ((err e)
      (do
        (assert false (str "Option Int64 maps to nullable integer: " e))
        false))
     ((ok forms)
-     (mt (s/generateAstSchema (addParamField forms (a/AstField :name "arity" :type "(Option Int64)" :docstring "\"\"" :default (none) :json (none))))
+     (match (s/generateAstSchema (addParamField forms (a/AstField :name "arity" :type "(Option Int64)" :docstring "\"\"" :default (none) :json (none))))
        ((err e)
         (do
           (assert false (str "Option Int64 schema generation failed: " e))
           false))
        ((ok text)
-        (mt (j/jsonParse text)
+        (match (j/jsonParse text)
           ((err e)
            (do
              (assert false (str "Option Int64 schema parse failed: " e))
              false))
           ((ok schema)
            (let [(dangling (unresolvedRefs schema))
-                 (arity (mt (s/getProp schema "$defs")
-                          ((some defs) (mt (s/getProp defs "Param")
-                                         ((some param) (mt (s/getProp param "properties")
+                 (arity (match (s/getProp schema "$defs")
+                          ((some defs) (match (s/getProp defs "Param")
+                                         ((some param) (match (s/getProp param "properties")
                                                          ((some props) (s/getProp props "arity"))
                                                          ((none) (none))))
                                          ((none) (none))))
                           ((none) (none))))
                  (expected (j/jobj (list (pair "type" (j/jarr (list (j/jstr "integer") (j/jstr "null")))))))
-                 (mapped (mt arity ((some v) (s/jsonEqual? v expected)) ((none) false)))]
+                 (mapped (match arity ((some v) (s/jsonEqual? v expected)) ((none) false)))]
              (do
                (assert (listEmpty? dangling) (str "schema with Option Int64 has no dangling refs, dangling: " (stringJoin dangling ", ")))
                (assert mapped "Param.arity of type (Option Int64) is {\"type\": [\"integer\", \"null\"]}")

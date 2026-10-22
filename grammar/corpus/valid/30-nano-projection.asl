@@ -21,13 +21,13 @@ fn gradeOf w: Window sm: Sample -> Grade
   (cond ((or (< sm.mean w.low) (> sm.mean w.high)) (outOfRange sm.mean)) ((> sm.drift 1.0) (drifting sm.drift)) (else (steady)))
 
 fn labelOf g: Grade -> Str
-  (mt g ((steady) "steady") ((drifting by) (s/concat "drifting:" (stringFromFloat64 by))) ((outOfRange m) (s/concat "out:" (stringFromFloat64 m))))
+  (match g ((steady) "steady") ((drifting by) (s/concat "drifting:" (stringFromFloat64 by))) ((outOfRange m) (s/concat "out:" (stringFromFloat64 m))))
 
 fn trendOf xs: (List Float) -> Trend
   (do "Compare the first reading with the last." (let [(head (optionOr (listHead xs) 0.0)) (tail (optionOr (listHead (listReverse xs)) 0.0))] (cond ((> tail head) (rising)) ((< tail head) (falling)) (else (flat)))))
 
 fn trendLabel t: Trend -> Str
-  (do "A one-word label for a trend." (mt t ((rising) "rising") ((falling) "falling") ((flat) "flat")))
+  (do "A one-word label for a trend." (match t ((rising) "rising") ((falling) "falling") ((flat) "flat")))
 
 fn summarise id: Str csv: Str -> Str
   (let [(xs (readings csv)) (sm (sampleOf id xs)) (w (Window :low 0.0 :high 100.0))] (stringJoin (list sm.id (stringFromInt64 sm.count) (stringFromFloat64 sm.mean) (labelOf (gradeOf w sm)) (trendLabel (trendOf xs))) "|"))

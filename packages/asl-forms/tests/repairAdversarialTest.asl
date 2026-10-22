@@ -6,7 +6,7 @@ fn fixtureDir -> String
   "asl/packages/asl-forms/tests/fixtures/unbalanced/g3real/"
 
 fn readFixture! name: String -> String
-  (mt (fileReadString (str (fixtureDir) name ".txt"))
+  (match (fileReadString (str (fixtureDir) name ".txt"))
     ((ok t) t)
     ((err e) (do (assert false (str "missing fixture " name ": " e)) "")))
 
@@ -29,7 +29,7 @@ fn itemProperty name: String it: rep/LeftItem -> Bool
   (let [(os (optionOr (rep/leftItemOptions it) (list)))
         (atSite (filter (fn [(o rep/RepairOption)] -> Bool (and (= (rep/repairOptionLine o) (rep/leftItemLine it)) (= (rep/repairOptionCol o) (rep/leftItemCol it)))) os))
         (safe (filter (fn [(o rep/RepairOption)] -> Bool (not (rep/repairOptionReparents o))) os))
-        (firstSafe (mt (listHead os) ((some o) (not (rep/repairOptionReparents o))) ((none) true)))]
+        (firstSafe (match (listHead os) ((some o) (not (rep/repairOptionReparents o))) ((none) true)))]
     (do
       (assert (or (listEmpty? os) (not (listEmpty? atSite))) (str name " item at " (stringFromInt64 (rep/leftItemLine it)) ":" (stringFromInt64 (rep/leftItemCol it)) " lists its at-site option"))
       (assert (or (listEmpty? safe) firstSafe) (str name " item at " (stringFromInt64 (rep/leftItemLine it)) " puts a non-reparenting option first"))
@@ -42,7 +42,7 @@ fn checkReal! name: String base: String at: Int64 oldLen: Int64 nItems: Int64 fi
         (left (rep/repairResultLeft res))
         (receipt (rep/repairResultReceipt res))
         (all (rep/repairResultLeft (runCase! text base at oldLen newLen "0.0")))
-        (opts (mt (listHead all) ((some it) (optionOr (rep/leftItemOptions it) (list))) ((none) (list))))
+        (opts (match (listHead all) ((some it) (optionOr (rep/leftItemOptions it) (list))) ((none) (list))))
         (allReceipt (rep/formatReceipt (list) all))]
     (do
       (if applied
@@ -59,7 +59,7 @@ fn checkReal! name: String base: String at: Int64 oldLen: Int64 nItems: Int64 fi
           (assert (= (listLength left) nItems) (str name " item count " (stringFromInt64 (listLength left))))
           true))
       (assert (stringStartsWith? allReceipt (str "(:repaired () :left (" firstItem)) (str name " first item: " allReceipt))
-      (assert (= (mt (listHead opts) ((some o) (rep/formatOption o)) ((none) "")) firstOption) (str name " first option is the at-site fix"))
+      (assert (= (match (listHead opts) ((some o) (rep/formatOption o)) ((none) "")) firstOption) (str name " first option is the at-site fix"))
       (assert (= (listLength all) nItems) (str name " every item is analysed when a pick is given"))
       (assert (listEmpty? (filter (fn [(it rep/LeftItem)] -> Bool (not (itemProperty name it))) all)) (str name " option property"))
       (if (= pick "")

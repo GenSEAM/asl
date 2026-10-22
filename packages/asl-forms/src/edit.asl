@@ -85,7 +85,7 @@ fn words s: String -> (List String)
           (stringSplit (stringReplace (stringReplace (stringReplace s "\t" " ") "\r" " ") "\n" " ") " "))
 
 fn progOf ws: (List String) -> String
-  (mt (listHead ws)
+  (match (listHead ws)
     ((none) "")
     ((some w)
       (let [(prog (k/baseName w))]
@@ -102,7 +102,7 @@ fn languageOf! path: String -> String
   (let [(ext (stringLower (extOf path)))]
     (if (not (stringEmpty? ext))
       (langByExt ext)
-      (mt (fileReadString path)
+      (match (fileReadString path)
         ((err _) "text")
         ((ok whole)
           (let [(line (optionOr (listHead (stringSplit (optionOr (stringSlice whole 0 (min 256 (stringLength whole))) "") "\n")) ""))
@@ -148,7 +148,7 @@ fn diagScan b: Bytes n: Int64 i: Int64 stack: (List (Pair Int64 Int64)) inStr: B
         ((= c 59) (diagScan b n (+ i 1) stack false true))
         ((or (= c 40) (= c 91) (= c 123)) (diagScan b n (+ i 1) (cons (pair c i) stack) false false))
         ((or (= c 41) (= c 93) (= c 125))
-          (mt (listHead stack)
+          (match (listHead stack)
             ((none) (some (DelimDiag :kind "unexpected" :byte i :expected "" :msg (str "unexpected closing delimiter '" (byteChar c) "' at byte " (stringFromInt64 i)))))
             ((some top)
               (if (= (closerOf (pairFirst top)) c)
@@ -162,7 +162,7 @@ fn delimDiag text: String -> (Option DelimDiag)
   (diagScan (stringToBytes text) (stringLength text) 0 (list) false false)
 
 fn delimError text: String -> String
-  (mt (delimDiag text) ((some d) d.msg) ((none) ""))
+  (match (delimDiag text) ((some d) d.msg) ((none) ""))
 
 fn aslFile? path: String -> Bool
   (or (stringEndsWith? path ".asl") (stringEndsWith? path ".asn"))
@@ -171,7 +171,7 @@ fn preOrForced pre: Bool -> String
   (if pre " :preexisting true" " :forced true")
 
 fn validateAsl ch: Checkers path: String lang: String before: (Option String) after: String force: Bool -> Verdict
-  (mt (delimDiag after)
+  (match (delimDiag after)
     ((none)
       (if (= lang "asn")
         (Verdict :code "" :message "" :fields " :balanced true")
@@ -185,7 +185,7 @@ fn validateAsl ch: Checkers path: String lang: String before: (Option String) af
             ((or pre force) (Verdict :code "" :message "" :fields (str " :balanced true :syntax :error" chk (preOrForced pre) " :syntaxMessage " (quoted diag))))
             (else (Verdict :code ":ERR_CHECK_FAILED" :message (if (stringEmpty? diag) (str "native check " st) diag) :fields (str " :balanced true :syntax :error" chk)))))))
     ((some d)
-      (let [(pre (mt before ((some b) (some? (delimDiag b))) ((none) false)))
+      (let [(pre (match before ((some b) (some? (delimDiag b))) ((none) false)))
             (detail (str " :byte " (stringFromInt64 d.byte) (if (stringEmpty? d.expected) "" (str " :expected " (quoted d.expected)))))]
         (if (or pre force)
           (Verdict :code "" :message "" :fields (str " :balanced false" detail (preOrForced pre)))
@@ -207,7 +207,7 @@ fn validateStaged! ch: Checkers path: String before: (Option String) after: Stri
             (host (str r.host (if (stringEmpty? checker) "" (str " :checker \"" checker "\""))))]
         (if (!= st "error")
           (Verdict :code "" :message "" :fields (str " :syntax :" st host (if (and (= st "skipped") (not (stringEmpty? msg)) (not (stringEmpty? checker))) (str " :syntaxMessage " (quoted msg)) "")))
-          (let [(pre (mt before ((some b) (= (foreignOf ch path lang b).status "error")) ((none) false)))]
+          (let [(pre (match before ((some b) (= (foreignOf ch path lang b).status "error")) ((none) false)))]
             (if (or pre force)
               (Verdict :code "" :message "" :fields (str " :syntax :error" host (preOrForced pre) " :syntaxMessage " (quoted msg)))
               (Verdict :code ":ERR_SYNTAX" :message msg :fields (str " :syntax :error" host))))))))
@@ -219,7 +219,7 @@ fn stripQuotes s: String -> String
     (else s))
 
 fn repairRun text: String lang: String spanStart: Int64 spanEnd: Int64 old: (Option String) pick: String -> rep/RepairResult
-  (mt old
+  (match old
     ((some o) (rep/repairEdit text lang spanStart spanEnd o (stripQuotes pick)))
     ((none) (rep/repairTextPick text lang spanStart spanEnd (stripQuotes pick))))
 
@@ -235,19 +235,19 @@ fn unrepairable id: Int64 op: String rel: String res: rep/RepairResult -> k/Edit
                  " item(s); nothing staged (resend with :pick \\\"K.N\\\" to apply option N of item K, one pair per item)\""))
 
 fn stagedOrDisk! vs: v/Vfs path: String -> (Result (Option String) String)
-  (mt (v/stagedContent! vs path)
+  (match (v/stagedContent! vs path)
     ((some s) (ok (some s)))
-    ((none) (if (k/isFile! path) (mt (v/readText! path) ((ok t) (ok (some t))) ((err e) (err e))) (ok (none)))))
+    ((none) (if (k/isFile! path) (match (v/readText! path) ((ok t) (ok (some t))) ((err e) (err e))) (ok (none)))))
 
 fn writeLocked! vs: v/Vfs ch: Checkers id: Int64 kw: (Map String String) fpath: String content0: String -> k/EditOutcome
   (let [(rel (k/relToRoot vs.root fpath))
         (lang (languageOf! fpath))]
-    (mt (stagedOrDisk! vs fpath)
+    (match (stagedOrDisk! vs fpath)
       ((err e) (failStep id "write" ":ERR_WRITE_FAILED" (msgTail e)))
       ((ok prior)
         (let [(repairing (and (not (autofixOff? kw)) (or (= lang "asl") (= lang "asn")) (some? (delimDiag content0))))
               (res (if repairing (some (repairRun content0 lang -1 -1 (none) (k/kwOr kw "pick" ""))) (none)))]
-          (mt res
+          (match res
             ((some r) (if (= (leftCount r) 0) (writeChecked! vs ch id kw fpath rel prior (rep/repairResultText r) (str " " (receiptLine r))) (if (flagOn? kw "force") (writeChecked! vs ch id kw fpath rel prior content0 " :repairSkipped true") (unrepairable id "write" rel r))))
             ((none) (writeChecked! vs ch id kw fpath rel prior content0 "")))))))
 
@@ -255,7 +255,7 @@ fn writeChecked! vs: v/Vfs ch: Checkers id: Int64 kw: (Map String String) fpath:
   (let [(vd (validateStaged! ch fpath prior content (flagOn? kw "force")))]
     (if (not (stringEmpty? vd.code))
       (failStep id "write" vd.code (str " :file " (quoted rel) vd.fields (msgTail (str vd.message "; pass :force true to stage anyway"))))
-      (mt (v/stage! vs fpath content)
+      (match (v/stage! vs fpath content)
         ((err e) (failStep id "write" ":ERR_WRITE_FAILED" (msgTail e)))
         ((ok _) (okStep id "write" (str " :file " (quoted rel) " :bytes " (stringFromInt64 (stringLength content)) " :staged true :pendingFlush true" vd.fields fix))))))
 
@@ -270,7 +270,7 @@ fn writeStep! vs: v/Vfs ch: Checkers held: (List String) id: Int64 kw: (Map Stri
       ((not (stringEmpty? (pairSecond res))) (failStep id "write" ":ERR_BOUNDARY_VIOLATION" (msgTail (pairSecond res))))
       ((k/isDir! fpath) (failStep id "write" ":ERR_IS_DIRECTORY" (msgTail (str "Target is a directory: " raw))))
       (else
-        (mt (v/withLock! vs held fpath (fn [] -> k/EditOutcome (writeLocked! vs ch id kw fpath content)))
+        (match (v/withLock! vs held fpath (fn [] -> k/EditOutcome (writeLocked! vs ch id kw fpath content)))
           ((ok out) out)
           ((err e) (failStep id "write" ":ERR_WRITE_FAILED" (msgTail e)))))))
 
@@ -295,7 +295,7 @@ fn lastIndex text: String b: Bytes needle: String from: Int64 last: Int64 -> Int
 fn editLocked! vs: v/Vfs ch: Checkers id: Int64 kw: (Map String String) fpath: String old: String new: String -> k/EditOutcome
   (let [(rel (k/relToRoot vs.root fpath))
         (all (flagOn? kw "all"))]
-    (mt (stagedOrDisk! vs fpath)
+    (match (stagedOrDisk! vs fpath)
       ((err e) (failStep id "edit" ":ERR_EDIT_FAILED" (msgTail e)))
       ((ok found)
         (let [(base (optionOr found ""))
@@ -322,7 +322,7 @@ fn editChecked! vs: v/Vfs ch: Checkers id: Int64 kw: (Map String String) fpath: 
   (let [(vd (validateStaged! ch fpath (some base) replaced (flagOn? kw "force")))]
     (if (not (stringEmpty? vd.code))
       (failStep id "edit" vd.code (str " :file " (quoted rel) vd.fields fix (msgTail (str vd.message "; nothing staged (pass :force true)"))))
-      (mt (v/stage! vs fpath replaced)
+      (match (v/stage! vs fpath replaced)
         ((err e) (failStep id "edit" ":ERR_EDIT_FAILED" (msgTail e)))
         ((ok _) (okStep id "edit" (str " :file " (quoted rel) " :staged true :replacements " (stringFromInt64 occ) " :bytes " (stringFromInt64 (stringLength replaced))
                                        " :pendingFlush true" vd.fields fix))))))
@@ -340,7 +340,7 @@ fn editStep! vs: v/Vfs ch: Checkers held: (List String) id: Int64 kw: (Map Strin
       ((and (not (k/isFile! fpath)) (none? (v/stagedContent! vs fpath))) (failStep id "edit" ":ERR_FILE_NOT_FOUND" (msgTail (str "File not found: " raw))))
       ((stringEmpty? old) (failStep id "edit" ":ERR_MISSING_ARG" " :message \"Missing :old target string\""))
       (else
-        (mt (v/withLock! vs held fpath (fn [] -> k/EditOutcome (editLocked! vs ch id kw fpath old new)))
+        (match (v/withLock! vs held fpath (fn [] -> k/EditOutcome (editLocked! vs ch id kw fpath old new)))
           ((ok out) out)
           ((err e) (failStep id "edit" ":ERR_EDIT_FAILED" (msgTail e)))))))
 
@@ -443,7 +443,7 @@ fn blocksInto! s: Seqs alo: Int64 ahi: Int64 blo: Int64 bhi: Int64 acc: (List Bl
         (if (and (< alo m.i) (< blo m.j)) (blocksInto! s alo m.i blo m.j withM) withM))))
 
 fn collapse bs: (List Blk) cur: Blk acc: (List Blk) -> (List Blk)
-  (mt (listHead bs)
+  (match (listHead bs)
     ((none) (listReverse (if (> cur.size 0) (cons cur acc) acc)))
     ((some b)
       (let [(rest (optionOr (listTail bs) (list)))]
@@ -452,7 +452,7 @@ fn collapse bs: (List Blk) cur: Blk acc: (List Blk) -> (List Blk)
           (collapse rest b (if (> cur.size 0) (cons cur acc) acc))))))
 
 fn opcodes bs: (List Blk) i: Int64 j: Int64 acc: (List Op) -> (List Op)
-  (mt (listHead bs)
+  (match (listHead bs)
     ((none) (listReverse acc))
     ((some b)
       (let [(ai b.i)
@@ -471,7 +471,7 @@ fn trimEnds codes: (List Op) n: Int64 -> (List Op)
     (listAppend (listTake codes1 (- (listLength codes1) 1)) (list last)))
 
 fn groupScan codes: (List Op) n: Int64 group: (List Op) acc: (List (List Op)) -> (List (List Op))
-  (mt (listHead codes)
+  (match (listHead codes)
     ((none)
       (let [(g (listReverse group))]
         (listReverse (if (and (not (listEmpty? g)) (not (and (= (listLength g) 1) (= (optionOr (listHead g) (Op :tag "" :i1 0 :i2 0 :j1 0 :j2 0)).tag "equal")))) (cons g acc) acc))))
@@ -539,7 +539,7 @@ fn unreadable! tps: (List String) -> (List String)
   (filter (fn [(tp String)] -> Bool (and (k/isFile! tp) (not (resultOk? (v/readText! tp))))) tps)
 
 fn resultOk? r: (Result String String) -> Bool
-  (mt r ((ok _) true) ((err _) false))
+  (match r ((ok _) true) ((err _) false))
 
 fn diffStep! vs: v/Vfs id: Int64 kw: (Map String String) args: (List String) -> k/EditOutcome
   (let [(raw (targetArg kw args))
@@ -547,7 +547,7 @@ fn diffStep! vs: v/Vfs id: Int64 kw: (Map String String) args: (List String) -> 
         (perr (pairSecond res))
         (targets (if (stringEmpty? raw) (v/stagedPaths! vs) (if (some? (v/stagedContent! vs (pairFirst res))) (list (pairFirst res)) (list))))
         (chunks (fold (fn [(acc (List String)) (tp String)] -> (List String)
-                        (mt (v/stagedContent! vs tp) ((none) acc) ((some staged) (cons (fileDiff! vs tp staged) acc))))
+                        (match (v/stagedContent! vs tp) ((none) acc) ((some staged) (cons (fileDiff! vs tp staged) acc))))
                       (list)
                       (if (stringEmpty? perr) targets (list))))
         (bad (unreadable! targets))]
@@ -567,7 +567,7 @@ fn preflushStep! vs: v/Vfs id: Int64 kw: (Map String String) args: (List String)
       (let [(all (v/stagedPaths! vs))
             (escaped (map (fn [(tp String)] -> String (k/relToRoot root tp)) (filter (fn [(tp String)] -> Bool (not (stringEmpty? (v/writeGuard! root tp)))) all)))
             (bad (map (fn [(tp String)] -> String (k/relToRoot root tp))
-                      (filter (fn [(tp String)] -> Bool (and (aslFile? tp) (mt (v/stagedContent! vs tp) ((some sc) (not (stringEmpty? (delimError sc)))) ((none) false)))) all)))]
+                      (filter (fn [(tp String)] -> Bool (and (aslFile? tp) (match (v/stagedContent! vs tp) ((some sc) (not (stringEmpty? (delimError sc)))) ((none) false)))) all)))]
         (cond
           ((listEmpty? all) (okStep id "preflush" (str " :stagedCount 0" (checksPassed))))
           ((not (listEmpty? escaped)) (failStep id "preflush" ":ERR_BOUNDARY_VIOLATION" (msgTail (str "Staged path no longer resolves inside the workspace: " (stringJoin escaped ",")))))
@@ -580,7 +580,7 @@ fn preflushStep! vs: v/Vfs id: Int64 kw: (Map String String) args: (List String)
           ((not (stringEmpty? (pairSecond res))) (failStep id "preflush" ":ERR_BOUNDARY_VIOLATION" (msgTail (pairSecond res))))
           ((and (none? staged) (not (k/isFile! fpath))) (failStep id "preflush" ":ERR_FILE_NOT_FOUND" (msgTail (str "File not found: " raw))))
           (else
-            (mt (mt staged ((some s) (ok s)) ((none) (v/readText! fpath)))
+            (match (match staged ((some s) (ok s)) ((none) (v/readText! fpath)))
               ((err e) (failStep id "preflush" ":ERR_READ_FAILED" (msgTail (str "Failed to read file: " e))))
               ((ok c)
                 (if (and (aslFile? fpath) (not (stringEmpty? (delimError c))))
@@ -598,7 +598,7 @@ fn ! effectMarkOnWrite! tp: String staged: String -> String
 
 fn flushOne! vs: v/Vfs tp: String -> (Pair String String)
   (let [(rel (k/relToRoot vs.root tp))]
-    (mt (v/stagedContent! vs tp)
+    (match (v/stagedContent! vs tp)
       ((none) (pair ":ERR_NOT_STAGED" (str "No staged modification for " rel)))
       ((some staged0)
         (let [(staged (effectMarkOnWrite! tp staged0))
@@ -609,16 +609,16 @@ fn flushOne! vs: v/Vfs tp: String -> (Pair String String)
             ((not (stringEmpty? derr)) (pair ":ERR_SYNTAX_MALFORMATION" (str "Tier-0 preflush failed in " rel ": " derr)))
             ((not (diskMatches? tp (v/stagedMeta! vs tp))) (pair ":ERR_STALE_BASE" (str "Disk changed since staging; refusing to clobber " rel)))
             (else
-              (mt (v/atomicWrite! tp staged)
+              (match (v/atomicWrite! tp staged)
                 ((err e) (pair ":ERR_WRITE_FAILED" e))
-                ((ok renamed) (mt (v/unstage! vs tp) ((err e) (pair ":ERR_WRITE_FAILED" e)) ((ok _) (pair "" (if renamed "" "inPlace"))))))))))))
+                ((ok renamed) (match (v/unstage! vs tp) ((err e) (pair ":ERR_WRITE_FAILED" e)) ((ok _) (pair "" (if renamed "" "inPlace"))))))))))))
 
 fn flushAll! vs: v/Vfs held: (List String) tps: (List String) flushed: (List (Pair String Bool)) fails: (List (Pair String String)) -> (Pair (List (Pair String Bool)) (List (Pair String String)))
-  (mt (listHead tps)
+  (match (listHead tps)
     ((none) (pair (listReverse flushed) (listReverse fails)))
     ((some tp)
       (let [(rest (optionOr (listTail tps) (list)))
-            (r (mt (v/withLock! vs held tp (fn [] -> (Pair String String) (flushOne! vs tp))) ((ok p) p) ((err e) (pair ":ERR_WRITE_FAILED" e))))]
+            (r (match (v/withLock! vs held tp (fn [] -> (Pair String String) (flushOne! vs tp))) ((ok p) p) ((err e) (pair ":ERR_WRITE_FAILED" e))))]
         (if (stringEmpty? (pairFirst r))
           (flushAll! vs held rest (cons (pair tp (= (pairSecond r) "inPlace")) flushed) fails)
           (flushAll! vs held rest flushed (cons r fails))))))
@@ -640,7 +640,7 @@ fn flushStep! vs: v/Vfs held: (List String) id: Int64 kw: (Map String String) ar
         (let [(r (flushAll! vs held targets (list) (list)))
               (flushed (pairFirst r))
               (fails (pairSecond r))]
-          (mt (listHead fails)
+          (match (listHead fails)
             ((some f)
               (failStep id "flush" (pairFirst f) (str " :flushedCount " (stringFromInt64 (listLength flushed)) " :failedCount " (stringFromInt64 (listLength fails)) (msgTail (pairSecond f)))))
             ((none)
@@ -650,13 +650,13 @@ fn flushStep! vs: v/Vfs held: (List String) id: Int64 kw: (Map String String) ar
                                         " :files [" (stringJoin (map (fn [(x (Pair String Bool))] -> String (quoted (k/relToRoot root (pairFirst x)))) flushed) " ") "]")))))))))
 
 fn flat r: (Result (Result T String) String) -> (Result T String)
-  (mt r ((err e) (err e)) ((ok inner) inner))
+  (match r ((err e) (err e)) ((ok inner) inner))
 
 fn discardStep! vs: v/Vfs held: (List String) id: Int64 kw: (Map String String) args: (List String) -> k/EditOutcome
   (let [(raw (targetArg kw args))
         (root vs.root)]
     (if (stringEmpty? raw)
-      (mt (v/discardAll! vs held)
+      (match (v/discardAll! vs held)
         ((err e) (failStep id "discard" ":ERR_DISCARD_FAILED" (msgTail e)))
         ((ok n) (okStep id "discard" (str " :discardedCount " (stringFromInt64 n) " :discarded " (if (> n 0) "true" "false")))))
       (let [(res (k/resolveInRoot! root raw))
@@ -667,7 +667,7 @@ fn discardStep! vs: v/Vfs held: (List String) id: Int64 kw: (Map String String) 
           ((and (none? (v/stagedContent! vs fpath)) (not (stringEmpty? other)))
             (failStep id "discard" ":ERR_STAGED_BY" (str " :path " (quoted (k/relToRoot root fpath)) " :session " (quoted other) " :message \"staged by another session; only that session may discard it\"")))
           (else
-            (mt (flat (v/withLock! vs held fpath (fn [] -> (Result Bool String) (let [(had (some? (v/stagedContent! vs fpath)))] (mt (v/unstage! vs fpath) ((err e) (err e)) ((ok _) (ok had)))))))
+            (match (flat (v/withLock! vs held fpath (fn [] -> (Result Bool String) (let [(had (some? (v/stagedContent! vs fpath)))] (match (v/unstage! vs fpath) ((err e) (err e)) ((ok _) (ok had)))))))
               ((err e) (failStep id "discard" ":ERR_DISCARD_FAILED" (msgTail e)))
               ((ok had) (okStep id "discard" (str " :file " (quoted (k/relToRoot root fpath)) " :discardedCount " (if had "1" "0") " :discarded " (if had "true" "false"))))))))))
 
@@ -808,10 +808,10 @@ fn snapTake! vs: v/Vfs held: (List String) st: TxnRun path: String -> (Result Tx
     (ok st)
     (let [(lp (v/lockPath vs path))
           (fdr (if (listContains? held lp) (ok -1) (v/lockAcquire! vs path)))]
-      (mt fdr
+      (match fdr
         ((err e) (err e))
         ((ok fd)
-          (mt (if (k/isFile! path) (mt (v/readText! path) ((ok t) (ok (some t))) ((err e) (err e))) (ok (none)))
+          (match (if (k/isFile! path) (match (v/readText! path) ((ok t) (ok (some t))) ((err e) (err e))) (ok (none)))
             ((err e) (do (if (>= fd 0) (resultOr (v/lockRelease! vs path fd) ()) ()) (err e)))
             ((ok disk)
               (ok (with st :snaps (listAppend st.snaps (list (Snap :path path :prior (v/stagedContent! vs path) :disk disk :fd fd)))))))))))
@@ -831,7 +831,7 @@ fn txnInner! vs: v/Vfs run: (fn [Int64 String (List String)] -> k/EditOutcome) h
               (ierr (pairSecond res))]
           (if (or (not (stringEmpty? ierr)) (not (owned? root owns ipath)))
             (abortWith st (innerLine k op (str " :status \"rejected\" :error-code \":ERR_OWNS\" :file " (quoted target) (msgTail (if (stringEmpty? ierr) (str target " is outside :owns") ierr)))) here)
-            (mt (snapTake! vs held st ipath)
+            (match (snapTake! vs held st ipath)
               ((err e) (abortWith st (innerLine k op (str " :status \"rejected\" :error-code \":ERR_LOCK\" :file " (quoted target) (msgTail e))) here))
               ((ok st2) (runInner vs run held st2 k op fs)))))
         (if (not (stepReadOnly op kw))
@@ -840,7 +840,7 @@ fn txnInner! vs: v/Vfs run: (fn [Int64 String (List String)] -> k/EditOutcome) h
 
 fn restoreStaged! vs: v/Vfs snaps: (List Snap) -> (List String)
   (fold (fn [(errs (List String)) (s Snap)] -> (List String)
-          (mt (mt s.prior ((none) (v/unstage! vs s.path)) ((some prior) (v/stage! vs s.path prior)))
+          (match (match s.prior ((none) (v/unstage! vs s.path)) ((some prior) (v/stage! vs s.path prior)))
             ((ok _) errs)
             ((err e) (listAppend errs (list e)))))
         (list)
@@ -848,15 +848,15 @@ fn restoreStaged! vs: v/Vfs snaps: (List Snap) -> (List String)
 
 fn releaseAll! vs: v/Vfs snaps: (List Snap) -> (List String)
   (fold (fn [(errs (List String)) (s Snap)] -> (List String)
-          (if (< s.fd 0) errs (mt (v/lockRelease! vs s.path s.fd) ((ok _) errs) ((err e) (listAppend errs (list e))))))
+          (if (< s.fd 0) errs (match (v/lockRelease! vs s.path s.fd) ((ok _) errs) ((err e) (listAppend errs (list e))))))
         (list)
         (listReverse snaps))
 
 fn rollback! vs: v/Vfs snaps: (List Snap) flushed: (List String) -> (List String)
   (fold (fn [(errs (List String)) (p String)] -> (List String)
-          (let [(disk (mt (listHead (filter (fn [(s Snap)] -> Bool (= s.path p)) snaps)) ((some s) s.disk) ((none) (none))))
-                (r (mt disk ((none) (if (k/isFile! p) (pathRemove p) (ok ()))) ((some prior) (mt (v/atomicWrite! p prior) ((ok _) (ok ())) ((err e) (err e))))))]
-            (mt r ((ok _) errs) ((err e) (listAppend errs (list e))))))
+          (let [(disk (match (listHead (filter (fn [(s Snap)] -> Bool (= s.path p)) snaps)) ((some s) s.disk) ((none) (none))))
+                (r (match disk ((none) (if (k/isFile! p) (pathRemove p) (ok ()))) ((some prior) (match (v/atomicWrite! p prior) ((ok _) (ok ())) ((err e) (err e))))))]
+            (match r ((ok _) errs) ((err e) (listAppend errs (list e))))))
         (list)
         flushed)
 
@@ -864,7 +864,7 @@ fn errTail errs: (List String) -> String
   (if (listEmpty? errs) "" (str " :restoreError " (quoted (stringJoin errs "; "))))
 
 fn flushSnaps! vs: v/Vfs held: (List String) snaps: (List Snap) todo: (List Snap) flushed: (List String) -> (Pair (List String) String)
-  (mt (listHead todo)
+  (match (listHead todo)
     ((none) (pair (listReverse flushed) ""))
     ((some s)
       (let [(rest (optionOr (listTail todo) (list)))
@@ -887,7 +887,7 @@ fn txnFinish! vs: v/Vfs held: (List String) id: Int64 owns: (List String) st: Tx
     (if (not (stringEmpty? st.failedAt))
       (let [(errs (listAppend (restoreStaged! vs snaps) (releaseAll! vs snaps)))]
         (failStep id "txn" ":ERR_TXN_ABORTED" (str " :failedAt " (quoted st.failedAt) " :owns [" ownsAsn "] :restored [" touched "] :flushed [] :steps [" steps "]" (errTail errs))))
-      (mt (scopePathList! vs.root (optionOr (envGet "ASL_UNIT") "") (txnPending! vs snaps))
+      (match (scopePathList! vs.root (optionOr (envGet "ASL_UNIT") "") (txnPending! vs snaps))
         ((err refusal)
           (let [(errs (listAppend (restoreStaged! vs snaps) (releaseAll! vs snaps)))]
             (failStep id "txn" ":ERR_SCOPE_REFUSED" (str " :receipt " refusal " :owns [" ownsAsn "] :restored [" touched "] :flushed [] :steps [" steps "]" (errTail errs)))))
@@ -921,10 +921,10 @@ fn txnStep! vs: v/Vfs run: (fn [Int64 String (List String)] -> k/EditOutcome) he
         (txnFinish! vs held id owns (pairFirst st)))))
 
 fn scopePathList! root: String unit: String paths: (List String) -> (Result Unit String)
-  (mt (listHead paths)
+  (match (listHead paths)
     ((none) (ok ()))
     ((some path)
-      (mt (coord/pathAllowed! root unit (k/relToRoot root path))
+      (match (coord/pathAllowed! root unit (k/relToRoot root path))
         ((err e) (err e))
         ((ok _) (scopePathList! root unit (optionOr (listTail paths) (list)))))))
 
@@ -934,7 +934,7 @@ fn scopeEditCheck! vs: v/Vfs kw: (Map String String) args: (List String) -> (Opt
         (path (pairFirst resolved))]
     (if (or (stringEmpty? raw) (not (stringEmpty? (pairSecond resolved))))
       (none)
-      (mt (coord/pathAllowed! vs.root (optionOr (envGet "ASL_UNIT") "") (k/relToRoot vs.root path))
+      (match (coord/pathAllowed! vs.root (optionOr (envGet "ASL_UNIT") "") (k/relToRoot vs.root path))
         ((ok _) (none))
         ((err e) (some e)))))
 
@@ -944,7 +944,7 @@ fn scopeFlushCheck! vs: v/Vfs kw: (Map String String) args: (List String) -> (Op
         (paths (cond
           ((not (stringEmpty? raw)) (if (stringEmpty? (pairSecond resolved)) (list (pairFirst resolved)) (list)))
           (else (v/stagedPaths! vs))))]
-    (mt (scopePathList! vs.root (optionOr (envGet "ASL_UNIT") "") paths)
+    (match (scopePathList! vs.root (optionOr (envGet "ASL_UNIT") "") paths)
       ((ok _) (none))
       ((err e) (some e))))
 
@@ -952,13 +952,13 @@ fn editOp! vs: v/Vfs ch: Checkers run: (fn [Int64 String (List String)] -> k/Edi
   (cond
     ((= op "write") (some (writeStep! vs ch held id kw args)))
     ((= op "edit")
-      (mt (scopeEditCheck! vs kw args)
+      (match (scopeEditCheck! vs kw args)
         ((some refusal) (some (failStep id "edit" ":ERR_SCOPE_REFUSED" (str " :receipt " refusal))))
         ((none) (some (editStep! vs ch held id kw args)))))
     ((= op "diff") (some (diffStep! vs id kw args)))
     ((= op "preflush") (some (preflushStep! vs id kw args)))
     ((= op "flush")
-      (mt (scopeFlushCheck! vs kw args)
+      (match (scopeFlushCheck! vs kw args)
         ((some refusal) (some (failStep id "flush" ":ERR_SCOPE_REFUSED" (str " :receipt " refusal))))
         ((none) (some (flushStep! vs held id kw args)))))
     ((= op "discard") (some (discardStep! vs held id kw args)))

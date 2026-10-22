@@ -3,15 +3,15 @@
   :i [(asl/agentLoop/gitOps :a g) (asl/agentLoop/core :a c)])
 
 fn kvGet kv: (List (Pair String c/KvVal)) k: String -> (Option c/KvVal)
-  (mt (listHead (filter (fn [p] (= (pairFirst p) k)) kv))
+  (match (listHead (filter (fn [p] (= (pairFirst p) k)) kv))
     ((some p) (some (pairSecond p)))
     ((none) (none)))
 
 fn kvText v: c/KvVal -> String
-  (mt v ((c/kvStr s) s) ((c/kvInt d) d))
+  (match v ((c/kvStr s) s) ((c/kvInt d) d))
 
 fn getS kv: (List (Pair String c/KvVal)) k: String -> String
-  (mt (kvGet kv k) ((some v) (kvText v)) ((none) ""))
+  (match (kvGet kv k) ((some v) (kvText v)) ((none) ""))
 
 fn getI kv: (List (Pair String c/KvVal)) k: String -> Int64
   (optionOr (stringToInt64 (getS kv k)) 0)
@@ -20,7 +20,7 @@ fn listed kv: (List (Pair String c/KvVal)) prefix: String -> (List String)
   (map (fn [i] (getS kv (str prefix (stringFromInt64 i)))) (range 0 (getI kv "n")))
 
 fn envKey row: String -> String
-  (mt (stringIndexOf row "=") ((some i) (c/sliceOf row 0 i)) ((none) row))
+  (match (stringIndexOf row "=") ((some i) (c/sliceOf row 0 i)) ((none) row))
 
 fn keptRow row: String -> Bool
   (let [k (envKey row)]
@@ -55,7 +55,7 @@ fn setupStep! base: String setupEnv: (List String) line: String -> Bool
       ((= step "mkdir") (ok? (dirCreate path)))
       ((= step "write") (ok? (fileWrite path (getS kv "text"))))
       ((= step "run")
-        (mt (g/runBounded! (listed kv "a") (some (str base "/" (getS kv "cwd"))) (some 60) (some (listAppend (cleanEnv! "") setupEnv)))
+        (match (g/runBounded! (listed kv "a") (some (str base "/" (getS kv "cwd"))) (some 60) (some (listAppend (cleanEnv! "") setupEnv)))
           ((ok b) (= (optionOr b.code -1) 0))
           ((err e) (do (eprintln (str "setup run failed: " e)) false))))
       (else false)))
@@ -67,10 +67,10 @@ fn subBase base: String s: String -> String
   (stringReplace s base "@BASE@")
 
 fn lineArgText a: g/LineArg -> String
-  (mt a ((g/laNone) "none") ((g/laBad) "bad") ((g/laNum n) (stringFromInt64 n)))
+  (match a ((g/laNone) "none") ((g/laBad) "bad") ((g/laNum n) (stringFromInt64 n)))
 
 fn optStr o: (Option c/KvVal) -> (Option String)
-  (mt o ((some v) (some (kvText v))) ((none) (none)))
+  (match o ((some v) (some (kvText v))) ((none) (none)))
 
 fn sliceText kv: (List (Pair String c/KvVal)) -> String
   (let [start (getI kv "start")
@@ -80,7 +80,7 @@ fn sliceText kv: (List (Pair String c/KvVal)) -> String
     (str "(slice " (c/serString (pairFirst sl)) (c/joinAll (map (fn [n] (str " " (stringFromInt64 n))) nums)) ")"))
 
 fn filesText base: String res: (Result (List String) String) -> String
-  (mt res
+  (match res
     ((ok fs) (str "(files" (c/joinAll (map (fn [f] (str " " (c/serString (subBase base f)))) fs)) ")"))
     ((err e) (str "(error " (c/serString e) ")")))
 

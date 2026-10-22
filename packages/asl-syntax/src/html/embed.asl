@@ -91,7 +91,7 @@ fn rebaseToken tok: tr/Token off: Int64 -> tr/Token
   (tr/makeToken (tr/tokenKind tok) (+ (tr/tokenStart tok) off) (+ (tr/tokenEnd tok) off))
 
 fn rebaseElement elem: tr/TreeElement off: Int64 -> tr/TreeElement
-  (mt elem
+  (match elem
     ((tr/elemToken tok) (tr/elemToken (rebaseToken tok off)))
     ((tr/elemNode node) (tr/elemNode (rebaseNode node off))))
 
@@ -106,7 +106,7 @@ fn rebaseNode node: tr/Node off: Int64 -> tr/Node
 
 fn scriptLanguage node: tr/Node text: String -> String
   (let [(typeOpt (htr/attributeValue node text "type"))]
-    (mt typeOpt
+    (match typeOpt
       ((none) "javascript")
       ((some tVal)
        (let [(trimmed (stringLower (stringTrim tVal)))]
@@ -122,7 +122,7 @@ fn scriptLanguage node: tr/Node text: String -> String
 
 fn styleLanguage node: tr/Node text: String -> String
   (let [(typeOpt (htr/attributeValue node text "type"))]
-    (mt typeOpt
+    (match typeOpt
       ((none) "css")
       ((some tVal)
        (let [(trimmed (stringLower (stringTrim tVal)))
@@ -136,7 +136,7 @@ fn embedScriptChildren children: (List tr/TreeElement) text: String lang: String
     (listReverse acc)
     (let [(hd (optionOr (listHead children) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail children) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (let [(k (tr/tokenKind tok))]
            (if (or (= k "scriptData") (or (= k "rawtext") (= k "character")))
@@ -145,7 +145,7 @@ fn embedScriptChildren children: (List tr/TreeElement) text: String lang: String
                    (content (optionOr (stringSlice text st en) ""))]
                (cond
                  ((= lang "javascript")
-                  (mt (jsm/parse content)
+                  (match (jsm/parse content)
                     ((ok jsTree)
                      (let [(rebased (rebaseNode jsTree st))]
                        (embedScriptChildren tl text lang (cons (tr/elemNode rebased) acc))))
@@ -169,7 +169,7 @@ fn embedStyleChildren children: (List tr/TreeElement) text: String lang: String 
     (listReverse acc)
     (let [(hd (optionOr (listHead children) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail children) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (let [(k (tr/tokenKind tok))]
            (if (or (= k "rawtext") (or (= k "scriptData") (= k "character")))
@@ -206,7 +206,7 @@ fn embedHtmlNode node: tr/Node text: String -> tr/Node
            (tr/makeNode k (tr/nodeStart node) (tr/nodeEnd node) newChildren))))))
 
 fn embedHtmlElement elem: tr/TreeElement text: String -> tr/TreeElement
-  (mt elem
+  (match elem
     ((tr/elemToken tok) elem)
     ((tr/elemNode node) (tr/elemNode (embedHtmlNode node text))))
 
@@ -226,7 +226,7 @@ fn parse text: String -> tr/Node
 fn nodeContainerName node: tr/Node text: String -> String
   (let [(tag (htr/elementName node))
         (idOpt (htr/elementId node text))]
-    (mt idOpt
+    (match idOpt
       ((some idVal) (if (stringEmpty? idVal) tag idVal))
       ((none) tag)))
 
@@ -235,7 +235,7 @@ fn extractScriptChildSymbols! children: (List tr/TreeElement) text: String sFile
     acc
     (let [(hd (optionOr (listHead children) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail children) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (let [(k (tr/tokenKind tok))]
            (if (or (= k "scriptData") (or (= k "rawtext") (= k "character")))
@@ -300,7 +300,7 @@ fn extractStyleSymbols node: tr/Node text: String sFile: src/Source container: S
       (let [(children (tr/nodeChildren node))]
         (listReverse
           (fold (fn [(acc (List EmbeddedSymbol)) (child tr/TreeElement)] -> (List EmbeddedSymbol)
-                  (mt child
+                  (match child
                     ((tr/elemToken tok)
                      (let [(k (tr/tokenKind tok))]
                        (if (or (= k "rawtext") (or (= k "character") (= k "scriptData")))
@@ -394,10 +394,10 @@ fn symbolSortBefore? a: sym/SymbolDef b: sym/SymbolDef -> Bool
       (> (sym/symbolEnd a) (sym/symbolEnd b))))
 
 fn mergeSymbolLists left: (List sym/SymbolDef) right: (List sym/SymbolDef) acc: (List sym/SymbolDef) -> (List sym/SymbolDef)
-  (mt (listHead left)
+  (match (listHead left)
     ((none) (listAppend (listReverse acc) right))
     ((some lhd)
-     (mt (listHead right)
+     (match (listHead right)
        ((none) (listAppend (listReverse acc) left))
        ((some rhd)
         (if (symbolSortBefore? lhd rhd)

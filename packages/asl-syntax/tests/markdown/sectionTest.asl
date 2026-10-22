@@ -52,7 +52,7 @@ fn testDuplicateAmbiguity -> Bool
         (rcpt (mds/markdownReadSymbolReceipt "doc.md" doc "Options"))]
     (do
       (assert (err? rAmb) "bare Options is ambiguous")
-      (mt rAmb
+      (match rAmb
         ((ok _) (assert false "expected ambiguous error"))
         ((err msg)
          (do
@@ -113,7 +113,7 @@ fn testDuplicatePathAmbiguity -> Bool
         (rDup (mds/resolveHeadingSymbol doc "Chapter 1/Exercise"))]
     (do
       (assert (err? rDup) "Chapter 1/Exercise is ambiguous with 2 matches")
-      (mt rDup
+      (match rDup
         ((ok _) (assert false "expected ambiguous error"))
         ((err msg)
          (do
@@ -127,7 +127,7 @@ fn testNotFoundHeading -> Bool
         (rcpt (mds/markdownReadSymbolReceipt "test.md" doc "Nonexistent"))]
     (do
       (assert (err? rNone) "Nonexistent heading is err")
-      (mt rNone
+      (match rNone
         ((ok _) (assert false "expected not found error"))
         ((err msg) (assert (stringContains? msg "not found") "error names not found")))
       (assert (stringContains? rcpt "ERR_SYMBOL_NOT_FOUND") "receipt error is ERR_SYMBOL_NOT_FOUND")
@@ -187,7 +187,7 @@ fn testFenceDelegation -> Bool
           (let [(del1 (mds/delegateFence f1))]
             (do
               (assert (mds/hasFenceSubtree? del1) "delegated json fence has subtree")
-              (mt del1.subtree
+              (match del1.subtree
                 ((none) (assert false "expected json subtree"))
                 ((some sub)
                  (do
@@ -208,7 +208,7 @@ fn testFenceDelegation -> Bool
       true))
 
 fn testTrackedReadme! -> Bool
-  (mt (fileReadString "README.md")
+  (match (fileReadString "README.md")
     ((err e) (do (assert false (str "read error on README.md: " e)) false))
     ((ok content)
      (let [(syms (mds/markdownHeadingSymbols content))

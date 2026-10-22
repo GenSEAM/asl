@@ -271,7 +271,7 @@ fn fastConsCall -> String
   (str "call ptr " (fastConsSym) "(i32 1, i64 40)")
 
 fn fastAllocCall type: Int64 bytes: Int64 -> String
-  (str "call ptr " (mt (fastAllocClass type bytes) ((some sc) (fastAllocSym sc)) ((none) "@asl_alloc_raw")) "(i32 " type ", i64 " bytes ")")
+  (str "call ptr " (match (fastAllocClass type bytes) ((some sc) (fastAllocSym sc)) ((none) "@asl_alloc_raw")) "(i32 " type ", i64 " bytes ")")
 
 fn gep d: String base: String off: String -> String
   (str "  " d " = getelementptr inbounds i8, ptr " base ", i64 " off "\n")
@@ -323,14 +323,14 @@ fn gcFactNames -> (List String)
   (list "PROT_READ" "PROT_WRITE" "MAP_PRIVATE" "MAP_ANON" "CLOCK_MONOTONIC" "timespec.size" "timespec.tv_sec" "timespec.tv_nsec")
 
 fn factOf facts: libc/TripleFacts name: String -> (Option Int64)
-  (mt (stringIndexOf name ".")
+  (match (stringIndexOf name ".")
     ((none) (libc/libcConst facts name))
     ((some i)
       (let [(sname (optionOr (stringSlice name 0 i) ""))
             (field (optionOr (stringSlice name (+ i 1) (stringLength name)) ""))]
         (if (= field "size")
           (libc/structSize facts sname)
-          (mt (libc/pairFind facts.structs sname)
+          (match (libc/pairFind facts.structs sname)
             ((some sf) (libc/structFieldOffset sf field))
             ((none) (none)))))))
 
@@ -341,13 +341,13 @@ fn gcFactsFor facts: libc/TripleFacts target: target/TargetFacts -> (Result GcCt
   (if (target/isWasm32 target)
     (ok (GcCtx :k (mapEmpty) :errno "" :target target :notrace false))
     (let [(resolved (fold (fn [(acc (Result (Map String Int64) String)) (n String)] -> (Result (Map String Int64) String)
-                          (mt acc
+                          (match acc
                             ((err e) (err e))
-                            ((ok m) (mt (factOf facts n)
+                            ((ok m) (match (factOf facts n)
                                       ((some v) (ok (mapSet m n v)))
                                       ((none) (err (str "libc.asl has no " n " for " facts.triple)))))))
                         (ok (mapEmpty)) (gcFactNames)))]
-    (mt resolved
+    (match resolved
       ((err e) (err e))
       ((ok m)
         (cond
@@ -1466,7 +1466,7 @@ fn tracingFunctionNames -> (List String)
         "sweepLarge" "sweepPages" "sweepPhase")
 
 fn collectCall? i: ty/SsaInstr -> Bool
-  (mt i.op ((ty/opCall callee _) (= callee "gcAslCollect")) (_ false))
+  (match i.op ((ty/opCall callee _) (= callee "gcAslCollect")) (_ false))
 
 fn uncollected f: ty/SsaFunction -> ty/SsaFunction
   (ty/ssaFunction f.name f.captures f.params f.retTy

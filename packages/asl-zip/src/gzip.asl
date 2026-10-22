@@ -156,13 +156,13 @@ fn ! headerEnd data: Bytes len: Int64 pos: Int64 tx: Bytes -> (Result Int64 Stri
     ((> (bytesGet data (+ pos 3)) 31) (err (errText (+ pos 3) "reserved flags set")))
     (else
      (let [(flg (bytesGet data (+ pos 3)))]
-       (mt (skipExtra data len flg (+ pos 10))
+       (match (skipExtra data len flg (+ pos 10))
          ((err e) (err e))
          ((ok p1)
-          (mt (skipString data len flg 3 p1)
+          (match (skipString data len flg 3 p1)
             ((err e) (err e))
             ((ok p2)
-             (mt (skipString data len flg 4 p2)
+             (match (skipString data len flg 4 p2)
                ((err e) (err e))
                ((ok p3) (checkHcrc data len flg pos p3 tx))))))))))
 
@@ -180,10 +180,10 @@ fn copyOut! dst: Bytes src: Bytes i: Int64 n: Int64 -> Unit
       (copyOut! dst src (+ i 1) n)))
 
 fn members! data: Bytes len: Int64 pos: Int64 out: Bytes op: Int64 limit: Int64 tx: Bytes -> (Result Bytes String)
-  (mt (headerEnd data len pos tx)
+  (match (headerEnd data len pos tx)
     ((err e) (err e))
     ((ok deflateStart)
-     (mt (inf/inflateAppend! data deflateStart out op limit)
+     (match (inf/inflateAppend! data deflateStart out op limit)
        ((err e) (err e))
        ((ok st)
         (let [(trailer st.stNext)

@@ -10,24 +10,24 @@ fn ! freshDir! tag: Str -> Str
   (let [(dir (str "/tmp/aslGatesHardening." tag "." (stringFromInt64 (nowNs))))] (do (assert (ok? (dirCreate dir)) (str "fixture dir created: " dir)) dir))
 
 fn errNames? res: (Result Unit Str) needle: Str -> Bool
-  (mt res ((ok _) false) ((err e) (stringContains? e needle)))
+  (match res ((ok _) false) ((err e) (stringContains? e needle)))
 
 fn ! testCommandLines -> Bool
   (let [(missing (str "/tmp/aslGatesHardening.missing." (stringFromInt64 (nowNs)))) (failCmd (str "find " missing " -type f")) (failed (rn/commandLines failCmd (processRun failCmd))) (okCmd "printf 'b\\n\\na\\n'") (listed (rn/commandLines okCmd (processRun okCmd)))]
-    (do (mt failed
+    (do (match failed
           ((ok lines) (assert false (str "a failing find must not list as ok: " (stringJoin lines ","))))
           ((err e) (do (assert (stringContains? e failCmd) (str "the error names the command: " e)) (assert (stringContains? e "No such file") (str "the error carries stderr: " e)))))
-        (mt listed
+        (match listed
           ((ok lines) (assert (= lines (list "a" "b")) (str "lines are sorted and blank lines dropped: " (stringJoin lines ","))))
           ((err e) (assert false (str "a zero-exit command must list: " e))))
         true))
 
 fn ! testCheckPaths -> Bool
   (let [(passAll (fn [(p Str)] -> (Result Unit Str) (ok ()))) (failB (fn [(p Str)] -> (Result Unit Str) (if (= p "b") (err "b: broken") (ok ())))) (fromErr (rn/checkPaths "things" (err "listing exploded") passAll)) (fromEmpty (rn/checkPaths "things" (ok (list)) passAll)) (fromBad (rn/checkPaths "things" (ok (list "a" "b" "c")) failB)) (fromGood (rn/checkPaths "things" (ok (list "a" "c")) failB))]
-    (do (mt fromErr ((ok _) (assert false "a listing error must not pass")) ((err e) (assert (= e "listing exploded") (str "the listing error passes through: " e))))
-        (mt fromEmpty ((ok _) (assert false "an empty listing must not pass")) ((err e) (assert (stringContains? e "No things found") (str "the empty listing is named: " e))))
-        (mt fromBad ((ok _) (assert false "a failing path must not pass")) ((err e) (assert (stringContains? e "1 of 3 things failed: b: broken") (str "the failing path is named: " e))))
-        (mt fromGood ((ok ps) (assert (= (listLength ps) 2) "all passing paths are returned")) ((err e) (assert false (str "passing paths must pass: " e))))
+    (do (match fromErr ((ok _) (assert false "a listing error must not pass")) ((err e) (assert (= e "listing exploded") (str "the listing error passes through: " e))))
+        (match fromEmpty ((ok _) (assert false "an empty listing must not pass")) ((err e) (assert (stringContains? e "No things found") (str "the empty listing is named: " e))))
+        (match fromBad ((ok _) (assert false "a failing path must not pass")) ((err e) (assert (stringContains? e "1 of 3 things failed: b: broken") (str "the failing path is named: " e))))
+        (match fromGood ((ok ps) (assert (= (listLength ps) 2) "all passing paths are returned")) ((err e) (assert false (str "passing paths must pass: " e))))
         true))
 
 fn ! testPathChecks -> Bool
@@ -54,11 +54,11 @@ fn ! testClaimsGroundingNamesFailures -> Bool
         (rMissing (sc/claimsGroundingAt! (list missing))) (rUnterminated (sc/claimsGroundingAt! (list missing unterminated))) (rFew (sc/claimsGroundingAt! (list few))) (rUngrounded (sc/claimsGroundingAt! (list ungrounded))) (rLive (sc/claimsGrounding!))
         (cleaned (pathRemove dir))]
     (do (assert wrote "claims fixtures written")
-        (mt rMissing ((ok n) (assert false "a missing claims file must not ground")) ((err e) (assert (stringContains? e missing) (str "the missing claims file is named: " e))))
-        (mt rUnterminated ((ok n) (assert false "an unterminated metric must not ground")) ((err e) (assert (and (stringContains? e unterminated) (stringContains? e "unterminated")) (str "the unterminated metric is named: " e))))
-        (mt rFew ((ok n) (assert false "two claims must not ground")) ((err e) (assert (stringContains? e "Only 2 published claims") (str "too few claims is named: " e))))
-        (mt rUngrounded ((ok n) (assert false "an ungrounded claim must not ground")) ((err e) (assert (stringContains? e "999x fabricated") (str "the ungrounded claim is named: " e))))
-        (mt rLive ((ok n) (assert (>= n 12) "the live claims file grounds at least 12 claims")) ((err e) (assert false (str "the live claims file must ground: " e))))
+        (match rMissing ((ok n) (assert false "a missing claims file must not ground")) ((err e) (assert (stringContains? e missing) (str "the missing claims file is named: " e))))
+        (match rUnterminated ((ok n) (assert false "an unterminated metric must not ground")) ((err e) (assert (and (stringContains? e unterminated) (stringContains? e "unterminated")) (str "the unterminated metric is named: " e))))
+        (match rFew ((ok n) (assert false "two claims must not ground")) ((err e) (assert (stringContains? e "Only 2 published claims") (str "too few claims is named: " e))))
+        (match rUngrounded ((ok n) (assert false "an ungrounded claim must not ground")) ((err e) (assert (stringContains? e "999x fabricated") (str "the ungrounded claim is named: " e))))
+        (match rLive ((ok n) (assert (>= n 12) "the live claims file grounds at least 12 claims")) ((err e) (assert false (str "the live claims file must ground: " e))))
         true))
 
 fn ! runTests -> Bool

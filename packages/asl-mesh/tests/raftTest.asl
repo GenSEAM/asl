@@ -287,7 +287,7 @@ fn testCheckAndSendSnapshot -> Bool
     (do
       (assert (some? reqBehind) "behind follower triggers snapshot request")
       (refute (none? reqBehind) "refute missing snapshot request for behind follower")
-      (mt reqBehind
+      (match reqBehind
         ((some snap)
           (do
             (assert (= snap.lastIncludedIndex 50) "snapshot lastIncludedIndex matches leader 50")

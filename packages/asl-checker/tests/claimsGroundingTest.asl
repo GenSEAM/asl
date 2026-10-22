@@ -36,7 +36,7 @@ fn testPublishedClaimsExtraction! -> Bool
     (do
       (assert (ok? res) "groundClaims must parse publishedClaims.asn cleanly")
       (refute (err? res) "publishedClaims.asn read must not fail")
-      (mt res
+      (match res
         ((err _) false)
         ((ok claims)
          (do
@@ -66,7 +66,7 @@ fn testUnbackedClaimRefutation -> Bool
         (assert (= refutedClaim.metric "metric-unbacked") "Refuted claim must be the unbacked one"))
       (assert (err? checkRes) "verifyClaimsGrounding must return err when unbacked claims exist")
       (refute (ok? checkRes) "verifyClaimsGrounding must not succeed on unbacked claims")
-      (mt checkRes
+      (match checkRes
         ((err msg)
          (do
            (assert (stringContains? msg "Refuted") "Error message must report refutation")
@@ -89,7 +89,7 @@ fn testFullClaimsGroundingPass -> Bool
       (refute (not (listEmpty? unbacked)) "Refute non-empty unbacked when all claims are backed")
       (assert (ok? checkRes) "verifyClaimsGrounding must return ok when all claims backed")
       (refute (err? checkRes) "verifyClaimsGrounding must refute err on complete grounding")
-      (mt checkRes
+      (match checkRes
         ((ok count) (assert (= count 2) "Grounded count must equal claims count"))
         ((err _) (assert false "verifyClaimsGrounding returned err")))
       true))

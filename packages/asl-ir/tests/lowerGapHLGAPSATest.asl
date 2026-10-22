@@ -59,10 +59,10 @@ fn ! writeFixtures! base: String -> Bool
                            (writeOne! base "gapfx/enumHiddenConsumer" (enumHiddenConsumerSource))))))))
 
 fn diagCodes res: (Result ty/SsaModule (List ty/IrDiag)) -> (List String)
-  (mt res ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> String d.code) ds)))
+  (match res ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> String d.code) ds)))
 
 fn diagMessages res: (Result ty/SsaModule (List ty/IrDiag)) -> (List String)
-  (mt res ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> String d.message) ds)))
+  (match res ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> String d.message) ds)))
 
 fn ! testQuoteNamedFunctionLowers base: String -> Bool
   (let [(res (lk/linkEntry! (str base "/gapfx/quoteFixture.asl")))]

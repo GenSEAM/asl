@@ -124,7 +124,7 @@ fn breakerDownFor st: BreakerState provider: String now: Int64 -> (Pair BreakerS
   (if (stringEmpty? provider)
     (pair st 0)
     (let [(stSeen (touchSeen st provider))]
-      (mt (mapGet stSeen.breakers provider)
+      (match (mapGet stSeen.breakers provider)
         ((none) (pair stSeen 0))
         ((some until)
          (let [(left (- until now))]
@@ -262,7 +262,7 @@ fn formatBreakerSnapshotAsn snapshot: (Map String ProviderStatus) -> String
     (str "(:breaker (" (stringJoin entries " ") "))"))
 
 fn stepBreaker st: BreakerState event: BreakerEvent now: Int64 -> (Pair BreakerState BreakerDecision)
-  (mt event
+  (match event
     ((evMarkDown p)
      (let [(nextSt (breakerMarkDown st p now))]
        (pair nextSt (decOk))))

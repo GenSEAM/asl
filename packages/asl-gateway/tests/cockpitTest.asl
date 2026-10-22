@@ -25,13 +25,13 @@ fn propIn props: (List (Pair String ck/AsnVal)) key: String -> (Option ck/AsnVal
     (if (= (pairFirst (preludeHead props)) key) (some (pairSecond (preludeHead props))) (propIn (preludeTail props) key)))
 
 fn textOf v: (Option ck/AsnVal) -> (Option String)
-  (mt v
-    ((some x) (mt x ((ck/asnText s) (some s)) (_ (none))))
+  (match v
+    ((some x) (match x ((ck/asnText s) (some s)) (_ (none))))
     ((none) (none)))
 
 fn atomOf v: (Option ck/AsnVal) -> String
-  (mt v
-    ((some x) (mt x ((ck/asnAtom s) s) (_ "")))
+  (match v
+    ((some x) (match x ((ck/asnAtom s) s) (_ "")))
     ((none) ""))
 
 fn intOf v: (Option ck/AsnVal) -> Int64
@@ -44,22 +44,22 @@ fn floatOf v: (Option ck/AsnVal) -> Float64
   (optionOr (stringToFloat64 (atomOf v)) 0.0)
 
 fn itemsOf v: (Option ck/AsnVal) -> (List ck/AsnVal)
-  (mt v
-    ((some x) (mt x ((ck/asnList items) items) (_ (list))))
+  (match v
+    ((some x) (match x ((ck/asnList items) items) (_ (list))))
     ((none) (list)))
 
 fn subProps v: ck/AsnVal -> (List (Pair String ck/AsnVal))
-  (mt (ck/asnProps v (none)) ((ok p) p) ((err _) (list)))
+  (match (ck/asnProps v (none)) ((ok p) p) ((err _) (list)))
 
 fn headProps v: ck/AsnVal head: String -> (List (Pair String ck/AsnVal))
-  (mt (ck/asnProps v (some head)) ((ok p) p) ((err _) (list)))
+  (match (ck/asnProps v (some head)) ((ok p) p) ((err _) (list)))
 
 fn toCase v: ck/AsnVal -> Case
   (let [(p (headProps v ":case"))]
     (Case :id (optionOr (textOf (propIn p "id")) "") :kind (atomOf (propIn p "kind")) :props p))
 
 fn caseForm? v: ck/AsnVal -> Bool
-  (mt v
+  (match v
     ((ck/asnList items) (and (not (listEmpty? items)) (= (atomOf (listGet items 0)) ":case")))
     (_ false))
 
@@ -67,10 +67,10 @@ fn declaredCount forms: (List ck/AsnVal) -> Int64
   (if (listEmpty? forms) -1 (intOf (propIn (headProps (preludeHead forms) ":cockpitFixture") "cases")))
 
 fn loadCases! -> (Result (List Case) String)
-  (mt (fileReadString (fixturePath))
+  (match (fileReadString (fixturePath))
     ((err e) (err e))
     ((ok text)
-      (mt (ck/asnReadText text)
+      (match (ck/asnReadText text)
         ((err e) (err (str "fixture: " e)))
         ((ok forms)
           (let [(cases (map toCase (filter caseForm? forms)))]
@@ -82,10 +82,10 @@ fn entryPath root: String e: ck/AsnVal -> String
   (str root "/" (optionOr (textOf (propIn (subPropsAfterHead e) "path")) ""))
 
 fn entryKind e: ck/AsnVal -> String
-  (mt e ((ck/asnList items) (atomOf (listGet items 0))) (_ ""))
+  (match e ((ck/asnList items) (atomOf (listGet items 0))) (_ ""))
 
 fn subPropsAfterHead e: ck/AsnVal -> (List (Pair String ck/AsnVal))
-  (mt e ((ck/asnList items) (subProps (ck/asnList (listDrop items 1)))) (_ (list)))
+  (match e ((ck/asnList items) (subProps (ck/asnList (listDrop items 1)))) (_ (list)))
 
 fn parentOf p: String -> String
   (let [(parts (stringSplit p "/"))]
@@ -96,45 +96,45 @@ fn createEntry! root: String e: ck/AsnVal -> (Result Unit String)
     (cond
       ((= kind ":dir") (dirCreate path))
       ((= kind ":file")
-        (mt (dirCreate (parentOf path))
+        (match (dirCreate (parentOf path))
           ((err e2) (err e2))
           ((ok _)
-            (mt (bytesFromBase64 (optionOr (textOf (propIn props "b64")) ""))
+            (match (bytesFromBase64 (optionOr (textOf (propIn props "b64")) ""))
               ((err e2) (err e2))
               ((ok bs) (fileWrite path bs))))))
       (else
-        (mt (dirCreate (parentOf path))
+        (match (dirCreate (parentOf path))
           ((err e2) (err e2))
           ((ok _) (pathSymlink (optionOr (textOf (propIn props "target")) "") path))))))
 
 fn touchEntry! root: String e: ck/AsnVal -> (Result Unit String)
-  (mt (optIntOf (propIn (subPropsAfterHead e) "mtimeNs"))
+  (match (optIntOf (propIn (subPropsAfterHead e) "mtimeNs"))
     ((none) (ok ()))
     ((some ns) (fileUtime (entryPath root e) ns)))
 
 fn chmodEntry! root: String e: ck/AsnVal restore: Bool -> (Result Unit String)
-  (mt (optIntOf (propIn (subPropsAfterHead e) "mode"))
+  (match (optIntOf (propIn (subPropsAfterHead e) "mode"))
     ((none) (ok ()))
     ((some m) (fileChmod (entryPath root e) (if restore 493 m))))
 
 fn eachOk f: (fn [ck/AsnVal] -> (Result Unit String)) xs: (List ck/AsnVal) -> (Result Unit String)
   (if (listEmpty? xs)
     (ok ())
-    (mt (f (preludeHead xs)) ((err e) (err e)) ((ok _) (eachOk f (preludeTail xs)))))
+    (match (f (preludeHead xs)) ((err e) (err e)) ((ok _) (eachOk f (preludeTail xs)))))
 
 fn materialize! root: String tree: (List ck/AsnVal) -> (Result Unit String)
-  (mt (dirCreate root)
+  (match (dirCreate root)
     ((err e) (err e))
     ((ok _)
-      (mt (eachOk (fn [(e ck/AsnVal)] -> (Result Unit String) (createEntry! root e)) tree)
+      (match (eachOk (fn [(e ck/AsnVal)] -> (Result Unit String) (createEntry! root e)) tree)
         ((err e) (err e))
         ((ok _)
-          (mt (eachOk (fn [(e ck/AsnVal)] -> (Result Unit String) (touchEntry! root e)) tree)
+          (match (eachOk (fn [(e ck/AsnVal)] -> (Result Unit String) (touchEntry! root e)) tree)
             ((err e) (err e))
             ((ok _) (eachOk (fn [(e ck/AsnVal)] -> (Result Unit String) (chmodEntry! root e false)) (listReverse tree))))))))
 
 fn teardown! root: String tree: (List ck/AsnVal) -> (Result Unit String)
-  (mt (eachOk (fn [(e ck/AsnVal)] -> (Result Unit String) (chmodEntry! root e true)) tree)
+  (match (eachOk (fn [(e ck/AsnVal)] -> (Result Unit String) (chmodEntry! root e true)) tree)
     ((err e) (err e))
     ((ok _) (pathRemove root)))
 
@@ -145,16 +145,16 @@ fn statusOf c: Case -> ck/GatewayStatus
                       :updates (intOf (propIn p "updates"))))
 
 fn poolOf v: ck/AsnVal -> ck/PoolStats
-  (let [(items (mt v ((ck/asnList xs) xs) (_ (list))))
+  (let [(items (match v ((ck/asnList xs) xs) (_ (list))))
         (p (subProps (ck/asnList (listDrop items 2))))]
     (ck/PoolStats :name (optionOr (textOf (listGet items 1)) "") :size (intOf (propIn p "size")) :busy (intOf (propIn p "busy")) :queued (intOf (propIn p "queued"))))
 
 fn errPair v: ck/AsnVal -> (Pair String Int64)
-  (let [(items (mt v ((ck/asnList xs) xs) (_ (list))))]
+  (let [(items (match v ((ck/asnList xs) xs) (_ (list))))]
     (pair (optionOr (textOf (listGet items 0)) "") (intOf (listGet items 1))))
 
 fn usageRowOf v: ck/AsnVal -> ck/UsageRow
-  (let [(items (mt v ((ck/asnList xs) xs) (_ (list))))
+  (let [(items (match v ((ck/asnList xs) xs) (_ (list))))
         (p (subProps (ck/asnList (listDrop items 2))))]
     (ck/UsageRow :name (optionOr (textOf (listGet items 1)) "") :requests (optIntOf (propIn p "requests")) :okCount (optIntOf (propIn p "ok"))
                  :errors (map errPair (itemsOf (propIn p "errors"))) :fallbacks (optIntOf (propIn p "fallbacks"))
@@ -169,7 +169,7 @@ fn stateOf c: Case -> ck/CockpitState
                      :now (if (= c.kind ":html") (floatOf (prop c "now")) 0.0)))
 
 fn envOf! c: Case root: String platform: String -> (Result ck/CockpitEnv String)
-  (mt (lt/zoneLoad! (textOf (prop c "tz")))
+  (match (lt/zoneLoad! (textOf (prop c "tz")))
     ((err e) (err e))
     ((ok zone)
       (let [(html (= c.kind ":html"))
@@ -177,7 +177,7 @@ fn envOf! c: Case root: String platform: String -> (Result ck/CockpitEnv String)
             (cal (textOf (prop c "calEnv")))]
         (ok (ck/CockpitEnv :rootEnv (if (or html (= (atomOf (prop c "rootEnv")) "true")) (some root) (none))
                            :cwd (if (stringEmpty? rel) root (str root "/" rel))
-                           :calibrationEnv (mt cal ((some s) (some (if (stringEmpty? s) "" (str root "/" s)))) ((none) (none)))
+                           :calibrationEnv (match cal ((some s) (some (if (stringEmpty? s) "" (str root "/" s)))) ((none) (none)))
                            :zone zone :platform platform)))))
 
 fn firstDiff a: String b: String i: Int64 -> Int64
@@ -202,11 +202,11 @@ fn checkHtml! c: Case root: String env: ck/CockpitEnv -> Bool
         (ms (/ (- (monotonicNs) t0) 1000000))]
     (do
       (when (stringStartsWith? c.id "large") (check! (< ms 5000) (str c.id ": rendered in " (stringFromInt64 ms) " ms, bound 5000")))
-      (mt (textOf (prop c "want"))
+      (match (textOf (prop c "want"))
         ((some want)
-          (mt got
+          (match got
             ((ok html)
-              (mt (textOf (prop c "portErrTile"))
+              (match (textOf (prop c "portErrTile"))
                 ((none) (check! (report! c.id (unroot html root) want) (str c.id ": HTML byte-identical to the original")))
                 ((some title)
                   (let [(got (unroot html root))
@@ -220,22 +220,22 @@ fn checkHtml! c: Case root: String env: ck/CockpitEnv -> Bool
 
 fn tileOf page: String title: String -> String
   (let [(open (str "<section class=\"tile\"><h2>" title))]
-    (mt (stringIndexOf page open)
+    (match (stringIndexOf page open)
       ((none) "")
       ((some i)
         (let [(rest (optionOr (stringSlice page i (stringLength page)) ""))]
-          (mt (stringIndexOf rest "</section>")
+          (match (stringIndexOf rest "</section>")
             ((none) "")
             ((some k) (optionOr (stringSlice rest 0 (+ k 10)) "")))))))
 
 fn normJson text: String -> String
-  (mt (j/jsonParse text) ((ok v) (j/jsonEmit v)) ((err e) (str "unparseable fixture json: " e)))
+  (match (j/jsonParse text) ((ok v) (j/jsonEmit v)) ((err e) (str "unparseable fixture json: " e)))
 
 fn dataResult! c: Case env: ck/CockpitEnv cache: ck/IntelCache now: Float64 -> (Pair ck/IntelCache (Result j/Json String))
   (let [(k c.kind) (st (statusOf c))]
     (cond
-      ((= k ":tasks") (pair cache (mt (ck/getTasksData! env) ((ok t) (ok (ck/tasksJson t))) ((err e) (err e)))))
-      ((= k ":mem") (pair cache (mt (ck/getMemData! env) ((ok m) (ok (ck/memJson m))) ((err e) (err e)))))
+      ((= k ":tasks") (pair cache (match (ck/getTasksData! env) ((ok t) (ok (ck/tasksJson t))) ((err e) (err e)))))
+      ((= k ":mem") (pair cache (match (ck/getMemData! env) ((ok m) (ok (ck/memJson m))) ((err e) (err e)))))
       ((= k ":daemons") (pair cache (ok (ck/getDaemonsData st.pid (intOf (prop c "port")) st))))
       ((= k ":intel") (let [(r (ck/getIntelCouplingData! cache now env))] (pair (pairFirst r) (ok (pairSecond r)))))
       ((= k ":vitality") (let [(r (ck/getVitalityData! cache now env))] (pair (pairFirst r) (ok (pairSecond r)))))
@@ -248,9 +248,9 @@ fn checkRecordedCalls! c: Case root: String env: ck/CockpitEnv cache: ck/IntelCa
           (step (dataResult! c env cache now))
           (want (subPropsAfterHead (ck/asnList (cons (ck/asnAtom ":r") (listItems (preludeHead results))))))
           (label (str c.id " call " (stringFromInt64 i)))
-          (ok1 (mt (textOf (propIn want "json"))
+          (ok1 (match (textOf (propIn want "json"))
                  ((some w)
-                   (mt (pairSecond step)
+                   (match (pairSecond step)
                      ((ok v) (check! (and (none? (prop c "portErr")) (report! label (unroot (j/jsonEmit v) root) (normJson w)))
                                      (str label ": data equal to the original, and no data where the original swallowed an OS error")))
                      ((err e) (check! (and (some? (prop c "portErr")) (not (stringEmpty? e)))
@@ -259,26 +259,26 @@ fn checkRecordedCalls! c: Case root: String env: ck/CockpitEnv cache: ck/IntelCa
       (and ok1 (checkRecordedCalls! c root env (pairFirst step) (preludeTail calls) (preludeTail results) (+ i 1)))))
 
 fn listItems v: ck/AsnVal -> (List ck/AsnVal)
-  (mt v ((ck/asnList items) items) (_ (list)))
+  (match v ((ck/asnList items) items) (_ (list)))
 
 fn stubDir c: Case root: String -> String
   (let [(stubs (filter (fn [(e ck/AsnVal)] -> Bool (stringEndsWith? (entryPath root e) "/asl")) (itemsOf (prop c "tree"))))]
     (if (listEmpty? stubs) (str root "/bin") (parentOf (entryPath root (preludeHead stubs)))))
 
 fn checkLog! c: Case root: String -> Bool
-  (mt (textOf (prop c "log"))
+  (match (textOf (prop c "log"))
     ((none) true)
     ((some want)
-      (let [(got (mt (fileReadString (str (stubDir c root) "/calls.log")) ((ok t) t) ((err _) "")))]
+      (let [(got (match (fileReadString (str (stubDir c root) "/calls.log")) ((ok t) t) ((err _) "")))]
         (check! (report! (str c.id " argv log") (unroot got root) want) (str c.id ": asl intel invoked with the same argv and count")))))
 
 fn runCase! base: String platform: String c: Case -> Bool
   (let [(root (str base "/" c.id))
         (tree (itemsOf (prop c "tree")))]
-    (mt (materialize! root tree)
+    (match (materialize! root tree)
       ((err e) (check! (stringEmpty? e) (str c.id ": fixture tree not built: " e)))
       ((ok _)
-        (let [(verdict (mt (envOf! c root platform)
+        (let [(verdict (match (envOf! c root platform)
                          ((err e) (check! (stringEmpty? e) (str c.id ": zone: " e)))
                          ((ok env)
                            (if (= c.kind ":html")
@@ -286,7 +286,7 @@ fn runCase! base: String platform: String c: Case -> Bool
                              (and (checkRecordedCalls! c root env (ck/emptyIntelCache) (itemsOf (prop c "calls")) (itemsOf (prop c "results")) 0)
                                   (checkLog! c root))))))
               (cleaned (teardown! root tree))]
-          (do (check! (ok? cleaned) (str c.id ": teardown " (mt cleaned ((ok _) "ok") ((err e) e))))
+          (do (check! (ok? cleaned) (str c.id ": teardown " (match cleaned ((ok _) "ok") ((err e) e))))
               verdict)))))
 
 fn runAll! base: String platform: String cases: (List Case) passed: Int64 -> Int64
@@ -295,17 +295,17 @@ fn runAll! base: String platform: String cases: (List Case) passed: Int64 -> Int
     (runAll! base platform (preludeTail cases) (if (runCase! base platform (preludeHead cases)) (+ passed 1) passed)))
 
 fn testReplay! -> Bool
-  (mt (loadCases!)
+  (match (loadCases!)
     ((err e) (check! (stringEmpty? e) (str "fixture: " e)))
     ((ok cases)
-      (mt (platformInfo)
+      (match (platformInfo)
         ((err e) (check! (stringEmpty? e) (str "platformInfo: " e)))
         ((ok info)
           (let [(base0 (str "/tmp/aslCockpitParity-" (stringFromInt64 (procSelf))))]
-            (mt (dirCreate base0)
+            (match (dirCreate base0)
               ((err e) (check! (stringEmpty? e) (str "temp dir: " e)))
               ((ok _)
-                (mt (realPath base0)
+                (match (realPath base0)
                   ((err e) (check! (stringEmpty? e) (str "temp dir: " e)))
                   ((ok base)
                     (let [(passed (runAll! base info.os cases 0))
@@ -326,7 +326,7 @@ fn intelCaseThroughAsl! c: Case -> Bool
            (str c.id ": intel runs as bin/asl " want " with no asl-intel stub; log " log)))
 
 fn testFixtureIntelThroughAsl! -> Bool
-  (mt (loadCases!)
+  (match (loadCases!)
     ((err e) (check! (stringEmpty? e) (str "fixture: " e)))
     ((ok cases)
       (let [(intelCases (filter (fn [(c Case)] -> Bool (listContains? (list ":intel" ":vitality" ":stubs") c.kind)) cases))
@@ -337,7 +337,7 @@ fn testFixtureIntelThroughAsl! -> Bool
              (listAll? intelCaseThroughAsl! intelCases)))))
 
 fn testFixtureCoversEveryKind! -> Bool
-  (mt (loadCases!)
+  (match (loadCases!)
     ((err e) (check! (stringEmpty? e) (str "fixture: " e)))
     ((ok cases)
       (let [(kinds (map (fn [(c Case)] -> String c.kind) cases))]
@@ -345,7 +345,7 @@ fn testFixtureCoversEveryKind! -> Bool
                 "fixture exercises every ported entry point"))))
 
 fn asnRejected text: String -> Bool
-  (mt (ck/asnReadText text) ((err _) true) ((ok _) false))
+  (match (ck/asnReadText text) ((err _) true) ((ok _) false))
 
 fn testUnicodeSurrogateRejected -> Bool
   (asnRejected "\"\\uD800\"")

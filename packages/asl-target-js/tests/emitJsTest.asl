@@ -27,7 +27,7 @@ fn runner -> String
     "\n")
 
 fn errCode text: String -> String
-  (mt (stringIndexOf text "ERR_")
+  (match (stringIndexOf text "ERR_")
     ((none) "")
     ((some at) (let [(rest (optionOr (stringSlice text at (stringLength text)) ""))] (optionOr (listHead (stringSplit (optionOr (listHead (stringSplit rest ":")) "") " ")) ""))))
 
@@ -39,10 +39,10 @@ fn ! sameAsHost! name: String -> Bool
         (out (str work "/" name ".mjs"))
         (compiled (js/compileEntry! (fixture name)))]
     (do
-      (assert (ok? compiled) (str name " compiles to js: " (mt compiled ((ok _) "ok") ((err ds) (js/diagText ds)))))
+      (assert (ok? compiled) (str name " compiles to js: " (match compiled ((ok _) "ok") ((err ds) (js/diagText ds)))))
       (sh! "." (list "/bin/sh" "-c" (str "mkdir -p " work)) 15 8)
       (assert (ok? (fileWrite (str work "/run.mjs") (runner))) "writes the node runner")
-      (assert (ok? (fileWrite out (mt compiled ((ok t) t) ((err _) "")))) (str name " writes its module"))
+      (assert (ok? (fileWrite out (match compiled ((ok t) t) ((err _) "")))) (str name " writes its module"))
       (let [(viaJs (splitSh! "." (str (shellQuote (node!)) " " work "/run.mjs " (shellQuote out)) (str work "/" name ".js.stderr") 30 16))
             (viaHost (splitSh! "." (str "./bin/asl run " (shellQuote (fixture name))) (str work "/" name ".host.stderr") 60 32))]
         (do
@@ -60,8 +60,8 @@ fn ! suiteUnderJs! suite: String -> Bool
         (out (str work "/" suite ".mjs"))
         (compiled (js/compileEntry! path))]
     (do
-      (assert (ok? compiled) (str suite " compiles to js: " (mt compiled ((ok _) "ok") ((err ds) (js/diagText ds)))))
-      (assert (ok? (fileWrite out (mt compiled ((ok t) t) ((err _) "")))) (str suite " writes its module"))
+      (assert (ok? compiled) (str suite " compiles to js: " (match compiled ((ok _) "ok") ((err ds) (js/diagText ds)))))
+      (assert (ok? (fileWrite out (match compiled ((ok t) t) ((err _) "")))) (str suite " writes its module"))
       (let [(viaJs (splitSh! "." (str (shellQuote (node!)) " --input-type=module -e " (shellQuote (str "const m = await import('" out "'); process.stdout.write(String(m.runTests()) + ' ' + m.counts.asserts)"))) (str work "/" suite ".js.stderr") 30 16))
             (viaHost (splitSh! "." (str "./bin/asl test " (shellQuote path)) (str work "/" suite ".host.stderr") 120 32))]
         (do
@@ -74,5 +74,5 @@ fn ! runTests -> Bool
     (assert (listAll? sameAsHost! ["hello" "arithmetic" "string" "list" "map" "gcLoop" "trap" "overflow" "shapes" "text" "deep" "printArgs"]) "every fixture runs the same under node as on the host")
     (assert (listAll? suiteUnderJs! ["htmlTest" "cssTest" "markdownTest"]) "asl-html's suites pass compiled to js")
     (let [(absent (js/compileEntry! (fixture "needsFile")))]
-      (assert (mt absent ((ok _) false) ((err ds) (listAny? (fn [(d ty/IrDiag)] -> Bool (= d.code "ERR_CAPABILITY_ABSENT")) ds))) "a program that reads a file does not compile to js: ERR_CAPABILITY_ABSENT"))
+      (assert (match absent ((ok _) false) ((err ds) (listAny? (fn [(d ty/IrDiag)] -> Bool (= d.code "ERR_CAPABILITY_ABSENT")) ds))) "a program that reads a file does not compile to js: ERR_CAPABILITY_ABSENT"))
     true)

@@ -36,7 +36,7 @@ fn testWorkStealingEpoch -> Bool
     (assert matchCanSteal "Matching epoch allows claim stealing")
     (assert (some? matchClaimOpt) "Matching claim returns some")
     (refute (none? matchClaimOpt) "Refutation: Matching claim cannot return none")
-    (mt matchClaimOpt ((some claimPair) (let [(sRes (pairFirst claimPair))
+    (match matchClaimOpt ((some claimPair) (let [(sRes (pairFirst claimPair))
           (newClaim (pairSecond claimPair))]
       (assert sRes.success "Steal result is success")
       (assert (= newClaim.claimEpoch 2) "New claim has incremented epoch 2")

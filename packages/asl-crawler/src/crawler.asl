@@ -104,7 +104,7 @@ fn crawlDistilledAsn result: CrawlResult -> Str
     (crawlAsn result))
 
 fn stripBetweenMarkers s: Str startTag: Str endTag: Str -> Str
-  (if (and (stringContains? s startTag) (stringContains? s endTag)) (mt (stringIndexOf s startTag) ((some sIdx) (let [(remainder (optionOr (stringSlice s sIdx (stringLength s)) ""))] (mt (stringIndexOf remainder endTag) ((some relEIdx) (let [(eIdx (+ sIdx relEIdx)) (endPos (+ eIdx (stringLength endTag))) (prefix (optionOr (stringSlice s 0 sIdx) "")) (suffix (optionOr (stringSlice s endPos (stringLength s)) ""))] (str prefix suffix))) ((none) s)))) ((none) s)) s)
+  (if (and (stringContains? s startTag) (stringContains? s endTag)) (match (stringIndexOf s startTag) ((some sIdx) (let [(remainder (optionOr (stringSlice s sIdx (stringLength s)) ""))] (match (stringIndexOf remainder endTag) ((some relEIdx) (let [(eIdx (+ sIdx relEIdx)) (endPos (+ eIdx (stringLength endTag))) (prefix (optionOr (stringSlice s 0 sIdx) "")) (suffix (optionOr (stringSlice s endPos (stringLength s)) ""))] (str prefix suffix))) ((none) s)))) ((none) s)) s)
 
 fn stripCacheDecorations html: Str -> Str
   (let [(s1 (stripBetweenMarkers html "<!-- BEGIN WAYBACK TOOLBAR INSERT -->" "<!-- END WAYBACK TOOLBAR INSERT -->")) (s2 (stripBetweenMarkers s1 "<div id=\"wm-ipp-base\"" "</div>"))] (stringTrim s2))
@@ -123,7 +123,7 @@ fn crawlWithFallback url: Str primaryResult: CrawlResult fallbackHtml: Str -> Cr
   (:c modeAuto [] "Adaptive sovereign cascade"))
 
 fn modeToString mode: CrawlMode -> Str
-  (mt mode
+  (match mode
     ((modeExtension) "extension")
     ((modePatchright) "patchright")
     ((modeStaticHttp) "staticHttp")
@@ -133,14 +133,14 @@ fn modeToString mode: CrawlMode -> Str
 fn stringToMode s: Str -> CrawlMode
   (let [(clean (stringLower (stringTrim s)))]
     (cond
-      ((or (== clean "extension") (== clean ":extension")) (modeExtension))
-      ((or (== clean "patchright") (== clean ":patchright") (== clean "cdp")) (modePatchright))
-      ((or (== clean "statichttp") (== clean "static") (== clean ":statichttp")) (modeStaticHttp))
-      ((or (== clean "cloudproxy") (== clean "cloud") (== clean "jina")) (modeCloudProxy))
+      ((or (= clean "extension") (= clean ":extension")) (modeExtension))
+      ((or (= clean "patchright") (= clean ":patchright") (= clean "cdp")) (modePatchright))
+      ((or (= clean "statichttp") (= clean "static") (= clean ":statichttp")) (modeStaticHttp))
+      ((or (= clean "cloudproxy") (= clean "cloud") (= clean "jina")) (modeCloudProxy))
       (else (modeAuto))))
 
 fn crawlWithMode url: Str mode: CrawlMode -> CrawlJob
-  (let [(prof (mt mode
+  (let [(prof (match mode
                 ((modeExtension) (st/chromeProfile))
                 ((modePatchright) (st/chromeProfile))
                 ((modeStaticHttp) (st/googlebotProfile))
@@ -176,13 +176,13 @@ fn formatFailedSnapshot url: Str errorMsg: Str errors: (List Str) -> Str
          "  :error \"" (esc/escapeAsnStr errorMsg) "\")\n"))
 
 fn ! runArgv! argv: (List Str) -> (Result proc/PoolResult Str)
-  (mt (proc/runPool! (list argv) 1)
+  (match (proc/runPool! (list argv) 1)
     ((err e) (err (str "process failed: " e)))
     ((ok rows)
-      (mt (listHead rows)
+      (match (listHead rows)
         ((none) (err "process returned no result"))
         ((some result)
-          (mt result.spawnError
+          (match result.spawnError
             ((some e)
               (let [(bin (optionOr (listHead argv) ""))]
                 (err (if (= e "notFound") (str "sh: " bin ": command not found")
@@ -192,11 +192,11 @@ fn ! runArgv! argv: (List Str) -> (Result proc/PoolResult Str)
 
 fn findStealthBrowser! -> (Option Str)
   (let [(envChrome (envGet "CHROME_BIN"))]
-    (mt envChrome
+    (match envChrome
       ((some b) (if (fileExists? b) (some b) (none)))
       ((none)
         (let [(aslChrome (envGet "ASL_CHROME"))]
-          (mt aslChrome
+          (match aslChrome
             ((some b) (if (fileExists? b) (some b) (none)))
             ((none)
               (let [(candidates (list "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
@@ -208,10 +208,10 @@ fn findStealthBrowser! -> (Option Str)
                                       "/usr/bin/chromium"
                                       "/usr/bin/brave-browser"))
                     (existing (filter fileExists? candidates))]
-                (mt (listHead existing)
+                (match (listHead existing)
                   ((some c) (some c))
                   ((none)
-                    (mt (runArgv! (list "which" "google-chrome" "chromium" "chrome"))
+                    (match (runArgv! (list "which" "google-chrome" "chromium" "chrome"))
                       ((err _) (none))
                       ((ok whichRes)
                         (if (= whichRes.exitCode 0)
@@ -225,12 +225,12 @@ fn browserFailureText exitCode: I64 stderr: Str -> Str
 fn fetchStealthBrowser! url: Str timeoutSec: I64 -> (Result Str Str)
   (if (not (isValidCrawlUrl? url))
     (err "Invalid URL: must start with http:// or https://, avoid shell metacharacters, and not point to private/loopback address")
-    (mt (findStealthBrowser!)
+    (match (findStealthBrowser!)
     ((none) (err "No local stealth browser binary found on system"))
     ((some browserBin)
       (let [(budget (stringFromInt64 (* timeoutSec 1000)))
             (argv (list browserBin "--headless=new" "--disable-blink-features=AutomationControlled" "--disable-infobars" "--no-first-run" "--no-default-browser-check" "--autoplay-policy=no-user-gesture-required" (str "--virtual-time-budget=" budget) "--window-size=1920,1080" "--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36" "--dump-dom" url))]
-        (mt (runArgv! argv)
+        (match (runArgv! argv)
           ((err e) (err (browserFailureText (if (stringContains? e "Permission denied") 126 127) e)))
           ((ok res)
             (if (= res.exitCode 0)
@@ -248,8 +248,8 @@ fn fetchCurl! url: Str timeoutSec: I64 -> (Result Str Str)
           (cmd (procCore/withStdin
                  (procCore/withTimeout (procCore/cmd "curl" args) (* (+ timeoutSec 5) 1000))
                  config))]
-      (mt (procCore/exec! cmd)
-        ((err e) (err (mt e
+      (match (procCore/exec! cmd)
+        ((err e) (err (match e
           ((procCore/notFound bin) (str "sh: " bin ": command not found"))
           ((procCore/permissionDenied path) (str "sh: " path ": Permission denied"))
           ((procCore/timeout _) "curl timeout")
@@ -279,7 +279,7 @@ fn gatewayDispatch! payload: Str target: Str browser: Str -> (Result Str Str)
         (argv (list "curl" "-sSf" "--max-time" "15" "-X" "POST"
                     "-H" "Content-Type: application/asn+sexpr"
                     "--data-binary" payload "--" url))]
-    (mt (runArgv! argv)
+    (match (runArgv! argv)
       ((err e) (err e))
       ((ok response)
         (if (= response.exitCode 0)
@@ -296,12 +296,12 @@ fn gatewayFailureReceipt! error: Str -> Int64
     1)
 
 fn dispatchGateway! payload: Str target: Str browser: Str -> Int64
-  (mt (gatewayDispatch! payload target browser)
+  (match (gatewayDispatch! payload target browser)
     ((err e) (gatewayFailureReceipt! e))
     ((ok receipt) (do (print receipt) (if (stringContains? receipt ":status :failed") 1 0))))
 
 fn ! runCrawlPatchright! url: Str distill: Str -> Int64
-  (mt (fetchStealthBrowser! url 20)
+  (match (fetchStealthBrowser! url 20)
     ((ok html)
       (do
         (cond
@@ -326,7 +326,7 @@ fn runCrawl! url: Str mode: Str distill: Str inject: Bool target: Str browser: S
   (let [(effMode (if (= mode "auto")
                    (if (browserGatewayActive?)
                      "extension"
-                     (mt (findStealthBrowser!)
+                     (match (findStealthBrowser!)
                        ((some _) "patchright")
                        ((none) "staticHttp")))
                    mode))]
@@ -338,7 +338,7 @@ fn runCrawl! url: Str mode: Str distill: Str inject: Bool target: Str browser: S
                                "\" :timeoutMs 10000)\n") url distill))
       ((= effMode "cloudProxy")
         (let [(jinaUrl (str "https://r.jina.ai/" url))]
-          (mt (fetchCurl! jinaUrl 15)
+          (match (fetchCurl! jinaUrl 15)
             ((ok html)
               (do
                 (cond
@@ -354,7 +354,7 @@ fn runCrawl! url: Str mode: Str distill: Str inject: Bool target: Str browser: S
         (runCrawlHttp! url distill (list)))))))
 
 fn runCrawlHttp! url: Str distill: Str prevErrors: (List Str) -> Int64
-  (mt (fetchCurl! url 10)
+  (match (fetchCurl! url 10)
     ((ok html)
       (do
         (cond
@@ -367,7 +367,7 @@ fn runCrawlHttp! url: Str distill: Str prevErrors: (List Str) -> Int64
     ((err e)
       (let [(errs1 (listAppend prevErrors (list (str "(:engine staticHttp :error \"" (esc/escapeAsnStr e) "\")"))))
             (jinaUrl (str "https://r.jina.ai/" url))]
-        (mt (fetchCurl! jinaUrl 10)
+        (match (fetchCurl! jinaUrl 10)
           ((ok jinaHtml)
             (do (print (distillHtmlToAsn url jinaHtml errs1)) 0))
           ((err e2)
@@ -378,22 +378,22 @@ fn ! browserGatewayActive? -> Bool
   (let [(port (optionOr (envGet "ASL_GATEWAY_PORT") "8765"))
         (statusUrl (str "http://127.0.0.1:" port "/api/asl/browser/status"))
         (argv (list "curl" "-sS" "--max-time" "1" "--" statusUrl))]
-    (mt (runArgv! argv)
+    (match (runArgv! argv)
       ((err _) false)
       ((ok response) (and (= response.exitCode 0) (stringContains? response.stdout "extension-primary")))))
 
 fn ! dispatchExtensionCrawl! payload: Str url: Str distill: Str -> Int64
-  (mt (gatewayDispatch! payload "" "")
+  (match (gatewayDispatch! payload "" "")
     ((err _) (runCrawlFallback! url distill))
     ((ok receipt) (if (stringContains? receipt ":snapshot") (do (print receipt) 0) (runCrawlFallback! url distill))))
 
 fn ! runCrawlFallback! url: Str distill: Str -> Int64
-  (mt (findStealthBrowser!)
+  (match (findStealthBrowser!)
     ((some _) (runCrawlPatchright! url distill))
     ((none) (runCrawlHttp! url distill (list))))
 
 fn extractAfter s: Str mark: Str -> (Option Str)
-  (mt (stringIndexOf s mark)
+  (match (stringIndexOf s mark)
     ((none) (none))
     ((some i) (stringSlice s (+ i (stringLength mark)) (stringLength s))))
 
@@ -406,7 +406,7 @@ fn sliceUntilAny s: Str delims: (List Str) -> Str
         (optionOr (stringSlice s 0 minIdx) s))))
 
 fn jsonScalarText value: j/Json -> Str
-  (mt value
+  (match value
     ((j/jstr s) s)
     ((j/jint n) (stringFromInt64 n))
     ((j/jfloat n) (stringFromFloat64 n))
@@ -414,7 +414,7 @@ fn jsonScalarText value: j/Json -> Str
     (_ ""))
 
 fn jsonFieldText obj: j/Json key: Str -> Str
-  (mt (j/jsonGet obj key)
+  (match (j/jsonGet obj key)
     ((some value) (jsonScalarText value))
     (_ ""))
 
@@ -422,11 +422,11 @@ fn extractTikTokMetadata! url: Str html: Str -> (Result Str Str)
   (let [(script (optionOr (extractAfter html "<script id=\"SIGI_STATE\"") ""))
         (jsonTail (optionOr (extractAfter script ">") ""))
         (jsonText (sliceUntilAny jsonTail (list "</script>")))
-        (vid (mt (extractAfter url "/video/")
+        (vid (match (extractAfter url "/video/")
               ((some rest) (sliceUntilAny rest (list "?" "/" "&" "#")))
               (_ "")))
         (parsed (j/jsonParse jsonText))]
-    (mt parsed
+    (match parsed
       ((err e) (err (str "TikTok SIGI_STATE metadata could not be parsed: " e)))
       ((ok root)
         (let [(module (optionOr (j/jsonGet root "ItemModule") (j/jnull)))
@@ -458,10 +458,10 @@ fn runTikTokWatch! url: Str watch: I64 -> Int64
 
 fn runTiktok! url: Str extract: Bool watch: I64 -> Int64
   (if extract
-    (mt (fetchCurl! url 20)
+    (match (fetchCurl! url 20)
       ((err e) (do (eprintln (str "TikTok extraction failed: " e)) 1))
       ((ok html)
-        (mt (extractTikTokMetadata! url html)
+        (match (extractTikTokMetadata! url html)
           ((err e) (do (eprintln (str "TikTok extraction failed: " e)) 1))
           ((ok receipt) (do (println receipt) 0)))))
     (runTikTokWatch! url watch))
@@ -469,7 +469,7 @@ fn runTiktok! url: Str extract: Bool watch: I64 -> Int64
 fn runAutomate! scriptFile: Str -> Int64
   (if (not (fileExists? scriptFile))
     (do (println "(:automationReceipt :status :failed :error \"script file does not exist\")") 1)
-    (mt (fileReadString scriptFile)
+    (match (fileReadString scriptFile)
       ((err e) (do (println (str "(:automationReceipt :status :failed :error \"" (esc/escapeAsnStr e) "\")")) 1))
       ((ok content) (dispatchGateway! content "" ""))))
 
@@ -483,12 +483,12 @@ fn exportAgentSlang! exportFile: Str script: Str -> Int64
   (let [(separator (lastPathSeparator exportFile 0 -1))
         (parent (if (< separator 0) "" (optionOr (stringSlice exportFile 0 separator) "")))]
     (if (stringEmpty? parent)
-      (mt (fileWrite exportFile script)
+      (match (fileWrite exportFile script)
         ((ok _) (do (println (str "(:agentBundle :exported \"" (esc/escapeAsnStr exportFile) "\" :bytes " (stringFromInt64 (stringLength script)) " :status :ok)")) 0))
         ((err e) (do (eprintln (str "Export failed: " e)) 1)))
-      (mt (dirCreate parent)
+      (match (dirCreate parent)
         ((err e) (do (eprintln (str "Export failed: " e)) 1))
-        ((ok _) (mt (fileWrite exportFile script)
+        ((ok _) (match (fileWrite exportFile script)
           ((ok _) (do (println (str "(:agentBundle :exported \"" (esc/escapeAsnStr exportFile) "\" :bytes " (stringFromInt64 (stringLength script)) " :status :ok)")) 0))
           ((err e) (do (eprintln (str "Export failed: " e)) 1)))))))
 
@@ -532,7 +532,7 @@ fn cmdSession! service: Str -> Int64
         1))
 
 fn parseCrawlArgs! rest: (List Str) url: Str mode: Str distill: Str inject: Bool target: Str browser: Str -> Int64
-  (mt (listHead rest)
+  (match (listHead rest)
     ((none)
       (if (stringEmpty? url)
         (do (eprintln "Error: url is required for crawl") 2)
@@ -569,7 +569,7 @@ fn parseCrawlArgs! rest: (List Str) url: Str mode: Str distill: Str inject: Bool
             (parseCrawlArgs! tail (if (stringEmpty? url) arg url) mode distill inject target browser))))))
 
 fn parseTiktokArgs! rest: (List Str) url: Str extract: Bool watch: I64 -> Int64
-  (mt (listHead rest)
+  (match (listHead rest)
     ((none)
       (if (stringEmpty? url)
         (do (eprintln "Error: url is required for tiktok") 2)
@@ -591,7 +591,7 @@ fn parseTiktokArgs! rest: (List Str) url: Str extract: Bool watch: I64 -> Int64
             (parseTiktokArgs! tail (if (stringEmpty? url) arg url) extract watch))))))
 
 fn parseAgentArgs! rest: (List Str) status: Bool exportFile: Str maxNodes: I64 stealth: Bool kinetics: Bool -> Int64
-  (mt (listHead rest)
+  (match (listHead rest)
     ((none)
       (runAgent! status exportFile maxNodes stealth kinetics))
     ((some arg)
@@ -608,7 +608,7 @@ fn parseAgentArgs! rest: (List Str) status: Bool exportFile: Str maxNodes: I64 s
               (do (eprintln "Missing value for --max-nodes") 2)
               (let [(raw (optionOr (listHead tail) "100"))
                     (parsed (stringToInt64 raw))]
-                (mt parsed
+                (match parsed
                   ((none) (do (eprintln (str "Invalid --max-nodes value: " raw)) 2))
                   ((some value)
                     (if (> value 0)

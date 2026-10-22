@@ -3,10 +3,10 @@
   :i [(asl-forms/check :a chk)])
 
 fn checkFileClean! path: String -> Bool
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e) (do (assert false (str "read error for " path ": " e)) false))
     ((ok content)
-     (mt (chk/checkSemantic! path content)
+     (match (chk/checkSemantic! path content)
        ((ok items) (listEmpty? items))
        ((err e) (do (assert false (str "semantic check error for " path ": " e)) false)))))
 
@@ -182,7 +182,7 @@ fn testWorkingDirectoryIndependence! -> Bool
         (res (chk/runNativeCheck! deepPath content))]
     (do
       (assert (not (stringEmpty? deepPath)) "canonical deepPath is non-empty")
-      (assert (ok? res) (str "the native checker accepts an absolute path: " (mt res ((err e) e) ((ok _) ""))))
+      (assert (ok? res) (str "the native checker accepts an absolute path: " (match res ((err e) e) ((ok _) ""))))
       (assert (listEmpty? (resultOr res (list (chk/makeLeftItem 0 0 "" "" "")))) "the absolute-path check of a clean module yields no items")
       (assert (not (fileExists? "asl/packages/asl-forms/tests/_chk_tmp.asl")) "no fixed temp file in tests directory")
       true))
@@ -190,7 +190,7 @@ fn testWorkingDirectoryIndependence! -> Bool
 fn testNativeCheckFailureReporting! -> Bool
   (let [(missing "asl/packages/asl-forms/tests/noSuchModuleForCheck.asl")
         (res (chk/runNativeCheck! missing "(module a)"))
-        (errStr (mt res ((err e) e) ((ok _) "")))]
+        (errStr (match res ((err e) e) ((ok _) "")))]
     (do
       (assert (err? res) "an unreadable target returns an err result, not an empty item list")
       (assert (stringStartsWith? errStr "native check could not read ") (str "the err names the native check: " errStr))
@@ -240,7 +240,7 @@ fn testCleanCorpusFiles! -> Bool
     true)
 
 fn lineOfSubstring text: String needle: String -> Int64
-  (mt (stringIndexOf text needle)
+  (match (stringIndexOf text needle)
     ((none) -1)
     ((some idx) (+ 1 (stringCountChar (optionOr (stringSlice text 0 idx) "") "\n"))))
 

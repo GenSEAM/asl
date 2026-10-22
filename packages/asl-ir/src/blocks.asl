@@ -31,7 +31,7 @@ fn soleParam b: ty/SsaBlock -> String
 fn forwards? known: (List String) b: ty/SsaBlock -> Bool
   (and (= (listLength b.params) 1)
     (and (listEmpty? b.instrs)
-      (mt b.term
+      (match b.term
         ((ty/termReturn x) (= x (soleParam b)))
         ((ty/termJump e) (and (listContains? known e.target) (= e.args [(soleParam b)])))
         (_ false))))
@@ -55,12 +55,12 @@ fn locals fn0: ty/SsaFunction -> (List String)
         [] fn0.blocks)
 
 fn tailCall ctx: BlockCtx b: ty/SsaBlock -> (Option (List String))
-  (mt (listLast b.instrs)
+  (match (listLast b.instrs)
     ((none) (none))
     ((some last)
-      (mt last.op
+      (match last.op
         ((ty/opCall callee xs)
-          (let [(returnsIt (mt b.term
+          (let [(returnsIt (match b.term
                              ((ty/termReturn x) (= x last.dest))
                              ((ty/termJump e) (and (listContains? ctx.returners e.target) (= e.args [last.dest])))
                              (_ false)))]
@@ -68,8 +68,8 @@ fn tailCall ctx: BlockCtx b: ty/SsaBlock -> (Option (List String))
         (_ (none)))))
 
 fn collect results: (List (Result String String)) -> (Result (List String) (List String))
-  (let [(bad (fold (fn [(acc (List String)) (r (Result String String))] -> (List String) (mt r ((err e) (cons e acc)) ((ok _) acc))) [] results))]
-    (if (listEmpty? bad) (ok (map (fn [(r (Result String String))] -> String (mt r ((ok s) s) ((err _) ""))) results)) (err (listReverse bad))))
+  (let [(bad (fold (fn [(acc (List String)) (r (Result String String))] -> (List String) (match r ((err e) (cons e acc)) ((ok _) acc))) [] results))]
+    (if (listEmpty? bad) (ok (map (fn [(r (Result String String))] -> String (match r ((ok s) s) ((err _) ""))) results)) (err (listReverse bad))))
 
 fn exportName moduleName: String fnName: String -> (Option String)
   (let [(prefix (str moduleName "."))]

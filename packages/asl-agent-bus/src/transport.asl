@@ -24,7 +24,7 @@ fn sessionSetState session: TransportSession newState: TransportState -> Transpo
   (with session :state newState)
 
 fn isSessionActive? session: TransportSession -> Bool
-  (mt session.state ((transportConnected) true) ((transportIdle) false) ((transportConnecting) false) ((transportClosing) false) ((transportClosed) false))
+  (match session.state ((transportConnected) true) ((transportIdle) false) ((transportConnecting) false) ((transportClosing) false) ((transportClosed) false))
 
 fn formatFrameHeader env: TransportEnvelope -> Str
   (str "FRAME:" env.id ":" (stringFromInt64 env.seq) ":" env.sender "->" env.target)
@@ -33,7 +33,7 @@ fn validateTransportEnvelope env: TransportEnvelope -> Bool
   (and (not (stringEmpty? env.id)) (and (not (stringEmpty? env.sender)) (and (not (stringEmpty? env.target)) (>= env.seq 0))))
 
 fn serializeFrameType t: TransportFrameType -> Str
-  (mt t ((frameHandshake) "HND") ((frameHeartbeat) "HRT") ((frameRpcReq) "REQ") ((frameRpcRes) "RES") ((frameStreamChunk) "CHK") ((frameClose) "CLS"))
+  (match t ((frameHandshake) "HND") ((frameHeartbeat) "HRT") ((frameRpcReq) "REQ") ((frameRpcRes) "RES") ((frameStreamChunk) "CHK") ((frameClose) "CLS"))
 
 fn parseFrameType s: Str -> TransportFrameType
   (cond ((= s "HND") (frameHandshake)) ((= s "HRT") (frameHeartbeat)) ((= s "RES") (frameRpcRes)) ((= s "CHK") (frameStreamChunk)) ((= s "CLS") (frameClose)) (else (frameRpcReq)))

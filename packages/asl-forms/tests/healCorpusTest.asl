@@ -13,7 +13,7 @@ fn healFloor -> Int64
   130
 
 fn caseOf piece: String -> (Pair String String)
-  (mt (stringIndexOf piece "\n")
+  (match (stringIndexOf piece "\n")
     ((none) (pair piece ""))
     ((some i)
       (let [(body (optionOr (stringSlice piece (+ i 1) (stringLength piece)) ""))
@@ -21,7 +21,7 @@ fn caseOf piece: String -> (Pair String String)
         (pair (optionOr (stringSlice piece 0 i) "") (if (stringEndsWith? body "\n") (optionOr (stringSlice body 0 (- n 1)) body) body)))))
 
 fn ! corpusCases name: String -> (List (Pair String String))
-  (mt (fileReadString (str (fixtureDir) "/" name))
+  (match (fileReadString (str (fixtureDir) "/" name))
     ((err e) (list))
     ((ok text) (map caseOf (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (stringSplit text ";;; case ")))))
 

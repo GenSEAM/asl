@@ -3,10 +3,10 @@
   :i [(asl-parser/ast :a ast)])
 
 fn verdict src: String -> String
-  (mt (ast/parse src) ((ok _) "ok") ((err e) e.msg))
+  (match (ast/parse src) ((ok _) "ok") ((err e) e.msg))
 
 fn legacy src: String -> String
-  (mt (ast/parseLegacy src) ((ok _) "ok") ((err e) e.msg))
+  (match (ast/parseLegacy src) ((ok _) "ok") ((err e) e.msg))
 
 fn head -> String
   "(module probe :x [f])\n\n"

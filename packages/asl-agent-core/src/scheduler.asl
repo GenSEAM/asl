@@ -20,7 +20,7 @@ fn schedulerReleaseProject sched: SchedulerState proj: Str -> SchedulerState
   (with sched :activeProjects (removeStr sched.activeProjects proj))
 
 fn schedulerReleaseTask sched: SchedulerState store: ts/TaskStore taskId: Str -> SchedulerState
-  (mt (ts/taskstoreGet store taskId)
+  (match (ts/taskstoreGet store taskId)
     ((some task)
       (let [(proj task.projectPath)
             (lane task.lane)
@@ -44,16 +44,16 @@ fn taskInList? tasks: (List tt/TaskRecord) id: Str -> Bool
   (if (listEmpty? tasks) false (let [(h (optionOr (listHead tasks) (tt/taskRecordCreate "" "" "" (tt/priorityNormal) 0 ""))) (tl (optionOr (listTail tasks) (list)))] (if (= h.id id) true (taskInList? tl id))))
 
 fn drainPassIdle! tasks: (List tt/TaskRecord) acc: DrainAccumulator -> DrainAccumulator
-  (if (listEmpty? tasks) acc (let [(sched acc.sched) (store acc.store) (claimed acc.claimed) (task (optionOr (listHead tasks) (tt/taskRecordCreate "" "" "" (tt/priorityNormal) 0 ""))) (restTasks (optionOr (listTail tasks) (list))) (maxConc sched.config.maxConcurrent) (currActive (listLength sched.activeProjects)) (laneCount (getLaneCount sched.activeLanes task.lane)) (proj task.projectPath) (projBusy (listContains? sched.activeProjects proj))] (if (>= currActive maxConc) acc (if (or projBusy (> laneCount 0)) (drainPassIdle! restTasks acc) (let [(claimRes (ts/taskstoreClaim! store task.id))] (mt claimRes ((ok nextStore) (let [(nextProjects (cons proj sched.activeProjects)) (nextLanes (incLaneCount sched.activeLanes task.lane)) (nextSched (SchedulerState :config sched.config :activeProjects nextProjects :activeLanes nextLanes)) (claimedTask (tt/TaskRecord :id task.id :lane task.lane :projectPath proj :state (tt/stateRouting) :priority task.priority :createdAt task.createdAt :updatedAt task.updatedAt :payload task.payload)) (nextClaimed (listAppend claimed (list claimedTask))) (nextAcc (DrainAccumulator :sched nextSched :store nextStore :claimed nextClaimed))] (drainPassIdle! restTasks nextAcc))) ((err _) (drainPassIdle! restTasks acc))))))))
+  (if (listEmpty? tasks) acc (let [(sched acc.sched) (store acc.store) (claimed acc.claimed) (task (optionOr (listHead tasks) (tt/taskRecordCreate "" "" "" (tt/priorityNormal) 0 ""))) (restTasks (optionOr (listTail tasks) (list))) (maxConc sched.config.maxConcurrent) (currActive (listLength sched.activeProjects)) (laneCount (getLaneCount sched.activeLanes task.lane)) (proj task.projectPath) (projBusy (listContains? sched.activeProjects proj))] (if (>= currActive maxConc) acc (if (or projBusy (> laneCount 0)) (drainPassIdle! restTasks acc) (let [(claimRes (ts/taskstoreClaim! store task.id))] (match claimRes ((ok nextStore) (let [(nextProjects (cons proj sched.activeProjects)) (nextLanes (incLaneCount sched.activeLanes task.lane)) (nextSched (SchedulerState :config sched.config :activeProjects nextProjects :activeLanes nextLanes)) (claimedTask (tt/TaskRecord :id task.id :lane task.lane :projectPath proj :state (tt/stateRouting) :priority task.priority :createdAt task.createdAt :updatedAt task.updatedAt :payload task.payload)) (nextClaimed (listAppend claimed (list claimedTask))) (nextAcc (DrainAccumulator :sched nextSched :store nextStore :claimed nextClaimed))] (drainPassIdle! restTasks nextAcc))) ((err _) (drainPassIdle! restTasks acc))))))))
 
 fn drainPassBusy! tasks: (List tt/TaskRecord) acc: DrainAccumulator -> DrainAccumulator
-  (if (listEmpty? tasks) acc (let [(sched acc.sched) (store acc.store) (claimed acc.claimed) (task (optionOr (listHead tasks) (tt/taskRecordCreate "" "" "" (tt/priorityNormal) 0 ""))) (restTasks (optionOr (listTail tasks) (list))) (maxConc sched.config.maxConcurrent) (currActive (listLength sched.activeProjects)) (proj task.projectPath) (projBusy (listContains? sched.activeProjects proj)) (alreadyClaimed (taskInList? claimed task.id))] (if (>= currActive maxConc) acc (if (or projBusy alreadyClaimed) (drainPassBusy! restTasks acc) (let [(claimRes (ts/taskstoreClaim! store task.id))] (mt claimRes ((ok nextStore) (let [(nextProjects (cons proj sched.activeProjects)) (nextLanes (incLaneCount sched.activeLanes task.lane)) (nextSched (SchedulerState :config sched.config :activeProjects nextProjects :activeLanes nextLanes)) (claimedTask (tt/TaskRecord :id task.id :lane task.lane :projectPath proj :state (tt/stateRouting) :priority task.priority :createdAt task.createdAt :updatedAt task.updatedAt :payload task.payload)) (nextClaimed (listAppend claimed (list claimedTask))) (nextAcc (DrainAccumulator :sched nextSched :store nextStore :claimed nextClaimed))] (drainPassBusy! restTasks nextAcc))) ((err _) (drainPassBusy! restTasks acc))))))))
+  (if (listEmpty? tasks) acc (let [(sched acc.sched) (store acc.store) (claimed acc.claimed) (task (optionOr (listHead tasks) (tt/taskRecordCreate "" "" "" (tt/priorityNormal) 0 ""))) (restTasks (optionOr (listTail tasks) (list))) (maxConc sched.config.maxConcurrent) (currActive (listLength sched.activeProjects)) (proj task.projectPath) (projBusy (listContains? sched.activeProjects proj)) (alreadyClaimed (taskInList? claimed task.id))] (if (>= currActive maxConc) acc (if (or projBusy alreadyClaimed) (drainPassBusy! restTasks acc) (let [(claimRes (ts/taskstoreClaim! store task.id))] (match claimRes ((ok nextStore) (let [(nextProjects (cons proj sched.activeProjects)) (nextLanes (incLaneCount sched.activeLanes task.lane)) (nextSched (SchedulerState :config sched.config :activeProjects nextProjects :activeLanes nextLanes)) (claimedTask (tt/TaskRecord :id task.id :lane task.lane :projectPath proj :state (tt/stateRouting) :priority task.priority :createdAt task.createdAt :updatedAt task.updatedAt :payload task.payload)) (nextClaimed (listAppend claimed (list claimedTask))) (nextAcc (DrainAccumulator :sched nextSched :store nextStore :claimed nextClaimed))] (drainPassBusy! restTasks nextAcc))) ((err _) (drainPassBusy! restTasks acc))))))))
 
 fn schedulerDrain! sched: SchedulerState store: ts/TaskStore -> (Result DrainResult Str)
   (let [(queued (ts/taskstoreListQueued store)) (initAcc (DrainAccumulator :sched sched :store store :claimed (list))) (accIdle (drainPassIdle! queued initAcc)) (finalAcc (drainPassBusy! queued accIdle))] (ok (DrainResult :scheduler finalAcc.sched :store finalAcc.store :claimedTasks finalAcc.claimed)))
 
 fn isReapableState? state: tt/TaskState -> Bool
-  (mt state ((stateRouting) true) ((stateClarification) true) ((stateReady) true) ((stateExecuting) true) ((stateVerifying) true) (_ false))
+  (match state ((stateRouting) true) ((stateClarification) true) ((stateReady) true) ((stateExecuting) true) ((stateVerifying) true) (_ false))
 
 fn countTrailingRetries tokens: (List Str) acc: I64 -> I64
   (if (listEmpty? tokens)
@@ -115,7 +115,7 @@ fn reapTasks! tasks: (List tt/TaskRecord) sched: SchedulerState store: ts/TaskSt
           (if (>= curRetries maxRetries)
             (let [(deadState (if (sm/validTransition? task.state (tt/stateFailed)) (tt/stateFailed) (tt/stateCancelled)))
                   (transRes (ts/taskstoreTransition! store task.id deadState nowMs))]
-              (mt transRes
+              (match transRes
                 ((ok nextStore)
                   (let [(nextProjects (removeStr sched.activeProjects task.projectPath))
                         (nextLanes (decLaneCount sched.activeLanes task.lane))
@@ -124,7 +124,7 @@ fn reapTasks! tasks: (List tt/TaskRecord) sched: SchedulerState store: ts/TaskSt
                 ((err _)
                   (reapTasks! restTasks sched store nowMs reapedCount maxRetries))))
             (let [(transRes (ts/taskstoreTransition! store task.id (tt/stateQueued) nowMs))]
-              (mt transRes
+              (match transRes
                 ((ok nextStore)
                   (let [(qTask (optionOr (ts/taskstoreGet nextStore task.id) task))
                         (taggedTask (tt/TaskRecord

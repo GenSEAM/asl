@@ -105,17 +105,17 @@ fn asnStr s: String -> String
   (str "\"" (wire/asnEscape s) "\"")
 
 fn optIntAsn v: (Option Int64) -> String
-  (mt v ((some n) (stringFromInt64 n)) ((none) "absent"))
+  (match v ((some n) (stringFromInt64 n)) ((none) "absent"))
 
 fn optFloatAsn v: (Option Float64) -> String
-  (mt v ((some f) (stringFromFloat64 f)) ((none) "absent"))
+  (match v ((some f) (stringFromFloat64 f)) ((none) "absent"))
 
 fn optStrAsn v: (Option String) -> String
-  (mt v ((some s) (asnStr s)) ((none) "absent"))
+  (match v ((some s) (asnStr s)) ((none) "absent"))
 
 ; (:m a grouping key is a raw value, never ASN-quoted: statLine/statsAsn quote the whole key once when rendering a Stat, so a key built from an already-quoted string would double-quote on display)
 fn optStrGroup v: (Option String) -> String
-  (mt v ((some s) s) ((none) "absent"))
+  (match v ((some s) s) ((none) "absent"))
 
 fn boolAsn b: Bool -> String
   (if b "true" "false")
@@ -147,52 +147,52 @@ fn callRowLine row: CallRow -> String
        " :sysHash " (asnStr row.sysHash) ")\n")
 
 fn fieldInt props: (Map String rd/SExpr) key: String -> (Option Int64)
-  (mt (mapGet props key)
+  (match (mapGet props key)
     ((none) none)
-    ((some e) (mt (c/asn_scalar e) ((c/scalarInt n) (some n)) (_ none))))
+    ((some e) (match (c/asn_scalar e) ((c/scalarInt n) (some n)) (_ none))))
 
 fn fieldStr props: (Map String rd/SExpr) key: String -> (Option String)
-  (mt (mapGet props key)
+  (match (mapGet props key)
     ((none) none)
-    ((some e) (mt (c/asn_scalar e) ((c/scalarStr s) (some s)) (_ none))))
+    ((some e) (match (c/asn_scalar e) ((c/scalarStr s) (some s)) (_ none))))
 
 fn fieldOptInt props: (Map String rd/SExpr) key: String -> (Option (Option Int64))
-  (mt (mapGet props key)
+  (match (mapGet props key)
     ((none) none)
     ((some e)
-     (mt (c/asn_scalar e)
+     (match (c/asn_scalar e)
        ((c/scalarInt n) (some (some n)))
        ((c/scalarStr s) (if (= s "absent") (some none) none))
        (_ none))))
 
 fn fieldOptFloat props: (Map String rd/SExpr) key: String -> (Option (Option Float64))
-  (mt (mapGet props key)
+  (match (mapGet props key)
     ((none) none)
     ((some e)
-     (mt (c/asn_scalar e)
+     (match (c/asn_scalar e)
        ((c/scalarFloat f) (some (some f)))
        ((c/scalarInt n) (some (some (int64ToFloat64 n))))
        ((c/scalarStr s) (if (= s "absent") (some none) none))
        (_ none))))
 
 fn fieldOptStr props: (Map String rd/SExpr) key: String -> (Option (Option String))
-  (mt (mapGet props key)
+  (match (mapGet props key)
     ((none) none)
     ((some e)
-     (mt (c/asn_scalar e)
+     (match (c/asn_scalar e)
        ((c/scalarStr s) (if (= s "absent") (some none) (some (some s))))
        (_ none))))
 
 fn fieldBool props: (Map String rd/SExpr) key: String -> (Option Bool)
-  (mt (mapGet props key)
+  (match (mapGet props key)
     ((none) none)
-    ((some e) (mt (c/asn_scalar e) ((c/scalarBool b) (some b)) (_ none))))
+    ((some e) (match (c/asn_scalar e) ((c/scalarBool b) (some b)) (_ none))))
 
 fn callRowParse line: String -> (Result CallRow String)
   (let [(trimmed (stringTrim line))]
     (if (stringEmpty? trimmed)
       (err "corrupt call row: empty line")
-      (mt (c/asn_props (rd/parseSexpr trimmed) (some ":call"))
+      (match (c/asn_props (rd/parseSexpr trimmed) (some ":call"))
         ((err e) (err (str "corrupt call row: " e)))
         ((ok props)
          (let [(at (fieldInt props "at")) (profile (fieldStr props "profile")) (intent (fieldStr props "intent"))
@@ -223,20 +223,20 @@ fn callRowParse line: String -> (Result CallRow String)
                    :toolCount (optionOr toolCount 0) :promptBytes (optionOr promptBytes 0) :sysHash (optionOr sysHash "")))))))))
 
 fn ! rotateIfNeeded! path: String -> (Result Bool String)
-  (mt (fileStat path)
+  (match (fileStat path)
     ((err _) (ok false))
     ((ok st)
      (if (and st.isFile (>= st.size (maxLedgerBytes)))
-       (mt (pathRename path (str path ".1"))
+       (match (pathRename path (str path ".1"))
          ((ok _) (ok true))
          ((err e) (err (str "rotate " path ": " e))))
        (ok false))))
 
 fn ! appendCallRow! path: String row: CallRow -> (Result Bool String)
-  (mt (dirCreate (g/posixDirname path))
+  (match (dirCreate (g/posixDirname path))
     ((err e) (err (str "ledger dir " (g/posixDirname path) ": " e)))
     ((ok _)
-     (mt (rotateIfNeeded! path)
+     (match (rotateIfNeeded! path)
        ((err e) (err e))
        ((ok _) (g/appendFile! path (callRowLine row) 200)))))
 
@@ -244,21 +244,21 @@ fn nonEmptyLines text: String -> (List String)
   (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringSplit text "\n"))
 
 fn parseRowsLoop lines: (List String) acc: (List CallRow) -> (Result (List CallRow) String)
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (ok (listReverse acc)))
     ((some l)
-     (mt (callRowParse l)
+     (match (callRowParse l)
        ((err e) (err e))
        ((ok row) (parseRowsLoop (optionOr (listTail lines) (list)) (cons row acc))))))
 
 ; (:m reads only the live ledger file: a rotated .1 predecessor is not folded in, so a window wider than the time since the last rotation under-counts)
 fn ! readRows! path: String -> (Result (List CallRow) String)
-  (mt (fileStat path)
+  (match (fileStat path)
     ((err _) (ok (list)))
     ((ok st)
      (if st.isDir
        (err (str path " is a directory"))
-       (mt (fileReadString path)
+       (match (fileReadString path)
          ((err e) (err (str "read " path ": " e)))
          ((ok raw) (parseRowsLoop (nonEmptyLines raw) (list)))))))
 
@@ -338,19 +338,19 @@ fn groupRows rows: (List CallRow) keyFn: (fn [CallRow] -> String) -> (Map String
         (mapEmpty) rows)
 
 fn latenciesOf rows: (List CallRow) -> (List Int64)
-  (listSort (fold (fn [(acc (List Int64)) (r CallRow)] -> (List Int64) (mt r.ms ((some m) (cons m acc)) ((none) acc))) (list) rows))
+  (listSort (fold (fn [(acc (List Int64)) (r CallRow)] -> (List Int64) (match r.ms ((some m) (cons m acc)) ((none) acc))) (list) rows))
 
 fn genMs r: CallRow -> (Option Int64)
-  (mt r.ms
+  (match r.ms
     ((none) none)
-    ((some m) (mt r.ttftMs ((some t) (some (max 0 (- m t)))) ((none) (some m)))))
+    ((some m) (match r.ttftMs ((some t) (some (max 0 (- m t)))) ((none) (some m)))))
 
 fn hasTtft? rows: (List CallRow) -> Bool
   (listAny? (fn [(r CallRow)] -> Bool (some? r.ttftMs)) rows)
 
 fn sumGen rows: (List CallRow) -> (Pair Int64 Int64)
   (fold (fn [(acc (Pair Int64 Int64)) (r CallRow)] -> (Pair Int64 Int64)
-          (mt (genMs r)
+          (match (genMs r)
             ((none) acc)
             ((some gm) (pair (+ (pairFirst acc) r.outTokens) (+ (pairSecond acc) gm)))))
         (pair 0 0) rows)

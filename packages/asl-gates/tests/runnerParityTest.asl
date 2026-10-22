@@ -3,37 +3,37 @@
   :i [(asl-gates/runnerMain :a rm) (asl-parser/reader :a p) (tests/parity/gates/runnerCorpus :a gr)])
 
 fn atom node: p/SExpr -> String
-  (mt node ((p/sexprAtom s) s) (_ ""))
+  (match node ((p/sexprAtom s) s) (_ ""))
 
 fn items node: p/SExpr -> (List p/SExpr)
   (p/sexprToList node)
 
 fn field xs: (List p/SExpr) key: String -> (Option p/SExpr)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (none))
     ((some k)
-      (mt (listGet xs 1)
+      (match (listGet xs 1)
         ((none) (none))
         ((some v) (if (= (atom k) key) (some v) (field (optionOr (listSlice xs 2 (listLength xs)) (list)) key))))))
 
 fn stringField xs: (List p/SExpr) key: String -> String
-  (mt (field xs key) ((some v) (gr/decodeString (atom v))) ((none) ""))
+  (match (field xs key) ((some v) (gr/decodeString (atom v))) ((none) ""))
 
 fn fixtureCases! -> (List p/SExpr)
-  (let [(text (mt (fileReadString "tests/parity/audit/runner.asn") ((ok s) s) ((err e) (do (assert false (str "read runner fixture: " e)) ""))))
+  (let [(text (match (fileReadString "tests/parity/audit/runner.asn") ((ok s) s) ((err e) (do (assert false (str "read runner fixture: " e)) ""))))
         (form (p/parseSexpr text))]
-    (optionOr (mt (field (optionOr (listTail (items form)) (list)) ":cases") ((some cs) (some (items cs))) ((none) (none))) (list)))
+    (optionOr (match (field (optionOr (listTail (items form)) (list)) ":cases") ((some cs) (some (items cs))) ((none) (none))) (list)))
 
 fn fixtureArgv node: p/SExpr -> (List String)
   (map (fn [(v p/SExpr)] -> String (gr/decodeString (atom v))) (items node))
 
 fn envPairs xs: (List p/SExpr) -> (List String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (list))
     ((some k)
       (let [(key (atom k))
             (name (optionOr (stringSlice key 1 (stringLength key)) ""))]
-        (mt (listGet xs 1)
+        (match (listGet xs 1)
           ((none) (do (assert false (str "fixture :env key " key " has a value")) (list)))
           ((some v)
             (do
@@ -44,7 +44,7 @@ fn fixtureEnv node: p/SExpr -> (List String)
   (envPairs (items node))
 
 fn workspaceRoot! -> String
-  (mt (realPath ".") ((ok root) root) ((err e) (do (assert false (str "realPath . fails: " e)) "")))
+  (match (realPath ".") ((ok root) root) ((err e) (do (assert false (str "realPath . fails: " e)) "")))
 
 fn ! timesLedger! -> String
   (str (optionOr (envGet "TMPDIR") "/tmp") "/aslRunnerParityTimes." (stringFromInt64 (procSelf)) ".asn")
@@ -59,12 +59,12 @@ fn runnerCall! dir: String argv: (List String) env: (List String) -> gr/Captured
   (let [(root (workspaceRoot!))
         (cmd (listAppend (list (str root "/bin/asl") "run" (str root "/asl/packages/asl-gates/src/runnerMain.asl")) argv))
         (script (str "exec " (stringJoin (map (fn [(s String)] -> String (str "'" (stringReplace s "'" "'\\''") "'")) cmd) " ")))]
-    (mt (gr/runCommand! (list "/bin/sh" "-c" script) dir (some (childEnv! env)))
+    (match (gr/runCommand! (list "/bin/sh" "-c" script) dir (some (childEnv! env)))
       ((err e) (do (assert false (str "ASL runner spawned for " (stringJoin argv " ") ": " e)) (gr/Captured :exit 127 :stdout "" :stderr e)))
       ((ok r) r)))
 
 fn replayCases! cases: (List p/SExpr) n: Int64 -> Int64
-  (mt (listHead cases)
+  (match (listHead cases)
     ((none) n)
     ((some caseForm)
       (let [(xs (items caseForm))
@@ -74,7 +74,7 @@ fn replayCases! cases: (List p/SExpr) n: Int64 -> Int64
             (setup (stringField repoFields ":setup"))
             (tmp (optionOr (envGet "TMPDIR") "/tmp"))
             (made (gr/runCommand! (list "/usr/bin/mktemp" "-d" (str tmp "/runnerParity." id ".XXXXXX")) (workspaceRoot!) (some (childEnv! (list)))))]
-        (mt made
+        (match made
           ((err e) (do (assert false (str id ": temporary repository created: " e)) n))
           ((ok dirResult)
             (let [(dir (stringTrim dirResult.stdout))
@@ -83,13 +83,13 @@ fn replayCases! cases: (List p/SExpr) n: Int64 -> Int64
                   (env (fixtureEnv (optionOr (field xs ":env") (p/makeVect (list)))))]
               (do
                 (assert (= dirResult.exit 0) (str id ": scratch directory created"))
-                (mt setupResult
+                (match setupResult
                   ((err e) (assert false (str id ": synthetic Git repo setup ran: " e)))
                   ((ok setupRun) (assert (= setupRun.exit 0) (str id ": synthetic Git repo setup exits 0: " setupRun.stderr))))
                 (if (= kind "chooseBase")
                   (let [(chosen (rm/chooseBaseAt! dir))
                         (wantBase (stringField xs ":base"))
-                        (base (mt (pairFirst chosen) ((some rec) rec.sha) ((none) "none")))
+                        (base (match (pairFirst chosen) ((some rec) rec.sha) ((none) "none")))
                         (wantProblems (map (fn [(v p/SExpr)] -> String (gr/decodeString (atom v))) (items (optionOr (field xs ":problems") (p/makeVect (list))))))]
                     (do
                       (assert (= base wantBase) (str id ": chooseBase base matches Python recording"))
@@ -114,7 +114,7 @@ fn replayChooseBaseFixtures! -> Bool
 
 fn testCorpusParity! -> Bool
   (do
-    (assert (>= (listLength (stringLines (optionOr (mt (fileReadString "asl/packages/asl-gates/tests/fixtures/runner/corpus.txt") ((ok s) (some s)) ((err _) (none))) ""))) 25) "fixture source corpus still covers at least 25 suites")
+    (assert (>= (listLength (stringLines (optionOr (match (fileReadString "asl/packages/asl-gates/tests/fixtures/runner/corpus.txt") ((ok s) (some s)) ((err _) (none))) ""))) 25) "fixture source corpus still covers at least 25 suites")
     (assert (= (listLength (fixtureCases!)) 8) "all eight synthetic runner recordings load")
     (assert (= (listLength (filter (fn [(caseForm p/SExpr)] -> Bool (= (stringField (items caseForm) ":kind") "cli")) (fixtureCases!))) 3) "CLI fixtures include no command, unknown command, and run")
     (assert (= (listLength (filter (fn [(caseForm p/SExpr)] -> Bool (= (stringField (items caseForm) ":kind") "ledger")) (fixtureCases!))) 2) "ledger fixtures include held red and stale green")

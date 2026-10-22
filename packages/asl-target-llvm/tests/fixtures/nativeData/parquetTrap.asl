@@ -3,7 +3,7 @@
   :i [])
 
 fn ! main args: (List String) -> (Result Unit String)
-  (mt (parquetOpen "tests/acceptance/vtbotDataPlane/fixtures/seiSpotDeals10k.parquet")
+  (match (parquetOpen "tests/acceptance/vtbotDataPlane/fixtures/seiSpotDeals10k.parquet")
     ((err e) (err e))
     ((ok h)
       (let [(which (optionOr (listHead args) ""))]

@@ -5,7 +5,7 @@
 (schema LogEntry (:f level LogLevel) (:f message String) (:f timestamp Int64) (:f subsystem String))
 
 fn formatEntry entry: LogEntry -> String
-  (let [(lvlStr (mt entry.level ((debug) "DEBUG") ((info) "INFO ") ((warn) "WARN ") ((error) "ERROR")))] (str "[" lvlStr "] [" entry.subsystem "] " entry.message))
+  (let [(lvlStr (match entry.level ((debug) "DEBUG") ((info) "INFO ") ((warn) "WARN ") ((error) "ERROR")))] (str "[" lvlStr "] [" entry.subsystem "] " entry.message))
 
 fn ! info! subsystem: String message: String -> Unit
   (let [(entry (LogEntry :level (info) :message message :timestamp 0 :subsystem subsystem))]

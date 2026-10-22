@@ -43,7 +43,7 @@ fn materializeSnapshot! root: String -> (Result String String)
       (err (str "snapshot of " (snapshotCommit) " failed: exit " (stringFromInt64 out.exitCode) " " out.stderr))))
 
 fn caseRootOf root: String snapshot: String kw: (Map String String) -> String
-  (mt (mapGet kw "root")
+  (match (mapGet kw "root")
     ((none) snapshot)
     ((some r) (str root "/" r)))
 
@@ -149,7 +149,7 @@ fn ! runTests -> Bool
     (assert (ok? (dirCreate (str root "/.asl/parityVfs"))) "create isolated parity VFS")
     (let [(made (materializeSnapshot! root))
           (snapshot (resultOr made ""))]
-      (assert (ok? made) (str "materialize the pinned live-tree snapshot: " (mt made ((ok d) d) ((err e) e))))
+      (assert (ok? made) (str "materialize the pinned live-tree snapshot: " (match made ((ok d) d) ((err e) e))))
     (let [(tally (fold (fn [(t ParityTally) (l String)] -> ParityTally (checkCase! root snapshot l t)) (ParityTally :cases 0 :failures 0 :unported 0 :aslNs 0) caseLines))
           (unchanged (not (workspaceVfsHasX! root)))
           (snapshotRemoved (ok? (pathRemove snapshot)))

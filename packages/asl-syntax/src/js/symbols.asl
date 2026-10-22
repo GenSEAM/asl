@@ -484,11 +484,11 @@ fn checkLine bs: Bytes text: String lstart: Int64 lend: Int64 -> (Option LineCan
       (none)
       (let [(indent (- i lstart))
             (fnCand (checkFunction bs text i lend lstart))]
-        (mt fnCand
+        (match fnCand
           ((some c) (some c))
           ((none)
            (let [(clsCand (checkClass bs text i lend lstart))]
-             (mt clsCand
+             (match clsCand
                ((some c) (some c))
                ((none)
                 (if (= indent 0)
@@ -526,7 +526,7 @@ fn scanLinesLoop s: src/Source text: String rawBs: Bytes maskedBs: Bytes len: In
       (if (= lstart -1)
         (scanLinesLoop s text rawBs maskedBs len lineCount (+ curLi 1) acc)
         (let [(cand (checkLine maskedBs text lstart lend))]
-          (mt cand
+          (match cand
             ((none)
              (scanLinesLoop s text rawBs maskedBs len lineCount (+ curLi 1) acc))
             ((some c)
@@ -550,10 +550,10 @@ fn jsSymbolSortBefore? a: JsSymbol b: JsSymbol -> Bool
       (> a.end b.end)))
 
 fn mergeJsSymbolLists left: (List JsSymbol) right: (List JsSymbol) acc: (List JsSymbol) -> (List JsSymbol)
-  (mt (listHead left)
+  (match (listHead left)
     ((none) (listAppend (listReverse acc) right))
     ((some lhd)
-     (mt (listHead right)
+     (match (listHead right)
        ((none) (listAppend (listReverse acc) left))
        ((some rhd)
         (if (jsSymbolSortBefore? lhd rhd)
@@ -592,7 +592,7 @@ fn jsSymbols! text: String -> (List sym/SymbolDef)
        (extractSymbols! text))
 
 fn findFirstJsSymbol syms: (List JsSymbol) start: Int64 end: Int64 -> (Option JsSymbol)
-  (mt (listHead (filter (fn [(s JsSymbol)] -> Bool
+  (match (listHead (filter (fn [(s JsSymbol)] -> Bool
                           (and (= s.start start) (= s.end end)))
                         syms))
     ((some s) (some s))
@@ -601,7 +601,7 @@ fn findFirstJsSymbol syms: (List JsSymbol) start: Int64 end: Int64 -> (Option Js
 fn findSymbolDotted syms: (List JsSymbol) query: String -> (Option JsSymbol)
   (let [(defs (map (fn [(s JsSymbol)] -> sym/SymbolDef (jsSymbolToSymbolDef s)) syms))
         (foundDef (sym/findSymbolDotted defs query))]
-    (mt foundDef
+    (match foundDef
       ((none) (none))
       ((some d)
        (findFirstJsSymbol syms (sym/symbolStart d) (sym/symbolEnd d)))))

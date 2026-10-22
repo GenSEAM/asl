@@ -21,10 +21,10 @@ fn ! testProfileParseAndFirstMatch -> Bool
   (let [(text (resultOr (fileReadString "asl/packages/asl-gateway/tests/fixtures/router/profile.asn") ""))
         (parsed (rt/parseRules text))]
     (assert (ok? parsed) "ASN profile fixture parses")
-    (mt parsed
+    (match parsed
       ((err _) false)
       ((ok profile)
-        (mt (rt/route profile (rt/Request :intent "chat" :role "assistant" :promptTokens 100 :tools true :json true :streaming true :latency "interactive" :budget "standard" :expectedTokens 1000) (list (endpoint "fast" 0 100 false false 1) (endpoint "quality" 0 100 false false 1)) (list (calibration "m-fast" "assistant" 9000)))
+        (match (rt/route profile (rt/Request :intent "chat" :role "assistant" :promptTokens 100 :tools true :json true :streaming true :latency "interactive" :budget "standard" :expectedTokens 1000) (list (endpoint "fast" 0 100 false false 1) (endpoint "quality" 0 100 false false 1)) (list (calibration "m-fast" "assistant" 9000)))
           ((err _) false)
           ((ok decision) (do
             (assert (= decision.ruleId "interactive") "first matching rule wins")
@@ -35,7 +35,7 @@ fn ! testProfileParseAndFirstMatch -> Bool
 fn ! testCalibrationSamplingDefaults -> Bool
   (let [(r (rule "defaults" "interactive" 100 (list (candidate "e" "m" 1))))
         (result (rt/route (rt/Profile :rules (list r)) (request "interactive") (list (endpoint "e" 0 10 false false 1)) (list (calibration "m" "assistant" 9000))))]
-    (mt result ((err _) false) ((ok d) (do
+    (match result ((err _) false) ((ok d) (do
       (assert (= d.choice.sampling.stop (list "CAL_STOP")) "calibration stop is the role default")
       true))))
 
@@ -44,8 +44,8 @@ fn testDimensionAndNoRoute -> Bool
         (bad (rt/Request :intent "other" :role "assistant" :promptTokens 100 :tools true :json true :streaming true :latency "interactive" :budget "standard" :expectedTokens 321))
         (result (rt/route profile bad (list) (list)))]
     (assert (err? result) "unmatched request returns noRoute")
-    (mt result
-      ((err error) (mt error
+    (match result
+      ((err error) (match error
         ((rt/routeFailure message) (do
         (assert (stringContains? message "noRoute") "noRoute error identifies the failure")
         (assert (stringContains? message "intent=other") "noRoute error reports intent")
@@ -69,12 +69,12 @@ fn testRouteScoreDownAndSpillover -> Bool
         (cal (list (calibration "cheap-model" "assistant" 9000) (calibration "good-model" "assistant" 10000) (calibration "slow-model" "assistant" 5000) (calibration "down-model" "assistant" 10000)))
         (result (rt/route p q states cal))]
     (assert (ok? result) "healthy candidates route")
-    (mt result ((err _) false) ((ok d)
+    (match result ((err _) false) ((ok d)
       (assert (= d.choice.endpoint "good") "quality term changes winning candidate")
       (assert (= (listLength d.spillover) 2) "wait over rule maximum spills ordered remainder")
-      (mt (listHead d.spillover) ((none) false) ((some first) (do
+      (match (listHead d.spillover) ((none) false) ((some first) (do
         (assert (= first.endpoint "cheap") "spillover begins with next score-ranked candidate")
-        (mt (listTail d.spillover) ((none) false) ((some rest) (mt (listHead rest) ((none) false) ((some second) (do (assert (= second.endpoint "slow") "spillover preserves complete score order") true))))))))
+        (match (listTail d.spillover) ((none) false) ((some rest) (match (listHead rest) ((none) false) ((some second) (do (assert (= second.endpoint "slow") "spillover preserves complete score order") true))))))))
       (assert (= (listLength d.candidates) 3) "down endpoint excluded") true)))
 
 fn testExpectedWaitThresholdIndependentOfWeight -> Bool
@@ -82,7 +82,7 @@ fn testExpectedWaitThresholdIndependentOfWeight -> Bool
         (r (rt/Rule :id base.id :intent base.intent :role base.role :minTokens base.minTokens :maxTokens base.maxTokens :tools false :json false :streaming false :latency "interactive" :budget "standard" :maxWaitMs 50 :costWeight 0 :waitWeight 0 :qualityWeight 0 :coldPenaltyMs 0 :candidates base.candidates))
         (p (rt/Profile :rules (list r)))
         (got (rt/route p (request "interactive") (list (endpoint "slow" 1 10 false false 1) (endpoint "fast" 1 100 false false 1)) (list (calibration "slow" "assistant" 10000) (calibration "fast" "assistant" 10000))))]
-    (mt got ((err _) false) ((ok d) (do
+    (match got ((err _) false) ((ok d) (do
       (assert (= d.choice.waitMs 100) "decision reports expected wait rather than weighted wait score")
       (assert (= (listLength d.spillover) 1) "expected wait above threshold spills even at zero wait weight") true))))
 
@@ -104,7 +104,7 @@ fn testReplayDeterminism -> Bool
     true)
 
 fn choiceEndpoint result: (Result rt/RouteDecision rt/RouterError) -> String
-  (mt result ((err _) "error") ((ok decision) decision.choice.endpoint))
+  (match result ((err _) "error") ((ok decision) decision.choice.endpoint))
 
 fn testReplayOrder -> Bool
   (let [(p (rt/Profile :rules (list (rule "replay" "interactive" 100 (list (candidate "first" "m1" 1) (candidate "second" "m2" 1))))))
@@ -140,10 +140,10 @@ fn testTieBreaks -> Bool
         (cc (list (calibration "m1" "assistant" 10000) (calibration "m2" "assistant" 10000)))
         (got (rt/route p (request "interactive") ss cc))]
     (assert (ok? got) "equal scores route")
-    (mt got ((err _) false) ((ok d) (do (assert (= d.choice.endpoint "heavy") "equal score prefers higher candidate weight") true)))
+    (match got ((err _) false) ((ok d) (do (assert (= d.choice.endpoint "heavy") "equal score prefers higher candidate weight") true)))
     (let [(firstRule (rule "declaration" "interactive" 100 (list (candidate "first" "m1" 1) (candidate "heavy" "m2" 1))))
           (same (rt/route (rt/Profile :rules (list firstRule)) (request "interactive") ss cc))]
-      (mt same ((err _) false) ((ok d) (do (assert (= d.choice.endpoint "first") "equal score and weight preserve declaration order") true)))))
+      (match same ((err _) false) ((ok d) (do (assert (= d.choice.endpoint "first") "equal score and weight preserve declaration order") true)))))
 
 fn testCostAndWaitChangeWinner -> Bool
   (let [(p (rt/Profile :rules (list (rule "cost-wait" "interactive" 10000 (list (candidate "a" "a" 1) (candidate "b" "b" 1))))))
@@ -151,8 +151,8 @@ fn testCostAndWaitChangeWinner -> Bool
         (cal (list (calibration "a" "assistant" 10000) (calibration "b" "assistant" 10000)))
         (costWinner (rt/route p q (list (endpoint "a" 0 10 false false 9) (endpoint "b" 0 10 false false 1)) cal))
         (waitWinner (rt/route p q (list (endpoint "a" 100 1 false false 1) (endpoint "b" 0 1 false false 1)) cal))]
-    (mt costWinner ((err _) false) ((ok d) (assert (= d.choice.endpoint "b") "lower token cost changes winner") true))
-    (mt waitWinner ((err _) false) ((ok d) (assert (= d.choice.endpoint "b") "shorter expected queue wait changes winner") true))
+    (match costWinner ((err _) false) ((ok d) (assert (= d.choice.endpoint "b") "lower token cost changes winner") true))
+    (match waitWinner ((err _) false) ((ok d) (assert (= d.choice.endpoint "b") "shorter expected queue wait changes winner") true))
     true)
 
 fn testColdStartPenalty -> Bool
@@ -162,7 +162,7 @@ fn testColdStartPenalty -> Bool
         (ss (list (endpoint "cold" 0 1 true false 1) (endpoint "warm" 0 1 false false 1)))
         (cc (list (calibration "cold" "assistant" 10000) (calibration "warm" "assistant" 10000)))
         (got (rt/route p (request "interactive") ss cc))]
-    (mt got ((err _) false) ((ok d) (do (assert (= d.choice.endpoint "warm") "cold-start penalty changes winner") true))))
+    (match got ((err _) false) ((ok d) (do (assert (= d.choice.endpoint "warm") "cold-start penalty changes winner") true))))
 
 fn testCalibrationScoreRange -> Bool
   (let [(p (rt/Profile :rules (list (rule "calibration-range" "interactive" 100 (list (candidate "e" "m" 1))))))
@@ -173,11 +173,11 @@ fn testCalibrationScoreRange -> Bool
         (state (endpoint "e" 0 10 false false 1))]
     (assert (ok? (rt/route p q s (list (calibration "m" "assistant" 0)))) "calibration score zero is accepted")
     (assert (ok? (rt/route p q s (list (calibration "m" "assistant" 10000)))) "calibration score 10000 is accepted")
-    (assert (mt (rt/route p q s (list (calibration "m" "assistant" -1)))
-      ((err error) (mt error ((rt/invalidCalibrationScore model score) (and (= model "m") (= score -1))) (_ false)))
+    (assert (match (rt/route p q s (list (calibration "m" "assistant" -1)))
+      ((err error) (match error ((rt/invalidCalibrationScore model score) (and (= model "m") (= score -1))) (_ false)))
       ((ok _) false)) "negative calibration score returns typed error")
-    (assert (mt (rt/route p q s (list (calibration "m" "assistant" 10001)))
-      ((err error) (mt error ((rt/invalidCalibrationScore model score) (and (= model "m") (= score 10001))) (_ false)))
+    (assert (match (rt/route p q s (list (calibration "m" "assistant" 10001)))
+      ((err error) (match error ((rt/invalidCalibrationScore model score) (and (= model "m") (= score 10001))) (_ false)))
       ((ok _) false)) "calibration score above 10000 returns typed error")
     (assert (err? (rt/score c r q state (some (calibration "m" "assistant" -1)))) "score helper rejects invalid calibration values")
     true)
@@ -197,7 +197,7 @@ fn testExpectedWaitOverflowGuard -> Bool
         (c (list (calibration "m" "assistant" 10000)))
         (result (rt/route p q s c))]
     (assert (ok? result) "expected-wait multiplication overflow saturates instead of trapping")
-    (mt result ((err _) false) ((ok decision)
+    (match result ((err _) false) ((ok decision)
       (assert (= decision.choice.waitMs 9223372036854775807) "overflowed expected wait saturates at Int64 maximum") true)))
 
 fn testMergeSamplingPreservesExplicit -> Bool

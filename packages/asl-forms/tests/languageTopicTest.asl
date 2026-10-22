@@ -3,7 +3,7 @@
   :i [])
 
 fn ! languageTopic -> String
-  (mt (fileReadString "asl/grammar/tools.asn")
+  (match (fileReadString "asl/grammar/tools.asn")
     ((err _) "")
     ((ok t) (optionOr (listHead (filter (fn [(l String)] -> Bool (stringContains? l "(:topic :name :language ")) (stringSplit t "\n"))) "")))
 

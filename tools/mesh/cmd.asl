@@ -57,10 +57,10 @@ fn s v: String -> board/AsnValue
   (board/asnStr v)
 
 fn entries v: board/AsnValue -> (List (Pair String board/AsnValue))
-  (mt v ((board/asnDict es) es) (_ (list)))
+  (match v ((board/asnDict es) es) (_ (list)))
 
 fn items v: board/AsnValue -> (List board/AsnValue)
-  (mt v ((board/asnList xs) xs) ((board/asnTuple xs) xs) (_ (list)))
+  (match v ((board/asnList xs) xs) ((board/asnTuple xs) xs) (_ (list)))
 
 fn getv es: (List (Pair String board/AsnValue)) k: String -> board/AsnValue
   (optionOr (board/dictGet es k) (board/asnNone))
@@ -75,7 +75,7 @@ fn cfgv ctx: Ctx k: String -> board/AsnValue
   (getv ctx.cfg k)
 
 fn cfgs ctx: Ctx k: String -> String
-  (mt (cfgv ctx k) ((board/asnStr x) x) ((board/asnNone) "") (v (board/pyStr v)))
+  (match (cfgv ctx k) ((board/asnStr x) x) ((board/asnNone) "") (v (board/pyStr v)))
 
 fn withCfg ctx: Ctx k: String v: board/AsnValue -> Ctx
   (Ctx :root ctx.root :cfg (board/dictPut ctx.cfg k v) :env ctx.env :gateway ctx.gateway :apiKey ctx.apiKey)
@@ -261,7 +261,7 @@ fn pyFloat x: Float64 -> String
   (stringFromFloat64 x)
 
 fn asFloat v: board/AsnValue -> Float64
-  (mt v
+  (match v
     ((board/asnFloat f) f)
     ((board/asnInt i) (int64ToFloat64 i))
     ((board/asnBool b) (if b 1.0 0.0))
@@ -271,7 +271,7 @@ fn splitOn text: String sep: String -> (List String)
   (stringSplit text sep)
 
 fn strOrEmpty v: board/AsnValue -> String
-  (mt v ((board/asnNone) "") (_ (board/pyStr v)))
+  (match v ((board/asnNone) "") (_ (board/pyStr v)))
 
 fn out! line: String -> Unit
   (println line)
@@ -282,12 +282,12 @@ fn warn! line: String -> Unit
 fn writeAll! fd: Int64 text: String -> (Result Unit String)
   (if (stringEmpty? text)
     (ok ())
-    (mt (fdWrite fd text)
+    (match (fdWrite fd text)
       ((err e) (err e))
       ((ok n)
         (if (>= n (stringLength text))
           (ok ())
-          (mt (stringSlice text n (stringLength text))
+          (match (stringSlice text n (stringLength text))
             ((some restText) (writeAll! fd restText))
             ((none) (err "partial write split a character")))))))
 
@@ -311,7 +311,7 @@ schema PoolState
   (:f done (List (Pair Int64 ProcOut)))
 
 fn readReady! fd: Int64 -> (Result (Option String) String)
-  (mt (fdRead fd 65536)
+  (match (fdRead fd 65536)
     ((err e) (err e))
     ((ok chunk) (if (stringEmpty? chunk) (do (fdClose fd) (ok (none))) (ok (some chunk)))))
 
@@ -334,13 +334,13 @@ fn killAllSlots! slots: (List Slot) -> Unit
 fn startSlot! idx: Int64 job: ProcJob -> (Result Slot String)
   (let [cwd (if (stringEmpty? job.cwd) (none) (some job.cwd))
         env (if (listEmpty? job.env) (none) (some job.env))]
-    (mt (procSpawnv job.argv cwd env)
+    (match (procSpawnv job.argv cwd env)
       ((err e) (err e))
       ((ok sp)
         (let [wrote (writeAll! sp.stdin job.input)
               closed (fdClose sp.stdin)
               dl (if (<= job.timeoutMs 0) -1 (+ (/ (monotonicNs) 1000000) job.timeoutMs))]
-          (mt (if (err? wrote) wrote closed)
+          (match (if (err? wrote) wrote closed)
             ((err e)
               (do (procKill (- 0 sp.pid) "SIGKILL")
                   (procWaitPid sp.pid false)
@@ -353,7 +353,7 @@ fn startSlot! idx: Int64 job: ProcJob -> (Result Slot String)
                         :deadlineMs dl :timedOut false))))))))
 
 fn fillSlots! k: Int64 st: PoolState -> (Result PoolState String)
-  (mt (listHead st.pending)
+  (match (listHead st.pending)
     ((none) (ok st))
     ((some item)
       (if (>= (listLength st.running) k)
@@ -361,7 +361,7 @@ fn fillSlots! k: Int64 st: PoolState -> (Result PoolState String)
         (let [rest (optionOr (listTail st.pending) (list))
               idx (pairFirst item)
               job (pairSecond item)]
-          (mt (startSlot! idx job)
+          (match (startSlot! idx job)
             ((err e) (do (killAllSlots! st.running) (err e)))
             ((ok s)
               (fillSlots! k (PoolState :pending rest
@@ -388,15 +388,15 @@ fn absorbSlot! s: Slot ready: (List (Pair Int64 Int64)) exited: (List (Pair Int6
   (let [outR (if (and s.outOpen (ready? ready s.outFd)) (readReady! s.outFd) (ok (some "")))
         errR (if (and s.errOpen (ready? ready s.errFd)) (readReady! s.errFd) (ok (some "")))
         code (if (some? s.code) s.code (exitOf exited s.pid))]
-    (mt outR
+    (match outR
       ((err e) (err (str "read stdout: " e)))
       ((ok oc)
-        (mt errR
+        (match errR
           ((err e) (err (str "read stderr: " e)))
           ((ok ec)
             (ok (Slot :index s.index :pid s.pid :outFd s.outFd :errFd s.errFd
-                      :outs (mt oc ((some x) (if (stringEmpty? x) s.outs (cons x s.outs))) ((none) s.outs))
-                      :errs (mt ec ((some x) (if (stringEmpty? x) s.errs (cons x s.errs))) ((none) s.errs))
+                      :outs (match oc ((some x) (if (stringEmpty? x) s.outs (cons x s.outs))) ((none) s.outs))
+                      :errs (match ec ((some x) (if (stringEmpty? x) s.errs (cons x s.errs))) ((none) s.errs))
                       :outOpen (and s.outOpen (some? oc))
                       :errOpen (and s.errOpen (some? ec))
                       :code code
@@ -404,10 +404,10 @@ fn absorbSlot! s: Slot ready: (List (Pair Int64 Int64)) exited: (List (Pair Int6
                       :timedOut s.timedOut)))))))
 
 fn absorbAllSlots! slots: (List Slot) ready: (List (Pair Int64 Int64)) exited: (List (Pair Int64 Int64)) acc: (List Slot) -> (Result (List Slot) String)
-  (mt (listHead slots)
+  (match (listHead slots)
     ((none) (ok (listReverse acc)))
     ((some s)
-      (mt (absorbSlot! s ready exited)
+      (match (absorbSlot! s ready exited)
         ((err e) (err e))
         ((ok s2) (absorbAllSlots! (optionOr (listTail slots) (list)) ready exited (cons s2 acc))))))
 
@@ -434,7 +434,7 @@ fn slotToDone s: Slot -> (Pair Int64 ProcOut)
                  :timedOut s.timedOut))
 
 fn poolLoop! k: Int64 st: PoolState -> (Result (List ProcOut) String)
-  (mt (fillSlots! k st)
+  (match (fillSlots! k st)
     ((err e) (do (killAllSlots! st.running) (err e)))
     ((ok st1)
       (if (and (listEmpty? st1.running) (listEmpty? st1.pending))
@@ -442,13 +442,13 @@ fn poolLoop! k: Int64 st: PoolState -> (Result (List ProcOut) String)
           (ok (map (fn [p] (pairSecond p)) sorted)))
         (let [nowMs (/ (monotonicNs) 1000000)
               timeout (pollTimeout st1.running nowMs)]
-          (mt (procPoll (watchFds st1.running) (livePids st1.running) timeout)
+          (match (procPoll (watchFds st1.running) (livePids st1.running) timeout)
             ((err e) (do (killAllSlots! st1.running) (err (str "procPoll: " e))))
             ((ok r)
               (let [now2 (/ (monotonicNs) 1000000)
                     ready (pairFirst r)
                     exited (pairSecond r)]
-                (mt (absorbAllSlots! st1.running ready exited (list))
+                (match (absorbAllSlots! st1.running ready exited (list))
                   ((err e) (do (killAllSlots! st1.running) (err e)))
                   ((ok absorbed)
                     (let [updated (map (fn [s] (expireSlot! s now2)) absorbed)
@@ -466,16 +466,16 @@ fn runProcPool! jobs: (List ProcJob) k: Int64 -> (Result (List ProcOut) String)
       (poolLoop! slots (PoolState :pending indexed :running (list) :done (list)))))
 
 fn runProc! argv: (List String) cwd: String env: (List String) input: String timeoutMs: Int64 -> (Result ProcOut String)
-  (mt (runProcPool! (list (ProcJob :argv argv :cwd cwd :env env :input input :timeoutMs timeoutMs)) 1)
+  (match (runProcPool! (list (ProcJob :argv argv :cwd cwd :env env :input input :timeoutMs timeoutMs)) 1)
     ((err e) (err e))
     ((ok rs)
-      (mt (listHead rs)
+      (match (listHead rs)
         ((some r) (ok r))
         ((none) (err "runProc: no output")))))
 
 
 fn envLookup env: (List String) name: String -> (Option String)
-  (mt (listHead env)
+  (match (listHead env)
     ((none) (none))
     ((some kv) (if (stringStartsWith? kv (str name "=")) (some (sub kv (+ (stringLength name) 1) (stringLength kv))) (envLookup (rest env) name))))
 
@@ -521,15 +521,15 @@ fn ! exists? path: String -> Bool
   (ok? (fileStat path))
 
 fn ! isDir? path: String -> Bool
-  (mt (fileStat path) ((ok st) st.isDir) ((err _) false))
+  (match (fileStat path) ((ok st) st.isDir) ((err _) false))
 
 fn ! isLink? path: String -> Bool
-  (mt (fileLstat path) ((ok st) st.isSymlink) ((err _) false))
+  (match (fileLstat path) ((ok st) st.isSymlink) ((err _) false))
 
 fn readText! path: String -> (Result String String)
   (if (isDir? path)
     (err (pyOsError "isADirectory" path))
-    (mt (fileReadString path)
+    (match (fileReadString path)
       ((err e) (err (pyOsError e path)))
       ((ok t) (ok (if (has? t "\r") (replaceAll (replaceAll t "\r\n" "\n") "\r" "\n") t)))))
 
@@ -540,24 +540,24 @@ fn nowMs! -> Int64
   (/ (nowNs) 1000000)
 
 fn localStamp! ctx: Ctx -> String
-  (mt (runProc! (list "date" "+%Y-%m-%d %H:%M:%S") "" ctx.env "" 10000)
+  (match (runProc! (list "date" "+%Y-%m-%d %H:%M:%S") "" ctx.env "" 10000)
     ((ok r) (rstripSpace r.out))
     ((err e) (str "ERR_TOOL_ABSENT: date: " e)))
 
 fn localCompactDate! -> String
-  (mt (localDate) ((ok d) (replaceAll d "-" "")) ((err e) (str "ERR_DATE_" e)))
+  (match (localDate) ((ok d) (replaceAll d "-" "")) ((err e) (str "ERR_DATE_" e)))
 
 fn localDay! -> String
-  (mt (localDate) ((ok d) d) ((err e) (str "ERR_DATE_" e)))
+  (match (localDate) ((ok d) d) ((err e) (str "ERR_DATE_" e)))
 
 fn appendText! path: String text: String -> (Result Unit String)
   (let [dir (board/pyDirname path)
-        made (if (stringEmpty? dir) (ok ()) (mt (dirCreate dir) ((ok _) (ok ())) ((err e) (err (pyOsError e dir)))))]
-    (mt made
+        made (if (stringEmpty? dir) (ok ()) (match (dirCreate dir) ((ok _) (ok ())) ((err e) (err (pyOsError e dir)))))]
+    (match made
       ((err e) (err e))
       ((ok _)
         (let [old (if (exists? path) (readText! path) (ok ""))]
-          (mt old
+          (match old
             ((err e) (err e))
             ((ok prev) (board/atomicWriteFile! path (str prev text))))))))
 
@@ -567,7 +567,7 @@ fn logTelemetryDict! ctx: Ctx fields: (List (Pair String String)) -> Unit
       ()
       (let [body (stringJoin (map (fn [p] (str ":" (pairFirst p) " \"" (pairSecond p) "\"")) fields) " ")
             line (str "(:mesh-telemetry :timestamp " (stringFromInt64 (nowMs!)) " " body ")\n")]
-        (mt (appendText! tel line)
+        (match (appendText! tel line)
           ((ok _) ())
           ((err e) (warn! (str "[Telemetry] write failed: " e)))))))
 
@@ -623,7 +623,7 @@ fn logTelemetryText! ctx: Ctx content: String intent: String role: String model:
                      ":markdownWrapped " (asnBool hasMd) " :preamble " (asnBool hasPre) " "
                      ":cheatingSuspected " (asnBool (not (listEmpty? cheat))) " :cheatingFlags " (quotedBracket cheat) " "
                      ":harnessComplaints " (quotedBracket debt) ")\n")]
-        (mt (appendText! (cfgs ctx "telemetry_log_path") rec)
+        (match (appendText! (cfgs ctx "telemetry_log_path") rec)
           ((ok _) ())
           ((err e) (warn! (str "[Telemetry] write failed: " e)))))))
 
@@ -639,7 +639,7 @@ fn timeoutText argv: (List String) secs: Int64 -> String
 fn aslEval! ctx: Ctx expr: String -> (Result ProcOut String)
   (let [bin (board/pyJoin ctx.root "bin/asl")
         argv (list bin "eval" expr)]
-    (mt (runProc! argv ctx.root ctx.env "" 30000)
+    (match (runProc! argv ctx.root ctx.env "" 30000)
       ((err e) (err (spawnCrash e bin)))
       ((ok r) (if r.timedOut (err (str "subprocess.TimeoutExpired: " (timeoutText argv 30))) (ok r)))))
 
@@ -652,7 +652,7 @@ fn dispatchHook! ctx: Ctx event: String context: (List (Pair String String)) -> 
             evalExpr (getd h "eval" (s ""))
             doc (gets h "doc" "")
             result (if (board/truthy? evalExpr)
-                     (mt (aslEval! ctx (board/pyStr evalExpr))
+                     (match (aslEval! ctx (board/pyStr evalExpr))
                        ((ok r) (board/pyStrip r.out))
                        ((err e) (str "error: " (hookErr e))))
                      "")
@@ -710,7 +710,7 @@ fn jsonStr text: String -> String
     (str "\"" (stringJoin (listReverse (jsonEscLoop text bs 0 0 (bytesLength bs) (list))) "") "\""))
 
 fn jsonDumps v: j/Json -> String
-  (mt v
+  (match v
     ((j/jnull) "null")
     ((j/jbool b) (if b "true" "false"))
     ((j/jint i) (stringFromInt64 i))
@@ -721,7 +721,7 @@ fn jsonDumps v: j/Json -> String
     ((j/jobj kvs) (str "{" (stringJoin (map (fn [p] (str (jsonStr (pairFirst p)) ": " (jsonDumps (pairSecond p)))) kvs) ", ") "}")))
 
 fn asnJson v: board/AsnValue -> j/Json
-  (mt v
+  (match v
     ((board/asnNone) (j/jnull))
     ((board/asnBool b) (j/jbool b))
     ((board/asnInt i) (j/jint i))
@@ -732,7 +732,7 @@ fn asnJson v: board/AsnValue -> j/Json
     ((board/asnDict es) (j/jobj (map (fn [p] (pair (pairFirst p) (asnJson (pairSecond p)))) es))))
 
 fn jsonAsn v: j/Json -> board/AsnValue
-  (mt v
+  (match v
     ((j/jnull) (board/asnNone))
     ((j/jbool b) (board/asnBool b))
     ((j/jint i) (board/asnInt i))
@@ -764,7 +764,7 @@ fn curlJob ctx: Ctx url: String headers: (List (Pair String String)) body: Strin
     (ProcJob :argv (list "curl" "-q" "-sS" "--config" "-") :cwd "" :env ctx.env :input conf :timeoutMs (* (+ timeoutSec 30) 1000)))
 
 fn parseHttpResult r: (Result ProcOut String) -> Http
-  (mt r
+  (match r
     ((err e) (if (stringStartsWith? e "notFound") (httpAbsent (str "ERR_TOOL_ABSENT: curl is not on PATH (" e ")")) (httpExc (str "curl did not start: " e))))
     ((ok res)
       (cond
@@ -775,7 +775,7 @@ fn parseHttpResult r: (Result ProcOut String) -> Http
                 k (lastNewline (stringToBytes o) (stringLength o))
                 codeText (if (< k 0) o (sub o (+ k 1) (stringLength o)))
                 bodyText (if (< k 0) "" (sub o 0 k))]
-            (mt (stringToInt64 codeText)
+            (match (stringToInt64 codeText)
               ((some c) (httpStatus c bodyText))
               ((none) (httpExc (str "curl wrote no status: " codeText)))))))))
 
@@ -788,33 +788,33 @@ fn lastNewline bs: Bytes j: Int64 -> Int64
   (cond ((<= j 0) -1) ((= (bytesGet bs (- j 1)) 10) (- j 1)) (else (lastNewline bs (- j 1))))
 
 fn jget v: j/Json k: String -> (Option j/Json)
-  (mt v
+  (match v
     ((j/jobj kvs) (fold (fn [acc p] (if (= (pairFirst p) k) (some (pairSecond p)) acc)) (none) kvs))
     (_ (none)))
 
 fn replyContent body: String -> (Result (Pair String board/AsnValue) String)
-  (mt (j/jsonParse body)
+  (match (j/jsonParse body)
     ((err e) (err (str "JSONDecodeError: " e)))
     ((ok v)
-      (mt v
+      (match v
         ((j/jobj _)
-          (let [choice (mt (jget v "choices")
+          (let [choice (match (jget v "choices")
                          ((none) (ok (j/jobj (list))))
                          ((some c)
-                           (mt c
-                             ((j/jarr xs) (mt (listHead xs) ((some x) (ok x)) ((none) (err "IndexError: list index out of range"))))
+                           (match c
+                             ((j/jarr xs) (match (listHead xs) ((some x) (ok x)) ((none) (err "IndexError: list index out of range"))))
                              ((j/jstr x) (if (stringEmpty? x) (err "IndexError: string index out of range") (err "AttributeError: 'str' object has no attribute 'get'")))
                              ((j/jobj _) (err "KeyError: 0"))
                              (_ (err "TypeError: object is not subscriptable")))))]
-            (mt choice
+            (match choice
               ((err e) (err e))
               ((ok ch)
-                (mt ch
+                (match ch
                   ((j/jobj _)
                     (let [msg (optionOr (jget ch "message") (j/jobj (list)))]
-                      (mt msg
+                      (match msg
                         ((j/jobj _)
-                          (mt (optionOr (jget msg "content") (j/jstr ""))
+                          (match (optionOr (jget msg "content") (j/jstr ""))
                             ((j/jstr c) (ok (pair (board/pyStrip c) (jsonAsn (optionOr (jget v "usage") (j/jobj (list)))))))
                             (_ (err "AttributeError: object has no attribute 'strip'"))))
                         (_ (err "AttributeError: object has no attribute 'get'")))))
@@ -861,19 +861,19 @@ fn makeIntentReq ctx: Ctx intent: String attractor: String prompt: String modelH
     (IntentReq :intent intent :headers headers :messages messages :modelHint modelHint :temp temp :maxTokens maxTokens :job job))
 
 fn finishIntentQuery! ctx: Ctx req: IntentReq res: Http -> Query
-  (mt res
+  (match res
     ((httpAbsent why) (queryFail why))
     (_
-      (let [gwReply (mt res
+      (let [gwReply (match res
                       ((httpStatus code body) (if (and (>= code 200) (< code 300)) (resultToOption (replyContent body)) (none)))
                       (_ (none)))]
-        (mt gwReply
+        (match gwReply
           ((some r)
             (do (logTelemetryText! ctx (pairFirst r) req.intent (str "shard:" req.intent) "gateway")
                 (Query :ok true :content (pairFirst r) :source "gateway" :usage (pairSecond r) :error "")))
           ((none)
             (let [primary (if (stringEmpty? req.modelHint) "qwen/qwen3.8-27b:free" req.modelHint)
-                  chain (mt (board/dictGet (entries (cfgv ctx "model_cascades")) primary)
+                  chain (match (board/dictGet (entries (cfgv ctx "model_cascades")) primary)
                           ((some v) (map board/pyStr (items v)))
                           ((none) (list "google/gemma-4-31b-it:free" "nex-agi/nex-n2.5-pro:free" "nvidia/nemotron-3-super-120b-a12b:free")))]
               (directCascade! ctx (cons primary chain) req.headers req.messages req.temp req.maxTokens req.intent 3)))))))
@@ -886,22 +886,22 @@ fn queryIntent! ctx: Ctx intent: String attractor: String prompt: String modelHi
 
 
 fn directCascade! ctx: Ctx models: (List String) headers: (List (Pair String String)) messages: j/Json temp: Float64 maxTokens: Int64 intent: String maxRetries: Int64 -> Query
-  (mt (listHead models)
+  (match (listHead models)
     ((none) (queryFail "Gateway and direct fallback cascades exhausted"))
     ((some m)
       (let [body (jsonDumps (j/jobj (list (pair "model" (j/jstr m)) (pair "messages" messages) (pair "temperature" (j/jfloat temp)) (pair "max_tokens" (j/jint maxTokens)))))]
-        (mt (directAttempts! ctx m headers body intent 0 maxRetries)
+        (match (directAttempts! ctx m headers body intent 0 maxRetries)
           ((some q) q)
           ((none) (directCascade! ctx (rest models) headers messages temp maxTokens intent maxRetries))))))
 
 fn directAttempts! ctx: Ctx m: String headers: (List (Pair String String)) body: String intent: String attempt: Int64 maxRetries: Int64 -> (Option Query)
   (if (> attempt maxRetries)
     (none)
-    (mt (httpPost! ctx (openrouterUrl) headers body 45)
+    (match (httpPost! ctx (openrouterUrl) headers body 45)
       ((httpAbsent why) (some (queryFail why)))
       ((httpStatus code text)
         (if (and (>= code 200) (< code 300))
-          (mt (replyContent text)
+          (match (replyContent text)
             ((ok r)
               (do (logTelemetryText! ctx (pairFirst r) intent (str "shard:" intent) m)
                   (some (Query :ok true :content (pairFirst r) :source (str "direct:" m) :usage (pairSecond r) :error ""))))
@@ -922,7 +922,7 @@ fn head150 text: String -> String
 fn evalPass? code: Int64 out: String -> Bool
   (and (= code 0)
        (or (= out "true") (= out "1") (= out ":true") (= out ":ok")
-           (mt (stringToFloat64 out)
+           (match (stringToFloat64 out)
              ((some n) (!= n 0.0))
              ((none) (and (not (stringStartsWith? out "Error")) (not (stringStartsWith? out "Parse error")) (!= out "false"))))))
 
@@ -935,7 +935,7 @@ fn staticCheck! ctx: Ctx chk: (List (Pair String board/AsnValue)) -> (Result Boo
     (do
       (print (str "--> Checking [:" cid "] (" doc ")... "))
       (if (board/truthy? ev)
-        (mt (aslEval! ctx (board/pyStr ev))
+        (match (aslEval! ctx (board/pyStr ev))
           ((err e) (err e))
           ((ok r)
             (let [ms (stringFromInt64 (/ (- (monotonicNs) t0) 1000000))
@@ -946,7 +946,7 @@ fn staticCheck! ctx: Ctx chk: (List (Pair String board/AsnValue)) -> (Result Boo
                     (eprint! (str "    [!] Error in eval check " cid ": " (head150 r.errText) "\n"))
                     (ok false))))))
         (let [argv (list "/bin/sh" "-c" (board/pyStr cmd))]
-          (mt (runProc! argv ctx.root ctx.env "" 60000)
+          (match (runProc! argv ctx.root ctx.env "" 60000)
             ((err e) (err (spawnCrash e "/bin/sh")))
             ((ok r)
               (if r.timedOut
@@ -965,10 +965,10 @@ fn dropLastNewline text: String -> String
   (if (endsWith? text "\n") (sub text 0 (- (stringLength text) 1)) text)
 
 fn staticLoop! ctx: Ctx checks: (List board/AsnValue) allOk: Bool -> (Result Bool String)
-  (mt (listHead checks)
+  (match (listHead checks)
     ((none) (ok allOk))
     ((some c)
-      (mt (staticCheck! ctx (entries c))
+      (match (staticCheck! ctx (entries c))
         ((err e) (err e))
         ((ok passed) (staticLoop! ctx (rest checks) (and allOk passed))))))
 
@@ -1096,17 +1096,17 @@ fn recordFinding! ctx: Ctx finding: (List (Pair String board/AsnValue)) shard: (
       (fn []
         (if (not (exists? bbPath))
           (ok ())
-          (mt (readText! bbPath)
+          (match (readText! bbPath)
             ((err e) (err e))
             ((ok bb)
-              (mt (corroborateExisting! ctx bbPath bb target (board/extractGapBlocks bb "defect"))
+              (match (corroborateExisting! ctx bbPath bb target (board/extractGapBlocks bb "defect"))
                 ((err e) (err e))
                 ((ok handled) (if handled (ok ()) (registerDefect! ctx bbPath bb finding target severity intent attractorRaw model))))))))))
 
 fn corroborateExisting! ctx: Ctx bbPath: String bb: String target: String blocks: (List String) -> (Result Bool String)
   (if (not (has? bb (str "\"" target "\"")))
     (ok false)
-    (mt (listHead blocks)
+    (match (listHead blocks)
       ((none) (ok false))
       ((some b)
         (let [inf (entries (board/parseGapBlock b))]
@@ -1118,7 +1118,7 @@ fn corroborateExisting! ctx: Ctx bbPath: String bb: String target: String blocks
                 (if (< c 0)
                   (corroborateExisting! ctx bbPath bb target (rest blocks))
                   (let [nb (subConfirmations b (+ c 1))]
-                    (mt (board/writeBoard! bbPath (replaceAll bb b nb) (cfgs ctx "shards_dir"))
+                    (match (board/writeBoard! bbPath (replaceAll bb b nb) (cfgs ctx "shards_dir"))
                       ((err e) (err e))
                       ((ok _) (do (out! (str "    [Blackboard] Finding for '" target "' corroborated (confirmations: " (stringFromInt64 (+ c 1)) ").")) (ok true)))))))))))))
 
@@ -1132,17 +1132,17 @@ fn registerDefect! ctx: Ctx bbPath: String bb: String finding: (List (Pair Strin
         entry (str "\n    (:defect\n      :id \"" defId "\"\n      :target \"" (board/sanitizeAsnString (s target)) "\"\n      :intent :" intent
                    "\n      :attractor " (board/renderAttractor attractorRaw) "\n      :auditor \"" (board/sanitizeAsnString (s model)) "\"\n      :severity :" severity
                    "\n      :hazard \"" (san "hazard") "\"\n      :evidence \"" (san "evidence") "\"\n      :status :candidate\n      :confirmations 1\n      :remediation \"" (san "remediation") "\")")]
-    (mt (board/insertIntoDefects bb entry)
+    (match (board/insertIntoDefects bb entry)
       ((err e) (err e))
       ((ok nbb)
-        (mt (board/writeBoard! bbPath nbb (cfgs ctx "shards_dir"))
+        (match (board/writeBoard! bbPath nbb (cfgs ctx "shards_dir"))
           ((err e) (err e))
           ((ok _)
             (let [shardDict (board/asnDict (list (pair "id" (s defId)) (pair "target" (s target)) (pair "intent" (s intent)) (pair "attractor" attractorRaw)
                                                  (pair "auditor" (s model)) (pair "severity" (s severity)) (pair "hazard" (getd finding "hazard" (s "")))
                                                  (pair "evidence" (getd finding "evidence" (s ""))) (pair "status" (s "candidate")) (pair "confirmations" (board/asnInt 1))
                                                  (pair "remediation" (getd finding "remediation" (s "")))))]
-              (mt (board/saveDefectShard! shardDict (cfgs ctx "shards_dir") ctx.root)
+              (match (board/saveDefectShard! shardDict (cfgs ctx "shards_dir") ctx.root)
                 ((err e) (err e))
                 ((ok _)
                   (do (out! (str "    [Blackboard] Registered new defect: " defId " on " target))
@@ -1157,13 +1157,13 @@ fn auditShard! ctx: Ctx shard: (List (Pair String board/AsnValue)) idx: Int64 cy
         dist (board/distillShard! ctx.root (shardPaths shard) 3500)
         prompt (auditPrompt shard slot dist.digest)]
     (pair plan
-      (mt (planTemp plan)
+      (match (planTemp plan)
         ((some temp) (queryIntent! ctx (board/pyStr (getv shard "intent")) slot prompt model temp 3 "" 1500))
         ((none) (Query :ok false :content "" :source "" :usage (board/asnNone) :error "ValueError: invalid plan temperature")))))
 
 
 fn concurrencyOf ctx: Ctx -> Int64
-  (mt (cfgv ctx "concurrency")
+  (match (cfgv ctx "concurrency")
     ((board/asnInt k) (max 1 k))
     ((board/asnStr s) (max 1 (optionOr (stringToInt64 s) 2)))
     (_ 2))
@@ -1188,7 +1188,7 @@ fn prepareShardWork! ctx: Ctx shard: (List (Pair String board/AsnValue)) idx: In
         dist (board/distillShard! ctx.root (shardPaths shard) 3500)
         prompt (auditPrompt shard slot dist.digest)
         tempOpt (planTemp plan)]
-    (mt tempOpt
+    (match tempOpt
       ((none)
         (ShardWork :shard shard :plan plan :req (none)
                    :immediateQuery (some (Query :ok false :content "" :source "" :usage (board/asnNone) :error "ValueError: invalid plan temperature"))))
@@ -1204,7 +1204,7 @@ fn applyShardResult! ctx: Ctx shard: (List (Pair String board/AsnValue)) plan: (
         tail (str " via " q.source " [attractor=" disp ", model=" (modelShort model) "]")]
     (if (not q.ok)
       (do (out! (str "  • [" sid "] Query failed: " q.error)) (ok ()))
-      (mt (board/parseFinding q.content)
+      (match (board/parseFinding q.content)
         ((none) (do (out! (str "  • [" sid "] Clean / Verified" tail)) (ok ())))
         ((some f)
           (let [fe (entries f)]
@@ -1219,10 +1219,10 @@ fn strOrNone v: board/AsnValue -> String
   (board/pyStr v)
 
 fn applyShardBatchLoop! ctx: Ctx works: (List ShardWork) procOuts: (List ProcOut) -> (Result Unit String)
-  (mt (listHead works)
+  (match (listHead works)
     ((none) (ok ()))
     ((some sw)
-      (let [resPair (mt sw.immediateQuery
+      (let [resPair (match sw.immediateQuery
                       ((some q) (pair q procOuts))
                       ((none)
                         (let [r (optionOr sw.req (dummyIntentReq))
@@ -1232,7 +1232,7 @@ fn applyShardBatchLoop! ctx: Ctx works: (List ShardWork) procOuts: (List ProcOut
                           (pair q restPo))))
             q (pairFirst resPair)
             remainingPo (pairSecond resPair)]
-        (mt (applyShardResult! ctx sw.shard sw.plan q)
+        (match (applyShardResult! ctx sw.shard sw.plan q)
           ((err e) (err e))
           ((ok _) (applyShardBatchLoop! ctx (optionOr (listTail works) (list)) remainingPo))))))
 
@@ -1241,9 +1241,9 @@ fn sweepBatch! ctx: Ctx shards: (List board/AsnValue) cycle: Int64 rotate: Bool 
     (ok ())
     (let [items (enumerate shards)
           works (map (fn [p] (prepareShardWork! ctx (entries (pairSecond p)) (pairFirst p) cycle rotate)) items)
-          jobs (fold (fn [acc sw] (mt sw.req ((some r) (listAppend acc (list r.job))) ((none) acc))) (list) works)
+          jobs (fold (fn [acc sw] (match sw.req ((some r) (listAppend acc (list r.job))) ((none) acc))) (list) works)
           k (max 1 (min (listLength shards) (concurrencyOf ctx)))]
-      (mt (runProcPool! jobs k)
+      (match (runProcPool! jobs k)
         ((err e) (err e))
         ((ok procOuts)
           (applyShardBatchLoop! ctx works procOuts)))))
@@ -1263,7 +1263,7 @@ fn runSweep! ctx: Ctx cycle: Int64 rotate: Bool -> (Result Unit String)
       (if isRot
         (out! (str "Rotation Mode:   ACTIVE (Cycle " (stringFromInt64 cycle) " across " (stringFromInt64 (listLength (items (getd rot "cycle_models" (board/asnList (list)))))) " models & regime :" regime ")\n"))
         (out! (str "Rotation Mode:   STATIC BASELINE (regime :" regime ")\n")))
-      (mt (runStatic! ctx)
+      (match (runStatic! ctx)
         ((err e) (err e))
         ((ok staticOk)
           (do
@@ -1272,7 +1272,7 @@ fn runSweep! ctx: Ctx cycle: Int64 rotate: Bool -> (Result Unit String)
               (out! "    [!] Static pipeline reported defects. Proceeding with shard audit to isolate cause...\n"))
             (out! (str "=== [PHASE 2] CONCURRENT INTENT DISPATCH ACROSS " (stringFromInt64 (listLength shards)) " SHARDS ==="))
             (let [t0 (monotonicNs)]
-              (mt (sweepBatch! ctx shards cycle rotate)
+              (match (sweepBatch! ctx shards cycle rotate)
                 ((err e) (err e))
                 ((ok _)
                   (do
@@ -1286,7 +1286,7 @@ fn codeContext! ctx: Ctx target: String k: Int64 -> String
         full (board/pyJoin ctx.root filePart)]
     (if (not (exists? full))
       ""
-      (mt (readText! full)
+      (match (readText! full)
         ((ok t) (cpTake t k))
         ((err e) (do (warn! (str "[Context] " e)) "")))))
 
@@ -1324,32 +1324,32 @@ fn applyVerdict! ctx: Ctx defect: (List (Pair String board/AsnValue)) v: (List (
       (out! (str "  • [" did "] Verdict: :" (stringUpper decision) " - " (cpTake ev 80) "..."))
       (board/withFileLock! bbPath
         (fn []
-          (mt (readText! bbPath)
+          (match (readText! bbPath)
             ((err e) (err e))
             ((ok cur)
               (cond
                 ((= decision "refute")
-                  (mt (board/setField block "status" ":refuted")
+                  (match (board/setField block "status" ":refuted")
                     ((err e) (err e))
                     ((ok b1)
-                      (mt (board/setField b1 "refutedBy" (str "(:kind :prose :agent \"" (board/sanitizeAsnString (s (board/normAgent (getd defect "auditor" (s "cross-examiner"))))) "\" :evidence \"" ev "\")"))
+                      (match (board/setField b1 "refutedBy" (str "(:kind :prose :agent \"" (board/sanitizeAsnString (s (board/normAgent (getd defect "auditor" (s "cross-examiner"))))) "\" :evidence \"" ev "\")"))
                         ((err e) (err e))
                         ((ok b2)
-                          (mt (board/writeBoard! bbPath (replaceAll cur block b2) (cfgs ctx "shards_dir"))
+                          (match (board/writeBoard! bbPath (replaceAll cur block b2) (cfgs ctx "shards_dir"))
                             ((err e) (err e))
                             ((ok _) (do (out! (str "    ✓ Defect " did " REFUTED and sealed with proof.")) (ok ())))))))))
                 ((= decision "corroborate")
                   (let [wit (getv v "witness_test")
                         witText (strOrEmpty wit)
                         clause (if (and (board/truthy? wit) (!= (stringLower witText) "nil")) (str "\n      :witnessTest \"" (board/sanitizeAsnString wit) "\"") "")]
-                    (mt (board/setField block "status" ":corroborated")
+                    (match (board/setField block "status" ":corroborated")
                       ((err e) (err e))
                       ((ok b1)
                         (let [c (confirmations b1)
                               b2 (if (< c 0) b1 (subConfirmations b1 (+ c 1)))
                               note (str "\n      :corroboratedByIntent :falsify\n      :corroborationEvidence \"" ev "\"" clause)
                               b3 (str (rstripSpace (dropLast b2)) note ")")]
-                          (mt (board/writeBoard! bbPath (replaceAll cur block b3) (cfgs ctx "shards_dir"))
+                          (match (board/writeBoard! bbPath (replaceAll cur block b3) (cfgs ctx "shards_dir"))
                             ((err e) (err e))
                             ((ok _)
                               (do (out! (str "    ✓ Defect " did " CORROBORATED" (if (board/truthy? wit) " with executable witness" "") "."))
@@ -1373,7 +1373,7 @@ fn prepareCrossWork! ctx: Ctx defect: (List (Pair String board/AsnValue)) -> Cro
     (CrossWork :defect defect :req req))
 
 fn applyCrossBatchLoop! ctx: Ctx works: (List CrossWork) procOuts: (List ProcOut) -> (Result Unit String)
-  (mt (listHead works)
+  (match (listHead works)
     ((none) (ok ()))
     ((some cw)
       (let [po (optionOr (listHead procOuts) (dummyProcOut))
@@ -1381,9 +1381,9 @@ fn applyCrossBatchLoop! ctx: Ctx works: (List CrossWork) procOuts: (List ProcOut
             r cw.req
             q (finishIntentQuery! ctx r (parseHttpResult (ok po)))
             did (strOrNone (getv cw.defect "id"))]
-        (mt (if (not q.ok)
+        (match (if (not q.ok)
               (do (out! (str "  • [" did "] Peer query failed: " q.error)) (ok ()))
-              (mt (board/parseVerdict q.content)
+              (match (board/parseVerdict q.content)
                 ((none) (do (out! (str "  • [" did "] Could not parse valid :verdict S-expression.")) (ok ())))
                 ((some v) (applyVerdict! ctx cw.defect (entries v)))))
           ((err e) (err e))
@@ -1395,7 +1395,7 @@ fn crossBatch! ctx: Ctx defects: (List (List (Pair String board/AsnValue))) -> (
     (let [works (map (fn [d] (prepareCrossWork! ctx d)) defects)
           jobs (map (fn [cw] cw.req.job) works)
           k (max 1 (min (listLength defects) (concurrencyOf ctx)))]
-      (mt (runProcPool! jobs k)
+      (match (runProcPool! jobs k)
         ((err e) (err e))
         ((ok procOuts)
           (applyCrossBatchLoop! ctx works procOuts)))))
@@ -1412,7 +1412,7 @@ fn runCrossExamine! ctx: Ctx targetId: String -> (Result Unit String)
       (out! "=== ASL AUDIT MESH: ADVERSARIAL CROSS-EXAMINATION ===")
       (if (not (exists? bbPath))
         (do (out! "Blackboard not found.") (ok ()))
-        (mt (readText! bbPath)
+        (match (readText! bbPath)
           ((err e) (err e))
           ((ok bb)
             (let [open (filter (fn [inf]
@@ -1434,9 +1434,9 @@ fn pidProbe! pid: Int64 -> Bool
     (else (resultOr (procAlive? pid) false)))
 
 fn readPid! path: String -> (Option Int64)
-  (mt (readText! path)
+  (match (readText! path)
     ((err _) (none))
-    ((ok t) (mt (board/pyInt (board/pyStrip t)) ((board/intOk v) (some v)) (_ (none)))))
+    ((ok t) (match (board/pyInt (board/pyStrip t)) ((board/intOk v) (some v)) (_ (none)))))
 
 fn countKeyed text: String key: String suffix: String -> Int64
   (let [bs (stringToBytes text)]
@@ -1470,16 +1470,16 @@ fn runStatus! ctx: Ctx -> (Result Unit String)
         legText (if (and (board/truthy? leg) (exists? legPath)) (readText! legPath) (ok ""))
         bbText (if (exists? bbPath) (readText! bbPath) (ok ""))
         pidFile (cfgs ctx "pid_file")]
-    (mt legText
+    (match legText
       ((err e) (err e))
       ((ok lt)
-        (mt bbText
+        (match bbText
           ((err e) (err e))
           ((ok bt)
             (let [blocks (board/extractGapBlocks bt "defect")
                   pidStatus (if (not (exists? pidFile))
                               "STOPPED"
-                              (mt (readPid! pidFile)
+                              (match (readPid! pidFile)
                                 ((none) "DEAD (Stale PID file)")
                                 ((some p) (if (and (<= p 2147483647) (pidProbe! p)) (str "RUNNING (PID: " (stringFromInt64 p) ")") "DEAD (Stale PID file)"))))
                   n (fn [x] (stringFromInt64 x))]
@@ -1547,13 +1547,13 @@ fn runDashboard! ctx: Ctx -> (Result Unit String)
   (let [bbPath (cfgs ctx "blackboard_path")
         text (if (exists? bbPath) (readText! bbPath) (ok ""))
         pidFile (cfgs ctx "pid_file")]
-    (mt text
+    (match text
       ((err e) (err e))
       ((ok bt)
         (let [blocks (board/extractGapBlocks bt "defect")
               pidStatus (if (not (exists? pidFile))
                           "OFFLINE"
-                          (mt (readPid! pidFile)
+                          (match (readPid! pidFile)
                             ((none) "STALE")
                             ((some p) (if (and (<= p 2147483647) (pidProbe! p)) (str "ACTIVE (PID " (stringFromInt64 p) ")") "STALE"))))
               shards (items (cfgv ctx "shards"))
@@ -1607,12 +1607,12 @@ fn bracketFrom line: String bs: Bytes n: Int64 key: String i: Int64 -> (Option S
           (bracketFrom line bs n key (+ p 1))))))
 
 fn bracketWords line: String key: String -> (List String)
-  (mt (bracketBody line key)
+  (match (bracketBody line key)
     ((none) (list))
     ((some body) (if (stringEmpty? (board/pyStrip body)) (list) (board/pySplit (replaceAll body "\"" "")))))
 
 fn counts xs: (List String) -> (List (Pair String Int64))
-  (fold (fn [acc x] (mt (board/dictGet acc x) ((some c) (board/dictPut acc x (+ c 1))) ((none) (board/dictPut acc x 1)))) (list) xs)
+  (fold (fn [acc x] (match (board/dictGet acc x) ((some c) (board/dictPut acc x (+ c 1))) ((none) (board/dictPut acc x 1)))) (list) xs)
 
 fn runTelemetry! ctx: Ctx -> (Result Unit String)
   (let [tel (cfgs ctx "telemetry_log_path")]
@@ -1620,7 +1620,7 @@ fn runTelemetry! ctx: Ctx -> (Result Unit String)
       (out! "=== ASL AUDIT MESH: AGENT TELEMETRY & COMPLIANCE REPORT ===")
       (if (not (exists? tel))
         (do (out! (str "No telemetry logs found at: " tel)) (ok ()))
-        (mt (readText! tel)
+        (match (readText! tel)
           ((err e) (err e))
           ((ok text)
             (let [lines (logLines text)
@@ -1688,7 +1688,7 @@ fn runProposals! ctx: Ctx -> (Result Unit String)
       (out! "Mode: READ-ONLY AUDIT (Proposals staged in Blackboard; zero disk mutation)\n")
       (if (not (exists? bbPath))
         (do (out! "Blackboard not found.") (ok ()))
-        (mt (readText! bbPath)
+        (match (readText! bbPath)
           ((err e) (err e))
           ((ok bb)
             (let [props (filter (fn [b] (has? b ":fixProposal")) (board/extractGapBlocks bb "defect"))]
@@ -1754,10 +1754,10 @@ fn runProposeFix! ctx: Ctx did: String -> (Result Unit String)
         (out! (str "=== ASL AUDIT MESH: FORMULATING VIRTUAL FIX PROPOSAL FOR " did " ==="))
         (if (not (exists? bbPath))
           (do (out! "Blackboard not found.") (ok ()))
-          (mt (readText! bbPath)
+          (match (readText! bbPath)
             ((err e) (err e))
             ((ok bb)
-              (mt (findDefect bb did)
+              (match (findDefect bb did)
                 ((none) (do (out! (str "Defect " did " not found in Blackboard.")) (ok ())))
                 ((some hit)
                   (let [block (pairFirst hit)
@@ -1786,7 +1786,7 @@ fn runProposeFix! ctx: Ctx did: String -> (Result Unit String)
                                   (if (has? block ":fixProposal")
                                     (do (out! "Defect already carries a fix proposal. Use 'asl mesh proposals' to inspect.") (ok ()))
                                     (let [nb (str (rstripSpace (dropLast block)) (proposalText cheating expl patch) ")")]
-                                      (mt (board/writeBoard! bbPath (replaceAll bb block nb) (cfgs ctx "shards_dir"))
+                                      (match (board/writeBoard! bbPath (replaceAll bb block nb) (cfgs ctx "shards_dir"))
                                         ((err e) (err e))
                                         ((ok _)
                                           (do (out! (str "✓ Fix proposal recorded in Blackboard. (Keyword check: " (if cheating (str "flagged " (stringJoin reasons ",")) "no flagged keywords") ")"))
@@ -1797,7 +1797,7 @@ fn runConsensus! ctx: Ctx -> (Result Unit String)
   (let [bbPath (cfgs ctx "blackboard_path")]
     (if (not (exists? bbPath))
       (ok ())
-      (mt (readText! bbPath)
+      (match (readText! bbPath)
         ((err e) (err e))
         ((ok bb)
           (let [ids (map (fn [b] (strOrEmpty (getv (entries (board/parseGapBlock b)) "id")))
@@ -1809,12 +1809,12 @@ fn runConsensus! ctx: Ctx -> (Result Unit String)
                 (consensusLoop! ctx ids))))))))
 
 fn consensusLoop! ctx: Ctx ids: (List String) -> (Result Unit String)
-  (mt (listHead ids)
+  (match (listHead ids)
     ((none) (ok ()))
     ((some did)
       (do
         (out! (str "    • Synthesizing virtual fix proposal for " (if (stringEmpty? did) "None" did) "..."))
-        (mt (runProposeFix! ctx did)
+        (match (runProposeFix! ctx did)
           ((ok _) ())
           ((err e) (warn! (str "      [Error] Failed to formulate proposal for " did ": " (hookErr e)))))
         (consensusLoop! ctx (rest ids)))))
@@ -1938,10 +1938,10 @@ fn preflushReason patch: String -> String
       (if (not (stringEmpty? r0))
         r0
         (let [payload (fn [tag]
-                        (mt (keyedEscaped patch tag)
+                        (match (keyedEscaped patch tag)
                           ((none) "")
                           ((some raw)
-                            (let [dec (mt (unicodeEscape raw true) ((ok d) d) ((err _) raw))
+                            (let [dec (match (unicodeEscape raw true) ((ok d) d) ((err _) raw))
                                   r (dyckReason dec)]
                               (if (stringEmpty? r) "" (str "Unbalanced Dyck-1 delimiter in " tag " payload: " r))))))
               rNew (payload ":new")
@@ -2092,16 +2092,16 @@ fn applyFix! ctx: Ctx did: String -> (Result board/AsnValue String)
       ((stringEmpty? did) (ok (fixResult (list (pair "status" "rejected") (pair "reason" "Missing target defect ID")))))
       ((not (exists? bbPath)) (ok (fixResult (list (pair "status" "rejected") (pair "reason" (str "Blackboard not found at " bbPath))))))
       (else
-        (mt (readText! bbPath)
+        (match (readText! bbPath)
           ((err e) (err e))
           ((ok bb)
-            (mt (findDefect bb did)
+            (match (findDefect bb did)
               ((none) (ok (fixResult (list (pair "status" "rejected") (pair "reason" (str "Defect " did " not found in Blackboard"))))))
               ((some hit)
-                (mt (keyedEscaped (pairFirst hit) ":proposedPatch")
+                (match (keyedEscaped (pairFirst hit) ":proposedPatch")
                   ((none) (ok (fixResult (list (pair "status" "rejected") (pair "reason" (str "No fix proposal found for defect " did))))))
                   ((some raw)
-                    (mt (unicodeEscape raw false)
+                    (match (unicodeEscape raw false)
                       ((err e) (err e))
                       ((ok patch) (applyPatch! ctx did patch))))))))))))
 
@@ -2118,13 +2118,13 @@ fn applyPatch! ctx: Ctx did: String patch: String -> (Result board/AsnValue Stri
           (let [ref (optionOr tgt "")
                 parts (splitOn ref "#")
                 filePart (first parts "")]
-            (mt (unicodeEscape (optionOr oldRaw "") false)
+            (match (unicodeEscape (optionOr oldRaw "") false)
               ((err e) (err e))
               ((ok oldText)
-                (mt (unicodeEscape (optionOr newRaw "") false)
+                (match (unicodeEscape (optionOr newRaw "") false)
                   ((err e) (err e))
                   ((ok newText)
-                    (mt (resolveFixTarget! ctx.root filePart)
+                    (match (resolveFixTarget! ctx.root filePart)
                       ((err code)
                         (ok (fixResult (list (pair "status" "rejected")
                                              (pair "error" code)
@@ -2140,14 +2140,14 @@ fn applyPatch! ctx: Ctx did: String patch: String -> (Result board/AsnValue Stri
                             score (round2 (/ (int64ToFloat64 killed) (int64ToFloat64 (max 1 gen))))]
                         (do
                           (out! (str "  ✓ In-memory sliced mutations: " (stringFromInt64 killed) "/" (stringFromInt64 gen) " killed"))
-                          (mt (board/withSecureFileLock! ctx.root filePart
+                          (match (board/withSecureFileLock! ctx.root filePart
                                 (fn []
-                                  (mt (fileReadAt ctx.root filePart)
+                                  (match (fileReadAt ctx.root filePart)
                                     ((err e) (err e))
                                     ((ok content)
                                       (if (not (has? content oldText))
                                         (ok false)
-                                        (mt (fileWriteAt ctx.root filePart (replaceFirst content oldText newText))
+                                        (match (fileWriteAt ctx.root filePart (replaceFirst content oldText newText))
                                           ((err e) (err e))
                                           ((ok _) (ok true))))))))
                             ((err e)
@@ -2166,7 +2166,7 @@ fn osErrText e: String -> String
     (if (and (>= p 0) (stringEndsWith? (sub e 0 p) "Error")) (sub e (+ p 2) (stringLength e)) e))
 
 fn runShellProbe! ctx: Ctx cmd: String timeoutSec: Int64 cwd: String -> (Result (Pair Int64 String) String)
-  (mt (runProc! (list "bash" "-c" cmd) (if (stringEmpty? cwd) ctx.root cwd) ctx.env "" (* timeoutSec 1000))
+  (match (runProc! (list "bash" "-c" cmd) (if (stringEmpty? cwd) ctx.root cwd) ctx.env "" (* timeoutSec 1000))
     ((err e) (err (str "ERR_TOOL_ABSENT: bash: " e)))
     ((ok r)
       (if r.timedOut
@@ -2176,11 +2176,11 @@ fn runShellProbe! ctx: Ctx cmd: String timeoutSec: Int64 cwd: String -> (Result 
 fn pyRealpathLimit! path: String depth: Int64 -> String
   (if (> depth 32)
     "__ASL_REALPATH_DEPTH_EXCEEDED__"
-    (mt (realPath path)
+    (match (realPath path)
       ((ok r) r)
       ((err _)
         (if (isLink? path)
-          (mt (fileReadlink path)
+          (match (fileReadlink path)
             ((ok target)
               (let [resolved (if (stringStartsWith? target "/") target (board/pyJoin (board/pyDirname path) target))]
                 (pyRealpathLimit! resolved (+ depth 1))))
@@ -2218,7 +2218,7 @@ fn normalizeRelPath rel: String -> (Result (List String) String)
                           (cond
                             ((or (stringEmpty? part) (= part ".")) st)
                             ((= part "..")
-                              (mt (listLast st)
+                              (match (listLast st)
                                 ((none) (listAppend st (list "..")))
                                 ((some last)
                                   (if (= last "..")
@@ -2237,14 +2237,14 @@ fn normalizeRelPath rel: String -> (Result (List String) String)
           (else (ok stack))))))
 
 fn singleTargetErrorCode! root: String rel: String -> String
-  (mt (normalizeRelPath rel)
+  (match (normalizeRelPath rel)
     ((err code) code)
     ((ok stack)
       (let [normRel (stringJoin stack "/")
             full (board/pyJoin root normRel)
-            realRoot (mt (realPath root) ((ok r) r) ((err _) (pyRealpath! root)))
+            realRoot (match (realPath root) ((ok r) r) ((err _) (pyRealpath! root)))
             rootPrefix (if (stringEndsWith? realRoot "/") realRoot (str realRoot "/"))
-            realFull (mt (realPath full) ((ok r) r) ((err _) (pyRealpath! full)))
+            realFull (match (realPath full) ((ok r) r) ((err _) (pyRealpath! full)))
             fullPrefix (if (stringEndsWith? realFull "/") realFull (str realFull "/"))]
         (cond
           ((= realFull "__ASL_REALPATH_DEPTH_EXCEEDED__")
@@ -2259,7 +2259,7 @@ fn targetErrorCode! root: String rel: String -> String
   (let [code (singleTargetErrorCode! root rel)]
     (if (not (stringEmpty? code))
       code
-      (mt (normalizeRelPath rel)
+      (match (normalizeRelPath rel)
         ((err e) e)
         ((ok stack) (singleTargetErrorCode! root (str (stringJoin stack "/") ".lock"))))))
 
@@ -2267,12 +2267,12 @@ fn resolveFixTarget! root: String rel: String -> (Result String String)
   (let [code (targetErrorCode! root rel)]
     (if (not (stringEmpty? code))
       (err code)
-      (mt (normalizeRelPath rel)
+      (match (normalizeRelPath rel)
         ((err e) (err e))
         ((ok stack) (ok (board/pyJoin root (stringJoin stack "/")))))))
 
 fn ! symlinkPrefix? cur: String parts: (List String) -> Bool
-  (mt (listHead parts)
+  (match (listHead parts)
     ((none) false)
     ((some part)
       (let [next (board/pyJoin cur part)]
@@ -2300,38 +2300,38 @@ fn makeTempDir! ctx: Ctx prefix: String tries: Int64 -> (Result String String)
         path (board/pyJoin (tempRoot ctx) (str prefix name))]
     (cond
       ((exists? path) (if (> tries 100) (err (str "FileExistsError: " path)) (makeTempDir! ctx prefix (+ tries 1))))
-      (else (mt (dirCreate path) ((ok _) (ok path)) ((err e) (err (pyOsError e path)))))))
+      (else (match (dirCreate path) ((ok _) (ok path)) ((err e) (err (pyOsError e path)))))))
 
 fn pow37 k: Int64 -> Int64
   (if (<= k 0) 1 (* 37 (pow37 (- k 1))))
 
 fn mirrorDir! src: String dst: String skip: String -> (Result Unit String)
-  (mt (dirList src)
+  (match (dirList src)
     ((err e) (err (pyOsError e src)))
     ((ok names)
       (fold (fn [acc name]
-              (mt acc
+              (match acc
                 ((err e) (err e))
                 ((ok _)
                   (if (= name skip)
                     (ok ())
-                    (mt (pathSymlink (board/pyJoin src name) (board/pyJoin dst name))
+                    (match (pathSymlink (board/pyJoin src name) (board/pyJoin dst name))
                       ((ok _) (ok ()))
                       ((err e) (err (pyOsError e (board/pyJoin dst name)))))))))
             (ok ()) names)))
 
 fn overlayLevels! src: String dst: String parts: (List String) content: String -> (Result Unit String)
-  (mt (listHead parts)
+  (match (listHead parts)
     ((none) (ok ()))
     ((some part)
-      (mt (mirrorDir! src dst part)
+      (match (mirrorDir! src dst part)
         ((err e) (err e))
         ((ok _)
           (if (listEmpty? (rest parts))
-            (mt (fileWrite (board/pyJoin dst part) content) ((ok _) (ok ())) ((err e) (err (pyOsError e (board/pyJoin dst part)))))
+            (match (fileWrite (board/pyJoin dst part) content) ((ok _) (ok ())) ((err e) (err (pyOsError e (board/pyJoin dst part)))))
             (let [s2 (board/pyJoin src part)
                   d2 (board/pyJoin dst part)]
-              (mt (dirCreate d2)
+              (match (dirCreate d2)
                 ((err e) (err (pyOsError e d2)))
                 ((ok _) (overlayLevels! s2 d2 (rest parts) content)))))))))
 
@@ -2339,21 +2339,21 @@ fn buildMutantOverlay! ctx: Ctx rel: String old: String new: String -> (Result O
   (let [perr (mutantPathError! ctx rel)]
     (if (not (stringEmpty? perr))
       (ok (Overlay :dir "" :error perr))
-      (mt (readText! (board/pyJoin ctx.root rel))
+      (match (readText! (board/pyJoin ctx.root rel))
         ((err e) (ok (Overlay :dir "" :error (str "mutant file unreadable: " (osErrText e)))))
         ((ok content)
           (let [c (countOf content old)]
             (if (!= c 1)
               (ok (Overlay :dir "" :error (str "mutant :old occurs " (stringFromInt64 c) " times in " rel)))
-              (mt (makeTempDir! ctx "aslMeshMutant" 0)
+              (match (makeTempDir! ctx "aslMeshMutant" 0)
                 ((err e) (err e))
                 ((ok tmp)
-                  (mt (overlayLevels! ctx.root tmp (splitOn rel "/") (replaceFirst content old new))
+                  (match (overlayLevels! ctx.root tmp (splitOn rel "/") (replaceFirst content old new))
                     ((err e) (do (removeTree! tmp) (err e)))
                     ((ok _) (ok (Overlay :dir tmp :error ""))))))))))))
 
 fn removeTree! path: String -> Unit
-  (mt (pathRemove path)
+  (match (pathRemove path)
     ((ok _) ())
     ((err e) (warn! (str "[Cleanup] " e))))
 
@@ -2361,7 +2361,7 @@ fn mutField m: (List (Pair String board/AsnValue)) k: String -> String
   (strOrEmpty (getv m k))
 
 fn mutantKilled! ctx: Ctx cmd: String m: (List (Pair String board/AsnValue)) -> (Result (Pair Bool String) String)
-  (mt (buildMutantOverlay! ctx (mutField m "file") (mutField m "old") (mutField m "new"))
+  (match (buildMutantOverlay! ctx (mutField m "file") (mutField m "old") (mutField m "new"))
     ((err e) (err e))
     ((ok ov)
       (if (not (stringEmpty? ov.error))
@@ -2369,7 +2369,7 @@ fn mutantKilled! ctx: Ctx cmd: String m: (List (Pair String board/AsnValue)) -> 
         (let [r (runShellProbe! ctx cmd 300 ov.dir)]
           (do
             (removeTree! ov.dir)
-            (mt r
+            (match r
               ((err e) (err e))
               ((ok p)
                 (if (!= (pairFirst p) 0)
@@ -2392,7 +2392,7 @@ fn evidenceForm agent: String cmd: String stamp: String -> String
   (str "(:agent \"" (board/sanitizeAsnString (s agent)) "\" :command \"" (board/sanitizeAsnString (s cmd)) "\" :exit 0 :at \"" stamp "\")")
 
 fn setFields block: String steps: (List (Pair String String)) -> (Result String String)
-  (fold (fn [acc p] (mt acc ((err e) (err e)) ((ok b) (board/setField b (pairFirst p) (pairSecond p))))) (ok block) steps)
+  (fold (fn [acc p] (match acc ((err e) (err e)) ((ok b) (board/setField b (pairFirst p) (pairSecond p))))) (ok block) steps)
 
 fn runTransition! ctx: Ctx did: String toRaw: String agent: String remediatedBy: String verifyCmd: String mutant: (Option (List (Pair String board/AsnValue)))
     -> (Result (Pair Bool String) String)
@@ -2404,10 +2404,10 @@ fn runTransition! ctx: Ctx did: String toRaw: String agent: String remediatedBy:
       (let [bbPath (cfgs ctx "blackboard_path")]
         (board/withFileLock! bbPath
           (fn []
-            (mt (readText! bbPath)
+            (match (readText! bbPath)
               ((err e) (err e))
               ((ok bb)
-                (mt (findDefect bb did)
+                (match (findDefect bb did)
                   ((none) (refuse "defect not found on the blackboard"))
                   ((some hit)
                     (let [block (pairFirst hit)
@@ -2416,10 +2416,10 @@ fn runTransition! ctx: Ctx did: String toRaw: String agent: String remediatedBy:
                           target (gets prior "target" "")
                           stamp (localDay!)
                           finish (fn [steps]
-                                   (mt (setFields block (listAppend steps (list (pair "status" (str ":" to)))))
+                                   (match (setFields block (listAppend steps (list (pair "status" (str ":" to)))))
                                      ((err e) (err e))
                                      ((ok nb)
-                                       (mt (board/writeBoard! bbPath (replaceFirst bb block nb) (cfgs ctx "shards_dir"))
+                                       (match (board/writeBoard! bbPath (replaceFirst bb block nb) (cfgs ctx "shards_dir"))
                                          ((err e) (err e))
                                          ((ok _) (ok (receipt true did to (list (pair "agent" (if (stringEmpty? agentN) "unknown" agentN))))))))))]
                       (cond
@@ -2429,7 +2429,7 @@ fn runTransition! ctx: Ctx did: String toRaw: String agent: String remediatedBy:
                           (let [vac (board/commandVacuity! (s verifyCmd) (s target) ctx.root)]
                             (if (not (stringEmpty? vac))
                               (refuse (str "vacuous evidence command: " vac))
-                              (mt (runShellProbe! ctx verifyCmd 300 "")
+                              (match (runShellProbe! ctx verifyCmd 300 "")
                                 ((err e) (err e))
                                 ((ok pr)
                                   (if (!= (pairFirst pr) 0)
@@ -2449,25 +2449,25 @@ fn transitionVerified! ctx: Ctx did: String to: String agentN: String remediated
       (refuse (str "--agent and --verify-cmd are required for :" to))
       (let [rec (board/asnDict (list (pair "target" (s target)) (pair "remediatedBy" (s rbN))
                                      (pair "verifiedBy" (board/asnDict (list (pair "agent" (s agentN)) (pair "command" (s verifyCmd)) (pair "exit" (s "0")))))))]
-        (mt (board/transitionAllowed! (s to) rec ctx.root)
+        (match (board/transitionAllowed! (s to) rec ctx.root)
           ((err e) (err e))
           ((ok verdict)
             (if (not (pairFirst verdict))
               (refuse (pairSecond verdict))
-              (mt (runShellProbe! ctx verifyCmd 300 "")
+              (match (runShellProbe! ctx verifyCmd 300 "")
                 ((err e) (err e))
                 ((ok pr)
                   (if (!= (pairFirst pr) 0)
                     (ok (receipt false did to (list (pair "reason" (str ":verifiedBy command exits " (stringFromInt64 (pairFirst pr)))) (pair "exit" (stringFromInt64 (pairFirst pr))))))
-                    (let [mut (mt mutant ((some m) m) ((none) (entries (getv prior "mutant"))))]
+                    (let [mut (match mutant ((some m) m) ((none) (entries (getv prior "mutant"))))]
                       (if (stringEmpty? (mutField mut "file"))
                         (refuse (str ":" to " needs a :mutant (:file :old :new) that the verify command kills"))
-                        (mt (mutantKilled! ctx verifyCmd mut)
+                        (match (mutantKilled! ctx verifyCmd mut)
                           ((err e) (err e))
                           ((ok k)
                             (if (not (pairFirst k))
                               (refuse (pairSecond k))
-                              (let [mutStep (mt mutant
+                              (let [mutStep (match mutant
                                               ((some m) (list (pair "mutant" (str "(:file \"" (board/sanitizeAsnString (s (mutField m "file"))) "\" :old \"" (board/sanitizeAsnString (s (mutField m "old")))
                                                                                   "\" :new \"" (board/sanitizeAsnString (s (mutField m "new"))) "\")"))))
                                               ((none) (list)))]
@@ -2493,7 +2493,7 @@ fn bump t: Tally verified: Int64 ran: Int64 mRun: Int64 mKilled: Int64 -> Tally
   (Tally :problems t.problems :warnings t.warnings :verified (+ t.verified verified) :ran (+ t.ran ran) :mutantsRun (+ t.mutantsRun mRun) :mutantsKilled (+ t.mutantsKilled mKilled))
 
 fn validateRun! ctx: Ctx t: Tally did: String label: String cmd: String -> (Result Tally String)
-  (mt (runShellProbe! ctx cmd 300 "")
+  (match (runShellProbe! ctx cmd 300 "")
     ((err e) (err e))
     ((ok pr)
       (let [t2 (bump t 0 1 0 0)]
@@ -2504,14 +2504,14 @@ fn validateRun! ctx: Ctx t: Tally did: String label: String cmd: String -> (Resu
 fn validateVerified! ctx: Ctx t0: Tally did: String st: String rec: board/AsnValue runCommands: Bool revertCheck: Bool -> (Result Tally String)
   (let [t (bump t0 1 0 0 0)
         es (entries rec)]
-    (mt (board/transitionAllowed! (s st) rec ctx.root)
+    (match (board/transitionAllowed! (s st) rec ctx.root)
       ((err e) (err e))
       ((ok verdict)
         (if (not (pairFirst verdict))
           (ok (addProblem t did (pairSecond verdict)))
           (let [t1 (if (stringStartsWith? (board/normAgent (getv es "remediatedBy")) "unrecorded") (addWarning t did ":remediatorUnknown") t)
                 cmd (strOrEmpty (getv (entries (getv es "verifiedBy")) "command"))]
-            (mt (if runCommands (validateRun! ctx t1 did ":verifiedBy" cmd) (ok t1))
+            (match (if runCommands (validateRun! ctx t1 did ":verifiedBy" cmd) (ok t1))
               ((err e) (err e))
               ((ok t2)
                 (let [mut (getv es "mutant")]
@@ -2519,7 +2519,7 @@ fn validateVerified! ctx: Ctx t0: Tally did: String st: String rec: board/AsnVal
                     ((and revertCheck (not (board/truthy? mut))) (ok (addWarning t2 did ":noMutant")))
                     (revertCheck
                       (let [m (entries mut)]
-                        (mt (buildMutantOverlay! ctx (mutField m "file") (mutField m "old") (mutField m "new"))
+                        (match (buildMutantOverlay! ctx (mutField m "file") (mutField m "old") (mutField m "new"))
                           ((err e) (err e))
                           ((ok ov)
                             (if (not (stringEmpty? ov.error))
@@ -2527,7 +2527,7 @@ fn validateVerified! ctx: Ctx t0: Tally did: String st: String rec: board/AsnVal
                               (let [r (runShellProbe! ctx cmd 300 ov.dir)]
                                 (do
                                   (removeTree! ov.dir)
-                                  (mt r
+                                  (match r
                                     ((err e) (err e))
                                     ((ok pr)
                                       (if (= (pairFirst pr) 0)
@@ -2567,23 +2567,23 @@ fn validateShards! ctx: Ctx t: Tally boardIds: (List (Pair String String)) -> (R
   (let [dir (cfgs ctx "shards_dir")]
     (if (or (stringEmpty? dir) (not (isDir? dir)))
       (ok (pair t (list)))
-      (mt (dirList dir)
+      (match (dirList dir)
         ((err e) (err (pyOsError e dir)))
         ((ok names)
           (fold (fn [acc fnm]
-                  (mt acc
+                  (match acc
                     ((err e) (err e))
                     ((ok st)
                       (if (not (and (stringStartsWith? fnm "defect_") (stringEndsWith? fnm ".asn")))
                         (ok st)
-                        (mt (readText! (board/pyJoin dir fnm))
+                        (match (readText! (board/pyJoin dir fnm))
                           ((err e) (err e))
                           ((ok sh)
                             (let [blocks (board/extractGapBlocks sh "defect")
                                   sid (if (listEmpty? blocks) "" (gets (entries (board/parseGapBlock (first blocks ""))) "id" ""))
                                   t1 (pairFirst st)
                                   ids (listAppend (pairSecond st) (list sid))]
-                              (ok (pair (mt (board/dictGet boardIds sid)
+                              (ok (pair (match (board/dictGet boardIds sid)
                                           ((none) (addProblem t1 (if (stringEmpty? sid) fnm sid) "orphan shard: not on the blackboard"))
                                           ((some blk) (if (!= (board/shardTextFromBlock blk) sh) (addProblem t1 sid "shard differs from its blackboard record") t1)))
                                         ids)))))))))
@@ -2593,16 +2593,16 @@ fn tallyList pairs: (List (Pair String String)) key: String -> String
   (board/asnListText (map (fn [p] (str "(:id \"" (board/sanitizeAsnString (s (pairFirst p))) "\" :" key " \"" (board/sanitizeAsnString (s (pairSecond p))) "\")")) pairs))
 
 fn runValidate! ctx: Ctx runCommands: Bool revertCheck: Bool -> (Result Int64 String)
-  (mt (readText! (cfgs ctx "blackboard_path"))
+  (match (readText! (cfgs ctx "blackboard_path"))
     ((err e) (err e))
     ((ok bb)
       (let [blocks (board/extractGapBlocks bb "defect")
             boardIds (fold (fn [acc b] (board/dictPut acc (gets (entries (board/parseGapBlock b)) "id" "") b)) (list) blocks)
             t0 (Tally :problems (list) :warnings (list) :verified 0 :ran 0 :mutantsRun 0 :mutantsKilled 0)]
-        (mt (fold (fn [acc b] (mt acc ((err e) (err e)) ((ok t) (validateBlock! ctx t b runCommands revertCheck)))) (ok t0) blocks)
+        (match (fold (fn [acc b] (match acc ((err e) (err e)) ((ok t) (validateBlock! ctx t b runCommands revertCheck)))) (ok t0) blocks)
           ((err e) (err e))
           ((ok t1)
-            (mt (validateShards! ctx t1 boardIds)
+            (match (validateShards! ctx t1 boardIds)
               ((err e) (err e))
               ((ok sp)
                 (let [shardIds (pairSecond sp)
@@ -2635,18 +2635,18 @@ fn chk cond: Bool what: String -> (Pair Bool String)
   (pair cond what)
 
 fn runStages stages: (List (fn [] -> (Result (List (Pair Bool String)) String))) acc: (List (Pair Bool String)) -> (Result (List (Pair Bool String)) String)
-  (mt (listHead stages)
+  (match (listHead stages)
     ((none) (ok acc))
     ((some st)
-      (mt (st)
+      (match (st)
         ((err e) (err e))
         ((ok cs) (runStages (rest stages) (listAppend acc cs))))))
 
 fn putText! path: String text: String -> (Result Unit String)
-  (mt (fileWrite path text) ((ok _) (ok ())) ((err e) (err (pyOsError e path))))
+  (match (fileWrite path text) ((ok _) (ok ())) ((err e) (err (pyOsError e path))))
 
 fn refusedCheck! ctx: Ctx did: String agent: String rb: String cmd: String mut: (Option (List (Pair String board/AsnValue))) what: String -> (Result (Pair Bool String) String)
-  (mt (runTransition! ctx did "remediated" agent rb cmd mut)
+  (match (runTransition! ctx did "remediated" agent rb cmd mut)
     ((err e) (err e))
     ((ok r) (ok (chk (not (pairFirst r)) what))))
 
@@ -2654,31 +2654,31 @@ fn mutDict file: String old: String new: String -> (Option (List (Pair String bo
   (some (list (pair "file" (s file)) (pair "old" (s old)) (pair "new" (s new))))
 
 fn checkSeq steps: (List (fn [] -> (Result (Pair Bool String) String))) acc: (List (Pair Bool String)) -> (Result (List (Pair Bool String)) String)
-  (mt (listHead steps)
+  (match (listHead steps)
     ((none) (ok acc))
-    ((some f) (mt (f) ((err e) (err e)) ((ok c) (checkSeq (rest steps) (listAppend acc (list c)))))))
+    ((some f) (match (f) ((err e) (err e)) ((ok c) (checkSeq (rest steps) (listAppend acc (list c)))))))
 
 fn firstBlock! ctx: Ctx -> (Result String String)
-  (mt (readText! (cfgs ctx "blackboard_path"))
+  (match (readText! (cfgs ctx "blackboard_path"))
     ((err e) (err e))
     ((ok bb) (ok (first (board/extractGapBlocks bb "defect") ""))))
 
 fn validateIs! ctx: Ctx runCommands: Bool revertCheck: Bool want: Int64 what: String -> (Result (Pair Bool String) String)
-  (mt (runValidate! ctx runCommands revertCheck)
+  (match (runValidate! ctx runCommands revertCheck)
     ((err e) (err e))
     ((ok code) (ok (chk (= code want) what))))
 
 fn rewriteBoard! ctx: Ctx f: (fn [String] -> (Result String String)) -> (Result Unit String)
   (let [bbPath (cfgs ctx "blackboard_path")]
-    (mt (readText! bbPath)
+    (match (readText! bbPath)
       ((err e) (err e))
-      ((ok bb) (mt (f bb) ((err e) (err e)) ((ok nb) (board/writeBoard! bbPath nb (cfgs ctx "shards_dir")))))))
+      ((ok bb) (match (f bb) ((err e) (err e)) ((ok nb) (board/writeBoard! bbPath nb (cfgs ctx "shards_dir")))))))
 
 fn selftestFinding! ctx: Ctx -> (Result (List (Pair Bool String)) String)
   (let [raw "(:finding :target \"a/b.asl#f\" :severity :classify :hazard \"h \\\"q\\\" h\" :evidence \"(let [(folding (tui/formatToolCall \\\"patch\\\" \\\"src/app.asl#entry\\\"))] x)\" :remediation \"r\")"
         wantEv "(let [(folding (tui/formatToolCall \"patch\" \"src/app.asl#entry\"))] x)"
         fnd (board/parseFinding raw)
-        fe (mt fnd ((some v) (entries v)) ((none) (list)))
+        fe (match fnd ((some v) (entries v)) ((none) (list)))
         c1 (chk (and (some? fnd) (= (strOrEmpty (getv fe "evidence")) wantEv)) "evidence captured whole across embedded quotes")
         c2 (chk (and (some? fnd) (= (strOrEmpty (getv fe "hazard")) "h \"q\" h")) "hazard unescaped")
         c3 (chk (and (some? fnd) (= (strOrEmpty (getv fe "severity")) "medium")) "unknown severity :classify clamps to the enum")
@@ -2686,10 +2686,10 @@ fn selftestFinding! ctx: Ctx -> (Result (List (Pair Bool String)) String)
                     (pair "model" (s "selftest-auditor")) (pair "temp" (board/asnFloat 0.2)))]
     (if (none? fnd)
       (err "TypeError: 'NoneType' object is not subscriptable")
-      (mt (recordFinding! ctx fe shard "" "")
+      (match (recordFinding! ctx fe shard "" "")
         ((err e) (err e))
         ((ok _)
-          (mt (readText! (cfgs ctx "blackboard_path"))
+          (match (readText! (cfgs ctx "blackboard_path"))
             ((err e) (err e))
             ((ok bb)
               (let [blocks (board/extractGapBlocks bb "defect")
@@ -2701,13 +2701,13 @@ fn selftestFinding! ctx: Ctx -> (Result (List (Pair Bool String)) String)
                           (chk (stringEmpty? (dyckReason bb)) "blackboard stays balanced"))))))))))
 
 fn selftestTransitions! ctx: Ctx tmp: String -> (Result (List (Pair Bool String)) String)
-  (mt (dirCreate (board/pyJoin tmp "a"))
+  (match (dirCreate (board/pyJoin tmp "a"))
     ((err e) (err (pyOsError e (board/pyJoin tmp "a"))))
     ((ok _)
-      (mt (putText! (board/pyJoin tmp "a/b.asl") "(ok)\n")
+      (match (putText! (board/pyJoin tmp "a/b.asl") "(ok)\n")
         ((err e) (err e))
         ((ok _)
-          (mt (firstBlock! ctx)
+          (match (firstBlock! ctx)
             ((err e) (err e))
             ((ok b0)
               (let [did (gets (entries (board/parseGapBlock b0)) "id" "")
@@ -2730,75 +2730,75 @@ fn selftestTransitions! ctx: Ctx tmp: String -> (Result (List (Pair Bool String)
                         (rc "agentB" "agentA" probe (mutDict "../x" "a" "b") "mutant path with .. is refused")
                         (rc "agentB" "agentA" probe (mutDict "/etc/hosts" "a" "b") "absolute mutant path is refused")
                         (fn []
-                          (mt (pathSymlink "/etc" (board/pyJoin tmp "esc"))
+                          (match (pathSymlink "/etc" (board/pyJoin tmp "esc"))
                             ((err e) (err (pyOsError e (board/pyJoin tmp "esc"))))
                             ((ok _) (ok (chk (not (stringEmpty? (mutantPathError! ctx "esc/hosts"))) "mutant path through a symlink is refused")))))
                         (fn []
-                          (mt (runTransition! ctx did "remediated" " AgentB " "agentA" probe mut)
+                          (match (runTransition! ctx did "remediated" " AgentB " "agentA" probe mut)
                             ((err e) (err e))
                             ((ok r) (ok (chk (pairFirst r) "independent verification that kills the mutant is accepted"))))))
                   (list)))))))))
 
 fn selftestStored! ctx: Ctx -> (Result (List (Pair Bool String)) String)
-  (mt (firstBlock! ctx)
+  (match (firstBlock! ctx)
     ((err e) (err e))
     ((ok b)
       (let [rec (entries (board/parseVerification b))
             c (chk (and (= (strOrEmpty (getv rec "remediatedBy")) "agenta") (= (strOrEmpty (getv (entries (getv rec "verifiedBy")) "agent")) "agentb")) "normalised agent ids stored")]
-        (mt (validateIs! ctx true false 0 "validate passes on the verified board")
+        (match (validateIs! ctx true false 0 "validate passes on the verified board")
           ((err e) (err e))
           ((ok v) (ok (list c v)))))))
 
 fn selftestOneLine! ctx: Ctx -> (Result (List (Pair Bool String)) String)
   (let [line "    (:defect :id \"DEF-Y-1\" :target \"a#b\" :status :remediated :confirmations 1)\n"]
     (checkSeq
-      (list (fn [] (mt (rewriteBoard! ctx (fn [bb] (ok (replaceAll bb "\n  ))" (str "\n" line "  ))")))))
+      (list (fn [] (match (rewriteBoard! ctx (fn [bb] (ok (replaceAll bb "\n  ))" (str "\n" line "  ))")))))
                      ((err e) (err e))
                      ((ok _) (validateIs! ctx false false 1 "one-line remediated record without verification fails validate"))))
-            (fn [] (mt (rewriteBoard! ctx (fn [bb] (ok (replaceAll bb line ""))))
+            (fn [] (match (rewriteBoard! ctx (fn [bb] (ok (replaceAll bb line ""))))
                      ((err e) (err e))
                      ((ok _) (validateIs! ctx false false 0 "removing the record removes its shard")))))
       (list)))
 
 fn putThenWrite! ctx: Ctx f: (fn [String] -> String) -> (Result Unit String)
   (let [bbPath (cfgs ctx "blackboard_path")]
-    (mt (readText! bbPath)
+    (match (readText! bbPath)
       ((err e) (err e))
       ((ok bb)
-        (mt (putText! bbPath (f bb))
+        (match (putText! bbPath (f bb))
           ((err e) (err e))
           ((ok _) (rewriteBoard! ctx (fn [x] (ok x))))))))
 
 fn selftestRefuted! ctx: Ctx -> (Result (List (Pair Bool String)) String)
   (checkSeq
-    (list (fn [] (mt (putThenWrite! ctx (fn [bb] (replaceAll bb "\n  ))" "\n    (:defect :id \"DEF-Y-2\" :target \"a/b.asl#g\" :status :refuted :refutedBy (:kind :prose :evidence \"said so\"))\n  ))")))
+    (list (fn [] (match (putThenWrite! ctx (fn [bb] (replaceAll bb "\n  ))" "\n    (:defect :id \"DEF-Y-2\" :target \"a/b.asl#g\" :status :refuted :refutedBy (:kind :prose :evidence \"said so\"))\n  ))")))
                    ((err e) (err e))
                    ((ok _) (validateIs! ctx false false 1 "prose-only refutation is reported, not ok"))))
-          (fn [] (mt (putThenWrite! ctx (fn [bb] (replaceAll bb "(:kind :prose :evidence \"said so\")" "(:agent \"t\" :command \"! grep -q gone a/b.asl\" :exit 0)")))
+          (fn [] (match (putThenWrite! ctx (fn [bb] (replaceAll bb "(:kind :prose :evidence \"said so\")" "(:agent \"t\" :command \"! grep -q gone a/b.asl\" :exit 0)")))
                    ((err e) (err e))
                    ((ok _) (validateIs! ctx true false 0 "executable refutation passes")))))
     (list))
 
 fn selftestRevert! ctx: Ctx tmp: String -> (Result (List (Pair Bool String)) String)
-  (mt (putText! (board/pyJoin tmp "t.txt") "fixed\n")
+  (match (putText! (board/pyJoin tmp "t.txt") "fixed\n")
     ((err e) (err e))
     ((ok _)
       (checkSeq
         (list (fn []
-                (mt (rewriteBoard! ctx
+                (match (rewriteBoard! ctx
                       (fn [bb]
                         (let [b0 (first (board/extractGapBlocks bb "defect") "")]
-                          (mt (setFields b0 (list (pair "target" "\"t.txt#x\"") (pair "verifiedBy" "(:agent \"agentb\" :command \"grep -q fixed t.txt\" :exit 0)")
+                          (match (setFields b0 (list (pair "target" "\"t.txt#x\"") (pair "verifiedBy" "(:agent \"agentb\" :command \"grep -q fixed t.txt\" :exit 0)")
                                                   (pair "mutant" "(:file \"t.txt\" :old \"fixed\" :new \"broken\")")))
                             ((err e) (err e))
                             ((ok nb) (ok (replaceAll bb b0 nb)))))))
                   ((err e) (err e))
                   ((ok _) (validateIs! ctx false true 0 "mutant killed by a real probe"))))
               (fn []
-                (mt (rewriteBoard! ctx
+                (match (rewriteBoard! ctx
                       (fn [bb]
                         (let [b1 (first (board/extractGapBlocks bb "defect") "")]
-                          (mt (board/setField b1 "verifiedBy" "(:agent \"agentb\" :command \"test -f t.txt\" :exit 0)")
+                          (match (board/setField b1 "verifiedBy" "(:agent \"agentb\" :command \"test -f t.txt\" :exit 0)")
                             ((err e) (err e))
                             ((ok nb) (ok (replaceAll bb b1 nb)))))))
                   ((err e) (err e))
@@ -2806,12 +2806,12 @@ fn selftestRevert! ctx: Ctx tmp: String -> (Result (List (Pair Bool String)) Str
         (list))))
 
 fn shardRefused! d: board/AsnValue dir: String root: String what: String -> (Result (Pair Bool String) String)
-  (mt (board/saveDefectShard! d dir root)
+  (match (board/saveDefectShard! d dir root)
     ((ok _) (ok (chk false what)))
     ((err e) (if (stringStartsWith? e "ValueError") (ok (chk true what)) (err e))))
 
 fn selftestGuards! ctx: Ctx -> (Result (List (Pair Bool String)) String)
-  (mt (readText! (cfgs ctx "blackboard_path"))
+  (match (readText! (cfgs ctx "blackboard_path"))
     ((err e) (err e))
     ((ok bb)
       (checkSeq
@@ -2822,12 +2822,12 @@ fn selftestGuards! ctx: Ctx -> (Result (List (Pair Bool String)) String)
         (list))))
 
 fn runSelftest! ctx0: Ctx -> (Result Int64 String)
-  (mt (makeTempDir! ctx0 "aslMeshSelftest" 0)
+  (match (makeTempDir! ctx0 "aslMeshSelftest" 0)
     ((err e) (err e))
     ((ok tmp)
       (let [ctxA (withCfg (withCfg ctx0 "blackboard_path" (s (board/pyJoin tmp "MeshDefectBlackboard.asn"))) "shards_dir" (s (board/pyJoin tmp "shards")))
             ctxB (withRoot ctxA tmp)
-            r (mt (putText! (cfgs ctxA "blackboard_path") "(:meshDefectBlackboard\n  :defects (\n  ))\n")
+            r (match (putText! (cfgs ctxA "blackboard_path") "(:meshDefectBlackboard\n  :defects (\n  ))\n")
                 ((err e) (err e))
                 ((ok _)
                   (runStages (list (fn [] (selftestFinding! ctxA))
@@ -2840,7 +2840,7 @@ fn runSelftest! ctx0: Ctx -> (Result Int64 String)
                              (list))))]
         (do
           (removeTree! tmp)
-          (mt r
+          (match r
             ((err e) (err e))
             ((ok checks)
               (let [fails (map pairSecond (filter (fn [c] (not (pairFirst c))) checks))
@@ -2858,16 +2858,16 @@ fn excMessage e: String -> String
       e))
 
 fn sleepSeconds! v: board/AsnValue -> (Result Unit String)
-  (let [ms (mt v ((board/asnInt i) (some (* i 1000))) ((board/asnFloat f) (float64ToInt64 (* f 1000.0))) ((board/asnBool b) (some (if b 1000 0))) (_ (none)))]
-    (mt ms
-      ((none) (err (str "TypeError: '" (mt v ((board/asnStr _) "str") ((board/asnNone) "NoneType") (_ "object")) "' object cannot be interpreted as an integer")))
+  (let [ms (match v ((board/asnInt i) (some (* i 1000))) ((board/asnFloat f) (float64ToInt64 (* f 1000.0))) ((board/asnBool b) (some (if b 1000 0))) (_ (none)))]
+    (match ms
+      ((none) (err (str "TypeError: '" (match v ((board/asnStr _) "str") ((board/asnNone) "NoneType") (_ "object")) "' object cannot be interpreted as an integer")))
       ((some k)
         (if (< k 0)
           (err "ValueError: sleep length must be non-negative")
           (do (sleepMs k) (ok ()))))))
 
 fn startDaemon! ctx: Ctx interval: Int64 once: Bool -> (Result Unit String)
-  (mt (board/cleanupStaleTempFilesEnv! ctx.root (none))
+  (match (board/cleanupStaleTempFilesEnv! ctx.root (none))
     ((err e) (err e))
     ((ok rep)
       (let [m (entries (board/cleanupMetrics rep))
@@ -2878,11 +2878,11 @@ fn startDaemon! ctx: Ctx interval: Int64 once: Bool -> (Result Unit String)
             dir (board/pyDirname pidPath)]
         (do
           (if (or (!= cf "0") (!= cl "0")) (out! (str "[Boot Cleanup] Purged " cf " stale files and " cl " orphan locks.")) ())
-          (mt (if (stringEmpty? dir) (err (pyOsError "notFound" "")) (mt (dirCreate dir) ((ok _) (ok ())) ((err e) (err (pyOsError e dir)))))
+          (match (if (stringEmpty? dir) (err (pyOsError "notFound" "")) (match (dirCreate dir) ((ok _) (ok ())) ((err e) (err (pyOsError e dir)))))
             ((err e) (err e))
             ((ok _)
               (let [old (if (exists? pidPath) (readPid! pidPath) (none))]
-                (mt old
+                (match old
                   ((some op)
                     (if (pidProbe! op)
                       (do (out! (str "Audit mesh daemon is already running (PID: " (stringFromInt64 op) ").")) (ok ()))
@@ -2891,7 +2891,7 @@ fn startDaemon! ctx: Ctx interval: Int64 once: Bool -> (Result Unit String)
 
 fn daemonRun! ctx: Ctx pidPath: String sleepV: board/AsnValue once: Bool -> (Result Unit String)
   (let [pid (procSelf)]
-    (mt (putText! pidPath (stringFromInt64 pid))
+    (match (putText! pidPath (stringFromInt64 pid))
       ((err e) (err e))
       ((ok _)
         (do
@@ -2905,55 +2905,55 @@ fn daemonRun! ctx: Ctx pidPath: String sleepV: board/AsnValue once: Bool -> (Res
 fn daemonCycle! ctx: Ctx pidPath: String sleepV: board/AsnValue once: Bool pid: Int64 cycle: Int64 -> (Result Unit String)
   (do
     (out! (str "\n==================== [CYCLE " (stringFromInt64 cycle) " - " (localStamp! ctx) "] ===================="))
-    (let [r (mt (runSweep! ctx cycle true)
+    (let [r (match (runSweep! ctx cycle true)
               ((err e) (err e))
               ((ok _)
                 (do (out! "\n-------------------- [CROSS-EXAMINATION PHASE] --------------------")
-                    (mt (runCrossExamine! ctx "")
+                    (match (runCrossExamine! ctx "")
                       ((err e) (err e))
                       ((ok _)
                         (do (out! "\n-------------------- [CONSENSUS FIX PROPOSALS PHASE] --------------------")
                             (runConsensus! ctx)))))))]
       (do
-        (mt r ((ok _) ()) ((err e) (warn! (str "[Cycle Error] Unexpected error in audit loop: " (excMessage e)))))
+        (match r ((ok _) ()) ((err e) (warn! (str "[Cycle Error] Unexpected error in audit loop: " (excMessage e)))))
         (if once
           (do
             (out! "✓ Bounded daemon cycle complete (--once). Shutting down...")
             (out! (str "\nAudit mesh daemon (PID: " (stringFromInt64 pid) ") received signal 15. Shutting down..."))
             (if (exists? pidPath)
-              (mt (pathRemove pidPath) ((ok _) ()) ((err e) (warn! (str "[Cleanup] " e))))
+              (match (pathRemove pidPath) ((ok _) ()) ((err e) (warn! (str "[Cleanup] " e))))
               ())
             (ok ()))
           (do
             (out! (str "\n[Cycle Complete] Sleeping " (board/pyStr sleepV) "s until next audit cycle..."))
-            (mt (sleepSeconds! sleepV)
+            (match (sleepSeconds! sleepV)
               ((err e) (err e))
               ((ok _) (daemonCycle! ctx pidPath sleepV once pid (+ cycle 1)))))))))
 
 fn dropPidFile! path: String -> (Result Unit String)
   (if (exists? path)
-    (mt (pathRemove path) ((ok _) (ok ())) ((err e) (err (pyOsError e path))))
+    (match (pathRemove path) ((ok _) (ok ())) ((err e) (err (pyOsError e path))))
     (ok ()))
 
 fn stopDaemon! ctx: Ctx -> (Result Unit String)
   (let [pidPath (cfgs ctx "pid_file")]
     (if (not (exists? pidPath))
       (do (out! "No active audit mesh daemon found.") (ok ()))
-      (mt (readText! pidPath)
+      (match (readText! pidPath)
         ((err e) (do (out! (str "Error stopping daemon: " (excMessage e))) (ok ())))
         ((ok text)
           (let [t (board/pyStrip text)]
-            (mt (board/pyInt t)
+            (match (board/pyInt t)
               ((board/intOk pid) (stopPid! pidPath pid))
               ((board/intHuge) (do (out! "Error stopping daemon: signed integer is greater than maximum") (ok ())))
               (_ (do (out! (str "Error stopping daemon: invalid literal for int() with base 10: " (board/pyRepr (s t)))) (ok ())))))))))
 
 fn stopPid! pidPath: String pid: Int64 -> (Result Unit String)
-  (mt (procKill pid "SIGTERM")
+  (match (procKill pid "SIGTERM")
     ((err e)
       (cond
         ((= e "noProcess")
-          (mt (dropPidFile! pidPath)
+          (match (dropPidFile! pidPath)
             ((err e2) (do (out! (str "Error stopping daemon: " (excMessage e2))) (ok ())))
             ((ok _) (do (out! "Daemon was not running (cleaned up stale PID file).") (ok ())))))
         ((= e "permission") (do (out! "Error stopping daemon: [Errno 1] Operation not permitted") (ok ())))
@@ -2961,8 +2961,8 @@ fn stopPid! pidPath: String pid: Int64 -> (Result Unit String)
     ((ok _)
       (do
         (sleepMs 500)
-        (if (pidProbe! pid) (mt (procKill pid "SIGKILL") ((ok _) ()) ((err e) (if (= e "noProcess") () (warn! (str "[Stop] SIGKILL failed: " e))))) ())
-        (mt (dropPidFile! pidPath)
+        (if (pidProbe! pid) (match (procKill pid "SIGKILL") ((ok _) ()) ((err e) (if (= e "noProcess") () (warn! (str "[Stop] SIGKILL failed: " e))))) ())
+        (match (dropPidFile! pidPath)
           ((err e) (do (out! (str "Error stopping daemon: " (excMessage e))) (ok ())))
           ((ok _) (do (out! (str "✓ Audit mesh daemon (PID: " (stringFromInt64 pid) ") successfully stopped.")) (ok ())))))))
 
@@ -3015,13 +3015,13 @@ fn benchFixtures! ctx: Ctx -> (Result (List Probe) String)
                    (list "clean-eval" "Pure Expression Evaluator (clean control)" "tests/fixtures/attractor_bench/clean_eval.asl" "evalPureExpr" "clean"
                          "Recursive evaluation, symbol lookup, and AST pattern matching"))]
     (fold (fn [acc row]
-            (mt acc
+            (match acc
               ((err e) (err e))
               ((ok ps)
                 (let [at (fn [k] (optionOr (listGet row k) ""))
                       full (board/pyJoin ctx.root (at 2))
                       code (if (exists? full) (readText! full) (ok (str ";; (def " (at 3) " ...)")))]
-                  (mt code
+                  (match code
                     ((err e) (err e))
                     ((ok c) (ok (listAppend ps (list (Probe :id (at 0) :name (at 1) :file (at 2) :symbol (at 3) :label (at 4) :focus (at 5) :code c))))))))))
           (ok (list)) rows))
@@ -3055,10 +3055,10 @@ schema ProbeRun
   (:f finding Bool)
 
 fn tokenCount v: (Option board/AsnValue) d: Float64 -> (Result Float64 String)
-  (mt v
+  (match v
     ((none) (ok d))
     ((some x)
-      (mt x
+      (match x
         ((board/asnInt i) (ok (int64ToFloat64 i)))
         ((board/asnFloat f) (ok f))
         ((board/asnBool b) (ok (if b 1.0 0.0)))
@@ -3071,21 +3071,21 @@ fn benchProbe! ctx: Ctx model: String r: String probe: Probe -> (Result ProbeRun
         lat (/ (- (monotonicNs) t0) 1000000)
         content (if res.ok (board/pyStrip res.content) "")
         usage (entries res.usage)]
-    (mt (tokenCount (board/dictGet usage "prompt_tokens") 350.0)
+    (match (tokenCount (board/dictGet usage "prompt_tokens") 350.0)
       ((err e) (err e))
       ((ok pt)
-        (mt (tokenCount (board/dictGet usage "completion_tokens") (int64ToFloat64 (/ (board/cpLength content) 4)))
+        (match (tokenCount (board/dictGet usage "completion_tokens") (int64ToFloat64 (/ (board/cpLength content) 4)))
           ((err e) (err e))
           ((ok ct)
-            (mt (board/tokenizeAsn content)
+            (match (board/tokenizeAsn content)
               ((err e) (err e))
               ((ok toks)
                 (let [form (pairFirst (board/parseAsnForm toks 0))
                       valid (and (board/truthy? form) (not (stringStartsWith? content "Error")))
-                      fe (mt form ((board/asnDict es) (some es)) (_ (none)))
+                      fe (match form ((board/asnDict es) (some es)) (_ (none)))
                       isDict (and valid (some? fe))
                       es (optionOr fe (list))
-                      scratch (mt (getd es "scratchpad" (s "")) ((board/asnStr x) (listLength (board/pySplit x))) (_ 0))
+                      scratch (match (getd es "scratchpad" (s "")) ((board/asnStr x) (listLength (board/pySplit x))) (_ 0))
                       dt (if isDict (getd es "target" (s "")) (board/asnNone))
                       dts (board/pyStr dt)
                       finding (and isDict (= (strOrEmpty (getv es "_tag")) "audit-finding"))
@@ -3099,7 +3099,7 @@ fn sumF xs: (List Float64) -> Float64
   (fold (fn [a x] (+ a x)) 0.0 xs)
 
 fn benchCell! ctx: Ctx model: String r: String probes: (List Probe) -> (Result Cell String)
-  (mt (fold (fn [acc p] (mt acc ((err e) (err e)) ((ok xs) (mt (benchProbe! ctx model r p) ((err e) (err e)) ((ok x) (ok (listAppend xs (list (pair p x))))))))) (ok (list)) probes)
+  (match (fold (fn [acc p] (match acc ((err e) (err e)) ((ok xs) (match (benchProbe! ctx model r p) ((err e) (err e)) ((ok x) (ok (listAppend xs (list (pair p x))))))))) (ok (list)) probes)
     ((err e) (err e))
     ((ok runs)
       (let [defect? (fn [pr] (= (pairFirst pr).label "defect"))
@@ -3177,13 +3177,13 @@ fn benchLedger! models: (List String) cells: (List Cell) regimes: (List String) 
 fn saveLedger! path: String text: String -> String
   (let [dir (board/pyDirname path)
         made (if (stringEmpty? dir) (err "[Errno 2] No such file or directory: ''")
-                 (mt (dirCreate dir) ((ok _) (ok ())) ((err e) (err (osErrText (pyOsError e dir))))))]
-    (mt made
+                 (match (dirCreate dir) ((ok _) (ok ())) ((err e) (err (osErrText (pyOsError e dir))))))]
+    (match made
       ((err e) (str "Notice: output file write bypassed (" e ")"))
       ((ok _)
         (if (isDir? path)
           (str "Notice: output file write bypassed (" (osErrText (pyOsError "isADirectory" path)) ")")
-          (mt (fileWrite path text)
+          (match (fileWrite path text)
             ((err e) (str "Notice: output file write bypassed (" (osErrText (pyOsError e path)) ")"))
             ((ok _) (str "✓ Saved 32-cell empirical ledger to " path)))))))
 
@@ -3201,7 +3201,7 @@ fn runBench! ctx: Ctx regimesText: String modelsText: String dryRun: Bool testFi
       (testFixtures
         (do
           (out! "=== [TEST-FIXTURES] Verifying Ground-Truth Metrics Evaluation ===")
-          (mt (benchFixtures! ctx)
+          (match (benchFixtures! ctx)
             ((err e) (err e))
             ((ok fx)
               (do
@@ -3216,7 +3216,7 @@ fn benchModels -> (List String)
 
 fn benchLive! ctx: Ctx regimes: (List String) modelsText: String outputPath: String -> (Result Unit String)
   (let [models (if (or (= modelsText "all") (stringEmpty? modelsText)) (benchModels) (commaItems modelsText))]
-    (mt (benchFixtures! ctx)
+    (match (benchFixtures! ctx)
       ((err e) (err e))
       ((ok fx)
         (do
@@ -3228,17 +3228,17 @@ fn benchLive! ctx: Ctx regimes: (List String) modelsText: String outputPath: Str
           (out! (str "Regimes (" (stringFromInt64 (listLength regimes)) "):   " (stringJoin regimes ", ")))
           (out! (str "Fixtures (" (stringFromInt64 (listLength fx)) "):  " (stringJoin (map (fn [p] p.id) fx) ", ")))
           (out! (str "Output Target:   " outputPath "\n"))
-          (mt (fold (fn [acc m]
-                      (mt acc
+          (match (fold (fn [acc m]
+                      (match acc
                         ((err e) (err e))
                         ((ok cs)
                           (do
                             (out! (str "--> Evaluating Model: " (modelShort m) " (" m ")"))
                             (fold (fn [acc2 r]
-                                    (mt acc2
+                                    (match acc2
                                       ((err e) (err e))
                                       ((ok cs2)
-                                        (mt (benchCell! ctx m r fx)
+                                        (match (benchCell! ctx m r fx)
                                           ((err e) (err e))
                                           ((ok c)
                                             (do
@@ -3332,7 +3332,7 @@ fn choicesMetavar -> String
 
 fn usageLines parts: (List String) indent: String prefix: (Option String) textWidth: Int64 -> (List String)
   (let [il (stringLength indent)
-        start (mt prefix ((some p) (- (stringLength p) 1)) ((none) (- il 1)))
+        start (match prefix ((some p) (- (stringLength p) 1)) ((none) (- il 1)))
         st (fold (fn [acc part]
                    (let [lines (pairFirst acc)
                          line (pairFirst (pairSecond acc))
@@ -3345,7 +3345,7 @@ fn usageLines parts: (List String) indent: String prefix: (Option String) textWi
         lines0 (pairFirst st)
         last (pairFirst (pairSecond st))
         lines (if (listEmpty? last) lines0 (listAppend lines0 (list (str indent (stringJoin last " ")))))]
-    (mt prefix
+    (match prefix
       ((some _) (if (listEmpty? lines) lines (cons (sub (first lines "") il (stringLength (first lines ""))) (rest lines))))
       ((none) lines)))
 
@@ -3406,7 +3406,7 @@ fn wrapLines chunks: (List String) width: Int64 lines: (List String) -> (List St
       (wrapLines (pairSecond broken) width (if (listEmpty? line) lines (listAppend lines (list (stringJoin line "")))))))
 
 fn takeFit cs: (List String) width: Int64 len: Int64 acc: (List String) -> (Pair (List String) (List String))
-  (mt (listHead cs)
+  (match (listHead cs)
     ((none) (pair acc cs))
     ((some c)
       (let [l (board/cpLength c)]
@@ -3427,7 +3427,7 @@ fn lastHyphenBefore chunk: String k: Int64 -> Int64
     (fold (fn [acc p] (if (= (pairSecond p) "-") (pairFirst p) acc)) -1 (zipIndex cs 0 (list))))
 
 fn zipIndex xs: (List T) i: Int64 acc: (List (Pair Int64 T)) -> (List (Pair Int64 T))
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (listReverse acc))
     ((some x) (zipIndex (rest xs) (+ i 1) (cons (pair i x) acc))))
 
@@ -3456,7 +3456,7 @@ fn helpText width: Int64 -> String
          "options:\n" (stringJoin (map (fn [sp] (helpItem (invocation sp) sp.help width maxHelp)) (optSpecs)) "")))
 
 fn helpWidth env: (List String) -> Int64
-  (let [c (mt (board/pyInt (optionOr (envLookup env "COLUMNS") "")) ((board/intOk v) v) (_ 0))]
+  (let [c (match (board/pyInt (optionOr (envLookup env "COLUMNS") "")) ((board/intOk v) v) (_ 0))]
     (- (if (> c 0) c 80) 2))
 
 enum Cls
@@ -3509,20 +3509,20 @@ fn classify a: String -> (Result Cls String)
           (let [ts (optionTuples a)]
             (cond
               ((> (listLength ts) 1)
-                (err (str "ambiguous option: " a " could match " (stringJoin (map (fn [t] (mt t ((clsOpt nm _ _) nm) (_ ""))) ts) ", "))))
+                (err (str "ambiguous option: " a " could match " (stringJoin (map (fn [t] (match t ((clsOpt nm _ _) nm) (_ ""))) ts) ", "))))
               ((= (listLength ts) 1) (ok (first ts (clsUnknown))))
               ((negativeNumber? a) (ok (clsA)))
               ((has? a " ") (ok (clsA)))
               (else (ok (clsUnknown)))))))))
 
 fn classifyAll argv: (List String) dash: Bool acc: (List Cls) -> (Result (List Cls) String)
-  (mt (listHead argv)
+  (match (listHead argv)
     ((none) (ok (listReverse acc)))
     ((some a)
       (cond
         (dash (classifyAll (rest argv) true (cons (clsA) acc)))
         ((= a "--") (classifyAll (rest argv) true (cons (clsDash) acc)))
-        (else (mt (classify a) ((err e) (err e)) ((ok c) (classifyAll (rest argv) false (cons c acc))))))))
+        (else (match (classify a) ((err e) (err e)) ((ok c) (classifyAll (rest argv) false (cons c acc))))))))
 
 schema PState
   (:f opts (List (Pair String String)))
@@ -3542,16 +3542,16 @@ fn takeOpt st: PState sp: OptSpec args: (List String) -> (Result (Option PState)
       ((= sp.kind "help") (ok (none)))
       ((= sp.kind "flag") (ok (some (PState :opts st.opts :flags (listAppend st.flags (list sp.dest)) :command st.command :extras st.extras))))
       ((= sp.kind "int")
-        (mt (board/pyInt v)
+        (match (board/pyInt v)
           ((board/intOk n) (ok (some (PState :opts (board/dictPut st.opts sp.dest (stringFromInt64 n)) :flags st.flags :command st.command :extras st.extras))))
           (_ (err (str "argument " (actionName sp) ": invalid int value: " (board/pyRepr (s v)))))))
       (else (ok (some (PState :opts (board/dictPut st.opts sp.dest v) :flags st.flags :command st.command :extras st.extras))))))
 
 fn patChar c: Cls -> String
-  (mt c ((clsA) "A") ((clsDash) "-") (_ "O"))
+  (match c ((clsA) "A") ((clsDash) "-") (_ "O"))
 
 fn optAt cls: (List Cls) i: Int64 -> Bool
-  (mt (listGet cls i) ((some c) (mt c ((clsOpt _ _ _) true) ((clsUnknown) true) (_ false))) ((none) false))
+  (match (listGet cls i) ((some c) (match c ((clsOpt _ _ _) true) ((clsUnknown) true) (_ false))) ((none) false))
 
 fn consumePositional st: PState argv: (List String) pat: String i: Int64 -> (Result (Pair PState Int64) String)
   (if (some? st.command)
@@ -3569,25 +3569,25 @@ fn consumePositional st: PState argv: (List String) pat: String i: Int64 -> (Res
         (err (str "argument command: invalid choice: " (board/pyRepr (s v)) " (choose from " (stringJoin (map (fn [x] (board/pyRepr (s x))) (commandChoices)) ", ") ")")))))
 
 fn removeFirst xs: (List String) x: String -> (List String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (list))
     ((some y) (if (= y x) (rest xs) (cons y (removeFirst (rest xs) x)))))
 
 fn consumeOptional st: PState argv: (List String) cls: (List Cls) pat: String i: Int64 -> (Result (Option (Pair PState Int64)) String)
-  (mt (optionOr (listGet cls i) (clsUnknown))
+  (match (optionOr (listGet cls i) (clsUnknown))
     ((clsOpt name sep explicit)
       (let [sp (optionOr (specOf name) (first (optSpecs) (OptSpec :names (list) :dest "" :kind "" :help "")))
             takesArg (or (= sp.kind "store") (= sp.kind "int"))]
-        (mt explicit
+        (match explicit
           ((some ex)
             (cond
               ((and (not takesArg) (not (stringStartsWith? name "--")) (not (stringEmpty? ex)))
                 (if (or sep (stringStartsWith? ex "-"))
                   (err (str "argument " (actionName sp) ": ignored explicit argument " (board/pyRepr (s ex))))
-                  (mt (takeOpt st sp (list))
+                  (match (takeOpt st sp (list))
                     ((err e) (err e))
                     ((ok r)
-                      (mt r
+                      (match r
                         ((none) (ok (none)))
                         ((some st2)
                           (let [next (str "-" (cpTake ex 1))
@@ -3595,14 +3595,14 @@ fn consumeOptional st: PState argv: (List String) cls: (List Cls) pat: String i:
                             (if (some? (specOf next))
                               (consumeOptionalAs st2 argv cls pat i next restEx)
                               (ok (some (pair (withExtra st2 (str "-" ex)) (+ i 1))))))))))))
-              (takesArg (mt (takeOpt st sp (list ex)) ((err e) (err e)) ((ok r) (ok (mt r ((some st2) (some (pair st2 (+ i 1)))) ((none) (none)))))))
+              (takesArg (match (takeOpt st sp (list ex)) ((err e) (err e)) ((ok r) (ok (match r ((some st2) (some (pair st2 (+ i 1)))) ((none) (none)))))))
               (else (err (str "argument " (actionName sp) ": ignored explicit argument " (board/pyRepr (s ex)))))))
           ((none)
             (if takesArg
               (if (= (sub pat (+ i 1) (+ i 2)) "A")
-                (mt (takeOpt st sp (list (optionOr (listGet argv (+ i 1)) ""))) ((err e) (err e)) ((ok r) (ok (mt r ((some st2) (some (pair st2 (+ i 2)))) ((none) (none))))))
+                (match (takeOpt st sp (list (optionOr (listGet argv (+ i 1)) ""))) ((err e) (err e)) ((ok r) (ok (match r ((some st2) (some (pair st2 (+ i 2)))) ((none) (none))))))
                 (err (str "argument " (actionName sp) ": expected one argument")))
-              (mt (takeOpt st sp (list)) ((err e) (err e)) ((ok r) (ok (mt r ((some st2) (some (pair st2 (+ i 1)))) ((none) (none)))))))))))
+              (match (takeOpt st sp (list)) ((err e) (err e)) ((ok r) (ok (match r ((some st2) (some (pair st2 (+ i 1)))) ((none) (none)))))))))))
     (_ (ok (some (pair (withExtra st (optionOr (listGet argv i) "")) (+ i 1))))))
 
 fn consumeOptionalAs st: PState argv: (List String) cls: (List Cls) pat: String i: Int64 name: String restEx: String -> (Result (Option (Pair PState Int64)) String)
@@ -3618,11 +3618,11 @@ fn nextOption cls: (List Cls) i: Int64 maxIdx: Int64 -> Int64
 
 fn parseLoop st: PState argv: (List String) cls: (List Cls) pat: String i: Int64 maxIdx: Int64 -> (Result (Option PState) String)
   (if (> i maxIdx)
-    (mt (consumePositional st argv pat i)
+    (match (consumePositional st argv pat i)
       ((err e) (err e))
       ((ok r) (ok (some (fold (fn [acc a] (withExtra acc a)) (pairFirst r) (listDrop argv (pairSecond r)))))))
     (let [nxt (nextOption cls i maxIdx)]
-      (mt (if (!= i nxt) (consumePositional st argv pat i) (ok (pair st i)))
+      (match (if (!= i nxt) (consumePositional st argv pat i) (ok (pair st i)))
         ((err e) (err e))
         ((ok r)
           (let [st1 (pairFirst r)
@@ -3631,24 +3631,24 @@ fn parseLoop st: PState argv: (List String) cls: (List Cls) pat: String i: Int64
               (parseLoop st1 argv cls pat j maxIdx)
               (let [st2 (if (optAt cls j) st1 (fold (fn [acc a] (withExtra acc a)) st1 (optionOr (listSlice argv j nxt) (list))))
                     k (if (optAt cls j) j nxt)]
-                (mt (consumeOptional st2 argv cls pat k)
+                (match (consumeOptional st2 argv cls pat k)
                   ((err e) (err e))
                   ((ok o)
-                    (mt o
+                    (match o
                       ((none) (ok (none)))
                       ((some p) (parseLoop (pairFirst p) argv cls pat (pairSecond p) maxIdx))))))))))))
 
 fn parseArgv argv: (List String) -> ParseOut
-  (mt (classifyAll argv false (list))
+  (match (classifyAll argv false (list))
     ((err e) (parsedError e))
     ((ok cls)
       (let [pat (stringJoin (map patChar cls) "")
             maxIdx (fold (fn [acc p] (if (optAt cls (pairFirst p)) (pairFirst p) acc)) -1 (zipIndex cls 0 (list)))
             st0 (PState :opts (list (pair "mutant_new" "") (pair "cycle" "0") (pair "regimes" "none,single,dual,all") (pair "models" "all")) :flags (list) :command (none) :extras (list))]
-        (mt (parseLoop st0 argv cls pat 0 maxIdx)
+        (match (parseLoop st0 argv cls pat 0 maxIdx)
           ((err e) (parsedError e))
           ((ok o)
-            (mt o
+            (match o
               ((none) (parsedHelp))
               ((some st)
                 (if (listEmpty? st.extras)
@@ -3665,25 +3665,25 @@ fn optInt a: Args dest: String -> Int64
   (optionOr (stringToInt64 (opt a dest)) 0)
 
 fn done r: (Result Unit String) -> (Result Int64 String)
-  (mt r ((ok _) (ok 0)) ((err e) (err e)))
+  (match r ((ok _) (ok 0)) ((err e) (err e)))
 
 fn dispatch! ctx: Ctx a: Args -> (Result Int64 String)
   (let [c a.command]
     (cond
       ((= c "status") (done (runStatus! ctx)))
       ((= c "dashboard") (done (runDashboard! ctx)))
-      ((= c "static") (mt (runStatic! ctx) ((ok b) (ok (if b 0 1))) ((err e) (err e))))
+      ((= c "static") (match (runStatic! ctx) ((ok b) (ok (if b 0 1))) ((err e) (err e))))
       ((= c "sweep") (done (runSweep! ctx (optInt a "cycle") (flag? a "rotate"))))
       ((= c "cross-examine") (done (runCrossExamine! ctx (opt a "id"))))
       ((= c "telemetry") (done (runTelemetry! ctx)))
       ((= c "proposals") (done (runProposals! ctx)))
       ((= c "propose-fix") (done (runProposeFix! ctx (opt a "id"))))
-      ((= c "apply-fix") (mt (applyFix! ctx (opt a "id")) ((ok d) (do (out! (str "Apply fix result: " (board/pyStr d))) (ok 0))) ((err e) (err e))))
+      ((= c "apply-fix") (match (applyFix! ctx (opt a "id")) ((ok d) (do (out! (str "Apply fix result: " (board/pyStr d))) (ok 0))) ((err e) (err e))))
       ((= c "bench") (done (runBench! ctx (opt a "regimes") (opt a "models") (flag? a "dry_run") (flag? a "test_fixtures") (opt a "output"))))
       ((= c "transition")
         (let [mf (opt a "mutant_file")
               mut (if (stringEmpty? mf) (none) (mutDict mf (opt a "mutant_old") (opt a "mutant_new")))]
-          (mt (runTransition! ctx (opt a "id") (opt a "to") (opt a "agent") (opt a "remediated_by") (opt a "verify_cmd") mut)
+          (match (runTransition! ctx (opt a "id") (opt a "to") (opt a "agent") (opt a "remediated_by") (opt a "verify_cmd") mut)
             ((err e) (err e))
             ((ok r) (do (out! (pairSecond r)) (ok (if (pairFirst r) 0 1)))))))
       ((= c "validate") (runValidate! ctx (flag? a "run") (flag? a "revert_check")))
@@ -3696,29 +3696,29 @@ fn rootDir! -> String
     (if (stringEmpty? r) (resultOr (realPath ".") ".") r))
 
 fn apiKeyOf env: (List String) -> String
-  (mt (envLookup env "OPENROUTER_API_KEY") ((some k) k) ((none) (optionOr (envLookup env "OPENAI_API_KEY") "")))
+  (match (envLookup env "OPENROUTER_API_KEY") ((some k) k) ((none) (optionOr (envLookup env "OPENAI_API_KEY") "")))
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [env (childEnv (envList))
         root (rootDir!)
         gateway (optionOr (envLookup env "GATEWAY_URL") "http://127.0.0.1:8765/v1/chat/completions")
         crash (fn [e] (do (warn! e) (ok 1)))]
-    (mt (board/loadMeshConfigEnv! root "" "")
+    (match (board/loadMeshConfigEnv! root "" "")
       ((err e) (crash e))
       ((ok cfg0)
-        (mt (parseArgv args)
+        (match (parseArgv args)
           ((parsedHelp) (do (print (helpText (helpWidth env))) (ok 0)))
           ((parsedError m) (do (eprintln (str "usage: " (usageText (helpWidth env)))) (eprintln (str "asl-mesh: error: " m)) (ok 2)))
           ((parsedArgs a)
             (let [cfgR (if (or (not (stringEmpty? (opt a "config"))) (not (stringEmpty? (opt a "profile"))))
                          (board/loadMeshConfigEnv! root (opt a "config") (opt a "profile"))
                          (ok cfg0))]
-              (mt cfgR
+              (match cfgR
                 ((err e) (crash e))
                 ((ok cfg)
                   (if (and (= (optionOr (envLookup env "ASL_AGENT_PLANE") "system") "worker") (or (= a.command "start") (= a.command "stop")))
                     (do (eprintln "(:error :plane \"worker\" :reason \"system-plane-restricted\" :message \"Worker plane agent cannot mutate mesh daemon state. System plane authority required. Communicate via declarative Blackboard messages.\")")
                         (ok 1))
-                    (mt (dispatch! (Ctx :root root :cfg (entries cfg) :env env :gateway gateway :apiKey (apiKeyOf env)) a)
+                    (match (dispatch! (Ctx :root root :cfg (entries cfg) :env env :gateway gateway :apiKey (apiKeyOf env)) a)
                       ((ok code) (ok code))
                       ((err e) (crash e))))))))))))

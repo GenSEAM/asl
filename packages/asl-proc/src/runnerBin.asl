@@ -14,22 +14,22 @@ fn headPath cache: String root: String -> String
   (str cache "/head" (stringReplace root "/" "_"))
 
 fn ! isExe? path: String -> Bool
-  (mt (fileStat path) ((ok st) st.isFile) ((err _) false))
+  (match (fileStat path) ((ok st) st.isFile) ((err _) false))
 
 fn ! sameBytes? a: String b: String -> Bool
-  (mt (fileReadBytes a)
+  (match (fileReadBytes a)
     ((err _) false)
-    ((ok x) (mt (fileReadBytes b) ((err _) false) ((ok y) (= x y)))))
+    ((ok x) (match (fileReadBytes b) ((err _) false) ((ok y) (= x y)))))
 
 fn ! allSame? root: String dir: String paths: (List String) -> Bool
-  (mt (listHead paths)
+  (match (listHead paths)
     ((none) true)
     ((some p) (if (sameBytes? (str root "/" p) (str dir "/src/" p)) (allSame? root dir (optionOr (listTail paths) (list))) false)))
 
 fn ! fresh? root: String dir: String -> Bool
   (if (or (stringEmpty? dir) (not (isExe? (str dir "/bin"))))
     false
-    (mt (fileReadString (str dir "/deps"))
+    (match (fileReadString (str dir "/deps"))
       ((err _) false)
       ((ok text) (let [(paths (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (stringLines text)))]
                    (if (listEmpty? paths) false (allSame? root dir paths))))))

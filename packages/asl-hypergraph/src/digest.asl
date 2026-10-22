@@ -9,7 +9,7 @@ fn deduplicate xs: (List Str) -> (List Str)
   (fold (fn [(acc (List Str)) (item Str)] -> (List Str) (if (stringEmpty? item) acc (let [(exists (fold (fn [(found Bool) (existing Str)] -> Bool (or found (= item existing))) false acc))] (if exists acc (listAppend acc (list item)))))) (list) xs)
 
 fn takeN n: Int64 xs: (List Str) -> (List Str)
-  (if (<= n 0) (list) (mt (listHead xs) ((some h) (cons h (takeN (- n 1) (optionOr (listTail xs) (list))))) ((none) (list))))
+  (if (<= n 0) (list) (match (listHead xs) ((some h) (cons h (takeN (- n 1) (optionOr (listTail xs) (list))))) ((none) (list))))
 
 fn estimateTokenCount s: Str -> Int64
   (let [(chars (stringLength s))] (if (<= chars 0) 0 (let [(est (/ (+ chars 3) 4))] (if (<= est 0) 1 est))))
@@ -18,7 +18,7 @@ fn compactPerceptionReceipt rawReceipt: Str tokenBudget: Int64 -> Str
   (let [(len (stringLength rawReceipt))] (compressSpaces rawReceipt 0 len false ""))
 
 fn compressSpaces s: Str idx: Int64 len: Int64 prevSpace: Bool acc: Str -> Str
-  (if (>= idx len) acc (let [(ch (mt (stringSlice s idx (+ idx 1)) ((some c) c) ((none) "")))] (if (or (= ch " ") (or (= ch "\n") (= ch "\t"))) (if prevSpace (compressSpaces s (+ idx 1) len true acc) (compressSpaces s (+ idx 1) len true (str acc " "))) (compressSpaces s (+ idx 1) len false (str acc ch)))))
+  (if (>= idx len) acc (let [(ch (match (stringSlice s idx (+ idx 1)) ((some c) c) ((none) "")))] (if (or (= ch " ") (or (= ch "\n") (= ch "\t"))) (if prevSpace (compressSpaces s (+ idx 1) len true acc) (compressSpaces s (+ idx 1) len true (str acc " "))) (compressSpaces s (+ idx 1) len false (str acc ch)))))
 
 fn formatCallersList callers: (List Str) -> Str
   (if (listEmpty? callers) "[]" (let [(inner (fold (fn [(acc Str) (c Str)] -> Str (if (stringEmpty? acc) (str "\"" c "\"") (str acc " \"" c "\""))) "" callers))] (str "[" inner "]")))

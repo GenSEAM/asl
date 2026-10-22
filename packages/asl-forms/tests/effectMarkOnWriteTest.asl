@@ -29,7 +29,7 @@ fn ! verifyFlush! vs: v/Vfs target: String dir: String -> Bool
 
 fn ! runTests -> Bool
   (let [(made (jp/runOne (jp/job (list "mktemp" "-d") "." (jp/childEnv (list))))) (rawDir (stringReplace made.out "\n" ""))
-        (dir (mt (realPath rawDir) ((ok r) r) ((err _) rawDir)))
+        (dir (match (realPath rawDir) ((ok r) r) ((err _) rawDir)))
         (vdir (str dir "/.asl/vfs"))
         (target (str dir "/m.asl"))]
     (do (assert (= made.exit 0) "mktemp -d makes a workspace directory")

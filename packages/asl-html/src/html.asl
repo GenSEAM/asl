@@ -87,7 +87,7 @@ fn document language: String headKids: (List Node) bodyAttrs: (List Attr) bodyKi
   (elemNode "html" [(attrPair "lang" language)] [(elemNode "head" [] headKids) (elemNode "body" bodyAttrs bodyKids)])
 
 fn button attrs: (List Attr) kids: (List Node) -> Node
-  (elemNode "button" (if (listAny? (fn [(a Attr)] -> Bool (mt a ((attrPair k v) (= k "type")) ((attrFlag k) false))) attrs) attrs (cons (attrPair "type" "button") attrs)) kids)
+  (elemNode "button" (if (listAny? (fn [(a Attr)] -> Bool (match a ((attrPair k v) (= k "type")) ((attrFlag k) false))) attrs) attrs (cons (attrPair "type" "button") attrs)) kids)
 
 fn svg attrs: (List Attr) kids: (List Node) -> Node
   (elemNode "svg" (cons (attrPair "xmlns" "http://www.w3.org/2000/svg") attrs) kids)
@@ -510,7 +510,7 @@ fn voidTag? tag: String -> Bool
   (listContains? ["area" "base" "br" "col" "embed" "hr" "img" "input" "link" "meta" "source" "track" "wbr" "path" "circle" "ellipse" "line" "polygon" "polyline" "rect" "image" "stop" "use"] tag)
 
 fn attrOut acc: (List String) at: Attr -> (List String)
-  (mt at
+  (match at
     ((attrFlag k) (cons k (cons " " acc)))
     ((attrPair k v) (cons "\"" (cons (escapeAttr v) (cons "=\"" (cons k (cons " " acc)))))))
 
@@ -518,7 +518,7 @@ fn openTag acc: (List String) tag: String attrs: (List Attr) -> (List String)
   (fold attrOut (cons tag (cons "<" acc)) attrs)
 
 fn renderInto acc: (List String) n: Node -> (List String)
-  (mt n
+  (match n
     ((textNode s) (cons (escapeText s) acc))
     ((fragNode kids) (fold renderInto acc kids))
     ((rawTextNode tag attrs body) (cons ">" (cons tag (cons "</" (cons (replaceIn body "</" "<\\/") (cons ">" (openTag acc tag attrs)))))))

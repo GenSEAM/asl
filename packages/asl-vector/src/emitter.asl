@@ -27,7 +27,7 @@ fn polyToPathData poly: (List (List F64)) -> String
   (if (listEmpty? poly) "" (let [(firstPt (optionOr (listHead poly) (list 0.0 0.0))) (startX (roundVal (optionOr (listHead firstPt) 0.0))) (startY (roundVal (optionOr (listHead (optionOr (listTail firstPt) (list))) 0.0))) (restPts (optionOr (listTail poly) (list))) (moveCmd (str "M" startX " " startY)) (lineCmds (pointsToLineCommands restPts startX startY))] (str moveCmd lineCmds "Z")))
 
 fn pointsToLineCommands pts: (List (List F64)) prevX: Int prevY: Int -> String
-  (if (listEmpty? pts) "" (let [(pt (optionOr (listHead pts) (list 0.0 0.0))) (tail (optionOr (listTail pts) (list))) (curX (roundVal (optionOr (listHead pt) 0.0))) (curY (roundVal (optionOr (listHead (optionOr (listTail pt) (list))) 0.0))) (cmd (if (== curY prevY) (str "H" curX) (if (== curX prevX) (str "V" curY) (str "L" curX " " curY))))] (str " " cmd (pointsToLineCommands tail curX curY))))
+  (if (listEmpty? pts) "" (let [(pt (optionOr (listHead pts) (list 0.0 0.0))) (tail (optionOr (listTail pts) (list))) (curX (roundVal (optionOr (listHead pt) 0.0))) (curY (roundVal (optionOr (listHead (optionOr (listTail pt) (list))) 0.0))) (cmd (if (= curY prevY) (str "H" curX) (if (= curX prevX) (str "V" curY) (str "L" curX " " curY))))] (str " " cmd (pointsToLineCommands tail curX curY))))
 
 fn emitVectorAsset elements: (List String) width: Int height: Int -> String
   (let [(header (emitSvgHeader width height (str "0 0 " width " " height))) (body (joinStrings elements "\n  ")) (footer (emitSvgFooter))] (str header "\n  " body "\n" footer))

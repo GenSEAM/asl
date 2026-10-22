@@ -1,4 +1,4 @@
-(module asl/packages/asl-checker/tests/boundedSubstitutionTest :x [buildVarChain testResolveNonVariable testResolveTransitiveChain testBoundedMetavariableCutoff testResolveVarSubstRecFuel testResolveCycleTermination testCheckerUnifySuiteExecution! runTests] :i [(../src/types :a ty) (../src/unify :a u)])
+(module asl/packages/asl-checker/tests/boundedSubstitutionTest :x [buildVarChain testResolveNonVariable testResolveTransitiveChain testBoundedMetavariableCutoff testResolveVarSubstRecFuel testResolveCycleTermination testCheckerUnifySuiteExecution! runTests] :i [(asl-checker/types :a ty) (asl-checker/unify :a u)])
 
 fn buildVarChain n: Int64 target: ty/Type -> (Map Int64 ty/Type)
   (fold (fn [(s (Map Int64 ty/Type)) (i Int64)] -> (Map Int64 ty/Type) (if (= i n) (mapSet s i target) (mapSet s i (ty/tyVar (+ i 1) "any")))) (mapEmpty) (range 1 (+ n 1)))

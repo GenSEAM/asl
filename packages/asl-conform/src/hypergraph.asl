@@ -33,7 +33,7 @@ fn buildAuditHypergraph nodes: (List AuditNode) edges: (List AuditEdge) -> Audit
   (let [(score (computeOverallScore nodes))] (makeAuditHypergraph "0.1.0" 1789725000000 nodes edges score))
 
 fn queryAuditGraph graph: AuditHypergraph lensFilter: (Option Str) severityFilter: (Option Str) anchorPrefix: (Option Str) -> (List AuditNode)
-  (fold (fn [(acc (List AuditNode)) (n AuditNode)] -> (List AuditNode) (let [(lensMatch (mt lensFilter ((some l) (= n.lens l)) ((none) true))) (sevMatch (mt severityFilter ((some s) (= n.severity s)) ((none) true))) (anchorMatch (mt anchorPrefix ((some a) (stringStartsWith? n.anchor a)) ((none) true)))] (if (and (and lensMatch sevMatch) anchorMatch) (listAppend acc (list n)) acc))) (list) graph.nodes)
+  (fold (fn [(acc (List AuditNode)) (n AuditNode)] -> (List AuditNode) (let [(lensMatch (match lensFilter ((some l) (= n.lens l)) ((none) true))) (sevMatch (match severityFilter ((some s) (= n.severity s)) ((none) true))) (anchorMatch (match anchorPrefix ((some a) (stringStartsWith? n.anchor a)) ((none) true)))] (if (and (and lensMatch sevMatch) anchorMatch) (listAppend acc (list n)) acc))) (list) graph.nodes)
 
 fn findEdgesFrom edges: (List AuditEdge) fromNode: Str -> (List AuditEdge)
   (fold (fn [(acc (List AuditEdge)) (e AuditEdge)] -> (List AuditEdge) (if (= e.from fromNode) (listAppend acc (list e)) acc)) (list) edges)

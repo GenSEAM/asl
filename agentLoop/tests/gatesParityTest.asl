@@ -145,7 +145,7 @@ fn testPlaceholderHit -> Bool
         f5 (list (pair "a.py" "x = 1\n"))
         res5 (g/placeholderHit g5 f5)]
     (do
-      (mt res1
+      (match res1
         ((some h1)
           (do
             (assert (= (g/hitFile h1) "a.py") "ph1 file")
@@ -154,7 +154,7 @@ fn testPlaceholderHit -> Bool
         ((none) (assert false "ph1 should match")))
       (assert (none? res2) "ph2 exit 0 is none")
       (assert (none? res3) "ph3 mismatch is none")
-      (mt res4
+      (match res4
         ((some h4)
           (do
             (assert (= (g/hitFile h4) "b.py") "ph4 file")
@@ -257,7 +257,7 @@ fn testVacuousOutsideOwns! -> Bool
         g4 (list (g/makeGateResult "sh bin/asl" 0 "" "" false 0))
         res4 (g/vacuousOutsideOwns! g4 (list) ".")]
     (do
-      (mt res1
+      (match res1
         ((some p1)
           (do
             (assert (= (pairFirst p1) "sh bin/asl") "voo1 cmd")

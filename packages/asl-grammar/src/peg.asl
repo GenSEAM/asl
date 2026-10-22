@@ -43,16 +43,16 @@
   (:f boundary String))
 
 fn ruleNamed rules: (List GrammarRule) name: String -> (Option GrammarRule)
-  (mt (listHead (filter (fn [(r GrammarRule)] -> Bool (= r.name name)) rules))
+  (match (listHead (filter (fn [(r GrammarRule)] -> Bool (= r.name name)) rules))
     ((some r) (some r))
     ((none) (none)))
 
 fn exprRefs e: asn/Sx -> (List String)
-  (mt e
+  (match e
     ((asn/sxSym s) (list s))
     ((asn/sxList items)
-      (mt (listHead items)
-        ((some h) (mt h
+      (match (listHead items)
+        ((some h) (match h
                     ((asn/sxSym op) (if (or (= op "word") (or (= op "cls") (or (= op "ncls") (= op "end"))))
                                       (list)
                                       (fold (fn [(acc (List String)) (x asn/Sx)] -> (List String) (listAppend acc (exprRefs x))) (list) (optionOr (listTail items) (list)))))
@@ -61,12 +61,12 @@ fn exprRefs e: asn/Sx -> (List String)
     (_ (list)))
 
 fn ruleRefs rules: (List GrammarRule) name: String -> (List String)
-  (mt (ruleNamed rules name)
+  (match (ruleNamed rules name)
     ((some r) (exprRefs r.expr))
     ((none) (list)))
 
 fn reaches? rules: (List GrammarRule) todo: (List String) seen: (List String) target: String -> Bool
-  (mt (listHead todo)
+  (match (listHead todo)
     ((none) false)
     ((some r) (let [(rest (optionOr (listTail todo) (list)))]
                 (cond
@@ -92,22 +92,22 @@ fn classTable spec: String negate: Bool -> Bytes
     (stringToBytes (stringJoin (map (fn [(c Int64)] -> String (if (= (inRanges? ranges c) negate) "0" "1")) (range 0 256)) "")))
 
 fn joinPes parts: (List Pe) isSeq: Bool -> Pe
-  (mt (listHead parts)
+  (match (listHead parts)
     ((none) (if isSeq (peEmpty) (peFail)))
     ((some p) (let [(rest (optionOr (listTail parts) (list)))]
                 (if (listEmpty? rest) p (if isSeq (peCat p (joinPes rest true)) (peOr p (joinPes rest false)))))))
 
 fn compileAll ctx: Ctx xs: (List asn/Sx) acc: (List Pe) -> (Result (List Pe) String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (ok (listReverse acc)))
-    ((some x) (mt (compileExpr ctx x)
+    ((some x) (match (compileExpr ctx x)
                 ((err e) (err e))
                 ((ok p) (compileAll ctx (optionOr (listTail xs) (list)) (cons p acc))))))
 
 fn compileOne ctx: Ctx op: String args: (List asn/Sx) -> (Result Pe String)
   (if (!= (listLength args) 1)
     (err (str "(" op " ...) takes one argument"))
-    (mt (compileExpr ctx (optionOr (listHead args) (asn/sxList (list))))
+    (match (compileExpr ctx (optionOr (listHead args) (asn/sxList (list))))
       ((err e) (err e))
       ((ok p) (ok (cond
                     ((= op "star") (peStar p))
@@ -117,56 +117,56 @@ fn compileOne ctx: Ctx op: String args: (List asn/Sx) -> (Result Pe String)
                     (else (peAnd p)))))))
 
 fn compileText ctx: Ctx op: String args: (List asn/Sx) -> (Result Pe String)
-  (mt (listHead args)
-    ((some a) (mt a
+  (match (listHead args)
+    ((some a) (match a
                 ((asn/sxStr s)
                   (cond
                     ((!= (listLength args) 1) (err (str "(" op " \"...\") takes one string")))
                     ((= op "cls") (ok (peClass (classTable s false))))
                     ((= op "ncls") (ok (peClass (classTable s true))))
-                    (else (mt (compileExpr ctx (asn/sxSym ctx.boundary))
+                    (else (match (compileExpr ctx (asn/sxSym ctx.boundary))
                             ((err e) (err e))
                             ((ok b) (ok (peCat (peLit (stringToBytes s)) (peNot b))))))))
                 (_ (err (str "(" op " ...) takes a string")))))
     ((none) (err (str "(" op " ...) takes a string"))))
 
 fn exceptWords xs: (List asn/Sx) acc: (List Bytes) -> (Option (List Bytes))
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (some (listReverse acc)))
-    ((some x) (mt x
+    ((some x) (match x
                 ((asn/sxStr s) (exceptWords (optionOr (listTail xs) (list)) (cons (stringToBytes s) acc)))
                 (_ (none)))))
 
 fn compileExcept ctx: Ctx args: (List asn/Sx) -> (Result Pe String)
-  (mt (exceptWords (optionOr (listTail args) (list)) (list))
+  (match (exceptWords (optionOr (listTail args) (list)) (list))
     ((none) (err "(except e \"word\" ...) takes strings after the expression"))
     ((some ws) (if (listEmpty? ws)
                  (err "(except e \"word\" ...) needs at least one word")
-                 (mt (compileExpr ctx (optionOr (listHead args) (asn/sxList (list))))
+                 (match (compileExpr ctx (optionOr (listHead args) (asn/sxList (list))))
                    ((err e) (err e))
                    ((ok b) (ok (peExcept b ws)))))))
 
 fn sxCount x: (Option asn/Sx) -> (Option Int64)
-  (mt x
-    ((some v) (mt v ((asn/sxInt k) (if (>= k 0) (some k) (none))) (_ (none))))
+  (match x
+    ((some v) (match v ((asn/sxInt k) (if (>= k 0) (some k) (none))) (_ (none))))
     ((none) (none)))
 
 fn compileRep ctx: Ctx args: (List asn/Sx) -> (Result Pe String)
-  (mt (sxCount (listGet args 1))
+  (match (sxCount (listGet args 1))
     ((none) (err "(rep e least most) takes two counts 0 or more"))
-    ((some least) (mt (sxCount (listGet args 2))
+    ((some least) (match (sxCount (listGet args 2))
                     ((none) (err "(rep e least most) takes two counts 0 or more"))
                     ((some most) (cond
                                    ((!= (listLength args) 3) (err "(rep e least most) takes three arguments"))
                                    ((or (< most least) (= most 0)) (err "(rep e least most) needs 0 < most and least <= most"))
-                                   (else (mt (compileExpr ctx (optionOr (listHead args) (asn/sxList (list))))
+                                   (else (match (compileExpr ctx (optionOr (listHead args) (asn/sxList (list))))
                                            ((err e) (err e))
                                            ((ok b) (ok (peRep b least most))))))))))
 
 fn compileForm ctx: Ctx op: String args: (List asn/Sx) -> (Result Pe String)
   (cond
     ((= op "rep") (compileRep ctx args))
-    ((or (= op "seq") (= op "alt")) (mt (compileAll ctx args (list)) ((err e) (err e)) ((ok ps) (ok (joinPes ps (= op "seq"))))))
+    ((or (= op "seq") (= op "alt")) (match (compileAll ctx args (list)) ((err e) (err e)) ((ok ps) (ok (joinPes ps (= op "seq"))))))
     ((or (= op "star") (or (= op "plus") (or (= op "opt") (or (= op "not") (= op "and"))))) (compileOne ctx op args))
     ((or (= op "word") (or (= op "cls") (= op "ncls"))) (compileText ctx op args))
     ((= op "except") (compileExcept ctx args))
@@ -174,21 +174,21 @@ fn compileForm ctx: Ctx op: String args: (List asn/Sx) -> (Result Pe String)
     (else (err (str "unknown grammar form " op))))
 
 fn compileRef ctx: Ctx name: String -> (Result Pe String)
-  (mt (listIndexOf ctx.names name)
+  (match (listIndexOf ctx.names name)
     ((none) (err (str "unknown rule " name)))
     ((some i) (if (optionOr (listGet ctx.recursive i) false)
                 (ok (peRef i))
-                (mt (ruleNamed ctx.rules name)
+                (match (ruleNamed ctx.rules name)
                   ((some r) (compileExpr ctx r.expr))
                   ((none) (err (str "unknown rule " name)))))))
 
 fn compileExpr ctx: Ctx e: asn/Sx -> (Result Pe String)
-  (mt e
+  (match e
     ((asn/sxStr s) (ok (peLit (stringToBytes s))))
     ((asn/sxSym name) (compileRef ctx name))
     ((asn/sxList items)
-      (mt (listHead items)
-        ((some h) (mt h
+      (match (listHead items)
+        ((some h) (match h
                     ((asn/sxSym op) (compileForm ctx op (optionOr (listTail items) (list))))
                     (_ (err "a grammar form starts with a symbol"))))
         ((none) (err "empty grammar form"))))
@@ -199,21 +199,21 @@ fn buildTree entries: (List (Pair Int64 Pe)) -> RuleTree
     (if (= n 0)
       (ruleLeaf)
       (let [(mid (/ n 2))]
-        (mt (listGet entries mid)
+        (match (listGet entries mid)
           ((some e) (ruleNode (buildTree (listTake entries mid)) (pairFirst e) (pairSecond e) (buildTree (listDrop entries (+ mid 1)))))
           ((none) (ruleLeaf))))))
 
 fn compileRecursive ctx: Ctx i: Int64 acc: (List (Pair Int64 Pe)) -> (Result (List (Pair Int64 Pe)) String)
-  (mt (listGet ctx.rules i)
+  (match (listGet ctx.rules i)
     ((none) (ok (listReverse acc)))
     ((some r) (if (optionOr (listGet ctx.recursive i) false)
-                (mt (compileExpr ctx r.expr)
+                (match (compileExpr ctx r.expr)
                   ((err e) (err (str "rule " r.name ": " e)))
                   ((ok p) (compileRecursive ctx (+ i 1) (cons (pair i p) acc))))
                 (compileRecursive ctx (+ i 1) acc))))
 
 fn duplicateName names: (List String) -> (Option String)
-  (mt (listHead names)
+  (match (listHead names)
     ((none) (none))
     ((some n) (let [(rest (optionOr (listTail names) (list)))]
                 (if (listContains? rest n) (some n) (duplicateName rest)))))
@@ -222,55 +222,55 @@ fn grammarBuild name: String start: String boundary: String rules: (List Grammar
   (let [(names (map (fn [(r GrammarRule)] -> String r.name) rules))
         (recursive (map (fn [(r GrammarRule)] -> Bool (reaches? rules (exprRefs r.expr) (list) r.name)) rules))
         (ctx (Ctx :rules rules :names names :recursive recursive :boundary boundary))]
-    (mt (duplicateName names)
+    (match (duplicateName names)
       ((some d) (err (str "duplicate rule " d)))
-      ((none) (mt (compileRecursive ctx 0 (list))
+      ((none) (match (compileRecursive ctx 0 (list))
                 ((err e) (err e))
-                ((ok entries) (mt (compileExpr ctx (asn/sxSym start))
+                ((ok entries) (match (compileExpr ctx (asn/sxSym start))
                                 ((err e) (err (str "start rule " start ": " e)))
                                 ((ok entry) (ok (Grammar :name name :start start :boundary boundary :rules rules :table (buildTree entries) :entry entry)))))))))
 
 fn sxKwIs? x: (Option asn/Sx) key: String -> Bool
-  (mt x
-    ((some v) (mt v ((asn/sxKw k) (= k key)) (_ false)))
+  (match x
+    ((some v) (match v ((asn/sxKw k) (= k key)) (_ false)))
     ((none) false))
 
 fn sxSymName x: (Option asn/Sx) -> (Option String)
-  (mt x
-    ((some v) (mt v ((asn/sxSym s) (some s)) (_ (none))))
+  (match x
+    ((some v) (match v ((asn/sxSym s) (some s)) (_ (none))))
     ((none) (none)))
 
 fn ruleFromSx x: asn/Sx -> (Result GrammarRule String)
-  (mt x
+  (match x
     ((asn/sxList items)
       (cond
         ((not (sxKwIs? (listGet items 0) "rule")) (err "a rule form starts with :rule"))
-        (else (mt (sxSymName (listGet items 1))
+        (else (match (sxSymName (listGet items 1))
                 ((none) (err "a rule name is a symbol"))
-                ((some name) (mt (listGet items 2)
+                ((some name) (match (listGet items 2)
                                ((none) (err (str "rule " name " has no body")))
                                ((some e) (ok (GrammarRule :name name :expr e :doc (optionOr (asn/asnKeyString (listDrop items 3) "d") ""))))))))))
     (_ (err "a rule is a (:rule name expr :d doc) form")))
 
 fn rulesFromSx xs: (List asn/Sx) acc: (List GrammarRule) -> (Result (List GrammarRule) String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (ok (listReverse acc)))
-    ((some x) (mt (ruleFromSx x)
+    ((some x) (match (ruleFromSx x)
                 ((err e) (err (str "rule " (+ (listLength acc) 1) ": " e)))
                 ((ok r) (rulesFromSx (optionOr (listTail xs) (list)) (cons r acc))))))
 
 fn grammarParse text: String -> (Result Grammar String)
-  (mt (asn/asnReadAll text)
+  (match (asn/asnReadAll text)
     ((err e) (err e))
-    ((ok forms) (mt (listHead forms)
+    ((ok forms) (match (listHead forms)
                   ((none) (err "empty grammar file"))
-                  ((some f) (mt f
+                  ((some f) (match f
                               ((asn/sxList items)
                                 (cond
                                   ((not (sxKwIs? (listHead items) "grammar")) (err "a grammar file is one (:grammar ...) form"))
-                                  (else (mt (asn/asnKeyValue items "rules")
-                                          ((some rv) (mt rv
-                                                       ((asn/sxVec rs) (mt (rulesFromSx rs (list))
+                                  (else (match (asn/asnKeyValue items "rules")
+                                          ((some rv) (match rv
+                                                       ((asn/sxVec rs) (match (rulesFromSx rs (list))
                                                                          ((err e) (err e))
                                                                          ((ok rules) (grammarBuild (optionOr (asn/asnKeyString items "name") "")
                                                                                        (optionOr (asn/asnKeyString items "start") "")
@@ -281,14 +281,14 @@ fn grammarParse text: String -> (Result Grammar String)
                               (_ (err "a grammar file is one (:grammar ...) form")))))))
 
 fn ! grammarLoad! path: String -> (Result Grammar String)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e) (err (str path ": " e)))
-    ((ok text) (mt (grammarParse text)
+    ((ok text) (match (grammarParse text)
                  ((err e) (err (str path ": " e)))
                  ((ok g) (ok g)))))
 
 fn ruleAt t: RuleTree i: Int64 -> Pe
-  (mt t
+  (match t
     ((ruleLeaf) (peFail))
     ((ruleNode l k b r) (cond ((= i k) b) ((< i k) (ruleAt l i)) (else (ruleAt r i)))))
 
@@ -329,7 +329,7 @@ fn tailrec repAt t: RuleTree bs: Bytes n: Int64 p: Int64 far: Int64 b: Pe k: Int
         (repAt t bs n (endOf q) (farOf q) b (+ k 1) least most))))
 
 fn pm t: RuleTree bs: Bytes n: Int64 p: Int64 far: Int64 e: Pe -> Int64
-  (mt e
+  (match e
     ((peClass tb) (if (< p n) (if (= (bytesGet tb (bytesGet bs p)) 49) (hit (+ p 1) far) (miss (max far p))) (miss (max far p))))
     ((peCat a b) (let [(q (pm t bs n p far a))] (if (< q 0) q (pm t bs n (endOf q) (farOf q) b))))
     ((peOr a b) (let [(q (pm t bs n p far a))] (if (< q 0) (pm t bs n p (farOf q) b) q)))
@@ -385,7 +385,7 @@ fn grammarReachable g: Grammar start: String -> (List String)
     (cons start (filter (fn [(n String)] -> Bool (and (!= n start) (listContains? seen n))) (grammarRuleNames g))))
 
 fn reachFrom rules: (List GrammarRule) todo: (List String) seen: (List String) -> (List String)
-  (mt (listHead todo)
+  (match (listHead todo)
     ((none) seen)
     ((some r) (let [(rest (optionOr (listTail todo) (list)))]
                 (if (listContains? seen r)

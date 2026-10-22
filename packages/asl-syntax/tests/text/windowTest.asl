@@ -194,7 +194,7 @@ fn testGeneratedLogExportedFunctions! scratchDir: String -> Bool
     true)
 
 fn probeSource name: String read: String -> String
-  (str "(module " name "\n  :x [main]\n  :i [])\n\nfn ! main args: (List String) -> (Result Int64 String)\n  (let [(path (optionOr (listHead args) \"\"))]\n    (mt " read "\n      ((ok bs) (ok (if (> (bytesLength bs) 0) 0 1)))\n      ((err e) (err e))))\n")
+  (str "(module " name "\n  :x [main]\n  :i [])\n\nfn ! main args: (List String) -> (Result Int64 String)\n  (let [(path (optionOr (listHead args) \"\"))]\n    (match " read "\n      ((ok bs) (ok (if (> (bytesLength bs) 0) 0 1)))\n      ((err e) (err e))))\n")
 
 fn ! peakRss! bin: String arg: String -> Int64
   (let [(cmd (str "sh -c 'if /usr/bin/time -l true >/dev/null 2>&1; then /usr/bin/time -l " bin " " arg " 2>&1 >/dev/null | awk \"/maximum resident set size/{print \\$1}\"; else /usr/bin/time -v " bin " " arg " 2>&1 >/dev/null | awk \"/Maximum resident set size/{print \\$6 * 1024}\"; fi'"))

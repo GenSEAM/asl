@@ -32,7 +32,7 @@ fn usageError msg: String -> c/Outcome
   (c/Outcome :out "" :err (str (usageText) "observe.asl: error: " msg "\n") :code 2)
 
 fn partitionEq s: String -> (Pair String (Option String))
-  (mt (stringIndexOf s "=")
+  (match (stringIndexOf s "=")
     ((none) (pair s (none)))
     ((some i) (pair (optionOr (stringSlice s 0 i) "") (some (optionOr (stringSlice s (+ i 1) (stringLength s)) "")))))
 
@@ -41,7 +41,7 @@ fn negNumber? s: String -> Bool
         (digits? (fn [(t String)] -> Bool (listAll? (fn [(ch String)] -> Bool (and (>= (charCode ch) 48) (<= (charCode ch) 57))) (stringChars t))))]
     (and (stringStartsWith? s "-")
          (or (and (not (stringEmpty? body)) (digits? body))
-             (mt (stringIndexOf body ".")
+             (match (stringIndexOf body ".")
                ((none) false)
                ((some i) (let [(a (optionOr (stringSlice body 0 i) "")) (b (optionOr (stringSlice body (+ i 1) (stringLength body)) ""))]
                            (and (digits? a) (not (stringEmpty? b)) (digits? b))))))))
@@ -77,12 +77,12 @@ fn classify s: String -> (Result Tok c/Outcome)
               (else (ok (tokOpt (Opt :act (none) :spelling s :sep (none) :explicit (none)) s)))))))))
 
 fn classifyAll args: (List String) acc: (List Tok) -> (Result (List Tok) c/Outcome)
-  (mt (listHead args)
+  (match (listHead args)
     ((none) (ok (listReverse acc)))
     ((some a)
       (if (= a "--")
         (ok (listAppend (listReverse acc) (cons (tokSep a) (map (fn [(x String)] -> Tok (tokArg x)) (optionOr (listTail args) (list))))))
-        (mt (classify a)
+        (match (classify a)
           ((err o) (err o))
           ((ok t) (classifyAll (optionOr (listTail args) (list)) (cons t acc)))))))
 
@@ -127,39 +127,39 @@ fn tokAt toks: (List Tok) i: Int64 -> (Option Tok)
   (listGet toks i)
 
 fn consumeOpt st: St o: Opt raw: String toks: (List Tok) i: Int64 -> (Result (Pair St Int64) c/Outcome)
-  (mt o.act
+  (match o.act
     ((none) (ok (pair (with st :extras (listAppend st.extras (list raw))) (+ i 1))))
     ((some act)
-      (mt o.explicit
+      (match o.explicit
         ((some ex)
           (cond
             ((and (= act "help") (not (stringStartsWith? o.spelling "--")) (not (stringEmpty? ex)))
-              (mt (shortTail st o) ((ok s2) (ok (pair s2 (+ i 1)))) ((err e) (err e))))
+              (match (shortTail st o) ((ok s2) (ok (pair s2 (+ i 1)))) ((err e) (err e))))
             ((= act "help") (err (usageError (str "argument -h/--help: ignored explicit argument " (pyRepr ex)))))
             (else (ok (pair (with st :args (setArg st.args act ex) :seen (cons act st.seen)) (+ i 1))))))
         ((none)
           (if (= act "help")
             (err (helpOutcome))
-            (mt (tokAt toks (+ i 1))
-              ((some nt) (mt nt
+            (match (tokAt toks (+ i 1))
+              ((some nt) (match nt
                            ((tokArg v) (ok (pair (with st :args (setArg st.args act v) :seen (cons act st.seen)) (+ i 2))))
                            (_ (err (usageError (str "argument " (actionName act) ": expected one argument"))))))
               ((none) (err (usageError (str "argument " (actionName act) ": expected one argument"))))))))))
 
 fn walk st: St toks: (List Tok) i: Int64 -> (Result St c/Outcome)
-  (mt (tokAt toks i)
+  (match (tokAt toks i)
     ((none) (ok st))
     ((some t)
-      (mt t
-        ((tokOpt o raw) (mt (consumeOpt st o raw toks i) ((ok p) (walk (pairFirst p) toks (pairSecond p))) ((err e) (err e))))
+      (match t
+        ((tokOpt o raw) (match (consumeOpt st o raw toks i) ((ok p) (walk (pairFirst p) toks (pairSecond p))) ((err e) (err e))))
         ((tokArg s) (walk (with st :extras (listAppend st.extras (list s))) toks (+ i 1)))
         ((tokSep s) (walk (with st :extras (listAppend st.extras (list s))) toks (+ i 1))))))
 
 fn parseArgs argv: (List String) -> (Result Args c/Outcome)
-  (mt (classifyAll argv (list))
+  (match (classifyAll argv (list))
     ((err e) (err e))
     ((ok toks)
-      (mt (walk (St :args (Args :dim (none) :scope "" :limit "" :symbol "" :module "" :path "" :spec "" :id "") :extras (list) :seen (list)) toks 0)
+      (match (walk (St :args (Args :dim (none) :scope "" :limit "" :symbol "" :module "" :path "" :spec "" :id "") :extras (list) :seen (list)) toks 0)
         ((err e) (err e))
         ((ok st)
           (cond

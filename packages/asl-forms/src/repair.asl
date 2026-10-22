@@ -196,7 +196,7 @@ fn escapeAsnString s: String -> String
     s4)
 
 fn nearSnippet text: String s: src/Source line: Int64 col: Int64 -> String
-  (mt (src/sourceLineStart s line)
+  (match (src/sourceLineStart s line)
     ((some start)
      (let [(end (src/sourceLineEnd s line))
            (lineStr (optionOr (stringSlice text start end) ""))
@@ -217,7 +217,7 @@ fn formatRepairedItem item: RepairedItem -> String
 
 fn formatLeftItem item: LeftItem -> String
   (str "(:line " (stringFromInt64 item.line) " :col " (stringFromInt64 item.col) " :expected \"" (escapeAsnString item.expected) "\" :near \"" (escapeAsnString item.near) "\""
-       (mt item.options
+       (match item.options
          ((some os) (str " :options (" (stringJoin (map formatOption os) " ") ")"))
          ((none) ""))
        ")")
@@ -284,9 +284,9 @@ fn collectLeftItems text: String s: src/Source nodes: (List tr/Node) acc: (List 
           (tail (optionOr (listTail nodes) (list)))
           (startOff (tr/nodeStart n))
           (posOpt (src/sourcePosAt s startOff))
-          (line (mt posOpt ((some p) p.line) ((none) 1)))
-          (col (mt posOpt ((some p) p.byteCol) ((none) 1)))
-          (expected (mt (tr/nodeMissing n)
+          (line (match posOpt ((some p) p.line) ((none) 1)))
+          (col (match posOpt ((some p) p.byteCol) ((none) 1)))
+          (expected (match (tr/nodeMissing n)
                       ((some m) (tr/missingTok m))
                       ((none) (if (tr/isStrayNode n) "" "\""))))
           (near (nearSnippet text s line col))
@@ -323,12 +323,12 @@ fn delimText kind: Int64 -> String
     (else ""))
 
 fn posAt s: src/Source offset: Int64 -> (Pair Int64 Int64)
-  (mt (src/sourcePosAt s offset)
+  (match (src/sourcePosAt s offset)
     ((some p) (pair p.line p.byteCol))
     ((none)
      (let [(len (src/sourceLength s))]
        (if (and (> offset 0) (>= offset len))
-         (mt (src/sourcePosAt s (- len 1))
+         (match (src/sourcePosAt s (- len 1))
            ((some p) (pair p.line (+ p.byteCol 1)))
            ((none) (pair 1 1)))
          (pair 1 1)))))
@@ -349,13 +349,13 @@ fn buildToks s: src/Source raw: (List tr/Token) acc: (List Tok) -> (List Tok)
           (buildToks s rest (cons tok acc))))))
 
 fn stepPrefix st: (Option (List Int64)) k: Int64 -> (Option (List Int64))
-  (mt st
+  (match st
     ((none) (none))
     ((some p)
      (cond
        ((> k 0) (some (cons k p)))
        ((< k 0)
-        (mt (listHead p)
+        (match (listHead p)
           ((some h) (if (= h (- 0 k)) (some (optionOr (listTail p) (list))) (none)))
           ((none) (none))))
        (else st))))
@@ -369,13 +369,13 @@ fn buildPrefix toks: (List Tok) st: (Option (List Int64)) acc: (List (Option (Li
         (buildPrefix rest (stepPrefix st t.kind) acc2))))
 
 fn stepSuffix st: (Option (List Int64)) k: Int64 -> (Option (List Int64))
-  (mt st
+  (match st
     ((none) (none))
     ((some q)
      (cond
        ((< k 0) (some (cons (- 0 k) q)))
        ((> k 0)
-        (mt (listHead q)
+        (match (listHead q)
           ((some h) (if (= h k) (some (optionOr (listTail q) (list))) (none)))
           ((none) (none))))
        (else st))))
@@ -389,10 +389,10 @@ fn buildSuffix revToks: (List Tok) st: (Option (List Int64)) acc: (List (Option 
       (buildSuffix rest nst (cons nst acc))))
 
 fn stackEq a: (List Int64) b: (List Int64) -> Bool
-  (mt (listHead a)
+  (match (listHead a)
     ((none) (listEmpty? b))
     ((some x)
-     (mt (listHead b)
+     (match (listHead b)
        ((none) false)
        ((some y)
         (if (= x y)
@@ -400,15 +400,15 @@ fn stackEq a: (List Int64) b: (List Int64) -> Bool
           false)))))
 
 fn topIs st: (List Int64) k: Int64 -> Bool
-  (mt (listHead st) ((some h) (= h k)) ((none) false))
+  (match (listHead st) ((some h) (= h k)) ((none) false))
 
 fn popStack st: (List Int64) -> (List Int64)
   (optionOr (listTail st) (list))
 
 fn findDelimError toks: (List Tok) stack: (List Tok) idx: Int64 textLen: Int64 -> DelimError
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none)
-     (mt (listHead stack)
+     (match (listHead stack)
        ((none) (DelimError :kind "none" :index idx :start textLen :end textLen :expected 0 :at (none)))
        ((some o) (DelimError :kind "missing" :index idx :start textLen :end textLen :expected (- 0 o.kind) :at (some o)))))
     ((some t)
@@ -417,7 +417,7 @@ fn findDelimError toks: (List Tok) stack: (List Tok) idx: Int64 textLen: Int64 -
        (cond
          ((> k 0) (findDelimError rest (cons t stack) (+ idx 1) textLen))
          ((< k 0)
-          (mt (listHead stack)
+          (match (listHead stack)
             ((none) (DelimError :kind "stray" :index idx :start t.start :end t.end :expected 0 :at (some t)))
             ((some o)
              (if (= o.kind (- 0 k))
@@ -426,7 +426,7 @@ fn findDelimError toks: (List Tok) stack: (List Tok) idx: Int64 textLen: Int64 -
          (else (findDelimError rest stack (+ idx 1) textLen))))))
 
 fn buildBounds pres: (List (Option (List Int64))) sufs: (List (Option (List Int64))) toks: (List Tok) prev: (Option Tok) idx: Int64 acc: (List Bound) -> (List Bound)
-  (mt (listHead pres)
+  (match (listHead pres)
     ((none) (listReverse acc))
     ((some p)
      (let [(sq (optionOr (listHead sufs) (none)))
@@ -435,33 +435,33 @@ fn buildBounds pres: (List (Option (List Int64))) sufs: (List (Option (List Int6
        (buildBounds (optionOr (listTail pres) (list)) (optionOr (listTail sufs) (list)) (optionOr (listTail toks) (list)) nxt (+ idx 1) (cons b acc)))))
 
 fn boundInRegion b: Bound r: Region -> Bool
-  (and (mt b.next ((some t) (>= t.start r.start)) ((none) true))
-       (mt b.prev ((some t) (<= t.end r.end)) ((none) true)))
+  (and (match b.next ((some t) (>= t.start r.start)) ((none) true))
+       (match b.prev ((some t) (<= t.end r.end)) ((none) true)))
 
 fn tokInRegion t: Tok r: Region -> Bool
   (and (>= t.start r.start) (<= t.end r.end))
 
 fn closerInsertBalances b: Bound c: Int64 -> Bool
-  (mt b.pre
+  (match b.pre
     ((none) false)
     ((some p)
-     (mt b.suf
+     (match b.suf
        ((none) false)
        ((some q) (and (topIs p (- 0 c)) (stackEq (popStack p) q))))))
 
 fn openerInsertBalances b: Bound o: Int64 -> Bool
-  (mt b.pre
+  (match b.pre
     ((none) false)
     ((some p)
-     (mt b.suf
+     (match b.suf
        ((none) false)
        ((some q) (and (topIs q o) (stackEq p (popStack q)))))))
 
 fn tokenEditBalances b: Bound after: Bound c: Int64 -> Bool
-  (mt b.pre
+  (match b.pre
     ((none) false)
     ((some p)
-     (mt after.suf
+     (match after.suf
        ((none) false)
        ((some q)
         (if (= c 0)
@@ -469,20 +469,20 @@ fn tokenEditBalances b: Bound after: Bound c: Int64 -> Bool
           (and (topIs p (- 0 c)) (stackEq (popStack p) q)))))))
 
 fn tokIs t: (Option Tok) k: Int64 -> Bool
-  (mt t ((some x) (= x.kind k)) ((none) false))
+  (match t ((some x) (= x.kind k)) ((none) false))
 
 fn closerInserts b: Bound r: Region kinds: (List Int64) acc: (List Cand) -> (List Cand)
-  (mt (listHead kinds)
+  (match (listHead kinds)
     ((none) acc)
     ((some c)
      (let [(rest (optionOr (listTail kinds) (list)))
-           (dup (mt b.next ((some t) (and (= t.kind c) (tokInRegion t r))) ((none) false)))]
+           (dup (match b.next ((some t) (and (= t.kind c) (tokInRegion t r))) ((none) false)))]
        (if (and (not dup) (closerInsertBalances b c))
          (closerInserts b r rest (cons (Cand :kind "insert" :index b.index :tokKind c :oldKind 0) acc))
          (closerInserts b r rest acc)))))
 
 fn openerInserts b: Bound kinds: (List Int64) acc: (List Cand) -> (List Cand)
-  (mt (listHead kinds)
+  (match (listHead kinds)
     ((none) acc)
     ((some o)
      (let [(rest (optionOr (listTail kinds) (list)))]
@@ -491,13 +491,13 @@ fn openerInserts b: Bound kinds: (List Int64) acc: (List Cand) -> (List Cand)
          (openerInserts b rest acc)))))
 
 fn closerEdits b: Bound after: Bound r: Region acc: (List Cand) -> (List Cand)
-  (mt b.next
+  (match b.next
     ((none) acc)
     ((some t)
      (let [(k t.kind)]
        (if (or (>= k 0) (or t.synthetic (not (tokInRegion t r))))
          acc
-         (let [(dupDel (mt after.next ((some u) (and (= u.kind k) (tokInRegion u r))) ((none) false)))
+         (let [(dupDel (match after.next ((some u) (and (= u.kind k) (tokInRegion u r))) ((none) false)))
                (acc1 (if (and (not dupDel) (tokenEditBalances b after 0))
                        (cons (Cand :kind "delete" :index b.index :tokKind 0 :oldKind k) acc)
                        acc))
@@ -511,14 +511,14 @@ fn lostOpenerAllowed b: Bound e: DelimError -> Bool
        (< b.index e.index))
 
 fn enumerateBalanced bounds: (List Bound) r: Region e: DelimError acc: (List Cand) -> (List Cand)
-  (mt (listHead bounds)
+  (match (listHead bounds)
     ((none) (listReverse acc))
     ((some b)
      (let [(rest (optionOr (listTail bounds) (list)))
            (inR (boundInRegion b r))
            (acc1 (if inR (closerInserts b r (list -1 -2 -3) acc) acc))
            (acc2 (if (and inR (lostOpenerAllowed b e)) (openerInserts b (list 1 2 3) acc1) acc1))
-           (acc3 (mt (listHead rest) ((some after) (closerEdits b after r acc2)) ((none) acc2)))]
+           (acc3 (match (listHead rest) ((some after) (closerEdits b after r acc2)) ((none) acc2)))]
        (enumerateBalanced rest r e acc3))))
 
 fn tokAt toks: (List Tok) i: Int64 -> (Option Tok)
@@ -527,16 +527,16 @@ fn tokAt toks: (List Tok) i: Int64 -> (Option Tok)
 fn candOffset toks: (List Tok) c: Cand textLen: Int64 -> Int64
   (if (= c.kind "insert")
     (if (> c.tokKind 0)
-      (mt (tokAt toks c.index) ((some t) t.start) ((none) textLen))
-      (if (= c.index 0) 0 (mt (tokAt toks (- c.index 1)) ((some t) t.end) ((none) 0))))
-    (mt (tokAt toks c.index) ((some t) t.start) ((none) 0)))
+      (match (tokAt toks c.index) ((some t) t.start) ((none) textLen))
+      (if (= c.index 0) 0 (match (tokAt toks (- c.index 1)) ((some t) t.end) ((none) 0))))
+    (match (tokAt toks c.index) ((some t) t.start) ((none) 0)))
 
 fn candPos toks: (List Tok) c: Cand -> (Pair Int64 Int64)
   (if (= c.kind "insert")
     (if (> c.tokKind 0)
-      (mt (tokAt toks c.index) ((some t) (pair t.line t.col)) ((none) (pair 1 1)))
-      (if (= c.index 0) (pair 1 1) (mt (tokAt toks (- c.index 1)) ((some t) (pair t.endLine t.endCol)) ((none) (pair 1 1)))))
-    (mt (tokAt toks c.index) ((some t) (pair t.line t.col)) ((none) (pair 1 1))))
+      (match (tokAt toks c.index) ((some t) (pair t.line t.col)) ((none) (pair 1 1)))
+      (if (= c.index 0) (pair 1 1) (match (tokAt toks (- c.index 1)) ((some t) (pair t.endLine t.endCol)) ((none) (pair 1 1)))))
+    (match (tokAt toks c.index) ((some t) (pair t.line t.col)) ((none) (pair 1 1))))
 
 fn applyCand text: String toks: (List Tok) c: Cand -> String
   (let [(len (stringLength text))
@@ -557,7 +557,7 @@ fn candToks toks: (List Tok) c: Cand idx: Int64 line: Int64 col: Int64 off: Int6
         (here (= idx c.index))
         (insTok (Tok :kind c.tokKind :start off :end off :line line :col col :endLine line :endCol (+ col 1) :synthetic true))
         (acc1 (if (and isIns here) (cons insTok acc) acc))]
-    (mt (listHead toks)
+    (match (listHead toks)
       ((none) (listReverse acc1))
       ((some t)
        (let [(rest (optionOr (listTail toks) (list)))
@@ -572,23 +572,23 @@ fn candToks toks: (List Tok) c: Cand idx: Int64 line: Int64 col: Int64 off: Int6
          (candToks rest c (+ idx 1) line col off acc2)))))
 
 fn frameColGte frames: (List Frame) col: Int64 -> Bool
-  (mt (listHead frames)
+  (match (listHead frames)
     ((none) false)
     ((some f) (if (>= f.col col) true (frameColGte (optionOr (listTail frames) (list)) col))))
 
 fn lineStartViolates frames: (List Frame) t: Tok -> Bool
   (or (frameColGte frames t.col)
-      (mt (listHead frames)
+      (match (listHead frames)
         ((none) false)
         ((some f) (and (>= f.lastCol 0) (and (< f.lastLine t.line) (< f.lastCol t.col))))))
 
 fn setLast frames: (List Frame) col: Int64 line: Int64 -> (List Frame)
-  (mt (listHead frames)
+  (match (listHead frames)
     ((none) frames)
     ((some f) (cons (Frame :col f.col :lastCol col :lastLine line) (optionOr (listTail frames) (list)))))
 
 fn layoutScan toks: (List Tok) frames: (List Frame) prevEndLine: Int64 firstLine: Int64 lastLine: Int64 -> Bool
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) true)
     ((some t)
      (let [(rest (optionOr (listTail toks) (list)))
@@ -601,7 +601,7 @@ fn layoutScan toks: (List Tok) frames: (List Frame) prevEndLine: Int64 firstLine
                (f2 (cond
                      ((> k 0) (cons (Frame :col t.col :lastCol -1 :lastLine 0) f1))
                      ((< k 0)
-                      (mt (listHead f1)
+                      (match (listHead f1)
                         ((none) f1)
                         ((some top)
                          (let [(below (optionOr (listTail f1) (list)))]
@@ -620,7 +620,7 @@ fn lineStartOff s: src/Source line: Int64 -> Int64
 
 fn leftFor text: String s: src/Source root: tr/Node lang: String e: DelimError -> (List LeftItem)
   (let [(treeLeft (collectLeftItems text s (langTreeErrors root lang) (list)))]
-    (mt e.at
+    (match e.at
       ((none) treeLeft)
       ((some t)
        (let [(item (LeftItem :line t.line :col t.col :expected (delimText e.expected) :near (nearSnippet text s t.line t.col) :options (none)))]
@@ -630,12 +630,12 @@ fn maxRegionToks -> Int64
   6000
 
 fn countInRegion toks: (List Tok) r: Region n: Int64 -> Int64
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) n)
     ((some t) (countInRegion (optionOr (listTail toks) (list)) r (if (tokInRegion t r) (+ n 1) n))))
 
 fn firstLexError raw: (List tr/Token) -> (Option tr/Token)
-  (mt (listHead raw)
+  (match (listHead raw)
     ((none) (none))
     ((some t) (if (tr/isErrorToken t) (some t) (firstLexError (optionOr (listTail raw) (list))))))
 
@@ -670,7 +670,7 @@ fn startsSegment text: String t: Tok prevEndLine: Int64 -> Bool
                 (and (= t.kind 0) (listContains? (list "fn" "fn!" "schema" "enum") (optionOr (stringSlice text t.start t.end) ""))))))
 
 fn splitSegments text: String toks: (List Tok) prevEndLine: Int64 cur: (List Tok) acc: (List (List Tok)) -> (List (List Tok))
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (listReverse (if (listEmpty? cur) acc (cons (listReverse cur) acc))))
     ((some t)
      (let [(rest (optionOr (listTail toks) (list)))]
@@ -693,8 +693,8 @@ fn segmentParses text: String lang: String seg: Segment o: RepairOption -> Bool
 fn makesEmptyForm toks: (List Tok) c: Cand -> Bool
   (and (= c.kind "insert")
        (if (> c.tokKind 0)
-         (mt (tokAt toks c.index) ((some t) (< t.kind 0)) ((none) false))
-         (mt (tokAt toks (- c.index 1)) ((some t) (> t.kind 0)) ((none) false))))
+         (match (tokAt toks c.index) ((some t) (< t.kind 0)) ((none) false))
+         (match (tokAt toks (- c.index 1)) ((some t) (> t.kind 0)) ((none) false))))
 
 fn candDist toks: (List Tok) c: Cand textLen: Int64 site: Int64 -> Int64
   (let [(d (- (candOffset toks c textLen) site))]
@@ -703,7 +703,7 @@ fn candDist toks: (List Tok) c: Cand textLen: Int64 site: Int64 -> Int64
 fn parsingUpTo text: String lang: String seg: Segment toks: (List Tok) cands: (List Cand) limit: Int64 acc: (List Cand) -> (List Cand)
   (if (>= (listLength acc) limit)
     (listReverse acc)
-    (mt (listHead cands)
+    (match (listHead cands)
       ((none) (listReverse acc))
       ((some c)
        (let [(rest (optionOr (listTail cands) (list)))]
@@ -720,7 +720,7 @@ fn applyOptions text: String os: (List RepairOption) -> String
     (applyOptionsLoop text (map (fn [(p (Pair Int64 RepairOption))] -> RepairOption (pairSecond p)) desc)))
 
 fn listZipIndex os: (List RepairOption) i: Int64 acc: (List (Pair Int64 RepairOption)) -> (List (Pair Int64 RepairOption))
-  (mt (listHead os)
+  (match (listHead os)
     ((none) (listReverse acc))
     ((some o) (listZipIndex (optionOr (listTail os) (list)) (+ i 1) (cons (pair i o) acc))))
 
@@ -731,13 +731,13 @@ fn ctxParses text: String lang: String seg: Segment opts: (List RepairOption) ->
     (not (langHasErrors (parseInLang cand lang) lang)))
 
 fn listSum xs: (List Int64) -> Int64
-  (mt (listHead xs) ((none) 0) ((some x) (+ x (listSum (optionOr (listTail xs) (list))))))
+  (match (listHead xs) ((none) 0) ((some x) (+ x (listSum (optionOr (listTail xs) (list))))))
 
 fn popT st: (List Tok) -> (List Tok)
   (optionOr (listTail st) (list))
 
 fn simpleCount toks: (List Tok) stack: (List Tok) n: Int64 -> Int64
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (+ n (listLength stack)))
     ((some t)
      (let [(rest (optionOr (listTail toks) (list)))
@@ -745,19 +745,19 @@ fn simpleCount toks: (List Tok) stack: (List Tok) n: Int64 -> Int64
        (cond
          ((> k 0) (simpleCount rest (cons t stack) n))
          ((< k 0)
-          (mt (listHead stack)
+          (match (listHead stack)
             ((none) (simpleCount rest stack (+ n 1)))
             ((some o)
              (if (= o.kind (- 0 k))
                (simpleCount rest (popT stack) n)
                (let [(below (popT stack))]
-                 (if (mt (listHead below) ((some u) (= u.kind (- 0 k))) ((none) false))
+                 (if (match (listHead below) ((some u) (= u.kind (- 0 k))) ((none) false))
                    (simpleCount rest (popT below) (+ n 1))
                    (simpleCount rest below (+ n 1))))))))
          (else (simpleCount rest stack n))))))
 
 fn greedySites toks: (List Tok) stack: (List Tok) idx: Int64 lastTok: Tok acc: (List SiteFix) -> (List SiteFix)
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (listAppend (listReverse acc) (map (fn [(o Tok)] -> SiteFix (SiteFix :cand (Cand :kind "insert" :index idx :tokKind (- 0 o.kind) :oldKind 0) :kind "missing" :expected (- 0 o.kind) :at lastTok)) stack)))
     ((some t)
      (let [(rest (optionOr (listTail toks) (list)))
@@ -765,13 +765,13 @@ fn greedySites toks: (List Tok) stack: (List Tok) idx: Int64 lastTok: Tok acc: (
        (cond
          ((> k 0) (greedySites rest (cons t stack) (+ idx 1) t acc))
          ((< k 0)
-          (mt (listHead stack)
+          (match (listHead stack)
             ((none) (greedySites rest stack (+ idx 1) t (cons (SiteFix :cand (Cand :kind "delete" :index idx :tokKind 0 :oldKind k) :kind "stray" :expected 0 :at t) acc)))
             ((some o)
              (if (= o.kind (- 0 k))
                (greedySites rest (popT stack) (+ idx 1) t acc)
                (let [(below (popT stack))
-                     (fitsBelow (mt (listHead below) ((some u) (= u.kind (- 0 k))) ((none) false)))
+                     (fitsBelow (match (listHead below) ((some u) (= u.kind (- 0 k))) ((none) false)))
                      (insCost (if fitsBelow (simpleCount rest (popT below) 0) 1000000))
                      (delCost (simpleCount rest stack 0))
                      (repCost (simpleCount rest below 0))
@@ -788,7 +788,7 @@ fn applyTokEdits toks: (List Tok) edits: (List Cand) idx: Int64 prev: (Option To
         (ins (filter (fn [(c Cand)] -> Bool (and (= c.kind "insert") (= c.index idx))) edits))
         (insToks (map (fn [(c Cand)] -> Tok (Tok :kind c.tokKind :start p.end :end p.end :line p.endLine :col p.endCol :endLine p.endLine :endCol (+ p.endCol 1) :synthetic true)) ins))
         (acc1 (listAppend (listReverse insToks) acc))]
-    (mt (listHead toks)
+    (match (listHead toks)
       ((none) (listReverse acc1))
       ((some t)
        (let [(rest (optionOr (listTail toks) (list)))
@@ -797,13 +797,13 @@ fn applyTokEdits toks: (List Tok) edits: (List Cand) idx: Int64 prev: (Option To
              (acc2 (cond
                      (del acc1)
                      ((listEmpty? repl) (cons t acc1))
-                     (else (cons (Tok :kind (mt (listHead repl) ((some c) c.tokKind) ((none) t.kind)) :start t.start :end t.end :line t.line :col t.col :endLine t.endLine :endCol t.endCol :synthetic true) acc1))))]
+                     (else (cons (Tok :kind (match (listHead repl) ((some c) c.tokKind) ((none) t.kind)) :start t.start :end t.end :line t.line :col t.col :endLine t.endLine :endCol t.endCol :synthetic true) acc1))))]
          (applyTokEdits rest edits (+ idx 1) (some t) acc2)))))
 
 fn nearestSurvivors text: String lang: String seg: Segment toks: (List Tok) ctx: (List RepairOption) r: Region cands: (List Cand) limit: Int64 acc: (List Cand) -> (List Cand)
   (if (>= (listLength acc) limit)
     (listReverse acc)
-    (mt (listHead cands)
+    (match (listHead cands)
       ((none) (listReverse acc))
       ((some c)
        (let [(rest (optionOr (listTail cands) (list)))
@@ -859,14 +859,14 @@ fn analyzeSite text: String lang: String s: src/Source seg: Segment sites: (List
                 (ranked (listSortBy (fn [(c Cand)] -> Int64 (atSiteRank toks e c))
                                     (filter (fn [(c Cand)] -> Bool (> (atSiteRank toks e c) 0)) cands)))
                 (atSite (listTake (filter (fn [(c Cand)] -> Bool (ctxParses text lang seg (listAppend ctx (list (candOption toks c len))))) ranked) 1))
-                (others2 (mt (listHead atSite)
+                (others2 (match (listHead atSite)
                            ((some a) (filter (fn [(c Cand)] -> Bool (not (sameCand a c))) kept))
                            ((none) kept)))
                 (leaves (leafForms toks toks (list) (list)))
                 (pool (listAppend atSite (filter (fn [(c Cand)] -> Bool (not (and (not (isAsnLang lang)) (makesEmptyForm toks c)))) others2)))
                 (scored (map (fn [(c Cand)] -> RepairOption
                                (markReparents (candOption toks c len)
-                                              (mt base
+                                              (match base
                                                 ((some b) (candReparents toks c (filter (fn [(x Elem)] -> Bool (and (>= x.id (* 2 seg.start)) (<= x.id (* 2 seg.end)))) b) len))
                                                 ((none) (altersLeaf toks c leaves len)))))
                              pool))
@@ -881,7 +881,7 @@ fn analyzeSite text: String lang: String s: src/Source seg: Segment sites: (List
                 (picked (listTake chosen (if (> (listLength must) 3) (listLength must) 3)))
                 (options (filter (fn [(o RepairOption)] -> Bool (not (listEmpty? (filter (fn [(p RepairOption)] -> Bool (sameOption o p)) picked)))) ranked))
                 (unique (if (and (= (listLength sites) 1) (= (listLength kept) 1))
-                          (mt (listHead kept) ((some c) (some (candOption toks c len))) ((none) (none)))
+                          (match (listHead kept) ((some c) (some (candOption toks c len))) ((none) (none)))
                           (none)))]
             (SiteResult :item (LeftItem :line siteLine :col siteCol :expected expected :near near :options (some options)) :unique unique))))))
 
@@ -889,7 +889,7 @@ fn flushLeft toks: (List Tok) -> Bool
   (not (listEmpty? (filter (fn [(t Tok)] -> Bool (= t.col 1)) (optionOr (listTail toks) (list)))))
 
 fn formEnd toks: (List Tok) stack: (List Int64) idx: Int64 -> Int64
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) -1)
     ((some t)
      (let [(k t.kind)
@@ -924,7 +924,7 @@ fn fnSurplus text: String seg: Segment -> (List Tok)
       (list)))
 
 fn surplusOptions text: String segs: (List Segment) acc: (List RepairOption) -> (List RepairOption)
-  (mt (listHead segs)
+  (match (listHead segs)
     ((none) acc)
     ((some g)
      (surplusOptions text (optionOr (listTail segs) (list))
@@ -932,7 +932,7 @@ fn surplusOptions text: String segs: (List Segment) acc: (List RepairOption) -> 
                                           (fnSurplus text g))))))
 
 fn promoteSurplus surplus: (List RepairOption) it: LeftItem -> LeftItem
-  (mt (listHead (filter (fn [(o RepairOption)] -> Bool (and (= o.line it.line) (= o.col it.col))) surplus))
+  (match (listHead (filter (fn [(o RepairOption)] -> Bool (and (= o.line it.line) (= o.col it.col))) surplus))
     ((none) it)
     ((some o)
      (if (= it.expected "")
@@ -943,12 +943,12 @@ fn markReparents o: RepairOption b: Bool -> RepairOption
   (with o :reparents b)
 
 fn dedupeOptions os: (List RepairOption) acc: (List RepairOption) -> (List RepairOption)
-  (mt (listHead os)
+  (match (listHead os)
     ((none) (listReverse acc))
     ((some o) (dedupeOptions (optionOr (listTail os) (list)) (if (listEmpty? (filter (fn [(p RepairOption)] -> Bool (sameOption o p)) acc)) (cons o acc) acc))))
 
 fn leafForms all: (List Tok) toks: (List Tok) stack: (List Tok) acc: (List (Pair Int64 Int64)) -> (List (Pair Int64 Int64))
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) acc)
     ((some t)
      (let [(rest (optionOr (listTail toks) (list)))
@@ -956,7 +956,7 @@ fn leafForms all: (List Tok) toks: (List Tok) stack: (List Tok) acc: (List (Pair
        (cond
          ((> k 0) (leafForms all rest (cons t stack) acc))
          ((< k 0)
-          (mt (listHead stack)
+          (match (listHead stack)
             ((some o) (if (and (= o.kind (- 0 k)) (not (delimBetween all o t)))
                         (leafForms all rest (optionOr (listTail stack) (list)) (cons (pair o.start t.end) acc))
                         (leafForms all rest (optionOr (listTail stack) (list)) acc)))
@@ -981,11 +981,11 @@ fn tokId t: Tok -> Int64
   (+ (* 2 t.start) (if t.synthetic 1 0))
 
 fn parentsOf toks: (List Tok) stack: (List (Pair Int64 Int64)) acc: (List Elem) -> (List Elem)
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (listReverse acc))
     ((some t)
      (let [(rest (optionOr (listTail toks) (list)))
-           (top (mt (listHead stack) ((some p) (pairFirst p)) ((none) -1)))
+           (top (match (listHead stack) ((some p) (pairFirst p)) ((none) -1)))
            (k t.kind)]
        (cond
          ((> k 0) (parentsOf rest (cons (pair (tokId t) k) stack) (cons (Elem :id (tokId t) :parent top) acc)))
@@ -998,15 +998,15 @@ fn popToMatch stack: (List (Pair Int64 Int64)) k: Int64 -> (List (Pair Int64 Int
     (dropThrough stack k))
 
 fn dropThrough stack: (List (Pair Int64 Int64)) k: Int64 -> (List (Pair Int64 Int64))
-  (mt (listHead stack)
+  (match (listHead stack)
     ((none) stack)
     ((some p) (if (= (pairSecond p) k) (optionOr (listTail stack) (list)) (dropThrough (optionOr (listTail stack) (list)) k))))
 
 fn parentsDiffer base: (List Elem) after: (List Elem) -> Bool
-  (mt (listHead base)
+  (match (listHead base)
     ((none) false)
     ((some b)
-     (mt (listHead after)
+     (match (listHead after)
        ((none) false)
        ((some a)
         (cond
@@ -1044,7 +1044,7 @@ fn mergedMissing text: String lang: String s: src/Source seg: Segment sites: (Li
         (len (stringLength text))
         (miss (filter (fn [(x SiteFix)] -> Bool (= x.kind "missing")) sites))
         (rest (filter (fn [(x SiteFix)] -> Bool (not (= x.kind "missing"))) sites))
-        (at (mt (listHead miss) ((some x) x.at) ((none) dflt)))
+        (at (match (listHead miss) ((some x) x.at) ((none) dflt)))
         (closers (stringJoin (map (fn [(x SiteFix)] -> String (delimText x.expected)) miss) ""))
         (opt (RepairOption :kind "insert" :tok closers :with "" :line at.endLine :col at.endCol :off at.end :delLen 0 :ins closers :reparents false))
         (ctx (map (fn [(x SiteFix)] -> RepairOption (candOption seg.toks x.cand len)) rest))
@@ -1071,7 +1071,7 @@ fn bareSite text: String s: src/Source site: SiteFix -> SiteResult
     (SiteResult :item (LeftItem :line line :col col :expected (delimText site.expected) :near (nearSnippet text s line col) :options (none)) :unique (none)))
 
 fn analyzeSegments text: String lang: String s: src/Source segs: (List Segment) spanStart: Int64 spanEnd: Int64 wholeLayout: Bool base: (Option (List Elem)) budget: Int64 acc: (List SiteResult) -> (List SiteResult)
-  (mt (listHead segs)
+  (match (listHead segs)
     ((none) acc)
     ((some g)
      (let [(rs (analyzeSegment text lang s g spanStart spanEnd wholeLayout base budget))
@@ -1087,7 +1087,7 @@ fn repairAlternatives text: String lang: String -> (List String)
         (toks (buildToks s (lx/tokenizeBytes (stringToBytes text)) (list)))
         (segs (map makeSegment (splitSegments text toks 0 (list) (list))))
         (bad (filter (fn [(g Segment)] -> Bool (not (= (findDelimError g.toks (list) 0 g.end).kind "none"))) segs))]
-    (mt (listHead bad)
+    (match (listHead bad)
       ((none) (list))
       ((some seg)
        (let [(stoks seg.toks)
@@ -1104,8 +1104,8 @@ fn parsePicks p: String -> (Option (List (Pair Int64 Int64)))
         (pairs (map (fn [(w String)] -> (Option (Pair Int64 Int64))
                       (let [(parts (stringSplit w "."))]
                         (if (= (listLength parts) 2)
-                          (mt (stringToInt64 (optionOr (listGet parts 0) ""))
-                            ((some k) (mt (stringToInt64 (optionOr (listGet parts 1) "")) ((some n) (some (pair k n))) ((none) (none))))
+                          (match (stringToInt64 (optionOr (listGet parts 0) ""))
+                            ((some k) (match (stringToInt64 (optionOr (listGet parts 1) "")) ((some n) (some (pair k n))) ((none) (none))))
                             ((none) (none)))
                           (none))))
                     words))]
@@ -1114,17 +1114,17 @@ fn parsePicks p: String -> (Option (List (Pair Int64 Int64)))
       (some (map (fn [(x (Option (Pair Int64 Int64)))] -> (Pair Int64 Int64) (optionOr x (pair 0 0))) pairs))))
 
 fn pickedOption items: (List LeftItem) k: Int64 n: Int64 -> (Option RepairOption)
-  (mt (listGet items (- k 1))
+  (match (listGet items (- k 1))
     ((none) (none))
-    ((some it) (mt it.options ((some os) (listGet os (- n 1))) ((none) (none)))))
+    ((some it) (match it.options ((some os) (listGet os (- n 1))) ((none) (none)))))
 
 fn applyOptionsLoop text: String os: (List RepairOption) -> String
-  (mt (listHead os)
+  (match (listHead os)
     ((none) text)
     ((some o) (applyOptionsLoop (applyOption text o) (optionOr (listTail os) (list)))))
 
 fn optionsItems os: (List RepairOption) acc: (List RepairedItem) -> (List RepairedItem)
-  (mt (listHead os)
+  (match (listHead os)
     ((none) acc)
     ((some o) (optionsItems (optionOr (listTail os) (list)) (listAppend acc (optionItems o)))))
 
@@ -1139,14 +1139,14 @@ fn pickReceipt repaired: (List RepairedItem) left: (List LeftItem) pick: String 
     (str (optionOr (stringSlice base 0 (- (stringLength base) 1)) "") " :pick \"" (escapeAsnString pick) "\"" (if parses "" " :pickParses false") ")"))
 
 fn applyPicks text: String lang: String items: (List LeftItem) pick: String -> RepairResult
-  (let [(chosen (mt (parsePicks pick)
+  (let [(chosen (match (parsePicks pick)
                   ((none) (none))
                   ((some ps)
                    (let [(os (map (fn [(p (Pair Int64 Int64))] -> (Option RepairOption) (pickedOption items (pairFirst p) (pairSecond p))) ps))]
                      (if (listEmpty? (filter (fn [(o (Option RepairOption))] -> Bool (not (some? o))) os))
                        (some (map (fn [(o (Option RepairOption))] -> RepairOption (optionOr o (RepairOption :kind "" :tok "" :with "" :line 0 :col 0 :off 0 :delLen 0 :ins "" :reparents false))) os))
                        (none))))))]
-    (mt chosen
+    (match chosen
       ((some os)
        (let [(next (applyOptions text os))]
          (if (textParses next lang)
@@ -1163,7 +1163,7 @@ fn repairCore text: String lang: String spanStart: Int64 spanEnd: Int64 wholeLay
         (toks (buildToks s raw (list)))
         (e (findDelimError toks (list) 0 len))
         (treeErrs (langTreeErrors root lang))]
-    (mt (firstLexError raw)
+    (match (firstLexError raw)
       ((some bad)
        (let [(pos (posAt s bad.start))
              (item (LeftItem :line (pairFirst pos) :col (pairSecond pos) :expected "\"" :near (nearSnippet text s (pairFirst pos) (pairSecond pos)) :options (none)))]
@@ -1185,8 +1185,8 @@ fn repairCore text: String lang: String spanStart: Int64 spanEnd: Int64 wholeLay
                   ((listEmpty? items) (leftResult text (leftFor text s root lang e)))
                   ((not (= (stringTrim pick) "")) (applyPicks text lang items pick))
                   (else
-                   (let [(only (if (= (listLength ordered) 1) (mt (listHead ordered) ((some x) x.unique) ((none) (none))) (none)))]
-                     (mt only
+                   (let [(only (if (= (listLength ordered) 1) (match (listHead ordered) ((some x) x.unique) ((none) (none))) (none)))]
+                     (match only
                        ((some o)
                         (let [(next (applyOption text o))]
                           (if (textParses next lang)
@@ -1223,7 +1223,7 @@ fn commentFollows text: String off: Int64 -> Bool
     (stringStartsWith? (stringTrim line) ";"))
 
 fn atSiteOption text: String s: src/Source it: LeftItem -> (Option RepairOption)
-  (mt (listHead (filter (fn [(o RepairOption)] -> Bool (and (= o.line it.line) (= o.col it.col))) (optionOr it.options (list))))
+  (match (listHead (filter (fn [(o RepairOption)] -> Bool (and (= o.line it.line) (= o.col it.col))) (optionOr it.options (list))))
     ((none) (none))
     ((some o)
      (if (and (= o.kind "insert") (and (> (stringLength it.expected) 0) (commentFollows text o.off)))

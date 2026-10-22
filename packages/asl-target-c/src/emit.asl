@@ -16,7 +16,7 @@ fn emitC11Function f: irTy/IrFunction -> Str
   (let [(retTy (cTy/emitC11Type f.retType)) (name f.name) (paramsStr (fold (fn [(acc Str) (p irTy/IrParam)] -> Str (let [(pDecl (str (cTy/emitC11Type p.ty) " " p.name))] (if (= acc "") pDecl (str acc ", " pDecl)))) "" f.params)) (bodyStr (emitC11Block f.body))] (str retTy " " name "(" (if (= paramsStr "") "void" paramsStr) ") {\n" bodyStr "}\n\n"))
 
 fn emitC11Module m: irTy/IrModule -> (Result Str (List irTy/IrDiag))
-  (let [(vRes (vfy/verifyIr m))] (mt vRes ((err diags) (err diags)) ((ok _) (let [(funcsStr (fold (fn [(acc Str) (f irTy/IrFunction)] -> Str (str acc (emitC11Function f))) "" m.funcs)) (mainWrapper "int main(void) {\n    asl_main();\n    return 0;\n}\n")] (ok (str (c11Preamble) funcsStr mainWrapper))))))
+  (let [(vRes (vfy/verifyIr m))] (match vRes ((err diags) (err diags)) ((ok _) (let [(funcsStr (fold (fn [(acc Str) (f irTy/IrFunction)] -> Str (str acc (emitC11Function f))) "" m.funcs)) (mainWrapper "int main(void) {\n    asl_main();\n    return 0;\n}\n")] (ok (str (c11Preamble) funcsStr mainWrapper))))))
 
 fn emitC11StandaloneCase caseId: Str -> Str
   (cond ((= caseId "div_mod_positive") (str (c11Preamble) "int main(void) {\n" "    int64_t d = asl_floor_div(14, 3);\n" "    int64_t m = asl_floor_mod(14, 3);\n" "    printf(\"div=%lld mod=%lld\\n\", (long long)d, (long long)m);\n" "    return 0;\n" "}\n")) ((= caseId "div_mod_negative") (str (c11Preamble) "int main(void) {\n" "    int64_t d = asl_floor_div(-7, 3);\n" "    int64_t m = asl_floor_mod(-7, 3);\n" "    printf(\"negDiv=%lld negMod=%lld\\n\", (long long)d, (long long)m);\n" "    return 0;\n" "}\n")) ((= caseId "div_mod_pos_neg") (str (c11Preamble) "int main(void) {\n" "    int64_t d = asl_floor_div(7, -3);\n" "    int64_t m = asl_floor_mod(7, -3);\n" "    printf(\"posNegDiv=%lld posNegMod=%lld\\n\", (long long)d, (long long)m);\n" "    return 0;\n" "}\n")) ((= caseId "div_mod_neg_neg") (str (c11Preamble) "int main(void) {\n" "    int64_t d = asl_floor_div(-7, -3);\n" "    int64_t m = asl_floor_mod(-7, -3);\n" "    printf(\"negNegDiv=%lld negMod=%lld\\n\", (long long)d, (long long)m);\n" "    return 0;\n" "}\n")) ((= caseId "div_mod_zero_dividend") (str (c11Preamble) "int main(void) {\n" "    int64_t d = asl_floor_div(0, 5);\n" "    int64_t m = asl_floor_mod(0, 5);\n" "    printf(\"zeroDiv=%lld zeroMod=%lld\\n\", (long long)d, (long long)m);\n" "    return 0;\n" "}\n")) ((= caseId "div_mod_bounds") (str (c11Preamble) "int main(void) {\n" "    int64_t m = asl_floor_mod(-9223372036854775807LL, 2);\n" "    printf(\"boundsMod=%lld\\n\", (long long)m);\n" "    return 0;\n" "}\n")) ((= caseId "shift_mask_64") (str (c11Preamble) "int main(void) {\n" "    int64_t v = (int64_t)((uint64_t)1 << (3 & 63));\n" "    printf(\"shl=%lld\\n\", (long long)v);\n" "    return 0;\n" "}\n")) ((= caseId "shift_mask_overflow") (str (c11Preamble) "int main(void) {\n" "    int64_t v = (int64_t)((uint64_t)1 << (67 & 63));\n" "    printf(\"shlMasked=%lld\\n\", (long long)v);\n" "    return 0;\n" "}\n")) ((= caseId "int_wrap_add") (str (c11Preamble) "int main(void) {\n" "    int64_t v = (int64_t)((uint64_t)9223372036854775807LL + (uint64_t)1);\n" "    printf(\"wrapped=%lld\\n\", (long long)v);\n" "    return 0;\n" "}\n")) ((= caseId "int_wrap_mul") (str (c11Preamble) "int main(void) {\n" "    int64_t v = (int64_t)((uint64_t)9223372036854775807LL * (uint64_t)2);\n" "    printf(\"mulWrap=%lld\\n\", (long long)v);\n" "    return 0;\n" "}\n")) ((= caseId "float_roundtrip_precision") (str (c11Preamble) "int main(void) {\n" "    const char* s = asl_str_from_f64(3.141592653589793);\n" "    printf(\"flt=%s\\n\", s);\n" "    return 0;\n" "}\n")) ((= caseId "option_unit_repr") (str (c11Preamble) "int main(void) {\n" "    asl_opt_unit_t v = { .is_some = true };\n" "    if (v.is_some) {\n" "        printf(\"optionUnit=Some\\n\");\n" "    } else {\n" "        printf(\"optionUnit=None\\n\");\n" "    }\n" "    return 0;\n" "}\n")) ((= caseId "option_scalar_repr") (str (c11Preamble) "int main(void) {\n" "    asl_opt_i64_t v = { .is_some = true, .value = 42 };\n" "    if (v.is_some) {\n" "        printf(\"optVal=%lld\\n\", (long long)v.value);\n" "    } else {\n" "        printf(\"none\\n\");\n" "    }\n" "    return 0;\n" "}\n")) (else ""))
@@ -48,7 +48,7 @@ fn c11SCode name: Str -> Str (str "code_" (c11SEsc name))
 fn c11SInit name: Str -> Str (str "asl_init_" (c11SEsc name))
 
 fn c11SType t: irTy/SsaTy -> Str
-  (mt t ((irTy/tyVal) "AslVal") ((irTy/tyRec _) "AslVal") ((irTy/tyI64) "int64_t") ((irTy/tyF64) "double") ((irTy/tyI1) "bool") ((irTy/tyPtr) "void*") ((irTy/tyI32) "int32_t"))
+  (match t ((irTy/tyVal) "AslVal") ((irTy/tyRec _) "AslVal") ((irTy/tyI64) "int64_t") ((irTy/tyF64) "double") ((irTy/tyI1) "bool") ((irTy/tyPtr) "void*") ((irTy/tyI32) "int32_t"))
 
 fn c11SOctDigit n: Int64 -> Str
   (optionOr (stringSlice "01234567" n (+ n 1)) "0")
@@ -90,11 +90,11 @@ fn c11SVariantTag env: C11SEnv typeName: Str variant: Str -> Int64
   (optionOr (listIndexOf (c11SVariantsOf env typeName) variant) 0)
 
 fn c11SClosureArity env: C11SEnv callee: Str -> Int64
-  (mt (mapGet env.functions callee) ((some f) (listLength f.params)) ((none) 0))
+  (match (mapGet env.functions callee) ((some f) (listLength f.params)) ((none) 0))
 
 fn c11SConst strings: (List Str) t: irTy/SsaTy c: irTy/SsaConst -> Str
   (let [(tn (irTy/ssaTyName t))]
-    (mt c
+    (match c
       ((irTy/constInt n) (if (= tn "i64") (str "INT64_C(" n ")") (str "asl_rt_int(INT64_C(" n "))")))
       ((irTy/constFloat x) (if (= tn "f64") (c11SFloatLit x) (str "asl_rt_float(" (c11SFloatLit x) ")")))
       ((irTy/constBool b) (if (= tn "i1") (if b "true" "false") (str "asl_rt_bool(" (if b "1" "0") ")")))
@@ -104,14 +104,14 @@ fn c11SConst strings: (List Str) t: irTy/SsaTy c: irTy/SsaConst -> Str
       ((irTy/constSymbol n) (str "asl_rt_symbol(" (c11SStrLit n) ")"))))
 
 fn c11SBoxExpr srcTy: irTy/SsaTy v: Str -> Str
-  (mt srcTy
+  (match srcTy
     ((irTy/tyI64) (str "asl_rt_int(" v ")"))
     ((irTy/tyF64) (str "asl_rt_float(" v ")"))
     ((irTy/tyI1) (str "asl_rt_bool(" v " ? 1 : 0)"))
     (_ v))
 
 fn c11SUnboxExpr dstTy: irTy/SsaTy v: Str -> Str
-  (mt dstTy
+  (match dstTy
     ((irTy/tyI64) (str "asl_rt_unbox_int(" v ")"))
     ((irTy/tyF64) (str "asl_rt_unbox_float(" v ")"))
     ((irTy/tyI1) (str "asl_rt_unbox_bool(" v ")"))
@@ -124,11 +124,11 @@ fn c11WrapBuiltinEntries -> (List irTy/SsaBuiltin)
   (filter (fn [(b irTy/SsaBuiltin)] -> Bool (= b.kind "wrap")) (irTy/builtinEntries))
 
 fn c11SOpExpr env: C11SEnv strings: (List Str) defs: (Map Str irTy/SsaTy) t: irTy/SsaTy op: irTy/SsaOp -> Str
-  (mt op
+  (match op
     ((irTy/opConst c) (c11SConst strings t c))
     ((irTy/opCall callee args) (str (c11SFn callee) "(" (stringJoin (c11SRefs args) ", ") ")"))
     ((irTy/opBuiltin name args) (str "asl_rt_builtin(" (c11SStrLit name) ", INT64_C(" (listLength args) "), " (c11SArrayLit "AslVal" (c11SRefs args)) ")"))
-    ((irTy/opEntry name args) (mt (irTy/builtinEntry name (listLength args))
+    ((irTy/opEntry name args) (match (irTy/builtinEntry name (listLength args))
                                 ((some b) (str (c11BuiltinSym b) "(" (stringJoin (c11SRefs args) ", ") ")"))
                                 ((none) (str "asl_rt_builtin(" (c11SStrLit name) ", INT64_C(" (listLength args) "), " (c11SArrayLit "AslVal" (c11SRefs args)) ")"))))
     ((irTy/opCallClosure c args) (str "asl_rt_call_closure(" (c11SVal c) ", INT64_C(" (listLength args) "), " (c11SArrayLit "AslVal" (c11SRefs args)) ")"))
@@ -185,12 +185,12 @@ fn c11SPrimStmt dest: Str name: Str args: (List Str) -> Str
 
 fn c11SInstr env: C11SEnv strings: (List Str) defs: (Map Str irTy/SsaTy) ins: irTy/SsaInstr -> Str
   (let [(d ins.dest) (t ins.ty) (op ins.op)]
-    (mt op
+    (match op
       ((irTy/opPrim name args) (c11SPrimStmt d name args))
       (_ (str "  " (c11SVal d) " = " (c11SOpExpr env strings defs t op) ";\n"))))
 
 fn c11SBlockParams blocks: (Map Str irTy/SsaBlock) label: Str -> (List irTy/SsaParam)
-  (mt (mapGet blocks label) ((some b) b.params) ((none) (list)))
+  (match (mapGet blocks label) ((some b) b.params) ((none) (list)))
 
 fn c11SEdgeStmt blocks: (Map Str irTy/SsaBlock) e: irTy/SsaEdge -> Str
   (let [(params (c11SBlockParams blocks e.target)) (args e.args)
@@ -200,7 +200,7 @@ fn c11SEdgeStmt blocks: (Map Str irTy/SsaBlock) e: irTy/SsaEdge -> Str
     (str assigns "  goto " (c11SLabel e.target) ";\n"))
 
 fn c11STerm env: C11SEnv blocks: (Map Str irTy/SsaBlock) fnName: Str defs: (Map Str irTy/SsaTy) term: irTy/SsaTerm -> Str
-  (mt term
+  (match term
     ((irTy/termReturn v) (str "  return " (c11SVal v) ";\n"))
     ((irTy/termJump e) (c11SEdgeStmt blocks e))
     ((irTy/termBranch cond thenE elseE)
@@ -211,7 +211,7 @@ fn c11STerm env: C11SEnv blocks: (Map Str irTy/SsaBlock) fnName: Str defs: (Map 
       (let [(variants (c11SVariantsOf env typeName))
             (tagExpr (str "asl_rt_tag(" (c11SVal scrutinee) ", INT64_C(" (listLength variants) "), " (c11SArrayLit "const char*" (map c11SStrLit variants)) ")"))
             (caseLines (stringJoin (map (fn [(c irTy/SsaCase)] -> Str (str "    case " (c11SVariantTag env typeName c.variant) ": {\n" (c11SEdgeStmt blocks c.edge) "    }\n")) cases) ""))
-            (defLine (mt defaultEdge
+            (defLine (match defaultEdge
                        ((some e) (str "    default: {\n" (c11SEdgeStmt blocks e) "    }\n"))
                        ((none) (str "    default: asl_rt_trap(" (c11SStrLit fnName) ");\n"))))]
         (str "  {\n    int64_t tag = " tagExpr ";\n    switch (tag) {\n" caseLines defLine "    }\n  }\n")))
@@ -274,7 +274,7 @@ fn c11SDistinct xs: (List Str) -> (List Str)
 
 fn c11SClosureTargets m: irTy/SsaModule -> (List Str)
   (c11SDistinct (fold (fn [(acc (List Str)) (ins irTy/SsaInstr)] -> (List Str)
-                        (mt ins.op ((irTy/opMakeClosure callee _) (listAppend acc (list callee))) (_ acc)))
+                        (match ins.op ((irTy/opMakeClosure callee _) (listAppend acc (list callee))) (_ acc)))
                       (list) (c11SAllInstrs m)))
 
 fn c11STrampolineProto f: irTy/SsaFunction -> Str
@@ -319,7 +319,7 @@ fn c11SMainWrapper m: irTy/SsaModule f: irTy/SsaFunction -> Str
         (init (str "  asl_rt_init();\n" (c11SInitCall m)))
         (argsLine (if usesArgs "  AslVal args = asl_rt_args(argc, argv);\n" ""))
         (callExpr (if usesArgs (str (c11SFn f.name) "(args)") (str (c11SFn f.name) "()")))]
-    (mt f.retTy
+    (match f.retTy
       ((irTy/tyVal) (str header init argsLine "  AslVal result = " callExpr ";\n  return asl_rt_exit_code(result);\n}\n"))
       ((irTy/tyRec _) (str header init argsLine "  AslVal result = " callExpr ";\n  return asl_rt_exit_code(result);\n}\n"))
       ((irTy/tyI64) (str header init argsLine "  int64_t result = " callExpr ";\n  return (int)result;\n}\n"))
@@ -395,15 +395,15 @@ fn emitC11SourceWith src: Str preludeSrc: Str path: Str -> (Result Str Str)
   (c11SFromLowered (lk/lowerSourceWith src preludeSrc) path)
 
 fn c11SFromLowered lowered: (Result irTy/SsaModule (List irTy/IrDiag)) path: Str -> (Result Str Str)
-  (mt lowered
+  (match lowered
     ((err diags) (err (str "lowering " path ": " (c11SDiagsToMsg diags))))
     ((ok m)
-      (mt (vfy/verifySsa m)
+      (match (vfy/verifySsa m)
         ((err diags) (err (str "verifying " path ": " (c11SDiagsToMsg diags))))
         ((ok _)
-          (mt (c11SFindEntry m)
+          (match (c11SFindEntry m)
             ((none) (err (str "entry function 'main' is not defined in " path)))
             ((some f)
-              (mt (c11SValidEntry f)
+              (match (c11SValidEntry f)
                 ((some msg) (err msg))
                 ((none) (ok (c11SAssemble m f))))))))))

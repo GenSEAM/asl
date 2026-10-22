@@ -49,7 +49,7 @@ fn ! hostTriple -> String
       (else "")))
 
 fn ! hostFacts -> libc/TripleFacts
-  (mt (libc/libcFacts (hostTriple))
+  (match (libc/libcFacts (hostTriple))
     ((some f) f)
     ((none) (do (assert false (str "hostFacts: no verified libc.asl row for this host's triple (uname says \"" (hostTriple) "\"); add one, probe-verified, not guessed, before running this gate here")) (libc/emptyTripleFacts))))
 
@@ -62,7 +62,7 @@ fn moduleOf facts: libc/TripleFacts strings: (List String) functions: (List ty/S
   (ty/ssaModule "fixture" strings (list (sys/resultTypeDecl) (sys/optionTypeDecl)) (list) (sys/sysExterns facts) (list) functions)
 
 fn textOf res: (Result String (List ty/IrDiag)) -> String
-  (mt res ((ok text) text) ((err diags) (str "ERR: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code "@" d.locus ": " d.message)) diags) " || "))))
+  (match res ((ok text) text) ((err diags) (str "ERR: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code "@" d.locus ": " d.message)) diags) " || "))))
 
 fn constOf facts: libc/TripleFacts name: String -> Int64
   (optionOr (libc/libcConst facts name) -1)
@@ -72,7 +72,7 @@ fn errCaseInstrs -> (List ty/SsaInstr)
         (ty/ssaInstr "errCode" (ty/tyI64) (ty/opUnbox "errBox")))
 
 fn ! unwrapFn label: String res: (Result ty/SsaFunction String) -> ty/SsaFunction
-  (mt res
+  (match res
     ((ok f) f)
     ((err e) (do (assert false (str label ": " e)) (sys/sysGetpidFn))))
 
@@ -620,7 +620,7 @@ fn listFieldInstrs listVar: String n: Int64 prefix: String -> (Pair (List ty/Ssa
     (pair (list) (list)) (range 0 n))
 
 fn joinIntsInstrsGo names: (List String) spaceName: String prefix: String i: Int64 acc: (List ty/SsaInstr) accName: String -> (Pair (List ty/SsaInstr) String)
-  (mt (listHead names)
+  (match (listHead names)
     ((none) (pair acc accName))
     ((some h)
      (let [(strName (str prefix ".str" i)) (convInstr (sys/entryInstr strName (ty/tyVal) "stringFromInt64" (list h)))]
@@ -681,12 +681,12 @@ fn ! testLstat work: String facts: libc/TripleFacts -> Bool
         (testStatFamily work facts "sysLstat" "sysLstat" "lstat" sys/sysLstatFn link "S_IFLNK" false)))
 
 fn ! mustSizeIn structs: (Option libc/StructFacts) label: String -> Int64
-  (mt structs ((some sf) sf.size) ((none) (do (assert false (str label ": no stat row in libc.asl for this triple")) -1)))
+  (match structs ((some sf) sf.size) ((none) (do (assert false (str label ": no stat row in libc.asl for this triple")) -1)))
 
 fn ! mustOffsetIn structs: (Option libc/StructFacts) field: String label: String -> Int64
-  (mt structs
+  (match structs
     ((none) (do (assert false (str label ": no stat row in libc.asl for this triple")) -1))
-    ((some sf) (mt (libc/structFieldOffset sf field)
+    ((some sf) (match (libc/structFieldOffset sf field)
                  ((some off) off)
                  ((none) (do (assert false (str label ": no " field " field in libc.asl's stat row for this triple")) -1)))))
 

@@ -29,7 +29,7 @@ fn vfsContextFrom! root: String given: String session: String home: String -> (R
     (cond
       ((and (not (stringEmpty? session)) (or (stringContains? session "..") (= session ".") (not (listAll? sessionChar? (stringChars session)))))
         (err (str "ASL_SESSION must match [A-Za-z0-9._-]+ without ..: " session)))
-      (else (mt (dirCreate dir) ((err e) (err e)) ((ok _) (ok (vfsAt root dir session)))))))
+      (else (match (dirCreate dir) ((err e) (err e)) ((ok _) (ok (vfsAt root dir session)))))))
 
 fn vfsContext! root: String -> (Result Vfs String)
   (vfsContextFrom! root (optionOr (envGet "ASL_VFS_DIR") "") (optionOr (envGet "ASL_SESSION") "") (optionOr (envGet "HOME") ""))
@@ -41,7 +41,7 @@ fn storeDir! v: Vfs -> String
       (do (resultOr (dirCreate d) ()) d)))
 
 fn readText! p: String -> (Result String String)
-  (mt (fileReadString p) ((err e) (err e)) ((ok s) (ok (k/universalNewlines s))))
+  (match (fileReadString p) ((err e) (err e)) ((ok s) (ok (k/universalNewlines s))))
 
 fn countChars b: Bytes i: Int64 n: Int64 acc: Int64 -> Int64
   (if (>= i n) acc (countChars b (+ i 1) n (if (= (& (bytesGet b i) 192) 128) acc (+ acc 1))))
@@ -65,40 +65,40 @@ fn lockPath v: Vfs path: String -> String
   (k/joinPath v.dir (str (vfsKey path) ".lock"))
 
 fn fileMode! p: String -> (Option Int64)
-  (mt (fileStat p) ((ok st) (some (& st.mode 4095))) ((err _) (none)))
+  (match (fileStat p) ((ok st) (some (& st.mode 4095))) ((err _) (none)))
 
 fn tempFor! d: String n: Int64 content: String -> (Result String String)
   (let [(tmp (k/joinPath d (str ".aslTmp" (stringFromInt64 (procSelf)) "_" (stringFromInt64 (nowNs)) "_" (stringFromInt64 n))))]
-    (mt (fileCreateExclusive tmp content)
+    (match (fileCreateExclusive tmp content)
       ((ok _) (ok tmp))
       ((err e) (if (and (stringContains? e "exists") (< n 100)) (tempFor! d (+ n 1) content) (err e)))))
 
 fn atomicWrite! path: String content: String -> (Result Bool String)
   (let [(d0 (k/dirName path))
         (d (if (stringEmpty? d0) "." d0))]
-    (mt (dirCreate d)
+    (match (dirCreate d)
       ((err e) (err e))
       ((ok _)
-        (mt (tempFor! d 0 content)
+        (match (tempFor! d 0 content)
           ((err e) (err e))
           ((ok tmp)
             (let [(old (fileMode! path))]
               (if (and (some? old) (!= old (fileMode! tmp)))
-                (do (resultOr (pathRemove tmp) ()) (mt (fileWrite path content) ((ok _) (ok false)) ((err e) (err e))))
-                (mt (pathRename tmp path)
+                (do (resultOr (pathRemove tmp) ()) (match (fileWrite path content) ((ok _) (ok false)) ((err e) (err e))))
+                (match (pathRename tmp path)
                   ((ok _) (ok true))
                   ((err e) (do (resultOr (pathRemove tmp) ()) (err e)))))))))))
 
 fn ! isLink? p: String -> Bool
-  (mt (realPath p)
+  (match (realPath p)
     ((ok real) (!= real (k/normalizePath p)))
-    ((err _) (mt (dirList (k/dirName p)) ((ok names) (listContains? names (k/baseName p))) ((err _) false))))
+    ((err _) (match (dirList (k/dirName p)) ((ok names) (listContains? names (k/baseName p))) ((err _) false))))
 
 fn under? root: String p: String -> Bool
   (or (= p root) (stringStartsWith? p (str root "/")))
 
 fn linkedPart! root: String cur: String parts: (List String) -> String
-  (mt (listHead parts)
+  (match (listHead parts)
     ((none) "")
     ((some part)
       (let [(rest (optionOr (listTail parts) (list)))]
@@ -121,12 +121,12 @@ fn writeGuard! root: String path: String -> String
 
 fn stagedContent! v: Vfs path: String -> (Option String)
   (let [(bp (blobPath! v path))]
-    (if (k/isFile! bp) (mt (readText! bp) ((ok s) (some s)) ((err _) (none))) (none)))
+    (if (k/isFile! bp) (match (readText! bp) ((ok s) (some s)) ((err _) (none))) (none)))
 
 fn jsonText obj: j/Json key: String -> String
-  (mt (jsonGetOpt obj key)
+  (match (jsonGetOpt obj key)
     ((none) "")
-    ((some v) (mt v ((j/jstr s) s) (_ ""))))
+    ((some v) (match v ((j/jstr s) s) (_ ""))))
 
 fn jsonGetOpt obj: j/Json key: String -> (Option j/Json)
   (j/jsonGet obj key)
@@ -135,16 +135,16 @@ fn noMeta -> VfsMeta
   (VfsMeta :present false :path "" :baseSha "" :baseExists false)
 
 fn parseMeta text: String -> VfsMeta
-  (mt (j/jsonParse text)
+  (match (j/jsonParse text)
     ((err _) (noMeta))
     ((ok obj)
       (let [(sha (jsonText obj "baseSha"))]
         (VfsMeta :present true :path (jsonText obj "path") :baseSha sha
-                 :baseExists (mt (jsonGetOpt obj "baseExists") ((some v) (mt v ((j/jbool b) b) (_ true))) ((none) (not (stringEmpty? sha))))))))
+                 :baseExists (match (jsonGetOpt obj "baseExists") ((some v) (match v ((j/jbool b) b) (_ true))) ((none) (not (stringEmpty? sha))))))))
 
 fn stagedMeta! v: Vfs path: String -> VfsMeta
   (let [(mp (metaPath! v path))]
-    (if (k/isFile! mp) (mt (fileReadString mp) ((ok t) (parseMeta t)) ((err _) (noMeta))) (noMeta)))
+    (if (k/isFile! mp) (match (fileReadString mp) ((ok t) (parseMeta t)) ((err _) (noMeta))) (noMeta)))
 
 fn hex4 n: Int64 -> String
   (let [(digits "0123456789abcdef")]
@@ -193,14 +193,14 @@ fn stage! v: Vfs path: String content: String -> (Result Unit String)
         (onDisk (k/isFile! path))
         (base (cond
                 (kept (ok (pair meta.baseSha meta.baseExists)))
-                (onDisk (mt (readText! path) ((ok t) (ok (pair (shaText t) true))) ((err e) (err e))))
+                (onDisk (match (readText! path) ((ok t) (ok (pair (shaText t) true))) ((err e) (err e))))
                 (else (ok (pair "" false)))))]
-    (mt base
+    (match base
       ((err e) (err e))
       ((ok b)
-        (mt (atomicWrite! (blobPath! v path) content)
+        (match (atomicWrite! (blobPath! v path) content)
           ((err e) (err e))
-          ((ok _) (mt (atomicWrite! mp (metaJson v path (pairFirst b) (pairSecond b))) ((ok _) (ok ())) ((err e) (err e))))))))
+          ((ok _) (match (atomicWrite! mp (metaJson v path (pairFirst b) (pairSecond b))) ((ok _) (ok ())) ((err e) (err e))))))))
 
 fn removeIfFile! p: String -> (Result Unit String)
   (if (k/isFile! p) (pathRemove p) (ok ()))
@@ -208,23 +208,23 @@ fn removeIfFile! p: String -> (Result Unit String)
 fn unstage! v: Vfs path: String -> (Result Unit String)
   (let [(b (removeIfFile! (blobPath! v path)))
         (m (removeIfFile! (metaPath! v path)))]
-    (mt b ((err e) (err e)) ((ok _) m)))
+    (match b ((err e) (err e)) ((ok _) m)))
 
 fn metaNamed! d: String names: (List String) acc: (List String) -> (List String)
-  (mt (listHead names)
+  (match (listHead names)
     ((none) (listReverse acc))
     ((some n)
       (let [(rest (optionOr (listTail names) (list)))
-            (p (if (stringEndsWith? n ".meta") (mt (fileReadString (k/joinPath d n)) ((ok t) (parseMeta t).path) ((err _) "")) ""))]
+            (p (if (stringEndsWith? n ".meta") (match (fileReadString (k/joinPath d n)) ((ok t) (parseMeta t).path) ((err _) "")) ""))]
         (metaNamed! d rest (if (stringEmpty? p) acc (cons p acc))))))
 
 fn stagedPaths! v: Vfs -> (List String)
   (let [(d (storeDir! v))]
-    (mt (dirList d) ((err _) (list)) ((ok names) (metaNamed! d names (list)))))
+    (match (dirList d) ((err _) (list)) ((ok names) (metaNamed! d names (list)))))
 
 fn stagedByOther! v: Vfs path: String -> String
   (let [(key (str (vfsKey path) ".meta"))]
-    (mt (dirList v.dir)
+    (match (dirList v.dir)
       ((err _) "")
       ((ok subs)
         (optionOr (listHead (filter (fn [(sub String)] -> Bool
@@ -239,14 +239,14 @@ fn tokenFor! -> String
     (str t (stringRepeat " " (- 48 (stringLength t)))))
 
 fn acquire! lp: String tries: Int64 -> (Result Int64 String)
-  (mt (fileLock lp true)
+  (match (fileLock lp true)
     ((err e)
       (if (= e "busy")
         (do (sleepMs (if (< tries 50) 1 10)) (acquire! lp (+ tries 1)))
         (err (str "lock " lp ": " e))))
     ((ok fd)
       (let [(tok (tokenFor!))]
-        (mt (fdWrite fd tok)
+        (match (fdWrite fd tok)
           ((err e) (do (resultOr (fdClose fd) ()) (err (str "lock " lp ": " e))))
           ((ok _)
             (if (stringStartsWith? (resultOr (fileReadString lp) "") tok)
@@ -256,26 +256,26 @@ fn acquire! lp: String tries: Int64 -> (Result Int64 String)
 fn release! v: Vfs path: String lp: String fd: Int64 -> (Result Unit String)
   (let [(gone (if (k/isFile! (metaPath! v path)) (ok ()) (removeIfFile! lp)))
         (closed (fdClose fd))]
-    (mt gone ((err e) (err e)) ((ok _) closed)))
+    (match gone ((err e) (err e)) ((ok _) closed)))
 
 fn withLock! v: Vfs held: (List String) path: String body: (fn [] -> T) -> (Result T String)
   (let [(lp (lockPath v path))]
     (if (listContains? held lp)
       (ok (body))
-      (mt (acquire! lp 0)
+      (match (acquire! lp 0)
         ((err e) (err e))
         ((ok fd)
           (let [(r (body))]
-            (mt (release! v path lp fd) ((err e) (err e)) ((ok _) (ok r))))))))
+            (match (release! v path lp fd) ((err e) (err e)) ((ok _) (ok r))))))))
 
 fn resultFlat r: (Result (Result T String) String) -> (Result T String)
-  (mt r ((err e) (err e)) ((ok inner) inner))
+  (match r ((err e) (err e)) ((ok inner) inner))
 
 fn discardLoop! v: Vfs held: (List String) paths: (List String) n: Int64 -> (Result Int64 String)
-  (mt (listHead paths)
+  (match (listHead paths)
     ((none) (ok n))
     ((some p)
-      (mt (resultFlat (withLock! v held p (fn [] -> (Result Unit String) (unstage! v p))))
+      (match (resultFlat (withLock! v held p (fn [] -> (Result Unit String) (unstage! v p))))
         ((err e) (err e))
         ((ok _) (discardLoop! v held (optionOr (listTail paths) (list)) (+ n 1))))))
 

@@ -40,9 +40,9 @@ fn policyPart line: String -> String
   (stringJoin (filter (fn [(f String)] -> Bool (not (stringStartsWith? f "totalGCNs "))) (stringSplit line ":")) ":")
 
 fn ! emitted path: String -> String
-  (mt (lk/linkEntry! path)
+  (match (lk/linkEntry! path)
     ((err ds) (do (assert false (str path ": links; " (formatDiags ds))) ""))
-    ((ok m) (mt (llvm/emitLlvmProgramNative! m (str m.name ".main"))
+    ((ok m) (match (llvm/emitLlvmProgramNative! m (str m.name ".main"))
               ((err ds) (do (assert false (str path ": emits; " (formatDiags ds))) ""))
               ((ok code) code))))
 

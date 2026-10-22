@@ -29,7 +29,7 @@ fn makeMobileSafariProfile -> StealthProfile
   (StealthProfile :kind (mobileSafari) :userAgent "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1" :accept "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" :acceptLanguage "en-US,en;q=0.9" :secChUa "" :secFetchDest "document" :secFetchMode "navigate" :secFetchSite "cross-site")
 
 fn makeProfile kind: StealthKind -> StealthProfile
-  (mt kind ((googleBot) (makeGooglebotProfile)) ((chromeStealth) (makeChromeProfile)) ((safariStealth) (makeSafariProfile)) ((mobileSafari) (makeMobileSafariProfile)))
+  (match kind ((googleBot) (makeGooglebotProfile)) ((chromeStealth) (makeChromeProfile)) ((safariStealth) (makeSafariProfile)) ((mobileSafari) (makeMobileSafariProfile)))
 
 fn buildHeaders profile: StealthProfile -> (List Str)
   (let [(base (list (str "User-Agent: " profile.userAgent) (str "Accept: " profile.accept) (str "Accept-Language: " profile.acceptLanguage) "Upgrade-Insecure-Requests: 1" (str "Sec-Fetch-Dest: " profile.secFetchDest) (str "Sec-Fetch-Mode: " profile.secFetchMode) (str "Sec-Fetch-Site: " profile.secFetchSite))) (chUa profile.secChUa)] (if (> (stringLength chUa) 0) (cons (str "Sec-CH-UA: " chUa) base) base))

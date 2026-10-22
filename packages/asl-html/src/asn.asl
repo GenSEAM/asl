@@ -26,10 +26,10 @@ fn kebab name: String -> String
   (stringJoin (map (fn [(c String)] -> String (if (upper? c) (str "-" (stringLower c)) c)) (stringChars name)) "")
 
 fn atomOf e: rd/SExpr -> (Option String)
-  (mt e ((rd/sexprAtom v) (some v)) (_ (none)))
+  (match e ((rd/sexprAtom v) (some v)) (_ (none)))
 
 fn headOf e: rd/SExpr -> String
-  (mt e ((rd/sexprList items) (bare (optionOr (atomOf (optionOr (listHead items) (rd/makeAtom ""))) ""))) (_ ""))
+  (match e ((rd/sexprList items) (bare (optionOr (atomOf (optionOr (listHead items) (rd/makeAtom ""))) ""))) (_ ""))
 
 fn lookup table: (List (Pair String String)) key: String -> (Option String)
   (optionMap pairSecond (listHead (filter (fn [(p (Pair String String))] -> Bool (= (pairFirst p) key)) table)))

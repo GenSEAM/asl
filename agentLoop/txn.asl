@@ -117,16 +117,16 @@ fn dropZeros s: String -> String
     (if (>= i (stringLength s)) "0" (tailFrom s i)))
 
 fn kvText v: c/KvVal -> String
-  (mt v ((c/kvStr t) t) ((c/kvInt t) t))
+  (match v ((c/kvStr t) t) ((c/kvInt t) t))
 
 fn kvGet kv: (List (Pair String c/KvVal)) key: String -> String
-  (mt (listHead (filter (fn [p] (= (pairFirst p) key)) kv))
+  (match (listHead (filter (fn [p] (= (pairFirst p) key)) kv))
     ((some p) (kvText (pairSecond p)))
     (none ""))
 
 fn kvIsInt kv: (List (Pair String c/KvVal)) key: String -> Bool
-  (mt (listHead (filter (fn [p] (= (pairFirst p) key)) kv))
-    ((some p) (mt (pairSecond p) ((c/kvInt _) true) ((c/kvStr _) false)))
+  (match (listHead (filter (fn [p] (= (pairFirst p) key)) kv))
+    ((some p) (match (pairSecond p) ((c/kvInt _) true) ((c/kvStr _) false)))
     (none false))
 
 fn dedup xs: (List String) -> (List String)
@@ -140,7 +140,7 @@ fn quotedEnd s: String n: Int64 j: Int64 -> Int64
     (else (quotedEnd s n (+ j 1))))
 
 fn serValue v: RVal -> String
-  (mt v
+  (match v
     ((rStr t) (c/serString t))
     ((rInt k) (stringFromInt64 k))
     ((rBool b) (if b "true" "false"))
@@ -220,11 +220,11 @@ fn txnRefusal stdout: String stderr: String fallback: String content: (Option St
               bal0)]
     (if (!= bal "")
       (let [at (dropZeros bal)
-            where (mt content
+            where (match content
                     ((some t) (str "byte " at " (line " (stringFromInt64 (+ (newlinesBefore t bal) 1)) " of :content)"))
                     (none (str "byte " at " of the file after the change")))]
         (pair err (str "refused: the delimiters ( ) [ ] { } and quotes do not balance at " where "; nothing was written")))
-      (mt (messageIn stdout)
+      (match (messageIn stdout)
         ((some m) (pair err m))
         (none
           (let [t (cpSuffix (pyStrip stderr) 300)]
@@ -252,7 +252,7 @@ fn itemHead raw: String -> String
   (cpPrefix (pyStrip raw) 40)
 
 fn balChars raw: String n: Int64 i: Int64 ln: Int64 st: BalState -> BalState
-  (mt st
+  (match st
     ((balStop m) st)
     ((balGo inStr stack start head)
       (if (>= i n)
@@ -281,7 +281,7 @@ fn balChars raw: String n: Int64 i: Int64 ln: Int64 st: BalState -> BalState
             (else (balChars raw n (+ i 1) ln st)))))))
 
 fn balLines lines: (List String) ln: Int64 st: BalState -> BalState
-  (mt st
+  (match st
     ((balStop m) st)
     ((balGo inStr stack start head)
       (if (listEmpty? lines)
@@ -299,7 +299,7 @@ fn balLines lines: (List String) ln: Int64 st: BalState -> BalState
 fn balanceAid text: String -> (Option String)
   (if (= text "")
     none
-    (mt (balLines (stringSplit text "\n") 1 (balGo false (list) 0 ""))
+    (match (balLines (stringSplit text "\n") 1 (balGo false (list) 0 ""))
       ((balStop m) (some m))
       ((balGo inStr stack start head)
         (if (listEmpty? stack) none (some (neverClosed stack "" start head))))))
@@ -322,27 +322,27 @@ fn universalNewlines t: String -> String
   (if (stringContains? t "\r") (stringReplace (stringReplace t "\r\n" "\n") "\r" "\n") t)
 
 fn ! readText! path: String -> FileText
-  (mt (fileStat path)
+  (match (fileStat path)
     ((err _) (fileAbsent))
     ((ok st)
       (if st.isDir
         (fileFailed (str path ": is a directory"))
-        (mt (fileReadString path)
+        (match (fileReadString path)
           ((ok t) (fileText (universalNewlines t)))
           ((err e) (fileFailed (str path ": " e)))))))
 
 fn replaceFirst s: String old: String new: String -> (Option String)
   (if (= old "")
     (some (str new s))
-    (mt (stringIndexOf s old)
+    (match (stringIndexOf s old)
       ((some i) (some (str (c/sliceOf s 0 i) new (tailFrom s (+ i (stringLength old))))))
       (none none)))
 
 fn applySteps text: String steps: (List TxnStep) target: String -> (Option String)
   (fold (fn [acc s]
-          (mt acc
+          (match acc
             ((some cur)
-              (mt s
+              (match s
                 ((txnStep op file kv)
                   (cond
                     ((!= file target) acc)
@@ -366,7 +366,7 @@ fn joinPath root: String p: String -> String
   (if (stringStartsWith? p "/") p (str root "/" p))
 
 fn abortAidOn text: String steps: (List TxnStep) target: String digits: String extra: String -> (Option AbortAid)
-  (mt (applySteps text steps target)
+  (match (applySteps text steps target)
     ((some cur)
       (let [lines (splitLines cur)
             k (optionOr (stringToInt64 (dropZeros digits)) 0)]
@@ -380,7 +380,7 @@ fn ! abortAid! root: String target: String steps: (List TxnStep) fullMsg: String
   (let [digits (lineDigits fullMsg (stringLength fullMsg) 0)]
     (if (or (= digits "") (= target ""))
       none
-      (mt (readText! (joinPath root target))
+      (match (readText! (joinPath root target))
         ((fileAbsent) (abortAidOn "" steps target digits extra))
         ((fileText t) (abortAidOn t steps target digits extra))
         ((fileFailed _) none))))
@@ -417,12 +417,12 @@ fn widenMinLeft -> Float64
 fn widenWanted start: String end: String budgetLeft: (Option Float64) -> Bool
   (if (not (and (allDigits start) (allDigits end)))
     false
-    (mt (stringToInt64 (dropZeros start))
+    (match (stringToInt64 (dropZeros start))
       ((some a)
-        (mt (stringToInt64 (dropZeros end))
+        (match (stringToInt64 (dropZeros end))
           ((some b)
             (and (>= b a) (and (< (+ (- b a) 1) (widenLines))
-              (mt budgetLeft ((some left) (>= left (widenMinLeft))) (none true)))))
+              (match budgetLeft ((some left) (>= left (widenMinLeft))) (none true)))))
           (none false)))
       (none false)))
 
@@ -453,7 +453,7 @@ fn widenKinds -> (List String)
   (list "def" "class" "function" "method" "fn" "struct" "impl" "module")
 
 fn span w: WidenItem -> Int64
-  (mt w ((widenItem a b _ _) (- b a)))
+  (match w ((widenItem a b _ _) (- b a)))
 
 fn keepLines lines: (List String) i: Int64 a: Int64 b: Int64 acc: Int64 -> Int64
   (if (or (listEmpty? lines) (> i b))
@@ -467,15 +467,15 @@ fn linesKeep text: String -> (List String)
       (map (fn [p] (if (< (pairFirst p) (- k 1)) (str (pairSecond p) "\n") (pairSecond p))) (enumerate parts))))
 
 fn widenPick start: Int64 end: Int64 exit: Int64 stdout: String file: FileText readCap: Int64 -> (Option WidenItem)
-  (let [around (filter (fn [w] (mt w ((widenItem a b _ k)
+  (let [around (filter (fn [w] (match w ((widenItem a b _ k)
                                        (and (listContains? (widenKinds) k) (and (<= a start) (and (>= b end) (not (and (= a start) (= b end)))))))))
                  (outlineItems stdout (stringLength stdout) 0 (list)))]
     (if (or (!= exit 0) (listEmpty? around))
       none
       (let [inner (fold (fn [best w] (if (< (span w) (span best)) w best)) (c/firstOf around) (c/restOf around))]
-        (mt file
+        (match file
           ((fileText t)
-            (mt inner ((widenItem a b _ _) (if (<= (keepLines (linesKeep t) 1 a b 0) readCap) (some inner) none))))
+            (match inner ((widenItem a b _ _) (if (<= (keepLines (linesKeep t) 1 a b 0) readCap) (some inner) none))))
           ((fileAbsent) none)
           ((fileFailed _) none)))))
 
@@ -483,7 +483,7 @@ fn widenPick start: Int64 end: Int64 exit: Int64 stdout: String file: FileText r
 fn ! widenToSymbol! filePath: String start: String end: String root: String readCap: Int64 budgetLeft: (Option Float64) run: (fn [String String] -> AslRun) -> (Option WidenItem)
   (if (not (widenWanted start end budgetLeft))
     none
-    (mt (run (widenForm filePath) root)
+    (match (run (widenForm filePath) root)
       ((aslRun code out _)
         (widenPick (intAt start 0 (stringLength start)) (intAt end 0 (stringLength end)) code out (readText! (joinPath root filePath)) readCap))))
 
@@ -538,7 +538,7 @@ fn baseName p: String -> String
   (optionOr (listLast (stringSplit p "/")) p)
 
 fn ! realLoose p: String -> String
-  (mt (realPath p)
+  (match (realPath p)
     ((ok r) r)
     ((err _)
       (if (or (= p "/") (= (dirName p) ""))
@@ -593,17 +593,17 @@ fn ! loadEffects! repoRoot: String -> (Result (List (Pair String String)) String
   (let [selfHostedPath (str repoRoot "/asl/agentLoop/effects.asn")
         legacyPath (str repoRoot "/scripts/agentLoop/effects.asn")
         path (if (fileExists? selfHostedPath) selfHostedPath legacyPath)]
-    (mt (fileStat path)
+    (match (fileStat path)
       ((err _) (ok (list)))
       ((ok st)
         (if (not st.isFile)
           (ok (list))
-          (mt (fileReadString path)
+          (match (fileReadString path)
             ((ok t) (ok (parseEffects t)))
             ((err e) (err (str path ": " e))))))))
 
 fn checkEffect effects: (List (Pair String String)) op: String -> Effect
-  (mt (listHead (filter (fn [p] (= (pairFirst p) op)) effects))
+  (match (listHead (filter (fn [p] (= (pairFirst p) op)) effects))
     ((some p) (if (listContains? (list "outward" "irreversible" "needsConfirm") (pairSecond p)) (effectConfirm) (effectAllowed)))
     (none (effectUndeclared)))
 
@@ -628,7 +628,7 @@ fn ownsGroup s: String n: Int64 p: Int64 -> (Option String)
     (else (ownsGroup s n (+ p 1))))
 
 fn txnOwnsOf form: String owns: (List String) -> (List String)
-  (mt (ownsGroup form (stringLength form) 0)
+  (match (ownsGroup form (stringLength form) 0)
     ((some g)
       (let [q (quotedAll g (stringLength g) 0 (list))]
         (if (listEmpty? q)
@@ -686,7 +686,7 @@ fn ! mapSub kv: (List (Pair String c/KvVal)) owns: (List String) txnOwns: (List 
       ((= op "check") (subGo (listAppend forms (list (str "(:check :file \"" file "\")"))) targets))
       ((= op "diff") (subGo (listAppend forms (list "(:diff)")) targets))
       (else
-        (mt (checkEffect effects op)
+        (match (checkEffect effects op)
           ((effectUndeclared) (subStop (simpleReject rid (rStr op) "ERR_EFFECT_UNDECLARED" (str "Operation '" op "' not declared in effects registry"))))
           ((effectConfirm) (subStop (confirmReceipt (newId) op)))
           ((effectAllowed) (subGo forms targets))))))
@@ -701,11 +701,11 @@ fn ! txnPrepare form: String owns: (List String) root: String effects: (List (Pa
       (let [n (stringLength form)
             inner (if (>= n 2) (c/sliceOf form 1 (- n 1)) "")
             subs (filter (fn [f] (stringStartsWith? (pyStrip f) "(:")) (c/parseForms inner))
-            acc (fold (fn [a f] (mt a
+            acc (fold (fn [a f] (match a
                                   ((subGo fs ts) (mapSub (c/parseKv f) sessionOwns txnOwns root effects rid newId fs ts))
                                   ((subStop _) a)))
                   (subGo (list) (list)) subs)]
-        (mt acc
+        (match acc
           ((subStop r) (prepDone r))
           ((subGo fs ts)
             (if (listEmpty? fs)
@@ -727,7 +727,7 @@ fn runErr out: String -> String
     (else (let [code (errorCodeIn out)] (if (= code "") "ERR_TXN_FAILED" code))))
 
 fn opt key: String v: (Option String) -> (List (Pair String RVal))
-  (mt v ((some t) (list (pair key (rStr t)))) (none (list)))
+  (match v ((some t) (list (pair key (rStr t)))) (none (list)))
 
 ; (:m :tags (repair))
 fn langForPath path: String -> (Option String)
@@ -738,10 +738,10 @@ fn langForPath path: String -> (Option String)
 
 ; (:m :ref G4 :tags (repair) :do "an .asl text goes through the one heal pipeline (asl-forms/heal) and is accepted only when it changed and, for a checker abort (clean), nothing is left over, for a balance refusal the healed text balances; an .asn text through asl-forms/repair, accepted only when nothing is left and the result balances; yields the repaired text and its (:repaired ... :left ...) receipt")
 fn tryRepairText! cur: (Option String) tf: String root: String clean: Bool -> (Option (Pair String String))
-  (mt cur
+  (match cur
     ((none) none)
     ((some t)
-      (mt (langForPath tf)
+      (match (langForPath tf)
         ((none) none)
         ((some lang)
           (if (= lang "asl")
@@ -764,10 +764,10 @@ fn repairedReceipt rid: String txnOwns: (List String) tf: String receipt: String
 fn ! defaultReceipt rid: String txnOwns: (List String) tf: String steps: (List TxnStep) root: String cmd: String okRun: Bool err: String msg: String balance: (Option String) code: Int64 out: String errText: String -> (List (Pair String RVal))
   (let [extra (if (or (= err "ERR_TXN_FLUSH_FAILED") (stringContains? msg "the delimiters ( ) [ ] { } and quotes do not balance")) (largeFileHint) "")
         aid (if okRun none (abortAid! root tf steps (str msg " " out " " errText) extra))
-        hint0 (mt aid ((some x) (mt x ((abortAidOf _ _ h) (some h)))) (none none))
+        hint0 (match aid ((some x) (match x ((abortAidOf _ _ h) (some h)))) (none none))
         tmpl (str "(:step :op \"write\" :file \"" tf "\" :content :raw)")
         hint (if (and (not okRun) (and (or (= err "ERR_TXN_FLUSH_FAILED") (= err "ERR_TXN_ABORTED")) (!= tf "")))
-               (some (mt hint0 ((some h) (str h "; " tmpl)) (none tmpl)))
+               (some (match hint0 ((some h) (str h "; " tmpl)) (none tmpl)))
                hint0)]
     (listAppend
       (list (pair "id" (rStr rid)) (pair "op" (rStr "txn")) (pair "status" (rStr (if okRun "ok" "rejected")))
@@ -778,15 +778,15 @@ fn ! defaultReceipt rid: String txnOwns: (List String) tf: String steps: (List T
         (listAppend
           (list (pair "exit" (rInt code)) (pair "stdout" (rStr out)) (pair "persisted" (rBool okRun)))
           (listAppend
-            (mt aid ((some x) (mt x ((abortAidOf k a _) (list (pair "line" (rInt k)) (pair "arrived" (rStr a)))))) (none (list)))
+            (match aid ((some x) (match x ((abortAidOf k a _) (list (pair "line" (rInt k)) (pair "arrived" (rStr a)))))) (none (list)))
             (opt "hint" hint))))))
 
 ; (:m :ref G4 :tags (repair txn) :do "a balance-flagged refusal, and for an .asl target a checker abort, is retried once through the repair pipeline before it reaches the model; only a payload repair cannot fix still refuses")
 fn ! txnFinish! prep: TxnPrep result: AslRun root: String rid: String -> (List (Pair String RVal))
-  (mt prep
+  (match prep
     ((prepDone r) r)
     ((prepRun txnOwns targets steps form)
-      (mt result
+      (match result
         ((aslRun code out errText)
           (let [cmd (str "asl txn (" (quoteEach txnOwns) ")")
                 okRun (= code 0)
@@ -795,18 +795,18 @@ fn ! txnFinish! prep: TxnPrep result: AslRun root: String rid: String -> (List (
                 uniq (dedup targets)
                 tf (if (= (listLength uniq) 1) (c/firstOf uniq) "")
                 cur (if (and (not okRun) (and (!= tf "") (not (stringContains? msg0 (refusedMark)))))
-                      (applySteps (mt (readText! (joinPath root tf)) ((fileText t) t) ((fileAbsent) "") ((fileFailed _) "")) steps tf)
+                      (applySteps (match (readText! (joinPath root tf)) ((fileText t) t) ((fileAbsent) "") ((fileFailed _) "")) steps tf)
                       none)
-                tMsg (mt cur ((some t) (pairSecond (txnRefusal out errText err (some t)))) (none ""))
+                tMsg (match cur ((some t) (pairSecond (txnRefusal out errText err (some t)))) (none ""))
                 msg (if (stringContains? tMsg (refusedMark)) tMsg msg0)
-                balance (mt cur
+                balance (match cur
                           ((some t) (if (or (= err "ERR_TXN_FLUSH_FAILED") (stringContains? tMsg (refusedMark))) (balanceAid t) none))
                           (none none))
                 healable (or (some? balance) (and (not okRun) (and (= err "ERR_TXN_ABORTED") (stringEndsWith? tf ".asl"))))
                 repaired (if healable (tryRepairText! cur tf root (none? balance)) none)]
-            (mt repaired
+            (match repaired
               ((some fix)
-                (mt (fileWrite (joinPath root tf) (pairFirst fix))
+                (match (fileWrite (joinPath root tf) (pairFirst fix))
                   ((ok _) (repairedReceipt rid txnOwns tf (pairSecond fix) cmd))
                   ((err _) (defaultReceipt rid txnOwns tf steps root cmd okRun err msg balance code out errText))))
               ((none) (defaultReceipt rid txnOwns tf steps root cmd okRun err msg balance code out errText))))))))
@@ -821,7 +821,7 @@ fn ! snapAll snap: (fn [String] -> Bool) targets: (List String) -> String
 fn ! execTxn! form: String owns: (List String) root: String effects: (List (Pair String String)) newId: (fn [] -> String) snap: (fn [String] -> Bool) run: (fn [String String] -> AslRun) -> (List (Pair String RVal))
   (let [rid (newId)
         prep (txnPrepare form owns root effects rid newId)]
-    (mt prep
+    (match prep
       ((prepDone r) r)
       ((prepRun _ targets _ sent)
         (let [failed (snapAll snap targets)]

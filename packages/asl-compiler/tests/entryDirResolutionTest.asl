@@ -19,14 +19,14 @@ fn unresolved diags: (List String) -> Bool
   (listAny? (fn [(d String)] -> Bool (or (stringContains? d "unresolved") (stringContains? d "no module helper"))) diags)
 
 fn ! testC99ResolvesFromEntryDir dir: String -> Bool
-  (mt (comp/compilePackageToC99! (str dir "/p1/src/main.asl") (list dir) false)
+  (match (comp/compilePackageToC99! (str dir "/p1/src/main.asl") (list dir) false)
     ((err e) (do (assert false (str "compilePackageToC99! returns a result: " e)) false))
     ((ok cr) (do (refute (unresolved cr.diagnostics) (str "the C99 path resolves helper in p1: " (stringJoin cr.diagnostics "; ")))
                  (assert cr.ok (str "the C99 path compiles the entry: " (stringJoin cr.diagnostics "; ")))
                  true)))
 
 fn ! testLlvmResolvesFromEntryDir dir: String -> Bool
-  (mt (comp/compilePackageToLlvm! (str dir "/p1/src/main.asl") (list dir))
+  (match (comp/compilePackageToLlvm! (str dir "/p1/src/main.asl") (list dir))
     ((err e) (do (assert false (str "compilePackageToLlvm! returns a result: " e)) false))
     ((ok cr) (do (refute (unresolved cr.diagnostics) (str "the LLVM path resolves helper in p1: " (stringJoin cr.diagnostics "; ")))
                  (assert cr.ok (str "the LLVM path compiles and links the entry: " (stringJoin cr.diagnostics "; ")))

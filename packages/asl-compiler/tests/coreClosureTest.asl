@@ -3,23 +3,23 @@
   :i [(asl-parser/ast :a a) (asl-checker/resolve :a r)])
 
 fn ! loadClosureFor entryFile: Str -> (Result (List r/ModuleSummary) Str)
-  (mt (fileReadString entryFile)
+  (match (fileReadString entryFile)
     ((err _) (err (str "Cannot read entry file: " entryFile)))
     ((ok src)
-      (mt (a/parse src)
+      (match (a/parse src)
         ((err pe) (err (str "Parse error in " entryFile ": " pe.msg)))
         ((ok forms)
           (let [(entrySummary (r/collectSummary forms entryFile))
                 (importPaths (r/mapValuesList entrySummary.imports))
                 (roots (list (r/parentDirOf entryFile) "."))]
-            (mt (r/loadModuleDeps! roots importPaths)
+            (match (r/loadModuleDeps! roots importPaths)
               ((err _) (err (str "Failed to load dependencies for " entryFile)))
               ((ok depsMap)
                 (let [(depSummaries (mapValues depsMap))]
                   (ok (cons entrySummary depSummaries))))))))))
 
 fn ! runTests -> Bool
-  (mt (loadClosureFor "asl/packages/asl-compiler/src/asl1.asl")
+  (match (loadClosureFor "asl/packages/asl-compiler/src/asl1.asl")
     ((err msg) (do (assert false (str "closure must load: " msg)) false))
     ((ok summaries)
       (let [(names (map (fn [(s r/ModuleSummary)] -> Str s.name) summaries))

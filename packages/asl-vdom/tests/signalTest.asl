@@ -4,7 +4,7 @@
 
 fn testSignalSourceIntegrity! -> Bool
   (let [(sRes (fileReadString "asl/packages/asl-vdom/src/signals.asl"))]
-    (mt sRes
+    (match sRes
       ((err e) (assert false (str "Failed to read signals.asl: " e)))
       ((ok src)
         (do
@@ -25,7 +25,7 @@ fn testSignalSourceIntegrity! -> Bool
 
 fn testSignalSymbolExports! -> Bool
   (let [(gRes (fileReadString "asl/packages/asl-vdom/src/signals.asl"))]
-    (mt gRes
+    (match gRes
       ((err ge) (assert false (str "Failed to read signals.asl: " ge)))
       ((ok gSrc)
         (do

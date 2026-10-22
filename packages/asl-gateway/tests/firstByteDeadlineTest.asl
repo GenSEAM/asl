@@ -4,14 +4,14 @@
   :i [(upstream :a u)])
 
 fn failureText f: u/UpstreamFailure -> String
-  (mt f
+  (match f
     ((u/toolAbsent tool detail) (str tool ": " detail))
     ((u/transportFailure code stderrText) (str "curl exit " (stringFromInt64 code) ": " stderrText))
     ((u/httpFailure status reason _ body) (str "http " (stringFromInt64 status) " " reason ": " body))
     ((u/protocolFailure detail) detail))
 
 fn isTimeoutCode28? f: u/UpstreamFailure -> Bool
-  (mt f
+  (match f
     ((u/transportFailure code _) (= code 28))
     (_ false))
 
@@ -24,17 +24,17 @@ fn ! runTests -> Bool
         (env (mapFromPairs (list (pair "PATH" (optionOr (envGet "PATH") "/usr/bin:/bin")))))
         (started (u/upstreamCallStart! req env 30.0))
         (before (u/wallSeconds!))
-        (outcome (mt started
+        (outcome (match started
                    ((err f) (err f))
                    ((ok call) (u/upstreamCallLoop! call (+ before 1.0)))))
         (afterMs (- (u/wallSeconds!) before))
         (closedListener (do (fdClose listener) true))]
     (do
       (assert listening "the test owns a real listening socket standing in for a silent provider")
-      (assert (ok? started) (str "a curl call against a reachable (if silent) port starts cleanly: " (mt started ((err f) (failureText f)) ((ok _) ""))))
+      (assert (ok? started) (str "a curl call against a reachable (if silent) port starts cleanly: " (match started ((err f) (failureText f)) ((ok _) ""))))
       ; (:m the event this test actually proves: the loop returns an error classified exactly like curl's own operation-timed-out (transportFailure, code 28), not a bare duration -- retryableRaised? treats any such timeout as retryable unconditionally, so :retry already picks this failure up with no further changes)
-      (assert (mt outcome ((err f) (isTimeoutCode28? f)) ((ok _) false))
-        (str "a connection that never sends a byte is classified as the same timeout curl's own CURLE_OPERATION_TIMEDOUT reports (transportFailure 28), not left open: " (mt outcome ((ok _) "got an ok reply from a socket nothing ever wrote to") ((err f) (failureText f)))))
+      (assert (match outcome ((err f) (isTimeoutCode28? f)) ((ok _) false))
+        (str "a connection that never sends a byte is classified as the same timeout curl's own CURLE_OPERATION_TIMEDOUT reports (transportFailure 28), not left open: " (match outcome ((ok _) "got an ok reply from a socket nothing ever wrote to") ((err f) (failureText f)))))
       (assert (< afterMs 5.0) (str "the first-byte deadline (1.0 s here) bounds the wait, it does not fall through to the full 30 s curl timeout: took " afterMs " s"))
       (assert closedListener "the stub socket is closed")
       true))

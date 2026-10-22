@@ -7,20 +7,20 @@ fn byteText b: Int64 -> String
     (optionOr (stringSlice tbl b (+ b 1)) ""))
 
 fn b64Text! s: String -> String
-  (mt (bytesFromBase64 s)
+  (match (bytesFromBase64 s)
     ((ok raw) (stringJoin (map (fn [k] (byteText (bytesGet raw k))) (range 0 (bytesLength raw))) ""))
     ((err e) (str "<bad base64: " e ">")))
 
 fn kvText v: c/KvVal -> String
-  (mt v ((c/kvStr s) s) ((c/kvInt s) s))
+  (match v ((c/kvStr s) s) ((c/kvInt s) s))
 
 fn has kv: (List (Pair String c/KvVal)) k: String -> Bool
   (or (some? (c/dictGet kv k)) (some? (c/dictGet kv (str k "B64"))))
 
 fn fld! kv: (List (Pair String c/KvVal)) k: String -> String
-  (mt (c/dictGet kv k)
+  (match (c/dictGet kv k)
     ((some v) (kvText v))
-    (none (mt (c/dictGet kv (str k "B64"))
+    (none (match (c/dictGet kv (str k "B64"))
             ((some v) (b64Text! (kvText v)))
             (none ""))))
 
@@ -28,13 +28,13 @@ fn jsonOf text: String -> j/Json
   (resultOr (j/jsonParse text) (j/jnull))
 
 fn jsonItems v: j/Json -> (List j/Json)
-  (mt v ((j/jarr xs) xs) (_ (list)))
+  (match v ((j/jarr xs) xs) (_ (list)))
 
 fn jsonText v: j/Json -> String
-  (mt v ((j/jstr s) s) (_ (pv/pyRepr v)))
+  (match v ((j/jstr s) s) (_ (pv/pyRepr v)))
 
 fn optText o: (Option String) -> String
-  (mt o ((some s) (pv/pyReprString s)) (none "None"))
+  (match o ((some s) (pv/pyReprString s)) (none "None"))
 
 fn check label: String want: String got: String -> Bool
   (do (assert (= want got) (str label ": want " (pv/pyReprString want) " got " (pv/pyReprString got))) true)
@@ -52,17 +52,17 @@ fn pairsText ps: (List (Pair String String)) -> String
   (str "{" (stringJoin (map (fn [p] (str (pv/pyReprString (pairFirst p)) ": " (pv/pyReprString (pairSecond p)))) ps) ", ") "}")
 
 fn timingText t: (Option pv/Timing) -> String
-  (mt t
+  (match t
     ((some x) (str "{'queueWaitSec': " (stringFromFloat64 x.queueWaitSec) ", 'execSec': " (stringFromFloat64 x.execSec) "}"))
     (none "None"))
 
 fn usageText u: (Option (List (Pair String j/Json))) -> String
-  (mt u
+  (match u
     ((some ps) (str "{" (stringJoin (map (fn [p] (str (pv/pyReprString (pairFirst p)) ": " (pv/pyRepr (pairSecond p)))) ps) ", ") "}"))
     (none "None"))
 
 fn servedText s: (Option (List (Pair String String))) -> String
-  (mt s ((some ps) (pairsText ps)) (none "None"))
+  (match s ((some ps) (pairsText ps)) (none "None"))
 
 fn expectedCode kind: String exc: String -> String
   (cond
@@ -76,7 +76,7 @@ fn checkOutcome! kv: (List (Pair String c/KvVal)) root: String r: (Result (Optio
   (let [(cid (fld! kv "id"))
         (outcome (fld! kv "outcome"))
         (kind (fld! kv "kind"))]
-    (mt r
+    (match r
       ((ok reply)
         (and (check (str cid " outcome") outcome "ok")
              (and (check (str cid " isNone") (fld! kv "isNone") (if (none? reply) "True" "False"))
@@ -95,7 +95,7 @@ fn checkOutcome! kv: (List (Pair String c/KvVal)) root: String r: (Result (Optio
 
 fn checkParse! kv: (List (Pair String c/KvVal)) -> Bool
   (let [(cid (fld! kv "id"))]
-    (mt (pv/parseAsnReply (fld! kv "input"))
+    (match (pv/parseAsnReply (fld! kv "input"))
       ((ok hf)
         (and (check (str cid " outcome") (fld! kv "outcome") "ok")
              (and (check (str cid " head") (fld! kv "head") (pairFirst hf))
@@ -111,7 +111,7 @@ fn ! checkNumbers kv: (List (Pair String c/KvVal)) -> Bool
         (t0 (monotonicNs))
         (parsed (pv/asnNumbers (fld! kv "input")))
         (ms (/ (- (monotonicNs) t0) 1000000))]
-    (mt parsed
+    (match parsed
       ((ok ps)
         (and (check (str cid " outcome") (fld! kv "outcome") "ok")
              (and (or (not (has kv "timed")) (checkTrue (str cid " parsed within 500 ms: " (stringFromInt64 ms)) (< ms 500)))
@@ -124,14 +124,14 @@ fn ! checkNumbers kv: (List (Pair String c/KvVal)) -> Bool
                   (check (str cid " message") (fld! kv "msg") (pv/errorMessage e)))))))
 
 fn checkServed! kv: (List (Pair String c/KvVal)) -> Bool
-  (let [(fields (mt (jsonOf (fld! kv "input")) ((j/jobj ps) ps) (_ (list))))]
+  (let [(fields (match (jsonOf (fld! kv "input")) ((j/jobj ps) ps) (_ (list))))]
     (check (str (fld! kv "id") " served") (fld! kv "out") (servedText (pv/servedFields fields))))
 
 fn checkStrings label: String want: String got: (List String) -> Bool
   (check label (stringJoin (map pv/pyReprString (map jsonText (jsonItems (jsonOf want)))) ", ") (stringJoin (map pv/pyReprString got) ", "))
 
 fn ! resolveHost repo: String -> (Option String)
-  (mt (envGet "ASL_HOST")
+  (match (envGet "ASL_HOST")
     ((some h) (if (fileExists? h)
                 (some (resultOr (realPath h) h))
                 (do (println (str "invalid environment variable: ASL_HOST path does not exist: " h))
@@ -150,7 +150,7 @@ fn ! makeStubBin host: String root: String -> Bool
         (made (and (ok? (dirCreate bin)) (ok? (dirCreate (str root "/emptyBin")))))
         (wrote (map (fn [t] (writeFile (str bin "/" t) (str "#!/bin/sh\nexec \"" host "\" run \"" stub "\" " t " \"$@\"\n"))) (list "codex" "claude" "curl")))
         (chmod (cp/exec! (cp/cmd "chmod" (list "755" (str bin "/codex") (str bin "/claude") (str bin "/curl")))))]
-    (and made (and (listAll? (fn [w] w) wrote) (mt chmod ((ok o) (= o.exitCode 0)) ((err _) false)))))
+    (and made (and (listAll? (fn [w] w) wrote) (match chmod ((ok o) (= o.exitCode 0)) ((err _) false)))))
 
 fn ! blankKeys -> (Map String String)
   (fold (fn [m row] (let [(name (optionOr (stringSlice row 0 (optionOr (stringIndexOf row "=") 0)) ""))]
@@ -179,7 +179,7 @@ fn keyRun s: String -> Int64
                           (bytesLength bs))))
 
 fn keyAfter s: String prefix: String minLen: Int64 -> Bool
-  (mt (stringIndexOf s prefix)
+  (match (stringIndexOf s prefix)
     ((some i) (let [(tail (optionOr (stringSlice s (+ i (stringLength prefix)) (stringLength s)) ""))
                     (word (optionOr (listHead (stringSplit (stringReplace (stringReplace tail "\"" " ") "'" " ") " ")) ""))]
                 (>= (keyRun word) minLen)))
@@ -194,7 +194,7 @@ fn keyLooking s: String -> Bool
             (or (keyAfter s "AIza" 30) (keyAfter s "AKIA" 16)))))))
 
 fn apiKeyEntry row: String -> Bool
-  (mt (stringIndexOf row "=")
+  (match (stringIndexOf row "=")
     ((some i) (and (stringEndsWith? (optionOr (stringSlice row 0 i) "") "_API_KEY") (< (+ i 1) (stringLength row))))
     (none false))
 
@@ -216,7 +216,7 @@ fn ! runProviderCase kv: (List (Pair String c/KvVal)) root: String kind: String 
         (env (envFor! root (str root "/stub/" cid) "stub" "" "" ""))
         (made (pv/makeProvider! backend "scout" root "" 600 "sprov" 1200 true env "auto"))]
     (and (checkTrue (str cid " fixture file written") prep)
-      (mt made
+      (match made
         ((err e) (checkOutcome! kv root (err e)))
         ((ok p)
           (let [(n (optionOr (stringToInt64 (fld! kv "calls")) 0))
@@ -224,9 +224,9 @@ fn ! runProviderCase kv: (List (Pair String c/KvVal)) root: String kind: String 
                                     (pair t.provider (cons t.reply (pairSecond acc))))))
                 (run (fold step (pair p (list)) (range 0 n)))
                 (outs (listReverse (pairSecond run)))
-                (want (map (fn [v] (mt v ((j/jnull) "None") (_ (pv/pyReprString (jsonText v))))) (jsonItems (jsonOf (fld! kv "outs")))))
-                (got (map (fn [r] (mt r ((ok o) (optText o)) ((err e) (str "error " (pv/errorMessage e))))) outs))
-                (lock (str root "/.asl/run/agentLoop/" (mt (pv/vendorName p) ((some v) v) (none "None")) ".lock"))]
+                (want (map (fn [v] (match v ((j/jnull) "None") (_ (pv/pyReprString (jsonText v))))) (jsonItems (jsonOf (fld! kv "outs")))))
+                (got (map (fn [r] (match r ((ok o) (optText o)) ((err e) (str "error " (pv/errorMessage e))))) outs))
+                (lock (str root "/.asl/run/agentLoop/" (match (pv/vendorName p) ((some v) v) (none "None")) ".lock"))]
             (and (check (str cid " outcome") (fld! kv "outcome") "ok")
               (and (check (str cid " name") (fld! kv "providerName") (pv/providerName p))
                 (and (check (str cid " vendor") (fld! kv "vendor") (optText (pv/vendorName p)))
@@ -245,7 +245,7 @@ fn ! runCliCase kv: (List (Pair String c/KvVal)) root: String -> Bool
         (pre (or (not (has kv "preLast")) (and (ok? (dirCreate codexDir)) (writeFile (str codexDir "/" mode ".last") (fld! kv "preLast")))))
         (env (envFor! root stubDir (fld! kv "path") "" "" ""))
         (made (pv/makeProvider! vendor mode root (fld! kv "model") (optionOr (stringToInt64 (fld! kv "timeout")) 600) session 1200 true env "auto"))]
-    (mt made
+    (match made
       ((err e) (checkTrue (str cid " provider made: " (pv/errorMessage e)) false))
       ((ok p)
         (let [(t (pv/nextTurn! p (fld! kv "sys") (fld! kv "user")))
@@ -282,7 +282,7 @@ fn configUnescape s: String -> String
     (unquoteLoop s bs (bytesLength bs) 0 (list)))
 
 fn configValue line: String -> String
-  (mt (stringIndexOf line " = ")
+  (match (stringIndexOf line " = ")
     ((some i) (let [(v (optionOr (stringSlice line (+ i 3) (stringLength line)) ""))]
                 (configUnescape (optionOr (stringSlice v 1 (- (stringLength v) 1)) ""))))
     (none ""))
@@ -291,7 +291,7 @@ fn configRows config: String key: String -> (List String)
   (map configValue (filter (fn [l] (stringStartsWith? l (str key " = "))) (stringSplit config "\n")))
 
 fn headerRow h: String -> String
-  (mt (stringIndexOf h ": ")
+  (match (stringIndexOf h ": ")
     ((some i) (str (stringLower (optionOr (stringSlice h 0 i) "")) ": " (optionOr (stringSlice h (+ i 2) (stringLength h)) "")))
     (none h))
 
@@ -306,7 +306,7 @@ fn ! runGatewayCase kv: (List (Pair String c/KvVal)) root: String -> Bool
         (env (envFor! root stubDir "stub" (fld! kv "url") (fld! kv "profile") cfgPath))
         (made (pv/makeProvider! "agy" mode root (fld! kv "model") (optionOr (stringToInt64 (fld! kv "timeout")) 600) session
                 (optionOr (stringToInt64 (fld! kv "queueTimeout")) 1200) (= (fld! kv "timeoutSet") "True") env "auto"))]
-    (mt made
+    (match made
       ((err e) (checkTrue (str cid " provider made: " (pv/errorMessage e)) false))
       ((ok p)
         (let [(t (if (= (fld! kv "advise") "True")
@@ -351,7 +351,7 @@ fn ! runVendorUnknown kv: (List (Pair String c/KvVal)) root: String -> Bool
 
 fn ! runMakeCase kv: (List (Pair String c/KvVal)) root: String -> Bool
   (let [(cid (fld! kv "id"))]
-    (mt (pv/makeProvider! (fld! kv "backend") "scout" root "" 600 "smake" 1200 true (envFor! root (str root "/stub/make") "stub" "" "" "") "auto")
+    (match (pv/makeProvider! (fld! kv "backend") "scout" root "" 600 "smake" 1200 true (envFor! root (str root "/stub/make") "stub" "" "" "") "auto")
       ((ok p) (and (check (str cid " outcome") (fld! kv "outcome") "ok")
                 (and (check (str cid " name") (fld! kv "providerName") (pv/providerName p))
                   (check (str cid " vendor") (fld! kv "vendor") (optText (pv/vendorName p))))))
@@ -370,7 +370,7 @@ fn ! runDryRun kv: (List (Pair String c/KvVal)) root: String -> Bool
         (mode (fld! kv "mode"))
         (agent (str root "/.asl/run/agentLoop/agents/.agents/plugins/aslLoop/agents/aslLoop"
                     (if (stringEmpty? mode) "Scout" (str (stringUpper (optionOr (stringSlice mode 0 1) "")) (optionOr (stringSlice mode 1 (stringLength mode)) ""))) ".md"))]
-    (mt (pv/buildDryRunInfo! (fld! kv "vendor") mode root (fld! kv "model") (optionOr (stringToInt64 (fld! kv "timeout")) 600) (optionOr (stringToInt64 (fld! kv "queueTimeout")) 1200) env)
+    (match (pv/buildDryRunInfo! (fld! kv "vendor") mode root (fld! kv "model") (optionOr (stringToInt64 (fld! kv "timeout")) 600) (optionOr (stringToInt64 (fld! kv "queueTimeout")) 1200) env)
       ((err e)
         (if (= (fld! kv "outcome") "error")
           (and (check (str cid " code") (fld! kv "code") (pv/errorCode e))
@@ -384,11 +384,11 @@ fn ! checkRedirect root: String -> Bool
   (let [(stubDir (str root "/stub/redirect302"))
         (staged (setupStub stubDir "HTTP/1.1 302 Found\r\nLocation: /elsewhere\r\nContent-Length: 0\r\n\r\n" "0" "" ""))
         (env (envFor! root stubDir "stub" "http://127.0.0.1:9/v1/chat/completions" "" (str root "/none.asn")))]
-    (mt (pv/makeProvider! "agy" "scout" root "" 600 "gredirect" 1200 true env "auto")
+    (match (pv/makeProvider! "agy" "scout" root "" 600 "gredirect" 1200 true env "auto")
       ((err e) (checkTrue (str "redirect302 provider: " (pv/errorMessage e)) false))
       ((ok p)
         (let [(t (pv/nextTurn! p "s" "u"))
-              (got (mt t.reply ((ok _) "ok") ((err e) (str (pv/errorCode e) " " (pv/errorMessage e)))))]
+              (got (match t.reply ((ok _) "ok") ((err e) (str (pv/errorCode e) " " (pv/errorMessage e)))))]
           (and (checkTrue "redirect302 stub staged" staged)
             (check "redirect302 is an HTTP error" "ERR_VENDOR Gateway HTTP error 302: Found" got))))))
 
@@ -398,7 +398,7 @@ fn ! checkIntentPlan root: String -> Bool
         (staged (setupStub stubDir "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}" "0" "" ""))
         (env (envFor! root stubDir "stub" "http://127.0.0.1:8765/v1/chat/completions" "" (str root "/intentPlan.asn")))
         (made (pv/makeProvider! "agy" "scout" root "" 600 "sintentplan" 1200 true env "plan"))]
-    (mt made
+    (match made
       ((err e) (checkTrue (str "intentPlan provider made: " (pv/errorMessage e)) false))
       ((ok p)
         (let [(t (pv/nextTurn! p "s" "u"))
@@ -414,7 +414,7 @@ fn ! checkSessionHeader root: String -> Bool
         (staged (setupStub stubDir "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}" "0" "" ""))
         (env (envFor! root stubDir "stub" "http://127.0.0.1:8765/v1/chat/completions" "" (str root "/none.asn")))
         (made (pv/makeProvider! "agy" "scout" root "" 600 "gsesshdr" 1200 true env "auto"))]
-    (mt made
+    (match made
       ((err e) (checkTrue (str "sessionHeader provider made: " (pv/errorMessage e)) false))
       ((ok p)
         (let [(t (pv/nextTurn! p "s" "u"))
@@ -471,13 +471,13 @@ fn ! checkFreshDir root: String -> Bool
         (taken (ok? (dirCreate (str base "/aslFresh_same"))))
         (got (pv/freshDir! base "aslFresh_" (fn [a] (if (= a 0) "same" "other")) 0))]
     (and (checkTrue "taken scratch name staged" taken)
-      (check "freshDir! skips the taken name" (str base "/aslFresh_other") (mt got ((ok d) d) ((err e) (pv/errorMessage e))))))
+      (check "freshDir! skips the taken name" (str base "/aslFresh_other") (match got ((ok d) d) ((err e) (pv/errorMessage e))))))
 
 fn ! checkTempDirs root: String -> Bool
-  (mt (pv/makeProvider! "codex" "scout" root "" 600 "stemp" 1200 true (envFor! root (str root "/stub/temp") "stub" "" "" "") "auto")
+  (match (pv/makeProvider! "codex" "scout" root "" 600 "stemp" 1200 true (envFor! root (str root "/stub/temp") "stub" "" "" "") "auto")
     ((err e) (checkTrue (str "tempDir provider: " (pv/errorMessage e)) false))
     ((ok p)
-      (mt p
+      (match p
         ((pv/vendorProvider cfg)
           (let [(dirs (map (fn [k] (resultOr (pv/tempDir! cfg "asl_codex_cwd_") "")) (range 0 20)))
                 (live (filter (fn [d] (and (not (stringEmpty? d)) (fileExists? d))) dirs))
@@ -509,7 +509,7 @@ fn ! checkCase root: String line: String -> Bool
       (else (checkTrue (str cid " has a known kind: " kind) false))))
 
 fn ! runTests -> Bool
-  (mt (resolveHost ".")
+  (match (resolveHost ".")
     ((none) false)
     ((some host)
      (let [(content (resultOr (fileReadString "asl/agentLoop/tests/providersFixture.asn") ""))

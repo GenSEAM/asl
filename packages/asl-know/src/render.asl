@@ -26,9 +26,9 @@ fn cardFile id: String -> String
   (str (stringReplace id "/" "-") ".asn")
 
 fn exampleText src: String -> String
-  (stringTrim (mt (stringIndexOf src "\nfn ! selfTest")
+  (stringTrim (match (stringIndexOf src "\nfn ! selfTest")
                 ((some i) (optionOr (stringSlice src 0 i) src))
-                ((none) (mt (stringIndexOf src "\nfn selfTest") ((some j) (optionOr (stringSlice src 0 j) src)) ((none) src)))))
+                ((none) (match (stringIndexOf src "\nfn selfTest") ((some j) (optionOr (stringSlice src 0 j) src)) ((none) src)))))
 
 fn pitTags d: sc/Decl -> (List String)
   (let [(ret (sc/returnType d.sig))]
@@ -47,7 +47,7 @@ fn sigOf d: sc/Decl -> String
 
 fn symRow card: String m: sc/Module docs: (Map String String) name: String -> String
   (let [(doc (mapGetOr docs (str m.path "#" name) ""))]
-    (mt (mapGet m.decls name)
+    (match (mapGet m.decls name)
       ((none) (str "(:sym " (q name) " :mod " (q m.name) " :sig none" (if (stringEmpty? doc) "" (str " :doc " (q doc))) ")"))
       ((some d) (str "(:sym " (q name) " :mod " (q m.name) (if (= d.kind "fn") "" (str " :kind " d.kind)) " :sig " (q (sigOf d))
                      (if (stringEmpty? doc) "" (str " :doc " (q (capWords doc 240)))) (tagList (pitTags d)) ")"))))
@@ -59,7 +59,7 @@ fn missingIn card: String m: sc/Module docs: (Map String String) name: String ->
     (else (list)))
 
 fn fitSigs sigs: (List String) room: Int64 acc: (List String) -> (Pair (List String) (List String))
-  (mt (listHead sigs)
+  (match (listHead sigs)
     ((none) (pair (listReverse acc) (list)))
     ((some s)
       (if (> (+ (stringLength s) 3) room)
@@ -67,7 +67,7 @@ fn fitSigs sigs: (List String) room: Int64 acc: (List String) -> (Pair (List Str
         (fitSigs (optionOr (listTail sigs) (list)) (- room (+ (stringLength s) 3)) (cons s acc)))))
 
 fn fitNames names: (List String) room: Int64 acc: (List String) -> (List String)
-  (mt (listHead names)
+  (match (listHead names)
     ((none) (listReverse acc))
     ((some s) (if (> (+ (stringLength s) 1) room) (listReverse acc) (fitNames (optionOr (listTail names) (list)) (- room (+ (stringLength s) 1)) (cons s acc)))))
 
@@ -95,7 +95,7 @@ fn cardLine id: String purpose: String head: String sigs: (List String) names: (
          (exampleField ex) ")"))
 
 fn modDecl m: sc/Module name: String -> (List sc/Decl)
-  (mt (mapGet m.decls name) ((some d) (list d)) ((none) (list)))
+  (match (mapGet m.decls name) ((some d) (list d)) ((none) (list)))
 
 fn packageCard p: sc/Package ex: String -> Card
   (let [(live (filter (fn [(m sc/Module)] -> Bool (not (listEmpty? (filter (fn [(n String)] -> Bool (not (plumbing? n))) m.exports)))) p.modules))
@@ -135,7 +135,7 @@ fn builtinRow id: String b: sc/Builtin -> String
        (if (stringEmpty? b.doc) "" (str " :doc " (q (capWords b.doc 240)))) (tagList (builtinPit b)) ")")
 
 fn sections bs: (List sc/Builtin) acc: (List String) -> (List String)
-  (mt (listHead bs)
+  (match (listHead bs)
     ((none) (listReverse acc))
     ((some b) (sections (optionOr (listTail bs) (list)) (if (or (stringEmpty? b.sec) (listContains? acc b.sec)) acc (cons b.sec acc)))))
 
@@ -158,18 +158,18 @@ fn quotedStrings s: String -> (List String)
     (quotedFrom s b n 0 (list)))
 
 fn quotedFrom s: String b: Bytes n: Int64 i: Int64 acc: (List String) -> (List String)
-  (mt (stringIndexOf (optionOr (stringSlice s i n) "") "\"")
+  (match (stringIndexOf (optionOr (stringSlice s i n) "") "\"")
     ((none) (listReverse acc))
     ((some k)
       (let [(start (+ i (+ k 1))) (e (sc/quoteEnd b n start))]
         (if (< e 0) (listReverse acc) (quotedFrom s b n (+ e 1) (cons (sc/unescape (optionOr (stringSlice s start e) "")) acc))))))
 
 fn between s: String a: String z: String -> String
-  (mt (stringIndexOf s a)
+  (match (stringIndexOf s a)
     ((none) "")
     ((some i)
       (let [(rest (optionOr (stringSlice s (+ i (stringLength a)) (stringLength s)) ""))]
-        (mt (stringIndexOf rest z) ((some j) (optionOr (stringSlice rest 0 j) rest)) ((none) rest)))))
+        (match (stringIndexOf rest z) ((some j) (optionOr (stringSlice rest 0 j) rest)) ((none) rest)))))
 
 fn langCard spec: String ex: String -> Card
   (let [(rules (quotedStrings (between spec ":rules (" ":pit (")))
@@ -179,7 +179,7 @@ fn langCard spec: String ex: String -> Card
         (line (str "(:card \"core/lang\" :purpose \"how to write ASL: syntax, effects, matching, records\" :rules ("
                    (stringJoin (map q rules) " ") ") :pit (" pitText ") :heal \"asl heal FILE repairs common slips in place\""
                    (exampleField ex) ")"))]
-    (Card :id "core/lang" :purpose "how to write ASL: syntax, effects, matching, records" :keys (list "module" "fn" "mt" "let") :line line :rows (list) :missing (list)))
+    (Card :id "core/lang" :purpose "how to write ASL: syntax, effects, matching, records" :keys (list "module" "fn" "match" "let") :line line :rows (list) :missing (list)))
 
 fn indexText cards: (List Card) -> String
   (let [(lines (map (fn [(c Card)] -> String (str "(:c " (q c.id) " " (q (capWords c.purpose 36)) " (" (stringJoin (listTake c.keys 2) " ") "))")) cards))
@@ -190,7 +190,7 @@ fn missingOf cards: (List Card) -> (List String)
   (listSort (listFlatMap (fn [(c Card)] -> (List String) c.missing) cards))
 
 fn ! exampleOf! root: String id: String -> String
-  (mt (fileReadString (str root "/asl/packages/asl-know/src/examples/" (camelId id) ".asl"))
+  (match (fileReadString (str root "/asl/packages/asl-know/src/examples/" (camelId id) ".asl"))
     ((ok src) (exampleText src))
     ((err _) ""))
 
@@ -212,7 +212,7 @@ fn unquoteRow l: String -> (Option String)
       (none)))
 
 fn uniq xs: (List String) acc: (List String) -> (List String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (listReverse acc))
     ((some x) (uniq (optionOr (listTail xs) (list)) (if (listContains? acc x) acc (cons x acc)))))
 

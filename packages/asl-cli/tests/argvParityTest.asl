@@ -3,7 +3,7 @@
   :i [(cli :a c) (asl-cli/lensCmd :a lens) (asl-cli/consiliumCmd :a cons) (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-parser/reader :a rd)])
 
 fn atomValue expr: rd/SExpr -> String
-  (mt expr ((rd/sexprAtom raw) raw) ((rd/sexprList _) "") ((rd/sexprVect _) ""))
+  (match expr ((rd/sexprAtom raw) raw) ((rd/sexprList _) "") ((rd/sexprVect _) ""))
 
 fn unquoteFixtureString raw: String -> String
   (if (>= (stringLength raw) 2)
@@ -32,7 +32,7 @@ fn shellQuote value: String -> String
 
 fn runFixtureProcess! cmd: String args: (List String) -> ProcessOutput
   (let [(quotedArgs (map shellQuote (cons cmd args)))
-        (root (mt (realPath ".") ((ok path) path) ((err _) ".")))
+        (root (match (realPath ".") ((ok path) path) ((err _) ".")))
         (binAsl (str root "/bin/asl"))
         (command (str (shellQuote binAsl) " " (stringJoin quotedArgs " ")))]
     (processRun command))
@@ -44,7 +44,7 @@ fn emittedBytes value: String -> String
   (if (stringEndsWith? value "\n") value (str value "\n"))
 
 fn normalizeCheckoutPath! value: String -> String
-  (mt (realPath ".")
+  (match (realPath ".")
     ((err _) value)
     ((ok root) (stringReplace value (str root "/") "")))
 
@@ -65,7 +65,7 @@ fn caseMatchesFixture! caseExpr: rd/SExpr -> Bool
         (and (or (stringEmpty? expectedStderr) (stringContains? (normalizeCheckoutPath! process.stderr) expectedStderr))
           (if (= expectedExit 0)
             true
-            (mt actual
+            (match actual
               ((ok _) false)
               ((err output)
                (if (and (= cmd "lens")
@@ -85,7 +85,7 @@ fn testConsiliumSecondSuiteFailure! -> Bool
   (let [(first (processRun "printf first-suite"))
         (second (processRun "printf second-suite >&2; exit 7"))
         (result (cons/consiliumTestResults first second))]
-    (mt result
+    (match result
       ((err message) (do (assert (= message "second-suite") "consilium --test propagates the second suite failure") true))
       ((ok _) (do (assert false "consilium --test must fail when its second suite fails") false))))
 
@@ -143,18 +143,18 @@ fn testPayloadAndFailureContracts! -> Bool
       (assert (= (lens/formatLensPayload "text" (list "say" "\"hi\"")) "(:lens :text \"say \\\"hi\\\"\")") "a text payload escapes the quotes of its target")
       (assert (stringContains? quoted "Target not found: say \\\"hi\\\"") "a quoted target reaches the lens operation intact")
       (assert (stringContains? (lens/formatLensPayload "text" (list "a\\b")) "\\\\") "a text payload escapes backslashes before the reader sees them")
-      (mt failed
+      (match failed
         ((err message) (do (assert (= message "lens-suite-failed") "lens --test propagates its suite failure") true))
         ((ok _) (do (assert false "lens --test must fail when its suite fails") false)))))
 
 fn ! runTests -> Bool
-  (mt (fileReadString "tests/parity/cli/argvFixture.asn")
+  (match (fileReadString "tests/parity/cli/argvFixture.asn")
     ((err e) (do (assert false (str "could not read argv fixture: " e)) false))
     ((ok src)
-     (mt (ast/readForms (lx/tokenize src))
+     (match (ast/readForms (lx/tokenize src))
        ((err e) (do (assert false (str "could not parse argv fixture: " e.msg)) false))
        ((ok forms)
-        (mt (listHead forms)
+        (match (listHead forms)
           ((none) (do (assert false "argv fixture has no top-level form") false))
           ((some form)
            (let [(root form.expr)

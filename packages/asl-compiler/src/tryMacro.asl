@@ -7,7 +7,7 @@ fn hasTryForm? exprStr: String -> Bool
       (stringContains? exprStr " (try "))
 
 fn makeTryExpansion innerExpr: String errVar: String -> String
-  (str "(mt " innerExpr " ((ok __try_val) __try_val) ((err " errVar ") (err " errVar ")))")
+  (str "(match " innerExpr " ((ok __try_val) __try_val) ((err " errVar ") (err " errVar ")))")
 
 fn expandTryMacro innerExpr: String -> String
   (makeTryExpansion innerExpr "__try_err")
@@ -23,7 +23,7 @@ fn findMatchingCloseParen text: String idx: Int64 depth: Int64 -> Int64
 
 fn expandTryInSource src: String -> String
   (let [(prefix "(try ")]
-    (mt (stringIndexOf src prefix)
+    (match (stringIndexOf src prefix)
       ((none) src)
       ((some idx)
         (let [(before (optionOr (stringSlice src 0 idx) ""))

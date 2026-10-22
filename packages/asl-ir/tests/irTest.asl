@@ -26,12 +26,12 @@ fn testVerifyDetectsUnterminatedBlock -> Bool
     (do
       (assert (err? res) "empty function is error")
       (refute (ok? res) "unterminated block refutes ok")
-      (mt res
+      (match res
         ((ok _) false)
         ((err diags)
           (do
             (assert (= (listLength diags) 1) "exactly 1 diagnostic")
-            (mt (listHead diags)
+            (match (listHead diags)
               ((some d) (assert (= d.code "ERR_IR_UNTERMINATED_BLOCK") "code matches"))
               ((none) (assert false "expected diagnostic")))
             true)))))
@@ -55,12 +55,12 @@ fn testVerifyCatchesUnboundVar -> Bool
     (do
       (assert (err? res) "unbound var is error")
       (refute (ok? res) "unbound var refutes ok")
-      (mt res
+      (match res
         ((ok _) false)
         ((err diags)
           (do
             (assert (>= (listLength diags) 1) "at least 1 diagnostic")
-            (mt (listHead diags)
+            (match (listHead diags)
               ((some d) (assert (= d.code "ERR_IR_UNBOUND_VAR") "error is ERR_IR_UNBOUND_VAR"))
               ((none) (assert false "expected diagnostic")))
             true)))))
@@ -75,12 +75,12 @@ fn testVerifyCatchesBufEscape -> Bool
     (do
       (assert (err? res) "buffer escape is error")
       (refute (ok? res) "buffer escape refutes ok")
-      (mt res
+      (match res
         ((ok _) false)
         ((err diags)
           (do
             (assert (>= (listLength diags) 1) "at least 1 diagnostic")
-            (mt (listHead diags)
+            (match (listHead diags)
               ((some d) (assert (= d.code "ERR_IR_BUF_ESCAPE") "error is ERR_IR_BUF_ESCAPE"))
               ((none) (assert false "expected diagnostic")))
             true)))))

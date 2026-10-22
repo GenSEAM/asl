@@ -7,4 +7,4 @@ fn renderTemplate tmpl: String args: (List String) -> String
   (let [(tStar (if (stringContains? tmpl "{*}") (stringReplace tmpl "{*}" (stringJoin args ", ")) tmpl)) (a0 (optionOr (listGet args 0) "")) (t0 (if (stringContains? tStar "{0}") (stringReplace tStar "{0}" a0) tStar)) (a1 (optionOr (listGet args 1) "")) (t1 (if (stringContains? t0 "{1}") (stringReplace t0 "{1}" a1) t0)) (a2 (optionOr (listGet args 2) "")) (t2 (if (stringContains? t1 "{2}") (stringReplace t1 "{2}" a2) t1))] t2)
 
 fn renderBuiltin bname: String args: (List String) -> (Option String)
-  (mt (builtinTemplate bname) ((none) (none)) ((some tmpl) (some (renderTemplate tmpl args))))
+  (match (builtinTemplate bname) ((none) (none)) ((some tmpl) (some (renderTemplate tmpl args))))

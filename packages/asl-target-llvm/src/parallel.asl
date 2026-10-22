@@ -240,26 +240,26 @@ fn parFactNames -> (List String)
 
 fn factOf facts: libc/TripleFacts name: String -> (Option Int64)
   (let [(dot (stringIndexOf name "."))]
-    (mt dot
+    (match dot
       ((none) (libc/libcConst facts name))
       ((some i)
         (let [(sname (optionOr (stringSlice name 0 i) ""))
               (field (optionOr (stringSlice name (+ i 1) (stringLength name)) ""))]
           (if (= field "size")
             (libc/structSize facts sname)
-            (mt (libc/pairFind facts.structs sname)
+            (match (libc/pairFind facts.structs sname)
               ((some sf) (libc/structFieldOffset sf field))
               ((none) (none))))))))
 
 fn parFacts facts: libc/TripleFacts -> (Result (Map String Int64) String)
   (let [(resolved (fold (fn [(acc (Result (Map String Int64) String)) (n String)] -> (Result (Map String Int64) String)
-                          (mt acc
+                          (match acc
                             ((err e) (err e))
-                            ((ok m) (mt (factOf facts n)
+                            ((ok m) (match (factOf facts n)
                                       ((some v) (ok (mapSet m n v)))
                                       ((none) (err (str "libc.asl has no " n " for " facts.triple)))))))
                         (ok (mapEmpty)) (parFactNames)))]
-    (mt resolved
+    (match resolved
       ((err e) (err e))
       ((ok m)
         (cond
@@ -1014,7 +1014,7 @@ fn wrapperFn c: ParCtx builtin: String argc: Int64 -> ty/SsaFunction
     (else (arityFn c builtin argc)))
 
 fn parFunctions facts: libc/TripleFacts pool: (Map String Int64) calls: (List (Pair String Int64)) -> (Result (List ty/SsaFunction) String)
-  (mt (parFacts facts)
+  (match (parFacts facts)
     ((err e) (err e))
     ((ok kmap)
       (let [(c (ParCtx :k kmap :pool pool :errno facts.errnoAccessor))]

@@ -23,7 +23,7 @@ fn ! runTests -> Bool
         (_cleanupRoot (pathRemove root))
         (longSock "/tmp/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.sock")
         (sockCheck (eng/checkSocketPath longSock true))
-        (sockErr (mt sockCheck ((err e) e) ((ok _) "")))
+        (sockErr (match sockCheck ((err e) e) ((ok _) "")))
         (vTripped (brk/evaluateBreaker "1000\n1010\n1020" 1025 false "/tmp/asl-engine.log"))
         (lseMsg (lse/formatLeaseBusyMessage "/tmp/asl_lse_Z38DCa/engine.sock"))
         (cfg (eng/resolveScope! "/tmp" "workspace"))

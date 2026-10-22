@@ -12,14 +12,14 @@ fn digest out: Bytes -> String
   (if (<= (bytesLength out) 262144) (bytesSha256 out) (str "sparse " (sparseStep out 0 (bytesLength out) 0)))
 
 fn ! decodeDir dir: String -> Int64
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err e) (do (println (str "dir err " dir " " e)) 0))
     ((ok names)
       (fold (fn [(acc Int64) (n String)] -> Int64
-              (mt (fileReadBytes (str dir "/" n))
+              (match (fileReadBytes (str dir "/" n))
                 ((err e) (do (println (str n " read err " e)) acc))
                 ((ok src)
-                  (mt (zstdDecompress src)
+                  (match (zstdDecompress src)
                     ((ok out) (do (println (str n " ok " (bytesLength out) " " (digest out))) (+ acc 1)))
                     ((err e) (do (println (str n " err " (errCode e))) (+ acc 1)))))))
             0 (listSort names))))

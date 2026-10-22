@@ -4,7 +4,7 @@
       (asl-target-llvm/tests/fixtures/ssaOpt/libMid :a mid)])
 
 fn optName o: (Option Int64) -> String
-  (mt o ((none) "none") ((some v) (str "some" v)))
+  (match o ((none) "none") ((some v) (str "some" v)))
 
 fn workerLine x: Int64 -> String
   (str (= (leaf/noneOf) (none)) " " (leaf/shadeName (if (> x 1) (leaf/dark) (leaf/light))) " " (leaf/twice (leaf/incBy) x))

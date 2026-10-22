@@ -8,20 +8,20 @@
 fn rowOf line: String -> (Option Row)
   (let [(words (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringTrim line) " ")))
         (rest (optionOr (listTail (optionOr (listTail words) (list))) (list)))]
-    (mt (stringToInt64 (optionOr (listHead words) ""))
+    (match (stringToInt64 (optionOr (listHead words) ""))
       ((none) (none))
-      ((some pid) (mt (stringToInt64 (optionOr (listGet words 1) ""))
+      ((some pid) (match (stringToInt64 (optionOr (listGet words 1) ""))
                     ((none) (none))
                     ((some ppid) (some (Row :pid pid :ppid ppid :argv0 (optionOr (listHead rest) ""))))))))
 
 fn rowsOf text: String -> (List Row)
-  (fold (fn [(acc (List Row)) (line String)] -> (List Row) (mt (rowOf line) ((some r) (cons r acc)) ((none) acc))) (list) (stringLines text))
+  (fold (fn [(acc (List Row)) (line String)] -> (List Row) (match (rowOf line) ((some r) (cons r acc)) ((none) acc))) (list) (stringLines text))
 
 fn chain rows: (List Row) pid: Int64 stop: Int64 depth: Int64 -> (List String)
   (cond
     ((= pid stop) (list "stop"))
     ((or (<= pid 1) (> depth 64)) (list))
-    (else (mt (listHead (filter (fn [(r Row)] -> Bool (= r.pid pid)) rows))
+    (else (match (listHead (filter (fn [(r Row)] -> Bool (= r.pid pid)) rows))
             ((none) (list))
             ((some r) (let [(up (chain rows r.ppid stop (+ depth 1)))]
                         (if (listEmpty? up) (list) (cons r.argv0 up)))))))

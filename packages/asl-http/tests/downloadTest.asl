@@ -4,7 +4,7 @@
 
 fn ! writeAll fd: Int64 data: String offset: Int64 -> (Result Unit String)
   (if (>= offset (stringLength data)) (ok ())
-    (mt (fdWrite fd (optionOr (stringSlice data offset (stringLength data)) ""))
+    (match (fdWrite fd (optionOr (stringSlice data offset (stringLength data)) ""))
       ((err e) (err e))
       ((ok n) (if (<= n 0) (err "ERR_WRITE_ZERO") (writeAll fd data (+ offset n))))))
 
@@ -12,18 +12,18 @@ fn ! responseBody mode: String -> String
   (if (= mode "small") "small" (if (= mode "cut") (stringRepeat "0123456789abcdef" 98304) (stringRepeat "0123456789abcdef" 196608)))
 
 fn ! serveRedirect port: Int64 -> (Result Int64 String)
-  (mt (tcpListen port)
+  (match (tcpListen port)
     ((err e) (err e))
     ((ok listener)
       (fdWrite 1 "READY\n")
-      (mt (sockAccept listener)
+      (match (sockAccept listener)
         ((err e) (do (fdClose listener) (err e)))
         ((ok first)
           (do
             (fdRead first 4096)
             (writeAll first (str "HTTP/1.1 302 Found\r\nContent-Length: 3145728\r\nLocation: http://127.0.0.1:" (stringFromInt64 port) "/final\r\nConnection: close\r\n\r\n") 0)
             (fdClose first)
-            (mt (sockAccept listener)
+            (match (sockAccept listener)
               ((err e) (do (fdClose listener) (err e)))
               ((ok final)
                 (do
@@ -34,11 +34,11 @@ fn ! serveRedirect port: Int64 -> (Result Int64 String)
                   (ok 0)))))))))
 
 fn ! serve mode: String port: Int64 -> (Result Int64 String)
-  (mt (tcpListen port)
+  (match (tcpListen port)
     ((err e) (err e))
     ((ok listener)
       (fdWrite 1 "READY\n")
-      (mt (sockAccept listener)
+      (match (sockAccept listener)
                 ((err e) (do (fdClose listener) (err e)))
                 ((ok client)
                   (do
@@ -61,55 +61,55 @@ fn ! serve mode: String port: Int64 -> (Result Int64 String)
                     (ok 0))))))
 
 fn ! main args: (List String) -> (Result Int64 String)
-  (mt (listHead args)
+  (match (listHead args)
     ((some mode) (if (= mode "server")
-      (mt (listGet args 1) ((some behavior) (mt (listGet args 2) ((some p) (mt (stringToInt64 p) ((some port) (if (= behavior "redirect") (serveRedirect port) (serve behavior port))) ((none) (err "ERR_TEST_SERVER_MODE")))) ((none) (err "ERR_TEST_SERVER_MODE")))) ((none) (err "ERR_TEST_SERVER_MODE")))
+      (match (listGet args 1) ((some behavior) (match (listGet args 2) ((some p) (match (stringToInt64 p) ((some port) (if (= behavior "redirect") (serveRedirect port) (serve behavior port))) ((none) (err "ERR_TEST_SERVER_MODE")))) ((none) (err "ERR_TEST_SERVER_MODE")))) ((none) (err "ERR_TEST_SERVER_MODE")))
       (err "ERR_TEST_SERVER_MODE")))
     ((none) (err "ERR_TEST_SERVER_MODE")))
 
 fn ! startServer mode: String -> (Result (Pair SpawnedProc Int64) String)
   (let [(ticks (/ (nowNs) 1000))
         (port (+ 30000 (- ticks (* (/ ticks 30000) 30000))))]
-   (mt (procSpawnv (list "./bin/asl" "run" "asl/packages/asl-http/tests/downloadTest.asl" "server" mode (stringFromInt64 port)) (some ".") (none))
+   (match (procSpawnv (list "./bin/asl" "run" "asl/packages/asl-http/tests/downloadTest.asl" "server" mode (stringFromInt64 port)) (some ".") (none))
     ((err e) (err (str "ERR_TEST_SERVER_SPAWN: " e)))
     ((ok sp)
       (do
         (fdClose sp.stdin)
-        (mt (fdRead sp.stdout 6)
+        (match (fdRead sp.stdout 6)
           ((err e) (err (str "ERR_TEST_SERVER_READY: " e)))
           ((ok ready)
             (do
               (fdClose sp.stdout)
               (fdClose sp.stderr)
               (if (= ready "READY\n") (ok (pair sp port))
-                (mt (procWaitPid sp.pid false)
+                (match (procWaitPid sp.pid false)
                   ((err e) (err (str "ERR_TEST_SERVER_WAIT: " e)))
                   ((ok _) (err (str "ERR_TEST_SERVER_NOT_READY: " ready))))))))))))
 
 fn ! finishServer sp: SpawnedProc -> (Result Int64 String)
-  (mt (procWaitPid sp.pid false)
+  (match (procWaitPid sp.pid false)
       ((err e) (err e))
-      ((ok status) (mt status ((some code) (ok code)) ((none) (err "ERR_TEST_SERVER_EXIT")))))
+      ((ok status) (match status ((some code) (ok code)) ((none) (err "ERR_TEST_SERVER_EXIT")))))
 
 fn ! noDownloadArtifacts! path: String -> Bool
   (noArtifactsIn! "/tmp/" path)
 
 fn ! noArtifactsIn! root: String pattern: String -> Bool
-  (mt (procSpawnv (list "find" root "-maxdepth" "1" "-path" (str pattern ".asl-http-*") "-print") (none) (none))
+  (match (procSpawnv (list "find" root "-maxdepth" "1" "-path" (str pattern ".asl-http-*") "-print") (none) (none))
     ((err e) (do (assert false (str "find download artifacts: " e)) false))
     ((ok sp)
       (do
         (fdClose sp.stdin)
         (fdClose sp.stderr)
-        (mt (procWaitPid sp.pid false)
+        (match (procWaitPid sp.pid false)
           ((err e) (do (fdClose sp.stdout) (assert false (str "wait for artifact scan: " e)) false))
           ((ok status)
-            (mt status
+            (match status
               ((none) (do (fdClose sp.stdout) (assert false "artifact scan has no exit status") false))
               ((some code)
                 (if (!= code 0)
                   (do (fdClose sp.stdout) (assert false (str "artifact scan exits: " (stringFromInt64 code))) false)
-                  (mt (fdRead sp.stdout 4096)
+                  (match (fdRead sp.stdout 4096)
                     ((err e) (do (fdClose sp.stdout) (assert false (str "read artifact scan: " e)) false))
                     ((ok output)
                       (do
@@ -119,24 +119,24 @@ fn ! noArtifactsIn! root: String pattern: String -> Bool
 fn ! testArtifactScanDetectsLeftovers! -> Bool
   (let [(path (str "/tmp/asl_http_scan_" (stringFromInt64 (nowNs))))
         (artifact (str path ".asl-http-test"))]
-    (mt (fileWrite artifact "leftover")
+    (match (fileWrite artifact "leftover")
       ((err e) (do (assert false (str "create artifact scan fixture: " e)) false))
       ((ok _)
         (let [(detected (not (noDownloadArtifacts! path)))]
-          (mt (pathRemove artifact)
+          (match (pathRemove artifact)
             ((err e) (do (assert false (str "remove artifact scan fixture: " e)) false))
             ((ok _) (do (assert detected "artifact scan detects a matching temporary file") true)))))))
 
 fn ! testBodyDownload! -> Bool
-  (mt (startServer "body")
+  (match (startServer "body")
     ((err e) (do (assert false e) false))
     ((ok server)
       (let [(sp (pairFirst server))
             (port (pairSecond server))
             (path (str "/tmp/asl_http_download_" (stringFromInt64 (nowNs)) ".csv.gz"))
             (result (d/httpDownload (str "http://127.0.0.1:" (stringFromInt64 port) "/archive") path 10000))]
-        (mt (finishServer sp) ((err e) (assert false (str "server exit: " e))) ((ok code) (assert (= code 0) (str "body server exits cleanly: " (stringFromInt64 code)))))
-        (mt result
+        (match (finishServer sp) ((err e) (assert false (str "server exit: " e))) ((ok code) (assert (= code 0) (str "body server exits cleanly: " (stringFromInt64 code)))))
+        (match result
           ((err e) (do (assert false (str "body download: " e)) false))
           ((ok file)
             (let [(bytes (fileReadBytes path))]
@@ -145,47 +145,47 @@ fn ! testBodyDownload! -> Bool
               (assert (= file.bytes 3145728) "downloaded byte count is 3 MiB")
               (assert (= file.bytes file.contentLength) "bytes equal Content-Length")
               (assert (noDownloadArtifacts! path) "successful body download removes temporary files")
-              (assert (mt bytes ((ok b) (= (bytesSha256 b) file.sha256)) ((err _) false)) "reported SHA-256 matches downloaded file")
+              (assert (match bytes ((ok b) (= (bytesSha256 b) file.sha256)) ((err _) false)) "reported SHA-256 matches downloaded file")
               true))))))
 
 fn ! testDashPathDownload! -> Bool
-  (mt (startServer "small")
+  (match (startServer "small")
     ((err e) (do (assert false e) false))
     ((ok server)
       (let [(sp (pairFirst server)) (port (pairSecond server))
             (name (str "-asl_http_dash_" (stringFromInt64 (nowNs))))
             (path name)
             (result (d/httpDownload (str "http://127.0.0.1:" (stringFromInt64 port) "/small") path 3000))]
-        (mt (finishServer sp)
+        (match (finishServer sp)
           ((err e) (assert false (str "dash-path server wait: " e)))
           ((ok code) (assert (= code 0) (str "dash-path server exits cleanly: " (stringFromInt64 code)))))
-        (mt result
+        (match result
           ((err e) (do (assert false (str "dash-path download: " e)) false))
           ((ok file)
             (let [(bytes (fileReadString path))]
               (pathRemove path)
               (assert (= file.contentLength 5) "dash-path Content-Length is five")
-              (assert (mt bytes ((ok body) (= body "small")) ((err _) false)) "dash-path body is intact")
+              (assert (match bytes ((ok body) (= body "small")) ((err _) false)) "dash-path body is intact")
               (assert (noArtifactsIn! "." (str "./" path)) "successful dash-path download removes temporary files")
               true))))))
 
 fn ! testKeepAliveDownload! -> Bool
-  (mt (startServer "keepalive")
+  (match (startServer "keepalive")
     ((err e) (do (assert false e) false))
     ((ok server)
       (let [(sp (pairFirst server)) (port (pairSecond server))
             (path (str "/tmp/asl_http_keepalive_" (stringFromInt64 (nowNs))))
             (result (d/httpDownload (str "http://127.0.0.1:" (stringFromInt64 port) "/keepalive") path 200))]
-        (mt (finishServer sp)
+        (match (finishServer sp)
           ((err e) (assert false (str "keep-alive server wait: " e)))
           ((ok code) (assert (= code 0) (str "keep-alive server exits cleanly: " (stringFromInt64 code)))))
-        (mt result
+        (match result
           ((err e) (do (assert false (str "keep-alive download: " e)) false))
           ((ok file)
             (let [(bytes (fileReadString path))]
               (pathRemove path)
               (assert (= file.contentLength 5) "keep-alive Content-Length is five")
-              (assert (mt bytes ((ok body) (= body "small")) ((err _) false)) "keep-alive body is intact")
+              (assert (match bytes ((ok body) (= body "small")) ((err _) false)) "keep-alive body is intact")
               (assert (noDownloadArtifacts! path) "successful keep-alive download removes temporary files")
               true))))))
 
@@ -200,7 +200,7 @@ fn ! testCurlTimeoutFormat! -> Bool
     true)
 
 fn ! testUrlOption! -> Bool
-  (mt (d/httpHead "--help" 1000)
+  (match (d/httpHead "--help" 1000)
     ((err e)
       (do
         (assert (stringContains? e "ERR_HTTP_CURL") "URL beginning with option syntax is passed as a URL")
@@ -208,7 +208,7 @@ fn ! testUrlOption! -> Bool
     ((ok _) (do (assert false "option-looking URL is not executed as curl help") false)))
 
 fn ! testClosedPortHead! -> Bool
-  (mt (d/httpHead "http://127.0.0.1:1/asl-http-closed-port" 1000)
+  (match (d/httpHead "http://127.0.0.1:1/asl-http-closed-port" 1000)
     ((err e)
       (do
         (assert (stringContains? e "ERR_HTTP_CURL") "closed-port HEAD returns a curl error instead of crashing")
@@ -218,21 +218,21 @@ fn ! testClosedPortHead! -> Bool
 fn ! noHeadArtifacts! -> Bool
   (let [(root (optionOr (envGet "TMPDIR") "/tmp"))
         (pattern (str "asl_http_head_" (stringFromInt64 (procSelf)) "_*.headers"))]
-    (mt (procSpawnv (list "find" root "-maxdepth" "1" "-name" pattern "-print") (none) (none))
+    (match (procSpawnv (list "find" root "-maxdepth" "1" "-name" pattern "-print") (none) (none))
       ((err e) (do (assert false (str "spawn HEAD artifact scan: " e)) false))
       ((ok sp)
         (do
           (fdClose sp.stdin)
           (fdClose sp.stderr)
-          (mt (procWaitPid sp.pid false)
+          (match (procWaitPid sp.pid false)
             ((err e) (do (fdClose sp.stdout) (assert false (str "wait for HEAD artifact scan: " e)) false))
             ((ok status)
-              (mt status
+              (match status
                 ((none) (do (fdClose sp.stdout) (assert false "HEAD artifact scan has no exit status") false))
                 ((some code)
                   (if (!= code 0)
                     (do (fdClose sp.stdout) (assert false (str "HEAD artifact scan exits: " (stringFromInt64 code))) false)
-                    (mt (fdRead sp.stdout 4096)
+                    (match (fdRead sp.stdout 4096)
                       ((err e) (do (fdClose sp.stdout) (assert false (str "read HEAD artifact scan: " e)) false))
                       ((ok output)
                         (do
@@ -240,13 +240,13 @@ fn ! noHeadArtifacts! -> Bool
                           (= (stringTrim output) "")))))))))))))
 
 fn ! testHead! -> Bool
-  (mt (startServer "head")
+  (match (startServer "head")
     ((err e) (do (assert false e) false))
     ((ok server)
       (let [(sp (pairFirst server)) (port (pairSecond server))
             (result (d/httpHead (str "http://127.0.0.1:" (stringFromInt64 port) "/archive") 3000))]
-        (mt (finishServer sp) ((err e) (assert false (str "head server exit: " e))) ((ok code) (assert (= code 0) (str "head server exits cleanly: " (stringFromInt64 code)))))
-        (mt result
+        (match (finishServer sp) ((err e) (assert false (str "head server exit: " e))) ((ok code) (assert (= code 0) (str "head server exits cleanly: " (stringFromInt64 code)))))
+        (match result
           ((err e) (do (assert false (str "HEAD request: " e)) false))
           ((ok info)
             (assert (= (pairFirst info) 200) "HEAD status is 200")
@@ -255,69 +255,69 @@ fn ! testHead! -> Bool
             true)))))
 
 fn ! testSmallDownload! -> Bool
-  (mt (startServer "small")
+  (match (startServer "small")
     ((err e) (do (assert false e) false))
     ((ok server)
       (let [(sp (pairFirst server)) (port (pairSecond server))
             (path (str "/tmp/asl_http_small_" (stringFromInt64 (nowNs))))
             (result (d/httpDownload (str "http://127.0.0.1:" (stringFromInt64 port) "/small") path 3000))]
-        (mt (finishServer sp)
+        (match (finishServer sp)
           ((err e) (assert false (str "small server wait: " e)))
           ((ok code) (assert (= code 0) (str "small server exits cleanly: " (stringFromInt64 code)))))
-        (mt result
+        (match result
           ((err e) (assert false (str "small download: " e)))
           ((ok file)
             (let [(bytes (fileReadString path))]
               (pathRemove path)
               (assert (= file.contentLength 5) "small response length is reported, not a fixed 3 MiB")
-              (assert (mt bytes ((ok body) (= body "small")) ((err _) false)) "small response body is intact")
+              (assert (match bytes ((ok body) (= body "small")) ((err _) false)) "small response body is intact")
               (assert (noDownloadArtifacts! path) "successful small download removes temporary files")
               true))))))
 
 fn ! testRedirect! -> Bool
-  (mt (startServer "redirect")
+  (match (startServer "redirect")
     ((err e) (do (assert false e) false))
     ((ok server)
       (let [(sp (pairFirst server)) (port (pairSecond server))
             (result (d/httpHead (str "http://127.0.0.1:" (stringFromInt64 port) "/redirect") 3000))]
-        (mt (finishServer sp)
+        (match (finishServer sp)
           ((err e) (assert false (str "redirect server wait: " e)))
           ((ok code) (assert (= code 0) (str "redirect server exits cleanly: " (stringFromInt64 code)))))
-        (mt result
+        (match result
           ((err e) (assert (stringContains? e "ERR_HTTP_INCOMPLETE_HEADERS") "redirect Content-Length does not leak into final response"))
           ((ok _) (assert false "redirect without final Content-Length must not reuse redirect length")))
         true)))
 
 fn ! testFailures! -> Bool
   (do
-  (mt (startServer "missing")
+  (match (startServer "missing")
     ((err e) (do (assert false e) false))
     ((ok server)
       (let [(sp (pairFirst server)) (port (pairSecond server))
             (path (str "/tmp/asl_http_404_" (stringFromInt64 (nowNs))))
             (result (d/httpDownload (str "http://127.0.0.1:" (stringFromInt64 port) "/missing") path 3000))]
-        (mt (finishServer sp)
+        (match (finishServer sp)
           ((err e) (assert false (str "404 server wait: " e)))
           ((ok code) (assert (= code 0) (str "404 server exits cleanly: " (stringFromInt64 code)))))
         (assert (err? result) "404 is an Err with curl fail enabled")
-        (assert (mt result ((err e) (stringContains? e "The requested URL returned error: 404")) ((ok _) false)) "curl failure retains its complete stderr cause")
+        (assert (match result ((err e) (stringContains? e "The requested URL returned error: 404")) ((ok _) false)) "curl failure retains its complete stderr cause")
         (assert (err? (fileStat path)) "404 leaves no destination file")
         (assert (noDownloadArtifacts! path) "404 removes temporary download files")
         true)))
-  (mt (startServer "cut")
+  (match (startServer "cut")
     ((err e) (do (assert false e) false))
     ((ok server)
       (let [(sp (pairFirst server)) (port (pairSecond server))
             (path (str "/tmp/asl_http_truncated_" (stringFromInt64 (nowNs))))
             (result (d/httpDownload (str "http://127.0.0.1:" (stringFromInt64 port) "/cut") path 3000))]
-        (mt (finishServer sp)
+        (match (finishServer sp)
           ((err e) (assert false (str "cut server wait: " e)))
           ((ok code) (assert (= code 0) (str "cut server exits cleanly: " (stringFromInt64 code)))))
         (assert (err? result) "truncated Content-Length is Err")
         (assert (err? (fileStat path)) "truncated download leaves no destination file")
         (assert (noDownloadArtifacts! path) "truncated download removes temporary files")
         true)))
-  (mt (startServer "slow")
+  (match (startServer "slow")
     ((err e) (do (assert false e) false))
     ((ok server)
       (let [(sp (pairFirst server)) (port (pairSecond server))
@@ -325,7 +325,7 @@ fn ! testFailures! -> Bool
             (started (nowNs))
             (result (d/httpDownload (str "http://127.0.0.1:" (stringFromInt64 port) "/slow") path 100))
             (elapsed (- (nowNs) started))]
-        (mt (finishServer sp)
+        (match (finishServer sp)
           ((err e) (assert false (str "timeout server wait: " e)))
           ((ok code) (assert (= code 0) (str "timeout server exits cleanly: " (stringFromInt64 code)))))
         (assert (err? result) "100 ms request timeout is Err")
@@ -335,33 +335,33 @@ fn ! testFailures! -> Bool
         true))))
 
 fn ! testContentLengthMismatch! -> Bool
-  (mt (startServer "mismatch")
+  (match (startServer "mismatch")
     ((err e) (do (assert false e) false))
     ((ok server)
       (let [(sp (pairFirst server)) (port (pairSecond server))
             (path (str "/tmp/asl_http_mismatch_" (stringFromInt64 (nowNs))))
             (result (d/httpDownload (str "http://127.0.0.1:" (stringFromInt64 port) "/mismatch") path 3000))]
-        (mt (finishServer sp)
+        (match (finishServer sp)
           ((err e) (assert false (str "mismatch server wait: " e)))
           ((ok code) (assert (= code 0) (str "mismatch server exits cleanly: " (stringFromInt64 code)))))
         (assert (err? result) "mismatched Content-Length is rejected after curl succeeds")
-        (assert (mt result ((err e) (stringContains? e "ERR_HTTP_CONTENT_LENGTH_MISMATCH")) ((ok _) false)) "mismatch reports Content-Length error")
+        (assert (match result ((err e) (stringContains? e "ERR_HTTP_CONTENT_LENGTH_MISMATCH")) ((ok _) false)) "mismatch reports Content-Length error")
         (assert (err? (fileStat path)) "mismatch leaves no destination file")
         (assert (noDownloadArtifacts! path) "mismatch removes temporary download files")
         true)))
 
 fn ! testMissingHeadersCleanup! -> Bool
-  (mt (startServer "noheaders")
+  (match (startServer "noheaders")
     ((err e) (do (assert false e) false))
     ((ok server)
       (let [(sp (pairFirst server)) (port (pairSecond server))
             (path (str "/tmp/asl_http_noheaders_" (stringFromInt64 (nowNs))))
             (result (d/httpDownload (str "http://127.0.0.1:" (stringFromInt64 port) "/noheaders") path 3000))]
-        (mt (finishServer sp)
+        (match (finishServer sp)
           ((err e) (assert false (str "no-headers server wait: " e)))
           ((ok code) (assert (= code 0) (str "no-headers server exits cleanly: " (stringFromInt64 code)))))
         (assert (err? result) "missing response headers are rejected after curl succeeds")
-        (assert (mt result ((err e) (stringContains? e "ERR_HTTP_INCOMPLETE_HEADERS")) ((ok _) false)) "missing headers report incomplete headers")
+        (assert (match result ((err e) (stringContains? e "ERR_HTTP_INCOMPLETE_HEADERS")) ((ok _) false)) "missing headers report incomplete headers")
         (assert (err? (fileStat path)) "missing headers leave no destination file")
         (assert (noDownloadArtifacts! path) "missing headers remove temporary download files")
         true)))

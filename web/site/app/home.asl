@@ -62,7 +62,7 @@ fn rulesSection -> h/Node
          (h/p [(h/cls "lead")] [(h/text "The checker enforces all of them before anything runs. None of them asks the model to be careful; they leave it nothing to be careless with.")])])
        (h/div [(h/cls "grid four")]
          [(ruleCell "Structure you can count" "Every ( [ and { is paired. A truncated or malformed program is caught by counting delimiters, before parsing and long before running." "ERR_READ_UNBALANCED")
-          (ruleCell "No nil, no exceptions" "Lookups return (some v) or (none) and failures return (err e). The unhappy path is written in the code, not discovered in a stack trace." "(mt r ((ok v) v) ((err e) 0))")
+          (ruleCell "No nil, no exceptions" "Lookups return (some v) or (none) and failures return (err e). The unhappy path is written in the code, not discovered in a stack trace." "(match r ((ok v) v) ((err e) 0))")
           (ruleCell "Effects are marked" "A function that prints, touches a file or runs a process says so with !. An unmarked effect is a check error, not a surprise." "ERR_EFFECT_UNMARKED")
           (ruleCell "One spelling per idea" "Whole camelCase words, predicates ending in ?, no aliases. There is one name to guess and it is the obvious one." "listLength · stringContains?")])])])
 

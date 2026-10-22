@@ -22,7 +22,7 @@ fn testIndentedFunctionProjection -> Bool
     (refute (stringContains? projected "(fn multiply") "projected function refutes raw enclosing parens on fn")
     (let [(topRes (cv/sexprToTopForm fnSexpr))]
       (assert (ok? topRes) "sexprToTopForm succeeds on pure Dyck-1 defun")
-      (mt topRes
+      (match topRes
         ((ok tf)
           (let [(rendered (ap/printTopForm tf))]
             (assert (stringContains? rendered "fn multiply") "astPrinter renders modern fn multiply")

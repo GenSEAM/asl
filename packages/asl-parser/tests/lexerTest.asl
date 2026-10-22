@@ -7,16 +7,16 @@ fn runTokenize -> (List String)
   (map (fn [(t lex/Token)] -> String (renderToken t)) (lex/tokenize "(a 12\n:b \"xy\")"))
 
 fn testSigilRejection -> Bool
-  (let [(tokens (lex/tokenize "@bad"))] (assert (> (listLength tokens) 0) "tokens must not be empty") (let [(t0 (optionOr (listHead tokens) (lex/makeToken (lex/tokEof) "" 0 0)))] (assert (= (lex/tokenTypeName t0.kind) "ERROR") "sigil @ must produce ERROR token") (assert (= t0.rawText "@") "raw-text of rejected sigil must be @") (let [(msg (mt t0.kind ((lex/tokError m) m) (_ "")))] (assert (stringContains? msg "invalid character '@'") "error message contains invalid character notice")) true))
+  (let [(tokens (lex/tokenize "@bad"))] (assert (> (listLength tokens) 0) "tokens must not be empty") (let [(t0 (optionOr (listHead tokens) (lex/makeToken (lex/tokEof) "" 0 0)))] (assert (= (lex/tokenTypeName t0.kind) "ERROR") "sigil @ must produce ERROR token") (assert (= t0.rawText "@") "raw-text of rejected sigil must be @") (let [(msg (match t0.kind ((lex/tokError m) m) (_ "")))] (assert (stringContains? msg "invalid character '@'") "error message contains invalid character notice")) true))
 
 fn expectedTokens -> (List String)
   (list "LPAREN|(|1|1" "SYMBOL|a|1|2" "INT|12|1|4" "KEYWORD|:b|2|1" "STRING|\"xy\"|2|4" "RPAREN|)|2|8" "EOF||2|9")
 
 fn oneTokenKind s: String -> String
-  (mt (listHead (lex/tokenize s)) ((some t) (lex/tokenTypeName t.kind)) ((none) "EMPTY"))
+  (match (listHead (lex/tokenize s)) ((some t) (lex/tokenTypeName t.kind)) ((none) "EMPTY"))
 
 fn oneTokenFloat s: String -> Float64
-  (mt (listHead (lex/tokenize s)) ((some t) (mt t.kind ((lex/tokFloat f) f) (_ 0.0))) ((none) 0.0))
+  (match (listHead (lex/tokenize s)) ((some t) (match t.kind ((lex/tokFloat f) f) (_ 0.0))) ((none) 0.0))
 
 fn testExponentFloats -> Bool
   (do

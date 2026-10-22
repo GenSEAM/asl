@@ -3,16 +3,16 @@
   :i [(asl/agentLoop/gateIntegrity :a gi) (asl/agentLoop/gates :a g) (asl/agentLoop/core :a c)])
 
 fn kvGet kv: (List (Pair String c/KvVal)) key: String -> (Option c/KvVal)
-  (mt (listHead (filter (fn [p] (= (pairFirst p) key)) kv))
+  (match (listHead (filter (fn [p] (= (pairFirst p) key)) kv))
     ((some p) (some (pairSecond p))) ((none) (none)))
 
 fn kvText value: c/KvVal -> String
-  (mt value ((c/kvStr s) s) ((c/kvInt _) ""))
+  (match value ((c/kvStr s) s) ((c/kvInt _) ""))
 
 fn expected fixture: String id: String -> String
   (let [prefix (str "(:case :id \"" id "\"")
         line (optionOr (listHead (filter (fn [l] (stringStartsWith? l prefix)) (stringLines fixture))) "")]
-    (mt (kvGet (c/parseKv line) "want")
+    (match (kvGet (c/parseKv line) "want")
       ((some value) (kvText value))
       ((none) "")))
 

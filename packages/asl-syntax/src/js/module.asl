@@ -45,7 +45,7 @@ fn hasNewlineElements elems: (List tr/TreeElement) text: String -> Bool
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (let [(k (tr/tokenKind tok))]
            (if (= k "newline")
@@ -154,7 +154,7 @@ fn parseImportAttributes toks: (List tr/Token) text: String -> (Result (Pair (Li
                     (tlBrace (optionOr (listTail remBrace) (list)))
                     (pref (concatLists (list (tokElem hd) trivBrace (tokElem braceTok))))
                     (bodyRes (parseImportAttributesLoop tlBrace text (list)))]
-                (mt bodyRes
+                (match bodyRes
                   ((err msg) (err msg))
                   ((ok p)
                    (let [(attrKids (listAppend pref (pairFirst p)))
@@ -238,7 +238,7 @@ fn parseImportDecl toks: (List tr/Token) text: String -> (Result tr/ParseResult 
           ((= k1 "string")
            (let [(kids (concatLists (list (tokElem importTok) triv1 (tokElem hd1))))
                  (attrRes (parseImportAttributes tl1 text))]
-             (mt attrRes
+             (match attrRes
                ((err msg) (err msg))
                ((ok attrPair)
                 (let [(attrKids (pairFirst attrPair))
@@ -285,7 +285,7 @@ fn parseImportDecl toks: (List tr/Token) text: String -> (Result tr/ParseResult 
                                  (tlSrc (optionOr (listTail remSrc) (list)))
                                  (baseKids (concatLists (list (tokElem importTok) triv1 (tokElem hd1) trivAs (tokElem asTok) trivName (tokElem nameTok) trivFrom (tokElem fromTok) trivSrc (tokElem srcTok))))
                                  (attrRes (parseImportAttributes tlSrc text))]
-                             (mt attrRes
+                             (match attrRes
                                ((err msg) (err msg))
                                ((ok attrPair)
                                 (let [(attrKids (pairFirst attrPair))
@@ -294,7 +294,7 @@ fn parseImportDecl toks: (List tr/Token) text: String -> (Result tr/ParseResult 
                                   (finishDeclWithSemi allKids startPos "importDecl" remAttr text))))))))))))))
           ((= k1 "lbrace")
            (let [(specRes (parseImportSpecifiersLoop tl1 text (list)))]
-             (mt specRes
+             (match specRes
                ((err msg) (err msg))
                ((ok specPair)
                 (let [(specKids (pairFirst specPair))
@@ -315,7 +315,7 @@ fn parseImportDecl toks: (List tr/Token) text: String -> (Result tr/ParseResult 
                               (tlSrc (optionOr (listTail remSrc) (list)))
                               (baseKids (concatLists (list (tokElem importTok) triv1 (tokElem hd1) specKids trivFrom (tokElem fromTok) trivSrc (tokElem srcTok))))
                               (attrRes (parseImportAttributes tlSrc text))]
-                          (mt attrRes
+                          (match attrRes
                             ((err msg) (err msg))
                             ((ok attrPair)
                              (let [(attrKids (pairFirst attrPair))
@@ -369,7 +369,7 @@ fn parseImportDecl toks: (List tr/Token) text: String -> (Result tr/ParseResult 
                                              (tlSrc (optionOr (listTail remSrc) (list)))
                                              (baseKids (concatLists (list (tokElem importTok) triv1 (tokElem defNameTok) trivComma (tokElem commaTok) trivNext (tokElem hdNext) trivAs (tokElem asTok) trivName (tokElem nameTok) trivFrom (tokElem fromTok) trivSrc (tokElem srcTok))))
                                              (attrRes (parseImportAttributes tlSrc text))]
-                                         (mt attrRes
+                                         (match attrRes
                                            ((err msg) (err msg))
                                            ((ok attrPair)
                                             (let [(attrKids (pairFirst attrPair))
@@ -378,7 +378,7 @@ fn parseImportDecl toks: (List tr/Token) text: String -> (Result tr/ParseResult 
                                               (finishDeclWithSemi allKids startPos "importDecl" remAttr text)))))))))))))
                        (if (= kNext "lbrace")
                          (let [(specRes (parseImportSpecifiersLoop tlNext text (list)))]
-                           (mt specRes
+                           (match specRes
                              ((err msg) (err msg))
                              ((ok specPair)
                               (let [(specKids (pairFirst specPair))
@@ -399,7 +399,7 @@ fn parseImportDecl toks: (List tr/Token) text: String -> (Result tr/ParseResult 
                                             (tlSrc (optionOr (listTail remSrc) (list)))
                                             (baseKids (concatLists (list (tokElem importTok) triv1 (tokElem defNameTok) trivComma (tokElem commaTok) trivNext (tokElem hdNext) specKids trivFrom (tokElem fromTok) trivSrc (tokElem srcTok))))
                                             (attrRes (parseImportAttributes tlSrc text))]
-                                        (mt attrRes
+                                        (match attrRes
                                           ((err msg) (err msg))
                                           ((ok attrPair)
                                            (let [(attrKids (pairFirst attrPair))
@@ -420,7 +420,7 @@ fn parseImportDecl toks: (List tr/Token) text: String -> (Result tr/ParseResult 
                            (tlSrc (optionOr (listTail remSrc) (list)))
                            (baseKids (concatLists (list (tokElem importTok) triv1 (tokElem defNameTok) trivComma (tokElem fromTok) trivSrc (tokElem srcTok))))
                            (attrRes (parseImportAttributes tlSrc text))]
-                       (mt attrRes
+                       (match attrRes
                          ((err msg) (err msg))
                          ((ok attrPair)
                           (let [(attrKids (pairFirst attrPair))
@@ -507,7 +507,7 @@ fn parseExportDecl toks: (List tr/Token) text: String -> (Result tr/ParseResult 
                                  (tlSrc (optionOr (listTail remSrc) (list)))
                                  (baseKids (concatLists (list (tokElem exportTok) triv1 (tokElem hd1) trivAs (tokElem asTok) trivName (tokElem nameTok) trivFrom (tokElem fromTok) trivSrc (tokElem srcTok))))
                                  (attrRes (parseImportAttributes tlSrc text))]
-                             (mt attrRes
+                             (match attrRes
                                ((err msg) (err msg))
                                ((ok attrPair)
                                 (let [(attrKids (pairFirst attrPair))
@@ -527,7 +527,7 @@ fn parseExportDecl toks: (List tr/Token) text: String -> (Result tr/ParseResult 
                              (tlSrc (optionOr (listTail remSrc) (list)))
                              (baseKids (concatLists (list (tokElem exportTok) triv1 (tokElem hd1) trivAs (tokElem fromTok) trivSrc (tokElem srcTok))))
                              (attrRes (parseImportAttributes tlSrc text))]
-                         (mt attrRes
+                         (match attrRes
                            ((err msg) (err msg))
                            ((ok attrPair)
                             (let [(attrKids (pairFirst attrPair))
@@ -536,7 +536,7 @@ fn parseExportDecl toks: (List tr/Token) text: String -> (Result tr/ParseResult 
                               (finishDeclWithSemi allKids startPos "exportDecl" remAttr text))))))))))))
           ((= k1 "lbrace")
            (let [(specRes (parseExportSpecifiersLoop tl1 text (list)))]
-             (mt specRes
+             (match specRes
                ((err msg) (err msg))
                ((ok specPair)
                 (let [(specKids (pairFirst specPair))
@@ -557,7 +557,7 @@ fn parseExportDecl toks: (List tr/Token) text: String -> (Result tr/ParseResult 
                               (tlSrc (optionOr (listTail remSrc) (list)))
                               (baseKids (concatLists (list (tokElem exportTok) triv1 (tokElem hd1) specKids trivFrom (tokElem fromTok) trivSrc (tokElem srcTok))))
                               (attrRes (parseImportAttributes tlSrc text))]
-                          (mt attrRes
+                          (match attrRes
                             ((err msg) (err msg))
                             ((ok attrPair)
                              (let [(attrKids (pairFirst attrPair))
@@ -610,7 +610,7 @@ fn parseModuleItemsLoop toks: (List tr/Token) text: String acc: (List tr/TreeEle
             (sl (tokenSlice hd text))]
         (cond
           ((isModuleImport rem text)
-           (mt (parseImportDecl rem text)
+           (match (parseImportDecl rem text)
              ((err msg) (err msg))
              ((ok declRes)
               (let [(node declRes.node)
@@ -620,7 +620,7 @@ fn parseModuleItemsLoop toks: (List tr/Token) text: String acc: (List tr/TreeEle
                     (parseModuleItemsLoop advToks text (listAppend accWithTriv (list (tr/elemNode node)))))
                   (parseModuleItemsLoop remToks text (listAppend accWithTriv (list (tr/elemNode node)))))))))
           ((= sl "export")
-           (mt (parseExportDecl rem text)
+           (match (parseExportDecl rem text)
              ((err msg) (err msg))
              ((ok declRes)
               (let [(node declRes.node)
@@ -644,7 +644,7 @@ fn firstErrorOffset elems: (List tr/TreeElement) -> (Option Int64)
     (none)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (if (= (tr/tokenKind tok) "error")
            (some (tr/tokenStart tok))
@@ -652,22 +652,22 @@ fn firstErrorOffset elems: (List tr/TreeElement) -> (Option Int64)
         ((tr/elemNode node)
          (if (tr/isErrorNode node)
            (some (tr/nodeStart node))
-           (mt (firstErrorOffset (tr/nodeChildren node))
+           (match (firstErrorOffset (tr/nodeChildren node))
              ((some off) (some off))
              ((none) (firstErrorOffset tl))))))))
 
 fn parseModuleTokens toks: (List tr/Token) text: String -> (Result tr/Node String)
   (let [(loopRes (parseModuleItemsLoop toks text (list)))]
-    (mt loopRes
+    (match loopRes
       ((err msg)
        (err msg))
       ((ok elems)
        (let [(root (tr/makeNode "module" 0 (stringLength text) elems))]
-         (mt (firstErrorOffset elems)
+         (match (firstErrorOffset elems)
            ((some off)
             (err (str "Parse error at offset " (stringFromInt64 off))))
            ((none)
-            (mt (tr/checkTiling root (stringLength text))
+            (match (tr/checkTiling root (stringLength text))
               ((ok _) (ok root))
               ((err msg) (err msg)))))))))
 

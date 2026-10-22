@@ -4,11 +4,11 @@
       (asl/agentLoop/core :a c)])
 
 fn getStr kv: (List (Pair String c/KvVal)) key: String -> String
-  (mt (listHead kv)
+  (match (listHead kv)
     ((none) "")
     ((some p)
       (if (= (pairFirst p) key)
-        (mt (pairSecond p)
+        (match (pairSecond p)
           ((c/kvStr s) s)
           ((c/kvInt i) i))
         (getStr (optionOr (listTail kv) (list)) key))))
@@ -41,7 +41,7 @@ fn headOfForm f: String -> String
     (getStr kv "_head"))
 
 fn runForms! forms: (List String) diffCount: Int64 ratioCount: Int64 -> (Pair Int64 Int64)
-  (mt (listHead forms)
+  (match (listHead forms)
     ((none) (pair diffCount ratioCount))
     ((some f)
       (let [(tl (optionOr (listTail forms) (list)))
@@ -70,10 +70,10 @@ fn opcodeEq a: diff/DiffOpcode b: diff/DiffOpcode -> Bool
                       (= a.j2 b.j2)))))
 
 fn opcodesEq a: (List diff/DiffOpcode) b: (List diff/DiffOpcode) -> Bool
-  (mt (listHead a)
+  (match (listHead a)
     ((none) (listEmpty? b))
     ((some oa)
-      (mt (listHead b)
+      (match (listHead b)
         ((none) false)
         ((some ob)
           (and (opcodeEq oa ob)

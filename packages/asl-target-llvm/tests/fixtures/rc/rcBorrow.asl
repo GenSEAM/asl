@@ -5,8 +5,8 @@
 (schema Cfg (:f scale Int64) (:f name String))
 
 fn walk cfg: Cfg xs: (List Int64) acc: Int64 -> Int64
-  (mt (listHead xs)
-    ((some x) (mt (listTail xs) ((some t) (walk cfg t (+ acc (* x cfg.scale)))) ((none) acc)))
+  (match (listHead xs)
+    ((some x) (match (listTail xs) ((some t) (walk cfg t (+ acc (* x cfg.scale)))) ((none) acc)))
     ((none) acc))
 
 fn ! main args: (List String) -> (Result Int64 String)

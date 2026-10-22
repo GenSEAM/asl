@@ -13,7 +13,7 @@ fn ! node -> String
   (let [(candidates (list "/usr/local/bin/node" "/opt/homebrew/bin/node"))
         (pathDirs (stringSplit (optionOr (envGet "PATH") "") ":"))
         (allCandidates (listAppend candidates (map (fn [(dir String)] -> String (str dir "/node")) pathDirs)))]
-    (mt (listHead (filter fileExists? allCandidates))
+    (match (listHead (filter fileExists? allCandidates))
       ((some p) p)
       ((none) "")))
 
@@ -57,10 +57,10 @@ fn diagText errors: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.code ": " d.message)) errors) "; ")
 
 fn textOf r: (Result String (List irTy/IrDiag)) -> String
-  (mt r ((ok t) t) ((err _) ""))
+  (match r ((ok t) t) ((err _) ""))
 
 fn whyOf r: (Result String (List irTy/IrDiag)) -> String
-  (mt r ((ok _) "ok") ((err ds) (diagText ds)))
+  (match r ((ok _) "ok") ((err ds) (diagText ds)))
 
 fn runnerJs -> String
   (stringJoin
@@ -101,9 +101,9 @@ fn churnLines -> (List String)
     "fn joinAll xs: (List String) acc: String fuel: Int64 -> String"
     "  (if (<= fuel 0)"
     "    (str acc \"~FUEL\")"
-    "    (mt (listHead xs)"
+    "    (match (listHead xs)"
     "      ((none) acc)"
-    "      ((some h) (mt (listTail xs)"
+    "      ((some h) (match (listTail xs)"
     "                  ((none) acc)"
     "                  ((some rest) (joinAll rest (str acc h \",\") (- fuel 1)))))))"
     "")
@@ -183,7 +183,7 @@ fn variantSource -> String
       "fn ! main -> Int64"
       "  (let [(held (some (list (str \"alpha-\" 1) (str \"beta-\" 2) (str \"gamma-\" 3))))"
       "        (spent (churn 150 0))]"
-      "    (do (mt held"
+      "    (do (match held"
       "          ((some xs) (println (joinAll xs \"\" 100)))"
       "          ((none) (println \"none\")))"
       "        0))"))
@@ -218,9 +218,9 @@ fn listLiteralSource -> String
         "fn sum values: (List Int64) fuel: Int64 -> Int64"
         "  (if (<= fuel 0)"
         "    -1"
-        "    (mt (listHead values)"
+        "    (match (listHead values)"
         "      ((none) 0)"
-        "      ((some h) (mt (listTail values)"
+        "      ((some h) (match (listTail values)"
         "        ((none) h)"
         "        ((some rest) (+ h (sum rest (- fuel 1))))))))")))
 
@@ -238,7 +238,7 @@ fn ! phiEmitHasRootStore -> Bool
     (and (ok? text) (phiRootStore? (textOf text))))
 
 fn emitFor facts: libc/TripleFacts tf: target/TargetFacts source: String -> (Result String (List irTy/IrDiag))
-  (mt (low/lowerSource source)
+  (match (low/lowerSource source)
     ((err ds) (err ds))
     ((ok m) (targetLlvm/emitLlvmProgramForTarget facts tf m "main")))
 
@@ -286,14 +286,14 @@ fn ! sharedObjects work: String -> Bool
       true))
 
 fn ! tightRuntime work: String facts: libc/TripleFacts tf: target/TargetFacts -> Bool
-  (mt (targetLlvm/emitLlvmRuntimeForTarget facts tf)
+  (match (targetLlvm/emitLlvmRuntimeForTarget facts tf)
     ((err _) false)
     ((ok text) (writeAndCompile "shared" "runtime-tight" (ok (stringReplace text "8388608" "1")) work)))
 
 fn ! nativeCollectorText -> String
   (let [(triple (gr/hostTriple (sh "uname -s -m").stdout))
         (facts (optionOr (libc/libcFacts triple) (libc/emptyTripleFacts)))]
-    (mt (gr/collectorText facts)
+    (match (gr/collectorText facts)
       ((ok text) text)
       ((err _) "")))
 

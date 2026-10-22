@@ -82,7 +82,7 @@ fn ! aesMixColumns! state: Bytes inverse: Bool -> Unit
 
 fn ! aesEncryptBlock key: Bytes block: Bytes -> (Result Bytes String)
   (if (!= (bytesLength block) 16) (err "invalidBlockLength")
-    (mt (aesExpandKey key)
+    (match (aesExpandKey key)
       ((err e) (err e))
       ((ok keys)
         (let [(rounds (- (/ (bytesLength keys) 16) 1)) (state (bytesAlloc 16))]
@@ -95,7 +95,7 @@ fn ! aesEncryptBlock key: Bytes block: Bytes -> (Result Bytes String)
 
 fn ! aesDecryptBlock key: Bytes block: Bytes -> (Result Bytes String)
   (if (!= (bytesLength block) 16) (err "invalidBlockLength")
-    (mt (aesExpandKey key)
+    (match (aesExpandKey key)
       ((err e) (err e))
       ((ok keys)
         (let [(rounds (- (/ (bytesLength keys) 16) 1)) (state (bytesAlloc 16))]
@@ -109,12 +109,12 @@ fn ! aesDecryptBlock key: Bytes block: Bytes -> (Result Bytes String)
 fn ! aesCbcDecrypt key: Bytes iv: Bytes ciphertext: Bytes -> (Result Bytes String)
   (let [(length (bytesLength ciphertext))]
     (if (or (!= (bytesLength iv) 16) (= length 0) (!= (mod length 16) 0)) (err "invalidCbcInput")
-      (mt (aesExpandKey key)
+      (match (aesExpandKey key)
         ((err e) (err e))
         ((ok _) (let [(plain (bytesAlloc length))
                       (step (fn [(step Any) offset] -> (Result Bytes String)
                         (if (>= offset length) (ok plain)
-                          (mt (aesDecryptBlock key (let [(block (bytesAlloc 16))
+                          (match (aesDecryptBlock key (let [(block (bytesAlloc 16))
                             (copy (fn [(copy Any) i] -> Unit (if (< i 16) (do (bytesSet block i (bytesGet ciphertext (+ offset i))) (copy copy (+ i 1))) ())))]
                             (do (copy copy 0) block)))
                             ((err e) (err e))
@@ -122,7 +122,7 @@ fn ! aesCbcDecrypt key: Bytes iv: Bytes ciphertext: Bytes -> (Result Bytes Strin
                               (copy (fn [(copy Any) i] -> Unit
                                 (if (< i 16) (do (bytesSet plain (+ offset i) (^ (bytesGet dec i) (bytesGet prior (+ (if (= offset 0) 0 (- offset 16)) i)))) (copy copy (+ i 1))) ())))]
                               (do (copy copy 0) (step step (+ offset 16))))))))) ]
-          (mt (step step 0)
+          (match (step step 0)
             ((err e) (err e))
             ((ok padded)
               (let [(padding (bytesGet padded (- length 1)))
@@ -140,7 +140,7 @@ fn ! aesCbcDecrypt key: Bytes iv: Bytes ciphertext: Bytes -> (Result Bytes Strin
 fn ! aesCtrCrypt key: Bytes counterBlock: Bytes input: Bytes -> (Result Bytes String)
   (let [(length (bytesLength input))]
     (if (!= (bytesLength counterBlock) 16) (err "invalidCtrCounter")
-      (mt (aesExpandKey key)
+      (match (aesExpandKey key)
         ((err e) (err e))
         ((ok _) (let [(counter (bytesAlloc 16)) (output (bytesAlloc length))
             (copyCounter (fn [(copyCounter Any) i] -> Unit
@@ -152,7 +152,7 @@ fn ! aesCtrCrypt key: Bytes counterBlock: Bytes input: Bytes -> (Result Bytes St
         (do (copyCounter copyCounter 0)
           (let [(step (fn [(step Any) offset] -> (Result Bytes String)
             (if (>= offset length) (ok output)
-              (mt (aesEncryptBlock key counter)
+              (match (aesEncryptBlock key counter)
                 ((err e) (err e))
                 ((ok stream)
                   (let [(count (if (< (- length offset) 16) (- length offset) 16))
@@ -177,7 +177,7 @@ fn ! aesCbcEncrypt key: Bytes iv: Bytes plaintext: Bytes -> (Result Bytes String
                       (copy (fn [(copy Any) i] -> Unit
                         (if (< i 16)
                           (do (bytesSet block i (^ (bytesGet padded (+ offset i)) (bytesGet prior (+ (if (= offset 0) 0 (- offset 16)) i)))) (copy copy (+ i 1))) ()) ))]
-                  (mt (aesEncryptBlock key (do (copy copy 0) block))
+                  (match (aesEncryptBlock key (do (copy copy 0) block))
                     ((err e) (err e))
                     ((ok encrypted) (let [(write (fn [(write Any) i] -> Unit
                       (if (< i 16) (do (bytesSet output (+ offset i) (bytesGet encrypted i)) (write write (+ i 1))) ())))]
@@ -234,22 +234,22 @@ fn ! aesGcmStart! key: Bytes iv: Bytes -> (Result Bytes String)
       (do (copy copy 0) (bytesSet j0 15 1) (ok j0))))
 
 fn ! aesGcmEncrypt key: Bytes iv: Bytes aad: Bytes plaintext: Bytes -> (Result Bytes String)
-  (mt (aesGcmStart! key iv)
+  (match (aesGcmStart! key iv)
     ((err e) (err e))
     ((ok j0)
       (let [(zero (bytesAlloc 16)) (counter (bytesAlloc 16)) (output (bytesAlloc (+ (bytesLength plaintext) 16)))
             (copy (fn [(copy Any) i] -> Unit
               (if (< i 16) (do (bytesSet counter i (bytesGet j0 i)) (copy copy (+ i 1))) ())))]
-        (mt (aesEncryptBlock key zero)
+        (match (aesEncryptBlock key zero)
           ((err e) (err e))
           ((ok h)
             (do (copy copy 0) (bytesSet counter 15 2)
-              (mt (aesCtrCrypt key counter plaintext)
+              (match (aesCtrCrypt key counter plaintext)
                 ((err e) (err e))
                 ((ok ciphertext)
                   (let [(tagMask (aesEncryptBlock key j0))
                         (tag (aesGhash! aad ciphertext h))]
-                    (mt tagMask
+                    (match tagMask
                       ((err e) (err e))
                       ((ok mask)
                         (let [(copyCipher (fn [(copyCipher Any) i] -> Unit
@@ -261,7 +261,7 @@ fn ! aesGcmEncrypt key: Bytes iv: Bytes aad: Bytes plaintext: Bytes -> (Result B
 fn ! aesGcmDecrypt key: Bytes iv: Bytes aad: Bytes ciphertextAndTag: Bytes -> (Result Bytes String)
   (let [(total (bytesLength ciphertextAndTag))]
     (if (< total 16) (err "authFailed")
-      (mt (aesGcmStart! key iv)
+      (match (aesGcmStart! key iv)
         ((err e) (err e))
         ((ok j0)
           (let [(cipherLength (- total 16)) (ciphertext (bytesAlloc (- total 16))) (tag (bytesAlloc 16))
@@ -270,13 +270,13 @@ fn ! aesGcmDecrypt key: Bytes iv: Bytes aad: Bytes ciphertextAndTag: Bytes -> (R
                 (copyTag (fn [(copyTag Any) i] -> Unit
                   (if (< i 16) (do (bytesSet tag i (bytesGet ciphertextAndTag (+ cipherLength i))) (copyTag copyTag (+ i 1))) ())))
                 (counter (bytesAlloc 16)) (zero (bytesAlloc 16))]
-            (mt (aesEncryptBlock key zero)
+            (match (aesEncryptBlock key zero)
               ((err e) (err e))
               ((ok h)
                 (let [(copyCounter (fn [(copyCounter Any) i] -> Unit
                   (if (< i 16) (do (bytesSet counter i (bytesGet j0 i)) (copyCounter copyCounter (+ i 1))) ())))]
                   (do (copy copy 0) (copyTag copyTag 0) (copyCounter copyCounter 0) (bytesSet counter 15 2)
-                    (mt (aesEncryptBlock key j0)
+                    (match (aesEncryptBlock key j0)
                       ((err e) (err e))
                       ((ok mask)
                         (let [(expected (aesGhash! aad ciphertext h))

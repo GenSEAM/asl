@@ -56,7 +56,7 @@ fn hasNewlineElements elems: (List tr/TreeElement) text: String -> Bool
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (if (= (tr/tokenKind tok) "newline")
            true
@@ -71,7 +71,7 @@ fn findChildNodes elems: (List tr/TreeElement) -> (List tr/Node)
     (list)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemNode n) (cons n (findChildNodes tl)))
         ((tr/elemToken _) (findChildNodes tl)))))
 
@@ -80,7 +80,7 @@ fn findChildTokens elems: (List tr/TreeElement) -> (List tr/Token)
     (list)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemNode _) (findChildTokens tl))
         ((tr/elemToken t) (cons t (findChildTokens tl))))))
 
@@ -89,12 +89,12 @@ fn firstErrorOffset elems: (List tr/TreeElement) -> (Option Int64)
     (none)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken _) (firstErrorOffset tl))
         ((tr/elemNode node)
          (if (tr/isErrorNode node)
            (some (tr/nodeStart node))
-           (mt (firstErrorOffset (tr/nodeChildren node))
+           (match (firstErrorOffset (tr/nodeChildren node))
              ((some off) (some off))
              ((none) (firstErrorOffset tl))))))))
 
@@ -1501,7 +1501,7 @@ fn parseTsImportDecl toks: (List tr/Token) text: String -> tr/ParseResult
          (parseTsImportClauseRest remAfterClose text prefix)))
       (else
        (let [(res (jsm/parseImportDecl rem text))]
-         (mt res
+         (match res
            ((err _)
             (let [(advToks (optionOr (listTail rem) (list)))
                   (errNode (tr/makeErrorNode (tr/tokenStart importTok) (tr/tokenEnd importTok) (list (tr/elemToken importTok))))]
@@ -1751,7 +1751,7 @@ fn parseTsExportDecl toks: (List tr/Token) text: String -> tr/ParseResult
               (tr/ParseResult :node node :rest fnRes.rest)))
            (else
             (let [(res (jsm/parseExportDecl rem text))]
-              (mt res
+              (match res
                 ((err _)
                  (let [(advToks (optionOr (listTail rem) (list)))
                        (errNode (tr/makeErrorNode (tr/tokenStart exportTok) (tr/tokenEnd exportTok) (list (tr/elemToken exportTok))))]
@@ -1759,7 +1759,7 @@ fn parseTsExportDecl toks: (List tr/Token) text: String -> tr/ParseResult
                 ((ok parseRes) parseRes)))))))
       (else
        (let [(res (jsm/parseExportDecl rem text))]
-         (mt res
+         (match res
            ((err _)
             (let [(advToks (optionOr (listTail rem) (list)))
                   (errNode (tr/makeErrorNode (tr/tokenStart exportTok) (tr/tokenEnd exportTok) (list (tr/elemToken exportTok))))]
@@ -1882,15 +1882,15 @@ fn parseModuleItemsLoop toks: (List tr/Token) text: String acc: (List tr/TreeEle
 
 fn parseTsModuleTokens toks: (List tr/Token) text: String -> (Result tr/Node String)
   (let [(loopRes (parseModuleItemsLoop toks text (list)))]
-    (mt loopRes
+    (match loopRes
       ((err msg) (err msg))
       ((ok elems)
        (let [(root (tr/makeNode "module" 0 (stringLength text) elems))]
-         (mt (firstErrorOffset elems)
+         (match (firstErrorOffset elems)
            ((some off)
             (err (str "Parse error at offset " (stringFromInt64 off))))
            ((none)
-            (mt (tr/checkTiling root (stringLength text))
+            (match (tr/checkTiling root (stringLength text))
               ((ok _) (ok root))
               ((err msg) (err msg)))))))))
 

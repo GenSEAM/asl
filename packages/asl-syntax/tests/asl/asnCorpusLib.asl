@@ -21,7 +21,7 @@ fn lexerDivergentAsnReason path: String -> String
 fn checkOneAsnFile! acc: (Pair Int64 Int64) path: String -> (Pair Int64 Int64)
   (let [(checked (pairFirst acc))
         (mismatches (pairSecond acc))]
-    (mt (fileReadString path)
+    (match (fileReadString path)
       ((err e)
        (do
          (assert false (str "read error for " path ": " e))
@@ -38,9 +38,9 @@ fn checkOneAsnFile! acc: (Pair Int64 Int64) path: String -> (Pair Int64 Int64)
              (pair (+ checked 1) mismatches))
          (let [(r1 (asn/asnRead src))
                (r2 (at/asnRead src))]
-           (mt r2
+           (match r2
              ((ok v2)
-              (mt r1
+              (match r1
                 ((ok v1)
                  (let [(s1 (asn/asnWrite v1))
                        (s2 (at/asnWrite v2))]
@@ -51,7 +51,7 @@ fn checkOneAsnFile! acc: (Pair Int64 Int64) path: String -> (Pair Int64 Int64)
                    (assert false (str "asn sweep: " path " asl-syntax rejected but asl-transpile accepted"))
                    (pair (+ checked 1) (+ mismatches 1))))))
              ((err _)
-              (mt r1
+              (match r1
                 ((ok _)
                  (do
                    (assert false (str "asn sweep: " path " asl-syntax accepted but asl-transpile rejected"))

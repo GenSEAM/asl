@@ -23,7 +23,7 @@ fn isActionPermitted? action: ComputerActionRequest -> Bool
   (if action.isDestructive action.confirmedByUser true)
 
 fn formatCdpPayload action: ComputerActionRequest -> Str
-  (mt action.kind ((actionNavigate) (str "{\"id\":1,\"method\":\"Page.navigate\",\"params\":{\"url\":\"" action.payload "\"}}")) ((actionClick) (str "{\"id\":2,\"method\":\"Input.dispatchMouseEvent\",\"params\":{\"type\":\"mousePressed\",\"x\":" (stringFromInt64 action.box.x) ",\"y\":" (stringFromInt64 action.box.y) ",\"button\":\"left\",\"clickCount\":1}}")) ((actionType) (str "{\"id\":3,\"method\":\"Input.insertText\",\"params\":{\"text\":\"" action.payload "\"}}")) ((actionInspect) "{\"id\":4,\"method\":\"Accessibility.getFullAXTree\",\"params\":{}}") ((actionScreenshot) "{\"id\":5,\"method\":\"Page.captureScreenshot\",\"params\":{}}"))
+  (match action.kind ((actionNavigate) (str "{\"id\":1,\"method\":\"Page.navigate\",\"params\":{\"url\":\"" action.payload "\"}}")) ((actionClick) (str "{\"id\":2,\"method\":\"Input.dispatchMouseEvent\",\"params\":{\"type\":\"mousePressed\",\"x\":" (stringFromInt64 action.box.x) ",\"y\":" (stringFromInt64 action.box.y) ",\"button\":\"left\",\"clickCount\":1}}")) ((actionType) (str "{\"id\":3,\"method\":\"Input.insertText\",\"params\":{\"text\":\"" action.payload "\"}}")) ((actionInspect) "{\"id\":4,\"method\":\"Accessibility.getFullAXTree\",\"params\":{}}") ((actionScreenshot) "{\"id\":5,\"method\":\"Page.captureScreenshot\",\"params\":{}}"))
 
 fn formatAccessibilityPayload action: ComputerActionRequest -> Str
   (str "(:ax-call :target \"" action.targetSelector "\" :action \"" action.payload "\" :box (:x " (stringFromInt64 action.box.x) " :y " (stringFromInt64 action.box.y) "))")
@@ -35,7 +35,7 @@ fn routeComputerAction id: Str intent: Str kind: ComputerActionKind selector: St
   (let [(sub (resolveSubstrateByIntent intent))] (ComputerActionRequest :actionId id :substrate sub :kind kind :targetSelector selector :payload payload :box box :isDestructive isDestructive :confirmedByUser false))
 
 fn executeComputerAction action: ComputerActionRequest -> ComputerActionReceipt
-  (if (not (isActionPermitted? action)) (ComputerActionReceipt :actionId action.actionId :exitCode 1 :status "blocked-by-safety" :observation "Destructive operation blocked pending operator confirmation" :durationMs 0) (let [(execRes (mt action.substrate ((substrateBrowser) (formatCdpPayload action)) ((substrateDesktop) (formatAccessibilityPayload action)) ((substrateTerminal) "pty-not-supported")))] (ComputerActionReceipt :actionId action.actionId :exitCode 0 :status "success" :observation (str "Executed action on " action.targetSelector " with res: " execRes) :durationMs 18)))
+  (if (not (isActionPermitted? action)) (ComputerActionReceipt :actionId action.actionId :exitCode 1 :status "blocked-by-safety" :observation "Destructive operation blocked pending operator confirmation" :durationMs 0) (let [(execRes (match action.substrate ((substrateBrowser) (formatCdpPayload action)) ((substrateDesktop) (formatAccessibilityPayload action)) ((substrateTerminal) "pty-not-supported")))] (ComputerActionReceipt :actionId action.actionId :exitCode 0 :status "success" :observation (str "Executed action on " action.targetSelector " with res: " execRes) :durationMs 18)))
 
 fn formatComputerReceiptAsn r: ComputerActionReceipt -> Str
   (str "(:action-receipt :id \"" r.actionId "\" :status \"" r.status "\" :exit " (stringFromInt64 r.exitCode) " :latency-ms " (stringFromInt64 r.durationMs) ")")

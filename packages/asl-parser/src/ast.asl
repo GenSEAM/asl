@@ -1,4 +1,4 @@
-(module asl-parser/ast :x [moduleNode ModuleNode SchemaNode EnumNode DefunNode EnumCase Param AstField TopForm ParseError PosForm KidForm readForms parse parseLegacy parseForTypeCheck retiredProse retiredSpelling retiredSource spellingErrors retiredFormErrors strictSpellingDefault bangedBuiltins parseForChecker renderNode AstLit litInt litFloat litString litBool litUnit AstPattern patWildcard patVar patLit patTuple patRecord patCtor AstMatchArm matchArm makeMatchArm AstExpr exprLit exprIdent exprMember exprCall exprLet exprIf exprMatch exprTry exprBlock exprRecord exprCond exprLambda exprInterpolation AstType typeNamed typeTuple typeRecord typeFn charsWithin? tailExprs sexprItems nthExpr hasTailrec? isInlineBodyCandidate? typeNodeText joinFnHeader readKidForms kidFormsFor findTokenPos findQualifiedTokenPos] :i [(lexer :a lx) (reader :a rd) (indentParser :a ip) (asl-syntax/core/tree :a tr) (fnHeader :a fh)])
+(module asl-parser/ast :x [moduleNode ModuleNode SchemaNode EnumNode DefunNode EnumCase Param AstField TopForm ParseError PosForm KidForm readForms parse parseLegacy parseForTypeCheck retiredProse retiredSpelling retiredSource spellingErrors retiredFormErrors bangedBuiltins parseForChecker renderNode AstLit litInt litFloat litString litBool litUnit AstPattern patWildcard patVar patLit patTuple patRecord patCtor AstMatchArm matchArm makeMatchArm AstExpr exprLit exprIdent exprMember exprCall exprLet exprIf exprMatch exprTry exprBlock exprRecord exprCond exprLambda exprInterpolation AstType typeNamed typeTuple typeRecord typeFn charsWithin? tailExprs sexprItems nthExpr hasTailrec? isInlineBodyCandidate? typeNodeText joinFnHeader readKidForms kidFormsFor findTokenPos findQualifiedTokenPos] :i [(lexer :a lx) (reader :a rd) (indentParser :a ip) (asl-syntax/core/tree :a tr) (fnHeader :a fh)])
 
 (schema ParseError (:f msg String) (:f line Int64) (:f col Int64))
 
@@ -34,10 +34,10 @@ fn matchArm pat: AstPattern body: AstExpr -> AstMatchArm
 fn makeMatchArm pat: AstPattern body: AstExpr -> AstMatchArm
   (AstMatchArm :pat pat :body body)
 fn headSpellings -> (List String)
-  (list "defun" "def" "df" "defschema" "schema" "dfs" "defenum" "enum" "dfe" "match" "mt" ":field" ":f" ":case" ":c")
+  (list "defun" "def" "df" "defschema" "schema" "dfs" "defenum" "enum" "dfe" "match" ":field" ":f" ":case" ":c")
 
 fn headVerboseNames -> (List String)
-  (list "defun" "defun" "defun" "defschema" "defschema" "defschema" "defenum" "defenum" "defenum" "match" "mt" ":field" ":field" ":case" ":case")
+  (list "defun" "defun" "defun" "defschema" "defschema" "defschema" "defenum" "defenum" "defenum" "match" ":field" ":field" ":case" ":case")
 
 fn optionSpellings -> (List String)
   (list ":doc" ":d" ":export" ":x" ":import" ":i" ":as" ":a")
@@ -52,7 +52,7 @@ fn typeVerboseNames -> (List String)
   (list "Int64" "Int64" "Int32" "Float64" "Float64" "Float64" "String" "Bool" "Unit" "Float64")
 
 fn aliasLookup spellings: (List String) verbs: (List String) a: String -> String
-  (mt (listIndexOf spellings a) ((some i) (optionOr (listGet verbs i) a)) ((none) a))
+  (match (listIndexOf spellings a) ((some i) (optionOr (listGet verbs i) a)) ((none) a))
 
 fn headVerbose a: String -> String
   (aliasLookup (headSpellings) (headVerboseNames) a)
@@ -76,7 +76,7 @@ fn kebabIdent? s: String -> Bool
   (let [(core (dropSuffix s))] (and (not (stringEmpty? core)) (and (stringContains? "abcdefghijklmnopqrstuvwxyz" (lx/charAt core 0)) (charsWithin? "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-" core))))
 
 fn fnName? s: String -> Bool
-  (let [(toks (lx/tokenize s))] (and (!= s "->") (and (= (listLength toks) 2) (mt (listHead toks) ((some t) (mt t.kind ((lx/tokSymbol _) true) (_ false))) ((none) false)))))
+  (let [(toks (lx/tokenize s))] (and (!= s "->") (and (= (listLength toks) 2) (match (listHead toks) ((some t) (match t.kind ((lx/tokSymbol _) true) (_ false))) ((none) false)))))
 
 fn pascalName? s: String -> Bool
   (and (not (stringEmpty? s)) (and (stringContains? "ABCDEFGHIJKLMNOPQRSTUVWXYZ" (lx/charAt s 0)) (charsWithin? "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" s)))
@@ -99,22 +99,22 @@ fn tailExprs items: (List rd/SExpr) -> (List rd/SExpr)
   (optionOr (listTail items) (list))
 
 fn sexprItems s: rd/SExpr -> (List rd/SExpr)
-  (mt s ((rd/sexprList items) items) ((rd/sexprVect items) items) ((rd/sexprAtom _) (list)))
+  (match s ((rd/sexprList items) items) ((rd/sexprVect items) items) ((rd/sexprAtom _) (list)))
 
 fn nthExpr items: (List rd/SExpr) i: Int64 -> rd/SExpr
-  (mt (listGet items i) ((some node) node) ((none) (rd/makeAtom "")))
+  (match (listGet items i) ((some node) node) ((none) (rd/makeAtom "")))
 
 fn nthString items: (List rd/SExpr) i: Int64 -> String
   (rd/sexprHead (nthExpr items i))
 
 fn listHeadText items: (List rd/SExpr) -> String
-  (mt (listHead items) ((some h) (rd/sexprHead h)) ((none) ""))
+  (match (listHead items) ((some h) (rd/sexprHead h)) ((none) ""))
 
 fn atomsToStrings xs: (List rd/SExpr) -> (List String)
   (map (fn [(x rd/SExpr)] -> String (rd/sexprHead x)) xs)
 
 fn findOpt items: (List rd/SExpr) key: String -> (Option rd/SExpr)
-  (mt (listHead items) ((some it) (if (and (rd/isAtom? it) (= (rd/sexprHead it) key)) (listHead (tailExprs items)) (findOpt (tailExprs items) key))) ((none) (none)))
+  (match (listHead items) ((some it) (if (and (rd/isAtom? it) (= (rd/sexprHead it) key)) (listHead (tailExprs items)) (findOpt (tailExprs items) key))) ((none) (none)))
 
 (schema OptScan (:f acc (List rd/SExpr)) (:f pendingImport Bool))
 
@@ -122,7 +122,7 @@ fn normImportSpec s: rd/SExpr -> rd/SExpr
   (let [(its (sexprItems s))] (if (and (= (listLength its) 3) (= (optionVerbose (nthString its 1)) ":as")) (rd/makeList (list (nthExpr its 0) (rd/makeAtom ":as") (nthExpr its 2))) s))
 
 fn normImportVect v: rd/SExpr -> rd/SExpr
-  (mt v ((rd/sexprVect specs) (rd/makeVect (map (fn [(s rd/SExpr)] -> rd/SExpr (normImportSpec s)) specs))) ((rd/sexprList _) v) ((rd/sexprAtom _) v))
+  (match v ((rd/sexprVect specs) (rd/makeVect (map (fn [(s rd/SExpr)] -> rd/SExpr (normImportSpec s)) specs))) ((rd/sexprList _) v) ((rd/sexprAtom _) v))
 
 fn normOptionStep st: OptScan x: rd/SExpr -> OptScan
   (if st.pendingImport (OptScan :acc (cons (normImportVect x) st.acc) :pendingImport false) (if (rd/isAtom? x) (let [(v (optionVerbose (rd/sexprHead x)))] (OptScan :acc (cons (rd/makeAtom v) st.acc) :pendingImport (= v ":import"))) (OptScan :acc (cons x st.acc) :pendingImport false)))
@@ -134,7 +134,7 @@ fn takesOptions? head: String -> Bool
   (or (= head "module") (= head "defun"))
 
 fn normalizeForm items: (List rd/SExpr) -> (List rd/SExpr)
-  (mt (listHead items) ((some h) (if (rd/isAtom? h) (let [(v (headVerbose (rd/sexprHead h))) (rest (tailExprs items))] (cons (rd/makeAtom v) (if (takesOptions? v) (normOptions rest) rest))) items)) ((none) items))
+  (match (listHead items) ((some h) (if (rd/isAtom? h) (let [(v (headVerbose (rd/sexprHead h))) (rest (tailExprs items))] (cons (rd/makeAtom v) (if (takesOptions? v) (normOptions rest) rest))) items)) ((none) items))
 
 fn formDefect items: (List rd/SExpr) -> String
   (if (and (= (listHeadText items) "fn") (= (nthString items 1) "{")) "a lambda takes neither type parameters nor :doc" "")
@@ -143,7 +143,7 @@ fn readFail st: ReadState msg: String line: Int64 col: Int64 -> ReadState
   (with st :fail (some (ParseError :msg msg :line line :col col)))
 
 fn emitNode st: ReadState node: rd/SExpr line: Int64 col: Int64 kids: (List (Pair Int64 Int64)) startOff: Int64 endOff: Int64 -> ReadState
-  (mt (listHead st.stack)
+  (match (listHead st.stack)
     ((some f) (with st :stack (cons (Frame :items (cons node f.items) :paren f.paren :line f.line :col f.col :kidPos (cons (pair line col) f.kidPos) :startOffset f.startOffset :headAtom (if (listEmpty? f.items) (some node) f.headAtom)) (frameTail st.stack)) :fail (none)))
     ((none) (with st :stack (list) :out (cons (KidForm :pf (PosForm :expr node :line line :col col) :kids kids :startOffset startOff :endOffset endOff) st.out) :fail (none))))
 
@@ -161,12 +161,12 @@ fn finishFrame st: ReadState f: Frame t: lx/Token -> ReadState
       (readFail st defect t.line t.col)))
 
 fn closeFrame st: ReadState paren: Bool t: lx/Token -> ReadState
-  (mt (listHead st.stack)
+  (match (listHead st.stack)
     ((some f) (if (= f.paren paren) (finishFrame st f t) (readFail st (str "mismatched closing delimiter '" t.rawText "'") t.line t.col)))
     ((none) (readFail st (str "unexpected closing delimiter '" t.rawText "'") t.line t.col)))
 
 fn finishRead st: ReadState -> ReadState
-  (mt (listHead st.stack) ((some f) (readFail st "unclosed delimiter" f.line f.col)) ((none) st))
+  (match (listHead st.stack) ((some f) (readFail st "unclosed delimiter" f.line f.col)) ((none) st))
 
 fn fieldStart? c: String -> Bool
   (and (not (stringEmpty? c)) (stringContains? "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_" c))
@@ -194,21 +194,21 @@ fn postfixToken? raw: String -> Bool
   (and (stringStartsWith? raw ".") (fieldStart? (lx/charAt raw 1)))
 
 fn inModuleForm? stack: (List Frame) -> Bool
-  (mt (listLast stack)
-    ((some f) (mt f.headAtom ((some h) (and (rd/isAtom? h) (= (rd/sexprHead h) "module"))) ((none) false)))
+  (match (listLast stack)
+    ((some f) (match f.headAtom ((some h) (and (rd/isAtom? h) (= (rd/sexprHead h) "module"))) ((none) false)))
     ((none) false))
 
 fn postfixFields st: ReadState t: lx/Token -> ReadState
   (let [(fields (optionOr (listTail (stringSplit t.rawText ".")) (list)))
         (bad (readFail st "ERR_READ_FIELD a postfix field chain is .name(.name)* after ')'" t.line t.col))]
-    (mt (listHead st.stack)
-      ((some f) (mt (listHead f.items)
-        ((some prev) (mt (fieldChain prev fields)
+    (match (listHead st.stack)
+      ((some f) (match (listHead f.items)
+        ((some prev) (match (fieldChain prev fields)
           ((some x) (with st :stack (cons (Frame :items (cons x (optionOr (listTail f.items) (list))) :paren f.paren :line f.line :col f.col :kidPos f.kidPos :startOffset f.startOffset :headAtom (if (listEmpty? (optionOr (listTail f.items) (list))) (some x) f.headAtom)) (frameTail st.stack)) :fail (none)))
           ((none) bad)))
         ((none) bad)))
-      ((none) (mt (listHead st.out)
-        ((some k) (mt (fieldChain k.pf.expr fields)
+      ((none) (match (listHead st.out)
+        ((some k) (match (fieldChain k.pf.expr fields)
           ((some x) (with st :stack (list) :out (cons (KidForm :pf (PosForm :expr x :line k.pf.line :col k.pf.col) :kids k.kids :startOffset k.startOffset :endOffset st.curOffset) (optionOr (listTail st.out) (list))) :fail (none)))
           ((none) bad)))
         ((none) bad)))))
@@ -225,7 +225,7 @@ fn readToken st: ReadState t: lx/Token -> ReadState
         (tokStart st.curOffset)
         (tokEnd (+ tokStart tokLen))
         (advSt (with st :fail (none) :curOffset tokEnd))]
-    (mt t.kind
+    (match t.kind
       ((lx/tokLparen) (pushFrame advSt true t))
       ((lx/tokLbracket) (pushFrame advSt false t))
       ((lx/tokRparen) (closeFrame advSt true t))
@@ -236,11 +236,11 @@ fn readToken st: ReadState t: lx/Token -> ReadState
       (_ (emitNode advSt (rd/makeAtom t.rawText) t.line t.col (list) tokStart tokEnd))))
 
 fn readStep st: ReadState t: lx/Token -> ReadState
-  (mt st.fail ((some _) st) ((none) (readToken st t)))
+  (match st.fail ((some _) st) ((none) (readToken st t)))
 
 fn readKidForms toks: (List lx/Token) -> (Result (List KidForm) ParseError)
   (let [(st (fold readStep (ReadState :stack (list) :out (list) :fail (none) :curOffset 0) toks))]
-    (mt st.fail ((some e) (err e)) ((none) (ok (listReverse st.out)))))
+    (match st.fail ((some e) (err e)) ((none) (ok (listReverse st.out)))))
 
 fn readForms toks: (List lx/Token) -> (Result (List PosForm) ParseError)
   (resultMap (readKidForms toks) (fn [(ks (List KidForm))] -> (List PosForm) (map (fn [(k KidForm)] -> PosForm k.pf) ks)))
@@ -276,14 +276,14 @@ fn boundaryOk? src: String start: Int64 end: Int64 needle: String -> Bool
 
 fn tailrec findNeedleFrom src: String floorOffset: Int64 needle: String -> (Option Int64)
   (if (or (> floorOffset (stringLength src)) (stringEmpty? needle)) (none)
-    (mt (stringIndexOf (optionOr (stringSlice src floorOffset (stringLength src)) "") needle)
+    (match (stringIndexOf (optionOr (stringSlice src floorOffset (stringLength src)) "") needle)
       ((none) (none))
       ((some relIdx)
         (let [(start (+ floorOffset relIdx)) (endOff (+ start (stringLength needle)))]
           (if (boundaryOk? src start endOff needle) (some start) (findNeedleFrom src (+ start 1) needle))))))
 
 fn findTokenPos src: String floorLine: Int64 floorCol: Int64 needle: String -> (Pair Int64 Int64)
-  (mt (findNeedleFrom src (lineColToOffset src floorLine floorCol) needle)
+  (match (findNeedleFrom src (lineColToOffset src floorLine floorCol) needle)
     ((some off) (offsetToLineCol src off))
     ((none) (pair floorLine floorCol)))
 
@@ -294,7 +294,7 @@ fn tailrec qualifierStart src: String idx: Int64 -> Int64
 
 ; (:m :ref CHECKER-R1GAPS :do "a parameter's type annotation is diagnosed at the function's first body statement (the only position resolve.asl's checkModuleRules tracks for it), which is textually AFTER the parameter list the offending type name lives in, so a forward-only search from that floor never finds it; lastNeedleBefore scans the whole prefix up to the floor and keeps the latest match, giving findQualifiedTokenPos a fallback for names that sit before their recorded floor as well as after it")
 fn tailrec lastNeedleBefore src: String needle: String searchFrom: Int64 ceilOffset: Int64 best: (Option Int64) -> (Option Int64)
-  (mt (findNeedleFrom src searchFrom needle)
+  (match (findNeedleFrom src searchFrom needle)
     ((none) best)
     ((some off)
       (if (>= off ceilOffset) best
@@ -302,7 +302,7 @@ fn tailrec lastNeedleBefore src: String needle: String searchFrom: Int64 ceilOff
 
 fn findQualifiedTokenPos src: String floorLine: Int64 floorCol: Int64 needle: String -> (Pair Int64 Int64)
   (let [(floorOff (lineColToOffset src floorLine floorCol))]
-    (mt (mt (findNeedleFrom src floorOff needle) ((some off) (some off)) ((none) (lastNeedleBefore src needle 0 floorOff (none))))
+    (match (match (findNeedleFrom src floorOff needle) ((some off) (some off)) ((none) (lastNeedleBefore src needle 0 floorOff (none))))
       ((none) (pair floorLine floorCol))
       ((some off)
         (let [(extended (if (= (optionOr (stringSlice src (- off 1) off) "") "/") (qualifierStart src (- off 1)) off))]
@@ -344,10 +344,10 @@ fn docHead? head: String idx: Int64 -> Bool
     (else false))
 
 fn closer? t: lx/Token -> Bool
-  (mt t.kind ((lx/tokRparen) true) ((lx/tokRbracket) true) ((lx/tokSymbol _) (= t.rawText "}")) (_ false))
+  (match t.kind ((lx/tokRparen) true) ((lx/tokRbracket) true) ((lx/tokSymbol _) (= t.rawText "}")) (_ false))
 
 fn opener t: lx/Token -> (Option DocFrame)
-  (mt t.kind
+  (match t.kind
     ((lx/tokLparen) (some (DocFrame :head "" :n 0 :prevD false)))
     ((lx/tokLbracket) (some (DocFrame :head "[" :n 1 :prevD false)))
     ((lx/tokSymbol _) (if (= t.rawText "{") (some (DocFrame :head "{" :n 1 :prevD false)) (none)))
@@ -355,12 +355,12 @@ fn opener t: lx/Token -> (Option DocFrame)
 
 fn kidOf f: DocFrame t: lx/Token -> DocFrame
   (with f
-    :head (if (= f.n 0) (mt t.kind ((lx/tokSymbol _) t.rawText) (_ "")) f.head)
+    :head (if (= f.n 0) (match t.kind ((lx/tokSymbol _) t.rawText) (_ "")) f.head)
     :n (+ f.n 1)
-    :prevD (mt t.kind ((lx/tokKeyword _) (or (= t.rawText ":d") (= t.rawText ":doc"))) (_ false)))
+    :prevD (match t.kind ((lx/tokKeyword _) (or (= t.rawText ":d") (= t.rawText ":doc"))) (_ false)))
 
 fn docHit? f: DocFrame t: lx/Token grouped: Bool -> Bool
-  (and (mt t.kind ((lx/tokString _) true) (_ false))
+  (and (match t.kind ((lx/tokString _) true) (_ false))
     (and f.prevD (if grouped (= f.head "fn") (docHead? f.head (- f.n 1)))))
 
 fn docKid st: DocScan t: lx/Token -> DocScan
@@ -370,7 +370,7 @@ fn docKid st: DocScan t: lx/Token -> DocScan
         (updated (kidOf parent t))
         (rest (optionOr (listTail st.stack) (list)))
         (placed (if grouped (with st :group updated :hit hit) (with st :stack (cons updated rest) :hit hit)))]
-    (mt (opener t)
+    (match (opener t)
       ((some f) (DocScan :stack (cons f placed.stack) :group placed.group :hit placed.hit))
       ((none) placed)))
 
@@ -378,7 +378,7 @@ fn docStep st: DocScan t: lx/Token -> DocScan
   (cond
     ((some? st.hit) st)
     ((closer? t) (with st :stack (optionOr (listTail st.stack) (list))))
-    ((mt t.kind ((lx/tokEof) true) (_ false)) st)
+    ((match t.kind ((lx/tokEof) true) (_ false)) st)
     ((and (listEmpty? st.stack) (= t.col 1)) (docKid (with st :group (DocFrame :head "" :n 0 :prevD false)) t))
     (else (docKid st t)))
 
@@ -406,10 +406,10 @@ fn isBareLiteralAtom text: String -> Bool
               (and (= (lx/charAt text 0) "-") (lx/isDigit (lx/charAt text 1))))))
 
 fn findBareLiteralTopExpr forms: (List TopForm) -> (Option PosForm)
-  (mt (listHead forms)
+  (match (listHead forms)
     ((none) (none))
     ((some f)
-      (mt f
+      (match f
         ((topExpr pf)
          (if (and (rd/isAtom? pf.expr) (isBareLiteralAtom (rd/sexprHead pf.expr)))
            (some pf)
@@ -417,34 +417,25 @@ fn findBareLiteralTopExpr forms: (List TopForm) -> (Option PosForm)
         (_ (findBareLiteralTopExpr (optionOr (listTail forms) (list)))))))
 
 fn rejectBareLiteralTopExpr forms: (List TopForm) -> (Result (List TopForm) ParseError)
-  (mt (findBareLiteralTopExpr forms)
+  (match (findBareLiteralTopExpr forms)
     ((some pf) (err (perr (str "ERR_READ_BARE_TOPLEVEL a bare literal '" (rd/sexprHead pf.expr) "' is not a top-level form; move it into a declaration or the package's doc.asn") pf)))
     ((none) (ok forms)))
 
 fn retiredProse src: String -> (Option ParseError)
   (let [(bs (stringToBytes src)) (n (bytesLength bs))]
-    (mt (freeCommentAt bs n 0)
+    (match (freeCommentAt bs n 0)
       ((some at) (some (ParseError :msg "ERR_READ_COMMENT free ; comments and (:m :why ...) are retired: move the text to the package doc.asn (asl doc); a comment is one ; (:m ...) meta form" :line (lineOfByte bs at) :col 1)))
       ((none)
         (if (not (docKeywordAt? bs n 0))
           (none)
-          (mt (fold docStep (DocScan :stack (list) :group (DocFrame :head "" :n 0 :prevD false) :hit (none)) (lx/tokenize src)).hit
+          (match (fold docStep (DocScan :stack (list) :group (DocFrame :head "" :n 0 :prevD false) :hit (none)) (lx/tokenize src)).hit
             ((some t) (some (ParseError :msg "ERR_READ_DOC :d docstrings are retired: move the text to the package doc.asn (asl doc)" :line t.line :col t.col)))
             ((none) (none)))))))
 
-(schema SpellScan (:f before String) (:f prev String) (:f opens (List String)) (:f phase Int64) (:f strict Bool) (:f fnAt (Option lx/Token)) (:f mods (List String)) (:f errs (List ParseError)) (:f defs (List String)) (:f calls (List lx/Token)))
+(schema SpellScan (:f before String) (:f prev String) (:f opens (List String)) (:f errs (List ParseError)))
 
 fn bangedBuiltins -> (List String)
   (list "bytesFromBase64" "bytesSet" "bytesSetFloat64" "bytesSha256" "cpuCount" "dirCreate" "dirList" "envGet" "envList" "eprintln" "execCmd" "fdClose" "fdNonBlocking" "fdPoll" "fdRead" "fdWrite" "file-append" "fileAppend" "fileChmod" "fileCreateExclusive" "fileExists?" "fileFsync" "fileLock" "fileLockAt" "fileLockWait" "fileLstat" "fileReadAt" "fileReadBytes" "fileReadlink" "fileReadRange" "fileReadString" "fileSize" "fileStat" "fileUtime" "fileWrite" "fileWriteAt" "getHomeDir" "localDate" "monotonicNs" "nowNs" "parquetOpen" "parquetReadF64" "parquetReadI64" "parquetReadI8" "pathRemove" "pathRename" "pathSymlink" "platformInfo" "preludeB64Dec" "print" "println" "procAlive?" "processRun" "processSpawn" "processWait" "procExecv" "procExePath" "procKill" "procPoll" "procRusage" "procSelf" "procSpawnv" "procWaitAny" "procWaitPid" "read-all" "read-line" "realPath" "sleepMs" "sockAccept" "sockLocalPort" "sockRecvFd" "sockSendFd" "tcpConnect" "tcpListen" "unixConnect" "unixListen" "unixSocketPair" "zstdAslBackwardInit" "zstdAslBackwardRead" "zstdAslBlocks" "zstdAslCountBlockDone" "zstdAslCountBlocks" "zstdAslDecompress" "zstdAslFillFseNorms" "zstdAslFinishFrame" "zstdAslForwardBits" "zstdAslForwardBitsLoop" "zstdAslFseBuildCell" "zstdAslFseBuildNorms" "zstdAslFseCountFinish" "zstdAslFseCounts" "zstdAslFseDecodeStep" "zstdAslFseInit" "zstdAslFseRead" "zstdAslFseSpread" "zstdAslFseSpreadOne" "zstdAslFseSpreadSkip" "zstdAslFseWeightLoop" "zstdAslFseZeroRun" "zstdAslHufBuild" "zstdAslHufCached" "zstdAslHufCheckWeights" "zstdAslHufCountWeights" "zstdAslHufDirectWeights" "zstdAslHufFill" "zstdAslHufFour" "zstdAslHufFseWeights" "zstdAslHufLiterals" "zstdAslHufOne" "zstdAslHufRead" "zstdAslHufSet16" "zstdAslHufSpread" "zstdAslHufStarts" "zstdAslHufStream" "zstdAslLiteralBlock" "zstdAslNormInit" "zstdAslNormSet" "zstdAslNormZeroRun" "zstdAslRepGet" "zstdAslRepSet" "zstdAslSeqLoad" "zstdAslSeqSave" "zstdAslSeqStateCopy" "zstdAslSeqTable" "zstdAslSequenceAdvance" "zstdAslSequenceCopy" "zstdAslSequenceMatch" "zstdAslSequenceRun" "zstdAslSequences" "zstdAslSequencesTables" "zstdAslSetRaw" "zstdAslSetRle" "zstdDecompress")
-
-fn bangedBuiltinMessage x: String -> String
-  (str "ERR_READ_SPELLING (" x " ...) is retired: an effectful builtin carries !, write (" x "! ...)")
-
-fn strictSpellingDefault -> Bool
-  false
-
-fn spellingEntry? name: String -> Bool
-  (or (= name "main") (= name "runTests"))
 
 fn spellingOpen? x: String -> Bool
   (or (= x "(") (or (= x "[") (= x "{")))
@@ -465,88 +456,69 @@ fn retiredHeadMessage x: String -> String
     ((= x "not=") "ERR_READ_SPELLING (not= a b) is retired: write (!= a b)")
     (else ""))
 
-fn fnMarkMessage name: String -> String
-  (str "ERR_READ_SPELLING fn ! " name " is retired: write fn " (if (or (spellingEntry? name) (stringEndsWith? name "!")) name (str name "!")))
-
 fn spellingErr msg: String t: lx/Token -> ParseError
   (ParseError :msg msg :line t.line :col t.col)
 
-fn spellingFnStep st: SpellScan t: lx/Token -> SpellScan
-  (match st.fnAt
-    ((none) st)
-    ((some f)
-      (cond
-        ((listContains? (list "!" "tailrec" ":tailrec") t.rawText) (with st :mods (cons t.rawText st.mods)))
-        ((and (listContains? st.mods "!") (spellingSymbol? t)) (with st :fnAt (none) :mods (list) :defs (cons t.rawText st.defs) :errs (cons (spellingErr (fnMarkMessage t.rawText) f) st.errs)))
-        ((spellingSymbol? t) (with st :fnAt (none) :mods (list) :defs (cons t.rawText st.defs)))
-        (else (with st :fnAt (none) :mods (list))))))
-
+; (:m :ref SYN-ARMS-DECISION-20261016 :do "fn ! name stays (E9) and builtins stay bare (E10, reverses EFFECT-BUILTINS-BANG): neither is a retired form any more, so spellingStep only flags the three still-genuine retired heads (mt/==/not=); the earlier fn-header mark check (fnMarkMessage) and bare-builtin-call check (bangedBuiltinMessage/scanErrors' bang arm) are dropped from this scanner, not just from retiredFormErrors (AGENTSURFACE-BANG-STALE already dropped the bang arm there)")
 fn spellingStep st: SpellScan t: lx/Token -> SpellScan
   (let [(x t.rawText)
         (afterOpen (= st.prev "("))
         (head (and afterOpen (and (spellingSymbol? t) (not (bindingPairAt? st.opens st.before)))))
         (opens (cond ((spellingOpen? x) (cons (str x " " st.prev) st.opens)) ((spellingClose? x) (optionOr (listTail st.opens) (list))) (else st.opens)))
-        (phase (cond ((and (= st.phase 0) (= x "module")) 1) ((and (= st.phase 1) (listEmpty? opens)) 2) ((and (= st.phase 0) (and (not (= x "(")) (not (= x "module")))) 2) (else st.phase)))
-        (strict (or st.strict (and (= st.phase 1) (and (= st.prev ":spelling") (= x "strict")))))
-        (fnState (spellingFnStep st t))
         (headMsg (if head (retiredHeadMessage x) ""))
-        (startsFn (and (= x "fn") (and (spellingSymbol? t) (or afterOpen (= t.col 1)))))
-        (errs (if (stringEmpty? headMsg) fnState.errs (cons (spellingErr headMsg t) fnState.errs)))
-        (calls (if (and head (listContains? (bangedBuiltins) x)) (cons t fnState.calls) fnState.calls))]
-    (with st :before st.prev :prev x :opens opens :phase phase :strict strict :fnAt (if startsFn (some t) fnState.fnAt) :mods (if startsFn (list) fnState.mods) :errs errs :defs fnState.defs :calls calls))
+        (errs (if (stringEmpty? headMsg) st.errs (cons (spellingErr headMsg t) st.errs)))]
+    (with st :before st.prev :prev x :opens opens :errs errs))
 
 fn spellingScan src: String -> SpellScan
-  (fold spellingStep (SpellScan :before "" :prev "" :opens (list) :phase 0 :strict false :fnAt (none) :mods (list) :errs (list) :defs (list) :calls (list)) (lx/tokenize src))
+  (fold spellingStep (SpellScan :before "" :prev "" :opens (list) :errs (list)) (lx/tokenize src))
 
 fn scanErrors st: SpellScan -> (List ParseError)
-  (let [(own (filter (fn [(t lx/Token)] -> Bool (not (listContains? st.defs t.rawText))) st.calls))
-        (bang (map (fn [(t lx/Token)] -> ParseError (spellingErr (bangedBuiltinMessage t.rawText) t)) own))]
-    (listSortBy (fn [(e ParseError)] -> Int64 (+ (* e.line 100000) e.col)) (listAppend (listReverse st.errs) bang)))
+  (listSortBy (fn [(e ParseError)] -> Int64 (+ (* e.line 100000) e.col)) (listReverse st.errs))
 
 fn spellingErrors src: String -> (List ParseError)
   (scanErrors (spellingScan src))
 
-; (:m :ref AGENTSURFACE-BANG-STALE :do "scanErrors' bang arm flags every bare call to a tools/codemod/builtinBang.asn effectful builtin as retired, which was correct under the 2026-10-15 builtinBang decision but is now stale: EFFECT-INFER (principles.asn InferWhatCanBeInferred, adopted 88729ed98) makes the bang optional and the bare spelling current. retiredFormErrors keeps the two still-genuine retired forms (mt/==/not=, fn ! name) and drops the bang arm, for a caller that counts retired debt rather than enforcing the opt-in :spelling strict codemod target; spellingErrors/bangedBuiltins are untouched so strictSpellingTest and the codemod keep their own, still-valid behavior")
 fn retiredFormErrors src: String -> (List ParseError)
   (listReverse (spellingScan src).errs)
 
+fn mayHoldRetiredHead? src: String -> Bool
+  (or (stringContains? src "mt") (or (stringContains? src "==") (stringContains? src "not=")))
+
 fn retiredSpelling src: String -> (Option ParseError)
-  (if (not (or (strictSpellingDefault) (stringContains? src ":spelling strict"))) (none)
-    (let [(st (spellingScan src))]
-      (if (or (strictSpellingDefault) st.strict) (listHead (scanErrors st)) (none))))
+  (if (mayHoldRetiredHead? src) (listHead (scanErrors (spellingScan src))) (none))
 
 fn retiredSource src: String -> (Option ParseError)
   (match (retiredProse src) ((some e) (some e)) ((none) (retiredSpelling src)))
 
 fn parse src: String -> (Result (List TopForm) ParseError)
-  (mt (retiredSource src)
+  (match (retiredSource src)
     ((some e) (err e))
-    ((none) (mt (parseLegacy src)
+    ((none) (match (parseLegacy src)
       ((err e) (err e))
       ((ok forms) (rejectBareLiteralTopExpr forms)))))
 
 fn parseForTypeCheck src: String -> (Result (List TopForm) ParseError)
-  (mt (retiredSource src)
+  (match (retiredSource src)
     ((some e) (err e))
-    ((none) (mt (parseForChecker src)
+    ((none) (match (parseForChecker src)
       ((err e) (err e))
       ((ok forms) (rejectBareLiteralTopExpr (desugarWith forms))))))
 
 fn parseLegacy src: String -> (Result (List TopForm) ParseError)
-  (mt (parseForChecker src)
+  (match (parseForChecker src)
     ((ok forms) (ok (desugarWith (map displayUntypedParams forms))))
     ((err pe) (err pe)))
 
 (schema WithCtx (:f schemas (Map String (List String))) (:f fieldTypes (Map String (Map String String))) (:f rets (Map String String)))
 
 fn localSchemas forms: (List TopForm) -> (Map String (List String))
-  (fold (fn [m f] (mt f ((topSchema n) (mapSet m n.name (map (fn [x] x.name) n.fields))) (_ m))) (mapEmpty) forms)
+  (fold (fn [m f] (match f ((topSchema n) (mapSet m n.name (map (fn [x] x.name) n.fields))) (_ m))) (mapEmpty) forms)
 
 fn localFieldTypes forms: (List TopForm) -> (Map String (Map String String))
-  (fold (fn [m f] (mt f ((topSchema n) (mapSet m n.name (fold (fn [acc x] (mapSet acc x.name x.type)) (mapEmpty) n.fields))) (_ m))) (mapEmpty) forms)
+  (fold (fn [m f] (match f ((topSchema n) (mapSet m n.name (fold (fn [acc x] (mapSet acc x.name x.type)) (mapEmpty) n.fields))) (_ m))) (mapEmpty) forms)
 
 fn localRets forms: (List TopForm) -> (Map String String)
-  (fold (fn [m f] (mt f ((topDefun d) (mapSet m d.name d.retType)) (_ m))) (mapEmpty) forms)
+  (fold (fn [m f] (match f ((topDefun d) (mapSet m d.name d.retType)) (_ m))) (mapEmpty) forms)
 
 fn withCtxOf forms: (List TopForm) -> WithCtx
   (WithCtx :schemas (localSchemas forms) :fieldTypes (localFieldTypes forms) :rets (localRets forms))
@@ -558,7 +530,7 @@ fn schemaOr wc: WithCtx t: String -> String
   (if (mapHas? wc.schemas t) t "")
 
 fn exprType wc: WithCtx types: (Map String String) e: rd/SExpr -> String
-  (mt e
+  (match e
     ((rd/sexprAtom v) (schemaOr wc (optionOr (mapGet types v) "")))
     ((rd/sexprList items)
       (let [(h (rd/sexprHead e))]
@@ -575,16 +547,16 @@ fn exprType wc: WithCtx types: (Map String String) e: rd/SExpr -> String
     (_ ""))
 
 fn withPairs items: (List rd/SExpr) acc: (Map String rd/SExpr) -> (Option (Map String rd/SExpr))
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (some acc))
-    ((some k) (mt (listGet items 1)
+    ((some k) (match (listGet items 1)
       ((some v) (if (and (rd/isAtom? k) (stringStartsWith? (rd/sexprHead k) ":"))
                   (withPairs (optionOr (listTail (optionOr (listTail items) (list))) (list)) (mapSet acc (optionOr (stringSlice (rd/sexprHead k) 1 (stringLength (rd/sexprHead k))) "") v))
                   (none)))
       ((none) (none)))))
 
 fn atomsOf e: rd/SExpr -> (List String)
-  (mt e
+  (match e
     ((rd/sexprAtom v) (list v))
     ((rd/sexprList items) (fold (fn [acc k] (listAppend acc (atomsOf k))) (list) items))
     ((rd/sexprVect items) (fold (fn [acc k] (listAppend acc (atomsOf k))) (list) items)))
@@ -599,9 +571,9 @@ fn withRecord ty: String fields: (List String) repl: (Map String rd/SExpr) src: 
 fn withExpand wc: WithCtx types: (Map String String) items: (List rd/SExpr) -> (Option rd/SExpr)
   (let [(x (itemAt items 1))
         (ty (exprType wc types x))]
-    (mt (mapGet wc.schemas ty)
+    (match (mapGet wc.schemas ty)
       ((none) (none))
-      ((some fields) (mt (withPairs (optionOr (listTail (optionOr (listTail items) (list))) (list)) (mapEmpty))
+      ((some fields) (match (withPairs (optionOr (listTail (optionOr (listTail items) (list))) (list)) (mapEmpty))
         ((none) (none))
         ((some repl)
           (cond
@@ -648,7 +620,7 @@ fn bindingItems vec: rd/SExpr -> (Option (List rd/SExpr))
 
 fn withLet wc: WithCtx types: (Map String String) items: (List rd/SExpr) -> rd/SExpr
   (let [(vec (itemAt items 1))]
-    (mt (bindingItems vec)
+    (match (bindingItems vec)
       ((none) (rd/makeList (map (fn [k] (withExpr wc types k)) items)))
       ((some bs)
         (let [(flat (and (not (listEmpty? bs)) (rd/isAtom? (itemAt bs 0))))
@@ -659,19 +631,19 @@ fn withLet wc: WithCtx types: (Map String String) items: (List rd/SExpr) -> rd/S
           (rd/makeList (cons (itemAt items 0) (cons newVec body)))))))
 
 fn withArm wc: WithCtx types: (Map String String) arm: rd/SExpr -> rd/SExpr
-  (mt arm
+  (match arm
     ((rd/sexprList parts)
       (let [(inner (unbind (atomsOf (itemAt parts 0)) types))]
         (rd/makeList (cons (itemAt parts 0) (map (fn [k] (withExpr wc inner k)) (optionOr (listTail parts) (list)))))))
     (_ (withExpr wc types arm)))
 
 fn withExpr wc: WithCtx types: (Map String String) e: rd/SExpr -> rd/SExpr
-  (mt e
+  (match e
     ((rd/sexprList items)
       (let [(h (rd/sexprHead e))]
         (cond
           ((= h "let") (withLet wc types items))
-          ((or (= h "mt") (= h "match"))
+          ((= h "match")
             (rd/makeList (cons (itemAt items 0) (cons (withExpr wc types (itemAt items 1)) (map (fn [a] (withArm wc types a)) (optionOr (listTail (optionOr (listTail items) (list))) (list)))))))
           ((or (= h "fn") (= h "lambda"))
             (let [(inner (unbind (atomsOf (itemAt items 1)) types))]
@@ -686,7 +658,7 @@ fn desugarWith forms: (List TopForm) -> (List TopForm)
   (desugarWithIn (withCtxOf forms) forms)
 
 fn desugarWithIn wc: WithCtx forms: (List TopForm) -> (List TopForm)
-  (map (fn [f] (mt f
+  (map (fn [f] (match f
                  ((topDefun d)
                    (let [(types (fold (fn [m p] (mapSet m p.name p.type)) (mapEmpty) d.params))]
                      (topDefun (DefunNode :name d.name :typeVars d.typeVars :isExported d.isExported :effect d.effect :params d.params :retType d.retType :docstring d.docstring
@@ -703,7 +675,7 @@ fn displayUntypedParam p: Param -> Param
   (with p :type (if (stringEmpty? p.type) "Any" p.type))
 
 fn displayUntypedParams form: TopForm -> TopForm
-  (mt form
+  (match form
     ((topModule m)
      (topModule (ModuleNode :path m.path :docstring m.docstring :exported m.exported :imports m.imports :defs (map displayUntypedParams m.defs))))
     ((topDefun d)
@@ -714,13 +686,13 @@ fn moduleForm? pf: PosForm -> Bool
   (and (rd/isList? pf.expr) (= (rd/sexprHead pf.expr) "module"))
 
 fn secondForm forms: (List PosForm) -> (Option PosForm)
-  (mt (listTail forms) ((some r) (listHead r)) ((none) (none)))
+  (match (listTail forms) ((some r) (listHead r)) ((none) (none)))
 
 fn checkModPath m: PosForm -> (Result String ParseError)
   (let [(p (nthString (sexprItems m.expr) 1))] (if (modPath? p) (ok p) (err (perr "module header needs a path" m))))
 
 fn modulePath mods: (List PosForm) -> (Result String ParseError)
-  (mt (secondForm mods) ((some extra) (err (perr "a second module header" extra))) ((none) (mt (listHead mods) ((some m) (checkModPath m)) ((none) (ok "")))))
+  (match (secondForm mods) ((some extra) (err (perr "a second module header" extra))) ((none) (match (listHead mods) ((some m) (checkModPath m)) ((none) (ok "")))))
 
 fn isModulePosForm? p: PosForm -> Bool
   (moduleForm? p)
@@ -729,13 +701,13 @@ fn isNotModulePosForm? p: PosForm -> Bool
   (not (moduleForm? p))
 
 fn modsExported mods: (List PosForm) -> (List String)
-  (mt (listHead mods) ((some m) (moduleExported m.expr)) ((none) (list)))
+  (match (listHead mods) ((some m) (moduleExported m.expr)) ((none) (list)))
 
 fn buildModuleDecls mods: (List PosForm) rest: (List KidForm) path: String -> (Result (List TopForm) ParseError)
-  (let [(exported (modsExported mods))] (mt (declForms rest exported) ((err e) (err e)) ((ok decls) (mt (listHead mods) ((some m) (ok (cons (topModule (moduleNode m.expr path decls)) decls))) ((none) (ok decls))))))
+  (let [(exported (modsExported mods))] (match (declForms rest exported) ((err e) (err e)) ((ok decls) (match (listHead mods) ((some m) (ok (cons (topModule (moduleNode m.expr path decls)) decls))) ((none) (ok decls))))))
 
 fn buildModule forms: (List KidForm) -> (Result (List TopForm) ParseError)
-  (let [(mods (filter isModulePosForm? (map (fn [(k KidForm)] -> PosForm k.pf) forms))) (rest (filter (fn [(k KidForm)] -> Bool (isNotModulePosForm? k.pf)) forms))] (mt (modulePath mods) ((err e) (err e)) ((ok path) (buildModuleDecls mods rest path))))
+  (let [(mods (filter isModulePosForm? (map (fn [(k KidForm)] -> PosForm k.pf) forms))) (rest (filter (fn [(k KidForm)] -> Bool (isNotModulePosForm? k.pf)) forms))] (match (modulePath mods) ((err e) (err e)) ((ok path) (buildModuleDecls mods rest path))))
 
 (schema LineCol (:f line Int64) (:f col Int64))
 
@@ -876,7 +848,7 @@ fn wrapFields inner: String fields: (List String) -> String
 
 fn postfixToPrefix text: String -> String
   (let [(bs (stringToBytes text)) (n (bytesLength bs))]
-    (mt (firstPostfix bs n 0 (list))
+    (match (firstPostfix bs n 0 (list))
       ((none) text)
       ((some at)
         (let [(open (pairFirst at)) (dot (pairFirst (pairSecond at))) (end (pairSecond (pairSecond at)))
@@ -910,7 +882,7 @@ fn lowerTopNodeToKid text: String node: tr/Node startPos: LineCol -> (Result Kid
         (formBs (stringToBytes formText))
         (cleanText (postfixToPrefix (joinFnHeader (if (formHasMultilineString? formBs) (escapeFormStringNewlines formText) formText))))
         (old (oldFieldAt formBs (bytesLength formBs) 0))]
-    (mt (mt old ((some at) (err (oldFieldError formText formBs at))) ((none) (ip/parseIndentedFormsPos cleanText)))
+    (match (match old ((some at) (err (oldFieldError formText formBs at))) ((none) (ip/parseIndentedFormsPos cleanText)))
       ((err e)
        (let [(eLine e.line)
              (eCol e.col)
@@ -918,7 +890,7 @@ fn lowerTopNodeToKid text: String node: tr/Node startPos: LineCol -> (Result Kid
              (adjCol (if (= eLine 1) (+ col (- eCol 1)) eCol))]
          (err (ParseError :msg e.msg :line adjLine :col adjCol))))
       ((ok forms)
-       (mt (listHead forms)
+       (match (listHead forms)
          ((none) (err (ParseError :msg "no form produced" :line line :col col)))
          ((some f)
           (let [(adjKids (map (fn [(k (Pair Int64 Int64))] -> (Pair Int64 Int64) (adjustKidPos line col k)) f.kids))]
@@ -929,14 +901,14 @@ fn lowerTopNodeToKid text: String node: tr/Node startPos: LineCol -> (Result Kid
                   :endOffset end))))))))
 
 fn lowerTopNodesLoop text: String bs: Bytes elements: (List tr/TreeElement) at: Int64 pos: LineCol acc: (List KidForm) -> (Result (List KidForm) ParseError)
-  (mt (listHead elements)
+  (match (listHead elements)
     ((none) (ok (listReverse acc)))
     ((some head)
      (let [(tail (optionOr (listTail elements) (list)))]
-       (mt head
+       (match head
          ((tr/elemNode node)
           (let [(startPos (offsetPosLoop bs node.start at pos.line pos.col))]
-            (mt (lowerTopNodeToKid text node startPos)
+            (match (lowerTopNodeToKid text node startPos)
               ((ok kid) (lowerTopNodesLoop text bs tail node.start startPos (cons kid acc)))
               ((err e) (err e)))))
          ((tr/elemToken _)
@@ -1044,7 +1016,7 @@ fn parseCstKidForms text: String -> (Result (List KidForm) ParseError)
     (lowerTopNodesLoop text bs elems 0 (LineCol :line 1 :col 1) (list)))
 
 fn parseIndentedToModule src: String -> (Result (List TopForm) ParseError)
-  (mt (parseCstKidForms src)
+  (match (parseCstKidForms src)
     ((ok forms) (buildModule forms))
     ((err e) (err e)))
 
@@ -1059,7 +1031,7 @@ fn isIndentedSource? src: String -> Bool
       (stringStartsWith? src "enum "))))))))
 
 fn parseParenModule src: String -> (Result (List TopForm) ParseError)
-  (mt (readKidForms (lx/tokenize src)) ((ok forms) (buildModule forms)) ((err e) (err e)))
+  (match (readKidForms (lx/tokenize src)) ((ok forms) (buildModule forms)) ((err e) (err e)))
 
 fn depthLimit -> Int64
   1000
@@ -1096,55 +1068,55 @@ fn depthError src: String -> (Option ParseError)
     (depthScan bs (bytesLength bs) 0 0 0 1 1))
 
 fn parseWithFallback src: String -> (Result (List TopForm) ParseError)
-  (mt (depthError src)
+  (match (depthError src)
     ((some e) (err e))
     ((none) (parseWithFallbackChecked src)))
 
 fn parseWithFallbackChecked src: String -> (Result (List TopForm) ParseError)
   (if (isIndentedSource? src)
-    (mt (parseIndentedToModule src)
+    (match (parseIndentedToModule src)
       ((ok res) (ok res))
-      ((err ie) (mt (parseParenModule src) ((ok res) (ok res)) ((err _) (err ie)))))
-    (mt (parseParenModule src)
+      ((err ie) (match (parseParenModule src) ((ok res) (ok res)) ((err _) (err ie)))))
+    (match (parseParenModule src)
       ((ok res) (ok res))
       ((err pe)
        (if (stringStartsWith? (stringTrim src) "(module")
          (err pe)
-         (mt (parseIndentedToModule src) ((ok res) (ok res)) ((err _) (err pe)))))))
+         (match (parseIndentedToModule src) ((ok res) (ok res)) ((err _) (err pe)))))))
 
 fn kidFormsFor src: String -> (Result (List KidForm) ParseError)
-  (mt (depthError src)
+  (match (depthError src)
     ((some e) (err e))
     ((none) (kidFormsForChecked src)))
 
 fn kidFormsForChecked src: String -> (Result (List KidForm) ParseError)
   (if (isIndentedSource? src)
-    (mt (parseCstKidForms src)
+    (match (parseCstKidForms src)
       ((ok ks) (ok ks))
-      ((err ie) (mt (readKidForms (lx/tokenize src)) ((ok ks) (ok ks)) ((err _) (err ie)))))
-    (mt (readKidForms (lx/tokenize src))
+      ((err ie) (match (readKidForms (lx/tokenize src)) ((ok ks) (ok ks)) ((err _) (err ie)))))
+    (match (readKidForms (lx/tokenize src))
       ((ok ks) (ok ks))
       ((err pe)
        (if (stringStartsWith? (stringTrim src) "(module")
          (err pe)
-         (mt (parseCstKidForms src) ((ok ks) (ok ks)) ((err _) (err pe)))))))
+         (match (parseCstKidForms src) ((ok ks) (ok ks)) ((err _) (err pe)))))))
 
 fn exportNamesOf v: rd/SExpr -> (List String)
-  (mt v
+  (match v
     ((rd/sexprList items) (atomsToStrings (if (= (listHeadText items) "list") (optionOr (listTail items) (list)) items)))
     (_ (atomsToStrings (sexprItems v))))
 
 fn moduleExported m: rd/SExpr -> (List String)
-  (mt (findOpt (sexprItems m) ":export") ((some v) (exportNamesOf v)) ((none) (mt (findOpt (sexprItems m) ":x") ((some v) (exportNamesOf v)) ((none) (list)))))
+  (match (findOpt (sexprItems m) ":export") ((some v) (exportNamesOf v)) ((none) (match (findOpt (sexprItems m) ":x") ((some v) (exportNamesOf v)) ((none) (list)))))
 
 fn moduleImports m: rd/SExpr -> (List (Pair String String))
-  (mt (findOpt (sexprItems m) ":import") ((some v) (map importPair (filter rd/isList? (sexprItems v)))) ((none) (mt (findOpt (sexprItems m) ":i") ((some v) (map importPair (filter rd/isList? (sexprItems v)))) ((none) (list)))))
+  (match (findOpt (sexprItems m) ":import") ((some v) (map importPair (filter rd/isList? (sexprItems v)))) ((none) (match (findOpt (sexprItems m) ":i") ((some v) (map importPair (filter rd/isList? (sexprItems v)))) ((none) (list)))))
 
 fn importPair t: rd/SExpr -> (Pair String String)
   (let [(items (sexprItems t))] (pair (nthString items 0) (nthString items 2)))
 
 fn moduleDocstring m: rd/SExpr -> String
-  (mt (findOpt (sexprItems m) ":doc") ((some v) (rd/sexprHead v)) ((none) (mt (findOpt (sexprItems m) ":d") ((some v) (rd/sexprHead v)) ((none) ""))))
+  (match (findOpt (sexprItems m) ":doc") ((some v) (rd/sexprHead v)) ((none) (match (findOpt (sexprItems m) ":d") ((some v) (rd/sexprHead v)) ((none) ""))))
 
 fn moduleNode m: rd/SExpr path: String defs: (List TopForm) -> ModuleNode
   (ModuleNode :path path :docstring (moduleDocstring m) :exported (moduleExported m) :imports (moduleImports m) :defs defs)
@@ -1167,12 +1139,12 @@ fn appendDecl k: KidForm exported: (Map String Bool) xs: (List TopForm) -> (Resu
       ((not (isDeclHead? (rd/sexprHead s)))
        (ok (cons (topExpr pf) xs)))
       (else
-       (mt (declForm pf k.kids exported)
+       (match (declForm pf k.kids exported)
          ((ok t) (ok (cons t xs)))
          ((err e) (err e))))))
 
 fn declStep acc: (Result (List TopForm) ParseError) k: KidForm exported: (Map String Bool) -> (Result (List TopForm) ParseError)
-  (mt acc ((err e) (err e)) ((ok xs) (appendDecl k exported xs)))
+  (match acc ((err e) (err e)) ((ok xs) (appendDecl k exported xs)))
 
 fn declForms forms: (List KidForm) exported: (List String) -> (Result (List TopForm) ParseError)
   (let [(exportedSet (exportedSetOf exported))]
@@ -1185,27 +1157,27 @@ fn filterTags items: (List rd/SExpr) -> (List rd/SExpr)
   (filter (fn [(x rd/SExpr)] -> Bool (not (isTag? x))) items)
 
 fn docString items: (List rd/SExpr) -> String
-  (mt (listHead items) ((some h) (cond ((isTag? h) (docString (tailExprs items))) ((and (rd/isAtom? h) (or (= (rd/sexprHead h) ":doc") (= (rd/sexprHead h) ":d"))) (mt (listHead (tailExprs items)) ((some d) (rd/sexprHead d)) ((none) ""))) (else ""))) ((none) ""))
+  (match (listHead items) ((some h) (cond ((isTag? h) (docString (tailExprs items))) ((and (rd/isAtom? h) (or (= (rd/sexprHead h) ":doc") (= (rd/sexprHead h) ":d"))) (match (listHead (tailExprs items)) ((some d) (rd/sexprHead d)) ((none) ""))) (else ""))) ((none) ""))
 
 fn docBody items: (List rd/SExpr) -> (List rd/SExpr)
-  (mt (listHead items) ((some h) (cond ((and (isTag? h) (not (listEmpty? (tailExprs items)))) (docBody (tailExprs items))) ((and (rd/isAtom? h) (or (= (rd/sexprHead h) ":doc") (= (rd/sexprHead h) ":d"))) (tailExprs (tailExprs items))) (else items))) ((none) (list)))
+  (match (listHead items) ((some h) (cond ((and (isTag? h) (not (listEmpty? (tailExprs items)))) (docBody (tailExprs items))) ((and (rd/isAtom? h) (or (= (rd/sexprHead h) ":doc") (= (rd/sexprHead h) ":d"))) (tailExprs (tailExprs items))) (else items))) ((none) (list)))
 
 fn paramsVector? v: (Option rd/SExpr) -> Bool
-  (mt v ((some node) (rd/isVect? node)) ((none) false))
+  (match v ((some node) (rd/isVect? node)) ((none) false))
 
 fn hasEffect? firstOpt: (Option rd/SExpr) -> Bool
-  (mt firstOpt ((some h) (and (rd/isAtom? h) (= (rd/sexprHead h) "!"))) ((none) false))
+  (match firstOpt ((some h) (and (rd/isAtom? h) (= (rd/sexprHead h) "!"))) ((none) false))
 
 fn hasTailrec? firstOpt: (Option rd/SExpr) -> Bool
-  (mt firstOpt
+  (match firstOpt
     ((some h) (and (rd/isAtom? h) (let [(v (rd/sexprHead h))] (or (= v "tailrec") (= v ":tailrec")))))
     ((none) false))
 
 fn funParams pslot: (Option rd/SExpr) -> (List Param)
-  (mt pslot ((some node) (paramList node)) ((none) (list)))
+  (match pslot ((some node) (paramList node)) ((none) (list)))
 
 fn typeNodeVect node: rd/SExpr -> rd/SExpr
-  (mt node
+  (match node
     ((rd/sexprAtom _) node)
     ((rd/sexprVect items) (rd/makeVect (map typeNodeVect items)))
     ((rd/sexprList items) (if (= (listHeadText items) "list")
@@ -1216,13 +1188,13 @@ fn typeNodeText node: rd/SExpr -> String
   (resolveTypeText (rd/renderSexpr (typeNodeVect node)))
 
 fn funRetType rslot: (Option rd/SExpr) -> String
-  (mt rslot ((some node) (typeNodeText node)) ((none) ""))
+  (match rslot ((some node) (typeNodeText node)) ((none) ""))
 
 fn padFront xs: (List (Pair Int64 Int64)) n: Int64 fill: (Pair Int64 Int64) -> (List (Pair Int64 Int64))
   (let [(len (listLength xs))] (if (>= len n) (listDrop xs (- len n)) (listAppend (map (fn [(_ Int64)] -> (Pair Int64 Int64) fill) (range 0 (- n len))) xs)))
 
 fn docBodyPos items: (List rd/SExpr) poses: (List (Pair Int64 Int64)) -> (List PosForm)
-  (mt (listHead items) ((none) (list)) ((some h) (cond ((isTag? h) (docBodyPos (tailExprs items) (listDrop poses 1))) ((and (rd/isAtom? h) (or (= (rd/sexprHead h) ":doc") (= (rd/sexprHead h) ":d"))) (untaggedPos (tailExprs (tailExprs items)) (listDrop poses 2))) (else (untaggedPos items poses)))))
+  (match (listHead items) ((none) (list)) ((some h) (cond ((isTag? h) (docBodyPos (tailExprs items) (listDrop poses 1))) ((and (rd/isAtom? h) (or (= (rd/sexprHead h) ":doc") (= (rd/sexprHead h) ":d"))) (untaggedPos (tailExprs (tailExprs items)) (listDrop poses 2))) (else (untaggedPos items poses)))))
 
 fn untaggedPos items: (List rd/SExpr) poses: (List (Pair Int64 Int64)) -> (List PosForm)
   (filter (fn [(p PosForm)] -> Bool (not (isTag? p.expr))) (map (fn [(i Int64)] -> PosForm (let [(lc (optionOr (listGet poses i) (pair 0 0)))] (PosForm :expr (nthExpr items i) :line (pairFirst lc) :col (pairSecond lc)))) (range 0 (listLength items))))
@@ -1238,7 +1210,7 @@ fn isInlineBodyCandidate? node: rd/SExpr -> Bool
         (let [(firstSub (nthExpr subItems 0))]
           (if (rd/isList? firstSub)
             true
-            (mt firstSub
+            (match firstSub
               ((rd/sexprAtom a) (not (isTypeConstructor? a)))
               (_ false))))))
     false)
@@ -1268,7 +1240,7 @@ fn funNode s: rd/SExpr exported: (Map String Bool) pf: PosForm kids: (List (Pair
         (rest5 (if isZeroParam rest4Actual (tailExprs rest4Actual)))
         (arrow (listHeadText rest5))
         (rawRetSlot (listHead (tailExprs rest5)))
-        (rawRetNode (mt rawRetSlot ((some n) n) ((none) (rd/makeAtom ""))))
+        (rawRetNode (match rawRetSlot ((some n) n) ((none) (rd/makeAtom ""))))
         (doc (docString (tailExprs (tailExprs rest5))))
         (rawBody (docBody (tailExprs (tailExprs rest5))))
         (tail (tailExprs (tailExprs rest5)))
@@ -1287,7 +1259,7 @@ fn funNode s: rd/SExpr exported: (Map String Bool) pf: PosForm kids: (List (Pair
       (else (ok (topDefun (DefunNode :name name :typeVars (list) :isExported (mapHas? exported name) :effect eff :params params :retType ret :docstring doc :body body :bodyPos bPos))))))
 
 fn vectItems v: rd/SExpr -> (List rd/SExpr)
-  (let [(items (sexprItems v))] (if (and (rd/isList? v) (mt (listHead items) ((some h) (and (rd/isAtom? h) (= (rd/sexprHead h) "list"))) ((none) false))) (tailExprs items) items))
+  (let [(items (sexprItems v))] (if (and (rd/isList? v) (match (listHead items) ((some h) (and (rd/isAtom? h) (= (rd/sexprHead h) "list"))) ((none) false))) (tailExprs items) items))
 
 fn paramList v: rd/SExpr -> (List Param)
   (map (fn [(p rd/SExpr)] -> Param (paramNode p)) (vectItems v))
@@ -1311,7 +1283,7 @@ fn allCaseHeads? forms: (List rd/SExpr) -> Bool
   (fold (fn [(acc Bool) (c rd/SExpr)] -> Bool (and acc (isCaseHead? (rd/sexprHead c)))) true forms)
 
 fn schemaJsonCase items: (List rd/SExpr) -> (Option String)
-  (mt (findOpt items ":json-case") ((some node) (some (rd/sexprHead node))) ((none) (none)))
+  (match (findOpt items ":json-case") ((some node) (some (rd/sexprHead node))) ((none) (none)))
 
 fn schemaNode s: rd/SExpr pf: PosForm -> (Result TopForm ParseError)
   (let [(items (sexprItems s)) (rest (tailExprs items)) (name (listHeadText rest)) (fforms (filter (fn [(f rd/SExpr)] -> Bool (and (rd/isList? f) (not (isTag? f)))) (tailExprs rest))) (jc (schemaJsonCase items))] (cond ((not (pascalName? name)) (err (perr (str "defschema name is not PascalCase: '" name "'") pf))) ((listEmpty? fforms) (err (perr "defschema needs at least one field" pf))) ((not (allFieldHeads? fforms)) (err (perr "every defschema member must be a (:field ...) form" pf))) (else (ok (topSchema (SchemaNode :name name :typeVars (list) :fields (map (fn [(f rd/SExpr)] -> AstField (fieldNode f)) fforms) :jsonCase jc))))))
@@ -1320,16 +1292,16 @@ fn fieldNode f: rd/SExpr -> AstField
   (let [(items (sexprItems f))] (AstField :name (nthString items 1) :type (typeNodeText (nthExpr items 2)) :docstring (nthString items 3) :default (findOpt items ":default") :json (optAfterKey items ":json")))
 
 fn optAfterKey items: (List rd/SExpr) key: String -> (Option String)
-  (mt (findOpt items key) ((some v) (some (rd/sexprHead v))) ((none) (none)))
+  (match (findOpt items key) ((some v) (some (rd/sexprHead v))) ((none) (none)))
 
 fn enumNode s: rd/SExpr pf: PosForm -> (Result TopForm ParseError)
   (let [(items (sexprItems s)) (rest (tailExprs items)) (name (listHeadText rest)) (cforms (filter (fn [(c rd/SExpr)] -> Bool (and (rd/isList? c) (not (isTag? c)))) (tailExprs rest)))] (cond ((not (pascalName? name)) (err (perr (str "defenum name is not PascalCase: '" name "'") pf))) ((listEmpty? cforms) (err (perr "defenum needs at least one case" pf))) ((not (allCaseHeads? cforms)) (err (perr "every defenum member must be a (:case ...) form" pf))) (else (ok (topEnum (positionalizeEnumFields (EnumNode :name name :typeVars (list) :cases (map (fn [(c rd/SExpr)] -> EnumCase (caseNode c)) cforms))))))))
 
 fn caseFields items: (List rd/SExpr) -> (List Param)
-  (mt (listGet items 2)
+  (match (listGet items 2)
     ((some node)
      (let [(fields (vectItems node))]
-       (if (listAny? (fn [(field rd/SExpr)] -> Bool (mt field ((rd/sexprList _) true) (_ false))) fields)
+       (if (listAny? (fn [(field rd/SExpr)] -> Bool (match field ((rd/sexprList _) true) (_ false))) fields)
          (map normalizeEnumField (paramList node))
          (flatEnumFields fields))))
     ((none) (list)))
@@ -1338,7 +1310,7 @@ fn normalizeEnumField p: Param -> Param
   (if (= p.name "_") (with p :name "") p)
 
 fn flatEnumFields fields: (List rd/SExpr) -> (List Param)
-  (mt (listHead fields)
+  (match (listHead fields)
     ((none) (list))
     ((some name)
      (let [(rest (optionOr (listTail fields) (list)))
@@ -1361,7 +1333,7 @@ fn caseNode c: rd/SExpr -> EnumCase
   (let [(items (sexprItems c))] (EnumCase :name (nthString items 1) :fields (caseFields items) :docstring (nthString items 3)))
 
 fn renderNode t: TopForm -> String
-  (mt t ((topModule m) (renderModule m)) ((topSchema s) (renderSchema s)) ((topEnum e) (renderEnum e)) ((topDefun d) (renderDefun d)) ((topExpr p) (rd/renderSexpr p.expr)))
+  (match t ((topModule m) (renderModule m)) ((topSchema s) (renderSchema s)) ((topEnum e) (renderEnum e)) ((topDefun d) (renderDefun d)) ((topExpr p) (rd/renderSexpr p.expr)))
 
 fn renderModule m: ModuleNode -> String
   (let [(doc (if (stringEmpty? m.docstring) "" (str " :doc " m.docstring))) (exp (if (listEmpty? m.exported) "" (str " :export [" (stringJoin m.exported " ") "]"))) (imp (if (listEmpty? m.imports) "" (str " :import [" (stringJoin (map (fn [(p (Pair String String))] -> String (renderImport p)) m.imports) " ") "]")))] (str "(module " m.path doc exp imp ")"))
@@ -1382,16 +1354,16 @@ fn renderParam p: Param -> String
   (str "(" p.name " " p.type ")")
 
 fn renderJsonCasePart jc: (Option String) -> String
-  (mt jc ((some v) (str " :json-case " v)) ((none) ""))
+  (match jc ((some v) (str " :json-case " v)) ((none) ""))
 
 fn renderSchema s: SchemaNode -> String
   (let [(tv (renderTypeVars s.typeVars)) (fields (renderJoined (map (fn [(f AstField)] -> String (renderField f)) s.fields) " ")) (jc (renderJsonCasePart s.jsonCase))] (str "(schema " tv s.name jc fields ")"))
 
 fn renderFieldDefault opt: (Option rd/SExpr) -> String
-  (mt opt ((some v) (str " :default " (rd/renderSexpr v))) ((none) ""))
+  (match opt ((some v) (str " :default " (rd/renderSexpr v))) ((none) ""))
 
 fn renderFieldJson opt: (Option String) -> String
-  (mt opt ((some v) (str " :json " v)) ((none) ""))
+  (match opt ((some v) (str " :json " v)) ((none) ""))
 
 fn renderField f: AstField -> String
   (let [(defp (renderFieldDefault f.default)) (jsonp (renderFieldJson f.json))] (str "(:field " f.name " " f.type " " f.docstring defp jsonp ")"))

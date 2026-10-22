@@ -20,34 +20,34 @@ fn shapeDecls -> (List String)
   (list "(enum Shape (:c circle [(r Int64)] \"round\") (:c square [(s Int64)] \"box\"))"
         ""
         "fn area s: Shape -> Int64"
-        "  (mt s ((circle r) (* r r)) ((square q) (* q q)))")
+        "  (match s ((circle r) (* r r)) ((square q) (* q q)))")
 
 fn colorDecls arms: String -> (List String)
   (list "(enum Color (:c red [] \"r\") (:c green [] \"g\") (:c blue [] \"b\"))"
         ""
         "fn code c: Color -> Int64"
-        (str "  (mt c " arms ")"))
+        (str "  (match c " arms ")"))
 
 fn fixtures -> (List (Pair String String))
-  (list (pair "foreignBinder" (moduleSource "foreignBinder" (listAppend (shapeDecls) (list "" "fn pick s: Shape -> Int64" "  (mt s ((circle r) r) (other 7))"))
+  (list (pair "foreignBinder" (moduleSource "foreignBinder" (listAppend (shapeDecls) (list "" "fn pick s: Shape -> Int64" "  (match s ((circle r) r) (other 7))"))
                                             "(str (pick (square 3)) \" \" (pick (circle 2)))"))
-        (pair "foreignBinderUsed" (moduleSource "foreignBinderUsed" (listAppend (shapeDecls) (list "" "fn pick s: Shape -> Int64" "  (mt s ((circle r) r) (other (area other)))"))
+        (pair "foreignBinderUsed" (moduleSource "foreignBinderUsed" (listAppend (shapeDecls) (list "" "fn pick s: Shape -> Int64" "  (match s ((circle r) r) (other (area other)))"))
                                                 "(str (pick (square 3)) \" \" (pick (circle 2)))"))
         (pair "ownBare" (moduleSource "ownBare" (colorDecls "(red 1) (green 2) (blue 3)") "(str (code (red)) \" \" (code (green)) \" \" (code (blue)))"))
         (pair "ownBareMissing" (moduleSource "ownBareMissing" (colorDecls "(red 1) (green 2)") "(str (code (red)))"))
-        (pair "optionBare" (moduleSource "optionBare" (list "fn get o: (Option Int64) -> Int64" "  (mt o ((some x) x) (none 0))")
+        (pair "optionBare" (moduleSource "optionBare" (list "fn get o: (Option Int64) -> Int64" "  (match o ((some x) x) (none 0))")
                                          "(str (get (some 4)) \" \" (get (none)))"))
-        (pair "unreachableNoneFirst" (moduleSource "unreachableNoneFirst" (listAppend (shapeDecls) (list "" "fn pick2 s: Shape -> Int64" "  (mt s (none 9) ((circle r) r) ((square q) q))"))
+        (pair "unreachableNoneFirst" (moduleSource "unreachableNoneFirst" (listAppend (shapeDecls) (list "" "fn pick2 s: Shape -> Int64" "  (match s (none 9) ((circle r) r) ((square q) q))"))
                                                     "(str (pick2 (circle 2)))"))
-        (pair "unreachablePlainFirst" (moduleSource "unreachablePlainFirst" (listAppend (shapeDecls) (list "" "fn pick3 s: Shape -> Int64" "  (mt s (x 1) ((circle r) r) ((square q) q))"))
+        (pair "unreachablePlainFirst" (moduleSource "unreachablePlainFirst" (listAppend (shapeDecls) (list "" "fn pick3 s: Shape -> Int64" "  (match s (x 1) ((circle r) r) ((square q) q))"))
                                                      "(str (pick3 (circle 2)))"))
-        (pair "noneBindsLabel" (moduleSource "noneBindsLabel" (list "fn label o: (Option String) -> String" "  \"lbl\"" "" "fn run x: (Option Int64) -> String" "  (mt x (none (label (none))) ((some v) (label (some \"x\"))))")
+        (pair "noneBindsLabel" (moduleSource "noneBindsLabel" (list "fn label o: (Option String) -> String" "  \"lbl\"" "" "fn run x: (Option Int64) -> String" "  (match x (none (label (none))) ((some v) (label (some \"x\"))))")
                                             "(run (none))"))
-        (pair "unreachableSingle" (moduleSource "unreachableSingle" (listAppend (shapeDecls) (list "" "fn pick4 s: Shape -> Int64" "  (mt s (x 1) ((circle r) r))"))
+        (pair "unreachableSingle" (moduleSource "unreachableSingle" (listAppend (shapeDecls) (list "" "fn pick4 s: Shape -> Int64" "  (match s (x 1) ((circle r) r))"))
                                                  "(str (pick4 (circle 2)))"))
-        (pair "keywordLiteralNotCatchall" (moduleSource "keywordLiteralNotCatchall" (listAppend (shapeDecls) (list "" "fn pick5 s: Shape -> Int64" "  (mt s (:foo 1) ((circle r) r) ((square q) q))"))
+        (pair "keywordLiteralNotCatchall" (moduleSource "keywordLiteralNotCatchall" (listAppend (shapeDecls) (list "" "fn pick5 s: Shape -> Int64" "  (match s (:foo 1) ((circle r) r) ((square q) q))"))
                                                            "(str (pick5 (circle 2)) \" \" (pick5 (square 3)))"))
-        (pair "elseKeywordRejected" (moduleSource "elseKeywordRejected" (listAppend (shapeDecls) (list "" "fn pick6 s: Shape -> Int64" "  (mt s (:else 1) ((circle r) r) ((square q) q))"))
+        (pair "elseKeywordRejected" (moduleSource "elseKeywordRejected" (listAppend (shapeDecls) (list "" "fn pick6 s: Shape -> Int64" "  (match s (:else 1) ((circle r) r) ((square q) q))"))
                                                     "(str (pick6 (circle 2)) \" \" (pick6 (square 3)))")))
 
 fn ! runsAs work: String name: String want: String -> Bool

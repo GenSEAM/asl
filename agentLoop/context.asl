@@ -21,7 +21,7 @@ fn contextTooLongCode -> String
   "ERR_CONTEXT_TOO_LONG"
 
 fn contextTooLongMessage e: ContextTooLong -> String
-  (mt e ((contextTooLong m) m))
+  (match e ((contextTooLong m) m))
 
 enum Review
   (reviewError message: String)
@@ -134,7 +134,7 @@ fn reprChar b: String -> String
     (else b))
 
 fn pyRepr v: j/Json -> String
-  (mt v
+  (match v
     ((j/jnull) "None")
     ((j/jbool b) (if b "True" "False"))
     ((j/jint i) (stringFromInt64 i))
@@ -145,10 +145,10 @@ fn pyRepr v: j/Json -> String
     ((j/jobj kvs) (str "{" (joinSep (map (fn [p] (str (pyRepr (j/jstr (pairFirst p))) ": " (pyRepr (pairSecond p)))) kvs) ", ") "}")))
 
 fn pyStr v: j/Json -> String
-  (mt v ((j/jstr s) s) (_ (pyRepr v)))
+  (match v ((j/jstr s) s) (_ (pyRepr v)))
 
 fn pyTruthy v: j/Json -> Bool
-  (mt v
+  (match v
     ((j/jnull) false)
     ((j/jbool b) b)
     ((j/jint i) (!= i 0))
@@ -159,10 +159,10 @@ fn pyTruthy v: j/Json -> Bool
     ((j/jobj kvs) (not (listEmpty? kvs))))
 
 fn isNone v: j/Json -> Bool
-  (mt v ((j/jnull) true) (_ false))
+  (match v ((j/jnull) true) (_ false))
 
 fn isZero v: j/Json -> Bool
-  (mt v
+  (match v
     ((j/jint i) (= i 0))
     ((j/jfloat f) (= f 0.0))
     ((j/jnum f) (= f 0.0))
@@ -170,8 +170,8 @@ fn isZero v: j/Json -> Bool
     (_ false))
 
 fn jget o: j/Json k: String -> (Option j/Json)
-  (mt o
-    ((j/jobj kvs) (mt (listHead (filter (fn [p] (= (pairFirst p) k)) kvs)) ((some p) (some (pairSecond p))) (none none)))
+  (match o
+    ((j/jobj kvs) (match (listHead (filter (fn [p] (= (pairFirst p) k)) kvs)) ((some p) (some (pairSecond p))) (none none)))
     (_ none))
 
 fn jgetOr o: j/Json k: String -> j/Json
@@ -188,27 +188,27 @@ fn strOr o: j/Json k: String -> String
     (if (pyTruthy v) (pyStr v) ""))
 
 fn firstTruthy o: j/Json keys: (List String) -> j/Json
-  (mt (listHead (filter (fn [k] (truthyAt o k)) keys))
+  (match (listHead (filter (fn [k] (truthyAt o k)) keys))
     ((some k) (jgetOr o k))
     (none (j/jnull)))
 
 fn strAt o: j/Json k: String -> (Option String)
-  (mt (jget o k) ((some v) (mt v ((j/jstr t) (some t)) (_ none))) (none none))
+  (match (jget o k) ((some v) (match v ((j/jstr t) (some t)) (_ none))) (none none))
 
 fn items v: j/Json -> (List j/Json)
-  (mt v ((j/jarr xs) xs) (_ (list)))
+  (match v ((j/jarr xs) xs) (_ (list)))
 
 fn getDefault o: j/Json k: String dflt: String -> String
-  (mt (jget o k) ((some v) (pyStr v)) (none dflt))
+  (match (jget o k) ((some v) (pyStr v)) (none dflt))
 
 fn escVal v: j/Json -> String
-  (mt v ((j/jnull) "") (_ (esc (pyStr v))))
+  (match v ((j/jnull) "") (_ (esc (pyStr v))))
 
 fn dedupe xs: (List String) -> (List String)
   (listReverse (fold (fn [acc x] (if (listContains? acc x) acc (cons x acc))) (list) xs))
 
 fn pyInt v: j/Json -> (Option Int64)
-  (mt v
+  (match v
     ((j/jint i) (some i))
     ((j/jbool b) (some (if b 1 0)))
     ((j/jfloat f) (float64ToInt64 f))
@@ -218,7 +218,7 @@ fn pyInt v: j/Json -> (Option Int64)
             neg (stringStartsWith? t "-")
             body (if (or neg (stringStartsWith? t "+")) (sub t 1 (stringLength t)) t)]
         (if (allDigits body)
-          (mt (stringToInt64 body) ((some n) (some (if neg (- 0 n) n))) (none none))
+          (match (stringToInt64 body) ((some n) (some (if neg (- 0 n) n))) (none none))
           none)))
     (_ none))
 
@@ -378,7 +378,7 @@ fn ratio a: Int64 b: Int64 -> Float64
   (/ (int64ToFloat64 a) (int64ToFloat64 b))
 
 fn jnum v: j/Json -> Float64
-  (mt v
+  (match v
     ((j/jint i) (int64ToFloat64 i))
     ((j/jfloat f) f)
     ((j/jnum f) f)
@@ -386,7 +386,7 @@ fn jnum v: j/Json -> Float64
     (_ 0.0))
 
 fn jint v: j/Json -> Int64
-  (mt v
+  (match v
     ((j/jint i) i)
     ((j/jbool b) (if b 1 0))
     ((j/jfloat f) (optionOr (float64ToInt64 f) 0))
@@ -394,11 +394,11 @@ fn jint v: j/Json -> Int64
 
 
 fn posInt v: j/Json -> (Option Int64)
-  (mt v ((j/jint i) (if (> i 0) (some i) none)) (_ none))
+  (match v ((j/jint i) (if (> i 0) (some i) none)) (_ none))
 
 fn vendorBounds timeout: j/Json queueTimeout: j/Json -> (Option (Pair Int64 Int64))
-  (mt (posInt timeout)
-    ((some t) (mt (posInt queueTimeout) ((some q) (some (pair t q))) (none none)))
+  (match (posInt timeout)
+    ((some t) (match (posInt queueTimeout) ((some q) (some (pair t q))) (none none)))
     (none none))
 
 fn vendorHttpSlackSec -> Int64
@@ -411,7 +411,7 @@ fn fitVendorCall bounds: (Option (Pair Int64 Int64)) left: Int64 -> (Pair Bool (
   (let [room (- left (if (some? bounds) (vendorHttpSlackSec) 0))]
     (if (< room (max 2 (vendorMinCallSec)))
       (pair false none)
-      (mt bounds
+      (match bounds
         ((some b) (let [t (min (pairFirst b) (- room 1))]
                     (pair true (some (pair t (max 1 (min (pairSecond b) (- room t))))))))
         (none (pair true none)))))
@@ -433,7 +433,7 @@ fn contextTokensFor model: (Option String) contextTokens: j/Json split: Bool -> 
     (jint contextTokens)
     (let [mid (stringLower (optionOr model ""))
           fams (listAppend (if split (list (pair "gemini" 120000)) (list)) (familyTokens))]
-      (mt (listHead (filter (fn [p] (stringContains? mid (pairFirst p))) fams))
+      (match (listHead (filter (fn [p] (stringContains? mid (pairFirst p))) fams))
         ((some p) (pairSecond p))
         (none (smallContextTokens)))))
 
@@ -445,10 +445,10 @@ fn modelBase name: j/Json -> String
         hit (filter (fn [p] (and (stringStartsWith? s p)
                                  (or (= (at1 s (stringLength p)) ":") (= (at1 s (stringLength p)) "/"))))
                     (vendorPrefixes))]
-    (stringLower (mt (listHead hit) ((some p) (sub s (+ (stringLength p) 1) (stringLength s))) (none s))))
+    (stringLower (match (listHead hit) ((some p) (sub s (+ (stringLength p) 1) (stringLength s))) (none s))))
 
 fn calibrationIndexPath env: (Option String) root: String -> String
-  (mt env
+  (match env
     ((some v) (if (stringEmpty? v) (pathJoin root ".asl/mem/calibration/index.asn") v))
     (none (pathJoin root ".asl/mem/calibration/index.asn")))
 
@@ -462,15 +462,15 @@ fn modelRowAt text: String p: Int64 -> (Option (Pair String Int64))
     (if (and (litAt text p head) (> q a)) (some (pair (sub text a q) (+ q 1))) none))
 
 fn nextRowHead text: String from: Int64 -> Int64
-  (mt (stringIndexOf (sub text from (stringLength text)) "(:model :id \"")
+  (match (stringIndexOf (sub text from (stringLength text)) "(:model :id \"")
     ((some k) (+ from k))
     (none (stringLength text)))
 
 fn rowsLoop text: String p: Int64 acc: (List (Pair String String)) -> (List (Pair String String))
-  (mt (stringIndexOf (sub text p (stringLength text)) "(:model :id \"")
+  (match (stringIndexOf (sub text p (stringLength text)) "(:model :id \"")
     (none (listReverse acc))
     ((some k)
-      (mt (modelRowAt text (+ p k))
+      (match (modelRowAt text (+ p k))
         (none (rowsLoop text (+ (+ p k) 1) acc))
         ((some r)
           (let [e (nextRowHead text (pairSecond r))]
@@ -498,9 +498,9 @@ fn budgetAt s: String p: Int64 -> (Option Int64)
       (else none)))
 
 fn findBudget s: String p: Int64 -> (Option Int64)
-  (mt (stringIndexOf (sub s p (stringLength s)) ":contextBudget")
+  (match (stringIndexOf (sub s p (stringLength s)) ":contextBudget")
     (none none)
-    ((some k) (mt (budgetAt s (+ p k)) ((some v) (some v)) (none (findBudget s (+ (+ p k) 1))))))
+    ((some k) (match (budgetAt s (+ p k)) ((some v) (some v)) (none (findBudget s (+ (+ p k) 1))))))
 
 ; (:m :tags (budget))
 fn servedContextTokens served: j/Json split: Bool text: String -> (Option Int64)
@@ -513,7 +513,7 @@ fn servedContextTokens served: j/Json split: Bool text: String -> (Option Int64)
             named (if (pyTruthy effort) (list model (str model ":" (pyStr effort))) (list model))
             extra (listSort (dedupe (filter (fn [id] (stringStartsWith? id (str model ":"))) (map pairFirst rows))))
             hit (fold (fn [acc id] (if (some? acc) acc (findBudget (rowText rows id) 0))) none (listAppend named extra))]
-        (mt hit ((some v) (some v)) (none (some (contextTokensFor (some model) (j/jnull) split)))))))
+        (match hit ((some v) (some v)) (none (some (contextTokensFor (some model) (j/jnull) split)))))))
 
 fn ! servedContextTokens! served: j/Json split: Bool path: String -> (Option Int64)
   (servedContextTokens served split (resultOr (fileReadString path) ""))
@@ -537,7 +537,7 @@ fn renderTurnContext coverage: (Option (List (Pair String (List (Pair Int64 Int6
   (pair (optionMap c/renderSeen coverage) (renderTranscript history budget))
 
 fn renderWindow coverage: (List (Pair String (List (Pair Int64 Int64)))) history: (List j/Json) budget: Int64 cut: Int64 dropped: Int64 pinned: (List String) -> (Pair String j/Json)
-  (mt (c/renderWindow (turnsOf history) budget cut dropped pinned)
+  (match (c/renderWindow (turnsOf history) budget cut dropped pinned)
     ((c/windowOf text last cutN droppedN used whole)
       (pair (c/renderSeen coverage)
         (j/jobj (list (pair "cut" (j/jint cutN)) (pair "dropped" (j/jint droppedN)) (pair "used" (j/jint used))
@@ -551,7 +551,7 @@ fn stableSectionAt basePrompt: String systemPrompt: String offsetBytes: Int64 ->
     (else "window"))
 
 fn turnMarks s: String p: Int64 acc: (List (Pair Int64 Int64)) -> (List (Pair Int64 Int64))
-  (mt (stringIndexOf (sub s p (stringLength s)) "(:turn ")
+  (match (stringIndexOf (sub s p (stringLength s)) "(:turn ")
     (none (listReverse acc))
     ((some k)
       (let [a (+ p k)
@@ -577,7 +577,7 @@ fn gateOutcome g: j/Json -> String
 fn isFailMarkedLine line: String -> Bool
   (or (stringContains? line "FAIL") (stringContains? line "ERR_ASSERT")
     (and (stringStartsWith? line "(:gate ")
-      (mt (countsOnLine line 7) ((some cnt) (!= (pairSecond cnt) "0")) (none false))))
+      (match (countsOnLine line 7) ((some cnt) (!= (pairSecond cnt) "0")) (none false))))
 
 fn failureLines lines: (List String) -> (List String)
   (filter isFailMarkedLine lines)
@@ -606,12 +606,12 @@ fn countsOnLine line: String q: Int64 -> (Option (Pair String String))
 fn anchoredCounts text: String -> (List (Pair String String))
   (fold (fn [acc line]
           (if (stringStartsWith? line "(:gate ")
-            (mt (countsOnLine line 7) ((some cnt) (listAppend acc (list cnt))) (none acc))
+            (match (countsOnLine line 7) ((some cnt) (listAppend acc (list cnt))) (none acc))
             acc))
     (list) (stringSplit text "\n"))
 
 fn countsTail counts: (List (Pair String String)) -> String
-  (mt (listLast counts)
+  (match (listLast counts)
     ((some cnt) (str " :asserts " (pairFirst cnt) " :failed " (pairSecond cnt)))
     (none ""))
 
@@ -664,7 +664,7 @@ fn contextKeepTurnsAt s: String p: Int64 -> (Option Int64)
     (if (> e j) (stringToInt64 (sub s j e)) none))
 
 fn contextKeepTurnsIn text: String -> (Option Int64)
-  (mt (stringIndexOf text ":contextKeepTurns")
+  (match (stringIndexOf text ":contextKeepTurns")
     ((none) none)
     ((some k) (contextKeepTurnsAt text k)))
 
@@ -684,7 +684,7 @@ fn contextToolCapBytesAt s: String p: Int64 -> (Option Int64)
     (if (> e j) (stringToInt64 (sub s j e)) none))
 
 fn contextToolCapBytesIn text: String -> (Option Int64)
-  (mt (stringIndexOf text ":contextToolCapBytes")
+  (match (stringIndexOf text ":contextToolCapBytes")
     ((none) none)
     ((some k) (contextToolCapBytesAt text k)))
 
@@ -705,7 +705,7 @@ fn contextMaxOlderLinesAt s: String p: Int64 -> (Option Int64)
     (if (> e j) (stringToInt64 (sub s j e)) none))
 
 fn contextMaxOlderLinesIn text: String -> (Option Int64)
-  (mt (stringIndexOf text ":contextMaxOlderLines")
+  (match (stringIndexOf text ":contextMaxOlderLines")
     ((none) none)
     ((some k) (contextMaxOlderLinesAt text k)))
 
@@ -717,7 +717,7 @@ fn ! contextMaxOlderLinesFor! root: String -> Int64
 
 ; (:m :do "a deterministic one-line receipt summary for a turn that has aged out of the kept window: just ops/files/gates, never the model's reply text, so the summary section is cheap and never carries prose that could itself grow unbounded")
 fn jgetStr h: j/Json k: String -> String
-  (mt (jget h k) ((some v) (pyStr v)) ((none) ""))
+  (match (jget h k) ((some v) (pyStr v)) ((none) ""))
 
 fn turnReceiptLine h: j/Json -> String
   (let [turn (jgetStr h "turn")
@@ -764,7 +764,7 @@ fn noWriteNudge deliver: (Option String) wrote: Bool done: Int64 files: (List St
         " is red: write the fix you have, or escalate naming what is missing"))
     ((or (!= deliver (some "patch")) wrote (< done (noWriteNudgeTurns))) "")
     (else
-      (let [whole (mt win ((some ts) (joinSep (map stringFromInt64 (listSort ts)) " ")) (none ""))
+      (let [whole (match win ((some ts) (joinSep (map stringFromInt64 (listSort ts)) " ")) (none ""))
             fs (if (listEmpty? files) "none" (joinSep files ", "))]
         (str (stringFromInt64 done) " turns and nothing written; files read: " fs ";"
           " receipts still whole: turns " whole "; the run stops at turn " (stringFromInt64 (noWriteTurns)) " without a write"))))
@@ -904,10 +904,10 @@ fn ! stepState! op: j/Json root: (Option String) workspaceGen: j/Json -> j/Json
     (cond
       ((or (= name "read") (= name "check"))
         (let [f (strOr op "file")
-              r (mt root ((some v) (if (stringEmpty? v) "." v)) (none "."))
+              r (match root ((some v) (if (stringEmpty? v) "." v)) (none "."))
               full (if (isAbs f) f (pathJoin r f))]
           (if (isDir! full) (j/jnull)
-            (mt (fileReadBytes full) ((ok bs) (j/jstr (sha1Hex bs))) ((err _) (j/jnull))))))
+            (match (fileReadBytes full) ((ok bs) (j/jstr (sha1Hex bs))) ((err _) (j/jnull))))))
       ((listContains? (workspaceOps) name) workspaceGen)
       (else (j/jint 0))))
 
@@ -915,17 +915,17 @@ fn ! stepState! op: j/Json root: (Option String) workspaceGen: j/Json -> j/Json
 fn spanHolder op: j/Json turnEvidence: (List (Pair Int64 (List (Pair String (Pair Int64 Int64))))) whole: (List Int64) -> (Option (Pair Int64 (Pair Int64 Int64)))
   (if (or (!= (strAt op "type") (some "step")) (!= (strAt op "op") (some "read")) (truthyAt op "symbol"))
     none
-    (mt (pyInt (jgetOr op "start"))
+    (match (pyInt (jgetOr op "start"))
       (none none)
       ((some a)
-        (mt (pyInt (jgetOr op "end"))
+        (match (pyInt (jgetOr op "end"))
           (none none)
           ((some b)
             (let [f (pyNormpath (strOr op "file"))]
               (fold (fn [acc t]
                       (if (some? acc) acc
                         (let [ev (fold (fn [e2 p] (if (= (pairFirst p) t) (pairSecond p) e2)) (list) turnEvidence)]
-                          (mt (listHead (filter (fn [x] (and (= (pyNormpath (pairFirst x)) f)
+                          (match (listHead (filter (fn [x] (and (= (pyNormpath (pairFirst x)) f)
                                                               (and (<= (pairFirst (pairSecond x)) a) (<= b (pairSecond (pairSecond x))))))
                                                 ev))
                             ((some x) (some (pair t (pairSecond x))))
@@ -940,12 +940,12 @@ fn seenReceipt op: j/Json turn: j/Json id: String -> j/Json
     (j/jobj (listAppend base extra)))
 
 fn lastGateLine out: (List String) tail: (List String) -> String
-  (mt (listHead (filter (fn [ln] (stringStartsWith? ln "(:gate ")) (listReverse out)))
+  (match (listHead (filter (fn [ln] (stringStartsWith? ln "(:gate ")) (listReverse out)))
     ((some ln) ln)
     (none (optionOr (listLast tail) "")))
 
 fn failureSignatures receipts: (List j/Json) gateResults: (List j/Json) -> (List String)
-  (let [status (fn [r] (mt (strAt r "status") ((some s) (or (= s "rejected") (= s "failed"))) (none false)))
+  (let [status (fn [r] (match (strAt r "status") ((some s) (or (= s "rejected") (= s "failed"))) (none false)))
         own (map (fn [r] (joinSep (filter (fn [x] (not (stringEmpty? x)))
                                     (list (getDefault r "op" "") (lstripColons (pyStr (jgetOr r "error")))
                                           (pyStr (let [v (firstTruthy r (list "file" "path"))] (if (pyTruthy v) v (j/jstr ""))))))
@@ -1003,7 +1003,7 @@ fn strBodyEnd s: String j: Int64 -> (Option Int64)
     (else (strBodyEnd s (+ j 1))))
 
 fn atValues s: String p: Int64 acc: (List String) -> (List String)
-  (mt (stringIndexOf (sub s p (stringLength s)) "(")
+  (match (stringIndexOf (sub s p (stringLength s)) "(")
     (none (listReverse acc))
     ((some k)
       (let [a (+ p k)
@@ -1011,7 +1011,7 @@ fn atValues s: String p: Int64 acc: (List String) -> (List String)
             j (+ i 3)
             q (skipWhile s j pySpace)]
         (if (and (litAt s i ":at") (> q j) (= (at1 s q) "\""))
-          (mt (strBodyEnd s (+ q 1))
+          (match (strBodyEnd s (+ q 1))
             ((some e) (atValues s (+ e 1) (cons (sub s (+ q 1) e) acc)))
             (none (atValues s (+ a 1) acc)))
           (atValues s (+ a 1) acc)))))
@@ -1021,7 +1021,7 @@ fn rpartColon s: String -> (Pair String String)
     (if (= k 0) (pair "" s) (pair (sub s 0 (- k 1)) (sub s k (stringLength s)))))
 
 fn possibleOpen s: String p: Int64 -> (Option Int64)
-  (mt (stringIndexOf (sub s p (stringLength s)) ":possible")
+  (match (stringIndexOf (sub s p (stringLength s)) ":possible")
     (none none)
     ((some k)
       (let [a (+ p k)
@@ -1034,11 +1034,11 @@ fn possibleSitesOf receipt: j/Json root: j/Json -> (List (Pair String Int64))
     (if (not (or (= op (some "observe")) (= op (some "run"))))
       (list)
       (let [text (pyStr (let [v (firstTruthy receipt (list "stdout" "out"))] (if (pyTruthy v) v (j/jstr ""))))]
-        (mt (stringIndexOf text "(:observe :dim callers")
+        (match (stringIndexOf text "(:observe :dim callers")
           (none (list))
           ((some head)
             (let [body (sub text head (byteFormEnd text head))]
-              (mt (possibleOpen body 0)
+              (match (possibleOpen body 0)
                 (none (list))
                 ((some o)
                   (fold (fn [acc at]
@@ -1057,8 +1057,8 @@ fn readCovers op: j/Json receipt: j/Json root: j/Json -> (Option Cover)
         (cond
           ((pyTruthy span)
             (let [xs (items span)]
-              (mt (pyInt (optionOr (listGet xs 0) (j/jnull)))
-                ((some a) (mt (pyInt (optionOr (listGet xs 1) (j/jnull))) ((some b) (some (coverOf path a (some b)))) (none none)))
+              (match (pyInt (optionOr (listGet xs 0) (j/jnull)))
+                ((some a) (match (pyInt (optionOr (listGet xs 1) (j/jnull))) ((some b) (some (coverOf path a (some b)))) (none none)))
                 (none none))))
           ((!= status (some "seen")) none)
           (else
@@ -1138,7 +1138,7 @@ fn hiddenTouched rel: String root: String hidden: (List (Pair String String)) ->
 fn setEnd pat: String i: Int64 -> Int64
   (let [j0 (if (= (at1 pat i) "!") (+ i 1) i)
         j1 (if (= (at1 pat j0) "]") (+ j0 1) j0)]
-    (mt (stringIndexOf (sub pat j1 (stringLength pat)) "]") ((some k) (+ j1 k)) (none -1)))
+    (match (stringIndexOf (sub pat j1 (stringLength pat)) "]") ((some k) (+ j1 k)) (none -1)))
 
 fn inSet set: String b: String -> Bool
   (let [n (stringLength set)]
@@ -1170,10 +1170,10 @@ fn ! entries! dir: String -> (List String)
   (resultOr (dirList dir) (list))
 
 fn ! isDir! p: String -> Bool
-  (mt (fileStat p) ((ok st) st.isDir) ((err _) false))
+  (match (fileStat p) ((ok st) st.isDir) ((err _) false))
 
 fn ! isFile! p: String -> Bool
-  (mt (fileStat p) ((ok st) st.isFile) ((err _) false))
+  (match (fileStat p) ((ok st) st.isFile) ((err _) false))
 
 fn relJoin a: String b: String -> String
   (if (stringEmpty? a) b (str a "/" b))
@@ -1239,7 +1239,7 @@ fn namedIn run: String -> (Option String)
     (fold (fn [acc k]
             (if (some? acc) acc
               (if (not (okDirs k)) none
-                (mt (lastSegMatch (optionOr (listGet segs k) ""))
+                (match (lastSegMatch (optionOr (listGet segs k) ""))
                   ((some e) (some (sub run 0 (+ (offs k) e))))
                   (none none)))))
       none (listReverse (range 0 n))))
@@ -1249,7 +1249,7 @@ fn namedPaths task: String i: Int64 acc: (List String) -> (List String)
     (listReverse acc)
     (if (and (pathCharB (at1 task i)) (or (= i 0) (not (pathCharB (at1 task (- i 1))))))
       (let [e (wordRunEnd task i)]
-        (mt (namedIn (sub task i e))
+        (match (namedIn (sub task i e))
           ((some m) (namedPaths task e (cons m acc)))
           (none (namedPaths task e acc))))
       (namedPaths task (+ i 1) acc)))
@@ -1274,7 +1274,7 @@ fn itemAt s: String p: Int64 -> (Option (Pair (List String) Int64))
   (let [h "(:item :name \""]
     (if (not (litAt s p h))
       none
-      (mt (strBodyEnd s (+ p (stringLength h)))
+      (match (strBodyEnd s (+ p (stringLength h)))
         (none none)
         ((some e)
           (let [name (sub s (+ p (stringLength h)) e)
@@ -1289,9 +1289,9 @@ fn itemAt s: String p: Int64 -> (Option (Pair (List String) Int64))
               none))))))
 
 fn itemsIn s: String p: Int64 acc: (List (List String)) -> (List (List String))
-  (mt (stringIndexOf (sub s p (stringLength s)) "(:item :name \"")
+  (match (stringIndexOf (sub s p (stringLength s)) "(:item :name \"")
     (none (listReverse acc))
-    ((some k) (mt (itemAt s (+ p k))
+    ((some k) (match (itemAt s (+ p k))
                 ((some r) (itemsIn s (pairSecond r) (cons (pairFirst r) acc)))
                 (none (itemsIn s (+ (+ p k) 1) acc)))))
 
@@ -1320,7 +1320,7 @@ fn nth2 xs: (List String) i: Int64 -> String
 ; (:m :tags (cache budget))
 fn ! prefetchBlock! task: (Option String) owns: (List String) root: String cap: Int64 beforeTurn: Int64 hidden: (List (Pair String String)) outline: (fn [String] -> (Pair Int64 String)) -> (Pair String (List (Pair String String)))
   (let [picked (fold (fn [st rel]
-                       (mt (prefetchEntry! rel root outline)
+                       (match (prefetchEntry! rel root outline)
                          (none st)
                          ((some ek)
                            (let [len (c/charLen (pairFirst ek))
@@ -1350,15 +1350,15 @@ fn receiptPhase receipt: j/Json -> (Option String)
   (cond
     ((truthyAt receipt "persisted") (some "implement"))
     ((= (strAt receipt "type") (some "findings")) (some "scout"))
-    ((= (strAt receipt "status") (some "ok")) (mt (strAt receipt "op") ((some o) (phaseOfOp o)) (none none)))
+    ((= (strAt receipt "status") (some "ok")) (match (strAt receipt "op") ((some o) (phaseOfOp o)) (none none)))
     (else none))
 
 fn deliverOfMode mode: String -> String
   (cond ((= mode "scout") "findings") ((= mode "plan") "plan") ((= mode "implement") "patch") ((= mode "grade") "verdict") (else mode))
 
 fn taskHintLines modeHint: (Option String) intent: (Option String) -> String
-  (str (mt modeHint ((some m) (if (stringEmpty? m) "" (str "expected deliverable: " (deliverOfMode m) "\n"))) (none ""))
-       (mt intent ((some i) (if (stringEmpty? i) "" (str "starting intent: " i "\n"))) (none "")))
+  (str (match modeHint ((some m) (if (stringEmpty? m) "" (str "expected deliverable: " (deliverOfMode m) "\n"))) (none ""))
+       (match intent ((some i) (if (stringEmpty? i) "" (str "starting intent: " i "\n"))) (none "")))
 
 fn unmetForm deliver: (Option String) reached: Bool wrote: Bool findings: (List String) -> String
   (let [d (optionOr deliver "")
@@ -1411,9 +1411,9 @@ fn universal s: String -> String
   (stringReplace (stringReplace s "\r\n" "\n") "\r" "\n")
 
 fn ! git! root: String args: (List String) -> (Result cp/ProcessOutput String)
-  (mt (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd "git" args) root) 120000))
+  (match (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd "git" args) root) 120000))
     ((ok out) (ok out))
-    ((err e) (err (mt e
+    ((err e) (err (match e
                     ((cp/notFound b) (str "git not found: " b))
                     ((cp/timeout ms) (str "git timed out after " (stringFromInt64 ms) " ms"))
                     ((cp/permissionDenied p) (str "git not executable: " p))
@@ -1431,26 +1431,26 @@ fn cutUtf8 s: String n: Int64 -> String
     (if (and (>= j 0) (> (+ j (max 1 (utf8Lead (bytesGet bs j)))) n)) (sub s 0 j) (sub s 0 n)))
 
 fn ! diffPart! root: String startHead: (Option String) rel: String -> (Result String String)
-  (mt (git! root (list "ls-files" "--error-unmatch" "--" rel))
+  (match (git! root (list "ls-files" "--error-unmatch" "--" rel))
     ((err e) (err e))
     ((ok ls)
       (let [full (pyNormpath (pathJoin root rel))
             start (optionOr startHead "")]
         (if (and (= ls.exitCode 0) (not (stringEmpty? start)))
-          (mt (git! root (list "diff" start "--" rel))
+          (match (git! root (list "diff" start "--" rel))
             ((err e) (err e))
             ((ok d) (ok (if (= d.exitCode 0) (universal (if (stringEmpty? d.stdout) "" (str d.stdout "\n"))) ""))))
           (if (isFile! full)
-            (mt (fileReadString full)
+            (match (fileReadString full)
               ((err e) (err e))
-              ((ok data) (ok (filePatchNew rel data (mt (fileStat full) ((ok st) st.mode) ((err _) 0))))))
+              ((ok data) (ok (filePatchNew rel data (match (fileStat full) ((ok st) st.mode) ((err _) 0))))))
             (ok ""))))))
 
 fn ! specCheckDiff! root: String startHead: (Option String) written: (List String) -> (Result String String)
   (let [rels (dedupe (map (fn [p] (if (isAbs p) (pyRelpath p root) (pyNormpath p))) (filter (fn [p] (not (stringEmpty? p))) written)))
-        parts (fold (fn [acc rel] (mt acc ((err e) (err e)) ((ok xs) (mt (diffPart! root startHead rel) ((ok d) (ok (listAppend xs (list d)))) ((err e) (err e))))))
+        parts (fold (fn [acc rel] (match acc ((err e) (err e)) ((ok xs) (match (diffPart! root startHead rel) ((ok d) (ok (listAppend xs (list d)))) ((err e) (err e))))))
                 (ok (list)) rels)]
-    (mt parts
+    (match parts
       ((err e) (err e))
       ((ok xs)
         (let [text (joinSep (filter (fn [p] (not (stringEmpty? p))) xs) "\n")]
@@ -1458,7 +1458,7 @@ fn ! specCheckDiff! root: String startHead: (Option String) written: (List Strin
                 (str (cutUtf8 text (specCheckDiffMax)) "\n[[spec-check diff cut at 60000 bytes]]\n")))))))
 
 fn verdictStart text: String p: Int64 -> (Option Int64)
-  (mt (stringIndexOf (sub text p (stringLength text)) "(")
+  (match (stringIndexOf (sub text p (stringLength text)) "(")
     (none none)
     ((some k)
       (let [a (+ p k)
@@ -1469,7 +1469,7 @@ fn verdictStart text: String p: Int64 -> (Option Int64)
           (verdictStart text (+ a 1))))))
 
 fn metAt form: String p: Int64 -> (Option Bool)
-  (mt (stringIndexOf (sub form p (stringLength form)) ":met")
+  (match (stringIndexOf (sub form p (stringLength form)) ":met")
     (none none)
     ((some k)
       (let [a (+ p k 4)
@@ -1484,13 +1484,13 @@ fn missingWalk form: String i: Int64 depth: Int64 acc: (List String) -> (Pair In
     (pair i acc)
     (let [b (at1 form i)]
       (if (= b "\"")
-        (mt (strBodyEnd form (+ i 1))
+        (match (strBodyEnd form (+ i 1))
           (none (pair i acc))
           ((some e) (missingWalk form (+ e 1) depth (if (= depth 1) (listAppend acc (list (specUnescape (sub form (+ i 1) e)))) acc))))
         (missingWalk form (+ i 1) (cond ((= b "(") (+ depth 1)) ((= b ")") (- depth 1)) (else depth)) acc))))
 
 fn missingLists form: String p: Int64 acc: (List String) -> (List String)
-  (mt (stringIndexOf (sub form p (stringLength form)) ":missing")
+  (match (stringIndexOf (sub form p (stringLength form)) ":missing")
     (none acc)
     ((some k)
       (let [a (+ p k)
@@ -1501,19 +1501,19 @@ fn missingLists form: String p: Int64 acc: (List String) -> (List String)
           (missingLists form (+ a 1) acc)))))
 
 fn parseSpecVerdict text: (Option String) -> (Option (Pair Bool (List String)))
-  (mt text
+  (match text
     (none none)
     ((some t)
       (if (stringEmpty? (pyStrip t))
         none
-        (mt (verdictStart t 0)
+        (match (verdictStart t 0)
           (none none)
           ((some a)
             (let [close (backWhile t (stringLength t) (fn [b] (!= b ")")))]
               (if (<= close (+ a 1))
                 none
                 (let [form (sub t a close)]
-                  (mt (metAt form 0)
+                  (match (metAt form 0)
                     (none none)
                     ((some met)
                       (let [missing (missingLists form 0 (list))]
@@ -1535,17 +1535,17 @@ fn countsTry s: String q: Int64 -> (Option (Pair (Pair String String) Int64))
 fn countsLazy s: String q: Int64 lineEnd: Int64 -> (Option (Pair (Pair String String) Int64))
   (if (or (> q lineEnd) (>= q (stringLength s)))
     none
-    (mt (countsTry s q) ((some r) (some r)) (none (countsLazy s (+ q 1) lineEnd))))
+    (match (countsTry s q) ((some r) (some r)) (none (countsLazy s (+ q 1) lineEnd))))
 
 fn countsScan s: String p: Int64 acc: (List (Pair String String)) -> (List (Pair String String))
   (let [n (stringLength s)]
-    (mt (stringIndexOf (sub s p n) "(:gate")
+    (match (stringIndexOf (sub s p n) "(:gate")
       (none (listReverse acc))
       ((some k)
         (let [a (+ p k)
               wb (or (>= (+ a 6) n) (not (c/isWordByte (at1 s (+ a 6)))))
               lineEnd (optionOr (optionMap (fn [x] (+ (+ a 6) x)) (stringIndexOf (sub s (+ a 6) n) "\n")) n)]
-          (mt (if wb (countsLazy s (+ a 6) lineEnd) none)
+          (match (if wb (countsLazy s (+ a 6) lineEnd) none)
             ((some r) (countsScan s (pairSecond r) (cons (pairFirst r) acc)))
             (none (countsScan s (+ a 1) acc)))))))
 
@@ -1553,7 +1553,7 @@ fn countsRegex1 s: String -> (List (Pair String String))
   (countsScan s 0 (list))
 
 fn digestLines receipts: (List j/Json) -> (List String)
-  (map digestLine (filter (fn [r] (mt r ((j/jobj _) true) (_ false))) receipts))
+  (map digestLine (filter (fn [r] (match r ((j/jobj _) true) (_ false))) receipts))
 
 fn trimStart lens: (List Int64) budget: Int64 -> Int64
   (let [total (listSum (map (fn [l] (+ l 1)) lens))]
@@ -1562,8 +1562,8 @@ fn trimStart lens: (List Int64) budget: Int64 -> Int64
 
 fn specGateLine gcmd: String lastGates: j/Json -> String
   (let [seen (jgetOr lastGates gcmd)
-        g (mt seen ((j/jarr xs) (optionOr (listGet xs 1) (j/jnull))) (_ (if (pyTruthy seen) seen (j/jobj (list)))))
-        isDict (mt g ((j/jobj _) true) (_ false))
+        g (match seen ((j/jarr xs) (optionOr (listGet xs 1) (j/jnull))) (_ (if (pyTruthy seen) seen (j/jobj (list)))))
+        isDict (match g ((j/jobj _) true) (_ false))
         outcome (cond
                   ((and isDict (truthyAt g "timeout")) (gateOutcome g))
                   ((and isDict (not (isNone (jgetOr g "exit")))) (str ":exit " (pyStr (jgetOr g "exit"))))
@@ -1589,7 +1589,7 @@ fn specShrink task: String diff: String unbacked: (List String) lines: (List Str
     (if (and (> (c/charLen txt) cap) (< st (listLength lines))) (specShrink task diff unbacked lines (+ st 1) gateLines cap) txt))
 
 fn ! runSpecCheck! ask: (fn [String String String] -> (Result (Option String) String)) task: (Option String) root: String startHead: (Option String) written: (List String) unbacked: (List String) receipts: (List j/Json) gates: (List String) lastGates: j/Json -> (Result Review String)
-  (mt (specCheckDiff! root startHead written)
+  (match (specCheckDiff! root startHead written)
     ((err e) (err e))
     ((ok diff)
       (let [gateLines (map (fn [g] (specGateLine g lastGates)) gates)
@@ -1602,7 +1602,7 @@ fn ! runSpecCheck! ask: (fn [String String String] -> (Result (Option String) St
             len0 (c/charLen text0)
             diff1 (if (and (> len0 cap) (not (stringEmpty? diff)))
                     (let [over (- len0 cap)
-                          baseDiff (mt (stringIndexOf diff "\n[[spec-check diff cut") ((some k) (sub diff 0 k)) (none diff))
+                          baseDiff (match (stringIndexOf diff "\n[[spec-check diff cut") ((some k) (sub diff 0 k)) (none diff))
                           marker "\n[[spec-check diff cut]]\n"
                           room (max 0 (- (- (c/charLen baseDiff) over) (stringLength marker)))]
                       (if (> room 0) (str (charPrefix baseDiff room) marker) "(diff cut)\n"))
@@ -1611,11 +1611,11 @@ fn ! runSpecCheck! ask: (fn [String String String] -> (Result (Option String) St
         (ok (askReviewer! ask (specCheckSystem) (charPrefix text1 cap))))))
 
 fn observeTarget out: String -> String
-  (let [dim (mt (stringIndexOf out ":dim")
+  (let [dim (match (stringIndexOf out ":dim")
               ((some k) (dimAt out k))
               (none none))
         sym (symbolIn out 0)]
-    (joinSep (listAppend (mt dim ((some d) (list d)) (none (list))) (mt sym ((some s) (list s)) (none (list)))) " "))
+    (joinSep (listAppend (match dim ((some d) (list d)) (none (list))) (match sym ((some s) (list s)) (none (list)))) " "))
 
 fn dimAt s: String k: Int64 -> (Option String)
   (let [a (+ k 4)
@@ -1623,20 +1623,20 @@ fn dimAt s: String k: Int64 -> (Option String)
         e (skipWhile s q c/isWordByte)]
     (if (and (> q a) (> e q))
       (some (sub s q e))
-      (mt (stringIndexOf (sub s (+ k 1) (stringLength s)) ":dim") ((some k2) (dimAt s (+ (+ k 1) k2))) (none none))))
+      (match (stringIndexOf (sub s (+ k 1) (stringLength s)) ":dim") ((some k2) (dimAt s (+ (+ k 1) k2))) (none none))))
 
 fn symbolIn s: String p: Int64 -> (Option String)
-  (mt (stringIndexOf (sub s p (stringLength s)) ":symbol")
+  (match (stringIndexOf (sub s p (stringLength s)) ":symbol")
     (none none)
     ((some k)
       (let [a (+ (+ p k) 7)
             q (skipWhile s a pySpace)]
         (if (and (> q a) (= (at1 s q) "\""))
-          (mt (strBodyEnd s (+ q 1)) ((some e) (some (sub s (+ q 1) e))) (none (symbolIn s (+ (+ p k) 1))))
+          (match (strBodyEnd s (+ q 1)) ((some e) (some (sub s (+ q 1) e))) (none (symbolIn s (+ (+ p k) 1))))
           (symbolIn s (+ (+ p k) 1))))))
 
 fn callersFrom s: String p: Int64 -> Bool
-  (mt (stringIndexOf (sub s p (stringLength s)) ":dim")
+  (match (stringIndexOf (sub s p (stringLength s)) ":dim")
     (none false)
     ((some k)
       (let [a (+ (+ p k) 4)
@@ -1650,7 +1650,7 @@ fn callersAt s: String -> Bool
   (callersFrom s 0)
 
 fn countGroupFrom s: String p: Int64 -> (Option String)
-  (mt (stringIndexOf (sub s p (stringLength s)) ":count")
+  (match (stringIndexOf (sub s p (stringLength s)) ":count")
     (none none)
     ((some k)
       (let [a (+ (+ p k) 6)
@@ -1661,7 +1661,7 @@ fn countGroupFrom s: String p: Int64 -> (Option String)
           (countGroupFrom s (+ (+ p k) 1))))))
 
 fn countPairs g: String p: Int64 acc: (List (Pair String String)) -> (List (Pair String String))
-  (mt (stringIndexOf (sub g p (stringLength g)) ":")
+  (match (stringIndexOf (sub g p (stringLength g)) ":")
     (none acc)
     ((some k)
       (let [a (+ (+ p k) 1)
@@ -1690,7 +1690,7 @@ fn digestLine r: j/Json -> String
         target (charPrefix (stringReplace t1 "\n" " ") 200)
         ex (jgetOr r "exit")
         counts (if (and (= opv "observe") (callersAt out))
-                 (mt (countGroupFrom out 0)
+                 (match (countGroupFrom out 0)
                    ((some g) (let [ps (countPairs g 0 (list))
                                    get (fn [k] (fold (fn [acc p] (if (= (pairFirst p) k) (pairSecond p) acc)) "0" (listReverse ps)))]
                                (str " :count (" (joinSep (map (fn [k] (str ":" k " " (get k))) (list "calls" "possible" "excluded")) " ") ")")))
@@ -1714,13 +1714,13 @@ fn evidenceDigest receipts: (List j/Json) cap: Int64 -> String
     (str (if (> start 0) (str "[" (stringFromInt64 start) " older receipt lines cut]\n") "") (joinSep (listDrop lines start) "\n")))
 
 fn ! askReviewer! ask: (fn [String String String] -> (Result (Option String) String)) system: String userText: String -> Review
-  (mt (ask "grade" system userText)
+  (match (ask "grade" system userText)
     ((err e) (reviewError (str "reviewer call failed: " (charPrefix e 200))))
     ((ok got)
-      (mt got
+      (match got
         (none (reviewError "reviewer returned no reply"))
         ((some reply)
-          (mt (parseSpecVerdict (some reply))
+          (match (parseSpecVerdict (some reply))
             ((some v) (reviewVerdict (pairFirst v) (pairSecond v)))
             (none (reviewError "reviewer reply unreadable")))))))
 
@@ -1775,18 +1775,18 @@ fn advisorSummary task: (Option String) deliver: (Option String) why: (Option St
         st (fold (fn [acc g]
                    (let [i (+ (listLength (pairFirst acc)) 1)
                          seen (lookup g)
-                         ex (mt seen ((some s) (jgetOr (pairSecond s) "exit")) (none (j/jnull)))
+                         ex (match seen ((some s) (jgetOr (pairSecond s) "exit")) (none (j/jnull)))
                          line (str (stringFromInt64 i) " " g " :exit " (if (isNone ex) "not run" (pyStr ex)))
                          red (pairSecond acc)
-                         red2 (mt seen
+                         red2 (match seen
                                 ((some s) (if (and (not (isNone ex)) (not (isZero ex))
-                                                   (mt red ((some rs) (>= (pairFirst s) (pairFirst rs))) (none true)))
+                                                   (match red ((some rs) (>= (pairFirst s) (pairFirst rs))) (none true)))
                                             (some s) red))
                                 (none red))]
                      (pair (listAppend (pairFirst acc) (list line)) red2)))
              (pair (list) none) gates)
         gateLines (pairFirst st)
-        tail (mt (pairSecond st)
+        tail (match (pairSecond st)
                ((some rs)
                  (let [lines (map (fn [ln] (charPrefix ln 200)) (lastN (pySplitLines (advisorGateOutput (pairSecond rs))) 40))
                        body (charSuffix (joinSep lines "\n") 3000)]
@@ -1795,7 +1795,7 @@ fn advisorSummary task: (Option String) deliver: (Option String) why: (Option St
         ops (joinSep (map advisorOpLine (lastN receipts 8)) "\n")
         gatesText (if (listEmpty? gateLines) "(none declared)" (joinSep gateLines "\n"))
         writtenText (charPrefix (if (listEmpty? written) "(none)" (joinSep written " ")) 600)
-        w (mt why ((some s) s) (none "None"))
+        w (match why ((some s) s) (none "None"))
         briefHead (if (stringContains? (optionOr why "") "parse defect") (str "last retry brief head: " (charPrefix (optionOr lastBrief "") 200) "\n") "")
         head (str "deliverable: " (let [d (optionOr deliver "")] (if (stringEmpty? d) "not stated" d)) "\nstuck because: " w "\n"
                briefHead "gates:\n" gatesText "\n" tail "files written: " writtenText "\nlast ops, oldest first:\n"
@@ -1804,7 +1804,7 @@ fn advisorSummary task: (Option String) deliver: (Option String) why: (Option St
     (charPrefix (str "task:\n" (charPrefix (optionOr task "") room) "\n\n" head) (advisorSummaryMax)))
 
 fn adviceStart text: String p: Int64 -> (Option Int64)
-  (mt (stringIndexOf (sub text p (stringLength text)) "(")
+  (match (stringIndexOf (sub text p (stringLength text)) "(")
     (none none)
     ((some k)
       (let [a (+ p k)
@@ -1816,48 +1816,48 @@ fn adviceStart text: String p: Int64 -> (Option Int64)
 
 fn fieldIn form: String key: String p: Int64 -> (Option String)
   (let [k (str ":" key)]
-    (mt (stringIndexOf (sub form p (stringLength form)) k)
+    (match (stringIndexOf (sub form p (stringLength form)) k)
       (none none)
       ((some off)
         (let [a (+ (+ p off) (stringLength k))
               q (skipWhile form a pySpace)]
           (if (and (> q a) (= (at1 form q) "\""))
-            (mt (strBodyEnd form (+ q 1)) ((some e) (some (sub form (+ q 1) e))) (none (fieldIn form key (+ (+ p off) 1))))
+            (match (strBodyEnd form (+ q 1)) ((some e) (some (sub form (+ q 1) e))) (none (fieldIn form key (+ (+ p off) 1))))
             (fieldIn form key (+ (+ p off) 1)))))))
 
 fn adviceField form: String key: String -> (Option String)
   (optionMap (fn [v] (charPrefix (pyStrip (specUnescape v)) 400)) (fieldIn form key 0))
 
 fn parseAdvice text: (Option String) -> (Option AdviceForm)
-  (mt text
+  (match text
     (none none)
     ((some t)
-      (mt (adviceStart t 0)
+      (match (adviceStart t 0)
         (none none)
         ((some a)
           (let [form (sub t a (stringLength t))
                 next (adviceField form "next")]
-            (mt next
+            (match next
               ((some n) (if (stringEmpty? n) none (some (adviceOf n (adviceField form "why") (adviceField form "avoid")))))
               (none none)))))))
 
 fn ! askAdvisor! advise: (Option (fn [String String] -> (Result (Option String) String))) summary: String -> AdvisorResult
-  (mt advise
+  (match advise
     (none (advisorSkipped "provider has no advisor channel"))
     ((some f)
-      (mt (f (advisorSystem) summary)
+      (match (f (advisorSystem) summary)
         ((err e) (advisorError (str "advisor call failed: " (charPrefix e 200))))
         ((ok reply)
-          (mt (parseAdvice reply)
+          (match (parseAdvice reply)
             ((some a) (advisorAdvice a))
             (none (advisorError (str "advisor reply unreadable: " (charPrefix (optionOr reply "None") 200)))))))))
 
 fn adviceNotice advice: AdviceForm -> String
-  (mt advice
+  (match advice
     ((adviceOf n why avoid)
       (str "(:advice :next \"" (esc n) "\""
-        (mt why ((some w) (if (stringEmpty? w) "" (str " :why \"" (esc w) "\""))) (none ""))
-        (mt avoid ((some a) (if (stringEmpty? a) "" (str " :avoid \"" (esc a) "\""))) (none ""))
+        (match why ((some w) (if (stringEmpty? w) "" (str " :why \"" (esc w) "\""))) (none ""))
+        (match avoid ((some a) (if (stringEmpty? a) "" (str " :avoid \"" (esc a) "\""))) (none ""))
         ")")))
 
 fn progressLine p: j/Json -> (Option String)
@@ -1872,4 +1872,4 @@ fn progressLine p: j/Json -> (Option String)
               ") :gates (" (joinSep gs " ") "))"))))
 
 fn ! emitProgress! p: j/Json -> Bool
-  (mt (progressLine p) ((some l) (do (eprintln l) true)) (none false))
+  (match (progressLine p) ((some l) (do (eprintln l) true)) (none false))

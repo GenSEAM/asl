@@ -1,13 +1,13 @@
 (module asl-parser/stage1FrontEndTest :x [runTests] :i [(asl-parser/ast :a ast) (indentLexer :a lx) (indentParser :a ip) (reader :a rd)])
 
 fn caseFieldNames forms: (List ast/TopForm) -> (List Str)
-  (fold (fn [(acc (List Str)) (f ast/TopForm)] -> (List Str) (mt f ((ast/topEnum e) (listAppend acc (map (fn [(c ast/EnumCase)] -> Str (str c.name "(" (stringJoin (map (fn [(p ast/Param)] -> Str (str p.name ":" p.type)) c.fields) " ") ")")) e.cases))) (_ acc))) (list) forms)
+  (fold (fn [(acc (List Str)) (f ast/TopForm)] -> (List Str) (match f ((ast/topEnum e) (listAppend acc (map (fn [(c ast/EnumCase)] -> Str (str c.name "(" (stringJoin (map (fn [(p ast/Param)] -> Str (str p.name ":" p.type)) c.fields) " ") ")")) e.cases))) (_ acc))) (list) forms)
 
 fn enumCases src: Str -> (List Str)
-  (mt (ast/parse src) ((ok forms) (caseFieldNames forms)) ((err pe) (list (str "parse error: " pe.msg))))
+  (match (ast/parse src) ((ok forms) (caseFieldNames forms)) ((err pe) (list (str "parse error: " pe.msg))))
 
 fn rendered src: Str -> Str
-  (mt (ip/parseIndented src) ((ok s) (rd/renderSexpr s)) ((err msg) (str "parse error: " msg)))
+  (match (ip/parseIndented src) ((ok s) (rd/renderSexpr s)) ((err msg) (str "parse error: " msg)))
 
 fn testParenthesizedEnumCases -> Bool
   (let [(src "(module m :x [] :i [])\n\nenum Pair\n  (pair first: A second: B)\n\nenum IoError\n  (notFound)\n  (other)\n\nenum PreludeMap\n  (preludeMapOf entries: (List (Pair K V)))\n\nfn f -> Int64\n  1\n")
@@ -25,7 +25,7 @@ fn testNamesEndingInQuestion -> Bool
       (refute (stringContains? call "__v") (str "a name ending in ? is not the try operator: " call))
       (assert (stringContains? bound "hasEmptyName?)") (str "a let-bound name ending in ? stays a name: " bound))
       (refute (stringContains? bound "__v") (str "a let-bound name ending in ? is not the try operator: " bound))
-      (assert (stringContains? tried "(mt (queryDb id) ((ok __v) __v) ((err __e) (err __e)))") (str "? after a closing paren is the try operator: " tried))
+      (assert (stringContains? tried "(match (queryDb id) ((ok __v) __v) ((err __e) (err __e)))") (str "? after a closing paren is the try operator: " tried))
       true))
 
 fn testFunctionTypedParameters -> Bool
@@ -46,8 +46,8 @@ fn testBracesInStringLiterals -> Bool
       true))
 
 fn stringValue src: Str -> Str
-  (mt (listHead (filter (fn [(t lx/IndentToken)] -> Bool (mt t.kind ((tokString _) true) (_ false))) (lx/tokenize src)))
-    ((some t) (mt t.kind ((tokString v) v) (_ "")))
+  (match (listHead (filter (fn [(t lx/IndentToken)] -> Bool (match t.kind ((tokString _) true) (_ false))) (lx/tokenize src)))
+    ((some t) (match t.kind ((tokString v) v) (_ "")))
     ((none) "no string token"))
 
 fn badEscapeDiags src: Str -> (List Str)
@@ -56,7 +56,7 @@ fn badEscapeDiags src: Str -> (List Str)
 fn testNoArrowFnRendersWithoutSentinel -> Bool
   (let [(src "(module m :x [] :i [])\n\nfn f x: Int64\n  (+ x 1)\n")
         (parsed (ast/parse src))
-        (got (mt parsed ((ok forms) (stringJoin (map ast/renderNode forms) "\n")) ((err pe) (str "parse error: " pe.msg))))]
+        (got (match parsed ((ok forms) (stringJoin (map ast/renderNode forms) "\n")) ((err pe) (str "parse error: " pe.msg))))]
     (do
       (assert (not (stringContains? got ":inferredUnit")) (str "renderDefun must not leak :inferredUnit: " got))
       (assert (stringContains? got "(fn f [(x Int64)] (+ x 1))") (str "no-arrow fn header renders with no arrow at all: " got))

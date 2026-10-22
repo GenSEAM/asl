@@ -15,8 +15,8 @@ fn testLetPair -> Bool
 fn testIfLet -> Bool
   (let [(expanded (mac/expandIfLet "item" "fetchItem" "(process item)" "fallback"))]
     (do
-      (assert (stringContains? expanded "mt fetchItem") "if-let matches on option expression")
-      (refute (not (stringContains? expanded "mt fetchItem")) "refutes missing mt match")
+      (assert (stringContains? expanded "match fetchItem") "if-let matches on option expression")
+      (refute (not (stringContains? expanded "match fetchItem")) "refutes missing match")
       (assert (stringContains? expanded "((some item) (process item))") "if-let binds some branch")
       (assert (stringContains? expanded "((none) fallback)") "if-let binds none fallback branch")
       true))
@@ -24,8 +24,8 @@ fn testIfLet -> Bool
 fn testWhenLet -> Bool
   (let [(expanded (mac/expandWhenLet "cfg" "loadConfig" "(start cfg)"))]
     (do
-      (assert (stringContains? expanded "mt loadConfig") "when-let desugars through mt")
-      (refute (not (stringContains? expanded "mt loadConfig")) "refutes missing mt in when-let")
+      (assert (stringContains? expanded "match loadConfig") "when-let desugars through match")
+      (refute (not (stringContains? expanded "match loadConfig")) "refutes missing match in when-let")
       (assert (stringContains? expanded "((some cfg) (start cfg))") "when-let executes body on some")
       (assert (stringContains? expanded "((none) (none))") "when-let yields none on missing")
       true))

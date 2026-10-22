@@ -21,14 +21,14 @@ fn unescape s: String -> String
     (unescapeLoop s bs (bytesLength bs) 0 0 (list)))
 
 fn idOf line: String -> String
-  (mt (stringIndexOf line ":id \"")
+  (match (stringIndexOf line ":id \"")
     ((none) "")
     ((some i)
      (let [(rest (u/slice line (+ i 5) (stringLength line)))]
-       (mt (stringIndexOf rest "\"") ((some k) (u/slice rest 0 k)) ((none) "")))))
+       (match (stringIndexOf rest "\"") ((some k) (u/slice rest 0 k)) ((none) "")))))
 
 fn ioText line: String -> String
-  (mt (stringIndexOf line ":io \"")
+  (match (stringIndexOf line ":io \"")
     ((none) "")
     ((some i) (unescape (u/slice line (+ i 5) (- (stringLength line) 2)))))
 
@@ -40,31 +40,31 @@ fn get v: j/Json k: String -> j/Json
   (optionOr (pt/jget v k) (j/jnull))
 
 fn text v: j/Json -> String
-  (mt v ((j/jstr s) s) (_ ""))
+  (match v ((j/jstr s) s) (_ ""))
 
 fn items v: j/Json -> (List j/Json)
-  (mt v ((j/jarr xs) xs) (_ (list)))
+  (match v ((j/jarr xs) xs) (_ (list)))
 
 fn num v: j/Json -> Float64
-  (mt v ((j/jint i) (int64ToFloat64 i)) ((j/jfloat f) f) ((j/jnum f) f) (_ 0.0))
+  (match v ((j/jint i) (int64ToFloat64 i)) ((j/jfloat f) f) ((j/jnum f) f) (_ 0.0))
 
 fn int v: j/Json -> Int64
-  (mt v ((j/jint i) i) (_ 0))
+  (match v ((j/jint i) i) (_ 0))
 
 fn flag v: j/Json -> Bool
-  (mt v ((j/jbool b) b) (_ false))
+  (match v ((j/jbool b) b) (_ false))
 
 fn pairs v: j/Json -> (List (Pair String String))
   (map (fn [(p j/Json)] -> (Pair String String) (pair (text (optionOr (listGet (items p) 0) (j/jnull))) (text (optionOr (listGet (items p) 1) (j/jnull)))))
        (items v))
 
 fn envOf v: j/Json -> (Map String String)
-  (mt v
+  (match v
     ((j/jobj kvs) (fold (fn [(m (Map String String)) (p (Pair String j/Json))] -> (Map String String) (mapSet m (pairFirst p) (text (pairSecond p)))) (mapEmpty) kvs))
     (_ (mapEmpty)))
 
 fn parseLine line: String -> (Option Case)
-  (mt (pt/jsonLoads (ioText line))
+  (match (pt/jsonLoads (ioText line))
     ((ok io) (some (Case :id (idOf line) :io io)))
     ((err _) none))
 
@@ -72,13 +72,13 @@ fn worldOf! io: j/Json -> (Result ch/ChatWorld String)
   (let [(env (envOf (get io "env")))
         (config (get io "config"))
         (path (str (text (get io "home")) "/.asl/gateway.asn"))
-        (exists (mt config ((j/jstr _) true) (_ false)))
-        (builtin (mt config ((j/jstr _) "") (_ (resultOr (fileReadString "asl/packages/asl-gateway/tests/fixtures/chatBuiltinConfig/gateway.asn") ""))))
+        (exists (match config ((j/jstr _) true) (_ false)))
+        (builtin (match config ((j/jstr _) "") (_ (resultOr (fileReadString "asl/packages/asl-gateway/tests/fixtures/chatBuiltinConfig/gateway.asn") ""))))
         (table (if exists
                  (c/gatewayProfilesLoadText! path true (ok (text config)) (optionOr (mapGet env "ASL_CALIBRATION_INDEX") ""))
                  (c/gatewayProfilesLoadText! "builtin" true (ok builtin) (optionOr (mapGet env "ASL_CALIBRATION_INDEX") ""))))
         (maxBytes (optionOr (stringToInt64 (optionOr (mapGet env "AGY_PROMPT_MAX_BYTES") "188000")) 188000))]
-    (mt (u/upstreamSettings env)
+    (match (u/upstreamSettings env)
       ((err e) (err e))
       ((ok st) (ok (ch/ChatWorld :env env :rootDir (optionOr (mapGet env "ROOT_DIR") "") :settings st :agyPromptMaxBytes maxBytes :table table)))))
 
@@ -87,7 +87,7 @@ fn requestOf io: j/Json -> ch/ChatRequest
     (ch/ChatRequest :path (text (get r "path")) :headers (pairs (get r "headers")) :body (text (get r "body"))))
 
 fn cliOf v: j/Json -> (Option ch/CliReply)
-  (mt v
+  (match v
     ((j/jobj _)
      (some (ch/CliReply :text (text (get v "text")) :usage (get v "usage") :dedup (flag (get v "dedup"))
                         :queueWaitSec (num (get v "queueWaitSec")) :execSec (num (get v "execSec")) :pool (text (get v "pool")))))
@@ -121,9 +121,9 @@ fn dump v: j/Json -> String
   (:f detail String))
 
 fn replay id: String step: ch/ChatStep trace: (List j/Json) n: Int64 want: j/Json -> Verdict
-  (mt step
+  (match step
     ((ch/stepEffect eff k)
-     (mt (listHead trace)
+     (match (listHead trace)
        ((none) (Verdict :id id :traceOk false :responseOk false :effects n :detail (str "extra effect " (dump (ch/effectJson eff)))))
        ((some rec)
         (let [(got (dump (ch/effectJson eff)))
@@ -143,19 +143,19 @@ fn replay id: String step: ch/ChatStep trace: (List j/Json) n: Int64 want: j/Jso
                 :detail (if (= got exp) (if (listEmpty? trace) "" "recorded effects never asked") (str "raised " kind ": " msg " want " exp))))))
 
 fn judge! c: Case -> Verdict
-  (mt (worldOf! c.io)
+  (match (worldOf! c.io)
     ((err e) (Verdict :id c.id :traceOk false :responseOk false :effects 0 :detail (str "world: " e)))
     ((ok world)
      (replay c.id (ch/chatStart! (requestOf c.io) world) (items (get c.io "trace")) 0 (get c.io "response"))))
 
 fn transportEffect step: ch/ChatStep remaining: Int64 -> (Option j/Json)
   (if (<= remaining 0) none
-    (mt step
+    (match step
       ((ch/stepEffect eff k)
        (let [(effectJson (ch/effectJson eff))
              (op (text (get effectJson "op")))]
          (if (or (= op "http") (= op "poolHttp")) (some effectJson)
-           (mt eff
+           (match eff
              ((ch/effRealpath _) (transportEffect (k (ch/outPath "/")) (- remaining 1)))
              ((ch/effIsDir _) (transportEffect (k (ch/outBool true)) (- remaining 1)))
              ((ch/effClock) (transportEffect (k (ch/outFloat 1.0)) (- remaining 1)))
@@ -169,7 +169,7 @@ fn transportEffect step: ch/ChatStep remaining: Int64 -> (Option j/Json)
 
 fn ! testChatWorld configText: String env: (Map String String) -> (Option ch/ChatWorld)
   (let [(table (c/gatewayProfilesLoadText! "/test" true (ok configText) ""))]
-    (mt (u/upstreamSettings env)
+    (match (u/upstreamSettings env)
       ((err _) none)
       ((ok settings) (some (ch/ChatWorld :env env :rootDir "/" :settings settings :agyPromptMaxBytes 10000 :table table)))))
 
@@ -179,28 +179,28 @@ fn ! transportEffectJson world: ch/ChatWorld -> (Option j/Json)
     (transportEffect (ch/chatStart! request world) 40))
 
 fn ! transportOp world: ch/ChatWorld -> String
-  (mt (transportEffectJson world)
+  (match (transportEffectJson world)
     ((none) "no-transport")
     ((some effect) (text (get effect "op"))))
 
 fn ! configuredPoolEffect -> j/Json
   (let [(configText "(:gateway :v 2 :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\" :pool (:windowMs 50 :peakCount 3 :bypassWhileBusy true :requestTimeoutMs 200))) :models ((:model :id m :provider test :name \"model-m\")) :profiles ((:profile :id default :routes ((:intent any :chain (m))))) :uses ((:use :for default :profile default)))")
         (env (mapSet (mapEmpty) "TEST_KEY" "test-key"))]
-    (mt (testChatWorld configText env)
+    (match (testChatWorld configText env)
       ((none) (j/jnull))
       ((some world) (optionOr (transportEffectJson world) (j/jnull)))))
 
 fn ! configuredPoolTransportOp -> String
   (let [(configText "(:gateway :v 2 :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\" :pool (:windowMs 50 :peakCount 3 :bypassWhileBusy true :requestTimeoutMs 200))) :models ((:model :id m :provider test :name \"model-m\")) :profiles ((:profile :id default :routes ((:intent any :chain (m))))) :uses ((:use :for default :profile default)))")
         (env (mapSet (mapEmpty) "TEST_KEY" "test-key"))]
-    (mt (testChatWorld configText env)
+    (match (testChatWorld configText env)
       ((none) "world-error")
       ((some world) (transportOp world))))
 
 fn ! directTransportOp -> String
   (let [(configText "(:gateway :v 2 :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\")) :models ((:model :id m :provider test :name \"model-m\")) :profiles ((:profile :id default :routes ((:intent any :chain (m))))) :uses ((:use :for default :profile default)))")
         (env (mapSet (mapEmpty) "TEST_KEY" "test-key"))]
-    (mt (testChatWorld configText env)
+    (match (testChatWorld configText env)
       ((none) "world-error")
       ((some world) (transportOp world))))
 
@@ -211,7 +211,7 @@ fn poolRetryConfigText -> String
 ; (:m like transportEffect, but skips past `skip` transport effects first, answering each with a retryable 503 so the Loop's own retry path drives it to the next attempt, and returns the transport effect actually reached after that)
 fn nthTransportEffect step: ch/ChatStep remaining: Int64 skip: Int64 -> (Option j/Json)
   (if (<= remaining 0) none
-    (mt step
+    (match step
       ((ch/stepEffect eff k)
        (let [(effectJson (ch/effectJson eff))
              (op (text (get effectJson "op")))]
@@ -219,7 +219,7 @@ fn nthTransportEffect step: ch/ChatStep remaining: Int64 skip: Int64 -> (Option 
            (if (> skip 0)
              (nthTransportEffect (k (ch/outHttp (ch/httpError 503 "Service Unavailable" (list) "{}"))) (- remaining 1) (- skip 1))
              (some effectJson))
-           (mt eff
+           (match eff
              ((ch/effRealpath _) (nthTransportEffect (k (ch/outPath "/")) (- remaining 1) skip))
              ((ch/effIsDir _) (nthTransportEffect (k (ch/outBool true)) (- remaining 1) skip))
              ((ch/effClock) (nthTransportEffect (k (ch/outFloat 1.0)) (- remaining 1) skip))
@@ -233,23 +233,23 @@ fn nthTransportEffect step: ch/ChatStep remaining: Int64 skip: Int64 -> (Option 
 
 fn ! retriedTransportOp -> String
   (let [(env (mapSet (mapEmpty) "TEST_KEY" "test-key"))]
-    (mt (testChatWorld (poolRetryConfigText) env)
+    (match (testChatWorld (poolRetryConfigText) env)
       ((none) "world-error")
       ((some world)
        (let [(request (ch/ChatRequest :path "/v1/chat/completions" :headers (list)
                        :body "{\"model\":\"m\",\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}"))]
-         (mt (nthTransportEffect (ch/chatStart! request world) 60 1)
+         (match (nthTransportEffect (ch/chatStart! request world) 60 1)
            ((none) "no-second-transport")
            ((some effect) (text (get effect "op"))))))))
 
 fn ! firstTransportOpOfRetryConfig -> String
   (let [(env (mapSet (mapEmpty) "TEST_KEY" "test-key"))]
-    (mt (testChatWorld (poolRetryConfigText) env)
+    (match (testChatWorld (poolRetryConfigText) env)
       ((none) "world-error")
       ((some world)
        (let [(request (ch/ChatRequest :path "/v1/chat/completions" :headers (list)
                        :body "{\"model\":\"m\",\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}"))]
-         (mt (nthTransportEffect (ch/chatStart! request world) 60 0)
+         (match (nthTransportEffect (ch/chatStart! request world) 60 0)
            ((none) "no-transport")
            ((some effect) (text (get effect "op"))))))))
 
@@ -259,7 +259,7 @@ fn ! queueTimeoutEffect -> j/Json
         (env (mapSet (mapEmpty) "TEST_KEY" "test-key"))
         (request (ch/ChatRequest :path "/v1/chat/completions" :headers (list)
                   :body "{\"model\":\"m\",\"queue_timeout\":1200,\"timeout\":300,\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}"))]
-    (mt (testChatWorld configText env)
+    (match (testChatWorld configText env)
       ((none) (j/jnull))
       ((some world) (optionOr (transportEffect (ch/chatStart! request world) 40) (j/jnull)))))
 
@@ -272,15 +272,15 @@ fn ! responsesRequest -> ch/ChatRequest
 
 fn ! responsesTransportEffect -> j/Json
   (let [(env (mapSet (mapEmpty) "TEST_KEY" "test-key"))]
-    (mt (testChatWorld (responsesConfigText) env)
+    (match (testChatWorld (responsesConfigText) env)
       ((none) (j/jnull))
       ((some world) (optionOr (transportEffect (ch/chatStart! (responsesRequest) world) 40) (j/jnull)))))
 
 fn ! drive! step: ch/ChatStep reply: String remaining: Int64 -> (Option ch/ChatResponse)
   (if (<= remaining 0) none
-    (mt step
+    (match step
       ((ch/stepEffect eff k)
-       (mt eff
+       (match eff
          ((ch/effHttp _ _ _ _ _ _ _) (drive! (k (ch/outHttp (ch/httpOk 200 (list) reply))) reply (- remaining 1)))
          ((ch/effPoolHttp _ _ _ _ _ _) (drive! (k (ch/outHttp (ch/httpOk 200 (list) reply))) reply (- remaining 1)))
          ((ch/effRealpath _) (drive! (k (ch/outPath "/")) reply (- remaining 1)))
@@ -297,10 +297,10 @@ fn ! drive! step: ch/ChatStep reply: String remaining: Int64 -> (Option ch/ChatR
 fn ! responsesReplyCheck -> String
   (let [(env (mapSet (mapEmpty) "TEST_KEY" "test-key"))
         (reply "{\"id\":\"r1\",\"object\":\"response\",\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"hi there\"}]}],\"usage\":{\"input_tokens\":5,\"output_tokens\":7,\"output_tokens_details\":{\"reasoning_tokens\":2}}}")]
-    (mt (testChatWorld (responsesConfigText) env)
+    (match (testChatWorld (responsesConfigText) env)
       ((none) "world-error")
       ((some world)
-       (mt (drive! (ch/chatStart! (responsesRequest) world) reply 60)
+       (match (drive! (ch/chatStart! (responsesRequest) world) reply 60)
          ((none) "no-response")
          ((some resp) resp.body)))))
 
@@ -317,10 +317,10 @@ fn ! reasoningOnlyReplyBody -> String
 
 fn ! reasoningFallbackCheck -> String
   (let [(env (mapSet (mapEmpty) "TEST_KEY" "test-key"))]
-    (mt (testChatWorld (reasoningFallbackConfigText) env)
+    (match (testChatWorld (reasoningFallbackConfigText) env)
       ((none) "world-error")
       ((some world)
-       (mt (drive! (ch/chatStart! (reasoningFallbackRequest) world) (reasoningOnlyReplyBody) 60)
+       (match (drive! (ch/chatStart! (reasoningFallbackRequest) world) (reasoningOnlyReplyBody) 60)
          ((none) "no-response")
          ((some resp) resp.body)))))
 
@@ -330,10 +330,10 @@ fn ! reasoningContentOnlyReplyBody -> String
 
 fn ! reasoningContentFallbackCheck -> String
   (let [(env (mapSet (mapEmpty) "TEST_KEY" "test-key"))]
-    (mt (testChatWorld (reasoningFallbackConfigText) env)
+    (match (testChatWorld (reasoningFallbackConfigText) env)
       ((none) "world-error")
       ((some world)
-       (mt (drive! (ch/chatStart! (reasoningFallbackRequest) world) (reasoningContentOnlyReplyBody) 60)
+       (match (drive! (ch/chatStart! (reasoningFallbackRequest) world) (reasoningContentOnlyReplyBody) 60)
          ((none) "no-response")
          ((some resp) resp.body)))))
 
@@ -341,9 +341,9 @@ fn ! reasoningContentFallbackCheck -> String
 fn ! captureBreaker! step: ch/ChatStep downAcc: (List String) eventAcc: (List String) status: Int64 reason: String httpBody: String remaining: Int64 -> (Pair (List String) (List String))
   (if (<= remaining 0)
     (pair (listReverse downAcc) (listReverse eventAcc))
-    (mt step
+    (match step
       ((ch/stepEffect eff k)
-       (mt eff
+       (match eff
          ((ch/effBreakerDown p) (captureBreaker! (k (ch/outFloat 0.0)) (cons p downAcc) eventAcc status reason httpBody (- remaining 1)))
          ((ch/effBreakerEvent e p) (captureBreaker! (k ch/outDone) downAcc (cons (str e ":" p) eventAcc) status reason httpBody (- remaining 1)))
          ((ch/effHttp _ _ _ _ _ _ _) (captureBreaker! (k (ch/outHttp (ch/httpError status reason (list) httpBody))) downAcc eventAcc status reason httpBody (- remaining 1)))
@@ -370,7 +370,7 @@ fn ! profileRoutedRequest -> ch/ChatRequest
 
 fn ! breakerCapture! configText: String status: Int64 reason: String httpBody: String -> (Pair (List String) (List String))
   (let [(env (mapSet (mapEmpty) "TEST_KEY" "test-key"))]
-    (mt (testChatWorld configText env)
+    (match (testChatWorld configText env)
       ((none) (pair (list) (list)))
       ((some world) (captureBreaker! (ch/chatStart! (profileRoutedRequest) world) (list) (list) status reason httpBody 120))))
 
@@ -390,7 +390,7 @@ fn ! resourceExhaustedEvents -> (List String)
 fn statusOf c: Case -> String
   (let [(r (get c.io "response"))
         (hs (filter (fn [(h j/Json)] -> Bool (= (text (optionOr (listGet (items h) 0) (j/jnull))) ":status")) (items (get r "head"))))]
-    (mt (listHead hs)
+    (match (listHead hs)
       ((some h) (text (optionOr (listGet (items h) 1) (j/jnull))))
       ((none) (str "raises " (text (get r "raises"))))))
 
@@ -405,9 +405,9 @@ fn ! spreadConfigText -> String
 ; (:m :do "answers the one effSpreadOrder a spread-configured cascade asks with answerOrder, every other effect with the same defaults transportEffect uses, and returns the model actually dispatched (from the real effHttp effect's own model field, never JSON) or a diagnostic string if the step ends another way")
 fn ! spreadDrive! step: ch/ChatStep answerOrder: (List String) remaining: Int64 -> String
   (if (<= remaining 0) "timeout"
-    (mt step
+    (match step
       ((ch/stepEffect eff k)
-       (mt eff
+       (match eff
          ((ch/effSpreadOrder _ _ _ _ _) (spreadDrive! (k (ch/outStrings answerOrder)) answerOrder (- remaining 1)))
          ((ch/effHttp _ model _ _ _ _ _) model)
          ((ch/effRealpath _) (spreadDrive! (k (ch/outPath "/")) answerOrder (- remaining 1)))
@@ -423,14 +423,14 @@ fn ! spreadDrive! step: ch/ChatStep answerOrder: (List String) remaining: Int64 
 
 fn ! spreadDispatchedModel! answerOrder: (List String) -> String
   (let [(env (mapSet (mapEmpty) "TEST_KEY" "test-key"))]
-    (mt (testChatWorld (spreadConfigText) env)
+    (match (testChatWorld (spreadConfigText) env)
       ((none) "world-error")
       ((some world) (spreadDrive! (ch/chatStart! (profileRoutedRequest) world) answerOrder 60))))
 
 fn ! runTests -> Bool
-  (let [(src (mt (fileReadString (fixturePath)) ((ok t) t) ((err _) "")))
+  (let [(src (match (fileReadString (fixturePath)) ((ok t) t) ((err _) "")))
         (lines (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:case ")) (stringSplit src "\n")))
-        (cases (fold (fn [(acc (List Case)) (l String)] -> (List Case) (mt (parseLine l) ((some c) (listAppend acc (list c))) ((none) acc))) (list) lines))
+        (cases (fold (fn [(acc (List Case)) (l String)] -> (List Case) (match (parseLine l) ((some c) (listAppend acc (list c))) ((none) acc))) (list) lines))
         (verdicts (map judge! cases))
         (bad (filter (fn [(v Verdict)] -> Bool (not (and v.traceOk v.responseOk))) verdicts))
         (effects (fold (fn [(acc Int64) (v Verdict)] -> Int64 (+ acc v.effects)) 0 verdicts))
@@ -465,7 +465,7 @@ fn ! runTests -> Bool
       (assert (not (stringContains? (text (get (responsesTransportEffect) "data")) "\"messages\"")) "RESPAPI: upstream body has no messages")
       (assert (stringContains? (text (get (responsesTransportEffect) "data")) "\"max_output_tokens\"") "RESPAPI: max_tokens becomes max_output_tokens")
       (let [(parsed (pt/jsonLoads (responsesReplyCheck)))]
-        (mt parsed
+        (match parsed
           ((err _) (assert false "RESPAPI: converted reply did not parse"))
           ((ok v)
             (let [(choices (get v "choices"))
@@ -476,7 +476,7 @@ fn ! runTests -> Bool
               (assert (= (int (get (get v "usage") "completion_tokens")) 7) "RESPAPI: output_tokens maps to completion_tokens")))))
       (let [(raw (reasoningFallbackCheck))
             (parsed (pt/jsonLoads raw))]
-        (mt parsed
+        (match parsed
           ((err _) (assert false (str "EMPTYCONTENTFALLBACK: response did not parse as a chat completion: " raw)))
           ((ok v)
             (let [(choices (get v "choices"))
@@ -486,7 +486,7 @@ fn ! runTests -> Bool
                       (str "EMPTYCONTENTFALLBACK: empty content falls back to message.reasoning: " (text (get msg "content"))))))))
       (let [(raw2 (reasoningContentFallbackCheck))
             (parsed2 (pt/jsonLoads raw2))]
-        (mt parsed2
+        (match parsed2
           ((err _) (assert false (str "EMPTYCONTENTFALLBACK2: response did not parse as a chat completion: " raw2)))
           ((ok v)
             (let [(choices (get v "choices"))

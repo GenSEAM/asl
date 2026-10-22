@@ -268,13 +268,13 @@ fn removePeer node: RaftNode peerIdToRemove: String -> RaftNode
     (with node :peers updatedPeers))
 
 fn renewLeaderLease node: RaftNode nowMs: Int64 -> RaftNode
-  (mt node.role
+  (match node.role
     ((roleLeader)
       (with node :leaderLeaseExpiresAt (+ nowMs node.leaseTtlMs) :readIndex node.commitIndex))
     (_ node))
 
 fn serveLinearizableRead node: RaftNode nowMs: Int64 -> (Option Int64)
-  (mt node.role
+  (match node.role
     ((roleLeader)
       (if (< nowMs node.leaderLeaseExpiresAt)
         (some node.readIndex)
@@ -282,7 +282,7 @@ fn serveLinearizableRead node: RaftNode nowMs: Int64 -> (Option Int64)
     (_ (none)))
 
 fn formatRaftState node: RaftNode -> String
-  (let [(roleStr (mt node.role
+  (let [(roleStr (match node.role
                    ((roleFollower) "follower")
                    ((roleCandidate) "candidate")
                    ((roleLeader) "leader")))]
@@ -308,7 +308,7 @@ fn commitJointConfiguration node: RaftNode -> RaftNode
                                  found))
                              (none)
                              node.logEntries))]
-    (mt jointEntryOpt
+    (match jointEntryOpt
       ((some entry)
         (let [(cmd entry.command)
               (newPeersStr (optionOr (stringSlice cmd 13 (stringLength cmd)) ""))
@@ -327,7 +327,7 @@ fn commitJointConfiguration node: RaftNode -> RaftNode
       ((none) node)))
 
 fn renewLeaderLeaseWithQuorum node: RaftNode acks: Int64 nowMs: Int64 -> RaftNode
-  (mt node.role
+  (match node.role
     ((roleLeader)
       (let [(totalClusterSize (+ (listLength node.peers) 1))]
         (if (isQuorumAchieved acks totalClusterSize)

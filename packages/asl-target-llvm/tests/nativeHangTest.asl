@@ -20,7 +20,7 @@
 
 fn ! cpuMicros -> Int64
   (let [(usage (procRusage))]
-    (mt usage
+    (match usage
       ((err e) (do (assert (ok? usage) (str "procRusage failed: " e)) 0))
       ((ok u) (+ u.selfUserUs u.selfSysUs))))
 
@@ -47,7 +47,7 @@ fn ! flatCost n: Int64 -> FlatCost
         (c0 (cpuMicros))
         (lowered (low/lowerSource source))
         (c1 (cpuMicros))]
-    (mt lowered
+    (match lowered
       ((err ds) (do (assert false (str "flat body of " n " asserts lowers: " (stringJoin (map (fn [(d ir/IrDiag)] -> String (str d.code " " d.message)) ds) "; "))) (FlatCost :lowerUs 0 :emitUs 0 :functions 0 :widest 0)))
       ((ok m)
         (let [(c2 (cpuMicros))
@@ -79,10 +79,10 @@ fn runFailure failure: String -> NativeRun
   (NativeRun :failure failure :exitCode -1 :stdout "" :stderr "")
 
 fn ! buildAndRun source: String prelude: String directory: String -> NativeRun
-  (mt (llvm/emitLlvmSourceWith source prelude "main")
+  (match (llvm/emitLlvmSourceWith source prelude "main")
     ((err ds) (runFailure (str "cannot compile: " ds)))
     ((ok text)
-      (mt (fileWrite (str directory "/flat.ll") text)
+      (match (fileWrite (str directory "/flat.ll") text)
         ((err e) (runFailure (str "cannot write LLVM IR: " e)))
         ((ok _)
           (let [(linked (processRun (str "/usr/bin/clang -O2 -Wno-override-module -x ir " directory "/flat.ll -x none asl/host/out/libaslrt.a -lm -o " directory "/flat")))]
@@ -92,11 +92,11 @@ fn ! buildAndRun source: String prelude: String directory: String -> NativeRun
                 (NativeRun :failure "" :exitCode ran.exitCode :stdout ran.stdout :stderr ran.stderr))))))))
 
 fn ! runFlat n: Int64 bad: Int64 -> NativeRun
-  (mt (fileReadString "asl/prelude/prelude.asl")
+  (match (fileReadString "asl/prelude/prelude.asl")
     ((err e) (runFailure (str "cannot read prelude: " e)))
     ((ok prelude)
       (let [(directory (fixtureDirectory))]
-        (mt (dirCreate directory)
+        (match (dirCreate directory)
           ((err e) (runFailure (str "cannot create " directory ": " e)))
           ((ok _)
             (let [(outcome (buildAndRun (flatSource n bad) prelude directory))
@@ -125,7 +125,7 @@ fn deepSource k: Int64 -> String
        " 1) \"deep\")\n    true)\n")
 
 fn parseVerdict r: (Result (List ast/TopForm) ast/ParseError) -> String
-  (mt r
+  (match r
     ((ok forms) "ok")
     ((err e) (str e.msg " at " e.line ":" e.col)))
 
@@ -141,13 +141,13 @@ fn ! testDepthGuard -> Bool
       (println "nativeHang depth CPU us parse/lower 2000-deep:" (- c1 c0) (- c2 c1))
       (assert (= deep "ERR_DEPTH expression nested deeper than 1000 at 7:4004") (str "a 2000-deep nest fails to parse with ERR_DEPTH at the recorded position, got " deep))
       (assert (< (- c1 c0) 3000000) "the 2000-deep nest is rejected within 3 s of CPU time")
-      (assert (mt lowered ((err ds) (= (optionOr (listHead (map (fn [(d ir/IrDiag)] -> String d.code) ds)) "") "ERR_DEPTH")) ((ok _) false)) "lowerSource reports the 2000-deep nest as ERR_DEPTH")
+      (assert (match lowered ((err ds) (= (optionOr (listHead (map (fn [(d ir/IrDiag)] -> String d.code) ds)) "") "ERR_DEPTH")) ((ok _) false)) "lowerSource reports the 2000-deep nest as ERR_DEPTH")
       (assert (= limit "ok") (str "an expression at depth 1000 parses, as the recorded expectation has it, got " limit))
       (assert (= over "ERR_DEPTH expression nested deeper than 1000 at 7:4004") (str "one level deeper fails as the recorded expectation has it, got " over))
       true))
 
 fn ! loadVerdict path: String -> String
-  (mt (lk/loadClosure! path)
+  (match (lk/loadClosure! path)
     ((ok units) "ok")
     ((err ds) (stringJoin (map (fn [(d ir/IrDiag)] -> String (str d.code " " d.message " " d.locus)) ds) "; ")))
 

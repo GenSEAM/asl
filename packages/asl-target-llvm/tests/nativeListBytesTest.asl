@@ -19,7 +19,7 @@ fn fixtureLines -> (List String)
         "  (+ a (+ b c))"
         ""
         "fn sumList xs: (List Int64) acc: Int64 -> Int64"
-        "  (mt (listHead xs) ((some h) (sumList (optionOr (listTail xs) (list)) (+ acc h))) ((none) acc))"
+        "  (match (listHead xs) ((some h) (sumList (optionOr (listTail xs) (list)) (+ acc h))) ((none) acc))"
         ""
         "fn headOf x: T -> Int64"
         "  (optionOr (listHead x) 0)"
@@ -57,8 +57,8 @@ fn fixtureLines -> (List String)
         "         (optionOr (listGet xs 2) 0) \" \" (optionOr (listGet xs 3) -1) \" \" (optionOr (listGet xs -1) -2) \" \" (optionOr (listGet (list) 0) -3) \" \""
         "         (optionOr (stringSlice \"hello\" 1 4) \"?\") \" \" (optionOr (stringSlice \"hello\" 1 2) \"?\") \" \" (optionOr (stringSlice \"hello\" 2 2) \"?\") \" \""
         "         (optionOr (stringSlice \"hello\" 3 9) \"?\") \" \" (optionOr (stringSlice \"\" 0 1) \"?\") \" \" (optionOr (stringSlice \"hello\" -1 2) \"?\") \" \""
-        "         (mt (listHead xs) ((some h) h) ((none) 0)) \" \" (mt (listHead (list)) ((some h) h) ((none) -1)) \" \""
-        "         (mt (listTail xs) ((some r) r) ((none) (list))) \" \" (mt (listTail (list)) ((some r) r) ((none) (list 7))) \" \""
+        "         (match (listHead xs) ((some h) h) ((none) 0)) \" \" (match (listHead (list)) ((some h) h) ((none) -1)) \" \""
+        "         (match (listTail xs) ((some r) r) ((none) (list))) \" \" (match (listTail (list)) ((some r) r) ((none) (list 7))) \" \""
         "         (getOf 5 -1)))"
         ""
         "fn partials -> String"
@@ -150,16 +150,16 @@ fn formatDiags ds: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.locus ": [" d.code "] " d.message)) ds) "; ")
 
 fn ! compiled path: String -> (Result String String)
-  (mt (lk/linkEntry! path)
+  (match (lk/linkEntry! path)
     ((err ds) (err (formatDiags ds)))
-    ((ok m) (mt (llvm/emitLlvmProgramNative! m (str m.name ".main"))
+    ((ok m) (match (llvm/emitLlvmProgramNative! m (str m.name ".main"))
               ((err ds) (err (formatDiags ds)))
               ((ok code) (ok code)))))
 
 fn ! optBin -> (Option String)
   (let [(known (filter (fn [(c String)] -> Bool (= (processRun (str "test -x " c)).exitCode 0))
                         (list "/opt/homebrew/opt/llvm/bin/opt" "/usr/local/opt/llvm/bin/opt")))]
-    (mt (listHead known)
+    (match (listHead known)
       ((some o) (some o))
       ((none) (if (= (processRun "command -v opt >/dev/null 2>&1").exitCode 0) (some "opt") (none)))))
 
@@ -180,7 +180,7 @@ fn sourceDirs -> (List (Pair String (List String)))
 
 fn ! sourceFiles -> (List String)
   (fold (fn [(acc (List String)) (d (Pair String (List String)))] -> (List String)
-          (mt (dirList (pairFirst d))
+          (match (dirList (pairFirst d))
             ((err e) (do (assert false (str "lists " (pairFirst d) ": " e)) acc))
             ((ok names) (listAppend acc (map (fn [(n String)] -> String (str (pairFirst d) "/" n))
                                              (filter (fn [(n String)] -> Bool (listAny? (fn [(s String)] -> Bool (stringEndsWith? n s)) (pairSecond d))) names))))))
@@ -189,7 +189,7 @@ fn ! sourceFiles -> (List String)
 fn ! testStaleNames -> Bool
   (let [(files (sourceFiles))
         (stale (fold (fn [(acc (List String)) (f String)] -> (List String)
-                       (mt (fileReadString f)
+                       (match (fileReadString f)
                          ((err e) (do (assert false (str "reads " f ": " e)) acc))
                          ((ok text) (listAppend acc (map (fn [(n String)] -> String (str f ": asl_rt_b_" n))
                                                          (filter (fn [(n String)] -> Bool (stringContains? text (str "asl_rt_b_" n))) (deletedEntries)))))))
@@ -220,7 +220,7 @@ fn ! testIr dir: String code: String -> Bool
       (refute (stringContains? code (str "alloca [" (bigCount) " x %Val]")) "the big literal has no argument array")
       (assert (>= (occurrences code "@listrt.cell(") (bigCount)) (str "the big literal is a chain of " (bigCount) " @listrt.cell conses"))
       (assert (ok? (fileWrite ll code)) (str "fileWrite " ll))
-      (mt (optBin)
+      (match (optBin)
         ((none) (do (println "opt not found on this host, skipping -passes=verify") true))
         ((some o) (let [(v (processRun (str o " -passes=verify -disable-output " ll)))]
                     (do (assert (= v.exitCode 0) (str "opt -passes=verify accepts the emitted IR: " v.stderr)) true))))
@@ -236,7 +236,7 @@ fn ! testValuesRejected dir: String -> Bool
     (map (fn [(name String)] -> Bool
            (let [(src (str dir "/" name "Value.asl"))]
              (do (assert (ok? (fileWrite src (valueSource name))) (str "fileWrite " src))
-                 (mt (compiled src)
+                 (match (compiled src)
                    ((ok _) (do (assert false (str name " as a value compiled")) true))
                    ((err e) (do (assert (stringContains? e (str "ERR_LOWER_UNKNOWN_SYMBOL")) (str name " as a value: " e))
                                 (assert (stringContains? e (str "'" name "'")) (str name " as a value names it: " e))
@@ -334,7 +334,7 @@ fn ! runTests -> Bool
       (testStaleNames)
       (testValuesRejected dir)
       (assert (ok? (fileWrite src (fixtureSrc))) (str "fileWrite " src))
-      (mt (compiled src)
+      (match (compiled src)
         ((err e) (do (assert false (str "listBytesFixture links and emits: " e)) true))
         ((ok code)
           (do

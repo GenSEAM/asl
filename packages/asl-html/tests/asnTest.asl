@@ -9,7 +9,7 @@ fn sheet -> String
   "(:css (:import \"/base.css\") (:layerOrder \"reset\" \"site\") (:rule \"a:hover\" :color \"var(--signal)\" :--ring \"2px\") (:supports \"(display: grid)\" (:rule \".g\" :display \"grid\")) (:keyframes \"fade\" (:at \"from\" :opacity 0) (:at \"to\" :opacity 1)) (:fontFace :fontFamily \"\\\"Mono\\\"\" :src \"url(/m.woff2)\"))"
 
 fn errorsOf r: (Result String (List String)) -> (List String)
-  (mt r ((ok _) []) ((err es) es))
+  (match r ((ok _) []) ((err es) es))
 
 fn runTests -> Bool
   (do

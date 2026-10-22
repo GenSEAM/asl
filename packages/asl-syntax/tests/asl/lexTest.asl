@@ -277,13 +277,13 @@ fn parseFileList stdout: String -> (List String)
 fn checkOneFile! acc: (Pair Int64 Int64) path: String -> (Pair Int64 Int64)
   (let [(checked (pairFirst acc))
         (mismatches (pairSecond acc))]
-    (mt (fileReadBytes path)
+    (match (fileReadBytes path)
       ((err _) acc)
       ((ok bs)
        (let [(len (bytesLength bs))
              (toks (lx/tokenizeBytes bs))
              (tilingRes (tr/checkTokensTiling toks len))]
-         (mt tilingRes
+         (match tilingRes
            ((err _) (pair (+ checked 1) (+ mismatches 1)))
            ((ok _)
             (let [(root (lx/tokensToNode toks len))

@@ -35,10 +35,10 @@ fn wordCode? k: Int64 -> Bool
     (else true))
 
 fn codeBefore s: String i: Int64 -> Int64
-  (if (<= i 0) -1 (let [(cs (c/charCodes (optionOr (stringSlice s (max 0 (- i 4)) i) "")))] (mt (listLast cs) ((some p) (pairFirst p)) ((none) -1))))
+  (if (<= i 0) -1 (let [(cs (c/charCodes (optionOr (stringSlice s (max 0 (- i 4)) i) "")))] (match (listLast cs) ((some p) (pairFirst p)) ((none) -1))))
 
 fn codeAfter s: String i: Int64 -> Int64
-  (if (>= i (stringLength s)) -1 (mt (listHead (c/charCodes (optionOr (stringSlice s i (min (stringLength s) (+ i 4))) ""))) ((some p) (pairFirst p)) ((none) -1)))
+  (if (>= i (stringLength s)) -1 (match (listHead (c/charCodes (optionOr (stringSlice s i (min (stringLength s) (+ i 4))) ""))) ((some p) (pairFirst p)) ((none) -1)))
 
 fn wordAt? s: String i: Int64 j: Int64 -> Bool
   (let [(first (codeAfter s i)) (last (codeBefore s j))]
@@ -73,12 +73,12 @@ fn skipRx? s: String -> Bool
 
 fn bodyNoDoc n: d/PyNode -> (List d/PyNode)
   (let [(body (d/kids n "body"))]
-    (mt (listHead body)
-      ((some b0) (if (and (d/isType? b0 "Expr") (mt (d/kid b0 "value") ((some v) (some? (d/constStr v))) ((none) false))) (optionOr (listTail body) (list)) body))
+    (match (listHead body)
+      ((some b0) (if (and (d/isType? b0 "Expr") (match (d/kid b0 "value") ((some v) (some? (d/constStr v))) ((none) false))) (optionOr (listTail body) (list)) body))
       ((none) body)))
 
 fn exprConst? s: d/PyNode kind: String -> Bool
-  (and (d/isType? s "Expr") (mt (d/kid s "value") ((some v) (= (d/constKind v) (some kind))) ((none) false)))
+  (and (d/isType? s "Expr") (match (d/kid s "value") ((some v) (= (d/constKind v) (some kind))) ((none) false)))
 
 fn singleWhy s: d/PyNode -> (Option String)
   (cond
@@ -88,7 +88,7 @@ fn singleWhy s: d/PyNode -> (Option String)
             (nm (optionOr (d/sfield e "id") ""))]
         (if (and (d/isType? e "Name") (or (= nm "NotImplementedError") (= nm "NotImplemented"))) (some (str "raises " nm)) (none))))
     ((d/isType? s "Return")
-      (mt (d/kid s "value")
+      (match (d/kid s "value")
         ((none) (some "returns None"))
         ((some v)
           (cond
@@ -107,18 +107,18 @@ fn stubWhy pi: p/PyIndex dd: p/PyDef -> (Option String)
         ((listAll? (fn [(s d/PyNode)] -> Bool (exprConst? s "ellipsis")) body) (some "body is ..."))
         (else
           (let [(single (if (= (listLength body) 1) (singleWhy (optionOr (listHead body) dd.node)) (none)))]
-            (mt single
+            (match single
               ((some w) (some w))
               ((none)
-                (mt (p/modOf pi.ix dd.modName)
+                (match (p/modOf pi.ix dd.modName)
                   ((none) (none))
                   ((some m)
-                    (mt (listHead (filter (fn [(cm (Pair Int64 String))] -> Bool (and (<= dd.line (pairFirst cm)) (<= (pairFirst cm) dd.end) (todoIn? (pairSecond cm)))) (commentsOf m)))
+                    (match (listHead (filter (fn [(cm (Pair Int64 String))] -> Bool (and (<= dd.line (pairFirst cm)) (<= (pairFirst cm) dd.end) (todoIn? (pairSecond cm)))) (commentsOf m)))
                       ((some cm) (some (str "TODO at line " (stringFromInt64 (pairFirst cm)))))
                       ((none) (none))))))))))))
 
 fn isTestMod? pi: p/PyIndex dd: p/PyDef -> Bool
-  (mt (p/modOf pi.ix dd.modName) ((some m) m.isTest) ((none) false))
+  (match (p/modOf pi.ix dd.modName) ((some m) m.isTest) ((none) false))
 
 fn padLine n: Int64 -> String
   (let [(s (stringFromInt64 n))] (str (stringRepeat "0" (max 0 (- 12 (stringLength s)))) s))
@@ -132,8 +132,8 @@ fn testDefs pi: p/PyIndex -> (List p/PyDef)
                       (allDefs pi)))
 
 fn classDecos pi: p/PyIndex t: p/PyDef -> (List d/PyNode)
-  (mt t.cls
-    ((some cq) (mt (p/defOf pi.ix (p/defKey t.modName cq)) ((some cd) (d/kids cd.node "decorator_list")) ((none) (list))))
+  (match t.cls
+    ((some cq) (match (p/defOf pi.ix (p/defKey t.modName cq)) ((some cd) (d/kids cd.node "decorator_list")) ((none) (list))))
     ((none) (list)))
 
 fn skipped pi: p/PyIndex t: p/PyDef -> Bool
@@ -141,13 +141,13 @@ fn skipped pi: p/PyIndex t: p/PyDef -> Bool
     (or (listAny? (fn [(x d/PyNode)] -> Bool (skipRx? (optionOr x.u ""))) decos)
         (listAny? (fn [(n d/PyNode)] -> Bool
                     (and (d/isType? n "Call")
-                         (mt (d/kid n "func")
+                         (match (d/kid n "func")
                            ((some f) (let [(s (optionOr f.u ""))] (or (stringEndsWith? s "skipTest") (= s "pytest.skip") (= s "skip"))))
                            ((none) false))))
                   (d/walkBfs t.node))))
 
 fn dottedStep ix: p/Ix cur: (Option p/Res) part: String -> (Option p/Res)
-  (mt cur
+  (match cur
     ((none) (none))
     ((some r)
       (cond
@@ -162,7 +162,7 @@ fn dottedFrom ix: p/Ix parts: (List String) i: Int64 -> (Option String)
     (let [(m (c/joinWith (listTake parts i) "."))]
       (if (not (or (h/omHas? ix.mods m) (h/hmHas? ix.pkgs m)))
         (dottedFrom ix parts (- i 1))
-        (mt (fold (fn [(cur (Option p/Res)) (part String)] -> (Option p/Res) (dottedStep ix cur part))
+        (match (fold (fn [(cur (Option p/Res)) (part String)] -> (Option p/Res) (dottedStep ix cur part))
                   (some (p/Res :tag "mod" :val m :how "" :hops 0)) (listDrop parts i))
           ((some r) (if (= r.tag "def") (some r.val) (none)))
           ((none) (none))))))
@@ -172,21 +172,21 @@ fn resolveDotted ix: p/Ix s: String -> (Option String)
 
 fn patchKey pi: p/PyIndex tmod: p/PyMod n: d/PyNode -> (Option String)
   (let [(ix pi.ix)
-        (fname (mt (d/kid n "func") ((some f) (optionOr f.u "")) ((none) "")))
+        (fname (match (d/kid n "func") ((some f) (optionOr f.u "")) ((none) "")))
         (args (d/kids n "args"))
         (arg0 (listGet args 0))
-        (str0 (mt arg0 ((some a) (d/constStr a)) ((none) (none))))
-        (str1 (mt (listGet args 1) ((some a) (d/constStr a)) ((none) (none))))
+        (str0 (match arg0 ((some a) (d/constStr a)) ((none) (none))))
+        (str1 (match (listGet args 1) ((some a) (d/constStr a)) ((none) (none))))
         (monkey (and (stringEndsWith? fname ".setattr") (stringContains? fname "monkeypatch")))]
     (cond
       ((and (or (= fname "patch") (stringEndsWith? fname ".patch")) (some? str0)) (resolveDotted ix (optionOr str0 "")))
       ((and (or (stringEndsWith? fname "patch.object") monkey) (>= (listLength args) 2) (some? str1))
         (let [(attr (optionOr str1 ""))]
-          (mt (p/resolveExpr ix tmod (optionOr arg0 n) (list))
+          (match (p/resolveExpr ix tmod (optionOr arg0 n) (list))
             ((some base)
               (cond
                 ((= base.tag "mod")
-                  (mt (p/resolveSym ix base.val attr 0) ((some r) (if (= r.tag "def") (some r.val) (none))) ((none) (none))))
+                  (match (p/resolveSym ix base.val attr 0) ((some r) (if (= r.tag "def") (some r.val) (none))) ((none) (none))))
                 ((or (= base.tag "def") (= base.tag "inst"))
                   (if (= (p/defKind ix base.val) "class") (p/methodOf ix base.val attr 0) (none)))
                 (else (none))))
@@ -195,13 +195,13 @@ fn patchKey pi: p/PyIndex tmod: p/PyMod n: d/PyNode -> (Option String)
       (else (none))))
 
 fn patches pi: p/PyIndex t: p/PyDef -> (h/HMap Bool)
-  (mt (p/modOf pi.ix t.modName)
+  (match (p/modOf pi.ix t.modName)
     ((none) (h/hmEmpty))
     ((some tmod)
       (let [(roots (listAppend (listAppend (d/kids t.node "decorator_list") (list t.node)) (classDecos pi t)))]
         (fold (fn [(acc (h/HMap Bool)) (root d/PyNode)] -> (h/HMap Bool)
                 (fold (fn [(a2 (h/HMap Bool)) (n d/PyNode)] -> (h/HMap Bool)
-                        (if (d/isType? n "Call") (mt (patchKey pi tmod n) ((some k) (h/hmPut a2 k true)) ((none) a2)) a2))
+                        (if (d/isType? n "Call") (match (patchKey pi tmod n) ((some k) (h/hmPut a2 k true)) ((none) a2)) a2))
                       acc (d/walkBfs root)))
               (h/hmEmpty) roots))))
 
@@ -209,7 +209,7 @@ fn edgesOf pi: p/PyIndex k: String -> (List String)
   (map (fn [(q (Pair String Bool))] -> String (pairFirst q)) (h/hmPairs (optionOr (h/hmGet pi.w.edges k) (h/hmEmpty))))
 
 fn reachLoop pi: p/PyIndex todo: (List String) cut: (h/HMap Bool) seen: (h/HMap Bool) -> (h/HMap Bool)
-  (mt (listHead todo)
+  (match (listHead todo)
     ((none) seen)
     ((some k)
       (let [(st (fold (fn [(acc (Pair (h/HMap Bool) (List String))) (cc String)] -> (Pair (h/HMap Bool) (List String))
@@ -218,8 +218,8 @@ fn reachLoop pi: p/PyIndex todo: (List String) cut: (h/HMap Bool) seen: (h/HMap 
         (reachLoop pi (pairSecond st) cut (pairFirst st)))))
 
 fn reach pi: p/PyIndex t: p/PyDef cut: (h/HMap Bool) -> (h/HMap Bool)
-  (let [(setUp (mt t.cls ((some cq) (p/methodOf pi.ix (p/defKey t.modName cq) "setUp" 0)) ((none) (none))))
-        (start (mt setUp ((some s) (list t.key s)) ((none) (list t.key))))]
+  (let [(setUp (match t.cls ((some cq) (p/methodOf pi.ix (p/defKey t.modName cq) "setUp" 0)) ((none) (none))))
+        (start (match setUp ((some s) (list t.key s)) ((none) (list t.key))))]
     (reachLoop pi start cut (h/hmEmpty)))
 
 fn directCallees pi: p/PyIndex t: p/PyDef -> (h/HMap Bool)

@@ -1,7 +1,7 @@
 (module aslMem/tests/vfsForkTest :x [runTests testForkVfsBranch testSpeculativeWriteIsolation testCommitBranch! testAbortBranch! testCompensatingSagas testBranchDiffAndMultiFork] :i [(vfs :a v) (vfsFork :a vf)])
 
 fn getBranchBuffer branch: vf/VFSBranch targetPath: Str -> (Option v/VFSBuffer)
-  (fold (fn [(acc (Option v/VFSBuffer)) (b v/VFSBuffer)] -> (Option v/VFSBuffer) (mt acc ((some found) (some found)) ((none) (if (= b.path targetPath) (some b) (none))))) (none) branch.buffers)
+  (fold (fn [(acc (Option v/VFSBuffer)) (b v/VFSBuffer)] -> (Option v/VFSBuffer) (match acc ((some found) (some found)) ((none) (if (= b.path targetPath) (some b) (none))))) (none) branch.buffers)
 
 fn testForkVfsBranch -> Bool
   (let [(reg0 (v/vfsInit)) (reg1 (v/vfsWrite reg0 "src/main.asl" "(module main :x [])")) (reg2 (v/vfsWrite reg1 "docs/readme.md" "# Readme")) (branch (vf/forkVfsBranch reg2 "branch-alpha"))] (assert (= branch.branchId "branch-alpha") "Branch id must match fork branch-id parameter") (assert (= branch.parentId "root") "Parent id must be root") (assert (= branch.status "active") "Initial branch status must be active") (assert (= (listLength branch.buffers) 2) "Forked branch must inherit all buffers from parent registry") (assert (= (listLength branch.buffers) reg2.size) "Forked branch buffer count must match root registry size") (assert (= branch.createdAtMs 1725793200000) "Branch created timestamp must be initialized") true)

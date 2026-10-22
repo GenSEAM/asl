@@ -3,8 +3,8 @@
   :i [(asl-parser/ast :a ast) (asl-parser/reader :a rd)])
 
 fn bodyOf src: String name: String -> String
-  (mt (ast/parse src)
-    ((ok forms) (stringJoin (map (fn [f] (mt f ((ast/topDefun d) (if (= d.name name) (stringJoin (map rd/renderSexpr d.body) " ") "")) (_ ""))) forms) ""))
+  (match (ast/parse src)
+    ((ok forms) (stringJoin (map (fn [f] (match f ((ast/topDefun d) (if (= d.name name) (stringJoin (map rd/renderSexpr d.body) " ") "")) (_ ""))) forms) ""))
     ((err e) (str "ERR " e.msg)))
 
 fn header -> String
@@ -30,7 +30,7 @@ fn runTests -> Bool
             "with on a let-bound record of a local schema expands")
     (assert (= (bodyOf (str (header) "fn f -> P\n  (with (g 1) :a 2)\n\nfn g n: Int64 -> P\n  (P :a n :b \"\" :c true)\n") "f") "(let [(withSource0 (g 1))] (P :a 2 :b withSource0.b :c withSource0.c))")
             "with on a call returning a local schema binds the source once")
-    (assert (= (bodyOf (str (header) "fn f p: P -> P\n  (mt (h p) ((some p) (with p :a 2)) ((none) p))\n") "f") "(mt (h p) ((some p) (with p :a 2)) ((none) p))")
+    (assert (= (bodyOf (str (header) "fn f p: P -> P\n  (match (h p) ((some p) (with p :a 2)) ((none) p))\n") "f") "(match (h p) ((some p) (with p :a 2)) ((none) p))")
             "an mt arm that rebinds p hides p's schema, so with stays for the checker")
     (assert (= (bodyOf (str (header) "fn f p: P -> P\n  (with (g withSource0) :a 2)\n\nfn g n: Int64 -> P\n  (P :a n :b \"\" :c true)\n") "f") "(let [(withSource1 (g withSource0))] (P :a 2 :b withSource1.b :c withSource1.c))")
             "the source binding never captures a name the with form uses")

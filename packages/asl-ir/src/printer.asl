@@ -1,7 +1,7 @@
 (module asl-ir/printer :x [printIr printFunction printStmt printExpr printType printSsa printSsaFunction printSsaOp printSsaTerm quoteString] :i [(asl-ir/types :a ty)])
 
 fn concatOnto rlists: (List (List T)) acc: (List T) -> (List T)
-  (mt (listHead rlists) ((some xs) (concatOnto (optionOr (listTail rlists) (list)) (listAppend xs acc))) ((none) acc))
+  (match (listHead rlists) ((some xs) (concatOnto (optionOr (listTail rlists) (list)) (listAppend xs acc))) ((none) acc))
 
 fn concatLists lists: (List (List T)) -> (List T)
   (concatOnto (listReverse lists) (list))
@@ -31,7 +31,7 @@ fn printSsaParam p: ty/SsaParam -> String
   (str "(" p.name " " (ty/ssaTyName p.ty) ")")
 
 fn printSsaConst c: ty/SsaConst -> String
-  (mt c
+  (match c
     ((ty/constInt n) (str "(const int " (stringFromInt64 n) ")"))
     ((ty/constFloat x) (str "(const float " (stringFromFloat64 x) ")"))
     ((ty/constBool b) (if b "(const bool true)" "(const bool false)"))
@@ -41,7 +41,7 @@ fn printSsaConst c: ty/SsaConst -> String
     ((ty/constSymbol name) (str "(const symbol " name ")")))
 
 fn printSsaOp op: ty/SsaOp -> String
-  (mt op
+  (match op
     ((ty/opConst c) (printSsaConst c))
     ((ty/opCall callee args) (form "call" (cons callee args)))
     ((ty/opBuiltin name args) (form "builtin" (cons (quoteString name) args)))
@@ -60,7 +60,7 @@ fn printSsaOp op: ty/SsaOp -> String
     ((ty/opPrim name args) (form "prim" (cons name args))))
 
 fn recordFields keys: (List String) values: (List String) out: (List String) -> (List String)
-  (mt (listHead keys)
+  (match (listHead keys)
     ((none) (listReverse out))
     ((some k) (recordFields (optionOr (listTail keys) (list)) (optionOr (listTail values) (list)) (cons (str "(" k " " (optionOr (listHead values) "?") ")") out))))
 
@@ -68,13 +68,13 @@ fn printSsaEdge e: ty/SsaEdge -> String
   (form e.target e.args)
 
 fn printSsaTerm t: ty/SsaTerm -> String
-  (mt t
+  (match t
     ((ty/termReturn v) (form "return" (list v)))
     ((ty/termJump e) (form "jump" (list (printSsaEdge e))))
     ((ty/termBranch c a b) (form "branch" (list c (printSsaEdge a) (printSsaEdge b))))
     ((ty/termSwitch s typeName cases d) (form "switch" (listAppend (list s typeName)
                                                           (listAppend (map (fn [(k ty/SsaCase)] -> String (form k.variant (list (printSsaEdge k.edge)))) cases)
-                                                                       (mt d ((some e) (list (form "default" (list (printSsaEdge e))))) ((none) (list)))))))
+                                                                       (match d ((some e) (list (form "default" (list (printSsaEdge e))))) ((none) (list)))))))
     ((ty/termUnreachable) "(unreachable)"))
 
 fn printSsaBlock b: ty/SsaBlock -> (List String)
@@ -84,7 +84,7 @@ fn printSsaBlock b: ty/SsaBlock -> (List String)
     (list (str "      " (printSsaTerm b.term) ")")))
 
 fn closeLast lines: (List String) -> (List String)
-  (mt (listSlice lines 0 (- (listLength lines) 1))
+  (match (listSlice lines 0 (- (listLength lines) 1))
     ((none) lines)
     ((some front) (listAppend front (list (str (optionOr (listGet lines (- (listLength lines) 1)) "") ")")))))
 

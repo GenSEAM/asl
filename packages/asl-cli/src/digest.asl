@@ -13,13 +13,13 @@ fn formatParamList params: (List a/Param) -> Str
   (if (listEmpty? params) "[]" (let [(inner (fold (fn [(acc Str) (p a/Param)] -> Str (let [(item (formatParam p))] (if (stringEmpty? acc) item (str acc " " item)))) "" params))] (str "[" inner "]")))
 
 fn formatTopFormSignature form: a/TopForm -> Str
-  (mt form ((a/topDefun f) (str "(:df " f.name " " (formatParamList f.params) " -> " f.retType ")")) ((a/topSchema s) (str "(:dfs " s.name ")")) ((a/topEnum e) (str "(:dfe " e.name ")")) (_ ""))
+  (match form ((a/topDefun f) (str "(:df " f.name " " (formatParamList f.params) " -> " f.retType ")")) ((a/topSchema s) (str "(:dfs " s.name ")")) ((a/topEnum e) (str "(:dfe " e.name ")")) (_ ""))
 
 fn extractModuleName forms: (List a/TopForm) -> Str
-  (fold (fn [(acc Str) (f a/TopForm)] -> Str (mt f ((a/topModule m) m.path) (_ acc))) "unknown" forms)
+  (fold (fn [(acc Str) (f a/TopForm)] -> Str (match f ((a/topModule m) m.path) (_ acc))) "unknown" forms)
 
 fn generateAstOutline src: Str path: Str -> (Result Str Str)
-  (mt (a/parse src) ((err pe) (err (str "Parse error in outline: " pe.msg))) ((ok forms) (let [(modName (extractModuleName forms)) (sigStrs (fold (fn [(acc (List Str)) (f a/TopForm)] -> (List Str) (let [(sig (formatTopFormSignature f))] (if (stringEmpty? sig) acc (listAppend acc (list sig))))) (list) forms)) (symbolsJoined (fold (fn [(acc Str) (sig Str)] -> Str (if (stringEmpty? acc) sig (str acc "\n    " sig))) "" sigStrs)) (outline (str "(:outline\n" "  :module \"" modName "\"\n" "  :symbols [\n    " symbolsJoined "\n  ])\n"))] (ok outline))))
+  (match (a/parse src) ((err pe) (err (str "Parse error in outline: " pe.msg))) ((ok forms) (let [(modName (extractModuleName forms)) (sigStrs (fold (fn [(acc (List Str)) (f a/TopForm)] -> (List Str) (let [(sig (formatTopFormSignature f))] (if (stringEmpty? sig) acc (listAppend acc (list sig))))) (list) forms)) (symbolsJoined (fold (fn [(acc Str) (sig Str)] -> Str (if (stringEmpty? acc) sig (str acc "\n    " sig))) "" sigStrs)) (outline (str "(:outline\n" "  :module \"" modName "\"\n" "  :symbols [\n    " symbolsJoined "\n  ])\n"))] (ok outline))))
 
 fn runOutlineCommand! args: (List Str) -> (Result Str Str)
-  (if (listEmpty? args) (err "Usage: asl outline <file.asl>") (let [(firstArg (optionOr (listHead args) ""))] (if (or (= firstArg "-h") (= firstArg "--help")) (ok (formatOutlineHelp)) (let [(path firstArg) (readRes (fileReadString path))] (mt readRes ((err _) (err (str "Failed to read target file: " path))) ((ok src) (generateAstOutline src path)))))))
+  (if (listEmpty? args) (err "Usage: asl outline <file.asl>") (let [(firstArg (optionOr (listHead args) ""))] (if (or (= firstArg "-h") (= firstArg "--help")) (ok (formatOutlineHelp)) (let [(path firstArg) (readRes (fileReadString path))] (match readRes ((err _) (err (str "Failed to read target file: " path))) ((ok src) (generateAstOutline src path)))))))

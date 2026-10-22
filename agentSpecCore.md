@@ -12,7 +12,7 @@ binds, with types and docs, and `asl '(:help :builtin <text>)'` searches it (§6
 ## 0. Scope
 
 **In:** modules, `schema` (records), `enum` (closed unions), `fn` (named and anonymous), `let`,
-`if`, `cond`, `mt` (`match`), `do`, `when`, `unless`, `assert`, `refute`, record update with
+`if`, `cond`, `match`, `do`, `when`, `unless`, `assert`, `refute`, record update with
 `with`, field access `x.f`, `Option`, `Result`, `Pair`, `List`, `Map`, strings, bytes, numeric
 arrays, arithmetic and comparison over `Bool` / `Int32` / `Int64` / `Float64` / `String` /
 `Unit`.
@@ -124,7 +124,6 @@ else.
 
 | Short | Long | Position | Host |
 |---|---|---|---|
-| `mt` | `match` | expression head | both read |
 | `fn` | `lambda` | expression head | both read |
 | `do` | `begin` | expression head | both read |
 | `:x` | `:export` | module option | only `:x` is read; `:export` is ignored, so the module exports nothing |
@@ -296,7 +295,7 @@ for any type:
 
 ```lisp
 fn swap p: (Pair A B) -> (Pair B A)
-  (mt p ((pair a b) (pair b a)))
+  (match p ((pair a b) (pair b a)))
 ```
 
 There is no `{ }` binder: a misspelled concrete type name is read the same way, and the host
@@ -335,7 +334,7 @@ both constructors and patterns, exactly like the built-in `ok` / `some`; an impo
 `alias/case` in both positions:
 
 ```lisp
-(mt sh
+(match sh
   ((circle r) (* 3.14159 (* r r)))
   ((rectangle w h) (* w h))
   ((point) 0.0))
@@ -380,10 +379,10 @@ Clauses are tested in order; the catch-all is `(else v)`. `(:else v)` is a keywo
 with `ERR_TYPE_MISMATCH`. The host does not require the `else` clause: a `cond` with no clause
 taken yields `()`.
 
-### 5.4 `mt` (`match`)
+### 5.4 `match`
 
 ```lisp
-(mt (stringToInt64 s)
+(match (stringToInt64 s)
   ((some n) (* n 2))
   ((none) 0))
 ```
@@ -406,16 +405,16 @@ A match over an `enum` must cover every case or end in a catch-all (`ERR_MATCH_N
 
 ### 5.5 Results and options
 
-There is no propagation operator. A `Result` or `Option` is taken apart with `mt`, or collapsed
+There is no propagation operator. A `Result` or `Option` is taken apart with `match`, or collapsed
 with a fallback by `optionOr` / `resultOr`; `optionMap`, `resultMap`, `resultMapErr`,
 `optionToResult` and `resultToOption` transform one without unwrapping it.
 
 ```lisp
 fn parsePort text: String -> (Result Int64 String)
-  (mt (listGet (stringSplit text ":") 1)
+  (match (listGet (stringSplit text ":") 1)
     ((none) (err "missing port"))
     ((some raw)
-      (mt (stringToInt64 (stringTrim raw))
+      (match (stringToInt64 (stringTrim raw))
         ((none) (err "port is not a number"))
         ((some n) (if (> n 65535) (err "port out of range") (ok n))))))
 ```
@@ -494,9 +493,9 @@ Complete, uses only forms defined above, and passes `asl-host check`.
 (module text/runs :x [longestRun])
 
 fn runLength chars: (List String) cur: String n: Int64 best: (Pair String Int64) -> (Pair String Int64)
-  (let [(better (mt best ((pair c k) (if (> n k) (pair cur n) best))))
+  (let [(better (match best ((pair c k) (if (> n k) (pair cur n) best))))
         (rest (optionOr (listTail chars) (list)))]
-    (mt (listHead chars)
+    (match (listHead chars)
       ((none) better)
       ((some h)
         (if (= h cur)
@@ -505,7 +504,7 @@ fn runLength chars: (List String) cur: String n: Int64 best: (Pair String Int64)
 
 fn longestRun s: String -> (Option (Pair String Int64))
   (let [(cs (stringChars s))]
-    (mt (listHead cs)
+    (match (listHead cs)
       ((none) (none))
       ((some h) (some (runLength (optionOr (listTail cs) (list)) h 1 (pair h 1))))))
 ```
@@ -547,7 +546,7 @@ A Core program is well-formed iff the rules below hold. The status column is wha
 | 1 | Delimiters balance and each bracket kind pairs exactly. | `ERR_READ_UNBALANCED` |
 | 2 | Every name is a builtin (§6), bound by `fn`/`let`/a pattern, declared by `schema`/`enum`, or `alias/member` of an import. | `ERR_UNKNOWN_SYMBOL` |
 | 3 | Every named `fn` declares its parameter types and return type. | `ERR_UNTYPED_PARAM` |
-| 4 | Every `mt` over an enum is exhaustive. | `ERR_MATCH_NONEXHAUSTIVE` |
+| 4 | Every `match` over an enum is exhaustive. | `ERR_MATCH_NONEXHAUSTIVE` |
 | 5 | Every `cond` ends in `(else v)`. | not enforced; an untaken `cond` yields `()` |
 | 6 | No arithmetic mixes `Int64` and `Float64`; argument and return types match the signature. | `ERR_TYPE_MISMATCH`; `Int32` and `Int64` are not told apart |
 | 7 | No identifier begins with `agentslang-`. | not enforced |

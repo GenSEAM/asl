@@ -1,10 +1,10 @@
 (module asl-parser/astConverterTest :x [runTests] :i [(astConverter :a ac) (ast :a a) (reader :a rd)])
 
 fn litEqual? a: a/AstLit b: a/AstLit -> Bool
-  (mt a ((a/litInt ai) (mt b ((a/litInt bi) (= ai bi)) (_ false))) ((a/litFloat af) (mt b ((a/litFloat bf) (= af bf)) (_ false))) ((a/litString as) (mt b ((a/litString bs) (= as bs)) (_ false))) ((a/litBool ab) (mt b ((a/litBool bb) (= ab bb)) (_ false))) ((a/litUnit) (mt b ((a/litUnit) true) (_ false))))
+  (match a ((a/litInt ai) (match b ((a/litInt bi) (= ai bi)) (_ false))) ((a/litFloat af) (match b ((a/litFloat bf) (= af bf)) (_ false))) ((a/litString as) (match b ((a/litString bs) (= as bs)) (_ false))) ((a/litBool ab) (match b ((a/litBool bb) (= ab bb)) (_ false))) ((a/litUnit) (match b ((a/litUnit) true) (_ false))))
 
 fn optPatternEqual? oa: (Option a/AstPattern) ob: (Option a/AstPattern) -> Bool
-  (mt oa ((some pa) (mt ob ((some pb) (patternEqual? pa pb)) ((none) false))) ((none) (mt ob ((some _) false) ((none) true))))
+  (match oa ((some pa) (match ob ((some pb) (patternEqual? pa pb)) ((none) false))) ((none) (match ob ((some _) false) ((none) true))))
 
 fn patternsEqual? as: (List a/AstPattern) bs: (List a/AstPattern) -> Bool
   (if (!= (listLength as) (listLength bs)) false (let [(len (listLength as))] (fold (fn [(acc Bool) (i Int64)] -> Bool (and acc (patternEqual? (optionOr (listGet as i) (a/patWildcard)) (optionOr (listGet bs i) (a/patWildcard))))) true (range 0 len))))
@@ -13,7 +13,7 @@ fn patFieldsEqual? as: (List (Pair String a/AstPattern)) bs: (List (Pair String 
   (if (!= (listLength as) (listLength bs)) false (let [(len (listLength as))] (fold (fn [(acc Bool) (i Int64)] -> Bool (let [(f1 (optionOr (listGet as i) (pair "" (a/patWildcard)))) (f2 (optionOr (listGet bs i) (pair "" (a/patWildcard))))] (and acc (and (= (pairFirst f1) (pairFirst f2)) (patternEqual? (pairSecond f1) (pairSecond f2)))))) true (range 0 len))))
 
 fn patternEqual? a: a/AstPattern b: a/AstPattern -> Bool
-  (mt a ((a/patWildcard) (mt b ((a/patWildcard) true) (_ false))) ((a/patVar an) (mt b ((a/patVar bn) (= an bn)) (_ false))) ((a/patLit al) (mt b ((a/patLit bl) (litEqual? al bl)) (_ false))) ((a/patTuple ae) (mt b ((a/patTuple be) (patternsEqual? ae be)) (_ false))) ((a/patRecord af) (mt b ((a/patRecord bf) (patFieldsEqual? af bf)) (_ false))) ((a/patCtor an aa) (mt b ((a/patCtor bn ba) (and (= an bn) (optPatternEqual? aa ba))) (_ false))))
+  (match a ((a/patWildcard) (match b ((a/patWildcard) true) (_ false))) ((a/patVar an) (match b ((a/patVar bn) (= an bn)) (_ false))) ((a/patLit al) (match b ((a/patLit bl) (litEqual? al bl)) (_ false))) ((a/patTuple ae) (match b ((a/patTuple be) (patternsEqual? ae be)) (_ false))) ((a/patRecord af) (match b ((a/patRecord bf) (patFieldsEqual? af bf)) (_ false))) ((a/patCtor an aa) (match b ((a/patCtor bn ba) (and (= an bn) (optPatternEqual? aa ba))) (_ false))))
 
 fn typesEqual? as: (List a/AstType) bs: (List a/AstType) -> Bool
   (if (!= (listLength as) (listLength bs)) false (let [(len (listLength as))] (fold (fn [(acc Bool) (i Int64)] -> Bool (and acc (typeEqual? (optionOr (listGet as i) (a/typeNamed "")) (optionOr (listGet bs i) (a/typeNamed ""))))) true (range 0 len))))
@@ -22,7 +22,7 @@ fn typeFieldsEqual? as: (List (Pair String a/AstType)) bs: (List (Pair String a/
   (if (!= (listLength as) (listLength bs)) false (let [(len (listLength as))] (fold (fn [(acc Bool) (i Int64)] -> Bool (let [(f1 (optionOr (listGet as i) (pair "" (a/typeNamed "")))) (f2 (optionOr (listGet bs i) (pair "" (a/typeNamed ""))))] (and acc (and (= (pairFirst f1) (pairFirst f2)) (typeEqual? (pairSecond f1) (pairSecond f2)))))) true (range 0 len))))
 
 fn typeEqual? a: a/AstType b: a/AstType -> Bool
-  (mt a ((a/typeNamed an) (mt b ((a/typeNamed bn) (= an bn)) (_ false))) ((a/typeTuple ae) (mt b ((a/typeTuple be) (typesEqual? ae be)) (_ false))) ((a/typeRecord af) (mt b ((a/typeRecord bf) (typeFieldsEqual? af bf)) (_ false))) ((a/typeFn ap ar) (mt b ((a/typeFn bp br) (and (typesEqual? ap bp) (typeEqual? ar br))) (_ false))))
+  (match a ((a/typeNamed an) (match b ((a/typeNamed bn) (= an bn)) (_ false))) ((a/typeTuple ae) (match b ((a/typeTuple be) (typesEqual? ae be)) (_ false))) ((a/typeRecord af) (match b ((a/typeRecord bf) (typeFieldsEqual? af bf)) (_ false))) ((a/typeFn ap ar) (match b ((a/typeFn bp br) (and (typesEqual? ap bp) (typeEqual? ar br))) (_ false))))
 
 fn exprsEqual? as: (List a/AstExpr) bs: (List a/AstExpr) -> Bool
   (if (!= (listLength as) (listLength bs)) false (let [(len (listLength as))] (fold (fn [(acc Bool) (i Int64)] -> Bool (and acc (exprEqual? (optionOr (listGet as i) (a/exprLit (a/litUnit))) (optionOr (listGet bs i) (a/exprLit (a/litUnit)))))) true (range 0 len))))
@@ -73,19 +73,19 @@ fn moduleSexpr -> rd/SExpr
   (rd/makeList (list (at "module") (at "demo/mod") (at ":d") (at "\"Demo.\"") (at ":x") (rd/makeVect (list (at "f") (at "g"))) (at ":i") (rd/makeVect (list (rd/makeList (list (at "dep/one") (at ":a") (at "one")))))))
 
 fn renderTop r: (Result a/TopForm String) -> String
-  (mt r ((ok t) (rd/renderSexpr (ac/topFormToSexpr t))) ((err e) (str "error: " e)))
+  (match r ((ok t) (rd/renderSexpr (ac/topFormToSexpr t))) ((err e) (str "error: " e)))
 
 fn moduleFields r: (Result a/TopForm String) -> String
-  (mt r ((ok t) (mt t ((a/topModule m) (str m.path "|" m.docstring "|" (stringJoin m.exported " ") "|" (stringJoin (map (fn [(p (Pair String String))] -> String (str (pairFirst p) "=" (pairSecond p))) m.imports) " "))) (_ "not a module"))) ((err e) (str "error: " e)))
+  (match r ((ok t) (match t ((a/topModule m) (str m.path "|" m.docstring "|" (stringJoin m.exported " ") "|" (stringJoin (map (fn [(p (Pair String String))] -> String (str (pairFirst p) "=" (pairSecond p))) m.imports) " "))) (_ "not a module"))) ((err e) (str "error: " e)))
 
 fn tryCallee e: a/AstExpr -> String
-  (mt e ((a/exprTry inner) (mt inner ((a/exprCall f _) (mt f ((a/exprIdent n) n) (_ "not an identifier"))) (_ "not a call"))) (_ "not a try"))
+  (match e ((a/exprTry inner) (match inner ((a/exprCall f _) (match f ((a/exprIdent n) n) (_ "not an identifier"))) (_ "not a call"))) (_ "not a try"))
 
 fn testTopFormConversions -> Bool
   (let [(modRes (ac/sexprToTopForm (moduleSexpr)))
         (fnS (rd/makeList (list (at "fn") (at "add") (rd/makeVect (list (rd/makeList (list (at "x") (at "Int64"))) (rd/makeList (list (at "y") (at "Int64"))))) (at "->") (at "Int64") (rd/makeList (list (at "+") (at "x") (at "y"))))))
         (enumS (rd/makeList (list (at "enum") (at "Color") (rd/makeList (list (at ":case") (at "red") (rd/makeVect (list (rd/makeList (list (at "shade") (at "Int64"))))) (at "\"Red.\""))))))
-        (trySexpr (rd/makeList (list (at "mt") (rd/makeList (list (at "fetch"))) (rd/makeList (list (rd/makeList (list (at "ok") (at "__v"))) (at "__v"))) (rd/makeList (list (rd/makeList (list (at "err") (at "__e"))) (rd/makeList (list (at "err") (at "__e"))))))))]
+        (trySexpr (rd/makeList (list (at "match") (rd/makeList (list (at "fetch"))) (rd/makeList (list (rd/makeList (list (at "ok") (at "__v"))) (at "__v"))) (rd/makeList (list (rd/makeList (list (at "err") (at "__e"))) (rd/makeList (list (at "err") (at "__e"))))))))]
     (do (assert (= (moduleFields modRes) "demo/mod|\"Demo.\"|f g|dep/one=one") (str "a module form converts with its path, doc, exports and imports: " (moduleFields modRes)))
         (assert (= (renderTop modRes) "(module demo/mod :doc \"Demo.\" :export [f g] :import [(dep/one :as one)])") (str "a module converts back with every field: " (renderTop modRes)))
         (assert (= (renderTop (ac/sexprToTopForm fnS)) "(fn add [(x Int64) (y Int64)] -> Int64 (+ x y))") (str "a fn converts back with a parameter vector: " (renderTop (ac/sexprToTopForm fnS))))
@@ -97,11 +97,11 @@ fn liftLowerRender s: rd/SExpr -> String
   (rd/renderSexpr (ac/lower (ac/lift s)))
 
 fn bodyRoundtripMismatches src: String -> (List String)
-  (mt (a/parse src)
+  (match (a/parse src)
     ((err e) (list (str "parse error: " e.msg)))
     ((ok forms)
      (fold (fn [(acc (List String)) (tf a/TopForm)] -> (List String)
-             (mt tf
+             (match tf
                ((a/topDefun d)
                 (fold (fn [(inner (List String)) (b rd/SExpr)] -> (List String)
                         (if (= (rd/renderSexpr b) (liftLowerRender b)) inner (listAppend inner (list (str (rd/renderSexpr b) " => " (liftLowerRender b))))))

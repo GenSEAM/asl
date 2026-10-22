@@ -11,7 +11,7 @@ fn ! sh cmd: String -> ProcessOutput
 
 fn ! findExecutable name: String knownLocations: (List String) -> String
   (let [(known (filter (fn [(c String)] -> Bool (= (sh (str "test -x " (shellQuote c))).exitCode 0)) knownLocations))]
-    (mt (listHead known)
+    (match (listHead known)
       ((some c) c)
       ((none)
         (let [(out (sh (str "command -v " (shellQuote name))))]

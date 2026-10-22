@@ -13,18 +13,18 @@ fn entryPath -> String
   "asl/packages/asl-json/tests/jsonTest.asl"
 
 fn lowerUnit units: (List lk/LinkUnit) prelude: lk/LinkUnit acc: lk/LinkAcc u: lk/LinkUnit -> lk/LinkAcc
-  (mt (low/lowerLinked u.forms u.positions (low/LinkScope :path u.path :imports (lk/importForms units u) :prelude prelude.forms :strings acc.strings :only (none)))
+  (match (low/lowerLinked u.forms u.positions (low/LinkScope :path u.path :imports (lk/importForms units u) :prelude prelude.forms :strings acc.strings :only (none)))
     ((ok m) (lk/LinkAcc :strings m.strings :modules (cons m acc.modules) :requested acc.requested :diags acc.diags))
     ((err ds) (lk/LinkAcc :strings acc.strings :modules acc.modules :requested acc.requested :diags (listAppend acc.diags ds))))
 
 fn ! writeModules dir: String modules: (List ty/SsaModule) -> Bool
-  (listAll? (fn [(m ty/SsaModule)] -> Bool (mt (fileWrite (str dir "/" (stringReplace m.name "/" "_") ".ssa") (str m)) ((ok _) true) ((err _) false))) modules)
+  (listAll? (fn [(m ty/SsaModule)] -> Bool (match (fileWrite (str dir "/" (stringReplace m.name "/" "_") ".ssa") (str m)) ((ok _) true) ((err _) false))) modules)
 
 fn ! run mode: String entry: String dir: String -> (Result Int64 String)
-  (mt (lk/loadClosure! entry)
+  (match (lk/loadClosure! entry)
     ((err ds) (err (str "closure of " entry " fails to load: " (listLength ds) " diag(s)")))
     ((ok units)
-      (mt (lk/loadClosure! (lk/preludePath))
+      (match (lk/loadClosure! (lk/preludePath))
         ((err _) (err "prelude closure fails to load"))
         ((ok pUnits)
           (let [(prelude (optionOr (listHead pUnits) (lk/emptyUnit "prelude")))]
@@ -47,7 +47,7 @@ fn ! main args: (List String) -> (Result Int64 String)
         (dir (optionOr (listGet args 2) "."))]
     (if (not (or (= mode "load") (= mode "units") (= mode "lower") (= mode "dump")))
       (err (str "unknown mode " mode "; expected load, units, lower or dump"))
-      (mt (run mode entry dir)
+      (match (run mode entry dir)
         ((ok n) (do (println (str "lowerAlloc " mode " modules " n)) (ok 0)))
         ((err e) (err e)))))
 
@@ -56,13 +56,13 @@ fn statsLine text: String -> String
 
 fn bytesAllocated line: String -> Int64
   (let [(tokens (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit line " ")))]
-    (mt (listIndexOf tokens ":bytesAllocated")
+    (match (listIndexOf tokens ":bytesAllocated")
       ((some i) (optionOr (stringToInt64 (stringReplace (optionOr (listGet tokens (+ i 1)) "") ")" "")) -1))
       ((none) -1)))
 
 fn ! runMode mode: String -> Int64
   (let [(built (nt/prepareRun (thisFile) (nt/fingerprint)))]
-    (mt built.binary
+    (match built.binary
       ((none) (do (assert false (str "lowerAllocTest builds natively: " built.reason)) -1))
       ((some bin)
        (let [(done (fr/runOneLimited (fr/job (list bin mode (entryPath)) "." (fr/childEnv (list "ASL_GC_STATS=1"))) (fr/limits 300 4)))]

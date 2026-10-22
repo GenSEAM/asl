@@ -3,7 +3,7 @@
   :i [(asl/agentLoop/turn :a tr) (asl/agentLoop/reply :a r) (asl/agentLoop/core :a c) (asl/agentLoop/plan :a p) (asl/agentLoop/tests/parity :a t)])
 
 fn sVal v: c/KvVal -> String
-  (mt v ((c/kvStr x) (t/sStr x)) ((c/kvInt x) (mt (stringToInt64 x) ((some i) (t/sInt i)) ((none) (t/sStr x)))))
+  (match v ((c/kvStr x) (t/sStr x)) ((c/kvInt x) (match (stringToInt64 x) ((some i) (t/sInt i)) ((none) (t/sStr x)))))
 
 fn sOps ops: (List (List (Pair String c/KvVal))) -> String
   (t/sList (map (fn [op] (t/sDict (map (fn [pr] (pair (pairFirst pr) (sVal (pairSecond pr)))) op))) ops))
@@ -23,25 +23,25 @@ fn sAuto a: r/AutoRepair input: String -> String
   (t/sDict (listAppend
     (list (pair "text" (t/sStr a.text)) (pair "notice" (t/sOpt a.notice)) (pair "kinds" (t/sStrs a.kinds))
           (pair "left" (t/sInt a.left)) (pair "quoteCount" (t/sInt a.quoteCount)))
-    (mt a.leftSpans ((some spans) (list (pair "leftSpans" (sSpans input spans)))) ((none) (list)))))
+    (match a.leftSpans ((some spans) (list (pair "leftSpans" (sSpans input spans)))) ((none) (list)))))
 
 fn sFacts f: r/ReplyFacts input: String -> String
   (let [bound (r/bindRawBlocks input).text]
     (t/sDict (listAppend
       (list (pair "ops" (sOps f.ops)) (pair "repeated" (t/sInt f.repeated)) (pair "forms" (t/sStrs f.forms))
             (pair "prose" (t/sBool f.prose)) (pair "dataFindings" (t/sStrs f.dataFindings)))
-      (mt f.cut ((some ci) (list (pair "cut" (sCut bound ci)))) ((none) (list))))))
+      (match f.cut ((some ci) (list (pair "cut" (sCut bound ci)))) ((none) (list))))))
 
 fn ! dispatch fname: String args: (List p/SexpNode) -> String
   (let [raw (t/argStr (t/argAt args 0))
         declNode (t/argAt args 1)
         declared (if (t/argNil? declNode) none (some (t/argStrs declNode)))
         got (tr/turnReply raw declared)]
-    (t/sDict (list (pair "text" (t/sStr got.text)) (pair "degenerateAt" (mt got.degenerateAt ((some i) (t/sInt i)) ((none) "nil")))
+    (t/sDict (list (pair "text" (t/sStr got.text)) (pair "degenerateAt" (match got.degenerateAt ((some i) (t/sInt i)) ((none) "nil")))
                    (pair "degenerateRepeats" (t/sInt got.degenerateRepeats)) (pair "capBytes" (t/sInt got.capBytes))
                    (pair "rawBlocks" (t/sInt got.rawBlocks)) (pair "unfenced" (t/sInt got.unfenced))
                    (pair "missingRaw" (t/sStrs got.missingRaw)) (pair "facts" (sFacts got.facts raw))
-                   (pair "repair" (mt got.repair ((some a) (sAuto a raw)) ((none) "nil"))))))
+                   (pair "repair" (match got.repair ((some a) (sAuto a raw)) ((none) "nil"))))))
 
 fn ! runTests -> Bool
   (let [root (resultOr (realPath ".") ".")
@@ -71,14 +71,14 @@ fn ! runTests -> Bool
       (assert (= passed 7) "all seven independently recorded turn results match the core turn implementation")
       (assert (= shortProseReply.text "(:step :op \"read\" :file \"a.txt\")")
               "PROSE-THRESHOLD: a short trailing-prose reply is repaired down to just its parsed form")
-      (assert (mt shortProseReply.repair ((some a) (= a.notice (some "(:repaired (:prose 3) :left ())"))) ((none) false))
+      (assert (match shortProseReply.repair ((some a) (= a.notice (some "(:repaired (:prose 3) :left ())"))) ((none) false))
               "PROSE-THRESHOLD: the repair notice reports the stripped word count under :prose")
-      (assert (mt shortProseReply.repair ((some a) (= a.kinds (list "prose"))) ((none) false))
+      (assert (match shortProseReply.repair ((some a) (= a.kinds (list "prose"))) ((none) false))
               "PROSE-THRESHOLD: the repair is tagged with kind prose")
       (assert (not (listEmpty? shortProseReply.facts.ops)) "PROSE-THRESHOLD: the kept op still parses after the prose is stripped")
-      (assert (mt cut ((some ci) (and (= ci.op (some "write")) (= ci.file (some "big.txt")))) ((none) false))
+      (assert (match cut ((some ci) (and (= ci.op (some "write")) (= ci.file (some "big.txt")))) ((none) false))
               "a cut write keeps its operation and file for ERR_REPLY_CUT")
-      (assert (and (= openReply.text "((") (mt openRepair ((some a) (stringEmpty? a.text)) ((none) false)))
+      (assert (and (= openReply.text "((") (match openRepair ((some a) (stringEmpty? a.text)) ((none) false)))
               "an empty repair retains the malformed reply rather than erasing it")
       (assert (not (tr/cutRestored (some priorCut) (some parsedCut) cutSpans))
               "an already reparsed cut is not replaced by the pre-repair cut")

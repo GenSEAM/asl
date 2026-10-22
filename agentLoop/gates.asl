@@ -17,28 +17,28 @@ fn makeGateResult cmd: String exitCode: Int64 stdout: String stderr: String time
   (gateResultOf cmd exitCode stdout stderr timeout seconds)
 
 fn gateCmd g: GateResult -> String
-  (mt g ((gateResultOf c _ _ _ _ _) c))
+  (match g ((gateResultOf c _ _ _ _ _) c))
 
 fn gateExit g: GateResult -> Int64
-  (mt g ((gateResultOf _ e _ _ _ _) e))
+  (match g ((gateResultOf _ e _ _ _ _) e))
 
 fn gateStdout g: GateResult -> String
-  (mt g ((gateResultOf _ _ o _ _ _) o))
+  (match g ((gateResultOf _ _ o _ _ _) o))
 
 fn gateStderr g: GateResult -> String
-  (mt g ((gateResultOf _ _ _ er _ _) er))
+  (match g ((gateResultOf _ _ _ er _ _) er))
 
 fn gateTimeout g: GateResult -> Bool
-  (mt g ((gateResultOf _ _ _ _ t _) t))
+  (match g ((gateResultOf _ _ _ _ t _) t))
 
 fn gateSeconds g: GateResult -> Int64
-  (mt g ((gateResultOf _ _ _ _ _ s) s))
+  (match g ((gateResultOf _ _ _ _ _ s) s))
 
 fn gateVerdicts results: (List GateResult) reverted: Bool -> (List String)
   (map (fn [g] (c/gateVerdict reverted (gateExit g) (gateStdout g) (gateStderr g))) results)
 
 fn stripComment s: String -> String
-  (mt (stringIndexOf s "#")
+  (match (stringIndexOf s "#")
     ((some idx) (stringTrim (optionOr (stringSlice s 0 idx) "")))
     ((none) s))
 
@@ -49,11 +49,11 @@ fn isPassLine line: String -> Bool
         (stringStartsWith? s "pass "))))
 
 fn isTargetExcept? target: String -> Bool
-  (let [t1 (mt (stringIndexOf target " as ")
+  (let [t1 (match (stringIndexOf target " as ")
              ((some idx) (stringTrim (optionOr (stringSlice target 0 idx) "")))
              ((none) target))
         t2 (if (and (stringContains? t1 ",") (not (stringStartsWith? t1 "(")))
-             (mt (stringIndexOf t1 ",")
+             (match (stringIndexOf t1 ",")
                ((some cidx) (stringTrim (optionOr (stringSlice t1 0 cidx) "")))
                ((none) t1))
              t1)
@@ -90,7 +90,7 @@ fn isSwallowedExceptLine line: String -> Bool
 
 fn isSingleLineSwallow line: String -> Bool
   (let [s (stripComment (stringTrim line))]
-    (mt (stringIndexOf s ":")
+    (match (stringIndexOf s ":")
       ((some cidx)
         (let [pre (optionOr (stringSlice s 0 cidx) "")
               post (optionOr (stringSlice s (+ cidx 1) (stringLength s)) "")]
@@ -121,7 +121,7 @@ fn scanSwallowedAdded hunk: (List (Pair Int64 String)) acc: (List Int64) -> (Lis
         ((isSingleLineSwallow lineText)
           (scanSwallowedAdded rest (cons lineNo acc)))
         ((isSwallowedExceptLine lineText)
-          (mt (findFirstSignificant rest)
+          (match (findFirstSignificant rest)
             ((some sig)
               (if (isPassLine sig)
                 (scanSwallowedAdded rest (cons lineNo acc))
@@ -166,13 +166,13 @@ enum PlaceholderHit
   (placeholderHitOf file: String line: Int64 text: String)
 
 fn hitFile h: PlaceholderHit -> String
-  (mt h ((placeholderHitOf f _ _) f))
+  (match h ((placeholderHitOf f _ _) f))
 
 fn hitLine h: PlaceholderHit -> Int64
-  (mt h ((placeholderHitOf _ l _) l))
+  (match h ((placeholderHitOf _ l _) l))
 
 fn hitText h: PlaceholderHit -> String
-  (mt h ((placeholderHitOf _ _ t) t))
+  (match h ((placeholderHitOf _ _ t) t))
 
 fn failingOutputs gateResults: (List GateResult) -> String
   (c/joinSep
@@ -204,7 +204,7 @@ fn checkFiles files: (List (Pair String String)) out: String -> (Option Placehol
           wf (pairFirst f)
           content (pairSecond f)
           lines (stringLines content)]
-      (mt (checkFileLines wf lines 1 out)
+      (match (checkFileLines wf lines 1 out)
         ((some hit) (some hit))
         ((none) (checkFiles fs out)))))
 
@@ -329,7 +329,7 @@ fn candidatePathsLoop! toks: (List String) rootDir: String acc: (List String) ->
           (candidatePathsLoop! rest rootDir acc)))))
 
 fn candidateGatePaths! cmd: String rootDir: String -> (List String)
-  (mt (parseCmdTokens cmd)
+  (match (parseCmdTokens cmd)
     ((some toks) (candidatePathsLoop! toks rootDir (list)))
     ((none) (list)))
 
@@ -350,7 +350,7 @@ fn missingGateFilesLoop! results: (List GateResult) idx: Int64 rootDir: String a
       (if (or (= (gateExit g) 0) (or (= (gateExit g) -1) (gateTimeout g)))
         (missingGateFilesLoop! rest (+ idx 1) rootDir acc)
         (let [miss (missingGatePaths! (gateCmd g) rootDir)]
-          (mt (listHead miss)
+          (match (listHead miss)
             ((some p) (missingGateFilesLoop! rest (+ idx 1) rootDir (cons (pair idx p) acc)))
             ((none) (missingGateFilesLoop! rest (+ idx 1) rootDir acc)))))))
 
@@ -358,7 +358,7 @@ fn missingGateFiles! gateResults: (List GateResult) rootDir: String -> (List (Pa
   (missingGateFilesLoop! gateResults 1 rootDir (list))
 
 fn ! isFile? p: String -> Bool
-  (mt (fileStat p)
+  (match (fileStat p)
     ((ok st) st.isFile)
     ((err _) false))
 
@@ -381,11 +381,11 @@ fn findVacuousOutside! results: (List GateResult) verdicts: (List String) owns: 
     (none)
     (let [g (c/firstOf results)
           gs (c/restOf results)
-          v (mt (listHead verdicts) ((some vd) vd) ((none) ""))
-          restV (mt (listTail verdicts) ((some vt) vt) ((none) (list)))]
+          v (match (listHead verdicts) ((some vd) vd) ((none) ""))
+          restV (match (listTail verdicts) ((some vt) vt) ((none) (list)))]
       (if (= v "vacuous")
         (let [words (splitWhitespace (gateCmd g))]
-          (mt (findFirstFile! words rootDir)
+          (match (findFirstFile! words rootDir)
             ((some f)
               (if (not (c/checkOwns f owns rootDir))
                 (some (pair (gateCmd g) f))
@@ -455,8 +455,8 @@ fn vacuousCmdsLoop results: (List GateResult) verdicts: (List String) acc: (List
     (listReverse acc)
     (let [g (c/firstOf results)
           gs (c/restOf results)
-          v (mt (listHead verdicts) ((some vd) vd) ((none) ""))
-          restV (mt (listTail verdicts) ((some vt) vt) ((none) (list)))]
+          v (match (listHead verdicts) ((some vd) vd) ((none) ""))
+          restV (match (listTail verdicts) ((some vt) vt) ((none) (list)))]
       (if (= v "vacuous")
         (vacuousCmdsLoop gs restV (cons (gateCmd g) acc))
         (vacuousCmdsLoop gs restV acc))))
@@ -481,8 +481,8 @@ fn formatDetailLoop results: (List GateResult) verdicts: (List String) acc: (Lis
     (c/joinSep (listReverse acc) "; ")
     (let [g (c/firstOf results)
           gs (c/restOf results)
-          v (mt (listHead verdicts) ((some vd) vd) ((none) ""))
-          restV (mt (listTail verdicts) ((some vt) vt) ((none) (list)))
+          v (match (listHead verdicts) ((some vd) vd) ((none) ""))
+          restV (match (listTail verdicts) ((some vt) vt) ((none) (list)))
           item (str (gateCmd g) " :" v " " (gateRevertOutcome g))]
       (formatDetailLoop gs restV (cons item acc))))
 

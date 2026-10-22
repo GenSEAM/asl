@@ -12,13 +12,13 @@ enum Turn
 
 ; (:m :ref D148)
 fn firstOf xs: (List T) -> T
-  (mt (listHead xs) ((some x) x))
+  (match (listHead xs) ((some x) x))
 
 fn restOf xs: (List T) -> (List T)
-  (mt (listTail xs) ((some t) t))
+  (match (listTail xs) ((some t) t))
 
 fn sliceOf s: String i: Int64 j: Int64 -> String
-  (mt (stringSlice s i j) ((some t) t))
+  (match (stringSlice s i j) ((some t) t))
 
 fn ch s: String i: Int64 -> String
   (sliceOf s i (+ i 1))
@@ -125,7 +125,7 @@ fn formsLoop s: String n: Int64 i: Int64 acc: (List String) -> (List String)
   (cond
     ((>= i n) (listReverse acc))
     ((= (ch s i) "(")
-      (mt (formEnd s n (+ i 1) 1 false false)
+      (match (formEnd s n (+ i 1) 1 false false)
         ((pair j d) (formsLoop s n j (if (= d 0) (cons (sliceOf s i j) acc) acc)))))
     (else (formsLoop s n (+ i 1) acc)))
 
@@ -136,7 +136,7 @@ fn stripLoop s: String n: Int64 i: Int64 start: Int64 acc: (List String) -> Stri
   (cond
     ((>= i n) (joinAll (listReverse (cons (sliceOf s start n) acc))))
     ((= (ch s i) "(")
-      (mt (formEnd s n (+ i 1) 1 false false)
+      (match (formEnd s n (+ i 1) 1 false false)
         ((pair j _) (stripLoop s n j j (cons " " (cons (sliceOf s start i) acc))))))
     (else (stripLoop s n (+ i 1) start acc)))
 
@@ -171,22 +171,22 @@ fn joinForms reply: String -> String
 fn dictGet d: (List (Pair String KvVal)) k: String -> (Option KvVal)
   (cond
     ((listEmpty? d) none)
-    (else (mt (firstOf d) ((pair ek v) (if (= ek k) (some v) (dictGet (restOf d) k))))))
+    (else (match (firstOf d) ((pair ek v) (if (= ek k) (some v) (dictGet (restOf d) k))))))
 
 fn dictHas d: (List (Pair String KvVal)) k: String -> Bool
   (some? (dictGet d k))
 
 fn dictSet d: (List (Pair String KvVal)) k: String v: KvVal -> (List (Pair String KvVal))
   (if (dictHas d k)
-    (map (fn [p] (mt p ((pair ek ev) (if (= ek k) (pair k v) p)))) d)
+    (map (fn [p] (match p ((pair ek ev) (if (= ek k) (pair k v) p)))) d)
     (listAppend d (list (pair k v))))
 
 fn dictOr d: (List (Pair String KvVal)) k: String -> KvVal
   (optionOr (dictGet d k) (kvStr ""))
 
 fn truthy o: (Option KvVal) -> Bool
-  (mt o
-    ((some v) (mt v ((kvStr t) (!= t "")) ((kvInt t) (!= t "0"))))
+  (match o
+    ((some v) (match v ((kvStr t) (!= t "")) ((kvInt t) (!= t "0"))))
     (none false))
 
 fn dropZeros s: String i: Int64 -> String
@@ -234,7 +234,7 @@ fn putString kv: (List (Pair String KvVal)) key: String v: String -> (List (Pair
 
 fn strPass s: String n: Int64 p: Int64 kv: (List (Pair String KvVal)) -> (List (Pair String KvVal))
   (if (>= p n) kv
-    (mt (keyAt s n p)
+    (match (keyAt s n p)
       ((pair q r)
         (let [e (if (and (>= q 0) (and (< r n) (= (ch s r) "\""))) (strBodyEnd s n (+ r 1)) -1)]
           (if (< e 0)
@@ -243,7 +243,7 @@ fn strPass s: String n: Int64 p: Int64 kv: (List (Pair String KvVal)) -> (List (
 
 fn intPass s: String n: Int64 p: Int64 kv: (List (Pair String KvVal)) -> (List (Pair String KvVal))
   (if (>= p n) kv
-    (mt (keyAt s n p)
+    (match (keyAt s n p)
       ((pair q r)
         (let [e (if (>= q 0) (runEnd s n r isDigit) -1)]
           (if (or (< e 0) (or (= e r) (or (>= e n) (not (or (isSpace (ch s e)) (= (ch s e) ")"))))))
@@ -259,7 +259,7 @@ fn dropColons s: String -> String
 
 fn atomPass s: String n: Int64 p: Int64 kv: (List (Pair String KvVal)) -> (List (Pair String KvVal))
   (if (>= p n) kv
-    (mt (keyAt s n p)
+    (match (keyAt s n p)
       ((pair q r)
         (let [e (if (>= q 0) (runEnd s n r isAtomByte) -1)]
           (if (or (< e 0) (= e r))
@@ -274,8 +274,8 @@ fn parseKv form: String -> (List (Pair String KvVal))
     (atomPass form n 0 (intPass form n 0 (strPass form n 0 kv0))))
 
 fn isFileOp o: (Option KvVal) -> Bool
-  (mt o
-    ((some v) (mt v ((kvStr t) (listContains? (list "read" "edit" "write" "check" "test" "fix") t)) ((kvInt _) false)))
+  (match o
+    ((some v) (match v ((kvStr t) (listContains? (list "read" "edit" "write" "check" "test" "fix") t)) ((kvInt _) false)))
     (none false))
 
 fn pathAlias e: (List (Pair String KvVal)) -> (List (Pair String KvVal))
@@ -295,20 +295,20 @@ fn evidenceOps nested: (List String) -> (List (List (Pair String KvVal)))
     (list) nested)
 
 fn nativeOp kv: (List (Pair String KvVal)) head: String form: String -> (List (Pair String KvVal))
-  (let [e0 (fold (fn [e p] (mt p ((pair k v) (if (= k "_head") e (dictSet e k v))))) (list (pair "type" (kvStr "step"))) kv)
+  (let [e0 (fold (fn [e p] (match p ((pair k v) (if (= k "_head") e (dictSet e k v))))) (list (pair "type" (kvStr "step"))) kv)
         e1 (dictSet (dictSet e0 "op" (kvStr head)) "form" (kvStr form))]
     (if (and (= head "help") (and (truthy (dictGet kv "op")) (not (dictHas kv "name"))))
       (dictSet e1 "name" (dictOr kv "op"))
       e1))
 
 fn stepOp kv: (List (Pair String KvVal)) form: String -> (List (Pair String KvVal))
-  (fold (fn [e p] (mt p ((pair k v) (if (listContains? (list "_head" "type" "form") k) e (dictSet e k v)))))
+  (fold (fn [e p] (match p ((pair k v) (if (listContains? (list "_head" "type" "form") k) e (dictSet e k v)))))
     (list (pair "type" (kvStr "step")) (pair "op" (dictOr kv "op")) (pair "form" (kvStr form)))
     kv)
 
 fn formOps form: String -> (List (List (Pair String KvVal)))
   (let [kv (parseKv form)
-        head (mt (dictOr kv "_head") ((kvStr t) t) ((kvInt t) t))]
+        head (match (dictOr kv "_head") ((kvStr t) t) ((kvInt t) t))]
     (cond
       ((= head "step") (list (stepOp kv form)))
       ((= head "evidence") (evidenceOps (parseForms (sliceOf form 1 (stringLength form)))))
@@ -358,11 +358,11 @@ fn evidenceKey op: (List (Pair String KvVal)) mode: String base: String -> (List
       (else (list name (firstTruthy (list (dictGet op "path") (dictGet op "file") (dictGet op "name")))))))
 
 fn serVal v: KvVal -> String
-  (mt v ((kvStr t) (serString t)) ((kvInt t) t))
+  (match v ((kvStr t) (serString t)) ((kvInt t) t))
 
 fn serOps ops: (List (List (Pair String KvVal))) -> String
   (str "(ops"
-    (joinAll (map (fn [op] (str " (op" (joinAll (map (fn [p] (mt p ((pair k v) (str " (" k " " (serVal v) ")")))) op)) ")")) ops))
+    (joinAll (map (fn [op] (str " (op" (joinAll (map (fn [p] (match p ((pair k v) (str " (" k " " (serVal v) ")")))) op)) ")")) ops))
     ")")
 
 fn serKey key: (List KvVal) -> String
@@ -449,12 +449,12 @@ fn globTokens cs: (List String) i: Int64 acc: (List GlobToken) -> (List GlobToke
 fn inRanges c: String rs: (List (Pair String String)) -> Bool
   (cond
     ((listEmpty? rs) false)
-    (else (mt (firstOf rs) ((pair lo hi) (if (and (>= c lo) (<= c hi)) true (inRanges c (restOf rs)))))))
+    (else (match (firstOf rs) ((pair lo hi) (if (and (>= c lo) (<= c hi)) true (inRanges c (restOf rs)))))))
 
 fn globMatch ts: (List GlobToken) cs: (List String) -> Bool
   (if (listEmpty? ts)
     (listEmpty? cs)
-    (mt (firstOf ts)
+    (match (firstOf ts)
       ((globStar) (if (globMatch (restOf ts) cs) true (if (listEmpty? cs) false (globMatch ts (restOf cs)))))
       ((globAny) (if (listEmpty? cs) false (globMatch (restOf ts) (restOf cs))))
       ((globLit c) (if (and (not (listEmpty? cs)) (= (firstOf cs) c)) (globMatch (restOf ts) (restOf cs)) false))
@@ -482,7 +482,7 @@ fn effectiveOwns owns: (List String) -> (List String)
   (if (listEmpty? owns) (list "**") owns)
 
 fn spanLess x: (Pair Int64 Int64) y: (Pair Int64 Int64) -> Bool
-  (mt x ((pair a b) (mt y ((pair c d) (or (< a c) (and (= a c) (< b d)))))))
+  (match x ((pair a b) (match y ((pair c d) (or (< a c) (and (= a c) (< b d)))))))
 
 fn insertSpan s: (Pair Int64 Int64) xs: (List (Pair Int64 Int64)) -> (List (Pair Int64 Int64))
   (cond
@@ -493,32 +493,32 @@ fn insertSpan s: (Pair Int64 Int64) xs: (List (Pair Int64 Int64)) -> (List (Pair
 fn mergeSpans spans: (List (Pair Int64 Int64)) -> (List (Pair Int64 Int64))
   (listReverse
     (fold (fn [out s]
-            (mt s ((pair a b)
+            (match s ((pair a b)
               (if (listEmpty? out)
                 (list s)
-                (mt (firstOf out) ((pair la lb)
+                (match (firstOf out) ((pair la lb)
                   (if (<= a (+ lb 1)) (cons (pair la (max lb b)) (restOf out)) (cons s out))))))))
       (list) (fold (fn [acc s] (insertSpan s acc)) (list) spans)))
 
 fn coverageOf coverage: (List (Pair String (List (Pair Int64 Int64)))) path: String -> (List (Pair Int64 Int64))
   (cond
     ((listEmpty? coverage) (list))
-    (else (mt (firstOf coverage) ((pair p sp) (if (= p path) sp (coverageOf (restOf coverage) path))))))
+    (else (match (firstOf coverage) ((pair p sp) (if (= p path) sp (coverageOf (restOf coverage) path))))))
 
 fn spanSeen coverage: (List (Pair String (List (Pair Int64 Int64)))) path: String a: Int64 b: Int64 -> Bool
-  (fold (fn [hit s] (or hit (mt s ((pair x y) (and (<= x a) (<= b y)))))) false (coverageOf coverage path))
+  (fold (fn [hit s] (or hit (match s ((pair x y) (and (<= x a) (<= b y)))))) false (coverageOf coverage path))
 
 fn recordRead coverage: (List (Pair String (List (Pair Int64 Int64)))) path: String a: Int64 b: Int64 -> (Pair Bool (List (Pair String (List (Pair Int64 Int64)))))
   (if (spanSeen coverage path a b)
     (pair false coverage)
     (let [merged (mergeSpans (listAppend (coverageOf coverage path) (list (pair a b))))]
       (pair true
-        (if (listEmpty? (filter (fn [e] (mt e ((pair p _) (= p path)))) coverage))
+        (if (listEmpty? (filter (fn [e] (match e ((pair p _) (= p path)))) coverage))
           (listAppend coverage (list (pair path merged)))
-          (map (fn [e] (mt e ((pair p _) (if (= p path) (pair p merged) e)))) coverage)))))
+          (map (fn [e] (match e ((pair p _) (if (= p path) (pair p merged) e)))) coverage)))))
 
 fn serSpan s: (Pair Int64 Int64) -> String
-  (mt s ((pair a b) (str "(" (stringFromInt64 a) " " (stringFromInt64 b) ")")))
+  (match s ((pair a b) (str "(" (stringFromInt64 a) " " (stringFromInt64 b) ")")))
 
 fn serSpans spans: (List (Pair Int64 Int64)) -> String
   (str "(spans" (joinAll (map (fn [s] (str " " (serSpan s))) spans)) ")")
@@ -527,7 +527,7 @@ fn renderSeen coverage: (List (Pair String (List (Pair Int64 Int64)))) -> String
   (if (listEmpty? coverage)
     ""
     (str "(:seen "
-      (joinSep (map (fn [e] (mt e ((pair p sp) (str "(\"" (escapeAsn p) "\" " (joinSep (map serSpan sp) " ") ")")))) coverage) " ")
+      (joinSep (map (fn [e] (match e ((pair p sp) (str "(\"" (escapeAsn p) "\" " (joinSep (map serSpan sp) " ") ")")))) coverage) " ")
       ")"))
 
 fn makeTurn turn: String sent: String got: String -> Turn
@@ -577,7 +577,7 @@ fn formsOnly s: String n: Int64 i: Int64 seen: Bool -> Bool
     ((>= i n) seen)
     ((isSpace (ch s i)) (formsOnly s n (+ i 1) seen))
     ((= (ch s i) "(")
-      (mt (formEnd s n (+ i 1) 1 false false)
+      (match (formEnd s n (+ i 1) 1 false false)
         ((pair j d) (if (= d 0) (formsOnly s n j true) false))))
     (else false))
 
@@ -599,7 +599,7 @@ fn turnForm turn: String sent: String got: String -> String
 
 ; (:m :adopted NormativeAndEmpiricalAreNotMixed)
 fn cutTurn h: Turn -> String
-  (mt h ((turnOf turn sent got)
+  (match h ((turnOf turn sent got)
     (let [sent2 (if (> (charLen sent) 300) (str (charPrefix sent 300) " ...") sent)
           got2 (if (> (charLen got) 300)
                  (let [reads (cutReads got (stringLength got) 0 (list))
@@ -609,10 +609,10 @@ fn cutTurn h: Turn -> String
       (turnForm turn sent2 got2))))
 
 fn wholeTurn h: Turn -> String
-  (mt h ((turnOf turn sent got) (turnForm turn sent got)))
+  (match h ((turnOf turn sent got) (turnForm turn sent got)))
 
 fn turnId h: Turn -> String
-  (mt h ((turnOf turn _ _) turn))
+  (match h ((turnOf turn _ _) turn))
 
 fn at xs: (List Int64) i: Int64 -> Int64
   (optionOr (listGet xs i) 0)
@@ -648,7 +648,7 @@ fn cutGot got: String -> String
 fn boundedLast newest: Turn budget: Int64 -> String
   (let [whole (wholeTurn newest)]
     (if (> (stringLength whole) budget)
-      (mt newest ((turnOf turn sent got)
+      (match newest ((turnOf turn sent got)
         (turnForm turn
           (if (> (charLen sent) 300) (str (charPrefix sent 300) " ...") sent)
           (if (> (charLen got) 300) (cutGot got) got))))
@@ -681,7 +681,7 @@ fn renderWindow history: (List Turn) budget: Int64 cut0: Int64 drop0: Int64 pinn
           (list (turnId newest))))))
 
 fn renderTranscript history: (List Turn) budget: Int64 -> String
-  (mt (renderWindow history budget 0 0 (list)) ((windowOf text last _ _ _ _) (str text last)))
+  (match (renderWindow history budget 0 0 (list)) ((windowOf text last _ _ _ _) (str text last)))
 
 fn memberOf x: String xs: (List String) -> Bool
   (listAny? (fn [y] (= x y)) xs)
@@ -732,8 +732,8 @@ fn runSeparators -> (List String)
   (list ";" "&&" "||" "|" "&" "(" ")")
 
 fn commandSegments words: (List String) -> (List (List String))
-  (mt (fold (fn [st w]
-              (mt st ((pair done cur)
+  (match (fold (fn [st w]
+              (match st ((pair done cur)
                 (if (memberOf w (runSeparators))
                   (pair (cons (listReverse cur) done) (list))
                   (pair done (cons w cur))))))
@@ -820,7 +820,7 @@ fn nearestOp unknown: String accepted: (List String) -> String
         alias (opAlias u)]
     (if (and (!= alias "") (listContains? accepted alias))
       alias
-      (mt (closest u accepted "" 1000000)
+      (match (closest u accepted "" 1000000)
         ((pair best d)
           (if (and (!= best "") (or (<= d 2) (<= (* 3 d) (stringLength u)))) best "")))))
 
@@ -830,8 +830,8 @@ fn terminalForms mode: String -> (List String)
     (list "(:done)" "(:escalate :reason s)"))
 
 fn isDataOp op: (List (Pair String KvVal)) declared: (List String) -> Bool
-  (let [name (mt (dictOr op "op") ((kvStr t) t) ((kvInt t) t))
-        form (mt (dictOr op "form") ((kvStr t) t) ((kvInt t) t))
+  (let [name (match (dictOr op "op") ((kvStr t) t) ((kvInt t) t))
+        form (match (dictOr op "form") ((kvStr t) t) ((kvInt t) t))
         h (headOf form)]
     (or
       (and (= (dictGet op "type") (some (kvStr "findings")))
@@ -842,7 +842,7 @@ fn isDataOp op: (List (Pair String KvVal)) declared: (List String) -> Bool
             (not (listContains? (list "step" "txn" "patch") name)))))))
 
 fn dataFindingForm op: (List (Pair String KvVal)) -> String
-  (let [form (mt (dictOr op "form") ((kvStr t) t) ((kvInt t) t))]
+  (let [form (match (dictOr op "form") ((kvStr t) t) ((kvInt t) t))]
     (if (= (dictGet op "type") (some (kvStr "findings")))
       form
       (str "(:findings " form ")")))
@@ -865,11 +865,11 @@ fn dataFindings reply: String declared: (List String) -> (List String)
         (list))))
 
 fn withoutForm op: (List (Pair String KvVal)) -> (List (Pair String KvVal))
-  (filter (fn [p] (mt p ((pair k _) (!= k "form")))) op)
+  (filter (fn [p] (match p ((pair k _) (!= k "form")))) op)
 
 fn uniqueSteps ops: (List (List (Pair String KvVal))) -> (List (List (Pair String KvVal)))
-  (mt (fold (fn [st op]
-              (mt st ((pair seen out)
+  (match (fold (fn [st op]
+              (match st ((pair seen out)
                 (let [k (withoutForm op)]
                   (if (and (= (dictGet op "type") (some (kvStr "step"))) (listContains? seen k))
                     st
@@ -878,8 +878,8 @@ fn uniqueSteps ops: (List (List (Pair String KvVal))) -> (List (List (Pair Strin
     ((pair _ out) (listReverse out)))
 
 fn intOf o: (Option KvVal) -> Int64
-  (mt o
-    ((some v) (mt v ((kvInt t) (optionOr (stringToInt64 t) -1)) ((kvStr t) -1)))
+  (match o
+    ((some v) (match v ((kvInt t) (optionOr (stringToInt64 t) -1)) ((kvStr t) -1)))
     (none -1))
 
 fn gateCounts out: String -> (Pair Int64 Int64)
@@ -896,7 +896,7 @@ fn missingText s: String -> Bool
 
 ; (:m :ref gates)
 fn gateVerdict reverted: Bool code: Int64 out: String err: String -> String
-  (mt (gateCounts out)
+  (match (gateCounts out)
     ((pair n m)
       (cond
         ((and (not reverted) (< n 0)) (if (= code 0) "asserted" "vacuous"))
@@ -914,13 +914,13 @@ fn firstString s: String -> (Pair Bool String)
     (if (< e 0) (pair false "") (pair true (asnUnescape (sliceOf s (+ q 1) e)))))
 
 fn noteText form: String -> (Pair Bool String)
-  (mt (dictGet (parseKv form) "text")
-    ((some v) (mt v ((kvStr t) (pair true t)) ((kvInt t) (pair true t))))
+  (match (dictGet (parseKv form) "text")
+    ((some v) (match v ((kvStr t) (pair true t)) ((kvInt t) (pair true t))))
     (none (if (= (headOf form) "note") (firstString form) (pair false ""))))
 
 ; (:m :tags (journal))
 fn noteStep form: String cap: Int64 -> String
-  (mt (noteText form)
+  (match (noteText form)
     ((pair has t)
       (let [k (charLen t)
             status (cond ((not has) "missing") ((> k cap) "rejected") (else "ok"))

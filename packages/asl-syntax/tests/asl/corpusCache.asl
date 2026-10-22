@@ -39,17 +39,17 @@ fn defaultRoots -> (List (Pair String String))
         (pair "asl/packages/asl-parser/tests" "liftLower"))
 
 fn fileLine! path: String -> String
-  (mt (fileReadBytes path)
+  (match (fileReadBytes path)
     ((ok b) (str path " " (bytesSha256 b)))
     ((err e) (str path " unreadable " e)))
 
 fn dirLines! dir: String prefix: String recurse: Bool -> (List String)
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err e) (list (str dir " unlistable " e)))
     ((ok names)
      (fold (fn [(acc (List String)) (name String)] -> (List String)
              (let [(child (str dir "/" name))]
-               (mt (fileStat child)
+               (match (fileStat child)
                  ((err e) (listAppend acc (list (str child " unstatable " e))))
                  ((ok st)
                   (if st.isDir
@@ -59,7 +59,7 @@ fn dirLines! dir: String prefix: String recurse: Bool -> (List String)
 
 fn rootLines! root: (Pair String String) -> (List String)
   (let [(path (pairFirst root)) (prefix (pairSecond root))]
-    (mt (fileStat path)
+    (match (fileStat path)
       ((err e) (list (str path " missing " e)))
       ((ok st)
        (if st.isDir
@@ -74,7 +74,7 @@ fn fingerprintRoots! roots: (List (Pair String String)) -> String
 
 fn availableLines! roots: (List (Pair String String)) -> (Option (List String))
   (fold (fn [(acc (Option (List String))) (r (Pair String String))] -> (Option (List String))
-          (mt acc
+          (match acc
             ((none) (none))
             ((some ls)
              (if (not (ok? (fileStat (pairFirst r))))
@@ -99,24 +99,24 @@ fn fingerprintName? name: String -> Bool
 fn evictOne! dir: String name: String -> Bool
   (let [(child (str dir "/" name))
         (doomed (str child ".evict." (stringFromInt64 (monotonicNs))))]
-    (mt (pathRename child doomed)
+    (match (pathRename child doomed)
       ((err e) (do (print (str "corpusCache: evict rename failed for " child ": " e "\n")) false))
       ((ok _)
-       (mt (pathRemove doomed)
+       (match (pathRemove doomed)
          ((err e) (do (print (str "corpusCache: evict remove failed for " doomed ": " e "\n")) false))
          ((ok _) true)))))
 
 fn evictStale! dir: String keep: String now: Int64 -> Int64
-  (mt (fileStat dir)
+  (match (fileStat dir)
     ((err _) 0)
     ((ok _)
-     (mt (dirList dir)
+     (match (dirList dir)
        ((err e) (do (print (str "corpusCache: cannot list " dir ": " e "\n")) 0))
        ((ok names)
         (fold (fn [(n Int64) (name String)] -> Int64
                 (if (or (= name keep) (not (fingerprintName? name)))
                   n
-                  (mt (fileStat (str dir "/" name))
+                  (match (fileStat (str dir "/" name))
                     ((err _) n)
                     ((ok st)
                      (if (and st.isDir (and (> (- now st.mtimeNs) (evictAgeNs)) (evictOne! dir name)))
@@ -125,7 +125,7 @@ fn evictStale! dir: String keep: String now: Int64 -> Int64
               0 names)))))
 
 fn openCache! dir: String -> Cache
-  (mt (availableLines! (defaultRoots))
+  (match (availableLines! (defaultRoots))
     ((none) (cacheDisabled))
     ((some lines)
      (let [(fp (linesDigest lines))
@@ -133,12 +133,12 @@ fn openCache! dir: String -> Cache
        (cacheAt dir fp))))
 
 fn defaultCacheDir! -> String
-  (mt (envGet "HOME")
+  (match (envGet "HOME")
     ((some home) (if (stringEmpty? home) ".asl/cache/corpus" (str home "/.asl/run/corpusCache")))
     ((none) ".asl/cache/corpus"))
 
 fn cacheFromEnv! -> Cache
-  (mt (envGet "ASL_CORPUS_CACHE")
+  (match (envGet "ASL_CORPUS_CACHE")
     ((some v)
      (cond
        ((= v "0") (cacheDisabled))
@@ -162,7 +162,7 @@ fn lookupVerdict! c: Cache suite: String path: String src: String outcomes: (Lis
   (if (not c.enabled)
     (none)
     (let [(key (verdictKey c suite path src))]
-      (mt (fileReadString (entryPath c key))
+      (match (fileReadString (entryPath c key))
         ((err _) (none))
         ((ok text)
          (listHead (filter (fn [(o String)] -> Bool (= text (entryText suite key o))) outcomes))))))
@@ -170,10 +170,10 @@ fn lookupVerdict! c: Cache suite: String path: String src: String outcomes: (Lis
 fn writeEntry! c: Cache key: String text: String -> (Result Unit String)
   (let [(final (entryPath c key))
         (tmp (str final ".tmp." (stringFromInt64 (monotonicNs))))]
-    (mt (dirCreate (entryDir c))
+    (match (dirCreate (entryDir c))
       ((err e) (err e))
       ((ok _)
-       (mt (fileWrite tmp text)
+       (match (fileWrite tmp text)
          ((err e) (err e))
          ((ok _) (pathRename tmp final))))))
 
@@ -181,6 +181,6 @@ fn storeVerdict! c: Cache suite: String path: String src: String outcome: String
   (if (not c.enabled)
     false
     (let [(key (verdictKey c suite path src))]
-      (mt (writeEntry! c key (entryText suite key outcome))
+      (match (writeEntry! c key (entryText suite key outcome))
         ((ok _) true)
         ((err e) (do (print (str "corpusCache: store failed for " path ": " e "\n")) false)))))

@@ -23,17 +23,17 @@ fn unescape s: String -> String
     (unescapeLoop s bs (bytesLength bs) 0 0 (list)))
 
 fn quotedAfter line: String key: String -> String
-  (mt (stringIndexOf line (str key " \""))
+  (match (stringIndexOf line (str key " \""))
     ((none) "")
     ((some i)
      (let [(start (+ i (stringLength key) 2))
            (rest (u/slice line start (stringLength line)))]
-       (mt (stringIndexOf rest "\"")
+       (match (stringIndexOf rest "\"")
          ((some k) (u/slice rest 0 k))
          ((none) "")))))
 
 fn ioText line: String -> String
-  (mt (stringIndexOf line ":io \"")
+  (match (stringIndexOf line ":io \"")
     ((none) "")
     ((some i) (unescape (u/slice line (+ i 5) (- (stringLength line) 2)))))
 
@@ -44,7 +44,7 @@ fn ioText line: String -> String
   (:f want j/Json))
 
 fn parseCase line: String -> (Result Case String)
-  (mt (j/jsonParse (ioText line))
+  (match (j/jsonParse (ioText line))
     ((err e) (err (str "fixture line does not parse: " e)))
     ((ok io) (ok (Case :id (quotedAfter line ":id") :fn (quotedAfter line ":fn")
                        :args (optionOr (j/jsonGet io "args") (j/jnull)) :want (optionOr (j/jsonGet io "want") (j/jnull))))))
@@ -56,33 +56,33 @@ fn has? v: j/Json k: String -> Bool
   (some? (j/jsonGet v k))
 
 fn jstrOf v: j/Json -> String
-  (mt v ((j/jstr s) s) (_ ""))
+  (match v ((j/jstr s) s) (_ ""))
 
 fn optStr v: j/Json -> (Option String)
-  (mt v ((j/jstr s) (some s)) (_ none))
+  (match v ((j/jstr s) (some s)) (_ none))
 
 fn optBool v: j/Json -> (Option Bool)
-  (mt v ((j/jbool b) (some b)) (_ none))
+  (match v ((j/jbool b) (some b)) (_ none))
 
 fn numF v: j/Json -> Float64
-  (mt v
+  (match v
     ((j/jint i) (int64ToFloat64 i))
     ((j/jfloat f) f)
     ((j/jnum f) f)
     (_ 0.0))
 
 fn numI v: j/Json -> Int64
-  (mt v
+  (match v
     ((j/jint i) i)
     ((j/jfloat f) (optionOr (float64ToInt64 f) 0))
     ((j/jnum f) (optionOr (float64ToInt64 f) 0))
     (_ 0))
 
 fn jlist v: j/Json -> (List j/Json)
-  (mt v ((j/jarr xs) xs) (_ (list)))
+  (match v ((j/jarr xs) xs) (_ (list)))
 
 fn jpairs v: j/Json -> (List (Pair String j/Json))
-  (mt v ((j/jobj kvs) kvs) (_ (list)))
+  (match v ((j/jobj kvs) kvs) (_ (list)))
 
 fn envOf v: j/Json -> (Map String String)
   (fold (fn [(m (Map String String)) (p (Pair String j/Json))] -> (Map String String) (mapSet m (pairFirst p) (jstrOf (pairSecond p))))
@@ -93,39 +93,39 @@ fn headerPairs v: j/Json -> (List (Pair String String))
        (jlist v))
 
 fn floatEq? x: Float64 b: j/Json -> Bool
-  (mt b
+  (match b
     ((j/jfloat y) (or (= x y) (and (isNan? x) (isNan? y))))
     ((j/jnum y) (or (= x y) (and (isNan? x) (isNan? y))))
     (_ false))
 
 fn listEq? xs: (List j/Json) ys: (List j/Json) -> Bool
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (listEmpty? ys))
     ((some x)
-     (mt (listHead ys)
+     (match (listHead ys)
        ((none) false)
        ((some y) (and (jsonEq? x y) (listEq? (optionOr (listTail xs) (list)) (optionOr (listTail ys) (list))))))))
 
 fn pairsEq? xs: (List (Pair String j/Json)) ys: (List (Pair String j/Json)) -> Bool
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (listEmpty? ys))
     ((some x)
-     (mt (listHead ys)
+     (match (listHead ys)
        ((none) false)
        ((some y) (and (= (pairFirst x) (pairFirst y))
                       (and (jsonEq? (pairSecond x) (pairSecond y)) (pairsEq? (optionOr (listTail xs) (list)) (optionOr (listTail ys) (list)))))))))
 
 fn jsonEq? a: j/Json b: j/Json -> Bool
-  (mt a
-    ((j/jint x) (mt b ((j/jint y) (= x y)) (_ false)))
+  (match a
+    ((j/jint x) (match b ((j/jint y) (= x y)) (_ false)))
     ((j/jfloat x) (floatEq? x b))
     ((j/jnum x) (floatEq? x b))
-    ((j/jarr xs) (mt b ((j/jarr ys) (listEq? xs ys)) (_ false)))
-    ((j/jobj xs) (mt b ((j/jobj ys) (pairsEq? xs ys)) (_ false)))
+    ((j/jarr xs) (match b ((j/jarr ys) (listEq? xs ys)) (_ false)))
+    ((j/jobj xs) (match b ((j/jobj ys) (pairsEq? xs ys)) (_ false)))
     (_ (= a b)))
 
 fn errName e: String -> String
-  (mt (stringIndexOf e ":") ((some i) (u/slice e 0 i)) ((none) e))
+  (match (stringIndexOf e ":") ((some i) (u/slice e 0 i)) ((none) e))
 
 fn okJ v: j/Json -> j/Json
   (j/jobj (list (pair "ok" v)))
@@ -137,7 +137,7 @@ fn strJ s: String -> j/Json
   (j/jstr s)
 
 fn optJ v: (Option String) -> j/Json
-  (mt v ((some s) (j/jstr s)) ((none) (j/jnull)))
+  (match v ((some s) (j/jstr s)) ((none) (j/jnull)))
 
 fn strList xs: (List String) -> j/Json
   (j/jarr (map strJ xs))
@@ -165,19 +165,19 @@ fn requestJ r: u/UpstreamRequest -> j/Json
                 (pair "data" (strJ r.data))))
 
 fn resultJ r: (Result j/Json String) -> j/Json
-  (mt r ((ok v) (okJ v)) ((err e) (raisesJ e)))
+  (match r ((ok v) (okJ v)) ((err e) (raisesJ e)))
 
 fn settingsOf env: (Map String String) -> (Result u/UpstreamSettings String)
   (u/upstreamSettings env)
 
 fn routeCase a: j/Json -> j/Json
   (let [(env (envOf (jget a "env")))]
-    (mt (settingsOf env)
+    (match (settingsOf env)
       ((err e) (raisesJ e))
       ((ok st) (okJ (endpointJ (u/getUpstreamForModel st env (optStr (jget a "model"))))))))
 
 fn timeoutCase a: j/Json -> j/Json
-  (mt (settingsOf (envOf (jget a "env")))
+  (match (settingsOf (envOf (jget a "env")))
     ((err e) (raisesJ e))
     ((ok st) (okJ (j/jfloat (u/upstreamTimeoutSec st (jstrOf (jget a "provider")))))))
 
@@ -190,10 +190,10 @@ fn bucketRaiseJ b: u/TokenBucket e: String -> j/Json
 fn bucketOp b: u/TokenBucket now: Float64 timeout: Float64 extra: Float64 -> (Pair u/TokenBucket (Result (Pair Bool j/Json) String))
   (let [(step (u/tokenBucketBegin b timeout now))
         (b1 (pairFirst step))]
-    (mt (pairSecond step)
+    (match (pairSecond step)
       ((err e) (pair b1 (err e)))
       ((ok s)
-       (mt s
+       (match s
          ((u/bucketAcquired) (pair b1 (ok (pair true (j/jnull)))))
          ((u/bucketRefused) (pair b1 (ok (pair false (j/jnull)))))
          ((u/bucketWait secs)
@@ -201,12 +201,12 @@ fn bucketOp b: u/TokenBucket now: Float64 timeout: Float64 extra: Float64 -> (Pa
             (pair (pairFirst done) (ok (pair (pairSecond done) (j/jfloat secs))))))))))
 
 fn bucketLoop b: u/TokenBucket ops: (List j/Json) acc: (List j/Json) -> (List j/Json)
-  (mt (listHead ops)
+  (match (listHead ops)
     ((none) (listReverse acc))
     ((some op)
      (let [(r (bucketOp b (numF (jget op "now")) (numF (jget op "timeout")) (numF (jget op "extra"))))
            (b2 (pairFirst r))
-           (row (mt (pairSecond r)
+           (row (match (pairSecond r)
                   ((err e) (bucketRaiseJ b2 e))
                   ((ok p) (bucketJ b2 (pairFirst p) (pairSecond p)))))]
        (bucketLoop b2 (optionOr (listTail ops) (list)) (cons row acc)))))
@@ -215,7 +215,7 @@ fn bucketCase a: j/Json -> j/Json
   (j/jarr (bucketLoop (u/makeTokenBucket (numF (jget a "rate")) (numF (jget a "capacity")) (numF (jget a "t0"))) (jlist (jget a "ops")) (list)))
 
 fn registryLoop reg: u/BucketRegistry ops: (List j/Json) acc: (List j/Json) -> (List j/Json)
-  (mt (listHead ops)
+  (match (listHead ops)
     ((none) (listReverse acc))
     ((some op)
      (let [(model (jstrOf (jget op "model")))
@@ -226,17 +226,17 @@ fn registryLoop reg: u/BucketRegistry ops: (List j/Json) acc: (List j/Json) -> (
            (reg2 (u/bucketRegistryPut (pairFirst got) model rpm (pairFirst r)))
            (size (j/jint (u/bucketRegistrySize reg2)))
            (b (pairFirst r))
-           (row (mt (pairSecond r)
+           (row (match (pairSecond r)
                   ((err e) (j/jobj (list (pair "raises" (strJ (errName e))) (pair "size" size))))
                   ((ok p) (j/jobj (list (pair "acquired" (j/jbool (pairFirst p))) (pair "slept" (pairSecond p)) (pair "rate" (j/jfloat b.rate))
                                         (pair "tokens" (j/jfloat b.tokens)) (pair "lastUpdate" (j/jfloat b.lastUpdate)) (pair "size" size))))))]
        (registryLoop reg2 (optionOr (listTail ops) (list)) (cons row acc)))))
 
 fn policyCase a: j/Json -> j/Json
-  (okJ (mt (u/roleTokenPolicy (optStr (jget a "role"))) ((some p) (policyJ p)) ((none) (j/jnull))))
+  (okJ (match (u/roleTokenPolicy (optStr (jget a "role"))) ((some p) (policyJ p)) ((none) (j/jnull))))
 
 fn requestCase a: j/Json -> j/Json
-  (mt (u/upstreamRequest (jstrOf (jget a "url")) (jstrOf (jget a "path")) (jstrOf (jget a "key")) (jstrOf (jget a "data")) (headerPairs (jget a "clientHeaders")))
+  (match (u/upstreamRequest (jstrOf (jget a "url")) (jstrOf (jget a "path")) (jstrOf (jget a "key")) (jstrOf (jget a "data")) (headerPairs (jget a "clientHeaders")))
     ((err e) (raisesJ e))
     ((ok r) (okJ (requestJ r))))
 
@@ -267,7 +267,7 @@ fn pureGot c: Case -> (Option j/Json)
   (let [(a c.args)
         (f c.fn)]
     (cond
-      ((= f "upstreamSettings") (some (mt (settingsOf (envOf (jget a "env"))) ((ok st) (okJ (settingsJ st))) ((err e) (raisesJ e)))))
+      ((= f "upstreamSettings") (some (match (settingsOf (envOf (jget a "env"))) ((ok st) (okJ (settingsJ st))) ((err e) (raisesJ e)))))
       ((= f "getUpstreamForModel") (some (routeCase a)))
       ((= f "upstreamTimeoutSec") (some (timeoutCase a)))
       ((= f "tokenBucket") (some (bucketCase a)))
@@ -290,7 +290,7 @@ fn pureGot c: Case -> (Option j/Json)
       (else none)))
 
 fn ! runArgv! argv: (List String) env: (Option (List String)) -> (Result (Pair Int64 String) String)
-  (mt (procSpawnv argv none env)
+  (match (procSpawnv argv none env)
     ((err e) (err (str (optionOr (listHead argv) "?") ": " e)))
     ((ok sp)
      (let [(c (fdClose sp.stdin))
@@ -298,12 +298,12 @@ fn ! runArgv! argv: (List String) env: (Option (List String)) -> (Result (Pair I
            (errText (readAll! sp.stderr (list)))
            (c2 (fdClose sp.stdout))
            (c3 (fdClose sp.stderr))]
-       (mt (procWaitPid sp.pid false)
+       (match (procWaitPid sp.pid false)
          ((err e) (err (str "wait: " e)))
          ((ok st) (ok (pair (optionOr st -1) out)))))))
 
 fn ! readAll! fd: Int64 acc: (List String) -> String
-  (mt (fdRead fd 1048576)
+  (match (fdRead fd 1048576)
     ((err _) (u/joinAll (listReverse acc)))
     ((ok chunk) (if (stringEmpty? chunk) (u/joinAll (listReverse acc)) (readAll! fd (cons chunk acc)))))
 
@@ -317,7 +317,7 @@ fn ! makeTmp! -> String
     dir)
 
 fn ! writeB64! path: String b64: String -> Bool
-  (mt (bytesFromBase64 b64)
+  (match (bytesFromBase64 b64)
     ((ok bs) (ok? (fileWrite path bs)))
     ((err _) false))
 
@@ -328,7 +328,7 @@ fn stateAppend r: j/Json extra: (List (Pair String j/Json)) -> j/Json
   (j/jobj (listAppend (jpairs r) extra))
 
 fn noteResult res: (Pair j/Json (Option String)) -> j/Json
-  (mt (pairSecond res) ((some e) (raisesJ e)) ((none) (okJ (j/jnull))))
+  (match (pairSecond res) ((some e) (raisesJ e)) ((none) (okJ (j/jnull))))
 
 fn callsHave? calls: (List j/Json) head: String -> Bool
   (listAny? (fn [(c j/Json)] -> Bool (= (optionOr (listGet (jlist c) 0) (j/jnull)) (j/jstr head))) calls)
@@ -361,9 +361,9 @@ fn ! seqOp! state: j/Json op: j/Json path: String want: j/Json -> (Pair j/Json j
        (let [(r (g/usageFallback state (optStr (jget op "provider")) (optStr (jget op "alias"))))]
          (pair (pairFirst r) (stateAppend (noteResult r) (list (pair "state" (pairFirst r)))))))
       ((= kind "asn")
-       (pair state (stateAppend (mt (g/usageAsn state) ((ok s) (okJ (strJ s))) ((err e) (raisesJ e))) (list (pair "state" state)))))
+       (pair state (stateAppend (match (g/usageAsn state) ((ok s) (okJ (strJ s))) ((err e) (raisesJ e))) (list (pair "state" state)))))
       ((= kind "restore")
-       (let [(prep (mt (jget op "file")
+       (let [(prep (match (jget op "file")
                      ((j/jstr b) (writeB64! path b))
                      (_ (do (pathRemove path) true))))
              (r (g/usageRestore! path state))
@@ -378,7 +378,7 @@ fn dropCalls v: j/Json -> j/Json
   (j/jobj (filter (fn [(p (Pair String j/Json))] -> Bool (not (= (pairFirst p) "calls"))) (jpairs v)))
 
 fn ! seqLoop! state: j/Json ops: (List j/Json) wants: (List j/Json) path: String acc: (List j/Json) -> (List j/Json)
-  (mt (listHead ops)
+  (match (listHead ops)
     ((none) (listReverse acc))
     ((some op)
      (let [(want (optionOr (listHead wants) (j/jnull)))
@@ -400,7 +400,7 @@ fn ! logCase! c: Case tmp: String -> (Pair j/Json j/Json)
         (results (map (fn [(r j/Json)] -> (Pair Bool (Result Bool String)) (pair (not (stringEmpty? (jstrOf r))) (g/logTelemetryEvent! path (optStr r))))
                       (jlist (jget a "records"))))
         (errorsSurface (listAll? (fn [(p (Pair Bool (Result Bool String)))] -> Bool (if (and blocked (pairFirst p)) (err? (pairSecond p)) (ok? (pairSecond p)))) results))
-        (file (mt (fileReadString path) ((ok t) (strJ t)) ((err _) (j/jnull))))]
+        (file (match (fileReadString path) ((ok t) (strJ t)) ((err _) (j/jnull))))]
     (pair (j/jobj (list (pair "file" file) (pair "errorsSurface" (j/jbool errorsSurface))))
           (j/jobj (list (pair "file" (jget c.want "file")) (pair "errorsSurface" (j/jbool true))))))
 
@@ -409,7 +409,7 @@ fn sortedPairs m: (Map String String) -> j/Json
 
 fn ! placeRc! home: String name: String spec: j/Json -> Bool
   (let [(path (str home "/" name))]
-    (mt spec
+    (match spec
       ((j/jstr s) (if (= s "dir") (ok? (dirCreate path)) (writeB64! path s)))
       (_ true)))
 
@@ -448,7 +448,7 @@ fn stubScript dir: String -> String
 fn ! installStub! dir: String -> Bool
   (and (ok? (dirCreate dir))
        (and (ok? (fileWrite (str dir "/curl") (stubScript dir)))
-            (mt (runArgv! (list "/bin/chmod" "755" (str dir "/curl")) none) ((ok p) (= (pairFirst p) 0)) ((err _) false))))
+            (match (runArgv! (list "/bin/chmod" "755" (str dir "/curl")) none) ((ok p) (= (pairFirst p) 0)) ((err _) false))))
 
 fn stubEnv dir: String tmp: String -> (Map String String)
   (mapFromPairs (list (pair "PATH" (str dir ":/usr/bin:/bin")) (pair "TMPDIR" tmp) (pair "HOME" tmp)
@@ -457,10 +457,10 @@ fn stubEnv dir: String tmp: String -> (Map String String)
                       (pair "OLLAMA_API_KEY" "fixture-ollama-key-6P0") (pair "LLM_GATEWAY_API_KEY" "fixture-llmgw-key-2W4")))
 
 fn outcomeJ r: (Result u/UpstreamResponse u/UpstreamFailure) -> j/Json
-  (mt r
+  (match r
     ((ok resp) (j/jobj (list (pair "body" (strJ resp.body)))))
     ((err f)
-     (mt f
+     (match f
        ((u/httpFailure status reason body _)
         (j/jobj (list (pair "status" (j/jint status)) (pair "usage" (strJ (g/usageHttpError status)))
                       (pair "reason" (strJ (w/upstreamErrorReason body (u/httpErrorText status reason)))))))
@@ -476,7 +476,7 @@ fn configHas? cfg: String name: String value: String -> Bool
 
 fn firstWord line: String -> String
   (let [(t (stringTrim line))
-        (sp (fold (fn [(best Int64) (c String)] -> Int64 (mt (stringIndexOf t c) ((some i) (if (< i best) i best)) ((none) best))) (stringLength t) (list " " "=" "\t")))]
+        (sp (fold (fn [(best Int64) (c String)] -> Int64 (match (stringIndexOf t c) ((some i) (if (< i best) i best)) ((none) best))) (stringLength t) (list " " "=" "\t")))]
     (u/slice t 0 sp))
 
 fn forbiddenFree? cfg: String -> Bool
@@ -507,7 +507,7 @@ fn ! resetStub! dir: String code: String out: String -> Bool
 fn ! literalConfig! dir: String tmp: String -> Bool
   (let [(reset (resetStub! dir "0" "HTTP/1.1 200 OK\r\n\r\nok"))
         (key "k\"q\\z\\")
-        (res (mt (u/upstreamRequest "https://h.example/v1" "/chat" key "l1\nl2 \"q\" \\ end\\" (list (pair "X-Q" "a\"b\\c\\")))
+        (res (match (u/upstreamRequest "https://h.example/v1" "/chat" key "l1\nl2 \"q\" \\ end\\" (list (pair "X-Q" "a\"b\\c\\")))
                ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0 0.0))
                ((err e) (err (u/protocolFailure e)))))
         (cfg (readOr! (str dir "/stdin")))
@@ -524,12 +524,12 @@ fn ! literalConfig! dir: String tmp: String -> Bool
 
 fn ! rejected! dir: String tmp: String url: String key: String headers: (List (Pair String String)) secret: String -> Bool
   (let [(reset (resetStub! dir "0" "HTTP/1.1 200 OK\r\n\r\nok"))
-        (res (mt (u/upstreamRequest url "/chat" key "{}" headers)
+        (res (match (u/upstreamRequest url "/chat" key "{}" headers)
                ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0 0.0))
                ((err e) (err (u/protocolFailure e)))))]
     (and reset
-         (and (mt res
-                ((err f) (mt f ((u/protocolFailure d) (and (stringStartsWith? d "ValueError") (not (stringContains? d secret)))) (_ false)))
+         (and (match res
+                ((err f) (match f ((u/protocolFailure d) (and (stringStartsWith? d "ValueError") (not (stringContains? d secret)))) (_ false)))
                 ((ok _) false))
               (not (fileExists? (str dir "/stdin"))))))
 
@@ -548,16 +548,16 @@ fn ! lineBreaksRejected! dir: String tmp: String -> Bool
 
 fn ! redirectIsError! dir: String tmp: String -> Bool
   (let [(reset (resetStub! dir "0" "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:9/elsewhere\r\n\r\nmoved"))
-        (res (mt (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" (list))
+        (res (match (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" (list))
                ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0 0.0))
                ((err e) (err (u/protocolFailure e)))))]
-    (and reset (mt res ((err f) (mt f ((u/httpFailure status _ body _) (and (= status 302) (= body "moved"))) (_ false))) ((ok _) false))))
+    (and reset (match res ((err f) (match f ((u/httpFailure status _ body _) (and (= status 302) (= body "moved"))) (_ false))) ((ok _) false))))
 
 ; (:m OCSESSION: withSessionHeader tags the upstream request with the provider's session header)
 fn ! sessionHeaderAdded! dir: String tmp: String -> Bool
   (let [(reset (resetStub! dir "0" "HTTP/1.1 200 OK\r\n\r\nok"))
         (headers (u/withSessionHeader (list (pair "X-ASL-Session" "sess-oc-1")) "x-opencode-session"))
-        (res (mt (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" headers)
+        (res (match (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" headers)
                ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0 0.0))
                ((err e) (err (u/protocolFailure e)))))
         (cfg (readOr! (str dir "/stdin")))]
@@ -569,7 +569,7 @@ fn ! sessionHeaderAdded! dir: String tmp: String -> Bool
 fn ! sessionHeaderOmittedWithoutProviderHeader! dir: String tmp: String -> Bool
   (let [(reset (resetStub! dir "0" "HTTP/1.1 200 OK\r\n\r\nok"))
         (headers (u/withSessionHeader (list (pair "X-ASL-Session" "sess-oc-2")) ""))
-        (res (mt (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" headers)
+        (res (match (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" headers)
                ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0 0.0))
                ((err e) (err (u/protocolFailure e)))))
         (cfg (readOr! (str dir "/stdin")))]
@@ -581,7 +581,7 @@ fn ! sessionHeaderOmittedWithoutProviderHeader! dir: String tmp: String -> Bool
 fn ! sessionHeaderOmittedWithoutClientSession! dir: String tmp: String -> Bool
   (let [(reset (resetStub! dir "0" "HTTP/1.1 200 OK\r\n\r\nok"))
         (headers (u/withSessionHeader (list) "x-opencode-session"))
-        (res (mt (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" headers)
+        (res (match (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" headers)
                ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0 0.0))
                ((err e) (err (u/protocolFailure e)))))
         (cfg (readOr! (str dir "/stdin")))]
@@ -597,7 +597,7 @@ fn ! stubCase! c: Case dir: String tmp: String -> (Pair j/Json j/Json)
         (w2 (fileWrite (str dir "/err") (jstrOf (jget curl "stderr"))))
         (w3 (fileWrite (str dir "/code") (stringFromInt64 (numI (jget curl "exit")))))
         (reqRes (u/upstreamRequest (jstrOf (jget a "url")) (jstrOf (jget a "path")) key (jstrOf (jget a "data")) (headerPairs (jget a "clientHeaders"))))]
-    (mt reqRes
+    (match reqRes
       ((err e) (pair (raisesJ e) c.want))
       ((ok req)
        (let [(out (u/callUpstream! req (stubEnv dir tmp) 45.0 0.0))
@@ -620,10 +620,10 @@ fn ! effectGot! c: Case ctx: Ctx -> (Option (Pair j/Json j/Json))
       (else none)))
 
 fn ! judge! c: Case ctx: Ctx -> Bool
-  (let [(gw (mt (pureGot c)
+  (let [(gw (match (pureGot c)
               ((some got) (some (pair got c.want)))
               ((none) (effectGot! c ctx))))]
-    (mt gw
+    (match gw
       ((none) (do (eprintln (str "(:case " c.id " :unknownFn " c.fn ")")) false))
       ((some p)
        (if (jsonEq? (pairFirst p) (pairSecond p))
@@ -634,12 +634,12 @@ fn caseLines text: String -> (List String)
   (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:case ")) (stringLines text))
 
 fn ! judgeAll! cases: (List Case) ctx: Ctx acc: (List (Pair String Bool)) -> (List (Pair String Bool))
-  (mt (listHead cases)
+  (match (listHead cases)
     ((none) (listReverse acc))
     ((some c) (judgeAll! (optionOr (listTail cases) (list)) ctx (cons (pair c.id (judge! c ctx)) acc))))
 
 fn ! assertAll! rs: (List (Pair String Bool)) -> Bool
-  (mt (listHead rs)
+  (match (listHead rs)
     ((none) true)
     ((some r) (do (assert (pairSecond r) (str "fixture case " (pairFirst r) " matches the Python original")) (assertAll! (optionOr (listTail rs) (list))))))
 
@@ -647,24 +647,24 @@ fn parsedCases lines: (List String) -> (List (Result Case String))
   (map parseCase lines)
 
 fn okCases rs: (List (Result Case String)) -> (List Case)
-  (fold (fn [(acc (List Case)) (r (Result Case String))] -> (List Case) (mt r ((ok c) (cons c acc)) ((err _) acc))) (list) (listReverse rs))
+  (fold (fn [(acc (List Case)) (r (Result Case String))] -> (List Case) (match r ((ok c) (cons c acc)) ((err _) acc))) (list) (listReverse rs))
 
 fn doubled s: String k: Int64 -> String
   (if (<= k 0) s (doubled (stringConcat s s) (- k 1)))
 
 fn ! stubFirst? dir: String -> Bool
-  (mt (runArgv! (list "/bin/sh" "-c" "command -v curl") (some (list (str "PATH=" dir ":/usr/bin:/bin"))))
+  (match (runArgv! (list "/bin/sh" "-c" "command -v curl") (some (list (str "PATH=" dir ":/usr/bin:/bin"))))
     ((ok p) (= (pairSecond p) (str dir "/curl\n")))
     ((err _) false))
 
 fn ! missingCurl! tmp: String -> Bool
   (let [(empty (str tmp "/emptyPath"))
         (made (dirCreate empty))]
-    (mt (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" (list))
+    (match (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" (list))
       ((err _) false)
       ((ok req)
-       (mt (u/callUpstream! req (mapFromPairs (list (pair "PATH" empty))) 5.0 0.0)
-         ((err f) (mt f ((u/toolAbsent tool _) (= tool "curl")) (_ false)))
+       (match (u/callUpstream! req (mapFromPairs (list (pair "PATH" empty))) 5.0 0.0)
+         ((err f) (match f ((u/toolAbsent tool _) (= tool "curl")) (_ false)))
          ((ok _) false)))))
 
 fn ! largeTransfer! dir: String tmp: String -> (Pair Bool Int64)
@@ -674,12 +674,12 @@ fn ! largeTransfer! dir: String tmp: String -> (Pair Bool Int64)
         (w2 (fileWrite (str dir "/err") ""))
         (w3 (fileWrite (str dir "/code") "0"))
         (t0 (monotonicNs))
-        (res (mt (u/upstreamRequest "https://h.example/v1" "/chat" "fixture-openrouter-key-7Q2" body (list))
+        (res (match (u/upstreamRequest "https://h.example/v1" "/chat" "fixture-openrouter-key-7Q2" body (list))
                ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0 0.0))
                ((err e) (err (u/protocolFailure e)))))
         (ms (/ (- (monotonicNs) t0) 1000000))
         (sent (resultOr (fileSize (str dir "/stdin")) 0))]
-    (pair (and (mt res ((ok r) (= r.body reply)) ((err _) false)) (> sent (stringLength body))) ms))
+    (pair (and (match res ((ok r) (= r.body reply)) ((err _) false)) (> sent (stringLength body))) ms))
 
 fn ! largeTelemetry! -> (Pair Bool Int64)
   (let [(content (str "(:reply " (doubled "(:x \"a\\\"b\" (:y 1)) " 13) ")"))
@@ -687,7 +687,7 @@ fn ! largeTelemetry! -> (Pair Bool Int64)
         (rec (g/analyzeTelemetry (j/jstr content) (some "implement") (some "coder") (some "m") (some "/w") "/r" 1))
         (url (g/cleanUrl (str "https://example.com/a?" (doubled "utm_x=1&q=%C3%A9+x&" 11) "end=1")))
         (ms (/ (- (monotonicNs) t0) 1000000))]
-    (pair (and (mt rec ((some r) (stringContains? r ":pureDyck1 true :markdownWrapped false")) ((none) false))
+    (pair (and (match rec ((some r) (stringContains? r ":pureDyck1 true :markdownWrapped false")) ((none) false))
                (and (stringStartsWith? url "https://example.com/a?q=%C3%A9+x&q=") (stringEndsWith? url "&end=1")))
           ms))
 

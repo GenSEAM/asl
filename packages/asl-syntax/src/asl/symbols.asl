@@ -214,7 +214,7 @@ fn matchParenHead text: String bs: Bytes len: Int64 start: Int64 -> (Option Head
       (if (= (bytesGet bs pos) 58)
         (matchParenKwHead text bs len pos)
         (let [(hend (scanDelimEnd bs len pos))]
-          (mt (matchDefHead text pos hend)
+          (match (matchDefHead text pos hend)
             ((none) (none))
             ((some head)
              (let [(posAfterHead (skipWs bs len hend))]
@@ -248,7 +248,7 @@ fn matchIndentHead text: String bs: Bytes len: Int64 lineStart: Int64 -> (Option
   (let [(hend (scanIndentHeadEnd bs len lineStart))]
     (if (= hend lineStart)
       (none)
-      (mt (matchDefHead text lineStart hend)
+      (match (matchDefHead text lineStart hend)
         ((none) (none))
         ((some head)
          (let [(spEnd (scanSpacesAndTabs bs len hend))]
@@ -291,7 +291,7 @@ fn scanParenLoop text: String bs: Bytes len: Int64 idx: Int64 stack: (List Paren
                           (remStack (optionOr (listTail stack) (list)))
                           (endOff (+ idx 1))]
                       (if (= frame.charCode 40)
-                        (mt (matchParenHead text bs len frame.startOffset)
+                        (match (matchParenHead text bs len frame.startOffset)
                           ((none)
                            (scanParenLoop text bs len (+ idx 1) remStack false false false acc))
                           ((some m)
@@ -341,7 +341,7 @@ fn updateLineDepth bs: Bytes pos: Int64 lEnd: Int64 stackDepth: Int64 inStr: Boo
 
 fn scanIndentedLines text: String bs: Bytes len: Int64 s: src/Source lineCount: Int64 lineNum: Int64 st: IndentScanState -> (List RawSymbol)
   (if (> lineNum lineCount)
-    (mt st.curSym
+    (match st.curSym
       ((some cur) (cons cur st.acc))
       ((none) st.acc))
     (let [(lStart (optionOr (src/sourceLineStart s lineNum) 0))
@@ -363,10 +363,10 @@ fn scanIndentedLines text: String bs: Bytes len: Int64 s: src/Source lineCount: 
         (let [(b0 (bytesGet bs lStart))
               (isCol0 (not (or (= b0 32) (= b0 9))))]
           (if (and isCol0 (= lineStartDepth 0))
-            (let [(newAcc (mt curSym ((some cur) (cons cur acc)) ((none) acc)))
+            (let [(newAcc (match curSym ((some cur) (cons cur acc)) ((none) acc)))
                   (newCur (if (or (= b0 40) (= b0 59))
                             (none)
-                            (mt (matchIndentHead text bs len lStart)
+                            (match (matchIndentHead text bs len lStart)
                               ((some m) (some (RawSymbol :name m.name :kind m.kind :start lStart :end lEnd :depth 0)))
                               ((none) (none)))))
                   (depthRes (updateLineDepth bs lStart lEnd stackDepth inStr esc false))
@@ -375,7 +375,7 @@ fn scanIndentedLines text: String bs: Bytes len: Int64 s: src/Source lineCount: 
                   (nextEsc (pairSecond (pairSecond depthRes)))]
               (scanIndentedLines text bs len s lineCount (+ lineNum 1)
                                  (IndentScanState :stackDepth nextDepth :inStr nextStr :esc nextEsc :curSym newCur :acc newAcc)))
-            (let [(updatedCur (mt curSym
+            (let [(updatedCur (match curSym
                                 ((some cur) (some (RawSymbol :name cur.name :kind cur.kind :start cur.start :end lEnd :depth 0)))
                                 ((none) (none))))
                   (depthRes (updateLineDepth bs lStart lEnd stackDepth inStr esc false))
@@ -393,10 +393,10 @@ fn rawSymSortBefore? a: RawSymbol b: RawSymbol -> Bool
       (> a.end b.end)))
 
 fn mergeRawLists left: (List RawSymbol) right: (List RawSymbol) acc: (List RawSymbol) -> (List RawSymbol)
-  (mt (listHead left)
+  (match (listHead left)
     ((none) (listAppend (listReverse acc) right))
     ((some lhd)
-     (mt (listHead right)
+     (match (listHead right)
        ((none) (listAppend (listReverse acc) left))
        ((some rhd)
         (if (rawSymSortBefore? lhd rhd)
@@ -413,7 +413,7 @@ fn sortRawSymbols syms: (List RawSymbol) -> (List RawSymbol)
         (mergeRawLists left right (list)))))
 
 fn pruneStack stack: (List AslSymbol) endOff: Int64 -> (List AslSymbol)
-  (mt (listHead stack)
+  (match (listHead stack)
     ((none) (list))
     ((some top)
      (if (< top.end endOff)
@@ -421,13 +421,13 @@ fn pruneStack stack: (List AslSymbol) endOff: Int64 -> (List AslSymbol)
        stack)))
 
 fn buildAslSymbolsLoop s: src/Source raws: (List RawSymbol) stack: (List AslSymbol) acc: (List AslSymbol) -> (List AslSymbol)
-  (mt (listHead raws)
+  (match (listHead raws)
     ((none) (listReverse acc))
     ((some raw)
      (let [(st raw.start)
            (en raw.end)
            (pruned (pruneStack stack en))
-           (container (mt (listHead pruned)
+           (container (match (listHead pruned)
                         ((some parent) parent.name)
                         ((none) "")))
            (stLine (optionOr (src/sourceLineAt s st) 1))
@@ -469,7 +469,7 @@ fn aslSymbols text: String -> (List sym/SymbolDef)
        (extractSymbols text))
 
 fn findFirstAslSymbol syms: (List AslSymbol) start: Int64 end: Int64 -> (Option AslSymbol)
-  (mt (listHead (filter (fn [(s AslSymbol)] -> Bool
+  (match (listHead (filter (fn [(s AslSymbol)] -> Bool
                           (and (= s.start start) (= s.end end)))
                         syms))
     ((some s) (some s))
@@ -478,7 +478,7 @@ fn findFirstAslSymbol syms: (List AslSymbol) start: Int64 end: Int64 -> (Option 
 fn findSymbolDotted syms: (List AslSymbol) query: String -> (Option AslSymbol)
   (let [(defs (map (fn [(s AslSymbol)] -> sym/SymbolDef (aslSymbolToSymbolDef s)) syms))
         (foundDef (sym/findSymbolDotted defs query))]
-    (mt foundDef
+    (match foundDef
       ((none) (none))
       ((some d)
        (findFirstAslSymbol syms (sym/symbolStart d) (sym/symbolEnd d)))))

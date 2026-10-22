@@ -95,7 +95,7 @@ fn hasErrorElementList elems: (List tr/TreeElement) -> Bool
     false
     (let [(head (optionOr (listHead elems) (tr/elemToken (tr/Token :kind "" :start 0 :end 0))))
           (tail (optionOr (listTail elems) (list)))]
-      (mt head
+      (match head
         ((tr/elemToken tok)
          (if (tr/isErrorToken tok)
            true
@@ -110,7 +110,7 @@ fn findOccurrencesLoop text: String anchor: String cur: Int64 totalLen: Int64 ac
     (listReverse acc)
     (let [(slice (optionOr (stringSlice text cur totalLen) ""))
           (idxOpt (stringIndexOf slice anchor))]
-      (mt idxOpt
+      (match idxOpt
         ((none) (listReverse acc))
         ((some relIdx)
          (let [(absIdx (+ cur relIdx))]
@@ -168,7 +168,7 @@ fn applySpanEdit text: String start: Int64 end: Int64 replacement: String parse:
              (suffix (optionOr (stringSlice text end totalLen) ""))
              (newText (str prefix replacement suffix))
              (parseRes (parse newText))]
-         (mt parseRes
+         (match parseRes
            ((err msg) (err (str "parse failed: " msg)))
            ((ok root)
             (if (hasErrorNode root)
@@ -176,7 +176,7 @@ fn applySpanEdit text: String start: Int64 end: Int64 replacement: String parse:
               (ok (EditResult :newText newText :root root)))))))))
 
 fn applySpanEditText text: String start: Int64 end: Int64 replacement: String parse: (fn [String] -> (Result tr/Node String)) -> (Result String String)
-  (mt (applySpanEdit text start end replacement parse)
+  (match (applySpanEdit text start end replacement parse)
     ((ok res) (ok res.newText))
     ((err msg) (err msg)))
 
@@ -184,7 +184,7 @@ fn applySpanEditWithTree text: String start: Int64 end: Int64 replacement: Strin
   (applySpanEdit text start end replacement (fn [(t String)] -> (Result tr/Node String) (ok (parse t))))
 
 fn applyAnchorEdit text: String anchor: String replacement: String parse: (fn [String] -> (Result tr/Node String)) -> (Result EditResult String)
-  (mt (resolveAnchor text anchor)
+  (match (resolveAnchor text anchor)
     ((err msg) (err msg))
     ((ok span)
      (applySpanEdit text span.start span.end replacement parse)))
@@ -197,7 +197,7 @@ fn symBefore? a: SymbolDef b: SymbolDef -> Bool
       (< a.start b.start)))
 
 fn insertSymbolSort sym: SymbolDef sorted: (List SymbolDef) -> (List SymbolDef)
-  (mt (listHead sorted)
+  (match (listHead sorted)
     ((none) (list sym))
     ((some hd)
      (if (symBefore? sym hd)
@@ -213,7 +213,7 @@ fn sortSymbolCandidates cands: (List SymbolDef) -> (List SymbolDef)
 fn matchesCandidate? cand: SymbolDef name: String parentOpt: (Option SymbolDef) -> Bool
   (if (not (= cand.name name))
     false
-    (mt parentOpt
+    (match parentOpt
       ((none) true)
       ((some parent)
        (let [(same? (and (= cand.start parent.start)
@@ -228,18 +228,18 @@ fn collectCandidates syms: (List SymbolDef) name: String parentOpt: (Option Symb
   (filter (fn [(s SymbolDef)] -> Bool (matchesCandidate? s name parentOpt)) syms)
 
 fn searchCandidatesList parts: (List String) syms: (List SymbolDef) idx: Int64 lastPart?: Bool cands: (List SymbolDef) -> (Option SymbolDef)
-  (mt (listHead cands)
+  (match (listHead cands)
     ((none) (none))
     ((some cand)
      (if lastPart?
        (some cand)
        (let [(deeper (searchParts parts syms (+ idx 1) (some cand)))]
-         (mt deeper
+         (match deeper
            ((some res) (some res))
            ((none) (searchCandidatesList parts syms idx lastPart? (optionOr (listTail cands) (list)))))))))
 
 fn searchParts parts: (List String) syms: (List SymbolDef) idx: Int64 parentOpt: (Option SymbolDef) -> (Option SymbolDef)
-  (mt (listGet parts idx)
+  (match (listGet parts idx)
     ((none) (none))
     ((some partName)
      (let [(cands (sortSymbolCandidates (collectCandidates syms partName parentOpt)))
@@ -306,7 +306,7 @@ fn betterScored? x: ScoredCandidate y: ScoredCandidate -> Bool
       (and (= x.score y.score) (> x.text y.text)))
 
 fn insertScoredCandidate item: ScoredCandidate items: (List ScoredCandidate) -> (List ScoredCandidate)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (list item))
     ((some hd)
      (if (betterScored? item hd)
@@ -324,7 +324,7 @@ fn getCloseStringMatches word: String possibilities: (List String) n: Int64 cuto
     (map (fn [(s ScoredCandidate)] -> String s.text) (listTake scored n)))
 
 fn dedupSortedStrings items: (List String) acc: (List String) -> (List String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (listReverse acc))
     ((some x)
      (dedupSortedStrings (optionOr (listTail items) (list))
@@ -333,7 +333,7 @@ fn dedupSortedStrings items: (List String) acc: (List String) -> (List String)
                            (cons x acc)))))
 
 fn fillNearSubstrings names: (List String) low: String near: (List String) k: Int64 -> (List String)
-  (mt (listHead names)
+  (match (listHead names)
     ((none) near)
     ((some nm)
      (if (>= (listLength near) k)

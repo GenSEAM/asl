@@ -35,7 +35,7 @@ fn prefixEnd bs: Bytes i: Int64 n: Int64 -> (Option Int64)
                      ((or (= b 45) (= b 42) (= b 43)) (some (+ i 1)))
                      ((digit? b) (let [(e (runEnd bs i n digit?)) (m (byteAt bs e n))] (if (or (= m 46) (= m 41)) (some (+ e 1)) (none))))
                      (else (none))))]
-    (mt afterMark
+    (match afterMark
       ((none) (none))
       ((some e) (let [(s (spacesEnd bs e n))] (if (> s e) (some s) (none))))))
 
@@ -49,15 +49,15 @@ fn markEnd bs: Bytes i: Int64 n: Int64 closing: Bool -> (Option Int64)
       (else (none))))
 
 fn options first: (Option Int64) fallback: Int64 -> (List Int64)
-  (mt first ((some e) (list e fallback)) ((none) (list fallback)))
+  (match first ((some e) (list e fallback)) ((none) (list fallback)))
 
 fn lookahead? bs: Bytes i: Int64 n: Int64 -> Bool
   (or (>= i n) (> (c/spaceLenAt bs i n) 0) (= (bytesGet bs i) 58) (= (bytesGet bs i) 46) (= (bytesGet bs i) 41))
 
 fn firstSome xs: (List Int64) f: (fn [Int64] -> (Option (Pair String String))) -> (Option (Pair String String))
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (none))
-    ((some x) (mt (f x) ((some r) (some r)) ((none) (firstSome (optionOr (listTail xs) (list)) f)))))
+    ((some x) (match (f x) ((some r) (some r)) ((none) (firstSome (optionOr (listTail xs) (list)) f)))))
 
 fn restOf line: String i: Int64 -> String
   (let [(n (stringLength line))
@@ -93,7 +93,7 @@ fn dropMarks s: String -> String
 fn specReqs text: String -> (List Req)
   (listReverse
     (fold (fn [(acc (List Req)) (line String)] -> (List Req)
-            (mt (reqMatch line)
+            (match (reqMatch line)
               ((none) acc)
               ((some m)
                 (if (listAny? (fn [(r Req)] -> Bool (= r.id (pairFirst m))) acc)
@@ -186,14 +186,14 @@ fn ridFrom bs: Bytes n: Int64 pat: Bytes m: Int64 i: Int64 hits: (fn [Int64] -> 
 fn docOf dd: p/PyDef -> (Option String)
   (if (= dd.kind "lambda")
     (none)
-    (mt (listHead (d/kids dd.node "body"))
-      ((some b0) (if (d/isType? b0 "Expr") (mt (d/kid b0 "value") ((some v) (d/constStr v)) ((none) (none))) (none)))
+    (match (listHead (d/kids dd.node "body"))
+      ((some b0) (if (d/isType? b0 "Expr") (match (d/kid b0 "value") ((some v) (d/constStr v)) ((none) (none))) (none)))
       ((none) (none))))
 
 fn cites? pi: p/PyIndex dd: p/PyDef rid: String -> Bool
   (or (idToken? dd.name rid)
-      (mt (docOf dd) ((some doc) (and (not (stringEmpty? doc)) (ridIn? doc rid))) ((none) false))
-      (mt (p/modOf pi.ix dd.modName)
+      (match (docOf dd) ((some doc) (and (not (stringEmpty? doc)) (ridIn? doc rid))) ((none) false))
+      (match (p/modOf pi.ix dd.modName)
         ((some m) (listAny? (fn [(cm (Pair Int64 String))] -> Bool (and (<= dd.line (pairFirst cm)) (<= (pairFirst cm) dd.end) (ridIn? (pairSecond cm) rid))) (q/commentsOf m)))
         ((none) false)))
 
@@ -273,12 +273,12 @@ fn boolText b: Bool -> String
   (if b "true" "false")
 
 fn testIsTest? pi: p/PyIndex k: String -> Bool
-  (mt (p/defOf pi.ix k)
-    ((some dd) (mt (p/modOf pi.ix dd.modName) ((some m) m.isTest) ((none) false)))
+  (match (p/defOf pi.ix k)
+    ((some dd) (match (p/modOf pi.ix dd.modName) ((some m) m.isTest) ((none) false)))
     ((none) true))
 
 fn srcOf pi: p/PyIndex dd: p/PyDef -> String
-  (mt (p/modOf pi.ix dd.modName) ((some m) (sourceSegment m.src dd.node)) ((none) ""))
+  (match (p/modOf pi.ix dd.modName) ((some m) (sourceSegment m.src dd.node)) ((none) ""))
 
 fn reqItem pi: p/PyIndex code: (List p/PyDef) infos: (List TI) r: Req -> (Pair String Bool)
   (let [(rid r.id)
@@ -291,7 +291,7 @@ fn reqItem pi: p/PyIndex code: (List p/PyDef) infos: (List TI) r: Req -> (Pair S
                               acc (h/hmPairs (union ti.callees ti.cut))))
                       cited rtests))
         (servedDefs (listSortBy (fn [(dd p/PyDef)] -> String (str dd.rel "\x00" (cal/padLine dd.line)))
-                                (fold (fn [(acc (List p/PyDef)) (pr (Pair String Bool))] -> (List p/PyDef) (mt (p/defOf pi.ix (pairFirst pr)) ((some dd) (cons dd acc)) ((none) acc))) (list) (h/hmPairs served))))
+                                (fold (fn [(acc (List p/PyDef)) (pr (Pair String Bool))] -> (List p/PyDef) (match (p/defOf pi.ix (pairFirst pr)) ((some dd) (cons dd acc)) ((none) acc))) (list) (h/hmPairs served))))
         (stubs (filter (fn [(dd p/PyDef)] -> Bool (some? (q/stubWhy pi dd))) servedDefs))
         (implemented (and (not (listEmpty? servedDefs)) (listEmpty? stubs)))
         (live (keysOf (filter (fn [(dd p/PyDef)] -> Bool (not (some? (q/stubWhy pi dd)))) servedDefs)))
@@ -335,7 +335,7 @@ fn ! coverageOver! root: String spec: String reqs: (List Req) pi: p/PyIndex limi
         (items (map (fn [(r Req)] -> (Pair Req (Pair String Bool)) (pair r (reqItem pi code infos r))) reqs))
         (done (map (fn [(pr (Pair Req (Pair String Bool)))] -> String (pairFirst pr).id) (filter (fn [(pr (Pair Req (Pair String Bool)))] -> Bool (pairSecond (pairSecond pr))) items)))
         (texts (map (fn [(pr (Pair Req (Pair String Bool)))] -> String (pairFirst (pairSecond pr))) items))]
-    (mt (c/shortRev! root ctx)
+    (match (c/shortRev! root ctx)
       ((err e) (err e))
       ((ok rev)
         (let [(head (str "(:observe :dim coverage :v 1 :spec " (c/quoted spec) " :rev " rev " :count (:reqs " (stringFromInt64 (listLength reqs))
@@ -345,22 +345,22 @@ fn ! coverageOver! root: String spec: String reqs: (List Req) pi: p/PyIndex limi
           (c/fitReceipt head (list (c/Section :key "reqs" :items texts :limit limit)) (str " :limits " (c/quoted (coverageLimits))) "coverage")))))
 
 fn ! observeCoverage! root: String spec: String idRx: (Option re/Regex) limit: Int64 ctx: c/Ctx -> (Pair String (Result String String))
-  (mt (fileReadString (c/joinPath root spec))
+  (match (fileReadString (c/joinPath root spec))
     ((err e) (pair "" (err (if (= e "permissionDenied") (str "PermissionError: [Errno 13] Permission denied: " (pyQuote (c/joinPath root spec))) (str "OSError: " e ": " (pyQuote (c/joinPath root spec)))))))
     ((ok raw)
-      (mt (decodeError raw)
+      (match (decodeError raw)
         ((some msg) (pair "" (err msg)))
         ((none)
           (let [(all (specReqs (c/universalNewlines raw)))
-                (reqs (mt idRx ((some rx) (filter (fn [(r Req)] -> Bool (some? (re/regex-match-full! rx r.id))) all)) ((none) all)))]
+                (reqs (match idRx ((some rx) (filter (fn [(r Req)] -> Bool (some? (re/regex-match-full! rx r.id))) all)) ((none) all)))]
             (if (listEmpty? reqs)
               (pair "" (err (c/rejectLine "ERR_NO_REQUIREMENTS" (str "no requirement ids (e.g. R1, REQ-2 at the start of a heading or list item) in " spec) "")))
-              (mt (c/workspaceFiles! root ctx)
+              (match (c/workspaceFiles! root ctx)
                 ((err e) (pair "" (err e)))
                 ((ok files)
-                  (mt (p/buildPyIndex root "" files ctx)
+                  (match (p/buildPyIndex root "" files ctx)
                     ((err e) (pair "" (err e)))
                     ((ok b)
-                      (mt b
+                      (match b
                         ((p/pyAbsent why) (pair "" (err (cal/absentLine "coverage" why))))
                         ((p/built pi) (pair pi.warnings (coverageOver! root spec reqs pi limit ctx))))))))))))))

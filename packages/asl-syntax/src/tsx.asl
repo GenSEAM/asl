@@ -31,7 +31,7 @@ fn rejectTypeAssertionsInElements elems: (List tr/TreeElement) -> (List tr/TreeE
     (list)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken _) (cons hd (rejectTypeAssertionsInElements tl)))
         ((tr/elemNode n) (cons (tr/elemNode (rejectTypeAssertions n)) (rejectTypeAssertionsInElements tl))))))
 
@@ -103,19 +103,19 @@ fn lookupJsxNode start: Int64 end: Int64 entries: (List (Pair (Pair Int64 Int64)
         (lookupJsxNode start end tl))))
 
 fn substituteJsxInElement elem: tr/TreeElement entries: (List (Pair (Pair Int64 Int64) tr/Node)) -> tr/TreeElement
-  (mt elem
+  (match elem
     ((tr/elemToken tok)
      (let [(st (tr/tokenStart tok))
            (en (tr/tokenEnd tok))
            (found (lookupJsxNode st en entries))]
-       (mt found
+       (match found
          ((some n) (tr/elemNode n))
          ((none) elem))))
     ((tr/elemNode node)
      (let [(st (tr/nodeStart node))
            (en (tr/nodeEnd node))
            (found (lookupJsxNode st en entries))]
-       (mt found
+       (match found
          ((some n) (tr/elemNode n))
          ((none) (tr/elemNode (substituteJsxNodes node entries)))))))
 
@@ -123,7 +123,7 @@ fn substituteJsxNodes node: tr/Node entries: (List (Pair (Pair Int64 Int64) tr/N
   (let [(st (tr/nodeStart node))
         (en (tr/nodeEnd node))
         (found (lookupJsxNode st en entries))]
-    (mt found
+    (match found
       ((some n) n)
       ((none)
        (let [(k (tr/nodeKind node))
@@ -308,7 +308,7 @@ fn tryParseGenericFunctionExpr text: String bs: Bytes len: Int64 cur: Int64 -> (
             (if hasStar
               (let [(kids (tr/nodeChildren fnNode))
                     (lastKid (optionOr (listLast kids) (tr/elemToken (tr/makeToken "" 0 0))))]
-                (mt lastKid
+                (match lastKid
                   ((tr/elemNode oldBlock)
                    (if (= (tr/nodeKind oldBlock) "block")
                      (let [(bStart (tr/nodeStart oldBlock))
@@ -360,7 +360,7 @@ fn findNextInteresting text: String bs: Bytes len: Int64 endOff: Int64 cur: Int6
                  (findNextInteresting text bs len endOff (+ cur 1))))
              (findNextInteresting text bs len endOff (+ cur 1)))))
         ((= b 40)
-         (mt (tryFindTypedParamsInParen text bs len cur)
+         (match (tryFindTypedParamsInParen text bs len cur)
            ((some _) cur)
            ((none) (findNextInteresting text bs len endOff (+ cur 1)))))
         (else
@@ -380,7 +380,7 @@ fn tokenizeTsxTokensLoop text: String bs: Bytes len: Int64 cur: Int64 endOff: In
           (cond
             ((= b 102)
              (let [(fnOpt (tryParseGenericFunctionExpr text bs endOff nextI))]
-               (mt fnOpt
+               (match fnOpt
                  ((some fnPair)
                   (let [(fnNode (pairFirst fnPair))
                         (pEnd (pairSecond fnPair))
@@ -399,7 +399,7 @@ fn tokenizeTsxTokensLoop text: String bs: Bytes len: Int64 cur: Int64 endOff: In
                     (tokenizeTsxTokensLoop text bs len (+ nextI 8) endOff allToks accMap))))))
             ((= b 114)
              (let [(plainOpt (tryFindPlainTextInParen text bs endOff nextI))]
-               (mt plainOpt
+               (match plainOpt
                  ((some plainPair)
                   (let [(span (pairFirst plainPair))
                         (pStart (pairFirst span))
@@ -420,7 +420,7 @@ fn tokenizeTsxTokensLoop text: String bs: Bytes len: Int64 cur: Int64 endOff: In
                     (tokenizeTsxTokensLoop text bs len (+ nextI 6) endOff allToks accMap))))))
             ((= b 40)
              (let [(parenOpt (tryFindTypedParamsInParen text bs len nextI))]
-               (mt parenOpt
+               (match parenOpt
                  ((some parenPair)
                   (let [(span (pairFirst parenPair))
                         (pStart (pairFirst span))
@@ -441,7 +441,7 @@ fn tokenizeTsxTokensLoop text: String bs: Bytes len: Int64 cur: Int64 endOff: In
                     (tokenizeTsxTokensLoop text bs len (+ nextI 1) endOff allToks accMap))))))
             (else
              (let [(arrowOpt (tryParseGenericArrow text bs len nextI))]
-               (mt arrowOpt
+               (match arrowOpt
                  ((some arrowPair)
                   (let [(arrowNode (pairFirst arrowPair))
                         (nextC (pairSecond arrowPair))]
@@ -460,7 +460,7 @@ fn tokenizeTsxTokensLoop text: String bs: Bytes len: Int64 cur: Int64 endOff: In
                         (tokenizeTsxTokensLoop text bs len (+ nextI 1) endOff allToks accMap)))))
                  ((none)
                   (let [(elemRes (jsx/parseJsxElementOrFragWithTagParser text bs len nextI parseTsxTagName))]
-                    (mt elemRes
+                    (match elemRes
                       ((ok resPair)
                        (let [(elemNode (pairFirst resPair))
                              (nextC (pairSecond resPair))]
@@ -486,16 +486,16 @@ fn tokenizeTsxTokensLoop text: String bs: Bytes len: Int64 cur: Int64 endOff: In
 
 fn parseTsxModuleTokens toks: (List tr/Token) text: String jsxMap: (List (Pair (Pair Int64 Int64) tr/Node)) -> (Result tr/Node String)
   (let [(modRes (tsMod/parseTsModuleTokens toks text))]
-    (mt modRes
+    (match modRes
       ((err msg) (err msg))
       ((ok root)
        (let [(restoredRoot (substituteJsxNodes root jsxMap))
              (finalRoot (rejectTypeAssertions restoredRoot))]
-         (mt (tsMod/firstErrorOffset (tr/nodeChildren finalRoot))
+         (match (tsMod/firstErrorOffset (tr/nodeChildren finalRoot))
            ((some off)
             (err (str "Parse error at offset " (stringFromInt64 off))))
            ((none)
-            (mt (tr/checkTiling finalRoot (stringLength text))
+            (match (tr/checkTiling finalRoot (stringLength text))
               ((ok _) (ok finalRoot))
               ((err msg) (err msg)))))))))
 
@@ -536,7 +536,7 @@ fn parseTsxElement text: String start: Int64 -> (Result tr/Node String)
   (let [(bs (stringToBytes text))
         (len (bytesLength bs))
         (res (jsx/parseJsxElementWithTagParser text bs len start parseTsxTagName))]
-    (mt res
+    (match res
       ((ok p) (ok (pairFirst p)))
       ((err e) (err e))))
 
@@ -544,7 +544,7 @@ fn parseTsxFragment text: String start: Int64 -> (Result tr/Node String)
   (let [(bs (stringToBytes text))
         (len (bytesLength bs))
         (res (jsx/parseJsxFragmentFrom text bs len start))]
-    (mt res
+    (match res
       ((ok p) (ok (pairFirst p)))
       ((err e) (err e))))
 

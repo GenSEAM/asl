@@ -19,7 +19,7 @@ fn ledger lines: (List bgt/BudgetLine) approvals: (List bgt/Approval) maxBuckets
   (bgt/makeLedger lines approvals maxBuckets)
 
 fn allowed action: bgt/Action nowMs: Int64 lines: (List bgt/BudgetLine) approvals: (List bgt/Approval) -> Bool
-  (mt (bgt/gate (ledger lines approvals 8) action nowMs)
+  (match (bgt/gate (ledger lines approvals 8) action nowMs)
     ((allow) true)
     ((deny _) false))
 
@@ -53,11 +53,11 @@ fn testPeriodsAndTightestLine -> Bool
         (day (bgt/periodDay))
         (hourLedger (ledger [(paidLine 50 false)] [] 8))
         (charged (bgt/charge hourLedger (event 3599999 40)))
-        (atBoundary (mt charged ((ok l) l) ((err _) hourLedger)))
+        (atBoundary (match charged ((ok l) l) ((err _) hourLedger)))
         (twoLines [(paidLine 100 false) (freeGlobal 30 hour)])]
     (do
-      (assert (mt (bgt/gate atBoundary (bgt/actionRequest "paid-api" "p1" "u1" 20) 3599999) ((deny _) true) (_ false)) "hour bucket blocks excess before boundary")
-      (assert (mt (bgt/gate atBoundary (bgt/actionRequest "paid-api" "p1" "u1" 20) 3600000) ((allow) true) (_ false)) "hour bucket rolls at exact boundary")
+      (assert (match (bgt/gate atBoundary (bgt/actionRequest "paid-api" "p1" "u1" 20) 3599999) ((deny _) true) (_ false)) "hour bucket blocks excess before boundary")
+      (assert (match (bgt/gate atBoundary (bgt/actionRequest "paid-api" "p1" "u1" 20) 3600000) ((allow) true) (_ false)) "hour bucket rolls at exact boundary")
       (assert (not (allowed (bgt/actionRequest "paid-api" "p1" "u1" 31) 1 twoLines [])) "tightest matching line wins")
       (assert (= (bgt/periodStart hour 3600000) 3600000) "hour start exact boundary")
       (assert (= (bgt/periodStart day 86400000) 86400000) "day start exact boundary")
@@ -69,14 +69,14 @@ fn testChargeOverflowAndBound -> Bool
   (let [(l (ledger [(paidLine 100 false)] [] 2))
         (tooBig (bgt/charge l (event 0 9223372036854775807)))
         (one (bgt/charge l (event 0 10)))
-        (l1 (mt one ((ok x) x) ((err _) l)))
+        (l1 (match one ((ok x) x) ((err _) l)))
         (two (bgt/charge l1 (event 3600000 10)))
-        (l2 (mt two ((ok x) x) ((err _) l1)))
+        (l2 (match two ((ok x) x) ((err _) l1)))
         (three (bgt/charge l2 (event 7200000 10)))
-        (l3 (mt three ((ok x) x) ((err _) l2)))
+        (l3 (match three ((ok x) x) ((err _) l2)))
         (multiLines (ledger [(paidLine 100 false) (freeGlobal 30 (bgt/periodHour))] [] 8))
         (multiCharge (bgt/charge multiLines (event 0 20)))
-        (multiLedger (mt multiCharge ((ok x) x) ((err _) multiLines)))
+        (multiLedger (match multiCharge ((ok x) x) ((err _) multiLines)))
         (unitLines (ledger [(bgt/BudgetLine :id "endpoint-unit" :scope (bgt/scopeEndpoint "paid-api") :period (bgt/periodUnit) :cap 10 :approved false)
                             (bgt/BudgetLine :id "provider-unit" :scope (bgt/scopeProvider "p1") :period (bgt/periodUnit) :cap 10 :approved false)] [] 1))
         (zeroCapacity (bgt/charge (ledger [(paidLine 100 false)] [] 0) (event 0 1)))]
@@ -96,23 +96,23 @@ fn testChargeOverflowAndBound -> Bool
 fn ! testCandidateFilteringAndFixture -> Bool
   (let [(candidates [(bgt/Candidate :endpoint "paid-api" :provider "p1" :unit "u1" :expectedCost 10) (bgt/Candidate :endpoint "paid-api" :provider "p2" :unit "u2" :expectedCost 101) (bgt/Candidate :endpoint "paid-api" :provider "p3" :unit "u3" :expectedCost 20)])
         (fixture (fileReadString "asl/packages/asl-gateway/tests/fixtures/budget/config.asn"))
-        (parsed (mt fixture ((ok text) (rd/parseSexpr text)) ((err _) (rd/makeAtom ""))))
+        (parsed (match fixture ((ok text) (rd/parseSexpr text)) ((err _) (rd/makeAtom ""))))
         (configured (bgt/parseBudgetConfig parsed 4))
         (filtered (bgt/withinBudget (ledger [(paidLine 100 false)] [] 4) candidates 0))]
     (do
       (assert (= (listLength filtered) 2) "routing keeps only affordable candidates")
       (assert (= (optionOr (listHead filtered) (bgt/Candidate :endpoint "" :provider "" :unit "" :expectedCost 0)).provider "p1") "routing preserves input order")
       (assert (= (optionOr (listGet filtered 1) (bgt/Candidate :endpoint "" :provider "" :unit "" :expectedCost 0)).provider "p3") "routing preserves order across a rejected middle candidate")
-      (assert (mt parsed ((sexprList _) true) (_ false)) "ASN budget fixture parses as a form")
+      (assert (match parsed ((sexprList _) true) (_ false)) "ASN budget fixture parses as a form")
       (assert (= (rd/sexprHead parsed) ":budgetConfig") "fixture declares budget config")
       (assert (stringContains? (rd/renderSexpr parsed) ":approved false") "config marks approval false rather than granting it")
-      (assert (mt configured ((ok l) (= (listLength l.lines) 2)) ((err _) false)) "ASN config lines become two budget rules")
-      (assert (mt configured ((ok l) (mt (bgt/gate l (bgt/actionDeploy "paid-api") 0) ((allow) true) ((deny _) false))) ((err _) false)) "ASN approval is consumed by paid deploy policy")
-      (assert (mt configured ((ok l) (mt (bgt/gate l (bgt/actionRequest "paid-api" "p1" "u1" 1000001) 0) ((deny _) true) ((allow) false))) ((err _) false)) "ASN cap constrains requests through the budget gate")
+      (assert (match configured ((ok l) (= (listLength l.lines) 2)) ((err _) false)) "ASN config lines become two budget rules")
+      (assert (match configured ((ok l) (match (bgt/gate l (bgt/actionDeploy "paid-api") 0) ((allow) true) ((deny _) false))) ((err _) false)) "ASN approval is consumed by paid deploy policy")
+      (assert (match configured ((ok l) (match (bgt/gate l (bgt/actionRequest "paid-api" "p1" "u1" 1000001) 0) ((deny _) true) ((allow) false))) ((err _) false)) "ASN cap constrains requests through the budget gate")
       true))
 
 fn denyReason action: bgt/Action lines: (List bgt/BudgetLine) approvals: (List bgt/Approval) -> String
-  (mt (bgt/gate (ledger lines approvals 8) action 1000)
+  (match (bgt/gate (ledger lines approvals 8) action 1000)
     ((allow) "")
     ((deny reason) reason))
 

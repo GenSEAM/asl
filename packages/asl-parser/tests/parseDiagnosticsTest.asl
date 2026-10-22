@@ -1,10 +1,10 @@
 (module asl-parser/parseDiagnosticsTest :x [runTests] :i [(ast :a a) (indentParser :a ip) (reader :a rd)])
 
 fn showTop r: (Result (List a/TopForm) a/ParseError) -> String
-  (mt r ((ok fs) (str "ok " (stringJoin (map (fn [(t a/TopForm)] -> String (a/renderNode t)) fs) " | "))) ((err e) (str "err " (stringFromInt64 e.line) ":" (stringFromInt64 e.col) " " e.msg)))
+  (match r ((ok fs) (str "ok " (stringJoin (map (fn [(t a/TopForm)] -> String (a/renderNode t)) fs) " | "))) ((err e) (str "err " (stringFromInt64 e.line) ":" (stringFromInt64 e.col) " " e.msg)))
 
 fn showIndent r: (Result (List rd/SExpr) String) -> String
-  (mt r ((ok fs) (str "ok " (stringJoin (map (fn [(s rd/SExpr)] -> String (rd/renderSexpr s)) fs) " | "))) ((err e) (str "err " e)))
+  (match r ((ok fs) (str "ok " (stringJoin (map (fn [(s rd/SExpr)] -> String (rd/renderSexpr s)) fs) " | "))) ((err e) (str "err " e)))
 
 fn testUnclosedIndentBody -> Bool
   (let [(got (showIndent (ip/parseIndentedForms "fn bad [] -> Int64\n  (foo 1\n")))] (do (assert (= got "err 2:3: unclosed '(' at end of file") (str "an unclosed paren in an indented body is an error at its opener, got " got)) true))

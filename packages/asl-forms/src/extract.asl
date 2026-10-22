@@ -35,7 +35,7 @@ fn lineEnd text: String offset: Int64 -> Int64
   (let [(n (stringLength text))
         (tail (optionOr (stringSlice text offset n) ""))
         (idx (stringIndexOf tail "\n"))]
-    (mt idx ((none) n) ((some i) (+ offset i))))
+    (match idx ((none) n) ((some i) (+ offset i))))
 
 fn isSpace b: Int64 -> Bool
   (or (= b 32) (or (= b 9) (or (= b 10) (= b 13))))
@@ -98,11 +98,11 @@ fn goParenEnd b: Bytes limit: Int64 i: Int64 depth: Int64 -> Int64
 fn rustImplNameStart text: String b: Bytes z: Int64 start: Int64 -> Int64
   (let [(generic (and (< start z) (= (bytesGet b start) 60)))
         (gt (if generic (stringIndexOf (optionOr (stringSlice text start z) "") ">") (none)))
-        (base (mt gt ((none) start) ((some k) (+ start k 1))))
+        (base (match gt ((none) start) ((some k) (+ start k 1))))
         (spaced (or (not generic)
           (and (some? gt) (< base z) (or (= (bytesGet b base) 32) (= (bytesGet b base) 9)))))
         (forAt (stringIndexOf (optionOr (stringSlice text base z) "") " for "))
-        (forStart (mt forAt ((none) base) ((some k) (+ base k 5))))]
+        (forStart (match forAt ((none) base) ((some k) (+ base k 5))))]
     (if spaced (skipSpace b z forStart) z))
 
 fn skipNonWordBack b: Bytes low: Int64 i: Int64 -> Int64
@@ -402,7 +402,7 @@ fn shellFuncResult text: String p: Int64 q: Int64 e: Int64 -> (Option ExtractSym
 fn shellLineDef text: String masked: String p: Int64 z: Int64 -> (Option ExtractSymbol)
   (let [(b (stringToBytes masked)) (n (stringLength masked))
         (nameSpan (shellFuncNameSpan masked b p z))]
-    (mt nameSpan
+    (match nameSpan
       ((none) (none))
       ((some sp)
         (let [(q (pairFirst sp)) (e (pairSecond sp))
@@ -545,7 +545,7 @@ fn simpleLoop text: String masked: String lang: String cur: Int64 acc: (List Ext
             (p (skipSpace (stringToBytes masked) z cur))
             (found (if (= lang "shell") (shellLineDef text masked p z) (makeSimpleDef text masked p z lang)))
             (next (+ z 1))]
-        (mt found
+        (match found
           ((none) (simpleLoop text masked lang next acc))
           ((some d) (simpleLoop text masked lang next (cons d acc)))))))
 
@@ -557,7 +557,7 @@ fn pythonLoop text: String cur: Int64 inTriple: Bool acc: (List ExtractSymbol) -
             (toggles (pythonTripleToggle (stringToBytes text) z cur false))
             (found (if inTriple (none) (makeSimpleDef text text p z "python")))
             (next (+ z 1))]
-        (mt found
+        (match found
           ((none) (pythonLoop text next (if toggles (not inTriple) inTriple) acc))
           ((some d) (pythonLoop text next (if toggles (not inTriple) inTriple) (cons d acc)))))))
 
@@ -672,4 +672,4 @@ fn findByStart syms: (List ExtractSymbol) start: Int64 -> (Option ExtractSymbol)
 fn ! findSymbol text: String lang: String name: String -> (Pair (Option ExtractSymbol) (List ExtractSymbol))
   (let [(syms (extractSymbols text lang))
         (hit (sym/findSymbolDotted (map toDef syms) name))]
-    (pair (mt hit ((none) (none)) ((some d) (findByStart syms (sym/symbolStart d)))) syms))
+    (pair (match hit ((none) (none)) ((some d) (findByStart syms (sym/symbolStart d)))) syms))

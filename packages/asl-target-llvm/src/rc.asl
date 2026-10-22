@@ -128,8 +128,8 @@ fn sameEntry? name: String -> Bool
   (= name "@stringSliceOr")
 
 fn sameAnchor ins: ty/SsaInstr -> (List (Pair String String))
-  (mt ins.op
-    ((ty/opEntry name args) (if (sameEntry? name) (mt (listHead (listReverse args)) ((some d) (list (pair (dupSameName) (str ins.dest "\t" d)))) ((none) (list))) (list)))
+  (match ins.op
+    ((ty/opEntry name args) (if (sameEntry? name) (match (listHead (listReverse args)) ((some d) (list (pair (dupSameName) (str ins.dest "\t" d)))) ((none) (list))) (list)))
     (_ (list)))
 
 fn heapUses facts: Facts names: (List String) kind: String -> (List Use)
@@ -145,7 +145,7 @@ fn childOrEntry? name: String -> Bool
   (listContains? (list "@listHeadOr" "@listTailOr" "@listGetOr") name)
 
 fn instrUses ctx: Ctx facts: Facts ins: ty/SsaInstr -> (List Use)
-  (mt ins.op
+  (match ins.op
     ((ty/opCall callee args) (cond ((builderFunction? ctx callee) (heapUses facts args "borrow")) ((or (arrayFresh? callee) (borrowExtern? callee)) (heapUses facts args "borrow")) ((opaqueFunction? ctx callee) (heapUses facts args "pin")) (else (callUses ctx facts callee args))))
     ((ty/opBuiltin name args) (heapUses facts args (if (borrowBuiltin? name) "borrow" "pin")))
     ((ty/opEntry name args) (heapUses facts args (if (consumeEntry? name) "consume" "borrow")))
@@ -163,7 +163,7 @@ fn instrUses ctx: Ctx facts: Facts ins: ty/SsaInstr -> (List Use)
 
 fn termUses facts: Facts t: ty/SsaTerm -> (List Use)
   (listAppend
-    (mt t
+    (match t
       ((ty/termReturn v) (heapUses facts (list v) (if (mapHas? facts.flow "$ret") "borrow" "consume")))
       ((ty/termBranch c _ _) (heapUses facts (list c) "borrow"))
       ((ty/termSwitch s _ _ _) (heapUses facts (list s) "borrow"))
@@ -183,8 +183,8 @@ fn flowEdge? facts: Facts label: String j: Int64 -> Bool
 fn resultKind ctx: Ctx ins: ty/SsaInstr -> String
   (if (not (heapTy? ins.ty))
     "raw"
-    (mt ins.op
-      ((ty/opConst c) (mt c ((ty/constStr _) "source") ((ty/constSymbol _) "source") (_ "immortal")))
+    (match ins.op
+      ((ty/opConst c) (match c ((ty/constStr _) "source") ((ty/constSymbol _) "source") (_ "immortal")))
       ((ty/opCall callee _) (if (mapHas? ctx.proj callee) "source" (if (and (opaqueFunction? ctx callee) (and (not (builderFunction? ctx callee)) (not (or (arrayFresh? callee) (borrowExtern? callee))))) "opaque" "owned")))
       ((ty/opBuiltin name _) (if (borrowBuiltin? name) "owned" "opaque"))
       ((ty/opEntry name _) (cond ((consumeEntry? name) "owned") ((childEntry? name) "source") ((childOrEntry? name) "sourceDup") ((freshEntry? name) "owned") ((sameEntry? name) "owned") ((wrapEntry? name) "wrap") (else "opaque")))
@@ -216,13 +216,13 @@ fn allUseKinds ctx: Ctx facts: Facts f: ty/SsaFunction -> (Map String (List Stri
           (mapEmpty) f.blocks))
 
 fn sourceBase ctx: Ctx op: ty/SsaOp -> String
-  (mt op ((ty/opCall callee args) (mt (mapGet ctx.proj callee) ((some i) (optionOr (listGet args i) "")) ((none) ""))) ((ty/opField b _) b) ((ty/opVariantField b _) b) ((ty/opEntry name args) (if (childEntry? name) (optionOr (listHead args) "") "")) (_ ""))
+  (match op ((ty/opCall callee args) (match (mapGet ctx.proj callee) ((some i) (optionOr (listGet args i) "")) ((none) ""))) ((ty/opField b _) b) ((ty/opVariantField b _) b) ((ty/opEntry name args) (if (childEntry? name) (optionOr (listHead args) "") "")) (_ ""))
 
 fn anchorOf ctx: Ctx defs: (Map String ty/SsaOp) derived: (Map String Bool) immortal: (Map String Bool) v: String fuel: Int64 -> String
   (cond
     ((<= fuel 0) "")
     ((mapHas? immortal v) "")
-    ((mapHas? derived v) (mt (mapGet defs v)
+    ((mapHas? derived v) (match (mapGet defs v)
                            ((some op) (let [(b (sourceBase ctx op))] (if (= b "") "" (anchorOf ctx defs derived immortal b (- fuel 1)))))
                            ((none) "")))
     (else v))
@@ -231,7 +231,7 @@ fn immortalBase? ctx: Ctx defs: (Map String ty/SsaOp) immortal: (Map String Bool
   (cond
     ((<= fuel 0) false)
     ((mapHas? immortal v) true)
-    (else (mt (mapGet defs v)
+    (else (match (mapGet defs v)
             ((some op) (let [(b (sourceBase ctx op))] (if (= b "") false (immortalBase? ctx defs immortal b (- fuel 1)))))
             ((none) false))))
 
@@ -243,7 +243,7 @@ fn rawNames f: ty/SsaFunction instrs: (List ty/SsaInstr) -> (Map String Bool)
     (setOf (listAppend params (listAppend blockParams dests))))
 
 fn rawBox? raws: (Map String Bool) ins: ty/SsaInstr -> Bool
-  (mt ins.op ((ty/opBox v) (mapHas? raws v)) (_ false))
+  (match ins.op ((ty/opBox v) (mapHas? raws v)) (_ false))
 
 fn functionFacts ctx: Ctx f: ty/SsaFunction -> Facts
   (let [(instrs (functionInstrs f))
@@ -253,7 +253,7 @@ fn functionFacts ctx: Ctx f: ty/SsaFunction -> Facts
         (defs (fold (fn [(acc (Map String ty/SsaOp)) (i ty/SsaInstr)] -> (Map String ty/SsaOp) (mapSet acc i.dest i.op)) (mapEmpty) instrs))
         (base0 (setOf (filter (fn [(n String)] -> Bool (let [(k (optionOr (mapGet kinds n) ""))] (or (= k "immortal") (= k "opaque")))) (mapKeys heap))))
         (sources (filter (fn [(n String)] -> Bool (let [(k (optionOr (mapGet kinds n) ""))] (or (= k "source") (= k "sourceDup")))) (mapKeys heap)))
-        (immortal (union base0 (setOf (filter (fn [(n String)] -> Bool (let [(b (mt (mapGet defs n) ((some op) (sourceBase ctx op)) ((none) "")))] (and (!= b "") (immortalBase? ctx defs base0 b 64)))) sources))))
+        (immortal (union base0 (setOf (filter (fn [(n String)] -> Bool (let [(b (match (mapGet defs n) ((some op) (sourceBase ctx op)) ((none) "")))] (and (!= b "") (immortalBase? ctx defs base0 b 64)))) sources))))
         (flow (if (mapHas? ctx.proj f.name) (flowOf ctx f) (flowNone)))
         (borrowed (union (borrowedParams ctx f) flow.names))
         (parts (partsOf instrs))
@@ -265,7 +265,7 @@ fn functionFacts ctx: Ctx f: ty/SsaFunction -> Facts
         (sinkable (fn [(n String)] -> Bool (and (not (mapHas? termConsumed n)) (not (mapHas? tailArgs n)))))
         (derived (setOf (filter (fn [(n String)] -> Bool (and (not (mapHas? immortal n)) (and (or (borrowOnly n) (sinkable n)) (= (optionOr (mapGet kinds n) "") "source")))) sources)))
         (anchors (fold (fn [(acc (Map String String)) (n String)] -> (Map String String)
-                         (mapSet acc n (mt (mapGet defs n) ((some op) (let [(b (sourceBase ctx op))] (if (= b "") "" (anchorOf ctx defs derived immortal b 64)))) ((none) ""))))
+                         (mapSet acc n (match (mapGet defs n) ((some op) (let [(b (sourceBase ctx op))] (if (= b "") "" (anchorOf ctx defs derived immortal b 64)))) ((none) ""))))
                        (mapEmpty) (mapKeys derived)))
         (dupAfter (setOf (filter (fn [(n String)] -> Bool (and (not (mapHas? immortal n)) (not (mapHas? derived n)))) sources)))
         (pinAfter (setOf (filter (fn [(n String)] -> Bool (= (optionOr (mapGet kinds n) "") "opaque")) (mapKeys heap))))
@@ -364,22 +364,22 @@ fn deferCalls drops: (List String) -> (List (Pair String String))
 
 ; (:m :ref RC-FBIP :do "a construct that allocates a pooled cell (a ctor of one to thirty-one fields, a cons) where an owned value read through its fields dies is preceded by a reset of that value: if it is unique its kids other than the fields moved into the construct are released and its cell becomes the construct's when the size class matches; moved fields are duplicated only when the value was shared")
 fn allocClass ins: ty/SsaInstr -> Int64
-  (mt ins.op
+  (match ins.op
     ((ty/opConstruct _ _ fields) (if (or (listEmpty? fields) (> (listLength fields) 31)) -1 (* 2 (listLength fields))))
     ((ty/opEntry name _) (if (consumeEntry? name) 3 -1))
     (_ -1))
 
 fn partOf op: ty/SsaOp -> (Option (Pair String Int64))
-  (mt op
+  (match op
     ((ty/opVariantField b i) (some (pair b i)))
-    ((ty/opEntry name args) (cond ((= name "@listFirst") (mt (listHead args) ((some b) (some (pair b 0))) ((none) (none))))
-                                  ((= name "@listRest") (mt (listHead args) ((some b) (some (pair b 1))) ((none) (none))))
+    ((ty/opEntry name args) (cond ((= name "@listFirst") (match (listHead args) ((some b) (some (pair b 0))) ((none) (none))))
+                                  ((= name "@listRest") (match (listHead args) ((some b) (some (pair b 1))) ((none) (none))))
                                   (else (none))))
     (_ (none)))
 
 fn partsOf instrs: (List ty/SsaInstr) -> (Map String (Pair String Int64))
   (fold (fn [(acc (Map String (Pair String Int64))) (i ty/SsaInstr)] -> (Map String (Pair String Int64))
-          (mt (partOf i.op) ((some p) (mapSet acc i.dest p)) ((none) acc)))
+          (match (partOf i.op) ((some p) (mapSet acc i.dest p)) ((none) acc)))
         (mapEmpty) instrs)
 
 fn cellBases parts: (Map String (Pair String Int64)) -> (Map String Bool)
@@ -402,14 +402,14 @@ fn movedFields facts: Facts x: String fields: (List String) -> (List String)
   (filter (fn [(f String)] -> Bool
             (and (= (listLength (filter (fn [(g String)] -> Bool (= g f)) fields)) 1)
                  (and (= (optionOr (mapGet facts.anchors f) "") x)
-                      (mt (mapGet facts.parts f) ((some p) (and (= (pairFirst p) x) (< (pairSecond p) 62))) ((none) false)))))
+                      (match (mapGet facts.parts f) ((some p) (and (= (pairFirst p) x) (< (pairSecond p) 62))) ((none) false)))))
           fields)
 
 fn maskOf facts: Facts moved: (List String) -> Int64
-  (fold (fn [(acc Int64) (f String)] -> Int64 (| acc (<< 1 (mt (mapGet facts.parts f) ((some p) (pairSecond p)) ((none) 0))))) 0 moved)
+  (fold (fn [(acc Int64) (f String)] -> Int64 (| acc (<< 1 (match (mapGet facts.parts f) ((some p) (pairSecond p)) ((none) 0))))) 0 moved)
 
 fn constructFields ins: ty/SsaInstr -> (List String)
-  (mt ins.op ((ty/opConstruct _ _ fields) fields) ((ty/opEntry _ args) args) (_ (list)))
+  (match ins.op ((ty/opConstruct _ _ fields) fields) ((ty/opEntry _ args) args) (_ (list)))
 
 schema Reuse
   cell: String
@@ -420,7 +420,7 @@ fn reusePlan facts: Facts ins: ty/SsaInstr dead: (List String) -> (Option Reuse)
   (let [(cls (allocClass ins))]
     (if (or (< cls 0) (or (listEmpty? dead) (not (reusableDest? ins.dest))))
       (none)
-      (mt (listHead (filter (fn [(x String)] -> Bool (and (mapHas? facts.cells x) (tracked? facts x))) dead))
+      (match (listHead (filter (fn [(x String)] -> Bool (and (mapHas? facts.cells x) (tracked? facts x))) dead))
         ((none) (none))
         ((some x) (let [(moved (movedFields facts x (constructFields ins)))]
                     (some (Reuse :cell x :moved moved :callee (resetName cls (maskOf facts moved)))))))))
@@ -439,18 +439,18 @@ fn rewriteInstr ctx: Ctx facts: Facts label: String tail: Bool w: Walk ins: ty/S
         (results (resultCalls facts ins after))
         (dead0 (dropsAfter facts uses after))
         (plan (if tail (none) (reusePlan facts ins dead0)))
-        (moved (mt plan ((some r) r.moved) ((none) (list))))
+        (moved (match plan ((some r) r.moved) ((none) (list))))
         (before (withoutDups (beforeCalls facts uses after) moved))
-        (late (mt plan ((some _) (none)) ((none) (if tail (none) (latePlan facts w.pend dead0)))))
-        (gone (mt plan ((some r) (some r.cell)) ((none) (mt late ((some l) (some l.cell)) ((none) (none))))))
-        (dead (mt gone ((some c) (filter (fn [(n String)] -> Bool (!= n c)) dead0)) ((none) dead0)))
+        (late (match plan ((some _) (none)) ((none) (if tail (none) (latePlan facts w.pend dead0)))))
+        (gone (match plan ((some r) (some r.cell)) ((none) (match late ((some l) (some l.cell)) ((none) (none))))))
+        (dead (match gone ((some c) (filter (fn [(n String)] -> Bool (!= n c)) dead0)) ((none) dead0)))
         (deferred (and tail (and (listEmpty? results) (not (listEmpty? dead)))))
         (pre (if deferred (listAppend before (deferCalls dead)) before))
         (post (if deferred (list) (listAppend results (map (fn [(n String)] -> (Pair String String) (pair (dropName) n)) dead))))
         (n0 w.n)
         (shared (map (fn [(f String)] -> (Pair String String) (pair (dupSharedName) (str (tokenName ins.dest) "\t" f))) moved))
-        (reuseIs (mt plan ((some r) (cons (rcCall (tokenName ins.dest) r.callee r.cell) (rcInstrs label (+ n0 (listLength pre)) shared))) ((none) (list))))
-        (lateIs (mt late ((some l) (list (rcCall (tokenName l.target) l.callee l.cell))) ((none) (list))))
+        (reuseIs (match plan ((some r) (cons (rcCall (tokenName ins.dest) r.callee r.cell) (rcInstrs label (+ n0 (listLength pre)) shared))) ((none) (list))))
+        (lateIs (match late ((some l) (list (rcCall (tokenName l.target) l.callee l.cell))) ((none) (list))))
         (nPre (+ (listLength pre) (listLength shared)))
         (beforeIs (listAppend (rcInstrs label n0 pre) reuseIs))
         (afterIs (listAppend (rcInstrs label (+ n0 nPre) post) lateIs))
@@ -467,15 +467,15 @@ schema Late
 
 ; (:m :ref RC-FBIP :do "an owned value read through its fields that dies before a later construct of the same block resets into the nearest such construct still without a cell; nothing it holds moves, so all its kids are released")
 fn latePlan facts: Facts pend: (List (Pair String Int64)) dead: (List String) -> (Option Late)
-  (mt (listHead pend)
+  (match (listHead pend)
     ((none) (none))
-    ((some p) (mt (listHead (filter (fn [(x String)] -> Bool (and (mapHas? facts.cells x) (tracked? facts x))) dead))
+    ((some p) (match (listHead (filter (fn [(x String)] -> Bool (and (mapHas? facts.cells x) (tracked? facts x))) dead))
                 ((none) (none))
                 ((some x) (some (Late :cell x :target (pairFirst p) :callee (resetName (pairSecond p) 0)))))))
 
 fn trapBlock? blocks: (Map String ty/SsaBlock) target: String -> Bool
-  (mt (mapGet blocks target)
-    ((some b) (and (listEmpty? b.instrs) (mt b.term ((ty/termUnreachable) true) (_ false))))
+  (match (mapGet blocks target)
+    ((some b) (and (listEmpty? b.instrs) (match b.term ((ty/termUnreachable) true) (_ false))))
     ((none) false))
 
 fn edgeCalls facts: Facts liveIn: (Map String (Map String Bool)) atTerm: (Map String Bool) e: ty/SsaEdge -> (List (Pair String String))
@@ -497,13 +497,13 @@ fn edgeCalls facts: Facts liveIn: (Map String (Map String Bool)) atTerm: (Map St
 
 fn termWithEdges t: ty/SsaTerm edges: (List ty/SsaEdge) -> ty/SsaTerm
   (let [(at (fn [(k Int64)] -> ty/SsaEdge (optionOr (listGet edges k) (ty/ssaEdge "" (list)))))]
-    (mt t
+    (match t
       ((ty/termJump _) (ty/termJump (at 0)))
       ((ty/termBranch c _ _) (ty/termBranch c (at 0) (at 1)))
       ((ty/termSwitch s typeName cases d)
         (ty/termSwitch s typeName
           (map (fn [(k Int64)] -> ty/SsaCase (let [(c (optionOr (listGet cases k) (ty/ssaCase "" (ty/ssaEdge "" (list)))))] (ty/ssaCase c.variant (at k)))) (range 0 (listLength cases)))
-          (mt d ((some _) (some (at (listLength cases)))) ((none) (none)))))
+          (match d ((some _) (some (at (listLength cases)))) ((none) (none)))))
       (_ t)))
 
 fn predCounts blocks: (List ty/SsaBlock) -> (Map String Int64)
@@ -530,15 +530,15 @@ fn placeEdges facts: Facts liveIn: (Map String (Map String Bool)) byLabel: (Map 
     (fold step (Edges :term b.term :blocks (list) :prefix prefix :n 0) (range 0 (listLength edges))))
 
 fn jumpDups facts: Facts liveIn: (Map String (Map String Bool)) t: ty/SsaTerm -> (List (Pair String String))
-  (mt t
+  (match t
     ((ty/termJump e) (edgeCalls facts liveIn (mapEmpty) e))
     ((ty/termReturn v) (if (and (mapHas? facts.borrowed v) (not (mapHas? facts.flow "$ret"))) (list (pair (dupName) v)) (list)))
     (_ (list)))
 
 fn tailClosureDest b: ty/SsaBlock -> String
-  (mt b.term
-    ((ty/termReturn v) (mt (listHead (listReverse b.instrs))
-                         ((some ins) (mt ins.op ((ty/opCallClosure _ _) (if (= ins.dest v) v "")) (_ "")))
+  (match b.term
+    ((ty/termReturn v) (match (listHead (listReverse b.instrs))
+                         ((some ins) (match ins.op ((ty/opCallClosure _ _) (if (= ins.dest v) v "")) (_ "")))
                          ((none) "")))
     (_ ""))
 
@@ -558,15 +558,15 @@ fn rewriteBlock ctx: Ctx facts: Facts liveIn: (Map String (Map String Bool)) byL
     (pair (cons main placed.blocks) placed.prefix))
 
 fn withPrefix b: ty/SsaBlock prefix: (Map String (List ty/SsaInstr)) -> ty/SsaBlock
-  (mt (mapGet prefix b.label)
+  (match (mapGet prefix b.label)
     ((none) b)
     ((some xs) (ty/ssaBlock b.label b.params (listAppend xs b.instrs) b.term)))
 
 fn closureCallee op: ty/SsaOp -> (Option String)
-  (mt op ((ty/opMakeClosure callee _) (some callee)) (_ (none)))
+  (match op ((ty/opMakeClosure callee _) (some callee)) (_ (none)))
 
 fn retarget targets: (Map String Bool) ins: ty/SsaInstr -> ty/SsaInstr
-  (mt ins.op
+  (match ins.op
     ((ty/opMakeClosure callee caps) (if (mapHas? targets callee) (ty/ssaInstr ins.dest ins.ty (ty/opMakeClosure (wrapperName callee) caps)) ins))
     (_ ins))
 
@@ -580,7 +580,7 @@ fn rcFunction ctx: Ctx f: ty/SsaFunction -> ty/SsaFunction
         (byLabel (fold (fn [(acc (Map String ty/SsaBlock)) (b ty/SsaBlock)] -> (Map String ty/SsaBlock) (mapSet acc b.label b)) (mapEmpty) f.blocks))
         (preds (predCounts f.blocks))
         (fnParams (filter (fn [(n String)] -> Bool (tracked? facts n)) (map (fn [(p ty/SsaParam)] -> String p.name) (listAppend f.captures f.params))))
-        (entryLabel (mt (listHead f.blocks) ((some b) b.label) ((none) "")))
+        (entryLabel (match (listHead f.blocks) ((some b) b.label) ((none) "")))
         (rewritten (fold (fn [(acc (Pair (List ty/SsaBlock) (Map String (List ty/SsaInstr)))) (b ty/SsaBlock)] -> (Pair (List ty/SsaBlock) (Map String (List ty/SsaInstr)))
                            (let [(r (rewriteBlock ctx facts liveIn byLabel preds (= b.label entryLabel) fnParams b (pairSecond acc)))]
                              (pair (listAppend (pairFirst acc) (pairFirst r)) (pairSecond r))))
@@ -614,7 +614,7 @@ fn rcModule m: ty/SsaModule user: (Map String Bool) -> ty/SsaModule
         (ctx0 (Ctx :user (union (union user singletons) routed) :opaque builders :builders builders :borrows (mapEmpty) :scc (mapEmpty) :proj (mapEmpty)))
         (targets (setOf (filter (fn [(n String)] -> Bool (mapHas? names n))
                                 (distinctNames (fold (fn [(acc (List String)) (f ty/SsaFunction)] -> (List String)
-                                                       (listAppend acc (fold (fn [(a (List String)) (ins ty/SsaInstr)] -> (List String) (mt (closureCallee ins.op) ((some c) (cons c a)) ((none) a))) (list) (functionInstrs f))))
+                                                       (listAppend acc (fold (fn [(a (List String)) (ins ty/SsaInstr)] -> (List String) (match (closureCallee ins.op) ((some c) (cons c a)) ((none) a))) (list) (functionInstrs f))))
                                                      (list) m.functions)))))
         (counted (fn [(f ty/SsaFunction)] -> Bool (not (opaqueFunction? ctx0 f.name))))
         (countedFns (filter counted m.functions))
@@ -1283,7 +1283,7 @@ fn allocText sym: String fallback: String sc: Int64 asan: Bool -> String
                    "}"))))
 
 fn declareSection text: String -> String
-  (mt (stringIndexOf text "\ndeclare ")
+  (match (stringIndexOf text "\ndeclare ")
     ((some at) (optionOr (stringSlice text at (stringLength text)) ""))
     ((none) ""))
 
@@ -1388,7 +1388,7 @@ fn sanitized text: String asan: Bool -> String
 fn reuseExterns bodies: (List ty/SsaFunction) -> (List ty/SsaExtern)
   (let [(names (distinctNames (fold (fn [(acc (List String)) (f ty/SsaFunction)] -> (List String)
                                       (fold (fn [(a (List String)) (ins ty/SsaInstr)] -> (List String)
-                                              (mt ins.op ((ty/opCall callee _) (if (stringStartsWith? callee "aslRcReset_") (cons callee a) a)) (_ a)))
+                                              (match ins.op ((ty/opCall callee _) (if (stringStartsWith? callee "aslRcReset_") (cons callee a) a)) (_ a)))
                                             acc (functionInstrs f)))
                                     (list) bodies)))]
     (if (listEmpty? names)
@@ -1542,14 +1542,14 @@ fn tokenOf line: String -> String
       ""))
 
 fn resetOf line: String -> String
-  (mt (stringIndexOf line "@aslRcReset_")
+  (match (stringIndexOf line "@aslRcReset_")
     ((none) "")
     ((some at) (optionOr (listHead (stringSplit (optionOr (stringSlice line (+ at 1) (stringLength line)) "") "(")) "")))
 
 fn allocClassOf line: String -> Int64
   (cond
     ((stringContains? line "= call ptr @gcAsl.allocFastCons(") 3)
-    (else (mt (stringIndexOf line "= call ptr @gcAsl.allocFast.")
+    (else (match (stringIndexOf line "= call ptr @gcAsl.allocFast.")
             ((none) -1)
             ((some at) (optionOr (stringToInt64 (optionOr (listHead (stringSplit (optionOr (stringSlice line (+ at 28) (stringLength line)) "") "(")) "")) -1)))))
 
@@ -1963,7 +1963,7 @@ fn callUses ctx: Ctx facts: Facts callee: String args: (List String) -> (List Us
 
 fn borrowedParams ctx: Ctx f: ty/SsaFunction -> (Map String Bool)
   (let [(flags (borrowFlags ctx f.name))]
-    (setOf (map (fn [(i Int64)] -> String (mt (listGet f.params i) ((some p) p.name) ((none) "")))
+    (setOf (map (fn [(i Int64)] -> String (match (listGet f.params i) ((some p) p.name) ((none) "")))
                 (filter (fn [(i Int64)] -> Bool (optionOr (listGet flags i) false)) (range 0 (listLength f.params))))))
 
 fn borrowable? targets: (Map String Bool) f: ty/SsaFunction -> Bool
@@ -1980,27 +1980,27 @@ fn withBorrows ctx: Ctx borrows: (Map String (List Bool)) -> Ctx
   (Ctx :user ctx.user :opaque ctx.opaque :builders ctx.builders :borrows borrows :scc ctx.scc :proj ctx.proj)
 
 fn ownParam borrows: (Map String (List Bool)) name: String i: Int64 -> (Map String (List Bool))
-  (mt (mapGet borrows name)
+  (match (mapGet borrows name)
     ((none) borrows)
     ((some flags) (if (optionOr (listGet flags i) false)
                     (mapSet borrows name (map (fn [(k Int64)] -> Bool (if (= k i) false (optionOr (listGet flags k) false))) (range 0 (listLength flags))))
                     borrows)))
 
 fn returnsVia byLabel: (Map String ty/SsaBlock) t: ty/SsaTerm v: String fuel: Int64 -> Bool
-  (mt t
+  (match t
     ((ty/termReturn r) (= r v))
     ((ty/termJump e) (and (> fuel 0)
                           (and (= e.args (list v))
-                               (mt (mapGet byLabel e.target)
-                                 ((some j) (and (listEmpty? j.instrs) (and (= (listLength j.params) 1) (mt (listHead j.params) ((some p) (returnsVia byLabel j.term p.name (- fuel 1))) ((none) false)))))
+                               (match (mapGet byLabel e.target)
+                                 ((some j) (and (listEmpty? j.instrs) (and (= (listLength j.params) 1) (match (listHead j.params) ((some p) (returnsVia byLabel j.term p.name (- fuel 1))) ((none) false)))))
                                  ((none) false)))))
     (_ false))
 
 fn tailCalls f: ty/SsaFunction -> (List (Pair String (List String)))
   (let [(byLabel (fold (fn [(acc (Map String ty/SsaBlock)) (b ty/SsaBlock)] -> (Map String ty/SsaBlock) (mapSet acc b.label b)) (mapEmpty) f.blocks))]
     (fold (fn [(acc (List (Pair String (List String)))) (b ty/SsaBlock)] -> (List (Pair String (List String)))
-            (mt (listHead (listReverse b.instrs))
-              ((some ins) (mt ins.op ((ty/opCall callee args) (if (returnsVia byLabel b.term ins.dest 16) (cons (pair callee args) acc) acc)) (_ acc)))
+            (match (listHead (listReverse b.instrs))
+              ((some ins) (match ins.op ((ty/opCall callee args) (if (returnsVia byLabel b.term ins.dest 16) (cons (pair callee args) acc) acc)) (_ acc)))
               ((none) acc)))
           (list) f.blocks))
 
@@ -2008,8 +2008,8 @@ fn tailCalls f: ty/SsaFunction -> (List (Pair String (List String)))
 fn callTargets f: ty/SsaFunction -> (List String)
   (let [(byLabel (fold (fn [(acc (Map String ty/SsaBlock)) (b ty/SsaBlock)] -> (Map String ty/SsaBlock) (mapSet acc b.label b)) (mapEmpty) f.blocks))
         (closures (listAny? (fn [(b ty/SsaBlock)] -> Bool
-                              (mt (listHead (listReverse b.instrs))
-                                ((some ins) (mt ins.op ((ty/opCallClosure _ _) (returnsVia byLabel b.term ins.dest 16)) (_ false)))
+                              (match (listHead (listReverse b.instrs))
+                                ((some ins) (match ins.op ((ty/opCallClosure _ _) (returnsVia byLabel b.term ins.dest 16)) (_ false)))
                                 ((none) false)))
                             f.blocks))]
     (listAppend (map pairFirst (tailCalls f)) (if closures (list "$closure") (list))))
@@ -2022,10 +2022,10 @@ fn callGraph fns: (List ty/SsaFunction) targets: (Map String Bool) -> (Map Strin
     (mapSet g0 "$closure" (filter (fn [(n String)] -> Bool (mapHas? names n)) (mapKeys targets))))
 
 fn dfsOrder g: (Map String (List String)) stack: (List (Pair String (List String))) seen: (Map String Bool) order: (List String) -> (Pair (Map String Bool) (List String))
-  (mt (listHead stack)
+  (match (listHead stack)
     ((none) (pair seen order))
     ((some top) (let [(rest (optionOr (listTail stack) (list)))]
-                  (mt (listHead (pairSecond top))
+                  (match (listHead (pairSecond top))
                     ((none) (dfsOrder g rest seen (cons (pairFirst top) order)))
                     ((some c) (let [(top1 (pair (pairFirst top) (optionOr (listTail (pairSecond top)) (list))))]
                                 (if (mapHas? seen c)
@@ -2033,7 +2033,7 @@ fn dfsOrder g: (Map String (List String)) stack: (List (Pair String (List String
                                   (dfsOrder g (cons (pair c (optionOr (mapGet g c) (list))) (cons top1 rest)) (mapSet seen c true) order))))))))
 
 fn finishOrder g: (Map String (List String)) nodes: (List String) seen: (Map String Bool) order: (List String) -> (List String)
-  (mt (listHead nodes)
+  (match (listHead nodes)
     ((none) order)
     ((some n) (let [(rest (optionOr (listTail nodes) (list)))]
                 (if (mapHas? seen n)
@@ -2048,14 +2048,14 @@ fn transposed g: (Map String (List String)) -> (Map String (List String))
         (mapEmpty) (mapKeys g))
 
 fn claim gT: (Map String (List String)) stack: (List String) root: String comp: (Map String String) -> (Map String String)
-  (mt (listHead stack)
+  (match (listHead stack)
     ((none) comp)
     ((some n) (let [(kids (filter (fn [(c String)] -> Bool (not (mapHas? comp c))) (optionOr (mapGet gT n) (list))))
                     (marked (fold (fn [(acc (Map String String)) (c String)] -> (Map String String) (mapSet acc c root)) comp kids))]
                 (claim gT (listAppend kids (optionOr (listTail stack) (list))) root marked))))
 
 fn components gT: (Map String (List String)) order: (List String) comp: (Map String String) -> (Map String String)
-  (mt (listHead order)
+  (match (listHead order)
     ((none) comp)
     ((some n) (components gT (optionOr (listTail order) (list)) (if (mapHas? comp n) comp (claim gT (list n) n (mapSet comp n n))))))
 
@@ -2064,16 +2064,16 @@ fn sccOf fns: (List ty/SsaFunction) targets: (Map String Bool) -> (Map String St
     (components (transposed g) (finishOrder g (mapKeys g) (mapEmpty) (list)) (mapEmpty)))
 
 fn sameScc? ctx: Ctx a: String b: String -> Bool
-  (mt (mapGet ctx.scc a)
+  (match (mapGet ctx.scc a)
     ((none) true)
-    ((some ca) (mt (mapGet ctx.scc b) ((none) true) ((some cb) (= ca cb)))))
+    ((some ca) (match (mapGet ctx.scc b) ((none) true) ((some cb) (= ca cb)))))
 
 fn settleFunction ctx: Ctx borrows: (Map String (List Bool)) f: ty/SsaFunction -> (Map String (List Bool))
   (let [(facts (functionFacts ctx f))
         (kinds (allUseKinds ctx facts f))
         (flags (borrowFlags ctx f.name))
         (consumed (fold (fn [(acc (Map String (List Bool))) (i Int64)] -> (Map String (List Bool))
-                          (let [(p (mt (listGet f.params i) ((some q) q.name) ((none) "")))]
+                          (let [(p (match (listGet f.params i) ((some q) q.name) ((none) "")))]
                             (if (and (optionOr (listGet flags i) false) (listContains? (optionOr (mapGet kinds p) (list)) "consume")) (ownParam acc f.name i) acc)))
                         borrows (range 0 (listLength f.params))))]
     (fold (fn [(acc (Map String (List Bool))) (c (Pair String (List String)))] -> (Map String (List Bool))
@@ -2099,7 +2099,7 @@ fn flowFail acc: Flow -> Flow
   (Flow :ok false :param acc.param :keys acc.keys :names acc.names :values acc.values)
 
 fn flowWalk ctx: Ctx defs: (Map String ty/SsaInstr) owners: (Map String (Pair String Int64)) incoming: (Map String (List (List String))) params: (Map String Int64) todo: (List String) acc: Flow -> Flow
-  (mt (listHead todo)
+  (match (listHead todo)
     ((none) acc)
     ((some v) (let [(rest (optionOr (listTail todo) (list)))]
                 (cond
@@ -2107,17 +2107,17 @@ fn flowWalk ctx: Ctx defs: (Map String ty/SsaInstr) owners: (Map String (Pair St
                   ((mapHas? acc.values v) (flowWalk ctx defs owners incoming params rest acc))
                   (else
                     (let [(seen (Flow :ok true :param acc.param :keys acc.keys :names acc.names :values (mapSet acc.values v true)))]
-                      (mt (mapGet params v)
+                      (match (mapGet params v)
                         ((some i) (if (or (= acc.param -1) (= acc.param i))
                                     (flowWalk ctx defs owners incoming params rest (Flow :ok true :param i :keys seen.keys :names seen.names :values seen.values))
                                     (flowFail seen)))
-                        ((none) (mt (mapGet defs v)
+                        ((none) (match (mapGet defs v)
                                   ((some ins) (let [(b (sourceBase ctx ins.op))]
                                                 (cond
                                                   ((!= b "") (flowWalk ctx defs owners incoming params (cons b rest) seen))
                                                   ((listContains? (list "immortal" "opaque") (resultKind ctx ins)) (flowWalk ctx defs owners incoming params rest seen))
                                                   (else (flowFail seen)))))
-                                  ((none) (mt (mapGet owners v)
+                                  ((none) (match (mapGet owners v)
                                             ((none) (flowFail seen))
                                             ((some o) (let [(label (pairFirst o)) (j (pairSecond o))
                                                             (args (map (fn [(xs (List String))] -> String (optionOr (listGet xs j) "")) (optionOr (mapGet incoming label) (list))))]
@@ -2132,7 +2132,7 @@ fn flowOf ctx: Ctx f: ty/SsaFunction -> Flow
     (let [(defs (fold (fn [(acc (Map String ty/SsaInstr)) (i ty/SsaInstr)] -> (Map String ty/SsaInstr) (mapSet acc i.dest i)) (mapEmpty) (functionInstrs f)))
           (owners (fold (fn [(acc (Map String (Pair String Int64))) (b ty/SsaBlock)] -> (Map String (Pair String Int64))
                           (fold (fn [(a (Map String (Pair String Int64))) (j Int64)] -> (Map String (Pair String Int64))
-                                  (mt (listGet b.params j) ((some p) (mapSet a p.name (pair b.label j))) ((none) a)))
+                                  (match (listGet b.params j) ((some p) (mapSet a p.name (pair b.label j))) ((none) a)))
                                 acc (range 0 (listLength b.params))))
                         (mapEmpty) f.blocks))
           (incoming (fold (fn [(acc (Map String (List (List String)))) (b ty/SsaBlock)] -> (Map String (List (List String)))
@@ -2140,9 +2140,9 @@ fn flowOf ctx: Ctx f: ty/SsaFunction -> Flow
                                   acc (ty/termEdges b.term)))
                           (mapEmpty) f.blocks))
           (params (fold (fn [(acc (Map String Int64)) (i Int64)] -> (Map String Int64)
-                          (mt (listGet f.params i) ((some p) (if (heapTy? p.ty) (mapSet acc p.name i) acc)) ((none) acc)))
+                          (match (listGet f.params i) ((some p) (if (heapTy? p.ty) (mapSet acc p.name i) acc)) ((none) acc)))
                         (mapEmpty) (range 0 (listLength f.params))))
-          (returns (fold (fn [(acc (List String)) (b ty/SsaBlock)] -> (List String) (mt b.term ((ty/termReturn v) (cons v acc)) (_ acc))) (list) f.blocks))
+          (returns (fold (fn [(acc (List String)) (b ty/SsaBlock)] -> (List String) (match b.term ((ty/termReturn v) (cons v acc)) (_ acc))) (list) f.blocks))
           (walked (flowWalk ctx defs owners incoming params returns (Flow :ok true :param -1 :keys (mapSet (mapEmpty) "$ret" true) :names (mapEmpty) :values (mapEmpty))))]
       (if (and walked.ok (and (>= walked.param 0) (not (listEmpty? returns)))) walked (flowNone))))
 
@@ -2150,7 +2150,7 @@ fn withProj ctx: Ctx proj: (Map String Int64) -> Ctx
   (Ctx :user ctx.user :opaque ctx.opaque :builders ctx.builders :borrows ctx.borrows :scc ctx.scc :proj proj)
 
 fn heapParamIndices f: ty/SsaFunction -> (List Int64)
-  (filter (fn [(i Int64)] -> Bool (mt (listGet f.params i) ((some p) (heapTy? p.ty)) ((none) false))) (range 0 (listLength f.params)))
+  (filter (fn [(i Int64)] -> Bool (match (listGet f.params i) ((some p) (heapTy? p.ty)) ((none) false))) (range 0 (listLength f.params)))
 
 fn projGuess ctx: Ctx f: ty/SsaFunction -> Int64
   (fold (fn [(acc Int64) (i Int64)] -> Int64
@@ -2166,7 +2166,7 @@ fn growProj ctx: Ctx fns: (List ty/SsaFunction) fuel: Int64 -> (Map String Int64
 fn projOk? ctx: Ctx f: ty/SsaFunction -> Bool
   (let [(w (flowOf ctx f))
         (facts (functionFacts ctx f))
-        (p (mt (listGet f.params w.param) ((some q) q.name) ((none) "")))]
+        (p (match (listGet f.params w.param) ((some q) q.name) ((none) "")))]
     (and w.ok (and (= (optionOr (mapGet ctx.proj f.name) -1) w.param)
                    (and (mapHas? facts.borrowed p) (listAll? (fn [(v String)] -> Bool (not (tracked? facts v))) (mapKeys w.values))))))
 

@@ -598,7 +598,7 @@ fn testMultilineAndComments -> Bool
 
 fn checkParseError code: String expectedOffset: Int64 label: String -> Bool
   (let [(res (expr/parse code))]
-    (mt res
+    (match res
       ((ok _) (do (assert false (str label " expected parse error, got ok")) false))
       ((err msg)
        (do

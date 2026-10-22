@@ -1,19 +1,19 @@
 (module aslConform/runner :x [runConformCase! runConformProfile! formatReceipt] :i [(aslConform/types :a ty) (aslConform/semantics :a sem) (aslConform/compare :a cmp) (asl-target-c :a c11) (asl-target-py :a py) (asl-proc/coreProcess :a proc) (asl-proc/pool :a pool)])
 
 fn readCaseFile! path: Str -> Str
-  (mt (fileReadString path) ((ok content) content) ((err _) ""))
+  (match (fileReadString path) ((ok content) content) ((err _) ""))
 
 fn runConformCase! casePath: Str profileId: Str invert: Bool -> ty/ConformanceResult
   (let [(caseAslPath (str casePath "/case.asl")) (expectOutPath (str casePath "/expect.stdout")) (expectExitPath (str casePath "/expect.exit")) (expectOut (stringTrim (readCaseFile! expectOutPath))) (expectExitStr (stringTrim (readCaseFile! expectExitPath))) (expectExit (optionOr (stringToInt64 expectExitStr) 0)) (caseId (stringReplace casePath "tests/conformance/xplat/" "")) (actualRes (executeTarget! profileId caseId))] (let [(actOut actualRes.actualStdout) (actExit actualRes.actualExit) (actReason actualRes.reason)] (if (!= actReason "") (ty/makeResult caseId profileId false actOut actExit actReason) (let [(matches (if invert (cmp/invertComparison actOut actExit expectOut expectExit) (cmp/compareOutput actOut actExit expectOut expectExit)))] (if matches (ty/makeResult caseId profileId true actOut actExit "Passed cleanly") (ty/makeResult caseId profileId false actOut actExit (str "Divergence detected: expected '" expectOut "' exit " (stringFromInt64 expectExit) ", observed '" actOut "' exit " (stringFromInt64 actExit))))))))
 
 fn ! runArgv! bin: Str args: (List Str) -> proc/ProcessOutput
-  (mt (pool/runPool! (list (listAppend (list bin) args)) 1)
+  (match (pool/runPool! (list (listAppend (list bin) args)) 1)
     ((err message) (proc/ProcessOutput :exitCode 127 :stdout "" :stderr (str "process spawn failed: " message) :durationMs 0))
     ((ok rows)
-      (mt (listHead rows)
+      (match (listHead rows)
         ((none) (proc/ProcessOutput :exitCode 127 :stdout "" :stderr "process returned no result" :durationMs 0))
         ((some row)
-          (mt row.spawnError
+          (match row.spawnError
             ((some message) (proc/ProcessOutput :exitCode (if (= message "permission") 126 127) :stdout "" :stderr (str "sh: " bin ": " (if (= message "permission") "Permission denied" "command not found")) :durationMs 0))
             ((none) (proc/ProcessOutput :exitCode row.exitCode :stdout row.stdout :stderr row.stderr :durationMs row.durationMs)))))))
 
@@ -21,7 +21,7 @@ fn pyQuoted s: Str -> Str
   (str "\"" (stringReplace (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\n" "\\n") "\"")
 
 fn ! pyCaseSource! casePath: Str -> Str
-  (mt (py/compileEntry! (str casePath "/case.asl"))
+  (match (py/compileEntry! (str casePath "/case.asl"))
     ((ok code) code)
     ((err ds) (str "import sys\nsys.exit(" (pyQuoted (py/diagText ds)) ")\n")))
 

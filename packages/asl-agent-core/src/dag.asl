@@ -22,10 +22,10 @@ fn dagFalsifyPremise dag: TaskDag premiseId: Str -> TaskDag
   (let [(newFalsified (if (listContains? dag.falsifiedPremises premiseId) dag.falsifiedPremises (listAppend dag.falsifiedPremises (list premiseId)))) (newNodes (map (fn [(node TaskNode)] -> TaskNode (if (listContains? node.premises premiseId) (TaskNode :id node.id :title node.title :state (taskInvalidated) :dependencies node.dependencies :premises node.premises) node)) dag.nodes))] (TaskDag :nodes newNodes :version (+ dag.version 1) :falsifiedPremises newFalsified))
 
 fn isNodeCompleted? dag: TaskDag depId: Str -> Bool
-  (let [(optN (dagFindNode dag depId))] (mt optN ((some n) (mt n.state ((taskCompleted) true) (_ false))) ((none) false)))
+  (let [(optN (dagFindNode dag depId))] (match optN ((some n) (match n.state ((taskCompleted) true) (_ false))) ((none) false)))
 
 fn dagCanActivate? dag: TaskDag nodeId: Str -> Bool
-  (let [(optN (dagFindNode dag nodeId))] (mt optN ((none) false) ((some node) (let [(isPending (mt node.state ((taskPending) true) (_ false))) (depsOk (fold (fn [(acc Bool) (depId Str)] -> Bool (and acc (isNodeCompleted? dag depId))) true node.dependencies)) (premisesOk (fold (fn [(acc Bool) (premiseId Str)] -> Bool (and acc (not (dagIsFalsified? dag premiseId)))) true node.premises))] (and isPending (and depsOk premisesOk))))))
+  (let [(optN (dagFindNode dag nodeId))] (match optN ((none) false) ((some node) (let [(isPending (match node.state ((taskPending) true) (_ false))) (depsOk (fold (fn [(acc Bool) (depId Str)] -> Bool (and acc (isNodeCompleted? dag depId))) true node.dependencies)) (premisesOk (fold (fn [(acc Bool) (premiseId Str)] -> Bool (and acc (not (dagIsFalsified? dag premiseId)))) true node.premises))] (and isPending (and depsOk premisesOk))))))
 
 fn dagCasVersion currentDag: TaskDag expectedVersion: I64 newDag: TaskDag -> (Option TaskDag)
   (if (= currentDag.version expectedVersion) (some newDag) (none))

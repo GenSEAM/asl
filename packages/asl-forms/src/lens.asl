@@ -154,7 +154,7 @@ fn closeBracket pat: (List String) j: Int64 n: Int64 -> Int64
   (cond ((>= j n) -1) ((= (optionOr (listGet pat j) "") "]") j) (else (closeBracket pat (+ j 1) n)))
 
 fn classHas items: (List String) c: String -> Bool
-  (mt (listHead items)
+  (match (listHead items)
     ((none) false)
     ((some a)
       (let [(rest (optionOr (listTail items) (list)))]
@@ -220,7 +220,7 @@ fn ! lensSh sc: LensScope argv: (List String) -> (Pair Int64 String)
     (if (stringEmpty? sp.failure) (pair sp.code (str sp.out sp.errText)) (pair -1 sp.failure)))
 
 fn ! gitLines sc: LensScope st: LensState key: String sub: String -> (Pair (List String) LensState)
-  (mt (mapGet st.lists key)
+  (match (mapGet st.lists key)
     ((some v) (pair v st))
     ((none)
       (let [(res (lensSh sc (list "git" sub)))
@@ -234,7 +234,7 @@ fn ! gitRemotes sc: LensScope st: LensState -> (Pair (List String) LensState)
   (gitLines sc st "rem" "remote")
 
 fn ! scopedFiles sc: LensScope st: LensState -> (Pair (List String) LensState)
-  (mt (mapGet st.lists "sf")
+  (match (mapGet st.lists "sf")
     ((some v) (pair v st))
     ((none)
       (let [(base (k/relPath sc.scopeRoot (k/normalizePath sc.root)))
@@ -246,19 +246,19 @@ fn ! readRel sc: LensScope rel: String -> (Option String)
   (let [(ap (if (stringStartsWith? rel "/") rel (k/joinPath sc.root rel)))]
     (if (not (k/isFile! ap))
       (none)
-      (mt (fileReadString ap) ((ok text) (some (k/universalNewlines text))) ((err _) (none)))))
+      (match (fileReadString ap) ((ok text) (some (k/universalNewlines text))) ((err _) (none)))))
 
 fn ! ignorePatterns sc: LensScope st: LensState -> (Pair (List String) LensState)
-  (mt (mapGet st.lists "ign")
+  (match (mapGet st.lists "ign")
     ((some v) (pair v st))
     ((none)
-      (let [(v (mt (readRel sc ".aslignore")
+      (let [(v (match (readRel sc ".aslignore")
                  ((none) (list))
                  ((some text) (filter (fn [(l String)] -> Bool (and (not (stringEmpty? l)) (not (stringStartsWith? l "#")))) (map d/pyStrip (stringSplit text "\n"))))))]
         (pair v (withList st "ign" v)))))
 
 fn ! auditScopeFiles sc: LensScope st: LensState -> (Pair (List String) LensState)
-  (mt (mapGet st.lists "asf")
+  (match (mapGet st.lists "asf")
     ((some v) (pair v st))
     ((none)
       (let [(sf (scopedFiles sc st))
@@ -269,7 +269,7 @@ fn ! auditScopeFiles sc: LensScope st: LensState -> (Pair (List String) LensStat
                               :status s2.status :metrics s2.metrics :findings s2.findings)))))
 
 fn telField raw: String field: String -> Int64
-  (mt (d/fieldNumber raw field false) ((some v) (optionOr (stringToInt64 v) -1)) ((none) -1))
+  (match (d/fieldNumber raw field false) ((some v) (optionOr (stringToInt64 v) -1)) ((none) -1))
 
 fn hexChar? c: String -> Bool
   (stringContains? "0123456789abcdefABCDEF" c)
@@ -295,7 +295,7 @@ fn telemetryOf rc: Int64 raw: String -> Telemetry
              :executedRefutes (telField raw "executedRefutes") :totalWallMs (telField raw "totalWallMs"))
 
 fn ! gateTelemetry sc: LensScope st: LensState runId: Int64 -> (Pair Telemetry LensState)
-  (mt (mapGet st.tel (num runId))
+  (match (mapGet st.tel (num runId))
     ((some t) (pair t st))
     ((none)
       (let [(bin (k/joinPath sc.root "bin/asl"))
@@ -310,7 +310,7 @@ fn ! gateTelemetry sc: LensScope st: LensState runId: Int64 -> (Pair Telemetry L
         (pair t (with st :tel (mapSet st.tel (num runId) t))))))
 
 fn ! intelReport sc: LensScope st: LensState sub: String -> (Pair (Pair Int64 String) LensState)
-  (mt (mapGet st.intel sub)
+  (match (mapGet st.intel sub)
     ((some r) (pair r st))
     ((none)
       (let [(bin (k/joinPath sc.root "bin/asl"))
@@ -318,7 +318,7 @@ fn ! intelReport sc: LensScope st: LensState sub: String -> (Pair (Pair Int64 St
         (pair r (with st :intel (mapSet st.intel sub r))))))
 
 fn intelNum text: String field: String -> Int64
-  (mt (d/fieldNumber text field true) ((some v) (optionOr (stringToInt64 v) -1)) ((none) -1))
+  (match (d/fieldNumber text field true) ((some v) (optionOr (stringToInt64 v) -1)) ((none) -1))
 
 fn ! cpuCount -> Int64
   (let [(sp (d/spawnRun (list "getconf" "_NPROCESSORS_ONLN") (none) (mapEmpty) 10))
@@ -330,7 +330,7 @@ fn endsWithAny? f: String exts: (List String) -> Bool
 
 fn ! readAll sc: LensScope files: (List String) -> (List (Pair String String))
   (fold (fn [(acc (List (Pair String String))) (rel String)] -> (List (Pair String String))
-          (mt (readRel sc rel) ((none) acc) ((some c) (cons (pair rel c) acc))))
+          (match (readRel sc rel) ((none) acc) ((some c) (cons (pair rel c) acc))))
         (list) files)
 
 fn ! repoInvariants sc: LensScope st0: LensState -> LensState
@@ -472,7 +472,7 @@ fn opName chunk: String -> String
     (if (and (stringStartsWith? h ":") (> e 1)) (optionOr (stringSlice h 1 e) "?") "?"))
 
 fn ! repoContract sc: LensScope st: LensState -> LensState
-  (mt (readRel sc "asl/grammar/tools.asn")
+  (match (readRel sc "asl/grammar/tools.asn")
     ((none) (record st "contract-precision" "unmeasured" "(:reason \"asl/grammar/tools.asn not present in scope\")"))
     ((some c)
       (let [(chunks (listDrop (stringSplit c "(:op ") 1))
@@ -486,7 +486,7 @@ fn ! repoContract sc: LensScope st: LensState -> LensState
                   (str "(:declaredOps " (num total) " :documentedOps " (num documented) " :undocumentedOps " (num (- total documented)) ")"))))))
 
 fn ! repoResilience sc: LensScope st: LensState -> LensState
-  (mt (readRel sc "asl/grammar/rules.asn")
+  (match (readRel sc "asl/grammar/rules.asn")
     ((none) (record st "resilience" "unmeasured" "(:reason \"asl/grammar/rules.asn not present in scope\")"))
     ((some c)
       (let [(thr (cappedAt c (stringToBytes c) 0))
@@ -568,7 +568,7 @@ fn requestedTokens raw: String -> (List String)
     (filter (fn [(x String)] -> Bool (not (stringEmpty? x))) (map stripQuotesColons (pySplit spaced))))
 
 fn dedupe xs: (List String) acc: (List String) -> (List String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (listReverse acc))
     ((some x) (dedupe (optionOr (listTail xs) (list)) (if (listContains? acc x) acc (cons x acc)))))
 
@@ -651,7 +651,7 @@ fn ! lensStep root: String id: Int64 kw: (Map String String) args: (List String)
           ((listEmpty? requested) (lensReject id ":ERR_UNKNOWN_LENS" "No audit lenses requested"))
           (res.whole (assemble sc (fold (fn [(s LensState) (l String)] -> LensState (repoLens sc s l)) (emptyState) requested) id target ":workspace" kw requested))
           (else
-            (mt (readRel sc res.path)
+            (match (readRel sc res.path)
               ((none) (lensReject id ":ERR_TARGET_UNREADABLE" (str "Target could not be read: " target)))
               ((some content)
                 (let [(ext (stringLower (d/pyExt res.path)))]

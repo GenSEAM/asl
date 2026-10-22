@@ -16,7 +16,7 @@ fn ! asanRuntime! -> (Result String String)
         (ctx (sys/Context :root r :scriptDir "" :argv0 "" :hostBin ""))
         (b (nb/Build :root r :cache cacheDir :tmp cacheDir :lib plain :base "" :clangVersion "" :owner ""
                      :deadlineNs (+ (monotonicNs) 900000000000) :maxDesc 16))]
-    (mt (cache/nativeAsl1! ctx plain (optionOr (envGet "CLANG") "clang"))
+    (match (cache/nativeAsl1! ctx plain (optionOr (envGet "CLANG") "clang"))
       ((err e) (err (str "native asl1: " e)))
       ((ok asl1) (nb/asanRuntime! b asl1 (str r "/asl/packages")))))
 
@@ -44,7 +44,7 @@ fn heapSource -> String
     "(enum Shape (:c circle [(r Int64)] \"Round\") (:c rect [(w Int64) (h Int64)] \"Rectangle\"))"
     ""
     "fn area s: Shape -> Int64"
-    "  (mt s ((circle r) (* r r)) ((rect w h) (* w h)))"
+    "  (match s ((circle r) (* r r)) ((rect w h) (* w h)))"
     ""
     "fn wide a: String b: String c: String d: String it: Item -> String"
     "  (str a b c d it.name (stringFromInt64 it.n))"
@@ -77,7 +77,7 @@ fn listStressSource -> String
     "  (if (= n 0) acc (build (- n 1) (cons (list n (+ n 1) (+ n 2) (+ n 3)) acc)))"
     ""
     "fn sumAll xs: (List (List Int64)) acc: Int64 -> Int64"
-    "  (mt (listHead xs) ((some l) (sumAll (optionOr (listTail xs) (list)) (+ acc (+ (optionOr (listGet l 0) 0) (optionOr (listGet l 3) 0))))) ((none) acc))"
+    "  (match (listHead xs) ((some l) (sumAll (optionOr (listTail xs) (list)) (+ acc (+ (optionOr (listGet l 0) 0) (optionOr (listGet l 3) 0))))) ((none) acc))"
     ""
     "fn slices s: String n: Int64 acc: String -> String"
     "  (if (= n 0) acc (slices s (- n 1) (str (optionOr (stringSlice s (mod n 5) (+ (mod n 5) 3)) \"\") (optionOr (stringSlice acc 0 (if (> (stringLength acc) 40) 40 (stringLength acc))) \"\"))))"
@@ -122,7 +122,7 @@ fn objectStressSource -> String
     "  (if (= (mod i 3) 0) a0 (if (= (mod i 3) 1) (a3 i 1 2) (a8 i 1 2 3 4 5 6 7)))"
     ""
     "fn weight m: Many -> Int64"
-    "  (mt m ((a0) 1) ((a3 x y z) (+ x (+ y z))) ((a8 b0 b1 b2 b3 b4 b5 b6 b7) (+ b0 b7)))"
+    "  (match m ((a0) 1) ((a3 x y z) (+ x (+ y z))) ((a8 b0 b1 b2 b3 b4 b5 b6 b7) (+ b0 b7)))"
     ""
     "fn ! main args: (List String) -> (Result Int64 String)"
     "  (let [(recs (map (fn [(i Int64)] -> Wide (Wide :f0 i :f1 1 :f2 2 :f3 3 :f4 4 :f5 5 :f6 6 :f7 7 :f8 8 :f9 9)) (range 0 300)))"
@@ -141,9 +141,9 @@ fn formatDiags ds: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.locus ": [" d.code "] " d.message)) ds) "; ")
 
 fn ! compiledText path: String -> (Result String String)
-  (mt (lk/linkEntry! path)
+  (match (lk/linkEntry! path)
     ((err ds) (err (formatDiags ds)))
-    ((ok m) (mt (llvm/emitLlvmProgramNative! m (str m.name ".main"))
+    ((ok m) (match (llvm/emitLlvmProgramNative! m (str m.name ".main"))
               ((err ds) (err (formatDiags ds)))
               ((ok code) (ok code)))))
 
@@ -195,7 +195,7 @@ fn ! testSource work: String -> Bool
         (ll (str work "/stressMod.ll"))]
     (do (assert (ok? (fileWrite src (heapSource))) "stressMod: source written")
         (let [(code (compiledText src))
-              (built (mt code ((ok c) (fileWrite ll c)) ((err e) (err e))))
+              (built (match code ((ok c) (fileWrite ll c)) ((err e) (err e))))
               (linked (sh (str (clangLink) ll (lib) work "/stressMod")))
               (interp (sh (str (host) " run " src)))]
           (do (assert (ok? built) (str "stressMod: compiles and writes its .ll; " built))
@@ -210,7 +210,7 @@ fn ! testListStress work: String -> Bool
   (let [(src (str work "/listStressMod.asl"))
         (ll (str work "/listStressMod.ll"))]
     (do (assert (ok? (fileWrite src (listStressSource))) "listStressMod: source written")
-        (mt (compiledText src)
+        (match (compiledText src)
           ((err e) (assert false (str "listStressMod: links and emits; " e)))
           ((ok code)
             (let [(written (fileWrite ll code))
@@ -229,7 +229,7 @@ fn ! testObjectStress work: String -> Bool
   (let [(src (str work "/objStressMod.asl"))
         (ll (str work "/objStressMod.ll"))]
     (do (assert (ok? (fileWrite src (objectStressSource))) "objStressMod: source written")
-        (mt (compiledText src)
+        (match (compiledText src)
           ((err e) (assert false (str "objStressMod: links and emits; " e)))
           ((ok code)
             (let [(written (fileWrite ll code))

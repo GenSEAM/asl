@@ -35,12 +35,12 @@ fn ! writeAndLink work: String name: String text: String -> Bool
 fn ! optBin -> (Option String)
   (let [(known (filter (fn [(c String)] -> Bool (= (exitOf (str "test -x " c)) 0))
                         (list "/opt/homebrew/opt/llvm/bin/opt" "/opt/homebrew/opt/llvm@22/bin/opt" "/usr/local/opt/llvm/bin/opt")))]
-    (mt (listGet known 0)
+    (match (listGet known 0)
       ((some o) (some o))
       ((none) (if (= (exitOf "command -v opt >/dev/null 2>&1") 0) (some "opt") (none)))))
 
 fn ! verifyLl label: String work: String file: String -> Bool
-  (mt (optBin)
+  (match (optBin)
     ((none) (do (println (str label ": opt not found on this host, skipping -passes=verify")) true))
     ((some o) (expectExit (str label ": opt -passes=verify accepts the emitted IR") (str o " -passes=verify -disable-output " work "/" file ".ll") 0)))
 
@@ -57,15 +57,15 @@ fn ! hostFacts -> libc/TripleFacts
   (optionOr (libc/libcFacts (hostTriple)) (libc/darwinArm64Facts))
 
 fn textOf res: (Result String (List ty/IrDiag)) -> String
-  (mt res ((ok text) text) ((err diags) (str "ERR: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " @ " d.locus ": " d.message)) diags) " || "))))
+  (match res ((ok text) text) ((err diags) (str "ERR: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " @ " d.locus ": " d.message)) diags) " || "))))
 
 fn ! sysFns facts: libc/TripleFacts -> (List ty/SsaFunction)
-  (mt (sys/sysFunctions facts)
+  (match (sys/sysFunctions facts)
     ((ok fs) fs)
     ((err e) (do (assert false (str "sysFunctions: " e)) (list))))
 
 fn ! procFns facts: libc/TripleFacts -> (List ty/SsaFunction)
-  (mt (proc/sysProcFunctions facts)
+  (match (proc/sysProcFunctions facts)
     ((ok fs) fs)
     ((err e) (do (assert false (str "sysProcFunctions: " e)) (list))))
 
@@ -685,11 +685,11 @@ fn ! testWaitAny work: String facts: libc/TripleFacts -> Bool
 
 fn ! testHostComparison work: String -> Bool
   (let [(ref (sh "echo hi")) (hRes (processSpawn "/bin/echo hi"))]
-    (mt hRes
+    (match hRes
       ((err e) (do (assert false (str "testHostComparison: processSpawn failed: " e)) false))
       ((ok h)
        (let [(wRes (processWait h 2000))]
-         (mt wRes
+         (match wRes
            ((err e) (do (assert false (str "testHostComparison: processWait failed: " e)) false))
            ((ok out)
             (do (assert (= out.exitCode ref.exitCode) (str "testHostComparison: exit " out.exitCode ", want " ref.exitCode))
@@ -789,16 +789,16 @@ fn diagText ds: (List ty/IrDiag) -> String
 fn ! lowered name: String src: String -> (Option ty/SsaModule)
   (let [(preludeText (resultOr (fileReadString (lk/preludePath)) ""))]
     (do (assert (not (stringEmpty? preludeText)) (str (lk/preludePath) " is readable"))
-        (mt (lk/lowerSourceWith src preludeText)
+        (match (lk/lowerSourceWith src preludeText)
           ((err ds) (do (assert false (str name ": lowerSourceWith: " (diagText ds))) (none)))
           ((ok m) (some m)))))
 
 fn ! build work: String name: String src: String -> String
   (let [(_ (assert (ok? (fileWrite (str work "/" name ".asl") src)) (str name ".asl written")))]
-    (mt (lowered name src)
+    (match (lowered name src)
       ((none) "")
       ((some m)
-        (mt (llvm/emitLlvmProgramFor (hostFacts) m "main")
+        (match (llvm/emitLlvmProgramFor (hostFacts) m "main")
           ((err ds) (do (assert false (str name ": emitLlvmProgramFor: " (diagText ds))) ""))
           ((ok text) (do (assert (ok? (fileWrite (str work "/" name ".ll") text)) (str name ".ll written")) text))))))
 
@@ -834,7 +834,7 @@ fn procSource work: String -> String
     "(module sysProcProbe :x [main] :i [])"
     ""
     "fn ! readAll fd: Int64 acc: String -> String"
-    "  (mt (fdRead fd 4096)"
+    "  (match (fdRead fd 4096)"
     "    ((err e) (str acc \"<err \" e \">\"))"
     "    ((ok s) (if (= (stringLength s) 0) acc (readAll fd (str acc s)))))"
     ""
@@ -848,7 +848,7 @@ fn procSource work: String -> String
     "  (do (fdClose c.stdin) (fdClose c.stdout) (fdClose c.stderr) true)"
     ""
     "fn ! run argv: (List String) cwd: (Option String) env: (Option (List String)) -> String"
-    "  (mt (procSpawnv argv cwd env)"
+    "  (match (procSpawnv argv cwd env)"
     "    ((err e) (str \"err \" e))"
     "    ((ok c) (let [(out (readAll c.stdout \"\"))"
     "                  (w (procWaitPid c.pid false))]"
@@ -858,24 +858,24 @@ fn procSource work: String -> String
     "  (fold (fn [(acc String) (kv String)] -> String (if (stringStartsWith? kv (str name \"=\")) (stringReplace kv (str name \"=\") \"\") acc)) \"\" (envList))"
     ""
     "fn ! self -> String"
-    "  (mt (procExePath)"
+    "  (match (procExePath)"
     "    ((err e) (str \"exe err \" e))"
     (str "    ((ok p) (if (stringEndsWith? p \"/asl-host\") (str p \" run \" \"" work "/sysProc.asl\") p)))")
     ""
     "fn label pid: Int64 names: (List (Pair Int64 String)) -> String"
-    "  (fold (fn [(acc String) (p (Pair Int64 String))] -> String (mt p ((pair q n) (if (= q pid) n acc)))) \"other\" names)"
+    "  (fold (fn [(acc String) (p (Pair Int64 String))] -> String (match p ((pair q n) (if (= q pid) n acc)))) \"other\" names)"
     ""
     "fn anyShape res: (Result (Option (Pair Int64 Int64)) String) names: (List (Pair Int64 String)) -> String"
-    "  (mt res"
+    "  (match res"
     "    ((err e) (str \"err \" e))"
-    "    ((ok o) (mt o ((none) \"ok none\") ((some p) (mt p ((pair pid code) (str \"ok \" (label pid names) \" \" code)))))))"
+    "    ((ok o) (match o ((none) \"ok none\") ((some p) (match p ((pair pid code) (str \"ok \" (label pid names) \" \" code)))))))"
     ""
     "fn pollShape res: (Result (Pair (List (Pair Int64 Int64)) (List (Pair Int64 Int64))) String) names: (List (Pair Int64 String)) -> String"
-    "  (mt res"
+    "  (match res"
     "    ((err e) (str \"err \" e))"
-    "    ((ok r) (mt r ((pair fds pids)"
-    "                   (str \"ok fds\" (fold (fn [(acc String) (p (Pair Int64 Int64))] -> String (mt p ((pair fd m) (str acc \" \" (label fd names) \":\" m)))) \"\" fds)"
-    "                        \" pids\" (fold (fn [(acc String) (p (Pair Int64 Int64))] -> String (mt p ((pair pid code) (str acc \" \" (label pid names) \":\" code)))) \"\" pids))))))"
+    "    ((ok r) (match r ((pair fds pids)"
+    "                   (str \"ok fds\" (fold (fn [(acc String) (p (Pair Int64 Int64))] -> String (match p ((pair fd m) (str acc \" \" (label fd names) \":\" m)))) \"\" fds)"
+    "                        \" pids\" (fold (fn [(acc String) (p (Pair Int64 Int64))] -> String (match p ((pair pid code) (str acc \" \" (label pid names) \":\" code)))) \"\" pids))))))"
     ""
     "fn ! spawnCases -> Bool"
     "  (do (println \"echo\" (run (list \"/bin/echo\" \"hi\" \"there\") (none) (none)))"
@@ -888,7 +888,7 @@ fn procSource work: String -> String
     "      (println \"env empty\" (run (list \"/usr/bin/env\") (none) (some (list))))"
     "      (println \"cwd\" (run (list \"/bin/pwd\") (some \"/\") (none)))"
     "      (println \"cwd missing\" (run (list \"/bin/pwd\") (some \"/nonexistent/dir\") (none)))"
-    "      (println \"record\" (mt (procSpawnv (list \"/bin/sh\" \"-c\" \"read l; echo got $l; echo oops >&2; exit 2\") (none) (none))"
+    "      (println \"record\" (match (procSpawnv (list \"/bin/sh\" \"-c\" \"read l; echo got $l; echo oops >&2; exit 2\") (none) (none))"
     "                          ((err e) (str \"err \" e))"
     "                          ((ok c) (let [(shape (str (noDigits (str c)) \" \" (> c.pid 0) \" \" (>= c.stdin 3) \" \" (>= c.stdout 3) \" \" (>= c.stderr 3)))"
     "                                        (wrote (fdWrite c.stdin \"line\\n\"))"
@@ -902,7 +902,7 @@ fn procSource work: String -> String
     "      true)"
     ""
     "fn ! waitCases -> Bool"
-    "  (mt (procSpawnv (list \"/bin/sleep\" \"5\") (none) (none))"
+    "  (match (procSpawnv (list \"/bin/sleep\" \"5\") (none) (none))"
     "    ((err e) (do (println \"sleep spawn\" e) false))"
     "    ((ok c) (let [(p c.pid) (names (list (pair p \"sleep\") (pair c.stdout \"out\")))]"
     "              (do (println \"running nohang\" (procWaitPid p true))"
@@ -917,11 +917,11 @@ fn procSource work: String -> String
     "                  (closeAll c)))))"
     ""
     "fn ! anyCases -> Bool"
-    "  (mt (procSpawnv (list \"/bin/sleep\" \"5\") (none) (none))"
+    "  (match (procSpawnv (list \"/bin/sleep\" \"5\") (none) (none))"
     "    ((err e) (do (println \"a spawn\" e) false))"
-    "    ((ok a) (mt (procSpawnv (list \"/bin/sh\" \"-c\" \"exit 3\") (none) (none))"
+    "    ((ok a) (match (procSpawnv (list \"/bin/sh\" \"-c\" \"exit 3\") (none) (none))"
     "      ((err e) (do (println \"b spawn\" e) false))"
-    "      ((ok b) (mt (procSpawnv (list \"/bin/sleep\" \"5\") (none) (none))"
+    "      ((ok b) (match (procSpawnv (list \"/bin/sleep\" \"5\") (none) (none))"
     "        ((err e) (do (println \"c spawn\" e) false))"
     "        ((ok c) (let [(names (list (pair a.pid \"a\") (pair b.pid \"b\") (pair c.pid \"c\")))]"
     "          (do (println \"any of three\" (anyShape (procWaitAny (list a.pid b.pid c.pid) 5000) names))"
@@ -932,7 +932,7 @@ fn procSource work: String -> String
     "              true))))))))"
     ""
     "fn ! pollCases -> Bool"
-    "  (mt (procSpawnv (list \"/bin/sh\" \"-c\" \"read l; exit 4\") (none) (none))"
+    "  (match (procSpawnv (list \"/bin/sh\" \"-c\" \"read l; exit 4\") (none) (none))"
     "    ((err e) (do (println \"z spawn\" e) false))"
     "    ((ok z) (let [(names (list (pair z.pid \"z\") (pair z.stdout \"zout\") (pair z.stdin \"zin\")))]"
     "              (do (println \"poll before\" (pollShape (procPoll (list (pair z.stdout 1)) (list z.pid) 0) names))"
@@ -941,9 +941,9 @@ fn procSource work: String -> String
     "                  (println \"poll exit\" (pollShape (procPoll (list) (list z.pid) 5000) names))"
     "                  (println \"poll after\" (pollShape (procPoll (list) (list z.pid) 0) names))"
     "                  (closeAll z)"
-    "                  (mt (procSpawnv (list \"/bin/sh\" \"-c\" \"exit 5\") (none) (none))"
+    "                  (match (procSpawnv (list \"/bin/sh\" \"-c\" \"exit 5\") (none) (none))"
     "                    ((err e) (do (println \"x spawn\" e) false))"
-    "                    ((ok x) (mt (procSpawnv (list \"/bin/sh\" \"-c\" \"exit 6\") (none) (none))"
+    "                    ((ok x) (match (procSpawnv (list \"/bin/sh\" \"-c\" \"exit 6\") (none) (none))"
     "                      ((err e) (do (println \"y spawn\" e) false))"
     "                      ((ok y) (let [(both (list (pair x.pid \"x\") (pair y.pid \"y\")))"
     "                                    (_ (run (list \"/bin/sleep\" \"0.3\") (none) (none)))]"
@@ -960,7 +960,7 @@ fn procSource work: String -> String
     "      true)"
     ""
     "fn ! rusageCase -> Bool"
-    "  (mt (procRusage)"
+    "  (match (procRusage)"
     "    ((err e) (do (println \"rusage err\" e) false))"
     "    ((ok r) (do (println \"rusage\" (noDigits (str r)) (> r.selfMaxRssKb 0) (>= r.selfUserUs 0) (>= r.selfSysUs 0) (> r.childrenMaxRssKb 0) (>= r.childrenUserUs 0) (>= r.childrenSysUs 0))"
     "                true)))"
@@ -980,7 +980,7 @@ fn procSource work: String -> String
     ""
     "fn ! fwdMode -> (Result Int64 String)"
     "  (let [(dir (envVar \"PROC_DIR\"))]"
-    "    (mt (procSpawnv (list \"/bin/sh\" \"-c\" (str \"trap 'echo term > \" dir \"/term; exit 9' TERM; echo ready > \" dir \"/ready; while :; do sleep 0.05; done\")) (none) (none))"
+    "    (match (procSpawnv (list \"/bin/sh\" \"-c\" (str \"trap 'echo term > \" dir \"/term; exit 9' TERM; echo ready > \" dir \"/ready; while :; do sleep 0.05; done\")) (none) (none))"
     "      ((err e) (do (println \"fwd spawn\" e) (ok 1)))"
     "      ((ok c) (do (println \"fwd spawned\")"
     "                  (println \"fwd waited\" (procWaitPid c.pid false))"
@@ -1041,10 +1041,10 @@ fn ! testProcFwd work: String -> Bool
 
 fn ! testProcLinux work: String facts: libc/TripleFacts arch: String -> Bool
   (let [(label (str "sysProc linux-" arch))]
-    (mt (lowered label (procSource work))
+    (match (lowered label (procSource work))
       ((none) false)
       ((some m)
-        (mt (llvm/emitLlvmProgramFor facts m "main")
+        (match (llvm/emitLlvmProgramFor facts m "main")
           ((err ds) (do (assert false (str label ": emitLlvmProgramFor: " (diagText ds))) false))
           ((ok text)
             (do (checkIr label text (procNames))

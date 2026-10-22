@@ -41,10 +41,10 @@ fn fixtureFailure failure: String -> FixtureRun
   (FixtureRun :failure failure :exitCode -1 :stdout "" :removed false)
 
 fn ! buildAndRun source: String prelude: String directory: String -> FixtureRun
-  (mt (llvm/emitLlvmSourceWith source prelude "main")
+  (match (llvm/emitLlvmSourceWith source prelude "main")
     ((err diagnostics) (fixtureFailure (str "cannot compile runtime fixture: " diagnostics)))
     ((ok llvmText)
-      (mt (fileWrite (str directory "/sum.ll") llvmText)
+      (match (fileWrite (str directory "/sum.ll") llvmText)
         ((err e) (fixtureFailure (str "cannot write generated LLVM: " e)))
         ((ok written)
           (let [(linked (processRun (str "/usr/bin/clang -Wno-override-module -x ir " directory "/sum.ll -x none asl/host/out/libaslrt.a -lm -o " directory "/sum")))]
@@ -54,10 +54,10 @@ fn ! buildAndRun source: String prelude: String directory: String -> FixtureRun
                 (FixtureRun :failure "" :exitCode ran.exitCode :stdout ran.stdout :removed false))))))))
 
 fn ! runFixture source: String directory: String -> FixtureRun
-  (mt (fileReadString "asl/prelude/prelude.asl")
+  (match (fileReadString "asl/prelude/prelude.asl")
     ((err e) (fixtureFailure (str "cannot read prelude: " e)))
     ((ok prelude)
-      (mt (dirCreate directory)
+      (match (dirCreate directory)
         ((err e) (fixtureFailure (str "cannot create runtime fixture: " e)))
         ((ok created)
           (let [(outcome (buildAndRun source prelude directory))
@@ -66,19 +66,19 @@ fn ! runFixture source: String directory: String -> FixtureRun
 
 fn ! cpuMicros -> Int64
   (let [(usageResult (procRusage))]
-    (mt usageResult
+    (match usageResult
       ((err e) (do (assert (ok? usageResult) (str "procRusage failed: " e)) 0))
       ((ok usage) (+ usage.selfUserUs usage.selfSysUs))))
 
 fn ! measure source: String -> PhaseTimes
-  (mt (ast/parse source)
+  (match (ast/parse source)
     ((err parseError) (PhaseTimes :lowerCpuUs -1 :verifyCpuUs -1))
     ((ok forms)
       (let [(positions (low/declPositions source))
             (startLower (cpuMicros))
             (lowered (low/lowerModule forms positions))
             (endLower (cpuMicros))]
-        (mt lowered
+        (match lowered
           ((err ds) (do (println "lowerScale lower diagnostic:" ds) (PhaseTimes :lowerCpuUs (- endLower startLower) :verifyCpuUs -1)))
           ((ok m) (let [(startVerify (cpuMicros))
                         (verified (vfy/verifySsa m))
@@ -88,9 +88,9 @@ fn ! measure source: String -> PhaseTimes
                       (PhaseTimes :lowerCpuUs (- endLower startLower) :verifyCpuUs (- endVerify startVerify)))))))))
 
 fn measured source: String -> Bool
-  (mt (low/lowerSource source)
+  (match (low/lowerSource source)
     ((err ds) false)
-    ((ok m) (mt (llvm/emitLlvmProgram m "main")
+    ((ok m) (match (llvm/emitLlvmProgram m "main")
              ((err ds) false)
              ((ok text) true))))
 

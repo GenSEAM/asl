@@ -22,14 +22,14 @@ fn jsonListEqual xs: (List j/Json) ys: (List j/Json) -> Bool
         (and (jsonEqual? hx hy) (jsonListEqual tx ty)))))
 
 fn jsonEqual? a: j/Json b: j/Json -> Bool
-  (mt a
-    ((jnull) (mt b ((jnull) true) (_ false)))
-    ((jbool b1) (mt b ((jbool b2) (= b1 b2)) (_ false)))
-    ((jint i1) (mt b ((jint i2) (= i1 i2)) ((jnum n2) (= (int64ToFloat64 i1) n2)) (_ false)))
-    ((jfloat f1) (mt b ((jfloat f2) (= f1 f2)) ((jnum n2) (= f1 n2)) (_ false)))
-    ((jnum n1) (mt b ((jnum n2) (= n1 n2)) ((jint i2) (= n1 (int64ToFloat64 i2))) ((jfloat f2) (= n1 f2)) (_ false)))
-    ((jstr s1) (mt b ((jstr s2) (= s1 s2)) (_ false)))
-    ((jarr xs) (mt b ((jarr ys) (jsonListEqual xs ys)) (_ false)))
+  (match a
+    ((jnull) (match b ((jnull) true) (_ false)))
+    ((jbool b1) (match b ((jbool b2) (= b1 b2)) (_ false)))
+    ((jint i1) (match b ((jint i2) (= i1 i2)) ((jnum n2) (= (int64ToFloat64 i1) n2)) (_ false)))
+    ((jfloat f1) (match b ((jfloat f2) (= f1 f2)) ((jnum n2) (= f1 n2)) (_ false)))
+    ((jnum n1) (match b ((jnum n2) (= n1 n2)) ((jint i2) (= n1 (int64ToFloat64 i2))) ((jfloat f2) (= n1 f2)) (_ false)))
+    ((jstr s1) (match b ((jstr s2) (= s1 s2)) (_ false)))
+    ((jarr xs) (match b ((jarr ys) (jsonListEqual xs ys)) (_ false)))
     ((jobj _) false))
 
 fn testRuleListCase! items: (List j/Json) caseIdx: Int64 totalCases: Int64 passCount: Int64 -> Bool
@@ -39,7 +39,7 @@ fn testRuleListCase! items: (List j/Json) caseIdx: Int64 totalCases: Int64 passC
       (assert (= passCount totalCases) "all rule list cases passed")
       true)
     (let [(inVal (optionOr (listGet items (* caseIdx 2)) (j/jstr "")))
-          (inputStr (mt inVal ((j/jstr s) s) (_ "")))
+          (inputStr (match inVal ((j/jstr s) s) (_ "")))
           (expectedVal (optionOr (listGet items (+ (* caseIdx 2) 1)) (j/jarr (list))))
           (tree (rules/parseRules inputStr))
           (printed (pr/print inputStr tree))
@@ -58,7 +58,7 @@ fn testDeclarationListCase! items: (List j/Json) caseIdx: Int64 totalCases: Int6
       (assert (= passCount totalCases) "all declaration list cases passed")
       true)
     (let [(inVal (optionOr (listGet items (* caseIdx 2)) (j/jstr "")))
-          (inputStr (mt inVal ((j/jstr s) s) (_ "")))
+          (inputStr (match inVal ((j/jstr s) s) (_ "")))
           (expectedVal (optionOr (listGet items (+ (* caseIdx 2) 1)) (j/jarr (list))))
           (tree (rules/parseDeclarationList inputStr))
           (printed (pr/print inputStr tree))
@@ -160,7 +160,7 @@ fn testDeclarationsAndImportant -> Bool
         (tree (rules/parseDeclarationList code))
         (children (tr/nodeChildren tree))
         (decls (filter (fn [(e tr/TreeElement)] -> Bool
-                         (mt e
+                         (match e
                            ((elemToken _) false)
                            ((elemNode n) (= (tr/nodeKind n) "declaration"))))
                        children))]
@@ -173,11 +173,11 @@ fn testDeclarationsAndImportant -> Bool
             (d2Elem (optionOr (listHead r1) (tr/elemToken (tr/makeToken "" 0 0))))
             (r2 (optionOr (listTail r1) (list)))
             (d3Elem (optionOr (listHead r2) (tr/elemToken (tr/makeToken "" 0 0))))]
-        (mt d1Elem
+        (match d1Elem
           ((elemNode d1)
-           (mt d2Elem
+           (match d2Elem
              ((elemNode d2)
-              (mt d3Elem
+              (match d3Elem
                 ((elemNode d3)
                  (do
                    (assert (rules/isImportantDeclaration? d1 code) "d1 is important")
@@ -225,7 +225,7 @@ fn testUpstreamRulesSuite! -> Bool
     (let [(jsonStr (resultOr contentRes ""))
           (parseRes (j/jsonParse jsonStr))]
       (assert (ok? parseRes) "parse rule_list.json")
-      (mt (resultOr parseRes (j/jnull))
+      (match (resultOr parseRes (j/jnull))
         ((j/jarr items)
          (testRuleListCase! items 0 (/ (listLength items) 2) 0))
         (_ (assert false "expected array")))))
@@ -236,7 +236,7 @@ fn testUpstreamDeclarationsSuite! -> Bool
     (let [(jsonStr2 (resultOr contentRes2 ""))
           (parseRes2 (j/jsonParse jsonStr2))]
       (assert (ok? parseRes2) "parse declaration_list.json")
-      (mt (resultOr parseRes2 (j/jnull))
+      (match (resultOr parseRes2 (j/jnull))
         ((j/jarr items2)
          (testDeclarationListCase! items2 0 (/ (listLength items2) 2) 0))
         (_ (assert false "expected array")))))

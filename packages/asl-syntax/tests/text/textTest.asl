@@ -24,7 +24,7 @@ fn testAmbiguousAnchorRejected -> Bool
         (rEdit (txt/textApplyAnchorEdit text "apple" "orange"))
         (rNotFound (txt/readAnchor text "mango" 0 100))]
     (assert (err? rAmb) "ambiguous anchor without occurrence is err")
-    (mt rAmb
+    (match rAmb
       ((err msg)
        (do
          (assert (stringContains? msg "ambiguous") "error message names ambiguous")
@@ -102,7 +102,7 @@ fn testAnchorEdit -> Bool
     (assert (ok? rEdit) "anchor edit succeeds")
     (assert (= (resultOr rEdit "") "The slow white cat jumps over the lazy dog.") "text replaced correctly")
     (assert (ok? rWithTree) "anchor edit with tree succeeds")
-    (mt rWithTree
+    (match rWithTree
       ((ok res)
        (do
          (assert (= (sym/editResultNewText res) "The quick brown fox jumps over the sleepy puppy.") "tree edit text matches")

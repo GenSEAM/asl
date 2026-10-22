@@ -10,11 +10,11 @@ fn testBezierEndpoints -> Bool
         (startPt (kn/evaluateBezier p0 p1 p2 p3 0.0))
         (endPt (kn/evaluateBezier p0 p1 p2 p3 1.0))]
     (do
-      (assert (== startPt.x 100) "Bezier start X must equal P0 X")
-      (assert (== startPt.y 100) "Bezier start Y must equal P0 Y")
-      (assert (== endPt.x 400) "Bezier end X must equal P3 X")
-      (assert (== endPt.y 500) "Bezier end Y must equal P3 Y")
-      (refute (== startPt.x 400) "start X refutes end X")
+      (assert (= startPt.x 100) "Bezier start X must equal P0 X")
+      (assert (= startPt.y 100) "Bezier start Y must equal P0 Y")
+      (assert (= endPt.x 400) "Bezier end X must equal P3 X")
+      (assert (= endPt.y 500) "Bezier end Y must equal P3 Y")
+      (refute (= startPt.x 400) "start X refutes end X")
       true))
 
 fn testBezierInterpolation -> Bool
@@ -24,9 +24,9 @@ fn testBezierInterpolation -> Bool
         (p3 (kn/makePoint 100 0))
         (midPt (kn/evaluateBezier p0 p1 p2 p3 0.5))]
     (do
-      (assert (== midPt.x 50) "Symmetric Bezier mid X must be 50")
-      (assert (== midPt.y 75) "Symmetric Bezier mid Y must be 75")
-      (refute (== midPt.y 0) "mid Y refutes zero")
+      (assert (= midPt.x 50) "Symmetric Bezier mid X must be 50")
+      (assert (= midPt.y 75) "Symmetric Bezier mid Y must be 75")
+      (refute (= midPt.y 0) "mid Y refutes zero")
       true))
 
 fn testFittsLawTiming -> Bool
@@ -51,15 +51,15 @@ fn testScrollDecayVelocity -> Bool
       (assert (< v2 v1) "Velocity after 300ms must be lower than 100ms")
       (assert (< v3 v2) "Velocity after 600ms must be lower than 300ms")
       (assert (>= v3 0) "Velocity must remain non-negative")
-      (refute (== v1 v0) "v1 refutes unchanged v0")
+      (refute (= v1 v0) "v1 refutes unchanged v0")
       true))
 
 fn testKineticsProfileDefaults -> Bool
   (let [(prof (kn/defaultKineticsProfile))]
     (do
-      (assert (== prof.a 150) "default Fitts intercept a")
-      (assert (== prof.b 120) "default Fitts slope b")
-      (assert (== prof.tremorFreqHz 10) "physiological tremor frequency in 8-12Hz band")
+      (assert (= prof.a 150) "default Fitts intercept a")
+      (assert (= prof.b 120) "default Fitts slope b")
+      (assert (= prof.tremorFreqHz 10) "physiological tremor frequency in 8-12Hz band")
       (assert (> prof.maxJitterPixels 0) "jitter pixels positive")
       true))
 

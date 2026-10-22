@@ -245,9 +245,9 @@ fn parseRegistry raw: String -> Registry
     (scanOps raw (stringToBytes raw) (stringLength raw) 0 "" (Registry :topics topics :ops (mapEmpty) :order (list))))
 
 fn firstReadable! paths: (List String) -> String
-  (mt (listHead paths)
+  (match (listHead paths)
     ((none) "")
-    ((some p) (mt (if (fileExists? p) (fileReadString p) (err "absent")) ((ok t) t) ((err _) (firstReadable! (optionOr (listTail paths) (list)))))))
+    ((some p) (match (if (fileExists? p) (fileReadString p) (err "absent")) ((ok t) t) ((err _) (firstReadable! (optionOr (listTail paths) (list)))))))
 
 fn loadRegistry! ctx: s/KnowCtx -> (Option Registry)
   (let [(root ctx.toolRoot)
@@ -258,19 +258,19 @@ fn loadRegistry! ctx: s/KnowCtx -> (Option Registry)
     (if (stringEmpty? raw) (none) (some (parseRegistry raw))))
 
 fn ! anyAslFile? dir: String -> Bool
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err _) false)
     ((ok names)
       (or (listAny? (fn [(nm String)] -> Bool (and (or (stringEndsWith? nm ".asl") (stringEndsWith? nm ".asn")) (not (k/isDir! (k/joinPath dir nm))))) names)
           (listAny? (fn [(nm String)] -> Bool (and (!= nm ".git") (k/isDir! (k/joinPath dir nm)) (k/realChild? dir nm) (anyAslFile? (k/joinPath dir nm)))) names))))
 
 fn ! gitListsAsl? ws: String extra: (List String) -> (Option Bool)
-  (mt (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd "git" (listAppend (listAppend (list "ls-files") extra) (list "*.asl" "*.asn"))) ws) 2000))
+  (match (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd "git" (listAppend (listAppend (list "ls-files") extra) (list "*.asl" "*.asn"))) ws) 2000))
     ((ok out) (some (and (= out.exitCode 0) (not (stringEmpty? (s/pyStrip out.stdout))))))
     ((err _) (none)))
 
 fn ! hasAsl? ws: String -> Bool
-  (mt (gitListsAsl? ws (list))
+  (match (gitListsAsl? ws (list))
     ((none) (anyAslFile? ws))
     ((some tracked)
       (or tracked
@@ -290,7 +290,7 @@ fn ! gitCommonDirParsed! stdout: String dir: String -> (Option String)
     (if (stringEmpty? raw) (none) (some (absolutizeCommonDir dir raw))))
 
 fn ! gitCommonDirAbs! dir: String -> (Option String)
-  (mt (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd "git" (list "rev-parse" "--git-common-dir")) dir) 2000))
+  (match (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd "git" (list "rev-parse" "--git-common-dir")) dir) 2000))
     ((err _) (none))
     ((ok out)
       (if (!= out.exitCode 0)
@@ -299,10 +299,10 @@ fn ! gitCommonDirAbs! dir: String -> (Option String)
 
 fn ! sameToolchainRepo? ws: String toolRoot: String -> Bool
   (or (= (realOr! ws) (realOr! toolRoot))
-      (mt (gitCommonDirAbs! ws)
+      (match (gitCommonDirAbs! ws)
         ((none) false)
         ((some wsCommon)
-          (mt (gitCommonDirAbs! toolRoot)
+          (match (gitCommonDirAbs! toolRoot)
             ((none) false)
             ((some trCommon) (= wsCommon trCommon))))))
 
@@ -347,7 +347,7 @@ fn missingRegistry id: Int64 op: String -> s/KnowOutcome
   (s/badLine (str (s/stepHead id op) " :status \"rejected\" :error-code \":ERR_REGISTRY_MISSING\" :message \"tools.asn registry not found\")"))
 
 fn toolsStep! ctx: s/KnowCtx id: Int64 kw: (Map String String) args: (List String) -> s/KnowOutcome
-  (mt (loadRegistry! ctx)
+  (match (loadRegistry! ctx)
     ((none) (missingRegistry id "tools"))
     ((some reg)
       (let [(known (knownMap! reg ctx))
@@ -355,7 +355,7 @@ fn toolsStep! ctx: s/KnowCtx id: Int64 kw: (Map String String) args: (List Strin
             (named (k/lstripColons (k/kwOr kw "op" (k/kwOr kw "tool" ""))))
             (target (if (and (stringEmpty? named) (not (listEmpty? args)) (not scopeAll)) (k/lstripColons (optionOr (listHead args) "")) named))]
         (if (not (stringEmpty? target))
-          (mt (mapGet known target)
+          (match (mapGet known target)
             ((some o) (s/okLine (str (s/stepHead id "tools") " :status \"ok\" :op " (t2Entry o (not (stringEmpty? (k/kwOr kw "tool" ""))) false) ")")))
             ((none) (s/badLine (str (s/stepHead id "tools") " :status \"rejected\" :error-code \":ERR_UNKNOWN_OP\" :message \"Unknown operation\"" (nearTail (listSort (mapKeys known)) target false) ")"))))
           (let [(vis (visibleOps! reg ctx scopeAll))
@@ -392,7 +392,7 @@ fn builtins t: String b: Bytes n: Int64 i: Int64 acc: (List Builtin) -> (List Bu
   (let [(at (k/findFrom t b "(:name \"" i))]
     (if (< at 0)
       (listReverse acc)
-      (mt (builtinAt t b n at)
+      (match (builtinAt t b n at)
         ((some hit) (builtins t b n (pairSecond hit) (cons (pairFirst hit) acc)))
         ((none) (builtins t b n (+ at 1) acc)))))
 
@@ -459,7 +459,7 @@ fn cRegistrationPaths -> (List String)
   (list "asl/host/src/prelude.c" "asl/host/src/sys.c" "asl/host/src/sysNet.c" "asl/host/src/arrays.c" "asl/host/src/parallel.c" "asl/host/src/kernels.c")
 
 fn cRegistrationRows! root: String paths: (List String) -> (List Builtin)
-  (mt (listHead paths)
+  (match (listHead paths)
     ((none) (list))
     ((some path)
       (listAppend
@@ -481,11 +481,11 @@ fn checkerSigType sig: (Pair (List String) (Pair Bool String)) -> String
     (str (if (listEmpty? shown) "()" (stringJoin shown " ")) " -> " ret))
 
 fn checkerRows names: (List String) acc: (List Builtin) -> (List Builtin)
-  (mt (listHead names)
+  (match (listHead names)
     ((none) (listReverse acc))
     ((some name)
       (let [(tail (optionOr (listTail names) (list)))]
-        (mt (ty/builtinSig name)
+        (match (ty/builtinSig name)
           ((none) (checkerRows tail acc))
           ((some sig) (checkerRows tail (cons (Builtin :name name :sec "" :type (checkerSigType sig) :doc "") acc)))))))
 
@@ -499,7 +499,7 @@ fn checkerBuiltins t: String -> (List Builtin)
 fn builtinUnion prelude: (List Builtin) checker: (List Builtin) registered: (List Builtin) absent: (List String) -> (List Builtin)
   (let [(bound (fn [(c Builtin)] -> Bool (listAny? (fn [(r Builtin)] -> Bool (= c.name r.name)) registered)))
         (overlaid (map (fn [(p Builtin)] -> Builtin
-                         (mt (listHead (filter (fn [(c Builtin)] -> Bool (= p.name c.name)) checker))
+                         (match (listHead (filter (fn [(c Builtin)] -> Bool (= p.name c.name)) checker))
                            ((none) p)
                            ((some c) (Builtin :name p.name :sec p.sec :type c.type :doc p.doc)))) prelude))
         (added (filter (fn [(c Builtin)] -> Bool (and (bound c) (not (listAny? (fn [(p Builtin)] -> Bool (= c.name p.name)) prelude)))) checker))
@@ -511,12 +511,12 @@ fn builtinUnion prelude: (List Builtin) checker: (List Builtin) registered: (Lis
 fn helpBuiltin! ctx: s/KnowCtx id: Int64 needleRaw: String -> s/KnowOutcome
   (let [(path (k/joinPath (k/joinPath (k/joinPath ctx.toolRoot "asl") "prelude") "prelude.asn"))
         (typesPath (k/joinPath (k/joinPath (k/joinPath (k/joinPath ctx.toolRoot "asl") "packages") "asl-checker") "src/types.asl"))]
-    (mt (fileReadString path)
+    (match (fileReadString path)
       ((err _)
         (s/badLine (str (s/stepHead id "help") " :status \"rejected\" :error-code \":ERR_EXEC_FAILED\" :message "
                         (s/quoted (str "cannot read " path ": " (cond ((not (fileExists? path)) (str "[Errno 2] No such file or directory: '" path "'")) ((k/isDir! path) (str "[Errno 21] Is a directory: '" path "'")) (else (str "[Errno 13] Permission denied: '" path "'"))))) ")")))
       ((ok text)
-        (mt (fileReadString typesPath)
+        (match (fileReadString typesPath)
           ((err _)
             (s/badLine (str (s/stepHead id "help") " :status \"rejected\" :error-code \":ERR_EXEC_FAILED\" :message "
                             (s/quoted (str "cannot read " typesPath)) ")")))
@@ -538,7 +538,7 @@ fn helpBuiltin! ctx: s/KnowCtx id: Int64 needleRaw: String -> s/KnowOutcome
                               (sm/getCloseMatches needle (map (fn [(e Builtin)] -> String e.name) entries) 5 0.4)) " ") ")" missTail ")")))))))))
 
 fn helpStep! ctx: s/KnowCtx id: Int64 kw: (Map String String) args: (List String) -> s/KnowOutcome
-  (mt (loadRegistry! ctx)
+  (match (loadRegistry! ctx)
     ((none) (missingRegistry id "help"))
     ((some reg)
       (let [(known (knownMap! reg ctx))
@@ -554,10 +554,10 @@ fn helpStep! ctx: s/KnowCtx id: Int64 kw: (Map String String) args: (List String
         (cond
           ((some? builtin) (helpBuiltin! ctx id (optionOr builtin "")))
           ((not (stringEmpty? topic))
-            (mt (listHead (filter (fn [(p (Pair String String))] -> Bool (= (pairFirst p) topic)) reg.topics))
+            (match (listHead (filter (fn [(p (Pair String String))] -> Bool (= (pairFirst p) topic)) reg.topics))
               ((some p) (s/okLine (str (s/stepHead id "help") " :status \"ok\" :topic " (pairSecond p) ")")))
               ((none) (s/badLine (str (s/stepHead id "help") " :status \"rejected\" :error-code \":ERR_UNKNOWN_TOPIC\" :message \"Unknown topic\"" (nearTail (listSort (map pairFirst reg.topics)) topic true) ")")))))
           (else
-            (mt (mapGet known op)
+            (match (mapGet known op)
               ((some o) (s/okLine (str (s/stepHead id "help") " :status \"ok\" :op " (t2Entry o true true) ")")))
               ((none) (s/badLine (str (s/stepHead id "help") " :status \"rejected\" :error-code \":ERR_UNKNOWN_OP\" :message \"Unknown operation\"" (nearTail (listSort (mapKeys known)) op false) ")")))))))))

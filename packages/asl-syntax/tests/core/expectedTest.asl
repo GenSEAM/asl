@@ -148,7 +148,7 @@ fn testTreeMissingAPI -> Bool
         (assert (tr/isErrorNode errNode) "errNode must be error node")
         (let [(errMisOpt (tr/nodeMissing errNode))]
           (assert (some? errMisOpt) "errNode nodeMissing must be some")
-          (mt errMisOpt
+          (match errMisOpt
             ((some em)
              (do
                (assert (= (tr/missingOffset em) 42) "errNode missing offset matches")
@@ -157,7 +157,7 @@ fn testTreeMissingAPI -> Bool
             ((none) (assert false "unreachable missing none")))))))
 
 fn checkFixtureFile! path: String isLayout: Bool -> Bool
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e) (assert false (str "read error for " path ": " e)))
     ((ok content)
      (let [(root (if isLayout (lay/parse content) (prn/parse content)))]

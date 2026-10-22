@@ -4,7 +4,7 @@
 
 fn ! asl1Bin! -> String
   (let [(built (nt/prepareRun "asl/packages/asl-compiler/src/asl1.asl" (nt/fingerprint)))]
-    (mt built.binary
+    (match built.binary
       ((some bin) bin)
       ((none) (do (assert false (str "asl1.asl builds natively: " built.reason)) ""))))
 

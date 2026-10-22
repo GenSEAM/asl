@@ -46,9 +46,9 @@ fn testParseStrayClose -> Bool
     (assert (= (pr/print s1 r1) s1) "stray close paren print matches")
     (let [(c1 r1.children)]
       (assert (= (listLength c1) 5) "r1 has 5 children")
-      (mt (listGet c1 2)
+      (match (listGet c1 2)
         ((some elem1)
-         (mt elem1
+         (match elem1
            ((tr/elemNode e1)
             (do
               (assert (= e1.kind "error") "r1 stray paren is error node")
@@ -61,9 +61,9 @@ fn testParseStrayClose -> Bool
     (assert (= (pr/print s2 r2) s2) "lone close paren print matches")
     (let [(c2 r2.children)]
       (assert (= (listLength c2) 1) "r2 has 1 child")
-      (mt (listHead c2)
+      (match (listHead c2)
         ((some elem2)
-         (mt elem2
+         (match elem2
            ((tr/elemNode e2)
             (do
               (assert (= e2.kind "error") "r2 stray paren is error node")
@@ -76,9 +76,9 @@ fn testParseStrayClose -> Bool
     (assert (= (pr/print s3 r3) s3) "mismatched close delimiter print matches")
     (let [(c3 r3.children)]
       (assert (= (listLength c3) 1) "r3 has 1 child")
-      (mt (listHead c3)
+      (match (listHead c3)
         ((some elem3)
-         (mt elem3
+         (match elem3
            ((tr/elemNode e3)
             (do
               (assert (= e3.kind "error") "r3 unclosed bracket is error node")
@@ -86,9 +86,9 @@ fn testParseStrayClose -> Bool
               (assert (= e3.end 7) "r3 error node end is 7")
               (let [(e3Kids e3.children)]
                 (assert (= (listLength e3Kids) 7) "r3 error node has 7 kids")
-                (mt (listGet e3Kids 6)
+                (match (listGet e3Kids 6)
                   ((some elem3Close)
-                   (mt elem3Close
+                   (match elem3Close
                      ((tr/elemNode strayClose3)
                       (do
                         (assert (= strayClose3.kind "error") "r3 stray close paren is error node")
@@ -103,9 +103,9 @@ fn testParseStrayClose -> Bool
     (assert (= (pr/print s4 r4) s4) "nested mismatched close print matches")
     (let [(c4 r4.children)]
       (assert (= (listLength c4) 5) "r4 has 5 children")
-      (mt (listHead c4)
+      (match (listHead c4)
         ((some elem4Head)
-         (mt elem4Head
+         (match elem4Head
            ((tr/elemNode listNode)
             (do
               (assert (= listNode.kind "list") "r4 parent structure around error is list")
@@ -113,9 +113,9 @@ fn testParseStrayClose -> Bool
               (assert (= listNode.end 7) "r4 list end is 7")
               (let [(lKids listNode.children)]
                 (assert (= (listLength lKids) 4) "r4 list has 4 elements")
-                (mt (listGet lKids 2)
+                (match (listGet lKids 2)
                   ((some errElem)
-                   (mt errElem
+                   (match errElem
                      ((tr/elemNode errNode)
                       (do
                         (assert (= errNode.kind "error") "r4 nested unclosed [ is error node")
@@ -125,9 +125,9 @@ fn testParseStrayClose -> Bool
                   ((none) (assert false "r4 missing child 2 of list"))))))
            ((tr/elemToken _) (assert false "r4 child 0 is not elemNode"))))
         ((none) (assert false "r4 missing child 0")))
-      (mt (listGet c4 4)
+      (match (listGet c4 4)
         ((some elem4Tail)
-         (mt elem4Tail
+         (match elem4Tail
            ((tr/elemNode strayNode)
             (do
               (assert (= strayNode.kind "error") "r4 stray close ] is error node")
@@ -200,7 +200,7 @@ fn testValidParenStructures -> Bool
     true)
 
 fn verifyFixtureFile! path: String expectedValid: Bool expectedTopForms: Int64 -> Bool
-  (mt (fileReadBytes path)
+  (match (fileReadBytes path)
     ((err ioErr)
      (do
        (assert false (str "cannot read fixture: " path " (" ioErr ")"))
@@ -232,7 +232,7 @@ fn verifyFixtureFile! path: String expectedValid: Bool expectedTopForms: Int64 -
   (:f total Int64))
 
 fn checkOneCorpusFile! acc: CheckDirStats path: String -> CheckDirStats
-  (mt (fileReadBytes path)
+  (match (fileReadBytes path)
     ((err e)
      (do
        (assert false (str "read error for " path ": " e))
@@ -311,7 +311,7 @@ fn parseFileList stdout: String -> (List String)
 fn checkOneAsnFile! acc: (Pair Int64 Int64) path: String -> (Pair Int64 Int64)
   (let [(checked (pairFirst acc))
         (mismatches (pairSecond acc))]
-    (mt (fileReadBytes path)
+    (match (fileReadBytes path)
       ((err e)
        (do
          (assert false (str "read error for " path ": " e))
@@ -344,7 +344,7 @@ fn testTrackedAsnSweep! -> Bool
 fn checkParenAslFile! acc: (Pair Int64 Int64) path: String -> (Pair Int64 Int64)
   (let [(checked (pairFirst acc))
         (mismatches (pairSecond acc))]
-    (mt (fileReadBytes path)
+    (match (fileReadBytes path)
       ((err e)
        (do
          (assert false (str "read error for " path ": " e))

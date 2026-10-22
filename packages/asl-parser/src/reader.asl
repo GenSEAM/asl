@@ -12,22 +12,22 @@ fn makeVect items: (List SExpr) -> SExpr
   (sexprVect items)
 
 fn isAtom? s: SExpr -> Bool
-  (mt s ((sexprAtom _) true) ((sexprList _) false) ((sexprVect _) false))
+  (match s ((sexprAtom _) true) ((sexprList _) false) ((sexprVect _) false))
 
 fn isList? s: SExpr -> Bool
-  (mt s ((sexprAtom _) false) ((sexprList _) true) ((sexprVect _) false))
+  (match s ((sexprAtom _) false) ((sexprList _) true) ((sexprVect _) false))
 
 fn isVect? s: SExpr -> Bool
-  (mt s ((sexprAtom _) false) ((sexprList _) false) ((sexprVect _) true))
+  (match s ((sexprAtom _) false) ((sexprList _) false) ((sexprVect _) true))
 
 fn sexprHead s: SExpr -> String
-  (mt s ((sexprAtom v) v) ((sexprList items) (mt (listHead items) ((some h) (mt h ((sexprAtom hv) hv) ((sexprList _) "") ((sexprVect _) ""))) ((none) ""))) ((sexprVect _) ""))
+  (match s ((sexprAtom v) v) ((sexprList items) (match (listHead items) ((some h) (match h ((sexprAtom hv) hv) ((sexprList _) "") ((sexprVect _) ""))) ((none) ""))) ((sexprVect _) ""))
 
 fn isHeadMatch? s: SExpr expected: String -> Bool
   (= (sexprHead s) expected)
 
 fn sexprToList s: SExpr -> (List SExpr)
-  (mt s ((sexprVect items) items) ((sexprList items) items) ((sexprAtom _) (list)))
+  (match s ((sexprVect items) items) ((sexprList items) items) ((sexprAtom _) (list)))
 
 (enum RItem (:c rText [(t String)] "Literal output text, already final") (:c rExpr [(e SExpr)] "An SExpr still to be expanded"))
 
@@ -54,13 +54,13 @@ fn rExpand open: String items: (List SExpr) close: String -> (List RItem)
   (cons (rText open) (listAppend (rSeparated items) (list (rText close))))
 
 fn rFieldName head: SExpr -> String
-  (mt head ((sexprAtom v) (if (and (stringStartsWith? v ".-") (> (stringLength v) 2)) (optionOr (stringSlice v 2 (stringLength v)) "") "")) (_ ""))
+  (match head ((sexprAtom v) (if (and (stringStartsWith? v ".-") (> (stringLength v) 2)) (optionOr (stringSlice v 2 (stringLength v)) "") "")) (_ ""))
 
 fn rNameAtom? v: String -> Bool
   (stringContains? "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_" (optionOr (stringSlice v 0 1) "-"))
 
 fn rFieldOperand e: SExpr field: String -> (List RItem)
-  (mt e
+  (match e
     ((sexprAtom v) (if (rNameAtom? v) (list (rExpr e) (rText (str "." field))) (list (rText "(do ") (rExpr e) (rText (str ")." field)))))
     ((sexprList _) (list (rExpr e) (rText (str "." field))))
     ((sexprVect _) (list (rText "(do ") (rExpr e) (rText (str ")." field)))))
@@ -73,12 +73,12 @@ fn rList items: (List SExpr) -> (List RItem)
       (rExpand "(" items ")")))
 
 fn rTick st: RState tick: Int64 -> RState
-  (mt (listHead st.work) ((some it) (let [(rest (rTail st.work))] (mt it ((rText t) (with st :work rest :out (cons t st.out))) ((rExpr e) (mt e ((sexprAtom v) (with st :work rest :out (cons v st.out))) ((sexprList items) (with st :work (listAppend (if st.sugar (rList items) (rExpand "(" items ")")) rest))) ((sexprVect items) (with st :work (listAppend (rExpand "[" items "]") rest)))))))) ((none) st))
+  (match (listHead st.work) ((some it) (let [(rest (rTail st.work))] (match it ((rText t) (with st :work rest :out (cons t st.out))) ((rExpr e) (match e ((sexprAtom v) (with st :work rest :out (cons v st.out))) ((sexprList items) (with st :work (listAppend (if st.sugar (rList items) (rExpand "(" items ")")) rest))) ((sexprVect items) (with st :work (listAppend (rExpand "[" items "]") rest)))))))) ((none) st))
 
 fn rRunSteps st: RState stepsLeft: Int64 -> RState
   (if (<= stepsLeft 0)
     st
-    (mt (listHead st.work)
+    (match (listHead st.work)
       ((none) st)
       ((some _) (rRunSteps (rTick st 0) (- stepsLeft 1)))))
 
@@ -124,7 +124,7 @@ fn tokenize s: String -> (List String)
     (listReverse (flushTok st.toks st.cur)))
 
 fn parseItem toks: (List String) -> (Pair SExpr (List String))
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (pair (sexprAtom "") (list)))
     ((some h)
      (let [(rest (optionOr (listTail toks) (list)))]
@@ -134,7 +134,7 @@ fn parseItem toks: (List String) -> (Pair SExpr (List String))
          (else (pair (sexprAtom h) rest))))))
 
 fn parseItems toks: (List String) closeTok: String acc: (List SExpr) -> (Pair (List SExpr) (List String))
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (pair (listReverse acc) (list)))
     ((some h)
      (if (= h closeTok)

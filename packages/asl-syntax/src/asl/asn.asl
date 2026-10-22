@@ -58,32 +58,32 @@
   (:c asnTuple [(items (List AsnValue))]))
 
 fn valueOk? v: AsnValue -> Bool
-  (mt v
+  (match v
     (_ true))
 
 fn standaloneOk? v: AsnValue -> Bool
-  (mt v
+  (match v
     ((asnSym _) false)
     ((asnPair _ _) false)
     (_ (valueOk? v)))
 
 fn vectorValueOk? v: AsnValue -> Bool
-  (mt v
+  (match v
     ((asnSym name) (wellFormedSym? name))
     (_ (valueOk? v)))
 
 fn isVec? v: AsnValue -> Bool
-  (mt v
+  (match v
     ((asnVec _) true)
     (_ false))
 
 fn isKw? v: AsnValue -> Bool
-  (mt v
+  (match v
     ((asnKw _) true)
     (_ false))
 
 fn vecItems v: AsnValue -> (List AsnValue)
-  (mt v
+  (match v
     ((asnVec items) items)
     (_ (list)))
 
@@ -167,18 +167,18 @@ fn stripQuotes s: String -> String
       s))
 
 fn asnIntValue v: AsnValue -> (Option Int64)
-  (mt v
+  (match v
     ((asnInt lex) (stringToInt64 lex))
     (_ (none)))
 
 fn asnFloatValue v: AsnValue -> (Option Float64)
-  (mt v
+  (match v
     ((asnFloat lex) (stringToFloat64 lex))
     (_ (none)))
 
 fn asnStringValue v: AsnValue -> (Option String)
-  (mt v
-    ((asnStr lex) (mt (asnUnescape (stripQuotes lex)) ((ok v) (some v)) ((err _) (none))))
+  (match v
+    ((asnStr lex) (match (asnUnescape (stripQuotes lex)) ((ok v) (some v)) ((err _) (none))))
     (_ (none)))
 
 (enum WItem
@@ -190,7 +190,7 @@ fn asnStringValue v: AsnValue -> (Option String)
   (:f out (List String)))
 
 fn wAtom? v: AsnValue -> Bool
-  (mt v
+  (match v
     ((asnNil) true)
     ((asnBool _) true)
     ((asnUnit) true)
@@ -202,7 +202,7 @@ fn wAtom? v: AsnValue -> Bool
     (_ false))
 
 fn wAtom v: AsnValue -> String
-  (mt v
+  (match v
     ((asnNil) "_")
     ((asnBool b) (if b "true" "false"))
     ((asnUnit) "()")
@@ -214,13 +214,13 @@ fn wAtom v: AsnValue -> String
     (_ ""))
 
 fn wOpen v: AsnValue -> String
-  (mt v
+  (match v
     ((asnVec _) "[")
     ((asnMap _) "{")
     (_ "("))
 
 fn wClose v: AsnValue -> String
-  (mt v
+  (match v
     ((asnVec _) "]")
     ((asnMap _) "}")
     (_ ")"))
@@ -242,7 +242,7 @@ fn wVals vs: (List AsnValue) -> (List WItem)
   (map (fn [(v AsnValue)] -> WItem (wVal v)) vs)
 
 fn wChildren v: AsnValue -> (List WItem)
-  (mt v
+  (match v
     ((asnVec items) (wVals items))
     ((asnMap es) (wEntries es))
     ((asnRec fs) (wFields fs))
@@ -256,7 +256,7 @@ fn wChildren v: AsnValue -> (List WItem)
     (_ (list)))
 
 fn wSeparated items: (List WItem) -> (List WItem)
-  (mt (listHead items)
+  (match (listHead items)
     ((some h)
      (let [(tailItems (optionOr (listTail items) (list)))]
        (cons h (listReverse (fold (fn [(acc (List WItem)) (x WItem)] -> (List WItem)
@@ -269,10 +269,10 @@ fn wWrap v: AsnValue -> (List WItem)
         (listAppend (wSeparated (wChildren v)) (list (wText (wClose v)))))
 
 fn wTick st: WState tick: Int64 -> WState
-  (mt (listHead st.work)
+  (match (listHead st.work)
     ((some it)
      (let [(rest (optionOr (listTail st.work) (list)))]
-       (mt it
+       (match it
          ((wText t) (WState :work rest :out (cons t st.out)))
          ((wVal v)
           (if (wAtom? v)
@@ -306,7 +306,7 @@ fn allCharsIn? s: String allowed: String -> Bool
        (listEmpty? (filter (fn [(c String)] -> Bool (not (stringContains? allowed c))) (stringChars s))))
 
 fn firstChar s: String -> String
-  (mt (stringSlice s 0 1) ((some c) c) ((none) ""))
+  (match (stringSlice s 0 1) ((some c) c) ((none) ""))
 
 fn kebabOk? s: String -> Bool
   (and (not (stringEmpty? s))
@@ -343,7 +343,7 @@ fn bareHeadKind s: String -> HeadKind
     (else (headBad)))
 
 fn partAt parts: (List String) i: Int64 -> String
-  (mt (listGet parts i) ((some p) p) ((none) ""))
+  (match (listGet parts i) ((some p) p) ((none) ""))
 
 fn headKind name: String -> HeadKind
   (let [(parts (stringSplit name "/"))]
@@ -356,12 +356,12 @@ fn headKind name: String -> HeadKind
       (else (headBad))))
 
 fn wellFormedSym? name: String -> Bool
-  (mt (headKind name)
+  (match (headKind name)
     ((headBad) false)
     (_ true))
 
 fn nthValue items: (List AsnValue) i: Int64 -> AsnValue
-  (mt (listGet items i) ((some v) v) ((none) (asnNil)))
+  (match (listGet items i) ((some v) v) ((none) (asnNil)))
 
 fn allVectorValues? items: (List AsnValue) -> Bool
   (listEmpty? (filter (fn [(v AsnValue)] -> Bool (not (vectorValueOk? v))) items))
@@ -373,19 +373,19 @@ fn allKeywords? items: (List AsnValue) -> Bool
   (listEmpty? (filter (fn [(v AsnValue)] -> Bool (not (isKw? v))) items))
 
 fn fieldKey fs: (List AsnField) -> String
-  (mt (listHead fs) ((some f) f.key) ((none) ""))
+  (match (listHead fs) ((some f) f.key) ((none) ""))
 
 fn fieldVal fs: (List AsnField) -> AsnValue
-  (mt (listHead fs) ((some f) f.val) ((none) (asnNil)))
+  (match (listHead fs) ((some f) f.val) ((none) (asnNil)))
 
 fn fieldsOf items: (List AsnValue) acc: (List AsnField) -> (Result (List AsnField) String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (ok (listReverse acc)))
     ((some k)
-     (mt k
+     (match k
        ((asnKw key)
         (let [(tail (optionOr (listTail items) (list)))]
-          (mt (listHead tail)
+          (match (listHead tail)
             ((some v)
              (if (valueOk? v)
                (fieldsOf (optionOr (listTail tail) (list)) (cons (AsnField :key key :val v) acc))
@@ -394,7 +394,7 @@ fn fieldsOf items: (List AsnValue) acc: (List AsnField) -> (Result (List AsnFiel
        (_ (err "parse")))))
 
 fn buildRecord items: (List AsnValue) -> (Result AsnValue String)
-  (mt (fieldsOf items (list))
+  (match (fieldsOf items (list))
     ((ok fs)
      (if (listEmpty? fs)
        (err "parse")
@@ -402,13 +402,13 @@ fn buildRecord items: (List AsnValue) -> (Result AsnValue String)
     ((err _) (buildTagged items)))
 
 fn tagFieldsAndChildren items: (List AsnValue) fieldsAcc: (List AsnField) childrenAcc: (List AsnValue) -> (Result (Pair (List AsnField) (List AsnValue)) String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (ok (pair (listReverse fieldsAcc) (listReverse childrenAcc))))
     ((some h)
      (let [(tail (optionOr (listTail items) (list)))]
-       (mt h
+       (match h
          ((asnKw key)
-          (mt (listHead tail)
+          (match (listHead tail)
             ((some v)
              (if (vectorValueOk? v)
                (tagFieldsAndChildren (optionOr (listTail tail) (list)) (cons (AsnField :key key :val v) fieldsAcc) childrenAcc)
@@ -419,31 +419,31 @@ fn tagFieldsAndChildren items: (List AsnValue) fieldsAcc: (List AsnField) childr
               (err "parse")))))))
 
 fn buildTagged items: (List AsnValue) -> (Result AsnValue String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (err "parse"))
     ((some h)
-     (mt h
+     (match h
        ((asnKw tag)
         (let [(rest (optionOr (listTail items) (list)))]
           (if (listEmpty? rest)
             (err "parse")
-            (mt (tagFieldsAndChildren rest (list) (list))
+            (match (tagFieldsAndChildren rest (list) (list))
               ((ok fc) (ok (asnTagged tag (pairFirst fc) (pairSecond fc))))
               ((err c) (err c))))))
        (_ (err "parse")))))
 
 
 fn buildSchemaHead name: String rest: (List AsnValue) -> (Result AsnValue String)
-  (mt (listHead rest)
+  (match (listHead rest)
     ((none) (ok (asnCtor name (list))))
     ((some h)
-     (mt h
+     (match h
        ((asnVec _) (if (allVectors? rest) (ok (asnRows name rest)) (err "parse")))
-       ((asnKw _) (mt (fieldsOf rest (list)) ((ok fs) (ok (asnCtor name fs))) ((err c) (err c))))
+       ((asnKw _) (match (fieldsOf rest (list)) ((ok fs) (ok (asnCtor name fs))) ((err c) (err c))))
        (_ (if (allVectorValues? rest) (ok (asnCase name rest)) (err "parse"))))))
 
 fn buildNamed name: String rest: (List AsnValue) -> (Result AsnValue String)
-  (mt (headKind name)
+  (match (headKind name)
     ((headType) (buildSchemaHead name rest))
     ((headCase) (if (allVectorValues? rest) (ok (asnCase name rest)) (err "parse")))
     ((headTag) (buildTuple (cons (asnSym name) rest)))
@@ -472,13 +472,13 @@ fn buildTuple items: (List AsnValue) -> (Result AsnValue String)
     (err "parse"))
 
 fn entriesOf items: (List AsnValue) acc: (List AsnEntry) -> (Result (List AsnEntry) String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (ok (listReverse acc)))
     ((some h)
      (let [(tail (optionOr (listTail items) (list)))]
-       (mt h
+       (match h
          ((asnKw key)
-          (mt (listHead tail)
+          (match (listHead tail)
             ((some v)
              (if (valueOk? v)
                (entriesOf (optionOr (listTail tail) (list)) (cons (AsnEntry :key (asnKw key) :val v :paren false) acc))
@@ -493,7 +493,7 @@ fn entriesOf items: (List AsnValue) acc: (List AsnEntry) -> (Result (List AsnEnt
          (_ (err "parse"))))))
 
 fn isTriviaElem elem: tr/TreeElement -> Bool
-  (mt elem
+  (match elem
     ((tr/elemToken tok) (tr/isTrivia tok))
     ((tr/elemNode _) false))
 
@@ -501,11 +501,11 @@ fn filterMeaningfulKids kids: (List tr/TreeElement) -> (List tr/TreeElement)
   (filter (fn [(e tr/TreeElement)] -> Bool (not (isTriviaElem e))) kids)
 
 fn dropFirstAndLast elems: (List tr/TreeElement) -> (List tr/TreeElement)
-  (mt (listTail elems)
+  (match (listTail elems)
     ((none) (list))
     ((some tail1)
      (let [(rev (listReverse tail1))]
-       (mt (listTail rev)
+       (match (listTail rev)
          ((none) (list))
          ((some revTail) (listReverse revTail))))))
 
@@ -526,17 +526,17 @@ fn tokenToAsnValue text: String tok: tr/Token -> (Result AsnValue String)
       (else (err "parse"))))
 
 fn elementsToValues text: String elems: (List tr/TreeElement) acc: (List AsnValue) -> (Result (List AsnValue) String)
-  (mt (listHead elems)
+  (match (listHead elems)
     ((none) (ok (listReverse acc)))
     ((some elem)
      (let [(rest (optionOr (listTail elems) (list)))]
-       (mt (cstToAsnValue text elem)
+       (match (cstToAsnValue text elem)
          ((ok v) (elementsToValues text rest (cons v acc)))
          ((err e) (err e))))))
 
 fn buildCstVector text: String kids: (List tr/TreeElement) -> (Result AsnValue String)
   (let [(inner (dropFirstAndLast kids))]
-    (mt (elementsToValues text inner (list))
+    (match (elementsToValues text inner (list))
       ((ok vals)
        (if (allVectorValues? vals)
          (ok (asnVec vals))
@@ -545,9 +545,9 @@ fn buildCstVector text: String kids: (List tr/TreeElement) -> (Result AsnValue S
 
 fn buildCstMap text: String kids: (List tr/TreeElement) -> (Result AsnValue String)
   (let [(inner (dropFirstAndLast kids))]
-    (mt (elementsToValues text inner (list))
+    (match (elementsToValues text inner (list))
       ((ok vals)
-       (mt (entriesOf vals (list))
+       (match (entriesOf vals (list))
          ((ok es) (ok (asnMap es)))
          ((err e) (err e))))
       ((err e) (err e))))
@@ -558,9 +558,9 @@ fn buildCstList text: String kids: (List tr/TreeElement) -> (Result AsnValue Str
       (if (= (listLength kids) 2)
         (let [(oElem (optionOr (listHead kids) (tr/elemToken (tr/makeToken "" 0 0))))
               (cElem (optionOr (listHead (optionOr (listTail kids) (list))) (tr/elemToken (tr/makeToken "" 0 0))))]
-          (mt oElem
+          (match oElem
             ((tr/elemToken oTok)
-             (mt cElem
+             (match cElem
                ((tr/elemToken cTok)
                 (if (and (= oTok.kind "lparen") (= cTok.kind "rparen"))
                   (if (= oTok.end cTok.start)
@@ -570,12 +570,12 @@ fn buildCstList text: String kids: (List tr/TreeElement) -> (Result AsnValue Str
                ((tr/elemNode _) (err "parse"))))
             ((tr/elemNode _) (err "parse"))))
         (err "parse"))
-      (mt (elementsToValues text inner (list))
+      (match (elementsToValues text inner (list))
         ((ok items)
-         (mt (listHead items)
+         (match (listHead items)
            ((none) (err "parse"))
            ((some h)
-            (mt h
+            (match h
               ((asnKw _) (buildRecord items))
               ((asnSym s) (buildNamed s (optionOr (listTail items) (list))))
               ((asnVec _) (buildTable items))
@@ -597,14 +597,14 @@ fn nodeToAsnValue text: String node: tr/Node -> (Result AsnValue String)
       (else (err "parse"))))
 
 fn cstToAsnValue text: String elem: tr/TreeElement -> (Result AsnValue String)
-  (mt elem
+  (match elem
     ((tr/elemToken tok) (tokenToAsnValue text tok))
     ((tr/elemNode node) (nodeToAsnValue text node)))
 
 fn readError text: String -> String
-  (mt (listHead (filter (fn [(t tr/Token)] -> Bool (and (tr/isErrorToken t) (stringStartsWith? (sliceToken text t) "\""))) (lx/tokenize text)))
+  (match (listHead (filter (fn [(t tr/Token)] -> Bool (and (tr/isErrorToken t) (stringStartsWith? (sliceToken text t) "\""))) (lx/tokenize text)))
     ((none) "parse")
-    ((some t) (mt (asnUnescape (stripQuotes (sliceToken text t)))
+    ((some t) (match (asnUnescape (stripQuotes (sliceToken text t)))
                 ((err e) e)
                 ((ok _) "parse"))))
 
@@ -615,10 +615,10 @@ fn asnRead text: String -> (Result AsnValue String)
       (let [(forms (prn/topLevelForms root))]
         (if (!= (listLength forms) 1)
           (err "parse")
-          (mt (listHead forms)
+          (match (listHead forms)
             ((none) (err "parse"))
             ((some form)
-             (mt (cstToAsnValue text form)
+             (match (cstToAsnValue text form)
                ((ok v) (if (standaloneOk? v) (ok v) (err "parse")))
                ((err e) (err e)))))))))
 
@@ -630,7 +630,7 @@ fn asnReadForms text: String -> (Result (List AsnValue) String)
         (elementsToValues text forms (list)))))
 
 fn isKeywordElem elem: tr/TreeElement -> Bool
-  (mt elem
+  (match elem
     ((tr/elemToken tok) (= tok.kind "keyword"))
     ((tr/elemNode _) false))
 
@@ -728,39 +728,39 @@ fn unquoteTok tok: String -> (Result String String)
     (ok tok))
 
 fn parseStepTokLoop toks: (List String) kw: (Map String String) args: (List String) -> (Result (Pair (Map String String) (List String)) String)
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none) (ok (pair kw (listReverse args))))
     ((some tok)
      (let [(rest (optionOr (listTail toks) (list)))]
        (if (stringStartsWith? tok ":")
          (let [(key (lstripColons tok))]
-           (mt (listHead rest)
+           (match (listHead rest)
              ((none) (parseStepTokLoop rest (mapSet kw key "true") args))
              ((some nextTok)
               (let [(after (optionOr (listTail rest) (list)))
-                    (hasSubArg (mt (listHead after)
+                    (hasSubArg (match (listHead after)
                                  ((none) false)
                                  ((some t2) (not (stringStartsWith? t2 ":")))))
                     (nextIsKw (stringStartsWith? nextTok ":"))
                     (takes (or (not nextIsKw)
                                (and (not hasSubArg) (or (subArgKey? key) (listEmpty? after)))))]
                 (if takes
-                  (mt (unquoteTok nextTok)
+                  (match (unquoteTok nextTok)
                     ((ok val) (parseStepTokLoop after (mapSet kw key val) args))
                     ((err e) (err e)))
                   (parseStepTokLoop rest (mapSet kw key "true") args))))))
-         (mt (unquoteTok tok)
+         (match (unquoteTok tok)
            ((ok val) (parseStepTokLoop rest kw (cons val args)))
            ((err e) (err e)))))))
 
 fn parseStep stepStr: String -> (Result AsnStep String)
   (let [(toks (tokenizeStep stepStr))]
-    (mt (listHead toks)
+    (match (listHead toks)
       ((none) (ok (AsnStep :op "" :kwargs (mapEmpty) :args (list))))
       ((some firstTok)
        (let [(op (lstripColons firstTok))
              (rest (optionOr (listTail toks) (list)))]
-         (mt (parseStepTokLoop rest (mapEmpty) (list))
+         (match (parseStepTokLoop rest (mapEmpty) (list))
            ((ok parsed) (ok (AsnStep :op op :kwargs (pairFirst parsed) :args (pairSecond parsed))))
            ((err e) (err e)))))))
 

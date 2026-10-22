@@ -6,31 +6,31 @@
       (asl-parser/reader :a rd)])
 
 fn getPropStr props: (Map String rd/SExpr) key: String fallback: String -> String
-  (mt (mapGet props key)
+  (match (mapGet props key)
     ((none) fallback)
     ((some expr)
-      (mt (cfg/asn_scalar expr)
+      (match (cfg/asn_scalar expr)
         ((cfg/scalarStr s) s)
         (_ fallback))))
 
 fn getPropBool props: (Map String rd/SExpr) key: String fallback: Bool -> Bool
-  (mt (mapGet props key)
+  (match (mapGet props key)
     ((none) fallback)
     ((some expr)
-      (mt (cfg/asn_scalar expr)
+      (match (cfg/asn_scalar expr)
         ((cfg/scalarBool b) b)
         (_ fallback))))
 
 fn getPropInt props: (Map String rd/SExpr) key: String fallback: Int64 -> Int64
-  (mt (mapGet props key)
+  (match (mapGet props key)
     ((none) fallback)
     ((some expr)
-      (mt (cfg/asn_scalar expr)
+      (match (cfg/asn_scalar expr)
         ((cfg/scalarInt n) n)
         (_ fallback))))
 
 fn testOneVariant! vForm: rd/SExpr -> Bool
-  (mt (cfg/asn_props vForm (some ":variant"))
+  (match (cfg/asn_props vForm (some ":variant"))
     ((err e) (do (assert false (str "Failed to parse variant props: " e)) false))
     ((ok vProps)
       (let [(vid (getPropStr vProps "id" ""))
@@ -45,7 +45,7 @@ fn testOneVariant! vForm: rd/SExpr -> Bool
         (if expectedValid
           (do
             (refute (err? parsed) (str vid ": valid variant must not fail"))
-            (mt parsed
+            (match parsed
               ((err e) (do (assert false (str "Expected variant " vid " to succeed, got error: " e)) false))
               ((ok tbl)
                 (do
@@ -57,7 +57,7 @@ fn testOneVariant! vForm: rd/SExpr -> Bool
                   true))))
           (do
             (refute (ok? parsed) (str vid ": invalid variant must not succeed"))
-            (mt parsed
+            (match parsed
               ((ok _) (do (assert false (str "Expected variant " vid " to fail, but succeeded")) false))
               ((err e)
                 (do
@@ -73,7 +73,7 @@ fn testOneVariant! vForm: rd/SExpr -> Bool
                   true))))))))
 
 fn testVariantsLoop! vs: (List rd/SExpr) -> Bool
-  (mt (listHead vs)
+  (match (listHead vs)
     ((none) true)
     ((some v)
       (let [(ok1 (testOneVariant! v))
@@ -92,16 +92,16 @@ fn testAsnScalarAndFigure -> Bool
         (figAtom (cfg/asn_figure (rd/sexprAtom "999")))
         (figList (cfg/asn_figure (rd/sexprList (list (rd/sexprAtom ":v") (rd/sexprAtom "888")))))]
     (do
-      (mt sb ((cfg/scalarBool b) (assert b "true atom is scalarBool true")) (_ (assert false "sb wrong")))
-      (mt sf ((cfg/scalarBool b) (assert (not b) "false atom is scalarBool false")) (_ (assert false "sf wrong")))
-      (mt si ((cfg/scalarInt n) (assert (= n 123) "int atom is scalarInt 123")) (_ (assert false "si wrong")))
-      (mt sneg ((cfg/scalarInt n) (assert (= n -456) "negative int atom is scalarInt -456")) (_ (assert false "sneg wrong")))
-      (mt sflt ((cfg/scalarFloat f) (assert (> f 3.0) "float atom is scalarFloat > 3")) (_ (assert false "sflt wrong")))
-      (mt sstr ((cfg/scalarStr s) (assert (= s "quoted string") "quoted str unescaped")) (_ (assert false "sstr wrong")))
-      (mt skw ((cfg/scalarStr s) (assert (= s "my-keyword") "keyword stripped")) (_ (assert false "skw wrong")))
-      (mt sident ((cfg/scalarStr s) (assert (= s "bareSymbol") "bare symbol scalarStr")) (_ (assert false "sident wrong")))
-      (mt figAtom ((cfg/scalarInt n) (assert (= n 999) "figAtom is scalarInt 999")) (_ (assert false "figAtom wrong")))
-      (mt figList ((cfg/scalarInt n) (assert (= n 888) "figList unwraps :v 888")) (_ (assert false "figList wrong")))
+      (match sb ((cfg/scalarBool b) (assert b "true atom is scalarBool true")) (_ (assert false "sb wrong")))
+      (match sf ((cfg/scalarBool b) (assert (not b) "false atom is scalarBool false")) (_ (assert false "sf wrong")))
+      (match si ((cfg/scalarInt n) (assert (= n 123) "int atom is scalarInt 123")) (_ (assert false "si wrong")))
+      (match sneg ((cfg/scalarInt n) (assert (= n -456) "negative int atom is scalarInt -456")) (_ (assert false "sneg wrong")))
+      (match sflt ((cfg/scalarFloat f) (assert (> f 3.0) "float atom is scalarFloat > 3")) (_ (assert false "sflt wrong")))
+      (match sstr ((cfg/scalarStr s) (assert (= s "quoted string") "quoted str unescaped")) (_ (assert false "sstr wrong")))
+      (match skw ((cfg/scalarStr s) (assert (= s "my-keyword") "keyword stripped")) (_ (assert false "skw wrong")))
+      (match sident ((cfg/scalarStr s) (assert (= s "bareSymbol") "bare symbol scalarStr")) (_ (assert false "sident wrong")))
+      (match figAtom ((cfg/scalarInt n) (assert (= n 999) "figAtom is scalarInt 999")) (_ (assert false "figAtom wrong")))
+      (match figList ((cfg/scalarInt n) (assert (= n 888) "figList unwraps :v 888")) (_ (assert false "figList wrong")))
       true))
 
 fn testGatewayParams -> Bool
@@ -123,19 +123,19 @@ fn testGatewayParams -> Bool
     (do
       (assert (listEmpty? errsValid) "valid gateway params produce no errors")
       (refute (not (listEmpty? errsValid)) "valid gateway params must not produce errors")
-      (mt pValid.temperature
+      (match pValid.temperature
         ((some t) (assert (> t 0.6) "temperature parsed"))
         ((none) (assert false "temperature missing")))
-      (mt pValid.effort
+      (match pValid.effort
         ((some eff) (assert (= eff "high") "effort parsed"))
         ((none) (assert false "effort missing")))
-      (mt pValid.maxTokens
+      (match pValid.maxTokens
         ((some mtVal) (assert (= mtVal 4096) "maxTokens parsed"))
         ((none) (assert false "maxTokens missing")))
-      (mt pValid.contextBudget
+      (match pValid.contextBudget
         ((some cbVal) (assert (= cbVal 16384) "contextBudget parsed"))
         ((none) (assert false "contextBudget missing")))
-      (mt pValid.reasoning
+      (match pValid.reasoning
         ((some rBool) (assert rBool "reasoning parsed"))
         ((none) (assert false "reasoning missing")))
       (assert (= (listLength errsInvalid) 3) "invalid params produce 3 errors")
@@ -148,20 +148,20 @@ fn ! testSessionHeaderParse -> Bool
         (withoutHeaderText "(:gateway :v 2\n  :providers ((:provider :id custom :kind openai :base \"https://example.com\"))\n  :models ((:model :id m1 :provider custom :name \"m1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
         (withoutHeaderRes (cfg/gateway_config_parse! withoutHeaderText "sessionHeaderAbsent" ".asl/mem/calibration/index.asn"))]
     (and
-      (mt withHeaderRes
+      (match withHeaderRes
         ((err e) (do (assert false (str "OCSESSION: provider with :sessionHeader failed to parse: " e)) false))
         ((ok tbl)
-          (mt (mapGet tbl.providers "custom")
+          (match (mapGet tbl.providers "custom")
             ((none) (do (assert false "OCSESSION: provider custom missing from parsed table") false))
             ((some pv)
               (do
                 (assert (= pv.sessionHeader "x-opencode-session") "OCSESSION: :sessionHeader is parsed onto GatewayProvider")
                 (refute (!= pv.sessionHeader "x-opencode-session") "OCSESSION: :sessionHeader must not mismatch")
                 true)))))
-      (mt withoutHeaderRes
+      (match withoutHeaderRes
         ((err e) (do (assert false (str "OCSESSION: provider without :sessionHeader failed to parse: " e)) false))
         ((ok tbl)
-          (mt (mapGet tbl.providers "custom")
+          (match (mapGet tbl.providers "custom")
             ((none) (do (assert false "OCSESSION: provider custom missing from parsed table") false))
             ((some pv)
               (do
@@ -175,22 +175,22 @@ fn testAnthropicKindParsesAndResolvesEntry -> Bool
         (missingBaseText "(:gateway :v 2\n  :providers ((:provider :id badAnthropic :kind anthropic))\n  :models ((:model :id m1 :provider badAnthropic :name \"m1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
         (missingBaseRes (cfg/gateway_config_parse! missingBaseText "anthropicKindNoBase" ".asl/mem/calibration/index.asn"))]
     (do
-      (mt res
+      (match res
         ((err e) (assert false (str "ANTHROPICKIND: a well-formed :kind anthropic provider must parse: " e)))
         ((ok tbl)
-          (mt (mapGet tbl.providers "commandCodeMsg")
+          (match (mapGet tbl.providers "commandCodeMsg")
             ((none) (assert false "ANTHROPICKIND: provider commandCodeMsg missing from parsed table"))
             ((some pv)
               (do
                 (assert (= pv.kind "anthropic") "ANTHROPICKIND: :kind anthropic is parsed onto GatewayProvider")
-                (mt (cfg/gateway_v2_entry! tbl "ccHaiku")
+                (match (cfg/gateway_v2_entry! tbl "ccHaiku")
                   ((cfg/entryResolved e)
                    (do
                      (assert (= e.kind "anthropic") "ANTHROPICKIND: gateway_v2_entry! propagates the real provider kind, not a hardcoded openai literal")
                      (assert (= e.upstream.url "https://api.commandcode.ai/provider/v1") "ANTHROPICKIND: the resolved entry's upstream url is the provider's :base")
                      true))
                   ((cfg/entryUnresolved _) (assert false "ANTHROPICKIND: ccHaiku must resolve"))))))))
-      (mt missingBaseRes
+      (match missingBaseRes
         ((ok _) (assert false "ANTHROPICKIND: a :kind anthropic provider with no :base must be rejected, same as openai"))
         ((err e) (assert (stringContains? e "needs :base") (str "ANTHROPICKIND: missing-base error names the requirement: " e))))
       true))
@@ -201,22 +201,22 @@ fn testGeminiKindParsesAndResolvesEntry -> Bool
         (missingBaseText "(:gateway :v 2\n  :providers ((:provider :id badGemini :kind gemini))\n  :models ((:model :id m1 :provider badGemini :name \"m1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
         (missingBaseRes (cfg/gateway_config_parse! missingBaseText "geminiKindNoBase" ".asl/mem/calibration/index.asn"))]
     (do
-      (mt res
+      (match res
         ((err e) (assert false (str "GEMINIKIND: a well-formed :kind gemini provider must parse: " e)))
         ((ok tbl)
-          (mt (mapGet tbl.providers "opencodeGemini")
+          (match (mapGet tbl.providers "opencodeGemini")
             ((none) (assert false "GEMINIKIND: provider opencodeGemini missing from parsed table"))
             ((some pv)
               (do
                 (assert (= pv.kind "gemini") "GEMINIKIND: :kind gemini is parsed onto GatewayProvider")
-                (mt (cfg/gateway_v2_entry! tbl "gemini4Argon")
+                (match (cfg/gateway_v2_entry! tbl "gemini4Argon")
                   ((cfg/entryResolved e)
                    (do
                      (assert (= e.kind "gemini") "GEMINIKIND: gateway_v2_entry! propagates the real provider kind, not a hardcoded openai literal")
                      (assert (= e.upstream.url "https://opencode.ai/inference/go/v1") "GEMINIKIND: the resolved entry's upstream url is the provider's :base")
                      true))
                   ((cfg/entryUnresolved _) (assert false "GEMINIKIND: gemini4Argon must resolve"))))))))
-      (mt missingBaseRes
+      (match missingBaseRes
         ((ok _) (assert false "GEMINIKIND: a :kind gemini provider with no :base must be rejected, same as openai"))
         ((err e) (assert (stringContains? e "needs :base") (str "GEMINIKIND: missing-base error names the requirement: " e))))
       true))
@@ -309,17 +309,17 @@ fn testRoutingAndEntries! tbl: cfg/GatewayTable -> Bool
       (let [(firstEntry (optionOr (listHead entriesDesign) (cfg/entryUnresolved "")))]
         (assert (= (cfg/gateway_entry_label firstEntry) "opus") "first entry label is opus"))
       (refute (none? aliasLookupDirect) "direct alias lookup must not be none")
-      (mt aliasLookupDirect
+      (match aliasLookupDirect
         ((some e) (assert (= (cfg/gateway_entry_label e) "flashLow") "direct alias lookup succeeds"))
         ((none) (assert false "direct alias lookup failed")))
       (refute (none? aliasLookupProviderName) "provider/name lookup must not be none")
-      (mt aliasLookupProviderName
+      (match aliasLookupProviderName
         ((some e) (assert (= (cfg/gateway_entry_label e) "astra") "provider/name alias lookup finds astra"))
         ((none) (assert false "provider/name lookup failed")))
       (refute (some? aliasLookupNonexistent) "nonexistent alias lookup must not be some")
       (assert (none? aliasLookupNonexistent) "nonexistent alias returns none")
       (assert (not (listEmpty? anyOnlys)) "gateway_any_only_intents finds profiles resolving only to any")
-      (mt (mapGet undMap "customNewIntent")
+      (match (mapGet undMap "customNewIntent")
         ((some count) (assert (= count 1) "customNewIntent noted once"))
         ((none) (assert false "customNewIntent not in undeclared map")))
       (assert (none? (mapGet undMap "plan")) "declared intent plan is not in undeclared map")
@@ -328,7 +328,7 @@ fn testRoutingAndEntries! tbl: cfg/GatewayTable -> Bool
 fn testProfilesV1Parse -> Bool
   (let [(v1Text "(:gateway :profile defProfile :profiles ((:profile :id defProfile :routes ((:intent any :models (\"m1\"))))))")
         (parseRes (cfg/gateway_profiles_parse v1Text))]
-    (mt parseRes
+    (match parseRes
       ((err e) (do (assert false (str "v1 profile parse failed: " e)) false))
       ((ok v1Cfg)
         (do
@@ -343,16 +343,16 @@ fn ! testModelApiParse -> Bool
         (okRes (cfg/gateway_config_parse! okText "apiOk" ".asl/mem/calibration/index.asn"))
         (badRes (cfg/gateway_config_parse! badText "apiBad" ".asl/mem/calibration/index.asn"))]
     (and
-      (mt okRes
+      (match okRes
         ((err e) (do (assert false (str "RESPAPI: :api responses must parse: " e)) false))
         ((ok tbl)
-          (mt (mapGet tbl.models "m1")
+          (match (mapGet tbl.models "m1")
             ((none) (do (assert false "RESPAPI: model m1 missing") false))
             ((some m)
-              (mt m.params.api
+              (match m.params.api
                 ((some a) (do (assert (= a "responses") "RESPAPI: :api parsed as responses") true))
                 ((none) (do (assert false "RESPAPI: :api not parsed onto params") false)))))))
-      (mt badRes
+      (match badRes
         ((ok _) (do (assert false "RESPAPI: :api bogus must be rejected") false))
         ((err e) (do (assert (stringContains? (stringLower e) ":api") (str "RESPAPI: bogus :api error names :api: " e)) true)))))
 
@@ -362,20 +362,20 @@ fn ! testRoleCascadeIsConfigOnly -> Bool
         (textB "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\") (:model :id m2 :provider test :name \"model-b\"))\n  :intents ((:intent :id coder))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)) (:intent coder :chain (m2 m1) :temperature 0.0))))\n  :uses ((:use :for default :profile p1)))")
         (resA (cfg/gateway_config_parse! textA "cascadeA" ".asl/mem/calibration/index.asn"))
         (resB (cfg/gateway_config_parse! textB "cascadeB" ".asl/mem/calibration/index.asn"))]
-    (mt resA
+    (match resA
       ((err e) (do (assert false (str "role-cascade-is-config fixture A failed to parse: " e)) false))
       ((ok tblA)
-        (mt resB
+        (match resB
           ((err e) (do (assert false (str "role-cascade-is-config fixture B failed to parse: " e)) false))
           ((ok tblB)
-            (mt (cfg/gatewayRouteEntriesExact! tblA (list) (none) "coder")
+            (match (cfg/gatewayRouteEntriesExact! tblA (list) (none) "coder")
               ((err e) (do (assert false (str "role-cascade-is-config: route A failed: " e)) false))
               ((ok reA)
-                (mt (cfg/gatewayRouteEntriesExact! tblB (list) (none) "coder")
+                (match (cfg/gatewayRouteEntriesExact! tblB (list) (none) "coder")
                   ((err e) (do (assert false (str "role-cascade-is-config: route B failed: " e)) false))
                   ((ok reB)
                     (let [(firstLabel (fn [(re cfg/RouteEntries)] -> String
-                                        (mt (listHead re.entries) ((some e) (cfg/gateway_entry_label e)) ((none) ""))))
+                                        (match (listHead re.entries) ((some e) (cfg/gateway_entry_label e)) ((none) ""))))
                           (labA (firstLabel reA))
                           (labB (firstLabel reB))]
                       (do
@@ -388,7 +388,7 @@ fn routeNamed routes: (List cfg/GatewayRoute) intent: String -> (Option cfg/Gate
   (listHead (filter (fn [(r cfg/GatewayRoute)] -> Bool (= r.intent intent)) routes))
 
 fn routeOfProfile tbl: cfg/GatewayTable pid: String intent: String -> (Option cfg/GatewayRoute)
-  (mt (mapGet tbl.profiles pid)
+  (match (mapGet tbl.profiles pid)
     ((none) none)
     ((some pr) (routeNamed pr.routes intent)))
 
@@ -406,28 +406,28 @@ fn ! testSpreadParsesWeightsAndValidates -> Bool
         (negRes (cfg/gateway_config_parse! negWeightText "spreadNeg" ".asl/mem/calibration/index.asn"))
         (unknownRes (cfg/gateway_config_parse! unknownAliasText "spreadUnknown" ".asl/mem/calibration/index.asn"))
         (badCooldownRes (cfg/gateway_config_parse! badCooldownText "spreadBadCooldown" ".asl/mem/calibration/index.asn"))]
-    (mt okRes
+    (match okRes
       ((err e) (do (assert false (str "SPREAD: a valid :spread must parse: " e)) false))
       ((ok tbl)
-        (mt (routeOfProfile tbl "p1" "any")
+        (match (routeOfProfile tbl "p1" "any")
           ((none) (do (assert false "SPREAD: the any route must exist") false))
           ((some route)
             (do
               (assert (= route.spread (list (pair "m1" 3) (pair "m2" 1))) (str "SPREAD: spread pairs read back in file order with their weights, got " route.spread))
               (assert (= route.cooldownSec 60) (str "SPREAD: cooldownSec defaults to 60 when absent, got " route.cooldownSec))
-              (mt cooldownRes
+              (match cooldownRes
                 ((err e) (do (assert false (str "SPREAD: a valid :cooldownSec override must parse: " e)) false))
                 ((ok tbl2)
-                  (mt (routeOfProfile tbl2 "p1" "any")
+                  (match (routeOfProfile tbl2 "p1" "any")
                     ((none) (do (assert false "SPREAD: the any route must exist in the cooldown fixture") false))
                     ((some route2)
                       (do
                         (assert (= route2.cooldownSec 30) (str "SPREAD: an explicit :cooldownSec overrides the 60 default, got " route2.cooldownSec))
                         (assert (err? zeroRes) "SPREAD: a zero weight must be a parse error, never silently dropped")
-                        (assert (mt zeroRes ((err e) (stringContains? e "m1")) ((ok _) false)) "SPREAD: the zero-weight error names the offending alias")
+                        (assert (match zeroRes ((err e) (stringContains? e "m1")) ((ok _) false)) "SPREAD: the zero-weight error names the offending alias")
                         (assert (err? negRes) "SPREAD: a negative weight must be a parse error")
                         (assert (err? unknownRes) "SPREAD: an alias absent from :models must be a parse error")
-                        (assert (mt unknownRes ((err e) (stringContains? e "ghost")) ((ok _) false)) "SPREAD: the unknown-alias error names the offending alias")
+                        (assert (match unknownRes ((err e) (stringContains? e "ghost")) ((ok _) false)) "SPREAD: the unknown-alias error names the offending alias")
                         (assert (err? badCooldownRes) "SPREAD: a non-positive :cooldownSec must be a parse error")
                         true)))))))))))
 
@@ -437,25 +437,25 @@ fn ! testRouteEntriesCarriesSpread -> Bool
         (plainText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
         (okRes (cfg/gateway_config_parse! okText "spreadEntriesOk" ".asl/mem/calibration/index.asn"))
         (plainRes (cfg/gateway_config_parse! plainText "spreadEntriesPlain" ".asl/mem/calibration/index.asn"))]
-    (mt okRes
+    (match okRes
       ((err e) (do (assert false (str "SPREADLIVE: a valid config must parse: " e)) false))
       ((ok tbl)
-        (mt (cfg/gatewayRouteEntries! tbl (list) (none) "any")
+        (match (cfg/gatewayRouteEntries! tbl (list) (none) "any")
           ((err e) (do (assert false (str "SPREADLIVE: gatewayRouteEntries! must resolve the default profile: " e)) false))
           ((ok re)
             (do
               (assert (= re.spread (list (pair "m1" 3) (pair "m2" 1))) (str "SPREADLIVE: gatewayRouteEntries! must carry the route's :spread, got " re.spread))
               (assert (= re.cooldownSec 45) (str "SPREADLIVE: gatewayRouteEntries! must carry the route's :cooldownSec, got " re.cooldownSec))
-              (mt (cfg/gatewayRouteEntriesExact! tbl (list) (none) "any")
+              (match (cfg/gatewayRouteEntriesExact! tbl (list) (none) "any")
                 ((err e) (do (assert false (str "SPREADLIVE: gatewayRouteEntriesExact! must resolve the default profile: " e)) false))
                 ((ok reExact)
                   (do
                     (assert (= reExact.spread (list (pair "m1" 3) (pair "m2" 1))) (str "SPREADLIVE: gatewayRouteEntriesExact! must carry the route's :spread too, got " reExact.spread))
                     (assert (= reExact.cooldownSec 45) (str "SPREADLIVE: gatewayRouteEntriesExact! must carry the route's :cooldownSec too, got " reExact.cooldownSec))
-                    (mt plainRes
+                    (match plainRes
                       ((err e) (do (assert false (str "SPREADLIVE: a plain no-spread config must parse: " e)) false))
                       ((ok tbl2)
-                        (mt (cfg/gatewayRouteEntries! tbl2 (list) (none) "any")
+                        (match (cfg/gatewayRouteEntries! tbl2 (list) (none) "any")
                           ((err e) (do (assert false (str "SPREADLIVE: gatewayRouteEntries! must resolve the plain profile: " e)) false))
                           ((ok rePlain)
                             (do
@@ -465,21 +465,21 @@ fn ! testRouteEntriesCarriesSpread -> Bool
 
 fn ! runTests -> Bool
   (let [(contentRes (fileReadString "asl/packages/asl-gateway/tests/configFixture.asn"))]
-    (mt contentRes
+    (match contentRes
       ((err e) (do (assert false (str "Failed to read fixture: " e)) false))
       ((ok content)
         (let [(toks (lx/tokenize content))]
-          (mt (ast/readForms toks)
+          (match (ast/readForms toks)
             ((err e) (do (assert false (str "Lex/ast error reading fixture: " e.msg)) false))
             ((ok forms)
               (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-                (mt (cfg/asn_props top (some ":fixture"))
+                (match (cfg/asn_props top (some ":fixture"))
                   ((err e) (do (assert false (str "Fixture form error: " e)) false))
                   ((ok fProps)
-                    (mt (mapGet fProps "variants")
+                    (match (mapGet fProps "variants")
                       ((none) (do (assert false "No :variants in fixture") false))
                       ((some vListExpr)
-                        (mt vListExpr
+                        (match vListExpr
                           ((rd/sexprList vList)
                             (do
                               (assert (>= (listLength vList) 12) "At least 12 fixture variants tested")
@@ -488,8 +488,8 @@ fn ! runTests -> Bool
                               (assert (testAsnScalarAndFigure) "ASN scalar and figure tested")
                               (assert (testGatewayParams) "Gateway params validation tested")
                               (assert (testSessionHeaderParse) "OCSESSION: provider :sessionHeader parsing tested")
-                              (let [(userGtwyRes (cfg/gateway_config_parse! (getPropStr (pairFirst (let [(v0 (optionOr (listHead vList) (rd/sexprAtom "")))] (mt (cfg/asn_props v0 (some ":variant")) ((ok p) (pair p (list))) ((err _) (pair (mapEmpty) (list)))))) "text" "") "userGtwy" ".asl/mem/calibration/index.asn"))]
-                                (mt userGtwyRes
+                              (let [(userGtwyRes (cfg/gateway_config_parse! (getPropStr (pairFirst (let [(v0 (optionOr (listHead vList) (rd/sexprAtom "")))] (match (cfg/asn_props v0 (some ":variant")) ((ok p) (pair p (list))) ((err _) (pair (mapEmpty) (list)))))) "text" "") "userGtwy" ".asl/mem/calibration/index.asn"))]
+                                (match userGtwyRes
                                   ((err e) (assert false (str "user gateway parse failed: " e)))
                                   ((ok tbl) (assert (testRoutingAndEntries! tbl) "Routing, entries, and labels tested"))))
                               (assert (testProfilesV1Parse) "Profiles v1 parsing tested")

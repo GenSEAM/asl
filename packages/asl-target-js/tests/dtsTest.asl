@@ -41,16 +41,16 @@ fn tscFlags -> String
 fn ! runTests -> Bool
   (let [(work "/tmp/asl-target-js-dts")
         (built (js/compileWithTypes! "asl/packages/asl-target-js/tests/fixtures/typed.asl"))
-        (types (mt built ((ok b) (pairSecond b)) ((err _) "")))]
+        (types (match built ((ok b) (pairSecond b)) ((err _) "")))]
     (do
-      (assert (ok? built) (str "typed fixture compiles with declarations: " (mt built ((ok _) "ok") ((err ds) (js/diagText ds)))))
+      (assert (ok? built) (str "typed fixture compiles with declarations: " (match built ((ok _) "ok") ((err ds) (js/diagText ds)))))
       (assert (stringContains? types "export interface Pt {\n  readonly x: bigint;\n  readonly y: bigint;\n}") "a schema becomes a readonly interface with bigint Int fields")
       (assert (stringContains? types "| { readonly name: \"circle\"; readonly fields: readonly [bigint] }") "an enum becomes a union tagged by variant name")
       (assert (stringContains? types "export declare function firstOr<T>(xs: AslList<T>, fallback: T): T;") "type variables become generics")
       (assert (stringContains? types "export declare function label(s: Shape): AslOption<string>;") "Option maps to AslOption")
       (assert (stringContains? types "export { asl$isBig$63 as \"isBig?\" };") "a name that is not a JS identifier is exported under its ASL name")
       (sh! "." (list "/bin/sh" "-c" (str "rm -rf " work " && mkdir -p " work)) 15 8)
-      (assert (ok? (fileWrite (str work "/typed.mjs") (mt built ((ok b) (pairFirst b)) ((err _) "")))) "writes the module")
+      (assert (ok? (fileWrite (str work "/typed.mjs") (match built ((ok b) (pairFirst b)) ((err _) "")))) "writes the module")
       (assert (ok? (fileWrite (str work "/typed.d.mts") types)) "writes the declarations")
       (assert (ok? (fileWrite (str work "/use.mts") (consumer))) "writes a TypeScript consumer")
       (assert (ok? (fileWrite (str work "/bad.mts") (misuse))) "writes a misuse")

@@ -23,7 +23,7 @@ fn makeScanResult modName: Str referenced: (List Str) missing: (List Str) -> Sca
   (ScanResult :module modName :referenced referenced :missing missing)
 
 fn shortcodeTypeToString st: ShortcodeType -> Str
-  (mt st ((pDec) "d") ((pCrit) "c") ((pLaw) "l") ((pReq) "r"))
+  (match st ((pDec) "d") ((pCrit) "c") ((pLaw) "l") ((pReq) "r"))
 
 fn stringToShortcodeType prefix: Str -> (Option ShortcodeType)
   (cond ((= prefix "d") (some (pDec))) ((= prefix "c") (some (pCrit))) ((= prefix "l") (some (pLaw))) ((= prefix "r") (some (pReq))) ((= prefix "p-dec") (some (pDec))) ((= prefix "p-crit") (some (pCrit))) ((= prefix "p-law") (some (pLaw))) ((= prefix "p-req") (some (pReq))) (else (none)))
@@ -38,7 +38,7 @@ fn isValidHex4? hex: Str -> Bool
   (if (= (stringLength hex) 4) (fold checkHexStep true (stringChars hex)) false)
 
 fn isValidShortcode? code: Str -> Bool
-  (if (= (stringLength code) 6) (mt (stringSlice code 0 1) ((none) false) ((some pre) (mt (stringSlice code 1 2) ((none) false) ((some hyp) (mt (stringSlice code 2 6) ((none) false) ((some hexPart) (and (stringContains? "dclr" pre) (and (= hyp "-") (isValidHex4? hexPart))))))))) false)
+  (if (= (stringLength code) 6) (match (stringSlice code 0 1) ((none) false) ((some pre) (match (stringSlice code 1 2) ((none) false) ((some hyp) (match (stringSlice code 2 6) ((none) false) ((some hexPart) (and (stringContains? "dclr" pre) (and (= hyp "-") (isValidHex4? hexPart))))))))) false)
 
 fn normalizeShortcode raw: Str -> Str
   (let [(trimmed (stringTrim raw))] (if (stringStartsWith? trimmed "@adr:") (optionOr (stringSlice trimmed 5 (stringLength trimmed)) "") (if (stringStartsWith? trimmed "@rule:") (optionOr (stringSlice trimmed 6 (stringLength trimmed)) "") (if (stringStartsWith? trimmed "@pcp:") (optionOr (stringSlice trimmed 5 (stringLength trimmed)) "") (if (stringStartsWith? trimmed "@") (optionOr (stringSlice trimmed 1 (stringLength trimmed)) "") trimmed)))))
@@ -56,13 +56,13 @@ fn extractTokenShortcode tok: Str -> (Option Str)
   (let [(norm (normalizeShortcode tok))] (if (isValidShortcode? norm) (some norm) (none)))
 
 fn scanShortcodes text: Str -> (List Str)
-  (let [(sanitized (sanitizeDelimiters text)) (tokens (filter isNonEmptyTok? (stringSplit sanitized " ")))] (fold (fn [(acc (List Str)) (tok Str)] -> (List Str) (mt (extractTokenShortcode tok) ((some sc) (if (listContains? acc sc) acc (listAppend acc (list sc)))) ((none) acc))) (list) tokens))
+  (let [(sanitized (sanitizeDelimiters text)) (tokens (filter isNonEmptyTok? (stringSplit sanitized " ")))] (fold (fn [(acc (List Str)) (tok Str)] -> (List Str) (match (extractTokenShortcode tok) ((some sc) (if (listContains? acc sc) acc (listAppend acc (list sc)))) ((none) acc))) (list) tokens))
 
 fn tailRules rules: (List AdrRule) -> (List AdrRule)
-  (mt (listTail rules) ((some tl) tl) ((none) (list)))
+  (match (listTail rules) ((some tl) tl) ((none) (list)))
 
 fn headRuleOrDefault rules: (List AdrRule) -> AdrRule
-  (mt (listHead rules) ((some h) h) ((none) (makeRule "" "" "" "" "")))
+  (match (listHead rules) ((some h) h) ((none) (makeRule "" "" "" "" "")))
 
 fn findRule rules: (List AdrRule) target: Str -> (Option AdrRule)
   (if (listEmpty? rules) (none) (let [(r (headRuleOrDefault rules))] (if (= r.code target) (some r) (findRule (tailRules rules) target))))
@@ -98,7 +98,7 @@ fn makeLifecycleRecord id: Str kind: Str title: Str desc: Str closure: ClosureCo
   (LifecycleRecord :id id :kind kind :title title :description desc :closure closure :status status)
 
 fn lifecycleKindToString k: LifecycleKind -> Str
-  (mt k ((lkIntent) "intent") ((lkGoal) "goal") ((lkPractice) "practice"))
+  (match k ((lkIntent) "intent") ((lkGoal) "goal") ((lkPractice) "practice"))
 
 fn stringToLifecycleKind s: Str -> (Option LifecycleKind)
   (cond ((= s "intent") (some (lkIntent))) ((= s "goal") (some (lkGoal))) ((= s "practice") (some (lkPractice))) (else (none)))

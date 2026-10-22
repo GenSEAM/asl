@@ -137,9 +137,9 @@ fn hostBytes! body: String -> String
     (if (= res.exitCode 0) (stringTrim res.stdout) (str "host eval failed: " res.stderr)))
 
 fn asnDecoded text: String -> (Result String String)
-  (mt (asn/asnRead text)
+  (match (asn/asnRead text)
     ((err e) (err e))
-    ((ok v) (mt (asn/asnStringValue v) ((some d) (ok d)) ((none) (err "not a string value")))))
+    ((ok v) (match (asn/asnStringValue v) ((some d) (ok d)) ((none) (err "not a string value")))))
 
 fn checkAsnCase! body: String expected: Bool -> Bool
   (let [(text (str "\"" body "\""))
@@ -147,13 +147,13 @@ fn checkAsnCase! body: String expected: Bool -> Bool
         (step (asn/parseStep (str "(:x " text ")")))]
     (if expected
       (let [(want (hostBytes! body))
-            (got (mt decoded ((ok d) (byteList d)) ((err e) (str "asnRead failed: " e))))]
+            (got (match decoded ((ok d) (byteList d)) ((err e) (str "asnRead failed: " e))))]
         (do
           (assert (= got want) (str body ": asn bytes " got ", asl-host bytes " want))
           (assert (ok? step) (str body ": parseStep accepts it"))
           (= got want)))
-      (let [(why (mt decoded ((ok d) (str "accepted as " (byteList d))) ((err e) e)))
-            (stepWhy (mt step ((ok _) "accepted") ((err e) e)))
+      (let [(why (match decoded ((ok d) (str "accepted as " (byteList d))) ((err e) e)))
+            (stepWhy (match step ((ok _) "accepted") ((err e) e)))
             (readResult (asn/asnRead text))]
         (do
           (assert (err? readResult) (str body ": asnRead rejects invalid escape"))

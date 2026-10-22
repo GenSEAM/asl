@@ -43,8 +43,8 @@ fn checkRepairedLines origLines: (List String) repLines: (List String) touched: 
     (ok true)
     (let [(o (listGet origLines (- idx 1)))
           (r (listGet repLines (- idx 1)))
-          (same (mt o
-                  ((some ot) (mt r ((some rt) (= ot rt)) ((none) false)))
+          (same (match o
+                  ((some ot) (match r ((some rt) (= ot rt)) ((none) false)))
                   ((none) false)))]
       (if (or same (listContains? touched idx))
         (checkRepairedLines origLines repLines touched (+ idx 1))
@@ -171,7 +171,7 @@ fn attachClosingPass entries: (List LineEntry) curIdx: Int64 -> (List LineEntry)
     (let [(entry (optionOr (listGet entries curIdx) (LineEntry :text "" :touched false :dropped true :pinned false)))]
       (if (or entry.dropped (or (not entry.touched) (not (isOnlyClosingDelims? entry.text))))
         (attachClosingPass entries (- curIdx 1))
-        (mt (findPrevContentEntry entries curIdx)
+        (match (findPrevContentEntry entries curIdx)
           ((none) (attachClosingPass entries (- curIdx 1)))
           ((some prevIdx)
            (let [(prevEntry (optionOr (listGet entries prevIdx) (LineEntry :text "" :touched false :dropped true :pinned false)))]
@@ -210,32 +210,32 @@ fn formatLines origText: String repairedText: String touched: (List Int64) -> St
     (joinLines outLines origText))
 
 fn formatText origText: String res: rep/RepairResult lang: String -> (Result String String)
-  (mt (resolveLang lang)
+  (match (resolveLang lang)
     ((err e) (err e))
     ((ok l)
      (if (not (listEmpty? (rep/repairResultLeft res)))
        (err (str "repair left defects: " (rep/repairResultReceipt res)))
        (let [(repairedText (rep/repairResultText res))
              (touched (touchedLinesFromRepaired (rep/repairResultRepaired res)))]
-         (mt (checkRepairedLines (splitLines origText) (splitLines repairedText) touched 1)
+         (match (checkRepairedLines (splitLines origText) (splitLines repairedText) touched 1)
            ((err e) (err e))
            ((ok _)
             (ok (formatLines origText repairedText touched))))))))
 
 fn formatBytes origBytes: Bytes res: rep/RepairResult lang: String -> (Result Bytes String)
-  (mt (formatText (bt/bytesToString origBytes) res lang)
+  (match (formatText (bt/bytesToString origBytes) res lang)
     ((err e) (err e))
     ((ok out) (ok (stringToBytes out))))
 
 fn formatRepair origText: String lang: String -> (Result String String)
-  (mt (resolveLang lang)
+  (match (resolveLang lang)
     ((err e) (err e))
     ((ok l) (formatText origText (rep/repairAtSite origText l) l)))
 
 fn formatFile! path: String -> (Result String String)
-  (mt (langForPath path)
+  (match (langForPath path)
     ((err e) (err e))
     ((ok lang)
-     (mt (fileReadString path)
+     (match (fileReadString path)
        ((err e) (err (str "cannot read " path ": " e)))
        ((ok content) (formatRepair content lang)))))

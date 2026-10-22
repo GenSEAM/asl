@@ -3,7 +3,7 @@
   :i [(asl-syntax/core/source :a src)])
 
 fn unwrapPos opt: (Option src/SourcePos) -> src/SourcePos
-  (mt opt
+  (match opt
     ((some p) p)
     ((none) (src/SourcePos :line -1 :byteCol -1 :charCol -1)))
 

@@ -265,7 +265,7 @@ fn ! testFibSourceToLlvm! -> Bool
     (do
       (assert (ok? res) "paren-dialect fib compiles to .ll")
       (refute (err? res) "paren-dialect fib refutes err")
-      (mt res
+      (match res
         ((err _) false)
         ((ok code)
           (do
@@ -284,7 +284,7 @@ fn ! testUnsupportedReturnsDiagnostic! -> Bool
     (do
       (assert (err? res) "unsupported construct must return err")
       (refute (ok? res) "unsupported construct refutes ok")
-      (mt res
+      (match res
         ((ok _) false)
         ((err diags)
           (let [(firstDiag (optionOr (listHead diags) (ty/makeIrDiag "" "" "")))]
@@ -299,7 +299,7 @@ fn testCompilePackageToLlvmImportsLinked! -> Bool
   (let [(res (comp/compilePackageToLlvm! "asl/packages/asl-codegen/src/c99Emit.asl" (list ".")))]
     (do
       (assert (ok? res) "a package with imports is checked and linked, not refused")
-      (mt res
+      (match res
         ((err _) false)
         ((ok cr)
           (do
@@ -319,7 +319,7 @@ fn negateSource -> String
     "\n")
 
 fn ! main args: (List String) -> (Result Int64 String)
-  (mt (mt (listHead args)
+  (match (match (listHead args)
         ((some entry) (llvm/emitLlvmSource (negateSource) entry))
         ((none) (llvm/emitLlvmSource (fibSource) "fibMain")))
     ((ok code) (do (print code) (ok 0)))
@@ -327,7 +327,7 @@ fn ! main args: (List String) -> (Result Int64 String)
       (err (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.locus ": " d.message)) diags) "; "))))
 
 fn ! testMissingEntryIsDiagnostic! -> Bool
-  (mt (llvm/emitLlvmSource (fibSource) "main")
+  (match (llvm/emitLlvmSource (fibSource) "main")
     ((ok _) (do (assert false "a source without main must not compile with entry main") false))
     ((err diags)
       (do

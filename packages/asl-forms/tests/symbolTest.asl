@@ -5,7 +5,7 @@ fn fixture! -> String
 
 fn span! name: String -> String
   (let [(text (fixture!))]
-    (mt (pairFirst (sy/findSymbol text name))
+    (match (pairFirst (sy/findSymbol text name))
       ((none) "none")
       ((some d) (str d.kind " " (stringFromInt64 d.start) "-" (stringFromInt64 d.end) " depth " (stringFromInt64 d.depth)
                      " lines " (stringFromInt64 (sy/lineOf text d.start)) "-" (stringFromInt64 (sy/lineOf text (max d.start (- d.end 1))))))))

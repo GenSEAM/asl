@@ -7,7 +7,7 @@ fn ! rootFor i: Int64 -> String
     (str base "/loopRunFixture_" (stringFromInt64 (procSelf)) "_" (stringFromInt64 i)))
 
 fn ! repoHasHead! root: String -> Bool
-  (mt (cp/exec! (cp/cmd "git" (list "-C" root "rev-parse" "HEAD")))
+  (match (cp/exec! (cp/cmd "git" (list "-C" root "rev-parse" "HEAD")))
     ((ok o) (= o.exitCode 0))
     ((err _) false))
 
@@ -42,12 +42,12 @@ fn ! runTests -> Bool
                               (pair "specCheckMet" (pair "ok" "nil"))
                               (pair "specCheckRetry" (pair "ok" "nil")))
         sampleLine (optionOr (listHead (filter (fn [line] (= (f/scenarioId line) "readThenDone")) lines)) "")
-        sampleNode (mt (p/planTree sampleLine) ((ok ns) (optionOr (listHead ns) (p/sexpAtom "nil"))) ((err _) (p/sexpAtom "nil")))
+        sampleNode (match (p/planTree sampleLine) ((ok ns) (optionOr (listHead ns) (p/sexpAtom "nil"))) ((err _) (p/sexpAtom "nil")))
         sampleJournal (f/maskJournal "<root>" (map f/argStr (f/listOf (f/field sampleNode ":journal"))))
         selectedRows (f/turnRows sampleJournal 1 (list ":reply"))
         readLine (optionOr (listHead (filter (fn [line] (= (f/scenarioId line) "readThenDone")) lines)) "")
         writeLine (optionOr (listHead (filter (fn [line] (= (f/scenarioId line) "writeGreenGate")) lines)) "")
-        writeNode (mt (p/planTree writeLine) ((ok ns) (optionOr (listHead ns) (p/sexpAtom "nil"))) ((err _) (p/sexpAtom "nil")))
+        writeNode (match (p/planTree writeLine) ((ok ns) (optionOr (listHead ns) (p/sexpAtom "nil"))) ((err _) (p/sexpAtom "nil")))
         writeJournal (f/maskJournal "<root>" (map f/argStr (f/listOf (f/field writeNode ":journal"))))
         writeTurnRows (f/turnRows writeJournal 1 (list))
         specMetLine (optionOr (listHead (filter (fn [line] (= (f/scenarioId line) "specCheckMet")) lines)) "")
@@ -94,7 +94,7 @@ fn ! runTests -> Bool
                     line (pairSecond item)
                     id (f/scenarioId line)
                     repo (f/repoFiles line)
-                    scenario (mt (p/planTree line) ((ok ns) (optionOr (listHead ns) (p/sexpAtom "nil"))) ((err _) (p/sexpAtom "nil")))
+                    scenario (match (p/planTree line) ((ok ns) (optionOr (listHead ns) (p/sexpAtom "nil"))) ((err _) (p/sexpAtom "nil")))
                     journal (map f/argStr (f/listOf (f/field scenario ":journal")))
                     masked (f/maskJournal "<root>" journal)
                     expectedResult (optionOr (listGet expectedResults i) (pair "" (pair "" "")))

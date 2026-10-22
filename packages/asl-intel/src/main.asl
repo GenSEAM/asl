@@ -34,7 +34,7 @@ fn pyInt s: String -> (Option Int64)
         (body (if (or neg (stringStartsWith? u "+")) (t/sliceStr u 1 (stringLength u)) u))
         (b (stringToBytes body)) (n (bytesLength b))]
     (if (or (= n 0) (or (= (bytesGet b 0) 95) (= (bytesGet b (- n 1)) 95))) (none)
-      (mt (digitsVal b n 0 0 false)
+      (match (digitsVal b n 0 0 false)
         ((some v) (some (if neg (- 0 v) v)))
         ((none) (none)))))
 
@@ -50,7 +50,7 @@ fn hasNext? args: (List String) -> Bool
   (not (listEmpty? (optionOr (listTail args) (list))))
 
 fn parseOpts sub: String args: (List String) o: Opts -> Opts
-  (mt (listHead args)
+  (match (listHead args)
     ((none) o)
     ((some a)
       (let [(rest (optionOr (listTail args) (list)))
@@ -88,7 +88,7 @@ fn parseOpts sub: String args: (List String) o: Opts -> Opts
           (else (parseOpts sub rest o))))))
 
 fn textOutcome r: (Result String String) -> h/Outcome
-  (mt r
+  (match r
     ((ok s) (h/outcome (str s "\n") "" 0))
     ((err e) (h/outcome "" (str "Error: " e "\n") 1)))
 
@@ -99,7 +99,7 @@ fn gitRootFrom! dir: String orig: String -> String
     (else (gitRootFrom! (t/dirName dir) orig)))
 
 fn makeCtx! -> h/Ctx
-  (let [(cwd (mt (realPath ".") ((ok p) p) ((err _) ".")))
+  (let [(cwd (match (realPath ".") ((ok p) p) ((err _) ".")))
         (homeEnv (optionOr (envGet "ASL_INTEL_HOME") ""))
         (home (if (stringEmpty? homeEnv) (gitRootFrom! cwd cwd) (t/absPath homeEnv cwd)))]
     (h/Ctx :home home :cwd cwd :aslRoot (optionOr (envGet "ASL_ROOT") "") :env (none)))
@@ -154,7 +154,7 @@ fn dispatchIntel! op: String target: String -> String
   (runIntel! (makeCtx!) (if (stringEmpty? target) (list op) (list op target))).out
 
 fn ! main args: (List String) -> (Result Int64 String)
-  (let [(oc (runIntel! (mt (envGet "ASL_INTEL_WORKSPACE") ((some w) (makeCtxFor! w)) ((none) (makeCtx!))) args))]
+  (let [(oc (runIntel! (match (envGet "ASL_INTEL_WORKSPACE") ((some w) (makeCtxFor! w)) ((none) (makeCtx!))) args))]
     (do
       (print oc.out)
       (if (stringEmpty? oc.err) () (eprintln (t/sliceStr oc.err 0 (- (stringLength oc.err) 1))))

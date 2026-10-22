@@ -65,13 +65,13 @@ fn testDottedLookup -> Bool
     (assert (some? q2) "finds foreignSyntax.A5")
     (assert (some? q3) "finds parserSyntax.A5")
     (assert (not (some? q4)) "rejects foreignSyntax.nonExistent")
-    (mt q2
+    (match q2
       ((some s)
        (do
          (assert (= (asym/aslSymbolName s) "A5") "q2 name is A5")
          (assert (= (asym/aslSymbolContainer s) "foreignSyntax") "q2 container is foreignSyntax")))
       ((none) (assert false "expected some q2")))
-    (mt q3
+    (match q3
       ((some s)
        (do
          (assert (= (asym/aslSymbolName s) "A5") "q3 name is A5")

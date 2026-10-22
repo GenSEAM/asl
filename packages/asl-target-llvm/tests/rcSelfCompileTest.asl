@@ -24,11 +24,11 @@ fn ! runtimes! -> (Result Libs String)
                      :deadlineNs (+ (monotonicNs) 900000000000) :maxDesc 16))]
     (if (not (sys/isFile? plain))
       (err (str plain " is absent: the native build (sh asl/host/build.sh) makes it"))
-      (mt (cache/nativeAsl1! ctx plain (optionOr (envGet "CLANG") "clang"))
+      (match (cache/nativeAsl1! ctx plain (optionOr (envGet "CLANG") "clang"))
         ((err e) (err (str "native asl1: " e)))
-        ((ok asl1) (mt (nb/asanRuntime! b asl1 (str r "/asl/packages"))
+        ((ok asl1) (match (nb/asanRuntime! b asl1 (str r "/asl/packages"))
                      ((err e) (err (str "ASan runtime: " e)))
-                     ((ok asan) (mt (nb/notraceRuntime! b asl1 (str r "/asl/packages"))
+                     ((ok asan) (match (nb/notraceRuntime! b asl1 (str r "/asl/packages"))
                                   ((err e) (err (str "untraced runtime: " e)))
                                   ((ok notrace) (ok (Libs :plain plain :asan asan :notrace notrace))))))))))
 
@@ -38,7 +38,7 @@ fn ! newWork label: String -> String
     dir)
 
 fn ! fileSha path: String -> String
-  (mt (fileReadBytes path) ((ok b) (bytesSha256 b)) ((err e) (str "unreadable " e)))
+  (match (fileReadBytes path) ((ok b) (bytesSha256 b)) ((err e) (str "unreadable " e)))
 
 fn ! job argv: (List String) env: (List String) -> fr/Done
   (fr/runOneLimited (fr/job argv (root) (fr/childEnv env)) (fr/limits 1500 16))
@@ -66,14 +66,14 @@ fn ! compileMode compiler: String mode: String work: String label: String entry:
       (err (str compiler " build " entry " mode " mode " (" d.verdict " exit " d.exit "): " (stringTrim d.out) " " (resultOr (fileReadString errPath) "")))))
 
 fn statOf text: String key: String -> Int64
-  (mt (stringIndexOf text (str ":" key " "))
+  (match (stringIndexOf text (str ":" key " "))
     ((none) -1)
     ((some at) (let [(rest (optionOr (stringSlice text (+ at (+ (stringLength key) 2)) (stringLength text)) ""))
                      (digits (optionOr (listHead (stringSplit (optionOr (listHead (stringSplit rest ")")) rest) " ")) ""))]
                  (optionOr (stringToInt64 digits) -1))))
 
 fn ! andThen r: (Result String String) next: (fn [String] -> (Result String String)) -> (Result String String)
-  (mt r ((ok v) (next v)) ((err e) (err e)))
+  (match r ((ok v) (next v)) ((err e) (err e)))
 
 schema Stages
   stage2: String
@@ -85,25 +85,25 @@ schema Stages
 
 fn ! stages libs: Libs work: String -> (Result Stages String)
   (let [(c (seed/compilerSource))]
-    (mt (seed/verify (root) (resultOr (fileReadString (str (root) "/" (seed/manifestPath))) "") work)
+    (match (seed/verify (root) (resultOr (fileReadString (str (root) "/" (seed/manifestPath))) "") work)
       ((err x) (err x))
       ((ok e)
-       (mt (andThen (andThen (seed/verifyEntry (root) e work) (fn [(s String)] -> (Result String String) (linkWith libs s (str work "/stage1") false)))
+       (match (andThen (andThen (seed/verifyEntry (root) e work) (fn [(s String)] -> (Result String String) (linkWith libs s (str work "/stage1") false)))
                     (fn [(s1 String)] -> (Result String String) (andThen (compileMode s1 "0" work "stage2" c) (fn [(l String)] -> (Result String String) (linkWith libs l (str work "/stage2") false)))))
          ((err x) (err x))
          ((ok s2)
-          (mt (compileMode s2 "0" work "stage3" c)
+          (match (compileMode s2 "0" work "stage3" c)
             ((err x) (err x))
             ((ok traced)
-             (mt (andThen (andThen (compileMode s2 "1" work "stage3rc" c) (fn [(l String)] -> (Result String String) (linkWith libs l (str work "/stage3rc") false)))
+             (match (andThen (andThen (compileMode s2 "1" work "stage3rc" c) (fn [(l String)] -> (Result String String) (linkWith libs l (str work "/stage3rc") false)))
                           (fn [(b String)] -> (Result String String) (compileMode b "0" work "stage4rc" c)))
                ((err x) (err x))
                ((ok countedOut)
-                (mt (andThen (andThen (compileMode s2 "asan" work "stage3asan" c) (fn [(l String)] -> (Result String String) (linkWith libs l (str work "/stage3asan") true)))
+                (match (andThen (andThen (compileMode s2 "asan" work "stage3asan" c) (fn [(l String)] -> (Result String String) (linkWith libs l (str work "/stage3asan") true)))
                              (fn [(b String)] -> (Result String String) (compileMode b "0" work "stage4asan" c)))
                   ((err x) (err x))
                   ((ok asanOut)
-                   (mt (andThen (andThen (compileMode s2 "notrace" work "stage3nt" c) (fn [(l String)] -> (Result String String) (linkMode libs l (str work "/stage3nt") "notrace")))
+                   (match (andThen (andThen (compileMode s2 "notrace" work "stage3nt" c) (fn [(l String)] -> (Result String String) (linkMode libs l (str work "/stage3nt") "notrace")))
                                 (fn [(b String)] -> (Result String String) (compileMode b "0" work "stage4nt" c)))
                      ((err x) (err x))
                      ((ok untracedOut) (ok (Stages :stage2 s2 :traced traced :counted (str work "/stage3rc.ll") :countedOut countedOut :asanOut asanOut :untracedOut untracedOut)))))))))))))))
@@ -116,15 +116,15 @@ fn ! testSelfCompile libs: Libs -> Bool
         (asanErr (resultOr (fileReadString (errFile work "stage4asan")) ""))
         (ntStats (resultOr (fileReadString (errFile work "stage4nt")) ""))
         (ntText (resultOr (fileReadString (str work "/stage3nt.ll")) ""))
-        (fib (mt built
+        (fib (match built
                ((err x) (err x))
                ((ok s) (andThen (compileMode (str work "/stage3rc") "0" work "fib" (seed/fibSource)) (fn [(l String)] -> (Result String String) (linkWith libs l (str work "/fib") false))))))
-        (fibRun (mt fib ((ok b) (some (job (list b) (list)))) ((err _) (none))))
+        (fibRun (match fib ((ok b) (some (job (list b) (list)))) ((err _) (none))))
         (_ (do (eprintln (str "rcSelfCompile stage4rc " rcStats " stage4nt " ntStats)) true))
-        (shas (mt built ((ok s) (list (fileSha s.traced) (fileSha s.countedOut) (fileSha s.asanOut) (fileSha s.untracedOut))) ((err _) (list "" "counted missing" "asan missing" "untraced missing"))))
+        (shas (match built ((ok s) (list (fileSha s.traced) (fileSha s.countedOut) (fileSha s.asanOut) (fileSha s.untracedOut))) ((err _) (list "" "counted missing" "asan missing" "untraced missing"))))
         (_ (do (eprintln (str "rcSelfCompile sha traced/counted/asan " (stringJoin shas " "))) true))
         (_ (pathRemove work))]
-    (do (assert (mt built ((ok _) true) ((err x) (do (eprintln x) false))) "seed -> stage2 -> stage3 (tracing), stage3rc, stage3asan and stage3nt build and each recompiles asl1")
+    (do (assert (match built ((ok _) true) ((err x) (do (eprintln x) false))) "seed -> stage2 -> stage3 (tracing), stage3rc, stage3asan and stage3nt build and each recompiles asl1")
         (assert (and (= (stringLength (optionOr (listGet shas 0) "")) 64) (= (listGet shas 1) (listGet shas 0))) "asl1 built with RC compiles asl1 to IR byte-identical to the tracing build's output")
         (assert (and (= (stringLength (optionOr (listGet shas 0) "")) 64) (= (listGet shas 2) (listGet shas 0))) "asl1 built with RC under ASan compiles asl1 to IR byte-identical to the tracing build's output")
         (assert (stringContains? countedText "call tailcc i64 @aslRcDrop(") "the RC build of asl1 carries compiler-inserted drops")
@@ -137,10 +137,10 @@ fn ! testSelfCompile libs: Libs -> Bool
         (assert (> (statOf ntStats "largeFreed") 1000000) (str "the untraced compiler frees over a million unpooled objects (arrays, bytes, over 512 B) itself: " ntStats))
         (assert (< (* 100 (- (statOf ntStats "large") (statOf ntStats "largeFreed"))) (statOf ntStats "large")) (str "the untraced compiler leaves under 1% of its unpooled objects live at exit: " ntStats))
         (assert (and (> (statOf ntStats "freed") 1000000) (= (statOf ntStats "stuck") 0)) (str "the untraced compiler frees its pooled cells and leaves none sticky: " ntStats))
-        (assert (mt fibRun ((some d) (= d.exit 42)) ((none) false)) "fibProgram built by the RC-built compiler exits 42")
+        (assert (match fibRun ((some d) (= d.exit 42)) ((none) false)) "fibProgram built by the RC-built compiler exits 42")
         (refute (fileExists? work) "the work directory is removed")
         true))
 
 fn ! runTests -> Bool
-  (do (assert (mt (runtimes!) ((ok libs) (testSelfCompile libs)) ((err e) (do (eprintln (str "rcSelfCompile runtimes: " e)) false))) "RC self-compile matches tracing")
+  (do (assert (match (runtimes!) ((ok libs) (testSelfCompile libs)) ((err e) (do (eprintln (str "rcSelfCompile runtimes: " e)) false))) "RC self-compile matches tracing")
       true)

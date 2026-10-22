@@ -31,8 +31,8 @@ fn testDeadLetterPoisonPillReaping! -> Bool
         (finalState recPoison.state)]
     (assert (= retryCountInitial 3) "Initial poison task has 3 retries")
     (assert (= reapRes.reapedCount 1) "Poison task was reaped")
-    (assert (mt finalState ((stateFailed) true) (_ false)) "Poison task exceeding maxRetries transitioned to stateFailed dead-letter")
-    (refute (mt finalState ((stateQueued) true) (_ false)) "Refutation: Dead-lettered poison task must not return to stateQueued")
+    (assert (match finalState ((stateFailed) true) (_ false)) "Poison task exceeding maxRetries transitioned to stateFailed dead-letter")
+    (refute (match finalState ((stateQueued) true) (_ false)) "Refutation: Dead-lettered poison task must not return to stateQueued")
     (assert (not (listContains? reapRes.scheduler.activeProjects "/ws/proj-p")) "Project lock released on dead-letter")
     (assert (= (sc/getLaneCount reapRes.scheduler.activeLanes "lane-p") 0) "Lane count decremented to 0 on dead-letter")
     true)

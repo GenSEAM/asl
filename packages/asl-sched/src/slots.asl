@@ -14,7 +14,7 @@ enum Schedule
   (cronSchedule cron: cr/Cron)
 
 fn slotClaim value: Slot worker: String now: Int64 leaseSeconds: Int64 -> ClaimResult
-  (mt value
+  (match value
     ((slot job due owner expiry attempt)
       (cond ((< leaseSeconds 1) invalidLease)
             ((< now due) notDue)
@@ -22,7 +22,7 @@ fn slotClaim value: Slot worker: String now: Int64 leaseSeconds: Int64 -> ClaimR
             (else (claimed (slot job due worker (+ now leaseSeconds) (+ attempt 1)))))))
 
 fn slotExpire value: Slot now: Int64 -> Slot
-  (mt value
+  (match value
     ((slot job due owner expiry attempt)
       (if (and (not (= owner "")) (<= expiry now))
         (slot job due "" 0 attempt)
@@ -38,14 +38,14 @@ fn recoverSlots values: (List Slot) now: Int64 -> (List Slot)
         (listAppend [released] rest))))
 
 fn slotComplete value: Slot schedule: Schedule completedSeconds: Int64 -> (Result Slot String)
-  (mt value
+  (match value
     ((slot job _ _ _ attempt)
-      (mt schedule
+      (match schedule
         ((intervalSchedule interval)
-          (mt (iv/intervalNextFire interval completedSeconds)
+          (match (iv/intervalNextFire interval completedSeconds)
             ((ok due) (ok (slot job due "" 0 0))) ((err e) (err e))))
         ((cronSchedule cron)
-          (mt (cr/nextFire cron completedSeconds)
+          (match (cr/nextFire cron completedSeconds)
             ((ok due) (ok (slot job due "" 0 0))) ((err e) (err e)))))))
 
 fn integerTextDigits n: Int64 -> String
@@ -80,16 +80,16 @@ fn slotTokens text: String index: Int64 quoted: Bool escaped: Bool current: Stri
               (slotTokens text (+ index 1) quoted false (stringConcat current c) tokenQuoted acc)))))))
 
 fn slotTokenText tokens: (List SlotToken) index: Int64 -> String
-  (mt (listGet tokens index) ((some token) token.text) ((none) ""))
+  (match (listGet tokens index) ((some token) token.text) ((none) ""))
 
 fn slotTokenQuoted? tokens: (List SlotToken) index: Int64 -> Bool
-  (mt (listGet tokens index) ((some token) token.quoted) ((none) false))
+  (match (listGet tokens index) ((some token) token.quoted) ((none) false))
 
 fn slotQuote value: String -> String
   (stringConcat "\"" (stringConcat (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace value "\\" "\\\\") "\"" "\\\"") "\n" "\\n") "\t" "\\t") "\r" "\\r") "\x00" "\\0") "\""))
 
 fn serializeSlot value: Slot -> String
-  (mt value
+  (match value
     ((slot job due owner expiry attempt)
       (stringConcat "(:slot "
         (stringConcat (slotQuote job)
@@ -102,20 +102,20 @@ fn parseSlot text: String -> (Result Slot String)
   (let [(source (stringTrim text))]
     (if (or (not (stringStartsWith? source "(:slot ")) (not (stringEndsWith? source ")")))
       (err "invalid slot ASN")
-      (mt (stringSlice source 7 (- (stringLength source) 1))
+      (match (stringSlice source 7 (- (stringLength source) 1))
         ((some body)
-          (mt (slotTokens body 0 false false "" false [])
+          (match (slotTokens body 0 false false "" false [])
             ((ok tokens)
               (if (or (not (= (listLength tokens) 5)) (not (slotTokenQuoted? tokens 0)) (slotTokenQuoted? tokens 1) (not (slotTokenQuoted? tokens 2)) (slotTokenQuoted? tokens 3) (slotTokenQuoted? tokens 4))
                 (err "invalid slot ASN")
                 (let [(due (stringToInt64 (slotTokenText tokens 1)))
                       (expiry (stringToInt64 (slotTokenText tokens 3)))
                       (attempt (stringToInt64 (slotTokenText tokens 4)))]
-                  (mt due
+                  (match due
                     ((some d)
-                      (mt expiry
+                      (match expiry
                         ((some e)
-                          (mt attempt
+                          (match attempt
                             ((some a) (ok (slot (slotTokenText tokens 0) d (slotTokenText tokens 2) e a)))
                             ((none) (err "invalid attempt"))))
                         ((none) (err "invalid expiry"))))

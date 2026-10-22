@@ -18,7 +18,7 @@ fn getBaseHorizon vc: VectorClock -> Int64
   vc.baseHorizon
 
 fn getClockValueWithHorizon vc: VectorClock targetId: String -> Int64
-  (mt (mapGet vc.entries targetId)
+  (match (mapGet vc.entries targetId)
     ((some v) v)
     ((none) vc.baseHorizon))
 

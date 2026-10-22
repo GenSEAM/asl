@@ -59,7 +59,7 @@
 
 fn resolveWorkspace! ctx: h/Ctx -> String
   (if (not (stringEmpty? ctx.aslRoot))
-    (let [(abs (t/absPath ctx.aslRoot ctx.cwd))] (mt (realPath abs) ((ok q) q) ((err _) abs)))
+    (let [(abs (t/absPath ctx.aslRoot ctx.cwd))] (match (realPath abs) ((ok q) q) ((err _) abs)))
     (gitProbe! ctx.cwd ctx.cwd))
 
 fn gitProbe! dir: String orig: String -> String
@@ -72,7 +72,7 @@ fn nodeOf! keys: tb/Strtab buf: Bytes modId: Int64 symId: Int64 -> Int64
   (do (tb/ivSet! buf 0 modId) (tb/ivSet! buf 1 symId) (tb/lookup keys buf 0 16))
 
 fn importIds! mods: tb/Strtab code: String -> (Pair tb/Strtab (List Int64))
-  (mt (c/firstGroup (p/patImportsBlock!) code)
+  (match (c/firstGroup (p/patImportsBlock!) code)
     ((none) (pair mods (list)))
     ((some blk)
       (fold (fn [(acc (Pair tb/Strtab (List Int64))) (nm String)] -> (Pair tb/Strtab (List Int64))
@@ -105,7 +105,7 @@ fn scanFile! sc: Scan fi: Int64 rel: String code: String -> Scan
 fn scanAll! ctx: h/Ctx root: String files: (List String) -> Scan
   (pairSecond
     (fold (fn [(acc (Pair Int64 Scan)) (rel String)] -> (Pair Int64 Scan)
-            (mt (h/readText! (if (stringStartsWith? rel "/") rel (t/joinPath root rel)))
+            (match (h/readText! (if (stringStartsWith? rel "/") rel (t/joinPath root rel)))
               ((err _) acc)
               ((ok code) (pair (+ (pairFirst acc) 1) (scanFile! (pairSecond acc) (pairFirst acc) rel code)))))
           (pair 0 (Scan :recs (list) :files 0 :imports (list) :syms (tb/strtabNew 4096) :mods (tb/strtabNew 1024)
@@ -131,7 +131,7 @@ fn wordEnd b: Bytes e: Int64 i: Int64 -> Int64
 
 fn decisionTable! -> tb/Strtab
   (fold (fn [(tab tb/Strtab) (w String)] -> tb/Strtab (pairFirst (tb/internStr! tab w)))
-        (tb/strtabNew 16) (list "if" "cond" "mt" "fold" "map" "filter" "and" "or" "case" "when"))
+        (tb/strtabNew 16) (list "if" "cond" "match" "fold" "map" "filter" "and" "or" "case" "when"))
 
 (schema Body
   (:f decisions Int64)
@@ -227,7 +227,7 @@ fn resolve! lk: Link keys: tb/Strtab buf: Bytes imports: (List Int64) fi: Int64 
       (do (tb/ivSet! lk.cacheFile sym (+ fi 1)) (tb/ivSet! lk.cacheVal sym target) target)))
 
 fn buildGraph! ctx: h/Ctx root: String keepLinks: Bool -> (Result Graph String)
-  (mt (st/trackedAsl! ctx root)
+  (match (st/trackedAsl! ctx root)
     ((err e) (err e))
     ((ok files)
       (let [(sc (scanAll! ctx root files))
@@ -331,10 +331,10 @@ fn withLinks g: Graph rated: (List Rated) -> (List Rated)
          rated))
 
 fn idAt names: (List (Pair String String)) k: Int64 -> String
-  (mt (listGet names k) ((some q) (pairFirst q)) ((none) ""))
+  (match (listGet names k) ((some q) (pairFirst q)) ((none) ""))
 
 fn kindAt names: (List (Pair String String)) k: Int64 -> String
-  (mt (listGet names k) ((some q) (pairSecond q)) ((none) ""))
+  (match (listGet names k) ((some q) (pairSecond q)) ((none) ""))
 
 fn strLess? a: String b: String -> Bool
   (let [(x (stringToBytes a)) (y (stringToBytes b))]
@@ -362,7 +362,7 @@ fn analyzeGraph! ctx: h/Ctx mode: String limit: Int64 modF: String symF: String 
   (analyzeGraphAt! ctx (resolveWorkspace! ctx) mode limit modF symF)
 
 fn analyzeGraphAt! ctx: h/Ctx root: String mode: String limit: Int64 modF: String symF: String -> (Result GraphSummary String)
-  (mt (buildGraph! ctx root (not (stringEmpty? symF)))
+  (match (buildGraph! ctx root (not (stringEmpty? symF)))
     ((err e) (err e))
     ((ok g)
       (let [(total (listLength g.nodes))
@@ -460,6 +460,6 @@ fn graphJson res: GraphSummary -> j/Json
                 (pair "filteredCount" (j/jInt res.filteredCount)) (pair "nodes" (j/jArr (map ratedJson res.nodes)))))
 
 fn runGraph! ctx: h/Ctx fmt: String mode: String limit: Int64 modF: String symF: String -> h/Outcome
-  (mt (analyzeGraph! ctx mode limit modF symF)
+  (match (analyzeGraph! ctx mode limit modF symF)
     ((err e) (h/outcome "" (str "Error: " e "\n") 1))
     ((ok res) (h/outcome (str (cond ((= fmt "json") (j/dumps (graphJson res))) ((= fmt "summary") (formatGraphSummary res)) (else (formatGraphAsn res))) "\n") "" 0)))

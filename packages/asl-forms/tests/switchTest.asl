@@ -36,7 +36,7 @@ fn ! runTests -> Bool
         (lsLink (pathSymlink "/bin/ls" (k/joinPath bin "ls")))
         (exprLink (pathSymlink "/bin/expr" (k/joinPath bin "expr")))
         (dirnameLink (pathSymlink "/usr/bin/dirname" (k/joinPath bin "dirname")))
-        (binEntryCount (mt (dirList bin) ((err _) -1) ((ok names) (listLength names))))
+        (binEntryCount (match (dirList bin) ((err _) -1) ((ok names) (listLength names))))
         (git (g/runArgv! (list "git" "init" "-q" base) (none) (none) 10000 0))
         (file (k/joinPath base "switchFixture.asl"))
         (written (fileWrite file "(module switch/sample :x [greet])\nfn greet -> String\n  \"hello\"\n"))

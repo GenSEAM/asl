@@ -414,7 +414,7 @@ fn nestedTailSource -> String
       "(fn walk [(n Int64) (acc Int64)] -> Int64"
       "  (if (= n 0)"
       "    acc"
-      "    (mt (some (mod n 2))"
+      "    (match (some (mod n 2))"
       "      ((some r) (if (= r 0)"
       "                  (if (= (mod n 3) 0) (walk (- n 1) (+ acc 1)) (walk (- n 1) acc))"
       "                  (walk (- n 1) acc)))"
@@ -435,8 +435,8 @@ fn program name: String -> (Result String (List ty/IrDiag))
     (else (llvm/emitLlvmProgram (failModule) name)))
 
 fn ! main args: (List String) -> (Result Int64 String)
-  (mt (listHead args)
+  (match (listHead args)
     ((none) (err "usage: abiPrograms.asl alloc|allocSmall|divZero|headNone|preludeInline|preludeInlineConsBad|preludeInlineListHeadBad|preludeInlineListTailBad|preludeInlineListEmptyBad|preludeInlineBytesLengthBad|arity|unknown|notBool|noMatch|asserts|negate|negateFloat|negateMin|negateText|joined|failed|tooBig|deepTail|nestedTail|fusedVariantInt|fusedVariantFloat|fusedVariantBool|fusedVariantRange|fusedVariantWrongTag|fusedRecordInt|fusedRecordMissingKey|staticFieldRecord|staticFieldMissing"))
-    ((some name) (mt (program name)
+    ((some name) (match (program name)
                    ((ok text) (do (print text) (ok 0)))
                    ((err diags) (err (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.locus ": " d.message)) diags) "; "))))))

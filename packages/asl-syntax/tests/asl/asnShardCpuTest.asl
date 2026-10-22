@@ -19,7 +19,7 @@ fn checkShard! suite: String -> Bool
         (passed (fr/executedOf done.out))]
     (do
       (assert (= done.exit 0) (str suite " exits 0 within the CPU cap (exit " (stringFromInt64 done.exit) ")"))
-      (assert (mt total ((some n) (> n 0)) ((none) false)) (str suite " reports a positive assertion count"))
+      (assert (match total ((some n) (> n 0)) ((none) false)) (str suite " reports a positive assertion count"))
       (assert (= total passed) (str suite " reports all assertions passed, got " done.out))
       true))
 

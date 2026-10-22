@@ -57,7 +57,7 @@ fn hasNewlineElements elems: (List tr/TreeElement) text: String -> Bool
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemNode _) (hasNewlineElements tl text))
         ((tr/elemToken tok)
          (if (= (tr/tokenKind tok) "newline")
@@ -495,7 +495,7 @@ fn parseDefaultBlock toks: (List tr/Token) text: String inAsync: Bool inGen: Boo
               (lastElem (optionOr (listLast elems) (tr/elemToken hd)))
               (endOffset (tr/elementEnd lastElem))
               (hasErr (listAny? (fn [(e tr/TreeElement)] -> Bool
-                                  (mt e
+                                  (match e
                                     ((tr/elemToken t) (= (tr/tokenKind t) "error"))
                                     ((tr/elemNode n) (= (tr/nodeKind n) "error"))))
                                 elems))
@@ -881,10 +881,10 @@ fn parseExpr text: String -> tr/Node
   (parseText text)
 
 fn findTokenKindOffset elems: (List tr/TreeElement) targetKind: String -> (Option Int64)
-  (mt (listHead elems)
+  (match (listHead elems)
     ((none) (none))
     ((some e)
-     (mt e
+     (match e
        ((tr/elemToken tok)
         (if (= (tr/tokenKind tok) targetKind)
           (some (tr/tokenStart tok))
@@ -915,18 +915,18 @@ fn nodeOpeningOffset n: tr/Node -> Int64
       (else (tr/nodeStart n))))
 
 fn hasDirectErrorToken elems: (List tr/TreeElement) -> Bool
-  (mt (listHead elems)
+  (match (listHead elems)
     ((none) false)
     ((some e)
-     (mt e
+     (match e
        ((tr/elemToken tok) (if (or (tr/isErrorToken tok) (= tok.kind "error")) true (hasDirectErrorToken (optionOr (listTail elems) (list)))))
        ((tr/elemNode n) (hasDirectErrorToken (optionOr (listTail elems) (list)))))))
 
 fn firstErrorOffset elems: (List tr/TreeElement) -> (Option Int64)
-  (mt (listHead elems)
+  (match (listHead elems)
     ((none) (none))
     ((some e)
-     (let [(here (mt e
+     (let [(here (match e
                    ((tr/elemToken tok)
                     (if (or (tr/isErrorToken tok) (= tok.kind "error"))
                       (some tok.start)
@@ -940,10 +940,10 @@ fn firstErrorOffset elems: (List tr/TreeElement) -> (Option Int64)
        (if (some? here) here (firstErrorOffset (optionOr (listTail elems) (list)))))))
 
 fn firstTrailingOffset elems: (List tr/TreeElement) seenExpr: Bool -> (Option Int64)
-  (mt (listHead elems)
+  (match (listHead elems)
     ((none) (none))
     ((some e)
-     (mt e
+     (match e
        ((tr/elemNode n) (firstTrailingOffset (optionOr (listTail elems) (list)) true))
        ((tr/elemToken tok)
         (if (and seenExpr (not (isTriviaTok tok)))
@@ -952,10 +952,10 @@ fn firstTrailingOffset elems: (List tr/TreeElement) seenExpr: Bool -> (Option In
 
 fn parse text: String -> (Result tr/Node String)
   (let [(root (parseText text))]
-    (mt (firstErrorOffset (list (tr/elemNode root)))
+    (match (firstErrorOffset (list (tr/elemNode root)))
       ((some off) (err (str "syntax error at offset " (stringFromInt64 off))))
       ((none)
-       (mt (firstTrailingOffset (tr/nodeChildren root) false)
+       (match (firstTrailingOffset (tr/nodeChildren root) false)
          ((some off) (err (str "syntax error at offset " (stringFromInt64 off))))
          ((none) (ok root))))))
 
@@ -969,11 +969,11 @@ fn expressionKind node: tr/Node -> String
 fn unwrapExpressionNode root: tr/Node -> tr/Node
   (if (= (tr/nodeKind root) "document")
     (let [(kids (tr/nodeChildren root))
-          (nodes (filter (fn [(e tr/TreeElement)] -> Bool (mt e ((tr/elemNode _) true) ((tr/elemToken _) false))) kids))]
+          (nodes (filter (fn [(e tr/TreeElement)] -> Bool (match e ((tr/elemNode _) true) ((tr/elemToken _) false))) kids))]
       (if (listEmpty? nodes)
         root
         (let [(firstElem (optionOr (listHead nodes) (tr/elemNode root)))]
-          (mt firstElem
+          (match firstElem
             ((tr/elemNode n) n)
             ((tr/elemToken _) root)))))
     root)
@@ -984,7 +984,7 @@ fn findChildNodes elems: (List tr/TreeElement) -> (List tr/Node)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))
           (rest (findChildNodes tl))]
-      (mt hd
+      (match hd
         ((tr/elemToken _) rest)
         ((tr/elemNode n) (cons n rest)))))
 
@@ -994,7 +994,7 @@ fn findChildTokens elems: (List tr/TreeElement) -> (List tr/Token)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))
           (rest (findChildTokens tl))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok) (cons tok rest))
         ((tr/elemNode _) rest))))
 
@@ -1013,7 +1013,7 @@ fn formatArrayElemsSExpr elems: (List tr/TreeElement) text: String -> String
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))
           (rest (formatArrayElemsSExpr tl text))]
-      (mt hd
+      (match hd
         ((tr/elemNode n)
          (str " " (exprToSExpr n text) rest))
         ((tr/elemToken tok)
@@ -1067,7 +1067,7 @@ fn formatTemplateContentSExpr elems: (List tr/TreeElement) text: String -> Strin
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))
           (rest (formatTemplateContentSExpr tl text))]
-      (mt hd
+      (match hd
         ((tr/elemNode n)
          (str " " (exprToSExpr n text) rest))
         ((tr/elemToken tok)
@@ -1127,7 +1127,7 @@ fn exprToSExpr node: tr/Node text: String -> String
        (let [(toks (findNonTriviaTokens kids))
              (nodes (findChildNodes kids))
              (firstElem (optionOr (listHead kids) (tr/elemToken (tr/makeToken "" 0 0))))
-             (isPost (mt firstElem ((tr/elemNode _) true) ((tr/elemToken _) false)))
+             (isPost (match firstElem ((tr/elemNode _) true) ((tr/elemToken _) false)))
              (opTok (optionOr (listHead toks) (tr/makeToken "" 0 0)))
              (op (tokenSlice opTok text))
              (argNode (optionOr (listHead nodes) (tr/makeErrorNode 0 0 (list))))]

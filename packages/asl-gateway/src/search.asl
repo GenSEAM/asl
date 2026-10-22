@@ -65,7 +65,7 @@ fn repl s: String old: String new: String -> String
 
 fn urlTypeCheck url: String -> (Result Bool pt/PyErr)
   (let [(c (stringIndexOf url ":"))]
-    (mt c
+    (match c
       ((some i) (if (and (> i 0) (not (pt/hasSubstr (pt/sliceB url 0 i) "/"))) (ok true) (err (pt/pyErr "ValueError" (str "unknown url type: " (pt/pyRepr (j/jstr url)))))))
       ((none) (err (pt/pyErr "ValueError" (str "unknown url type: " (pt/pyRepr (j/jstr url))))))))
 
@@ -101,9 +101,9 @@ fn headerNameOk name: String -> Bool
   (let [(bs (stringToBytes name))] (and (> (bytesLength bs) 0) (allBytes bs 0 (bytesLength bs) isTokenByte)))
 
 fn urlSelector url: String -> String
-  (mt (stringIndexOf url "://")
+  (match (stringIndexOf url "://")
     ((none) url)
-    ((some i) (let [(rest (pt/sliceB url (+ i 3) (stringLength url)))] (mt (stringIndexOf rest "/") ((some k) (pt/sliceB rest k (stringLength rest))) ((none) "")))))
+    ((some i) (let [(rest (pt/sliceB url (+ i 3) (stringLength url)))] (match (stringIndexOf rest "/") ((some k) (pt/sliceB rest k (stringLength rest))) ((none) "")))))
 
 fn validateReq r: HttpReq -> (Result Bool pt/PyErr)
   (let [(ctl (fn [(b Int64)] -> Bool (or (<= b 32) (= b 127))))
@@ -113,13 +113,13 @@ fn validateReq r: HttpReq -> (Result Bool pt/PyErr)
     (cond
       ((not (noBytes r.url ctl))
         (err (pt/pyErr "InvalidURL" (str "URL can't contain control characters. " (pt/pyRepr (j/jstr (urlSelector r.url))) " (found at least " (let [(i (firstCtl (stringToBytes r.url) 0))] (pt/pyRepr (j/jstr (pt/sliceB r.url i (+ i 1))))) ")"))))
-      ((some? badName) (err (pt/pyErr "ValueError" (str "Invalid header name " (bytesRepr (mt badName ((some h) (pairFirst h)) ((none) "")))))))
-      ((some? badValue) (err (pt/pyErr "ValueError" (str "Invalid header value for " (bytesRepr (mt badValue ((some h) (pairFirst h)) ((none) ""))) " (value withheld)"))))
-      ((mt r.data ((some d) (not (noBytes d (fn [(b Int64)] -> Bool (= b 0))))) ((none) false)) (err (pt/pyErr "ValueError" "request body contains a NUL byte")))
+      ((some? badName) (err (pt/pyErr "ValueError" (str "Invalid header name " (bytesRepr (match badName ((some h) (pairFirst h)) ((none) "")))))))
+      ((some? badValue) (err (pt/pyErr "ValueError" (str "Invalid header value for " (bytesRepr (match badValue ((some h) (pairFirst h)) ((none) ""))) " (value withheld)"))))
+      ((match r.data ((some d) (not (noBytes d (fn [(b Int64)] -> Bool (= b 0))))) ((none) false)) (err (pt/pyErr "ValueError" "request body contains a NUL byte")))
       (else (ok true))))
 
 fn curlConfig r: HttpReq -> (Result String pt/PyErr)
-  (mt (validateReq r)
+  (match (validateReq r)
     ((err e) (err e))
     ((ok _)
       (ok (pt/treeJoin
@@ -130,16 +130,16 @@ fn curlConfig r: HttpReq -> (Result String pt/PyErr)
                 (map (fn [(h (Pair String String))] -> String (str "header = " (cq (str (pairFirst h) ": " (pairSecond h))) "\n")) r.headers)
                 (listAppend
                   (list (if (hasHeader r.headers "accept") "" "header = \"Accept:\"\n") "header = \"Expect:\"\n")
-                  (mt r.data ((some d) (list "data-raw = " (cq d) "\n")) ((none) (list))))))))))
+                  (match r.data ((some d) (list "data-raw = " (cq d) "\n")) ((none) (list))))))))))
 
 fn curlChildEnv env: (Map String String) -> (List String)
   (let [(names (list "http_proxy" "https_proxy" "HTTP_PROXY" "HTTPS_PROXY" "no_proxy" "NO_PROXY" "all_proxy" "ALL_PROXY" "SSL_CERT_FILE" "CURL_CA_BUNDLE"))
-        (extra (fold (fn [(acc (List String)) (k String)] -> (List String) (mt (mapGet env k) ((some v) (listAppend acc (list (str k "=" v)))) ((none) acc))) (list) names))]
+        (extra (fold (fn [(acc (List String)) (k String)] -> (List String) (match (mapGet env k) ((some v) (listAppend acc (list (str k "=" v)))) ((none) acc))) (list) names))]
     (cons (str "PATH=" (optionOr (mapGet env "PATH") "/usr/bin:/bin")) extra))
 
 fn headerLines block: String -> (List (Pair String String))
   (fold (fn [(acc (List (Pair String String))) (line String)] -> (List (Pair String String))
-          (mt (stringIndexOf line ":")
+          (match (stringIndexOf line ":")
             ((some i) (listAppend acc (list (pair (pt/sliceB line 0 i) (pt/pyStrip (pt/sliceB line (+ i 1) (stringLength line)))))))
             ((none) acc)))
         (list) (optionOr (listTail (stringSplit block "\r\n")) (list)))
@@ -147,7 +147,7 @@ fn headerLines block: String -> (List (Pair String String))
 fn parseCurlOutput out: String -> (Result HttpResult String)
   (if (not (stringStartsWith? out "HTTP/"))
     (err (str "curl output has no status line: " (pt/sliceB out 0 (min 80 (stringLength out)))))
-    (mt (stringIndexOf out "\r\n\r\n")
+    (match (stringIndexOf out "\r\n\r\n")
       ((none) (err "curl output has no header terminator"))
       ((some k)
         (let [(block (pt/sliceB out 0 k))
@@ -171,7 +171,7 @@ fn httpOk? code: Int64 -> Bool
 fn ! writeAll! fd: Int64 s: String -> (Result Int64 String)
   (if (stringEmpty? s)
     (ok 0)
-    (mt (fdWrite fd s)
+    (match (fdWrite fd s)
       ((err e) (err e))
       ((ok k) (writeAll! fd (pt/sliceB s k (stringLength s))))))
 
@@ -180,17 +180,17 @@ fn ! reap! pid: Int64 outFd: Int64 errFd: Int64 -> Bool
     (and (ok? w) (ok? a) (ok? b)))
 
 fn ! spawnCurl! idx: Int64 r: HttpReq env: (List String) -> (Result Slot HttpResult)
-  (mt (curlConfig r)
+  (match (curlConfig r)
     ((err e) (err (httpFail e false)))
     ((ok cfg)
-      (mt (procSpawnv (list "curl" "-q" "--config" "-") (none) (some env))
+      (match (procSpawnv (list "curl" "-q" "--config" "-") (none) (some env))
         ((err e) (err (httpFail (pt/pyErr "ToolAbsent" (str "ERR_TOOL_ABSENT: curl did not start (" e ")")) false)))
         ((ok sp)
           (let [(w (writeAll! sp.stdin cfg)) (c (fdClose sp.stdin))]
-            (mt w
+            (match w
               ((err e) (do (reap! sp.pid sp.stdout sp.stderr) (err (httpFail (pt/pyErr "URLError" (str "<urlopen error curl stdin: " e ">")) false))))
               ((ok _)
-                (mt c
+                (match c
                   ((err e) (do (reap! sp.pid sp.stdout sp.stderr) (err (httpFail (pt/pyErr "URLError" (str "<urlopen error curl stdin close: " e ">")) false))))
                   ((ok _) (ok (Slot :idx idx :pid sp.pid :outFd sp.stdout :errFd sp.stderr :outOpen true :errOpen true :out (list) :errs (list) :code (none) :fault (none) :timedOut false)))))))))))
 
@@ -198,19 +198,19 @@ fn fdReady? ready: (List (Pair Int64 Int64)) fd: Int64 -> Bool
   (listAny? (fn [(p (Pair Int64 Int64))] -> Bool (= (pairFirst p) fd)) ready)
 
 fn ! readSide! fd: Int64 -> (Result (Option String) String)
-  (mt (fdRead fd 65536)
-    ((ok chunk) (if (stringEmpty? chunk) (mt (fdClose fd) ((ok _) (ok (none))) ((err e) (err (str "close: " e)))) (ok (some chunk))))
+  (match (fdRead fd 65536)
+    ((ok chunk) (if (stringEmpty? chunk) (match (fdClose fd) ((ok _) (ok (none))) ((err e) (err (str "close: " e)))) (ok (some chunk))))
     ((err e) (do (fdClose fd) (err (str "read: " e)))))
 
 fn ! absorb! s: Slot ready: (List (Pair Int64 Int64)) exited: (List (Pair Int64 Int64)) -> Slot
   (let [(o (if (and s.outOpen (fdReady? ready s.outFd)) (readSide! s.outFd) (ok (some ""))))
         (e (if (and s.errOpen (fdReady? ready s.errFd)) (readSide! s.errFd) (ok (some ""))))
         (ex (filter (fn [(p (Pair Int64 Int64))] -> Bool (= (pairFirst p) s.pid)) exited))
-        (code (if (some? s.code) s.code (mt (listHead ex) ((some p) (some (pairSecond p))) ((none) (none)))))
-        (fault (cond ((some? s.fault) s.fault) ((err? o) (resultToOption (mt o ((err m) (ok m)) ((ok _) (err ""))))) ((err? e) (resultToOption (mt e ((err m) (ok m)) ((ok _) (err ""))))) (else (none))))
+        (code (if (some? s.code) s.code (match (listHead ex) ((some p) (some (pairSecond p))) ((none) (none)))))
+        (fault (cond ((some? s.fault) s.fault) ((err? o) (resultToOption (match o ((err m) (ok m)) ((ok _) (err ""))))) ((err? e) (resultToOption (match e ((err m) (ok m)) ((ok _) (err ""))))) (else (none))))
         (oc (optionOr (resultToOption o) (none)))
         (ec (optionOr (resultToOption e) (none)))]
-    (with s :outOpen (and s.outOpen (ok? o) (some? oc)) :errOpen (and s.errOpen (ok? e) (some? ec)) :out (mt oc ((some c) (if (stringEmpty? c) s.out (cons c s.out))) ((none) s.out)) :errs (mt ec ((some c) (if (stringEmpty? c) s.errs (cons c s.errs))) ((none) s.errs)) :code code :fault fault))
+    (with s :outOpen (and s.outOpen (ok? o) (some? oc)) :errOpen (and s.errOpen (ok? e) (some? ec)) :out (match oc ((some c) (if (stringEmpty? c) s.out (cons c s.out))) ((none) s.out)) :errs (match ec ((some c) (if (stringEmpty? c) s.errs (cons c s.errs))) ((none) s.errs)) :code code :fault fault))
 
 fn slotDone? s: Slot -> Bool
   (and (some? s.code) (not s.outOpen) (not s.errOpen))
@@ -232,7 +232,7 @@ fn ! pollLoop! running: (List Slot) done: (List Slot) deadlineNs: Int64 -> (List
                            (listAppend acc (listAppend (if s.outOpen (list (pair s.outFd 1)) (list)) (if s.errOpen (list (pair s.errFd 1)) (list)))))
                          (list) running))
               (pids (map (fn [(s Slot)] -> Int64 s.pid) (filter (fn [(s Slot)] -> Bool (none? s.code)) running)))]
-          (mt (procPoll fds pids leftMs)
+          (match (procPoll fds pids leftMs)
             ((err e) (listAppend done (map (fn [(s Slot)] -> Slot (killSlot! s (str "procPoll: " e) false)) running)))
             ((ok rd)
               (let [(slots (map (fn [(s Slot)] -> Slot (absorb! s (pairFirst rd) (pairSecond rd))) running))
@@ -247,18 +247,18 @@ fn charsetNameOk cs: String -> Bool
          (allBytes bs 0 n (fn [(b Int64)] -> Bool (or (and (>= b 97) (<= b 122)) (and (>= b 65) (<= b 90)) (and (>= b 48) (<= b 57)) (= b 46) (= b 95) (= b 58) (= b 45))))))
 
 fn ! runTool! argv: (List String) env: (List String) ms: Int64 -> (Result (Pair Int64 String) String)
-  (mt (procSpawnv argv (none) (some env))
+  (match (procSpawnv argv (none) (some env))
     ((err e) (err (str "ERR_TOOL_ABSENT: " (optionOr (listHead argv) "") " did not start (" e ")")))
     ((ok sp)
-      (mt (fdClose sp.stdin)
+      (match (fdClose sp.stdin)
         ((err e) (do (reap! sp.pid sp.stdout sp.stderr) (err (str "stdin close: " e))))
         ((ok _)
           (let [(slot (Slot :idx 0 :pid sp.pid :outFd sp.stdout :errFd sp.stderr :outOpen true :errOpen true :out (list) :errs (list) :code (none) :fault (none) :timedOut false))
                 (done (pollLoop! (list slot) (list) (+ (monotonicNs) (* ms 1000000))))]
-            (mt (listHead done)
+            (match (listHead done)
               ((none) (err "tool produced no result"))
               ((some s)
-                (mt s.fault
+                (match s.fault
                   ((some f) (err f))
                   ((none) (ok (pair (optionOr s.code -1) (pt/treeJoin (listReverse s.out)))))))))))))
 
@@ -266,20 +266,20 @@ fn ! iconvDecode! raw: String cs: String env: (Map String String) -> (Result Str
   (if (not (charsetNameOk cs))
     (err (pt/pyErr "LookupError" (str "unknown encoding: " cs)))
     (let [(childEnv (list (str "PATH=" (optionOr (mapGet env "PATH") "/usr/bin:/bin"))))]
-      (mt (runTool! (list "iconv" "-f" cs "-t" "UTF-8" "/dev/null") childEnv 5000)
+      (match (runTool! (list "iconv" "-f" cs "-t" "UTF-8" "/dev/null") childEnv 5000)
         ((err e) (err (pt/pyErr "ToolAbsent" e)))
         ((ok probe)
           (if (not (= (pairFirst probe) 0))
             (err (pt/pyErr "LookupError" (str "unknown encoding: " cs)))
             (let [(path (str "/tmp/aslIconv." (stringFromInt64 (procSelf)) "." (stringFromInt64 (monotonicNs))))]
-              (mt (fileWrite path raw)
+              (match (fileWrite path raw)
                 ((err e) (err (pt/pyErr "OSError" (str "iconv input: " e))))
                 ((ok _)
                   (let [(conv (runTool! (list "iconv" "-c" "-f" cs "-t" "UTF-8" path) childEnv 10000))
                         (removed (pathRemove path))]
-                    (mt conv
+                    (match conv
                       ((err e) (err (pt/pyErr "ToolAbsent" e)))
-                      ((ok r) (mt removed ((err e) (err (pt/pyErr "OSError" (str "iconv input cleanup: " e)))) ((ok _) (ok (pairSecond r)))))))))))))))
+                      ((ok r) (match removed ((err e) (err (pt/pyErr "OSError" (str "iconv input cleanup: " e)))) ((ok _) (ok (pairSecond r)))))))))))))))
 
 fn ! decodeBody! raw: String cs: String env: (Map String String) -> (Result String pt/PyErr)
   (if (pt/nativeCharset? cs) (pt/decodeCharset raw cs) (iconvDecode! raw cs env))
@@ -293,23 +293,23 @@ fn slotResult s: Slot -> HttpResult
       ((some? s.fault) (httpFail (pt/pyErr "URLError" (str "<urlopen error curl " (optionOr s.fault "") ">")) false))
       ((= code 28) (httpFail (pt/pyErr "URLError" "<urlopen error timed out>") true))
       ((not (= code 0)) (httpFail (pt/pyErr "URLError" (str "<urlopen error " (if (stringEmpty? errText) (str "curl exit " (stringFromInt64 code)) errText) ">")) false))
-      (else (mt (parseCurlOutput out) ((ok r) r) ((err e) (httpFail (pt/pyErr "RemoteDisconnected" e) false))))))
+      (else (match (parseCurlOutput out) ((ok r) r) ((err e) (httpFail (pt/pyErr "RemoteDisconnected" e) false))))))
 
 fn timeoutMs r: HttpReq -> Int64
-  (mt r.timeout
+  (match r.timeout
     ((j/jint i) (* i 1000))
-    ((j/jfloat f) (mt (float64ToInt64 (* f 1000.0)) ((some i) i) ((none) 60000)))
+    ((j/jfloat f) (match (float64ToInt64 (* f 1000.0)) ((some i) i) ((none) 60000)))
     (_ 60000))
 
 fn ! runCurlBatch! reqs: (List HttpReq) env: (List String) -> (List HttpResult)
   (let [(started (map (fn [(p (Pair Int64 HttpReq))] -> (Result Slot HttpResult) (spawnCurl! (pairFirst p) (pairSecond p) env)) (enumerate reqs)))
-        (slots (fold (fn [(acc (List Slot)) (r (Result Slot HttpResult))] -> (List Slot) (mt r ((ok s) (listAppend acc (list s))) ((err _) acc))) (list) started))
+        (slots (fold (fn [(acc (List Slot)) (r (Result Slot HttpResult))] -> (List Slot) (match r ((ok s) (listAppend acc (list s))) ((err _) acc))) (list) started))
         (guardMs (+ 15000 (fold (fn [(acc Int64) (r HttpReq)] -> Int64 (max acc (timeoutMs r))) 0 reqs)))
         (finished (pollLoop! slots (list) (+ (monotonicNs) (* guardMs 1000000))))]
     (map (fn [(p (Pair Int64 (Result Slot HttpResult)))] -> HttpResult
-           (mt (pairSecond p)
+           (match (pairSecond p)
              ((err failed) failed)
-             ((ok _) (mt (listHead (filter (fn [(s Slot)] -> Bool (= s.idx (pairFirst p))) finished))
+             ((ok _) (match (listHead (filter (fn [(s Slot)] -> Bool (= s.idx (pairFirst p))) finished))
                        ((some s) (slotResult s))
                        ((none) (httpFail (pt/pyErr "URLError" "<urlopen error curl slot lost>") false))))))
          (enumerate started)))
@@ -318,7 +318,7 @@ fn httpError code: Int64 reason: String -> pt/PyErr
   (pt/pyErr "HTTPError" (str "HTTP Error " (stringFromInt64 code) ": " reason))
 
 fn contentCharset hs: (List (Pair String String)) -> (Option String)
-  (mt (listHead (filter (fn [(h (Pair String String))] -> Bool (= (pt/asciiLower (pairFirst h)) "content-type")) hs))
+  (match (listHead (filter (fn [(h (Pair String String))] -> Bool (= (pt/asciiLower (pairFirst h)) "content-type")) hs))
     ((none) (none))
     ((some h)
       (fold (fn [(acc (Option String)) (param String)] -> (Option String)
@@ -331,12 +331,12 @@ fn contentCharset hs: (List (Pair String String)) -> (Option String)
             (none) (optionOr (listTail (stringSplit (pairSecond h) ";")) (list)))))
 
 fn jsonBody r: HttpResult -> (Result j/Json pt/PyErr)
-  (mt r
+  (match r
     ((httpFail e _) (err e))
     ((httpResp code reason _ body)
       (if (not (httpOk? code))
         (err (httpError code reason))
-        (mt (pt/strictUtf8 body) ((err e) (err e)) ((ok text) (pt/jsonLoads text))))))
+        (match (pt/strictUtf8 body) ((err e) (err e)) ((ok text) (pt/jsonLoads text))))))
 
 fn jobj3 a: String av: j/Json b: String bv: j/Json c: String cv: j/Json -> j/Json
   (j/jobj (list (pair a av) (pair b bv) (pair c cv)))
@@ -351,15 +351,15 @@ fn respJson answer: j/Json results: (List j/Json) -> j/Json
   (j/jobj (list (pair "answer" answer) (pair "results" (j/jarr results))))
 
 fn orErr r: (Result j/Json pt/PyErr) -> j/Json
-  (mt r ((ok v) v) ((err e) (engineError e)))
+  (match r ((ok v) v) ((err e) (engineError e)))
 
 fn collect items: (List j/Json) f: (fn [j/Json] -> (Result (Option j/Json) pt/PyErr)) acc: (List j/Json) -> (Result (List j/Json) pt/PyErr)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (ok (listReverse acc)))
     ((some it)
-      (mt (f it)
+      (match (f it)
         ((err e) (err e))
-        ((ok o) (collect (optionOr (listTail items) (list)) f (mt o ((some v) (cons v acc)) ((none) acc)))))))
+        ((ok o) (collect (optionOr (listTail items) (list)) f (match o ((some v) (cons v acc)) ((none) acc)))))))
 
 fn tavilyReq query: String limit: Int64 key: String -> HttpReq
   (HttpReq :url "https://api.tavily.com/search"
@@ -368,7 +368,7 @@ fn tavilyReq query: String limit: Int64 key: String -> HttpReq
            :timeout (j/jint 10))
 
 fn lessThanQuarter sc: j/Json -> (Result Bool pt/PyErr)
-  (mt sc
+  (match sc
     ((j/jint i) (ok (< (int64ToFloat64 i) 0.25)))
     ((j/jfloat f) (ok (< f 0.25)))
     ((j/jnum f) (ok (< f 0.25)))
@@ -377,24 +377,24 @@ fn lessThanQuarter sc: j/Json -> (Result Bool pt/PyErr)
 
 fn tavilyParse r: HttpResult -> j/Json
   (orErr
-    (mt (jsonBody r)
+    (match (jsonBody r)
       ((err e) (err e))
       ((ok data)
-        (mt (pt/jgetOr data "answer" (j/jstr ""))
+        (match (pt/jgetOr data "answer" (j/jstr ""))
           ((err e) (err e))
           ((ok answer)
-            (mt (pt/jgetOr data "results" (j/jarr (list)))
+            (match (pt/jgetOr data "results" (j/jarr (list)))
               ((err e) (err e))
               ((ok rs)
-                (mt (pt/pyIter rs)
+                (match (pt/pyIter rs)
                   ((err e) (err e))
                   ((ok items)
-                    (mt (collect items
+                    (match (collect items
                           (fn [(it j/Json)] -> (Result (Option j/Json) pt/PyErr)
-                            (mt (pt/jgetOr it "score" (j/jfloat 0.9))
+                            (match (pt/jgetOr it "score" (j/jfloat 0.9))
                               ((err e) (err e))
                               ((ok sc)
-                                (mt (lessThanQuarter sc)
+                                (match (lessThanQuarter sc)
                                   ((err e) (err e))
                                   ((ok low) (if low (ok (none)) (ok (some (resultItem (optionOr (pt/jget it "title") (j/jstr "")) (pt/cleanUrl (optionOr (pt/jget it "url") (j/jstr "")))
                                                                   (optionOr (pt/jget it "content") (j/jstr "")) "tavily" sc)))))))))
@@ -409,7 +409,7 @@ fn ! runOne! st: HubState r: HttpReq -> HttpResult
   (optionOr (listHead (runCurlBatch! (list r) (curlChildEnv st.env))) (httpFail (pt/pyErr "URLError" "<urlopen error no result>") false))
 
 fn ! doTavilySearch! st: HubState query: String limit: Int64 apiKey: (Option String) -> j/Json
-  (let [(key (mt apiKey ((some k) (if (stringEmpty? k) (envGetNonEmpty st "TAVILY_API_KEY") k)) ((none) (envGetNonEmpty st "TAVILY_API_KEY"))))]
+  (let [(key (match apiKey ((some k) (if (stringEmpty? k) (envGetNonEmpty st "TAVILY_API_KEY") k)) ((none) (envGetNonEmpty st "TAVILY_API_KEY"))))]
     (if (stringEmpty? key) (j/jnull) (tavilyParse (runOne! st (tavilyReq query limit key)))))
 
 fn serperReq query: String limit: Int64 key: String -> HttpReq
@@ -420,18 +420,18 @@ fn serperReq query: String limit: Int64 key: String -> HttpReq
 
 fn serperParse r: HttpResult -> j/Json
   (orErr
-    (mt (jsonBody r)
+    (match (jsonBody r)
       ((err e) (err e))
       ((ok data)
-        (mt (pt/jgetOr data "organic" (j/jarr (list)))
+        (match (pt/jgetOr data "organic" (j/jarr (list)))
           ((err e) (err e))
           ((ok rs)
-            (mt (pt/pyIter rs)
+            (match (pt/pyIter rs)
               ((err e) (err e))
               ((ok items)
-                (mt (collect items
+                (match (collect items
                       (fn [(it j/Json)] -> (Result (Option j/Json) pt/PyErr)
-                        (mt (pt/jgetOr it "title" (j/jstr ""))
+                        (match (pt/jgetOr it "title" (j/jstr ""))
                           ((err e) (err e))
                           ((ok title) (ok (some (resultItem title (pt/cleanUrl (optionOr (pt/jget it "link") (j/jstr ""))) (optionOr (pt/jget it "snippet") (j/jstr "")) "serper" (j/jfloat 0.85)))))))
                       (list))
@@ -439,7 +439,7 @@ fn serperParse r: HttpResult -> j/Json
                   ((ok results) (ok (respJson (j/jstr "") results)))))))))))
 
 fn ! doSerperSearch! st: HubState query: String limit: Int64 apiKey: (Option String) -> j/Json
-  (let [(key (mt apiKey ((some k) (if (stringEmpty? k) (envGetNonEmpty st "SERPER_API_KEY") k)) ((none) (envGetNonEmpty st "SERPER_API_KEY"))))]
+  (let [(key (match apiKey ((some k) (if (stringEmpty? k) (envGetNonEmpty st "SERPER_API_KEY") k)) ((none) (envGetNonEmpty st "SERPER_API_KEY"))))]
     (if (stringEmpty? key) (j/jnull) (serperParse (runOne! st (serperReq query limit key)))))
 
 fn wikiReq query: String limit: Int64 -> HttpReq
@@ -449,38 +449,38 @@ fn wikiReq query: String limit: Int64 -> HttpReq
 fn wikiRows titles: j/Json urls: j/Json snippets: j/Json i: Int64 n: Int64 acc: (List j/Json) -> (Result (List j/Json) pt/PyErr)
   (if (>= i n)
     (ok (listReverse acc))
-    (mt (pt/pyIndex titles i)
+    (match (pt/pyIndex titles i)
       ((err e) (err e))
       ((ok t)
-        (mt (pt/pyIndex urls i)
+        (match (pt/pyIndex urls i)
           ((err e) (err e))
           ((ok u)
-            (mt (pt/pyIndex snippets i)
+            (match (pt/pyIndex snippets i)
               ((err e) (err e))
               ((ok s) (wikiRows titles urls snippets (+ i 1) n (cons (resultItem t u s "wikipedia" (j/jfloat 0.8)) acc)))))))))
 
 fn wikiParse r: HttpResult -> j/Json
   (orErr
-    (mt (jsonBody r)
+    (match (jsonBody r)
       ((err e) (err e))
       ((ok data)
-        (mt (pt/jlen data)
+        (match (pt/jlen data)
           ((err e) (err e))
           ((ok n)
             (if (< n 4)
               (ok (respJson (j/jstr "") (list)))
-              (mt (pt/pyIndex data 1)
+              (match (pt/pyIndex data 1)
                 ((err e) (err e))
                 ((ok titles)
-                  (mt (pt/pyIndex data 2)
+                  (match (pt/pyIndex data 2)
                     ((err e) (err e))
                     ((ok snippets)
-                      (mt (pt/pyIndex data 3)
+                      (match (pt/pyIndex data 3)
                         ((err e) (err e))
                         ((ok urls)
-                          (mt (pt/jlen titles)
+                          (match (pt/jlen titles)
                             ((err e) (err e))
-                            ((ok tn) (mt (wikiRows titles urls snippets 0 tn (list)) ((err e) (err e)) ((ok rows) (ok (respJson (j/jstr "") rows))))))))))))))))))
+                            ((ok tn) (match (wikiRows titles urls snippets 0 tn (list)) ((err e) (err e)) ((ok rows) (ok (respJson (j/jstr "") rows))))))))))))))))))
 
 fn ! doWikiSearch! st: HubState query: String limit: Int64 -> j/Json
   (wikiParse (runOne! st (wikiReq query limit)))
@@ -494,23 +494,23 @@ fn searxngReq base: String query: String -> HttpReq
 
 fn searxngParse r: HttpResult limit: Int64 -> j/Json
   (orErr
-    (mt (jsonBody r)
+    (match (jsonBody r)
       ((err e) (err e))
       ((ok data)
-        (mt (pt/jgetOr data "results" (j/jarr (list)))
+        (match (pt/jgetOr data "results" (j/jarr (list)))
           ((err e) (err e))
           ((ok rs)
-            (mt (pt/pyIter rs)
+            (match (pt/pyIter rs)
               ((err e) (err e))
-              ((ok items) (mt (searxRows items limit (list)) ((err e) (err e)) ((ok rows) (ok (respJson (j/jstr "") rows)))))))))))
+              ((ok items) (match (searxRows items limit (list)) ((err e) (err e)) ((ok rows) (ok (respJson (j/jstr "") rows)))))))))))
 
 fn searxRows items: (List j/Json) limit: Int64 acc: (List j/Json) -> (Result (List j/Json) pt/PyErr)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (ok (listReverse acc)))
     ((some it)
       (if (>= (listLength acc) limit)
         (ok (listReverse acc))
-        (mt (pt/jgetOr it "title" (j/jstr ""))
+        (match (pt/jgetOr it "title" (j/jstr ""))
           ((err e) (err e))
           ((ok title)
             (searxRows (optionOr (listTail items) (list)) limit
@@ -521,7 +521,7 @@ fn ! doSearxngSearch! st: HubState query: String limit: Int64 -> (Result j/Json 
     (if (stringEmpty? base)
       (ok (j/jnull))
       (let [(req (searxngReq base query))]
-        (mt (urlTypeCheck req.url) ((err e) (err e)) ((ok _) (ok (searxngParse (runOne! st req) limit)))))))
+        (match (urlTypeCheck req.url) ((err e) (err e)) ((ok _) (ok (searxngParse (runOne! st req) limit)))))))
 
 fn ddgReq query: String -> HttpReq
   (HttpReq :url (str "https://html.duckduckgo.com/html/?q=" (pt/urlQuote query "/"))
@@ -545,7 +545,7 @@ fn gtOrEnd bs: Bytes n: Int64 from: Int64 -> Int64
   (let [(k (byteFind bs n ">" from))] (if (< k 0) n k))
 
 fn linkTryHrefs s: String bs: Bytes n: Int64 hs: (List Int64) -> (Option (Pair (Pair String String) Int64))
-  (mt (listHead hs)
+  (match (listHead hs)
     ((none) (none))
     ((some h)
       (let [(t (byteFind bs n "\"" (+ h 6)))
@@ -556,14 +556,14 @@ fn linkTryHrefs s: String bs: Bytes n: Int64 hs: (List Int64) -> (Option (Pair (
           (linkTryHrefs s bs n (optionOr (listTail hs) (list)))))))
 
 fn linkTryClasses s: String bs: Bytes n: Int64 ps: (List Int64) -> (Option (Pair (Pair String String) Int64))
-  (mt (listHead ps)
+  (match (listHead ps)
     ((none) (none))
     ((some p)
       (let [(q (+ p 7)) (r (byteFind bs n "\"" q))]
         (if (and (>= r 0) (pt/hasSubstr (pt/sliceB s q r) "result__url"))
           (let [(e1 (gtOrEnd bs n (+ r 1)))
                 (hs (allFrom bs n (stringToBytes "href=\"") 6 (+ r 1) (- e1 6) (list)))]
-            (mt (linkTryHrefs s bs n hs)
+            (match (linkTryHrefs s bs n hs)
               ((some m) (some m))
               ((none) (linkTryClasses s bs n (optionOr (listTail ps) (list))))))
           (linkTryClasses s bs n (optionOr (listTail ps) (list)))))))
@@ -574,7 +574,7 @@ fn linksLoop s: String bs: Bytes n: Int64 i: Int64 acc: (List (Pair String Strin
       (listReverse acc)
       (let [(e0 (gtOrEnd bs n (+ k 2)))
             (ps (allFrom bs n (stringToBytes "class=\"") 7 (+ k 3) (- e0 7) (list)))]
-        (mt (linkTryClasses s bs n ps)
+        (match (linkTryClasses s bs n ps)
           ((some m) (linksLoop s bs n (pairSecond m) (cons (pairFirst m) acc)))
           ((none) (linksLoop s bs n (+ k 1) acc))))))
 
@@ -582,7 +582,7 @@ fn ddgLinks html: String -> (List (Pair String String))
   (let [(bs (stringToBytes html))] (linksLoop html bs (bytesLength bs) 0 (list)))
 
 fn snipTryClasses s: String bs: Bytes n: Int64 ps: (List Int64) -> (Option (Pair String Int64))
-  (mt (listHead ps)
+  (match (listHead ps)
     ((none) (none))
     ((some p)
       (let [(q (+ p 7)) (r (byteFind bs n "\"" q))]
@@ -600,7 +600,7 @@ fn snipsLoop s: String bs: Bytes n: Int64 i: Int64 acc: (List String) -> (List S
       (listReverse acc)
       (let [(e0 (gtOrEnd bs n (+ k 2)))
             (ps (allFrom bs n (stringToBytes "class=\"") 7 (+ k 3) (- e0 7) (list)))]
-        (mt (snipTryClasses s bs n ps)
+        (match (snipTryClasses s bs n ps)
           ((some m) (snipsLoop s bs n (pairSecond m) (cons (pairFirst m) acc)))
           ((none) (snipsLoop s bs n (+ k 1) acc))))))
 
@@ -618,7 +618,7 @@ fn uddgFrom link: String bs: Bytes n: Int64 i: Int64 -> (Option String)
         (if (> e (+ k 5)) (some (pt/sliceB link (+ k 5) e)) (uddgFrom link bs n (+ k 1))))))
 
 fn ddgParse r: HttpResult limit: Int64 -> j/Json
-  (mt r
+  (match r
     ((httpFail e _) (engineError e))
     ((httpResp code reason _ body)
       (if (not (httpOk? code))
@@ -630,7 +630,7 @@ fn ddgParse r: HttpResult limit: Int64 -> j/Json
               (rows (map (fn [(i Int64)] -> j/Json
                            (let [(lk (optionOr (listGet links i) (pair "" "")))
                                  (raw (pairFirst lk))
-                                 (actual (mt (uddgOf raw) ((some g) (pt/urlUnquote g)) ((none) raw)))
+                                 (actual (match (uddgOf raw) ((some g) (pt/urlUnquote g)) ((none) raw)))
                                  (title (pt/pyStrip (pt/stripTagRegex (pairSecond lk) "")))
                                  (snippet (if (< i (listLength snips)) (pt/pyStrip (pt/stripTagRegex (optionOr (listGet snips i) "") "")) ""))]
                              (resultItem (j/jstr (if (stringEmpty? title) "Search Result" title)) (pt/cleanUrl (j/jstr actual)) (j/jstr snippet) "ddg" (j/jfloat 0.75))))
@@ -645,7 +645,7 @@ fn engErr eng: String msg: j/Json -> j/Json
   (j/jobj (list (pair "engine" (j/jstr eng)) (pair "error" msg)))
 
 fn hashKey v: j/Json -> (Result String pt/PyErr)
-  (mt v
+  (match v
     ((j/jstr s) (ok (str "s:" s)))
     ((j/jnull) (ok "none"))
     ((j/jarr _) (err (pt/pyErr "TypeError" "unhashable type: 'list'")))
@@ -653,11 +653,11 @@ fn hashKey v: j/Json -> (Result String pt/PyErr)
     (_ (ok (str "n:" (pt/jsonDumps v -1)))))
 
 fn mergeLoop items: (List j/Json) seen: (List String) merged: (List j/Json) limit: Int64 -> (Result (Pair (List String) (List j/Json)) pt/PyErr)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (ok (pair seen merged)))
     ((some r)
       (let [(u (pt/cleanUrl (optionOr (pt/jget r "url") (j/jnull))))]
-        (mt (hashKey u)
+        (match (hashKey u)
           ((err e) (err e))
           ((ok key)
             (if (and (not (listContains? seen key)) (< (listLength merged) limit))
@@ -669,7 +669,7 @@ fn ! parallelTier1Search! st: HubState query: String limit: Int64 -> (Pair (Resu
         (ser (envGetNonEmpty st "SERPER_API_KEY"))
         (mid (cond ((not (stringEmpty? tav)) (some (pair "tavily" (tavilyReq query limit tav)))) ((not (stringEmpty? ser)) (some (pair "serper" (serperReq query limit ser)))) (else (none))))
         (st1 (ddgThrottle! st))
-        (engines (listAppend (list (pair "wiki" (wikiReq query limit))) (listAppend (mt mid ((some m) (list m)) ((none) (list))) (list (pair "ddg" (ddgReq query))))))
+        (engines (listAppend (list (pair "wiki" (wikiReq query limit))) (listAppend (match mid ((some m) (list m)) ((none) (list))) (list (pair "ddg" (ddgReq query))))))
         (outs (runCurlBatch! (map (fn [(e (Pair String HttpReq))] -> HttpReq (pairSecond e)) engines) (curlChildEnv st1.env)))
         (datas (map (fn [(p (Pair (Pair String HttpReq) HttpResult))] -> (Pair String j/Json)
                       (let [(name (pairFirst (pairFirst p))) (r (pairSecond p))]
@@ -684,40 +684,40 @@ fn ! parallelTier1Search! st: HubState query: String limit: Int64 -> (Pair (Resu
         (good (filter (fn [(p (Pair String j/Json))] -> Bool
                         (let [(d (pairSecond p))] (and (pt/pyTruthy d) (not (pt/pyTruthy (optionOr (pt/jget d "error") (j/jnull)))) (pt/pyTruthy (optionOr (pt/jget d "results") (j/jnull))))))
                       datas))
-        (byName (fn [(name String)] -> (Option j/Json) (mt (listHead (filter (fn [(p (Pair String j/Json))] -> Bool (= (pairFirst p) name)) good)) ((some p) (some (pairSecond p))) ((none) (none)))))
-        (answer (mt (byName "tavily") ((some d) (let [(a (optionOr (pt/jget d "answer") (j/jnull)))] (if (pt/pyTruthy a) a (j/jstr "")))) ((none) (j/jstr ""))))
+        (byName (fn [(name String)] -> (Option j/Json) (match (listHead (filter (fn [(p (Pair String j/Json))] -> Bool (= (pairFirst p) name)) good)) ((some p) (some (pairSecond p))) ((none) (none)))))
+        (answer (match (byName "tavily") ((some d) (let [(a (optionOr (pt/jget d "answer") (j/jnull)))] (if (pt/pyTruthy a) a (j/jstr "")))) ((none) (j/jstr ""))))
         (ordered (fold (fn [(acc (List j/Json)) (name String)] -> (List j/Json)
-                         (mt (byName name) ((some d) (listAppend acc (mt (optionOr (pt/jget d "results") (j/jarr (list))) ((j/jarr xs) xs) (_ (list))))) ((none) acc)))
+                         (match (byName name) ((some d) (listAppend acc (match (optionOr (pt/jget d "results") (j/jarr (list))) ((j/jarr xs) xs) (_ (list))))) ((none) acc)))
                        (list) (list "wiki" "tavily" "serper" "ddg")))]
-    (mt (mergeLoop ordered (list) (list) limit)
+    (match (mergeLoop ordered (list) (list) limit)
       ((err e) (pair (err e) st1))
       ((ok m) (pair (ok (j/jobj (list (pair "answer" answer) (pair "results" (j/jarr (pairSecond m))) (pair "errors" (j/jarr errors))))) st1))))
 
 fn errorsOf v: j/Json -> (List j/Json)
-  (mt (optionOr (pt/jget v "errors") (j/jarr (list))) ((j/jarr xs) xs) (_ (list)))
+  (match (optionOr (pt/jget v "errors") (j/jarr (list))) ((j/jarr xs) xs) (_ (list)))
 
 fn jremove v: j/Json k: String -> j/Json
-  (mt v ((j/jobj kvs) (j/jobj (filter (fn [(p (Pair String j/Json))] -> Bool (not (= (pairFirst p) k))) kvs))) (_ v))
+  (match v ((j/jobj kvs) (j/jobj (filter (fn [(p (Pair String j/Json))] -> Bool (not (= (pairFirst p) k))) kvs))) (_ v))
 
 fn ! executeSearchHub! st: HubState query: String engine: String limit: Int64 -> (Pair (Result j/Json pt/PyErr) HubState)
   (if (stringEmpty? query)
     (pair (ok (respJson (j/jstr "") (list))) st)
     (let [(ckey (str engine ":" (stringFromInt64 limit) ":" (pt/pyStrip (pt/pyLower query))))
           (now st.nowMs)
-          (hit (mt (mapGet st.cache ckey) ((some c) (if (< (- now (pairFirst c)) 900000) (some (pairSecond c)) (none))) ((none) (none))))]
-      (mt hit
+          (hit (match (mapGet st.cache ckey) ((some c) (if (< (- now (pairFirst c)) 900000) (some (pairSecond c)) (none))) ((none) (none))))]
+      (match hit
         ((some cached) (pair (ok cached) st))
         ((none)
           (let [(choice (pt/pyLower engine))
                 (step (cond
-                        ((= choice "searxng") (pair (mt (doSearxngSearch! st query limit) ((ok v) (ok (pair v (list)))) ((err e) (err e))) st))
+                        ((= choice "searxng") (pair (match (doSearxngSearch! st query limit) ((ok v) (ok (pair v (list)))) ((err e) (err e))) st))
                         ((= choice "tavily") (pair (ok (pair (doTavilySearch! st query limit (none)) (list))) st))
                         ((= choice "serper") (pair (ok (pair (doSerperSearch! st query limit (none)) (list))) st))
                         ((or (= choice "wikipedia") (= choice "wiki")) (pair (ok (pair (doWikiSearch! st query limit) (list))) st))
                         ((= choice "ddg") (let [(d (doDdgSearch! st query limit))] (pair (ok (pair (pairFirst d) (list))) (pairSecond d))))
                         (else (autoSearch! st query limit))))
                 (st1 (pairSecond step))]
-            (mt (pairFirst step)
+            (match (pairFirst step)
               ((err e) (pair (err e) st1))
               ((ok sp)
                 (let [(res0 (pairFirst sp)) (errs0 (pairSecond sp))
@@ -731,20 +731,20 @@ fn ! executeSearchHub! st: HubState query: String engine: String limit: Int64 ->
                   (pair (ok res2) st2)))))))))
 
 fn ! autoSearch! st: HubState query: String limit: Int64 -> (Pair (Result (Pair j/Json (List j/Json)) pt/PyErr) HubState)
-  (mt (if (stringEmpty? (envGetNonEmpty st "SEARXNG_URL")) (ok (j/jnull)) (doSearxngSearch! st query limit))
+  (match (if (stringEmpty? (envGetNonEmpty st "SEARXNG_URL")) (ok (j/jnull)) (doSearxngSearch! st query limit))
     ((err e) (pair (err e) st))
     ((ok sx)
       (let [(sxErr (and (pt/pyTruthy sx) (pt/pyTruthy (optionOr (pt/jget sx "error") (j/jnull)))))
             (errs (if sxErr (list (engErr "searxng" (optionOr (pt/jget sx "error") (j/jnull)))) (list)))]
         (if (or (not (pt/pyTruthy sx)) (not (pt/pyTruthy (optionOr (pt/jget sx "results") (j/jnull)))))
           (let [(t (parallelTier1Search! st query limit))]
-            (mt (pairFirst t)
+            (match (pairFirst t)
               ((err e) (pair (err e) (pairSecond t)))
               ((ok v) (pair (ok (pair v errs)) (pairSecond t)))))
           (pair (ok (pair sx errs)) st)))))
 
 fn escapeAsnStr v: j/Json -> String
-  (mt v
+  (match v
     ((j/jnull) "")
     (_ (repl (repl (repl (repl (repl (pt/pyStr v) "\\" "\\\\") "\"" "\\\"") "\n" " ") "\r" " ") "\t" " ")))
 
@@ -752,30 +752,30 @@ fn keyErr k: String -> pt/PyErr
   (pt/pyErr "KeyError" (str "'" k "'"))
 
 fn jreq v: j/Json k: String -> (Result j/Json pt/PyErr)
-  (mt v
-    ((j/jobj _) (mt (pt/jget v k) ((some x) (ok x)) ((none) (err (keyErr k)))))
+  (match v
+    ((j/jobj _) (match (pt/jget v k) ((some x) (ok x)) ((none) (err (keyErr k)))))
     ((j/jarr _) (err (pt/pyErr "TypeError" "list indices must be integers or slices, not str")))
     (_ (err (pt/pyErr "TypeError" (str "'" (pt/pyTypeName v) "' object is not subscriptable")))))
 
 fn indexOfEq xs: (List j/Json) v: j/Json i: Int64 -> Int64
-  (mt (listHead xs) ((none) -1) ((some x) (if (pt/pyEq x v) i (indexOfEq (optionOr (listTail xs) (list)) v (+ i 1)))))
+  (match (listHead xs) ((none) -1) ((some x) (if (pt/pyEq x v) i (indexOfEq (optionOr (listTail xs) (list)) v (+ i 1)))))
 
 fn searchItems rs: (List j/Json) sources: (List j/Json) acc: (List String) -> (Result (Pair (List String) (List j/Json)) pt/PyErr)
-  (mt (listHead rs)
+  (match (listHead rs)
     ((none) (ok (pair (listReverse acc) sources)))
     ((some r)
-      (mt (jreq r "url")
+      (match (jreq r "url")
         ((err e) (err e))
         ((ok u)
           (let [(src1 (if (>= (indexOfEq sources u 0) 0) sources (listAppend sources (list u))))
                 (sref (+ (indexOfEq src1 u 0) 1))]
-            (mt (jreq r "title")
+            (match (jreq r "title")
               ((err e) (err e))
               ((ok title)
-                (mt (jreq r "snippet")
+                (match (jreq r "snippet")
                   ((err e) (err e))
                   ((ok snippet)
-                    (mt (jreq r "engine")
+                    (match (jreq r "engine")
                       ((err e) (err e))
                       ((ok eng)
                         (let [(sc (optionOr (pt/jget r "score") (j/jfloat 0.85)))
@@ -784,13 +784,13 @@ fn searchItems rs: (List j/Json) sources: (List j/Json) acc: (List String) -> (R
                           (searchItems (optionOr (listTail rs) (list)) src1 (cons item acc))))))))))))))
 
 fn formatSearchAsn res: j/Json query: String -> (Result String pt/PyErr)
-  (mt (pt/jgetOr res "results" (j/jarr (list)))
+  (match (pt/jgetOr res "results" (j/jarr (list)))
     ((err e) (err e))
     ((ok rsv)
-      (mt (pt/pyIter rsv)
+      (match (pt/pyIter rsv)
         ((err e) (err e))
         ((ok rs)
-          (mt (searchItems rs (list) (list))
+          (match (searchItems rs (list) (list))
             ((err e) (err e))
             ((ok is)
               (let [(itemsStr (pt/joinSep (pairFirst is) "\n    "))

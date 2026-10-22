@@ -45,7 +45,7 @@ fn testGenericArrowFunctions! -> Bool
     (assert (checkTsx! "const f = <T,>(x: T): T => x;") "const generic arrow")
     (assert (checkTsx! "export const f = <T,>(x: T): T => x;") "export const generic arrow")
     (let [(res (tsx/parseTsx "<T,>(x: T): T => x;"))]
-      (mt res
+      (match res
         ((ok root)
          (assert (= (tsx/tsxNodeKind root) "arrowFunction") "arrowFunction node kind"))
         ((err _)
@@ -56,25 +56,25 @@ fn testGenericArrowFunctions! -> Bool
 fn testNoAngleAssertions! -> Bool
   (do
     (let [(res (tsx/parseTsx "<string>x;"))]
-      (mt res
+      (match res
         ((ok root)
          (assert false (str "expected angle assertion rejected, got: " (tsx/tsxNodeKind root))))
         ((err msg)
          (assert (= msg "Parse error at offset 0") (str "angle assertion rejected in tsx: " msg)))))
     (let [(resLet (tsx/parseTsx "let a = <string>x;"))]
-      (mt resLet
+      (match resLet
         ((ok root)
          (assert false (str "expected let angle assertion rejected, got: " (tsx/tsxNodeKind root))))
         ((err msg)
          (assert (= msg "Parse error at offset 8") (str "let angle assertion rejected: " msg)))))
     (let [(resConst (tsx/parseTsx "const y = <number>z;"))]
-      (mt resConst
+      (match resConst
         ((ok root)
          (assert false (str "expected const angle assertion rejected, got: " (tsx/tsxNodeKind root))))
         ((err msg)
          (assert (= msg "Parse error at offset 10") (str "const angle assertion rejected: " msg)))))
     (let [(resCall (tsx/parseTsx "foo(<boolean>bar);"))]
-      (mt resCall
+      (match resCall
         ((ok root)
          (assert false (str "expected call arg angle assertion rejected, got: " (tsx/tsxNodeKind root))))
         ((err msg)
@@ -124,7 +124,7 @@ fn elementsHaveError? elems: (List tr/TreeElement) -> Bool
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemNode n) (if (treeHasError? n) true (elementsHaveError? tl)))
         ((tr/elemToken t) (if (tr/isErrorToken t) true (elementsHaveError? tl))))))
 
@@ -133,7 +133,7 @@ fn checkFileExactRoundTrip! path: String content: String -> Bool
   (let [(res (tsx/parseTsxModule content))]
     (if (not (ok? res))
       (do
-        (println (str "PARSE ERROR on " path ": " (mt res ((ok _) "") ((err e) e))))
+        (println (str "PARSE ERROR on " path ": " (match res ((ok _) "") ((err e) e))))
         false)
       (let [(root (resultOr res (tr/makeErrorNode 0 0 (list))))
             (printed (pr/printTreeString content root))
@@ -173,7 +173,7 @@ fn checkBabelTsxSuite! suiteName: String files: (List String) exclusions: (List 
       true)
     (let [(path (optionOr (listHead files) ""))
           (rest (optionOr (listTail files) (list)))]
-      (mt (findExclusionReason path exclusions)
+      (match (findExclusionReason path exclusions)
         ((some _)
          (checkBabelTsxSuite! suiteName rest exclusions runCount passCount (+ excludedCount 1)))
         ((none)
@@ -210,27 +210,27 @@ fn upstreamBabelTsxExclusions -> (List (Pair String String))
 fn testUnclosedAnglesAndMalformedElements -> Bool
   (do
     (let [(res1 (tsx/parseTsx "<T"))]
-      (mt res1
+      (match res1
         ((ok _) (assert false "expected error for unclosed <T"))
         ((err msg) (assert (= msg "Parse error at offset 0") (str "unclosed <T: " msg)))))
     (let [(res2 (tsx/parseTsx "<div"))]
-      (mt res2
+      (match res2
         ((ok _) (assert false "expected error for unclosed <div"))
         ((err msg) (assert (= msg "Parse error at offset 0") (str "unclosed <div: " msg)))))
     (let [(res3 (tsx/parseTsx "<T extends"))]
-      (mt res3
+      (match res3
         ((ok _) (assert false "expected error for unclosed <T extends"))
         ((err msg) (assert (= msg "Parse error at offset 0") (str "unclosed <T extends: " msg)))))
     (let [(resElem1 (tsx/parseTsxElement "<div" 0))]
-      (mt resElem1
+      (match resElem1
         ((ok _) (assert false "expected error for parseTsxElement on <div"))
         ((err msg) (assert (= msg "Unclosed JSX element at offset 4") (str "parseTsxElement <div offset: " msg)))))
     (let [(resElem2 (tsx/parseTsxElement "<" 0))]
-      (mt resElem2
+      (match resElem2
         ((ok _) (assert false "expected error for parseTsxElement on <"))
         ((err msg) (assert (= msg "Expected tag name at offset 1") (str "parseTsxElement < offset: " msg)))))
     (let [(resElem3 (tsx/parseTsxElement "<Component<T" 0))]
-      (mt resElem3
+      (match resElem3
         ((ok _) (assert false "expected error for parseTsxElement on <Component<T"))
         ((err msg) (assert (= msg "Expected '>' or '/>' in tag at offset 10") (str "parseTsxElement unclosed type args: " msg)))))
     true)

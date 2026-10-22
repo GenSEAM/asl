@@ -54,7 +54,7 @@ fn contentLength head: String -> Int64
     0 (stringSplit head "\r\n"))
 
 fn parseHttp raw: String -> (Option (Pair String String))
-  (mt (stringIndexOf raw "\r\n\r\n")
+  (match (stringIndexOf raw "\r\n\r\n")
     ((none) none)
     ((some end)
       (let [(head (optionOr (stringSlice raw 0 end) ""))
@@ -65,14 +65,14 @@ fn parseHttp raw: String -> (Option (Pair String String))
           (some (pair (optionOr (listGet requestLine 1) "") (optionOr (stringSlice raw start (+ start want)) "")))))))
 
 fn field v: j/Json key: String -> j/Json
-  (mt v ((j/jobj kvs) (optionOr (optionMap pairSecond (listHead (filter (fn [(p (Pair String j/Json))] -> Bool (= (pairFirst p) key)) kvs))) (j/jnull))) (_ (j/jnull)))
+  (match v ((j/jobj kvs) (optionOr (optionMap pairSecond (listHead (filter (fn [(p (Pair String j/Json))] -> Bool (= (pairFirst p) key)) kvs))) (j/jnull))) (_ (j/jnull)))
 
 fn text v: j/Json -> String
-  (mt v ((j/jstr s) s) (_ ""))
+  (match v ((j/jstr s) s) (_ ""))
 
 fn lastContent body: j/Json -> String
-  (mt (field body "messages")
-    ((j/jarr xs) (mt (listLast xs) ((some m) (text (field m "content"))) ((none) "")))
+  (match (field body "messages")
+    ((j/jarr xs) (match (listLast xs) ((some m) (text (field m "content"))) ((none) "")))
     (_ ""))
 
 fn completion model: String content: String -> String
@@ -83,10 +83,10 @@ fn httpReply body: String -> String
   (str "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " (stringFromInt64 (stringLength body)) "\r\nConnection: close\r\n\r\n" body)
 
 fn observe path: String body: String nowMs: Int64 -> (Pair StubSeen String)
-  (let [(parsed (mt (pt/jsonLoads body) ((ok v) v) ((err _) (j/jnull))))
+  (let [(parsed (match (pt/jsonLoads body) ((ok v) v) ((err _) (j/jnull))))
         (batch (field parsed "batch"))
-        (items (mt batch ((j/jarr xs) xs) (_ (list parsed))))
-        (size (mt batch ((j/jarr xs) (listLength xs)) (_ 0)))
+        (items (match batch ((j/jarr xs) xs) (_ (list parsed))))
+        (size (match batch ((j/jarr xs) (listLength xs)) (_ 0)))
         (model (text (field (optionOr (listHead items) (j/jnull)) "model")))
         (contents (map lastContent items))
         (replies (map (fn [(it j/Json)] -> String (completion (text (field it "model")) (lastContent it))) items))
@@ -98,18 +98,18 @@ fn observe path: String body: String nowMs: Int64 -> (Pair StubSeen String)
 
 fn ! writeAll! fd: Int64 data: String -> Bool
   (if (stringEmpty? data) true
-    (mt (fdWrite fd data)
+    (match (fdWrite fd data)
       ((err _) false)
       ((ok n) (if (<= n 0) false (writeAll! fd (optionOr (stringSlice data n (stringLength data)) ""))))))
 
 fn ! stepStub! w: World conn: StubConn ready: (List (Pair Int64 Int64)) -> World
   (if (or conn.held (not (ready? ready conn.fd))) (withStubs w (listAppend w.stubs (list conn)) w.seen)
-    (mt (fdRead conn.fd 65536)
+    (match (fdRead conn.fd 65536)
       ((err _) (do (fdClose conn.fd) w))
       ((ok chunk)
         (if (stringEmpty? chunk) (do (fdClose conn.fd) w)
           (let [(input (str conn.input chunk))]
-            (mt (parseHttp input)
+            (match (parseHttp input)
               ((none) (withStubs w (listAppend w.stubs (list (with conn :input input :held false :model "" :reply ""))) w.seen))
               ((some request)
                 (let [(o (observe (pairFirst request) (pairSecond request) (nowMs!)))
@@ -121,7 +121,7 @@ fn ! stepStub! w: World conn: StubConn ready: (List (Pair Int64 Int64)) -> World
 
 fn ! stepClient! c: Client ready: (List (Pair Int64 Int64)) -> Client
   (if (or c.done (not (ready? ready c.fd))) c
-    (mt (fdRead c.fd 65536)
+    (match (fdRead c.fd 65536)
       ((err _) (do (fdClose c.fd) (with c :done true :doneMs (nowMs!))))
       ((ok chunk)
         (if (stringEmpty? chunk)
@@ -130,7 +130,7 @@ fn ! stepClient! c: Client ready: (List (Pair Int64 Int64)) -> Client
 
 fn ! stepWorld! w: World ready: (List (Pair Int64 Int64)) -> World
   (let [(accepted (if (ready? ready w.listener)
-                    (mt (sockAccept w.listener)
+                    (match (sockAccept w.listener)
                       ((ok fd) (withStubs w (listAppend w.stubs (list (StubConn :fd fd :input "" :held false :model "" :reply ""))) w.seen))
                       ((err _) w))
                     w))
@@ -144,7 +144,7 @@ fn watchOf w: World -> (List (Pair Int64 Int64))
 
 fn ! pump! w: World until: (fn [World] -> Bool) deadline: Int64 -> World
   (if (or (until w) (>= (nowMs!) deadline)) w
-    (mt (fdPoll (watchOf w) 20)
+    (match (fdPoll (watchOf w) 20)
       ((err _) (pump! w until deadline))
       ((ok ready) (pump! (stepWorld! w ready) until deadline))))
 
@@ -162,7 +162,7 @@ fn ! send! w: World model: String tag: String -> World
   (let [(body (str "{\"model\":\"" model "\",\"messages\":[{\"role\":\"user\",\"content\":\"" tag "\"}]}"))
         (request (str "POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: "
                       (stringFromInt64 (stringLength body)) "\r\n\r\n" body))]
-    (mt (tcpConnect w.gatewayPort)
+    (match (tcpConnect w.gatewayPort)
       ((err _) (withClients w (listAppend w.clients (list (Client :fd -1 :tag tag :sentMs (nowMs!) :response "connect failed" :done true :doneMs (nowMs!))))))
       ((ok fd)
         (do (writeAll! fd request)
@@ -213,7 +213,7 @@ fn gatewayConfig base: String -> String
 
 fn ! waitPort! path: String attempts: Int64 -> Int64
   (if (<= attempts 0) 0
-    (mt (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
+    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
       ((some port) (if (> port 0) port (do (sleepMs 20) (waitPort! path (- attempts 1)))))
       ((none) (do (sleepMs 20) (waitPort! path (- attempts 1))))))
 
@@ -231,7 +231,7 @@ fn ! runTests -> Bool
         (env (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" temp) (str "ASL_GATEWAY_ROOT=" temp)
                    (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") (nativeCliCacheEnvRow!)))
         (spawned (procSpawnv (list "/bin/sh" "-c" command) (none) (some env)))
-        (pid (mt spawned ((ok sp) sp.pid) ((err _) 0)))
+        (pid (match spawned ((ok sp) sp.pid) ((err _) 0)))
         (gatewayPort (if (> pid 0) (waitPort! readyPath 500) 0))
         (w0 (World :listener listener :gatewayPort gatewayPort :stubs (list) :seen (list) :clients (list) :hold (list "bypass-target" "queue-target" "timeout-target")))
 

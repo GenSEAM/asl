@@ -5,7 +5,7 @@ enum Shape (circle r: Int64) (square side: Int64)
 (schema Pt (:f x Int64) (:f y Int64))
 
 fn area s: Shape -> Int64
-  (mt s ((circle r) (* 3 (* r r))) ((square a) (* a a)))
+  (match s ((circle r) (* 3 (* r r))) ((square a) (* a a)))
 
 fn firstOr xs: (List T) fallback: T -> T
   (optionOr (listHead xs) fallback)

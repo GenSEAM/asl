@@ -1,7 +1,7 @@
 (module asl-know/examples/aslHttp :x [pathOf selfTest] :i [(asl-http/http11 :a http)])
 
 fn pathOf raw: String -> String
-  (mt (http/parseHttpRequest raw)
+  (match (http/parseHttpRequest raw)
     ((err e) (str "error: " e))
     ((ok req) (str req.method " " req.path)))
 

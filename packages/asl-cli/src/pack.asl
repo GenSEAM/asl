@@ -30,7 +30,7 @@ fn withMode o: PackOptions m: String dir: String -> PackOptions
   (with o :mode m :stageDir dir)
 
 fn ! parseOptions! args: (List String) o: PackOptions -> (Result PackOptions Int64)
-  (mt (listHead args)
+  (match (listHead args)
     ((none) (ok o))
     ((some a)
       (let [(rest (optionOr (listTail args) (list)))
@@ -74,27 +74,27 @@ fn cliScripts -> (List String)
         "asl/packages/asl-gates/src/auditMain.asl")
 
 fn ! mkdirs! dirs: (List String) -> Int64
-  (mt (listHead dirs)
+  (match (listHead dirs)
     ((none) 0)
     ((some d)
-      (mt (dirCreate d)
+      (match (dirCreate d)
         ((err e) (do (sys/sayErr! (str "mkdir: " d ": " e)) 1))
         ((ok _) (mkdirs! (optionOr (listTail dirs) (list)))))))
 
 fn ! copyEach! files: (List String) dest: String -> Int64
-  (mt (listHead files)
+  (match (listHead files)
     ((none) 0)
     ((some f)
       (let [(rc (sys/run! (list "cp" "-f" f dest)))]
         (if (!= rc 0) rc (copyEach! (optionOr (listTail files) (list)) dest)))))
 
 fn ! sourcesOf! dir: String suffix: String -> (Result (List String) String)
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err e) (err (str dir ": " e)))
     ((ok names) (ok (map (fn [(n String)] -> String (str dir "/" n)) (filter (fn [(n String)] -> Bool (stringEndsWith? n suffix)) names)))))
 
 fn ! copyCliSources! root: String rt: String -> Int64
-  (mt (sourcesOf! (str root "/asl/packages/asl-cli/src") ".asl")
+  (match (sourcesOf! (str root "/asl/packages/asl-cli/src") ".asl")
     ((err e) (do (sys/sayErr! (str "asl pack: " e)) 1))
     ((ok cli)
       (let [(made (mkdirs! (list (str rt "/asl/packages/asl-cli/src") (str rt "/asl/packages/asl-gates/src"))))]
@@ -107,7 +107,7 @@ fn ! copyCliSources! root: String rt: String -> Int64
                 (if (!= r2 0) r2 (let [(r3 (sys/run! (list "cp" "-f" (str root "/.asl.config.asn") (str rt "/.asl.config.asn"))))] (if (!= r3 0) r3 (copyRuntimePackages! root rt)))))))))))
 
 fn ! copyPackages! root: String dest: String -> Int64
-  (mt (dirList (str root "/asl/packages"))
+  (match (dirList (str root "/asl/packages"))
     ((err e) (do (sys/sayErr! (str "asl pack: asl/packages: " e)) 0))
     ((ok names)
       (let [(entries (map (fn [(n String)] -> String (str root "/asl/packages/" n)) (filter (fn [(n String)] -> Bool (not (stringStartsWith? n "."))) names)))]
@@ -117,7 +117,7 @@ fn ! copyPackages! root: String dest: String -> Int64
             (do (if (!= rc 0) (sys/sayErr! (str "asl pack: copying asl/packages exited " (stringFromInt64 rc) "; the bundle continues without them")) true) 0))))))
 
 fn ! copyRuntimePackages! root: String rt: String -> Int64
-  (mt (dirList (str root "/asl/packages"))
+  (match (dirList (str root "/asl/packages"))
     ((err e) (do (sys/sayErr! (str "asl pack: asl/packages: " e)) 1))
     ((ok names)
       (let [(entries (map (fn [(n String)] -> String (str root "/asl/packages/" n)) (filter (fn [(n String)] -> Bool (not (stringStartsWith? n "."))) names)))]
@@ -125,7 +125,7 @@ fn ! copyRuntimePackages! root: String rt: String -> Int64
           (sys/run! (listAppend (cons "cp" (cons "-R" entries)) (list (str rt "/asl/packages/"))))))))
 
 fn ! writePlatform! path: String line: String -> Int64
-  (mt (fileWrite path (str line "\n")) ((err e) (do (sys/sayErr! (str "asl pack: " path ": " e)) 1)) ((ok _) 0))
+  (match (fileWrite path (str line "\n")) ((err e) (do (sys/sayErr! (str "asl pack: " path ": " e)) 1)) ((ok _) 0))
 
 ; (:m :ref HL-FIXWAVE :do "r8 used to copy asl/host/out/asl-host into the staged runtime only when it happened to exist, a leftover from the stage-0 host era; HL-DELETE means that path can never exist again, so the staged bundle instead gets what rt/bin/asl's own cold-start bootstrap (asl/bin/asl's logic) actually needs on a fresh machine with no prebuilt cache: asl/host/build.sh and the asl1 seed tree, plus any already-built libaslrt.a as a best-effort head start")
 fn ! stageDarwin! ctx: sys/Context stage: String version: String -> Int64
@@ -138,7 +138,7 @@ fn ! stageDarwin! ctx: sys/Context stage: String version: String -> Int64
             (if (!= r3 0) r3
               (let [(r5 (copyCliSources! root rt))]
                 (if (!= r5 0) r5
-                  (mt (sourcesOf! (str root "/asl/grammar") ".asn")
+                  (match (sourcesOf! (str root "/asl/grammar") ".asn")
                         ((err e) (do (sys/sayErr! (str "asl pack: " e)) 1))
                         ((ok grammar)
                           (let [(r6 (if (listEmpty? grammar) (do (sys/sayErr! (str "cp: " root "/asl/grammar/*.asn: No such file or directory")) 1) (copyEach! grammar (str rt "/asl/grammar/"))))]
@@ -166,9 +166,9 @@ fn ! stageDarwin! ctx: sys/Context stage: String version: String -> Int64
 
 fn ! stageMode! ctx: sys/Context o: PackOptions -> Int64
   (let [(dir o.stageDir)
-        (occupied (mt (fileStat dir)
+        (occupied (match (fileStat dir)
                     ((err _) false)
-                    ((ok st) (if st.isDir (mt (dirList dir) ((ok names) (not (listEmpty? names))) ((err _) false)) true))))]
+                    ((ok st) (if st.isDir (match (dirList dir) ((ok names) (not (listEmpty? names))) ((err _) false)) true))))]
     (if (or (stringEmpty? dir) occupied)
       (do (sys/sayErr! "asl pack --stage DIR: DIR must be new or empty") 2)
       (let [(rc (stageDarwin! ctx dir o.version))]
@@ -184,7 +184,7 @@ fn nativeAuditArgv root: String sub: String args: (List String) -> (List String)
 fn ! staticGatesPass! root: String -> Bool
   (if (not (sys/isFile? (nativeAuditEntry root)))
     false
-    (mt (sys/capture! (nativeAuditArgv root "gates" (list "--static")) (none))
+    (match (sys/capture! (nativeAuditArgv root "gates" (list "--static")) (none))
       ((err _) false)
       ((ok c) (= c.exitCode 0))))
 
@@ -201,7 +201,7 @@ fn ! makeTemp! prefix: String n: Int64 -> (Result String String)
   (let [(path (str "/tmp/" prefix "." (stringFromInt64 (procSelf)) "." (stringFromInt64 (/ (nowNs) 1000)) "." (stringFromInt64 n)))]
     (if (fileExists? path)
       (if (> n 50) (err (str "no free temporary directory for " prefix)) (makeTemp! prefix (+ n 1)))
-      (mt (dirCreate path) ((err e) (err (str path ": " e))) ((ok _) (ok path)))))
+      (match (dirCreate path) ((err e) (err (str path ": " e))) ((ok _) (ok path)))))
 
 fn ! gates! ctx: sys/Context -> Int64
   (let [(root ctx.root)]
@@ -269,36 +269,36 @@ fn csvByte field: String -> (Option Int64)
       (else (optionMap uint8Of (radixLiteral t)))))
 
 fn ! csvBytes! fields: (List String) line: String acc: (List Int64) -> (Result (List Int64) String)
-  (mt (listHead fields)
+  (match (listHead fields)
     ((none) (ok (listReverse acc)))
     ((some f)
-      (mt (csvByte f)
+      (match (csvByte f)
         ((none) (err (str "(:pack :status :failed :error ERR_WASM_CSV :message \"field " (stringReplace (stringReplace f "\\" "\\\\") "\"" "\\\"") " of line " (stringReplace (stringReplace line "\\" "\\\\") "\"" "\\\"") " is not a number\")")))
         ((some v) (csvBytes! (optionOr (listTail fields) (list)) line (cons v acc))))))
 
 fn ! writeBytes! path: String values: (List Int64) -> (Result Int64 String)
   (let [(b (bytesAlloc (listLength values)))
         (filled (fold (fn [(i Int64) (v Int64)] -> Int64 (do (bytesSet b i v) (+ i 1))) 0 values))]
-    (mt (fileWrite path b) ((err e) (err (str path ": " e))) ((ok _) (ok filled))))
+    (match (fileWrite path b) ((err e) (err (str path ": " e))) ((ok _) (ok filled))))
 
 fn firstDigitLine lines: (List String) -> (Option String)
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (none))
     ((some l) (if (digitAt? l 0) (some l) (firstDigitLine (optionOr (listTail lines) (list))))))
 
 fn ! compileWasm! ctx: sys/Context distDir: String -> Int64
   (if (not (sys/executable? ctx.hostBin))
     0
-    (mt (sys/capture! (list ctx.hostBin "run" (str ctx.root "/tools/compileWasm.asl")) (none))
+    (match (sys/capture! (list ctx.hostBin "run" (str ctx.root "/tools/compileWasm.asl")) (none))
       ((err e) (do (sys/sayErr! (str "asl pack: compileWasm: " e)) 0))
       ((ok c)
-        (mt (if (= c.exitCode 0) (firstDigitLine (stringLines c.stdout)) (none))
+        (match (if (= c.exitCode 0) (firstDigitLine (stringLines c.stdout)) (none))
           ((none) 0)
           ((some line)
-            (mt (csvBytes! (stringSplit (stringTrim line) ",") (stringTrim line) (list))
+            (match (csvBytes! (stringSplit (stringTrim line) ",") (stringTrim line) (list))
               ((err e) (do (sys/sayErr! e) 1))
               ((ok values)
-                (mt (writeBytes! (str distDir "/asl.wasm") values)
+                (match (writeBytes! (str distDir "/asl.wasm") values)
                   ((err e) (do (sys/sayErr! (str "asl pack: " e)) 1))
                   ((ok n) (do (sys/say! (str "    ✓ Compiled asl.wasm (" (stringFromInt64 n) " bytes)")) 0))))))))))
 
@@ -308,7 +308,7 @@ fn ! tarball! out: String dir: String members: (List String) -> Int64
 fn ! packDarwin! ctx: sys/Context o: PackOptions distDir: String -> Int64
   (let [(v o.version) (name (str "asl-" o.version "-darwin-arm64.tar.gz"))]
     (do (sys/say! (str "    • Packaging target: " name "..."))
-      (mt (makeTemp! "asl-pack-darwin" 0)
+      (match (makeTemp! "asl-pack-darwin" 0)
         ((err e) (do (sys/sayErr! (str "asl pack: " e)) 1))
         ((ok stage)
           (let [(rc (stageDarwin! ctx stage v))
@@ -333,7 +333,7 @@ fn ! layLinux! ctx: sys/Context o: PackOptions distDir: String tmp: String -> In
   (let [(wasm (str distDir "/asl.wasm"))
         (r1 (if (fileExists? wasm) (sys/run! (list "cp" "-f" wasm (str tmp "/asl.wasm"))) 0))]
     (if (!= r1 0) r1
-      (mt (fileWrite (str tmp "/asl") (linuxWrapper))
+      (match (fileWrite (str tmp "/asl") (linuxWrapper))
         ((err e) (do (sys/sayErr! (str "asl pack: " e)) 1))
         ((ok _)
           (let [(r2 (sys/run! (list "chmod" "+x" (str tmp "/asl"))))]
@@ -349,7 +349,7 @@ fn ! layLinux! ctx: sys/Context o: PackOptions distDir: String tmp: String -> In
 fn ! packLinux! ctx: sys/Context o: PackOptions distDir: String -> Int64
   (let [(name (str "asl-" o.version "-linux-x64.tar.gz"))]
     (do (sys/say! (str "    • Packaging target: " name "..."))
-      (mt (makeTemp! "asl-pack-linux" 0)
+      (match (makeTemp! "asl-pack-linux" 0)
         ((err e) (do (sys/sayErr! (str "asl pack: " e)) 1))
         ((ok tmp)
           (let [(rc (layLinux! ctx o distDir tmp))
@@ -360,13 +360,13 @@ fn ! packLinux! ctx: sys/Context o: PackOptions distDir: String -> Int64
               (else (do (sys/say! (str "    ✓ Packaged " distDir "/" name)) 0))))))))
 
 fn ! writeSums! distDir: String -> Int64
-  (mt (dirList distDir)
+  (match (dirList distDir)
     ((err e) (do (sys/sayErr! (str "asl pack: " distDir ": " e)) 1))
     ((ok names)
       (let [(files (filter (fn [(n String)] -> Bool (and (stringStartsWith? n "asl-") (sys/isFile? (str distDir "/" n)))) names))
-            (lines (map (fn [(n String)] -> (Result String String) (mt (fileReadBytes (str distDir "/" n)) ((ok b) (ok (str (bytesSha256 b) "  " n "\n"))) ((err e) (err (str n ": " e))))) files))
+            (lines (map (fn [(n String)] -> (Result String String) (match (fileReadBytes (str distDir "/" n)) ((ok b) (ok (str (bytesSha256 b) "  " n "\n"))) ((err e) (err (str n ": " e))))) files))
             (bad (filter err? lines))]
-        (mt (if (listEmpty? bad) (fileWrite (str distDir "/SHA256SUMS") (stringJoin (map (fn [(r (Result String String))] -> String (resultOr r "")) lines) "")) (err "unreadable asl-* file"))
+        (match (if (listEmpty? bad) (fileWrite (str distDir "/SHA256SUMS") (stringJoin (map (fn [(r (Result String String))] -> String (resultOr r "")) lines) "")) (err "unreadable asl-* file"))
           ((err e) (do (sys/sayErr! (str "asl pack: SHA256SUMS: " e)) 1))
           ((ok _) (do (sys/say! (str "    ✓ Emitted " distDir "/SHA256SUMS")) 0))))))
 
@@ -417,7 +417,7 @@ fn ! buildMode! ctx: sys/Context o: PackOptions -> Int64
         (else (distribute! ctx o)))))
 
 fn ! packCommand! ctx: sys/Context args: (List String) -> Int64
-  (mt (parseOptions! args (PackOptions :quick false :install false :skipGates false :target "all" :version "0.1.0" :mode "build" :stageDir ""))
+  (match (parseOptions! args (PackOptions :quick false :install false :skipGates false :target "all" :version "0.1.0" :mode "build" :stageDir ""))
     ((err code) code)
     ((ok o)
       (cond

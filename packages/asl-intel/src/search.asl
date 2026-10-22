@@ -8,7 +8,7 @@
       (asl-intel/coupling :a c)])
 
 fn walkAsl! ctx: h/Ctx dir: String -> (Result (List String) String)
-  (mt (h/findTree! ctx dir false (list "*.asl"))
+  (match (h/findTree! ctx dir false (list "*.asl"))
     ((err e) (err e))
     ((ok tree) (ok (h/walkFiles! tree))))
 
@@ -17,11 +17,11 @@ fn quoted10 xs: (List String) -> String
 
 fn analyzeImpact! ctx: h/Ctx sym: String -> (Result String String)
   (let [(root ctx.home) (rex (p/patWordLit! sym))]
-    (mt (walkAsl! ctx (t/joinPath (t/joinPath root "asl") "packages"))
+    (match (walkAsl! ctx (t/joinPath (t/joinPath root "asl") "packages"))
       ((err e) (err e))
       ((ok files)
         (let [(hits (fold (fn [(acc (Pair (List String) (List String))) (f String)] -> (Pair (List String) (List String))
-                            (mt (h/readText! f)
+                            (match (h/readText! f)
                               ((err _) acc)
                               ((ok code)
                                 (let [(b (stringToBytes code))]
@@ -49,7 +49,7 @@ fn globEscape s: String -> String
 
 fn walkFind! ctx: h/Ctx root: String fpath: String -> (Result (Option String) String)
   (if (or (stringEmpty? fpath) (stringContains? fpath "/")) (ok (none))
-    (mt (h/findTree! ctx root false (list (globEscape fpath)))
+    (match (h/findTree! ctx root false (list (globEscape fpath)))
       ((err e) (err e))
       ((ok tree)
         (ok (listHead (filter (fn [(f String)] -> Bool (= (t/baseName f) fpath)) (h/walkFiles! tree)))))))
@@ -57,7 +57,7 @@ fn walkFind! ctx: h/Ctx root: String fpath: String -> (Result (Option String) St
 fn fnItem code: String exports: (List String) caps: (List Int64) -> m/OutlineItem
   (let [(name (t/pyStrip (optionOr (r/rexGroup code caps 1) "")))
         (g2 (t/pyStrip (optionOr (r/rexGroup code caps 2) "")))
-        (sig (t/pyStrip (mt (r/rexGroup code caps 3) ((some g3) (str g2 " -> " (t/pyStrip g3))) ((none) g2))))]
+        (sig (t/pyStrip (match (r/rexGroup code caps 3) ((some g3) (str g2 " -> " (t/pyStrip g3))) ((none) g2))))]
     (m/makeOutlineItem name "fn" sig (listContains? exports name)))
 
 fn kindItems rex: r/Rex kind: String code: String b: Bytes exports: (List String) -> (List m/OutlineItem)
@@ -76,18 +76,18 @@ fn extractOutline! ctx: h/Ctx fpath: String -> (Result String String)
   (let [(root (t/absPath (if (stringEmpty? ctx.aslRoot) ctx.home ctx.aslRoot) ctx.cwd))
         (direct (if (stringStartsWith? fpath "/") fpath (t/joinPath root fpath)))
         (found (if (fileExists? direct) (ok (some direct)) (walkFind! ctx root fpath)))]
-    (mt found
+    (match found
       ((err e) (err e))
       ((ok hit)
         (let [(resolved (optionOr hit direct))]
           (if (not (h/isFile? resolved))
             (ok (str "(:outline :status :error :message \"File not found: " fpath "\")"))
-            (mt (h/readText! resolved)
+            (match (h/readText! resolved)
               ((err e) (err (str "cannot read " resolved ": " e)))
               ((ok code)
                 (let [(b (stringToBytes code))
                       (modId (optionOr (c/firstGroup (p/patModuleId!) code) (t/baseName resolved)))
-                      (exports (mt (c/firstGroup (p/patExports!) code) ((some g) (t/pySplit g)) ((none) (list))))
+                      (exports (match (c/firstGroup (p/patExports!) code) ((some g) (t/pySplit g)) ((none) (list))))
                       (fns (map (fn [(caps (List Int64))] -> m/OutlineItem (fnItem code exports caps)) (r/rexFindAll (p/patOutlineFn!) b (bytesLength b))))
                       (items (listAppend fns (listAppend (kindItems (p/patSchemaLine!) "schema" code b exports) (kindItems (p/patMacroLine!) "macro" code b exports))))
                       (outl (m/makeModuleOutline modId (t/relPath resolved root ctx.cwd) items))]
@@ -101,7 +101,7 @@ fn extractOutline! ctx: h/Ctx fpath: String -> (Result String String)
                                   "\n"))))))))))
 
 fn fileMatches! ctx: h/Ctx root: String f: String qb: Bytes acc: (List String) -> (List String)
-  (mt (h/readText! f)
+  (match (h/readText! f)
     ((err _) acc)
     ((ok code)
       (let [(b (stringToBytes code)) (n (bytesLength b)) (rel (t/relPath f root ctx.cwd))]
@@ -109,13 +109,13 @@ fn fileMatches! ctx: h/Ctx root: String f: String qb: Bytes acc: (List String) -
           (lineMatches code b (t/splitLinesPy b n) qb (p/patQueryDecl!) rel acc)))))
 
 fn lineMatches code: String b: Bytes lines: (List (Pair Int64 Int64)) qb: Bytes dRex: r/Rex rel: String acc: (List String) -> (List String)
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) acc)
     ((some ln)
       (let [(s (pairFirst ln)) (e (pairSecond ln)) (rest (optionOr (listTail lines) (list)))]
         (if (< (t/foldIndexOf b e qb (bytesLength qb) s) 0)
           (lineMatches code b rest qb dRex rel acc)
-          (mt (r/rexSearch dRex b e s)
+          (match (r/rexSearch dRex b e s)
             ((none) (lineMatches code b rest qb dRex rel acc))
             ((some caps)
               (let [(sym (t/pyStrip (optionOr (r/rexGroup code caps 1) "")))
@@ -125,14 +125,14 @@ fn lineMatches code: String b: Bytes lines: (List (Pair Int64 Int64)) qb: Bytes 
 fn dirGroups files: (List String) -> (List (List String))
   (listReverse (map listReverse
     (fold (fn [(acc (List (List String))) (f String)] -> (List (List String))
-            (mt (listHead acc)
+            (match (listHead acc)
               ((some g) (if (= (t/dirName (optionOr (listHead g) "")) (t/dirName f)) (cons (cons f g) (optionOr (listTail acc) (list))) (cons (list f) acc)))
               ((none) (list (list f)))))
           (list) files)))
 
 fn querySymbols! ctx: h/Ctx q: String -> (Result String String)
   (let [(root ctx.home) (qb (stringToBytes q))]
-    (mt (walkAsl! ctx (t/joinPath (t/joinPath root "asl") "packages"))
+    (match (walkAsl! ctx (t/joinPath (t/joinPath root "asl") "packages"))
       ((err e) (err e))
       ((ok files)
         (let [(ms (listReverse (fold (fn [(acc (List String)) (g (List String))] -> (List String)

@@ -63,7 +63,7 @@ fn findChildNodes elems: (List tr/TreeElement) -> (List tr/Node)
     (list)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemNode n) (cons n (findChildNodes tl)))
         ((tr/elemToken _) (findChildNodes tl)))))
 
@@ -72,7 +72,7 @@ fn findChildTokens elems: (List tr/TreeElement) -> (List tr/Token)
     (list)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemNode _) (findChildTokens tl))
         ((tr/elemToken t) (cons t (findChildTokens tl))))))
 
@@ -81,7 +81,7 @@ fn findNonTriviaTokens elems: (List tr/TreeElement) -> (List tr/Token)
     (list)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemNode _) (findNonTriviaTokens tl))
         ((tr/elemToken t)
          (if (isTriviaTok t)
@@ -1221,11 +1221,11 @@ fn firstErrorOffset elems: (List tr/TreeElement) -> (Option Int64)
     (none)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemNode n)
          (if (or (tr/isErrorNode n) (= (tr/nodeKind n) "error"))
            (some (tr/nodeStart n))
-           (mt (firstErrorOffset (tr/nodeChildren n))
+           (match (firstErrorOffset (tr/nodeChildren n))
              ((some off) (some off))
              ((none) (firstErrorOffset tl)))))
         ((tr/elemToken tok)
@@ -1238,7 +1238,7 @@ fn firstTrailingOffset elems: (List tr/TreeElement) seenExpr: Bool -> (Option In
     (none)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemNode _)
          (firstTrailingOffset tl true))
         ((tr/elemToken tok)
@@ -1250,11 +1250,11 @@ fn parseType text: String -> (Result tr/Node String)
   (let [(tokens (lx/tokenize text))
         (root (parseTypeTokens tokens text))
         (elems (tr/nodeChildren root))]
-    (mt (firstErrorOffset elems)
+    (match (firstErrorOffset elems)
       ((some off)
        (err (str "Parse error at offset " (stringFromInt64 off))))
       ((none)
-       (mt (firstTrailingOffset elems false)
+       (match (firstTrailingOffset elems false)
          ((some off)
           (err (str "Unexpected token at offset " (stringFromInt64 off))))
          ((none)
@@ -1314,7 +1314,7 @@ fn formatTupleElementsLoop elems: (List tr/TreeElement) text: String acc: (List 
     (listReverse acc)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken _) (formatTupleElementsLoop tl text acc))
         ((tr/elemNode n)
          (formatTupleElementsLoop tl text (cons (typeToSExpr n text) acc))))))
@@ -1526,7 +1526,7 @@ fn hasNewlineElements elems: (List tr/TreeElement) text: String -> Bool
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemNode _) (hasNewlineElements tl text))
         ((tr/elemToken tok)
          (if (= (tr/tokenKind tok) "newline")
@@ -1815,11 +1815,11 @@ fn parseTs text: String -> (Result tr/Node String)
   (let [(tokens (lx/tokenize text))
         (root (parseTsTokens tokens text))
         (elems (tr/nodeChildren root))]
-    (mt (firstErrorOffset elems)
+    (match (firstErrorOffset elems)
       ((some off)
        (err (str "Parse error at offset " (stringFromInt64 off))))
       ((none)
-       (mt (firstTrailingOffset elems false)
+       (match (firstTrailingOffset elems false)
          ((some off)
           (err (str "Unexpected token at offset " (stringFromInt64 off))))
          ((none)

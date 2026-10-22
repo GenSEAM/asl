@@ -21,7 +21,7 @@ fn sh! cmd: String -> ProcessOutput
   (processRun cmd)
 
 fn runnerCounts stdout: String -> (Pair Int64 Int64)
-  (mt (listHead (filter (fn [(l String)] -> Bool (stringContains? l " assertion(s) executed (")) (stringSplit stdout "\n")))
+  (match (listHead (filter (fn [(l String)] -> Bool (stringContains? l " assertion(s) executed (")) (stringSplit stdout "\n")))
     ((none) (pair -1 -1))
     ((some line)
      (let [(tail (optionOr (listLast (stringSplit line ": ")) ""))
@@ -34,12 +34,12 @@ fn probe! cacheDir: String files: String -> ProcessOutput
   (sh! (str "ASL_CORPUS_CACHE='" cacheDir "' CORPUS_CACHE_PROBE_FILES='" files "' '" (fr/nativeCliFor ".") "' test asl/packages/asl-parser/tests/corpusCacheProbe.asl 2>&1"))
 
 fn countFiles! dir: String -> Int64
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err _) 0)
     ((ok names)
      (fold (fn [(n Int64) (name String)] -> Int64
              (let [(child (str dir "/" name))]
-               (mt (fileStat child)
+               (match (fileStat child)
                  ((err _) n)
                  ((ok st) (if st.isDir (+ n (countFiles! child)) (+ n 1))))))
            0 names)))
@@ -285,7 +285,7 @@ fn makeFakeDirs! dir: String fresh: (List String) stale: (List String) -> Proces
            (stringJoin (map (fn [(n String)] -> String (str " && touch -t 202601010100 " n)) stale) "")))
 
 fn dirPresent! p: String -> Bool
-  (mt (fileStat p) ((ok st) st.isDir) ((err _) false))
+  (match (fileStat p) ((ok st) st.isDir) ((err _) false))
 
 fn hexDirs! dir: String -> (List String)
   (filter (fn [(n String)] -> Bool (and (= (stringLength n) 64) (not (stringContains? n ".")))) (resultOr (dirList dir) (list)))

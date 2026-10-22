@@ -29,7 +29,7 @@ fn isAgentAuthorized? tool: ToolDescriptor role: Str -> Bool
   (let [(allowed tool.agents)] (or (listContains? allowed "*") (listContains? allowed role)))
 
 fn isSafetyPermitted? tool: ToolDescriptor ceiling: ToolSafety -> Bool
-  (mt tool.safety ((safetySafe) true) ((safetyGuarded) (mt ceiling ((safetySafe) false) (_ true))) ((safetyDangerous) (mt ceiling ((safetyDangerous) true) (_ false))))
+  (match tool.safety ((safetySafe) true) ((safetyGuarded) (match ceiling ((safetySafe) false) (_ true))) ((safetyDangerous) (match ceiling ((safetyDangerous) true) (_ false))))
 
 fn maskToolSecrets tool: ToolDescriptor -> ToolDescriptor
   (let [(maskedEnv (mapEmpty))] (with tool :env maskedEnv :secrets (map (fn [(s SecretRef)] -> SecretRef (SecretRef :key s.key :source s.source :ref "***" :fallback "***")) tool.secrets) :redacted true))

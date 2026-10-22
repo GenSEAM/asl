@@ -6,7 +6,7 @@ fn drawing -> String
   "(:svg :w 100 :h 50 (:rc :x 0 :y 0 :w 100 :h 50 :rx 8 :f \"#222\") (:circ :cx 25 :cy 25 :r 10 :s \"#fff\" :strokeWidth 2) (:txt :x 50 :y 30 :anchor \"middle\" \"a < b\"))"
 
 fn errorsOf src: String -> (List String)
-  (mt (conv/asnToSvg src) ((ok _) []) ((err es) es))
+  (match (conv/asnToSvg src) ((ok _) []) ((err es) es))
 
 fn runTests -> Bool
   (do

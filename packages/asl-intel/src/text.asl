@@ -153,11 +153,11 @@ fn charStr c: Int64 -> String
   (optionOr (stringSlice " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~" (- c 32) (- c 31)) "")
 
 fn concatPass xs: (List String) acc: (List String) -> (List String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (listReverse acc))
     ((some a)
       (let [(rest (optionOr (listTail xs) (list)))]
-        (mt (listHead rest)
+        (match (listHead rest)
           ((none) (listReverse (cons a acc)))
           ((some b2) (concatPass (optionOr (listTail rest) (list)) (cons (stringConcat a b2) acc)))))))
 
@@ -344,7 +344,7 @@ fn pyRound x: Float nd: Int64 -> Float
 
 fn fmtFixed x: Float nd: Int64 -> String
   (let [(neg (< x 0.0)) (ax (if neg (- 0.0 x) x)) (q0 (scaledHalfEven ax nd))
-        (q (if (< q0 0) (* (mt (float64ToInt64 ax) ((some i) i) ((none) 0)) (pow10 nd)) q0))
+        (q (if (< q0 0) (* (match (float64ToInt64 ax) ((some i) i) ((none) 0)) (pow10 nd)) q0))
         (p (pow10 nd)) (ip (/ q p)) (fp (mod q p))
         (fs (intStr fp))
         (body (if (= nd 0) (intStr ip) (str (intStr ip) "." (stringRepeat "0" (- nd (stringLength fs))) fs)))]
@@ -449,13 +449,13 @@ fn takeN xs: (List T) k: Int64 -> (List T)
 
 fn takeLoop xs: (List T) k: Int64 acc: (List T) -> (List T)
   (if (<= k 0) (listReverse acc)
-    (mt (listHead xs)
+    (match (listHead xs)
       ((none) (listReverse acc))
       ((some x) (takeLoop (optionOr (listTail xs) (list)) (- k 1) (cons x acc)))))
 
 fn dropN xs: (List T) k: Int64 -> (List T)
   (if (<= k 0) xs
-    (mt (listTail xs)
+    (match (listTail xs)
       ((none) (list))
       ((some r) (dropN r (- k 1)))))
 

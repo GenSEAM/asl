@@ -84,7 +84,7 @@ fn arrayBuiltinSig name: String -> (Option (Pair (List String) (Pair Bool String
     (else (none)))
 
 fn builtinSig name: String -> (Option (Pair (List String) (Pair Bool String)))
-  (cond ((= name "fnv1a64") (sigFn (list "String") "Int64")) (else (mt (arrayBuiltinSig name) ((some signature) (some signature)) ((none) (mt (builtinSigFallback name) ((some signature) (some signature)) ((none) (hostBuiltinSig name)))))))
+  (cond ((= name "fnv1a64") (sigFn (list "String") "Int64")) (else (match (arrayBuiltinSig name) ((some signature) (some signature)) ((none) (match (builtinSigFallback name) ((some signature) (some signature)) ((none) (hostBuiltinSig name)))))))
 
 fn hostBuiltinSig name: String -> (Option (Pair (List String) (Pair Bool String)))
   (cond ((= name "fdClose") (sigFn (list "Int64") "(Result Unit String)"))
@@ -147,10 +147,10 @@ fn showTypes ts: (List Type) -> (List String)
   (map (fn [(t Type)] -> String (showType t)) ts)
 
 fn stripFirstChar s: String -> String
-  (mt (stringSlice s 1 (stringLength s)) ((some sub) sub) ((none) s))
+  (match (stringSlice s 1 (stringLength s)) ((some sub) sub) ((none) s))
 
 fn showType t: Type -> String
-  (mt t ((tyVar id kind) (cond ((= kind "num") "a number") ((= kind "int") "an integer") ((= kind "text") "String or Bytes") (else "_"))) ((tyFun params ret) (str "(fn [" (stringJoin (showTypes params) " ") "] -> " (showType ret) ")")) ((tyCon name args mod shown) (let [(head (mt shown ((some rest) rest) ((none) (if (stringStartsWith? name "#") (stripFirstChar name) name))))] (if (listEmpty? args) head (str "(" head " " (stringJoin (showTypes args) " ") ")")))))
+  (match t ((tyVar id kind) (cond ((= kind "num") "a number") ((= kind "int") "an integer") ((= kind "text") "String or Bytes") (else "_"))) ((tyFun params ret) (str "(fn [" (stringJoin (showTypes params) " ") "] -> " (showType ret) ")")) ((tyCon name args mod shown) (let [(head (match shown ((some rest) rest) ((none) (if (stringStartsWith? name "#") (stripFirstChar name) name))))] (if (listEmpty? args) head (str "(" head " " (stringJoin (showTypes args) " ") ")")))))
 
 (schema TypeTokState (:f toks (List String) "Token accumulator, reversed") (:f cur String "Current atom accumulator"))
 
@@ -164,7 +164,7 @@ fn tokenizeTypeStr s: String -> (List String)
   (let [(st (fold tokenizeTypeStep (TypeTokState :toks (list) :cur "") (stringChars s)))] (listReverse (flushCur st.toks st.cur)))
 
 fn getTypevarId name: String typevars: (List String) -> Int64
-  (mt (listIndexOf typevars name) ((some i) (+ i 1)) ((none) 1))
+  (match (listIndexOf typevars name) ((some i) (+ i 1)) ((none) 1))
 
 fn makeQualPair member: String alias: (Option String) head: String -> (Pair String (Pair (Option String) (Option String)))
   (let [(optH (some head))] (pair (resolveTypeAlias member) (pair alias optH)))
@@ -173,16 +173,16 @@ fn parseConName head: String -> (Pair String (Pair (Option String) (Option Strin
   (if (not (stringContains? head "/")) (pair (resolveTypeAlias head) (pair (none) (none))) (let [(parts (stringSplit head "/")) (alias (listGet parts 0))] (match (listGet parts 1) ((some s) (makeQualPair s alias head)) ((none) (makeQualPair head alias head)))))
 
 fn safeToksTail toks: (List String) -> (List String)
-  (if (listEmpty? toks) (list) (mt (listSlice toks 1 (listLength toks)) ((some rest) rest) ((none) (list))))
+  (if (listEmpty? toks) (list) (match (listSlice toks 1 (listLength toks)) ((some rest) rest) ((none) (list))))
 
 fn skipDelim toks: (List String) delim: String -> (List String)
-  (mt (listHead toks) ((some str) (if (= str delim) (safeToksTail toks) toks)) ((none) toks))
+  (match (listHead toks) ((some str) (if (= str delim) (safeToksTail toks) toks)) ((none) toks))
 
 fn parseTypeToks toks: (List String) typevars: (List String) -> (Pair Type (List String))
-  (mt (listHead toks) ((none) (pair (tyCon "Unit" (list) (none) (none)) (list))) ((some s) (let [(rest (safeToksTail toks))] (if (= s "(") (mt (listHead rest) ((none) (pair (tyCon "Unit" (list) (none) (none)) (list))) ((some sSym) (let [(rest2 (safeToksTail rest))] (if (= sSym ")") (pair (tyCon "Unit" (list) (none) (none)) rest2) (if (= sSym "fn") (let [(curToks (skipDelim (skipDelim rest2 "!") "[")) (pRes (parseFnParams curToks typevars (list))) (params (pairFirst pRes)) (afterParams (pairSecond pRes)) (cur2 (skipDelim afterParams "->")) (retRes (parseTypeToks cur2 typevars)) (ret (pairFirst retRes)) (afterRet (pairSecond retRes)) (finalRem (skipDelim afterRet ")"))] (pair (tyFun params ret) finalRem)) (let [(argsRes (parseTypeArgs rest2 typevars (list))) (args (pairFirst argsRes)) (afterArgs (pairSecond argsRes)) (conInfo (parseConName sSym)) (cName (pairFirst conInfo)) (cMod (pairFirst (pairSecond conInfo))) (cShown (pairSecond (pairSecond conInfo)))] (pair (tyCon cName args cMod cShown) afterArgs))))))) (if (listContains? typevars s) (let [(varId (getTypevarId s typevars)) (kind (if (= s "N") "num" (if (or (= s "A") (or (= s "B") (or (= s "T") (= s "E")))) "any" "any")))] (pair (tyVar varId kind) rest)) (let [(conInfo (parseConName s)) (cName (pairFirst conInfo)) (cMod (pairFirst (pairSecond conInfo))) (cShown (pairSecond (pairSecond conInfo)))] (pair (tyCon cName (list) cMod cShown) rest)))))))
+  (match (listHead toks) ((none) (pair (tyCon "Unit" (list) (none) (none)) (list))) ((some s) (let [(rest (safeToksTail toks))] (if (= s "(") (match (listHead rest) ((none) (pair (tyCon "Unit" (list) (none) (none)) (list))) ((some sSym) (let [(rest2 (safeToksTail rest))] (if (= sSym ")") (pair (tyCon "Unit" (list) (none) (none)) rest2) (if (= sSym "fn") (let [(curToks (skipDelim (skipDelim rest2 "!") "[")) (pRes (parseFnParams curToks typevars (list))) (params (pairFirst pRes)) (afterParams (pairSecond pRes)) (cur2 (skipDelim afterParams "->")) (retRes (parseTypeToks cur2 typevars)) (ret (pairFirst retRes)) (afterRet (pairSecond retRes)) (finalRem (skipDelim afterRet ")"))] (pair (tyFun params ret) finalRem)) (let [(argsRes (parseTypeArgs rest2 typevars (list))) (args (pairFirst argsRes)) (afterArgs (pairSecond argsRes)) (conInfo (parseConName sSym)) (cName (pairFirst conInfo)) (cMod (pairFirst (pairSecond conInfo))) (cShown (pairSecond (pairSecond conInfo)))] (pair (tyCon cName args cMod cShown) afterArgs))))))) (if (listContains? typevars s) (let [(varId (getTypevarId s typevars)) (kind (if (= s "N") "num" (if (or (= s "A") (or (= s "B") (or (= s "T") (= s "E")))) "any" "any")))] (pair (tyVar varId kind) rest)) (let [(conInfo (parseConName s)) (cName (pairFirst conInfo)) (cMod (pairFirst (pairSecond conInfo))) (cShown (pairSecond (pairSecond conInfo)))] (pair (tyCon cName (list) cMod cShown) rest)))))))
 
 fn parseDelimitedTypes toks: (List String) typevars: (List String) closing: String acc: (List Type) -> (Pair (List Type) (List String))
-  (mt (listHead toks) ((none) (pair (listReverse acc) (list))) ((some str) (if (= str closing) (let [(revAcc (listReverse acc)) (remToks (safeToksTail toks))] (pair revAcc remToks)) (let [(res (parseTypeToks toks typevars))] (parseDelimitedTypes (pairSecond res) typevars closing (cons (pairFirst res) acc))))))
+  (match (listHead toks) ((none) (pair (listReverse acc) (list))) ((some str) (if (= str closing) (let [(revAcc (listReverse acc)) (remToks (safeToksTail toks))] (pair revAcc remToks)) (let [(res (parseTypeToks toks typevars))] (parseDelimitedTypes (pairSecond res) typevars closing (cons (pairFirst res) acc))))))
 
 fn parseTypeArgs toks: (List String) typevars: (List String) acc: (List Type) -> (Pair (List Type) (List String))
   (parseDelimitedTypes toks typevars ")" acc)
@@ -236,17 +236,17 @@ fn genericCandidates name: String -> String
   (stringJoin (map (fn [(p (Pair String String))] -> String (optionOr (listGet (stringSplit (pairFirst p) "/") 1) "")) (filter (fn [(p (Pair String String))] -> Bool (stringStartsWith? (pairFirst p) (str name "/"))) (genericRows))) ", ")
 
 fn receiverOver t: Type -> String
-  (mt t
+  (match t
     ((tyVar _ _) "")
     ((tyCon name _ _ _) (if (listContains? (list "String" "List" "Bytes" "Map" "I64Array" "I8Array" "F64Array") name) name "?"))
     (_ "?"))
 
 fn isTyVar? t: Type -> Bool
-  (mt t ((tyVar _ _) true) (_ false))
+  (match t ((tyVar _ _) true) (_ false))
 
 fn genericRenamed name: String -> String
   (let [(multi (filter (fn [(p (Pair String String))] -> Bool (= (pairSecond p) name)) (genericRows)))]
-    (mt (listHead multi)
+    (match (listHead multi)
       ((some p) (optionOr (listHead (stringSplit (pairFirst p) "/")) ""))
       ((none) (optionOr (listHead (map (fn [(n String)] -> String n) (filter (fn [(n String)] -> Bool (= (genericAlias n) name)) (genericAliasNames)))) ""))))
 

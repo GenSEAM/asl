@@ -8,7 +8,7 @@ fn makeSessionCardItem id: String sub: String tabs: Int64 auth: Bool status: Ses
   (SessionCardItem :targetId id :substrateName sub :activeTabsCount tabs :isAuthenticated auth :status status :currentTask task)
 
 fn formatSessionCue status: SessionStatus -> String
-  (mt status ((statusActive) "[OK] Active") ((statusRunning) "[RUN] Executing") ((statusIdle) "[IDLE] Standby") ((statusBlocked) "[BLOCKED] Safety Hold"))
+  (match status ((statusActive) "[OK] Active") ((statusRunning) "[RUN] Executing") ((statusIdle) "[IDLE] Standby") ((statusBlocked) "[BLOCKED] Safety Hold"))
 
 fn renderSessionCard item: SessionCardItem -> ui/VNode
   (let [(cue (formatSessionCue item.status)) (authStr (if item.isAuthenticated "Authenticated SaaS" "Isolated Sandbox")) (titleText (str item.substrateName " (" cue ")")) (metaText (str "Target: " item.targetId " | Tabs: " (stringFromInt64 item.activeTabsCount) " | " authStr " | Task: " item.currentTask)) (attrs (mapSet (mapSet (mapEmpty) "class" "sds1-session-card") "data-target" item.targetId))] (ui/makeContainer (str "sess-" item.targetId) attrs (list (ui/makeText titleText "session-title") (ui/makeText metaText "session-meta"))))

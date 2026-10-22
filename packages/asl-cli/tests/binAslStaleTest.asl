@@ -10,7 +10,7 @@ fn tampered -> String
   "asl/packages/asl-cli/src/nativeCli.asl"
 
 fn ! envFor cache: (Option String) extra: (List String) -> (List String)
-  (listAppend (cons (str "SERVED_STOP_PID=" (stringFromInt64 (procSelf))) (listAppend (mt cache ((some c) (list (str "ASL_NATIVE_CLI_CACHE=" c))) ((none) (list))) extra))
+  (listAppend (cons (str "SERVED_STOP_PID=" (stringFromInt64 (procSelf))) (listAppend (match cache ((some c) (list (str "ASL_NATIVE_CLI_CACHE=" c))) ((none) (list))) extra))
     (filter (fn [(row String)] -> Bool (not (or (stringStartsWith? row "ASL_HOST=") (or (stringStartsWith? row "SERVED_STOP_PID=") (or (stringStartsWith? row "ASL_NATIVE_CLI_WAIT=") (and (some? cache) (stringStartsWith? row "ASL_NATIVE_CLI_CACHE="))))))) (run/childEnv (list))))
 
 fn ! binAsl! root: String args: (List String) env: (List String) -> run/Done
@@ -60,7 +60,7 @@ fn ! runTests -> Bool
         (waitPid (fileWrite (str waitLock "/pid") (str (stringFromInt64 (procSelf)) "\n")))
         (waitOwner (fileWrite (str waitLock "/owner") "99999999\n"))
         (deadOwnerWait (binAsl! root (list "test" (passSuite)) (envFor (some (str cache "/waitDeadOwner")) (list "ASL_NATIVE_CLI_WAIT=1"))))
-        (edited (mt (fileReadString (str copy "/src/" (tampered)))
+        (edited (match (fileReadString (str copy "/src/" (tampered)))
                   ((err e) (err e))
                   ((ok text) (fileWrite (str copy "/src/" (tampered)) (str text "\n(:m :why \"an edit the cached binary predates\")\n")))))
         (pointed (fileWrite (nc/headPath cache root) (str copy "\n")))

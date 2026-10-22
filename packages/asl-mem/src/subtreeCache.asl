@@ -32,7 +32,7 @@ fn lookupSubtree cache: SubtreeCache hash: Str -> (Option SubtreeEntry)
   (mapGet cache.entries hash)
 
 fn findUnchangedEntries entries: (List SubtreeEntry) oldCache: SubtreeCache acc: (List SubtreeEntry) -> (List SubtreeEntry)
-  (if (listEmpty? entries) acc (let [(entry (optionOr (listHead entries) (SubtreeEntry :hash "" :name "" :kind "" :astNode ""))) (rest (optionOr (listTail entries) (list))) (h entry.hash) (cached (lookupSubtree oldCache h))] (mt cached ((some oldEntry) (findUnchangedEntries rest oldCache (listAppend acc (list oldEntry)))) ((none) (findUnchangedEntries rest oldCache acc)))))
+  (if (listEmpty? entries) acc (let [(entry (optionOr (listHead entries) (SubtreeEntry :hash "" :name "" :kind "" :astNode ""))) (rest (optionOr (listTail entries) (list))) (h entry.hash) (cached (lookupSubtree oldCache h))] (match cached ((some oldEntry) (findUnchangedEntries rest oldCache (listAppend acc (list oldEntry)))) ((none) (findUnchangedEntries rest oldCache acc)))))
 
 fn reconcileIncrementalDiff oldCache: SubtreeCache newSource: Str -> (Pair (List SubtreeEntry) SubtreeCache)
   (let [(newCache (indexSubtrees newSource)) (allEntries (mapValues newCache.entries)) (unchanged (findUnchangedEntries allEntries oldCache (list)))] (pair unchanged newCache))

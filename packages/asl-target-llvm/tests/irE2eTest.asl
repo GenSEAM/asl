@@ -256,7 +256,7 @@ fn primChecksBase -> (List (List ty/SsaInstr))
               (prim "lowOk" (ty/tyI1) "eqInt" (list "lowBack" "lowInt"))))
 
 fn lastDest instrs: (List ty/SsaInstr) -> String
-  (mt (listGet instrs (- (listLength instrs) 1)) ((some i) i.dest) ((none) ""))
+  (match (listGet instrs (- (listLength instrs) 1)) ((some i) i.dest) ((none) ""))
 
 fn checkLabel k: Int64 count: Int64 -> String
   (if (= k count) "done" (str "check" k))
@@ -345,24 +345,24 @@ fn diagText diags: (List ty/IrDiag) -> String
   (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.locus ": " d.message)) diags) "; ")
 
 fn ! main args: (List String) -> (Result Int64 String)
-  (mt (listHead args)
+  (match (listHead args)
     ((none) (err "usage: irE2eTest.asl fib|loop|switch|ops|fibRaw|primCheck|traps|trap:ENTRY"))
-    ((some name) (mt (fixture name)
+    ((some name) (match (fixture name)
                    ((ok text) (do (print text) (ok 0)))
                    ((err diags) (err (diagText diags))))))
 
 fn golden! name: String -> String
-  (mt (fileReadString (str "asl/packages/asl-target-llvm/tests/golden/" name ".ll"))
+  (match (fileReadString (str "asl/packages/asl-target-llvm/tests/golden/" name ".ll"))
     ((ok text) text)
     ((err e) (str "missing golden " name ": " e)))
 
 fn ! matchesGolden? name: String -> Bool
-  (mt (fixture name)
+  (match (fixture name)
     ((ok text) (= text (golden! name)))
     ((err _) false))
 
 fn codes res: (Result String (List ty/IrDiag)) -> (List String)
-  (mt res ((ok _) (list)) ((err diags) (map (fn [(d ty/IrDiag)] -> String d.code) diags)))
+  (match res ((ok _) (list)) ((err diags) (map (fn [(d ty/IrDiag)] -> String d.code) diags)))
 
 fn testGoldens! -> Bool
   (do (assert (matchesGolden? "fib") "fib over Val: builtin calls with hoisted argv, recursion, Val branch inlines its own tag check and trap (RT-MEMORY M2), program wrapper unboxes the result")
@@ -385,7 +385,7 @@ fn testVerifierGuards -> Bool
         true))
 
 fn testRawPrograms -> Bool
-  (let [(fibText (mt (fixture "fibRaw") ((ok t) t) ((err _) "")))
+  (let [(fibText (match (fixture "fibRaw") ((ok t) t) ((err _) "")))
         (badPrim (plainModule "bad" (list (ty/ssaFunction "f" (list) (list (ty/ssaParam "x" (ty/tyF64))) (ty/tyI64)
                                               (list (block "entry" (list (rawInt "one" 1) (prim "r" (ty/tyI64) "addInt" (list "x" "one"))) (ty/termReturn "r")))))))]
     (do (refute (stringContains? fibText "asl_rt_") "raw fib needs no runtime function")

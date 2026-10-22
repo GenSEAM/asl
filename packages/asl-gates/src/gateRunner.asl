@@ -25,32 +25,32 @@ fn commandLines cmd: Str res: ProcessOutput -> (Result (List Str) Str)
     (err (str cmd " exited " (stringFromInt64 res.exitCode) ": " (stringTrim res.stderr))))
 
 fn ! checkPaths what: Str listing: (Result (List Str) Str) check: (fn [Str] -> (Result Unit Str)) -> (Result (List Str) Str)
-  (mt listing
+  (match listing
     ((err e) (err e))
     ((ok paths)
-      (let [(problems (fold (fn [(acc (List Str)) (p Str)] -> (List Str) (mt (check p) ((ok _) acc) ((err e) (listAppend acc (list e))))) (list) paths))]
+      (let [(problems (fold (fn [(acc (List Str)) (p Str)] -> (List Str) (match (check p) ((ok _) acc) ((err e) (listAppend acc (list e))))) (list) paths))]
         (cond
           ((listEmpty? paths) (err (str "No " what " found")))
           ((listEmpty? problems) (ok paths))
           (else (err (str (stringFromInt64 (listLength problems)) " of " (stringFromInt64 (listLength paths)) " " what " failed: " (stringJoin problems "; "))))))))
 
 fn ! manifestCheck! p: Str -> (Result Unit Str)
-  (mt (fileReadString p)
+  (match (fileReadString p)
     ((err e) (err (str "Failed to read manifest " p ": " e)))
     ((ok c) (if (g/verifyManifestString c) (ok ()) (err (str p ": no valid package id")))))
 
 fn ! balanceCheck! p: Str -> (Result Unit Str)
-  (mt (dyck/checkFile! p)
+  (match (dyck/checkFile! p)
     ((err e) (err (str "Failed to read " p ": " e)))
-    ((ok issue) (mt issue ((none) (ok ())) ((some at) (err (str p ": unbalanced at byte " (stringFromInt64 (pairFirst at)) ": " (pairSecond at)))))))
+    ((ok issue) (match issue ((none) (ok ())) ((some at) (err (str p ": unbalanced at byte " (stringFromInt64 (pairFirst at)) ": " (pairSecond at)))))))
 
 fn ! skillCheck! p: Str -> (Result Unit Str)
-  (mt (fileReadString p)
+  (match (fileReadString p)
     ((err e) (err (str "Failed to read skill " p ": " e)))
     ((ok c) (if (stringStartsWith? c "---\n") (ok ()) (err (str p ": does not open with a --- frontmatter fence")))))
 
 fn countVerdict num: I64 name: Str res: (Result (List Str) Str) okMessage: Str -> GateVerdict
-  (mt res
+  (match res
     ((ok paths) (makeVerdict num name true (str (stringFromInt64 (listLength paths)) " " okMessage)))
     ((err e) (makeVerdict num name false e)))
 
@@ -71,11 +71,11 @@ fn ! runLiveGateAudit -> GateSummary
         (v1 (countVerdict 1 "Package Manifests & Structure" manifests "package manifests verified directly on disk."))
         (srcCmd "find asl/packages -name '*.asl'")
         (v2 (countVerdict 2 "Pure ASL Syntax & Form Balance" (checkPaths "ASL source files" (commandLines srcCmd (processRun srcCmd)) (fn [(p Str)] -> (Result Unit Str) (balanceCheck! p))) "source files verified for S-expression balance on disk."))
-        (v3 (mt (sc/claimsGrounding!) ((ok n) (makeVerdict 3 "Site Claims Grounding Audit" true (str "Grounded " (stringFromInt64 n) " published benchmark claims against the registry on disk."))) ((err e) (makeVerdict 3 "Site Claims Grounding Audit" false e))))
-        (v4 (mt (g/auditPackageTreeZeroForeign (list "asl/packages")) ((ok cleanCount) (let [(zeroCRes (processRun "test ! -f bootstrap.c && test ! -f engine/legacy/asl.c && test ! -f engine/asl_runtime.h && test ! -f engine/asl-engine.c"))] (if (= zeroCRes.exitCode 0) (makeVerdict 4 "Zero-Foreign File & Zero-C Policy" true (str "Audited " (stringFromInt64 cleanCount) " package files: zero-foreign and zero-c infrastructure verified cleanly.")) (makeVerdict 4 "Zero-Foreign File & Zero-C Policy" false (str "Legacy C files detected in root or engine (test exited " (stringFromInt64 zeroCRes.exitCode) ")"))))) ((err violations) (makeVerdict 4 "Zero-Foreign File & Zero-C Policy" false (str "Foreign files or audit errors in packages: " (stringJoin violations ", "))))))
+        (v3 (match (sc/claimsGrounding!) ((ok n) (makeVerdict 3 "Site Claims Grounding Audit" true (str "Grounded " (stringFromInt64 n) " published benchmark claims against the registry on disk."))) ((err e) (makeVerdict 3 "Site Claims Grounding Audit" false e))))
+        (v4 (match (g/auditPackageTreeZeroForeign (list "asl/packages")) ((ok cleanCount) (let [(zeroCRes (processRun "test ! -f bootstrap.c && test ! -f engine/legacy/asl.c && test ! -f engine/asl_runtime.h && test ! -f engine/asl-engine.c"))] (if (= zeroCRes.exitCode 0) (makeVerdict 4 "Zero-Foreign File & Zero-C Policy" true (str "Audited " (stringFromInt64 cleanCount) " package files: zero-foreign and zero-c infrastructure verified cleanly.")) (makeVerdict 4 "Zero-Foreign File & Zero-C Policy" false (str "Legacy C files detected in root or engine (test exited " (stringFromInt64 zeroCRes.exitCode) ")"))))) ((err violations) (makeVerdict 4 "Zero-Foreign File & Zero-C Policy" false (str "Foreign files or audit errors in packages: " (stringJoin violations ", "))))))
         (suiteCmd "find asl/packages/asl-gates/tests \\( -path '*/tests/*test*.asl' -o -path '*/tests/*Test*.asl' \\)")
-        (suites (mt (commandLines suiteCmd (processRun suiteCmd)) ((ok ps) (ok (filter (fn [(p Str)] -> Bool (not (stringContains? p "gateRunnerTest"))) ps))) ((err e) (err e))))
-        (v5 (mt suites
+        (suites (match (commandLines suiteCmd (processRun suiteCmd)) ((ok ps) (ok (filter (fn [(p Str)] -> Bool (not (stringContains? p "gateRunnerTest"))) ps))) ((err e) (err e))))
+        (v5 (match suites
               ((ok ps) (auditSuitePaths ps (fn [(p Str)] -> fr/Job (fr/job (list "/bin/sh" "-c" (str "bin/asl test " p)) "." (fr/childEnv (list))))))
               ((err e) (makeVerdict 5 "Pure ASL Gate Test Suite" false e))))
         (v6 (countVerdict 6 "Package Manifest Recount" manifests "package manifests recounted with a valid package id; exported symbols are not audited."))

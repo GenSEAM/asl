@@ -214,7 +214,7 @@ fn testSpreadAndRest! -> Bool
     true)
 fn checkExprAsync code: String expected: String -> Bool
   (let [(res (cv/parseAsync code))]
-    (mt res
+    (match res
       ((ok root)
        (let [(exprNode (cv/unwrapExpressionNode root))
              (sexpr (cv/coverToSExpr exprNode code))]
@@ -223,7 +223,7 @@ fn checkExprAsync code: String expected: String -> Bool
 
 fn checkExprGenerator code: String expected: String -> Bool
   (let [(res (cv/parseGenerator code))]
-    (mt res
+    (match res
       ((ok root)
        (let [(exprNode (cv/unwrapExpressionNode root))
              (sexpr (cv/coverToSExpr exprNode code))]
@@ -329,7 +329,7 @@ fn checkTest262Files! files: (List String) runCount: Int64 passCount: Int64 excl
       true)
     (let [(path (optionOr (listHead files) ""))
           (rest (optionOr (listTail files) (list)))]
-      (mt (test262ExclusionReason path (test262Exclusions))
+      (match (test262ExclusionReason path (test262Exclusions))
         ((some _)
          (checkTest262Files! rest runCount passCount (+ excludedCount 1)))
         ((none)

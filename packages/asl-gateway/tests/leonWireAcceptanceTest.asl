@@ -10,7 +10,7 @@ fn field fields: (List (Pair String String)) key: String -> (Option String)
         fields)
 
 fn numbered fields: (List (Pair String j/Json)) key: String -> String
-  (mt (fold (fn [(found (Option j/Json)) (p (Pair String j/Json))] -> (Option j/Json)
+  (match (fold (fn [(found (Option j/Json)) (p (Pair String j/Json))] -> (Option j/Json)
                (if (= (pairFirst p) key) (some (pairSecond p)) found))
              (none)
              fields)
@@ -27,10 +27,10 @@ fn runTests -> Bool
                                        (pair "temperature" (j/jfloat 0.2))
                                        (pair "ignored" (j/jstr "discard")))))
         (bad (pv/parseAsnReply "(:reply :content \"unterminated"))]
-    (mt parsed
+    (match parsed
       ((err _) false)
       ((ok hf)
-        (mt numbers
+        (match numbers
           ((err _) false)
           ((ok nums)
             (do

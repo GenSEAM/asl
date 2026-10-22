@@ -29,7 +29,7 @@ fn ! runTests -> Bool
         (lease1Res (lse/acquireLease! testSock))
         (lease1 (resultOr lease1Res (lse/LeaseLock :acquired false :fd -1 :lockPath "" :error "fail")))
         (lease2Res (lse/acquireLease! testSock))
-        (lease2Err (mt lease2Res ((ok _) "") ((err e) e)))
+        (lease2Err (match lease2Res ((ok _) "") ((err e) e)))
         (_rel1 (lse/releaseLease! lease1))
         (lease3Res (lse/acquireLease! testSock))
         (lease3Ok (ok? lease3Res))

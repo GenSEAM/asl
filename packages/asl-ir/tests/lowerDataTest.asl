@@ -9,13 +9,13 @@ fn joinLines xs: (List String) -> String
   (stringJoin xs "\n")
 
 fn printed res: (Result ty/SsaModule (List ty/IrDiag)) -> String
-  (mt res ((ok m) (prn/printSsa m)) ((err ds) (str "lowering failed: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message " " d.locus)) ds) "; "))))
+  (match res ((ok m) (prn/printSsa m)) ((err ds) (str "lowering failed: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message " " d.locus)) ds) "; "))))
 
 fn verified? res: (Result ty/SsaModule (List ty/IrDiag)) -> Bool
-  (mt res ((ok m) (ok? (vfy/verifySsa m))) ((err _) false))
+  (match res ((ok m) (ok? (vfy/verifySsa m))) ((err _) false))
 
 fn diagsOf res: (Result ty/SsaModule (List ty/IrDiag)) -> (List ty/IrDiag)
-  (mt res ((ok _) (list)) ((err ds) ds))
+  (match res ((ok _) (list)) ((err ds) ds))
 
 fn codes diags: (List ty/IrDiag) -> (List String)
   (map (fn [(d ty/IrDiag)] -> String d.code) diags)
@@ -56,13 +56,13 @@ fn shapeSource -> String
     "(enum Shape (:c circle [(r Int64)] \"round\") (:c rect [(w Int64) (h Int64)] \"box\") (:c empty [] \"nothing\"))"
     ""
     "(fn area [(s Shape)] -> Int64"
-    "  (mt s ((circle r) (* r r)) ((rect w _) w) ((empty) 0)))"
+    "  (match s ((circle r) (* r r)) ((rect w _) w) ((empty) 0)))"
     ""
     "(fn inner [(s Shape)] -> Int64"
-    "  (mt s ((circle r) r) (rest (area rest))))"
+    "  (match s ((circle r) r) (rest (area rest))))"
     ""
     "(fn round? [(s Shape)] -> Bool"
-    "  (mt (rect 1 2) ((circle _) true) (_ false)))"))
+    "  (match (rect 1 2) ((circle _) true) (_ false)))"))
 
 fn shapeGolden -> String
   (joinLines (list
@@ -121,7 +121,7 @@ fn preludeSource -> String
     "(module demo/prelude :x [orZero wrap nothing])"
     ""
     "(fn orZero [(o (Option Int64))] -> Int64"
-    "  (mt o ((some v) v) ((none) 0)))"
+    "  (match o ((some v) v) ((none) 0)))"
     ""
     "(fn wrap [(x Int64)] -> (Result Int64 String)"
     "  (if (< x 0) (err \"neg\") (ok x)))"
@@ -217,15 +217,15 @@ fn badMatchSource -> String
   (joinLines (list
     "(module demo/badMatch :x [partial])"
     "(enum Shape (:c circle [(r Int64)] \"round\") (:c rect [(w Int64) (h Int64)] \"box\") (:c empty [] \"nothing\"))"
-    "(fn partial [(s Shape)] -> Int64 (mt s ((circle r) r) ((empty) 0)))"
-    "(fn unknown [(s Shape)] -> Int64 (mt s ((square r) r) (_ 0)))"
-    "(fn short [(s Shape)] -> Int64 (mt s ((rect w) w) (_ 0)))"
+    "(fn partial [(s Shape)] -> Int64 (match s ((circle r) r) ((empty) 0)))"
+    "(fn unknown [(s Shape)] -> Int64 (match s ((square r) r) (_ 0)))"
+    "(fn short [(s Shape)] -> Int64 (match s ((rect w) w) (_ 0)))"
     "(fn build [] -> Shape (circle 1 2))"
-    "(fn mixed [(s Shape)] -> Int64 (mt s ((circle r) r) ((some v) v) (_ 0)))"
-    "(fn twice [(s Shape)] -> Int64 (mt s ((empty) 0) ((empty) 1) (_ 2)))"
-    "(fn late [(s Shape)] -> Int64 (mt s (_ 0) ((empty) 1)))"
+    "(fn mixed [(s Shape)] -> Int64 (match s ((circle r) r) ((some v) v) (_ 0)))"
+    "(fn twice [(s Shape)] -> Int64 (match s ((empty) 0) ((empty) 1) (_ 2)))"
+    "(fn late [(s Shape)] -> Int64 (match s (_ 0) ((empty) 1)))"
     "(fn opt [] -> (Option Int64) (none 1))"
-    "(fn bare [(s Shape)] -> Int64 (mt s (circle 0) (_ 1)))"))
+    "(fn bare [(s Shape)] -> Int64 (match s (circle 0) (_ 1)))"))
 
 fn badRecordSource -> String
   (joinLines (list
@@ -267,7 +267,7 @@ fn testBadMatch -> Bool
         (assert (stringContains? (messageAt ds 0) "'square'") "the unknown constructor is named")
         (assert (stringContains? (messageAt ds 1) "binds 1 field(s), the variant has 2") "a short pattern names both arities")
         (assert (stringContains? (messageAt ds 2) "takes 1 field(s), got 2") "an over-applied constructor names both arities")
-        (assert (stringStartsWith? (messageAt ds 3) "mt arms mix") (str "diagnostics name the match form as written, mt: " (messageAt ds 3)))
+        (assert (stringStartsWith? (messageAt ds 3) "match arms mix") (str "diagnostics name the match form as written, match: " (messageAt ds 3)))
         (assert (stringContains? (messageAt ds 6) "pattern 'circle' of Shape binds 0 field(s), the variant has 1") "a bare constructor pattern for a variant with fields is an arity error")
         true))
 

@@ -55,13 +55,13 @@ fn fnNamed m: ty/SsaModule name: String -> ty/SsaFunction
   (optionOr (getFn m.functions name) (ty/ssaFunction "" (list) (list) (ty/tyVal) (list)))
 
 fn isRecNamed t: ty/SsaTy name: String -> Bool
-  (mt t ((ty/tyRec schema) (= schema name)) (_ false))
+  (match t ((ty/tyRec schema) (= schema name)) (_ false))
 
 fn isPoint t: ty/SsaTy -> Bool
   (isRecNamed t "Point")
 
 fn firstParamIsPoint f: ty/SsaFunction -> Bool
-  (mt (listHead f.params) ((none) false) ((some p) (isPoint p.ty)))
+  (match (listHead f.params) ((none) false) ((some p) (isPoint p.ty)))
 
 fn noRecParam f: ty/SsaFunction -> Bool
   (listAll? (fn [(p ty/SsaParam)] -> Bool (= (ty/ssaTyName p.ty) "val")) f.params)
@@ -70,25 +70,25 @@ fn instrs f: ty/SsaFunction -> (List ty/SsaInstr)
   (fold (fn [(acc (List ty/SsaInstr)) (b ty/SsaBlock)] -> (List ty/SsaInstr) (listAppend acc b.instrs)) (list) f.blocks)
 
 fn hasPointDest f: ty/SsaFunction -> Bool
-  (listAny? (fn [(i ty/SsaInstr)] -> Bool (and (isPoint i.ty) (mt i.op ((ty/opCall _ _) true) (_ false)))) (instrs f))
+  (listAny? (fn [(i ty/SsaInstr)] -> Bool (and (isPoint i.ty) (match i.op ((ty/opCall _ _) true) (_ false)))) (instrs f))
 
 fn hasRecCallDest f: ty/SsaFunction name: String -> Bool
-  (listAny? (fn [(i ty/SsaInstr)] -> Bool (and (isRecNamed i.ty name) (mt i.op ((ty/opCall _ _) true) (_ false)))) (instrs f))
+  (listAny? (fn [(i ty/SsaInstr)] -> Bool (and (isRecNamed i.ty name) (match i.op ((ty/opCall _ _) true) (_ false)))) (instrs f))
 
 fn externNamed m: ty/SsaModule name: String -> ty/SsaExtern
   (optionOr (listHead (filter (fn [(e ty/SsaExtern)] -> Bool (= e.name name)) m.externs)) (ty/ssaExtern "" 0))
 
 fn hasPointRecord f: ty/SsaFunction -> Bool
-  (listAny? (fn [(i ty/SsaInstr)] -> Bool (and (isPoint i.ty) (mt i.op ((ty/opRecord _ _ _) true) (_ false)))) (instrs f))
+  (listAny? (fn [(i ty/SsaInstr)] -> Bool (and (isPoint i.ty) (match i.op ((ty/opRecord _ _ _) true) (_ false)))) (instrs f))
 
 fn hasUnboxTo f: ty/SsaFunction t: ty/SsaTy -> Bool
-  (listAny? (fn [(i ty/SsaInstr)] -> Bool (and (= (ty/ssaTyName i.ty) (ty/ssaTyName t)) (mt i.op ((ty/opUnbox _) true) (_ false)))) (instrs f))
+  (listAny? (fn [(i ty/SsaInstr)] -> Bool (and (= (ty/ssaTyName i.ty) (ty/ssaTyName t)) (match i.op ((ty/opUnbox _) true) (_ false)))) (instrs f))
 
 fn hasBoxInstr f: ty/SsaFunction -> Bool
-  (listAny? (fn [(i ty/SsaInstr)] -> Bool (mt i.op ((ty/opBox _) true) (_ false))) (instrs f))
+  (listAny? (fn [(i ty/SsaInstr)] -> Bool (match i.op ((ty/opBox _) true) (_ false))) (instrs f))
 
 fn closesOver f: ty/SsaFunction callee: String -> Bool
-  (listAny? (fn [(i ty/SsaInstr)] -> Bool (mt i.op ((ty/opMakeClosure c _) (= c callee)) (_ false))) (instrs f))
+  (listAny? (fn [(i ty/SsaInstr)] -> Bool (match i.op ((ty/opMakeClosure c _) (= c callee)) (_ false))) (instrs f))
 
 fn hasPointBlockParam f: ty/SsaFunction -> Bool
   (listAny? (fn [(b ty/SsaBlock)] -> Bool (listAny? (fn [(p ty/SsaParam)] -> Bool (isPoint p.ty)) b.params)) f.blocks)
@@ -100,10 +100,10 @@ fn diagText ds: (List ty/IrDiag) -> String
   (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.locus ": " d.message)) ds) "; ")
 
 fn verifyText m: ty/SsaModule -> String
-  (mt (vfy/verifySsa m) ((ok _) "") ((err ds) (diagText ds)))
+  (match (vfy/verifySsa m) ((ok _) "") ((err ds) (diagText ds)))
 
 fn testRecordModule -> Bool
-  (mt (low/lowerSource (source))
+  (match (low/lowerSource (source))
     ((err ds) (assert false (str "record schema source lowers: " (diagText ds))))
     ((ok m)
       (do (assert (firstParamIsPoint (fnNamed m "getY")) "annotated schema parameter retains identity")
@@ -127,7 +127,7 @@ fn testRecordModule -> Bool
           true)))
 
 fn testRawLet -> Bool
-  (mt (low/lowerSource (rawLetSource))
+  (match (low/lowerSource (rawLetSource))
     ((err ds) (assert false (str "typed lets with raw annotations lower: " (diagText ds))))
     ((ok m)
       (do (assert (stringEmpty? (verifyText m)) (str "typed lets with raw annotations verify: " (verifyText m)))
@@ -137,20 +137,20 @@ fn testRawLet -> Bool
           true)))
 
 fn lowerApp -> (Result ty/SsaModule (List ty/IrDiag))
-  (mt (ast/parse (libSource))
+  (match (ast/parse (libSource))
     ((err e) (err (list (ty/makeIrDiag "ERR_TEST_PARSE" e.msg "rlib"))))
-    ((ok libForms) (mt (ast/parse (appSource))
+    ((ok libForms) (match (ast/parse (appSource))
                      ((err e) (err (list (ty/makeIrDiag "ERR_TEST_PARSE" e.msg "rapp"))))
                      ((ok appForms) (low/lowerLinked appForms (low/declPositions (appSource))
                                                      (low/LinkScope :path "rapp.asl" :imports (mapSet (mapEmpty) "l" libForms) :prelude (list) :strings (list) :only (none)))))))
 
 fn testImportedRecord -> Bool
-  (mt (lowerApp)
+  (match (lowerApp)
     ((err ds) (assert false (str "a module importing a record schema lowers: " (diagText ds))))
     ((ok m)
       (do (assert (hasRecCallDest (fnNamed m "rapp.useMk") "rlib.Point") "a call through an import alias returns the imported module's schema, not the importer's same-named one")
           (assert (isRecNamed (externNamed m "rlib.mk").ret "rlib.Point") (str "an extern returning an imported record resolves its schema: " (ty/ssaTyName (externNamed m "rlib.mk").ret)))
-          (assert (mt (listHead (externNamed m "rlib.getX").params) ((some t) (isRecNamed t "rlib.Point")) ((none) false)) "an extern taking an imported record resolves its parameter schema")
+          (assert (match (listHead (externNamed m "rlib.getX").params) ((some t) (isRecNamed t "rlib.Point")) ((none) false)) "an extern taking an imported record resolves its parameter schema")
           true)))
 
 fn runTests -> Bool

@@ -60,8 +60,8 @@ fn esc text: String limit: Int64 -> String
 
 fn fmtCheck c: Check -> String
   (let [(parts0 (list (str "(:check :id " c.id " :status " c.status)))
-        (parts1 (mt c.n ((some num) (listAppend parts0 (list (str ":n " (itos num))))) ((none) parts0)))
-        (parts2 (mt c.trust ((some t) (listAppend parts1 (list (str ":trust " t)))) ((none) parts1)))
+        (parts1 (match c.n ((some num) (listAppend parts0 (list (str ":n " (itos num))))) ((none) parts0)))
+        (parts2 (match c.trust ((some t) (listAppend parts1 (list (str ":trust " t)))) ((none) parts1)))
         (parts3 (if (stringEmpty? c.err) parts2 (listAppend parts2 (list (str ":err " c.err)))))
         (parts4 (if (stringEmpty? c.ev) parts3 (listAppend parts3 (list (str ":ev \"" (esc c.ev 400) "\"")))))]
     (str (stringJoin parts4 " ") ")"))
@@ -106,18 +106,18 @@ fn perItem cid: String bad: (List String) err: String n: (Option Int64) -> (List
         baseChecks)))
 
 fn isFile! path: String -> Bool
-  (mt (fileReadBytes path) ((ok _) true) ((err _) false))
+  (match (fileReadBytes path) ((ok _) true) ((err _) false))
 
 fn ! isLink? path: String -> Bool
-  (mt (p/exec! (p/withTimeout (p/cmd "/bin/sh" (list "-c" "test -L \"$1\"" "sh" path)) 5000))
+  (match (p/exec! (p/withTimeout (p/cmd "/bin/sh" (list "-c" "test -L \"$1\"" "sh" path)) 5000))
     ((err _) false)
     ((ok o) (= o.exitCode 0)))
 
 fn readText! path: String -> (Option String)
-  (mt (fileReadString path) ((ok s) (some s)) ((err _) (none)))
+  (match (fileReadString path) ((ok s) (some s)) ((err _) (none)))
 
 fn readBytes! path: String -> (Option Bytes)
-  (mt (fileReadBytes path) ((ok b) (some b)) ((err _) (none)))
+  (match (fileReadBytes path) ((ok b) (some b)) ((err _) (none)))
 
 fn basename path: String -> String
   (let [(parts (stringSplit path "/"))]
@@ -134,23 +134,23 @@ fn ! gitCmd! root: String args: (List String) -> p/ProcessCmd
              "GIT_CEILING_DIRECTORIES" (gf/ceilingFor! root))
 
 fn ! discoverRoot! cwd: String -> (Result String String)
-  (mt (p/exec! (p/withTimeout (p/withCwd (p/cmd "git" (list "rev-parse" "--show-toplevel")) cwd) 600000))
+  (match (p/exec! (p/withTimeout (p/withCwd (p/cmd "git" (list "rev-parse" "--show-toplevel")) cwd) 600000))
     ((err _) (err "git rev-parse --show-toplevel could not run"))
     ((ok o) (if (= o.exitCode 0) (ok (stringTrim o.stdout)) (err (str "git rev-parse --show-toplevel: " (stringTrim o.stderr))))))
 
 fn git! root: String args: (List String) -> (Result String String)
-  (mt (p/exec! (gitCmd! root args))
+  (match (p/exec! (gitCmd! root args))
     ((err _) (err (str "git " (stringJoin args " ") " could not run")))
     ((ok o) (if (= o.exitCode 0) (ok (stringTrim o.stdout)) (err (str "git " (stringJoin args " ") ": " (stringTrim o.stderr))))))
 
 fn gitOk! root: String args: (List String) -> Bool
-  (mt (p/exec! (gitCmd! root args))
+  (match (p/exec! (gitCmd! root args))
     ((ok o) (= o.exitCode 0))
     ((err _) false))
 
 fn trackedRoot! root: String args: (List String) -> (List String)
   (let [(cmdArgs (listAppend (list "ls-files" "-z" "--") args))]
-    (mt (p/exec! (gitCmd! root cmdArgs))
+    (match (p/exec! (gitCmd! root cmdArgs))
       ((err _) (list))
       ((ok o) (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (stringSplit o.stdout "\x00")))))
 
@@ -161,7 +161,7 @@ fn linkRelative path: String -> String
   (if (stringStartsWith? path "./") (cut path 2 (stringLength path)) path)
 
 fn symlinks! root: String -> (Option (List String))
-  (mt (p/exec! (p/withTimeout (p/withCwd (p/cmd "find" (list "." "-type" "l" "-print0")) root) 600000))
+  (match (p/exec! (p/withTimeout (p/withCwd (p/cmd "find" (list "." "-type" "l" "-print0")) root) 600000))
     ((err _) (none))
     ((ok o)
      (if (!= o.exitCode 0)
@@ -175,12 +175,12 @@ fn syntaxCheck! root: String cid: String -> (List Check)
         (links (symlinks! root))
         (checked (fold (fn [(acc (Pair (List String) (List String))) (p String)] -> (Pair (List String) (List String))
                          (let [(full (str root "/" p))]
-                           (if (mt links ((some paths) (listContains? paths p)) ((none) (isLink? full)))
+                           (if (match links ((some paths) (listContains? paths p)) ((none) (isLink? full)))
                              acc
-                             (mt (readBytes! full)
+                             (match (readBytes! full)
                                ((none) (pair (pairFirst acc) (cons (str p " is tracked but missing from the worktree") (pairSecond acc))))
                                ((some bs)
-                                (mt (dyck/check bs (not (stringEndsWith? p ".asl")))
+                                (match (dyck/check bs (not (stringEndsWith? p ".asl")))
                                   ((none) acc)
                                   ((some pairRes)
                                    (pair (cons (str p " byte " (itos (pairFirst pairRes)) " " (pairSecond pairRes)) (pairFirst acc)) (pairSecond acc)))))))))
@@ -194,7 +194,7 @@ fn syntaxCheck! root: String cid: String -> (List Check)
       (listAppend mainChecks (perItem cid missing "ERR_TRACKED_MISSING" (none)))))
 
 fn remoteCheck! root: String -> Check
-  (let [(remotes (mt (git! root (list "remote"))
+  (let [(remotes (match (git! root (list "remote"))
                    ((ok out) (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (stringSplit out "\n")))
                    ((err _) (list))))]
     (if (listEmpty? remotes)
@@ -205,7 +205,7 @@ fn ssotCheck! root: String -> Check
   (let [(installPath (str root "/scripts/install.sh"))]
     (if (not (isFile! installPath))
       (failCheck "ssot" "ERR_SSOT_DRIFT" "exit 127; " (none) (none))
-      (mt (p/exec! (p/withTimeout (p/withCwd (p/cmd installPath (list "--check-rules")) root) 600000))
+      (match (p/exec! (p/withTimeout (p/withCwd (p/cmd installPath (list "--check-rules")) root) 600000))
         ((err _) (failCheck "ssot" "ERR_SSOT_DRIFT" "exit 127; " (none) (none)))
         ((ok o)
          (let [(lines (stringSplit (str o.stdout o.stderr) "\n"))
@@ -244,14 +244,14 @@ fn emojiLoop bs: Bytes n: Int64 i: Int64 -> Bool
 
 fn fileHasEmoji! root: String p: String -> (Option String)
   (let [(full (str root "/" p))]
-    (mt (readText! full)
+    (match (readText! full)
       ((none) (none))
       ((some text)
        (let [(lines (stringSplit text "\n"))]
          (findEmojiLine p lines 1)))))
 
 fn findEmojiLine p: String lines: (List String) n: Int64 -> (Option String)
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (none))
     ((some l)
      (if (hasEmoji? l)
@@ -261,7 +261,7 @@ fn findEmojiLine p: String lines: (List String) n: Int64 -> (Option String)
 fn emojiCheck! root: String -> (List Check)
   (let [(files (trackedRoot! root (list "*.asn" "*.asl")))
         (bad (fold (fn [(acc (List String)) (p String)] -> (List String)
-                     (mt (fileHasEmoji! root p)
+                     (match (fileHasEmoji! root p)
                        ((some b) (cons b acc))
                        ((none) acc)))
                    (list)
@@ -269,7 +269,7 @@ fn emojiCheck! root: String -> (List Check)
     (perItem "c2Emoji" (listReverse bad) "ERR_EMOJI" (some (listLength files))))
 
 fn checkConflictLines p: String lines: (List String) n: Int64 state: Int64 start: Int64 fence: Bool isMd: Bool acc: (List String) -> (List String)
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none)
      (if (!= state 0)
        (cons (str "unresolved merge conflict in " p " line " (itos start) " unterminated marker") acc)
@@ -296,14 +296,14 @@ fn checkConflictLines p: String lines: (List String) n: Int64 state: Int64 start
 
 fn fileConflictMarkers! root: String p: String -> (List String)
   (let [(full (str root "/" p))]
-    (mt (readBytes! full)
+    (match (readBytes! full)
       ((none) (list))
       ((some bs)
        (let [(n (bytesLength bs))
              (hasNull (nullInHead bs (min n 8192) 0))]
          (if hasNull
            (list)
-           (mt (readText! full)
+           (match (readText! full)
              ((none) (list))
              ((some text)
               (let [(lines (stringSplit text "\n"))
@@ -327,7 +327,7 @@ fn coreCheck! root: String cid: String args: (List String) -> Check
   (let [(corePath (str root "/bin/asl-core"))]
     (if (not (isFile! corePath))
       (notComputedCheck cid "bin/asl-core absent")
-      (mt (p/exec! (p/withTimeout (p/withCwd (p/cmd corePath args) root) 600000))
+      (match (p/exec! (p/withTimeout (p/withCwd (p/cmd corePath args) root) 600000))
         ((err _) (failCheck cid "ERR_CORE_FAILED" (str "bin/asl-core " (stringJoin args " ") " could not run") (none) (some ":unverifiedCore")))
         ((ok o)
          (if (= o.exitCode 0)
@@ -338,10 +338,10 @@ fn manifestCheck! root: String -> (List Check)
   (let [(files (filter (fn [(p String)] -> Bool (= (basename p) "manifest.asn")) (trackedRoot! root (list "*manifest.asn"))))
         (checked (fold (fn [(acc (Pair (List String) (List String))) (p String)] -> (Pair (List String) (List String))
                          (let [(full (str root "/" p))]
-                           (mt (readBytes! full)
+                           (match (readBytes! full)
                              ((none) (pair (pairFirst acc) (cons (str p " is tracked but missing from the worktree") (pairSecond acc))))
                              ((some bs)
-                              (mt (dyck/check bs true)
+                              (match (dyck/check bs true)
                                 ((none) acc)
                                 ((some pairRes)
                                  (pair (cons (str p " byte " (itos (pairFirst pairRes)) " " (pairSecond pairRes)) (pairFirst acc)) (pairSecond acc))))))))
@@ -381,10 +381,10 @@ fn stringIndexOfFrom s: String needle: String from: Int64 -> (Option Int64)
   (let [(n (stringLength s))]
     (if (or (< from 0) (> from n))
       (none)
-      (mt (stringSlice s from n)
+      (match (stringSlice s from n)
         ((none) (none))
         ((some sliced)
-         (mt (stringIndexOf sliced needle)
+         (match (stringIndexOf sliced needle)
            ((none) (none))
            ((some idx) (some (+ from idx))))))))
 
@@ -393,11 +393,11 @@ fn extractMatches text: String prefix: String suffix: String -> (List String)
     (findMatchesLoop text prefix suffix k 0 (list)))
 
 fn findMatchesLoop text: String prefix: String suffix: String k: Int64 i: Int64 acc: (List String) -> (List String)
-  (mt (stringIndexOfFrom text prefix i)
+  (match (stringIndexOfFrom text prefix i)
     ((none) (listReverse acc))
     ((some start)
      (let [(vStart (+ start k))]
-       (mt (stringIndexOfFrom text suffix vStart)
+       (match (stringIndexOfFrom text suffix vStart)
          ((none) (listReverse acc))
          ((some end)
           (let [(val (cut text vStart end))]
@@ -405,13 +405,13 @@ fn findMatchesLoop text: String prefix: String suffix: String k: Int64 i: Int64 
 
 fn extractRegistry text: String -> (List String)
   (let [(marker "fn standardClaims")]
-    (mt (stringIndexOf text marker)
+    (match (stringIndexOf text marker)
       ((none) (list))
       ((some idx)
-       (mt (stringIndexOfFrom text "(list" idx)
+       (match (stringIndexOfFrom text "(list" idx)
          ((none) (list))
          ((some lStart)
-          (mt (stringIndexOfFrom text ")" lStart)
+          (match (stringIndexOfFrom text ")" lStart)
             ((none) (list))
             ((some lEnd)
              (let [(body (cut text (+ lStart 5) lEnd))]
@@ -438,7 +438,7 @@ fn findOverBudget text: String -> (List String)
             (let [(nameEnd (optionOr (stringIndexOf blk "\"") 0))
                   (name (cut blk 0 nameEnd))
                   (tokIdx (stringIndexOf blk ":tokens "))]
-              (mt tokIdx
+              (match tokIdx
                 ((none) acc)
                 ((some ti)
                  (let [(rest (cut blk (+ ti 8) (stringLength blk)))
@@ -455,7 +455,7 @@ fn skillCheck! root: String -> (List Check)
   (let [(files (filter (fn [(p String)] -> Bool (= (basename p) "SKILL.md")) (trackedRoot! root (list "*SKILL.md"))))
         (bad (fold (fn [(acc (List String)) (p String)] -> (List String)
                      (let [(full (str root "/" p))]
-                       (mt (readText! full)
+                       (match (readText! full)
                          ((none) acc)
                          ((some text)
                           (if (validFrontmatter? text) acc (cons p acc))))))
@@ -470,7 +470,7 @@ fn validFrontmatter? text: String -> Bool
       (findFrontmatterEnd (optionOr (listTail lines) (list)) false false)))
 
 fn findFrontmatterEnd lines: (List String) hasName: Bool hasDesc: Bool -> Bool
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) false)
     ((some l)
      (let [(t (stringTrim l))]
@@ -493,7 +493,7 @@ fn installerChecks! root: String -> (List Check)
             (copies (list "asl/dist/install.sh" "asl/web/dist/install.sh" "asl/web/public/install.sh"))
             (drift (fold (fn [(acc (List String)) (p String)] -> (List String)
                            (let [(full (str root "/" p))]
-                             (mt (readBytes! full)
+                             (match (readBytes! full)
                                ((none) (cons p acc))
                                ((some cb) (if (= cb srcBytes) acc (cons p acc))))))
                          (list)
@@ -507,7 +507,7 @@ fn storageChecks! root: String -> (List Check)
   (let [(files (trackedRoot! root (list ".asl/mem/tasks/*.asn")))
         (bad (fold (fn [(acc (List String)) (p String)] -> (List String)
                      (let [(full (str root "/" p))]
-                       (mt (readText! full)
+                       (match (readText! full)
                          ((none) acc)
                          ((some text)
                           (listAppend acc (findPlaceholderLines p (stringSplit text "\n") 1))))))
@@ -516,7 +516,7 @@ fn storageChecks! root: String -> (List Check)
     (perItem "receiptDigests" (map (fn [(b String)] -> String (str "placeholder :digest in " b)) bad) "ERR_PLACEHOLDER_DIGEST" (some (listLength files))))
 
 fn findPlaceholderLines p: String lines: (List String) n: Int64 -> (List String)
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (list))
     ((some l)
      (let [(rest (findPlaceholderLines p (optionOr (listTail lines) (list)) (+ n 1)))]
@@ -535,10 +535,10 @@ fn hasZeroDigest? line: String -> Bool
   (zeroDigestFrom? line 0)
 
 fn zeroDigestFrom? line: String from: Int64 -> Bool
-  (mt (stringIndexOfFrom line ":digest \"" from)
+  (match (stringIndexOfFrom line ":digest \"" from)
     ((none) false)
     ((some marker) (let [(start (+ marker 9))]
-      (mt (stringIndexOfFrom line "\"" start)
+      (match (stringIndexOfFrom line "\"" start)
         ((none) false)
         ((some end) (let [(digest (cut line start end))
                           (bytes (stringToBytes digest))]
@@ -555,7 +555,7 @@ fn staticGateChecks! root: String -> (List Check)
         (c2 (syntaxCheck! root "gate2Syntax"))
         (c3 (list (groundingCheck! root)))
         (fa (af/foreignAudit! root false ""))
-        (c4 (mt fa ((ok a) (map (fn [(fc af/Check)] -> Check (Check :id fc.id :status fc.status :err fc.err :ev fc.ev :n fc.n :trust (none))) a.checks)) ((err _) (list (failCheck "gate4Foreign" "ERR_FOREIGN" "foreign audit error" (none) (none))))))
+        (c4 (match fa ((ok a) (map (fn [(fc af/Check)] -> Check (Check :id fc.id :status fc.status :err fc.err :ev fc.ev :n fc.n :trust (none))) a.checks)) ((err _) (list (failCheck "gate4Foreign" "ERR_FOREIGN" "foreign audit error" (none) (none))))))
         (c5 (list (remoteCheck! root)))
         (c6 (grammarChecks! root))
         (c7 (emojiCheck! root))
@@ -580,7 +580,7 @@ fn fullGreenDir -> String
 
 fn recordLine! root: String r: sr/SuiteResult -> (Result String String)
   (let [(path r.suite)]
-    (mt (fileReadBytes (str root "/" path))
+    (match (fileReadBytes (str root "/" path))
       ((err e) (err (str "cannot read suite " path ": " e)))
       ((ok bs)
        (let [(nul "\u0000")
@@ -589,30 +589,30 @@ fn recordLine! root: String r: sr/SuiteResult -> (Result String String)
 
 fn recordBody! root: String results: (List sr/SuiteResult) -> (Result String String)
   (fold (fn [(acc (Result String String)) (r sr/SuiteResult)] -> (Result String String)
-          (mt acc
+          (match acc
             ((err e) (err e))
             ((ok text) (resultMap (recordLine! root r) (fn [(l String)] -> String (str text l))))))
         (ok "")
         (listSortBy (fn [(r sr/SuiteResult)] -> String r.suite) results))
 
 fn writeRecord! root: String results: (List sr/SuiteResult) -> (Result String String)
-  (mt (git! root (list "rev-parse" "HEAD"))
+  (match (git! root (list "rev-parse" "HEAD"))
     ((err e) (err e))
     ((ok head)
-     (mt (git! root (list "rev-parse" "HEAD^{tree}"))
+     (match (git! root (list "rev-parse" "HEAD^{tree}"))
        ((err e) (err e))
        ((ok tree)
-        (mt (recordBody! root results)
+        (match (recordBody! root results)
           ((err e) (err e))
           ((ok lines)
            (let [(body (str lines ")\n"))
                  (rel (str (fullGreenDir) head ".asn"))
                  (first (str "(:fullGreen :v 1 :sha \"" head "\" :tree \"" tree "\" :origin :runner :suites " (itos (listLength results))
                              " :receiptDigest \"" (bytesSha256 (stringToBytes body)) "\"\n"))]
-             (mt (dirCreate (str root "/" (fullGreenDir)))
+             (match (dirCreate (str root "/" (fullGreenDir)))
                ((err e) (err (str "cannot create " (fullGreenDir) ": " e)))
                ((ok _)
-                (mt (fileWrite (str root "/" rel) (stringToBytes (str first body)))
+                (match (fileWrite (str root "/" rel) (stringToBytes (str first body)))
                   ((err e) (err (str "cannot write " rel ": " e)))
                   ((ok _) (ok rel))))))))))))
 
@@ -627,7 +627,7 @@ fn tier name: String cs: (List Check) -> Check
         (failCheck capName "ERR_TIER_FAILED" (esc (stringJoin (map (fn [(c Check)] -> String (str c.id " " c.err " " c.ev)) bad) "; ") 400) (none) (none)))))
 
 fn jobsValue jobs: (List String) -> (Option String)
-  (mt (listLast jobs)
+  (match (listLast jobs)
     ((none) (none))
     ((some j) (some (cut j 7 (stringLength j)))))
 
@@ -641,7 +641,7 @@ fn spawnFullJob! root: String argv: (List String) -> (Result String String)
                      (if (listEmpty? forwarded) "" (str " " (stringJoin forwarded " ")))))
         (form (str "(:manage :action :spawn :id \"" id "\" :cmd \"" (esc jobCmd 5000) "\")"))
         (aslBin (str root "/bin/asl"))]
-    (mt (p/exec! (p/withTimeout (p/withCwd (p/cmd aslBin (list form)) root) 60000))
+    (match (p/exec! (p/withTimeout (p/withCwd (p/cmd aslBin (list form)) root) 60000))
       ((err e) (err (str "manage spawn failed: " e)))
       ((ok o)
        (if (and (= o.exitCode 0) (stringContains? o.stdout ":status :ok"))
@@ -678,7 +678,7 @@ fn closureTests! root: String -> Check
   (let [(basePair (rm/chooseBaseAt! root))
         (baseOpt (pairFirst basePair))
         (problems (pairSecond basePair))]
-    (mt baseOpt
+    (match baseOpt
       ((none) (notComputedCheck "tierTests" "suite scope is :full; run audit gates --full"))
       ((some base)
        (if (not (listEmpty? problems))
@@ -690,10 +690,10 @@ fn closureTests! root: String -> Check
                (why (pairSecond info))]
            (if (= scope ":full")
              (notComputedCheck "tierTests" (str "suite scope is :full; run audit gates --full: " why))
-             (mt (sr/snapRun root suites (sr/workerCount (none)) 0)
+             (match (sr/snapRun root suites (sr/workerCount (none)) 0)
                ((err f) (tier "tests" (list (snapshotFault "tests" f))))
                ((ok snap)
-                (mt (rl/ledgerAt root (none))
+                (match (rl/ledgerAt root (none))
                   ((err e) (tier "tests" (list (failCheck "tests" "ERR_LEDGER_READ" e (none) (none)))))
                   ((ok ledger) (tier "tests" (suiteGateChecks! "tests" snap.results ledger root))))))))))))
 
@@ -704,7 +704,7 @@ fn cmdBuild! root: String argv: (List String) -> AuditRun
   (let [(aslBin (str root "/bin/asl"))]
     (if (not (isFile! aslBin))
       (emit "build" (list (failCheck "build" "ERR_BUILD_FAILED" (str "[Errno 2] No such file or directory: '" aslBin "'") (none) (none))) "" "" false)
-      (mt (p/exec! (p/withTimeout (p/withCwd (p/cmd aslBin (cons "build" argv)) root) 600000))
+      (match (p/exec! (p/withTimeout (p/withCwd (p/cmd aslBin (cons "build" argv)) root) 600000))
         ((err _) (emit "build" (list (failCheck "build" "ERR_BUILD_FAILED" (str "[Errno 2] No such file or directory: '" aslBin "'") (none) (none))) "" "" false))
         ((ok o)
          (let [(rc o.exitCode)
@@ -723,7 +723,7 @@ fn checkOneFile! root: String a: String -> (List Check)
       (list (failCheck "file" "ERR_NO_FILE" a (none) (none)))
       (let [(bs (optionOr (readBytes! full) (bytesAlloc 0)))
             (res (dyck/check bs (not (stringEndsWith? a ".asl"))))
-            (cBal (mt res
+            (cBal (match res
                     ((some pairRes) (failCheck "balance" "ERR_UNBALANCED" (str a " byte " (itos (pairFirst pairRes)) " " (pairSecond pairRes)) (none) (none)))
                     ((none) (passCheck "balance" (none) (none)))))
             (cCore (coreCheck! root "coreCheck" (list "check" full)))
@@ -774,7 +774,7 @@ fn validJobs? a: String -> Bool
   (let [(parts (stringSplit a "="))]
     (if (!= (listLength parts) 2)
       false
-      (mt (stringToInt64 (optionOr (listLast parts) ""))
+      (match (stringToInt64 (optionOr (listLast parts) ""))
         ((none) false)
         ((some n) (>= n 1)))))
 
@@ -807,7 +807,7 @@ fn cmdGatesAt! root: String argv: (List String) inRunner: Bool -> AuditRun
                 (baseFailed (or (and (not full) (not (listEmpty? problems)))
                                 (listAny? unverifiedBaseProblem? problems)))
                 (checks (if baseFailed (listAppend staticChecks (list (failCheck "fullGreenBase" "ERR_BASE_UNVERIFIED" (stringJoin (listTake problems 6) "; ") (none) (none)))) staticChecks))
-                (baseSha (mt baseOpt ((some r) r.sha) ((none) "none")))
+                (baseSha (match baseOpt ((some r) r.sha) ((none) "none")))
                 (allSuites (resultOr (sr/discover root (list)) (list)))
                 (baseLedger (if (none? baseOpt) (list) (resultOr (rl/ledgerAt root (some baseSha)) (list))))
                 (ledger (resultOr (rl/ledgerAt root (none)) (list)))
@@ -823,7 +823,7 @@ fn cmdGatesAt! root: String argv: (List String) inRunner: Bool -> AuditRun
                 (reason (pairSecond scopeData))
                 (frozen (if (= scope ":full")
                           (resultOr (sr/frozenCount root (list)) 0)
-                          (mt (rm/affectedPrefixesAt! root baseSha)
+                          (match (rm/affectedPrefixesAt! root baseSha)
                             ((err _) 0)
                             ((ok pr) (resultOr (sr/frozenCount root (pairFirst pr)) 0)))))
                 (head (str ":scope " scope " :base \"" baseSha "\" :scopeReason \"" (esc reason 400) "\" :frozen " (itos frozen)))
@@ -834,19 +834,19 @@ fn cmdGatesAt! root: String argv: (List String) inRunner: Bool -> AuditRun
               ((and (= scope ":full") (not full) (not sync))
                (emit "gates" checks (str head " :suites " (itos (listLength suites)) " :suitesRun :no :needs \"--full\"") (str deltaForm " " excluded) true))
               ((and (= scope ":full") full (not sync))
-               (mt (spawnFullJob! root argv)
+               (match (spawnFullJob! root argv)
                  ((err e)
                   (emit "gates" (listAppend checks (list (failCheck "gate5Job" "ERR_JOB_SPAWN" e (none) (none)))) head (str deltaForm " " excluded) false))
                  ((ok job)
                   (emit "gates" checks (str head " :job \"" job "\" :suites " (itos (listLength suites))) (str deltaForm " " excluded) true))))
               (else
-               (mt (sr/snapRun root suites (sr/workerCount (jobsValue jobs)) 0)
+               (match (sr/snapRun root suites (sr/workerCount (jobsValue jobs)) 0)
                  ((err f)
                   (if (= f.kind "busy")
                     (emit "gates" (list (failCheck "runnerLock" "ERR_BUSY" f.msg (none) (none))) "" "" false)
                     (emit "gates" (listAppend checks (list (snapshotFault "gate5Suites" f))) head (str deltaForm " " excluded) false)))
                  ((ok snap)
-                  (mt (rl/ledgerAt root (none))
+                  (match (rl/ledgerAt root (none))
                     ((err e)
                      (emit "gates" (listAppend checks (list (failCheck "knownRed" "ERR_LEDGER_READ" e (none) (none)))) head (str deltaForm " " excluded) false))
                     ((ok liveLedger)
@@ -858,10 +858,10 @@ fn cmdGatesAt! root: String argv: (List String) inRunner: Bool -> AuditRun
                            (allChecks (listAppend checks (listAppend runChecks recordChecks)))
                            (allPassed (listAll? (fn [(c Check)] -> Bool (= c.status ":passed")) allChecks))
                            (written (if (and record (not refused) allPassed) (writeRecord! root results) (ok "")))
-                           (finalChecks (mt written
+                           (finalChecks (match written
                                           ((err e) (listAppend allChecks (list (failCheck "fullGreenRecord" "ERR_RECORD_WRITE" (esc e 400) (none) (none)))))
                                           ((ok _) allChecks)))
-                           (recordedForm (mt written
+                           (recordedForm (match written
                                            ((ok rel) (if (stringEmpty? rel) "" (str " :recorded \"" rel "\"")))
                                            ((err _) "")))
                            (runHead (str head " :suites " (itos (listLength results))

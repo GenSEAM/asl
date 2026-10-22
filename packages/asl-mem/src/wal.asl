@@ -9,16 +9,16 @@
 (enum WalStreamResult (:c walSuccess [(entries (List WalEntry))]) (:c walGap [(expectedSeq I64) (actualSeq I64)]) (:c walCorrupt [(lineIndex I64) (reason Str)]))
 
 fn isWalSuccess? res: WalStreamResult -> Bool
-  (mt res ((walSuccess _) true) (_ false))
+  (match res ((walSuccess _) true) (_ false))
 
 fn isWalGap? res: WalStreamResult -> Bool
-  (mt res ((walGap _ _) true) (_ false))
+  (match res ((walGap _ _) true) (_ false))
 
 fn isWalCorrupt? res: WalStreamResult -> Bool
-  (mt res ((walCorrupt _ _) true) (_ false))
+  (match res ((walCorrupt _ _) true) (_ false))
 
 fn opTypeToString op: WalOpType -> Str
-  (mt op ((opPutVector) "v+") ((opPutNode) "n+") ((opPutEdge) "e+") ((opDelNode) "n-") ((opCheckpoint) "ckpt"))
+  (match op ((opPutVector) "v+") ((opPutNode) "n+") ((opPutEdge) "e+") ((opDelNode) "n-") ((opCheckpoint) "ckpt"))
 
 fn stringToOpType s: Str -> (Option WalOpType)
   (cond ((or (= s "v+") (= s "PUT-VECTOR")) (some (opPutVector))) ((or (= s "n+") (= s "PUT-NODE")) (some (opPutNode))) ((or (= s "e+") (= s "PUT-EDGE")) (some (opPutEdge))) ((or (= s "n-") (= s "DEL-NODE")) (some (opDelNode))) ((or (= s "ckpt") (= s "CHECKPOINT")) (some (opCheckpoint))) (else (none)))
@@ -36,25 +36,25 @@ fn formatWalFrame e: WalEntry -> Str
   (let [(seqStr (stringFromInt64 e.seqNum)) (epochStr (stringFromInt64 e.timestampEpoch)) (opStr (opTypeToString e.opType)) (keyEsc (esc/escapeAsnStr e.key)) (payloadEsc (esc/escapeAsnStr e.payload)) (crc (computeWalChecksum e.seqNum e.timestampEpoch opStr e.key e.payload)) (crcStr (stringFromInt64 crc))] (asn/asnWrite (asn/asnCtor "WalEntry" (list (asn/AsnField :key ":seq" :val (asn/asnInt seqStr)) (asn/AsnField :key ":epoch" :val (asn/asnInt epochStr)) (asn/AsnField :key ":op" :val (asn/asnStr (str "\"" opStr "\""))) (asn/AsnField :key ":key" :val (asn/asnStr (str "\"" keyEsc "\""))) (asn/AsnField :key ":payload" :val (asn/asnStr (str "\"" payloadEsc "\""))) (asn/AsnField :key ":crc" :val (asn/asnInt crcStr))))))
 
 fn findField fs: (List asn/AsnField) key: Str -> (Option asn/AsnValue)
-  (let [(matches (filter (fn [(f asn/AsnField)] -> Bool (= f.key key)) fs))] (mt (listHead matches) ((some f) (some f.val)) ((none) (none))))
+  (let [(matches (filter (fn [(f asn/AsnField)] -> Bool (= f.key key)) fs))] (match (listHead matches) ((some f) (some f.val)) ((none) (none))))
 
 fn getFieldInt fs: (List asn/AsnField) key: Str -> I64
-  (mt (findField fs key) ((some v) (mt v ((asn/asnInt s) (optionOr (stringToInt64 s) 0)) (_ 0))) ((none) 0))
+  (match (findField fs key) ((some v) (match v ((asn/asnInt s) (optionOr (stringToInt64 s) 0)) (_ 0))) ((none) 0))
 
 fn getFieldStr fs: (List asn/AsnField) key: Str -> Str
-  (mt (findField fs key) ((some v) (optionOr (asn/asnStringValue v) "")) ((none) ""))
+  (match (findField fs key) ((some v) (optionOr (asn/asnStringValue v) "")) ((none) ""))
 
 fn getFieldStrUnescaped fs: (List asn/AsnField) key: Str -> Str
-  (mt (findField fs key) ((some v) (esc/unescapeAsnStr (optionOr (asn/asnStringValue v) ""))) ((none) ""))
+  (match (findField fs key) ((some v) (esc/unescapeAsnStr (optionOr (asn/asnStringValue v) ""))) ((none) ""))
 
 fn parseWalFrame raw: Str -> (Option WalEntry)
-  (mt (asn/asnRead raw) ((ok v) (mt v ((asn/asnCtor name fs) (if (= name "WalEntry") (let [(seq (getFieldInt fs ":seq")) (epoch (getFieldInt fs ":epoch")) (opS (getFieldStr fs ":op")) (keyS (getFieldStr fs ":key")) (payloadS (getFieldStr fs ":payload")) (parsedCrc (getFieldInt fs ":crc")) (expectedCrc (computeWalChecksum seq epoch opS keyS payloadS))] (if (!= parsedCrc expectedCrc) (none) (mt (stringToOpType opS) ((some op) (some (WalEntry :seqNum seq :timestampEpoch epoch :opType op :key keyS :payload payloadS :checksum expectedCrc))) ((none) (none))))) (none))) (_ (none)))) ((err _) (none)))
+  (match (asn/asnRead raw) ((ok v) (match v ((asn/asnCtor name fs) (if (= name "WalEntry") (let [(seq (getFieldInt fs ":seq")) (epoch (getFieldInt fs ":epoch")) (opS (getFieldStr fs ":op")) (keyS (getFieldStr fs ":key")) (payloadS (getFieldStr fs ":payload")) (parsedCrc (getFieldInt fs ":crc")) (expectedCrc (computeWalChecksum seq epoch opS keyS payloadS))] (if (!= parsedCrc expectedCrc) (none) (match (stringToOpType opS) ((some op) (some (WalEntry :seqNum seq :timestampEpoch epoch :opType op :key keyS :payload payloadS :checksum expectedCrc))) ((none) (none))))) (none))) (_ (none)))) ((err _) (none)))
 
 fn parseWalStream rawLog: Str -> (List WalEntry)
-  (let [(lines (filter (fn [(l Str)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringSplit rawLog "\n")))] (fold (fn [(acc (List WalEntry)) (line Str)] -> (List WalEntry) (mt (parseWalFrame line) ((some entry) (listAppend acc (list entry))) ((none) acc))) (list) lines))
+  (let [(lines (filter (fn [(l Str)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringSplit rawLog "\n")))] (fold (fn [(acc (List WalEntry)) (line Str)] -> (List WalEntry) (match (parseWalFrame line) ((some entry) (listAppend acc (list entry))) ((none) acc))) (list) lines))
 
 fn parseWalStreamLoop lines: (List Str) expectedSeq: I64 lineIdx: I64 acc: (List WalEntry) -> WalStreamResult
-  (if (listEmpty? lines) (walSuccess acc) (mt (listHead lines) ((none) (walSuccess acc)) ((some line) (let [(restLines (optionOr (listTail lines) (list)))] (mt (parseWalFrame line) ((none) (walCorrupt lineIdx (str "Malformed or CRC-corrupted WAL frame at line " (stringFromInt64 lineIdx)))) ((some entry) (let [(actSeq entry.seqNum)] (if (!= actSeq expectedSeq) (walGap expectedSeq actSeq) (parseWalStreamLoop restLines (+ expectedSeq 1) (+ lineIdx 1) (listAppend acc (list entry)))))))))))
+  (if (listEmpty? lines) (walSuccess acc) (match (listHead lines) ((none) (walSuccess acc)) ((some line) (let [(restLines (optionOr (listTail lines) (list)))] (match (parseWalFrame line) ((none) (walCorrupt lineIdx (str "Malformed or CRC-corrupted WAL frame at line " (stringFromInt64 lineIdx)))) ((some entry) (let [(actSeq entry.seqNum)] (if (!= actSeq expectedSeq) (walGap expectedSeq actSeq) (parseWalStreamLoop restLines (+ expectedSeq 1) (+ lineIdx 1) (listAppend acc (list entry)))))))))))
 
 fn parseWalStreamStrict rawLog: Str startSeq: I64 -> WalStreamResult
   (let [(lines (filter (fn [(l Str)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringSplit rawLog "\n")))] (parseWalStreamLoop lines startSeq 1 (list)))

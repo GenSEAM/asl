@@ -41,25 +41,25 @@ fn testBasicIndentedFn -> Bool
       (assert (= (pr/print s r) s) "basic fn leaf print matches source")
       (assert (= (lay/topLevelFormCount r) 1) "basic fn has 1 top level form")
       (let [(forms (lay/topLevelForms r))]
-        (mt (listHead forms)
+        (match (listHead forms)
           ((none) (do (assert false "missing top form") false))
           ((some elem)
-           (mt elem
+           (match elem
              ((tr/elemToken _) (do (assert false "top form is not token") false))
              ((tr/elemNode node)
               (do
                 (assert (= node.kind "fn") "top form is fn node")
                 (let [(kids node.children)]
                   (assert (>= (listLength kids) 2) "fn has at least header and body")
-                  (mt (listHead kids)
+                  (match (listHead kids)
                     ((none) (assert false "missing header"))
                     ((some hElem)
-                     (mt hElem
+                     (match hElem
                        ((tr/elemNode hNode)
                         (assert (= hNode.kind "header") "first child is header node"))
                        ((tr/elemToken _) (assert false "first child is not node"))))))
                 (let [(lowerRes (lay/lowerTopFormText s node))]
-                  (mt lowerRes
+                  (match lowerRes
                     ((err e) (do (assert false (str "lower error: " e)) false))
                     ((ok sexpr)
                      (do
@@ -76,7 +76,7 @@ fn testIndentedFnWithEffectAndDoc -> Bool
       (assert (ok? (tr/checkTiling r l)) "doc fn tiles cleanly")
       (assert (= (pr/print s r) s) "doc fn leaf print matches source")
       (let [(lowerRes (lay/lowerString s))]
-        (mt lowerRes
+        (match lowerRes
           ((err e) (do (assert false (str "lower error: " e)) false))
           ((ok sexprs)
            (do
@@ -103,7 +103,7 @@ fn testSchemaAndEnumDeclarations -> Bool
       (assert (= (pr/print schemaSrc rSchema) schemaSrc) "schema print matches")
       (assert (= (lay/topLevelFormCount rSchema) 1) "schema has 1 top form")
       (let [(loweredSchema (lay/lowerString schemaSrc))]
-        (mt loweredSchema
+        (match loweredSchema
           ((err e) (do (assert false (str "schema lower err: " e)) false))
           ((ok sList)
            (let [(sx (optionOr (listHead sList) (rd/makeAtom "")))]
@@ -151,7 +151,7 @@ fn testMultipleTopLevelForms -> Bool
       (assert (= (pr/print s r) s) "multi-form print matches")
       (assert (= (lay/topLevelFormCount r) 3) "multi-form has 3 top forms")
       (let [(loweredRes (lay/lowerString s))]
-        (mt loweredRes
+        (match loweredRes
           ((err e) (do (assert false (str "lower error: " e)) false))
           ((ok sexprs)
            (do
@@ -185,7 +185,7 @@ fn isParenOrInvalidFile path: String -> Bool
 fn checkTrackedIndentedFile! acc: (Pair Int64 Int64) path: String -> (Pair Int64 Int64)
   (if (isParenOrInvalidFile path)
     acc
-    (mt (fileReadBytes path)
+    (match (fileReadBytes path)
       ((err _) acc)
       ((ok bs)
        (let [(len (bytesLength bs))
@@ -212,15 +212,15 @@ fn testTrackedIndentedFilesSweep! -> Bool
         true)))
 
 fn checkLoweringAgainstIndentParser! path: String -> Bool
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) false)
     ((ok src)
      (let [(loweredRes (lay/lowerString src))
            (ipRes (ip/parseIndentedForms src))]
-       (mt loweredRes
+       (match loweredRes
          ((err e1) (do (assert false (str path " lower error: " e1)) false))
          ((ok lowForms)
-          (mt ipRes
+          (match ipRes
             ((err e2) (do (assert false (str path " ip error: " e2)) false))
             ((ok ipForms)
              (do
@@ -255,7 +255,7 @@ fn hostTopLevelFormCount! path: String -> Int64
     (optionOr (stringToInt64 first) 0))
 
 fn checkTopCount! path: String -> Bool
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) false)
     ((ok src)
      (let [(root (lay/parse src))
@@ -302,7 +302,7 @@ fn testMultilineStringAndCorpusFixtures! -> Bool
         (rCorpus (lay/lowerString (resultOr (fileReadString "asl/grammar/tests/corpusTest.asl") "")))]
     (do
       (assert (ok? r1) "multiline string in body lowers successfully")
-      (mt r1
+      (match r1
         ((ok f1)
          (let [(first1 (optionOr (listHead f1) (rd/makeAtom "")))]
            (assert (= (rd/renderSexpr first1) "(fn fixtureSleepContent [] -> String \"#!/bin/sh\\n: cmd\\n\")")
@@ -310,7 +310,7 @@ fn testMultilineStringAndCorpusFixtures! -> Bool
         ((err _) (assert false "r1 failed")))
       (assert (ok? r2) "multiline string in let expression lowers successfully")
       (assert (ok? r3) "schema followed by fn with escaped quote lowers successfully")
-      (mt r3
+      (match r3
         ((ok f3)
          (do
            (assert (= (listLength f3) 3) "corpusTest fixture has 3 forms")
@@ -331,7 +331,7 @@ fn testMultilineStringAndCorpusFixtures! -> Bool
 fn testNoArrowFnLowersWithoutSentinel -> Bool
   (let [(s (str "(module t/sample :x [f] :i [])\n\n" "fn f x: Int64\n" "  (+ x 1)\n"))
         (r (lay/lowerString s))]
-    (mt r
+    (match r
       ((err e) (do (assert false (str "lowering no-arrow fn header failed: " e)) false))
       ((ok forms)
        (let [(rendered (stringJoin (map rd/renderSexpr forms) "\n"))]
@@ -346,7 +346,7 @@ fn testNoArrowFnLowersWithoutSentinel -> Bool
 fn testArrowedFnBodyNotCorruptedByFalseMatch -> Bool
   (let [(s (str "(module t/sample :x [f] :i [])\n\n" "fn f x: Int64 -> Int64\n" "  (-> x)\n" "  (:inferredUnit 1)\n"))
         (r (lay/lowerString s))]
-    (mt r
+    (match r
       ((err e) (do (assert false (str "lowering an arrowed fn with a false-match-shaped body failed: " e)) false))
       ((ok forms)
        (let [(rendered (stringJoin (map rd/renderSexpr forms) "\n"))]
@@ -359,7 +359,7 @@ fn testArrowedFnBodyNotCorruptedByFalseMatch -> Bool
 fn testParenFnWithNoArrowKeepsListShapedBody -> Bool
   (let [(s (str "(module t/sample :x [f] :i [])\n\n" "(fn f [(x Int64)] (-> x) (:inferredUnit 1))\n"))
         (r (lay/lowerString s))]
-    (mt r
+    (match r
       ((err e) (do (assert false (str "lowering a paren-style no-arrow fn with a list-shaped body failed: " e)) false))
       ((ok forms)
        (let [(rendered (stringJoin (map rd/renderSexpr forms) "\n"))]
@@ -372,7 +372,7 @@ fn testParenFnWithNoArrowKeepsListShapedBody -> Bool
 fn testArrowedFnBareSentinelAtomsInBodySurvive -> Bool
   (let [(s (str "(module t/sample :x [f] :i [])\n\n" "fn f x: Int64 -> Int64\n" "  (+ x 1)\n" "  ->\n" "  :inferredUnit\n"))
         (r (lay/lowerString s))]
-    (mt r
+    (match r
       ((err e) (do (assert false (str "lowering an arrowed fn with bare sentinel-shaped atoms in its body failed: " e)) false))
       ((ok forms)
        (let [(rendered (stringJoin (map rd/renderSexpr forms) "\n"))]

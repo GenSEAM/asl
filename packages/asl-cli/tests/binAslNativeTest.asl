@@ -117,7 +117,7 @@ fn ! testQuiet root: String host: String -> Bool
   (let [(dir (str root "/.asl/cache/binAslQuiet/" (stringFromInt64 (procSelf))))
         (tag (str "quiet" (stringFromInt64 (procSelf)) "x" (stringFromInt64 (nowNs))))
         (rel (str ".asl/cache/binAslQuiet/" (stringFromInt64 (procSelf)) "/quietTest.asl"))
-        (made (mt (dirCreate dir) ((err e) (err e)) ((ok _) (fileWrite (str dir "/quietTest.asl") (freshSuite tag)))))
+        (made (match (dirCreate dir) ((err e) (err e)) ((ok _) (fileWrite (str dir "/quietTest.asl") (freshSuite tag)))))
         (nativeErr (str dir "/native.err"))
         (hostErr (str dir "/host.err"))
         (native (binAslSplit! root (list "test" rel) (envWith (list)) nativeErr))

@@ -23,7 +23,7 @@ fn testTilingGapAtStart -> Bool
         (root (tr/makeNode "expr" 0 5 (list (tr/elemToken t1))))
         (res (tr/checkTiling root 5))]
     (assert (err? res) "gap at start is rejected")
-    (mt res
+    (match res
       ((ok _) (assert false "expected error"))
       ((err msg)
        (do
@@ -37,7 +37,7 @@ fn testTilingGapInMiddle -> Bool
         (root (tr/makeNode "expr" 0 10 (list (tr/elemToken t1) (tr/elemToken t2))))
         (res (tr/checkTiling root 10))]
     (assert (err? res) "gap in middle is rejected")
-    (mt res
+    (match res
       ((ok _) (assert false "expected error"))
       ((err msg)
        (do
@@ -50,7 +50,7 @@ fn testTilingGapAtEnd -> Bool
         (root (tr/makeNode "expr" 0 10 (list (tr/elemToken t1))))
         (res (tr/checkTiling root 10))]
     (assert (err? res) "gap at end is rejected")
-    (mt res
+    (match res
       ((ok _) (assert false "expected error"))
       ((err msg)
        (do
@@ -64,7 +64,7 @@ fn testTilingOverlapInMiddle -> Bool
         (root (tr/makeNode "expr" 0 8 (list (tr/elemToken t1) (tr/elemToken t2))))
         (res (tr/checkTiling root 8))]
     (assert (err? res) "overlap in middle is rejected")
-    (mt res
+    (match res
       ((ok _) (assert false "expected error"))
       ((err msg)
        (do
@@ -77,7 +77,7 @@ fn testTilingOverlapPastEnd -> Bool
         (root (tr/makeNode "expr" 0 10 (list (tr/elemToken t1))))
         (res (tr/checkTiling root 10))]
     (assert (err? res) "overlap past end is rejected")
-    (mt res
+    (match res
       ((ok _) (assert false "expected error"))
       ((err msg)
        (do
@@ -177,27 +177,27 @@ fn testNodeAtBoundariesAndOffsets -> Bool
     (assert (ok? (tr/checkTiling root 10)) "root tiles [0, 10)")
     (let [(opt0 (cur/nodeAt root 0))]
       (assert (some? opt0) "nodeAt 0 returns some")
-      (mt opt0
+      (match opt0
         ((some n) (assert (= (tr/nodeKind n) "target1") "nodeAt 0 is target1"))
         ((none) (assert false "expected node"))))
     (let [(opt4 (cur/nodeAt root 4))]
       (assert (some? opt4) "nodeAt 4 returns some")
-      (mt opt4
+      (match opt4
         ((some n) (assert (= (tr/nodeKind n) "target1") "nodeAt 4 is target1"))
         ((none) (assert false "expected node"))))
     (let [(opt5 (cur/nodeAt root 5))]
       (assert (some? opt5) "nodeAt 5 (boundary between t1 and t2) returns some")
-      (mt opt5
+      (match opt5
         ((some n) (assert (= (tr/nodeKind n) "root") "nodeAt 5 is root enclosing whitespace"))
         ((none) (assert false "expected node"))))
     (let [(opt6 (cur/nodeAt root 6))]
       (assert (some? opt6) "nodeAt 6 (boundary between t2 and n2) returns some")
-      (mt opt6
+      (match opt6
         ((some n) (assert (= (tr/nodeKind n) "target2") "nodeAt 6 is target2"))
         ((none) (assert false "expected node"))))
     (let [(opt9 (cur/nodeAt root 9))]
       (assert (some? opt9) "nodeAt len-1 (9) returns some")
-      (mt opt9
+      (match opt9
         ((some n) (assert (= (tr/nodeKind n) "target2") "nodeAt 9 is target2"))
         ((none) (assert false "expected node"))))
     (assert (none? (cur/nodeAt root 10)) "nodeAt len (10) returns none")
@@ -230,22 +230,22 @@ fn testMultiTokenBoundaries -> Bool
     (assert (ok? (tr/checkTiling root 12)) "multi-token seq tiles")
     (let [(at0 (cur/nodeAt root 0))]
       (assert (some? at0) "nodeAt 0 (start) returns some")
-      (mt at0
+      (match at0
         ((some n) (assert (= (tr/nodeKind n) "nodeA") "offset 0 is nodeA"))
         ((none) (assert false "expected node"))))
     (let [(at3 (cur/nodeAt root 3))]
       (assert (some? at3) "nodeAt 3 (boundary 1-2) returns some")
-      (mt at3
+      (match at3
         ((some n) (assert (= (tr/nodeKind n) "nodeB") "boundary 3 selects nodeB"))
         ((none) (assert false "expected node"))))
     (let [(at7 (cur/nodeAt root 7))]
       (assert (some? at7) "nodeAt 7 (boundary 2-3) returns some")
-      (mt at7
+      (match at7
         ((some n) (assert (= (tr/nodeKind n) "nodeC") "boundary 7 selects nodeC"))
         ((none) (assert false "expected node"))))
     (let [(at11 (cur/nodeAt root 11))]
       (assert (some? at11) "nodeAt 11 (len-1) returns some")
-      (mt at11
+      (match at11
         ((some n) (assert (= (tr/nodeKind n) "nodeC") "offset 11 is nodeC"))
         ((none) (assert false "expected node"))))
     (assert (none? (cur/nodeAt root 12)) "nodeAt 12 (len) returns none")
@@ -271,12 +271,12 @@ fn testAncestorsAndSiblings -> Bool
       (assert (= (tr/nodeKind (optionOr (listGet subAncs 1) childB)) "childA") "subExpr ancestor 1 is childA"))
     (let [(pSub (cur/parentNode root subExpr))]
       (assert (some? pSub) "subExpr has parent")
-      (mt pSub
+      (match pSub
         ((some p) (assert (= (tr/nodeKind p) "childA") "subExpr parent is childA"))
         ((none) (assert false "expected parent"))))
     (let [(pA (cur/parentNode root childA))]
       (assert (some? pA) "childA has parent")
-      (mt pA
+      (match pA
         ((some p) (assert (= (tr/nodeKind p) "root") "childA parent is root"))
         ((none) (assert false "expected parent"))))
     (assert (none? (cur/parentNode root root)) "root has no parent")
@@ -286,29 +286,29 @@ fn testAncestorsAndSiblings -> Bool
       (assert (= (tr/nodeKind (optionOr (listGet sibsB 1) root)) "childC") "sibling 1 is childC"))
     (let [(nextA (cur/nextSibling root childA))]
       (assert (some? nextA) "childA has next sibling")
-      (mt nextA
+      (match nextA
         ((some n) (assert (= (tr/nodeKind n) "childB") "next of childA is childB"))
         ((none) (assert false "expected next"))))
     (let [(nextB (cur/nextSibling root childB))]
       (assert (some? nextB) "childB has next sibling")
-      (mt nextB
+      (match nextB
         ((some n) (assert (= (tr/nodeKind n) "childC") "next of childB is childC"))
         ((none) (assert false "expected next"))))
     (assert (none? (cur/nextSibling root childC)) "childC has no next sibling")
     (assert (none? (cur/prevSibling root childA)) "childA has no prev sibling")
     (let [(prevB (cur/prevSibling root childB))]
       (assert (some? prevB) "childB has prev sibling")
-      (mt prevB
+      (match prevB
         ((some n) (assert (= (tr/nodeKind n) "childA") "prev of childB is childA"))
         ((none) (assert false "expected prev"))))
     (let [(prevC (cur/prevSibling root childC))]
       (assert (some? prevC) "childC has prev sibling")
-      (mt prevC
+      (match prevC
         ((some n) (assert (= (tr/nodeKind n) "childB") "prev of childC is childB"))
         ((none) (assert false "expected prev"))))
     (let [(cOpt (cur/cursorAt root 0))]
       (assert (some? cOpt) "cursorAt 0 returns some")
-      (mt cOpt
+      (match cOpt
         ((some c)
          (do
            (assert (= (tr/nodeKind (cur/cursorNode c)) "subExpr") "cursorNode is subExpr")
@@ -327,21 +327,21 @@ fn testLineRangeThroughSource -> Bool
         (lr2Opt (cur/nodeLineRange s nodeL2))
         (lrMultiOpt (cur/nodeLineRange s nodeMulti))]
     (assert (some? lr1Opt) "line range 1 returns some")
-    (mt lr1Opt
+    (match lr1Opt
       ((some lr)
        (do
          (assert (= lr.startLine 1) "stmt1 start line is 1")
          (assert (= lr.endLine 1) "stmt1 end line is 1")))
       ((none) (assert false "expected line range")))
     (assert (some? lr2Opt) "line range 2 returns some")
-    (mt lr2Opt
+    (match lr2Opt
       ((some lr)
        (do
          (assert (= lr.startLine 2) "stmt2 start line is 2")
          (assert (= lr.endLine 2) "stmt2 end line is 2")))
       ((none) (assert false "expected line range")))
     (assert (some? lrMultiOpt) "line range multi returns some")
-    (mt lrMultiOpt
+    (match lrMultiOpt
       ((some lr)
        (do
          (assert (= lr.startLine 1) "multi start line is 1")

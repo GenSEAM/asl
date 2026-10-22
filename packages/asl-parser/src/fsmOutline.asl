@@ -19,7 +19,7 @@ fn findIdentEnd s: String idx: Int64 len: Int64 isAsl: Bool -> Int64
   (if (>= idx len) len (let [(ch (lx/charAt s idx))] (if (isIdentChar ch isAsl) (findIdentEnd s (+ idx 1) len isAsl) idx)))
 
 fn extractIdent s: String start: Int64 len: Int64 isAsl: Bool -> String
-  (let [(pos (skipSpaces s start len))] (if (>= pos len) "" (let [(end (findIdentEnd s pos len isAsl))] (if (> end pos) (mt (stringSlice s pos end) ((some id) id) ((none) "")) ""))))
+  (let [(pos (skipSpaces s start len))] (if (>= pos len) "" (let [(end (findIdentEnd s pos len isAsl))] (if (> end pos) (match (stringSlice s pos end) ((some id) id) ((none) "")) ""))))
 
 fn findClosingParen s: String idx: Int64 len: Int64 -> Int64
   (if (>= idx len) len (let [(ch (lx/charAt s idx))] (if (= ch ")") (+ idx 1) (findClosingParen s (+ idx 1) len))))
@@ -34,10 +34,10 @@ fn extractHeaderItem line: String lineNum: Int64 -> (Option OutlineItem)
   (let [(trimmed (stringTrim line)) (len (stringLength trimmed))] (cond ((or (stringStartsWith? trimmed "(module ") (stringStartsWith? trimmed "module ")) (let [(p1 (if (stringStartsWith? trimmed "(") 8 7)) (p2 (skipSpaces trimmed p1 len)) (name (extractIdent trimmed p2 len true))] (if (> (stringLength name) 0) (some (OutlineItem :kind "module" :name name :line lineNum)) (none)))) ((stringStartsWith? trimmed "(:grammar") (if (stringContains? trimmed ":package") (let [(pkgPos (+ (optionOr (stringIndexOf trimmed ":package") 0) 8)) (name (extractIdent trimmed pkgPos len true))] (if (> (stringLength name) 0) (some (OutlineItem :kind "grammar" :name name :line lineNum)) (none))) (none))) (true (none))))
 
 fn extractHeadersLoop lines: (List String) lineNum: Int64 acc: (List OutlineItem) -> (List OutlineItem)
-  (mt (listHead lines) ((none) (listReverse acc)) ((some line) (let [(hdr (extractHeaderItem line lineNum)) (newAcc (mt hdr ((some it) (cons it acc)) ((none) acc)))] (extractHeadersLoop (optionOr (listTail lines) (list)) (+ lineNum 1) newAcc))))
+  (match (listHead lines) ((none) (listReverse acc)) ((some line) (let [(hdr (extractHeaderItem line lineNum)) (newAcc (match hdr ((some it) (cons it acc)) ((none) acc)))] (extractHeadersLoop (optionOr (listTail lines) (list)) (+ lineNum 1) newAcc))))
 
 fn mergeOutlineItems a: (List OutlineItem) b: (List OutlineItem) acc: (List OutlineItem) -> (List OutlineItem)
-  (mt (listHead a) ((none) (listAppend (listReverse acc) b)) ((some ahd) (mt (listHead b) ((none) (listAppend (listReverse acc) a)) ((some bhd) (if (<= ahd.line bhd.line) (mergeOutlineItems (optionOr (listTail a) (list)) b (cons ahd acc)) (mergeOutlineItems a (optionOr (listTail b) (list)) (cons bhd acc)))))))
+  (match (listHead a) ((none) (listAppend (listReverse acc) b)) ((some ahd) (match (listHead b) ((none) (listAppend (listReverse acc) a)) ((some bhd) (if (<= ahd.line bhd.line) (mergeOutlineItems (optionOr (listTail a) (list)) b (cons ahd acc)) (mergeOutlineItems a (optionOr (listTail b) (list)) (cons bhd acc)))))))
 
 fn scanAslOutline src: String -> (List OutlineItem)
   (let [(headers (extractHeadersLoop (stringSplit src "\n") 1 (list))) (syms (asym/extractSymbols src)) (symItems (map (fn [(s asym/AslSymbol)] -> OutlineItem (OutlineItem :kind (asym/aslSymbolKind s) :name (asym/aslSymbolName s) :line (asym/aslSymbolStartLine s))) syms))] (mergeOutlineItems headers symItems (list)))
@@ -69,7 +69,7 @@ fn stepChars line: String idx: Int64 len: Int64 st: ScanState lang: String -> Sc
 fn scanOutline src: String lang: String -> (List OutlineItem)
   (if (= lang "asl")
     (scanAslOutline src)
-    (let [(lines (stringSplit src "\n")) (initSt (ScanState :inComment false :inQuote "" :braceDepth 0 :parenDepth 0)) (initLoop (FsmLoop :state initSt :lineNum 1 :acc (list))) (finalLoop (fold (fn [(loop FsmLoop) (line String)] -> FsmLoop (let [(st loop.state) (ln loop.lineNum) (acc loop.acc) (itemOpt (extractLineItem line ln st lang)) (newAcc (mt itemOpt ((some it) (cons it acc)) ((none) acc))) (nextSt (stepChars line 0 (stringLength line) st lang))] (FsmLoop :state nextSt :lineNum (+ ln 1) :acc newAcc))) initLoop lines))] (listReverse finalLoop.acc)))
+    (let [(lines (stringSplit src "\n")) (initSt (ScanState :inComment false :inQuote "" :braceDepth 0 :parenDepth 0)) (initLoop (FsmLoop :state initSt :lineNum 1 :acc (list))) (finalLoop (fold (fn [(loop FsmLoop) (line String)] -> FsmLoop (let [(st loop.state) (ln loop.lineNum) (acc loop.acc) (itemOpt (extractLineItem line ln st lang)) (newAcc (match itemOpt ((some it) (cons it acc)) ((none) acc))) (nextSt (stepChars line 0 (stringLength line) st lang))] (FsmLoop :state nextSt :lineNum (+ ln 1) :acc newAcc))) initLoop lines))] (listReverse finalLoop.acc)))
 
 fn formatOutline items: (List OutlineItem) -> String
   (str "(:outline [\n" (stringJoin (map (fn [(it OutlineItem)] -> String (str "  (:item :kind \"" it.kind "\" :name \"" it.name "\" :line " (stringFromInt64 it.line) ")")) items) "\n") "\n])")

@@ -27,7 +27,7 @@ fn testBinaryFrameCodec -> Bool
       (let [(decRes (h2/decodeBinaryFrame binWire))]
         (do
           (assert (ok? decRes) "Binary frame decoding must succeed")
-          (mt decRes
+          (match decRes
             ((ok f)
               (do
                 (assert (= f.frameType (h2/FRAME_DATA)) "Frame type must be FRAME_DATA")
@@ -89,7 +89,7 @@ fn testBackwardCompatibleTextFrames -> Bool
     (do
       (assert (stringStartsWith? encoded "H2F:") "Text frame starts with H2F:")
       (assert (ok? decodedRes) "Decoding text frame succeeds")
-      (mt decodedRes
+      (match decodedRes
         ((ok dec)
           (do
             (assert (= dec.streamId 7) "Decoded text frame streamId is 7")
@@ -125,7 +125,7 @@ fn testHpackEncodeDecodeRoundtrip -> Bool
       (let [(decRes (h2/decodeHpack (h2/makeHpackTable 4096) wireBlock))]
         (do
           (assert (ok? decRes) "Decoding HPACK block succeeds")
-          (mt decRes
+          (match decRes
             ((ok pairRes)
               (let [(decHdrs (pairSecond pairRes))]
                 (do

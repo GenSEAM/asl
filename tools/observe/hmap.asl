@@ -19,7 +19,7 @@ fn hmEmpty -> (HMap V)
   (hmNil)
 
 fn hmFind m: (HMap V) h: Int64 k: String -> (Option V)
-  (mt m
+  (match m
     ((hmNil) (none))
     ((hmNode h2 k2 v l r)
       (cond
@@ -34,7 +34,7 @@ fn hmHas? m: (HMap V) k: String -> Bool
   (some? (hmGet m k))
 
 fn hmIns m: (HMap V) h: Int64 k: String v: V -> (HMap V)
-  (mt m
+  (match m
     ((hmNil) (hmNode h k v (hmNil) (hmNil)))
     ((hmNode h2 k2 v2 l r)
       (cond
@@ -46,7 +46,7 @@ fn hmPut m: (HMap V) k: String v: V -> (HMap V)
   (hmIns m (hashKey k) k v)
 
 fn hmCollect m: (HMap V) acc: (List (Pair String V)) -> (List (Pair String V))
-  (mt m
+  (match m
     ((hmNil) acc)
     ((hmNode h k v l r) (hmCollect l (cons (pair k v) (hmCollect r acc)))))
 
@@ -57,26 +57,26 @@ fn hmValues m: (HMap V) -> (List V)
   (map (fn [(p (Pair String V))] -> V (pairSecond p)) (hmPairs m))
 
 fn hmSize m: (HMap V) -> Int64
-  (mt m ((hmNil) 0) ((hmNode h k v l r) (+ 1 (hmSize l) (hmSize r))))
+  (match m ((hmNil) 0) ((hmNode h k v l r) (+ 1 (hmSize l) (hmSize r))))
 
 fn omEmpty -> (OMap V)
   (omOf (hmNil) 0)
 
 fn omGet m: (OMap V) k: String -> (Option V)
-  (mt m ((omOf t n) (optionMap (fn [(p (Pair Int64 V))] -> V (pairSecond p)) (hmGet t k))))
+  (match m ((omOf t n) (optionMap (fn [(p (Pair Int64 V))] -> V (pairSecond p)) (hmGet t k))))
 
 fn omHas? m: (OMap V) k: String -> Bool
   (some? (omGet m k))
 
 fn omPut m: (OMap V) k: String v: V -> (OMap V)
-  (mt m
+  (match m
     ((omOf t n)
-      (mt (hmGet t k)
+      (match (hmGet t k)
         ((some p) (omOf (hmPut t k (pair (pairFirst p) v)) n))
         ((none) (omOf (hmPut t k (pair n v)) (+ n 1))))))
 
 fn omPairs m: (OMap V) -> (List (Pair String V))
-  (mt m
+  (match m
     ((omOf t n)
       (map (fn [(p (Pair String (Pair Int64 V)))] -> (Pair String V) (pair (pairFirst p) (pairSecond (pairSecond p))))
            (listSortBy (fn [(p (Pair String (Pair Int64 V)))] -> Int64 (pairFirst (pairSecond p))) (hmPairs t)))))
@@ -85,4 +85,4 @@ fn omValues m: (OMap V) -> (List V)
   (map (fn [(p (Pair String V))] -> V (pairSecond p)) (omPairs m))
 
 fn omSize m: (OMap V) -> Int64
-  (mt m ((omOf t n) (hmSize t)))
+  (match m ((omOf t n) (hmSize t)))

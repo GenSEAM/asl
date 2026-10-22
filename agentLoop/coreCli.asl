@@ -13,7 +13,7 @@ fn netString s: String i: Int64 -> (Pair String Int64)
 fn netStrings s: String i: Int64 k: Int64 acc: (List String) -> (Pair (List String) Int64)
   (if (= k 0)
     (pair (listReverse acc) i)
-    (mt (netString s i) ((pair v j) (netStrings s j (- k 1) (cons v acc)))))
+    (match (netString s i) ((pair v j) (netStrings s j (- k 1) (cons v acc)))))
 
 fn toInt s: String -> Int64
   (optionOr (stringToInt64 s) 0)
@@ -35,9 +35,9 @@ fn arg fs: (List String) i: Int64 -> String
   (optionOr (listGet fs i) "")
 
 fn coverageRun reads: (List (List String)) -> String
-  (mt (fold (fn [st r]
-              (mt st ((pair news cov)
-                (mt (c/recordRead cov (arg r 0) (toInt (arg r 1)) (toInt (arg r 2)))
+  (match (fold (fn [st r]
+              (match st ((pair news cov)
+                (match (c/recordRead cov (arg r 0) (toInt (arg r 1)) (toInt (arg r 2)))
                   ((pair new cov2) (pair (cons (if new " true" " false") news) cov2))))))
         (pair (list) (list)) reads)
     ((pair news cov) (str "(new" (c/joinAll (listReverse news)) ") " (c/serString (c/renderSeen cov)))))
@@ -54,12 +54,12 @@ fn coverageFields fs: (List String) acc: (List (Pair String (List (Pair Int64 In
         (cons (pair (c/firstOf fs) (spanPairs (optionOr (listSlice spans 0 k) (list)) (list))) acc))))
 
 fn serCoverage cov: (List (Pair String (List (Pair Int64 Int64)))) -> String
-  (str "(coverage" (c/joinAll (map (fn [e] (mt e ((pair p sp) (str " (" (c/serString p) " " (c/serSpans sp) ")")))) cov)) ")")
+  (str "(coverage" (c/joinAll (map (fn [e] (match e ((pair p sp) (str " (" (c/serString p) " " (c/serSpans sp) ")")))) cov)) ")")
 
 fn readsRun reads: (List (List String)) cov0: (List (Pair String (List (Pair Int64 Int64)))) -> String
-  (mt (fold (fn [st r]
-              (mt st ((pair news cov)
-                (mt (c/recordRead cov (arg r 0) (toInt (arg r 1)) (toInt (arg r 2)))
+  (match (fold (fn [st r]
+              (match st ((pair news cov)
+                (match (c/recordRead cov (arg r 0) (toInt (arg r 1)) (toInt (arg r 2)))
                   ((pair new cov2) (pair (cons (if new " true" " false") news) cov2))))))
         (pair (list) cov0) reads)
     ((pair news cov) (str "(new" (c/joinAll (listReverse news)) ") " (serCoverage cov))))
@@ -95,7 +95,7 @@ fn kvIntsFrom fs: (List String) -> (List (Pair String Int64))
   (map kvIntFromFields (chunks fs 2 (list)))
 
 fn serOptStr o: (Option String) -> String
-  (mt o ((some v) (str "(some " (c/serString v) ")")) ((none) "(none)"))
+  (match o ((some v) (str "(some " (c/serString v) ")")) ((none) "(none)"))
 
 fn serStrList xs: (List String) -> String
   (str "(" (c/joinAll (map (fn [s] (str " " (c/serString s))) xs)) ")")
@@ -107,11 +107,11 @@ fn strListGroup fs: (List String) -> (Pair (List String) (List String))
 fn strListGroups fs: (List String) n: Int64 acc: (List (List String)) -> (Pair (List (List String)) (List String))
   (if (= n 0)
     (pair (listReverse acc) fs)
-    (mt (strListGroup fs) ((pair g rest) (strListGroups rest (- n 1) (cons g acc)))))
+    (match (strListGroup fs) ((pair g rest) (strListGroups rest (- n 1) (cons g acc)))))
 
 
 fn serNode node: p/SexpNode -> String
-  (mt node
+  (match node
     ((p/sexpAtom a) (str "(atom " (c/serString a) ")"))
     ((p/sexpStr s) (str "(str " (c/serString s) ")"))
     ((p/sexpList items) (str "(list" (c/joinAll (map (fn [it] (str " " (serNode it))) items)) ")")))
@@ -145,7 +145,7 @@ fn parseReceiptAt fs: (List String) -> (Pair cl/Receipt (List String))
 fn parseReceiptsLoop fs: (List String) k: Int64 acc: (List cl/Receipt) -> (Pair (List cl/Receipt) (List String))
   (if (= k 0)
     (pair (listReverse acc) fs)
-    (mt (parseReceiptAt fs)
+    (match (parseReceiptAt fs)
       ((pair r rest) (parseReceiptsLoop rest (- k 1) (cons r acc)))))
 
 fn parseReceipts fs: (List String) -> (Pair (List cl/Receipt) (List String))
@@ -164,7 +164,7 @@ fn parseCoverageEntry fs: (List String) -> (Pair (Pair String (List (Pair Int64 
 fn parseCoverageEntriesLoop fs: (List String) k: Int64 acc: (List (Pair String (List (Pair Int64 Int64)))) -> (Pair (List (Pair String (List (Pair Int64 Int64)))) (List String))
   (if (= k 0)
     (pair (listReverse acc) fs)
-    (mt (parseCoverageEntry fs)
+    (match (parseCoverageEntry fs)
       ((pair e rest) (parseCoverageEntriesLoop rest (- k 1) (cons e acc)))))
 
 fn parseCoverage fs: (List String) -> (Pair (List (Pair String (List (Pair Int64 Int64)))) (List String))
@@ -216,7 +216,7 @@ fn parseTurnEntry fs: (List String) -> (Pair cl/TurnEvidenceEntry (List String))
 fn parseTurnEntriesLoop fs: (List String) k: Int64 acc: (List cl/TurnEvidenceEntry) -> (Pair (List cl/TurnEvidenceEntry) (List String))
   (if (= k 0)
     (pair (listReverse acc) fs)
-    (mt (parseTurnEntry fs)
+    (match (parseTurnEntry fs)
       ((pair e rest) (parseTurnEntriesLoop rest (- k 1) (cons e acc)))))
 
 fn buildWrongClaims fs: (List String) k: Int64 acc: (List cl/Claim) -> (List cl/Claim)
@@ -229,9 +229,9 @@ fn buildWrongClaims fs: (List String) k: Int64 acc: (List cl/Claim) -> (List cl/
 fn serClaim c: cl/Claim -> String
   (if (cl/claimIsEvidence? c)
     (str "(:evidence :cmd " (c/serString (cl/claimCmd c))
-         " :hasReceipt " (mt (cl/claimReceiptOpt c) ((some _) "true") ((none) "false"))
+         " :hasReceipt " (match (cl/claimReceiptOpt c) ((some _) "true") ((none) "false"))
          " :receipt " (c/serString (optionOr (cl/claimReceiptOpt c) ""))
-         " :hasExit " (mt (cl/claimExitOpt c) ((some _) "true") ((none) "false"))
+         " :hasExit " (match (cl/claimExitOpt c) ((some _) "true") ((none) "false"))
          " :exit " (stringFromInt64 (optionOr (cl/claimExitOpt c) 0))
          " :backed " (if (cl/claimBacked c) "true" "false") ")")
     (str "(:prose :text " (c/serString (cl/claimText c)) " :backed " (if (cl/claimBacked c) "true" "false") ")"))
@@ -321,13 +321,13 @@ fn runCase! kind: String fs: (List String) -> String
             tr (tr/turnReply (arg fs 0) declared)
             facts tr.facts
             cut facts.cut]
-        (str "(turnReply " (c/serString tr.text) " " (c/serString tr.preBindText) " " (stringFromInt64 (mt tr.degenerateAt ((some n) n) (none -1))) " " (stringFromInt64 tr.degenerateRepeats) " " (stringFromInt64 tr.capBytes)
+        (str "(turnReply " (c/serString tr.text) " " (c/serString tr.preBindText) " " (stringFromInt64 (match tr.degenerateAt ((some n) n) (none -1))) " " (stringFromInt64 tr.degenerateRepeats) " " (stringFromInt64 tr.capBytes)
           " " (stringFromInt64 tr.rawBlocks) " " (stringFromInt64 tr.unfenced) " "
           (c/serOps facts.ops) " (forms" (c/joinAll (map (fn [f] (str " " (c/serString f))) facts.forms)) ") "
           (if facts.prose "true" "false") " " (stringFromInt64 facts.repeated)
           " (findings" (c/joinAll (map (fn [f] (str " " (c/serString f))) facts.dataFindings)) ") "
-          (mt cut ((some ci) (str "(cut " (stringFromInt64 ci.bytes) " " (stringFromInt64 ci.start) " " (mt ci.head ((some x) (c/serString x)) (none "(:none)")) " " (mt ci.op ((some x) (c/serString x)) (none "(:none)")) " " (mt ci.file ((some x) (c/serString x)) (none "(:none)")) " " (stringFromInt64 ci.offset) " " (c/serString ci.text) ")")) (none "(:none)")) " "
-          (mt tr.repair
+          (match cut ((some ci) (str "(cut " (stringFromInt64 ci.bytes) " " (stringFromInt64 ci.start) " " (match ci.head ((some x) (c/serString x)) (none "(:none)")) " " (match ci.op ((some x) (c/serString x)) (none "(:none)")) " " (match ci.file ((some x) (c/serString x)) (none "(:none)")) " " (stringFromInt64 ci.offset) " " (c/serString ci.text) ")")) (none "(:none)")) " "
+          (match tr.repair
             ((some a) (str "(repair " (c/serString (optionOr a.notice "")) " " (stringFromInt64 a.left) " "
                          (stringFromInt64 a.quoteCount) " (kinds"
                          (c/joinAll (map (fn [k] (str " " (c/serString k))) a.kinds)) "))"))
@@ -345,7 +345,7 @@ fn runCase! kind: String fs: (List String) -> String
         (map (fn [t] (c/makeTurn (arg t 0) (arg t 1) (arg t 2))) (triples (c/restOf fs) (list)))
         (toInt (arg fs 0)))))
     ((= kind "window")
-      (mt (c/renderWindow
+      (match (c/renderWindow
             (map (fn [t] (c/makeTurn (arg t 0) (arg t 1) (arg t 2))) (triples (restFrom fs (+ 4 (toInt (arg fs 3)))) (list)))
             (toInt (arg fs 0)) (toInt (arg fs 1)) (toInt (arg fs 2)) (optionOr (listSlice fs 4 (+ 4 (toInt (arg fs 3)))) (list)))
         ((c/windowOf text last cut dropped used whole)
@@ -383,22 +383,22 @@ fn runCase! kind: String fs: (List String) -> String
       (let [(res (rep/repairAtSite (arg fs 0) (arg fs 1)))]
         (str "(repair " (c/serString (rep/repairResultText res)) " " (c/serString (rep/repairResultReceipt res)) ")")))
     ((or (= kind "planTree") (= kind "plan_tree"))
-      (mt (p/planTree (arg fs 0))
+      (match (p/planTree (arg fs 0))
         ((ok tree) (str "(ok " (serTree tree) ")"))
         ((err e) (str "(err " (c/serString e) ")"))))
     ((or (= kind "planFields") (= kind "plan_fields"))
-      (mt (p/planTree (arg fs 0))
+      (match (p/planTree (arg fs 0))
         ((ok tree)
-          (let [items (mt (listHead tree)
-                        ((some h) (mt h ((p/sexpList it) it) ((p/sexpAtom _) tree) ((p/sexpStr _) tree)))
+          (let [items (match (listHead tree)
+                        ((some h) (match h ((p/sexpList it) it) ((p/sexpAtom _) tree) ((p/sexpStr _) tree)))
                         (none (list)))
                 fields (p/planFields items)
                 kv (pairFirst fields)
                 lists (pairSecond fields)]
             (str "(fields (kv"
               (c/joinAll (map (fn [pr]
-                                (mt pr ((pair k val)
-                                  (mt val
+                                (match pr ((pair k val)
+                                  (match val
                                     ((p/valFlag b) (str " (" k " " (if b "true" "false") ")"))
                                     ((p/valStr s) (str " (" k " " (c/serString s) ")"))
                                     ((p/valList l) (str " (" k " (list" (c/joinAll (map (fn [n] (str " " (serNode n))) l)) "))"))))))
@@ -408,12 +408,12 @@ fn runCase! kind: String fs: (List String) -> String
               "))")))
         ((err e) (str "(err " (c/serString e) ")"))))
     ((or (= kind "planSteps") (= kind "plan_steps"))
-      (mt (p/planTree (arg fs 0))
+      (match (p/planTree (arg fs 0))
         ((ok tree)
-          (let [nodes (mt (listHead tree)
-                        ((some h) (mt h ((p/sexpList it) (if (p/isStepForm it) tree it)) ((p/sexpAtom _) tree) ((p/sexpStr _) tree)))
+          (let [nodes (match (listHead tree)
+                        ((some h) (match h ((p/sexpList it) (if (p/isStepForm it) tree it)) ((p/sexpAtom _) tree) ((p/sexpStr _) tree)))
                         (none (list)))]
-            (mt (p/planSteps nodes)
+            (match (p/planSteps nodes)
               ((ok steps) (str "(ok (steps" (c/joinAll (map (fn [s] (str " (:step :id " (p/stepId s) " :do " (c/serString (p/stepDoText s)) " :check " (c/serString (p/stepCheckText s)) ")")) steps)) "))"))
               ((err e) (str "(err " (c/serString e) ")")))))
         ((err e) (str "(err " (c/serString e) ")"))))
@@ -457,10 +457,10 @@ fn runCase! kind: String fs: (List String) -> String
             numEv (toInt (arg fs 4))
             evIds (optionOr (listSlice fs 5 (+ 5 numEv)) (list))
             res (p/planStep plan opName opForm rid evIds)]
-        (mt res
+        (match res
           ((p/stepResult st op msg err ent newPlan)
             (str "(stepResult " (c/serString st) " " (c/serString op) " " (c/serString msg) " " (c/serString err) " "
-                 (mt ent ((some e) (c/serString e)) ((none) (c/serString ""))) " "
+                 (match ent ((some e) (c/serString e)) ((none) (c/serString ""))) " "
                  (c/serString (p/serPlanState newPlan)) ")")))))
     ((or (= kind "planReplay") (= kind "plan_replay"))
       (p/serPlanState (p/planReplay (arg fs 0))))
@@ -468,7 +468,7 @@ fn runCase! kind: String fs: (List String) -> String
       (let [rates (r/batchingRates (toInt (arg fs 0)) (toInt (arg fs 1)) (toInt (arg fs 2)))]
         (str "(rate " (stringFromFloat64 (pairFirst rates)) " " (stringFromFloat64 (pairSecond rates)) ")")))
     ((= kind "costForm")
-      (mt (stringToFloat64 (arg fs 4))
+      (match (stringToFloat64 (arg fs 4))
         ((some wallSec)
           (c/serString (r/costForm (toInt (arg fs 0)) (toInt (arg fs 1)) (toInt (arg fs 2)) (toInt (arg fs 3))
                                     wallSec (toInt (arg fs 5)))))
@@ -598,11 +598,11 @@ fn runCase! kind: String fs: (List String) -> String
             parseDefectCount (toInt (arg rest2 0))]
         (c/serString (r/advisorSkip why retries parseDefectCount))))
     ((= kind "parseAdvice")
-      (mt (r/parseAdvice (arg fs 0))
+      (match (r/parseAdvice (arg fs 0))
         ((none) "(none)")
         ((some a) (str "(some " (c/serString (r/adviceNext a)) " " (serOptStr (r/adviceWhy a)) " " (serOptStr (r/adviceAvoid a)) ")"))))
     ((= kind "parseSpecVerdict")
-      (mt (r/parseSpecVerdict (arg fs 0))
+      (match (r/parseSpecVerdict (arg fs 0))
         ((none) "(none)")
         ((some v) (str "(some " (if (r/verdictMet v) "true" "false") " " (serStrList (r/verdictMissing v)) ")"))))
     ((= kind "digestLine")
@@ -722,7 +722,7 @@ fn runCase! kind: String fs: (List String) -> String
             owns (optionOr (listSlice fs 2 (+ 2 numOwns)) (list))
             results (gateResultsFromFields (restFrom fs (+ 2 numOwns)) (list))
             res (g/vacuousOutsideOwns! results owns rootDir)]
-        (mt res
+        (match res
           ((some p) (str "(unowned " (c/serString (pairFirst p)) " " (c/serString (pairSecond p)) ")"))
           ((none) "(:none)"))))
     ((or (= kind "isSwallowedExceptLine") (= kind "is_swallowed_except_line"))
@@ -750,7 +750,7 @@ fn runCase! kind: String fs: (List String) -> String
             numFiles (toInt (arg fs filesOffset))
             filePairs (parseStrPairs (optionOr (listSlice fs (+ filesOffset 1) (+ filesOffset 1 (* 2 numFiles))) (list)) (list))
             res (g/placeholderHit results filePairs)]
-        (mt res
+        (match res
           ((some h) (str "(hit " (c/serString (g/hitFile h)) " " (stringFromInt64 (g/hitLine h)) " " (c/serString (g/hitText h)) ")"))
           ((none) "(:none)"))))
     ((or (= kind "missingGatePaths") (= kind "missing_gate_paths"))
@@ -776,7 +776,7 @@ fn runCase! kind: String fs: (List String) -> String
             results (gateResultsFromFields gateFields (list))
             verdicts (restFrom fs (+ 1 (* 6 numResults)))
             res (g/gateVacuousMessage results verdicts)]
-        (mt res
+        (match res
           ((some msg) (c/serString msg))
           ((none) "(:none)"))))
     ((or (= kind "gateRevertVerdict") (= kind "gate_revert_verdict"))
@@ -797,11 +797,11 @@ fn runCase! kind: String fs: (List String) -> String
 fn caseLoop! s: String n: Int64 i: Int64 idx: Int64 -> Int64
   (if (>= i n)
     idx
-    (mt (netString s i)
+    (match (netString s i)
       ((pair kind j)
-        (mt (netString s j)
+        (match (netString s j)
           ((pair count k)
-            (mt (netStrings s k (toInt count) (list))
+            (match (netStrings s k (toInt count) (list))
               ((pair fs next)
                 (do
                   (println (str (stringFromInt64 idx) " " kind " " (runCase! kind fs)))
@@ -810,6 +810,6 @@ fn caseLoop! s: String n: Int64 i: Int64 idx: Int64 -> Int64
 fn ! main args: (List String) -> (Result Int64 String)
   (if (listEmpty? args)
     (err "usage: bin/asl run asl/agentLoop/coreCli.asl CORPUS")
-    (mt (fileReadString (c/firstOf args))
+    (match (fileReadString (c/firstOf args))
       ((ok s) (let [(n (caseLoop! s (stringLength s) 0 0))] (ok 0)))
       ((err e) (err e))))

@@ -20,10 +20,10 @@
   (:f diags (List ty/IrDiag)))
 
 fn revOnto xs: (List T) acc: (List T) -> (List T)
-  (mt (listHead xs) ((some x) (revOnto (optionOr (listTail xs) (list)) (cons x acc))) ((none) acc))
+  (match (listHead xs) ((some x) (revOnto (optionOr (listTail xs) (list)) (cons x acc))) ((none) acc))
 
 fn concatOnto rlists: (List (List T)) acc: (List T) -> (List T)
-  (mt (listHead rlists) ((some xs) (concatOnto (optionOr (listTail rlists) (list)) (listAppend xs acc))) ((none) acc))
+  (match (listHead rlists) ((some xs) (concatOnto (optionOr (listTail rlists) (list)) (listAppend xs acc))) ((none) acc))
 
 fn concatLists lists: (List (List T)) -> (List T)
   (concatOnto (listReverse lists) (list))
@@ -39,25 +39,25 @@ fn importAlias imp: (Pair String String) -> String
 
 fn headerOf forms: (List ast/TopForm) -> (Option ast/ModuleNode)
   (fold (fn [(acc (Option ast/ModuleNode)) (t ast/TopForm)] -> (Option ast/ModuleNode)
-          (mt acc ((some _) acc) ((none) (mt t ((ast/topModule m) (some m)) ((ast/topSchema _) acc) ((ast/topEnum _) acc) ((ast/topDefun _) acc) ((ast/topExpr _) acc)))))
+          (match acc ((some _) acc) ((none) (match t ((ast/topModule m) (some m)) ((ast/topSchema _) acc) ((ast/topEnum _) acc) ((ast/topDefun _) acc) ((ast/topExpr _) acc)))))
         (none) forms)
 
 fn ! realOrSelf! path: String -> String
-  (mt (realPath path) ((ok p) p) ((err _) path))
+  (match (realPath path) ((ok p) p) ((err _) path))
 
 fn ! rootRelative! path: String -> String
-  (mt (realPath ".")
+  (match (realPath ".")
     ((ok root) (if (stringStartsWith? path (str root "/")) (optionOr (stringSlice path (+ (stringLength root) 1) (stringLength path)) path) path))
     ((err _) path))
 
 fn ! resolveImports! importer: String path: String imps: (List (Pair String String)) acc: (List (Pair String String)) diags: (List ty/IrDiag) ix: r/ModIndex -> (Pair (Result (List (Pair String String)) (List ty/IrDiag)) r/ModIndex)
-  (mt (listHead imps)
+  (match (listHead imps)
     ((none) (pair (if (listEmpty? diags) (ok (listReverse acc)) (err (listReverse diags))) ix))
     ((some imp) (let [(rest (optionOr (listTail imps) (list)))]
                   (if (= (pairFirst imp) "sys")
                     (resolveImports! importer path rest acc diags ix)
                     (let [(res (r/resolveImport! importer (pairFirst imp) ix))
-                          (found (mt res.status ((r/resOk) true) ((r/resDeprecated) true) (_ false)))]
+                          (found (match res.status ((r/resOk) true) (_ false)))]
                       (if found
                         (resolveImports! importer path rest (cons (pair (importAlias imp) res.path) acc) diags res.index)
                         (resolveImports! importer path rest acc
@@ -70,20 +70,20 @@ fn parseDiag pe: ast/ParseError locus: String -> ty/IrDiag
     (ty/makeIrDiag "ERR_LOWER_PARSE" pe.msg locus))
 
 fn ! readUnit! path: String ix: r/ModIndex -> (Pair (Result LinkUnit (List ty/IrDiag)) r/ModIndex)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) (pair (err (list (ty/makeIrDiag "ERR_LINK_READ" (str "cannot read " path) path))) ix))
-    ((ok src) (mt (ast/parse src)
+    ((ok src) (match (ast/parse src)
                 ((err pe) (pair (err (list (parseDiag pe (str path ":" pe.line ":" pe.col)))) ix))
-                ((ok forms) (mt (headerOf forms)
+                ((ok forms) (match (headerOf forms)
                               ((none) (pair (err (list (ty/makeIrDiag "ERR_LOWER_NO_MODULE" (str path " has no module header") path))) ix))
                               ((some m) (let [(resolved (resolveImports! (realOrSelf! path) path m.imports (list) (list) ix))]
-                                          (pair (mt (pairFirst resolved)
+                                          (pair (match (pairFirst resolved)
                                                   ((err ds) (err ds))
                                                   ((ok imports) (ok (LinkUnit :path path :name m.path :forms forms :positions (low/sitedPositions (rootRelative! path) (low/declPositions src)) :imports imports))))
                                                 (pairSecond resolved)))))))))
 
 fn ! visitAll! st: LoadState paths: (List String) -> LoadState
-  (mt (listHead paths)
+  (match (listHead paths)
     ((none) st)
     ((some p) (visitAll! (visit! st p) (optionOr (listTail paths) (list)))))
 
@@ -93,7 +93,7 @@ fn ! visit! st: LoadState path: String -> LoadState
       st
       (let [(read (readUnit! path st.index))
             (marked (with st :seen (mapSet st.seen key true) :index (pairSecond read)))]
-        (mt (pairFirst read)
+        (match (pairFirst read)
           ((err ds) (LoadState :units marked.units :seen marked.seen :diags (revOnto ds marked.diags) :index marked.index))
           ((ok u) (let [(after (visitAll! marked (map (fn [(imp (Pair String String))] -> String (pairSecond imp)) u.imports)))]
                     (LoadState :units (cons u after.units) :seen after.seen :diags after.diags :index after.index)))))))
@@ -102,7 +102,7 @@ fn duplicateModules units: (List LinkUnit) -> (List ty/IrDiag)
   (listReverse
     (pairFirst
       (fold (fn [(st (Pair (List ty/IrDiag) (Map String LinkUnit))) (u LinkUnit)] -> (Pair (List ty/IrDiag) (Map String LinkUnit))
-              (mt (mapGet (pairSecond st) u.name)
+              (match (mapGet (pairSecond st) u.name)
                 ((some v) (pair (cons (ty/makeIrDiag "ERR_LINK_DUPLICATE_MODULE" (str "module " u.name " is declared by both " v.path " and " u.path) u.path) (pairFirst st)) (pairSecond st)))
                 ((none) (pair (pairFirst st) (mapSet (pairSecond st) u.name u)))))
             (pair (list) (mapEmpty)) units)))
@@ -119,13 +119,13 @@ fn ! loadClosure! entryPath: String -> (Result (List LinkUnit) (List ty/IrDiag))
 
 fn importForms units: (List LinkUnit) u: LinkUnit -> (Map String (List ast/TopForm))
   (fold (fn [(acc (Map String (List ast/TopForm))) (imp (Pair String String))] -> (Map String (List ast/TopForm))
-          (mt (listHead (filter (fn [(v LinkUnit)] -> Bool (= v.path (pairSecond imp))) units))
+          (match (listHead (filter (fn [(v LinkUnit)] -> Bool (= v.path (pairSecond imp))) units))
             ((some v) (mapSet acc (pairFirst imp) v.forms))
             ((none) acc)))
         (mapEmpty) u.imports)
 
 fn absorb acc: LinkAcc res: (Result ty/SsaModule (List ty/IrDiag)) -> LinkAcc
-  (mt res
+  (match res
     ((ok m) (LinkAcc :strings m.strings :modules (listAppend acc.modules (list m)) :requested acc.requested :diags acc.diags))
     ((err ds) (with acc :diags (listAppend acc.diags ds))))
 
@@ -137,7 +137,7 @@ fn lowerUnit units: (List LinkUnit) prelude: LinkUnit acc: LinkAcc u: LinkUnit -
   (lowerUnitAs units prelude acc u u.name)
 
 fn opRefs op: ty/SsaOp -> (List String)
-  (mt op
+  (match op
     ((ty/opCall callee _) (list callee))
     ((ty/opMakeClosure callee _) (list callee))
     (_ (list)))
@@ -182,28 +182,28 @@ fn nativeOverlayDir -> String
   "asl/prelude/native/"
 
 fn ! overlayTopForms! path: String -> (Result (List ast/TopForm) (List ty/IrDiag))
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) (err (list (ty/makeIrDiag "ERR_LINK_READ" (str "cannot read native overlay file " path) path))))
-    ((ok src) (mt (ast/parse src)
+    ((ok src) (match (ast/parse src)
                 ((err pe) (err (list (ty/makeIrDiag "ERR_LOWER_PARSE" pe.msg (str path ":" pe.line ":" pe.col)))))
-                ((ok forms) (ok (filter (fn [(t ast/TopForm)] -> Bool (mt t ((ast/topModule _) false) ((ast/topExpr _) false) (_ true))) forms))))))
+                ((ok forms) (ok (filter (fn [(t ast/TopForm)] -> Bool (match t ((ast/topModule _) false) ((ast/topExpr _) false) (_ true))) forms))))))
 
 fn ! overlayFormsAll! dir: String names: (List String) -> (Result (List ast/TopForm) (List ty/IrDiag))
   (let [(results (map (fn [(n String)] -> (Result (List ast/TopForm) (List ty/IrDiag)) (overlayTopForms! (str dir n))) names))
-        (diags (fold (fn [(acc (List ty/IrDiag)) (r (Result (List ast/TopForm) (List ty/IrDiag)))] -> (List ty/IrDiag) (mt r ((ok _) acc) ((err ds) (listAppend acc ds)))) (list) results))]
+        (diags (fold (fn [(acc (List ty/IrDiag)) (r (Result (List ast/TopForm) (List ty/IrDiag)))] -> (List ty/IrDiag) (match r ((ok _) acc) ((err ds) (listAppend acc ds)))) (list) results))]
     (if (listEmpty? diags)
-      (ok (fold (fn [(acc (List ast/TopForm)) (r (Result (List ast/TopForm) (List ty/IrDiag)))] -> (List ast/TopForm) (mt r ((ok fs) (listAppend acc fs)) ((err _) acc))) (list) results))
+      (ok (fold (fn [(acc (List ast/TopForm)) (r (Result (List ast/TopForm) (List ty/IrDiag)))] -> (List ast/TopForm) (match r ((ok fs) (listAppend acc fs)) ((err _) acc))) (list) results))
       (err diags)))
 
 fn nativeModuleHeader -> ast/TopForm
   (ast/topModule (ast/ModuleNode :path "native" :docstring "" :exported (list) :imports (list) :defs (list)))
 
 fn ! overlayUnitAt! dir: String -> (Result LinkUnit (List ty/IrDiag))
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err _) (if (fileExists? dir)
                (err (list (ty/makeIrDiag "ERR_LINK_READ" (str "cannot list native overlay directory " dir) dir)))
                (ok (LinkUnit :path dir :name "native" :forms (list (nativeModuleHeader)) :positions (mapEmpty) :imports (list)))))
-    ((ok entries) (mt (overlayFormsAll! dir (filter (fn [(n String)] -> Bool (stringEndsWith? n ".asl")) entries))
+    ((ok entries) (match (overlayFormsAll! dir (filter (fn [(n String)] -> Bool (stringEndsWith? n ".asl")) entries))
                     ((err ds) (err ds))
                     ((ok forms) (ok (LinkUnit :path dir :name "native" :forms (cons (nativeModuleHeader) forms) :positions (mapEmpty) :imports (list)))))))
 
@@ -212,7 +212,7 @@ fn ! overlayUnit! -> (Result LinkUnit (List ty/IrDiag))
 
 
 fn builtinRefs op: ty/SsaOp -> (List String)
-  (mt op ((ty/opBuiltin name _) (list name)) (_ (list)))
+  (match op ((ty/opBuiltin name _) (list name)) (_ (list)))
 
 fn functionBuiltinRefs f: ty/SsaFunction -> (List String)
   (listReverse
@@ -221,12 +221,12 @@ fn functionBuiltinRefs f: ty/SsaFunction -> (List String)
           (list) f.blocks))
 
 fn topFormName t: ast/TopForm -> (Option String)
-  (mt t ((ast/topDefun d) (some d.name)) (_ (none)))
+  (match t ((ast/topDefun d) (some d.name)) (_ (none)))
 
 fn definedNames unit: LinkUnit -> (List String)
   (listReverse
     (fold (fn [(acc (List String)) (t ast/TopForm)] -> (List String)
-            (mt (topFormName t) ((some n) (cons n acc)) ((none) acc)))
+            (match (topFormName t) ((some n) (cons n acc)) ((none) acc)))
           (list) unit.forms))
 
 fn builtinSeeds unit: LinkUnit acc: LinkAcc -> (List String)
@@ -271,9 +271,9 @@ fn builtinTargets native: LinkUnit prelude: LinkUnit acc: LinkAcc -> (Map String
         (claim (fn [(unitName String) (defined (Map String Bool)) (n String)] -> (Option String)
                  (let [(q (str unitName "." n))] (if (and (mapHas? defined n) (mapHas? linked q)) (some q) (none)))))]
     (fold (fn [(m (Map String String)) (n String)] -> (Map String String)
-            (mt (claim native.name nativeDefined n)
+            (match (claim native.name nativeDefined n)
               ((some q) (mapSet m n q))
-              ((none) (mt (claim prelude.name preludeDefined n) ((some q) (mapSet m n q)) ((none) m)))))
+              ((none) (match (claim prelude.name preludeDefined n) ((some q) (mapSet m n q)) ((none) m)))))
           (mapEmpty) used))
 
 (schema RewriteAcc (:f instrs (List ty/SsaInstr)) (:f next Int64))
@@ -288,7 +288,7 @@ fn coerceArgRewrite acc: RewriteAcc v: String want: ty/SsaTy -> (Pair RewriteAcc
       (pair (RewriteAcc :instrs (cons (ty/ssaInstr dest want (ty/opUnbox v)) acc.instrs) :next (+ acc.next 1)) dest)))
 
 fn coerceArgsFrom acc: RewriteAcc args: (List String) params: (List ty/SsaParam) out: (List String) -> (Pair RewriteAcc (List String))
-  (mt (listHead args)
+  (match (listHead args)
     ((none) (pair acc (listReverse out)))
     ((some a) (let [(p (optionOr (listHead params) (ty/ssaParam "" (ty/tyVal))))
                     (c (coerceArgRewrite acc a p.ty))]
@@ -299,12 +299,12 @@ fn coerceArgsRewrite acc: RewriteAcc args: (List String) params: (List ty/SsaPar
 
 
 fn rewriteOne resolved: (Map String String) fnMap: (Map String ty/SsaFunction) acc: RewriteAcc ins: ty/SsaInstr -> RewriteAcc
-  (mt ins.op
+  (match ins.op
     ((ty/opBuiltin name args)
-      (mt (mapGet resolved name)
+      (match (mapGet resolved name)
         ((none) (with acc :instrs (cons ins acc.instrs)))
         ((some callee)
-          (mt (mapGet fnMap callee)
+          (match (mapGet fnMap callee)
             ((none) (with acc :instrs (cons ins acc.instrs)))
             ((some f)
               (let [(cargs (coerceArgsRewrite acc args f.params))
@@ -351,8 +351,8 @@ fn typesUsed functions: (List ty/SsaFunction) -> (List String)
   (listReverse
     (fold (fn [(acc (List String)) (f ty/SsaFunction)] -> (List String)
             (fold (fn [(names (List String)) (b ty/SsaBlock)] -> (List String)
-                    (revOnto (mt b.term ((ty/termSwitch _ tn _ _) (list tn)) (_ (list)))
-                             (fold (fn [(ns (List String)) (i ty/SsaInstr)] -> (List String) (mt i.op ((ty/opConstruct tn _ _) (cons tn ns)) (_ ns))) names b.instrs)))
+                    (revOnto (match b.term ((ty/termSwitch _ tn _ _) (list tn)) (_ (list)))
+                             (fold (fn [(ns (List String)) (i ty/SsaInstr)] -> (List String) (match i.op ((ty/opConstruct tn _ _) (cons tn ns)) (_ ns))) names b.instrs)))
                   acc f.blocks))
           (list) functions))
 
@@ -404,41 +404,41 @@ fn emptyUnit name: String -> LinkUnit
   (LinkUnit :path "" :name name :forms (list) :positions (mapEmpty) :imports (list))
 
 fn preludeDiagsOf preludeRes: (Result LinkUnit (List ty/IrDiag)) -> (List ty/IrDiag)
-  (mt preludeRes ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> ty/IrDiag (ty/makeIrDiag "ERR_LINK_PRELUDE" (str "prelude functions are not visible: " d.code " " d.message) d.locus)) ds)))
+  (match preludeRes ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> ty/IrDiag (ty/makeIrDiag "ERR_LINK_PRELUDE" (str "prelude functions are not visible: " d.code " " d.message) d.locus)) ds)))
 
 fn ! linkUnits units: (List LinkUnit) preludeRes: (Result LinkUnit (List ty/IrDiag)) -> (Result ty/SsaModule (List ty/IrDiag))
   (linkUnitsWith units preludeRes (overlayUnit!))
 
 fn finishLink units: (List LinkUnit) prelude: LinkUnit entry: LinkUnit lowered: LinkAcc overlayRes: (Result LinkUnit (List ty/IrDiag)) preludeRes: (Result LinkUnit (List ty/IrDiag)) -> (Result ty/SsaModule (List ty/IrDiag))
   (let [(withPrelude (lowerPrelude prelude lowered))
-        (native (mt overlayRes ((ok u) u) ((err _) (emptyUnit "native"))))
+        (native (match overlayRes ((ok u) u) ((err _) (emptyUnit "native"))))
         (withBuiltin (builtinRounds native prelude withPrelude))
         (resolved (builtinTargets native prelude withBuiltin))
         (preludeDiags (preludeDiagsOf preludeRes))]
     (cond
-      ((err? overlayRes) (err (mt overlayRes ((ok _) (list)) ((err ds) ds))))
+      ((err? overlayRes) (err (match overlayRes ((ok _) (list)) ((err ds) ds))))
       ((not (listEmpty? withBuiltin.diags))
         (err (listAppend withBuiltin.diags (if (listAny? preludeCouldResolve? withBuiltin.diags) preludeDiags (list)))))
       ((not (listEmpty? (duplicateFunctions withBuiltin))) (err (duplicateFunctions withBuiltin)))
       (else (let [(m (rewriteModuleBuiltins resolved (merge entry.name prelude.name withBuiltin)))]
-               (mt (vfy/verifySsa m)
+               (match (vfy/verifySsa m)
                  ((err ds) (err ds))
                  ((ok _) (ok m)))))))
 
 fn linkUnitsWith units: (List LinkUnit) preludeRes: (Result LinkUnit (List ty/IrDiag)) overlayRes: (Result LinkUnit (List ty/IrDiag)) -> (Result ty/SsaModule (List ty/IrDiag))
-  (let [(prelude (mt preludeRes ((ok p) p) ((err _) (emptyUnit "prelude"))))
+  (let [(prelude (match preludeRes ((ok p) p) ((err _) (emptyUnit "prelude"))))
         (entry (optionOr (listGet units (- (listLength units) 1)) prelude))
         (lowered (fold (fn [(acc LinkAcc) (u LinkUnit)] -> LinkAcc (lowerUnit units prelude acc u)) (LinkAcc :strings (list) :modules (list) :requested (list) :diags (list)) units))]
     (finishLink units prelude entry lowered overlayRes preludeRes))
 
 fn linkUnitsWithBareEntry units: (List LinkUnit) preludeRes: (Result LinkUnit (List ty/IrDiag)) overlayRes: (Result LinkUnit (List ty/IrDiag)) -> (Result ty/SsaModule (List ty/IrDiag))
-  (let [(prelude (mt preludeRes ((ok p) p) ((err _) (emptyUnit "prelude"))))
+  (let [(prelude (match preludeRes ((ok p) p) ((err _) (emptyUnit "prelude"))))
         (entry (optionOr (listGet units (- (listLength units) 1)) prelude))
         (lowered (fold (fn [(acc LinkAcc) (u LinkUnit)] -> LinkAcc (lowerUnitAs units prelude acc u (if (= u.path entry.path) "" u.name))) (LinkAcc :strings (list) :modules (list) :requested (list) :diags (list)) units))]
     (finishLink units prelude entry lowered overlayRes preludeRes))
 
 fn ! linkWith! entryPath: String preludeFile: String -> (Result ty/SsaModule (List ty/IrDiag))
-  (mt (loadClosure! entryPath)
+  (match (loadClosure! entryPath)
     ((err ds) (err ds))
     ((ok units) (linkUnits units (pairFirst (readUnit! preludeFile (r/emptyModIndex))))))
 
@@ -446,7 +446,7 @@ fn ! linkEntry! entryPath: String -> (Result ty/SsaModule (List ty/IrDiag))
   (linkWith! entryPath (preludePath))
 
 fn ! linkWithBare! entryPath: String preludeFile: String -> (Result ty/SsaModule (List ty/IrDiag))
-  (mt (loadClosure! entryPath)
+  (match (loadClosure! entryPath)
     ((err ds) (err ds))
     ((ok units) (linkUnitsWithBareEntry units (pairFirst (readUnit! preludeFile (r/emptyModIndex))) (overlayUnit!))))
 
@@ -454,19 +454,19 @@ fn ! linkEntryBare! entryPath: String -> (Result ty/SsaModule (List ty/IrDiag))
   (linkWithBare! entryPath (preludePath))
 
 fn preludeUnitOf preludeSrc: String -> (Result LinkUnit (List ty/IrDiag))
-  (mt (ast/parse preludeSrc)
+  (match (ast/parse preludeSrc)
     ((err pe) (err (list (ty/makeIrDiag "ERR_LOWER_PARSE" pe.msg (str (preludePath) ":" pe.line ":" pe.col)))))
-    ((ok forms) (mt (headerOf forms)
+    ((ok forms) (match (headerOf forms)
                   ((none) (err (list (ty/makeIrDiag "ERR_LOWER_NO_MODULE" (str (preludePath) " has no module header") (preludePath)))))
                   ((some m) (ok (LinkUnit :path (preludePath) :name m.path :forms forms :positions (low/declPositions preludeSrc) :imports (list)))))))
 
 fn lowerSourceAgainst src: String preludeRes: (Result LinkUnit (List ty/IrDiag)) -> (Result ty/SsaModule (List ty/IrDiag))
-  (mt (ast/parse src)
+  (match (ast/parse src)
     ((err e) (err (list (ty/makeIrDiag "ERR_LOWER_PARSE" e.msg (str e.line ":" e.col)))))
-    ((ok forms) (let [(prelude (mt preludeRes ((ok p) p) ((err _) (emptyUnit "prelude"))))
+    ((ok forms) (let [(prelude (match preludeRes ((ok p) p) ((err _) (emptyUnit "prelude"))))
                       (lowered (absorb (LinkAcc :strings (list) :modules (list) :requested (list) :diags (list)) (low/lowerWithPrelude forms (low/declPositions src) prelude.forms)))
                       (withPrelude (lowerPrelude prelude lowered))
-                      (name (mt (headerOf forms) ((some m) m.path) ((none) "")))]
+                      (name (match (headerOf forms) ((some m) m.path) ((none) "")))]
                   (cond
                     ((not (listEmpty? withPrelude.diags))
                       (err (listAppend withPrelude.diags (if (listAny? preludeCouldResolve? withPrelude.diags) (preludeDiagsOf preludeRes) (list)))))
@@ -477,6 +477,6 @@ fn lowerSourceWith src: String preludeSrc: String -> (Result ty/SsaModule (List 
   (lowerSourceAgainst src (preludeUnitOf preludeSrc))
 
 fn ! lowerSourceLinked! src: String -> (Result ty/SsaModule (List ty/IrDiag))
-  (lowerSourceAgainst src (mt (fileReadString (preludePath))
+  (lowerSourceAgainst src (match (fileReadString (preludePath))
                             ((ok text) (preludeUnitOf text))
                             ((err _) (err (list (ty/makeIrDiag "ERR_LINK_READ" (str "cannot read " (preludePath)) (preludePath)))))))

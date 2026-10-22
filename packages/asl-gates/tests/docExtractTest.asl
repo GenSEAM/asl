@@ -9,7 +9,7 @@ fn fixture name: String -> String
   (str (fixtureDir) "/" name)
 
 fn readFixture! name: String -> String
-  (mt (fileReadString (fixture name))
+  (match (fileReadString (fixture name))
     ((ok t) t)
     ((err _) (do (assert false (str (fixture name) " reads")) "")))
 
@@ -20,7 +20,7 @@ fn textsOf cs: (List dx/DocCandidate) -> (List String)
   (map (fn [(c dx/DocCandidate)] -> String c.text) cs)
 
 fn findCands! path: String text: String -> (List dx/DocCandidate)
-  (mt (dx/findCandidates! path text)
+  (match (dx/findCandidates! path text)
     ((err e) (do (assert false (str "findCandidates! ok: " e)) (list)))
     ((ok cs) cs))
 
@@ -102,7 +102,7 @@ fn testDryRunNoWrite! -> Bool
     (do
       (assert (ok? made) "temp dir made")
       (assert (ok? (fileWrite dst (readFixture! "moduleDoc.asl.txt"))) "fixture copied")
-      (mt (dx/extractFile! dir "moduleDoc.asl")
+      (match (dx/extractFile! dir "moduleDoc.asl")
         ((err e) (assert false (str "extractFile! ok: " e)))
         ((ok r)
           (do
@@ -112,7 +112,7 @@ fn testDryRunNoWrite! -> Bool
       true))
 
 fn fileTextOr! path: String -> String
-  (mt (fileReadString path) ((ok t) t) ((err _) ""))
+  (match (fileReadString path) ((ok t) t) ((err _) ""))
 
 ; (:m :ref NOSELFHOST-DOCEXTRACT-20261020 :do "mktemp/mkdir/check/rm -rf migrated off bare processRun to fr/shellOut, so this test reaches zero bare child starts rather than adding a baseline row")
 fn testApplyRoundTrip! -> Bool
@@ -123,10 +123,10 @@ fn testApplyRoundTrip! -> Bool
       (assert (ok? made) "temp dir made")
       (assert (ok? mk) "package dir made")
       (assert (ok? (fileWrite dst (readFixture! "fnDoc.asl.txt"))) "fixture copied into a package layout")
-      (mt (dx/extractFile! dir "asl/packages/fxpkg/src.asl")
+      (match (dx/extractFile! dir "asl/packages/fxpkg/src.asl")
         ((err e) (assert false (str "extractFile! ok: " e)))
         ((ok r)
-          (mt (dx/applyExtract! dir r)
+          (match (dx/applyExtract! dir r)
             ((err e) (assert false (str "applyExtract! ok: " e)))
             ((ok ledgerRel)
               (do
@@ -189,10 +189,10 @@ fn testNoteApply! -> Bool
       (assert (ok? made) "temp dir made")
       (assert (ok? mk) "package dir made")
       (assert (ok? (fileWrite dst text)) "fixture copied into a package layout")
-      (mt (dx/extractFile! dir "asl/packages/fxpkg/src.asl")
+      (match (dx/extractFile! dir "asl/packages/fxpkg/src.asl")
         ((err e) (assert false (str "extractFile! ok: " e)))
         ((ok r)
-          (mt (dx/applyExtract! dir r)
+          (match (dx/applyExtract! dir r)
             ((err e) (assert false (str "applyExtract! ok: " e)))
             ((ok ledgerRel)
               (do

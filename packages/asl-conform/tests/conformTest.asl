@@ -24,7 +24,7 @@ fn testRuleLookup -> Bool
       (refute (none? rDivOpt) "divModFloor rule refutes none")
       (assert (none? rBadOpt) "nonExistentRule is none")
       (refute (some? rBadOpt) "nonExistentRule refutes some")
-      (mt rDivOpt
+      (match rDivOpt
         ((some r)
           (do
             (assert (= r.tier "A") "tier is A")
@@ -44,7 +44,7 @@ fn testProfileLookup -> Bool
       (refute (none? pC11Opt) "c11 profile refutes none")
       (assert (some? pWasmOpt) "wasm profile found")
       (refute (none? pWasmOpt) "wasm profile refutes none")
-      (mt pC11Opt
+      (match pC11Opt
         ((some p)
           (do
             (assert (= p.id "c11") "id is c11")

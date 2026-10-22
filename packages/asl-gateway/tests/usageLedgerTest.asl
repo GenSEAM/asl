@@ -24,13 +24,13 @@ fn rowsEqual? a: ul/CallRow b: ul/CallRow -> Bool
                  (= a.api b.api) (= a.stream b.stream) (= a.toolCount b.toolCount) (= a.promptBytes b.promptBytes) (= a.sysHash b.sysHash)))
 
 fn optIntText v: (Option Int64) -> String
-  (mt v ((some n) (stringFromInt64 n)) ((none) "none"))
+  (match v ((some n) (stringFromInt64 n)) ((none) "none"))
 
 fn optFloatText v: (Option Float64) -> String
-  (mt v ((some f) (stringFromFloat64 f)) ((none) "none"))
+  (match v ((some f) (stringFromFloat64 f)) ((none) "none"))
 
 fn errText r: (Result ul/CallRow String) -> String
-  (mt r ((ok _) "") ((err e) e))
+  (match r ((ok _) "") ((err e) e))
 
 fn pct part: Int64 whole: Int64 -> Float64
   (if (= whole 0) 0.0 (* 100.0 (/ (int64ToFloat64 part) (int64ToFloat64 whole))))
@@ -104,10 +104,10 @@ fn testEnv -> (Map String String)
   (mapFromPairs (list (pair "FIXP_KEY" "key")))
 
 fn ! wiringFor text: String -> (Result dp/Wiring String)
-  (mt (cfg/gatewayProfilesLoadText! "/tmp/usageLedgerTest/.asl/gateway.asn" true (ok text) "")
+  (match (cfg/gatewayProfilesLoadText! "/tmp/usageLedgerTest/.asl/gateway.asn" true (ok text) "")
     ((err e) (err e))
     ((ok table)
-     (mt (u/upstreamSettings (testEnv))
+     (match (u/upstreamSettings (testEnv))
        ((err e) (err e))
        ((ok st) (dp/wiringFromConfig (some table) text st (testEnv) (dp/builtinFamilies))))))
 

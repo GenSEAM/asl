@@ -3,24 +3,24 @@
   :i [(asl-parser/reader :a rd)])
 
 fn asInt s: rd/SExpr -> (Option Int64)
-  (mt s
+  (match s
     ((rd/sexprAtom a) (stringToInt64 a))
     (_ (none)))
 
 fn asBool s: rd/SExpr -> (Option Bool)
-  (mt s
+  (match s
     ((rd/sexprAtom a)
       (if (= a "true") (some true)
         (if (= a "false") (some false) (none))))
     (_ (none)))
 
 fn isZero? s: rd/SExpr -> Bool
-  (mt (asInt s)
+  (match (asInt s)
     ((some i) (= i 0))
     ((none) false))
 
 fn isOne? s: rd/SExpr -> Bool
-  (mt (asInt s)
+  (match (asInt s)
     ((some i) (= i 1))
     ((none) false))
 
@@ -28,9 +28,9 @@ fn sexprEquals? a: rd/SExpr b: rd/SExpr -> Bool
   (= (rd/renderSexpr a) (rd/renderSexpr b))
 
 fn foldArithmetic op: Str a1: rd/SExpr a2: rd/SExpr -> (Option rd/SExpr)
-  (mt (asInt a1)
+  (match (asInt a1)
     ((some i1)
-      (mt (asInt a2)
+      (match (asInt a2)
         ((some i2)
           (if (= op "+") (some (rd/makeAtom (stringFromInt64 (+ i1 i2))))
             (if (= op "-") (some (rd/makeAtom (stringFromInt64 (- i1 i2))))
@@ -43,7 +43,7 @@ fn foldArithmetic op: Str a1: rd/SExpr a2: rd/SExpr -> (Option rd/SExpr)
               (if (and (= op "*") (= i1 1)) (some a2)
                 (none)))))))
     ((none)
-      (mt (asInt a2)
+      (match (asInt a2)
         ((some i2)
           (if (and (= op "+") (= i2 0)) (some a1)
             (if (and (= op "-") (= i2 0)) (some a1)
@@ -59,9 +59,9 @@ fn foldArithmetic op: Str a1: rd/SExpr a2: rd/SExpr -> (Option rd/SExpr)
               (none)))))))
 
 fn foldLogic op: Str a1: rd/SExpr a2: rd/SExpr -> (Option rd/SExpr)
-  (mt (asBool a1)
+  (match (asBool a1)
     ((some b1)
-      (mt (asBool a2)
+      (match (asBool a2)
         ((some b2)
           (if (= op "and") (some (rd/makeAtom (if (and b1 b2) "true" "false")))
             (if (= op "or") (some (rd/makeAtom (if (or b1 b2) "true" "false")))
@@ -73,7 +73,7 @@ fn foldLogic op: Str a1: rd/SExpr a2: rd/SExpr -> (Option rd/SExpr)
               (if b1 (some (rd/makeAtom "true")) (some a2))
               (none))))))
     ((none)
-      (mt (asBool a2)
+      (match (asBool a2)
         ((some b2)
           (if (= op "and")
             (if b2 (some a1) (some (rd/makeAtom "false")))
@@ -83,12 +83,12 @@ fn foldLogic op: Str a1: rd/SExpr a2: rd/SExpr -> (Option rd/SExpr)
         ((none) (none)))))
 
 fn foldBranches condExpr: rd/SExpr thenExpr: rd/SExpr elseExpr: rd/SExpr -> rd/SExpr
-  (mt (asBool condExpr)
+  (match (asBool condExpr)
     ((some b) (if b thenExpr elseExpr))
     ((none) (rd/makeList (list (rd/makeAtom "if") condExpr thenExpr elseExpr))))
 
 fn foldConstants expr: rd/SExpr -> rd/SExpr
-  (mt expr
+  (match expr
     ((rd/sexprAtom _) expr)
     ((rd/sexprVect items) (rd/makeVect (map (fn [(item rd/SExpr)] (foldConstants item)) items)))
     ((rd/sexprList items)
@@ -96,14 +96,14 @@ fn foldConstants expr: rd/SExpr -> rd/SExpr
         (let [(foldedItems (map (fn [(item rd/SExpr)] (foldConstants item)) items))
               (h (optionOr (listHead foldedItems) (rd/makeAtom "")))
               (rest (optionOr (listTail foldedItems) (list)))]
-          (mt h
+          (match h
             ((rd/sexprAtom op)
               (cond
                 ((or (or (= op "+") (= op "-")) (or (= op "*") (= op "/")))
                   (if (= (listLength rest) 2)
                     (let [(a1 (optionOr (listGet rest 0) (rd/makeAtom "")))
                           (a2 (optionOr (listGet rest 1) (rd/makeAtom "")))]
-                      (mt (foldArithmetic op a1 a2)
+                      (match (foldArithmetic op a1 a2)
                         ((some folded) folded)
                         ((none) (rd/makeList foldedItems))))
                     (rd/makeList foldedItems)))
@@ -111,14 +111,14 @@ fn foldConstants expr: rd/SExpr -> rd/SExpr
                   (if (= (listLength rest) 2)
                     (let [(a1 (optionOr (listGet rest 0) (rd/makeAtom "")))
                           (a2 (optionOr (listGet rest 1) (rd/makeAtom "")))]
-                      (mt (foldLogic op a1 a2)
+                      (match (foldLogic op a1 a2)
                         ((some folded) folded)
                         ((none) (rd/makeList foldedItems))))
                     (rd/makeList foldedItems)))
                 ((= op "not")
                   (if (= (listLength rest) 1)
                     (let [(a (optionOr (listGet rest 0) (rd/makeAtom "")))]
-                      (mt (asBool a)
+                      (match (asBool a)
                         ((some b) (rd/makeAtom (if b "false" "true")))
                         ((none) (rd/makeList foldedItems))))
                     (rd/makeList foldedItems)))
@@ -141,7 +141,7 @@ fn getNotInner s: rd/SExpr -> rd/SExpr
 
 fn simplifyBoolean expr: rd/SExpr -> rd/SExpr
   (let [(f (foldConstants expr))]
-    (mt f
+    (match f
       ((rd/sexprAtom _) f)
       ((rd/sexprVect items) (rd/makeVect (map (fn [(item rd/SExpr)] (simplifyBoolean item)) items)))
       ((rd/sexprList items)
@@ -192,7 +192,7 @@ fn simplifyBoolean expr: rd/SExpr -> rd/SExpr
               (else (rd/makeList (map (fn [(item rd/SExpr)] (simplifyBoolean item)) items)))))))))
 
 fn isPureLiteral? s: rd/SExpr -> Bool
-  (mt s
+  (match s
     ((rd/sexprAtom a)
       (or (some? (stringToInt64 a))
           (or (= a "true")
@@ -202,7 +202,7 @@ fn isPureLiteral? s: rd/SExpr -> Bool
     (_ false))
 
 fn dceBlock expr: rd/SExpr -> rd/SExpr
-  (mt expr
+  (match expr
     ((rd/sexprAtom _) expr)
     ((rd/sexprVect items) (rd/makeVect (map (fn [(item rd/SExpr)] (dceBlock item)) items)))
     ((rd/sexprList items)
@@ -228,7 +228,7 @@ fn dceBlock expr: rd/SExpr -> rd/SExpr
                     (t (dceBlock (optionOr (listGet items 2) (rd/makeAtom ""))))
                     (e (dceBlock (if (>= (listLength items) 4) (optionOr (listGet items 3) (rd/makeAtom "null")) (rd/makeAtom "null"))))
                     (cFold (foldConstants c))]
-                (mt (asBool cFold)
+                (match (asBool cFold)
                   ((some b) (if b t e))
                   ((none) (rd/makeList (list (rd/makeAtom "if") cFold t e))))))
             ((= head "let")
@@ -247,7 +247,7 @@ fn evalComptimeConstant expr: rd/SExpr -> (Option rd/SExpr)
       (none)))
 
 fn substituteVar expr: rd/SExpr varName: Str replacement: rd/SExpr -> rd/SExpr
-  (mt expr
+  (match expr
     ((rd/sexprAtom a)
       (if (= a varName)
         replacement
@@ -277,7 +277,7 @@ fn substituteVar expr: rd/SExpr varName: Str replacement: rd/SExpr -> rd/SExpr
 
 fn foldLetBindings expr: rd/SExpr -> rd/SExpr
   (let [(folded (foldConstants expr))]
-    (mt folded
+    (match folded
       ((rd/sexprList items)
         (if (listEmpty? items)
           folded
@@ -293,7 +293,7 @@ fn foldLetBindings expr: rd/SExpr -> rd/SExpr
                                             (let [(varName (rd/sexprHead binding))
                                                   (valExpr (optionOr (listGet bItems 1) (rd/makeAtom "")))
                                                   (comptimeVal (evalComptimeConstant valExpr))]
-                                              (mt comptimeVal
+                                              (match comptimeVal
                                                 ((some constVal)
                                                   (substituteVar bBody varName constVal))
                                                 ((none)

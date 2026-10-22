@@ -40,22 +40,22 @@ fn parseField rest: String prefix: String -> (Option (Pair String String))
 
 fn parseLedgerLine line: String -> (Option LedgerEntry)
   (let [(trimmed (stringTrim line))]
-    (mt (parseField trimmed "(:suite \"")
+    (match (parseField trimmed "(:suite \"")
       ((none) (none))
       ((some p1)
        (let [(suite (pairFirst p1))]
          (if (stringEmpty? suite)
            (none)
-           (mt (parseField (pairSecond p1) "\" :cause \"")
+           (match (parseField (pairSecond p1) "\" :cause \"")
              ((none) (none))
              ((some p2)
               (let [(cause (pairFirst p2))]
                 (if (stringEmpty? cause)
                   (none)
-                  (mt (parseField (pairSecond p2) "\" :failedAssertDigest \"")
+                  (match (parseField (pairSecond p2) "\" :failedAssertDigest \"")
                     ((none) (none))
                     ((some p3)
-                     (mt (parseField (pairSecond p3) "\" :since \"")
+                     (match (parseField (pairSecond p3) "\" :since \"")
                        ((none) (none))
                        ((some p4)
                         (if (stringStartsWith? (pairSecond p4) "\")")
@@ -65,21 +65,21 @@ fn parseLedgerLine line: String -> (Option LedgerEntry)
 fn parseLedger text: String -> (List LedgerEntry)
   (let [(lines (stringLines text))]
     (fold (fn [(acc (List LedgerEntry)) (line String)] -> (List LedgerEntry)
-            (mt (parseLedgerLine line)
+            (match (parseLedgerLine line)
               ((none) acc)
               ((some entry) (listAppend acc (list entry)))))
           (list)
           lines))
 
 fn ! ledgerAt root: String rev: (Option String) -> (Result (List LedgerEntry) String)
-  (mt rev
+  (match rev
     ((none)
      (let [(path (str root "/.asl/mem/knownRed.asn"))]
        (if (not (sr/isFile! path))
          (ok (list))
          (resultMap (fileReadString path) parseLedger))))
     ((some r)
-     (mt (sr/gitRun! root (list "show" (str r ":.asl/mem/knownRed.asn")))
+     (match (sr/gitRun! root (list "show" (str r ":.asl/mem/knownRed.asn")))
        ((err e) (err e))
        ((ok d) (ok (if (= d.code 0) (parseLedger d.out) (list)))))))
 

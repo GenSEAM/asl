@@ -19,7 +19,7 @@
   (:f actual String))
 
 fn shown r: (Result String String) -> String
-  (mt r
+  (match r
     ((ok s) s)
     ((err e) (str "<err " e ">")))
 
@@ -37,7 +37,7 @@ fn findRoot! dir: String depth: Int64 -> (Result String String)
           (findRoot! (stringJoin (listTake parts (- (listLength parts) 1)) "/") (- depth 1))))))
 
 fn repoRoot! -> (Result String String)
-  (mt (realPath ".")
+  (match (realPath ".")
     ((err _) (err "cannot canonicalize the working directory"))
     ((ok cwd) (findRoot! cwd 64)))
 
@@ -51,7 +51,7 @@ fn createUnique! dir: String ext: String content: String attempt: Int64 -> (Resu
   (if (>= attempt 8)
     (err (str "could not create a unique oracle file under " dir))
     (let [(path (str dir "/out-" (stringFromInt64 (nowNs)) "-" (stringFromInt64 attempt) ext))]
-      (mt (fileCreateExclusive path content)
+      (match (fileCreateExclusive path content)
         ((ok _) (ok path))
         ((err _) (createUnique! dir ext content (+ attempt 1))))))
 
@@ -59,27 +59,27 @@ fn oracleDir! root: String -> (Result String String)
   (let [(dir (str root "/scratch/formatTestOracle"))]
     (if (fileExists? dir)
       (ok dir)
-      (mt (dirCreate dir)
+      (match (dirCreate dir)
         ((ok _) (ok dir))
         ((err e) (err (str "cannot create " dir ": " e))))))
 
 fn hostRun! text: String lang: String -> (Result HostRun String)
-  (mt (repoRoot!)
+  (match (repoRoot!)
     ((err e) (err e))
     ((ok root)
-     (mt (oracleDir! root)
+     (match (oracleDir! root)
        ((err e) (err e))
        ((ok dir)
-        (mt (createUnique! dir (if (= lang "asl") ".asl" ".asn") text 0)
+        (match (createUnique! dir (if (= lang "asl") ".asl" ".asn") text 0)
           ((err e) (err e))
           ((ok path)
            (let [(res (processRun (str (shellQuote (hostBinary! root)) (if (= lang "asl") " check " " parse ") (shellQuote path) " 2>&1")))]
-             (mt (pathRemove path)
+             (match (pathRemove path)
                ((err e) (err (str "cannot remove oracle file " path ": " e)))
                ((ok _) (ok (HostRun :exitCode res.exitCode :output (str res.stdout res.stderr))))))))))))
 
 fn hostComplaint! text: String lang: String -> String
-  (mt (hostRun! text lang)
+  (match (hostRun! text lang)
     ((err e) (str "oracle failed to run: " e))
     ((ok r) (if (= r.exitCode 0) "" (str "exit " (stringFromInt64 r.exitCode) ": " r.output))))
 
@@ -143,8 +143,8 @@ fn fixtureOutcomes! -> (List Outcome)
   (map (fn [(c (Pair String String))] -> Outcome
          (let [(path (pairFirst c))]
            (Outcome :label path
-                    :input (mt (fileReadString path) ((ok s) s) ((err e) (str "<read error " e ">")))
-                    :lang (mt (fmt/langForPath path) ((ok l) l) ((err e) e))
+                    :input (match (fileReadString path) ((ok s) s) ((err e) (str "<read error " e ">")))
+                    :lang (match (fmt/langForPath path) ((ok l) l) ((err e) e))
                     :expected (pairSecond c)
                     :actual (shown (fmt/formatFile! path)))))
        (fixtureCases))
@@ -189,10 +189,10 @@ fn testOracleRejects! -> Bool
   (let [(astPrinterOut (hostRun! "fn foo -> Int64\n  (let [(a 1)] undefinedZzzSymbol)\n" "asl"))
         (badAsn (hostRun! "(a [b c)\n" "asn"))]
     (do
-      (assert (mt astPrinterOut ((ok r) (and (!= r.exitCode 0) (stringContains? r.output "ERR_UNKNOWN_SYMBOL"))) ((err _) false))
-              (str "host rejects (let [(a 1)] undefinedZzzSymbol): " (mt astPrinterOut ((ok r) r.output) ((err e) e))))
-      (assert (mt badAsn ((ok r) (!= r.exitCode 0)) ((err _) false))
-              (str "host parse rejects an unbalanced ASN frame: " (mt badAsn ((ok r) r.output) ((err e) e))))
+      (assert (match astPrinterOut ((ok r) (and (!= r.exitCode 0) (stringContains? r.output "ERR_UNKNOWN_SYMBOL"))) ((err _) false))
+              (str "host rejects (let [(a 1)] undefinedZzzSymbol): " (match astPrinterOut ((ok r) r.output) ((err e) e))))
+      (assert (match badAsn ((ok r) (!= r.exitCode 0)) ((err _) false))
+              (str "host parse rejects an unbalanced ASN frame: " (match badAsn ((ok r) r.output) ((err e) e))))
       true))
 
 fn testTokenBagRejects -> Bool
@@ -225,7 +225,7 @@ fn testCallerItemsFollowed -> Bool
       (assert (= (shown (fmt/formatText "(:a   1\n(:b  2)\n" multi "asn")) "(:a 1)\n(:b  2)\n") "only the line the items name is re-spaced")
       (assert (err? (fmt/formatText "(:a   1\n(:b  2)\n" unexplained "asn")) "text changing a line no item names is refused")
       (assert (err? (fmt/formatText "(a" leftOver "asn")) "a result with left defects is refused")
-      (assert (= (mt (fmt/formatBytes (stringToBytes "(a  (b c") given "asn")
+      (assert (= (match (fmt/formatBytes (stringToBytes "(a  (b c") given "asn")
                    ((ok bs) (bt/bytesToString bs))
                    ((err e) e))
                  "(a (b) c)")

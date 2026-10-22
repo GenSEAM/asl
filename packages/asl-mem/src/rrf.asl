@@ -6,7 +6,7 @@ fn computeRrfScore rank: I64 k: I64 -> F64
   (if (<= rank 0) 0.0 (let [(kVal (if (<= k 0) 60 k)) (denom (+ (int64ToFloat64 kVal) (int64ToFloat64 rank)))] (/ 1.0 denom)))
 
 fn accumulateChannel channel: (List RankedCandidate) k: I64 accMap: (Map Str F64) -> (Map Str F64)
-  (if (listEmpty? channel) accMap (let [(cand (optionOr (listHead channel) (RankedCandidate :id "" :score 0.0 :rank 0))) (rest (optionOr (listTail channel) (list))) (id cand.id) (r cand.rank) (s (computeRrfScore r k)) (prev (mt (mapGet accMap id) ((some val) val) ((none) 0.0))) (nextMap (mapSet accMap id (+ prev s)))] (accumulateChannel rest k nextMap)))
+  (if (listEmpty? channel) accMap (let [(cand (optionOr (listHead channel) (RankedCandidate :id "" :score 0.0 :rank 0))) (rest (optionOr (listTail channel) (list))) (id cand.id) (r cand.rank) (s (computeRrfScore r k)) (prev (match (mapGet accMap id) ((some val) val) ((none) 0.0))) (nextMap (mapSet accMap id (+ prev s)))] (accumulateChannel rest k nextMap)))
 
 fn insertCandidate item: RankedCandidate sorted: (List RankedCandidate) -> (List RankedCandidate)
   (if (listEmpty? sorted) (list item) (let [(headC (optionOr (listHead sorted) (RankedCandidate :id "" :score 0.0 :rank 0))) (tailC (optionOr (listTail sorted) (list)))] (if (> item.score headC.score) (cons item sorted) (cons headC (insertCandidate item tailC)))))
@@ -24,7 +24,7 @@ fn assignRanks candidates: (List RankedCandidate) -> (List RankedCandidate)
   (assignRanksLoop candidates 1 (list))
 
 fn mapToCandidates keys: (List Str) scores: (Map Str F64) -> (List RankedCandidate)
-  (if (listEmpty? keys) (list) (let [(k (optionOr (listHead keys) "")) (rest (optionOr (listTail keys) (list))) (s (mt (mapGet scores k) ((some v) v) ((none) 0.0))) (cand (RankedCandidate :id k :score s :rank 0))] (cons cand (mapToCandidates rest scores))))
+  (if (listEmpty? keys) (list) (let [(k (optionOr (listHead keys) "")) (rest (optionOr (listTail keys) (list))) (s (match (mapGet scores k) ((some v) v) ((none) 0.0))) (cand (RankedCandidate :id k :score s :rank 0))] (cons cand (mapToCandidates rest scores))))
 
 fn fuseRankedChannels channelA: (List RankedCandidate) channelB: (List RankedCandidate) k: I64 -> (List RankedCandidate)
   (let [(kVal (if (<= k 0) 60 k)) (mapA (accumulateChannel channelA kVal (mapEmpty))) (mapBoth (accumulateChannel channelB kVal mapA)) (keys (mapKeys mapBoth)) (unsorted (mapToCandidates keys mapBoth)) (sorted (sortCandidates unsorted))] (assignRanks sorted))

@@ -68,14 +68,14 @@ fn sourceFixture -> String
 
 fn ! testSourceBuiltinLowering -> Bool
   (let [(lowered (lk/lowerSourceLinked! (sourceFixture)))]
-    (assert (ok? lowered) (str "lowerSourceLinked! handles pair, pair accessors, optionOr, and listReverse against the real prelude: " (mt lowered ((ok _) "ok") ((err ds) (formatDiags ds)))))
+    (assert (ok? lowered) (str "lowerSourceLinked! handles pair, pair accessors, optionOr, and listReverse against the real prelude: " (match lowered ((ok _) "ok") ((err ds) (formatDiags ds)))))
     true)
 
 fn ! compileNative path: String llPath: String exePath: String -> Captured
-  (mt (lk/linkEntry! path)
+  (match (lk/linkEntry! path)
     ((err ds) (Captured :exitCode 1 :stdout "" :stderr (str "link failed: " (formatDiags ds))))
     ((ok m)
-      (mt (llvm/emitLlvmProgramNative! m "lowerPairOptionFixture.main")
+      (match (llvm/emitLlvmProgramNative! m "lowerPairOptionFixture.main")
         ((err ds) (Captured :exitCode 1 :stdout "" :stderr (str "LLVM emission failed: " (formatDiags ds))))
         ((ok code)
           (do
@@ -114,7 +114,7 @@ fn ! testNativeParity -> Bool
       true))
 
 fn ! compileViaEmitLlvmSource llPath: String exePath: String -> Captured
-  (mt (llvm/emitLlvmSource (fixtureSource) "main")
+  (match (llvm/emitLlvmSource (fixtureSource) "main")
     ((err ds) (Captured :exitCode 1 :stdout "" :stderr (str "emitLlvmSource failed: " (formatDiags ds))))
     ((ok code)
       (do

@@ -10,19 +10,19 @@ fn entries -> (List String)
 ; (:m :ref NATIVE-LOWER-GAPS :do "repinned: fused list matches test @listHeadEmpty? or @listTailEmpty? and build the Option on the miss path; assert and refute carry their call site")
 ; (:m :ref HLLOWSMERGE :do "repinned on merge main into sh/HLLOWS: checkSemanticTest.asl's linked-IR digest shifted with the merged tree's own asl-forms/checkSemanticTest.asl content; measured on the merged tree by this file's own goldenDigests printer, never hand-written")
 fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "3048911025981420353:4955936")
+  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "1611931848141747398:4941072")
         (pair "lowerSourceWith" "6806003338108627551:8856"))
 
 fn diagLine d: ty/IrDiag -> String
   (str d.code " " d.message " @ " d.locus)
 
 fn resultText res: (Result ty/SsaModule (List ty/IrDiag)) -> String
-  (mt res
+  (match res
     ((ok m) (str "(ok)\n" (prn/printSsa m)))
     ((err ds) (str "(err)\n" (stringJoin (map diagLine ds) "\n"))))
 
 fn ! linkedText entry: String -> String
-  (str (mt (lk/loadClosure! entry)
+  (str (match (lk/loadClosure! entry)
          ((ok units) (stringJoin (map (fn [(u lk/LinkUnit)] -> String (str u.path " " u.name " " (str u.imports))) units) "\n"))
          ((err ds) (stringJoin (map diagLine ds) "\n")))
        "\n"
@@ -31,15 +31,15 @@ fn ! linkedText entry: String -> String
 fn sourceCases -> (List String)
   (list "(module q/a :x [main])\n\nfn main -> Int64\n  (listLength (listAppend (list 1 2 3) (map (fn [(x Int64)] -> Int64 (* x 2)) (list 4 5))))\n"
         "(module q/b :x [main])\n\nfn main -> Int64\n  (noSuchFunction 1 2)\n"
-        "(module q/c :x [main])\n\n(enum Shape (:c circle [(r Int64)] \"round\") (:c rect [(w Int64) (h Int64)] \"box\"))\n\nfn area s: Shape -> Int64\n  (mt s ((circle r) (* r r)) ((rect w h) (* w h)))\n\nfn main -> Int64\n  (+ (area (circle 2)) (optionOr (listGet (list 1 2 3) 1) 0))\n")
+        "(module q/c :x [main])\n\n(enum Shape (:c circle [(r Int64)] \"round\") (:c rect [(w Int64) (h Int64)] \"box\"))\n\nfn area s: Shape -> Int64\n  (match s ((circle r) (* r r)) ((rect w h) (* w h)))\n\nfn main -> Int64\n  (+ (area (circle 2)) (optionOr (listGet (list 1 2 3) 1) 0))\n")
 
 fn ! sourceText -> String
-  (mt (fileReadString (lk/preludePath))
+  (match (fileReadString (lk/preludePath))
     ((err _) "(unreadable prelude)")
     ((ok preludeSrc) (stringJoin (map (fn [(src String)] -> String (resultText (lk/lowerSourceWith src preludeSrc))) (sourceCases)) "\n----\n")))
 
 fn ! rootRelative text: String -> String
-  (mt (realPath ".")
+  (match (realPath ".")
     ((ok root) (stringReplace text (str root "/") ""))
     ((err _) text))
 

@@ -13,7 +13,7 @@ fn ! sh cmd: String -> ProcessOutput
 
 fn ! asl1Bin! -> String
   (let [(built (nt/prepareRun "asl/packages/asl-compiler/src/asl1.asl" (nt/fingerprint)))]
-    (mt built.binary
+    (match built.binary
       ((some bin) bin)
       ((none) (do (assert false (str "asl1.asl builds natively: " built.reason)) ""))))
 
@@ -61,7 +61,7 @@ fn ! testArrayNative work: String -> Bool
       (map (fn [(name String)] -> Bool (do (assert (stringContains? (arraySource) (str "(" name " ")) (str "arrayNativeMod calls " name)) true)) (arrayNames))
       (let [(built (sh (str (asl1Bin!) " build " src " -o " ll)))]
         (assert (= built.exitCode 0) (str "arrayNativeMod: asl1 builds it; exit " built.exitCode "; stdout " built.stdout "; stderr " built.stderr)))
-      (let [(llText (mt (fileReadString ll) ((ok t) t) ((err e) (str "unreadable " ll ": " e))))]
+      (let [(llText (match (fileReadString ll) ((ok t) t) ((err e) (str "unreadable " ll ": " e))))]
         (do
           (refute (stringContains? llText "@asl_rt_builtin_array") "arrayNativeMod: .ll neither calls nor declares asl_rt_builtin_array")
           (assert (stringContains? llText "@asl$2Dtarget$2Dllvm$2Farrays$2Ef64ArrayFold(") "arrayNativeMod: .ll calls the routed f64ArrayFold")

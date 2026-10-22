@@ -46,64 +46,64 @@ enum StepResult
               plan: Plan)
 
 fn stepId s: Step -> String
-  (mt s ((stepOf id _ _) id))
+  (match s ((stepOf id _ _) id))
 
 fn stepDoText s: Step -> String
-  (mt s ((stepOf _ d _) d))
+  (match s ((stepOf _ d _) d))
 
 fn stepCheckText s: Step -> String
-  (mt s ((stepOf _ _ c) c))
+  (match s ((stepOf _ _ c) c))
 
 fn makeStep id: String doText: String checkText: String -> Step
   (stepOf id doText checkText)
 
 fn planOn p: Plan -> Bool
-  (mt p ((planOf on _ _ _ _ _ _ _) on))
+  (match p ((planOf on _ _ _ _ _ _ _) on))
 
 fn planStepList p: Plan -> (List Step)
-  (mt p ((planOf _ steps _ _ _ _ _ _) steps))
+  (match p ((planOf _ steps _ _ _ _ _ _) steps))
 
 fn planDone p: Plan -> (Map String String)
-  (mt p ((planOf _ _ done _ _ _ _ _) done))
+  (match p ((planOf _ _ done _ _ _ _ _) done))
 
 fn planDropped p: Plan -> (Map String String)
-  (mt p ((planOf _ _ _ dropped _ _ _ _) dropped))
+  (match p ((planOf _ _ _ dropped _ _ _ _) dropped))
 
 fn planRevisions p: Plan -> Int64
-  (mt p ((planOf _ _ _ _ revisions _ _ _) revisions))
+  (match p ((planOf _ _ _ _ revisions _ _ _) revisions))
 
 fn planCurrent p: Plan -> (Option String)
-  (mt p ((planOf _ _ _ _ _ current _ _) current))
+  (match p ((planOf _ _ _ _ _ current _ _) current))
 
 fn planSince p: Plan -> Int64
-  (mt p ((planOf _ _ _ _ _ _ since _) since))
+  (match p ((planOf _ _ _ _ _ _ since _) since))
 
 fn planNudgeTurn p: Plan -> (Option Int64)
-  (mt p ((planOf _ _ _ _ _ _ _ nudgeTurn) nudgeTurn))
+  (match p ((planOf _ _ _ _ _ _ _ nudgeTurn) nudgeTurn))
 
 fn newPlan on: Bool -> Plan
   (planOf on (list) (mapEmpty) (mapEmpty) 0 (none) 0 (none))
 
 fn summarySteps s: PlanSummary -> Int64
-  (mt s ((summaryOf steps _ _ _) steps))
+  (match s ((summaryOf steps _ _ _) steps))
 
 fn summaryDone s: PlanSummary -> Int64
-  (mt s ((summaryOf _ done _ _) done))
+  (match s ((summaryOf _ done _ _) done))
 
 fn summaryDropped s: PlanSummary -> Int64
-  (mt s ((summaryOf _ _ dropped _) dropped))
+  (match s ((summaryOf _ _ dropped _) dropped))
 
 fn summaryRevisions s: PlanSummary -> Int64
-  (mt s ((summaryOf _ _ _ revisions) revisions))
+  (match s ((summaryOf _ _ _ revisions) revisions))
 
 fn receiptId r: Receipt -> String
-  (mt r ((receiptOf id _ _) id))
+  (match r ((receiptOf id _ _) id))
 
 fn receiptOp r: Receipt -> String
-  (mt r ((receiptOf _ op _) op))
+  (match r ((receiptOf _ op _) op))
 
 fn receiptStatus r: Receipt -> String
-  (mt r ((receiptOf _ _ status) status))
+  (match r ((receiptOf _ _ status) status))
 
 fn makeReceipt id: String op: String status: String -> Receipt
   (receiptOf id op status)
@@ -166,8 +166,8 @@ fn scanTree s: String n: Int64 i: Int64 stack: (List (List SexpNode)) -> (Result
                     restStack (c/restOf parentStack)]
                 (scanTree s n (+ cur 1) (cons (cons (sexpList topList) parentList) restStack)))))
           ((= c "\"")
-            (mt (scanString s n (+ cur 1) (list))
-              ((ok pr) (mt pr ((pair strVal nextIdx)
+            (match (scanString s n (+ cur 1) (list))
+              ((ok pr) (match pr ((pair strVal nextIdx)
                                (scanTree s n nextIdx (cons (cons (sexpStr strVal) (c/firstOf stack)) (c/restOf stack))))))
               ((err e) (err e))))
           (else
@@ -179,7 +179,7 @@ fn planTree text: String -> (Result (List SexpNode) String)
   (scanTree text (stringLength text) 0 (list (list)))
 
 fn sexpToVal node: SexpNode -> SexpVal
-  (mt node
+  (match node
     ((sexpAtom t) (valStr t))
     ((sexpStr t) (valStr t))
     ((sexpList items) (valList items)))
@@ -189,12 +189,12 @@ fn planFieldsLoop xs: (List SexpNode) kv: (List (Pair String SexpVal)) lists: (L
     (pair (listReverse kv) (listReverse lists))
     (let [headNode (c/firstOf xs)
           tailNodes (c/restOf xs)]
-      (mt headNode
+      (match headNode
         ((sexpAtom a)
           (if (stringStartsWith? a ":")
             (let [key (c/sliceOf a 1 (stringLength a))
                   isNextFlag (or (listEmpty? tailNodes)
-                                 (mt (c/firstOf tailNodes)
+                                 (match (c/firstOf tailNodes)
                                    ((sexpAtom na) (stringStartsWith? na ":"))
                                    ((sexpStr _) false)
                                    ((sexpList _) false)))]
@@ -215,17 +215,17 @@ fn planFields items: (List SexpNode) -> (Pair (List (Pair String SexpVal)) (List
 
 fn kvGet kv: (List (Pair String SexpVal)) k: String -> (Option SexpVal)
   (fold (fn [acc pr]
-          (mt acc
+          (match acc
             ((some _) acc)
-            ((none) (mt pr ((pair key val) (if (= key k) (some val) (none)))))))
+            ((none) (match pr ((pair key val) (if (= key k) (some val) (none)))))))
     (none) kv)
 
 fn kvHas kv: (List (Pair String SexpVal)) k: String -> Bool
   (some? (kvGet kv k))
 
 fn kvGetStr kv: (List (Pair String SexpVal)) k: String -> (Option String)
-  (mt (kvGet kv k)
-    ((some val) (mt val ((valStr s) (some s)) ((valFlag _) (none)) ((valList _) (none))))
+  (match (kvGet kv k)
+    ((some val) (match val ((valStr s) (some s)) ((valFlag _) (none)) ((valList _) (none))))
     ((none) (none)))
 
 fn validPlanIdChar? c: String -> Bool
@@ -246,8 +246,8 @@ fn validPlanId? s: String -> Bool
         (validPlanIdChars? s n 0))))
 
 fn isStepForm items: (List SexpNode) -> Bool
-  (mt (listHead items)
-    ((some node) (mt node ((sexpAtom a) (= a ":step")) ((sexpStr _) false) ((sexpList _) false)))
+  (match (listHead items)
+    ((some node) (match node ((sexpAtom a) (= a ":step")) ((sexpStr _) false) ((sexpList _) false)))
     (none false))
 
 fn planStepsLoop nodes: (List SexpNode) acc: (List Step) -> (Result (List Step) String)
@@ -259,7 +259,7 @@ fn planStepsLoop nodes: (List SexpNode) acc: (List Step) -> (Result (List Step) 
         (ok (listReverse acc))))
     (let [node (c/firstOf nodes)
           restNodes (c/restOf nodes)]
-      (mt node
+      (match node
         ((sexpList items)
           (if (not (isStepForm items))
             (err "each plan item is (:step :id s :do s :check s)")
@@ -268,20 +268,20 @@ fn planStepsLoop nodes: (List SexpNode) acc: (List Step) -> (Result (List Step) 
                   sidOpt (kvGetStr kv "id")
                   doOpt (kvGetStr kv "do")
                   chkVal (kvGet kv "check")]
-              (mt sidOpt
+              (match sidOpt
                 ((none) (err "a step :id is 1 to 32 letters, digits, '_', '.' or '-'"))
                 ((some sid)
                   (if (not (validPlanId? sid))
                     (err "a step :id is 1 to 32 letters, digits, '_', '.' or '-'")
-                    (mt doOpt
+                    (match doOpt
                       ((none) (err (str "step " sid " needs :do s, and :check is a string")))
                       ((some doText)
                         (if (stringEmpty? (stringTrim doText))
                           (err (str "step " sid " needs :do s, and :check is a string"))
-                          (let [chkText (mt chkVal
+                          (let [chkText (match chkVal
                                           ((none) (some ""))
-                                          ((some val) (mt val ((valStr s) (some s)) ((valFlag _) (none)) ((valList _) (none)))))]
-                            (mt chkText
+                                          ((some val) (match val ((valStr s) (some s)) ((valFlag _) (none)) ((valList _) (none)))))]
+                            (match chkText
                               ((none) (err (str "step " sid " needs :do s, and :check is a string")))
                               ((some checkStr)
                                 (if (or (> (listLength (stringChars doText)) 300) (> (listLength (stringChars checkStr)) 300))
@@ -328,7 +328,7 @@ fn maxInt a: Int64 b: Int64 -> Int64
 
 fn planNow plan: Plan turn: Int64 -> String
   (if (listEmpty? (planStepList plan))
-    (mt (planNudgeTurn plan)
+    (match (planNudgeTurn plan)
       ((some n) (if (= n turn)
                   "(:missing \"no plan yet: add (:plan (:step :id s1 :do s :check s) ...) beside your next steps\")"
                   "(:none)"))
@@ -337,7 +337,7 @@ fn planNow plan: Plan turn: Int64 -> String
           droppedIds (filter (fn [s] (mapHas? (planDropped plan) (stepId s))) (planStepList plan))
           doneStr (c/joinSep (map stepId doneIds) " ")
           droppedStr (c/joinSep (map stepId droppedIds) " ")
-          where (mt (planCurrent plan)
+          where (match (planCurrent plan)
                   ((some cur)
                     (str ":current " cur " :turnsOnCurrent " (stringFromInt64 (maxInt 0 (- (- turn 1) (planSince plan))))))
                   ((none) ":allReconciled true"))
@@ -380,12 +380,12 @@ fn removeAllDropped dropped: (Map String String) steps: (List Step) -> (Map Stri
   (fold (fn [d s] (mapRemove d (stepId s))) dropped steps)
 
 fn planStep plan: Plan opName: String opForm: String rid: String evidenceIds: (List String) -> StepResult
-  (mt (planTree opForm)
+  (match (planTree opForm)
     ((err e) (rejectedResult rid opName "ERR_PARSE" (str "the " opName " form does not parse: " e) plan))
     ((ok tree)
       (if (not (= (listLength tree) 1))
         (rejectedResult rid opName "ERR_PARSE" (str "one (" opName " ...) form is expected") plan)
-        (mt (c/firstOf tree)
+        (match (c/firstOf tree)
           ((sexpList formItems)
             (let [fields (planFields formItems)
                   kv (pairFirst fields)
@@ -406,9 +406,9 @@ fn planStep plan: Plan opName: String opForm: String rid: String evidenceIds: (L
                         (let [givenVal (kvGet kv "revise")
                               nodes (if (not revise)
                                       (map (fn [l] (sexpList l)) lists)
-                                      (mt givenVal
+                                      (match givenVal
                                         ((some val)
-                                          (mt val
+                                          (match val
                                             ((valList gList)
                                               (if (isStepForm gList)
                                                 (cons (sexpList gList) (map (fn [l] (sexpList l)) lists))
@@ -416,7 +416,7 @@ fn planStep plan: Plan opName: String opForm: String rid: String evidenceIds: (L
                                             ((valStr s) (list (sexpStr s)))
                                             ((valFlag _) (list (sexpAtom "flag")))))
                                         ((none) (list))))]
-                          (mt (planSteps nodes)
+                          (match (planSteps nodes)
                             ((err e) (rejectedResult rid opName "ERR_INVALID_ARG" e plan))
                             ((ok parsedSteps)
                               (if revise
@@ -480,16 +480,16 @@ fn serPlanState p: Plan -> String
        " :revisions " (stringFromInt64 (planRevisions p))
        " :nudgeTurn " (stringFromInt64 (optionOr (planNudgeTurn p) -1))
        " :steps (" (c/joinSep (map (fn [s] (str "(:step :id " (stepId s) " :do " (c/serString (stepDoText s)) " :check " (c/serString (stepCheckText s)) ")")) (planStepList p)) " ") ")"
-       " :done (" (c/joinSep (map (fn [pr] (mt pr ((pair k v) (str "(:done :id " k " :ev " (c/serString v) ")")))) (mapPairs (planDone p))) " ") ")"
-       " :dropped (" (c/joinSep (map (fn [pr] (mt pr ((pair k v) (str "(:dropped :id " k " :why " (c/serString v) ")")))) (mapPairs (planDropped p))) " ") ")"
+       " :done (" (c/joinSep (map (fn [pr] (match pr ((pair k v) (str "(:done :id " k " :ev " (c/serString v) ")")))) (mapPairs (planDone p))) " ") ")"
+       " :dropped (" (c/joinSep (map (fn [pr] (match pr ((pair k v) (str "(:dropped :id " k " :why " (c/serString v) ")")))) (mapPairs (planDropped p))) " ") ")"
        ")")
 
 fn extractStep node: SexpNode -> (Option Step)
-  (mt node
+  (match node
     ((sexpList items)
       (let [fields (planFields items)
             kv (pairFirst fields)]
-        (mt (kvGetStr kv "id")
+        (match (kvGetStr kv "id")
           ((some sid)
             (some (stepOf sid (optionOr (kvGetStr kv "do") "") (optionOr (kvGetStr kv "check") ""))))
           ((none) (none)))))
@@ -497,11 +497,11 @@ fn extractStep node: SexpNode -> (Option Step)
     ((sexpStr _) (none)))
 
 fn extractPair node: SexpNode valKey: String -> (Option (Pair String String))
-  (mt node
+  (match node
     ((sexpList items)
       (let [fields (planFields items)
             kv (pairFirst fields)]
-        (mt (kvGetStr kv "id")
+        (match (kvGetStr kv "id")
           ((some sid)
             (some (pair sid (optionOr (kvGetStr kv valKey) ""))))
           ((none) (none)))))
@@ -509,28 +509,28 @@ fn extractPair node: SexpNode valKey: String -> (Option (Pair String String))
     ((sexpStr _) (none)))
 
 fn parsePlanState text: String -> Plan
-  (mt (planTree text)
+  (match (planTree text)
     ((err e) (do (assert false (str "parsePlanState: " e)) (newPlan false)))
     ((ok tree)
       (if (listEmpty? tree)
         (do (assert false "parsePlanState: empty tree") (newPlan false))
-        (mt (c/firstOf tree)
+        (match (c/firstOf tree)
           ((sexpList items)
             (let [fields (planFields items)
                   kv (pairFirst fields)
-                  onVal (mt (kvGet kv "on") ((some v) (mt v ((valFlag b) b) ((valStr s) (= s "true")) ((valList _) false))) ((none) true))
+                  onVal (match (kvGet kv "on") ((some v) (match v ((valFlag b) b) ((valStr s) (= s "true")) ((valList _) false))) ((none) true))
                   curStr (optionOr (kvGetStr kv "current") "")
                   current (if (stringEmpty? curStr) (none) (some curStr))
                   since (optionOr (stringToInt64 (optionOr (kvGetStr kv "since") "0")) 0)
                   revs (optionOr (stringToInt64 (optionOr (kvGetStr kv "revisions") "0")) 0)
                   nudgeNum (optionOr (stringToInt64 (optionOr (kvGetStr kv "nudgeTurn") "-1")) -1)
                   nudgeTurn (if (< nudgeNum 0) (none) (some nudgeNum))
-                  stepsNodes (mt (kvGet kv "steps") ((some v) (mt v ((valList lst) lst) ((valStr _) (list)) ((valFlag _) (list)))) ((none) (list)))
-                  doneNodes (mt (kvGet kv "done") ((some v) (mt v ((valList lst) lst) ((valStr _) (list)) ((valFlag _) (list)))) ((none) (list)))
-                  droppedNodes (mt (kvGet kv "dropped") ((some v) (mt v ((valList lst) lst) ((valStr _) (list)) ((valFlag _) (list)))) ((none) (list)))
-                  steps (fold (fn [acc n] (mt (extractStep n) ((some s) (listAppend acc (list s))) ((none) acc))) (list) stepsNodes)
-                  donePairs (fold (fn [acc n] (mt (extractPair n "ev") ((some p) (listAppend acc (list p))) ((none) acc))) (list) doneNodes)
-                  droppedPairs (fold (fn [acc n] (mt (extractPair n "why") ((some p) (listAppend acc (list p))) ((none) acc))) (list) droppedNodes)]
+                  stepsNodes (match (kvGet kv "steps") ((some v) (match v ((valList lst) lst) ((valStr _) (list)) ((valFlag _) (list)))) ((none) (list)))
+                  doneNodes (match (kvGet kv "done") ((some v) (match v ((valList lst) lst) ((valStr _) (list)) ((valFlag _) (list)))) ((none) (list)))
+                  droppedNodes (match (kvGet kv "dropped") ((some v) (match v ((valList lst) lst) ((valStr _) (list)) ((valFlag _) (list)))) ((none) (list)))
+                  steps (fold (fn [acc n] (match (extractStep n) ((some s) (listAppend acc (list s))) ((none) acc))) (list) stepsNodes)
+                  donePairs (fold (fn [acc n] (match (extractPair n "ev") ((some p) (listAppend acc (list p))) ((none) acc))) (list) doneNodes)
+                  droppedPairs (fold (fn [acc n] (match (extractPair n "why") ((some p) (listAppend acc (list p))) ((none) acc))) (list) droppedNodes)]
               (planOf onVal steps (mapFromPairs donePairs) (mapFromPairs droppedPairs) revs current since nudgeTurn)))
           ((sexpAtom _) (do (assert false "parsePlanState: expected list") (newPlan false)))
           ((sexpStr _) (do (assert false "parsePlanState: expected list") (newPlan false)))))))
@@ -539,31 +539,31 @@ fn parseTurnLine line: String -> (Option (Pair Int64 (Pair String (List (Pair St
   (if (not (stringStartsWith? line "(:turn "))
     (none)
     (let [sp1 (stringIndexOf line " ")]
-      (mt sp1
+      (match sp1
         ((none) (none))
         ((some idx1)
           (let [rem (c/sliceOf line (+ idx1 1) (stringLength line))
                 sp2 (stringIndexOf rem " ")]
-            (mt sp2
+            (match sp2
               ((none) (none))
               ((some idx2)
                 (let [turnStr (c/sliceOf rem 0 idx2)
                       turnNum (optionOr (stringToInt64 turnStr) -1)
                       rem2 (c/sliceOf rem (+ idx2 1) (stringLength rem))
                       sp3 (stringIndexOf rem2 " ")]
-                  (mt sp3
+                  (match sp3
                     ((none) (none))
                     ((some idx3)
                       (let [kindStr (c/sliceOf rem2 0 idx3)]
                         (if (or (< turnNum 0) (not (stringStartsWith? kindStr ":")))
                           (none)
                           (let [kind (c/sliceOf kindStr 1 (stringLength kindStr))]
-                            (mt (planTree line)
+                            (match (planTree line)
                               ((err _) (none))
                               ((ok tree)
                                 (if (listEmpty? tree)
                                   (none)
-                                  (mt (c/firstOf tree)
+                                  (match (c/firstOf tree)
                                     ((sexpList items)
                                       (let [fields (planFields items)]
                                         (some (pair turnNum (pair kind (pairFirst fields))))))
@@ -575,18 +575,18 @@ fn planReplayLoop lines: (List String) plan: Plan -> Plan
     plan
     (let [line (c/firstOf lines)
           restLines (c/restOf lines)]
-      (mt (parseTurnLine line)
+      (match (parseTurnLine line)
         ((none) (planReplayLoop restLines plan))
         ((some turnInfo)
-          (mt turnInfo
+          (match turnInfo
             ((pair turn restInfo)
-              (mt restInfo
+              (match restInfo
                 ((pair kind kv)
                   (cond
                 ((or (= kind "plan") (= kind "planRevise"))
                   (let [rawVal (if (= kind "plan") (kvGet kv "plan") (kvGet kv "steps"))
-                        nodes (mt rawVal ((some v) (mt v ((valList lst) lst) ((valStr _) (list)) ((valFlag _) (list)))) ((none) (list)))]
-                    (mt (planSteps nodes)
+                        nodes (match rawVal ((some v) (match v ((valList lst) lst) ((valStr _) (list)) ((valFlag _) (list)))) ((none) (list)))]
+                    (match (planSteps nodes)
                       ((err _) (planReplayLoop restLines plan))
                       ((ok steps)
                         (let [newDropped (removeAllDropped (planDropped plan) steps)
@@ -598,7 +598,7 @@ fn planReplayLoop lines: (List String) plan: Plan -> Plan
                 ((= kind "planDone")
                   (let [sid (optionOr (kvGetStr kv "id") "")
                         ev (kvGetStr kv "ev")]
-                    (mt ev
+                    (match ev
                       ((none) (planReplayLoop restLines (planAdvance plan turn)))
                       ((some evStr)
                         (let [newDropped (mapRemove (planDropped plan) sid)

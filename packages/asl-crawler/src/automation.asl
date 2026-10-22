@@ -169,20 +169,20 @@ fn formatMediaMetadataAsn receipt: MediaMetadataReceipt -> Str
 
 fn isValidActionOp? op: Str -> Bool
   (let [(clean (stringLower (stringTrim op)))]
-    (or (== clean "navigate")
-      (or (== clean "click")
-        (or (== clean "type")
-          (or (== clean "scroll")
-            (or (== clean "watchmedia")
-              (or (== clean "extractmedia")
-                (or (== clean "wait")
-                  (or (== clean "snapshot")
-                    (== clean "execasl"))))))))))
+    (or (= clean "navigate")
+      (or (= clean "click")
+        (or (= clean "type")
+          (or (= clean "scroll")
+            (or (= clean "watchmedia")
+              (or (= clean "extractmedia")
+                (or (= clean "wait")
+                  (or (= clean "snapshot")
+                    (= clean "execasl"))))))))))
 
 fn simulateActionExecution action: AutomationAction -> AutomationReceipt
   (let [(op action.op)]
     (cond
-      ((== op "navigate")
+      ((= op "navigate")
         (makeAutomationReceipt
           "act-sim-001"
           "ok"
@@ -190,7 +190,7 @@ fn simulateActionExecution action: AutomationAction -> AutomationReceipt
           action.target
           (str "(:pageSnapshot :url \"" (esc/escapeAsnStr action.target) "\" :title \"Simulated Page\" :status :ok)")
           ""))
-      ((== op "watchMedia")
+      ((= op "watchMedia")
         (makeAutomationReceipt
           "act-sim-002"
           "ok"

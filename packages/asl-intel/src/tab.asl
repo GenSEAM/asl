@@ -16,7 +16,7 @@ fn ivNew n: Int64 -> Bytes
   (bytesAlloc (* 8 (max 1 n)))
 
 fn ivGet v: Bytes i: Int64 -> Int64
-  (mt (float64ToInt64 (bytesGetFloat64 v i)) ((some x) x) ((none) 0))
+  (match (float64ToInt64 (bytesGetFloat64 v i)) ((some x) x) ((none) 0))
 
 fn ivSet! v: Bytes i: Int64 x: Int64 -> Unit
   (bytesSetFloat64 v i (int64ToFloat64 x))
@@ -107,10 +107,10 @@ fn lookupStr tab: Strtab s: String -> Int64
   (let [(b (stringToBytes s))] (lookup tab b 0 (bytesLength b)))
 
 fn mergeWith less: (Fn T T Bool) a: (List T) b: (List T) acc: (List T) -> (List T)
-  (mt (listHead a)
+  (match (listHead a)
     ((none) (revOnto acc b))
     ((some x)
-      (mt (listHead b)
+      (match (listHead b)
         ((none) (revOnto acc a))
         ((some y)
           (if (less y x)
@@ -118,16 +118,16 @@ fn mergeWith less: (Fn T T Bool) a: (List T) b: (List T) acc: (List T) -> (List 
             (mergeWith less (optionOr (listTail a) (list)) b (cons x acc)))))))
 
 fn revOnto acc: (List T) rest: (List T) -> (List T)
-  (mt (listHead acc)
+  (match (listHead acc)
     ((none) rest)
     ((some x) (revOnto (optionOr (listTail acc) (list)) (cons x rest))))
 
 fn mergePass less: (Fn T T Bool) runs: (List (List T)) acc: (List (List T)) -> (List (List T))
-  (mt (listHead runs)
+  (match (listHead runs)
     ((none) (listReverse acc))
     ((some a)
       (let [(rest (optionOr (listTail runs) (list)))]
-        (mt (listHead rest)
+        (match (listHead rest)
           ((none) (listReverse (cons a acc)))
           ((some b) (mergePass less (optionOr (listTail rest) (list)) (cons (mergeWith less a b (list)) acc)))))))
 

@@ -36,20 +36,20 @@ fn importedCall m: ty/SsaModule name: String -> Bool
   (let [(f (optionOr (listHead m.functions) (ty/ssaFunction "missing" (list) (list) (ty/tyVal) (list))))]
     (listAny? (fn [(b ty/SsaBlock)] -> Bool
       (listAny? (fn [(i ty/SsaInstr)] -> Bool
-        (mt i.op ((ty/opCall callee _) (= callee name)) (_ false))) b.instrs)) f.blocks))
+        (match i.op ((ty/opCall callee _) (= callee name)) (_ false))) b.instrs)) f.blocks))
 
 fn importedExtern m: ty/SsaModule name: String -> (Option ty/SsaExtern)
   (listHead (filter (fn [(e ty/SsaExtern)] -> Bool (= e.name name)) m.externs))
 
 fn hasSignature m: ty/SsaModule name: String arity: Int64 -> Bool
-  (mt (importedExtern m name)
+  (match (importedExtern m name)
     ((none) false)
     ((some e) (and (= e.arity arity) (= (listLength e.params) arity)
                    (listAll? (fn [(p ty/SsaTy)] -> Bool (= p (ty/tyVal))) e.params)
                    (= e.ret (ty/tyVal)))))
 
 fn hasAbsentCapability result: (Result rt/Routed (List ty/IrDiag)) name: String -> Bool
-  (mt result
+  (match result
     ((ok _) false)
     ((err diags) (listAny? (fn [(d ty/IrDiag)] -> Bool
       (and (= d.code "ERR_CAPABILITY_ABSENT") (stringContains? d.message name) (stringContains? d.message "wasm32-wasi"))) diags)))
@@ -60,25 +60,25 @@ fn unverifiableProbe -> ty/SsaModule
       (list (ty/ssaBlock "entry" (list) (list) (ty/termReturn "missing"))))))
 
 fn preservesVerifierDiagnostics m: ty/SsaModule -> Bool
-  (mt (vfy/verifySsa m)
-    ((err expected) (mt (rt/routeModule (wasmFacts) m) ((err actual) (= actual expected)) (_ false)))
+  (match (vfy/verifySsa m)
+    ((err expected) (match (rt/routeModule (wasmFacts) m) ((err actual) (= actual expected)) (_ false)))
     (_ false))
 
 fn printCallDests b: ty/SsaBlock -> (List String)
   (fold (fn [(dests (List String)) (i ty/SsaInstr)] -> (List String)
-    (mt i.op ((ty/opCall name args) (if (and (= name "print") (= (listLength args) 1)) (listAppend dests (list i.dest)) dests)) (_ dests)))
+    (match i.op ((ty/opCall name args) (if (and (= name "print") (= (listLength args) 1)) (listAppend dests (list i.dest)) dests)) (_ dests)))
     (list) b.instrs)
 
 fn printCallArgs b: ty/SsaBlock -> (List String)
   (fold (fn [(argsOut (List String)) (i ty/SsaInstr)] -> (List String)
-    (mt i.op ((ty/opCall name args) (if (and (= name "print") (= (listLength args) 1)) (listAppend argsOut args) argsOut)) (_ argsOut)))
+    (match i.op ((ty/opCall name args) (if (and (= name "print") (= (listLength args) 1)) (listAppend argsOut args) argsOut)) (_ argsOut)))
     (list) b.instrs)
 
 fn spaceConstant? strings: (List String) dest: String i: ty/SsaInstr -> Bool
   (if (not (= i.dest dest))
     false
-    (mt i.op
-      ((ty/opConst c) (mt c ((ty/constStr index) (= (listGet strings index) (some " "))) (_ false)))
+    (match i.op
+      ((ty/opConst c) (match c ((ty/constStr index) (= (listGet strings index) (some " "))) (_ false)))
       (_ false)))
 
 fn hasSpacePrintArg strings: (List String) b: ty/SsaBlock -> Bool
@@ -87,9 +87,9 @@ fn hasSpacePrintArg strings: (List String) b: ty/SsaBlock -> Bool
       (listAny? (fn [(c ty/SsaInstr)] -> Bool (spaceConstant? strings spaceArg c)) b.instrs)))
 
 fn uniquePrintDests m: ty/SsaModule -> Bool
-  (mt (listHead m.functions)
+  (match (listHead m.functions)
     ((none) false)
-    ((some f) (mt (listHead f.blocks) ((none) false) ((some b)
+    ((some f) (match (listHead f.blocks) ((none) false) ((some b)
       (let [(dests (printCallDests b))]
         (let [(first (optionOr (listGet dests 0) "")) (second (optionOr (listGet dests 1) "")) (third (optionOr (listGet dests 2) ""))]
           (and (= (listLength dests) 3) (not (= first second)) (not (= first third)) (not (= second third)) (= third "printed") (hasSpacePrintArg m.strings b))))))))
@@ -112,14 +112,14 @@ fn runTests -> Bool
         (printWithSpace (rt/routeModule (wasmFacts) (variadicPrintProbe (list "existing" " "))))
         (invalid (unverifiableProbe))]
     (do
-      (assert (mt printOnly ((ok r) (hasImport r.result "print")) ((err _) false)) "print is declared as a wasm host import")
-      (assert (mt printOnly ((ok r) (importedCall r.result "print")) ((err _) false)) "print builtin call resolves to the import")
-      (assert (mt printOnly ((ok r) (hasSignature r.result "print" 1)) ((err _) false)) "print import declares one Val parameter and a Val result")
-      (assert (mt printOnly ((ok r) (= (listLength r.result.externs) 1)) ((err _) false)) "a print-only module declares exactly one host import")
-      (assert (mt variadicPrint ((ok r) (verifiesModule r.result)) ((err _) false)) "variadic print routed module verifies")
-      (assert (mt variadicPrint ((ok r) (uniquePrintDests r.result)) ((err _) false)) "variadic print has spaced one-Val calls with unique destinations")
-      (assert (mt printWithoutSpace ((ok r) (and (= r.result.strings (list "existing" " ")) (uniquePrintDests r.result))) ((err _) false)) "variadic print appends and references space after existing strings")
-      (assert (mt printWithSpace ((ok r) (and (= r.result.strings (list "existing" " ")) (uniquePrintDests r.result))) ((err _) false)) "variadic print reuses space at its nonzero pool index")
+      (assert (match printOnly ((ok r) (hasImport r.result "print")) ((err _) false)) "print is declared as a wasm host import")
+      (assert (match printOnly ((ok r) (importedCall r.result "print")) ((err _) false)) "print builtin call resolves to the import")
+      (assert (match printOnly ((ok r) (hasSignature r.result "print" 1)) ((err _) false)) "print import declares one Val parameter and a Val result")
+      (assert (match printOnly ((ok r) (= (listLength r.result.externs) 1)) ((err _) false)) "a print-only module declares exactly one host import")
+      (assert (match variadicPrint ((ok r) (verifiesModule r.result)) ((err _) false)) "variadic print routed module verifies")
+      (assert (match variadicPrint ((ok r) (uniquePrintDests r.result)) ((err _) false)) "variadic print has spaced one-Val calls with unique destinations")
+      (assert (match printWithoutSpace ((ok r) (and (= r.result.strings (list "existing" " ")) (uniquePrintDests r.result))) ((err _) false)) "variadic print appends and references space after existing strings")
+      (assert (match printWithSpace ((ok r) (and (= r.result.strings (list "existing" " ")) (uniquePrintDests r.result))) ((err _) false)) "variadic print reuses space at its nonzero pool index")
       (map assertAbsent (absentCases))
       (assert (preservesVerifierDiagnostics invalid) "wasm32-wasi returns the verifier diagnostics for an unverifiable module without imports")
       true))

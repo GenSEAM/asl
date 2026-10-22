@@ -270,4 +270,4 @@ fn raw content: String -> v/VNode
   (v/elementNode "raw" (mapSet (mapEmpty) "html" content) (list))
 
 fn vnodeToHtml node: v/VNode -> Str
-  (mt node ((v/textNode content) (escapeHtml content)) ((v/elementNode tag attrs children) (if (or (= tag "raw") (= tag "!raw")) (optionOr (mapGet attrs "html") "") (let [(attrStr (attrsToHtml attrs)) (chLen (listLength children))] (if (= chLen 0) (if (isVoidTag? tag) (str "<" tag attrStr ">") (str "<" tag attrStr "></" tag ">")) (let [(chStrs (map (fn [(ch v/VNode)] -> String (vnodeToHtml ch)) children)) (body (stringJoin chStrs ""))] (str "<" tag attrStr ">" body "</" tag ">")))))))
+  (match node ((v/textNode content) (escapeHtml content)) ((v/elementNode tag attrs children) (if (or (= tag "raw") (= tag "!raw")) (optionOr (mapGet attrs "html") "") (let [(attrStr (attrsToHtml attrs)) (chLen (listLength children))] (if (= chLen 0) (if (isVoidTag? tag) (str "<" tag attrStr ">") (str "<" tag attrStr "></" tag ">")) (let [(chStrs (map (fn [(ch v/VNode)] -> String (vnodeToHtml ch)) children)) (body (stringJoin chStrs ""))] (str "<" tag attrStr ">" body "</" tag ">")))))))

@@ -9,7 +9,7 @@
 (schema SymbolGraph (:f nodes (List GraphNode)) (:f edges (List GraphEdge)))
 
 fn edgeKindToString k: EdgeKind -> Str
-  (mt k ((edgeCalls) "calls") ((edgeDefines) "defines") ((edgeImports) "imports") ((edgeImplements) "implements") ((edgeSubtypes) "subtypes"))
+  (match k ((edgeCalls) "calls") ((edgeDefines) "defines") ((edgeImports) "imports") ((edgeImplements) "implements") ((edgeSubtypes) "subtypes"))
 
 fn graphCreate -> SymbolGraph
   (SymbolGraph :nodes (list) :edges (list))

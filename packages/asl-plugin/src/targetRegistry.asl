@@ -18,7 +18,7 @@ fn lookupTarget reg: TargetRegistry name: Str -> (Option (fn [(List a/TopForm) (
   (mapGet reg.targets name)
 
 fn dispatchTargetCodegen reg: TargetRegistry target: Str forms: (List a/TopForm) options: (Map Str Str) -> (Result Str Str)
-  (mt (lookupTarget reg target) ((some emitter) (emitter forms options)) ((none) (err (str "unsupported-target: " target))))
+  (match (lookupTarget reg target) ((some emitter) (emitter forms options)) ((none) (err (str "unsupported-target: " target))))
 
 fn listRegisteredTargets reg: TargetRegistry -> (List Str)
   (mapKeys reg.targets)

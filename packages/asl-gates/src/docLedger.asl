@@ -28,25 +28,25 @@ fn kvStep acc: KvAcc key: String val: rd/SExpr -> KvAcc
     (else (with acc :bad true)))
 
 fn kvLoop items: (List rd/SExpr) acc: KvAcc -> KvAcc
-  (mt (listHead items)
+  (match (listHead items)
     ((none) acc)
     ((some k)
       (let [(tail (optionOr (listTail items) (list)))]
-        (mt (kwName k)
+        (match (kwName k)
           ((none) (with acc :bad true))
           ((some key)
-            (mt (listHead tail)
+            (match (listHead tail)
               ((none) (with acc :bad true))
               ((some v) (kvLoop (optionOr (listTail tail) (list)) (kvStep acc key v)))))))))
 
 fn rowFromSym acc: KvAcc sym: String -> (Result DocRow String)
-  (mt acc.text
+  (match acc.text
     ((none) (err "doc ledger row is missing :text"))
     ((some txt) (ok (DocRow :symbol sym :text txt))))
 
 fn rowFromAcc acc: KvAcc -> (Result DocRow String)
   (if acc.bad (err "doc ledger row has an unknown key or a non-string value")
-    (mt acc.symbol
+    (match acc.symbol
       ((none) (err "doc ledger row is missing :symbol"))
       ((some sym) (rowFromSym acc sym))))
 
@@ -56,27 +56,27 @@ fn rowFromForm f: rd/SExpr -> (Result DocRow String)
       (rowFromAcc (kvLoop (optionOr (listTail (rd/sexprToList f)) (list)) (KvAcc :symbol (none) :text (none) :bad false)))))
 
 fn rowsAppend row: DocRow restResult: (Result (List DocRow) String) -> (Result (List DocRow) String)
-  (mt restResult
+  (match restResult
     ((err e) (err e))
     ((ok rest) (ok (cons row rest))))
 
 fn rowsStep form: rd/SExpr rest: (List rd/SExpr) -> (Result (List DocRow) String)
-  (mt (rowFromForm form)
+  (match (rowFromForm form)
     ((err e) (err e))
     ((ok row) (rowsAppend row (rowsFromForms rest))))
 
 fn rowsFromForms forms: (List rd/SExpr) -> (Result (List DocRow) String)
-  (mt (listHead forms)
+  (match (listHead forms)
     ((none) (ok (list)))
     ((some f) (rowsStep f (optionOr (listTail forms) (list)))))
 
 fn parseLedgerText text: String -> (Result (List DocRow) String)
-  (mt (meta/parseForms text)
+  (match (meta/parseForms text)
     ((err e) (err e))
     ((ok forms) (rowsFromForms forms)))
 
 fn loadLedgerFile! path: String -> (Result (List DocRow) String)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e) (err e))
     ((ok text) (parseLedgerText text)))
 
@@ -84,7 +84,7 @@ fn loadLedger! path: String -> (Result (List DocRow) String)
   (if (not (fileExists? path)) (ok (list)) (loadLedgerFile! path))
 
 fn findRowBySymbol rows: (List DocRow) symbol: String -> (Option DocRow)
-  (mt (listHead rows)
+  (match (listHead rows)
     ((none) (none))
     ((some r) (if (= r.symbol symbol) (some r) (findRowBySymbol (optionOr (listTail rows) (list)) symbol))))
 
@@ -98,13 +98,13 @@ fn findBySymbol! root: String symbol: String -> (Result (Option DocRow) String)
   (let [(idx (hashIdx symbol))]
     (if (< idx 0) (err "symbol must contain '#' separating its file path from its name")
       (let [(relPath (relPathOf symbol)) (ledgerPath (str root "/" (dx/ledgerPathFor relPath)))]
-        (mt (loadLedger! ledgerPath)
+        (match (loadLedger! ledgerPath)
           ((err e) (err e))
           ((ok rows) (ok (findRowBySymbol rows symbol)))))))
 
 fn findByFile! root: String file: String -> (Result (List DocRow) String)
   (let [(ledgerPath (str root "/" (dx/ledgerPathFor file))) (prefix (str file "#"))]
-    (mt (loadLedger! ledgerPath)
+    (match (loadLedger! ledgerPath)
       ((err e) (err e))
       ((ok rows) (ok (filter (fn [(r DocRow)] -> Bool (stringStartsWith? r.symbol prefix)) rows)))))
 
@@ -123,7 +123,7 @@ fn isLineSymbol? name: String -> Bool
 
 fn defNamesMatch? tops: (List ast/TopForm) name: String -> Bool
   (listAny? (fn [(t ast/TopForm)] -> Bool
-    (mt t
+    (match t
       ((ast/topDefun n) (= n.name name))
       ((ast/topSchema n) (= n.name name))
       ((ast/topEnum n) (= n.name name))
@@ -132,7 +132,7 @@ fn defNamesMatch? tops: (List ast/TopForm) name: String -> Bool
 
 fn fieldExists? tops: (List ast/TopForm) schemaName: String fieldName: String -> Bool
   (listAny? (fn [(t ast/TopForm)] -> Bool
-    (mt t
+    (match t
       ((ast/topSchema n) (and (= n.name schemaName) (listAny? (fn [(f ast/AstField)] -> Bool (= f.name fieldName)) n.fields)))
       (_ false)))
     tops)
@@ -150,12 +150,12 @@ fn nameResolves? tops: (List ast/TopForm) name: String -> Bool
     (else (defNamesMatch? tops name)))
 
 fn ! resolveParsed! text: String name: String -> Bool
-  (mt (ast/parse text)
+  (match (ast/parse text)
     ((err _) false)
     ((ok tops) (nameResolves? tops name)))
 
 fn ! resolveFileText! full: String name: String -> Bool
-  (mt (fileReadString full)
+  (match (fileReadString full)
     ((err _) false)
     ((ok text) (resolveParsed! text name)))
 
@@ -172,21 +172,21 @@ fn ! rowResolves! root: String row: DocRow -> Bool
     (if (< idx 0) false (rowResolvesAt! root symbol idx)))
 
 fn ! unresolvedSymbols! root: String rows: (List DocRow) -> (List String)
-  (mt (listHead rows)
+  (match (listHead rows)
     ((none) (list))
     ((some r)
       (let [(tail (optionOr (listTail rows) (list)))]
         (if (rowResolves! root r) (unresolvedSymbols! root tail) (cons r.symbol (unresolvedSymbols! root tail))))))
 
 fn ! checkLedger! root: String ledgerPath: String -> (Result (List String) String)
-  (mt (loadLedger! (str root "/" ledgerPath))
+  (match (loadLedger! (str root "/" ledgerPath))
     ((err e) (err e))
     ((ok rows) (ok (unresolvedSymbols! root rows))))
 
 fn ! reportSymbol! root: String symbol: String -> Int64
-  (mt (findBySymbol! root symbol)
+  (match (findBySymbol! root symbol)
     ((err e) (do (println (str "(:doc :symbol \"" symbol "\" :status :error :message \"" e "\")")) 1))
-    ((ok found) (mt found
+    ((ok found) (match found
       ((none) (do (println (str "(:doc :symbol \"" symbol "\" :found false)")) 0))
       ((some row) (do (println (str "(:doc :symbol \"" symbol "\" :found true :text \"" (escRow (renderText row.text)) "\")")) 0)))))
 
@@ -194,7 +194,7 @@ fn rowLine! r: DocRow -> String
   (str "(:row :symbol \"" r.symbol "\" :text \"" (escRow (renderText r.text)) "\")")
 
 fn ! reportFile! root: String file: String -> Int64
-  (mt (findByFile! root file)
+  (match (findByFile! root file)
     ((err e) (do (println (str "(:doc :file \"" file "\" :status :error :message \"" e "\")")) 1))
     ((ok rows) (do (println (str "(:doc :file \"" file "\" :found " (stringFromInt64 (listLength rows)) " :rows [" (stringJoin (map rowLine! rows) " ") "])")) 0)))
 

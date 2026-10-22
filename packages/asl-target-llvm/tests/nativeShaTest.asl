@@ -9,12 +9,12 @@ fn probe -> String
 
 fn ! nativeRun -> nt/ProcOut
   (let [(built (nt/prepareRun (probe) "nativeShaTest"))]
-    (mt built.binary
+    (match built.binary
       ((none) (nt/ProcOut :exitCode 127 :stdout "" :stderr built.reason))
       ((some bin) (nt/runProc (list bin) (none)))))
 
 fn shaMs stderr: String -> Int64
-  (mt (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? l "shaMs ")) (stringLines stderr)))
+  (match (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? l "shaMs ")) (stringLines stderr)))
     ((none) -1)
     ((some line) (optionOr (stringToInt64 (stringTrim (optionOr (stringSlice line 6 (stringLength line)) ""))) -1)))
 

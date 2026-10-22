@@ -21,7 +21,7 @@ fn synthSource d: Int64 q: Int64 tail: String -> String
        (stringJoin (map (fn [(i Int64)] -> String (str "(m" (stringFromInt64 (mod i d)) "/f)")) (range 0 q)) " ") " " tail ")\n")
 
 fn parsed src: String -> (List a/TopForm)
-  (mt (a/parse src) ((ok forms) forms) ((err _) (list)))
+  (match (a/parse src) ((ok forms) forms) ((err _) (list)))
 
 fn texts ds: (List ty/Diagnostic) -> String
   (stringJoin (map (fn [(d ty/Diagnostic)] -> String (str d.code " " d.message)) ds) "; ")
@@ -57,5 +57,5 @@ fn ! runTests -> Bool
       true)
 
 fn ! main args: (List String) -> (Result Int64 String)
-  (let [(d (optionOr (mt (listHead args) ((some s) (stringToInt64 s)) ((none) (none))) 50))]
+  (let [(d (optionOr (match (listHead args) ((some s) (stringToInt64 s)) ((none) (none))) 50))]
     (do (println (str "diags " (stringFromInt64 (listLength (c/checkSource (synthSource d 2000 "") (synthDeps d) "syn.asl"))))) (ok 0)))

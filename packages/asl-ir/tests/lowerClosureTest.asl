@@ -9,13 +9,13 @@ fn joinLines xs: (List String) -> String
   (stringJoin xs "\n")
 
 fn printed res: (Result ty/SsaModule (List ty/IrDiag)) -> String
-  (mt res ((ok m) (prn/printSsa m)) ((err ds) (str "lowering failed: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message " " d.locus)) ds) "; "))))
+  (match res ((ok m) (prn/printSsa m)) ((err ds) (str "lowering failed: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message " " d.locus)) ds) "; "))))
 
 fn verified? res: (Result ty/SsaModule (List ty/IrDiag)) -> Bool
-  (mt res ((ok m) (ok? (vfy/verifySsa m))) ((err _) false))
+  (match res ((ok m) (ok? (vfy/verifySsa m))) ((err _) false))
 
 fn diagsOf res: (Result ty/SsaModule (List ty/IrDiag)) -> (List ty/IrDiag)
-  (mt res ((ok _) (list)) ((err ds) ds))
+  (match res ((ok _) (list)) ((err ds) ds))
 
 fn codes diags: (List ty/IrDiag) -> (List String)
   (map (fn [(d ty/IrDiag)] -> String d.code) diags)

@@ -22,7 +22,7 @@ fn evaluateRss rssMb: Int64 softMb: Int64 hardMb: Int64 -> RssStatus
       (RssStatus :level ":ok" :currentRssMb rssMb :softLimitMb softMb :hardLimitMb hardMb :criticalMessage "")))
 
 fn sampleCurrentRssMb! -> Int64
-  (mt (procRusage)
+  (match (procRusage)
     ((ok u)
       (/ u.selfMaxRssKb 1024))
     ((err _)

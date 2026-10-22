@@ -146,34 +146,34 @@ fn ! testGatewayCliAndLifecycle -> Bool
 
 fn ! gatewayTestWriteAll! fd: Int64 data: String offset: Int64 -> (Result Bool String)
   (if (>= offset (stringLength data)) (ok true)
-    (mt (fdWrite fd (optionOr (stringSlice data offset (stringLength data)) ""))
+    (match (fdWrite fd (optionOr (stringSlice data offset (stringLength data)) ""))
       ((err e) (err e))
       ((ok count) (if (<= count 0) (err "test socket write made no progress")
                    (gatewayTestWriteAll! fd data (+ offset count))))))
 
 fn ! gatewayTestStub! portPath: String pidPath: String -> (Result Int64 String)
-  (mt (fileWrite pidPath (stringFromInt64 (procSelf)))
+  (match (fileWrite pidPath (stringFromInt64 (procSelf)))
     ((err e) (err e))
     ((ok _)
-      (mt (tcpListen 0)
+      (match (tcpListen 0)
     ((err e) (err e))
     ((ok listenerFd)
-      (mt (sockLocalPort listenerFd)
+      (match (sockLocalPort listenerFd)
         ((err e) (do (fdClose listenerFd) (err e)))
         ((ok port)
-          (mt (fileWrite portPath (stringFromInt64 port))
+          (match (fileWrite portPath (stringFromInt64 port))
             ((err e) (do (fdClose listenerFd) (err e)))
             ((ok _)
-              (mt (sockAccept listenerFd)
+              (match (sockAccept listenerFd)
                 ((err e) (do (fdClose listenerFd) (err e)))
                 ((ok clientFd)
-                  (mt (fdRead clientFd 65536)
+                  (match (fdRead clientFd 65536)
                     ((err e) (do (fdClose clientFd) (fdClose listenerFd) (err e)))
                     ((ok _)
                       (let [(response (gatewayTestWriteAll! clientFd
                                       "HTTP/1.1 200 OK\r\nContent-Length: 11\r\nConnection: close\r\n\r\nupstream-ok" 0))]
                         (do (fdClose clientFd) (fdClose listenerFd)
-                          (mt response
+                          (match response
                             ((err e) (err e))
                             ((ok _) (ok 0)))))))))))))))))
 
@@ -183,7 +183,7 @@ fn ! gatewayTestStubMain args: (List String) -> (Result Int64 String)
     (ok 2))
 
 fn gatewayTestReceiptNumber text: String marker: String -> Int64
-  (mt (stringIndexOf text marker)
+  (match (stringIndexOf text marker)
     ((none) 0)
     ((some at)
       (let [(start (+ at (stringLength marker)))
@@ -196,7 +196,7 @@ fn gatewayTestReceiptNumber text: String marker: String -> Int64
 
 fn ! gatewayTestWaitPort! path: String attempts: Int64 -> Int64
   (if (<= attempts 0) 0
-    (mt (fileReadString path)
+    (match (fileReadString path)
       ((err _) (do (sleepMs 20) (gatewayTestWaitPort! path (- attempts 1))))
       ((ok text)
         (let [(port (optionOr (stringToInt64 (stringTrim text)) 0))]
@@ -211,12 +211,12 @@ fn ! gatewayTestWaitGone! pid: Int64 attempts: Int64 -> Bool
           (do (sleepMs 20) (gatewayTestWaitGone! pid (- attempts 1)))))))
 
 fn ! gatewayTestReapStub! handle: Int64 pid: Int64 wait: (Result ProcessOutput String) -> (Result Int64 String)
-  (mt wait
+  (match wait
     ((err waitError)
-      (mt (procKill pid "SIGTERM")
+      (match (procKill pid "SIGTERM")
         ((err killError) (err (str "wait failed: " waitError "; kill failed: " killError)))
         ((ok _)
-          (mt (processWait handle 10000)
+          (match (processWait handle 10000)
             ((err reapError) (err (str "wait failed: " waitError "; reap failed: " reapError)))
             ((ok _) (ok 125))))))
     ((ok output) (ok output.exitCode)))
@@ -228,7 +228,7 @@ fn ! gatewayLifecycleTest! root: String temp: String host: String runner: String
         (testFile (str root "/asl/packages/asl-gateway/tests/gatewayCliTest.asl"))
         (statePath (str home "/.asl/run/gatewayState.asn"))
         (stubStart (processSpawn (str host " run " testFile " stub " portPath " " stubPidPath)))
-        (stubHandle (mt stubStart ((err _) 0) ((ok handle) handle)))
+        (stubHandle (match stubStart ((err _) 0) ((ok handle) handle)))
         (stubPid (gatewayTestWaitPort! stubPidPath 150))
         (upstreamPort (if (> stubHandle 0) (gatewayTestWaitPort! portPath 150) 0))
         (start (processRun (str "HOME=" home " " runner " start --port 0 --upstream http://127.0.0.1:" (stringFromInt64 upstreamPort))))
@@ -262,7 +262,7 @@ fn ! gatewayLifecycleTest! root: String temp: String host: String runner: String
                     (err "spawn failed")))
         (failurePidPath (str temp "/failure.pid"))
         (failureStart (processSpawn (str "echo $$ > " failurePidPath " ; exec /bin/sleep 30")))
-        (failureHandle (mt failureStart ((err _) 0) ((ok handle) handle)))
+        (failureHandle (match failureStart ((err _) 0) ((ok handle) handle)))
         (failurePid (gatewayTestWaitPort! failurePidPath 150))
         (failureWait (if (> failureHandle 0) (processWait failureHandle -1) (err "spawn failed")))
         (failureExit (if (> failureHandle 0)

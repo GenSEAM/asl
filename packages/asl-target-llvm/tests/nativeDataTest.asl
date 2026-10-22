@@ -24,7 +24,7 @@ fn ! sh cmd: String -> Recorded
 
 fn ! nativeRun path: String args: (List String) label: String -> Recorded
   (let [(built (nt/prepareRun path label))]
-    (mt built.binary
+    (match built.binary
       ((none) (Recorded :exitCode 127 :stdout "" :stderr built.reason :ranNatively false :buildReason built.reason))
       ((some bin) (let [(r (nt/runProc (listAppend (list bin) args) (none)))]
                     (Recorded :exitCode r.exitCode :stdout r.stdout :stderr r.stderr :ranNatively true :buildReason built.reason)))))
@@ -36,7 +36,7 @@ fn errorLine text: String -> String
   (optionOr (listHead (filter (fn [(l String)] -> Bool (stringContains? l "ERR_")) (stringLines text))) "")
 
 fn errorTail line: String -> String
-  (mt (stringIndexOf line "ERR_")
+  (match (stringIndexOf line "ERR_")
     ((some i) (stringReplace (optionOr (stringSlice line i (stringLength line)) line) " (after 0 asserts)" ""))
     ((none) line))
 
@@ -111,7 +111,7 @@ fn ! testEqAlias -> Bool
 ; (:m :ref HLAUDIT-LOWS :do "d3a263c9d's own testDownstream once dropped a third, OUT-OF-ROOT leg (no ASL_ROOT at all, an absolute path to the downstream file) because asl-cli/src/command.asl's runFile! then unconditionally required ctx.hostBin for any out-of-workspace path; that requirement is gone (confirmed by hand: 'bin/asl run <absolute path outside this worktree>' with no ASL_ROOT exits 0 and prints the bin/asl-only diagnostic 'NATIVE-BYPASS ... :reason absolute-path-outside-workspace :staged .asl/cache/nativeTest/outside/<digest>.asl' to stderr), and tools/nativeTest.asl's own OUT-OF-ROOT-USERPATH comment (tools/nativeTest.asl:1523) confirms stageOutsideFile! gives the self-built ntBin the same staging minus that print (silent on success, eprintln only on failure, so the leg below checks exit/stdout parity plus the real side effect -- a file landing under .asl/cache/nativeTest/outside -- instead of a stderr string this layer never emits), so this leg is restored live rather than frozen, since it does pass natively")
 
 fn ! testDownstream -> Bool
-  (mt (oracle/selfTestBinary!)
+  (match (oracle/selfTestBinary!)
     ((err e) (do (assert false (str "testDownstream: self-built tools/nativeTest.asl binary: " e)) false))
     ((ok ntBin)
       (let [(root (resultOr (realPath ".") "."))
@@ -134,7 +134,7 @@ fn ! testDownstream -> Bool
           (assert (stringContains? rooted.stderr "NATIVE-CACHE") "a downstream file with ASL_ROOT runs natively")
           (assert (= outOfRoot.exitCode 0) (str "OUT-OF-ROOT: no ASL_ROOT, an absolute downstream path outside the toolchain still runs: " outOfRoot.stderr))
           (assert (= outOfRoot.stdout expectedOutOfRoot) (str "out-of-root native output: " outOfRoot.stdout))
-          (assert (mt (dirList (str root "/.asl/cache/nativeTest/outside")) ((ok names) (not (listEmpty? names))) ((err _) false))
+          (assert (match (dirList (str root "/.asl/cache/nativeTest/outside")) ((ok names) (not (listEmpty? names))) ((err _) false))
             "stageOutsideFile! actually staged the absolute out-of-root path under .asl/cache/nativeTest/outside, the documented bypass, not some other route")
           (assert (= removed.exitCode 0) "downstream workspace removed")
           true))))

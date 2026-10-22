@@ -35,7 +35,7 @@ fn ! benchRunCmdMb mb: Int64 budgetMs: Int64 -> Bool
         (elapsedMs (/ (- t1 t0) 1000000))]
     (do
       (assert (ok? receiptRes) (str "runCmd! " (stringFromInt64 mb) "MB must succeed, not swallow an error"))
-      (mt receiptRes
+      (match receiptRes
         ((ok receipt)
           (do (assert (= receipt.exitCode 0) "head|tr must exit 0")
               (assert (ok? (sh/releaseReceipt! receipt)) "runCmd! receipt spool file must release cleanly, leaving none behind")
@@ -73,7 +73,7 @@ fn ! testRunCmdCaptureStaysLinear -> Bool
         (out (proc/exec! (proc/withTimeout (proc/cmd "sh" (list "-c" cmdStr)) 60000)))]
     (do
       (assert (ok? out) "4MB capture must complete within the 60s generous wall-clock budget, not time out (PROC-spoolQuadratic)")
-      (mt out
+      (match out
         ((ok o)
           (do
             (assert (= o.exitCode 0) "head|tr must exit 0")

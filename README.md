@@ -58,13 +58,13 @@ This is one example, not a benchmark. The `(! ...)` sigil frame is the target wi
 enum Shape (circle r: Int64) (square side: Int64)
 
 fn area s: Shape -> Int64
-  (mt s ((circle r) (* 3 (* r r))) ((square a) (* a a)))
+  (match s ((circle r) (* 3 (* r r))) ((square a) (* a a)))
 
 fn runTests -> Bool
   (do (assert (= (area (square 3)) 9) "square") (assert (= (area (circle 1)) 3) "circle") true)
 ```
 
-A function header is a bare column-0 line; its body is indented below. There is no nil, exception or `try`: fallible builtins return `(some v)`/`(none)` or `(err e)`, taken apart with `mt`. User and builtin names are camelCase, predicates end in `?` (`listLength`, `stringContains?`). The full rules are in [`llms.txt`](llms.txt).
+A function header is a bare column-0 line; its body is indented below. There is no nil, exception or `try`: fallible builtins return `(some v)`/`(none)` or `(err e)`, taken apart with `match`. User and builtin names are camelCase, predicates end in `?` (`listLength`, `stringContains?`). The full rules are in [`llms.txt`](llms.txt).
 
 ## Quickstart
 

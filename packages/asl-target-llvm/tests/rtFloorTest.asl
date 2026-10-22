@@ -12,9 +12,9 @@ fn formatDiags ds: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.locus ": [" d.code "] " d.message)) ds) "; ")
 
 fn ! emitted path: String -> String
-  (mt (lk/linkEntry! path)
+  (match (lk/linkEntry! path)
     ((err ds) (do (assert false (str path ": links; " (formatDiags ds))) ""))
-    ((ok m) (mt (llvm/emitLlvmProgramNative! m (str m.name ".main"))
+    ((ok m) (match (llvm/emitLlvmProgramNative! m (str m.name ".main"))
               ((err ds) (do (assert false (str path ": emits; " (formatDiags ds))) ""))
               ((ok code) code))))
 

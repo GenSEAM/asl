@@ -19,10 +19,10 @@ fn mainCallingSource -> String
   "(module q/imain :x [m] :i [(q/iscale :a dep)])\n\nfn m -> Int64\n  (dep/d0)\n"
 
 fn parsed src: String -> (List ast/TopForm)
-  (mt (ast/parse src) ((ok fs) fs) ((err _) (list)))
+  (match (ast/parse src) ((ok fs) fs) ((err _) (list)))
 
 fn ! cpuUs -> Int64
-  (mt (procRusage)
+  (match (procRusage)
     ((err e) (do (assert false (str "procRusage failed: " e)) 0))
     ((ok usage) (+ usage.selfUserUs usage.selfSysUs)))
 
@@ -34,7 +34,7 @@ fn linkedAgainst depForms: (List ast/TopForm) -> (Result ty/SsaModule (List ty/I
 
 fn ! importWorkload n: Int64 -> Int64
   (let [(depForms (parsed (depSource n)))]
-    (mt (linkedAgainst depForms)
+    (match (linkedAgainst depForms)
       ((ok m) (listLength m.functions))
       ((err ds) (do (assert false (str "depSource(" (stringFromInt64 n) ") links: " (listLength ds) " diag(s)")) 0))))
 
@@ -59,8 +59,8 @@ fn ! testHiddenImportsStayHidden -> Bool
         (depForms (parsed depSrc))
         (visibleRes (linkedCalling depForms "visible0"))
         (hiddenRes (linkedCalling depForms "hidden1"))]
-    (do (assert (mt visibleRes ((ok _) true) ((err _) false)) "an export in :x links through the import")
-        (assert (mt hiddenRes ((ok _) false) ((err _) true)) "a dep function not in :x must stay unreachable through the import")
+    (do (assert (match visibleRes ((ok _) true) ((err _) false)) "an export in :x links through the import")
+        (assert (match hiddenRes ((ok _) false) ((err _) true)) "a dep function not in :x must stay unreachable through the import")
         true))
 
 fn ! testImportScalesLinearlyInDepSize -> Bool

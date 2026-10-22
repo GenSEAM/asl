@@ -7,7 +7,7 @@
 
 fn ! asl1Bin! -> String
   (let [(built (nt/prepareRun "asl/packages/asl-compiler/src/asl1.asl" (nt/fingerprint)))]
-    (mt built.binary
+    (match built.binary
       ((some bin) bin)
       ((none) (do (assert false (str "asl1.asl builds natively: " built.reason)) ""))))
 
@@ -185,7 +185,7 @@ fn ! build work: String name: String src: String -> String
       (assert (ok? (fileWrite file src)) (str name ": source written"))
       (let [(built (sh (str (asl1Bin!) " build " file " -o " ll)))]
         (assert (= built.exitCode 0) (str name ": asl1 builds it; exit " built.exitCode "; " built.stdout built.stderr)))
-      (let [(text (mt (fileReadString ll) ((ok t) t) ((err e) (str "unreadable " ll ": " e))))
+      (let [(text (match (fileReadString ll) ((ok t) t) ((err e) (str "unreadable " ll ": " e))))
             (called (filter (fn [(n String)] -> Bool (stringContains? src (str "(" n " "))) (arrayNames)))]
         (do
           (refute (stringContains? text "asl_rt_builtin_array") (str name ": IR neither calls nor declares asl_rt_builtin_array"))
@@ -244,7 +244,7 @@ fn ! testErrors work: String -> Bool
     true)
 
 fn statOf stats: String key: String -> Int64
-  (mt (listGet (stringSplit stats (str ":" key " ")) 1)
+  (match (listGet (stringSplit stats (str ":" key " ")) 1)
     ((none) -1)
     ((some rest) (optionOr (stringToInt64 (optionOr (listHead (stringSplit rest " ")) "")) -1)))
 
@@ -329,11 +329,11 @@ fn diagsText ds: (List irTy/IrDiag) -> String
 
 fn ! testTwoModules work: String -> Bool
   (let [(a (llvm/emitLlvmSource (twoMainSource) "main"))
-        (b (mt (low/lowerSource (twoLibSource)) ((err ds) (err ds)) ((ok m) (llvm/emitLlvmModule m))))]
-    (mt a
+        (b (match (low/lowerSource (twoLibSource)) ((err ds) (err ds)) ((ok m) (llvm/emitLlvmModule m))))]
+    (match a
       ((err ds) (do (assert false (str "twoA emits: " (diagsText ds))) false))
       ((ok aText)
-        (mt b
+        (match b
           ((err ds) (do (assert false (str "twoB emits: " (diagsText ds))) false))
           ((ok bText)
             (do

@@ -298,7 +298,7 @@ fn makeAtomToken bs: Bytes start: Int64 end: Int64 -> tr/Token
   (let [(n (- end start))]
     (if (and (> n 1) (= (bytesGet bs start) 58))
       (tr/makeToken "keyword" start end)
-      (mt (classifyNumber bs start end)
+      (match (classifyNumber bs start end)
         ((some numKind) (tr/makeToken numKind start end))
         ((none) (tr/makeToken "symbol" start end)))))
 

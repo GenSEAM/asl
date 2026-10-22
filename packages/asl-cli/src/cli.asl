@@ -47,10 +47,10 @@ fn shellQuote s: Str -> Str
   (str "'" (stringReplace s "'" "'\\''") "'")
 
 fn checkGateSrc! files: (List Str) count: I64 path: Str srcRes: (Result Str Str) -> (Result Str Str)
-  (mt srcRes ((err _) (err (str "Failed to read gate target file: " path))) ((ok src) (mt (a/parse src) ((err pe) (if (stringContains? pe.msg "not kebab-case") (checkGateFilesStep! (optionOr (listTail files) (list)) (+ count 1)) (err (str path ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": [parse-error] " pe.msg)))) ((ok _) (checkGateFilesStep! (optionOr (listTail files) (list)) (+ count 1))))))
+  (match srcRes ((err _) (err (str "Failed to read gate target file: " path))) ((ok src) (match (a/parse src) ((err pe) (if (stringContains? pe.msg "not kebab-case") (checkGateFilesStep! (optionOr (listTail files) (list)) (+ count 1)) (err (str path ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": [parse-error] " pe.msg)))) ((ok _) (checkGateFilesStep! (optionOr (listTail files) (list)) (+ count 1))))))
 
 fn checkGateFilesStep! files: (List Str) count: I64 -> (Result Str Str)
-  (mt (listHead files) ((none) (ok (str "✓ [Pure ASL Gate] " (stringFromInt64 count) " file(s) verified cleanly."))) ((some path) (checkGateSrc! files count path (fileReadString path))))
+  (match (listHead files) ((none) (ok (str "✓ [Pure ASL Gate] " (stringFromInt64 count) " file(s) verified cleanly."))) ((some path) (checkGateSrc! files count path (fileReadString path))))
 
 fn ! checkGateFiles files: (List Str) -> (Result Str Str)
   (if (listEmpty? files) (err "Usage: asl gate <file1.asl> [file2.asl ...]") (checkGateFilesStep! files 0))
@@ -104,7 +104,7 @@ fn ! cmdCheck args: (List Str) -> (Result Str Str)
   (checkCli/runCheckCommand! args)
 
 fn ! cmdBuild args: (List Str) -> (Result Str Str)
-  (if (listEmpty? args) (err "Usage: asl build [--target <c99|c-embedded>] <file.asl>") (let [(hasTargetFlag (and (>= (listLength args) 2) (= (optionOr (listHead args) "") "--target"))) (target (if hasTargetFlag (optionOr (listGet args 1) "c99") "c99")) (restArgs (if hasTargetFlag (optionOr (listTail (optionOr (listTail args) (list))) (list)) args)) (path (optionOr (listHead restArgs) ""))] (cond ((stringEmpty? path) (err "Usage: asl build [--target <c99|c-embedded>] <file.asl>")) ((and (!= target "c99") (!= target "c-embedded")) (err (str "Target '" target "' is not built into the self-hosting core; it lives in asl-compiler/targets"))) (else (let [(srcRes (fileReadString path))] (mt srcRes ((err ioErr) (err (str "Failed to read source file: " path))) ((ok src) (let [(cres (comp/compileSourceToC99 src path (= target "c-embedded")))] (if cres.ok (ok cres.code) (err (str "Build failed: " (stringJoin cres.diagnostics "\n"))))))))))))
+  (if (listEmpty? args) (err "Usage: asl build [--target <c99|c-embedded>] <file.asl>") (let [(hasTargetFlag (and (>= (listLength args) 2) (= (optionOr (listHead args) "") "--target"))) (target (if hasTargetFlag (optionOr (listGet args 1) "c99") "c99")) (restArgs (if hasTargetFlag (optionOr (listTail (optionOr (listTail args) (list))) (list)) args)) (path (optionOr (listHead restArgs) ""))] (cond ((stringEmpty? path) (err "Usage: asl build [--target <c99|c-embedded>] <file.asl>")) ((and (!= target "c99") (!= target "c-embedded")) (err (str "Target '" target "' is not built into the self-hosting core; it lives in asl-compiler/targets"))) (else (let [(srcRes (fileReadString path))] (match srcRes ((err ioErr) (err (str "Failed to read source file: " path))) ((ok src) (let [(cres (comp/compileSourceToC99 src path (= target "c-embedded")))] (if cres.ok (ok cres.code) (err (str "Build failed: " (stringJoin cres.diagnostics "\n"))))))))))))
 
 ; (:m :ref NATIVE-LOWER-GAPS :do "with no ASL_HOST, run, test and eval go to the native CLI of the toolchain bin/asl names in ASL_CLI_ROOT for every child, not to a guessed path")
 fn resolveHostBinary! -> (Result Str Str)
@@ -115,7 +115,7 @@ fn resolveHostBinary! -> (Result Str Str)
       (if (and (not (stringEmpty? cliRoot)) (ok? (fileStat native)))
         (ok native)
         (err "neither ASL_HOST nor ASL_CLI_ROOT names a runner (asl/host/src was retired by HL-DELETE) -- run through bin/asl, which sets ASL_CLI_ROOT, or set ASL_HOST to a real interpreter binary"))
-      (mt (fileStat envHost)
+      (match (fileStat envHost)
         ((ok _) (ok envHost))
         ((err _) (err (str "ASL_HOST binary not found: " envHost))))))
 
@@ -123,7 +123,7 @@ fn ! cmdEval args: (List Str) -> (Result Str Str)
   (if (listEmpty? args)
     (err "Usage: asl eval <expr>")
     (let [(hostRes (resolveHostBinary!))]
-      (mt hostRes
+      (match hostRes
         ((err e) (err e))
         ((ok hostBin)
          (let [(exprStr (stringJoin args " "))
@@ -137,15 +137,15 @@ fn ! cmdRun args: (List Str) -> (Result Str Str)
   (if (listEmpty? args)
     (err "Usage: asl run <file.asl>")
     (let [(hostRes (resolveHostBinary!))]
-      (mt hostRes
+      (match hostRes
         ((err e) (err e))
         ((ok hostBin)
          (let [(path (optionOr (listHead args) ""))
                (srcRes (fileReadString path))]
-           (mt srcRes
+           (match srcRes
              ((err ioErr) (err (str "Failed to read source file: " path)))
              ((ok src)
-              (mt (a/parse src)
+              (match (a/parse src)
                 ((err pe) (err (str path ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": [parse-error] " pe.msg)))
                 ((ok forms)
                  (let [(diags (chk/checkModule forms (mapEmpty) path))]
@@ -164,7 +164,7 @@ fn ! cmdTest args: (List Str) -> (Result Str Str)
     ((listAny? stringEmpty? args) (err "ERR_EMPTY_PATH: asl test takes one or more non-empty file paths"))
     (else
     (let [(hostRes (resolveHostBinary!))]
-      (mt hostRes
+      (match hostRes
         ((err e) (err e))
         ((ok hostBin)
          (let [(quotedArgs (map (fn [(a Str)] -> Str (shellQuote a)) args))
@@ -175,10 +175,10 @@ fn ! cmdTest args: (List Str) -> (Result Str Str)
              (err (stringTrim (if (stringEmpty? procRes.stderr) procRes.stdout procRes.stderr))))))))))
 
 fn ! cmdParse args: (List Str) -> (Result Str Str)
-  (if (listEmpty? args) (err "Usage: asl parse <file.asl>") (let [(path (optionOr (listHead args) "")) (srcRes (fileReadString path))] (mt srcRes ((err ioErr) (err (str "Failed to read source file: " path))) ((ok src) (mt (a/parse src) ((err pe) (err (str path ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": [parse-error] " pe.msg))) ((ok forms) (ok (str "Parsed " (stringFromInt64 (listLength forms)) " top-level AST form(s)."))))))))
+  (if (listEmpty? args) (err "Usage: asl parse <file.asl>") (let [(path (optionOr (listHead args) "")) (srcRes (fileReadString path))] (match srcRes ((err ioErr) (err (str "Failed to read source file: " path))) ((ok src) (match (a/parse src) ((err pe) (err (str path ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": [parse-error] " pe.msg))) ((ok forms) (ok (str "Parsed " (stringFromInt64 (listLength forms)) " top-level AST form(s)."))))))))
 
 fn ! cmdLint args: (List Str) -> (Result Str Str)
-  (if (listEmpty? args) (err "Usage: asl lint <file.asl>") (let [(path (optionOr (listHead args) "")) (srcRes (fileReadString path))] (mt srcRes ((err ioErr) (err (str "Failed to read source file: " path))) ((ok src) (mt (a/parse src) ((err pe) (err (str "Parse error during lint: " pe.msg))) ((ok forms) (ok (str "✓ " path ": Clean. AST parsed cleanly."))))))))
+  (if (listEmpty? args) (err "Usage: asl lint <file.asl>") (let [(path (optionOr (listHead args) "")) (srcRes (fileReadString path))] (match srcRes ((err ioErr) (err (str "Failed to read source file: " path))) ((ok src) (match (a/parse src) ((err pe) (err (str "Parse error during lint: " pe.msg))) ((ok forms) (ok (str "✓ " path ": Clean. AST parsed cleanly."))))))))
 
 fn outputLine value: Str -> Str
   (if (stringEndsWith? value "\n")
@@ -186,7 +186,7 @@ fn outputLine value: Str -> Str
     value)
 
 fn ! handleDispatchResult cmd: Str args: (List Str) res: (Result Str Str) -> (Result Unit Str)
-  (mt res
+  (match res
     ((ok outputStr) (let [(unused (println (outputLine outputStr)))] (ok ())))
     ((err errStr)
      (if (and (= cmd "lens")
@@ -199,4 +199,4 @@ fn ! executeCli args: (List Str) -> (Result Unit Str)
   (if (listEmpty? args) (let [(unused (println (formatHelp)))] (ok ())) (let [(cmd (optionOr (listHead args) "help")) (cmdArgs (optionOr (listTail args) (list)))] (handleDispatchResult cmd cmdArgs (dispatchCmd cmd cmdArgs))))
 
 fn ! main args: (List Str) -> Int64
-  (mt (executeCli args) ((ok _) 0) ((err _) 1))
+  (match (executeCli args) ((ok _) 0) ((err _) 1))

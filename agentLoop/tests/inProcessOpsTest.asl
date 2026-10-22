@@ -9,7 +9,7 @@ fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
 
 fn insert n: Int64 xs: (List Int64) -> (List Int64)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (list n))
     ((some h) (if (<= n h) (cons n xs) (cons h (insert n (optionOr (listTail xs) (list)))))))
 

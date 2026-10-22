@@ -6,7 +6,7 @@ fn testCrawlerSourceIntegrity! -> Bool
   (let [(cRes (fileReadString "asl/packages/asl-crawler/src/crawler.asl"))
         (sRes (fileReadString "asl/packages/asl-crawler/src/stealth.asl"))
         (bRes (fileReadString "asl/packages/asl-crawler/src/browserDetector.asl"))]
-    (mt cRes
+    (match cRes
       ((err e1) (assert false (str "Failed to read crawler.asl: " e1)))
       ((ok cSrc)
         (do
@@ -18,7 +18,7 @@ fn testCrawlerSourceIntegrity! -> Bool
           (refute (stringContains? cSrc "webcache.googleusercontent.com") "crawler refutes dead Google webcache")
           (refute (stringContains? cSrc "Mach-O") "Zero Mach-O in crawler")
           (refute (stringContains? cSrc "ELF64") "Zero ELF64 in crawler"))))
-    (mt sRes
+    (match sRes
       ((err e2) (assert false (str "Failed to read stealth.asl: " e2)))
       ((ok sSrc)
         (do
@@ -26,7 +26,7 @@ fn testCrawlerSourceIntegrity! -> Bool
           (assert (stringContains? sSrc "fn googlebotProfile") "stealth.asl defines googlebotProfile")
           (assert (stringContains? sSrc "fn chromeProfile") "stealth.asl defines chromeProfile")
           (refute (= sSrc "") "stealth source refutes empty"))))
-    (mt bRes
+    (match bRes
       ((err e3) (assert false (str "Failed to read browserDetector.asl: " e3)))
       ((ok bSrc)
         (do
@@ -38,7 +38,7 @@ fn testCrawlerSourceIntegrity! -> Bool
 
 fn testCrawlerGrammarRegistration! -> Bool
   (let [(gRes (fileReadString "asl/packages/asl-crawler/src/crawler.asl"))]
-    (mt gRes
+    (match gRes
       ((err e) (assert false (str "Failed to read crawler.asl: " e)))
       ((ok gSrc)
         (do
@@ -59,7 +59,7 @@ fn testCrawlerUrlValidation -> Bool
     true)
 
 fn testCrawlerStatusLogic! -> Bool
-  (mt (fileReadString "asl/packages/asl-crawler/src/crawler.asl")
+  (match (fileReadString "asl/packages/asl-crawler/src/crawler.asl")
     ((err e) (do (assert false (str "Failed to read crawler.asl: " e)) false))
     ((ok src)
      (do

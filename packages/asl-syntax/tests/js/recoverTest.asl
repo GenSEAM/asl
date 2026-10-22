@@ -207,7 +207,7 @@ fn checkPositiveSuite! files: (List String) exclusions: (List (Pair String Strin
       true)
     (let [(path (optionOr (listHead files) ""))
           (tl (optionOr (listTail files) (list)))]
-      (mt (findExclusionReason path exclusions)
+      (match (findExclusionReason path exclusions)
         ((some _)
          (checkPositiveSuite! tl exclusions runCount passCount (+ excludedCount 1)))
         ((none)

@@ -23,7 +23,7 @@ fn numbered prefix: String n: Int64 -> (List String)
   (map (fn [(i Int64)] -> String (str prefix i)) (range 0 n))
 
 fn nestedSum names: (List String) -> String
-  (mt (listTail names)
+  (match (listTail names)
     ((some rest) (if (listEmpty? rest)
                    (optionOr (listHead names) "0")
                    (str "(+ " (optionOr (listHead names) "0") " " (nestedSum rest) ")")))
@@ -98,13 +98,13 @@ fn appSource -> String
     "  (+ a (+ b c))"
     ""
     "fn area b: Wider -> Int64"
-    "  (mt b ((box w h) (* w h)))"
+    "  (match b ((box w h) (* w h)))"
     ""
     "fn manyOf n: Int64 -> Many"
     (str "  (cond " (manyOfArms) " (else (a8 1 2 3 4 5 6 7 8)))")
     ""
     "fn manySum m: Many -> Int64"
-    (str "  (mt m " (manySumArms) ")")
+    (str "  (match m " (manySumArms) ")")
     ""
     "fn spin n: Int64 acc: Int64 -> Int64"
     "  (if (= n 0) acc (spin (- n 1) (+ acc (stringLength (idOf \"constant text\")))))"
@@ -159,16 +159,16 @@ fn formatDiags ds: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.locus ": [" d.code "] " d.message)) ds) "; ")
 
 fn ! compiled path: String -> (Result String String)
-  (mt (lk/linkEntry! path)
+  (match (lk/linkEntry! path)
     ((err ds) (err (formatDiags ds)))
-    ((ok m) (mt (llvm/emitLlvmProgramNative! m (str m.name ".main"))
+    ((ok m) (match (llvm/emitLlvmProgramNative! m (str m.name ".main"))
               ((err ds) (err (formatDiags ds)))
               ((ok code) (ok code)))))
 
 fn ! optBin -> (Option String)
   (let [(known (filter (fn [(c String)] -> Bool (= (processRun (str "test -x " c)).exitCode 0))
                         (list "/opt/homebrew/opt/llvm/bin/opt" "/usr/local/opt/llvm/bin/opt")))]
-    (mt (listHead known)
+    (match (listHead known)
       ((some o) (some o))
       ((none) (if (= (processRun "command -v opt >/dev/null 2>&1").exitCode 0) (some "opt") (none)))))
 
@@ -204,7 +204,7 @@ fn ! verified dir: String name: String code: String -> Bool
                  true))
            (deletedEntries))
       (assert (ok? (fileWrite ll code)) (str "fileWrite " ll))
-      (mt (optBin)
+      (match (optBin)
         ((none) (do (println "opt not found on this host, skipping -passes=verify") true))
         ((some o) (let [(v (processRun (str o " -passes=verify -disable-output " ll)))]
                     (do (assert (= v.exitCode 0) (str name ": opt -passes=verify accepts the emitted IR: " v.stderr)) true))))
@@ -293,7 +293,7 @@ fn ! testParity exe: String src: String args: String -> Bool
 
 fn objectsAllocated text: String -> (Option Int64)
   (let [(mark ":objectsAllocated ")]
-    (mt (stringIndexOf text mark)
+    (match (stringIndexOf text mark)
       ((none) (none))
       ((some at) (let [(tail (optionOr (stringSlice text (+ at (stringLength mark)) (stringLength text)) ""))]
                    (stringToInt64 (optionOr (stringSlice tail 0 (optionOr (stringIndexOf tail " ") (stringLength tail))) ""))))))
@@ -319,7 +319,7 @@ fn ! testFixture dir: String -> Bool
       (assert (= (processRun (str "mkdir -p " dir "/objfx")).exitCode 0) "fixture module directory made")
       (assert (ok? (fileWrite src (appSource))) (str "fileWrite " src))
       (assert (ok? (fileWrite (str dir "/objfx/other.asl") (otherSource))) "fileWrite objfx/other.asl")
-      (mt (compiled src)
+      (match (compiled src)
         ((err e) (assert false (str "objfx/app links and emits: " e)))
         ((ok code)
           (do
@@ -347,7 +347,7 @@ fn ! testCapture300 dir: String -> Bool
     (do
       (assert (ok? (fileWrite src (cap300Source))) "fileWrite cap300.asl")
       (assert (stringContains? (recordedCap300).stderr "ERR_LIMIT: more than 256 captured variables") "cap300: the recorded asl-host run refuses more than 256 captures at load")
-      (mt (compiled src)
+      (match (compiled src)
         ((err e) (assert false (str "cap300 links and emits: " e)))
         ((ok code)
           (do
@@ -424,9 +424,9 @@ fn ! testCRecord dir: String -> Bool
       (assert (ok? (fileWrite twin (libTwinSource))) "fileWrite objLibHost.asl")
       (assert (ok? (fileWrite cSrc (cFixture))) "fileWrite objLibMain.c")
       (assert (ok? (fileWrite (str dir "/valrtC.ll") (ssa/cRuntimeModule))) "fileWrite valrtC.ll, the C main's intern and C floor definitions")
-      (mt (low/lowerSource (libSource))
+      (match (low/lowerSource (libSource))
         ((err ds) (assert false (str "objLib lowers: " (formatDiags ds))))
-        ((ok m) (mt (ssa/emitLlvmModule m)
+        ((ok m) (match (ssa/emitLlvmModule m)
                   ((err ds) (assert false (str "objLib emits: " (formatDiags ds))))
                   ((ok code)
                     (do
@@ -448,7 +448,7 @@ fn ! testSymbol dir: String -> Bool
   (let [(m (irTy/ssaModule "objSym" (list) (list) (list) (list) (list)
              (list (irTy/ssaFunction "sym" (list) (list) (irTy/tyVal)
                      (list (irTy/ssaBlock "entry" (list) (list (irTy/ssaInstr "s" (irTy/tyVal) (irTy/opConst (irTy/constSymbol "foo")))) (irTy/termReturn "s")))))))]
-    (mt (llvm/emitLlvmProgram m "sym")
+    (match (llvm/emitLlvmProgram m "sym")
       ((err ds) (assert false (str "objSym emits: " (formatDiags ds))))
       ((ok code)
         (do
@@ -492,7 +492,7 @@ fn ! testEmptyRecord dir: String -> Bool
         (do
           (assert (= interp.stdout "1\n") (str "objEmptyHost: the recorded asl-host run prints 1, got " interp.stdout interp.stderr))
           (map (fn [(entry String)] -> Bool
-                 (mt (llvm/emitLlvmProgram m entry)
+                 (match (llvm/emitLlvmProgram m entry)
                    ((err ds) (do (assert false (str entry " emits: " (formatDiags ds))) true))
                    ((ok code)
                      (do
@@ -520,10 +520,10 @@ fn suiteSource -> String
     "      (- n 7))") "\n") "\n")
 
 fn ! testReport dir: String -> Bool
-  (mt (low/lowerSource (suiteSource))
+  (match (low/lowerSource (suiteSource))
     ((err ds) (assert false (str "objSuite lowers: " (formatDiags ds))))
     ((ok suite)
-      (mt (ssa/emitLlvmModule suite)
+      (match (ssa/emitLlvmModule suite)
         ((err ds) (assert false (str "objSuite emits: " (formatDiags ds))))
         ((ok suiteCode)
           (let [(entry (irTy/ssaModule "objEntry" (list) (list) (list) (list (irTy/ssaExtern "checks" 1)) (list)
@@ -532,7 +532,7 @@ fn ! testReport dir: String -> Bool
                                          (list (irTy/ssaInstr "seven" (irTy/tyVal) (irTy/opConst (irTy/constInt 7)))
                                                (irTy/ssaInstr "r" (irTy/tyVal) (irTy/opCall "checks" (list "seven"))))
                                          (irTy/termReturn "r")))))))]
-            (mt (llvm/emitLlvmProgram entry "start")
+            (match (llvm/emitLlvmProgram entry "start")
               ((err ds) (assert false (str "objEntry emits: " (formatDiags ds))))
               ((ok entryCode)
                 (do

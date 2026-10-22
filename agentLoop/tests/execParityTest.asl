@@ -7,13 +7,13 @@
       (asl/agentLoop/runOps :a r)])
 
 fn items n: p/SexpNode -> (List p/SexpNode)
-  (mt n ((p/sexpList xs) xs) (_ (list)))
+  (match n ((p/sexpList xs) xs) (_ (list)))
 
 fn atomOf n: p/SexpNode -> String
-  (mt n ((p/sexpAtom a) a) (_ ""))
+  (match n ((p/sexpAtom a) a) (_ ""))
 
 fn strOf n: p/SexpNode -> String
-  (mt n ((p/sexpStr s) s) ((p/sexpAtom a) a) (_ ""))
+  (match n ((p/sexpStr s) s) ((p/sexpAtom a) a) (_ ""))
 
 fn at xs: (List p/SexpNode) i: Int64 -> p/SexpNode
   (optionOr (listGet xs i) (p/sexpAtom ""))
@@ -25,7 +25,7 @@ fn restItems n: p/SexpNode -> (List p/SexpNode)
   (optionOr (listTail (items n)) (list))
 
 fn part xs: (List p/SexpNode) name: String -> (List p/SexpNode)
-  (mt (listHead (filter (fn [n] (= (headAtom n) name)) xs))
+  (match (listHead (filter (fn [n] (= (headAtom n) name)) xs))
     ((some n) (restItems n))
     ((none) (list)))
 
@@ -48,7 +48,7 @@ fn opField n: p/SexpNode root: String base: String -> (Pair String c/KvVal)
       (else (pair k (c/kvStr "True")))))
 
 fn valOf n: p/SexpNode -> x/Val
-  (mt n
+  (match n
     ((p/sexpStr s) (x/vStr s))
     ((p/sexpAtom a)
       (cond
@@ -60,7 +60,7 @@ fn valOf n: p/SexpNode -> x/Val
       (cond
         ((listEmpty? xs) (x/vStrs (list)))
         ((= (headAtom (at xs 0)) "r") (x/vRecs (map recOf xs)))
-        ((listAll? (fn [e] (mt e ((p/sexpStr _) true) (_ false))) xs) (x/vStrs (map strOf xs)))
+        ((listAll? (fn [e] (match e ((p/sexpStr _) true) (_ false))) xs) (x/vStrs (map strOf xs)))
         (else (x/vPair (optionOr (stringToInt64 (atomOf (at xs 0))) 0) (optionOr (stringToInt64 (atomOf (at xs 1))) 0))))))
 
 fn recOf n: p/SexpNode -> (List (Pair String x/Val))
@@ -85,7 +85,7 @@ fn serStrs xs: (List String) -> String
   (str "(" (stringJoin (map c/serString xs) " ") ")")
 
 fn ! runOk argv: (List String) cwd: (Option String) env: (Option (List String)) -> Bool
-  (mt (procSpawnv argv cwd env)
+  (match (procSpawnv argv cwd env)
     ((ok sp) (= (procWaitPid sp.pid false) (ok (some 0))))
     ((err _) false))
 
@@ -115,7 +115,7 @@ fn ! replayRun calls: (List (Pair String t/AslRun)) sentLog: String counter: Str
   (fn [form rootDir]
     (let [k (optionOr (stringToInt64 (stringTrim (readOr counter))) 0)
           logged (and (appendLine sentLog (c/serString form)) (writeOk counter (stringFromInt64 (+ k 1))))]
-      (mt (listGet calls k)
+      (match (listGet calls k)
         ((some cl) (if logged (pairSecond cl) (t/aslRun 97 "" "replay log write failed")))
         ((none) (t/aslRun 98 "" (str "replay: no recorded call " (stringFromInt64 k)))))))
 
@@ -166,7 +166,7 @@ fn ! tableCase xs: (List p/SexpNode) effects: (List (Pair String String)) -> Boo
         want (partStr xs "want")
         a1 (strOf (at xs 1))
         got (cond
-              ((= kind "shape") (mt (listHead (filter (fn [pr] (= (pairFirst pr) a1)) (x/opShapes))) ((some pr) (pairSecond pr)) ((none) "(missing)")))
+              ((= kind "shape") (match (listHead (filter (fn [pr] (= (pairFirst pr) a1)) (x/opShapes))) ((some pr) (pairSecond pr)) ((none) "(missing)")))
               ((= kind "accepted") (serStrs (x/acceptedOpsForMode a1 effects)))
               ((= kind "terminal") (serStrs (x/terminalForms a1)))
               ((= kind "undeclared") (x/serRec (x/undeclaredAnswer a1 (strOf (at xs 2)) effects)))
@@ -192,8 +192,8 @@ fn ! runCases rows: (List (List p/SexpNode)) base: String template: String repo:
         (+ (if matched 0 1) (runCases (c/restOf rows) base template repo effects)))))
 
 fn rowOf line: String -> (List p/SexpNode)
-  (mt (p/planTree line)
-    ((ok nodes) (mt (listHead nodes) ((some nd) (items nd)) ((none) (list))))
+  (match (p/planTree line)
+    ((ok nodes) (match (listHead nodes) ((some nd) (items nd)) ((none) (list))))
     ((err _) (list)))
 
 fn ! runTests -> Bool

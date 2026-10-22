@@ -31,7 +31,7 @@ fn paramLine? line: String -> Bool
          (or (= w "->") (and (> (stringLength w) 1) (and (stringEndsWith? w ":") (not (stringStartsWith? w ":")))))))
 
 fn headerJoin header: String rest: (List String) taken: Int64 -> (Option (Pair String Int64))
-  (mt (listHead rest)
+  (match (listHead rest)
     ((none) (none))
     ((some line) (let [(joined (str header " " (stringTrim line)))]
                    (cond
@@ -54,6 +54,6 @@ fn joinFnHeader text: String -> String
         (rewritten (if (= originalFirst first) text (stringJoin (cons first rest) "\n")))]
     (if (or (not (or (stringStartsWith? first "fn ") (stringStartsWith? first "fn!"))) (headerArrow? first))
       rewritten
-      (mt (headerJoin first rest 0)
+      (match (headerJoin first rest 0)
         ((none) rewritten)
         ((some j) (stringJoin (cons (pairFirst j) (listAppend (map (fn [(_ Int64)] -> String "") (range 0 (pairSecond j))) (listDrop rest (pairSecond j)))) "\n")))))

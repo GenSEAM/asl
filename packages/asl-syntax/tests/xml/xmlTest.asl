@@ -189,7 +189,7 @@ fn testRoundTripTrackedCorpus! -> Bool
     (assert (= totalFiles 33) "total tracked svg + xml count is exactly 33")
     (let [(pipeline (fn [(bs Bytes)] -> (Result Bytes String)
                       (let [(root (xml/parseXmlBytes bs))]
-                        (mt (tr/checkTiling root (bytesLength bs))
+                        (match (tr/checkTiling root (bytesLength bs))
                           ((err msg) (err (str "tiling error: " msg)))
                           ((ok _) (ok (pr/printTreeBytes! bs root)))))))
           (report (crp/runCorpusOnFiles! pipeline allFiles))]
@@ -201,14 +201,14 @@ fn testRoundTripTrackedCorpus! -> Bool
 fn testTrackedTruncatedSvgDetectedAsNotWf! -> Bool
   (let [(trunc1 "harness/results/svg/compare/synthwaveBaseTruncated.svg")
         (trunc2 "harness/results/svg/compare/isometricBaseTruncated.svg")]
-    (mt (fileReadString trunc1)
+    (match (fileReadString trunc1)
       ((err _) (assert false "failed to read synthwaveBaseTruncated.svg"))
       ((ok text1)
        (let [(root1 (xml/parseXml text1))]
          (assert (not (xml/isWellFormed root1)) "synthwaveBaseTruncated is not well-formed")
          (assert (sym/hasErrorNode root1) "synthwaveBaseTruncated has error node")
          (assert (= (pr/printTreeString text1 root1) text1) "synthwaveBaseTruncated round trips"))))
-    (mt (fileReadString trunc2)
+    (match (fileReadString trunc2)
       ((err _) (assert false "failed to read isometricBaseTruncated.svg"))
       ((ok text2)
        (let [(root2 (xml/parseXml text2))]
@@ -244,7 +244,7 @@ fn testReparseGuard -> Bool
         (parseFn (fn [(t String)] -> (Result tr/Node String) (ok (xml/parseXml t))))
         (cleanRes (sym/applySpanEdit cleanXml 15 18 "two" parseFn))]
     (assert (ok? cleanRes) "reparse guard succeeds on clean edit")
-    (mt cleanRes
+    (match cleanRes
       ((ok editRes)
        (do
          (assert (= editRes.newText "<doc><item id=\"two\"/></doc>") "new text matches clean edit")
@@ -252,7 +252,7 @@ fn testReparseGuard -> Bool
       ((err _) (assert false "expected ok clean edit")))
     (let [(badRes (sym/applySpanEdit cleanXml 15 18 "two</broken" parseFn))]
       (assert (err? badRes) "reparse guard rejects edit introducing Error node")
-      (mt badRes
+      (match badRes
         ((ok _) (assert false "expected error for bad edit"))
         ((err msg) (assert (stringContains? msg "Error node") "error names Error node"))))
     true)
@@ -264,7 +264,7 @@ fn testXmlBenchPerf! -> Bool
         (allFiles (listAppend svgFiles xmlFiles))
         (t0 (monotonicNs))
         (_ (fold (fn [(acc Unit) (f String)] -> Unit
-                   (mt (fileReadBytes f)
+                   (match (fileReadBytes f)
                      ((err _) ())
                      ((ok bs)
                       (let [(root (xml/parseXmlBytes bs))]
@@ -350,7 +350,7 @@ fn testCommentNodeAndTokenSpans -> Bool
           (kids (tr/nodeChildren rootComment))]
       (assert (> (listLength kids) 0) "rootComment has kids")
       (let [(firstElem (optionOr (listHead kids) (tr/elemToken (tr/makeToken "" 0 0))))]
-        (mt firstElem
+        (match firstElem
           ((elemToken _) (assert false "expected comment node"))
           ((elemNode n)
            (do
@@ -372,7 +372,7 @@ fn testCDataNodeAndTokenSpans -> Bool
           (elemKids (tr/nodeChildren elem))]
       (assert (= (listLength elemKids) 3) "elem has 3 children")
       (let [(cdataElem (optionOr (listGet elemKids 1) (tr/elemToken (tr/makeToken "" 0 0))))]
-        (mt cdataElem
+        (match cdataElem
           ((elemToken _) (assert false "expected cdata node"))
           ((elemNode n)
            (do
@@ -392,7 +392,7 @@ fn testPINodeAndTokenSpans -> Bool
           (rootPI (xml/parseXml docPI))
           (piKids (tr/nodeChildren rootPI))
           (firstElem (optionOr (listHead piKids) (tr/elemToken (tr/makeToken "" 0 0))))]
-      (mt firstElem
+      (match firstElem
         ((elemToken _) (assert false "expected pi node"))
         ((elemNode n)
          (do
@@ -408,7 +408,7 @@ fn testPINodeAndTokenSpans -> Bool
           (rootProlog (xml/parseXml docProlog))
           (prologKids (tr/nodeChildren rootProlog))
           (firstElem (optionOr (listHead prologKids) (tr/elemToken (tr/makeToken "" 0 0))))]
-      (mt firstElem
+      (match firstElem
         ((elemToken _) (assert false "expected prolog node"))
         ((elemNode n)
          (do
@@ -428,7 +428,7 @@ fn testDoctypeNodeAndTokenSpans -> Bool
           (rootDTD (xml/parseXml docDTD))
           (dtdKids (tr/nodeChildren rootDTD))
           (firstElem (optionOr (listHead dtdKids) (tr/elemToken (tr/makeToken "" 0 0))))]
-      (mt firstElem
+      (match firstElem
         ((elemToken _) (assert false "expected doctype node"))
         ((elemNode n)
          (do
@@ -453,7 +453,7 @@ fn testParseAndParseBytes -> Bool
         (resBadBytes (xml/parseBytes badBytes))]
     (assert (ok? resGood) "parse returns ok on well-formed XML")
     (assert (err? resBad) "parse returns err on not-wf XML")
-    (mt resBad
+    (match resBad
       ((ok _) (assert false "expected err on not-wf XML"))
       ((err msg)
        (do
@@ -461,7 +461,7 @@ fn testParseAndParseBytes -> Bool
          (assert (stringContains? msg "6") "error offset is 6"))))
     (assert (ok? resGoodBytes) "parseBytes returns ok on well-formed XML")
     (assert (err? resBadBytes) "parseBytes returns err on not-wf XML")
-    (mt resBadBytes
+    (match resBadBytes
       ((ok _) (assert false "expected err on not-wf XML bytes"))
       ((err msgBytes)
        (do

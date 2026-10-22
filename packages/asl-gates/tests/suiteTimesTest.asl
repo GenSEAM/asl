@@ -9,13 +9,13 @@ fn sh! command: String -> String
       (stringTrim res.stdout)))
 
 fn readText! path: String -> String
-  (mt (fileReadString path) ((ok text) text) ((err e) (str "unreadable: " e)))
+  (match (fileReadString path) ((ok text) text) ((err e) (str "unreadable: " e)))
 
 fn errText r: (Result (Map String Int64) String) -> String
-  (mt r ((ok _) "") ((err e) e))
+  (match r ((ok _) "") ((err e) e))
 
 fn msOf r: (Result (Map String Int64) String) suite: String -> Int64
-  (mt r ((ok m) (optionOr (mapGet m suite) -1)) ((err _) -1))
+  (match r ((ok m) (optionOr (mapGet m suite) -1)) ((err _) -1))
 
 fn ! testLedgerRoundTrip! dir: String -> Bool
   (let [(path (str dir "/nested/run/gateTimes.asn"))
@@ -27,7 +27,7 @@ fn ! testLedgerRoundTrip! dir: String -> Bool
         (text (readText! path))
         (absent (st/readTimes! (str dir "/absent/gateTimes.asn")))]
     (do
-      (assert (ok? first) (str "first ledger write succeeds, creating the parent directories: " (mt first ((ok _) "") ((err e) e))))
+      (assert (ok? first) (str "first ledger write succeeds, creating the parent directories: " (match first ((ok _) "") ((err e) e))))
       (assert (= (msOf firstRead "tests/aTest.asl") 1200) "written row reads back")
       (assert (= (msOf firstRead weird) 5) "a suite with a quote and a backslash round-trips")
       (assert (ok? second) "second ledger write succeeds")
@@ -86,7 +86,7 @@ fn ! timedRun! order: (List Int64) -> (Pair Int64 (List sr/Done))
   (let [(t0 (monotonicNs))
         (res (sr/runJobsBy! (jobs) order 2 (none) (none)))
         (wall (/ (- (monotonicNs) t0) 1000000))]
-    (pair wall (mt res ((ok ds) ds) ((err e) (list)))))
+    (pair wall (match res ((ok ds) ds) ((err e) (list)))))
 
 fn withinHalfSecond d: sr/Done s: Int64 -> Bool
   (let [(ms (sr/doneMs d))]
@@ -96,7 +96,7 @@ fn ! testLongestFirst! dir: String -> Bool
   (let [(path (str dir "/pool/gateTimes.asn"))
         (seeded (st/writeTimes! path (list (st/SuiteTime :suite "long" :ms 4000) (st/SuiteTime :suite "s1" :ms 1000) (st/SuiteTime :suite "s2" :ms 1000)
                                            (st/SuiteTime :suite "s3" :ms 1000) (st/SuiteTime :suite "s4" :ms 1000))))
-        (known (mt (st/readTimes! path) ((ok m) m) ((err _) (mapEmpty))))
+        (known (match (st/readTimes! path) ((ok m) m) ((err _) (mapEmpty))))
         (order (st/startOrder (names) known))
         (ordered (timedRun! order))
         (dones (pairSecond ordered))
@@ -151,7 +151,7 @@ fn ! testRunnerRecords! dir: String -> Bool
       true))
 
 fn ! runTests -> Bool
-  (let [(dir (optionOr (mt (sr/makeTempDir! "aslSuiteTimesTest") ((ok d) (some d)) ((err _) (none))) ""))]
+  (let [(dir (optionOr (match (sr/makeTempDir! "aslSuiteTimesTest") ((ok d) (some d)) ((err _) (none))) ""))]
     (do
       (assert (not (stringEmpty? dir)) "scratch directory created")
       (assert (testLedgerRoundTrip! dir) "ledger write and read round-trip")

@@ -119,17 +119,17 @@ fn unquote s: String -> String
       s))
 
 fn elementKind elem: tr/TreeElement -> String
-  (mt elem
+  (match elem
     ((tr/elemToken tok) tok.kind)
     ((tr/elemNode node) node.kind))
 
 fn elementStart elem: tr/TreeElement -> Int64
-  (mt elem
+  (match elem
     ((tr/elemToken tok) tok.start)
     ((tr/elemNode node) node.start))
 
 fn elementEnd elem: tr/TreeElement -> Int64
-  (mt elem
+  (match elem
     ((tr/elemToken tok) tok.end)
     ((tr/elemNode node) node.end))
 
@@ -142,7 +142,7 @@ fn elementValue text: String elem: tr/TreeElement -> String
   (unquote (elementRawText text elem))
 
 fn isTriviaOrDelim elem: tr/TreeElement -> Bool
-  (mt elem
+  (match elem
     ((tr/elemToken tok)
      (let [(k tok.kind)]
        (or (tr/isTriviaToken tok)
@@ -175,7 +175,7 @@ fn findKeywordVectorNode kids: (List tr/TreeElement) key: String text: String ->
         (if (listEmpty? tail)
           (none)
           (let [(nextElem (optionOr (listHead tail) head))]
-            (mt nextElem
+            (match nextElem
               ((tr/elemNode n) (some n))
               ((tr/elemToken _) (findKeywordVectorNode tail key text)))))
         (findKeywordVectorNode tail key text))))
@@ -188,7 +188,7 @@ fn parseAsnQueryNode node: tr/Node text: String -> QueryPattern
         (optVal (findKeywordValue kids ":optional" text))
         (isOpt (= optVal "true"))
         (childrenVecOpt (findKeywordVectorNode kids ":children" text))]
-    (mt childrenVecOpt
+    (match childrenVecOpt
       ((some vecNode)
        (let [(vecKids (filterMeaningful vecNode.children))
              (childPats (parseAsnChildList vecKids text (list)))]
@@ -201,7 +201,7 @@ fn parseAsnChildList kids: (List tr/TreeElement) text: String acc: (List QueryPa
     (listReverse acc)
     (let [(head (optionOr (listHead kids) (tr/elemToken (tr/makeToken "" 0 0))))
           (tail (optionOr (listTail kids) (list)))]
-      (mt head
+      (match head
         ((tr/elemNode n)
          (let [(pat (parseAsnQueryNode n text))]
            (parseAsnChildList tail text (cons pat acc))))
@@ -222,7 +222,7 @@ fn parseSexprPatternLoop kids: (List tr/TreeElement) text: String kind: String c
     (QueryPattern :kind kind :capture capture :text textVal :optional false :children (listReverse accKids))
     (let [(head (optionOr (listHead kids) (tr/elemToken (tr/makeToken "" 0 0))))
           (tail (optionOr (listTail kids) (list)))]
-      (mt head
+      (match head
         ((tr/elemToken tok)
          (let [(tokVal (elementRawText text head))]
            (if (stringStartsWith? tokVal "@")
@@ -252,7 +252,7 @@ fn queryCompile input: String -> QueryPattern
         (if (listEmpty? forms)
           (queryPatternKindDummy)
           (let [(f (optionOr (listHead forms) (tr/elemNode root)))]
-            (mt f
+            (match f
               ((tr/elemNode n) (parseAsnQueryNode n trimmed))
               ((tr/elemToken _) (queryPatternKindDummy))))))
       (let [(root (prn/parseString trimmed))
@@ -260,13 +260,13 @@ fn queryCompile input: String -> QueryPattern
         (if (listEmpty? forms)
           (queryPatternKindDummy)
           (let [(f (optionOr (listHead forms) (tr/elemNode root)))]
-            (mt f
+            (match f
               ((tr/elemNode n) (parseSexprPatternNode n trimmed))
               ((tr/elemToken _) (queryPatternKindDummy))))))))
 
 
 fn isLanguageKeyword kw: String -> Bool
-  (listContains? (list "fn" "module" "schema" "enum" "macro" "test" "type" "let" "if" "cond" "mt" "do" "assert") kw)
+  (listContains? (list "fn" "module" "schema" "enum" "macro" "test" "type" "let" "if" "cond" "match" "do" "assert") kw)
 
 fn kindMatches pat: QueryPattern elem: tr/TreeElement text: String -> Bool
   (let [(patKind pat.kind)
@@ -293,7 +293,7 @@ fn matchElement pat: QueryPattern elem: tr/TreeElement text: String -> Bool
       (let [(pKids pat.children)]
         (if (listEmpty? pKids)
           true
-          (mt elem
+          (match elem
             ((tr/elemToken _) false)
             ((tr/elemNode node)
              (let [(elemKids (filterMeaningful node.children))]
@@ -340,8 +340,8 @@ fn makeCaptureFromElem capName: String elem: tr/TreeElement text: String s: src/
         (raw (elementRawText text elem))
         (val (elementValue text elem))
         (posOpt (src/sourcePosAt s start))
-        (line (mt posOpt ((some p) p.line) ((none) 1)))
-        (col (mt posOpt ((some p) p.byteCol) ((none) 1)))]
+        (line (match posOpt ((some p) p.line) ((none) 1)))
+        (col (match posOpt ((some p) p.byteCol) ((none) 1)))]
     (QueryCapture :name capName :value val :text raw :start start :end end :line line :col col))
 
 fn collectChildCaptures elemKids: (List tr/TreeElement) eIdx: Int64 pIdx: Int64 pKids: (List QueryPattern) text: String s: src/Source acc: (List QueryCapture) -> (List QueryCapture)
@@ -369,7 +369,7 @@ fn collectCaptures pat: QueryPattern elem: tr/TreeElement text: String s: src/So
         (pKids pat.children)]
     (if (listEmpty? pKids)
       topCap
-      (mt elem
+      (match elem
         ((tr/elemToken _) topCap)
         ((tr/elemNode node)
          (let [(elemKids (filterMeaningful node.children))
@@ -384,7 +384,7 @@ fn traverseKids kids: (List tr/TreeElement) pat: QueryPattern text: String s: sr
     acc
     (let [(head (optionOr (listHead kids) (tr/elemToken (tr/makeToken "" 0 0))))
           (tail (optionOr (listTail kids) (list)))]
-      (mt head
+      (match head
         ((tr/elemNode n)
          (let [(nextAcc (traverseMatches n pat text s acc))]
            (traverseKids tail pat text s nextAcc)))
@@ -500,7 +500,7 @@ fn validateSemver s: String -> Bool
                                    (some rest)
                                    (none)))))
                            (some s)))]
-            (mt noBuild
+            (match noBuild
               ((none) false)
               ((some sNoBuild)
                (let [(hasHyphen (stringContains? sNoBuild "-"))
@@ -514,7 +514,7 @@ fn validateSemver s: String -> Bool
                                         (some corePart)
                                         (none)))))
                                 (some sNoBuild)))]
-                 (mt coreOpt
+                 (match coreOpt
                    ((none) false)
                    ((some core)
                     (let [(coreParts (stringSplit core "."))]
@@ -535,7 +535,7 @@ fn validateCronItem item: String min: Int64 max: Int64 -> Bool
     (if (stringStartsWith? item "*/")
       (let [(stepStr (optionOr (stringSlice item 2 (stringLength item)) ""))
             (stepOpt (stringToInt64 stepStr))]
-        (mt stepOpt
+        (match stepOpt
           ((some step) (and (> step 0) (<= step max)))
           ((none) false)))
       (if (stringContains? item "-")
@@ -544,14 +544,14 @@ fn validateCronItem item: String min: Int64 max: Int64 -> Bool
             false
             (let [(startOpt (stringToInt64 (optionOr (listGet rParts 0) "")))
                   (endOpt (stringToInt64 (optionOr (listGet rParts 1) "")))]
-              (mt startOpt
+              (match startOpt
                 ((some start)
-                 (mt endOpt
+                 (match endOpt
                    ((some end) (and (>= start min) (and (<= start end) (<= end max))))
                    ((none) false)))
                 ((none) false)))))
         (let [(numOpt (stringToInt64 item))]
-          (mt numOpt
+          (match numOpt
             ((some num) (and (>= num min) (<= num max)))
             ((none) false))))))
 
@@ -592,7 +592,7 @@ fn validateCron s: String -> Bool
                  (validateCronField fDow 0 7))))))))))
 
 fn nearSnippet text: String s: src/Source line: Int64 col: Int64 -> String
-  (mt (src/sourceLineStart s line)
+  (match (src/sourceLineStart s line)
     ((some start)
      (let [(end (src/sourceLineEnd s line))
            (lineStr (optionOr (stringSlice text start end) ""))
@@ -639,7 +639,7 @@ fn collectSemverLintItems matches: (List QueryMatch) text: String s: src/Source 
     (let [(head (optionOr (listHead matches) (QueryMatch :pattern (queryPatternKindDummy) :captures (list))))
           (tail (optionOr (listTail matches) (list)))
           (cOpt (queryCaptureGet head "@ver"))]
-      (mt cOpt
+      (match cOpt
         ((none) (collectSemverLintItems tail text s acc))
         ((some c)
          (let [(val (captureValue c))]
@@ -663,7 +663,7 @@ fn collectCronLintItems matches: (List QueryMatch) text: String s: src/Source ac
     (let [(head (optionOr (listHead matches) (QueryMatch :pattern (queryPatternKindDummy) :captures (list))))
           (tail (optionOr (listTail matches) (list)))
           (cOpt (queryCaptureGet head "@cron"))]
-      (mt cOpt
+      (match cOpt
         ((none) (collectCronLintItems tail text s acc))
         ((some c)
          (let [(val (captureValue c))]
@@ -702,7 +702,7 @@ fn collectDuplicateItems matches: (List QueryMatch) capName: String text: String
     (let [(head (optionOr (listHead matches) (QueryMatch :pattern (queryPatternKindDummy) :captures (list))))
           (tail (optionOr (listTail matches) (list)))
           (cOpt (queryCaptureGet head capName))]
-      (mt cOpt
+      (match cOpt
         ((none) (collectDuplicateItems tail capName text s seen acc))
         ((some c)
          (let [(name (captureValue c))]
@@ -721,7 +721,7 @@ fn collectDefinedIds matches: (List QueryMatch) acc: (List String) -> (List Stri
     (let [(head (optionOr (listHead matches) (QueryMatch :pattern (queryPatternKindDummy) :captures (list))))
           (tail (optionOr (listTail matches) (list)))
           (cOpt (queryCaptureGet head "@id"))]
-      (mt cOpt
+      (match cOpt
         ((some c) (collectDefinedIds tail (cons (captureValue c) acc)))
         ((none) (collectDefinedIds tail acc)))))
 
@@ -740,7 +740,7 @@ fn collectUnboundItems matches: (List QueryMatch) definedIds: (List String) text
     (let [(head (optionOr (listHead matches) (QueryMatch :pattern (queryPatternKindDummy) :captures (list))))
           (tail (optionOr (listTail matches) (list)))
           (cOpt (queryCaptureGet head "@deps"))]
-      (mt cOpt
+      (match cOpt
         ((none) (collectUnboundItems tail definedIds text s acc))
         ((some c)
          (let [(start (captureStart c))
@@ -751,7 +751,7 @@ fn collectUnboundItems matches: (List QueryMatch) definedIds: (List String) text
            (if (listEmpty? forms)
              (collectUnboundItems tail definedIds text s acc)
              (let [(formNode (optionOr (listHead forms) (tr/elemToken (tr/makeToken "" 0 0))))]
-               (mt formNode
+               (match formNode
                  ((tr/elemToken _) (collectUnboundItems tail definedIds text s acc))
                  ((tr/elemNode n)
                   (let [(kids (filterMeaningful n.children))
@@ -769,8 +769,8 @@ fn checkDepKids kids: (List tr/TreeElement) definedIds: (List String) sliceText:
         (let [(relStart (elementStart head))
               (absStart (+ baseOffset relStart))
               (posOpt (src/sourcePosAt s absStart))
-              (line (mt posOpt ((some p) p.line) ((none) 1)))
-              (col (mt posOpt ((some p) p.byteCol) ((none) 1)))
+              (line (match posOpt ((some p) p.line) ((none) 1)))
+              (col (match posOpt ((some p) p.byteCol) ((none) 1)))
               (expected (str "unbound reference '" refName "'"))
               (near (nearSnippet fullText s line col))
               (item (rep/makeLeftItem line col expected near))]

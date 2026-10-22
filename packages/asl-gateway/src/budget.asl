@@ -68,17 +68,17 @@
   (:f expectedCost Int64))
 
 fn requiredBudgetField props: (Map String rd/SExpr) key: String -> (Result rd/SExpr String)
-  (mt (mapGet props key)
+  (match (mapGet props key)
     ((some expr) (ok expr))
     ((none) (err (str "budget config missing :" key))))
 
 fn budgetString expr: rd/SExpr what: String -> (Result String String)
-  (mt (cfg/asnScalar expr)
+  (match (cfg/asnScalar expr)
     ((cfg/scalarStr value) (ok value))
     (_ (err (str "budget config " what " must be a string"))))
 
 fn budgetQuotedString expr: rd/SExpr what: String -> (Result String String)
-  (mt expr
+  (match expr
     ((rd/sexprAtom raw)
       (if (and (stringStartsWith? raw "\"") (stringEndsWith? raw "\""))
         (budgetString expr what)
@@ -86,22 +86,22 @@ fn budgetQuotedString expr: rd/SExpr what: String -> (Result String String)
     (_ (err (str "budget config " what " must be quoted"))))
 
 fn budgetInt expr: rd/SExpr what: String -> (Result Int64 String)
-  (mt (cfg/asnScalar expr)
+  (match (cfg/asnScalar expr)
     ((cfg/scalarInt value) (ok value))
     (_ (err (str "budget config " what " must be an integer"))))
 
 fn budgetBool expr: rd/SExpr what: String -> (Result Bool String)
-  (mt (cfg/asnScalar expr)
+  (match (cfg/asnScalar expr)
     ((cfg/scalarBool value) (ok value))
     (_ (err (str "budget config " what " must be a boolean"))))
 
 fn budgetScope scopeExpr: rd/SExpr keyExpr: rd/SExpr -> (Result BudgetScope String)
-  (mt (budgetString scopeExpr "line scope")
+  (match (budgetString scopeExpr "line scope")
     ((err e) (err e))
     ((ok scopeName)
       (if (= scopeName "global")
         (ok (scopeGlobal))
-        (mt (budgetQuotedString keyExpr "scope key")
+        (match (budgetQuotedString keyExpr "scope key")
           ((err e) (err e))
           ((ok key)
             (cond
@@ -111,7 +111,7 @@ fn budgetScope scopeExpr: rd/SExpr keyExpr: rd/SExpr -> (Result BudgetScope Stri
               (else (err "budget config has invalid scope or empty scope key"))))))))
 
 fn budgetPeriod expr: rd/SExpr -> (Result Period String)
-  (mt (budgetString expr "line period")
+  (match (budgetString expr "line period")
     ((err e) (err e))
     ((ok name)
       (cond
@@ -121,40 +121,40 @@ fn budgetPeriod expr: rd/SExpr -> (Result Period String)
         (else (err (str "budget config has unknown period " name))))))
 
 fn parseBudgetLine form: rd/SExpr -> (Result BudgetLine String)
-  (mt (cfg/asnProps form (some ":line"))
+  (match (cfg/asnProps form (some ":line"))
     ((err e) (err e))
     ((ok props)
-      (mt (requiredBudgetField props "id")
+      (match (requiredBudgetField props "id")
         ((err e) (err e))
         ((ok idExpr)
-          (mt (budgetQuotedString idExpr "line id")
+          (match (budgetQuotedString idExpr "line id")
             ((err e) (err e))
             ((ok id)
-              (mt (requiredBudgetField props "scope")
+              (match (requiredBudgetField props "scope")
                 ((err e) (err e))
                 ((ok scopeExpr)
-                  (mt (requiredBudgetField props "key")
+                  (match (requiredBudgetField props "key")
                     ((err e) (err e))
                     ((ok keyExpr)
-                      (mt (budgetScope scopeExpr keyExpr)
+                      (match (budgetScope scopeExpr keyExpr)
                         ((err e) (err e))
                         ((ok scope)
-                          (mt (requiredBudgetField props "period")
+                          (match (requiredBudgetField props "period")
                             ((err e) (err e))
                             ((ok periodExpr)
-                              (mt (budgetPeriod periodExpr)
+                              (match (budgetPeriod periodExpr)
                                 ((err e) (err e))
                                 ((ok period)
-                                  (mt (requiredBudgetField props "cap")
+                                  (match (requiredBudgetField props "cap")
                                     ((err e) (err e))
                                     ((ok capExpr)
-                                      (mt (budgetInt capExpr "line cap")
+                                      (match (budgetInt capExpr "line cap")
                                         ((err e) (err e))
                                         ((ok cap)
-                                          (mt (requiredBudgetField props "approved")
+                                          (match (requiredBudgetField props "approved")
                                             ((err e) (err e))
                                             ((ok approvedExpr)
-                                              (mt (budgetBool approvedExpr "line approval")
+                                              (match (budgetBool approvedExpr "line approval")
                                                 ((err e) (err e))
                                                 ((ok approved)
                                                   (if (or (stringEmpty? id) (< cap 0))
@@ -162,30 +162,30 @@ fn parseBudgetLine form: rd/SExpr -> (Result BudgetLine String)
                                                     (ok (BudgetLine :id id :scope scope :period period :cap cap :approved approved)))))))))))))))))))))))))))
 
 fn parseBudgetLines forms: (List rd/SExpr) -> (Result (List BudgetLine) String)
-  (mt (listHead forms)
+  (match (listHead forms)
     ((none) (ok []))
     ((some form)
-      (mt (parseBudgetLine form)
+      (match (parseBudgetLine form)
         ((err e) (err e))
         ((ok line)
-          (mt (parseBudgetLines (optionOr (listTail forms) []))
+          (match (parseBudgetLines (optionOr (listTail forms) []))
             ((err e) (err e))
             ((ok rest) (ok (cons line rest))))))))
 
 fn parseBudgetApproval form: rd/SExpr -> (Result Approval String)
-  (mt (cfg/asnProps form (some ":approval"))
+  (match (cfg/asnProps form (some ":approval"))
     ((err e) (err e))
     ((ok props)
-      (mt (requiredBudgetField props "endpoint")
+      (match (requiredBudgetField props "endpoint")
         ((err e) (err e))
         ((ok endpointExpr)
-          (mt (budgetQuotedString endpointExpr "approval endpoint")
+          (match (budgetQuotedString endpointExpr "approval endpoint")
             ((err e) (err e))
             ((ok endpoint)
-              (mt (requiredBudgetField props "cap")
+              (match (requiredBudgetField props "cap")
                 ((err e) (err e))
                 ((ok capExpr)
-                  (mt (budgetInt capExpr "approval cap")
+                  (match (budgetInt capExpr "approval cap")
                     ((err e) (err e))
                     ((ok cap)
                       (if (or (stringEmpty? endpoint) (< cap 0))
@@ -193,41 +193,41 @@ fn parseBudgetApproval form: rd/SExpr -> (Result Approval String)
                         (ok (Approval :endpoint endpoint :cap cap)))))))))))))
 
 fn parseBudgetApprovals forms: (List rd/SExpr) -> (Result (List Approval) String)
-  (mt (listHead forms)
+  (match (listHead forms)
     ((none) (ok []))
     ((some form)
-      (mt (parseBudgetApproval form)
+      (match (parseBudgetApproval form)
         ((err e) (err e))
         ((ok approval)
-          (mt (parseBudgetApprovals (optionOr (listTail forms) []))
+          (match (parseBudgetApprovals (optionOr (listTail forms) []))
             ((err e) (err e))
             ((ok rest) (ok (cons approval rest))))))))
 
 fn parseBudgetVector expr: rd/SExpr what: String -> (Result (List rd/SExpr) String)
-  (mt expr
+  (match expr
     ((rd/sexprVect items) (ok items))
     (_ (err (str "budget config :" what " must be a vector"))))
 
 fn parseBudgetConfig form: rd/SExpr maxBuckets: Int64 -> (Result Ledger String)
-  (mt (cfg/asnProps form (some ":budgetConfig"))
+  (match (cfg/asnProps form (some ":budgetConfig"))
     ((err e) (err e))
     ((ok props)
-      (mt (requiredBudgetField props "lines")
+      (match (requiredBudgetField props "lines")
         ((err e) (err e))
         ((ok linesExpr)
-          (mt (parseBudgetVector linesExpr "lines")
+          (match (parseBudgetVector linesExpr "lines")
             ((err e) (err e))
             ((ok lineForms)
-              (mt (parseBudgetLines lineForms)
+              (match (parseBudgetLines lineForms)
                 ((err e) (err e))
                 ((ok lines)
-                  (mt (requiredBudgetField props "approvals")
+                  (match (requiredBudgetField props "approvals")
                     ((err e) (err e))
                     ((ok approvalsExpr)
-                      (mt (parseBudgetVector approvalsExpr "approvals")
+                      (match (parseBudgetVector approvalsExpr "approvals")
                         ((err e) (err e))
                         ((ok approvalForms)
-                          (mt (parseBudgetApprovals approvalForms)
+                          (match (parseBudgetApprovals approvalForms)
                             ((err e) (err e))
                             ((ok approvals)
                               (if (< maxBuckets 0)
@@ -238,7 +238,7 @@ fn makeLedger lines: (List BudgetLine) approvals: (List Approval) maxBuckets: In
   (Ledger :lines lines :approvals approvals :buckets [] :maxBuckets (if (> maxBuckets 0) maxBuckets 0))
 
 fn periodStart period: Period nowMs: Int64 -> Int64
-  (mt period
+  (match period
     ((periodHour) (* (/ nowMs 3600000) 3600000))
     ((periodDay) (* (/ nowMs 86400000) 86400000))
     ((periodUnit) 0))
@@ -247,7 +247,7 @@ fn bucketCount ledger: Ledger -> Int64
   (listLength ledger.buckets)
 
 fn scopeMatches scope: BudgetScope endpoint: String provider: String unit: String -> Bool
-  (mt scope
+  (match scope
     ((scopeEndpoint key) (= key endpoint))
     ((scopeProvider key) (= key provider))
     ((scopeUnit key) (= key unit))
@@ -257,12 +257,12 @@ fn lineMatches line: BudgetLine event: Charge -> Bool
   (scopeMatches line.scope event.endpoint event.provider event.unit)
 
 fn endpointApprovalScopeMatches scope: BudgetScope endpoint: String -> Bool
-  (mt scope
+  (match scope
     ((scopeEndpoint key) (= key endpoint))
     (_ false))
 
 fn spentFor buckets: (List Bucket) lineId: String start: Int64 -> Int64
-  (mt (listHead buckets)
+  (match (listHead buckets)
     ((none) 0)
     ((some bucket)
       (if (and (= bucket.lineId lineId) (= bucket.periodStart start))
@@ -270,7 +270,7 @@ fn spentFor buckets: (List Bucket) lineId: String start: Int64 -> Int64
         (spentFor (optionOr (listTail buckets) []) lineId start))))
 
 fn allWithin lines: (List BudgetLine) buckets: (List Bucket) event: Charge -> Bool
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) true)
     ((some line)
       (if (lineMatches line event)
@@ -283,7 +283,7 @@ fn allWithin lines: (List BudgetLine) buckets: (List Bucket) event: Charge -> Bo
         (allWithin (optionOr (listTail lines) []) buckets event))))
 
 fn upsertBucket buckets: (List Bucket) lineId: String start: Int64 cost: Int64 -> (List Bucket)
-  (mt (listHead buckets)
+  (match (listHead buckets)
     ((none) [(Bucket :lineId lineId :periodStart start :amount cost)])
     ((some bucket)
       (if (and (= bucket.lineId lineId) (= bucket.periodStart start))
@@ -291,7 +291,7 @@ fn upsertBucket buckets: (List Bucket) lineId: String start: Int64 cost: Int64 -
         (listAppend [bucket] (upsertBucket (optionOr (listTail buckets) []) lineId start cost)))))
 
 fn updateBuckets ledger: Ledger lines: (List BudgetLine) event: Charge -> (List Bucket)
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) ledger.buckets)
     ((some line)
       (if (lineMatches line event)
@@ -309,21 +309,21 @@ fn charge ledger: Ledger event: Charge -> (Result Ledger BudgetError)
         (ok (with ledger :buckets updated)))))
 
 fn approvalExists approvals: (List Approval) endpoint: String cap: Int64 -> Bool
-  (mt (listHead approvals)
+  (match (listHead approvals)
     ((none) false)
     ((some approval)
       (or (and (= approval.endpoint endpoint) (= approval.cap cap))
           (approvalExists (optionOr (listTail approvals) []) endpoint cap))))
 
 fn approvalForEndpointExists approvals: (List Approval) endpoint: String -> Bool
-  (mt (listHead approvals)
+  (match (listHead approvals)
     ((none) false)
     ((some approval)
       (or (= approval.endpoint endpoint)
           (approvalForEndpointExists (optionOr (listTail approvals) []) endpoint))))
 
 fn approvalForPaidEndpoint lines: (List BudgetLine) approvals: (List Approval) endpoint: String -> Bool
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) true)
     ((some line)
       (if (and (> line.cap 0) (endpointApprovalScopeMatches line.scope endpoint))
@@ -332,7 +332,7 @@ fn approvalForPaidEndpoint lines: (List BudgetLine) approvals: (List Approval) e
         (approvalForPaidEndpoint (optionOr (listTail lines) []) approvals endpoint))))
 
 fn approvedRaisedCaps lines: (List BudgetLine) approvals: (List Approval) endpoint: String -> Bool
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) true)
     ((some line)
       (if (and (> line.cap 0) (endpointApprovalScopeMatches line.scope endpoint))
@@ -357,7 +357,7 @@ fn lineCovers lines: (List BudgetLine) endpoint: String provider: String unit: S
   (listAny? (fn [(line BudgetLine)] -> Bool (scopeMatches line.scope endpoint provider unit)) lines)
 
 fn deployCovered ledger: Ledger endpoint: String -> Bool
-  (and (listAny? (fn [(line BudgetLine)] -> Bool (mt line.scope ((scopeEndpoint key) (= key endpoint)) ((scopeGlobal) true) (_ false))) ledger.lines)
+  (and (listAny? (fn [(line BudgetLine)] -> Bool (match line.scope ((scopeEndpoint key) (= key endpoint)) ((scopeGlobal) true) (_ false))) ledger.lines)
        (approvalForEndpointExists ledger.approvals endpoint))
 
 fn spendDecision ledger: Ledger endpoint: String provider: String unit: String cost: Int64 nowMs: Int64 -> Decision
@@ -366,7 +366,7 @@ fn spendDecision ledger: Ledger endpoint: String provider: String unit: String c
     (decisionForCost ledger endpoint provider unit cost nowMs))
 
 fn gate ledger: Ledger action: Action nowMs: Int64 -> Decision
-  (mt action
+  (match action
     ((actionDeploy endpoint)
       (if (not (deployCovered ledger endpoint))
         (deny "deploy lacks a budget line and approval for its endpoint")
@@ -381,12 +381,12 @@ fn gate ledger: Ledger action: Action nowMs: Int64 -> Decision
     ((actionRequest endpoint provider unit cost) (decisionForCost ledger endpoint provider unit cost nowMs)))
 
 fn filterCandidates ledger: Ledger candidates: (List Candidate) nowMs: Int64 -> (List Candidate)
-  (mt (listHead candidates)
+  (match (listHead candidates)
     ((none) [])
     ((some candidate)
       (let [(rest (filterCandidates ledger (optionOr (listTail candidates) []) nowMs))
             (decision (gate ledger (actionRequest candidate.endpoint candidate.provider candidate.unit candidate.expectedCost) nowMs))]
-        (mt decision
+        (match decision
           ((allow) (listAppend [candidate] rest))
           ((deny _) rest)))))
 

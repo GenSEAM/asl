@@ -24,15 +24,15 @@ fn soaks -> (List Soak)
         (Soak :name "allocMix" :size 20000))
 
 fn ! buildExe! libs: rc/Libs dir: String name: String mode: String -> (Result String String)
-  (mt (lk/linkEntry! (str "bench/native/" name ".asl"))
+  (match (lk/linkEntry! (str "bench/native/" name ".asl"))
     ((err ds) (err (str name " links: " (rc/diagText ds))))
     ((ok m)
-     (mt (llvm/emitLlvmProgramNativeWith! m (str m.name ".main") mode)
+     (match (llvm/emitLlvmProgramNativeWith! m (str m.name ".main") mode)
        ((err ds) (err (str name " emits in mode " mode ": " (rc/diagText ds))))
        ((ok code)
         (let [(ll (str dir "/" name "." mode ".ll"))
               (exe (str dir "/" name "." mode))]
-          (mt (fileWrite ll code)
+          (match (fileWrite ll code)
             ((err e) (err (str "cannot write " ll ": " e)))
             ((ok _)
              (let [(linked (rc/sh (rc/linkCmd libs mode ll exe)))]
@@ -48,9 +48,9 @@ fn largeLive stats: String -> Int64
   (- (rc/statOf stats "large") (rc/statOf stats "largeFreed"))
 
 fn collector notrace: Bool -> String
-  (mt (libc/libcFacts "darwin-arm64")
+  (match (libc/libcFacts "darwin-arm64")
     ((none) "")
-    ((some facts) (mt (gr/collectorTextWith facts (target/nativeTargetFacts "arm64-apple-darwin") notrace) ((ok text) text) ((err _) ""))))
+    ((some facts) (match (gr/collectorTextWith facts (target/nativeTargetFacts "arm64-apple-darwin") notrace) ((ok text) text) ((err _) ""))))
 
 fn testUntracedCollector -> Bool
   (let [(traced (collector false))
@@ -116,27 +116,27 @@ fn untracedSoaks -> (List Soak)
   (list (Soak :name "slice" :size 1000))
 
 fn ! checkUntracedOnly libs: rc/Libs dir: String s: Soak -> Bool
-  (mt (buildExe! libs dir s.name "0")
+  (match (buildExe! libs dir s.name "0")
     ((err e) (do (assert false (str "tracing build: " e)) false))
-    ((ok t) (mt (buildExe! libs dir s.name "notrace")
+    ((ok t) (match (buildExe! libs dir s.name "notrace")
               ((err e) (do (assert false (str "untraced RC build: " e)) false))
               ((ok u) (checkUntraced s t u)))))
 
 fn ! checkSoak libs: rc/Libs dir: String s: Soak -> Bool
-  (mt (buildExe! libs dir s.name "0")
+  (match (buildExe! libs dir s.name "0")
     ((err e) (do (assert false (str "tracing build: " e)) false))
     ((ok t)
-     (mt (buildExe! libs dir s.name "1")
+     (match (buildExe! libs dir s.name "1")
        ((err e) (do (assert false (str "RC build: " e)) false))
        ((ok c)
-        (mt (buildExe! libs dir s.name "asan")
+        (match (buildExe! libs dir s.name "asan")
           ((err e) (do (assert false (str "RC ASan build: " e)) false))
-          ((ok a) (mt (buildExe! libs dir s.name "notrace")
+          ((ok a) (match (buildExe! libs dir s.name "notrace")
                     ((err e) (do (assert false (str "untraced RC build: " e)) false))
                     ((ok u) (and (checkRuns s t c a) (checkUntraced s t u))))))))))
 
 fn ! runTests -> Bool
-  (mt (rc/runtimes!)
+  (match (rc/runtimes!)
     ((err e) (do (assert false (str "rcSoakTest runtimes: " e)) false))
     ((ok libs)
      (let [(dir (str (optionOr (envGet "TMPDIR") "/tmp") "/rcSoakTest." (procSelf) "." (monotonicNs)))

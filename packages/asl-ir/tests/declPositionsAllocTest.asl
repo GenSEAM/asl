@@ -7,7 +7,7 @@ fn repeatOnto n: Int64 unit: String acc: String -> String
 
 fn ! cpuMicros -> Int64
   (let [(usageResult (procRusage))]
-    (mt usageResult
+    (match usageResult
       ((err e) (do (assert (ok? usageResult) (str "procRusage failed: " e)) 0))
       ((ok usage) (+ usage.selfUserUs usage.selfSysUs))))
 
@@ -18,7 +18,7 @@ fn ! largeFixture -> String
   (repeatOnto 10 (lowerSrc) "")
 
 fn lineOfLineStart text: String needle: String -> Int64
-  (mt (stringIndexOf text needle)
+  (match (stringIndexOf text needle)
     ((none) -1)
     ((some idx) (+ 2 (stringCountChar (optionOr (stringSlice text 0 idx) "") "\n"))))
 

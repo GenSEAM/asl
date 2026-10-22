@@ -211,13 +211,13 @@ fn testDirectStepParsing -> Bool
     true)
 
 fn findField fs: (List asn/AsnField) key: String -> asn/AsnValue
-  (mt (listHead (filter (fn [(f asn/AsnField)] -> Bool (= f.key key)) fs))
+  (match (listHead (filter (fn [(f asn/AsnField)] -> Bool (= f.key key)) fs))
     ((some f) f.val)
     ((none) (asn/asnNil)))
 
 fn checkKwEntry kw: (Map String String) item: asn/AsnValue okSoFar: Bool -> Bool
   (and okSoFar
-       (mt item
+       (match item
          ((asn/asnRec fs)
           (let [(k (optionOr (asn/asnStringValue (findField fs ":localKey")) ""))
                 (expV (optionOr (asn/asnStringValue (findField fs ":localVal")) ""))
@@ -234,13 +234,13 @@ fn checkArgsEqual gotArgs: (List String) expArgs: (List asn/AsnValue) -> Bool
                         (range 0 (listLength gotArgs)))))
 
 fn checkOneStepCase! acc: Int64 rec: asn/AsnValue -> Int64
-  (mt rec
+  (match rec
     ((asn/asnRec fs)
      (let [(formOpt (asn/asnStringValue (findField fs ":form")))
            (opOpt (asn/asnStringValue (findField fs ":op")))
            (kwVal (findField fs ":kw"))
            (argsVal (findField fs ":args"))]
-       (mt formOpt
+       (match formOpt
          ((some form)
           (let [(stepRes (asn/parseStep form))
                 (step (resultOr stepRes (asn/AsnStep :op "<parseStep error>" :kwargs (mapEmpty) :args (list))))
@@ -254,7 +254,7 @@ fn checkOneStepCase! acc: Int64 rec: asn/AsnValue -> Int64
             (if (and opMatches (and kwSizeMatches (and kwValsMatch argsMatch)))
               acc
               (do
-                (println (str "Step mismatch for: " form "\n  got op: " step.op " exp op: " expectedOp (mt stepRes ((err e) (str " error: " e)) ((ok _) ""))))
+                (println (str "Step mismatch for: " form "\n  got op: " step.op " exp op: " expectedOp (match stepRes ((err e) (str " error: " e)) ((ok _) ""))))
                 (+ acc 1)))))
          ((none) (+ acc 1)))))
     (_ (+ acc 1)))
@@ -263,14 +263,14 @@ fn crFormText -> String
   "(:echo :message \"a\\rb\")"
 
 fn crForm? rec: asn/AsnValue -> Bool
-  (mt rec
+  (match rec
     ((asn/asnRec fs) (= (asn/asnStringValue (findField fs ":form")) (some (crFormText))))
     (_ false))
 
 fn recField rec: asn/AsnValue key: String -> (Option String)
-  (mt rec
+  (match rec
     ((asn/asnRec fs)
-     (mt (listHead (asn/vecItems (findField fs key)))
-       ((some kv) (mt kv ((asn/asnRec kfs) (asn/asnStringValue (findField kfs ":localVal"))) (_ (none))))
+     (match (listHead (asn/vecItems (findField fs key)))
+       ((some kv) (match kv ((asn/asnRec kfs) (asn/asnStringValue (findField kfs ":localVal"))) (_ (none))))
        ((none) (none))))
     (_ (none)))

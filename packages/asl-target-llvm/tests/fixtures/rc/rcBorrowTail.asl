@@ -3,8 +3,8 @@
   :i [])
 
 fn total xs: (List Int64) acc: Int64 -> Int64
-  (mt (listHead xs)
-    ((some x) (mt (listTail xs) ((some t) (total t (+ acc x))) ((none) (+ acc x))))
+  (match (listHead xs)
+    ((some x) (match (listTail xs) ((some t) (total t (+ acc x))) ((none) (+ acc x))))
     ((none) acc))
 
 fn probe n: Int64 -> Int64

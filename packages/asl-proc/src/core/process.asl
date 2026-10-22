@@ -35,13 +35,13 @@ fn formatTimeoutSeconds ms: Int64 -> String
   (let [(sec (/ ms 1000)) (fraction (mod (/ ms 100) 10))] (if (< ms 1000) (str "0." (stringFromInt64 (/ ms 100))) (if (> fraction 0) (str (stringFromInt64 sec) "." (stringFromInt64 fraction)) (stringFromInt64 sec))))
 
 fn buildShellCmd c: ProcessCmd stdinPath: String -> String
-  (let [(b c.bin) (args c.args) (quotedBin (quoteShellArg b)) (quotedArgs (map quoteShellArg args)) (baseCmd (if (listEmpty? quotedArgs) quotedBin (str quotedBin " " (stringJoin quotedArgs " ")))) (envKeys (mapKeys c.env)) (envPrefix (if (listEmpty? envKeys) "" (let [(entries (map (fn [(k String)] -> String (let [(v (optionOr (mapGet c.env k) ""))] (str k "=" (quoteShellArg v)))) envKeys))] (str "env " (stringJoin entries " ") " ")))) (cwdPrefix (mt c.cwd ((some d) (str "cd " (quoteShellArg d) " && ")) ((none) ""))) (cmdWithEnv (str cwdPrefix envPrefix baseCmd)) (stdinOpt c.stdinData) (stdinPart (mt stdinOpt ((some s) (if (stringEmpty? s) "< /dev/null" (if (stringEmpty? stdinPath) "" (str "< " (quoteShellArg stdinPath))))) ((none) "< /dev/null"))) (innerCmd (mt stdinOpt ((some s) (if (and (not (stringEmpty? s)) (stringEmpty? stdinPath)) (str "printf '%s' " (quoteShellArg s) " | ( " cmdWithEnv " )") (str "( " cmdWithEnv " ) " stdinPart))) ((none) (str "( " cmdWithEnv " ) " stdinPart)))) (timeout c.timeoutMs)] (if (<= timeout 0) innerCmd (let [(tSec (formatTimeoutSeconds timeout))] (str "S=$(mktemp 2>/dev/null || echo /tmp/.asl_wd_sentinel_$$); rm -f $S; ( " innerCmd " ) & P=$!; (sleep " tSec " >/dev/null 2>&1 < /dev/null && touch $S && kill -9 $P 2>/dev/null) >/dev/null 2>&1 < /dev/null & W=$!; wait $P 2>/dev/null; R=$?; { kill -9 $W && wait $W; } 2>/dev/null; if [ -f $S ]; then rm -f $S; exit 124; else rm -f $S; exit $R; fi"))))
+  (let [(b c.bin) (args c.args) (quotedBin (quoteShellArg b)) (quotedArgs (map quoteShellArg args)) (baseCmd (if (listEmpty? quotedArgs) quotedBin (str quotedBin " " (stringJoin quotedArgs " ")))) (envKeys (mapKeys c.env)) (envPrefix (if (listEmpty? envKeys) "" (let [(entries (map (fn [(k String)] -> String (let [(v (optionOr (mapGet c.env k) ""))] (str k "=" (quoteShellArg v)))) envKeys))] (str "env " (stringJoin entries " ") " ")))) (cwdPrefix (match c.cwd ((some d) (str "cd " (quoteShellArg d) " && ")) ((none) ""))) (cmdWithEnv (str cwdPrefix envPrefix baseCmd)) (stdinOpt c.stdinData) (stdinPart (match stdinOpt ((some s) (if (stringEmpty? s) "< /dev/null" (if (stringEmpty? stdinPath) "" (str "< " (quoteShellArg stdinPath))))) ((none) "< /dev/null"))) (innerCmd (match stdinOpt ((some s) (if (and (not (stringEmpty? s)) (stringEmpty? stdinPath)) (str "printf '%s' " (quoteShellArg s) " | ( " cmdWithEnv " )") (str "( " cmdWithEnv " ) " stdinPart))) ((none) (str "( " cmdWithEnv " ) " stdinPart)))) (timeout c.timeoutMs)] (if (<= timeout 0) innerCmd (let [(tSec (formatTimeoutSeconds timeout))] (str "S=$(mktemp 2>/dev/null || echo /tmp/.asl_wd_sentinel_$$); rm -f $S; ( " innerCmd " ) & P=$!; (sleep " tSec " >/dev/null 2>&1 < /dev/null && touch $S && kill -9 $P 2>/dev/null) >/dev/null 2>&1 < /dev/null & W=$!; wait $P 2>/dev/null; R=$?; { kill -9 $W && wait $W; } 2>/dev/null; if [ -f $S ]; then rm -f $S; exit 124; else rm -f $S; exit $R; fi"))))
 
 fn buildShellCmdArgs b: String args: (List String) stdinVal: String -> String
   (let [(c (ProcessCmd :bin b :args args :env (mapEmpty) :cwd (none) :timeoutMs 5000 :stdinData (if (stringEmpty? stdinVal) (none) (some stdinVal))))] (buildShellCmd c ""))
 
 fn envRowKey row: String -> String
-  (mt (stringIndexOf row "=") ((some i) (optionOr (stringSlice row 0 i) row)) ((none) row))
+  (match (stringIndexOf row "=") ((some i) (optionOr (stringSlice row 0 i) row)) ((none) row))
 
 fn childEnv! overrides: (Map String String) -> (Option (List String))
   (let [(keys (mapKeys overrides))]
@@ -65,19 +65,19 @@ fn readyOn ready: (List (Pair Int64 Int64)) fd: Int64 -> Bool
 fn ! stepStdin sp: SpawnedProc io: ExecIo -> ExecIo
   (if (stringEmpty? io.pending)
     (do (fdClose sp.stdin) (with io :pending "" :inOpen false))
-    (mt (fdWrite sp.stdin io.pending)
+    (match (fdWrite sp.stdin io.pending)
       ((ok n) (with io :pending (optionOr (stringSlice io.pending n (stringLength io.pending)) "") :inOpen true))
       ((err e) (if (= e "wouldBlock") io (do (fdClose sp.stdin) (with io :pending "" :inOpen false))))))
 
 fn ! stepOut sp: SpawnedProc io: ExecIo -> ExecIo
-  (mt (fdRead sp.stdout 65536)
+  (match (fdRead sp.stdout 65536)
     ((ok chunk) (if (stringEmpty? chunk)
       (do (fdClose sp.stdout) (with io :outOpen false))
       (with io :outOpen true :out (str io.out chunk))))
     ((err e) (if (= e "wouldBlock") io (do (fdClose sp.stdout) (with io :outOpen false)))))
 
 fn ! stepErr sp: SpawnedProc io: ExecIo -> ExecIo
-  (mt (fdRead sp.stderr 65536)
+  (match (fdRead sp.stderr 65536)
     ((ok chunk) (if (stringEmpty? chunk)
       (do (fdClose sp.stderr) (with io :errOpen false))
       (with io :errOpen true :errText (str io.errText chunk))))
@@ -92,7 +92,7 @@ fn ! pumpIo sp: SpawnedProc io: ExecIo deadlineNs: Int64 -> (Result ExecIo Int64
     (let [(leftMs (/ (- deadlineNs (monotonicNs)) 1000000))]
       (if (<= leftMs 0)
         (do (closeOpen sp io) (err 0))
-        (mt (fdPoll (pollSet sp io) leftMs)
+        (match (fdPoll (pollSet sp io) leftMs)
           ((err _) (do (closeOpen sp io) (err 1)))
           ((ok ready)
             (let [(io1 (if (and io.inOpen (readyOn ready sp.stdin)) (stepStdin sp io) io))
@@ -107,16 +107,16 @@ fn ! execCapture! c: ProcessCmd stripOutput: Bool -> (Result ProcessOutput Proce
   (let [(b c.bin) (timeoutMsVal c.timeoutMs) (startNs (monotonicNs))]
     (if (<= timeoutMsVal 0)
       (err (timeout timeoutMsVal))
-      (mt (procSpawnv (listAppend (list b) c.args) c.cwd (childEnv! c.env))
+      (match (procSpawnv (listAppend (list b) c.args) c.cwd (childEnv! c.env))
         ((err e) (err (spawnError b e)))
         ((ok sp)
           (let [(nb (fdNonBlocking sp.stdin true))
                 (io0 (ExecIo :pending (optionOr c.stdinData "") :inOpen true :outOpen true :errOpen true :out "" :errText ""))
                 (pumped (pumpIo sp io0 (+ startNs (* timeoutMsVal 1000000))))]
-            (mt pumped
+            (match pumped
               ((err _) (do (procKill (- 0 sp.pid) "SIGKILL") (procWaitPid sp.pid false) (err (timeout timeoutMsVal))))
               ((ok io)
-                (mt (procWaitPid sp.pid false)
+                (match (procWaitPid sp.pid false)
                   ((err e) (err (executionFailed -1 e)))
                   ((ok code) (ok (ProcessOutput :exitCode (optionOr code -1) :stdout (if stripOutput (stripTrailingNewline io.out) io.out) :stderr (if stripOutput (stripTrailingNewline io.errText) io.errText) :durationMs (/ (- (monotonicNs) startNs) 1000000))))))))))))
 
@@ -127,7 +127,7 @@ fn ! execRaw! c: ProcessCmd -> (Result ProcessOutput ProcessError)
   (execCapture! c false)
 
 fn runSimple! bin: String args: (List String) -> (Result String ProcessError)
-  (mt (exec! (cmd bin args)) ((ok out) (if (= out.exitCode 0) (ok out.stdout) (err (executionFailed out.exitCode out.stderr)))) ((err e) (err e)))
+  (match (exec! (cmd bin args)) ((ok out) (if (= out.exitCode 0) (ok out.stdout) (err (executionFailed out.exitCode out.stderr)))) ((err e) (err e)))
 
 fn makeProcessReceipt exitCode: Int64 durationMs: Int64 peakRssMb: Int64 spoolPath: String summary: String -> ProcessReceipt
   (ProcessReceipt :exitCode exitCode :durationMs durationMs :peakRssMb peakRssMb :spoolPath spoolPath :summary summary)

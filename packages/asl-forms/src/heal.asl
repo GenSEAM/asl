@@ -14,7 +14,7 @@
 (schema Edit (:f start Int64) (:f end Int64) (:f with String))
 
 fn healRuleNames -> (List String)
-  (list "delimiterBalance" "lineHeader" "freeComment" "fnHeaderUnwrap" "bodyIndent" "condClauses" "letBindingVector" "testPredicate" "symbolRename" "effectMark")
+  (list "delimiterBalance" "lineHeader" "freeComment" "retiredSpelling" "fnHeaderUnwrap" "bodyIndent" "condClauses" "letBindingVector" "testPredicate" "symbolRename" "effectMark")
 
 ; (:m :do "reader: byte-offset S-expressions; strings and ; comments are skipped as atoms/blank so edits never land inside them")
 
@@ -70,33 +70,33 @@ fn readSx text: String -> (List Sx)
     (pairFirst (readSeq text bs (bytesLength bs) 0 (list))))
 
 fn sxStart x: Sx -> Int64
-  (mt x ((sxAtom _ s _) s) ((sxList _ _ s _) s))
+  (match x ((sxAtom _ s _) s) ((sxList _ _ s _) s))
 
 fn sxEnd x: Sx -> Int64
-  (mt x ((sxAtom _ _ e) e) ((sxList _ _ _ e) e))
+  (match x ((sxAtom _ _ e) e) ((sxList _ _ _ e) e))
 
 fn atomText x: Sx -> String
-  (mt x ((sxAtom t _ _) t) ((sxList _ _ _ _) ""))
+  (match x ((sxAtom t _ _) t) ((sxList _ _ _ _) ""))
 
 fn listItems x: Sx -> (List Sx)
-  (mt x ((sxAtom _ _ _) (list)) ((sxList _ items _ _) items))
+  (match x ((sxAtom _ _ _) (list)) ((sxList _ items _ _) items))
 
 fn parenList? x: Sx -> Bool
-  (mt x ((sxAtom _ _ _) false) ((sxList o _ _ _) (= o 40)))
+  (match x ((sxAtom _ _ _) false) ((sxList o _ _ _) (= o 40)))
 
 fn bracketList? x: Sx -> Bool
-  (mt x ((sxAtom _ _ _) false) ((sxList o _ _ _) (= o 91)))
+  (match x ((sxAtom _ _ _) false) ((sxList o _ _ _) (= o 91)))
 
 fn headIs? x: Sx name: String -> Bool
-  (mt (listHead (listItems x)) ((some h) (= (atomText h) name)) ((none) false))
+  (match (listHead (listItems x)) ((some h) (= (atomText h) name)) ((none) false))
 
 fn allLists x: Sx -> (List Sx)
-  (mt x
+  (match x
     ((sxAtom _ _ _) (list))
     ((sxList _ items _ _) (cons x (fold (fn [(acc (List Sx)) (c Sx)] -> (List Sx) (listAppend acc (allLists c))) (list) items))))
 
 fn allAtoms x: Sx -> (List Sx)
-  (mt x
+  (match x
     ((sxAtom _ _ _) (list x))
     ((sxList _ items _ _) (fold (fn [(acc (List Sx)) (c Sx)] -> (List Sx) (listAppend acc (allAtoms c))) (list) items)))
 
@@ -109,7 +109,7 @@ fn forestAtoms forest: (List Sx) -> (List Sx)
 ; (:m :do "edits: sorted by start (an insertion before a replacement at the same offset), an edit overlapping the previously kept one is dropped (a later round takes it), then applied right to left")
 
 fn tailrec keepDisjoint es: (List Edit) lastEnd: Int64 acc: (List Edit) -> (List Edit)
-  (mt (listHead es)
+  (match (listHead es)
     ((none) (listReverse acc))
     ((some e) (let [(rest (optionOr (listTail es) (list)))]
                 (if (< e.start lastEnd) (keepDisjoint rest lastEnd acc) (keepDisjoint rest (max lastEnd e.end) (cons e acc))))))
@@ -144,11 +144,11 @@ fn lineOf text: String at: Int64 -> Int64
 
 fn lowerDiags text: String path: String -> (List ty/Diagnostic)
   (map (fn [(x Sx)] -> ty/Diagnostic (diagOf "ERR_LOWER_UNSUPPORTED" "'let' without a binding vector is outside the lowered subset" (lineOf text (sxStart x)) 1 path))
-       (filter (fn [(x Sx)] -> Bool (and (parenList? x) (and (headIs? x "let") (mt (listGet (listItems x) 1) ((some b) (parenList? b)) ((none) false)))))
+       (filter (fn [(x Sx)] -> Bool (and (parenList? x) (and (headIs? x "let") (match (listGet (listItems x) 1) ((some b) (parenList? b)) ((none) false)))))
                (forestLists (readSx text))))
 
 fn checkText text: String deps: (Map String r/ModuleSummary) path: String -> (List ty/Diagnostic)
-  (mt (a/parseForTypeCheck text)
+  (match (a/parseForTypeCheck text)
     ((err pe) (list (diagOf "parse" pe.msg pe.line pe.col path)))
     ((ok forms) (chk/checkModuleSource forms deps path text)))
 
@@ -176,7 +176,7 @@ fn ruleDelimiterBalance text: String -> (List String)
 
 ; (:m :do "rule lineHeader: the paren-free header lines (module X / doc \"...\" / exports a, b) become (module X :x [a b]) with the doc kept as a meta comment")
 fn headerValue lines: (List String) key: String -> (Option String)
-  (mt (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? l (str key " "))) lines))
+  (match (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? l (str key " "))) lines))
     ((some l) (some (stringTrim (slice l (+ (stringLength key) 1) (stringLength l)))))
     ((none) none))
 
@@ -184,7 +184,7 @@ fn headerLine? l: String -> Bool
   (or (stringStartsWith? l "module ") (or (stringStartsWith? l "doc ") (or (stringStartsWith? l "exports ") (stringEmpty? (stringTrim l)))))
 
 fn tailrec takeWhileLoop p: (fn [String] -> Bool) xs: (List String) acc: (List String) -> (List String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (listReverse acc))
     ((some x) (if (p x) (takeWhileLoop p (optionOr (listTail xs) (list)) (cons x acc)) (listReverse acc))))
 
@@ -193,11 +193,11 @@ fn ruleLineHeader text: String -> (List String)
         (headLen (listLength (takeWhileLoop headerLine? lines (list))))
         (head (optionOr (listSlice lines 0 headLen) (list)))
         (body (listDrop lines headLen))]
-    (mt (headerValue head "module")
+    (match (headerValue head "module")
       ((none) (list))
       ((some name)
-        (let [(exports (mt (headerValue head "exports") ((some e) (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (stringSplit (stringReplace e "," " ") " "))) ((none) (list))))
-              (doc (mt (headerValue head "doc") ((some d) (list (str "; (:m :doc " d ")"))) ((none) (list))))]
+        (let [(exports (match (headerValue head "exports") ((some e) (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (stringSplit (stringReplace e "," " ") " "))) ((none) (list))))
+              (doc (match (headerValue head "doc") ((some d) (list (str "; (:m :doc " d ")"))) ((none) (list))))]
           (list (stringJoin (listAppend (cons (str "(module " name " :x [" (stringJoin exports " ") "])") doc) (cons "" body)) "\n"))))))
 
 ; (:m :do "rule freeComment: a free ; comment line, retired by the reader (ERR_READ_COMMENT), becomes the one-line meta form ; (:m :note \"...\")")
@@ -212,20 +212,45 @@ fn ruleFreeComment text: String -> (List String)
   (let [(next (stringJoin (map freeCommentLine (stringLines text)) "\n"))]
     (if (= next text) (list) (list next)))
 
+; (:m :do "rule retiredSpelling, a normal form applied once before the scored rules because a retired head hides every other diagnostic behind one parse error: the head of a form spelled (mt ...), (== ...) or (not= ...), retired by the reader (ERR_READ_SPELLING), becomes match, = or !=")
+fn retiredHeadFor name: String -> (Option String)
+  (cond ((= name "mt") (some "match"))
+        ((= name "==") (some "="))
+        ((= name "not=") (some "!="))
+        (else (none)))
+
+fn retiredSpellingEdit x: Sx -> (List Edit)
+  (match (listHead (listItems x))
+    ((none) (list))
+    ((some h)
+      (match (retiredHeadFor (atomText h))
+        ((none) (list))
+        ((some to) (match h ((sxAtom _ s e) (list (Edit :start s :end e :with to))) ((sxList _ _ _ _) (list)))))))
+
+fn spellNormal text: String rules: (List String) -> String
+  (if (listContains? rules "retiredSpelling") (optionOr (listHead (ruleRetiredSpelling text)) text) text)
+
+fn spellApplied before: String after: String -> (List String)
+  (if (= before after) (list) (list "retiredSpelling"))
+
+fn ruleRetiredSpelling text: String -> (List String)
+  (let [(es (fold (fn [(acc (List Edit)) (x Sx)] -> (List Edit) (listAppend acc (retiredSpellingEdit x))) (list) (listFlatMap allLists (readSx text))))]
+    (if (listEmpty? es) (list) (list (applyEdits text es))))
+
 ; (:m :do "rule fnHeaderUnwrap: a top-level (fn name p: T -> R body) written in header style becomes the header line with its body indented below")
 fn headerStyleFn? x: Sx -> Bool
   (and (parenList? x)
     (and (headIs? x "fn")
       (let [(items (listItems x))
-            (afterBang (if (mt (listGet items 1) ((some b) (= (atomText b) "!")) ((none) false)) 2 1))]
-        (mt (listGet items (+ afterBang 1)) ((some p) (not (bracketList? p))) ((none) false)))))
+            (afterBang (if (match (listGet items 1) ((some b) (= (atomText b) "!")) ((none) false)) 2 1))]
+        (match (listGet items (+ afterBang 1)) ((some p) (not (bracketList? p))) ((none) false)))))
 
 fn unwrapEdits text: String x: Sx -> (List Edit)
   (let [(items (listItems x))]
-    (mt (listIndexOf (map atomText items) "->")
+    (match (listIndexOf (map atomText items) "->")
       ((none) (list))
       ((some ai)
-        (mt (listGet items (+ ai 2))
+        (match (listGet items (+ ai 2))
           ((none) (list))
           ((some body)
             (let [(retEnd (sxEnd (optionOr (listGet items (+ ai 1)) body)))
@@ -290,15 +315,15 @@ fn nestedElseEdits c: Sx -> (List Edit)
       (list)))
 
 fn tailrec flatPairEdits cs: (List Sx) acc: (List Edit) -> (List Edit)
-  (mt (listHead cs)
+  (match (listHead cs)
     ((none) acc)
     ((some t)
       (let [(rest (optionOr (listTail cs) (list)))]
         (cond
-          ((= (atomText t) "else") (mt (listHead rest) ((some e) (listAppend acc (list (ins (sxStart t) "(") (ins (sxEnd e) ")")))) ((none) acc)))
-          ((= (atomText t) ":else") (mt (listHead rest) ((some e) (listAppend acc (list (repl t "(else") (ins (sxEnd e) ")")))) ((none) acc)))
+          ((= (atomText t) "else") (match (listHead rest) ((some e) (listAppend acc (list (ins (sxStart t) "(") (ins (sxEnd e) ")")))) ((none) acc)))
+          ((= (atomText t) ":else") (match (listHead rest) ((some e) (listAppend acc (list (repl t "(else") (ins (sxEnd e) ")")))) ((none) acc)))
           ((elseItem? t) acc)
-          (else (mt (listHead rest)
+          (else (match (listHead rest)
                   ((some e) (flatPairEdits (optionOr (listTail rest) (list)) (listAppend acc (list (ins (sxStart t) "(") (ins (sxEnd e) ")")))))
                   ((none) acc)))))))
 
@@ -306,7 +331,7 @@ fn condEdits mode: String x: Sx -> (List Edit)
   (let [(clauses (optionOr (listTail (listItems x)) (list)))]
     (cond
       ((= mode "flat") (flatPairEdits clauses (list)))
-      ((= mode "else") (mt (listLast clauses) ((some c) (nestedElseEdits c)) ((none) (list))))
+      ((= mode "else") (match (listLast clauses) ((some c) (nestedElseEdits c)) ((none) (list))))
       (else (fold (fn [(acc (List Edit)) (c Sx)] -> (List Edit) (listAppend acc (bracketClauseEdits c))) (list) clauses))))
 
 fn condRewrite text: String mode: String -> (List String)
@@ -342,15 +367,15 @@ fn pairItem? x: Sx -> Bool
   (and (parenList? x) (= (listLength (listItems x)) 2))
 
 fn tailrec flatBindEdits items: (List Sx) acc: (List Edit) -> (List Edit)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) acc)
     ((some name)
-      (mt (listGet items 1)
+      (match (listGet items 1)
         ((none) acc)
         ((some v) (flatBindEdits (listDrop items 2) (listAppend acc (list (ins (sxStart name) "(") (ins (sxEnd v) ")"))))))))
 
 fn letEdits x: Sx -> (List Edit)
-  (mt (listGet (listItems x) 1)
+  (match (listGet (listItems x) 1)
     ((none) (list))
     ((some g)
       (if (not (parenList? g))
@@ -378,8 +403,8 @@ fn testHeadEdit t: Sx -> (List Edit)
 
 fn testsOf x: Sx -> (List Sx)
   (cond
-    ((headIs? x "if") (mt (listGet (listItems x) 1) ((some t) (list t)) ((none) (list))))
-    ((headIs? x "cond") (fold (fn [(acc (List Sx)) (c Sx)] -> (List Sx) (mt (listHead (listItems c)) ((some t) (listAppend acc (list t))) ((none) acc))) (list) (optionOr (listTail (listItems x)) (list))))
+    ((headIs? x "if") (match (listGet (listItems x) 1) ((some t) (list t)) ((none) (list))))
+    ((headIs? x "cond") (fold (fn [(acc (List Sx)) (c Sx)] -> (List Sx) (match (listHead (listItems c)) ((some t) (listAppend acc (list t))) ((none) acc))) (list) (optionOr (listTail (listItems x)) (list))))
     (else (list)))
 
 fn ruleTestPredicate text: String -> (List String)
@@ -395,7 +420,7 @@ fn unboundName d: ty/Diagnostic -> (Option String)
     (else none))
 
 fn renamedHintOf d: ty/Diagnostic -> (Option String)
-  (mt (stringIndexOf d.message "; renamed to ")
+  (match (stringIndexOf d.message "; renamed to ")
     ((none) none)
     ((some i) (listHead (stringSplit (slice d.message (+ i 13) (stringLength d.message)) " "))))
 
@@ -407,10 +432,10 @@ fn upperFirst s: String -> String
 
 fn camelOf s: String -> String
   (let [(parts (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (stringSplit (stringReplace s "-" "_") "_")))]
-    (mt (listHead parts) ((some h) (str h (stringJoin (map upperFirst (optionOr (listTail parts) (list))) ""))) ((none) s)))
+    (match (listHead parts) ((some h) (str h (stringJoin (map upperFirst (optionOr (listTail parts) (list))) ""))) ((none) s)))
 
 fn tailrec distRow a: (List String) bc: String prev: (List Int64) j: Int64 left: Int64 diag: Int64 acc: (List Int64) -> (List Int64)
-  (mt (listHead a)
+  (match (listHead a)
     ((none) (listReverse acc))
     ((some ac)
       (let [(up (optionOr (listGet prev (+ j 1)) 0))
@@ -443,7 +468,7 @@ fn symbolCandidates name: String hint: (Option String) vocab: (List String) -> (
                   (list (str (lowerFirst (slice name 2 n)) "?"))
                   (list)))
         (camel (if (or (stringContains? name "_") (stringContains? name "-")) (list (camelOf name)) (list)))
-        (hinted (mt hint ((some h) (list h)) ((none) (list))))
+        (hinted (match hint ((some h) (list h)) ((none) (list))))
         (all (listAppend hinted (listAppend bangless (listAppend isForm (listAppend camel (nearestInVocab name vocab))))))]
     (filter (fn [(c String)] -> Bool (and (!= c name) (not (stringEmpty? c)))) all))
 
@@ -452,7 +477,7 @@ fn renameAtoms text: String from: String to: String -> String
 
 fn ruleSymbolRename text: String ds: (List ty/Diagnostic) vocab: (List String) -> (List String)
   (fold (fn [(acc (List String)) (d ty/Diagnostic)] -> (List String)
-          (mt (unboundName d)
+          (match (unboundName d)
             ((none) acc)
             ((some name) (listAppend acc (map (fn [(c String)] -> String (renameAtoms text name c)) (symbolCandidates name (renamedHintOf d) vocab))))))
         (list) ds)
@@ -488,7 +513,7 @@ fn ruleCandidates rule: String text: String ds: (List ty/Diagnostic) vocab: (Lis
 (schema Step (:f text String) (:f diags (List ty/Diagnostic)) (:f rule String))
 
 fn firstImproving rule: String cands: (List String) text: String score: Int64 deps: (Map String r/ModuleSummary) path: String -> (Option Step)
-  (mt (listHead cands)
+  (match (listHead cands)
     ((none) none)
     ((some c)
       (let [(rest (optionOr (listTail cands) (list)))]
@@ -498,10 +523,10 @@ fn firstImproving rule: String cands: (List String) text: String score: Int64 de
             (if (< (healScore ds) score) (some (Step :text c :diags ds :rule rule)) (firstImproving rule rest text score deps path)))))))
 
 fn tryRules rules: (List String) text: String ds: (List ty/Diagnostic) deps: (Map String r/ModuleSummary) path: String vocab: (List String) -> (Option Step)
-  (mt (listHead rules)
+  (match (listHead rules)
     ((none) none)
     ((some rule)
-      (mt (firstImproving rule (ruleCandidates rule text ds vocab) text (healScore ds) deps path)
+      (match (firstImproving rule (ruleCandidates rule text ds vocab) text (healScore ds) deps path)
         ((some s) (some s))
         ((none) (tryRules (optionOr (listTail rules) (list)) text ds deps path vocab)))))
 
@@ -525,7 +550,7 @@ fn parseRuleNames -> (List String)
 fn healLoop text: String ds: (List ty/Diagnostic) deps: (Map String r/ModuleSummary) path: String vocab: (List String) rules: (List String) parseOnly: Bool rounds: Int64 applied: (List String) -> HealResult
   (if (or (listEmpty? ds) (or (<= rounds 0) (and parseOnly (not (parseFailed? ds)))))
     (finish text ds applied)
-    (mt (tryRules (if parseOnly (filter (fn [(r String)] -> Bool (listContains? (parseRuleNames) r)) rules) rules) text ds deps path vocab)
+    (match (tryRules (if parseOnly (filter (fn [(r String)] -> Bool (listContains? (parseRuleNames) r)) rules) rules) text ds deps path vocab)
       ((none) (finish text ds applied))
       ((some s) (healLoop s.text s.diags deps path vocab rules parseOnly (- rounds 1) (cons s.rule applied)))))
 
@@ -544,7 +569,8 @@ fn vocabFromSource text: String base: (List String) -> (List String)
 
 ; (:m :do "healSourceRules runs a chosen subset of the rules: the rule fixtures use it to show each rule is the cause of its repair (the pipeline without it leaves the fixture broken)")
 fn healSourceRules text: String path: String deps: (Map String r/ModuleSummary) vocab: (List String) rules: (List String) -> HealResult
-  (healLoop text (healDiags text deps path) deps path (vocabFromSource text vocab) rules false 24 (list))
+  (let [(t0 (spellNormal text rules))]
+    (healLoop t0 (healDiags t0 deps path) deps path (vocabFromSource t0 vocab) rules false 24 (spellApplied text t0)))
 
 fn healSourceWith text: String path: String deps: (Map String r/ModuleSummary) vocab: (List String) -> HealResult
   (healSourceRules text path deps vocab (healRuleNames))
@@ -553,16 +579,17 @@ fn healSource text: String path: String -> HealResult
   (healSourceWith text path (mapEmpty) (list))
 
 fn ! preludeVocab! path: String -> (List String)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) (list))
     ((ok src) (vocabFromSource src (list))))
 
 ; (:m :do "the effectful entry: a text that does not parse first gets the parse-level rules alone, then the imports load the way checkFileCached! (asl check) loads them, the vocabulary comes from the prelude at preludePath, and maxRounds caps the rule applications over both phases")
 fn ! heal! path: String text: String roots: (List String) preludePath: String maxRounds: Int64 -> (Result HealResult String)
-  (let [(vocab (vocabFromSource text (preludeVocab! preludePath)))
-        (ds0 (checkText text (mapEmpty) path))
-        (first (if (parseFailed? ds0) (healLoop text ds0 (mapEmpty) path vocab (healRuleNames) true maxRounds (list)) (finish text (list) (list))))]
-    (mt (a/parseForTypeCheck first.text)
+  (let [(t0 (spellNormal text (healRuleNames)))
+        (vocab (vocabFromSource t0 (preludeVocab! preludePath)))
+        (ds0 (checkText t0 (mapEmpty) path))
+        (first (if (parseFailed? ds0) (healLoop t0 ds0 (mapEmpty) path vocab (healRuleNames) true maxRounds (spellApplied text t0)) (finish t0 (list) (spellApplied text t0))))]
+    (match (a/parseForTypeCheck first.text)
       ((err _) (ok first))
       ((ok forms)
         (let [(summary (r/collectSummary forms path))

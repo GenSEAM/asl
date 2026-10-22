@@ -149,25 +149,25 @@ fn scanExpPart bs: Bytes pos: Int64 len: Int64 -> (Result Int64 String)
         (ok (scanDigits bs (+ pSign 1) len)))))
 
 fn parseJsonNumber src: String bs: Bytes startPos: Int64 len: Int64 -> (Result (Pair Json Int64) String)
-  (mt (scanIntPart bs startPos len)
+  (match (scanIntPart bs startPos len)
     ((err e) (err e))
     ((ok pInt)
-     (mt (scanFracPart bs pInt len)
+     (match (scanFracPart bs pInt len)
        ((err e) (err e))
        ((ok pFrac)
-        (mt (scanExpPart bs pFrac len)
+        (match (scanExpPart bs pFrac len)
           ((err e) (err e))
           ((ok pExp)
            (let [(hasFrac (!= pFrac pInt))
                  (hasExp (!= pExp pFrac))
                  (numStr (optionOr (stringSlice src startPos pExp) ""))]
              (if (or hasFrac hasExp)
-               (mt (stringToFloat64 numStr)
+               (match (stringToFloat64 numStr)
                  ((some f) (ok (pair (jfloat f) pExp)))
                  ((none) (err (str "error at byte " (stringFromInt64 startPos) ": malformed number " numStr))))
-               (mt (stringToInt64 numStr)
+               (match (stringToInt64 numStr)
                  ((some i) (ok (pair (jint i) pExp)))
-                 ((none) (mt (stringToFloat64 numStr)
+                 ((none) (match (stringToFloat64 numStr)
                            ((some f) (ok (pair (jfloat f) pExp)))
                            ((none) (err (str "error at byte " (stringFromInt64 startPos) ": malformed number " numStr))))))))))))))
 
@@ -182,7 +182,7 @@ fn parseArrayElements src: String bs: Bytes pos: Int64 len: Int64 depth: Int64 a
   (let [(pVal (skipWs bs pos len))]
     (if (>= pVal len)
       (err (str "error at byte " (stringFromInt64 len) ": unexpected end of input in array"))
-      (mt (parseJsonValue src bs pVal len depth)
+      (match (parseJsonValue src bs pVal len depth)
         ((err e) (err e))
         ((ok p)
          (let [(val (pairFirst p))
@@ -220,7 +220,7 @@ fn parseObjectPairs src: String bs: Bytes pos: Int64 len: Int64 depth: Int64 acc
       (err (str "error at byte " (stringFromInt64 len) ": unexpected end of input in object"))
       (if (!= (bytesGet bs pKey) 34)
         (err (str "error at byte " (stringFromInt64 pKey) ": expected string key in object"))
-        (mt (parseJsonString src pKey)
+        (match (parseJsonString src pKey)
           ((err e) (err e))
           ((ok pStr)
            (let [(key (pairFirst pStr))
@@ -233,7 +233,7 @@ fn parseObjectPairs src: String bs: Bytes pos: Int64 len: Int64 depth: Int64 acc
                  (let [(pVal (skipWs bs (+ pColon 1) len))]
                    (if (>= pVal len)
                      (err (str "error at byte " (stringFromInt64 len) ": expected value after ':'"))
-                     (mt (parseJsonValue src bs pVal len depth)
+                     (match (parseJsonValue src bs pVal len depth)
                        ((err e) (err e))
                        ((ok pValRes)
                         (let [(val (pairFirst pValRes))
@@ -270,7 +270,7 @@ fn parseJsonValue src: String bs: Bytes pos: Int64 len: Int64 depth: Int64 -> (R
     (err (str "error at byte " (stringFromInt64 pos) ": unexpected end of input"))
     (let [(b (bytesGet bs pos))]
       (cond
-        ((= b 34) (mt (parseJsonString src pos) ((ok p) (ok (pair (jstr (pairFirst p)) (pairSecond p)))) ((err e) (err e))))
+        ((= b 34) (match (parseJsonString src pos) ((ok p) (ok (pair (jstr (pairFirst p)) (pairSecond p)))) ((err e) (err e))))
         ((= b 123) (parseJsonObject src bs pos len (+ depth 1)))
         ((= b 91) (parseJsonArray src bs pos len (+ depth 1)))
         ((or (= b 45) (and (>= b 48) (<= b 57))) (parseJsonNumber src bs pos len))
@@ -288,7 +288,7 @@ fn jsonParse src: String -> (Result Json String)
         (startPos (skipWs bs 0 len))]
     (if (>= startPos len)
       (err "error at byte 0: empty JSON input")
-      (mt (parseJsonValue src bs startPos len 0)
+      (match (parseJsonValue src bs startPos len 0)
         ((err e) (err e))
         ((ok p)
          (let [(val (pairFirst p))
@@ -306,7 +306,7 @@ fn findKeyInPairs kvs: (List (Pair String Json)) key: String -> (Option Json)
         (findKeyInPairs (preludeTail kvs) key))))
 
 fn jsonGet obj: Json key: String -> (Option Json)
-  (mt obj
+  (match obj
     ((jobj kvs) (findKeyInPairs kvs key))
     (_ none))
 
@@ -340,11 +340,11 @@ fn emitString s: String -> String
     (scanEmitStr s bs len 0 0 (list)))
 
 fn emitPair p: (Pair String Json) -> String
-  (mt p
+  (match p
     ((pair k v) (str (emitString k) ":" (jsonEmit v))))
 
 fn jsonEmit val: Json -> String
-  (mt val
+  (match val
     ((jnull) "null")
     ((jbool b) (if b "true" "false"))
     ((jint i) (stringFromInt64 i))

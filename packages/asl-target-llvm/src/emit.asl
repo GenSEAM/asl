@@ -107,7 +107,7 @@ fn emitLlvmExpr expr: irTy/IrExpr target: Str ty: irTy/IrType -> Str
       ((= k "cmp")
         (if isFloat
           (cond
-            ((or (= op "==") (= op "=")) (str "    %" target " = fcmp oeq double " l ", " r "\n"))
+            ((= op "=") (str "    %" target " = fcmp oeq double " l ", " r "\n"))
             ((= op "!=") (str "    %" target " = fcmp one double " l ", " r "\n"))
             ((= op "<") (str "    %" target " = fcmp olt double " l ", " r "\n"))
             ((= op "<=") (str "    %" target " = fcmp ole double " l ", " r "\n"))
@@ -115,7 +115,7 @@ fn emitLlvmExpr expr: irTy/IrExpr target: Str ty: irTy/IrType -> Str
             ((= op ">=") (str "    %" target " = fcmp oge double " l ", " r "\n"))
             (else (str "    %" target " = fcmp oeq double " l ", " r "\n")))
           (cond
-            ((or (= op "==") (= op "=")) (str "    %" target " = icmp eq i64 " l ", " r "\n"))
+            ((= op "=") (str "    %" target " = icmp eq i64 " l ", " r "\n"))
             ((= op "!=") (str "    %" target " = icmp ne i64 " l ", " r "\n"))
             ((= op "<") (str "    %" target " = icmp slt i64 " l ", " r "\n"))
             ((= op "<=") (str "    %" target " = icmp sle i64 " l ", " r "\n"))
@@ -195,7 +195,7 @@ fn emitLlvmFunction f: irTy/IrFunction -> Str
 
 fn emitLlvmModule m: irTy/IrModule -> (Result Str (List irTy/IrDiag))
   (let [(vRes (vfy/verifyIr m))]
-    (mt vRes
+    (match vRes
       ((err diags) (err diags))
       ((ok _)
         (let [(funcsStr (fold (fn [(acc Str) (f irTy/IrFunction)] -> Str

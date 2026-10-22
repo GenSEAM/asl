@@ -46,20 +46,20 @@ fn attrFor name: String value: String -> (Option h/Attr)
     (else (some (h/attr name value))))
 
 fn buildItems tag: String where: String items: (List rd/SExpr) acc: Built -> Built
-  (mt (listHead items)
+  (match (listHead items)
     ((none) acc)
     ((some item)
       (let [(rest (listDrop items 1))]
-        (mt item
+        (match item
           ((rd/sexprAtom v)
             (cond
               ((a/keywordAtom? v)
                 (let [(name (attributeName (a/bare v)))]
-                  (mt (mt (listHead rest) ((some x) (a/atomOf x)) ((none) (none)))
+                  (match (match (listHead rest) ((some x) (a/atomOf x)) ((none) (none)))
                     ((none) (buildItems tag where (listDrop rest 1) (addError acc (str where ": attribute :" (a/bare v) " needs a single value"))))
                     ((some value)
                       (if (known? name)
-                        (buildItems tag where (listDrop rest 1) (mt (attrFor name (a/valueText value)) ((some at) (with acc :attrs (listAppend acc.attrs [at]))) ((none) acc)))
+                        (buildItems tag where (listDrop rest 1) (match (attrFor name (a/valueText value)) ((some at) (with acc :attrs (listAppend acc.attrs [at]))) ((none) acc)))
                         (buildItems tag where (listDrop rest 1) (addError acc (str where ": unknown attribute :" (a/bare v) " (as " name ")"))))))))
               ((a/stringAtom? v)
                 (if (h/voidTag? tag)
@@ -72,18 +72,18 @@ fn buildItems tag: String where: String items: (List rd/SExpr) acc: Built -> Bui
 
 fn styleElement where: String items: (List rd/SExpr) -> (Pair h/Node (List String))
   (let [(sheet (css/rulesOf (str where " > ") items))]
-    (mt sheet
+    (match sheet
       ((ok rules) (pair (h/styleSheet rules) []))
       ((err es) (pair (h/frag []) es))))
 
 fn buildElement parent: String index: Int64 e: rd/SExpr -> (Pair h/Node (List String))
-  (mt e
+  (match e
     ((rd/sexprList items)
       (let [(tag (a/headOf e))
             (where (str parent tag "[" (stringFromInt64 index) "]"))]
         (cond
           ((= tag "style") (styleElement where (listDrop items 1)))
-          ((= tag "svg") (mt (svg/drawingToNode (rd/renderSexpr e)) ((ok node) (pair node [])) ((err es) (pair (h/frag []) (map (fn [(m String)] -> String (str where ": " m)) es)))))
+          ((= tag "svg") (match (svg/drawingToNode (rd/renderSexpr e)) ((ok node) (pair node [])) ((err es) (pair (h/frag []) (map (fn [(m String)] -> String (str where ": " m)) es)))))
           ((listContains? (elementNames) tag)
             (let [(built (buildItems tag where (listDrop items 1) (Built :attrs [] :kids [] :errors [])))]
               (pair (if (= tag "script")
@@ -98,9 +98,9 @@ fn pageToNode source: String -> (Result h/Node (List String))
     (if (listEmpty? (pairSecond built)) (ok (pairFirst built)) (err (pairSecond built))))
 
 fn asnToHtml source: String -> (Result String (List String))
-  (mt (a/unbalanced source)
+  (match (a/unbalanced source)
     ((some es) (err es))
     ((none)
-      (mt (pageToNode source)
+      (match (pageToNode source)
         ((err es) (err es))
         ((ok node) (ok (if (= (a/headOf (rd/parseSexpr source)) "html") (str (h/renderDocument node) "\n") (str (h/render node) "\n")))))))

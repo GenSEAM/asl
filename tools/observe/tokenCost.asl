@@ -50,7 +50,7 @@ fn pyWords s: String -> (List String)
   (let [(bs (stringToBytes s))] (wordsLoop s bs 0 (bytesLength bs) 0 (list)))
 
 fn skipFlags words: (List String) -> (Option String)
-  (mt (listHead words)
+  (match (listHead words)
     ((none) (none))
     ((some w) (if (stringStartsWith? w "-") (skipFlags (optionOr (listTail words) (list))) (some w))))
 
@@ -64,11 +64,11 @@ fn shebangKind txt: String -> String
         (if (not (stringStartsWith? line "#!"))
           "other"
           (let [(words (pyWords (c/pyStrip (optionOr (stringSlice line 2 (stringLength line)) ""))))]
-            (mt (listHead words)
+            (match (listHead words)
               ((none) "other")
               ((some w0)
                 (let [(interp (if (= (c/baseName w0) "env") (skipFlags (optionOr (listTail words) (list))) (some w0)))]
-                  (mt interp
+                  (match interp
                     ((none) "other")
                     ((some w) (if (shebangInterp? (c/baseName w)) "foreign" "other")))))))))))
 
@@ -82,7 +82,7 @@ fn kindOf path: String txt: String -> String
 
 fn entries! tok: tok/Tokenizer root: String paths: (List String) -> (List Entry)
   (listReverse (fold (fn [(acc (List Entry)) (rel String)] -> (List Entry)
-          (mt (fileReadString (c/joinPath root rel))
+          (match (fileReadString (c/joinPath root rel))
             ((err _) acc)
             ((ok txt)
               (let [(bs (stringToBytes txt))
@@ -103,7 +103,7 @@ fn binaryCount rows: (List Entry) -> Int64
   (fold (fn [(n Int64) (e Entry)] -> Int64 (+ n (if e.binary 1 0))) 0 rows)
 
 fn maxCount rows: (List Entry) -> String
-  (mt (listHead (listSortBy (fn [(e Entry)] -> Int64 (- 0 e.count)) (textEntries rows)))
+  (match (listHead (listSortBy (fn [(e Entry)] -> Int64 (- 0 e.count)) (textEntries rows)))
     ((none) "")
     ((some e) (str " :max (" (c/quoted e.path) " " (stringFromInt64 e.count) ")")))
 
@@ -127,23 +127,23 @@ fn receiptFit head: String rows: (List Entry) total: Int64 shown: Int64 -> (Pair
       (receiptFit head rows total (- shown 1))))
 
 fn tokenizerDir! root: String ctx: c/Ctx -> (Option String)
-  (let [(roots (listAppend (mt (c/ctxEnv ctx "ASL_CLI_ROOT") ((none) (list)) ((some r) (if (stringEmpty? r) (list) (list r)))) (list root)))]
+  (let [(roots (listAppend (match (c/ctxEnv ctx "ASL_CLI_ROOT") ((none) (list)) ((some r) (if (stringEmpty? r) (list) (list r)))) (list root)))]
     (listHead (filter c/isDir? (map (fn [(r String)] -> String (c/joinPath r "data/tokenizers")) roots))))
 
 fn runDate! ctx: c/Ctx -> (Result String String)
   (if (stringEmpty? ctx.date) (localDate) (ok ctx.date))
 
 fn tokenReceipt! root: String scope: String limit: Int64 ctx: c/Ctx -> (Result String String)
-  (mt (tokenizerDir! root ctx)
+  (match (tokenizerDir! root ctx)
     ((none) (err (c/rejectLine "ERR_NO_ENCODER" "data/tokenizers is not found under ASL_CLI_ROOT or the workspace; token counts are not estimated" " :method none")))
     ((some dataDir)
-      (mt (tok/loadTokenizer! dataDir)
+      (match (tok/loadTokenizer! dataDir)
         ((err e) (err (c/rejectLine "ERR_TOKENIZER" e " :method none")))
         ((ok tokenizer)
-          (mt (runDate! ctx)
+          (match (runDate! ctx)
             ((err e) (err (c/rejectLine "ERR_DATE" (str "local date unavailable: " e) "")))
             ((ok date)
-              (mt (c/git! (if (stringEmpty? scope) (list "ls-files" "-z") (list "ls-files" "-z" "--" scope)) root ctx)
+              (match (c/git! (if (stringEmpty? scope) (list "ls-files" "-z") (list "ls-files" "-z" "--" scope)) root ctx)
                 ((err e) (err e))
                 ((ok git)
                   (if (!= (pairFirst git) 0)

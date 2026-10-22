@@ -30,12 +30,12 @@ fn ! claimsLocate! workspace: String -> (Result ClaimsStore String)
         (ok (ClaimsStore :workspace workspace :root root :retired (str root "/retired") :lock (str root "/.lock"))))))
 
 fn claimsStore! workspace: String -> (Result ClaimsStore String)
-  (mt (claimsLocate! workspace)
+  (match (claimsLocate! workspace)
     ((err e) (err e))
-    ((ok store) (mt (dirCreate store.retired) ((err e) (err e)) ((ok _) (ok store)))))
+    ((ok store) (match (dirCreate store.retired) ((err e) (err e)) ((ok _) (ok store)))))
 
 fn ! storeExists? store: ClaimsStore -> Bool
-  (mt (fileStat store.root) ((ok st) st.isDir) ((err _) false))
+  (match (fileStat store.root) ((ok st) st.isDir) ((err _) false))
 
 fn claimsAt store: ClaimsStore unit: String -> String
   (str store.root "/" unit ".asn")
@@ -69,7 +69,7 @@ fn quoteTail text: String i: Int64 -> (Pair String Int64)
 
 fn fieldStart text: String key: String -> Int64
   (let [(found (stringIndexOf text (str ":" key)))]
-    (mt found ((some i) (skipSpaces text (+ i (stringLength key) 1))) ((none) (stringLength text))))
+    (match found ((some i) (skipSpaces text (+ i (stringLength key) 1))) ((none) (stringLength text))))
 
 fn quotedField text: String key: String -> String
   (let [(i (fieldStart text key))]
@@ -145,7 +145,7 @@ fn exemptPath? path: String -> Bool
     (or (= p "scripts/audit/foreignBaseline.asn") (= p "scripts/audit/foreignAllowlist.asn")))
 
 fn listOverlapPath items: (List String) path: String -> String
-  (mt (listHead items)
+  (match (listHead items)
     ((none) "")
     ((some item)
       (if (and (not (exemptPath? path)) (and (not (exemptPath? item)) (pathsOverlap? path item)))
@@ -153,7 +153,7 @@ fn listOverlapPath items: (List String) path: String -> String
         (listOverlapPath (optionOr (listTail items) (list)) path))))
 
 fn readLease! path: String -> (Result Lease String)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err e) (err e))
     ((ok raw)
       (let [(lease (parseLease raw))]
@@ -162,18 +162,18 @@ fn readLease! path: String -> (Result Lease String)
           (ok lease)))))
 
 fn readNames! store: ClaimsStore names: (List String) acc: (List Lease) -> (Result (List Lease) String)
-  (mt (listHead names)
+  (match (listHead names)
     ((none) (ok (listReverse acc)))
     ((some name)
       (let [(rest (optionOr (listTail names) (list)))]
         (if (and (stringEndsWith? name ".asn") (!= name "log.asn") (not (stringStartsWith? name "retired")))
-          (mt (readLease! (str store.root "/" name))
+          (match (readLease! (str store.root "/" name))
             ((err e) (err e))
             ((ok lease) (readNames! store rest (cons lease acc))))
           (readNames! store rest acc)))))
 
 fn readLeases! store: ClaimsStore -> (Result (List Lease) String)
-  (mt (dirList store.root)
+  (match (dirList store.root)
     ((err e) (err e))
     ((ok names) (readNames! store names (list))))
 
@@ -188,9 +188,9 @@ fn ! worktreeListed? store: ClaimsStore path: String -> Bool
 
 fn ! leaseStale? store: ClaimsStore lease: Lease -> Bool
   (let [(stat (fileStat (claimsAt store lease.unit)))
-        (mtime (mt stat ((ok st) st.mtime) ((err _) 0)))
+        (mtime (match stat ((ok st) st.mtime) ((err _) 0)))
         (age (- (/ (nowNs) 1000000000) mtime))
-        (pidAlive (and (> lease.pid 0) (mt (procAlive? lease.pid) ((ok b) b) ((err _) false))))
+        (pidAlive (and (> lease.pid 0) (match (procAlive? lease.pid) ((ok b) b) ((err _) false))))
         (host (optionOr (envGet "HOSTNAME") (commandOutput! "hostname")))]
     (or (isMerged? store lease) (not (worktreeListed? store lease.worktree))
         (and (> age lease.ttl) (or (!= host lease.host) (not pidAlive)))))
@@ -198,25 +198,25 @@ fn ! leaseStale? store: ClaimsStore lease: Lease -> Bool
 fn retireLease! store: ClaimsStore unit: String -> (Result Unit String)
   (let [(source (claimsAt store unit))
         (target (str store.retired "/" unit "." (stringFromInt64 (nowNs)) ".asn"))]
-    (mt (pathRename source target)
+    (match (pathRename source target)
       ((ok _) (ok ()))
       ((err e) (if (stringContains? e "notFound") (ok ()) (err e)))))
 
 fn retireStale! store: ClaimsStore leases: (List Lease) -> (Result Unit String)
-  (mt (listHead leases)
+  (match (listHead leases)
     ((none) (ok ()))
     ((some lease)
       (let [(rest (optionOr (listTail leases) (list)))]
         (if (leaseStale? store lease)
-          (mt (retireLease! store lease.unit)
+          (match (retireLease! store lease.unit)
             ((err e) (err e)) ((ok _) (retireStale! store rest)))
           (retireStale! store rest)))))
 
 fn sweepLeases! store: ClaimsStore -> (Result (List Lease) String)
-  (mt (readLeases! store)
+  (match (readLeases! store)
     ((err e) (err e))
     ((ok leases)
-      (mt (retireStale! store leases)
+      (match (retireStale! store leases)
         ((err e) (err e))
         ((ok _) (readLeases! store)))))
 
@@ -234,25 +234,25 @@ fn heartbeat! store: ClaimsStore unit: String -> (Result Unit String)
     (if (fileExists? p) (fileUtime p (nowNs)) (ok ())))
 
 fn claims! workspace: String -> (Result String String)
-  (mt (claimsLocate! workspace)
+  (match (claimsLocate! workspace)
     ((err e) (err e))
     ((ok store)
       (if (not (storeExists? store)) (ok "(:claims)")
-      (mt (lockAcquire! store)
+      (match (lockAcquire! store)
         ((err e) (err e))
         ((ok fd)
           (let [(read (sweepLeases! store))
                 (released (lockRelease! fd))]
-            (mt released
+            (match released
               ((err e) (err e))
-              ((ok _) (mt read
+              ((ok _) (match read
                 ((err e) (err e))
                 ((ok leases)
                   (ok (str "(:claims" (if (listEmpty? leases) "" (str " " (stringJoin (map leaseContent leases) " "))) ")"))))))))))))
 
 fn pathAllowedLeases! store: ClaimsStore unit: String path: String leases: (List Lease) -> (Result String String)
-  (mt (listHead leases)
-    ((none) (mt (heartbeat! store unit) ((err e) (err e)) ((ok _) (ok ""))))
+  (match (listHead leases)
+    ((none) (match (heartbeat! store unit) ((err e) (err e)) ((ok _) (ok ""))))
     ((some lease)
       (let [(rest (optionOr (listTail leases) (list)))
             (found (listOverlapPath lease.owns path))]
@@ -267,18 +267,18 @@ fn pathAllowedLeases! store: ClaimsStore unit: String path: String leases: (List
 
 fn pathAllowed! workspace: String unit: String rel: String -> (Result String String)
   (let [(caller (callerUnit! workspace unit))]
-    (mt (claimsLocate! workspace)
+    (match (claimsLocate! workspace)
       ((err e) (if (stringContains? e "cannot resolve git common directory") (ok "") (err e)))
       ((ok store)
         (if (not (storeExists? store)) (ok "")
-        (mt (lockAcquire! store)
+        (match (lockAcquire! store)
           ((err e) (err e))
           ((ok fd)
-            (let [(result (mt (sweepLeases! store)
+            (let [(result (match (sweepLeases! store)
                            ((err e) (err e))
                            ((ok rows) (pathAllowedLeases! store caller (trimPath rel) rows))))
                   (released (lockRelease! fd))]
-              (mt released
+              (match released
                 ((err e) (err e))
                 ((ok _) result)))))))))
 
@@ -325,7 +325,7 @@ fn ! currentLease! workspace: String unit: String owns: (List String) -> Lease
     :at (nowNs) :ttl 7200)
 
 fn claimConflicts unit: String owns: (List String) leases: (List Lease) -> String
-  (mt (listHead leases)
+  (match (listHead leases)
     ((none) "")
     ((some lease)
       (let [(rest (optionOr (listTail leases) (list)))
@@ -337,7 +337,7 @@ fn claimConflicts unit: String owns: (List String) leases: (List Lease) -> Strin
             (receipt unit lease.unit first))))))
 
 fn overlapBetween left: (List String) right: (List String) -> String
-  (mt (listHead left)
+  (match (listHead left)
     ((none) "")
     ((some path)
       (let [(hit (listOverlapPath right path))]
@@ -349,7 +349,7 @@ fn sameLeaseOwner? a: Lease b: Lease -> Bool
        (= a.agent b.agent))
 
 fn leaseForUnit leases: (List Lease) unit: String -> (Option Lease)
-  (mt (listHead leases)
+  (match (listHead leases)
     ((none) (none))
     ((some lease)
       (if (= unit lease.unit)
@@ -357,26 +357,26 @@ fn leaseForUnit leases: (List Lease) unit: String -> (Option Lease)
         (leaseForUnit (optionOr (listTail leases) (list)) unit))))
 
 fn logClaim! store: ClaimsStore lease: Lease -> (Result String String)
-  (mt (fileAppend (str store.root "/log.asn") (str "(:claimed :unit " (q lease.unit) " :at " (stringFromInt64 (nowNs)) ")\n"))
+  (match (fileAppend (str store.root "/log.asn") (str "(:claimed :unit " (q lease.unit) " :at " (stringFromInt64 (nowNs)) ")\n"))
     ((ok _) (ok (str "(:claimed :unit " (q lease.unit) ")")))
     ((err e)
-      (mt (pathRemove (claimsAt store lease.unit))
+      (match (pathRemove (claimsAt store lease.unit))
         ((err cleanup) (err (str e "; claim rollback failed: " cleanup)))
         ((ok _) (err e)))))
 
 fn writeClaim! store: ClaimsStore lease: Lease -> (Result String String)
-  (mt (fileCreateExclusive (claimsAt store lease.unit) (leaseContent lease))
+  (match (fileCreateExclusive (claimsAt store lease.unit) (leaseContent lease))
     ((ok _) (logClaim! store lease))
     ((err e) (if (stringContains? e "exists") (err (receipt lease.unit lease.unit (optionOr (listHead lease.owns) ""))) (err e))))
 
 fn claimUnderLock! store: ClaimsStore unit: String owns: (List String) -> (Result String String)
-  (mt (readLeases! store)
+  (match (readLeases! store)
     ((err e) (err e))
     ((ok leases)
-      (mt (retireStale! store leases)
+      (match (retireStale! store leases)
         ((err e) (err e))
         ((ok _)
-          (mt (readLeases! store)
+          (match (readLeases! store)
             ((err e) (err e))
             ((ok live)
               (let [(self (currentLease! store.workspace unit owns))
@@ -385,11 +385,11 @@ fn claimUnderLock! store: ClaimsStore unit: String owns: (List String) -> (Resul
                     (refusal (claimConflicts unit owns others))]
                 (if (not (stringEmpty? refusal))
                   (err refusal)
-                  (mt previous
+                  (match previous
                     ((some prior)
                       (if (not (sameLeaseOwner? prior self))
                         (err (receipt unit unit (optionOr (listHead owns) "")))
-                        (mt (retireLease! store unit)
+                        (match (retireLease! store unit)
                           ((err e) (err e))
                           ((ok _) (writeClaim! store self)))))
                     ((none) (writeClaim! store self)))))))))))
@@ -397,47 +397,47 @@ fn claimUnderLock! store: ClaimsStore unit: String owns: (List String) -> (Resul
 fn claim! workspace: String unit: String owns: (List String) -> (Result String String)
   (if (or (not (validUnit? unit)) (not (validOwns? owns)))
     (err (receipt unit "" ""))
-    (mt (claimsStore! workspace)
+    (match (claimsStore! workspace)
       ((err e) (err e))
       ((ok store)
-        (mt (lockAcquire! store)
+        (match (lockAcquire! store)
           ((err e) (err e))
           ((ok fd)
             (let [(result (claimUnderLock! store unit owns))
                   (released (lockRelease! fd))]
-              (mt released ((err e) (err e)) ((ok _) result))))))))
+              (match released ((err e) (err e)) ((ok _) result))))))))
 
 fn logRelease! store: ClaimsStore unit: String receipt: String -> (Result String String)
-  (mt (fileAppend (str store.root "/log.asn") (str "(:released :unit " (q unit) " :at " (stringFromInt64 (nowNs)) ")\n"))
+  (match (fileAppend (str store.root "/log.asn") (str "(:released :unit " (q unit) " :at " (stringFromInt64 (nowNs)) ")\n"))
     ((err e) (err e))
     ((ok _) (ok receipt)))
 
 fn releaseUnderLock! store: ClaimsStore unit: String -> (Result String String)
-  (mt (sweepLeases! store)
+  (match (sweepLeases! store)
     ((err e) (err e))
     ((ok live)
-      (mt (leaseForUnit live unit)
+      (match (leaseForUnit live unit)
         ((none) (ok (str "(:released :unit " (q unit) " :absent true)")))
         ((some held)
           (let [(caller (callerUnit! store.workspace ""))
                 (self (currentLease! store.workspace unit (list)))]
             (if (or (!= caller unit) (not (sameLeaseOwner? held self)))
               (err (receipt caller unit (optionOr (listHead held.owns) "")))
-              (mt (pathRemove (claimsAt store unit))
+              (match (pathRemove (claimsAt store unit))
                 ((err e) (err e))
                 ((ok _) (logRelease! store unit (str "(:released :unit " (q unit) ")"))))))))))
 
 fn release! workspace: String unit: String -> (Result String String)
   (if (not (validUnit? unit))
     (err (receipt unit "" ""))
-    (mt (claimsLocate! workspace)
+    (match (claimsLocate! workspace)
       ((err e) (err e))
       ((ok store)
         (if (not (storeExists? store))
           (ok (str "(:released :unit " (q unit) " :absent true)"))
-          (mt (lockAcquire! store)
+          (match (lockAcquire! store)
             ((err e) (err e))
             ((ok fd)
               (let [(result (releaseUnderLock! store unit))
                     (released (lockRelease! fd))]
-                (mt released ((err e) (err e)) ((ok _) result)))))))))
+                (match released ((err e) (err e)) ((ok _) result)))))))))

@@ -15,9 +15,9 @@ fn testRegisterAndRenderSlot -> Bool
         (pHeader (ps/makeUIPlugin "nav" "Navbar" "header" "<nav>Links</nav>"))
         (pSidebar (ps/makeUIPlugin "tree" "FileTree" "sidebar" "<aside>Tree</aside>"))
         (reg1 (ps/registerPlugin shell0 pHeader))
-        (shell1 (mt reg1 ((ok s) s) ((err _) shell0)))
+        (shell1 (match reg1 ((ok s) s) ((err _) shell0)))
         (reg2 (ps/registerPlugin shell1 pSidebar))
-        (shell2 (mt reg2 ((ok s) s) ((err _) shell1)))]
+        (shell2 (match reg2 ((ok s) s) ((err _) shell1)))]
     (assert (= (listLength shell2.activePlugins) 2) "2 plugins registered")
     (refute (!= (listLength shell2.activePlugins) 2) "registered count refutes mismatch")
     (let [(headerHtml (ps/renderSlot shell2 "header"))
@@ -34,11 +34,11 @@ fn testUnregisterPlugin -> Bool
   (let [(shell0 (ps/makePluginShell))
         (plugin (ps/makeUIPlugin "p1" "Plugin One" "workspace" "<div>Canvas</div>"))
         (reg (ps/registerPlugin shell0 plugin))
-        (shell1 (mt reg ((ok s) s) ((err _) shell0)))
+        (shell1 (match reg ((ok s) s) ((err _) shell0)))
         (unreg (ps/unregisterPlugin shell1 "p1"))]
     (assert (ok? unreg) "unregistering existing plugin succeeds")
     (refute (err? unreg) "unregistering existing plugin refutes error")
-    (mt unreg
+    (match unreg
       ((ok shell2)
         (assert (listEmpty? shell2.activePlugins) "active plugins list is empty after unregister")
         (refute (not (listEmpty? shell2.activePlugins)) "active plugins refutes non-empty"))

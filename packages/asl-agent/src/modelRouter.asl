@@ -72,14 +72,14 @@ fn defaultRoutingMatrix -> RoutingMatrix
 fn resolveModelForRole role: TaskRole matrix: RoutingMatrix offline: Bool -> ModelEndpoint
   (if (or offline matrix.preferLocal)
     matrix.localFallback
-    (mt role
+    (match role
       ((roleDesign) matrix.designEndpoint)
       ((roleCoding) matrix.codingEndpoint)
       ((roleReview) matrix.reviewEndpoint)
       ((roleTriage) matrix.triageEndpoint)))
 
 fn formatRouteDecision role: TaskRole ep: ModelEndpoint -> Str
-  (let [(roleName (mt role
+  (let [(roleName (match role
                     ((roleDesign) "design")
                     ((roleCoding) "coding")
                     ((roleReview) "review")

@@ -11,7 +11,7 @@
 (schema ClusterFrame (:f id Str) (:f from Str) (:f to Str) (:f op OpKind) (:f taskId Str) (:f payload Str) (:f wirePayload Str))
 
 fn workerIdle? w: WorkerNode -> Bool
-  (mt w.state ((stateIdle) true) (_ false))
+  (match w.state ((stateIdle) true) (_ false))
 
 fn packKeys raw: Str -> Str
   (let [(s1 (stringReplace raw ":dependencies" ":deps")) (s2 (stringReplace s1 ":sender" ":from")) (s3 (stringReplace s2 ":target" ":to"))] s3)
@@ -68,13 +68,13 @@ fn isRelayLeaseExpired? lease: RelayLease now: I64 -> Bool
   (>= now (+ lease.grantedAt lease.ttlMs))
 
 fn relayClaimLease reg: RelayLeaseRegistry logicalPath: Str sessionId: Str taskId: Str ttlMs: I64 now: I64 digest: Str -> (Result RelayLease Str)
-  (let [(existingOpt (mapGet reg.leases logicalPath))] (mt existingOpt ((none) (let [(newLease (RelayLease :logicalPath logicalPath :sessionId sessionId :taskId taskId :grantedAt now :ttlMs ttlMs :digest digest))] (ok newLease))) ((some cur) (if (isRelayLeaseExpired? cur now) (let [(renewed (RelayLease :logicalPath logicalPath :sessionId sessionId :taskId taskId :grantedAt now :ttlMs ttlMs :digest digest))] (ok renewed)) (if (= cur.sessionId sessionId) (let [(extended (RelayLease :logicalPath logicalPath :sessionId sessionId :taskId taskId :grantedAt now :ttlMs ttlMs :digest digest))] (ok extended)) (err "ERR_LEASE_CONFLICT"))))))
+  (let [(existingOpt (mapGet reg.leases logicalPath))] (match existingOpt ((none) (let [(newLease (RelayLease :logicalPath logicalPath :sessionId sessionId :taskId taskId :grantedAt now :ttlMs ttlMs :digest digest))] (ok newLease))) ((some cur) (if (isRelayLeaseExpired? cur now) (let [(renewed (RelayLease :logicalPath logicalPath :sessionId sessionId :taskId taskId :grantedAt now :ttlMs ttlMs :digest digest))] (ok renewed)) (if (= cur.sessionId sessionId) (let [(extended (RelayLease :logicalPath logicalPath :sessionId sessionId :taskId taskId :grantedAt now :ttlMs ttlMs :digest digest))] (ok extended)) (err "ERR_LEASE_CONFLICT"))))))
 
 fn relayRegistryWithLease reg: RelayLeaseRegistry lease: RelayLease -> RelayLeaseRegistry
   (RelayLeaseRegistry :leases (mapSet reg.leases lease.logicalPath lease))
 
 fn relayReleaseLease reg: RelayLeaseRegistry logicalPath: Str sessionId: Str -> (Result RelayLeaseRegistry Str)
-  (let [(existingOpt (mapGet reg.leases logicalPath))] (mt existingOpt ((none) (err "ERR_LEASE_NOT_FOUND")) ((some cur) (if (= cur.sessionId sessionId) (ok (RelayLeaseRegistry :leases (mapRemove reg.leases logicalPath))) (err "ERR_NOT_LEASE_HOLDER")))))
+  (let [(existingOpt (mapGet reg.leases logicalPath))] (match existingOpt ((none) (err "ERR_LEASE_NOT_FOUND")) ((some cur) (if (= cur.sessionId sessionId) (ok (RelayLeaseRegistry :leases (mapRemove reg.leases logicalPath))) (err "ERR_NOT_LEASE_HOLDER")))))
 
 fn relayVerifyWrite reg: RelayLeaseRegistry logicalPath: Str sessionId: Str digest: Str now: I64 -> (Result Bool Str)
-  (let [(existingOpt (mapGet reg.leases logicalPath))] (mt existingOpt ((none) (err "ERR_STALE_LEASE")) ((some cur) (if (isRelayLeaseExpired? cur now) (err "ERR_STALE_LEASE") (if (!= cur.sessionId sessionId) (err "ERR_STALE_LEASE") (if (!= cur.digest digest) (err "ERR_CAS_MISMATCH") (ok true)))))))
+  (let [(existingOpt (mapGet reg.leases logicalPath))] (match existingOpt ((none) (err "ERR_STALE_LEASE")) ((some cur) (if (isRelayLeaseExpired? cur now) (err "ERR_STALE_LEASE") (if (!= cur.sessionId sessionId) (err "ERR_STALE_LEASE") (if (!= cur.digest digest) (err "ERR_CAS_MISMATCH") (ok true)))))))

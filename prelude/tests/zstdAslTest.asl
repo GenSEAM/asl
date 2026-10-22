@@ -1,21 +1,21 @@
 (module prelude/tests/zstdAslTest :x [runTests] :i [(asl-ir/link :a lk) (asl-ir/types :a irTy) (asl-target-llvm :a llvm)])
 
 fn decodeSha! path: String -> String
-  (mt (fileReadBytes path)
+  (match (fileReadBytes path)
     ((ok src)
-      (mt (zstdAslDecompress src)
+      (match (zstdAslDecompress src)
         ((ok decoded)
-          (mt (zstdDecompress src)
+          (match (zstdDecompress src)
             ((ok reference) (if (= (bytesSha256 decoded) (bytesSha256 reference)) (bytesSha256 decoded) "BYTE_MISMATCH"))
             ((err message) (str "C_ERR " message))))
         ((err message) (str "ASL_ERR " message))))
     ((err message) (str "NO_FILE " message)))
 
 fn decodeErr! path: String -> String
-  (mt (fileReadBytes path)
+  (match (fileReadBytes path)
     ((ok src)
-      (let [aslError (mt (zstdAslDecompress src) ((ok _) "DECODED") ((err message) (str "ERR " message)))
-            cError (mt (zstdDecompress src) ((ok _) "DECODED") ((err message) (str "ERR " message)))]
+      (let [aslError (match (zstdAslDecompress src) ((ok _) "DECODED") ((err message) (str "ERR " message)))
+            cError (match (zstdDecompress src) ((ok _) "DECODED") ((err message) (str "ERR " message)))]
         (if (= aslError cError) aslError "ERROR_TEXT_MISMATCH")))
     ((err _) "NO_FILE"))
 
@@ -29,8 +29,8 @@ fn dataByte i: Int64 -> Int64
   (mod (+ (* i 131) (/ i 251)) 256)
 
 fn ! putList b: Bytes at: Int64 xs: (List Int64) -> Int64
-  (mt (listHead xs)
-    ((some x) (do (bytesSet b at x) (mt (listTail xs) ((some rest) (putList b (+ at 1) rest)))))
+  (match (listHead xs)
+    ((some x) (do (bytesSet b at x) (match (listTail xs) ((some rest) (putList b (+ at 1) rest)))))
     (none at))
 
 fn ! putData b: Bytes at: Int64 i: Int64 end: Int64 -> Int64
@@ -51,18 +51,18 @@ fn ! windowFrame off: Int64 -> Bytes
 
 fn ! windowErr off: Int64 -> String
   (let [src (windowFrame off)
-        aslError (mt (zstdAslDecompress src) ((ok _) "DECODED") ((err message) (str "ERR " message)))
-        cError (mt (zstdDecompress src) ((ok _) "DECODED") ((err message) (str "ERR " message)))]
+        aslError (match (zstdAslDecompress src) ((ok _) "DECODED") ((err message) (str "ERR " message)))
+        cError (match (zstdDecompress src) ((ok _) "DECODED") ((err message) (str "ERR " message)))]
     (if (= aslError cError) aslError (str "ERROR_TEXT_MISMATCH asl=" aslError " c=" cError)))
 
 fn ! windowTailMatches off: Int64 -> Bool
-  (mt (zstdAslDecompress (windowFrame off))
+  (match (zstdAslDecompress (windowFrame off))
     ((ok decoded)
       (and (= (bytesLength decoded) 1203)
         (= (bytesGet decoded 1200) (dataByte (- 1200 off)))
         (= (bytesGet decoded 1201) (dataByte (- 1201 off)))
         (= (bytesGet decoded 1202) (dataByte (- 1202 off)))
-        (mt (zstdDecompress (windowFrame off)) ((ok reference) (= (bytesSha256 decoded) (bytesSha256 reference))) ((err _) false))))
+        (match (zstdDecompress (windowFrame off)) ((ok reference) (= (bytesSha256 decoded) (bytesSha256 reference))) ((err _) false))))
     ((err _) false))
 
 fn ! repeatOffsetIdx2Frame -> Bytes
@@ -74,9 +74,9 @@ fn ! repeatOffsetIdx2Frame -> Bytes
       b))
 
 fn ! repeatOffsetIdx2Matches? -> Bool
-  (mt (zstdAslDecompress (repeatOffsetIdx2Frame))
+  (match (zstdAslDecompress (repeatOffsetIdx2Frame))
     ((ok decoded)
-      (mt (zstdDecompress (repeatOffsetIdx2Frame))
+      (match (zstdDecompress (repeatOffsetIdx2Frame))
         ((ok reference) (= (bytesSha256 decoded) (bytesSha256 reference)))
         ((err _) false)))
     ((err _) false))
@@ -91,25 +91,25 @@ fn ! offsetJustPastProducedFrame -> Bytes
 
 fn ! offsetJustPastProducedErr -> String
   (let [src (offsetJustPastProducedFrame)
-        aslError (mt (zstdAslDecompress src) ((ok _) "DECODED") ((err message) (str "ERR " message)))
-        cError (mt (zstdDecompress src) ((ok _) "DECODED") ((err message) (str "ERR " message)))]
+        aslError (match (zstdAslDecompress src) ((ok _) "DECODED") ((err message) (str "ERR " message)))
+        cError (match (zstdDecompress src) ((ok _) "DECODED") ((err message) (str "ERR " message)))]
     (if (= aslError cError) aslError (str "ERROR_TEXT_MISMATCH asl=" aslError " c=" cError)))
 
 fn ! checkedFrameSha size: Int64 xs: (List Int64) -> String
   (let [src (bytesAlloc size)]
     (do
       (putList src 0 xs)
-      (mt (zstdAslDecompress src)
+      (match (zstdAslDecompress src)
         ((ok decoded)
-          (mt (zstdDecompress src)
+          (match (zstdDecompress src)
             ((ok reference) (if (= (bytesSha256 decoded) (bytesSha256 reference)) (bytesSha256 decoded) "BYTE_MISMATCH"))
             ((err message) (str "C_ERR " message))))
         ((err message) (str "ASL_ERR " message)))))
 
 fn ! zstdFixturePaths -> (List String)
-  (let [pos (mt (dirList "tests/acceptance/r1Host/fixtures/zstd/pos") ((ok xs) xs) ((err e) (assert false (str "list positive fixtures: " e)) (list)))]
-    (let [pages (mt (dirList "tests/acceptance/r1Host/fixtures/zstd/pages") ((ok xs) xs) ((err e) (assert false (str "list parquet page fixtures: " e)) (list)))]
-      (let [neg (mt (dirList "tests/acceptance/r1Host/fixtures/zstd/neg") ((ok xs) xs) ((err e) (assert false (str "list negative fixtures: " e)) (list)))
+  (let [pos (match (dirList "tests/acceptance/r1Host/fixtures/zstd/pos") ((ok xs) xs) ((err e) (assert false (str "list positive fixtures: " e)) (list)))]
+    (let [pages (match (dirList "tests/acceptance/r1Host/fixtures/zstd/pages") ((ok xs) xs) ((err e) (assert false (str "list parquet page fixtures: " e)) (list)))]
+      (let [neg (match (dirList "tests/acceptance/r1Host/fixtures/zstd/neg") ((ok xs) xs) ((err e) (assert false (str "list negative fixtures: " e)) (list)))
             posPaths (map (fn [n] (str "tests/acceptance/r1Host/fixtures/zstd/pos/" n)) pos)
             pagePaths (map (fn [n] (str "tests/acceptance/r1Host/fixtures/zstd/pages/" n)) pages)
             negPaths (map (fn [n] (str "tests/acceptance/r1Host/fixtures/zstd/neg/" n)) neg)]
@@ -129,8 +129,8 @@ fn ! overlayProgram paths: (List String) -> String
        "      (adler b (+ i 1) n a2 (mod (+ s a2) 65521))))\n"
        "fn ! one path: String -> Bool\n"
        "  (do\n"
-       "    (mt (fileReadBytes path)\n"
-       "      ((ok input) (mt (zstdDecompress input)\n"
+       "    (match (fileReadBytes path)\n"
+       "      ((ok input) (match (zstdDecompress input)\n"
        "        ((ok decoded) (println (str path \" OK \" (bytesLength decoded) \" \" (adler decoded 0 (bytesLength decoded) 1 0))))\n"
        "        ((err message) (println (str path \" ERR \" message)))))\n"
        "      ((err message) (println (str path \" READ_ERR \" message))))\n"
@@ -145,9 +145,9 @@ fn ! nativeFixtureParity! paths: (List String) -> Bool
         (llPath (str dir "/zstdOverlayAll.ll"))
         (exe (str dir "/zstdOverlayAll"))
         (wroteSource (fileWrite sourcePath (overlayProgram paths)))
-        (code (mt (lk/linkEntry! sourcePath)
+        (code (match (lk/linkEntry! sourcePath)
                 ((err ds) (str "error: " (formatDiags ds)))
-                ((ok m) (mt (llvm/emitLlvmProgramNative! m (str m.name ".main"))
+                ((ok m) (match (llvm/emitLlvmProgramNative! m (str m.name ".main"))
                           ((err ds) (str "error: " (formatDiags ds)))
                           ((ok ll) ll)))))
         (wroteLl (fileWrite llPath code))

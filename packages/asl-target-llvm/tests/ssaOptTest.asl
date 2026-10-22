@@ -26,9 +26,9 @@ fn libSource -> String
   "(module probeLib\n  :x [nothing]\n  :i [])\n\nfn nothing -> (Option Int64)\n  (none)\n"
 
 fn ! lowered src: String -> (Result irTy/SsaModule String)
-  (mt (fileReadString (lk/preludePath))
+  (match (fileReadString (lk/preludePath))
     ((err e) (err (str "cannot read the prelude: " e)))
-    ((ok preludeSrc) (mt (lk/lowerSourceWith src preludeSrc)
+    ((ok preludeSrc) (match (lk/lowerSourceWith src preludeSrc)
                        ((err ds) (err (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.locus ": " d.message)) ds) "; ")))
                        ((ok m) (ok m)))))
 
@@ -43,30 +43,30 @@ fn countOps m: irTy/SsaModule pred: (fn [irTy/SsaOp] -> Bool) -> Int64
   (listLength (filter (fn [(i irTy/SsaInstr)] -> Bool (pred i.op)) (userInstrs m)))
 
 fn nullaryConstruct? op: irTy/SsaOp -> Bool
-  (mt op ((irTy/opConstruct _ _ fields) (listEmpty? fields)) (_ false))
+  (match op ((irTy/opConstruct _ _ fields) (listEmpty? fields)) (_ false))
 
 fn fieldedConstruct? op: irTy/SsaOp -> Bool
-  (mt op ((irTy/opConstruct _ _ fields) (not (listEmpty? fields))) (_ false))
+  (match op ((irTy/opConstruct _ _ fields) (not (listEmpty? fields))) (_ false))
 
 fn capturelessClosure? op: irTy/SsaOp -> Bool
-  (mt op ((irTy/opMakeClosure _ caps) (listEmpty? caps)) (_ false))
+  (match op ((irTy/opMakeClosure _ caps) (listEmpty? caps)) (_ false))
 
 fn capturingClosure? op: irTy/SsaOp -> Bool
-  (mt op ((irTy/opMakeClosure _ caps) (not (listEmpty? caps))) (_ false))
+  (match op ((irTy/opMakeClosure _ caps) (not (listEmpty? caps))) (_ false))
 
 fn singletonRead? op: irTy/SsaOp -> Bool
-  (mt op ((irTy/opGlobal name) (stringContains? name ".@ssaOpt$")) (_ false))
+  (match op ((irTy/opGlobal name) (stringContains? name ".@ssaOpt$")) (_ false))
 
 fn distinctKeys m: irTy/SsaModule -> Int64
   (listLength (fold (fn [(acc (List String)) (i irTy/SsaInstr)] -> (List String)
-                      (mt (opt/constantKey i) ((some k) (if (listContains? acc k) acc (cons k acc))) ((none) acc)))
+                      (match (opt/constantKey i) ((some k) (if (listContains? acc k) acc (cons k acc))) ((none) acc)))
                     (list) (userInstrs m)))
 
 fn entryOf m: irTy/SsaModule -> String
   (optionOr (listHead (filter (fn [(n String)] -> Bool (or (= n "main") (stringEndsWith? n ".main"))) (map (fn [(f irTy/SsaFunction)] -> String f.name) m.functions))) "main")
 
 fn diagsText res: (Result String (List irTy/IrDiag)) -> String
-  (mt res ((ok _) "ok") ((err ds) (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.locus ": [" d.code "] " d.message)) ds) "; ")))
+  (match res ((ok _) "ok") ((err ds) (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.locus ": [" d.code "] " d.message)) ds) "; ")))
 
 fn occurrences text: String needle: String -> Int64
   (- (listLength (stringSplit text needle)) 1)
@@ -77,13 +77,13 @@ fn outsideInits text: String needle: String -> Int64
         0 (stringSplit text "\ndefine "))
 
 fn mainBody text: String -> String
-  (mt (mt (stringIndexOf text "define internal i32 @asl.main(") ((some i) (some i)) ((none) (stringIndexOf text "define i32 @main(")))
+  (match (match (stringIndexOf text "define internal i32 @asl.main(") ((some i) (some i)) ((none) (stringIndexOf text "define i32 @main(")))
     ((none) "")
     ((some i) (let [(rest (optionOr (stringSlice text i (stringLength text)) ""))]
                 (optionOr (stringSlice rest 0 (optionOr (stringIndexOf rest "\n}\n") (stringLength rest))) ""))))
 
 fn ! testRewrite -> Bool
-  (mt (lowered (probeSource))
+  (match (lowered (probeSource))
     ((err e) (do (assert false (str "probe lowers: " e)) false))
     ((ok m)
       (let [(h (opt/hoistConstants m))
@@ -107,7 +107,7 @@ fn ! testRewrite -> Bool
             true))))
 
 fn ! testEmitted -> Bool
-  (mt (lowered (probeSource))
+  (match (lowered (probeSource))
     ((err e) (do (assert false (str "probe lowers: " e)) false))
     ((ok m)
       (let [(keysCtor (listLength (filter (fn [(i irTy/SsaInstr)] -> Bool (nullaryConstruct? i.op)) (userInstrs m))))
@@ -129,19 +129,19 @@ fn ! testEmitted -> Bool
             true))))
 
 fn ! hostFacts -> (Result libc/TripleFacts String)
-  (mt (run/shellOut "uname -s -m" 10000)
+  (match (run/shellOut "uname -s -m" 10000)
     ((err e) (err e))
-    ((ok out) (mt (route/hostFactsOf (stringTrim out))
+    ((ok out) (match (route/hostFactsOf (stringTrim out))
                 ((err e) (err e))
-                ((ok o) (mt o
+                ((ok o) (match o
                           ((none) (err (str "no triple facts for " (stringTrim out))))
                           ((some f) (ok f)))))))
 
 fn ! testSeparateModule -> Bool
-  (mt (lowered (libSource))
+  (match (lowered (libSource))
     ((err e) (do (assert false (str "probeLib lowers: " e)) false))
     ((ok m)
-      (mt (hostFacts)
+      (match (hostFacts)
         ((err e) (do (assert false (str "host facts: " e)) false))
         ((ok f)
           (let [(plain (resultOr (llvm/emitLlvmModule m) ""))
@@ -156,7 +156,7 @@ fn ! testSeparateModule -> Bool
 fn statsField text: String field: String -> Int64
   (let [(line (optionOr (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:gcStats ")) (stringSplit text "\n"))) ""))
         (tokens (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit line " ")))]
-    (mt (listIndexOf tokens field)
+    (match (listIndexOf tokens field)
       ((some i) (optionOr (stringToInt64 (stringReplace (optionOr (listGet tokens (+ i 1)) "") ")" "")) -1))
       ((none) -1)))
 
@@ -164,7 +164,7 @@ fn fixture name: String -> String
   (str "asl/packages/asl-target-llvm/tests/fixtures/ssaOpt/" name ".asl")
 
 fn ! runBuilt built: nt/Built env: (List String) -> run/Done
-  (mt built.binary
+  (match built.binary
     ((none) (run/Done :idx 0 :exit 127 :out built.reason :ms 0 :verdict "notBuilt"))
     ((some bin) (run/runOneLimited (run/job (list bin) "." (run/childEnv env)) (run/limits 120 4))))
 

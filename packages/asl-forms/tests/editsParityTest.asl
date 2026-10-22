@@ -30,7 +30,7 @@ fn aslCheckIn! ws: String p: String after: String before: (Option String) -> e/S
   (let [(overlay (str (tmpRoot!) "/aslOverlay" (stringFromInt64 (nowNs))))
         (rel (k/relPath p ws))
         (r (nativeCheck! overlay rel after))
-        (pre (if (= (pairFirst r) "error") (mt before ((some b) (pairFirst (nativeCheck! overlay rel b))) ((none) "")) ""))]
+        (pre (if (= (pairFirst r) "error") (match before ((some b) (pairFirst (nativeCheck! overlay rel b))) ((none) "")) ""))]
     (do (resultOr (pathRemove overlay) ())
         (e/SyntaxResult :status (pairFirst r) :message (pairSecond r) :before pre :host "")))
 
@@ -46,7 +46,7 @@ fn dispatch! vs: v/Vfs ch: e/Checkers id: Int64 form: String held: (List String)
   (let [(p (k/parseStep form))
         (run (fn [(n Int64) (f String) (h (List String))] -> k/EditOutcome
                    (let [(r (dispatch! vs ch n f h))] (k/EditOutcome :lines r.lines :errCount r.errCount))))]
-    (mt (e/editOp! vs ch run held id p.op p.kwargs p.args)
+    (match (e/editOp! vs ch run held id p.op p.kwargs p.args)
       ((some out) (ops/StepOutcome :lines out.lines :errCount out.errCount))
       ((none) (ops/runStep! vs.root id form))))
 
@@ -55,7 +55,7 @@ fn octal n: Int64 -> String
 
 fn treeRows! ws: String rel: String -> (List String)
   (let [(dir (if (stringEmpty? rel) ws (str ws "/" rel)))]
-    (mt (dirList dir)
+    (match (dirList dir)
       ((err _) (list))
       ((ok names)
         (fold (fn [(acc (List String)) (name String)] -> (List String)
@@ -63,11 +63,11 @@ fn treeRows! ws: String rel: String -> (List String)
                       (full (str ws "/" r))]
                   (cond
                     ((and (stringEmpty? rel) (= name ".asl")) acc)
-                    ((v/isLink? full) (cons (str "L " r " " (mt (proc/runSimple! "readlink" (list full)) ((ok t) t) ((err _) "?"))) acc))
+                    ((v/isLink? full) (cons (str "L " r " " (match (proc/runSimple! "readlink" (list full)) ((ok t) t) ((err _) "?"))) acc))
                     ((k/isDir! full) (listAppend (cons (str "D " r) acc) (treeRows! ws r)))
                     (else
-                      (let [(mode (mt (fileStat full) ((ok st) (& st.mode 4095)) ((err _) 0)))
-                            (sha (mt (fileReadBytes full) ((ok b) (bytesSha256 b)) ((err x) x)))]
+                      (let [(mode (match (fileStat full) ((ok st) (& st.mode 4095)) ((err _) 0)))
+                            (sha (match (fileReadBytes full) ((ok b) (bytesSha256 b)) ((err x) x)))]
                         (cons (str "F " r " " (octal mode) " " sha) acc))))))
               (list)
               names))))
@@ -76,20 +76,20 @@ fn tree! ws: String -> String
   (stringJoin (listSort (treeRows! ws "")) "\n")
 
 fn jtext obj: j/Json key: String -> String
-  (mt (j/jsonGet obj key) ((some x) (mt x ((j/jstr s) s) (_ ""))) ((none) ""))
+  (match (j/jsonGet obj key) ((some x) (match x ((j/jstr s) s) (_ ""))) ((none) ""))
 
 fn jbool obj: j/Json key: String -> String
-  (mt (j/jsonGet obj key) ((some x) (mt x ((j/jbool b) (if b "true" "false")) (_ "none"))) ((none) "none"))
+  (match (j/jsonGet obj key) ((some x) (match x ((j/jbool b) (if b "true" "false")) (_ "none"))) ((none) "none"))
 
 fn metaRow! ws: String sess: String dir: String name: String -> String
   (let [(text (resultOr (fileReadString (str dir "/" name)) ""))
         (meta (resultOr (j/jsonParse text) (j/jnull)))
-        (blob (mt (fileReadBytes (str dir "/" (optionOr (stringSlice name 0 (- (stringLength name) 5)) "") ".blob")) ((ok b) (bytesSha256 b)) ((err x) x)))
+        (blob (match (fileReadBytes (str dir "/" (optionOr (stringSlice name 0 (- (stringLength name) 5)) "") ".blob")) ((ok b) (bytesSha256 b)) ((err x) x)))
         (sha (jtext meta "baseSha"))]
     (str sess " " (k/relPath (jtext meta "path") ws) " " blob " " (if (stringEmpty? sha) "-" sha) " " (jbool meta "baseExists") " " (v/shaText (stringReplace text ws "@WS@"))))
 
 fn storeRows! ws: String sess: String dir: String -> (List String)
-  (mt (dirList dir)
+  (match (dirList dir)
     ((err _) (list))
     ((ok names)
       (fold (fn [(acc (List String)) (name String)] -> (List String)
@@ -104,7 +104,7 @@ fn staged! ws: String -> String
   (stringJoin (listSort (storeRows! ws "." (str ws "/.asl/vfs"))) "\n")
 
 fn sh! bin: String args: (List String) -> Bool
-  (mt (proc/runSimple! bin args)
+  (match (proc/runSimple! bin args)
     ((ok _) true)
     ((err _) (do (println (str "(:harnessError :bin " bin " :args \"" (k/escapeAsnVal (stringJoin args " ")) "\")")) false)))
 
@@ -145,7 +145,7 @@ fn report! kw: (Map String String) field: String want: String got: String -> Boo
           false)))
 
 fn hostTail part: String -> String
-  (mt (stringIndexOf part "\"") ((some i) (str "*" (optionOr (stringSlice part i (stringLength part)) ""))) ((none) part))
+  (match (stringIndexOf part "\"") ((some i) (str "*" (optionOr (stringSlice part i (stringLength part)) ""))) ((none) part))
 
 fn normHost s: String -> String
   (let [(parts (stringSplit s ":syntaxHost \"python"))]
@@ -178,7 +178,7 @@ fn tally a: Replay b: Replay -> Replay
   (with b :steps (+ a.steps b.steps) :failures (+ a.failures b.failures) :loose (+ a.loose b.loose) :diverged (+ a.diverged b.diverged))
 
 fn replayAll! parent: String exact: Bool lines: (List String) cur: Replay sid: String total: Replay -> Replay
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (tally total cur))
     ((some line)
       (let [(rest (optionOr (listTail lines) (list)))
@@ -196,7 +196,7 @@ fn replayAll! parent: String exact: Bool lines: (List String) cur: Replay sid: S
 fn unitChecks! root: String -> Bool
   (let [(ws (str root "/unit"))
         (vs (do (resultOr (pathRemove ws) ()) (resultOr (dirCreate (str ws "/.asl")) ()) (resultOr (dirCreate (str ws "/bare")) ()) (vfsFor! ws "")))
-        (dirOf (fn [(r (Result v/Vfs String))] -> String (mt r ((ok c) c.dir) ((err x) (str "err " x)))))
+        (dirOf (fn [(r (Result v/Vfs String))] -> String (match r ((ok c) c.dir) ((err x) (str "err " x)))))
         (envDir (optionOr (envGet "ASL_VFS_DIR") ""))
         (lp (v/lockPath vs (str ws "/a.txt")))]
     (do
@@ -205,7 +205,7 @@ fn unitChecks! root: String -> Bool
       (assert (= (dirOf (v/vfsContextFrom! (str ws "/bare") "" "" ws)) (str ws "/.cache/asl/vfs/" (optionOr (stringSlice (v/shaText (str ws "/bare")) 0 16) ""))) "a workspace without .asl stores under the home cache by root digest")
       (assert (stringStartsWith? (dirOf (v/vfsContextFrom! ws "" "a/b" "/h")) "err ASL_SESSION must match") "a session naming a path is refused")
       (assert (= (dirOf (v/vfsContext! ws)) (if (stringEmpty? envDir) (str ws "/.asl/vfs") envDir)) "vfsContext reads ASL_VFS_DIR from the environment, set or unset")
-      (assert (mt (v/lockAcquire! vs (str ws "/a.txt")) ((ok fd) (and (= (fileLock lp true) (err "busy")) (resultOk? (v/lockRelease! vs (str ws "/a.txt") fd)) (not (fileExists? lp)))) ((err _) false))
+      (assert (match (v/lockAcquire! vs (str ws "/a.txt")) ((ok fd) (and (= (fileLock lp true) (err "busy")) (resultOk? (v/lockRelease! vs (str ws "/a.txt") fd)) (not (fileExists? lp)))) ((err _) false))
               "a held lock is busy to another open, and release removes the lock file when nothing is staged")
       (assert (= (v/withLock! vs (list lp) (str ws "/a.txt") (fn [] -> Int64 7)) (ok 7)) "a lock the caller already holds is re-entered without flock")
       (assert (= (v/jsonQuote "a\"\\\n\x01é𝄞") "\"a\\\"\\\\\\n\\u0001\\u00e9\\ud834\\udd1e\"") "metas quote strings as json.dumps with ensure_ascii")
@@ -230,7 +230,7 @@ fn unitChecks! root: String -> Bool
       true))
 
 fn resultOk? r: (Result Unit String) -> Bool
-  (mt r ((ok _) true) ((err _) false))
+  (match r ((ok _) true) ((err _) false))
 
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))

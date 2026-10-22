@@ -66,7 +66,7 @@ fn reactorUnregister reactor: Reactor targetFd: Int64 -> (Result Reactor String)
           (ok (with reactor :registrations filtered :activeCount newCount))))))
 
 fn readyMaskFor ready: (List (Pair Int64 Int64)) fd: Int64 -> (Option Int64)
-  (mt (listHead (filter (fn [(p (Pair Int64 Int64))] (= (pairFirst p) fd)) ready))
+  (match (listHead (filter (fn [(p (Pair Int64 Int64))] (= (pairFirst p) fd)) ready))
     ((none) (none))
     ((some p) (some (pairSecond p))))
 
@@ -74,11 +74,11 @@ fn ! reactorPoll reactor: Reactor timeoutMs: Int64 -> (Result (Pair Reactor (Lis
   (if (< timeoutMs 0)
     (err "ERR_REACTOR_INVALID_TIMEOUT")
     (let [(regs reactor.registrations)]
-      (mt (fdPoll (map (fn [(r ReactorRegistration)] (pair r.fd r.interestMask)) regs) timeoutMs)
+      (match (fdPoll (map (fn [(r ReactorRegistration)] (pair r.fd r.interestMask)) regs) timeoutMs)
         ((err e) (err (str "ERR_REACTOR_POLL: " e)))
         ((ok ready)
           (let [(events (fold (fn [(acc (List ReactorEvent)) (r ReactorRegistration)]
-                                (mt (readyMaskFor ready r.fd)
+                                (match (readyMaskFor ready r.fd)
                                   ((none) acc)
                                   ((some m) (listAppend acc (list (ReactorEvent :fd r.fd :readyMask m :tag r.tag))))))
                               (list) regs))]
@@ -86,7 +86,7 @@ fn ! reactorPoll reactor: Reactor timeoutMs: Int64 -> (Result (Pair Reactor (Lis
                       events)))))))
 
 fn popEvent reactor: Reactor -> (Pair Reactor (Option ReactorEvent))
-  (mt (listHead reactor.eventQueue)
+  (match (listHead reactor.eventQueue)
     ((none) (pair reactor (none)))
     ((some firstEvt)
       (pair (with reactor :eventQueue (optionOr (listTail reactor.eventQueue) (list)))
@@ -94,7 +94,7 @@ fn popEvent reactor: Reactor -> (Pair Reactor (Option ReactorEvent))
 
 fn ! reactorNextEvent! reactor: Reactor -> (Result (Pair Reactor (Option ReactorEvent)) String)
   (if (listEmpty? reactor.eventQueue)
-    (mt (reactorPoll reactor 0)
+    (match (reactorPoll reactor 0)
       ((err e) (err e))
       ((ok polled) (ok (popEvent (pairFirst polled)))))
     (ok (popEvent reactor)))
@@ -166,10 +166,10 @@ fn serverConnCount server: Server -> Int64
   (listLength server.connections)
 
 fn httpListen! port: Int64 config: ServerConfig -> (Result Server String)
-  (mt (tcpListen port)
+  (match (tcpListen port)
     ((err e) (err (str "ERR_LISTEN: " e)))
     ((ok listenerFd)
-      (mt (fdNonBlocking listenerFd true)
+      (match (fdNonBlocking listenerFd true)
         ((err e) (do (fdClose listenerFd) (err (str "ERR_NONBLOCK: " e))))
         ((ok _)
           (ok (Server
@@ -180,12 +180,12 @@ fn httpListen! port: Int64 config: ServerConfig -> (Result Server String)
             :config config))))))
 
 fn acceptNewClients! server: Server nowNs: Int64 -> (Pair Server (List HttpEvent))
-  (mt (sockAccept server.listenerFd)
+  (match (sockAccept server.listenerFd)
     ((err _) (pair server (list)))
     ((ok clientFd)
       (if (>= (listLength server.connections) server.config.maxConnections)
         (do (fdClose clientFd) (pair server (list)))
-        (mt (fdNonBlocking clientFd true)
+        (match (fdNonBlocking clientFd true)
           ((err _) (do (fdClose clientFd) (pair server (list))))
           ((ok _)
             (let [(cid server.nextConnId)
@@ -202,20 +202,20 @@ fn findConnByFd conns: (List Connection) targetFd: Int64 -> (Option Connection)
 
 fn chunkedBodyEnd buf: String pos: Int64 -> (Result (Option Int64) String)
   (let [(rest (optionOr (stringSlice buf pos (stringLength buf)) ""))]
-    (mt (stringIndexOf rest "\r\n")
+    (match (stringIndexOf rest "\r\n")
       ((none) (ok (none)))
       ((some lineEnd)
         (let [(sizeLine (optionOr (stringSlice rest 0 lineEnd) ""))
-              (sizeText (mt (stringIndexOf sizeLine ";") ((some semi) (optionOr (stringSlice sizeLine 0 semi) "")) ((none) sizeLine)))
+              (sizeText (match (stringIndexOf sizeLine ";") ((some semi) (optionOr (stringSlice sizeLine 0 semi) "")) ((none) sizeLine)))
               (dataStart (+ pos (+ lineEnd 2)))]
-          (mt (parseHexSize (stringTrim sizeText) 0 0)
+          (match (parseHexSize (stringTrim sizeText) 0 0)
             ((none) (err "ERR_HTTP_INVALID_CHUNK_SIZE"))
             ((some size)
               (if (= size 0)
                 (let [(trailers (optionOr (stringSlice buf dataStart (stringLength buf)) ""))]
                   (if (stringStartsWith? trailers "\r\n")
                     (ok (some (+ dataStart 2)))
-                    (mt (stringIndexOf trailers "\r\n\r\n")
+                    (match (stringIndexOf trailers "\r\n\r\n")
                       ((none) (ok (none)))
                       ((some t) (ok (some (+ dataStart (+ t 4))))))))
                 (let [(dataEnd (+ dataStart size))]
@@ -229,20 +229,20 @@ fn parseHexSize text: String i: Int64 acc: Int64 -> (Option Int64)
     (if (= i 0) (none) (some acc))
     (let [(c (optionOr (stringSlice text i (+ i 1)) ""))
           (digit (stringIndexOf "0123456789abcdef" (stringLower c)))]
-      (mt digit
+      (match digit
         ((none) (none))
         ((some d) (if (> acc 34359738367) (none) (parseHexSize text (+ i 1) (+ (* acc 16) d)))))))
 
 fn requestLength buf: String headerLen: Int64 -> (Result (Option Int64) String)
-  (mt (http/parseHttpRequest (optionOr (stringSlice buf 0 headerLen) ""))
+  (match (http/parseHttpRequest (optionOr (stringSlice buf 0 headerLen) ""))
     ((err e) (err e))
     ((ok head)
       (if (= (stringLower (optionOr (http/getHeaderFromHeaders head.headers "Transfer-Encoding") "")) "chunked")
         (chunkedBodyEnd buf headerLen)
-        (mt (http/getHeaderFromHeaders head.headers "Content-Length")
+        (match (http/getHeaderFromHeaders head.headers "Content-Length")
           ((none) (ok (some headerLen)))
           ((some text)
-            (mt (stringToInt64 (stringTrim text))
+            (match (stringToInt64 (stringTrim text))
               ((none) (err "ERR_HTTP_INVALID_CONTENT_LENGTH"))
               ((some n)
                 (cond
@@ -253,7 +253,7 @@ fn requestLength buf: String headerLen: Int64 -> (Result (Option Int64) String)
 fn tryParseRequests conn: Connection maxHeaderBytes: Int64 -> (Pair Connection (List HttpEvent))
   (let [(buf conn.buffer)
         (headerEnd (stringIndexOf buf "\r\n\r\n"))]
-    (mt headerEnd
+    (match headerEnd
       ((none)
         (if (> (stringLength buf) maxHeaderBytes)
           (pair conn (list (mkErrorEvent conn.connId 431 "ERR_HEADER_TOO_LARGE")))
@@ -261,14 +261,14 @@ fn tryParseRequests conn: Connection maxHeaderBytes: Int64 -> (Pair Connection (
       ((some endIdx)
         (if (> endIdx maxHeaderBytes)
           (pair conn (list (mkErrorEvent conn.connId 431 "ERR_HEADER_TOO_LARGE")))
-          (mt (requestLength buf (+ endIdx 4))
+          (match (requestLength buf (+ endIdx 4))
             ((err e) (pair conn (list (mkErrorEvent conn.connId 400 e))))
-            ((ok complete) (mt complete
+            ((ok complete) (match complete
             ((none) (pair conn (list)))
             ((some reqLen)
               (let [(rawReq (optionOr (stringSlice buf 0 reqLen) ""))
                     (rest (optionOr (stringSlice buf reqLen (stringLength buf)) ""))]
-                (mt (http/parseHttpRequest rawReq)
+                (match (http/parseHttpRequest rawReq)
                   ((err e) (pair conn (list (mkErrorEvent conn.connId 400 e))))
                   ((ok parsed)
                     (let [(evt (mkRequestEvent conn.connId parsed.method parsed.path parsed.headers.entries parsed.body))
@@ -279,7 +279,7 @@ fn tryParseRequests conn: Connection maxHeaderBytes: Int64 -> (Pair Connection (
                         (pair updatedConn (list evt)))))))))))))))
 
 fn readFromConn! conn: Connection nowNs: Int64 maxHeaderBytes: Int64 -> (Pair Connection (List HttpEvent))
-  (mt (fdRead conn.fd 4096)
+  (match (fdRead conn.fd 4096)
     ((err _)
       (pair conn (list (mkClosedEvent conn.connId))))
     ((ok data)
@@ -297,7 +297,7 @@ fn checkTimeouts! conns: (List Connection) nowNs: Int64 timeoutNs: Int64 -> (Pai
     (pair (list) (list)) conns)
 
 fn drainFd! fd: Int64 acc: String -> (Result (Pair String Bool) String)
-  (mt (fdRead fd 65536)
+  (match (fdRead fd 65536)
     ((err e) (if (= e "wouldBlock") (ok (pair acc false)) (err e)))
     ((ok data) (if (= (stringLength data) 0) (ok (pair acc true)) (drainFd! fd (str acc data)))))
 
@@ -305,37 +305,37 @@ fn closeProcFds! p: ProcEntry -> Unit
   (do (fdClose p.stdoutFd) (fdClose p.stderrFd) ())
 
 fn stepProc! p: ProcEntry nowNs: Int64 -> (Pair (Option ProcEntry) (List HttpEvent))
-  (mt (drainFd! p.stdoutFd p.stdout)
+  (match (drainFd! p.stdoutFd p.stdout)
     ((err e) (do (closeProcFds! p) (pair (none) (list (mkProcErrorEvent p.handle (str "stdout read failed: " e))))))
     ((ok outRes)
-      (mt (drainFd! p.stderrFd p.stderr)
+      (match (drainFd! p.stderrFd p.stderr)
         ((err e) (do (closeProcFds! p) (pair (none) (list (mkProcErrorEvent p.handle (str "stderr read failed: " e))))))
         ((ok errRes)
           (let [(sout (pairFirst outRes))
                 (serr (pairFirst errRes))
                 (running (with p :stdout sout :stderr serr))]
-            (mt (procWaitPid p.handle true)
+            (match (procWaitPid p.handle true)
               ((err e) (do (closeProcFds! p) (pair (none) (list (mkProcErrorEvent p.handle (str "wait failed: " e))))))
               ((ok status)
-                (mt status
+                (match status
                   ((some code)
-                    (let [(tailOut (mt (drainFd! p.stdoutFd sout) ((ok r) (pairFirst r)) ((err _) sout)))
-                          (tailErr (mt (drainFd! p.stderrFd serr) ((ok r) (pairFirst r)) ((err _) serr)))]
+                    (let [(tailOut (match (drainFd! p.stdoutFd sout) ((ok r) (pairFirst r)) ((err _) sout)))
+                          (tailErr (match (drainFd! p.stderrFd serr) ((ok r) (pairFirst r)) ((err _) serr)))]
                       (do (closeProcFds! p) (pair (none) (list (mkProcDoneEvent p.handle code tailOut tailErr))))))
                   ((none)
                     (if (and (> p.deadlineNs 0) (> nowNs p.deadlineNs))
                       (let [(killed (procKill (- 0 p.handle) "SIGKILL"))
                             (reaped (procWaitPid p.handle false))
-                            (reason (mt killed
+                            (reason (match killed
                                       ((err e) (str "kill failed: " e))
-                                      ((ok _) (mt reaped ((err e) (str "killed; reap failed: " e)) ((ok _) "killed")))))]
+                                      ((ok _) (match reaped ((err e) (str "killed; reap failed: " e)) ((ok _) "killed")))))]
                         (do (closeProcFds! p) (pair (none) (list (mkProcTimeoutEvent p.handle sout serr reason)))))
                       (pair (some running) (list))))))))))))
 
 fn checkProcs! server: Server nowNs: Int64 -> (Pair Server (List HttpEvent))
   (let [(result (fold (fn [(acc (Pair (List ProcEntry) (List HttpEvent))) (p ProcEntry)]
                   (let [(step (stepProc! p nowNs))]
-                    (pair (mt (pairFirst step) ((some kept) (listAppend (pairFirst acc) (list kept))) ((none) (pairFirst acc)))
+                    (pair (match (pairFirst step) ((some kept) (listAppend (pairFirst acc) (list kept))) ((none) (pairFirst acc)))
                           (listAppend (pairSecond acc) (pairSecond step)))))
                   (pair (list) (list)) server.procs))]
     (pair (with server :procs (pairFirst result))
@@ -346,7 +346,7 @@ fn processConnEvents! server: Server readyFds: (List (Pair Int64 Int64)) nowNs: 
     (fold (fn [(acc (Pair Server (List HttpEvent))) (rp (Pair Int64 Int64))]
       (let [(fd (pairFirst rp))
             (srv (pairFirst acc))]
-        (mt (findConnByFd srv.connections fd)
+        (match (findConnByFd srv.connections fd)
           ((none) acc)
           ((some conn)
             (let [(res (readFromConn! conn nowNs maxHdr))
@@ -383,7 +383,7 @@ fn reactorStep! server: Server timeoutMs: Int64 -> (Result (Pair Server (List Ht
         (srv2 (pairFirst procRes))
         (procEvents (pairSecond procRes))
         (pollPairs (cons (pair srv2.listenerFd 1) (map (fn [(c Connection)] (pair c.fd 1)) srv2.connections)))]
-    (mt (fdPoll pollPairs (reactorPollTimeoutMs srv2.procs nowNs timeoutMs))
+    (match (fdPoll pollPairs (reactorPollTimeoutMs srv2.procs nowNs timeoutMs))
       ((err e) (err e))
       ((ok readyPairs)
         (let [(listenerReady (listAny? (fn [(rp (Pair Int64 Int64))] (= (pairFirst rp) srv2.listenerFd)) readyPairs))
@@ -398,12 +398,12 @@ fn reactorStep! server: Server timeoutMs: Int64 -> (Result (Pair Server (List Ht
 fn writeAll! fd: Int64 data: String offset: Int64 deadlineNs: Int64 -> (Result Unit String)
   (if (>= offset (stringLength data)) (ok (do))
     (let [(chunk (optionOr (stringSlice data offset (stringLength data)) ""))]
-      (mt (fdWrite fd chunk)
+      (match (fdWrite fd chunk)
         ((err e)
           (if (!= e "wouldBlock") (err e)
             (let [(leftMs (/ (- deadlineNs (monotonicNs)) 1000000))]
               (if (<= leftMs 0) (err "ERR_WRITE_TIMEOUT")
-                (mt (fdPoll (list (pair fd 2)) leftMs)
+                (match (fdPoll (list (pair fd 2)) leftMs)
                   ((err pe) (err pe))
                   ((ok _) (writeAll! fd data offset deadlineNs)))))))
         ((ok n)
@@ -429,11 +429,11 @@ fn findConnById conns: (List Connection) targetId: Int64 -> (Option Connection)
     (listHead found))
 
 fn httpRespond! server: Server connId: Int64 statusCode: Int64 headers: (List (Pair String String)) body: String -> (Result Server String)
-  (mt (findConnById server.connections connId)
+  (match (findConnById server.connections connId)
     ((none) (err "ERR_CONN_NOT_FOUND"))
     ((some conn)
       (let [(response (http/formatHttpResponse (http/makeResponse statusCode (cond ((= statusCode 200) "OK") ((= statusCode 204) "No Content") ((= statusCode 400) "Bad Request") ((= statusCode 404) "Not Found") ((= statusCode 431) "Request Header Fields Too Large") ((= statusCode 408) "Request Timeout") ((= statusCode 500) "Internal Server Error") (else "Unknown")) (http/makeHeaders (responseHeaders headers body)) body)))]
-        (mt (writeAll! conn.fd response 0 (writeDeadline! server))
+        (match (writeAll! conn.fd response 0 (writeDeadline! server))
           ((err e) (err (str "ERR_RESPOND: " e)))
           ((ok _) (ok server))))))
 
@@ -442,20 +442,20 @@ fn int64ToHex value: Int64 -> String
     (str (int64ToHex (/ value 16)) (optionOr (stringSlice "0123456789abcdef" (- value (* (/ value 16) 16)) (+ (- value (* (/ value 16) 16)) 1)) "0")))
 
 fn httpClose! server: Server connId: Int64 -> (Result Server String)
-  (mt (findConnById server.connections connId)
+  (match (findConnById server.connections connId)
     ((none) (err "ERR_CONN_NOT_FOUND"))
     ((some conn)
-      (mt (fdClose conn.fd)
+      (match (fdClose conn.fd)
         ((err e) (err e))
         ((ok _)
           (ok (with server :connections (removeConn server.connections conn.fd)))))))
 
 fn httpStreamChunk! server: Server connId: Int64 chunk: String -> (Result Server String)
-  (mt (findConnById server.connections connId)
+  (match (findConnById server.connections connId)
     ((none) (err "ERR_CONN_NOT_FOUND"))
     ((some conn)
       (if (stringEmpty? chunk)
-        (mt (writeAll! conn.fd "0\r
+        (match (writeAll! conn.fd "0\r
 \r
 " 0 (writeDeadline! server))
           ((err e) (err (str "ERR_STREAM: " e)))
@@ -466,17 +466,17 @@ fn httpStreamChunk! server: Server connId: Int64 chunk: String -> (Result Server
               (frame (str hexLen "\r
 " chunk "\r
 "))]
-          (mt (writeAll! conn.fd frame 0 (writeDeadline! server))
+          (match (writeAll! conn.fd frame 0 (writeDeadline! server))
             ((err e) (err (str "ERR_STREAM: " e)))
             ((ok _)
               (let [(updatedConns (map (fn [(c Connection)] (if (= c.connId connId) (Connection :fd c.fd :connId c.connId :buffer c.buffer :lastActivityNs c.lastActivityNs :chunkedMode true) c)) server.connections))]
                 (ok (with server :connections updatedConns)))))))))
 
 fn reactorAddProc! server: Server pid: Int64 stdoutFd: Int64 stderrFd: Int64 timeoutMs: Int64 -> (Result Server String)
-  (mt (fdNonBlocking stdoutFd true)
+  (match (fdNonBlocking stdoutFd true)
     ((err e) (err (str "stdout non-blocking: " e)))
     ((ok _)
-      (mt (fdNonBlocking stderrFd true)
+      (match (fdNonBlocking stderrFd true)
         ((err e) (err (str "stderr non-blocking: " e)))
         ((ok _)
           (let [(deadlineNs (if (<= timeoutMs 0) 0 (+ (monotonicNs) (* timeoutMs 1000000))))

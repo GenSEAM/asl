@@ -63,7 +63,7 @@ fn universalNewlines t: String -> String
   (if (stringContains? t "\r") (stringReplace (stringReplace t "\r\n" "\n") "\r" "\n") t)
 
 fn serValue v: RVal -> String
-  (mt v
+  (match v
     ((rStr s) (c/serString s))
     ((rInt n) (stringFromInt64 n))
     ((rBool b) (if b "true" "false"))
@@ -81,14 +81,14 @@ fn ! nowMono -> Float64
   (/ (int64ToFloat64 (monotonicNs)) 1000000000.0)
 
 fn budgetLeft deadlineAt: (Option Float64) nowMono: Float64 -> (Option Float64)
-  (mt deadlineAt
+  (match deadlineAt
     ((none) (none))
     ((some at) (some (- at nowMono))))
 
 fn stepTimeout runTimeout: Int64 deadlineAt: (Option Float64) nowMono: Float64 -> Int64
-  (mt (budgetLeft deadlineAt nowMono)
+  (match (budgetLeft deadlineAt nowMono)
     ((none) runTimeout)
-    ((some left) (mt (float64ToInt64 left)
+    ((some left) (match (float64ToInt64 left)
                    ((some n) (max 1 (min runTimeout n)))
                    ((none) (if (> left 0.0) runTimeout 1)))))
 
@@ -98,29 +98,29 @@ fn engineSocketPath! rootDir: String -> String
 
 ; (:m :tags (transport))
 fn ! engineRequest sockPath: String line: String timeoutSec: Int64 -> (Result String (Pair String String))
-  (mt (etp/socketExchange! sockPath line (* (max 1 timeoutSec) 1000))
+  (match (etp/socketExchange! sockPath line (* (max 1 timeoutSec) 1000))
     ((ok ans) (ok (stringTrim ans)))
     ((err e) (err (pair (if (= e "timed out") "ERR_TIMEOUT" "ERR_SOCKET") e))))
 
 fn envJson! env: (Option (List String)) -> j/Json
   (j/jobj (map (fn [row]
-                 (mt (stringIndexOf row "=")
+                 (match (stringIndexOf row "=")
                    ((some i) (pair (c/sliceOf row 0 i) (j/jstr (c/sliceOf row (+ i 1) (stringLength row)))))
                    ((none) (pair row (j/jstr "")))))
-               (mt env ((some rows) rows) ((none) (envList)))))
+               (match env ((some rows) rows) ((none) (envList)))))
 
 fn jsonInt v: (Option j/Json) -> (Option Int64)
-  (mt (optionOr v (j/jnull)) ((j/jint n) (some n)) (_ none))
+  (match (optionOr v (j/jnull)) ((j/jint n) (some n)) (_ none))
 
 fn jsonStr v: (Option j/Json) -> (Option String)
-  (mt (optionOr v (j/jnull)) ((j/jstr s) (some s)) (_ none))
+  (match (optionOr v (j/jnull)) ((j/jstr s) (some s)) (_ none))
 
 ; (:m :tags (transport))
 fn ! runAslSocket sockPath: String form: String rootDir: String timeoutSec: Int64 env: (Option (List String)) -> (Result RunAslResult (Pair String String))
   (let [request (j/jsonEmit (j/jobj (list (pair "forms" (j/jarr (list (j/jstr form))))
                                           (pair "root" (j/jstr (t/normPath rootDir)))
                                           (pair "env" (envJson! env)))))]
-    (mt (engineRequest sockPath request timeoutSec)
+    (match (engineRequest sockPath request timeoutSec)
       ((err e)
         (if (= (pairFirst e) "ERR_TIMEOUT")
           (ok (RunAslResult :exit 1 :stdout ""
@@ -128,7 +128,7 @@ fn ! runAslSocket sockPath: String form: String rootDir: String timeoutSec: Int6
                 :timedOut true :seconds timeoutSec :fellBack ""))
           (err e)))
       ((ok ans)
-        (mt (j/jsonParse ans)
+        (match (j/jsonParse ans)
           ((err m) (err (pair "ERR_ENGINE_ANSWER" (str "the engine answer is not JSON: " m))))
           ((ok obj)
             (let [code (jsonInt (j/jsonGet obj "exit"))
@@ -145,7 +145,7 @@ fn ! chooseTransport envVal: String sockPath: String -> (Pair String String)
     ((= envVal "subprocess") (pair "subprocess" "ASL_TRANSPORT=subprocess"))
     ((not (ok? (fileStat sockPath))) (pair "subprocess" (str "no engine socket at " sockPath)))
     (else
-      (mt (engineRequest sockPath "(:ping)" 2)
+      (match (engineRequest sockPath "(:ping)" 2)
         ((ok ans)
           (if (stringStartsWith? ans "(:pong")
             (pair "socket" "")
@@ -158,7 +158,7 @@ fn safeObserveDim? dim: String -> Bool
 fn safeInProcessForm? form: String -> Bool
   (let [(steps (k/extractSteps form))]
     (and (= (listLength steps) 1)
-         (mt (listHead steps)
+         (match (listHead steps)
            ((none) false)
            ((some raw)
              (let [(step (k/parseStep raw))
@@ -198,7 +198,7 @@ fn bestIndex! lines: (List String) target: String k: Int64 i: Int64 maxI: Int64 
 ; (:m :tags (leon))
 fn ! nearestLines root: String filePath: String old: String -> (Option (Pair (Pair Int64 Int64) String))
   (let [full (t/normPath (if (stringStartsWith? filePath "/") filePath (str root "/" filePath)))]
-    (mt (t/readText! full)
+    (match (t/readText! full)
       ((fileAbsent) (none))
       ((fileFailed _) (none))
       ((fileText text)
@@ -224,7 +224,7 @@ fn isWordChar c: String -> Bool
   (or (c/isDigit c) (or (and (>= c "a") (<= c "z")) (or (and (>= c "A") (<= c "Z")) (= c "_"))))
 
 fn placeholderLoop text: String n: Int64 pos: Int64 -> Bool
-  (mt (stringIndexOf (c/sliceOf text pos n) "assert")
+  (match (stringIndexOf (c/sliceOf text pos n) "assert")
     ((none) false)
     ((some relPos)
       (let [i (+ pos relPos)]
@@ -253,7 +253,7 @@ fn readyOn ready: (List (Pair Int64 Int64)) fd: Int64 -> Bool
 fn readPipe! fd: Int64 open: Bool isReady: Bool text: String -> (Pair Bool String)
   (if (not (and open isReady))
     (pair open text)
-    (mt (fdRead fd 65536)
+    (match (fdRead fd 65536)
       ((ok chunk) (if (stringEmpty? chunk) (do (fdClose fd) (pair false text)) (pair true (str text chunk))))
       ((err e) (if (= e "wouldBlock") (pair true text) (do (fdClose fd) (pair false text))))))
 
@@ -264,7 +264,7 @@ fn closePipes! sp: SpawnedProc outOpen: Bool errOpen: Bool -> Bool
     true)
 
 fn leftMs! deadline: (Option Int64) -> Int64
-  (mt deadline ((some d) (max 0 (/ (- d (monotonicNs)) 1000000))) ((none) -1))
+  (match deadline ((some d) (max 0 (/ (- d (monotonicNs)) 1000000))) ((none) -1))
 
 fn pumpPipes! sp: SpawnedProc outOpen: Bool errOpen: Bool out: String errText: String deadline: (Option Int64) -> PumpEnd
   (if (not (or outOpen errOpen))
@@ -272,7 +272,7 @@ fn pumpPipes! sp: SpawnedProc outOpen: Bool errOpen: Bool out: String errText: S
     (let [ms (leftMs! deadline)]
       (if (= ms 0)
         (pumpLate outOpen errOpen out errText)
-        (mt (fdPoll (pollSet sp outOpen errOpen) ms)
+        (match (fdPoll (pollSet sp outOpen errOpen) ms)
           ((err e) (do (closePipes! sp outOpen errOpen) (pumpFailed (str "poll failed: " e))))
           ((ok ready)
             (let [o (readPipe! sp.stdout outOpen (readyOn ready sp.stdout) out)
@@ -280,26 +280,26 @@ fn pumpPipes! sp: SpawnedProc outOpen: Bool errOpen: Bool out: String errText: S
               (pumpPipes! sp (pairFirst o) (pairFirst r) (pairSecond o) (pairSecond r) deadline)))))))
 
 fn waitExit! pid: Int64 deadline: (Option Int64) -> (Result (Option Int64) String)
-  (mt deadline
+  (match deadline
     ((none) (procWaitPid pid false))
     ((some d)
-      (mt (procWaitPid pid true)
+      (match (procWaitPid pid true)
         ((err e) (err e))
         ((ok got)
-          (mt got
+          (match got
             ((some code) (ok (some code)))
             ((none) (if (>= (monotonicNs) d) (ok (none)) (do (sleepMs 5) (waitExit! pid deadline)))))))))
 
 fn killGroup! pid: Int64 -> Bool
-  (mt (procKill (- 0 pid) "SIGKILL") ((ok _) true) ((err _) false))
+  (match (procKill (- 0 pid) "SIGKILL") ((ok _) true) ((err _) false))
 
 fn afterKill! sp: SpawnedProc outOpen: Bool errOpen: Bool out: String errText: String -> (Result Bounded String)
   (let [drained (pumpPipes! sp outOpen errOpen out errText (some (+ (monotonicNs) 5000000000)))
-        texts (mt drained
+        texts (match drained
                 ((pumpDone o e) (pair o e))
                 ((pumpLate oo eo _ _) (do (closePipes! sp oo eo) (pair "" "")))
                 ((pumpFailed _) (pair "" "")))]
-    (mt (procWaitPid sp.pid false)
+    (match (procWaitPid sp.pid false)
       ((err e) (err e))
       ((ok _) (ok (Bounded :code (none) :out (universalNewlines (pairFirst texts)) :errText (universalNewlines (pairSecond texts)) :timedOut true)))))
 
@@ -310,25 +310,25 @@ fn spawnError path: String kind: String -> String
     (else (str "spawn failed: " kind)))
 
 fn ! runBounded argv: (List String) cwd: (Option String) timeoutSec: (Option Int64) env: (Option (List String)) -> (Result Bounded String)
-  (mt (procSpawnv argv cwd env)
+  (match (procSpawnv argv cwd env)
     ((err kind) (err (spawnError (optionOr (listHead argv) "") kind)))
     ((ok sp)
       (let [closed (fdClose sp.stdin)
-            deadline (mt timeoutSec ((some t) (some (+ (monotonicNs) (* t 1000000000)))) ((none) (none)))]
-        (mt (pumpPipes! sp true true "" "" deadline)
+            deadline (match timeoutSec ((some t) (some (+ (monotonicNs) (* t 1000000000)))) ((none) (none)))]
+        (match (pumpPipes! sp true true "" "" deadline)
           ((pumpFailed m) (do (killGroup! sp.pid) (procWaitPid sp.pid false) (err m)))
           ((pumpLate oo eo o e) (do (killGroup! sp.pid) (afterKill! sp oo eo o e)))
           ((pumpDone o e)
-            (mt (waitExit! sp.pid deadline)
+            (match (waitExit! sp.pid deadline)
               ((err m) (err m))
               ((ok got)
-                (mt got
+                (match got
                   ((none) (do (killGroup! sp.pid) (afterKill! sp false false o e)))
                   ((some code) (ok (Bounded :code (some code) :out (universalNewlines o) :errText (universalNewlines e) :timedOut false)))))))))))
 
 ; (:m :tags (transport))
 fn envWithAslRoot! rootDir: String env: (Option (List String)) -> (List String)
-  (let [base (mt env ((some rows) rows) ((none) (envList)))
+  (let [base (match env ((some rows) rows) ((none) (envList)))
         filtered (filter (fn [r] (not (stringStartsWith? r "ASL_ROOT="))) base)
         homed (if (listAny? (fn [r] (stringStartsWith? r "HOME=")) filtered)
                 filtered
@@ -338,7 +338,7 @@ fn envWithAslRoot! rootDir: String env: (Option (List String)) -> (List String)
     (cons (str "ASL_ROOT=" (t/normPath rootDir)) homed))
 
 fn envOverride key: String env: (Option (List String)) -> (Option String)
-  (mt (listHead (filter (fn [row] (stringStartsWith? row (str key "="))) (optionOr env (list))))
+  (match (listHead (filter (fn [row] (stringStartsWith? row (str key "="))) (optionOr env (list))))
     ((none) (none))
     ((some row) (stringSlice row (+ (stringLength key) 1) (stringLength row))))
 
@@ -346,7 +346,7 @@ fn ! runAslOnBin aslBin: String form: String rootDir: String timeoutSec: Int64 e
   (let [argv (list aslBin form)
         childEnv (some (envWithAslRoot! rootDir env))
         res (runBounded argv (some rootDir) (some timeoutSec) childEnv)]
-    (mt res
+    (match res
       ((err m) (RunAslResult :exit 1 :stdout "" :stderr m :timedOut false :seconds 0 :fellBack ""))
       ((ok b)
         (if b.timedOut
@@ -373,7 +373,7 @@ fn ! runAsl repoRoot: String form: String rootDir: String timeoutSec: Int64 env:
         (RunAslResult :exit (pairSecond result) :stdout (pairFirst result) :stderr "" :timedOut false
           :seconds (/ elapsed 1000000000) :fellBack ""))
       (if (= decided "socket")
-      (mt (runAslSocket (engineSocketPath! toolRoot) form rootDir timeoutSec env)
+      (match (runAslSocket (engineSocketPath! toolRoot) form rootDir timeoutSec env)
         ((ok r) r)
         ((err e)
           (let [r (runAslOnBin aslBin form rootDir timeoutSec env)]
@@ -381,8 +381,8 @@ fn ! runAsl repoRoot: String form: String rootDir: String timeoutSec: Int64 env:
       (runAslOnBin aslBin form rootDir timeoutSec env))))
 
 fn getKvStr kv: (List (Pair String c/KvVal)) key: String -> String
-  (mt (listHead (filter (fn [p] (= (pairFirst p) key)) kv))
-    ((some p) (mt (pairSecond p) ((c/kvStr s) s) ((c/kvInt s) s)))
+  (match (listHead (filter (fn [p] (= (pairFirst p) key)) kv))
+    ((some p) (match (pairSecond p) ((c/kvStr s) s) ((c/kvInt s) s)))
     (none ""))
 
 fn allDigits s: String -> Bool
@@ -394,13 +394,13 @@ fn countLns s: String n: Int64 pos: Int64 acc: Int64 -> Int64
     (countLns s n (+ pos 1) (if (= (c/sliceOf s pos (+ pos 1)) "\n") (+ acc 1) acc)))
 
 fn replaceFirst s: String oldStr: String newStr: String -> String
-  (mt (stringIndexOf s oldStr)
+  (match (stringIndexOf s oldStr)
     ((none) s)
     ((some idx)
       (str (c/sliceOf s 0 idx) newStr (c/sliceOf s (+ idx (stringLength oldStr)) (stringLength s)))))
 
 fn findReadContent s: String -> String
-  (mt (stringIndexOf s ":content \"")
+  (match (stringIndexOf s ":content \"")
     ((none) "")
     ((some idx)
       (let [start (+ idx 10)
@@ -408,7 +408,7 @@ fn findReadContent s: String -> String
         (if (>= end start) (c/asnUnescape (c/sliceOf s start end)) ""))))
 
 fn findIntField s: String prefix: String -> (Option Int64)
-  (mt (stringIndexOf s prefix)
+  (match (stringIndexOf s prefix)
     ((none) (none))
     ((some idx)
       (let [start (+ idx (stringLength prefix))
@@ -417,24 +417,24 @@ fn findIntField s: String prefix: String -> (Option Int64)
         (if (> end start) (stringToInt64 (c/sliceOf s start end)) (none)))))
 
 fn findMoreRange s: String -> (Option (Pair Int64 Int64))
-  (mt (stringIndexOf s ":truncated true")
+  (match (stringIndexOf s ":truncated true")
     ((none) (none))
     ((some _)
-      (mt (stringIndexOf s ":more (:start ")
+      (match (stringIndexOf s ":more (:start ")
         ((none) (none))
         ((some mIdx)
           (let [sStart (+ mIdx 14)
                 n (stringLength s)
                 sEnd (runEnd s n sStart c/isDigit)]
-            (mt (stringIndexOf (c/sliceOf s sEnd n) " :end ")
+            (match (stringIndexOf (c/sliceOf s sEnd n) " :end ")
               ((none) (none))
               ((some eRel)
                 (let [eStart (+ (+ sEnd eRel) 6)
                       eEnd (runEnd s n eStart c/isDigit)]
-                  (mt (stringToInt64 (c/sliceOf s sStart sEnd))
+                  (match (stringToInt64 (c/sliceOf s sStart sEnd))
                     ((none) (none))
                     ((some a)
-                      (mt (stringToInt64 (c/sliceOf s eStart eEnd))
+                      (match (stringToInt64 (c/sliceOf s eStart eEnd))
                         ((none) (none))
                         ((some b) (some (pair a b))))))))))))))
 
@@ -457,11 +457,11 @@ fn errorCodeAt s: String n: Int64 i: Int64 -> (Option String)
         (if (= j5 j4) (none) (some (c/sliceOf s j4 j5))))))
 
 fn errorCodeFrom s: String n: Int64 pos: Int64 -> (Option String)
-  (mt (stringIndexOf (c/sliceOf s pos n) ":error")
+  (match (stringIndexOf (c/sliceOf s pos n) ":error")
     ((none) (none))
     ((some rel)
       (let [i (+ pos rel)]
-        (mt (errorCodeAt s n i)
+        (match (errorCodeAt s n i)
           ((some code) (some code))
           ((none) (errorCodeFrom s n (+ i 1)))))))
 
@@ -469,7 +469,7 @@ fn findReadError s: String defaultErr: String -> String
   (optionOr (errorCodeFrom s (stringLength s) 0) defaultErr)
 
 fn messageFrom s: String n: Int64 pos: Int64 -> (Option String)
-  (mt (stringIndexOf (c/sliceOf s pos n) ":message")
+  (match (stringIndexOf (c/sliceOf s pos n) ":message")
     ((none) (none))
     ((some rel)
       (let [i (+ pos rel)
@@ -478,27 +478,27 @@ fn messageFrom s: String n: Int64 pos: Int64 -> (Option String)
         (if (< end 0) (messageFrom s n (+ i 1)) (some (c/sliceOf s (+ j 1) end))))))
 
 fn findReadMsg s: String errText: String -> String
-  (mt (messageFrom s (stringLength s) 0)
+  (match (messageFrom s (stringLength s) 0)
     ((some m) m)
     ((none)
       (let [stripped (pyStrip s)]
         (if (!= stripped "") (c/sliceOf stripped 0 (min 300 (stringLength stripped))) errText))))
 
 fn ! countFileLines path: String -> (Option Int64)
-  (mt (fileStat path)
+  (match (fileStat path)
     ((err _) (none))
     ((ok st)
       (if st.isDir
         (none)
-        (mt (fileReadString path)
+        (match (fileReadString path)
           ((err _) (none))
           ((ok t) (some (listLength (t/splitLines t))))))))
 
 fn ! findAnchorLine path: String anchor: String -> Int64
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) 1)
     ((ok t)
-      (mt (stringIndexOf t anchor)
+      (match (stringIndexOf t anchor)
         ((none) 1)
         ((some idx) (+ (countLns t idx 0 0) 1)))))
 
@@ -518,7 +518,7 @@ fn formatReadBody content: String cap: Int64 totalLines: (Option Int64) mStart: 
               shownLns (countLns shown (stringLength shown) 0 0)
               startN (optionOr mStart 1)
               shownEnd (- (+ startN shownLns) 1)
-              totStr (mt totalLines ((some tl) (stringFromInt64 tl)) ((none) "None"))
+              totStr (match totalLines ((some tl) (stringFromInt64 tl)) ((none) "None"))
               tailMsg (str "\n... [cut at line " (stringFromInt64 shownEnd) " of " totStr "; read :start " (stringFromInt64 (+ shownEnd 1)) " :end n, or :symbol name]")
               fullCont (str shown tailMsg)]
           (pair fullCont shown)))
@@ -527,7 +527,7 @@ fn formatReadBody content: String cap: Int64 totalLines: (Option Int64) mStart: 
 fn parseOutlineItems stdout: String -> String
   (let [items (t/outlineItems stdout (stringLength stdout) 0 (list))]
     (stringJoin
-      (map (fn [w] (mt w ((t/widenItem a b nm kd) (str (stringFromInt64 a) "-" (stringFromInt64 b) " " kd " " nm))))
+      (map (fn [w] (match w ((t/widenItem a b nm kd) (str (stringFromInt64 a) "-" (stringFromInt64 b) " " kd " " nm))))
         items)
       "\n"))
 
@@ -632,13 +632,13 @@ fn buildElseForm opName: String op: (List (Pair String c/KvVal)) -> String
     (str args ")"))
 
 fn aslRunCode r: t/AslRun -> Int64
-  (mt r ((t/aslRun code _ _) code))
+  (match r ((t/aslRun code _ _) code))
 
 fn aslRunOut r: t/AslRun -> String
-  (mt r ((t/aslRun _ out _) out))
+  (match r ((t/aslRun _ out _) out))
 
 fn aslRunErr r: t/AslRun -> String
-  (mt r ((t/aslRun _ _ errText) errText))
+  (match r ((t/aslRun _ _ errText) errText))
 
 fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root: String newId: (fn [] -> String) snap: (fn [String] -> Bool) run: (fn [String String] -> t/AslRun) cap: Int64 budgetLeft: (Option Float64) -> (List (Pair String RVal))
   (let [opHead (getKvStr op "_head")
@@ -670,10 +670,10 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
               aid (if (!= code 0) (t/abortAid! root filePath (list (t/txnStep "write" filePath (list (pair "content" (c/kvStr content))))) fullMsg extra) (none))
               balance (if (and (!= code 0) (or (= err0 "ERR_TXN_FLUSH_FAILED") (stringContains? refMsg "refused: the delimiters"))) (t/balanceAid content) (none))
               rawTmpl (str "(:step :op \"write\" :file \"" filePath "\" :content :raw)")
-              hint0 (mt aid ((some x) (mt x ((t/abortAidOf _ _ h) (some h)))) ((none) (none)))
+              hint0 (match aid ((some x) (match x ((t/abortAidOf _ _ h) (some h)))) ((none) (none)))
               hint (if (!= code 0)
                      (if (or (= err0 "ERR_TXN_FLUSH_FAILED") (= err0 "ERR_TXN_ABORTED"))
-                       (mt hint0 ((some h) (some (str h "; " rawTmpl))) ((none) (some rawTmpl)))
+                       (match hint0 ((some h) (some (str h "; " rawTmpl))) ((none) (some rawTmpl)))
                        hint0)
                      (none))]
           (listAppend
@@ -682,13 +682,13 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
               (pair "message" (if (= code 0) (rNone) (rStr refMsg)))
               (pair "cmd" (rStr (str "asl txn write " filePath))))
             (listAppend
-              (mt balance ((some b) (list (pair "balance" (rStr b)))) ((none) (list)))
+              (match balance ((some b) (list (pair "balance" (rStr b)))) ((none) (list)))
               (listAppend
                 (list (pair "exit" (rInt code)) (pair "stdout" (rStr out)) (pair "persisted" (rBool (= code 0))))
                 (listAppend
-                  (mt aid ((some x) (mt x ((t/abortAidOf k a _) (list (pair "line" (rInt k)) (pair "arrived" (rStr a)))))) ((none) (list)))
+                  (match aid ((some x) (match x ((t/abortAidOf k a _) (list (pair "line" (rInt k)) (pair "arrived" (rStr a)))))) ((none) (list)))
                   (listAppend
-                    (mt hint ((some h) (list (pair "hint" (rStr h)))) ((none) (list)))
+                    (match hint ((some h) (list (pair "hint" (rStr h)))) ((none) (list)))
                     (if (and (= code 0) (placeholderAssert? content))
                       (list (pair "warning" (rStr "placeholder assert: red-first needs a real assertion on the missing behaviour")))
                       (list)))))))))
@@ -704,7 +704,7 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
               errText (aslRunErr res)
               st (if (= code 0) "ok" "rejected")
               fullTarget (t/normPath (if (stringStartsWith? filePath "/") filePath (str root "/" filePath)))
-              afterEdit (mt (t/readText! fullTarget)
+              afterEdit (match (t/readText! fullTarget)
                           ((fileText curF) (if (stringContains? curF old) (some (replaceFirst curF old new)) (none)))
                           (_ (none)))
               ref (if (!= code 0) (t/txnRefusal out errText "ERR_EDIT_FAILED" afterEdit) (pair "" ""))
@@ -720,30 +720,30 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
               aid (if (!= code 0) (t/abortAid! root filePath (list (t/txnStep "edit" filePath (list (pair "old" (c/kvStr old)) (pair "new" (c/kvStr new))))) fullMsg extra) (none))
               balance (if (and (!= code 0) (or (= err0 "ERR_TXN_FLUSH_FAILED") (stringContains? refMsg "refused: the delimiters"))) (t/balanceAid (optionOr afterEdit "")) (none))
               rawTmpl (str "(:step :op \"write\" :file \"" filePath "\" :content :raw)")
-              hint0 (mt aid ((some x) (mt x ((t/abortAidOf _ _ h) (some h)))) ((none) (none)))
+              hint0 (match aid ((some x) (match x ((t/abortAidOf _ _ h) (some h)))) ((none) (none)))
               hint (if (!= code 0)
                      (if (or (= err0 "ERR_TXN_FLUSH_FAILED") (= err0 "ERR_TXN_ABORTED"))
-                       (mt hint0 ((some h) (some (str h "; " rawTmpl))) ((none) (some rawTmpl)))
+                       (match hint0 ((some h) (some (str h "; " rawTmpl))) ((none) (some rawTmpl)))
                        hint0)
                      (none))
               noMatch (or (stringContains? out "ERR_NO_MATCH") (stringContains? refMsg "Old target string not found"))
               near (if (and (!= st "ok") noMatch) (nearestLines root filePath old) (none))
-              finalMsg (mt near ((some _) (str refMsg "; the file's lines nearest the :old follow")) ((none) refMsg))]
+              finalMsg (match near ((some _) (str refMsg "; the file's lines nearest the :old follow")) ((none) refMsg))]
           (listAppend
-            (mt near ((some p) (list (pair "span" (rPair (pairFirst (pairFirst p)) (pairSecond (pairFirst p)))) (pair "content" (rStr (pairSecond p))))) ((none) (list)))
+            (match near ((some p) (list (pair "span" (rPair (pairFirst (pairFirst p)) (pairSecond (pairFirst p)))) (pair "content" (rStr (pairSecond p))))) ((none) (list)))
             (listAppend
               (list (pair "id" (rStr rid)) (pair "op" (rStr "edit")) (pair "file" (rStr filePath)) (pair "status" (rStr st))
                 (pair "error" (if (= code 0) (rNone) (rStr err0)))
                 (pair "message" (if (= code 0) (rNone) (rStr finalMsg)))
                 (pair "cmd" (rStr (str "asl txn edit " filePath))))
               (listAppend
-                (mt balance ((some b) (list (pair "balance" (rStr b)))) ((none) (list)))
+                (match balance ((some b) (list (pair "balance" (rStr b)))) ((none) (list)))
                 (listAppend
                   (list (pair "exit" (rInt code)) (pair "stdout" (rStr out)) (pair "persisted" (rBool (= code 0))))
                   (listAppend
-                    (mt aid ((some x) (mt x ((t/abortAidOf k a _) (list (pair "line" (rInt k)) (pair "arrived" (rStr a)))))) ((none) (list)))
+                    (match aid ((some x) (match x ((t/abortAidOf k a _) (list (pair "line" (rInt k)) (pair "arrived" (rStr a)))))) ((none) (list)))
                     (listAppend
-                      (mt hint ((some h) (list (pair "hint" (rStr h)))) ((none) (list)))
+                      (match hint ((some h) (list (pair "hint" (rStr h)))) ((none) (list)))
                       (if (and (= code 0) (placeholderAssert? new))
                         (list (pair "warning" (rStr "placeholder assert: red-first needs a real assertion on the missing behaviour")))
                         (list))))))))))
@@ -755,8 +755,8 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
               endVal (getKvStr op "end")
               wholeFile (and (= symbolVal "") (and (= anchorVal "") (and (= startVal "") (= endVal ""))))
               widened (if (!= symbolVal "") (none) (t/widenToSymbol! filePath startVal endVal root cap budgetLeft run))
-              effStart (mt widened ((some w) (mt w ((t/widenItem a _ _ _) (stringFromInt64 a)))) ((none) startVal))
-              effEnd (mt widened ((some w) (mt w ((t/widenItem _ b _ _) (stringFromInt64 b)))) ((none) endVal))
+              effStart (match widened ((some w) (match w ((t/widenItem a _ _ _) (stringFromInt64 a)))) ((none) startVal))
+              effEnd (match widened ((some w) (match w ((t/widenItem _ b _ _) (stringFromInt64 b)))) ((none) endVal))
               form (buildReadForm filePath symbolVal anchorVal effStart effEnd cap)
               res (run form root)
               code (aslRunCode res)
@@ -782,22 +782,22 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
               body (pairSecond bodyPair)
               partial (or (!= body fullCont) (stringEndsWith? body "\n"))
               last0 (- (+ firstLine (countLns body (stringLength body) 0 0)) (if partial 1 0))
-              lastLine (mt mMore ((some mr) (min last0 (- (pairFirst mr) 1))) ((none) last0))
+              lastLine (match mMore ((some mr) (min last0 (- (pairFirst mr) 1))) ((none) last0))
               span (if (and (!= body "") (and (= code 0) (not useOutline))) (some (pair firstLine lastLine)) (none))
               errVal (if (!= code 0) (some (findReadError out "ERR_READ_FAILED")) (none))
               msgVal (cond
                        ((!= code 0) (some (findReadMsg out errText)))
                        (useOutline (some (oversizeWholeHint)))
                        ((some? widened)
-                         (mt (optionOr widened (t/widenItem 0 0 "" ""))
+                         (match (optionOr widened (t/widenItem 0 0 "" ""))
                            ((t/widenItem a b nm kd) (some (str "widened to the enclosing " kd " " nm ", lines " (stringFromInt64 a) "-" (stringFromInt64 b))))))
                        (else (none)))]
           (list (pair "id" (rStr rid)) (pair "op" (rStr "read")) (pair "file" (rStr filePath))
-            (pair "span" (mt span ((some sp) (rPair (pairFirst sp) (pairSecond sp))) ((none) (rNone))))
+            (pair "span" (match span ((some sp) (rPair (pairFirst sp) (pairSecond sp))) ((none) (rNone))))
             (pair "content" (if (= code 0) (rStr fullCont) (rNone)))
             (pair "status" (rStr st))
-            (pair "error" (mt errVal ((some e) (rStr e)) ((none) (rNone))))
-            (pair "message" (mt msgVal ((some m) (rStr m)) ((none) (rNone))))
+            (pair "error" (match errVal ((some e) (rStr e)) ((none) (rNone))))
+            (pair "message" (match msgVal ((some m) (rStr m)) ((none) (rNone))))
             (pair "cmd" (rStr (str "asl read " filePath)))
             (pair "exit" (rInt code))
             (pair "stdout" (rStr out)))))

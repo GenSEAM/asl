@@ -3,12 +3,12 @@
   :i [(config :a cfg)])
 
 fn selected table: cfg/GatewayTable headers: (List (Pair String String)) env: (Option String) -> String
-  (mt (cfg/gatewayProfileSelect table headers env)
+  (match (cfg/gatewayProfileSelect table headers env)
     ((ok chosen) chosen.name)
     ((err e) (str "ERROR:" e)))
 
 fn routed table: cfg/GatewayTable profile: String intent: String -> (List String)
-  (mt (mapGet table.profiles profile)
+  (match (mapGet table.profiles profile)
     ((none) (list))
     ((some chosen) (optionOr (cfg/gatewayProfileModels chosen.routes intent) (list))))
 
@@ -18,10 +18,10 @@ fn ! runTests -> Bool
         (parsed (cfg/gatewayConfigParse! text "fixture" ""))
         (changed (cfg/gatewayConfigParse! edited "fixture" ""))
         (bad (cfg/gatewayConfigParse! "(:gateway :profile default :profiles (" "broken" ""))]
-    (mt parsed
+    (match parsed
       ((err _) false)
       ((ok table)
-        (mt changed
+        (match changed
           ((err _) false)
           ((ok changedTable)
             (let [(plan (routed table "default" "plan"))

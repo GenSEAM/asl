@@ -8,7 +8,7 @@ fn ! fernetBase64UrlDecode encoded: String -> (Result Bytes String)
     (if (= (mod n 4) 1) (err "invalidBase64")
       (let [(padded (if (= (mod n 4) 2) (str translated "==")
                      (if (= (mod n 4) 3) (str translated "=") translated)))]
-        (mt (bytesFromBase64 padded)
+        (match (bytesFromBase64 padded)
           ((ok bytes) (ok bytes))
           ((err _) (err "invalidBase64"))))))
 
@@ -29,11 +29,11 @@ fn fernetTimestamp token: Bytes -> Int64
       (step step 1 0)))
 
 fn ! fernetVerify key: String token: String nowSeconds: Int64 ttlSeconds: Int64 -> (Result Bytes String)
-  (mt (fernetBase64UrlDecode key)
+  (match (fernetBase64UrlDecode key)
     ((err _) (err "invalidKey"))
     ((ok keyBytes)
       (if (!= (bytesLength keyBytes) 32) (err "invalidKey")
-        (mt (fernetBase64UrlDecode token)
+        (match (fernetBase64UrlDecode token)
           ((err _) (err "invalidToken"))
           ((ok raw)
             (let [(n (bytesLength raw))]
@@ -55,6 +55,6 @@ fn ! fernetVerify key: String token: String nowSeconds: Int64 ttlSeconds: Int64 
                             (err "expired")
                           (let [(iv (fernetCopy raw 9 16))
                                 (ciphertext (fernetCopy raw 25 (- signedLength 25)))]
-                            (mt (aes/aesCbcDecrypt encryptionKey iv ciphertext)
+                            (match (aes/aesCbcDecrypt encryptionKey iv ciphertext)
                               ((ok plaintext) (ok plaintext))
                               ((err _) (err "invalidToken"))))))))))))))))))

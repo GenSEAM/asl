@@ -17,12 +17,12 @@ fn extractThinkBlocks text: Str -> (Pair Str Str)
   (let [(openTag "<think>")
         (closeTag "</think>")
         (idxOpen (stringIndexOf text openTag))]
-    (mt idxOpen
+    (match idxOpen
       ((none) (pair "" text))
       ((some o)
         (let [(afterOpen (optionOr (stringSlice text (+ o 7) (stringLength text)) ""))
               (idxClose (stringIndexOf afterOpen closeTag))]
-          (mt idxClose
+          (match idxClose
             ((none) (pair (stringTrim afterOpen) (optionOr (stringSlice text 0 o) "")))
             ((some c)
               (let [(thinkContent (optionOr (stringSlice afterOpen 0 c) ""))
@@ -79,7 +79,7 @@ fn gatewayServerArg args: (List String) index: Int64 -> String
   (optionOr (listGet args index) "")
 
 fn gatewayDropArgs args: (List String) -> (List String)
-  (mt (listTail args) ((some tail) tail) ((none) (list)))
+  (match (listTail args) ((some tail) tail) ((none) (list)))
 
 fn gatewayFindArg args: (List String) flag: String fallback: String -> String
   (if (< (listLength args) 2) fallback
@@ -94,7 +94,7 @@ fn ! gatewayReadyPath! -> String
   (str (gatewayStatePath!) ".ready")
 
 fn gatewayNumberAfter text: String marker: String fallback: Int64 -> Int64
-  (mt (stringIndexOf text marker)
+  (match (stringIndexOf text marker)
     ((none) fallback)
     ((some at)
       (let [(start (+ at (stringLength marker)))
@@ -141,7 +141,7 @@ fn gatewayUpstreamPort upstream: String -> Int64
     (optionOr (stringToInt64 (optionOr (stringSlice hostPort 0 end) "")) 0))
 
 fn ! gatewayStatus! launch: Launch requestedPort: Int64 -> (Result Int64 String)
-  (mt (fileReadString (gatewayStatePath!))
+  (match (fileReadString (gatewayStatePath!))
     ((err _) (do (sys/say! (str "(:gateway :status :offline :port " requestedPort ")")) (ok 0)))
     ((ok state)
       (let [(numbers (gatewayStateNumbers state))
@@ -154,7 +154,7 @@ fn ! gatewayStatus! launch: Launch requestedPort: Int64 -> (Result Int64 String)
           (ok 0)))))
 
 fn ! gatewayLegacyStatus! launch: Launch requestedPort: Int64 -> (Result Int64 String)
-  (mt (fileReadString (gatewayStatePath!))
+  (match (fileReadString (gatewayStatePath!))
     ((err _) (do (sys/say! (str "ASL Cognitive Gateway: OFFLINE (Port: " requestedPort ")")) (ok 0)))
     ((ok state)
       (let [(numbers (gatewayStateNumbers state))
@@ -172,7 +172,7 @@ fn ! gatewayWaitGone! pid: Int64 attempts: Int64 -> Bool
       (do (processRun "/bin/sleep 0.02") (gatewayWaitGone! pid (- attempts 1))) true))
 
 fn ! gatewayStop! launch: Launch -> (Result Int64 String)
-  (mt (fileReadString (gatewayStatePath!))
+  (match (fileReadString (gatewayStatePath!))
     ((err _) (do (sys/say! "(:gateway :status :offline :port 0)") (ok 0)))
     ((ok state)
       (let [(numbers (gatewayStateNumbers state))
@@ -180,7 +180,7 @@ fn ! gatewayStop! launch: Launch -> (Result Int64 String)
             (port (pairSecond numbers))]
         (if (not (gatewayServiceOwnsPid! launch pid))
           (do (sys/say! (str "(:gateway :status :offline :port " port ")")) (ok 0))
-          (mt (procKill pid "SIGTERM")
+          (match (procKill pid "SIGTERM")
             ((err e) (err (str "gateway stop failed: " e)))
             ((ok _)
               (if (gatewayWaitGone! pid 100)
@@ -188,7 +188,7 @@ fn ! gatewayStop! launch: Launch -> (Result Int64 String)
                 (err "gateway process did not exit after SIGTERM"))))))))
 
 fn gatewayStateUpstream text: String -> String
-  (mt (stringIndexOf text ":upstream ")
+  (match (stringIndexOf text ":upstream ")
     ((none) "")
     ((some at)
       (let [(start (+ at 10))
@@ -200,7 +200,7 @@ fn gatewayStateUpstream text: String -> String
         (optionOr (stringSlice tail 0 end) ""))))
 
 fn ! gatewayRestart! launch: Launch args: (List String) -> (Result Int64 String)
-  (mt (fileReadString (gatewayStatePath!))
+  (match (fileReadString (gatewayStatePath!))
     ((err _) (gatewayStart! launch args))
     ((ok state)
       (let [(numbers (gatewayStateNumbers state))
@@ -213,12 +213,12 @@ fn ! gatewayRestart! launch: Launch args: (List String) -> (Result Int64 String)
             (upstream (if (stringEmpty? requestedUpstream) oldUpstream requestedUpstream))]
         (if (or (stringEmpty? upstream) (not (gatewaySafeShellArg? upstream)))
           (err "gateway restart requires a safe upstream URL")
-          (mt (stringToInt64 portText)
+          (match (stringToInt64 portText)
             ((none) (err "gateway restart port must be an integer between 0 and 65535"))
             ((some port)
               (if (or (< port 0) (> port 65535))
                 (err "gateway restart port must be an integer between 0 and 65535")
-                (mt (if (gatewayServiceOwnsPid! launch oldPid) (gatewayStop! launch) (ok 0))
+                (match (if (gatewayServiceOwnsPid! launch oldPid) (gatewayStop! launch) (ok 0))
                   ((err e) (err e))
                   ((ok _) (gatewayStart! launch (list "start" "--port" portText "--upstream" upstream)))))))))))
 
@@ -237,7 +237,7 @@ fn ! mainWith args: (List String) module: String families: (List dp/LifecycleFam
         (port (optionOr (stringToInt64 portText) 0))]
     (cond
       ((= mode "start")
-        (mt (gatewayStart! launch args)
+        (match (gatewayStart! launch args)
           ((err e) (do (sys/sayErr! e) (ok 1)))
           ((ok boundPort)
             (let [(state (resultOr (fileReadString (gatewayStatePath!)) ""))]
@@ -249,18 +249,18 @@ fn ! mainWith args: (List String) module: String families: (List dp/LifecycleFam
       ((= mode "serve")
         (let [(upstream (gatewayFindArg args "--upstream" ""))
               (ready (gatewayFindArg args "--ready" ""))]
-          (mt (gatewayRunServer! launch port upstream ready)
+          (match (gatewayRunServer! launch port upstream ready)
             ((err e) (do (sys/sayErr! e) (ok 1)))
             ((ok _) (ok 0)))))
       ((= mode "run")
         (let [(upstream (gatewayFindArg args "--upstream" ""))]
-          (mt (gatewayRunServer! launch port upstream "")
+          (match (gatewayRunServer! launch port upstream "")
             ((err e) (do (sys/sayErr! e) (ok 1)))
             ((ok _) (ok 0)))))
       ((or (= mode "config") (or (= mode "configCheck") (or (= mode "convert") (= mode "stats"))))
         (cli/gatewayCliMain args))
       ((or (= mode "restart") (= mode "update"))
-        (mt (gatewayRestart! launch args)
+        (match (gatewayRestart! launch args)
           ((err e) (do (sys/sayErr! e) (ok 1)))
           ((ok boundPort)
             (let [(state (resultOr (fileReadString (gatewayStatePath!)) ""))
@@ -275,15 +275,15 @@ fn ! mainWith args: (List String) module: String families: (List dp/LifecycleFam
 
 fn ! gatewayWaitReady! path: String attempts: Int64 -> (Result Int64 String)
   (if (<= attempts 0) (err "gateway server did not become ready")
-    (mt (fileReadString path)
+    (match (fileReadString path)
       ((err _) (do (processRun "/bin/sleep 0.02") (gatewayWaitReady! path (- attempts 1))))
       ((ok text)
-        (mt (stringToInt64 (stringTrim text))
+        (match (stringToInt64 (stringTrim text))
           ((none) (do (processRun "/bin/sleep 0.02") (gatewayWaitReady! path (- attempts 1))))
           ((some port) (if (> port 0) (ok port) (err "gateway server published an invalid port")))))))
 
 fn gatewayHostPath! hostResult: (Result String String) -> (Result String String)
-  (mt hostResult
+  (match hostResult
     ((err e) (err (str "cannot resolve gateway host executable: " e)))
     ((ok host)
       (if (stringEmpty? host)
@@ -299,7 +299,7 @@ fn ! gatewaySelfHost! -> (Result String String)
     (if (stringEmpty? root) (procExePath) (ok (str root "/bin/asl"))))
 
 fn ! gatewayStart! launch: Launch args: (List String) -> (Result Int64 String)
-  (mt (gatewayHostPath! (gatewaySelfHost!))
+  (match (gatewayHostPath! (gatewaySelfHost!))
     ((err e) (err e))
     ((ok host) (gatewayStartWithHost! launch args host)))
 
@@ -320,10 +320,10 @@ fn ! gatewayStartWithHost! launch: Launch args: (List String) host: String -> (R
                 (or (not (gatewaySafeShellArg? upstream))
                   (or (not (gatewaySafeShellArg? portText)) (not (gatewaySafeShellArg? readyPath)))))))
         (err "gateway launch arguments are missing or contain unsupported shell characters")
-        (mt (dirCreate dir)
+        (match (dirCreate dir)
           ((err e) (err (str "cannot create gateway state directory: " e)))
           ((ok _)
-            (mt (fileWrite readyPath "pending")
+            (match (fileWrite readyPath "pending")
               ((err e) (err (str "cannot prepare gateway readiness file: " e)))
               ((ok _)
                 (let [(launch (processRun (str "/usr/bin/nohup " host " run " modulePath
@@ -332,10 +332,10 @@ fn ! gatewayStartWithHost! launch: Launch args: (List String) host: String -> (R
                       (pid (optionOr (stringToInt64 (stringTrim launch.stdout)) 0))]
                   (if (or (not (= launch.exitCode 0)) (<= pid 1))
                     (err "failed to launch ASL gateway server")
-                    (mt (gatewayWaitReady! readyPath 250)
+                    (match (gatewayWaitReady! readyPath 250)
                       ((err e) (do (procKill pid "SIGTERM") (err e)))
                       ((ok boundPort)
-                        (mt (fileWrite statePath
+                        (match (fileWrite statePath
                               (str "(:gateway :status :running :pid " pid " :port " boundPort
                                 " :upstream " upstream ")"))
                           ((err e) (do (procKill pid "SIGTERM") (err (str "cannot persist gateway state: " e))))
@@ -345,15 +345,15 @@ fn ! gatewayRunServer! launch: Launch port: Int64 upstream: String readyPath: St
   (let [(upstreamPort (gatewayUpstreamPort upstream))]
     (if (or (<= upstreamPort 0) (> upstreamPort 65535))
       (err "upstream must be an http URL with an explicit port")
-      (mt (tcpListen port)
+      (match (tcpListen port)
         ((err e) (err (str "gateway listen failed: " e)))
         ((ok listenerFd)
-          (mt (sockLocalPort listenerFd)
+          (match (sockLocalPort listenerFd)
             ((err e) (do (fdClose listenerFd) (err e)))
             ((ok boundPort)
               (if (stringEmpty? readyPath)
                 (gatewayServe! listenerFd upstreamPort launch.families)
-                (mt (fileWrite readyPath (str boundPort))
+                (match (fileWrite readyPath (str boundPort))
                   ((err e) (do (fdClose listenerFd) (err e)))
                   ((ok _) (gatewayServe! listenerFd upstreamPort launch.families))))))))))
 
@@ -433,7 +433,7 @@ fn loopWiring srv: GatewayLoop wiring: dp/Wiring text: (Option String) -> Gatewa
   (with srv :pools (pd/poolWithPlugins srv.pools wiring.plugins) :wiring wiring :wiringText text)
 
 fn addConn srv: GatewayLoop fd: Int64 phase: ConnPhase -> GatewayLoop
-  (mt phase
+  (match phase
     ((connWriting data)
       (if (<= fd (linkFd))
         (with srv :outbox (listAppend srv.outbox (list (pair fd data))))
@@ -460,10 +460,10 @@ fn reasonPhrase code: Int64 -> String
 
 fn renderResponse resp: ch/ChatResponse -> String
   (let [(head resp.head)
-        (code (fold (fn [(acc Int64) (h ch/HeadItem)] -> Int64 (mt h ((ch/headStatus n) n) ((ch/headField _ _) acc))) 200 head))
+        (code (fold (fn [(acc Int64) (h ch/HeadItem)] -> Int64 (match h ((ch/headStatus n) n) ((ch/headField _ _) acc))) 200 head))
         (fields (fold (fn [(acc (List String)) (h ch/HeadItem)] -> (List String)
-                        (mt h ((ch/headStatus _) acc) ((ch/headField n v) (listAppend acc (list (str n ": " v "\r\n")))))) (list) head))
-        (hasLength (listAny? (fn [(h ch/HeadItem)] -> Bool (mt h ((ch/headField n _) (= (stringLower n) "content-length")) ((ch/headStatus _) false))) head))
+                        (match h ((ch/headStatus _) acc) ((ch/headField n v) (listAppend acc (list (str n ": " v "\r\n")))))) (list) head))
+        (hasLength (listAny? (fn [(h ch/HeadItem)] -> Bool (match h ((ch/headField n _) (= (stringLower n) "content-length")) ((ch/headStatus _) false))) head))
         (length (if hasLength "" (str "Content-Length: " (stringFromInt64 (stringLength resp.body)) "\r\n")))]
     (str "HTTP/1.1 " (stringFromInt64 code) " " (reasonPhrase code) "\r\n" (stringJoin fields "") length "Connection: close\r\n\r\n" resp.body))
 
@@ -478,7 +478,7 @@ fn errorResponse code: Int64 text: String -> String
   (:f body String))
 
 fn headerPair line: String -> (Option (Pair String String))
-  (mt (stringIndexOf line ":")
+  (match (stringIndexOf line ":")
     ((none) none)
     ((some at) (some (pair (stringTrim (optionOr (stringSlice line 0 at) ""))
                            (stringTrim (optionOr (stringSlice line (+ at 1) (stringLength line)) ""))))))
@@ -489,13 +489,13 @@ fn contentLength headers: (List (Pair String String)) -> Int64
     0 headers)
 
 fn parseRequest raw: String -> (Option HttpRequest)
-  (mt (stringIndexOf raw "\r\n\r\n")
+  (match (stringIndexOf raw "\r\n\r\n")
     ((none) none)
     ((some end)
       (let [(lines (stringSplit (optionOr (stringSlice raw 0 end) "") "\r\n"))
             (requestLine (stringSplit (optionOr (listHead lines) "") " "))
             (headers (fold (fn [(acc (List (Pair String String))) (l String)] -> (List (Pair String String))
-                             (mt (headerPair l) ((some h) (listAppend acc (list h))) ((none) acc)))
+                             (match (headerPair l) ((some h) (listAppend acc (list h))) ((none) acc)))
                        (list) (optionOr (listTail lines) (list))))
             (bodyStart (+ end 4))
             (want (contentLength headers))]
@@ -507,17 +507,17 @@ fn chatPath? path: String -> Bool
   (or (stringStartsWith? path "/v1/chat/completions") (stringStartsWith? path "/chat/completions"))
 
 fn failureReply f: u/UpstreamFailure -> ch/HttpReply
-  (mt f
+  (match f
     ((u/httpFailure status reason body headers) (ch/httpError status reason headers body))
     ((u/transportFailure code text) (ch/httpRaised (= code 28) (str "curl exit " (stringFromInt64 code) ": " (stringTrim text))))
     ((u/toolAbsent tool detail) (ch/httpRaised false (str tool ": " detail)))
     ((u/protocolFailure detail) (ch/httpRaised false detail)))
 
 fn poolReplyHttp result: (Result u/UpstreamResponse pd/PoolFailure) -> ch/HttpReply
-  (mt result
+  (match result
     ((ok resp) (ch/httpOk resp.status (list) resp.body))
     ((err failure)
-      (mt failure
+      (match failure
         ((pd/poolUpstream f) (failureReply f))
         ((pd/poolTimedOut id ms) (ch/httpRaised true (str "ERR_POOL_TIMEOUT: request " (stringFromInt64 id) " waited past requestTimeoutMs " (stringFromInt64 ms))))
         ((pd/poolRejected reason) (ch/httpRaised false (str "ERR_POOL_REJECTED: " reason))))))
@@ -534,9 +534,9 @@ fn breakerEvent! st: b/BreakerState event: String pool: String now: Int64 -> b/B
     (else (do (logLine! (str "(:gateway :breaker :unknownEvent \"" (wire/asnEscape event) "\")")) st)))
 
 fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/ChatOutcome)
-  (mt eff
+  (match eff
     ((ch/effRealpath p) (pair srv (ch/outPath (resultOr (realPath p) p))))
-    ((ch/effIsDir p) (pair srv (ch/outBool (mt (fileStat p) ((ok st) st.isDir) ((err _) false)))))
+    ((ch/effIsDir p) (pair srv (ch/outBool (match (fileStat p) ((ok st) st.isDir) ((err _) false)))))
     ((ch/effClock) (pair srv (ch/outFloat (/ (int64ToFloat64 (nowNs)) 1000000000.0))))
     ((ch/effBreakerDown pool)
       (let [(r (b/breakerDownFor srv.breaker pool (nowSec!)))]
@@ -553,23 +553,23 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
     ((ch/effUsageNote p a o usage)
       (let [(pc srv.pendingCall)
             (tokens (g/usageTokens usage))
-            (params (mt pc ((some x) x.params) ((none) (ul/defaultCallParams))))
-            (row (ul/CallRow :atMs (/ (nowNs) 1000000) :profile (mt pc ((some x) x.profile) ((none) "")) :intent (mt pc ((some x) x.intent) ((none) "")) :alias a :provider p
-                   :model (mt pc ((some x) x.model) ((none) "")) :inTokens (optionOr (listGet tokens 0) 0)
+            (params (match pc ((some x) x.params) ((none) (ul/defaultCallParams))))
+            (row (ul/CallRow :atMs (/ (nowNs) 1000000) :profile (match pc ((some x) x.profile) ((none) "")) :intent (match pc ((some x) x.intent) ((none) "")) :alias a :provider p
+                   :model (match pc ((some x) x.model) ((none) "")) :inTokens (optionOr (listGet tokens 0) 0)
                    :cachedTokens (optionOr (listGet tokens 1) 0) :outTokens (optionOr (listGet tokens 2) 0)
                    :reasoningTokens (optionOr (listGet tokens 3) 0)
-                   :ttftMs none :ms (mt pc ((some x) (some x.latencyMs)) ((none) none)) :outcome o
-                   :charge (mt pc ((some x) x.charge) ((none) 0))
-                   :tag (mt pc ((some x) (if (stringEmpty? x.tag) none (some x.tag))) ((none) none))
+                   :ttftMs none :ms (match pc ((some x) (some x.latencyMs)) ((none) none)) :outcome o
+                   :charge (match pc ((some x) x.charge) ((none) 0))
+                   :tag (match pc ((some x) (if (stringEmpty? x.tag) none (some x.tag))) ((none) none))
                    :temperature params.temperature :topP params.topP :maxTokens params.maxTokens :effort params.effort
                    :api params.api :stream params.stream :toolCount params.toolCount :promptBytes params.promptBytes :sysHash params.sysHash))
-            (ledgerPath (optionOr (mt srv.wiringText ((some t) (c/gatewayLedgerPathOverride t)) ((none) none)) (ul/defaultLedgerPath srv.home)))
+            (ledgerPath (optionOr (match srv.wiringText ((some t) (c/gatewayLedgerPathOverride t)) ((none) none)) (ul/defaultLedgerPath srv.home)))
             (wrote (ul/appendCallRow! ledgerPath row))
             ; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "written in addition to, never instead of, the stats ledger above: GW-STATS's per-HOME ledgerPath keeps serving its own calibration/--by queries unchanged, this is the separate shared ledger (default outside scratch homes once the operator sets :sharedUsagePath, see gatewaySharedUsagePathOverride) that a scratch HOME's deletion cannot take with it")
-            (sharedPath (optionOr (mt srv.wiringText ((some t) (c/gatewaySharedUsagePathOverride t)) ((none) none)) (ul/defaultSharedUsagePath srv.home)))
+            (sharedPath (optionOr (match srv.wiringText ((some t) (c/gatewaySharedUsagePathOverride t)) ((none) none)) (ul/defaultSharedUsagePath srv.home)))
             (wroteShared (ul/appendCallRow! sharedPath row))]
-        (do (mt wrote ((ok _) true) ((err e) (logLine! (str "(:gateway :statsLedger :error \"" (wire/asnEscape e) "\")"))))
-          (do (mt wroteShared ((ok _) true) ((err e) (logLine! (str "(:gateway :sharedUsageLedger :error \"" (wire/asnEscape e) "\")"))))
+        (do (match wrote ((ok _) true) ((err e) (logLine! (str "(:gateway :statsLedger :error \"" (wire/asnEscape e) "\")"))))
+          (do (match wroteShared ((ok _) true) ((err e) (logLine! (str "(:gateway :sharedUsageLedger :error \"" (wire/asnEscape e) "\")"))))
             (do (logLine! (str "(:gateway :usage :provider \"" (wire/asnEscape p) "\" :alias \"" (wire/asnEscape a) "\" :outcome \"" (wire/asnEscape o) "\")"))
               (pair (loopPending srv none) ch/outDone))))))
     ((ch/effUsageFallback p a)
@@ -590,7 +590,7 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
     ((ch/effSpreadNote429 alias)
       (pair (loopSpreadState srv srv.spreadState (mapSet srv.spreadLast429 alias (/ (nowNs) 1000000))) ch/outDone))
     ((ch/effTelemetry rec)
-      (do (mt rec ((some r) (logLine! r)) ((none) true)) (pair srv ch/outDone)))
+      (do (match rec ((some r) (logLine! r)) ((none) true)) (pair srv ch/outDone)))
     ((ch/effNoteIntent i)
       (do (logLine! (str "(:gateway :unknownIntent \"" (wire/asnEscape i) "\")")) (pair srv ch/outDone)))
     ((ch/effLog text) (do (logLine! (stringTrim text)) (pair srv ch/outDone)))
@@ -606,11 +606,11 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
     ((ch/effPoolHttp _ _ _ _ _ _) (pair srv (ch/outHttp (ch/httpRaised false "a pool effect reached the synchronous effect runner")))))
 
 fn ! drive! srv: GatewayLoop fd: Int64 tag: String step: ch/ChatStep -> GatewayLoop
-  (mt step
+  (match step
     ((ch/stepDone resp) (addConn srv fd (connWriting (renderResponse resp))))
     ((ch/stepRaised kind message) (addConn srv fd (connWriting (errorResponse 500 (str kind ": " message)))))
     ((ch/stepEffect eff k)
-      (mt eff
+      (match eff
         ((ch/effHttp provider model intent role request timeout profile)
           (dispatchHttp! srv fd tag (dp/RouteHint :provider provider :model model :intent intent :role role
                                   :promptTokens (/ (stringLength request.data) 4)) request timeout k profile))
@@ -625,10 +625,10 @@ fn ! drive! srv: GatewayLoop fd: Int64 tag: String step: ch/ChatStep -> GatewayL
           (let [(got (u/geminiBucket srv.buckets model rpm (u/wallSeconds!)))
                 (begun (u/tokenBucketBegin (pairSecond got) timeout (u/wallSeconds!)))
                 (b1 (pairFirst begun))]
-            (mt (pairSecond begun)
+            (match (pairSecond begun)
               ((err _) (drive! (loopState srv srv.breaker (u/bucketRegistryPut (pairFirst got) model rpm b1) srv.profiles) fd tag (k (ch/outBool false))))
               ((ok s)
-               (mt s
+               (match s
                  ((u/bucketAcquired) (drive! (loopState srv srv.breaker (u/bucketRegistryPut (pairFirst got) model rpm b1) srv.profiles) fd tag (k (ch/outBool true))))
                  ((u/bucketRefused) (drive! (loopState srv srv.breaker (u/bucketRegistryPut (pairFirst got) model rpm b1) srv.profiles) fd tag (k (ch/outBool false))))
                  ((u/bucketWait secs)
@@ -640,19 +640,19 @@ fn errorOutcome status: Int64 reason: String -> ch/ChatOutcome
   (ch/outHttp (ch/httpError status reason (list (pair (ch/gatewayOriginHeader) "gateway")) (str "{\"error\": \"" (wire/asnEscape reason) "\"}")))
 
 fn jsonFloatOf v: (Option j/Json) -> (Option Float64)
-  (mt v ((none) none) ((some jv) (mt jv ((j/jint i) (some (int64ToFloat64 i))) ((j/jfloat f) (some f)) ((j/jnum n) (some n)) (_ none))))
+  (match v ((none) none) ((some jv) (match jv ((j/jint i) (some (int64ToFloat64 i))) ((j/jfloat f) (some f)) ((j/jnum n) (some n)) (_ none))))
 
 fn jsonIntOf v: (Option j/Json) -> (Option Int64)
-  (mt v ((none) none) ((some jv) (mt jv ((j/jint i) (some i)) ((j/jfloat f) (float64ToInt64 f)) ((j/jnum n) (float64ToInt64 n)) (_ none))))
+  (match v ((none) none) ((some jv) (match jv ((j/jint i) (some i)) ((j/jfloat f) (float64ToInt64 f)) ((j/jnum n) (float64ToInt64 n)) (_ none))))
 
 fn jsonStrOf v: (Option j/Json) -> (Option String)
-  (mt v ((none) none) ((some jv) (mt jv ((j/jstr s) (some s)) (_ none))))
+  (match v ((none) none) ((some jv) (match jv ((j/jstr s) (some s)) (_ none))))
 
 fn jsonBoolOf v: (Option j/Json) d: Bool -> Bool
-  (mt v ((none) d) ((some jv) (mt jv ((j/jbool b) b) (_ d))))
+  (match v ((none) d) ((some jv) (match jv ((j/jbool b) b) (_ d))))
 
 fn jsonArrOf v: (Option j/Json) -> (List j/Json)
-  (mt v ((none) (list)) ((some jv) (mt jv ((j/jarr xs) xs) (_ (list)))))
+  (match v ((none) (list)) ((some jv) (match jv ((j/jarr xs) xs) (_ (list)))))
 
 fn apiKindOf url: String -> String
   (cond
@@ -663,23 +663,23 @@ fn apiKindOf url: String -> String
 
 ; (:m a short, non-reversible fingerprint of the system prefix, to see prefix-cache reuse across calls without storing the prefix text itself)
 fn systemPrefixHash messages: (List j/Json) -> String
-  (mt (listHead messages)
+  (match (listHead messages)
     ((none) "")
     ((some first)
      (if (= (optionOr (jsonStrOf (j/jsonGet first "role")) "") "system")
-       (mt (jsonStrOf (j/jsonGet first "content"))
+       (match (jsonStrOf (j/jsonGet first "content"))
          ((none) "")
          ((some content) (optionOr (stringSlice (bytesSha256 (stringToBytes content)) 0 16) "")))
        "")))
 
 ; (:m the effective request parameters as actually sent, read back out of sent.data rather than re-derived from config, so a parameter the provider ignores is still recorded as sent, not guessed; on an unparseable body this is honestly the api kind alone with every other field defaulted, not a guess at what was meant)
 fn paramsFromRequest sent: u/UpstreamRequest -> ul/CallParams
-  (mt (j/jsonParse sent.data)
+  (match (j/jsonParse sent.data)
     ((err _) (with (ul/defaultCallParams) :api (apiKindOf sent.url)))
     ((ok body)
      (let [(messages (jsonArrOf (j/jsonGet body "messages")))
            (effortDirect (jsonStrOf (j/jsonGet body "effort")))
-           (effort (mt effortDirect ((some s) (some s)) ((none) (jsonStrOf (j/jsonGet body "reasoning_effort")))))]
+           (effort (match effortDirect ((some s) (some s)) ((none) (jsonStrOf (j/jsonGet body "reasoning_effort")))))]
        (ul/CallParams
          :temperature (jsonFloatOf (j/jsonGet body "temperature"))
          :topP (jsonFloatOf (j/jsonGet body "top_p"))
@@ -695,7 +695,7 @@ fn paramsFromRequest sent: u/UpstreamRequest -> ul/CallParams
 fn ! budgetRefusal! srv: GatewayLoop profile: String -> (Option String)
   (if (stringEmpty? profile) none
     (let [(text (optionOr srv.wiringText ""))]
-      (mt (c/gatewayDailyTokenBudget text profile)
+      (match (c/gatewayDailyTokenBudget text profile)
         ((none) none)
         ((some cap)
           (let [(sharedPath (optionOr (c/gatewaySharedUsagePathOverride text) (ul/defaultSharedUsagePath srv.home)))
@@ -707,12 +707,12 @@ fn ! budgetRefusal! srv: GatewayLoop profile: String -> (Option String)
               none))))))
 
 fn ! dispatchHttp! srv: GatewayLoop fd: Int64 tag: String hint: dp/RouteHint request: u/UpstreamRequest timeout: Float64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) profile: String -> GatewayLoop
-  (mt (budgetRefusal! srv profile)
+  (match (budgetRefusal! srv profile)
     ((some reason) (do (logLine! (str "(:gateway :budget :profile \"" (wire/asnEscape profile) "\" :result refused :reason \"" (wire/asnEscape reason) "\")")) (drive! srv fd tag (k (errorOutcome 429 reason)))))
     ((none)
       (let [(w srv.wiring)
             (planned (dp/plan w hint request srv.env (nowMs!)))]
-        (mt planned
+        (match planned
           ((dp/planReject status reason row)
             (do (logLine! (dp/decisionText row))
               (drive! srv fd tag (k (errorOutcome status reason)))))
@@ -722,7 +722,7 @@ fn ! dispatchHttp! srv: GatewayLoop fd: Int64 tag: String hint: dp/RouteHint req
           ((dp/planWait slot provider sent row cold deadline)
             (do (logLine! (dp/decisionText row))
               (if cold
-                (mt (dp/startSlot! w slot (nowMs!) deadline)
+                (match (dp/startSlot! w slot (nowMs!) deadline)
                   ((dp/startRefused status reason line) (do (logLine! line) (drive! srv fd tag (k (errorOutcome status reason)))))
                   ((dp/startOk next line) (do (logLine! line) (addConn (loopWiring srv next srv.wiringText) fd (connWarm slot provider sent (dp/sendTimeout w hint provider timeout) k deadline hint.model hint.intent tag profile)))))
                 (addConn (loopWiring srv (dp/waiting w slot) srv.wiringText) fd (connWarm slot provider sent (dp/sendTimeout w hint provider timeout) k deadline hint.model hint.intent tag profile)))))))))
@@ -730,13 +730,13 @@ fn ! dispatchHttp! srv: GatewayLoop fd: Int64 tag: String hint: dp/RouteHint req
 fn ! sendPlanned! srv: GatewayLoop fd: Int64 tag: String slot: String provider: String sent: u/UpstreamRequest timeout: Float64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) model: String intent: String profile: String -> GatewayLoop
   (let [(w srv.wiring)
         (params (paramsFromRequest sent))]
-    (mt (p/sendHttp! w.plugins provider sent srv.env timeout)
+    (match (p/sendHttp! w.plugins provider sent srv.env timeout)
       ((err f) (drive! (settled! srv slot provider intent model tag params "" 0 false profile) fd tag (k (ch/outHttp (failureReply f)))))
       ((ok call) (addConn (loopWiring srv (dp/started w slot) srv.wiringText) fd (connHttp call k slot provider (nowMs!) model intent tag params profile)))))
 
 fn ! stepWarm! srv: GatewayLoop conn: GatewayConn tag: String slot: String provider: String sent: u/UpstreamRequest timeout: Float64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) deadline: Int64 model: String intent: String profile: String -> GatewayLoop
   (let [(now (nowMs!))]
-    (mt (dp/slotReady srv.wiring slot now)
+    (match (dp/slotReady srv.wiring slot now)
       ((dp/readyNow) (sendPlanned! srv conn.fd tag slot provider sent timeout k model intent profile))
       ((dp/readyGone reason) (drive! srv conn.fd tag (k (errorOutcome 503 reason))))
       ((dp/readyLater)
@@ -760,7 +760,7 @@ fn ! settled! srv: GatewayLoop slot: String provider: String intent: String mode
 fn ! chatWorld! srv: GatewayLoop -> (Pair GatewayLoop (Result ch/ChatWorld String))
   (let [(loaded (c/gatewayProfilesLoad! srv.profiles srv.home srv.registryPath))
         (srv1 (loopState srv srv.breaker srv.buckets (pairFirst loaded)))]
-    (mt (u/upstreamSettings srv.env)
+    (match (u/upstreamSettings srv.env)
       ((err e) (pair srv1 (err e)))
       ((ok settings) (pair (wired! srv1 (pairSecond loaded) settings) (ok (ch/ChatWorld :env srv.env :rootDir srv.rootDir :settings settings
                                       :agyPromptMaxBytes srv.promptMaxBytes :table (pairSecond loaded)))))))
@@ -768,9 +768,9 @@ fn ! chatWorld! srv: GatewayLoop -> (Pair GatewayLoop (Result ch/ChatWorld Strin
 fn ! wired! srv: GatewayLoop table: (Result c/GatewayTable String) settings: u/UpstreamSettings -> GatewayLoop
   (let [(path (c/gatewayProfilesPath srv.home))
         (text (if (fileExists? path) (resultOr (fileReadString path) "") ""))
-        (tableOpt (mt table ((ok t) (some t)) ((err _) none)))]
+        (tableOpt (match table ((ok t) (some t)) ((err _) none)))]
     (if (= srv.wiringText (some text)) srv
-      (mt (dp/wiringFromConfig tableOpt text settings srv.env srv.families)
+      (match (dp/wiringFromConfig tableOpt text settings srv.env srv.families)
         ((ok w) (loopWiring srv (dp/carrySpend srv.wiring w) (some text)))
         ((err e) (do (logLine! (str "(:gateway :wiring :error \"" (wire/asnEscape e) "\")"))
                    (loopWiring srv (dp/emptyWiring settings) (some text)))))))
@@ -789,20 +789,20 @@ fn ! dispatch! srv: GatewayLoop fd: Int64 raw: String request: HttpRequest -> Ga
     (let [(w (chatWorld! srv))
           (tag (c/headerGet request.headers "X-ASL-Tag"))
           (headersWithSession (ensureSessionHeader request.headers fd (nowMs!)))]
-      (mt (pairSecond w)
+      (match (pairSecond w)
         ((err e) (addConn (pairFirst w) fd (connWriting (errorResponse 500 e))))
         ((ok world) (drive! (pairFirst w) fd tag (ch/chatStart! (ch/ChatRequest :path request.path :headers headersWithSession :body request.body) world)))))
-    (mt (omniRoute! srv fd request)
+    (match (omniRoute! srv fd request)
       ((some next) next)
       ((none)
-        (mt (tcpConnect srv.upstreamPort)
+        (match (tcpConnect srv.upstreamPort)
           ((err e) (addConn srv fd (connWriting (errorResponse 502 (str "upstream connect failed: " e)))))
           ((ok upstreamFd) (addConn srv fd (connProxy upstreamFd raw "")))))))
 
 ; (:m :ref MAINFIX10 :do "omniApi.asl implemented every /api/asl/ route (browser target+extension registration and poll, project/channel sync ingest) but was never imported outside itself, so every /api/asl/ request fell through to the generic proxy and 502'd against whatever --upstream happened to be. omniRoute! handles only paths omniDispatch itself recognizes under /api/asl/, returning none for anything else (including every non-/api/asl path) so the existing fallback arm's proxy call is unchanged for everything this does not claim")
 fn ! omniRoute! srv: GatewayLoop fd: Int64 request: HttpRequest -> (Option GatewayLoop)
   (if (not (stringStartsWith? request.path "/api/asl/")) none
-    (mt (om/omniDispatch srv.omni request.method request.path request.body (nowMs!))
+    (match (om/omniDispatch srv.omni request.method request.path request.body (nowMs!))
       ((none) none)
       ((some (ok reply)) (some (addConn (loopOmni srv reply.state) fd (connWriting (h/formatHttpResponse reply.response)))))
       ((some (err e)) (some (addConn srv fd (connWriting (errorResponse 502 (str "omni dispatch failed: " e))))))))
@@ -812,12 +812,12 @@ fn ! closeConn! conn: GatewayConn -> Bool
 
 fn ! stepReading! srv: GatewayLoop conn: GatewayConn ready: (List (Pair Int64 Int64)) -> GatewayLoop
   (if (not (readyOn? ready conn.fd)) (loopConns srv (listAppend srv.conns (list conn)))
-    (mt (fdRead conn.fd 65536)
+    (match (fdRead conn.fd 65536)
       ((err e) (if (= e "wouldBlock") (loopConns srv (listAppend srv.conns (list conn))) (do (closeConn! conn) srv)))
       ((ok chunk)
         (if (stringEmpty? chunk) (do (closeConn! conn) srv)
           (let [(input (str conn.input chunk))]
-            (mt (parseRequest input)
+            (match (parseRequest input)
               ((none) (loopConns srv (listAppend srv.conns (list (with conn :input input :phase connReading)))))
               ((some request) (dispatch! srv conn.fd input request))))))))
 
@@ -826,10 +826,10 @@ fn ! stepProxy! srv: GatewayLoop conn: GatewayConn upstreamFd: Int64 pending: St
                 (loopConns srv (listAppend srv.conns (list (with conn :input "" :phase (connProxy upstreamFd p r)))))))]
     (if (not (readyOn? ready upstreamFd)) (keep pending response)
       (if (not (stringEmpty? pending))
-        (mt (fdWrite upstreamFd pending)
+        (match (fdWrite upstreamFd pending)
           ((err e) (do (fdClose upstreamFd) (addConn srv conn.fd (connWriting (errorResponse 502 (str "upstream write failed: " e))))))
           ((ok n) (keep (optionOr (stringSlice pending n (stringLength pending)) "") response)))
-        (mt (fdRead upstreamFd 65536)
+        (match (fdRead upstreamFd 65536)
           ((err e) (do (fdClose upstreamFd) (addConn srv conn.fd (connWriting (errorResponse 502 (str "upstream read failed: " e))))))
           ((ok chunk)
             (if (stringEmpty? chunk)
@@ -838,7 +838,7 @@ fn ! stepProxy! srv: GatewayLoop conn: GatewayConn upstreamFd: Int64 pending: St
 
 fn ! stepWriting! srv: GatewayLoop conn: GatewayConn data: String ready: (List (Pair Int64 Int64)) -> GatewayLoop
   (if (not (readyOn? ready conn.fd)) (loopConns srv (listAppend srv.conns (list conn)))
-    (mt (fdWrite conn.fd data)
+    (match (fdWrite conn.fd data)
       ((err e) (if (= e "wouldBlock") (loopConns srv (listAppend srv.conns (list conn))) (do (closeConn! conn) srv)))
       ((ok n)
         (let [(rest (optionOr (stringSlice data n (stringLength data)) ""))]
@@ -846,11 +846,11 @@ fn ! stepWriting! srv: GatewayLoop conn: GatewayConn data: String ready: (List (
             (addConn srv conn.fd (connWriting rest)))))))
 
 fn ! stepHttp! srv: GatewayLoop conn: GatewayConn tag: String call: u/UpstreamCall k: (fn [ch/ChatOutcome] -> ch/ChatStep) slot: String provider: String startMs: Int64 model: String intent: String params: ul/CallParams profile: String ready: (List (Pair Int64 Int64)) -> GatewayLoop
-  (mt (u/upstreamCallPump! call ready)
+  (match (u/upstreamCallPump! call ready)
     ((err f) (drive! (settled! srv slot provider intent model tag params "" startMs false profile) conn.fd tag (k (ch/outHttp (failureReply f)))))
     ((ok next)
       (if (u/upstreamCallOpen? next) (addConn srv conn.fd (connHttp next k slot provider startMs model intent tag params profile))
-        (mt (u/upstreamCallFinish! next)
+        (match (u/upstreamCallFinish! next)
           ((ok resp) (drive! (settled! srv slot provider intent model tag params resp.body startMs true profile) conn.fd tag (k (ch/outHttp (ch/httpOk resp.status (list) resp.body)))))
           ((err f) (drive! (settled! srv slot provider intent model tag params "" startMs false profile) conn.fd tag (k (ch/outHttp (failureReply f)))))))))
 
@@ -867,7 +867,7 @@ fn ! stepBucketWait! srv: GatewayLoop conn: GatewayConn deadlineMs: Int64 k: (fn
     (loopConns srv (listAppend srv.conns (list conn))))
 
 fn ! stepConn! srv: GatewayLoop conn: GatewayConn ready: (List (Pair Int64 Int64)) -> GatewayLoop
-  (mt conn.phase
+  (match conn.phase
     ((connReading) (stepReading! srv conn ready))
     ((connHttp call k slot provider startMs model intent tag params profile) (stepHttp! srv conn tag call k slot provider startMs model intent params profile ready))
     ((connPool _ _) (loopConns srv (listAppend srv.conns (list conn))))
@@ -878,24 +878,24 @@ fn ! stepConn! srv: GatewayLoop conn: GatewayConn ready: (List (Pair Int64 Int64
     ((connWriting data) (stepWriting! srv conn data ready)))
 
 fn waitsFor? conn: GatewayConn requestId: Int64 -> Bool
-  (mt conn.phase ((connPool id _) (= id requestId)) (_ false))
+  (match conn.phase ((connPool id _) (= id requestId)) (_ false))
 
 fn ! deliverReplies! srv: GatewayLoop -> GatewayLoop
-  (mt (listHead srv.replies)
+  (match (listHead srv.replies)
     ((none) srv)
     ((some reply)
       (let [(rest (loopPools srv srv.pools (optionOr (listTail srv.replies) (list))))
             (target (listHead (filter (fn [(cn GatewayConn)] -> Bool (waitsFor? cn reply.requestId)) rest.conns)))]
-        (mt target
+        (match target
           ((none) (deliverReplies! rest))
           ((some conn)
             (let [(others (loopConns rest (filter (fn [(cn GatewayConn)] -> Bool (not (waitsFor? cn reply.requestId))) rest.conns)))]
-              (mt conn.phase
+              (match conn.phase
                 ((connPool _ k) (deliverReplies! (drive! others conn.fd "" (k (ch/outHttp (poolReplyHttp reply.result))))))
                 (_ (deliverReplies! rest)))))))))
 
 fn connWatch conn: GatewayConn -> (List (Pair Int64 Int64))
-  (mt conn.phase
+  (match conn.phase
     ((connReading) (list (pair conn.fd 1)))
     ((connHttp call _ _ _ _ _ _ _ _ _) (u/upstreamCallWatch call))
     ((connPool _ _) (list))
@@ -907,10 +907,10 @@ fn connWatch conn: GatewayConn -> (List (Pair Int64 Int64))
 
 fn ! acceptReady! srv: GatewayLoop ready: (List (Pair Int64 Int64)) -> GatewayLoop
   (if (not (readyOn? ready srv.listener)) srv
-    (mt (sockAccept srv.listener)
+    (match (sockAccept srv.listener)
       ((err e) (do (logLine! (str "(:gateway :acceptFailed \"" e "\")")) srv))
       ((ok fd)
-        (mt (fdNonBlocking fd true)
+        (match (fdNonBlocking fd true)
           ((err e) (do (fdClose fd) (logLine! (str "(:gateway :acceptFailed \"" e "\")")) srv))
           ((ok _) (addConn srv fd connReading))))))
 
@@ -920,11 +920,11 @@ fn ! warmPolled! srv: GatewayLoop -> GatewayLoop
       (loopWiring srv (pairFirst polled) srv.wiringText)))
 
 fn parked? conn: GatewayConn -> Bool
-  (mt conn.phase ((connWarm _ _ _ _ _ _ _ _ _ _) true) (_ false))
+  (match conn.phase ((connWarm _ _ _ _ _ _ _ _ _ _) true) (_ false))
 
 ; (:m :tags (retry) :do "the deadline-ordered timer queue the poll loop watches alongside its sockets: how long until this one conn's connTimer or connBucketWait should fire, clamped to >=0; none for every other phase")
 fn timerWaitMs now: Int64 conn: GatewayConn -> (Option Int64)
-  (mt conn.phase
+  (match conn.phase
     ((connTimer deadlineMs _ _) (some (max 0 (- deadlineMs now))))
     ((connBucketWait deadlineMs _ _) (some (max 0 (- deadlineMs now))))
     (_ none))
@@ -932,7 +932,7 @@ fn timerWaitMs now: Int64 conn: GatewayConn -> (Option Int64)
 ; (:m :tags (retry) :do "the soonest a parked connTimer needs the reactor to look again; -1 (no constraint) when none are parked")
 fn nearestTimerWaitMs now: Int64 conns: (List GatewayConn) -> Int64
   (fold (fn [(acc Int64) (cn GatewayConn)] -> Int64
-          (mt (timerWaitMs now cn)
+          (match (timerWaitMs now cn)
             ((none) acc)
             ((some w) (if (< acc 0) w (min acc w)))))
     -1 conns)
@@ -956,7 +956,7 @@ fn ! gatewayEventLoop! srv: GatewayLoop -> (Result Int64 String)
         (timeout (combineTimeoutMs (if (pd/poolActive? srv.pools) 10 -1)
                    (combineTimeoutMs (if (listAny? parked? srv.conns) 20 -1)
                      (nearestTimerWaitMs (nowMs!) srv.conns))))]
-    (mt (fdPoll watch timeout)
+    (match (fdPoll watch timeout)
       ((err e) (if (= e "interrupted") (gatewayEventLoop! srv) (err (str "gateway poll failed: " e))))
       ((ok ready) (gatewayEventLoop! (gatewayTurn! srv ready)))))
 
@@ -980,14 +980,14 @@ fn ! linkOpen! env: (Map String String) home: String rootDir: String families: (
         (registryPath (if (stringEmpty? registryEnv) (str rootDir "/.asl/mem/calibration/index.asn") registryEnv))
         (loaded (c/gatewayProfilesLoad! (c/emptyProfilesCache) home registryPath))
         (path (c/gatewayProfilesPath home))]
-    (mt (pairSecond loaded)
+    (match (pairSecond loaded)
       ((err e) (err e))
       ((ok table)
-        (mt (u/upstreamSettings env)
+        (match (u/upstreamSettings env)
           ((err e) (err e))
           ((ok settings)
             (let [(text (resultOr (fileReadString path) ""))]
-              (mt (dp/wiringFromConfig (some table) text settings env families)
+              (match (dp/wiringFromConfig (some table) text settings env families)
                 ((err e) (err (str "gateway wiring: " e)))
                 ((ok w)
                   (ok (GatewayLoop :listener -1 :upstreamPort 0 :env env :home home :rootDir rootDir :registryPath registryPath
@@ -1008,7 +1008,7 @@ fn pending? srv: GatewayLoop fd: Int64 -> Bool
   (or (listAny? (fn [(cn GatewayConn)] -> Bool (= cn.fd fd)) srv.conns) (not (listEmpty? srv.replies)))
 
 fn ! linkPump! srv: GatewayLoop fd: Int64 deadlineMs: Int64 -> (Pair GatewayLoop (Result String String))
-  (mt (outboxFor srv fd)
+  (match (outboxFor srv fd)
     ((some data) (pair (withoutOutbox srv fd) (ok data)))
     ((none)
       (cond
@@ -1020,7 +1020,7 @@ fn ! linkPump! srv: GatewayLoop fd: Int64 deadlineMs: Int64 -> (Pair GatewayLoop
                 (timeout (combineTimeoutMs (if (pd/poolActive? srv.pools) 10 -1)
                            (combineTimeoutMs (if (or (listEmpty? watch) (listAny? parked? srv.conns)) 20 -1)
                              (combineTimeoutMs (nearestTimerWaitMs (nowMs!) srv.conns) 1000))))]
-            (mt (fdPoll watch timeout)
+            (match (fdPoll watch timeout)
               ((err e) (if (= e "interrupted") (linkPump! srv fd deadlineMs) (pair srv (err (str "gateway poll failed: " e)))))
               ((ok ready) (linkPump! (gatewayTurn! srv ready) fd deadlineMs))))))))
 

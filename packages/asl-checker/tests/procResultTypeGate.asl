@@ -12,22 +12,22 @@ fn ! diagMessagesForParsed path: Str forms: (List a/TopForm) -> (Result (List St
   (let [(summary (r/collectSummary forms path))
         (importPaths (r/mapValuesList summary.imports))
         (depsRes (r/loadModuleDeps! (cons (r/parentDirOf path) (checkerRoots)) importPaths))]
-    (mt depsRes
+    (match depsRes
       ((err e) (err (str path ": imports do not load: " e)))
       ((ok deps) (ok (map (fn [(d ty/Diagnostic)] -> Str (str path ": " d.code ": " d.message)) (chk/checkModule forms deps path))))))
 
 fn ! diagMessagesForPath path: Str -> (Result (List Str) Str)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) (err (str path ": unreadable")))
-    ((ok src) (mt (a/parse src) ((err e) (err (str path ": does not parse: " e.msg))) ((ok forms) (diagMessagesForParsed path forms)))))
+    ((ok src) (match (a/parse src) ((err e) (err (str path ": does not parse: " e.msg))) ((ok forms) (diagMessagesForParsed path forms)))))
 
 fn ! diagMessages -> (List (Result (List Str) Str))
   (map diagMessagesForPath (targetPaths))
 
 fn ! testNoProcessResultAnnotationRemains -> Bool
   (let [(outcomes (diagMessages))
-        (failures (fold (fn [(acc (List Str)) (o (Result (List Str) Str))] -> (List Str) (mt o ((err e) (listAppend acc (list e))) ((ok _) acc))) (list) outcomes))
-        (msgs (fold (fn [(acc (List Str)) (o (Result (List Str) Str))] -> (List Str) (mt o ((err _) acc) ((ok ms) (listAppend acc ms)))) (list) outcomes))
+        (failures (fold (fn [(acc (List Str)) (o (Result (List Str) Str))] -> (List Str) (match o ((err e) (listAppend acc (list e))) ((ok _) acc))) (list) outcomes))
+        (msgs (fold (fn [(acc (List Str)) (o (Result (List Str) Str))] -> (List Str) (match o ((err _) acc) ((ok ms) (listAppend acc ms)))) (list) outcomes))
         (hits (filter (fn [(m Str)] -> Bool (stringContains? m "ProcessResult")) msgs))]
     (do
       (assert (= (listLength outcomes) 5) "the gate covers the five target files")

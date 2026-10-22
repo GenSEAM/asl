@@ -59,7 +59,7 @@ fn ! hostTriple -> String
       (else "")))
 
 fn ! hostFacts -> libc/TripleFacts
-  (mt (libc/libcFacts (hostTriple))
+  (match (libc/libcFacts (hostTriple))
     ((some f) f)
     ((none) (do (assert false (str "hostFacts: libc.asl has no row for this host's triple \"" (hostTriple) "\"")) (libc/emptyTripleFacts))))
 
@@ -74,9 +74,9 @@ fn fdSource -> String
     "  (cond ((= fd r) \"r\") ((= fd w) \"w\") (else \"other\"))"
     ""
     "fn ! shape res: (Result (List (Pair Int64 Int64)) String) r: Int64 w: Int64 -> String"
-    "  (mt res"
+    "  (match res"
     "    ((err e) (str \"err \" e))"
-    "    ((ok ready) (str \"ok\" (fold (fn [(acc String) (p (Pair Int64 Int64))] -> String (mt p ((pair fd m) (str acc \" \" (label fd r w) \":\" m)))) \"\" ready))))"
+    "    ((ok ready) (str \"ok\" (fold (fn [(acc String) (p (Pair Int64 Int64))] -> String (match p ((pair fd m) (str acc \" \" (label fd r w) \":\" m)))) \"\" ready))))"
     ""
     "fn dup s: String k: Int64 -> String"
     "  (if (= k 0) s (dup (str s s) (- k 1)))"
@@ -84,12 +84,12 @@ fn fdSource -> String
     "fn ! readAll r: Int64 want: Int64 acc: String -> String"
     "  (if (>= (stringLength acc) want)"
     "    acc"
-    "    (mt (fdRead r (- want (stringLength acc)))"
+    "    (match (fdRead r (- want (stringLength acc)))"
     "      ((err e) (str acc \"<err \" e \">\"))"
     "      ((ok s) (if (= (stringLength s) 0) acc (readAll r want (str acc s))))))"
     ""
     "fn ! bigTrip w: Int64 r: Int64 -> String"
-    "  (mt (fdWrite w (dup \"x\" 16))"
+    "  (match (fdWrite w (dup \"x\" 16))"
     "    ((err e) (str \"write err \" e))"
     "    ((ok n) (str (> n 0) \" \" (= (stringLength (readAll r n \"\")) n))))"
     ""
@@ -129,7 +129,7 @@ fn fdSource -> String
     "      (ok 0))"
     ""
     "fn ! main args: (List String) -> (Result Int64 String)"
-    "  (mt (procSpawnv (list \"/bin/cat\") (none) (none))"
+    "  (match (procSpawnv (list \"/bin/cat\") (none) (none))"
     "    ((err e) (do (println \"procSpawnv\" e) (ok 1)))"
     "    ((ok child) (pipeChecks child.stdin child.stdout child.pid)))"))
 
@@ -138,18 +138,18 @@ fn infoSource -> String
     "(module sysInfo :x [main] :i [])"
     ""
     "fn ! readAll fd: Int64 acc: String -> String"
-    "  (mt (fdRead fd 4096)"
+    "  (match (fdRead fd 4096)"
     "    ((err e) (str acc \"<err \" e \">\"))"
     "    ((ok s) (if (= (stringLength s) 0) acc (readAll fd (str acc s)))))"
     ""
     "fn ! childOut argv: (List String) -> String"
-    "  (mt (procSpawnv argv (none) (none))"
+    "  (match (procSpawnv argv (none) (none))"
     "    ((err e) (str \"spawn err \" e))"
     "    ((ok c) (let [(out (readAll c.stdout \"\"))]"
     "              (do (procWaitPid c.pid false) (fdClose c.stdout) (fdClose c.stdin) (fdClose c.stderr) out))))"
     ""
     "fn ! reapedPid -> Int64"
-    "  (mt (procSpawnv (list \"/usr/bin/true\") (none) (none))"
+    "  (match (procSpawnv (list \"/usr/bin/true\") (none) (none))"
     "    ((err e) -1)"
     "    ((ok c) (do (procWaitPid c.pid false) (fdClose c.stdout) (fdClose c.stdin) (fdClose c.stderr) c.pid)))"
     ""
@@ -160,10 +160,10 @@ fn infoSource -> String
     "  (let [(self (procSelf))"
     "        (gone (reapedPid))"
     "        (env (envList))]"
-    "    (do (println \"cpuCount is getconf\" (mt (cpuCount) ((ok c) (= (str c \"\\n\") (childOut (list \"/usr/bin/getconf\" \"_NPROCESSORS_ONLN\")))) ((err e) e)))"
+    "    (do (println \"cpuCount is getconf\" (match (cpuCount) ((ok c) (= (str c \"\\n\") (childOut (list \"/usr/bin/getconf\" \"_NPROCESSORS_ONLN\")))) ((err e) e)))"
     "        (println \"platformInfo\" (platformInfo))"
-    "        (println \"platformInfo is uname\" (mt (platformInfo) ((ok p) (= (str p.os \" \" p.release \" \" p.machine \"\\n\") (childOut (list \"/usr/bin/uname\" \"-s\" \"-r\" \"-m\")))) ((err e) e)))"
-    "        (println \"localDate is date\" (mt (localDate) ((ok d) (= (str d \"\\n\") (childOut (list \"/bin/date\" \"+%Y-%m-%d\")))) ((err e) e)))"
+    "        (println \"platformInfo is uname\" (match (platformInfo) ((ok p) (= (str p.os \" \" p.release \" \" p.machine \"\\n\") (childOut (list \"/usr/bin/uname\" \"-s\" \"-r\" \"-m\")))) ((err e) e)))"
+    "        (println \"localDate is date\" (match (localDate) ((ok d) (= (str d \"\\n\") (childOut (list \"/bin/date\" \"+%Y-%m-%d\")))) ((err e) e)))"
     "        (println \"envList has probe\" (listContains? env \"SYSROUTE_PROBE=sysRoute 42\"))"
     "        (println \"envList is env\" (= (joinLines env) (childOut (list \"/usr/bin/env\"))))"
     "        (println \"procSelf is sh's parent\" (= (str self \"\\n\") (childOut (list \"/bin/sh\" \"-c\" \"echo $PPID\"))))"
@@ -175,7 +175,7 @@ fn infoSource -> String
     "        (println \"procKill reaped\" (procKill gone \"SIGTERM\"))"
     "        (println \"procKill bad\" (procKill self \"SIGFOO\") (procKill self \"\") (procKill 1 \"SIGTERM\") (procKill -1 \"SIGTERM\") (procKill 0 \"SIGTERM\") (procKill 2147483648 \"SIGTERM\") (procKill -2147483648 \"SIGTERM\") (procKill self 15) (procKill \"1\" \"SIGTERM\"))"
     "        (println \"procExePath ok\" (ok? (procExePath)))"
-    "        (eprintln (mt (procExePath) ((ok p) p) ((err e) e)))"
+    "        (eprintln (match (procExePath) ((ok p) p) ((err e) e)))"
     "        (ok 0)))"))
 
 fn fileSource -> String
@@ -183,7 +183,7 @@ fn fileSource -> String
     "(module sysFile :x [main] :i [])"
     ""
     "fn ! shape res: (Result Int64 String) -> String"
-    "  (mt res"
+    "  (match res"
     "    ((ok fd) (do (fdClose fd) \"ok\"))"
     "    ((err e) (str \"err \" e)))"
     ""
@@ -204,13 +204,13 @@ fn fileSource -> String
     "        (nul \"a\\u{0}b\")"
     "        (long (str d \"/\" (dup \"x\" 13)))]"
     "    (do (println \"lock ok\" (shape (fileLock p true)) (shape (fileLock p false)))"
-    "        (println \"lock held\" (mt (fileLock p true)"
+    "        (println \"lock held\" (match (fileLock p true)"
     "                               ((ok fd) (let [(ex (child self (str \"lock \" p \" true\")))"
     "                                              (sh (child self (str \"lock \" p \" false\")))]"
     "                                          (do (fdClose fd) (str ex \" / \" sh))))"
     "                               ((err e) (str \"err \" e))))"
     "        (println \"lock released\" (child self (str \"lock \" p \" true\")))"
-    "        (println \"lock shared\" (mt (fileLock p false)"
+    "        (println \"lock shared\" (match (fileLock p false)"
     "                                 ((ok fd) (let [(sh (child self (str \"lock \" p \" false\")))"
     "                                                (ex (child self (str \"lock \" p \" true\")))]"
     "                                            (do (fdClose fd) (str sh \" / \" ex))))"
@@ -219,13 +219,13 @@ fn fileSource -> String
     "        (println \"wait free\" (shape (fileLockWait p)) (shape (fileLockWait p false)) (shape (fileLockWait p 50)) (shape (fileLockWait p (some 50)))"
     "                 (shape (fileLockWait p (none))) (shape (fileLockWait p true (some 50))) (shape (fileLockWait p false (none)))"
     "                 (shape (fileLockWait p true -1)) (shape (fileLockWait p true 0)) (shape (fileLockWait p true 1125899906842625)))"
-    "        (println \"wait held\" (mt (fileLock p true)"
+    "        (println \"wait held\" (match (fileLock p true)"
     "                               ((ok fd) (let [(a (child self (str \"wait \" p \" true 0\")))"
     "                                              (b (child self (str \"wait \" p \" true 150\")))"
     "                                              (c (child self (str \"wait \" p \" false 30\")))]"
     "                                          (do (fdClose fd) (str a \" / \" b \" / \" c))))"
     "                               ((err e) (str \"err \" e))))"
-    "        (println \"wait shared\" (mt (fileLock p false)"
+    "        (println \"wait shared\" (match (fileLock p false)"
     "                                 ((ok fd) (let [(a (child self (str \"wait \" p \" false 100\")))"
     "                                                (b (child self (str \"wait \" p \" true 40\")))]"
     "                                            (do (fdClose fd) (str a \" / \" b))))"
@@ -252,7 +252,7 @@ fn fileSource -> String
     "        (decoys sub pid 3 130)"
     "        (println \"write exhausted\" (fileWriteAt d \"sub/f.txt\" \"lost\") (fileReadAt d \"sub/f.txt\"))"
     "        (println \"write after\" (fileWriteAt d \"sub/f.txt\" \"kept\") (fileReadAt d \"sub/f.txt\") (fileReadAt d (str \"sub/.asl-write-\" pid \"-131\")))"
-    "        (println \"write nul data\" (fileWriteAt d \"sub/f.txt\" \"a\\u{0}b\") (mt (fileReadAt d \"sub/f.txt\") ((ok s) (stringLength s)) ((err e) -1)))"
+    "        (println \"write nul data\" (fileWriteAt d \"sub/f.txt\" \"a\\u{0}b\") (match (fileReadAt d \"sub/f.txt\") ((ok s) (stringLength s)) ((err e) -1)))"
     "        (println \"write big\" (fileWriteAt d \"sub/big.txt\" big) (= (fileReadAt d \"sub/big.txt\") (ok big)) (stringLength big))"
     "        (println \"read\" (fileReadAt d \"sub/empty.txt\") (fileReadAt d \"real/r.txt\"))"
     "        (println \"linked parent\" (fileReadAt d \"link/r.txt\") (fileWriteAt d \"link/r.txt\" \"y\") (fileLockAt d \"link/r.txt\" true))"
@@ -268,7 +268,7 @@ fn fileSource -> String
     "        (println \"bad args\" (fileReadAt 5 \"a\") (fileReadAt d 5) (fileWriteAt d \"sub/f.txt\" 5) (fileWriteAt 5 \"x\" \"y\") (fileLockAt d \"x\" 1) (fileLockAt d 5 true)"
     "                 (fileReadAt d \"a\\u{0}b\") (fileWriteAt \"a\\u{0}b\" \"x\" \"y\") (fileLockAt d \"x\\u{0}\" true))"
     "        (println \"lockAt\" (shape (fileLockAt d \"sub/new.lock\" true)) (shape (fileLockAt d \"sub/new.lock\" false)) (shape (fileLockAt d \"sub/f.txt\" false)))"
-    "        (println \"lockAt held\" (mt (fileLockAt d \"sub/new.lock\" true)"
+    "        (println \"lockAt held\" (match (fileLockAt d \"sub/new.lock\" true)"
     "                                 ((ok fd) (let [(c (child self (str \"lockAt \" d \" sub/new.lock\")))] (do (fdClose fd) c)))"
     "                                 ((err e) (str \"err \" e))))"
     "        (println \"lockAt released\" (child self (str \"lockAt \" d \" sub/new.lock\")))"
@@ -306,7 +306,7 @@ fn wrapperDef name: String -> String
   (str "define internal tailcc %Val @" (ssa/llvmName (str "asl-target-llvm/sysRoute." name)) "(")
 
 fn ! fileText path: String -> String
-  (mt (fileReadString path) ((ok t) t) ((err e) (do (assert false (str path ": " e)) "")))
+  (match (fileReadString path) ((ok t) t) ((err e) (do (assert false (str path ": " e)) "")))
 
 fn diagText ds: (List ty/IrDiag) -> String
   (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.message)) ds) "; ")
@@ -314,16 +314,16 @@ fn diagText ds: (List ty/IrDiag) -> String
 fn ! lowered name: String src: String -> (Option ty/SsaModule)
   (let [(preludeText (resultOr (fileReadString (lk/preludePath)) ""))]
     (do (assert (not (stringEmpty? preludeText)) (str (lk/preludePath) " is readable"))
-        (mt (lk/lowerSourceWith src preludeText)
+        (match (lk/lowerSourceWith src preludeText)
           ((err ds) (do (assert false (str name ": lowerSourceWith: " (diagText ds))) (none)))
           ((ok m) (some m)))))
 
 fn ! build work: String name: String src: String -> String
   (let [(_ (assert (ok? (fileWrite (str work "/" name ".asl") src)) (str name ".asl written")))]
-    (mt (lowered name src)
+    (match (lowered name src)
       ((none) "")
       ((some m)
-        (mt (llvm/emitLlvmProgramFor (hostFacts) m "main")
+        (match (llvm/emitLlvmProgramFor (hostFacts) m "main")
           ((err ds) (do (assert false (str name ": emitLlvmProgramFor: " (diagText ds))) ""))
           ((ok text) (do (assert (ok? (fileWrite (str work "/" name ".ll") text)) (str name ".ll written")) text))))))
 
@@ -366,7 +366,7 @@ fn ! testFd work: String -> Bool
         true))
 
 fn ! realOf path: String -> String
-  (mt (realPath path) ((ok p) p) ((err e) (do (assert false (str "realPath " path ": " e)) "")))
+  (match (realPath path) ((ok p) p) ((err e) (do (assert false (str "realPath " path ": " e)) "")))
 
 fn ! testInfo work: String -> Bool
   (let [(ll (build work "sysInfo" (infoSource)))
@@ -488,13 +488,13 @@ fn ! optBin -> (Option String)
                     (list "/opt/homebrew/opt/llvm/bin/opt" "/opt/homebrew/opt/llvm@22/bin/opt" "/usr/local/opt/llvm/bin/opt")))
 
 fn ! testPortable work: String -> Bool
-  (mt (lowered "sysInfo" (infoSource))
+  (match (lowered "sysInfo" (infoSource))
     ((none) false)
     ((some m)
-      (do (mt (llvm/emitLlvmProgram m "main")
+      (do (match (llvm/emitLlvmProgram m "main")
             ((err ds) (map (fn [(n String)] -> Bool (do (assert (stringContains? (diagText ds) (str "'" n "'")) (str "pure emitLlvmProgram rejects unrouted " n ", there being no C sys table: " (diagText ds))) true)) (infoNames)))
             ((ok _) (assert false "pure emitLlvmProgram emits sysInfo without routing: no C sys table exists to call")))
-          (mt (llvm/emitLlvmProgramFor (libc/linuxX8664Facts) m "main")
+          (match (llvm/emitLlvmProgramFor (libc/linuxX8664Facts) m "main")
             ((err ds) (assert false (str "sysInfo emitLlvmProgramFor linux-x86_64: " (diagText ds))))
             ((ok text)
               (do (checkIr "sysInfo linux-x86_64" text (infoNames))
@@ -502,16 +502,16 @@ fn ! testPortable work: String -> Bool
                   (assert (stringContains? text "@environ") "linux-x86_64 envList reads the environ global")
                   (assert (not (stringContains? text "@_NSGetEnviron")) "linux-x86_64 routing has no darwin _NSGetEnviron")
                   (assert (ok? (fileWrite (str work "/sysInfoLinux.ll") text)) "sysInfoLinux.ll written")
-                  (mt (optBin)
+                  (match (optBin)
                     ((none) (do (println "sysInfo linux-x86_64: no opt on this host, -passes=verify skipped") true))
                     ((some o) (do (assert (= (sh (str o " -passes=verify -disable-output " work "/sysInfoLinux.ll")).exitCode 0) "linux-x86_64 routed IR verifies") true))))))
           true)))
 
 fn routedOf res: (Result rt/Routed (List ty/IrDiag)) -> (Option ty/SsaModule)
-  (mt res ((ok r) (some r.result)) ((err _) (none)))
+  (match res ((ok r) (some r.result)) ((err _) (none)))
 
 fn diagCodes res: (Result rt/Routed (List ty/IrDiag)) -> (List String)
-  (mt res ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> String d.code) ds)))
+  (match res ((ok _) (list)) ((err ds) (map (fn [(d ty/IrDiag)] -> String d.code) ds)))
 
 fn withRecord m: ty/SsaModule d: ty/SsaRecordDecl -> ty/SsaModule
   (ty/ssaModule m.name m.strings m.types (listAppend m.records (list d)) m.externs m.globals m.functions)
@@ -528,7 +528,7 @@ fn referencePoolIndex strings: (List String) s: String -> (Option Int64)
 fn referencePoolWith strings: (List String) wanted: (List String) -> (Pair (List String) (Map String Int64))
   (fold (fn [(acc (Pair (List String) (Map String Int64))) (s String)] -> (Pair (List String) (Map String Int64))
           (let [(have (pairFirst acc))]
-            (mt (referencePoolIndex have s)
+            (match (referencePoolIndex have s)
               ((some i) (pair have (mapSet (pairSecond acc) s i)))
               ((none) (pair (listAppend have (list s)) (mapSet (pairSecond acc) s (listLength have)))))))
         (pair strings (mapEmpty)) wanted)
@@ -556,18 +556,18 @@ fn ! testPoolWith -> Bool
 
 fn ! testRouteModule -> Bool
   (let [(facts (libc/darwinArm64Facts))]
-    (mt (lowered "sysInfo" (infoSource))
+    (match (lowered "sysInfo" (infoSource))
       ((none) false)
       ((some m)
-        (do (mt (routedOf (rt/routeModule facts m))
+        (do (match (routedOf (rt/routeModule facts m))
               ((none) (assert false "sysInfo routes for darwin-arm64"))
               ((some out) (do (assert (= (countIn out.strings "badFd") 1) "badFd is in the routed pool once")
                               (assert (= (countIn out.strings "SIGWINCH") 1) "SIGWINCH is in the routed pool once")
                               (assert (not (rt/routes? out)) "a routed module has no routed builtin call left"))))
-            (mt (routedOf (rt/routeModule facts (withString m "badFd")))
+            (match (routedOf (rt/routeModule facts (withString m "badFd")))
               ((none) (assert false "sysInfo with badFd in its pool routes"))
               ((some out) (assert (= (countIn out.strings "badFd") 1) "badFd already in the pool is reused, not appended")))
-            (mt (routedOf (rt/routeModule facts (withRecord m (ty/ssaRecordDecl "PlatformInfo" (list "os" "release" "machine")))))
+            (match (routedOf (rt/routeModule facts (withRecord m (ty/ssaRecordDecl "PlatformInfo" (list "os" "release" "machine")))))
               ((none) (assert false "sysInfo declaring the same PlatformInfo routes"))
               ((some out) (assert (= (listLength (filter (fn [(d ty/SsaRecordDecl)] -> Bool (= d.name "PlatformInfo")) out.records)) 1) "an own PlatformInfo with the same fields is declared once")))
             (assert (= (diagCodes (rt/routeModule facts (withRecord m (ty/ssaRecordDecl "PlatformInfo" (list "os"))))) (list "ERR_LLVM_SYSROUTE_RECORD")) "an own PlatformInfo with other fields is ERR_LLVM_SYSROUTE_RECORD")
@@ -581,16 +581,16 @@ fn tagProbe name: String n: Int64 -> ty/SsaFunction
             (ty/termReturn "t"))))
 
 fn ! testTagGuard work: String -> Bool
-  (mt (lowered "sysTag" (lines (list "(module sysTag :x [main] :i [])" "" "fn ! main -> (Result Int64 String)" "  (do (fdClose 99) (fdPoll (list) 0) (ok 0))")))
+  (match (lowered "sysTag" (lines (list "(module sysTag :x [main] :i [])" "" "fn ! main -> (Result Int64 String)" "  (do (fdClose 99) (fdPoll (list) 0) (ok 0))")))
     ((none) false)
     ((some m)
-      (mt (routedOf (rt/routeModule (hostFacts) m))
+      (match (routedOf (rt/routeModule (hostFacts) m))
         ((none) (do (assert false "sysTag routes for this host") false))
         ((some r)
           (let [(probed (ty/ssaModule r.name r.strings r.types r.records r.externs r.globals
                           (listAppend r.functions (list (tagProbe "tagGood" 6) (tagProbe "tagBad" 300)))))
                 (runs (map (fn [(entry String)] -> ProcessOutput
-                             (mt (llvm/emitLlvmProgram probed entry)
+                             (match (llvm/emitLlvmProgram probed entry)
                                ((err ds) (do (assert false (str entry ": emitLlvmProgram: " (diagText ds))) (sh "false")))
                                ((ok text) (do (assert (ok? (fileWrite (str work "/" entry ".ll") text)) (str entry ".ll written"))
                                               (linkBin work entry)

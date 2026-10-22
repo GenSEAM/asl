@@ -6,7 +6,7 @@ enum ZoneResult
   (zoneResult offsetSeconds: Int64 isDst: Bool abbreviation: String)
 
 fn zoneTypeAt data: TzifData index: Int64 -> ZoneResult
-  (mt data
+  (match data
     ((tzifData version transitions typeIndexes offsets dstFlags abbreviations footer)
       (zoneResult (optionOr (listGet offsets index) 0) (optionOr (listGet dstFlags index) false) (optionOr (listGet abbreviations index) ""))))
 
@@ -128,23 +128,23 @@ fn zoneTransitionIndex transitions: (List Int64) instant: Int64 -> Int64
   (zoneTransitionIndexLoop transitions instant 0 -1)
 
 fn utcToLocal data: TzifData instantSeconds: Int64 -> ZoneResult
-  (mt data ((tzifData version transitions typeIndexes offsets dstFlags abbreviations footer)
+  (match data ((tzifData version transitions typeIndexes offsets dstFlags abbreviations footer)
     (let [(i (zoneTransitionIndex transitions instantSeconds))
           (afterTable (or (= (listLength transitions) 0) (> instantSeconds (optionOr (listGet transitions (- (listLength transitions) 1)) 0))))]
       (if (and afterTable (not (stringEmpty? footer)))
-        (mt (posixFooterType footer instantSeconds)
+        (match (posixFooterType footer instantSeconds)
           ((some result) result)
           ((none) (if (< i 0) (zoneTypeAt data 0) (zoneTypeAt data (optionOr (listGet typeIndexes i) 0)))))
         (if (< i 0) (zoneTypeAt data 0) (zoneTypeAt data (optionOr (listGet typeIndexes i) 0)))))))
 
 fn zoneOffset data: TzifData instantSeconds: Int64 -> Int64
-  (mt (utcToLocal data instantSeconds) ((zoneResult offset isDst abbreviation) offset))
+  (match (utcToLocal data instantSeconds) ((zoneResult offset isDst abbreviation) offset))
 
 fn zoneAbbreviation data: TzifData instantSeconds: Int64 -> String
-  (mt (utcToLocal data instantSeconds) ((zoneResult offset isDst abbreviation) abbreviation))
+  (match (utcToLocal data instantSeconds) ((zoneResult offset isDst abbreviation) abbreviation))
 
 fn zoneIsDst data: TzifData instantSeconds: Int64 -> Bool
-  (mt (utcToLocal data instantSeconds) ((zoneResult offset isDst abbreviation) isDst))
+  (match (utcToLocal data instantSeconds) ((zoneResult offset isDst abbreviation) isDst))
 
 fn zoneCandidatesAppendLoop footer: String i: Int64 out: (List Int64) -> (List Int64)
   (if (>= i (listLength (posixFooterOffsets footer))) out (zoneCandidatesAppendLoop footer (+ i 1) (listAppend out [(optionOr (listGet (posixFooterOffsets footer) i) 0)])))
@@ -153,11 +153,11 @@ fn zoneCandidatesLoop data: TzifData local: Int64 allOffsets: (List Int64) i: In
   (if (>= i (listLength allOffsets)) out
     (let [(candidate (- local (optionOr (listGet allOffsets i) 0)))
           (at (utcToLocal data candidate))]
-      (mt at ((zoneResult off dst abbr)
+      (match at ((zoneResult off dst abbr)
         (if (and (= (+ candidate off) local) (not (listContains? out candidate))) (zoneCandidatesLoop data local allOffsets (+ i 1) (listAppend out [candidate])) (zoneCandidatesLoop data local allOffsets (+ i 1) out))))))
 
 fn zoneCandidates data: TzifData local: Int64 -> (List Int64)
-  (mt data ((tzifData version transitions typeIndexes offsets dstFlags abbreviations footer)
+  (match data ((tzifData version transitions typeIndexes offsets dstFlags abbreviations footer)
     (let [(allOffsets (zoneCandidatesAppendLoop footer 0 offsets))]
       (listSort (zoneCandidatesLoop data local allOffsets 0 [])))))
 
@@ -171,8 +171,8 @@ fn zoneFooterGapMapLoop rules: (List String) standard: Int64 daylight: Int64 las
           (end (posixRuleInstant y (optionOr (listGet rules 2) "") daylight))
           (startMap (if (and (> start last) (zoneInGap? local start standard daylight)) (some (- local (if (= policy "earlier") standard daylight))) (none)))
           (endMap (if (and (> end last) (zoneInGap? local end daylight standard)) (some (- local (if (= policy "earlier") daylight standard))) (none)))]
-      (mt startMap ((some value) (some value))
-        ((none) (mt endMap ((some value) (some value)) ((none) (zoneFooterGapMapLoop rules standard daylight last local policy year (+ i 1))))))))
+      (match startMap ((some value) (some value))
+        ((none) (match endMap ((some value) (some value)) ((none) (zoneFooterGapMapLoop rules standard daylight last local policy year (+ i 1))))))))
 
 fn zoneFooterGapMap footer: String transitions: (List Int64) local: Int64 policy: String -> (Option Int64)
   (if (< (listLength (stringSplit footer ",")) 3) (none)
@@ -195,8 +195,8 @@ fn zoneGapMapLoop transitions: (List Int64) typeIndexes: (List Int64) offsets: (
         (zoneGapMapLoop transitions typeIndexes offsets local policy (+ i 1)))))
 
 fn zoneGapMap data: TzifData local: Int64 policy: String -> (Option Int64)
-  (mt data ((tzifData version transitions typeIndexes offsets dstFlags abbreviations footer)
-    (mt (zoneGapMapLoop transitions typeIndexes offsets local policy 0) ((some value) (some value)) ((none) (zoneFooterGapMap footer transitions local policy)))))
+  (match data ((tzifData version transitions typeIndexes offsets dstFlags abbreviations footer)
+    (match (zoneGapMapLoop transitions typeIndexes offsets local policy 0) ((some value) (some value)) ((none) (zoneFooterGapMap footer transitions local policy)))))
 
 fn localToUtc data: TzifData localSeconds: Int64 policy: String -> (Result Int64 String)
   (let [(candidates (zoneCandidates data localSeconds)) (count (listLength (zoneCandidates data localSeconds)))]
@@ -206,7 +206,7 @@ fn localToUtc data: TzifData localSeconds: Int64 policy: String -> (Result Int64
           (if (= policy "second") (ok (optionOr (listGet candidates (- count 1)) 0)) (err "fold")))
         (if (= policy "err") (err "gap")
           (if (or (= policy "earlier") (= policy "later"))
-            (mt (zoneGapMap data localSeconds policy)
+            (match (zoneGapMap data localSeconds policy)
               ((some instant) (ok instant))
               ((none) (err "localTimeNotCovered")))
             (err (str "unsupportedGapPolicy:" policy)))))))

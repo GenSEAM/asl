@@ -74,7 +74,7 @@ fn cssUrl url: String -> String
   (str "url(" (cssString url) ")")
 
 fn declOut d: Decl -> String
-  (mt d
+  (match d
     ((declPair prop value) (str prop ":" value))
     ((declImportant prop value) (str prop ":" value " !important")))
 
@@ -85,7 +85,7 @@ fn frameOut frame: (Pair String (List Decl)) -> String
   (str (pairFirst frame) "{" (renderDecls (pairSecond frame)) "}")
 
 fn renderRule r: Rule -> String
-  (mt r
+  (match r
     ((ruleNode selector decls) (str selector "{" (renderDecls decls) "}"))
     ((atBlock name prelude rules) (str "@" name (if (stringEmpty? prelude) "" (str " " prelude)) "{" (stringJoin (map renderRule rules) "") "}"))
     ((keyframesNode name frames) (str "@keyframes " name "{" (stringJoin (map frameOut frames) "") "}"))
@@ -102,7 +102,7 @@ fn declsPretty depth: Int64 decls: (List Decl) -> String
   (stringJoin (map (fn [(d Decl)] -> String (str (pad depth) (declOut d) ";\n")) decls) "")
 
 fn rulePretty depth: Int64 r: Rule -> String
-  (mt r
+  (match r
     ((ruleNode selector decls) (str (pad depth) selector " {\n" (declsPretty (+ depth 1) decls) (pad depth) "}\n"))
     ((atBlock name prelude rules) (str (pad depth) "@" name (if (stringEmpty? prelude) "" (str " " prelude)) " {\n" (stringJoin (map (fn [(x Rule)] -> String (rulePretty (+ depth 1) x)) rules) "") (pad depth) "}\n"))
     ((keyframesNode name frames) (str (pad depth) "@keyframes " name " {\n" (stringJoin (map (fn [(f (Pair String (List Decl)))] -> String (str (pad (+ depth 1)) (pairFirst f) " {\n" (declsPretty (+ depth 2) (pairSecond f)) (pad (+ depth 1)) "}\n")) frames) "") (pad depth) "}\n"))

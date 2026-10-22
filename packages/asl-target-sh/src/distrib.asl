@@ -157,7 +157,7 @@ fn generateInstallShHeader -> String
 fn writeFd! fd: Int64 s: String -> Bool
   (if (stringEmpty? s)
     true
-    (mt (fdWrite fd s)
+    (match (fdWrite fd s)
       ((ok n) (writeFd! fd (optionOr (stringSlice s n (stringLength s)) "")))
       ((err _) false)))
 
@@ -187,13 +187,13 @@ fn readText! path: String -> (Result String String)
   (fileReadString path)
 
 fn isRegular! path: String -> Bool
-  (mt (fileStat path) ((ok st) st.isFile) ((err _) false))
+  (match (fileStat path) ((ok st) st.isFile) ((err _) false))
 
 fn isDir! path: String -> Bool
-  (mt (fileStat path) ((ok st) st.isDir) ((err _) false))
+  (match (fileStat path) ((ok st) st.isDir) ((err _) false))
 
 fn modeOf! path: String -> Int64
-  (mt (fileStat path) ((ok st) st.mode) ((err _) 0))
+  (match (fileStat path) ((ok st) st.mode) ((err _) 0))
 
 fn isExecutable! path: String -> Bool
   (and (isRegular! path) (not (= (& (modeOf! path) 73) 0)))
@@ -297,7 +297,7 @@ fn isScript bs: Bytes -> Bool
 
 fn isRunnable! path: String os: String arch: String -> Bool
   (and (isExecutable! path)
-       (mt (fileReadRange path 0 4096)
+       (match (fileReadRange path 0 4096)
          ((err _) false)
          ((ok bs)
            (cond
@@ -326,7 +326,7 @@ fn readyOn? ready: (List (Pair Int64 Int64)) fd: Int64 -> Bool
   (listAny? (fn [p] (= (pairFirst p) fd)) ready)
 
 fn pumpStep! fd: Int64 open: Bool acc: String -> (Pair Bool String)
-  (mt (fdRead fd 65536)
+  (match (fdRead fd 65536)
     ((ok chunk) (if (stringEmpty? chunk) (do (fdClose fd) (pair false acc)) (pair true (str acc chunk))))
     ((err e) (if (= e "wouldBlock") (pair open acc) (do (fdClose fd) (pair false acc)))))
 
@@ -337,7 +337,7 @@ fn pumpIo! sp: SpawnedProc io: Io deadlineNs: Int64 -> (Pair Bool Io)
           (fds (listAppend (if io.outOpen (list (pair sp.stdout 1)) (list)) (if io.errOpen (list (pair sp.stderr 1)) (list))))]
       (if (<= leftMs 0)
         (do (if io.outOpen (fdClose sp.stdout) (ok ())) (if io.errOpen (fdClose sp.stderr) (ok ())) (pair false io))
-        (mt (fdPoll fds leftMs)
+        (match (fdPoll fds leftMs)
           ((err _) (do (if io.outOpen (fdClose sp.stdout) (ok ())) (if io.errOpen (fdClose sp.stderr) (ok ())) (pair false io)))
           ((ok ready)
             (let [(o (if (and io.outOpen (readyOn? ready sp.stdout)) (pumpStep! sp.stdout true io.out) (pair io.outOpen io.out)))
@@ -345,14 +345,14 @@ fn pumpIo! sp: SpawnedProc io: Io deadlineNs: Int64 -> (Pair Bool Io)
               (pumpIo! sp (Io :outOpen (pairFirst o) :errOpen (pairFirst e) :out (pairSecond o) :errText (pairSecond e)) deadlineNs)))))))
 
 fn runArgv! argv: (List String) cwd: (Option String) env: (Option (List String)) timeoutMs: Int64 -> (Result RunResult String)
-  (mt (procSpawnv argv cwd env)
+  (match (procSpawnv argv cwd env)
     ((err e) (err e))
     ((ok sp)
       (let [(closed (fdClose sp.stdin))
             (pumped (pumpIo! sp (Io :outOpen true :errOpen true :out "" :errText "") (+ (monotonicNs) (* timeoutMs 1000000))))
             (io (pairSecond pumped))]
         (if (pairFirst pumped)
-          (mt (procWaitPid sp.pid false)
+          (match (procWaitPid sp.pid false)
             ((err e) (err e))
             ((ok code) (ok (RunResult :code (optionOr code -1) :out io.out :errText io.errText))))
           (do (procKill (- 0 sp.pid) "SIGKILL")
@@ -360,18 +360,18 @@ fn runArgv! argv: (List String) cwd: (Option String) env: (Option (List String))
               (ok (RunResult :code 142 :out io.out :errText io.errText)))))))
 
 fn chmodTo! path: String mode: Int64 -> (Result Unit String)
-  (mt (runArgv! (list "chmod" (if (= mode 493) "755" "644") path) (none) (none) 60000)
+  (match (runArgv! (list "chmod" (if (= mode 493) "755" "644") path) (none) (none) 60000)
     ((ok r) (if (= r.code 0) (ok ()) (err (str "chmod " path ": " r.errText))))
     ((err e) (err (str "ERR_TOOL_ABSENT chmod: " e))))
 
 fn ! symlink? dir: String name: String -> Bool
   (and (entryIn? dir name)
-       (mt (realPath (str dir "/" name))
+       (match (realPath (str dir "/" name))
          ((err _) true)
-         ((ok real) (mt (realPath dir) ((ok d) (not (= real (str d "/" name)))) ((err _) true)))))
+         ((ok real) (match (realPath dir) ((ok d) (not (= real (str d "/" name)))) ((err _) true)))))
 
 fn ! entryIn? dir: String name: String -> Bool
-  (mt (dirList dir) ((ok names) (listContains? names name)) ((err _) false))
+  (match (dirList dir) ((ok names) (listContains? names name)) ((err _) false))
 
 fn generateInstallSh -> String
   (str
@@ -498,7 +498,7 @@ fn act! st: Inst argv: (List String) -> Step
 fn actRun! st: Inst argv: (List String) -> Step
   (let [(cmd (optionOr (listHead argv) ""))]
     (cond
-      ((= cmd "mkdir") (mt (dirCreate (optionOr (listLast argv) "")) ((ok _) (go st)) ((err e) (die! e))))
+      ((= cmd "mkdir") (match (dirCreate (optionOr (listLast argv) "")) ((ok _) (go st)) ((err e) (die! e))))
       ((= cmd "rm") (do (if (pathExists? (optionOr (listLast argv) "")) (pathRemove (optionOr (listLast argv) "")) (ok ())) (go st)))
       (else (passThrough! st argv (none)))))
 
@@ -509,12 +509,12 @@ fn baseName p: String -> String
   (sliceFrom p (+ (lastSlash p (- (stringLength p) 1)) 1))
 
 fn passThrough! st: Inst argv: (List String) cwd: (Option String) -> Step
-  (mt (runArgv! argv cwd (none) 600000)
+  (match (runArgv! argv cwd (none) 600000)
     ((err e) (die! (str "ERR_TOOL_ABSENT " (optionOr (listHead argv) "") ": " e)))
     ((ok r) (do (writeOut! r.out) (writeErr! r.errText) (if (= r.code 0) (go st) (stop r.code)))))
 
 fn then s: Step f: (fn [Inst] -> Step) -> Step
-  (mt s ((go st) (f st)) ((stop c) (stop c)))
+  (match s ((go st) (f st)) ((stop c) (stop c)))
 
 (schema Opts (:f dry Bool) (:f autoYes Bool) (:f filter String) (:f skip Bool) (:f purge Bool) (:f force Bool) (:f sourceDir String) (:f home String) (:f bad String) (:f code Int64))
 
@@ -525,7 +525,7 @@ fn optSet o: Opts key: String val: String -> Opts
         :home (if (= key "home") val o.home) :bad (if (= key "bad") val o.bad) :code (cond ((= key "bad") 2) ((= key "badHome") 1) (else o.code)))
 
 fn parseOpts args: (List String) o: Opts -> Opts
-  (mt (listHead args)
+  (match (listHead args)
     ((none) o)
     ((some a)
       (let [(rest (optionOr (listTail args) (list)))
@@ -589,7 +589,7 @@ fn generatePortableAsl -> String
     "HERE=\"$(CDPATH= cd -P -- \"$(dirname -- \"$PRG\")\" && pwd -P)\"\n"
     "exec \"$HERE/../../bin/asl\" \"$@\"\n")
 fn emitPortableEntry! root: String st: Inst -> (Option String)
-  (mt (pkgOf! root)
+  (match (pkgOf! root)
     ((none) (none))
     ((some pkg)
       (let [(cli (str pkg "/packages/asl-cli/src/main.asl"))]
@@ -609,7 +609,7 @@ fn emitPortableEntry! root: String st: Inst -> (Option String)
 fn tempDir! tag: String -> (Result String String)
   (let [(base (optionOr (envGet "TMPDIR") "/tmp"))
         (dir (str (if (stringEndsWith? base "/") (sliceTo base (- (stringLength base) 1)) base) "/" tag "." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs))))]
-    (mt (dirCreate dir) ((ok _) (ok dir)) ((err e) (err e))))
+    (match (dirCreate dir) ((ok _) (ok dir)) ((err e) (err e))))
 
 fn firstField s: String -> String
   (optionOr (listHead (filter (fn [w] (not (stringEmpty? w))) (stringSplit (stringReplace (stringReplace s "\t" " ") "\n" " ") " "))) "")
@@ -621,10 +621,10 @@ fn stepSource! st: Inst -> Step
       ((not (isDir! src)) (die! (str "--source " src " is not a directory")))
       (else
         (let [(real (resultOr (realPath src) src))
-              (entryOpt (mt (aslEntry! real st.os st.arch)
+              (entryOpt (match (aslEntry! real st.os st.arch)
                           ((some e) (some e))
                           ((none) (emitPortableEntry! real st))))]
-          (mt entryOpt
+          (match entryOpt
             ((none) (die! (str "no asl entry point in " real " (looked for bin/asl, asl/asl, asl)")))
             ((some e) (do (say! (str "\u{1F4E6} Installing ASL from " real)) (go (withEntry st e false real)))))))))
 
@@ -641,7 +641,7 @@ fn repoUrl! -> String
   (optionOr (envGet "REPO_URL") (defaultRepoUrl))
 
 fn prebuiltBaseUrl! -> (Option String)
-  (mt (envGet "ASL_PREBUILT_URL")
+  (match (envGet "ASL_PREBUILT_URL")
     ((some u) (if (stringEmpty? u) (none) (some u)))
     ((none)
       (if (= (repoUrl!) (defaultRepoUrl))
@@ -649,7 +649,7 @@ fn prebuiltBaseUrl! -> (Option String)
         (none))))
 
 fn curlTo! url: String out: String -> Bool
-  (mt (runArgv! (list "curl" "-fsSL" url "-o" out) (none) (none) 600000)
+  (match (runArgv! (list "curl" "-fsSL" url "-o" out) (none) (none) 600000)
     ((ok r) (= r.code 0))
     ((err _) false))
 
@@ -657,7 +657,7 @@ fn stepPrebuilt! st: Inst -> Step
   (let [(tag (archTag st.arch))]
     (if (or (not (stringEmpty? st.entry)) (= tag "unknown") st.force)
       (go st)
-      (mt (prebuiltBaseUrl!)
+      (match (prebuiltBaseUrl!)
         ((none) (go st))
         ((some base)
           (let [(tarName (str "asl-0.1.0-" st.os "-" tag ".tar.gz"))
@@ -665,7 +665,7 @@ fn stepPrebuilt! st: Inst -> Step
             (if st.dry
               (do (say! (str "  would download " url " (+ .sha256), verify, and extract into " st.installDir "; falling back to a source tree if unavailable")) (go st))
               (do (say! (str "\u{1F680} Downloading pre-built ASL binary for " st.os "-" tag "..."))
-                  (mt (tempDir! "asl-dl")
+                  (match (tempDir! "asl-dl")
                     ((err e) (die! e))
                     ((ok tmp)
                       (let [(tarPath (str tmp "/" tarName))
@@ -676,9 +676,9 @@ fn stepPrebuilt! st: Inst -> Step
 
 fn verifyAndExtract! st: Inst tarPath: String sumPath: String -> Step
   (let [(expected (firstField (resultOr (fileReadString sumPath) "")))
-        (actual (mt (fileReadBytes tarPath) ((ok b) (bytesSha256 b)) ((err _) "")))]
+        (actual (match (fileReadBytes tarPath) ((ok b) (bytesSha256 b)) ((err _) "")))]
     (if (and (not (stringEmpty? expected)) (= expected actual))
-      (then (mt (dirCreate st.installDir) ((ok _) (go st)) ((err e) (die! e)))
+      (then (match (dirCreate st.installDir) ((ok _) (go st)) ((err e) (die! e)))
         (fn [s1] (then (passThrough! s1 (list "tar" "-xzf" tarPath "--no-same-owner" "-C" s1.installDir) (none))
                    (fn [s2] (let [(target (str s2.installDir "/asl"))
                                   (made (if (isRegular! target) (runArgv! (list "chmod" "+x" target) (none) (none) 60000) (err "absent")))]
@@ -688,10 +688,10 @@ fn verifyAndExtract! st: Inst tarPath: String sumPath: String -> Step
 fn stepCheckout! st: Inst -> Step
   (if (or (not (stringEmpty? st.entry)) (not (= st.from "file")))
     (go st)
-    (let [(entryOpt (mt (aslEntry! st.tree st.os st.arch)
+    (let [(entryOpt (match (aslEntry! st.tree st.os st.arch)
                       ((some e) (some e))
                       ((none) (emitPortableEntry! st.tree st))))]
-      (mt entryOpt
+      (match entryOpt
         ((none) (go st))
         ((some e) (do (say! (str "\u{1F4E6} Installing ASL from local checkout " st.tree)) (go (withEntry st e false st.tree)))))))
 
@@ -701,10 +701,10 @@ fn stepClone! st: Inst -> Step
     (let [(clone (str st.home "/.asl/repo"))]
       (do (say! (str "\u{1F4E6} Installing ASL from " (repoUrl!) " into " clone))
           (then (if (isDir! (str clone "/.git")) (act! st (list "git" "-C" clone "pull" "--ff-only")) (act! st (list "git" "clone" "--depth" "1" (repoUrl!) clone)))
-            (fn [s1] (let [(entryOpt (mt (aslEntry! clone s1.os s1.arch)
+            (fn [s1] (let [(entryOpt (match (aslEntry! clone s1.os s1.arch)
                                       ((some e) (some e))
                                       ((none) (emitPortableEntry! clone s1))))]
-                       (mt entryOpt
+                       (match entryOpt
                          ((some e) (go (withEntry s1 e false clone)))
                          ((none) (if s1.dry (go (withEntry s1 (str clone "/bin/asl") false clone)) (die! (str "no asl entry point in " clone " (looked for bin/asl, asl/asl, asl)")))))))))))
 
@@ -712,7 +712,7 @@ fn link! st: Inst src: String target: String -> Step
   (then (act! st (list "ln" "-sfn" src target)) (fn [s1] (go (withLink s1 target))))
 
 fn linkAll! st: Inst pairs: (List (Pair String String)) -> Step
-  (mt (listHead pairs)
+  (match (listHead pairs)
     ((none) (go st))
     ((some p) (then (link! st (pairFirst p) (pairSecond p)) (fn [s1] (linkAll! s1 (optionOr (listTail pairs) (list)))))))
 
@@ -741,7 +741,7 @@ fn skillOps text: String -> (List String)
       (bulletOps lines false (list))))
 
 fn bulletOps lines: (List String) found: Bool acc: (List String) -> (List String)
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) (listReverse acc))
     ((some l)
       (let [(rest (optionOr (listTail lines) (list)))]
@@ -771,7 +771,7 @@ fn servesOp? out: String op: String -> Bool
   (listAny? (fn [l] (opInLine l (str "(:op :" op) 0)) (splitLines out))
 
 fn opInLine l: String key: String from: Int64 -> Bool
-  (mt (stringIndexOf (sliceFrom l from) key)
+  (match (stringIndexOf (sliceFrom l from) key)
     ((none) false)
     ((some rel)
       (let [(at (+ from rel (stringLength key)))
@@ -782,7 +782,7 @@ fn probeEnv! home: String -> (List String)
   (listAppend (filter (fn [r] (not (or (stringStartsWith? r "ASL_ROOT=") (stringStartsWith? r "HOME=")))) (envList)) (list (str "HOME=" home)))
 
 fn ! answersOp? bin: String op: String home: String dir: String -> Bool
-  (mt (runArgv! (list bin "(:tools :scope :all)") (some dir) (some (probeEnv! home)) 5000)
+  (match (runArgv! (list bin "(:tools :scope :all)") (some dir) (some (probeEnv! home)) 5000)
     ((err _) false)
     ((ok r) (and (= r.code 0) (servesOp? (str r.out r.errText) op))))
 
@@ -790,12 +790,12 @@ fn stepProbe! st: Inst ops: (List String) -> Step
   (let [(bin (str st.installDir "/asl"))]
     (if st.dry
       (do (say! (str "  would probe: " bin " '(:tools)' must list " (spaceList ops))) (go st))
-      (mt (tempDir! "asl-probe")
+      (match (tempDir! "asl-probe")
         ((err e) (die! e))
         ((ok dir)
           (let [(ran (runArgv! (list bin "(:tools :scope :all)") (some dir) (some (probeEnv! st.home)) 120000))
-                (out (trimNewlines (mt ran ((ok r) (str r.out r.errText)) ((err e) e))))
-                (failed (mt ran ((ok r) (not (= r.code 0))) ((err _) true)))]
+                (out (trimNewlines (match ran ((ok r) (str r.out r.errText)) ((err e) e))))
+                (failed (match ran ((ok r) (not (= r.code 0))) ((err _) true)))]
             (cond
               ((listEmpty? ops)
                 (do (pathRemove dir) (die! "the embedded skill documents no ops; re-render with scripts/install.sh --render-rules")))
@@ -826,7 +826,7 @@ fn addToPath! st: Inst config: String -> Bool
     (if (and (isRegular! config) (not (stringContains? (resultOr (fileReadString config) "") dir)))
       (if st.dry
         (say! (str "  would append PATH export for " dir " to " config))
-        (mt (fileWrite config (str (resultOr (fileReadString config) "") "\n# AgentSlang (ASL) CLI\nexport PATH=\"" dir ":$PATH\"\n"))
+        (match (fileWrite config (str (resultOr (fileReadString config) "") "\n# AgentSlang (ASL) CLI\nexport PATH=\"" dir ":$PATH\"\n"))
           ((ok _) (say! (str "✓ Added " dir " to " config)))
           ((err e) (warn! (str "install.sh: " e)))))
       true))
@@ -868,9 +868,9 @@ fn writeSkill! st: Inst text: String dir: String -> Bool
     (say! (str "  would write " dir "/SKILL.md"))
     (let [(made (dirCreate dir))
           (tmp (str dir "/SKILL.md." (stringFromInt64 (procSelf)) ".tmp"))]
-      (mt (fileWrite tmp text)
+      (match (fileWrite tmp text)
         ((err e) (warn! (str "install.sh: " e)))
-        ((ok _) (mt (pathRename tmp (str dir "/SKILL.md"))
+        ((ok _) (match (pathRename tmp (str dir "/SKILL.md"))
                   ((ok _) (say! (str "  ✓ Installed skill: " dir "/SKILL.md")))
                   ((err e) (warn! (str "install.sh: " e))))))))
 
@@ -894,23 +894,23 @@ fn stripBlock text: String -> String
                                           (pair false (list)) trimmed)))))
 
 fn lastNonBlank xs: (List String) i: Int64 last: Int64 -> Int64
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) last)
     ((some l) (lastNonBlank (optionOr (listTail xs) (list)) (+ i 1) (if (blank? l) last i))))
 
 fn dropBlanks xs: (List String) -> (List String)
-  (mt (listHead xs) ((some l) (if (blank? l) (dropBlanks (optionOr (listTail xs) (list))) xs)) ((none) xs))
+  (match (listHead xs) ((some l) (if (blank? l) (dropBlanks (optionOr (listTail xs) (list))) xs)) ((none) xs))
 
 fn copyFile! src: String dst: String -> (Result Unit String)
-  (mt (fileReadBytes src) ((ok b) (fileWrite dst b)) ((err e) (err e)))
+  (match (fileReadBytes src) ((ok b) (fileWrite dst b)) ((err e) (err e)))
 
 fn copyTree! src: String dst: String -> (Result Unit String)
   (if (isDir! src)
-    (mt (dirCreate dst)
+    (match (dirCreate dst)
       ((err e) (err e))
-      ((ok _) (mt (dirList src)
+      ((ok _) (match (dirList src)
                 ((err e) (err e))
-                ((ok names) (fold (fn [acc n] (mt acc ((ok _) (copyTree! (str src "/" n) (str dst "/" n))) ((err e) (err e)))) (ok ()) names)))))
+                ((ok names) (fold (fn [acc n] (match acc ((ok _) (copyTree! (str src "/" n) (str dst "/" n))) ((err e) (err e)))) (ok ()) names)))))
     (copyFile! src dst))
 
 fn stripToolbelt! st: Inst backupRoot: String stampText: String target: String -> Bool
@@ -921,13 +921,13 @@ fn stripToolbelt! st: Inst backupRoot: String stampText: String target: String -
       (st.dry (say! (str "  would back up and strip the ASL_TOOLBELT block from " target)))
       (else
         (let [(bdir (str backupRoot "/directives-" stampText))
-              (saved (mt (dirCreate bdir) ((ok _) (copyFile! target (str bdir "/" (backupTag st.home target)))) ((err e) (err e))))]
+              (saved (match (dirCreate bdir) ((ok _) (copyFile! target (str bdir "/" (backupTag st.home target)))) ((err e) (err e))))]
           (if (err? saved)
             (warn! (str "  ⚠\u{FE0F} Failed to back up " target "; left unchanged"))
             (let [(out (stripBlock text))]
               (if (stringEmpty? out)
                 (do (pathRemove target) (say! (str "  ✓ Removed legacy toolbelt directive file: " target " (backup in " bdir ")")))
-                (mt (fileWrite (str target "." (stringFromInt64 (procSelf)) ".tmp") out)
+                (match (fileWrite (str target "." (stringFromInt64 (procSelf)) ".tmp") out)
                   ((err e) (warn! (str "install.sh: " e)))
                   ((ok _) (do (pathRename (str target "." (stringFromInt64 (procSelf)) ".tmp") target)
                               (say! (str "  ✓ Stripped legacy toolbelt block: " target " (backup in " bdir ")"))))))))))))
@@ -941,7 +941,7 @@ fn readLine! prompt: String tty: String -> (Option String)
     (do (writeErr! prompt) (readLineFrom! "")))
 
 fn readLineFrom! acc: String -> (Option String)
-  (mt (fdRead 0 1)
+  (match (fdRead 0 1)
     ((err _) (none))
     ((ok c) (cond
               ((stringEmpty? c) (none))
@@ -1018,7 +1018,7 @@ fn stepGemini! st: Inst text: String selected: String gemini: Bool -> Step
           (writeSkill! st text (str home "/.gemini/skills/asl-toolbelt"))
           (then (act! st (list "mkdir" "-p" (str plugin "/skills")))
             (fn [s1] (then (act! s1 (list "rm" "-rf" (str plugin "/harnesses")))
-                       (fn [s2] (do (if s2.dry (say! (str "  would write " plugin "/plugin.json")) (mt (fileWrite (str plugin "/plugin.json") (pluginJson)) ((ok _) true) ((err e) (warn! (str "install.sh: " e)))))
+                       (fn [s2] (do (if s2.dry (say! (str "  would write " plugin "/plugin.json")) (match (fileWrite (str plugin "/plugin.json") (pluginJson)) ((ok _) true) ((err e) (warn! (str "install.sh: " e)))))
                                     (writeSkill! s2 text (str plugin "/skills/asl-toolbelt"))
                                     (go s2))))))))
     (go st))
@@ -1089,7 +1089,7 @@ fn argAt args: (List String) i: Int64 -> String
   (optionOr (listGet args i) "")
 
 fn codeOf s: Step -> Int64
-  (mt s ((go _) 0) ((stop c) c))
+  (match s ((go _) 0) ((stop c) c))
 
 fn installMain! args: (List String) -> Int64
   (let [(o (parseOpts (listDrop args 5) (Opts :dry false :autoYes false :filter "" :skip false :purge false :force false :sourceDir "" :home (optionOr (envGet "HOME") "") :bad "" :code 0)))
@@ -1108,7 +1108,7 @@ fn installMain! args: (List String) -> Int64
             (then (stepCheckout! s2) (fn [s3]
             (then (stepClone! s3) (fn [s4]
             (then (stepLinks! s4) (fn [s5]
-              (mt (skillText! s5)
+              (match (skillText! s5)
                 ((err e) (die! e))
                 ((ok text)
                   (then (stepProbe! s5 (skillOps text)) (fn [s6]

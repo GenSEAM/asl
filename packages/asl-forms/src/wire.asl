@@ -90,7 +90,7 @@ fn wireTokens text: String -> (Result (List String) String)
   (tokLoop (stringToBytes text) text (stringLength text) 0 (list))
 
 fn treeLoop toks: (List String) stack: (List (List WNode)) -> (Result (List WNode) String)
-  (mt (listHead toks)
+  (match (listHead toks)
     ((none)
       (if (= (listLength stack) 1) (ok (listReverse (optionOr (listHead stack) (list)))) (err "unbalanced")))
     ((some t)
@@ -106,7 +106,7 @@ fn treeLoop toks: (List String) stack: (List (List WNode)) -> (Result (List WNod
           (else (treeLoop rest (cons (cons (wAtom t) top) below)))))))
 
 fn atomText n: WNode -> (Option String)
-  (mt n ((wAtom t) (some t)) ((wList _) (none)))
+  (match n ((wAtom t) (some t)) ((wList _) (none)))
 
 fn isAtom? n: WNode x: String -> Bool
   (= (atomText n) (some x))
@@ -124,14 +124,14 @@ fn digits? s: String -> Bool
   (and (not (stringEmpty? s)) (listAll? (fn [(c String)] -> Bool (and (>= (charCode c) 48) (<= (charCode c) 57))) (stringChars s)))
 
 fn stepWalk items: (List WNode) acc: StepParts -> StepParts
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (with acc :rest (listReverse acc.rest)))
     ((some kNode)
       (let [(tl (optionOr (listTail items) (list)))
             (kTok (optionOr (atomText kNode) ""))
-            (vTok (mt (listHead tl) ((some v) (atomText v)) ((none) (none))))
+            (vTok (match (listHead tl) ((some v) (atomText v)) ((none) (none))))
             (tl2 (optionOr (listTail tl) (list)))]
-        (mt vTok
+        (match vTok
           ((some v)
             (cond
               ((and (= kTok ":id") (digits? v)) (stepWalk tl2 acc))
@@ -145,24 +145,24 @@ fn stepWalk items: (List WNode) acc: StepParts -> StepParts
           ((none) (stepWalk tl (with acc :rest (cons kNode acc.rest))))))))
 
 fn valueAfter items: (List WNode) key: String -> (Option WNode)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (none))
     ((some x)
       (let [(tl (optionOr (listTail items) (list)))]
         (if (and (isAtom? x key) (not (listEmpty? tl))) (listHead tl) (valueAfter tl key)))))
 
 fn stringValueAfter items: (List WNode) key: String quoted: Bool -> (Option String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (none))
     ((some x)
       (let [(tl (optionOr (listTail items) (list)))
-            (v (mt (listHead tl) ((some y) (atomText y)) ((none) (none))))]
-        (mt v
+            (v (match (listHead tl) ((some y) (atomText y)) ((none) (none))))]
+        (match v
           ((some s) (if (and (isAtom? x key) (or (not quoted) (stringStartsWith? s "\""))) (some s) (stringValueAfter tl key quoted)))
           ((none) (stringValueAfter tl key quoted))))))
 
 fn afterNotFound msg: String -> String
-  (mt (stringIndexOf msg "not found: ")
+  (match (stringIndexOf msg "not found: ")
     ((none) "")
     ((some p)
       (let [(tail (optionOr (stringSlice msg (+ p 11) (stringLength msg)) ""))]
@@ -178,13 +178,13 @@ fn wireNearest! ws: Workspace code: String op: String rest: (List WNode) -> (Lis
     ((and (= code "ERR_UNIMPLEMENTED") (not (stringEmpty? op))) (sm/getCloseMatches op ws.ops 3 0.5))
     ((and (= code "ERR_NOT_PORTED") (not (stringEmpty? op))) (sm/getCloseMatches op (filter (fn [(o String)] -> Bool (!= o op)) ws.ops) 3 0.5))
     ((= code "ERR_FILE_NOT_FOUND")
-      (let [(fromFile (mt (stringValueAfter rest ":file" true) ((some s) (some (optionOr (stringSlice s 1 (- (stringLength s) 1)) ""))) ((none) (none))))
-            (missing (mt fromFile ((some s) s) ((none) (afterNotFound (optionOr (stringValueAfter rest ":message" false) "")))))]
+      (let [(fromFile (match (stringValueAfter rest ":file" true) ((some s) (some (optionOr (stringSlice s 1 (- (stringLength s) 1)) ""))) ((none) (none))))
+            (missing (match fromFile ((some s) s) ((none) (afterNotFound (optionOr (stringValueAfter rest ":message" false) "")))))]
         (if (stringEmpty? missing)
           (list)
           (let [(full (if (stringStartsWith? missing "/") missing (k/joinPath ws.root missing)))
                 (parent (existingDirUp! (k/dirName full)))]
-            (mt (dirList parent)
+            (match (dirList parent)
               ((err _) (list))
               ((ok names)
                 (map (fn [(nm String)] -> String (k/relPath (k/joinPath parent nm) ws.root))
@@ -203,7 +203,7 @@ fn wireStep! ws: Workspace items: (List WNode) failed: Bool head: String -> (Lis
           (op (if (= op0 none0) "" op0))
           (rest parts.rest)
           (headNodes (if (opName? op) (list (wAtom (wireCamel (str ":" op)))) (list (wAtom ":step") (wAtom ":op") (wAtom (str "\"" op "\"")))))
-          (errCode (mt (valueAfter rest ":error") ((some n) (optionOr (atomText n) "\u0001list")) ((none) "")))
+          (errCode (match (valueAfter rest ":error") ((some n) (optionOr (atomText n) "\u0001list")) ((none) "")))
           (hint (hintFor errCode))
           (addHint (and (not (stringEmpty? hint)) (not (listAny? (fn [(n WNode)] -> Bool (isAtom? n ":hint")) rest))))
           (near (if addHint (wireNearest! ws errCode op rest) (list)))
@@ -234,19 +234,19 @@ fn verbatimKey? key: String -> Bool
   (or (= key ":content") (= key ":old") (= key ":new"))
 
 fn outItems roots: (List String) items: (List WNode) prev: String acc: (List String) -> (List String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (listReverse acc))
     ((some x)
       (outItems roots (optionOr (listTail items) (list)) (optionOr (atomText x) "") (cons (wireOut roots x prev) acc))))
 
 fn wireOut roots: (List String) node: WNode key: String -> String
-  (mt node
+  (match node
     ((wList xs) (str "(" (stringJoin (outItems roots xs "" (list)) " ") ")"))
     ((wAtom t) (if (stringStartsWith? t "\"") (wireStr roots t (not (verbatimKey? key))) (wireCamel t))))
 
 fn searchQuoted text: String key: String pred: (fn [String] -> Bool) from: Int64 -> String
   (let [(rest (optionOr (stringSlice text from (stringLength text)) ""))]
-    (mt (stringIndexOf rest key)
+    (match (stringIndexOf rest key)
       ((none) "")
       ((some p)
         (let [(st (+ from p (stringLength key)))
@@ -266,14 +266,14 @@ fn rawReceipt text: String failed: Bool head: String -> String
     (str "(" headTok (if (stringEmpty? stV) "" (str " :status :" stV)) " :raw \"" (k/escapeAsnVal (stringTrim text)) "\")"))
 
 fn wireReceipt! ws: Workspace text: String failed: Bool head: String -> String
-  (mt (wireTokens text)
+  (match (wireTokens text)
     ((err _) (rawReceipt text failed head))
     ((ok toks)
-      (mt (treeLoop toks (list (list)))
+      (match (treeLoop toks (list (list)))
         ((err _) (rawReceipt text failed head))
         ((ok forms)
           (stringJoin (map (fn [(f WNode)] -> String
-                             (mt f
+                             (match f
                                ((wList xs) (wireOut ws.roots (wList (wireStep! ws xs failed head)) ""))
                                ((wAtom _) (wireOut ws.roots f ""))))
                            forms)

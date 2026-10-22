@@ -10,7 +10,7 @@ fn wideSource n: Int64 -> String
        "fn main -> Int64\n  (listLength (list " (stringJoin (map stringFromInt64 (range 0 n)) " ") "))\n")
 
 fn ! cpuUs -> Int64
-  (mt (procRusage)
+  (match (procRusage)
     ((err e) (do (assert false (str "procRusage failed: " e)) 0))
     ((ok usage) (+ usage.selfUserUs usage.selfSysUs)))
 

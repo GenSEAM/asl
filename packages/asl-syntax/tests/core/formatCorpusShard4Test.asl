@@ -4,7 +4,7 @@
       (asl-syntax/tests/core/formatCorpusShard1Test :a sweep)])
 
 fn ! runTests -> Bool
-  (mt (lib/allCorpusFiles!)
+  (match (lib/allCorpusFiles!)
     ((err e) (do (assert false (str "git ls-files failed: " e)) false))
     ((ok allFiles)
      (let [(v (sweep/formatShard! allFiles 4 4 "formatCorpusShard4Test"))]

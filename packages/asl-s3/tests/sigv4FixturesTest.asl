@@ -10,23 +10,23 @@
   (:f canonical String) (:f toSign String) (:f signature String))
 
 fn ! readText path: String -> String
-  (mt (fileReadString path) ((ok value) value) ((err _) ""))
+  (match (fileReadString path) ((ok value) value) ((err _) ""))
 
 fn jsonString object: j/Json key: String -> String
-  (mt (j/jsonGet object key)
+  (match (j/jsonGet object key)
     ((none) "")
-    ((some value) (mt value ((j/jstr text) text) (_ ""))))
+    ((some value) (match value ((j/jstr text) text) (_ ""))))
 
 fn jsonBool object: j/Json key: String -> Bool
-  (mt (j/jsonGet object key)
+  (match (j/jsonGet object key)
     ((none) false)
-    ((some value) (mt value ((j/jbool flag) flag) (_ false))))
+    ((some value) (match value ((j/jbool flag) flag) (_ false))))
 
 fn parseHeaders lines: (List String) out: (List s/Header) -> (List s/Header)
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) out)
     ((some line)
-      (mt (stringIndexOf line ":")
+      (match (stringIndexOf line ":")
         ((none) (parseHeaders (optionOr (listTail lines) (list)) out))
         ((some colon)
           (parseHeaders (optionOr (listTail lines) (list))
@@ -35,7 +35,7 @@ fn parseHeaders lines: (List String) out: (List s/Header) -> (List s/Header)
               :value (optionOr (stringSlice line (+ colon 1) (stringLength line)) "")))))))))
 
 fn parseQuery items: (List String) out: (List s/QueryParam) -> (List s/QueryParam)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) out)
     ((some item)
       (let [(parts (stringSplit item "="))]
@@ -45,19 +45,19 @@ fn parseQuery items: (List String) out: (List s/QueryParam) -> (List s/QueryPara
             :value (optionOr (listGet parts 1) ""))))))))
 
 fn queryFromTarget target: String -> (List s/QueryParam)
-  (mt (stringIndexOf target "?")
+  (match (stringIndexOf target "?")
     ((none) (list))
     ((some qmark)
       (let [(raw (optionOr (stringSlice target (+ qmark 1) (stringLength target)) ""))]
         (if (stringEmpty? raw) (list) (parseQuery (stringSplit raw "&") (list))))))
 
 fn pathFromTarget target: String -> String
-  (mt (stringIndexOf target "?")
+  (match (stringIndexOf target "?")
     ((none) target)
     ((some qmark) (optionOr (stringSlice target 0 qmark) "")))
 
 fn hasSigningDate headers: (List s/Header) -> Bool
-  (mt (listHead headers)
+  (match (listHead headers)
     ((none) false)
     ((some item)
       (let [(name (stringLower (stringTrim item.name)))]
@@ -73,7 +73,7 @@ fn ! readVector name: String -> Vector
         (target (optionOr (listGet request 1) ""))
         (headers (parseHeaders (optionOr (listSlice lines 1 (listLength lines)) (list)) (list)))
         (contextText (readText (str base "context.json")))
-        (context (mt (j/jsonParse contextText) ((ok value) value) ((err _) (j/jobj (list)))))
+        (context (match (j/jsonParse contextText) ((ok value) value) ((err _) (j/jobj (list)))))
         (credentials (optionOr (j/jsonGet context "credentials") (j/jobj (list))))
         (secret (jsonString credentials "secret_access_key"))
         (timestamp (stringReplace (stringReplace (jsonString context "timestamp") "-" "") ":" ""))
@@ -81,7 +81,7 @@ fn ! readVector name: String -> Vector
         (region (jsonString context "region"))
         (service (jsonString context "service"))
         (separator (stringIndexOf req "\n\n"))
-        (body (mt separator ((none) "") ((some at) (optionOr (stringSlice req (+ at 2) (stringLength req)) ""))))
+        (body (match separator ((none) "") ((some at) (optionOr (stringSlice req (+ at 2) (stringLength req)) ""))))
         (signBody (jsonBool context "sign_body"))
         (bodyHash (if signBody (s/payloadHash (stringToBytes body)) "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"))
         (signedHeaders (listAppend headers
@@ -103,7 +103,7 @@ fn ! assertVector vector: Vector -> Bool
     true)
 
 fn ! assertVectors vectors: (List Vector) -> Bool
-  (mt (listHead vectors)
+  (match (listHead vectors)
     ((none) true)
     ((some vector) (and (assertVector vector) (assertVectors (optionOr (listTail vectors) (list))))))
 

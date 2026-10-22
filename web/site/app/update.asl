@@ -19,7 +19,7 @@ fn copyOps line: String buttonId: String -> (List b/Op)
   [(b/copyOp line) (b/textOp (str "#" buttonId) "Copied") (b/afterOp 1600 (m/msgCode (m/resetCopy)))]
 
 fn step msg: m/Msg model: Int64 -> (Pair Int64 (List b/Op))
-  (mt msg
+  (match msg
     ((m/boot) (pair model (if (explicit? model) (themeOps model) [])))
     ((m/toggleTheme)
       (let [(next (+ 2 (if (light? model) 0 1)))]

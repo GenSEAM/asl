@@ -6,7 +6,7 @@
       (asl-ir/link :a lk)])
 
 fn printed res: (Result ty/SsaModule (List ty/IrDiag)) -> String
-  (mt res
+  (match res
     ((ok m) (prn/printSsa m))
     ((err ds) (str "lower failed: " (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.locus ": " d.message)) ds) "; "))))
 
@@ -14,9 +14,9 @@ fn lowerOnly unit: lk/LinkUnit names: (List String) -> String
   (printed (low/lowerLinked unit.forms unit.positions (low/LinkScope :path unit.path :imports (mapEmpty) :prelude (list) :strings (list) :only (some names))))
 
 fn ! preludeUnit! -> (Result lk/LinkUnit String)
-  (mt (lk/loadClosure! (lk/preludePath))
+  (match (lk/loadClosure! (lk/preludePath))
     ((err ds) (err (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) ds) "; ")))
-    ((ok units) (mt (listHead units) ((some u) (ok u)) ((none) (err "prelude closure is empty")))))
+    ((ok units) (match (listHead units) ((some u) (ok u)) ((none) (err "prelude closure is empty")))))
 
 fn withOverlay prelude: lk/LinkUnit o: lk/LinkUnit -> lk/LinkUnit
   (lk/LinkUnit :path prelude.path :name prelude.name :forms (listAppend prelude.forms (optionOr (listTail o.forms) (list))) :positions prelude.positions :imports prelude.imports)
@@ -41,7 +41,7 @@ fn ! testOperatorBodies prelude: lk/LinkUnit -> Bool
       true))
 
 fn ! testOverlayCallSites prelude: lk/LinkUnit -> Bool
-  (mt (lk/overlayUnit!)
+  (match (lk/overlayUnit!)
     ((err ds) (do (assert false (str "native overlay loads: " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) ds) "; "))) false))
     ((ok o) (let [(text (lowerOnly (withOverlay prelude o) (list "bigSigma0" "choose" "majority" "rotr" "shrWord" "shlWord" "mask32")))]
               (do
@@ -67,6 +67,6 @@ fn ! testUserShadow -> Bool
       true))
 
 fn ! runTests -> Bool
-  (mt (preludeUnit!)
+  (match (preludeUnit!)
     ((err e) (do (assert false (str "prelude loads: " e)) false))
     ((ok prelude) (do (testOperatorBodies prelude) (testOverlayCallSites prelude) (testUserShadow) true)))

@@ -29,13 +29,13 @@ fn value obj: j/Json key: String -> j/Json
   (optionOr (j/jsonGet obj key) (j/jnull))
 
 fn stringValue v: j/Json -> String
-  (mt v ((j/jstr s) s) (_ ""))
+  (match v ((j/jstr s) s) (_ ""))
 
 fn textValue v: j/Json -> (Option String)
-  (mt v ((j/jstr s) (some s)) (_ none))
+  (match v ((j/jstr s) (some s)) (_ none))
 
 fn numberValue v: j/Json -> Int64
-  (mt v
+  (match v
     ((j/jint n) n)
     ((j/jfloat f) (optionOr (float64ToInt64 f) 0))
     ((j/jnum f) (optionOr (float64ToInt64 f) 0))
@@ -43,7 +43,7 @@ fn numberValue v: j/Json -> Int64
     (_ 0))
 
 fn truthy v: j/Json -> Bool
-  (mt v
+  (match v
     ((j/jnull) false)
     ((j/jbool b) b)
     ((j/jint n) (!= n 0))
@@ -54,7 +54,7 @@ fn truthy v: j/Json -> Bool
     ((j/jobj xs) (not (listEmpty? xs))))
 
 fn array v: j/Json -> (List j/Json)
-  (mt v ((j/jarr xs) xs) (_ (list)))
+  (match v ((j/jarr xs) xs) (_ (list)))
 
 fn isType obj: j/Json expected: String -> Bool
   (= (stringValue (value obj "type")) expected)
@@ -63,7 +63,7 @@ fn textBlock b: j/Json -> String
   (if (isType b "text") (stringValue (value b "text")) "")
 
 fn contentText content: j/Json -> String
-  (mt content
+  (match content
     ((j/jstr s) s)
     ((j/jarr xs) (stringJoin (map textBlock xs) ""))
     (_ ""))
@@ -99,7 +99,7 @@ fn nonTextBlocks m: Meter blocks: (List j/Json) -> Meter
     (let [(head (optionOr (listHead blocks) (j/jnull)))
           (tail (optionOr (listTail blocks) (list)))
           (kind (value head "type"))]
-      (mt kind
+      (match kind
         ((j/jstr s) (if (= s "text") (nonTextBlocks m tail) (nonTextBlocks (addNonText m s) tail)))
         (_ (nonTextBlocks m tail)))))
 
@@ -128,7 +128,7 @@ fn assistantBlocks! tokenizer: tok/Tokenizer m: Meter names: (Map String String)
               (msg (value inp "message"))
               (nextNames (mapSet names id name))
               (reply (textValue msg))]
-          (mt reply
+          (match reply
             ((none) (assistantBlocks! tokenizer m nextNames tail))
             ((some text)
               (if (= name "SubagentHandback")
@@ -169,7 +169,7 @@ fn usageContext usage: j/Json -> Int64
      (numberValue (value usage "cache_read_input_tokens")))
 
 fn recordLine! tokenizer: tok/Tokenizer m: Meter names: (Map String String) line: String -> (Pair Meter (Map String String))
-  (mt (j/jsonParse line)
+  (match (j/jsonParse line)
     ((err _) (pair m names))
     ((ok rec)
       (let [(msg (value rec "message"))
@@ -202,13 +202,13 @@ fn processFiles! tokenizer: tok/Tokenizer m: Meter files: (List String) -> (Resu
     (let [(path (optionOr (listHead files) ""))
           (tail (optionOr (listTail files) (list)))
           (r (fileReadString path))]
-      (mt r
+      (match r
         ((err e) (err (str "read " path " failed: " e)))
         ((ok content)
           (processFiles! tokenizer (records! tokenizer m (mapEmpty) (stringLines content)) tail)))))
 
 fn gatherDir! path: String -> (Result (List String) String)
-  (mt (dirList path)
+  (match (dirList path)
     ((err e) (err e))
     ((ok names)
       (gatherNames! path names (list))))
@@ -221,13 +221,13 @@ fn gatherNames! path: String names: (List String) acc: (List String) -> (Result 
     (let [(name (optionOr (listHead names) ""))
           (full (str path "/" name))
           (stat (fileStat full))]
-      (mt stat
+      (match stat
         ((err _) (gatherNames! path (optionOr (listTail names) (list)) acc))
         ((ok info)
           (if (stringStartsWith? name ".")
             (gatherNames! path (optionOr (listTail names) (list)) acc)
             (if info.isDir
-              (mt (gatherDir! full)
+              (match (gatherDir! full)
                 ((err e) (err e))
                 ((ok nested) (gatherNames! path (optionOr (listTail names) (list)) (listAppend acc nested))))
               (gatherNames! path (optionOr (listTail names) (list))
@@ -242,11 +242,11 @@ fn uniqueSorted sorted: (List String) previous: String acc: (List String) -> (Li
 fn gatherPaths! paths: (List String) acc: (List String) -> (Result (List String) String)
   (if (listEmpty? paths) (ok (uniqueSorted (listSort acc) "" (list)))
     (let [(path (optionOr (listHead paths) ""))]
-      (mt (fileStat path)
+      (match (fileStat path)
         ((err _) (gatherPaths! (optionOr (listTail paths) (list)) acc))
         ((ok info)
           (if info.isDir
-            (mt (gatherDir! path)
+            (match (gatherDir! path)
               ((err e) (err e))
               ((ok nested) (gatherPaths! (optionOr (listTail paths) (list)) (listAppend acc nested))))
             (gatherPaths! (optionOr (listTail paths) (list))
@@ -303,13 +303,13 @@ fn render m: Meter -> String
 fn withFiles! tokenizer: tok/Tokenizer files: (List String) -> (Result String String)
   (if (listEmpty? files)
     (err "(:contextSpend :status :error :code ERR_NO_TRANSCRIPTS)")
-    (mt (processFiles! tokenizer (Meter :files (listLength files) :replies (list) :sendMessages 0
+    (match (processFiles! tokenizer (Meter :files (listLength files) :replies (list) :sendMessages 0
                      :handbacks 0 :briefs (list) :byTool (mapEmpty) :oversize 0 :nonText (mapEmpty) :peak 0) files)
       ((err e) (err e))
       ((ok m) (ok (render m)))))
 
 fn runPaths! tokenizer: tok/Tokenizer paths: (List String) -> (Result String String)
-  (mt (gatherPaths! paths (list))
+  (match (gatherPaths! paths (list))
     ((err e) (err e))
     ((ok files) (withFiles! tokenizer files)))
 
@@ -328,10 +328,10 @@ fn entryScript! -> (Option String)
 
 fn workspaceRoot! -> (Result String String)
   (let [(envRoot (optionOr (envGet "ASL_ROOT") ""))
-        (fromScript (mt (entryScript!)
+        (fromScript (match (entryScript!)
                       ((none) (none))
-                      ((some script) (mt (realPath script) ((ok real) (configRootFrom! (parentOf real) (none))) ((err _) (none))))))
-        (fromCwd (mt (realPath ".") ((ok cwd) (configRootFrom! cwd (none))) ((err _) (none))))]
+                      ((some script) (match (realPath script) ((ok real) (configRootFrom! (parentOf real) (none))) ((err _) (none))))))
+        (fromCwd (match (realPath ".") ((ok cwd) (configRootFrom! cwd (none))) ((err _) (none))))]
     (cond
       ((not (stringEmpty? envRoot)) (ok envRoot))
       ((some? fromScript) (ok (optionOr fromScript "")))
@@ -339,10 +339,10 @@ fn workspaceRoot! -> (Result String String)
       (else (err "no .asl.config.asn above the script or the working directory; set ASL_ROOT"))))
 
 fn ! main args: (List String) -> (Result Int64 String)
-  (mt (mt (workspaceRoot!) ((err e) (err e)) ((ok root) (tok/loadTokenizer! (str root "/data/tokenizers"))))
+  (match (match (workspaceRoot!) ((err e) (err e)) ((ok root) (tok/loadTokenizer! (str root "/data/tokenizers"))))
     ((err e) (err (str "contextSpend: " e)))
     ((ok tokenizer)
-      (mt (runPaths! tokenizer args)
+      (match (runPaths! tokenizer args)
         ((err e) (if (stringStartsWith? e "(:contextSpend :status :error")
                     (do (fdWrite 1 (str (optionOr (stringSlice e 0 (- (stringLength e) 1)) e) " :paths (" (stringJoin (map (fn [(p String)] -> String (str "\"" p "\"")) args) " ") "))\n")) (ok 1))
                     (err e)))

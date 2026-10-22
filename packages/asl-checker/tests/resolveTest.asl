@@ -4,7 +4,7 @@ fn checkHasCode diags: (List ty/Diagnostic) wantCode: String -> Bool
   (fold (fn [(acc Bool) (d ty/Diagnostic)] -> Bool (or acc (= d.code wantCode))) false diags)
 
 fn resolveProbe src: String wantCode: String -> Bool
-  (mt (a/parse src) ((err _) false) ((ok forms) (let [(summary (r/collectSummary forms "test.asl")) (diags (r/resolveModule summary forms (mapEmpty)))] (checkHasCode diags wantCode))))
+  (match (a/parse src) ((err _) false) ((ok forms) (let [(summary (r/collectSummary forms "test.asl")) (diags (r/resolveModule summary forms (mapEmpty)))] (checkHasCode diags wantCode))))
 
 fn testUnboundProbe -> Bool
   (do (assert (resolveProbe "(fn foo [] -> Int64 (+ x 1))" "rule-2") "unbound var rule-2") (refute (resolveProbe "(fn foo [(x Int64)] -> Int64 (+ x 1))" "rule-2") "bound var not rule-2") true)

@@ -24,7 +24,7 @@ fn topLevelForms data: String -> Int64
   (let [(bs (stringToBytes data))] (formsLoop bs 0 (bytesLength bs) 0 0 false false))
 
 fn ledgerStats! path: String -> (Result (Pair Int64 Int64) String)
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((ok data) (ok (pair (topLevelForms data) (stringLength data))))
     ((err e) (err e)))
 
@@ -32,11 +32,11 @@ fn listDir! path: String -> (Result (List String) String)
   (dirList path)
 
 fn walkSum! dir: String -> (Result (Pair Int64 Int64) String)
-  (mt (listDir! dir)
+  (match (listDir! dir)
     ((err e) (err e))
     ((ok names)
       (fold (fn [(acc (Result (Pair Int64 Int64) String)) (name String)] -> (Result (Pair Int64 Int64) String)
-              (mt acc
+              (match acc
                 ((err e) (err e))
                 ((ok tot)
                   (let [(full (c/joinPath dir name))]
@@ -44,9 +44,9 @@ fn walkSum! dir: String -> (Result (Pair Int64 Int64) String)
                       ((c/isDir? full)
                         (if (c/isLink? full)
                           (ok tot)
-                          (mt (walkSum! full) ((ok s) (ok (pair (+ (pairFirst tot) (pairFirst s)) (+ (pairSecond tot) (pairSecond s))))) ((err e) (err e)))))
+                          (match (walkSum! full) ((ok s) (ok (pair (+ (pairFirst tot) (pairFirst s)) (+ (pairSecond tot) (pairSecond s))))) ((err e) (err e)))))
                       ((stringEndsWith? name ".asn")
-                        (mt (ledgerStats! full) ((ok s) (ok (pair (+ (pairFirst tot) (pairFirst s)) (+ (pairSecond tot) (pairSecond s))))) ((err e) (err e))))
+                        (match (ledgerStats! full) ((ok s) (ok (pair (+ (pairFirst tot) (pairFirst s)) (+ (pairSecond tot) (pairSecond s))))) ((err e) (err e))))
                       (else (ok tot)))))))
             (ok (pair 0 0)) names)))
 
@@ -56,28 +56,28 @@ fn ledgerForm l: Ledger -> String
   (str "(:path " (c/quoted l.path) " :forms " (stringFromInt64 l.forms) " :bytes " (stringFromInt64 l.bytes) ")")
 
 fn entries! mem: String names: (List String) acc: (List Ledger) -> (Result (List Ledger) String)
-  (mt (listHead names)
+  (match (listHead names)
     ((none) (ok (listReverse acc)))
     ((some name)
       (let [(full (c/joinPath mem name)) (rel (str ".asl/mem/" name)) (rest (optionOr (listTail names) (list)))]
         (cond
           ((and (c/isFile? full) (stringEndsWith? name ".asn"))
-            (mt (ledgerStats! full) ((ok s) (entries! mem rest (cons (Ledger :path rel :forms (pairFirst s) :bytes (pairSecond s)) acc))) ((err e) (err e))))
+            (match (ledgerStats! full) ((ok s) (entries! mem rest (cons (Ledger :path rel :forms (pairFirst s) :bytes (pairSecond s)) acc))) ((err e) (err e))))
           ((c/isDir? full)
-            (mt (walkSum! full) ((ok s) (entries! mem rest (cons (Ledger :path (str rel "/") :forms (pairFirst s) :bytes (pairSecond s)) acc))) ((err e) (err e))))
+            (match (walkSum! full) ((ok s) (entries! mem rest (cons (Ledger :path (str rel "/") :forms (pairFirst s) :bytes (pairSecond s)) acc))) ((err e) (err e))))
           (else (entries! mem rest acc))))))
 
 fn ! observeMemory! root: String ctx: c/Ctx -> (Result String String)
   (let [(mem (c/joinPath root ".asl/mem"))]
     (if (not (c/isDir? mem))
       (err (c/rejectLine "ERR_PATH_NOT_FOUND" (str "no .asl/mem directory under " root) ""))
-      (mt (listDir! mem)
+      (match (listDir! mem)
         ((err e) (err (c/rejectLine "ERR_IO" e "")))
         ((ok names)
-          (mt (entries! mem names (list))
+          (match (entries! mem names (list))
             ((err e) (err (c/rejectLine "ERR_IO" e "")))
             ((ok ls)
-              (mt (c/shortRev! root ctx)
+              (match (c/shortRev! root ctx)
                 ((err e) (err e))
                 ((ok rev)
                   (let [(shown (listTake ls (ledgerCap)))]

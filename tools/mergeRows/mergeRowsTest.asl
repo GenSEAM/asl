@@ -26,7 +26,7 @@ fn testHistoryReplay! -> Bool
     (and (= r.exitCode 0)
          (stringContains? r.stdout "mergeRowsHistoryTest: 5 historical pairs and 3 Git-dispatched replays passed")))
 fn testAttributes! -> Bool
-  (mt (fileReadString ".gitattributes")
+  (match (fileReadString ".gitattributes")
     ((err _) false)
     ((ok text) (let [(lines (stringLines text))]
       (and (listContains? lines ".asl/mem/knownRed.asn merge=asnRows")
@@ -37,7 +37,7 @@ fn insertBeforeLast text: String row: String -> String
         (cut (if (stringEmpty? (optionOr (listGet lines (- n 1)) "x")) (- n 2) (- n 1)))]
     (stringJoin (listAppend (listTake lines cut) (cons row (listDrop lines cut))) "\n"))
 fn testLedger! path: String oursRow: String theirsRow: String -> Bool
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) false)
     ((ok base)
       (let [(ours (insertBeforeLast base oursRow))
@@ -49,7 +49,7 @@ fn bumpTotal text: String by: Int64 -> String
       (str "(:total " (stringFromInt64 (+ by (optionOr (stringToInt64 (optionOr (stringSlice l 8 (- (stringLength l) 1)) "")) 0))) ")")
       l)) (stringSplit text "\n")) "\n")
 fn testHostValidityLedger! -> Bool
-  (mt (fileReadString "tests/audit/hostValidity.asn")
+  (match (fileReadString "tests/audit/hostValidity.asn")
     ((err _) false)
     ((ok base)
       (let [(o "(:f :path \"rowsOurs.asl\" :code ERR_X :class staleName)\n")

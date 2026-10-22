@@ -101,7 +101,7 @@ fn readListHead bs: Bytes pos: Int64 limit: Int64 -> (Pair Int64 (Pair Int64 Int
 fn ! readList bs: Bytes pos: Int64 limit: Int64 left: Int64 ty: Int64 acc: (List ThriftValue) -> (Result (Pair ThriftValue Int64) String)
   (if (<= left 0)
     (ok (pair (thList (listReverse acc)) pos))
-    (mt (readValue bs pos limit ty)
+    (match (readValue bs pos limit ty)
       ((err e) (err e))
       ((ok entry)
        (if (<= (pairSecond entry) pos)
@@ -110,10 +110,10 @@ fn ! readList bs: Bytes pos: Int64 limit: Int64 left: Int64 ty: Int64 acc: (List
 
 fn ! readStruct bs: Bytes pos: Int64 limit: Int64 lastId: Int64 acc: (List (Pair Int64 ThriftValue)) -> (Result (Pair ThriftValue Int64) String)
   (let [(field (readField bs pos limit lastId))]
-    (mt field
+    (match field
       ((footerEnd next) (ok (pair (thStruct (listReverse acc)) next)))
       ((footerField id ty at)
-       (mt (readValue bs at limit ty)
+       (match (readValue bs at limit ty)
          ((err e) (err e))
          ((ok value)
           (if (<= (pairSecond value) pos)
@@ -121,7 +121,7 @@ fn ! readStruct bs: Bytes pos: Int64 limit: Int64 lastId: Int64 acc: (List (Pair
             (readStruct bs (pairSecond value) limit id (cons (pair id (pairFirst value)) acc))))))))
 
 fn ! footerTree path: String -> (Result (List (Pair Int64 ThriftValue)) String)
-  (mt (fileReadBytes path)
+  (match (fileReadBytes path)
     ((err e) (err e))
     ((ok bs)
      (let [(size (bytesLength bs))]
@@ -138,37 +138,37 @@ fn ! footerTree path: String -> (Result (List (Pair Int64 ThriftValue)) String)
                    (end (- size 8))]
                (if (or (<= length 0) (< start 4))
                  (err "ERR_PARQUET: invalid footer length")
-                 (mt (readStruct bs start end 0 (list))
+                 (match (readStruct bs start end 0 (list))
                    ((err e) (err e))
                    ((ok parsed) (ok (matchStructFields (pairFirst parsed)))))))))))))
 
 fn matchStructFields value: ThriftValue -> (List (Pair Int64 ThriftValue))
-  (mt value ((thStruct fields) fields) (_ (list)))
+  (match value ((thStruct fields) fields) (_ (list)))
 
 fn fieldAt fields: (List (Pair Int64 ThriftValue)) id: Int64 -> (Option ThriftValue)
-  (mt (listHead fields)
+  (match (listHead fields)
     ((none) (none))
     ((some entry)
      (if (= (pairFirst entry) id) (some (pairSecond entry))
        (fieldAt (optionOr (listTail fields) (list)) id))))
 
 fn asList value: ThriftValue -> (List ThriftValue)
-  (mt value ((thList xs) xs) (_ (list)))
+  (match value ((thList xs) xs) (_ (list)))
 
 fn asFields value: ThriftValue -> (List (Pair Int64 ThriftValue))
   (matchStructFields value)
 
 fn asInt value: ThriftValue -> Int64
-  (mt value ((thInt n) n) (_ 0))
+  (match value ((thInt n) n) (_ 0))
 
 fn asText value: ThriftValue -> String
-  (mt value ((thString s) s) (_ ""))
+  (match value ((thString s) s) (_ ""))
 
 fn getField fields: (List (Pair Int64 ThriftValue)) id: Int64 -> ThriftValue
   (optionOr (fieldAt fields id) (thOther))
 
 fn columnIndex schema: (List ThriftValue) name: String at: Int64 -> Int64
-  (mt (listHead schema)
+  (match (listHead schema)
     ((none) -1)
     ((some item)
      (if (= (asText (getField (asFields item) 4)) name)
@@ -176,7 +176,7 @@ fn columnIndex schema: (List ThriftValue) name: String at: Int64 -> Int64
        (columnIndex (optionOr (listTail schema) (list)) name (+ at 1)))))
 
 fn findColumnChunk groups: (List ThriftValue) groupIndex: Int64 columnIndexValue: Int64 -> ThriftValue
-  (mt (listGet groups groupIndex)
+  (match (listGet groups groupIndex)
     ((none) (thOther))
     ((some group)
      (let [(chunks (asList (getField (asFields group) 1)))]
@@ -186,7 +186,7 @@ fn findGroup groups: (List ThriftValue) index: Int64 -> ThriftValue
   (optionOr (listGet groups index) (thOther))
 
 fn ! footerChunk path: String columnName: String rowGroup: Int64 -> (Result (List (Pair Int64 ThriftValue)) String)
-  (mt (footerTree path)
+  (match (footerTree path)
     ((err e) (err e))
     ((ok root)
      (let [(schema (asList (getField root 2)))
@@ -211,24 +211,24 @@ fn encodingsFor xs: (List ThriftValue) -> (List String)
   (map (fn [(v ThriftValue)] -> String (encodingName (asInt v))) xs)
 
 fn ! parquetColumnEncodings path: String columnName: String rowGroup: Int64 -> (Result (List String) String)
-  (mt (footerChunk path columnName rowGroup)
+  (match (footerChunk path columnName rowGroup)
     ((err e) (err e))
     ((ok meta) (ok (encodingsFor (asList (getField meta 2))))))
 
 fn ! parquetColumnCompression path: String columnName: String rowGroup: Int64 -> (Result String String)
-  (mt (footerChunk path columnName rowGroup)
+  (match (footerChunk path columnName rowGroup)
     ((err e) (err e))
     ((ok meta)
      (let [(codec (asInt (getField meta 4)))]
        (cond ((not (some? (fieldAt meta 4))) (err "ERR_PARQUET: missing codec"))
-             ((not (mt (getField meta 4) ((thInt _) true) (_ false))) (err "ERR_PARQUET: codec is not an integer"))
+             ((not (match (getField meta 4) ((thInt _) true) (_ false))) (err "ERR_PARQUET: codec is not an integer"))
              ((= codec 0) (ok "UNCOMPRESSED"))
              ((= codec 1) (ok "SNAPPY"))
              ((= codec 6) (ok "ZSTD"))
              (else (err (str "ERR_PARQUET: unknown codec " (stringFromInt64 codec))))))))
 
 fn ! parquetColumnHasDictionary path: String columnName: String rowGroup: Int64 -> (Result Bool String)
-  (mt (footerChunk path columnName rowGroup)
+  (match (footerChunk path columnName rowGroup)
     ((err e) (err e))
     ((ok meta)
      (let [(encs (asList (getField meta 2)))]
@@ -237,18 +237,18 @@ fn ! parquetColumnHasDictionary path: String columnName: String rowGroup: Int64 
                    (listContains encs (thInt 8))))))))
 
 fn listContains xs: (List ThriftValue) value: ThriftValue -> Bool
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) false)
     ((some x)
      (or (= x value) (listContains (optionOr (listTail xs) (list)) value))))
 
 fn ! parquetKvMetadata path: String key: String -> (Result String String)
-  (mt (footerTree path)
+  (match (footerTree path)
     ((err e) (err e))
     ((ok root) (findKv (asList (getField root 5)) key)))
 
 fn findKv xs: (List ThriftValue) key: String -> (Result String String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (err (str "ERR_PARQUET: key-value metadata not found: " key)))
     ((some item)
      (let [(fields (asFields item))

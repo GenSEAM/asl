@@ -21,7 +21,7 @@ fn ! runTests -> Bool
       (assert (and (= made.exit 0) (!= tmp "")) "temporary directory is created")
       (if (!= unzip.exit 0) (do (sh! root (list "rm" "-rf" tmp) 30 8) ()) ())
       (assert (= unzip.exit 0) "unzip must be installed; install unzip to run ZIP writer tests")
-      (mt archive
+      (match archive
         ((err e) (do (assert false (str "ZIP writer returned error: " e)) false))
         ((ok bytes)
           (let [(writeResult (fileWrite (str tmp "/sample.zip") bytes))
@@ -34,7 +34,7 @@ fn ! runTests -> Bool
               (assert (stringContains? stdout "compressed.txt") "unzip lists deflated entry")
               (assert (stringContains? stdout "empty.txt") "unzip lists empty entry")
               true))))
-      (mt gzip
+      (match gzip
         ((err e) (do (assert false (str "gzip writer returned error: " e)) false))
         ((ok bytes)
           (let [(writeResult (fileWrite (str tmp "/sample.gz") bytes))
@@ -43,7 +43,7 @@ fn ! runTests -> Bool
             (do
               (assert (ok? writeResult) "gzip bytes are written to the temporary file")
               (assert (= testResult.exit 0) "gzip -t accepts the generated member")
-              (mt decoded
+              (match decoded
                 ((err _) (assert false "gzip member is readable by the existing gzip reader"))
                 ((ok plain) (assert (= (bytesSha256 plain) (bytesSha256 repeat)) "gzip writer output round-trips through existing reader")))
               true))))

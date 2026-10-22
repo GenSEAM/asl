@@ -2,22 +2,22 @@
 
 fn testCannedCommandsNotImplemented! -> Bool
   (do
-    (mt (c/dispatchCmd "tool" (list))
+    (match (c/dispatchCmd "tool" (list))
       ((err msg) (assert (stringContains? msg "ERR_NOT_IMPLEMENTED") "tool returns ERR_NOT_IMPLEMENTED"))
       ((ok _) (assert false "tool must not return canned ok")))
-    (mt (c/dispatchCmd "launch" (list))
+    (match (c/dispatchCmd "launch" (list))
       ((err msg) (assert (stringContains? msg "ERR_NOT_IMPLEMENTED") "launch returns ERR_NOT_IMPLEMENTED"))
       ((ok _) (assert false "launch must not return canned ok")))
-    (mt (c/dispatchCmd "chk" (list))
+    (match (c/dispatchCmd "chk" (list))
       ((err msg) (assert (stringContains? msg "ERR_NOT_IMPLEMENTED") "chk returns ERR_NOT_IMPLEMENTED"))
       ((ok _) (assert false "chk must not return ok")))
-    (mt (c/dispatchCmd "where" (list))
+    (match (c/dispatchCmd "where" (list))
       ((err msg) (assert (stringContains? msg "ERR_NOT_IMPLEMENTED") "where returns ERR_NOT_IMPLEMENTED"))
       ((ok _) (assert false "where must not return ok")))
-    (mt (c/dispatchCmd "conform" (list))
+    (match (c/dispatchCmd "conform" (list))
       ((err msg) (assert (stringContains? msg "ERR_NOT_IMPLEMENTED") "conform returns ERR_NOT_IMPLEMENTED"))
       ((ok _) (assert false "conform must not return canned ok")))
-    (mt (c/dispatchCmd "ir" (list))
+    (match (c/dispatchCmd "ir" (list))
       ((err msg) (assert (stringContains? msg "ERR_NOT_IMPLEMENTED") "ir returns ERR_NOT_IMPLEMENTED"))
       ((ok _) (assert false "ir must not return canned ok")))
     true)
@@ -25,7 +25,7 @@ fn testCannedCommandsNotImplemented! -> Bool
 fn testCmdRunDiagnostics! -> Bool
   (let [(res (c/dispatchCmd "run" (list "asl/packages/asl-cli/tests/fixtures/typeBad.asl")))]
     (assert (err? res) "cmdRun on typeBad must fail")
-    (mt res
+    (match res
       ((ok _) (assert false "cmdRun on typeBad must not return ok"))
       ((err msg)
        (do
@@ -36,7 +36,7 @@ fn testCmdRunDiagnostics! -> Bool
 
 fn testCmdRunExecutesMain! -> Bool
   (let [(res (c/dispatchCmd "run" (list "asl/packages/asl-cli/tests/fixtures/runMe.asl")))]
-    (mt res
+    (match res
       ((ok stdoutStr) (assert (stringContains? stdoutStr "RUN_OUTPUT_MARKER") "cmdRun executed main and produced stdout"))
       ((err e) (assert false (str "cmdRun failed with: " e))))
     true)
@@ -44,7 +44,7 @@ fn testCmdRunExecutesMain! -> Bool
 fn testCmdTestNoEntryDiagnostics! -> Bool
   (let [(res (c/dispatchCmd "test" (list "asl/packages/asl-cli/tests/fixtures/noEntry.asl")))]
     (assert (err? res) "cmdTest on noEntry must fail")
-    (mt res
+    (match res
       ((ok _) (assert false "cmdTest on noEntry must not return ok"))
       ((err msg)
        (do
@@ -55,7 +55,7 @@ fn testCmdTestNoEntryDiagnostics! -> Bool
 fn testCmdTestZeroAssertsFails! -> Bool
   (let [(res (c/dispatchCmd "test" (list "asl/packages/asl-cli/tests/fixtures/noAsserts.asl")))]
     (assert (err? res) "cmdTest on zero asserts must fail")
-    (mt res
+    (match res
       ((ok _) (assert false "cmdTest on zero asserts must not pass"))
       ((err msg) (assert (stringContains? msg "zero assertions") "cmdTest reports zero assertions failure")))
     true)
@@ -63,7 +63,7 @@ fn testCmdTestZeroAssertsFails! -> Bool
 fn testCmdTestExecutionPasses! -> Bool
   (let [(res (c/dispatchCmd "test" (list "asl/packages/asl-cli/tests/fixtures/testOk.asl")))]
     (assert (ok? res) "cmdTest on testOk must succeed")
-    (mt res
+    (match res
       ((ok out)
        (do
          (assert (stringContains? out "assertion(s) executed") "cmdTest reports executed assertions")
@@ -74,7 +74,7 @@ fn testCmdTestExecutionPasses! -> Bool
 fn testCmdTestNoDocPasses! -> Bool
   (let [(res (c/dispatchCmd "test" (list "asl/packages/asl-cli/tests/fixtures/testNoDoc.asl")))]
     (assert (ok? res) "cmdTest on passing test without :d must succeed")
-    (mt res
+    (match res
       ((ok out)
        (do
          (assert (stringContains? out "assertion(s) executed") "reports executed assertions")
@@ -117,7 +117,7 @@ fn testCmdEvalFromTmp! -> Bool
 fn testCheckDispatchUnknownSymbol! -> Bool
   (let [(res (c/dispatchCmd "check" (list "asl/packages/asl-cli/tests/fixtures/unknownSym.asl")))]
     (assert (err? res) "check on unknownSym must fail")
-    (mt res
+    (match res
       ((ok _) (assert false "check on unknownSym must not return ok"))
       ((err msg)
        (do
@@ -128,7 +128,7 @@ fn testCheckDispatchUnknownSymbol! -> Bool
 fn testCheckDispatchCleanNoDoc! -> Bool
   (let [(res (c/dispatchCmd "check" (list "asl/packages/asl-cli/tests/fixtures/cleanNoDoc.asl")))]
     (assert (ok? res) "check on clean file without doc must pass")
-    (mt res
+    (match res
       ((ok msg)
        (do
          (refute (stringContains? msg "rule-8") "check reports no rule-8: docs live in doc.asn (D158)")

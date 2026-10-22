@@ -27,13 +27,13 @@ fn diagText ds: (List ty/IrDiag) -> String
   (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.locus ": " d.message)) ds) "; ")
 
 fn emitted m: ty/SsaModule entry: String -> String
-  (mt (llvm/emitLlvmProgram m entry) ((ok text) text) ((err ds) (str "emit failed: " (diagText ds))))
+  (match (llvm/emitLlvmProgram m entry) ((ok text) text) ((err ds) (str "emit failed: " (diagText ds))))
 
 fn fnBody text: String header: String -> String
-  (mt (stringIndexOf text header)
+  (match (stringIndexOf text header)
     ((none) "")
     ((some i) (let [(rest (optionOr (stringSlice text i (stringLength text)) ""))]
-                (mt (stringIndexOf rest "\n}\n") ((none) rest) ((some j) (optionOr (stringSlice rest 0 j) ""))))))
+                (match (stringIndexOf rest "\n}\n") ((none) rest) ((some j) (optionOr (stringSlice rest 0 j) ""))))))
 
 fn ! runNative work: String text: String -> Int64
   (let [(llFile (str work "/recordRun.ll"))
@@ -46,7 +46,7 @@ fn ! runNative work: String text: String -> Int64
           (processRun binFile).exitCode))))
 
 fn ! runTests -> Bool
-  (mt (low/lowerSource (source))
+  (match (low/lowerSource (source))
     ((err ds) (assert false (str "record program lowers: " (diagText ds))))
     ((ok m)
       (let [(program (emitted m "main"))

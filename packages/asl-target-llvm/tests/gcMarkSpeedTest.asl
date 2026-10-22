@@ -46,9 +46,9 @@ fn ! hostTriple -> String
       (else "")))
 
 fn ! drainOf -> (Option ty/SsaFunction)
-  (mt (libc/libcFacts (hostTriple))
+  (match (libc/libcFacts (hostTriple))
     ((none) none)
-    ((some facts) (mt (gr/collectorModule facts)
+    ((some facts) (match (gr/collectorModule facts)
                     ((err ds) (do (assert false (str "collectorModule: " (formatDiags ds))) none))
                     ((ok m) (listHead (filter (fn [(f ty/SsaFunction)] -> Bool (= f.name (gc/functionName "drain"))) m.functions))))))
 
@@ -59,15 +59,15 @@ fn defOf all: (List ty/SsaInstr) name: String -> (Option ty/SsaInstr)
   (listHead (filter (fn [(i ty/SsaInstr)] -> Bool (= i.dest name)) all))
 
 fn constOf all: (List ty/SsaInstr) name: String -> (Option Int64)
-  (mt (defOf all name)
+  (match (defOf all name)
     ((none) none)
-    ((some i) (mt i.op ((opConst c) (mt c ((constInt v) (some v)) (_ none))) (_ none))))
+    ((some i) (match i.op ((opConst c) (match c ((constInt v) (some v)) (_ none))) (_ none))))
 
 fn primOf i: ty/SsaInstr -> (Pair String (List String))
-  (mt i.op ((opPrim name args) (pair name args)) (_ (pair "" (list))))
+  (match i.op ((opPrim name args) (pair name args)) (_ (pair "" (list))))
 
 fn baseOf all: (List ty/SsaInstr) name: String -> String
-  (mt (defOf all name)
+  (match (defOf all name)
     ((none) name)
     ((some i) (let [(p (primOf i))] (if (= (pairFirst p) "rawIntToPtr") (optionOr (listHead (pairSecond p)) name) name))))
 
@@ -81,7 +81,7 @@ fn memOps all: (List ty/SsaInstr) instrs: (List ty/SsaInstr) -> (List (List Stri
 
 fn derives? all: (List ty/SsaInstr) name: String src: String depth: Int64 -> Bool
   (if (= depth 0) false
-    (mt (defOf all name)
+    (match (defOf all name)
       ((none) false)
       ((some i) (let [(p (primOf i)) (args (pairSecond p))]
                   (if (and (= (pairFirst p) "rawLshrI64") (= (optionOr (listGet args 0) "") src) (= (constOf all (optionOr (listGet args 1) "")) (some 32)))
@@ -92,29 +92,29 @@ fn blockOf f: ty/SsaFunction label: String -> (Option ty/SsaBlock)
   (listHead (filter (fn [(b ty/SsaBlock)] -> Bool (= b.label label)) f.blocks))
 
 fn targets t: ty/SsaTerm -> (List String)
-  (mt t
+  (match t
     ((termJump e) (list e.target))
     ((termBranch c a b) (list a.target b.target))
     (_ (list)))
 
 fn typeGated? all: (List ty/SsaInstr) b: ty/SsaBlock -> Bool
-  (mt b.term ((termBranch c a e) (derives? all c "oh" 8)) (_ false))
+  (match b.term ((termBranch c a e) (derives? all c "oh" 8)) (_ false))
 
 fn reachUngated f: ty/SsaFunction all: (List ty/SsaInstr) todo: (List String) seen: (List String) fuel: Int64 -> (List String)
-  (mt (listHead todo)
+  (match (listHead todo)
     ((none) seen)
     ((some l) (let [(rest (optionOr (listTail todo) (list)))]
                 (if (or (listContains? seen l) (<= fuel 0))
                   (reachUngated f all rest seen (- fuel 1))
-                  (mt (blockOf f l)
+                  (match (blockOf f l)
                     ((none) (reachUngated f all rest (cons l seen) (- fuel 1)))
                     ((some b) (reachUngated f all (if (or (= l "kids") (typeGated? all b)) rest (listAppend rest (targets b.term))) (cons l seen) (- fuel 1))))))))
 
 fn opCount b: ty/SsaBlock -> Int64
-  (listLength (filter (fn [(i ty/SsaInstr)] -> Bool (mt i.op ((opConst c) false) (_ true))) b.instrs))
+  (listLength (filter (fn [(i ty/SsaInstr)] -> Bool (match i.op ((opConst c) false) (_ true))) b.instrs))
 
 fn pathOps f: ty/SsaFunction labels: (List String) -> Int64
-  (fold (fn [(acc Int64) (l String)] -> Int64 (+ acc (mt (blockOf f l) ((some b) (opCount b)) ((none) 0)))) 0 labels)
+  (fold (fn [(acc Int64) (l String)] -> Int64 (+ acc (match (blockOf f l) ((some b) (opCount b)) ((none) 0)))) 0 labels)
 
 fn interiorPath -> (List String)
   (list "kid" "test" "ptest" "page" "push" "room" "put")
@@ -126,7 +126,7 @@ fn markedBytesOffset -> String
   (stringFromInt64 (* 8 56))
 
 fn ! testStructure -> Bool
-  (mt (drainOf)
+  (match (drainOf)
     ((none) (do (assert false "drain: the collector module for this host has a drain function") false))
     ((some f)
       (let [(all (instrsOf f))
@@ -140,13 +140,13 @@ fn ! testStructure -> Bool
             (pushLabel (optionOr (listHead (map (fn [(b ty/SsaBlock)] -> String b.label) pushes)) ""))
             (fromPage (reachUngated f all (list "page") (list) 200))
             (fromLarge (reachUngated f all (list "lset") (list) 200))
-            (gated (mt (blockOf f "push") ((some b) (typeGated? all b)) ((none) false)))
+            (gated (match (blockOf f "push") ((some b) (typeGated? all b)) ((none) false)))
             (interior (pathOps f (interiorPath)))
             (leaf (pathOps f (leafPath gated)))]
         (do (assert (= (listLength pushes) 1) (str "drain: exactly one block pushes a child onto the mark stack; got " (listLength pushes)))
             (assert (= (listLength pageCount) 0) (str "drain: no per-object load or store of the page header's mark count at offset 48; got " (listLength pageCount)))
             (assert (= (listLength markedBytes) 0) (str "drain: marked bytes stay in a register inside the loop, no state slot 56 access outside entry, start and done; got " (listLength markedBytes)))
-            (assert (listAny? (fn [(l String)] -> Bool (mt (blockOf f l) ((some b) (and (typeGated? all b) (listContains? (targets b.term) "kids"))) ((none) false))) fromPage)
+            (assert (listAny? (fn [(l String)] -> Bool (match (blockOf f l) ((some b) (and (typeGated? all b) (listContains? (targets b.term) "kids"))) ((none) false))) fromPage)
                     (str "drain: a marked pooled child meets a branch on its type byte that returns a fieldless child to the child loop; reached " (stringJoin fromPage " ")))
             (refute (listContains? fromPage pushLabel) (str "drain: a marked pooled child reaches the push block " pushLabel " only through a branch on its type byte; reached " (stringJoin fromPage " ")))
             (refute (listContains? fromLarge pushLabel) (str "drain: a marked large child reaches the push block " pushLabel " only through a branch on its type byte; reached " (stringJoin fromLarge " ")))
@@ -157,14 +157,14 @@ fn ! testStructure -> Bool
 fn statsField text: String key: String -> Int64
   (let [(line (optionOr (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:gcStats ")) (stringLines text))) ""))
         (tokens (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit line " ")))]
-    (mt (listIndexOf tokens key)
+    (match (listIndexOf tokens key)
       ((some i) (optionOr (stringToInt64 (stringReplace (optionOr (listGet tokens (+ i 1)) "") ")" "")) -1))
       ((none) -1)))
 
 fn ! emitted path: String -> String
-  (mt (lk/linkEntry! path)
+  (match (lk/linkEntry! path)
     ((err ds) (do (assert false (str path ": links; " (formatDiags ds))) ""))
-    ((ok m) (mt (llvm/emitLlvmProgramNative! m (str m.name ".main"))
+    ((ok m) (match (llvm/emitLlvmProgramNative! m (str m.name ".main"))
               ((err ds) (do (assert false (str path ": emits; " (formatDiags ds))) ""))
               ((ok code) code))))
 
@@ -192,7 +192,7 @@ fn deepSource -> String
           "    (fork (grow (- depth 1) (* seed 2)) (grow (- depth 1) (+ (* seed 2) 1)) (str \"n\" (stringFromInt64 seed))))"
           ""
           "fn weigh t: Tree -> Int64"
-          "  (mt t ((tip l) (+ l.weight (stringLength l.label))) ((fork a b nm) (+ (weigh a) (+ (weigh b) (stringLength nm)))))"
+          "  (match t ((tip l) (+ l.weight (stringLength l.label))) ((fork a b nm) (+ (weigh a) (+ (weigh b) (stringLength nm)))))"
           ""
           "fn churn i: Int64 acc: Int64 -> Int64"
           "  (if (= i 0) acc (churn (- i 1) (+ acc (stringLength (str \"c\" (stringFromInt64 i))))))"
@@ -224,7 +224,7 @@ fn ! sameRun work: String bins: (List (Pair String String)) row: (List String) -
   (let [(name (optionOr (listGet row 0) ""))
         (arg (optionOr (listGet row 1) ""))
         (env (optionOr (listGet row 2) ""))
-        (bin (optionOr (mt (listHead (filter (fn [(p (Pair String String))] -> Bool (= (pairFirst p) name)) bins)) ((some p) (some (pairSecond p))) ((none) none)) ""))
+        (bin (optionOr (match (listHead (filter (fn [(p (Pair String String))] -> Bool (= (pairFirst p) name)) bins)) ((some p) (some (pairSecond p))) ((none) none)) ""))
         (out (sh (str "ASL_GC_STATS=1 " env " " bin " " arg)))
         (got (list (stringReplace out.stdout "\n" "")
                    (stringFromInt64 (statsField out.stderr ":collections")) (stringFromInt64 (statsField out.stderr ":objectsAllocated"))

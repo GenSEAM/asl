@@ -8,7 +8,7 @@ fn quote s: String -> String
   (str "\"" (stringReplace (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\n" "\\n") "\"")
 
 fn encodeOp op: Op -> String
-  (mt op
+  (match op
     ((attrOp sel name value) (str "(:attr " (quote sel) " " (quote name) " " (quote value) ")"))
     ((textOp sel s) (str "(:text " (quote sel) " " (quote s) ")"))
     ((swapOp sel node) (str "(:swap " (quote sel) " " (quote (h/render node)) ")"))

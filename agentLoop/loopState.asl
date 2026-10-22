@@ -280,7 +280,7 @@ schema ReceiptAdapter
   (:f id String) (:f op String) (:f status String) (:f hasExit Bool) (:f exit Int64) (:f cmd String)
 
 fn execValJson v: x/Val -> j/Json
-  (mt v
+  (match v
     ((x/vStr s) (j/jstr s)) ((x/vInt n) (j/jint n)) ((x/vBool b) (j/jbool b))
     ((x/vStrs xs) (j/jarr (map (fn [s] (j/jstr s)) xs)))
     ((x/vPair a b) (j/jarr (list (j/jint a) (j/jint b)))) ((x/vNone) (j/jnull))
@@ -297,25 +297,25 @@ fn claimsReceiptJson r: cl/Receipt -> j/Json
 
 fn planReceiptJson id: String op: String status: String exit: (Option Int64) cmd: String -> j/Json
   (j/jobj (list (pair "id" (j/jstr id)) (pair "op" (j/jstr op))
-    (pair "status" (j/jstr status)) (pair "exit" (mt exit ((some n) (j/jint n)) (none (j/jnull))))
+    (pair "status" (j/jstr status)) (pair "exit" (match exit ((some n) (j/jint n)) (none (j/jnull))))
     (pair "cmd" (j/jstr cmd))))
 
 fn retryReceiptJson r: rt/ReceiptRec -> j/Json
-  (mt r ((rt/receiptRec id op _ cmd _ _ _ _ _ _ _ exit status _ _)
+  (match r ((rt/receiptRec id op _ cmd _ _ _ _ _ _ _ exit status _ _)
     (j/jobj (list (pair "id" (j/jstr id))
-      (pair "op" (mt op ((some s) (j/jstr s)) (none (j/jnull))))
-      (pair "status" (mt status ((some s) (j/jstr s)) (none (j/jnull))))
-      (pair "exit" (mt exit ((some n) (j/jint n)) (none (j/jnull))))
-      (pair "cmd" (mt cmd ((some s) (j/jstr s)) (none (j/jnull))))))))
+      (pair "op" (match op ((some s) (j/jstr s)) (none (j/jnull))))
+      (pair "status" (match status ((some s) (j/jstr s)) (none (j/jnull))))
+      (pair "exit" (match exit ((some n) (j/jint n)) (none (j/jnull))))
+      (pair "cmd" (match cmd ((some s) (j/jstr s)) (none (j/jnull))))))))
 
 fn gitRValJson v: go/RVal -> j/Json
-  (mt v ((go/rStr s) (j/jstr s)) ((go/rInt n) (j/jint n)) ((go/rBool b) (j/jbool b))
+  (match v ((go/rStr s) (j/jstr s)) ((go/rInt n) (j/jint n)) ((go/rBool b) (j/jbool b))
     ((go/rNull) (j/jnull)) ((go/rPair a b) (j/jarr (list (j/jint a) (j/jint b)))))
 fn runRValJson v: ro/RVal -> j/Json
-  (mt v ((ro/rStr s) (j/jstr s)) ((ro/rInt n) (j/jint n)) ((ro/rBool b) (j/jbool b))
+  (match v ((ro/rStr s) (j/jstr s)) ((ro/rInt n) (j/jint n)) ((ro/rBool b) (j/jbool b))
     ((ro/rList xs) (j/jarr (map (fn [s] (j/jstr s)) xs))))
 fn txnRValJson v: tx/RVal -> j/Json
-  (mt v ((tx/rStr s) (j/jstr s)) ((tx/rInt n) (j/jint n)) ((tx/rBool b) (j/jbool b))
+  (match v ((tx/rStr s) (j/jstr s)) ((tx/rInt n) (j/jint n)) ((tx/rBool b) (j/jbool b))
     ((tx/rList xs) (j/jarr (map (fn [s] (j/jstr s)) xs))) ((tx/rNone) (j/jnull)))
 
 fn gateJson v: g/GateResult -> j/Json
@@ -323,12 +323,12 @@ fn gateJson v: g/GateResult -> j/Json
     (pair "stdout" (j/jstr (g/gateStdout v))) (pair "stderr" (j/jstr (g/gateStderr v)))
     (pair "timeout" (j/jbool (g/gateTimeout v))) (pair "seconds" (j/jint (g/gateSeconds v)))))
 fn gateRecJson v: rt/GateRec -> j/Json
-  (mt v ((rt/gateRec cmd exit timeout seconds stdout stderr)
+  (match v ((rt/gateRec cmd exit timeout seconds stdout stderr)
     (j/jobj (list (pair "cmd" (j/jstr cmd))
-    (pair "exit" (mt exit ((some n) (j/jint n)) (none (j/jnull))))
+    (pair "exit" (match exit ((some n) (j/jint n)) (none (j/jnull))))
       (pair "stdout" (j/jstr stdout)) (pair "stderr" (j/jstr stderr))
       (pair "timeout" (j/jbool timeout))
-      (pair "seconds" (mt seconds ((some n) (j/jint n)) (none (j/jnull))))))))
+      (pair "seconds" (match seconds ((some n) (j/jint n)) (none (j/jnull))))))))
 fn gateResult v: g/GateResult -> rt/GateRec
   (rt/makeGateRec (g/gateCmd v) (g/gateExit v) (g/gateTimeout v) (g/gateSeconds v) (g/gateStdout v) (g/gateStderr v))
 fn lastGatesJson values: (Map String (Pair Int64 g/GateResult)) -> j/Json

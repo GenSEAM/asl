@@ -146,16 +146,16 @@ fn formatDiags ds: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.locus ": [" d.code "] " d.message)) ds) "; ")
 
 fn ! compiled path: String -> (Result String String)
-  (mt (lk/linkEntry! path)
+  (match (lk/linkEntry! path)
     ((err ds) (err (formatDiags ds)))
-    ((ok m) (mt (llvm/emitLlvmProgramNative! m (str m.name ".main"))
+    ((ok m) (match (llvm/emitLlvmProgramNative! m (str m.name ".main"))
               ((err ds) (err (formatDiags ds)))
               ((ok code) (ok code)))))
 
 fn ! optBin -> (Option String)
   (let [(known (filter (fn [(c String)] -> Bool (= (processRun (str "test -x " c)).exitCode 0))
                         (list "/opt/homebrew/opt/llvm/bin/opt" "/usr/local/opt/llvm/bin/opt")))]
-    (mt (listHead known)
+    (match (listHead known)
       ((some o) (some o))
       ((none) (if (= (processRun "command -v opt >/dev/null 2>&1").exitCode 0) (some "opt") (none)))))
 
@@ -186,7 +186,7 @@ fn sourceDirs -> (List (Pair String (List String)))
 
 fn ! sourceFiles -> (List String)
   (fold (fn [(acc (List String)) (d (Pair String (List String)))] -> (List String)
-          (mt (dirList (pairFirst d))
+          (match (dirList (pairFirst d))
             ((err e) (do (assert false (str "lists " (pairFirst d) ": " e)) acc))
             ((ok names) (listAppend acc (map (fn [(n String)] -> String (str (pairFirst d) "/" n))
                                              (filter (fn [(n String)] -> Bool (listAny? (fn [(s String)] -> Bool (stringEndsWith? n s)) (pairSecond d))) names))))))
@@ -195,7 +195,7 @@ fn ! sourceFiles -> (List String)
 fn ! testStaleNames -> Bool
   (let [(files (sourceFiles))
         (stale (fold (fn [(acc (List String)) (f String)] -> (List String)
-                       (mt (fileReadString f)
+                       (match (fileReadString f)
                          ((err e) (do (assert false (str "reads " f ": " e)) acc))
                          ((ok text) (listAppend acc (map (fn [(n String)] -> String (str f ": " n))
                                                          (filter (fn [(n String)] -> Bool (or (stringContains? text (str "asl_rt_b_" n))
@@ -228,7 +228,7 @@ fn ! testIr dir: String code: String -> Bool
       (assert (stringContains? code "call void @mathrt.want(ptr @.strrt.who.stringSlice, i32 2,") "an Int operand of stringSlice fails with stringSlice's want text")
       (assert (stringContains? code "call void @mathrt.want(ptr @.strrt.who.stringFromInt64, i32 2,") "an Int operand of stringFromInt64 fails with its want text")
       (assert (ok? (fileWrite ll code)) (str "fileWrite " ll))
-      (mt (optBin)
+      (match (optBin)
         ((none) (do (println "opt not found on this host, skipping -passes=verify") true))
         ((some o) (let [(v (processRun (str o " -passes=verify -disable-output " ll)))]
                     (do (assert (= v.exitCode 0) (str "opt -passes=verify accepts the emitted IR: " v.stderr)) true))))
@@ -307,7 +307,7 @@ fn ! runTests -> Bool
       (testArchive)
       (testStaleNames)
       (assert (ok? (fileWrite src (fixtureSrc))) (str "fileWrite " src))
-      (mt (compiled src)
+      (match (compiled src)
         ((err e) (do (assert false (str "stringFixture links and emits: " e)) true))
         ((ok code)
           (do

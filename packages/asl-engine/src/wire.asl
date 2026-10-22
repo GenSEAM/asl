@@ -103,13 +103,13 @@ fn cleanQuotedToken tok: String -> String
       tok))
 
 fn parseKwargs tokens: (List String) acc: (List (Pair String String)) -> (List (Pair String String))
-  (mt (listHead tokens)
+  (match (listHead tokens)
     ((none) (listReverse acc))
     ((some tok)
       (let [(rest (optionOr (listTail tokens) (list)))]
         (if (stringStartsWith? tok ":")
           (let [(key (stripLeadingColon tok))]
-            (mt (listHead rest)
+            (match (listHead rest)
               ((none) (listReverse (cons (pair key "true") acc)))
               ((some valTok)
                 (let [(val (cleanQuotedToken valTok))
@@ -124,7 +124,7 @@ fn parseSimpleSExpr rawText: String -> (Pair String (List (Pair String String)))
                  (stringTrim (optionOr (stringSlice trimmed 1 (- n 1)) ""))
                  trimmed))
         (tokens (tokenizeLoop inner 0 (stringLength inner) (list)))]
-    (mt (listHead tokens)
+    (match (listHead tokens)
       ((none) (pair "" (list)))
       ((some opTok)
         (let [(op (stripLeadingColon opTok))
@@ -134,7 +134,7 @@ fn parseSimpleSExpr rawText: String -> (Pair String (List (Pair String String)))
 
 fn getArg args: (List (Pair String String)) key: String -> (Option String)
   (let [(targetKey (stripLeadingColon key))]
-    (mt (listHead args)
+    (match (listHead args)
       ((none) (none))
       ((some p)
         (if (= (stripLeadingColon (pairFirst p)) targetKey)
@@ -143,7 +143,7 @@ fn getArg args: (List (Pair String String)) key: String -> (Option String)
 
 fn getArgRaw args: (List (Pair String String)) key: String -> (Option String)
   (let [(targetKey (stripLeadingColon key))]
-    (mt (listHead args)
+    (match (listHead args)
       ((none) (none))
       ((some p)
         (if (= (stripLeadingColon (pairFirst p)) targetKey)

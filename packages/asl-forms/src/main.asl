@@ -31,7 +31,7 @@ fn toolchainRoot! cwd: String -> String
       (else cwd)))
 
 fn uniqueRoots items: (List String) acc: (List String) -> (List String)
-  (mt (listHead items)
+  (match (listHead items)
     ((none) (listSortBy (fn [(r String)] -> Int64 (- 0 (stringLength r))) (listReverse acc)))
     ((some r)
       (uniqueRoots (optionOr (listTail items) (list)) (if (or (stringEmpty? r) (= r "/") (listContains? acc r)) acc (cons r acc)))))
@@ -56,7 +56,7 @@ fn gateOp? op: String -> Bool
   (listContains? (list "check" "chk" "gate" "test" "preflush" "lens" "audit") op)
 
 fn flushAfterMutation? steps: (List k/ParsedStep) mutating: Bool -> Bool
-  (mt (listHead steps)
+  (match (listHead steps)
     ((none) false)
     ((some p)
       (or (and (= p.op "flush") mutating)
@@ -128,12 +128,12 @@ fn coordinationStep! root: String id: Int64 p: k/ParsedStep -> ops/StepOutcome
           ((= op "claims") (coord/claims! root))
           ((= op "release") (coord/release! root unit))
           (else (err "unknown coordination operation"))))]
-    (mt result
+    (match result
       ((ok receipt) (ops/StepOutcome :lines (list receipt) :errCount 0))
       ((err receipt) (ops/StepOutcome :lines (list receipt) :errCount 1))))
 
 fn drive! root: String steps: (List (Pair String k/ParsedStep)) idx: Int64 sequential: Bool d: Drive -> Drive
-  (mt (listHead steps)
+  (match (listHead steps)
     ((none) d)
     ((some rp)
       (let [(p (pairSecond rp))
@@ -190,7 +190,7 @@ fn ! payloadText! args: (List String) -> (Result String String)
     ((= (optionOr (listHead args) "") "-") (fileReadString "/dev/stdin"))
     ((= (optionOr (listHead args) "") "-f")
       (let [(path (optionOr (listGet args 1) ""))]
-        (if (stringEmpty? path) (err "-f needs a FILE of forms") (mt (fileReadString path) ((ok t) (ok t)) ((err e) (err (str path ": " e)))))))
+        (if (stringEmpty? path) (err "-f needs a FILE of forms") (match (fileReadString path) ((ok t) (ok t)) ((err e) (err (str path ": " e)))))))
     (else (ok (stringJoin args " "))))
 
 fn ! mainText! args: (List String) -> (Pair String Int64)
@@ -200,7 +200,7 @@ fn ! mainText! args: (List String) -> (Pair String Int64)
         (session (envOr! "ASL_SESSION"))]
     (if (and (not (stringEmpty? session)) (not (validSession? session)))
       (pair "(:error :code ERR_BAD_SESSION :message \"ASL_SESSION must match [A-Za-z0-9._-]+ without ..\")\n" 2)
-      (mt (payloadText! payloadArgs)
+      (match (payloadText! payloadArgs)
         ((err e) (pair (str "(:error :code ERR_READ_FAILED :message \"" (k/escapeAsnVal e) "\")\n") 2))
         ((ok payload) (runPayloadText! (workspaceFor! rootArg) payload)))))
 

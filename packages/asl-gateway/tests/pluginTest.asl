@@ -58,35 +58,35 @@ fn paidLedger approvals: (List bgt/Approval) -> bgt/Ledger
     approvals 8)
 
 fn detailOf result: (Result p/LifecycleStatus p/PluginFailure) -> String
-  (mt result ((ok s) s.detail) ((err _) ""))
+  (match result ((ok s) s.detail) ((err _) ""))
 
 fn failureOf result: (Result p/LifecycleStatus p/PluginFailure) -> (Option p/PluginFailure)
-  (mt result ((ok _) none) ((err f) (some f)))
+  (match result ((ok _) none) ((err f) (some f)))
 
 fn sendFailure result: (Result p/PluginReply p/PluginFailure) -> (Option p/PluginFailure)
-  (mt result ((ok _) none) ((err f) (some f)))
+  (match result ((ok _) none) ((err f) (some f)))
 
 fn batchFailure result: (Result (List p/PluginReply) p/PluginFailure) -> (Option p/PluginFailure)
-  (mt result ((ok _) none) ((err f) (some f)))
+  (match result ((ok _) none) ((err f) (some f)))
 
 fn upstreamError result: (Result up/UpstreamCall up/UpstreamFailure) -> (Option p/PluginFailure)
-  (mt result ((ok _) none) ((err f) (some (p/upstreamFailed f))))
+  (match result ((ok _) none) ((err f) (some (p/upstreamFailed f))))
 
 fn cliError result: (Result cli/CliParseResult String) -> (Option p/PluginFailure)
-  (mt result ((ok _) none) ((err e) (some (p/cliFailed e))))
+  (match result ((ok _) none) ((err e) (some (p/cliFailed e))))
 
 fn curlAbsent? failure: (Option p/PluginFailure) -> Bool
-  (mt failure
-    ((some f) (mt f ((p/upstreamFailed u) (mt u ((up/toolAbsent tool _) (= tool "curl")) (_ false))) (_ false)))
+  (match failure
+    ((some f) (match f ((p/upstreamFailed u) (match u ((up/toolAbsent tool _) (= tool "curl")) (_ false))) (_ false)))
     ((none) false))
 
 fn spendGate? failure: (Option p/PluginFailure) -> Bool
-  (mt failure
-    ((some f) (mt f ((p/spendGate _) true) (_ false)))
+  (match failure
+    ((some f) (match f ((p/spendGate _) true) (_ false)))
     ((none) false))
 
 fn rejected result: (Result p/Plugin String) -> String
-  (mt result ((ok _) "") ((err e) e))
+  (match result ((ok _) "") ((err e) e))
 
 fn rateFor rates: (List (Pair String Float64)) gpu: String -> Float64
   (fold (fn [(acc Float64) (rate (Pair String Float64))] -> Float64 (if (= (pairFirst rate) gpu) (pairSecond rate) acc)) -1.0 rates)
@@ -102,14 +102,14 @@ fn runpodRow -> up/UpstreamProvider
 fn ! capabilityChecks -> Bool
   (let [(caps (serverlessCaps (p/continuous)))]
     (do
-      (assert (mt caps.api ((p/openaiChat) true) (_ false)) "capability api carries openaiChat")
-      (assert (mt caps.batching ((p/continuous) true) (_ false)) "capability batching carries continuous")
+      (assert (match caps.api ((p/openaiChat) true) (_ false)) "capability api carries openaiChat")
+      (assert (match caps.batching ((p/continuous) true) (_ false)) "capability batching carries continuous")
       (assert (= caps.maxConcurrency 8) "capability maxConcurrency carries 8")
       (assert caps.streaming "capability streaming carries true")
       (assert caps.tools "capability tools carries true")
       (assert (not caps.json) "capability json carries false")
-      (assert (mt caps.scaleModel ((p/serverless idle coldMs) (and (= idle 2) (= coldMs 30000))) (_ false)) "capability scaleModel carries serverless idle and cold start")
-      (assert (mt caps.priceModel ((p/perGpuSecond rates) (= (rateFor rates "L4") 0.000222)) (_ false)) "capability priceModel carries a perGpuSecond rate per gpu")
+      (assert (match caps.scaleModel ((p/serverless idle coldMs) (and (= idle 2) (= coldMs 30000))) (_ false)) "capability scaleModel carries serverless idle and cold start")
+      (assert (match caps.priceModel ((p/perGpuSecond rates) (= (rateFor rates "L4") 0.000222)) (_ false)) "capability priceModel carries a perGpuSecond rate per gpu")
       (assert (= caps.regions (list "us-east" "eu-west")) "capability regions carries the region list")
       (assert (= (p/capabilitiesError caps) none) "a well-formed capability record passes validation")
       (assert (= (p/capabilitiesError (withConcurrency caps 0)) (some "maxConcurrency is below 1")) "maxConcurrency below 1 is rejected")
@@ -120,12 +120,12 @@ fn ! capabilityChecks -> Bool
       (assert (= (rejected (p/makePlugin "fx" caps fixtureSend (some fixtureBatch) fixtureHealth none)) "fx: sendBatch without batchEndpoint") "sendBatch without batchEndpoint is rejected")
       (assert (= (rejected (p/makePlugin "" caps fixtureSend none fixtureHealth none)) "plugin id is empty") "an empty plugin id is rejected")
       (assert (= (rejected (p/makePlugin "fx" (withConcurrency caps 0) fixtureSend none fixtureHealth none)) "fx: maxConcurrency is below 1") "makePlugin applies capability validation")
-      (mt (p/makePlugin "fx" (serverlessCaps (p/batchEndpoint)) fixtureSend (some fixtureBatch) fixtureHealth none)
+      (match (p/makePlugin "fx" (serverlessCaps (p/batchEndpoint)) fixtureSend (some fixtureBatch) fixtureHealth none)
         ((err e) (assert false (str "batchEndpoint plugin builds: " e)))
         ((ok batcher)
           (assert (= (batchFailure (p/pluginSendBatch! batcher (list (p/cliSend "a" (badBinOptions)) (p/cliSend "b" (badBinOptions)))))
                      (some (p/cliFailed "fixture batch 2"))) "pluginSendBatch! delegates to the plugin's sendBatch")))
-      (mt (p/makePlugin "fx" caps fixtureSend none fixtureHealth none)
+      (match (p/makePlugin "fx" caps fixtureSend none fixtureHealth none)
         ((err e) (assert false (str "continuous plugin builds: " e)))
         ((ok plain)
           (do
@@ -137,12 +137,12 @@ fn ! openaiCompatChecks st: up/UpstreamSettings -> Bool
   (let [(badUrl (up/UpstreamRequest :url "https://bad url" :fragment "" :method "POST" :headers (list) :data "{}"))
         (good (up/UpstreamRequest :url "https://fixture.invalid/v1/chat/completions" :fragment "" :method "POST" :headers (list) :data "{}"))
         (noCurl (mapFromPairs (list (pair "PATH" "/nonexistent/aslPluginTest"))))]
-    (mt (p/ollama st)
+    (match (p/ollama st)
       ((err e) (do (assert false (str "ollama plugin builds: " e)) false))
       ((ok plugin)
         (do
           (assert (= plugin.id "ollama") "ollama adapter takes its id from the provider row")
-          (assert (mt plugin.capabilities.api ((p/openaiChat) true) (_ false)) "ollama adapter declares the openaiChat api")
+          (assert (match plugin.capabilities.api ((p/openaiChat) true) (_ false)) "ollama adapter declares the openaiChat api")
           (assert (= (sendFailure (p/pluginSend! plugin (p/httpSend badUrl (mapEmpty) 1.0)))
                      (upstreamError (up/upstreamCallStart! badUrl (mapEmpty) 1.0))) "openaiCompat send delegates to upstreamCallStart! (url rejected)")
           (assert (some? (sendFailure (p/pluginSend! plugin (p/httpSend badUrl (mapEmpty) 1.0)))) "openaiCompat send reports the rejected url as a failure")
@@ -151,7 +151,7 @@ fn ! openaiCompatChecks st: up/UpstreamSettings -> Bool
           (assert (curlAbsent? (sendFailure (p/pluginSend! plugin (p/httpSend good noCurl 1.0)))) "openaiCompat send passes the request env to the transport")
           (assert (= (sendFailure (p/pluginSend! plugin (p/cliSend "hi" (badBinOptions)))) (some (p/unsupported "ollama" "cliSend"))) "openaiCompat refuses a CLI request")
           (assert (= (p/pluginHealth! plugin (mapEmpty)) (ok st.ollamaUrl)) "openaiCompat health reports the row's base URL")
-          (mt (p/openaiCompat (runpodRow) st (p/openaiCompatCapabilities 4 (p/serverless 5 20000) (p/perGpuSecond (list (pair "4090" 0.00031))) (list)) none)
+          (match (p/openaiCompat (runpodRow) st (p/openaiCompatCapabilities 4 (p/serverless 5 20000) (p/perGpuSecond (list (pair "4090" 0.00031))) (list)) none)
             ((err e) (assert false (str "configured row builds: " e)))
             ((ok runpod)
               (do
@@ -161,23 +161,23 @@ fn ! openaiCompatChecks st: up/UpstreamSettings -> Bool
           true))))
 
 fn ! cliAdapterCheck name: String built: (Result p/Plugin String) direct: (Result cli/CliParseResult String) expected: String -> Bool
-  (mt built
+  (match built
     ((err e) (do (assert false (str name " plugin builds: " e)) false))
     ((ok plugin)
       (do
         (assert (= plugin.id name) (str name " adapter takes its id from the CLI row"))
-        (assert (mt plugin.capabilities.api ((p/cliAgent) true) (_ false)) (str name " adapter declares the cliAgent api"))
-        (assert (mt plugin.capabilities.batching ((p/unbatched) true) (_ false)) (str name " adapter declares no batching"))
+        (assert (match plugin.capabilities.api ((p/cliAgent) true) (_ false)) (str name " adapter declares the cliAgent api"))
+        (assert (match plugin.capabilities.batching ((p/unbatched) true) (_ false)) (str name " adapter declares no batching"))
         (assert (= (sendFailure (p/pluginSend! plugin (p/cliSend "hello" (badBinOptions)))) (cliError direct)) (str name " send delegates to its dispatch function"))
         (assert (= (sendFailure (p/pluginSend! plugin (p/cliSend "hello" (badBinOptions)))) (some (p/cliFailed (str expected " not found: " (missingBin))))) (str name " send runs its own CLI"))
         (assert (= (sendFailure (p/pluginSend! plugin (p/httpSend (up/UpstreamRequest :url "https://x" :fragment "" :method "POST" :headers (list) :data "") (mapEmpty) 1.0)))
                    (some (p/unsupported name "httpSend"))) (str name " refuses an HTTP request"))
-        (assert (= (mt (p/pluginHealth! plugin (mapEmpty)) ((ok _) true) ((err _) false))
-                   (mt (cli/cliProviderNamed name) ((some row) (fileExists? (cli/cliProviderBin! row))) ((none) false))) (str name " health follows its binary"))
+        (assert (= (match (p/pluginHealth! plugin (mapEmpty)) ((ok _) true) ((err _) false))
+                   (match (cli/cliProviderNamed name) ((some row) (fileExists? (cli/cliProviderBin! row))) ((none) false))) (str name " health follows its binary"))
         true)))
 
 fn ! lifecycleChecks -> Bool
-  (mt (p/makePlugin "modalFixture" (serverlessCaps (p/continuous)) fixtureSend none fixtureHealth (some (fixtureLifecycle)))
+  (match (p/makePlugin "modalFixture" (serverlessCaps (p/continuous)) fixtureSend none fixtureHealth (some (fixtureLifecycle)))
     ((err e) (do (assert false (str "lifecycle plugin builds: " e)) false))
     ((ok plugin)
       (let [(unapproved (paidLedger (list)))
@@ -191,7 +191,7 @@ fn ! lifecycleChecks -> Bool
           (assert (= (detailOf (p/pluginStart! plugin (some approved) (lifecycleRequest 10) 1000)) "start") "start within the budget cap reaches the plugin")
           (assert (= (detailOf (p/pluginStop! plugin (lifecycleRequest 0))) "stop") "stop needs no ledger")
           (assert (= (failureOf (p/pluginStatus! plugin (lifecycleRequest 0))) (some (p/lifecycleFailed "status probe failed"))) "a lifecycle failure is typed lifecycleFailed")
-          (mt (p/makePlugin "plain" (serverlessCaps (p/continuous)) fixtureSend none fixtureHealth none)
+          (match (p/makePlugin "plain" (serverlessCaps (p/continuous)) fixtureSend none fixtureHealth none)
             ((err e) (assert false (str "plain plugin builds: " e)))
             ((ok plain) (assert (= (failureOf (p/pluginDeploy! plain (some approved) (lifecycleRequest 0) 1000)) (some (p/unsupported "plain" "deploy"))) "deploy on a plugin without lifecycle is unsupported")))
           true))))
@@ -209,23 +209,23 @@ fn ! siteChecks st: up/UpstreamSettings -> Bool
       (assert (= (up/getUpstreamForModelIn (list) (up/upstreamFallback) st env (some "agy")).provider "openrouter") "routing has no provider branch outside the table")
       (assert (= (up/upstreamTimeoutSecIn withRunpod st "runpod") 300.0) "the timeout comes from the provider row")
       (assert (= (up/upstreamTimeoutSec st "ollama") st.ollamaTimeoutSec) "the ollama row keeps its timeout")
-      (assert (mt (cli/cliProviderNamed "codex") ((some row) (= (row.parse codexLine) (cli/cliParseResult "codex" codexLine))) ((none) false)) "cliParseResult parses through the CLI row")
+      (assert (match (cli/cliProviderNamed "codex") ((some row) (= (row.parse codexLine) (cli/cliParseResult "codex" codexLine))) ((none) false)) "cliParseResult parses through the CLI row")
       (assert (= (cli/cliProviderNamed "nope") none) "an unknown CLI client has no row")
-      (mt (p/defaultPlugins! st)
+      (match (p/defaultPlugins! st)
         ((err e) (assert false (str "default registry builds: " e)))
         ((ok registry)
           (do
             (assert (= (map (fn [(one p/Plugin)] -> String one.id) registry) (list "claude" "codex" "agy" "gemini" "ollama" "groq" "openrouter")) "the default registry holds one plugin per provider row")
             (assert (= (p/pluginNamed registry "agy-cli") none) "cli:// routing rows are not HTTP plugins")
-            (assert (mt (p/pluginNamed registry "claude")
+            (assert (match (p/pluginNamed registry "claude")
                       ((some one) (= (sendFailure (p/pluginSend! one (p/cliSend "hi" (badBinOptions)))) (some (p/cliFailed (str "CLAUDE_BIN not found: " (missingBin))))))
                       ((none) false)) "the core dispatches a CLI provider by id through its plugin record")
-            (assert (mt (p/pluginNamed registry "gemini") ((some one) (= (p/pluginHealth! one (mapEmpty)) (ok st.geminiUrl))) ((none) false)) "the gemini row is an openaiCompat plugin"))))
+            (assert (match (p/pluginNamed registry "gemini") ((some one) (= (p/pluginHealth! one (mapEmpty)) (ok st.geminiUrl))) ((none) false)) "the gemini row is an openaiCompat plugin"))))
       true))
 
 fn ! runTests -> Bool
   (let [(settingsEnv (mapFromPairs (list (pair "OLLAMA_BASE_URL" "http://127.0.0.1:9000/") (pair "OLLAMA_TIMEOUT_SEC" "7"))))]
-    (mt (up/upstreamSettings settingsEnv)
+    (match (up/upstreamSettings settingsEnv)
       ((err e) (do (assert false (str "settings build: " e)) false))
       ((ok st)
         (and (capabilityChecks)

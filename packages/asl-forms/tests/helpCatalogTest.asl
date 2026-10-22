@@ -44,7 +44,7 @@ fn tableNames path: String text: String -> (List String)
       (if (or (< a 0) (< e 0)) (list) (registeredNames (optionOr (stringSlice text (+ a (stringLength marker)) e) "")))))
 
 fn cNames! root: String paths: (List String) acc: (List String) -> (List String)
-  (mt (listHead paths)
+  (match (listHead paths)
     ((none) (listSort (listReverse acc)))
     ((some path)
       (let [(source (resultOr (fileReadString (str root "/" path)) ""))]

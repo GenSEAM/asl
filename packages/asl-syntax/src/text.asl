@@ -167,10 +167,10 @@ fn decodeUtf8Replace rawText: String bs: Bytes -> String
       (stringJoin (decodeUtf8Loop rawText bs len 0 0 (list)) "")))
 
 fn loadTextFile! file: String -> (Result String String)
-  (mt (fileReadBytes file)
+  (match (fileReadBytes file)
     ((err e) (err e))
     ((ok bs)
-     (mt (fileReadString file)
+     (match (fileReadString file)
        ((err e) (err e))
        ((ok rawText)
         (let [(decoded (decodeUtf8Replace rawText bs))]
@@ -274,7 +274,7 @@ fn readRangeReceipt file: String text: String startLine: Int64 endLine: Int64 li
              " :content \"" (out/escapeAsnValue content) "\")"))))
 
 fn readRangeFileReceipt! file: String startLine: Int64 endLine: Int64 limit: Int64 maxBytes: Int64 -> (Result String String)
-  (mt (fileReadBytes file)
+  (match (fileReadBytes file)
     ((err e) (err e))
     ((ok bs)
      (let [(kind (src/binaryKind bs))]
@@ -283,7 +283,7 @@ fn readRangeFileReceipt! file: String startLine: Int64 endLine: Int64 limit: Int
                   "\" :bytes " (stringFromInt64 (bytesLength bs))
                   " :kind \"" kind
                   "\" :hint \"binary files are never returned as text; inspect them with a native tool such as file, otool or xxd\" :see \"(:help :op read)\")"))
-         (mt (loadTextFile! file)
+         (match (loadTextFile! file)
            ((err e) (err e))
            ((ok text)
             (ok (readRangeReceipt file text startLine endLine limit maxBytes))))))))
@@ -338,7 +338,7 @@ fn readAnchorReceipt file: String text: String anchor: String occurrence: Int64 
               " :content \"" (out/escapeAsnValue content) "\")")))))
 
 fn readAnchorFileReceipt! file: String anchor: String occurrence: Int64 limit: Int64 -> (Result String String)
-  (mt (fileReadBytes file)
+  (match (fileReadBytes file)
     ((err e) (err e))
     ((ok bs)
      (let [(kind (src/binaryKind bs))]
@@ -347,7 +347,7 @@ fn readAnchorFileReceipt! file: String anchor: String occurrence: Int64 limit: I
                   "\" :bytes " (stringFromInt64 (bytesLength bs))
                   " :kind \"" kind
                   "\" :hint \"binary files are never returned as text; inspect them with a native tool such as file, otool or xxd\" :see \"(:help :op read)\")"))
-         (mt (loadTextFile! file)
+         (match (loadTextFile! file)
            ((err e) (err e))
            ((ok text)
             (ok (readAnchorReceipt file text anchor occurrence limit))))))))
@@ -386,7 +386,7 @@ fn isAllCapsHeading? line: String -> Bool
     (if (< len 2)
       false
       (let [(bs (stringToBytes lineTrim))]
-        (mt (checkAllCapsChars bs len 0 0)
+        (match (checkAllCapsChars bs len 0 0)
           ((some _) true)
           ((none) false)))))
 
@@ -423,7 +423,7 @@ fn isNumberedHeading? line: String -> (Option (Pair Int64 String))
       (none)
       (let [(bs (stringToBytes lineTrim))]
         (if (and (>= (bytesGet bs 0) 48) (<= (bytesGet bs 0) 57))
-          (mt (scanNumberedPrefix bs len 0 0)
+          (match (scanNumberedPrefix bs len 0 0)
             ((some p) (some (pair (pairFirst p) lineTrim)))
             ((none) (none)))
           (none)))))
@@ -452,7 +452,7 @@ fn isKeyAtCol0? line: String -> (Option (Pair String String))
     (if (< len 2)
       (none)
       (let [(bs (stringToBytes line))]
-        (mt (scanKeyCol0 bs len 0)
+        (match (scanKeyCol0 bs len 0)
           ((some colIdx)
            (let [(key (optionOr (stringSlice line 0 colIdx) ""))
                  (val (stringTrim (optionOr (stringSlice line (+ colIdx 1) len) "")))]
@@ -499,10 +499,10 @@ fn detectHeadingsLoop spans: (List LineSpan) text: String acc: (List HeadingInfo
       (if sp.blank?
         (detectHeadingsLoop rest text acc)
         (let [(nextSpOpt (listHead rest))]
-          (mt nextSpOpt
+          (match nextSpOpt
             ((some nextSp)
              (let [(nextContent (optionOr (stringSlice text nextSp.start nextSp.end) ""))]
-               (mt (isSetextUnderline? nextContent)
+               (match (isSetextUnderline? nextContent)
                  ((some lvl)
                   (let [(h (HeadingInfo :name (stringTrim content)
                                         :kind "heading"
@@ -519,21 +519,21 @@ fn detectHeadingsLoop spans: (List LineSpan) text: String acc: (List HeadingInfo
 
 fn detectHeadingLineStep sp: LineSpan rest: (List LineSpan) text: String acc: (List HeadingInfo) -> (List HeadingInfo)
   (let [(content (optionOr (stringSlice text sp.start sp.end) ""))]
-    (mt (isSetextUnderline? content)
+    (match (isSetextUnderline? content)
       ((some _)
        (detectHeadingsLoop rest text acc))
       ((none)
-       (mt (isSectionHeading? content)
+       (match (isSectionHeading? content)
          ((some secName)
           (let [(h (HeadingInfo :name secName :kind "section" :level 2 :line sp.lineNum :start sp.start :end sp.end))]
             (detectHeadingsLoop rest text (cons h acc))))
          ((none)
-          (mt (isNumberedHeading? content)
+          (match (isNumberedHeading? content)
             ((some np)
              (let [(h (HeadingInfo :name (pairSecond np) :kind "heading" :level (pairFirst np) :line sp.lineNum :start sp.start :end sp.end))]
                (detectHeadingsLoop rest text (cons h acc))))
             ((none)
-             (mt (isKeyAtCol0? content)
+             (match (isKeyAtCol0? content)
                ((some kp)
                 (let [(h (HeadingInfo :name (pairFirst kp) :kind "key" :level 3 :line sp.lineNum :start sp.start :end sp.end))]
                   (detectHeadingsLoop rest text (cons h acc))))
@@ -634,7 +634,7 @@ fn parseTextSource s: src/Source text: String -> tr/Node
   (parseText text)
 
 fn textApplyAnchorEdit text: String anchor: String replacement: String -> (Result String String)
-  (mt (sym/applyAnchorEdit text anchor replacement (fn [(t String)] -> (Result tr/Node String) (ok (parseText t))))
+  (match (sym/applyAnchorEdit text anchor replacement (fn [(t String)] -> (Result tr/Node String) (ok (parseText t))))
     ((ok res) (ok res.newText))
     ((err msg) (err msg)))
 

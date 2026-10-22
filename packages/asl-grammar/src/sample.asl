@@ -13,26 +13,26 @@ fn pick s: Int64 n: Int64 -> Int64
   (if (<= n 0) 0 (mod (/ (nextSeed s) 65536) n))
 
 fn formOf e: asn/Sx -> (Pair String (List asn/Sx))
-  (mt e
-    ((asn/sxList items) (mt (listHead items)
-                          ((some h) (mt h
+  (match e
+    ((asn/sxList items) (match (listHead items)
+                          ((some h) (match h
                                       ((asn/sxSym op) (pair op (optionOr (listTail items) (list))))
                                       (_ (pair "" (list)))))
                           ((none) (pair "" (list)))))
     (_ (pair "" (list))))
 
 fn heightOf hs: (List (Pair String Int64)) name: String -> Int64
-  (mt (listHead (filter (fn [(h (Pair String Int64))] -> Bool (= (pairFirst h) name)) hs))
+  (match (listHead (filter (fn [(h (Pair String Int64))] -> Bool (= (pairFirst h) name)) hs))
     ((some h) (pairSecond h))
     ((none) 1000000))
 
 fn repCount args: (List asn/Sx) i: Int64 -> Int64
-  (mt (listGet args i)
-    ((some x) (mt x ((asn/sxInt k) k) (_ 0)))
+  (match (listGet args i)
+    ((some x) (match x ((asn/sxInt k) k) (_ 0)))
     ((none) 0))
 
 fn exprHeight hs: (List (Pair String Int64)) e: asn/Sx -> Int64
-  (mt e
+  (match e
     ((asn/sxSym name) (+ (heightOf hs name) 1))
     ((asn/sxList _)
       (let [(f (formOf e)) (op (pairFirst f)) (args (pairSecond f))]
@@ -59,12 +59,12 @@ fn printableChar c: Int64 -> String
 fn classChoice spec: String negate: Bool s: Int64 -> String
   (let [(table (peg/classTable spec negate))
         (members (filter (fn [(c Int64)] -> Bool (= (bytesGet table c) 49)) (range 32 127)))]
-    (mt (listGet members (pick s (listLength members)))
+    (match (listGet members (pick s (listLength members)))
       ((some c) (printableChar c))
       ((none) (if (= (bytesGet table 10) 49) "\n" ""))))
 
 fn ruleBody rules: (List peg/GrammarRule) name: String -> asn/Sx
-  (mt (listHead (filter (fn [(r peg/GrammarRule)] -> Bool (= r.name name)) rules))
+  (match (listHead (filter (fn [(r peg/GrammarRule)] -> Bool (= r.name name)) rules))
     ((some r) r.expr)
     ((none) (asn/sxStr "")))
 
@@ -83,7 +83,7 @@ fn exceptDerive rules: (List peg/GrammarRule) hs: (List (Pair String Int64)) bud
       (else (Gen :text (str st.text fresh.text "x") :seed fresh.seed))))
 
 fn derive rules: (List peg/GrammarRule) hs: (List (Pair String Int64)) budget: Int64 depth: Int64 e: asn/Sx st: Gen -> Gen
-  (mt e
+  (match e
     ((asn/sxStr s) (with st :text (str st.text s)))
     ((asn/sxSym name) (derive rules hs budget (+ depth 1) (ruleBody rules name) st))
     ((asn/sxList _)
@@ -96,11 +96,11 @@ fn derive rules: (List peg/GrammarRule) hs: (List (Pair String Int64)) budget: I
           ((= op "rep") (let [(least (repCount args 1))]
                           (repeatDerive rules hs budget depth (optionOr (listHead args) (asn/sxStr "")) (if over least (+ least (pick s (+ (min (- (repCount args 2) least) 2) 1)))) next)))
           ((= op "opt") (repeatDerive rules hs budget depth (optionOr (listHead args) (asn/sxStr "")) (if over 0 (pick s 2)) next))
-          ((= op "word") (mt (listHead args) ((some w) (derive rules hs budget depth w st)) ((none) st)))
-          ((= op "cls") (mt (listHead args) ((some a) (mt a ((asn/sxStr spec) (Gen :text (str st.text (classChoice spec false s)) :seed (nextSeed s))) (_ st))) ((none) st)))
-          ((= op "ncls") (mt (listHead args) ((some a) (mt a ((asn/sxStr spec) (Gen :text (str st.text (classChoice spec true s)) :seed (nextSeed s))) (_ st))) ((none) st)))
+          ((= op "word") (match (listHead args) ((some w) (derive rules hs budget depth w st)) ((none) st)))
+          ((= op "cls") (match (listHead args) ((some a) (match a ((asn/sxStr spec) (Gen :text (str st.text (classChoice spec false s)) :seed (nextSeed s))) (_ st))) ((none) st)))
+          ((= op "ncls") (match (listHead args) ((some a) (match a ((asn/sxStr spec) (Gen :text (str st.text (classChoice spec true s)) :seed (nextSeed s))) (_ st))) ((none) st)))
           ((= op "except") (exceptDerive rules hs budget depth (optionOr (listHead args) (asn/sxStr ""))
-                             (fold (fn [(acc (List String)) (x asn/Sx)] -> (List String) (mt x ((asn/sxStr w) (cons w acc)) (_ acc))) (list) (optionOr (listTail args) (list)))
+                             (fold (fn [(acc (List String)) (x asn/Sx)] -> (List String) (match x ((asn/sxStr w) (cons w acc)) (_ acc))) (list) (optionOr (listTail args) (list)))
                              10 st))
           (else st))))
     (_ st))

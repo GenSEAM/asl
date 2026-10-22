@@ -53,7 +53,7 @@ fn testAnchorResolutionUnique -> Bool
   (let [(text "line 1\nlet targetValue = 42;\nline 3\n")
         (res (sym/resolveAnchor text "targetValue"))]
     (assert (ok? res) "resolve unique anchor succeeds")
-    (mt res
+    (match res
       ((ok span)
        (do
          (assert (= span.start 11) "anchor start is 11")
@@ -66,7 +66,7 @@ fn testAnchorResolutionAmbiguous -> Bool
   (let [(text "foo bar foo baz foo qux")
         (res (sym/resolveAnchor text "foo"))]
     (assert (err? res) "ambiguous anchor is rejected")
-    (mt res
+    (match res
       ((ok _) (assert false "expected ambiguity error"))
       ((err msg)
        (do
@@ -78,7 +78,7 @@ fn testAnchorResolutionNotFound -> Bool
   (let [(text "alpha beta gamma")
         (res (sym/resolveAnchor text "delta"))]
     (assert (err? res) "not found anchor rejected")
-    (mt res
+    (match res
       ((ok _) (assert false "expected not found error"))
       ((err msg)
        (assert (stringContains? msg "not found") "error message contains not found")))
@@ -94,13 +94,13 @@ fn testAnchorResolutionOccurrence -> Bool
     (assert (ok? r2) "occurrence 2 succeeds")
     (assert (ok? r3) "occurrence 3 succeeds")
     (assert (err? r4) "occurrence 4 out of bounds rejected")
-    (mt r1
+    (match r1
       ((ok s) (assert (= s.start 0) "occ 1 start is 0"))
       ((err _) (assert false "occ 1 failed")))
-    (mt r2
+    (match r2
       ((ok s) (assert (= s.start 5) "occ 2 start is 5"))
       ((err _) (assert false "occ 2 failed")))
-    (mt r3
+    (match r3
       ((ok s) (assert (= s.start 10) "occ 3 start is 10"))
       ((err _) (assert false "occ 3 failed")))
     true)
@@ -123,7 +123,7 @@ fn testReparseGuardCleanEdit -> Bool
   (let [(text "hello WORLD end")
         (res (sym/applySpanEdit text 6 11 "EVERYONE" toyParse))]
     (assert (ok? res) "clean edit succeeds")
-    (mt res
+    (match res
       ((ok editRes)
        (do
          (assert (= editRes.newText "hello EVERYONE end") "new text matches")
@@ -135,7 +135,7 @@ fn testReparseGuardErrorNodeRejected -> Bool
   (let [(text "hello WORLD end")
         (res (sym/applySpanEdit text 6 11 "BAD" toyParse))]
     (assert (err? res) "edit introducing Error node is rejected")
-    (mt res
+    (match res
       ((ok _) (assert false "expected rejection"))
       ((err msg)
        (assert (stringContains? msg "Error node") "error names Error node")))
@@ -145,7 +145,7 @@ fn testReparseGuardParseFailureRejected -> Bool
   (let [(text "hello WORLD end")
         (res (sym/applySpanEdit text 6 11 "FAIL" toyParse))]
     (assert (err? res) "edit causing parse failure is rejected")
-    (mt res
+    (match res
       ((ok _) (assert false "expected parse failure"))
       ((err msg)
        (assert (stringContains? msg "parse") "error message names parse")))
@@ -157,11 +157,11 @@ fn testApplyAnchorEdit -> Bool
         (multiText "one dup two dup three")
         (rAmb (sym/applyAnchorEdit multiText "dup" "REPLACEMENT" toyParse))]
     (assert (ok? rClean) "anchor edit on unique anchor succeeds")
-    (mt rClean
+    (match rClean
       ((ok editRes) (assert (= editRes.newText "one REPLACEMENT two") "anchor edit replaced"))
       ((err _) (assert false "expected ok anchor edit")))
     (assert (err? rAmb) "anchor edit on ambiguous anchor rejected")
-    (mt rAmb
+    (match rAmb
       ((ok _) (assert false "expected ambiguous anchor error"))
       ((err msg) (assert (stringContains? msg "ambiguous") "error names ambiguous")))
     true)

@@ -253,7 +253,7 @@ fn testDispatchAgainstStubs! -> Bool
                          :addDirs baseOpts.addDirs
                          :cliBin (some (str stubDir "/codex"))))
             (res (cli/dispatchCodexFallback! testPrompt codexOpts))]
-        (assert (ok? res) (str "dispatchCodexFallback failed: " (mt res ((ok _) "OK") ((err msg) msg))))
+        (assert (ok? res) (str "dispatchCodexFallback failed: " (match res ((ok _) "OK") ((err msg) msg))))
         (let [(parsed (resultOr res (cli/CliParseResult :text "" :usage none :dedup false)))]
           (assert (= parsed.text "stub codex reply") "stub codex parsed text"))
         (let [(recordedStdin (stringTrim (resultOr (fileReadString (str logDir "/last_stdin.txt")) "")))]
@@ -280,7 +280,7 @@ fn testDispatchAgainstStubs! -> Bool
                           :addDirs baseOpts.addDirs
                           :cliBin (some (str stubDir "/claude"))))
             (resClaude (cli/dispatchClaudeFallback! testPrompt claudeOpts))]
-        (assert (ok? resClaude) (str "dispatchClaudeFallback failed: " (mt resClaude ((ok _) "OK") ((err msg) msg))))
+        (assert (ok? resClaude) (str "dispatchClaudeFallback failed: " (match resClaude ((ok _) "OK") ((err msg) msg))))
         (let [(parsed (resultOr resClaude (cli/CliParseResult :text "" :usage none :dedup false)))]
           (assert (= parsed.text "stub claude reply") "stub claude parsed text"))
         (let [(recordedStdin (stringTrim (resultOr (fileReadString (str logDir "/last_stdin.txt")) "")))]
@@ -305,7 +305,7 @@ fn testDispatchAgainstStubs! -> Bool
                        :addDirs baseOpts.addDirs
                        :cliBin (some (str stubDir "/agy"))))
             (resAgy (cli/dispatchAgyFallback! testPrompt agyOpts))]
-        (assert (ok? resAgy) (str "dispatchAgyFallback failed: " (mt resAgy ((ok _) "OK") ((err msg) msg))))
+        (assert (ok? resAgy) (str "dispatchAgyFallback failed: " (match resAgy ((ok _) "OK") ((err msg) msg))))
         (let [(parsed (resultOr resAgy (cli/CliParseResult :text "" :usage none :dedup false)))]
           (assert (= parsed.text "stub agy reply") "stub agy parsed text"))
         (let [(recordedArgv (resultOr (fileReadString (str logDir "/last_argv.txt")) ""))]
@@ -392,7 +392,7 @@ fn testFixtureCorpusVerification! -> Bool
         true)))
 
 fn fixtureLineById lines: (List String) id: String -> String
-  (mt (listHead lines)
+  (match (listHead lines)
     ((none) "")
     ((some line)
      (if (stringContains? line (str ":id \"" id "\""))
@@ -413,55 +413,55 @@ fn fixtureStringField content: String id: String field: String -> String
   (let [(line (fixtureLineById (stringSplit content "\n") id))
         (marker (str field " "))
         (markerPos (stringIndexOf line marker))]
-    (mt markerPos
+    (match markerPos
       ((none) "")
       ((some pos)
        (let [(start (+ pos (stringLength marker)))
              (end (fixtureQuotedEnd line (+ pos (stringLength marker)) (+ pos (stringLength marker)) false))]
          (let [(raw (optionOr (stringSlice line start (+ end 1)) "\"\\\""))]
-           (mt (j/jsonParse raw)
-             ((ok parsed) (mt parsed ((j/jstr value) value) (_ "")))
+           (match (j/jsonParse raw)
+             ((ok parsed) (match parsed ((j/jstr value) value) (_ "")))
              ((err _) "")))))))
 
 fn fixtureExpectedJson content: String id: String -> j/Json
   (resultOr (j/jsonParse (fixtureStringField content id ":want")) (j/jnull))
 
 fn fixtureJsonPairsMatch expected: (List (Pair String j/Json)) actual: j/Json -> Bool
-  (mt (listHead expected)
+  (match (listHead expected)
     ((none) true)
     ((some entry)
-     (mt (j/jsonGet actual (pairFirst entry))
+     (match (j/jsonGet actual (pairFirst entry))
        ((none) false)
        ((some value)
         (and (fixtureJsonEquivalent (pairSecond entry) value)
              (fixtureJsonPairsMatch (optionOr (listTail expected) (list)) actual))))))
 
 fn fixtureJsonListsMatch expected: (List j/Json) actual: (List j/Json) -> Bool
-  (mt (listHead expected)
+  (match (listHead expected)
     ((none) (listEmpty? actual))
     ((some value)
-     (mt (listHead actual)
+     (match (listHead actual)
        ((none) false)
        ((some actualValue)
         (and (fixtureJsonEquivalent value actualValue)
              (fixtureJsonListsMatch (optionOr (listTail expected) (list)) (optionOr (listTail actual) (list))))))))
 
 fn fixtureJsonEquivalent expected: j/Json actual: j/Json -> Bool
-  (mt expected
+  (match expected
     ((j/jobj expectedPairs)
-     (mt actual
+     (match actual
        ((j/jobj actualPairs)
         (and (= (listLength expectedPairs) (listLength actualPairs))
              (fixtureJsonPairsMatch expectedPairs actual)))
        (_ false)))
     ((j/jarr expectedValues)
-     (mt actual
+     (match actual
        ((j/jarr actualValues) (fixtureJsonListsMatch expectedValues actualValues))
        (_ false)))
     (_ (= expected actual)))
 
 fn fixtureJsonOutputMatches content: String id: String result: (Result j/Json String) -> Bool
-  (mt result
+  (match result
     ((ok value) (fixtureJsonEquivalent (fixtureExpectedJson content id) value))
     ((err _) false))
 
@@ -482,13 +482,13 @@ fn testFixtureJsonRows! -> Bool
       (assert (and (ok? surrounded) (fixtureCaseIncludes content "json_obj_surrounded" ":status :ok") (fixtureJsonOutputMatches content "json_obj_surrounded" surrounded)) "json_obj_surrounded fixture expected JSON equals actual parsed object")
       (assert (and (ok? escaped) (fixtureCaseIncludes content "json_obj_escaped" ":status :ok") (fixtureJsonOutputMatches content "json_obj_escaped" escaped)) "json_obj_escaped fixture expected JSON equals actual parsed object")
       (assert (and (ok? empty) (fixtureCaseIncludes content "json_obj_empty" ":status :ok") (fixtureJsonOutputMatches content "json_obj_empty" empty)) "json_obj_empty fixture expected JSON equals actual parsed object")
-      (assert (and (err? noJson) (fixtureCaseIncludes content "json_obj_no_json" ":status :err") (fixtureCaseIncludes content "json_obj_no_json" "no JSON object in output") (= (mt noJson ((err e) e) ((ok _) "")) "no JSON object in output")) "json_obj_no_json fixture error output")
-      (assert (and (err? arrayOnly) (fixtureCaseIncludes content "json_obj_array_only" ":status :err") (fixtureCaseIncludes content "json_obj_array_only" "no JSON object in output") (= (mt arrayOnly ((err e) e) ((ok _) "")) "no JSON object in output")) "json_obj_array_only fixture error output")
-      (assert (and (err? malformed) (fixtureCaseIncludes content "json_obj_malformed" ":status :err") (= (mt malformed ((err e) e) ((ok _) "")) (fixtureStringField content "json_obj_malformed" ":want"))) (str "json_obj_malformed expected " (fixtureStringField content "json_obj_malformed" ":want") " but got " (mt malformed ((err e) e) ((ok _) ""))))
+      (assert (and (err? noJson) (fixtureCaseIncludes content "json_obj_no_json" ":status :err") (fixtureCaseIncludes content "json_obj_no_json" "no JSON object in output") (= (match noJson ((err e) e) ((ok _) "")) "no JSON object in output")) "json_obj_no_json fixture error output")
+      (assert (and (err? arrayOnly) (fixtureCaseIncludes content "json_obj_array_only" ":status :err") (fixtureCaseIncludes content "json_obj_array_only" "no JSON object in output") (= (match arrayOnly ((err e) e) ((ok _) "")) "no JSON object in output")) "json_obj_array_only fixture error output")
+      (assert (and (err? malformed) (fixtureCaseIncludes content "json_obj_malformed" ":status :err") (= (match malformed ((err e) e) ((ok _) "")) (fixtureStringField content "json_obj_malformed" ":want"))) (str "json_obj_malformed expected " (fixtureStringField content "json_obj_malformed" ":want") " but got " (match malformed ((err e) e) ((ok _) ""))))
       true))
 
 fn fixtureUsageMatches content: String id: String usage: (Option cli/CliUsage) -> Bool
-  (mt usage
+  (match usage
     ((none) (fixtureCaseIncludes content id ":usage :none"))
     ((some u)
      (and
@@ -600,9 +600,9 @@ fn testPromptDirFailures! -> Bool
       (let [(dirRes (cli/cliWritePromptDirAt! "agy" "directory error prompt" false obstruction))
             (pluginRes (cli/cliWritePromptDirAt! "agy" "plugin write error prompt" false writePluginRoot))
             (promptRes (cli/cliWritePromptDirAt! "agy" "prompt write error prompt" false writePromptRoot))]
-        (assert (and (err? dirRes) (stringStartsWith? (mt dirRes ((err e) e) ((ok _) "")) "failed to create agents dir:")) "prompt setup propagates directory creation failure")
-        (assert (and (err? pluginRes) (stringStartsWith? (mt pluginRes ((err e) e) ((ok _) "")) "failed to write plugin.json:")) "prompt setup propagates plugin.json write failure")
-        (assert (and (err? promptRes) (stringStartsWith? (mt promptRes ((err e) e) ((ok _) "")) "failed to write aslGateway.md:")) "prompt setup propagates agent markdown write failure"))
+        (assert (and (err? dirRes) (stringStartsWith? (match dirRes ((err e) e) ((ok _) "")) "failed to create agents dir:")) "prompt setup propagates directory creation failure")
+        (assert (and (err? pluginRes) (stringStartsWith? (match pluginRes ((err e) e) ((ok _) "")) "failed to write plugin.json:")) "prompt setup propagates plugin.json write failure")
+        (assert (and (err? promptRes) (stringStartsWith? (match promptRes ((err e) e) ((ok _) "")) "failed to write aslGateway.md:")) "prompt setup propagates agent markdown write failure"))
       true))
 
 fn ! runTests -> Bool

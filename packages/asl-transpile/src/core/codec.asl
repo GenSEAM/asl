@@ -26,7 +26,7 @@ fn renderJsonObject entries: (List JsonEntry) -> String
   (wrapDelimited "{" (mapEntries entries) "}")
 
 fn renderJson v: JsonValue -> String
-  (mt v ((jsonNull) "null") ((jsonBool b) (if b "true" "false")) ((jsonInt n) (stringFromInt64 n)) ((jsonFloat f) (stringFromFloat64 f)) ((jsonStr s) (str "\"" s "\"")) ((jsonArr arr) (renderJsonArray arr)) ((jsonObj obj) (renderJsonObject obj)))
+  (match v ((jsonNull) "null") ((jsonBool b) (if b "true" "false")) ((jsonInt n) (stringFromInt64 n)) ((jsonFloat f) (stringFromFloat64 f)) ((jsonStr s) (str "\"" s "\"")) ((jsonArr arr) (renderJsonArray arr)) ((jsonObj obj) (renderJsonObject obj)))
 
 fn projectLens lens: String model: ml/MultilensModel opts: ml/LensOptions -> ml/LensResult
   (ml/projectLens lens model opts)

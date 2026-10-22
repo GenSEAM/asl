@@ -12,12 +12,12 @@ fn childPassed out: String name: String -> Bool
   (listContains? (stringLines out) (checkLine name true))
 
 fn fileHas! path: String parts: (List String) -> Bool
-  (mt (fileReadString path)
+  (match (fileReadString path)
     ((err _) false)
     ((ok text) (listAll? (fn [(p String)] -> Bool (stringContains? text p)) parts)))
 
 fn shown r: (Result String String) -> String
-  (mt r ((err e) (str "err " e)) ((ok b) (str "ok " b)))
+  (match r ((err e) (str "err " e)) ((ok b) (str "ok " b)))
 
 fn ! crawlerChecks dir: String -> (List String)
   (let [(curl (c/fetchCurl! "https://example.test/path" 2))
@@ -32,7 +32,7 @@ fn ! crawlerChecks dir: String -> (List String)
           (str "detail curl " (shown curl) "; browser " (shown browser) "; failed " (shown failed))))
 
 fn ! main args: (List String) -> (Result Int64 String)
-  (mt (envGet "CRAWLER_ARGV_DIR")
+  (match (envGet "CRAWLER_ARGV_DIR")
     ((none) (err "CRAWLER_ARGV_DIR is not set"))
     ((some dir) (do (println (stringJoin (crawlerChecks dir) "\n")) (ok 0))))
 
@@ -51,8 +51,8 @@ fn ! runCrawlerArgvParent -> Bool
         (browserWritten (fileWrite browserPath browserScript))
         (curlChmod (fileChmod curlPath 493))
         (browserChmod (fileChmod browserPath 493))
-        (path (mt (envGet "PATH") ((some p) p) ((none) "/usr/bin:/bin")))
-        (cwd (mt (envGet "PWD") ((some p) p) ((none) ".")))
+        (path (match (envGet "PATH") ((some p) p) ((none) "/usr/bin:/bin")))
+        (cwd (match (envGet "PWD") ((some p) p) ((none) ".")))
         (baseCmd (procCore/withCwd (procCore/cmd "bin/asl" (list "run" "asl/packages/asl-crawler/tests/argvTest.asl")) cwd))
         (pathCmd (procCore/withEnv baseCmd "PATH" (str dir ":" path)))
         (browserCmd (procCore/withEnv pathCmd "CHROME_BIN" browserPath))
@@ -65,7 +65,7 @@ fn ! runCrawlerArgvParent -> Bool
       (assert (ok? browserWritten) "browser stub written")
       (assert (ok? curlChmod) "curl stub executable")
       (assert (ok? browserChmod) "browser stub executable")
-      (mt run
+      (match run
         ((err e) (do (assert false (str "nested production argv test failed to launch: " e)) false))
         ((ok result)
           (do

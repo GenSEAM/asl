@@ -83,10 +83,10 @@ fn routeModelNames r: cfg/GatewayRoute -> (List String)
   (if (listEmpty? r.chain) r.models r.chain)
 
 fn activeProfileRoutes headers: (List (Pair String String)) hi: HealthInputs -> (List cfg/GatewayRoute)
-  (mt hi.profiles
+  (match hi.profiles
     ((err _) (list))
     ((ok tbl)
-     (mt (cfg/gatewayProfileSelect tbl headers hi.envProfile)
+     (match (cfg/gatewayProfileSelect tbl headers hi.envProfile)
        ((err _) (list))
        ((ok sel) (filter (fn [(r cfg/GatewayRoute)] -> Bool (!= r.intent "any")) sel.profile.routes)))))
 
@@ -129,12 +129,12 @@ fn pyIntParse s: String -> (Option Int64)
         (neg (stringStartsWith? t "-"))
         (digits (if (or neg (stringStartsWith? t "+")) (optionOr (stringSlice t 1 (stringLength t)) "") t))
         (bs (stringToBytes digits))]
-    (mt (digitsLoop bs (bytesLength bs) 0 0 false)
+    (match (digitsLoop bs (bytesLength bs) 0 0 false)
       ((none) (none))
       ((some v) (some (if neg (- 0 v) v)))))
 
 fn lookupPair xs: (List (Pair String String)) key: String -> (Option String)
-  (mt (listHead xs)
+  (match (listHead xs)
     ((none) (none))
     ((some p) (if (= (pairFirst p) key) (some (pairSecond p)) (lookupPair (optionOr (listTail xs) (list)) key))))
 
@@ -142,12 +142,12 @@ fn qsGet qs: (List (Pair String String)) key: String -> (Option String)
   (lookupPair (listReverse qs) key)
 
 fn qsGetOr qs: (List (Pair String String)) key: String alt: String dflt: String -> String
-  (mt (qsGet qs key)
+  (match (qsGet qs key)
     ((some v) v)
     ((none) (optionOr (qsGet qs alt) dflt)))
 
 fn queryOf target: String -> (Result String pt/PyErr)
-  (mt (pt/urlparse target)
+  (match (pt/urlparse target)
     ((err e) (err e))
     ((ok parts) (ok (optionOr (listGet parts 4) ""))))
 
@@ -178,7 +178,7 @@ fn strList xs: (List String) -> j/Json
   (j/jarr (map (fn [(s String)] -> j/Json (j/jstr s)) xs))
 
 fn optStr o: (Option String) -> j/Json
-  (mt o ((some s) (j/jstr s)) ((none) (j/jnull)))
+  (match o ((some s) (j/jstr s)) ((none) (j/jnull)))
 
 fn routesJson routes: (List cfg/GatewayRoute) key: String -> j/Json
   (j/jarr (map (fn [(r cfg/GatewayRoute)] -> j/Json
@@ -187,7 +187,7 @@ fn routesJson routes: (List cfg/GatewayRoute) key: String -> j/Json
                routes))
 
 fn profileHealthJson info: cfg/ProfileHealth -> j/Json
-  (mt info
+  (match info
     ((cfg/healthError e source) (j/jobj (list (pair "error" (j/jstr e)) (pair "source" (j/jstr source)))))
     ((cfg/healthV1 name routes source)
       (j/jobj (list (pair "name" (j/jstr name)) (pair "routes" (routesJson routes "models")) (pair "source" (j/jstr source)))))
@@ -196,17 +196,17 @@ fn profileHealthJson info: cfg/ProfileHealth -> j/Json
                     (pair "fallback" (optStr fallback)) (pair "source" (j/jstr source))))))
 
 fn asnUnescapeLoop cs: (List String) acc: (List String) -> (Result String String)
-  (mt (listHead cs)
+  (match (listHead cs)
     ((none) (ok (stringJoin (listReverse acc) "")))
     ((some c)
       (let [(rest (optionOr (listTail cs) (list)))]
         (if (= c "\\")
-          (mt (listHead rest)
+          (match (listHead rest)
             ((none) (err "dangling backslash"))
             ((some e)
               (let [(ch (cond ((= e "n") (some "\n")) ((= e "r") (some "\r")) ((= e "t") (some "\t"))
                               ((= e "\\") (some "\\")) ((= e "\"") (some "\"")) (else (none))))]
-                (mt ch
+                (match ch
                   ((none) (err (str "unknown escape \\" e)))
                   ((some x) (asnUnescapeLoop (optionOr (listTail rest) (list)) (cons x acc)))))))
           (asnUnescapeLoop rest (cons c acc))))))
@@ -217,31 +217,31 @@ fn paramJson text: String -> (Result j/Json String)
     ((= text "false") (ok (j/jbool false)))
     ((= text "nil") (ok (j/jnull)))
     ((and (stringStartsWith? text "\"") (and (stringEndsWith? text "\"") (>= (stringLength text) 2)))
-      (mt (asnUnescapeLoop (stringChars (optionOr (stringSlice text 1 (- (stringLength text) 1)) "")) (list))
+      (match (asnUnescapeLoop (stringChars (optionOr (stringSlice text 1 (- (stringLength text) 1)) "")) (list))
         ((err e) (err e))
         ((ok s) (ok (j/jstr s)))))
     ((or (stringContains? text ".") (or (stringContains? text "e") (stringContains? text "E")))
-      (mt (stringToFloat64 text)
+      (match (stringToFloat64 text)
         ((some f) (ok (j/jfloat f)))
         ((none) (err (str "parameter value " text " is no number")))))
     (else
-      (mt (stringToInt64 text)
+      (match (stringToInt64 text)
         ((some n) (ok (j/jint n)))
         ((none) (err (str "parameter value " text " is no number"))))))
 
 fn paramsJson shown: (List (Pair String String)) acc: (List (Pair String j/Json)) -> (Result j/Json String)
-  (mt (listHead shown)
+  (match (listHead shown)
     ((none) (ok (j/jobj (listReverse acc))))
     ((some p)
-      (mt (paramJson (pairSecond p))
+      (match (paramJson (pairSecond p))
         ((err e) (err (str (pairFirst p) ": " e)))
         ((ok v) (paramsJson (optionOr (listTail shown) (list)) (cons (pair (pairFirst p) v) acc))))))
 
 fn modelsCfgJson models: (List cfg/GatewayModel) acc: (List (Pair String j/Json)) -> (Result j/Json String)
-  (mt (listHead models)
+  (match (listHead models)
     ((none) (ok (j/jobj (listReverse acc))))
     ((some m)
-      (mt (paramsJson m.shown (list))
+      (match (paramsJson m.shown (list))
         ((err e) (err (str "model " m.id " " e)))
         ((ok params)
           (modelsCfgJson (optionOr (listTail models) (list))
@@ -250,7 +250,7 @@ fn modelsCfgJson models: (List cfg/GatewayModel) acc: (List (Pair String j/Json)
                                acc))))))
 
 fn configHealthJson c: cfg/ConfigHealth -> (Result j/Json String)
-  (mt (modelsCfgJson c.models (list))
+  (match (modelsCfgJson c.models (list))
     ((err e) (err e))
     ((ok models)
       (ok (j/jobj (list (pair "v" (j/jint 2))
@@ -278,7 +278,7 @@ fn healthAsn st: GetState headers: (List (Pair String String)) api: Bool -> (Res
                       " :undeclaredIntents (" undeclared ")"))
         (breaker (str " :breaker (" (stringJoin (map (fn [(b BreakerRow)] -> String (str ":" b.name " (:down " (boolText b.down) " :secondsLeft " (stringFromInt64 b.secondsLeft) ")")) hi.breaker) " ") ")"))
         (tail (str ":pools (" pools ") :wire (asn json) :clis (" clis ") :profile " profile " " breaker " "))]
-    (mt (us/usageAsn hi.usage)
+    (match (us/usageAsn hi.usage)
       ((err e) (err e))
       ((ok usageText)
         (let [(update (str (us/gatewayUpdateAsn hi.update) " :usage " usageText))]
@@ -288,7 +288,7 @@ fn healthAsn st: GetState headers: (List (Pair String String)) api: Bool -> (Res
                 (str "(:health :status :ok :service \"asl-gateway\" " tail update ")\n")))))))
 
 fn objKvs v: j/Json -> (List (Pair String j/Json))
-  (mt v ((j/jobj kvs) kvs) (_ (list)))
+  (match v ((j/jobj kvs) kvs) (_ (list)))
 
 fn healthJson st: GetState headers: (List (Pair String String)) api: Bool -> (Result j/Json String)
   (let [(hi st.health)
@@ -306,10 +306,10 @@ fn healthJson st: GetState headers: (List (Pair String String)) api: Bool -> (Re
         (api3 (if api
                 (list (pair "omniProtocol" (j/jbool true)) (pair "projects" (j/jint (listLength st.projects))) (pair "channels" (j/jint (listLength st.channels))))
                 (list)))]
-    (mt gatewayCfg
+    (match gatewayCfg
       ((none) (ok (j/jobj (listAppend withUsage api3))))
       ((some c)
-        (mt (configHealthJson c)
+        (match (configHealthJson c)
           ((err e) (err e))
           ((ok g) (ok (j/jobj (listAppend (listAppend withUsage (list (pair "gateway" g))) api3))))))))
 
@@ -351,14 +351,14 @@ fn targetsText targets: (List TargetRow) -> String
 fn popAction queues: (List ActionQueue) id: String -> (Pair (Option String) (List ActionQueue))
   (fold (fn [(acc (Pair (Option String) (List ActionQueue))) (q ActionQueue)] -> (Pair (Option String) (List ActionQueue))
           (if (and (= q.id id) (none? (pairFirst acc)))
-            (mt (listHead q.items)
+            (match (listHead q.items)
               ((none) (pair (none) (listAppend (pairSecond acc) (list q))))
               ((some item) (pair (some item) (listAppend (pairSecond acc) (list (ActionQueue :id id :items (optionOr (listTail q.items) (list))))))))
             (pair (pairFirst acc) (listAppend (pairSecond acc) (list q)))))
         (pair (none) (list)) queues)
 
 fn pollText head: String idKey: String id: String item: (Option String) -> String
-  (mt item
+  (match item
     ((some a) (str "(" head "\n  :status :action\n  " idKey " \"" id "\"\n  :hasAction true\n  :action " a ")\n"))
     ((none) (str "(" head "\n  :status :idle\n  " idKey " \"" id "\"\n  :hasAction false)\n")))
 
@@ -369,7 +369,7 @@ fn withExtensionQueues st: GetState qs: (List ActionQueue) -> GetState
   (with st :extensionQueues qs)
 
 fn pollRoute target: String st: GetState isTarget: Bool -> GetOutcome
-  (mt (queryOf target)
+  (match (queryOf target)
     ((err e) (getFail e))
     ((ok q)
       (let [(qs (pt/parseQsl q))
@@ -389,15 +389,15 @@ fn healthRoute st: GetState headers: (List (Pair String String)) parsedPath: Str
         (api (stringStartsWith? parsedPath "/api/asl/"))
         (asn (or (stringContains? accept "application/asn+sexpr") (and api (not (stringContains? accept "application/json")))))]
     (if asn
-      (mt (healthAsn st headers api)
+      (match (healthAsn st headers api)
         ((err e) (getFail (pt/pyErr "ValueError" e)))
         ((ok body) (getRespond st (ok200 (asnHeaders) body))))
-      (mt (healthJson st headers api)
+      (match (healthJson st headers api)
         ((err e) (getFail (pt/pyErr "ValueError" e)))
         ((ok data) (getRespond st (ok200 (jsonHeaders) (dumps data)))))))
 
 fn searchRoute target: String headers: (List (Pair String String)) -> GetOutcome
-  (mt (queryOf target)
+  (match (queryOf target)
     ((err e) (getFail e))
     ((ok q)
       (let [(qs (pt/parseQsl q))]
@@ -409,12 +409,12 @@ fn searchRoute target: String headers: (List (Pair String String)) -> GetOutcome
 fn searchResponse req: SearchRequest res: j/Json -> (Result h/HttpResponse pt/PyErr)
   (if req.json
     (ok (ok200 (h/makeHeaders (list (pair "Content-Type" "application/json") (pair "X-ASL-Wire-Protocol" "asn/1.0"))) (dumps res)))
-    (mt (se/formatSearchAsn res req.query)
+    (match (se/formatSearchAsn res req.query)
       ((err e) (err e))
       ((ok body) (ok (ok200 (asnHeaders) body)))))
 
 fn parsedRoute target: String headers: (List (Pair String String)) st: GetState -> GetOutcome
-  (mt (pt/urlparse target)
+  (match (pt/urlparse target)
     ((err e) (getFail e))
     ((ok parts)
       (let [(parsedPath (pathRstrip (optionOr (listGet parts 2) "")))]

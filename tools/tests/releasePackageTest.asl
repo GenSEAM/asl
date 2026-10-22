@@ -8,7 +8,7 @@ fn testBuildReleasePackageSuccess -> Bool
     (do
       (assert (ok? res) "buildReleasePackage must succeed when certified and root hash provided")
       (refute (err? res) "Must not fail on valid release parameters")
-      (mt res
+      (match res
         ((ok bundle)
          (do
            (assert (= bundle.version "0.1.0") "Version must match")
@@ -38,7 +38,7 @@ fn testSuperviseClosureGateSuccess -> Bool
     (do
       (assert (ok? res) "superviseClosureGate must succeed with 10/10 tiers and valid root hash")
       (refute (err? res) "Must not return error on certified closure")
-      (mt res
+      (match res
         ((ok receipt)
          (do
            (assert (= receipt.milestone "M09") "Milestone must be M09")

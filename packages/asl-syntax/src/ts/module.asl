@@ -43,7 +43,7 @@ fn elementsHaveError? elems: (List tr/TreeElement) -> Bool
     false
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemNode n) (if (treeHasError? n) true (elementsHaveError? tl)))
         ((tr/elemToken t) (if (tr/isErrorToken t) true (elementsHaveError? tl))))))
 
@@ -119,7 +119,7 @@ fn firstErrorOffset elems: (List tr/TreeElement) -> (Option Int64)
     (none)
     (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
           (tl (optionOr (listTail elems) (list)))]
-      (mt hd
+      (match hd
         ((tr/elemToken tok)
          (if (= (tr/tokenKind tok) "error")
            (some (tr/tokenStart tok))
@@ -127,21 +127,21 @@ fn firstErrorOffset elems: (List tr/TreeElement) -> (Option Int64)
         ((tr/elemNode node)
          (if (tr/isErrorNode node)
            (some (tr/nodeStart node))
-           (mt (firstErrorOffset (tr/nodeChildren node))
+           (match (firstErrorOffset (tr/nodeChildren node))
              ((some off) (some off))
              ((none) (firstErrorOffset tl))))))))
 
 fn parseTsModuleTokens toks: (List tr/Token) text: String -> (Result tr/Node String)
   (let [(loopRes (parseModuleItemsLoop toks text (list)))]
-    (mt loopRes
+    (match loopRes
       ((err msg) (err msg))
       ((ok elems)
        (let [(root (tr/makeNode "module" 0 (stringLength text) elems))]
-         (mt (firstErrorOffset elems)
+         (match (firstErrorOffset elems)
            ((some off)
             (err (str "Parse error at offset " (stringFromInt64 off))))
            ((none)
-            (mt (tr/checkTiling root (stringLength text))
+            (match (tr/checkTiling root (stringLength text))
               ((ok _) (ok root))
               ((err msg) (err msg)))))))))
 

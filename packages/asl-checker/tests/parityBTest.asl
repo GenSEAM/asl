@@ -3,7 +3,7 @@
   :i [(types :a ty) (ast :a a) (resolve :a r)])
 
 fn diagsOf src: String -> (List ty/Diagnostic)
-  (mt (a/parse src)
+  (match (a/parse src)
     ((err _) (list (ty/Diagnostic :code "parse" :message "source did not parse" :msg "" :line 0 :col 0 :path "test.asl")))
     ((ok forms) (r/resolveModule (r/collectSummary forms "test.asl") forms (mapEmpty))))
 
@@ -11,10 +11,10 @@ fn codesOf src: String -> (List String)
   (map (fn [(d ty/Diagnostic)] -> String d.code) (diagsOf src))
 
 fn summaryOf src: String path: String -> r/ModuleSummary
-  (r/collectSummary (mt (a/parse src) ((ok f) f) ((err _) (list))) path)
+  (r/collectSummary (match (a/parse src) ((ok f) f) ((err _) (list))) path)
 
 fn messagesWith src: String deps: (Map String r/ModuleSummary) -> (List String)
-  (mt (a/parse src)
+  (match (a/parse src)
     ((err _) (list "parse"))
     ((ok forms) (map (fn [(d ty/Diagnostic)] -> String (str d.code " " d.message)) (r/resolveModule (r/collectSummary forms "test.asl") forms deps))))
 
@@ -63,18 +63,18 @@ fn testCycleThroughRootOnly -> Bool
         true))
 
 fn testExhaustiveOverDeclaredEnums -> Bool
-  (do (refute (listContains? (codesOf "(fn f [(o (Option Int64))] -> Int64 (mt o ((some t) t)))") "rule-4") "a match over Option without none passes")
-      (refute (listContains? (codesOf "(fn f [(r (Result Int64 String))] -> Int64 (mt r ((ok v) v)))") "rule-4") "a match over Result without err passes")
-      (assert (listContains? (codesOf "(enum Color (:c red []) (:c green [])) (fn f [(c Color)] -> Int64 (mt c ((red) 1)))") "rule-4") "a match over a declared enum missing a case is rule-4")
-      (assert (listContains? (codesOf "(enum Maybe (:c none []) (:c some [(v Int64)])) (fn f [(x Maybe)] -> Int64 (mt x ((some v) v)))") "rule-4") "a local enum reusing some and none is its own declared enum, so a match missing none is rule-4")
+  (do (refute (listContains? (codesOf "(fn f [(o (Option Int64))] -> Int64 (match o ((some t) t)))") "rule-4") "a match over Option without none passes")
+      (refute (listContains? (codesOf "(fn f [(r (Result Int64 String))] -> Int64 (match r ((ok v) v)))") "rule-4") "a match over Result without err passes")
+      (assert (listContains? (codesOf "(enum Color (:c red []) (:c green [])) (fn f [(c Color)] -> Int64 (match c ((red) 1)))") "rule-4") "a match over a declared enum missing a case is rule-4")
+      (assert (listContains? (codesOf "(enum Maybe (:c none []) (:c some [(v Int64)])) (fn f [(x Maybe)] -> Int64 (match x ((some v) v)))") "rule-4") "a local enum reusing some and none is its own declared enum, so a match missing none is rule-4")
       true)
 
 fn testImportedCasesBeatPreludeNameCollisions -> Bool
   (let [(proc (summaryOf "(module process :x [ProcessError] :i []) (enum ProcessError (:c notFound []) (:c timeout []))" "/w/process.asl"))
         (deps (mapSet (mapEmpty) "/w/process.asl" proc))
-        (messages (messagesWith "(module t :x [] :i [(process :a p)]) (fn f [(e p/ProcessError)] -> Int64 (mt e ((notFound) 0) ((timeout) 1)))" deps))
-        (qualified (messagesWith "(module t :x [] :i [(process :a p)]) (fn f [(e p/ProcessError)] -> Int64 (mt e ((p/notFound) 0) ((p/timeout) 1)))" deps))
-        (qualifiedMissing (messagesWith "(module t :x [] :i [(process :a p)]) (fn f [(e p/ProcessError)] -> Int64 (mt e ((p/notFound) 0)))" deps))]
+        (messages (messagesWith "(module t :x [] :i [(process :a p)]) (fn f [(e p/ProcessError)] -> Int64 (match e ((notFound) 0) ((timeout) 1)))" deps))
+        (qualified (messagesWith "(module t :x [] :i [(process :a p)]) (fn f [(e p/ProcessError)] -> Int64 (match e ((p/notFound) 0) ((p/timeout) 1)))" deps))
+        (qualifiedMissing (messagesWith "(module t :x [] :i [(process :a p)]) (fn f [(e p/ProcessError)] -> Int64 (match e ((p/notFound) 0)))" deps))]
     (do (assert (listEmpty? messages) (str "imported ProcessError constructor names win over prelude IoError names: " (stringJoin messages "; ")))
         (assert (listEmpty? qualified) (str "all qualified imported cases are exhaustive: " (stringJoin qualified "; ")))
         (assert (listAny? (fn [(m String)] -> Bool (stringStartsWith? m "rule-4")) qualifiedMissing) (str "qualified imported patterns still detect a missing case: " (stringJoin qualifiedMissing "; ")))
@@ -83,7 +83,7 @@ fn testImportedCasesBeatPreludeNameCollisions -> Bool
 fn testCaseExportedWithoutTypeNameStillQualifies -> Bool
   (let [(core (summaryOf "(module core :x [windowOf mk] :i []) (enum Window (:c windowOf [(text String)])) (fn mk [] -> Window (windowOf \"x\"))" "/w/core.asl"))
         (deps (mapSet (mapEmpty) "/w/core.asl" core))
-        (messages (messagesWith "(module t :x [] :i [(core :a c)]) (fn f [] -> String (mt (c/mk) ((c/windowOf text) text)))" deps))]
+        (messages (messagesWith "(module t :x [] :i [(core :a c)]) (fn f [] -> String (match (c/mk) ((c/windowOf text) text)))" deps))]
     (do (assert (listEmpty? messages) (str "a case exported by name alone, not its enum type, still qualifies in a match pattern: " (stringJoin messages "; ")))
         true))
 
@@ -109,12 +109,12 @@ fn testChainedQualifiedType -> Bool
         true))
 
 fn testInvalidArmHead -> Bool
-  (do (assert (listContains? (codesOf "(fn sealed [] -> Int64 1) (fn classify [] -> Bool (mt 3 (sealed false)))") "ERR_INVALID_MT_ARM") "a pattern naming a module fn is invalid")
-      (assert (listContains? (codesOf "(fn classify [] -> Bool (mt 3 (println false)))") "ERR_INVALID_MT_ARM") "a pattern naming a builtin is invalid")
-      (refute (listContains? (codesOf "(fn classify [] -> Bool (mt 3 (n false)))") "ERR_INVALID_MT_ARM") "a fresh name binds")
-      (assert (listContains? (codesOf "(fn ok [(x Int64)] -> Int64 x) (fn f [(r (Result Int64 String))] -> Int64 (mt r ((ok v) v) (_ 0)))") "ERR_INVALID_MT_ARM") "a list pattern headed by a module fn that shadows a case is invalid")
-      (refute (listContains? (codesOf "(fn classify [(o (Option Int64))] -> Int64 (mt o ((some count) count) (none 0)))") "ERR_INVALID_MT_ARM") "a nested binder may reuse any name")
-      (assert (listContains? (messagesWith "(module t :x [] :i [(priv :a p)]) (fn sealed [] -> Int64 1) (fn classify [] -> Bool (mt 3 (sealed false)))" (mapSet (mapEmpty) "/w/priv.asl" (summaryOf "(module priv :x [] :i []) (enum Hidden (:c sealed [] \"s\"))" "/w/priv.asl"))) "ERR_INVALID_MT_ARM mt arm has an invalid pattern head") "a module fn shadows a case of a dependency")
+  (do (assert (listContains? (codesOf "(fn sealed [] -> Int64 1) (fn classify [] -> Bool (match 3 (sealed false)))") "ERR_INVALID_MT_ARM") "a pattern naming a module fn is invalid")
+      (assert (listContains? (codesOf "(fn classify [] -> Bool (match 3 (println false)))") "ERR_INVALID_MT_ARM") "a pattern naming a builtin is invalid")
+      (refute (listContains? (codesOf "(fn classify [] -> Bool (match 3 (n false)))") "ERR_INVALID_MT_ARM") "a fresh name binds")
+      (assert (listContains? (codesOf "(fn ok [(x Int64)] -> Int64 x) (fn f [(r (Result Int64 String))] -> Int64 (match r ((ok v) v) (_ 0)))") "ERR_INVALID_MT_ARM") "a list pattern headed by a module fn that shadows a case is invalid")
+      (refute (listContains? (codesOf "(fn classify [(o (Option Int64))] -> Int64 (match o ((some count) count) (none 0)))") "ERR_INVALID_MT_ARM") "a nested binder may reuse any name")
+      (assert (listContains? (messagesWith "(module t :x [] :i [(priv :a p)]) (fn sealed [] -> Int64 1) (fn classify [] -> Bool (match 3 (sealed false)))" (mapSet (mapEmpty) "/w/priv.asl" (summaryOf "(module priv :x [] :i []) (enum Hidden (:c sealed [] \"s\"))" "/w/priv.asl"))) "ERR_INVALID_MT_ARM mt arm has an invalid pattern head") "a module fn shadows a case of a dependency")
       true)
 
 fn testNilIsUnknown -> Bool

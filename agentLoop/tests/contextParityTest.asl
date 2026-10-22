@@ -4,10 +4,10 @@
       (asl-json/json :a j) (asl-proc/coreProcess :a cp)])
 
 fn head n: p/SexpNode -> String
-  (mt n ((p/sexpList xs) (mt (listHead xs) ((some h) (mt h ((p/sexpAtom a) a) (_ ""))) (none ""))) (_ ""))
+  (match n ((p/sexpList xs) (match (listHead xs) ((some h) (match h ((p/sexpAtom a) a) (_ ""))) (none ""))) (_ ""))
 
 fn toJson n: p/SexpNode -> j/Json
-  (mt n
+  (match n
     ((p/sexpStr s) (j/jstr s))
     ((p/sexpAtom a)
       (cond
@@ -19,7 +19,7 @@ fn toJson n: p/SexpNode -> j/Json
       (let [h (head n)]
         (cond
           ((= h "l") (j/jarr (map toJson (pa/argItems n))))
-          ((= h "d") (j/jobj (map (fn [kv] (let [ps (pa/argItems (p/sexpList (cons (p/sexpAtom "k") (mt kv ((p/sexpList ys) ys) (_ (list))))))]
+          ((= h "d") (j/jobj (map (fn [kv] (let [ps (pa/argItems (p/sexpList (cons (p/sexpAtom "k") (match kv ((p/sexpList ys) ys) (_ (list))))))]
                                                (pair (pa/argStr (pa/argAt ps 0)) (toJson (pa/argAt ps 1)))))
                               (pa/argItems n))))
           ((= h "f") (j/jfloat (floatOf (pa/argStr (pa/argAt (pa/argItems n) 0)))))
@@ -70,7 +70,7 @@ fn sF f: Float64 -> String
   (str "(f \"" (x/floatRepr f) "\")")
 
 fn sJ v: j/Json -> String
-  (mt v
+  (match v
     ((j/jnull) "nil")
     ((j/jbool b) (pa/sBool b))
     ((j/jint i) (pa/sInt i))
@@ -84,33 +84,33 @@ fn sSite s: (Pair String Int64) -> String
   (pa/sList (list (pa/sStr (pairFirst s)) (pa/sInt (pairSecond s))))
 
 fn sReview r: x/Review -> String
-  (mt r
+  (match r
     ((x/reviewError m) (pa/sDict (list (pair "error" (pa/sStr m)))))
     ((x/reviewVerdict met missing) (pa/sDict (list (pair "met" (pa/sBool met)) (pair "missing" (pa/sStrs missing))))))
 
 fn sAdvice a: x/AdviceForm -> String
-  (mt a
+  (match a
     ((x/adviceOf n why avoid)
       (pa/sDict (listAppend (list (pair "next" (pa/sStr n)))
-                  (listAppend (mt why ((some w) (list (pair "why" (pa/sStr w)))) (none (list)))
-                              (mt avoid ((some v) (list (pair "avoid" (pa/sStr v)))) (none (list))))))))
+                  (listAppend (match why ((some w) (list (pair "why" (pa/sStr w)))) (none (list)))
+                              (match avoid ((some v) (list (pair "avoid" (pa/sStr v)))) (none (list))))))))
 
 fn optJStr v: j/Json -> (Option String)
-  (mt v ((j/jstr s) (some s)) (_ none))
+  (match v ((j/jstr s) (some s)) (_ none))
 
 
 fn subRoot s: String root: String -> String
   (stringReplace s "@ROOT@" root)
 
 fn subRootJ v: j/Json root: String -> j/Json
-  (mt v
+  (match v
     ((j/jstr s) (j/jstr (subRoot s root)))
     ((j/jarr xs) (j/jarr (map (fn [y] (subRootJ y root)) xs)))
     ((j/jobj kvs) (j/jobj (map (fn [pr] (pair (pairFirst pr) (subRootJ (pairSecond pr) root))) kvs)))
     (_ v))
 
 fn ! run! root: String bin: String args: (List String) -> Bool
-  (mt (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd bin args) root) 60000))
+  (match (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd bin args) root) 60000))
     ((ok out) (if (= out.exitCode 0) true (do (eprintln (str "setup: " bin " exits " (stringFromInt64 out.exitCode) ": " out.stderr)) false)))
     ((err _) (do (eprintln (str "setup: " bin " does not spawn")) false)))
 
@@ -219,7 +219,7 @@ fn ! dispatchA f: String a: (List p/SexpNode) -> String
     ((= f "vendorBounds")
       (let [t (arg a 0) q (arg a 1)
             miss (fn [n] (if (= (pa/argStr n) "missing") (j/jnull) (toJson n)))]
-        (mt (x/vendorBounds (miss t) (miss q)) ((some b) (pa/sList (list (pa/sInt (pairFirst b)) (pa/sInt (pairSecond b))))) (none "nil"))))
+        (match (x/vendorBounds (miss t) (miss q)) ((some b) (pa/sList (list (pa/sInt (pairFirst b)) (pa/sInt (pairSecond b))))) (none "nil"))))
     ((= f "fitVendorCall")
       (let [bs (pa/argInts (arg a 0))
             bounds (if (listEmpty? bs) none (some (pair (optionOr (listGet bs 0) 0) (optionOr (listGet bs 1) 0))))
@@ -265,7 +265,7 @@ fn ! dispatchA f: String a: (List p/SexpNode) -> String
             r (x/stepState! (subRootJ (aJ a 1) root) (some root) (aJ a 2))]
         (do (dropTree! root) (sJ r))))
     ((= f "spanHolder")
-      (mt (x/spanHolder (aJ a 0) (evidenceOf (arg a 1)) (pa/argInts (arg a 2)))
+      (match (x/spanHolder (aJ a 0) (evidenceOf (arg a 1)) (pa/argInts (arg a 2)))
         ((some r) (pa/sList (list (pa/sInt (pairFirst r)) (pa/sList (list (pa/sInt (pairFirst (pairSecond r))) (pa/sInt (pairSecond (pairSecond r))))))))
         (none "nil")))
     ((= f "seenReceipt") (sJ (x/seenReceipt (aJ a 0) (aJ a 1) "rid000000000")))
@@ -280,9 +280,9 @@ fn ! dispatchB f: String a: (List p/SexpNode) -> String
     ((= f "sitePath") (pa/sStr (x/sitePath (aJ a 0) (aJ a 1))))
     ((= f "possibleSitesOf") (pa/sList (map sSite (x/possibleSitesOf (aJ a 0) (aJ a 1)))))
     ((= f "readCovers")
-      (mt (x/readCovers (aJ a 0) (aJ a 1) (aJ a 2))
-        ((some cv) (mt cv ((x/coverOf path first last)
-                            (pa/sList (list (pa/sStr path) (pa/sInt first) (mt last ((some l) (pa/sInt l)) (none "(f \"inf\")")))))))
+      (match (x/readCovers (aJ a 0) (aJ a 1) (aJ a 2))
+        ((some cv) (match cv ((x/coverOf path first last)
+                            (pa/sList (list (pa/sStr path) (pa/sInt first) (match last ((some l) (pa/sInt l)) (none "(f \"inf\")")))))))
         (none "nil")))
     ((= f "siteNamed") (pa/sBool (x/siteNamed (siteOf (arg a 0)) (aS a 1))))
     ((= f "openPossible")
@@ -307,9 +307,9 @@ fn ! dispatchB f: String a: (List p/SexpNode) -> String
     ((= f "specCheckDiff")
       (let [root (buildTree! (arg a 0))
             r (x/specCheckDiff! root (aOS a 1) (map (fn [w] (subRoot w root)) (aSs a 2)))]
-        (do (dropTree! root) (mt r ((ok d) (pa/sStr d)) ((err e) (str "tool error: " e))))))
+        (do (dropTree! root) (match r ((ok d) (pa/sStr d)) ((err e) (str "tool error: " e))))))
     ((= f "parseSpecVerdict")
-      (mt (x/parseSpecVerdict (optJStr (aJ a 0)))
+      (match (x/parseSpecVerdict (optJStr (aJ a 0)))
         ((some v) (pa/sDict (list (pair "met" (pa/sBool (pairFirst v))) (pair "missing" (pa/sStrs (pairSecond v))))))
         (none "nil")))
     ((= f "digestLine") (pa/sStr (x/digestLine (aJ a 0))))
@@ -324,7 +324,7 @@ fn ! dispatchB f: String a: (List p/SexpNode) -> String
       (let [root (buildTree! (arg a 0))
             lg (if (pa/argNil? (arg a 8)) (j/jobj (list)) (objOf (arg a 8)))
             r (x/runSpecCheck! (fakeAsk (aS a 1)) (aOS a 2) root (aOS a 3) (map (fn [w] (subRoot w root)) (aSs a 4)) (aSs a 5) (aJs a 6) (aSs a 7) lg)]
-        (do (dropTree! root) (mt r ((ok v) (sReview v)) ((err e) (str "tool error: " e))))))
+        (do (dropTree! root) (match r ((ok v) (sReview v)) ((err e) (str "tool error: " e))))))
     ((= f "askReviewer") (sReview (x/askReviewer! (fakeAsk (aS a 0)) (aS a 1) (aS a 2))))
     ((= f "runFindingsCheck") (sReview (x/runFindingsCheck! (fakeAsk (aS a 0)) (aOS a 1) (aSs a 2) (aJs a 3))))
     ((= f "advisorSkip") (pa/sStr (x/advisorSkip (aOS a 0) (intPairs (arg a 1)) (aI a 2))))
@@ -332,16 +332,16 @@ fn ! dispatchB f: String a: (List p/SexpNode) -> String
     ((= f "advisorOpLine") (pa/sStr (x/advisorOpLine (aJ a 0))))
     ((= f "advisorSummary")
       (pa/sStr (x/advisorSummary (aOS a 0) (aOS a 1) (aOS a 2) (aSs a 3) (lastGatesTurn (arg a 4)) (aSs a 5) (aJs a 6) (aOS a 7))))
-    ((= f "parseAdvice") (mt (x/parseAdvice (optJStr (aJ a 0))) ((some v) (sAdvice v)) (none "nil")))
+    ((= f "parseAdvice") (match (x/parseAdvice (optJStr (aJ a 0))) ((some v) (sAdvice v)) (none "nil")))
     ((= f "askAdvisor")
-      (mt (x/askAdvisor! (fakeAdvise (aS a 0)) (aS a 1))
+      (match (x/askAdvisor! (fakeAdvise (aS a 0)) (aS a 1))
         ((x/advisorSkipped w) (pa/sDict (list (pair "skip" (pa/sStr w)))))
         ((x/advisorError m) (pa/sDict (list (pair "error" (pa/sStr m)))))
         ((x/advisorAdvice v) (sAdvice v))))
     ((= f "adviceNotice")
       (let [d (aJ a 0)]
         (pa/sStr (x/adviceNotice (x/adviceOf (x/pyStr (x/jgetOr d "next")) (optJStr (x/jgetOr d "why")) (optJStr (x/jgetOr d "avoid")))))))
-    ((= f "emitProgress") (pa/sStr (mt (x/progressLine (aJ a 0)) ((some l) (str l "\n")) (none ""))))
+    ((= f "emitProgress") (pa/sStr (match (x/progressLine (aJ a 0)) ((some l) (str l "\n")) (none ""))))
     (else (str "(unknown fn " f ")")))
 
 fn portedFns -> (List String)

@@ -21,10 +21,10 @@ fn makeImpactReceipt symbol: Str callers: (List Str) callersCount: Int64 tests: 
   (ImpactReceipt :symbol symbol :callers callers :callersCount callersCount :tests tests :testsCount testsCount :types types :status status)
 
 fn findEdgesByTarget edges: (List HyperEdge) targetStr: Str relationFilter: (Option Str) -> (List HyperEdge)
-  (fold (fn [(acc (List HyperEdge)) (edge HyperEdge)] -> (List HyperEdge) (if (and (= edge.target targetStr) (mt relationFilter ((some rel) (= edge.relation rel)) ((none) true))) (listAppend acc (list edge)) (let [(cleanTarget (fold (fn [(acc Str) (s Str)] -> Str s) targetStr (stringSplit targetStr ":")))] (if (and (or (= edge.target cleanTarget) (stringEndsWith? edge.target (str ":" cleanTarget))) (mt relationFilter ((some rel) (= edge.relation rel)) ((none) true))) (listAppend acc (list edge)) acc)))) (list) edges)
+  (fold (fn [(acc (List HyperEdge)) (edge HyperEdge)] -> (List HyperEdge) (if (and (= edge.target targetStr) (match relationFilter ((some rel) (= edge.relation rel)) ((none) true))) (listAppend acc (list edge)) (let [(cleanTarget (fold (fn [(acc Str) (s Str)] -> Str s) targetStr (stringSplit targetStr ":")))] (if (and (or (= edge.target cleanTarget) (stringEndsWith? edge.target (str ":" cleanTarget))) (match relationFilter ((some rel) (= edge.relation rel)) ((none) true))) (listAppend acc (list edge)) acc)))) (list) edges)
 
 fn findEdgesBySource edges: (List HyperEdge) sourceStr: Str relationFilter: (Option Str) -> (List HyperEdge)
-  (fold (fn [(acc (List HyperEdge)) (edge HyperEdge)] -> (List HyperEdge) (if (and (= edge.source sourceStr) (mt relationFilter ((some rel) (= edge.relation rel)) ((none) true))) (listAppend acc (list edge)) acc)) (list) edges)
+  (fold (fn [(acc (List HyperEdge)) (edge HyperEdge)] -> (List HyperEdge) (if (and (= edge.source sourceStr) (match relationFilter ((some rel) (= edge.relation rel)) ((none) true))) (listAppend acc (list edge)) acc)) (list) edges)
 
 fn findNodeById nodes: (List HyperNode) targetId: Str -> (Option HyperNode)
-  (fold (fn [(acc (Option HyperNode)) (node HyperNode)] -> (Option HyperNode) (mt acc ((some n) (some n)) ((none) (if (or (= node.id targetId) (= node.symbol targetId) (stringEndsWith? node.id (str ":" targetId))) (some node) (none))))) (none) nodes)
+  (fold (fn [(acc (Option HyperNode)) (node HyperNode)] -> (Option HyperNode) (match acc ((some n) (some n)) ((none) (if (or (= node.id targetId) (= node.symbol targetId) (stringEndsWith? node.id (str ":" targetId))) (some node) (none))))) (none) nodes)

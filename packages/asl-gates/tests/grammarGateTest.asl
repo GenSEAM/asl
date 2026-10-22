@@ -13,7 +13,7 @@ fn testRegistered -> Bool
   (let [(e1 (gg/makeSymbolEntry "foo" (gg/symFn) 1 false "")) (e2 (gg/makeSymbolEntry "bar" (gg/symType) 1 false "")) (reg (list e1 e2))] (do (assert (gg/isRegistered? "foo" reg) "foo registered") (assert (gg/isRegistered? "bar" reg) "bar registered") (assert (not (gg/isRegistered? "baz" reg)) "baz not registered") true))
 
 fn testGetSymbol -> Bool
-  (let [(e1 (gg/makeSymbolEntry "foo" (gg/symFn) 1 false "")) (reg (list e1)) (found (gg/getRegisteredSymbol "foo" reg)) (notFound (gg/getRegisteredSymbol "missing" reg))] (do (mt found ((some s) (assert (= s.name "foo") "found name")) ((none) (assert false "foo should be found"))) (mt notFound ((some _) (assert false "missing should not be found")) ((none) true)) true))
+  (let [(e1 (gg/makeSymbolEntry "foo" (gg/symFn) 1 false "")) (reg (list e1)) (found (gg/getRegisteredSymbol "foo" reg)) (notFound (gg/getRegisteredSymbol "missing" reg))] (do (match found ((some s) (assert (= s.name "foo") "found name")) ((none) (assert false "foo should be found"))) (match notFound ((some _) (assert false "missing should not be found")) ((none) true)) true))
 
 fn runTests -> Bool
   (do (assert (testMakeEntry) "testMakeEntry") (assert (testCountKebab) "testCountKebab") (assert (testAuditDensity) "testAuditDensity") (assert (testRegistered) "testRegistered") (assert (testGetSymbol) "testGetSymbol") true)

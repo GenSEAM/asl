@@ -24,6 +24,6 @@ fn runSuite! cache: cc/Cache suite: String files: (List String) -> Bool
 fn ! runTests -> Bool
   (let [(cache (cc/cacheFromEnv!))
         (suites (words (optionOr (envGet "CORPUS_CACHE_PROBE_SUITES") "layoutCorpus printReparse liftLower")))]
-    (mt (envGet "CORPUS_CACHE_PROBE_FILES")
+    (match (envGet "CORPUS_CACHE_PROBE_FILES")
       ((none) (do (assert false "CORPUS_CACHE_PROBE_FILES is set") false))
       ((some v) (fold (fn [(acc Bool) (s String)] -> Bool (and (runSuite! cache s (words v)) acc)) true suites))))

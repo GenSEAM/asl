@@ -23,8 +23,8 @@ fn ! cacheDir! workspace: String kw: (Map String String) -> String
       (else (str workspace "/.asl/cache/nativeTest"))))
 
 fn ! runBinary! id: Int64 bin: String workspace: String timeout: Int64 -> (Pair String Int64)
-  (mt (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd bin (list)) workspace) timeout))
-    ((err failure) (mt failure
+  (match (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd bin (list)) workspace) timeout))
+    ((err failure) (match failure
       ((cp/timeout ms) (pair (outputLine id "error" (str " :error :ERR_TIMEOUT :timeoutMs " (stringFromInt64 ms))) 0))
       (_ (pair (outputLine id "error" " :error :ERR_PROCESS") 1))))
     ((ok out)
@@ -33,9 +33,9 @@ fn ! runBinary! id: Int64 bin: String workspace: String timeout: Int64 -> (Pair 
         (pair (outputLine id "error" (str " :error :ERR_EVAL :stdout " (quoted out.stdout) " :stderr " (quoted out.stderr) " :exit " (stringFromInt64 out.exitCode))) 0))))
 
 fn ! written! path: String src: String -> String
-  (mt (dirCreate (k/dirName path))
+  (match (dirCreate (k/dirName path))
     ((err e) e)
-    ((ok _) (mt (fileWrite path src) ((err e) e) ((ok _) ""))))
+    ((ok _) (match (fileWrite path src) ((err e) e) ((ok _) ""))))
 
 fn absolute workspace: String path: String -> String
   (if (stringStartsWith? path "/") path (k/joinPath workspace path))
@@ -45,7 +45,7 @@ fn sourcePath workspace: String kind: String src: String -> String
 
 fn ! built! workspace: String cDir: String path: String -> (Result String String)
   (let [(b (nt/prepareIn cDir path (nt/fingerprint) "eval"))]
-    (mt b.binary ((some bin) (ok (absolute workspace bin))) ((none) (err b.reason))))
+    (match b.binary ((some bin) (ok (absolute workspace bin))) ((none) (err b.reason))))
 
 fn ! compileAndRun! id: Int64 workspace: String cDir: String code: String timeout: Int64 -> (Pair String Int64)
   (let [(src (evalSource code))
@@ -53,7 +53,7 @@ fn ! compileAndRun! id: Int64 workspace: String cDir: String code: String timeou
         (made (written! path src))]
     (if (not (stringEmpty? made))
       (pair (outputLine id "error" (str " :error :ERR_TEMP :message " (quoted (str path " " made)))) 1)
-      (mt (built! workspace cDir path)
+      (match (built! workspace cDir path)
         ((err reason) (pair (outputLine id "error" (str " :error :ERR_EVAL :stderr " (quoted reason) " :exit 1")) 1))
         ((ok bin) (runBinary! id bin workspace timeout)))))
 
@@ -76,6 +76,6 @@ fn ! nativeEntry! workspace: String importPath: String intMain: Bool -> (Result 
         (made (written! path src))]
     (if (not (stringEmpty? made))
       (err (str "cannot write " path ": " made))
-      (mt (built! workspace (cacheDir! workspace (mapEmpty)) path)
+      (match (built! workspace (cacheDir! workspace (mapEmpty)) path)
         ((ok bin) (ok bin))
         ((err reason) (err (str importPath " does not build natively: " reason))))))

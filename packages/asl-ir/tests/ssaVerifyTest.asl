@@ -32,7 +32,7 @@ fn moduleOf functions: (List ty/SsaFunction) -> ty/SsaModule
   (ty/ssaModule "fixture" (list "hello" "line\n\"quoted\" \\") (list (shapeType)) (list (ty/ssaRecordDecl "Point" (list "x" "y"))) (list (ty/ssaExtern "net/fetch" 2)) (list) functions)
 
 fn codes res: (Result Unit (List ty/IrDiag)) -> (List String)
-  (mt res ((ok _) (list)) ((err diags) (map (fn [(d ty/IrDiag)] -> String d.code) diags)))
+  (match res ((ok _) (list)) ((err diags) (map (fn [(d ty/IrDiag)] -> String d.code) diags)))
 
 fn onlyCode res: (Result Unit (List ty/IrDiag)) code: String -> Bool
   (= (codes res) (list code))
