@@ -150,6 +150,26 @@ fn ! testRunnerRecords! dir: String -> Bool
       (assert (= orderAfterCorrupt observedOrder) (str "a corrupt ledger stops the runner before any suite starts: " orderAfterCorrupt))
       true))
 
+; (:m :ref GATETIMES-STALE-ROWS-20261022 :do "writeTimesIn! over a fixture tree: the row of a deleted suite is dropped, the row of a live suite this run did not report is kept, a reported row is overwritten, and writeTimes! still keeps every row")
+fn ! testPruneStaleRows! dir: String -> Bool
+  (let [(tree (str dir "/tree"))
+        (made (dirCreate tree))
+        (live (fileWrite (str tree "/liveTest.asl") "x"))
+        (other (fileWrite (str tree "/otherTest.asl") "x"))
+        (path (str dir "/pruned/gateTimes.asn"))
+        (seeded (st/writeTimes! path (list (st/SuiteTime :suite "liveTest.asl" :ms 10) (st/SuiteTime :suite "otherTest.asl" :ms 20) (st/SuiteTime :suite "deletedTest.asl" :ms 30))))
+        (plain (st/readTimes! path))
+        (pruned (st/writeTimesIn! path (list (st/SuiteTime :suite "liveTest.asl" :ms 11)) tree))
+        (after (st/readTimes! path))]
+    (do
+      (assert (and (ok? made) (and (ok? live) (and (ok? other) (ok? seeded)))) "fixture tree and ledger seeded")
+      (assert (= (msOf plain "deletedTest.asl") 30) "writeTimes! keeps the row of a suite whose file is absent")
+      (assert (ok? pruned) "pruning write succeeds")
+      (assert (= (msOf after "deletedTest.asl") -1) "the row of a deleted suite is dropped")
+      (assert (= (msOf after "otherTest.asl") 20) "the row of a live suite this run did not report is kept")
+      (assert (= (msOf after "liveTest.asl") 11) "a reported live suite is overwritten")
+      true))
+
 fn ! runTests -> Bool
   (let [(dir (optionOr (match (sr/makeTempDir! "aslSuiteTimesTest") ((ok d) (some d)) ((err _) (none))) ""))]
     (do
@@ -159,5 +179,6 @@ fn ! runTests -> Bool
       (assert (testStartOrder) "start order from the ledger")
       (assert (testLongestFirst! dir) "longest known job starts first")
       (assert (testRunnerRecords! dir) "runner records per-suite times")
+      (assert (testPruneStaleRows! dir) "train's write drops rows of deleted suites and keeps unselected live ones")
       (assert (ok? (pathRemove dir)) "scratch directory removed")
       true))

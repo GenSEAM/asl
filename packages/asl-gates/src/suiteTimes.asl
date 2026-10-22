@@ -1,5 +1,5 @@
 (module asl-gates/suiteTimes
-  :x [SuiteTime timesPath! parseTimes renderTimes readTimes! writeTimes! mergeTimes startOrder]
+  :x [SuiteTime timesPath! parseTimes renderTimes readTimes! writeTimes! writeTimesIn! mergeTimes startOrder]
   :i [])
 
 (schema SuiteTime
@@ -97,20 +97,28 @@ fn parentDir p: String -> String
       ((and (= n 2) (stringStartsWith? p "/")) "/")
       (else (stringJoin (listTake parts (- n 1)) "/"))))
 
-fn ! writeTimes! path: String rows: (List SuiteTime) -> (Result Unit String)
+; (:m :ref GATETIMES-STALE-ROWS-20261022 :do "writeTimesIn! writes the ledger like writeTimes! but drops every row whose suite file no longer exists under root, so a deleted suite stops ranking as known-heavy in startOrder; rows of suites the run did not select stay, they are only judged by whether their file exists")
+fn ! writeWith! path: String rows: (List SuiteTime) keep: (fn [String] -> Bool) -> (Result Unit String)
   (match (readTimes! path)
     ((err e) (err e))
     ((ok old)
-     (let [(tmp (str path ".tmp." (stringFromInt64 (procSelf))))]
+     (let [(tmp (str path ".tmp." (stringFromInt64 (procSelf))))
+           (merged (mapFromPairs (filter (fn [(p (Pair String Int64))] -> Bool (keep (pairFirst p))) (mapPairs (mergeTimes old rows)))))]
        (match (dirCreate (parentDir path))
          ((err e) (err (str "gateTimes " (parentDir path) ": " e)))
          ((ok _)
-          (match (fileWrite tmp (renderTimes (mergeTimes old rows)))
+          (match (fileWrite tmp (renderTimes merged))
             ((err e) (err (str "gateTimes " tmp ": " e)))
             ((ok _)
              (match (pathRename tmp path)
                ((ok _) (ok ()))
                ((err e) (do (pathRemove tmp) (err (str "gateTimes rename " tmp ": " e))))))))))))
+
+fn ! writeTimes! path: String rows: (List SuiteTime) -> (Result Unit String)
+  (writeWith! path rows (fn [(s String)] -> Bool true))
+
+fn ! writeTimesIn! path: String rows: (List SuiteTime) root: String -> (Result Unit String)
+  (writeWith! path rows (fn [(s String)] -> Bool (fileExists? (str root "/" s))))
 
 fn padLeft s: String width: Int64 -> String
   (if (>= (stringLength s) width) s (padLeft (str "0" s) width))
