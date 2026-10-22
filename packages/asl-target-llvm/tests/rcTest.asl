@@ -185,7 +185,9 @@ fn finishRouted? out: String -> Bool
 fn ! testFinishText -> Bool
   (let [(plain (rc/rcFinishTextWith (finishSample false "") false true))
         (rooted (rc/rcFinishTextWith (finishSample true "") false true))
-        (inPlace (rc/rcFinishTextWith (finishSample true "define internal void @late() {\nentry:\n  ret void\n}\n") false true))]
+        (inPlace (rc/rcFinishTextWith (finishSample true "define internal void @late() {\nentry:\n  ret void\n}\n") false true))
+        (literal (rc/rcFinishTextWith (str "@str.1 = private unnamed_addr constant [34 x i8] c\"call tailcc %Val @aslRc.arenaRun(\\00\"\n" (finishSample false "")) false true))
+        (calling (rc/rcFinishTextWith (finishSample false "define internal tailcc %Val @user(%Val %f) {\nentry:\n  %r = call tailcc %Val @prelude$2EarenaRun(%Val %f)\n  ret %Val %r\n}\n") false true))]
     (do (assert (finishRouted? plain) (str "classes 2 and 12 and cons cells are routed with their definitions: " plain))
         (assert (stringContains? plain "  %a = call ptr @gcAsl.allocFast.0(i32 1, i64 16)\n") "class 0 stays on the GC allocator without the rooted runtime")
         (refute (stringContains? plain "declare tailcc i64 @aslRcDup(%Val)") "the RC declare leaves the declare block")
@@ -197,6 +199,8 @@ fn ! testFinishText -> Bool
         (assert (stringContains? inPlace "  %a = call ptr @aslRc.allocFast.0(i32 1, i64 16)\n") "and sees the rooted runtime through the declares in place")
         (refute (stringContains? inPlace "declare tailcc i64 @aslRcDup(%Val)") "and removes the RC declare in place")
         (assert (stringContains? inPlace "define internal void @late() {") "the define after the declares is kept")
+        (refute (stringContains? literal "@aslRc.arenaCur") "a module holding the arenaRun call text only as string data, as the compiler does, gets no region runtime")
+        (assert (stringContains? calling "@aslRc.arenaCur = internal global ptr null") "a module calling arenaRun gets the region runtime")
         true))
 
 fn ! testRejectsUnknownMode -> Bool

@@ -1415,7 +1415,7 @@ fn runtimeTextWith text: String asan: Bool notrace: Bool -> String
 
 fn runtimeTextIn text: String section: String asan: Bool notrace: Bool -> String
   (let [(rooted (rootedRuntime? section))
-        (uses (stringContains? text (arenaRunCall))) (active (and uses notrace))]
+        (uses (arenaCalled? text)) (active (and uses notrace))]
     (liveChecked asan (lines (listAppend
            (list (str "@aslRc.free = internal global [" (classes) " x %Val] zeroinitializer, align 16")
                  (str "@aslRc.rooted = internal global [" (classes) " x i8] zeroinitializer")
@@ -1701,6 +1701,10 @@ fn arenaCallText -> String
 
 fn arenaRunCall -> String
   "call tailcc %Val @aslRc.arenaRun("
+
+; (:m :ref RC-ARENA-MUSTTAIL :do "a module uses the region runtime only when it calls it: a call instruction assigns its result, so a string constant holding the call text, as in this compiler's own string table, does not count")
+fn arenaCalled? text: String -> Bool
+  (or (stringContains? text (str "= " (arenaRunCall))) (stringContains? text (str "= musttail " (arenaRunCall))))
 
 ; (:m :ref RC-LIST-RELINK :do "under untraced RC a listAppend call goes to aslRc.appendOwned, which owns both lists as listAppend does: it walks the unique leading cells of the left list and, when they reach its end, links the right list to the last cell in place with no copy; from the first shared cell on (count above zero, stuck or arena cells included) it hands that suffix to the copying listAppend and links the copy in; the callee and call texts are spliced at run time so an RC-built compiler still finds the calls in its own text; the entry is not internal, since musttail callers need its tailcc kept and LLVM turns internal functions to fastcc")
 fn appendCallee -> String
