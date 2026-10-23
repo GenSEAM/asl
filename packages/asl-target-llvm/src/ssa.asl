@@ -1,5 +1,5 @@
 (module asl-target-llvm/ssa
-  :x [emitLlvmModule emitLlvmProgram ownedEntryName emitLlvmModuleWasm32 emitLlvmProgramWasm32 trapLowering llvmName llvmBytes llvmFloat runtimeDecls cDeclFits? overwideCDecls cRuntimeModule ModEnv FnEnv NameIndex nameIndexSet tailCall? linkInits definesInit? ensureInit listBuilder?]
+  :x [emitLlvmModule emitLlvmProgram ownedEntryName emitLlvmModuleWasm32 emitLlvmProgramWasm32 trapLowering llvmName llvmBytes llvmFloat runtimeDecls cDeclFits? overwideCDecls cRuntimeModule ModEnv FnEnv NameIndex nameIndexSet tailCall? pinMusttailCallees linkInits definesInit? ensureInit listBuilder?]
 
   :i [(asl-ir/types :a ty)
       (asl-ir/verify :a vfy)
@@ -1759,6 +1759,36 @@ fn tailSpan env: FnEnv b: ty/SsaBlock -> Int64
 
 fn tailCall? env: FnEnv b: ty/SsaBlock -> Bool
   (> (tailSpan env b) 0)
+
+fn musttailCallee line: String -> (Option String)
+  (match (listGet (stringSplit line "musttail call ") 1)
+    ((none) (none))
+    ((some rest) (let [(parts (stringSplit rest " @"))]
+                   (match (listGet parts 1)
+                     ((some sym) (if (stringContains? (optionOr (listHead parts) "") "(") (none) (listHead (stringSplit sym "("))))
+                     ((none) (none))))))
+
+fn internalDefineSymbol line: String -> (Option String)
+  (if (stringStartsWith? line "define internal ")
+    (match (listGet (stringSplit line " @") 1) ((none) (none)) ((some rest) (listHead (stringSplit rest "("))))
+    (none))
+
+; (:m :ref LLVM-TAILCALL-UNSUPPORTED-20261022 :do "Apple clang 17 DeadArgumentElimination rewrites the return type of an internal function whose callers use only part of its Val, ignoring that another caller reaches it by musttail; the musttail site then returns through a conversion and the backend aborts. A use in @llvm.compiler.used makes the function address-taken, which keeps DAE off it, while it stays internal for the linker")
+fn pinMusttailCallees text: String -> String
+  (if (not (stringContains? text "musttail call "))
+    text
+    (let [(lines (stringSplit text "\n"))
+          (targets (fold (fn [(acc (Map String Bool)) (line String)] -> (Map String Bool)
+                           (match (musttailCallee line) ((some s) (mapSet acc s true)) ((none) acc)))
+                         (mapEmpty) lines))
+          (pinned (fold (fn [(acc (List String)) (line String)] -> (List String)
+                          (match (internalDefineSymbol line)
+                            ((some s) (if (mapHas? targets s) (cons (str "ptr @" s) acc) acc))
+                            ((none) acc)))
+                        (list) lines))]
+      (if (listEmpty? pinned)
+        text
+        (str text "\n@llvm.compiler.used = appending global [" (listLength pinned) " x ptr] [" (stringJoin (listReverse pinned) ", ") "], section \"llvm.metadata\"\n"))))
 
 fn closureTailArgs dest: String args: (List String) -> String
   (stringJoin (map (fn [(i Int64)] -> String

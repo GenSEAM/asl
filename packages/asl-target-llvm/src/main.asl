@@ -103,7 +103,9 @@ fn thenPar routed: (Result rt/Routed (List irTy/IrDiag)) par: (fn [irTy/SsaModul
 fn emitRouted routed: (Result rt/Routed (List irTy/IrDiag)) emit: (fn [irTy/SsaModule] -> (Result String (List irTy/IrDiag))) -> (Result String (List irTy/IrDiag))
   (match routed
     ((err diags) (err diags))
-    ((ok r) (rt/internalize (ar/finishText (ar/routedNames? r.internal) (pr/finishText (pr/routedNames? r.internal) (emit r.result))) r.internal)))
+    ((ok r) (match (rt/internalize (ar/finishText (ar/routedNames? r.internal) (pr/finishText (pr/routedNames? r.internal) (emit r.result))) r.internal)
+              ((err diags) (err diags))
+              ((ok text) (ok (ssa/pinMusttailCallees text))))))
 
 fn runtimeDecls -> (List String)
   (ssa/runtimeDecls)
