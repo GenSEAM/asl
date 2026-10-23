@@ -8,7 +8,7 @@ fn ! fixtureRoot! -> String
   (str "/tmp/aslOutsidePkgClosureTest_" (stringFromInt64 (monotonicNs)))
 
 fn ! configSource -> String
-  "(:asl-config :workspace \"outsidepkgclosurefixture\")\n"
+  "(:asl-config :workspace \"outsidepkgclosurefixture\"\n  :testData (\"data/ignored\"))\n"
 
 fn ! aSource -> String
   (str
@@ -39,6 +39,10 @@ fn ! testSource -> String
     "    (assert (= (oa/valueA) 7) \"direct sibling import resolves\")\n"
     "    (assert (= (ob/valueB) 35) \"transitive sibling import resolves\")\n"
     "    (assert (= (resultOr (fileReadString \"outsidepkgclosurefixture/data/rows.txt\") \"\") \"42\\n\") \"a data file of the package opens by its workspace-qualified path\")\n"
+    "    (assert (stringContains? (resultOr (fileReadString \"outsidepkgclosurefixture/a.asl\") \"\") \"valueA\") \"a .asl source of the package opens as text by its workspace-qualified path\")\n"
+    "    (assert (= (resultOr (fileReadString \"outsidepkgclosurefixture/data/ignored/big.txt\") \"\") \"9\\n\") \"a git-ignored data directory the package declares in :testData opens by its workspace-qualified path\")\n"
+    "    (assert (= (resultOr (fileReadString \"data/ignored/big.txt\") \"\") \"9\\n\") \"a git-ignored declared data file opens relative to the package root\")\n"
+    "    (assert (stringContains? (resultOr (fileReadString \"a.asl\") \"\") \"valueA\") \"a .asl source of the package opens as text relative to the package root\")\n"
     "    true)\n")
 
 fn ! writeFile! path: String content: String -> (Result Unit String)
@@ -55,6 +59,10 @@ fn ! buildFixture! root: String -> (Result String String)
               (testPath (str root "/theTest.asl"))
               (dataDir (dirCreate (str root "/data")))
               (wData (writeFile! (str root "/data/rows.txt") "42\n"))
+              (ignDir (dirCreate (str root "/data/ignored")))
+              (wIgn (writeFile! (str root "/data/ignored/big.txt") "9\n"))
+              (wGitIgnore (writeFile! (str root "/.gitignore") "data/ignored/\n"))
+              (gitInit (fr/runOneLimited (fr/job (list "git" "init" "-q") root (fr/childEnv (list))) (fr/limits 60 8)))
               (wTest (writeFile! testPath (testSource)))]
           (match wCfg
             ((err e) (err (str "cannot write .asl.config.asn: " e)))
@@ -67,7 +75,7 @@ fn ! buildFixture! root: String -> (Result String String)
                     ((ok _)
                       (match wTest
                         ((err e) (err (str "cannot write theTest.asl: " e)))
-                        ((ok _) (ok testPath)))))))))))))
+                        ((ok _) (if (= gitInit.exit 0) (ok testPath) (err (str "git init failed: " gitInit.out)))))))))))))))
 
 fn ! repoRoot! -> String
   (resultOr (realPath ".") ".")
