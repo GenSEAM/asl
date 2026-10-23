@@ -108,7 +108,17 @@ fn ! runCase name: String -> Bool
                 (assert (= native.stdout "15") "map fixture prints its computed update/missing-key result")
                 (assert (= native.exitCode 15) "map fixture native exit is 15")
                 true)
-              true)))))))
+              (if (= name "mulWide")
+                (do
+                  (assert (= native.stdout "9223372030926249001,-9223372030926249001,9223372032559808512,-9223372032559808512,9223372036854775807,-9223372036854775808") (str "mulWide prints the exact wide products: " native.stdout))
+                  (assert (= native.exitCode 7) "mulWide native exit is 7")
+                  true)
+                (if (= name "mulTrap")
+                  (do
+                    (assert (not (= native.exitCode 0)) "mulTrap traps natively on Int64 multiply overflow")
+                    (assert (not (= native.exitCode 2)) "mulTrap traps before returning 2")
+                    true)
+                  true)))))))))
 
 fn ! missingCollectorRejected work: String -> Bool
   (let [(programLl (str work "/missing-collector.ll"))
@@ -150,4 +160,6 @@ fn ! runTests -> Bool
       (assert (runCase "map") "map compares wasm to native, including status 15")
       (assert (runCase "gcLoop") "GC-heavy loop compares wasm to native")
       (assert (runCase "trap") "trap compares wasm to native nonzero status")
+      (assert (runCase "mulWide") "Int64 multiplies at the boundary compare wasm to native, through __multi3")
+      (assert (runCase "mulTrap") "Int64 multiply overflow traps on wasm as on native")
       true))
