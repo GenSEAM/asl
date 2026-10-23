@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [runTests main failLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey prepare prepareIn prepareTestSource prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [runTests main failLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey prepare prepareIn prepareTestSource prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -91,7 +91,7 @@ fn withEnvStripped! names: (List String) -> (List String)
           (envList))
 
 fn format -> String
-  "nativeTest/6;compile=-O2,-Wno-override-module,-c;link=-O2,-lm"
+  "nativeTest/7;compile=-O2,-Wno-override-module,-c;link=-O2,-lm"
 
 ; (:m :ref NATIVE-CHDIR :do "the root is explicit: the CLI process bin/asl started (ASL_CLI_ENTRY_PID is this pid) uses ASL_CLI_ROOT, the tree that bin/asl belongs to, whatever its cwd; any other process keeps a toolchain cwd, then ASL_CLI_ROOT, then ASL_ROOT; the native CLI no longer chdirs to the root before calling in")
 fn ! toolchainRoot? dir: String -> Bool
@@ -398,7 +398,7 @@ fn manifestEntry stamped: Bool line: String -> (Option (List String))
 
 fn manifestEntries text: String -> (List (Option (List String)))
   (let [(header (optionOr (listHead (stringLines text)) ""))
-        (stamped (or (stringStartsWith? header "nativeTest/5") (stringStartsWith? header "nativeTest/6")))]
+        (stamped (or (stringStartsWith? header "nativeTest/5") (or (stringStartsWith? header "nativeTest/6") (stringStartsWith? header "nativeTest/7"))))]
     (map (fn [(l String)] -> (Option (List String)) (manifestEntry stamped l))
          (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (optionOr (listTail (stringLines text)) (list)))))
 
@@ -534,6 +534,11 @@ fn ! storeFallback slot: String deps: (List String) reason: String t: (List Int6
           ((ok _) ()))
         (Built :binary (none) :reason reason :cache "miss" :recompiled (list) :reused (list)
                :depsMs (optionOr (listGet t 0) 0) :asl1Ms (optionOr (listGet t 1) 0) :clangMs (optionOr (listGet t 2) 0))))
+
+; (:m :ref NATIVETEST-CACHE-KEY-IMPORTS-20261022 :do "a closure-load failure names a module the manifest never lists (only the suite file is recorded), so a cached verdict could not notice an edit to an imported module and kept serving the failure; loading is a parse-only step, so the failure is reported without being stored")
+fn uncachedFailure reason: String t: (List Int64) -> Built
+  (Built :binary (none) :reason reason :cache "miss" :recompiled (list) :reused (list)
+         :depsMs (optionOr (listGet t 0) 0) :asl1Ms (optionOr (listGet t 1) 0) :clangMs (optionOr (listGet t 2) 0))
 
 (schema ModCompileResult
   (:f path String)
@@ -1316,7 +1321,7 @@ fn ! compileWhole! cDir: String path: String src: String slot: String key: Strin
             ((err e2) (unbuilt (str "cannot write " wrapper ": " e2)))
             ((ok _)
              (match (lk/loadClosure! wrapper)
-               ((err ds) (storeFallback slot (list path) (loadFailure ds) (list)))
+               ((err ds) (uncachedFailure (loadFailure ds) (list)))
                ((ok units)
                 (let [(deps (closureDeps units key))]
                   (match (lk/linkEntry! wrapper)
@@ -1376,7 +1381,7 @@ fn ! compileSeparate! cDir: String path: String src: String slot: String key: St
                       (pRes (lk/loadClosure! (toolPath (lk/preludePath))))
                       (t1 (monotonicNs))]
                   (match uRes
-                    ((err ds) (storeFallback slot (list path) (loadFailure ds) (list (ms (- t1 t0)) 0 0)))
+                    ((err ds) (uncachedFailure (loadFailure ds) (list (ms (- t1 t0)) 0 0)))
                     ((ok units)
                      (match pRes
                        ((err pds) (do (awaitUnitWorkers! plan.procs t0) (storeFallback slot (list path) (str "prelude load failed: " (stringJoin (map (fn [(d irTy/IrDiag)] -> String d.message) pds) "; ")) (list (ms (- t1 t0)) 0 0))))

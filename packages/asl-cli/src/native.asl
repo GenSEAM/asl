@@ -1,6 +1,6 @@
 (module asl-cli/native
   :x [main]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/command :a cmd) (asl-tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/command :a cmd) (asl-tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl-checker/resolve :a ckr) (asl-tools/agentSurfaceAudit :a tsa)])
 
 fn rest args: (List String) -> (List String)
   (optionOr (listTail args) (list))
@@ -29,13 +29,16 @@ fn ! nativeTool! args: (List String) -> Int64
 fn ! outsideStageDir ctx: sys/Context -> String
   (str ctx.root "/.asl/cache/nativeTest/outside")
 
+fn ! outsidePkgStageDir ctx: sys/Context -> String
+  (str ctx.root "/.asl/cache/nativeTest/outsidePkg")
+
 fn ! outsideRelPath digest: String -> String
   (str ".asl/cache/nativeTest/outside/" digest ".asl")
 
 fn ! ensureDir! dir: String -> (Result Unit String)
   (if (sys/isDir? dir) (ok ()) (dirCreate dir))
 
-fn ! stageOutside! ctx: sys/Context absFile: String -> (Result String String)
+fn ! stageOutsideSingle! ctx: sys/Context absFile: String -> (Result String String)
   (match (fileReadString absFile)
     ((err e) (err (str "cannot read " absFile ": " e)))
     ((ok src)
@@ -50,6 +53,98 @@ fn ! stageOutside! ctx: sys/Context absFile: String -> (Result String String)
               (match (fileWrite dest src)
                 ((err e3) (err (str "cannot write " dest ": " e3)))
                 ((ok _) (ok rel)))))))))
+
+; (:m :ref NATIVETEST-OUTSIDE-CLOSURE-20261020 :do "an externally-rooted file with its own .asl.config.asn (a vendored project, not a loose script) declares a package with sibling-module imports that a single-file content-hash copy can never resolve, since every import inside it names a sibling by the package's own workspace-qualified path; find that package's root the same way asl check does (climb to the nearest .asl.config.asn) and mirror the whole package's .asl files under ctx.root so resolveImport!'s own scanUp!, unmodified, finds a config at the mirror's root instead of climbing past it into ctx.root's")
+fn ! findPackageRoot! dir: String depth: Int64 -> (Option String)
+  (if (or (> depth 64) (= dir "/"))
+    (none)
+    (if (sys/isFile? (str dir "/.asl.config.asn"))
+      (some dir)
+      (let [(parent (ckr/parentDirOf dir))]
+        (if (= parent dir) (none) (findPackageRoot! parent (+ depth 1))))))
+
+fn ! dropPrefixLen s: String n: Int64 -> String
+  (optionOr (stringSlice s n (stringLength s)) "")
+
+fn ! afterNeedle s: String needle: String -> (Option String)
+  (match (stringIndexOf s needle) ((none) (none)) ((some i) (some (dropPrefixLen s (+ i (stringLength needle))))))
+
+; (:m :ref NATIVETEST-OUTSIDE-CLOSURE-20261020 :do "only the :workspace value is needed for resolveWorkspaceQualified!'s fast path; a plain needle-and-quote scan avoids pulling the full ASN reader in just for this one field")
+fn ! quotedValueAfter s: String needle: String -> String
+  (match (afterNeedle s needle)
+    ((none) "")
+    ((some rest) (match (stringIndexOf rest "\"")
+      ((none) "")
+      ((some q1) (let [(afterQ1 (dropPrefixLen rest (+ q1 1)))]
+        (match (stringIndexOf afterQ1 "\"")
+          ((none) "")
+          ((some q2) (optionOr (stringSlice afterQ1 0 q2) ""))))))))
+
+fn ! workspaceNameOf configText: String -> String
+  (quotedValueAfter configText ":workspace")
+
+fn ! mirrorFile! src: String dest: String -> (Result Unit String)
+  (match (fileReadBytes src)
+    ((err e) (err (str "cannot read " src ": " e)))
+    ((ok content)
+      (match (ensureDir! (ckr/parentDirOf dest))
+        ((err e2) (err (str "cannot create " (ckr/parentDirOf dest) ": " e2)))
+        ((ok _)
+          (match (fileWrite dest content)
+            ((err e3) (err (str "cannot write " dest ": " e3)))
+            ((ok _) (ok ())))))))
+
+fn ! mirrorFiles! root: String mirrorDir: String files: (List String) -> (Result Unit String)
+  (match (listHead files)
+    ((none) (ok ()))
+    ((some f) (let [(rel (dropPrefixLen f (+ (stringLength root) 1)))
+                    (dest (str mirrorDir "/" rel))]
+                (match (mirrorFile! f dest)
+                  ((err e) (err e))
+                  ((ok _) (mirrorFiles! root mirrorDir (optionOr (listTail files) (list))))))))
+
+fn ! writeMirrorConfig! root: String mirrorDir: String -> (Result Unit String)
+  (let [(origText (resultOr (fileReadString (str root "/.asl.config.asn")) ""))
+        (ws (workspaceNameOf origText))
+        (synth (str "(:asl-config :workspace \"" ws "\" :root true)\n"))]
+    (fileWrite (str mirrorDir "/.asl.config.asn") synth))
+
+; (:m :ref NATIVETEST-OUTSIDE-CLOSURE-20261020 :do "a test opens data files (parquet fixtures, .asn contracts) by paths relative to the package, so the mirror carries every tracked and untracked-but-not-ignored file of the package as bytes, listed by git; a package that is not a git work tree falls back to every file outside dot-directories plus the .asl files under .asl/mem that the index walk skips")
+fn ! gitFiles! root: String -> (Option (List String))
+  (let [(d (run/runOneLimited (run/job (list "git" "-C" root "ls-files" "-co" "--exclude-standard") root (run/childEnv (list))) (run/limits 60 8)))]
+    (if (= d.exit 0)
+      (some (filter (fn [(p String)] -> Bool (sys/isFile? p)) (map (fn [(l String)] -> String (str root "/" l)) (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines d.out)))))
+      (none)))
+
+fn ! fallbackFiles! root: String -> (List String)
+  (let [(memDir (str root "/.asl/mem"))]
+    (listAppend (tsa/filesUnder! root) (filter (fn [(p String)] -> Bool (stringEndsWith? p ".asl")) (if (sys/isDir? memDir) (tsa/filesUnder! memDir) (list)))))
+
+fn ! stagePackageMirror! ctx: sys/Context root: String -> (Result String String)
+  (let [(digest (bytesSha256 (stringToBytes root)))
+        (wsName (workspaceNameOf (resultOr (fileReadString (str root "/.asl.config.asn")) "")))
+        (mirrorDir (str (outsidePkgStageDir ctx) "/" digest))
+        (files (optionOr (gitFiles! root) (fallbackFiles! root)))]
+    (match (ensureDir! mirrorDir)
+      ((err e) (err (str "cannot create " mirrorDir ": " e)))
+      ((ok _)
+        (match (mirrorFiles! root mirrorDir files)
+          ((err e) (err e))
+          ((ok _)
+            (match (mirrorFiles! root (str mirrorDir "/" wsName) (if (stringEmpty? wsName) (list) (filter (fn [(p String)] -> Bool (not (stringEndsWith? p ".asl"))) files)))
+              ((err e) (err e))
+              ((ok _)
+            (match (writeMirrorConfig! root mirrorDir)
+              ((err e) (err (str "cannot write " mirrorDir "/.asl.config.asn: " e)))
+              ((ok _) (ok mirrorDir))))))))))
+
+fn ! stageOutside! ctx: sys/Context absFile: String -> (Result String String)
+  (match (findPackageRoot! (ckr/parentDirOf absFile) 0)
+    ((none) (stageOutsideSingle! ctx absFile))
+    ((some root)
+      (match (stagePackageMirror! ctx root)
+        ((err e) (err e))
+        ((ok mirrorDir) (ok (rooted ctx (str mirrorDir "/" (dropPrefixLen absFile (+ (stringLength root) 1)))))))))
 
 fn ! runOutside! ctx: sys/Context file: String absFile: String args: (List String) -> Int64
   (if (not (sys/isFile? absFile))
@@ -137,11 +232,21 @@ fn ! suite! ctx: sys/Context fp: String path: String -> Int64
     ((ok rel) (suiteBuilt! ctx fp path rel)))
 
 ; (:m :ref OUT-OF-ROOT-USERPATH :do "rel is always root-relative (rooted for an in-root file, stageOutside!'s rel for a staged one); nt/prepare would read it bare against the actual cwd (OUT-OF-ROOT-USERPATH), wrong whenever test! skipped reexecTestAtRoot! (anyOutOfRoot?) and cwd never became ctx.root, so prepareSourceIn reads the absolute ctx.root-anchored path while keeping rel as the logical/import name")
+; (:m :ref NATIVETEST-OUTSIDE-CLOSURE-20261020 :do "a staged package sits at <digest>/<workspace>/ under outsidePkg and its suite runs with <digest> as the working directory, the arrangement of the source tree where the package directory is named by its workspace, so a data path written workspace-qualified (vtbot/asl/tests/fixtures/x.parquet) opens the same file; every other suite keeps the cwd it was started with")
+fn ! suiteCwd ctx: sys/Context rel: String -> (Option String)
+  (let [(marker ".asl/cache/nativeTest/outsidePkg/")]
+    (if (stringStartsWith? rel marker)
+      (let [(tail (dropPrefixLen rel (stringLength marker)))
+            (digest (optionOr (listHead (stringSplit tail "/")) ""))]
+        (some (str ctx.root "/" marker digest)))
+      (none)))
+
 fn ! suiteBuilt! ctx: sys/Context fp: String path: String rel: String -> Int64
   (let [(built (nt/prepareTestSource (str ctx.root "/" rel) rel fp))]
     (match built.binary
-      ((some bin)
-        (let [(out (nt/runProc (list "nice" "-n" "15" bin) (some (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff))))))
+      ((some binPath)
+        (let [(bin (if (stringStartsWith? binPath "/") binPath (str ctx.root "/" binPath)))
+              (out (nt/runProcIn (list "nice" "-n" "15" bin) (suiteCwd ctx rel) (some (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff))))))
               (v (nt/judgeInit! bin path (preludeOverride ctx) (nt/verdictOf path out.exitCode out.stderr)))]
           (do (print out.stdout)
               (eprintText v.stderr)
