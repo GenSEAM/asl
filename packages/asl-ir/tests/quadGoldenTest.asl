@@ -10,8 +10,9 @@ fn entries -> (List String)
 ; (:m :ref NATIVE-LOWER-GAPS :do "repinned: fused list matches test @listHeadEmpty? or @listTailEmpty? and build the Option on the miss path; assert and refute carry their call site")
 ; (:m :ref PERF-MAPRANK :do "repinned: the prelude treap rank changed (FNV byte step), then PERF-MONO-MAPKEY ran treap key tests as opsrt.keyCmp (now the LLVM-only ssaOpt nativePrelude body of prelude.preludeKeyOrder) and PERF-FREECHAIN added allocation-free has and getOr walks, so linked IR of the prelude and of map literals moved; measured by this file's own goldenDigests printer")
 ; (:m :ref HLLOWSMERGE :do "repinned on merge main into sh/HLLOWS: checkSemanticTest.asl's linked-IR digest shifted with the merged tree's own asl-forms/checkSemanticTest.asl content; measured on the merged tree by this file's own goldenDigests printer, never hand-written")
+; (:m :ref PERF-REALPATH-CACHE :do "repinned: checkSemanticTest links asl-checker/resolve, whose walk, importer cache and loadModuleDepsIx! changed its linked IR; measured by this file's own goldenDigests printer")
 fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "-9039435184319426095:4943806")
+  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "3518356563441014170:4946123")
         (pair "lowerSourceWith" "6806003338108627551:8856"))
 
 fn diagLine d: ty/IrDiag -> String

@@ -1,4 +1,4 @@
-(module asl-ir/link :x [LinkUnit LinkAcc loadClosure! linkUnits linkWith! linkEntry! linkWithBare! linkEntryBare! lowerSourceWith lowerSourceLinked! preludePath lowerPrelude importForms firstByName firstRecordByName allFunctions emptyUnit nativeOverlayDir overlayUnit! overlayUnitAt! linkUnitsWith linkUnitsWithBareEntry rewriteModuleBuiltins rewriteModuleBuiltinsAgainst definedNames functionBuiltinRefs] :i [(asl-ir/types :a ty) (asl-ir/lower :a low) (asl-ir/verify :a vfy) (asl-parser/ast :a ast) (asl-checker/resolve :a r)])
+(module asl-ir/link :x [LinkUnit LinkAcc loadClosure! loadClosureWith! linkEntryWith! linkUnits linkWith! linkEntry! linkWithBare! linkEntryBare! lowerSourceWith lowerSourceLinked! preludePath lowerPrelude importForms firstByName firstRecordByName allFunctions emptyUnit nativeOverlayDir overlayUnit! overlayUnitAt! linkUnitsWith linkUnitsWithBareEntry rewriteModuleBuiltins rewriteModuleBuiltinsAgainst definedNames functionBuiltinRefs] :i [(asl-ir/types :a ty) (asl-ir/lower :a low) (asl-ir/verify :a vfy) (asl-parser/ast :a ast) (asl-checker/resolve :a r)])
 
 (schema LinkUnit
   (:f path String)
@@ -112,7 +112,10 @@ fn reservedPreludeNameDiags units: (List LinkUnit) -> (List ty/IrDiag)
        (filter (fn [(u LinkUnit)] -> Bool (and (= u.name "prelude") (not (or (= u.path (preludePath)) (stringEndsWith? u.path (str "/" (preludePath))))))) units))
 
 fn ! loadClosure! entryPath: String -> (Result (List LinkUnit) (List ty/IrDiag))
-  (let [(st (visit! (LoadState :units (list) :seen (mapEmpty) :diags (list) :index (r/emptyModIndex)) entryPath))
+  (loadClosureWith! entryPath (r/emptyModIndex))
+
+fn ! loadClosureWith! entryPath: String ix: r/ModIndex -> (Result (List LinkUnit) (List ty/IrDiag))
+  (let [(st (visit! (LoadState :units (list) :seen (mapEmpty) :diags (list) :index ix) entryPath))
         (units (listReverse st.units))
         (diags (listAppend (listAppend (listReverse st.diags) (duplicateModules units)) (reservedPreludeNameDiags units)))]
     (if (listEmpty? diags) (ok units) (err diags)))
@@ -444,6 +447,12 @@ fn ! linkWith! entryPath: String preludeFile: String -> (Result ty/SsaModule (Li
 
 fn ! linkEntry! entryPath: String -> (Result ty/SsaModule (List ty/IrDiag))
   (linkWith! entryPath (preludePath))
+
+; (:m :ref PERF-REALPATH-CACHE :do "link an entry against a module index an earlier load of the same compile already built")
+fn ! linkEntryWith! entryPath: String ix: r/ModIndex -> (Result ty/SsaModule (List ty/IrDiag))
+  (match (loadClosureWith! entryPath ix)
+    ((err ds) (err ds))
+    ((ok units) (linkUnits units (pairFirst (readUnit! (preludePath) (r/emptyModIndex))))))
 
 fn ! linkWithBare! entryPath: String preludeFile: String -> (Result ty/SsaModule (List ty/IrDiag))
   (match (loadClosure! entryPath)

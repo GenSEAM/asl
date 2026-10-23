@@ -1,4 +1,4 @@
-(module asl-checker/resolve :x [FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleDepsFrom! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags modSchema builtinSchemaFieldTypes builtinRecordNames builtinFieldNameList resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports unexportedCaseModule letrecDiags] :i [(types :a ty) (ast :a a) (reader :a rd)])
+(module asl-checker/resolve :x [FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleDepsIx! loadModuleDepsFrom! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags modSchema builtinSchemaFieldTypes builtinRecordNames builtinFieldNameList resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports unexportedCaseModule letrecDiags] :i [(types :a ty) (ast :a a) (reader :a rd)])
 
 (schema FunSummary (:f name String) (:f params (List (pair String String))) (:f ret String) (:f typevars (List String)) (:f hasDoc Bool) (:f effect Bool) (:f calls (List String)) (:f witness String))
 
@@ -131,7 +131,7 @@ fn modFun m: ModuleSummary name: String -> (Option FunSummary)
 
 (schema IdxPkg (:f name String) (:f base String) (:f dir String) (:f deps (List String)))
 
-(schema ModIndex (:f root String) (:f mods (List IdxMod)) (:f pkgs (List IdxPkg)) (:f skipped Int64) (:f skippedAt String) (:f workspaces (Map String String)))
+(schema ModIndex (:f root String) (:f mods (List IdxMod)) (:f pkgs (List IdxPkg)) (:f skipped Int64) (:f skippedAt String) (:f workspaces (Map String String)) (:f importers (Map String ImporterCtx)))
 
 (schema Cand (:f path String) (:f name String))
 
@@ -141,6 +141,8 @@ fn modFun m: ModuleSummary name: String -> (Option FunSummary)
 
 (schema LoadCtx (:f nearest String) (:f outer String) (:f pkg String))
 
+(schema ImporterCtx (:f ctx LoadCtx) (:f outer String))
+
 (schema ModuleClosure (:f deps (Map String ModuleSummary)) (:f paths (List String)) (:f unresolved (List String)) (:f errors (List String)) (:f index ModIndex))
 
 (schema ModHeader (:f name String) (:f hasDoc Bool) (:f exports (List String)) (:f imports (List (Pair String String))))
@@ -148,7 +150,7 @@ fn modFun m: ModuleSummary name: String -> (Option FunSummary)
 (schema ImportPass (:f imports (Map String String)) (:f targets (List String)) (:f unresolved (List String)) (:f index ModIndex))
 
 fn emptyModIndex -> ModIndex
-  (ModIndex :root "" :mods (list) :pkgs (list) :skipped 0 :skippedAt "" :workspaces (mapEmpty))
+  (ModIndex :root "" :mods (list) :pkgs (list) :skipped 0 :skippedAt "" :workspaces (mapEmpty) :importers (mapEmpty))
 
 fn byteAt s: String i: Int64 -> String
   (if (< i 0) "" (optionOr (stringSlice s i (+ i 1)) ""))
@@ -297,20 +299,19 @@ fn ! indexManifest! dir: String path: String ix: ModIndex -> ModIndex
             (with ix :pkgs (cons (IdxPkg :name (nameItemText (itemAt kids 1)) :base (lastSegOf dir) :dir dir :deps (manifestDeps kids 2 (list))) ix.pkgs))
             ix)))))))
 
+; (:m :ref PERF-REALPATH-CACHE :do "the walk starts at a real root and descends only through entries that are no symlink, so an entry's path is real exactly when the entry itself is no symlink: one lstat replaces a realpath (a lookup per path component) and a stat")
 fn ! walkEntry! dir: String name: String depth: Int64 ix: ModIndex -> ModIndex
   (let [(path (str dir "/" name))]
     (if (or (stringStartsWith? name ".") (= name "node_modules")) ix
-      (match (realPath! path)
-        ((none) ix)
-        ((some real) (if (!= real path) ix
-          (match (fileStat path)
-            ((err _) ix)
-            ((ok st) (cond
-              (st.isDir (walkDir! path (+ depth 1) ix))
-              ((and st.isFile (and (> (stringLength name) 4) (stringEndsWith? name ".asl")))
-                (match (headerName! path) ((none) ix) ((some n) (with ix :mods (cons (IdxMod :name n :path path) ix.mods)))))
-              ((and st.isFile (= name "manifest.asn")) (indexManifest! dir path ix))
-              (else ix)))))))))
+      (match (fileLstat path)
+        ((err _) ix)
+        ((ok st) (cond
+          (st.isSymlink ix)
+          (st.isDir (walkDir! path (+ depth 1) ix))
+          ((and st.isFile (and (> (stringLength name) 4) (stringEndsWith? name ".asl")))
+            (match (headerName! path) ((none) ix) ((some n) (with ix :mods (cons (IdxMod :name n :path path) ix.mods)))))
+          ((and st.isFile (= name "manifest.asn")) (indexManifest! dir path ix))
+          (else ix))))))
 
 fn ! walkEntries! dir: String names: (List String) depth: Int64 ix: ModIndex -> ModIndex
   (match (listHead names) ((none) ix) ((some n) (walkEntries! dir (safeTail names) depth (walkEntry! dir n depth ix))))
@@ -322,7 +323,7 @@ fn ! walkDir! dir: String depth: Int64 ix: ModIndex -> ModIndex
 fn ! ensureIndex! root: String ix: ModIndex -> ModIndex
   (if (= ix.root root) ix
     (let [(built (walkDir! root 0 (with ix :root root :mods (list) :pkgs (list) :skipped 0 :skippedAt "")))]
-      (ModIndex :root root :mods (listReverse built.mods) :pkgs (listReverse built.pkgs) :skipped built.skipped :skippedAt built.skippedAt :workspaces built.workspaces)))
+      (ModIndex :root root :mods (listReverse built.mods) :pkgs (listReverse built.pkgs) :skipped built.skipped :skippedAt built.skippedAt :workspaces built.workspaces :importers built.importers)))
 
 fn addCands c: (List Cand) more: (List Cand) -> (List Cand)
   (fold (fn [(acc (List Cand)) (x Cand)] -> (List Cand) (if (listAny? (fn [(y Cand)] -> Bool (= y.path x.path)) acc) acc (listAppendOne acc x))) c more)
@@ -461,13 +462,25 @@ fn importPathMax -> Int64
 fn importTooLong? imp: String -> Bool
   (>= (stringLength imp) (importPathMax))
 
-fn ! resolveImport! importer: String imp: String ix: ModIndex -> Resolution
+; (:m :ref PERF-REALPATH-CACHE :do "every import of one importer directory climbs the same ancestors: the climb (a stat and a config read per level) and the two realpaths run once per directory and are kept in the index, as workspaceOf! keeps workspaces; an outer of \"\" stands for none")
+fn ! importerCtx! importer: String ix: ModIndex -> (Pair ImporterCtx ModIndex)
+  (let [(raw (parentDirOf importer))]
+    (match (mapGet ix.importers raw)
+      ((some c) (pair c ix))
+      ((none) (let [(dir (optionOr (realPath! raw) raw))
+                    (ctx (scanUp! dir (LoadCtx :nearest "" :outer "" :pkg "")))
+                    (c (ImporterCtx :ctx ctx :outer (if (stringEmpty? ctx.nearest) "" (optionOr (realPath! ctx.outer) ""))))]
+                (pair c (with ix :importers (mapSet ix.importers raw c)))))))
+
+fn ! resolveImport! importer: String imp: String ix0: ModIndex -> Resolution
   (let [(ups (countUps imp 0)) (q (sliceFrom imp (* 3 ups)))]
-    (if (importTooLong? imp) (missingRes (str " is " (stringLength imp) " bytes, at or over the " (importPathMax) "-byte PATH_MAX") ix)
-    (if (listAny? badSegment? (stringSplit q "/")) (missingRes " has an empty, . or .. segment after its leading ../ run" ix)
-      (let [(dir (optionOr (realPath! (parentDirOf importer)) (parentDirOf importer)))
-            (ctx (scanUp! dir (LoadCtx :nearest "" :outer "" :pkg "")))]
-        (match (if (stringEmpty? ctx.nearest) (none) (realPath! ctx.outer))
+    (if (importTooLong? imp) (missingRes (str " is " (stringLength imp) " bytes, at or over the " (importPathMax) "-byte PATH_MAX") ix0)
+    (if (listAny? badSegment? (stringSplit q "/")) (missingRes " has an empty, . or .. segment after its leading ../ run" ix0)
+      (let [(found (importerCtx! importer ix0))
+            (c (pairFirst found))
+            (ix (pairSecond found))
+            (ctx c.ctx)]
+        (match (if (stringEmpty? c.outer) (none) (some c.outer))
           ((none) (missingRes " has no .asl.config.asn above its importer" ix))
           ((some outer) (let [(pkg (if (or (stringEmpty? ctx.pkg) (not (isUnder? ctx.pkg outer))) ctx.nearest ctx.pkg))]
             (if (> ups 0)
@@ -724,13 +737,18 @@ fn ! printLines! lines: (List String) -> Unit
   (match (listHead lines) ((none) ()) ((some l) (do (eprintln l) (printLines! (safeTail lines)))))
 
 fn ! loadModuleDeps! roots: (List String) imports: (List String) -> (Result (Map String ModuleSummary) String)
+  (pairFirst (loadModuleDepsIx! roots imports (emptyModIndex)))
+
+; (:m :ref PERF-REALPATH-CACHE :do "the module index the dependency load built (one walk of the tree under the outer config: a list, an lstat per entry and a header read per module) is handed back, so a later load in the same compile, the link, resolves against it instead of walking the tree again")
+fn ! loadModuleDepsIx! roots: (List String) imports: (List String) ix: ModIndex -> (Pair (Result (Map String ModuleSummary) String) ModIndex)
   (let [(importers (fold (fn [(acc (List String)) (r String)] -> (List String) (match (realPath! r) ((some d) (listAppendOne acc (str d "/_"))) ((none) acc))) (list) roots))
-        (cl (loadTop! importers (map (fn [(p String)] -> (Pair String String) (pair (lastSegOf p) p)) imports) true (ModuleClosure :deps (mapEmpty) :paths (list) :unresolved (list) :errors (list) :index (emptyModIndex)) (list)))]
+        (cl (loadTop! importers (map (fn [(p String)] -> (Pair String String) (pair (lastSegOf p) p)) imports) true (ModuleClosure :deps (mapEmpty) :paths (list) :unresolved (list) :errors (list) :index ix) (list)))]
     (do (printLines! cl.unresolved)
         (printLines! cl.errors)
-        (cond ((not (listEmpty? cl.unresolved)) (err "notFound"))
-              ((not (listEmpty? cl.errors)) (err "other"))
-              (else (ok cl.deps)))))
+        (pair (cond ((not (listEmpty? cl.unresolved)) (err "notFound"))
+                    ((not (listEmpty? cl.errors)) (err "other"))
+                    (else (ok cl.deps)))
+              cl.index)))
 
 fn ! loadModuleDepsFrom! roots: (List String) imports: (List String) seedDeps: (Map String ModuleSummary) seedIndex: ModIndex -> ModuleClosure
   (let [(importers (fold (fn [(acc (List String)) (r String)] -> (List String) (match (realPath! r) ((some d) (listAppendOne acc (str d "/_"))) ((none) acc))) (list) roots))]

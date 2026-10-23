@@ -57,18 +57,19 @@ fn ! compilePackageToLlvmWith! entryFile: Str roots: (List Str) rcMode: Str -> (
           ((ok entryForms)
             (let [(entrySummary (r/collectSummary entryForms entryFile))
                   (importPaths (r/mapValuesList entrySummary.imports))]
-              (match (r/loadModuleDeps! (cons (r/parentDirOf entryFile) roots) importPaths)
+              (let [(loaded (r/loadModuleDepsIx! (cons (r/parentDirOf entryFile) roots) importPaths (r/emptyModIndex)))]
+                (match (pairFirst loaded)
                 ((err _) (err (str "Failed to load package dependencies of " entryFile)))
                 ((ok deps)
                   (let [(diags (chk/checkModule entryForms deps entryFile)) (fatal diags)]
                     (if (not (listEmpty? fatal))
                       (ok (CompileResult :ok false :code "" :diagnostics (formatDiagnostics fatal)))
-                      (match (lk/linkEntry! entryFile)
+                      (match (lk/linkEntryWith! entryFile (pairSecond loaded))
                         ((err irDiags) (ok (CompileResult :ok false :code "" :diagnostics (formatIrDiagnostics irDiags))))
                         ((ok m)
                           (match (llvm/emitLlvmProgramNativeWith! m (str m.name ".main") rcMode)
                             ((err irDiags) (ok (CompileResult :ok false :code "" :diagnostics (formatIrDiagnostics irDiags))))
-                            ((ok llCode) (ok (CompileResult :ok true :code llCode :diagnostics (list)))))))))))))))))
+                            ((ok llCode) (ok (CompileResult :ok true :code llCode :diagnostics (list))))))))))))))))))
 
 fn formatIrDiagnostics diags: (List irTy/IrDiag) -> (List Str)
   (map (fn [(d irTy/IrDiag)] -> Str (str d.locus ": [" d.code "] " d.message)) diags)

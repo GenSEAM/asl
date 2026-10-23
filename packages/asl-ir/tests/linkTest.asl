@@ -3,7 +3,8 @@
   :i [(asl-ir/types :a ty)
       (asl-ir/printer :a prn)
       (asl-ir/link :a lk)
-      (asl-parser/ast :a ast)])
+      (asl-parser/ast :a ast)
+      (asl-checker/resolve :a r)])
 
 fn joinLines xs: (List String) -> String
   (stringJoin xs "\n")
@@ -503,6 +504,22 @@ fn ! testDuplicateFunction -> Bool
       (assert (ok? single) (str "the same module linked once has no duplicate: " (printed single)))
       true))
 
+fn ! testLinkReusesIndex dir: String -> Bool
+  (let [(probe (r/resolveImport! (str dir "/linkfx/app.asl") "linkfx/notIndexed" (r/emptyModIndex)))
+        (ix probe.index)
+        (entry (str dir "/linkfx/lateUser.asl"))
+        (user (writeOne! dir "lateUser" "(module linkfx/lateUser :x [main] :i [(linkfx/late :a l)])\n\nfn main -> Int64\n  (l/seven)\n"))
+        (late (writeOne! dir "lateFile" "(module linkfx/late :x [seven] :i [])\n\nfn seven -> Int64\n  7\n"))
+        (reused (lk/linkEntryWith! entry ix))
+        (fresh (lk/linkEntry! entry))]
+    (do
+      (assert (not (stringEmpty? ix.root)) (str "resolving an unknown import walks the fixture tree into the index: " probe.note))
+      (assert (and user late) "lateUser.asl and lateFile.asl written after the index was built")
+      (assert (ok? fresh) (str "a fresh link indexes lateFile.asl and resolves linkfx/late by its header: " (printed fresh)))
+      (assert (err? reused) (str "linkEntryWith! resolves against the index it is given, which predates lateFile.asl, instead of walking the tree again: " (printed reused)))
+      (assert (listAny? (fn [(d ty/IrDiag)] -> Bool (stringContains? d.message "linkfx/late")) (diagsOf reused)) (str "the reused index leaves linkfx/late unresolved: " (printed reused)))
+      true))
+
 fn ! runTests -> Bool
   (let [(made (processRun "mktemp -d"))
         (dir (stringReplace made.stdout "\n" ""))]
@@ -519,5 +536,6 @@ fn ! runTests -> Bool
       (testUnresolvedImport dir)
       (testPreludeNameClash dir)
       (testDuplicateFunction)
+      (testLinkReusesIndex dir)
       (assert (= (processRun (str "rm -rf " dir)).exitCode 0) "fixture directory removed")
       true))

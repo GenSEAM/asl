@@ -131,10 +131,53 @@ fn ! testResolveImportFromRelativeImporter -> Bool
         (assert (= nested.path bare.path) "both reach the same module")
         true))
 
+fn ! testSymlinkedEntriesStayUnindexed -> Bool
+  (let [(dir (workDir!))
+        (outside (workDir!))
+        (cfg (fileWrite (str dir "/.asl.config.asn") "(:aslConfig :workspace \"sym\")\n"))
+        (user (writeFixture! dir "symUser" "(symFile :a f)"))
+        (real (writeFixture! dir "symReal" ""))
+        (target (writeFixture! outside "symFile" ""))
+        (nested (sh (str "mkdir " outside "/pkg")))
+        (deep (writeFixture! (str outside "/pkg") "symDeep" ""))
+        (linked (sh (str "ln -s " outside "/symFile.asl " dir "/symFile.asl && ln -s " outside "/pkg " dir "/pkg")))
+        (importer (str dir "/symUser.asl"))
+        (control (r/resolveImport! importer "symReal" (r/emptyModIndex)))
+        (viaFile (r/resolveImport! importer "symFile" control.index))
+        (viaDir (r/resolveImport! importer "symDeep" viaFile.index))]
+    (do (assert (and (ok? cfg) (and user (and real (and target deep)))) "symlink fixture written")
+        (assert (and (= nested.exitCode 0) (= linked.exitCode 0)) "a symlinked module file and a symlinked package directory made inside the workspace")
+        (assert (match control.status ((r/resOk) true) (_ false)) (str "a real module in the workspace resolves through the walked index: " control.note))
+        (assert (match viaFile.status ((r/resMissing) true) (_ false)) (str "a symlinked module file is never indexed: " viaFile.note))
+        (assert (match viaDir.status ((r/resMissing) true) (_ false)) (str "a module under a symlinked directory is never indexed: " viaDir.note))
+        (assert (= (sh (str "rm -rf " dir " " outside)).exitCode 0) "symlink work directories removed")
+        true))
+
+fn ! testImporterContextIsReused -> Bool
+  (let [(dir (workDir!))
+        (cfg (fileWrite (str dir "/.asl.config.asn") "(:aslConfig :workspace \"ctx\")\n"))
+        (a (writeFixture! dir "ctxA" "(ctxB :a b)"))
+        (b (writeFixture! dir "ctxB" ""))
+        (importer (str dir "/ctxA.asl"))
+        (initial (r/resolveImport! importer "ctxB" (r/emptyModIndex)))
+        (removed (sh (str "rm " dir "/.asl.config.asn")))
+        (again (r/resolveImport! importer "ctxB" initial.index))
+        (fresh (r/resolveImport! importer "ctxB" (r/emptyModIndex)))]
+    (do (assert (and (ok? cfg) (and a b)) "ctx fixture written")
+        (assert (match initial.status ((r/resOk) true) (_ false)) (str "ctxB resolves under the fixture config: " initial.note))
+        (assert (= removed.exitCode 0) "fixture config removed")
+        (assert (match fresh.status ((r/resMissing) true) (_ false)) (str "a fresh index climbs again and finds no config: " fresh.note))
+        (assert (match again.status ((r/resOk) true) (_ false)) (str "the index from the first resolution keeps the importer directory's climb, so the same importer resolves without climbing again: " again.note))
+        (assert (= again.path initial.path) "to the same module")
+        (assert (= (sh (str "rm -rf " dir)).exitCode 0) "ctx work directory removed")
+        true))
+
 fn ! runTests -> Bool
   (let [(dir (fixtureDir!))]
     (do (assert (testSysImportShortcuts dir) "testSysImportShortcuts")
         (assert (testParentDirOf) "testParentDirOf")
+        (assert (testImporterContextIsReused) "testImporterContextIsReused")
+        (assert (testSymlinkedEntriesStayUnindexed) "testSymlinkedEntriesStayUnindexed")
         (assert (testResolveImportFromRelativeImporter) "testResolveImportFromRelativeImporter")
         (assert (testUnreadableDependencyIsAnIoLine dir) "testUnreadableDependencyIsAnIoLine")
         (assert (testUnreadableEntryIsAnIoLine dir) "testUnreadableEntryIsAnIoLine")
