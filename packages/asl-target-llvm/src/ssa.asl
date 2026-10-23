@@ -3186,15 +3186,39 @@ fn exportDefinitions roots: String calls: Bool -> (List String)
 
 fn valueExports defs: (List String) -> (List String)
   (let [(text (stringJoin defs "\n"))
-        (keys (rterr/refKeys text))]
-    (filter (fn [(piece String)] -> Bool (pieceAbsent? keys text piece))
-            (exportDefinitions (valrt/rtValueExportRoots) false)))
+        (pieces (exportDefinitions (valrt/rtValueExportRoots) false))
+        (firsts (map (fn [(piece String)] -> (Option String) (rterr/refFirstKey (stringTrim piece))) pieces))
+        (wanted (fold (fn [(acc (Map String Bool)) (f (Option String))] -> (Map String Bool)
+                        (match f ((some k) (mapSet acc k true)) ((none) acc)))
+                      (mapEmpty) firsts))
+        (index (headOffsets (stringSplit text "\n") 0 wanted (mapEmpty)))]
+    (map (fn [(entry (Pair String (Option String)))] -> String (match entry ((pair piece _) piece)))
+         (filter (fn [(entry (Pair String (Option String)))] -> Bool (match entry ((pair piece first) (pieceAbsent? index text (stringTrim piece) first))))
+                 (zip pieces firsts))))
 
-fn pieceAbsent? keys: (Map String Bool) text: String piece: String -> Bool
-  (let [(trimmed (stringTrim piece))]
-    (match (rterr/refFirstKey trimmed)
-      ((some k) (if (mapHas? keys k) (not (stringContains? text trimmed)) true))
-      ((none) (not (stringContains? text trimmed)))))
+fn headLine? line: String -> Bool
+  (or (stringStartsWith? line "define ") (stringStartsWith? line "@"))
+
+fn headOffsets lines: (List String) offset: Int64 wanted: (Map String Bool) acc: (Map String (List Int64)) -> (Map String (List Int64))
+  (match (listHead lines)
+    ((none) acc)
+    ((some line) (headOffsets (optionOr (listTail lines) (list)) (+ offset (+ (stringLength line) 1)) wanted
+                   (if (headLine? line)
+                     (match (rterr/refFirstKey line)
+                       ((some k) (if (mapHas? wanted k) (mapSet acc k (cons offset (mapGetOr acc k (list)))) acc))
+                       ((none) acc))
+                     acc))))
+
+fn pieceAbsent? index: (Map String (List Int64)) text: String piece: String first: (Option String) -> Bool
+  (match first
+    ((some k) (not (listAny? (fn [(start Int64)] -> Bool (pieceAt? text piece start)) (mapGetOr index k (list)))))
+    ((none) (not (stringContains? text piece))))
+
+fn pieceAt? text: String piece: String start: Int64 -> Bool
+  (and (>= start 0)
+       (match (stringSlice text start (+ start (stringLength piece)))
+         ((some s) (= s piece))
+         ((none) false)))
 
 fn cRuntimeModule -> String
   (let [(wrappers (stringJoin (list "define i32 @intern(ptr %text, i64 %length) {" "entry:" "  %id = call i32 @valrt.intern(ptr %text, i64 %length)" "  ret i32 %id" "}" ""
