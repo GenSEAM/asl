@@ -1,0 +1,11 @@
+{"timestamp":"2026-10-22T10:00:00.000Z","ordinal":0,"type":"session_meta","payload":{"id":"aaa","timestamp":"2026-10-22T10:00:00.000Z","cwd":"/work/proj"}}
+{"timestamp":"2026-10-22T10:00:01.000Z","ordinal":1,"type":"response_item","payload":{"type":"function_call","name":"exec","arguments":"{}","call_id":"c1"}}
+{"timestamp":"2026-10-22T10:00:02.000Z","ordinal":2,"type":"response_item","payload":{"type":"function_call_output","call_id":"c1","output":"x"}}
+{"timestamp":"2026-10-22T10:00:03.000Z","ordinal":3,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":10,"total_tokens":110}}}}
+{"timestamp":"2026-10-22T10:00:03.100Z","ordinal":4,"type":"token_usage_record","payload":{"usage":{"input_tokens":100}}}
+{"timestamp":"2026-10-22T10:00:04.000Z","ordinal":5,"type":"response_item","payload":{"type":"custom_tool_call","name":"exec","input":"ls","call_id":"c2"}}
+{"timestamp":"2026-10-22T10:00:05.000Z","ordinal":6,"type":"response_item","payload":{"type":"custom_tool_call","name":"apply_patch","input":"p","call_id":"c3"}}
+{"timestamp":"2026-10-22T10:00:06.000Z","ordinal":7,"type":"event_msg","payload":{"type":"token_count","info":null}}
+{"timestamp":"2026-10-22T10:00:07.000Z","ordinal":8,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":300,"cached_input_tokens":200,"output_tokens":30,"total_tokens":330}}}}
+{"timestamp":"2026-10-22T10:00:07.100Z","ordinal":9,"type":"token_usage_record","payload":{"usage":{"input_tokens":200}}}
+{"timestamp":"2026-10-22T10:00:08.000Z","ordinal":10,"type":"event_msg","payload":{"type":"stream_error"}}

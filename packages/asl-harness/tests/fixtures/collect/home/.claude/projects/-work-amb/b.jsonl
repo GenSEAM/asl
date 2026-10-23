@@ -1,0 +1,2 @@
+{"type":"queue-operation","timestamp":"2026-10-22T10:00:03.000Z","sessionId":"b"}
+{"type":"assistant","timestamp":"2026-10-22T10:00:10.000Z","uuid":"b","message":{"id":"b","role":"assistant","content":[],"usage":{"input_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":1}}}
