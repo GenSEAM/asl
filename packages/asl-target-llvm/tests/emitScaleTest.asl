@@ -28,12 +28,19 @@ fn ! emitCpu source: String -> Int64
                 ((err ds) (do (println "emitScale emit diagnostic:" ds) -1))
                 ((ok text) (- endEmit startEmit))))))
 
+; (:m :ref FLAKES-EMITSCALE :do "a size is sampled five times and the minimum CPU time kept: load inflates single samples, never the least disturbed one, so the 2.6x bound on the ratio of minima still separates linear from quadratic emission (4x)")
+fn ! emitMin source: String -> Int64
+  (fold (fn [(best Int64) (i Int64)] -> Int64
+          (let [(t (emitCpu source))]
+            (if (<= t 0) best (if (or (< best 0) (< t best)) t best))))
+        -1 (range 0 5))
+
 fn ! testEmitScales -> Bool
   (let [(warm (emitCpu (listSource 1000)))
-        (a (emitCpu (listSource 4000)))
-        (b (emitCpu (listSource 8000)))
-        (straightA (emitCpu (straightSource 4000)))
-        (straight (emitCpu (straightSource 8000)))]
+        (a (emitMin (listSource 4000)))
+        (b (emitMin (listSource 8000)))
+        (straightA (emitMin (straightSource 4000)))
+        (straight (emitMin (straightSource 8000)))]
     (do
       (println "emitScale emission CPU us, list 1000/4000/8000:" warm a b "straight 4000/8000:" straightA straight)
       (assert (and (> a 0) (> b 0)) "literal emission measurements succeeded")
