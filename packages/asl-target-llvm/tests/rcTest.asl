@@ -300,6 +300,7 @@ fn ! testSpine libs: Libs dir: String -> Bool
                   (assert (stringContains? (runtimeBody b.code "aslRc.freeOne") "call void @aslRc.freeChain(ptr %o)") "freeOne frees through freeChain")
                   (assert (stringContains? b.code "define internal void @aslRc.recycle(ptr %o, i64 %h) alwaysinline {") "recycle is inlined into the free path")
                   (assert (stringContains? (runtimeBody b.code "aslRc.recycle") "call void @aslRc.recycleSlow(ptr %o, i64 %h)") "large, small and sticky cells take the outlined recycleSlow")
+                  (assert (stringContains? (fnBodyOf b.code "%Val" "prelude$2EpreludeReverseOnto") "@aslRcReset_") (str "the map builder's reverse owns the list it walks, so a unique cell resets into the next cons instead of being freed after the call: " (fnBodyOf b.code "%Val" "prelude$2EpreludeReverseOnto")))
                   true))))
 
 fn ! testOpStats libs: Libs dir: String -> Bool

@@ -33,6 +33,40 @@ fn churn keys: (List K) drop: (List K) seed: Int64 -> (Map K Int64)
         cut (fold (fn [acc k] (mapRemove acc k)) full (shuffle drop (+ seed 31)))]
     (fold (fn [acc k] (mapSet acc k 1)) cut (shuffle drop (+ seed 57))))
 
+; (:m :ref PERF-MAPRANK :do "a reference model for random insert and remove sequences: an association list with the last write of each key, sorted by key at the end")
+fn modelSet model: (List (Pair K Int64)) k: K v: Int64 -> (List (Pair K Int64))
+  (cons (pair k v) (filter (fn [p] (!= (pairFirst p) k)) model))
+
+fn modelRemove model: (List (Pair K Int64)) k: K -> (List (Pair K Int64))
+  (filter (fn [p] (!= (pairFirst p) k)) model)
+
+fn lcg s: Int64 -> Int64
+  (mod (+ (* s 1103515245) 12345) 2147483648)
+
+fn replay keyOf: (fn [Int64] -> K) steps: Int64 seed: Int64 m: (Map K Int64) model: (List (Pair K Int64)) -> (Pair (Map K Int64) (List (Pair K Int64)))
+  (if (= steps 0) (pair m model)
+    (let [s (lcg seed)
+          k (keyOf (mod (/ s 7) 97))]
+      (if (= (mod s 5) 0)
+        (replay keyOf (- steps 1) s (mapRemove m k) (modelRemove model k))
+        (replay keyOf (- steps 1) s (mapSet m k steps) (modelSet model k steps)))))
+
+; (:m :ref PERF-MONO-MAPKEY :do "mapGet of every key the replay could touch, present or removed, answers as the model does; mapHas? and mapGetOr too (PERF-FREECHAIN walks them without an Option)")
+fn modelGet model: (List (Pair K Int64)) k: K -> (Option Int64)
+  (match (listFind (fn [p] (= (pairFirst p) k)) model)
+    ((some p) (some (pairSecond p)))
+    ((none) none))
+
+fn agrees? keyOf: (fn [Int64] -> K) seed: Int64 -> Bool
+  (let [r (replay keyOf 600 seed (mapEmpty) (list))
+        m (pairFirst r)
+        want (listSortBy (fn [p] (pairFirst p)) (pairSecond r))]
+    (and (and (= (mapPairs m) want) (= m (mapFromPairs want)))
+         (listAll? (fn [i] (and (= (mapGet m (keyOf i)) (modelGet want (keyOf i)))
+                                (and (= (mapHas? m (keyOf i)) (some? (modelGet want (keyOf i))))
+                                     (= (mapGetOr m (keyOf i) -1) (optionOr (modelGet want (keyOf i)) -1)))))
+                   (range 0 97))))
+
 fn sorted? xs: (List Int64) -> Bool
   (match (listHead xs)
     ((none) true)
@@ -96,4 +130,9 @@ fn ! runTests -> Bool
       (assert (< (depth (preludeTree attack)) 64) (str "the crafted equal-rank family stays shallow, depth " (depth (preludeTree attack))))
       (assert (= (listLength (filter (fn [m] (= m shape0)) shapes)) 5) "equal key sets under shuffled inserts and removes give identical trees")
       (assert (< (depth (preludeTree shape0)) 40) "400 keys give a tree of depth under 40")
+      (assert (listAll? (fn [seed] (agrees? (fn [i] (str "k" (* i 7919))) seed)) (list 1 2 3 4)) "random String-key insert and remove sequences give the model's key-sorted pairs and a map equal to one built from them")
+      (assert (listAll? (fn [seed] (agrees? (fn [i] (- (* i 104729) 5000000)) seed)) (list 5 6 7 8)) "random Int64-key sequences, negatives included, agree with the model")
+      (assert (listAll? (fn [seed] (agrees? (fn [i] (str "q\"-0.0" (mod i 9) "\\" (mod i 11))) seed)) (list 9 10 11 12)) "random keys holding quotes, backslashes and -0.0 text agree with the model")
+      (assert (= (mapKeys (mapFromPairs (list (pair "ab" 1) (pair "" 2) (pair "abc" 3) (pair "b" 4) (pair "a" 5) (pair "aa" 6)))) (list "" "a" "aa" "ab" "abc" "b")) "String keys order bytewise with a prefix before its extensions")
+      (assert (= (mapGet (mapFromPairs (list (pair "ab" 1) (pair "abc" 3) (pair "a" 5))) "abd") none) "a String key absent but sharing a prefix is not found")
       true))

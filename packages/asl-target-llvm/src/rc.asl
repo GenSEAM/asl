@@ -115,7 +115,7 @@ fn countedRoute? name: String -> Bool
 
 fn borrowBuiltin? name: String -> Bool
   (listContains? (list "+" "-" "*" "/" "mod" "<" "<=" ">" ">=" "=" "!=" "not" "str" "print" "println" "eprintln" "stringFromFloat64" "stringToFloat64" "abs" "int64ToFloat64" "float64ToInt64" "~"
-                       "min" "max" "<<" ">>" "&" "|" "^" "clamp" "assert" "refute" "trap")
+                       "min" "max" "<<" ">>" "&" "|" "^" "clamp" "assert" "refute" "trap" "keyCompare")
                  name)
 
 fn freshEntry? name: String -> Bool
@@ -2840,10 +2840,29 @@ fn borrowedParams ctx: Ctx f: ty/SsaFunction -> (Map String Bool)
 fn borrowable? targets: (Map String Bool) f: ty/SsaFunction -> Bool
   (and (listEmpty? f.captures) (not (mapHas? targets f.name)))
 
+; (:m :ref PERF-FREECHAIN :do "a parameter walked as a list starts owned, not borrowed, when one block both builds a cons and passes the parameter's rest to a call, as a reverse or a map onto an accumulator does: a unique cell of it then dies into a reset and becomes that cons, relinking the list in place instead of freeing the cell after the call while the cons takes a fresh one; a walk whose cons sits apart from its recursion keeps the borrow")
+fn listReuseParams f: ty/SsaFunction -> (Map String Bool)
+  (let [(instrs (fold (fn [(acc (List ty/SsaInstr)) (b ty/SsaBlock)] -> (List ty/SsaInstr) (listAppend acc b.instrs)) (list) f.blocks))
+        (rests (fold (fn [(acc (Map String String)) (i ty/SsaInstr)] -> (Map String String)
+                       (match i.op
+                         ((ty/opEntry name args) (if (= name "@listRest") (match (listHead args) ((some p) (mapSet acc i.dest p)) ((none) acc)) acc))
+                         (_ acc)))
+                     (mapEmpty) instrs))]
+    (setOf (fold (fn [(acc (List String)) (b ty/SsaBlock)] -> (List String)
+                   (if (listAny? (fn [(i ty/SsaInstr)] -> Bool (= (allocClass i) 3)) b.instrs)
+                     (fold (fn [(found (List String)) (i ty/SsaInstr)] -> (List String)
+                             (match i.op
+                               ((ty/opCall _ args) (listAppend found (fold (fn [(ps (List String)) (a String)] -> (List String) (match (mapGet rests a) ((some p) (cons p ps)) ((none) ps))) (list) args)))
+                               (_ found)))
+                           acc b.instrs)
+                     acc))
+                 (list) f.blocks)))
+
 fn initialBorrows counted: (List ty/SsaFunction) targets: (Map String Bool) -> (Map String (List Bool))
   (fold (fn [(acc (Map String (List Bool))) (f ty/SsaFunction)] -> (Map String (List Bool))
           (if (borrowable? targets f)
-            (mapSet acc f.name (map (fn [(p ty/SsaParam)] -> Bool (heapTy? p.ty)) f.params))
+            (let [(walked (listReuseParams f))]
+              (mapSet acc f.name (map (fn [(p ty/SsaParam)] -> Bool (and (heapTy? p.ty) (not (mapHas? walked p.name)))) f.params)))
             acc))
         (mapEmpty) counted)
 

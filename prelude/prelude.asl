@@ -467,8 +467,12 @@ fn preludeRankPow5 t: Int64 -> Int64
         t4 (mod (* t2 t2) 2147483647)]
     (mod (* t4 t) 2147483647))
 
-fn preludeRankLane h: Int64 m: Int64 c: Int64 x: Int64 -> Int64
-  (preludeRankPow5 (mod (+ (* h m) (+ x c)) 2147483647))
+; (:m :ref PERF-MAPRANK :do "one polynomial step per byte kept in 31 bits, every product under 2^53 so the js and py targets compute it exactly; the mod-prime power mix runs once per key in preludeRankEnd. The rank only shapes the treap, never a result, so the LLVM target replaces this body with an FNV-1a step (xor, multiply, mask: no division), see asl-target-llvm/ssaOpt nativePrelude")
+fn preludeRankByte h: Int64 x: Int64 -> Int64
+  (mod (+ (* h 31) (+ x 1)) 2147483647)
+
+fn preludeRankEnd h: Int64 -> Int64
+  (+ (* (preludeRankPow5 (mod (+ h 12345) 2147483647)) 2147483648) (preludeRankPow5 (mod (+ (* h 48271) 40503) 2147483647)))
 
 fn preludeRankNegZero bs: Bytes j: Int64 n: Int64 -> Bool
   (if (> (+ j 3) n) false
@@ -478,22 +482,25 @@ fn preludeRankNegZero bs: Bytes j: Int64 n: Int64 -> Bool
           (or (= (+ j 3) n)
             (let [d (bytesGet bs (+ j 3))] (or (< d 48) (> d 57))))))))
 
-fn preludeRankStep bs: Bytes i: Int64 n: Int64 q: Int64 a: Int64 b: Int64 -> Int64
-  (if (>= i n) (+ (* a 2147483648) b)
+fn preludeRankStep bs: Bytes i: Int64 n: Int64 q: Int64 h: Int64 -> Int64
+  (if (>= i n) (preludeRankEnd h)
     (let [x (bytesGet bs i)]
       (if (and (= q 0) (and (= x 45) (preludeRankNegZero bs (+ i 1) n)))
-        (preludeRankStep bs (+ i 1) n q a b)
+        (preludeRankStep bs (+ i 1) n q h)
         (preludeRankStep bs (+ i 1) n
           (cond ((= q 2) 1) ((= q 1) (cond ((= x 92) 2) ((= x 34) 0) (else 1))) ((= x 34) 1) (else 0))
-          (preludeRankLane a 48271 12345 x)
-          (preludeRankLane b 69621 40503 x)))))
+          (preludeRankByte h x)))))
 
 fn preludeRank k: K -> Int64
   (let [bs (stringToBytes (str (list k)))]
-    (preludeRankStep bs 0 (bytesLength bs) 0 1013904223 1103515245))
+    (preludeRankStep bs 0 (bytesLength bs) 0 1013904223))
 
 fn preludeAbove r1: Int64 k1: K r2: Int64 k2: K -> Bool
   (or (> r1 r2) (and (= r1 r2) (< k1 k2)))
+
+; (:m :ref PERF-MONO-MAPKEY :do "one three-way key test per treap node: 0 equal, -1 less, 1 greater; the LLVM target replaces this body by opsrt.keyCmp (icmp for Ints, one memcmp for Strings), this body stays the reference")
+fn preludeKeyOrder a: K b: K -> Int64
+  (cond ((= a b) 0) ((< a b) -1) (else 1))
 
 fn preludeTreeInsert t: (PreludeTree K V) k: K v: V -> (PreludeTree K V)
   (match t
@@ -519,19 +526,42 @@ fn preludeTreeReplace t: (PreludeTree K V) k: K v: V -> (PreludeTree K V)
   (match t
     ((preludeLeaf) t)
     ((preludeNode nk nv r l g)
-      (cond
-        ((= k nk) (preludeNode k v r l g))
-        ((< k nk) (preludeNode nk nv r (preludeTreeReplace l k v) g))
-        (else (preludeNode nk nv r l (preludeTreeReplace g k v))))))
+      (let [c (preludeKeyOrder k nk)]
+        (cond
+          ((= c 0) (preludeNode k v r l g))
+          ((< c 0) (preludeNode nk nv r (preludeTreeReplace l k v) g))
+          (else (preludeNode nk nv r l (preludeTreeReplace g k v)))))))
 
 fn preludeTreeGet t: (PreludeTree K V) k: K -> (Option V)
   (match t
     ((preludeLeaf) none)
     ((preludeNode nk nv _ l g)
-      (cond
-        ((= k nk) (some nv))
-        ((< k nk) (preludeTreeGet l k))
-        (else (preludeTreeGet g k)))))
+      (let [c (preludeKeyOrder k nk)]
+        (cond
+          ((= c 0) (some nv))
+          ((< c 0) (preludeTreeGet l k))
+          (else (preludeTreeGet g k))))))
+
+; (:m :ref PERF-FREECHAIN :do "membership and get-with-default walk the tree without building an Option, so mapHas? (run by every mapSet and mapRemove) and mapGetOr leave no some cell to free")
+fn preludeTreeHas? t: (PreludeTree K V) k: K -> Bool
+  (match t
+    ((preludeLeaf) false)
+    ((preludeNode nk _ _ l g)
+      (let [c (preludeKeyOrder k nk)]
+        (cond
+          ((= c 0) true)
+          ((< c 0) (preludeTreeHas? l k))
+          (else (preludeTreeHas? g k))))))
+
+fn preludeTreeGetOr t: (PreludeTree K V) k: K default: V -> V
+  (match t
+    ((preludeLeaf) default)
+    ((preludeNode nk nv _ l g)
+      (let [c (preludeKeyOrder k nk)]
+        (cond
+          ((= c 0) nv)
+          ((< c 0) (preludeTreeGetOr l k default))
+          (else (preludeTreeGetOr g k default))))))
 
 fn preludeTreeMerge a: (PreludeTree K V) b: (PreludeTree K V) -> (PreludeTree K V)
   (match a
@@ -548,10 +578,11 @@ fn preludeTreeRemove t: (PreludeTree K V) k: K -> (PreludeTree K V)
   (match t
     ((preludeLeaf) t)
     ((preludeNode nk nv r l g)
-      (cond
-        ((= k nk) (preludeTreeMerge l g))
-        ((< k nk) (preludeNode nk nv r (preludeTreeRemove l k) g))
-        (else (preludeNode nk nv r l (preludeTreeRemove g k))))))
+      (let [c (preludeKeyOrder k nk)]
+        (cond
+          ((= c 0) (preludeTreeMerge l g))
+          ((< c 0) (preludeNode nk nv r (preludeTreeRemove l k) g))
+          (else (preludeNode nk nv r l (preludeTreeRemove g k)))))))
 
 fn preludeTreePairs t: (PreludeTree K V) acc: (List (Pair K V)) -> (List (Pair K V))
   (match t
@@ -578,10 +609,10 @@ fn mapGet m: (Map K V) k: K -> (Option V)
   (preludeTreeGet (preludeTree m) k)
 
 fn mapGetOr m: (Map K V) k: K default: V -> V
-  (optionOr (mapGet m k) default)
+  (preludeTreeGetOr (preludeTree m) k default)
 
 fn mapHas? m: (Map K V) k: K -> Bool
-  (some? (mapGet m k))
+  (preludeTreeHas? (preludeTree m) k)
 
 fn mapSize m: (Map K V) -> Int64
   (match m ((preludeMapOf n _) n))

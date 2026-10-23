@@ -4,7 +4,7 @@
 
 fn opsSymbols -> (List (Pair String String))
   (list (pair "+" "add") (pair "-" "sub") (pair "*" "mul") (pair "/" "div") (pair "mod" "mod")
-        (pair "<" "lt") (pair "<=" "le") (pair ">" "gt") (pair ">=" "ge") (pair "=" "eq") (pair "!=" "ne") (pair "not" "not"))
+        (pair "<" "lt") (pair "<=" "le") (pair ">" "gt") (pair ">=" "ge") (pair "=" "eq") (pair "!=" "ne") (pair "not" "not") (pair "keyCompare" "keyCmp"))
 
 fn opsEntry? name: String -> Bool
   (listAny? (fn [(p (Pair String String))] -> Bool (= (pairFirst p) name)) (opsSymbols))
@@ -249,6 +249,64 @@ fn cmpFunction -> String
     "bad:"
     "  call void @opsrt.pair(ptr %who, i32 %a.tag, i32 %b.tag)"
     "  unreachable"
+    "}") "\n")
+
+; (:m :ref PERF-MONO-MAPKEY :do "three-way key order for the treap in one call: two Ints by icmp, two Strings by one memcmp and their lengths (the order opsrt.cmp gives), anything else by opsrt.eq then opsrt.lt, the same tests preludeKeyOrder makes in ASL")
+fn keyCmpFunction -> String
+  (stringJoin (list
+    "define internal %Val @opsrt.keyCmp(%Val %a, %Val %b) {"
+    "entry:"
+    "  %a.tagw = extractvalue %Val %a, 0"
+    "  %a.tag = trunc i64 %a.tagw to i32"
+    "  %a.bits = extractvalue %Val %a, 1"
+    "  %b.tagw = extractvalue %Val %b, 0"
+    "  %b.tag = trunc i64 %b.tagw to i32"
+    "  %b.bits = extractvalue %Val %b, 1"
+    "  %a.int = icmp eq i32 %a.tag, 2"
+    "  %b.int = icmp eq i32 %b.tag, 2"
+    "  %ints = and i1 %a.int, %b.int"
+    "  br i1 %ints, label %int, label %notInt"
+    "int:"
+    "  %i.lt = icmp slt i64 %a.bits, %b.bits"
+    "  %i.gt = icmp sgt i64 %a.bits, %b.bits"
+    "  %i.up = zext i1 %i.gt to i64"
+    "  %i = select i1 %i.lt, i64 -1, i64 %i.up"
+    (boxInt "%i")
+    "notInt:"
+    "  %a.str = icmp eq i32 %a.tag, 5"
+    "  %b.str = icmp eq i32 %b.tag, 5"
+    "  %strs = and i1 %a.str, %b.str"
+    "  br i1 %strs, label %string, label %other"
+    "string:"
+    "  %a.obj = inttoptr i64 %a.bits to ptr"
+    "  %b.obj = inttoptr i64 %b.bits to ptr"
+    "  %a.lenp = getelementptr inbounds i8, ptr %a.obj, i64 8"
+    "  %a.len = load i64, ptr %a.lenp"
+    "  %b.lenp = getelementptr inbounds i8, ptr %b.obj, i64 8"
+    "  %b.len = load i64, ptr %b.lenp"
+    "  %a.text = getelementptr inbounds i8, ptr %a.obj, i64 16"
+    "  %b.text = getelementptr inbounds i8, ptr %b.obj, i64 16"
+    "  %shorter = icmp ult i64 %a.len, %b.len"
+    "  %common = select i1 %shorter, i64 %a.len, i64 %b.len"
+    "  %bytes = call i32 @memcmp(ptr %a.text, ptr %b.text, i64 %common)"
+    "  %s.lt = icmp slt i32 %bytes, 0"
+    "  %s.gt = icmp sgt i32 %bytes, 0"
+    "  %longer = icmp ugt i64 %a.len, %b.len"
+    "  %s.tie = select i1 %shorter, i64 -1, i64 0"
+    "  %s.tail = zext i1 %longer to i64"
+    "  %s.len = or i64 %s.tie, %s.tail"
+    "  %s.up = select i1 %s.gt, i64 1, i64 %s.len"
+    "  %s = select i1 %s.lt, i64 -1, i64 %s.up"
+    (boxInt "%s")
+    "other:"
+    "  %same = call i1 @opsrt.eq(%Val %a, %Val %b)"
+    "  br i1 %same, label %equal, label %unequal"
+    "equal:"
+    "  ret %Val { i64 2, i64 0 }"
+    "unequal:"
+    "  %less = call i1 @opsrt.lt(%Val %a, %Val %b)"
+    "  %o = select i1 %less, i64 -1, i64 1"
+    (boxInt "%o")
     "}") "\n")
 
 fn equality suffix: String intCmp: String floatCmp: String negate: Bool -> String
@@ -520,6 +578,7 @@ fn opsFunctions -> (List (Pair String String))
     (pair "@opsrt.div" (divFunction))
     (pair "@opsrt.mod" (modFunction))
     (pair "@opsrt.cmp" (cmpFunction))
+    (pair "@opsrt.keyCmp" (keyCmpFunction))
     (pair "@opsrt.lt" (ordering "lt" "slt" "olt"))
     (pair "@opsrt.le" (ordering "le" "sle" "ole"))
     (pair "@opsrt.gt" (ordering "gt" "sgt" "ogt"))

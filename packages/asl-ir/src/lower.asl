@@ -1556,8 +1556,24 @@ fn bindAll kinds: (Map String String) e: rd/SExpr -> (Map String String)
     ((rd/sexprVect items) (fold bindAll kinds items))
     ((rd/sexprList items) (fold bindAll kinds items)))
 
+; (:m :ref PERF-FREECHAIN :do "generic resolution answers none for a subtree it leaves alone, so an unchanged body is shared, not copied cell by cell and the old copy freed; only the path to a rewritten atom or call is rebuilt")
 fn resolveAll ctx: LowerCtx kinds: (Map String String) xs: (List rd/SExpr) -> (List rd/SExpr)
-  (map (fn [(x rd/SExpr)] -> rd/SExpr (resolveGenerics ctx kinds x)) xs)
+  (optionOr (resolveRest ctx kinds xs) xs)
+
+fn resolveRest ctx: LowerCtx kinds: (Map String String) xs: (List rd/SExpr) -> (Option (List rd/SExpr))
+  (match (listHead xs)
+    ((none) none)
+    ((some x) (let [(t (tailOf xs))
+                    (rt (resolveRest ctx kinds t))]
+                (match (resolveChanged ctx kinds x)
+                  ((none) (match rt ((none) none) ((some ys) (some (cons x ys)))))
+                  ((some y) (some (cons y (optionOr rt t))))))))
+
+fn consRest h: rd/SExpr r: (Option (List rd/SExpr)) -> (Option (List rd/SExpr))
+  (match r ((none) none) ((some ys) (some (cons h ys))))
+
+fn relist r: (Option (List rd/SExpr)) -> (Option rd/SExpr)
+  (match r ((none) none) ((some ys) (some (rd/makeList ys))))
 
 fn resolveBinding ctx: LowerCtx kinds: (Map String String) items: (List rd/SExpr) -> (Pair (List rd/SExpr) (Map String String))
   (let [(name (nthOf items 0)) (typed (= (listLength items) 3))
@@ -1598,29 +1614,33 @@ fn resolveLambda ctx: LowerCtx kinds: (Map String String) items: (List rd/SExpr)
                      kinds params))]
     (rd/makeList (cons (nthOf items 0) (cons (nthOf items 1) (resolveAll ctx inner (optionOr (listSlice items 2 (listLength items)) (list)))))))
 
-fn resolveCall ctx: LowerCtx kinds: (Map String String) items: (List rd/SExpr) -> rd/SExpr
-  (let [(h (rd/sexprHead (nthOf items 0))) (args (resolveAll ctx kinds (tailOf items)))
+fn resolveCall ctx: LowerCtx kinds: (Map String String) items: (List rd/SExpr) -> (Option rd/SExpr)
+  (let [(h (rd/sexprHead (nthOf items 0))) (changed (resolveRest ctx kinds (tailOf items))) (args (optionOr changed (tailOf items)))
         (alias (genericAlias h))
         (conc (cond ((shadowed? ctx kinds h) "")
                     ((not (stringEmpty? alias)) alias)
                     ((listEmpty? args) "")
                     ((not (genericMulti? h)) "")
                     (else (let [(k (kindOf ctx kinds (nthOf args 0)))] (if (stringEmpty? k) "" (genericConcrete h k))))))]
-    (rd/makeList (cons (if (stringEmpty? conc) (nthOf items 0) (rd/makeAtom conc)) args)))
+    (if (and (stringEmpty? conc) (none? changed)) none
+      (some (rd/makeList (cons (if (stringEmpty? conc) (nthOf items 0) (rd/makeAtom conc)) args)))))
 
 fn resolveGenerics ctx: LowerCtx kinds: (Map String String) e: rd/SExpr -> rd/SExpr
+  (optionOr (resolveChanged ctx kinds e) e)
+
+fn resolveChanged ctx: LowerCtx kinds: (Map String String) e: rd/SExpr -> (Option rd/SExpr)
   (match e
-    ((rd/sexprAtom v) (let [(alias (genericAlias v))] (if (or (stringEmpty? alias) (shadowed? ctx kinds v)) e (rd/makeAtom alias))))
-    ((rd/sexprVect items) (rd/sexprVect (resolveAll ctx kinds items)))
+    ((rd/sexprAtom v) (let [(alias (genericAlias v))] (if (or (stringEmpty? alias) (shadowed? ctx kinds v)) none (some (rd/makeAtom alias)))))
+    ((rd/sexprVect items) (match (resolveRest ctx kinds items) ((none) none) ((some ys) (some (rd/sexprVect ys)))))
     ((rd/sexprList items) (match (listHead items)
-                            ((none) e)
-                            ((some h) (if (not (rd/isAtom? h)) (rd/makeList (resolveAll ctx kinds items))
+                            ((none) none)
+                            ((some h) (if (not (rd/isAtom? h)) (relist (resolveRest ctx kinds items))
                                         (let [(name (rd/sexprHead h))]
-                                          (cond ((shadowed? ctx kinds name) (rd/makeList (cons h (resolveAll ctx kinds (tailOf items)))))
-                                                ((= name "let") (resolveLetForm ctx kinds items))
-                                                ((= name "fn") (resolveLambda ctx kinds items))
-                                                ((= name "match") (rd/makeList (cons h (cons (resolveGenerics ctx kinds (nthOf items 1)) (map (fn [(a rd/SExpr)] -> rd/SExpr (resolveArm ctx kinds a)) (optionOr (listSlice items 2 (listLength items)) (list)))))))
-                                                ((or (stringStartsWith? name ":") (stringStartsWith? name "\"")) (rd/makeList (cons h (resolveAll ctx kinds (tailOf items)))))
+                                          (cond ((shadowed? ctx kinds name) (relist (consRest h (resolveRest ctx kinds (tailOf items)))))
+                                                ((= name "let") (some (resolveLetForm ctx kinds items)))
+                                                ((= name "fn") (some (resolveLambda ctx kinds items)))
+                                                ((= name "match") (some (rd/makeList (cons h (cons (resolveGenerics ctx kinds (nthOf items 1)) (map (fn [(a rd/SExpr)] -> rd/SExpr (resolveArm ctx kinds a)) (optionOr (listSlice items 2 (listLength items)) (list))))))))
+                                                ((or (stringStartsWith? name ":") (stringStartsWith? name "\"")) (relist (consRest h (resolveRest ctx kinds (tailOf items)))))
                                                 (else (resolveCall ctx kinds items)))))))))
 
 ; (:m :ref NATIVE-LOWER-GAPS :do "assert and refute call sites: declPositions also records, per declaration, the line:col of each (assert or (refute in its text under siteKey, and lowering appends the k-th site to the k-th assert or refute of the body in source order as an (@site \"path:L:C\") operand; a count that disagrees attaches none")

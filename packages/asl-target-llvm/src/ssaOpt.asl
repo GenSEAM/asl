@@ -1,5 +1,5 @@
 (module asl-target-llvm/ssaOpt
-  :x [hoistConstants constantKey singletonPrefix singleton?]
+  :x [hoistConstants nativePrelude constantKey singletonPrefix singleton?]
   :i [(asl-ir/types :a ty)])
 
 schema Hoisted
@@ -70,3 +70,33 @@ fn hoistConstants m: ty/SsaModule -> ty/SsaModule
         (ty/ssaModule m.name m.strings m.types m.records m.externs
           (listAppend globals m.globals)
           (listAppend (map (fn [(f ty/SsaFunction)] -> ty/SsaFunction (if (own? f) f (rewriteFunction prefix found.keys f))) m.functions) inits)))))
+
+; (:m :ref (PERF-MONO-MAPKEY PERF-MAPRANK) :do "LLVM-only bodies for two prelude treap helpers, so the go, js and py targets keep the prelude bodies, which lack keyCompare and bit primitives: the key order runs as one native three-way compare (opsrt.keyCmp) instead of a generic = and a generic <, and the rank byte step as FNV-1a in 31 bits (xor, multiply, mask) instead of a mod-prime step; only the bodies are replaced and clang inlines the small calls")
+fn nativePrelude m: ty/SsaModule -> ty/SsaModule
+  (with m :functions (map (fn [(f ty/SsaFunction)] -> ty/SsaFunction (rankByteBody (keyOrderBody f))) m.functions))
+
+fn typedAs? f: ty/SsaFunction params: String ret: String -> Bool
+  (and (= (listLength f.params) 2)
+       (and (= (ty/ssaTyName f.retTy) ret) (listAll? (fn [(p ty/SsaParam)] -> Bool (= (ty/ssaTyName p.ty) params)) f.params)))
+
+fn paramNames f: ty/SsaFunction -> (List String)
+  (map (fn [(p ty/SsaParam)] -> String p.name) f.params)
+
+fn rankByteBody f: ty/SsaFunction -> ty/SsaFunction
+  (if (and (= f.name "prelude.preludeRankByte") (typedAs? f "i64" "i64"))
+    (with f :blocks (list (ty/ssaBlock "entry" (list)
+                            (list (ty/ssaInstr "%0" (ty/tyI64) (ty/opPrim "rawXorI64" (paramNames f)))
+                                  (ty/ssaInstr "%1" (ty/tyI64) (ty/opConst (ty/constInt 16777619)))
+                                  (ty/ssaInstr "%2" (ty/tyI64) (ty/opPrim "mulIntHost" (list "%0" "%1")))
+                                  (ty/ssaInstr "%3" (ty/tyI64) (ty/opConst (ty/constInt 2147483647)))
+                                  (ty/ssaInstr "%4" (ty/tyI64) (ty/opPrim "rawAndI64" (list "%2" "%3"))))
+                            (ty/termReturn "%4"))))
+    f)
+
+fn keyOrderBody f: ty/SsaFunction -> ty/SsaFunction
+  (if (and (= f.name "prelude.preludeKeyOrder") (typedAs? f "val" "i64"))
+    (with f :blocks (list (ty/ssaBlock "entry" (list)
+                            (list (ty/ssaInstr "%0" (ty/tyVal) (ty/opBuiltin "keyCompare" (paramNames f)))
+                                  (ty/ssaInstr "%1" (ty/tyI64) (ty/opUnbox "%0")))
+                            (ty/termReturn "%1"))))
+    f)

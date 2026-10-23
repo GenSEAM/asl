@@ -72,8 +72,10 @@ fn ! main args: (List String) -> (Result Int64 String)
            rows)
       (ok 0)))
 
+; (:m :ref PERF-MAPRANK :do "prelude row repinned: the treap rank hash changed, then PERF-MONO-MAPKEY added opsrt.keyCmp and PERF-FREECHAIN the has and getOr walks; size and sha256 printed by this file's own main, the other rows unchanged")
 ; (:m :ref HLLOWSMERGE :do "11 rows repinned on merge main into sh/HLLOWS (asl-parser/ast, asl-checker/resolve|unify|tailPos|constAssert|check|checkCached, asl-forms/check|tests/checkSemanticTest, emitRefsEntry, prelude): each pair's own size and sha256 were printed by this file's own main on the merged tree, never hand-written; the other rows are unchanged")
 ; (:m :ref LLVM-TAILCALL-UNSUPPORTED-20261022 :do "8 rows repinned (asl-checker/check|checkCached|resolve, asl-forms/check|kernel|tests/checkSemanticTest, asl-syntax/core/source, prelude): the emitted text of each differs from the previous pin only by the appended @llvm.compiler.used line of pinMusttailCallees, checked by diffing this file's main output with and without the pass; sizes and digests printed by main")
+; (:m :ref PERF-MONO-MAPKEY :do "prelude row repinned: keyCompare and the FNV rank step moved from lowering to the LLVM-only ssaOpt nativePrelude pass, so treap call sites call prelude.preludeKeyOrder and only its body is opsrt.keyCmp; size and sha256 printed by this file's own main")
 fn expectedDigests -> (List (Pair String String))
   (list
     (pair "asl-syntax/core/source 407260" "76a6c6728c05e952bf99c6902d276daadcb9c5d21249b1facf470af6b5776ef9")
@@ -117,7 +119,7 @@ fn expectedDigests -> (List (Pair String String))
     (pair "asl-forms/check 926775" "616744bef1d57260283acff603687ccdd272cdfd47e975eda66c17377f2205ff")
     (pair "asl-forms/tests/checkSemanticTest 719378" "b2bf046b16e544cd84782dca5286be9b86f8b3aa218f18c5d3c95c5ee5383c5c")
     (pair "emitRefsEntry 228205" "f4edb6d636684c2b765d49abd814773752f80af6b4ad5dfb4c935f18f4d547ff")
-    (pair "prelude 741426" "63fde4fa8e5c1b348e64678ccfcaf64eb1a862ea811088cce2badc082219590b"))
+    (pair "prelude 751437" "7adc1ad22d5bc451435bad80016d7c3bf9896e71f5dd1f553a056e9de794e206"))
 
 fn ! runTests -> Bool
   (let [(got (corpusDigests))
