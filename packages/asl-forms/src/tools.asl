@@ -1,6 +1,6 @@
 (module asl-forms/tools
   :x [ToolOp Registry loadRegistry! toolsStep! helpStep! visibleOps!]
-  :i [(asl-forms/kernel :a k) (asl-forms/search :a s) (asl-forms/similarity :a sm) (asl-proc/coreProcess :a cp) (asl-checker/types :a ty)])
+  :i [(asl-forms/kernel :a k) (asl-forms/search :a s) (asl-forms/similarity :a sm) (asl-proc/coreProcess :a cp) (asl-checker/types :a ty) (asl-ir/lower :a lo)])
 
 
 (schema ToolOp (:f name String) (:f scope String) (:f public String) (:f doc String) (:f form String) (:f paramsRaw String) (:f paramsCompact String) (:f paramsSummary String) (:f examples (List String)) (:f errors (List String)) (:f related (List String)))
@@ -416,56 +416,13 @@ fn builtinRow e: Builtin -> String
   (str "(:name " (s/quoted e.name) " :type " (if (stringEmpty? e.type) "absent" (s/quoted e.type))
        (if (stringEmpty? e.doc) " :doc absent" (str " :doc " (s/quoted e.doc))) ")")
 
-fn cRegistrationNames text: String -> (List String)
-  (cRegistrationNamesAt text (stringToBytes text) 0 (list))
+; (:m :ref REDS-HELP-NATIVE :do "a builtin is bound when the native lowering table asl-ir/lower builtinArity knows it (parMap and parFold take their arity from the alternate table); this replaces the six asl/host/src C registration tables that HL-DELETE removed")
+fn nativeBound? name: String -> Bool
+  (or (some? (lo/builtinArity name)) (listContains? (list "parMap" "parFold") name))
 
-fn arrayRowSuffixes text: String -> (List String)
-  (let [(b (stringToBytes text))
-        (a (k/findFrom text b "#define ROWS(P)" 0))
-        (e (if (< a 0) -1 (k/findFrom text b "const Builtin arrayBuiltins" a)))]
-    (if (< e 0) (list) (rowSuffixesAt text b e a (list))))
-
-fn rowSuffixesAt text: String b: Bytes end: Int64 from: Int64 acc: (List String) -> (List String)
-  (let [(at (k/findFrom text b "{#P \"" from))]
-    (if (or (< at 0) (>= at end)) (listReverse acc)
-      (let [(a (+ at 5)) (e (findByte b end a 34))]
-        (if (< e 0) (listReverse acc)
-          (rowSuffixesAt text b end (+ e 1) (cons (slice text a e) acc))))))
-
-fn cTableNames path: String text: String -> (List String)
-  (if (= path "asl/host/src/arrays.c")
-    (let [(suffixes (arrayRowSuffixes text))]
-      (listAppend (listAppend (map (fn [(s String)] -> String (str "f64" s)) suffixes)
-                              (map (fn [(s String)] -> String (str "i64" s)) suffixes))
-                  (map (fn [(s String)] -> String (str "i8" s)) suffixes)))
-    (let [(marker (cond ((= path "asl/host/src/prelude.c") "const Builtin coreBuiltins[] = {")
-                        ((= path "asl/host/src/sys.c") "const Builtin sysBuiltins[] = {")
-                        ((= path "asl/host/src/sysNet.c") "const Builtin sysNetBuiltins[] = {")
-                        ((= path "asl/host/src/parallel.c") "const Builtin parallelBuiltins[] = {")
-                        (else "const Builtin kernelBuiltins[] = {")))
-          (b (stringToBytes text))
-          (a (k/findFrom text b marker 0))
-          (e (if (< a 0) -1 (k/findFrom text b "};" a)))]
-      (if (or (< a 0) (< e 0)) (list) (cRegistrationNames (slice text (+ a (stringLength marker)) e)))))
-
-fn cRegistrationNamesAt text: String b: Bytes from: Int64 acc: (List String) -> (List String)
-  (let [(at (k/findFrom text b "{\"" from))]
-    (if (< at 0) (listReverse acc)
-      (let [(a (+ at 2)) (e (findByte b (stringLength text) (+ at 2) 34))]
-        (if (< e 0) (listReverse acc)
-          (cRegistrationNamesAt text b (+ e 1) (cons (slice text a e) acc))))))
-
-fn cRegistrationPaths -> (List String)
-  (list "asl/host/src/prelude.c" "asl/host/src/sys.c" "asl/host/src/sysNet.c" "asl/host/src/arrays.c" "asl/host/src/parallel.c" "asl/host/src/kernels.c")
-
-fn cRegistrationRows! root: String paths: (List String) -> (List Builtin)
-  (match (listHead paths)
-    ((none) (list))
-    ((some path)
-      (listAppend
-        (map (fn [(name String)] -> Builtin (Builtin :name name :sec "" :type "" :doc ""))
-             (cTableNames path (resultOr (fileReadString (if (fileExists? (k/joinPath root path)) (k/joinPath root path) (k/aslPath! root (optionOr (stringSlice path 4 (stringLength path)) path)))) "")))
-        (cRegistrationRows! root (optionOr (listTail paths) (list))))))
+fn nativeRows names: (List String) -> (List Builtin)
+  (map (fn [(name String)] -> Builtin (Builtin :name name :sec "" :type "" :doc ""))
+       (filter nativeBound? names))
 
 fn checkerNames t: String b: Bytes from: Int64 acc: (List String) -> (List String)
   (let [(at (k/findFrom t b "(= name \"" from))]
@@ -523,7 +480,7 @@ fn helpBuiltin! ctx: s/KnowCtx id: Int64 needleRaw: String -> s/KnowOutcome
           ((ok checkerText)
         (let [(needle (k/lstripColons needleRaw))
               (preludeEntries (builtins text (stringToBytes text) (stringLength text) 0 (list)))
-              (entries (builtinUnion preludeEntries (checkerBuiltins checkerText) (cRegistrationRows! ctx.toolRoot (cRegistrationPaths)) (absentNames text)))
+              (entries (builtinUnion preludeEntries (checkerBuiltins checkerText) (nativeRows (listAppend (map (fn [(e Builtin)] -> String e.name) preludeEntries) (map (fn [(e Builtin)] -> String e.name) (checkerBuiltins checkerText)))) (absentNames text)))
               (byName (filter (fn [(e Builtin)] -> Bool (stringContains? e.name needle)) entries))
               (words (splitWords (stringLower needle)))
               (hits (if (listEmpty? byName) (filter (fn [(e Builtin)] -> Bool (and (not (listEmpty? words)) (listAll? (fn [(w String)] -> Bool (stringContains? (stringLower (str e.name " " e.doc)) w)) words))) entries) byName))

@@ -3,4 +3,4 @@
  :entry "src/sigv4.asl"
  :description "Pure ASL AWS S3 request construction and Signature Version 4 signing"
  :aslFirst true
- :dependencies [asl-crypto asl-syntax])
+ :dependencies ["asl-crypto" "asl-syntax"])

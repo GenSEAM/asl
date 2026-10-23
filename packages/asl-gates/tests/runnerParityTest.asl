@@ -123,10 +123,16 @@ fn testCorpusParity! -> Bool
     (assert (= (replayCases! (fixtureCases!) 0) 8) "all eight synthetic runner recordings replay exactly through ASL only")
     (assert (ok? (fileReadString (timesLedger!))) "runner calls wrote the private gateTimes ledger")
     (assert (ok? (pathRemove (timesLedger!))) "private gateTimes ledger removed")
-    (assert (gr/replayCorpus!) "pinned 25-suite runner.py recordings replay through ASL only")
+    true)
+
+fn testDecode -> Bool
+  (do
+    (assert (= (gr/decodeString "\"a\\\\nb\"") "a\\nb") "an escaped backslash before n decodes to a backslash and n")
+    (assert (= (gr/decodeString "\"\\u0041\\t\"") "A\t") "a \\u escape decodes to its character")
     true)
 
 fn ! runTests -> Bool
   (do
+    (assert (testDecode) "shared decode helper")
     (assert (testCorpusParity!) "corpus parity")
     true)

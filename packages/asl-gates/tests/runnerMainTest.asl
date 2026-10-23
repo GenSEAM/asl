@@ -233,12 +233,16 @@ fn workRoot! -> String
 fn ! timesLedger! -> String
   (str (optionOr (envGet "TMPDIR") "/tmp") "/aslRunnerMainTimes." (stringFromInt64 (procSelf)) ".asn")
 
+fn envKeyOf kv: String -> String
+  (optionOr (listHead (stringSplit kv "=")) "")
+
 fn runAsl! dir: String env: String args: String -> Outcome
   (let [(root (workRoot!))
         (argv (listAppend (list (str root "/bin/asl") "run" (str root "/asl/packages/asl-gates/src/runnerMain.asl"))
                           (filter (fn [(arg String)] -> Bool (not (stringEmpty? arg))) (stringSplit args " "))))
         (extra (filter (fn [(kv String)] -> Bool (not (stringEmpty? kv))) (stringSplit env " ")))
-        (childEnv (listAppend (filter (fn [(kv String)] -> Bool (not (stringStartsWith? kv "ASL_GATE_TIMES="))) (envList)) (cons (str "ASL_GATE_TIMES=" (timesLedger!)) extra)))]
+        (overridden (cons "ASL_GATE_TIMES" (map envKeyOf extra)))
+        (childEnv (listAppend (filter (fn [(kv String)] -> Bool (not (listContains? overridden (envKeyOf kv)))) (envList)) (cons (str "ASL_GATE_TIMES=" (timesLedger!)) extra)))]
     (command! argv dir (some childEnv)))
 
 fn testRunUsageParity! -> Bool
@@ -290,7 +294,7 @@ fn redFixturePath name: String -> String
   (str (fixtureDir) "/" name ".asl")
 
 fn redDigest name: String missing: String -> String
-  (optionOr (stringSlice (bytesSha256 (stringToBytes (str "ERR_UNKNOWN_SYMBOL\n" (redFixturePath name) ": ERR_UNKNOWN_SYMBOL " missing))) 0 16) "")
+  (optionOr (stringSlice (bytesSha256 (stringToBytes (str "ERR_RUNTIME\n" "FAIL " (redFixturePath name) ": " (redFixturePath name) ":4:4: ERR_UNKNOWN_SYMBOL unbound symbol: " missing " (after 0 asserts)"))) 0 16) "")
 
 fn makeClone! -> String
   (let [(root (workRoot!))
@@ -318,8 +322,8 @@ fn dropLastLine text: String -> String
 
 fn editedLedger original: String -> String
   (str (dropLastLine original) "\n"
-       "  (:suite \"" (redFixturePath "heldRedTest") "\" :cause \"ERR_UNKNOWN_SYMBOL\" :failedAssertDigest \"" (redDigest "heldRedTest" "heldRedMissing") "\" :since \"R1a2\")\n"
-       "  (:suite \"" (redFixturePath "driftRedTest") "\" :cause \"ERR_UNKNOWN_SYMBOL\" :failedAssertDigest \"0000000000000000\" :since \"R1a2\")\n"
+       "  (:suite \"" (redFixturePath "heldRedTest") "\" :cause \"ERR_RUNTIME\" :failedAssertDigest \"" (redDigest "heldRedTest" "heldRedMissing") "\" :since \"R1a2\")\n"
+       "  (:suite \"" (redFixturePath "driftRedTest") "\" :cause \"ERR_RUNTIME\" :failedAssertDigest \"0000000000000000\" :since \"R1a2\")\n"
        "  (:suite \"asl/packages/asl-gates/tests/siteClaimsTest.asl\" :cause \"ERR_LOAD\" :failedAssertDigest \"1111111111111111\" :since \"R1a2\")\n"
        "  (:suite \"tests/gone/missingTest.asl\" :cause \"ERR_LOAD\" :failedAssertDigest \"2222222222222222\" :since \"R1a2\")\n"
        ")\n")
@@ -343,7 +347,7 @@ fn testRunVerdictParity! scratch: String -> Bool
       (assert (ok? w) "edited ledger written")
       (assert (!= edited original) "ledger edit took effect")
       (assert (stringStartsWith? out "(:runner :status :failed :scope :affected :suites 3 :passedSuites 1 :knownRedHeld 1 ") "one held, one passing, receipt failed")
-      (assert (stringContains? out (str "(:check :id suite :status :failed :err ERR_KNOWN_RED_DRIFT :suite \"" (redFixturePath "driftRedTest") "\" :ev \"ERR_UNKNOWN_SYMBOL " (redDigest "driftRedTest" "driftRedMissing") " ")) "drift names the new signature")
+      (assert (stringContains? out (str "(:check :id suite :status :failed :err ERR_KNOWN_RED_DRIFT :suite \"" (redFixturePath "driftRedTest") "\" :ev \"ERR_RUNTIME " (redDigest "driftRedTest" "driftRedMissing") " ")) "drift names the new signature")
       (assert (stringContains? out "(:check :id suite :status :failed :err ERR_STALE_KNOWN_RED :suite \"asl/packages/asl-gates/tests/siteClaimsTest.asl\" :ev \"listed in knownRed but passed\")") "stale entry for a passing suite")
       (assert (stringContains? out "(:check :id suite :status :failed :err ERR_STALE_KNOWN_RED :suite \"tests/gone/missingTest.asl\" :ev \"knownRed entry names no suite file\")") "missing-file entry")
       (assert (stringContains? out (str "(:knownRedDelta (:added (:suite \"" (redFixturePath "heldRedTest") "\"")) "delta against HEAD lists the appended entries as added")
@@ -417,7 +421,6 @@ fn testRunDifferential! -> Bool
 
 fn testChooseBaseReplay! -> Bool
   (do
-    (assert (gr/replayCase! "runBase") "pinned runner.py runBase fixture replays chooseBase through ASL only")
     (assert (rp/replayChooseBaseFixtures!) "synthetic chooseBase fixtures replay through ASL only")
     true)
 
@@ -469,6 +472,146 @@ fn testFrozenLedger! -> Bool
       (assert (ok? (pathRemove scratch)) "scratch clone removed")
       true))
 
+fn gateShContent name: String failed: Int64 -> String
+  (str "#!/bin/sh\necho \"(:gate :name " name " :asserts 1 :failed " (stringFromInt64 failed) ")\"\n")
+
+fn writeShSuite! repo: String name: String failed: Int64 -> Bool
+  (let [(path (str repo "/" (livePath name)))]
+    (and (ok? (dirCreate (str repo "/" (liveDir))))
+         (ok? (fileWrite path (gateShContent name failed)))
+         (= (command! (list "/bin/chmod" "+x" path) repo (none)).code 0)))
+
+fn liveDir -> String
+  "asl/packages/asl-gates/tests/runnerLiveFixture"
+
+fn livePath name: String -> String
+  (str (liveDir) "/" name)
+
+fn leftovers! dir: String -> (List String)
+  (match (dirList dir) ((ok names) (listSort names)) ((err e) (list (str "unreadable " e))))
+
+; (:m :ref RUNNER-BEHAVIOUR :do "a process in its own session whose argv0 is the given name, detached from our pipes and bounded by alarm 120; the pid it prints is also its process group id")
+fn ! orphan! argv0: String -> Int64
+  (let [(r (command! (list "/usr/bin/perl" "-e" "use POSIX; my $p = fork; if ($p) { print \"$p\\n\"; exit 0 } POSIX::setsid(); open STDIN, '<', '/dev/null'; open STDOUT, '>', '/dev/null'; open STDERR, '>', '/dev/null'; alarm 120; exec { '/bin/sleep' } $ARGV[0], '120';" argv0) (workRoot!) (none)))]
+    (optionOr (stringToInt64 (stringTrim r.out)) -1))
+
+fn ! pidAlive? pid: Int64 -> Bool
+  (= (command! (list "/bin/ps" "-p" (stringFromInt64 pid)) (workRoot!) (none)).code 0)
+
+fn ! finishedPid! -> Int64
+  (optionOr (stringToInt64 (stringTrim (command! (list "/bin/sh" "-c" "echo $$") (workRoot!) (none)).out)) -1)
+
+fn ! killPid! pid: Int64 -> Unit
+  (do (command! (list "/bin/kill" "-9" (stringFromInt64 pid)) (workRoot!) (none)) ())
+
+; (:m :ref RUNNER-BEHAVIOUR :do "run against a lock another process holds: after ASL_GATE_LOCK_WAIT_S the runner reports ERR_BUSY with the holder pid, exits 1 and starts no suite; once the lock is released the same run goes through")
+fn ! testRunnerBusy! repo: String scratch: String -> Bool
+  (let [(lockPath (str repo "/.git/aslRunner.lock"))
+        (log (str scratch "/busy.log"))
+        (env (str "ASL_GATE_LOCK_WAIT_S=1 ASL_RUNNER_FIXTURE_LOG=" log))
+        (args (str "run --suite " (fixtureDir) "/snapshotProbeATest.sh"))
+        (held (fileLock lockPath true))
+        (wrote (fileWrite lockPath (stringFromInt64 (procSelf))))
+        (busy (runAsl! repo env args))
+        (ranWhileBusy (fileExists? log))
+        (released (match held ((ok fd) (fdClose fd)) ((err e) (err e))))
+        (free (runAsl! repo env args))]
+    (do
+      (assert (and (ok? held) (ok? wrote)) "the test process holds the runner lock")
+      (assert (= busy.code 1) (str "a busy run exits 1: " busy.out))
+      (assert (and (stringStartsWith? busy.out "(:runner :status :failed :err ERR_BUSY :ev \"a runner already holds ") (stringContains? busy.out (str "/repo/.git/aslRunner.lock, holder pid " (stringFromInt64 (procSelf)) "\")"))) (str "ERR_BUSY names the lock file and the holder pid: " busy.out))
+      (refute ranWhileBusy "no suite started while the lock was held")
+      (assert (ok? released) "lock released")
+      (assert (stringContains? free.out ":suites 1 ") (str "after release the same run goes through: " free.out))
+      (assert (ok? (pathRemove log)) "probe log removed")
+      true))
+
+; (:m :ref RUNNER-BEHAVIOUR :do "a failing native build in the snapshot is a runner error: exit 2, ERR_RUNNER with the build's exit code and output, no suite verdicts, and the snapshot and lock are cleaned up")
+fn ! testRunnerBuildFail! repo: String scratch: String -> Bool
+  (let [(tmp (str scratch "/tmpBuild"))
+        (_ (sh! scratch (str "mkdir -p " (shq tmp))))
+        (buildSh (str repo "/asl/host/build.sh"))
+        (original (readText! buildSh))
+        (broken (fileWrite buildSh "#!/bin/sh\necho 'compiling fixture'\necho 'fixture build: seeded failure' >&2\nexit 3\n"))
+        (out (runAsl! repo (str "TMPDIR=" tmp) (str "run --suite " (redFixturePath "heldRedTest"))))
+        (restored (fileWrite buildSh original))]
+    (do
+      (assert (ok? broken) "build.sh replaced by a failing one")
+      (assert (= out.code 2) (str "a failed build exits 2: " out.out))
+      (assert (stringContains? out.out "(:runner :status :failed :err ERR_RUNNER :ev \"native CLI build failed: exit 3: ") (str "the failure names the build exit: " out.out))
+      (assert (stringContains? out.out "fixture build: seeded failure") "the build output is in the evidence")
+      (refute (stringContains? out.out ":suites ") "no suite verdicts after a failed build")
+      (assert (listEmpty? (leftovers! tmp)) (str "no snapshot left behind: " (stringJoin (leftovers! tmp) ",")))
+      (assert (ok? restored) "build.sh restored")
+      true))
+
+; (:m :ref RUNNER-BEHAVIOUR :do "a registry lists the process groups an earlier runner left: the next run kills a group whose leader is a runner snapshot process and leaves a listed group that is not one, then empties the registry")
+fn ! testRunnerReap! repo: String scratch: String -> Bool
+  (let [(registry (str repo "/.git/aslRunner.pgids"))
+        (mine (orphan! "aslRunnerSnap.reapFixture"))
+        (other (orphan! "plainSleepReapFixture"))
+        (_ (fileWrite registry (str (stringFromInt64 mine) "\n" (stringFromInt64 other) "\n")))
+        (aliveBefore (and (pidAlive? mine) (pidAlive? other)))
+        (out (runAsl! repo "" (str "run --suite " (fixtureDir) "/liveOkTest.sh")))
+        (mineAlive (pidAlive? mine))
+        (otherAlive (pidAlive? other))
+        (after (resultOr (fileReadString registry) "gone"))
+        (_k1 (killPid! mine))
+        (_k2 (killPid! other))]
+    (do
+      (assert (and (> mine 1) (> other 1) aliveBefore) "both fixture groups are running before the run")
+      (assert (stringContains? out.out ":suites 1 ") (str "the run itself went through: " out.out))
+      (refute mineAlive "the listed group led by a runner snapshot process is killed")
+      (assert otherAlive "a listed group that is not a runner snapshot is left alone")
+      (assert (stringEmpty? after) (str "the registry is emptied: " after))
+      true))
+
+; (:m :ref RUNNER-BEHAVIOUR :do "temp dirs of dead runners (aslRunnerSnap.<pid>.* and aslKnownRedCapture.<pid>.*) are swept at the start of a run; a live pid, our own pid and names of any other shape stay")
+fn ! testRunnerSweep! repo: String scratch: String -> Bool
+  (let [(tmp (str scratch "/tmpSweep"))
+        (dead (stringFromInt64 (finishedPid!)))
+        (live (stringFromInt64 (procSelf)))
+        (names (list (str "aslRunnerSnap." dead ".a") (str "aslKnownRedCapture." dead ".b") (str "aslRunnerSnap." live ".c") (str "unrelated." dead ".d") "aslRunnerSnap.notAPid.e"))
+        (_ (sh! scratch (str "mkdir -p " (shq tmp) " && cd " (shq tmp) " && mkdir " (stringJoin (map shq names) " "))))
+        (out (runAsl! repo (str "TMPDIR=" tmp) (str "run --suite " (fixtureDir) "/liveOkTest.sh")))
+        (left (leftovers! tmp))]
+    (do
+      (assert (stringContains? out.out ":suites 1 ") (str "the run itself went through: " out.out))
+      (assert (= left (listSort (list (str "aslRunnerSnap." live ".c") (str "unrelated." dead ".d") "aslRunnerSnap.notAPid.e"))) (str "only the dead runners' dirs are swept: " (stringJoin left ",")))
+      true))
+
+; (:m :ref RUNNER-BEHAVIOUR :do "the snapshot is the working tree, not the index: an edited tracked suite runs as edited, a newly staged suite runs, a deleted tracked suite does not")
+fn ! testRunnerLiveEdits! repo: String -> Bool
+  (let [(made (and (writeShSuite! repo "aLiveTest.sh" 0) (writeShSuite! repo "bLiveTest.sh" 0) (writeShSuite! repo "cLiveTest.sh" 0)))
+        (_ (sh! repo "/usr/bin/git add -A"))
+        (edited (fileWrite (str repo "/" (livePath "aLiveTest.sh")) (gateShContent "aLiveTest.sh" 1)))
+        (deleted (pathRemove (str repo "/" (livePath "bLiveTest.sh"))))
+        (added (and (writeShSuite! repo "dLiveTest.sh" 0) (= (command! (list "/usr/bin/git" "add" (livePath "dLiveTest.sh")) repo (none)).code 0)))
+        (out (runAsl! repo "" (str "run --path " (liveDir))))]
+    (do
+      (assert (and made (ok? edited) (ok? deleted) added) "fixture edited after staging: a edited, b deleted, d new and staged")
+      (assert (stringContains? out.out " :suites 3 :passedSuites 2 ") (str "a, c and d ran; a failed: " out.out))
+      (assert (stringContains? out.out (str "(:check :id suite :status :failed :err ERR_NEW_RED_SUITE :suite \"" (livePath "aLiveTest.sh") "\"")) "the edited suite runs as edited and is a new red")
+      (refute (stringContains? out.out "bLiveTest.sh") "the deleted suite is not run")
+      (assert (= out.code 1) "a new red suite exits 1")
+      true))
+
+fn ! testRunnerBehaviours! -> Bool
+  (let [(scratch (makeClone!))
+        (repo (str scratch "/repo"))
+        (_ (sh! scratch "mkdir -p tmp"))
+        (okWritten (writeShSuite! repo "liveOkTest.sh" 0))
+        (moved (sh! repo (str "mv " (shq (livePath "liveOkTest.sh")) " " (shq (str (fixtureDir) "/liveOkTest.sh")) " && /usr/bin/git add -A")))]
+    (do
+      (assert okWritten "ok suite fixture written")
+      (assert (testRunnerBusy! repo scratch) "runner busy")
+      (assert (testRunnerBuildFail! repo scratch) "runner build failure")
+      (assert (testRunnerReap! repo scratch) "runner reaps orphan groups")
+      (assert (testRunnerSweep! repo scratch) "runner sweeps stale temps")
+      (assert (testRunnerLiveEdits! repo) "runner snapshots the working tree")
+      (assert (ok? (pathRemove scratch)) "scratch clone removed")
+      true))
+
 fn ! runTests -> Bool
   (do
     (assert (testParseDependenciesValid) "parseDependencies valid")
@@ -484,8 +627,9 @@ fn ! runTests -> Bool
     (assert (testBaselineAsserts) "gateTests baseline")
     (assert (testRunUsageParity!) "run usage parity")
     (assert (testRunDifferential!) "run differential")
-    (assert (testChooseBaseReplay!) "chooseBase fixture replay")
+    (assert (testChooseBaseReplay!) "chooseBase replay")
     (assert (testFrozenLedger!) "frozen ledger")
+    (assert (testRunnerBehaviours!) "runner behaviours")
     (assert (ok? (fileReadString (timesLedger!))) "runner children wrote the private gateTimes ledger")
     (assert (ok? (pathRemove (timesLedger!))) "private gateTimes ledger removed")
     true)

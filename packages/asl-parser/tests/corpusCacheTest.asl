@@ -92,7 +92,7 @@ fn snapshotProbeEmptyCacheEnv! root: String cwd: String home: String files: Stri
   (sh! (str "cd '" cwd "' && ASL_CORPUS_CACHE='' HOME='" home "' ASL_CLI_ROOT='" cwd "' CORPUS_CACHE_PROBE_FILES='" files "' '" (rawHost! root) "' test '" (probeFile cwd) "' 2>&1"))
 
 fn linkFullTree cwd: String root: String -> String
-  (str "mkdir -p '" cwd "/asl' '" cwd "/asl/packages' && ln -s '" root "/.asl.config.asn' '" cwd "/.asl.config.asn' && ln -s '" root "/asl/prelude' '" cwd "/asl/prelude' && ln -s '" root "/asl/host' '" cwd "/asl/host' && ln -s '" root "/asl/packages/asl-parser' '" cwd "/asl/packages/asl-parser' && ln -s '" root "/asl/packages/asl-syntax' '" cwd "/asl/packages/asl-syntax' && ln -s '" root "/asl/packages/asl-json' '" cwd "/asl/packages/asl-json' && ln -s '" root "/asl/packages/asl-forms' '" cwd "/asl/packages/asl-forms'")
+  (str "mkdir -p '" cwd "/asl' '" cwd "/asl/packages' && ln -s '" root "/.asl.config.asn' '" cwd "/.asl.config.asn' && ln -s '" root "/asl/prelude' '" cwd "/asl/prelude' && ln -s '" root "/asl/host' '" cwd "/asl/host' && cp -R '" root "/asl/packages/asl-parser' '" cwd "/asl/packages/asl-parser' && cp -R '" root "/asl/packages/asl-syntax' '" cwd "/asl/packages/asl-syntax' && cp -R '" root "/asl/packages/asl-json' '" cwd "/asl/packages/asl-json' && cp -R '" root "/asl/packages/asl-forms' '" cwd "/asl/packages/asl-forms'")
 
 fn linkProbeFiles cwd: String -> String
   (str "mkdir -p '" cwd "/probeFiles' && cp asl/packages/asl-syntax/src/core/bytesText.asl '" cwd "/probeFiles/bytesText.asl' && cp asl/packages/asl-syntax/src/core/print.asl '" cwd "/probeFiles/print.asl' && cp asl/packages/asl-syntax/src/core/outline.asl '" cwd "/probeFiles/outline.asl'")

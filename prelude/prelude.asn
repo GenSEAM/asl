@@ -80,8 +80,6 @@
       :doc "Negative infinity.")
     (:name "=" :sec "Comparison and logic" :type "T T -> Bool" :src "asl/host/src/compile.c"
       :doc "Structural equality over lists and records; comparing values of different kinds is a type error.")
-    (:name "==" :sec "Comparison and logic" :type "T T -> Bool" :src "asl/host/src/compile.c"
-      :doc "The same operator as =.")
     (:name "!=" :sec "Comparison and logic" :type "T T -> Bool" :src "asl/host/src/compile.c"
       :doc "Structural inequality.")
     (:name "<" :sec "Comparison and logic" :type "T T -> Bool" :src "asl/host/src/compile.c"

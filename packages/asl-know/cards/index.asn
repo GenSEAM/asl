@@ -1,7 +1,7 @@
 (:know :tier L0 :cards 76 :tokensBy bytes36 :use "(:know :q intent-or-name :budget N) or asl know; a card id or exact symbol returns its card")
 (:c "core/lang" "how to write ASL: syntax, effects, m..." (module fn))
 (:c "core/arithmetic" "Arithmetic builtins, no import" (+ -))
-(:c "core/comparison" "Comparison and logic builtins, no im..." (= ==))
+(:c "core/comparison" "Comparison and logic builtins, no im..." (= !=))
 (:c "core/string" "String builtins, no import" (str stringConcat))
 (:c "core/numeric" "Numeric conversion builtins, no impo..." (int32ToInt64 int64ToInt32))
 (:c "core/list" "List builtins, no import" (list cons))

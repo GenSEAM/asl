@@ -1,6 +1,5 @@
-(:card "core/comparison" :purpose "Comparison and logic builtins, no import" :sigs ("= : T T -> Bool" "== : T T -> Bool" "!= : T T -> Bool" "< : T T -> Bool" "<= : T T -> Bool" "> : T T -> Bool" ">= : T T -> Bool" "and : Bool... -> Bool" "or : Bool... -> Bool" "not : Bool -> Bool") :example none)
+(:card "core/comparison" :purpose "Comparison and logic builtins, no import" :sigs ("= : T T -> Bool" "!= : T T -> Bool" "< : T T -> Bool" "<= : T T -> Bool" "> : T T -> Bool" ">= : T T -> Bool" "and : Bool... -> Bool" "or : Bool... -> Bool" "not : Bool -> Bool") :example none)
 (:sym "=" :sig "= : T T -> Bool" :doc "Structural equality over lists and records; comparing values of different kinds is a type error.")
-(:sym "==" :sig "== : T T -> Bool" :doc "The same operator as =.")
 (:sym "!=" :sig "!= : T T -> Bool" :doc "Structural inequality.")
 (:sym "<" :sig "< : T T -> Bool" :doc "Ordered comparison of two values of the same type: Int, Float, String (bytewise) or Keyword (by name); any other pair is ERR_TYPE.")
 (:sym "<=" :sig "<= : T T -> Bool" :doc "Ordered comparison of two values of the same type: Int, Float, String (bytewise) or Keyword (by name); any other pair is ERR_TYPE.")

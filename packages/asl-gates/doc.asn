@@ -356,8 +356,6 @@
 (:doc :symbol "asl/packages/asl-gates/tests/auditGatesTest.asl#chmodFixture!" :text "same git argv sequence as foreignGen.py")
 (:doc :symbol "asl/packages/asl-gates/tests/auditGatesTest.asl#normWall" :text "suite wall time differs per run; auditGen.py writes :wallMs <ms>")
 (:doc :symbol "asl/packages/asl-gates/tests/auditGatesTest.asl#recordFails!" :text "ag/writeRecord on the tree auditGen.py gave audit.py writeRecord: same path and bytes")
-(:doc :symbol "asl/packages/asl-gates/tests/auditParityTest.asl#" :text "Audit parity replays pinned Python dyck/vacuity cases against ASL ports")
-(:doc :symbol "asl/packages/asl-gates/tests/auditParityTest.asl#testDecodeAndCapture" :text "fails on misordered unescape or one-read capture")
 (:doc :symbol "asl/packages/asl-gates/tests/docExtractTest.asl#L129" :text "mutant: a :why value should never leak its surrounding quotes into the ledger text")
 (:doc :symbol "asl/packages/asl-gates/tests/docExtractTest.asl#L131" :text "mutant: dropping the :why key must not also drop sibling keys such as :ref")
 (:doc :symbol "asl/packages/asl-gates/tests/dyckTest.asl#" :text "Unit tests for dyck delimiter balance checker")

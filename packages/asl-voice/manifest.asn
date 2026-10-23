@@ -6,4 +6,5 @@
  :modules [
    "aslVoice/conversationalContext"
    "aslVoice/voiceBuffer"
- ])
+ ]
+ :dependencies [])

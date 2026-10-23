@@ -194,7 +194,7 @@ fn ! runTests -> Bool
     (do
       (assert (= discoveryResult.exitCode 0) "ASL discovery exits successfully")
       (assert (> discoveredCount 100) "ASL discovery lists over 100 suites")
-      (assert (listContains? suiteLines "asl/packages/asl-gates/tests/auditParityTest.asl") "discovery includes auditParityTest")
+      (assert (listContains? suiteLines "asl/packages/asl-gates/tests/dyckTest.asl") "discovery includes dyckTest")
       (assert (listContains? suiteLines "asl/packages/asl-gates/tests/suiteRunnerTest.asl") "discovery includes suiteRunnerTest")
       (assert (stringStartsWith? excludedLine "(:excluded") "discovery output retains the exclusion form")
       (assert (stringStartsWith? frozenLine "(:frozen") "discovery output ends with a frozen count")

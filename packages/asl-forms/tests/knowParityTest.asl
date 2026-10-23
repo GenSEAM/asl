@@ -53,6 +53,20 @@ fn writeSpec! dir: String f: FileSpec -> Bool
 fn materializeTree! files: (List FileSpec) tree: String dir: String -> Bool
   (and (mkdirs! dir) (listAll? (fn [(f FileSpec)] -> Bool (writeSpec! dir f)) (filter (fn [(f FileSpec)] -> Bool (= f.tree tree)) files)))
 
+fn copyFile! from: String to: String -> Bool
+  (match (fileReadString from)
+    ((err _) false)
+    ((ok text) (ok? (fileWrite to text))))
+
+; (:m :ref KNOWPARITY-ROOTCONFIG :do "a toolchain tree that builds a tool natively needs the workspace config and package manifests above its importer; the fixture embeds only sources, so they come from the repo")
+fn linkWorkspaceMarkers! repo: String tc: String -> Bool
+  (if (not (k/isDir! (k/joinPath tc "asl/packages")))
+    true
+    (and (copyFile! (k/joinPath repo ".asl.config.asn") (k/joinPath tc ".asl.config.asn"))
+         (match (dirList (k/joinPath tc "asl/packages"))
+           ((err _) false)
+           ((ok names) (listAll? (fn [(p String)] -> Bool (copyFile! (k/joinPath repo (str "asl/packages/" p "/manifest.asn")) (k/joinPath tc (str "asl/packages/" p "/manifest.asn")))) names)))))
+
 fn runGit! ws: String args: (List String) -> Bool
   (match (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd "git" args) ws) 60000))
     ((ok out) (= out.exitCode 0))
@@ -67,6 +81,7 @@ fn prepareCase! repo: String base: String files: (List FileSpec) c: CaseSpec -> 
         (ws (if (= c.ws "@tc") tc (k/joinPath dir "knowWs")))
         (made (and (materializeTree! files c.tc tc)
                    (or (= c.ws "@tc") (materializeTree! files c.ws ws))
+                   (linkWorkspaceMarkers! repo tc)
                    (or (stringEmpty? c.extra) (materializeTree! files c.extra (k/joinPath dir c.extra)))))
         (gitOk (cond
                  ((= c.git "init") (runGit! ws (list "init" "-q")))

@@ -10,4 +10,5 @@
    "aslAgent/omniIngress"
    "aslAgent/omniIntent"
    "aslAgent/unbiasedContext"
- ])
+ ]
+ :dependencies ["asl-text"])
