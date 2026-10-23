@@ -132,5 +132,31 @@ fn ! testImportEditInvalidatesVerdict! -> Bool
             (assert (ok? removed) "fixture directory is removed")
             true)))))
 
+; (:m :ref NATIVERUN-RELATIVE-20261023 :do "asl run of a package file by a relative path from the package directory staged the mirror and then handed the root-relative staged path to a process whose cwd is the package, so the file was not found; the entry reads data relative to the package, the cwd the user ran from")
+fn runMainSource -> String
+  (str
+    "(module outsidepkgclosurefixture/runMain\n"
+    "  :x [main]\n"
+    "  :i [(outsidepkgclosurefixture/a :a oa)])\n"
+    "\n"
+    "fn main -> (Result Int String)\n"
+    "  (if (= (resultOr (fileReadString \"data/rows.txt\") \"\") \"42\\n\") (ok (- (oa/valueA) 7)) (err \"rows.txt not read from the package directory\"))\n")
+
+fn ! testRunFromPackageDirectory! -> Bool
+  (let [(root (fixtureRoot!))
+        (builtR (buildFixture! root))]
+    (match builtR
+      ((err e) (assert false (str "fixture setup failed: " e)))
+      ((ok _)
+        (let [(wMain (writeFile! (str root "/runMain.asl") (runMainSource)))
+              (binAsl (str (repoRoot!) "/bin/asl"))
+              (result (fr/runOneLimited (fr/job (list binAsl "run" "runMain.asl") root (fr/childEnv (list))) (fr/limits 900 64)))
+              (removed (pathRemove root))]
+          (do
+            (assert (ok? wMain) "the entry module is written")
+            (assert (= result.exit 0) (str "asl run of a relative path from the package directory runs the entry: " result.out))
+            (assert (ok? removed) "fixture directory is removed")
+            true)))))
+
 fn ! runTests -> Bool
-  (and (testOutsidePackageClosureResolves!) (testImportEditInvalidatesVerdict!))
+  (and (and (testOutsidePackageClosureResolves!) (testImportEditInvalidatesVerdict!)) (testRunFromPackageDirectory!))

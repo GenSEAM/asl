@@ -175,7 +175,7 @@ fn ! runOutside! ctx: sys/Context file: String absFile: String args: (List Strin
       ((err e) (do (sys/sayErr! (str "(:run :status :failed :error ERR_BUILD :message \"cannot stage " file ": " e "\")")) 1))
       ((ok rel)
         (do (eprintln (str "NATIVE-BYPASS " file " :reason absolute-path-outside-workspace :staged " rel))
-            (nativeTest! (cons "run" (cons rel (rest args))))))))
+            (nativeTest! (cons "run" (cons (str ctx.root "/" rel) (rest args))))))))
 
 ; (:m :ref R1-NATIVE-RECERT :do "nt/main prints its own 'FAIL path: ERR_NATIVE_UNSUPPORTED: path exports neither runTests nor main' when run! delegates straight to it, same generic wrap as the test-side gap but with no Built.reason string this layer could intercept; a cheap static nt/entryOf read of the file's own header, done here before delegating, catches the same no-entry case and reports it with the canonical ERR_NO_ENTRY CONTRACT.asn names, while any file that does declare an entry still goes to nativeTest! exactly as before")
 ; (:m :ref POSTFIX :do "the early-intercept FAIL line reinvented nt/main's own construction and got it wrong on 3 points: it rooted (relative) both path mentions where nt/main's runFile uses the raw absFile for the FAIL prefix and only the relative logical path for the message body, it dropped the colon after ERR_NO_ENTRY, and it appended a bogus (after 0 asserts) suffix nt/main's run leg never prints (that suffix is test/eval-only, from failLine, not runFile's bare failReason); matched verbatim to nt/main's own text so nativeCliTest's native-equals-asl-host comparison holds")
