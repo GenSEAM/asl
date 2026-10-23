@@ -92,7 +92,11 @@ fn testTrackedMarkdownRoundTrip! -> Bool
      (let [(total (listLength files))
            (passed (checkFilesLoop! files 0))]
        (do
-         (assert (> total 0) (str "tracked md files found: " (stringFromInt64 total)))
+         (assert (> total 100) (str "tracked md files total > 100: " (stringFromInt64 total)))
+         (assert (listContains? files "MANIFESTO.md") "md list includes MANIFESTO.md")
+         (assert (listContains? files "asl/ROADMAP.md") "md list includes asl/ROADMAP.md")
+         (assert (listContains? files "asl/packages/asl-html/README.md") "md list includes a package README")
+         (assert (listContains? files "asl/web/content/blog/clean-break-v04.md") "md list includes a blog post")
          (assert (= passed total) (str "all files passed round-trip: " (stringFromInt64 passed) " / " (stringFromInt64 total)))
          true))))
 
