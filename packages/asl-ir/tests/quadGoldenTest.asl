@@ -13,8 +13,10 @@ fn entries -> (List String)
 ; (:m :ref PERF-REALPATH-CACHE :do "repinned: checkSemanticTest links asl-checker/resolve, whose walk, importer cache and loadModuleDepsIx! changed its linked IR; measured by this file's own goldenDigests printer")
 ; (:m :ref WAVE1-REDS :do "repinned: COMPILEHOT 5ac2c6a68 rewrote asl-checker/resolve isEffectfulBuiltin? (name chain) and checkSemanticTest links resolve, so its linked IR is 10274 bytes longer; the main-tree pin 3518356563441014170:4946123 predates it; measured by this file's own goldenDigests printer")
 ; (:m :ref WAVE2 :do "repinned on the integrated tree: unboxed record fields (UFIR UFEMIT), hashRt and loop closure clones changed the linked IR of checkSemanticTest; measured by this file own goldenDigests printer")
+; (:m :ref WAVE3 :do "checkSemanticTest linked IR repinned on the merged tree (RCSETTLE rc worklist, RCCOST2, READINTO mkBytesOwn, MEMMEM, main 668c10ea8): +537 bytes over the TABLECONST pin; measured by this file own goldenDigests printer")
+; (:m :ref TABLECONST :do "repinned: genericAlias, genericConcrete and builtinEntry became cond chains, and checkSemanticTest links asl-checker/types; measured by this file own goldenDigests printer")
 fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "4212955357428612866:4961500")
+  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "5125643264259691999:4972216")
         (pair "lowerSourceWith" "6806003338108627551:8856"))
 
 fn diagLine d: ty/IrDiag -> String

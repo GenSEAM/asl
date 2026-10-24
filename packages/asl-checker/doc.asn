@@ -315,3 +315,4 @@
 (:doc :symbol "asl/packages/asl-checker/src/lint.asl#lintModule" :text "Every LINT_QUADRATIC_LISTGET hit across a module's top-level defuns, in source order.")
 (:doc :symbol "asl/packages/asl-checker/tests/quadLintTest.asl#" :text "Falsifiable fixture for the LINT_QUADRATIC_LISTGET idiom lint (IDIOMLINT): a synthetic listGet-by-counter recursive fn is flagged, a listHead/listTail walk and a single non-recursive listGet are not.")
 (:doc :symbol "asl/packages/asl-checker/src/resolve.asl#isEffectfulBuiltin?" :text "Whether a builtin name has a side effect and so is never dropped or reordered as pure: a host effectful name or an effectful value builtin.")
+(:doc :symbol "asl/packages/asl-checker/src/types.asl#genericRows" :text "The D159 one-type generic name rows: each pair maps a name/Type key such as length/String to its concrete builtin, the table genericAlias and genericConcrete read.")

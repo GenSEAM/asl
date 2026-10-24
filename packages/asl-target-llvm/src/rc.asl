@@ -12,6 +12,7 @@ schema Ctx
   borrows: (Map String (List Bool))
   scc: (Map String String)
   proj: (Map String Int64)
+  cache: (Map String Facts)
 
 schema Use
   name: String
@@ -108,6 +109,10 @@ fn builderFunction? ctx: Ctx name: String -> Bool
 
 ; (:m :ref CLOSPEC :do "a closureSpec clone of a fresh kernel (its name followed by $cs) is fresh as the kernel is")
 fn arrayFresh? name: String -> Bool
+  (and (stringStartsWith? name "asl-target-llvm/arrays.") (arrayKernel? name))
+
+; (:m :ref RCCOST2 :do "arrayFresh? runs per call instruction; the kernel names are all under the arrays. prefix, so any other callee is rejected before the 21 names are built")
+fn arrayKernel? name: String -> Bool
   (listContains? (fold (fn [(acc (List String)) (k String)] -> (List String)
                          (listAppend acc (map (fn [(op String)] -> String (str "asl-target-llvm/arrays." k "Array" op)) (list "Len" "Get" "Slice" "Concat" "Generate" "Sum" "CountEq"))))
                        (list) (list "f64" "i64" "i8"))
@@ -115,7 +120,7 @@ fn arrayFresh? name: String -> Bool
 
 ; (:m :ref RC-UNPIN :do "runtime externs the system routes call that read their Val arguments without keeping them and return a fresh value, a raw pointer to a malloc copy or a tag word (abs, the route's tag read)")
 fn borrowExtern? name: String -> Bool
-  (listContains? (list "mkStr" "mkBytes" "valToCStr" "valToCStrN" "abs") name)
+  (listContains? (list "mkStr" "mkBytes" "mkBytesOwn" "valToCStr" "valToCStrN" "abs") name)
 
 ; (:m :ref RC-UNPIN :do "functions the system route adds (sysRoute wrappers and the sys helpers they call) are plain SSA over fresh allocations, so they are counted like user code; array kernels and parallel workers stay opaque")
 fn countedRoute? name: String -> Bool
@@ -216,10 +221,11 @@ fn heapNames f: ty/SsaFunction -> (Map String Bool)
         (dests (map (fn [(i ty/SsaInstr)] -> String i.dest) (filter (fn [(i ty/SsaInstr)] -> Bool (heapTy? i.ty)) (functionInstrs f))))]
     (setOf (listAppend params (listAppend blockParams dests))))
 
-fn allUseKinds ctx: Ctx facts: Facts f: ty/SsaFunction -> (Map String (List String))
-  (let [(note (fn [(acc (Map String (List String))) (u Use)] -> (Map String (List String)) (mapSet acc u.name (cons u.kind (optionOr (mapGet acc u.name) (list))))))]
-    (fold (fn [(acc (Map String (List String))) (b ty/SsaBlock)] -> (Map String (List String))
-            (fold note (fold (fn [(a (Map String (List String))) (ins ty/SsaInstr)] -> (Map String (List String)) (fold note a (instrUses ctx facts ins))) acc b.instrs)
+; (:m :ref RCCOST2 :do "both readers of the per-name use kinds only ask whether a name has a consume use, so the set of consumed names replaces a map of kind lists that consed per use")
+fn consumedNames ctx: Ctx facts: Facts f: ty/SsaFunction -> (Map String Bool)
+  (let [(note (fn [(acc (Map String Bool)) (u Use)] -> (Map String Bool) (if (= u.kind "consume") (mapSet acc u.name true) acc)))]
+    (fold (fn [(acc (Map String Bool)) (b ty/SsaBlock)] -> (Map String Bool)
+            (fold note (fold (fn [(a (Map String Bool)) (ins ty/SsaInstr)] -> (Map String Bool) (fold note a (instrUses ctx facts ins))) acc b.instrs)
                   (termUses facts b.term)))
           (mapEmpty) f.blocks))
 
@@ -267,8 +273,8 @@ fn functionFacts ctx: Ctx f: ty/SsaFunction -> Facts
         (parts (partsOf instrs))
         (probe (Facts :heap heap :immortal immortal :anchors (mapEmpty) :dupAfter (mapEmpty) :pinAfter (mapEmpty) :wrapAfter (mapEmpty) :borrowed borrowed :flow flow.keys :parts parts :cells (cellBases parts)
                       :takes (mapEmpty) :guards (mapEmpty) :rawSet (mapEmpty)))
-        (useKinds (allUseKinds ctx probe f))
-        (borrowOnly (fn [(n String)] -> Bool (listAll? (fn [(k String)] -> Bool (!= k "consume")) (optionOr (mapGet useKinds n) (list)))))
+        (consumeSet (consumedNames ctx probe f))
+        (borrowOnly (fn [(n String)] -> Bool (not (mapHas? consumeSet n))))
         (termConsumed (setOf (fold (fn [(acc (List String)) (b ty/SsaBlock)] -> (List String) (listAppend acc (map (fn [(u Use)] -> String u.name) (filter (fn [(u Use)] -> Bool (= u.kind "consume")) (termUses probe b.term))))) (list) f.blocks)))
         (tailArgs (setOf (fold (fn [(acc (List String)) (c (Pair String (List String)))] -> (List String) (listAppend acc (pairSecond c))) (list) (tailCalls f))))
         (sinkable (fn [(n String)] -> Bool (and (not (mapHas? termConsumed n)) (not (mapHas? tailArgs n)))))
@@ -762,7 +768,7 @@ fn rawLiveness ctx: Ctx facts: Facts f: ty/SsaFunction rawIn: (Map String (Map S
     (if (or (<= fuel 0) (= (liveSize next) (liveSize rawIn))) next (rawLiveness ctx facts f next (- fuel 1))))
 
 fn rcFunction ctx: Ctx f: ty/SsaFunction -> ty/SsaFunction
-  (let [(facts (functionFacts ctx f))
+  (let [(facts (cachedFacts ctx f))
         (liveIn (liveness ctx facts f (mapEmpty) 1000))
         (rawIn (if (= (mapSize facts.rawSet) 0) (mapEmpty) (rawLiveness ctx facts f (mapEmpty) 1000)))
         (byLabel (fold (fn [(acc (Map String ty/SsaBlock)) (b ty/SsaBlock)] -> (Map String ty/SsaBlock) (mapSet acc b.label b)) (mapEmpty) f.blocks))
@@ -828,17 +834,17 @@ fn rcModule m: ty/SsaModule user: (Map String Bool) -> ty/SsaModule
         (names (setOf (map (fn [(f ty/SsaFunction)] -> String f.name) m.functions)))
         (singletons (setOf (filter opt/singleton? (mapKeys names))))
         (routed (setOf (filter (fn [(n String)] -> Bool (and (not (mapHas? user n)) (countedRoute? n))) (mapKeys names))))
-        (ctx0 (Ctx :user (union (union user singletons) routed) :opaque builders :builders builders :borrows (mapEmpty) :scc (mapEmpty) :proj (mapEmpty)))
+        (ctx0 (Ctx :user (union (union user singletons) routed) :opaque builders :builders builders :borrows (mapEmpty) :scc (mapEmpty) :proj (mapEmpty) :cache (mapEmpty)))
         (targets (setOf (filter (fn [(n String)] -> Bool (mapHas? names n))
                                 (distinctNames (fold (fn [(acc (List String)) (f ty/SsaFunction)] -> (List String)
                                                        (listAppend acc (fold (fn [(a (List String)) (ins ty/SsaInstr)] -> (List String) (match (closureCallee ins.op) ((some c) (cons c a)) ((none) a))) (list) (functionInstrs f))))
                                                      (list) m.functions)))))
         (counted (fn [(f ty/SsaFunction)] -> Bool (not (opaqueFunction? ctx0 f.name))))
         (countedFns (filter counted m.functions))
-        (ctxS (Ctx :user ctx0.user :opaque ctx0.opaque :builders ctx0.builders :borrows ctx0.borrows :scc (sccOf m.functions targets) :proj (mapEmpty)))
+        (ctxS (Ctx :user ctx0.user :opaque ctx0.opaque :builders ctx0.builders :borrows ctx0.borrows :scc (sccOf m.functions targets) :proj (mapEmpty) :cache (mapEmpty)))
         (borrows0 (initialBorrows countedFns targets))
         (ctxB (withBorrows ctxS borrows0))
-        (ctx (settleProj (withProj ctxB (growProj ctxB (filter (fn [(f ty/SsaFunction)] -> Bool (borrowable? targets f)) countedFns) 50)) countedFns borrows0 50))
+        (ctx (settleProj (withProj ctxB (growProj ctxB (filter (fn [(f ty/SsaFunction)] -> Bool (borrowable? targets f)) countedFns) 50)) countedFns (flagReaders countedFns) (allPending countedFns) borrows0 50))
         (bodies (map (fn [(f ty/SsaFunction)] -> ty/SsaFunction
                        (let [(g (retargetClosures targets (if (counted f) (rcFunction ctx f) f)))]
                          (if (mapHas? targets f.name) (uncaptured g) g)))
@@ -1999,18 +2005,6 @@ fn routeFunction last: Bool part: String -> Routed
       (Routed :text (stringJoin (pairFirst r) "\n") :classes (pairSecond r)
               :resets (filter (fn [(x String)] -> Bool (!= x "")) (map resetOf (filter (fn [(l String)] -> Bool (!= (tokenOf l) "")) (pairFirst r)))))))
 
-fn routeReuse text: String asan: Bool -> (Pair String (List String))
-  (if (not (stringContains? text "= call tailcc i64 @aslRcReset_"))
-    (pair text (list))
-    (let [(parts (stringSplit text "\ndefine "))
-          (n (listLength parts))
-          (done (map (fn [(i Int64)] -> Routed (routeFunction (= i (- n 1)) (optionOr (listGet parts i) ""))) (range 0 n)))]
-      (pair (stringJoin (map (fn [(r Routed)] -> String r.text) done) "\ndefine ")
-            (cons (dupSharedText)
-                  (listAppend (map reuseOrText (distinctInts (fold (fn [(acc (List Int64)) (r Routed)] -> (List Int64) (listAppend r.classes acc)) (list) done)))
-                              (map (fn [(r String)] -> String (resetFrom asan r)) (distinctNames (fold (fn [(acc (List String)) (r Routed)] -> (List String) (listAppend r.resets acc)) (list) done))))))))
-
-
 fn distinctInts xs: (List Int64) -> (List Int64)
   (fold (fn [(acc (List Int64)) (x Int64)] -> (List Int64) (if (listContains? acc x) acc (cons x acc))) (list) xs)
 
@@ -2794,18 +2788,73 @@ fn allocKey piece: String -> Int64
 fn routedKey? rooted: Bool k: Int64 -> Bool
   (or (= k -2) (and (< k (classes)) (or (>= k (smallClasses)) (and rooted (>= k 0)))))
 
-schema AllocRoute
+; (:m :ref RCCOST2 :do "the module text is split into its function chunks once: the reset routing, the pooled allocation routing, the filter dup and the sized allocation lines each rewrite a chunk in place and the chunks are joined once, instead of one split and join of the whole text per pass; a chunk without a pass's trigger text is passed through untouched. The text after the last chunk boundary and the reuse definitions appended to it form chunks of their own, so every pass sees the same lines as before")
+schema Finished
   text: String
   classes: (List Int64)
   cons: Bool
+  sized: Bool
 
-fn routeAllocs text: String rooted: Bool -> AllocRoute
-  (let [(pieces (stringSplit text (allocCallPrefix)))
-        (keys (map allocKey (listDrop pieces 1)))
-        (parts (map (fn [(p String)] -> String (str (if (routedKey? rooted (allocKey p)) (routedCallPrefix) (allocCallPrefix)) p)) (listDrop pieces 1)))]
-    (AllocRoute :text (stringJoin (cons (optionOr (listHead pieces) "") parts) "")
-                :classes (filter (fn [(c Int64)] -> Bool (and (listContains? keys c) (routedKey? rooted c))) (range 0 (classes)))
-                :cons (listContains? keys -2)))
+schema Piece
+  text: String
+  mask: Int64
+  cons: Bool
+  sized: Bool
+
+fn allocBit k: Int64 -> Int64
+  (if (and (>= k 0) (< k (classes))) (<< 1 k) 0)
+
+fn routePieces c: String rooted: Bool -> Piece
+  (let [(pieces (stringSplit c (allocCallPrefix)))
+        (rest (optionOr (listTail pieces) (list)))]
+    (if (listEmpty? rest)
+      (Piece :text c :mask 0 :cons false :sized false)
+      (let [(keyed (map (fn [(p String)] -> (Pair Int64 String) (pair (allocKey p) p)) rest))]
+        (Piece :text (stringJoin (cons (optionOr (listHead pieces) "") (map (fn [(q (Pair Int64 String))] -> String (str (if (routedKey? rooted (pairFirst q)) (routedCallPrefix) (allocCallPrefix)) (pairSecond q))) keyed)) "")
+               :mask (fold (fn [(acc Int64) (q (Pair Int64 String))] -> Int64 (| acc (allocBit (pairFirst q)))) 0 keyed)
+               :cons (listAny? (fn [(q (Pair Int64 String))] -> Bool (= (pairFirst q) -2)) keyed)
+               :sized false))))
+
+fn dupPiece c: String last: Bool -> String
+  (cond
+    ((not (stringContains? c "  store %Val %x, ptr %ccar")) c)
+    (last (filterDup c))
+    (else (let [(r (filterDup (str c "\n")))] (optionOr (stringSlice r 0 (- (stringLength r) 1)) r))))
+
+fn finishPiece c: String rooted: Bool active: Bool last: Bool -> Piece
+  (let [(routed (routePieces c rooted))
+        (t routed.text)
+        (hasSized (stringContains? t (sizedCall)))
+        (d (dupPiece t last))
+        (touched (or hasSized (and active (or (stringContains? d ", ptr @global.") (stringContains? d (parallelCallText))))))]
+    (Piece :text (if touched (routeSized active d) d) :mask routed.mask :cons routed.cons :sized hasSized))
+
+fn finishChunks hashed: String asan: Bool rooted: Bool active: Bool -> Finished
+  (let [(parts (stringSplit hashed "\ndefine "))
+        (n (listLength parts))
+        (hasReset (stringContains? hashed "= call tailcc i64 @aslRcReset_"))
+        (done (if hasReset
+                (listAppend (map (fn [(p String)] -> Routed (routeFunction false p)) (listTake parts (- n 1)))
+                            (map (fn [(p String)] -> Routed (routeFunction true p)) (listDrop parts (- n 1))))
+                (list)))
+        (texts (if hasReset (map (fn [(r Routed)] -> String r.text) done) parts))
+        (defs (if hasReset
+                (cons (dupSharedText)
+                      (listAppend (map reuseOrText (distinctInts (fold (fn [(acc (List Int64)) (r Routed)] -> (List Int64) (listAppend r.classes acc)) (list) done)))
+                                  (map (fn [(r String)] -> String (resetFrom asan r)) (distinctNames (fold (fn [(acc (List String)) (r Routed)] -> (List String) (listAppend r.resets acc)) (list) done)))))
+                (list)))
+        (extra (if hasReset (stringSplit (str "\n" (lines (map (fn [(d String)] -> String (if active (arenaReset d) d)) defs)) "\n") "\ndefine ") (list)))
+        (chunks (if hasReset
+                  (listAppend (listTake texts (- n 1)) (cons (str (optionOr (listHead (listDrop texts (- n 1))) "") (optionOr (listHead extra) "")) (optionOr (listTail extra) (list))))
+                  texts))
+        (m (listLength chunks))
+        (pieces (listAppend (map (fn [(c String)] -> Piece (finishPiece c rooted active false)) (listTake chunks (- m 1)))
+                            (map (fn [(c String)] -> Piece (finishPiece c rooted active true)) (listDrop chunks (- m 1)))))
+        (mask (fold (fn [(acc Int64) (p Piece)] -> Int64 (| acc p.mask)) 0 pieces))]
+    (Finished :text (stringJoin (map (fn [(p Piece)] -> String p.text) pieces) "\ndefine ")
+              :classes (filter (fn [(c Int64)] -> Bool (and (= (& (>> mask c) 1) 1) (routedKey? rooted c))) (range 0 (classes)))
+              :cons (listAny? (fn [(p Piece)] -> Bool p.cons) pieces)
+              :sized (listAny? (fn [(p Piece)] -> Bool p.sized) pieces)))
 
 fn rcFinishText text: String asan: Bool -> String
   (rcFinishTextWith text asan false)
@@ -2845,15 +2894,12 @@ fn rcFinishTextCounted text: String asan: Bool notrace: Bool counted: Bool -> St
         (relink (and notrace (stringContains? arenaed (appendCallText))))
         (undeclared (if relink (stringReplace arenaed (appendCallText) (appendOwnedCall)) arenaed))
         (hashed (hashRt/hashSplice undeclared notrace))
-        (reuse (routeReuse hashed asan))
-        (reused (if (listEmpty? (pairSecond reuse)) hashed (str (pairFirst reuse) "\n" (lines (map (fn [(d String)] -> String (if active (arenaReset d) d)) (pairSecond reuse))) "\n")))
-        (route (routeAllocs reused rooted))
-        (large (filter (fn [(c Int64)] -> Bool (>= c (smallClasses))) route.classes))
-        (small (filter (fn [(c Int64)] -> Bool (< c (smallClasses))) route.classes))
-        (consDef (if route.cons (list (allocText "@aslRc.allocFastCons" "@gcAsl.allocFastCons" 3 asan)) (list)))
-        (sized (or active (stringContains? route.text (sizedCall))))
-        (dupped (if (stringContains? route.text (filterStore)) (filterDup route.text) route.text))
-        (body (routeSized active dupped))
+        (fin (finishChunks hashed asan rooted active))
+        (large (filter (fn [(c Int64)] -> Bool (>= c (smallClasses))) fin.classes))
+        (small (filter (fn [(c Int64)] -> Bool (< c (smallClasses))) fin.classes))
+        (consDef (if fin.cons (list (allocText "@aslRc.allocFastCons" "@gcAsl.allocFastCons" 3 asan)) (list)))
+        (sized (or active fin.sized))
+        (body fin.text)
         (sizedDef (if sized (list (sizedAllocText asan rooted)) (list)))
         (final (if active (arenaGetters body) body))]
     (str final section "\n" (uncounted counted (runtimeTextIn final (if (< cut n) section (declareSection final)) asan notrace)) "\n"
@@ -3214,7 +3260,16 @@ fn initialBorrows counted: (List ty/SsaFunction) targets: (Map String Bool) -> (
         (mapEmpty) counted)
 
 fn withBorrows ctx: Ctx borrows: (Map String (List Bool)) -> Ctx
-  (Ctx :user ctx.user :opaque ctx.opaque :builders ctx.builders :borrows borrows :scc ctx.scc :proj ctx.proj)
+  (Ctx :user ctx.user :opaque ctx.opaque :builders ctx.builders :borrows borrows :scc ctx.scc :proj ctx.proj :cache ctx.cache)
+
+fn withCache ctx: Ctx cache: (Map String Facts) -> Ctx
+  (Ctx :user ctx.user :opaque ctx.opaque :builders ctx.builders :borrows ctx.borrows :scc ctx.scc :proj ctx.proj :cache cache)
+
+; (:m :ref RCCOST2 :do "the facts a function was last settled with are kept in the context: the worklist settles a function again whenever a flag it reads changes, so its last facts were computed from the flags and projections that are final, and rcFunction and the projection check reuse them instead of computing them again")
+fn cachedFacts ctx: Ctx f: ty/SsaFunction -> Facts
+  (match (mapGet ctx.cache f.name)
+    ((some facts) facts)
+    ((none) (functionFacts ctx f)))
 
 fn ownParam borrows: (Map String (List Bool)) name: String i: Int64 -> (Map String (List Bool))
   (match (mapGet borrows name)
@@ -3318,29 +3373,78 @@ fn projOwners ctx: Ctx facts: Facts f: ty/SsaFunction -> (Map String Bool)
                    (_ acc)))
                (list) (functionInstrs f)))
 
-fn settleFunction ctx: Ctx borrows: (Map String (List Bool)) f: ty/SsaFunction -> (Map String (List Bool))
+; (:m :ref RCCOST2 :do "settling only ever turns a borrowed flag of f or of a tail callee in f's SCC into owned, so a function with no borrowed parameter whose tail calls reach no callee with a borrowed parameter leaves the flags as they are and skips its facts")
+fn settleIdle? ctx: Ctx f: ty/SsaFunction -> Bool
+  (and (not (listAny? (fn [(b Bool)] -> Bool b) (borrowFlags ctx f.name)))
+       (listAll? (fn [(c (Pair String (List String)))] -> Bool
+                   (or (not (sameScc? ctx f.name (pairFirst c))) (not (listAny? (fn [(b Bool)] -> Bool b) (borrowFlags ctx (pairFirst c))))))
+                 (tailCalls f)))
+
+schema Visit
+  borrows: (Map String (List Bool))
+  facts: (Option Facts)
+
+fn settleFunction ctx: Ctx borrows: (Map String (List Bool)) f: ty/SsaFunction -> Visit
+  (if (settleIdle? ctx f) (Visit :borrows borrows :facts (none)) (settleFacts ctx borrows f))
+
+fn settleFacts ctx: Ctx borrows: (Map String (List Bool)) f: ty/SsaFunction -> Visit
   (let [(facts (functionFacts ctx f))
-        (kinds (allUseKinds ctx facts f))
+        (consumeSet (consumedNames ctx facts f))
         (flags (borrowFlags ctx f.name))
         (owners (projOwners ctx facts f))
         (consumed (fold (fn [(acc (Map String (List Bool))) (i Int64)] -> (Map String (List Bool))
                           (let [(p (match (listGet f.params i) ((some q) q.name) ((none) "")))]
-                            (if (and (optionOr (listGet flags i) false) (or (listContains? (optionOr (mapGet kinds p) (list)) "consume") (mapHas? owners p))) (ownParam acc f.name i) acc)))
+                            (if (and (optionOr (listGet flags i) false) (or (mapHas? consumeSet p) (mapHas? owners p))) (ownParam acc f.name i) acc)))
                         borrows (range 0 (listLength f.params))))]
-    (fold (fn [(acc (Map String (List Bool))) (c (Pair String (List String)))] -> (Map String (List Bool))
-            (let [(args (pairSecond c))]
-              (fold (fn [(a (Map String (List Bool))) (i Int64)] -> (Map String (List Bool))
-                      (if (and (!= (liveName facts (optionOr (listGet args i) "")) "") (sameScc? ctx f.name (pairFirst c))) (ownParam a (pairFirst c) i) a))
-                    acc (range 0 (listLength args)))))
-          consumed (tailCalls f)))
+    (Visit :borrows (fold (fn [(acc (Map String (List Bool))) (c (Pair String (List String)))] -> (Map String (List Bool))
+                            (let [(args (pairSecond c))]
+                              (fold (fn [(a (Map String (List Bool))) (i Int64)] -> (Map String (List Bool))
+                                      (if (and (!= (liveName facts (optionOr (listGet args i) "")) "") (sameScc? ctx f.name (pairFirst c))) (ownParam a (pairFirst c) i) a))
+                                    acc (range 0 (listLength args)))))
+                          consumed (tailCalls f))
+           :facts (some facts)))
 
 fn borrowCount borrows: (Map String (List Bool)) -> Int64
   (fold (fn [(acc Int64) (flags (List Bool))] -> Int64 (+ acc (listLength (filter (fn [(b Bool)] -> Bool b) flags)))) 0 (mapValues borrows))
 
-fn settleBorrows ctx: Ctx counted: (List ty/SsaFunction) borrows: (Map String (List Bool)) fuel: Int64 -> (Map String (List Bool))
-  (let [(c (withBorrows ctx borrows))
-        (next (fold (fn [(acc (Map String (List Bool))) (f ty/SsaFunction)] -> (Map String (List Bool)) (settleFunction c acc f)) borrows counted))]
-    (if (or (<= fuel 0) (= (borrowCount next) (borrowCount borrows))) next (settleBorrows ctx counted next (- fuel 1))))
+; (:m :ref RC-SETTLE-WORKLIST :do "the counted functions whose settling reads the borrow flags of a name: the function itself (its own flags make its borrowed parameters) and every function with a call to it (callUses reads the callee's flags at each opCall, tail calls included); closure calls read no flags")
+fn flagReaders counted: (List ty/SsaFunction) -> (Map String (List String))
+  (fold (fn [(acc (Map String (List String))) (f ty/SsaFunction)] -> (Map String (List String))
+          (fold (fn [(a (Map String (List String))) (n String)] -> (Map String (List String)) (mapSet a n (cons f.name (optionOr (mapGet a n) (list)))))
+                acc
+                (distinctNames (cons f.name (fold (fn [(cs (List String)) (ins ty/SsaInstr)] -> (List String) (match ins.op ((ty/opCall callee _) (cons callee cs)) (_ cs))) (list) (functionInstrs f))))))
+        (mapEmpty) counted)
+
+; (:m :ref RC-SETTLE-WORKLIST :do "settleFunction writes only the flags of the function and of its tail callees, so a flag read goes stale only for the readers of those names")
+fn settledNames f: ty/SsaFunction -> (List String)
+  (cons f.name (map pairFirst (tailCalls f)))
+
+fn flagsEqual? a: (Map String (List Bool)) b: (Map String (List Bool)) n: String -> Bool
+  (= (optionOr (mapGet a n) (list)) (optionOr (mapGet b n) (list)))
+
+; (:m :ref RC-SETTLE-WORKLIST :do "ownParam only turns a borrow into an own, so the settled flags are the one fixpoint whatever the visiting order; a function is settled again only when the flags it reads changed, instead of every function every round")
+schema Settled
+  borrows: (Map String (List Bool))
+  queue: (Map String Bool)
+  cache: (Map String Facts)
+
+fn settleBorrows ctx: Ctx counted: (List ty/SsaFunction) readers: (Map String (List String)) pending: (Map String Bool) borrows: (Map String (List Bool)) fuel: Int64 -> Settled
+  (let [(todo (filter (fn [(f ty/SsaFunction)] -> Bool (mapHas? pending f.name)) counted))
+        (step (fold (fn [(st Settled) (f ty/SsaFunction)] -> Settled
+                      (let [(cur st.borrows)
+                            (v (settleFunction (withBorrows ctx cur) cur f))
+                            (after v.borrows)
+                            (changed (filter (fn [(n String)] -> Bool (not (flagsEqual? cur after n))) (settledNames f)))]
+                        (Settled :borrows after
+                                 :queue (fold (fn [(q (Map String Bool)) (n String)] -> (Map String Bool)
+                                                (fold (fn [(q2 (Map String Bool)) (r String)] -> (Map String Bool) (mapSet q2 r true)) q (optionOr (mapGet readers n) (list))))
+                                              st.queue changed)
+                                 :cache (match v.facts ((some fc) (mapSet st.cache f.name fc)) ((none) (mapRemove st.cache f.name))))))
+                    (Settled :borrows borrows :queue (mapEmpty) :cache ctx.cache) todo))]
+    (cond
+      ((= (mapSize step.queue) 0) step)
+      ((<= fuel 0) (Settled :borrows step.borrows :queue step.queue :cache (fold (fn [(c (Map String Facts)) (n String)] -> (Map String Facts) (mapRemove c n)) step.cache (mapKeys step.queue))))
+      (else (settleBorrows (withCache ctx step.cache) counted readers step.queue step.borrows (- fuel 1)))))
 
 ; (:m :ref RC-PERF :do "a projection returns a part of one borrowed parameter (the parameter, a field, a list cell's head or rest, a projection of those, or a join of them) without a dup; its callers treat the result as derived from that argument, so a read-only accessor or a list walk that returns a suffix costs no RC traffic in the loop and the caller dups once only if it keeps the result")
 fn flowNone -> Flow
@@ -3398,7 +3502,7 @@ fn flowOf ctx: Ctx f: ty/SsaFunction -> Flow
       (if (and walked.ok (and (>= walked.param 0) (not (listEmpty? returns)))) walked (flowNone))))
 
 fn withProj ctx: Ctx proj: (Map String Int64) -> Ctx
-  (Ctx :user ctx.user :opaque ctx.opaque :builders ctx.builders :borrows ctx.borrows :scc ctx.scc :proj proj)
+  (Ctx :user ctx.user :opaque ctx.opaque :builders ctx.builders :borrows ctx.borrows :scc ctx.scc :proj proj :cache ctx.cache)
 
 fn heapParamIndices f: ty/SsaFunction -> (List Int64)
   (filter (fn [(i Int64)] -> Bool (match (listGet f.params i) ((some p) (heapTy? p.ty)) ((none) false))) (range 0 (listLength f.params)))
@@ -3416,18 +3520,27 @@ fn growProj ctx: Ctx fns: (List ty/SsaFunction) fuel: Int64 -> (Map String Int64
 
 fn projOk? ctx: Ctx f: ty/SsaFunction -> Bool
   (let [(w (flowOf ctx f))
-        (facts (functionFacts ctx f))
+        (facts (cachedFacts ctx f))
         (p (match (listGet f.params w.param) ((some q) q.name) ((none) "")))]
     (and w.ok (and (= (optionOr (mapGet ctx.proj f.name) -1) w.param)
                    (and (mapHas? facts.borrowed p) (listAll? (fn [(v String)] -> Bool (not (tracked? facts v))) (mapKeys w.values))))))
 
-fn settleProj ctx: Ctx counted: (List ty/SsaFunction) borrows: (Map String (List Bool)) fuel: Int64 -> Ctx
-  (let [(b (settleBorrows ctx counted borrows 50))
-        (c (withBorrows ctx b))
+; (:m :ref RC-SETTLE-WORKLIST :do "after a round drops projections, only those functions and their callers see different facts (resultKind, sourceBase and the flow all look at the projection of a direct callee), so the next settling starts from them on the flags already settled")
+fn settleProj ctx: Ctx counted: (List ty/SsaFunction) readers: (Map String (List String)) pending: (Map String Bool) borrows: (Map String (List Bool)) fuel: Int64 -> Ctx
+  (let [(s (settleBorrows ctx counted readers pending borrows 50))
+        (b s.borrows)
+        (c (withCache (withBorrows ctx b) s.cache))
         (kept (fold (fn [(acc (Map String Int64)) (f ty/SsaFunction)] -> (Map String Int64)
                       (if (and (mapHas? ctx.proj f.name) (projOk? c f)) (mapSet acc f.name (optionOr (mapGet ctx.proj f.name) -1)) acc))
-                    (mapEmpty) counted))]
+                    (mapEmpty) counted))
+        (dropped (filter (fn [(n String)] -> Bool (not (mapHas? kept n))) (mapKeys ctx.proj)))
+        (affected (setOf (fold (fn [(acc (List String)) (n String)] -> (List String) (listAppend acc (optionOr (mapGet readers n) (list)))) (list) dropped)))]
     (cond
       ((= (mapSize kept) (mapSize ctx.proj)) c)
-      ((<= fuel 0) (let [(none0 (withProj c (mapEmpty)))] (withBorrows none0 (settleBorrows none0 counted b 50))))
-      (else (settleProj (withProj c kept) counted b (- fuel 1)))))
+      ((<= fuel 0) (let [(none0 (withProj c (mapEmpty)))
+                         (again (settleBorrows none0 counted readers (allPending counted) b 50))]
+                     (withCache (withBorrows none0 again.borrows) again.cache)))
+      (else (settleProj (withProj c kept) counted readers affected b (- fuel 1)))))
+
+fn allPending counted: (List ty/SsaFunction) -> (Map String Bool)
+  (setOf (map (fn [(f ty/SsaFunction)] -> String f.name) counted))

@@ -269,7 +269,8 @@ fn preludeBytesEq sb: Bytes tb: Bytes i: Int64 j: Int64 k: Int64 -> Bool
 fn preludeFindBytes sb: Bytes tb: Bytes i: Int64 last: Int64 k: Int64 -> (Option Int64)
   (cond
     ((> i last) none)
-    ((preludeBytesEq sb tb i 0 k) (some i))
+    ((= k 0) (some i))
+    ((and (= (bytesGet sb i) (bytesGet tb 0)) (preludeBytesEq sb tb i 1 k)) (some i))
     (else (preludeFindBytes sb tb (+ i 1) last k)))
 
 fn preludeFind s: String t: String i: Int64 last: Int64 -> (Option Int64)

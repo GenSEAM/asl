@@ -58,6 +58,9 @@ fn valToCStrExtern -> ty/SsaExtern
 fn mkBytesExtern -> ty/SsaExtern
   (ty/ssaExternTyped "mkBytes" (list (ty/tyPtr) (ty/tyI64)) (ty/tyVal))
 
+fn mkBytesOwnExtern -> ty/SsaExtern
+  (ty/ssaExternTyped "mkBytesOwn" (list (ty/tyPtr) (ty/tyI64)) (ty/tyVal))
+
 fn mkStrExtern -> ty/SsaExtern
   (ty/ssaExternTyped "mkStr" (list (ty/tyPtr) (ty/tyI64)) (ty/tyVal))
 
@@ -65,7 +68,7 @@ fn errnoAccessorExtern facts: libc/TripleFacts -> ty/SsaExtern
   (ty/ssaExternTyped facts.errnoAccessor (list) (ty/tyPtr))
 
 fn sysCommonExterns facts: libc/TripleFacts -> (List ty/SsaExtern)
-  (list (mallocExtern) (freeExtern) (valToCStrExtern) (mkBytesExtern) (mkStrExtern) (errnoAccessorExtern facts))
+  (list (mallocExtern) (freeExtern) (valToCStrExtern) (mkBytesExtern) (mkBytesOwnExtern) (mkStrExtern) (errnoAccessorExtern facts))
 
 fn pow256 i: Int64 -> Int64
   (if (<= i 0) 1 (* 256 (pow256 (- i 1))))
@@ -1220,6 +1223,7 @@ fn fileSlurpBytesFn k: (Map String Int64) -> ty/SsaFunction
 
 fn fileSlurpAs k: (Map String Int64) name: String mk: String -> ty/SsaFunction
   (ty/ssaFunction (fileW name) (list) (list (ty/ssaParam "fd" (ty/tyI32))) (ty/tyVal)
+    (listAppend
     (list
       (block "entry" (list (int64Const "minCap" 4096) (int64Const "zero" 0) (int64Const "one" 1)
                             (int64Const "stSize" (fileK k "stat.size"))
@@ -1281,10 +1285,20 @@ fn fileSlurpAs k: (Map String Int64) name: String mk: String -> ty/SsaFunction
         (ty/termBranch "isEintr" (ty/ssaEdge "loop" (list "bufAt" "cap" "len")) (edgeTo "done")))
       (block "rdSome" (list (fileEq "eof" "got" "zero")) (fileBr "eof" "done" "advance"))
       (block "advance" (list (primInstr "lenNext" (ty/tyI64) "addInt" (list "len" "got")))
-        (fileJump "loop" (list "bufAt" "cap" "lenNext")))
+        (fileJump "loop" (list "bufAt" "cap" "lenNext"))))
+    (fileSlurpTail k mk)))
+
+; (:m :ref READINTO :do "Bytes adopt the slurp buffer: mkBytesOwn takes ownership of p as the data of n bytes (capacity >= n+1), so the read lands in its final storage and no copy is made; done is reached only after a read into spare room, so len < cap and the NUL terminator fits")
+fn fileSlurpTail k: (Map String Int64) mk: String -> (List ty/SsaBlock)
+  (if (= mk "mkBytes")
+    (list
+      (block "done" (list (callInstr "ownBytes" (ty/tyVal) "mkBytesOwn" (list "buf" "len"))
+                          (constructResult "ownValue" "ok" "ownBytes"))
+        (ty/termReturn "ownValue")))
+    (list
       (fileRet "done" (list (callInstr "text" (ty/tyVal) mk (list "buf" "len"))
-                              (freeInstr "doneFree" "buf")
-                              (constructResult "doneValue" "ok" "text")) "doneValue")))
+                            (freeInstr "doneFree" "buf")
+                            (constructResult "doneValue" "ok" "text")) "doneValue")))
 
 fn fileFactNames -> (List String)
   (list "O_RDONLY" "O_WRONLY" "O_RDWR" "O_CREAT" "O_EXCL" "O_TRUNC" "O_APPEND" "O_CLOEXEC" "O_NOFOLLOW" "O_DIRECTORY" "O_NONBLOCK"

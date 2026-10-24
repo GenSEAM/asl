@@ -664,13 +664,14 @@ fn targetOf chunk: String names: (List String) -> (Option String)
   (let [(header (beforeFirst chunk "\n"))]
     (listFind (fn [(n String)] -> Bool (stringContains? header (mangled n))) names))
 
-; (:m :ref INTHASHMAP :do "one split on define boundaries only when a target body is present, so a program without HashMap pays one substring scan per name and keeps its text byte for byte")
+; (:m :ref INTHASHMAP :do "one split on define boundaries; a target is present when a define header names it (targetOf matches headers only), so the check reads the headers instead of scanning the whole text once per name, and a program without HashMap keeps its text byte for byte (RCCOST2)")
 fn hashSplice text: String notrace: Bool -> String
-  (let [(id (stringContains? text "@ctorId.preludeHashOf = "))
-        (names (if notrace (cons (hashKeyName) (slotsNames)) (list (hashKeyName))))
-        (present (filter (fn [(n String)] -> Bool (stringContains? text (mangled n))) names))]
+  (let [(names (if notrace (cons (hashKeyName) (slotsNames)) (list (hashKeyName))))
+        (chunks (stringSplit text "\ndefine "))
+        (headers (map (fn [(c String)] -> String (beforeFirst c "\n")) (optionOr (listTail chunks) (list))))
+        (present (filter (fn [(n String)] -> Bool (listAny? (fn [(h String)] -> Bool (stringContains? h (mangled n))) headers)) names))]
     (if (listEmpty? present) text
-      (let [(chunks (stringSplit text "\ndefine "))]
+      (let [(id (stringContains? text "@ctorId.preludeHashOf = "))]
         (stringJoin (cons (optionOr (listHead chunks) "")
                           (map (fn [(c String)] -> String
                                  (match (targetOf c present)

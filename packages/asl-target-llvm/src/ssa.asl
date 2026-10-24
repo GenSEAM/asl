@@ -3363,18 +3363,9 @@ fn strFunctions -> (List (Pair String String))
            "  %fits = icmp ule i64 %y.len, %x.len\n"
            "  br i1 %fits, label %start, label %no\n"
            "start:\n"
-           "  %last = sub i64 %x.len, %y.len\n"
-           "  br label %loop\n"
-           "loop:\n"
-           "  %i = phi i64 [ 0, %start ], [ %next, %advance ]\n"
-           "  %at = getelementptr inbounds i8, ptr %xText, i64 %i\n"
-           "  %c = call i32 @memcmp(ptr %at, ptr %yText, i64 %y.len)\n"
-           "  %same = icmp eq i32 %c, 0\n"
-           "  br i1 %same, label %yes, label %advance\n"
-           "advance:\n"
-           "  %next = add i64 %i, 1\n"
-           "  %more = icmp ule i64 %next, %last\n"
-           "  br i1 %more, label %loop, label %no\n"
+           "  %hit = call ptr @memmem(ptr %xText, i64 %x.len, ptr %yText, i64 %y.len)\n"
+           "  %found = icmp ne ptr %hit, null\n"
+           "  ret i1 %found\n"
            "yes:\n"
            "  ret i1 true\n"
            "no:\n"
@@ -3394,7 +3385,7 @@ fn strFunctions -> (List (Pair String String))
            "  ret %Val %b\n}")))
 
 fn strDecls -> (List String)
-  (list "declare i32 @memcmp(ptr, ptr, i64)" "declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1 immarg)")
+  (list "declare i32 @memcmp(ptr, ptr, i64)" "declare ptr @memmem(ptr, i64, ptr, i64)" "declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1 immarg)")
 
 fn hostConstants -> (List (Pair String String))
   (listAppend (map (fn [(p (Pair String String))] -> (Pair String String) (pair (pairFirst p) (mathText (pairFirst p) (pairSecond p))))
@@ -3416,6 +3407,21 @@ fn hostFunctions -> (List (Pair String String))
            "  br label %done\n"
            "done:\n"
            "  ret %Val %b\n}"))
+    (pair "@mkBytesOwn"
+      (str "define internal %Val @mkBytesOwn(ptr %p, i64 %olen) {\nentry:\n"
+           "  %oobj = call ptr @asl_alloc(i32 6, i64 32)\n"
+           "  %olenp = getelementptr inbounds i8, ptr %oobj, i64 8\n"
+           "  store i64 %olen, ptr %olenp\n"
+           "  %oelemp = getelementptr inbounds i8, ptr %oobj, i64 16\n"
+           "  store i64 1, ptr %oelemp\n"
+           "  %odatap = getelementptr inbounds i8, ptr %oobj, i64 24\n"
+           "  store ptr %p, ptr %odatap\n"
+           "  %oendp = getelementptr inbounds i8, ptr %p, i64 %olen\n"
+           "  store i8 0, ptr %oendp\n"
+           "  call void @gcAccount(ptr %oobj, i64 %olen)\n"
+           "  %oobjw = ptrtoint ptr %oobj to i64\n"
+           "  %oval = insertvalue %Val { i64 11, i64 0 }, i64 %oobjw, 1\n"
+           "  ret %Val %oval\n}"))
     (pair "@aslLogSpawn"
       (stringJoin (list
         "define internal i64 @aslLogSpawn(ptr %argv0) {"
@@ -3461,7 +3467,7 @@ fn hostDecls -> (List String)
   (list "declare ptr @getenv(ptr)" "declare ptr @getcwd(ptr, i64)" "declare ptr @fopen(ptr, ptr)" "declare i64 @fwrite(ptr, i64, i64, ptr)" "declare i32 @fclose(ptr)")
 
 fn hostDefined? name: String -> Bool
-  (listContains? (list "mkBytes" "aslLogSpawn") name)
+  (listContains? (list "mkBytes" "mkBytesOwn" "aslLogSpawn") name)
 
 fn mathPiecesAll -> (List rterr/RefPiece)
   (rterr/refPieces (list "(" ")" "," " " "\n")

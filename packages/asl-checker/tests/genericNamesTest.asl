@@ -9,6 +9,9 @@ fn codes ds: (List ty/Diagnostic) -> (List String)
 fn text ds: (List ty/Diagnostic) -> String
   (stringJoin (map (fn [(d ty/Diagnostic)] -> String (str d.code " " d.message)) ds) "; ")
 
+fn rowOver p: (Pair String String) -> String
+  (optionOr (listGet (stringSplit (pairFirst p) "/") 1) "")
+
 fn ! runTests -> Bool
   (let [(onString (probe "(length s)" "[(s String)] -> Int64"))
         (onList (probe "(length xs)" "[(xs (List Int64))] -> Int64"))
@@ -35,4 +38,8 @@ fn ! runTests -> Bool
       (assert (= (ty/renamedHint "stringLength") "; renamed to length (D159)") "a retired multi-type name hints its generic name")
       (assert (= (ty/renamedHint "listHead") "; renamed to head (D159)") "a retired one-type name hints its generic name")
       (assert (= (ty/renamedHint "stringFromInt64") "") "a conversion keeps its name and has no hint")
+      (assert (listEmpty? (filter (fn [(p (Pair String String))] -> Bool (not (= (ty/genericConcrete (optionOr (listHead (stringSplit (pairFirst p) "/")) "") (rowOver p)) (pairSecond p)))) (ty/genericRows))) "genericConcrete agrees with every genericRows row")
+      (assert (= (listLength (ty/genericRows)) 38) "genericRows has 38 rows, each covered by the agreement check")
+      (assert (= (ty/genericConcrete "length" "Int64") "") "an uncovered receiver has no concrete name")
+      (assert (and (= (ty/genericAlias "head") "listHead") (and (= (ty/genericAlias "sha256") "bytesSha256") (= (ty/genericAlias "nope") ""))) "genericAlias hits first and last rows and misses unknowns")
       true))

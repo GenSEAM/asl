@@ -1,0 +1,21 @@
+(module prelude/tests/stringFindTest :x [runTests] :i [])
+
+; (:m :ref PRELUDEHOT :do "stringIndexOf semantics under the first-byte skip: partial prefix matches, match at the last position, empty needle, needle longer than the haystack, multibyte")
+fn runTests -> Bool
+  (do
+    (assert (= (stringIndexOf "abc" "a") (some 0)) "first byte match at 0")
+    (assert (= (stringIndexOf "abc" "c") (some 2)) "match at last position")
+    (assert (= (stringIndexOf "aaab" "aab") (some 1)) "partial prefix matches do not hide a later match")
+    (assert (= (stringIndexOf "abababc" "abc") (some 4)) "repeated prefix then match")
+    (assert (= (stringIndexOf "abcabd" "abd") (some 3)) "second occurrence of a shared prefix")
+    (assert (= (stringIndexOf "abc" "abd") none) "same prefix, differing last byte is absent")
+    (assert (= (stringIndexOf "abc" "x") none) "absent byte")
+    (assert (= (stringIndexOf "abc" "") (some 0)) "empty needle matches at 0")
+    (assert (= (stringIndexOf "" "") (some 0)) "empty in empty")
+    (assert (= (stringIndexOf "" "a") none) "needle in empty haystack")
+    (assert (= (stringIndexOf "ab" "abc") none) "needle longer than haystack")
+    (assert (= (stringIndexOf "abc" "abc") (some 0)) "whole string")
+    (assert (= (stringIndexOf "xé界z" "界z") (some 3)) "multibyte needle at byte offset")
+    (assert (stringContains? "hello world" "o w") "contains across a space")
+    (assert (not (stringContains? "hello" "lol")) "contains absent")
+    true)

@@ -46,9 +46,11 @@ fn progSource -> String
     "fn ! main args: (List String) -> (Result Unit String)"
     "  (match (fileReadBytes (optionOr (listGet args 0) \"\"))"
     "    ((err e) (err (str \"read: \" e)))"
-    "    ((ok b) (match (fileWrite (optionOr (listGet args 1) \"\") b)"
+    "    ((ok b) (if (= (optionOr (listGet args 1) \"\") \"-\")\n"
+    "              (do (println (str (bytesLength b) \" \" (if (> (bytesLength b) 0) (bytesGet b (- (bytesLength b) 1)) -1))) (ok ()))\n"
+    "              (match (fileWrite (optionOr (listGet args 1) \"\") b)"
     "              ((err e) (err (str \"write: \" e)))"
-    "              ((ok _) (do (println (bytesLength b)) (ok ()))))))"
+    "              ((ok _) (do (println (bytesLength b)) (ok ())))))))"
     "") "\n")
 
 fn ! build work: String -> String
@@ -102,6 +104,11 @@ fn ! pipeCase work: String size: Int64 -> Bool
         (r (sh (str "cat " inp " | " work "/slurpProg /dev/stdin " outp " && cmp " inp " " outp)))]
     (check (str "pipe " size " bytes read byte-identical, exit " r.exit " " r.out) (= r.exit 0)))
 
+; (:m :ref READINTO :do "a path that does not exist yields the (err ...) text the base produced: main prints it as read: <text> and exits nonzero")
+fn ! missingCase work: String -> Bool
+  (let [(r (sh (str work "/slurpProg " work "/noSuchFile /dev/null 2>&1")))]
+    (check (str "missing file reports the base error text, exit " r.exit " " r.out) (and (!= r.exit 0) (stringContains? r.out (str "read: notFound: " work "/noSuchFile: No such file or directory")))))
+
 ; (:m :ref SLURPSIZE :do "shrink between fstat and read: fd 0 is a regular file whose offset dd moved to byte 100, so fstat reports the full size and read returns size-100 bytes; macOS /dev/stdin shares the fd offset, Linux reopens it so the case is skipped there")
 fn ! shrinkCase work: String -> Bool
   (if (= (shellText "uname -s") "Darwin")
@@ -115,21 +122,25 @@ fn ! shrinkCase work: String -> Bool
 fn ! rssCase work: String -> Bool
   (if (= (shellText "uname -s") "Darwin")
     (let [(inp (str work "/inbig"))
-          (g (sh (str "head -c 67108864 /dev/zero > " inp)))
-          (r (sh (str "/usr/bin/time -l " work "/slurpProg " inp " " work "/outbig 2>&1 | awk '/maximum resident/ {print $1}'")))
+          (g (sh (str "head -c 67108864 /dev/urandom > " inp)))
+          (last (shellText (str "tail -c 1 " inp " | od -An -tu1 | tr -d ' '")))
+          (r (sh (str "/usr/bin/time -l " work "/slurpProg " inp " - 2>" work "/rssErr >" work "/rssOut; awk '/maximum resident/ {print $1}' " work "/rssErr")))
+          (shown (shellText (str "cat " work "/rssOut")))
           (rss (optionOr (stringToInt64 (stringTrim r.out)) 0))]
       (do (assert (= g.exit 0) "64 MiB fixture written")
-          (check (str "peak RSS " rss " bytes under 2.4x of 64 MiB (sized single read)") (and (> rss 0) (< rss 160000000)))))
+          (check (str "64 MiB read has the right length and last byte, got " shown) (= shown (str "67108864 " last)))
+          (check (str "peak RSS " rss " bytes under 1.35x of 64 MiB (read lands in the Bytes payload, no copy)") (and (> rss 0) (< rss 90600000)))))
     true)
 
 fn ! runTests -> Bool
   (let [(work (shellText "mktemp -d"))]
     (do (assert (not (stringEmpty? work)) "mktemp -d makes a work directory")
         (let [(ll (build work))]
-          (do (map (fn [(n Int64)] -> Bool (fileCase work n)) (list 0 1 4095 4096 4097 5000000))
+          (do (map (fn [(n Int64)] -> Bool (fileCase work n)) (list 0 1 4095 4096 4097 16383 16384 16385 5000000))
               (rssCase work)
+              (missingCase work)
               (checkIr ll)))
-        (map (fn [(n Int64)] -> Bool (pipeCase work n)) (list 0 1 4097 5000000))
+        (map (fn [(n Int64)] -> Bool (pipeCase work n)) (list 0 1 4097 16384 5000000))
         (shrinkCase work)
         (sh (str "chmod -R u+rwx " work " 2>/dev/null; rm -rf " work))
         true))

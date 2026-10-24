@@ -560,7 +560,7 @@ fn ! runWith libs: Libs -> Bool
         (assert (checkFixture libs dir "rcList" "834000\n" 16000 15000 1000 0) "lists through the map builder are freed and reused under RC, none pinned")
         (assert (checkFixture libs dir "rcBuiltins" "388890\n" 279000 279000 100 0) "values passed to str, stringConcat, stringSlice, listTail and the filter and map builders are borrowed and freed, none pinned")
         (assert (checkFixture libs dir "rcSmall" "100000\n" 99999 99999 10 0) "16-byte none cells are freed onto the small-class stack and reused")
-        (assert (checkFixture libs dir "rcSys" "10000\n" 10000 9000 1000 0) "arguments and results of the routed fileStat, realPath, fileReadString, dirList and fileExists? are borrowed and freed, none pinned")
+        (assert (checkFixture libs dir "rcSys" "12000\n" 10000 9000 1000 0) "arguments and results of the routed fileStat, realPath, fileReadString, fileReadBytes (adopted slurp buffer), dirList and fileExists? are borrowed and freed, none pinned")
         (assert (testVariantTmpCleared dir) "a variant runtime build removes its work directory")
         (assert (ok? (pathRemove dir)) "rcTest work directory removed")
         true))

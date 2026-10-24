@@ -13,8 +13,9 @@ fn ! score -> Int64
         (real (match (realPath (self)) ((ok p) (if (stringEndsWith? p "/rcSys.asl") 1 0)) ((err _) 0)))
         (text (match (fileReadString (self)) ((ok s) (if (stringContains? s "fn ! score") 1 0)) ((err _) 0)))
         (listed (match (dirList (dir)) ((ok names) (if (listContains? names "rcSys.asl") 1 0)) ((err _) 0)))
-        (exists (if (fileExists? (self)) 1 0))]
-    (+ stat (+ real (+ text (+ listed exists)))))
+        (exists (if (fileExists? (self)) 1 0))
+        (raw (match (fileReadBytes (self)) ((ok b) (if (> (bytesLength b) 100) 1 0)) ((err _) 0)))]
+    (+ stat (+ real (+ text (+ listed (+ exists raw))))))
 
 fn ! probe n: Int64 acc: Int64 -> Int64
   (if (= n 0) acc (probe (- n 1) (+ acc (score))))
