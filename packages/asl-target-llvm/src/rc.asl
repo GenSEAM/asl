@@ -2078,6 +2078,51 @@ fn appendOwnedText asan: Bool -> String
                "  ret %Val %a"
                "}"))
 
+; (:m :ref RINGSOA :do "under untraced RC a listReverse call goes to aslRc.reverseOwned, which owns its list as listReverse does: each unique leading cell has its tail turned to point at the cells already reversed, with no alloc, free or count traffic; from the first shared cell on (count above zero, stuck or arena cells included) it hands that suffix and the reversed prefix to the copying preludeReverseOnto; the call texts are spliced at run time like appendCallText")
+fn reverseCallText -> String
+  (str "call tailcc %Val @" (stringReplace "prelude+listReverse" "+" "$2E") "(")
+
+fn reverseOntoCallText -> String
+  (str "call tailcc %Val @" (stringReplace "prelude+preludeReverseOnto" "+" "$2E") "(")
+
+fn reverseOwnedCall -> String
+  "call tailcc %Val @aslRc.reverseOwned("
+
+fn reverseOwnedText asan: Bool -> String
+  (lines (list "define tailcc %Val @aslRc.reverseOwned(%Val %xs) {"
+               "entry:"
+               "  %tw = extractvalue %Val %xs, 0"
+               "  %t32 = trunc i64 %tw to i32"
+               "  %isList = icmp eq i32 %t32, 6"
+               "  br i1 %isList, label %walk, label %copy"
+               "walk:"
+               "  %cv = phi %Val [ %xs, %entry ], [ %nv, %own ]"
+               "  %acc = phi %Val [ { i64 6, i64 0 }, %entry ], [ %cv, %own ]"
+               "  %cw = extractvalue %Val %cv, 1"
+               "  %c = inttoptr i64 %cw to ptr"
+               "  %empty = icmp eq ptr %c, null"
+               "  br i1 %empty, label %done, label %cell"
+               "cell:"
+               "  %h = load i64, ptr %c"
+               (if asan "  call void @aslRc.live(ptr %c, i64 %h)" "")
+               "  %cn = lshr i64 %h, 48"
+               "  %c8 = and i64 %cn, 255"
+               "  %uniq = icmp eq i64 %c8, 0"
+               "  br i1 %uniq, label %own, label %copy"
+               "own:"
+               "  %np = getelementptr inbounds i8, ptr %c, i64 24"
+               "  %nv = load %Val, ptr %np"
+               "  store %Val %acc, ptr %np"
+               "  br label %walk"
+               "done:"
+               "  ret %Val %acc"
+               "copy:"
+               "  %rest = phi %Val [ %xs, %entry ], [ %cv, %cell ]"
+               "  %onto = phi %Val [ { i64 6, i64 0 }, %entry ], [ %acc, %cell ]"
+               (str "  %r = " (reverseOntoCallText) "%Val %rest, %Val %onto)")
+               "  ret %Val %r"
+               "}"))
+
 fn arenaChunk -> Int64
   262144
 
@@ -2892,7 +2937,9 @@ fn rcFinishTextCounted text: String asan: Bool notrace: Bool counted: Bool -> St
         (guard (fn [(d String)] -> String (if active (arenaGuarded d) d)))
         (arenaed (if uses (stringReplace code (arenaCallText) (arenaRunCall)) code))
         (relink (and notrace (stringContains? arenaed (appendCallText))))
-        (undeclared (if relink (stringReplace arenaed (appendCallText) (appendOwnedCall)) arenaed))
+        (appended (if relink (stringReplace arenaed (appendCallText) (appendOwnedCall)) arenaed))
+        (reversing (and notrace (and (stringContains? appended (reverseCallText)) (stringContains? appended (reverseOntoCallText)))))
+        (undeclared (if reversing (stringReplace appended (reverseCallText) (reverseOwnedCall)) appended))
         (hashed (hashRt/hashSplice undeclared notrace))
         (fin (finishChunks hashed asan rooted active))
         (large (filter (fn [(c Int64)] -> Bool (>= c (smallClasses))) fin.classes))
@@ -2905,7 +2952,7 @@ fn rcFinishTextCounted text: String asan: Bool notrace: Bool counted: Bool -> St
     (str final section "\n" (uncounted counted (runtimeTextIn final (if (< cut n) section (declareSection final)) asan notrace)) "\n"
          (uncounted counted (lines (map guard (listAppend (map (fn [(c Int64)] -> String (allocText (rcAllocSym c) (allocFastSym c) c asan)) large)
                                        (listAppend consDef (listAppend (map smallAllocText small) sizedDef))))))
-         "\n" (lines (map callOwnedText arities)) "\n" (lines (map (fn [(i Int64)] -> String (liveChecked asan (takeText i))) takes)) "\n" (if relink (str (appendOwnedText asan) "\n") "")))
+         "\n" (lines (map callOwnedText arities)) "\n" (lines (map (fn [(i Int64)] -> String (liveChecked asan (takeText i))) takes)) "\n" (if relink (str (appendOwnedText asan) "\n") "") (if reversing (str (reverseOwnedText asan) "\n") "")))
 
 fn routeSized active: Bool text: String -> String
   (stringJoin (map (fn [(l String)] -> String

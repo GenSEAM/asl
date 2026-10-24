@@ -1417,6 +1417,10 @@ fn envFailB label: String fmt: String text: String -> ty/SsaBlock
 fn getenvI d: String name: String -> (List ty/SsaInstr)
   (appendAll (list (cs (str d ".n") name) (ex (str d ".p") (ptr) "getenv" (list (str d ".n"))) (p2i d (str d ".p"))))
 
+; (:m :ref RINGSOA :do "an untraced runtime never collects, so nothing lowers the allocated count or raises the threshold: a finite threshold would send every small allocation past the first ASL_GC_MIN_MIB to the out-of-line slow path for good; its threshold is set past any reachable count instead")
+fn untracedThreshold -> Int64
+  9223372036854775807
+
 fn initFn c: GcCtx -> ty/SsaFunction
   (fun "init" (list)
     (list (blk "entry" (list (state) (ex "pub" (i64) "gcAslPublish" (list)) (getenvI "es" "ASL_GC_STRESS") (cl "stress" "isOne" (list "es")) (sst "w1" (sStress) "stress")
@@ -1441,7 +1445,7 @@ fn initFn c: GcCtx -> ty/SsaFunction
           (blk "xok" (list (shlK "xb" "xv" 20) (sst "w5" (sMaxBytes) "xb")) (jmp "thresh" (list)))
           (blk "thresh" (list (sld "maxb" (sMaxBytes)) (sld "minb" (sMinBytes)) (cmpK "capped" "neInt" "maxb" 0) (ult "smaller" "maxb" "minb") (andB "useMax" "capped" "smaller"))
             (brA "useMax" "first" (list "maxb") "first" (list "minb")))
-          (blkp "first" (list "t") (list (sst "w6" (sThreshold) "t") (getenvI "ev" "ASL_GC_VERIFY") (cl "ver" "isOne" (list "ev")) (sst "w7" (sVerify) "ver") (k "z" 0))
+          (blkp "first" (list "t") (list (if c.notrace (k "never" (untracedThreshold)) (list)) (sst "w6" (sThreshold) (if c.notrace "never" "t")) (getenvI "ev" "ASL_GC_VERIFY") (cl "ver" "isOne" (list "ev")) (sst "w7" (sVerify) "ver") (k "z" 0))
             (ret "z"))))
 
 fn wasmInitFn -> ty/SsaFunction
