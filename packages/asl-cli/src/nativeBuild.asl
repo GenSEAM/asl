@@ -421,7 +421,7 @@ fn ! main args: (List String) -> (Result Int64 String)
       (else
         (let [(_ (say! (str "asl: native build pid " pid " started for " root)))
               (code (match (build! root cacheDir owner)
-                      ((ok dir) (do (say! (str "asl: native build: " dir)) 0))
+                      ((ok dir) (do (say! (str "asl: native build: " dir)) (say! (str "asl: native build pruned " (stringFromInt64 (nc/pruneNativeCache! cacheDir 4 21600000000000)) " old cache dirs")) 0))
                       ((err e) (do (say! (str "asl: native build failed: " e)) 1))))
               (_ (pathRemove (str cacheDir "/tmp." pid)))
               (_ (releaseLock! cacheDir owner))]

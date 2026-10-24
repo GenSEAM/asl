@@ -1,5 +1,5 @@
 (module asl-cli/nativeCli
-  :x [cacheDir! headPath underRoot clangFacts! fresh? probe? alive? verbKind nativeGate! hostEntry!]
+  :x [cacheDir! headPath underRoot clangFacts! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache!]
   :i [(asl/packages/asl-cli/src/system :a sys)])
 
 fn ! cacheDir! -> String
@@ -283,3 +283,35 @@ fn ! hostEntry! ctx: sys/Context args: (List String) -> Unit
       ((= kind "host") (do (eprintln (str "asl: " verb " is not native yet, so it runs on asl-host")) ()))
       ((= kind "native") (do (eprintln (str "asl: " verb " runs on asl-host: no native toolchain, " (nativeWhy! ctx args))) ()))
       (else ())))
+
+; (:m :ref OUTSIDEPKG-STAGE-SOURCES-20261024 :do "bounded cache: the newest keep entries of dir whose name starts with prefix stay; an older one goes only when its last use (newest of its mtime and its .used file's) is older than minAgeNs and its name is not in protected; a removed directory holding symlinks drops the links, never their targets; returns the count removed")
+fn ! entryStamp! path: String -> Int64
+  (match (fileStat path)
+    ((err _) 0)
+    ((ok st) (match (fileStat (str path "/.used"))
+               ((ok u) (if (> u.mtimeNs st.mtimeNs) u.mtimeNs st.mtimeNs))
+               ((err _) st.mtimeNs))))
+
+fn ! pruneEntries! dir: String prefix: String keep: Int64 minAgeNs: Int64 protected: (List String) -> Int64
+  (match (dirList dir)
+    ((err _) 0)
+    ((ok names)
+      (let [(now (nowNs))
+            (stamped (map (fn [(n String)] -> (Pair String Int64) (pair n (entryStamp! (str dir "/" n)))) (filter (fn [(n String)] -> Bool (stringStartsWith? n prefix)) names)))
+            (newestFirst (listSortBy (fn [(e (Pair String Int64))] -> Int64 (- 0 (pairSecond e))) stamped))
+            (state (fold (fn [(acc (Pair Int64 Int64)) (e (Pair String Int64))] -> (Pair Int64 Int64)
+                           (let [(idx (pairFirst acc)) (removed (pairSecond acc))]
+                             (if (and (>= idx keep) (and (not (listContains? protected (pairFirst e))) (> (- now (pairSecond e)) minAgeNs)))
+                               (pair (+ idx 1) (if (ok? (pathRemove (str dir "/" (pairFirst e)))) (+ removed 1) removed))
+                               (pair (+ idx 1) removed))))
+                         (pair 0 0) newestFirst))]
+        (pairSecond state))))
+
+; (:m :ref NATIVECLI-PRUNE :do "after a native CLI is built, cli-* and asl1-* directories of the cache older than 6h that no head* file names are removed, keeping the newest keep of each kind; a head's target is protected whatever its age")
+fn ! headTargets! cache: String -> (List String)
+  (map (fn [(h String)] -> String (sys/baseName (stringTrim (resultOr (fileReadString (str cache "/" h)) ""))))
+       (filter (fn [(n String)] -> Bool (and (stringStartsWith? n "head") (not (stringContains? n ".part.")))) (resultOr (dirList cache) (list))))
+
+fn ! pruneNativeCache! cache: String keep: Int64 minAgeNs: Int64 -> Int64
+  (let [(targets (headTargets! cache))]
+    (+ (pruneEntries! cache "cli-" keep minAgeNs targets) (pruneEntries! cache "asl1-" keep minAgeNs targets)))

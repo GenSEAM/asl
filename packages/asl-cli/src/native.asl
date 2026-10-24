@@ -38,6 +38,24 @@ fn ! outsideRelPath digest: String -> String
 fn ! ensureDir! dir: String -> (Result Unit String)
   (if (sys/isDir? dir) (ok ()) (dirCreate dir))
 
+; (:m :ref OUTSIDEPKG-STAGE-SOURCES-20261024 :do "the cache of staged outside files keeps the newest 4 entries per kind: staging touches the entry it uses (a single file is rewritten, a package directory gets a .used file written) and prunes older ones, never an entry used in the last 30 minutes or the one being staged")
+fn ! stageKeep -> Int64
+  4
+
+fn ! stageMinAgeNs -> Int64
+  1800000000000
+
+fn ! touchUsed! path: String -> Bool
+  (if (sys/isDir? path)
+    (ok? (fileWrite (str path "/.used") (stringFromInt64 (nowNs))))
+    (match (fileReadBytes path)
+      ((err _) false)
+      ((ok b) (let [(part (str path ".part." (stringFromInt64 (procSelf))))]
+                (and (ok? (fileWrite part b)) (ok? (pathRename part path)))))))
+
+fn ! pruneStage! dir: String prefix: String current: String -> Int64
+  (nc/pruneEntries! dir prefix (stageKeep) (stageMinAgeNs) (list current))
+
 fn ! stageOutsideSingle! ctx: sys/Context absFile: String -> (Result String String)
   (match (fileReadString absFile)
     ((err e) (err (str "cannot read " absFile ": " e)))
@@ -48,11 +66,9 @@ fn ! stageOutsideSingle! ctx: sys/Context absFile: String -> (Result String Stri
         (match (ensureDir! (outsideStageDir ctx))
           ((err e2) (err (str "cannot create " (outsideStageDir ctx) ": " e2)))
           ((ok _)
-            (if (sys/isFile? dest)
-              (ok rel)
-              (match (fileWrite dest src)
-                ((err e3) (err (str "cannot write " dest ": " e3)))
-                ((ok _) (ok rel)))))))))
+            (match (if (sys/isFile? dest) (ok ()) (fileWrite dest src))
+              ((err e3) (err (str "cannot write " dest ": " e3)))
+              ((ok _) (do (touchUsed! dest) (pruneStage! (outsideStageDir ctx) "" (str digest ".asl")) (ok rel)))))))))
 
 ; (:m :ref NATIVETEST-OUTSIDE-CLOSURE-20261020 :do "an externally-rooted file with its own .asl.config.asn (a vendored project, not a loose script) declares a package with sibling-module imports that a single-file content-hash copy can never resolve, since every import inside it names a sibling by the package's own workspace-qualified path; find that package's root the same way asl check does (climb to the nearest .asl.config.asn) and mirror the whole package's .asl files under ctx.root so resolveImport!'s own scanUp!, unmodified, finds a config at the mirror's root instead of climbing past it into ctx.root's")
 fn ! findPackageRoot! dir: String depth: Int64 -> (Option String)
@@ -94,14 +110,82 @@ fn ! mirrorFile! src: String dest: String -> (Result Unit String)
             ((err e3) (err (str "cannot write " dest ": " e3)))
             ((ok _) (ok ())))))))
 
+; (:m :ref OUTSIDEPKG-STAGE-SOURCES-20261024 :do "a staged package copied every listed file, so one asl test of a package with multi-GB exported data wrote tens of GB per cache key (68G in 13 entries on 2026-10-24); the build reads only .asl and .asn sources (and the manifest, an .asn), which stay real copies, while every other file, and an .asn over 1MB, is a symlink to the original: relative and workspace-qualified data paths still open, nothing is duplicated, and removing the stage drops the links only")
+fn ! sourceSized? path: String -> Bool
+  (and (or (stringEndsWith? path ".asl") (stringEndsWith? path ".asn"))
+       (or (stringEndsWith? path ".asl") (match (fileStat path) ((ok st) (<= st.size 1048576)) ((err _) false))))
+
+; (:m :ref OUTSIDEPKG-STAGE-SOURCES-20261024 :do "a staged suite may write into its package data, so non-source files are copy-on-write clones (macOS cp -c, Linux cp --reflink=auto) that share blocks with the original until written and never touch it; where a clone fails (non-CoW filesystem, other volume) a file up to 8MB is copied and a larger one is linked, and the number linked is reported on stderr; stale links from an earlier stage are removed first so a copy never writes through them")
+fn ! cloneLimitBytes -> Int64
+  8388608
+
+fn ! runIn! dir: String argv: (List String) -> Int64
+  (let [(d (run/runOneLimited (run/job argv dir (run/childEnv (list))) (run/limits 120 8)))] d.exit)
+
+fn ! cloneBatch! destDir: String srcs: (List String) -> Bool
+  (let [(tail (listAppend srcs (list (str destDir "/"))))]
+    (or (= (runIn! destDir (cons "cp" (cons "-c" (cons "--" tail)))) 0)
+        (= (runIn! destDir (cons "cp" (cons "--reflink=auto" (cons "--" tail)))) 0)))
+
+fn ! settleOne! destDir: String src: String -> Int64
+  (if (cloneBatch! destDir (list src))
+    0
+    (if (match (fileStat src) ((ok st) (<= st.size (cloneLimitBytes))) ((err _) true))
+      (if (= (runIn! destDir (list "cp" "--" src (str destDir "/"))) 0) 0 (if (= (runIn! destDir (list "ln" "-sf" "--" src (str destDir "/"))) 0) 1 -1))
+      (if (= (runIn! destDir (list "ln" "-sf" "--" src (str destDir "/"))) 0) 1 -1)))
+
+fn ! settleEach! destDir: String srcs: (List String) -> Int64
+  (fold (fn [(n Int64) (src String)] -> Int64 (let [(r (settleOne! destDir src))] (if (< r 0) -1000000000 (+ n r)))) 0 srcs)
+
+fn ! cloneChunks! destDir: String srcs: (List String) -> Int64
+  (if (listEmpty? srcs)
+    0
+    (let [(chunk (listTake srcs 200))
+          (rest (listDrop srcs 200))
+          (_gone (map (fn [(src String)] -> Bool (ok? (pathRemove (str destDir "/" (sys/baseName src))))) chunk))
+          (here (if (cloneBatch! destDir chunk) 0 (settleEach! destDir chunk)))
+          (more (cloneChunks! destDir rest))]
+      (+ here more)))
+
+fn ! cloneDirGroups! groups: (List (Pair String (List String))) -> (Result Int64 String)
+  (match (listHead groups)
+    ((none) (ok 0))
+    ((some g)
+      (match (ensureDir! (pairFirst g))
+        ((err e) (err (str "cannot create " (pairFirst g) ": " e)))
+        ((ok _)
+          (let [(n (cloneChunks! (pairFirst g) (pairSecond g)))]
+            (if (< n 0)
+              (err (str "cannot clone, copy or link into " (pairFirst g)))
+              (match (cloneDirGroups! (optionOr (listTail groups) (list)))
+                ((err e) (err e))
+                ((ok m) (ok (+ n m))))))))))
+
+fn ! groupByDir files: (List (Pair String String)) -> (List (Pair String (List String)))
+  (fold (fn [(acc (List (Pair String (List String)))) (f (Pair String String))] -> (List (Pair String (List String)))
+          (let [(dir (ckr/parentDirOf (pairSecond f)))]
+            (if (listAny? (fn [(g (Pair String (List String)))] -> Bool (= (pairFirst g) dir)) acc)
+              (map (fn [(g (Pair String (List String)))] -> (Pair String (List String)) (if (= (pairFirst g) dir) (pair dir (cons (pairFirst f) (pairSecond g))) g)) acc)
+              (cons (pair dir (list (pairFirst f))) acc))))
+        (list) files)
+
 fn ! mirrorFiles! root: String mirrorDir: String files: (List String) -> (Result Unit String)
-  (match (listHead files)
+  (let [(plan (map (fn [(f String)] -> (Pair String String) (pair f (str mirrorDir "/" (dropPrefixLen f (+ (stringLength root) 1))))) files))
+        (copies (filter (fn [(p (Pair String String))] -> Bool (sourceSized? (pairFirst p))) plan))
+        (links (filter (fn [(p (Pair String String))] -> Bool (not (sourceSized? (pairFirst p)))) plan))]
+    (match (mirrorCopies! copies)
+      ((err e) (err e))
+      ((ok _) (match (cloneDirGroups! (groupByDir links))
+                ((err e) (err e))
+                ((ok linked) (do (if (> linked 0) (eprintln (str "(:stage :symlinked " (stringFromInt64 linked) " :over " (stringFromInt64 (cloneLimitBytes)) " :why clone-failed :into " mirrorDir ")")) ()) (ok ())))))))
+
+fn ! mirrorCopies! copies: (List (Pair String String)) -> (Result Unit String)
+  (match (listHead copies)
     ((none) (ok ()))
-    ((some f) (let [(rel (dropPrefixLen f (+ (stringLength root) 1)))
-                    (dest (str mirrorDir "/" rel))]
-                (match (mirrorFile! f dest)
-                  ((err e) (err e))
-                  ((ok _) (mirrorFiles! root mirrorDir (optionOr (listTail files) (list))))))))
+    ((some c)
+      (match (mirrorFile! (pairFirst c) (pairSecond c))
+        ((err e) (err e))
+        ((ok _) (mirrorCopies! (optionOr (listTail copies) (list)))))))
 
 fn ! writeMirrorConfig! root: String mirrorDir: String -> (Result Unit String)
   (let [(origText (resultOr (fileReadString (str root "/.asl.config.asn")) ""))
@@ -158,7 +242,7 @@ fn ! stagePackageMirror! ctx: sys/Context root: String -> (Result String String)
               ((ok _)
                 (match (writeMirrorConfig! root pkgDir)
                   ((err e) (err (str "cannot write " pkgDir "/.asl.config.asn: " e)))
-                  ((ok _) (ok pkgDir))))))))))
+                  ((ok _) (do (touchUsed! mirrorDir) (pruneStage! (outsidePkgStageDir ctx) "" digest) (ok pkgDir)))))))))))
 
 fn ! stageOutside! ctx: sys/Context absFile: String -> (Result String String)
   (match (findPackageRoot! (ckr/parentDirOf absFile) 0)
