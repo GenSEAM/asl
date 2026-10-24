@@ -77,19 +77,37 @@ fn ! firstLine! cmd: String -> (Option String)
         (line (stringTrim (optionOr (listHead (stringLines o.stdout)) "")))]
     (if (and (= o.exitCode 0) (not (stringEmpty? line))) (some line) (none)))
 
-fn ! recordClang! path: String version: String triple: String -> Bool
-  (let [(made (dirCreate (str (cacheDir!) "/clang")))
-        (part (str path ".part." (stringFromInt64 (procSelf))))]
-    (match (fileWrite part (str version "\n" triple "\n"))
-      ((err e) (sys/sayErr! (str "asl: cannot record clang facts at " part ": " e (match made ((err m) (str " (" m ")")) ((ok _) "")))))
-      ((ok _) (match (pathRename part path)
-                ((err e) (let [(gone (pathRemove part))]
-                           (sys/sayErr! (str "asl: cannot record clang facts at " path ": " e (if (err? gone) (str "; " part " stays") "")))))
-                ((ok _) true)))))
+; (:m :ref TOOLCACHE-SANDBOX :do "clang facts are the one thing a native asl test writes under HOME/.asl/run; where that is read-only (a sandboxed caller) they are kept under $TMPDIR/asl-cache-home-<sha16 of HOME>/clang instead, no fork on the warm path, so the facts are not recomputed with clang on every call")
+fn ! factsDirs! -> (List String)
+  (let [(tmp (optionOr (envGet "TMPDIR") "/tmp"))
+        (base (if (stringEndsWith? tmp "/") (optionOr (stringSlice tmp 0 (- (stringLength tmp) 1)) tmp) tmp))
+        (id (optionOr (stringSlice (bytesSha256 (stringToBytes (optionOr (envGet "HOME") ""))) 0 16) "x"))]
+    (list (str (cacheDir!) "/clang") (str base "/asl-cache-home-" id "/clang")))
+
+fn ! recordClangIn! dirs: (List String) name: String version: String triple: String lastErr: String -> Bool
+  (match (listHead dirs)
+    ((none) (sys/sayErr! (str "asl: cannot record clang facts at " name ": " lastErr)))
+    ((some dir)
+      (let [(made (dirCreate dir))
+            (path (str dir "/" name))
+            (part (str path ".part." (stringFromInt64 (procSelf))))]
+        (match (fileWrite part (str version "\n" triple "\n"))
+          ((err e) (recordClangIn! (optionOr (listTail dirs) (list)) name version triple (str e (match made ((err m) (str " (" m ")")) ((ok _) "")))))
+          ((ok _) (match (pathRename part path)
+                    ((err e) (let [(gone (pathRemove part))]
+                               (sys/sayErr! (str "asl: cannot record clang facts at " path ": " e (if (err? gone) (str "; " part " stays") "")))))
+                    ((ok _) true)))))))
+
+fn ! recordedFacts! dirs: (List String) name: String -> (List String)
+  (match (listHead dirs)
+    ((none) (list))
+    ((some dir)
+      (let [(recorded (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines (resultOr (fileReadString (str dir "/" name)) ""))))]
+        (if (= (listLength recorded) 2) recorded (recordedFacts! (optionOr (listTail dirs) (list)) name)))))
 
 fn ! clangFacts! -> (List String)
-  (let [(path (str (cacheDir!) "/clang/" (bytesSha256 (stringToBytes (clangIdentity!)))))
-        (recorded (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines (resultOr (fileReadString path) ""))))]
+  (let [(name (bytesSha256 (stringToBytes (clangIdentity!))))
+        (recorded (recordedFacts! (factsDirs!) name))]
     (if (= (listLength recorded) 2)
       recorded
       (let [(q (shQuote (clangCommand!)))]
@@ -97,7 +115,7 @@ fn ! clangFacts! -> (List String)
           ((none) (list))
           ((some version) (match (firstLine! (str q " -dumpmachine"))
                             ((none) (list))
-                            ((some triple) (do (recordClang! path version triple) (list version triple)))))))))
+                            ((some triple) (do (recordClangIn! (factsDirs!) name version triple "") (list version triple)))))))))
 
 fn ! fresh? root: String dir: String -> Bool
   (if (or (stringEmpty? dir) (not (sys/executable? (str dir "/bin"))))
