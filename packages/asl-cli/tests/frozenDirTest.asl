@@ -1,4 +1,4 @@
-(module asl-cli/tests/frozenDirTest :x [runTests] :i [(asl-tools/fleet/run :a run)])
+(module asl-cli/tests/frozenDirTest :x [runTests] :i [(asl-tools/fleet/run :a run) (asl-gates/suiteRunner :a sr)])
 
 fn ! cliWithin! root: String cache: String timeoutS: Int64 argv: (List String) -> run/Done
   (run/runOneLimited
@@ -20,43 +20,84 @@ fn warmupDeadlineS -> Int64
 fn sharedCache -> String
   (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli")
 
-; (:m :ref FROZENDIR-STALE :do "asl/grammar/frozen.asn freezes distribTest inside the live asl-target-sh/tests (installParityTest unfroze with its fixture, so the directory run executes it as a live suite) and the whole asl-vector/tests package; the other asl-target-sh suites unfroze on 2026-10-15")
-fn mixedDir -> String
-  "asl/packages/asl-target-sh/tests"
+; (:m :ref FROZENDIR-OWN-FIXTURE-20261023 :do "the frozen/live contract is asserted on a throwaway git root that carries its own asl/grammar/frozen.asn (one frozen and one live trivial suite), so unfreezing a real suite cannot break it and no real suite directory is run; one cheap CLI call over the all-frozen asl-vector/tests dir plus the live testChanged fixture only checks the bin/asl wiring")
+fn frozenRel -> String
+  "suites/frozenTest.asl"
 
-fn frozenSuites -> (List String)
-  (list "asl/packages/asl-target-sh/tests/distribTest.asl")
+fn liveRel -> String
+  "suites/liveTest.asl"
 
-fn liveSuites -> (List String)
-  (list "asl/packages/asl-target-sh/tests/astTest.asl" "asl/packages/asl-target-sh/tests/emitPs1Test.asl"
-        "asl/packages/asl-target-sh/tests/emitShTest.asl" "asl/packages/asl-target-sh/tests/lowerTest.asl")
+fn suiteText name: String ok: String -> String
+  (str "(module suites/" name " :x [runTests] :i [])\n\nfn runTests -> Bool\n  (do (assert (= 1 " ok ") \"" name " ran\") true)\n")
 
-fn frozenFile -> String
-  "asl/packages/asl-vector/tests/vectorTest.asl"
+fn ! writeFixture! root: String -> Bool
+  (and (ok? (dirCreate (str root "/asl")))
+       (and (ok? (dirCreate (str root "/asl/grammar")))
+            (and (ok? (dirCreate (str root "/suites")))
+                 (and (ok? (fileWrite (str root "/asl/grammar/frozen.asn")
+                                      (str "(:frozenPaths :v 1\n  (:frozen :path \"" (frozenRel) "\" :kind suite :reason \"fixture\"))\n")))
+                      (and (ok? (fileWrite (str root "/" (frozenRel)) (suiteText "frozenTest" "2")))
+                           (ok? (fileWrite (str root "/" (liveRel)) (suiteText "liveTest" "1"))))))))
 
-fn ! checks! mode: String dir: run/Done explicit: run/Done live: run/Done -> Bool
+fn ! gitIndexed! root: String -> Bool
+  (match (sr/gitRun! root (list "init" "-q"))
+    ((err _) false)
+    ((ok i) (match (sr/gitRun! root (list "add" "-A"))
+              ((err _) false)
+              ((ok a) (and (= i.code 0) (= a.code 0))))))
+
+fn ! removeTree! root: String path: String -> Bool
+  (let [(done (run/runOneLimited (run/job (list "/bin/rm" "-rf" path) root (run/childEnv (list))) (run/limits 30 4)))]
+    (= done.exit 0))
+
+fn suitesText r: (Result (List String) String) -> String
+  (match r
+    ((ok l) (stringJoin l ","))
+    ((err e) e))
+
+fn countText r: (Result Int64 String) -> String
+  (match r
+    ((ok n) (stringFromInt64 n))
+    ((err e) e))
+
+fn ! fixtureChecks! base: String -> Bool
+  (let [(made (writeFixture! base))
+        (indexed (gitIndexed! base))
+        (dirRun (sr/discover base (list "suites")))
+        (dirCount (sr/frozenCount base (list "suites")))
+        (explicitRun (sr/discover base (list (frozenRel))))
+        (explicitCount (sr/frozenCount base (list (frozenRel))))]
+    (do (assert made "the throwaway frozen/live fixture was written")
+        (assert indexed "the throwaway fixture is a git root with both suites indexed")
+        (assert (= (suitesText dirRun) (liveRel)) (str "a directory run keeps the live suite and drops the frozen one: " (suitesText dirRun)))
+        (assert (= (countText dirCount) "1") (str "a directory run counts the one frozen suite: " (countText dirCount)))
+        (assert (listContains? (resultOr explicitRun (list)) (frozenRel)) (str "an explicitly named frozen suite still runs: " (suitesText explicitRun)))
+        (assert (= (countText explicitCount) "0") (str "an explicitly named frozen suite is not counted frozen: " (countText explicitCount)))
+        true))
+
+fn ! checks! mode: String dir: run/Done -> Bool
   (do
-    (assert (or (= dir.exit 0) (= dir.exit 1)) (str mode " directory with frozen suites exited normally: " dir.out))
-    (assert (stringContains? dir.out "(:test :frozen ") (str mode " prints frozen count"))
-    (assert (not (stringContains? dir.out "(:test :frozen 0)")) (str mode " reports at least one frozen suite: " dir.out))
-    (assert (listAll? (fn [(s String)] -> Bool (not (stringContains? dir.out (str s ":")))) (frozenSuites)) (str mode " does not run the frozen suites of a directory: " dir.out))
-    (assert (listAll? (fn [(s String)] -> Bool (stringContains? dir.out (str s ":"))) (liveSuites)) (str mode " runs the live suites of the same directory: " dir.out))
-    (assert (= explicit.exit 0) (str mode " explicitly named frozen file still runs: " explicit.out))
-    (assert (stringContains? explicit.out (str (frozenFile) ":")) (str mode " runs explicitly named frozen suite: " explicit.out))
-    (assert (= live.exit 0) (str mode " live directory exits successfully: " live.out))
-    (assert (stringContains? live.out "(:test :frozen 0)") (str mode " reports zero frozen suites for live directory"))
+    (assert (or (= dir.exit 0) (= dir.exit 1)) (str mode " directories with frozen suites exited normally: " dir.out))
+    (assert (stringContains? dir.out "(:test :frozen 2)") (str mode " reports both frozen vector suites: " dir.out))
+    (assert (not (stringContains? dir.out "vectorTest.asl:")) (str mode " does not run a frozen suite of a directory: " dir.out))
+    (assert (not (stringContains? dir.out "vectorizerTest.asl:")) (str mode " does not run the other frozen suite of a directory: " dir.out))
+    (assert (stringContains? dir.out "testChanged/alphaTest.asl:") (str mode " runs the live suites of the other directory: " dir.out))
     true)
 
-; (:m :ref NATIVE-STALE-CONVERGE :do "a brand-new cache dir (the common case: no ASL_NATIVE_CLI_CACHE preset) always cold-starts bin/asl's native build on its first call, regardless of verb; that build's own progress lines landed in the very first measured call's captured output and polluted the frozen/live substring checks below, flipping this suite red whenever the cache happened to arrive cold rather than pre-warmed by an earlier train step. A throwaway warm-up run forces the cold-start build to finish before any output is inspected, so the suite's own result no longer depends on whether the cache arrived warm or cold")
+; (:m :ref NATIVE-STALE-CONVERGE :do "a brand-new cache dir (the common case: no ASL_NATIVE_CLI_CACHE preset) always cold-starts bin/asl's native build on its first call, regardless of verb; that build's own progress lines landed in the very first measured call's captured output and polluted the substring checks below, so a throwaway warm-up run forces the cold-start build to finish before any output is inspected")
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (configuredCache (optionOr (envGet "ASL_NATIVE_CLI_CACHE") ""))
         (cache (if (stringEmpty? configuredCache) (sharedCache) configuredCache))
+        (frozenDir "asl/packages/asl-vector/tests")
         (liveDir "asl/packages/asl-cli/tests/fixtures/testChanged")
-        (warm (cliWithin! root cache (warmupDeadlineS) (list "test" (mixedDir))))
-        (nativeDir (cli! root cache (list "test" (mixedDir))))
-        (nativeFile (cli! root cache (list "test" (frozenFile))))
-        (nativeLive (cli! root cache (list "test" liveDir)))
-        (nativeChecks (checks! "bin/asl native path" nativeDir nativeFile nativeLive))]
-    (do (assert (or (= warm.exit 0) (= warm.exit 1)) (str "the warm-up run of mixedDir (cold-start build) finished before any measured call: " warm.out))
-        nativeChecks))
+        (base (resultOr (sr/makeTempDir! "frozenDirTest") ""))
+        (fixture (fixtureChecks! base))
+        (cleaned (removeTree! root base))
+        (warm (cliWithin! root cache (warmupDeadlineS) (list "test" liveDir)))
+        (nativeDir (cli! root cache (list "test" frozenDir liveDir)))]
+    (do (assert (not (stringEmpty? base)) "the throwaway root was created")
+        (assert fixture "the throwaway fixture checks passed")
+        (assert cleaned "the throwaway root was removed")
+        (assert (or (= warm.exit 0) (= warm.exit 1)) (str "the warm-up run (cold-start build) finished before any measured call: " warm.out))
+        (checks! "bin/asl native path" nativeDir)))
