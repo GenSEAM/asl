@@ -4,7 +4,8 @@
       (asl-target-llvm :a llvm)
       (asl-target-llvm/sys :a sys)
       (asl-target-llvm/sysNet :a sysNet)
-      (asl-target-llvm/libc :a libc)])
+      (asl-target-llvm/libc :a libc)
+      (asl-tools/fleet/run :a run)])
 
 ; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): runTests used to spawn the leftover host binary live (`asl-host run <work>/tcpEchoSrc.asl` / unixEchoSrc.asl) and compare only its exitCode, both against a hardcoded literal 65 and against the native build's own exit. The host is gone; a real run of both fixtures against the leftover host binary at ~/projects/asex/asl/host/out/asl-host, read-only, outside this worktree, confirmed exitCode 65 for both the tcp and the unix echo fixture (verified at port time, not guessed), so the now-dead `(assert (= tcpHost.exitCode 65) ...)`/`(assert (= unixHost.exitCode 65) ...)` self-checks (tautological once that value is a recorded constant rather than a live run) are dropped, and the native-vs-host comparison becomes native-vs-recorded-65 directly")
 
@@ -20,8 +21,33 @@ fn recordedTcpEchoExit -> Int64
 fn recordedUnixEchoExit -> Int64
   65
 
-fn ! sh cmd: String -> ProcessOutput
-  (processRun cmd)
+; (:m :ref SYSNET-UNBOUNDED-CHILD-20261024 :do "every child starts through fleet/run with a 60s timeout (a normal child takes under 3s) and a descendant cap of 8; a blocked fixture such as the tcpEchoMutant accept now ends as verdict timeout, exit 124, which the mutant assertion reads as not 65, instead of idling forever")
+(schema Captured
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
+
+fn shellQuote s: String -> String
+  (str "'" (stringReplace s "'" "'\\''") "'")
+
+fn ! root -> String
+  (resultOr (realPath ".") ".")
+
+fn childTimeoutS -> Int64
+  60
+
+fn ! sh cmd: String -> Captured
+  (let [(base (str (optionOr (envGet "TMPDIR") "/tmp") "/sysNetTest." (procSelf) "." (monotonicNs)))
+        (outPath (str base ".out"))
+        (errPath (str base ".err"))
+        (done (run/runOneLimited (run/job (list "sh" "-c" (str "(cd " (shellQuote (root)) " && (" cmd ")) > " (shellQuote outPath) " 2> " (shellQuote errPath))) (root)
+                                         (run/childEnv (list)))
+                                 (run/limits (childTimeoutS) 8)))
+        (outText (resultOr (fileReadString outPath) ""))
+        (errText (resultOr (fileReadString errPath) ""))
+        (_ (pathRemove outPath))
+        (_ (pathRemove errPath))]
+    (Captured :exitCode done.exit :stdout outText :stderr (if (= done.verdict "exit") errText (str errText " verdict " done.verdict " " done.out))))
 
 fn ! writeAndLink work: String name: String text: String -> Bool
   (let [(ll (str work "/" name ".ll"))]
