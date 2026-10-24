@@ -53,8 +53,8 @@ fn ! built work: String name: String text: String -> String
         bin))
 
 fn ! testStructure -> Bool
-  (let [(text (emitted "bench/native/record.asl"))
-        (step (functionText text "define tailcc %Val @bench$2Fnative$2Frecord$2Estep("))
+  (let [(text (emitted (benchPath "record")))
+        (step (functionText text "define tailcc %Val @asl$2Dtarget$2Dllvm$2Ftests$2Ffixtures$2FrecordScalar$2Falloc$2Frecord$2Estep("))
         (helper (functionText text "define linkonce_odr hidden ptr @gcAsl.allocFast.5("))
         (fast (optionOr (stringSlice helper 0 (optionOr (stringIndexOf helper "\nslow:") 0)) ""))]
     (do (assert (> (stringLength step) 0) "record: step is emitted")
@@ -70,8 +70,12 @@ fn ! testStructure -> Bool
         (assert (= (occurrences text "call ptr @asl_alloc_raw(") (occurrences text "tail call ptr @asl_alloc_raw(i32 %t, i64 %n)")) "record: asl_alloc_raw is called only from fast-path misses")
         true))
 
+; (:m :ref RECSROA :do "recordScalar removes bench/native/record.asl's per-step Body, so the record workload is its escaping copy")
+fn benchPath name: String -> String
+  (if (= name "record") "asl/packages/asl-target-llvm/tests/fixtures/recordScalar/alloc/record.asl" (str "bench/native/" name ".asl"))
+
 fn ! sameStats work: String name: String n: Int64 -> Bool
-  (let [(text (emitted (str "bench/native/" name ".asl")))
+  (let [(text (emitted (benchPath name)))
         (raw (rawText text))
         (inl (built work (str name "Inline") text))
         (ref (built work (str name "Raw") raw))
@@ -89,7 +93,7 @@ fn ! sameStats work: String name: String n: Int64 -> Bool
         true))
 
 fn ! testCollects work: String -> Bool
-  (let [(bin (built work "recordCollect" (emitted "bench/native/record.asl")))
+  (let [(bin (built work "recordCollect" (emitted (benchPath "record"))))
         (big (sh (str "ASL_GC_STATS=1 ASL_GC_MIN_MIB=1 " bin " 100000")))
         (plain (sh (str bin " 3000")))
         (stressed (sh (str "ASL_GC_STATS=1 ASL_GC_STRESS=1 " bin " 3000")))]

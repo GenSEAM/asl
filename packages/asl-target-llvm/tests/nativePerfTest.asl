@@ -180,10 +180,10 @@ fn ! testGcStress cache: String -> Bool
 
 fn ! testTypedFields ntBin: String cache: String -> Bool
   (let [(native (sh (str "ASL_NATIVE_TEST_CACHE='" cache "/typed' ASL_NATIVE_KEEP_LL=1 nice -n 15 " ntBin " run bench/native/record.asl 1000 </dev/null")))
-        (step (sh (str "cat $(find '" cache "/typed' -name '*.ll') | awk '/^define .*record[$]2Estep[(]/,/^}/'")))]
+        (step (sh (str "cat $(find '" cache "/typed' -name '*.ll') | awk '/^define .*record[$]2Estep[$]24sr[(]/,/^}/'")))]
     (do (assert (= native.exitCode 0) (str "record bench runs natively: " native.stderr))
         (assert (= (stringTrim native.stdout) "820 41") "record bench at 1000 prints 820 41")
-        (assert (stringContains? step.stdout "define tailcc %Val @bench$2Fnative$2Frecord$2Estep(") "the kept IR holds record.step")
+        (assert (stringContains? step.stdout "define tailcc %Val @bench$2Fnative$2Frecord$2Estep$24sr(") "the kept IR holds the loop of record.step, its recordScalar worker (RECSROA)")
         (assert (not (stringContains? step.stdout "@opsrt.add(")) "record.step adds its Int64 fields raw, with no @opsrt.add call")
         (assert (stringContains? step.stdout "@llvm.sadd.with.overflow.i64") "the raw add of the fields keeps its overflow check")
         true))

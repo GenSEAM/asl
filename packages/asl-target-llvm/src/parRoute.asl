@@ -1,5 +1,5 @@
 (module asl-target-llvm/parRoute
-  :x [parCalls routes? routeModule routeHost! routedNames? finishText helperDefinitions]
+  :x [parCalls routes? routeModule routeHost! routeHostLinked! routedNames? finishText helperDefinitions]
   :i [(asl-ir/types :a ty)
       (asl-ir/verify :a vfy)
       (asl-target-llvm/libc :a libc)
@@ -73,10 +73,14 @@ fn routeVerified facts: libc/TripleFacts m: ty/SsaModule calls: (List (Pair Stri
                                :internal names)))))))))
 
 fn routeModule facts: libc/TripleFacts m: ty/SsaModule -> (Result rt/Routed (List ty/IrDiag))
+  (routeModuleAs facts m true)
+
+; (:m :ref PERF-VERIFY-ONCE :do "check false skips the input verify: the native entry routes a linked module, which the link verified, and the emit verifies the routed, RC-rewritten module again")
+fn routeModuleAs facts: libc/TripleFacts m: ty/SsaModule check: Bool -> (Result rt/Routed (List ty/IrDiag))
   (let [(calls (parCalls m))]
     (if (listEmpty? calls)
       (ok (rt/Routed :result m :internal (list)))
-      (match (vfy/verifySsa m)
+      (match (if check (vfy/verifySsa m) (ok ()))
         ((err ds) (err ds))
         ((ok _) (routeVerified facts m calls)))))
 
@@ -87,6 +91,12 @@ fn unameWords text: String -> (Option (Pair String String))
       (none)))
 
 fn ! routeHost! m: ty/SsaModule -> (Result rt/Routed (List ty/IrDiag))
+  (routeHostAs! m true)
+
+fn ! routeHostLinked! m: ty/SsaModule -> (Result rt/Routed (List ty/IrDiag))
+  (routeHostAs! m false)
+
+fn ! routeHostAs! m: ty/SsaModule check: Bool -> (Result rt/Routed (List ty/IrDiag))
   (if (routes? m)
     (let [(out (processRun "uname -s -m"))
           (host (if (= out.exitCode 0) (unameWords out.stdout) (none)))]
@@ -94,7 +104,7 @@ fn ! routeHost! m: ty/SsaModule -> (Result rt/Routed (List ty/IrDiag))
         ((none) (err (list (diag "ERR_LLVM_PARROUTE_HOST" (str "uname -s -m exited " out.exitCode " printing '" out.stdout "' " out.stderr) m.name))))
         ((some p) (match (rt/routeFactsFor (rt/tripleOf (pairFirst p) (pairSecond p)))
                     ((none) (ok (rt/Routed :result m :internal (list))))
-                    ((some facts) (routeModule facts m))))))
+                    ((some facts) (routeModuleAs facts m check))))))
     (ok (rt/Routed :result m :internal (list))))
 
 fn helperDefinitions -> (List (Pair String String))

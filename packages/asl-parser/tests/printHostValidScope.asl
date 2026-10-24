@@ -203,6 +203,7 @@ fn knownSourceInvalidPaths -> (List String)
     "tests/acceptance/d81/Task52501.asl"
     "tests/acceptance/r1Host/sem/typePolymorphicTest.asl"
     "tests/acceptance/r1Prelude/fixtures/refuteEnum/enumImportTest.asl"
+    "tests/harnessBench/cases/asl-author-duration/hidden/durationHiddenTest.asl"
     "asl/tools/fleet/run.asl"
     "tools/orch/main.asl"
     "tools/tests/aslRepoSyncTest.asl"

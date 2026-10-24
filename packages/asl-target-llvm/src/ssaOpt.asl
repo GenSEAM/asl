@@ -1,6 +1,6 @@
 (module asl-target-llvm/ssaOpt
   :x [hoistConstants nativePrelude constantKey singletonPrefix singleton?]
-  :i [(asl-ir/types :a ty)])
+  :i [(asl-ir/types :a ty) (asl-target-llvm/recordScalar :a rs)])
 
 schema Hoisted
   keys: (Map String Int64)
@@ -72,8 +72,9 @@ fn hoistConstants m: ty/SsaModule -> ty/SsaModule
           (listAppend (map (fn [(f ty/SsaFunction)] -> ty/SsaFunction (if (own? f) f (rewriteFunction prefix found.keys f))) m.functions) inits)))))
 
 ; (:m :ref (PERF-MONO-MAPKEY PERF-MAPRANK) :do "LLVM-only bodies for two prelude treap helpers, so the go, js and py targets keep the prelude bodies, which lack keyCompare and bit primitives: the key order runs as one native three-way compare (opsrt.keyCmp) instead of a generic = and a generic <, and the rank byte step as FNV-1a in 31 bits (xor, multiply, mask) instead of a mod-prime step; only the bodies are replaced and clang inlines the small calls")
+; (:m :ref RECSROA :do "then records threaded through self calls become one parameter per field (recordScalar), before the routes and the RC pass see the module")
 fn nativePrelude m: ty/SsaModule -> ty/SsaModule
-  (with m :functions (map (fn [(f ty/SsaFunction)] -> ty/SsaFunction (rankByteBody (keyOrderBody f))) m.functions))
+  (rs/scalarizeRecords (with m :functions (map (fn [(f ty/SsaFunction)] -> ty/SsaFunction (rankByteBody (keyOrderBody f))) m.functions)))
 
 fn typedAs? f: ty/SsaFunction params: String ret: String -> Bool
   (and (= (listLength f.params) 2)

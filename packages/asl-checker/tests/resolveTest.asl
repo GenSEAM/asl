@@ -22,6 +22,16 @@ fn testUnboundTypevarProbe -> Bool
 fn testEffectProbe -> Bool
   (do (refute (resolveProbe "(fn foo [] -> (Result Unit IoError) (println \"hi\"))" "rule-12") "an unmarked effectful fn in a non-pure module infers clean, no rule-12") (refute (resolveProbe "(fn foo [] -> Int64 42)" "rule-12") "pure function not rule-12") true)
 
+; (:m :ref COMPILEHOT :do "isEffectfulBuiltin? answers by an allocation-free name chain, not a list rebuilt per call: every host effectful name is effectful, near misses and pure builtins are not")
+fn testEffectfulBuiltinNames -> Bool
+  (do (assert (listAll? (fn [(n String)] -> Bool (r/isEffectfulBuiltin? n)) (list "cpuCount" "dirCreate" "dirList" "envGet" "envList" "eprintln" "fdClose" "fdNonBlocking" "fdPoll" "fdRead" "fdWrite" "fileAppend" "fileChmod" "fileCreateExclusive" "fileFsync" "fileLock" "fileLockAt" "fileLockWait" "fileLstat" "fileReadAt" "fileReadBytes" "fileReadlink" "fileReadRange" "fileReadString" "fileStat" "fileUtime" "fileWrite" "fileWriteAt" "getHomeDir" "localDate" "monotonicNs" "nowNs" "parquetKvMetadata" "parquetOpen" "parquetReadF64" "parquetReadI64" "parquetReadI8" "pathRemove" "pathRename" "pathSymlink" "platformInfo" "print" "println" "procAlive?" "processRun" "processSpawn" "processWait" "procExecv" "procExePath" "procKill" "procPoll" "procRusage" "procSelf" "procSpawnv" "procWaitAny" "procWaitPid" "realPath" "sleepMs" "sockAccept" "sockLocalPort" "tcpConnect" "tcpListen" "unixConnect" "unixListen")) "every host effectful builtin name is effectful")
+      (assert (r/isEffectfulBuiltin? "tcpListen") "value effectful builtin still effectful")
+      (refute (r/isEffectfulBuiltin? "printlnx") "a name that extends an effectful one is not effectful")
+      (refute (r/isEffectfulBuiltin? "printl") "a prefix of an effectful name is not effectful")
+      (refute (r/isEffectfulBuiltin? "listLength") "a pure builtin is not effectful")
+      (refute (r/isEffectfulBuiltin? "") "the empty name is not effectful")
+      true)
+
 ; (:m :ref CHKFIX :do "markedFn? treats unmarked top-level main and runTests as entry points (CMSPELL codemod prerequisite): every suite's effectful runTests and every effectful main lack a trailing ! by convention, so without this they would all need rule-12 in a :pure package; any other unmarked effectful fn is simply inferred effectful (EFFECT-INFER), never rule-12 outside a :pure package")
 fn testUnmarkedEntryPointProbe -> Bool
   (do (refute (resolveProbe "(fn main [] -> Int64 (do (println \"hi\") 0))" "rule-12") "unmarked main performing effects is not rule-12")
@@ -42,7 +52,7 @@ fn testBuiltinRefProbe -> Bool
   (do (assert (resolveProbe "(fn shout [(xs (List Bool))] -> (List Bool) (map and xs))" "builtin-reference") "naked variadic builtin (and) in HOF builtin-reference") (refute (resolveProbe "(fn shout [(xs (List String))] -> (List String) (map stringUpper xs))" "builtin-reference") "naked fixed-arity builtin (stringUpper) in HOF is typed as a value, not builtin-reference") (refute (resolveProbe "(fn foo [] -> Int64 (+ 1 2))" "builtin-reference") "normal call not builtin-reference") true)
 
 fn testResolve -> Bool
-  (do (assert (testUnboundProbe) "unbound probe rule-2") (assert (testMissingDocProbe) "missing doc probe rule-8") (assert (testReservedProbe) "reserved probe rule-7") (assert (testUnboundTypevarProbe) "unbound typevar probe rule-10") (assert (testEffectProbe) "effect probe rule-12") (assert (testUnmarkedEntryPointProbe) "unmarked entry point probe rule-12") (assert (testArityProbe) "arity probe") (assert (testCtorProbe) "ctor probe") (assert (testNotCallableProbe) "not-callable probe") (assert (testBuiltinRefProbe) "builtin-ref probe") (refute (checkHasCode (list) "rule-2") "empty diagnostics has no error") true)
+  (do (assert (testEffectfulBuiltinNames) "effectful builtin names") (assert (testUnboundProbe) "unbound probe rule-2") (assert (testMissingDocProbe) "missing doc probe rule-8") (assert (testReservedProbe) "reserved probe rule-7") (assert (testUnboundTypevarProbe) "unbound typevar probe rule-10") (assert (testEffectProbe) "effect probe rule-12") (assert (testUnmarkedEntryPointProbe) "unmarked entry point probe rule-12") (assert (testArityProbe) "arity probe") (assert (testCtorProbe) "ctor probe") (assert (testNotCallableProbe) "not-callable probe") (assert (testBuiltinRefProbe) "builtin-ref probe") (refute (checkHasCode (list) "rule-2") "empty diagnostics has no error") true)
 
 fn ! runTests -> Bool
   (do (assert (testResolve) "test-resolve must pass") (refute (resolveProbe "(fn foo [] -> Int64 42)" "rule-2") "pure constant has no rule-2") true)

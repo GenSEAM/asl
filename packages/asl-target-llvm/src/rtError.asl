@@ -507,18 +507,25 @@ fn refEnd b: Bytes n: Int64 j: Int64 -> Int64
     ((refStop? (bytesGet b j)) j)
     (else (refEnd b n (+ j 1))))
 
+; (:m :ref COMPILEHOT :do "refNextAt: the byte scan over the whole definitions text is a three-argument loop (index of the next @, or n), not refKeysFrom's six-argument one")
+fn refNextAt b: Bytes n: Int64 i: Int64 -> Int64
+  (cond
+    ((>= i n) n)
+    ((= (bytesGet b i) 64) i)
+    (else (refNextAt b n (+ i 1))))
+
 fn refAdd acc: (Map String Bool) k: String -> (Map String Bool)
   (if (mapHas? acc k) acc (mapSet acc k true))
 
 fn refKeysFrom text: String b: Bytes n: Int64 endNl: Bool i: Int64 acc: (Map String Bool) -> (Map String Bool)
   (cond
     ((>= i n) acc)
-    ((!= (bytesGet b i) 64) (refKeysFrom text b n endNl (+ i 1) acc))
+    ((!= (bytesGet b i) 64) (refKeysFrom text b n endNl (refNextAt b n (+ i 1)) acc))
     (else (let [(j (refEnd b n (+ i 1)))]
             (cond
-              ((and (< j n) (!= (bytesGet b j) 64)) (refKeysFrom text b n endNl (+ j 1) (refAdd acc (optionOr (stringSlice text i (+ j 1)) ""))))
+              ((and (< j n) (!= (bytesGet b j) 64)) (refKeysFrom text b n endNl (refNextAt b n (+ j 1)) (refAdd acc (optionOr (stringSlice text i (+ j 1)) ""))))
               ((and (>= j n) endNl) (refAdd acc (str (optionOr (stringSlice text i n) "") "\n")))
-              (else (refKeysFrom text b n endNl j acc))))))
+              (else (refKeysFrom text b n endNl (refNextAt b n j) acc))))))
 
 fn refKeysInto acc: (Map String Bool) text: String endNl: Bool -> (Map String Bool)
   (let [(b (stringToBytes text))]

@@ -3,13 +3,13 @@
       parseForms atomText itemsOf kvGet unquote stripColon textOf quoteStr floatOf intOf
       loadBaselineText loadBaseline renderBaseline
       withinTolerance maxAllowed evaluate findRow
-      benchLine? parseBenchLine benchRowsFromText runBenchMeasurements
-      osFlag userMsOf compileWorkloadRow hostLine methodText defaultBaselinePath fmt2
+      benchLine? parseBenchRows rowsFromTop ratioOf benchRowsFromText runBenchMeasurements
+      osFlag instrRetired fixedInputDir compileWorkloadRow fmt3 rowTol hostLine methodText defaultBaselinePath fmt2
       flagTakesValue? positional optValue]
   :i [(asl-parser/reader :a rd) (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/nativeTest :a nt)])
 
-(schema BenchBase (:f name String) (:f ratio Float64))
-(schema CompileBase (:f name String) (:f userMs Int64))
+(schema BenchBase (:f name String) (:f ratio Float64) (:f tol Float64))
+(schema CompileBase (:f name String) (:f instr Int64) (:f tol Float64))
 (schema GcPolicy (:f minMib Int64) (:f label String) (:f date String) (:f method String) (:f scope String))
 (schema Baseline
   (:f id String) (:f date String) (:f host String) (:f method String)
@@ -62,18 +62,25 @@ fn fmt2 x: Float64 -> String
         (frac (mod hundredths 100))]
     (str (if neg "-" "") ip "." (if (< frac 10) "0" "") frac))
 
+fn fmt3 x: Float64 -> String
+  (let [(thousandths (optionOr (float64ToInt64 (+ (* x 1000.0) 0.5)) 0))
+        (frac (mod thousandths 1000))]
+    (str (/ thousandths 1000) "." (if (< frac 100) "0" "") (if (< frac 10) "0" "") frac))
+
 fn subForms items: (List rd/SExpr) tag: String -> (List rd/SExpr)
   (filter (fn [(it rd/SExpr)] -> Bool (= (atomText (optionOr (listHead (itemsOf it)) (rd/makeAtom ""))) tag)) items)
 
 fn parseBenchBase row: rd/SExpr -> BenchBase
   (let [(items (itemsOf row))]
     (BenchBase :name (textOf (optionOr (kvGet items ":name") (rd/makeAtom "")))
-               :ratio (optionOr (floatOf (kvGet items ":ratio")) 0.0)))
+               :ratio (optionOr (floatOf (kvGet items ":ratio")) 0.0)
+               :tol (optionOr (floatOf (kvGet items ":tol")) 0.0)))
 
 fn parseCompileBase row: rd/SExpr -> CompileBase
   (let [(items (itemsOf row))]
     (CompileBase :name (textOf (optionOr (kvGet items ":name") (rd/makeAtom "")))
-                 :userMs (optionOr (intOf (kvGet items ":userMs")) 0)))
+                 :instr (optionOr (intOf (kvGet items ":instr")) 0)
+                 :tol (optionOr (floatOf (kvGet items ":tol")) 0.0)))
 
 fn parseGcPolicy row: rd/SExpr -> GcPolicy
   (let [(items (itemsOf row))]
@@ -119,10 +126,10 @@ fn methodLineOf b: Baseline -> String
   (str "  :method " (quoteStr b.method))
 
 fn benchLine2 x: BenchBase -> String
-  (str "  (:bench :name " (quoteStr x.name) " :ratio " (fmt2 x.ratio) ")")
+  (str "  (:bench :name " (quoteStr x.name) " :ratio " (fmt3 x.ratio) " :tol " (fmt2 x.tol) ")")
 
 fn compileLine2 x: CompileBase -> String
-  (str "  (:compile :name " (quoteStr x.name) " :userMs " x.userMs ")")
+  (str "  (:compile :name " (quoteStr x.name) " :instr " x.instr " :tol " (fmt3 x.tol) ")")
 
 fn gcPolicyLine x: GcPolicy -> String
   (str "  (:gcPolicy :minMib " x.minMib " :label " x.label " :date " (quoteStr x.date) " :method " (quoteStr x.method) " :scope " (quoteStr x.scope) ")")
@@ -140,59 +147,77 @@ fn maxAllowed base: Float64 tolerance: Float64 -> Float64
 fn findRow rows: (List MeasureRow) name: String -> (Option MeasureRow)
   (listHead (filter (fn [(r MeasureRow)] -> Bool (= r.name name)) rows))
 
-fn evalOne label: String base: Float64 tol: Float64 row: (Option MeasureRow) -> (List String)
+; (:m :ref PERFGATE :do "a ratio row may rise past base * (1 + tol) by an absolute 0.05 before it is red, so a base near 0 (a bench whose ASL side uses far less memory than C) is not red for a few KB; compile rows carry no slack. Only a rise is red: a faster tree is reported by --record, never failed")
+fn rowTol tol: Float64 default: Float64 -> Float64
+  (if (> tol 0.0) tol default)
+
+fn evalOne label: String base: Float64 tol: Float64 slack: Float64 row: (Option MeasureRow) -> (List String)
   (match row
     ((none) (list (str label ": no measurement in this run")))
     ((some r)
      (cond
        ((not r.ok) (list (str label ": measurement failed: " r.note)))
-       ((withinTolerance base tol r.value) (list))
+       ((<= r.value (+ (maxAllowed base tol) slack)) (list))
        (else (list (str label ": " (fmt2 r.value) " exceeds baseline " (fmt2 base)
-                         " x (1+" (fmt2 tol) ") = " (fmt2 (maxAllowed base tol))))))))
+                         " x (1+" (fmt2 tol) ") = " (fmt2 (maxAllowed base tol)) (if (> slack 0.0) " + 0.05" "")))))))
 
 fn evaluate baseline: Baseline benchRows: (List MeasureRow) compileRows: (List MeasureRow) -> (List String)
   (let [(benchDefects (fold (fn [(acc (List String)) (b BenchBase)] -> (List String)
-                              (listAppend acc (evalOne (str "bench " b.name) b.ratio baseline.tolerance (findRow benchRows b.name))))
+                              (listAppend acc (evalOne (str "bench " b.name) b.ratio (rowTol b.tol baseline.tolerance) 0.05 (findRow benchRows b.name))))
                             (list) baseline.benches))
         (compileDefects (fold (fn [(acc (List String)) (c CompileBase)] -> (List String)
-                                (listAppend acc (evalOne (str "compile " c.name) (int64ToFloat64 c.userMs) baseline.tolerance (findRow compileRows c.name))))
+                                (listAppend acc (evalOne (str "compile " c.name) (int64ToFloat64 c.instr) (rowTol c.tol 0.02) 0.0 (findRow compileRows c.name))))
                               (list) baseline.compiles))]
     (listAppend benchDefects compileDefects))
 
 fn benchLine? l: String -> Bool
   (stringStartsWith? l "(:bench ")
 
-fn rowFromFields name: String errField: (Option rd/SExpr) sameField: (Option rd/SExpr) ratioField: (Option rd/SExpr) -> MeasureRow
+; (:m :ref PERFGATE :do "a (:bench ...) lock row yields two gate rows, NAME/MODE/instr = ASL instructions retired over C and NAME/MODE/rss = ASL peak RSS over C, both computed from the raw counts (not the rounded two-decimal text): wall time is in the lock row for humans and never gated, since a loaded host moves it by +-50% on C runs under 20 ms")
+fn ratioOf num: (Option Int64) den: (Option Int64) -> (Option Float64)
+  (match num
+    ((none) (none))
+    ((some n) (match den
+                ((none) (none))
+                ((some d) (if (or (<= n 0) (<= d 0)) (none) (some (/ (int64ToFloat64 n) (int64ToFloat64 d))))))))
+
+fn rowOf label: String bad: Bool note: String ratio: (Option Float64) -> MeasureRow
   (cond
-    ((some? errField) (MeasureRow :name name :ok false :value 0.0 :note (textOf (optionOr errField (rd/makeAtom "")))))
-    ((none? ratioField) (MeasureRow :name name :ok false :value 0.0 :note "no :ratio field"))
-    ((and (some? sameField) (!= (atomText (optionOr sameField (rd/makeAtom ""))) "true"))
-     (MeasureRow :name name :ok false :value (optionOr (floatOf ratioField) 0.0) :note "output mismatch (:same false)"))
-    (else (MeasureRow :name name :ok true :value (optionOr (floatOf ratioField) 0.0) :note "")))
+    (bad (MeasureRow :name label :ok false :value 0.0 :note note))
+    ((none? ratio) (MeasureRow :name label :ok false :value 0.0 :note "missing or non-positive count"))
+    (else (MeasureRow :name label :ok true :value (optionOr ratio 0.0) :note "")))
 
-fn rowFromTop top: rd/SExpr -> MeasureRow
+fn rowsFromTop top: rd/SExpr -> (List MeasureRow)
   (let [(items (itemsOf top))
-        (name (textOf (optionOr (listGet items 1) (rd/makeAtom "?"))))]
-    (rowFromFields name (kvGet items ":error") (kvGet items ":same") (kvGet items ":ratio")))
+        (name (textOf (optionOr (listGet items 1) (rd/makeAtom "?"))))
+        (mode (match (kvGet items ":mode") ((some m) (textOf m)) ((none) "tracing")))
+        (base (str name "/" mode))
+        (errField (kvGet items ":error"))
+        (mismatch (and (some? (kvGet items ":same")) (!= (atomText (optionOr (kvGet items ":same") (rd/makeAtom ""))) "true")))
+        (bad (or (some? errField) mismatch))
+        (note (if (some? errField) (textOf (optionOr errField (rd/makeAtom ""))) "output mismatch (:same false)"))]
+    (list (rowOf (str base "/instr") bad note (ratioOf (intOf (kvGet items ":aslInstr")) (intOf (kvGet items ":cInstr"))))
+          (rowOf (str base "/rss") bad note (ratioOf (intOf (kvGet items ":aslRssKb")) (intOf (kvGet items ":cRssKb"))))))
 
-fn parseBenchLine line: String -> MeasureRow
+fn parseBenchRows line: String -> (List MeasureRow)
   (match (parseForms line)
-    ((err e) (MeasureRow :name "?" :ok false :value 0.0 :note (str "bench line does not read: " e)))
+    ((err e) (list (MeasureRow :name "?" :ok false :value 0.0 :note (str "bench line does not read: " e))))
     ((ok forms)
      (match (listHead forms)
-       ((none) (MeasureRow :name "?" :ok false :value 0.0 :note "empty bench line"))
-       ((some top) (rowFromTop top)))))
+       ((none) (list (MeasureRow :name "?" :ok false :value 0.0 :note "empty bench line")))
+       ((some top) (rowsFromTop top)))))
 
 fn benchRowsFromText text: String -> (List MeasureRow)
-  (map parseBenchLine (filter benchLine? (stringLines text)))
+  (fold (fn [(acc (List MeasureRow)) (l String)] -> (List MeasureRow) (listAppend acc (parseBenchRows l)))
+        (list) (filter benchLine? (stringLines text)))
 
 ; (:m :ref HL-FIXWAVE :do "both spawns here used to hardcode asl/host/out/asl-host, the stage-0 interpreter HL-DELETE retired for good; bin/asl (the native CLI launcher, self-building from the asl1 seed) is what runs bench/native/run.asl and asl1.asl now")
-fn ! runBenchMeasurements runs: Int64 names: (List String) -> (List MeasureRow)
+fn ! runBenchMeasurements runs: Int64 names: (List String) modes: String -> (List MeasureRow)
   (let [(work (str ".asl/cache/perfGate/" (procSelf)))
         (_ (dirCreate work))
         (lockPath (str work "/benchLock.asn"))
         (_ (pathRemove lockPath))
-        (argv (listAppend (list "bin/asl" "run" "bench/native/run.asl" "--runs" (stringFromInt64 runs) "--lock" lockPath) names))
+        (argv (listAppend (list "bin/asl" "run" "bench/native/run.asl" "--runs" (stringFromInt64 runs) "--mode" modes "--lock" lockPath) names))
         (_ (nt/runProc argv (none)))
         (text (resultOr (fileReadString lockPath) ""))
         (_ (pathRemove lockPath))]
@@ -201,35 +226,63 @@ fn ! runBenchMeasurements runs: Int64 names: (List String) -> (List MeasureRow)
 fn ! osFlag -> String
   (if (stringContains? (nt/runProc (list "uname" "-s") (none)).stdout "Darwin") "-l" "-v")
 
-fn userMsOf text: String -> Int64
-  (let [(lines (stringLines text))
-        (macLine (listHead (filter (fn [(l String)] -> Bool (stringContains? l " user")) lines)))
-        (gnuLine (listHead (filter (fn [(l String)] -> Bool (stringContains? l "User time (seconds):")) lines)))]
-    (match macLine
-      ((some l)
-       (let [(before (optionOr (listHead (stringSplit l " user")) ""))
-             (toks (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit before " ")))]
-         (optionOr (float64ToInt64 (* (optionOr (stringToFloat64 (optionOr (listGet toks (- (listLength toks) 1)) "")) -0.001) 1000.0)) -1)))
-      ((none)
-       (match gnuLine
-         ((some l) (optionOr (float64ToInt64 (* (optionOr (stringToFloat64 (stringTrim (optionOr (listGet (stringSplit l ":") 1) ""))) -0.001) 1000.0)) -1))
-         ((none) -1)))))
+; (:m :ref PERFGATE :do "instructions retired of one child tree, from /usr/bin/time -l (Darwin); -1 where the platform prints none (Linux -v has no such line), which the gate reports as an unmeasured row rather than passing it")
+fn instrRetired text: String -> Int64
+  (match (listHead (filter (fn [(l String)] -> Bool (stringContains? l "instructions retired")) (stringLines text)))
+    ((some l) (optionOr (stringToInt64 (optionOr (listHead (stringSplit (stringTrim l) " ")) "")) -1))
+    ((none) -1))
 
-fn ! compileWorkloadRow -> MeasureRow
-  (let [(name "tools/corpusNativeMain.asl")
-        (work (str ".asl/cache/perfGate/" (procSelf)))
-        (_ (dirCreate work))
-        (ll (str work "/corpusNativeMain.ll"))
-        (argv (list "/usr/bin/time" (osFlag) "nice" "-n" "15" "bin/asl" "run"
-                    "asl/packages/asl-compiler/src/asl1.asl" "build" name "-o" ll))
-        (out (nt/runProc argv (none)))
-        (_ (pathRemove ll))]
-    (if (!= out.exitCode 0)
-      (MeasureRow :name name :ok false :value 0.0 :note (str "cold build failed (exit " out.exitCode "): " (stringTrim out.stderr)))
-      (let [(u (userMsOf out.stderr))]
-        (if (< u 0)
-          (MeasureRow :name name :ok false :value 0.0 :note (str "could not parse /usr/bin/time output: " (stringTrim out.stderr)))
-          (MeasureRow :name name :ok true :value (int64ToFloat64 u) :note "")))))
+fn fixedInputCommit -> String
+  "b9c1acb05"
+
+fn ! perfHome -> String
+  (str (optionOr (envGet "HOME") ".") "/.asl/run/perfGate")
+
+; (:m :ref PERFGATE :do "FIXED-INPUT-B9C1 (.asl/mem/benchmarks/fixedInput-20261022.asn): git archive of b9c1acb05 asl, unpacked once per machine; the compile workload must not change with the tree under test, only the compiler does")
+fn ! fixedInputDir -> (Result String String)
+  (let [(dir (str (perfHome) "/fixedInput-" (fixedInputCommit)))]
+    (if (fileExists? (str dir "/asl/prelude/prelude.asl"))
+      (ok dir)
+      (let [(_ (dirCreate dir))
+            (tar (str dir ".tar"))
+            (a (nt/runProc (list "git" "archive" "--format=tar" "-o" tar (fixedInputCommit) "asl") (none)))]
+        (if (!= a.exitCode 0)
+          (err (str "git archive " (fixedInputCommit) " failed: " (stringTrim a.stderr)))
+          (let [(x (nt/runProc (list "tar" "-xf" tar "-C" dir) (none)))
+                (_ (pathRemove tar))]
+            (if (!= x.exitCode 0) (err (str "tar failed: " (stringTrim x.stderr))) (ok dir)))))))
+
+fn ! compilerBinary work: String given: (Option String) -> (Result String String)
+  (match given
+    ((some p) (ok (resultOr (realPath p) p)))
+    ((none)
+     (let [(out (str work "/asl1.nt"))
+           (r (nt/runProc (list "nice" "-n" "10" "bin/asl" "build" "asl/packages/asl-compiler/src/asl1.asl" "-o" out) (none)))]
+       (if (= r.exitCode 0) (ok (resultOr (realPath out) out)) (err (str "asl1 build exit " r.exitCode ": " (stringTrim r.stderr)))))))
+
+; (:m :ref PERFGATE :do "compile workload = instructions retired by the tree's notrace asl1 (bin/asl build asl1.asl) compiling FIXED-INPUT-B9C1's asl1.asl to LLVM IR; deterministic to about 0.2% across rounds and loads (2026-10-23 notrace 165.70e9 166.00e9), so the 2% gate does not read load")
+fn ! compileWorkloadRow compiler: (Option String) -> MeasureRow
+  (let [(name "fixedNt")
+        (rel (str ".asl/cache/perfGate/" (procSelf)))
+        (_ (dirCreate rel))
+        (work (resultOr (realPath rel) rel))]
+    (match (fixedInputDir)
+      ((err e) (MeasureRow :name name :ok false :value 0.0 :note e))
+      ((ok dir)
+       (match (compilerBinary work compiler)
+         ((err e) (MeasureRow :name name :ok false :value 0.0 :note e))
+         ((ok bin)
+          (let [(ll (str work "/fixedNt.ll"))
+                (env (nt/withEnvOverrides! (list (str "ASL_ROOT=" dir) (str "ASL_PRELUDE=" dir "/asl/prelude/prelude.asl") "ASL_HOST_CACHE=0")))
+                (out (nt/runProcIn (list "/usr/bin/time" (osFlag) bin "build" "asl/packages/asl-compiler/src/asl1.asl" "-o" ll) (some dir) (some env)))
+                (size (resultOr (fileSize ll) 0))
+                (_ (pathRemove ll))]
+            (if (or (!= out.exitCode 0) (<= size 0))
+              (MeasureRow :name name :ok false :value 0.0 :note (str "fixedNt compile failed (exit " out.exitCode ", ll bytes " size "): " (stringTrim out.stderr)))
+              (let [(n (instrRetired out.stderr))]
+                (if (<= n 0)
+                  (MeasureRow :name name :ok false :value 0.0 :note "no instructions retired line in /usr/bin/time output")
+                  (MeasureRow :name name :ok true :value (int64ToFloat64 n) :note ""))))))))))
 
 fn civilDate ns: Int64 -> String
   (let [(z (+ (/ ns 86400000000000) 719468))
@@ -253,12 +306,10 @@ fn ! hostLine -> String
     (str u "; " cv "; load " load))
 
 fn methodText -> String
-  (str "bench/native/run.asl: clang -O2 C vs asl/tools/nativeTest native ASL (clang -O2 over emitted LLVM IR), "
-       "same argv size, best of N wall-clock runs per binary, ratio = asl/c (ratio is load-robust: both sides "
-       "share the same ambient load back to back); compile = /usr/bin/time user seconds for a cold asl1 build "
-       "of tools/corpusNativeMain.asl to LLVM IR (direct asl1 CLI invocation, no clang link, no nativeTest "
-       "module cache, so it is always a cold compile); gate fails when a bench ratio or the compile user time "
-       "exceeds baseline * (1 + tolerance)")
+  (str "bench/native/run.asl --mode both: 16 benches, clang -O2 C vs ASL built twice, notrace (bin/asl build, the CLI default) and tracing (tools/nativeTest, rc 0), same argv size; "
+       "gated ratios are ASL/C instructions retired and ASL/C peak RSS (/usr/bin/time -l, deterministic, load-free), never wall time; "
+       "compile = instructions retired by the tree's notrace asl1 compiling FIXED-INPUT-B9C1 (git archive b9c1acb05 asl) asl1.asl to LLVM IR; "
+       "gate fails when a row exceeds baseline * (1 + its tol) (+0.05 absolute on ratio rows)")
 
 fn ! defaultBaselinePath -> String
   (str (optionOr (envGet "ASL_ROOT") ".") "/.asl/mem/bench/perfBaseline.asn")
@@ -269,7 +320,7 @@ fn optValue args: (List String) flag: String -> (Option String)
     ((some a) (if (= a flag) (listGet args 1) (optValue (optionOr (listTail args) (list)) flag))))
 
 fn flagTakesValue? flag: String -> Bool
-  (listContains? (list "--baseline" "--runs" "--tolerance") flag)
+  (listContains? (list "--baseline" "--runs" "--tolerance" "--modes" "--compiler") flag)
 
 fn positional args: (List String) acc: (List String) -> (List String)
   (match (listHead args)
@@ -278,47 +329,75 @@ fn positional args: (List String) acc: (List String) -> (List String)
                 (positional (listDrop args (if (flagTakesValue? a) 2 1)) acc)
                 (positional (listDrop args 1) (cons a acc)))))
 
-fn ! recordRun baselinePath: String runs: Int64 names: (List String) tolArg: (Option String) -> (Result Int64 String)
-  (let [(benchRows (runBenchMeasurements runs names))
-        (compileRows (list (compileWorkloadRow)))
+; (:m :ref PERFGATE :do "adopted tolerances (2026-10-23): instructions-retired ratio rows 0.15, peak-RSS ratio rows 0.25, fixedNt compile instructions 0.02; the ratio rows are far steadier than wall time (fib notrace 1211520824 vs 1211574072 C instructions in two runs), so these are wide against noise and narrow against a real slowdown")
+fn rowTolFor name: String tolArg: (Option Float64) -> Float64
+  (match tolArg
+    ((some t) t)
+    ((none) (if (stringEndsWith? name "/rss") 0.25 0.15)))
+
+fn ! measureAll runs: Int64 names: (List String) modes: String compiler: (Option String) skipBench: Bool skipCompile: Bool -> (Pair (List MeasureRow) (List MeasureRow))
+  (pair (if skipBench (list) (runBenchMeasurements runs names modes))
+        (if skipCompile (list) (list (compileWorkloadRow compiler))))
+
+fn ! recordRun baselinePath: String runs: Int64 names: (List String) tolArg: (Option String) modes: String compiler: (Option String) -> (Result Int64 String)
+  (let [(measured (measureAll runs names modes compiler false false))
+        (benchRows (pairFirst measured))
+        (compileRows (pairSecond measured))
         (prior (loadBaseline baselinePath))
         (tol (match tolArg
-               ((some s) (optionOr (stringToFloat64 s) 0.35))
-               ((none) (match prior ((ok b) b.tolerance) ((err _) 0.35)))))
+               ((some s) (some (optionOr (stringToFloat64 s) 0.35)))
+               ((none) (none))))
         (okBenches (filter (fn [(r MeasureRow)] -> Bool r.ok) benchRows))
         (okCompiles (filter (fn [(r MeasureRow)] -> Bool r.ok) compileRows))
         (failed (listAppend (filter (fn [(r MeasureRow)] -> Bool (not r.ok)) benchRows)
                              (filter (fn [(r MeasureRow)] -> Bool (not r.ok)) compileRows)))
         (newBaseline (Baseline :id "nativePerfGate" :date (civilDate (nowNs)) :host (hostLine) :method (methodText)
-                                :tolerance tol :toleranceLabel "adopted"
-                                :benches (map (fn [(r MeasureRow)] -> BenchBase (BenchBase :name r.name :ratio r.value)) okBenches)
-                                :compiles (map (fn [(r MeasureRow)] -> CompileBase (CompileBase :name r.name :userMs (optionOr (float64ToInt64 r.value) 0))) okCompiles)
+                                :tolerance 0.35 :toleranceLabel "adopted"
+                                :benches (map (fn [(r MeasureRow)] -> BenchBase (BenchBase :name r.name :ratio r.value :tol (rowTolFor r.name tol))) okBenches)
+                                :compiles (map (fn [(r MeasureRow)] -> CompileBase (CompileBase :name r.name :instr (optionOr (float64ToInt64 r.value) 0) :tol (optionOr tol 0.02))) okCompiles)
                                 :gcPolicy (match prior ((ok b) b.gcPolicy) ((err _) (list)))))]
     (do
       (fold (fn [(acc Unit) (r MeasureRow)] -> Unit (do (eprintln (str "perfGate: " r.name " did not measure: " r.note)) acc)) () failed)
       (match (dirCreate (str (optionOr (envGet "ASL_ROOT") ".") "/.asl/mem/bench"))
         ((err _) ())
         ((ok _) ()))
-      (match (fileWrite baselinePath (renderBaseline newBaseline))
-        ((err e) (err (str "perfGate: cannot write " baselinePath ": " e)))
-        ((ok _) (do (println (renderBaseline newBaseline)) (ok 0))))))
+      (if (not (listEmpty? failed))
+        (err "perfGate: --record refused, some rows did not measure (a baseline must hold every row)")
+        (match (fileWrite baselinePath (renderBaseline newBaseline))
+          ((err e) (err (str "perfGate: cannot write " baselinePath ": " e)))
+          ((ok _) (do (println (renderBaseline newBaseline)) (ok 0)))))))
 
-fn ! checkRun baselinePath: String runs: Int64 names: (List String) -> (Result Int64 String)
+fn ! checkRun baselinePath: String runs: Int64 names: (List String) modes: String compiler: (Option String) skipBench: Bool skipCompile: Bool -> (Result Int64 String)
   (match (loadBaseline baselinePath)
     ((err e) (err e))
     ((ok baseline)
-     (let [(benchRows (runBenchMeasurements runs names))
-           (compileRows (list (compileWorkloadRow)))
-           (defects (evaluate baseline benchRows compileRows))]
+     (let [(measured (measureAll runs names modes compiler skipBench skipCompile))
+           (benchRows (pairFirst measured))
+           (compileRows (pairSecond measured))
+           (inScope (Baseline :id baseline.id :date baseline.date :host baseline.host :method baseline.method
+                              :tolerance baseline.tolerance :toleranceLabel baseline.toleranceLabel
+                              :benches (if skipBench (list) (filter (fn [(b BenchBase)] -> Bool (and (or (= modes "both") (= modes (benchMode b.name))) (or (listEmpty? names) (listContains? names (benchOf b.name))))) baseline.benches))
+                              :compiles (if skipCompile (list) baseline.compiles)
+                              :gcPolicy baseline.gcPolicy))
+           (defects (evaluate inScope benchRows compileRows))]
        (do (fold (fn [(acc Unit) (d String)] -> Unit (do (eprintln (str "perfGate: " d)) acc)) () defects)
+           (println (str "(:perfGate :rows " (+ (listLength benchRows) (listLength compileRows)) " :defects " (listLength defects) ")"))
            (ok (if (listEmpty? defects) 0 1))))))
+
+fn benchMode name: String -> String
+  (optionOr (listGet (stringSplit name "/") 1) "")
+
+fn benchOf name: String -> String
+  (optionOr (listHead (stringSplit name "/")) "")
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(record (listContains? args "--record"))
         (baselinePath (optionOr (optValue args "--baseline") (defaultBaselinePath)))
-        (runs (optionOr (stringToInt64 (optionOr (optValue args "--runs") "3")) 3))
+        (runs (optionOr (stringToInt64 (optionOr (optValue args "--runs") "1")) 1))
         (tolArg (optValue args "--tolerance"))
+        (modes (optionOr (optValue args "--modes") "both"))
+        (compiler (optValue args "--compiler"))
         (names (positional args (list)))]
     (if record
-      (recordRun baselinePath runs names tolArg)
-      (checkRun baselinePath runs names)))
+      (recordRun baselinePath runs names tolArg modes compiler)
+      (checkRun baselinePath runs names modes compiler (listContains? args "--skip-bench") (listContains? args "--skip-compile"))))

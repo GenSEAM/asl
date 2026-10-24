@@ -11,8 +11,9 @@ fn entries -> (List String)
 ; (:m :ref PERF-MAPRANK :do "repinned: the prelude treap rank changed (FNV byte step), then PERF-MONO-MAPKEY ran treap key tests as opsrt.keyCmp (now the LLVM-only ssaOpt nativePrelude body of prelude.preludeKeyOrder) and PERF-FREECHAIN added allocation-free has and getOr walks, so linked IR of the prelude and of map literals moved; measured by this file's own goldenDigests printer")
 ; (:m :ref HLLOWSMERGE :do "repinned on merge main into sh/HLLOWS: checkSemanticTest.asl's linked-IR digest shifted with the merged tree's own asl-forms/checkSemanticTest.asl content; measured on the merged tree by this file's own goldenDigests printer, never hand-written")
 ; (:m :ref PERF-REALPATH-CACHE :do "repinned: checkSemanticTest links asl-checker/resolve, whose walk, importer cache and loadModuleDepsIx! changed its linked IR; measured by this file's own goldenDigests printer")
+; (:m :ref WAVE1-REDS :do "repinned: COMPILEHOT 5ac2c6a68 rewrote asl-checker/resolve isEffectfulBuiltin? (name chain) and checkSemanticTest links resolve, so its linked IR is 10274 bytes longer; the main-tree pin 3518356563441014170:4946123 predates it; measured by this file's own goldenDigests printer")
 fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "3518356563441014170:4946123")
+  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "2343795750628133572:4956397")
         (pair "lowerSourceWith" "6806003338108627551:8856"))
 
 fn diagLine d: ty/IrDiag -> String

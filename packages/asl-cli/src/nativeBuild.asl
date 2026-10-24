@@ -325,7 +325,7 @@ fn ! copyAll! from: String to: String paths: (List String) -> (Result Unit Strin
 fn ! install! b: Build name: String tag: String entry: String key: String dir: String deps: (List String) bin: String -> (Result String String)
   (let [(staged (str b.tmp "/" name ".dir"))]
     (match (match (dirCreate staged) ((err e) (err e)) ((ok _) (match (fileWrite (str staged "/deps") (str (stringJoin deps "\n") "\n"))
-      ((err e) (err e)) ((ok _) (fileWrite (str staged "/clang-version") (str b.clangVersion "\n"))))))
+      ((err e) (err e)) ((ok _) (match (fileWrite (str staged "/clang-version") (str b.clangVersion "\n")) ((err e) (err e)) ((ok _) (fileWrite (str staged "/rc") "notrace\n")))))))
       ((err e) (err (str "cannot stage " staged ": " e)))
       ((ok _) (match (copyAll! b.root (str staged "/src") deps)
         ((err e) (err e))
@@ -340,7 +340,7 @@ fn ! install! b: Build name: String tag: String entry: String key: String dir: S
 fn ! compile! b: Build name: String compiler: String tag: String entry: String dir: String deps: (List String) key: String -> (Result String String)
   (let [(ll (str b.tmp "/" name ".ll"))
         (start (monotonicNs))
-        (built (child! b (list compiler "build" entry "-o" ll)))
+        (built (child! b (list compiler "build" entry "-o" ll "--rc" "notrace")))
         (_ (say! (str "asl: native build: build " entry " " (stringFromInt64 (/ (- (monotonicNs) start) 1000000)) " ms")))
         (failed (fn [(why String)] -> (Result String String)
                   (do (if (transientFailure? why) (ok ()) (fileWrite (str dir ".failed") (str why "\n"))) (err why))))]
@@ -356,7 +356,7 @@ fn ! compile! b: Build name: String compiler: String tag: String entry: String d
 fn ! stage! b: Build name: String compiler: String tag: String entry: String extra: (List String) -> (Result String String)
   (match (depsOf! b compiler entry extra)
     ((err e) (err e))
-    ((ok deps) (match (keyOf! b b.root tag entry deps)
+    ((ok deps) (match (keyOf! b b.root (str tag "+notrace") entry deps)
       ((err e) (err e))
       ((ok key) (let [(dir (str b.cache "/" name "-" key))
                        (marker (str dir ".failed"))
@@ -368,7 +368,7 @@ fn ! stage! b: Build name: String compiler: String tag: String entry: String ext
                     ((sys/executable? (str dir "/bin")) (ok dir))
                     ((and markerPresent (not stuckTransient)) (err (str "an earlier build of " entry " with key " key " failed: " markerText)))
                     (else (do (say! (str "asl: native build: " entry " with " (sys/baseName (sys/parentOf compiler))))
-                              (compile! b name compiler tag entry dir deps key)))))))))
+                              (compile! b name compiler (str tag "+notrace") entry dir deps key)))))))))
 
 fn ! writeHead! b: Build dir: String -> (Result String String)
   (let [(head (nc/headPath b.cache b.root))
@@ -377,6 +377,9 @@ fn ! writeHead! b: Build dir: String -> (Result String String)
       ((err e) (err (str "cannot write " part ": " e)))
       ((ok _) (match (pathRename part head) ((err e) (err (str "cannot install " head ": " e))) ((ok _) (ok dir))))))
 
+fn withLib b: Build lib: String -> Build
+  (with b :lib lib)
+
 fn ! build! root: String cacheDir: String owner: String -> (Result String String)
   (match (setup! root cacheDir owner)
     ((err e) (err e))
@@ -384,13 +387,16 @@ fn ! build! root: String cacheDir: String owner: String -> (Result String String
       (let [(b (pairFirst ready))]
         (match (seed! b (pairSecond ready))
           ((err e) (err e))
-          ((ok seedBin) (match (stage! b "asl1" seedBin (sys/baseName (sys/parentOf seedBin)) "asl/packages/asl-compiler/src/asl1.asl" (list))
+          ((ok seedBin) (match (notraceRuntime! b seedBin (str root "/asl/packages"))
             ((err e) (err e))
-            ((ok stage1) (let [(asl1Deps (stringLines (stringTrim (resultOr (fileReadString (str stage1 "/deps")) ""))))]
-              (match (stage! b "cli" (str stage1 "/bin") (sys/baseName stage1) "asl/packages/asl-cli/src/native.asl"
-                          (listAppend asl1Deps (list "asl/host/out/libaslrt.a" "asl/seed/seed.asn")))
+            ((ok ntLib) (let [(nb (withLib b ntLib))]
+              (match (stage! nb "asl1" seedBin (sys/baseName (sys/parentOf seedBin)) "asl/packages/asl-compiler/src/asl1.asl" (list))
                 ((err e) (err e))
-                ((ok cli) (if (nc/probe? root cli) (writeHead! b cli) (err "the built native CLI failed its self-probe"))))))))))))
+                ((ok stage1) (let [(asl1Deps (stringLines (stringTrim (resultOr (fileReadString (str stage1 "/deps")) ""))))]
+                  (match (stage! nb "cli" (str stage1 "/bin") (sys/baseName stage1) "asl/packages/asl-cli/src/native.asl"
+                              (listAppend asl1Deps (list "asl/host/out/libaslrt.a" "asl/seed/seed.asn")))
+                    ((err e) (err e))
+                    ((ok cli) (if (nc/probe? root cli) (writeHead! b cli) (err "the built native CLI failed its self-probe")))))))))))))))
 
 fn flagValue args: (List String) flag: String -> (Option String)
   (match (listIndexOf args flag)

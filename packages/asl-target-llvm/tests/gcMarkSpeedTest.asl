@@ -210,12 +210,13 @@ fn deepSource -> String
           "")
     "\n")
 
+; (:m :ref RECSROA :do "the two record rows measure the escaping copy fixtures/recordScalar/alloc/record.asl, since recordScalar removes bench/native/record.asl's per-step Body: one more 16-byte object live from start to exit, every per-step figure unchanged")
 fn runs -> (List (List String))
-  (list (list "record" "3000" "ASL_GC_STRESS=1" "0 1" "3011" "3011" "3003" "168345" "213")
+  (list (list "record" "3000" "ASL_GC_STRESS=1" "0 1" "3012" "3012" "3003" "168361" "229")
         (list "list" "2000" "ASL_GC_STRESS=1" "3003000" "5012" "5012" "4005" "200351" "40154")
         (list "allocMix" "2000" "ASL_GC_STRESS=1" "164708" "10010" "10010" "10001" "416301" "282")
         (list "deep" "5" "ASL_GC_STRESS=1" "19512 39012 8893" "5387" "5387" "4391" "167648" "41061")
-        (list "record" "200000" "ASL_GC_MIN_MIB=1" "780 -39" "10" "200011" "187249" "11200357" "140")
+        (list "record" "200000" "ASL_GC_MIN_MIB=1" "780 -39" "10" "200012" "187248" "11200373" "156")
         (list "list" "200000" "ASL_GC_MIN_MIB=1" "30000300000" "3" "500012" "3" "20000363" "9436468")
         (list "allocMix" "200000" "ASL_GC_MIN_MIB=1" "509154" "39" "1000010" "983052" "41600305" "372")
         (list "deep" "13" "ASL_GC_MIN_MIB=1" "1208473736 2416947460 24893" "3" "354507" "51319" "13671640" "5452157"))
@@ -240,7 +241,7 @@ fn ! sameRun work: String bins: (List (Pair String String)) row: (List String) -
 fn ! testSemantics work: String -> Bool
   (let [(deep (str work "/deep.asl"))
         (written (fileWrite deep (deepSource)))
-        (bins (list (pair "record" (built work "record" "bench/native/record.asl")) (pair "list" (built work "list" "bench/native/list.asl"))
+        (bins (list (pair "record" (built work "record" "asl/packages/asl-target-llvm/tests/fixtures/recordScalar/alloc/record.asl")) (pair "list" (built work "list" "bench/native/list.asl"))
                     (pair "allocMix" (built work "allocMix" "bench/native/allocMix.asl")) (pair "deep" (built work "deep" deep))))]
     (do (assert (ok? written) (str "fileWrite " deep))
         (assert (> (listLength (runs)) 0) "runs: base rows recorded")

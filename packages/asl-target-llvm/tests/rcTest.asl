@@ -363,6 +363,28 @@ fn ! testFold libs: Libs dir: String -> Bool
                               (assert (= c.run.stdout want) (str "rcFold prints its folds under untraced RC: " c.run.stdout))
                               true)))))))
 
+; (:m :ref RC-OWN-FOR-REUSE :do "a map built by mapSet in a loop is owned all the way down, so the insert path resets its own cells; a snapshot kept across later inserts and a bump keeps every old node, which a take or reset of a shared cell would overwrite")
+fn ! testMapReuse libs: Libs dir: String -> Bool
+  (let [(want "3000 0 4498500 4000 1000 499500 4000 500500\n")]
+    (match (buildRun libs dir "rcMapReuse" "asan")
+      ((err e) (do (assert false (str "RC ASan rcMapReuse build: " e)) false))
+      ((ok a) (match (buildRun libs dir "rcMapReuse" "notrace")
+                ((err e) (do (assert false (str "rcMapReuse untraced RC build: " e)) false))
+                ((ok c) (let [(stats a.run.stderr)
+                              (hits (statOf stats "fbip"))
+                              (resets (statOf stats "resets"))
+                              (freed (statOf stats "freed"))]
+                          (do (assert (= a.run.exitCode 0) (str "rcMapReuse RC under ASan exits 0: " stats))
+                              (assert (= a.run.stdout want) (str "the snapshot and the bumped map keep their own nodes under RC ASan: " a.run.stdout " " stats))
+                              (refute (stringContains? stats "Sanitizer") (str "no part is read after its cell was taken apart: " stats))
+                              (assert (stringContains? a.code "define internal tailcc i64 @aslRcTake_1(") "mapSet takes the tree out of a unique map instead of duplicating it")
+                              (assert (and (> resets 80000) (>= (* hits 10) (* resets 9))) (str "a unique map's insert path reuses at least 90% of its reset cells: fbip " hits " resets " resets ", base fbip 8217 of 79141"))
+                              (assert (and (> freed 0) (< freed 20000)) (str "a reused path cell is never freed: freed " freed ", base 87926"))
+                              (assert (= c.run.exitCode 0) (str "rcMapReuse untraced RC exits 0: " c.run.stderr))
+                              (assert (= c.run.stdout want) (str "the snapshot and the bumped map keep their own nodes under untraced RC: " c.run.stdout))
+                              (assert (= (statOf c.run.stderr "freed") freed) (str "untraced RC frees the same cells as ASan mode: " c.run.stderr))
+                              true)))))))
+
 fn ! testAppend libs: Libs dir: String -> Bool
   (let [(want "1999000 2000 1999005 2001\n15 5 13 6 3\n")]
     (match (buildRun libs dir "rcAppend" "asanNotrace")
@@ -442,6 +464,7 @@ fn ! runWith libs: Libs -> Bool
         (assert (testFreeQueue libs dir) "a freed object's dying kids continue the free loop or are recycled on the spot instead of queueing")
         (assert (testReuse libs dir) "an owned matched value that dies at or before a construct of its size class lends its cell, moved fields skip dup and release")
         (assert (testFold libs dir) "a non-tail closure call hands owned arguments to the lambda's owned entry, so a fold accumulator stays unique")
+        (assert (testMapReuse libs dir) "mapSet on a unique map takes its tree and reuses the insert path in place, a shared snapshot keeps its nodes")
         (assert (testAppend libs dir) "an untraced listAppend relinks a unique left list, splices a copy at its first shared cell, and copies a shared one")
         (assert (testArena libs dir) "a thunk run in its own arena frees its cells together and copies its result out, ASan-clean across nested domains")
         (assert (testSplice libs dir) "routing never rewrites the call texts it searches for when they sit in the module as data")

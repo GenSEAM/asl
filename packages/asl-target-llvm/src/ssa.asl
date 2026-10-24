@@ -3238,20 +3238,21 @@ fn cRuntimeModule -> String
 fn assemble m: ty/SsaModule definitions: (List String) wasm: Bool fieldIds: (List String) -> String
   (let [(consts (emitConstants m wasm fieldIds))
         (defs (stringJoin definitions "\n"))
+        (defKeys (rterr/refKeys defs))
+        (shimDefs (valrt/rtValueDefinedNames defs defKeys))
         (externs (map (fn [(e ty/SsaExtern)] -> String
                         (cond
                           ((not e.typed) (str "declare %Val " (fnSym e.name) "(" (stringJoin (map (fn [(i Int64)] -> String "%Val") (range 0 e.arity)) ", ") ")"))
                           ((nativeExtern? e) (str "declare " (llTy e.ret) " " (fnSym e.name) "(" (stringJoin (listAppend (map llTy e.params) (if e.variadic (list "...") (list))) ", ") ")"))
                           (else (str "declare tailcc " (llTy e.ret) " " (fnSym e.name) "(" (stringJoin (map (fn [(p ty/SsaParam)] -> String (llTy p.ty)) (registerParams (map (fn [(t ty/SsaTy)] -> ty/SsaParam (ty/ssaParam "" t)) e.params))) ", ") ")"))))
-                      (filter (fn [(e ty/SsaExtern)] -> Bool (not (or (hostDefined? e.name) (valrt/rtValueDefines? defs e.name)))) m.externs)))
+                      (filter (fn [(e ty/SsaExtern)] -> Bool (not (or (hostDefined? e.name) (listContains? shimDefs e.name)))) m.externs)))
         (spill (if (stringContains? defs "@asl_rt_spill") (list (str "@asl_rt_spill = external global [" (spillCapacity) " x %Val]")) (list)))
         (externGlobals (map (fn [(n String)] -> String (str (externGlobalSym n) " = external global ptr")) (loadGlobalNames m)))
-        (defKeys (rterr/refKeys defs))
         (moduleDecls (listAppend (listAppend (listAppend externs spill) externGlobals) (listAppend (usedDeclsIn defKeys defs (runtimeDecls)) (usedDeclsIn defKeys defs (intrinsicDecls)))))
         (formatDecls (fold (fn [(acc (List String)) (d String)] -> (List String)
                              (if (listAny? (fn [(e String)] -> Bool (= (declSymbol e) (declSymbol d))) (listAppend moduleDecls acc)) acc (listAppend acc (list d))))
                            (list) (usedDeclsIn defKeys defs (listAppend (listAppend (listAppend (listAppend (listAppend (fmt/rtFormatDecls) (rterr/rtErrorDecls)) (seqDecls)) (strDecls)) (opsrt/rtOpsDecls)) (listAppend (listAppend (objrt/rtObjectDecls) (hostDecls)) (valrt/rtValueDecls))))))
-        (decls (filter (fn [(d String)] -> Bool (not (valueDefinedDecl? defs d))) (listAppend moduleDecls formatDecls)))]
+        (decls (filter (fn [(d String)] -> Bool (not (valueDefinedDecl? shimDefs d))) (listAppend moduleDecls formatDecls)))]
     (str "source_filename = \"" (llvmBytes m.name) "\"\n\n"
          (if (mentionsVal? defs (stringJoin decls "\n")) "%Val = type { i64, i64 }\n\n" "")
 
@@ -3265,10 +3266,10 @@ fn mentionsVal? a: String b: String -> Bool
           (let [(n (stringLength a))]
             (stringContains? (str (optionOr (stringSlice a (max 0 (- n 3)) n) a) (optionOr (stringSlice b 0 (min 3 (stringLength b))) b)) "%Val"))))
 
-fn valueDefinedDecl? defs: String decl: String -> Bool
+fn valueDefinedDecl? shimDefs: (List String) decl: String -> Bool
   (let [(sym (declSymbol decl))
         (name (optionOr (stringSlice sym 1 (- (stringLength sym) 1)) ""))]
-    (and (listContains? (valrt/valueShimNames) name) (valrt/rtValueDefines? defs name)))
+    (listContains? shimDefs name))
 
 fn spillDiag name: String types: (List ty/SsaTy) -> (List ty/IrDiag)
   (if (> (spillCount types) (spillCapacity))

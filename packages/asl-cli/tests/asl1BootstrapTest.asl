@@ -65,16 +65,25 @@ fn ! onlyEmptyCacheEntry? path: String -> Bool
                   ((ok files) (and (= files.exitCode 0)
                     (= (sys/stripTrailingNewlines files.stdout) "build.lock.takeover")))))))))))
 
-fn ! hasInstalledNative? path: String -> Bool
+fn ! entriesWithBinary path: String -> (List String)
   (match (sys/capture! (list "ls" "-A" path) (none))
-    ((err _) false)
-    ((ok listing)
-      (match (listHead (stringLines (sys/stripTrailingNewlines listing.stdout)))
-        ((none) false)
-        ((some entry)
-          (and (fileExists? (str path "/" entry "/asl1-native"))
-            (and (fileExists? (str path "/" entry "/sha256"))
-              (sys/executable? (str path "/" entry "/asl1-native"))))))))
+    ((err _) (list))
+    ((ok listing) (filter (fn [(entry String)] -> Bool (fileExists? (str path "/" entry "/asl1-native"))) (stringLines (sys/stripTrailingNewlines listing.stdout)))))
+
+fn ! hasInstalledNative? path: String -> Bool
+  (match (listHead (entriesWithBinary path))
+    ((none) false)
+    ((some entry)
+      (and (fileExists? (str path "/" entry "/sha256"))
+        (sys/executable? (str path "/" entry "/asl1-native")))))
+
+; (:m :ref TOOLNT :do "the fixtures' fake clang cannot build the notrace runtime, so every installed stage there is the tracing fallback: it lives under <key>-tracing with rc=tracing and no entry under the plain key holds a binary, so the next call retries the notrace build")
+fn ! onlyTracingEntries? path: String -> Bool
+  (let [(entries (entriesWithBinary path))]
+    (and (not (listEmpty? entries))
+      (listAll? (fn [(entry String)] -> Bool
+                  (and (stringEndsWith? entry "-tracing") (= (resultOr (fileReadString (str path "/" entry "/rc")) "") "tracing\n")))
+                entries)))
 
 fn ! testColdBootstrapRequiresSeedBeforeStages -> Bool
   (let [(root (tempRoot))
@@ -194,10 +203,11 @@ fn ! testColdBootstrapRequiresSeedBeforeStages -> Bool
                   (_ (assert (match seedResult ((none) false) ((some captured) (= captured.exitCode 0))) "seeded nativeAsl1! produces an installed compiler"))
                   (_ (assert (match seedResult ((none) false) ((some captured) (stringContains? captured.stdout "BUILT"))) "seeded bootstrap reports its installed result"))
                   (_ (assert (match seedResult ((none) false) ((some captured) (not (stringContains? captured.stderr "ERR_MAIN_FAILED")))) "seeded bootstrap has no main failure diagnostic"))
-                  (_ (assert (= (resultOr (fileReadString stageLog) "") "seed\nnative\n") "both native stages run in order, seed then stage one"))
+                  (_ (assert (= (resultOr (fileReadString stageLog) "") "seed\nseed\nnative\nnative\n") "both native stages run in order, seed then stage one"))
                   (_ (assert (not (stringContains? (resultOr (fileReadString hostLog) "") " build ")) "seeded bootstrap does not interpret the compiler build"))
                   (_ (assert (stringStartsWith? (resultOr (fileReadString clangLog) "") "--version\n--version\n") "both native requests query toolchain version before linking"))
                   (_ (assert (hasInstalledNative? cacheRoot) "second-stage compiler is installed with digest and executable bit"))
+                  (_ (assert (onlyTracingEntries? cacheRoot) "a stage that fell back to the tracing runtime is cached under <key>-tracing with rc=tracing, never under the notrace key"))
                   (clearedStages (pathRemove stageLog))
                   (priorChild (sys/captureWith! (list host "run" testPath "main") (none)
                     (list (str "ASL1_BOOT_ROOT=" ctx.root)
@@ -217,10 +227,11 @@ fn ! testColdBootstrapRequiresSeedBeforeStages -> Bool
                   (_ (assert (some? priorResult) "cold request with a prior cache entry starts"))
                   (_ (assert (match priorResult ((none) false) ((some captured) (= captured.exitCode 0))) "prior cached native binary bootstraps a distinct cold key"))
                   (_ (assert (match priorResult ((none) false) ((some captured) (stringContains? captured.stdout "BUILT"))) "prior-cache bootstrap returns its installed compiler"))
-                  (_ (assert (= (resultOr (fileReadString stageLog) "") "native\nnative\nnative\n") "a deps probe on the cached compiler precedes both build stages, without falling back to the seed"))
+                  (_ (assert (= (resultOr (fileReadString stageLog) "") "native\nnative\nnative\nnative\nnative\n") "a deps probe on the cached compiler precedes both build stages, without falling back to the seed"))
                   (_ (assert (not (fileExists? seed)) "a cached compiler is never promoted to the bootstrap seed"))
                   (_ (assert (not (fileExists? (str seed ".sha256"))) "no seed digest is written for a cached compiler"))
                   (_ (assert (hasInstalledNative? cacheRoot) "prior-cache bootstrap installs the second-stage binary"))
+                  (_ (assert (onlyTracingEntries? cacheRoot) "a stage that fell back to the tracing runtime is cached under <key>-tracing with rc=tracing, never under the notrace key"))
                   (clearedFailureStages (pathRemove stageLog))
                   (failedChild (sys/captureWith! (list host "run" testPath "main") (none)
                     (list (str "ASL1_BOOT_ROOT=" ctx.root)
@@ -240,7 +251,7 @@ fn ! testColdBootstrapRequiresSeedBeforeStages -> Bool
                   (_ (assert (some? failedResult) "failing native stage process starts"))
                   (_ (assert (match failedResult ((none) false) ((some captured) (= captured.exitCode 0))) "native-stage failure is returned through the production entry point"))
                   (_ (assert (match failedResult ((none) false) ((some captured) (stringContains? captured.stdout "native asl1 stage failed (exit 7)"))) "native-stage failure reports its exact process error"))
-                  (_ (assert (= (resultOr (fileReadString stageLog) "") "seed\nnative-failed\n") "failing stage follows the successful seed stage and stops before stage two"))
+                  (_ (assert (= (resultOr (fileReadString stageLog) "") "seed\nseed\nnative-failed\nnative-failed\n") "failing stage follows the successful seed stage and stops before stage two"))
                   (_ (assert (not (hasInstalledNative? failedCacheRoot)) "failed native stage installs no cache binary"))
                   (relativeChild (sys/captureWith! (list host "run" testPath "main") (some fixture)
                     (list (str "ASL1_BOOT_ROOT=" ctx.root)
@@ -260,6 +271,7 @@ fn ! testColdBootstrapRequiresSeedBeforeStages -> Bool
                   (_ (assert (ok? relativeCacheMade) "root-relative deps case has its own cache directory"))
                   (_ (assert (match relativeResult ((none) false) ((some captured) (and (= captured.exitCode 0) (stringContains? captured.stdout "BUILT")))) (str "root-relative deps lines (asl1 deps since ASL1SELF) hash under the workspace root even when the caller runs elsewhere: " (match relativeResult ((none) "no child") ((some captured) (str captured.stdout captured.stderr))))))
                   (_ (assert (hasInstalledNative? relativeCacheRoot) "root-relative deps key installs its compiler"))
+                  (_ (assert (onlyTracingEntries? relativeCacheRoot) "a stage that fell back to the tracing runtime is cached under <key>-tracing with rc=tracing, never under the notrace key"))
                   (passed true)]
               (cleanup root passed)))))))
 

@@ -76,9 +76,10 @@ fn lowerWasmPrint m: irTy/SsaModule -> irTy/SsaModule
 fn ! emitLlvmProgramNative! m: irTy/SsaModule entry: String -> (Result String (List irTy/IrDiag))
   (emitLlvmProgramNativeWith! m entry "0")
 
+; (:m :ref PERF-VERIFY-ONCE :do "m is a linked module, which the link verified, so the routes skip their input verify; ssa/emitLlvmProgram still verifies the routed, RC-rewritten module and rejects an invalid one")
 fn ! emitLlvmProgramNativeWith! m: irTy/SsaModule entry: String mode: String -> (Result String (List irTy/IrDiag))
   (let [(user (fold (fn [(acc (Map String Bool)) (f irTy/SsaFunction)] -> (Map String Bool) (mapSet acc f.name true)) (mapEmpty) m.functions))]
-    (match (emitRouted (thenPar (thenPar (rt/routeHost! (opt/nativePrelude m)) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (pr/routeHost! r))) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (ar/routeModule r)))
+    (match (emitRouted (thenPar (thenPar (rt/routeHostLinked! (opt/nativePrelude m)) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (pr/routeHostLinked! r))) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (ar/routeLinked r)))
                     (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag))
                       (cond
                         ((or (= mode "") (= mode "0")) (ssa/emitLlvmProgram (opt/hoistConstants r) entry))

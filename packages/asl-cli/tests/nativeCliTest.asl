@@ -163,6 +163,39 @@ fn testGatewayVerbsAreForms! -> Bool
     (assert (= (nc/verbKind (list "gateway" "stats")) "forms") "gateway classifies as forms, same lane as audit/build/pack")
     true)
 
+; (:m :ref TOOLNT :do "the installed native CLI and the asl1 stage that built it carry the untraced RC runtime: ASL_RC_STATS=1 makes only an RC build print :rcStats on exit, a tracing build never does; the CLI is the head recorded for this workspace after warmCli!, the asl1 stage is any cache dir whose rc marker nativeBuild install! wrote")
+fn ! rcStatsOf! bin: String errFile: String -> String
+  (let [(_ (fileWrite errFile ""))
+        (d (run/runOneLimited (run/job (list "/bin/sh" "-c" "exec \"$0\" \"$@\" 2>\"$1\"" bin errFile "version") "/tmp" (list "PATH=/usr/bin:/bin" "ASL_RC_STATS=1")) (run/limits 120 8)))]
+    (resultOr (fileReadString errFile) ""))
+
+fn ! installedCli! root: String -> String
+  (stringTrim (resultOr (fileReadString (nc/headPath (sharedCli) root)) ""))
+
+fn ! notraceAsl1! -> String
+  (let [(cache (sharedCli))
+        (dirs (filter (fn [(n String)] -> Bool (and (stringStartsWith? n "asl1-") (fileExists? (str cache "/" n "/rc")))) (resultOr (dirList cache) (list))))]
+    (match (listHead dirs) ((none) "") ((some n) (str cache "/" n "/bin"))))
+
+; (:m :ref TOOLNT :do "asl build routes through the cached native asl1: after one build the newest head of the asl1 cache names an entry whose rc marker is notrace and whose binary prints :rcStats; a tracing fallback lives under <key>-tracing and is never a head's target")
+fn ! cachedAsl1Entry! root: String work: String cache: String -> String
+  (let [(src (str work ".asl"))
+        (_ (fileWrite src "(module hello\n  :x [main]\n  :i [])\n\nfn ! main -> (Result Int64 String)\n  (ok 0)\n"))
+        (d (run/runOneLimited (run/job (list (str root "/bin/asl") "build" src "-o" work) root (list "PATH=/usr/bin:/bin" (str "HOME=" (optionOr (envGet "HOME") "/tmp")) (str "ASL_NATIVE_ASL1_CACHE=" cache))) (run/limits 1800 32)))
+        (hd (run/runOneLimited (run/job (list "/bin/sh" "-c" (str "ls -t \"" cache "\"/head-* 2>/dev/null | head -n 1")) root (list "PATH=/usr/bin:/bin")) (run/limits 60 8)))
+        (heads (stringTrim hd.out))
+        (key (stringTrim (resultOr (fileReadString heads) "")))]
+    (if (and (= d.verdict "exit") (and (= d.exit 0) (not (stringEmpty? key)))) (str cache "/" key) ""))
+
+fn ! asl1CacheNotrace! root: String errFile: String -> Bool
+  (let [(cache (str errFile ".asl1"))
+        (entry (cachedAsl1Entry! root (str errFile ".hello") cache))
+        (good (and (not (stringEmpty? entry))
+                   (and (= (resultOr (fileReadString (str entry "/rc")) "") "notrace\n")
+                        (stringContains? (rcStatsOf! (str entry "/asl1-native") errFile) ":rcStats"))))
+        (_ (run/runOneLimited (run/job (list "/bin/rm" "-rf" cache (str errFile ".hello") (str errFile ".hello.asl")) root (list)) (run/limits 60 8)))]
+    good)
+
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (cases (match (fileReadString (str root "/asl/packages/asl-cli/tests/fixtures/argv.asn")) ((err _) (err "argv.asn unreadable: run from the workspace root")) ((ok text) (readCases text))))
@@ -192,6 +225,9 @@ fn ! runTests -> Bool
       (assert (some? built) "asl/packages/asl-cli/src/native.asl builds natively")
       (assert (ok? sweep) (match sweep ((err e) (str "sweep workspace: " e)) ((ok _) "sweep workspace")))
       (assert (and (= warm.verdict "exit") (= warm.exit 0)) (str "the workspace CLI that cases re-enter as $ROOT/bin/asl is built before replay: " warm.verdict " " (stringFromInt64 warm.exit) " " warm.out))
+      (assert (stringContains? (rcStatsOf! (str (installedCli! root) "/bin") errFile) ":rcStats") "the installed native CLI links the untraced RC runtime (ASL_RC_STATS=1 prints :rcStats)")
+      (assert (stringContains? (rcStatsOf! (notraceAsl1!) errFile) ":rcStats") "a notrace asl1 stage exists in the native CLI cache (rc marker) and prints :rcStats")
+      (assert (asl1CacheNotrace! root errFile) "the cached asl1 that asl build uses is a notrace build: rc marker notrace and :rcStats on exit")
       (assert (> (listLength found) 0) "at least one case replayed")
       (assert (= (listLength found) (listLength liveCases)) "every live case replayed")
       (assert (stringEmpty? witnessText) (str "buildHostAbsent and every other replayed case never touch ctx.hostBin/ASL_HOST (HOSTBIN): " witnessText))

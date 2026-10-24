@@ -117,8 +117,31 @@ fn ! testDirectFloatBuiltin -> Bool
       (assert (ok? removedDir) "direct-float temporary directory is removed")
       true))
 
+; (:m :ref PERF-VERIFY-ONCE :do "the native entry skips the route input verify (its input is a linked module); an unlinked invalid module, here one returning an undefined value after a routed sys builtin, is still rejected by the emit verify in every RC mode")
+fn invalidModule -> irTy/SsaModule
+  (irTy/ssaModule "nativeBuiltinGapFixture" (list) (list) (list) (list) (list)
+    (list
+      (irTy/ssaFunction "nativeBuiltinGapFixture.main" (list) (list) (irTy/tyVal)
+        (list
+          (irTy/ssaBlock "entry" (list)
+            (list (irTy/ssaInstr "%now" (irTy/tyVal) (irTy/opBuiltin "monotonicNs" (list))))
+            (irTy/termReturn "%missing"))))))
+
+fn diagCodes r: (Result String (List irTy/IrDiag)) -> (List String)
+  (match r ((ok _) (list)) ((err ds) (map (fn [(d irTy/IrDiag)] -> String d.code) ds)))
+
+fn ! rejectedIn mode: String -> Bool
+  (let [(r (llvm/emitLlvmProgramNativeWith! (invalidModule) "nativeBuiltinGapFixture.main" mode))]
+    (do (assert (err? r) (str "mode " mode ": a module returning an undefined value is rejected"))
+        (assert (listAny? (fn [(c String)] -> Bool (stringStartsWith? c "ERR_IR")) (diagCodes r)) (str "mode " mode ": by an SSA verify diagnostic: " (stringJoin (diagCodes r) " ")))
+        true))
+
+fn ! testInvalidModuleRejected -> Bool
+  (and (rejectedIn "0") (and (rejectedIn "1") (rejectedIn "notrace")))
+
 fn ! runTests -> Bool
   (do
     (assert (testNativeParity) "native builtin fixture matches the interpreter")
     (assert (testDirectFloatBuiltin) "direct native float constants execute")
+    (assert (testInvalidModuleRejected) "an invalid module is rejected on the native entry")
     true)

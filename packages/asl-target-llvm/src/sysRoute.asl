@@ -1,5 +1,5 @@
 (module asl-target-llvm/sysRoute
-  :x [RouteTable Routed routeTables tableBuiltins wrapperName routes? routeModule tripleOf routeFactsFor hostFactsOf routeHost! internalize routeConst signalNames errKinds tagGuardText poolWith]
+  :x [RouteTable Routed routeTables tableBuiltins wrapperName routes? routeModule tripleOf routeFactsFor hostFactsOf routeHost! routeHostLinked! internalize routeConst signalNames errKinds tagGuardText poolWith]
   :i [(asl-ir/types :a ty)
       (asl-ir/verify :a vfy)
       (asl-target-llvm/libc :a libc)
@@ -459,12 +459,16 @@ fn wasmRouteModule facts: libc/TripleFacts m: ty/SsaModule -> (Result Routed (Li
               (ok (Routed :result (ty/ssaModule m.name (pairFirst printStrings) m.types m.records externs m.globals (map (fn [(f ty/SsaFunction)] -> ty/SsaFunction (rewriteImports imports f spaceIndex)) m.functions)) :internal (list))))))))))
 
 fn routeModule facts: libc/TripleFacts m: ty/SsaModule -> (Result Routed (List ty/IrDiag))
+  (routeModuleAs facts m true)
+
+; (:m :ref PERF-VERIFY-ONCE :do "check false skips the input verify: the native entry routes a linked module, which the link verified, and the emit verifies the routed, RC-rewritten module again")
+fn routeModuleAs facts: libc/TripleFacts m: ty/SsaModule check: Bool -> (Result Routed (List ty/IrDiag))
   (if (stringStartsWith? facts.triple "wasm32")
     (wasmRouteModule facts m)
     (let [(tables (tablesUsed m))]
       (if (listEmpty? tables)
         (ok (Routed :result m :internal (list)))
-        (match (vfy/verifySsa m)
+        (match (if check (vfy/verifySsa m) (ok ()))
           ((err diags) (err diags))
           ((ok _) (routeTablesInto facts m tables))))))
 
@@ -492,6 +496,12 @@ fn hostFactsOf text: String -> (Result (Option libc/TripleFacts) String)
     ((some p) (ok (routeFactsFor (tripleOf (pairFirst p) (pairSecond p))))))
 
 fn ! routeHost! m: ty/SsaModule -> (Result Routed (List ty/IrDiag))
+  (routeHostAs! m true)
+
+fn ! routeHostLinked! m: ty/SsaModule -> (Result Routed (List ty/IrDiag))
+  (routeHostAs! m false)
+
+fn ! routeHostAs! m: ty/SsaModule check: Bool -> (Result Routed (List ty/IrDiag))
   (if (routes? m)
     (let [(out (processRun "uname -s -m"))
           (host (if (= out.exitCode 0) (unamePair out.stdout) (none)))]
@@ -499,7 +509,7 @@ fn ! routeHost! m: ty/SsaModule -> (Result Routed (List ty/IrDiag))
         ((none) (err (list (routeDiag "ERR_LLVM_SYSROUTE_HOST" (str "uname -s -m exited " out.exitCode " printing '" out.stdout "' " out.stderr) m.name))))
         ((some p) (match (routeFactsFor (tripleOf (pairFirst p) (pairSecond p)))
                     ((none) (ok (Routed :result m :internal (list))))
-                    ((some facts) (routeModule facts m))))))
+                    ((some facts) (routeModuleAs facts m check))))))
     (ok (Routed :result m :internal (list))))
 
 fn internalizeDefinePrefix -> String

@@ -1,5 +1,5 @@
 (module asl-target-llvm/rtValue
-  :x [rtValueLlvm rtValueDecls rtValueDefines? rtValueExportRoots valueShimNames]
+  :x [rtValueLlvm rtValueDecls rtValueDefines? rtValueDefinedNames rtValueExportRoots valueShimNames]
   :i [])
 
 fn valText sym: String text: String -> String
@@ -439,3 +439,7 @@ fn rtValueDecls -> (List String)
 fn rtValueDefines? text: String name: String -> Bool
   (let [(h (header name))]
     (and (not (stringEmpty? h)) (stringContains? text h)))
+
+; (:m :ref COMPILEHOT :do "rtValueDefinedNames: the shim names whose header line is in text, found once per module (keys = refKeys text, so a name never mentioned as @name( skips the scan); callers look names up in the list instead of scanning the whole text per extern and per declaration")
+fn rtValueDefinedNames text: String keys: (Map String Bool) -> (List String)
+  (filter (fn [(n String)] -> Bool (and (mapHas? keys (str "@" n "(")) (rtValueDefines? text n))) (valueShimNames))

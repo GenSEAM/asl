@@ -23,8 +23,13 @@ fn soaks -> (List Soak)
         (Soak :name "soa" :size 5000)
         (Soak :name "allocMix" :size 20000))
 
+; (:m :ref RECSROA :do "recordScalar removes bench/native/record.asl per-step Body, so the record soak runs its escaping copy")
+; (:m :ref SLICEVIEW :do "a slice read only by readers is fused, so the slice soak runs a copy whose view crosses a call")
+fn benchPath name: String -> String
+  (if (= name "record") "asl/packages/asl-target-llvm/tests/fixtures/recordScalar/alloc/record.asl" (if (= name "slice") "asl/packages/asl-target-llvm/tests/fixtures/sliceView/alloc/slice.asl" (str "bench/native/" name ".asl")))
+
 fn ! buildExe! libs: rc/Libs dir: String name: String mode: String -> (Result String String)
-  (match (lk/linkEntry! (str "bench/native/" name ".asl"))
+  (match (lk/linkEntry! (benchPath name))
     ((err ds) (err (str name " links: " (rc/diagText ds))))
     ((ok m)
      (match (llvm/emitLlvmProgramNativeWith! m (str m.name ".main") mode)

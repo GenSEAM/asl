@@ -326,27 +326,53 @@ fn storeBlocks c: ArrCtx kind: String label: String v: String arr: String idx: S
 fn who kind: String op: String -> String
   (str kind "Array" op)
 
+; (:m :ref SLICEVIEW :do "a reader takes a window: Unit, Unit reads the whole array; Int s, Int e reads the view [s, e) of it that arrayRoute fused from a slice no other use keeps, checked as the slice checks it (its name in the type and range errors), so no element is copied")
+fn viewEntry c: ArrCtx kind: String w: String next: String -> (List ty/SsaBlock)
+  (let [(sw (who kind "Slice"))]
+    (appendAll
+      (list
+        (list (block "entry" (list (cs c "whoR" w) (cs c "whoS" sw) (cs c "a.type" (typeOfKind kind)) (tagOf "ws.u" "ws") (cmpK "isWin" "neInt" "ws.u" 0))
+                (branch "isWin" "pickS" "pickR"))
+              (block "pickS" (list) (jump "pick" (list "whoS")))
+              (block "pickR" (list) (jump "pick" (list "whoR")))
+              (paramBlock "pick" (list (ty/ssaParam "who" (ptr))) (list) (jump "a" (list))))
+        (checkArr c kind "a" "a" w "wsel")
+        (list (block "wsel" (list) (branch "isWin" "ws" "whole")))
+        (checkInt c "ws" "ws" "we")
+        (checkInt c "we" "we" "wrange")
+        (list (block "wrange" (list (unbox "sv" (i64) "ws") (unbox "ev" (i64) "we") (lenOf "pn" "a")
+                                (cmpK "wneg" "ltInt" "sv" 0) (cmp "wback" "ltInt" "ev" "sv") (cmp "wpast" "gtInt" "ev" "pn") (orB "wbad0" "wneg" "wback") (orB "wbad" "wbad0" "wpast"))
+                (branch "wbad" "woob" "wok")))
+        (raiseBlocks c "woob" (list) "ERR_RANGE" "%s [%lld, %lld) outside length %lld" (list "who" "sv" "ev" "pn"))
+        (list (block "wok" (list (sub "wn" "ev" "sv")) (jump "view" (list "sv" "wn")))
+              (block "whole" (list (lenOf "fn" "a") (k "f0" 0)) (jump "view" (list "f0" "fn")))
+              (paramBlock "view" (list (pI "s0") (pI "n")) (list (dataOf "d0" "a") (offset "d" "d0" "s0" (elemOfKind kind))) (jump next (list)))))))
+
+fn windowParams -> (List ty/SsaParam)
+  (list (pV "ws") (pV "we"))
+
+fn checkIntR c: ArrCtx label: String v: String okLabel: String -> (List ty/SsaBlock)
+  (checkTag c label v (tagInt) okLabel "%s expects Int, got %s" (list "whoR"))
+
 fn lenFn c: ArrCtx kind: String -> ty/SsaFunction
   (let [(w (who kind "Len"))]
-    (function w (list (pV "a")) (val)
+    (function w (listAppend (list (pV "a")) (windowParams)) (val)
       (appendAll
         (list
-          (list (block "entry" (whoAnd c "a" w kind) (jump "a" (list))))
-          (checkArr c kind "a" "a" w "ok")
-          (list (block "ok" (list (lenOf "n" "a") (box "r" "n")) (returnTerm "r")))))))
+          (viewEntry c kind w "ok")
+          (list (block "ok" (list (box "r" "n")) (returnTerm "r")))))))
 
 fn getFn c: ArrCtx kind: String -> ty/SsaFunction
   (let [(w (who kind "Get"))]
-    (function w (list (pV "a") (pV "i")) (val)
+    (function w (listAppend (list (pV "a") (pV "i")) (windowParams)) (val)
       (appendAll
         (list
-          (list (block "entry" (whoAnd c "a" w kind) (jump "a" (list))))
-          (checkArr c kind "a" "a" w "i")
-          (checkInt c "i" "i" "range")
-          (list (block "range" (list (unbox "iv" (i64) "i") (lenOf "n" "a") (cmpK "neg" "ltInt" "iv" 0) (cmp "past" "geInt" "iv" "n") (orB "bad" "neg" "past"))
+          (viewEntry c kind w "i")
+          (checkIntR c "i" "i" "range")
+          (list (block "range" (list (unbox "iv" (i64) "i") (cmpK "neg" "ltInt" "iv" 0) (cmp "past" "geInt" "iv" "n") (orB "bad" "neg" "past"))
                   (branch "bad" "oob" "load")))
-          (raiseBlocks c "oob" (list) "ERR_RANGE" "%s index %lld outside length %lld" (list "who" "iv" "n"))
-          (list (block "load" (list (dataOf "d" "a") (loadBoxed kind "r" "d" "iv")) (returnTerm "r")))))))
+          (raiseBlocks c "oob" (list) "ERR_RANGE" "%s index %lld outside length %lld" (list "whoR" "iv" "n"))
+          (list (block "load" (list (loadBoxed kind "r" "d" "iv")) (returnTerm "r")))))))
 
 fn sliceFn c: ArrCtx kind: String -> ty/SsaFunction
   (let [(w (who kind "Slice")) (elem (elemOfKind kind))]
@@ -406,16 +432,16 @@ fn generateFn c: ArrCtx kind: String -> ty/SsaFunction
           (list (block "step" (list (addK "i2" "i" 1)) (jump "loop" (list "i2")))
                 (block "fin" (list) (returnTerm "r")))))))
 
+; (:m :ref SLICEVIEW :do "an Int sum first adds wrapping while it ORs each element's magnitude bits, a loop clang vectorizes; when n times that bound stays under 2^62 no partial sum can leave int64 and the wrapped sum is exact, otherwise the checked loop runs and raises at the first overflowing prefix as before")
 fn sumFn c: ArrCtx kind: String -> ty/SsaFunction
   (let [(w (who kind "Sum"))]
-    (function w (list (pV "a")) (val)
+    (function w (listAppend (list (pV "a")) (windowParams)) (val)
       (appendAll
         (list
-          (list (block "entry" (whoAnd c "a" w kind) (jump "a" (list))))
-          (checkArr c kind "a" "a" w "init")
+          (viewEntry c kind w "init")
           (if (= kind "f64")
             (list
-              (block "init" (list (lenOf "n" "a") (dataOf "d" "a") (k "i0" 0) (kf "z" 0.0)) (jump "loop" (list "i0" "z" "z")))
+              (block "init" (list (k "i0" 0) (kf "z" 0.0)) (jump "loop" (list "i0" "z" "z")))
               (paramBlock "loop" (list (pI "i") (pF "s") (pF "c")) (list (cmp "done" "geInt" "i" "n")) (branch "done" "fin" "body"))
               (block "body" (list (loadElem kind "v" "d" "i") (pr "u" (f64) "addFloat" (list "s" "v"))
                               (ex "as" (f64) "aslArrFabs" (list "s")) (ex "av" (f64) "aslArrFabs" (list "v")) (cmp "ge" "geFloat" "as" "av"))
@@ -428,24 +454,30 @@ fn sumFn c: ArrCtx kind: String -> ty/SsaFunction
               (block "comp" (list (pr "sc" (f64) "addFloat" (list "s" "c")) (box "rc" "sc")) (returnTerm "rc"))
               (block "plain" (list (box "rp" "s")) (returnTerm "rp")))
             (list
-              (block "init" (list (lenOf "n" "a") (dataOf "d" "a") (k "i0" 0)) (jump "loop" (list "i0" "i0")))
-              (paramBlock "loop" (list (pI "i") (pI "s")) (list (cmp "done" "geInt" "i" "n")) (branch "done" "fin" "body"))
+              (block "init" (list (k "i0" 0)) (jump "floop" (list "i0" "i0" "i0")))
+              (paramBlock "floop" (list (pI "fi") (pI "fs") (pI "fm")) (list (cmp "fdone" "geInt" "fi" "n")) (branch "fdone" "fend" "fbody"))
+              (block "fbody" (list (loadElem kind "fv" "d" "fi") (add "fs2" "fs" "fv") (k "f63" 63) (pr "fsg" (i64) "rawAshrI64" (list "fv" "f63"))
+                               (pr "fa" (i64) "rawXorI64" (list "fv" "fsg")) (pr "fm2" (i64) "rawOrI64" (list "fm" "fa")) (addK "fi2" "fi" 1))
+                (jump "floop" (list "fi2" "fs2" "fm2")))
+              (block "fend" (list (cmpK "some" "gtInt" "n" 0)) (argBranch "some" "bound" (list) "ret" (list "fs")))
+              (block "bound" (list (k "half" 4611686018427387904) (pr "lim" (i64) "quotInt" (list "half" "n")) (cmp "fast" "ltInt" "fm" "lim"))
+                (argBranch "fast" "ret" (list "fs") "loop" (list "i0" "i0" "i0")))
+              (paramBlock "loop" (list (pI "i") (pI "s") (pI "o")) (list (cmp "done" "geInt" "i" "n")) (branch "done" "fin" "body"))
               (block "body" (list (loadElem kind "v" "d" "i") (add "s2" "s" "v") (pr "x1" (i64) "rawXorI64" (list "s" "s2")) (pr "x2" (i64) "rawXorI64" (list "v" "s2"))
-                              (pr "x3" (i64) "rawAndI64" (list "x1" "x2")) (cmpK "ovf" "ltInt" "x3" 0))
-                (branch "ovf" "overflow" "step"))
-              (block "step" (list (addK "i2" "i" 1)) (jump "loop" (list "i2" "s2")))
-              (block "fin" (list (box "r" "s")) (returnTerm "r"))))
-          (if (= kind "f64") (list) (raiseBlocks c "overflow" (list) "ERR_INT_OVERFLOW" "%s leaves int64" (list "who")))))))
+                              (pr "x3" (i64) "rawAndI64" (list "x1" "x2")) (pr "o2" (i64) "rawOrI64" (list "o" "x3")) (addK "i2" "i" 1))
+                (jump "loop" (list "i2" "s2" "o2")))
+              (block "fin" (list (cmpK "ovf" "ltInt" "o" 0)) (argBranch "ovf" "overflow" (list) "ret" (list "s")))
+              (paramBlock "ret" (list (pI "t")) (list (box "r" "t")) (returnTerm "r"))))
+          (if (= kind "f64") (list) (raiseBlocks c "overflow" (list) "ERR_INT_OVERFLOW" "%s leaves int64" (list "whoR")))))))
 
 fn countEqFn c: ArrCtx kind: String -> ty/SsaFunction
   (let [(w (who kind "CountEq")) (isF (= kind "f64"))]
-    (function w (list (pV "a") (pV "x")) (val)
+    (function w (listAppend (list (pV "a") (pV "x")) (windowParams)) (val)
       (appendAll
         (list
-          (list (block "entry" (whoAnd c "a" w kind) (jump "a" (list))))
-          (checkArr c kind "a" "a" w "x")
-          (if isF (checkTag c "x" "x" (tagFloat) "start" "%s expects Float, got %s" (list "who")) (checkInt c "x" "x" "start"))
-          (list (block "start" (list (unbox "xv" (rawTy kind) "x") (lenOf "n" "a") (dataOf "d" "a") (k "z" 0)) (jump "loop" (list "z" "z")))
+          (viewEntry c kind w "x")
+          (if isF (checkTag c "x" "x" (tagFloat) "start" "%s expects Float, got %s" (list "whoR")) (checkIntR c "x" "x" "start"))
+          (list (block "start" (list (unbox "xv" (rawTy kind) "x") (k "z" 0)) (jump "loop" (list "z" "z")))
                 (paramBlock "loop" (list (pI "i") (pI "cnt")) (list (cmp "done" "geInt" "i" "n")) (branch "done" "fin" "body"))
                 (block "body" (list (loadElem kind "v" "d" "i") (cmp "eq" (if isF "eqFloat" "eqInt") "v" "xv")) (branch "eq" "hit" "miss"))
                 (block "hit" (list (addK "cnt2" "cnt" 1)) (jump "step" (list "cnt2")))

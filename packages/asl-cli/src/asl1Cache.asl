@@ -1,6 +1,6 @@
 (module asl-cli/asl1Cache
   :x [nativeAsl1! singleFlight! bootstrap! buildNative! buildNativeTransaction! closure!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl-parser/ast :a a) (asl-checker/resolve :a r)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl-parser/ast :a a) (asl-checker/resolve :a r) (asl/packages/asl-cli/src/nativeBuild :a nb)])
 
 fn compilerPath! ctx: sys/Context -> String
   (optionOr (envGet "ASL_NATIVE_ASL1_SOURCE") (str ctx.root "/asl/packages/asl-compiler/src/asl1.asl"))
@@ -87,7 +87,7 @@ fn ! versionLine clang: String -> (Result String String)
 fn ! baseHashes compiler: String lib: String clangVersion: String -> (Result String String)
   (match (appendFileHash (list compiler lib) "")
     ((err e) (err e))
-    ((ok hashes) (ok (str hashes "clang=" clangVersion "\n"))))
+    ((ok hashes) (ok (str hashes "clang=" clangVersion "\nrc=notrace\n"))))
 
 fn headPath! base: String -> String
   (str (cacheDir!) "/head-" (bytesSha256 (stringToBytes base)))
@@ -146,8 +146,21 @@ fn ! latestHeadBinary! heads: (List String) -> (Option String)
         ((err _) (latestHeadBinary! (optionOr (listTail heads) (list))))
         ((ok rawKey)
           (let [(key (sys/stripTrailingNewlines rawKey))]
-            (if (usable? key) (some (binaryPath! key))
-              (latestHeadBinary! (optionOr (listTail heads) (list)))))))))
+            (cond
+              ((usable? key) (some (binaryPath! key)))
+              ((usableTracing? key) (some (str (entryDir! key) "-tracing/asl1-native")))
+              (else (latestHeadBinary! (optionOr (listTail heads) (list))))))))))
+
+; (:m :ref TOOLNT :do "a tracing fallback entry is a valid prior compiler for the next bootstrap, but never satisfies usable? for the notrace key, so asl build keeps retrying the notrace stage")
+fn ! usableTracing? key: String -> Bool
+  (let [(dir (str (entryDir! key) "-tracing")) (binary (str dir "/asl1-native"))]
+    (and (sys/isFile? binary)
+      (and (sys/executable? binary)
+        (match (fileReadString (str dir "/sha256"))
+          ((err _) false)
+          ((ok expected) (match (shaFile binary)
+            ((err _) false)
+            ((ok actual) (= (sys/stripTrailingNewlines expected) actual))))))))
 
 fn seedField row: String key: String -> (Option String)
   (let [(parts (stringSplit row (str ":" key " ")))]
@@ -240,11 +253,32 @@ fn ! ensureSeed! root: String lib: String clang: String -> (Result String String
 fn staleSeed reason: String -> String
   (str "ERR_SEED_STALE: the bootstrap seed cannot build the compiler sources (" reason "); regenerate it with bin/asl run asl/tools/seed.asl regen")
 
-fn ! nativeStage! compiler: String source: String lib: String clang: String -> (Result String String)
+; (:m :ref TOOLNT :do "the native asl1 stages are compiled with --rc notrace and linked against the untraced runtime, built once per clang and runtime sources by the stage binary itself and cached under the asl1 cache's rt directory; a tracing build needed 18.1 s and 2.18 GB for the same self-compile that notrace does in 12.3 s and 1.15 GB")
+fn ! notraceLib! compiler: String root: String lib: String clang: String -> (Result String String)
+  (match (versionLine clang)
+    ((err e) (err e))
+    ((ok version)
+      (let [(dir (str (cacheDir!) "/rt")) (_ (dirCreate (cacheDir!)))]
+        (match (dirCreate dir)
+          ((err e) (err (str "cannot create " dir ": " e)))
+          ((ok _) (nb/notraceRuntime! (nb/Build :root root :cache dir :tmp dir :lib lib :base "" :clangVersion version :owner "" :deadlineNs (+ (monotonicNs) 1800000000000) :maxDesc 32)
+                                      compiler (str root "/asl/packages")))))))
+
+fn ! nativeStage! compiler: String source: String root: String lib: String clang: String -> (Result String String)
+  (match (notraceLib! compiler root lib clang)
+    ((ok ntLib) (stageWith! compiler source ntLib clang (list "--rc" "notrace")))
+    ((err why) (do (sys/sayErr! (str "(:receipt :rc tracing :reason \"notrace runtime unavailable: " (stringReplace why "\"" "'") "\" :effect \"this asl1 is a tracing build, cached beside the notrace key and rebuilt on the next call\")"))
+                   (match (stageWith! compiler source lib clang (list))
+                     ((err e) (err e))
+                     ((ok part) (match (fileWrite (str part ".tracing") "tracing\n")
+                       ((err e) (do (drop part) (err (str "cannot mark the tracing stage: " e))))
+                       ((ok _) (ok part))))))))
+
+fn ! stageWith! compiler: String source: String lib: String clang: String rcArgs: (List String) -> (Result String String)
   (let [(ll (str compiler ".boot.ll"))
         (part (str compiler ".boot.native"))
-        (compiled (sys/run! (list "nice" "-n" "15" compiler "build" source "-o" ll)))
-        (inputCleanup (if (stringContains? compiler ".boot.native") (drop compiler) true))]
+        (compiled (sys/run! (listAppend (list "nice" "-n" "15" compiler "build" source "-o" ll) rcArgs)))
+        (inputCleanup (if (stringContains? compiler ".boot.native") (and (drop compiler) (drop (str compiler ".tracing"))) true))]
     (if (!= compiled 0)
       (do (drop ll) (drop part) (err (str "native asl1 stage failed (exit " (stringFromInt64 compiled) ")")))
       (let [(linked (sys/runMerged! (list "nice" "-n" "15" clang "-O2" "-Wno-override-module" "-x" "ir" ll "-x" "none" lib "-lm" "-o" part)))]
@@ -281,9 +315,23 @@ fn buildNativeTransaction! root: String key: String closure: String previousFn: 
         (depsTmp (str entry "/deps.part." (stringFromInt64 (procSelf)) "x" (stringFromInt64 (nowNs))))]
     (buildNative! previousFn seedFn stage
           (fn [(stage2 String)] -> (Result String String)
-            (match (pathRename stage2 part)
-              ((err e) (err (str "cannot stage bootstrapped native asl1: " e)))
-              ((ok _) (installNative! part binary keyTmp shaTmp depsTmp entry key closure))))))
+            (installStage! stage2 part binary keyTmp shaTmp depsTmp entry key closure))))
+
+; (:m :ref TOOLNT :do "a stage that fell back to the tracing runtime is installed under <key>-tracing with rc=tracing, never under the notrace key, so usable? stays false for the key and the next call rebuilds the notrace stage; a notrace stage writes rc=notrace next to its binary")
+fn ! installStage! stage2: String part: String binary: String keyTmp: String shaTmp: String depsTmp: String entry: String key: String closure: String -> (Result String String)
+  (let [(tracing (fileExists? (str stage2 ".tracing")))
+        (dir (if tracing (str entry "-tracing") entry))
+        (rel (fn [(path String)] -> String (str dir (optionOr (stringSlice path (stringLength entry) (stringLength path)) ""))))
+        (made (if tracing (do (drop (str stage2 ".tracing")) (dirCreate dir)) (ok ())))]
+    (match made
+      ((err e) (err (str "cannot create the tracing stage dir: " e)))
+      ((ok _) (match (pathRename stage2 (rel part))
+        ((err e) (err (str "cannot stage bootstrapped native asl1: " e)))
+        ((ok _) (match (installNative! (rel part) (rel binary) (rel keyTmp) (rel shaTmp) (rel depsTmp) dir key closure)
+          ((err e) (err e))
+          ((ok installed) (match (fileWrite (str dir "/rc") (if tracing "tracing\n" "notrace\n"))
+            ((err e) (err (str "cannot write the rc marker: " e)))
+            ((ok _) (ok installed))))))))))
 
 fn ! lockOwnerAlive? lockPath: String -> (Result Bool String)
   (match (fileReadString lockPath)
@@ -419,7 +467,7 @@ fn ! coldBinary! ctx: sys/Context compiler: String lib: String clang: String bas
           (fn [] (usable? key))
           (fn [] (buildNativeTransaction! (cacheDir!) key closure (fn [] (latestCachedBinary!)) (fn [(cached (Option String))] -> (Result String String)
             (ensureSeed! ctx.root lib clang))
-            (fn [(native String)] -> (Result String String) (nativeStage! native compiler lib clang)))))
+            (fn [(native String)] -> (Result String String) (nativeStage! native compiler ctx.root lib clang)))))
           ((err e) (err e))
           ((ok binary) (do (writeHead! base key) (ok binary))))))))))
 

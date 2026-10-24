@@ -282,7 +282,7 @@ fn preludeSplitBytes s: String sb: Bytes sepb: Bytes k: Int64 start: Int64 i: In
   (let [n (bytesLength sb)]
     (cond
       ((> (+ i k) n) (listReverse (cons (preludeSlice s start n) acc)))
-      ((preludeBytesEq sb sepb i 0 k) (preludeSplitBytes s sb sepb k (+ i k) (+ i k) (cons (preludeSlice s start i) acc)))
+      ((and (= (bytesGet sb i) (bytesGet sepb 0)) (preludeBytesEq sb sepb i 1 k)) (preludeSplitBytes s sb sepb k (+ i k) (+ i k) (cons (preludeSlice s start i) acc)))
       (else (preludeSplitBytes s sb sepb k start (+ i 1) acc))))
 
 fn preludeSplit s: String sep: String start: Int64 i: Int64 acc: (List String) -> (List String)
