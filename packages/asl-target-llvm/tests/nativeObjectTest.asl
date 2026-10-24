@@ -481,7 +481,7 @@ fn ! testEmptyRecord dir: String -> Bool
                         (irTy/ssaBlock "yes" (list) (list) (irTy/termReturn "y"))
                         (irTy/ssaBlock "no" (list) (list) (irTy/termReturn "n")))))
         (fieldFn (emptyRecordCase "emptyField" (list (irTy/ssaInstr "f" (irTy/tyVal) (irTy/opField "q" "zz"))) "f"))
-        (m (irTy/ssaModule "objEmpty" (list) (list) (list (irTy/SsaRecordDecl :name "Empty" :fields (list))) (list) (list) (list idFn pickFn eqFn fieldFn)))
+        (m (irTy/ssaModule "objEmpty" (list) (list) (list (irTy/SsaRecordDecl :name "Empty" :fields (list) :kinds (list))) (list) (list) (list idFn pickFn eqFn fieldFn)))
         (twin (str dir "/objEmptyHost.asl"))]
     (do
       (assert (ok? (fileWrite twin (str "(module objEmptyHost :x [main] :i [])\n\n(schema Empty)\n\nfn idOf x: T -> T\n  x\n\n"

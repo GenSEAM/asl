@@ -1,6 +1,6 @@
 (module asl-target-llvm/ssaOpt
   :x [hoistConstants nativePrelude constantKey singletonPrefix singleton?]
-  :i [(asl-ir/types :a ty) (asl-target-llvm/recordScalar :a rs)])
+  :i [(asl-ir/types :a ty) (asl-target-llvm/recordScalar :a rs) (asl-target-llvm/closureSpec :a cs) (asl-target-llvm/loopGuard :a lg)])
 
 schema Hoisted
   keys: (Map String Int64)
@@ -56,8 +56,11 @@ fn initFunction prefix: String i: Int64 op: ty/SsaOp -> ty/SsaFunction
   (ty/ssaFunction (initName prefix i) (list) (list) (ty/tyVal)
     (list (ty/ssaBlock "entry" (list) (list (ty/ssaInstr "v" (ty/tyVal) op)) (ty/termReturn "v"))))
 
-fn hoistConstants m: ty/SsaModule -> ty/SsaModule
-  (let [(prefix (singletonPrefix m.name))
+; (:m :ref CLOSPEC :do "routed modules first get call sites that pass a known closure specialised (closureSpec), so the array kernels the routes added are cloned too and only the closures left are hoisted")
+; (:m :ref LOOPGUARD :do "then counted sum loops over Bytes or an I64Array get one entry check and a check-free loop (loopGuard), the original loop kept as the fallback")
+fn hoistConstants m0: ty/SsaModule -> ty/SsaModule
+  (let [(m (lg/guardLoops (cs/specializeClosures m0)))
+        (prefix (singletonPrefix m.name))
         (own? (fn [(f ty/SsaFunction)] -> Bool (stringStartsWith? f.name prefix)))
         (user (filter (fn [(f ty/SsaFunction)] -> Bool (not (own? f))) m.functions))
         (found (collect user))]

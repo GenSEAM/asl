@@ -306,7 +306,7 @@ fn ! hostLine -> String
     (str u "; " cv "; load " load))
 
 fn methodText -> String
-  (str "bench/native/run.asl --mode both: 16 benches, clang -O2 C vs ASL built twice, notrace (bin/asl build, the CLI default) and tracing (tools/nativeTest, rc 0), same argv size; "
+  (str "bench/native/run.asl --mode both: 19 benches, clang -O2 C vs ASL built twice, notrace (bin/asl build, the CLI default) and tracing (tools/nativeTest, rc 0), same argv size; "
        "gated ratios are ASL/C instructions retired and ASL/C peak RSS (/usr/bin/time -l, deterministic, load-free), never wall time; "
        "compile = instructions retired by the tree's notrace asl1 compiling FIXED-INPUT-B9C1 (git archive b9c1acb05 asl) asl1.asl to LLVM IR; "
        "gate fails when a row exceeds baseline * (1 + its tol) (+0.05 absolute on ratio rows)")

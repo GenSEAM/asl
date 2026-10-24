@@ -1,8 +1,9 @@
 (module asl-target-llvm/rc
-  :x [rcModule rcFinishText rcFinishTextWith sanitized routeArrayAlloc dupName dropName pinName wrapperName runtimeText gcConsCall arenaCallText appendCallText]
+  :x [rcModule rcFinishText rcFinishTextWith rcFinishTextCounted sanitized routeArrayAlloc dupName dropName pinName wrapperName runtimeText gcConsCall arenaCallText appendCallText]
   :i [(asl-ir/types :a ty)
       (asl-target-llvm/ssa :a ssa)
-      (asl-target-llvm/ssaOpt :a opt)])
+      (asl-target-llvm/ssaOpt :a opt)
+      (asl-target-llvm/hashRt :a hashRt)])
 
 schema Ctx
   user: (Map String Bool)
@@ -37,6 +38,8 @@ schema Walk
   n: Int64
   pend: (List (Pair String Int64))
   raw: (Map String Bool)
+  quiet: (Map String (Map String Bool))
+  moves: (Map String Bool)
 
 schema Flow
   ok: Bool
@@ -103,11 +106,12 @@ fn opaqueFunction? ctx: Ctx name: String -> Bool
 fn builderFunction? ctx: Ctx name: String -> Bool
   (mapHas? ctx.builders name)
 
+; (:m :ref CLOSPEC :do "a closureSpec clone of a fresh kernel (its name followed by $cs) is fresh as the kernel is")
 fn arrayFresh? name: String -> Bool
   (listContains? (fold (fn [(acc (List String)) (k String)] -> (List String)
                          (listAppend acc (map (fn [(op String)] -> String (str "asl-target-llvm/arrays." k "Array" op)) (list "Len" "Get" "Slice" "Concat" "Generate" "Sum" "CountEq"))))
                        (list) (list "f64" "i64" "i8"))
-                 name)
+                 (optionOr (listHead (stringSplit name "$cs")) name))
 
 ; (:m :ref RC-UNPIN :do "runtime externs the system routes call that read their Val arguments without keeping them and return a fresh value, a raw pointer to a malloc copy or a tag word (abs, the route's tag read)")
 fn borrowExtern? name: String -> Bool
@@ -278,7 +282,7 @@ fn functionFacts ctx: Ctx f: ty/SsaFunction -> Facts
         (owned (fn [(x String)] -> Bool (and (mapHas? heap x) (and (not (mapHas? immortal x)) (and (not (mapHas? anchors x)) (not (mapHas? borrowed x)))))))
         (takes (takeCandidates parts anchors owned))
         (guards (takeGuards takes anchors parts))]
-    (Facts :heap heap :immortal immortal :anchors anchors :dupAfter dupAfter :pinAfter pinAfter :wrapAfter wrapAfter :borrowed borrowed :flow flow.keys :parts parts :cells probe.cells
+    (Facts :heap heap :immortal immortal :anchors anchors :dupAfter dupAfter :pinAfter pinAfter :wrapAfter wrapAfter :borrowed borrowed :flow flow.keys :parts (orParts parts instrs) :cells probe.cells
            :takes takes :guards guards
            :rawSet (fold (fn [(acc (Map String Bool)) (xs (List String))] -> (Map String Bool) (union acc (setOf xs))) (setOf (mapKeys takes)) (mapValues guards))))
 
@@ -348,10 +352,10 @@ fn fresh w: Walk -> String
   (str "rc." w.n)
 
 fn emitRc w: Walk callee: String v: String -> Walk
-  (Walk :live w.live :out (cons (rcCall (fresh w) callee v) w.out) :n (+ w.n 1) :pend w.pend :raw w.raw)
+  (Walk :live w.live :out (cons (rcCall (fresh w) callee v) w.out) :n (+ w.n 1) :pend w.pend :raw w.raw :quiet w.quiet :moves w.moves)
 
 fn prependAll w: Walk xs: (List ty/SsaInstr) -> Walk
-  (Walk :live w.live :out (listAppend xs w.out) :n w.n :pend w.pend :raw w.raw)
+  (Walk :live w.live :out (listAppend xs w.out) :n w.n :pend w.pend :raw w.raw :quiet w.quiet :moves w.moves)
 
 fn rcInstrs label: String w0: Int64 calls: (List (Pair String String)) -> (List ty/SsaInstr)
   (map (fn [(i Int64)] -> ty/SsaInstr
@@ -359,7 +363,15 @@ fn rcInstrs label: String w0: Int64 calls: (List (Pair String String)) -> (List 
            (rcCall (str "rc." label "." (+ w0 i)) (pairFirst c) (pairSecond c))))
        (range 0 (listLength calls)))
 
+; (:m :ref RC-BORROW-CONSUME-CLASH :do "the names one instruction both borrows and consumes: the consumed copy is duplicated and the borrowed one dropped after, so the callee cannot free cells it still reads through the borrowed parameter")
+fn clashNames uses: (List Use) -> (Map String Bool)
+  (let [(lent (setOf (map (fn [(u Use)] -> String u.name) (filter (fn [(u Use)] -> Bool (= u.kind "borrow")) uses))))]
+    (if (= (mapSize lent) 0)
+      lent
+      (setOf (filter (fn [(n String)] -> Bool (mapHas? lent n)) (map (fn [(u Use)] -> String u.name) (filter (fn [(u Use)] -> Bool (= u.kind "consume")) uses))))))
+
 fn beforeCalls facts: Facts uses: (List Use) after: (Map String Bool) -> (List (Pair String String))
+  (let [(clash (clashNames uses))]
   (pairSecond
     (fold (fn [(acc (Pair (Map String Bool) (List (Pair String String)))) (u Use)] -> (Pair (Map String Bool) (List (Pair String String)))
             (let [(seen (pairFirst acc)) (calls (pairSecond acc)) (v u.name)]
@@ -368,14 +380,15 @@ fn beforeCalls facts: Facts uses: (List Use) after: (Map String Bool) -> (List (
                 ((and (= u.kind "consume") (mapHas? facts.borrowed v)) (pair seen (listAppend calls (list (pair (dupName) v)))))
                 ((and (= u.kind "consume") (mapHas? facts.anchors v)) (pair seen (listAppend calls (list (pair (dupName) v)))))
                 ((and (= u.kind "consume") (tracked? facts v))
-                  (if (or (mapHas? after v) (mapHas? seen v))
+                  (if (or (mapHas? after v) (or (mapHas? seen v) (mapHas? clash v)))
                     (pair (mapSet seen v true) (listAppend calls (list (pair (dupName) v))))
                     (pair (mapSet seen v true) calls)))
                 (else acc))))
-          (pair (mapEmpty) (list)) uses))
+          (pair (mapEmpty) (list)) uses)))
 
 fn dropsAfter facts: Facts uses: (List Use) after: (Map String Bool) -> (List String)
-  (let [(taken (setOf (map (fn [(u Use)] -> String u.name) (filter (fn [(u Use)] -> Bool (or (= u.kind "consume") (= u.kind "pin"))) uses))))
+  (let [(clash (clashNames uses))
+        (taken (setOf (filter (fn [(n String)] -> Bool (not (mapHas? clash n))) (map (fn [(u Use)] -> String u.name) (filter (fn [(u Use)] -> Bool (or (= u.kind "consume") (= u.kind "pin"))) uses)))))
         (names (liveNames facts uses))]
     (pairSecond (fold (fn [(acc (Pair (Map String Bool) (List String))) (n String)] -> (Pair (Map String Bool) (List String))
                         (if (or (mapHas? after n) (or (mapHas? taken n) (mapHas? (pairFirst acc) n)))
@@ -411,6 +424,18 @@ fn partOf op: ty/SsaOp -> (Option (Pair String Int64))
                                   ((= name "@listRest") (match (listHead args) ((some b) (some (pair b 1))) ((none) (none))))
                                   (else (none))))
     (_ (none)))
+
+; (:m :ref FREECHAINLOOP :do "listHeadOr and listTailOr read slot 0 or 1 of a non-empty list and the default otherwise; they count as parts for the slot a reset or a drop may keep, never as anchored reads nor as cells, since on an empty list there is no cell and the reset duplicates the default as the read did")
+fn orParts parts: (Map String (Pair String Int64)) instrs: (List ty/SsaInstr) -> (Map String (Pair String Int64))
+  (fold (fn [(acc (Map String (Pair String Int64))) (i ty/SsaInstr)] -> (Map String (Pair String Int64))
+          (match i.op
+            ((ty/opEntry name args) (match (listHead args)
+                                      ((some b) (cond ((= name "@listHeadOr") (mapSet acc i.dest (pair b 0)))
+                                                      ((= name "@listTailOr") (mapSet acc i.dest (pair b 1)))
+                                                      (else acc)))
+                                      ((none) acc)))
+            (_ acc)))
+        parts instrs)
 
 fn partsOf instrs: (List ty/SsaInstr) -> (Map String (Pair String Int64))
   (fold (fn [(acc (Map String (Pair String Int64))) (i ty/SsaInstr)] -> (Map String (Pair String Int64))
@@ -503,9 +528,11 @@ fn rewriteInstr ctx: Ctx facts: Facts label: String tail: Bool w: Walk ins: ty/S
   (let [(after w.live)
         (owned (and (not tail) (ownedCall? facts ins)))
         (uses (cond (owned (ownedUses facts ins)) ((closureCall? ins) (closureUses facts ins)) (else (instrUses ctx facts ins))))
-        (results (resultCalls facts ins after))
+        (results (filter (fn [(c (Pair String String))] -> Bool (not (and (= (pairFirst c) (dupName)) (mapHas? w.moves (pairSecond c))))) (resultCalls facts ins after)))
         (dead0 (dropsAfter facts uses after))
-        (plan (if tail (none) (reusePlan facts ins dead0)))
+        (plan0 (if tail (none) (reusePlan facts ins dead0)))
+        (extra (match plan0 ((some r) (restMoves facts (optionOr (mapGet w.quiet ins.dest) (mapEmpty)) r after uses)) ((none) (list))))
+        (plan (match plan0 ((some r) (some (Reuse :cell r.cell :moved (listAppend r.moved extra) :callee (resetName (allocClass ins) (maskOf facts (listAppend r.moved extra)))))) ((none) (none))))
         (moved (match plan ((some r) r.moved) ((none) (list))))
         (before (takenDups facts uses w.raw (withoutDups (beforeCalls facts uses after) moved)))
         (late (match plan ((some _) (none)) ((none) (if tail (none) (latePlan facts w.pend dead0)))))
@@ -513,20 +540,72 @@ fn rewriteInstr ctx: Ctx facts: Facts label: String tail: Bool w: Walk ins: ty/S
         (dead (match gone ((some c) (filter (fn [(n String)] -> Bool (!= n c)) dead0)) ((none) dead0)))
         (deferred (and tail (and (listEmpty? results) (not (listEmpty? dead)))))
         (pre (if deferred (listAppend before (deferCalls dead)) before))
-        (post (if deferred (list) (listAppend results (map (fn [(n String)] -> (Pair String String) (pair (dropName) n)) dead))))
+        (quietHere (optionOr (mapGet w.quiet ins.dest) (mapEmpty)))
+        (drops (if (or deferred (= (mapSize quietHere) 0)) (list) (dropMoves facts quietHere after uses dead)))
+        (dropped (setOf (map (fn [(d DropMove)] -> String d.cell) drops)))
+        (post (if deferred (list) (listAppend results (map (fn [(n String)] -> (Pair String String) (pair (dropName) n)) (filter (fn [(n String)] -> Bool (not (mapHas? dropped n))) dead)))))
         (n0 w.n)
         (shared (map (fn [(f String)] -> (Pair String String) (pair (dupSharedName) (str (tokenName ins.dest) "\t" f))) moved))
         (reuseIs (match plan ((some r) (cons (rcCall (tokenName ins.dest) r.callee r.cell) (rcInstrs label (+ n0 (listLength pre)) shared))) ((none) (list))))
-        (lateIs (match late ((some l) (list (rcCall (tokenName l.target) l.callee l.cell))) ((none) (list))))
         (nPre (+ (listLength pre) (listLength shared)))
         (beforeIs (listAppend (rcInstrs label n0 pre) reuseIs))
-        (afterIs (listAppend (rcInstrs label (+ n0 nPre) post) lateIs))
+        (dropShared (fold (fn [(acc (List (Pair String String))) (d DropMove)] -> (List (Pair String String)) (listAppend acc (map (fn [(f String)] -> (Pair String String) (pair (dupSharedName) (str (tokenName (str "drop." label "." n0 "." d.cell)) "\t" f))) d.moved))) (list) drops))
+        (dropIs (listAppend (map (fn [(d DropMove)] -> ty/SsaInstr (rcCall (tokenName (str "drop." label "." n0 "." d.cell)) (resetName (noCell) (maskOf facts d.moved)) d.cell)) drops)
+                            (rcInstrs label (+ n0 (+ nPre (listLength post))) dropShared)))
+        (dropMoved (fold (fn [(acc (List String)) (d DropMove)] -> (List String) (listAppend acc d.moved)) (list) drops))
+        (lateMoved (match late ((some l) (if (= (mapSize quietHere) 0) (list) (restMoves facts quietHere (Reuse :cell l.cell :moved (list) :callee "") after uses))) ((none) (list))))
+        (lateIs (match late
+                  ((some l) (cons (rcCall (tokenName l.target) (resetName l.cls (maskOf facts lateMoved)) l.cell)
+                                  (rcInstrs label (+ n0 (+ nPre (+ (listLength post) (listLength dropShared))))
+                                            (map (fn [(f String)] -> (Pair String String) (pair (dupSharedName) (str (tokenName l.target) "\t" f))) lateMoved))))
+                  ((none) (list))))
+        (afterIs (listAppend (rcInstrs label (+ n0 nPre) post) (listAppend dropIs lateIs)))
         (pend (cond ((some? late) (optionOr (listTail w.pend) (list)))
                     ((and (none? plan) (and (not tail) (and (>= (allocClass ins) 0) (reusableDest? ins.dest)))) (cons (pair ins.dest (allocClass ins)) w.pend))
                     (else w.pend)))
         (live (union (mapRemove after ins.dest) (setOf (liveNames facts uses))))
         (raw (if (= (mapSize facts.rawSet) 0) w.raw (union (mapRemove w.raw ins.dest) (setOf (rawNamesOf facts uses)))))]
-    (Walk :live live :out (listAppend beforeIs (cons (if owned (ownedInstr ins) ins) (listAppend afterIs w.out))) :n (+ n0 (+ nPre (listLength post))) :pend pend :raw raw))
+    (Walk :live live :out (listAppend beforeIs (cons (if owned (ownedInstr ins) ins) (listAppend afterIs w.out))) :n (+ n0 (+ nPre (+ (listLength post) (+ (listLength dropShared) (listLength lateMoved))))) :pend pend :raw raw
+          :quiet w.quiet :moves (if (and (listEmpty? extra) (and (listEmpty? dropMoved) (listEmpty? lateMoved))) w.moves (union w.moves (setOf (listAppend extra (listAppend dropMoved lateMoved)))))))
+
+schema DropMove
+  cell: String
+  moved: (List String)
+
+; (:m :ref FREECHAINLOOP :do "a cell that dies here while a part read from it earlier in the block outlives it, duplicated at the read and untouched since, is released by a reset that keeps that slot (asking for a class no construct has, so it never hands its cell over): a unique cell is recycled with its other kids released and the part inherits the slot's count, a shared one is decremented and the part is duplicated then, so a list walk by head and tail costs no dup and release of each rest")
+fn dropMoves facts: Facts quiet: (Map String Bool) after: (Map String Bool) uses: (List Use) dead: (List String) -> (List DropMove)
+  (filter (fn [(d DropMove)] -> Bool (not (listEmpty? d.moved)))
+          (map (fn [(x String)] -> DropMove (DropMove :cell x :moved (if (mapHas? facts.cells x) (restMoves facts quiet (Reuse :cell x :moved (list) :callee "") after uses) (list))))
+               dead))
+
+; (:m :ref FREECHAINLOOP :do "a part of the reset cell that was read earlier in the block, duplicated at its read because it outlives the cell, and untouched between that read and the construct moves with the reset like a moved field: the reset leaves its slot alone and it is duplicated only when the cell was shared, so a unique list cell walked by reverse costs no dup and release of its rest")
+fn restMoves facts: Facts quiet: (Map String Bool) r: Reuse after: (Map String Bool) uses: (List Use) -> (List String)
+  (let [(used (setOf (map (fn [(u Use)] -> String u.name) uses)))
+        (taken (map (fn [(f String)] -> Int64 (partSlot facts "" f)) r.moved))
+        (cands (filter (fn [(f String)] -> Bool (movableRest? facts after used taken (partSlot facts r.cell f) f)) (mapKeys quiet)))]
+    (filter (fn [(f String)] -> Bool (= (listLength (filter (fn [(g String)] -> Bool (= (partSlot facts r.cell g) (partSlot facts r.cell f))) cands)) 1)) cands))
+
+fn partSlot facts: Facts cell: String f: String -> Int64
+  (match (mapGet facts.parts f)
+    ((some p) (if (or (= cell "") (= (pairFirst p) cell)) (pairSecond p) -1))
+    ((none) -1))
+
+fn movableRest? facts: Facts after: (Map String Bool) used: (Map String Bool) taken: (List Int64) i: Int64 f: String -> Bool
+  (and (>= i 0)
+       (and (< i 62)
+            (and (mapHas? after f)
+                 (and (mapHas? facts.dupAfter f)
+                      (and (not (mapHas? used f)) (not (listContains? taken i)))))))
+
+; (:m :ref FREECHAINLOOP :do "for each instruction of a block, the parts read earlier in the block whose result is duplicated at the read and that no instruction uses between the read and the construct")
+fn quietParts facts: Facts b: ty/SsaBlock -> (Map String (Map String Bool))
+  (pairSecond (fold (fn [(acc (Pair (Map String Bool) (Map String (Map String Bool)))) (ins ty/SsaInstr)] -> (Pair (Map String Bool) (Map String (Map String Bool)))
+                      (let [(clean0 (pairFirst acc))
+                            (out (if (and (!= ins.dest "") (> (mapSize clean0) 0)) (mapSet (pairSecond acc) ins.dest clean0) (pairSecond acc)))
+                            (clean1 (if (= (mapSize clean0) 0) clean0 (without clean0 (ty/opOperands ins.op))))
+                            (clean (if (and (mapHas? facts.parts ins.dest) (mapHas? facts.dupAfter ins.dest)) (mapSet clean1 ins.dest true) clean1))]
+                        (pair clean out)))
+                    (pair (mapEmpty) (mapEmpty)) b.instrs))
 
 fn rawNamesOf facts: Facts uses: (List Use) -> (List String)
   (filter (fn [(n String)] -> Bool (mapHas? facts.rawSet n)) (map (fn [(u Use)] -> String u.name) uses))
@@ -554,6 +633,7 @@ schema Late
   cell: String
   target: String
   callee: String
+  cls: Int64
 
 ; (:m :ref RC-FBIP :do "an owned value read through its fields that dies before a later construct of the same block resets into the nearest such construct still without a cell; nothing it holds moves, so all its kids are released")
 fn latePlan facts: Facts pend: (List (Pair String Int64)) dead: (List String) -> (Option Late)
@@ -561,7 +641,7 @@ fn latePlan facts: Facts pend: (List (Pair String Int64)) dead: (List String) ->
     ((none) (none))
     ((some p) (match (listHead (filter (fn [(x String)] -> Bool (and (mapHas? facts.cells x) (tracked? facts x))) dead))
                 ((none) (none))
-                ((some x) (some (Late :cell x :target (pairFirst p) :callee (resetName (pairSecond p) 0)))))))
+                ((some x) (some (Late :cell x :target (pairFirst p) :callee (resetName (pairSecond p) 0) :cls (pairSecond p)))))))
 
 fn trapBlock? blocks: (Map String ty/SsaBlock) target: String -> Bool
   (match (mapGet blocks target)
@@ -638,7 +718,7 @@ fn rewriteBlock ctx: Ctx facts: Facts liveIn: (Map String (Map String Bool)) raw
         (atTerm (union liveOut (setOf (liveNames facts termUsed))))
         (placed (placeEdges facts liveIn byLabel preds b atTerm prefix))
         (jumpCalls (jumpDups facts liveIn b.term))
-        (start (Walk :live atTerm :out (rcInstrs (str b.label ".j") 0 jumpCalls) :n 0 :pend (list) :raw (rawAtTerm facts rawIn b)))
+        (start (Walk :live atTerm :out (rcInstrs (str b.label ".j") 0 jumpCalls) :n 0 :pend (list) :raw (rawAtTerm facts rawIn b) :quiet (quietParts facts b) :moves (mapEmpty)))
         (tailDest (tailClosureDest b))
         (walked (fold (fn [(w Walk) (ins ty/SsaInstr)] -> Walk (rewriteInstr ctx facts b.label (and (!= tailDest "") (and (= ins.dest tailDest) (listEmpty? w.out))) w ins)) start (listReverse b.instrs)))
         (defined (listAppend (blockParamNames facts b) (if entry fnParams (list))))
@@ -911,7 +991,7 @@ fn claimText -> String
                "}"))
 
 
-; (:m :ref RC-RELEASEKIDS :do "a freed object's dying kids never go through release: a kid without kids (string, bytes, box, array) is recycled on the spot, and of the kids that have kids one becomes the next turn of the loop while only the others are pushed, so a list spine, a tree path or a record chain frees with no pending-stack traffic")
+; (:m :ref RC-RELEASEKIDS :do "a freed object's dying kids never go through release: a kid without kids (string, bytes, box, array, a record or ctor whose +12 boxed-slot count is 0) is recycled on the spot, and of the kids that have kids one becomes the next turn of the loop while only the others are pushed, so a list spine, a tree path or a record chain frees with no pending-stack traffic")
 fn kidText p: String k: String go: String -> (List String)
   (list (str p "Claim:")
         (str "  %" p "Free = call i1 @aslRc.claim(ptr %" k ")")
@@ -921,7 +1001,15 @@ fn kidText p: String k: String go: String -> (List String)
         (str "  %" p "Ty = lshr i64 %" p "H, 32")
         (str "  %" p "Ty8 = and i64 %" p "Ty, 255")
         (str "  %" p "Ty1 = sub i64 %" p "Ty8, 1")
-        (str "  %" p "Nest = icmp ult i64 %" p "Ty1, 4")
+        (str "  %" p "Kinded = icmp ult i64 %" p "Ty1, 4")
+        (str "  %" p "Ty2 = sub i64 %" p "Ty8, 2")
+        (str "  %" p "Flat = icmp ult i64 %" p "Ty2, 2")
+        (str "  %" p "Np = getelementptr inbounds i8, ptr %" k ", i64 12")
+        (str "  %" p "N = load i32, ptr %" p "Np")
+        (str "  %" p "None = icmp eq i32 %" p "N, 0")
+        (str "  %" p "Bare = and i1 %" p "Flat, %" p "None")
+        (str "  %" p "Boxed = xor i1 %" p "Bare, true")
+        (str "  %" p "Nest = and i1 %" p "Kinded, %" p "Boxed")
         (str "  br i1 %" p "Nest, label %" p "Keep, label %" p "Leaf")
         (str p "Leaf:")
         (str "  call void @aslRc.recycle(ptr %" k ", i64 %" p "H)")
@@ -961,10 +1049,9 @@ fn freeChainText asan: Bool -> String
                    "  br i1 %free, label %both, label %headOnly"
                    "both:"
                    "  %hk = icmp ne ptr %hn, null"
-                   "  br i1 %hk, label %headPush, label %next"
-                   "headPush:"
-                   "  call void @aslRc.push(ptr %hn)"
-                   (if asan (statBump "pushedHead" (statPushed)) "")
+                   "  br i1 %hk, label %headShallow, label %next"
+                   "headShallow:"
+                   "  call void @aslRc.freeShallow(ptr %hn)"
                    "  br label %next"
                    "next:"
                    "  br label %top"
@@ -1030,6 +1117,79 @@ fn freeChainText asan: Bool -> String
                    "done:"
                    "  ret void"
                    "}"))))))
+
+; (:m :ref FREECHAINLOOP :do "a nested head of a dying cons whose tail also dies is freed on the spot instead of being pushed: its count is already zero, each dying kid without kids is recycled, one dying kid with kids becomes the next turn of this loop and only further ones are pushed, then each cell is recycled; a list of records, nested records included, frees with no pending-stack traffic")
+fn freeShallowText asan: Bool -> String
+  (lines (listAppend
+           (list "define internal void @aslRc.freeShallow(ptr %o) {"
+                 "entry:"
+                 "  br label %top"
+                 "top:"
+                 "  %p = phi ptr [ %o, %entry ], [ %nx, %again ]"
+                 "  %h = load i64, ptr %p"
+                 "  %ty = lshr i64 %h, 32"
+                 "  %ty8 = and i64 %ty, 255"
+                 "  switch i64 %ty8, label %leaf [ i64 1, label %cons i64 2, label %rec i64 3, label %ctor i64 4, label %clo ]"
+                 "cons:"
+                 "  %cb = getelementptr inbounds i8, ptr %p, i64 8"
+                 "  br label %kids"
+                 "rec:"
+                 "  %rnp = getelementptr inbounds i8, ptr %p, i64 12"
+                 "  %rn32 = load i32, ptr %rnp"
+                 "  %rn = sext i32 %rn32 to i64"
+                 "  %rb = getelementptr inbounds i8, ptr %p, i64 24"
+                 "  br label %kids"
+                 "ctor:"
+                 "  %fnp = getelementptr inbounds i8, ptr %p, i64 12"
+                 "  %fn32 = load i32, ptr %fnp"
+                 "  %fn = sext i32 %fn32 to i64"
+                 "  %fb = getelementptr inbounds i8, ptr %p, i64 16"
+                 "  br label %kids"
+                 "clo:"
+                 "  %unp = getelementptr inbounds i8, ptr %p, i64 16"
+                 "  %un32 = load i32, ptr %unp"
+                 "  %un = sext i32 %un32 to i64"
+                 "  %ub = getelementptr inbounds i8, ptr %p, i64 24"
+                 "  br label %kids"
+                 "leaf:"
+                 "  br label %kids"
+                 "kids:"
+                 "  %base = phi ptr [ %cb, %cons ], [ %rb, %rec ], [ %fb, %ctor ], [ %ub, %clo ], [ %p, %leaf ]"
+                 "  %n = phi i64 [ 2, %cons ], [ %rn, %rec ], [ %fn, %ctor ], [ %un, %clo ], [ 0, %leaf ]"
+                 "  br label %loop"
+                 "loop:"
+                 "  %i = phi i64 [ 0, %kids ], [ %i1, %step ]"
+                 "  %nx = phi ptr [ null, %kids ], [ %nx1, %step ]"
+                 "  %more = icmp slt i64 %i, %n"
+                 "  br i1 %more, label %body, label %kidsDone"
+                 "body:"
+                 "  %off = mul i64 %i, 16"
+                 "  %at = getelementptr inbounds i8, ptr %base, i64 %off"
+                 "  %kid = load %Val, ptr %at"
+                 "  %k = call ptr @aslRc.obj(%Val %kid)"
+                 "  %kz = icmp eq ptr %k, null"
+                 "  br i1 %kz, label %step, label %kidClaim")
+           (listAppend (kidText "kid" "k" "step")
+             (list "kidKeep:"
+                   "  %had = icmp ne ptr %nx, null"
+                   "  br i1 %had, label %kidPush, label %step"
+                   "kidPush:"
+                   "  call void @aslRc.push(ptr %nx)"
+                   (if asan (statBump "pushedKid" (statPushed)) "")
+                   "  br label %step"
+                   "step:"
+                   "  %nx1 = phi ptr [ %nx, %body ], [ %nx, %kidClaim ], [ %nx, %kidLeaf ], [ %k, %kidKeep ], [ %k, %kidPush ]"
+                   "  %i1 = add i64 %i, 1"
+                   "  br label %loop"
+                   "kidsDone:"
+                   "  call void @aslRc.recycle(ptr %p, i64 %h)"
+                   "  %go = icmp ne ptr %nx, null"
+                   "  br i1 %go, label %again, label %done"
+                   "again:"
+                   "  br label %top"
+                   "done:"
+                   "  ret void"
+                   "}"))))
 
 fn freeOneText -> String
   (lines (list "define internal void @aslRc.freeOne(ptr %o) noinline {"
@@ -1502,7 +1662,7 @@ fn runtimeTextIn text: String section: String asan: Bool notrace: Bool -> String
                  (objText notrace) (liveCheckText) (dupText asan) (dropText asan) (pushText)
                  (childrenText "pinKids" "pinVal") (drainText) (recycleText asan rooted notrace) (if active (arenaPinned (pinValText notrace)) (pinValText notrace)) (pinText)
                  (if active (arenaDeferred (deferText rooted)) (deferText rooted))
-                 (dupValText) (childrenText "dupKids" "dupVal") (dupKidsText) (dupSameText) (freeOneText) (claimText) (freeChainText asan)
+                 (dupValText) (childrenText "dupKids" "dupVal") (dupKidsText) (dupSameText) (freeOneText) (claimText) (freeChainText asan) (freeShallowText asan)
                  (cond (active (arenaRuntimeText asan)) (uses (arenaRunText false)) (else "")))
            (listAppend (if rooted (listAppend (smallGlobals text) (list (smallSyncText) (smallPushText))) (list))
              (listAppend (runtimeDecls section asan rooted)
@@ -1662,7 +1822,8 @@ fn resetKidsText -> (List String)
         "  %i1 = add i64 %i, 1"
         "  br label %loop")
 
-; (:m :ref RC-FBIP :do "a reset of a unique value releases its kids except the moved ones and hands its cell over when its size class is the construct's, else recycles it and answers 1 (moved, no cell); a shared value is decremented and answers 0, so the moved fields are then duplicated; the shared test is inlined and only a unique value calls out")
+; (:m :ref RC-FBIP :do "a reset of a unique value releases its kids except the moved ones and hands its cell over when its size class is the construct's, else recycles it and answers 1 (moved, no cell); a shared value is decremented and answers 0, so the moved fields are then duplicated; the shared test is inlined and only a unique value that is no cons calls out")
+; (:m :ref FREECHAINLOOP :do "a unique cons resets inline: the mask is a constant, so only the unmoved slots of the pair get a release and a cons whose two slots both moved costs a class test; any other kind takes the generic resetSlow")
 fn resetText asan: Bool cls: Int64 mask: Int64 -> String
   (let [(slow (str "@aslRc.resetSlow." cls "." mask))]
     (lines (listAppend
@@ -1689,28 +1850,55 @@ fn resetText asan: Bool cls: Int64 mask: Int64 -> String
                    "shared:"
                    "  ret i64 0"
                    "unique:"
+                   "  %fty = lshr i64 %h, 32"
+                   "  %fty8 = and i64 %fty, 255"
+                   "  %isCons = icmp eq i64 %fty8, 1"
+                   "  br i1 %isCons, label %consFast, label %slowPath"
+                   "slowPath:"
                    (str "  %u = call i64 " slow "(ptr %o, i64 %h)")
                    "  ret i64 %u"
-                   "}"
-                   (str "define internal i64 " slow "(ptr %o, i64 %h) {")
-                   "entry:"
-                   (str "  %mask = add i64 0, " mask)
-                   "  br label %unique")
-             (listAppend (resetKidsText)
-               (list "kidsDone:"
-                     "  %cls = lshr i64 %h, 56"
-                     (str "  %fits = icmp eq i64 %cls, " cls)
-                     "  br i1 %fits, label %give, label %spare"
-                     "give:"
-                     (if asan (statBump "fbip" (statFbip)) "")
-                     "  %w = ptrtoint ptr %o to i64"
-                     "  ret i64 %w"
-                     "spare:"
-                     (if asan (statBump "spare" (statSpare)) "")
-                     "  call void @aslRc.recycle(ptr %o, i64 %h)"
-                     "  ret i64 1"
-                     "}")))))
+                   "consFast:")
+             (listAppend (consReleaseText mask 0)
+             (listAppend (consReleaseText mask 1)
+             (listAppend (cons "  br label %kidsDone" (resetDoneText asan cls))
+             (listAppend
+               (list (str "define internal i64 " slow "(ptr %o, i64 %h) {")
+                     "entry:"
+                     (str "  %mask = add i64 0, " mask)
+                     "  br label %unique")
+               (listAppend (resetKidsText) (resetDoneText asan cls)))))))))
 
+fn consReleaseText mask: Int64 i: Int64 -> (List String)
+  (if (!= (& mask (<< 1 i)) 0)
+    (list)
+    (let [(k (str "%k" i))]
+      (list (str "  " k "p = getelementptr inbounds i8, ptr %o, i64 " (+ 8 (* 16 i)))
+            (str "  " k "v = load %Val, ptr " k "p")
+            (str "  " k " = call ptr @aslRc.obj(%Val " k "v)")
+            (str "  " k "z = icmp eq ptr " k ", null")
+            (str "  br i1 " k "z, label %after" i ", label %claim" i)
+            (str "claim" i ":")
+            (str "  " k "d = call i1 @aslRc.claim(ptr " k ")")
+            (str "  br i1 " k "d, label %free" i ", label %after" i)
+            (str "free" i ":")
+            (str "  call void @aslRc.freeOne(ptr " k ")")
+            (str "  br label %after" i)
+            (str "after" i ":"))))
+
+fn resetDoneText asan: Bool cls: Int64 -> (List String)
+  (list "kidsDone:"
+        "  %cls = lshr i64 %h, 56"
+        (str "  %fits = icmp eq i64 %cls, " cls)
+        "  br i1 %fits, label %give, label %spare"
+        "give:"
+        (if asan (statBump "fbip" (statFbip)) "")
+        "  %w = ptrtoint ptr %o to i64"
+        "  ret i64 %w"
+        "spare:"
+        (if asan (statBump "spare" (statSpare)) "")
+        "  call void @aslRc.recycle(ptr %o, i64 %h)"
+        "  ret i64 1"
+        "}")
 
 fn reuseOrName cls: Int64 -> String
   (if (= cls 3) "@aslRc.reuseOrCons" (str "@aslRc.reuseOr." cls))
@@ -2623,6 +2811,25 @@ fn rcFinishText text: String asan: Bool -> String
   (rcFinishTextWith text asan false)
 
 fn rcFinishTextWith text: String asan: Bool notrace: Bool -> String
+  (rcFinishTextCounted text asan notrace (or asan (not notrace)))
+
+; (:m :ref FREECHAINLOOP :do "the per-cell counters (freed, reused, fresh) bump a global on every alloc and free; the untraced production build compiles them out unless counted is set (rc mode notraceStats), the counted, ASan and stats builds keep them, and the rarer counters stay in every build")
+fn countedSlot? line: String -> Bool
+  (and (stringContains? line ".sp = getelementptr [")
+       (or (stringEndsWith? line (str "ptr @aslRc.stats, i64 0, i64 " (statFreed)))
+           (or (stringEndsWith? line (str "ptr @aslRc.stats, i64 0, i64 " (statReused)))
+               (stringEndsWith? line (str "ptr @aslRc.stats, i64 0, i64 " (statFresh))))))
+
+fn uncounted counted: Bool text: String -> String
+  (if counted
+    text
+    (lines (listReverse (pairSecond (fold (fn [(acc (Pair Int64 (List String))) (l String)] -> (Pair Int64 (List String))
+                                            (cond ((> (pairFirst acc) 0) (pair (- (pairFirst acc) 1) (pairSecond acc)))
+                                                  ((countedSlot? l) (pair 3 (pairSecond acc)))
+                                                  (else (pair 0 (cons l (pairSecond acc))))))
+                                          (pair 0 (list)) (stringLines text))))))
+
+fn rcFinishTextCounted text: String asan: Bool notrace: Bool counted: Bool -> String
   (let [(n (stringLength text))
         (cut (declareCut text))
         (arities (ownedArityIn text))
@@ -2637,8 +2844,9 @@ fn rcFinishTextWith text: String asan: Bool notrace: Bool -> String
         (arenaed (if uses (stringReplace code (arenaCallText) (arenaRunCall)) code))
         (relink (and notrace (stringContains? arenaed (appendCallText))))
         (undeclared (if relink (stringReplace arenaed (appendCallText) (appendOwnedCall)) arenaed))
-        (reuse (routeReuse undeclared asan))
-        (reused (if (listEmpty? (pairSecond reuse)) undeclared (str (pairFirst reuse) "\n" (lines (map (fn [(d String)] -> String (if active (arenaReset d) d)) (pairSecond reuse))) "\n")))
+        (hashed (hashRt/hashSplice undeclared notrace))
+        (reuse (routeReuse hashed asan))
+        (reused (if (listEmpty? (pairSecond reuse)) hashed (str (pairFirst reuse) "\n" (lines (map (fn [(d String)] -> String (if active (arenaReset d) d)) (pairSecond reuse))) "\n")))
         (route (routeAllocs reused rooted))
         (large (filter (fn [(c Int64)] -> Bool (>= c (smallClasses))) route.classes))
         (small (filter (fn [(c Int64)] -> Bool (< c (smallClasses))) route.classes))
@@ -2648,9 +2856,9 @@ fn rcFinishTextWith text: String asan: Bool notrace: Bool -> String
         (body (routeSized active dupped))
         (sizedDef (if sized (list (sizedAllocText asan rooted)) (list)))
         (final (if active (arenaGetters body) body))]
-    (str final section "\n" (runtimeTextIn final (if (< cut n) section (declareSection final)) asan notrace) "\n"
-         (lines (map guard (listAppend (map (fn [(c Int64)] -> String (allocText (rcAllocSym c) (allocFastSym c) c asan)) large)
-                                       (listAppend consDef (listAppend (map smallAllocText small) sizedDef)))))
+    (str final section "\n" (uncounted counted (runtimeTextIn final (if (< cut n) section (declareSection final)) asan notrace)) "\n"
+         (uncounted counted (lines (map guard (listAppend (map (fn [(c Int64)] -> String (allocText (rcAllocSym c) (allocFastSym c) c asan)) large)
+                                       (listAppend consDef (listAppend (map smallAllocText small) sizedDef))))))
          "\n" (lines (map callOwnedText arities)) "\n" (lines (map (fn [(i Int64)] -> String (liveChecked asan (takeText i))) takes)) "\n" (if relink (str (appendOwnedText asan) "\n") "")))
 
 fn routeSized active: Bool text: String -> String
@@ -3001,7 +3209,7 @@ fn initialBorrows counted: (List ty/SsaFunction) targets: (Map String Bool) -> (
   (fold (fn [(acc (Map String (List Bool))) (f ty/SsaFunction)] -> (Map String (List Bool))
           (if (borrowable? targets f)
             (let [(walked (listReuseParams f))]
-              (mapSet acc f.name (map (fn [(p ty/SsaParam)] -> Bool (and (heapTy? p.ty) (not (mapHas? walked p.name)))) f.params)))
+              (mapSet acc f.name (hashRt/ownedFlags f.name (map (fn [(p ty/SsaParam)] -> Bool (and (heapTy? p.ty) (not (mapHas? walked p.name)))) f.params))))
             acc))
         (mapEmpty) counted)
 

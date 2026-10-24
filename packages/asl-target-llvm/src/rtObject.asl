@@ -1,5 +1,5 @@
 (module asl-target-llvm/rtObject
-  :x [rtObjectPieces rtObjectDecls]
+  :x [rtObjectPieces rtObjectDecls recHelperText]
   :i [])
 
 fn objText sym: String text: String -> String
@@ -90,6 +90,78 @@ fn strFunction -> String
                 "done:"
                 "  ret %Val %cached")))
 
+fn keysWordLines -> (List String)
+  (list "  %kp = getelementptr inbounds i8, ptr %obj, i64 16"
+        "  %kw = load i64, ptr %kp"
+        "  %kbit = and i64 %kw, 1"
+        "  %tagged = icmp ne i64 %kbit, 0"
+        "  %kw0 = and i64 %kw, -2"
+        "  %keys = inttoptr i64 %kw0 to ptr")
+
+fn recArityFunction prefix: String -> String
+  (stringJoin (listAppend (list (str "define internal i32 @" prefix ".recArity(ptr %obj) alwaysinline {") "entry:")
+                          (listAppend (keysWordLines)
+                                      (list "  br i1 %tagged, label %desc, label %plain"
+                                            "plain:"
+                                            "  %np = getelementptr inbounds i8, ptr %obj, i64 12"
+                                            "  %n = load i32, ptr %np"
+                                            "  ret i32 %n"
+                                            "desc:"
+                                            "  %dnp = getelementptr inbounds i8, ptr %keys, i64 -8"
+                                            "  %dn = load i32, ptr %dnp"
+                                            "  ret i32 %dn"
+                                            "}")))
+              "\n")
+
+fn recKeysFunction prefix: String -> String
+  (stringJoin (listAppend (list (str "define internal ptr @" prefix ".recKeys(ptr %obj) alwaysinline {") "entry:")
+                          (listAppend (keysWordLines) (list "  ret ptr %keys" "}")))
+              "\n")
+
+fn recGetFunction prefix: String -> String
+  (stringJoin (listAppend (list (str "define internal %Val @" prefix ".recGet(ptr %obj, i32 %i) alwaysinline {") "entry:")
+                          (listAppend (keysWordLines)
+                                      (list "  %iw = sext i32 %i to i64"
+                                            "  br i1 %tagged, label %desc, label %plain"
+                                            "plain:"
+                                            "  %off = mul i64 %iw, 16"
+                                            "  %slot = add i64 %off, 24"
+                                            "  %valp = getelementptr inbounds i8, ptr %obj, i64 %slot"
+                                            "  %value = load %Val, ptr %valp"
+                                            "  ret %Val %value"
+                                            "desc:"
+                                            "  %dnp = getelementptr inbounds i8, ptr %keys, i64 -8"
+                                            "  %dn = load i32, ptr %dnp"
+                                            "  %dnw = sext i32 %dn to i64"
+                                            "  %locIndex = add i64 %dnw, %iw"
+                                            "  %locp = getelementptr inbounds i32, ptr %keys, i64 %locIndex"
+                                            "  %loc = load i32, ptr %locp"
+                                            "  %locTag = lshr i32 %loc, 24"
+                                            "  %locOff = and i32 %loc, 16777215"
+                                            "  %locOffw = zext i32 %locOff to i64"
+                                            "  %at = getelementptr inbounds i8, ptr %obj, i64 %locOffw"
+                                            "  %boxed = icmp eq i32 %locTag, 255"
+                                            "  br i1 %boxed, label %slotVal, label %rawVal"
+                                            "slotVal:"
+                                            "  %held = load %Val, ptr %at"
+                                            "  ret %Val %held"
+                                            "rawVal:"
+                                            "  %word = load i64, ptr %at"
+                                            "  %tagw = zext i32 %locTag to i64"
+                                            "  %tagged0 = insertvalue %Val undef, i64 %tagw, 0"
+                                            "  %rebox = insertvalue %Val %tagged0, i64 %word, 1"
+                                            "  ret %Val %rebox"
+                                            "}")))
+              "\n")
+
+fn recHelperPieces prefix: String -> (List (Pair String String))
+  (list (pair (str "@" prefix ".recArity") (recArityFunction prefix))
+        (pair (str "@" prefix ".recKeys") (recKeysFunction prefix))
+        (pair (str "@" prefix ".recGet") (recGetFunction prefix)))
+
+fn recHelperText prefix: String -> (List String)
+  (map (fn [(p (Pair String String))] -> String (pairSecond p)) (recHelperPieces prefix))
+
 fn fieldFunction -> String
   (defineFn "%Val @objrt.field(%Val %v, ptr %cell, ptr %name, i64 %len)"
     (list (tagOf "%v")
@@ -97,10 +169,8 @@ fn fieldFunction -> String
                 "  br i1 %isRec, label %rec, label %notRec"
                 "rec:"
                 "  %key = call i32 @objrt.nameId(ptr %cell, ptr %name, i64 %len)"
-                "  %np = getelementptr inbounds i8, ptr %obj, i64 12"
-                "  %n = load i32, ptr %np"
-                "  %keysp = getelementptr inbounds i8, ptr %obj, i64 16"
-                "  %keys = load ptr, ptr %keysp"
+                "  %n = call i32 @objrt.recArity(ptr %obj)"
+                "  %keys = call ptr @objrt.recKeys(ptr %obj)"
                 "  br label %loop"
                 "loop:"
                 "  %i = phi i32 [ 0, %rec ], [ %next, %body ]"
@@ -113,11 +183,7 @@ fn fieldFunction -> String
                 "  %match = icmp eq i32 %k, %key"
                 "  br i1 %match, label %found, label %loop"
                 "found:"
-                "  %i64 = sext i32 %i to i64"
-                "  %off = mul i64 %i64, 16"
-                "  %slot = add i64 %off, 24"
-                "  %valp = getelementptr inbounds i8, ptr %obj, i64 %slot"
-                "  %value = load %Val, ptr %valp"
+                "  %value = call %Val @objrt.recGet(ptr %obj, i32 %i)"
                 "  ret %Val %value"
                 "missing:"
                 "  call void @rterr.raiseText(ptr @.rterr.c.ERR_FIELD, ptr @.objrt.noField, ptr %name)"
@@ -266,6 +332,7 @@ fn symbolFunction -> String
 
 fn rtObjectPieces -> (List (Pair String String))
   (listAppend (objConstants)
+              (listAppend (recHelperPieces "objrt")
               (list (pair "@objrt.nameId" (nameIdFunction))
                     (pair "@objrt.str" (strFunction))
                     (pair "@objrt.field" (fieldFunction))
@@ -274,7 +341,7 @@ fn rtObjectPieces -> (List (Pair String String))
                     (pair "@objrt.capture" (captureFunction))
                     (pair "@objrt.call" (callFunction))
                     (pair "@aslCall" (aslCallFunction))
-                    (pair "@objrt.symbol" (symbolFunction))))
+                    (pair "@objrt.symbol" (symbolFunction)))))
 
 fn rtObjectDecls -> (List String)
   (list "declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1 immarg)")

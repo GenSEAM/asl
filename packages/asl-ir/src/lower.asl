@@ -1802,6 +1802,15 @@ fn enumDecls forms: (List ast/TopForm) prefix: String -> (List ty/SsaTypeDecl)
 fn schemaFields s: ast/SchemaNode -> (List String)
   (map (fn [(f ast/AstField)] -> String f.name) s.fields)
 
+fn fieldKind typeText: String -> Int64
+  (cond ((or (= typeText "Int64") (= typeText "Int")) 2)
+        ((or (= typeText "Float64") (= typeText "Float")) 3)
+        ((= typeText "Bool") 1)
+        (else 255))
+
+fn schemaKinds s: ast/SchemaNode -> (List Int64)
+  (map (fn [(f ast/AstField)] -> Int64 (fieldKind f.type)) s.fields)
+
 fn schemaDefaults s: ast/SchemaNode -> (Map String rd/SExpr)
   (fold (fn [(m (Map String rd/SExpr)) (f ast/AstField)] -> (Map String rd/SExpr)
           (match f.default
@@ -1843,7 +1852,7 @@ fn visWithSchemaDefaults v: Vis key: String modName: String s: ast/SchemaNode ke
 fn recordDecls forms: (List ast/TopForm) prefix: String -> (List ty/SsaRecordDecl)
   (fold (fn [(acc (List ty/SsaRecordDecl)) (t ast/TopForm)] -> (List ty/SsaRecordDecl)
           (match t
-            ((ast/topSchema s) (cons (ty/ssaRecordDecl (qualify prefix s.name) (schemaFields s)) acc))
+            ((ast/topSchema s) (cons (ty/ssaRecordDeclTyped (qualify prefix s.name) (schemaFields s) (schemaKinds s)) acc))
             ((ast/topModule _) acc) ((ast/topEnum _) acc) ((ast/topDefun _) acc) ((ast/topExpr _) acc)))
         (list) (listReverse forms))
 

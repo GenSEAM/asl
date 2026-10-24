@@ -445,9 +445,10 @@ fn fieldIdNames m: ty/SsaModule -> (List String)
   (let [(menv (moduleEnv m))]
     (distinct (fold (fn [(acc (List String)) (f ty/SsaFunction)] -> (List String) (listAppend acc (typedFieldNamesIn menv f))) (fusedFieldNames m) m.functions)))
 
+; (:m :do "record literals by dest, and boxes by dest so a record field store can take the raw source")
 fn recordMap f: ty/SsaFunction -> NameIndex
   (fold (fn [(acc NameIndex) (ins ty/SsaInstr)] -> NameIndex
-          (match ins.op ((ty/opRecord _ _ _) (nameIndexSet acc ins.dest ins.op)) (_ acc)))
+          (match ins.op ((ty/opRecord _ _ _) (nameIndexSet acc ins.dest ins.op)) ((ty/opBox _) (nameIndexSet acc ins.dest ins.op)) (_ acc)))
         (nameIndexEmpty) (allInstrs f))
 
 fn opRecordFields op: ty/SsaOp -> (Option (List String))
@@ -467,15 +468,107 @@ fn staticFieldIndex env: FnEnv base: String field: String -> (Option Int64)
   (fieldStaticIndexFor env.records base field)
 
 fn typedFieldIndexFor menv: ModEnv recs: NameIndex defs: NameIndex base: String field: String -> (Option Int64)
-  (if (some? (nameIndexGet recs base))
+  (if (some? (recordFieldsFor recs base))
     (none)
-    (match (nameIndexGet defs base)
-      ((some t) (match t
-                  ((ty/tyRec schema) (match (nameIndexGet menv.records schema)
-                                       ((some fields) (listIndexOf fields field))
-                                       ((none) (none))))
-                  (_ (none))))
+    (match (baseSchema defs base)
+      ((some schema) (match (recordDeclOf menv schema)
+                       ((some d) (listIndexOf d.fields field))
+                       ((none) (none))))
       ((none) (none))))
+
+fn baseSchema defs: NameIndex base: String -> (Option String)
+  (match (nameIndexGet defs base)
+    ((some t) (match t ((ty/tyRec schema) (some schema)) (_ (none))))
+    ((none) (none)))
+
+fn recordDeclOf menv: ModEnv schema: String -> (Option ty/SsaRecordDecl)
+  (nameIndexGet menv.records schema)
+
+; (:m :ref UNBOXFIELDS :do "a schema whose declared fields include an Int64, Float64 or Bool gets the descriptor layout: boxed %Val slots first, then 8-byte raw payload words; offsets fit the 24-bit loc field")
+fn rawDecl? d: ty/SsaRecordDecl -> Bool
+  (and (ty/ssaRecordRaw? d) (and (<= (listLength d.fields) 4096) (= (listLength d.kinds) (listLength d.fields))))
+
+fn rawSchema? menv: ModEnv schema: String -> Bool
+  (match (recordDeclOf menv schema) ((some d) (rawDecl? d)) ((none) false))
+
+fn kindAt d: ty/SsaRecordDecl i: Int64 -> Int64
+  (optionOr (listGet d.kinds i) 255)
+
+fn boxedSlots d: ty/SsaRecordDecl -> Int64
+  (listCount (fn [(k Int64)] -> Bool (= k 255)) d.kinds)
+
+fn rawWords d: ty/SsaRecordDecl -> Int64
+  (- (listLength d.kinds) (boxedSlots d))
+
+fn rawRecordBytes d: ty/SsaRecordDecl -> Int64
+  (+ 24 (+ (* 16 (boxedSlots d)) (* 8 (rawWords d))))
+
+; (:m :do "byte offset of declared field i: boxed fields keep declared order among the slots at 24 + 16 j, raw fields keep declared order among the words after the slots")
+fn fieldOffset d: ty/SsaRecordDecl i: Int64 -> Int64
+  (let [(before (listTake d.kinds i))
+        (boxedBefore (listCount (fn [(k Int64)] -> Bool (= k 255)) before))]
+    (if (= (kindAt d i) 255)
+      (+ 24 (* 16 boxedBefore))
+      (+ 24 (+ (* 16 (boxedSlots d)) (* 8 (- i boxedBefore))))))
+
+fn fieldLoc d: ty/SsaRecordDecl i: Int64 -> Int64
+  (+ (* (kindAt d i) 16777216) (fieldOffset d i))
+
+fn descKeys schema: String -> String
+  (str "getelementptr inbounds (i8, ptr " (keyIdsSym schema) ", i64 8)")
+
+fn descTagged schema: String -> String
+  (str "getelementptr inbounds (i8, ptr " (keyIdsSym schema) ", i64 9)")
+
+fn keysBase menv: ModEnv schema: String -> String
+  (if (rawSchema? menv schema) (descKeys schema) (keyIdsSym schema))
+
+; (:m :do "the descriptor <{ i32 n, i32 nb, [n x i32] keys, [n x i32] locs }> is zero-initialized (asl-cli/irSplit reads a global's type as every word before its last) and filled by the schema init, which runs before the first literal is built")
+fn descriptorType d: ty/SsaRecordDecl -> String
+  (let [(arr (str "[" (listLength d.fields) " x i32]"))]
+    (str "<{ i32, i32, " arr ", " arr " }>"))
+
+fn descriptorGlobal d: ty/SsaRecordDecl -> String
+  (str (keyIdsSym d.name) " = internal global " (descriptorType d) " zeroinitializer, align 8\n")
+
+; (:m :do "locs[i] = (tag << 24) | byte offset of declared field i; tag 255 is a boxed %Val slot")
+fn descriptorInit d: ty/SsaRecordDecl -> String
+  (let [(n (listLength d.fields)) (sym (keyIdsSym d.name))]
+    (str "  %desc.np = getelementptr inbounds i8, ptr " sym ", i64 0\n"
+         "  store i32 " n ", ptr %desc.np\n"
+         "  %desc.nbp = getelementptr inbounds i8, ptr " sym ", i64 4\n"
+         "  store i32 " (boxedSlots d) ", ptr %desc.nbp\n"
+         (stringJoin (map (fn [(i Int64)] -> String
+                            (str "  %desc.loc" i " = getelementptr inbounds i8, ptr " sym ", i64 " (+ 8 (* 4 (+ n i))) "\n"
+                                 "  store i32 " (fieldLoc d i) ", ptr %desc.loc" i "\n"))
+                          (range 0 n)) "")))
+
+fn sameFieldSet? fields: (List String) declared: (List String) -> Bool
+  (and (= (listLength fields) (listLength declared))
+       (and (= (listLength (distinct fields)) (listLength fields))
+            (listAll? (fn [(f String)] -> Bool (listContains? fields f)) declared)))
+
+fn rawLiteral? d: ty/SsaRecordDecl fields: (List String) -> Bool
+  (and (rawDecl? d) (sameFieldSet? fields d.fields))
+
+; (:m :do "the unboxed source of a boxed value when it was boxed in this function from a raw of the field's kind: i64 for Int64, double for Float64, i1 for Bool")
+fn staticRaw env: FnEnv v: String kind: Int64 -> (Option String)
+  (match (nameIndexGet env.records v)
+    ((some op) (match op
+                 ((ty/opBox x) (let [(n (ty/ssaTyName (defType env x)))]
+                                 (if (or (and (= kind 2) (= n "i64")) (or (and (= kind 3) (= n "f64")) (and (= kind 1) (= n "i1")))) (some x) (none))))
+                 (_ (none))))
+    ((none) (none)))
+
+fn literalDecl env: FnEnv d: ty/SsaRecordDecl fields: (List String) i: Int64 -> Int64
+  (optionOr (listIndexOf d.fields (optionOr (listGet fields i) "")) 0)
+
+; (:m :do "literal positions of raw-kind fields whose value is only known boxed: their tags are checked at run time and a mismatch builds the boxed layout")
+fn dynamicRaws env: FnEnv d: ty/SsaRecordDecl fields: (List String) values: (List String) -> (List Int64)
+  (filter (fn [(i Int64)] -> Bool
+            (let [(k (kindAt d (literalDecl env d fields i)))]
+              (and (!= k 255) (not (some? (staticRaw env (optionOr (listGet values i) "") k))))))
+          (range 0 (listLength fields)))
 
 fn typedFieldIndex env: FnEnv base: String field: String -> (Option Int64)
   (typedFieldIndexFor env.mod env.records env.defs base field)
@@ -614,6 +707,10 @@ fn recordKeysPrelude p: String lbl: String base: String field: String -> String
        "  " p ".n = load i32, ptr " p ".np\n"
        "  " p ".keysp = getelementptr inbounds i8, ptr " p ".obj, i64 16\n"
        "  " p ".keys = load ptr, ptr " p ".keysp\n"
+       "  " p ".kbits = ptrtoint ptr " p ".keys to i64\n"
+       "  " p ".kdesc = trunc i64 " p ".kbits to i1\n"
+       "  br i1 " p ".kdesc, label %" lbl ".slow, label %" lbl ".ids\n"
+       lbl ".ids:\n"
        "  " p ".ready = load i1, ptr " (fieldIdReadySym field) "\n"
        "  br i1 " p ".ready, label %" lbl ".scan, label %" lbl ".resolve\n"
        lbl ".resolve:\n"
@@ -630,6 +727,74 @@ fn staticKeyProbe p: String lbl: String index: Int64 hit: String miss: String ->
        "  " p ".skey = load i32, ptr " p ".skeyp\n"
        "  " p ".skeyOk = icmp eq i32 " p ".skey, " p ".fid\n"
        "  br i1 " p ".skeyOk, label %" hit ", label %" miss "\n")
+
+fn typedRawDecl env: FnEnv base: String -> (Option ty/SsaRecordDecl)
+  (match (baseSchema env.defs base)
+    ((some s) (match (recordDeclOf env.mod s) ((some d) (if (rawDecl? d) (some d) (none))) ((none) (none))))
+    ((none) (none)))
+
+; (:m :ref UNBOXFIELDS :do "typed read of a descriptor-layout schema: the keys word equal to this schema's tagged descriptor means one load at the constant offset; any other record goes to objrt.field")
+fn descGuard p: String lbl: String base: String schema: String hit: String -> String
+  (str (valTag p base)
+       "  " p ".isRec = icmp eq i32 " p ".vtag, 7\n"
+       "  br i1 " p ".isRec, label %" lbl ".rec, label %" lbl ".slow\n"
+       lbl ".rec:\n"
+       (valObj p base)
+       "  " p ".kwp = getelementptr inbounds i8, ptr " p ".obj, i64 16\n"
+       "  " p ".kw = load ptr, ptr " p ".kwp\n"
+       "  " p ".isDesc = icmp eq ptr " p ".kw, " (descTagged schema) "\n"
+       "  br i1 " p ".isDesc, label %" lbl "." hit ", label %" lbl ".slow\n")
+
+fn emitTypedRead lhs: String env: FnEnv dest: String base: String field: String index: Int64 -> String
+  (match (typedRawDecl env base)
+    ((some d) (let [(p (str "%" (llvmName dest))) (lbl (llvmName dest)) (b (val base))]
+                (str (descGuard p lbl b d.name "fast")
+                     lbl ".fast:\n"
+                     (rawSlotLoad (str "  " p ".fastval = ") p (str p ".obj") (fieldOffset d index) (kindAt d index))
+                     "  br label %" lbl ".join\n"
+                     lbl ".slow:\n"
+                     (fieldMiss (str "  " p ".slowval = ") b field)
+                     "  br label %" lbl ".join\n"
+                     lbl ".join:\n"
+                     lhs "phi %Val [ " p ".fastval, %" lbl ".fast ], [ " p ".slowval, %" lbl ".slow ]\n")))
+    ((none) (emitTypedFieldRead lhs dest (val base) field index)))
+
+fn emitFusedRead lhs: String env: FnEnv dest: String t: ty/SsaTy base: String field: String -> String
+  (let [(static (typedFieldIndex env base field))]
+    (match (typedRawDecl env base)
+      ((some d) (match static
+                  ((some idx) (emitFusedDescUnbox lhs dest t (val base) field d idx))
+                  ((none) (emitFusedFieldUnbox lhs dest t (val base) field static (list)))))
+      ((none) (emitFusedFieldUnbox lhs dest t (val base) field static
+                                   (match static ((some _) (list)) ((none) (fieldGuesses env.mod field (fusedTagNum (rawKind t)))))))))
+
+; (:m :do "fused unbox of a descriptor-layout field: a raw word of the wanted kind loads directly, a boxed slot is tag-checked, every other case takes objrt.field with the usual type trap")
+fn emitFusedDescUnbox lhs: String dest: String t: ty/SsaTy base: String field: String d: ty/SsaRecordDecl index: Int64 -> String
+  (let [(p (str "%" (llvmName dest))) (lbl (llvmName dest)) (kind (rawKind t)) (lty (llTy t)) (expect (fusedTagNum kind))
+        (k (kindAt d index)) (off (fieldOffset d index))]
+    (str (descGuard p lbl base d.name "hit")
+         lbl ".hit:\n"
+         (cond ((= k expect) (str "  br label %" lbl ".fast\n"))
+               ((= k 255) (str "  " p ".ftagp = getelementptr inbounds i8, ptr " p ".obj, i64 " off "\n"
+                               "  " p ".ftag = load i32, ptr " p ".ftagp\n"
+                               "  " p ".rightTag = icmp eq i32 " p ".ftag, " expect "\n"
+                               "  br i1 " p ".rightTag, label %" lbl ".fast, label %" lbl ".slow\n"))
+               (else (str "  br label %" lbl ".slow\n")))
+         lbl ".fast:\n"
+         "  " p ".valp = getelementptr inbounds i8, ptr " p ".obj, i64 " (if (= k 255) (+ off 8) off) "\n"
+         (fusedFastLoad p kind lty)
+         "  br label %" lbl ".join\n"
+         lbl ".slow:\n"
+         (fieldMiss (str "  " p ".slowfield = ") base field)
+         (valTag (str p ".sf") (str p ".slowfield"))
+         "  " p ".sf.ok = icmp eq i32 " p ".sf.vtag, " expect "\n"
+         "  br i1 " p ".sf.ok, label %" lbl ".slowok, label %" lbl ".trap\n"
+         (typeTrap (str p ".sf") lbl expect)
+         lbl ".slowok:\n"
+         (unboxPayload (str "  " p ".slowval = ") (str p ".slowval") kind (str p ".slowfield"))
+         "  br label %" lbl ".join\n"
+         lbl ".join:\n"
+         lhs "phi " lty " [ " p ".fastval, %" lbl ".fast ], [ " p ".slowval, %" lbl ".slowok ]\n"))
 
 fn emitTypedFieldRead lhs: String dest: String base: String field: String index: Int64 -> String
   (let [(p (str "%" (llvmName dest))) (lbl (llvmName dest)) (slotOff (+ 24 (* index 16)))]
@@ -648,11 +813,49 @@ fn emitTypedFieldRead lhs: String dest: String base: String field: String index:
          lbl ".join:\n"
          lhs "phi %Val [ " p ".fastval, %" lbl ".fast ], [ " p ".slowval, %" lbl ".slow ]\n"))
 
-fn emitFusedFieldUnbox lhs: String dest: String t: ty/SsaTy base: String field: String static: (Option Int64) -> String
+; (:m :do "one guessed descriptor: equal keys word means the field sits at that schema's constant offset; a raw word of the wanted kind loads directly, a boxed slot is tag-checked first")
+fn guessBlocks p: String lbl: String field: String expect: Int64 kind: String lty: String guesses: (List ty/SsaRecordDecl) -> String
+  (stringJoin (map (fn [(j Int64)] -> String
+                     (let [(d (optionOr (listGet guesses j) (ty/ssaRecordDecl "" (list))))
+                           (at (optionOr (listIndexOf d.fields field) 0)) (k (kindAt d at)) (off (fieldOffset d at))
+                           (q (str p ".g" j)) (here (str lbl ".g" j)) (next (if (= (+ j 1) (listLength guesses)) (str lbl ".rec") (str lbl ".g" (+ j 1))))]
+                       (str here ":\n"
+                            "  " q ".is = icmp eq ptr " p ".gkw, " (descTagged d.name) "\n"
+                            "  br i1 " q ".is, label %" here ".hit, label %" next "\n"
+                            here ".hit:\n"
+                            (if (= k 255)
+                              (str "  " q ".tagp = getelementptr inbounds i8, ptr " p ".gobj, i64 " off "\n"
+                                   "  " q ".tag = load i32, ptr " q ".tagp\n"
+                                   "  " q ".tagOk = icmp eq i32 " q ".tag, " expect "\n"
+                                   "  br i1 " q ".tagOk, label %" here ".val, label %" lbl ".slow\n"
+                                   here ".val:\n"
+                                   "  " q ".valp = getelementptr inbounds i8, ptr " p ".gobj, i64 " (+ off 8) "\n")
+                              (str "  br label %" here ".val\n"
+                                   here ".val:\n"
+                                   "  " q ".valp = getelementptr inbounds i8, ptr " p ".gobj, i64 " off "\n"))
+                            (if (= kind "bool")
+                              (str "  " q ".w = load i64, ptr " q ".valp\n  " q ".v = trunc i64 " q ".w to i1\n")
+                              (str "  " q ".v = load " lty ", ptr " q ".valp\n"))
+                            "  br label %" lbl ".join\n")))
+                   (range 0 (listLength guesses))) "")
+
+fn guessArms p: String lbl: String guesses: (List ty/SsaRecordDecl) -> String
+  (stringJoin (map (fn [(j Int64)] -> String (str ", [ " p ".g" j ".v, %" lbl ".g" j ".val ]")) (range 0 (listLength guesses))) "")
+
+fn emitFusedFieldUnbox lhs: String dest: String t: ty/SsaTy base: String field: String static: (Option Int64) guesses: (List ty/SsaRecordDecl) -> String
   (let [(p (str "%" (llvmName dest))) (lbl (llvmName dest)) (kind (rawKind t)) (lty (llTy t)) (expect (fusedTagNum kind))]
     (str (valTag p base)
          "  " p ".isRec = icmp eq i32 " p ".vtag, 7\n"
-         "  br i1 " p ".isRec, label %" lbl ".rec, label %" lbl ".slow\n"
+         (if (listEmpty? guesses)
+           (str "  br i1 " p ".isRec, label %" lbl ".rec, label %" lbl ".slow\n")
+           (str "  br i1 " p ".isRec, label %" lbl ".guess, label %" lbl ".slow\n"
+                lbl ".guess:\n"
+                "  " p ".gobjw = extractvalue %Val " base ", 1\n"
+                "  " p ".gobj = inttoptr i64 " p ".gobjw to ptr\n"
+                "  " p ".gkwp = getelementptr inbounds i8, ptr " p ".gobj, i64 16\n"
+                "  " p ".gkw = load ptr, ptr " p ".gkwp\n"
+                "  br label %" lbl ".g0\n"
+                (guessBlocks p lbl field expect kind lty guesses)))
          (recordKeysPrelude p lbl base field)
          (match static
            ((none) (str "  br label %" lbl ".loop\n"
@@ -695,7 +898,7 @@ fn emitFusedFieldUnbox lhs: String dest: String t: ty/SsaTy base: String field: 
          (unboxPayload (str "  " p ".slowval = ") (str p ".slowval") kind (str p ".slowfield"))
          "  br label %" lbl ".join\n"
          lbl ".join:\n"
-         lhs "phi " lty " [ " p ".fastval, %" lbl ".fast ], [ " p ".slowval, %" lbl ".slowok ]\n"))
+         lhs "phi " lty " [ " p ".fastval, %" lbl ".fast ], [ " p ".slowval, %" lbl ".slowok ]" (guessArms p lbl guesses) "\n"))
 
 fn emitFieldIdInit field: String -> String
   (str "define internal void " (fieldIdInitSym field) "() {\nbb.entry:\n"
@@ -709,14 +912,15 @@ fn emitCtorIdInit variant: String -> String
        "  store i32 %kw.aux, ptr " (ctorIdSym variant) "\n"
        "  store i1 true, ptr " (ctorIdReadySym variant) "\n  ret void\n}\n")
 
-fn emitSchemaIdInit schema: String fields: (List String) -> String
+fn emitSchemaIdInit schema: String fields: (List String) keys: String desc: String -> String
   (let [(n (listLength fields))]
     (str "define internal void " (schemaIdInitSym schema) "() {\nbb.entry:\n"
+         desc
          (internId "%kw.aux" schema)
          "  store i32 %kw.aux, ptr " (schemaIdSym schema) "\n"
          (stringJoin (map (fn [(k Int64)] -> String
                             (str (internId (str "%fkw." k ".aux") (optionOr (listGet fields k) ""))
-                                 "  %fslot." k " = getelementptr inbounds [" n " x i32], ptr " (keyIdsSym schema) ", i64 0, i64 " k "\n"
+                                 "  %fslot." k " = getelementptr inbounds [" n " x i32], ptr " keys ", i64 0, i64 " k "\n"
                                  "  store i32 %fkw." k ".aux, ptr %fslot." k "\n"))
                           (range 0 n)) "")
          "  store i1 true, ptr " (schemaIdReadySym schema) "\n  ret void\n}\n"))
@@ -747,8 +951,23 @@ fn emitConstruct lhs: String dest: String variant: String fields: (List String) 
     (str (emitCtorAlloc lbl variant (map val fields))
          lhs "insertvalue %Val { i64 8, i64 0 }, i64 %" lbl ".objw, 1\n"))
 
-fn emitRecord lhs: String dest: String schemaName: String fields: (List String) values: (List String) declared: (List String) -> String
-  (let [(p (str "%" (llvmName dest))) (lbl (llvmName dest)) (n (listLength values))
+fn emitRecord lhs: String env: FnEnv dest: String schemaName: String fields: (List String) values: (List String) -> String
+  (match (recordDeclOf env.mod schemaName)
+    ((some d) (if (rawLiteral? d fields)
+                (emitRawRecord lhs env dest d fields values)
+                (emitBoxedRecord lhs dest schemaName fields values d.fields (keysBase env.mod schemaName))))
+    ((none) (emitBoxedRecord lhs dest schemaName fields values (list) (keyIdsSym schemaName))))
+
+fn schemaReady p: String lbl: String schemaName: String next: String -> String
+  (str "  " p ".ready = load i1, ptr " (schemaIdReadySym schemaName) "\n"
+       "  br i1 " p ".ready, label %" lbl "." next ", label %" lbl ".resolve\n"
+       lbl ".resolve:\n"
+       "  call void " (schemaIdInitSym schemaName) "()\n"
+       "  br label %" lbl "." next "\n")
+
+; (:m :do "today's boxed layout: n = +12, slot i at 24 + 16 i in literal order, keys the declared array when the literal lists all fields in order, else an inline array after the slots")
+fn boxedRecordAlloc p: String schemaReg: String fields: (List String) values: (List String) declared: (List String) keys: String -> String
+  (let [(n (listLength values))
         (full (= fields declared)) (bytes (+ 24 (* n (if full 16 20))))
         (stores (stringJoin (map (fn [(i Int64)] -> String
                                     (str "  " p ".f" i "p = getelementptr inbounds i8, ptr " p ".objp, i64 " (+ 24 (* i 16)) "\n"
@@ -757,33 +976,106 @@ fn emitRecord lhs: String dest: String schemaName: String fields: (List String) 
         (keyStores (if full "" (stringJoin (map (fn [(i Int64)] -> String
                                        (let [(field (optionOr (listGet fields i) ""))
                                              (idx (optionOr (listIndexOf declared field) 0))
-                                             (slot (str "%" (llvmName dest) ".key" i))
-                                             (src (str "%" (llvmName dest) ".src" i))]
-                                         (str "  " src " = getelementptr inbounds [" (listLength declared) " x i32], ptr " (keyIdsSym schemaName) ", i64 0, i64 " idx "\n"
+                                             (slot (str p ".key" i))
+                                             (src (str p ".src" i))]
+                                         (str "  " src " = getelementptr inbounds [" (listLength declared) " x i32], ptr " keys ", i64 0, i64 " idx "\n"
                                               "  " slot " = getelementptr inbounds i32, ptr " p ".keyarr, i32 " i "\n"
                                               "  " slot ".id = load i32, ptr " src "\n"
                                               "  store i32 " slot ".id, ptr " slot "\n")))
                                      (range 0 n)) "")))]
-    (str "  " p ".ready = load i1, ptr " (schemaIdReadySym schemaName) "\n"
-         "  br i1 " p ".ready, label %" lbl ".alloc, label %" lbl ".resolve\n"
-         lbl ".resolve:\n"
-         "  call void " (schemaIdInitSym schemaName) "()\n"
-         "  br label %" lbl ".alloc\n"
-         lbl ".alloc:\n"
-         "  " p ".schema = load i32, ptr " (schemaIdSym schemaName) "\n"
-         "  " p ".objp = " (gc/fastAllocCall 2 bytes) "\n"
+    (str "  " p ".objp = " (gc/fastAllocCall 2 bytes) "\n"
          "  " p ".schemap = getelementptr inbounds i8, ptr " p ".objp, i64 8\n"
-         "  store i32 " p ".schema, ptr " p ".schemap\n"
+         "  store i32 " schemaReg ", ptr " p ".schemap\n"
          "  " p ".np = getelementptr inbounds i8, ptr " p ".objp, i64 12\n"
          "  store i32 " n ", ptr " p ".np\n"
          "  " p ".keysp = getelementptr inbounds i8, ptr " p ".objp, i64 16\n"
-         (if full (str "  store ptr " (keyIdsSym schemaName) ", ptr " p ".keysp\n")
+         (if full (str "  store ptr " keys ", ptr " p ".keysp\n")
              (str "  " p ".keyarr = getelementptr inbounds i8, ptr " p ".objp, i64 " (+ 24 (* n 16)) "\n"
                   "  store ptr " p ".keyarr, ptr " p ".keysp\n"))
          stores
-         keyStores
+         keyStores))
+
+fn emitBoxedRecord lhs: String dest: String schemaName: String fields: (List String) values: (List String) declared: (List String) keys: String -> String
+  (let [(p (str "%" (llvmName dest))) (lbl (llvmName dest))]
+    (str (schemaReady p lbl schemaName "alloc")
+         lbl ".alloc:\n"
+         "  " p ".schema = load i32, ptr " (schemaIdSym schemaName) "\n"
+         (boxedRecordAlloc p (str p ".schema") fields values declared keys)
          "  " p ".objw = ptrtoint ptr " p ".objp to i64\n"
          lhs "insertvalue %Val { i64 7, i64 0 }, i64 " p ".objw, 1\n"))
+
+; (:m :ref UNBOXFIELDS :do "descriptor layout: +12 = nb boxed slots (the rc and gc kid scans stop there), +16 = descriptor keys | 1, values permuted from literal order into slot order at compile time")
+fn rawRecordAlloc p: String env: FnEnv d: ty/SsaRecordDecl schemaReg: String fields: (List String) values: (List String) wordOf: (fn [Int64] -> String) -> String
+  (let [(stores (stringJoin (map (fn [(i Int64)] -> String
+                                    (let [(at (literalDecl env d fields i)) (k (kindAt d at)) (v (optionOr (listGet values i) ""))]
+                                      (str "  " p ".f" i "p = getelementptr inbounds i8, ptr " p ".objp, i64 " (fieldOffset d at) "\n"
+                                           (if (= k 255)
+                                             (str "  store %Val " (val v) ", ptr " p ".f" i "p\n")
+                                             (str "  store i64 " (wordOf i) ", ptr " p ".f" i "p\n")))))
+                                  (range 0 (listLength values))) ""))]
+    (str "  " p ".objp = " (gc/fastAllocCall 2 (rawRecordBytes d)) "\n"
+         "  " p ".schemap = getelementptr inbounds i8, ptr " p ".objp, i64 8\n"
+         "  store i32 " schemaReg ", ptr " p ".schemap\n"
+         "  " p ".np = getelementptr inbounds i8, ptr " p ".objp, i64 12\n"
+         "  store i32 " (boxedSlots d) ", ptr " p ".np\n"
+         "  " p ".keysp = getelementptr inbounds i8, ptr " p ".objp, i64 16\n"
+         "  store ptr " (descTagged d.name) ", ptr " p ".keysp\n"
+         stores))
+
+fn staticWordText p: String env: FnEnv d: ty/SsaRecordDecl fields: (List String) values: (List String) i: Int64 -> String
+  (let [(k (kindAt d (literalDecl env d fields i))) (v (optionOr (listGet values i) "")) (w (str p ".w" i))]
+    (match (staticRaw env v k)
+      ((some x) (cond ((= k 3) (str "  " w " = bitcast double " (val x) " to i64\n"))
+                      ((= k 1) (str "  " w " = zext i1 " (val x) " to i64\n"))
+                      (else "")))
+      ((none) (if (= k 255) "" (str "  " w " = extractvalue %Val " (val v) ", 1\n")))))
+
+fn wordName p: String env: FnEnv d: ty/SsaRecordDecl fields: (List String) values: (List String) i: Int64 -> String
+  (let [(k (kindAt d (literalDecl env d fields i))) (v (optionOr (listGet values i) ""))]
+    (match (staticRaw env v k)
+      ((some x) (if (= k 2) (val x) (str p ".w" i)))
+      ((none) (str p ".w" i))))
+
+fn tagCheck p: String env: FnEnv d: ty/SsaRecordDecl fields: (List String) values: (List String) i: Int64 -> String
+  (let [(k (kindAt d (literalDecl env d fields i))) (v (optionOr (listGet values i) "")) (q (str p ".t" i))]
+    (str (valTag q (val v))
+         "  " q ".ok = icmp eq i32 " q ".vtag, " k "\n"))
+
+fn emitRawRecord lhs: String env: FnEnv dest: String d: ty/SsaRecordDecl fields: (List String) values: (List String) -> String
+  (let [(p (str "%" (llvmName dest))) (lbl (llvmName dest)) (schemaName d.name)
+        (dyn (dynamicRaws env d fields values))
+        (words (stringJoin (map (fn [(i Int64)] -> String (staticWordText p env d fields values i)) (range 0 (listLength values))) ""))
+        (wordOf (fn [(i Int64)] -> String (wordName p env d fields values i)))]
+    (if (listEmpty? dyn)
+      (str (schemaReady p lbl schemaName "alloc")
+           lbl ".alloc:\n"
+           "  " p ".schema = load i32, ptr " (schemaIdSym schemaName) "\n"
+           words
+           (rawRecordAlloc p env d (str p ".schema") fields values wordOf)
+           "  " p ".objw = ptrtoint ptr " p ".objp to i64\n"
+           lhs "insertvalue %Val { i64 7, i64 0 }, i64 " p ".objw, 1\n")
+      (let [(oks (map (fn [(i Int64)] -> String (str p ".t" i ".ok")) dyn))
+            (allName (fn [(j Int64)] -> String (if (< j 0) "true" (str p ".all" j))))
+            (allOk (pair (allName (- (listLength oks) 1))
+                         (stringJoin (map (fn [(j Int64)] -> String (str "  " (allName j) " = and i1 " (allName (- j 1)) ", " (optionOr (listGet oks j) "true") "\n"))
+                                          (range 0 (listLength oks))) "")))]
+        (str (schemaReady p lbl schemaName "chk")
+             lbl ".chk:\n"
+             "  " p ".schema = load i32, ptr " (schemaIdSym schemaName) "\n"
+             (stringJoin (map (fn [(i Int64)] -> String (tagCheck p env d fields values i)) dyn) "")
+             (pairSecond allOk)
+             "  br i1 " (pairFirst allOk) ", label %" lbl ".raw, label %" lbl ".boxed\n"
+             lbl ".raw:\n"
+             words
+             (rawRecordAlloc (str p ".r") env d (str p ".schema") fields values wordOf)
+             "  br label %" lbl ".alloc\n"
+             lbl ".boxed:\n"
+             (boxedRecordAlloc (str p ".b") (str p ".schema") fields values d.fields (descKeys schemaName))
+             "  br label %" lbl ".alloc\n"
+             lbl ".alloc:\n"
+             "  " p ".objp = phi ptr [ " p ".r.objp, %" lbl ".raw ], [ " p ".b.objp, %" lbl ".boxed ]\n"
+             "  " p ".objw = ptrtoint ptr " p ".objp to i64\n"
+             lhs "insertvalue %Val { i64 7, i64 0 }, i64 " p ".objw, 1\n"))))
 
 fn emitMakeClosure lhs: String dest: String callee: String caps: (List String) -> String
   (let [(p (str "%" (llvmName dest))) (n (listLength caps)) (bytes (+ 24 (* n 16)))
@@ -1024,7 +1316,56 @@ fn emitListLiteralKept lhs: String dest: String items: (List String) kept: Strin
     (str (stringJoin (listReverse built.lines) "")
          lhs "insertvalue %Val " built.tail ", i64 6, 0\n"))
 
+; (:m :ref UNBOXFIELDS :do "a read of a literal built in this function: a descriptor-layout literal loads its slot or raw word at the constant offset, guarded by the keys word only when the literal may have taken the boxed fallback")
 fn emitStaticFieldRead lhs: String env: FnEnv dest: String base: String index: Int64 -> String
+  (match (nameIndexGet env.records base)
+    ((some op) (match op
+                 ((ty/opRecord schemaName fields values) (match (recordDeclOf env.mod schemaName)
+                                                            ((some d) (if (rawLiteral? d fields)
+                                                                        (emitStaticRawRead lhs env dest base index d fields values)
+                                                                        (emitStaticBoxedRead lhs env dest base index)))
+                                                            ((none) (emitStaticBoxedRead lhs env dest base index))))
+                 (_ (emitStaticBoxedRead lhs env dest base index))))
+    ((none) (emitStaticBoxedRead lhs env dest base index)))
+
+fn rawSlotLoad lhs: String p: String obj: String off: Int64 kind: Int64 -> String
+  (if (= kind 255)
+    (str "  " p ".slotp = getelementptr inbounds i8, ptr " obj ", i64 " off "\n"
+         lhs "load %Val, ptr " p ".slotp\n")
+    (str "  " p ".slotp = getelementptr inbounds i8, ptr " obj ", i64 " off "\n"
+         "  " p ".raw = load i64, ptr " p ".slotp\n"
+         lhs "insertvalue %Val { i64 " kind ", i64 0 }, i64 " p ".raw, 1\n"))
+
+fn emitStaticRawRead lhs: String env: FnEnv dest: String base: String index: Int64 d: ty/SsaRecordDecl fields: (List String) values: (List String) -> String
+  (let [(p (str "%" (llvmName dest))) (lbl (llvmName dest)) (b (val base))
+        (at (literalDecl env d fields index)) (k (kindAt d at)) (off (fieldOffset d at))]
+    (str (valTag p b)
+         "  " p ".isRec = icmp eq i32 " p ".vtag, 7\n"
+         "  br i1 " p ".isRec, label %" lbl ".chk, label %" lbl ".bad\n"
+         lbl ".bad:\n"
+         "  call void @rterr.match(ptr " (nameSym env.name) ")\n"
+         "  unreachable\n"
+         lbl ".chk:\n"
+         (valObj p b)
+         (if (listEmpty? (dynamicRaws env d fields values))
+           (str "  br label %" lbl ".fast\n"
+                lbl ".fast:\n"
+                (rawSlotLoad lhs p (str p ".obj") off k))
+           (str "  " p ".kwp = getelementptr inbounds i8, ptr " p ".obj, i64 16\n"
+                "  " p ".kw = load ptr, ptr " p ".kwp\n"
+                "  " p ".isDesc = icmp eq ptr " p ".kw, " (descTagged d.name) "\n"
+                "  br i1 " p ".isDesc, label %" lbl ".sraw, label %" lbl ".sbox\n"
+                lbl ".sraw:\n"
+                (rawSlotLoad (str "  " p ".rv = ") (str p ".r") (str p ".obj") off k)
+                "  br label %" lbl ".fast\n"
+                lbl ".sbox:\n"
+                "  " p ".bslotp = getelementptr inbounds i8, ptr " p ".obj, i64 " (+ 24 (* index 16)) "\n"
+                "  " p ".bv = load %Val, ptr " p ".bslotp\n"
+                "  br label %" lbl ".fast\n"
+                lbl ".fast:\n"
+                lhs "phi %Val [ " p ".rv, %" lbl ".sraw ], [ " p ".bv, %" lbl ".sbox ]\n"))))
+
+fn emitStaticBoxedRead lhs: String env: FnEnv dest: String base: String index: Int64 -> String
   (let [(p (str "%" (llvmName dest))) (lbl (llvmName dest)) (b (val base)) (tagOff (+ 24 (* index 16)))]
     (str (valTag p b)
          "  " p ".isRec = icmp eq i32 " p ".vtag, 7\n"
@@ -1445,7 +1786,7 @@ fn emitInstr env: FnEnv ins: ty/SsaInstr -> String
                                   (match (staticFieldIndex env base field)
                                     ((some idx) (emitStaticFieldRead lhs env d base idx))
                                     ((none) (match (typedFieldIndex env base field)
-                                              ((some idx) (emitTypedFieldRead lhs d (val base) field idx))
+                                              ((some idx) (emitTypedRead lhs env d base field idx))
                                               ((none) (fieldMiss lhs (val base) field)))))))
       ((ty/opVariantField base i) (if (some? (nameIndexGet env.fused d)) "" (emitVariantFieldVal lhs d (val base) i)))
       ((ty/opUnbox v) (match (nameIndexGet env.fused v)
@@ -1453,11 +1794,11 @@ fn emitInstr env: FnEnv ins: ty/SsaInstr -> String
                                   ((some w) (emitEntryUnbox lhs d t v w))
                                   ((none) (emitUnboxInline lhs d t v))))
                         ((some fusedOp) (match fusedOp
-                                          ((ty/opField base field) (emitFusedFieldUnbox lhs d t (val base) field (typedFieldIndex env base field)))
+                                          ((ty/opField base field) (emitFusedRead lhs env d t base field))
                                           ((ty/opVariantField base i) (emitFusedVariantUnbox lhs d t (val base) i))
                                           (_ (emitUnboxInline lhs d t v))))))
       ((ty/opConstruct _ variant fields) (emitConstruct lhs d variant fields))
-      ((ty/opRecord schemaName fields values) (emitRecord lhs d schemaName fields values (optionOr (nameIndexGet env.mod.records schemaName) (list))))
+      ((ty/opRecord schemaName fields values) (emitRecord lhs env d schemaName fields values))
       ((ty/opMakeClosure callee caps) (emitMakeClosure lhs d callee caps))
       ((ty/opEntry name args) (match (nativeEntry name (listLength args))
                                  ((some b) (emitNativeEntry lhs d b args))
@@ -2210,10 +2551,10 @@ fn constructedSchemas m: ty/SsaModule -> (List String)
 fn loadGlobalNames m: ty/SsaModule -> (List String)
   (distinct (gather (fn [(op ty/SsaOp)] -> (List String) (match op ((ty/opLoadGlobal name) (list name)) (_ (list)))) (allOps m)))
 
-fn recordSchemaFields m: ty/SsaModule schema: String -> (List String)
-  (match (listHead (filter (fn [(r ty/SsaRecordDecl)] -> Bool (= r.name schema)) m.records))
-    ((some r) r.fields)
-    ((none) (list)))
+fn distinctRecords records: (List ty/SsaRecordDecl) -> (List ty/SsaRecordDecl)
+  (listReverse (pairSecond (fold (fn [(acc (Pair NameIndex (List ty/SsaRecordDecl))) (d ty/SsaRecordDecl)] -> (Pair NameIndex (List ty/SsaRecordDecl))
+                                   (if (nameIndexHas? (pairFirst acc) d.name) acc (pair (nameIndexSet (pairFirst acc) d.name true) (cons d (pairSecond acc)))))
+                                 (pair (nameIndexEmpty) (list)) records)))
 
 fn idCellNames m: ty/SsaModule -> (List String)
   (distinct (gather (fn [(op ty/SsaOp)] -> (List String)
@@ -2280,11 +2621,15 @@ fn emitConstants m: ty/SsaModule wasm: Bool fieldIds: (List String) -> String
                             (str (ctorIdSym v) " = internal global i32 0\n"
                                  (ctorIdReadySym v) " = internal global i1 false\n"))
                           (constructedVariants m)))
-        (schemaIdLines (map (fn [(s String)] -> String
-                              (str (schemaIdSym s) " = internal global i32 0\n"
-                                   (schemaIdReadySym s) " = internal global i1 false\n"
-                                   (keyIdsSym s) " = internal global [" (listLength (recordSchemaFields m s)) " x i32] zeroinitializer\n"))
-                            (constructedSchemas m)))
+        (built (constructedSchemas m))
+        (schemaIdLines (listAppend (map (fn [(s String)] -> String
+                                          (str (schemaIdSym s) " = internal global i32 0\n"
+                                               (schemaIdReadySym s) " = internal global i1 false\n"
+                                               (match (recordDeclOf menv s)
+                                                 ((some d) (if (rawDecl? d) (descriptorGlobal d) (str (keyIdsSym s) " = internal global [" (listLength d.fields) " x i32] zeroinitializer\n")))
+                                                 ((none) (str (keyIdsSym s) " = internal global [0 x i32] zeroinitializer\n")))))
+                                        built)
+                                   (map descriptorGlobal (filter (fn [(d ty/SsaRecordDecl)] -> Bool (and (rawDecl? d) (not (listContains? built d.name)))) (distinctRecords m.records)))))
         (protoLines (if (listEmpty? (closureTargets m))
                       (list)
                       (listAppend (cons "@protoFile.compiled = private unnamed_addr constant [11 x i8] c\"<compiled>\x5c00\"\n"
@@ -2345,13 +2690,30 @@ fn emitSharedInit i: Int64 g: ty/SsaGlobal -> String
          "  br label %" lbl ".done\n"
          lbl ".done:\n"))
 
+; (:m :ref UNBOXFIELDS :do "under #field.<name> the records index also lists the descriptor-layout schemas declaring that field, the guesses an untyped fused read checks before its key scan")
+fn fieldOwners index: NameIndex records: (List ty/SsaRecordDecl) -> NameIndex
+  (fold (fn [(acc NameIndex) (d ty/SsaRecordDecl)] -> NameIndex
+          (fold (fn [(a NameIndex) (f String)] -> NameIndex
+                  (let [(key (str "#field." f))]
+                    (nameIndexSet a key (listAppend (optionOr (nameIndexGet a key) (list)) (list d)))))
+                acc d.fields))
+        index (filter rawDecl? (map (fn [(r ty/SsaRecordDecl)] -> ty/SsaRecordDecl (optionOr (nameIndexGet index r.name) r)) (distinctRecords records))))
+
+fn fieldGuesses menv: ModEnv field: String expect: Int64 -> (List ty/SsaRecordDecl)
+  (listTake (filter (fn [(d ty/SsaRecordDecl)] -> Bool
+                      (match (listIndexOf d.fields field)
+                        ((some i) (let [(k (kindAt d i))] (or (= k expect) (= k 255))))
+                        ((none) false)))
+                    (optionOr (nameIndexGet menv.records (str "#field." field)) (list)))
+            4)
+
 fn moduleEnv m: ty/SsaModule -> ModEnv
   (ModEnv :name m.name
           :functions (fold (fn [(acc NameIndex) (f ty/SsaFunction)] -> NameIndex (nameIndexSet acc f.name f)) (nameIndexEmpty) m.functions)
           :externs (fold (fn [(acc NameIndex) (e ty/SsaExtern)] -> NameIndex (nameIndexSet acc e.name e)) (nameIndexEmpty) m.externs)
           :types (fold (fn [(acc NameIndex) (d ty/SsaTypeDecl)] -> NameIndex (nameIndexSet acc d.name d.variants)) (nameIndexEmpty) m.types)
           :strings (pairSecond (fold (fn [(acc (Pair Int64 NameIndex)) (s String)] -> (Pair Int64 NameIndex) (pair (+ (pairFirst acc) 1) (nameIndexSet (pairSecond acc) (stringFromInt64 (pairFirst acc)) s))) (pair 0 (nameIndexEmpty)) m.strings))
-          :records (fold (fn [(acc NameIndex) (r ty/SsaRecordDecl)] -> NameIndex (nameIndexSet acc r.name r.fields)) (nameIndexEmpty) m.records)
+          :records (fieldOwners (fold (fn [(acc NameIndex) (r ty/SsaRecordDecl)] -> NameIndex (nameIndexSet acc r.name r)) (nameIndexEmpty) m.records) m.records)
           :boxed (nameIndexEmpty))
 
 fn rtFormatBuiltin? name: String -> Bool
@@ -3163,7 +3525,9 @@ fn emitDefinitionsRooted m: ty/SsaModule entryCalls: String rooted: Bool fieldId
         (resolvers (map (fn [(t String)] -> String (emitVariantIdsInit menv t)) (switchTypes m)))
         (fieldResolvers (map emitFieldIdInit fieldIds))
         (ctorResolvers (map emitCtorIdInit (constructedVariants m)))
-        (schemaResolvers (map (fn [(s String)] -> String (emitSchemaIdInit s (recordSchemaFields m s))) (constructedSchemas m)))
+        (schemaResolvers (map (fn [(s String)] -> String (match (recordDeclOf menv s)
+                                                    ((some d) (emitSchemaIdInit s d.fields (keysBase menv s) (if (rawDecl? d) (descriptorInit d) "")))
+                                                    ((none) (emitSchemaIdInit s (list) (keyIdsSym s) "")))) (constructedSchemas m)))
         (init (emitInit m))]
     (let [(core (listAppend (listAppend (listAppend (listAppend (listAppend (listAppend fns tramps) resolvers) fieldResolvers) ctorResolvers) schemaResolvers)
                             (if (stringEmpty? init) (list) (list init))))

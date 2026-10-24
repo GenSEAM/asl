@@ -641,6 +641,149 @@ fn mapPairs m: (Map K V) -> (List (Pair K V))
 fn mapFromPairs ps: (List (Pair K V)) -> (Map K V)
   (fold (fn [m p] (match p ((pair k v) (mapSet m k v)))) (mapEmpty) ps)
 
+
+; (:m :ref INTHASHMAP :do "HashMap: open addressing with linear probing, capacity a power of two, a stored hash per slot (0 = vacant, a stored hash is odd), growth at load 3/4, backward-shift removal. The primitives below are the reference every target runs (three persistent maps); under the untraced RC runtime asl-target-llvm/hashRt replaces their bodies with one flat object of (hash key value) triples whose writes go in place when the map is unique and copy it when shared, so maps stay persistent")
+enum HashMap
+  (preludeHashOf count: Int64 capacity: Int64 hashes: (Map Int64 Int64) keys: (Map Int64 K) values: (Map Int64 V))
+
+fn preludeHashNew cap: Int64 -> (HashMap K V)
+  (preludeHashOf 0 (max cap 1) (mapEmpty) (mapEmpty) (mapEmpty))
+
+fn preludeHashCapacity m: (HashMap K V) -> Int64
+  (match m ((preludeHashOf _ cap _ _ _) cap))
+
+fn preludeHashCountOf m: (HashMap K V) -> Int64
+  (match m ((preludeHashOf n _ _ _ _) n))
+
+fn preludeHashSetCount m: (HashMap K V) n: Int64 -> (HashMap K V)
+  (match m ((preludeHashOf _ cap hs ks vs) (preludeHashOf n cap hs ks vs)))
+
+fn preludeHashInside m: (HashMap K V) j: Int64 -> Int64
+  (if (and (>= j 0) (< j (preludeHashCapacity m))) j (preludeTrap "HashMap: the slot is outside the table"))
+
+fn preludeHashState m: (HashMap K V) j: Int64 -> Int64
+  (match m ((preludeHashOf _ _ hs _ _) (mapGetOr hs (preludeHashInside m j) 0)))
+
+fn preludeHashKeyAt m: (HashMap K V) j: Int64 -> K
+  (match m ((preludeHashOf _ _ _ ks _) (match (mapGet ks (preludeHashInside m j)) ((some k) k) ((none) (preludeTrap "HashMap: the slot is vacant")))))
+
+fn preludeHashValueAt m: (HashMap K V) j: Int64 -> V
+  (match m ((preludeHashOf _ _ _ _ vs) (match (mapGet vs (preludeHashInside m j)) ((some v) v) ((none) (preludeTrap "HashMap: the slot is vacant")))))
+
+fn preludeHashPutEntry m: (HashMap K V) j: Int64 h: Int64 k: K -> (HashMap K V)
+  (match m ((preludeHashOf n cap hs ks vs) (let [(i (preludeHashInside m j))] (preludeHashOf n cap (mapSet hs i h) (mapSet ks i k) vs))))
+
+fn preludeHashPutValue m: (HashMap K V) j: Int64 v: V -> (HashMap K V)
+  (match m ((preludeHashOf n cap hs ks vs) (preludeHashOf n cap hs ks (mapSet vs (preludeHashInside m j) v))))
+
+fn preludeHashClear m: (HashMap K V) j: Int64 -> (HashMap K V)
+  (match m ((preludeHashOf n cap hs ks vs) (let [(i (preludeHashInside m j))] (preludeHashOf n cap (mapRemove hs i) (mapRemove ks i) (mapRemove vs i)))))
+
+; (:m :ref INTHASHMAP :do "move the triple at from to the slot to and leave from vacant")
+fn preludeHashMoveSlot m: (HashMap K V) from: Int64 to: Int64 -> (HashMap K V)
+  (preludeHashClear (preludeHashPutValue (preludeHashPutEntry m to (preludeHashState m from) (preludeHashKeyAt m from)) to (preludeHashValueAt m from)) from)
+
+; (:m :ref INTHASHMAP :do "an odd, non-negative hash of any key, consistent with =: the treap rank of the key's text; the LLVM target replaces the body (Int64 by a Fibonacci multiply, String by FNV-1a over its bytes, other values by this body)")
+fn preludeHashKey k: K -> Int64
+  (+ (* (mod (preludeRank k) 1073741824) 2) 1)
+
+fn preludeHashSlot h: Int64 mask: Int64 -> Int64
+  (& (>> h 1) mask)
+
+; (:m :ref INTHASHMAP :do "linear probe from slot j: the slot of the key, or the first vacant one; the table is never full. Four parameters at most for every primitive the native splice replaces: a fifth would travel through the spill area")
+fn preludeHashFind m: (HashMap K V) h: Int64 k: K j: Int64 -> Int64
+  (let [(s (preludeHashState m j))]
+    (cond
+      ((= s 0) j)
+      ((and (= s h) (= (preludeHashKeyAt m j) k)) j)
+      (else (preludeHashFind m h k (& (+ j 1) (- (preludeHashCapacity m) 1))))))
+
+fn preludeHashFree m: (HashMap K V) j: Int64 mask: Int64 -> Int64
+  (if (= (preludeHashState m j) 0) j (preludeHashFree m (& (+ j 1) mask) mask))
+
+fn preludeHashRehash fresh: (HashMap K V) old: (HashMap K V) i: Int64 cap: Int64 -> (HashMap K V)
+  (if (>= i cap) fresh
+    (let [(h (preludeHashState old i))]
+      (if (= h 0)
+        (preludeHashRehash fresh old (+ i 1) cap)
+        (let [(to (preludeHashFree fresh (preludeHashSlot h (- (preludeHashCapacity fresh) 1)) (- (preludeHashCapacity fresh) 1)))]
+          (preludeHashRehash (preludeHashPutValue (preludeHashPutEntry fresh to h (preludeHashKeyAt old i)) to (preludeHashValueAt old i)) old (+ i 1) cap)))))
+
+fn preludeHashGrow m: (HashMap K V) n: Int64 -> (HashMap K V)
+  (let [(cap (preludeHashCapacity m))]
+    (if (> (* n 4) (* cap 3))
+      (preludeHashRehash (preludeHashSetCount (preludeHashNew (* cap 2)) n) m 0 cap)
+      m))
+
+fn hashMapEmpty -> (HashMap K V)
+  (preludeHashNew 8)
+
+; (:m :ref INTHASHMAP :do "the smallest power of two from 8 up that holds n entries without growing (count * 4 <= cap * 3)")
+fn preludeHashCapacityFor n: Int64 cap: Int64 -> Int64
+  (if (or (<= (* n 4) (* cap 3)) (> cap 1073741824)) cap (preludeHashCapacityFor n (* cap 2)))
+
+; (:m :ref INTHASHMAP :do "an empty map pre-sized for n entries, so n sets never rehash")
+fn hashMapWithCapacity n: Int64 -> (HashMap K V)
+  (preludeHashNew (preludeHashCapacityFor n 8))
+
+fn hashMapLength m: (HashMap K V) -> Int64
+  (preludeHashCountOf m)
+
+fn preludeHashLookup m: (HashMap K V) k: K -> Int64
+  (let [(h (preludeHashKey k))]
+    (preludeHashFind m h k (preludeHashSlot h (- (preludeHashCapacity m) 1))))
+
+fn hashMapSet m: (HashMap K V) k: K v: V -> (HashMap K V)
+  (let [(n (preludeHashCountOf m))
+        (h (preludeHashKey k))
+        (j (preludeHashFind m h k (preludeHashSlot h (- (preludeHashCapacity m) 1))))
+        (fresh (= (preludeHashState m j) 0))]
+    (if fresh
+      (preludeHashGrow (preludeHashSetCount (preludeHashPutValue (preludeHashPutEntry m j h k) j v) (+ n 1)) (+ n 1))
+      (preludeHashPutValue m j v)))
+
+fn hashMapGet m: (HashMap K V) k: K -> (Option V)
+  (let [(j (preludeHashLookup m k))]
+    (if (= (preludeHashState m j) 0) none (some (preludeHashValueAt m j))))
+
+fn hashMapGetOr m: (HashMap K V) k: K default: V -> V
+  (let [(j (preludeHashLookup m k))]
+    (if (= (preludeHashState m j) 0) default (preludeHashValueAt m j)))
+
+fn hashMapHas? m: (HashMap K V) k: K -> Bool
+  (!= (preludeHashState m (preludeHashLookup m k)) 0)
+
+; (:m :ref INTHASHMAP :do "backward-shift deletion: walk the probe run after the hole; an entry whose home slot is not cyclically inside (hole, j] moves into the hole, which then moves to j; the run ends at a vacant slot")
+fn preludeHashShift m: (HashMap K V) mask: Int64 hole: Int64 j: Int64 -> (HashMap K V)
+  (let [(h (preludeHashState m j))]
+    (cond
+      ((= h 0) m)
+      ((>= (& (- j (preludeHashSlot h mask)) mask) (& (- j hole) mask)) (preludeHashShift (preludeHashMoveSlot m j hole) mask j (& (+ j 1) mask)))
+      (else (preludeHashShift m mask hole (& (+ j 1) mask)))))
+
+fn hashMapRemove m: (HashMap K V) k: K -> (HashMap K V)
+  (let [(n (preludeHashCountOf m))
+        (mask (- (preludeHashCapacity m) 1))
+        (j (preludeHashLookup m k))]
+    (if (= (preludeHashState m j) 0)
+      m
+      (preludeHashShift (preludeHashClear (preludeHashSetCount m (- n 1)) j) mask j (& (+ j 1) mask))))
+
+fn preludeHashFoldFrom m: (HashMap K V) j: Int64 acc: B f: (fn [B K V] -> B) -> B
+  (if (>= j (preludeHashCapacity m)) acc
+    (if (= (preludeHashState m j) 0)
+      (preludeHashFoldFrom m (+ j 1) acc f)
+      (preludeHashFoldFrom m (+ j 1) (f acc (preludeHashKeyAt m j) (preludeHashValueAt m j)) f)))
+
+fn hashMapFold m: (HashMap K V) init: B f: (fn [B K V] -> B) -> B
+  (preludeHashFoldFrom m 0 init f)
+
+fn hashMapPairs m: (HashMap K V) -> (List (Pair K V))
+  (hashMapFold m (list) (fn [acc k v] (cons (pair k v) acc)))
+
+fn hashMapFromPairs ps: (List (Pair K V)) -> (HashMap K V)
+  (fold (fn [m p] (match p ((pair k v) (hashMapSet m k v)))) (hashMapEmpty) ps)
+
 fn preludeIoError message: String -> IoError
   (cond
     ((stringStartsWith? message "notFound:") (notFound))

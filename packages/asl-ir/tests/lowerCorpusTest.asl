@@ -55,7 +55,7 @@ fn ! testCorpus -> Bool
         (starting (fold (fn [(acc Int64) (p (Pair String Int64))] -> Int64 (+ acc (pairSecond p))) 0 (startingTable)))
         (ratchet (fold (fn [(acc Int64) (p (Pair String Int64))] -> Int64 (+ acc (pairSecond p))) 0 (remainingTable)))]
     (do
-      (assert (= (listLength units) 50) (str "the closure loads 50 modules (49 plus asl-target-llvm/recordScalar, imported by ssaOpt since RECSROA), got " (listLength units)))
+      (assert (= (listLength units) 53) (str "the closure loads 53 modules (49 plus asl-target-llvm/recordScalar, imported by ssaOpt since RECSROA, plus asl-target-llvm/closureSpec and asl-target-llvm/hashRt since WAVE2, plus asl-target-llvm/loopGuard since LOOPGUARD), got " (listLength units)))
       (assert (= (listLength (mapKeys sources)) (listLength (distinctPathsOf (listAppend units prelude))))
               (str "every closure and prelude source is readable, got " (listLength (mapKeys sources)) " of " (listLength (distinctPathsOf (listAppend units prelude)))))
       (assert (listEmpty? unknown) (str "every remaining diagnostic has a blocker outside the lowerer: " (stringJoin unknown "\n")))

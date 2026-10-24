@@ -524,6 +524,20 @@ fn verifySsaFunction ctx: SsaCtx f: ty/SsaFunction -> (List ty/IrDiag)
     ((none) (list (ssaDiag "ERR_IR_EMPTY_FUNCTION" (str "function '" f.name "' has no blocks") f.name)))
     ((some entryBlock) (verifySsaBlocks ctx f entryBlock)))
 
+fn recordKindDiags m: ty/SsaModule locus: String -> (List ty/IrDiag)
+  (let [(lengthDiags (concatDiags (map (fn [(r ty/SsaRecordDecl)] -> (List ty/IrDiag)
+                                         (if (= (listLength r.kinds) (listLength r.fields)) (list)
+                                           (list (ssaDiag "ERR_IR_RECORD_KINDS" (str "record '" r.name "' has " (listLength r.kinds) " field kinds for " (listLength r.fields) " fields") (str locus r.name)))))
+                                       m.records)))
+        (conflictState (fold (fn [(st (Pair (Map String ty/SsaRecordDecl) (List ty/IrDiag))) (r ty/SsaRecordDecl)] -> (Pair (Map String ty/SsaRecordDecl) (List ty/IrDiag))
+                               (match (mapGet (pairFirst st) r.name)
+                                 ((none) (pair (mapSet (pairFirst st) r.name r) (pairSecond st)))
+                                 ((some o) (if (and (ty/ssaRecordRaw? o) (ty/ssaRecordRaw? r) (!= o.kinds r.kinds))
+                                             (pair (pairFirst st) (cons (ssaDiag "ERR_IR_RECORD_KIND_CONFLICT" (str "record '" r.name "' is declared with conflicting field kinds") (str locus r.name)) (pairSecond st)))
+                                             st))))
+                             (pair (mapEmpty) (list)) m.records))]
+    (listAppend lengthDiags (listReverse (pairSecond conflictState))))
+
 fn declarationDiags ctx: SsaCtx m: ty/SsaModule locus: String -> (List ty/IrDiag)
   (concatDiags (list
     (duplicateNames "function" (listAppend (map (fn [(f ty/SsaFunction)] -> String f.name) m.functions) (map (fn [(e ty/SsaExtern)] -> String e.name) m.externs)) locus)
@@ -532,6 +546,7 @@ fn declarationDiags ctx: SsaCtx m: ty/SsaModule locus: String -> (List ty/IrDiag
     (duplicateNames "record" (map (fn [(r ty/SsaRecordDecl)] -> String r.name) m.records) locus)
     (concatDiags (map (fn [(d ty/SsaTypeDecl)] -> (List ty/IrDiag) (duplicateNames "variant" (map (fn [(v ty/SsaVariant)] -> String v.name) d.variants) (str locus d.name "/"))) m.types))
     (concatDiags (map (fn [(r ty/SsaRecordDecl)] -> (List ty/IrDiag) (duplicateNames "field" r.fields (str locus r.name "/"))) m.records))
+    (recordKindDiags m locus)
     (concatDiags (map (fn [(g ty/SsaGlobal)] -> (List ty/IrDiag) (checkGlobal ctx locus g)) m.globals))))
 
 fn verifySsaDiags m: ty/SsaModule -> (List ty/IrDiag)

@@ -1213,18 +1213,42 @@ fn fileRouteRecords -> (List ty/SsaRecordDecl)
         (ty/ssaRecordDecl "LinkStat" (list "isFile" "isDir" "isSymlink" "size" "mtime" "mode" "mtimeNs")))
 
 fn fileSlurpFn k: (Map String Int64) -> ty/SsaFunction
-  (ty/ssaFunction (fileW "fileSlurp") (list) (list (ty/ssaParam "fd" (ty/tyI32))) (ty/tyVal)
+  (fileSlurpAs k "fileSlurp" "mkStr")
+
+fn fileSlurpBytesFn k: (Map String Int64) -> ty/SsaFunction
+  (fileSlurpAs k "fileSlurpBytes" "mkBytes")
+
+fn fileSlurpAs k: (Map String Int64) name: String mk: String -> ty/SsaFunction
+  (ty/ssaFunction (fileW name) (list) (list (ty/ssaParam "fd" (ty/tyI32))) (ty/tyVal)
     (list
-      (block "entry" (list (int64Const "initialCap" 4096)
-                            (callInstr "initialBuf" (ty/tyPtr) "malloc" (list "initialCap"))
-                            (primInstr "initialNull" (ty/tyI1) "rawPtrIsNull" (list "initialBuf")))
-        (fileBr "initialNull" "allocErr" "loopStart"))
+      (block "entry" (list (int64Const "minCap" 4096) (int64Const "zero" 0) (int64Const "one" 1)
+                            (int64Const "stSize" (fileK k "stat.size"))
+                            (callInstr "st" (ty/tyPtr) "malloc" (list "stSize"))
+                            (primInstr "stNull" (ty/tyI1) "rawPtrIsNull" (list "st")))
+        (fileBr "stNull" "pickMin" "doStat"))
+      (block "pickMin" (list) (fileJump "alloc" (list "minCap")))
+      (block "doStat" (list (callInstr "stat32" (ty/tyI32) "fstat" (list "fd" "st")) (fileWiden "statRes" "stat32")
+                             (primInstr "statFailed" (ty/tyI1) "neInt" (list "statRes" "zero")))
+        (fileBr "statFailed" "statBad" "statOk"))
+      (block "statBad" (list (freeInstr "statBad.free" "st")) (fileJump "alloc" (list "minCap")))
+      (block "statOk"
+        (listAppend (fileModeInstrs "m" k "st")
+          (list (int64Const "ifreg" (fileK k "S_IFREG")) (fileEq "isReg" "m.fmt" "ifreg")
+                (int64Const "sizeOff" (fileK k "stat.st_size")) (primInstr "size" (ty/tyI64) "rawLoadI64" (list "st" "sizeOff"))
+                (freeInstr "statOk.free" "st")))
+        (fileBr "isReg" "regSized" "pickMin"))
+      (block "regSized" (list (primInstr "positive" (ty/tyI1) "gtInt" (list "size" "zero"))) (fileBr "positive" "limitChk" "pickMin"))
+      (block "limitChk" (list (int64Const "sizeLimit" 1099511627776) (primInstr "inLimit" (ty/tyI1) "ltInt" (list "size" "sizeLimit")))
+        (fileBr "inLimit" "capSize" "pickMin"))
+      (block "capSize" (list (primInstr "sizePlus" (ty/tyI64) "addInt" (list "size" "one"))) (fileJump "alloc" (list "sizePlus")))
+      (ty/ssaBlock "alloc" (list (ty/ssaParam "initialCap" (ty/tyI64)))
+        (list (callInstr "initialBuf" (ty/tyPtr) "malloc" (list "initialCap"))
+              (primInstr "initialNull" (ty/tyI1) "rawPtrIsNull" (list "initialBuf"))
+              (primInstr "initialAt" (ty/tyI64) "rawPtrToInt" (list "initialBuf")))
+        (ty/termBranch "initialNull" (edgeTo "allocErr") (ty/ssaEdge "loop" (list "initialAt" "initialCap" "zero"))))
       (fileRet "allocErr" (list (callInstr "allocErrno" (ty/tyI64) "sysErrnoValue" (list))
                                   (boxInstr "allocErrBox" "allocErrno")
                                   (constructResult "allocErrValue" "err" "allocErrBox")) "allocErrValue")
-      (block "loopStart" (list (primInstr "initialAt" (ty/tyI64) "rawPtrToInt" (list "initialBuf"))
-                                (int64Const "zero" 0))
-        (fileJump "loop" (list "initialAt" "initialCap" "zero")))
       (ty/ssaBlock "loop" (list (ty/ssaParam "bufAt" (ty/tyI64)) (ty/ssaParam "cap" (ty/tyI64)) (ty/ssaParam "len" (ty/tyI64)))
         (list (primInstr "buf" (ty/tyPtr) "rawIntToPtr" (list "bufAt"))
               (fileEq "full" "len" "cap"))
@@ -1258,7 +1282,7 @@ fn fileSlurpFn k: (Map String Int64) -> ty/SsaFunction
       (block "rdSome" (list (fileEq "eof" "got" "zero")) (fileBr "eof" "done" "advance"))
       (block "advance" (list (primInstr "lenNext" (ty/tyI64) "addInt" (list "len" "got")))
         (fileJump "loop" (list "bufAt" "cap" "lenNext")))
-      (fileRet "done" (list (callInstr "text" (ty/tyVal) "mkStr" (list "buf" "len"))
+      (fileRet "done" (list (callInstr "text" (ty/tyVal) mk (list "buf" "len"))
                               (freeInstr "doneFree" "buf")
                               (constructResult "doneValue" "ok" "text")) "doneValue")))
 
@@ -2187,7 +2211,13 @@ fn fileGetHomeDirFn k: (Map String Int64) pool: (Map String Int64) -> ty/SsaFunc
                                (fileCall "noHomeResult" (ty/tyVal) "fileFormatError" (list "kind" "dash" "reason"))) "noHomeResult")))
 
 fn fileReadWholeFn k: (Map String Int64) -> ty/SsaFunction
-  (ty/ssaFunction "sysReadWhole" (list) (list (ty/ssaParam "path" (ty/tyVal))) (ty/tyVal)
+  (fileReadWholeAs k "sysReadWhole" "fileSlurp")
+
+fn fileReadWholeBytesFn k: (Map String Int64) -> ty/SsaFunction
+  (fileReadWholeAs k "sysReadWholeBytes" "fileSlurpBytes")
+
+fn fileReadWholeAs k: (Map String Int64) name: String slurp: String -> ty/SsaFunction
+  (ty/ssaFunction name (list) (list (ty/ssaParam "path" (ty/tyVal))) (ty/tyVal)
     (list
       (block "entry" (listAppend (stringToPtrInstrs "p" "path")
                        (listAppend (fileOr "flags" k (list "O_RDONLY"))
@@ -2199,7 +2229,7 @@ fn fileReadWholeFn k: (Map String Int64) -> ty/SsaFunction
                                 (freeInstr "openFree" "p") (boxInstr "errnoBox" "errno")
                                 (constructResult "err" "err" "errnoBox")) (ty/termReturn "err"))
       (block "read" (list (freeInstr "pathFree" "p")
-                           (callInstr "raw" (ty/tyVal) (fileW "fileSlurp") (list "fd"))
+                           (callInstr "raw" (ty/tyVal) (fileW slurp) (list "fd"))
                            (callInstr "closed" (ty/tyI32) "close" (list "fd"))) (ty/termReturn "raw"))))
 
 fn fileReadStringFn k: (Map String Int64) pool: (Map String Int64) -> ty/SsaFunction
@@ -2216,10 +2246,8 @@ fn fileReadBytesFn k: (Map String Int64) pool: (Map String Int64) -> ty/SsaFunct
     (list
       (block "entry" (list (fileCall "isText" (ty/tyI1) "isStr" (list "path"))) (fileBr "isText" "call" "badType"))
       (fileStrTrapBlock pool "badType" "fileReadBytes" "path")
-      (block "call" (list (callInstr "raw" (ty/tyVal) "sysReadWhole" (list "path"))) (fileResSwitch "raw" "done" "failed"))
-      (fileRet "done" (list (ty/ssaInstr "text" (ty/tyVal) (ty/opVariantField "raw" 0))
-                            (entryInstr "bytes" (ty/tyVal) "stringToBytes" (list "text"))
-                            (constructResult "okv" "ok" "bytes")) "okv")
+      (block "call" (list (callInstr "raw" (ty/tyVal) "sysReadWholeBytes" (list "path"))) (fileResSwitch "raw" "done" "failed"))
+      (fileRet "done" (list) "raw")
       (fileErrnoErrBlock "failed" "raw" "path")))
 
 fn fileReadRangeFn k: (Map String Int64) pool: (Map String Int64) -> ty/SsaFunction
@@ -2879,7 +2907,7 @@ fn fileRouteFunctions facts: libc/TripleFacts pool: (Map String Int64) -> (Resul
                                 (fileLockFn k pool) (fileLockWait1Fn k pool) (fileLockWait2Fn k pool) (fileLockWait3Fn k pool) (fileLockWaitBadFn pool)
                                 (fileAppendFn k pool) (fileLockAtFn k pool) (fileReadAtFn k pool) (fileWriteAtFn k pool)
                                 (sysRealpathFn) (sysRenameFn) (sysChmodFn) (sysMkdirFn) (sysUnlinkFn) (sysRmdirFn) (sysSymlinkFn)
-                                dirListFn statFn lstatFn utimensatFn (fileReadWholeFn k) (fileSlurpFn k) (fileReadlinkRawFn k) (fileSysFsyncPathFn k)
+                                dirListFn statFn lstatFn utimensatFn (fileReadWholeFn k) (fileReadWholeBytesFn k) (fileSlurpFn k) (fileSlurpBytesFn k) (fileReadlinkRawFn k) (fileSysFsyncPathFn k)
                                 (fileIoKindFn k pool) (fileIoErrorFn k) (fileIoErrorCapFn) (fileFormatErrorFn k) (fileFormatErrorCapFn pool)
                                 (fileTypeNameFn pool) (fileTypeTrapFn pool) (fileMapIoResultFn) (fileMapUnitIoResultFn)
                                 (fileNameLessFn) (fileSortStringsFn) (fileMergeStringsFn) (fileDirCreateWalkFn k pool) (filePathRemoveRecFn k pool) (fileReadRangeFdFn k pool)

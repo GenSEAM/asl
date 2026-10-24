@@ -94,7 +94,7 @@ fn diagText diags: (List irTy/IrDiag) -> String
 fn ! linkCmd libs: Libs mode: String ll: String exe: String -> String
   (if (or (= mode "asan") (= mode "asanNotrace"))
     (str "/usr/bin/clang " (stringJoin (nb/sanitizeFlags) " ") " -Wno-override-module -x ir " (shellQuote ll) " -x none " (shellQuote (if (= mode "asan") libs.asan libs.notrace)) " -lm -o " (shellQuote exe))
-    (str "/usr/bin/clang -O1 -Wno-override-module -x ir " (shellQuote ll) " -x none " (shellQuote (if (= mode "notrace") libs.notrace libs.plain)) " -lm -o " (shellQuote exe)))
+    (str "/usr/bin/clang -O1 -Wno-override-module -x ir " (shellQuote ll) " -x none " (shellQuote (if (or (= mode "notrace") (= mode "notraceStats")) libs.notrace libs.plain)) " -lm -o " (shellQuote exe)))
 
 fn ! buildRun libs: Libs dir: String name: String mode: String -> (Result Built String)
   (match (lk/linkEntry! (fixture name))
@@ -290,6 +290,12 @@ fn runtimeBody code: String sym: String -> String
     ((some at) (let [(rest (optionOr (stringSlice code at (stringLength code)) ""))]
                  (match (stringIndexOf rest "\n}\n") ((some e) (optionOr (stringSlice rest 0 e) "")) ((none) rest)))))
 
+fn resetBody code: String sym: String -> String
+  (match (stringIndexOf code (str "define internal tailcc i64 @" sym "("))
+    ((none) "")
+    ((some at) (let [(rest (optionOr (stringSlice code at (stringLength code)) ""))]
+                 (match (stringIndexOf rest "\n}\n") ((some e) (optionOr (stringSlice rest 0 e) "")) ((none) rest)))))
+
 fn ! testSpine libs: Libs dir: String -> Bool
   (match (buildRun libs dir "rcList" "1")
     ((err e) (do (assert false (str "RC spine build: " e)) false))
@@ -301,6 +307,10 @@ fn ! testSpine libs: Libs dir: String -> Bool
                   (assert (stringContains? b.code "define internal void @aslRc.recycle(ptr %o, i64 %h) alwaysinline {") "recycle is inlined into the free path")
                   (assert (stringContains? (runtimeBody b.code "aslRc.recycle") "call void @aslRc.recycleSlow(ptr %o, i64 %h)") "large, small and sticky cells take the outlined recycleSlow")
                   (assert (stringContains? (fnBodyOf b.code "%Val" "prelude$2EpreludeReverseOnto") "@aslRcReset_") (str "the map builder's reverse owns the list it walks, so a unique cell resets into the next cons instead of being freed after the call: " (fnBodyOf b.code "%Val" "prelude$2EpreludeReverseOnto")))
+                  (assert (stringContains? (fnBodyOf b.code "%Val" "prelude$2EpreludeReverseOnto") "@aslRcReset_3_3(") (str "reverse moves both the head and the rest with the reset, mask 3: " (fnBodyOf b.code "%Val" "prelude$2EpreludeReverseOnto")))
+                  (assert (= (callCount (fnBodyOf b.code "%Val" "prelude$2EpreludeReverseOnto") "aslRcDup") 0) (str "reverse duplicates neither part of a unique cell: " (fnBodyOf b.code "%Val" "prelude$2EpreludeReverseOnto")))
+                  (assert (stringContains? (resetBody b.code "aslRcReset_3_3") "consFast:") (str "a cons reset is inline for a unique cell: " (resetBody b.code "aslRcReset_3_3")))
+                  (refute (stringContains? (resetBody b.code "aslRcReset_3_3") "@aslRc.freeOne(") (str "a cons reset with both slots moved releases nothing: " (resetBody b.code "aslRcReset_3_3")))
                   true))))
 
 fn ! testOpStats libs: Libs dir: String -> Bool
@@ -368,7 +378,7 @@ fn ! testMapReuse libs: Libs dir: String -> Bool
   (let [(want "3000 0 4498500 4000 1000 499500 4000 500500\n")]
     (match (buildRun libs dir "rcMapReuse" "asan")
       ((err e) (do (assert false (str "RC ASan rcMapReuse build: " e)) false))
-      ((ok a) (match (buildRun libs dir "rcMapReuse" "notrace")
+      ((ok a) (match (buildRun libs dir "rcMapReuse" "notraceStats")
                 ((err e) (do (assert false (str "rcMapReuse untraced RC build: " e)) false))
                 ((ok c) (let [(stats a.run.stderr)
                               (hits (statOf stats "fbip"))
@@ -403,7 +413,7 @@ fn ! testAppend libs: Libs dir: String -> Bool
 
 fn ! testArena libs: Libs dir: String -> Bool
   (let [(traced (buildRun libs dir "rcArena" "0"))
-        (counted (buildRun libs dir "rcArena" "notrace"))
+        (counted (buildRun libs dir "rcArena" "notraceStats"))
         (asan (buildRun libs dir "rcArena" "asanNotrace"))
         (want "72073000\n")]
     (match traced
@@ -442,6 +452,74 @@ fn ! testSplice libs: Libs dir: String -> Bool
                 true)))
 
 
+; (:m :ref FREECHAINLOOP :do "lists of records with no boxed slot, with a boxed string and with a nested record each die whole: every dying cons head is freed inline with the spine, nothing goes through the pending stack, and every cell allocated is freed by exit")
+fn ! testFreeLoop libs: Libs dir: String -> Bool
+  (let [(want "45022300\n")]
+    (match (buildRun libs dir "rcFreeLoop" "asan")
+      ((err e) (do (assert false (str "rcFreeLoop ASan build: " e)) false))
+      ((ok a) (match (buildRun libs dir "rcFreeLoop" "1")
+                ((err e) (do (assert false (str "rcFreeLoop RC build: " e)) false))
+                ((ok c) (let [(stats c.run.stderr)
+                              (held (- (+ (statOf stats "fresh") (statOf stats "reused")) (statOf stats "freed")))
+                              (chain (runtimeBody c.code "aslRc.freeChain"))
+                              (shallow (runtimeBody c.code "aslRc.freeShallow"))]
+                          (do (assert (= a.run.exitCode 0) (str "rcFreeLoop RC under ASan exits 0: " a.run.stderr))
+                              (assert (= a.run.stdout want) (str "rcFreeLoop prints its sums under RC ASan: " a.run.stdout))
+                              (refute (stringContains? a.run.stderr "Sanitizer") (str "no freed head is read again: " a.run.stderr))
+                              (assert (= c.run.stdout want) (str "rcFreeLoop prints its sums under RC: " c.run.stdout))
+                              (assert (= (statOf a.run.stderr "pushed") 0) (str "dying record heads of a dying spine never go through the pending stack: pushed " (statOf a.run.stderr "pushed") ", base 30000"))
+                              (assert (> (statOf stats "freed") 60000) (str "every record, label and cons cell of the ten rounds is freed: " stats))
+                              (assert (<= held 8) (str "every cell allocated is freed by exit, fresh + reused - freed " held ": " stats))
+                              (refute (stringContains? chain "call void @aslRc.push(ptr %hn)") (str "freeChain pushes no cons head: " chain))
+                              (assert (stringContains? chain "call void @aslRc.freeShallow(ptr %hn)") "freeChain frees a nested head inline")
+                              (assert (stringContains? shallow "%kidBare = and i1 %kidFlat, %kidNone") "a record or ctor with no boxed slot is a leaf kid")
+                              true)))))))
+
+; (:m :ref FREECHAINLOOP :do "the untraced build carries no per-cell counter; notraceStats is the same build with them, and counts what the ASan build counts")
+fn ! testCounted libs: Libs dir: String -> Bool
+  (match (buildRun libs dir "rcList" "notrace")
+    ((err e) (do (assert false (str "rcList untraced build: " e)) false))
+    ((ok u) (match (buildRun libs dir "rcList" "notraceStats")
+              ((err e) (do (assert false (str "rcList untraced stats build: " e)) false))
+              ((ok s) (match (buildRun libs dir "rcList" "asanNotrace")
+                        ((err e) (do (assert false (str "rcList untraced ASan build: " e)) false))
+                        ((ok a) (do (assert (= u.run.stdout "834000\n") (str "rcList prints its sum untraced: " u.run.stdout))
+                                    (assert (= s.run.stdout u.run.stdout) (str "the stats build prints the same: " s.run.stdout))
+                                    (assert (stringContains? u.run.stderr ":rcStats") "the untraced build still reports")
+                                    (assert (= (statOf u.run.stderr "freed") 0) (str "the untraced build counts no freed cell: " u.run.stderr))
+                                    (assert (= (statOf u.run.stderr "reused") 0) (str "the untraced build counts no reused cell: " u.run.stderr))
+                                    (assert (= (statOf u.run.stderr "fresh") 0) (str "the untraced build counts no fresh cell: " u.run.stderr))
+                                    (refute (stringContains? u.code "%freed.sp = getelementptr") "no freed counter in the untraced IR")
+                                    (assert (stringContains? s.code "%freed.sp = getelementptr") "the stats build carries the freed counter")
+                                    (assert (> (statOf s.run.stderr "freed") 15000) (str "the stats build counts freed cells: " s.run.stderr))
+                                    (assert (= (statOf s.run.stderr "freed") (statOf a.run.stderr "freed")) (str "the stats build frees what the ASan build frees: " s.run.stderr " vs " a.run.stderr))
+                                    (assert (= (statOf s.run.stderr "reused") (statOf a.run.stderr "reused")) (str "the stats build reuses what the ASan build reuses: " s.run.stderr " vs " a.run.stderr))
+                                    (assert (= (statOf s.run.stderr "fresh") (statOf a.run.stderr "fresh")) (str "the stats build allocates what the ASan build allocates: " s.run.stderr " vs " a.run.stderr))
+                                    true)))))))
+
+; (:m :ref FREECHAINLOOP :do "a list walked by head and tail keeps each rest in its slot: the cell dying into the next cons (mapAlias) or dropped (sumWalk) is reset with the rest's slot kept, so neither duplicates the rest")
+fn walkMoves code: String -> Bool
+  (let [(alias (fnBodyOf code "%Val" "rcClash$2EmapAlias"))
+        (walk (fnBody code "rcClash$2EsumWalk"))]
+    (do (assert (stringContains? alias "@aslRcReset_3_2(") (str "mapAlias resets its cell into the next cons keeping the rest, mask 2: " alias))
+        (assert (= (callCount alias "aslRcDup") 0) (str "mapAlias duplicates no rest: " alias))
+        (assert (stringContains? walk "@aslRcReset_99_2(") (str "sumWalk releases its cell keeping the rest, mask 2, class 99: " walk))
+        (assert (= (callCount walk "aslRcDup") 0) (str "sumWalk duplicates no rest: " walk))
+        true))
+
+; (:m :ref RC-BORROW-CONSUME-CLASH :do "a list passed to one call both borrowed and consumed, consumed twice, borrowed twice or captured by the lambda that walks it prints what tracing prints in every RC build, ASan-clean")
+fn ! testClash libs: Libs dir: String -> Bool
+  (let [(want "a3,bb3,ccc3\nx3,yy3,zzz3,w3\n5446\n")
+        (runs (map (fn [(mode String)] -> (Pair String (Result Built String)) (pair mode (buildRun libs dir "rcClash" mode))) (list "0" "1" "notrace" "asanNotrace" "asan")))]
+    (listAll? (fn [(r (Pair String (Result Built String)))] -> Bool
+                (match (pairSecond r)
+                  ((err e) (do (assert false (str "rcClash " (pairFirst r) " build: " e)) false))
+                  ((ok b) (do (assert (= b.run.exitCode 0) (str "rcClash " (pairFirst r) " exits 0: " b.run.stderr))
+                              (assert (= b.run.stdout want) (str "rcClash " (pairFirst r) " prints what tracing prints, got " b.run.stdout))
+                              (refute (stringContains? b.run.stderr "Sanitizer") (str "rcClash " (pairFirst r) " frees no cell a borrowed parameter still reads: " b.run.stderr))
+                              (if (= (pairFirst r) "1") (walkMoves b.code) true)))))
+              runs))
+
 fn ! runTests -> Bool
   (match (runtimes!)
     ((err e) (do (assert false (str "rcTest runtimes: " e)) false))
@@ -462,6 +540,9 @@ fn ! runWith libs: Libs -> Bool
         (assert (testSpine libs dir) "a freed list spine is walked in one loop, not pushed cell by cell through the pending stack")
         (assert (testOpStats libs dir) "ASan-mode RC counts dups, drops and those on immediates; production RC counts none")
         (assert (testFreeQueue libs dir) "a freed object's dying kids continue the free loop or are recycled on the spot instead of queueing")
+        (assert (testClash libs dir) "a name both borrowed and consumed by one call is duplicated for the consumer and dropped after")
+        (assert (testFreeLoop libs dir) "a dying spine frees its record heads inline, records without boxed slots as leaves")
+        (assert (testCounted libs dir) "the per-cell counters exist only in the counted, ASan and notraceStats builds")
         (assert (testReuse libs dir) "an owned matched value that dies at or before a construct of its size class lends its cell, moved fields skip dup and release")
         (assert (testFold libs dir) "a non-tail closure call hands owned arguments to the lambda's owned entry, so a fold accumulator stays unique")
         (assert (testMapReuse libs dir) "mapSet on a unique map takes its tree and reuses the insert path in place, a shared snapshot keeps its nodes")

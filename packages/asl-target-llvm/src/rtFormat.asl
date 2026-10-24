@@ -1,5 +1,6 @@
 (module asl-target-llvm/rtFormat
-  :x [rtFormatDecls rtFormatLlvm rtFormatNameCall rtFormatValueLlvm rtFormatValLlvm rtFormatManyLlvm rtFormatTerminalLlvm])
+  :x [rtFormatDecls rtFormatLlvm rtFormatNameCall rtFormatValueLlvm rtFormatValLlvm rtFormatManyLlvm rtFormatTerminalLlvm]
+  :i [(asl-target-llvm/rtObject :a objrt)])
 
 fn rtFormatNameCall id: String -> String
   (str "call ptr @valrt.symName(i32 " id ")\n")
@@ -246,7 +247,7 @@ fn rtFormatLlvm -> (List String)
     "@.rtfmt.ninf = private unnamed_addr constant [5 x i8] c\"-inf\\00\"")
 
 fn rtFormatValueLlvm -> (List String)
-  (list
+  (listAppend (objrt/recHelperText "rtfmt") (list
     "%RtFormatBuf = type { ptr, i64, i64 }"
     "@.rtfmt.unit = private unnamed_addr constant [3 x i8] c\"()\\00\""
     "@.rtfmt.true = private unnamed_addr constant [5 x i8] c\"true\\00\""
@@ -527,12 +528,9 @@ fn rtFormatValueLlvm -> (List String)
     "  call void @rtfmt_text(ptr %b, ptr %ro)"
     "  %rword = extractvalue %Val %v, 1"
     "  %robj = inttoptr i64 %rword to ptr"
-    "  %rn.ptr = getelementptr i8, ptr %robj, i64 12"
-    "  %rn.i32 = load i32, ptr %rn.ptr"
+    "  %rn.i32 = call i32 @rtfmt.recArity(ptr %robj)"
     "  %rn = zext i32 %rn.i32 to i64"
-    "  %rkeys.ptr = getelementptr i8, ptr %robj, i64 16"
-    "  %rkeys = load ptr, ptr %rkeys.ptr"
-    "  %rvalues = getelementptr i8, ptr %robj, i64 24"
+    "  %rkeys = call ptr @rtfmt.recKeys(ptr %robj)"
     "  br label %record.loop"
     "record.loop:"
     "  %ri = phi i64 [ 0, %record ], [ %ri.next, %record.next ]"
@@ -554,8 +552,8 @@ fn rtFormatValueLlvm -> (List String)
     "  call void @rtfmt_text(ptr %b, ptr %rkey.name)"
     "  %rspace = getelementptr [2 x i8], ptr @.rtfmt.space, i64 0, i64 0"
     "  call void @rtfmt_text(ptr %b, ptr %rspace)"
-    "  %rvalue.ptr = getelementptr %Val, ptr %rvalues, i64 %ri"
-    "  %rvalue = load %Val, ptr %rvalue.ptr"
+    "  %ri.i32 = trunc i64 %ri to i32"
+    "  %rvalue = call %Val @rtfmt.recGet(ptr %robj, i32 %ri.i32)"
     "  %rdepth = add i32 %depth, 1"
     "  call void @rtfmt_render(ptr %b, %Val %rvalue, i32 1, i32 %rdepth, i32 %limit)"
     "  br label %record.next"
@@ -598,7 +596,7 @@ fn rtFormatValueLlvm -> (List String)
     "ctor.end:"
     "  call void @rtfmt_text(ptr %b, ptr %cc)"
     "  ret void"
-    "}")
+    "}"))
 
 fn inlineBufferStart -> (List String)
   (list

@@ -1,6 +1,6 @@
 (module asl-tools/seed
-  :x [Entry Stages seedDir manifestPath compilerSource runtimeArchive fibSource tripleKey seedFileFor parseManifest entryFor verifyEntry verify manifestRow replaceRow link compileWith bootstrap importPaths sourceClosure sourceDigest staleness checkVerdict regen RuntimeEntry runtimeModules runtimeFileFor parseRuntime runtimeRow replaceRuntimeRows runtimeDigest runtimeStaleness main]
-  :i [(asl-tools/fleet/run :a fr)])
+  :x [Entry Stages seedDir manifestPath compilerSource runtimeArchive fibSource tripleKey seedFileFor parseManifest entryFor verifyEntry verify manifestRow replaceRow link linkArgv linkWith compileWith compileRc bootstrap importPaths sourceClosure sourceDigest staleness checkVerdict regen RuntimeEntry runtimeModules runtimeFileFor parseRuntime runtimeRow replaceRuntimeRows runtimeDigest runtimeStaleness main]
+  :i [(asl-tools/fleet/run :a fr) (asl/packages/asl-cli/src/asl1Cache :a ac)])
 
 (schema Entry
   (:f triple String)
@@ -18,6 +18,7 @@
   (:f stage2Ll String)
   (:f stage2 String)
   (:f stage3Ll String)
+  (:f stage2Lib String)
   (:f fixpoint Bool))
 
 (schema RuntimeEntry
@@ -192,14 +193,24 @@ fn ! verify root: String manifestText: String work: String -> (Result Entry Stri
 fn ! notHost? path: String -> Bool
   (and (not (stringEndsWith? path "/asl-host")) (!= path "asl-host"))
 
-fn ! link root: String ll: String out: String -> (Result String String)
-  (let [(d (runJob (list (clang) "-O1" "-Wno-override-module" "-x" "ir" ll "-x" "none" (str root "/" (runtimeArchive)) "-lm" "-o" out) root (list)))]
+; (:m :ref FIXPOINT-O2-NT :do "stages link at -O2 as asl build does; stage2 on is notrace IR linked against the notrace runtime asl1Cache builds with the stage compiler")
+fn ! linkArgv ll: String out: String lib: String -> (List String)
+  (list (clang) "-O2" "-Wno-override-module" "-x" "ir" ll "-x" "none" lib "-lm" "-o" out)
+
+fn ! linkWith root: String ll: String out: String lib: String -> (Result String String)
+  (let [(d (runJob (linkArgv ll out lib) root (list)))]
     (if (and (= d.exit 0) (fileExists? out)) (ok out) (err (str "ERR_SEED_LINK: clang " ll " (" d.verdict " exit " d.exit "): " (stringTrim d.out)))))
 
+fn ! link root: String ll: String out: String -> (Result String String)
+  (linkWith root ll out (str root "/" (runtimeArchive)))
+
 fn ! compileWith root: String compiler: String entry: String out: String -> (Result String String)
+  (compileRc root compiler entry out (list))
+
+fn ! compileRc root: String compiler: String entry: String out: String rc: (List String) -> (Result String String)
   (if (not (notHost? compiler)) (err (str "ERR_SEED_STAGE: " compiler " is the host interpreter, not a stage binary"))
     (let [(_ (if (fileExists? out) (pathRemove out) (ok ())))
-          (d (runJob (list compiler "build" entry "-o" out) root
+          (d (runJob (listAppend (list compiler "build" entry "-o" out) rc) root
                      (list (str "ASL_ROOT=" root) (str "ASL_PRELUDE=" root "/asl/prelude/prelude.asl") "ASL_HOST_CACHE=0")))]
       (if (and (= d.exit 0) (fileExists? out)) (ok out) (err (str "ERR_SEED_BUILD: " compiler " build " entry " (" d.verdict " exit " d.exit "): " (stringTrim d.out))))))
 
@@ -212,14 +223,16 @@ fn ! bootstrap root: String e: Entry work: String -> (Result Stages String)
     ((ok seedPath)
      (match (link root seedPath (str work "/stage1"))
        ((err x) (err x))
-       ((ok s1) (match (compileWith root s1 (compilerSource) (str work "/stage2.ll"))
+       ((ok s1) (match (compileRc root s1 (compilerSource) (str work "/stage2.ll") (list "--rc" "notrace"))
                   ((err x) (err x))
-                  ((ok l2) (match (link root l2 (str work "/stage2"))
+                  ((ok l2) (match (ac/notraceLib! s1 root (str root "/" (runtimeArchive)) (clang))
+                             ((err x) (err (str "ERR_SEED_RT: notrace runtime built by " s1 ": " x)))
+                             ((ok lib2) (match (linkWith root l2 (str work "/stage2") lib2)
                              ((err x) (err x))
-                             ((ok s2) (match (compileWith root s2 (compilerSource) (str work "/stage3.ll"))
+                             ((ok s2) (match (compileRc root s2 (compilerSource) (str work "/stage3.ll") (list "--rc" "notrace"))
                                         ((err x) (err x))
-                                        ((ok l3) (ok (Stages :stage1 s1 :stage2Ll l2 :stage2 s2 :stage3Ll l3
-                                                             :fixpoint (= (fileSha l2) (fileSha l3))))))))))))))
+                                        ((ok l3) (ok (Stages :stage1 s1 :stage2Ll l2 :stage2 s2 :stage3Ll l3 :stage2Lib lib2
+                                                             :fixpoint (= (fileSha l2) (fileSha l3))))))))))))))))
 
 fn importPaths header: String -> (List String)
   (fold (fn [(acc (List String)) (piece String)] -> (List String)

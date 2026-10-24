@@ -55,13 +55,13 @@ fn ! built work: String name: String text: String -> String
 fn ! testStructure -> Bool
   (let [(text (emitted (benchPath "record")))
         (step (functionText text "define tailcc %Val @asl$2Dtarget$2Dllvm$2Ftests$2Ffixtures$2FrecordScalar$2Falloc$2Frecord$2Estep("))
-        (helper (functionText text "define linkonce_odr hidden ptr @gcAsl.allocFast.5("))
+        (helper (functionText text "define linkonce_odr hidden ptr @gcAsl.allocFast.3("))
         (fast (optionOr (stringSlice helper 0 (optionOr (stringIndexOf helper "\nslow:") 0)) ""))]
     (do (assert (> (stringLength step) 0) "record: step is emitted")
         (assert (= (occurrences step "@asl_alloc_raw(") 0) (str "record: step calls asl_alloc_raw " (occurrences step "@asl_alloc_raw(") " times, want 0"))
-        (assert (= (occurrences step "call ptr @gcAsl.allocFast.5(i32 2, i64 56)") 1) "record: step allocates its 56-byte Body through size class 5's fast path")
+        (assert (= (occurrences step "call ptr @gcAsl.allocFast.3(i32 2, i64 40)") 1) "record: step allocates its 40-byte Body (two raw Int64 words, UNBOXFIELDS) through size class 3's fast path")
         (assert (stringContains? helper "\nslow:\n  %r = tail call ptr @asl_alloc_raw(i32 %t, i64 %n)\n") "record: a fast-path miss tail-calls asl_alloc_raw")
-        (assert (> (stringLength fast) 0) "record: size class 5's helper has a fast path before its slow block")
+        (assert (> (stringLength fast) 0) "record: size class 3's helper has a fast path before its slow block")
         (refute (stringContains? fast "call ") "record: the fast path calls nothing")
         (assert (stringContains? fast "%s = load ptr, ptr @asl_gc_state_ptr\n  %unpublished = icmp eq ptr %s, null\n  br i1 %unpublished, label %slow") "record: an unpublished collector state takes the slow path")
         (assert (stringContains? fast "%over = icmp ult i64 %th, %al\n  %stressed = icmp ne i64 %stress, 0\n  %need = or i1 %over, %stressed\n  br i1 %need, label %slow") "record: crossing the threshold or ASL_GC_STRESS takes the slow path")
@@ -94,12 +94,12 @@ fn ! sameStats work: String name: String n: Int64 -> Bool
 
 fn ! testCollects work: String -> Bool
   (let [(bin (built work "recordCollect" (emitted (benchPath "record"))))
-        (big (sh (str "ASL_GC_STATS=1 ASL_GC_MIN_MIB=1 " bin " 100000")))
+        (big (sh (str "ASL_GC_STATS=1 ASL_GC_MIN_MIB=1 " bin " 150000")))
         (plain (sh (str bin " 3000")))
         (stressed (sh (str "ASL_GC_STATS=1 ASL_GC_STRESS=1 " bin " 3000")))]
-    (do (assert (= big.exitCode 0) (str "record 100000: exits 0; " big.stderr))
-        (assert (>= (statsField big.stderr ":bytesAllocated") 4194304) (str "record 100000: allocates at least 4x the 1 MiB threshold; " big.stderr))
-        (assert (>= (statsField big.stderr ":collections") 4) (str "record 100000: collects at least 4 times under a 1 MiB threshold; " big.stderr))
+    (do (assert (= big.exitCode 0) (str "record 150000 (40-byte raw Body): exits 0; " big.stderr))
+        (assert (>= (statsField big.stderr ":bytesAllocated") 4194304) (str "record 150000 (40-byte raw Body): allocates at least 4x the 1 MiB threshold; " big.stderr))
+        (assert (>= (statsField big.stderr ":collections") 4) (str "record 150000 (40-byte raw Body): collects at least 4 times under a 1 MiB threshold; " big.stderr))
         (assert (= stressed.exitCode 0) (str "record 3000 under ASL_GC_STRESS=1: exits 0; " stressed.stderr))
         (assert (= stressed.stdout plain.stdout) (str "record 3000: same output under stress; plain " plain.stdout " stressed " stressed.stdout))
         (assert (>= (statsField stressed.stderr ":objectsAllocated") 3000) (str "record 3000 under ASL_GC_STRESS=1: allocates a Body per step; " stressed.stderr))

@@ -1,4 +1,4 @@
-(module asl-ir/types :x [IrType IrParam IrExpr IrSwitchCase IrStmt IrFunction IrModule IrDiag makeIrType makeIrParam makeIrLet makeIrDrop makeIrReturn makeIrSwitch makeIrFunction makeIrModule makeIrDiag verifyAnfStmt verifyAnfFunction verifyAnfModule SsaTy SsaConst SsaOp SsaEdge SsaCase SsaTerm SsaParam SsaInstr SsaBlock SsaFunction SsaVariant SsaTypeDecl SsaRecordDecl SsaGlobal SsaExtern SsaModule ssaParam ssaInstr ssaEdge ssaCase ssaBlock ssaFunction ssaVariant ssaTypeDecl ssaRecordDecl ssaGlobal ssaExtern ssaExternTyped ssaExternVariadic ssaModule ssaTyName ssaAbiName ssaIsRec? ssaIsRaw? termEdges opOperands SsaPrim primSignature SsaBuiltin builtinEntries builtinEntry] :i [])
+(module asl-ir/types :x [IrType IrParam IrExpr IrSwitchCase IrStmt IrFunction IrModule IrDiag makeIrType makeIrParam makeIrLet makeIrDrop makeIrReturn makeIrSwitch makeIrFunction makeIrModule makeIrDiag verifyAnfStmt verifyAnfFunction verifyAnfModule SsaTy SsaConst SsaOp SsaEdge SsaCase SsaTerm SsaParam SsaInstr SsaBlock SsaFunction SsaVariant SsaTypeDecl SsaRecordDecl SsaGlobal SsaExtern SsaModule ssaParam ssaInstr ssaEdge ssaCase ssaBlock ssaFunction ssaVariant ssaTypeDecl ssaRecordDecl ssaRecordDeclTyped ssaRecordRaw? ssaGlobal ssaExtern ssaExternTyped ssaExternVariadic ssaModule ssaTyName ssaAbiName ssaIsRec? ssaIsRaw? termEdges opOperands SsaPrim primSignature SsaBuiltin builtinEntries builtinEntry] :i [])
 
 (schema IrType (:f kind Str) (:f repr Str) (:f isSecondClass Bool))
 
@@ -146,7 +146,7 @@ fn verifyAnfModule moduleObj: IrModule -> (Option IrDiag)
 
 (schema SsaTypeDecl (:f name String) (:f variants (List SsaVariant)))
 
-(schema SsaRecordDecl (:f name String) (:f fields (List String)))
+(schema SsaRecordDecl (:f name String) (:f fields (List String)) (:f kinds (List Int64)))
 
 (schema SsaGlobal (:f name String) (:f init String))
 
@@ -179,7 +179,13 @@ fn ssaTypeDecl name: String variants: (List SsaVariant) -> SsaTypeDecl
   (SsaTypeDecl :name name :variants variants)
 
 fn ssaRecordDecl name: String fields: (List String) -> SsaRecordDecl
-  (SsaRecordDecl :name name :fields fields)
+  (SsaRecordDecl :name name :fields fields :kinds (map (fn [(f String)] -> Int64 255) fields))
+
+fn ssaRecordDeclTyped name: String fields: (List String) kinds: (List Int64) -> SsaRecordDecl
+  (SsaRecordDecl :name name :fields fields :kinds kinds)
+
+fn ssaRecordRaw? d: SsaRecordDecl -> Bool
+  (listAny? (fn [(k Int64)] -> Bool (!= k 255)) d.kinds)
 
 fn ssaGlobal name: String init: String -> SsaGlobal
   (SsaGlobal :name name :init init)

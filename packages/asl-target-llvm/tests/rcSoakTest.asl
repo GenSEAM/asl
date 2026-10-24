@@ -123,7 +123,7 @@ fn untracedSoaks -> (List Soak)
 fn ! checkUntracedOnly libs: rc/Libs dir: String s: Soak -> Bool
   (match (buildExe! libs dir s.name "0")
     ((err e) (do (assert false (str "tracing build: " e)) false))
-    ((ok t) (match (buildExe! libs dir s.name "notrace")
+    ((ok t) (match (buildExe! libs dir s.name "notraceStats")
               ((err e) (do (assert false (str "untraced RC build: " e)) false))
               ((ok u) (checkUntraced s t u)))))
 
@@ -136,7 +136,7 @@ fn ! checkSoak libs: rc/Libs dir: String s: Soak -> Bool
        ((ok c)
         (match (buildExe! libs dir s.name "asan")
           ((err e) (do (assert false (str "RC ASan build: " e)) false))
-          ((ok a) (match (buildExe! libs dir s.name "notrace")
+          ((ok a) (match (buildExe! libs dir s.name "notraceStats")
                     ((err e) (do (assert false (str "untraced RC build: " e)) false))
                     ((ok u) (and (checkRuns s t c a) (checkUntraced s t u))))))))))
 

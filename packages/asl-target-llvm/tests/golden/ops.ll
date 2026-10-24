@@ -355,6 +355,73 @@ other:
 @.objrt.strLimit = private unnamed_addr constant [50 x i8] c"string constant: count %lld outside 0..2147483647\00"
 @.objrt.partial = private unnamed_addr constant [8 x i8] c"partial\00"
 @objrt.partialId = internal global i32 -1
+define internal i32 @objrt.recArity(ptr %obj) alwaysinline {
+entry:
+  %kp = getelementptr inbounds i8, ptr %obj, i64 16
+  %kw = load i64, ptr %kp
+  %kbit = and i64 %kw, 1
+  %tagged = icmp ne i64 %kbit, 0
+  %kw0 = and i64 %kw, -2
+  %keys = inttoptr i64 %kw0 to ptr
+  br i1 %tagged, label %desc, label %plain
+plain:
+  %np = getelementptr inbounds i8, ptr %obj, i64 12
+  %n = load i32, ptr %np
+  ret i32 %n
+desc:
+  %dnp = getelementptr inbounds i8, ptr %keys, i64 -8
+  %dn = load i32, ptr %dnp
+  ret i32 %dn
+}
+define internal ptr @objrt.recKeys(ptr %obj) alwaysinline {
+entry:
+  %kp = getelementptr inbounds i8, ptr %obj, i64 16
+  %kw = load i64, ptr %kp
+  %kbit = and i64 %kw, 1
+  %tagged = icmp ne i64 %kbit, 0
+  %kw0 = and i64 %kw, -2
+  %keys = inttoptr i64 %kw0 to ptr
+  ret ptr %keys
+}
+define internal %Val @objrt.recGet(ptr %obj, i32 %i) alwaysinline {
+entry:
+  %kp = getelementptr inbounds i8, ptr %obj, i64 16
+  %kw = load i64, ptr %kp
+  %kbit = and i64 %kw, 1
+  %tagged = icmp ne i64 %kbit, 0
+  %kw0 = and i64 %kw, -2
+  %keys = inttoptr i64 %kw0 to ptr
+  %iw = sext i32 %i to i64
+  br i1 %tagged, label %desc, label %plain
+plain:
+  %off = mul i64 %iw, 16
+  %slot = add i64 %off, 24
+  %valp = getelementptr inbounds i8, ptr %obj, i64 %slot
+  %value = load %Val, ptr %valp
+  ret %Val %value
+desc:
+  %dnp = getelementptr inbounds i8, ptr %keys, i64 -8
+  %dn = load i32, ptr %dnp
+  %dnw = sext i32 %dn to i64
+  %locIndex = add i64 %dnw, %iw
+  %locp = getelementptr inbounds i32, ptr %keys, i64 %locIndex
+  %loc = load i32, ptr %locp
+  %locTag = lshr i32 %loc, 24
+  %locOff = and i32 %loc, 16777215
+  %locOffw = zext i32 %locOff to i64
+  %at = getelementptr inbounds i8, ptr %obj, i64 %locOffw
+  %boxed = icmp eq i32 %locTag, 255
+  br i1 %boxed, label %slotVal, label %rawVal
+slotVal:
+  %held = load %Val, ptr %at
+  ret %Val %held
+rawVal:
+  %word = load i64, ptr %at
+  %tagw = zext i32 %locTag to i64
+  %tagged0 = insertvalue %Val undef, i64 %tagw, 0
+  %rebox = insertvalue %Val %tagged0, i64 %word, 1
+  ret %Val %rebox
+}
 define internal i32 @objrt.nameId(ptr %cell, ptr %name, i64 %len) {
 entry:
   %id = load i32, ptr %cell
@@ -406,10 +473,8 @@ entry:
   br i1 %isRec, label %rec, label %notRec
 rec:
   %key = call i32 @objrt.nameId(ptr %cell, ptr %name, i64 %len)
-  %np = getelementptr inbounds i8, ptr %obj, i64 12
-  %n = load i32, ptr %np
-  %keysp = getelementptr inbounds i8, ptr %obj, i64 16
-  %keys = load ptr, ptr %keysp
+  %n = call i32 @objrt.recArity(ptr %obj)
+  %keys = call ptr @objrt.recKeys(ptr %obj)
   br label %loop
 loop:
   %i = phi i32 [ 0, %rec ], [ %next, %body ]
@@ -422,11 +487,7 @@ body:
   %match = icmp eq i32 %k, %key
   br i1 %match, label %found, label %loop
 found:
-  %i64 = sext i32 %i to i64
-  %off = mul i64 %i64, 16
-  %slot = add i64 %off, 24
-  %valp = getelementptr inbounds i8, ptr %obj, i64 %slot
-  %value = load %Val, ptr %valp
+  %value = call %Val @objrt.recGet(ptr %obj, i32 %i)
   ret %Val %value
 missing:
   call void @rterr.raiseText(ptr @.rterr.c.ERR_FIELD, ptr @.objrt.noField, ptr %name)

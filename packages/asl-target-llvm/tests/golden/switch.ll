@@ -495,6 +495,73 @@ bad:
 @.rtfmt.nan = private unnamed_addr constant [4 x i8] c"nan\00"
 @.rtfmt.inf = private unnamed_addr constant [4 x i8] c"inf\00"
 @.rtfmt.ninf = private unnamed_addr constant [5 x i8] c"-inf\00"
+define internal i32 @rtfmt.recArity(ptr %obj) alwaysinline {
+entry:
+  %kp = getelementptr inbounds i8, ptr %obj, i64 16
+  %kw = load i64, ptr %kp
+  %kbit = and i64 %kw, 1
+  %tagged = icmp ne i64 %kbit, 0
+  %kw0 = and i64 %kw, -2
+  %keys = inttoptr i64 %kw0 to ptr
+  br i1 %tagged, label %desc, label %plain
+plain:
+  %np = getelementptr inbounds i8, ptr %obj, i64 12
+  %n = load i32, ptr %np
+  ret i32 %n
+desc:
+  %dnp = getelementptr inbounds i8, ptr %keys, i64 -8
+  %dn = load i32, ptr %dnp
+  ret i32 %dn
+}
+define internal ptr @rtfmt.recKeys(ptr %obj) alwaysinline {
+entry:
+  %kp = getelementptr inbounds i8, ptr %obj, i64 16
+  %kw = load i64, ptr %kp
+  %kbit = and i64 %kw, 1
+  %tagged = icmp ne i64 %kbit, 0
+  %kw0 = and i64 %kw, -2
+  %keys = inttoptr i64 %kw0 to ptr
+  ret ptr %keys
+}
+define internal %Val @rtfmt.recGet(ptr %obj, i32 %i) alwaysinline {
+entry:
+  %kp = getelementptr inbounds i8, ptr %obj, i64 16
+  %kw = load i64, ptr %kp
+  %kbit = and i64 %kw, 1
+  %tagged = icmp ne i64 %kbit, 0
+  %kw0 = and i64 %kw, -2
+  %keys = inttoptr i64 %kw0 to ptr
+  %iw = sext i32 %i to i64
+  br i1 %tagged, label %desc, label %plain
+plain:
+  %off = mul i64 %iw, 16
+  %slot = add i64 %off, 24
+  %valp = getelementptr inbounds i8, ptr %obj, i64 %slot
+  %value = load %Val, ptr %valp
+  ret %Val %value
+desc:
+  %dnp = getelementptr inbounds i8, ptr %keys, i64 -8
+  %dn = load i32, ptr %dnp
+  %dnw = sext i32 %dn to i64
+  %locIndex = add i64 %dnw, %iw
+  %locp = getelementptr inbounds i32, ptr %keys, i64 %locIndex
+  %loc = load i32, ptr %locp
+  %locTag = lshr i32 %loc, 24
+  %locOff = and i32 %loc, 16777215
+  %locOffw = zext i32 %locOff to i64
+  %at = getelementptr inbounds i8, ptr %obj, i64 %locOffw
+  %boxed = icmp eq i32 %locTag, 255
+  br i1 %boxed, label %slotVal, label %rawVal
+slotVal:
+  %held = load %Val, ptr %at
+  ret %Val %held
+rawVal:
+  %word = load i64, ptr %at
+  %tagw = zext i32 %locTag to i64
+  %tagged0 = insertvalue %Val undef, i64 %tagw, 0
+  %rebox = insertvalue %Val %tagged0, i64 %word, 1
+  ret %Val %rebox
+}
 %RtFormatBuf = type { ptr, i64, i64 }
 @.rtfmt.unit = private unnamed_addr constant [3 x i8] c"()\00"
 @.rtfmt.true = private unnamed_addr constant [5 x i8] c"true\00"
@@ -776,12 +843,9 @@ record:
   call void @rtfmt_text(ptr %b, ptr %ro)
   %rword = extractvalue %Val %v, 1
   %robj = inttoptr i64 %rword to ptr
-  %rn.ptr = getelementptr i8, ptr %robj, i64 12
-  %rn.i32 = load i32, ptr %rn.ptr
+  %rn.i32 = call i32 @rtfmt.recArity(ptr %robj)
   %rn = zext i32 %rn.i32 to i64
-  %rkeys.ptr = getelementptr i8, ptr %robj, i64 16
-  %rkeys = load ptr, ptr %rkeys.ptr
-  %rvalues = getelementptr i8, ptr %robj, i64 24
+  %rkeys = call ptr @rtfmt.recKeys(ptr %robj)
   br label %record.loop
 record.loop:
   %ri = phi i64 [ 0, %record ], [ %ri.next, %record.next ]
@@ -804,8 +868,8 @@ record.key:
   call void @rtfmt_text(ptr %b, ptr %rkey.name)
   %rspace = getelementptr [2 x i8], ptr @.rtfmt.space, i64 0, i64 0
   call void @rtfmt_text(ptr %b, ptr %rspace)
-  %rvalue.ptr = getelementptr %Val, ptr %rvalues, i64 %ri
-  %rvalue = load %Val, ptr %rvalue.ptr
+  %ri.i32 = trunc i64 %ri to i32
+  %rvalue = call %Val @rtfmt.recGet(ptr %robj, i32 %ri.i32)
   %rdepth = add i32 %depth, 1
   call void @rtfmt_render(ptr %b, %Val %rvalue, i32 1, i32 %rdepth, i32 %limit)
   br label %record.next

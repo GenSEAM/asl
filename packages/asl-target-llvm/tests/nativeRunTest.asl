@@ -426,14 +426,6 @@ fn defineIr ll: String header: String -> String
 fn beforeSlow frag: String -> String
   (optionOr (stringSlice frag 0 (optionOr (stringIndexOf frag ".slow:\n") (stringLength frag))) frag)
 
-fn probeBranch frag: String miss: String -> String
-  (let [(mark ".sIn = icmp slt i32 1, %")]
-    (match (stringIndexOf frag mark)
-      ((none) "<no .sIn bound compare>")
-      ((some at) (let [(tail (optionOr (stringSlice frag (+ at (stringLength mark)) (stringLength frag)) ""))
-                       (r (optionOr (stringSlice tail 0 (optionOr (stringIndexOf tail ".n\n") 0)) ""))]
-                   (str "  br i1 %" r ".sIn, label %" r ".sprobe, label %" r "." miss "\n")))))
-
 fn ! expectSameError work: String bin: String src: String mode: String want: String -> Bool
   (let [(native (sh (str work "/" bin " " mode)))
         (hosted (sh (str (host) " run " src " " mode)))]
@@ -455,21 +447,15 @@ fn ! testTypedFields work: String -> Bool
               ((ok ll) (let [(getY (defineIr ll "define tailcc i64 @getY("))
                              (nameOf (defineIr ll "define tailcc %Val @nameOf("))]
                          (do (assert (ok? (fileWrite (str work "/typedFieldMod.ll") ll)) "typedField: .ll written")
-                             (assert (stringContains? getY ".skeyp = getelementptr inbounds i32, ptr ") (str "typedField getY: keys[1] is addressed at y's static index:\n" getY))
-                             (assert (stringContains? getY ".keys, i64 1\n") (str "typedField getY: the probed key is keys[1], y's declared index in Point:\n" getY))
-                             (assert (stringContains? getY ".sIn = icmp slt i32 1, %") (str "typedField getY: y's index 1 is bound-checked against Rec.n before keys[1] is read:\n" getY))
-                             (assert (and (stringContains? getY ".n\n  br i1 %") (stringContains? getY ".sIn, label %")) (str "typedField getY: the bound check's result guards the branch to the probe:\n" getY))
-                             (assert (stringContains? getY (probeBranch getY "loop")) (str "typedField getY: an index past Rec.n skips the probe for the key scan (.loop), never reading keys[1]:\n" getY))
-                             (assert (stringContains? getY ".skeyOk = icmp eq i32 ") (str "typedField getY: keys[i] is compared with @fieldId.y:\n" getY))
-                             (assert (stringContains? getY "@fieldId.y") (str "typedField getY: the compare reads the cached interned id of y:\n" getY))
+                             ; (:m :ref UNBOXFIELDS :do "Point and Person declare Int64 fields, so both take the descriptor layout: a typed read compares the keys word with the schema's tagged descriptor and loads at the constant offset; the old static key probe stays for all-boxed schemas")
+                             (assert (stringContains? getY ".isDesc = icmp eq ptr %") (str "typedField getY: the keys word is compared with a descriptor:\n" getY))
+                             (assert (stringContains? getY "getelementptr inbounds (i8, ptr @keyIds.Point, i64 9)") (str "typedField getY: the descriptor is Point's, tagged (+8 keys | 1):\n" getY))
+                             (assert (stringContains? getY ".valp = getelementptr inbounds i8, ptr %") (str "typedField getY: the fused hit loads the raw word at a constant offset:\n" getY))
+                             (assert (stringContains? getY ", i64 32\n") (str "typedField getY: y is Point's second raw word at 24 + 8:\n" getY))
                              (refute (stringContains? (beforeSlow getY) "@objrt.field(") (str "typedField getY: no call to objrt.field before the cold .slow block:\n" getY))
-                             (assert (stringContains? nameOf ".keys, i64 1\n") (str "typedField nameOf: the probed key is keys[1], name's declared index in Person:\n" nameOf))
-                             (assert (stringContains? nameOf ".sIn = icmp slt i32 1, %") (str "typedField nameOf: name's index 1 is bound-checked against Rec.n before keys[1] is read:\n" nameOf))
-                             (assert (and (stringContains? nameOf ".n\n  br i1 %") (stringContains? nameOf ".sIn, label %")) (str "typedField nameOf: the bound check's result guards the branch to the probe:\n" nameOf))
-                             (assert (stringContains? nameOf (probeBranch nameOf "slow")) (str "typedField nameOf: an index past Rec.n goes to the cold .slow block, never reading keys[1]:\n" nameOf))
-                             (assert (stringContains? nameOf ".skeyOk = icmp eq i32 ") (str "typedField nameOf: keys[i] is compared with @fieldId.name:\n" nameOf))
+                             (assert (stringContains? nameOf "getelementptr inbounds (i8, ptr @keyIds.Person, i64 9)") (str "typedField nameOf: the descriptor is Person's:\n" nameOf))
                              (assert (stringContains? nameOf ".slotp = getelementptr inbounds i8, ptr ") (str "typedField nameOf: the static slot is addressed:\n" nameOf))
-                             (assert (stringContains? nameOf ", i64 40\n") (str "typedField nameOf: name's static slot is at offset 40 (index 1):\n" nameOf))
+                             (assert (stringContains? nameOf ", i64 24\n") (str "typedField nameOf: name is Person's only boxed slot, at 24, before the raw age word:\n" nameOf))
                              (refute (stringContains? (beforeSlow nameOf) "@objrt.field(") (str "typedField nameOf: no call to objrt.field before the cold .slow block:\n" nameOf))
                              (link work "typedFieldMod" (lib))
                              (let [(native (sh (str work "/typedFieldMod")))

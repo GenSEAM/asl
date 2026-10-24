@@ -1,5 +1,5 @@
 (module asl-cli/asl1Cache
-  :x [nativeAsl1! singleFlight! bootstrap! buildNative! buildNativeTransaction! closure!]
+  :x [notraceLib! nativeAsl1! singleFlight! bootstrap! buildNative! buildNativeTransaction! closure!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl-parser/ast :a a) (asl-checker/resolve :a r) (asl/packages/asl-cli/src/nativeBuild :a nb)])
 
 fn compilerPath! ctx: sys/Context -> String

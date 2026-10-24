@@ -367,11 +367,20 @@ fn firstByName decls: (List ty/SsaTypeDecl) -> (List ty/SsaTypeDecl)
             (pair (list) (mapEmpty)) decls)))
 
 fn firstRecordByName decls: (List ty/SsaRecordDecl) -> (List ty/SsaRecordDecl)
-  (listReverse
-    (pairFirst
-      (fold (fn [(st (Pair (List ty/SsaRecordDecl) (Map String Bool))) (d ty/SsaRecordDecl)] -> (Pair (List ty/SsaRecordDecl) (Map String Bool))
-              (if (mapHas? (pairSecond st) d.name) st (pair (cons d (pairFirst st)) (mapSet (pairSecond st) d.name true))))
-            (pair (list) (mapEmpty)) decls)))
+  (let [(typedByName (fold (fn [(m (Map String ty/SsaRecordDecl)) (d ty/SsaRecordDecl)] -> (Map String ty/SsaRecordDecl)
+                             (if (and (ty/ssaRecordRaw? d) (not (mapHas? m d.name))) (mapSet m d.name d) m))
+                           (mapEmpty) decls))
+        (preferTyped (fn [(d ty/SsaRecordDecl)] -> ty/SsaRecordDecl
+                       (if (ty/ssaRecordRaw? d) d
+                         (match (mapGet typedByName d.name)
+                           ((some t) (if (= t.fields d.fields) t d))
+                           ((none) d)))))]
+    (map preferTyped
+      (listReverse
+        (pairFirst
+          (fold (fn [(st (Pair (List ty/SsaRecordDecl) (Map String Bool))) (d ty/SsaRecordDecl)] -> (Pair (List ty/SsaRecordDecl) (Map String Bool))
+                  (if (mapHas? (pairSecond st) d.name) st (pair (cons d (pairFirst st)) (mapSet (pairSecond st) d.name true))))
+                (pair (list) (mapEmpty)) decls)))))
 
 fn firstExternByName decls: (List ty/SsaExtern) -> (List ty/SsaExtern)
   (listReverse
