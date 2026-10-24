@@ -2,6 +2,8 @@
   :x [runTests]
   :i [(asl/agentLoop/core :a c) (asl-proc/runnerBin :a rb)])
 
+; (:m :ref LEON-HARNESS5 :do "the dry-run systemPrompt value is compared as {PROMPT}: it carries the date, platform, cwd and branch rows of harness5 and is asserted by leonHarness5Test")
+
 ; (:m :ref MAINPARITY-ENV :do "dry-run and plan_* fixture receipts embed the systemPrompt's 'stage-0 host' sentence, which journal.asl#grammarOf! fills in from asl-proc/runnerBin#runnerDisplay!: the plain repo-relative asl/host/out/asl-host path only when no fresh native-CLI cache entry exists for this root, otherwise the cached native binary's own path under the shared, machine-wide ~/.asl/run/nativeCli -- a value this suite cannot hardcode, since it depends on whichever checkout or worktree root last triggered a native build, not on fixture content. The fixture's '{ROOT}/asl/host/out/asl-host' literal silently assumed the never-cached case; it is now '{HOST}', filled in with the same runnerDisplay! call main.asl itself makes, so the comparison tracks whatever the real loop actually reports instead of one checkout's incidental cache state")
 
 fn shellQuote s: String -> String
@@ -81,6 +83,21 @@ fn ! fixtureRowForForm repo: String lines: (List String) scope: String form: Str
 fn ! receiptExpected repo: String hostDisplay: String row: String -> String
   (stringReplace (stringReplace (fixtureField row "receipt") "{HOST}" hostDisplay) "{ROOT}" repo)
 
+fn promptEnd s: String i: Int64 -> Int64
+  (cond
+    ((>= i (stringLength s)) i)
+    ((= (optionOr (stringSlice s i (+ i 1)) "") "\\") (promptEnd s (+ i 2)))
+    ((= (optionOr (stringSlice s i (+ i 1)) "") "\"") i)
+    (else (promptEnd s (+ i 1))))
+
+fn promptStub stdout: String -> String
+  (match (stringIndexOf stdout " :systemPrompt \"")
+    ((none) stdout)
+    ((some i)
+      (let [from (+ i 16)
+            to (promptEnd stdout from)]
+        (str (optionOr (stringSlice stdout 0 from) "") "{PROMPT}" (optionOr (stringSlice stdout to (stringLength stdout)) "")))))
+
 fn ! matchesFixtureRow repo: String hostDisplay: String scope: String env: String form: String row: String -> Bool
   (let [rowScope (fixtureField row "scope")
         expected (receiptExpected repo hostDisplay row)
@@ -88,7 +105,7 @@ fn ! matchesFixtureRow repo: String hostDisplay: String scope: String env: Strin
     (and (!= row "")
          (or (= rowScope scope) (and (= scope "default") (= rowScope "")))
          (fixtureFormMatches repo row form)
-         (= actual.stdout expected)
+         (= (promptStub actual.stdout) expected)
          (= actual.exitCode (fixtureInt row "exit"))))
 
 fn ! fixtureMismatchesAt repo: String hostDisplay: String scope: String env: String prefix: String index: Int64 forms: (List String) acc: (List String) -> (List String)

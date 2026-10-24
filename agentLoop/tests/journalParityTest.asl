@@ -190,13 +190,6 @@ fn retSer root: String r: (Result String String) -> String
     ((ok s) (t/sDict (list (pair "ret" (t/sStr (norm root s))))))
     ((err e) (raised root e)))
 
-fn ! harnessCase root: String a: (List p/SexpNode) -> String
-  (retSer root (j/harnessLayers (subRoot root (t/argStr (t/argAt a 2))) (subRoot root (t/argStr (t/argAt a 0))) (t/argStr (t/argAt a 1))))
-
-fn ! promptCase root: String a: (List p/SexpNode) -> String
-  (retSer root (j/buildSystemPrompt (subRoot root (t/argStr (t/argAt a 6))) (t/argStr (t/argAt a 0)) (subRoot root (t/argStr (t/argAt a 1)))
-                                    (t/argStr (t/argAt a 2)) (t/argStrs (t/argAt a 3)) (t/argOptInt (t/argAt a 4)) (t/argBool (t/argAt a 5))))
-
 fn ! filePatchCase a: (List p/SexpNode) -> String
   (let [old (t/argOptStr (t/argAt a 1))
         new (t/argOptStr (t/argAt a 2))
@@ -219,12 +212,10 @@ fn ! dispatch! n: Int64 fname: String a: (List p/SexpNode) -> String
     ((= fname "retainJournal") (fsCase! n a retainCase))
     ((= fname "applyResumePatch") (fsCase! n a resumeCase))
     ((= fname "handBack") (fsCase! n a handBackCase))
-    ((= fname "harnessLayers") (fsCase! n a harnessCase))
-    ((= fname "buildSystemPrompt") (fsCase! n a promptCase))
     (else (str "(unknown fn " fname ")")))
 
 fn ! runTests -> Bool
-  (let [fns (list "harnessLayers" "buildSystemPrompt" "retainJournal" "journalWrite" "snapshotBeforeWrite" "patchLines"
+  (let [fns (list "retainJournal" "journalWrite" "snapshotBeforeWrite" "patchLines"
                   "filePatch" "applyResumePatch" "handBack" "writtenField" "handBackFields")
         passed (t/replay! (fixturePath) fns (fn [fname args] (dispatch! (monotonicNs) fname args)))]
     (do

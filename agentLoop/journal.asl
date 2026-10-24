@@ -3,7 +3,7 @@
       harnessLayers buildSystemPrompt retainJournal journalWrite snapshotBeforeWrite patchLines filePatch!
       applyResumePatch handBack writtenField handBackFields
       newWritten idleWritten git! asnRead asnReadOne pathNorm pathRel pathJoin pathDirname splitExt loadEffects]
-  :i [(asl/agentLoop/core :a c) (asl/agentLoop/diff :a d) (asl-proc/coreProcess :a cp) (asl-proc/runnerBin :a rb)])
+  :i [(asl/agentLoop/core :a c) (asl/agentLoop/diff :a d) (asl-proc/coreProcess :a cp) (asl-proc/runnerBin :a rb) (asl-harness/launch :a lh)])
 
 (schema Snapshot
   (:f bytes (Option String))
@@ -15,27 +15,12 @@
   (:f files (Option (List (Pair String Snapshot))))
   (:f startHead (Option String)))
 
-(schema Grammar
-  (:f harness String)
-  (:f clients String)
-  (:f tools String)
-  (:f host String))
-
 enum AsnNode
   (asnKw name: String)
   (asnSym text: String)
   (asnStr text: String)
   (asnNum text: String)
   (asnForm items: (List AsnNode))
-
-enum Layer
-  (layerOf id: String conds: (Option (List String)) text: (Option String) src: (Option String))
-
-(schema Harness
-  (:f layers (List Layer))
-  (:f intro String)
-  (:f items (List (Pair String (Pair (Option AsnNode) (Option AsnNode)))))
-  (:f modes (List (Pair String (List String)))))
 
 fn newWritten root: String startHead: (Option String) -> Written
   (Written :root root :files (some (list)) :startHead startHead)
@@ -731,15 +716,6 @@ fn asnReadOne text: String -> (Result AsnNode String)
         (ok (c/firstOf vs))
         (err (str "expected one form, found " (stringFromInt64 (listLength vs)) " values")))))
 
-fn formItems v: AsnNode -> (List AsnNode)
-  (match v ((asnForm xs) xs) ((asnKw _) (list)) ((asnSym _) (list)) ((asnStr _) (list)) ((asnNum _) (list)))
-
-fn strLike v: AsnNode -> (Option String)
-  (match v ((asnKw k) (some k)) ((asnSym t) (some t)) ((asnStr t) (some t)) ((asnNum _) none) ((asnForm _) none))
-
-fn strIs v: AsnNode s: String -> Bool
-  (match (strLike v) ((some t) (= t s)) ((none) false))
-
 fn reprChar q: String x: String -> String
   (cond
     ((= x "\\") "\\\\")
@@ -753,9 +729,6 @@ fn pyReprStr s: String -> String
   (let [q (if (and (stringContains? s "'") (not (stringContains? s "\""))) "\"" "'")]
     (str q (c/joinAll (map (fn [x] (reprChar q x)) (stringChars s))) q))
 
-fn pyReprList xs: (List String) -> String
-  (str "[" (c/joinSep (map pyReprStr xs) ", ") "]")
-
 fn nodeRepr v: AsnNode -> String
   (match v
     ((asnKw k) (str ":" k))
@@ -763,17 +736,6 @@ fn nodeRepr v: AsnNode -> String
     ((asnStr t) (pyReprStr t))
     ((asnNum t) t)
     ((asnForm xs) (str "[" (c/joinSep (map nodeRepr xs) ", ") "]")))
-
-fn nodeStr v: AsnNode -> String
-  (match v
-    ((asnKw k) k)
-    ((asnSym t) t)
-    ((asnStr t) t)
-    ((asnNum t) t)
-    ((asnForm _) (nodeRepr v)))
-
-fn optStr o: (Option AsnNode) -> String
-  (match o ((some v) (nodeStr v)) ((none) "None"))
 
 fn isKw v: AsnNode key: String -> Bool
   (match v ((asnKw k) (= k key)) ((asnSym _) false) ((asnStr _) false) ((asnNum _) false) ((asnForm _) false))
@@ -783,47 +745,6 @@ fn getLoop xs: (List AsnNode) key: String found: (Option AsnNode) -> (Option Asn
     found
     (getLoop (c/restOf xs) key (if (isKw (c/firstOf xs) key) (some (c/firstOf (c/restOf xs))) found)))
 
-fn formGet v: AsnNode key: String -> (Option AsnNode)
-  (getLoop (formItems v) key none)
-
-fn truthy v: AsnNode -> Bool
-  (match v
-    ((asnForm xs) (not (listEmpty? xs)))
-    ((asnStr t) (not (stringEmpty? t)))
-    ((asnKw k) (not (stringEmpty? k)))
-    ((asnSym t) (not (stringEmpty? t)))
-    ((asnNum t) (not (or (= t "0") (or (= t "0.0") (= t "-0.0"))))))
-
-fn pyType v: AsnNode -> String
-  (match v ((asnForm _) "Form") ((asnNum t) (if (isIntTok t) "int" "float")) ((asnKw _) "Keyword") ((asnSym _) "Symbol") ((asnStr _) "str"))
-
-fn headIs v: AsnNode head: String -> Bool
-  (match (listHead (formItems v)) ((some h) (strIs h head)) ((none) false))
-
-fn formsOf o: (Option AsnNode) head: String -> (Result (List AsnNode) String)
-  (match o
-    ((none) (ok (list)))
-    ((some v)
-      (cond
-        ((not (truthy v)) (ok (list)))
-        ((isForm v) (ok (filter (fn [x] (and (isForm x) (headIs x head))) (formItems v))))
-        (else (err (str "AttributeError: '" (pyType v) "' object has no attribute 'forms'"))))))
-
-fn ! grammarOf! repoRoot: String -> Grammar
-  (Grammar :harness (pathJoin repoRoot "asl/grammar/harness.asn") :clients (pathJoin repoRoot "asl/grammar/clients.asn")
-           :tools (pathJoin repoRoot "asl/grammar/tools.asn") :host (rb/runnerDisplay! repoRoot))
-
-fn systemExit msg: String -> String
-  (str "SystemExit: " msg)
-
-fn ! readTree! path: String -> (Result AsnNode String)
-  (match (readText! path)
-    ((err e) (err e))
-    ((ok text)
-      (match (asnReadOne text)
-        ((err e) (err (systemExit (str "launch: " path ": " e))))
-        ((ok t) (ok t)))))
-
 fn dictPut kv: (List (Pair String T)) k: String v: T -> (List (Pair String T))
   (if (listAny? (fn [pr] (= (pairFirst pr) k)) kv)
     (map (fn [pr] (if (= (pairFirst pr) k) (pair k v) pr)) kv)
@@ -832,377 +753,32 @@ fn dictPut kv: (List (Pair String T)) k: String v: T -> (List (Pair String T))
 fn dictAt kv: (List (Pair String T)) k: String -> (Option T)
   (match (listHead (filter (fn [pr] (= (pairFirst pr) k)) kv)) ((some pr) (some (pairSecond pr))) ((none) none))
 
-fn clientFields items: (List AsnNode) i: Int64 acc: (List (Pair String AsnNode)) -> (List (Pair String AsnNode))
-  (if (>= i (- (listLength items) 1))
-    acc
-    (let [k (optionOr (listGet items i) (asnSym ""))
-          v (optionOr (listGet items (+ i 1)) (asnSym ""))]
-      (clientFields items (+ i 2) (match k ((asnKw name) (dictPut acc name v)) ((asnSym _) acc) ((asnStr _) acc) ((asnNum _) acc) ((asnForm _) acc)))))
-
-fn addClient acc: (Result (List (Pair String (List (Pair String AsnNode)))) String) f: AsnNode -> (Result (List (Pair String (List (Pair String AsnNode)))) String)
-  (match acc
-    ((err e) (err e))
-    ((ok cs)
-      (let [fields (clientFields (formItems f) 1 (list))]
-        (match (dictAt fields "id")
-          ((none) (err "KeyError: 'id'"))
-          ((some idv) (ok (dictPut cs (nodeStr idv) (filter (fn [pr] (not (= (pairFirst pr) "id"))) fields))))))))
-
-fn ! loadClients! g: Grammar -> (Result (List (Pair String (List (Pair String AsnNode)))) String)
-  (match (readTree! g.clients)
-    ((err e) (err e))
-    ((ok tree)
-      (match (formsOf (formGet tree "clients") "client")
-        ((err e) (err e))
-        ((ok forms) (fold addClient (ok (list)) forms)))))
-
-fn ! clientField! g: Grammar client: String field: String -> (Result (Option String) String)
-  (match (loadClients! g)
-    ((err e) (err e))
-    ((ok cs)
-      (ok (match (dictAt cs client)
-            ((none) none)
-            ((some fields) (match (dictAt fields field) ((some v) (strLike v)) ((none) none)))))))
-
-fn nodeIter o: (Option AsnNode) -> (Result (List String) String)
-  (match o
-    ((none) (ok (list)))
-    ((some v)
-      (cond
-        ((not (truthy v)) (ok (list)))
-        ((isForm v) (ok (map nodeStr (formItems v))))
-        ((some? (strLike v)) (ok (stringChars (optionOr (strLike v) ""))))
-        (else (err (str "TypeError: '" (pyType v) "' object is not iterable"))))))
-
-fn notForm o: (Option AsnNode) -> Bool
-  (match o ((some v) (not (isForm v))) ((none) false))
-
-fn layerCheck f: AsnNode -> (Result Layer String)
-  (let [lid (optStr (formGet f "id"))
-        text (formGet f "text")
-        src (formGet f "from")
-        whenV (formGet f "when")
-        unlessV (formGet f "unless")
-        badText (match text ((some t) (none? (strLike t))) ((none) false))]
-    (cond
-      ((or (= (none? text) (none? src)) badText)
-        (err (systemExit (str "launch: layer " lid " needs exactly one of :text \"...\" or :from"))))
-      ((notForm whenV) (err (systemExit (str "launch: layer " lid " :when must be a list of facts"))))
-      ((notForm unlessV) (err (systemExit (str "launch: layer " lid " :unless must be a list of facts"))))
-      (else
-        (let [cnd (listAppend (resultOr (nodeIter whenV) (list)) (map (fn [u] (str "!" u)) (resultOr (nodeIter unlessV) (list))))]
-          (ok (layerOf lid (if (listEmpty? cnd) none (some cnd))
-                       (match text ((some t) (strLike t)) ((none) none))
-                       (match src ((some s) (some (nodeStr s))) ((none) none))))))))
-
-fn attGet att: (Option AsnNode) key: String -> (Result (Option AsnNode) String)
-  (match att
-    ((none) (ok none))
-    ((some v)
-      (cond
-        ((not (truthy v)) (ok none))
-        ((isForm v) (ok (formGet v key)))
-        (else (err (str "AttributeError: '" (pyType v) "' object has no attribute 'get'"))))))
-
-fn missingOf items: (List (Pair String (Pair (Option AsnNode) (Option AsnNode)))) ids: (List String) -> (List String)
-  (filter (fn [i] (none? (dictAt items i))) ids)
-
-fn modesMissing g: Grammar items: (List (Pair String (Pair (Option AsnNode) (Option AsnNode)))) modes: (List (Pair String (List String))) -> (Option String)
-  (match (listHead (filter (fn [m] (not (listEmpty? (missingOf items (pairSecond m))))) modes))
-    ((none) none)
-    ((some m)
-      (some (systemExit (str "launch: mode " (pairFirst m) " names unknown attractors "
-                             (pyReprList (missingOf items (pairSecond m))) " in " g.harness)))))
-
-fn collect rs: (List (Result T String)) -> (Result (List T) String)
-  (fold (fn [acc r] (match acc ((err e) (err e)) ((ok xs) (match r ((err e) (err e)) ((ok x) (ok (listAppend xs (list x)))))))) (ok (list)) rs)
-
-fn modeOfForm m: AsnNode -> (Result (Pair String (List String)) String)
-  (match (nodeIter (formGet m "attractors"))
-    ((err e) (err e))
-    ((ok ids) (ok (pair (optStr (formGet m "id")) ids))))
-
-fn ! attractorsOf! g: Grammar tree: AsnNode layers: (List Layer) -> (Result Harness String)
-  (let [att (formGet tree "attractors")
-        parts (collect (list (attGet att "items") (attGet att "modes") (attGet att "intro")))]
-    (match parts
-      ((err e) (err e))
-      ((ok nodes)
-        (let [itemsNode (optionOr (listGet nodes 0) none)
-              modesNode (optionOr (listGet nodes 1) none)
-              introNode (optionOr (listGet nodes 2) none)]
-          (match (formsOf itemsNode "attractor")
-            ((err e) (err e))
-            ((ok aforms)
-              (match (formsOf modesNode "mode")
-                ((err e) (err e))
-                ((ok mforms)
-                  (match (collect (map modeOfForm mforms))
-                    ((err e) (err e))
-                    ((ok modeList)
-                      (let [items (fold (fn [acc a] (dictPut acc (optStr (formGet a "id")) (pair (formGet a "goal") (formGet a "shadow")))) (list) aforms)
-                            modes (fold (fn [acc m] (dictPut acc (pairFirst m) (pairSecond m))) (list) modeList)]
-                        (match (modesMissing g items modes)
-                          ((some e) (err e))
-                          ((none)
-                            (ok (Harness :layers layers
-                                         :intro (match introNode ((some v) (if (truthy v) (nodeStr v) "")) ((none) ""))
-                                         :items items :modes modes)))))))))))))))
-
-fn ! loadHarness! g: Grammar -> (Result Harness String)
-  (match (readTree! g.harness)
-    ((err e) (err e))
-    ((ok tree)
-      (if (not (headIs tree "harness"))
-        (err (systemExit (str "launch: " g.harness " is not a (:harness ...) form")))
-        (match (formsOf (formGet tree "layers") "layer")
-          ((err e) (err e))
-          ((ok lforms)
-            (match (collect (map layerCheck lforms))
-              ((err e) (err e))
-              ((ok layers)
-                (if (listEmpty? layers)
-                  (err (systemExit (str "launch: " g.harness " has no :layers")))
-                  (match (attractorsOf! g tree layers)
-                    ((err e) (err e))
-                    ((ok h)
-                      (match (loadClients! g)
-                        ((err e) (err e))
-                        ((ok _) (ok h)))))))))))))
-
-fn ! whichAsl -> (Option String)
-  (listHead (filter (fn [p] (match (statOf p) ((some st) (and st.isFile (not (= (& st.mode 73) 0)))) ((none) false)))
-                    (map (fn [dir] (pathJoin (if (stringEmpty? dir) "." dir) "asl")) (stringSplit (optionOr (envGet "PATH") "") ":"))))
-
-fn migrateTrue text: String i: Int64 -> Bool
-  (match (stringIndexOf (sl text i (stringLength text)) ":migrate")
-    ((none) false)
-    ((some k)
-      (let [n (stringLength text)
-            p (+ (+ i k) 8)
-            q (leftEnd text p n)]
-        (if (and (> q p) (and (= (sl text q (+ q 4)) "true") (not (isWord (ch text (+ q 4))))))
-          true
-          (migrateTrue text p)))))
-
-fn ! facts! g: Grammar client: String cwd: String mode: String -> (Result (List (Pair String Bool)) String)
-  (match (git! cwd (list "rev-parse" "--show-toplevel"))
-    ((err e) (err e))
-    ((ok top)
-      (let [root (if (= top.exitCode 0) (pyStrip top.stdout) "")
-            hasRoot (not (stringEmpty? root))
-            asex (and hasRoot (isFile? (pathJoin root "asl/grammar/rules.asn")))
-            aslSrc (if hasRoot
-                     (match (git! root (list "ls-files" "--" "*.asl")) ((ok o) (not (stringEmpty? (pyStrip o.stdout)))) ((err _) false))
-                     false)
-            cfg (if hasRoot (pathJoin root ".asl.config.asn") "")
-            migrate (and hasRoot (and (isFile? cfg) (migrateTrue (resultOr (fileReadString cfg) "") 0)))]
-        (match (loadClients! g)
-          ((err e) (err e))
-          ((ok cs)
-            (match (clientField! g client "shell")
-              ((err e) (err e))
-              ((ok shell)
-                (match (clientField! g client "subagent")
-                  ((err e) (err e))
-                  ((ok sub)
-                    (ok (list (pair "git" hasRoot) (pair "asex" asex) (pair "foreign" (and hasRoot (not asex)))
-                              (pair "aslProject" (or asex (or aslSrc migrate)))
-                              (pair "shell" (some? shell)) (pair "asl" (some? (whichAsl)))
-                              (pair "session" (not (stringEmpty? (optionOr (envGet "ASL_SESSION") ""))))
-                              (pair "implement" (or (= mode "implement") (= mode "grade")))
-                              (pair "distill" (= mode "distill")) (pair "agy" (= client "agy")) (pair "codex" (= client "codex"))
-                              (pair "once" false) (pair "chat" (none? (dictAt cs client))) (pair "tools" (some? (dictAt cs client)))
-                              (pair "subagent" (some? sub)))))))))))))
-
-fn ! gitState! cwd: String -> (Result String String)
-  (match (git! cwd (list "rev-parse" "--show-toplevel"))
-    ((err e) (err e))
-    ((ok top)
-      (if (not (= top.exitCode 0))
-        (ok "none")
-        (match (git! cwd (list "branch" "--show-current"))
-          ((err e) (err e))
-          ((ok b)
-            (let [branch (pyStrip b.stdout)]
-              (ok (str (pyStrip top.stdout) " on " (if (stringEmpty? branch) "detached HEAD" branch)))))))))
-
-fn briefOf op: AsnNode -> (Option String)
-  (match (formGet op "brief") ((some v) (strLike v)) ((none) none))
-
-fn ! toolBriefs! g: Grammar -> (Result String String)
-  (match (readTree! g.tools)
-    ((err e) (err e))
-    ((ok tree)
-      (match (formsOf (formGet tree "entries") "op")
-        ((err e) (err e))
-        ((ok ops) (ok (c/joinSep (someOf (map briefOf ops)) "; "))))))
-
-fn topicField t: AsnNode field: String -> (Option String)
-  (if (= (optStr (formGet t "name")) "language")
-    (match (formGet t field) ((some v) (strLike v)) ((none) none))
-    none)
-
-fn ! languageText! g: Grammar field: String -> (Result String String)
-  (match (readTree! g.tools)
-    ((err e) (err e))
-    ((ok tree)
-      (match (formsOf (formGet tree "topics") "topic")
-        ((err e) (err e))
-        ((ok topics)
-          (match (listHead (someOf (map (fn [t] (topicField t field)) topics)))
-            ((some text) (ok text))
-            ((none) (err (systemExit (str "launch: " g.tools " has no (:topic :name :language :" field " ...)")))))))))
-
-fn attractorLine h: Harness i: String -> String
-  (let [gs (optionOr (dictAt h.items i) (pair none none))]
-    (str i ": " (optStr (pairFirst gs)) ", overdone: " (optStr (pairSecond gs))))
-
-fn ! attractorsText! g: Grammar mode: String -> (Result String String)
-  (match (loadHarness! g)
-    ((err e) (err e))
-    ((ok h)
-      (let [ids (optionOr (dictAt h.modes mode) (list))]
-        (if (listEmpty? ids)
-          (err (systemExit (str "launch: no attractors for mode " mode " in " g.harness)))
-          (ok (str h.intro " " (c/joinSep (map (fn [i] (attractorLine h i)) ids) "; ")))))))
-
-fn ! stdoutOf! tool: String args: (List String) -> String
-  (match (run! tool args "/") ((ok o) (pyStrip o.stdout)) ((err e) e))
-
-fn ! fillValue! key: String cwd: String gitState: String briefs: String shell: (Option String) sub: (Option String) -> (Option String)
-  (cond
-    ((= key "cwd") (some cwd))
-    ((= key "git") (some gitState))
-    ((= key "platform") (some (str (stdoutOf! "uname" (list "-s")) " " (stdoutOf! "uname" (list "-r")) " " (stdoutOf! "uname" (list "-m")))))
-    ((= key "date") (some (stdoutOf! "date" (list "+%Y-%m-%d"))))
-    ((= key "shell") (some (optionOr shell "shell")))
-    ((= key "asl") (some (optionOr (whichAsl) "asl")))
-    ((= key "promptDir") (some "the prompt dir"))
-    ((= key "note") (some "note.md"))
-    ((= key "aslMore") (some briefs))
-    ((= key "subagent") (some (optionOr sub "a subagent tool")))
-    (else none))
-
-fn braceNext s: String i: Int64 n: Int64 -> Int64
-  (if (and (< i n) (not (= (ch s i) "{"))) (braceNext s (+ i 1) n) i)
-
-fn ! fillLoop! text: String n: Int64 i: Int64 lookup: (fn [String] -> (Option String)) acc: (List String) -> String
-  (cond
-    ((>= i n) (c/joinAll (listReverse acc)))
-    ((= (ch text i) "{")
-      (let [j (wordRun text (+ i 1) n)]
-        (if (and (> j (+ i 1)) (= (ch text j) "}"))
-          (fillLoop! text n (+ j 1) lookup (cons (optionOr (lookup (sl text (+ i 1) j)) (sl text i (+ j 1))) acc))
-          (fillLoop! text n (+ i 1) lookup (cons "{" acc)))))
-    (else
-      (let [k (braceNext text (+ i 1) n)]
-        (fillLoop! text n k lookup (cons (sl text i k) acc)))))
-
-fn hostEnds s: String i: Int64 len: Int64 n: Int64 -> Bool
-  (and (= (sl s (+ i (- len 8)) (+ i len)) "asl-host")
-       (or (>= (+ i len) n) (not (or (isWord (ch s (+ i len))) (= (ch s (+ i len)) "-")))))
-
-fn hostTokenAt s: String i: Int64 n: Int64 -> Int64
-  (let [before (if (= i 0) "" (ch s (- i 1)))
-        okBefore (or (= i 0) (not (or (isWord before) (or (= before "/") (or (= before ".") (= before "-"))))))]
-    (cond
-      ((not okBefore) 0)
-      ((and (= (sl s i (+ i 13)) "asl/host/out/") (hostEnds s i 21 n)) 21)
-      ((hostEnds s i 8 n) 8)
-      (else 0)))
-
-fn hostLoop s: String n: Int64 i: Int64 start: Int64 host: String acc: (List String) -> String
-  (if (>= i n)
-    (c/joinAll (listReverse (cons (sl s start n) acc)))
-    (let [k (hostTokenAt s i n)]
-      (if (> k 0)
-        (hostLoop s n (+ i k) (+ i k) host (cons host (cons (sl s start i) acc)))
-        (hostLoop s n (+ i 1) start host acc))))
-
-fn hostPaths text: String host: String -> String
-  (hostLoop text (stringLength text) 0 0 host (list))
-
-fn factOf have: (List (Pair String Bool)) w: String -> Bool
-  (optionOr (dictAt have w) false)
-
-fn ! layerPart! g: Grammar mode: String lid: String text: (Option String) src: (Option String) lookup: (fn [String] -> (Option String)) -> (Result String String)
-  (match src
-    ((some s)
-      (cond
-        ((= s "attractors") (attractorsText! g mode))
-        ((= s "language") (languageText! g "text"))
-        ((= s "languageTools") (languageText! g "tools"))
-        (else (err (systemExit (str "launch: layer " lid " :from " s " is not a known source"))))))
-    ((none) (let [t (optionOr text "")] (ok (fillLoop! t (stringLength t) 0 lookup (list))))))
-
-fn ! renderLayers! g: Grammar have: (List (Pair String Bool)) mode: String only: (List String) lookup: (fn [String] -> (Option String)) layers: (List Layer) acc: (List String) -> (Result (List String) String)
-  (if (listEmpty? layers)
-    (ok (listReverse acc))
-    (match (c/firstOf layers)
-      ((layerOf lid cnd text src)
-        (let [rest (c/restOf layers)
-              conds (optionOr cnd (list))
-              pos (filter (fn [w] (not (stringStartsWith? w "!"))) conds)
-              neg (map (fn [w] (sl w 1 (stringLength w))) (filter (fn [w] (stringStartsWith? w "!")) conds))
-              unknown (filter (fn [w] (none? (dictAt have w))) (listAppend pos neg))]
-          (cond
-            ((and (not (listEmpty? only)) (not (listContains? only lid))) (renderLayers! g have mode only lookup rest acc))
-            ((not (listEmpty? unknown))
-              (err (systemExit (str "launch: layer " lid " names unknown facts " (pyReprList unknown) " in " g.harness))))
-            ((and (not (listEmpty? pos)) (not (listAll? (fn [w] (factOf have w)) pos))) (renderLayers! g have mode only lookup rest acc))
-            ((listAny? (fn [w] (factOf have w)) neg) (renderLayers! g have mode only lookup rest acc))
-            (else
-              (match (layerPart! g mode lid text src lookup)
-                ((err e) (err e))
-                ((ok p) (renderLayers! g have mode only lookup rest (cons p acc))))))))))
-
-fn layerId l: Layer -> String
-  (match l ((layerOf lid _ _ _) lid))
-
-fn ! render! g: Grammar cwd: String client: String mode: String only: (List String) -> (Result String String)
-  (match (loadHarness! g)
-    ((err e) (err e))
-    ((ok h)
-      (match (facts! g client cwd mode)
-        ((err e) (err e))
-        ((ok have)
-          (match (gitState! cwd)
-            ((err e) (err e))
-            ((ok gs)
-              (match (clientField! g client "shell")
-                ((err e) (err e))
-                ((ok shell)
-                  (match (toolBriefs! g)
-                    ((err e) (err e))
-                    ((ok briefs)
-                      (match (clientField! g client "subagent")
-                        ((err e) (err e))
-                        ((ok sub)
-                          (let [ids (map layerId h.layers)
-                                unknownOnly (filter (fn [o] (not (listContains? ids o))) only)
-                                lookup (fn [key] (fillValue! key cwd gs briefs shell sub))]
-                            (if (not (listEmpty? unknownOnly))
-                              (err (systemExit (str "launch: cannot render unknown layers " (pyReprList unknownOnly))))
-                              (match (renderLayers! g have mode only lookup h.layers (list))
-                                ((err e) (err e))
-                                ((ok parts) (ok (str (c/joinSep (map (fn [p] (hostPaths p g.host)) parts) "\n") "\n"))))))))))))))))))
-
-fn harnessError e: String -> String
-  (if (stringStartsWith? e "SystemExit: ")
-    (str "RuntimeError: ERR_HARNESS: " (sl e 12 (stringLength e)))
-    e)
-
+; (:m :ref LEON-HARNESS5 :do "Leon renders the same harness5.asn rows asl launch renders, through asl-harness/launch renderAsnFor for client leon; mode implement because Leon has no mode path and its task text picks the phases")
 fn ! harnessLayers repoRoot: String rootDir: String mode: String -> (Result String String)
-  (let [g (grammarOf! repoRoot)]
-    (match (clientField! g "leon" "layers")
-      ((err e) (err (harnessError e)))
-      ((ok names)
-        (if (stringEmpty? (optionOr names ""))
-          (err "RuntimeError: ERR_HARNESS: asl/grammar/clients.asn has no (:client :id leon :layers ...)")
-          (match (render! g rootDir "leon" mode (nonEmpty (map pyStrip (stringSplit (optionOr names "") ","))))
-            ((err e) (err (harnessError e)))
-            ((ok text) (ok (pyStrip text))))))))
+  (let [paths (lh/pathsFor repoRoot (lh/runnerDisplay! repoRoot))
+        clients (fileReadString paths.clients)
+        tools (fileReadString paths.tools)]
+    (match clients
+      ((err e) (err (str "RuntimeError: ERR_HARNESS: " e)))
+      ((ok ctext)
+        (match tools
+          ((err e) (err (str "RuntimeError: ERR_HARNESS: " e)))
+          ((ok ttext)
+            (match (lh/probe! rootDir)
+              ((err e) (err (str "RuntimeError: ERR_HARNESS: " e)))
+              ((ok probe)
+                (match (lh/platform!)
+                  ((err e) (err (str "RuntimeError: ERR_HARNESS: " e)))
+                  ((ok plat)
+                    (match (lh/today!)
+                      ((err e) (err (str "RuntimeError: ERR_HARNESS: " e)))
+                      ((ok day)
+                        (let [loaded (lh/loadSources paths "" ctext ttext)
+                              opts (lh/RenderOpts :cwd rootDir :client "leon" :mode mode :core false :promptDir none :drop (list) :only (list)
+                                                  :fills (list) :once false :platform plat :date day)]
+                          (match (lh/renderAsnFor loaded probe opts)
+                            ((err e) (err (str "RuntimeError: ERR_HARNESS: " e)))
+                            ((ok text) (ok (pyStrip text))))))))))))))))
 
 fn classEnd s: String i: Int64 n: Int64 -> Int64
   (if (and (< i n) (not (= (ch s i) "\""))) (classEnd s (+ i 1) n) i)
@@ -1282,94 +858,39 @@ fn opShapes -> (List (Pair String String))
         (pair "research" "(:step :op \"research\" :topic s [:depth flash|deep|exhaustive])")
         (pair "crawl" "(:step :op \"crawl\" :url u [:distill text|asn] [:limit n])"))
 
-fn writeFact -> String
-  "a write or edit step is applied to the file at once inside :owns; a later edit is the only undo; a run that does not end with green gates is handed back as a patch and the files are restored"
-
-fn oldFact -> String
-  "quote an :old only from text a receipt still shows whole; before a cut can take them, copy the lines you will edit into (:note ...); after a cut re-read only the lines one edit needs, once"
-
-fn deliverFact -> String
-  (str "first state what the task asks you to deliver as (:intent :deliver findings|patch|plan|verdict :why s); "
-       "findings that need web or document research add :kind research, and a turn after a search or research step is served by a research model; "
-       "a later (:intent ...) restates it; findings are done with (:findings ...) claims that receipts back; "
-       "findings accumulate across turns, a claim with the same :file and :anchor replaces the earlier one, "
-       "and (:retract :file f :anchor a) inside (:findings ...) drops one; "
-       "a patch is done once a write is applied and the declared gates pass; a plan is done with (:note ...) and (:done); "
-       "a verdict is done with (:findings ...) citing gate receipts")
-
-fn autoFact -> String
-  (str "the task decides the phases, and you choose them in any order, each as often as needed: "
-       "scout reads and searches and reports (:findings ...); plan sets the plan as the session (:note ...); "
-       "implement writes inside :owns, or anywhere inside the workspace root when no :owns is given; "
-       "grade runs the declared gates with (:step :op \"gate\") and cites their receipts; "
-       "the run ends with (:done), (:findings ...) or (:escalate :reason s); "
-       "(:done :commit s) commits the written paths when the task asks for a commit; "
-       "code it writes catches the specific error and handles or reports it; "
-       "it never writes a bare except or except Exception followed by pass")
-
-fn noteFact -> String
-  (str "a window cut drops older receipts; a (:note ...) survives it, sent whole in every message: "
-       "keep in it the decisions, the target file and span, and the next write")
-
-fn lookupFact -> String
-  (str "an outline step lists a file's defs and classes with their line spans, cheaper than reading it; "
-       "every call site of a function, through aliases and modules: the observe step with :dim callers :symbol s")
-
-fn batchFact -> String
-  (str "batching: a turn costs a whole model call and a wrong guess costs one receipt, "
-       "so each reply carries every independent read, query, edit and gate step you can foresee; "
-       "only a step that needs a receipt not yet seen waits for the next turn, where you recalibrate; "
-       "a reply has no limit on steps; three steps in one reply, the edit quoting lines an earlier receipt showed: "
-       "(:step :op \"edit\" :file \"src/ring.py\" :old \"return xs[len(xs)]\" :new \"return xs[len(xs) - 1]\") "
-       "(:step :op \"read\" :file \"tests/ringTest.sh\" :start 1 :end 60) (:step :op \"gate\" :n 1)"
-       "; once the lines to change are seen, the next reply carries the edit")
-
-fn planFact -> String
-  (str "plan: your first reply carries (:plan (:step :id s1 :do s :check s) ...) beside its first steps; "
-       "the plan is sent whole in every message, and (:now) shows :plan (:done (ids) :current id :turnsOnCurrent n); "
-       "(:planDone :id s1 :ev id) marks a step done, citing the :id of a receipt that shows its :check; "
-       "(:planDrop :id s :why s) drops a step; (:plan :revise ((:step ...) ...) :why s) replaces the steps not done; "
-       "the run is done only when every step is done or dropped")
-
-fn indexed xs: (List String) i: Int64 acc: (List String) -> (List String)
-  (if (listEmpty? xs)
-    (listReverse acc)
-    (indexed (c/restOf xs) (+ i 1) (cons (str "  " (stringFromInt64 i) " \"" (escapeAsn (c/firstOf xs)) "\"") acc)))
+fn quoted xs: (List String) -> String
+  (c/joinSep (map (fn [x] (str "\"" (escapeAsn x) "\"")) xs) " ")
 
 fn opt c: Bool x: String -> (List String)
   (if c (list x) (list))
+
+fn planRow -> String
+  "(:plan :first (:plan (:step :id s1 :do s :check s)) :sentWhole true :now (:plan :done (ids) :current id :turnsOnCurrent n) :marks ((:planDone :id s1 :ev receiptId) (:planDrop :id s :why s) (:plan :revise ((:step ...)) :why s)) :doneWhen (every step (done dropped)) :ev receiptShowingCheck)"
+
+fn batchRow -> String
+  "(:batch :example ((:step :op \"edit\" :file \"src/ring.py\" :old \"return xs[len(xs)]\" :new \"return xs[len(xs) - 1]\") (:step :op \"read\" :file \"tests/ringTest.sh\" :start 1 :end 60) (:step :op \"gate\" :n 1)) :waits (:step :needs receiptNotSeen))"
+
+fn gatesRow gates: (List String) -> String
+  (str "(:gates :run (:step :op \"gate\") :nth (:step :op \"gate\" :n i) :after everyActingTurn :counts (:gate :asserts n :failed 0) :needs (:gt n 0) :redOnRevert (:gt failed 0) :items (" (quoted gates) "))")
 
 fn ! buildSystemPrompt repoRoot: String task: String rootDir: String base: String gates: (List String) contextTokens: (Option Int64) plan: Bool -> (Result String String)
   (let [effects (loadEffects repoRoot)
         confirm (map pairFirst (filter (fn [e] (listContains? (list "outward" "irreversible" "needsConfirm") (pairSecond e))) effects))
         accepted (map pairFirst (filter (fn [e] (and (= (pairSecond e) "local") (not (= (pairFirst e) "step")))) effects))
         shapes (someOf (map (fn [op] (if (listContains? (list "diff" "flush" "discard") op) none (dictAt (opShapes) op))) accepted))
-        head (list "answer contract: a program reads the reply as ASN forms; several forms in one reply run in order; an unbalanced form or over 40 words outside the forms is a parse defect; fenced forms are read"
-                   "grounding: a claim holds when a receipt or the given context shows it; what the context and receipts do not show is unknown; (:escalate :reason s) or a (:findings ...) claim naming what is needed carries it to the reader"
-                   (str "tools: the step forms below are executed in the workspace by the program that reads your reply, and each receipt comes back next turn; " (writeFact) "; " (oldFact))
-                   "scope: paths resolve against the workspace root; a read outside the workspace answers ERR_BOUNDARY_VIOLATION"
-                   "done by escalating: when a receipt shows the cause in a file outside :owns, (:escalate :reason s) naming that file and the receipt :id is the finished answer"
-                   "evidence: (:evidence (:receipt id)) runs nothing; it cites the :id of a receipt already in the context; a command exit counts as evidence only through a run or gate receipt"
-                   (autoFact) (deliverFact))
-        shapeText (str "accepted op forms:\n" (c/joinSep (map (fn [s] (str "  " s)) shapes) "\n") "\n"
-                       "for code with quotes, backslashes or many lines, use :raw and a fenced block on the following lines as the normal way to send code; the escaped-string form stays accepted for short values without escapes.")
-        gateText (str "declared gates; (:step :op \"gate\") runs them all now, :n i the i-th, and they run after every turn that acts; a gate counts when it prints (:gate ... :asserts n :failed 0) with n > 0, and :failed above 0 once the change is reverted:\n"
-                      (c/joinSep (indexed gates 1 (list)) "\n"))
-        parts (listAppend head
-                (listAppend (opt plan (planFact))
-                  (listAppend (list (batchFact) (lookupFact))
-                    (listAppend (opt (not (listEmpty? confirm)) (str "not run, answered with a needsConfirm receipt: " (c/joinSep confirm ", ")))
-                      (listAppend (opt (not (listEmpty? shapes)) shapeText)
-                        (listAppend (list "each (:step ...) runs in the workspace; the next message carries the task, each earlier turn as (:turn n :sent <your forms> :got <its receipts>), and last (:now ...) with the files written, the newest gate runs and :last, the newest turn"
-                                          (noteFact))
-                          (opt (not (listEmpty? gates)) gateText)))))))
+        rows (listAppend (opt (not (listEmpty? shapes)) (str "(:ops :raw \"code with quotes, backslashes or many lines: :raw and a fenced block on the following lines\" :forms (" (quoted shapes) "))"))
+               (listAppend (opt (not (listEmpty? confirm)) (str "(:needsConfirm :answers needsConfirmReceipt :ops (" (quoted confirm) "))"))
+                 (listAppend (opt plan (planRow))
+                   (listAppend (list (batchRow))
+                     (opt (not (listEmpty? gates)) (gatesRow gates))))))
         layers (match contextTokens
-                 ((some t) (if (>= t 8000) (harnessLayers repoRoot rootDir "implement") (ok "")))
+                 ((some _) (harnessLayers repoRoot rootDir "implement"))
                  ((none) (ok "")))]
     (match layers
       ((err e) (err e))
       ((ok lay)
-        (ok (c/joinSep (listAppend parts (listAppend (opt (not (stringEmpty? lay)) lay)
-                                           (listAppend (opt (not (stringEmpty? task)) (str "Task: " task))
-                                                       (opt (not (stringEmpty? base)) (str "Base: " base)))))
-                       "\n\n")))))
+        (ok (c/joinSep (listAppend (opt (not (stringEmpty? lay)) lay)
+                         (listAppend rows
+                           (listAppend (opt (not (stringEmpty? task)) (str "(:task " (quoted (list task)) ")"))
+                                       (opt (not (stringEmpty? base)) (str "(:base " (quoted (list base)) ")")))))
+                       "\n")))))
