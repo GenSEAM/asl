@@ -1,7 +1,7 @@
 (:package asl-harness
  :version "0.1.0"
  :entry "src/launch.asl"
- :description "asl launch in ASL: harness prompt render, per-client argv and exec (port of scripts/harness/launch.py)"
+ :description "asl launch in ASL: harness prompt render, per-client argv and exec (port of the retired Python launcher)"
  :aslFirst true
  :modules ["asl-harness/launch" "asl-harness/collect"]
  :dependencies [])
