@@ -1,6 +1,6 @@
 (module asl-cli/nativeBuild
-  :x [Build variantKey! main link! compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! transientFailure?]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-checker/resolve :a r)])
+  :x [Build variantKey! main link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! transientFailure?]
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r)])
 
 (schema Build
   (:f root String)
@@ -101,10 +101,6 @@ fn ! setup! root: String cacheDir: String owner: String -> (Result (Pair Build S
                         ((err e) (err (str "cannot create " start.tmp ": " e)))
                         ((ok _) (ok (pair (with (with start :base (sh/bytesSha256 (stringToBytes (str row "\n" libSha "\n" version)))) :clangVersion version) row)))))))))))))))
 
-fn ! linkWith! b: Build inputs: (List String) ll: String out: String -> (Result String String)
-  (let [(d (child! b (listAppend (cons (clang!) (cons "-O2" inputs)) (list b.lib "-lm" "-o" out))))]
-    (if (passed? d) (ok out) (err (failure (str "clang link of " ll) d))))
-
 fn ! writeParts! ll: String parts: (List (Pair Int64 String)) -> (Result (List String) String)
   (match (listHead parts)
     ((none) (ok (list)))
@@ -116,14 +112,18 @@ fn ! writeParts! ll: String parts: (List (Pair Int64 String)) -> (Result (List S
                     ((ok rest) (ok (cons path rest)))))))))
 
 fn ! partsOf ll: String n: Int64 -> (Result (List String) String)
+  (partsWith ll n (ir/inlineLimit))
+
+fn ! partsWith ll: String n: Int64 limit: Int64 -> (Result (List String) String)
   (match (fileReadString ll)
     ((err e) (err (str "cannot read " ll ": " e)))
-    ((ok text) (match (ir/split text n)
+    ((ok text) (match (ir/splitWith text n limit)
       ((err e) (err (str "cannot split " ll ": " e)))
       ((ok parts) (writeParts! ll (enumerate parts))))))
 
-fn ! compileParts! b: Build ll: String paths: (List String) n: Int64 -> (Result (List String) String)
-  (let [(jobs (map (fn [(p String)] -> run/Job (run/job (list (clang!) "-O2" "-Wno-override-module" "-x" "ir" p "-c" "-o" (str p ".o")) b.root (run/childEnv (list))))
+; (:m :ref BUILDPAR :do "one parts link for every clang shell-out that takes a whole module: split the .ll into up to n parts (irSplit keeps alwaysinline and small internal bodies available in every part), compile them through the bounded job pool and link the objects; one part, or a split that fails, links the whole .ll in one clang call. Returns the part count and, for a whole link, why")
+fn ! compileWith! b: Build clang: String flags: (List String) ll: String paths: (List String) n: Int64 -> (Result (List String) String)
+  (let [(jobs (map (fn [(p String)] -> run/Job (run/job (listAppend (cons clang flags) (list "-Wno-override-module" "-x" "ir" p "-c" "-o" (str p ".o"))) b.root (run/childEnv (list))))
                    paths))
         (done (if (or (<= b.deadlineNs (monotonicNs)) (not (ownerAlive? b))) (list) (run/runPoolLimited jobs n (run/limits (remainingS b) b.maxDesc))))
         (bad (filter (fn [(d run/Done)] -> Bool (not (passed? d))) done))]
@@ -134,22 +134,107 @@ fn ! compileParts! b: Build ll: String paths: (List String) n: Int64 -> (Result 
                                 ((none) (err (str "clang -c of the parts of " ll " failed")))))
       (else (ok (map (fn [(p String)] -> String (str p ".o")) paths)))))
 
+fn ! linkObjs! b: Build clang: String flags: (List String) inputs: (List String) label: String out: String -> (Result String String)
+  (let [(d (child! b (listAppend (cons clang flags) (listAppend inputs (list b.lib "-lm" "-o" out)))))]
+    (if (passed? d) (ok out) (err (failure (str "clang link of " label) d))))
+
+fn ! dropParts! paths: (List String) -> Int64
+  (fold (fn [(acc Int64) (p String)] -> Int64 (let [(_ (pathRemove p)) (_ (pathRemove (str p ".o")))] (+ acc 1))) 0 paths)
+
+; (:m :ref BUILDPAR :do "dev (-O1) builds the parts without the small-body copies: on asl1.asl split 8 ways -O1 alone was no faster than -O2 (clang 26.5 s vs 20.4 s wall, 80.9 vs 80.5 s user, 2026-10-25), so dev buys its speed by skipping the copies the release level needs for runtime parity")
+fn inlineFor flags: (List String) -> Int64
+  (if (listContains? flags "-O1") 0 (ir/inlineLimit))
+
+fn ! linkParts! b: Build clang: String flags: (List String) ll: String out: String n: Int64 -> (Result (Pair Int64 String) String)
+  (let [(whole (fn [(why String)] -> (Result (Pair Int64 String) String)
+                 (match (linkObjs! b clang flags (list "-Wno-override-module" "-x" "ir" ll "-x" "none") (sys/baseName ll) out)
+                   ((err e) (err e))
+                   ((ok _) (ok (pair 1 why))))))]
+    (if (<= n 1) (whole "")
+      (match (partsWith ll n (inlineFor flags))
+        ((err e) (whole e))
+        ((ok paths) (if (< (listLength paths) 2) (do (dropParts! paths) (whole ""))
+                      (let [(linked (match (compileWith! b clang flags ll paths n)
+                                      ((err e) (err e))
+                                      ((ok objs) (match (linkObjs! b clang flags objs (sys/baseName ll) out)
+                                                   ((err e) (err e))
+                                                   ((ok _) (ok (pair (listLength objs) "")))))))
+                            (_ (dropParts! paths))]
+                        linked))))))
+
+; (:m :ref BUILDPAR :do "the link shape is a workspace setting, :native (:parts N :level :dev|:release) in the nearest .asl.config.asn, else in ~/.asl/config.asn; absent, parts is min(online cores, 8) and the level is release (-O2), so a tree without the keys builds as before; dev is -O1")
+fn valueAfter items: (List rd/SExpr) key: String -> (Option rd/SExpr)
+  (match (listHead items)
+    ((none) (none))
+    ((some h) (if (and (rd/isAtom? h) (= (rd/sexprHead h) key)) (listGet items 1) (valueAfter (optionOr (listTail items) (list)) key))))
+
+fn nativeKey text: String key: String -> (Option String)
+  (match (valueAfter (rd/sexprToList (rd/parseSexpr text)) ":native")
+    ((none) (none))
+    ((some native) (match (valueAfter (rd/sexprToList native) key)
+                     ((none) (none))
+                     ((some v) (some (if (rd/isAtom? v) (rd/sexprHead v) (rd/renderSexpr v)))))))
+
+fn levelFlag word: String -> (Result String String)
+  (cond
+    ((or (= word ":release") (= word "release")) (ok "-O2"))
+    ((or (= word ":dev") (= word "dev")) (ok "-O1"))
+    (else (err (str "ERR_CONFIG: :native :level must be :dev or :release, got " word))))
+
+fn partsValue word: String -> (Result Int64 String)
+  (match (stringToInt64 word)
+    ((some n) (if (and (>= n 1) (<= n 64)) (ok n) (err (str "ERR_CONFIG: :native :parts must be 1..64, got " word))))
+    ((none) (err (str "ERR_CONFIG: :native :parts must be an integer, got " word))))
+
+fn parentDir dir: String -> String
+  (let [(parts (stringSplit dir "/"))]
+    (stringJoin (listTake parts (- (listLength parts) 1)) "/"))
+
+fn ! nearestConfig! dir: String -> String
+  (let [(cfg (str dir "/.asl.config.asn"))]
+    (cond
+      ((fileExists? cfg) (resultOr (fileReadString cfg) ""))
+      ((or (stringEmpty? dir) (= dir "/")) "")
+      (else (nearestConfig! (parentDir dir)))))
+
+fn ! configured! dir: String key: String -> (Option String)
+  (match (nativeKey (nearestConfig! dir) key)
+    ((some v) (some v))
+    ((none) (let [(home (optionOr (envGet "HOME") ""))]
+              (if (stringEmpty? home) (none) (nativeKey (resultOr (fileReadString (str home "/.asl/config.asn")) "") key)))))
+
+fn ! onlineCores! -> Int64
+  (match (sys/capture! (list "getconf" "_NPROCESSORS_ONLN") (none))
+    ((ok c) (if (= c.exitCode 0) (max 1 (optionOr (stringToInt64 (stringTrim c.stdout)) 1)) 1))
+    ((err _) 1))
+
+; (:m :ref BUILDPAR :do "a configured or default parts count is an upper bound: each part keeps at least minPartBytes of IR, so a module under 8 MB links whole. bench/native/soa.asl (270 KB, 181 bodies) ran 41% more instructions split 8 ways (440e6 -> 622e6) and gained nothing in link time (282 -> 225 ms); asl1.asl (53.7 MB) still splits 8 ways")
+fn minPartBytes -> Int64
+  4000000
+
+fn partsForSize n: Int64 bytes: Int64 -> Int64
+  (max 1 (min n (/ bytes (minPartBytes))))
+
+fn ! linkPartsFor! dir: String -> (Result Int64 String)
+  (match (configured! dir ":parts")
+    ((some word) (partsValue word))
+    ((none) (ok (min 8 (onlineCores!)))))
+
+fn ! linkLevelFor! dir: String -> (Result String String)
+  (match (configured! dir ":level")
+    ((some word) (levelFlag word))
+    ((none) (ok "-O2")))
+
 fn ! link! b: Build ll: String out: String -> (Result String String)
-  (let [(n (envInt! "ASL_NATIVE_LINK_JOBS" 8))
-        (start (monotonicNs))
-        (whole (fn [(why String)] -> (Result String String)
-                 (do (say! (str "asl: native build: link " (sys/baseName ll) " whole" why))
-                     (linkWith! b (list "-Wno-override-module" "-x" "ir" ll "-x" "none") ll out))))
-        (linked (if (<= n 1) (whole "")
-                  (match (partsOf ll n)
-                    ((err e) (whole (str " (" e ")")))
-                    ((ok paths) (if (< (listLength paths) 2) (whole "")
-                                  (match (compileParts! b ll paths n)
-                                    ((err e) (err e))
-                                    ((ok objs) (do (say! (str "asl: native build: link " (sys/baseName ll) " parts " (stringFromInt64 (listLength objs))))
-                                                   (linkWith! b objs ll out)))))))))]
-    (do (say! (str "asl: native build: link " (sys/baseName ll) " " (stringFromInt64 (/ (- (monotonicNs) start) 1000000)) " ms"))
-        linked))
+  (let [(start (monotonicNs))
+        (linked (match (linkPartsFor! b.root)
+                  ((err e) (err e))
+                  ((ok n) (linkParts! b (clang!) (list "-O2") ll out (partsForSize n (resultOr (fileSize ll) 0))))))]
+    (do (match linked
+          ((ok shape) (say! (str "asl: native build: link " (sys/baseName ll) (if (= (pairFirst shape) 1) (str " whole" (if (stringEmpty? (pairSecond shape)) "" (str " (" (pairSecond shape) ")"))) (str " parts " (stringFromInt64 (pairFirst shape)))))))
+          ((err _) true))
+        (say! (str "asl: native build: link " (sys/baseName ll) " " (stringFromInt64 (/ (- (monotonicNs) start) 1000000)) " ms"))
+        (match linked ((err e) (err e)) ((ok _) (ok out)))))
 
 fn ! sanitizeFlags -> (List String)
   (list "-O0" "-g" "-fno-omit-frame-pointer" "-fsanitize=address,undefined")

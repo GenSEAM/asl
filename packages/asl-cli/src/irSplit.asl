@@ -1,5 +1,5 @@
 (module asl-cli/irSplit
-  :x [Body Split split declOf externOf]
+  :x [Body Split split splitWith inlineLimit declOf externOf]
   :i [])
 
 (schema Body
@@ -81,9 +81,27 @@ fn assign bodies: (List Body) n: Int64 -> (List Int64)
 fn ownText u: Body -> String
   (if (stringStartsWith? u.head "define internal ") (str "define hidden " (optionOr (stringSlice u.text 16 (stringLength u.text)) "")) u.text)
 
-fn otherText u: Body -> (Result String String)
+; (:m :ref BUILDPAR :do "a body at most limit bytes long (2000: on asl1.asl split 8 ways, fixedNt +4.0% with no copies, +3.3% at 800, +0.79% at 1500, +0.16% at 2000, 2026-10-25) is also given to every other part as available_externally, so a small helper (a closure code wrapper, a prelude accessor) still inlines across a part boundary as it does in the whole module; only internal bodies and bodies with default linkage qualify, never main, a weak or a linkonce body")
+fn inlineLimit -> Int64
+  2000
+
+fn linkageWord? w: String -> Bool
+  (listContains? (list "weak" "weak_odr" "linkonce" "linkonce_odr" "private" "hidden" "protected" "available_externally" "external" "extern_weak" "common" "appending" "dllexport") w)
+
+fn plainDefine? head: String -> Bool
+  (not (linkageWord? (optionOr (listHead (stringSplit (optionOr (stringSlice head 7 (stringLength head)) "") " ")) "")))
+
+fn copyText u: Body limit: Int64 -> (Option String)
+  (cond
+    ((or (> u.size limit) (stringContains? u.head " @main(")) (none))
+    ((stringStartsWith? u.head "define internal ") (some (str "define available_externally " (optionOr (stringSlice u.text 16 (stringLength u.text)) ""))))
+    ((plainDefine? u.head) (some (str "define available_externally " (optionOr (stringSlice u.text 7 (stringLength u.text)) ""))))
+    (else (none)))
+
+fn otherText u: Body limit: Int64 -> (Result String String)
   (cond
     ((stringStartsWith? u.head "define linkonce_odr ") (ok u.text))
+    ((some? (copyText u limit)) (ok (optionOr (copyText u limit) "")))
     ((and (stringStartsWith? u.head "define internal ") (stringEndsWith? u.head " alwaysinline {"))
       (ok (str "define available_externally " (optionOr (stringSlice u.text 16 (stringLength u.text)) ""))))
     (else (match (declOf u.head)
@@ -103,18 +121,21 @@ fn collect xs: (List (Result String String)) acc: (List String) -> (Result (List
     ((none) (ok (listReverse acc)))
     ((some r) (match r ((err e) (err e)) ((ok s) (collect (optionOr (listTail xs) (list)) (cons s acc))))))
 
-fn part s: Split owners: (List Int64) k: Int64 -> (Result String String)
+fn part s: Split owners: (List Int64) k: Int64 limit: Int64 -> (Result String String)
   (match (collect (map (fn [(l String)] -> (Result String String) (ownedText k l)) s.owned) (list))
     ((err e) (err e))
     ((ok globals) (match (collect (map (fn [(p (Pair Int64 Body))] -> (Result String String)
-                                       (if (= (pairFirst p) k) (ok (ownText (pairSecond p))) (otherText (pairSecond p))))
+                                       (if (= (pairFirst p) k) (ok (ownText (pairSecond p))) (otherText (pairSecond p) limit)))
                                      (zip owners s.bodies)) (list))
       ((err e) (err e))
       ((ok bodies) (ok (str (stringJoin s.shared "\n") "\n" (stringJoin globals "\n") "\n" (stringJoin bodies "\n") "\n"))))))
 
 fn split text: String n: Int64 -> (Result (List String) String)
+  (splitWith text n (inlineLimit))
+
+fn splitWith text: String n: Int64 limit: Int64 -> (Result (List String) String)
   (match (parse text)
     ((err e) (err e))
     ((ok s) (let [(parts (max 1 (min n (listLength s.bodies))))
                   (owners (assign s.bodies parts))]
-              (collect (map (fn [(k Int64)] -> (Result String String) (part s owners k)) (range 0 parts)) (list)))))
+              (collect (map (fn [(k Int64)] -> (Result String String) (part s owners k limit)) (range 0 parts)) (list)))))

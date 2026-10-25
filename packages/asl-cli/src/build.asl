@@ -5,6 +5,13 @@
 fn usage -> String
   "usage: asl build FILE [-o OUT]"
 
+; (:m :ref BUILDPAR :do "the link shape a build asked for on its command line (--parts N, --dev, --release; the usage line stays the one the argv parity fixtures pin); an empty field means the config decides (nb/linkPartsFor!, nb/linkLevelFor!)")
+(schema Opts
+  (:f target String)
+  (:f out String)
+  (:f parts String)
+  (:f level String))
+
 fn ! fail text: String code: Int64 -> Int64
   (do (sys/sayErr! text) code)
 
@@ -13,18 +20,23 @@ fn findClang! name: String -> (Option String)
     (if (and (sys/isFile? name) (sys/executable? name)) (some name) (none))
     (sys/onPath! name))
 
-fn parseArgs! args: (List String) target: String out: String -> (Result (Pair String String) Int64)
+fn parseArgs! args: (List String) o: Opts -> (Result Opts Int64)
   (match (listHead args)
-    ((none) (ok (pair target out)))
+    ((none) (ok o))
     ((some a)
-      (let [(more (optionOr (listTail args) (list)))]
+      (let [(more (optionOr (listTail args) (list)))
+            (value (fn [(flag String)] -> (Result String Int64)
+                     (if (listEmpty? more)
+                       (err (fail (str "(:build :status :failed :error ERR_USAGE :message \"" flag " requires a value\")") 2))
+                       (ok (optionOr (listHead more) "")))))
+            (after (optionOr (listTail more) (list)))]
         (cond
-          ((= a "-o")
-            (if (listEmpty? more)
-              (err (fail "(:build :status :failed :error ERR_USAGE :message \"-o requires an output path\")" 2))
-              (parseArgs! (optionOr (listTail more) (list)) target (optionOr (listHead more) ""))))
+          ((= a "-o") (match (value "-o") ((err c) (err c)) ((ok v) (parseArgs! after (with o :out v)))))
+          ((= a "--parts") (match (value "--parts") ((err c) (err c)) ((ok v) (parseArgs! after (with o :parts v)))))
+          ((= a "--dev") (parseArgs! more (with o :level "dev")))
+          ((= a "--release") (parseArgs! more (with o :level "release")))
           ((stringStartsWith? a "-") (err (fail (str "(:build :status :failed :error ERR_UNKNOWN_ARG :message \"unknown option " a "\")") 2)))
-          ((stringEmpty? target) (parseArgs! more a out))
+          ((stringEmpty? o.target) (parseArgs! more (with o :target a)))
           (else (err (fail (str "(:build :status :failed :error ERR_USAGE :message \"unexpected argument " a "\")") 2)))))))
 
 fn ! drop! path: String -> Bool
@@ -83,7 +95,7 @@ fn ! variantLib! ctx: sys/Context clang: String lib: String variant: String -> (
                                     :deadlineNs (+ (monotonicNs) 1800000000000) :maxDesc 32))]
                   (if (= variant "notrace") (nb/notraceRuntime! b native (str ctx.root "/asl/packages")) (nb/asanRuntime! b native (str ctx.root "/asl/packages")))))))))))
 
-fn ! effectiveLibAndFlags! ctx: sys/Context clang: String lib: String mode: String -> (Result (Pair String (List String)) String)
+fn ! effectiveLibAndFlags! ctx: sys/Context clang: String lib: String mode: String opt: String -> (Result (Pair String (List String)) String)
   (cond
     ((= mode "asan")
       (match (variantLib! ctx clang lib "asan")
@@ -92,13 +104,23 @@ fn ! effectiveLibAndFlags! ctx: sys/Context clang: String lib: String mode: Stri
     ((= mode "notrace")
       (match (variantLib! ctx clang lib "notrace")
         ((err e) (err e))
-        ((ok ntLib) (ok (pair ntLib (list "-O2"))))))
-    (else (ok (pair lib (list "-O2")))))
+        ((ok ntLib) (ok (pair ntLib (list opt))))))
+    (else (ok (pair lib (list opt)))))
 
-fn ! linkAttempt! clang: String flags: (List String) libs: (List String) ll: String part: String -> (Result sys/Captured String)
-  (sys/capture! (listAppend (list "nice" "-n" "15" clang) (listAppend flags (listAppend (list "-Wno-override-module" "-x" "ir" ll "-x" "none") (listAppend libs (list "-lm" "-o" part))))) (none))
+; (:m :ref BUILDPAR :do "the link goes through nativeBuild's parts path: the .ll is split into the configured number of parts (a --parts flag exactly; a configured or default count only while each part keeps nb/minPartBytes, so a small program links whole as before), compiled in parallel by the bounded job pool and linked; one part, or a split that fails, is the old single clang call. The shape is reported on stderr as one ASN line when it is not the classic one part at -O2, which stays silent as the argv parity cases pin")
+fn ! linkShape! dir: String o: Opts -> (Result (Pair Int64 String) String)
+  (match (if (stringEmpty? o.parts) (nb/linkPartsFor! dir) (nb/partsValue o.parts))
+    ((err e) (err e))
+    ((ok n) (match (if (stringEmpty? o.level) (nb/linkLevelFor! dir) (nb/levelFlag o.level))
+      ((err e) (err e))
+      ((ok opt) (ok (pair n opt))))))
 
-fn ! link! ctx: sys/Context clang: String lib: String target: String out: String tmp: String mode: String -> Int64
+fn ! linkAttempt! ctx: sys/Context clang: String flags: (List String) lib: String ll: String part: String n: Int64 tmp: String -> (Result (Pair Int64 String) String)
+  (let [(b (nb/Build :root ctx.root :cache tmp :tmp tmp :lib lib :base "" :clangVersion "" :owner ""
+                     :deadlineNs (+ (monotonicNs) 3600000000000) :maxDesc (+ 16 (* 4 n))))]
+    (nb/linkParts! b clang flags ll part n))
+
+fn ! link! ctx: sys/Context clang: String lib: String target: String out: String tmp: String mode: String shape: (Pair Int64 String) exact: Bool -> Int64
   (let [(ll (str tmp "/out.ll"))
         (part (str out ".part" (stringFromInt64 (procSelf))))
         (compiled (compileLl! ctx clang lib target ll mode))]
@@ -110,33 +132,42 @@ fn ! link! ctx: sys/Context clang: String lib: String target: String out: String
           (match (dirCreate outDir)
             ((err _) (do (drop! ll) (drop! tmp) (fail (str "ERR_BUILD: cannot create " outDir) 1)))
             ((ok _)
-              (match (effectiveLibAndFlags! ctx clang lib mode)
+              (match (effectiveLibAndFlags! ctx clang lib mode (pairSecond shape))
                 ((err e) (do (drop! ll) (drop! tmp) (fail (str "ERR_BUILD: runtime variant: " e) 1)))
                 ((ok libFlags)
-                  (let [(effLib (pairFirst libFlags))
-                        (flags (pairSecond libFlags))
-                        (linkRes (linkAttempt! clang flags (list effLib) ll part))
+                  (let [(flags (pairSecond libFlags))
+                        (start (monotonicNs))
+                        (n (if exact (pairFirst shape) (nb/partsForSize (pairFirst shape) (resultOr (fileSize ll) 0))))
+                        (linkRes (linkAttempt! ctx clang flags (pairFirst libFlags) ll part n tmp))
+                        (ms (/ (- (monotonicNs) start) 1000000))
                         (removed (drop! tmp))]
-                    (cond
-                      ((err? linkRes) (do (drop! part) (fail (match linkRes ((err e) e) ((ok _) "")) 1)))
-                      ((or (!= (match linkRes ((ok c) c.exitCode) ((err _) 1)) 0) (not (sys/isFile? part)))
-                        (do (drop! part) (fail (str "ERR_BUILD: clang link failed for " target ": " (match linkRes ((ok c) c.stderr) ((err _) ""))) (match linkRes ((ok c) (if (!= c.exitCode 0) c.exitCode 1)) ((err _) 1)))))
-                      ((not removed) (do (drop! part) (fail (str "ERR_BUILD: cannot remove " tmp) 1)))
-                      (else
-                        (match (pathRename part out)
-                          ((err _) (do (drop! part) (fail (str "ERR_BUILD: cannot write " out) 1)))
-                          ((ok _) (do (sys/say! (str "built " out)) 0))))))))))))))
+                    (match linkRes
+                      ((err e) (do (drop! part) (fail (str "ERR_BUILD: clang link failed for " target ": " e) 1)))
+                      ((ok linked)
+                        (cond
+                          ((not (sys/isFile? part)) (do (drop! part) (fail (str "ERR_BUILD: clang link wrote no " part) 1)))
+                          ((not removed) (do (drop! part) (fail (str "ERR_BUILD: cannot remove " tmp) 1)))
+                          (else
+                            (match (pathRename part out)
+                              ((err _) (do (drop! part) (fail (str "ERR_BUILD: cannot write " out) 1)))
+                              ((ok _) (do (if (and (= (pairFirst linked) 1) (= (optionOr (listHead flags) "") "-O2")) true (sys/sayErr! (str "(:build :link (:parts " (stringFromInt64 (pairFirst linked)) " :opt \"" (optionOr (listHead flags) "") "\" :ms " (stringFromInt64 ms)
+                                                             (if (stringEmpty? (pairSecond linked)) "" (str " :whole \"" (stringReplace (pairSecond linked) "\"" "'") "\"")) "))")))
+                                          (sys/say! (str "built " out)) 0))))))))))))))))
 
-fn ! buildFile! ctx: sys/Context clang: String lib: String target: String given: String -> Int64
-  (let [(out (if (stringEmpty? given) (defaultOut target) given))
+fn ! buildFile! ctx: sys/Context clang: String lib: String target: String o: Opts -> Int64
+  (let [(given o.out)
+        (out (if (stringEmpty? given) (defaultOut target) given))
         (checked (verify/nativeCheckPaths! (list target)))]
     (if (!= checked 0)
       checked
       (match (tempDir! (let [(t (optionOr (envGet "TMPDIR") ""))] (if (stringEmpty? t) "/tmp" (if (stringEndsWith? t "/") (optionOr (stringSlice t 0 (- (stringLength t) 1)) t) t))) 0)
         ((err _) (fail "ERR_BUILD: cannot create temporary directory" 1))
-        ((ok tmp) (match (rcc/rcModeIn! (sys/parentOf (resultOr (realPath target) target)) "notrace")
-                    ((err e) (do (drop! tmp) (fail e 1)))
-                    ((ok mode) (link! ctx clang lib target out tmp mode)))))))
+        ((ok tmp) (let [(dir (sys/parentOf (resultOr (realPath target) target)))]
+                    (match (rcc/rcModeIn! dir "notrace")
+                      ((err e) (do (drop! tmp) (fail e 1)))
+                      ((ok mode) (match (linkShape! dir o)
+                        ((err e) (do (drop! tmp) (fail e 1)))
+                        ((ok shape) (link! ctx clang lib target out tmp mode shape (not (stringEmpty? o.parts))))))))))))
 
 fn ! buildCommand! ctx: sys/Context args: (List String) -> Int64
   (let [(first (optionOr (listHead args) ""))
@@ -151,11 +182,11 @@ fn ! buildCommand! ctx: sys/Context args: (List String) -> Int64
           ((some clang)
             (if (not (sys/isFile? lib))
               (fail (str "ERR_BUILD: libaslrt.a not found at " lib "; build it with sh asl/host/build.sh") 1)
-              (match (parseArgs! args "" "")
+              (match (parseArgs! args (Opts :target "" :out "" :parts "" :level ""))
                 ((err code) code)
                 ((ok parsed)
-                  (let [(target (pairFirst parsed))]
+                  (let [(target parsed.target)]
                     (cond
                       ((stringEmpty? target) (fail (usage) 2))
                       ((not (sys/isFile? target)) (fail (str "(:build :status :failed :error ERR_NO_FILE :message \"file not found: " target "\")") 1))
-                      (else (buildFile! ctx clang lib target (pairSecond parsed)))))))))))))
+                      (else (buildFile! ctx clang lib target parsed))))))))))))
