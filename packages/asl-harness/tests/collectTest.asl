@@ -27,7 +27,7 @@ fn ! checkTime -> Bool
         (d (= (c/isoEpoch "2024-02-29T23:59:59Z") 1709251199))
         (e (= (c/epochDays 1792663200) "2026/10/22"))
         (f (= (c/epochDays 1709251199) "2024/02/29"))
-        (g (= (c/slugOf "/Users/x/a.b_c") "-Users-x-a-b-c"))]
+        (g (= (c/slugOf "/work/x/a.b_c") "-work-x-a-b-c"))]
     (do (assert a "isoEpoch fixture time")
         (assert b "isoEpoch epoch")
         (assert d "isoEpoch leap day")

@@ -223,6 +223,19 @@ fn ! testDataDirs configText: String -> (List String)
 fn ! testDataFiles! root: String configText: String -> (List String)
   (fold (fn [(acc (List String)) (d String)] -> (List String) (let [(dir (str root "/" d))] (if (sys/isDir? dir) (listAppend acc (tsa/filesUnder! dir)) acc))) (list) (testDataDirs configText))
 
+; (:m :ref MAINRED4-SYMLINK-20261025 :do "the index walk never indexes a symlink, so a symlinked .asl in a package is no module of it (the escapePkg confinement fixture); the mirror copies bytes through symlinks, which turned such an entry into a real module inside the staged root, so symlinked .asl files are left out of the mirror")
+fn ! indexable? path: String -> Bool
+  (or (not (stringEndsWith? path ".asl")) (match (fileLstat path) ((ok st) (not st.isSymlink)) ((err _) true)))
+
+; (:m :ref MAINRED4-FIRSTPARTY-20261025 :do "the staged package root is :root true, so the toolchain first-party packages (asl-json, the stdlib) were unreachable from it; their non-test .asl sources and manifests are mirrored under the same root, as the in-root resolution sees them")
+fn ! firstPartyFiles! root: String -> (List String)
+  (filter (fn [(p String)] -> Bool
+            (let [(rel (dropPrefixLen p (+ (stringLength root) 1)))]
+              (and (or (stringStartsWith? rel "asl/packages/") (stringStartsWith? rel "asl/tools/"))
+                   (and (not (stringContains? rel "/tests/"))
+                        (or (stringEndsWith? rel ".asl") (stringEndsWith? rel "/manifest.asn"))))))
+          (optionOr (gitFiles! root) (fallbackFiles! root)))
+
 ; (:m :ref NATIVETEST-MIRRORASL-20261023 :do "the package is mirrored twice: flat under the digest directory, the working directory of its suite, so files read relative to the package root open, and again under <digest>/<workspace>/, the indexed root with the synthesized :root true config and the suite, so a file read by a workspace-qualified path (vtbot/asl/x.asl read as text, vtbot/asl/tests/fixtures/x.parquet) opens too; only the second copy sits under the config, so no module is indexed twice")
 fn ! stagePackageMirror! ctx: sys/Context root: String -> (Result String String)
   (let [(digest (bytesSha256 (stringToBytes root)))
@@ -230,7 +243,7 @@ fn ! stagePackageMirror! ctx: sys/Context root: String -> (Result String String)
         (mirrorDir (str (outsidePkgStageDir ctx) "/" digest))
         (pkgDir (str mirrorDir "/" (if (stringEmpty? wsName) "pkg" wsName)))
         (cfgText (resultOr (fileReadString (str root "/.asl.config.asn")) ""))
-        (files (listAppend (optionOr (gitFiles! root) (fallbackFiles! root)) (testDataFiles! root cfgText)))]
+        (files (filter indexable? (listAppend (optionOr (gitFiles! root) (fallbackFiles! root)) (testDataFiles! root cfgText))))]
     (match (ensureDir! pkgDir)
       ((err e) (err (str "cannot create " pkgDir ": " e)))
       ((ok _)
@@ -240,9 +253,12 @@ fn ! stagePackageMirror! ctx: sys/Context root: String -> (Result String String)
             (match (mirrorFiles! root pkgDir files)
               ((err e) (err e))
               ((ok _)
-                (match (writeMirrorConfig! root pkgDir)
-                  ((err e) (err (str "cannot write " pkgDir "/.asl.config.asn: " e)))
-                  ((ok _) (do (touchUsed! mirrorDir) (pruneStage! (outsidePkgStageDir ctx) "" digest) (ok pkgDir)))))))))))
+                (match (mirrorFiles! ctx.root pkgDir (firstPartyFiles! ctx.root))
+                  ((err e) (err e))
+                  ((ok _)
+                    (match (writeMirrorConfig! root pkgDir)
+                      ((err e) (err (str "cannot write " pkgDir "/.asl.config.asn: " e)))
+                      ((ok _) (do (touchUsed! mirrorDir) (pruneStage! (outsidePkgStageDir ctx) "" digest) (ok pkgDir)))))))))))))
 
 fn ! stageOutside! ctx: sys/Context absFile: String -> (Result String String)
   (match (findPackageRoot! (ckr/parentDirOf absFile) 0)
