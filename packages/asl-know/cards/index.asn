@@ -1,4 +1,4 @@
-(:know :tier L0 :cards 76 :tokensBy bytes36 :use "(:know :q intent-or-name :budget N) or asl know; a card id or exact symbol returns its card")
+(:know :tier L0 :cards 77 :tokensBy bytes36 :use "(:know :q intent-or-name :budget N) or asl know; a card id or exact symbol returns its card")
 (:c "core/lang" "how to write ASL: syntax, effects, m..." (module fn))
 (:c "core/arithmetic" "Arithmetic builtins, no import" (+ -))
 (:c "core/comparison" "Comparison and logic builtins, no im..." (= !=))
@@ -71,6 +71,7 @@
 (:c "asl-transpile" "AgentSlang Multi-Target AST Transpil..." (makeKv renderJson))
 (:c "asl-tz" "Pure ASL TZif and POSIX timezone sup..." (tzifParse loadZoneBytes))
 (:c "asl-ui" "Pure AgentSlang Universal Declarativ..." (makeMutationRecord makeMutationRecordOfType))
+(:c "asl-utils" "Optional coreutils-style commands mi..." (parseTimeout timeoutMsOf))
 (:c "asl-vdom" "Dual perception AXTree downsampling ..." (t txt))
 (:c "asl-vector" "Pure AgentSlang Native Image-to-SVG ..." (vectorizeBitmap vectorizeLayer))
 (:c "asl-voice" "150ms pre-roll circular audio buffer..." (voiceBufferCreate voiceBufferStepFrame))
