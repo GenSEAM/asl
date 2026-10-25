@@ -1,5 +1,5 @@
 (module asl-target-llvm/rtError
-  :x [rtErrorDecls rtErrorDefinitions rtErrorDefinitionsWith rtErrorDefinitionsJoin refCloseJoin refKeysJoin rtErrorPieces RefPiece refPieces refClose refKeys refFirstKey refPlain? rtErrorTrapCodes wasmTrapImport wasmRaiseFunction tailOf]
+  :x [rtErrorDecls rtErrorDefinitions rtErrorDefinitionsWith rtErrorDefinitionsJoin rtErrorDefinitionsJoinKeys refCloseJoinKeys refKeysMore refKeysInto refKeysUnion refCloseJoin refKeysJoin rtErrorPieces RefPiece refPieces refClose refKeys refFirstKey refPlain? rtErrorTrapCodes wasmTrapImport wasmRaiseFunction tailOf]
   :i [(asl-target-llvm/rtValue :a valrt)])
 
 fn rtErrorDecls -> (List String)
@@ -514,10 +514,10 @@ fn refNextAt b: Bytes n: Int64 i: Int64 -> Int64
     ((= (bytesGet b i) 64) i)
     (else (refNextAt b n (+ i 1))))
 
-fn refAdd acc: (Map String Bool) k: String -> (Map String Bool)
-  (if (mapHas? acc k) acc (mapSet acc k true))
+fn refAdd acc: (HashMap String Bool) k: String -> (HashMap String Bool)
+  (if (hashMapHas? acc k) acc (hashMapSet acc k true))
 
-fn refKeysFrom text: String b: Bytes n: Int64 endNl: Bool i: Int64 acc: (Map String Bool) -> (Map String Bool)
+fn refKeysFrom text: String b: Bytes n: Int64 endNl: Bool i: Int64 acc: (HashMap String Bool) -> (HashMap String Bool)
   (cond
     ((>= i n) acc)
     ((!= (bytesGet b i) 64) (refKeysFrom text b n endNl (refNextAt b n (+ i 1)) acc))
@@ -527,18 +527,25 @@ fn refKeysFrom text: String b: Bytes n: Int64 endNl: Bool i: Int64 acc: (Map Str
               ((and (>= j n) endNl) (refAdd acc (str (optionOr (stringSlice text i n) "") "\n")))
               (else (refKeysFrom text b n endNl (refNextAt b n j) acc))))))
 
-fn refKeysInto acc: (Map String Bool) text: String endNl: Bool -> (Map String Bool)
+fn refKeysInto acc: (HashMap String Bool) text: String endNl: Bool -> (HashMap String Bool)
   (let [(b (stringToBytes text))]
     (refKeysFrom text b (bytesLength b) endNl 0 acc))
 
-fn refKeys text: String -> (Map String Bool)
-  (refKeysInto (mapEmpty) text false)
+fn refKeys text: String -> (HashMap String Bool)
+  (refKeysInto (hashMapEmpty) text false)
 
-fn refKeysJoin acc: (Map String Bool) chunks: (List String) -> (Map String Bool)
+fn refKeysJoin acc: (HashMap String Bool) chunks: (List String) -> (HashMap String Bool)
   (match (listHead chunks)
     ((none) acc)
     ((some c) (let [(rest (optionOr (listTail chunks) (list)))]
                 (refKeysJoin (refKeysInto acc c (not (listEmpty? rest))) rest))))
+
+; (:m :ref TEXTPASS :do "refKeysMore: keys of chunks that are followed by more text, added to keys already computed; the module's chunk list grows by appending (format helpers, reached pieces), so its key map is extended instead of rescanning every chunk")
+fn refKeysMore acc: (HashMap String Bool) chunks: (List String) -> (HashMap String Bool)
+  (fold (fn [(m (HashMap String Bool)) (c String)] -> (HashMap String Bool) (refKeysInto m c true)) acc chunks)
+
+fn refKeysUnion acc: (HashMap String Bool) more: (HashMap String Bool) -> (HashMap String Bool)
+  (hashMapFold more acc (fn [(m (HashMap String Bool)) (k String) (v Bool)] -> (HashMap String Bool) (hashMapSet m k true)))
 
 fn tailSuffix rev: (List String) acc: (List String) size: Int64 -> (List String)
   (match (listHead rev)
@@ -574,9 +581,9 @@ fn refPiece delims: (List String) p: (Pair String String) -> RefPiece
 fn refPieces delims: (List String) pieces: (List (Pair String String)) -> (List RefPiece)
   (map (fn [(p (Pair String String))] -> RefPiece (refPiece delims p)) pieces)
 
-fn refersVia? keys: (Map String Bool) text: String p: RefPiece -> Bool
+fn refersVia? keys: (HashMap String Bool) text: String p: RefPiece -> Bool
   (if p.plain
-    (listAny? (fn [(k String)] -> Bool (mapHas? keys k)) p.keys)
+    (listAny? (fn [(k String)] -> Bool (hashMapHas? keys k)) p.keys)
     (listAny? (fn [(k String)] -> Bool (stringContains? text k)) p.keys))
 
 fn tailOf text: String -> String
@@ -585,7 +592,7 @@ fn tailOf text: String -> String
 fn refClose text: String chosen: (Map String Bool) pieces: (List RefPiece) -> (Map String Bool)
   (refCloseStep (refKeys text) text (tailOf text) chosen pieces)
 
-fn refCloseStep keys: (Map String Bool) text: String tail: String chosen: (Map String Bool) pieces: (List RefPiece) -> (Map String Bool)
+fn refCloseStep keys: (HashMap String Bool) text: String tail: String chosen: (Map String Bool) pieces: (List RefPiece) -> (Map String Bool)
   (let [(fresh (filter (fn [(p RefPiece)] -> Bool (and (not (mapHas? chosen p.name)) (refersVia? keys text p))) pieces))]
     (if (listEmpty? fresh)
       chosen
@@ -594,9 +601,17 @@ fn refCloseStep keys: (Map String Bool) text: String tail: String chosen: (Map S
                 pieces)))
 
 fn refCloseJoin chunks: (List String) pieces: (List RefPiece) -> (Map String Bool)
-  (refCloseStep (refKeysJoin (mapEmpty) chunks)
+  (refCloseStep (refKeysJoin (hashMapEmpty) chunks)
                 (if (listAll? (fn [(p RefPiece)] -> Bool p.plain) pieces) "" (stringJoin chunks "\n"))
                 (tailOfJoin chunks) (mapEmpty) pieces)
+
+fn refCloseJoinKeys keys: (HashMap String Bool) chunks: (List String) pieces: (List RefPiece) -> (Map String Bool)
+  (refCloseStep keys
+                (if (listAll? (fn [(p RefPiece)] -> Bool p.plain) pieces) "" (stringJoin chunks "\n"))
+                (tailOfJoin chunks) (mapEmpty) pieces)
+
+fn rtErrorDefinitionsJoinKeys pieces: (List RefPiece) keys: (HashMap String Bool) chunks: (List String) -> (List String)
+  (rtErrorChosen pieces (refCloseJoinKeys keys chunks pieces))
 
 fn rtErrorPieces -> (List RefPiece)
   (refPieces (refDelimiters) (piecesOf (listAppend (listAppend (rtErrorCoreLlvm) (rtErrorValueLlvm)) (valrt/rtValueLlvm))))

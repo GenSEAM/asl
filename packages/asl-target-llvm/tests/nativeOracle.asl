@@ -16,7 +16,7 @@ fn ! independentRun! src: String args: (List String) label: String -> ProcOut
         (written (if (ok? made) (fileWrite path src) (err "workDir not created")))]
     (if (not (ok? written))
       (let [(_ (pathRemove workDir))] (ProcOut :exitCode 127 :stdout "" :stderr (str "independentRun!: cannot write fixture: " written)))
-      (let [(built (nt/prepareRun path label))
+      (let [(built (nt/prepareRun path (nt/fingerprint)))
             (bin (optionOr built.binary ""))
             (out (if (stringEmpty? bin)
                    (ProcOut :exitCode 127 :stdout "" :stderr (str "independentRun!: " built.reason))
@@ -26,7 +26,7 @@ fn ! independentRun! src: String args: (List String) label: String -> ProcOut
         out)))
 
 fn ! selfTestBinary! -> (Result String String)
-  (let [(built (nt/prepareRun "asl/tools/nativeTest.asl" "selfBuild"))]
+  (let [(built (nt/prepareRun "asl/tools/nativeTest.asl" (nt/fingerprint)))]
     (match built.binary
       ((none) (err built.reason))
       ((some bin) (realPath bin))))

@@ -23,7 +23,7 @@ fn ! sh cmd: String -> Recorded
 ; (:m :ref HL-E-LLVM :do "ranNatively/buildReason replace the old 'grep the subprocess's own stderr for NATIVE-CACHE/NATIVE-FALLBACK' check: that marker was printed by asl/tools/nativeTest.asl's own telemetry when IT ran as the outer subprocess (the old 'asl-host run asl/tools/nativeTest.asl run ...' shape). Calling prepareRun/runProc in-process instead means the telemetry goes to this test's own current-process stderr, never into the built fixture binary's returned stderr, so whether the fixture ran natively (never falls back, since this code path has no host to fall back to) is read directly off the Built record prepareRun returns")
 
 fn ! nativeRun path: String args: (List String) label: String -> Recorded
-  (let [(built (nt/prepareRun path label))]
+  (let [(built (nt/prepareRun path (nt/fingerprint)))]
     (match built.binary
       ((none) (Recorded :exitCode 127 :stdout "" :stderr built.reason :ranNatively false :buildReason built.reason))
       ((some bin) (let [(r (nt/runProc (listAppend (list bin) args) (none)))]

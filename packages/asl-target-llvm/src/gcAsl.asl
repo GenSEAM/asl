@@ -310,9 +310,9 @@ fn fastAllocDefinition sym: String miss: String sc: Int64 inline: Bool -> String
            (slotGep "%bap" (sBytesAllocated)) "  %ba = load i64, ptr %bap\n  %ba1 = add i64 %ba, %n\n  store i64 %ba1, ptr %bap\n"
            "  ret ptr %o\n" slow)))
 
-fn fastAllocDefinitions keys: (Map String Bool) inline: Bool -> (List String)
-  (let [(used (filter (fn [(sc Int64)] -> Bool (mapHas? keys (str (fastAllocSym sc) "("))) (range 0 (numClasses))))
-        (consUsed (mapHas? keys (str (fastConsSym) "(")))]
+fn fastAllocDefinitions keys: (HashMap String Bool) inline: Bool -> (List String)
+  (let [(used (filter (fn [(sc Int64)] -> Bool (hashMapHas? keys (str (fastAllocSym sc) "("))) (range 0 (numClasses))))
+        (consUsed (hashMapHas? keys (str (fastConsSym) "(")))]
     (if (and (listEmpty? used) (not consUsed))
       (list)
       (listAppend (if inline (list (statePtrText)) (list))

@@ -530,6 +530,17 @@ fn internalizeLine wanted: (Map String Bool) line: String -> String
       line)
     line)
 
+; (:m :ref TEXTPASS :do "internalizeText: only the define lines change, so the text is cut at each newline-define-prefix (6k pieces) instead of at every line (786k); a piece is rewritten by internalizeLine on its first line, the rest is copied as is")
+fn internalizePiece wanted: (Map String Bool) piece: String -> String
+  (let [(k (optionOr (stringIndexOf piece "\n") (stringLength piece)))
+        (line (str (internalizeDefinePrefix) (optionOr (stringSlice piece 0 k) piece)))]
+    (str "\n" (internalizeLine wanted line) (optionOr (stringSlice piece k (stringLength piece)) "")))
+
+fn internalizeText wanted: (Map String Bool) text: String -> String
+  (let [(parts (stringSplit (str "\n" text) (str "\n" (internalizeDefinePrefix))))
+        (out (str (optionOr (listHead parts) "") (stringJoin (map (fn [(p String)] -> String (internalizePiece wanted p)) (listDrop parts 1)) "")))]
+    (optionOr (stringSlice out 1 (stringLength out)) ""))
+
 fn internalize res: (Result String (List ty/IrDiag)) names: (List String) -> (Result String (List ty/IrDiag))
   (if (listEmpty? names)
     res
@@ -537,7 +548,7 @@ fn internalize res: (Result String (List ty/IrDiag)) names: (List String) -> (Re
       ((err diags) (err diags))
       ((ok text)
         (let [(wanted (internalizeNames names))]
-          (ok (stringJoin (map (fn [(line String)] -> String (internalizeLine wanted line)) (stringSplit text "\n")) "\n"))))))
+          (ok (internalizeText wanted text))))))
 
 fn signalNames -> (List String)
   (list "SIGHUP" "SIGINT" "SIGQUIT" "SIGKILL" "SIGUSR1" "SIGUSR2" "SIGTERM" "SIGCONT" "SIGSTOP" "SIGWINCH")

@@ -8,7 +8,7 @@ fn probe -> String
   "asl/packages/asl-target-llvm/tests/fixtures/nativeSha/shaProbe.asl"
 
 fn ! nativeRun -> nt/ProcOut
-  (let [(built (nt/prepareRun (probe) "nativeShaTest"))]
+  (let [(built (nt/prepareRun (probe) (nt/fingerprint)))]
     (match built.binary
       ((none) (nt/ProcOut :exitCode 127 :stdout "" :stderr built.reason))
       ((some bin) (nt/runProc (list bin) (none)))))

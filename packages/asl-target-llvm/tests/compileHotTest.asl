@@ -3,8 +3,8 @@
   :i [(asl-target-llvm/rtError :a rterr)
       (asl-target-llvm/rtValue :a valrt)])
 
-fn hasKey keys: (Map String Bool) k: String -> Bool
-  (mapHas? keys k)
+fn hasKey keys: (HashMap String Bool) k: String -> Bool
+  (hashMapHas? keys k)
 
 ; (:m :ref COMPILEHOT :do "refKeys over text with @ at the start, the middle, after a non-stop byte, and last without a delimiter")
 fn testRefKeys -> Bool
@@ -15,8 +15,8 @@ fn testRefKeys -> Bool
       (assert (hasKey keys "@c(") "@ glued to a preceding word is found")
       (refute (hasKey keys "@d") "a key with no delimiter at the end of text is dropped")
       (refute (hasKey keys "@x") "bytes after the delimiter are not a key")
-      (assert (= (mapSize (rterr/refKeys "no at sign at all")) 0) "text without @ has no keys")
-      (assert (= (mapSize (rterr/refKeys "")) 0) "empty text has no keys")
+      (assert (= (hashMapLength (rterr/refKeys "no at sign at all")) 0) "text without @ has no keys")
+      (assert (= (hashMapLength (rterr/refKeys "")) 0) "empty text has no keys")
       true))
 
 ; (:m :ref COMPILEHOT :do "a shim header defined only after thousands of other lines and after a mere call of another shim is still found; a name only called, never defined, is not defined")
@@ -33,7 +33,7 @@ fn testDefinedNames -> Bool
       (assert (= (listLength defined) 1) "exactly the one defined shim")
       (assert (valrt/rtValueDefines? text "symName") "rtValueDefines? still agrees on the defined name")
       (refute (valrt/rtValueDefines? text "intern") "rtValueDefines? still agrees on the called-only name")
-      (assert (= (listLength (valrt/rtValueDefinedNames "" (mapEmpty))) 0) "empty text defines none")
+      (assert (= (listLength (valrt/rtValueDefinedNames "" (hashMapEmpty))) 0) "empty text defines none")
       true))
 
 ; (:m :ref COMPILEHOT :do "splitting where the separator shares its first byte with data: overlaps, partial matches, adjacent and edge separators")

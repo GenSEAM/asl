@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [runTests main failLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey prepare prepareIn prepareTestSource prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [runTests main failLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -871,9 +871,9 @@ fn ! dropStale objPath: String metaPath: String -> Unit
 
 fn ! compileSubsetPrelude facts: (Option libc/TripleFacts) cDir: String fp: String allPreludeRefs: (List String) prelude: lk/LinkUnit ovlNames: (List String) slot: String counter: Int64 opt: String extra: (List String) -> PreludeStep
   (let [(preludeFns (map (fn [(n String)] -> String (optionOr (stringSlice n 8 (stringLength n)) n)) allPreludeRefs))
-        (preludeKey (bytesSha256 (stringToBytes (str "prelude/1
+        (preludeKey (bytesSha256 (stringToBytes (str "prelude/2
 " fp "
-" (fileDigest (toolPath (lk/preludePath))) "
+" (preludeDigestIn (toolRoot)) "
 " (stringJoin (listSort preludeFns) ",")))))
         (preludeObj (str (modulesDirIn cDir) "/prelude-" preludeKey ".o"))
         (preludeMeta (str (modulesDirIn cDir) "/prelude-" preludeKey ".meta"))]
@@ -887,11 +887,18 @@ fn ! compileSubsetPrelude facts: (Option libc/TripleFacts) cDir: String fp: Stri
            ((err e) (preludeFailed e))
            ((ok pLl) (compilePreludeSpawn slot preludeKey preludeObj preludeMeta pLl counter opt extra)))))))
 
-fn fullPreludeKey fp: String opt: String extra: (List String) -> String
-  (bytesSha256 (stringToBytes (str "preludeFull/1\n" fp "\n" opt "\n" (stringJoin extra " "))))
+; (:m :ref PRELUDEKEY :do "fp alone is the caller's claim and some callers pass a label (nativeOracle selfBuild), so a prelude object keyed by fp outlived its prelude: a 2026-10-18 object without HashMap was linked into units calling prelude.hashMapEmpty. Prelude keys now also cover the digests of the prelude source and native overlay files actually compiled")
+fn ! preludeDigestIn root: String -> String
+  (let [(at (fn [(rel String)] -> String (if (= root ".") rel (str root "/" rel))))
+        (overlay (lk/nativeOverlayDir))
+        (overlayDir (if (stringEndsWith? overlay "/") (optionOr (stringSlice overlay 0 (- (stringLength overlay) 1)) overlay) overlay))]
+    (bytesSha256 (stringToBytes (stringJoin (map (fn [(l String)] -> String (relativeTo root l)) (listAppend (treeLines (at (lk/preludePath))) (treeLines (at overlayDir)))) "\n"))))
+
+fn fullPreludeKey fp: String preludeDigest: String opt: String extra: (List String) -> String
+  (bytesSha256 (stringToBytes (str "preludeFull/2\n" fp "\n" preludeDigest "\n" opt "\n" (stringJoin extra " "))))
 
 fn ! compileFullPrelude facts: (Option libc/TripleFacts) cDir: String fp: String prelude: lk/LinkUnit ovlNames: (List String) slot: String counter: Int64 opt: String extra: (List String) -> (Option PreludeStep)
-  (let [(key (fullPreludeKey fp opt extra))
+  (let [(key (fullPreludeKey fp (preludeDigestIn (toolRoot)) opt extra))
         (preludeObj (str (modulesDirIn cDir) "/prelude-full-" key ".o"))
         (preludeMeta (str (modulesDirIn cDir) "/prelude-full-" key ".meta"))
         (marker (str (modulesDirIn cDir) "/prelude-full-" key ".unsupported"))]
@@ -1053,7 +1060,7 @@ fn ! spawnWorker! t0: Int64 base: (List String) env: (Option (List String)) acc:
                  (listAppend acc (list (WorkerProc :pid sp.pid :outFd sp.stdout :errFd sp.stderr :units (listLength g)))))))
 
 fn ! fullPreludePending? cDir: String fp: String opt: String extra: (List String) -> Bool
-  (let [(key (fullPreludeKey fp opt extra))
+  (let [(key (fullPreludeKey fp (preludeDigestIn (toolRoot)) opt extra))
         (stem (str (modulesDirIn cDir) "/prelude-full-" key))]
     (and (fullPreludeWanted?)
          (none? (readVerifiedMeta (str stem ".meta") (str stem ".o")))

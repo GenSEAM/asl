@@ -280,12 +280,21 @@ fn preludeFind s: String t: String i: Int64 last: Int64 -> (Option Int64)
 fn stringIndexOf s: String t: String -> (Option Int64)
   (preludeFind s t 0 (- (stringLength s) (stringLength t)))
 
+fn preludeNextByte sb: Bytes c: Int64 i: Int64 limit: Int64 -> Int64
+  (cond
+    ((>= i limit) limit)
+    ((= (bytesGet sb i) c) i)
+    (else (preludeNextByte sb c (+ i 1) limit)))
+
+; (:m :ref TEXTPASS :do "stringSplit scans for the separator's first byte in a 4-argument loop and only then compares the rest, instead of re-entering the 7-argument split loop per byte; same leftmost non-overlapping matches")
 fn preludeSplitBytes s: String sb: Bytes sepb: Bytes k: Int64 start: Int64 i: Int64 acc: (List String) -> (List String)
-  (let [n (bytesLength sb)]
+  (let [n (bytesLength sb)
+        limit (+ (- n k) 1)
+        j (preludeNextByte sb (bytesGet sepb 0) i limit)]
     (cond
-      ((> (+ i k) n) (listReverse (cons (preludeSlice s start n) acc)))
-      ((and (= (bytesGet sb i) (bytesGet sepb 0)) (preludeBytesEq sb sepb i 1 k)) (preludeSplitBytes s sb sepb k (+ i k) (+ i k) (cons (preludeSlice s start i) acc)))
-      (else (preludeSplitBytes s sb sepb k start (+ i 1) acc))))
+      ((>= j limit) (listReverse (cons (preludeSlice s start n) acc)))
+      ((preludeBytesEq sb sepb j 1 k) (preludeSplitBytes s sb sepb k (+ j k) (+ j k) (cons (preludeSlice s start j) acc)))
+      (else (preludeSplitBytes s sb sepb k start (+ j 1) acc))))
 
 fn preludeSplit s: String sep: String start: Int64 i: Int64 acc: (List String) -> (List String)
   (preludeSplitBytes s (stringToBytes s) (stringToBytes sep) (stringLength sep) start i acc)

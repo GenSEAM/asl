@@ -1,5 +1,5 @@
 (module asl-target-llvm/ssa
-  :x [emitLlvmModule emitLlvmProgram ownedEntryName emitLlvmModuleWasm32 emitLlvmProgramWasm32 trapLowering llvmName llvmBytes llvmFloat runtimeDecls cDeclFits? overwideCDecls cRuntimeModule ModEnv FnEnv NameIndex nameIndexSet tailCall? pinMusttailCallees linkInits definesInit? ensureInit listBuilder?]
+  :x [emitLlvmModule emitLlvmProgram ownedEntryName emitLlvmModuleWasm32 emitLlvmProgramWasm32 trapLowering llvmName llvmBytes llvmFloat runtimeDecls cDeclFits? overwideCDecls cRuntimeModule ModEnv FnEnv NameIndex nameIndexSet tailCall? pinMusttailCallees linkInits definesInit? ensureInit listBuilder? headOffsetsText headOffsets usedDeclsKeyed usedDeclsJoin]
 
   :i [(asl-ir/types :a ty)
       (asl-ir/verify :a vfy)
@@ -359,19 +359,27 @@ fn declPlain? decl: String -> Bool
   (let [(sym (declSymbol decl))]
     (and (stringEndsWith? sym "(") (rterr/refPlain? (optionOr (stringSlice sym 0 (- (stringLength sym) 1)) ""))))
 
-fn declUsed? keys: (Map String Bool) text: String decl: String -> Bool
+fn declUsed? keys: (HashMap String Bool) text: String decl: String -> Bool
   (if (declPlain? decl)
-    (mapHas? keys (declSymbol decl))
+    (hashMapHas? keys (declSymbol decl))
     (stringContains? text (declSymbol decl)))
 
-fn usedDeclsIn keys: (Map String Bool) text: String decls: (List String) -> (List String)
+fn usedDeclsIn keys: (HashMap String Bool) text: String decls: (List String) -> (List String)
   (filter (fn [(d String)] -> Bool (declUsed? keys text d)) decls)
 
 fn usedDecls text: String decls: (List String) -> (List String)
   (usedDeclsIn (rterr/refKeys text) text decls)
 
+; (:m :ref TEXTPASS :do "usedDeclsKeyed: usedDeclsJoin from a key map of the chunks that treats each as followed by more text; exact when the last chunk's end-token key is the same either way, else the keys are rescanned")
+fn usedDeclsKeyed allKeys: (HashMap String Bool) chunks: (List String) decls: (List String) -> (List String)
+  (let [(last (optionOr (listGet chunks (- (listLength chunks) 1)) ""))
+        (exact (= (hashMapLength (rterr/refKeysInto (hashMapEmpty) last true)) (hashMapLength (rterr/refKeysInto (hashMapEmpty) last false))))]
+    (usedDeclsIn (if exact allKeys (rterr/refKeysJoin (hashMapEmpty) chunks))
+                 (if (listAll? declPlain? decls) "" (stringJoin chunks "\n"))
+                 decls))
+
 fn usedDeclsJoin chunks: (List String) decls: (List String) -> (List String)
-  (usedDeclsIn (rterr/refKeysJoin (mapEmpty) chunks)
+  (usedDeclsIn (rterr/refKeysJoin (hashMapEmpty) chunks)
                (if (listAll? declPlain? decls) "" (stringJoin chunks "\n"))
                decls)
 
@@ -2101,6 +2109,12 @@ fn tailSpan env: FnEnv b: ty/SsaBlock -> Int64
 fn tailCall? env: FnEnv b: ty/SsaBlock -> Bool
   (> (tailSpan env b) 0)
 
+; (:m :ref TEXTPASS :do "musttailCallee/internalDefineSymbol read one line; the pin pass hands them only the pieces of the module text that follow a musttail call or a define internal prefix, cut at the first newline, so the 786k-line module is never split into lines")
+fn firstLineOf s: String -> String
+  (match (stringIndexOf s "\n")
+    ((some k) (optionOr (stringSlice s 0 k) s))
+    ((none) s))
+
 fn musttailCallee line: String -> (Option String)
   (match (listGet (stringSplit line "musttail call ") 1)
     ((none) (none))
@@ -2118,15 +2132,16 @@ fn internalDefineSymbol line: String -> (Option String)
 fn pinMusttailCallees text: String -> String
   (if (not (stringContains? text "musttail call "))
     text
-    (let [(lines (stringSplit text "\n"))
-          (targets (fold (fn [(acc (Map String Bool)) (line String)] -> (Map String Bool)
-                           (match (musttailCallee line) ((some s) (mapSet acc s true)) ((none) acc)))
-                         (mapEmpty) lines))
-          (pinned (fold (fn [(acc (List String)) (line String)] -> (List String)
-                          (match (internalDefineSymbol line)
+    (let [(sites (listDrop (stringSplit text "musttail call ") 1))
+          (targets (fold (fn [(acc (Map String Bool)) (site String)] -> (Map String Bool)
+                           (match (musttailCallee (str "musttail call " (firstLineOf site))) ((some s) (mapSet acc s true)) ((none) acc)))
+                         (mapEmpty) sites))
+          (defines (listDrop (stringSplit (str "\n" text) "\ndefine internal ") 1))
+          (pinned (fold (fn [(acc (List String)) (d String)] -> (List String)
+                          (match (internalDefineSymbol (str "define internal " (firstLineOf d)))
                             ((some s) (if (mapHas? targets s) (cons (str "ptr @" s) acc) acc))
                             ((none) acc)))
-                        (list) lines))]
+                        (list) defines))]
       (if (listEmpty? pinned)
         text
         (str text "\n@llvm.compiler.used = appending global [" (listLength pinned) " x ptr] [" (stringJoin (listReverse pinned) ", ") "], section \"llvm.metadata\"\n"))))
@@ -3522,6 +3537,10 @@ fn formatHelpers -> (List String)
               (fmt/rtFormatTerminalLlvm))
 
 fn emitDefinitionsRooted m: ty/SsaModule entryCalls: String rooted: Bool fieldIds: (List String) -> (List String)
+  (pairFirst (emitDefinitionsKeyed m entryCalls rooted fieldIds))
+
+; (:m :ref TEXTPASS :do "emitDefinitionsKeyed: the definitions and the key map of all their chunks, each treated as followed by more text; the entry text keys are added only to the map that closes the runtime pieces, so the second map is exact for any consumer that appends chunks after the definitions")
+fn emitDefinitionsKeyed m: ty/SsaModule entryCalls: String rooted: Bool fieldIds: (List String) -> (Pair (List String) (HashMap String Bool))
   (let [(menv (boxedEnv (moduleEnv m) m))
         (framed (map (fn [(f ty/SsaFunction)] -> String (if (and (not rooted) (listBuilder? f)) (listBuilderText f) (emitFunctionRooted menv f rooted))) m.functions))
         (fns (if (listAny? (fn [(t String)] -> Bool (stringContains? t "@asl_gc_shadow_top")) framed) (cons (shadowTopDecl) framed) framed))
@@ -3539,13 +3558,22 @@ fn emitDefinitionsRooted m: ty/SsaModule entryCalls: String rooted: Bool fieldId
                             (if (stringEmpty? init) (list) (list init))))
           (base (listAppend core (mathDefinitionsJoin core)))
           (rtPieces (rterr/rtErrorPieces))
-          (reachedDefs (rterr/rtErrorDefinitionsJoin rtPieces (withEntryCalls base entryCalls)))
+          (baseChunks (withEntryCalls base entryCalls))
+          (entryKeys (rterr/refKeysInto (hashMapEmpty) entryCalls false))
+          (baseNo (rterr/refKeysMore (hashMapEmpty) base))
+          (baseKeys (rterr/refKeysUnion baseNo entryKeys))
+          (reachedDefs (rterr/rtErrorDefinitionsJoinKeys rtPieces baseKeys baseChunks))
           (reached (stringJoin reachedDefs "\n"))
           (rendering (or (stringContains? reached "@asl_rt_format_") (stringContains? reached "@rtfmt_render(")))
           (formats (or rendering (listAny? formatOp? (allOps m))))
-          (callers (if formats (listAppend base (formatHelpers)) base))]
-      (let [(defs (listAppend callers (if formats (rterr/rtErrorDefinitionsJoin rtPieces (withEntryCalls callers entryCalls)) reachedDefs)))]
-        (listAppend defs (gc/fastAllocDefinitions (rterr/refKeysJoin (mapEmpty) (withEntryCalls defs entryCalls)) (not rooted))))))
+          (helpers (if formats (formatHelpers) (list)))
+          (callers (listAppend base helpers))
+          (callerNo (rterr/refKeysMore baseNo helpers))
+          (callerKeys (rterr/refKeysUnion callerNo entryKeys))]
+      (let [(callerDefs (if formats (rterr/rtErrorDefinitionsJoinKeys rtPieces callerKeys (withEntryCalls callers entryCalls)) reachedDefs))
+            (defs (listAppend callers callerDefs))
+            (fast (gc/fastAllocDefinitions (rterr/refKeysMore callerKeys callerDefs) (not rooted)))]
+        (pair (listAppend defs fast) (rterr/refKeysMore (rterr/refKeysMore callerNo callerDefs) fast)))))
 
 fn withEntryCalls defs: (List String) entryCalls: String -> (List String)
   (if (listEmpty? defs) (list "" entryCalls) (listAppend defs (list entryCalls)))
@@ -3561,7 +3589,7 @@ fn valueExports defs: (List String) -> (List String)
         (wanted (fold (fn [(acc (Map String Bool)) (f (Option String))] -> (Map String Bool)
                         (match f ((some k) (mapSet acc k true)) ((none) acc)))
                       (mapEmpty) firsts))
-        (index (headOffsets (stringSplit text "\n") 0 wanted (mapEmpty)))]
+        (index (headOffsetsText text wanted))]
     (map (fn [(entry (Pair String (Option String)))] -> String (match entry ((pair piece _) piece)))
          (filter (fn [(entry (Pair String (Option String)))] -> Bool (match entry ((pair piece first) (pieceAbsent? index text (stringTrim piece) first))))
                  (zip pieces firsts))))
@@ -3578,6 +3606,23 @@ fn headOffsets lines: (List String) offset: Int64 wanted: (Map String Bool) acc:
                        ((some k) (if (mapHas? wanted k) (mapSet acc k (cons offset (mapGetOr acc k (list)))) acc))
                        ((none) acc))
                      acc))))
+
+; (:m :ref TEXTPASS :do "headOffsetsText: headOffsets over the lines that start with the head marker, found by cutting the text at newline+marker; offset of a line is the running length of the pieces and markers before it. Head lines are define and @ lines, so two cuts replace the split into every line")
+fn headOffsetsAt text: String marker: String wanted: (Map String Bool) acc: (Map String (List Int64)) -> (Map String (List Int64))
+  (let [(cut (str "\n" marker))
+        (parts (stringSplit (str "\n" text) cut))
+        (step (fn [(st (Pair Int64 (Map String (List Int64)))) (part String)] -> (Pair Int64 (Map String (List Int64)))
+                (let [(at (pairFirst st))
+                      (line (str marker (firstLineOf part)))
+                      (next (+ (+ at (stringLength cut)) (stringLength part)))]
+                  (pair next
+                        (match (rterr/refFirstKey line)
+                          ((some k) (if (mapHas? wanted k) (mapSet (pairSecond st) k (cons at (mapGetOr (pairSecond st) k (list)))) (pairSecond st)))
+                          ((none) (pairSecond st)))))))]
+    (pairSecond (fold step (pair (stringLength (optionOr (listHead parts) "")) acc) (listDrop parts 1))))
+
+fn headOffsetsText text: String wanted: (Map String Bool) -> (Map String (List Int64))
+  (headOffsetsAt text "@" wanted (headOffsetsAt text "define " wanted (mapEmpty)))
 
 fn pieceAbsent? index: (Map String (List Int64)) text: String piece: String first: (Option String) -> Bool
   (match first
@@ -3606,9 +3651,12 @@ fn cRuntimeModule -> String
     (str "source_filename = \"aslRuntime\"\n\n%Val = type { i64, i64 }\n\n" defs "\n" (stringJoin decls "\n") "\n"))
 
 fn assemble m: ty/SsaModule definitions: (List String) wasm: Bool fieldIds: (List String) -> String
+  (assembleWith m definitions wasm fieldIds (none))
+
+fn assembleWith m: ty/SsaModule definitions: (List String) wasm: Bool fieldIds: (List String) known: (Option (HashMap String Bool)) -> String
   (let [(consts (emitConstants m wasm fieldIds))
         (defs (stringJoin definitions "\n"))
-        (defKeys (rterr/refKeys defs))
+        (defKeys (match known ((some k) k) ((none) (rterr/refKeys defs))))
         (shimDefs (valrt/rtValueDefinedNames defs defKeys))
         (externs (map (fn [(e ty/SsaExtern)] -> String
                         (cond
@@ -3851,11 +3899,15 @@ fn emitEntry m: ty/SsaModule entry: String wasm: Bool -> (Result String (List ty
 
           ((some f)
             (cond
-              ((takesArgList f) (let [(fids (fieldIdNames m)) (defs (emitDefinitionsRooted m (emitArgsMain m f) wasm fids))]
-                                  (ok (assemble m (listAppend (listAppend defs (valueExports defs)) (list (if wasm (emitArgsMain m f) (onMainStack (emitArgsMain m f))))) wasm fids))))
+              ((takesArgList f) (let [(fids (fieldIdNames m)) (dk (emitDefinitionsKeyed m (emitArgsMain m f) wasm fids)) (defs (pairFirst dk)) (ve (valueExports defs))
+                                      (mainText (if wasm (emitArgsMain m f) (onMainStack (emitArgsMain m f))))]
+                                  (ok (assembleWith m (listAppend (listAppend defs ve) (list mainText)) wasm fids (some (rterr/refKeysInto (rterr/refKeysMore (pairSecond dk) ve) mainText false))))))
               ((not (and (listEmpty? f.params) (listEmpty? f.captures))) (err (entryDiag (str "entry function '" entry "' must take no parameters, or one Val parameter (the argument list) and return a Val Result, and no captures") entry)))
               (else
                 (let [(fids (fieldIdNames m))
-                      (defs (emitDefinitionsRooted m (emitMain m f false) wasm fids))
-                      (usesRuntime (or (not (listEmpty? (usedDeclsJoin defs (runtimeDecls)))) (= (ty/ssaAbiName f.retTy) "val")))]
-                  (ok (assemble m (listAppend (if usesRuntime (listAppend defs (valueExports defs)) defs) (list (if (and usesRuntime (not wasm)) (onMainStack (emitMain m f true)) (emitMain m f usesRuntime)))) wasm fids))))))))
+                      (dk (emitDefinitionsKeyed m (emitMain m f false) wasm fids))
+                      (defs (pairFirst dk))
+                      (usesRuntime (or (not (listEmpty? (usedDeclsKeyed (pairSecond dk) defs (runtimeDecls)))) (= (ty/ssaAbiName f.retTy) "val")))
+                      (ve (if usesRuntime (valueExports defs) (list)))
+                      (mainText (if (and usesRuntime (not wasm)) (onMainStack (emitMain m f true)) (emitMain m f usesRuntime)))]
+                  (ok (assembleWith m (listAppend (listAppend defs ve) (list mainText)) wasm fids (some (rterr/refKeysInto (rterr/refKeysMore (pairSecond dk) ve) mainText false))))))))))

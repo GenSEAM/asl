@@ -1,5 +1,5 @@
 (module asl-target-llvm/rtValue
-  :x [rtValueLlvm rtValueDecls rtValueDefines? rtValueDefinedNames rtValueExportRoots valueShimNames]
+  :x [rtValueLlvm rtValueDecls rtValueDefines? rtValueDefinedNames rtValueExportRoots valueShimNames shimHeaders]
   :i [])
 
 fn valText sym: String text: String -> String
@@ -440,6 +440,17 @@ fn rtValueDefines? text: String name: String -> Bool
   (let [(h (header name))]
     (and (not (stringEmpty? h)) (stringContains? text h)))
 
-; (:m :ref COMPILEHOT :do "rtValueDefinedNames: the shim names whose header line is in text, found once per module (keys = refKeys text, so a name never mentioned as @name( skips the scan); callers look names up in the list instead of scanning the whole text per extern and per declaration")
-fn rtValueDefinedNames text: String keys: (Map String Bool) -> (List String)
-  (filter (fn [(n String)] -> Bool (and (mapHas? keys (str "@" n "(")) (rtValueDefines? text n))) (valueShimNames))
+fn firstLineOf piece: String -> String
+  (optionOr (stringSlice piece 0 (optionOr (stringIndexOf piece "\n") (stringLength piece))) piece)
+
+; (:m :ref HOTSPOT2 :do "rtValueDefinedNames: the shim names whose header line is in text; every header starts with define, so the text is cut once at newline+define and each piece's first line is looked up in the set of wanted headers, instead of one whole-text search per present shim name (keys = refKeys text: a name never mentioned as @name( is skipped)")
+fn rtValueDefinedNames text: String keys: (HashMap String Bool) -> (List String)
+  (let [(cands (filter (fn [(n String)] -> Bool (and (hashMapHas? keys (str "@" n "(")) (not (stringEmpty? (header n))))) (valueShimNames)))]
+    (if (listEmpty? cands)
+      (list)
+      (let [(wanted (fold (fn [(a (Map String Bool)) (n String)] -> (Map String Bool) (mapSet a (header n) true)) (mapEmpty) cands))
+            (parts (stringSplit text "\ndefine "))
+            (heads (if (stringStartsWith? text "define ") (list (firstLineOf (optionOr (listHead parts) ""))) (list)))
+            (lines (listAppend heads (map (fn [(p String)] -> String (str "define " (firstLineOf p))) (listDrop parts 1))))
+            (found (fold (fn [(a (Map String Bool)) (l String)] -> (Map String Bool) (if (mapHas? wanted l) (mapSet a l true) a)) (mapEmpty) lines))]
+        (filter (fn [(n String)] -> Bool (mapHas? found (header n))) cands))))
