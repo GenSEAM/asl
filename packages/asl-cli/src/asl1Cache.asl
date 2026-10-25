@@ -1,5 +1,5 @@
 (module asl-cli/asl1Cache
-  :x [notraceLib! nativeAsl1! singleFlight! bootstrap! buildNative! buildNativeTransaction! closure!]
+  :x [memoSha! memoShaIn! statFacts! notraceLib! nativeAsl1! singleFlight! bootstrap! buildNative! buildNativeTransaction! closure!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl-parser/ast :a a) (asl-checker/resolve :a r) (asl/packages/asl-cli/src/nativeBuild :a nb)])
 
 fn compilerPath! ctx: sys/Context -> String
@@ -26,10 +26,90 @@ fn depsPath! key: String -> String
 fn shaPath! key: String -> String
   (str (entryDir! key) "/sha256")
 
-fn ! shaFile path: String -> (Result String String)
+fn ! hashBytes path: String -> (Result String String)
   (match (fileReadBytes path)
     ((err e) (err (str "cannot hash " path ": " e)))
     ((ok bytes) (ok (bytesSha256 bytes))))
+
+; (:m :ref WARMBUILD-DIGEST-STAMP-20261025 :do "sha256 in ASL costs about 380 instructions a byte, and a warm build hashed the 20 MB cached compiler plus 55 dependency files (8.7e9 of 28.1e9 instructions, 55% of sampled CPU). A digest is remembered beside the cache as 'dev ino ctime mtime size digest' under the sha256 of the real path and reused only while all five facts are unchanged (git-index style): touch -r, cp -p then mv, a retargeted symlink or an archive extraction keep mtime and size but change ino or ctime. The facts come from one batched stat(1) spawn (BSD -f or GNU -c form); FileStat has no ino/dev/ctime, and a field added to the compiler's own record cannot be used by asl-cli until the seed asl1 knows it. A failed spawn means no stamps, every file is hashed. Git's racy rule: a file with mtime or ctime within racyNs of now is never remembered. The stored digest must be 64 lowercase hex. Returns the digest and whether the stamp answered")
+fn racyNs -> Int64
+  2000000000
+
+fn stampFile stampDir: String path: String -> String
+  (str stampDir "/" (bytesSha256 (stringToBytes (resultOr (realPath path) path))))
+
+fn hexChar? c: String -> Bool
+  (some? (stringIndexOf "0123456789abcdef" c))
+
+fn hex64? s: String -> Bool
+  (and (= (stringLength s) 64) (= (listLength (filter hexChar? (stringChars s))) 64))
+
+fn nsOfSeconds s: String -> Int64
+  (optionOr (stringToInt64 (stringReplace s "." "")) 9000000000000000000)
+
+fn racyFacts? facts: String window: Int64 -> Bool
+  (let [(parts (stringSplit facts " "))
+        (limit (- (nowNs) window))]
+    (or (!= (listLength parts) 5)
+      (or (>= (nsOfSeconds (optionOr (listGet parts 2) "")) limit)
+          (>= (nsOfSeconds (optionOr (listGet parts 3) "")) limit))))
+
+fn ! statLines! flags: (List String) paths: (List String) -> (Option (List String))
+  (match (sys/capture! (listAppend (cons "stat" flags) (cons "--" paths)) (none))
+    ((err _) (none))
+    ((ok c) (let [(lines (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines c.stdout)))]
+      (if (and (= c.exitCode 0) (= (listLength lines) (listLength paths))) (some lines) (none)))))
+
+fn ! statFacts! paths: (List String) -> (List String)
+  (if (listEmpty? paths) (list)
+    (match (statLines! (list "-c" "%d %i %.9Z %.9Y %s") paths)
+      ((some lines) lines)
+      ((none) (match (statLines! (list "-f" "%d %i %Fc %Fm %z") paths)
+        ((some lines) lines)
+        ((none) (map (fn [(p String)] -> String "") paths))))))
+
+fn ! sweepParts! stampDir: String -> Bool
+  (let [(old (- (nowNs) 86400000000000))]
+    (do (map (fn [(n String)] -> Bool
+          (if (stringContains? n ".part.")
+            (match (fileStat (str stampDir "/" n)) ((ok st) (if (< st.mtimeNs old) (ok? (pathRemove (str stampDir "/" n))) false)) ((err _) false))
+            false))
+        (resultOr (dirList stampDir) (list)))
+        true))
+
+fn ! recordStamp! stampDir: String path: String facts: String digest: String -> Bool
+  (let [(file (stampFile stampDir path))
+        (part (str file ".part." (stringFromInt64 (procSelf)) "x" (stringFromInt64 (nowNs))))]
+    (match (dirCreate stampDir)
+      ((err _) false)
+      ((ok _) (do (sweepParts! stampDir) (match (fileWrite part (str facts " " digest "\n"))
+        ((err _) (do (drop part) false))
+        ((ok _) (match (pathRename part file)
+          ((err _) (do (drop part) false))
+          ((ok _) true))))))))
+
+fn ! memoSha! stampDir: String path: String facts: String -> (Result (Pair String Bool) String)
+  (memoShaIn! stampDir path facts (racyNs))
+
+fn ! memoShaIn! stampDir: String path: String facts: String window: Int64 -> (Result (Pair String Bool) String)
+  (let [(stored (sys/stripTrailingNewlines (resultOr (fileReadString (stampFile stampDir path)) "")))
+        (want (str facts " "))
+        (storedDigest (optionOr (stringSlice stored (stringLength want) (stringLength stored)) ""))]
+    (if (and (not (stringEmpty? facts)) (and (stringStartsWith? stored want) (hex64? storedDigest)))
+      (ok (pair storedDigest true))
+      (match (hashBytes path)
+        ((err e) (err e))
+        ((ok digest)
+          (do (if (and (not (stringEmpty? facts)) (not (racyFacts? facts window))) (recordStamp! stampDir path facts digest) false)
+              (ok (pair digest false)))))))
+
+fn ! stampDir! -> String
+  (str (cacheDir!) ".stamps")
+
+fn ! shaFile path: String -> (Result String String)
+  (match (memoSha! (stampDir!) path (optionOr (listHead (statFacts! (list path))) ""))
+    ((err e) (err e))
+    ((ok hit) (ok (pairFirst hit))))
 
 fn ! validBinary? path: String key: String -> Bool
   (and (match (fileReadString (keyPath! key))
@@ -46,12 +126,15 @@ fn ! appendFileHash paths: (List String) acc: String -> (Result String String)
   (appendFileHashIn "" paths acc)
 
 fn ! appendFileHashIn root: String paths: (List String) acc: String -> (Result String String)
+  (appendHashes root paths (statFacts! (map (fn [(p String)] -> String (underRoot root p)) paths)) acc)
+
+fn ! appendHashes root: String paths: (List String) facts: (List String) acc: String -> (Result String String)
   (match (listHead paths)
     ((none) (ok acc))
     ((some path)
-      (match (shaFile (underRoot root path))
+      (match (memoSha! (stampDir!) (underRoot root path) (optionOr (listHead facts) ""))
         ((err e) (err e))
-        ((ok digest) (appendFileHashIn root (optionOr (listTail paths) (list)) (str acc path "=" digest "\n"))))))
+        ((ok hit) (appendHashes root (optionOr (listTail paths) (list)) (optionOr (listTail facts) (list)) (str acc path "=" (pairFirst hit) "\n"))))))
 
 fn underRoot root: String path: String -> String
   (if (or (stringEmpty? root) (stringStartsWith? path "/")) path (str root "/" path))

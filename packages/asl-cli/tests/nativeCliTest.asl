@@ -193,7 +193,7 @@ fn ! asl1CacheNotrace! root: String errFile: String -> Bool
         (good (and (not (stringEmpty? entry))
                    (and (= (resultOr (fileReadString (str entry "/rc")) "") "notrace\n")
                         (stringContains? (rcStatsOf! (str entry "/asl1-native") errFile) ":rcStats"))))
-        (_ (run/runOneLimited (run/job (list "/bin/rm" "-rf" cache (str errFile ".hello") (str errFile ".hello.asl")) root (list)) (run/limits 60 8)))]
+        (_ (run/runOneLimited (run/job (list "/bin/rm" "-rf" cache (str cache ".stamps") (str errFile ".hello") (str errFile ".hello.asl")) root (list)) (run/limits 60 8)))]
     good)
 
 fn ! runTests -> Bool
