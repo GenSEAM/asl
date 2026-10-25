@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [Job Done Limits Proc ProcOut Running RunningSep Lease job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited runShell! runGuarded spawn spawnSep reapStaleLeases! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procSnapshot treeOf killTree! shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
+  :x [Job Done Limits Proc ProcOut Running RunningSep Lease job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited runShell! runGuarded spawn spawnSep reapStaleLeases! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procSnapshot treeOf killTree! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
   :i [])
 
 (schema Job

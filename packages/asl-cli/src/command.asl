@@ -194,6 +194,12 @@ fn ! train! ctx: sys/Context args: (List String) -> Int64
       (sys/execv! (cons (str ctx.root "/bin/asl") (cons "run" (cons entry args))) (list))
       (do (sys/sayErr! "Error: the train tool entry tools/fleet/train.asl was not found") 1)))
 
+fn ! shim! ctx: sys/Context mode: String args: (List String) -> Int64
+  (let [(entry (str ctx.root "/asl/packages/asl-utils/src/timeout.asl"))]
+    (if (sys/isFile? entry)
+      (sys/execv! (cons (str ctx.root "/bin/asl") (cons "run" (cons entry (cons mode args)))) (list))
+      (do (sys/sayErr! "Error: the asl-utils entry asl/packages/asl-utils/src/timeout.asl was not found") 1)))
+
 fn ! eval! ctx: sys/Context args: (List String) -> Int64
   (if (= (first args) "--native")
     (let [(cwdReal (resultOr (realPath ".") "."))
@@ -488,6 +494,7 @@ fn ! dispatch! ctx: sys/Context cmd: String args: (List String) -> Int64
     ((= cmd "consilium") (cliResult! "consilium" args (consilium/runConsiliumCommand args)))
     ((= cmd "mesh") (mesh! ctx args))
     ((= cmd "train") (train! ctx args))
+    ((= cmd "timeout") (shim! ctx "timeout" args))
     ((or (= cmd "relay") (or (= cmd "rla") (= cmd "gateway"))) (tool! ctx "asl-gateway" args))
     ((or (= cmd "web") (= cmd "search")) (webDelegate! ctx "search" "query" args))
     ((= cmd "research") (webDelegate! ctx "research" "topic" args))
