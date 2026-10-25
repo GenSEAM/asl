@@ -13,7 +13,7 @@ fn showInt o: (Option Int64) -> String
   (match o ((some n) (str "some " (stringFromInt64 n))) ((none) "none"))
 
 fn report xs: (List Float64) -> String
-  (stringJoin (list (if (listEmpty? xs) "T" "F") (stringFromInt64 (listLength xs)) (stringFromFloat64 (listSum xs)) (showFloat (listMin xs)) (showFloat (listMax xs)) (showFloats (listSort xs))) "|")
+  (stringJoin (list (if (listEmpty? xs) "T" "F") (stringFromInt64 (listLength xs)) (stringFromFloat64 (listSumFloat64 xs)) (showFloat (listMin xs)) (showFloat (listMax xs)) (showFloats (listSort xs))) "|")
 
 fn noFloats -> (List Float64)
   (list)

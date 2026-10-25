@@ -30,7 +30,7 @@
 (:sym "listFlatMap" :sig "listFlatMap : (fn [A] -> (List B)) (List A) -> (List B)" :doc "Map then concatenate: each element's resulting list in order, back to back.")
 (:sym "enumerate" :sig "enumerate : (List T) -> (List (Pair Int64 T))" :doc "Each element paired with its index from 0.")
 (:sym "zip" :sig "zip : (List A) (List B) -> (List (Pair A B))" :doc "Pair up elements, truncating to the shorter list.")
-(:sym "listSum" :sig "listSum : (List N) -> N" :doc "Sum of elements, 0 when empty. Traps on Int64 overflow.")
+(:sym "listSum" :sig "listSum : (List Int64) -> Int64" :doc "Sum of elements, 0 when empty. Traps on Int64 overflow.")
 (:sym "listMin" :sig "listMin : (List T) -> (Option T)" :doc "Least element, or none when empty." :pit (option))
 (:sym "listMax" :sig "listMax : (List T) -> (Option T)" :doc "Greatest element, or none when empty." :pit (option))
 (:sym "partial" :sig "partial : (fn [A... B...] -> R) A... -> (fn [B...] -> R)" :doc "Bind leading arguments of a function." :pit (variadic))

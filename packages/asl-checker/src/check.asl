@@ -466,8 +466,12 @@ fn resolveDeferred st: InferState mod: r/ModuleSummary path: String -> InferStat
 fn variadicBuiltin? name: String -> Bool
   (or (= name "and") (or (= name "or") (= name "list")))
 
+; (:m :ref LISTSUM :do "listSum and the sum alias are Int64 only; the hint names the Float64 entry, since the generic dispatch table keys on the receiver kind List and cannot see the element type")
+fn sumHint cname: String -> String
+  (if (or (= cname "listSum") (= cname "sum")) " (a List Float64 sums with listSumFloat64)" "")
+
 fn foldExpectArgs args: (List ty/Type) params: (List ty/Type) cname: String path: String modName: String st: InferState -> InferState
-  (match (listHead args) ((none) st) ((some a) (match (listHead params) ((none) st) ((some p) (let [(nextParams (match (listHead (r/safeTail params)) ((none) (if (variadicBuiltin? cname) params (list))) ((some _) (r/safeTail params)))) (st1 (expectType st a p (str "argument to " cname) path modName))] (foldExpectArgs (r/safeTail args) nextParams cname path modName st1))))))
+  (match (listHead args) ((none) st) ((some a) (match (listHead params) ((none) st) ((some p) (let [(nextParams (match (listHead (r/safeTail params)) ((none) (if (variadicBuiltin? cname) params (list))) ((some _) (r/safeTail params)))) (st1 (expectType st a p (str "argument to " cname (sumHint cname)) path modName))] (foldExpectArgs (r/safeTail args) nextParams cname path modName st1))))))
 
 fn fmLetValStep bname: String brest: (List rd/SExpr) tails: (List rd/SExpr) lenv: (Map String ty/Type) annTy: (Option ty/Type) restFrames: (List InferFrame) fm: FrameMachine -> FrameMachine
   (let [(pv (popValue fm)) (val (pairFirst pv)) (remValues (pairSecond pv)) (nextEnv (mapSet lenv bname val)) (st0 (match annTy ((some t) (expectType fm.state val t "let binding" fm.path fm.mod.name)) ((none) fm.state)))] (if (listEmpty? brest) (let [(lastE (lastExprUnit tails))] (with fm :frames (cons (fEval lastE) restFrames) :values remValues :env nextEnv :state st0)) (let [(nextB (r/firstExprEmpty brest)) (flat? (match nextB ((rd/sexprAtom _) true) (_ false))) (remBrest (if flat? (r/safeTail (r/safeTail brest)) (r/safeTail brest))) (bparts (if flat? (list nextB (r/secondExprEmpty brest)) (match nextB ((rd/sexprList bp) bp) ((rd/sexprVect bp) bp) (_ (list))))) (nextBname (if flat? (rd/sexprHead nextB) (r/firstHeadIdent bparts))) (nextBval (letBindValue bparts))] (with fm :frames (cons (fEval nextBval) (cons (fLetVal nextBname remBrest tails nextEnv (letAnnType bparts fm.mod fm.deps)) restFrames)) :values remValues :env nextEnv :state (letAnnState st0 bparts fm.path)))))

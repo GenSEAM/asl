@@ -221,8 +221,12 @@ fn preludeZip a: (List A) b: (List B) acc: (List (Pair A B)) -> (List (Pair A B)
 fn zip a: (List A) b: (List B) -> (List (Pair A B))
   (preludeZip a b (list))
 
-fn listSum xs: (List N) -> N
+fn listSum xs: (List Int64) -> Int64
   (if (listEmpty? xs) 0 (fold (fn [acc x] (+ acc x)) (preludeHead xs) (preludeTail xs)))
+
+; (:m :ref LISTSUM :do "the empty sum is the element type's zero and a runtime list carries no element type, so Float64 sums have their own typed entry with 0.0; listSum is Int64 only, a generic N body returning the Int literal 0 broke an empty Float64 list at run")
+fn listSumFloat64 xs: (List Float64) -> Float64
+  (if (listEmpty? xs) 0.0 (fold (fn [acc x] (+ acc x)) (preludeHead xs) (preludeTail xs)))
 
 fn listMin xs: (List T) -> (Option T)
   (if (listEmpty? xs) none

@@ -12,7 +12,7 @@ fn readings csv: Str -> (List Num)
   (map (fn [t] (optionOr (stringToFloat64 t) 0.0)) (filter (fn [t] (some? (stringToFloat64 t))) (stringSplit csv ",")))
 
 fn meanOf xs: (List Num) -> Num
-  (if (= (listLength xs) 0) 0.0 (/ (listSum xs) (int64ToFloat64 (listLength xs))))
+  (if (= (listLength xs) 0) 0.0 (/ (listSumFloat64 xs) (int64ToFloat64 (listLength xs))))
 
 fn sampleOf id: Str xs: (List F64) -> Sample
   (let [(m (meanOf xs))] (Sample :id (s/upper id) :count (listLength xs) :mean m :drift (- (optionOr (listMax xs) m) (optionOr (listMin xs) m)) :settled (not (listEmpty? xs))))
