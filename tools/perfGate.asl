@@ -3,7 +3,7 @@
       parseForms atomText itemsOf kvGet unquote stripColon textOf quoteStr floatOf intOf
       loadBaselineText loadBaseline renderBaseline
       withinTolerance maxAllowed evaluate findRow
-      benchLine? parseBenchRows rowsFromTop ratioOf benchRowsFromText runBenchMeasurements
+      benchLine? parseBenchRows rowsFromTop parityRowsFromTop ratioOf benchRowsFromText runBenchMeasurements
       osFlag instrRetired fixedInputDir compileWorkloadRow fmt3 rowTol hostLine methodText defaultBaselinePath fmt2
       flagTakesValue? positional optValue]
   :i [(asl-parser/reader :a rd) (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/nativeTest :a nt)])
@@ -170,8 +170,9 @@ fn evaluate baseline: Baseline benchRows: (List MeasureRow) compileRows: (List M
                               (list) baseline.compiles))]
     (listAppend benchDefects compileDefects))
 
+; (:m :ref BENCHPARITY :do "lock rows the gate reads: (:bench ...) (whole-program ratios; a row labelled regression guard compares ASL with C of another structure or amount of work and only tracks the compiler over time), (:parity ...) and (:parityHeadline ...)")
 fn benchLine? l: String -> Bool
-  (stringStartsWith? l "(:bench ")
+  (or (stringStartsWith? l "(:bench ") (or (stringStartsWith? l "(:parity ") (stringStartsWith? l "(:parityHeadline ")))
 
 ; (:m :ref PERFGATE :do "a (:bench ...) lock row yields two gate rows, NAME/MODE/instr = ASL instructions retired over C and NAME/MODE/rss = ASL peak RSS over C, both computed from the raw counts (not the rounded two-decimal text): wall time is in the lock row for humans and never gated, since a loaded host moves it by +-50% on C runs under 20 ms")
 fn ratioOf num: (Option Int64) den: (Option Int64) -> (Option Float64)
@@ -187,7 +188,32 @@ fn rowOf label: String bad: Bool note: String ratio: (Option Float64) -> Measure
     ((none? ratio) (MeasureRow :name label :ok false :value 0.0 :note "missing or non-positive count"))
     (else (MeasureRow :name label :ok true :value (optionOr ratio 0.0) :note "")))
 
+; (:m :ref BENCHPARITY :do "a (:parity ASL :c C ...) row yields ASL~C/MODE/marginal, the quotient of per-element instructions (instr(n2) - instr(n1)) of ASL over C, which cancels startup; a row that folds (a side under half an instruction per element) yields no gate row, since it measures startup; a (:parityHeadline ...) row yields parity/MODE/headline, the median same-algorithm marginal ratio")
+fn parityRowsFromTop items: (List rd/SExpr) -> (List MeasureRow)
+  (let [(asl (textOf (optionOr (listGet items 1) (rd/makeAtom "?"))))
+        (c (match (kvGet items ":c") ((some v) (textOf v)) ((none) "?")))
+        (mode (match (kvGet items ":mode") ((some m) (textOf m)) ((none) "tracing")))
+        (label (str asl "~" c "/" mode "/marginal"))
+        (errField (kvGet items ":error"))
+        (same (= (atomText (optionOr (kvGet items ":same") (rd/makeAtom ""))) "true"))
+        (folds (= (atomText (optionOr (kvGet items ":folds") (rd/makeAtom ""))) "true"))]
+    (cond
+      ((some? errField) (list (rowOf label true (textOf (optionOr errField (rd/makeAtom ""))) (none))))
+      ((not same) (list (rowOf label true "output mismatch (:same false)" (none))))
+      (folds (list))
+      (else (list (rowOf label false "" (floatOf (kvGet items ":marginalRatio")))))))
+
 fn rowsFromTop top: rd/SExpr -> (List MeasureRow)
+  (let [(head (atomText (optionOr (listHead (itemsOf top)) (rd/makeAtom ""))))]
+    (cond
+      ((= head ":parity") (parityRowsFromTop (itemsOf top)))
+      ((= head ":parityHeadline")
+       (let [(items (itemsOf top))
+             (mode (match (kvGet items ":mode") ((some m) (textOf m)) ((none) "tracing")))]
+         (list (rowOf (str "parity/" mode "/headline") false "" (floatOf (kvGet items ":medianMarginalRatio"))))))
+      (else (benchRowsFromTop top))))
+
+fn benchRowsFromTop top: rd/SExpr -> (List MeasureRow)
   (let [(items (itemsOf top))
         (name (textOf (optionOr (listGet items 1) (rd/makeAtom "?"))))
         (mode (match (kvGet items ":mode") ((some m) (textOf m)) ((none) "tracing")))
@@ -217,7 +243,7 @@ fn ! runBenchMeasurements runs: Int64 names: (List String) modes: String -> (Lis
         (_ (dirCreate work))
         (lockPath (str work "/benchLock.asn"))
         (_ (pathRemove lockPath))
-        (argv (listAppend (list "bin/asl" "run" "bench/native/run.asl" "--runs" (stringFromInt64 runs) "--mode" modes "--lock" lockPath) names))
+        (argv (listAppend (list "bin/asl" "run" "bench/native/run.asl" "--runs" (stringFromInt64 runs) "--mode" modes "--parity" "--lock" lockPath) names))
         (_ (nt/runProc argv (none)))
         (text (resultOr (fileReadString lockPath) ""))
         (_ (pathRemove lockPath))]
@@ -307,7 +333,8 @@ fn ! hostLine -> String
 
 fn methodText -> String
   (str "bench/native/run.asl --mode both: 19 benches, clang -O2 C vs ASL built twice, notrace (bin/asl build, the CLI default) and tracing (tools/nativeTest, rc 0), same argv size; "
-       "gated ratios are ASL/C instructions retired and ASL/C peak RSS (/usr/bin/time -l, deterministic, load-free), never wall time; "
+       "gated ratios are ASL/C instructions retired and ASL/C peak RSS (/usr/bin/time -l, deterministic, load-free), never wall time; rows labelled regression guard compare with C of another structure or work and only track the compiler; "
+       "--parity adds NAME~C/MODE/marginal rows (per-element instructions at n2 minus n1, ASL over C, same algorithm or idiomatic C, folded rows left out) and parity/MODE/headline (median same-algorithm marginal ratio); "
        "compile = instructions retired by the tree's notrace asl1 compiling FIXED-INPUT-B9C1 (git archive b9c1acb05 asl) asl1.asl to LLVM IR; "
        "gate fails when a row exceeds baseline * (1 + its tol) (+0.05 absolute on ratio rows)")
 
