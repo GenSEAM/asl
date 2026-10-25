@@ -20,8 +20,9 @@ enum PreludeTree
   (preludeLeaf)
   (preludeNode key: K value: V rank: Int64 left: (PreludeTree K V) right: (PreludeTree K V))
 
+; (:m :ref BUGFIX2 :do "a zero-arm match lowers to unreachable that drops the message; trap raises ERR_TYPE with it, as the host did, without touching the user assert counter")
 fn preludeTrap message: String -> T
-  (match message)
+  (trap "ERR_TYPE" message)
 
 fn preludeIsFloat x: N -> Bool
   (let [s (str x)]

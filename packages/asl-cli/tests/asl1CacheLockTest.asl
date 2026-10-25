@@ -180,21 +180,25 @@ fn ! testNegativeTimeoutIsBounded -> Bool
 fn ! testInvalidOwnerMetadataAndLivenessPropagate -> Bool
   (let [(root (tempRoot))
         (dirMade (setup root))
-        (readLock (str root "/missing-pid.lock"))
+        (readLock (str root "/unreadable.lock"))
+        (missingPidLock (str root "/missing-pid.lock"))
         (malformedLock (str root "/malformed.lock"))
         (invalidPidLock (str root "/invalid-pid.lock"))
         (ready (fn [] -> Bool false))
         (builder (fn [] -> (Result String String) (ok "unexpected")))]
     (if (not dirMade) false
       (and (ok? (dirCreate readLock))
+        (and (ok? (fileWrite missingPidLock ""))
         (and (ok? (fileWrite malformedLock "not-a-pid\n"))
           (and (ok? (fileWrite invalidPidLock "-1\n"))
             (let [(readResult (cache/singleFlight! readLock "unused" 100 ready builder))
+                  (missingPidResult (cache/singleFlight! missingPidLock "unused" 100 ready builder))
                   (malformedResult (cache/singleFlight! malformedLock "unused" 100 ready builder))
                   (invalidPidResult (cache/singleFlight! invalidPidLock "unused" 100 ready builder))]
-              (and (check (match readResult ((err e) (stringStartsWith? e "ERR_ASL1_CACHE_OWNER_METADATA:")) ((ok _) false)) "missing lock owner PID is rejected")
+              (and (check (match readResult ((err e) (stringStartsWith? e "ERR_ASL1_CACHE_OWNER_READ:")) ((ok _) false)) "unreadable lock owner file (a directory) is a read error")
+                (and (check (match missingPidResult ((err e) (stringStartsWith? e "ERR_ASL1_CACHE_OWNER_METADATA:")) ((ok _) false)) "missing lock owner PID is rejected")
                 (and (check (match malformedResult ((err e) (stringStartsWith? e "ERR_ASL1_CACHE_OWNER_METADATA:")) ((ok _) false)) "malformed lock owner metadata propagates")
-                  (check (match invalidPidResult ((err e) (stringStartsWith? e "ERR_ASL1_CACHE_OWNER_LIVENESS:")) ((ok _) false)) "lock owner liveness errors propagate")))))))))
+                  (check (match invalidPidResult ((err e) (stringStartsWith? e "ERR_ASL1_CACHE_OWNER_LIVENESS:")) ((ok _) false)) "lock owner liveness errors propagate")))))))))))
 
 fn ! runTests -> Bool
   (and (testInvalidOwnerMetadataAndLivenessPropagate) (and (testNegativeTimeoutIsBounded) (and (testLiveOwnerMetadataIsRespected) (and (testLiveOwnerTimesOut) (and (testOneBuildAndReuse) (and (testConcurrentCallersBuildOnce) (testDeadOwnerTakenOver)))))))

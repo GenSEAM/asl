@@ -15,8 +15,9 @@ fn entries -> (List String)
 ; (:m :ref WAVE2 :do "repinned on the integrated tree: unboxed record fields (UFIR UFEMIT), hashRt and loop closure clones changed the linked IR of checkSemanticTest; measured by this file own goldenDigests printer")
 ; (:m :ref WAVE3 :do "checkSemanticTest linked IR repinned on the merged tree (RCSETTLE rc worklist, RCCOST2, READINTO mkBytesOwn, MEMMEM, main 668c10ea8): +537 bytes over the TABLECONST pin; measured by this file own goldenDigests printer")
 ; (:m :ref TABLECONST :do "repinned: genericAlias, genericConcrete and builtinEntry became cond chains, and checkSemanticTest links asl-checker/types; measured by this file own goldenDigests printer")
+; (:m :ref WAVE5B :do "checkSemanticTest linked IR repinned on the merged tree: BUGFIX2 preludeTrap body is (trap ERR_TYPE message) instead of a zero-arm match, +21 bytes over the main 8a5b9e87e pin; measured by this file own goldenDigests printer")
 fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "5125643264259691999:4972216")
+  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "8005723304637407250:4972237")
         (pair "lowerSourceWith" "6806003338108627551:8856"))
 
 fn diagLine d: ty/IrDiag -> String

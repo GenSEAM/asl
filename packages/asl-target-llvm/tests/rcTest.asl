@@ -339,6 +339,15 @@ fn ! testFreeQueue libs: Libs dir: String -> Bool
         (assert (= strs 0) (str "dying kids with no kids (strings) are recycled on the spot, never pushed: rcBuiltins pushed " strs " cells, base 80000"))
         true))
 
+; (:m :ref DIR-READ-EISDIR :do "reading a directory is (err invalidPath: ... Is a directory) for both fileReadBytes and fileReadString, in the tracing and the untraced build")
+fn ! dirReadIn libs: Libs dir: String mode: String -> Bool
+  (match (buildRun libs dir "rcDirRead" mode)
+    ((err e) (do (assert false (str "rcDirRead " mode " build: " e)) false))
+    ((ok b) (do (assert (= b.run.stdout "err invalidPath: .: Is a directory\nerr invalidPath: .: Is a directory\n") (str "rcDirRead " mode " reports EISDIR as an error: " b.run.stdout " " b.run.stderr)) true)))
+
+fn ! testDirRead libs: Libs dir: String -> Bool
+  (do (dirReadIn libs dir "0") (dirReadIn libs dir "notrace") true)
+
 fn ! testReuse libs: Libs dir: String -> Bool
   (match (buildRun libs dir "rcReuse" "asan")
     ((err e) (do (assert false (str "RC ASan rcReuse build: " e)) false))
@@ -543,6 +552,7 @@ fn ! runWith libs: Libs -> Bool
         (assert (testClash libs dir) "a name both borrowed and consumed by one call is duplicated for the consumer and dropped after")
         (assert (testFreeLoop libs dir) "a dying spine frees its record heads inline, records without boxed slots as leaves")
         (assert (testCounted libs dir) "the per-cell counters exist only in the counted, ASan and notraceStats builds")
+        (assert (testDirRead libs dir) "a directory read is an error, not an empty ok, in tracing and untraced builds")
         (assert (testReuse libs dir) "an owned matched value that dies at or before a construct of its size class lends its cell, moved fields skip dup and release")
         (assert (testFold libs dir) "a non-tail closure call hands owned arguments to the lambda's owned entry, so a fold accumulator stays unique")
         (assert (testMapReuse libs dir) "mapSet on a unique map takes its tree and reuses the insert path in place, a shared snapshot keeps its nodes")

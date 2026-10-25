@@ -221,11 +221,12 @@ native_cli() {
   fi
   install_copy "$dir/aslNativeBuild" "$OUT/aslNativeBuild"
   stamp="$OUT/aslNativeBuild-fresh"
-  rm -rf "$stamp" && mkdir -p "$stamp/src"
+  # (:m :why "STAMP-SHADOW: the source snapshot sits in .src behind the symlink src (nativeCli fresh? reads dir/src/p); the module index (asl-checker/resolve walkEntry!) skips dot names and symlinks, so the copies never make an undeclared import such as asl-parser/indentParser ambiguous")
+  rm -rf "$stamp" && mkdir -p "$stamp/.src" && ln -s .src "$stamp/src"
   printf '%s\n' "$deps" | while IFS= read -r f; do
     [ -n "$f" ] || continue
     case "$f" in /*) rel=${f#"$root"/} ;; *) rel=$f; f="$root/$f" ;; esac
-    mkdir -p "$stamp/src/$(dirname "$rel")" && cp "$f" "$stamp/src/$rel" || exit 1
+    mkdir -p "$stamp/.src/$(dirname "$rel")" && cp "$f" "$stamp/.src/$rel" || exit 1
     printf '%s\n' "$rel"
   done > "$stamp/deps"
   printf '%s\n' "$clang_version" > "$stamp/clang-version"

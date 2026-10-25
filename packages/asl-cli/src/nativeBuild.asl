@@ -1,6 +1,6 @@
 (module asl-cli/nativeBuild
-  :x [Build main link! compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! transientFailure?]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir)])
+  :x [Build variantKey! main link! compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! transientFailure?]
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-checker/resolve :a r)])
 
 (schema Build
   (:f root String)
@@ -207,14 +207,43 @@ fn ! emitObjs! b: Build asl1: String tmp: String specs: (List (Pair (Pair String
 fn ! asanRuntimeKey! b: Build packagesDir: String -> (Result String String)
   (variantKey! b packagesDir "asan")
 
-fn ! variantKey! b: Build packagesDir: String variant: String -> (Result String String)
-  (match (shaOf (str packagesDir "/asl-target-llvm/src/gcRoute.asl"))
-    ((err e) (err e))
-    ((ok s1) (match (shaOf (str packagesDir "/asl-target-llvm/src/rtAbi.asl"))
+; (:m :ref VARIANTKEY-CLOSURE-20261025 :do "the variant runtime key hashes the source closure of its three root modules (the same resolver asl1Cache walks), not only the root files: an edit to gcAsl.asl or rc.asl, imported by gcRoute.asl, kept a stale libaslrt-notrace.a under .asl/cache/rcRuntime")
+fn distinctSorted xs: (List String) -> (List String)
+  (listReverse (fold (fn [(acc (List String)) (x String)] -> (List String) (if (= (optionOr (listHead acc) "") x) acc (cons x acc))) (list) (listSort xs)))
+
+fn ! closureFiles! file: String root: String -> (Result (List String) String)
+  (match (fileReadString file)
+    ((err e) (err (str "cannot read " file ": " e)))
+    ((ok src)
+      (match (a/parse src)
+        ((err pe) (err (str "cannot parse " file ":" (stringFromInt64 pe.line) ": " pe.msg)))
+        ((ok forms)
+          (let [(summary (r/collectSummary forms file))]
+            (match (r/loadModuleDeps! (cons (r/parentDirOf file) (list root)) (r/mapValuesList summary.imports))
+              ((err _) (err (str "cannot load the imports of " file)))
+              ((ok closure) (ok (cons file (filter (fn [(k String)] -> Bool (stringStartsWith? k "/")) (mapKeys closure)))))))))))
+
+fn ! hashFiles! paths: (List String) acc: String -> (Result String String)
+  (match (listHead paths)
+    ((none) (ok acc))
+    ((some p) (match (shaOf p)
       ((err e) (err e))
-      ((ok s2) (match (shaOf (str packagesDir "/asl-target-llvm/src/rtFloor.asl"))
+      ((ok s) (hashFiles! (optionOr (listTail paths) (list)) (str acc s "\n"))))))
+
+fn ! allClosureFiles! files: (List String) root: String acc: (List String) -> (Result (List String) String)
+  (match (listHead files)
+    ((none) (ok (distinctSorted acc)))
+    ((some f) (match (closureFiles! f root)
+      ((err e) (err e))
+      ((ok found) (allClosureFiles! (optionOr (listTail files) (list)) root (listAppend acc found))))))
+
+fn ! variantKey! b: Build packagesDir: String variant: String -> (Result String String)
+  (let [(src (str packagesDir "/asl-target-llvm/src"))]
+    (match (allClosureFiles! (list (str src "/gcRoute.asl") (str src "/rtAbi.asl") (str src "/rtFloor.asl")) b.root (list))
+      ((err e) (err e))
+      ((ok files) (match (hashFiles! files "")
         ((err e) (err e))
-        ((ok s3) (ok (sh/bytesSha256 (stringToBytes (str b.clangVersion "\n" variant "\n" s1 "\n" s2 "\n" s3))))))))))
+        ((ok hashes) (ok (sh/bytesSha256 (stringToBytes (str b.clangVersion "\n" variant "\n" hashes)))))))))
 
 fn ! asanRuntime! b: Build asl1: String packagesDir: String -> (Result String String)
   (variantRuntime! b asl1 packagesDir "asan" (list) (list "asan"))

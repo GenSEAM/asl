@@ -6,8 +6,8 @@ large bytes ok 3145728 97 98 99
 large string 3145728
 missing bytes notFound: @@FSROUTE_WORK@@/tree/missing: No such file or directory
 missing string (err "notFound: @@FSROUTE_WORK@@/tree/missing: No such file or directory")
-directory bytes ok 0 
-directory string (ok "")
+directory bytes err invalidPath: @@FSROUTE_WORK@@/tree: Is a directory
+directory string (err "invalidPath: @@FSROUTE_WORK@@/tree: Is a directory")
 fifo string (ok "fifo")
 nul string (ok "x")
 nul stat ok true false 1 420 8

@@ -109,6 +109,11 @@ fn ! missingCase work: String -> Bool
   (let [(r (sh (str work "/slurpProg " work "/noSuchFile /dev/null 2>&1")))]
     (check (str "missing file reports the base error text, exit " r.exit " " r.out) (and (!= r.exit 0) (stringContains? r.out (str "read: notFound: " work "/noSuchFile: No such file or directory")))))
 
+; (:m :ref DIR-READ-EISDIR :do "a directory opens read-only but read() fails with EISDIR; the slurp returns (err errno) like any other failure, not (ok empty)")
+fn ! dirCase work: String -> Bool
+  (let [(r (sh (str work "/slurpProg " work " /dev/null 2>&1")))]
+    (check (str "directory read is an error with the EISDIR text, exit " r.exit " " r.out) (and (!= r.exit 0) (stringContains? r.out (str "read: invalidPath: " work ": Is a directory")))))
+
 ; (:m :ref SLURPSIZE :do "shrink between fstat and read: fd 0 is a regular file whose offset dd moved to byte 100, so fstat reports the full size and read returns size-100 bytes; macOS /dev/stdin shares the fd offset, Linux reopens it so the case is skipped there")
 fn ! shrinkCase work: String -> Bool
   (if (= (shellText "uname -s") "Darwin")
@@ -139,6 +144,7 @@ fn ! runTests -> Bool
           (do (map (fn [(n Int64)] -> Bool (fileCase work n)) (list 0 1 4095 4096 4097 16383 16384 16385 5000000))
               (rssCase work)
               (missingCase work)
+              (dirCase work)
               (checkIr ll)))
         (map (fn [(n Int64)] -> Bool (pipeCase work n)) (list 0 1 4097 16384 5000000))
         (shrinkCase work)

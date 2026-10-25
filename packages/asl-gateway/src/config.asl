@@ -100,6 +100,7 @@
       gatewayConfigAsn
       gatewayConfigReceipt
       gatewayConfigCheckText!
+      DecidePoint decideModes defaultDecidePoint gatewayDecideRows gatewayDecidePoint gatewayDecideLoad!
       headerGet]
   :i [(wire :a wire)
       (asl-parser/ast :a ast)
@@ -2088,7 +2089,7 @@ fn gatewayProfilesLoadText! path: String exists: Bool text: (Result String Strin
   (if (not exists)
     (err (str "ERR_GATEWAY_NO_CONFIG: " path))
     (match text
-      ((err _) (err (str "ERR_GATEWAY_NO_CONFIG: " path)))
+      ((err e) (err (str path ": " e)))
       ((ok t)
         (match (gateway_config_parse! t path registryPath)
           ((err e) (if (gatewayNoRoutesError? e) (err (str "ERR_GATEWAY_NO_CONFIG: " path)) (err (str path ": " e))))
@@ -2120,6 +2121,92 @@ fn gatewayProfilesLoad! cache: ProfilesCache home: String registryPath: String -
                 (if (and exists (not (listEmpty? lines))) (eprintln (stringJoin lines "\n")) ())))
             ((err _) ()))
           (pair (ProfilesCache :key (some key) :result result) result)))))
+
+; (:m :ref HRN-DECISION-LAYER :do "a decision point is switched per row (:gateway ... :decides ((:decide :point P :mode off|static|model|shadow :model M :threshold T))); a point with no valid row of its own runs static (no outward call); shadow and model, the modes that send error lines to a provider, come only from an explicit valid row for that point, and a malformed row of another point never changes this one; keyFiles ride along so a caller resolves the provider key through keyFileLookup! and not the environment first")
+(schema DecidePoint
+  (:f point String)
+  (:f mode String)
+  (:f model String)
+  (:f threshold Float64)
+  (:f keyFiles (List String)))
+
+fn decideModes -> (List String)
+  (list "off" "static" "model" "shadow")
+
+fn defaultDecidePoint point: String -> DecidePoint
+  (DecidePoint :point point :mode "static" :model "" :threshold 0.5 :keyFiles (list))
+
+fn decideThreshold props: (Map String rd/SExpr) what: String -> (Result Float64 String)
+  (match (mapGet props "threshold")
+    ((none) (ok 0.5))
+    ((some expr)
+      (let [(v (match (asn_scalar expr) ((scalarFloat f) (some f)) ((scalarInt n) (some (int64ToFloat64 n))) (_ (none))))]
+        (match v
+          ((none) (err (str what " :threshold must be a number")))
+          ((some f) (if (or (< f 0.0) (> f 1.0)) (err (str what " :threshold must be within 0..1")) (ok f)))))))
+
+fn decideOne props: (Map String rd/SExpr) -> (Result DecidePoint String)
+  (match (mapGet props "point")
+    ((none) (err "(:decide ...) needs :point"))
+    ((some pExpr)
+      (match (asn_name pExpr "(:decide :point ...)")
+        ((err e) (err e))
+        ((ok point)
+          (let [(what (str "decide " point))
+                (modeRes (match (mapGet props "mode")
+                           ((none) (err (str what " needs :mode off, static, model or shadow")))
+                           ((some m) (match (asn_name m (str what " :mode"))
+                                       ((err e) (err e))
+                                       ((ok mode) (if (listContains? (decideModes) mode) (ok mode) (err (str what " :mode must be one of off static model shadow, found " mode))))))))
+                (modelRes (match (mapGet props "model")
+                            ((none) (ok ""))
+                            ((some m) (asn_name_or_string m (str what " :model")))))]
+            (match modeRes
+              ((err e) (err e))
+              ((ok mode)
+                (match modelRes
+                  ((err e) (err e))
+                  ((ok model)
+                    (match (decideThreshold props what)
+                      ((err e) (err e))
+                      ((ok t) (ok (DecidePoint :point point :mode mode :model model :threshold t :keyFiles (list))))))))))))))
+
+fn gatewayDecideRows g: (Map String rd/SExpr) -> (Pair (Map String DecidePoint) (List String))
+  (let [(forms (getSubForms g "decides" ":decide"))
+        (keyFiles (gatewayKeyFilesFromProps g))
+        (named (map (fn [(props (Map String rd/SExpr))] -> String
+                      (match (mapGet props "point") ((some p) (match (asn_name p "point") ((ok s) s) ((err _) ""))) ((none) "")))
+                    (pairFirst forms)))
+        (twice (fn [(p String)] -> Bool (> (listCount (fn [(s String)] -> Bool (= s p)) named) 1)))]
+    (fold (fn [(acc (Pair (Map String DecidePoint) (List String))) (props (Map String rd/SExpr))] -> (Pair (Map String DecidePoint) (List String))
+            (match (decideOne props)
+              ((err e) (pair (pairFirst acc) (listAppendOne (pairSecond acc) e)))
+              ((ok d) (cond
+                        ((twice d.point)
+                          (if (listContains? (pairSecond acc) (str "decide " d.point " is declared twice"))
+                            acc
+                            (pair (pairFirst acc) (listAppendOne (pairSecond acc) (str "decide " d.point " is declared twice")))))
+                        (else (pair (mapSet (pairFirst acc) d.point (DecidePoint :point d.point :mode d.mode :model d.model :threshold d.threshold :keyFiles keyFiles)) (pairSecond acc)))))))
+          (pair (mapEmpty) (pairSecond forms))
+          (pairFirst forms)))
+
+; (:m :do "text is a whole gateway.asn; an unreadable or non-(:gateway ...) text, or a point with no row, yields defaultDecidePoint (static) plus the reason; valid rows of other points stay in force")
+fn gatewayDecidePoint text: String point: String -> (Pair DecidePoint (List String))
+  (match (ast/readForms (lx/tokenize text))
+    ((err e) (pair (defaultDecidePoint point) (list (str "gateway config unreadable: " e))))
+    ((ok forms)
+      (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
+        (match (asn_props top (some ":gateway"))
+          ((err e) (pair (defaultDecidePoint point) (list e)))
+          ((ok g)
+            (let [(rows (gatewayDecideRows g))
+                  (base (DecidePoint :point point :mode "static" :model "" :threshold 0.5 :keyFiles (gatewayKeyFilesFromProps g)))]
+              (pair (optionOr (mapGet (pairFirst rows) point) base) (pairSecond rows))))))))
+
+fn ! gatewayDecideLoad! path: String point: String -> (Pair DecidePoint (List String))
+  (match (fileReadString path)
+    ((err _) (pair (defaultDecidePoint point) (list (str "no gateway config at " path))))
+    ((ok text) (gatewayDecidePoint text point)))
 
 fn headerGet headers: (List (Pair String String)) name: String -> String
   (match (listHead headers)
