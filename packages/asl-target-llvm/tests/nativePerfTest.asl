@@ -204,10 +204,12 @@ fn ! testListBuilders ntBin: String cache: String -> Bool
 
 fn ! testFloorFix ntBin: String cache: String -> Bool
   (let [(native (sh (str "ASL_NATIVE_TEST_CACHE='" cache "/floor' ASL_NATIVE_KEEP_LL=1 nice -n 15 " ntBin " run bench/native/loop.asl 1000 </dev/null")))
-        (go (sh (str "cat $(find '" cache "/floor' -name '*.ll') | awk '/^define .*loop[$]2Ego[(]/,/^}/'")).stdout)]
+        (go (sh (str "cat $(find '" cache "/floor' -name '*.ll') | awk '/^define .*loop[$]2Ego([$]24av(Fast|Checked))?[(]/,/^}/'")).stdout)
+        (fast (sh (str "cat $(find '" cache "/floor' -name '*.ll') | awk '/^define .*loop[$]2Ego[$]24avFast[(]/,/^}/'")).stdout)]
     (do (assert (= native.exitCode 0) (str "loop bench runs natively: " native.stderr))
         (assert (= (stringTrim native.stdout) "691508967") "loop bench at 1000 prints 691508967")
-        (assert (stringContains? go "call i64 @mathrt.floorModFix(") "loop.go fixes a negative remainder in the cold helper")
+        (assert (stringContains? go "call i64 @mathrt.floorModFix(") "loop.go (with its ARITHVER copies go$avFast and go$avChecked) fixes a negative remainder in the cold helper")
+        (assert (stringContains? fast "call i64 @mathrt.floorModFix(") "the unchecked go$avFast that ARITHVER makes keeps the cold floor fix")
         (assert (stringContains? go "@llvm.expect.i1(") "the fix-up branch is marked unlikely")
         (assert (not (stringContains? go ".p.shifted")) "no inline shifted-remainder select remains in loop.go")
         true))

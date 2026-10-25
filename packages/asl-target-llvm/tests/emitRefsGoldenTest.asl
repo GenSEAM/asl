@@ -84,6 +84,7 @@ fn ! main args: (List String) -> (Result Int64 String)
 ; (:m :ref WAVE3 :do "27 rows repinned from this file own main on the merged tree: 25 modules -230 bytes each (MEMMEM: @strrt.contains is a memmem call), asl-syntax/core/source +544 and prelude +3289 then TABLECONST -6889 and asl-checker/types -7110 (table constants; PRELUDEHOT preludeFindBytes first-byte compare plus the memmem declare); the other rows unchanged")
 ; (:m :ref WAVE5B :do "7 rows repinned from this file own main on the merged tree: BUGFIX2 fileSlurp rdFail block (+1005 bytes in asl-syntax/core/source, asl-checker/resolve|check|checkCached, asl-forms/check|tests/checkSemanticTest, each a fileReadString caller) and preludeTrap as trap ERR_TYPE (prelude -102); the other rows unchanged")
 ; (:m :ref PRELUDEKEY-MERGE :do "rows repinned on merge main a6a027618 into sh/PRELUDEKEY from this file own main")
+; (:m :ref WAVE6 :do "prelude row repinned on merge main a69c179e8 into sh/MAPREUSE (with ARITHVER, FUSION): size and sha256 printed by this file own main, the other rows unchanged")
 fn expectedDigests -> (List (Pair String String))
   (list
     (pair "asl-syntax/core/source 423657" "71e61da1c606990a10f0f93ff219c4da7fa8b768166835891a08a7fc2a95f48d")
@@ -127,7 +128,7 @@ fn expectedDigests -> (List (Pair String String))
     (pair "asl-forms/check 935224" "5e3e513838ed6f29da9274b2cee41eadfc1d1a7fd4512dc06fcd360b91480644")
     (pair "asl-forms/tests/checkSemanticTest 726589" "ddccaa8c834cd2a70ce716aace87b1b51badda8b3d48ecf87d51d73b3aa6ca81")
     (pair "emitRefsEntry 231101" "815dcd75bbf1a7d85a1e7e7a0be2c9cd4ed0f6593d7d7c97ca229fe76807172a")
-    (pair "prelude 763429" "810631770e4d9a00586d4acf7387e808810ee6b0a0d26be88fc7fddfb6c47970"))
+    (pair "prelude 768437" "1008badedfb5d1d37b8a74c32086f27edec57f2beb1b196d3f53c5fc95cc4270"))
 
 fn ! runTests -> Bool
   (let [(got (corpusDigests))

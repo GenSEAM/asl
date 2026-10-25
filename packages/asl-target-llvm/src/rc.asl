@@ -3,7 +3,8 @@
   :i [(asl-ir/types :a ty)
       (asl-target-llvm/ssa :a ssa)
       (asl-target-llvm/ssaOpt :a opt)
-      (asl-target-llvm/hashRt :a hashRt)])
+      (asl-target-llvm/hashRt :a hashRt)
+      (asl-target-llvm/treapRt :a treapRt)])
 
 schema Ctx
   user: (Map String Bool)
@@ -159,7 +160,7 @@ fn childOrEntry? name: String -> Bool
 
 fn instrUses ctx: Ctx facts: Facts ins: ty/SsaInstr -> (List Use)
   (match ins.op
-    ((ty/opCall callee args) (cond ((= callee (arenaEntry)) (heapUses facts args "consume")) ((builderFunction? ctx callee) (heapUses facts args "borrow")) ((or (arrayFresh? callee) (borrowExtern? callee)) (heapUses facts args "borrow")) ((opaqueFunction? ctx callee) (heapUses facts args "pin")) (else (callUses ctx facts callee args))))
+    ((ty/opCall callee args) (cond ((arenaEntry? callee) (heapUses facts args "consume")) ((builderFunction? ctx callee) (heapUses facts args "borrow")) ((or (arrayFresh? callee) (borrowExtern? callee)) (heapUses facts args "borrow")) ((opaqueFunction? ctx callee) (heapUses facts args "pin")) (else (callUses ctx facts callee args))))
     ((ty/opBuiltin name args) (heapUses facts args (if (borrowBuiltin? name) "borrow" "pin")))
     ((ty/opEntry name args) (heapUses facts args (if (consumeEntry? name) "consume" "borrow")))
     ((ty/opCallClosure c args) (if (ownedCall? facts ins) (ownedUses facts ins) (heapUses facts (cons c args) "borrow")))
@@ -198,7 +199,7 @@ fn resultKind ctx: Ctx ins: ty/SsaInstr -> String
     "raw"
     (match ins.op
       ((ty/opConst c) (match c ((ty/constStr _) "source") ((ty/constSymbol _) "source") (_ "immortal")))
-      ((ty/opCall callee _) (if (and (mapHas? ctx.proj callee) (!= callee (arenaEntry))) "source" (if (and (opaqueFunction? ctx callee) (and (not (builderFunction? ctx callee)) (not (or (arrayFresh? callee) (borrowExtern? callee))))) "opaque" "owned")))
+      ((ty/opCall callee _) (if (and (mapHas? ctx.proj callee) (not (arenaEntry? callee))) "source" (if (and (opaqueFunction? ctx callee) (and (not (builderFunction? ctx callee)) (not (or (arrayFresh? callee) (borrowExtern? callee))))) "opaque" "owned")))
       ((ty/opBuiltin name _) (if (borrowBuiltin? name) "owned" "opaque"))
       ((ty/opEntry name _) (cond ((consumeEntry? name) "owned") ((childEntry? name) "source") ((childOrEntry? name) "sourceDup") ((freshEntry? name) "owned") ((sameEntry? name) "owned") ((wrapEntry? name) "wrap") (else "opaque")))
       ((ty/opField _ _) "source")
@@ -1669,7 +1670,7 @@ fn runtimeTextIn text: String section: String asan: Bool notrace: Bool -> String
                  (childrenText "pinKids" "pinVal") (drainText) (recycleText asan rooted notrace) (if active (arenaPinned (pinValText notrace)) (pinValText notrace)) (pinText)
                  (if active (arenaDeferred (deferText rooted)) (deferText rooted))
                  (dupValText) (childrenText "dupKids" "dupVal") (dupKidsText) (dupSameText) (freeOneText) (claimText) (freeChainText asan) (freeShallowText asan)
-                 (cond (active (arenaRuntimeText asan)) (uses (arenaRunText false)) (else "")))
+                 (cond (active (arenaRuntimeText asan)) (uses (lines (list (arenaRunText false) (arenaRunFlatText false)))) (else "")))
            (listAppend (if rooted (listAppend (smallGlobals text) (list (smallSyncText) (smallPushText))) (list))
              (listAppend (runtimeDecls section asan rooted)
                (if active (listAppend (declIfAbsent section "@malloc" "declare ptr @malloc(i64)") (declIfAbsent section "@llvm.memcpy.p0.p0.i64" "declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)")) (list))))))))
@@ -2022,9 +2023,24 @@ fn arenaCallText -> String
 fn arenaRunCall -> String
   "call tailcc %Val @aslRc.arenaRun("
 
+; (:m :ref SOAREGION :do "the flat region entry regionInfer calls for a thunk it proved allocates only arena cells and immediates; built from its entry like arenaCallText")
+fn arenaFlatEntry -> String
+  "prelude.arenaRunFlat"
+
+; (:m :ref SOAREGION :do "both region entries consume their thunk and hand back a promoted value, never a projection")
+fn arenaEntry? callee: String -> Bool
+  (or (= callee (arenaEntry)) (= callee (arenaFlatEntry)))
+
+fn arenaFlatCallText -> String
+  (str "call tailcc %Val @" (stringReplace (arenaFlatEntry) "." "$2E") "(")
+
+fn arenaFlatRunCall -> String
+  "call tailcc %Val @aslRc.arenaRunFlat("
+
 ; (:m :ref RC-ARENA-MUSTTAIL :do "a module uses the region runtime only when it calls it: a call instruction assigns its result, so a string constant holding the call text, as in this compiler's own string table, does not count")
 fn arenaCalled? text: String -> Bool
-  (or (stringContains? text (str "= " (arenaRunCall))) (stringContains? text (str "= musttail " (arenaRunCall))))
+  (or (or (stringContains? text (str "= " (arenaRunCall))) (stringContains? text (str "= musttail " (arenaRunCall))))
+      (or (stringContains? text (str "= " (arenaFlatRunCall))) (stringContains? text (str "= musttail " (arenaFlatRunCall)))))
 
 ; (:m :ref RC-LIST-RELINK :do "under untraced RC a listAppend call goes to aslRc.appendOwned, which owns both lists as listAppend does: it walks the unique leading cells of the left list and, when they reach its end, links the right list to the last cell in place with no copy; from the first shared cell on (count above zero, stuck or arena cells included) it hands that suffix to the copying listAppend and links the copy in; the callee and call texts are spliced at run time so an RC-built compiler still finds the calls in its own text; the entry is not internal, since musttail callers need its tailcc kept and LLVM turns internal functions to fastcc")
 fn appendCallee -> String
@@ -2430,6 +2446,35 @@ fn arenaWalkText -> String
                "  ret void"
                "}"))
 
+; (:m :ref SOAREGION :do "a flat release frees the chunks and the large cells as the walk does after it, without visiting a cell")
+fn arenaReleaseText -> String
+  (lines (list "define internal void @aslRc.arenaRelease(ptr %a) noinline {"
+               "entry:"
+               "  %cp = getelementptr inbounds i8, ptr %a, i64 16"
+               "  %c0 = load ptr, ptr %cp"
+               "  %bp = getelementptr inbounds i8, ptr %a, i64 48"
+               "  %b0 = load ptr, ptr %bp"
+               "  br label %free"
+               "free:"
+               "  %f = phi ptr [ %c0, %entry ], [ %fn, %freeOne ]"
+               "  %fmore = icmp ne ptr %f, null"
+               "  br i1 %fmore, label %freeOne, label %bigFree"
+               "freeOne:"
+               "  %fn = load ptr, ptr %f"
+               "  call void @aslRc.arenaFreeChunk(ptr %f)"
+               "  br label %free"
+               "bigFree:"
+               "  %g = phi ptr [ %b0, %free ], [ %gn, %bigOne ]"
+               "  %gmore = icmp ne ptr %g, null"
+               "  br i1 %gmore, label %bigOne, label %done"
+               "bigOne:"
+               "  %gn = load ptr, ptr %g"
+               "  call void @free(ptr %g)"
+               "  br label %bigFree"
+               "done:"
+               "  ret void"
+               "}"))
+
 ; (:m :ref MM-REGIONS :do "promotion copies the closing arena's cells reachable from the result into the enclosing region through the ordinary allocator, depth-first over an explicit stack of slots; each copy takes over the cell's references, and the cell keeps a forward to it so shared structure is copied once")
 fn arenaPromoteText -> String
   (lines (list "define internal %Val @aslRc.arenaPromote(%Val %r, i64 %cls) noinline {"
@@ -2618,8 +2663,15 @@ fn arenaEscapeText -> String
 
 ; (:m :ref MM-REGIONS :do "arenaRun opens an arena one deeper than the innermost open one, runs the thunk with every allocation of this thread cut from it, then promotes the result into the enclosing region and releases the arena, or retires it when a value escaped; past the deepest depth it is a plain call")
 fn arenaRunText active: Bool -> String
+  (arenaRunTextFor active "arenaRun" "  call void @aslRc.arenaWalk(ptr %a, i64 0)")
+
+; (:m :ref SOAREGION :do "arenaRunFlat is arenaRun whose release frees the chunks without walking the cells: regionInfer calls it only for a thunk whose cells hold nothing but immediates and cells of the same arena, so no cell has a kid outside to drop")
+fn arenaRunFlatText active: Bool -> String
+  (arenaRunTextFor active "arenaRunFlat" "  call void @aslRc.arenaRelease(ptr %a)")
+
+fn arenaRunTextFor active: Bool name: String release: String -> String
   (lines (if active
-           (list "define internal tailcc %Val @aslRc.arenaRun(%Val %f) {"
+           (list (str "define internal tailcc %Val @aslRc." name "(%Val %f) {")
                  "entry:"
                  "  %d = load i64, ptr @aslRc.arenaDepth"
                  (str "  %deep = icmp uge i64 %d, " (arenaDeepest))
@@ -2664,12 +2716,12 @@ fn arenaRunText active: Bool -> String
                  "release:"
                  "  %cls = add i64 %d1, 128"
                  "  %out = call %Val @aslRc.arenaPromote(%Val %r, i64 %cls)"
-                 "  call void @aslRc.arenaWalk(ptr %a, i64 0)"
+                 release
                  "  call void @free(ptr %a)"
                  (str "  %od = call tailcc i64 @" (dropName) "(%Val %f)")
                  "  ret %Val %out"
                  "}")
-           (list "define internal tailcc %Val @aslRc.arenaRun(%Val %f) {"
+           (list (str "define internal tailcc %Val @aslRc." name "(%Val %f) {")
                  "entry:"
                  "  %r = call %Val @objrt.call(%Val %f, i64 0, ptr null)"
                  (str "  %d = call tailcc i64 @" (dropName) "(%Val %f)")
@@ -2688,7 +2740,7 @@ fn arenaGlobals -> (List String)
 fn arenaRuntimeText asan: Bool -> String
   (lines (listAppend (arenaGlobals)
                      (list (arenaTestText) (arenaAllocText) (arenaGrowText asan) (arenaChunkFreeText asan) (childrenText "arenaKids" "arenaDropKid")
-                           (arenaWalkText) (arenaPromoteText) (arenaEscapeText) (arenaRunText true))))
+                           (arenaWalkText) (arenaPromoteText) (arenaEscapeText) (arenaRunText true) (arenaReleaseText) (arenaRunFlatText true))))
 
 ; (:m :ref MM-REGIONS :do "inside an open arena each allocation entry cuts its cell from the arena, except arrays and handles, which stay ordinary heap")
 fn arenaGuarded def: String -> String
@@ -2932,15 +2984,15 @@ fn rcFinishTextCounted text: String asan: Bool notrace: Bool counted: Bool -> St
         (code (if (< cut n) (optionOr (stringSlice text 0 cut) "") (undeclaredInPlace text removed)))
         (section (if (< cut n) (keptDecls (optionOr (stringSlice text cut n) "") removed) ""))
         (rooted (rootedRuntime? (if (< cut n) section (declareSection code))))
-        (uses (stringContains? code (arenaCallText)))
+        (uses (or (stringContains? code (arenaCallText)) (stringContains? code (arenaFlatCallText))))
         (active (and uses notrace))
         (guard (fn [(d String)] -> String (if active (arenaGuarded d) d)))
-        (arenaed (if uses (stringReplace code (arenaCallText) (arenaRunCall)) code))
+        (arenaed (if uses (stringReplace (stringReplace code (arenaCallText) (arenaRunCall)) (arenaFlatCallText) (arenaFlatRunCall)) code))
         (relink (and notrace (stringContains? arenaed (appendCallText))))
         (appended (if relink (stringReplace arenaed (appendCallText) (appendOwnedCall)) arenaed))
         (reversing (and notrace (and (stringContains? appended (reverseCallText)) (stringContains? appended (reverseOntoCallText)))))
         (undeclared (if reversing (stringReplace appended (reverseCallText) (reverseOwnedCall)) appended))
-        (hashed (hashRt/hashSplice undeclared notrace))
+        (hashed (treapRt/treapSplice (hashRt/hashSplice undeclared notrace) (and notrace (not uses))))
         (fin (finishChunks hashed asan rooted active))
         (large (filter (fn [(c Int64)] -> Bool (>= c (smallClasses))) fin.classes))
         (small (filter (fn [(c Int64)] -> Bool (< c (smallClasses))) fin.classes))
@@ -3302,7 +3354,7 @@ fn initialBorrows counted: (List ty/SsaFunction) targets: (Map String Bool) -> (
   (fold (fn [(acc (Map String (List Bool))) (f ty/SsaFunction)] -> (Map String (List Bool))
           (if (borrowable? targets f)
             (let [(walked (listReuseParams f))]
-              (mapSet acc f.name (hashRt/ownedFlags f.name (map (fn [(p ty/SsaParam)] -> Bool (and (heapTy? p.ty) (not (mapHas? walked p.name)))) f.params))))
+              (mapSet acc f.name (treapRt/ownedFlags f.name (hashRt/ownedFlags f.name (map (fn [(p ty/SsaParam)] -> Bool (and (heapTy? p.ty) (not (mapHas? walked p.name)))) f.params)))))
             acc))
         (mapEmpty) counted)
 
@@ -3412,7 +3464,7 @@ fn projOwners ctx: Ctx facts: Facts f: ty/SsaFunction -> (Map String Bool)
   (setOf (fold (fn [(acc (List String)) (ins ty/SsaInstr)] -> (List String)
                  (match ins.op
                    ((ty/opCall callee args)
-                     (if (or (= callee (arenaEntry)) (or (builderFunction? ctx callee) (or (arrayFresh? callee) (or (borrowExtern? callee) (opaqueFunction? ctx callee)))))
+                     (if (or (arenaEntry? callee) (or (builderFunction? ctx callee) (or (arrayFresh? callee) (or (borrowExtern? callee) (opaqueFunction? ctx callee)))))
                        acc
                        (fold (fn [(a (List String)) (u Use)] -> (List String)
                                (if (= u.kind "consume") (match (mapGet facts.anchors u.name) ((some p) (if (= p "") a (cons p a))) ((none) a)) a))

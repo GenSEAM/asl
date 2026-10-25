@@ -1,5 +1,5 @@
 (module asl-target-llvm/loopGuard
-  :x [guardLoops checkedName kernelName]
+  :x [guardLoops checkedName kernelName fastName slowName]
   :i [(asl-ir/types :a ty)])
 
 ; (:m :ref LOOPGUARD :do "loop versioning of counted sum loops: a self tail loop f(.. i .. n .. buf .. acc ..) that returns acc at (= i n) and otherwise calls itself with i+1 and acc plus bytesGet buf i (or i64ArrayGet buf i over the whole array) gets one entry check that proves every read in [i, n) inside buf and no partial sum outside int64; then a loop with neither check runs, which clang vectorizes; otherwise the original loop runs unchanged as f$lgChecked, so every trap fires at the same element with the same error (D154: checks are moved, never removed)")
@@ -104,7 +104,7 @@ fn jumpOf t: ty/SsaTerm -> (Option ty/SsaEdge)
 
 ; (:m :do "the shape of f when it is exactly the counted sum loop: entry (= i n) or (= n i) branching to a block that passes acc to the join and one computing only i+1, the element, acc plus the element and the self call, every other argument of which is its own parameter; the join returns its one parameter")
 fn loopShape f: ty/SsaFunction -> (Option Shape)
-  (if (or (!= (listLength f.blocks) 4) (or (not (listEmpty? f.captures)) (or (!= (ty/ssaTyName f.retTy) "i64") (stringEndsWith? f.name "$lgChecked"))))
+  (if (or (!= (listLength f.blocks) 4) (or (not (listEmpty? f.captures)) (or (!= (ty/ssaTyName f.retTy) "i64") (or (stringEndsWith? f.name "$lgChecked") (stringContains? f.name "$av")))))
     (none)
     (let [(entry (firstBlock f))]
       (match entry.term
@@ -315,4 +315,249 @@ fn versions m: ty/SsaModule f: ty/SsaFunction -> (Option (List ty/SsaFunction))
         (else (none)))))
 
 fn guardLoops m: ty/SsaModule -> ty/SsaModule
-  (with m :functions (listFlatMap (fn [(f ty/SsaFunction)] -> (List ty/SsaFunction) (optionOr (versions m f) (list f))) m.functions))
+  (let [(guarded (listFlatMap (fn [(f ty/SsaFunction)] -> (List ty/SsaFunction) (optionOr (versions m f) (list f))) m.functions))
+        (m2 (with m :functions guarded))]
+    (with m2 :functions (listFlatMap (fn [(f ty/SsaFunction)] -> (List ty/SsaFunction) (optionOr (arithVersions m2 f) (list f))) guarded)))
+
+; (:m :ref ARITHVER :do "bench note: the fused ring rounds versioned raw are closed-formed by clang (about 0.035 instructions per element at 4M and 40M), so the bench/native ring instruction ratio after FUSION + ARITHVER (0.77) is closedForm, startup-dominated: startup against startup, not a loop speedup")
+; (:m :ref ARITHVER :do "range versioning of checked Int arithmetic in self loops: f(.. i .. n ..) whose entry tests (= i n), whose self calls (none reachable from the equal branch) all pass i+1 and n unchanged. Under H, every Int parameter of f other than accumulators within +-2^40 and i <= n, each value in f gets a compile-time interval; a checked add, sub or mul whose interval stays within +-2^61 cannot overflow. A moved parameter stays under H when every self call passes it a value inside +-2^40 (by induction over the calls); an accumulator, passed itself or itself plus a value e of known bound M, stays inside +-2^62 when |acc| <= 2^61 and n - i <= 2^61 / M at entry, since the call depth is at most n - i. f becomes an entry check of H and those bounds: when it holds f$avFast runs, the loop with those operations raw; otherwise f$avChecked, the loop as it was, so every trap fires at the same step with the same error. A loop is versioned only when every checked operation in it runs raw: with some left checked the raw ones save about one instruction per step and cost a second copy of the body, which on bench/native/array cost the clang inlining of i64ArrayGet (2.06x -> 3.19x)")
+schema Iv
+  known: Bool
+  lo: Int64
+  hi: Int64
+
+schema ArithPlan
+  index: String
+  bound: String
+  held: (List String)
+  accs: (List (Pair String Int64))
+  raw: (List String)
+
+fn ivCap -> Int64
+  2305843009213693952
+
+fn ivHeld -> Int64
+  1099511627776
+
+fn ivTop -> Iv
+  (Iv :known false :lo 0 :hi 0)
+
+fn ivOf lo: Int64 hi: Int64 -> Iv
+  (if (and (>= lo (- 0 (ivCap))) (<= hi (ivCap))) (Iv :known true :lo lo :hi hi) (ivTop))
+
+fn ivMag a: Iv -> Int64
+  (max (if (< a.lo 0) (- 0 a.lo) a.lo) (if (< a.hi 0) (- 0 a.hi) a.hi))
+
+fn ivAdd a: Iv b: Iv -> Iv
+  (if (and a.known b.known) (ivOf (+ a.lo b.lo) (+ a.hi b.hi)) (ivTop))
+
+fn ivSub a: Iv b: Iv -> Iv
+  (if (and a.known b.known) (ivOf (- a.lo b.hi) (- a.hi b.lo)) (ivTop))
+
+fn ivMul a: Iv b: Iv -> Iv
+  (cond
+    ((not (and a.known b.known)) (ivTop))
+    ((and (> (ivMag a) 0) (> (ivMag b) (/ (ivCap) (ivMag a)))) (ivTop))
+    (else (let [(ps (list (* a.lo b.lo) (* a.lo b.hi) (* a.hi b.lo) (* a.hi b.hi)))]
+            (ivOf (fold (fn [(x Int64) (y Int64)] -> Int64 (min x y)) (* a.lo b.lo) ps) (fold (fn [(x Int64) (y Int64)] -> Int64 (max x y)) (* a.lo b.lo) ps)))))
+
+; (:m :do "a floored mod by a positive divisor is in [0, hi-1]; by any other nonzero divisor its magnitude is below the divisor's")
+fn ivMod a: Iv b: Iv -> Iv
+  (cond
+    ((not b.known) (ivTop))
+    ((> b.lo 0) (ivOf 0 (- b.hi 1)))
+    ((= (ivMag b) 0) (ivTop))
+    (else (ivOf (- 1 (ivMag b)) (- (ivMag b) 1))))
+
+fn ivHull a: Iv b: Iv -> Iv
+  (if (and a.known b.known) (ivOf (min a.lo b.lo) (max a.hi b.hi)) (ivTop))
+
+fn ivWithin? a: Iv lim: Int64 -> Bool
+  (and a.known (and (>= a.lo (- 0 lim)) (<= a.hi lim)))
+
+fn ivGet env: (Map String Iv) v: String -> Iv
+  (optionOr (mapGet env v) (ivTop))
+
+fn arg2 args: (List String) env: (Map String Iv) k: Int64 -> Iv
+  (ivGet env (arg args k))
+
+fn rawOf name: String -> String
+  (cond ((= name "addIntHost") "rawAddI64") ((= name "subIntHost") "rawSubI64") ((= name "mulIntHost") "rawMulI64") (else ""))
+
+fn ivOp env: (Map String Iv) defs: (Map String ty/SsaOp) op: ty/SsaOp -> Iv
+  (match op
+    ((ty/opConst c) (match c ((ty/constInt k) (ivOf k k)) (_ (ivTop))))
+    ((ty/opPrim name args)
+      (cond
+        ((= name "addIntHost") (ivAdd (arg2 args env 0) (arg2 args env 1)))
+        ((= name "subIntHost") (ivSub (arg2 args env 0) (arg2 args env 1)))
+        ((= name "mulIntHost") (ivMul (arg2 args env 0) (arg2 args env 1)))
+        ((= name "modIntHost") (ivMod (arg2 args env 0) (arg2 args env 1)))
+        (else (ivTop))))
+    ((ty/opUnbox v) (match (mapGet defs v) ((some d) (match d ((ty/opBox x) (ivGet env x)) (_ (ivTop)))) ((none) (ivTop))))
+    (_ (ivTop)))
+
+fn allDefs f: ty/SsaFunction -> (Map String ty/SsaOp)
+  (fold (fn [(acc (Map String ty/SsaOp)) (b ty/SsaBlock)] -> (Map String ty/SsaOp) (fold (fn [(a (Map String ty/SsaOp)) (i ty/SsaInstr)] -> (Map String ty/SsaOp) (mapSet a i.dest i.op)) acc b.instrs))
+        (mapEmpty) f.blocks)
+
+; (:m :do "the interval of every Int value of f given its parameters' intervals: instructions in block order, a block parameter the hull of what every edge into it passes (top while an edge's value is not yet known), two passes")
+fn ivBlocks f: ty/SsaFunction defs: (Map String ty/SsaOp) env: (Map String Iv) -> (Map String Iv)
+  (fold (fn [(e (Map String Iv)) (b ty/SsaBlock)] -> (Map String Iv)
+          (let [(withParams (fold (fn [(e2 (Map String Iv)) (k Int64)] -> (Map String Iv)
+                                    (let [(p (optionOr (listGet b.params k) (ty/ssaParam "" (ty/tyVal))))
+                                          (ins (listFlatMap (fn [(c ty/SsaBlock)] -> (List String)
+                                                              (listFlatMap (fn [(ed ty/SsaEdge)] -> (List String) (if (= ed.target b.label) (list (arg ed.args k)) (list))) (ty/termEdges c.term)))
+                                                            f.blocks))]
+                                      (if (or (listEmpty? ins) (!= (ty/ssaTyName p.ty) "i64"))
+                                        e2
+                                        (mapSet e2 p.name (fold (fn [(acc Iv) (v String)] -> Iv (ivHull acc (ivGet e2 v))) (ivGet e2 (arg ins 0)) ins)))))
+                                  e (range 0 (listLength b.params))))]
+            (fold (fn [(e3 (Map String Iv)) (i ty/SsaInstr)] -> (Map String Iv) (if (= (ty/ssaTyName i.ty) "i64") (mapSet e3 i.dest (ivOp e3 defs i.op)) e3)) withParams b.instrs)))
+        env f.blocks)
+
+fn selfCalls f: ty/SsaFunction -> (List (List String))
+  (listFlatMap (fn [(b ty/SsaBlock)] -> (List (List String))
+                 (listFlatMap (fn [(i ty/SsaInstr)] -> (List (List String)) (match i.op ((ty/opCall c args) (if (= c f.name) (list args) (list))) (_ (list)))) b.instrs))
+               f.blocks)
+
+fn reachFrom f: ty/SsaFunction todo: (List String) seen: (List String) fuel: Int64 -> (List String)
+  (match (listHead todo)
+    ((none) seen)
+    ((some l) (if (or (<= fuel 0) (listContains? seen l))
+                (reachFrom f (listDrop todo 1) seen (- fuel 1))
+                (match (blockOf f l)
+                  ((none) (reachFrom f (listDrop todo 1) seen (- fuel 1)))
+                  ((some b) (reachFrom f (listAppend (map (fn [(e ty/SsaEdge)] -> String e.target) (ty/termEdges b.term)) (listDrop todo 1)) (cons l seen) (- fuel 1)))))))
+
+fn callsSelf? f: ty/SsaFunction b: ty/SsaBlock -> Bool
+  (listAny? (fn [(i ty/SsaInstr)] -> Bool (match i.op ((ty/opCall c _) (= c f.name)) (_ false))) b.instrs)
+
+fn indexOf names: (List String) x: String -> Int64
+  (optionOr (listIndexOf names x) -1)
+
+fn stepsByOne? defs: (Map String ty/SsaOp) v: String i: String -> Bool
+  (match (addend defs v i) ((some one) (constOne? defs one)) ((none) false))
+
+; (:m :do "the induction pair (i, n) of f: the entry block's compare, n passed unchanged and i as i+1 by every self call, and no self call reachable from the equal branch or in the entry block")
+fn inductionOf f: ty/SsaFunction defs: (Map String ty/SsaOp) -> (Option (Pair String String))
+  (let [(entry (firstBlock f)) (names (paramNames f)) (calls (selfCalls f))]
+    (match entry.term
+      ((ty/termBranch c thenE _)
+        (match (mapGet (defsOf entry.instrs) c)
+          ((some op)
+            (match op
+              ((ty/opPrim name args)
+                (let [(x (arg args 0)) (y (arg args 1))
+                      (fits (fn [(i String) (n String)] -> Bool
+                              (let [(ki (indexOf names i)) (kn (indexOf names n))]
+                                (and (>= ki 0) (and (>= kn 0) (and (!= i n) (and (= (paramTy f i) "i64") (and (= (paramTy f n) "i64")
+                                     (listAll? (fn [(a (List String))] -> Bool (and (= (arg a kn) n) (stepsByOne? defs (arg a ki) i))) calls)))))))))
+                      (equal (reachFrom f (list thenE.target) (list) 10000))]
+                  (cond
+                    ((or (!= name "eqInt") (listEmpty? calls)) (none))
+                    ((callsSelf? f entry) (none))
+                    ((listAny? (fn [(b ty/SsaBlock)] -> Bool (and (listContains? equal b.label) (callsSelf? f b))) f.blocks) (none))
+                    ((fits x y) (some (pair x y)))
+                    ((fits y x) (some (pair y x)))
+                    (else (none)))))
+              (_ (none))))
+          ((none) (none))))
+      (_ (none))))
+
+fn heldEnv names: (List String) -> (Map String Iv)
+  (fold (fn [(e (Map String Iv)) (p String)] -> (Map String Iv) (mapSet e p (ivOf (- 0 (ivHeld)) (ivHeld)))) (mapEmpty) names)
+
+fn argsAt calls: (List (List String)) k: Int64 -> (List String)
+  (map (fn [(a (List String))] -> String (arg a k)) calls)
+
+; (:m :do "the parameters that stay under H: start from every Int parameter and drop each one some self call may pass a value outside +-2^40, until none is dropped; i stays, as i <= n and every call that passes i+1 has i != n")
+fn heldParams f: ty/SsaFunction defs: (Map String ty/SsaOp) i: String held: (List String) fuel: Int64 -> (List String)
+  (let [(env (ivBlocks f defs (ivBlocks f defs (heldEnv held))))
+        (calls (selfCalls f)) (names (paramNames f))
+        (kept (filter (fn [(p String)] -> Bool (or (= p i) (listAll? (fn [(v String)] -> Bool (or (= v p) (ivWithin? (ivGet env v) (ivHeld)))) (argsAt calls (indexOf names p))))) held))]
+    (if (or (<= fuel 0) (= (listLength kept) (listLength held))) kept (heldParams f defs i kept (- fuel 1))))
+
+; (:m :do "an accumulator p: every self call passes p itself or a checked add of p and a value of known interval, whose magnitude bound it returns (at least 1)")
+fn accBound f: ty/SsaFunction defs: (Map String ty/SsaOp) env: (Map String Iv) p: String -> (Option Int64)
+  (fold (fn [(acc (Option Int64)) (v String)] -> (Option Int64)
+          (match acc
+            ((none) (none))
+            ((some m) (if (= v p) (some m)
+                        (match (addend defs v p)
+                          ((none) (none))
+                          ((some e) (let [(r (ivGet env e))] (if (and r.known (!= e p)) (some (max m (ivMag r))) (none)))))))))
+        (some 1) (argsAt (selfCalls f) (indexOf (paramNames f) p)))
+
+fn accAdds f: ty/SsaFunction p: String -> (List String)
+  (filter (fn [(v String)] -> Bool (!= v p)) (argsAt (selfCalls f) (indexOf (paramNames f) p)))
+
+fn arithPlan f: ty/SsaFunction -> (Option ArithPlan)
+  (if (or (not (listEmpty? f.captures)) (or (stringContains? f.name "$av") (stringStartsWith? f.name "asl-target-llvm/arrays.")))
+    (none)
+    (let [(defs (allDefs f))]
+      (match (inductionOf f defs)
+        ((none) (none))
+        ((some ind)
+          (let [(ints (map (fn [(p ty/SsaParam)] -> String p.name) (filter (fn [(p ty/SsaParam)] -> Bool (= (ty/ssaTyName p.ty) "i64")) f.params)))
+                (held (heldParams f defs (pairFirst ind) ints (listLength ints)))
+                (env0 (ivBlocks f defs (ivBlocks f defs (heldEnv held))))
+                (accs (listFlatMap (fn [(p String)] -> (List (Pair String Int64)) (if (listContains? held p) (list) (match (accBound f defs env0 p) ((some m) (list (pair p m))) ((none) (list))))) ints))
+                (accOps (listFlatMap (fn [(a (Pair String Int64))] -> (List String) (accAdds f (pairFirst a))) accs))
+                (checked (filter (fn [(i ty/SsaInstr)] -> Bool (match i.op ((ty/opPrim n _) (!= (rawOf n) "")) (_ false))) (listFlatMap (fn [(b ty/SsaBlock)] -> (List ty/SsaInstr) b.instrs) f.blocks)))
+                (raw (map (fn [(i ty/SsaInstr)] -> String i.dest) (filter (fn [(i ty/SsaInstr)] -> Bool (or (listContains? accOps i.dest) (ivWithin? (ivGet env0 i.dest) (ivCap)))) checked)))]
+            (if (or (or (listEmpty? raw) (!= (listLength raw) (listLength checked))) (not (and (listContains? held (pairFirst ind)) (listContains? held (pairSecond ind)))))
+              (none)
+              (some (ArithPlan :index (pairFirst ind) :bound (pairSecond ind) :held held :accs accs :raw raw))))))))
+
+fn fastName name: String -> String
+  (str name "$avFast")
+
+fn slowName name: String -> String
+  (str name "$avChecked")
+
+fn renamedLoop f: ty/SsaFunction name: String raw: (List String) -> ty/SsaFunction
+  (ty/ssaFunction name f.captures f.params f.retTy
+    (map (fn [(b ty/SsaBlock)] -> ty/SsaBlock
+           (ty/ssaBlock b.label b.params
+             (map (fn [(i ty/SsaInstr)] -> ty/SsaInstr
+                    (match i.op
+                      ((ty/opCall c args) (if (= c f.name) (ins i.dest i.ty (ty/opCall name args)) i))
+                      ((ty/opPrim n args) (if (listContains? raw i.dest) (ins i.dest i.ty (ty/opPrim (rawOf n) args)) i))
+                      (_ i)))
+                  b.instrs)
+             b.term))
+         f.blocks))
+
+fn rangeChecks v: String lim: Int64 k: Int64 -> (List ty/SsaInstr)
+  (let [(p (str "av." k "."))]
+    (list (kInt (str p "lo") (- 0 lim)) (kInt (str p "hi") lim)
+          (prim (str p "ge") (ty/tyI1) "geInt" (list v (str p "lo"))) (prim (str p "le") (ty/tyI1) "leInt" (list v (str p "hi")))
+          (prim (str p "in") (ty/tyI1) "andBool" (list (str p "ge") (str p "le")))))
+
+; (:m :do "the entry check: each held parameter within +-2^40, each accumulator within +-2^61, i <= n, and n - i within 2^61 over the largest accumulator step; all quiet compares on values the checks bound")
+fn arithEntry f: ty/SsaFunction s: ArithPlan -> (List ty/SsaBlock)
+  (let [(held (map (fn [(k Int64)] -> (List ty/SsaInstr) (rangeChecks (arg s.held k) (ivHeld) k)) (range 0 (listLength s.held))))
+        (accs (map (fn [(k Int64)] -> (List ty/SsaInstr) (rangeChecks (pairFirst (optionOr (listGet s.accs k) (pair "" 0))) (ivCap) (+ k (listLength s.held)))) (range 0 (listLength s.accs))))
+        (m (fold (fn [(a Int64) (p (Pair String Int64))] -> Int64 (max a (pairSecond p))) 1 s.accs))
+        (oks (map (fn [(k Int64)] -> String (str "av." k ".in")) (range 0 (+ (listLength s.held) (listLength s.accs)))))
+        (trip (list (prim "av.order" (ty/tyI1) "leInt" (list s.index s.bound)) (prim "av.trip" (ty/tyI64) "rawSubI64" (list s.bound s.index))
+                    (kInt "av.limit" (/ (ivCap) m)) (prim "av.short" (ty/tyI1) "leInt" (list "av.trip" "av.limit"))
+                    (prim "av.t0" (ty/tyI1) "andBool" (list "av.order" "av.short"))))
+        (folded (pairSecond (fold (fn [(acc (Pair String (List ty/SsaInstr))) (k Int64)] -> (Pair String (List ty/SsaInstr))
+                                    (let [(d (str "av.all" k))] (pair d (listAppend (pairSecond acc) (list (prim d (ty/tyI1) "andBool" (list (pairFirst acc) (arg oks k))))))))
+                                  (pair "av.t0" (list)) (range 0 (listLength oks)))))
+        (last (if (listEmpty? oks) "av.t0" (str "av.all" (- (listLength oks) 1))))]
+    (list (blk "entry" (listAppend (listFlatMap (fn [(x (List ty/SsaInstr))] -> (List ty/SsaInstr) x) (listAppend held accs)) (listAppend trip folded))
+            (branchTo last "av.fast" (list) "av.slow" (list)))
+          (blk "av.fast" (list (ins "av.r1" f.retTy (ty/opCall (fastName f.name) (paramNames f)))) (ty/termReturn "av.r1"))
+          (blk "av.slow" (list (ins "av.r2" f.retTy (ty/opCall (slowName f.name) (paramNames f)))) (ty/termReturn "av.r2"))))
+
+fn arithVersions m: ty/SsaModule f: ty/SsaFunction -> (Option (List ty/SsaFunction))
+  (match (arithPlan f)
+    ((none) (none))
+    ((some s) (if (or (hasFunction? m (fastName f.name)) (hasFunction? m (slowName f.name)))
+                (none)
+                (some (list (ty/ssaFunction f.name f.captures f.params f.retTy (arithEntry f s))
+                            (renamedLoop f (fastName f.name) s.raw)
+                            (renamedLoop f (slowName f.name) (list)))))))

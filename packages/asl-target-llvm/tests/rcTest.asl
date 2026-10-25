@@ -440,7 +440,7 @@ fn ! testArena libs: Libs dir: String -> Bool
                    (assert (= c.run.exitCode 0) (str "rcArena untraced RC exits 0, got " c.run.exitCode ": " stats))
                    (assert (= c.run.stdout want) (str "values built in nested arenas and promoted out of them print what tracing prints: " c.run.stdout " (" stats ")"))
                    (assert (stringContains? c.code "call tailcc %Val @aslRc.arenaRun(") "untraced RC routes arenaRun to the runtime region entry")
-                   (assert (= (statOf stats "arenas") 600) (str "each of 300 steps opens its arena and a nested one: " stats))
+                   (assert (= (statOf stats "arenas") 900) (str "each of 300 steps opens its arena, a nested one and the region regionInfer gives the total of the inner grown tree: " stats))
                    (assert (> (statOf stats "arenaCells") 600000) (str "the tree, list and record cells of a step are bump-allocated in its arena: " stats))
                    (assert (= (statOf stats "promoted") 3900) (str "only cells reachable from an arena's result are copied out: 13 per step, " stats))
                    (assert (= (statOf stats "retained") 0) (str "no arena value escapes into a global or a pin, so no arena is retained: " stats))

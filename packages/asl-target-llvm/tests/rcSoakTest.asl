@@ -25,8 +25,10 @@ fn soaks -> (List Soak)
 
 ; (:m :ref RECSROA :do "recordScalar removes bench/native/record.asl per-step Body, so the record soak runs its escaping copy")
 ; (:m :ref SLICEVIEW :do "a slice read only by readers is fused, so the slice soak runs a copy whose view crosses a call")
+; (:m :ref WAVE6 :do "listFusion makes bench/native/ring allocate O(1) cells, so the ring soak runs a copy whose batch fusion rejects, and testRingFused checks the bench itself")
+; (:m :ref WAVE6 :do "regionInfer runs bench/native/soa's record list in one flat arena under untraced RC, so the soa soak runs a copy whose list is read after its sum, and testSoaRegion checks the bench itself")
 fn benchPath name: String -> String
-  (if (= name "record") "asl/packages/asl-target-llvm/tests/fixtures/recordScalar/alloc/record.asl" (if (= name "slice") "asl/packages/asl-target-llvm/tests/fixtures/sliceView/alloc/slice.asl" (str "bench/native/" name ".asl")))
+  (if (= name "ring") "asl/packages/asl-target-llvm/tests/fixtures/listFusion/alloc/ring.asl" (if (= name "soa") "asl/packages/asl-target-llvm/tests/fixtures/regionInfer/alloc/soa.asl" (if (= name "record") "asl/packages/asl-target-llvm/tests/fixtures/recordScalar/alloc/record.asl" (if (= name "slice") "asl/packages/asl-target-llvm/tests/fixtures/sliceView/alloc/slice.asl" (str "bench/native/" name ".asl")))))
 
 fn ! buildExe! libs: rc/Libs dir: String name: String mode: String -> (Result String String)
   (match (lk/linkEntry! (benchPath name))
@@ -117,6 +119,51 @@ fn ! checkUntraced s: Soak t: String u: String -> Bool
         (assert (= (rc/statOf u4.stderr "pinned") (rc/statOf u1.stderr "pinned")) (str n " untraced pinned cells do not grow: " u1.stderr " then " u4.stderr))
         true))
 
+fn allocs stats: String -> Int64
+  (+ (+ (rc/statOf stats "fresh") (rc/statOf stats "reused")) (rc/statOf stats "large"))
+
+; (:m :ref WAVE6 :do "bench/native/ring fused: its allocation count is the same at n and 4n, while the unfused soak copy allocates per element")
+fn ! testRingFused libs: rc/Libs dir: String -> Bool
+  (match (lk/linkEntry! "bench/native/ring.asl")
+    ((err ds) (do (assert false (str "ring links: " (rc/diagText ds))) false))
+    ((ok m) (match (llvm/emitLlvmProgramNativeWith! m (str m.name ".main") "1")
+              ((err ds) (do (assert false (str "ring emits under RC: " (rc/diagText ds))) false))
+              ((ok code)
+                (let [(ll (str dir "/ringFused.1.ll")) (exe (str dir "/ringFused.1"))]
+                  (match (fileWrite ll code)
+                    ((err e) (do (assert false (str "cannot write " ll ": " e)) false))
+                    ((ok _) (let [(linked (rc/sh (rc/linkCmd libs "1" ll exe)))
+                                  (c1 (runAt exe 20000))
+                                  (c4 (runAt exe 80000))]
+                              (do (assert (= linked.exitCode 0) (str "ring RC links: " linked.stderr))
+                                  (assert (= c1.exitCode 0) (str "fused ring exits 0 at 20000: " c1.stderr))
+                                  (assert (= c4.exitCode 0) (str "fused ring exits 0 at 80000: " c4.stderr))
+                                  (assert (= (stringTrim c4.stdout) "3189728256") (str "fused ring prints its sum at 80000: " c4.stdout))
+                                  (assert (> (allocs c1.stderr) 0) (str "fused ring reports its allocations: " c1.stderr))
+                                  (assert (= (allocs c4.stderr) (allocs c1.stderr)) (str "fused ring allocates O(1) cells: " c1.stderr " then " c4.stderr))
+                                  true)))))))))
+
+; (:m :ref WAVE6 :do "bench/native/soa under untraced RC: its records come from a flat arena released whole, so it opens an arena and its per-cell frees are the same at n and 4n")
+fn ! testSoaRegion libs: rc/Libs dir: String -> Bool
+  (match (lk/linkEntry! "bench/native/soa.asl")
+    ((err ds) (do (assert false (str "soa links: " (rc/diagText ds))) false))
+    ((ok m) (match (llvm/emitLlvmProgramNativeWith! m (str m.name ".main") "notraceStats")
+              ((err ds) (do (assert false (str "soa emits untraced: " (rc/diagText ds))) false))
+              ((ok code)
+                (let [(ll (str dir "/soaRegion.nt.ll")) (exe (str dir "/soaRegion.nt"))]
+                  (match (fileWrite ll code)
+                    ((err e) (do (assert false (str "cannot write " ll ": " e)) false))
+                    ((ok _) (let [(linked (rc/sh (rc/linkCmd libs "notraceStats" ll exe)))
+                                  (u1 (runAt exe 5000))
+                                  (u4 (runAt exe 20000))]
+                              (do (assert (= linked.exitCode 0) (str "soa untraced links: " linked.stderr))
+                                  (assert (= u1.exitCode 0) (str "region soa exits 0 at 5000: " u1.stderr))
+                                  (assert (= u4.exitCode 0) (str "region soa exits 0 at 20000: " u4.stderr))
+                                  (assert (= (stringTrim u4.stdout) "1399970000 1399970000") (str "region soa prints its sums at 20000: " u4.stdout))
+                                  (assert (> (rc/statOf u4.stderr "arenas") 0) (str "region soa runs its records in an arena: " u4.stderr))
+                                  (assert (= (rc/statOf u4.stderr "freed") (rc/statOf u1.stderr "freed")) (str "region soa frees no cell one by one per record: " u1.stderr " then " u4.stderr))
+                                  true)))))))))
+
 fn untracedSoaks -> (List Soak)
   (list (Soak :name "slice" :size 1000))
 
@@ -148,6 +195,8 @@ fn ! runTests -> Bool
            (made (dirCreate dir))]
        (do (assert (ok? made) "rcSoakTest work directory created")
            (assert (testUntracedCollector) "the untraced collector variant links no tracing")
+           (assert (testRingFused libs dir) "the fused ring bench allocates O(1) cells")
+           (assert (testSoaRegion libs dir) "the soa bench runs its records in an arena")
            (assert (fold (fn [(acc Bool) (s Soak)] -> Bool (and (checkSoak libs dir s) acc)) true (soaks)) "every bench in the soak sample holds under RC")
            (assert (fold (fn [(acc Bool) (s Soak)] -> Bool (and (checkUntracedOnly libs dir s) acc)) true (untracedSoaks)) "array views are freed without a collector")
            (assert (ok? (pathRemove dir)) "rcSoakTest work directory removed")

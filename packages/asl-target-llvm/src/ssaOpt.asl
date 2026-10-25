@@ -1,6 +1,6 @@
 (module asl-target-llvm/ssaOpt
   :x [hoistConstants nativePrelude constantKey singletonPrefix singleton?]
-  :i [(asl-ir/types :a ty) (asl-target-llvm/recordScalar :a rs) (asl-target-llvm/closureSpec :a cs) (asl-target-llvm/loopGuard :a lg)])
+  :i [(asl-ir/types :a ty) (asl-target-llvm/recordScalar :a rs) (asl-target-llvm/closureSpec :a cs) (asl-target-llvm/loopGuard :a lg) (asl-target-llvm/listFusion :a lf) (asl-target-llvm/regionInfer :a ri)])
 
 schema Hoisted
   keys: (Map String Int64)
@@ -57,9 +57,11 @@ fn initFunction prefix: String i: Int64 op: ty/SsaOp -> ty/SsaFunction
     (list (ty/ssaBlock "entry" (list) (list (ty/ssaInstr "v" (ty/tyVal) op)) (ty/termReturn "v"))))
 
 ; (:m :ref CLOSPEC :do "routed modules first get call sites that pass a known closure specialised (closureSpec), so the array kernels the routes added are cloned too and only the closures left are hoisted")
+; (:m :ref FUSION :do "then a left fold over the listReverse of an accumulator-built list becomes one loop that never builds the list (listFusion)")
 ; (:m :ref LOOPGUARD :do "then counted sum loops over Bytes or an I64Array get one entry check and a check-free loop (loopGuard), the original loop kept as the fallback")
+; (:m :ref SOAREGION :do "then a scalar computed from a list or record a loop builds and nothing else reads runs in its own flat arena (regionInfer)")
 fn hoistConstants m0: ty/SsaModule -> ty/SsaModule
-  (let [(m (lg/guardLoops (cs/specializeClosures m0)))
+  (let [(m (ri/inferRegions (lg/guardLoops (lf/fuseLists (cs/specializeClosures m0)))))
         (prefix (singletonPrefix m.name))
         (own? (fn [(f ty/SsaFunction)] -> Bool (stringStartsWith? f.name prefix)))
         (user (filter (fn [(f ty/SsaFunction)] -> Bool (not (own? f))) m.functions))
