@@ -14,6 +14,7 @@ schema Ctx
   scc: (Map String String)
   proj: (Map String Int64)
   cache: (Map String Facts)
+  arity: (Map String Int64)
 
 schema Use
   name: String
@@ -33,6 +34,7 @@ schema Facts
   takes: (Map String (Pair String Int64))
   guards: (Map String (List String))
   rawSet: (Map String Bool)
+  known: (Map String Int64)
 
 schema Walk
   live: (Map String Bool)
@@ -273,7 +275,7 @@ fn functionFacts ctx: Ctx f: ty/SsaFunction -> Facts
         (borrowed (union (borrowedParams ctx f) flow.names))
         (parts (partsOf instrs))
         (probe (Facts :heap heap :immortal immortal :anchors (mapEmpty) :dupAfter (mapEmpty) :pinAfter (mapEmpty) :wrapAfter (mapEmpty) :borrowed borrowed :flow flow.keys :parts parts :cells (cellBases parts)
-                      :takes (mapEmpty) :guards (mapEmpty) :rawSet (mapEmpty)))
+                      :takes (mapEmpty) :guards (mapEmpty) :rawSet (mapEmpty) :known (mapEmpty)))
         (consumeSet (consumedNames ctx probe f))
         (borrowOnly (fn [(n String)] -> Bool (not (mapHas? consumeSet n))))
         (termConsumed (setOf (fold (fn [(acc (List String)) (b ty/SsaBlock)] -> (List String) (listAppend acc (map (fn [(u Use)] -> String u.name) (filter (fn [(u Use)] -> Bool (= u.kind "consume")) (termUses probe b.term))))) (list) f.blocks)))
@@ -287,18 +289,33 @@ fn functionFacts ctx: Ctx f: ty/SsaFunction -> Facts
         (pinAfter (setOf (filter (fn [(n String)] -> Bool (= (optionOr (mapGet kinds n) "") "opaque")) (mapKeys heap))))
         (wrapAfter (setOf (filter (fn [(n String)] -> Bool (= (optionOr (mapGet kinds n) "") "wrap")) (mapKeys heap))))
         (owned (fn [(x String)] -> Bool (and (mapHas? heap x) (and (not (mapHas? immortal x)) (and (not (mapHas? anchors x)) (not (mapHas? borrowed x)))))))
-        (takes (takeCandidates parts anchors owned))
+        (labels (fold (fn [(acc (Map String String)) (b ty/SsaBlock)] -> (Map String String) (fold (fn [(a (Map String String)) (i ty/SsaInstr)] -> (Map String String) (mapSet a i.dest b.label)) acc b.instrs)) (mapEmpty) f.blocks))
+        (known (knownClasses ctx f instrs))
+        (takes (takeCandidates parts anchors owned (exclusiveSlots parts labels known)))
         (guards (takeGuards takes anchors parts))]
-    (Facts :heap heap :immortal immortal :anchors anchors :dupAfter dupAfter :pinAfter pinAfter :wrapAfter wrapAfter :borrowed borrowed :flow flow.keys :parts (orParts parts instrs) :cells probe.cells
+    (Facts :heap heap :immortal immortal :anchors anchors :dupAfter dupAfter :pinAfter pinAfter :wrapAfter wrapAfter :borrowed borrowed :flow flow.keys :parts (orParts parts instrs) :cells (recordCells probe.cells instrs)
            :takes takes :guards guards
-           :rawSet (fold (fn [(acc (Map String Bool)) (xs (List String))] -> (Map String Bool) (union acc (setOf xs))) (setOf (mapKeys takes)) (mapValues guards))))
+           :rawSet (fold (fn [(acc (Map String Bool)) (xs (List String))] -> (Map String Bool) (union acc (setOf xs))) (setOf (mapKeys takes)) (mapValues guards))
+           :known known))
 
 ; (:m :ref RC-OWN-FOR-REUSE :do "a part read straight from an owned cell (a ctor field, a cons head or rest) that no other read of the function takes from the same slot can be taken out of the cell instead of duplicated: when the cell is unique its slot is cleared, so a callee that consumes the part sees it unique and resets it in place, while the cell itself still dies into a later construct")
-fn takeCandidates parts: (Map String (Pair String Int64)) anchors: (Map String String) owned: (fn [String] -> Bool) -> (Map String (Pair String Int64))
-  (let [(slots (fold (fn [(acc (Map String Int64)) (p (Pair String Int64))] -> (Map String Int64)
-                       (let [(k (str (pairFirst p) "\t" (pairSecond p)))] (mapSet acc k (+ 1 (optionOr (mapGet acc k) 0)))))
-                     (mapEmpty) (mapValues parts)))]
-    (fold (fn [(acc (Map String (Pair String Int64))) (v String)] -> (Map String (Pair String Int64))
+; (:m :ref PERCEUS :do "a slot read once per block counts as read once when every block that reads it is a case block of a switch on the cell entered only from that switch: the arms of one match are exclusive, so a take in one arm zeroes a slot no other read on its path sees")
+fn exclusiveSlots parts: (Map String (Pair String Int64)) labels: (Map String String) known: (Map String Int64) -> (Map String Int64)
+  (let [(reads (fold (fn [(acc (Map String (List String))) (v String)] -> (Map String (List String))
+                       (match (mapGet parts v)
+                         ((some p) (let [(k (str (pairFirst p) "\t" (pairSecond p)))] (mapSet acc k (cons (optionOr (mapGet labels v) "") (optionOr (mapGet acc k) (list))))))
+                         ((none) acc)))
+                     (mapEmpty) (mapKeys parts)))]
+    (fold (fn [(acc (Map String Int64)) (k String)] -> (Map String Int64)
+            (let [(ls (optionOr (mapGet reads k) (list)))
+                  (x (optionOr (listHead (stringSplit k "\t")) ""))
+                  (ok (and (= (listLength (distinctNames ls)) (listLength ls))
+                           (or (= (listLength ls) 1) (listAll? (fn [(l String)] -> Bool (mapHas? known (str l "\t" x))) ls))))]
+              (mapSet acc k (if ok 1 (listLength ls)))))
+          (mapEmpty) (mapKeys reads)))
+
+fn takeCandidates parts: (Map String (Pair String Int64)) anchors: (Map String String) owned: (fn [String] -> Bool) slots: (Map String Int64) -> (Map String (Pair String Int64))
+  (fold (fn [(acc (Map String (Pair String Int64))) (v String)] -> (Map String (Pair String Int64))
             (match (mapGet parts v)
               ((some p) (let [(x (pairFirst p)) (i (pairSecond p))]
                           (if (and (= (optionOr (mapGet anchors v) "") x)
@@ -306,7 +323,7 @@ fn takeCandidates parts: (Map String (Pair String Int64)) anchors: (Map String S
                             (mapSet acc v p)
                             acc)))
               ((none) acc)))
-          (mapEmpty) (mapKeys anchors)))
+          (mapEmpty) (mapKeys anchors))
 
 ; (:m :ref RC-OWN-FOR-REUSE :do "the names through which a cell could still be read after one of its parts was taken: the cell itself and every value anchored on it that is not a part read straight from it (a projection call may return the cell whole)")
 fn takeGuards takes: (Map String (Pair String Int64)) anchors: (Map String String) parts: (Map String (Pair String Int64)) -> (Map String (List String))
@@ -418,9 +435,11 @@ fn deferCalls drops: (List String) -> (List (Pair String String))
        (range 0 (listLength drops)))
 
 ; (:m :ref RC-FBIP :do "a construct that allocates a pooled cell (a ctor of one to thirty-one fields, a cons) where an owned value read through its fields dies is preceded by a reset of that value: if it is unique its kids other than the fields moved into the construct are released and its cell becomes the construct's when the size class matches; moved fields are duplicated only when the value was shared")
+; (:m :ref PERCEUS :do "a record literal of n fields in declared order takes 24 + 16 n bytes, class 1 + 2 n; raw or reordered layouts differ, and routeChunk reclasses the reset to the emitted alloc line")
 fn allocClass ins: ty/SsaInstr -> Int64
   (match ins.op
     ((ty/opConstruct _ _ fields) (if (or (listEmpty? fields) (> (listLength fields) 31)) -1 (* 2 (listLength fields))))
+    ((ty/opRecord _ fields _) (if (or (listEmpty? fields) (> (listLength fields) 30)) -1 (+ 1 (* 2 (listLength fields)))))
     ((ty/opEntry name _) (if (consumeEntry? name) 3 -1))
     (_ -1))
 
@@ -451,6 +470,56 @@ fn partsOf instrs: (List ty/SsaInstr) -> (Map String (Pair String Int64))
 
 fn cellBases parts: (Map String (Pair String Int64)) -> (Map String Bool)
   (setOf (map (fn [(p (Pair String Int64))] -> String (pairFirst p)) (mapValues parts)))
+
+; (:m :ref PERCEUS :do "a record read through opField is a reuse cell too, marked false: its slot order is not static, so nothing moves out of it and the reset releases every kid")
+fn recordCells cells: (Map String Bool) instrs: (List ty/SsaInstr) -> (Map String Bool)
+  (fold (fn [(acc (Map String Bool)) (i ty/SsaInstr)] -> (Map String Bool)
+          (match i.op ((ty/opField b _) (if (mapHas? acc b) acc (mapSet acc b false))) (_ acc)))
+        cells instrs)
+
+fn variantArity types: (List ty/SsaTypeDecl) -> (Map String Int64)
+  (fold (fn [(acc (Map String Int64)) (d ty/SsaTypeDecl)] -> (Map String Int64)
+          (fold (fn [(a (Map String Int64)) (v ty/SsaVariant)] -> (Map String Int64) (mapSet a (str d.name "\t" v.name) v.arity)) acc d.variants))
+        (mapEmpty) types)
+
+; (:m :ref PERCEUS :do "the size class a cell is known to have: a list part's base is a cons (class 3) everywhere; a switch scrutinee holds the case's variant (class 2 x arity, or no cell for arity 0: -1) only inside the case block itself when that block is entered only from that case, not in the blocks it dominates, where a reset finds the class at run time; keys are block label, tab, name, and tab, name for the everywhere facts")
+fn knownClasses ctx: Ctx f: ty/SsaFunction instrs: (List ty/SsaInstr) -> (Map String Int64)
+  (let [(preds (predCounts f.blocks))
+        (lists (fold (fn [(acc (Map String Int64)) (i ty/SsaInstr)] -> (Map String Int64)
+                       (match i.op
+                         ((ty/opEntry name args) (if (or (= name "@listFirst") (= name "@listRest"))
+                                                   (match (listHead args) ((some b) (mapSet acc (str "\t" b) 3)) ((none) acc))
+                                                   acc))
+                         (_ acc)))
+                     (mapEmpty) instrs))]
+    (fold (fn [(acc (Map String Int64)) (b ty/SsaBlock)] -> (Map String Int64)
+            (match b.term
+              ((ty/termSwitch x tn cases _)
+               (fold (fn [(a (Map String Int64)) (c ty/SsaCase)] -> (Map String Int64)
+                       (match (mapGet ctx.arity (str tn "\t" c.variant))
+                         ((some n) (if (= (optionOr (mapGet preds c.edge.target) 0) 1) (mapSet a (str c.edge.target "\t" x) (if (> n 0) (* 2 n) -1)) a))
+                         ((none) a)))
+                     acc cases))
+              (_ acc)))
+          lists f.blocks))
+
+fn knownClass facts: Facts label: String x: String -> Int64
+  (match (mapGet facts.known (str label "\t" x))
+    ((some c) c)
+    ((none) (optionOr (mapGet facts.known (str "\t" x)) -2)))
+
+fn recordClass? cls: Int64 -> Bool
+  (and (= (mod cls 2) 1) (!= cls 3))
+
+; (:m :ref PERCEUS :do "a dead cell whose class is known to differ from the construct's never resets into it; one known to match goes first, then one of the construct's kind")
+fn cellFor facts: Facts label: String cls: Int64 dead: (List String) -> (Option String)
+  (let [(cands (filter (fn [(x String)] -> Bool (and (mapHas? facts.cells x) (and (tracked? facts x) (let [(k (knownClass facts label x))] (or (= k -2) (= k cls)))))) dead))
+        (want (not (recordClass? cls)))]
+    (match (listHead (filter (fn [(x String)] -> Bool (= (knownClass facts label x) cls)) cands))
+      ((some x) (some x))
+      ((none) (match (listHead (filter (fn [(x String)] -> Bool (= (optionOr (mapGet facts.cells x) false) want)) cands))
+                ((some x) (some x))
+                ((none) (listHead cands))))))
 
 fn tokenName dest: String -> String
   (str "rcTok_" dest)
@@ -483,11 +552,11 @@ schema Reuse
   moved: (List String)
   callee: String
 
-fn reusePlan facts: Facts ins: ty/SsaInstr dead: (List String) -> (Option Reuse)
+fn reusePlan facts: Facts label: String ins: ty/SsaInstr dead: (List String) -> (Option Reuse)
   (let [(cls (allocClass ins))]
     (if (or (< cls 0) (or (listEmpty? dead) (not (reusableDest? ins.dest))))
       (none)
-      (match (listHead (filter (fn [(x String)] -> Bool (and (mapHas? facts.cells x) (tracked? facts x))) dead))
+      (match (cellFor facts label cls dead)
         ((none) (none))
         ((some x) (let [(moved (movedFields facts x (constructFields ins)))]
                     (some (Reuse :cell x :moved moved :callee (resetName cls (maskOf facts moved)))))))))
@@ -537,12 +606,12 @@ fn rewriteInstr ctx: Ctx facts: Facts label: String tail: Bool w: Walk ins: ty/S
         (uses (cond (owned (ownedUses facts ins)) ((closureCall? ins) (closureUses facts ins)) (else (instrUses ctx facts ins))))
         (results (filter (fn [(c (Pair String String))] -> Bool (not (and (= (pairFirst c) (dupName)) (mapHas? w.moves (pairSecond c))))) (resultCalls facts ins after)))
         (dead0 (dropsAfter facts uses after))
-        (plan0 (if tail (none) (reusePlan facts ins dead0)))
+        (plan0 (if tail (none) (reusePlan facts label ins dead0)))
         (extra (match plan0 ((some r) (restMoves facts (optionOr (mapGet w.quiet ins.dest) (mapEmpty)) r after uses)) ((none) (list))))
         (plan (match plan0 ((some r) (some (Reuse :cell r.cell :moved (listAppend r.moved extra) :callee (resetName (allocClass ins) (maskOf facts (listAppend r.moved extra)))))) ((none) (none))))
         (moved (match plan ((some r) r.moved) ((none) (list))))
         (before (takenDups facts uses w.raw (withoutDups (beforeCalls facts uses after) moved)))
-        (late (match plan ((some _) (none)) ((none) (if tail (none) (latePlan facts w.pend dead0)))))
+        (late (match plan ((some _) (none)) ((none) (if tail (none) (latePlan facts label w.pend dead0)))))
         (gone (match plan ((some r) (some r.cell)) ((none) (match late ((some l) (some l.cell)) ((none) (none))))))
         (dead (match gone ((some c) (filter (fn [(n String)] -> Bool (!= n c)) dead0)) ((none) dead0)))
         (deferred (and tail (and (listEmpty? results) (not (listEmpty? dead)))))
@@ -643,10 +712,10 @@ schema Late
   cls: Int64
 
 ; (:m :ref RC-FBIP :do "an owned value read through its fields that dies before a later construct of the same block resets into the nearest such construct still without a cell; nothing it holds moves, so all its kids are released")
-fn latePlan facts: Facts pend: (List (Pair String Int64)) dead: (List String) -> (Option Late)
+fn latePlan facts: Facts label: String pend: (List (Pair String Int64)) dead: (List String) -> (Option Late)
   (match (listHead pend)
     ((none) (none))
-    ((some p) (match (listHead (filter (fn [(x String)] -> Bool (and (mapHas? facts.cells x) (tracked? facts x))) dead))
+    ((some p) (match (cellFor facts label (pairSecond p) dead)
                 ((none) (none))
                 ((some x) (some (Late :cell x :target (pairFirst p) :callee (resetName (pairSecond p) 0) :cls (pairSecond p)))))))
 
@@ -835,14 +904,14 @@ fn rcModule m: ty/SsaModule user: (Map String Bool) -> ty/SsaModule
         (names (setOf (map (fn [(f ty/SsaFunction)] -> String f.name) m.functions)))
         (singletons (setOf (filter opt/singleton? (mapKeys names))))
         (routed (setOf (filter (fn [(n String)] -> Bool (and (not (mapHas? user n)) (countedRoute? n))) (mapKeys names))))
-        (ctx0 (Ctx :user (union (union user singletons) routed) :opaque builders :builders builders :borrows (mapEmpty) :scc (mapEmpty) :proj (mapEmpty) :cache (mapEmpty)))
+        (ctx0 (Ctx :user (union (union user singletons) routed) :opaque builders :builders builders :borrows (mapEmpty) :scc (mapEmpty) :proj (mapEmpty) :cache (mapEmpty) :arity (variantArity m.types)))
         (targets (setOf (filter (fn [(n String)] -> Bool (mapHas? names n))
                                 (distinctNames (fold (fn [(acc (List String)) (f ty/SsaFunction)] -> (List String)
                                                        (listAppend acc (fold (fn [(a (List String)) (ins ty/SsaInstr)] -> (List String) (match (closureCallee ins.op) ((some c) (cons c a)) ((none) a))) (list) (functionInstrs f))))
                                                      (list) m.functions)))))
         (counted (fn [(f ty/SsaFunction)] -> Bool (not (opaqueFunction? ctx0 f.name))))
         (countedFns (filter counted m.functions))
-        (ctxS (Ctx :user ctx0.user :opaque ctx0.opaque :builders ctx0.builders :borrows ctx0.borrows :scc (sccOf m.functions targets) :proj (mapEmpty) :cache (mapEmpty)))
+        (ctxS (Ctx :user ctx0.user :opaque ctx0.opaque :builders ctx0.builders :borrows ctx0.borrows :scc (sccOf m.functions targets) :proj (mapEmpty) :cache (mapEmpty) :arity ctx0.arity))
         (borrows0 (initialBorrows countedFns targets))
         (ctxB (withBorrows ctxS borrows0))
         (ctx (settleProj (withProj ctxB (growProj ctxB (filter (fn [(f ty/SsaFunction)] -> Bool (borrowable? targets f)) countedFns) 50)) countedFns (flagReaders countedFns) (allPending countedFns) borrows0 50))
@@ -1907,11 +1976,16 @@ fn resetDoneText asan: Bool cls: Int64 -> (List String)
         "  ret i64 1"
         "}")
 
-fn reuseOrName cls: Int64 -> String
-  (if (= cls 3) "@aslRc.reuseOrCons" (str "@aslRc.reuseOr." cls))
+; (:m :ref PERCEUS :do "reuse keys: -3 is the cons allocator, any other key a pooled size class, so a one-field record of class 3 takes its fresh cell from allocFast.3, not from the cons pool")
+fn reuseOrName key: Int64 -> String
+  (if (= key -3) "@aslRc.reuseOrCons" (str "@aslRc.reuseOr." key))
 
-fn reuseOrText cls: Int64 -> String
-  (lines (list (str "define internal ptr " (reuseOrName cls) "(i64 %tok, i32 %t, i64 %n) alwaysinline {")
+fn reuseKey line: String -> Int64
+  (if (and (stringContains? line "= call ") (stringContains? line "ptr @gcAsl.allocFastCons(")) -3 (allocClassOf line))
+
+fn reuseOrText key: Int64 -> String
+  (let [(cls (if (= key -3) 3 key))]
+  (lines (list (str "define internal ptr " (reuseOrName key) "(i64 %tok, i32 %t, i64 %n) alwaysinline {")
                "entry:"
                "  %has = icmp ugt i64 %tok, 1"
                "  br i1 %has, label %reuse, label %fresh"
@@ -1924,9 +1998,9 @@ fn reuseOrText cls: Int64 -> String
                "  store i64 %h, ptr %o"
                "  ret ptr %o"
                "fresh:"
-               (str "  %r = call ptr " (if (= cls 3) "@gcAsl.allocFastCons" (allocFastSym cls)) "(i32 %t, i64 %n)")
+               (str "  %r = call ptr " (if (= key -3) "@gcAsl.allocFastCons" (allocFastSym cls)) "(i32 %t, i64 %n)")
                "  ret ptr %r"
-               "}"))
+               "}")))
 
 fn dupSharedText -> String
   (lines (list (str "define internal tailcc i64 @" (dupSharedName) "(i64 %tok, %Val %v) alwaysinline {")
@@ -1971,7 +2045,7 @@ fn reroute line: String toks: (Map String Bool) -> String
   (let [(x (allocTarget line))]
     (if (or (= x "") (not (mapHas? toks x)))
       line
-      (str "  %" x ".objp = call ptr " (reuseOrName (allocClassOf line)) "(i64 %" (tokenName x) ", " (optionOr (listHead (listReverse (stringSplit line "("))) ""))))
+      (str "  %" x ".objp = call ptr " (reuseOrName (reuseKey line)) "(i64 %" (tokenName x) ", " (optionOr (listHead (listReverse (stringSplit line "("))) ""))))
 
 fn unclaimed line: String consumed: (Map String Bool) -> String
   (let [(t (tokenOf line))]
@@ -1979,17 +2053,32 @@ fn unclaimed line: String consumed: (Map String Bool) -> String
       line
       (str (optionOr (listHead (stringSplit line "@aslRcReset_")) "") "@aslRcReset_" (noCell) "_" (optionOr (listGet (stringSplit (resetOf line) "_") 2) "0") "(" (optionOr (listHead (listReverse (stringSplit line "("))) ""))))
 
+; (:m :ref PERCEUS :do "the reset of a claimed token asks for the class of the one alloc line that takes it, so the SSA class is only a reuse marker and a record of any layout gets its true size class")
+fn reclassed line: String single: (Map String Int64) -> String
+  (let [(t (tokenOf line))]
+    (match (mapGet single t)
+      ((none) line)
+      ((some c) (let [(parts (stringSplit (resetOf line) "_"))]
+                  (str (optionOr (listHead (stringSplit line "@aslRcReset_")) "") "@aslRcReset_" c "_" (optionOr (listGet parts 2) "0") "(" (optionOr (listHead (listReverse (stringSplit line "("))) ""))))))
+
 fn noCell -> Int64
   99
 
 ; (:m :ref RC-FBIP :do "within one function the construct a reset precedes takes its cell through reuseOr, named by the token the reset defines; a reset whose construct allocates no pooled cell asks for a class no cell has, so it never hands one over; only functions that hold a reset are split into lines")
+; (:m :ref PERCEUS :do "a token is claimed only by exactly one alloc line, and its reset is reclassed to that line's class, so a raw or reordered record layout never takes a cell of another size; a literal with two alloc paths (dynamic raw or boxed) or none leaves its reset a noCell drop")
 fn routeChunk ls: (List String) -> (Pair (List String) (List Int64))
   (let [(toks (setOf (filter (fn [(t String)] -> Bool (!= t "")) (map tokenOf ls))))]
     (if (= (mapSize toks) 0)
       (pair ls (list))
-      (let [(consumed (setOf (filter (fn [(x String)] -> Bool (mapHas? toks x)) (map allocTarget ls))))]
-        (pair (map (fn [(l String)] -> String (unclaimed (reroute l toks) consumed)) ls)
-              (map allocClassOf (filter (fn [(l String)] -> Bool (mapHas? consumed (allocTarget l))) ls))))))
+      (let [(lines0 (fold (fn [(acc (Map String (List Int64))) (l String)] -> (Map String (List Int64))
+                            (let [(x (allocTarget l))] (if (mapHas? toks x) (mapSet acc x (cons (allocClassOf l) (optionOr (mapGet acc x) (list)))) acc)))
+                          (mapEmpty) ls))
+            (single (fold (fn [(acc (Map String Int64)) (x String)] -> (Map String Int64)
+                            (match (mapGet lines0 x) ((some cs) (if (= (listLength cs) 1) (mapSet acc x (optionOr (listHead cs) -1)) acc)) ((none) acc)))
+                          (mapEmpty) (mapKeys lines0)))
+            (consumed (setOf (mapKeys single)))]
+        (pair (map (fn [(l String)] -> String (unclaimed (reclassed (reroute l consumed) single) consumed)) ls)
+              (map reuseKey (filter (fn [(l String)] -> Bool (mapHas? consumed (allocTarget l))) ls))))))
 
 fn resetDecl? l: String -> Bool
   (or (stringStartsWith? l "declare tailcc i64 @aslRcReset_") (stringStartsWith? l (str "declare tailcc i64 @" (dupSharedName) "(")))
@@ -2926,7 +3015,7 @@ fn finishPiece c: String rooted: Bool active: Bool last: Bool -> Piece
         (touched (or hasSized (and active (or (stringContains? d ", ptr @global.") (stringContains? d (parallelCallText))))))]
     (Piece :text (if touched (routeSized active d) d) :mask routed.mask :cons routed.cons :sized hasSized))
 
-fn finishChunks hashed: String asan: Bool rooted: Bool active: Bool -> Finished
+fn finishChunks hashed: String stats: Bool rooted: Bool active: Bool -> Finished
   (let [(parts (stringSplit hashed "\ndefine "))
         (n (listLength parts))
         (hasReset (stringContains? hashed "= call tailcc i64 @aslRcReset_"))
@@ -2938,7 +3027,7 @@ fn finishChunks hashed: String asan: Bool rooted: Bool active: Bool -> Finished
         (defs (if hasReset
                 (cons (dupSharedText)
                       (listAppend (map reuseOrText (distinctInts (fold (fn [(acc (List Int64)) (r Routed)] -> (List Int64) (listAppend r.classes acc)) (list) done)))
-                                  (map (fn [(r String)] -> String (resetFrom asan r)) (distinctNames (fold (fn [(acc (List String)) (r Routed)] -> (List String) (listAppend r.resets acc)) (list) done)))))
+                                  (map (fn [(r String)] -> String (resetFrom stats r)) (distinctNames (fold (fn [(acc (List String)) (r Routed)] -> (List String) (listAppend r.resets acc)) (list) done)))))
                 (list)))
         (extra (if hasReset (stringSplit (str "\n" (lines (map (fn [(d String)] -> String (if active (arenaReset d) d)) defs)) "\n") "\ndefine ") (list)))
         (chunks (if hasReset
@@ -2993,7 +3082,7 @@ fn rcFinishTextCounted text: String asan: Bool notrace: Bool counted: Bool -> St
         (reversing (and notrace (and (stringContains? appended (reverseCallText)) (stringContains? appended (reverseOntoCallText)))))
         (undeclared (if reversing (stringReplace appended (reverseCallText) (reverseOwnedCall)) appended))
         (hashed (treapRt/treapSplice (hashRt/hashSplice undeclared notrace) (and notrace (not uses))))
-        (fin (finishChunks hashed asan rooted active))
+        (fin (finishChunks hashed (or asan counted) rooted active))
         (large (filter (fn [(c Int64)] -> Bool (>= c (smallClasses))) fin.classes))
         (small (filter (fn [(c Int64)] -> Bool (< c (smallClasses))) fin.classes))
         (consDef (if fin.cons (list (allocText "@aslRc.allocFastCons" "@gcAsl.allocFastCons" 3 asan)) (list)))
@@ -3350,19 +3439,41 @@ fn listReuseParams f: ty/SsaFunction -> (Map String Bool)
                      acc))
                  (list) f.blocks)))
 
+; (:m :ref PERCEUS :do "a parameter starts owned when one block reads it as a cell (variant field or record field) and later builds a value of the same kind, as a map over a variant, a record update or an Option rebuild does: its unique cell then dies into a reset and becomes that value (Lean's borrow inference keeps a reset parameter owned); list walks keep listReuseParams, since a list is often walked while its owner keeps it (measured: preludeAppendBounded 1.17M shared resets when owned)")
+fn cellRead param: (Map String Bool) op: ty/SsaOp -> String
+  (match op
+    ((ty/opVariantField b _) (if (mapHas? param b) "adt" ""))
+    ((ty/opField b _) (if (mapHas? param b) "rec" ""))
+    (_ ""))
+
+fn allocKind ins: ty/SsaInstr -> String
+  (if (< (allocClass ins) 0) "" (match ins.op ((ty/opRecord _ _ _) "rec") (_ "adt")))
+
+fn reuseParams f: ty/SsaFunction -> (Map String Bool)
+  (let [(params (setOf (map (fn [(q ty/SsaParam)] -> String q.name) f.params)))]
+    (fold (fn [(acc (Map String Bool)) (b ty/SsaBlock)] -> (Map String Bool)
+            (pairSecond (fold (fn [(st (Pair (Map String String) (Map String Bool))) (i ty/SsaInstr)] -> (Pair (Map String String) (Map String Bool))
+                                (let [(read (cellRead params i.op))
+                                      (seen (if (= read "") (pairFirst st) (mapSet (pairFirst st) (optionOr (listHead (ty/opOperands i.op)) "") read)))
+                                      (kind (allocKind i))]
+                                  (pair seen (if (= kind "") (pairSecond st)
+                                               (fold (fn [(a (Map String Bool)) (x String)] -> (Map String Bool) (if (= (optionOr (mapGet (pairFirst st) x) "") kind) (mapSet a x true) a)) (pairSecond st) (mapKeys (pairFirst st)))))))
+                              (pair (mapEmpty) acc) b.instrs)))
+          (mapEmpty) f.blocks))
+
 fn initialBorrows counted: (List ty/SsaFunction) targets: (Map String Bool) -> (Map String (List Bool))
   (fold (fn [(acc (Map String (List Bool))) (f ty/SsaFunction)] -> (Map String (List Bool))
           (if (borrowable? targets f)
-            (let [(walked (listReuseParams f))]
+            (let [(walked (union (listReuseParams f) (reuseParams f)))]
               (mapSet acc f.name (treapRt/ownedFlags f.name (hashRt/ownedFlags f.name (map (fn [(p ty/SsaParam)] -> Bool (and (heapTy? p.ty) (not (mapHas? walked p.name)))) f.params)))))
             acc))
         (mapEmpty) counted)
 
 fn withBorrows ctx: Ctx borrows: (Map String (List Bool)) -> Ctx
-  (Ctx :user ctx.user :opaque ctx.opaque :builders ctx.builders :borrows borrows :scc ctx.scc :proj ctx.proj :cache ctx.cache)
+  (Ctx :user ctx.user :opaque ctx.opaque :builders ctx.builders :borrows borrows :scc ctx.scc :proj ctx.proj :cache ctx.cache :arity ctx.arity)
 
 fn withCache ctx: Ctx cache: (Map String Facts) -> Ctx
-  (Ctx :user ctx.user :opaque ctx.opaque :builders ctx.builders :borrows ctx.borrows :scc ctx.scc :proj ctx.proj :cache cache)
+  (Ctx :user ctx.user :opaque ctx.opaque :builders ctx.builders :borrows ctx.borrows :scc ctx.scc :proj ctx.proj :cache cache :arity ctx.arity)
 
 ; (:m :ref RCCOST2 :do "the facts a function was last settled with are kept in the context: the worklist settles a function again whenever a flag it reads changes, so its last facts were computed from the flags and projections that are final, and rcFunction and the projection check reuse them instead of computing them again")
 fn cachedFacts ctx: Ctx f: ty/SsaFunction -> Facts
@@ -3601,7 +3712,7 @@ fn flowOf ctx: Ctx f: ty/SsaFunction -> Flow
       (if (and walked.ok (and (>= walked.param 0) (not (listEmpty? returns)))) walked (flowNone))))
 
 fn withProj ctx: Ctx proj: (Map String Int64) -> Ctx
-  (Ctx :user ctx.user :opaque ctx.opaque :builders ctx.builders :borrows ctx.borrows :scc ctx.scc :proj proj :cache ctx.cache)
+  (Ctx :user ctx.user :opaque ctx.opaque :builders ctx.builders :borrows ctx.borrows :scc ctx.scc :proj proj :cache ctx.cache :arity ctx.arity)
 
 fn heapParamIndices f: ty/SsaFunction -> (List Int64)
   (filter (fn [(i Int64)] -> Bool (match (listGet f.params i) ((some p) (heapTy? p.ty)) ((none) false))) (range 0 (listLength f.params)))

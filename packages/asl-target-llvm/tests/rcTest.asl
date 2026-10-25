@@ -563,7 +563,7 @@ fn ! runWith libs: Libs -> Bool
         (assert (checkFixture libs dir "rcSink" "2288\n" 500 400 2000 0) "names read from a tree and kept or replaced are freed once, ASan-clean")
         (assert (checkFixture libs dir "rcProject" "2572500 2400 600\n" 60000 59000 3500 0) "projections kept past their anchor are duplicated and freed once, ASan-clean")
         (assert (checkFixture libs dir "rcBorrow" "14999850000 1\n" 100000 0 200000 0) "borrowed parameters stay correct and ASan-clean")
-        (assert (checkFixture libs dir "rcLoop" "499500 -499500\n" 999 999 8 0) "a record rebuilt each step is freed and its cell reused")
+        (assert (checkFixture libs dir "rcLoop" "499500 -499500\n" 0 0 8 0) "a record rebuilt each step hands its unique cell to the next one (PERCEUS; base freed and reused 999 through the free list)")
         (assert (checkFixture libs dir "rcShare" "1498500\n" 1999 1997 8 0) "a record passed twice to one call is duplicated then freed once, and a discarded result is freed")
         (assert (checkFixture libs dir "rcTree" "302841 19\n" 6000 6000 700 0) "path-copying tree insertion frees and reuses the replaced path")
         (assert (checkFixture libs dir "rcTail" "3000000 5\n" 2999000 2999000 10 0) "a closure call in tail position keeps musttail: its drops are deferred, three million frames never stack")
