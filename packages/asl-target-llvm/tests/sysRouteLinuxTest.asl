@@ -58,6 +58,10 @@ fn arityRows text: String -> (List (Pair String Int64))
 fn documentedGaps -> (List (Pair String String))
   (list)
 
+; (:m :ref FFI1 :do "foreign is a declaration body, not a callable builtin: it needs three literal strings and a ! fn of its own, and foreignTest covers it")
+fn callable rows: (List (Pair String Int64)) -> (List (Pair String Int64))
+  (filter (fn [(r (Pair String Int64))] -> Bool (!= (pairFirst r) "foreign")) rows)
+
 fn operands n: Int64 -> String
   (stringJoin (map (fn [(k Int64)] -> String "0") (range 0 (if (< n 0) 1 n))) " ")
 
@@ -252,7 +256,7 @@ fn ! runTests -> Bool
   (let [(made (sh "mktemp -d"))
         (work (stringReplace made.stdout "\n" ""))
         (src (str work "/linuxAll.asl"))
-        (rows (match (fileReadString "asl/packages/asl-ir/src/lower.asl") ((ok t) (arityRows t)) ((err e) (do (assert false (str "reads lower.asl: " e)) (list)))))]
+        (rows (match (fileReadString "asl/packages/asl-ir/src/lower.asl") ((ok t) (callable (arityRows t))) ((err e) (do (assert false (str "reads lower.asl: " e)) (list)))))]
     (do (assert (= made.exitCode 0) "mktemp -d makes a work directory")
         (assert (> (listLength rows) 150) (str "builtinArity yields its rows, got " (listLength rows)))
         (assert (listAll? (fn [(r (Pair String Int64))] -> Bool (and (not (stringEmpty? (pairFirst r))) (>= (pairSecond r) -1))) rows) "every builtinArity row parses to a name and an arity")
