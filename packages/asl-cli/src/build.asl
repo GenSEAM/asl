@@ -194,9 +194,12 @@ fn ! link! ctx: sys/Context clang: String lib: String target: String out: String
 fn ! buildFile! ctx: sys/Context clang: String lib: String target: String o: Opts -> Int64
   (let [(given o.out)
         (out (if (stringEmpty? given) (defaultOut target) given))
-        (checked (verify/nativeCheckPaths! (list target)))]
-    (if (!= checked 0)
-      checked
+        (links (linksFor! target))
+        (checked (if (ok? links) (verify/nativeCheckPaths! (list target)) 1))]
+    (cond
+      ((err? links) (fail (str "ERR_BUILD: " (match links ((err e) e) ((ok _) ""))) 1))
+      ((!= checked 0) checked)
+      (else
       (match (tempDir! (let [(t (optionOr (envGet "TMPDIR") ""))] (if (stringEmpty? t) "/tmp" (if (stringEndsWith? t "/") (optionOr (stringSlice t 0 (- (stringLength t) 1)) t) t))) 0)
         ((err _) (fail "ERR_BUILD: cannot create temporary directory" 1))
         ((ok tmp) (let [(dir (sys/parentOf (resultOr (realPath target) target)))]
@@ -204,7 +207,7 @@ fn ! buildFile! ctx: sys/Context clang: String lib: String target: String o: Opt
                       ((err e) (do (drop! tmp) (fail e 1)))
                       ((ok mode) (match (linkShape! dir o)
                         ((err e) (do (drop! tmp) (fail e 1)))
-                        ((ok shape) (link! ctx clang lib target out tmp mode shape (not (stringEmpty? o.parts))))))))))))
+                        ((ok shape) (link! ctx clang lib target out tmp mode shape (not (stringEmpty? o.parts)))))))))))))
 
 fn ! buildCommand! ctx: sys/Context args: (List String) -> Int64
   (let [(first (optionOr (listHead args) ""))

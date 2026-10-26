@@ -162,9 +162,15 @@ fn copyString g: Gen prefix: String v: String -> (Pair Gen (Pair String String))
         (g2 (emit (holding g1 ptr) n (ty/tyI64) (ty/opEntry "stringLength" (list v))))]
     (pair g2 (pair ptr n)))
 
+; (:m :ref FFI1 :do "rawNarrowI32 traps outside the signed range, so a checked u32 in [0, 2^32-1] is first moved to the signed value with the same low 32 bits: ((v + 2^31) & 0xFFFFFFFF) - 2^31")
+fn wrapU32 g: Gen prefix: String v: String -> (Pair Gen String)
+  (let [(g1 (int64 (int64 (int64 g (str prefix ".bias") 2147483648) (str prefix ".mask") 4294967295) (str prefix ".unbias") -2147483648))
+        (g2 (prim (prim g1 (str prefix ".biased") (ty/tyI64) "rawAddI64" (list v (str prefix ".bias"))) (str prefix ".low") (ty/tyI64) "rawAndI64" (list (str prefix ".biased") (str prefix ".mask"))))
+        (g3 (prim g2 (str prefix ".signed") (ty/tyI64) "rawAddI64" (list (str prefix ".low") (str prefix ".unbias"))))]
+    (pair (prim g3 (str prefix ".c") (ty/tyI32) "rawNarrowI32" (list (str prefix ".signed"))) (str prefix ".c")))
+
 fn narrowLength g: Gen prefix: String n: String i: Int64 kind: String -> (Pair Gen String)
-  (let [(g1 (rangeCheck g (str prefix ".len32") n 0 4294967295 (argMessage g i kind)))]
-    (pair (prim g1 (str prefix ".n32") (ty/tyI32) "rawNarrowI32" (list n)) (str prefix ".n32")))
+  (wrapU32 (rangeCheck g (str prefix ".len32") n 0 4294967295 (argMessage g i kind)) (str prefix ".len32") n)
 
 fn boolArg g: Gen prefix: String b: String -> (Pair Gen String)
   (let [(yes (str prefix ".true")) (no (str prefix ".false")) (join (str prefix ".joined")) (out (str prefix ".c"))
@@ -182,8 +188,9 @@ fn marshal g: Gen i: Int64 p: ty/SsaParam kind: String -> (Pair Gen (List String
           (cond
             ((= kind "i64") (pair g1 (list v)))
             ((= kind "u64") (pair (rangeCheck g1 prefix v 0 9223372036854775807 (argMessage g i kind)) (list v)))
-            (else (let [(g2 (if (= kind "i32") (rangeCheck g1 prefix v -2147483648 2147483647 (argMessage g i kind)) (rangeCheck g1 prefix v 0 4294967295 (argMessage g i kind))))]
-                    (pair (prim g2 (str prefix ".c") (ty/tyI32) "rawNarrowI32" (list v)) (list (str prefix ".c"))))))))
+            ((= kind "i32") (pair (prim (rangeCheck g1 prefix v -2147483648 2147483647 (argMessage g i kind)) (str prefix ".c") (ty/tyI32) "rawNarrowI32" (list v)) (list (str prefix ".c"))))
+            (else (let [(w (wrapU32 (rangeCheck g1 prefix v 0 4294967295 (argMessage g i kind)) prefix v))]
+                    (pair (pairFirst w) (list (pairSecond w))))))))
       ((= kind "f64") (let [(raw (rawOf g p (ty/tyF64) (str prefix ".f")))] (pair (pairFirst raw) (list (pairSecond raw)))))
       ((= kind "bool") (let [(raw (rawOf g p (ty/tyI1) (str prefix ".b")))
                              (r (boolArg (pairFirst raw) prefix (pairSecond raw)))]

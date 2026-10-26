@@ -111,10 +111,33 @@ fn fixtureSource -> String
     "fn ! errorText code: Int64 -> String"
     "  (foreign \"c\" \"strerror\" \"i32 -> cstr\")"
     ""
+    "fn ! swap x: Int64 -> (Result Int64 String)"
+    "  (foreign \"c\" \"htonl\" \"u32 -> u32\")"
+    ""
+    "fn ! swapSigned x: Int64 -> (Result Int64 String)"
+    "  (foreign \"c\" \"htonl\" \"i32 -> i32\")"
+    ""
+    "fn ! crcChecked seed: Int64 data: Bytes -> (Result Int64 String)"
+    "  (foreign \"z\" \"crc32\" \"u64 bytes32 -> u64\")"
+    ""
+    "fn ! absBool b: Bool -> Int64"
+    "  (foreign \"c\" \"abs\" \"bool -> i32\")"
+    ""
+    "fn ! envText name: String -> String"
+    "  (foreign \"c\" \"getenv\" \"cstr -> cstr\")"
+    ""
+    "fn ! twice x: Int64 -> (Result Int64 String)"
+    "  (match (swap x) ((ok y) (swap y)) ((err e) (err e)))"
+    ""
+    "fn ! twiceSigned x: Int64 -> (Result Int64 String)"
+    "  (match (swapSigned x) ((ok y) (swapSigned y)) ((err e) (err e)))"
+    ""
     "fn ! main args: (List String) -> (Result Int64 String)"
-    "  (if (listContains? args \"trap\")"
-    "    (do (println (str (lower 4294967296))) (ok 0))"
-    "    (do (println (str \"cbrt \" (cubeRoot 27.0) \" \" (cubeRoot -8.0)))"
+    "  (cond"
+    "    ((listContains? args \"trap\") (do (println (str (lower 4294967296))) (ok 0)))"
+    "    ((listContains? args \"nul\") (do (println (str (cLength \"a\\x00b\"))) (ok 0)))"
+    "    ((listContains? args \"null\") (do (println (str (stringLength (envText \"ASL_FFI1_UNSET_PROBE_NAME\")))) (ok 0)))"
+    "    (else (do (println (str \"cbrt \" (cubeRoot 27.0) \" \" (cubeRoot -8.0)))"
     "        (println (str \"strlen \" (cLength \"héllo\") \" \" (cLength \"\")))"
     "        (println (str \"crc32 \" (crc 0 (stringToBytes \"hello\")) \" \" (crc 0 (stringToBytes \"\"))))"
     "        (println (str \"adler32 \" (adler 1 \"hello\")))"
@@ -123,7 +146,12 @@ fn fixtureSource -> String
     "        (println (str \"digit \" (digit 55) \" \" (digit 65)))"
     "        (println (str \"errno2 \" (errorText 2)))"
     "        (println (str \"nul \" (cLengthChecked \"a\\x00b\")))"
-    "        (ok 0)))"
+    "        (println (str \"i32 \" (twiceSigned -2147483648) \" \" (twiceSigned 2147483647) \" \" (twiceSigned -2147483649) \" \" (twiceSigned 2147483648)))"
+    "        (println (str \"u32 \" (twice 0) \" \" (twice 2147483648) \" \" (twice 4294967295) \" \" (swap 4294967295) \" \" (swap 1)))"
+    "        (println (str \"u32out \" (twice -1) \" \" (twice 4294967296)))"
+    "        (println (str \"u64 \" (crcChecked 9223372036854775807 (stringToBytes \"hi\")) \" \" (crcChecked -1 (stringToBytes \"hi\"))))"
+    "        (println (str \"bool \" (absBool true) \" \" (absBool false)))"
+    "        (ok 0))))"
     "") "\n")
 
 fn expectedLines -> (List String)
@@ -135,7 +163,12 @@ fn expectedLines -> (List String)
         "range (err \"ERR_RANGE: ffiFixture.upper (C toupper) argument 1 is outside C i32\") (err \"ERR_RANGE: ffiFixture.upper (C toupper) argument 1 is outside C i32\")"
         "digit true false"
         "errno2 No such file or directory"
-        "nul (err \"ERR_FOREIGN_NUL: ffiFixture.cLengthChecked (C strlen) argument 1 holds a NUL byte, which a C string cannot carry\")")
+        "nul (err \"ERR_FOREIGN_NUL: ffiFixture.cLengthChecked (C strlen) argument 1 holds a NUL byte, which a C string cannot carry\")"
+        "i32 (ok -2147483648) (ok 2147483647) (err \"ERR_RANGE: ffiFixture.swapSigned (C htonl) argument 1 is outside C i32\") (err \"ERR_RANGE: ffiFixture.swapSigned (C htonl) argument 1 is outside C i32\")"
+        "u32 (ok 0) (ok 2147483648) (ok 4294967295) (ok 4294967295) (ok 16777216)"
+        "u32out (err \"ERR_RANGE: ffiFixture.swap (C htonl) argument 1 is outside C u32\") (err \"ERR_RANGE: ffiFixture.swap (C htonl) argument 1 is outside C u32\")"
+        "u64 (ok 1723189164) (err \"ERR_RANGE: ffiFixture.crcChecked (C crc32) argument 1 is outside C u64\")"
+        "bool 1 0")
 
 fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
@@ -154,6 +187,8 @@ fn ! testBuild root: String work: String -> Bool
         (buildErr (resultOr (fileReadString errFile) ""))
         (ran (if (= built.exit 0) (runIn (list exe) dir 60) built))
         (trapped (if (= built.exit 0) (runIn (list "/bin/sh" "-c" "exec \"$0\" trap 2>&1" exe) dir 60) built))
+        (nulTrap (if (= built.exit 0) (runIn (list "/bin/sh" "-c" "exec \"$0\" nul 2>&1" exe) dir 60) built))
+        (nullTrap (if (= built.exit 0) (runIn (list "/usr/bin/env" "-u" "ASL_FFI1_UNSET_PROBE_NAME" "/bin/sh" "-c" "exec \"$0\" null 2>&1" exe) dir 60) built))
         (lines (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines ran.out)))]
     (do (assert (ok? made) (str "the fixture directory " dir " was created"))
         (assert (and (ok? wroteManifest) (ok? wroteSource)) "the fixture files were written")
@@ -167,7 +202,29 @@ fn ! testBuild root: String work: String -> Bool
         (assert (!= trapped.exit 0) (str "a plain foreign fn traps on an out-of-range argument: exit " trapped.exit))
         (assert (stringContains? trapped.out "ERR_RANGE") (str "the trap names ERR_RANGE: " trapped.out))
         (assert (stringContains? trapped.out "C tolower") (str "the trap names the C symbol: " trapped.out))
+        (assert (!= nulTrap.exit 0) (str "a plain foreign fn traps on a NUL byte: exit " nulTrap.exit))
+        (assert (stringContains? nulTrap.out "ERR_FOREIGN_NUL: ffiFixture.cLength (C strlen)") (str "the plain NUL trap raises its own code: " nulTrap.out))
+        (assert (!= nullTrap.exit 0) (str "a plain foreign fn traps on a NULL C string: exit " nullTrap.exit))
+        (assert (stringContains? nullTrap.out "ERR_FOREIGN_NULL: ffiFixture.envText (C getenv) returned a NULL C string") (str "the plain NULL trap raises its own code: " nullTrap.out))
+        (assert (not (stringContains? (str nulTrap.out nullTrap.out) "unknown error code")) "no foreign trap code is unknown to the runtime")
         true))
+
+; (:m :ref FFI1 :do "a :linkLibraries entry reaches the clang command line, so bin/asl build refuses a flag, a space, a path or a response file before it compiles anything")
+fn ! rejectsLink work: String root: String name: String i: Int64 -> Bool
+  (let [(dir (str work "/badLink" (stringFromInt64 i)))
+        (made (dirCreate dir))
+        (wroteManifest (fileWrite (str dir "/manifest.asn") (str "(:package badLink :version \"0.1.0\" :entry \"main.asl\" :linkLibraries [\"" name "\"])\n")))
+        (wroteSource (fileWrite (str dir "/main.asl") "(module badLink :x [main] :i [])\n\nfn ! main args: (List String) -> (Result Int64 String)\n  (ok (listLength args))\n"))
+        (built (runIn (list "/bin/sh" "-c" "exec \"$0\" build \"$1\" -o \"$2\" 2>&1" (str root "/bin/asl") (str dir "/main.asl") (str dir "/never")) root 600))]
+    (do (assert (and (ok? made) (and (ok? wroteManifest) (ok? wroteSource))) (str "the " name " fixture was written"))
+        (assert (!= built.exit 0) (str "bin/asl build refuses :linkLibraries " name ": exit " built.exit))
+        (assert (stringContains? built.out (str "ERR_BUILD: " dir "/manifest.asn: :linkLibraries names " name ", which is not a library name")) (str "the refusal names the entry " name ": " built.out))
+        (assert (not (fileExists? (str dir "/never"))) (str "no executable is written for " name))
+        true))
+
+fn ! testLinkValidation root: String work: String -> Bool
+  (listAll? (fn [(p (Pair Int64 String))] -> Bool (rejectsLink work root (pairSecond p) (pairFirst p)))
+            (enumerate (list "-Wl,-x" "z m" "z/../x" "@file")))
 
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
@@ -176,8 +233,10 @@ fn ! runTests -> Bool
         (made (dirCreate work))
         (routed (testRoute))
         (built (if (ok? made) (testBuild root work) false))
+        (validated (if (ok? made) (testLinkValidation root work) false))
         (cleaned (run/runOneLimited (run/job (list "/bin/rm" "-rf" work) root (run/childEnv (list))) (run/limits 60 4)))]
     (do (assert routed "ffiRoute binds and rejects as declared")
         (assert built "the native foreign fixture builds and prints the C results")
+        (assert validated "bin/asl build validates :linkLibraries names")
         (assert (= cleaned.exit 0) "the work directory was removed")
         true))
