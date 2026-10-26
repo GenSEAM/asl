@@ -26,7 +26,7 @@ fn ! testMissingConfig -> Bool
     (do
       (assert (err? loaded) "missing config does not synthesize a builtin paid-provider route")
       (assert (match loaded ((err e) (and (stringContains? e "ERR_GATEWAY_NO_CONFIG") (stringContains? e path))) ((ok _) false)) "missing config error names its type and path")
-      (assert (match unreadable ((err e) (and (stringContains? e "ERR_GATEWAY_NO_CONFIG") (stringContains? e path))) ((ok _) false)) "unreadable config error names its type and path")
+      (assert (match unreadable ((err e) (and (stringContains? e "permission denied") (stringContains? e path))) ((ok _) false)) "unreadable config error names its path and the read cause (6e8ed4982)")
       (assert (match emptyRoutes ((err e) (and (stringContains? e "ERR_GATEWAY_NO_CONFIG") (stringContains? e path))) ((ok _) false)) (str "config with no routes fails closed with its type and path: " (match emptyRoutes ((err e) e) ((ok _) "accepted"))))
       (assert (match emptyProfiles ((err e) (and (stringContains? e "ERR_GATEWAY_NO_CONFIG") (stringContains? e path))) ((ok _) false)) "config with no profiles fails closed with its type and path")
       true))
@@ -49,7 +49,7 @@ fn ! probe! client: Int64 recorder: Int64 response: String providerContact: Bool
 
 fn ! runTests -> Bool
   (let [(temp (stringTrim (processRun "/usr/bin/mktemp -d /tmp/noConfigTest.XXXXXX").stdout))
-        (listenResult (tcpListen 49152))
+        (listenResult (tcpListen 0))
         (listener (match listenResult ((ok fd) fd) ((err _) -1)))
         (portResult (sockLocalPort listener))
         (providerPort (resultOr portResult 0))

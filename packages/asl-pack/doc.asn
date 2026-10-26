@@ -135,3 +135,8 @@
 (:doc :symbol "asl/packages/asl-pack/src/pkgStore.asl#copyFile!" :text "capped local copy used for file:/// fetches")
 (:doc :symbol "asl/packages/asl-pack/src/pkgIndex.asl#normVersion" :text "version text with numeric parts and at least three components")
 (:doc :symbol "asl/packages/asl-pack/src/pkgIndex.asl#caretPrefixEq" :text "semver caret test: the first non-zero component of the base and all before it must match")
+(:doc :symbol "asl/packages/asl-pack/src/pkgCli.asl#configIndex" :text "index URL from the :index field of HOME/.asl/pkg.asn; empty string when the file is absent or unreadable")
+(:doc :symbol "asl/packages/asl-pack/src/pkgCli.asl#mainIn!" :text "dispatch an asl pkg verb (list, info, install, remove, update, verify) against a store context; prints usage and returns 2 on no or unknown verb; returns the exit code")
+(:doc :symbol "asl/packages/asl-pack/src/pkgCli.asl#usageText" :text "usage line of the asl pkg command")
+(:doc :symbol "asl/packages/asl-pack/src/pkgIndex.asl#Artefact" :text "one downloadable build of a package version: target triple, URL and expected sha256")
+(:doc :symbol "asl/packages/asl-pack/src/pkgIndex.asl#Dep" :text "dependency of a package version: package name and version spec")
