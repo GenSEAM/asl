@@ -6,7 +6,8 @@
       (asl-target-llvm/sys :a sys)
       (asl-target-llvm/sysNet :a sysNet)
       (asl-target-llvm/sysProc :a proc)
-      (asl-target-llvm/ssa :a ssa)])
+      (asl-target-llvm/ssa :a ssa)
+      (asl-target-llvm/ffiRoute :a ffi)])
 
 (enum RouteTable
   (:c sysNetTable [] "tcpListen, tcpConnect, sockAccept, sockLocalPort, unixListen and unixConnect over asl-target-llvm/sysNet, in place of asl/host/src/sysNet.c's table, and unixSocketPair, sockSendFd and sockRecvFd (SCM_RIGHTS descriptor passing), native only")
@@ -464,13 +465,16 @@ fn routeModule facts: libc/TripleFacts m: ty/SsaModule -> (Result Routed (List t
 ; (:m :ref PERF-VERIFY-ONCE :do "check false skips the input verify: the native entry routes a linked module, which the link verified, and the emit verifies the routed, RC-rewritten module again")
 fn routeModuleAs facts: libc/TripleFacts m: ty/SsaModule check: Bool -> (Result Routed (List ty/IrDiag))
   (if (stringStartsWith? facts.triple "wasm32")
-    (wasmRouteModule facts m)
-    (let [(tables (tablesUsed m))]
-      (if (listEmpty? tables)
-        (ok (Routed :result m :internal (list)))
-        (match (if check (vfy/verifySsa m) (ok ()))
-          ((err diags) (err diags))
-          ((ok _) (routeTablesInto facts m tables))))))
+    (if (ffi/foreign? m) (err (ffi/rejectForeign m facts.triple)) (wasmRouteModule facts m))
+    (match (ffi/routeForeign m)
+      ((err diags) (err diags))
+      ((ok bound)
+        (let [(tables (tablesUsed bound))]
+          (if (listEmpty? tables)
+            (ok (Routed :result bound :internal (list)))
+            (match (if check (vfy/verifySsa bound) (ok ()))
+              ((err diags) (err diags))
+              ((ok _) (routeTablesInto facts bound tables))))))))
 
 fn tripleOf os: String machine: String -> String
   (cond
@@ -502,6 +506,11 @@ fn ! routeHostLinked! m: ty/SsaModule -> (Result Routed (List ty/IrDiag))
   (routeHostAs! m false)
 
 fn ! routeHostAs! m: ty/SsaModule check: Bool -> (Result Routed (List ty/IrDiag))
+  (match (ffi/routeForeign m)
+    ((err diags) (err diags))
+    ((ok bound) (routeBoundHost! bound check)))
+
+fn ! routeBoundHost! m: ty/SsaModule check: Bool -> (Result Routed (List ty/IrDiag))
   (if (routes? m)
     (let [(out (processRun "uname -s -m"))
           (host (if (= out.exitCode 0) (unamePair out.stdout) (none)))]

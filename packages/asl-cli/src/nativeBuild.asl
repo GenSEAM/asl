@@ -11,7 +11,8 @@
   (:f clangVersion String)
   (:f owner String)
   (:f deadlineNs Int64)
-  (:f maxDesc Int64))
+  (:f maxDesc Int64)
+  (:f links (List String) :default (list)))
 
 fn seedField row: String key: String -> (Option String)
   (let [(parts (stringSplit row (str ":" key " ")))]
@@ -135,7 +136,7 @@ fn ! compileWith! b: Build clang: String flags: (List String) ll: String paths: 
       (else (ok (map (fn [(p String)] -> String (str p ".o")) paths)))))
 
 fn ! linkObjs! b: Build clang: String flags: (List String) inputs: (List String) label: String out: String -> (Result String String)
-  (let [(d (child! b (listAppend (cons clang flags) (listAppend inputs (list b.lib "-lm" "-o" out)))))]
+  (let [(d (child! b (listAppend (cons clang flags) (listAppend inputs (cons b.lib (listAppend b.links (list "-lm" "-o" out)))))))]
     (if (passed? d) (ok out) (err (failure (str "clang link of " label) d))))
 
 fn ! dropParts! paths: (List String) -> Int64

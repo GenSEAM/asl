@@ -1,6 +1,6 @@
 (module asl-cli/build
   :x [buildCommand!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/asl1Cache :a cache) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/nativeBuild :a nb) (asl/packages/asl-cli/src/rcConfig :a rcc)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/asl1Cache :a cache) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/nativeBuild :a nb) (asl/packages/asl-cli/src/rcConfig :a rcc) (asl-parser/reader :a rd) (asl-checker/foreign :a fsig)])
 
 fn usage -> String
   "usage: asl build FILE [-o OUT]"
@@ -115,9 +115,44 @@ fn ! linkShape! dir: String o: Opts -> (Result (Pair Int64 String) String)
       ((err e) (err e))
       ((ok opt) (ok (pair n opt))))))
 
-fn ! linkAttempt! ctx: sys/Context clang: String flags: (List String) lib: String ll: String part: String n: Int64 tmp: String -> (Result (Pair Int64 String) String)
+; (:m :ref FFI1 :do "the native libraries a program's foreign fns call: :linkLibraries [\"z\"] in the manifest.asn nearest the entry file becomes -lz after libaslrt.a on the link line; c and m need no row")
+fn valueOf items: (List rd/SExpr) key: String -> (Option rd/SExpr)
+  (match (listHead items)
+    ((none) (none))
+    ((some h) (if (and (rd/isAtom? h) (= (rd/sexprHead h) key)) (listGet items 1) (valueOf (optionOr (listTail items) (list)) key))))
+
+fn unquoted s: String -> String
+  (if (and (>= (stringLength s) 2) (and (stringStartsWith? s "\"") (stringEndsWith? s "\""))) (optionOr (stringSlice s 1 (- (stringLength s) 1)) s) s)
+
+fn linkLibraries text: String -> (Result (List String) String)
+  (match (valueOf (rd/sexprToList (rd/parseSexpr text)) ":linkLibraries")
+    ((none) (ok (list)))
+    ((some v)
+      (let [(names (map (fn [(e rd/SExpr)] -> String (unquoted (rd/sexprHead e))) (match v ((rd/sexprVect xs) xs) ((rd/sexprList xs) xs) ((rd/sexprAtom _) (list v)))))
+            (bad (filter (fn [(n String)] -> Bool (not (fsig/libName? n))) names))]
+        (if (listEmpty? bad)
+          (ok (map (fn [(n String)] -> String (str "-l" n)) names))
+          (err (str ":linkLibraries names " (optionOr (listHead bad) "") ", which is not a library name ([A-Za-z0-9_.+-], not starting with -)"))))))
+
+fn ! nearestManifest! dir: String depth: Int64 -> (Option String)
+  (let [(m (str dir "/manifest.asn"))]
+    (cond
+      ((sys/isFile? m) (some m))
+      ((or (<= depth 0) (or (stringEmpty? dir) (= dir "/"))) (none))
+      (else (nearestManifest! (sys/parentOf dir) (- depth 1)))))
+
+fn ! linksFor! target: String -> (Result (List String) String)
+  (match (nearestManifest! (sys/parentOf (resultOr (realPath target) target)) 32)
+    ((none) (ok (list)))
+    ((some m) (match (fileReadString m)
+                ((err e) (err (str "cannot read " m ": " e)))
+                ((ok text) (match (linkLibraries text)
+                             ((err e) (err (str m ": " e)))
+                             ((ok links) (ok links)))))))
+
+fn ! linkAttempt! ctx: sys/Context clang: String flags: (List String) lib: String links: (List String) ll: String part: String n: Int64 tmp: String -> (Result (Pair Int64 String) String)
   (let [(b (nb/Build :root ctx.root :cache tmp :tmp tmp :lib lib :base "" :clangVersion "" :owner ""
-                     :deadlineNs (+ (monotonicNs) 3600000000000) :maxDesc (+ 16 (* 4 n))))]
+                     :deadlineNs (+ (monotonicNs) 3600000000000) :maxDesc (+ 16 (* 4 n)) :links links))]
     (nb/linkParts! b clang flags ll part n))
 
 fn ! link! ctx: sys/Context clang: String lib: String target: String out: String tmp: String mode: String shape: (Pair Int64 String) exact: Bool -> Int64
@@ -134,11 +169,13 @@ fn ! link! ctx: sys/Context clang: String lib: String target: String out: String
             ((ok _)
               (match (effectiveLibAndFlags! ctx clang lib mode (pairSecond shape))
                 ((err e) (do (drop! ll) (drop! tmp) (fail (str "ERR_BUILD: runtime variant: " e) 1)))
-                ((ok libFlags)
+                ((ok libFlags) (match (linksFor! target)
+                ((err e) (do (drop! ll) (drop! tmp) (fail (str "ERR_BUILD: " e) 1)))
+                ((ok links)
                   (let [(flags (pairSecond libFlags))
                         (start (monotonicNs))
                         (n (if exact (pairFirst shape) (nb/partsForSize (pairFirst shape) (resultOr (fileSize ll) 0))))
-                        (linkRes (linkAttempt! ctx clang flags (pairFirst libFlags) ll part n tmp))
+                        (linkRes (linkAttempt! ctx clang flags (pairFirst libFlags) links ll part n tmp))
                         (ms (/ (- (monotonicNs) start) 1000000))
                         (removed (drop! tmp))]
                     (match linkRes
@@ -152,7 +189,7 @@ fn ! link! ctx: sys/Context clang: String lib: String target: String out: String
                               ((err _) (do (drop! part) (fail (str "ERR_BUILD: cannot write " out) 1)))
                               ((ok _) (do (if (and (= (pairFirst linked) 1) (= (optionOr (listHead flags) "") "-O2")) true (sys/sayErr! (str "(:build :link (:parts " (stringFromInt64 (pairFirst linked)) " :opt \"" (optionOr (listHead flags) "") "\" :ms " (stringFromInt64 ms)
                                                              (if (stringEmpty? (pairSecond linked)) "" (str " :whole \"" (stringReplace (pairSecond linked) "\"" "'") "\"")) "))")))
-                                          (sys/say! (str "built " out)) 0))))))))))))))))
+                                          (sys/say! (str "built " out)) 0))))))))))))))))))
 
 fn ! buildFile! ctx: sys/Context clang: String lib: String target: String o: Opts -> Int64
   (let [(given o.out)

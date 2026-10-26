@@ -19,6 +19,7 @@
    "asl-target-llvm/sys"
    "asl-target-llvm/sysNet"
    "asl-target-llvm/sysRoute"
+   "asl-target-llvm/ffiRoute"
    "asl-target-llvm/parallel"
    "asl-target-llvm/parRoute"
    "asl-target-llvm/arrays"
@@ -34,4 +35,4 @@
    "asl-target-llvm/sysProc"
    "asl-target-llvm/target"
  ]
- :dependencies ["asl-ir"])
+ :dependencies ["asl-ir" "asl-checker"])

@@ -1,4 +1,4 @@
-(module asl-checker/check :x [InferState Deferred checkModule checkModuleIn checkModuleSource checkSource checkFile! schemaOfCtor] :i [(types :a ty) (unify :a u) (resolve :a r) (ast :a a) (reader :a rd) (tailPos :a tp) (constAssert :a ca)])
+(module asl-checker/check :x [InferState Deferred checkModule checkModuleIn checkModuleSource checkSource checkFile! schemaOfCtor] :i [(types :a ty) (unify :a u) (resolve :a r) (ast :a a) (reader :a rd) (tailPos :a tp) (constAssert :a ca) (foreign :a ff)])
 
 (schema InferState (:f subst (Map Int64 ty/Type)) (:f nextVar Int64) (:f intSites (List (pair String Int64))) (:f mapSites (List (pair ty/Type String))) (:f diags (List ty/Diagnostic)) (:f deferred (List Deferred)))
 
@@ -622,7 +622,7 @@ fn checkModuleIn forms: (List a/TopForm) deps: r/DepIndex path: String -> (List 
         (summary (match existingMod
                    ((some m) (r/withImports summary0 m.imports))
                    ((none) summary0)))
-        (p12Diags (r/resolveModuleIn summary forms deps)) (defunDiags (fold (fn [(acc (List ty/Diagnostic)) (form a/TopForm)] -> (List ty/Diagnostic) (match form ((a/topDefun d) (listAppend (typeBoundary (checkDefunWithUntyped d summary deps path)) acc)) ((a/topExpr p) (listAppend (typeBoundary (checkExprDiags p summary deps path)) acc)) (_ acc))) (list) forms))] (listAppend p12Diags defunDiags))
+        (p12Diags (r/resolveModuleIn summary forms deps)) (defunDiags (fold (fn [(acc (List ty/Diagnostic)) (form a/TopForm)] -> (List ty/Diagnostic) (match form ((a/topDefun d) (listAppend (typeBoundary (checkDefunWithUntyped d summary deps path)) acc)) ((a/topExpr p) (listAppend (typeBoundary (checkExprDiags p summary deps path)) acc)) (_ acc))) (list) forms))] (listAppend p12Diags (listAppend (ff/foreignDiags forms path) defunDiags)))
 
 fn parseErrDiag pe: a/ParseError path: String -> (List ty/Diagnostic)
   (list (ty/Diagnostic :code "parse" :message pe.msg :msg pe.msg :line pe.line :col pe.col :path path))

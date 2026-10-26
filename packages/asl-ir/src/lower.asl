@@ -1,4 +1,4 @@
-(module asl-ir/lower :x [LinkScope lowerModule lowerWithPrelude lowerLinked lowerLinkedAs lowerSource declPositions sitedPositions builtinArity builtinArityFor genericConcrete genericAlias genericMulti?] :i [(asl-ir/types :a ty) (asl-parser/ast :a ast) (asl-parser/reader :a rd) (asl-checker/types :a cty)])
+(module asl-ir/lower :x [LinkScope lowerModule lowerWithPrelude lowerLinked lowerLinkedAs lowerSource declPositions sitedPositions builtinArity builtinArityFor genericConcrete genericAlias genericMulti?] :i [(asl-ir/types :a ty) (asl-parser/ast :a ast) (asl-parser/reader :a rd) (asl-checker/foreign :a ffd) (asl-checker/types :a cty)])
 
 (schema Ctor (:f typeName String) (:f variant String) (:f arity Int64))
 
@@ -72,7 +72,7 @@ fn builtinArity name: String -> (Option Int64)
     ((= name "not") (some 1)) ((= name "abs") (some 1)) ((= name "min") (some 2))
     ((= name "max") (some 2)) ((= name "<<") (some 2)) ((= name ">>") (some 2))
     ((= name "&") (some 2)) ((= name "|") (some 2)) ((= name "^") (some 2)) ((= name "~") (some 1))
-    ((= name "trap") (some 2)) ((= name "str") (some -1)) ((= name "stringConcat") (some 2))
+    ((= name "trap") (some 2)) ((= name "foreign") (some -1)) ((= name "str") (some -1)) ((= name "stringConcat") (some 2))
     ((= name "stringLength") (some 1)) ((= name "stringFromInt64") (some 1)) ((= name "print") (some -1))
     ((= name "println") (some -1)) ((= name "parMap") (some 3)) ((= name "parFold") (some 5))
     ((= name "listTail") (some 1)) ((= name "listHead") (some 1)) ((= name "listEmpty?") (some 1))
@@ -1757,7 +1757,7 @@ fn lowerTop positions: (Map String String) info: ModInfo only: (Option (Map Stri
     ((ast/topEnum _) acc)
     ((ast/topDefun d) (if (not (wanted? only d.name))
                         acc
-                        (match (lowerFunction (ctxFor d.name positions info) acc.strings d)
+                        (match (lowerFunction (ctxFor d.name positions info) acc.strings (ffd/withReturnMode d))
                           ((err e) (withDiag acc e))
                           ((ok lf) (addLowered acc lf)))))
     ((ast/topExpr p) (let [(initName (str "@init$" (stringFromInt64 p.line) "_" (stringFromInt64 p.col)))
