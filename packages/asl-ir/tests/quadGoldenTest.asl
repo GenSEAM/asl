@@ -21,8 +21,9 @@ fn entries -> (List String)
 ; (:m :ref PKG-CLIENT-FIX2 :do "checkSemanticTest linked IR repinned: asl-checker/resolve gained the installed-package import fallback (installedModule, installedFallback!, two helpers; +8080 bytes); measured by this file own goldenDigests printer")
 ; (:m :ref TOKDEFFIX :do "checkSemanticTest linked IR repinned on sh/TOKDEFM (+6302 bytes): it links asl-parser/ast (scriptEntries, scriptModule, mainParams, mainBody) and asl-checker/types (argInt, argStr, preludeMainDone sigs); measured by this file own goldenDigests printer")
 ; (:m :ref FFI1 :do "checkSemanticTest linked IR repinned on merge main bc1302354 (+40259 bytes over the TOKDEFFIX pin): lowerTop routes foreign defuns through asl-checker/foreign withReturnMode and the checker gained the foreign rules; measured by this file own goldenDigests printer")
+; (:m :ref FFI2 :do "checkSemanticTest linked IR repinned on merge sh/FFI1 2d7d8c9f0 into sh/FFI2 (+7387 bytes): asl-checker/foreign gained the handle and close kinds, kindBase, kindFinaliser and the !neg/!null conventions; measured by this file own goldenDigests printer")
 fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "-2911053424433430118:5028614")
+  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "-6861983874424337818:5036001")
         (pair "lowerSourceWith" "6806003338108627551:8856"))
 
 fn diagLine d: ty/IrDiag -> String
