@@ -1,5 +1,5 @@
 (module asl-target-llvm/sysRoute
-  :x [RouteTable Routed routeTables tableBuiltins wrapperName routes? routeModule tripleOf routeFactsFor hostFactsOf routeHost! routeHostLinked! internalize routeConst signalNames errKinds tagGuardText poolWith]
+  :x [RouteTable Routed routeTables tableBuiltins wrapperName routes? routeModule tripleOf routeFactsFor hostFactsOf routeHost! routeHostLinked! routeTargetLinked! targetFacts! internalize routeConst signalNames errKinds tagGuardText poolWith]
   :i [(asl-ir/types :a ty)
       (asl-ir/verify :a vfy)
       (asl-target-llvm/libc :a libc)
@@ -505,16 +505,32 @@ fn ! routeHost! m: ty/SsaModule -> (Result Routed (List ty/IrDiag))
 fn ! routeHostLinked! m: ty/SsaModule -> (Result Routed (List ty/IrDiag))
   (routeHostAs! m false)
 
-; (:m :ref FFI2 :do "a module with foreign calls routes through the host facts like one with syscalls, since its wrappers read the host's errno accessor; routeModuleAs binds the foreign stubs first")
 fn ! routeHostAs! m: ty/SsaModule check: Bool -> (Result Routed (List ty/IrDiag))
-  (if (or (routes? m) (ffi/foreign? m))
+  (routeTargetAs! m check "")
+
+fn ! routeTargetLinked! m: ty/SsaModule target: String -> (Result Routed (List ty/IrDiag))
+  (routeTargetAs! m false target)
+
+; (:m :ref RV1 :do "target names a libc.asl triple (linux-aarch64, ...) to route for instead of the one uname reports, so a darwin stage emits a linux seed; an unknown name is an error, never an unrouted module")
+fn ! targetFacts! target: String -> (Result (Option libc/TripleFacts) String)
+  (if (stringEmpty? target)
     (let [(out (processRun "uname -s -m"))
           (host (if (= out.exitCode 0) (unamePair out.stdout) (none)))]
       (match host
-        ((none) (err (list (routeDiag "ERR_LLVM_SYSROUTE_HOST" (str "uname -s -m exited " out.exitCode " printing '" out.stdout "' " out.stderr) m.name))))
-        ((some p) (match (routeFactsFor (tripleOf (pairFirst p) (pairSecond p)))
-                    ((none) (if (ffi/foreign? m) (err (ffi/rejectForeign m (tripleOf (pairFirst p) (pairSecond p)))) (ok (Routed :result m :internal (list)))))
-                    ((some facts) (routeModuleAs facts m check))))))
+        ((none) (err (str "uname -s -m exited " out.exitCode " printing '" out.stdout "' " out.stderr)))
+        ((some p) (ok (routeFactsFor (tripleOf (pairFirst p) (pairSecond p)))))))
+    (match (routeFactsFor target)
+      ((none) (err (str "--target " target " is not a verified libc.asl triple")))
+      ((some facts) (ok (some facts)))))
+
+; (:m :ref FFI1 :do "a module with foreign calls routes through the target facts like one with syscalls, since its wrappers read that target's errno accessor; routeModuleAs binds the foreign stubs first, and a target without facts rejects them")
+fn ! routeTargetAs! m: ty/SsaModule check: Bool target: String -> (Result Routed (List ty/IrDiag))
+  (if (or (routes? m) (ffi/foreign? m))
+    (match (targetFacts! target)
+      ((err e) (err (list (routeDiag "ERR_LLVM_SYSROUTE_HOST" e m.name))))
+      ((ok found) (match found
+                    ((none) (if (ffi/foreign? m) (err (ffi/rejectForeign m (if (stringEmpty? target) "host" target))) (ok (Routed :result m :internal (list)))))
+                    ((some facts) (routeModuleAs facts m check)))))
     (ok (Routed :result m :internal (list))))
 
 fn internalizeDefinePrefix -> String

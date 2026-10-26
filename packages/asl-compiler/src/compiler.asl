@@ -1,4 +1,4 @@
-(module asl-compiler/compiler :x [CompileResult compileSourceToC99 compilePackageToC99! compilePackageToLlvm! compilePackageToLlvmWith! formatDiagnostic formatIrDiagnostics compileSourceTarget compileStandaloneTarget verifyPackageCapabilities eliminateDeadCapabilities] :i [(asl-parser/ast :a a) (asl-checker/types :a ty) (asl-checker/check :a chk) (asl-checker/resolve :a r) (asl-codegen/c99Emit :a c99) (asl-codegen/c99Mangle :a cm) (asl-target-llvm/main :a llvm) (asl-ir/types :a irTy) (asl-ir/link :a lk)])
+(module asl-compiler/compiler :x [CompileResult compileSourceToC99 compilePackageToC99! compilePackageToLlvm! compilePackageToLlvmWith! compilePackageToLlvmFor! formatDiagnostic formatIrDiagnostics compileSourceTarget compileStandaloneTarget verifyPackageCapabilities eliminateDeadCapabilities] :i [(asl-parser/ast :a a) (asl-checker/types :a ty) (asl-checker/check :a chk) (asl-checker/resolve :a r) (asl-codegen/c99Emit :a c99) (asl-codegen/c99Mangle :a cm) (asl-target-llvm/main :a llvm) (asl-ir/types :a irTy) (asl-ir/link :a lk)])
 
 (schema CompileResult (:f ok Bool) (:f code Str) (:f diagnostics (List Str)))
 
@@ -48,6 +48,9 @@ fn ! compilePackageToLlvm! entryFile: Str roots: (List Str) -> (Result CompileRe
   (compilePackageToLlvmWith! entryFile roots "0")
 
 fn ! compilePackageToLlvmWith! entryFile: Str roots: (List Str) rcMode: Str -> (Result CompileResult Str)
+  (compilePackageToLlvmFor! entryFile roots rcMode "")
+
+fn ! compilePackageToLlvmFor! entryFile: Str roots: (List Str) rcMode: Str target: Str -> (Result CompileResult Str)
   (let [(readRes (fileReadString entryFile))]
     (match readRes
       ((err _) (err (str "Failed to read entry file: " entryFile)))
@@ -67,7 +70,7 @@ fn ! compilePackageToLlvmWith! entryFile: Str roots: (List Str) rcMode: Str -> (
                       (match (lk/linkEntryWith! entryFile (pairSecond loaded))
                         ((err irDiags) (ok (CompileResult :ok false :code "" :diagnostics (formatIrDiagnostics irDiags))))
                         ((ok m)
-                          (match (llvm/emitLlvmProgramNativeWith! m (str m.name ".main") rcMode)
+                          (match (llvm/emitLlvmProgramNativeFor! m (str m.name ".main") rcMode target)
                             ((err irDiags) (ok (CompileResult :ok false :code "" :diagnostics (formatIrDiagnostics irDiags))))
                             ((ok llCode) (ok (CompileResult :ok true :code llCode :diagnostics (list))))))))))))))))))
 

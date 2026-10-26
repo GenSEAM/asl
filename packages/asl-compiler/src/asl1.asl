@@ -1,7 +1,7 @@
 (module asl-compiler/asl1 :x [main usage] :i [(asl-parser/ast :a a) (asl-checker/resolve :a r) (asl-checker/check :a chk) (asl-checker/types :a ty) (asl-compiler/compiler :a comp) (asl-compiler/checkCache :a cc)])
 
 fn usage -> String
-  "usage: asl1 build ENTRY -o OUT.ll [--rc 0|1|asan|notrace] | asl1 check ENTRY | asl1 deps ENTRY"
+  "usage: asl1 build ENTRY -o OUT.ll [--rc 0|1|asan|notrace] [--target linux-aarch64|linux-x86_64|darwin-arm64] | asl1 check ENTRY | asl1 deps ENTRY"
 
 fn roots -> (List String)
   (list ".")
@@ -12,8 +12,8 @@ fn ! report diags: (List String) -> (Result Int64 String)
     ((some d) (do (eprintln d)
                   (report (optionOr (listTail diags) (list))))))
 
-fn ! build entry: String out: String rcMode: String -> (Result Int64 String)
-  (match (comp/compilePackageToLlvmWith! entry (roots) rcMode)
+fn ! build entry: String out: String rcMode: String target: String -> (Result Int64 String)
+  (match (comp/compilePackageToLlvmFor! entry (roots) rcMode target)
     ((err e) (report (list e)))
     ((ok cr) (if cr.ok
                (match (fileWrite out cr.code)
@@ -75,6 +75,17 @@ fn ! deps entry: String -> (Result Int64 String)
                                                 (do (println (stringJoin (distinctSorted relPaths) "\n"))
                                                     (ok 0))))))))))
 
+; (:m :ref RV1 :do "build flags after -o OUT come in --rc MODE and --target TRIPLE pairs in any order, a later pair overriding an earlier one; an unknown flag or a flag without its value is a usage error")
+fn buildFlags rest: (List String) rcMode: String target: String -> (Option (Pair String String))
+  (match (listHead rest)
+    ((none) (some (pair rcMode target)))
+    ((some flag) (match (listGet rest 1)
+                   ((none) (none))
+                   ((some v) (cond
+                               ((= flag "--rc") (buildFlags (listDrop rest 2) v target))
+                               ((= flag "--target") (buildFlags (listDrop rest 2) rcMode v))
+                               (else (none)))))))
+
 fn ! usageError -> (Result Int64 String)
   (do (eprintln (usage))
       (ok 2))
@@ -83,8 +94,10 @@ fn ! main args: (List String) -> (Result Int64 String)
   (let [(cmd (optionOr (listGet args 0) ""))
         (entry (optionOr (listGet args 1) ""))]
     (cond
-      ((and (= cmd "build") (and (= (listLength args) 4) (= (optionOr (listGet args 2) "") "-o"))) (build entry (optionOr (listGet args 3) "") "0"))
-      ((and (= cmd "build") (and (= (listLength args) 6) (and (= (optionOr (listGet args 2) "") "-o") (= (optionOr (listGet args 4) "") "--rc")))) (build entry (optionOr (listGet args 3) "") (optionOr (listGet args 5) "")))
+      ((and (= cmd "build") (and (>= (listLength args) 4) (= (optionOr (listGet args 2) "") "-o")))
+       (match (buildFlags (listDrop args 4) "0" "")
+         ((none) (usageError))
+         ((some p) (build entry (optionOr (listGet args 3) "") (pairFirst p) (pairSecond p)))))
       ((and (= cmd "check") (= (listLength args) 2)) (check entry))
       ((and (= cmd "deps") (= (listLength args) 2)) (deps entry))
       (else (usageError))))

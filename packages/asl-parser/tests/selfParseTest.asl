@@ -6,7 +6,7 @@
 
 fn closureModules -> (List ClosureModule)
   (list
-    (ClosureModule :path "asl/packages/asl-compiler/src/compiler.asl" :expected 21)
+    (ClosureModule :path "asl/packages/asl-compiler/src/compiler.asl" :expected 22) ; (:m :ref RV1 :do "21 -> 22: compilePackageToLlvmFor! (asl1 build --target)")
     (ClosureModule :path "asl/packages/asl-parser/src/ast.asl" :expected 268) ; (:m :ref TOKDEFFIX :do "264 -> 268 measured: scriptEntries, scriptModule (IMPLICIT-MODULE), mainParams, mainBody (MAIN-SUGAR)")
     (ClosureModule :path "asl/packages/asl-checker/src/types.asl" :expected 52)
     (ClosureModule :path "asl/packages/asl-checker/src/check.asl" :expected 136) ; (:m :ref LISTSUM :do "135 -> 136: sumHint")
@@ -14,7 +14,7 @@ fn closureModules -> (List ClosureModule)
     (ClosureModule :path "asl/packages/asl-checker/src/resolve.asl" :expected 286)
     (ClosureModule :path "asl/packages/asl-codegen/src/c99Emit.asl" :expected 51)
     (ClosureModule :path "asl/packages/asl-codegen/src/c99Mangle.asl" :expected 9)
-    (ClosureModule :path "asl/packages/asl-target-llvm/src/main.asl" :expected 30)
+    (ClosureModule :path "asl/packages/asl-target-llvm/src/main.asl" :expected 31) ; (:m :ref RV1 :do "30 -> 31: emitLlvmProgramNativeFor!")
     ; (:m :ref UFIR :do "asl-ir/src/types.asl 67 -> 69 forms: ssaRecordDeclTyped and ssaRecordRaw? (unboxed record field kinds); asl-ir/src/verify.asl 87 -> 88: recordKindDiags")
     (ClosureModule :path "asl/packages/asl-ir/src/types.asl" :expected 69)
     (ClosureModule :path "asl/packages/asl-parser/src/lexer.asl" :expected 33)

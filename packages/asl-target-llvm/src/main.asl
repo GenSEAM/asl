@@ -1,5 +1,5 @@
 (module asl-target-llvm
-  :x [emitLlvmModule emitLlvmProgram emitLlvmModuleFor emitLlvmProgramFor emitLlvmModuleForTarget emitLlvmProgramForTarget emitLlvmRuntimeForTarget emitLlvmSupportForTarget emitLlvmProgramNative! emitLlvmProgramNativeWith! runtimeDecls emitLlvmType emitLlvmBlock emitLlvmStmt emitLlvmExpr emitLlvmClosure emitLlvmPanic emitLlvmSource emitLlvmSourceWith emitLlvmTargetTriple llvmPreamble emitLlvmFunction]
+  :x [emitLlvmModule emitLlvmProgram emitLlvmModuleFor emitLlvmProgramFor emitLlvmModuleForTarget emitLlvmProgramForTarget emitLlvmRuntimeForTarget emitLlvmSupportForTarget emitLlvmProgramNative! emitLlvmProgramNativeWith! emitLlvmProgramNativeFor! runtimeDecls emitLlvmType emitLlvmBlock emitLlvmStmt emitLlvmExpr emitLlvmClosure emitLlvmPanic emitLlvmSource emitLlvmSourceWith emitLlvmTargetTriple llvmPreamble emitLlvmFunction]
   :i [(asl-ir/types :a irTy)
       (asl-ir/link :a lk)
       (asl-target-llvm/types :a ty)
@@ -76,10 +76,14 @@ fn lowerWasmPrint m: irTy/SsaModule -> irTy/SsaModule
 fn ! emitLlvmProgramNative! m: irTy/SsaModule entry: String -> (Result String (List irTy/IrDiag))
   (emitLlvmProgramNativeWith! m entry "0")
 
-; (:m :ref PERF-VERIFY-ONCE :do "m is a linked module, which the link verified, so the routes skip their input verify; ssa/emitLlvmProgram still verifies the routed, RC-rewritten module and rejects an invalid one")
 fn ! emitLlvmProgramNativeWith! m: irTy/SsaModule entry: String mode: String -> (Result String (List irTy/IrDiag))
+  (emitLlvmProgramNativeFor! m entry mode "")
+
+; (:m :ref PERF-VERIFY-ONCE :do "m is a linked module, which the link verified, so the routes skip their input verify; ssa/emitLlvmProgram still verifies the routed, RC-rewritten module and rejects an invalid one")
+; (:m :ref RV1 :do "target \"\" routes for the host uname reports; a libc.asl triple such as linux-aarch64 routes for that triple instead")
+fn ! emitLlvmProgramNativeFor! m: irTy/SsaModule entry: String mode: String target: String -> (Result String (List irTy/IrDiag))
   (let [(user (fold (fn [(acc (Map String Bool)) (f irTy/SsaFunction)] -> (Map String Bool) (mapSet acc f.name true)) (mapEmpty) m.functions))]
-    (match (emitRouted (thenPar (thenPar (rt/routeHostLinked! (opt/nativePrelude m)) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (pr/routeHostLinked! r))) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (ar/routeLinked r)))
+    (match (emitRouted (thenPar (thenPar (rt/routeTargetLinked! (opt/nativePrelude m) target) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (pr/routeTargetLinked! r target))) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (ar/routeLinked r)))
                     (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag))
                       (cond
                         ((or (= mode "") (= mode "0")) (ssa/emitLlvmProgram (opt/hoistConstants r) entry))

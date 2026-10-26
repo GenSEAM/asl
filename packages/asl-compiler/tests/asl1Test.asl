@@ -115,7 +115,7 @@ fn ! testUsage -> Bool
         (depsBare (driver "deps"))]
     (do (map (fn [(out ProcessOutput)] -> Bool
                (do (assert (= out.exitCode 2) (str "a malformed command line exits 2, got " out.exitCode "; stderr: " out.stderr))
-                   (assert (= out.stderr "usage: asl1 build ENTRY -o OUT.ll [--rc 0|1|asan|notrace] | asl1 check ENTRY | asl1 deps ENTRY\n") (str "the usage line on stderr: " out.stderr))
+                   (assert (= out.stderr "usage: asl1 build ENTRY -o OUT.ll [--rc 0|1|asan|notrace] [--target linux-aarch64|linux-x86_64|darwin-arm64] | asl1 check ENTRY | asl1 deps ENTRY\n") (str "the usage line on stderr: " out.stderr))
                    true))
              (list none noOut unknown depsBare))
         true))

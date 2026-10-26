@@ -1,5 +1,5 @@
 (module asl-tools/seed
-  :x [Entry Stages seedDir manifestPath compilerSource runtimeArchive fibSource tripleKey seedFileFor parseManifest entryFor verifyEntry verify manifestRow replaceRow link linkArgv linkWith compileWith compileRc bootstrap importPaths sourceClosure sourceDigest staleness checkVerdict regen RuntimeEntry runtimeModules runtimeFileFor parseRuntime runtimeRow replaceRuntimeRows runtimeDigest runtimeStaleness main]
+  :x [Entry Stages seedDir manifestPath compilerSource runtimeArchive fibSource tripleKey seedFileFor parseManifest entryFor bytesCheck unpack verifyEntry verify manifestRow replaceRow link linkArgv linkWith compileWith compileRc bootstrap importPaths sourceClosure sourceDigest staleness checkVerdict regen crossTargets crossTarget RuntimeEntry runtimeModules runtimeFileFor parseRuntime runtimeRow replaceRuntimeRows runtimeDigest runtimeStaleness main]
   :i [(asl-tools/fleet/run :a fr) (asl/packages/asl-cli/src/asl1Cache :a ac)])
 
 (schema Entry
@@ -63,10 +63,14 @@ fn stripVersion s: String -> String
   (let [(n (stringLength s))]
     (if (and (> n 0) (digitOrDot? (optionOr (stringSlice s (- n 1) n) "x"))) (stripVersion (optionOr (stringSlice s 0 (- n 1)) "")) s))
 
+; (:m :ref RV1 :do "a linux triple is keyed by its arch alone (aarch64-linux-gnu, x86_64-pc-linux-gnu -> ARCH-unknown-linux-gnu), matching build.sh seed_triple and asl-cli seedTriple; others drop their OS version")
 fn tripleKey triple: String -> String
   (let [(parts (stringSplit (stringTrim triple) "-"))
+        (arch (optionOr (listHead parts) ""))
         (lastPart (optionOr (listLast parts) ""))]
-    (stringJoin (listAppend (listTake parts (max 0 (- (listLength parts) 1))) (list (stripVersion lastPart))) "-"))
+    (if (listContains? parts "linux")
+      (str (if (= arch "arm64") "aarch64" arch) "-unknown-linux-gnu")
+      (stringJoin (listAppend (listTake parts (max 0 (- (listLength parts) 1))) (list (stripVersion lastPart))) "-")))
 
 fn seedFileFor key: String -> String
   (str (seedDir) "/" key "/asl1.ll.gz")
@@ -87,16 +91,26 @@ fn ! hostTriple root: String -> (Result String String)
   (let [(d (runJob (list (clang) "-dumpmachine") root (list)))]
     (if (= d.exit 0) (ok (stringTrim d.out)) (err (str "ERR_SEED_CLANG: " (clang) " -dumpmachine exit " d.exit ": " (stringTrim d.out)))))
 
-fn ! fingerprintOf root: String -> (Result String String)
+fn ! fingerprintFor root: String key: String -> (Result String String)
   (let [(v (runJob (list (clang) "--version") root (list)))]
     (if (!= v.exit 0) (err (str "ERR_SEED_CLANG: " (clang) " --version exit " v.exit))
-      (match (hostTriple root)
-        ((err e) (err e))
-        ((ok t) (ok (bytesSha256 (stringToBytes (stringJoin (list "seed/1" (optionOr (listHead (stringLines v.out)) "") (tripleKey t)) "\n"))))))))
+      (ok (bytesSha256 (stringToBytes (stringJoin (list "seed/1" (optionOr (listHead (stringLines v.out)) "") key) "\n"))))))
 
+; (:m :ref RV1 :do "a seed key other than the host's is cut by cross emission: the host fixpoint compiler builds asl1 with --target and the runtime emitters write their modules with --target, the libc.asl triple paired here")
+fn crossTargets -> (List (Pair String String))
+  (list (pair "aarch64-unknown-linux-gnu" "linux-aarch64") (pair "x86_64-unknown-linux-gnu" "linux-x86_64"))
+
+fn crossTarget key: String -> (Option String)
+  (optionMap pairSecond (listFind (fn [(p (Pair String String))] -> Bool (= (pairFirst p) key)) (crossTargets)))
+
+; (:m :ref SEEDX86 :do "a seed cut from sources that differ from HEAD names HEAD+dirty, so :sourceCommit never claims a commit the IR was not cut from; commit first, then regen")
 fn ! sourceCommitOf root: String -> String
-  (let [(d (runJob (list "git" "rev-parse" "HEAD") root (list)))]
-    (if (= d.exit 0) (stringTrim d.out) "unknown"))
+  (let [(d (runJob (list "git" "rev-parse" "HEAD") root (list)))
+        (s (runJob (list "git" "status" "--porcelain" "--untracked-files=no" "--" "asl/packages" "asl/prelude") root (list)))]
+    (cond
+      ((!= d.exit 0) "unknown")
+      ((or (!= s.exit 0) (not (stringEmpty? (stringTrim s.out)))) (str (stringTrim d.out) "+dirty"))
+      (else (stringTrim d.out))))
 
 fn fieldOf row: String key: String -> (Option String)
   (let [(parts (stringSplit row (str ":" key " ")))]
@@ -353,7 +367,7 @@ fn ! writeSeed root: String key: String fixed: String work: String -> (Result En
                              (_ (dirCreate (str root "/" (seedDir) "/" key)))
                              (entry (Entry :triple key :file file :bytes (bytesLength b) :sha256 (bytesSha256 b)
                                            :llBytes (bytesLength ll) :llSha256 (bytesSha256 ll)
-                                           :fingerprint (resultOr (fingerprintOf root) "unknown") :sourceDigest (sourceDigest root) :sourceCommit (sourceCommitOf root)))
+                                           :fingerprint (resultOr (fingerprintFor root key) "unknown") :sourceDigest (sourceDigest root) :sourceCommit (sourceCommitOf root)))
                              (old (resultOr (fileReadString (str root "/" (manifestPath))) ""))]
                          (match (fileWrite (str root "/" file) b)
                            ((err x) (err (str "ERR_SEED_IO: " file ": " x)))
@@ -361,7 +375,7 @@ fn ! writeSeed root: String key: String fixed: String work: String -> (Result En
                                      ((err x) (err (str "ERR_SEED_IO: " (manifestPath) ": " x)))
                                      ((ok _) (ok entry))))))))))
 
-fn ! runtimeModule root: String key: String compiler: String work: String m: (Pair String String) -> (Result RuntimeEntry String)
+fn ! runtimeModule root: String key: String compiler: String work: String emitArgs: (List String) m: (Pair String String) -> (Result RuntimeEntry String)
   (let [(module (pairFirst m))
         (emitter (pairSecond m))
         (ll (str work "/" module ".ll"))]
@@ -369,7 +383,7 @@ fn ! runtimeModule root: String key: String compiler: String work: String m: (Pa
       ((err x) (err x))
       ((ok progLl) (match (link root progLl (str work "/" emitter ".prog"))
         ((err x) (err x))
-        ((ok prog) (let [(d (runJob (list prog ll) root (list)))]
+        ((ok prog) (let [(d (runJob (cons prog (cons ll emitArgs)) root (list)))]
           (if (not (and (= d.exit 0) (fileExists? ll)))
             (err (str "ERR_SEED_RUNTIME: " emitter " (" d.verdict " exit " d.exit "): " (stringTrim d.out)))
             (match (pack root ll work)
@@ -383,45 +397,63 @@ fn ! runtimeModule root: String key: String compiler: String work: String m: (Pa
                     ((ok _) (ok (RuntimeEntry :triple key :module module :file file :bytes (bytesLength b) :sha256 (bytesSha256 b)
                                               :llBytes (bytesLength ir) :llSha256 (bytesSha256 ir) :sourceDigest (runtimeDigest root) :sourceCommit (sourceCommitOf root)))))))))))))))))
 
-fn ! runtimeAll root: String key: String compiler: String work: String mods: (List (Pair String String)) acc: (List RuntimeEntry) -> (Result (List RuntimeEntry) String)
+fn ! runtimeAll root: String key: String compiler: String work: String emitArgs: (List String) mods: (List (Pair String String)) acc: (List RuntimeEntry) -> (Result (List RuntimeEntry) String)
   (match (listHead mods)
     ((none) (ok acc))
-    ((some m) (match (runtimeModule root key compiler work m)
+    ((some m) (match (runtimeModule root key compiler work emitArgs m)
                 ((err x) (err x))
-                ((ok e) (runtimeAll root key compiler work (optionOr (listTail mods) (list)) (listAppend acc (list e)))))))
+                ((ok e) (runtimeAll root key compiler work emitArgs (optionOr (listTail mods) (list)) (listAppend acc (list e)))))))
 
-fn ! runtimeFrom root: String key: String ll: String work: String -> (Result (List RuntimeEntry) String)
+fn ! runtimeFrom root: String key: String ll: String work: String emitArgs: (List String) -> (Result (List RuntimeEntry) String)
   (match (link root ll (str work "/runtimeCompiler"))
     ((err e) (err e))
-    ((ok compiler) (match (runtimeAll root key compiler work (runtimeModules) (list))
+    ((ok compiler) (match (runtimeAll root key compiler work emitArgs (runtimeModules) (list))
       ((err e) (err e))
       ((ok fresh) (match (fileWrite (str root "/" (manifestPath)) (replaceRuntimeRows (resultOr (fileReadString (str root "/" (manifestPath))) "") fresh))
         ((err x) (err (str "ERR_SEED_IO: " (manifestPath) ": " x)))
         ((ok _) (ok fresh)))))))
 
-fn ! regenIn root: String args: (List String) work: String key: String -> (Result Entry String)
-  (match (candidateOf root args work key)
+fn targetArgv target: String -> (List String)
+  (if (stringEmpty? target) (list) (list "--target" target))
+
+; (:m :ref RV1 :do "fixed is the host fixpoint IR; for a cross target the compiler it links builds asl1 once more with --target, and that IR is the seed")
+fn ! seedIr root: String fixed: String work: String target: String -> (Result String String)
+  (if (stringEmpty? target) (ok fixed)
+    (match (link root fixed (str work "/crossCompiler"))
+      ((err x) (err x))
+      ((ok compiler) (compileRc root compiler (compilerSource) (str work "/cross.ll") (targetArgv target)))))
+
+fn ! regenIn root: String args: (List String) work: String hostKey: String key: String target: String -> (Result Entry String)
+  (match (candidateOf root args work hostKey)
     ((err e) (err e))
     ((ok c) (if (listContains? args "--runtime")
-              (match (runtimeFrom root key c work)
+              (match (runtimeFrom root key c work (targetArgv target))
                 ((err e) (err e))
                 ((ok _) (match (entryFor (parseManifest (resultOr (fileReadString (str root "/" (manifestPath))) "")) key)
                           ((none) (err (str "ERR_SEED_TRIPLE: no seed for " key)))
                           ((some e) (ok e)))))
               (match (iterate root c work 1)
                 ((err e) (err e))
-                ((ok fixed) (match (writeSeed root key fixed work)
+                ((ok fixed) (match (seedIr root fixed work target)
                   ((err e) (err e))
-                  ((ok entry) (match (runtimeFrom root key fixed work) ((err e) (err e)) ((ok _) (ok entry))))))))))
+                  ((ok ir) (match (writeSeed root key ir work)
+                    ((err e) (err e))
+                    ((ok entry) (match (runtimeFrom root key fixed work (targetArgv target)) ((err e) (err e)) ((ok _) (ok entry))))))))))))
 
+; (:m :ref RV1 :do "--triple KEY names the seed to cut: the host's key, or no flag, regenerates the host seed, a crossTargets key a cross seed, anything else is refused")
 fn ! regen root: String args: (List String) -> (Result Entry String)
   (match (hostTriple root)
     ((err e) (err e))
-    ((ok t) (match (freshWork)
-              ((err e) (err e))
-              ((ok work) (let [(result (regenIn root args work (tripleKey t)))
-                               (_ (pathRemove work))]
-                           result)))))
+    ((ok t) (let [(hostKey (tripleKey t))
+                  (key (optionOr (argAfter args "--triple") hostKey))
+                  (target (if (= key hostKey) (some "") (crossTarget key)))]
+              (match target
+                ((none) (err (str "ERR_SEED_TRIPLE: --triple " key " is neither the host " hostKey " nor a cross target (" (stringJoin (map pairFirst (crossTargets)) ", ") ")")))
+                ((some tgt) (match (freshWork)
+                              ((err e) (err e))
+                              ((ok work) (let [(result (regenIn root args work hostKey key tgt))
+                                               (_ (pathRemove work))]
+                                           result))))))))
 
 fn ! checkVerdict root: String triple: String -> (Pair Int64 String)
   (match (fileReadString (str root "/" (manifestPath)))
@@ -465,6 +497,6 @@ fn ! main args: (List String) -> Int64
       ((= (listHead args) (some "check"))
        (match (hostTriple root)
          ((err e) (do (eprintln e) 1))
-         ((ok t) (let [(v (checkVerdict root t))]
+         ((ok t) (let [(v (checkVerdict root (optionOr (argAfter args "--triple") t)))]
                    (do (map (fn [(l String)] -> Bool (do (if (stringStartsWith? l "ERR_") (eprintln l) (println l)) true)) (stringLines (pairSecond v))) (pairFirst v))))))
-      (else (do (eprintln "usage: asl/tools/seed.asl regen [--from-host | --from FILE.ll | --runtime] | verify | check") 2))))
+      (else (do (eprintln "usage: asl/tools/seed.asl regen [--from-host | --from FILE.ll | --runtime] [--triple KEY] | verify | check [--triple KEY]") 2))))

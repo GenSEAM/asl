@@ -1,5 +1,5 @@
 (module asl-target-llvm/gcRoute
-  :x [collectorModule collectorModuleForTarget collectorModuleWith collectorText collectorTextForTarget collectorTextWith entryNames hostTriple main]
+  :x [collectorModule collectorModuleForTarget collectorModuleWith collectorText collectorTextForTarget collectorTextWith entryNames hostTriple targetArgs! main]
   :i [(asl-ir/types :a ty)
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/ssa :a ssa)
@@ -161,16 +161,24 @@ fn hostTriple uname: String -> String
       ((and (= os "Linux") (or (= machine "aarch64") (= machine "arm64"))) "linux-aarch64")
       (else "")))
 
+; (:m :ref RV1 :do "an emitter run with --target TRIPLE writes its module for that libc.asl triple, else for the host uname reports; the pair is the triple and the args left once --target and its value are dropped")
+fn ! targetArgs! args: (List String) -> (Pair String (List String))
+  (match (listIndexOf args "--target")
+    ((some i) (pair (optionOr (listGet args (+ i 1)) "") (listAppend (listTake args i) (listDrop args (+ i 2)))))
+    ((none) (let [(out (processRun "uname -s -m"))]
+              (pair (if (and (= out.exitCode 0) (not (stringEmpty? (hostTriple out.stdout)))) (hostTriple out.stdout) (str "uname -s -m exit " out.exitCode ": " (stringTrim out.stdout))) args))))
+
 fn ! main args: (List String) -> (Result Int64 String)
-  (let [(out (processRun "uname -s -m"))
-        (triple (if (= out.exitCode 0) (hostTriple out.stdout) ""))]
+  (let [(chosen (targetArgs! args))
+        (triple (pairFirst chosen))
+        (rest (pairSecond chosen))]
     (match (libc/libcFacts triple)
-      ((none) (err (str "ERR_LLVM_GCROUTE: libc.asl covers no host printing '" out.stdout "' for uname -s -m")))
+      ((none) (err (str "ERR_LLVM_GCROUTE: libc.asl covers no triple '" triple "' (uname -s -m, else --target)")))
       ((some facts)
-        (match (collectorTextWith facts (target/nativeTargetFacts facts.triple) (= (optionOr (listGet args 1) "") "notrace"))
+        (match (collectorTextWith facts (target/nativeTargetFacts facts.triple) (= (optionOr (listGet rest 1) "") "notrace"))
           ((err ds) (err (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code ": " d.message)) ds) "; ")))
           ((ok text)
-            (match (listHead args)
+            (match (listHead rest)
               ((none) (do (print text) (ok 0)))
               ((some path) (match (fileWrite path text)
                              ((ok _) (ok 0))

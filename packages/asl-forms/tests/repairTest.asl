@@ -369,6 +369,7 @@ fn replayFixture! name: String -> String
     ((ok t) t)
     ((err e) (do (assert false (str "missing fixture " name ": " e)) "")))
 
+; (:m :ref MAINRED7 :do "the replayed real files predate the retired (mt subject arm ...) spelling (ERR_READ_SPELLING, 7a7a62f82); the repaired text is checked with it written (match ...), the fixtures and their receipt coordinates stay byte-exact")
 fn checkSurplusReplay! name: String base: String at: Int64 oldLen: Int64 receipt: String checkError: String -> Bool
   (let [(edit (>= at 0))
         (b (if edit (replayFixture! base) ""))
@@ -377,16 +378,17 @@ fn checkSurplusReplay! name: String base: String at: Int64 oldLen: Int64 receipt
         (res (if edit
                (rep/repairEdit text "asl" at (+ at (stringLength n)) (optionOr (stringSlice b at (+ at oldLen)) "") "")
                (rep/repairTextPick text "asl" -1 -1 "")))
-        (fixed (rep/repairResultText res))]
+        (fixed (rep/repairResultText res))
+        (checked (stringReplace fixed "(mt " "(match "))]
     (do
       (assert (= (rep/repairResultReceipt res) receipt) (str name " receipt: " (rep/repairResultReceipt res)))
       (assert (= (stringLength fixed) (- (stringLength text) (listLength (rep/repairResultRepaired res)))) (str name " only the surplus closers are removed"))
       (assert (not (nativeAccepts! text (str "asl/packages/asl-forms/tests/.surplus_" name "_before.asl") "parse")) (str name " payload is rejected before the repair"))
       (if (= checkError "")
-        (do (assert (nativeAccepts! fixed (str "asl/packages/asl-forms/tests/.surplus_" name ".asl") "check") (str name " repaired text passes the native check")) true)
-        (let [(chk (nativeRunText! fixed (str "asl/packages/asl-forms/tests/.surplus_" name ".asl") "check"))]
+        (do (assert (nativeAccepts! checked (str "asl/packages/asl-forms/tests/.surplus_" name ".asl") "check") (str name " repaired text passes the native check")) true)
+        (let [(chk (nativeRunText! checked (str "asl/packages/asl-forms/tests/.surplus_" name ".asl") "check"))]
           (do
-            (assert (nativeAccepts! fixed (str "asl/packages/asl-forms/tests/.surplus_" name ".asl") "parse") (str name " repaired text passes the native parse"))
+            (assert (nativeAccepts! checked (str "asl/packages/asl-forms/tests/.surplus_" name ".asl") "parse") (str name " repaired text passes the native parse"))
             (assert (and (!= (pairFirst chk) 0) (stringContains? (pairSecond chk) checkError)) (str name " native check fails only on the payload's own " checkError ", not syntax: " (pairSecond chk)))
             (assert (not (or (stringContains? (pairSecond chk) "ERR_READ") (stringContains? (pairSecond chk) ": parse "))) (str name " native check reports no reader error: " (pairSecond chk)))
             true)))

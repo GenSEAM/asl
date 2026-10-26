@@ -1,5 +1,5 @@
 (module asl-target-llvm/parRoute
-  :x [parCalls routes? routeModule routeHost! routeHostLinked! routedNames? finishText helperDefinitions]
+  :x [parCalls routes? routeModule routeHost! routeHostLinked! routeTargetLinked! routedNames? finishText helperDefinitions]
   :i [(asl-ir/types :a ty)
       (asl-ir/verify :a vfy)
       (asl-target-llvm/libc :a libc)
@@ -84,27 +84,22 @@ fn routeModuleAs facts: libc/TripleFacts m: ty/SsaModule check: Bool -> (Result 
         ((err ds) (err ds))
         ((ok _) (routeVerified facts m calls)))))
 
-fn unameWords text: String -> (Option (Pair String String))
-  (let [(ws (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringReplace text "\n" " ") " ")))]
-    (if (= (listLength ws) 2)
-      (some (pair (optionOr (listGet ws 0) "") (optionOr (listGet ws 1) "")))
-      (none)))
-
 fn ! routeHost! m: ty/SsaModule -> (Result rt/Routed (List ty/IrDiag))
-  (routeHostAs! m true)
+  (routeTargetAs! m true "")
 
 fn ! routeHostLinked! m: ty/SsaModule -> (Result rt/Routed (List ty/IrDiag))
-  (routeHostAs! m false)
+  (routeTargetAs! m false "")
 
-fn ! routeHostAs! m: ty/SsaModule check: Bool -> (Result rt/Routed (List ty/IrDiag))
+fn ! routeTargetLinked! m: ty/SsaModule target: String -> (Result rt/Routed (List ty/IrDiag))
+  (routeTargetAs! m false target)
+
+fn ! routeTargetAs! m: ty/SsaModule check: Bool target: String -> (Result rt/Routed (List ty/IrDiag))
   (if (routes? m)
-    (let [(out (processRun "uname -s -m"))
-          (host (if (= out.exitCode 0) (unameWords out.stdout) (none)))]
-      (match host
-        ((none) (err (list (diag "ERR_LLVM_PARROUTE_HOST" (str "uname -s -m exited " out.exitCode " printing '" out.stdout "' " out.stderr) m.name))))
-        ((some p) (match (rt/routeFactsFor (rt/tripleOf (pairFirst p) (pairSecond p)))
+    (match (rt/targetFacts! target)
+      ((err e) (err (list (diag "ERR_LLVM_PARROUTE_HOST" e m.name))))
+      ((ok found) (match found
                     ((none) (ok (rt/Routed :result m :internal (list))))
-                    ((some facts) (routeModuleAs facts m check))))))
+                    ((some facts) (routeModuleAs facts m check)))))
     (ok (rt/Routed :result m :internal (list))))
 
 fn helperDefinitions -> (List (Pair String String))

@@ -257,9 +257,13 @@ fn stripVersion s: String -> String
   (let [(n (stringLength s))]
     (if (and (> n 0) (stringContains? "0123456789." (optionOr (stringSlice s (- n 1) n) "x"))) (stripVersion (optionOr (stringSlice s 0 (- n 1)) "")) s))
 
+; (:m :ref RV1 :do "a linux triple is keyed by its arch alone, as asl/seed names it (aarch64-linux-gnu and x86_64-pc-linux-gnu become aarch64-unknown-linux-gnu and x86_64-unknown-linux-gnu); others drop their OS version")
 fn seedTriple triple: String -> String
-  (let [(parts (stringSplit (stringTrim triple) "-"))]
-    (stringJoin (listAppend (listTake parts (max 0 (- (listLength parts) 1))) (list (stripVersion (optionOr (listLast parts) "")))) "-"))
+  (let [(parts (stringSplit (stringTrim triple) "-"))
+        (arch (optionOr (listHead parts) ""))]
+    (if (listContains? parts "linux")
+      (str (if (= arch "arm64") "aarch64" arch) "-unknown-linux-gnu")
+      (stringJoin (listAppend (listTake parts (max 0 (- (listLength parts) 1))) (list (stripVersion (optionOr (listLast parts) "")))) "-")))
 
 fn seedRow text: String key: String -> (Option String)
   (listHead (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "(:seed ") (stringContains? l (str ":triple \"" key "\""))))

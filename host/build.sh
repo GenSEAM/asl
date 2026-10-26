@@ -39,7 +39,15 @@ prior_runtime() {
 }
 
 seed_field() { printf '%s' "$1" | sed -E "s/.*:$2 \"([^\"]*)\".*/\1/"; }
-seed_triple() { "$CLANG" -print-target-triple 2>/dev/null | sed -E 's/[0-9.]+$//'; }
+# (:m :why "RV1: the seed dir follows uname -sm, the machine the seed runs on, so a Linux clang printing aarch64-linux-gnu or x86_64-pc-linux-gnu still finds asl/seed/aarch64-unknown-linux-gnu; another host falls back to clang's triple without its OS version")
+seed_triple() {
+  case "$(uname -sm 2>/dev/null)" in
+    "Darwin arm64") echo arm64-apple-darwin ;;
+    "Linux aarch64"|"Linux arm64") echo aarch64-unknown-linux-gnu ;;
+    "Linux x86_64") echo x86_64-unknown-linux-gnu ;;
+    *) "$CLANG" -print-target-triple 2>/dev/null | sed -E 's/[0-9.]+$//' ;;
+  esac
+}
 
 hash_stdin() {
   if command -v sha256sum >/dev/null 2>&1; then
