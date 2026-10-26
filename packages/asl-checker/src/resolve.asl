@@ -1,4 +1,4 @@
-(module asl-checker/resolve :x [FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleDepsIx! loadModuleDepsFrom! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags modSchema builtinSchemaFieldTypes builtinRecordNames builtinFieldNameList resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports unexportedCaseModule letrecDiags isEffectfulBuiltin?] :i [(types :a ty) (ast :a a) (reader :a rd)])
+(module asl-checker/resolve :x [installedModule FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleDepsIx! loadModuleDepsFrom! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags modSchema builtinSchemaFieldTypes builtinRecordNames builtinFieldNameList resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports unexportedCaseModule letrecDiags isEffectfulBuiltin?] :i [(types :a ty) (ast :a a) (reader :a rd)])
 
 (schema FunSummary (:f name String) (:f params (List (pair String String))) (:f ret String) (:f typevars (List String)) (:f hasDoc Bool) (:f effect Bool) (:f calls (List String)) (:f witness String))
 
@@ -438,6 +438,41 @@ fn ! resolveIndexed! imp: String first: String rest: String qualified: Bool pkg:
           (let [(r2 (settled ix (depCands! ix pkg imp)))]
             (if (not (isMissing? r2)) r2 (resolveDeclared! imp qualified pkg outer ix)))))))
 
+fn installedSegmentsOk? rest: String -> Bool
+  (and (not (stringEmpty? rest))
+       (and (not (stringStartsWith? rest "/"))
+            (listAll? (fn [(s String)] -> Bool (and (not (stringEmpty? s)) (and (not (= s ".")) (not (= s ".."))))) (stringSplit rest "/"))))
+
+fn installedNameOk? name: String -> Bool
+  (and (not (stringEmpty? name))
+       (listAll? (fn [(c String)] -> Bool (let [(n (charCode c))] (or (and (>= n 97) (<= n 122)) (or (and (>= n 48) (<= n 57)) (= n 45))))) (stringChars name)))
+
+; (:m :ref PKG-CLIENT :do "read-only import fallback owned by the checker so asl1 never depends on asl-pack: NAME/REST resolves to ~/.asl/pkgs/NAME/current/src/REST.asl when that file exists and its real path stays under ~/.asl/pkgs; asl-pack writes that tree")
+fn ! installedModule home: String imp: String -> (Option String)
+  (match (stringIndexOf imp "/")
+    ((none) (none))
+    ((some k)
+     (let [(name (optionOr (stringSlice imp 0 k) ""))
+           (rest (optionOr (stringSlice imp (+ k 1) (stringLength imp)) ""))
+           (cand (str home "/.asl/pkgs/" name "/current/src/" rest ".asl"))]
+       (if (not (and (installedNameOk? name) (installedSegmentsOk? rest))) (none)
+         (if (not (fileExists? cand)) (none)
+           (match (realPath cand)
+             ((err _) (none))
+             ((ok real)
+              (match (realPath (str home "/.asl/pkgs"))
+                ((err _) (none))
+                ((ok root) (if (stringStartsWith? real (str root "/")) (some real) (none)))))))))))
+
+; (:m :ref PKG-CLIENT :do "a qualified import no workspace package satisfied falls back to ~/.asl/pkgs/NAME/current/src unless NAME is a workspace package (read-only; the installed reader above), so packages installed by asl pkg are importable")
+fn ! installedFallback! r: Resolution imp: String -> Resolution
+  (if (not (isMissing? r)) r
+    (let [(first (optionOr (listHead (stringSplit imp "/")) ""))]
+      (if (listAny? (fn [(k IdxPkg)] -> Bool (pkgNamed? k first)) r.index.pkgs) r
+        (match (installedModule (resultOr (getHomeDir) "") imp)
+          ((some p) (Resolution :status (resOk) :path p :note "" :index r.index))
+          ((none) r)))))
+
 fn ! resolveNamed! imp: String nearest: String outer: String pkg: String ix0: ModIndex -> Resolution
   (let [(slash (stringIndexOf imp "/"))
         (qualified (some? slash))
@@ -453,7 +488,7 @@ fn ! resolveNamed! imp: String nearest: String outer: String pkg: String ix0: Mo
           (match (withinRoot! direct outer) ((some real) (Resolution :status (resOk) :path real :note "" :index ix)) ((none) (missingRes " names a path that leaves the workspace root" ix)))
           (match (okIfWithin! (str outer "/" first "/src/" rest ".asl") outer ix)
             ((some r) r)
-            ((none) (resolveIndexed! imp first rest qualified pkg outer ix))))))
+            ((none) (installedFallback! (resolveIndexed! imp first rest qualified pkg outer ix) imp))))))
       (else (resolveIndexed! imp first rest qualified pkg outer ix))))
 
 fn importPathMax -> Int64

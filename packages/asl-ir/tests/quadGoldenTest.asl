@@ -18,8 +18,9 @@ fn entries -> (List String)
 ; (:m :ref TABLECONST :do "repinned: genericAlias, genericConcrete and builtinEntry became cond chains, and checkSemanticTest links asl-checker/types; measured by this file own goldenDigests printer")
 ; (:m :ref WAVE5B :do "checkSemanticTest linked IR repinned on the merged tree: BUGFIX2 preludeTrap body is (trap ERR_TYPE message) instead of a zero-arm match, +21 bytes over the main 8a5b9e87e pin; measured by this file own goldenDigests printer")
 ; (:m :ref PRELUDEKEY-MERGE :do "checkSemanticTest linked IR repinned on merge main a6a027618 into sh/PRELUDEKEY; measured by this file own goldenDigests printer")
+; (:m :ref PKG-CLIENT-FIX2 :do "checkSemanticTest linked IR repinned: asl-checker/resolve gained the installed-package import fallback (installedModule, installedFallback!, two helpers; +8080 bytes); measured by this file own goldenDigests printer")
 fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "6148029800064510074:4973972")
+  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "-3815503726640431507:4982053")
         (pair "lowerSourceWith" "6806003338108627551:8856"))
 
 fn diagLine d: ty/IrDiag -> String

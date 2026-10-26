@@ -9,6 +9,9 @@
    "aslPack/installer"
    "aslPack/intermediatePolicy"
    "aslPack/pack"
+   "aslPack/pkgCli"
+   "aslPack/pkgIndex"
+   "aslPack/pkgStore"
    "aslPack/platform"
    "aslPack/release"
    "aslPack/runtime"
@@ -18,4 +21,4 @@
    "aslPack/targets/previewServer"
    "aslPack/targets/swift"
  ]
- :dependencies ["asl-transpile" "asl-proc"])
+ :dependencies ["asl-transpile" "asl-proc" "asl-parser"])
