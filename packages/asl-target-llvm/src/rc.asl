@@ -3042,6 +3042,39 @@ fn finishChunks hashed: String stats: Bool rooted: Bool active: Bool -> Finished
               :cons (listAny? (fn [(p Piece)] -> Bool p.cons) pieces)
               :sized (listAny? (fn [(p Piece)] -> Bool p.sized) pieces)))
 
+; (:m :ref QW-ALLOC :do "the one-byte string table: strrt.single, called where a slice has length 1, returns one of 256 static cells whose count is stuck (255) and class is unpooled (255), so dup, drop, claim and pin leave it alone and no allocation happens; under untraced RC the generic definition, which allocates a cell, is renamed and the table version takes its name. The replace is anchored to a line start, which a string constant never has (its newlines are escaped), so a user literal holding the define line is untouched. The head is built from two parts so this compiler's own constants never match the rename when it compiles itself")
+fn oneCharHead -> String
+  (str "define internal ptr @strrt." "single(ptr %src) {")
+
+fn oneCharGenericHead -> String
+  (str "define internal ptr @strrt." "singleGeneric(ptr %src) {")
+
+fn hexDigit d: Int64 -> String
+  (optionOr (stringSlice "0123456789ABCDEF" d (+ d 1)) "0")
+
+fn hexByte b: Int64 -> String
+  (str "\\" (hexDigit (/ b 16)) (hexDigit (mod b 16)))
+
+; (:m :ref QW-ALLOC :do "the table is one byte-string constant of 256 cells of 24 bytes, little-endian: header word 0xFFFF000000000012 (class 255, count 255, type string, size 18), length 1, then the byte and a zero; one trailing token keeps irSplit's extern declaration of an internal global, which drops the last word of the initializer, valid")
+fn oneCharCell b: Int64 -> String
+  (str "\\12\\00\\00\\00\\00\\00\\FF\\FF\\01\\00\\00\\00\\00\\00\\00\\00" (hexByte b) "\\00\\00\\00\\00\\00\\00\\00")
+
+fn oneCharText -> String
+  (lines (list (str "@strrt.one = internal global [6144 x i8] c\"" (stringJoin (map oneCharCell (range 0 256)) "") "\", align 16")
+               (oneCharHead)
+               "entry:"
+               "  %b = load i8, ptr %src"
+               "  %i = zext i8 %b to i64"
+               "  %off = mul i64 %i, 24"
+               "  %p = getelementptr inbounds i8, ptr @strrt.one, i64 %off"
+               "  ret ptr %p"
+               "}"))
+
+fn oneCharSplice text: String notrace: Bool -> String
+  (if (and notrace (stringContains? text (str "\n" (oneCharHead))))
+    (str (stringReplace text (str "\n" (oneCharHead)) (str "\n" (oneCharGenericHead))) "\n" (oneCharText) "\n")
+    text)
+
 fn rcFinishText text: String asan: Bool -> String
   (rcFinishTextWith text asan false)
 
@@ -3081,7 +3114,7 @@ fn rcFinishTextCounted text: String asan: Bool notrace: Bool counted: Bool -> St
         (appended (if relink (stringReplace arenaed (appendCallText) (appendOwnedCall)) arenaed))
         (reversing (and notrace (and (stringContains? appended (reverseCallText)) (stringContains? appended (reverseOntoCallText)))))
         (undeclared (if reversing (stringReplace appended (reverseCallText) (reverseOwnedCall)) appended))
-        (hashed (treapRt/treapSplice (hashRt/hashSplice undeclared notrace) (and notrace (not uses))))
+        (hashed (oneCharSplice (treapRt/treapSplice (hashRt/hashSplice undeclared notrace) (and notrace (not uses))) notrace))
         (fin (finishChunks hashed (or asan counted) rooted active))
         (large (filter (fn [(c Int64)] -> Bool (>= c (smallClasses))) fin.classes))
         (small (filter (fn [(c Int64)] -> Bool (< c (smallClasses))) fin.classes))

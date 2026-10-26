@@ -282,7 +282,7 @@ bb.done:
 
 define internal %Val @listrt.cell(%Val %car, %Val %cdr) {
 entry:
-  %obj = call ptr @asl_alloc(i32 1, i64 40)
+  %obj = call ptr @gcAsl.allocFastCons(i32 1, i64 40)
   %carp = getelementptr inbounds i8, ptr %obj, i64 8
   store %Val %car, ptr %carp
   %cdrp = getelementptr inbounds i8, ptr %obj, i64 24
@@ -1290,9 +1290,81 @@ slow:
   %r = tail call ptr @asl_alloc_raw(i32 %t, i64 %n)
   ret ptr %r
 }
+define linkonce_odr hidden ptr @gcAsl.allocFastCons(i32 %t, i64 %n) alwaysinline {
+entry:
+  %s = load ptr, ptr @asl_gc_state_ptr
+  %unpublished = icmp eq ptr %s, null
+  br i1 %unpublished, label %slow, label %ready
+ready:
+  %al = load i64, ptr %s
+  %thp = getelementptr inbounds i8, ptr %s, i64 8
+  %th = load i64, ptr %thp
+  %stp = getelementptr inbounds i8, ptr %s, i64 40
+  %stress = load i64, ptr %stp
+  %over = icmp ult i64 %th, %al
+  %stressed = icmp ne i64 %stress, 0
+  %need = or i1 %over, %stressed
+  br i1 %need, label %slow, label %pool
+pool:
+  %fpp = getelementptr inbounds i8, ptr %s, i64 592
+  %fp = load i64, ptr %fpp
+  %hasFree = icmp ne i64 %fp, 0
+  br i1 %hasFree, label %slow, label %active
+active:
+  %app = getelementptr inbounds i8, ptr %s, i64 600
+  %ap = load ptr, ptr %app
+  %noActive = icmp eq ptr %ap, null
+  br i1 %noActive, label %slow, label %room
+room:
+  %bip = getelementptr inbounds i8, ptr %ap, i64 56
+  %bi = load i64, ptr %bip
+  %cntp = getelementptr inbounds i8, ptr %ap, i64 32
+  %cnt = load i64, ptr %cntp
+  %fits = icmp slt i64 %bi, %cnt
+  br i1 %fits, label %bump, label %slow
+bump:
+  %bi1 = add i64 %bi, 1
+  store i64 %bi1, ptr %bip
+  %word = lshr i64 %bi, 6
+  %wo = shl i64 %word, 3
+  %wb = getelementptr inbounds i8, ptr %ap, i64 72
+  %wat = getelementptr inbounds i8, ptr %wb, i64 %wo
+  %bitn = and i64 %bi, 63
+  %bit = shl i64 1, %bitn
+  %wv = load i64, ptr %wat
+  %wv1 = or i64 %wv, %bit
+  store i64 %wv1, ptr %wat
+  %acp = getelementptr inbounds i8, ptr %ap, i64 40
+  %ac = load i64, ptr %acp
+  %ac1 = add i64 %ac, 1
+  store i64 %ac1, ptr %acp
+  %off = mul i64 %bi, 40
+  %first = getelementptr inbounds i8, ptr %ap, i64 %off
+  %o = getelementptr inbounds i8, ptr %first, i64 512
+  %t64 = sext i32 %t to i64
+  %ty = shl i64 %t64, 32
+  %h1 = or i64 %n, %ty
+  %h = or i64 %h1, 216172782113783808
+  store i64 %h, ptr %o
+  %al1 = add i64 %al, %n
+  store i64 %al1, ptr %s
+  %oap = getelementptr inbounds i8, ptr %s, i64 72
+  %oa = load i64, ptr %oap
+  %oa1 = add i64 %oa, 1
+  store i64 %oa1, ptr %oap
+  %bap = getelementptr inbounds i8, ptr %s, i64 88
+  %ba = load i64, ptr %bap
+  %ba1 = add i64 %ba, %n
+  store i64 %ba1, ptr %bap
+  ret ptr %o
+slow:
+  %r = tail call ptr @asl_alloc_cons()
+  ret ptr %r
+}
 declare %Val @net$2Ffetch(%Val, %Val)
 declare ptr @asl_alloc(i32, i64)
 declare ptr @asl_alloc_raw(i32, i64)
+declare ptr @asl_alloc_cons()
 declare void @asl_rt_global_root(ptr)
 declare {i64, i1} @llvm.sadd.with.overflow.i64(i64, i64)
 declare ptr @malloc(i64)
