@@ -703,8 +703,21 @@ fn isNotModulePosForm? p: PosForm -> Bool
 fn modsExported mods: (List PosForm) -> (List String)
   (match (listHead mods) ((some m) (moduleExported m.expr)) ((none) (list)))
 
+fn scriptEntries decls: (List TopForm) -> (List String)
+  (let [(names (fold (fn [acc t] (match t ((topDefun d) (if (or (= d.name "main") (= d.name "runTests")) (cons d.name acc) acc)) (_ acc))) (list) decls))]
+    (listReverse names))
+
+; (:m :ref IMPLICIT-MODULE :do "a source with no module header that defines main or runTests is a script module: the parser synthesises its header with an empty path (the loader names it from its file), no imports and those entries exported; a headerless source without an entry stays a bare fragment")
+fn scriptModule rest: (List KidForm) decls: (List TopForm) -> (Result (List TopForm) ParseError)
+  (let [(entries (scriptEntries decls))]
+    (if (listEmpty? entries)
+      (ok decls)
+      (match (declForms rest entries)
+        ((err e) (err e))
+        ((ok exportedDecls) (ok (cons (topModule (ModuleNode :path "" :docstring "" :exported entries :imports (list) :defs exportedDecls)) exportedDecls))))))
+
 fn buildModuleDecls mods: (List PosForm) rest: (List KidForm) path: String -> (Result (List TopForm) ParseError)
-  (let [(exported (modsExported mods))] (match (declForms rest exported) ((err e) (err e)) ((ok decls) (match (listHead mods) ((some m) (ok (cons (topModule (moduleNode m.expr path decls)) decls))) ((none) (ok decls))))))
+  (let [(exported (modsExported mods))] (match (declForms rest exported) ((err e) (err e)) ((ok decls) (match (listHead mods) ((some m) (ok (cons (topModule (moduleNode m.expr path decls)) decls))) ((none) (scriptModule rest decls))))))
 
 fn buildModule forms: (List KidForm) -> (Result (List TopForm) ParseError)
   (let [(mods (filter isModulePosForm? (map (fn [(k KidForm)] -> PosForm k.pf) forms))) (rest (filter (fn [(k KidForm)] -> Bool (isNotModulePosForm? k.pf)) forms))] (match (modulePath mods) ((err e) (err e)) ((ok path) (buildModuleDecls mods rest path))))
@@ -1187,6 +1200,16 @@ fn typeNodeVect node: rd/SExpr -> rd/SExpr
 fn typeNodeText node: rd/SExpr -> String
   (resolveTypeText (rd/renderSexpr (typeNodeVect node)))
 
+; (:m :ref MAIN-SUGAR :do "fn main with no -> is a Unit main: it is effectful, returns (Result Unit String), and its last statement is passed to preludeMainDone, which takes Unit and returns (ok ()), so a Result it ends on is a type error at that statement, never dropped; the statement count and positions stay; with no parameters it still binds args, the argument list")
+fn mainParams sugar: Bool params: (List Param) -> (List Param)
+  (if (and sugar (listEmpty? params)) (list (Param :name "args" :type "(List String)")) params)
+
+fn mainBody sugar: Bool body: (List rd/SExpr) -> (List rd/SExpr)
+  (if (or (not sugar) (listEmpty? body))
+    body
+    (let [(n (listLength body))]
+      (listAppend (listTake body (- n 1)) (list (rd/makeList (list (rd/makeAtom "preludeMainDone") (optionOr (listGet body (- n 1)) (rd/makeAtom "()"))))))))
+
 fn funRetType rslot: (Option rd/SExpr) -> String
   (match rslot ((some node) (typeNodeText node)) ((none) ""))
 
@@ -1247,6 +1270,7 @@ fn funNode s: rd/SExpr exported: (Map String Bool) pf: PosForm kids: (List (Pair
         (hasInline (and (listEmpty? rawBody) (isInlineBodyCandidate? rawRetNode)))
         (ret (if hasInline (funRetType (listHead (sexprItems rawRetNode))) (funRetType rawRetSlot)))
         (body (if hasInline (tailExprs (sexprItems rawRetNode)) rawBody))
+        (mainSugar (and (= name "main") (= ret ":inferredUnit")))
         (bPos (if hasInline
                 (map (fn [(_ rd/SExpr)] -> PosForm (with pf :expr _)) body)
                 (docBodyPos tail (padFront kids (listLength tail) (pair pf.line pf.col)))))]
@@ -1256,7 +1280,7 @@ fn funNode s: rd/SExpr exported: (Map String Bool) pf: PosForm kids: (List (Pair
       ((not (= arrow "->")) (err (perr "defun return type must be introduced by ->" pf)))
       ((stringEmpty? ret) (err (perr "defun has no return type" pf)))
       ((listEmpty? body) (err (perr "defun has no body" pf)))
-      (else (ok (topDefun (DefunNode :name name :typeVars (list) :isExported (mapHas? exported name) :effect eff :params params :retType ret :docstring doc :body body :bodyPos bPos))))))
+      (else (ok (topDefun (DefunNode :name name :typeVars (list) :isExported (mapHas? exported name) :effect (or eff mainSugar) :params (mainParams mainSugar params) :retType (if mainSugar "(Result Unit String)" ret) :docstring doc :body (mainBody mainSugar body) :bodyPos bPos))))))
 
 fn vectItems v: rd/SExpr -> (List rd/SExpr)
   (let [(items (sexprItems v))] (if (and (rd/isList? v) (match (listHead items) ((some h) (and (rd/isAtom? h) (= (rd/sexprHead h) "list"))) ((none) false))) (tailExprs items) items))

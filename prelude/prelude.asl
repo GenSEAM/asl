@@ -477,6 +477,18 @@ fn stringToInt64 s: String -> (Option Int64)
                 (else (some (- v)))))
             (none none))))))
 
+; (:m :ref MAIN-SUGAR :do "a script reads its arguments by position with a fallback, the common prefix of every bench and tool main; the first one goes through listHead and no string literal is pooled, so a program's allocation counts stay those of the spelled-out idiom")
+fn argInt args: (List String) i: Int64 fallback: Int64 -> Int64
+  (if (= i 0)
+    (match (listHead args) ((some s) (optionOr (stringToInt64 s) fallback)) (none fallback))
+    (match (listGet args i) ((some s) (optionOr (stringToInt64 s) fallback)) (none fallback)))
+
+fn argStr args: (List String) i: Int64 fallback: String -> String
+  (if (= i 0) (optionOr (listHead args) fallback) (optionOr (listGet args i) fallback))
+
+fn preludeMainDone u: Unit -> (Result Unit String)
+  (ok u)
+
 fn preludeRankPow5 t: Int64 -> Int64
   (let [t2 (mod (* t t) 2147483647)
         t4 (mod (* t2 t2) 2147483647)]

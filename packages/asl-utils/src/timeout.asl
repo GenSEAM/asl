@@ -137,12 +137,21 @@ fn ! drainFd! fd: Int64 isOpen: Bool dest: Int64 -> Bool
   (writeAll! dest (readRest! fd isOpen ""))
 
 
+; (:m :ref TIMEOUT-WRAPPER-ORPHAN :do "O_NONBLOCK lives on the open file description, so a sibling shim on the same stdin clears it when it exits; read fd 0 only when poll says it is readable, re-marking it non-blocking first, so a read never blocks after the child is gone")
+fn ! stdinChunk! -> (Pair Bool String)
+  (match (fdPoll (list (pair 0 1)) 0)
+    ((ok ready) (if (listEmpty? ready)
+                  (pair true "")
+                  (let [(_ (fdNonBlocking 0 true))]
+                    (match (fdRead 0 65536)
+                      ((ok chunk) (if (stringEmpty? chunk) (pair false "") (pair true chunk)))
+                      ((err _) (pair true ""))))))
+    ((err _) (pair true "")))
+
 ; (:m :ref PROCSHIM :do "stdin of the shim into the child: one chunk at a time, closed at EOF, dropped if the child closes it")
 fn ! feed! r: Run -> Run
   (let [(src (if (and r.srcOpen (and r.inOpen (stringEmpty? r.pending)))
-               (match (fdRead 0 65536)
-                 ((ok chunk) (if (stringEmpty? chunk) (pair false "") (pair true chunk)))
-                 ((err _) (pair true "")))
+               (stdinChunk!)
                (pair (and r.srcOpen r.inOpen) "")))
         (pending (str r.pending (pairSecond src)))
         (wrote (if (and r.inOpen (not (stringEmpty? pending)))

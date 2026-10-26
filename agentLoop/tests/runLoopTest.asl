@@ -153,6 +153,7 @@ fn finalState base: s/LoopState f: Final -> s/LoopState
     :patchErr base.patchErr
     :placeholderBriefs base.placeholderBriefs
     :prefetch base.prefetch
+    :baselineGreen base.baselineGreen
     :priorIds base.priorIds
     :resumePatchPath base.resumePatchPath
     :retries f.retries
@@ -509,6 +510,10 @@ fn ! runTests -> Bool
         prefetchSetup (rl/setup! prefetchEnv)
         prefetchState (match prefetchSetup ((rl/ready run) run.state) ((rl/early _) (rl/stateFor prefetchEnv)))
         noOwnsEnv (makeEnv "loopRun21" "prefetch wiring test no owns" tmp (str tmp "/loopRunTest-prefetch-none.asn") 4 none (list) none)
+        baselineEnv (makeEnv "loopRun25" "baseline wiring test" tmp (str tmp "/loopRunTest-baseline.asn") 4 none (list "true" "false" "exit 0") none)
+        baselineSetup (rl/setup! baselineEnv)
+        baselineState (match baselineSetup ((rl/ready run) run.state) ((rl/early _) (rl/stateFor baselineEnv)))
+        turnOneState (fn [st] (rl/withHeadState st 1 0 false none (list) (mapEmpty) "ok" none none 0.0))
         noOwnsSetup (rl/setup! noOwnsEnv)
         noOwnsState (match noOwnsSetup ((rl/ready run) run.state) ((rl/early _) (rl/stateFor noOwnsEnv)))
         retainRoot (str tmp "/retain")
@@ -667,6 +672,10 @@ fn ! runTests -> Bool
                                "\n(:prefetch (:file \"prefetch.txt\" :lines (1 1) :content \"hello prefetch\\n\"))"))
                       "turn 1's state carries the prefetched block for a task with :owns")
                     (assert (= noOwnsState.prefetch "") "a task with no :owns carries no prefetch block in turn 1's state")
+                    (assert (= (rl/firstTurnPrefetch (turnOneState prefetchState)) prefetchState.prefetch) "LEON-CAPS: the first turn is sent the prefetch block")
+                    (assert (= (rl/firstTurnPrefetch (rl/withHeadState prefetchState 2 0 false none (list) (mapEmpty) "ok" none none 0.0)) "") "LEON-CAPS: a later turn is not sent the prefetch block again")
+                    (assert (= baselineState.baselineGreen (list "true" "exit 0")) "LEON-CAPS: setup runs the gates once and records the ones already green")
+                    (assert (= noOwnsState.baselineGreen (list)) "LEON-CAPS: a task with no gates records no baseline")
                     (assert (>= (optionOr deepseekFallbackState.contextTokens 0) 120000) "LEON-CONTEXT-WINDOW: a deepseek model with no explicit contextTokens falls back above the 8000 floor")
                     (assert (>= (optionOr minimaxFallbackState.contextTokens 0) 120000) "LEON-CONTEXT-WINDOW: a minimax model with no explicit contextTokens falls back above the 8000 floor")
                     (assert (= deepseekExplicitState.contextTokens (some 50000)) "LEON-CONTEXT-WINDOW: an explicit contextTokens wins over the deepseek family default")

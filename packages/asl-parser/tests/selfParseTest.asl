@@ -7,7 +7,7 @@
 fn closureModules -> (List ClosureModule)
   (list
     (ClosureModule :path "asl/packages/asl-compiler/src/compiler.asl" :expected 21)
-    (ClosureModule :path "asl/packages/asl-parser/src/ast.asl" :expected 264)
+    (ClosureModule :path "asl/packages/asl-parser/src/ast.asl" :expected 268) ; (:m :ref TOKDEFFIX :do "264 -> 268 measured: scriptEntries, scriptModule (IMPLICIT-MODULE), mainParams, mainBody (MAIN-SUGAR)")
     (ClosureModule :path "asl/packages/asl-checker/src/types.asl" :expected 52)
     (ClosureModule :path "asl/packages/asl-checker/src/check.asl" :expected 136) ; (:m :ref LISTSUM :do "135 -> 136: sumHint")
     ; (:m :ref PERF-REALPATH-CACHE :do "279 -> 282: ImporterCtx, importerCtx! and loadModuleDepsIx! added")

@@ -97,7 +97,8 @@
   (:f execSec (Option Float64))
   (:f usage (Option Usage))
   (:f batching (Option Batching))
-  (:f plan (Option pl/PlanSummary)))
+  (:f plan (Option pl/PlanSummary))
+  (:f vacuousGates (List String)))
 
 (schema MainResult
   (:f stdout String)
@@ -885,6 +886,7 @@ fn formatReceipt r: LoopResult -> String
                   " :opTurns " (stringFromInt64 b.turns) ")")))
          ((none) ""))
        (match r.plan ((some p) (pl/planField p)) ((none) ""))
+       (if (listEmpty? r.vacuousGates) "" (str " :vacuousGates (" (stringJoin (map (fn [g] (str "\"" (c/escapeAsn g) "\"")) r.vacuousGates) " ") ")"))
        ")")
 
 
@@ -1190,8 +1192,8 @@ fn ! appendRetryLines! path: String turn: Int64 retries: Int64 -> Bool
       (fileAppend path (str "(:retry :turn " (stringFromInt64 turn) " :attempt " (stringFromInt64 retries) ")\n"))
       (appendRetryLines! path turn (- retries 1))))
 
-fn ! liveProviderRetry! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) wallBudget: (Option Int64) sleep: (fn [Int64] -> Bool) -> (Pair pv/Turn Int64)
-  (rt/retryTurn! provider call 3 (list 1 2 4) wallBudget sleep)
+fn ! liveProviderRetry! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) wallBudget: (Option Int64) sleep: (fn [Int64] -> Bool) now: (fn [] -> Float64) -> (Pair pv/Turn Int64)
+  (rt/retryTurn! provider call 3 (list 1 2 4) wallBudget sleep now)
 
 fn liveWriteStatus out: ex/ExecOut -> Bool
   (match (ex/recGet out.rec "status")
@@ -1367,17 +1369,22 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
             (stringFromInt64 (ctx/noWriteTurns)) " without a write. Write now to "
             (c/joinSep ra.owns ", ") " -- stop re-reading and make the edit.")
           "")
-        user (str "Task: " ra.task (if (stringEmpty? transcript) "" (str "\n\n" transcript))
+        prefetched (rl/firstTurnPrefetch state)
+        user (str "Task: " ra.task (if (stringEmpty? prefetched) "" (str "\n\n" prefetched)) (if (stringEmpty? transcript) "" (str "\n\n" transcript))
           (if (stringEmpty? advisorText) "" (str "\n\nAdvisor: " advisorText))
           (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." "")
           writeNudge)
-        turnOwnSent (str "Task: " ra.task
+        turnOwnSent (str "Task: " ra.task (if (stringEmpty? prefetched) "" (str "\n\n" prefetched))
           (if (stringEmpty? advisorText) "" (str "\n\nAdvisor: " advisorText))
           (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." "")
           writeNudge)
         _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :sent \"" (c/escapeAsn user) "\")\n"))
         retried (liveProviderRetry! wrapped.provider
-          (fn [p attempt] (providerCall p system user)) env.wallBudget env.sleep)
+          (fn [p attempt] (providerCall p system user))
+          (match env.wallBudget
+            ((some w) (some (max 0 (- w (optionOr (float64ToInt64 (- (env.now) state.runStarted)) 0)))))
+            ((none) none))
+          env.sleep env.now)
         _retryLogged (appendRetryLines! path turn (pairSecond retried))
         response (pairFirst retried)
         _usageLogged (match (providerUsageLine response.meta)
@@ -1386,6 +1393,8 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
       ((err e)
         (do
           (fileAppend path (str "(:turn " (stringFromInt64 turn) " :error :" (pv/errorCode e) " :message \"" (c/escapeAsn (pv/errorMessage e)) "\")\n"))
+          (fileAppend path (str "(:err :turn " (stringFromInt64 turn) " :class :" (rt/errorClass (pv/errorCode e) (pv/errorMessage e))
+            " :code :" (pv/errorCode e) " :retries " (stringFromInt64 (pairSecond retried)) " :message \"" (c/escapeAsn (pv/errorMessage e)) "\")\n"))
           (let [nextState (rl/withHeadState state turn state.readStreak state.writesPersisted none
                     state.allGateResults state.lastGates "failed" none none state.runStarted)
                 nextRun (rl/withState run nextState)]
@@ -1527,7 +1536,7 @@ fn loopResultOf ra: RunArgs rootDir: String result: ls/RunResult usage: (Option 
     :parseDefect result.parseDefect :parseDefectTurn result.parseDefectTurn
     :findings (some (map pv/pyStr result.findings)) :queueWaitSec result.queueWaitSec
     :execSec result.execSec :usage (match (liveUsage result.usage) ((some u) (some u)) ((none) usage))
-    :batching batching :plan (livePlan result.planSummary)))
+    :batching batching :plan (livePlan result.planSummary) :vacuousGates result.vacuousGates))
 
 fn ! executeLive ra: RunArgs repoRoot: String rootDir: String env: pv/ProviderEnv -> MainResult
   (match (pv/makeProvider! ra.backend "auto" rootDir ra.model ra.timeout "" ra.queueTimeout ra.timeoutSet env (optionOr ra.intent "auto"))

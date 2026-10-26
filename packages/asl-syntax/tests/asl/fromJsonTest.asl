@@ -194,6 +194,10 @@ fn testDeclarationsRoundtrip! -> Bool
             (assert (topFormsEquivalent? (list dModule dFn dSchema dEnum) (resultOr reparsed (list))) "reparsed module defs equivalent to original"))))
       true))
 
+; (:m :ref TOKDEFFIX :do "a lone fn main printed on its own reparses as a headerless script, whose header the parser synthesises with an empty path; that header is not part of the printed form")
+fn withoutScriptHeader forms: (List a/TopForm) -> (List a/TopForm)
+  (filter (fn [(t a/TopForm)] -> Bool (match t ((a/topModule m) (not (stringEmpty? m.path))) (_ true))) forms)
+
 fn verifySingleTopForm! path: String idx: Int64 tf: a/TopForm -> Bool
   (let [(jVal (fj/topFormToJson tf))
         (vVal (validateTopFormJson! jVal))]
@@ -216,7 +220,7 @@ fn verifySingleTopForm! path: String idx: Int64 tf: a/TopForm -> Bool
                                       ((a/topModule m)
                                        (if (listEmpty? m.defs) (list tf) (cons tf m.defs)))
                                       (_ (list tf))))
-                    (equiv (topFormsEquivalent? expectedForms reparsedForms))]
+                    (equiv (topFormsEquivalent? expectedForms (withoutScriptHeader reparsedForms)))]
                 (do
                   (if (not equiv)
                     (print (str "DIFF in " path " form " (stringFromInt64 idx) ":\n  ORIG: " (rd/renderSexpr (cv/topFormToSexpr tf)) "\n  REPARSED: " (match (listHead reparsedForms) ((some rf) (rd/renderSexpr (cv/topFormToSexpr rf))) ((none) "<empty>")) "\n  ASL:\n" aslText "\n"))

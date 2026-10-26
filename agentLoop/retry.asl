@@ -2,32 +2,89 @@
   :x [buildRetryBrief costForm batchingRates reinforceWhyFor escalationNear nowForm noWriteNudge gateNow
       advisorSummary advisorSkip parseAdvice parseSpecVerdict digestLine evidenceDigest advisorGateOutput advisorOpLine
       makeGateRec makeReceiptRec verdictMet verdictMissing adviceNext adviceWhy adviceAvoid escapeAsn
-      providerRetryPause retryTurn! GateRec ReceiptRec AdviceRec SpecVerdict]
+      providerRetryPause errorTransient errorClass httpStatusIn retryTurn! GateRec ReceiptRec AdviceRec SpecVerdict]
   :i [(asl/agentLoop/context :a ctx) (asl/agentLoop/providers :a pv)])
 
-fn providerRetryPause errorCode: String retryCount: Int64 configured: (List Int64) budgetLeft: (Option Int64) -> Int64
-  (let [transient (listContains? (list "ERR_VENDOR" "ERR_QUEUE_TIMEOUT" "ERR_GATEWAY_OFFLINE") errorCode)
-        slot (min retryCount (listLength configured))
+; (:m :ref LEON-CAPS :do "a transport error is transient (429, 408, 5xx, timeout, connection reset, empty body, gateway or queue trouble) and is retried with backoff under the wall budget, or permanent (4xx, unknown codes) and is surfaced at once; ERR_VENDOR with no status in its message stays transient as before, because the gateway reports unreadable and statusless failures through it")
+fn transientCodes -> (List String)
+  (list "ERR_QUEUE_TIMEOUT" "ERR_GATEWAY_OFFLINE" "ERR_NO_REPLY" "ERR_TIMEOUT")
+
+fn transientMarkers -> (List String)
+  (list "timed out" "timeout" "connection reset" "reset by peer" "empty body" "empty content" "empty reply" "rate limit" "overloaded")
+
+fn transportCodes -> (List String)
+  (list "ERR_VENDOR" "ERR_IO" "ERR_TIMEOUT" "ERR_NO_REPLY" "ERR_QUEUE_TIMEOUT" "ERR_GATEWAY_OFFLINE")
+
+fn statusDigit b: Int64 -> Bool
+  (and (>= b 48) (<= b 57))
+
+fn statusRunEnd bs: Bytes n: Int64 i: Int64 -> Int64
+  (if (and (< i n) (statusDigit (bytesGet bs i))) (statusRunEnd bs n (+ i 1)) i)
+
+fn statusRunValue bs: Bytes i: Int64 end: Int64 acc: Int64 -> Int64
+  (if (>= i end) acc (statusRunValue bs (+ i 1) end (+ (* acc 10) (- (bytesGet bs i) 48))))
+
+; (:m :ref LEON-CAPS :do "the status is read only from the prefix httpError and readResponse build (HTTP error N, Gateway error N); a port or any other number in curl text is never a status")
+fn statusAfter low: String prefix: String -> Int64
+  (match (stringIndexOf low prefix)
+    ((none) 0)
+    ((some k)
+      (let [bs (stringToBytes (slice low (+ k (stringLength prefix)) (stringLength low)))
+            n (bytesLength bs)
+            end (statusRunEnd bs n 0)]
+        (if (= end 3) (statusRunValue bs 0 end 0) 0))))
+
+fn httpStatusIn message: String -> Int64
+  (let [low (stringLower message)
+        first (statusAfter low "http error ")]
+    (if (> first 0) first (statusAfter low "gateway error ")))
+
+fn errorTransient code: String message: String -> Bool
+  (let [status (httpStatusIn message)
+        low (stringLower message)]
+    (cond
+      ((listContains? (transientCodes) code) true)
+      ((not (listContains? (transportCodes) code)) false)
+      ((listAny? (fn [marker] (stringContains? low marker)) (transientMarkers)) true)
+      ((>= status 400) (or (= status 408) (or (= status 429) (>= status 500))))
+      (else (= code "ERR_VENDOR"))))
+
+fn errorClass code: String message: String -> String
+  (if (errorTransient code message) "transient" "permanent")
+
+fn providerRetryPause transient: Bool retryCount: Int64 configured: (List Int64) budgetLeft: (Option Int64) -> Int64
+  (let [slot (min retryCount (listLength configured))
         pause (if (and transient (> slot 0)) (optionOr (listGet configured (- slot 1)) 0) 0)]
     (match budgetLeft ((some left) (max 0 (min pause left))) ((none) pause)))
 
-fn ! retryTurn! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) maxRetries: Int64 configured: (List Int64) budgetLeft: (Option Int64) sleep: (fn [Int64] -> Bool) -> (Pair pv/Turn Int64)
-  (retryTurnLoop! provider call (max 0 maxRetries) configured budgetLeft sleep 0)
+; (:m :ref LEON-CAPS :do "each attempt's own elapsed seconds (rounded up) are charged to the wall budget as well as the pauses, and no retry starts once the budget is spent; the budget the caller passes is what is left now, not the run's total")
+fn chargeSeconds elapsed: Float64 -> Int64
+  (let [whole (optionOr (float64ToInt64 elapsed) 0)]
+    (max 0 (if (> elapsed (int64ToFloat64 whole)) (+ whole 1) whole)))
 
-fn ! retryTurnLoop! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) maxRetries: Int64 configured: (List Int64) budgetLeft: (Option Int64) sleep: (fn [Int64] -> Bool) retries: Int64 -> (Pair pv/Turn Int64)
-  (let [turn (call provider retries)]
+fn budgetOpen left: (Option Int64) -> Bool
+  (match left ((some n) (> n 0)) ((none) true))
+
+fn ! retryTurn! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) maxRetries: Int64 configured: (List Int64) budgetLeft: (Option Int64) sleep: (fn [Int64] -> Bool) now: (fn [] -> Float64) -> (Pair pv/Turn Int64)
+  (retryTurnLoop! provider call (max 0 maxRetries) configured budgetLeft sleep now 0)
+
+fn ! retryTurnLoop! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) maxRetries: Int64 configured: (List Int64) budgetLeft: (Option Int64) sleep: (fn [Int64] -> Bool) now: (fn [] -> Float64) retries: Int64 -> (Pair pv/Turn Int64)
+  (let [started (now)
+        turn (call provider retries)
+        spent (chargeSeconds (- (now) started))
+        afterCall (match budgetLeft ((some n) (some (max 0 (- n spent)))) ((none) none))]
     (match turn.reply
       ((ok _) (pair turn retries))
       ((err error)
-        (let [code (pv/errorCode error)
-              pause (providerRetryPause code (+ retries 1) configured budgetLeft)]
-          (if (and (< retries maxRetries) (listContains? (list "ERR_VENDOR" "ERR_QUEUE_TIMEOUT" "ERR_GATEWAY_OFFLINE") code))
+        (let [transient (errorTransient (pv/errorCode error) (pv/errorMessage error))
+              pause (providerRetryPause transient (+ retries 1) configured afterCall)]
+          (if (and (< retries maxRetries) (and transient (budgetOpen afterCall)))
             (let [waited (if (> pause 0) (sleep pause) true)
-                  left (match budgetLeft ((some n) (some (max 0 (- n pause)))) ((none) none))]
+                  left (match afterCall ((some n) (some (max 0 (- n pause)))) ((none) none))]
               (if waited
-                (retryTurnLoop! turn.provider call maxRetries configured left sleep (+ retries 1))
+                (retryTurnLoop! turn.provider call maxRetries configured left sleep now (+ retries 1))
                 (pair turn retries)))
-            (pair turn retries))))))
+            (pair turn retries)))))) 
 
 enum GateRec
   (gateRec cmd: String exit: (Option Int64) timeout: Bool seconds: (Option Int64) stdout: String stderr: String)

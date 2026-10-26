@@ -227,9 +227,20 @@ workspace resolves inside it (`rest.asl`, `src/rest.asl`, then the declared name
 bare name resolves in the importing package, then in its manifest dependencies. A file with no
 config above it can import nothing (`ERR_UNRESOLVED_IMPORT`).
 
-A file with no `module` header is still a module, and exports nothing. Aliases are module-local.
+A file with no `module` header is still a module. It exports nothing, unless it defines `main` or
+`runTests`: then it is a script module, named from its path, importing only the prelude and exporting
+those entries. Aliases are module-local.
 
-**A module that exports `main` is a program.**
+**A module that exports `main` is a program.** A standalone program is a script, and `fn main` with no
+`->` is the short form: it binds `args`, returns `(ok ())`, and its last line must be `Unit`, so a
+`Result` there is a type error rather than a dropped failure.
+
+```lisp
+fn main
+  (println "hello" (argInt args 0 1))
+```
+
+The full form stays valid:
 
 ```lisp
 (module tools/hello :x [main])
@@ -306,8 +317,8 @@ Visibility comes from the module's `:x` list, not from position.
 ### 4.3 `fn` — lambdas
 
 ```lisp
-(fn [(x Int64)] -> Int64 (* x 2))
 (map (fn [x] (* x 2)) xs)
+(fn [(x Int64)] -> Int64 (* x 2))
 ```
 
 `(fn [<param>*] [-> Type] <body-expr>+)`, where each `<param>` is a name or `(name Type)`. A lambda

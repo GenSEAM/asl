@@ -3,7 +3,7 @@
       budgetLeft stepTimeout nowMono chooseTransport transportField engineSocketPath! gateTimeoutSec
       engineRequest runAslSocket
       nearestLines placeholderAssert? runBounded runAsl
-      execAslOp! execAslOpCustom! serReceipt serValue
+      execAslOp! execAslOpCustom! readOutlineBytes readOutlineBytesIn readOutlineBytesFor! serReceipt serValue
       runExit runStdout runStderr runTimedOut runSeconds runFellBack chooseTransportFor]
   :i [(asl/agentLoop/core :a c)
       (asl/agentLoop/diff :a diff)
@@ -577,6 +577,27 @@ fn ! outlineText filePath: String root: String run: (fn [String String] -> t/Asl
         res (run form root)]
     (parseOutlineItems (aslRunOut res)))
 
+; (:m :ref LEON-CAPS :do "a whole-file read above this many bytes answers with the file's outline and a hint to read by symbol instead of the body; project-tunable as :agentLoop (:readOutlineBytes N) in .asl.config.asn, same key-scan style as the other agentLoop limits")
+fn readOutlineBytes -> Int64
+  16384
+
+fn readOutlineBytesIn text: String -> (Option Int64)
+  (match (stringIndexOf text ":readOutlineBytes")
+    ((none) none)
+    ((some k)
+      (let [tail (stringTrim (c/sliceOf text (+ k (stringLength ":readOutlineBytes")) (stringLength text)))
+            e (runEnd tail (stringLength tail) 0 c/isDigit)]
+        (if (> e 0) (stringToInt64 (c/sliceOf tail 0 e)) none))))
+
+fn ! readOutlineBytesFor! root: String -> Int64
+  (let [cfg (str root "/.asl.config.asn")]
+    (match (fileReadString cfg)
+      ((ok text) (optionOr (readOutlineBytesIn text) (readOutlineBytes)))
+      ((err _) (readOutlineBytes))))
+
+fn oversizeBytesHint size: Int64 limit: Int64 -> String
+  (str "read of " (stringFromInt64 size) " bytes exceeds the " (stringFromInt64 limit) "-byte whole-file limit; this is the file's outline instead -- read a section by :symbol name, or :start n :end m")
+
 fn oversizeWholeHint -> String
   "read exceeded the payload cap; this is the file's outline instead -- read a section by :symbol name, or :start n :end m"
 
@@ -764,8 +785,11 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
               errText (aslRunErr res)
               st (if (= code 0) "ok" "rejected")
               contentRaw (if (= code 0) (findReadContent out) "")
-              oversizeWhole (and wholeFile (and (= code 0) (> (stringLength contentRaw) cap)))
               fullPath (t/normPath (if (stringStartsWith? filePath "/") filePath (str root "/" filePath)))
+              fileBytes (resultOr (fileSize fullPath) 0)
+              outlineLimit (readOutlineBytesFor! root)
+              overBytes (and wholeFile (and (= code 0) (> fileBytes outlineLimit)))
+              oversizeWhole (and wholeFile (and (= code 0) (or overBytes (> (stringLength contentRaw) cap))))
               totalLines (countFileLines fullPath)
               mStart (findIntField out ":start ")
               mMore (findMoreRange out)
@@ -787,7 +811,7 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
               errVal (if (!= code 0) (some (findReadError out "ERR_READ_FAILED")) (none))
               msgVal (cond
                        ((!= code 0) (some (findReadMsg out errText)))
-                       (useOutline (some (oversizeWholeHint)))
+                       (useOutline (some (if overBytes (oversizeBytesHint fileBytes outlineLimit) (oversizeWholeHint))))
                        ((some? widened)
                          (match (optionOr widened (t/widenItem 0 0 "" ""))
                            ((t/widenItem a b nm kd) (some (str "widened to the enclosing " kd " " nm ", lines " (stringFromInt64 a) "-" (stringFromInt64 b))))))

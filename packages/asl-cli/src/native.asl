@@ -227,14 +227,101 @@ fn ! testDataFiles! root: String configText: String -> (List String)
 fn ! indexable? path: String -> Bool
   (or (not (stringEndsWith? path ".asl")) (match (fileLstat path) ((ok st) (not st.isSymlink)) ((err _) true)))
 
-; (:m :ref MAINRED4-FIRSTPARTY-20261025 :do "the staged package root is :root true, so the toolchain first-party packages (asl-json, the stdlib) were unreachable from it; their non-test .asl sources and manifests are mirrored under the same root, as the in-root resolution sees them")
-fn ! firstPartyFiles! root: String -> (List String)
-  (filter (fn [(p String)] -> Bool
-            (let [(rel (dropPrefixLen p (+ (stringLength root) 1)))]
-              (and (or (stringStartsWith? rel "asl/packages/") (stringStartsWith? rel "asl/tools/"))
-                   (and (not (stringContains? rel "/tests/"))
-                        (or (stringEndsWith? rel ".asl") (stringEndsWith? rel "/manifest.asn"))))))
-          (optionOr (gitFiles! root) (fallbackFiles! root)))
+; (:m :ref MAINRED5-CLOSURE-20261026 :do "mirroring every first-party file into each staged root cost 11.8MB per stage (MIRROR-FIRSTPARTY-COST); only the first-party modules reachable from the staged sources through header :i entries, plus the manifests of their packages, are mirrored. The header scan is textual (the region from :i [ to the next ]), a superset of the real imports, never a subset")
+fn ! tokensOf s: String -> (List String)
+  (filter (fn [(t String)] -> Bool (and (not (stringEmpty? t)) (not (stringStartsWith? t ":"))))
+          (stringSplit (stringReplace (stringReplace s "\n" " ") "\t" " ") " "))
+
+fn ! rawTokens s: String -> (List String)
+  (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit (stringReplace (stringReplace s "\n" " ") "\t" " ") " "))
+
+fn ! importNamesIn src: String -> (List String)
+  (match (stringIndexOf src ":i [")
+    ((none) (list))
+    ((some k)
+      (let [(rest (dropPrefixLen src (+ k 4)))
+            (region (match (stringIndexOf rest "]") ((some e) (optionOr (stringSlice rest 0 e) "")) ((none) "")))
+            (pieces (stringSplit region "("))]
+        (listAppend (tokensOf (optionOr (listHead pieces) ""))
+          (fold (fn [(acc (List String)) (p String)] -> (List String)
+                  (let [(sp (stringSplit p ")"))
+                        (first (optionOr (listHead (rawTokens (optionOr (listHead sp) ""))) ""))]
+                    (listAppend (if (stringEmpty? first) acc (listAppend acc (list first))) (tokensOf (optionOr (listGet sp 1) "")))))
+                (list) (optionOr (listTail pieces) (list)))))))
+
+fn ! moduleNameIn src: String -> String
+  (match (stringIndexOf src "(module ")
+    ((none) "")
+    ((some k) (optionOr (listHead (rawTokens (stringReplace (optionOr (stringSlice src (+ k 8) (+ k 200)) (dropPrefixLen src (+ k 8))) ")" " "))) "")))
+
+fn ! keyOf path: String -> String
+  (if (stringEndsWith? path ".asl") (optionOr (stringSlice path 0 (- (stringLength path) 4)) path) path)
+
+fn ! indexFirstParty! root: String files: (List String) -> (Map String String)
+  (fold (fn [(m (Map String String)) (p String)] -> (Map String String)
+          (if (stringEndsWith? p ".asl")
+            (let [(withPath (mapSet m (str "path:" (keyOf p)) p))
+                  (n (moduleNameIn (resultOr (fileReadString p) "")))]
+              (if (stringEmpty? n) withPath (mapSet withPath (str "mod:" n) p)))
+            m))
+        (mapEmpty) files)
+
+fn ! resolveFirstParty idx: (Map String String) root: String dir: String name: String -> (Option String)
+  (if (stringContains? name "/")
+    (match (mapGet idx (str "mod:" name))
+      ((some p) (some p))
+      ((none) (mapGet idx (str "path:" root "/" name))))
+    (let [(parent (ckr/parentDirOf dir))
+          (tries (list (str "path:" dir "/" name) (str "path:" dir "/src/" name) (str "path:" parent "/" name) (str "mod:" name)))]
+      (firstKeyHit idx tries)))
+
+fn ! firstKeyHit idx: (Map String String) xs: (List String) -> (Option String)
+  (match (listHead xs)
+    ((none) (none))
+    ((some x) (match (mapGet idx x) ((some v) (some v)) ((none) (firstKeyHit idx (optionOr (listTail xs) (list)))))))
+
+fn ! closeFirstParty! idx: (Map String String) root: String pending: (List (Pair String String)) seen: (Map String Bool) -> (Map String Bool)
+  (match (listHead pending)
+    ((none) seen)
+    ((some e)
+      (let [(rest (optionOr (listTail pending) (list)))]
+        (match (resolveFirstParty idx root (pairFirst e) (pairSecond e))
+          ((none) (closeFirstParty! idx root rest seen))
+          ((some p)
+            (if (some? (mapGet seen p))
+              (closeFirstParty! idx root rest seen)
+              (let [(names (importNamesIn (resultOr (fileReadString p) "")))
+                    (more (map (fn [(n String)] -> (Pair String String) (pair (ckr/parentDirOf p) n)) names))]
+                (closeFirstParty! idx root (listAppend rest more) (mapSet seen p true)))))))))
+
+fn ! manifestFor root: String path: String all: (Map String Bool) -> (Option String)
+  (let [(dir (ckr/parentDirOf path))
+        (m (str dir "/manifest.asn"))]
+    (cond
+      ((some? (mapGet all m)) (some m))
+      ((or (<= (stringLength dir) (stringLength root)) (= dir "/")) (none))
+      (else (manifestFor root dir all)))) 
+
+fn ! firstPartyFiles! root: String staged: (List String) -> (List String)
+  (let [(all (filter (fn [(p String)] -> Bool
+                       (let [(rel (dropPrefixLen p (+ (stringLength root) 1)))]
+                         (and (or (stringStartsWith? rel "asl/packages/") (stringStartsWith? rel "asl/tools/"))
+                              (and (not (stringContains? rel "/tests/"))
+                                   (or (stringEndsWith? rel ".asl") (stringEndsWith? rel "/manifest.asn"))))))
+                     (optionOr (gitFiles! root) (fallbackFiles! root))))
+        (idx (indexFirstParty! root all))
+        (present (fold (fn [(m (Map String Bool)) (p String)] -> (Map String Bool) (mapSet m p true)) (mapEmpty) all))
+        (initial (fold (fn [(acc (List (Pair String String))) (f String)] -> (List (Pair String String))
+                         (if (stringEndsWith? f ".asl")
+                           (listAppend acc (map (fn [(n String)] -> (Pair String String) (pair (ckr/parentDirOf f) n)) (importNamesIn (resultOr (fileReadString f) ""))))
+                           acc))
+                       (list) staged))
+        (seen (closeFirstParty! idx root initial (mapEmpty)))
+        (mods (mapKeys seen))
+        (manifests (fold (fn [(acc (List String)) (p String)] -> (List String)
+                           (match (manifestFor root p present) ((some m) (if (listAny? (fn [(x String)] -> Bool (= x m)) acc) acc (cons m acc))) ((none) acc)))
+                         (list) mods))]
+    (listAppend mods manifests))
 
 ; (:m :ref NATIVETEST-MIRRORASL-20261023 :do "the package is mirrored twice: flat under the digest directory, the working directory of its suite, so files read relative to the package root open, and again under <digest>/<workspace>/, the indexed root with the synthesized :root true config and the suite, so a file read by a workspace-qualified path (vtbot/asl/x.asl read as text, vtbot/asl/tests/fixtures/x.parquet) opens too; only the second copy sits under the config, so no module is indexed twice")
 fn ! stagePackageMirror! ctx: sys/Context root: String -> (Result String String)
@@ -253,7 +340,7 @@ fn ! stagePackageMirror! ctx: sys/Context root: String -> (Result String String)
             (match (mirrorFiles! root pkgDir files)
               ((err e) (err e))
               ((ok _)
-                (match (mirrorFiles! ctx.root pkgDir (firstPartyFiles! ctx.root))
+                (match (mirrorFiles! ctx.root pkgDir (firstPartyFiles! ctx.root files))
                   ((err e) (err e))
                   ((ok _)
                     (match (writeMirrorConfig! root pkgDir)

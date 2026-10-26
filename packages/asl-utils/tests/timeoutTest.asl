@@ -100,6 +100,16 @@ fn ! testStdin -> Bool
         (assert (= r.exitCode 0) (str "cat exits 0 once stdin closes: " r.exitCode))
         true))
 
+; (:m :ref TIMEOUT-WRAPPER-ORPHAN :do "two shims read one stdin pipe that stays open; the first exits after 1 s and clears O_NONBLOCK on the shared description, the second must still exit with its 3 s child instead of blocking in read until its own timeout")
+fn ! testSharedStdin -> Bool
+  (let [(r (cliSh! "sleep 30.7314 | { \"$0\" timeout 20 -- sleep 1 <&0 & a=$!; s=$(date +%s); \"$0\" timeout 20 -- sleep 3; echo \"$? $(( $(date +%s) - s ))\"; pkill -f 'sleep 30.7314'; wait $a; }" "/bin/bash"))
+        (_ (killMarker! "sleep 30.7314"))
+        (words (stringSplit (stringTrim r.stdout) " "))
+        (secs (optionOr (stringToInt64 (optionOr (listGet words 1) "")) 99))]
+    (do (assert (= (optionOr (listHead words) "") "0") (str "the second shim exits 0 with its child: " r.stdout " " r.stderr))
+        (assert (< secs 15) (str "it exits when its child exits, not at its 20 s timeout: " secs " s"))
+        true))
+
 fn ! testDrain -> Bool
   (let [(r (shim! "10" (list "/bin/sh" "-c" "head -c 60000 /dev/zero | tr '\\0' a")))]
     (do (assert (= (stringLength r.stdout) 60000) (str "everything a fast-exiting child wrote is forwarded: " (stringLength r.stdout)))
@@ -149,6 +159,7 @@ fn ! runTests -> Bool
       (assert (testRespawner) "a respawning tree is stopped by STOP then KILL rounds")
       (assert (testBrokenPipe) "a closed reader ends the shim with 141 and kills the tree")
       (assert (testStdin) "stdin is pumped to the child and closed at EOF")
+      (assert (testSharedStdin) "a shim exits with its child when a sibling shim on the same stdin cleared O_NONBLOCK")
       (assert (testDrain) "output written just before exit is not lost")
       (assert (testDrainDirect) "draining a pipe after its writer exited delivers every byte")
       (assert (testSpawnFailure) "an unstartable command exits 127")

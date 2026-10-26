@@ -40,7 +40,7 @@ schema LoopState
   (:f code String) (:f commitRequested Bool) (:f declaredOps (List String)) (:f fetched j/Json)
   (:f header String) (:f history (List j/Json)) (:f lastGates (Map String j/Json))
   (:f missingGateIntro (List String)) (:f patchErr (Option String))
-  (:f placeholderBriefs (Map String Int64)) (:f prefetch String) (:f priorIds (List String))
+  (:f placeholderBriefs (Map String Int64)) (:f prefetch String) (:f baselineGreen (List String)) (:f priorIds (List String))
   (:f resumePatchPath (Option String)) (:f retries j/Json) (:f runUnbackedClaims (List j/Json))
   (:f specChecksDone Int64) (:f startTurn Int64) (:f taskLines String) (:f unparsable j/Json)
   (:f vendorBounds j/Json) (:f window j/Json) (:f writtenFiles (List String))
@@ -275,6 +275,7 @@ schema RunResult
   (:f execSec (Option Float64)) (:f usage (Option j/Json)) (:f signal (Option String))
   (:f ownsRejected (List j/Json)) (:f planSummary (Option j/Json)) (:f coreHost j/Json) (:f openPossible (List String))
   (:f gatePreflight (Option j/Json)) (:f message (Option String))
+  (:f vacuousGates (List String))
 
 schema ReceiptAdapter
   (:f id String) (:f op String) (:f status String) (:f hasExit Bool) (:f exit Int64) (:f cmd String)

@@ -69,6 +69,17 @@ fn parseDiag pe: ast/ParseError locus: String -> ty/IrDiag
     (ty/makeIrDiag "ERR_DEPTH" (optionOr (stringSlice pe.msg 10 (stringLength pe.msg)) pe.msg) locus)
     (ty/makeIrDiag "ERR_LOWER_PARSE" pe.msg locus))
 
+; (:m :ref IMPLICIT-MODULE :do "a script module's header has an empty path, so its unit is named from its file: the root-relative path without ./ and .asl, the same spelling an import of it would use; the name is written into the header form too, since lowering reads it from there")
+fn ! unitName header: String path: String -> String
+  (if (stringEmpty? header)
+    (let [(rel (rootRelative! path))
+          (p (if (stringStartsWith? rel "./") (optionOr (stringSlice rel 2 (stringLength rel)) rel) rel))]
+      (if (stringEndsWith? p ".asl") (optionOr (stringSlice p 0 (- (stringLength p) 4)) p) p))
+    header)
+
+fn namedForms forms: (List ast/TopForm) name: String -> (List ast/TopForm)
+  (map (fn [(t ast/TopForm)] -> ast/TopForm (match t ((ast/topModule m) (if (stringEmpty? m.path) (ast/topModule (ast/ModuleNode :path name :docstring m.docstring :exported m.exported :imports m.imports :defs m.defs)) t)) (_ t))) forms)
+
 fn ! readUnit! path: String ix: r/ModIndex -> (Pair (Result LinkUnit (List ty/IrDiag)) r/ModIndex)
   (match (fileReadString path)
     ((err _) (pair (err (list (ty/makeIrDiag "ERR_LINK_READ" (str "cannot read " path) path))) ix))
@@ -79,7 +90,7 @@ fn ! readUnit! path: String ix: r/ModIndex -> (Pair (Result LinkUnit (List ty/Ir
                               ((some m) (let [(resolved (resolveImports! (realOrSelf! path) path m.imports (list) (list) ix))]
                                           (pair (match (pairFirst resolved)
                                                   ((err ds) (err ds))
-                                                  ((ok imports) (ok (LinkUnit :path path :name m.path :forms forms :positions (low/sitedPositions (rootRelative! path) (low/declPositions src)) :imports imports))))
+                                                  ((ok imports) (ok (LinkUnit :path path :name (unitName m.path path) :forms (namedForms forms (unitName m.path path)) :positions (low/sitedPositions (rootRelative! path) (low/declPositions src)) :imports imports))))
                                                 (pairSecond resolved)))))))))
 
 fn ! visitAll! st: LoadState paths: (List String) -> LoadState

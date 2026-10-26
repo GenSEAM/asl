@@ -146,6 +146,10 @@
       :doc "Decimal rendering of a float.")
     (:name "stringToInt64" :sec "String" :type "String -> (Option Int64)" :src "asl/prelude/prelude.asl"
       :doc "Parse an optionally signed integer, or none when it is malformed or outside Int64.")
+    (:name "argInt" :sec "String" :type "(List String) Int64 Int64 -> Int64" :src "asl/prelude/prelude.asl"
+      :doc "The argument at an index read as an Int64, or the fallback when it is absent or not a number.")
+    (:name "argStr" :sec "String" :type "(List String) Int64 String -> String" :src "asl/prelude/prelude.asl"
+      :doc "The argument at an index, or the fallback when it is absent.")
     (:name "stringToFloat64" :sec "String" :type "String -> (Option Float64)" :src "asl/host/src/prelude.c"
       :doc "Parse a float (nan, inf and -inf included), or none when it is malformed.")
     (:name "int32ToInt64" :sec "Numeric conversion" :type "Int32 -> Int64" :src "asl/prelude/prelude.asl"

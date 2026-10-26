@@ -140,10 +140,23 @@ fn headerOf src: String -> String
     ((none) src)
     ((some i) (optionOr (stringSlice src 0 i) src)))
 
+fn definesFn? lines: (List String) name: String -> Bool
+  (listAny? (fn [l] (or (or (= l (str "fn " name)) (stringStartsWith? l (str "fn " name " ")))
+                        (or (= l (str "fn ! " name)) (stringStartsWith? l (str "fn ! " name " ")))))
+            lines)
+
+fn moduleHeaded? lines: (List String) -> Bool
+  (listAny? (fn [l] (or (= l "(module") (stringStartsWith? l "(module "))) lines)
+
+; (:m :ref IMPLICIT-MODULE :do "a headerless source exports the entries it defines (main, runTests), as the parser's synthesised script header does")
+fn scriptExportsOf src: String -> (List String)
+  (let [(lines (stringLines src))]
+    (if (moduleHeaded? lines) (list) (filter (fn [n] (definesFn? lines n)) (list "main" "runTests"))))
+
 fn exportsOf src: String -> (List String)
   (let [(header (headerOf src))]
     (match (stringIndexOf header ":x [")
-      ((none) (list))
+      ((none) (scriptExportsOf src))
       ((some i) (let [(rest (optionOr (stringSlice header (+ i 4) (stringLength header)) ""))
                       (body (optionOr (listHead (stringSplit rest "]")) ""))
                       (flat (stringReplace (stringReplace (stringReplace body "\n" " ") "\t" " ") "\r" " "))]
@@ -156,8 +169,9 @@ fn entryOf src: String -> (Option String)
       ((listContains? xs "main") (some "main"))
       (else (none))))
 
+; (:m :ref MAIN-SUGAR :do "a bare fn main header line, the parser's sugared main, binds args, so it takes the argument list")
 fn mainLine line: String -> Bool
-  (or (stringStartsWith? line "fn main ") (stringStartsWith? line "fn ! main "))
+  (or (or (stringStartsWith? line "fn main ") (stringStartsWith? line "fn ! main ")) (or (= line "fn main") (= line "fn ! main")))
 
 fn mainReturnsBareInt64 src: String -> Bool
   (match (listHead (filter mainLine (stringLines src)))

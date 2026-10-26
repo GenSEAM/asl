@@ -304,7 +304,11 @@ fn printTopEnum e: a/EnumNode -> String
 fn printImport p: (Pair String String) -> String
   (if (stringEmpty? (pairSecond p)) (str "(" (pairFirst p) ")") (str "(" (pairFirst p) " :a " (pairSecond p) ")"))
 
+; (:m :ref TOKDEFFIX :do "a script module's header is synthesised by the parser (empty path), so it prints as nothing and the printed script reparses as the same headerless file")
 fn printModuleHeader m: a/ModuleNode -> String
+  (if (stringEmpty? m.path) "" (printModuleHeaderNamed m))
+
+fn printModuleHeaderNamed m: a/ModuleNode -> String
   (str "(module " m.path
        " :x [" (stringJoin m.exported " ") "]"
        " :i [" (stringJoin (map printImport m.imports) " ") "])")
@@ -313,4 +317,4 @@ fn printTopForm tf: a/TopForm -> String
   (match tf ((a/topDefun d) (printTopDefun d)) ((a/topSchema s) (printTopSchema s)) ((a/topEnum e) (printTopEnum e)) ((a/topModule m) (printModuleHeader m)) ((a/topExpr p) (rd/renderSexpr p.expr)))
 
 fn printAstModule mod: a/ModuleNode -> String
-  (let [(header (printModuleHeader mod))] (if (listEmpty? mod.defs) header (let [(renderedDefs (map (fn [(tf a/TopForm)] -> String (printTopForm tf)) mod.defs))] (str header "\n\n" (stringJoin renderedDefs "\n\n")))))
+  (let [(header (printModuleHeader mod))] (if (listEmpty? mod.defs) header (let [(renderedDefs (map (fn [(tf a/TopForm)] -> String (printTopForm tf)) mod.defs))] (stringJoin (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (cons header renderedDefs)) "\n\n"))))

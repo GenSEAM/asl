@@ -26,12 +26,22 @@ fn ! cliRoot -> String
 fn ! cliInvoke command: String -> ProcessOutput
   (processRun (str "HOME=/dev/null " command))
 
+; (:m :ref TEST-FIXED-PORTS :do "an offline-status port is bound with port 0, read back and closed, so no fixed port can be held by another process")
+fn ! gatewayTestFreePort -> Int64
+  (match (tcpListen 0)
+    ((err _) -1)
+    ((ok fd)
+      (match (sockLocalPort fd)
+        ((err _) (do (fdClose fd) -1))
+        ((ok port) (do (fdClose fd) port)))))
+
 fn ! testGatewayCliAndLifecycle -> Bool
   (let [(root (cliRoot))
         (host (str root "/bin/asl"))
         (runner (str root "/bin/asl-gateway"))
         (registry (str root "/.asl/mem/calibration/index.asn"))
         (temp (stringTrim (processRun "mktemp -d /tmp/asl-gateway-cli.XXXXXX").stdout))
+        (offlinePort (stringFromInt64 (gatewayTestFreePort)))
         (injectionMarker (str temp "/shell-injection-ran"))
         (pathDir (str temp "/path"))
         (_path (processRun (str "/bin/mkdir -p " pathDir " && /bin/ln -sf /bin/bash " pathDir "/bash && /bin/ln -sf /usr/bin/dirname " pathDir "/dirname && /bin/ln -sf /usr/bin/basename " pathDir "/basename && /bin/ln -sf /bin/mkdir " pathDir "/mkdir"
@@ -70,8 +80,9 @@ fn ! testGatewayCliAndLifecycle -> Bool
         (_invalidContinuation (processRun (str "printf '(:gateway :v 1)\\303A' > " invalidContinuationPath)))
         (_truncatedUtf8 (processRun (str "printf '(:gateway :v 1)\\303' > " truncatedUtf8Path)))]
     (do
+      (assert (!= offlinePort "-1") "a free loopback port was bound with port 0 and read back")
       (let [(python (processRun (str "PATH=" pathDir " command -v python3")))
-            (run (processRun (str "PATH=" pathDir " ASL_GATEWAY_PORT=55231 " runner " status --port 55231")))]
+            (run (processRun (str "PATH=" pathDir " ASL_GATEWAY_PORT=" offlinePort " " runner " status --port " offlinePort)))]
         (assert (= python.exitCode 1) "runtime PATH has no python3")
         (assert (= run.exitCode 0) "gateway status runs with python3 absent from PATH"))
       (let [(run (cliInvoke (str runner " config check " valid)))
@@ -124,12 +135,12 @@ fn ! testGatewayCliAndLifecycle -> Bool
         (assert (not (stringContains? run.stdout "calibration absent-cal is not in the registry")) "unknown-provider calibration is not reported as a valid registry member")
         (assert (stringContains? run.stdout ":models 0") "unknown-provider model is excluded from effective models"))
       (gatewayLifecycleTest! root temp host runner)
-      (let [(run (cliInvoke (str runner " status --port 55231")))]
+      (let [(run (cliInvoke (str runner " status --port " offlinePort)))]
         (assert (= run.exitCode 0) "offline status exits zero")
-        (assert (stringContains? run.stdout "(:gateway :status :offline :port 55231)") "offline status is an ASL receipt"))
-      (let [(run (cliInvoke (str "ASL_GATEWAY_PORT=55231 " runner)))]
+        (assert (stringContains? run.stdout (str "(:gateway :status :offline :port " offlinePort ")")) "offline status is an ASL receipt"))
+      (let [(run (cliInvoke (str "ASL_GATEWAY_PORT=" offlinePort " " runner)))]
         (assert (= run.exitCode 0) "no-argument status exits zero")
-        (assert (= run.stdout "ASL Cognitive Gateway: OFFLINE (Port: 55231)\n") "no-argument status preserves the legacy output exactly"))
+        (assert (= run.stdout (str "ASL Cognitive Gateway: OFFLINE (Port: " offlinePort ")\n")) "no-argument status preserves the legacy output exactly"))
       (assert (gatewayInjectionRejected? runner temp (str "http://127.0.0.1:1$touch " injectionMarker) 1) "dollar in upstream is rejected before launch")
       (assert (gatewayInjectionRejected? runner temp (str "http://127.0.0.1:1;touch " injectionMarker) 2) "semicolon in upstream is rejected before launch")
       (assert (gatewayInjectionRejected? runner temp (str "http://127.0.0.1:1|touch " injectionMarker) 3) "pipe in upstream is rejected before launch")
