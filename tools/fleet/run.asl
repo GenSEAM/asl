@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [Job Done Limits Proc ProcOut Running RunningSep Lease job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited runShell! runGuarded spawn spawnSep reapStaleLeases! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procSnapshot treeOf killTree! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
+  :x [Job Done Limits Proc ProcOut Running RunningSep Lease job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardFds spawn spawnSep reapStaleLeases! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procSnapshot treeOf killTree! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
   :i [])
 
 (schema Job
@@ -374,32 +374,59 @@ fn ! reapStaleLeases! -> Int64
         (names (resultOr (dirList (leaseDir)) (list)))]
     (fold (fn [(n Int64) (name String)] -> Int64 (if (reapLeaseFile! now alive name) (+ n 1) n)) 0 names))
 
-fn ! guardLoop r: RunningSep lim: Limits lastCheck: Int64 -> ProcOut
-  (let [(pumped (pumpOneSep r))
+; (:m :ref GW-SESSION-BIND :do "a guarded run a caller steps itself: guardStart! reaps stale leases, spawns and writes the lease; each guardAdvance! pumps output once and judges the limits, returning the ProcOut when the child has ended, so a single-threaded server can park the run and look at it between other work; guardFds is what to poll. guardLoop and runGuarded are this same step in a blocking loop")
+(schema Guarded
+  (:f run RunningSep)
+  (:f lim Limits)
+  (:f lastCheck Int64))
+
+(schema GuardStep
+  (:f out (Option ProcOut))
+  (:f guard Guarded)
+  (:f progress Bool))
+
+fn ! guardStart! argv: (List String) cwd: String env: (List String) lim: Limits -> (Result Guarded ProcOut)
+  (let [(_ (reapStaleLeases!))]
+    (match (spawnSep argv cwd env)
+      ((err d) (err d))
+      ((ok r) (let [(_ (writeLease! r.pid (procSelf) r.startNs (leaseDeadline r.startNs lim.timeoutMs)))]
+                (ok (Guarded :run r :lim lim :lastCheck 0))))))
+
+fn guardFds g: Guarded -> (List (Pair Int64 Int64))
+  (listAppend (if g.run.outOpen (list (pair g.run.outFd 1)) (list)) (if g.run.errOpen (list (pair g.run.errFd 1)) (list)))
+
+fn ! guardAdvance! g: Guarded -> GuardStep
+  (let [(lim g.lim)
+        (pumped (pumpOneSep g.run))
         (progress (pairFirst pumped))
         (r1 (pairSecond pumped))
         (now (monotonicNs))
-        (checked (and (> lim.maxDesc 0) (>= (- now lastCheck) (checkEveryNs))))
+        (checked (and (> lim.maxDesc 0) (>= (- now g.lastCheck) (checkEveryNs))))
         (snap (if checked (procSnapshot) (list)))
         (own (if checked (ownGroup snap (procSelf)) -1))
         (r2 (judgeSep lim now snap own checked r1))
-        (over? (or (not (stringEmpty? r2.killed)) (and (not r2.outOpen) (not r2.errOpen))))]
+        (over? (or (not (stringEmpty? r2.killed)) (and (not r2.outOpen) (not r2.errOpen))))
+        (g2 (Guarded :run r2 :lim lim :lastCheck (if checked now g.lastCheck)))]
     (if over?
-      (finishSep r2)
-      (do (if (not progress)
-            (fdPoll (listAppend (if r2.outOpen (list (pair r2.outFd 1)) (list)) (if r2.errOpen (list (pair r2.errFd 1)) (list))) 50)
-            (ok (list)))
-          (guardLoop r2 lim (if checked now lastCheck)))))
+      (let [(o (finishSep r2)) (_ (removeLease! r2.pid))]
+        (GuardStep :out (some o) :guard g2 :progress progress))
+      (GuardStep :out none :guard g2 :progress progress)))
+
+fn ! guardLoop g: Guarded -> ProcOut
+  (let [(s (guardAdvance! g))]
+    (match s.out
+      ((some o) o)
+      ((none)
+       (do (if (not s.progress)
+             (fdPoll (guardFds s.guard) 50)
+             (ok (list)))
+           (guardLoop s.guard)))))
 
 ; (:m :ref ORPHAN-EVAL-ESCAPE :do "argv runs exactly as given, no auto-nice prefix: mirrors runProcIn's existing contract so nativeTest.asl's runOne/evalExpression! call sites (one of which already prefixes its own nice -n 15) can swap to this with no argv change")
 fn ! runGuarded argv: (List String) cwd: String env: (List String) lim: Limits -> ProcOut
-  (let [(_ (reapStaleLeases!))]
-    (match (spawnSep argv cwd env)
-      ((err d) d)
-      ((ok r) (let [(_ (writeLease! r.pid (procSelf) r.startNs (leaseDeadline r.startNs lim.timeoutMs)))
-                    (out (guardLoop r lim 0))
-                    (_ (removeLease! r.pid))]
-                out))))
+  (match (guardStart! argv cwd env lim)
+    ((err d) d)
+    ((ok g) (guardLoop g)))
 
 fn openFds rs: (List Running) -> (List (Pair Int64 Int64))
   (fold (fn [(acc (List (Pair Int64 Int64))) (r Running)] -> (List (Pair Int64 Int64))

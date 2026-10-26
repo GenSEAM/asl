@@ -1,7 +1,7 @@
 (module aslGateway/server
   :x [GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main! main mainWith
-      GatewayConn ConnPhase connReading connTimer connBucketWait connWriting drive! apiKindOf PendingCall runEffect! budgetRefusal!]
-  :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (asl-cli/system :a sys)
+      GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! gatewayTurn! loopConns apiKindOf PendingCall runEffect! budgetRefusal!]
+  :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
       (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/router :a rt) (asl-json/json :a j)
       (aslGateway/omniApi :a om) (asl-http/http11 :a h)])
@@ -257,7 +257,7 @@ fn ! mainWith args: (List String) module: String families: (List dp/LifecycleFam
           (match (gatewayRunServer! launch port upstream "")
             ((err e) (do (sys/sayErr! e) (ok 1)))
             ((ok _) (ok 0)))))
-      ((or (= mode "config") (or (= mode "configCheck") (or (= mode "convert") (= mode "stats"))))
+      ((or (= mode "config") (or (= mode "configCheck") (or (= mode "convert") (or (= mode "stats") (= mode "session")))))
         (cli/gatewayCliMain args))
       ((or (= mode "restart") (= mode "update"))
         (match (gatewayRestart! launch args)
@@ -314,12 +314,12 @@ fn ! gatewayStartWithHost! launch: Launch args: (List String) host: String -> (R
                  (stringTrim (processRun "pwd").stdout)))
         (modulePath (str root "/" launch.module))]
     (if (or (< port 0) (> port 65535)) (err "port must be between 0 and 65535")
-      (if (or (stringEmpty? upstream)
-            (or (not (gatewaySafeShellArg? host))
+      (if (stringEmpty? upstream) (err "gateway start needs --upstream URL")
+      (if (or (not (gatewaySafeShellArg? host))
               (or (not (gatewaySafeShellArg? modulePath))
                 (or (not (gatewaySafeShellArg? upstream))
-                  (or (not (gatewaySafeShellArg? portText)) (not (gatewaySafeShellArg? readyPath)))))))
-        (err "gateway launch arguments are missing or contain unsupported shell characters")
+                  (or (not (gatewaySafeShellArg? portText)) (not (gatewaySafeShellArg? readyPath))))))
+        (err "gateway launch arguments contain unsupported shell characters (host path, module path, --upstream, --port or ready path)")
         (match (dirCreate dir)
           ((err e) (err (str "cannot create gateway state directory: " e)))
           ((ok _)
@@ -339,7 +339,7 @@ fn ! gatewayStartWithHost! launch: Launch args: (List String) host: String -> (R
                               (str "(:gateway :status :running :pid " pid " :port " boundPort
                                 " :upstream " upstream ")"))
                           ((err e) (do (procKill pid "SIGTERM") (err (str "cannot persist gateway state: " e))))
-                          ((ok _) (ok boundPort))))))))))))))
+                          ((ok _) (ok boundPort)))))))))))))))
 
 fn ! gatewayRunServer! launch: Launch port: Int64 upstream: String readyPath: String -> (Result Int64 String)
   (let [(upstreamPort (gatewayUpstreamPort upstream))]
@@ -366,6 +366,8 @@ fn ! gatewayRunServer! launch: Launch port: Int64 upstream: String readyPath: St
   (:c connTimer [(deadlineMs Int64) (k (fn [ch/ChatOutcome] -> ch/ChatStep)) (tag String)])
   ; (:m :tags (retry) :do "a token-bucket wait (effBucket) parks here instead of blocking, same shape as connTimer: the token is already reserved/debited into srv.buckets at park time (GW-BUCKET-RESERVE), so a second concurrent request for the same model+rpm sees the debit and computes a wait pushed out by another 1/rate, giving N parked requests deadlines spaced ~1/rate apart instead of all waking at once; resume just proceeds (the reservation already happened), no stale-snapshot write-back needed here")
   (:c connBucketWait [(deadlineMs Int64) (k (fn [ch/ChatOutcome] -> ch/ChatStep)) (tag String)])
+  ; (:m :ref GW-SESSION-BIND :do "a bound CLI turn parks here instead of blocking the reactor: the vendor child runs under fleet/run limits, the reactor polls its pipes with every other connection and steps it each turn, and the continuation resumes when the child has ended")
+  (:c connCli [(p bd/BoundPend) (k (fn [ch/ChatOutcome] -> ch/ChatStep)) (tag String) (t0 Int64)])
   (:c connProxy [(upstreamFd Int64) (pending String) (response String)])
   (:c connWriting [(data String)]))
 
@@ -600,8 +602,11 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
         (pair (loopState srv srv.breaker (pairFirst r) srv.profiles) (ch/outBool (resultOr (pairSecond r) false)))))
     ; (:m :tags (retry) :do "unreachable from the reactor: drive! matches ch/effSleepMs itself and parks a connTimer instead of calling runEffect!; this blocking fallback only serves a caller that invokes runEffect! directly outside drive! (e.g. a test), where there is no reactor turn to protect")
     ((ch/effSleepMs ms) (do (sleepMs (max 0 ms)) (pair srv ch/outDone)))
-    ((ch/effCli client _)
-      (do (logLine! (str "(:gateway :cli :unavailable \"" (wire/asnEscape client) "\" :entry http)")) (pair srv (ch/outCli none))))
+    ((ch/effCli client args)
+      (let [(sctx (ses/sessCtxAt! srv.home (envList)))]
+        (if (bd/boundCliEligible? sctx client args)
+          (pair srv (ch/outCli (bd/boundCliEffect! sctx client args)))
+          (do (logLine! (str "(:gateway :cli :unavailable \"" (wire/asnEscape client) "\" :entry http)")) (pair srv (ch/outCli none))))))
     ((ch/effHttp _ _ _ _ _ _ _) (pair srv (ch/outHttp (ch/httpRaised false "an HTTP effect reached the synchronous effect runner"))))
     ((ch/effPoolHttp _ _ _ _ _ _) (pair srv (ch/outHttp (ch/httpRaised false "a pool effect reached the synchronous effect runner")))))
 
@@ -634,6 +639,13 @@ fn ! drive! srv: GatewayLoop fd: Int64 tag: String step: ch/ChatStep -> GatewayL
                  ((u/bucketWait secs)
                   (addConn (loopState srv srv.breaker (u/bucketRegistryPut (pairFirst got) model rpm (u/takeToken b1)) srv.profiles) fd
                     (connBucketWait (+ (nowMs!) (u/ceilMs secs)) k tag))))))))
+        ((ch/effCli client args)
+          (let [(sctx (ses/sessCtxAt! srv.home (envList)))]
+            (if (bd/boundCliEligible? sctx client args)
+              (match (bd/boundCliBegin! sctx client args)
+                ((bd/boundCliNow r) (drive! srv fd tag (k (ch/outCli r))))
+                ((bd/boundCliRunning p) (addConn srv fd (connCli p k tag (monotonicNs)))))
+              (let [(r (runEffect! srv eff))] (drive! (pairFirst r) fd tag (k (pairSecond r)))))))
         (_ (let [(r (runEffect! srv eff))] (drive! (pairFirst r) fd tag (k (pairSecond r))))))))
 
 fn errorOutcome status: Int64 reason: String -> ch/ChatOutcome
@@ -866,6 +878,13 @@ fn ! stepBucketWait! srv: GatewayLoop conn: GatewayConn deadlineMs: Int64 k: (fn
     (drive! srv conn.fd tag (k (ch/outBool true)))
     (loopConns srv (listAppend srv.conns (list conn))))
 
+; (:m :ref GW-SESSION-BIND :do "one reactor turn of a parked bound CLI turn: boundAdvance! pumps the child's pipes and judges its limits without waiting; while it runs the conn is re-parked, when it ends the reply (or the failure, as none) goes to the chat continuation")
+fn ! stepCli! srv: GatewayLoop conn: GatewayConn p: bd/BoundPend k: (fn [ch/ChatOutcome] -> ch/ChatStep) tag: String t0: Int64 -> GatewayLoop
+  (let [(s (bd/boundAdvance! p))]
+    (match (pairFirst s)
+      ((none) (loopConns srv (listAppend srv.conns (list (GatewayConn :fd conn.fd :input conn.input :phase (connCli (pairSecond s) k tag t0))))))
+      ((some r) (drive! srv conn.fd tag (k (ch/outCli (bd/boundCliFinish r (/ (- (monotonicNs) t0) 1000000))))))))
+
 fn ! stepConn! srv: GatewayLoop conn: GatewayConn ready: (List (Pair Int64 Int64)) -> GatewayLoop
   (match conn.phase
     ((connReading) (stepReading! srv conn ready))
@@ -873,6 +892,7 @@ fn ! stepConn! srv: GatewayLoop conn: GatewayConn ready: (List (Pair Int64 Int64
     ((connPool _ _) (loopConns srv (listAppend srv.conns (list conn))))
     ((connWarm slot provider sent timeout k deadline model intent tag profile) (stepWarm! srv conn tag slot provider sent timeout k deadline model intent profile))
     ((connTimer deadlineMs k tag) (stepTimer! srv conn deadlineMs k tag))
+    ((connCli p k tag t0) (stepCli! srv conn p k tag t0))
     ((connBucketWait deadlineMs k tag) (stepBucketWait! srv conn deadlineMs k tag))
     ((connProxy upstreamFd pending response) (stepProxy! srv conn upstreamFd pending response ready))
     ((connWriting data) (stepWriting! srv conn data ready)))
@@ -901,6 +921,7 @@ fn connWatch conn: GatewayConn -> (List (Pair Int64 Int64))
     ((connPool _ _) (list))
     ((connWarm _ _ _ _ _ _ _ _ _ _) (list))
     ((connTimer _ _ _) (list))
+    ((connCli p _ _ _) (bd/boundFds p))
     ((connBucketWait _ _ _) (list))
     ((connProxy upstreamFd pending _) (list (pair upstreamFd (if (stringEmpty? pending) 1 2))))
     ((connWriting _) (list (pair conn.fd 2))))
@@ -918,6 +939,9 @@ fn ! warmPolled! srv: GatewayLoop -> GatewayLoop
   (let [(polled (dp/pollSlots! srv.wiring (nowMs!)))]
     (do (fold (fn [(acc Bool) (line String)] -> Bool (logLine! line)) true (pairSecond polled))
       (loopWiring srv (pairFirst polled) srv.wiringText)))
+
+fn cliParked? conn: GatewayConn -> Bool
+  (match conn.phase ((connCli _ _ _ _) true) (_ false))
 
 fn parked? conn: GatewayConn -> Bool
   (match conn.phase ((connWarm _ _ _ _ _ _ _ _ _ _) true) (_ false))
@@ -955,7 +979,8 @@ fn ! gatewayEventLoop! srv: GatewayLoop -> (Result Int64 String)
                    (pd/poolWatch srv.pools))))
         (timeout (combineTimeoutMs (if (pd/poolActive? srv.pools) 10 -1)
                    (combineTimeoutMs (if (listAny? parked? srv.conns) 20 -1)
-                     (nearestTimerWaitMs (nowMs!) srv.conns))))]
+                     (combineTimeoutMs (if (listAny? cliParked? srv.conns) 50 -1)
+                       (nearestTimerWaitMs (nowMs!) srv.conns)))))]
     (match (fdPoll watch timeout)
       ((err e) (if (= e "interrupted") (gatewayEventLoop! srv) (err (str "gateway poll failed: " e))))
       ((ok ready) (gatewayEventLoop! (gatewayTurn! srv ready)))))

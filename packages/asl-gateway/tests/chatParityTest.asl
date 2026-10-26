@@ -90,7 +90,7 @@ fn cliOf v: j/Json -> (Option ch/CliReply)
   (match v
     ((j/jobj _)
      (some (ch/CliReply :text (text (get v "text")) :usage (get v "usage") :dedup (flag (get v "dedup"))
-                        :queueWaitSec (num (get v "queueWaitSec")) :execSec (num (get v "execSec")) :pool (text (get v "pool")))))
+                        :queueWaitSec (num (get v "queueWaitSec")) :execSec (num (get v "execSec")) :pool (text (get v "pool")) :binding (j/jnull))))
     (_ none))
 
 fn httpOf v: j/Json -> ch/HttpReply

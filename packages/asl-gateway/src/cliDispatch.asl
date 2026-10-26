@@ -40,11 +40,14 @@
       runSpawnDispatch!
       agyAgentMarkdown
       jsonIntField
+      CliBoundFlags
+      cliBoundFlags!
       gatewayCliMain
       main]
   :i [(asl-json/json :a j)
       (config :a cfg)
       (usageLedger :a ul)
+      (sessions :a ses)
       (asl-cli/system :a sys)])
 
 (schema CliUsage
@@ -453,6 +456,7 @@ fn ! gatewayCliMain args: (List String) -> (Result Int64 String)
       ((or (= mode "configCheck") (and (= mode "config") (= second "check"))) (gatewayConfigCheckCli! path))
       ((= mode "stats") (gatewayStatsCli! (optionOr (listTail args) (list))))
       ((= mode "usage") (gatewayUsageCli! (optionOr (listTail args) (list))))
+      ((= mode "session") (ses/sessionsCli! (optionOr (listTail args) (list))))
       (else (do (sys/sayErr! "unknown gateway ASL CLI mode") (ok 2)))))
 
 fn ! main args: (List String) -> (Result Int64 String)
@@ -1281,3 +1285,40 @@ fn dispatch_claude_fallback! prompt: String model: (Option String) effort: (Opti
                                    :agent none
                                    :addDirs (list)
                                    :cliBin none))
+
+(schema CliBoundFlags
+  (:f args (List String))
+  (:f tmpDir String))
+
+fn dropFlags xs: (List String) specs: (List (Pair String Int64)) -> (List String)
+  (match (listHead xs)
+    ((none) (list))
+    ((some x)
+     (let [(rest (optionOr (listTail xs) (list)))
+           (hit (listHead (filter (fn [(sp (Pair String Int64))] -> Bool (= (pairFirst sp) x)) specs)))]
+       (match hit
+         ((some sp) (dropFlags (listReverse (listTake (listReverse rest) (- (listLength rest) (pairSecond sp)))) specs))
+         ((none) (cons x (dropFlags rest specs)))))))
+
+; (:m :ref GW-SESSION-BIND :do "flags that a session row supplies or that stop the vendor keeping its conversation are removed by name, each with the count of values it takes, never by position: claude -p, --output-format V, --no-session-persistence; codex exec, -C V, the bare -, --json, --ephemeral, --skip-git-repo-check; agy --output-format V and -p V (the prompt, which the row's :sep puts back)")
+fn boundDropSpecs client: String -> (List (Pair String Int64))
+  (cond
+    ((= client "claude") (list (pair "-p" 0) (pair "--output-format" 1) (pair "--no-session-persistence" 0)))
+    ((= client "codex") (list (pair "exec" 0) (pair "-C" 1) (pair "-" 0) (pair "--json" 0) (pair "--ephemeral" 0) (pair "--skip-git-repo-check" 0)))
+    (else (list (pair "--output-format" 1) (pair "-p" 1))))
+
+; (:m :ref GW-SESSION-BIND :do "the policy flags of the ordinary dispatch for a bound turn: the same builders run, then what a session row already supplies (headless, json output, the prompt) and what would stop the vendor keeping its conversation (claude --no-session-persistence, codex --ephemeral) is removed by flag name, so the system prompt file, tool lean flags, model and effort still apply; the per-turn temp dir is 0700 and the caller removes it")
+fn ! cliBoundFlags! client: String sysPrompt: String noTools: Bool model: (Option String) effort: (Option String) ws: String -> (Result CliBoundFlags String)
+  (let [(sys (if (stringEmpty? sysPrompt) (proxySystemPrompt) sysPrompt))]
+    (match (cliWritePromptDir! client sys noTools)
+      ((err e) (err e))
+      ((ok pd)
+       (let [(_m (fileChmod pd.tmpDir 448))
+             (cmd (cond
+                    ((= client "claude") (ok (claudeBuildCmd! "claude" pd.promptPath noTools model effort)))
+                    ((= client "codex") (ok (codexBuildCmd "codex" ws pd.promptPath noTools effort model)))
+                    ((= client "agy") (ok (agyBuildCmd! "agy" ws pd.tmpDir (optionOr (envGet "ROOT_DIR") ".") 300 model effort none (list) "" noTools)))
+                    (else (err (str "no bound flags for client " client)))))]
+         (match cmd
+           ((err e) (do (pathRemove pd.tmpDir) (err e)))
+           ((ok full) (ok (CliBoundFlags :args (dropFlags (optionOr (listTail full) (list)) (boundDropSpecs client)) :tmpDir pd.tmpDir))))))))

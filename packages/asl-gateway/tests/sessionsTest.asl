@@ -1,0 +1,187 @@
+(module aslGateway/tests/sessionsTest
+  :x [runTests]
+  :i [(sessions :a s)
+      (asl-tools/fleet/run :a fr)])
+
+(schema Seen
+  (:f startA String)
+  (:f rowA String)
+  (:f modeA Int64)
+  (:f sendA String)
+  (:f argvA String)
+  (:f startB String)
+  (:f sendA2 String)
+  (:f marker Bool)
+  (:f busy String)
+  (:f busyStart String)
+  (:f staleSend String)
+  (:f list1 String)
+  (:f show String)
+  (:f replyFile String)
+  (:f stop String)
+  (:f filesAfterStop (List String))
+  (:f stopAgain String)
+  (:f badName String)
+  (:f badCwdRel String)
+  (:f badCwdHash String)
+  (:f badCwdMissing String)
+  (:f badVendor String)
+  (:f badText String)
+  (:f failed String)
+  (:f failedRow Bool)
+  (:f noId String)
+  (:f noIdRow Bool)
+  (:f dupStart String))
+
+fn fakeProgram -> String
+  "BEGIN{sd=ARGV[1]; n=ARGC-1; prompt=ARGV[n]; id=\"\"; for(i=2;i<n;i++) if(ARGV[i]==\"--resume\") id=ARGV[i+1]; resumed=(id!=\"\"); if(!resumed){f=sd \"/counter\"; c=0; getline c < f; close(f); c++; print c > f; close(f); id=\"fake-\" c} ctxf=sd \"/ctx-\" id; mem=\"\"; while((getline l < ctxf)>0) mem=mem l \"|\"; close(ctxf); print prompt >> ctxf; close(ctxf); af=sd \"/argv-\" id; print \"TURN resumed=\" resumed >> af; for(i=2;i<=n;i++) print \"ARG<\" ARGV[i] \">\" >> af; close(af); printf \"{\\\"session_id\\\":\\\"%s\\\",\\\"result\\\":\\\"seen=%s now=%s can=%s lst=%s\\\",\\\"usage\\\":{\\\"input_tokens\\\":3,\\\"output_tokens\\\":4}}\\n\", id, mem, prompt, ENVIRON[\"ASLCANARY\"], ENVIRON[\"ASLLISTED\"]; exit 0}"
+
+fn sampleConfig -> String
+  "(:gateway :sessionsTimeoutSec 90 :sessions ((:vendor \"claude\" :bin \"claude\" :first (\"-p\" \"--output-format\" \"json\") :resume (\"-p\" \"--output-format\" \"json\" \"--resume\" \"{id}\") :idFrom \"session_id\" :replyFrom \"result\" :model (\"--model\" \"{model}\") :fork (\"--fork-session\") :env (\"ANTHROPIC_API_KEY\")) (:vendor \"codex\" :bin \"codex\" :first (\"exec\" \"--json\" \"--skip-git-repo-check\") :resume (\"exec\" \"resume\" \"--json\" \"--skip-git-repo-check\" \"{id}\") :idFrom \"thread_id\" :replyFrom \"text\" :model (\"-m\" \"{model}\")) (:vendor \"agy\" :bin \"agy\" :first (\"--output-format\" \"json\") :resume (\"--output-format\" \"json\" \"--conversation\" \"{id}\") :sep \"-p\" :idFrom \"conversation_id\" :replyFrom \"response\" :model (\"--model\" \"{model}\")) (:vendor \"leon\" :bin \"asl\" :wrap \"(:agent :task {prompt})\" :wrapResume \"(:agent :task {prompt} :resume \\\"{id}\\\")\" :idFrom \"session\")))"
+
+fn ! sleepFor! ms: Int64 -> Unit
+  (do (sleepMs ms) ())
+
+fn ! exitOf! argv: (List String) -> Int64
+  (fr/runGuarded argv "/" (fr/childEnv (list)) (fr/limits 10 64)).exitCode
+
+fn fakeVendor sd: String -> s/SessVendor
+  (s/SessVendor :name "fake" :bin "/usr/bin/awk" :env (list "ASLLISTED") :first (list (fakeProgram) sd) :resume (list (fakeProgram) sd "--resume" "{id}")
+                :idFrom "session_id" :replyFrom "result" :wrap "" :wrapResume "" :sep "" :modelArgs (list) :fork (list))
+
+fn plainVendor name: String bin: String -> s/SessVendor
+  (s/SessVendor :name name :bin bin :env (list) :first (list) :resume (list) :idFrom "session_id" :replyFrom "" :wrap "" :wrapResume "" :sep "" :modelArgs (list) :fork (list))
+
+fn vendorNamed ctx: s/SessCtx name: String -> s/SessVendor
+  (optionOr (listHead (filter (fn [(v s/SessVendor)] -> Bool (= v.name name)) ctx.vendors)) (plainVendor "" ""))
+
+fn ! observe! ctx: s/SessCtx dir: String sd: String -> Seen
+  (let [(marker (str dir "/MARK"))
+        (args (list "--model" "x y" ";" (str "$(touch " marker ")") "q\"uote"))
+        (startA (s/sessStart! ctx "s-one" "fake" dir args "alpha"))
+        (rowA (resultOr (fileReadString (s/sessRowPath ctx "s-one")) ""))
+        (modeA (match (fileStat (s/sessRowPath ctx "s-one")) ((ok st) (& st.mode 511)) ((err _) 0)))
+        (sendA (s/sessSend! ctx "s-one" "beta" (list)))
+        (argvA (resultOr (fileReadString (str sd "/argv-fake-1")) ""))
+        (dupStart (s/sessStart! ctx "s-one" "fake" dir args "again"))
+        (startB (s/sessStart! ctx "s-two" "fake" dir (list) "gamma"))
+        (sendA2 (s/sessSend! ctx "s-one" "delta" (list)))
+        (lockB (pathSymlink (stringFromInt64 (procSelf)) (str dir "/sessions/s-two.lock")))
+        (busy (s/sessSend! ctx "s-two" "epsilon" (list)))
+        (busyStart (s/sessStart! ctx "s-two" "fake" dir (list) "x"))
+        (unlockB (pathRemove (str dir "/sessions/s-two.lock")))
+        (staleLock (pathSymlink "999999" (str dir "/sessions/s-two.lock")))
+        (staleSend (s/sessSend! ctx "s-two" "zeta" (list)))
+        (list1 (s/sessList! ctx))
+        (show (s/sessShow! ctx "s-one"))
+        (replyFile (resultOr (fileReadString (str dir "/sessions/s-one.reply")) ""))
+        (stop (s/sessStop! ctx "s-one"))
+        (filesAfterStop (s/sessRowFiles! ctx))
+        (stopAgain (s/sessStop! ctx "s-one"))
+        (badName (s/sessStart! ctx "bad name;x" "fake" dir args "t"))
+        (badCwdRel (s/sessStart! ctx "s-bad" "fake" "tmp" args "t"))
+        (badCwdHash (s/sessStart! ctx "s-bad" "fake" "/tmp/#{x}" args "t"))
+        (badCwdMissing (s/sessStart! ctx "s-bad" "fake" (str dir "/missing") args "t"))
+        (badVendor (s/sessStart! ctx "s-bad" "nope" dir args "t"))
+        (badText (s/sessStart! ctx "s-bad" "fake" dir args ""))
+        (failed (s/sessStart! ctx "s-fail" "fails" dir (list) "t"))
+        (failedRow (fileExists? (s/sessRowPath ctx "s-fail")))
+        (noId (s/sessStart! ctx "s-noid" "noid" dir (list) "t"))
+        (noIdRow (fileExists? (s/sessRowPath ctx "s-noid")))]
+    (Seen :startA startA :rowA rowA :modeA modeA :sendA sendA :argvA argvA :startB startB :sendA2 sendA2 :marker (fileExists? marker)
+          :busy busy :busyStart busyStart :staleSend staleSend :list1 list1 :show show :replyFile replyFile :stop stop
+          :filesAfterStop filesAfterStop :stopAgain stopAgain :badName badName :badCwdRel badCwdRel :badCwdHash badCwdHash
+          :badCwdMissing badCwdMissing :badVendor badVendor :badText badText :failed failed :failedRow failedRow :noId noId
+          :noIdRow noIdRow :dupStart dupStart))
+
+fn testPure -> Bool
+  (let [(ctx (s/sessCtxFromText (sampleConfig) "/d" (list "PATH=/bin" "ASLCANARY=x" "ANTHROPIC_API_KEY=k" "HOME=/h")))
+        (claude (vendorNamed ctx "claude"))
+        (codex (vendorNamed ctx "codex"))
+        (agy (vendorNamed ctx "agy"))
+        (leon (vendorNamed ctx "leon"))]
+    (do (assert (= (listLength ctx.vendors) 4) "the sample config row lists claude codex agy and leon")
+        (assert (= ctx.timeoutSec 90) "the timeout comes from the config row")
+        (assert (= claude.idFrom "session_id") "claude id key")
+        (assert (= (s/sessArgv claude "" (list "--model" "m") "hi") (list "claude" "-p" "--output-format" "json" "--model" "m" "hi")) "claude first turn: headless json, extra args, then the prompt")
+        (assert (= (s/sessArgv claude "ID1" (list) "hi") (list "claude" "-p" "--output-format" "json" "--resume" "ID1" "hi")) "claude later turn resumes by id")
+        (assert (= (s/sessArgv codex "" (list) "hi") (list "codex" "exec" "--json" "--skip-git-repo-check" "hi")) "codex first turn is exec --json")
+        (assert (= (s/sessArgv codex "T1" (list) "hi") (list "codex" "exec" "resume" "--json" "--skip-git-repo-check" "T1" "hi")) "codex later turn is exec resume ID")
+        (assert (= (s/sessArgv agy "C1" (list) "hi") (list "agy" "--output-format" "json" "--conversation" "C1" "-p" "hi")) "agy later turn resumes by conversation id and the prompt follows -p")
+        (assert (= (s/sessArgv leon "" (list) "do it") (list "asl" "(:agent :task \"do it\")")) "leon first turn is one :agent form with the quoted prompt")
+        (assert (= (s/sessArgv leon "S9" (list) "next") (list "asl" "(:agent :task \"next\" :resume \"S9\")")) "leon later turn adds :resume with the stored id")
+        (assert (= (s/sessKeyValues "{\"session_id\":\"abc\",\"result\":\"hi \\\"there\\\"\",\"n\":3}" "result") (list "hi \"there\"")) "a JSON string value is unescaped")
+        (assert (= (s/sessKeyValues "{\"session_id\": \"abc\"}" "session_id") (list "abc")) "space after the colon is allowed")
+        (assert (= (s/sessKeyValues "{\"type\":\"thread.started\",\"thread_id\":\"t1\"}\n{\"text\":\"a\"}\n{\"text\":\"b\"}" "text") (list "a" "b")) "JSON lines give every value in order")
+        (assert (= (s/sessKeyValues "(:agent :status ok :session \"S1\" :journal \"j\")" "session") (list "S1")) "an ASN receipt key is read")
+        (assert (= (s/sessReplyOf "{\"text\":\"a\"}\n{\"text\":\"b\"}" "text") "b") "the reply is the last value of the key")
+        (assert (= (s/sessReplyOf "  plain out \n" "") "plain out") "no reply key means the trimmed output")
+        (assert (= (s/sessKeyValues "{\"a\":1}" "missing") (list)) "an absent key gives nothing")
+        (assert (= (s/sessKeyValues "{\"a\":1}" "") (list)) "an empty key gives nothing")
+        (assert (= (s/sessVendorEnv ctx claude) (list "PATH=/bin" "ANTHROPIC_API_KEY=k" "HOME=/h")) "base names plus the vendor's own :env names")
+        (assert (= (s/sessVendorEnv ctx codex) (list "PATH=/bin" "HOME=/h")) "another vendor does not see the first vendor's key")
+        (assert (s/sessCwdOk? "/tmp/x") "an absolute cwd is accepted")
+        (assert (not (s/sessCwdOk? "tmp/x")) "a relative cwd is rejected")
+        (assert (not (s/sessCwdOk? "/tmp/#{x}")) "a cwd with # is rejected")
+        (assert (s/sessNameOk? "a-B-9") "a plain name is accepted")
+        (assert (not (s/sessNameOk? "a b")) "a name with a space is rejected")
+        (assert (not (s/sessNameOk? "../x")) "a path-like name is rejected")
+        true))
+
+fn testLive -> Bool
+  (let [(me (stringFromInt64 (procSelf)))
+        (dir (str "/tmp/aslSessionsTest" me))
+        (sd (str dir "/state"))
+        (ctx (s/SessCtx :dir (str dir "/sessions") :env (listAppend (envList) (list "ASLCANARY=secret" "ASLLISTED=yes")) :timeoutSec 20 :ttlSec 0 :ledger ""
+                        :vendors (list (fakeVendor sd) (plainVendor "fails" "/usr/bin/false") (plainVendor "noid" "/bin/echo"))))
+        (_mk (dirCreate sd))
+        (seen (observe! ctx dir sd))
+        (_rm (pathRemove dir))]
+    (do (assert (stringStartsWith? seen.startA "(:session :op start :status ok :name \"s-one\" :sessionId \"fake-1\"") "start runs the first turn and stores the vendor's session id")
+        (assert (stringContains? seen.startA "seen= now=alpha") "the first turn saw no earlier context")
+        (assert (stringContains? seen.startA ":usage (:in 3 :out 4)") "usage reported by the vendor is returned")
+        (assert (stringContains? seen.rowA ":sessionId \"fake-1\"") "the row holds the vendor session id")
+        (assert (= seen.modeA 384) "the row file is 0600")
+        (assert (stringContains? seen.sendA ":resumed true") "send resumes the stored session")
+        (assert (stringContains? seen.sendA "seen=alpha| now=beta") "the second turn sees the first turn's context")
+        (assert (stringContains? seen.argvA "TURN resumed=0") "the first turn got no resume flag")
+        (assert (stringContains? seen.argvA "TURN resumed=1") "the later turn got the resume flag")
+        (assert (stringContains? seen.argvA "ARG<--resume>\nARG<fake-1>") "the stored id follows the resume flag")
+        (assert (stringContains? seen.argvA "ARG<x y>") "an argument with a space stays one argument")
+        (assert (stringContains? seen.argvA "ARG<;>") "a lone semicolon arrives as a literal")
+        (assert (stringContains? seen.argvA "ARG<$(touch /tmp/aslSessionsTest") "a command substitution arrives as literal text")
+        (assert (not seen.marker) "the command substitution was not executed")
+        (assert (stringContains? seen.argvA "ARG<q\"uote>") "an embedded quote arrives unchanged")
+        (assert (stringContains? seen.argvA "ARG<beta>") "the prompt is the last argument")
+        (assert (stringContains? seen.sendA "can=") "the canary slot is present in the reply")
+        (assert (not (stringContains? seen.sendA "can=secret")) "a variable not on the allowlist is absent for the vendor")
+        (assert (stringContains? seen.sendA "lst=yes") "a variable listed for the vendor is present")
+        (assert (stringContains? seen.startB ":sessionId \"fake-2\"") "a second session gets its own id")
+        (assert (stringContains? seen.sendA2 "seen=alpha|beta| now=delta") "a session keeps its own context")
+        (assert (not (stringContains? seen.sendA2 "gamma")) "another session's context does not leak")
+        (assert (stringContains? seen.busy ":code busy") "a second concurrent send is busy")
+        (assert (stringContains? seen.busyStart ":code busy") "a start on a busy name is busy")
+        (assert (stringContains? seen.staleSend ":status ok") "a lock whose owner is gone is taken over")
+        (assert (stringContains? seen.dupStart ":code nameInUse") "an existing name cannot be started again")
+        (assert (stringContains? seen.list1 ":count 2") "list shows both sessions")
+        (assert (stringContains? seen.show ":replyPath") "show names the last reply path")
+        (assert (stringContains? seen.replyFile "now=delta") "the last reply is stored")
+        (assert (stringStartsWith? seen.stop "(:session :op stop :status ok") "stop answers an ok receipt")
+        (assert (= seen.filesAfterStop (list "s-two.asn")) "stop removes the row")
+        (assert (stringContains? seen.stopAgain ":code noSession") "stopping a forgotten session is a clean error")
+        (assert (stringContains? seen.badName ":code badName") "a bad name is rejected")
+        (assert (stringContains? seen.badCwdRel ":code badCwd") "a relative cwd is rejected")
+        (assert (stringContains? seen.badCwdHash ":code badCwd") "a cwd with # is rejected")
+        (assert (stringContains? seen.badCwdMissing ":code badCwd") "a missing cwd is rejected")
+        (assert (stringContains? seen.badVendor ":code vendorNotAllowed") "a vendor outside the allowlist is rejected")
+        (assert (stringContains? seen.badText ":code badText") "start without text is rejected")
+        (assert (stringContains? seen.failed ":code vendorFailed") "a failing vendor is reported")
+        (assert (not seen.failedRow) "a failed first turn stores no row")
+        (assert (stringContains? seen.noId ":code noSessionId") "output without a session id is reported")
+        (assert (not seen.noIdRow) "no id means no row")
+        true))
+
+fn ! runTests -> Bool
+  (do (assert (testPure) "pure checks")
+      (assert (testLive) "live sessions")
+      true)

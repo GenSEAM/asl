@@ -32,6 +32,8 @@
     "aslGateway/fleet"
     "aslGateway/plugin"
     "aslGateway/router"
+    "aslGateway/sessions"
+    "aslGateway/binding"
     "aslGateway/upstream"
     "aslGateway/usage"
     "aslGateway/usageLedger"))

@@ -21,6 +21,7 @@
       effHttp
       effPoolHttp
       effCli
+      cliCallerKey
       CliReply
       HttpReply
       httpOk
@@ -111,7 +112,8 @@
   (:f dedup Bool)
   (:f queueWaitSec Float64)
   (:f execSec Float64)
-  (:f pool String))
+  (:f pool String)
+  (:f binding j/Json))
 
 (enum HttpReply
   (:c httpOk [(status Int64) (headers (List (Pair String String))) (body String)])
@@ -1119,6 +1121,14 @@ fn cliAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
                                                           (stringFromInt64 cx.world.agyPromptMaxBytes) " bytes agy keeps; shorten the message") true)
                          (cliDispatch cx l a prompt system noTools effort temp execT queueT agent bodyObj)))))))))))))))
 
+; (:m :ref GW-SESSION-BIND :do "the caller session key of a request: the X-ASL-Session header unless it is the server fallback asl-run-*, else the body field session; empty when none, and an empty key leaves the CLI dispatch exactly as before; the body field user is not a key")
+fn cliCallerKey hs: (List (Pair String String)) body: j/Json -> String
+  (let [(h (optionOr (u/headerGet hs "X-ASL-Session") ""))
+        (s (if (isObj? body) (strOr (getOr body "session" (j/jstr "")) "") ""))]
+    (cond
+      ((and (not (stringEmpty? h)) (not (stringStartsWith? h "asl-run-"))) h)
+      (else s)))
+
 fn cliDispatch cx: Ctx l: Loop a: Attempt prompt: String system: String noTools: Bool effort: j/Json temp: j/Json execT: Float64 queueT: Float64 agent: j/Json bodyObj: j/Json -> ChatStep
   (let [(prov a.upstream.provider)
         (m a.model)
@@ -1155,7 +1165,7 @@ fn cliDispatch cx: Ctx l: Loop a: Attempt prompt: String system: String noTools:
                             (sendError cx l.head 502 (str "CLI worker " prov " failed or returned empty response") true))))))))]
     (if (stringEmpty? prompt)
       (onReply none)
-      (askCli (effCli client (pairSecond plan)) onReply)))
+      (askCli (effCli client (let [(key (cliCallerKey cx.req.headers bodyObj))] (if (stringEmpty? key) (pairSecond plan) (listAppend (pairSecond plan) (list (pair "session" (j/jstr key)) (pair "messages" (getOr bodyObj "messages" (j/jnull))) (pair "sanitize" (j/jbool cx.sanitize))))))) onReply)))
 
 fn usageInt u: j/Json k: String -> Int64
   (match (getOr u k (j/jnull)) ((j/jint n) n) (_ 0))
@@ -1175,7 +1185,8 @@ fn cliReplied cx: Ctx l: Loop a: Attempt reply: CliReply client: String telModel
                   (asl0 (list (pair "queueWaitSec" (round3 reply.queueWaitSec)) (pair "execSec" (round3 reply.execSec)) (pair "pool" (j/jstr pool))))
                   (asl1 (if hasUsage (listAppend asl0 (list (pair "usage" usage))) asl0))
                   (asl2 (if reply.dedup (listAppend asl1 (list (pair "dedup" (j/jbool true)))) asl1))
-                  (asl3 (u/objSet asl2 "alias" (j/jstr a.alias)))
+                  (asl2b (match reply.binding ((j/jnull) asl2) (b (listAppend asl2 (list (pair "binding" b))))))
+                  (asl3 (u/objSet asl2b "alias" (j/jstr a.alias)))
                   (asl4 (match sentEffort ((some s) (u/objSet asl3 "effort" (j/jstr s))) ((none) asl3)))
                   (resp0 (completionJson (str "chatcmpl-" tag "-" (stringFromInt64 ts)) ts telModel text asl4))
                   (resp (if hasUsage
