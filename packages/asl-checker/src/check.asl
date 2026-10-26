@@ -55,7 +55,7 @@ fn qualifyTypeWithMod t: ty/Type mod: r/ModuleSummary deps: r/DepIndex -> ty/Typ
 fn knownTypeName? name: String argc: Int64 optMod: (Option String) isLocal: Bool nextMod: (Option String) -> Bool
   (or (some? optMod)
       (or (ty/isNumericType? name)
-          (or (listContains? (list "String" "Bool" "Unit" "Bytes" "Keyword" "IoError" "PreludeMap" "PreludeTree" "HashMap" "ProcessOutput" "SpawnedProc" "PlatformInfo" "Rusage" "FileStat" "F64Array" "I8Array" "I64Array" "SExpr" "ParquetHandle") name)
+          (or (listContains? (list "String" "Bool" "Unit" "Bytes" "Keyword" "IoError" "PreludeMap" "PreludeTree" "HashMap" "ProcessOutput" "SpawnedProc" "PlatformInfo" "Rusage" "FileStat" "F64Array" "I8Array" "I64Array" "SExpr" "ParquetHandle" "Handle") name)
               (or (and (or (= name "List") (= name "Option")) (= argc 1))
                   (or (and (or (= name "Result") (or (= name "Map") (= name "Pair"))) (= argc 2))
                       (or (and (= (stringLength name) 1) (= (stringUpper name) name))

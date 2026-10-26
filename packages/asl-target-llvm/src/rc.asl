@@ -122,8 +122,9 @@ fn arrayKernel? name: String -> Bool
                  (optionOr (listHead (stringSplit name "$cs")) name))
 
 ; (:m :ref RC-UNPIN :do "runtime externs the system routes call that read their Val arguments without keeping them and return a fresh value, a raw pointer to a malloc copy or a tag word (abs, the route's tag read)")
+; (:m :ref FFI2 :do "ffiMkHandle returns a fresh Handle and the foreign wrappers' Handle reads (ffiHandlePtr, ffiHandleFin) and close (ffiHandleClear) borrow their Val, so a Handle is counted, not pinned, and its finaliser runs when the count reaches zero")
 fn borrowExtern? name: String -> Bool
-  (listContains? (list "mkStr" "mkBytes" "mkBytesOwn" "valToCStr" "valToCStrN" "abs") name)
+  (listContains? (list "mkStr" "mkBytes" "mkBytesOwn" "valToCStr" "valToCStrN" "abs" "ffiMkHandle" "ffiHandlePtr" "ffiHandleFin" "ffiHandleClear") name)
 
 ; (:m :ref RC-UNPIN :do "functions the system route adds (sysRoute wrappers and the sys helpers they call) are plain SSA over fresh allocations, so they are counted like user code; array kernels and parallel workers stay opaque")
 fn countedRoute? name: String -> Bool

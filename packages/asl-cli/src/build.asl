@@ -1,6 +1,6 @@
 (module asl-cli/build
   :x [buildCommand!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/asl1Cache :a cache) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/nativeBuild :a nb) (asl/packages/asl-cli/src/rcConfig :a rcc) (asl-parser/reader :a rd) (asl-checker/foreign :a fsig)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/asl1Cache :a cache) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/nativeBuild :a nb) (asl/packages/asl-cli/src/rcConfig :a rcc) (asl-parser/reader :a rd) (asl-parser/ast :a a) (asl-checker/resolve :a r) (asl-checker/foreign :a fsig)])
 
 fn usage -> String
   "usage: asl build FILE [-o OUT]"
@@ -141,21 +141,51 @@ fn ! nearestManifest! dir: String depth: Int64 -> (Option String)
       ((or (<= depth 0) (or (stringEmpty? dir) (= dir "/"))) (none))
       (else (nearestManifest! (sys/parentOf dir) (- depth 1)))))
 
-fn ! linksFor! target: String -> (Result (List String) String)
-  (match (nearestManifest! (sys/parentOf (resultOr (realPath target) target)) 32)
-    ((none) (ok (list)))
-    ((some m) (match (fileReadString m)
-                ((err e) (err (str "cannot read " m ": " e)))
-                ((ok text) (match (linkLibraries text)
-                             ((err e) (err (str m ": " e)))
-                             ((ok links) (ok links)))))))
+fn ! manifestLinks! m: String -> (Result (List String) String)
+  (match (fileReadString m)
+    ((err e) (err (str "cannot read " m ": " e)))
+    ((ok text) (match (linkLibraries text)
+                 ((err e) (err (str m ": " e)))
+                 ((ok links) (ok links)))))
+
+; (:m :ref FFI2 :do "the link takes the :linkLibraries of every package the program reaches: the manifest nearest the entry and the nearest one of each module in its import closure, entry first, each -l once")
+fn ! moduleFiles! root: String entry: String -> (Result (List String) String)
+  (match (fileReadString entry)
+    ((err e) (err (str "cannot read " entry ": " e)))
+    ((ok src)
+      (match (a/parse src)
+        ((err pe) (err (str "cannot parse " entry ":" (stringFromInt64 pe.line) ": " pe.msg)))
+        ((ok forms)
+          (let [(summary (r/collectSummary forms entry))]
+            (match (r/loadModuleDeps! (cons (r/parentDirOf entry) (list root)) (r/mapValuesList summary.imports))
+              ((err e) (err (str "cannot load the imports of " entry ": " e)))
+              ((ok closure) (ok (cons entry (listSort (filter (fn [(k String)] -> Bool (stringStartsWith? k "/")) (mapKeys closure))))))))))))
+
+fn distinctKeep xs: (List String) -> (List String)
+  (fold (fn [(acc (List String)) (x String)] -> (List String) (if (listContains? acc x) acc (listAppend acc (list x)))) (list) xs)
+
+fn ! linksIn! manifests: (List String) acc: (List String) -> (Result (List String) String)
+  (match (listHead manifests)
+    ((none) (ok (distinctKeep acc)))
+    ((some m) (match (manifestLinks! m)
+                ((err e) (err e))
+                ((ok links) (linksIn! (optionOr (listTail manifests) (list)) (listAppend acc links))))))
+
+fn ! linksFor! root: String target: String -> (Result (List String) String)
+  (let [(entry (resultOr (realPath target) target))]
+    (match (moduleFiles! root entry)
+      ((err e) (err e))
+      ((ok files) (linksIn! (distinctKeep (fold (fn [(acc (List String)) (f String)] -> (List String)
+                                                  (match (nearestManifest! (sys/parentOf f) 32) ((some m) (listAppend acc (list m))) ((none) acc)))
+                                                (list) files))
+                            (list)))))
 
 fn ! linkAttempt! ctx: sys/Context clang: String flags: (List String) lib: String links: (List String) ll: String part: String n: Int64 tmp: String -> (Result (Pair Int64 String) String)
   (let [(b (nb/Build :root ctx.root :cache tmp :tmp tmp :lib lib :base "" :clangVersion "" :owner ""
                      :deadlineNs (+ (monotonicNs) 3600000000000) :maxDesc (+ 16 (* 4 n)) :links links))]
     (nb/linkParts! b clang flags ll part n))
 
-fn ! link! ctx: sys/Context clang: String lib: String target: String out: String tmp: String mode: String shape: (Pair Int64 String) exact: Bool -> Int64
+fn ! link! ctx: sys/Context clang: String lib: String target: String out: String tmp: String mode: String shape: (Pair Int64 String) exact: Bool links: (List String) -> Int64
   (let [(ll (str tmp "/out.ll"))
         (part (str out ".part" (stringFromInt64 (procSelf))))
         (compiled (compileLl! ctx clang lib target ll mode))]
@@ -169,9 +199,7 @@ fn ! link! ctx: sys/Context clang: String lib: String target: String out: String
             ((ok _)
               (match (effectiveLibAndFlags! ctx clang lib mode (pairSecond shape))
                 ((err e) (do (drop! ll) (drop! tmp) (fail (str "ERR_BUILD: runtime variant: " e) 1)))
-                ((ok libFlags) (match (linksFor! target)
-                ((err e) (do (drop! ll) (drop! tmp) (fail (str "ERR_BUILD: " e) 1)))
-                ((ok links)
+                ((ok libFlags)
                   (let [(flags (pairSecond libFlags))
                         (start (monotonicNs))
                         (n (if exact (pairFirst shape) (nb/partsForSize (pairFirst shape) (resultOr (fileSize ll) 0))))
@@ -189,12 +217,12 @@ fn ! link! ctx: sys/Context clang: String lib: String target: String out: String
                               ((err _) (do (drop! part) (fail (str "ERR_BUILD: cannot write " out) 1)))
                               ((ok _) (do (if (and (= (pairFirst linked) 1) (= (optionOr (listHead flags) "") "-O2")) true (sys/sayErr! (str "(:build :link (:parts " (stringFromInt64 (pairFirst linked)) " :opt \"" (optionOr (listHead flags) "") "\" :ms " (stringFromInt64 ms)
                                                              (if (stringEmpty? (pairSecond linked)) "" (str " :whole \"" (stringReplace (pairSecond linked) "\"" "'") "\"")) "))")))
-                                          (sys/say! (str "built " out)) 0))))))))))))))))))
+                                          (sys/say! (str "built " out)) 0))))))))))))))))
 
 fn ! buildFile! ctx: sys/Context clang: String lib: String target: String o: Opts -> Int64
   (let [(given o.out)
         (out (if (stringEmpty? given) (defaultOut target) given))
-        (links (linksFor! target))
+        (links (linksFor! ctx.root target))
         (checked (if (ok? links) (verify/nativeCheckPaths! (list target)) 1))]
     (cond
       ((err? links) (fail (str "ERR_BUILD: " (match links ((err e) e) ((ok _) ""))) 1))
@@ -207,7 +235,7 @@ fn ! buildFile! ctx: sys/Context clang: String lib: String target: String o: Opt
                       ((err e) (do (drop! tmp) (fail e 1)))
                       ((ok mode) (match (linkShape! dir o)
                         ((err e) (do (drop! tmp) (fail e 1)))
-                        ((ok shape) (link! ctx clang lib target out tmp mode shape (not (stringEmpty? o.parts)))))))))))))
+                        ((ok shape) (link! ctx clang lib target out tmp mode shape (not (stringEmpty? o.parts)) (resultOr links (list)))))))))))))
 
 fn ! buildCommand! ctx: sys/Context args: (List String) -> Int64
   (let [(first (optionOr (listHead args) ""))

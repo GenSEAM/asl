@@ -9,6 +9,7 @@
       (asl-target-llvm/rtOps :a opsrt)
       (asl-target-llvm/rtObject :a objrt)
       (asl-target-llvm/rtValue :a valrt)
+      (asl-target-llvm/ffiRt :a ffirt)
       (asl-target-llvm/target :a target)
       (asl-target-llvm/ssaOpt :a opt)])
 
@@ -1835,7 +1836,7 @@ fn emitInstr env: FnEnv ins: ty/SsaInstr -> String
            ((ty/opCall callee args) (emitCall env lhs d callee args))
            ((ty/opCallClosure c args) (str lhs "call %Val @objrt.call(%Val " (val c) ", i64 " (listLength args) ", " arr ")\n"))
            ((ty/opGlobal g) (if (opt/singleton? g) (str lhs "call %Val " (globalGetSym g) "()\n") (str lhs "load %Val, ptr " (globalSym g) "\n")))
-           ((ty/opLoadGlobal g) (str lhs "load ptr, ptr " (externGlobalSym g) "\n"))
+           ((ty/opLoadGlobal g) (if (stringStartsWith? g "&") (str lhs "getelementptr i8, ptr " (externGlobalSym (dropAddressMark g)) ", i64 0\n") (str lhs "load ptr, ptr " (externGlobalSym g) "\n")))
            ((ty/opBox v) (boxInline lhs d (defType env v) (val v)))
            ((ty/opPrim name args) (emitPrim lhs d name args))
            (_ ""))))))
@@ -2563,8 +2564,12 @@ fn constructedVariants m: ty/SsaModule -> (List String)
 fn constructedSchemas m: ty/SsaModule -> (List String)
   (distinct (gather (fn [(op ty/SsaOp)] -> (List String) (match op ((ty/opRecord s _ _) (list s)) (_ (list)))) (allOps m)))
 
+; (:m :ref FFI2 :do "opLoadGlobal of &name is the address of the declared C function name (a Handle finaliser), not a load of a C global")
+fn dropAddressMark name: String -> String
+  (optionOr (stringSlice name 1 (stringLength name)) name)
+
 fn loadGlobalNames m: ty/SsaModule -> (List String)
-  (distinct (gather (fn [(op ty/SsaOp)] -> (List String) (match op ((ty/opLoadGlobal name) (list name)) (_ (list)))) (allOps m)))
+  (distinct (gather (fn [(op ty/SsaOp)] -> (List String) (match op ((ty/opLoadGlobal name) (if (stringStartsWith? name "&") (list) (list name))) (_ (list)))) (allOps m)))
 
 fn distinctRecords records: (List ty/SsaRecordDecl) -> (List ty/SsaRecordDecl)
   (listReverse (pairSecond (fold (fn [(acc (Pair NameIndex (List ty/SsaRecordDecl))) (d ty/SsaRecordDecl)] -> (Pair NameIndex (List ty/SsaRecordDecl))
@@ -3518,11 +3523,11 @@ fn hostDecls -> (List String)
   (list "declare ptr @getenv(ptr)" "declare ptr @getcwd(ptr, i64)" "declare ptr @fopen(ptr, ptr)" "declare i64 @fwrite(ptr, i64, i64, ptr)" "declare i32 @fclose(ptr)")
 
 fn hostDefined? name: String -> Bool
-  (listContains? (list "mkBytes" "mkBytesOwn" "aslLogSpawn") name)
+  (or (listContains? (list "mkBytes" "mkBytesOwn" "aslLogSpawn") name) (listContains? (ffirt/ffiRtNames) name))
 
 fn mathPiecesAll -> (List rterr/RefPiece)
   (rterr/refPieces (list "(" ")" "," " " "\n")
-                   (listAppend (listAppend (listAppend (mathPieces) (listAppend (listAppend (seqConstants) (seqFunctions)) (listAppend (strConstants) (strFunctions)))) (opsrt/rtOpsPieces)) (listAppend (objrt/rtObjectPieces) (listAppend (hostConstants) (cons (pair "@tailrt.closure" (tailClosureFunction)) (hostFunctions))))))
+                   (listAppend (listAppend (listAppend (mathPieces) (listAppend (listAppend (seqConstants) (seqFunctions)) (listAppend (strConstants) (strFunctions)))) (opsrt/rtOpsPieces)) (listAppend (objrt/rtObjectPieces) (listAppend (hostConstants) (cons (pair "@tailrt.closure" (tailClosureFunction)) (listAppend (hostFunctions) (ffirt/ffiRtPieces)))))))
 
 fn tailClosureFunction -> String
   (stringJoin (list

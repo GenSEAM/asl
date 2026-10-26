@@ -20,6 +20,7 @@
    "asl-target-llvm/sysNet"
    "asl-target-llvm/sysRoute"
    "asl-target-llvm/ffiRoute"
+   "asl-target-llvm/ffiRt"
    "asl-target-llvm/parallel"
    "asl-target-llvm/parRoute"
    "asl-target-llvm/arrays"

@@ -466,7 +466,7 @@ fn routeModule facts: libc/TripleFacts m: ty/SsaModule -> (Result Routed (List t
 fn routeModuleAs facts: libc/TripleFacts m: ty/SsaModule check: Bool -> (Result Routed (List ty/IrDiag))
   (if (stringStartsWith? facts.triple "wasm32")
     (if (ffi/foreign? m) (err (ffi/rejectForeign m facts.triple)) (wasmRouteModule facts m))
-    (match (ffi/routeForeign m)
+    (match (ffi/routeForeign facts.errnoAccessor m)
       ((err diags) (err diags))
       ((ok bound)
         (let [(tables (tablesUsed bound))]
@@ -505,19 +505,15 @@ fn ! routeHost! m: ty/SsaModule -> (Result Routed (List ty/IrDiag))
 fn ! routeHostLinked! m: ty/SsaModule -> (Result Routed (List ty/IrDiag))
   (routeHostAs! m false)
 
+; (:m :ref FFI2 :do "a module with foreign calls routes through the host facts like one with syscalls, since its wrappers read the host's errno accessor; routeModuleAs binds the foreign stubs first")
 fn ! routeHostAs! m: ty/SsaModule check: Bool -> (Result Routed (List ty/IrDiag))
-  (match (ffi/routeForeign m)
-    ((err diags) (err diags))
-    ((ok bound) (routeBoundHost! bound check)))
-
-fn ! routeBoundHost! m: ty/SsaModule check: Bool -> (Result Routed (List ty/IrDiag))
-  (if (routes? m)
+  (if (or (routes? m) (ffi/foreign? m))
     (let [(out (processRun "uname -s -m"))
           (host (if (= out.exitCode 0) (unamePair out.stdout) (none)))]
       (match host
         ((none) (err (list (routeDiag "ERR_LLVM_SYSROUTE_HOST" (str "uname -s -m exited " out.exitCode " printing '" out.stdout "' " out.stderr) m.name))))
         ((some p) (match (routeFactsFor (tripleOf (pairFirst p) (pairSecond p)))
-                    ((none) (ok (Routed :result m :internal (list))))
+                    ((none) (if (ffi/foreign? m) (err (ffi/rejectForeign m (tripleOf (pairFirst p) (pairSecond p)))) (ok (Routed :result m :internal (list)))))
                     ((some facts) (routeModuleAs facts m check))))))
     (ok (Routed :result m :internal (list))))
 

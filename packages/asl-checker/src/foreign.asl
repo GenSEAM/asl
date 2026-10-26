@@ -1,10 +1,11 @@
 (module asl-checker/foreign
-  :x [ForeignSig ForeignSpec argKinds returnKinds aslTypeOfKind parseSig cArgCount resultInner literalText libName? foreignCall? specOfTexts specOfCall specOfBody withReturnMode foreignDiags]
+  :x [ForeignSig ForeignSpec argKinds returnKinds kindBase kindFinaliser aslTypeOfKind parseSig cArgCount resultInner literalText libName? foreignCall? specOfTexts specOfCall specOfBody withReturnMode foreignDiags]
   :i [(types :a ty) (ast :a a) (reader :a rd)])
 
 (schema ForeignSig
   (:f args (List String))
-  (:f ret String))
+  (:f ret String)
+  (:f check String :default ""))
 
 (schema ForeignSpec
   (:f lib String)
@@ -12,13 +13,31 @@
   (:f sig ForeignSig))
 
 fn argKinds -> (List String)
-  (list "i32" "u32" "i64" "u64" "f64" "bool" "cstr" "str" "str32" "bytes" "bytes32")
+  (list "i32" "u32" "i64" "u64" "f64" "bool" "cstr" "str" "str32" "bytes" "bytes32" "handle" "close")
 
 fn returnKinds -> (List String)
-  (list "i32" "u32" "i64" "u64" "f64" "bool" "cstr" "void")
+  (list "i32" "u32" "i64" "u64" "f64" "bool" "cstr" "void" "handle")
+
+; (:m :ref FFI2 :do "handle:F and close:F name the C finaliser F of an owned Handle: a result handle:F runs F at collection, an argument handle:F or close:F accepts only handles made with F, and close:F also marks the handle closed after the call")
+fn kindBase kind: String -> String
+  (optionOr (listHead (stringSplit kind ":")) kind)
+
+fn kindFinaliser kind: String -> String
+  (match (stringIndexOf kind ":")
+    ((some i) (optionOr (stringSlice kind (+ i 1) (stringLength kind)) ""))
+    ((none) ""))
+
+fn kindShape? kinds: (List String) kind: String -> Bool
+  (let [(base (kindBase kind)) (fin (kindFinaliser kind)) (marked (stringContains? kind ":"))]
+    (and (listContains? kinds base)
+         (cond
+           ((= base "close") (and marked (symbolName? fin)))
+           ((= base "handle") (or (not marked) (symbolName? fin)))
+           (else (not marked)))))
 
 fn aslTypeOfKind kind: String -> String
   (cond
+    ((or (= (kindBase kind) "handle") (= (kindBase kind) "close")) "Handle")
     ((or (= kind "i32") (or (= kind "u32") (or (= kind "i64") (= kind "u64")))) "Int64")
     ((= kind "f64") "Float64")
     ((= kind "bool") "Bool")
@@ -33,18 +52,35 @@ fn cArgCount kind: String -> Int64
 fn words text: String -> (List String)
   (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringReplace (stringReplace text "\t" " ") "\n" " ") " "))
 
+; (:m :ref FFI2 :do "a result may carry one C failure convention: !neg (an i32 or i64 below zero) or !null (a NULL cstr or handle) turns into ERR_FOREIGN_ERRNO with strerror(errno)")
+fn checkOf rets: (List String) -> (Result String String)
+  (match (listGet rets 1)
+    ((none) (ok ""))
+    ((some flag)
+      (let [(ret (kindBase (optionOr (listHead rets) "")))]
+        (cond
+          ((> (listLength rets) 2) (err "a C result takes at most one convention, !neg or !null"))
+          ((= flag "!neg") (if (or (= ret "i32") (= ret "i64")) (ok "neg") (err (str "!neg needs an i32 or i64 result, not " ret))))
+          ((= flag "!null") (if (or (= ret "cstr") (= ret "handle")) (ok "null") (err (str "!null needs a cstr or handle result, not " ret))))
+          (else (err (str "unknown C result convention " flag "; use !neg or !null")))))))
+
 fn parseSig text: String -> (Result ForeignSig String)
   (let [(sides (stringSplit text "->"))]
     (if (!= (listLength sides) 2)
       (err (str "the signature \"" text "\" needs exactly one ->, as in \"f64 -> f64\""))
       (let [(args (words (optionOr (listGet sides 0) "")))
             (rets (words (optionOr (listGet sides 1) "")))
-            (badArgs (filter (fn [(k String)] -> Bool (not (listContains? (argKinds) k))) args))]
+            (ret (optionOr (listHead rets) ""))
+            (badArgs (filter (fn [(k String)] -> Bool (not (kindShape? (argKinds) k))) args))
+            (closes (filter (fn [(k String)] -> Bool (= (kindBase k) "close")) args))]
         (cond
-          ((not (listEmpty? badArgs)) (err (str "unknown C argument type " (optionOr (listHead badArgs) "") "; use one of " (stringJoin (argKinds) " "))))
-          ((!= (listLength rets) 1) (err (str "the signature \"" text "\" needs one C result type after ->")))
-          ((not (listContains? (returnKinds) (optionOr (listHead rets) ""))) (err (str "unknown C result type " (optionOr (listHead rets) "") "; use one of " (stringJoin (returnKinds) " "))))
-          (else (ok (ForeignSig :args args :ret (optionOr (listHead rets) ""))))))))
+          ((not (listEmpty? badArgs)) (err (str "unknown C argument type " (optionOr (listHead badArgs) "") "; use one of " (stringJoin (argKinds) " ") " (handle may name its finaliser as handle:F, close must: close:F)")))
+          ((> (listLength closes) 1) (err "a C call closes at most one handle"))
+          ((listEmpty? rets) (err (str "the signature \"" text "\" needs one C result type after ->")))
+          ((not (kindShape? (returnKinds) ret)) (err (str "unknown C result type " ret "; use one of " (stringJoin (returnKinds) " ") " (handle may name its finaliser as handle:F)")))
+          (else (match (checkOf rets)
+                  ((err e) (err e))
+                  ((ok check) (ok (ForeignSig :args args :ret ret :check check)))))))))
 
 fn normalType text: String -> String
   (stringReplace (stringReplace (stringJoin (words text) " ") "( " "(") " )" ")")

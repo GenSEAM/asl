@@ -61,8 +61,31 @@ fn ! testSig -> Bool
       (assert (= (ff/cArgCount "cstr") 1) "cstr crosses as one pointer")
       true)
 
+; (:m :ref FFI2 :do "Handle kinds and C failure conventions: handle, handle:F and close:F cross as Handle, !neg goes with i32 or i64 results and !null with cstr or handle results, and a call closes at most one handle")
+fn handles -> String
+  (probe "fn ! openFile p: String m: String -> (Result Handle String)\n  (foreign \"c\" \"fopen\" \"cstr cstr -> handle:fclose !null\")\nfn ! closeFile f: Handle -> (Result Int64 String)\n  (foreign \"c\" \"fclose\" \"close:fclose -> i32 !neg\")\nfn ! fileNo f: Handle -> Int64\n  (foreign \"c\" \"fileno\" \"handle -> i32\")\nfn ! closeFd fd: Int64 -> Int64\n  (foreign \"c\" \"close\" \"i32 -> i32 !neg\")\nfn ! tty fd: Int64 -> (Result String String)\n  (foreign \"c\" \"ttyname\" \"i32 -> cstr !null\")")
+
+fn ! testHandles -> Bool
+  (do (assert (listEmpty? (diagsOf (handles))) (str "handle declarations check clean: " (messagesOf (handles))))
+      (expectCode "Handle param type" (probe "fn ! fileNo f: Int64 -> Int64\n  (foreign \"c\" \"fileno\" \"handle -> i32\")") "ERR_FOREIGN_SIG")
+      (expectCode "Handle result type" (probe "fn ! openFile p: String m: String -> (Result Int64 String)\n  (foreign \"c\" \"fopen\" \"cstr cstr -> handle:fclose\")") "ERR_FOREIGN_SIG")
+      (expectCode "close needs a finaliser" (probe "fn ! closeFile f: Handle -> Int64\n  (foreign \"c\" \"fclose\" \"close -> i32\")") "ERR_FOREIGN_SIG")
+      (expectCode "finaliser name" (probe "fn ! fileNo f: Handle -> Int64\n  (foreign \"c\" \"fileno\" \"handle:9x -> i32\")") "ERR_FOREIGN_SIG")
+      (expectCode "marked plain kind" (probe "fn ! cbrt x: Float64 -> Float64\n  (foreign \"m\" \"cbrt\" \"f64:x -> f64\")") "ERR_FOREIGN_SIG")
+      (expectCode "two closes" (probe "fn ! both a: Handle b: Handle -> Int64\n  (foreign \"c\" \"both\" \"close:fclose close:fclose -> i32\")") "ERR_FOREIGN_SIG")
+      (expectCode "!neg on cstr" (probe "fn ! tty fd: Int64 -> String\n  (foreign \"c\" \"ttyname\" \"i32 -> cstr !neg\")") "ERR_FOREIGN_SIG")
+      (expectCode "!null on i32" (probe "fn ! closeFd fd: Int64 -> Int64\n  (foreign \"c\" \"close\" \"i32 -> i32 !null\")") "ERR_FOREIGN_SIG")
+      (expectCode "unknown convention" (probe "fn ! closeFd fd: Int64 -> Int64\n  (foreign \"c\" \"close\" \"i32 -> i32 !zero\")") "ERR_FOREIGN_SIG")
+      (expectCode "two conventions" (probe "fn ! closeFd fd: Int64 -> Int64\n  (foreign \"c\" \"close\" \"i32 -> i32 !neg !neg\")") "ERR_FOREIGN_SIG")
+      (assert (= (ff/parseSig "cstr -> handle:fclose !null") (ok (ff/ForeignSig :args (list "cstr") :ret "handle:fclose" :check "null"))) "a handle result keeps its finaliser and convention")
+      (assert (= (ff/kindFinaliser "close:sqlite3_close") "sqlite3_close") "close:F names its finaliser")
+      (assert (= (ff/kindBase "handle:fclose") "handle") "handle:F is a handle")
+      (assert (= (ff/aslTypeOfKind "close:fclose") "Handle") "close:F crosses as Handle")
+      true)
+
 fn ! runTests -> Bool
   (do (assert (testClean) "clean declarations")
+      (assert (testHandles) "handle kinds and conventions")
       (assert (testRules) "each rule has its code")
       (assert (testSig) "signature parsing")
       true)
