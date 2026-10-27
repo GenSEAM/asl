@@ -76,53 +76,19 @@ bb.entry.match:
     i64 0, label %bb.onCircle
   ]
 bb.onCircle:
-  %r.vtagw = extractvalue %Val %shape, 0
-  %r.vtag = trunc i64 %r.vtagw to i32
-  %r.isCtor = icmp eq i32 %r.vtag, 8
-  br i1 %r.isCtor, label %r.ctor, label %r.slow
-r.ctor:
   %r.objw = extractvalue %Val %shape, 1
   %r.obj = inttoptr i64 %r.objw to ptr
-  %r.np = getelementptr inbounds i8, ptr %r.obj, i64 12
-  %r.n = load i32, ptr %r.np
-  %r.n64 = sext i32 %r.n to i64
-  %r.inRange = icmp slt i64 0, %r.n64
-  br i1 %r.inRange, label %r.fast, label %r.slow
-r.fast:
   %r.fp = getelementptr inbounds i8, ptr %r.obj, i64 16
-  %r.fastval = load %Val, ptr %r.fp
-  br label %r.join
-r.slow:
-  %r.slowval = call %Val @objrt.variantField(%Val %shape, i64 0)
-  br label %r.join
-r.join:
-  %r = phi %Val [ %r.fastval, %r.fast ], [ %r.slowval, %r.slow ]
+  %r = load %Val, ptr %r.fp
   br label %bb.join
 bb.onSquare:
-  %side.vtagw = extractvalue %Val %shape, 0
-  %side.vtag = trunc i64 %side.vtagw to i32
-  %side.isCtor = icmp eq i32 %side.vtag, 8
-  br i1 %side.isCtor, label %side.ctor, label %side.slow
-side.ctor:
   %side.objw = extractvalue %Val %shape, 1
   %side.obj = inttoptr i64 %side.objw to ptr
-  %side.np = getelementptr inbounds i8, ptr %side.obj, i64 12
-  %side.n = load i32, ptr %side.np
-  %side.n64 = sext i32 %side.n to i64
-  %side.inRange = icmp slt i64 0, %side.n64
-  br i1 %side.inRange, label %side.fast, label %side.slow
-side.fast:
   %side.fp = getelementptr inbounds i8, ptr %side.obj, i64 16
-  %side.fastval = load %Val, ptr %side.fp
-  br label %side.join
-side.slow:
-  %side.slowval = call %Val @objrt.variantField(%Val %shape, i64 0)
-  br label %side.join
-side.join:
-  %side = phi %Val [ %side.fastval, %side.fast ], [ %side.slowval, %side.slow ]
+  %side = load %Val, ptr %side.fp
   br label %bb.join
 bb.join:
-  %result = phi %Val [ %zero, %bb.entry.match ], [ %r, %r.join ], [ %side, %side.join ]
+  %result = phi %Val [ %zero, %bb.entry.match ], [ %r, %bb.onCircle ], [ %side, %bb.onSquare ]
   ret %Val %result
 }
 
@@ -219,50 +185,7 @@ bb.entry:
   ret void
 }
 
-@.objrt.variantType = private unnamed_addr constant [27 x i8] c"variant field %lld of a %s\00"
-@.objrt.variantRange = private unnamed_addr constant [42 x i8] c"variant %s has %d field(s), no field %lld\00"
 @.objrt.patternArity = private unnamed_addr constant [45 x i8] c"pattern (%s) binds %u field(s), value has %d\00"
-define internal %Val @objrt.variantField(%Val %v, i64 %i) {
-entry:
-  %tagw = extractvalue %Val %v, 0
-  %tag = trunc i64 %tagw to i32
-  %objw = extractvalue %Val %v, 1
-  %obj = inttoptr i64 %objw to ptr
-  %isCtor = icmp eq i32 %tag, 8
-  br i1 %isCtor, label %ctor, label %notCtor
-ctor:
-  %np = getelementptr inbounds i8, ptr %obj, i64 12
-  %n = load i32, ptr %np
-  %n64 = sext i32 %n to i64
-  %nonNegative = icmp sge i64 %i, 0
-  %below = icmp slt i64 %i, %n64
-  %inRange = and i1 %nonNegative, %below
-  br i1 %inRange, label %found, label %range
-found:
-  %off = mul i64 %i, 16
-  %slot = add i64 %off, 16
-  %valp = getelementptr inbounds i8, ptr %obj, i64 %slot
-  %value = load %Val, ptr %valp
-  ret %Val %value
-range:
-  %idp = getelementptr inbounds i8, ptr %obj, i64 8
-  %id = load i32, ptr %idp
-  %vname = call ptr @valrt.symName(i32 %id)
-  %range.buf = alloca [4096 x i8]
-  store i8 0, ptr %range.buf
-  %range.written = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %range.buf, i64 4096, ptr @.objrt.variantRange, ptr %vname, i32 %n, i64 %i)
-  %range.len = call i64 @strlen(ptr %range.buf)
-  call void @rterr.raise(ptr @.rterr.c.ERR_RANGE, ptr %range.buf, i64 %range.len)
-  unreachable
-notCtor:
-  %tname = call ptr @rterr.tagName(i32 %tag)
-  %type.buf = alloca [4096 x i8]
-  store i8 0, ptr %type.buf
-  %type.written = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %type.buf, i64 4096, ptr @.objrt.variantType, i64 %i, ptr %tname)
-  %type.len = call i64 @strlen(ptr %type.buf)
-  call void @rterr.raise(ptr @.rterr.c.ERR_TYPE, ptr %type.buf, i64 %type.len)
-  unreachable
-}
 define internal void @objrt.patternArity(ptr %name, i32 %want, i32 %n) noreturn {
 entry:
   %buf = alloca [4096 x i8]
@@ -1236,7 +1159,6 @@ unknown:
   unreachable
 }
 @.rterr.c.ERR_ARITY = private unnamed_addr constant [10 x i8] c"ERR_ARITY\00"
-@.rterr.c.ERR_RANGE = private unnamed_addr constant [10 x i8] c"ERR_RANGE\00"
 @.rterr.m.noArmValue = private unnamed_addr constant [24 x i8] c"no arm matches %s in %s\00"
 
 define internal ptr @rterr.text(%Val %s) {

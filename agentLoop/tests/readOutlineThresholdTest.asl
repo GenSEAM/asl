@@ -31,7 +31,13 @@ fn ! runTests -> Bool
         tuned (receiptFor "(:step :op \"read\" :file \"small.txt\")" root)
         tunedRange (receiptFor "(:step :op \"read\" :file \"small.txt\" :start 1 :end 5)" root)
         _d (fileWrite (str root "/.asl.config.asn") "(:aslConfig :agentLoop (:readOutlineBytes 1000000))\n")
-        raised (receiptFor "(:step :op \"read\" :file \"big.txt\")" root)]
+        raised (receiptFor "(:step :op \"read\" :file \"big.txt\")" root)
+        _e (fileWrite (str root "/.asl.config.asn") "(:aslConfig :readOutlineBytes 100 :other (:readOutlineBytes 100))\n")
+        unscoped (receiptFor "(:step :op \"read\" :file \"small.txt\")" root)
+        unscopedLimit (o/readOutlineBytesFor! root)
+        _f (fileWrite (str root "/.asl.config.asn") "(:aslConfig :agentLoop (:readOutlineBytes 0))\n")
+        zero (receiptFor "(:step :op \"read\" :file \"small.txt\")" root)
+        zeroLimit (o/readOutlineBytesFor! root)]
     (do
       (assert (> (stringLength big) 16384) "the large fixture is above the default limit")
       (assert (< (stringLength small) 16384) "the small fixture is below the default limit")
@@ -46,5 +52,13 @@ fn ! runTests -> Bool
       (assert (and (stringContains? raised "BODY") (not (stringContains? raised "3-5 fn foo"))) "a raised limit returns the large file whole")
       (assert (= (o/readOutlineBytesIn "(:agentLoop (:readOutlineBytes 321))") (some 321)) "the config key parses")
       (assert (none? (o/readOutlineBytesIn "(:agentLoop (:other 1))")) "an absent key falls back")
+      (assert (and (stringContains? unscoped "BODY") (not (stringContains? unscoped "3-5 fn foo")) (= unscopedLimit (ok 16384)))
+              "a :readOutlineBytes outside the :agentLoop group is ignored and the default limit applies")
+      (assert (and (stringContains? zero "(status \"rejected\")") (stringContains? zero "ERR_CONFIG")
+                   (stringContains? zero "must be a positive integer") (not (stringContains? zero "BODY")))
+              "a :readOutlineBytes of 0 rejects the read with ERR_CONFIG instead of outlining every file or falling back")
+      (assert (match zeroLimit ((err m) (stringContains? m ":readOutlineBytes must be a positive integer, got \"0\"")) ((ok _) false))
+              "the limit lookup returns the config error for 0")
+      (assert (none? (o/readOutlineBytesIn "(:agentLoop (:readOutlineBytes 0))")) "0 is not a limit")
       (assert (ok? (pathRemove root)) "the scratch root is removed")
       true))

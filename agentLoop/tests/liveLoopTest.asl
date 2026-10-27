@@ -131,7 +131,9 @@ fn ! runTests -> Bool
                      "(:script :id \"liveLoopTaskCommit\" :mode :implement\n  :turns (\n    (:turn :num 1 :reply \"(:step :op \\\"write\\\" :file \\\"subject.txt\\\" :content \\\"green\\\\n\\\")\")\n    (:turn :num 2 :reply \"(:step :op \\\"write\\\" :file \\\"subject.txt\\\" :content \\\"green\\\\n\\\") (:done :commit \\\"(:c :a agentLoop :do \\\\\\\"live commit\\\\\\\" :g \\\\\\\"liveLoopTest 15 assertions\\\\\\\")\\\")\")\n  )\n)\n")
             (write (str baselineReadRoot "/tests/fixtures/agentLoop/mvp/baselineGreenRead.asn")
                    "(:script :id \"liveLoopBaselineGreenRead\" :mode :implement\n  :turns (\n    (:turn :num 1 :reply \"(:step :op \\\"read\\\" :file \\\"subject.txt\\\")\")\n    (:turn :num 2 :reply \"(:done)\")\n  )\n)\n"))))
-        editReady (and fixtures (initCommitRepo editRoot "before\n"))
+        cfgOff (fold (fn [acc r] (and acc (write (str r "/.asl.config.asn") "(:aslConfig :agentLoop (:specCheck false))\n")))
+                 true (list oneRoot editRoot capRoot redRoot emptyRoot commitRoot integrityRoot findingsRoot rejectedRoot confirmRoot threeRoot taskCommitRoot baselineReadRoot))
+        editReady (and cfgOff (and fixtures (initCommitRepo editRoot "before\n")))
         redReady (and fixtures (initCommitRepo redRoot "before\n"))
         threeReady (and fixtures (initCommitRepo threeRoot "before\n"))
         commitReady (and fixtures (initCommitRepo commitRoot "before\n"))
@@ -187,7 +189,7 @@ fn ! runTests -> Bool
         capJournal (readOr (str capRoot "/.asl/run/agentLoop/" capSession ".journal"))
         editedFile (readOr (str editRoot "/subject.txt"))
         closeRoot (tempDir)
-        closeFixtureDir (ok? (dirCreate (str closeRoot "/tests/fixtures/agentLoop/mvp")))
+        closeFixtureDir (and (ok? (dirCreate (str closeRoot "/tests/fixtures/agentLoop/mvp"))) (write (str closeRoot "/.asl.config.asn") "(:aslConfig :agentLoop (:specCheck false))\n"))
         closeFixtureStaged (and closeFixtureDir (stageFixture closeRoot "closeOnGreen"))
         closeReady (and closeFixtureStaged (initCommitRepo closeRoot "before\n"))
         close (runMain closeRoot "close on green gate without an explicit done" "closeOnGreen"
@@ -208,7 +210,7 @@ fn ! runTests -> Bool
         baselineReadSession (fieldAfter baselineRead.stdout ":session \"")
         baselineReadJournal (readOr (str baselineReadRoot "/.asl/run/agentLoop/" baselineReadSession ".journal"))
         capsRoot (tempDir)
-        capsDir (ok? (dirCreate (str capsRoot "/tests/fixtures/agentLoop/mvp")))
+        capsDir (and (ok? (dirCreate (str capsRoot "/tests/fixtures/agentLoop/mvp"))) (write (str capsRoot "/.asl.config.asn") "(:aslConfig :agentLoop (:specCheck false))\n"))
         capsFixtures (and capsDir
           (and (write (str capsRoot "/tests/fixtures/agentLoop/mvp/retryEmpty.asn")
                  "(:script :id \"liveLoopRetryEmpty\" :mode :implement :attemptLog \"enabled\"\n  :turns (\n    (:turn :num 1 :error \"ERR_NO_REPLY\")\n    (:turn :num 2 :reply \"(:done)\")\n  )\n)\n")

@@ -25,6 +25,13 @@ fn int32Over -> String
 fn int32Fits -> String
   "(module probe :x [f] :i [])\nfn f n: Int32 -> Int32\n  (+ n 2147483647)\n"
 
+fn int64Cases -> (List (Pair String Bool))
+  (list (pair "9223372036854775808" true) (pair "-9223372036854775809" true) (pair "99999999999999999999" true) (pair "9223372036854775807" false) (pair "-9223372036854775808" false)
+)
+
+fn int64Src lit: String -> String
+  (str "(module probe :x [f] :i [])\nfn f -> Int64\n  " lit "\n")
+
 fn constantCases -> (List String)
   (list "(module probe :x [f] :i [])\nfn f -> Bool\n  (do (assert true \"t\") true)\n"
         "(module probe :x [f] :i [])\nfn f -> Bool\n  (do (assert (= 1 1) \"one\") true)\n"
@@ -56,4 +63,5 @@ fn ! runTests -> Bool
     (assert (listContains? (codesOf (int32Over)) "ERR_INT_RANGE") (str "a literal past Int32 is ERR_INT_RANGE: " (messagesOf (int32Over))))
     (refute (listContains? (codesOf (int32Over)) "literal-range") (str "the internal literal-range code is mapped: " (messagesOf (int32Over))))
     (assert (listEmpty? (diagsOf (int32Fits))) (str "Int32 max fits: " (messagesOf (int32Fits))))
+    (assert (listAll? (fn [(c (Pair String Bool))] -> Bool (= (listContains? (codesOf (int64Src (pairFirst c))) "ERR_INT_RANGE") (pairSecond c))) (int64Cases)) (str "Int64 literals past i64 are ERR_INT_RANGE, min and max stay valid: " (stringJoin (map (fn [(c (Pair String Bool))] -> String (messagesOf (int64Src (pairFirst c)))) (int64Cases)) " | ")))
     true)

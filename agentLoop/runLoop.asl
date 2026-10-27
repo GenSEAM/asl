@@ -1,10 +1,10 @@
 (module asl/agentLoop/runLoop
-  :x [LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! head! finish! runLoopWith! runLoopWithProvider! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
+  :x [withUnbacked specCheckRun! journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! head! finish! runLoopWith! runLoopWithProvider! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
   :i [(asl/agentLoop/loopState :a s) (asl/agentLoop/loop :a lp)
       (asl/agentLoop/context :a ctx) (asl/agentLoop/journal :a jr)
       (asl/agentLoop/gitOps :a go) (asl/agentLoop/runOps :a ro) (asl/agentLoop/reply :a rp)
       (asl/agentLoop/core :a c) (asl/agentLoop/gates :a g) (asl-json/json :a j)
-      (asl/agentLoop/providers :a pv)])
+      (asl/agentLoop/providers :a pv) (asl/agentLoop/agentConfig :a ac)])
 
 schema LoopRun
   (:f state s/LoopState) (:f procs ro/Procs) (:f written jr/Written) (:f session String)
@@ -66,6 +66,10 @@ fn coreZero -> j/Json
   (j/jobj (list (pair "built" (j/jint 0)) (pair "calls" (j/jint 0)) (pair "cases" (j/jint 0)) (pair "sec" (j/jfloat 0.0))))
 
 fn ! emptyResult env: s/LoopEnv sid: String status: String error: (Option String) turns: Int64 patch: (Option String) restored: (List String) preflight: (Option j/Json) message: (Option String) commitMissing: (Option Bool) -> s/RunResult
+  (emptyResultWith env sid status error turns patch restored preflight message commitMissing (list))
+
+; (:m :ref LEON-CAPS :do "a result built after the baseline pass ran carries that pass's vacuous gates; the setup rejections come before the baseline runs, so they have none to report")
+fn ! emptyResultWith env: s/LoopEnv sid: String status: String error: (Option String) turns: Int64 patch: (Option String) restored: (List String) preflight: (Option j/Json) message: (Option String) commitMissing: (Option Bool) vacuous: (List String) -> s/RunResult
   (s/RunResult :status status :unbacked 0 :unbackedClaims (list) :gates (list)
     :turns turns :escalate none
     :needsConfirm none :error error
@@ -76,7 +80,7 @@ fn ! emptyResult env: s/LoopEnv sid: String status: String error: (Option String
     :batching (j/jobj (list (pair "ops" (j/jint 0)) (pair "single" (j/jint 0)) (pair "turns" (j/jint 0))))
     :gatesGreen none :commit none :commitError none :commitMissing commitMissing
     :queueWaitSec none :execSec none :usage none :signal none :ownsRejected (list)
-    :planSummary none :coreHost (if (= status "escalated") (coreZero) (j/jobj (list))) :openPossible (list) :gatePreflight preflight :message message :vacuousGates (list))
+    :planSummary none :coreHost (if (= status "escalated") (coreZero) (j/jobj (list))) :openPossible (list) :gatePreflight preflight :message message :vacuousGates vacuous :specCheck none)
 
 fn taskByte bs: Bytes n: Int64 i: Int64 -> Int64
   (if (and (>= i 0) (< i n)) (bytesGet bs i) -1)
@@ -485,6 +489,10 @@ fn withBaseline state: s/LoopState green: (List String) -> s/LoopState
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
       :writtenFiles state.writtenFiles)
 
+; (:m :ref LEON-CAPS :do "the unbacked gate or count claims of the final reply replace any earlier set; they are the claims the end status counts")
+fn withUnbacked state: s/LoopState claims: (List j/Json) -> s/LoopState
+  (with state :runUnbackedClaims claims)
+
 fn ! setup! env: s/LoopEnv -> LoopSetup
   (let [state (stateFor env)
         sid (optionOr env.sessionId (env.newId))
@@ -503,6 +511,9 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
             (optionOr env.base "") (optionOr env.model "") "default" ":transport :subprocess :transportWhy \"ASL_TRANSPORT=subprocess\""
             (stringFromInt64 timeout) (stringFromInt64 (optionOr env.contextTokens 24000))
             (match env.wallBudget ((some n) (stringFromInt64 n)) ((none) "")) env.plan)))
+        cfgText (ac/configText! rootDir)
+        cfgProblems (ac/configProblems cfgText)
+        baselineOn (!= (optionOr (ac/agentLoopValue cfgText ":baseline") "true") "false")
         preflight (go/gatePreflight! env.gates rootDir none)
         fresh (jr/newWritten rootDir head)
         patchState (match env.resume
@@ -518,6 +529,11 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
       (jr/journalWrite env.journalPath header)
       (resumeJournal! applied env.journalPath)
       (cond
+        ((not (listEmpty? cfgProblems))
+          (let [message (c/joinSep cfgProblems "; ")]
+            (do
+              (jr/journalWrite env.journalPath (str "(:configProblem \"" (c/escapeAsn message) "\")\n(:result :status :rejected :session \"" sid "\" :error :ERR_CONFIG :message \"" (c/escapeAsn message) "\")\n"))
+              (early (emptyResult env sid "rejected" (some "ERR_CONFIG") 0 none (list) none (some message) none)))))
         ((not (listEmpty? preflight))
           (do
             (jr/journalWrite env.journalPath (str "(:gatePreflight " (go/formatGatePreflight preflight) ")\n(:result :status :rejected :session \"" sid "\" :error :ERR_GATE_UNPARSABLE)\n"))
@@ -528,10 +544,11 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
               (jr/journalWrite env.journalPath (str "(:resumePatch :error \"" (c/escapeAsn message) "\")\n(:result :status :rejected :session \"" sid "\" :error :ERR_RESUME_PATCH :message \"" (c/escapeAsn message) "\")\n"))
               (early (emptyResult env sid "rejected" (some "ERR_RESUME_PATCH") 0 none (list) none (some message) none)))))
         (else
-          (let [green (if (and (none? env.resume) (not (listEmpty? env.gates)))
+          (let [green (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates))))
                         (baselineGreen! env.gates rootDir timeout)
                         (list))
-                _ (if (and (none? env.resume) (not (listEmpty? env.gates))) (ok? (jr/journalWrite env.journalPath (str "(:baseline :green (" (quoted green) ") :red (" (quoted (filter (fn [g] (not (listContains? green g))) env.gates)) "))\n"))) true)]
+                _ (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates)))) (ok? (jr/journalWrite env.journalPath (str "(:baseline :green (" (quoted green) ") :red (" (quoted (filter (fn [g] (not (listContains? green g))) env.gates)) "))\n"))) true)
+                _skipped (if (and (not baselineOn) (and (none? env.resume) (not (listEmpty? env.gates)))) (ok? (jr/journalWrite env.journalPath "(:baseline :skipped :why \"config :agentLoop :baseline false\")\n")) true)]
           (ready (LoopRun
             :state (withBaseline (withPrefetch (withHeadState state state.turn state.readStreak (some? applied)
               state.deliver state.allGateResults state.lastGates state.status state.signalName
@@ -694,7 +711,53 @@ fn ! commit! env: s/LoopEnv run: LoopRun rootDir: String status: String gatesGre
               ((some? invalid) (commitFailed! env (str "the commit message is not a valid (:c ...) ASN line: " (optionOr invalid ""))))
               (else (commitWritten! env run rootDir message))))))))
 
-fn resultText state: s/LoopState session: String status: String unbacked: Int64 commit: (Pair (Option String) (Option String)) commitMissing: Bool preserve: Bool patch: (Option String) restored: (List String) -> String
+fn specText spec: (Option s/SpecVerdict) -> String
+  (match spec
+    ((some v) (str (if (= v.verdict "skipped") " :specCheck (:verdict skipped :reason noGrader)" (str " :specCheck (:verdict " v.verdict " :model \"" (c/escapeAsn v.model) "\" :reasons (" (quoted v.reasons) "))"))))
+    ((none) ""))
+
+fn modelOfLine line: String -> (Option String)
+  (match (stringIndexOf line ":model \"")
+    ((none) none)
+    ((some k)
+      (let [rest (optionOr (stringSlice line (+ k 8) (stringLength line)) "")]
+        (match (stringIndexOf rest "\"")
+          ((some e) (some (optionOr (stringSlice rest 0 e) "")))
+          ((none) none)))))
+
+; (:m :ref LEON-CAPS :do "the model named on the last journal row that starts with tag: (:served ...) rows come from the writer's turns, (:graderServed ...) rows from the spec-check call; empty when the journal holds none")
+fn journalModel text: String tag: String -> String
+  (fold (fn [acc line] (if (stringStartsWith? line tag) (optionOr (modelOfLine line) acc) acc)) "" (stringLines text))
+
+fn specFail model: String reasons: (List String) -> s/SpecVerdict
+  (s/SpecVerdict :verdict "fail" :model model :reasons reasons)
+
+; (:m :ref LEON-CAPS :do "the diff is graded against the task by the env.grade channel, a gateway role other than the writer's; a reviewer error, an unreadable reply, a grader that reports no model, a grader that is the writer's own model, an unknown writer model, and a not-met verdict are all fail; a provider with no grader channel is skipped, which still ends needsReview, never a silent pass")
+fn ! specCheckRun! env: s/LoopEnv run: LoopRun rootDir: String written: (List String) -> s/SpecVerdict
+  (let [state run.state
+        review (ctx/runSpecCheck! env.grade (some env.task) rootDir run.written.startHead written
+                 (map ctx/pyStr state.runUnbackedClaims) (list) env.gates (j/jobj (mapPairs state.lastGates)))
+        after (resultOr (fileReadString env.journalPath) "")
+        grader (journalModel after "(:graderServed ")
+        servedWriter (journalModel after "(:served ")
+        writer (if (stringEmpty? servedWriter) (optionOr env.model "") servedWriter)]
+    (match review
+      ((err e) (specFail grader (list (str "spec check could not run: " e))))
+      ((ok verdict)
+        (match verdict
+          ((ctx/reviewError m)
+            (if (stringContains? m "ERR_NO_GRADER_CHANNEL")
+              (s/SpecVerdict :verdict "skipped" :model "" :reasons (list "noGrader"))
+              (specFail grader (list m))))
+          ((ctx/reviewVerdict met missing)
+            (cond
+              ((not met) (specFail grader (if (listEmpty? missing) (list "the grader found the task unmet") missing)))
+              ((stringEmpty? grader) (specFail grader (list "the grader reported no model, so it cannot be shown to differ from the writer")))
+              ((stringEmpty? writer) (specFail grader (list "the writer model is unknown, so the grader cannot be shown to differ")))
+              ((= grader writer) (specFail grader (list (str "the grader model " grader " is the writer's model"))))
+              (else (s/SpecVerdict :verdict "pass" :model grader :reasons (list)))))))))
+
+fn resultText state: s/LoopState session: String status: String unbacked: Int64 commit: (Pair (Option String) (Option String)) commitMissing: Bool preserve: Bool patch: (Option String) restored: (List String) spec: (Option s/SpecVerdict) -> String
   (let [claims (map ctx/pyStr state.runUnbackedClaims)
         findings (map ctx/pyStr state.findingsList)
         usage state.usageTotals
@@ -713,13 +776,14 @@ fn resultText state: s/LoopState session: String status: String unbacked: Int64 
       " :phases (" (phasesText state.phases) ")"
       (if preserve " :gatesGreen true" "")
       (if (listEmpty? state.baselineGreen) "" (str " :vacuousGates (" (quoted state.baselineGreen) ")"))
+      (specText spec)
       (if (listEmpty? findings) "" (str " :findings (" (c/joinSep findings " ") ")"))
       (if state.hasTiming (str " :queueWaitSec " (ctx/floatRepr state.totalQueueWaitSec) " :execSec " (ctx/floatRepr state.totalExecSec)) "")
       (if (usageAny usage) (str " :usage (:input " (usageInt usage "inputTokens") " :cached " (usageInt usage "cachedTokens") " :output " (usageInt usage "outputTokens") ")") "")
       " :batching (:turns " (batchingInt batching "turns") " :ops " (batchingInt batching "ops") " :singleOp " (batchingInt batching "single") ")"
       (jr/handBackFields patch restored) (jr/writtenField state.writtenFiles) ")\n"))
 
-fn ! finalResult env: s/LoopEnv run: LoopRun status: String unbacked: Int64 commit: (Pair (Option String) (Option String)) commitMissing: Bool preserve: Bool patch: (Option String) restored: (List String) -> s/RunResult
+fn ! finalResult env: s/LoopEnv run: LoopRun status: String unbacked: Int64 commit: (Pair (Option String) (Option String)) commitMissing: Bool preserve: Bool patch: (Option String) restored: (List String) spec: (Option s/SpecVerdict) -> s/RunResult
   (let [state run.state
         usage state.usageTotals]
     (s/RunResult
@@ -741,12 +805,12 @@ fn ! finalResult env: s/LoopEnv run: LoopRun status: String unbacked: Int64 comm
       :ownsRejected state.ownsRejections
       :planSummary (match (j/jsonGet state.plan "steps") ((some _) (some state.plan)) ((none) none))
       :coreHost (coreHostZero) :openPossible (list)
-      :gatePreflight none :message none :vacuousGates state.baselineGreen))
+      :gatePreflight none :message none :vacuousGates state.baselineGreen :specCheck spec))
 
 fn ! failedAfterKill! env: s/LoopEnv run: LoopRun rootDir: String e: String -> s/RunResult
   (match (jr/handBack run.written rootDir env.journalPath run.session true run.written.startHead)
-    ((err handErr) (emptyResult env run.session "failed" (some handErr) run.state.turn none (list) none none none))
-    ((ok hand) (emptyResult env run.session "failed" (some e) run.state.turn (pairFirst (pairSecond hand)) (pairSecond (pairSecond hand)) none none none)))
+    ((err handErr) (emptyResultWith env run.session "failed" (some handErr) run.state.turn none (list) none none none run.state.baselineGreen))
+    ((ok hand) (emptyResultWith env run.session "failed" (some e) run.state.turn (pairFirst (pairSecond hand)) (pairSecond (pairSecond hand)) none none none run.state.baselineGreen)))
 
 fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
   (let [state run.state
@@ -754,13 +818,18 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
         findings (map ctx/pyStr state.findingsList)
         outcome (stringSplit (lp/finalOutcome state.status (optionOr state.deliver "") (not (listEmpty? findings))
           (listAny? (fn [f] (stringContains? f ":claim")) findings) (listLength state.runUnbackedClaims) 0) "|")
-        finalStatus (c/firstOf outcome)
+        status0 (c/firstOf outcome)
         finalUnbacked (optionOr (stringToInt64 (optionOr (listGet outcome 1) "")) 0)
-        failed (fn [e patch restored] (emptyResult env run.session "failed" (some e) state.turn patch restored none none none))]
+        failed (fn [e patch restored] (emptyResultWith env run.session "failed" (some e) state.turn patch restored none none none state.baselineGreen))]
     (match (killRun! env run rootDir)
       ((err e) (failedAfterKill! env run rootDir e))
       ((ok _)
-        (let [gatesGreen (declaredGatesGreen env.gates state.lastGates)
+        (let [written (distinct (listAppend state.writtenFiles (writtenPaths run.written)))
+              spec (if (and env.specCheck (and (= status0 "ok") (not (listEmpty? written))))
+                     (some (specCheckRun! env run rootDir written))
+                     none)
+              finalStatus (match spec ((some v) (if (or (= v.verdict "fail") (= v.verdict "skipped")) "needsReview" status0)) ((none) status0))
+              gatesGreen (declaredGatesGreen env.gates state.lastGates)
               preserveGreen (and gatesGreen (not (listEmpty? env.gates)))
               preserve (lp/preserveFiles finalStatus (optionOr state.escalateReceipt "")
                 (intField state.retries "gates" 0) (intField state.retries "steps" 0) run.parseDefects preserveGreen)
@@ -776,9 +845,9 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
                     (let [commitMissing (and (= finalStatus "ok") (and state.commitRequested (and (none? run.commitMessage) state.writesPersisted)))]
                       (match (journaled! env (str (if commitMissing "(:commitMissing true)\n" "")
                             (ctx/coreStatsLine (coreHostZero))
-                            (resultText state run.session finalStatus finalUnbacked commit commitMissing preserve patch restored)) true)
+                            (resultText state run.session finalStatus finalUnbacked commit commitMissing preserve patch restored spec)) true)
                         ((err e) (failed e patch restored))
-                        ((ok _) (finalResult env run finalStatus finalUnbacked commit commitMissing preserve patch restored)))))))))))))
+                        ((ok _) (finalResult env run finalStatus finalUnbacked commit commitMissing preserve patch restored spec)))))))))))))
 
 fn ! runBody! env: s/LoopEnv run: LoopRun body: (fn [s/LoopEnv LoopRun] -> (Pair LoopRun s/Step)) -> LoopRun
   (match (head! env run.state run.parseDefectStreak)
@@ -806,7 +875,7 @@ fn ! runLoopWith! env: s/LoopEnv body: (fn [s/LoopEnv LoopRun] -> (Pair LoopRun 
       (let [finished (runBody! env run body)
             result (finish! env finished)]
         (match (cleanup! env finished.session)
-          ((err e) (emptyResult env finished.session "failed" (some e) finished.state.turn none (list) none none none))
+          ((err e) (emptyResultWith env finished.session "failed" (some e) finished.state.turn none (list) none none none finished.state.baselineGreen))
           ((ok _) result)))))
 
 fn ! runBodyWithProvider! env: s/LoopEnv wrapped: ProviderRun body: (fn [s/LoopEnv ProviderRun] -> (Pair ProviderRun s/Step)) -> ProviderRun
@@ -832,5 +901,5 @@ fn ! runLoopWithProvider! env: s/LoopEnv provider: pv/Provider body: (fn [s/Loop
             completed finished.run
             result (finish! env completed)]
         (match (cleanup! env completed.session)
-          ((err e) (emptyResult env completed.session "failed" (some e) completed.state.turn none (list) none none none))
+          ((err e) (emptyResultWith env completed.session "failed" (some e) completed.state.turn none (list) none none none completed.state.baselineGreen))
           ((ok _) result)))))

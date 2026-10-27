@@ -19,10 +19,14 @@
   (:f totalDefs Int64)
   (:f dead (List Def)))
 
+; (:m :ref DEADCODE-EXCLUDE-CACHE :do "copies under .asl/cache are build artifacts, so deadcode no longer scans them; they inflated filesScanned and made a private fn look referenced twice")
+fn cacheCopy? fpath: String -> Bool
+  (or (stringContains? fpath "/.asl/cache/") (stringStartsWith? fpath ".asl/cache/"))
+
 fn walkIgnoring! ctx: h/Ctx root: String -> (Result (List String) String)
   (match (h/findTree! ctx root true (list "*.asl"))
     ((err e) (err e))
-    ((ok tree) (ok (h/walkFiles! tree))))
+    ((ok tree) (ok (filter (fn [(f String)] -> Bool (not (cacheCopy? f))) (h/walkFiles! tree)))))
 
 ; (:m :ref MAINFIX14-TRACKEDASL-20261019 :do "walkIgnoring! shells out to find, which has no notion of .gitignore and descends into gitignored dirs such as .asl/cache -- harmless for lint (working tree, no claim of truth) but wrong for any audit that reports a production-truth count: a fixture artifact another suite happens to leave in .asl/cache/<suite>/*.asl (nativeTest.asl, nativeTestReportTest.asl -- both gitignored by .gitignore:9) gets scanned and counted as a real production stub. trackedAsl! asks git ls-files instead, so only committed source is ever in scope; same pattern already proven in asl-intel/stubs.asl trackedAsl!")
 fn trackedAsl! ctx: h/Ctx root: String -> (Result (List String) String)

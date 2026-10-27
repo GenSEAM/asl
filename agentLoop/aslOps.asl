@@ -6,6 +6,7 @@
       execAslOp! execAslOpCustom! readOutlineBytes readOutlineBytesIn readOutlineBytesFor! serReceipt serValue
       runExit runStdout runStderr runTimedOut runSeconds runFellBack chooseTransportFor]
   :i [(asl/agentLoop/core :a c)
+      (asl/agentLoop/agentConfig :a ac)
       (asl/agentLoop/diff :a diff)
       (asl/agentLoop/txn :a t)
       (asl-json/json :a j)
@@ -582,18 +583,19 @@ fn readOutlineBytes -> Int64
   16384
 
 fn readOutlineBytesIn text: String -> (Option Int64)
-  (match (stringIndexOf text ":readOutlineBytes")
+  (match (ac/agentLoopValue text ":readOutlineBytes")
     ((none) none)
-    ((some k)
-      (let [tail (stringTrim (c/sliceOf text (+ k (stringLength ":readOutlineBytes")) (stringLength text)))
-            e (runEnd tail (stringLength tail) 0 c/isDigit)]
-        (if (> e 0) (stringToInt64 (c/sliceOf tail 0 e)) none))))
+    ((some v) (ac/positiveInt v)))
 
-fn ! readOutlineBytesFor! root: String -> Int64
-  (let [cfg (str root "/.asl.config.asn")]
-    (match (fileReadString cfg)
-      ((ok text) (optionOr (readOutlineBytesIn text) (readOutlineBytes)))
-      ((err _) (readOutlineBytes))))
+; (:m :ref LEON-CAPS :do "a configured value that is not a positive integer is an error the read op reports, never a silent fallback to the default")
+fn ! readOutlineBytesFor! root: String -> (Result Int64 String)
+  (let [text (ac/configText! root)]
+    (match (ac/agentLoopValue text ":readOutlineBytes")
+      ((none) (ok (readOutlineBytes)))
+      ((some v)
+        (match (ac/positiveInt v)
+          ((some n) (ok n))
+          ((none) (err (str ":agentLoop :readOutlineBytes must be a positive integer, got \"" v "\"")))))))
 
 fn oversizeBytesHint size: Int64 limit: Int64 -> String
   (str "read of " (stringFromInt64 size) " bytes exceeds the " (stringFromInt64 limit) "-byte whole-file limit; this is the file's outline instead -- read a section by :symbol name, or :start n :end m")
@@ -769,6 +771,13 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
                         (list (pair "warning" (rStr "placeholder assert: red-first needs a real assertion on the missing behaviour")))
                         (list))))))))))
       ((= opName "read")
+        (match (readOutlineBytesFor! root)
+          ((err cfgMsg)
+            (list (pair "id" (rStr rid)) (pair "op" (rStr "read")) (pair "file" (rStr (getKvStr op "file")))
+              (pair "span" (rNone)) (pair "content" (rNone)) (pair "status" (rStr "rejected"))
+              (pair "error" (rStr "ERR_CONFIG")) (pair "message" (rStr cfgMsg))
+              (pair "cmd" (rStr (str "asl read " (getKvStr op "file")))) (pair "exit" (rInt 2)) (pair "stdout" (rStr ""))))
+          ((ok outlineLimit)
         (let [filePath (getKvStr op "file")
               symbolVal (getKvStr op "symbol")
               anchorVal (getKvStr op "anchor")
@@ -787,7 +796,6 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
               contentRaw (if (= code 0) (findReadContent out) "")
               fullPath (t/normPath (if (stringStartsWith? filePath "/") filePath (str root "/" filePath)))
               fileBytes (resultOr (fileSize fullPath) 0)
-              outlineLimit (readOutlineBytesFor! root)
               overBytes (and wholeFile (and (= code 0) (> fileBytes outlineLimit)))
               oversizeWhole (and wholeFile (and (= code 0) (or overBytes (> (stringLength contentRaw) cap))))
               totalLines (countFileLines fullPath)
@@ -824,7 +832,7 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
             (pair "message" (match msgVal ((some m) (rStr m)) ((none) (rNone))))
             (pair "cmd" (rStr (str "asl read " filePath)))
             (pair "exit" (rInt code))
-            (pair "stdout" (rStr out)))))
+            (pair "stdout" (rStr out)))))))
       ((or (= opName "query") (= opName "q"))
         (let [queryText (let [q (getKvStr op "query")] (if (!= q "") q (getKvStr op "text")))
               inMode (getKvStr op "in")

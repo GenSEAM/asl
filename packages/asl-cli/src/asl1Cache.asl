@@ -353,18 +353,18 @@ fn ! notraceLib! compiler: String root: String lib: String clang: String -> (Res
 
 fn ! nativeStage! compiler: String source: String root: String lib: String clang: String -> (Result String String)
   (match (notraceLib! compiler root lib clang)
-    ((ok ntLib) (stageWith! compiler source ntLib clang (list "--rc" "notrace")))
+    ((ok ntLib) (stageWith! root compiler source ntLib clang (list "--rc" "notrace")))
     ((err why) (do (sys/sayErr! (str "(:receipt :rc tracing :reason \"notrace runtime unavailable: " (stringReplace why "\"" "'") "\" :effect \"this asl1 is a tracing build, cached beside the notrace key and rebuilt on the next call\")"))
-                   (match (stageWith! compiler source lib clang (list))
+                   (match (stageWith! root compiler source lib clang (list))
                      ((err e) (err e))
                      ((ok part) (match (fileWrite (str part ".tracing") "tracing\n")
                        ((err e) (do (drop part) (err (str "cannot mark the tracing stage: " e))))
                        ((ok _) (ok part))))))))
 
-fn ! stageWith! compiler: String source: String lib: String clang: String rcArgs: (List String) -> (Result String String)
+fn ! stageWith! root: String compiler: String source: String lib: String clang: String rcArgs: (List String) -> (Result String String)
   (let [(ll (str compiler ".boot.ll"))
         (part (str compiler ".boot.native"))
-        (compiled (sys/run! (listAppend (list "nice" "-n" "15" compiler "build" source "-o" ll) rcArgs)))
+        (compiled (sys/runAt! root (listAppend (list "nice" "-n" "15" compiler "build" source "-o" ll) rcArgs)))
         (inputCleanup (if (stringContains? compiler ".boot.native") (and (drop compiler) (drop (str compiler ".tracing"))) true))]
     (if (!= compiled 0)
       (do (drop ll) (drop part) (err (str "native asl1 stage failed (exit " (stringFromInt64 compiled) ")")))

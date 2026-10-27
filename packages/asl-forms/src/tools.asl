@@ -1,9 +1,9 @@
 (module asl-forms/tools
-  :x [ToolOp Registry loadRegistry! toolsStep! helpStep! visibleOps!]
+  :x [ToolOp Registry loadRegistry! toolsStep! helpStep! visibleOps! unknownKeys!]
   :i [(asl-forms/kernel :a k) (asl-forms/search :a s) (asl-forms/similarity :a sm) (asl-proc/coreProcess :a cp) (asl-checker/types :a ty) (asl-ir/lower :a lo)])
 
 
-(schema ToolOp (:f name String) (:f scope String) (:f public String) (:f doc String) (:f form String) (:f paramsRaw String) (:f paramsCompact String) (:f paramsSummary String) (:f examples (List String)) (:f errors (List String)) (:f related (List String)))
+(schema ToolOp (:f name String) (:f scope String) (:f public String) (:f doc String) (:f form String) (:f paramsRaw String) (:f paramsCompact String) (:f paramsSummary String) (:f examples (List String)) (:f errors (List String)) (:f related (List String)) (:f accepts (List String)))
 
 (schema Registry (:f topics (List (Pair String String))) (:f ops (Map String ToolOp)) (:f order (List String)))
 
@@ -189,7 +189,8 @@ fn opBlock name: String oblk: String prevCompact: String -> ToolOp
             :paramsSummary (stringJoin (map (fn [(p Param)] -> String (if p.req p.name (str p.name "?"))) params) " ")
             :examples (literals exBlock (stringToBytes exBlock) (stringLength exBlock) 0 (list))
             :errors (keyTokens oblk ":errors")
-            :related (keyTokens oblk ":related")))
+            :related (keyTokens oblk ":related")
+            :accepts (keyTokens oblk ":accepts")))
 
 fn opStart b: Bytes n: Int64 i: Int64 -> Int64
   (if (= (byteAt b n i) 40)
@@ -257,6 +258,20 @@ fn loadRegistry! ctx: s/KnowCtx -> (Option Registry)
         (raw (firstReadable! paths))]
     (if (stringEmpty? raw) (none) (some (parseRegistry raw))))
 
+; (:m :ref INTEL-UNKNOWN-KEY :do "one reader for every op: the keys a step passes are checked against the :params the catalogue declares for that op, so an unknown key such as :path on :intel is named instead of silently dropped; ops without a declared :params are not checked")
+fn ! unknownKeys! ctx: s/KnowCtx op: String kw: (Map String String) -> (Pair (List String) (List String))
+  (match (loadRegistry! ctx)
+    ((none) (pair (list) (list)))
+    ((some reg)
+      (match (mapGet reg.ops op)
+        ((none) (pair (list) (list)))
+        ((some o)
+          (let [(declared (map (fn [(p Param)] -> String p.name) (paramItems o.paramsRaw (stringToBytes o.paramsRaw) (stringLength o.paramsRaw) 0 (list))))
+                (accepted (listAppend declared o.accepts))]
+            (if (listEmpty? accepted)
+              (pair (list) (list))
+              (pair (listSort (filter (fn [(k String)] -> Bool (not (listContains? accepted k))) (mapKeys kw))) accepted)))))))
+
 fn ! anyAslFile? dir: String -> Bool
   (match (dirList dir)
     ((err _) false)
@@ -316,7 +331,7 @@ fn visibleOps! reg: Registry ctx: s/KnowCtx scopeAll: Bool -> (List ToolOp)
                 ((= o.scope "any") true)
                 ((= o.scope "asl") has)
                 (else false)))
-            (map (fn [(nm String)] -> ToolOp (optionOr (mapGet reg.ops nm) (ToolOp :name nm :scope "" :public "" :doc "" :form "" :paramsRaw "" :paramsCompact "" :paramsSummary "" :examples (list) :errors (list) :related (list)))) reg.order)))
+            (map (fn [(nm String)] -> ToolOp (optionOr (mapGet reg.ops nm) (ToolOp :name nm :scope "" :public "" :doc "" :form "" :paramsRaw "" :paramsCompact "" :paramsSummary "" :examples (list) :errors (list) :related (list) :accepts (list)))) reg.order)))
 
 fn t2Entry o: ToolOp withPublic: Bool withDoc: Bool -> String
   (stringJoin

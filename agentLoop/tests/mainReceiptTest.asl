@@ -1,6 +1,6 @@
 (module asl/agentLoop/tests/mainReceiptTest
   :x [runTests]
-  :i [(asl/agentLoop/main :a m) (asl/agentLoop/plan :a pl) (asl/agentLoop/gitOps :a go) (asl-json/json :a j)])
+  :i [(asl/agentLoop/main :a m) (asl/agentLoop/plan :a pl) (asl/agentLoop/gitOps :a go) (asl/agentLoop/loopState :a ls) (asl-json/json :a j)])
 
 fn ! write path: String content: String -> Bool
   (match (fileWrite path content)
@@ -39,7 +39,7 @@ fn minimalResult -> m/LoopResult
                 :unbackedClaims (list) :contextTokens none :turns none :gates (list) :escalate none :patch none
                 :restored (list) :written (list) :needsConfirm (list) :ownsRejected (list) :error none :gatePreflight (list)
                 :parseDefect false :parseDefectTurn none :findings none :queueWaitSec none :execSec none :usage none
-                :batching none :plan none :vacuousGates (list))
+                :batching none :plan none :vacuousGates (list) :specCheck none)
 
 fn fullGates -> String
   "[{\"cmd\":\"echo \\\"a\\\"\",\"exit\":0},{\"cmd\":\"sleep 9\",\"timeout\":true,\"seconds\":5}]"
@@ -57,7 +57,8 @@ fn fullResult -> m/LoopResult
                 :gatePreflight (list (list (pair "n" (go/rInt 1)) (pair "cmd" (go/rStr "a\"b")) (pair "message" (go/rStr "bad"))))
                 :parseDefect true :parseDefectTurn (some 4) :findings (some (list " f1 " "" "  " "(:f 2)"))
                 :queueWaitSec (some 0.1) :execSec (some 2.0) :usage (some (m/Usage :input 10 :cached 3 :output 5))
-                :batching (some (m/Batching :turns 4 :ops 6 :single 2)) :plan (some (pl/summaryOf 3 1 1 0)) :vacuousGates (list))
+                :batching (some (m/Batching :turns 4 :ops 6 :single 2)) :plan (some (pl/summaryOf 3 1 1 0)) :vacuousGates (list "g1")
+                :specCheck (some (ls/SpecVerdict :verdict "fail" :model "m\"1" :reasons (list "r1" "r\"2"))))
 
 fn edgeResult -> m/LoopResult
   (m/LoopResult :status "failed" :modeHint (some "") :deliver (some "") :phases (list) :session (some "") :journal (some "")
@@ -65,7 +66,7 @@ fn edgeResult -> m/LoopResult
                 :patch (some "") :restored (list) :written (list) :needsConfirm (list) :ownsRejected (list) :error (some "")
                 :gatePreflight (list) :parseDefect true :parseDefectTurn none :findings (some (list)) :queueWaitSec (some 0.0)
                 :execSec none :usage (some (m/Usage :input 0 :cached 0 :output 0))
-                :batching (some (m/Batching :turns 0 :ops 0 :single 0)) :plan (some (pl/summaryOf 0 0 0 0)) :vacuousGates (list))
+                :batching (some (m/Batching :turns 0 :ops 0 :single 0)) :plan (some (pl/summaryOf 0 0 0 0)) :vacuousGates (list) :specCheck none)
 
 fn sessions -> (List String)
   (list "full" "legacy" "hints" "noTurn" "endedOk" "a..b" "missing" "bad id")

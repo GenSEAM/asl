@@ -63,7 +63,7 @@ fn ! compileLl! ctx: sys/Context clang: String lib: String target: String ll: St
   (if (not (sys/isFile? (str ctx.root "/asl/packages/asl-compiler/src/asl1.asl")))
     (interpretAsl1! ctx target ll mode)
     (match (cache/nativeAsl1! ctx lib clang)
-      ((ok native) (sys/run! (listAppend (list "nice" "-n" "15" native "build" target "-o" ll) (rcArgs mode))))
+      ((ok native) (sys/runAt! ctx.root (listAppend (list "nice" "-n" "15" native "build" (resultOr (realPath target) target) "-o" ll) (rcArgs mode))))
       ((err reason)
         (do
           (sys/sayErr! (str "NATIVE-ASL1-FALLBACK " reason))
@@ -185,9 +185,13 @@ fn ! linkAttempt! ctx: sys/Context clang: String flags: (List String) lib: Strin
                      :deadlineNs (+ (monotonicNs) 3600000000000) :maxDesc (+ 16 (* 4 n)) :links links))]
     (nb/linkParts! b clang flags ll part n))
 
+; (:m :ref BUILD-OUTSIDE-WS-FRESH-HOME :do "nb/linkParts! runs clang from the workspace root, so a relative part path landed in the root while the caller's cwd held the output; the part path is made absolute against the caller's cwd")
+fn ! absolutePath! p: String -> String
+  (if (stringStartsWith? p "/") p (str (resultOr (realPath ".") ".") "/" p))
+
 fn ! link! ctx: sys/Context clang: String lib: String target: String out: String tmp: String mode: String shape: (Pair Int64 String) exact: Bool links: (List String) -> Int64
   (let [(ll (str tmp "/out.ll"))
-        (part (str out ".part" (stringFromInt64 (procSelf))))
+        (part (absolutePath! (str out ".part" (stringFromInt64 (procSelf)))))
         (compiled (compileLl! ctx clang lib target ll mode))]
     (cond
       ((or (!= compiled 0) (not (sys/isFile? ll)))

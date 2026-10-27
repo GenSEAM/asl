@@ -12,6 +12,9 @@ fn fakeTurn prompt: String system: String -> pv/Turn
 fn fakeAdvice prompt: String system: String -> (Result (Option String) String)
   (ok none)
 
+fn fakeGrade role: String system: String text: String -> (Result (Option String) String)
+  (ok none)
+
 fn fakeId -> String
   "loopRunTest"
 
@@ -39,14 +42,14 @@ fn makeEnvWith sid: (Option String) task: String root: String journal: String bu
     :rootDir root :budget budget :inputTokenBudget 0 :journalPath journal :maxRetries 0 :sessionId sid
     :base (some "") :contextTokens (some 24000) :model (some "loop-run-fixture")
     :gateTimeout (some 10) :wallBudget wall :resume resume :intent (some "patch") :plan false :specCheck false
-    :next fakeTurn :advise fakeAdvice :review fakeAdvice :newId fakeId :now fakeNow :sleep fakeSleep)
+    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep)
 
 fn makeEnvModel id: String model: String contextTokens: (Option Int64) root: String journal: String -> s/LoopEnv
   (s/LoopEnv :provider fakeTurn :task "context window check" :modeHint (some "implement") :owns (list) :gates (list)
     :rootDir root :budget 4 :inputTokenBudget 0 :journalPath journal :maxRetries 0 :sessionId (some id)
     :base (some "") :contextTokens contextTokens :model (some model)
     :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck false
-    :next fakeTurn :advise fakeAdvice :review fakeAdvice :newId fakeId :now fakeNow :sleep fakeSleep)
+    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep)
 
 ; (:m :ref PREFETCH-WIRE)
 fn makeEnvOwns id: String task: String root: String journal: String owns: (List String) -> s/LoopEnv
@@ -54,7 +57,7 @@ fn makeEnvOwns id: String task: String root: String journal: String owns: (List 
     :rootDir root :budget 4 :inputTokenBudget 0 :journalPath journal :maxRetries 0 :sessionId (some id)
     :base (some "") :contextTokens (some 24000) :model (some "loop-run-fixture")
     :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck false
-    :next fakeTurn :advise fakeAdvice :review fakeAdvice :newId fakeId :now fakeNow :sleep fakeSleep)
+    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep)
 
 ; (:m :ref FREEBENCH-TOKENBUDGET-20261017 :do "a dedicated fixture for the cumulative input-token cap, separate from makeEnv's unbounded default, so existing tests keep their original unconfigured-budget behaviour")
 fn makeEnvTokenBudget id: String root: String journal: String inputTokenBudget: Int64 -> s/LoopEnv
@@ -62,7 +65,7 @@ fn makeEnvTokenBudget id: String root: String journal: String inputTokenBudget: 
     :rootDir root :budget 4 :inputTokenBudget inputTokenBudget :journalPath journal :maxRetries 0 :sessionId (some id)
     :base (some "") :contextTokens (some 24000) :model (some "loop-run-fixture")
     :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck false
-    :next fakeTurn :advise fakeAdvice :review fakeAdvice :newId fakeId :now fakeNow :sleep fakeSleep)
+    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep)
 
 schema Final
   (:f turn Int64)

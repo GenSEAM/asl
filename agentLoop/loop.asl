@@ -37,7 +37,7 @@ fn preserveFiles status: String escalate: String gateRetries: Int64 stepRetries:
         (and (= parseDefects 0) gatesGreen))))
 
 fn handBackRestore status: String preserve: Bool -> Bool
-  (and (not (= status "ok")) (not preserve))
+  (and (not (= status "ok")) (and (not (= status "needsReview")) (not preserve)))
 
 fn noWriteLimitReached runTurns: Float64 turnLimit: Float64 wallBudget: Int64 elapsed: Float64 share: Float64 -> Bool
   (or (>= runTurns turnLimit)

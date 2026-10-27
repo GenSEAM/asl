@@ -22,8 +22,10 @@ fn entries -> (List String)
 ; (:m :ref TOKDEFFIX :do "checkSemanticTest linked IR repinned on sh/TOKDEFM (+6302 bytes): it links asl-parser/ast (scriptEntries, scriptModule, mainParams, mainBody) and asl-checker/types (argInt, argStr, preludeMainDone sigs); measured by this file own goldenDigests printer")
 ; (:m :ref FFI1 :do "checkSemanticTest linked IR repinned on merge main bc1302354 (+40259 bytes over the TOKDEFFIX pin): lowerTop routes foreign defuns through asl-checker/foreign withReturnMode and the checker gained the foreign rules; measured by this file own goldenDigests printer")
 ; (:m :ref FFI2 :do "checkSemanticTest linked IR repinned on merge sh/FFI1 2d7d8c9f0 into sh/FFI2 (+7387 bytes): asl-checker/foreign gained the handle and close kinds, kindBase, kindFinaliser and the !neg/!null conventions; measured by this file own goldenDigests printer")
+; (:m :ref BATCH8 :do "checkSemanticTest linked text repinned on INTEG8b (+5039 bytes: merged branches add link units and imports in asl-checker/resolve and the llvm target); measured by this file own goldenDigests printer")
+; (:m :ref FFI2 :do "checkSemanticTest linked IR re-recorded on merge sh/INTEG8b into sh/FFI2 (5041040 bytes: BATCH8 plus the foreign checker rules); measured by this file own goldenDigests printer")
 fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "-6861983874424337818:5036001")
+  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "7899118468533494687:5041040")
         (pair "lowerSourceWith" "6806003338108627551:8856"))
 
 fn diagLine d: ty/IrDiag -> String

@@ -252,9 +252,32 @@ fn cmpFunction -> String
     "}") "\n")
 
 ; (:m :ref PERF-MONO-MAPKEY :do "three-way key order for the treap in one call: two Ints by icmp, two Strings by one memcmp and their lengths (the order opsrt.cmp gives), anything else by opsrt.eq then opsrt.lt, the same tests preludeKeyOrder makes in ASL")
+; (:m :ref QW-MAP :do "opsrt.keyCmp is the small Int front the inliner takes into every treap walk: two Ints by icmp with no call, anything else by one call of keyCmpSlow, which holds the String and mixed cases")
 fn keyCmpFunction -> String
   (stringJoin (list
     "define internal %Val @opsrt.keyCmp(%Val %a, %Val %b) {"
+    "entry:"
+    "  %a.tagw = extractvalue %Val %a, 0"
+    "  %b.tagw = extractvalue %Val %b, 0"
+    "  %a.tag = trunc i64 %a.tagw to i32"
+    "  %b.tag = trunc i64 %b.tagw to i32"
+    "  %a.int = icmp eq i32 %a.tag, 2"
+    "  %b.int = icmp eq i32 %b.tag, 2"
+    "  %ints = and i1 %a.int, %b.int"
+    "  br i1 %ints, label %int, label %slow"
+    "int:"
+    "  %a.bits = extractvalue %Val %a, 1"
+    "  %b.bits = extractvalue %Val %b, 1"
+    "  %i.lt = icmp slt i64 %a.bits, %b.bits"
+    "  %i.gt = icmp sgt i64 %a.bits, %b.bits"
+    "  %i.up = zext i1 %i.gt to i64"
+    "  %i = select i1 %i.lt, i64 -1, i64 %i.up"
+    (boxInt "%i")
+    "slow:"
+    "  %s = call %Val @opsrt.keyCmpSlow(%Val %a, %Val %b)"
+    "  ret %Val %s"
+    "}"
+    "define internal %Val @opsrt.keyCmpSlow(%Val %a, %Val %b) noinline {"
     "entry:"
     "  %a.tagw = extractvalue %Val %a, 0"
     "  %a.tag = trunc i64 %a.tagw to i32"

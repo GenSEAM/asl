@@ -22,7 +22,7 @@ fn oldSummaryPrefix n: Int64 keepTurns: Int64 maxOlderLines: Int64 -> String
 
 fn writeConfig! root: String keepTurns: Int64 toolCapBytes: Int64 maxOlderLines: Int64 -> Bool
   (ok? (fileWrite (str root "/.asl.config.asn")
-    (str "(:agentLoop :contextKeepTurns " (stringFromInt64 keepTurns)
+    (str "(:agentLoop (:specCheck false) :contextKeepTurns " (stringFromInt64 keepTurns)
       " :contextToolCapBytes " (stringFromInt64 toolCapBytes)
       " :contextMaxOlderLines " (stringFromInt64 maxOlderLines) ")\n")))
 

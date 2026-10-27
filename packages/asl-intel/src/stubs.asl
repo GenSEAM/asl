@@ -127,10 +127,15 @@ fn constStub rel: String isTest: Bool name: String code: String body: String b: 
       ((placeholder? b hits bs be) (some (placeholderStub rel name code b bs be hd)))
       (else (none))))
 
+; (:m :ref STUBS-PROD-SCOPE :do "fixtures, corpus and examples hold stubs on purpose as inputs to other tools, so the audit scans neither them nor counts them as production findings; tests stay in scope for vacuous-test detection")
+fn stubScope? rel: String -> Bool
+  (let [(p (str "/" rel))] (not (or (stringContains? p "/fixtures/") (stringContains? p "/corpus/") (stringContains? p "/examples/"))))
+
 fn analyzeStubs! ctx: h/Ctx root: String -> (Result StubSummary String)
   (match (trackedAsl! ctx root)
     ((err e) (err e))
-    ((ok files)
+    ((ok allFiles)
+      (let [(files (filter stubScope? allFiles))]
       (ok (inOrder (fold (fn [(st StubSummary) (rel String)] -> StubSummary
                   (match (h/readText! (if (stringStartsWith? rel "/") rel (t/joinPath root rel)))
                     ((err _) st)
@@ -143,13 +148,14 @@ fn analyzeStubs! ctx: h/Ctx root: String -> (Result StubSummary String)
                                          (list) hs))]
                         (StubSummary :files st.files :functions (+ st.functions (listLength hs))
                                     :stubs (listAppend found st.stubs))))))
-                (StubSummary :files (listLength files) :functions 0 :stubs (list)) files)))))
+                (StubSummary :files (listLength files) :functions 0 :stubs (list)) files))))))
 
 fn inOrder res: StubSummary -> StubSummary
   (with res :stubs (listReverse res.stubs))
 
 fn formatStubsAsn res: StubSummary -> String
   (t/joinWith (list "(:stubAudit" "  :status :ok"
+                    (str "  :scope \"tracked asl without fixtures corpus examples\"")
                     (str "  :totalFilesScanned " (t/intStr res.files))
                     (str "  :totalFunctionsScanned " (t/intStr res.functions))
                     (str "  :stubsCount " (t/intStr (listLength res.stubs)))

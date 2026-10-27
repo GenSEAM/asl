@@ -21,6 +21,8 @@
       (asl/agentLoop/plan :a pl)
       (asl/agentLoop/gateIntegrity :a gi)
       (asl/agentLoop/claims :a cl)
+      (asl/agentLoop/claimBacking :a cb)
+      (asl/agentLoop/agentConfig :a ac)
       (asl-json/json :a j)])
 
 (schema Invocation
@@ -98,7 +100,8 @@
   (:f usage (Option Usage))
   (:f batching (Option Batching))
   (:f plan (Option pl/PlanSummary))
-  (:f vacuousGates (List String)))
+  (:f vacuousGates (List String))
+  (:f specCheck (Option ls/SpecVerdict)))
 
 (schema MainResult
   (:f stdout String)
@@ -887,6 +890,11 @@ fn formatReceipt r: LoopResult -> String
          ((none) ""))
        (match r.plan ((some p) (pl/planField p)) ((none) ""))
        (if (listEmpty? r.vacuousGates) "" (str " :vacuousGates (" (stringJoin (map (fn [g] (str "\"" (c/escapeAsn g) "\"")) r.vacuousGates) " ") ")"))
+       (match r.specCheck
+         ((some v) (if (= v.verdict "skipped") " :specCheck (:verdict skipped :reason noGrader)"
+                          (str " :specCheck (:verdict " v.verdict " :model \"" (c/escapeAsn v.model) "\" :reasons ("
+                        (stringJoin (map (fn [x] (str "\"" (c/escapeAsn x) "\"")) v.reasons) " ") "))")))
+         ((none) ""))
        ")")
 
 
@@ -1073,6 +1081,21 @@ fn ! liveAdvisor provider: pv/Provider sys: String msg: String -> (Result (Optio
       (match turn.reply
         ((err e) (err (pv/errorMessage e)))
         ((ok reply) (ok reply)))))
+
+fn servedModel meta: pv/TurnMeta -> (Option String)
+  (match meta.served
+    ((some fields) (optionMap pairSecond (listHead (filter (fn [p] (= (pairFirst p) "model")) fields))))
+    ((none) none))
+
+; (:m :ref LEON-CAPS :do "the grader call is its own gateway request for the configured intent and profile; its served model is journaled as (:graderServed ...) so the spec check can compare it with the writer's")
+fn ! liveGrader provider: pv/Provider intent: String profile: String path: String sys: String msg: String -> (Result (Option String) String)
+  (let [turn (pv/grade! provider intent profile sys msg)
+        _ (match (servedModel turn.meta)
+            ((some model) (ok? (fileAppend path (str "(:graderServed :model \"" (c/escapeAsn model) "\")\n"))))
+            ((none) true))]
+    (match turn.reply
+      ((err e) (err (pv/errorMessage e)))
+      ((ok reply) (ok reply))))
 
 fn ! liveReviewer provider: pv/Provider sys: String msg: String -> (Result (Option String) String)
   (let [turn (pv/review! provider sys msg)]
@@ -1388,7 +1411,10 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
         _retryLogged (appendRetryLines! path turn (pairSecond retried))
         response (pairFirst retried)
         _usageLogged (match (providerUsageLine response.meta)
-          ((some form) (ok? (fileAppend path (str form "\n")))) ((none) true))]
+          ((some form) (ok? (fileAppend path (str form "\n")))) ((none) true))
+        _servedLogged (match (servedModel response.meta)
+          ((some model) (ok? (fileAppend path (str "(:served :turn " (stringFromInt64 turn) " :model \"" (c/escapeAsn model) "\")\n"))))
+          ((none) true))]
     (match response.reply
       ((err e)
         (do
@@ -1488,8 +1514,10 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
                   nextState0 (rl/withHeadState executed.state turn state.readStreak writesPersisted
                     deliver allGates lastGates
                     status none none state.runStarted)
-                  nextState (rl/withFindings nextState0 (map (fn [form] (j/jstr form)) mergedFindingForms)
+                  nextState1 (rl/withFindings nextState0 (map (fn [form] (j/jstr form)) mergedFindingForms)
                     executed.state.needsConfirmList)
+                  unbackedNow (if terminal (cb/unbackedGateClaims reply ra.gates allGates) (list))
+                  nextState (if terminal (rl/withUnbacked nextState1 (map (fn [t] (j/jstr t)) unbackedNow)) nextState1)
                   withCommit (match (liveCommitMessage operations)
                     ((some message) (rl/withCommitMessage executed (some message)))
                     ((none) executed))
@@ -1536,7 +1564,8 @@ fn loopResultOf ra: RunArgs rootDir: String result: ls/RunResult usage: (Option 
     :parseDefect result.parseDefect :parseDefectTurn result.parseDefectTurn
     :findings (some (map pv/pyStr result.findings)) :queueWaitSec result.queueWaitSec
     :execSec result.execSec :usage (match (liveUsage result.usage) ((some u) (some u)) ((none) usage))
-    :batching batching :plan (livePlan result.planSummary) :vacuousGates result.vacuousGates))
+    :batching batching :plan (livePlan result.planSummary) :vacuousGates result.vacuousGates
+    :specCheck result.specCheck))
 
 fn ! executeLive ra: RunArgs repoRoot: String rootDir: String env: pv/ProviderEnv -> MainResult
   (match (pv/makeProvider! ra.backend "auto" rootDir ra.model ra.timeout "" ra.queueTimeout ra.timeoutSet env (optionOr ra.intent "auto"))
@@ -1558,12 +1587,17 @@ fn ! executeLive ra: RunArgs repoRoot: String rootDir: String env: pv/ProviderEn
                 (let [call (fn [sys user] (pv/nextTurn! provider sys user))
                       providerCall (fn [p sys user] (pv/nextTurn! p sys user))
                       hooks (liveHooks! provider)
+                      cfgText (ac/configText! rootDir)
+                      graderIntent (optionOr (ac/agentLoopValue cfgText ":graderIntent") "grade")
+                      graderProfile (optionOr (ac/agentLoopValue cfgText ":graderProfile") "")
+                      specOn (!= (optionOr (ac/agentLoopValue cfgText ":specCheck") "true") "false")
                       liveEnv (ls/LoopEnv :provider call :task ra.task :modeHint (modeOf ra.modeHint)
                         :owns ra.owns :gates ra.gates :rootDir rootDir :budget ra.budget :inputTokenBudget ra.inputTokenBudget
                         :journalPath path :maxRetries 3 :sessionId (some session) :base (some ra.base)
                         :contextTokens (some tokens) :model (some model) :gateTimeout (some ra.gateTimeout)
-                        :wallBudget ra.wallBudget :resume none :intent ra.intent :plan ra.plan :specCheck true
+                        :wallBudget ra.wallBudget :resume none :intent ra.intent :plan ra.plan :specCheck specOn
                         :next call :advise (pairFirst hooks) :review (pairSecond hooks)
+                        :grade (fn [role sys msg] (liveGrader provider graderIntent graderProfile path sys msg))
                         :newId (fn [] session) :now (fn [] (ao/nowMono))
                         :sleep (fn [seconds] (do (if (> seconds 0) (sleepMs (* seconds 1000)) ()) true)))
                       result (rl/runLoopWithProvider! liveEnv provider (fn [le wrapped] (liveBody! ra repoRoot rootDir path system le providerCall wrapped)))

@@ -17,7 +17,7 @@
 
 (schema ListCells (:f lines (List String)) (:f index Int64) (:f tail String))
 
-(schema FnEnv (:f mod ModEnv) (:f defs NameIndex) (:f blocks NameIndex) (:f order (List ty/SsaBlock)) (:f retTy ty/SsaTy) (:f name String) (:f fused NameIndex) (:f records NameIndex) (:f wants NameIndex) (:f preds NameIndex) (:f size Int64))
+(schema FnEnv (:f mod ModEnv) (:f defs NameIndex) (:f blocks NameIndex) (:f order (List ty/SsaBlock)) (:f retTy ty/SsaTy) (:f name String) (:f fused NameIndex) (:f records NameIndex) (:f wants NameIndex) (:f preds NameIndex) (:f arms NameIndex) (:f size Int64))
 
 (enum NameIndex
   (:c nameIndexEmpty [])
@@ -667,6 +667,36 @@ fn emitFusedVariantUnbox lhs: String dest: String t: ty/SsaTy base: String index
          "  " p ".inRange = icmp slt i64 " index ", " p ".n64\n"
          "  br i1 " p ".inRange, label %" lbl ".chk, label %" lbl ".slow\n"
          lbl ".chk:\n"
+         "  " p ".ftagp = getelementptr inbounds i8, ptr " p ".obj, i64 " tagOff "\n"
+         "  " p ".ftag = load i32, ptr " p ".ftagp\n"
+         "  " p ".rightTag = icmp eq i32 " p ".ftag, " expect "\n"
+         "  br i1 " p ".rightTag, label %" lbl ".fast, label %" lbl ".slow\n"
+         lbl ".fast:\n"
+         "  " p ".valp = getelementptr inbounds i8, ptr " p ".obj, i64 " valOff "\n"
+         (fusedFastLoad p kind lty)
+         "  br label %" lbl ".join\n"
+         lbl ".slow:\n"
+         "  " p ".slowfield = call %Val @objrt.variantField(%Val " base ", i64 " index ")\n"
+         (valTag (str p ".sf") (str p ".slowfield"))
+         "  " p ".sf.ok = icmp eq i32 " p ".sf.vtag, " expect "\n"
+         "  br i1 " p ".sf.ok, label %" lbl ".slowok, label %" lbl ".trap\n"
+         (typeTrap (str p ".sf") lbl expect)
+         lbl ".slowok:\n"
+         (unboxPayload (str "  " p ".slowval = ") (str p ".slowval") kind (str p ".slowfield"))
+         "  br label %" lbl ".join\n"
+         lbl ".join:\n"
+         lhs "phi " lty " [ " p ".fastval, %" lbl ".fast ], [ " p ".slowval, %" lbl ".slowok ]\n"))
+
+fn emitArmFieldVal lhs: String dest: String base: String index: Int64 -> String
+  (let [(p (str "%" (llvmName dest)))]
+    (str (valObj p base)
+         "  " p ".fp = getelementptr inbounds i8, ptr " p ".obj, i64 " (+ 16 (* index 16)) "\n"
+         lhs "load %Val, ptr " p ".fp\n"))
+
+fn emitFusedArmUnbox lhs: String dest: String t: ty/SsaTy base: String index: Int64 -> String
+  (let [(p (str "%" (llvmName dest))) (lbl (llvmName dest)) (kind (rawKind t)) (lty (llTy t))
+        (tagOff (+ 16 (* index 16))) (valOff (+ tagOff 8)) (expect (fusedTagNum kind))]
+    (str (valObj p base)
          "  " p ".ftagp = getelementptr inbounds i8, ptr " p ".obj, i64 " tagOff "\n"
          "  " p ".ftag = load i32, ptr " p ".ftagp\n"
          "  " p ".rightTag = icmp eq i32 " p ".ftag, " expect "\n"
@@ -1762,7 +1792,32 @@ fn plainUnbox? op: ty/SsaOp -> Bool
   (match op ((ty/opUnbox _) true) (_ false))
 
 fn unfusedVariantField? env: FnEnv ins: ty/SsaInstr -> Bool
-  (match ins.op ((ty/opVariantField _ _) (not (some? (nameIndexGet env.fused ins.dest)))) (_ false))
+  (match ins.op ((ty/opVariantField _ _) (and (not (some? (nameIndexGet env.fused ins.dest))) (not (armField? env ins.dest)))) (_ false))
+
+; (:m :ref QW-MAP :do "a field read of the scrutinee in the arm block of its own switch, reached by that one edge, has passed the constructor, id and arity checks of the switch: it loads the slot with no tag, range or slow path")
+fn armField? env: FnEnv dest: String -> Bool
+  (some? (nameIndexGet env.arms dest))
+
+fn armFieldsOf menv: ModEnv blockIdx: NameIndex predIdx: NameIndex acc: NameIndex b: ty/SsaBlock -> NameIndex
+  (match b.term
+    ((ty/termSwitch s typeName cases _)
+      (fold (fn [(a NameIndex) (c ty/SsaCase)] -> NameIndex
+              (let [(arity (match (listFind (fn [(v ty/SsaVariant)] -> Bool (= v.name c.variant)) (optionOr (nameIndexGet menv.types typeName) (list)))
+                             ((some v) v.arity) ((none) 0)))
+                    (single (= (listLength (optionOr (nameIndexGet predIdx c.edge.target) (list))) 1))]
+                (if (not single) a
+                  (match (nameIndexGet blockIdx c.edge.target)
+                    ((none) a)
+                    ((some t) (fold (fn [(m NameIndex) (ins ty/SsaInstr)] -> NameIndex
+                                      (match ins.op
+                                        ((ty/opVariantField base i) (if (and (= base s) (and (>= i 0) (< i arity))) (nameIndexSet m ins.dest true) m))
+                                        (_ m)))
+                                    a t.instrs))))))
+            acc cases))
+    (_ acc))
+
+fn armFieldMap menv: ModEnv blocks: (List ty/SsaBlock) blockIdx: NameIndex predIdx: NameIndex -> NameIndex
+  (fold (fn [(acc NameIndex) (b ty/SsaBlock)] -> NameIndex (armFieldsOf menv blockIdx predIdx acc b)) (nameIndexEmpty) blocks)
 
 fn exitLabel env: FnEnv b: ty/SsaBlock -> String
   (let [(afterInstrs (fold (fn [(acc String) (ins ty/SsaInstr)] -> String
@@ -1797,14 +1852,14 @@ fn emitInstr env: FnEnv ins: ty/SsaInstr -> String
                                     ((none) (match (typedFieldIndex env base field)
                                               ((some idx) (emitTypedRead lhs env d base field idx))
                                               ((none) (fieldMiss lhs (val base) field)))))))
-      ((ty/opVariantField base i) (if (some? (nameIndexGet env.fused d)) "" (emitVariantFieldVal lhs d (val base) i)))
+      ((ty/opVariantField base i) (if (some? (nameIndexGet env.fused d)) "" (if (armField? env d) (emitArmFieldVal lhs d (val base) i) (emitVariantFieldVal lhs d (val base) i))))
       ((ty/opUnbox v) (match (nameIndexGet env.fused v)
                         ((none) (match (nameIndexGet env.wants d)
                                   ((some w) (emitEntryUnbox lhs d t v w))
                                   ((none) (emitUnboxInline lhs d t v))))
                         ((some fusedOp) (match fusedOp
                                           ((ty/opField base field) (emitFusedRead lhs env d t base field))
-                                          ((ty/opVariantField base i) (emitFusedVariantUnbox lhs d t (val base) i))
+                                          ((ty/opVariantField base i) (if (armField? env v) (emitFusedArmUnbox lhs d t (val base) i) (emitFusedVariantUnbox lhs d t (val base) i)))
                                           (_ (emitUnboxInline lhs d t v))))))
       ((ty/opConstruct _ variant fields) (emitConstruct lhs d variant fields))
       ((ty/opRecord schemaName fields values) (emitRecord lhs env d schemaName fields values))
@@ -2261,16 +2316,19 @@ fn emitFunctionRooted menv: ModEnv f: ty/SsaFunction rooted: Bool -> String
 
 fn emitBodyAs menv: ModEnv f: ty/SsaFunction rooted: Bool retTy: ty/SsaTy head: String -> String
   (let [(blocks f.blocks)
+        (blockIdx (fold (fn [(acc NameIndex) (b ty/SsaBlock)] -> NameIndex (nameIndexSet acc b.label b)) (nameIndexEmpty) blocks))
+        (predIdx (predecessors blocks))
         (env (FnEnv :mod menv
                     :defs (functionDefs f)
-                    :blocks (fold (fn [(acc NameIndex) (b ty/SsaBlock)] -> NameIndex (nameIndexSet acc b.label b)) (nameIndexEmpty) blocks)
+                    :blocks blockIdx
                     :order blocks
                     :retTy retTy
                     :name f.name
                     :fused (fusedMap f)
                     :records (recordMap f)
                     :wants (entryUnboxes f)
-                    :preds (predecessors blocks)
+                    :preds predIdx
+                    :arms (armFieldMap menv blocks blockIdx predIdx)
                     :size (listLength blocks)))
         (allocas (stringJoin (map (fn [(b ty/SsaBlock)] -> String (stringJoin (map allocaFor b.instrs) "")) blocks) ""))
         (allParams (listAppend f.captures f.params))
@@ -2497,7 +2555,7 @@ fn boxableAbi? t: ty/SsaTy -> Bool
 fn probeEnv menv: ModEnv f: ty/SsaFunction -> FnEnv
   (FnEnv :mod menv :defs (nameIndexEmpty)
          :blocks (fold (fn [(acc NameIndex) (b ty/SsaBlock)] -> NameIndex (nameIndexSet acc b.label b)) (nameIndexEmpty) f.blocks)
-         :order f.blocks :retTy (ty/tyVal) :name f.name :fused (nameIndexEmpty) :records (nameIndexEmpty) :wants (nameIndexEmpty) :preds (nameIndexEmpty)
+         :order f.blocks :retTy (ty/tyVal) :name f.name :fused (nameIndexEmpty) :records (nameIndexEmpty) :wants (nameIndexEmpty) :preds (nameIndexEmpty) :arms (nameIndexEmpty)
          :size (listLength f.blocks))
 
 fn rawCallee? env: FnEnv callee: String -> Bool

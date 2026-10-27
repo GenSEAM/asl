@@ -473,6 +473,22 @@ fn ! installedFallback! r: Resolution imp: String -> Resolution
           ((some p) (Resolution :status (resOk) :path p :note "" :index r.index))
           ((none) r)))))
 
+; (:m :ref CASE-PKG-INSIDE-WS :do "the index walk skips dot directories, so a package under .asl/tmp (a scratch case, a vendored repo) was never indexed and its own qualified imports found nothing; an import whose first segment names the importer's own package (manifest :package name or directory name) now resolves against that package's root (src/REST.asl, then REST.asl) when the index found no single module")
+fn ! manifestNameOf! dir: String -> String
+  (match (fileReadString (str dir "/manifest.asn"))
+    ((err _) "")
+    ((ok src) (match (parseItem src 0)
+      ((none) "")
+      ((some r) (let [(l (pairFirst r)) (kids l.kids)]
+        (if (and (= l.kind "list") (>= (listLength kids) 2)) (nameItemText (itemAt kids 1)) ""))))))
+
+fn ! ownPackageFallback! r: Resolution first: String rest: String pkg: String -> Resolution
+  (if (or (stringEmpty? pkg) (match r.status ((resOk) true) (_ false))) r
+    (if (not (or (= (lastSegOf pkg) first) (= (manifestNameOf! pkg) first))) r
+      (match (okIfWithin! (str pkg "/src/" rest ".asl") pkg r.index)
+        ((some own) own)
+        ((none) (match (okIfWithin! (str pkg "/" rest ".asl") pkg r.index) ((some own) own) ((none) r))))))
+
 fn ! resolveNamed! imp: String nearest: String outer: String pkg: String ix0: ModIndex -> Resolution
   (let [(slash (stringIndexOf imp "/"))
         (qualified (some? slash))
@@ -488,7 +504,7 @@ fn ! resolveNamed! imp: String nearest: String outer: String pkg: String ix0: Mo
           (match (withinRoot! direct outer) ((some real) (Resolution :status (resOk) :path real :note "" :index ix)) ((none) (missingRes " names a path that leaves the workspace root" ix)))
           (match (okIfWithin! (str outer "/" first "/src/" rest ".asl") outer ix)
             ((some r) r)
-            ((none) (installedFallback! (resolveIndexed! imp first rest qualified pkg outer ix) imp))))))
+            ((none) (installedFallback! (ownPackageFallback! (resolveIndexed! imp first rest qualified pkg outer ix) first rest pkg) imp))))))
       (else (resolveIndexed! imp first rest qualified pkg outer ix))))
 
 fn importPathMax -> Int64

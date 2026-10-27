@@ -1435,6 +1435,15 @@ fn optionSource ctx: LowerCtx env: (Map String String) e: rd/SExpr -> String
       ((and (= h "listGet") (and (= n 2) (preludeName? ctx env h))) "@listGetOr")
       (else "")))
 
+; (:m :ref QW-MAP :do "optionOr over a prelude mapGet of two operands is mapGetOr: the walk answers the found value or the default and builds no Option box; operands keep their order")
+fn mapGetCall? ctx: LowerCtx env: (Map String String) e: rd/SExpr -> Bool
+  (let [(items (rd/sexprToList e))]
+    (and (rd/isList? e)
+         (and (= (listLength items) 3)
+              (and (rd/isAtom? (nthOf items 0))
+                   (and (= (rd/sexprHead (nthOf items 0)) "mapGet")
+                        (and (preludeName? ctx env "mapGet") (preludeName? ctx env "mapGetOr")))))))
+
 fn lowerOptionOr ctx: LowerCtx env: (Map String String) st: LowerState entryName: String args: (List rd/SExpr) -> (Result Lowered ty/IrDiag)
   (match (lowerArgs ctx env st (listAppend (tailOf (rd/sexprToList (nthOf args 0))) (list (nthOf args 1))))
     ((err d) (err d))
@@ -1460,6 +1469,9 @@ fn lowerHead ctx: LowerCtx env: (Map String String) st: LowerState name: String 
 
     ((and (= name "optionOr") (and (= (listLength args) 2) (and (preludeName? ctx env name) (not (stringEmpty? (optionSource ctx env (nthOf args 0)))))))
       (lowerOptionOr ctx env st (optionSource ctx env (nthOf args 0)) args))
+    ((and (= name "optionOr") (and (= (listLength args) 2) (and (preludeName? ctx env name) (mapGetCall? ctx env (nthOf args 0)))))
+      (let [(call (rd/sexprToList (nthOf args 0)))]
+        (lowerExpr ctx env st (rd/makeList (list (rd/makeAtom "mapGetOr") (nthOf call 1) (nthOf call 2) (nthOf args 1))))))
     ((or (= name "when") (= name "unless"))
       (if (listEmpty? args)
         (err (lowerDiag ctx "ERR_LOWER_ARITY" (str "'" name "' needs a condition")))

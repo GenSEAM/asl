@@ -13,7 +13,7 @@ fn checkFileClean! path: String -> Bool
 fn testSeededAslUnknownSymbol! -> Bool
   (let [(tmpDir (optionOr (envGet "TMPDIR") "/tmp"))
         (tmpPath (str tmpDir "/asl_test_seeded_" (stringFromInt64 (monotonicNs)) ".asl"))
-        (content "(module test/seededTypeError :x [badFn])\n\nfn badFn a: Int64 -> Int64\n  (let [(x 1)]\n    nonExistentSymbol)\n")
+        (content "(module test/seededTypeError :x [badFn])\n\nfn badFn a: Int64 -> Int64\n  (let [(x 1)] x)\n  nonExistentSymbol\n")
         (wRes (fileWrite tmpPath content))]
     (do
       (assert (ok? wRes) "write temp asl seeded error file")

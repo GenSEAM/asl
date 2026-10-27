@@ -461,8 +461,11 @@ fn editCheckers! env: g/GateEnv -> e/Checkers
               :foreignCheck (fn [(path String) (content String)] -> e/SyntaxResult (foreignResult! env path content)))
 
 fn runNested! root: String id: Int64 form: String held: (List String) -> StepOutcome
-  (let [(p (k/parseStep form))]
-    (runStepHeld! root id p.op p.kwargs p.args held form))
+  (let [(p (k/parseStep form))
+        (bad (t/unknownKeys! (knowContext! root) p.op p.kwargs))]
+    (if (listEmpty? (pairFirst bad))
+      (runStepHeld! root id p.op p.kwargs p.args held form)
+      (rejected id p.op "ERR_UNKNOWN_KEY" (str " :keys (" (stringJoin (map (fn [(k String)] -> String (str ":" k)) (pairFirst bad)) " ") ") :accepted (" (stringJoin (map (fn [(k String)] -> String (str ":" k)) (pairSecond bad)) " ") ")"))))
 
 fn targetRun! root: String id: Int64 kw: (Map String String) args: (List String) held: (List String) -> StepOutcome
   (let [(tname (k/lstripColons (k/kwOr kw "name" (k/kwOr kw "target" (k/kwOr kw "to" (optionOr (listHead args) ""))))))

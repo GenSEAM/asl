@@ -127,6 +127,7 @@
         (:lenses :type forms :default [:invariants] :note "list of audit lenses to evaluate")
         (:profile :type sym :default :freeTier :note "execution profile: freeTier frontier codexLuna")
       )
+      :accepts (path text lens)
       :lenses (:all :invariants :teleology :semantics :gates :triMap :grading :astAddressing :ramTxn :foreign :limitCycle :workspaceIsolation :dyck1Purity :tokenEconomics)
       :profiles (:freeTier :frontier :codexLuna)
       :doc "Execute a multi-lens audit across 13 canonical inquiry lenses returning structured ASN report.")
@@ -156,6 +157,7 @@
         (:timeout :type int :default 600 :note "execution seconds")
         (:wallBudget :type int)
       )
+      :accepts (role)
       :examples (
         "(:agent :task \"Survey the parser\")"
         "(:agent :task \"Fix the failing check\" :owns (\"src\") :gates (\"asl check\"))"
@@ -191,6 +193,7 @@
         (:start :type int :default 0 :note "starting line number for slice")
         (:end :type int :default 0 :note "ending line number for slice")
       )
+      :accepts (maxBytes sym occurrence)
       :examples (
         "(:read :file \"asl/grammar/rules.asn\" :limit 10)"
       )
@@ -227,6 +230,7 @@
         (:autofix :type sym :default :structural :note "repair unbalanced delimiters left by the replacement; :none stages the text as given")
         (:force :type bool :default false :note "stage despite balance or syntax errors")
       )
+      :accepts (path pick)
       :examples (
         "(:edit :file \"asl/grammar/rules.asn\" :old \"rules\" :new \"rules\" :all true)"
       )
@@ -257,6 +261,7 @@
         (:path :type str :default "." :note "directory path to scan")
         (:depth :type int :default 3 :note "list files this many directory levels deep; the counts always cover the whole tree")
       )
+      :accepts (ws)
       :examples (
         "(:tree :path \".\")"
         "(:tree :path \"packages\" :depth 1)"
@@ -273,6 +278,7 @@
         (:scope :type str :default "." :note "tokenCost: tracked files under this path")
         (:limit :type int :default 20 :note "tokenCost :top or sessions shown, rest in :more; 1-100; receipt < 4096 bytes")
       )
+      :accepts (symbol module path spec id)
       :examples (
         "(:observe :dim callers :symbol \"Cache.fetch\")"
       )
@@ -286,6 +292,7 @@
       :params (
         (:file :type str :default "" :note "optional path to inspect; defaults to all staged")
       )
+      :accepts (path)
       :examples (
         "(:diff)"
       )
@@ -300,6 +307,7 @@
       :params (
         (:file :type str :default "" :note "optional path to persist; defaults to all staged")
       )
+      :accepts (path)
       :examples (
         "(:flush)"
       )
@@ -314,6 +322,7 @@
       :params (
         (:file :type str :default "" :note "optional path to discard; defaults to all staged")
       )
+      :accepts (path)
       :examples (
         "(:discard)"
       )
@@ -328,6 +337,7 @@
       :params (
         (:file :type str :default "" :note "file to verify; defaults to workspace check")
       )
+      :accepts (path)
       :examples (
         "(:check :file \"asl/grammar/rules.asn\")"
       )
@@ -357,6 +367,7 @@
         (:file :type str :req true :note "path to ASL or ASN file to balance")
         (:apply :type sym :default :none :note "stage proposed repair (:true, :indentation, :heuristic)")
       )
+      :accepts (path)
       :examples (
         "(:fix :file \"asl/grammar/rules.asn\")"
       )
@@ -383,6 +394,7 @@
       :params (
         (:subcmd :type sym :default :coupling :note "the audit to run")
       )
+      :accepts (full path)
       :subcmds (:coupling :deadcode :vacuity :sweep :graph :complexity :stubs :trace :consistency :gates :closure :foreign :steps :vitality :all :full :system)
       :doc "coupling, deadcode, vacuity, sweep, graph, complexity, stubs and trace run asl-intel and return its receipt; consistency, gates, closure, foreign, steps, vitality, all, full and system run the workspace's native asl-gates/auditMain.asl and answer ERR_WORKSPACE_ONLY where it is absent; any other name is ERR_UNKNOWN_SUBCMD.")
 
@@ -431,6 +443,7 @@
         (:claim :type str :default "" :note "claim or note content")
         (:query :type str :default "" :note "query: the text to look for")
       )
+      :accepts (fact id)
       :doc "Record or query working memory observations in pure ASN.")
 
     (:op :target
@@ -440,6 +453,7 @@
         (:file :type str :default "" :note "source file path")
         (:out :type str :default "" :note "stage the result at this path, like (:write); without it the result is returned in :output")
       )
+      :accepts (to target)
       :doc "Convert an ASN drawing, page or stylesheet to SVG, HTML or CSS, or compile an ASL entry module to an ES module (js), its TypeScript declarations (ts), a Python 3 file (py) or a Go file (go). Errors name their place in the source. An ASL module is type-checked on the host first. c, llvm, rs, swift, wat and sh answer ERR_NOT_IMPLEMENTED; any other name ERR_UNKNOWN_TARGET.")
 
     (:op :pack
@@ -452,5 +466,6 @@
         (:skipGates :type bool :default false :note "skip verification gates")
         (:self :type bool :default false :note "build host-only binary")
       )
+      :accepts (version)
       :doc "Assemble native self-hosted LLVM binary, audit verification gates, and package target distribution bundles (darwin-arm64, linux-x64, wasm).")
   ))

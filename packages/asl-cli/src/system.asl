@@ -1,5 +1,5 @@
 (module asl-cli/system
-  :x [Context Captured context! childEnv! execv! run! runWith! runMerged! capture! captureWith! findCommand! onPath! executable? isFile? isDir? trimLeft stripTrailingNewlines hostAbsent say! sayErr! parentOf baseName]
+  :x [Context Captured context! childEnv! execv! run! runWith! runMerged! runAt! capture! captureWith! findCommand! onPath! executable? isFile? isDir? trimLeft stripTrailingNewlines hostAbsent say! sayErr! parentOf baseName]
   :i [])
 
 (schema Context
@@ -201,6 +201,12 @@ fn ! run! argv: (List String) -> Int64
 
 fn ! runWith! argv: (List String) extra: (List String) -> Int64
   (match (spawn! argv (none) 1 extra)
+    ((err e) (do (sayErr! (str "asl: cannot run " e)) 127))
+    ((ok st) (optionOr st.code 1)))
+
+; (:m :ref BUILD-OUTSIDE-WS-FRESH-HOME :do "a seed compiler reads asl/prelude/prelude.asl relative to its cwd, so a stage started from a caller outside the workspace failed with the prelude unreadable; the child starts in the given directory")
+fn ! runAt! dir: String argv: (List String) -> Int64
+  (match (spawn! argv (some dir) 1 (list))
     ((err e) (do (sayErr! (str "asl: cannot run " e)) 127))
     ((ok st) (optionOr st.code 1)))
 

@@ -326,3 +326,4 @@
 (:doc :symbol "asl/packages/asl-cli/src/nativeBuild.asl#partsForSize" :text "Part count for an IR of the given byte size: n capped so every part keeps at least minPartBytes, and at least 1.")
 (:doc :symbol "asl/packages/asl-cli/src/nativeBuild.asl#partsValue" :text "Parses a :native :parts config word as an integer in 1..64; anything else is an ERR_CONFIG err.")
 (:doc :symbol "asl/packages/asl-cli/src/nativeBuild.asl#partsWith" :text "Splits the .ll file at ll into up to n part files (ll.partN.ll) with the given small-body inline limit and returns their paths; an unreadable file or a failed split is an err.")
+(:doc :symbol "asl/packages/asl-cli/src/system.asl#runAt!" :text "runWith! with the child started in dir: a seed compiler reads asl/prelude/prelude.asl relative to its cwd. Returns the exit code, 127 when the spawn fails.")

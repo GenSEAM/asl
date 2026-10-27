@@ -232,9 +232,12 @@ fn ! testByValueAbi work: String -> Bool
 
 fn ! testInlineVariantAndCapture work: String -> Bool
   (let [(ll (fileText (str work "/alloc.ll")))]
-    (do (assert (stringContains? ll "x.fast:\n  %x.fp = getelementptr inbounds i8, ptr %x.obj, i64 16\n  %x.fastval = load %Val, ptr %x.fp\n  br label %x.join\n")
-                "alloc: a non-fused opVariantField's fast block is just the address, the Val load and the jump to join, no runtime call inside it")
-        (assert (stringContains? ll "x.slow:\n  %x.slowval = call %Val @objrt.variantField(%Val %h, i64 0)\n  br label %x.join\n")
+    (do (assert (stringContains? ll "  %x.fp = getelementptr inbounds i8, ptr %x.obj, i64 16\n  %x = load %Val, ptr %x.fp\n")
+                "alloc: an opVariantField of the matched value in its own arm block is the address and the Val load, no tag, range or runtime call (QW-MAP)")
+        (refute (stringContains? ll "x.slow:") "alloc: that arm field read has no slow block")
+        (assert (stringContains? ll "rest.fast:\n  %rest.fp = getelementptr inbounds i8, ptr %rest.obj, i64 16\n  %rest.fastval = load %Val, ptr %rest.fp\n  br label %rest.join\n")
+                "alloc: any other opVariantField's fast block is just the address, the Val load and the jump to join, no runtime call inside it")
+        (assert (stringContains? ll "rest.slow:\n  %rest.slowval = call %Val @objrt.variantField(%Val %t, i64 0)\n  br label %rest.join\n")
                 "alloc: its miss falls to rtObject's objrt.variantField, on its own slow block unreachable from the fast path")
         (assert (stringContains? ll "cap0.fast:\n  %cap0.fp = getelementptr inbounds i8, ptr %cap0.obj, i64 24\n  %cap0.fastval = load %Val, ptr %cap0.fp\n  br label %cap0.join\n")
                 "alloc: addK's capture 0 reads Closure.up[0] inline on the fast block, no call")
@@ -1252,7 +1255,7 @@ fn ! testPreludeNative work: String -> Bool
                (do (assert (stringContains? ir (str "define tailcc %Val @prelude$2E" f "(")) (str "preludeNative: the module defines prelude " f))
                    (refute (stringContains? ir (str "@name." f ",")) (str "preludeNative: no asl_rt_builtin call names " f))
                    true))
-             (list "stringSplit" "mapGet" "mapSet" "mapEmpty" "listSort")))
+             (list "stringSplit" "mapGetOr" "mapSet" "mapEmpty" "listSort")))
       (link work "preludeNative" (lib))
       (let [(out (sh (str "ASL_PRELUDE=" work "/absent.asl " work "/preludeNative")))]
         (assert (and (= out.exitCode 0) (= out.stdout want)) (str "preludeNative: native prints " out.stdout " exit " out.exitCode " with prelude.asl absent; stderr " out.stderr)))

@@ -298,3 +298,4 @@
 (:doc :symbol "asl/packages/asl-compiler/tests/wasiRuntimeTest.asl#" :text "End-to-end dynamic WASI runtime execution, Git VFS verification, and task registration tests.")
 (:doc :symbol "asl/packages/asl-compiler/src/wasi.asl#WasiExecReceipt" :text "Receipt of a WASI system command execution.")
 (:doc :symbol "asl/packages/asl-compiler/src/comptime.asl#monotonicAfter" :text "Busy-waits on the monotonic clock until it reads strictly later than previous, for gensym's unique timestamp suffix.")
+(:doc :symbol "asl/packages/asl-compiler/src/compiler.asl#compilePackageToLlvmFor!" :text "compilePackageToLlvmWith! for an explicit target triple: the empty string means the host triple; rcMode as in compilePackageToLlvmWith!.")

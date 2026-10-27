@@ -745,3 +745,4 @@
 (:doc :symbol "asl/packages/asl-forms/tests/editsParityTest.asl#dispatch!" :text "router stand-in: edit ops, else ported ops")
 (:doc :symbol "asl/packages/asl-forms/tests/editsParityTest.asl#normHost" :text "the python version in :syntaxHost is the machine's")
 (:doc :symbol "asl/packages/asl-forms/tests/editsParityTest.asl#replayAll!" :text "fixture lines grouped by scenario, in order")
+(:doc :symbol "asl/packages/asl-forms/src/tools.asl#unknownKeys!" :text "Keys a step passes that the tools catalogue declares neither in :params nor in :accepts for op. Returns (sorted unknown keys, accepted keys); both empty when the catalogue or op is missing or declares nothing.")

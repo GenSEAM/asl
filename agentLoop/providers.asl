@@ -3,7 +3,7 @@
       ProviderEnv VendorConfig Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
       parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
-      curlConfig parseCurlResponse tempDir! freshDir! buildDryRunInfo! providerEnv! makeProvider! nextTurn! advise! review! providerName vendorName splitContext cleanup! toolsField]
+      curlConfig parseCurlResponse tempDir! freshDir! buildDryRunInfo! providerEnv! makeProvider! nextTurn! advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField]
   :i [(asl-json/json :a j) (asl-proc/coreProcess :a cp) (aslGateway/server :a gs) (aslGateway/dispatch :a gd) (aslGateway/upstream :a gu) (aslGateway/config :a cfg)])
 
 enum ProviderError
@@ -51,6 +51,8 @@ enum Provider
   (:f turns (List ScriptStep))
   (:f advisor (Option String))
   (:f reviewer (Option String))
+  (:f gradeReply (Option String))
+  (:f gradeModel (Option String))
   (:f attemptLogPath (Option String)))
 
 (schema Timing
@@ -593,6 +595,8 @@ fn parseScriptFixture text: String attemptLogPath: (Option String) -> ScriptData
     (ScriptData :turns steps
       :advisor (fixtureField text ":advisor" 0 n)
       :reviewer (fixtureField text ":reviewer" 0 n)
+      :gradeReply (fixtureField text ":gradeReply" 0 n)
+      :gradeModel (fixtureField text ":gradeModel" 0 n)
       :attemptLogPath attemptLogPath))
 
 fn lineBreakWidth bs: Bytes n: Int64 i: Int64 -> Int64
@@ -1339,6 +1343,38 @@ fn ! advise! p: Provider system: String text: String -> (Option Turn)
       (let [(r (callVendor! (setIntent cfg "reinforce") system text))]
         (some (Turn :provider (vendorProvider (setIntent r.cfg cfg.intent)) :reply r.reply :meta r.meta))))
     (_ none))
+
+fn withProfile env: ProviderEnv profile: String -> ProviderEnv
+  (with env :profile profile)
+
+fn graderConfig cfg: VendorConfig intent: String profile: String -> VendorConfig
+  (with cfg :intent intent :model "" :env (if (stringEmpty? profile) cfg.env (withProfile cfg.env profile)))
+
+fn noGraderChannel p: Provider -> Turn
+  (Turn :provider p :reply
+    (err (providerError "ERR_NO_GRADER_CHANNEL" "ERR_NO_GRADER_CHANNEL provider has no grader channel"))
+    :meta (emptyMeta))
+
+; (:m :ref LEON-CAPS :do "the grader call is its own request: the configured gateway intent and profile pick the grader, the writer's pinned model is dropped so the profile routes it; a scripted fixture answers from :gradeReply and reports :gradeModel as the served model, so the fake proves the wiring and the model comparison, not a model's judgement")
+fn ! grade! p: Provider intent: String profile: String system: String text: String -> Turn
+  (match p
+    ((scriptFixtureProvider scriptName fixture scriptIndex)
+      (match fixture.gradeReply
+        ((some reply)
+          (Turn :provider p :reply (ok (some reply))
+            :meta (TurnMeta :timing none :usage none :finish none :truncated false
+                    :served (match fixture.gradeModel ((some m) (some (list (pair "model" m)))) ((none) none)))))
+        ((none) (noGraderChannel p))))
+    ((vendorProvider cfg)
+      (let [(r (callVendor! (graderConfig cfg intent profile) system text))]
+        (Turn :provider p :reply r.reply :meta r.meta)))
+    (_ (noGraderChannel p)))
+
+fn graderAvailable? p: Provider -> Bool
+  (match p
+    ((scriptFixtureProvider _ fixture _) (some? fixture.gradeReply))
+    ((vendorProvider _) true)
+    (_ false))
 
 fn ! review! p: Provider system: String text: String -> Turn
   (match p

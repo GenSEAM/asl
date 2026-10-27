@@ -1,5 +1,5 @@
 (module asl/agentLoop/loopState
-  :x [LoopEnv LoopState TurnCtx Step RunResult ReceiptAdapter execValJson execRecJson
+  :x [LoopEnv LoopState TurnCtx Step RunResult SpecVerdict ReceiptAdapter execValJson execRecJson
       claimsReceiptJson planReceiptJson retryReceiptJson gitRValJson runRValJson txnRValJson
       gateJson gateRecJson gateResult lastGatesJson]
   :i [(asl/agentLoop/providers :a pv) (asl/agentLoop/exec :a x)
@@ -18,6 +18,7 @@ schema LoopEnv
   (:f next (fn [String String] -> pv/Turn))
   (:f advise (fn [String String] -> (Result (Option String) String)))
   (:f review (fn [String String] -> (Result (Option String) String)))
+  (:f grade (fn [String String String] -> (Result (Option String) String)))
   (:f newId (fn [] -> String)) (:f now (fn [] -> Float64)) (:f sleep (fn [Int64] -> Bool))
 
 schema LoopState
@@ -275,7 +276,10 @@ schema RunResult
   (:f execSec (Option Float64)) (:f usage (Option j/Json)) (:f signal (Option String))
   (:f ownsRejected (List j/Json)) (:f planSummary (Option j/Json)) (:f coreHost j/Json) (:f openPossible (List String))
   (:f gatePreflight (Option j/Json)) (:f message (Option String))
-  (:f vacuousGates (List String))
+  (:f vacuousGates (List String)) (:f specCheck (Option SpecVerdict))
+
+schema SpecVerdict
+  (:f verdict String) (:f model String) (:f reasons (List String))
 
 schema ReceiptAdapter
   (:f id String) (:f op String) (:f status String) (:f hasExit Bool) (:f exit Int64) (:f cmd String)
