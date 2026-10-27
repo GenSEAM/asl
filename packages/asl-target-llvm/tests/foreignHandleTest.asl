@@ -5,6 +5,7 @@
       (asl-ir/verify :a vfy)
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/sysRoute :a rt)
+      (asl-target-llvm/main :a llvm)
       (asl-tools/fleet/run :a run)])
 
 ; (:m :ref FFI2 :do "owned C pointers end to end: a handle:F result becomes a Handle whose finaliser F runs at collection, close:F closes it once, a closed or foreign Handle is refused before C sees it, !neg and !null report strerror(errno), and :linkLibraries of an imported package reach the link")
@@ -75,6 +76,52 @@ fn ! testRoute -> Bool
         ((ok m) (assert (listContains? (match (rt/routeModule (libc/wasm32Facts) m) ((err ds) (diagCodes ds)) ((ok _) (list))) "ERR_FOREIGN_TARGET")
                         "wasm32 rejects handles with the rest of foreign")))
       true)
+
+fn calleeOf text: String -> String
+  (match (listGet (stringSplit text "@") 1)
+    ((none) "")
+    ((some rest) (optionOr (listHead (stringSplit rest "(")) "")))
+
+fn definedConventions lines: (List String) -> (Map String Bool)
+  (fold (fn [(acc (Map String Bool)) (l String)] -> (Map String Bool)
+          (if (stringStartsWith? l "define ") (mapSet acc (calleeOf l) (stringContains? l " tailcc ")) acc))
+        (mapEmpty) lines)
+
+; (:m :ref FFI2 :do "a direct call whose convention differs from its callee's define is undefined behaviour that instcombine turns into poison, so every call site of a function this program defines must match its tailcc or ccc")
+fn conventionMismatches text: String -> (List String)
+  (let [(lines (stringLines text))
+        (defs (definedConventions lines))]
+    (fold (fn [(acc (List String)) (l String)] -> (List String)
+            (match (listGet (stringSplit l "call ") 1)
+              ((none) acc)
+              ((some rest) (let [(name (calleeOf rest))]
+                             (match (mapGet defs name)
+                               ((none) acc)
+                               ((some tail) (if (= tail (stringStartsWith? rest "tailcc ")) acc (listAppend acc (list (stringTrim l))))))))))
+          (list) lines))
+
+fn conventionSource -> String
+  (stringJoin (list
+    "(module ffiConventions :x [main] :i [])"
+    "fn ! openFile path: String mode: String -> (Result Handle String)"
+    "  (foreign \"c\" \"fopen\" \"cstr cstr -> handle:fclose !null\")"
+    "fn ! closeFile f: Handle -> (Result Int64 String)"
+    "  (foreign \"c\" \"fclose\" \"close:fclose -> i32 !neg\")"
+    "fn ! writeText s: String f: Handle -> (Result Int64 String)"
+    "  (foreign \"c\" \"fputs\" \"cstr handle:fclose -> i32 !neg\")"
+    "fn ! main args: (List String) -> (Result Int64 String)"
+    "  (match (openFile \"/dev/null\" \"w\") ((ok h) (do (writeText \"a\" h) (closeFile h))) ((err e) (err e)))"
+    "") "\n")
+
+fn ! testConventions -> Bool
+  (match (low/lowerSource (conventionSource))
+    ((err ds) (do (assert (listEmpty? ds) (str "the handle fixture lowers: " (stringJoin (diagCodes ds) " "))) false))
+    ((ok m) (match (llvm/emitLlvmProgramNativeWith! m "main" "notrace")
+              ((err ds) (do (assert (listEmpty? ds) (str "the handle fixture emits: " (stringJoin (diagCodes ds) " "))) false))
+              ((ok text) (let [(bad (conventionMismatches text))]
+                           (do (assert (stringContains? text "@ffiHandleClear(") "the close wrapper calls ffiHandleClear")
+                               (assert (listEmpty? bad) (str "every call matches its callee's calling convention: " (stringJoin (listTake bad 4) " | ")))
+                               true))))))
 
 fn fixtureSource -> String
   (stringJoin (list
@@ -226,17 +273,58 @@ fn ! testTransitive root: String work: String -> Bool
         (assert (= (stringTrim ran.out) "crc32 907060870") (str "the imported package's crc32 is libz's: " ran.out))
         true))
 
+fn churnSource -> String
+  (stringJoin (list
+    "(module ffiChurn :x [main] :i [])"
+    ""
+    "fn ! openFile path: String mode: String -> (Result Handle String)"
+    "  (foreign \"c\" \"fopen\" \"cstr cstr -> handle:fclose !null\")"
+    ""
+    "fn ! writePlain s: String f: Handle -> Int64"
+    "  (foreign \"c\" \"fputs\" \"cstr handle:fclose -> i32 !neg\")"
+    ""
+    "fn ! opened path: String k: Int64 -> Int64"
+    "  (fold (fn [(acc Int64) (i Int64)] -> Int64 (match (openFile path \"w\") ((ok h) (do (writePlain \"x\" h) (+ acc 1))) ((err _) acc))) 0 (range 0 k))"
+    ""
+    "fn ! main args: (List String) -> (Result Int64 String)"
+    "  (do (println (str \"files \" (opened (str (optionOr (listHead args) \".\") \"/churn.txt\") 2000)))"
+    "      (ok 0))"
+    "") "\n")
+
+; (:m :ref FFI2 :do "a Handle whose count reaches zero runs its finaliser at once in every RC mode: 2000 fopen results dropped without fclose stay under a 64-descriptor limit only if each drop closes its FILE")
+fn ! churnIn root: String work: String mode: String -> Bool
+  (let [(dir (str work "/churn-" mode))
+        (made (dirCreate dir))
+        (wrote (and (ok? (fileWrite (str dir "/manifest.asn") "(:package ffiChurn :version \"0.1.0\" :entry \"main.asl\")\n"))
+                    (and (ok? (fileWrite (str dir "/.asl.config.asn") (str "(:asl-config :native (:rc :" mode "))\n")))
+                         (ok? (fileWrite (str dir "/main.asl") (churnSource))))))
+        (exe (str dir "/churn"))
+        (built (build root dir exe))
+        (ran (if (= built.exit 0) (runIn (list "/bin/sh" "-c" "ulimit -n 64 && exec \"$0\" \"$1\" 2>&1" exe dir) dir 120) built))]
+    (do (assert (and (ok? made) wrote) (str "the " mode " churn fixture was written under " dir))
+        (assert (= built.exit 0) (str "bin/asl build links the " mode " churn fixture: exit " built.exit " " built.out))
+        (assert (= ran.exit 0) (str "the " mode " churn fixture runs: exit " ran.exit " " ran.out))
+        (assert (= (stringTrim ran.out) "files 2000") (str "under :rc :" mode " every dropped FILE is closed by its finaliser, 2000 of 2000 opens under ulimit -n 64: " ran.out))
+        true))
+
+fn ! testRcModes root: String work: String -> Bool
+  (fold (fn [(acc Bool) (mode String)] -> Bool (and (churnIn root work mode) acc)) true (list "counted" "asan" "notrace"))
+
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (work (str root "/.asl/cache/foreignHandleTest." (stringFromInt64 (procSelf))))
         (_ (dirCreate (str root "/.asl/cache")))
         (made (dirCreate work))
         (routedOk (testRoute))
+        (conventions (testConventions))
         (handles (if (ok? made) (testHandles root work) false))
         (transitive (if (ok? made) (testTransitive root work) false))
+        (modes (if (ok? made) (testRcModes root work) false))
         (cleaned (run/runOneLimited (run/job (list "/bin/rm" "-rf" work) root (run/childEnv (list))) (run/limits 60 4)))]
     (do (assert routedOk "ffiRoute declares the handle and errno externs")
         (assert handles "the native handle fixture prints the C results")
         (assert transitive "an imported package's :linkLibraries reach the link")
+        (assert conventions "foreign wrappers call the ffi helpers with their own calling convention")
+        (assert modes "every RC mode finalises a dropped Handle at once")
         (assert (= cleaned.exit 0) "the work directory was removed")
         true))

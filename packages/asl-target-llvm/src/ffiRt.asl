@@ -41,15 +41,16 @@ fn loadText name: String offset: Int64 -> String
                                 "  ret ptr null"
                                 "}")) "\n")
 
+; (:m :ref FFI2 :do "the clear returns ptr, a raw signature, so its call sites go through nativeExtern as plain ccc calls like the other helpers; an i64 result made them tailcc calls of a ccc define")
 fn clearText -> String
-  (stringJoin (listAppend (cons "define internal i64 @ffiHandleClear(%Val %h) {" (cons "entry:" (objOf)))
+  (stringJoin (listAppend (cons "define internal ptr @ffiHandleClear(%Val %h) {" (cons "entry:" (objOf)))
                           (list "  %pp = getelementptr inbounds i8, ptr %obj, i64 16"
                                 "  store ptr null, ptr %pp"
                                 "  %fp = getelementptr inbounds i8, ptr %obj, i64 24"
                                 "  store ptr null, ptr %fp"
-                                "  ret i64 0"
+                                "  ret ptr null"
                                 "none:"
-                                "  ret i64 0"
+                                "  ret ptr null"
                                 "}")) "\n")
 
 fn ffiRtPieces -> (List (Pair String String))

@@ -70,7 +70,7 @@ fn helperExterns -> (List ty/SsaExtern)
         (ty/ssaExternTyped "ffiMkHandle" (list (ty/tyPtr) (ty/tyPtr)) (ty/tyVal))
         (ty/ssaExternTyped "ffiHandlePtr" (list (ty/tyVal)) (ty/tyPtr))
         (ty/ssaExternTyped "ffiHandleFin" (list (ty/tyVal)) (ty/tyPtr))
-        (ty/ssaExternTyped "ffiHandleClear" (list (ty/tyVal)) (ty/tyI64)))
+        (ty/ssaExternTyped "ffiHandleClear" (list (ty/tyVal)) (ty/tyPtr)))
 
 fn errnoExterns accessor: String -> (List ty/SsaExtern)
   (list (ty/ssaExternTyped accessor (list) (ty/tyPtr))
@@ -242,7 +242,7 @@ fn handleArg g: Gen i: Int64 v: String kind: String -> (Pair Gen (List String))
     (pair (if (= (fsig/kindBase kind) "close") (with g3 :closes (listAppend g3.closes (list v))) g3) (list ptr)))
 
 fn clearClosed g: Gen -> Gen
-  (fold (fn [(acc Gen) (v String)] -> Gen (call acc (str "ffi.cleared." v) (ty/tyI64) "ffiHandleClear" (list v))) g g.closes)
+  (fold (fn [(acc Gen) (v String)] -> Gen (call acc (str "ffi.cleared." v) (ty/tyPtr) "ffiHandleClear" (list v))) g g.closes)
 
 ; (:m :ref FFI2 :do "!neg and !null read errno first, before the argument buffers are freed, and build ERR_FOREIGN_ERRNO: who failed: strerror(errno) at run time")
 fn errnoFail g: Gen name: String -> Gen

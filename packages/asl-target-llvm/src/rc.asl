@@ -967,7 +967,7 @@ fn objText notrace: Bool -> String
                "  %small = icmp ule i64 %ty8, 4"
                "  %cls = lshr i64 %h, 56"
                "  %pooled = icmp ne i64 %cls, 255"
-               (if notrace "  %arr = icmp eq i64 %ty8, 6\n  %hnd = icmp eq i64 %ty8, 7\n  %ext = or i1 %arr, %hnd\n  %ok = or i1 %small, %ext" "  %ok = and i1 %small, %pooled")
+               (if notrace "  %arr = icmp eq i64 %ty8, 6\n  %hnd = icmp eq i64 %ty8, 7\n  %ext = or i1 %arr, %hnd\n  %ok = or i1 %small, %ext" "  %hnd = icmp eq i64 %ty8, 7\n  %pool = and i1 %small, %pooled\n  %ok = or i1 %pool, %hnd")
                "  br i1 %ok, label %yes, label %none"
                "yes:"
                "  ret ptr %o"
@@ -1478,9 +1478,9 @@ fn recycleBody name: String asan: Bool rooted: Bool notrace: Bool -> String
                  "entry:"
                  "  %cls = lshr i64 %h, 56"
                  "  %big = icmp uge i64 %cls, 2"
-                 (if notrace "  %isLarge = icmp eq i64 %cls, 255\n  br i1 %isLarge, label %largeFree, label %classed\nclassed:" "")
+                 (str "  %isLarge = icmp eq i64 %cls, 255\n  br i1 %isLarge, label %" (if notrace "largeFree" "largeFinalise") ", label %classed\nclassed:")
                  (if rooted "  br i1 %big, label %node, label %smallNode" "  br label %small")
-                 (if notrace (largeFreeText) "")
+                 (if notrace (largeFreeText) (largeFinaliseText))
                  "small:"
                  (str "  %hs = or i64 %h, " (sticky))
                  "  store i64 %hs, ptr %o"
@@ -1520,6 +1520,25 @@ fn largeFreeText -> String
                "largeRelease:"
                "  %lo = getelementptr inbounds i8, ptr %o, i64 -24"
                "  call void @free(ptr %lo)"
+               "  ret void"))
+
+; (:m :ref FFI2 :do "under the traced runtime the only large object RC counts is a Handle (aslRc.obj admits type 7), and the sweep owns its memory: at count zero it runs fin(p) at once, clears both words so the sweep never runs it again, and sticks the header so later drops ignore it")
+fn largeFinaliseText -> String
+  (lines (list "largeFinalise:"
+               "  %gfp = getelementptr inbounds i8, ptr %o, i64 24"
+               "  %gf = load ptr, ptr %gfp"
+               "  %gnf = icmp eq ptr %gf, null"
+               "  br i1 %gnf, label %largeStick, label %largeRun"
+               "largeRun:"
+               "  %gap = getelementptr inbounds i8, ptr %o, i64 16"
+               "  %ga = load ptr, ptr %gap"
+               "  store ptr null, ptr %gap"
+               "  store ptr null, ptr %gfp"
+               "  call void %gf(ptr %ga)"
+               "  br label %largeStick"
+               "largeStick:"
+               (str "  %gs = or i64 %h, " (sticky))
+               "  store i64 %gs, ptr %o"
                "  ret void"))
 
 fn recycleNodeText -> (List String)
@@ -1573,12 +1592,12 @@ fn pinValText notrace: Bool -> String
                "  %h = load i64, ptr %o"
                "  %ty = lshr i64 %h, 32"
                "  %ty8 = and i64 %ty, 255"
-               (if notrace "  %over = icmp ugt i64 %ty8, 7\n  %raw = icmp eq i64 %ty8, 5\n  %leafy = or i1 %over, %raw" "  %leafy = icmp ugt i64 %ty8, 4")
+               (if notrace "  %over = icmp ugt i64 %ty8, 7\n  %raw = icmp eq i64 %ty8, 5\n  %leafy = or i1 %over, %raw" "  %over = icmp ugt i64 %ty8, 4\n  %hndp = icmp eq i64 %ty8, 7\n  %nh = xor i1 %hndp, true\n  %leafy = and i1 %over, %nh")
                "  br i1 %leafy, label %done, label %kind"
                "kind:"
                "  %cls = lshr i64 %h, 56"
                "  %pooled = icmp ne i64 %cls, 255"
-               (if notrace "  br label %counted" "  br i1 %pooled, label %counted, label %walk")
+               (if notrace "  br label %counted" "  %cnt = or i1 %pooled, %hndp\n  br i1 %cnt, label %counted, label %walk")
                "counted:"
                "  call void @aslRc.live(ptr %o, i64 %h)"
                "  %c = lshr i64 %h, 48"
