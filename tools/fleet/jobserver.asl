@@ -247,8 +247,10 @@ fn ! wantWith snap: (List Row) dir: String cls: String key: String timeoutMs: In
     (if (< rank 0) (Grant :state "none" :idxs (list) :startNs 0)
       (let [(root (rootDir dir))
             (owner (procSelf))
-            (_ (dirCreate (str root "/tokens")))
+            (usable (and (ok? (dirCreate (str root "/tokens"))) (ok? (dirCreate (str root "/wait")))))
             (names (tokenNames root))]
+        (if (not usable)
+          (let [(_ (eprintln "(:jobserver :note rootUnwritable :proceeding true)"))] (Grant :state "open" :idxs (list) :startNs 0))
         (if (listEmpty? snap)
           (let [(_ (eprintln "(:jobserver :note psFailed :proceeding true)"))] (Grant :state "open" :idxs (list) :startNs 0))
         (if (or (holdsAny root snap (ancestorsOf snap owner 64) names) (holdsSelf root snap owner names))
@@ -267,7 +269,7 @@ fn ! wantWith snap: (List Row) dir: String cls: String key: String timeoutMs: In
                      (idxs (if (and (listEmpty? first) (> (reapStale root snap names (maxHoldNs dir)) 0)) (takeFor cls root n owner ost now) first))]
                  (if (listEmpty? idxs)
                    (Grant :state "wait" :idxs (list) :startNs start)
-                   (let [(_ (removeTicket root name))] (Grant :state "ready" :idxs idxs :startNs start))))))))))))
+                   (let [(_ (removeTicket root name))] (Grant :state "ready" :idxs idxs :startNs start)))))))))))))
 
 fn ! acquire dir: String cls: String key: String timeoutMs: Int64 -> Grant
   (let [(g (want dir cls key timeoutMs))]

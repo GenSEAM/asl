@@ -130,8 +130,9 @@ fn ! fresh? root: String dir: String -> Bool
               ((ok text) (let [(paths (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (stringLines text)))]
                            (if (listEmpty? paths) false (allSame? root dir paths)))))))))))
 
+; (:m :ref INTEG9-F1 :do "the self-probe runs asl test with --jobserverDir none: an internal check of the binary takes no machine-wide token and so writes nothing under HOME, which a dry-run install of a fresh root must leave unchanged")
 fn ! probe? root: String dir: String -> Bool
-  (let [(cmd (str "cd " (shQuote root) " && ASL_CLI_ROOT=" (shQuote root) " ASL_CLI_SCRIPT_DIR=" (shQuote (str root "/bin")) " ASL_CLI_ARGV0=" (shQuote (str root "/bin/asl")) " ASL_CLI_ENTRY_PID=$$ ASL_NATIVE_CLI_DIR=" (shQuote dir) " ASL_NATIVE_QUIET_PID=$$ exec " (shQuote (str dir "/bin")) " test " (shQuote (str root "/asl/packages/asl-cli/tests/fixtures/sweep/passTest.asl"))))
+  (let [(cmd (str "cd " (shQuote root) " && ASL_CLI_ROOT=" (shQuote root) " ASL_CLI_SCRIPT_DIR=" (shQuote (str root "/bin")) " ASL_CLI_ARGV0=" (shQuote (str root "/bin/asl")) " ASL_CLI_ENTRY_PID=$$ ASL_NATIVE_CLI_DIR=" (shQuote dir) " ASL_NATIVE_QUIET_PID=$$ exec " (shQuote (str dir "/bin")) " test --jobserverDir none " (shQuote (str root "/asl/packages/asl-cli/tests/fixtures/sweep/passTest.asl"))))
         (result (boundedCapture! cmd 30000))]
     (if (and (= result.exitCode 0)
           (and (stringContains? result.stdout "passTest.asl: 1 assertion(s) executed") (not (stringContains? result.stdout "asl-host"))))

@@ -184,14 +184,18 @@ fn subst env: Env a: String -> String
 fn nativeCliCache! -> String
   (optionOr (envGet "ASL_NATIVE_CLI_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli"))
 
+; (:m :ref INTEG9-F1 :do "asl run writes a check verdict under $HOME/.asl/cache/check; the sandbox HOME must stay clean, so the child pins the verdict cache to the caller's own, as the native CLI cache is")
+fn checkCacheDir! -> String
+  (optionOr (envGet "ASL_CHECK_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/cache/check"))
+
 fn childEnv! env: Env -> (List String)
   (listAppend
     (filter (fn [r] (not (or (stringStartsWith? r "PATH=") (stringStartsWith? r "HOME=") (stringStartsWith? r "TMPDIR=") (stringStartsWith? r "LC_ALL=")
-                             (stringStartsWith? r "STUB_") (stringStartsWith? r "ASL_ROOT=") (stringStartsWith? r "ASL_HOST=") (stringStartsWith? r "ASL_NATIVE_CLI_CACHE=")
+                             (stringStartsWith? r "STUB_") (stringStartsWith? r "ASL_ROOT=") (stringStartsWith? r "ASL_HOST=") (stringStartsWith? r "ASL_NATIVE_CLI_CACHE=") (stringStartsWith? r "ASL_CHECK_CACHE=")
                              (stringContains? (optionOr (listHead (stringSplit r "=")) "") "_API_KEY"))))
       (envList))
     (list (str "PATH=" env.sandbox "/stub/bin:/usr/bin:/bin:/usr/sbin:/sbin") (str "HOME=" env.home) (str "TMPDIR=" env.sandbox "/tmp")
-          "LC_ALL=C" (str "STUB_LOG=" env.sandbox "/stub/log") (str "STUB_STATE=" env.sandbox "/stub/state") (str "ASL_NATIVE_CLI_CACHE=" (nativeCliCache!))))
+          "LC_ALL=C" (str "STUB_LOG=" env.sandbox "/stub/log") (str "STUB_STATE=" env.sandbox "/stub/state") (str "ASL_NATIVE_CLI_CACHE=" (nativeCliCache!)) (str "ASL_CHECK_CACHE=" (checkCacheDir!))))
 
 fn stripSkillLines s: String -> String
   (dist/joinLines (filter (fn [l] (not (stringContains? l " install-skill"))) (dist/splitLines s)))

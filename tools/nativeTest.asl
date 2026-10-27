@@ -1863,7 +1863,23 @@ fn failText root: String rel: String path: String shown: String reason: String -
       (str "FAIL " name ": " (fold (fn [(acc String) (p String)] -> String (stringReplace acc p name)) reason (list (str root "/" rel) (str root "/" (stemOf rel)) rel (stemOf rel)))))
     (str "FAIL " path ": " reason))
 
+; (:m :ref INTEG9-F1 :do "a script that was prepared on purpose (nativeTest prepare FILE leaves a binary in the store) runs from that binary when its sources still match, so a tool that must start where fork is gone (fleet guard) needs no compile; a script nobody prepared still builds into an ephemeral slot and leaves nothing")
+fn ! keptRun root: String rel: String fp: String -> (Option String)
+  (if (inlineStaged? rel)
+    (none)
+    (match (fileReadString (str root "/" rel))
+      ((err _) (none))
+      ((ok _) (let [(key (slotKey (str "run" (rcTag (rcModeFor! rel)) ":" (importPathOf rel)) (fileDigest (str root "/" rel))))]
+                (match (lookup (str (cacheDir!) "/" fp "/" key) "run")
+                  ((some b) b.binary)
+                  ((none) (none)))))))
+
 fn ! runStaged! root: String rel: String path: String shown: String args: (List String) fp: String -> Int64
+  (match (keptRun root rel fp)
+    ((some bin) (do (telemetry (str "NATIVE-CACHE " path " :cache :hit")) (execStaged! bin args)))
+    ((none) (runBuilt! root rel path shown args fp)))
+
+fn ! runBuilt! root: String rel: String path: String shown: String args: (List String) fp: String -> Int64
   (let [(cDir (cacheDir!))
         (slot (ephemeralSlotIn! cDir))
         (built (buildEphemeral! cDir (str root "/" rel) rel fp "run" slot))

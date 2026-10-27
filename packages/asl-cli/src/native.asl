@@ -727,7 +727,7 @@ fn intelAlias verb: String -> String
     ((or (= verb "vitality") (= verb "full")) "vitality")
     (else ""))
 
-; (:m :ref MACHINE-JOBSERVER :do "asl test and asl build hold one machine-wide CPU token of class writer for the life of this process (the pid stays the same across execv, and a dead owner's token is reclaimed), unless an ancestor already holds one; --jobserverDir DIR names the token dir (default ~/.asl/run/jobserver), stripped before dispatch; asl check and asl forms stay token-free; a wait past 30 minutes proceeds without a token")
+; (:m :ref MACHINE-JOBSERVER :do "asl test and asl build hold one machine-wide CPU token of class writer for the life of this process (the pid stays the same across execv, and a dead owner's token is reclaimed), unless an ancestor already holds one; --jobserverDir DIR names the token dir (default ~/.asl/run/jobserver; none takes no token), stripped before dispatch; asl check and asl forms stay token-free; a wait past 30 minutes proceeds without a token")
 fn jobserverDirOf args: (List String) -> String
   (match (listIndexOf args "--jobserverDir")
     ((some i) (optionOr (listGet args (+ i 1)) ""))
@@ -739,7 +739,7 @@ fn withoutJobserverDir args: (List String) -> (List String)
     ((none) args))
 
 fn ! jobserverToken! verb: String dir: String -> Bool
-  (if (or (= verb "test") (= verb "build"))
+  (if (and (or (= verb "test") (= verb "build")) (!= dir "none"))
     (let [(g (js/acquireProc dir "writer" "cli" 1800000))]
       (if (= g.state "expired") (sys/sayErr! "(:jobserver :note tokenTimeout :proceeding true)") true))
     true)
