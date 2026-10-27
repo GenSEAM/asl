@@ -142,7 +142,7 @@ fn ! ensureNativeCli! snap: String real: String rootReal: String -> (Result Unit
 fn ! runViaFleet! job: sr/Job snap: String -> fr/Done
   (fr/runOneLimited
     (fr/job job.argv (optionOr job.cwd snap) (optionOr job.env (list)))
-    (fr/Limits :timeoutMs job.timeoutMs :maxDesc 32))
+    (fr/Limits :timeoutMs job.timeoutMs :maxDesc 32 :class "" :jsDir ""))
 
 fn ! hostlessProbe! -> Bool
   (match (sr/gitRoot!)
