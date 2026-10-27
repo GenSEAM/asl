@@ -62,11 +62,11 @@ fn ! testVariantTmpCleared dir: String -> Bool
         (match (nb/notraceRuntime! b asl1 (str r "/asl/packages"))
           ((err e) (do (assert false (str "untraced runtime in a fresh cache: " e)) false))
           ((ok lib)
-            (let [(entries (resultOr (dirList cacheDir) (list)))
+            (let [(entries (filter (fn [(n String)] -> Bool (!= n "leases")) (resultOr (dirList cacheDir) (list))))
                   (libDir (sys/parentOf lib))]
               (do (assert (ok? made) "fresh runtime cache directory created")
                   (assert (sys/isFile? lib) (str "the untraced runtime is installed at " lib))
-                  (assert (= entries (list (sys/baseName libDir))) (str "a fresh variant build leaves only its installed directory, no rt-notrace.PID work directory: " (stringJoin entries " ")))
+                  (assert (= entries (list (sys/baseName libDir))) (str "a fresh variant build leaves only its installed directory, no rt-notrace.PID work directory (the leases directory of BIN-NO-PERSIST is not an entry): " (stringJoin entries " ")))
                   (assert (ok? (pathRemove lib)) "fresh runtime library removed")
                   (assert (ok? (pathRemove libDir)) "fresh runtime directory removed")
                   (assert (ok? (pathRemove cacheDir)) "fresh runtime cache directory removed")
