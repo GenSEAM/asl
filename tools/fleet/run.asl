@@ -1,6 +1,6 @@
 (module asl-tools/fleet/run
-  :x [Job Done Limits Proc ProcOut Running RunningSep Lease job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardFds spawn spawnSep reapStaleLeases! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procSnapshot treeOf killTree! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
-  :i [])
+  :x [Job Done Limits Proc ProcOut Running RunningSep Lease job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardFds spawn spawnSep reapStaleLeases! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procSnapshot treeOf killTree! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
+  :i [(asl-tools/fleet/jobserver :a js)])
 
 (schema Job
   (:f argv (List String))
@@ -16,7 +16,9 @@
 
 (schema Limits
   (:f timeoutMs Int64)
-  (:f maxDesc Int64))
+  (:f maxDesc Int64)
+  (:f class String)
+  (:f jsDir String))
 
 (schema Proc
   (:f pid Int64)
@@ -116,7 +118,11 @@ fn ! readChunk fd: Int64 isOpen: Bool -> (Pair Bool String)
       ((err _) (pair true ""))))
 
 fn limits timeoutS: Int64 maxDesc: Int64 -> Limits
-  (Limits :timeoutMs (* timeoutS 1000) :maxDesc maxDesc)
+  (Limits :timeoutMs (* timeoutS 1000) :maxDesc maxDesc :class "" :jsDir "")
+
+; (:m :ref MACHINE-JOBSERVER :do "opt-in per call: a suite, build, clang or bench child takes a machine-wide CPU token of this class (train audit writer background exclusive) before exec and frees it on exit; the default class \"\" takes none, so short git and grep children and children of a token holder never queue behind the pool they run under; jsDir \"\" is ~/.asl/run/jobserver")
+fn heavy lim: Limits cls: String dir: String -> Limits
+  (Limits :timeoutMs lim.timeoutMs :maxDesc lim.maxDesc :class cls :jsDir dir)
 
 fn defaultLimits -> Limits
   (limits 1800 64)
@@ -386,11 +392,15 @@ fn ! reapStaleLeases! -> Int64
   (:f progress Bool))
 
 fn ! guardStart! argv: (List String) cwd: String env: (List String) lim: Limits -> (Result Guarded ProcOut)
-  (let [(_ (reapStaleLeases!))]
-    (match (spawnSep argv cwd env)
-      ((err d) (err d))
-      ((ok r) (let [(_ (writeLease! r.pid (procSelf) r.startNs (leaseDeadline r.startNs lim.timeoutMs)))]
-                (ok (Guarded :run r :lim lim :lastCheck 0))))))
+  (let [(_ (reapStaleLeases!))
+        (g (js/acquire lim.jsDir lim.class (stringFromInt64 (monotonicNs)) lim.timeoutMs))]
+    (if (= g.state "expired")
+      (err (ProcOut :exitCode 124 :stdout "" :stderr (str "(:fleetRun :verdict :tokenWait :class " lim.class " :timeoutMs " lim.timeoutMs ")\n")))
+      (match (spawnSep argv cwd env)
+        ((err d) (let [(_ (js/releaseIdxs lim.jsDir g.idxs))] (err d)))
+        ((ok r0) (let [(r (if (listEmpty? g.idxs) r0 (let [(_ (js/bind lim.jsDir g.idxs r0.pid lim.class g.startNs))] (startedAtSep r0 g.startNs))))
+                       (_ (writeLease! r.pid (procSelf) r.startNs (leaseDeadline r.startNs lim.timeoutMs)))]
+                   (ok (Guarded :run r :lim lim :lastCheck 0)))))))
 
 fn guardFds g: Guarded -> (List (Pair Int64 Int64))
   (listAppend (if g.run.outOpen (list (pair g.run.outFd 1)) (list)) (if g.run.errOpen (list (pair g.run.errFd 1)) (list)))
@@ -408,7 +418,7 @@ fn ! guardAdvance! g: Guarded -> GuardStep
         (over? (or (not (stringEmpty? r2.killed)) (and (not r2.outOpen) (not r2.errOpen))))
         (g2 (Guarded :run r2 :lim lim :lastCheck (if checked now g.lastCheck)))]
     (if over?
-      (let [(o (finishSep r2)) (_ (removeLease! r2.pid))]
+      (let [(o (finishSep r2)) (_ (removeLease! r2.pid)) (_ (js/releasePid lim.jsDir lim.class r2.pid))]
         (GuardStep :out (some o) :guard g2 :progress progress))
       (GuardStep :out none :guard g2 :progress progress)))
 
@@ -437,9 +447,29 @@ fn ! poolLoop jobs: (List Job) next: Int64 slots: Int64 lim: Limits running: (Li
   (if (and (< (listLength running) slots) (< next (listLength jobs)))
     (if (not (admit next))
       (poolLoop jobs (listLength jobs) slots lim running done lastCheck admit onDone state)
-      (match (spawn next (optionOr (listGet jobs next) (job (list) "." (list))))
-        ((err d) (poolLoop jobs (+ next 1) slots lim running (cons d done) lastCheck admit onDone (onDone state d)))
-        ((ok r) (poolLoop jobs (+ next 1) slots lim (listAppend running (list r)) done lastCheck admit onDone state))))
+      (let [(g (js/want lim.jsDir lim.class (stringFromInt64 next) lim.timeoutMs))]
+        (cond
+          ((= g.state "expired")
+           (let [(d (Done :idx next :exit 124 :out (str "(:fleetRun :verdict :tokenWait :class " lim.class " :timeoutMs " lim.timeoutMs ")\n") :ms (/ (- (monotonicNs) g.startNs) 1000000) :verdict "tokenWait"))]
+             (poolLoop jobs (+ next 1) slots lim running (cons d done) lastCheck admit onDone (onDone state d))))
+          ((= g.state "wait")
+           (if (listEmpty? running)
+             (let [(_ (sleepMs (js/backoffMs g.startNs)))] (poolLoop jobs next slots lim running done lastCheck admit onDone state))
+             (poolPump jobs next slots lim running done lastCheck admit onDone state)))
+          (else
+           (match (spawn next (optionOr (listGet jobs next) (job (list) "." (list))))
+             ((err d) (let [(_ (js/releaseIdxs lim.jsDir g.idxs))] (poolLoop jobs (+ next 1) slots lim running (cons d done) lastCheck admit onDone (onDone state d))))
+             ((ok r0) (let [(r (if (listEmpty? g.idxs) r0 (let [(_ (js/bind lim.jsDir g.idxs r0.pid lim.class g.startNs))] (startedAt r0 g.startNs))))]
+                        (poolLoop jobs (+ next 1) slots lim (listAppend running (list r)) done lastCheck admit onDone state))))))))
+    (poolPump jobs next slots lim running done lastCheck admit onDone state))
+
+fn startedAt r: Running ns: Int64 -> Running
+  (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text r.text :outOpen r.outOpen :errOpen r.errOpen :startNs ns :killed r.killed :groups r.groups :known r.known)
+
+fn startedAtSep r: RunningSep ns: Int64 -> RunningSep
+  (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd :outText r.outText :errText r.errText :outOpen r.outOpen :errOpen r.errOpen :startNs ns :killed r.killed :groups r.groups :known r.known)
+
+fn ! poolPump jobs: (List Job) next: Int64 slots: Int64 lim: Limits running: (List Running) done: (List Done) lastCheck: Int64 admit: (fn [Int64] -> Bool) onDone: (fn [S Done] -> S) state: S -> (Pair (List Done) S)
     (if (listEmpty? running)
       (pair (listSortBy (fn [(d Done)] -> Int64 d.idx) done) state)
       (let [(pumped (map pumpOne running))
@@ -453,10 +483,11 @@ fn ! poolLoop jobs: (List Job) next: Int64 slots: Int64 lim: Limits running: (Li
             (closed (filter over? states))
             (still (filter (fn [(r Running)] -> Bool (not (over? r))) states))
             (finished (map finish closed))
+            (_ (fold (fn [(n Int64) (r Running)] -> Int64 (+ n (js/releasePid lim.jsDir lim.class r.pid))) 0 closed))
             (nextState (fold onDone state finished))]
         ; (:m :ref RUNASL-POOLLOOP-FDPOLL-TYPE-20261017 :do "fix: the two if branches disagreed in type (fdPoll's own (Result (List (Pair Int64 Int64)) String) vs the else branch's bare Unit) -- a latent mismatch only a full native rebuild's whole-program check surfaces, not the normal incremental path; fdPoll's own result was always discarded here (it is called only to block until a socket is ready or the 50ms timeout passes, never consulted), so the true branch now discards it explicitly too, making both branches Unit with no change in runtime behavior")
         (do (if (and (not progress) (listEmpty? closed)) (let [(_ (fdPoll (openFds still) 50))] ()) ())
-            (poolLoop jobs next slots lim still (listAppend finished done) (if checked now lastCheck) admit onDone nextState)))))
+            (poolLoop jobs next slots lim still (listAppend finished done) (if checked now lastCheck) admit onDone nextState))))
 
 fn ! runPoolLimited jobs: (List Job) slots: Int64 lim: Limits -> (List Done)
   (pairFirst (poolLoop jobs 0 (if (< slots 1) 1 slots) lim (list) (list) 0 (fn [(i Int64)] -> Bool true) (fn [(n Int64) (d Done)] -> Int64 (+ n 1)) 0))

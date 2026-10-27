@@ -1,6 +1,6 @@
 (module asl-cli/native
   :x [main]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheFallback :a cf) (asl/packages/asl-cli/src/command :a cmd) (asl-tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl-checker/resolve :a ckr) (asl-tools/agentSurfaceAudit :a tsa) (asl-pack/pkgCli :a pkg)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheFallback :a cf) (asl/packages/asl-cli/src/command :a cmd) (asl-tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl-checker/resolve :a ckr) (asl-tools/agentSurfaceAudit :a tsa) (asl-pack/pkgCli :a pkg) (asl-tools/fleet/jobserver :a js)])
 
 fn rest args: (List String) -> (List String)
   (optionOr (listTail args) (list))
@@ -604,9 +604,10 @@ fn ! check! ctx: sys/Context args: (List String) -> Int64
 fn ! rootRelativeArg ctx: sys/Context a: String -> String
   (rooted ctx (resultOr (realPath a) a))
 
-fn ! reexecTestAtRoot! ctx: sys/Context args: (List String) -> Int64
+fn ! reexecTestAtRoot! ctx: sys/Context args: (List String) dir: String -> Int64
   (sys/execv! (listAppend (list "/bin/sh" "-c" "cd -- \"$0\" && exec \"$@\"" ctx.root (str ctx.root "/bin/asl") "test")
-                          (map (fn [(a String)] -> String (rootRelativeArg ctx a)) args))
+                          (listAppend (if (stringEmpty? dir) (list) (list "--jobserverDir" dir))
+                          (map (fn [(a String)] -> String (rootRelativeArg ctx a)) args)))
               (list))
 
 fn ! outOfRoot? ctx: sys/Context a: String -> Bool
@@ -616,13 +617,13 @@ fn ! outOfRoot? ctx: sys/Context a: String -> Bool
 fn ! anyOutOfRoot? ctx: sys/Context args: (List String) -> Bool
   (listAny? (fn [(a String)] -> Bool (outOfRoot? ctx a)) (filter (fn [(a String)] -> Bool (not (stringStartsWith? a "--"))) args))
 
-fn ! test! ctx: sys/Context args: (List String) -> Int64
+fn ! test! ctx: sys/Context args: (List String) dir: String -> Int64
   (let [(tracing (or (listContains? args "--trace") (= (optionOr (envGet "ASL_TRACE") "0") "1")))
         (plainFiles (and (not (listEmpty? args)) (and (not (listContains? args "--changed")) (not (= (first args) "--native")))))
         (hosted (or (listContains? args "--compare") (or tracing (and (not plainFiles) (not (atRoot? ctx))))))]
     (cond
       (hosted (cmd/dispatch! ctx "test" args))
-      ((and plainFiles (not (atRoot? ctx)) (not (anyOutOfRoot? ctx args))) (reexecTestAtRoot! ctx args))
+      ((and plainFiles (not (atRoot? ctx)) (not (anyOutOfRoot? ctx args))) (reexecTestAtRoot! ctx args dir))
       ((listContains? args "--changed") (changedTest! ctx args))
       ((listEmpty? args) (sweepTest! ctx))
       ((= (first args) "--native") (if (listEmpty? (rest args)) (cmd/dispatch! ctx "test" args) (suites! ctx (rest args))))
@@ -721,14 +722,35 @@ fn intelAlias verb: String -> String
     ((or (= verb "vitality") (= verb "full")) "vitality")
     (else ""))
 
+; (:m :ref MACHINE-JOBSERVER :do "asl test and asl build hold one machine-wide CPU token of class writer for the life of this process (the pid stays the same across execv, and a dead owner's token is reclaimed), unless an ancestor already holds one; --jobserverDir DIR names the token dir (default ~/.asl/run/jobserver), stripped before dispatch; asl check and asl forms stay token-free; a wait past 30 minutes proceeds without a token")
+fn jobserverDirOf args: (List String) -> String
+  (match (listIndexOf args "--jobserverDir")
+    ((some i) (optionOr (listGet args (+ i 1)) ""))
+    ((none) ""))
+
+fn withoutJobserverDir args: (List String) -> (List String)
+  (match (listIndexOf args "--jobserverDir")
+    ((some i) (listAppend (listTake args i) (listDrop args (+ i 2))))
+    ((none) args))
+
+fn ! jobserverToken! verb: String dir: String -> Bool
+  (if (or (= verb "test") (= verb "build"))
+    (let [(g (js/acquireProc dir "writer" "cli" 1800000))]
+      (if (= g.state "expired") (sys/sayErr! "(:jobserver :note tokenTimeout :proceeding true)") true))
+    true)
+
 fn ! dispatch! ctx: sys/Context verb: String args: (List String) -> Int64
+  (let [(_ (jobserverToken! verb (jobserverDirOf args)))]
+    (dispatchRaw! ctx verb (withoutJobserverDir args) (jobserverDirOf args)))
+
+fn ! dispatchRaw! ctx: sys/Context verb: String args: (List String) dir: String -> Int64
   (cond
     ((or (stringStartsWith? verb "(") (stringStartsWith? verb ":")) (forms! (cons verb args)))
     ((= verb "rpc") (forms! args))
     ((= verb "intel") (intel! ctx args))
     ((not (stringEmpty? (intelAlias verb))) (intel! ctx (cons (intelAlias verb) args)))
     ((= verb "run") (run! ctx args))
-    ((= verb "test") (test! ctx args))
+    ((= verb "test") (test! ctx args dir))
     ((= verb "parse") (parse! ctx args))
     ((= verb "eval") (eval! ctx args))
     ((= verb "launch") (launch! ctx args))
