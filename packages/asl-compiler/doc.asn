@@ -299,3 +299,4 @@
 (:doc :symbol "asl/packages/asl-compiler/src/wasi.asl#WasiExecReceipt" :text "Receipt of a WASI system command execution.")
 (:doc :symbol "asl/packages/asl-compiler/src/comptime.asl#monotonicAfter" :text "Busy-waits on the monotonic clock until it reads strictly later than previous, for gensym's unique timestamp suffix.")
 (:doc :symbol "asl/packages/asl-compiler/src/compiler.asl#compilePackageToLlvmFor!" :text "compilePackageToLlvmWith! for an explicit target triple: the empty string means the host triple; rcMode as in compilePackageToLlvmWith!.")
+(:doc :symbol "asl/packages/asl-compiler/src/checkCache.asl#verdictKeyWith!" :text "The cache key of entry like verdictKey!, keyed by the caller's own checkerId instead of rehashing the checker source closure, and with a staged per-run entry keyed under alias in place of its path; none when a file cannot be resolved or read.")
