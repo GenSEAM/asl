@@ -231,6 +231,20 @@ A file with no `module` header is still a module. It exports nothing, unless it 
 `runTests`: then it is a script module, named from its path, importing only the prelude and exporting
 those entries. Aliases are module-local.
 
+**Top-level code is the entry.** In a file with no header, the column-0 forms that are not items
+(`fn`, `schema`, `enum`) run in order as the program, like a shell or Python script: they see the
+file's functions and `args`, and may have effects. `(let [(x e)])` with no body binds `x` for the
+forms after it; when `e` checks as `(Result T E)`, `x` is the `ok` value. A form that checks as
+`(err e)` stops the script: one line `(:err :form N :line L :msg e)` goes to stderr and the exit
+status is 1; otherwise it is 0. A `fn main` with no `->` follows the same rule for its statements
+before the last, and its last statement must be Unit; it takes no parameter or one `(List String)`.
+Inside other functions nothing changes. `(use pkg/mod ...)` imports each
+module under its last segment. A first line starting with `#!` is skipped, so `#!/usr/bin/env asl`
+and `chmod +x` make the file executable; `asl FILE args`, `asl -e 'code' args` and `asl - args`
+(code on stdin; a keyword-headed form there is still an operation batch) run it. Such a file cannot
+also define `main` (`ERR_SCRIPT_MAIN`), one program holds at most one (`ERR_MULTIPLE_ENTRY`), and
+importing one is `ERR_TOPLEVEL_IN_LIBRARY`, so importing never runs code.
+
 **A module that exports `main` is a program.** A standalone program is a script, and `fn main` with no
 `->` is the short form: it binds `args`, returns `(ok ())`, and its last line must be `Unit`, so a
 `Result` there is a type error rather than a dropped failure.

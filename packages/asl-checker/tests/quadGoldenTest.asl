@@ -10,6 +10,7 @@ fn checkerRoots -> (List String)
 
 ; (:m :ref CHKFIX :do "the golden is the full checker summary text in fixtures/quadGolden, not just its digest, so a mismatch prints a reviewable line diff instead of two opaque numbers; re-recorded after PRELPASS/Perceus/TGTTRIM merged, asl-eval/src dropped from checkerRoots since that package is deleted")
 ; (:m :ref TOKDEFFIX :do "both goldens re-recorded from corpusText on sh/TOKDEFM: only the summary lines of asl-parser/ast and asl-parser/astPrinter (TOKEN-DEFAULTS fns) and, in main.golden, asl-target-llvm/rc and ssa (QW-ALLOC from main) changed, each by added exports and calls")
+; (:m :ref SCRIPT-ENTRY :do "both goldens re-recorded from corpusText on the merge with main 5891b54dc: only the asl-parser/ast and asl-parser/astPrinter summary lines changed (script statements, printer inverse, new exports)")
 fn goldenFileFor entry: String -> String
   (cond ((= entry "asl/packages/asl-forms/tests/checkSemanticTest.asl") "asl/packages/asl-checker/tests/fixtures/quadGolden/checkSemanticTest.golden.txt")
         ((= entry "asl/packages/asl-cli/src/main.asl") "asl/packages/asl-checker/tests/fixtures/quadGolden/main.golden.txt")

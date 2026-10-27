@@ -670,3 +670,8 @@
 (:doc :symbol "asl/packages/asl-parser/src/parenForms.asl#bracketError" :text "In strict mode, locates the first retired [ ] or { } bracket in source and reports it.")
 (:doc :symbol "asl/packages/asl-parser/src/parenForms.asl#bindPairs" :text "Flattens a let-binding list into (name expr) pairs, accepting either paired or flat form.")
 (:doc :symbol "asl/packages/asl-parser/src/reader.asl#renderPrefix" :text "Renders an S-expression back to text without the dot/infix sugar renderSexpr applies.")
+(:doc :symbol "asl/packages/asl-parser/src/ast.asl#scriptStepParts" :text "The form number, line, column and expression of a (preludeScriptStep N L C e) marker, which the parser wraps around each top-level code form of a script; none for any other form.")
+(:doc :symbol "asl/packages/asl-parser/src/ast.asl#scriptStepAt" :text "Wraps expression e as the marker (preludeScriptStep N L C e): statement number N at the line and column of its position form, which the checker reads to place diagnostics and to note Result statements.")
+(:doc :symbol "asl/packages/asl-parser/src/ast.asl#shebangless" :text "The source with a #! first line blanked and its newline kept, so later lines keep their numbers; any other source unchanged.")
+(:doc :symbol "asl/packages/asl-parser/src/ast.asl#scriptMainDoc" :text "The docstring of the main the parser synthesises from a script's top-level code; the linker reads it to tell such a module from one that defines main.")
+(:doc :symbol "asl/packages/asl-parser/src/ast.asl#scriptStatementsOf" :text "The top-level code forms a synthesised script main body was built from, markers removed and in order, so a printer writes the script back as written.")

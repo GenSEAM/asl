@@ -1,4 +1,4 @@
-(module asl-ir/link :x [LinkUnit LinkAcc loadClosure! loadClosureWith! linkEntryWith! linkUnits linkWith! linkEntry! linkWithBare! linkEntryBare! lowerSourceWith lowerSourceLinked! preludePath lowerPrelude importForms firstByName firstRecordByName allFunctions emptyUnit nativeOverlayDir overlayUnit! overlayUnitAt! linkUnitsWith linkUnitsWithBareEntry rewriteModuleBuiltins rewriteModuleBuiltinsAgainst definedNames functionBuiltinRefs] :i [(asl-ir/types :a ty) (asl-ir/lower :a low) (asl-ir/verify :a vfy) (asl-parser/ast :a ast) (asl-checker/resolve :a r)])
+(module asl-ir/link :x [LinkUnit LinkAcc loadClosure! loadClosureWith! linkEntryWith! linkUnits linkWith! linkEntry! linkWithBare! linkEntryBare! lowerSourceWith lowerSourceLinked! preludePath lowerPrelude importForms firstByName firstRecordByName allFunctions emptyUnit nativeOverlayDir overlayUnit! overlayUnitAt! linkUnitsWith linkUnitsWithBareEntry rewriteModuleBuiltins rewriteModuleBuiltinsAgainst definedNames functionBuiltinRefs] :i [(asl-ir/types :a ty) (asl-ir/lower :a low) (asl-ir/verify :a vfy) (asl-parser/ast :a ast) (asl-checker/resolve :a r) (asl-checker/check :a chk)])
 
 (schema LinkUnit
   (:f path String)
@@ -90,8 +90,17 @@ fn ! readUnit! path: String ix: r/ModIndex -> (Pair (Result LinkUnit (List ty/Ir
                               ((some m) (let [(resolved (resolveImports! (realOrSelf! path) path m.imports (list) (list) ix))]
                                           (pair (match (pairFirst resolved)
                                                   ((err ds) (err ds))
-                                                  ((ok imports) (ok (LinkUnit :path path :name (unitName m.path path) :forms (namedForms forms (unitName m.path path)) :positions (low/sitedPositions (rootRelative! path) (low/declPositions src)) :imports imports))))
+                                                  ((ok imports) (let [(script (scriptForms! path m forms (pairSecond resolved)))]
+                                                                  (ok (LinkUnit :path path :name (unitName m.path path) :forms (namedForms (pairFirst script) (unitName m.path path)) :positions (low/sitedPositions (rootRelative! path) (low/declPositions src)) :imports imports)))))
                                                 (pairSecond resolved)))))))))
+
+; (:m :ref TOP-LEVEL-CODE :do "a headerless unit's top-level statements, and the statements of a sugared main in any unit (SCRIPT-ENTRY), are elaborated against their checked types before lowering; the unit's imports are loaded only when it has some")
+fn ! scriptForms! path: String m: ast/ModuleNode forms: (List ast/TopForm) ix: r/ModIndex -> (Pair (List ast/TopForm) r/ModIndex)
+  (cond
+    ((not (chk/needsElaboration? forms)) (pair forms ix))
+    ((listEmpty? m.imports) (pair (chk/elaborateScript forms (mapEmpty) path) ix))
+    (else (let [(loaded (r/loadModuleDepsIx! (list (r/parentDirOf path) ".") (map (fn [(p (Pair String String))] -> String (pairFirst p)) m.imports) ix))]
+            (pair (chk/elaborateScript forms (resultOr (pairFirst loaded) (mapEmpty)) path) (pairSecond loaded)))))
 
 fn ! visitAll! st: LoadState paths: (List String) -> LoadState
   (match (listHead paths)
@@ -122,13 +131,31 @@ fn reservedPreludeNameDiags units: (List LinkUnit) -> (List ty/IrDiag)
   (map (fn [(u LinkUnit)] -> ty/IrDiag (ty/makeIrDiag "ERR_LINK_RESERVED_MODULE_NAME" (str "module name 'prelude' is reserved for the designated prelude every module links against; rename the module declared in " u.path) u.path))
        (filter (fn [(u LinkUnit)] -> Bool (and (= u.name "prelude") (not (or (= u.path (preludePath)) (stringEndsWith? u.path (str "/" (preludePath))))))) units))
 
+fn topLevelCode? u: LinkUnit -> Bool
+  (listAny? (fn [(t ast/TopForm)] -> Bool (match t ((ast/topDefun d) (and (= d.name "main") (= d.docstring (ast/scriptMainDoc)))) (_ false))) u.forms)
+
+fn importsPath? u: LinkUnit path: String -> Bool
+  (listAny? (fn [(imp (Pair String String))] -> Bool (= (pairSecond imp) path)) u.imports)
+
+; (:m :ref ENTRY-RULE :do "top-level code is the program's entry: two modules holding it in one closure are ERR_MULTIPLE_ENTRY naming both, and a module holding it that another module imports is ERR_TOPLEVEL_IN_LIBRARY, so importing never runs code; the native run wrapper nativeTestEntry is the one importer allowed, it is how asl run calls the entry")
+fn entryDiags units: (List LinkUnit) -> (List ty/IrDiag)
+  (let [(scripts (filter topLevelCode? units))
+        (root (optionOr (listHead units) (emptyUnit "")))]
+    (if (>= (listLength scripts) 2)
+      (list (ty/makeIrDiag "ERR_MULTIPLE_ENTRY" (str "only one module of a program may hold top-level code, the entry; these do: " (stringJoin (map (fn [(u LinkUnit)] -> String u.path) scripts) " ")) root.path))
+      (fold (fn [(acc (List ty/IrDiag)) (s LinkUnit)] -> (List ty/IrDiag)
+              (match (listHead (filter (fn [(u LinkUnit)] -> Bool (and (!= u.name "nativeTestEntry") (importsPath? u s.path))) units))
+                ((none) acc)
+                ((some u) (cons (ty/makeIrDiag "ERR_TOPLEVEL_IN_LIBRARY" (str s.path " holds top-level code, so it is a script and cannot be imported (by " u.path "); move the code it shares into a module of fns") s.path) acc))))
+            (list) scripts)))
+
 fn ! loadClosure! entryPath: String -> (Result (List LinkUnit) (List ty/IrDiag))
   (loadClosureWith! entryPath (r/emptyModIndex))
 
 fn ! loadClosureWith! entryPath: String ix: r/ModIndex -> (Result (List LinkUnit) (List ty/IrDiag))
   (let [(st (visit! (LoadState :units (list) :seen (mapEmpty) :diags (list) :index ix) entryPath))
         (units (listReverse st.units))
-        (diags (listAppend (listAppend (listReverse st.diags) (duplicateModules units)) (reservedPreludeNameDiags units)))]
+        (diags (listAppend (listAppend (listAppend (listReverse st.diags) (duplicateModules units)) (reservedPreludeNameDiags units)) (entryDiags units)))]
     (if (listEmpty? diags) (ok units) (err diags)))
 
 fn importForms units: (List LinkUnit) u: LinkUnit -> (Map String (List ast/TopForm))

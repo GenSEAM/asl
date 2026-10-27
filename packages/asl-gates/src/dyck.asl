@@ -61,6 +61,15 @@ fn checkLoop data: Bytes n: Int64 i: Int64 inStr: Bool inComment: Bool strStart:
 fn check data: Bytes comments: Bool -> (Option (Pair Int64 String))
   (checkLoop data (bytesLength data) 0 false false 0 comments (list))
 
+fn lineEnd data: Bytes n: Int64 i: Int64 -> Int64
+  (cond ((>= i n) n) ((= (bytesGet data i) 10) (+ i 1)) (else (lineEnd data n (+ i 1))))
+
+; (:m :ref SHEBANG :do "an ASL file's first line starting with #! is skipped as the reader skips it, so a shebang naming flags with brackets does not unbalance check")
+fn checkSource data: Bytes -> (Option (Pair Int64 String))
+  (let [(n (bytesLength data))
+        (start (if (and (>= n 2) (and (= (bytesGet data 0) 35) (= (bytesGet data 1) 33))) (lineEnd data n 0) 0))]
+    (checkLoop data n start false false 0 false (list)))
+
 fn checkString text: String comments: Bool -> (Option (Pair Int64 String))
   (check (stringToBytes text) comments)
 
@@ -77,7 +86,7 @@ fn checkFile! path: String -> (Result (Option (Pair Int64 String)) String)
         (err "Is a directory")
         (let [(r (fileReadBytes path))]
           (match r
-            ((ok data) (ok (check data (not (stringEndsWith? path ".asl")))))
+            ((ok data) (ok (if (stringEndsWith? path ".asl") (checkSource data) (check data true))))
             ((err e) (err (extractStrerror path e)))))))
     ((err e)
       (err (extractStrerror path e))))

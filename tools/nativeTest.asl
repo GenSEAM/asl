@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [runTests main failLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [runTests main failLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -140,6 +140,16 @@ fn headerOf src: String -> String
     ((none) src)
     ((some i) (optionOr (stringSlice src 0 i) src)))
 
+; (:m :ref SCRIPT-ENTRY :do "fn header lines with their tailrec marker dropped, so fn tailrec main and fn ! tailrec runTests read like fn main and fn ! runTests, as the parser reads them")
+fn fnLine l: String -> String
+  (let [(words (stringSplit l " ")) (rest (optionOr (listTail words) (list)))]
+    (if (= (listHead words) (some "fn"))
+      (stringJoin (cons "fn" (listAppend (filter (fn [(w String)] -> Bool (and (!= w "tailrec") (!= w ":tailrec"))) (listTake rest 2)) (listDrop rest 2))) " ")
+      l))
+
+fn fnLines src: String -> (List String)
+  (map fnLine (stringLines src))
+
 fn definesFn? lines: (List String) name: String -> Bool
   (listAny? (fn [l] (or (or (= l (str "fn " name)) (stringStartsWith? l (str "fn " name " ")))
                         (or (= l (str "fn ! " name)) (stringStartsWith? l (str "fn ! " name " ")))))
@@ -149,9 +159,22 @@ fn moduleHeaded? lines: (List String) -> Bool
   (listAny? (fn [l] (or (= l "(module") (stringStartsWith? l "(module "))) lines)
 
 ; (:m :ref IMPLICIT-MODULE :do "a headerless source exports the entries it defines (main, runTests), as the parser's synthesised script header does")
+; (:m :ref TOP-LEVEL-CODE :do "a column-0 paren form that is no declaration, data form or use line is top-level code, which the parser turns into main")
+fn codeLine? l: String -> Bool
+  (and (stringStartsWith? l "(")
+       (not (listAny? (fn [p] (stringStartsWith? l p)) (list "(:" "(use " "(fn " "(defun " "(df " "(schema " "(defschema " "(dfs " "(enum " "(defenum " "(dfe "))))
+
+; (:m :ref SCRIPT-ENTRY :do "a headerless file's entries are what the parser exports from its synthesised script header; the line heuristic is the fallback for a file that does not parse")
 fn scriptExportsOf src: String -> (List String)
-  (let [(lines (stringLines src))]
-    (if (moduleHeaded? lines) (list) (filter (fn [n] (definesFn? lines n)) (list "main" "runTests"))))
+  (match (ast/parse src)
+    ((ok forms) (listFlatMap (fn [(t ast/TopForm)] -> (List String) (match t ((ast/topModule m) (if (stringEmpty? m.path) m.exported (list))) (_ (list)))) forms))
+    ((err _) (scriptExportsByLine src)))
+
+fn scriptExportsByLine src: String -> (List String)
+  (let [(lines (fnLines src))]
+    (cond ((moduleHeaded? lines) (list))
+          ((listAny? codeLine? lines) (cons "main" (filter (fn [n] (definesFn? lines n)) (list "runTests"))))
+          (else (filter (fn [n] (definesFn? lines n)) (list "main" "runTests")))))
 
 fn exportsOf src: String -> (List String)
   (let [(header (headerOf src))]
@@ -174,7 +197,7 @@ fn mainLine line: String -> Bool
   (or (or (stringStartsWith? line "fn main ") (stringStartsWith? line "fn ! main ")) (or (= line "fn main") (= line "fn ! main")))
 
 fn mainReturnsBareInt64 src: String -> Bool
-  (match (listHead (filter mainLine (stringLines src)))
+  (match (listHead (filter mainLine (fnLines src)))
     ((none) false)
     ((some l) (match (stringIndexOf l "->")
                 ((none) false)
@@ -184,12 +207,20 @@ fn wrapperSourceRunInt64 importPath: String takesArgs: Bool -> String
   (str "(module nativeTestEntry\n"
        "  :x [main]\n"
        "  :i [(" importPath " :a suite)])\n\n"
+       (dropEphemeralSource)
        "fn ! main args: (List String) -> (Result Int64 String)\n"
-       "  (ok (suite/main" (if takesArgs " args" "") "))\n")
+       "  (do (dropEphemeral!) (ok (suite/main" (if takesArgs " args" "") ")))\n")
+
+; (:m :ref BIN-NO-PERSIST-20261026 :do "a run binary built into an ephemeral slot removes its own file and slot first thing in main, so a script, -e or - leaves no binary behind once it is running; a binary anywhere else (prepare, tests) is left alone")
+fn dropEphemeralSource -> String
+  (str "fn ! dropEphemeral! -> Bool\n"
+       "  (match (procExePath)\n"
+       "    ((ok p) (if (and (stringContains? p \"/ephemeral/run.\") (stringEndsWith? p \"/run\")) (ok? (pathRemove (optionOr (stringSlice p 0 (- (stringLength p) 4)) p))) false))\n"
+       "    ((err _) false))\n\n")
 
 fn mainTakesArgs src: String -> Bool
-  (match (listHead (filter mainLine (stringLines src)))
-    ((none) false)
+  (match (listHead (filter mainLine (fnLines src)))
+    ((none) (let [(lines (stringLines src))] (and (not (moduleHeaded? lines)) (listAny? codeLine? lines))))
     ((some l) (let [(after (stringTrim (optionOr (listGet (stringSplit l " main ") 1) "")))]
                 (not (stringStartsWith? after "->")))))
 
@@ -222,8 +253,9 @@ fn wrapperSource importPath: String entry: String takesArgs: Bool -> String
   (str "(module nativeTestEntry\n"
        "  :x [main]\n"
        "  :i [(" importPath " :a suite)])\n\n"
+       (if (= entry "run") (dropEphemeralSource) "")
        "fn ! main args: (List String) -> (Result Int64 String)\n"
-       (guardedBody entry takesArgs))
+       (if (= entry "run") (str "  (do (dropEphemeral!)\n" (guardedBody entry takesArgs) "  )\n") (guardedBody entry takesArgs)))
 
 fn reportLine? line: String -> Bool
   (let [(words (stringSplit line " "))]
@@ -581,11 +613,9 @@ fn ! readVerifiedMeta metaPath: String objPath: String -> (Option (List String))
                  (curMtime (match st ((ok s) (stringFromInt64 s.mtimeNs)) ((err _) "-1")))]
              (if (not (= storedSize curSize))
                (none)
-               (if (= storedMtime curMtime)
-                 (some refs)
-                 (if (= storedSha (loggedDigest "readVerifiedMeta" objPath))
-                   (some refs)
-                   (none))))))))))
+               (if (or (= storedMtime curMtime) (= storedSha (loggedDigest "readVerifiedMeta" objPath)))
+                 (do (fileUtime metaPath (nowNs)) (some refs))
+                 (none)))))))))
 
 fn ! nativeFacts! -> (Option libc/TripleFacts)
   (let [(out (runProc (list "uname" "-s" "-m") (none)))]
@@ -678,16 +708,18 @@ fn overlayRounds px: lk/LinkUnit names: (List String) acc: lk/LinkAcc -> lk/Link
 fn unitFailed path: String e: String -> UnitStep
   (UnitStep :done (some (ModCompileResult :path path :ok false :obj "" :recompiled true :preludeRefs (list) :initName "" :err e)) :pending (none))
 
+; (:m :ref BIN-NO-PERSIST-20261026 :do "the key holds the unit name: an implicit script module is named by its path as seen from the cwd (greet from its own dir, asl/packages/.../greet from the root), and an object compiled under one name linked under the other left greet.main undefined once run binaries stopped being reused")
 fn ! unitKey fp: String u: lk/LinkUnit ifaceMap: (Map String String) isEntry: Bool inits: (List String) -> String
   (moduleCacheKey fp u.path (fileDigest u.path)
                   (listAppend (map (fn [(imp (Pair String String))] -> String (str (pairSecond imp) " " (optionOr (mapGet ifaceMap (pairSecond imp)) ""))) u.imports)
-                              (if isEntry (list (str "@inits " (stringJoin inits ","))) (list))))
+                              (cons (str "@name " u.name) (if isEntry (list (str "@inits " (stringJoin inits ","))) (list)))))
 
 fn ! compileUnitPrepare facts: (Option libc/TripleFacts) cDir: String fp: String u: lk/LinkUnit units: (List lk/LinkUnit) ifaceMap: (Map String String) prelude: lk/LinkUnit px: lk/LinkUnit ovlNames: (List String) entry: lk/LinkUnit slot: String counter: Int64 inits: (List String) opt: String -> UnitStep
   (let [(isEntry (= u.name entry.name))
         (uKey (unitKey fp u ifaceMap isEntry inits))
-        (objPath (str (modulesDirIn cDir) "/" uKey ".o"))
-        (metaPath (str (modulesDirIn cDir) "/" uKey ".meta"))]
+        (objDir (if (and (ephemeralSlot? slot) (or isEntry (transientSource? u.path))) slot (modulesDirIn cDir)))
+        (objPath (str objDir "/" uKey ".o"))
+        (metaPath (str objDir "/" uKey ".meta"))]
     (match (readVerifiedMeta metaPath objPath)
       ((some refs)
        (UnitStep :done (some (ModCompileResult :path u.path :ok true :obj objPath :recompiled false
@@ -843,9 +875,9 @@ fn ! preludeSectionFlags darwin: Bool -> (List String)
 fn ! deadStripFlags darwin: Bool -> (List String)
   (if darwin (list "-Wl,-dead_strip") (list "-Wl,--gc-sections"))
 
-; (:m :ref NATIVE-LOWER-GAPS :do "a closure that does not load is the program's own error (an unresolved import), not a native gap: its reason leads with the first diagnostic's code, which failLine keeps as the FAIL code")
+; (:m :ref NATIVE-LOWER-GAPS :do "a closure that does not load is the program's own error (an unresolved import), not a native gap: its reason leads with the first diagnostic's code, which failLine keeps as the FAIL code; a parse error carries its path:line:col")
 fn loadFailure ds: (List irTy/IrDiag) -> String
-  (str (match (listHead ds) ((some d) d.code) ((none) "ERR_NATIVE_UNSUPPORTED")) ": closure load failed: " (stringJoin (map (fn [(d irTy/IrDiag)] -> String d.message) ds) "; "))
+  (str (match (listHead ds) ((some d) d.code) ((none) "ERR_NATIVE_UNSUPPORTED")) ": closure load failed: " (stringJoin (map (fn [(d irTy/IrDiag)] -> String (if (and (= d.code "ERR_LOWER_PARSE") (not (stringEmpty? d.locus))) (str d.locus ": " d.message) d.message)) ds) "; "))
 
 ; (:m :ref U4-MARKER-PARITY :do "a checker-rejected reason (cache :checker-reject) already names its own path:line:col CODE, cosmetically rewritten back to the logical path the caller knows (checkerRejection!'s stringReplace); failReason must not re-wrap that behind ERR_NATIVE_UNSUPPORTED just because it does not start with ERR_")
 fn failReason reason: String path: String -> String
@@ -1272,21 +1304,26 @@ fn ! checkRootsForNative -> (List String)
   (list "." "asl/packages" "asl")
 
 ; (:m :ref U4-MARKER-PARITY :do "test and run used to compile straight from AST to IR/SSA/LLVM with no static check at all (compileSeparate! and compileWhole! both lower unconditionally), so a type error only ever surfaced if the VM or the native runtime happened to trap it, in a different format with no line:col, or (when the fixture has no main/runTests, like the sem/invalid corpus) not at all before ERR_NO_ENTRY. checkerRejection! runs asl-checker's own checkFile! once per entry, through the same digest-keyed on-disk Verdict cache asl1's own check subcommand already uses (asl-compiler/checkCache), so a repeat test/run of an unchanged entry (and unchanged checker) replays the cached verdict instead of rechecking; a hit with diagnostics renders them through asl-cli/verify's formatDiags, the exact formatter asl check's own printDiag! uses, so the three subcommands name the same site. actualPath is read (checkFile! does its own fileReadString); logicalPath is only substituted into the rendered text, so a staged or root-relative name still shows the form check would print")
-fn ! checkerRejection! actualPath: String logicalPath: String -> (Option String)
-  (match (ccache/verdictKey! actualPath)
-    ((none) (none))
-    ((some key)
-     (match (ccache/lookup! key)
-       ((some v) (if (= v.exitCode 0) (none) (some v.body)))
-       ((none)
-        (match (chk/checkFile! actualPath (checkRootsForNative))
-          ((err _) (none))
-          ((ok diags)
-           (if (listEmpty? diags)
-             (do (match (ccache/store! key (ccache/Verdict :exitCode 0 :body "")) ((ok _) ()) ((err _) ())) (none))
-             (let [(body (stringReplace (verify/formatDiags diags) actualPath logicalPath))]
-               (do (match (ccache/store! key (ccache/Verdict :exitCode 1 :body body)) ((ok _) ()) ((err _) ()))
-                   (some body))))))))))
+fn ! checkerRejection! actualPath: String logicalPath: String fp: String -> (Option String)
+  (let [(inline (inlineStaged? logicalPath))
+        (shown (if inline (inlineName logicalPath) logicalPath))]
+    (match (ccache/verdictKeyWith! actualPath (if inline (str "inline " shown) "") (str "nativeTest " fp))
+      ((none) (freshRejection! actualPath shown (none)))
+      ((some key)
+       (match (ccache/lookup! key)
+         ((some v) (if (= v.exitCode 0) (none) (some v.body)))
+         ((none) (freshRejection! actualPath shown (some key)))))))
+
+; (:m :ref SCRIPT-RUN-UNCHECKED :do "a file the checker cannot key or read is checked uncached or rejected, never let through unchecked")
+fn ! freshRejection! actualPath: String logicalPath: String key: (Option String) -> (Option String)
+  (match (chk/checkFile! actualPath (checkRootsForNative))
+    ((err e) (some (str logicalPath ":0:0: ERR_IO " e)))
+    ((ok diags)
+     (let [(body (if (listEmpty? diags) "" (stringReplace (verify/formatDiags diags) actualPath logicalPath)))
+           (_ (match key
+                ((some k) (match (ccache/store! k (ccache/Verdict :exitCode (if (listEmpty? diags) 0 1) :body body)) ((ok _) ()) ((err _) ())))
+                ((none) ())))]
+       (if (listEmpty? diags) (none) (some body)))))
 
 fn ! rcRuntime! rc: String -> (Result (Pair String (List String)) String)
   (let [(root (toolRoot))
@@ -1360,7 +1397,7 @@ fn ! compileWhole! cDir: String path: String src: String slot: String key: Strin
                                ((ok libFlags) (linkWhole! slot bin ll deps libFlags t0 t1))))))))))))))))))))
 
 fn ! compileIn cDir: String path: String actualPath: String src: String slot: String key: String fp: String mode: String -> Built
-  (match (if (or (= mode "test") (= mode "run")) (checkerRejection! actualPath path) (none))
+  (match (if (or (= mode "test") (= mode "run")) (checkerRejection! actualPath path fp) (none))
     ((some body) (Built :binary (none) :reason body :cache "checker-reject" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
     ((none)
      (if (= mode "eval")
@@ -1478,7 +1515,7 @@ fn ! lookup slot: String mode: String -> (Option Built)
                    ((and (= (manifestKind text) "binary")
                          (and (fileExists? (str slot "/" mode))
                               (match (fileStat (str slot "/" mode)) ((ok st) (> st.size 0)) ((err _) false))))
-                    (some (Built :binary (some (str slot "/" mode)) :reason "" :cache "hit" :recompiled (list) :reused (manifestFiles text) :depsMs 0 :asl1Ms 0 :clangMs 0)))
+                    (do (fileUtime slot (nowNs)) (some (Built :binary (some (str slot "/" mode)) :reason "" :cache "hit" :recompiled (list) :reused (manifestFiles text) :depsMs 0 :asl1Ms 0 :clangMs 0))))
                    ((= (manifestKind text) "fallback")
                     (some (Built :binary (none) :reason (str (resultOr (fileReadString (str slot "/reason")) "reason unreadable") " (cached)") :cache "fallback-hit" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0)))
                    (else (none))))))
@@ -1506,6 +1543,89 @@ fn ! prune dir: String current: String -> Unit
                  ((ok _) acc)
                  ((err e) (eprintln (str "nativeTest: cannot prune " (pairFirst p) ": " e)))))
              () stale))))
+
+; (:m :ref BIN-NO-PERSIST-20261026 :do "scripts, -e, - and eval build into an ephemeral slot run.PID.NS under the store: the entry module and any inline or eval source keep their objects in the slot, the binary is exec'd and drops itself, and nothing of it stays in the store; library modules still reuse the shared object cache")
+fn ephemeralDirIn cDir: String -> String
+  (str cDir "/ephemeral")
+
+fn ephemeralSlot? slot: String -> Bool
+  (stringContains? slot "/ephemeral/run.")
+
+fn transientSource? path: String -> Bool
+  (or (stringContains? path ".asl/cache/nativeTest/outside/inline") (stringContains? path ".asl/cache/nativeTest/evals/"))
+
+fn ! ephemeralSlotIn! cDir: String -> String
+  (let [(dir (ephemeralDirIn cDir))
+        (_ (dirCreate dir))
+        (abs (resultOr (realPath dir) dir))]
+    (str abs "/run." (stringFromInt64 (procSelf)) "." (stringFromInt64 (monotonicNs))))
+
+fn ! keepOnly! slot: String keep: String -> Unit
+  (fold (fn [(acc Unit) (n String)] -> Unit (if (= n keep) acc (match (pathRemove (str slot "/" n)) ((ok _) acc) ((err _) acc))))
+        () (resultOr (dirList slot) (list)))
+
+fn ! buildEphemeral! cDir: String actualPath: String logicalPath: String fp: String mode: String slot: String -> Built
+  (match (fileReadString actualPath)
+    ((err _) (unbuilt (str "cannot read " actualPath)))
+    ((ok src) (let [(key (slotKey (str mode (rcTag (rcModeFor! logicalPath)) ":" (importPathOf logicalPath) ":" slot) (fileDigest actualPath)))]
+                (match (dirCreate slot)
+                  ((err e) (unbuilt (str "cannot create " slot ": " e)))
+                  ((ok _) (let [(built (dropWrapperIn cDir key (compileIn cDir logicalPath actualPath src slot key fp mode)))
+                                (_ (sweepStore! cDir))]
+                            built))))))
+
+; (:m :ref BIN-NO-PERSIST-20261026 :do "the store holds slots of every fingerprint and the shared module objects, grouped by key stem; on each build the oldest of them go until the store fits the :native :storeCap bytes (2G), a slot with a live lock is pinned, nothing used within :native :storeMinAge (60m) goes (a build touches every object and slot it reuses as it starts), and an ephemeral slot whose process is dead is removed")
+fn stemOfName n: String -> String
+  (let [(parts (stringSplit n "."))]
+    (if (< (listLength parts) 2) n (stringJoin (listTake parts (- (listLength parts) 1)) ".")))
+
+fn ! moduleEntries! dir: String -> (List ncli/StoreEntry)
+  (let [(groups (fold (fn [(m (Map String (List String))) (n String)] -> (Map String (List String))
+                        (mapSet m (stemOfName n) (cons (str dir "/" n) (mapGetOr m (stemOfName n) (list)))))
+                      (mapEmpty) (resultOr (dirList dir) (list))))]
+    (map (fn [(k String)] -> ncli/StoreEntry (ncli/storeEntry! (mapGetOr groups k (list)) false)) (mapKeys groups)))
+
+fn hexKey? n: String -> Bool
+  (= (stringLength n) 64)
+
+fn ! slotEntries! cDir: String -> (List ncli/StoreEntry)
+  (fold (fn [(acc (List ncli/StoreEntry)) (f String)] -> (List ncli/StoreEntry)
+          (listAppend acc (map (fn [(n String)] -> ncli/StoreEntry (ncli/storeEntry! (list (str cDir "/" f "/" n)) (lockLive? (str cDir "/" f "/" n "/lock"))))
+                               (filter hexKey? (resultOr (dirList (str cDir "/" f)) (list))))))
+        (list) (filter hexKey? (resultOr (dirList cDir) (list))))
+
+fn ! deadEphemeral? name: String -> Bool
+  (match (listGet (stringSplit name ".") 1)
+    ((some pid) (not (pidAlive? (optionOr (stringToInt64 pid) 0))))
+    ((none) false))
+
+; (:m :ref BIN-NO-PERSIST-20261026 :do "a sweep walks every file of the store (539 ms on 40000 files, 2026-10-27), so a build sweeps at most once a minute per store, marked by the swept file")
+fn ! sweepStore! cDir: String -> Int64
+  (let [(mark (str cDir "/swept"))]
+    (if (< (- (nowNs) (ncli/entryStamp! mark)) 60000000000)
+      0
+      (do (fileWrite mark "") (sweepStoreNow! cDir))))
+
+; (:m :ref BIN-NO-PERSIST-20261026 :do "one sweep at a time per store, under sweep.lock; a build leases its slot with slot/lock while it fills it, and sweepEntries! re-stamps each entry right before deleting it")
+fn ! sweepStoreNow! cDir: String -> Int64
+  (sweepStoreWith! cDir (nb/storeCapFor! (toolRoot)) (nb/storeMinAgeNs! (toolRoot)))
+
+fn ! sweepStoreWith! cDir: String capBytes: Int64 minAgeNs: Int64 -> Int64
+  (let [(lock (str cDir "/sweep.lock"))]
+    (if (not (takeLock! lock 1))
+      0
+      (let [(eDir (ephemeralDirIn cDir))
+            (stale (filter (fn [(n String)] -> Bool (and (stringStartsWith? n "run.") (and (deadEphemeral? n) (ok? (pathRemove (str eDir "/" n)))))) (resultOr (dirList eDir) (list))))
+            (entries (listAppend (slotEntries! cDir) (moduleEntries! (modulesDirIn cDir))))
+            (swept (ncli/sweepEntries! entries capBytes minAgeNs))
+            (_ (pathRemove lock))]
+        (+ (listLength stale) (pairSecond swept)))))
+
+fn ! leaseSlot! slot: String -> Bool
+  (ok? (fileWrite (str slot "/lock") (stringFromInt64 (procSelf))))
+
+fn ! leasedBuild! slot: String b: Built -> Built
+  (do (pathRemove (str slot "/lock")) b)
 
 fn ! dropWrapperIn cDir: String key: String b: Built -> Built
   (let [(dir (wrapperDirIn cDir))
@@ -1537,7 +1657,9 @@ fn ! prepareIn cDir: String path: String fp: String mode: String -> Built
                   ((some b) b)
                   ((none) (match (dirCreate slot)
                             ((err e) (Built :binary (none) :reason (str "cannot create " slot ": " e) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-                            ((ok _) (dropWrapperIn cDir key (compileIn cDir path path src slot key fp mode)))))))))
+                            ((ok _) (let [(built (leasedBuild! slot (do (leaseSlot! slot) (dropWrapperIn cDir key (compileIn cDir path path src slot key fp mode)))))
+                                          (_ (sweepStore! cDir))]
+                                      built))))))))
 
 fn ! prepareSourceIn cDir: String actualPath: String logicalPath: String fp: String mode: String -> Built
   (match (fileReadString actualPath)
@@ -1548,7 +1670,9 @@ fn ! prepareSourceIn cDir: String actualPath: String logicalPath: String fp: Str
                   ((some b) b)
                   ((none) (match (dirCreate slot)
                             ((err e) (Built :binary (none) :reason (str "cannot create " slot ": " e) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-                            ((ok _) (dropWrapperIn cDir key (compileIn cDir logicalPath actualPath src slot key fp mode)))))))))
+                            ((ok _) (let [(built (leasedBuild! slot (do (leaseSlot! slot) (dropWrapperIn cDir key (compileIn cDir logicalPath actualPath src slot key fp mode)))))
+                                          (_ (sweepStore! cDir))]
+                                      built))))))))
 
 fn ! prepareTestSource actualPath: String logicalPath: String fp: String -> Built
   (prepareSourceIn (cacheDir!) actualPath logicalPath fp "test")
@@ -1562,17 +1686,17 @@ fn ! prepareRunIn cDir: String path: String fp: String -> Built
 fn ! prepareRun path: String fp: String -> Built
   (prepareRunIn (cacheDir!) path fp)
 
-fn ! prepareEval path: String src: String fp: String -> Built
-  (let [(key (slotKey (str "eval:" (importPathOf path)) (bytesSha256 (stringToBytes src))))
-        (slot (str (cacheDir!) "/" fp "/" key))]
+fn ! prepareEval path: String src: String fp: String slot: String -> Built
+  (let [(cDir (cacheDir!))
+        (key (slotKey (str "eval:" (importPathOf path) ":" slot) (bytesSha256 (stringToBytes src))))]
     (match (fileWrite path src)
-      ((err e) (Built :binary (none) :reason (str "cannot write " path ": " e) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-      ((ok _) (match (lookup slot "eval")
-              ((some cached) (do (telemetry "NATIVE-EVAL-SLOT :hit") cached))
-              ((none) (do (telemetry "NATIVE-EVAL-SLOT :miss")
-                         (match (dirCreate slot)
-                      ((err e) (Built :binary (none) :reason (str "cannot create " slot ": " e) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-                      ((ok _) (compileIn (cacheDir!) path path src slot key fp "eval")))))))))
+      ((err e) (unbuilt (str "cannot write " path ": " e)))
+      ((ok _) (let [(built (match (dirCreate slot)
+                              ((err e) (unbuilt (str "cannot create " slot ": " e)))
+                              ((ok _) (compileIn cDir path path src slot key fp "eval"))))
+                    (_ (pathRemove path))
+                    (_ (sweepStore! cDir))]
+                built))))
 
 fn singleBalancedForm? expr: String -> Bool
   (let [(tree (paren/parseString expr))]
@@ -1589,10 +1713,12 @@ fn ! evalExpression! expr: String fp: String -> Int64
         (made (dirCreate (toolPath ".asl/cache/nativeTest/evals")))]
     (match made
       ((err e) (do (eprintln (str "native eval: cannot create cache: " e)) 1))
-      ((ok _) (let [(built (prepareEval path src fp))]
+      ((ok _) (let [(slot (ephemeralSlotIn! (cacheDir!)))
+                    (built (prepareEval path src fp slot))]
                 (match built.binary
-                  ((none) (do (eprintln (str "native eval: " built.reason)) 1))
-                  ((some bin) (let [(out (fromFr (fr/runGuarded (list bin) "." (withEnvOverrides! (list (str "ASL_PRELUDE=" (absPath "asl/host/out/prelude.asl")))) (fr/defaultLimits))))]
+                  ((none) (do (pathRemove slot) (eprintln (str "native eval: " built.reason)) 1))
+                  ((some bin) (let [(out (fromFr (fr/runGuarded (list bin) "." (withEnvOverrides! (list (str "ASL_PRELUDE=" (absPath "asl/host/out/prelude.asl")))) (fr/defaultLimits))))
+                                    (_ (pathRemove slot))]
                                 (do (if (not (stringEmpty? out.stdout)) (print out.stdout) ())
                                     (if (not (stringEmpty? out.stderr)) (eprintText out.stderr) ())
                                     (if (= out.exitCode 0)
@@ -1716,21 +1842,49 @@ fn ! execStaged! bin: String args: (List String) -> Int64
     ((ok _) 0)
     ((err e2) (do (eprintln (str "nativeTest: cannot execute " bin ": " e2)) 127)))
 
-fn ! runStaged! root: String rel: String path: String args: (List String) fp: String -> Int64
-  (let [(built (prepareSourceIn (cacheDir!) (str root "/" rel) rel fp "run"))]
+; (:m :ref SCRIPT-ENTRY :do "asl -e and asl - stage their text as outside/inline<pid>x<digest>.asl; the run execs its binary, so the staged text is removed once the binary is built, before the exec")
+fn inlineStaged? rel: String -> Bool
+  (stringStartsWith? rel ".asl/cache/nativeTest/outside/inline")
+
+; (:m :ref SCRIPT-ENTRY :do "a failure of inline text names it as the user typed it (-e, -, or the shebang file's name) from the stage name's e, s or f mark, never the staged file")
+fn inlineName rel: String -> String
+  (let [(stem (optionOr (stringSlice rel 36 (- (stringLength rel) 4)) ""))]
+    (cond ((stringStartsWith? stem "e") "-e")
+          ((stringStartsWith? stem "f") (match (stringIndexOf stem "x-") ((some i) (optionOr (stringSlice stem (+ i 2) (stringLength stem)) stem)) ((none) stem)))
+          (else "-")))
+
+fn stemOf rel: String -> String
+  (if (stringEndsWith? rel ".asl") (optionOr (stringSlice rel 0 (- (stringLength rel) 4)) rel) rel)
+
+; (:m :ref SCRIPT-RUN-UNCHECKED :do "a staged copy of an outside file is named by the path the user gave (run --as), as asl check names it")
+fn failText root: String rel: String path: String shown: String reason: String -> String
+  (if (or (inlineStaged? rel) (not (stringEmpty? shown)))
+    (let [(name (if (inlineStaged? rel) (inlineName rel) shown))]
+      (str "FAIL " name ": " (fold (fn [(acc String) (p String)] -> String (stringReplace acc p name)) reason (list (str root "/" rel) (str root "/" (stemOf rel)) rel (stemOf rel)))))
+    (str "FAIL " path ": " reason))
+
+fn ! runStaged! root: String rel: String path: String shown: String args: (List String) fp: String -> Int64
+  (let [(cDir (cacheDir!))
+        (slot (ephemeralSlotIn! cDir))
+        (built (buildEphemeral! cDir (str root "/" rel) rel fp "run" slot))
+        (_ (if (inlineStaged? rel) (pathRemove (str root "/" rel)) (ok ())))]
     (match built.binary
-      ((some bin) (do (telemetry (str "NATIVE-CACHE " path " :cache :" built.cache)) (execStaged! bin args)))
-      ((none) (do (eprintln (str "FAIL " path ": " (failReason built.reason rel))) 1))))
+      ((some bin) (do (telemetry (str "NATIVE-CACHE " path " :cache :" built.cache))
+                      (keepOnly! slot (sys/baseName bin))
+                      (let [(code (execStaged! bin args))
+                            (_ (pathRemove slot))]
+                        code)))
+      ((none) (do (pathRemove slot) (eprintln (failText root rel path shown (failReason built.reason (if (inlineStaged? rel) (inlineName rel) rel)))) 1))))
 
 ; (:m :ref OUT-OF-ROOT-USERPATH :do "runFile's path is the caller's own (cwd-relative or absolute, per prepareIn's own note); an in-root file is read where it stands and named by stripping toolRoot (matching prepareCommand!'s prepareSourceIn split); an out-of-root file (testDownstream's downstream copy, a /tmp driver fixture) is staged into root first so its logical name is a real, resolvable one")
-fn ! runFile path: String args: (List String) fp: String -> Int64
+fn ! runFile path: String shown: String args: (List String) fp: String -> Int64
   (let [(root (resultOr (realPath (toolRoot)) (toolRoot)))
         (absFile (resultOr (realPath path) path))
         (inRoot (stringStartsWith? absFile (str root "/")))
         (staged (if inRoot (ok (relativeTo root absFile)) (stageOutsideFile! root absFile)))]
     (match staged
       ((err e) (do (eprintln (str "FAIL " path ": ERR_NATIVE_UNSUPPORTED: cannot stage " path ": " e)) 1))
-      ((ok rel) (runStaged! root rel path args fp))))
+      ((ok rel) (runStaged! root rel path shown args fp))))
 
 fn ! fingerprintOr fpOpt: (Option String) -> String
   (match fpOpt ((some f) f) ((none) (fingerprint)))
@@ -1782,8 +1936,9 @@ fn ! lockPid path: String -> (Option Int64)
     ((err _) (none))
     ((ok text) (stringToInt64 (stringTrim text))))
 
+; (:m :ref BIN-NO-PERSIST-20261026 :do "liveness asks procAlive?, as asl-cli/nativeCli does, instead of sending the pid a real SIGCONT")
 fn ! pidAlive? pid: Int64 -> Bool
-  (and (> pid 1) (ok? (procKill pid "SIGCONT")))
+  (and (> pid 1) (resultOr (procAlive? pid) false))
 
 fn ! lockLive? path: String -> Bool
   (and (fileExists? path)
@@ -1823,8 +1978,11 @@ fn ! dispatch! args: (List String) fpOpt: (Option String) -> (Result Int64 Strin
      (cond
        ((= cmd "run")
         (match (listGet args 1)
-          ((none) (do (eprintln "usage: nativeTest run FILE [ARGS...]") (ok 2)))
-          ((some path) (ok (runFile path (optionOr (listSlice args 2 (listLength args)) (list)) (fingerprintOr fpOpt))))))
+          ((none) (do (eprintln "usage: nativeTest run [--as NAME] FILE [ARGS...]") (ok 2)))
+          ((some path)
+            (if (and (= path "--as") (>= (listLength args) 4))
+              (ok (runFile (optionOr (listGet args 3) "") (optionOr (listGet args 2) "") (listDrop args 4) (fingerprintOr fpOpt)))
+              (ok (runFile path "" (optionOr (listSlice args 2 (listLength args)) (list)) (fingerprintOr fpOpt)))))))
        ((= cmd "prepare")
         (match (listGet args 1)
           ((none) (do (eprintln "usage: nativeTest prepare FILE") (ok 2)))

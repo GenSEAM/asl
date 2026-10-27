@@ -304,9 +304,15 @@ fn printTopEnum e: a/EnumNode -> String
 fn printImport p: (Pair String String) -> String
   (if (stringEmpty? (pairSecond p)) (str "(" (pairFirst p) ")") (str "(" (pairFirst p) " :a " (pairSecond p) ")"))
 
-; (:m :ref TOKDEFFIX :do "a script module's header is synthesised by the parser (empty path), so it prints as nothing and the printed script reparses as the same headerless file")
+; (:m :ref TOP-LEVEL-CODE :do "a script's synthesised header prints as its use lines, or as nothing, and its synthesised main as the top-level code it came from, so a printed script reparses to the same forms")
+fn printScriptHeader m: a/ModuleNode -> String
+  (stringJoin (map (fn [(p (Pair String String))] -> String (str "(use " (pairFirst p) ")")) m.imports) "\n")
+
+fn printScriptMain d: a/DefunNode -> String
+  (stringJoin (map rd/renderSexpr (listFlatMap a/scriptStatementsOf d.body)) "\n")
+
 fn printModuleHeader m: a/ModuleNode -> String
-  (if (stringEmpty? m.path) "" (printModuleHeaderNamed m))
+  (if (stringEmpty? m.path) (printScriptHeader m) (printModuleHeaderNamed m))
 
 fn printModuleHeaderNamed m: a/ModuleNode -> String
   (str "(module " m.path
@@ -314,7 +320,7 @@ fn printModuleHeaderNamed m: a/ModuleNode -> String
        " :i [" (stringJoin (map printImport m.imports) " ") "])")
 
 fn printTopForm tf: a/TopForm -> String
-  (match tf ((a/topDefun d) (printTopDefun d)) ((a/topSchema s) (printTopSchema s)) ((a/topEnum e) (printTopEnum e)) ((a/topModule m) (printModuleHeader m)) ((a/topExpr p) (rd/renderSexpr p.expr)))
+  (match tf ((a/topDefun d) (if (= d.docstring (a/scriptMainDoc)) (printScriptMain d) (printTopDefun d))) ((a/topSchema s) (printTopSchema s)) ((a/topEnum e) (printTopEnum e)) ((a/topModule m) (printModuleHeader m)) ((a/topExpr p) (rd/renderSexpr p.expr)))
 
 fn printAstModule mod: a/ModuleNode -> String
   (let [(header (printModuleHeader mod))] (if (listEmpty? mod.defs) header (let [(renderedDefs (map (fn [(tf a/TopForm)] -> String (printTopForm tf)) mod.defs))] (stringJoin (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (cons header renderedDefs)) "\n\n"))))

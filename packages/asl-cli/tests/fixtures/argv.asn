@@ -13,7 +13,7 @@
   (:case :id "testUnknownOption" :argv ["test" "--bogus"] :stdout "(:test :status :failed :error ERR_UNKNOWN_ARG :message \"asl test takes files and directories; unknown option --bogus\")\n" :stderr "" :exit 2)
   (:case :id "parseRunMe" :argv ["parse" "asl/packages/asl-cli/tests/fixtures/runMe.asl"] :stdout "2 top-level form(s)\n" :stderr "" :exit 0)
   (:case :id "parseNativeTest" :argv ["parse" "asl/packages/asl-cli/tests/fixtures/sweep/passTest.asl"] :stdout "2 top-level form(s)\n" :stderr "" :exit 0)
-  (:case :id "parsePrelude" :argv ["parse" "asl/prelude/prelude.asl"] :stdout "307 top-level form(s)\n" :stderr "" :exit 0)
+  (:case :id "parsePrelude" :argv ["parse" "asl/prelude/prelude.asl"] :stdout "308 top-level form(s)\n" :stderr "" :exit 0)
   (:case :id "parseAsn" :argv ["parse" "asl/packages/asl-cli/tests/fixtures/argv.asn"] :stdout "1 top-level form(s)\n" :stderr "" :exit 0)
   (:case :id "parseMissing" :argv ["parse" "asl/packages/asl-cli/tests/fixtures/none.asl"] :stdout "" :stderr "asl/packages/asl-cli/tests/fixtures/none.asl: ERR_IO cannot read file\n" :exit 1)
   (:case :id "parseUnclosed" :argv ["parse" "asl/grammar/corpus/invalid/unbalanced.asl"] :stdout "" :stderr "asl/grammar/corpus/invalid/unbalanced.asl:2:3: ERR_READ_UNBALANCED unclosed '(' at end of file\n" :exit 1)

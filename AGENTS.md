@@ -62,7 +62,7 @@ asl '(:audit :subcmd coupling)'   # the same audits as a toolbelt receipt
 
 ## 3. Syntax
 The full rules are in the `language` topic; the points agents most often get wrong:
-- **A file** is a module header, `(module ws/name :x [exports] :i [(other/module :a alias)])`, then items in column 0; a standalone program skips the header, since a file that defines `main` is a script and `fn main` with no `->` binds `args` and returns `(ok ())`. A function header is a bare line, `fn name a: Int64 -> Bool`, with its body indented below.
+- **A file** is a module header, `(module ws/name :x [exports] :i [(other/module :a alias)])`, then items in column 0; a standalone program skips the header: its column-0 code forms run in order with `args` bound, a top-level `(let [(x e)])` binds `x` for the forms after it, and a form that checks as `(err e)` exits 1 with `(:err :form N :line L :msg e)`; `(use pkg/mod)` imports, `#!/usr/bin/env asl` makes it executable, `asl FILE`, `asl -e 'code'` and `asl -` run it. A headerless file may instead define `main`; `fn main` with no `->` binds `args` and returns `(ok ())`. A function header is a bare line, `fn name a: Int64 -> Bool`, with its body indented below.
 - **Saved form**: `fn`, `(schema ...)`, `enum`, `mt` (or `match`), `:x`, `:i`, `:a`, `:f`, `:c`. `(df ...)`, `(dfs ...)`, `(defun ...)` and `(defschema ...)` are rejected with ERR_UNSUPPORTED_TOPLEVEL.
 - **Types**: `Int64`, `Float64`, `String`, `Bool`, `Unit`, `(List T)`; the host also reads `I64`, `F64`, `Str`.
 - **Effects**: a function that does I/O is `fn ! name ...` or ends in `!`; otherwise check fails with ERR_EFFECT_UNMARKED.

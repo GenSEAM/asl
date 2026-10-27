@@ -1,6 +1,6 @@
 (module asl-cli/nativeCli
-  :x [cacheDir! headPath underRoot clangFacts! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache!]
-  :i [(asl/packages/asl-cli/src/system :a sys)])
+  :x [cacheDir! headPath underRoot clangFacts! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs]
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl-tools/fleet/run :a run)])
 
 fn ! cacheDir! -> String
   (let [(configured (optionOr (envGet "ASL_NATIVE_CLI_CACHE") ""))
@@ -16,7 +16,7 @@ fn headPath cache: String root: String -> String
 fn verbKind args: (List String) -> String
   (let [(verb (optionOr (listHead args) "help"))]
     (cond
-      ((or (listContains? (list "run" "test" "parse" "eval" "launch" "check" "pkg") verb) (stringEndsWith? verb ".asl")) "native")
+      ((or (listContains? (list "run" "test" "parse" "eval" "launch" "check" "pkg" "-e") verb) (or (stringEndsWith? verb ".asl") (stringContains? verb "/"))) "native")
       ((or (stringStartsWith? verb "(")
            (or (stringStartsWith? verb ":")
                (listContains? (list "rpc" "intel" "coupling" "graph" "complexity" "vitality" "full" "stubs" "trace"
@@ -315,3 +315,159 @@ fn ! headTargets! cache: String -> (List String)
 fn ! pruneNativeCache! cache: String keep: Int64 minAgeNs: Int64 -> Int64
   (let [(targets (headTargets! cache))]
     (+ (pruneEntries! cache "cli-" keep minAgeNs targets) (pruneEntries! cache "asl1-" keep minAgeNs targets)))
+
+; (:m :ref BIN-NO-PERSIST-20261026 :do "a build store is bounded by bytes: each entry (a directory or a group of files) carries its last use and its size; the oldest unpinned entries older than minAgeNs go until the store fits the cap, each re-stamped right before it goes so one used since the scan stays; a pinned entry stays whatever its age and size")
+(schema StoreEntry
+  (:f paths (List String))
+  (:f stamp Int64)
+  (:f bytes Int64)
+  (:f pinned Bool))
+
+fn ! treeBytes! path: String -> Int64
+  (match (fileLstat path)
+    ((err _) 0)
+    ((ok st) (if (and st.isDir (not st.isSymlink))
+               (fold (fn [(acc Int64) (n String)] -> Int64 (+ acc (treeBytes! (str path "/" n)))) 0 (resultOr (dirList path) (list)))
+               st.size)))
+
+; (:m :ref BIN-NO-PERSIST-20261026 :do "an entry's last use is the newest mtime of anything inside it, so a file written deep in a slot or a touched object counts")
+fn ! treeStamp! path: String -> Int64
+  (match (fileLstat path)
+    ((err _) 0)
+    ((ok st) (if (and st.isDir (not st.isSymlink))
+               (fold (fn [(acc Int64) (n String)] -> Int64 (max acc (treeStamp! (str path "/" n)))) st.mtimeNs (resultOr (dirList path) (list)))
+               st.mtimeNs)))
+
+fn ! pathsStamp! paths: (List String) -> Int64
+  (fold (fn [(acc Int64) (p String)] -> Int64 (max acc (treeStamp! p))) 0 paths)
+
+fn ! storeEntry! paths: (List String) pinned: Bool -> StoreEntry
+  (StoreEntry :paths paths
+              :stamp (pathsStamp! paths)
+              :bytes (fold (fn [(acc Int64) (p String)] -> Int64 (+ acc (treeBytes! p))) 0 paths)
+              :pinned pinned)
+
+fn storeBytes entries: (List StoreEntry) -> Int64
+  (fold (fn [(acc Int64) (e StoreEntry)] -> Int64 (+ acc e.bytes)) 0 entries)
+
+fn ! dropEntry! e: StoreEntry -> Bool
+  (fold (fn [(acc Bool) (p String)] -> Bool (and (ok? (pathRemove p)) acc)) true e.paths)
+
+fn ! sweepEntries! entries: (List StoreEntry) capBytes: Int64 minAgeNs: Int64 -> (Pair Int64 Int64)
+  (let [(now (nowNs))
+        (oldestFirst (listSortBy (fn [(e StoreEntry)] -> Int64 e.stamp) entries))]
+    (fold (fn [(acc (Pair Int64 Int64)) (e StoreEntry)] -> (Pair Int64 Int64)
+            (if (and (> (pairFirst acc) capBytes) (and (not e.pinned) (and (> (- now e.stamp) minAgeNs) (> (- (nowNs) (pathsStamp! e.paths)) minAgeNs))))
+              (if (dropEntry! e) (pair (- (pairFirst acc) e.bytes) (+ (pairSecond acc) 1)) acc)
+              acc))
+          (pair (storeBytes entries) 0) oldestFirst))
+
+; (:m :ref BIN-NO-PERSIST-20261026 :do "a head file is named by its root with every slash made an underscore, so an underscore may be either; the walk takes each next path component as the shortest run of parts that exists as a directory, so only a root that exists today is found")
+fn ! rootWalk! base: String parts: (List String) n: Int64 -> (Option String)
+  (cond
+    ((listEmpty? parts) (if (and (not (stringEmpty? base)) (sys/isDir? base)) (some base) (none)))
+    ((> n (listLength parts)) (none))
+    (else (let [(comp (stringJoin (listTake parts n) "_"))
+                (next (str base "/" comp))]
+            (match (if (and (not (stringEmpty? comp)) (sys/isDir? next)) (rootWalk! next (listDrop parts n) 1) (none))
+              ((some root) (some root))
+              ((none) (rootWalk! base parts (+ n 1)))))))
+
+fn ! headRoot! name: String -> (Option String)
+  (if (stringStartsWith? name "head_")
+    (rootWalk! "" (stringSplit (optionOr (stringSlice name 5 (stringLength name)) "") "_") 1)
+    (none))
+
+fn headFile? name: String -> Bool
+  (and (stringStartsWith? name "head") (not (stringContains? name ".part.")))
+
+fn storeName? name: String -> Bool
+  (listAny? (fn [(p String)] -> Bool (stringStartsWith? name p)) (list "cli-" "asl1-" "seed-" "rt-"))
+
+fn ! tmpDead? name: String -> Bool
+  (and (stringStartsWith? name "tmp.") (not (alive? (optionOr (stringToInt64 (optionOr (stringSlice name 4 (stringLength name)) "")) 0))))
+
+; (:m :ref BIN-NO-PERSIST-20261026 :do "a sweep holds the build lock bin/asl and the CLI take (lock/pid made exclusively): a lock held by this process or one of its ancestors (bin/asl native_refresh runs the builder under its own lock) is used and left; one held by any other pid, live or not yet cleared, means no sweep this time")
+fn ! takeLock! cache: String -> (Option Bool)
+  (let [(lock (str cache "/lock"))
+        (held (heldPid lock))]
+    (cond
+      ((= held (procSelf)) (some false))
+      ((and (> held 1) (listContains? (run/descendantsOf (run/psSnapshot) held) (procSelf))) (some false))
+      ((not (ok? (dirCreate lock))) (none))
+      ((ok? (fileCreateExclusive (str lock "/pid") (str (stringFromInt64 (procSelf)) "\n"))) (some true))
+      (else (none))))
+
+; (:m :ref BIN-NO-PERSIST-20261026 :do "a build leases every seed, rt, asl1 or cli entry it reuses or makes before it touches it: leases/NAME@PID holds pid and start; a lease of a live pid pins NAME, a dead one is dropped, and the build drops its own at its end")
+fn leaseDirOf cache: String -> String
+  (str cache "/leases")
+
+fn ! leaseEntry! cache: String name: String startNs: Int64 -> Bool
+  (let [(dir (leaseDirOf cache))
+        (_ (dirCreate dir))]
+    (ok? (fileWrite (str dir "/" name "@" (stringFromInt64 (procSelf))) (str (stringFromInt64 (procSelf)) " " (stringFromInt64 startNs) "\n"))))
+
+fn ! dropLeases! cache: String -> Int64
+  (let [(dir (leaseDirOf cache))
+        (mine (str "@" (stringFromInt64 (procSelf))))]
+    (listLength (filter (fn [(n String)] -> Bool (and (stringEndsWith? n mine) (ok? (pathRemove (str dir "/" n))))) (resultOr (dirList dir) (list)))))
+
+fn leasePid name: String -> Int64
+  (optionOr (stringToInt64 (optionOr (listLast (stringSplit name "@")) "")) 0)
+
+fn leaseName name: String -> String
+  (let [(parts (stringSplit name "@"))]
+    (stringJoin (listTake parts (- (listLength parts) 1)) "@"))
+
+fn ! liveLeases! cache: String -> (List String)
+  (let [(dir (leaseDirOf cache))
+        (names (resultOr (dirList dir) (list)))
+        (_ (map (fn [(n String)] -> Bool (and (not (alive? (leasePid n))) (ok? (pathRemove (str dir "/" n))))) names))]
+    (map leaseName (filter (fn [(n String)] -> Bool (alive? (leasePid n))) names)))
+
+; (:m :ref BIN-NO-PERSIST-20261026 :do "a build in flight is a tmp.PID dir of a live pid; one that holds no lease yet (just started, or a builder from before leases) holds unknown entries, so nothing is swept while it runs")
+fn ! tmpPid name: String -> Int64
+  (if (stringStartsWith? name "tmp.") (optionOr (stringToInt64 (optionOr (stringSlice name 4 (stringLength name)) "")) 0) 0)
+
+fn ! unleasedBuild? cache: String names: (List String) -> Bool
+  (let [(holders (map leasePid (resultOr (dirList (leaseDirOf cache)) (list))))]
+    (listAny? (fn [(n String)] -> Bool (let [(pid (tmpPid n))] (and (alive? pid) (and (!= pid (procSelf)) (not (listContains? holders pid)))))) names))
+
+; (:m :ref BIN-NO-PERSIST-20261026 :do "the floor of the old prune stays: on the native CLI store nothing younger than 6 hours goes and the newest 4 entries of each kind stay, a .failed marker not counting as one; the cap only acts beyond that")
+fn sharedFloorNs -> Int64
+  21600000000000
+
+fn keepNewest -> Int64
+  4
+
+fn kindOf name: String -> String
+  (optionOr (listHead (filter (fn [(p String)] -> Bool (stringStartsWith? name p)) (list "cli-" "asl1-" "seed-" "rt-"))) "")
+
+fn ! newestOfKinds names: (List String) stamps: (Map String Int64) -> (List String)
+  (fold (fn [(acc (List String)) (k String)] -> (List String)
+          (listAppend acc (listTake (listSortBy (fn [(n String)] -> Int64 (- 0 (mapGetOr stamps n 0))) (filter (fn [(n String)] -> Bool (and (= (kindOf n) k) (not (stringEndsWith? n ".failed")))) names)) (keepNewest))))
+        (list) (list "cli-" "asl1-" "seed-" "rt-"))
+
+; (:m :ref BIN-NO-PERSIST-20261026 :do "after a native CLI build, under the build lock: a head whose root no longer exists is removed, a tmp dir whose builder is dead goes, and the cli, asl1, seed and rt entries are held under capBytes by last use above the floor, with the target of every live head and every leased entry pinned; returns the count removed")
+fn ! sweepNativeCache! cache: String capBytes: Int64 minAgeNs: Int64 -> Int64
+  (match (takeLock! cache)
+    ((none) 0)
+    ((some taken) (let [(removed (match (dirList cache)
+                                   ((err _) 0)
+                                   ((ok names) (if (unleasedBuild? cache names) 0 (sweepLocked! cache names (liveLeases! cache) capBytes (max minAgeNs (sharedFloorNs)))))))
+                        (_ (if taken (pathRemove (str cache "/lock")) (ok ())))]
+                    removed)))
+
+fn ! sweepLocked! cache: String names: (List String) leased: (List String) capBytes: Int64 minAgeNs: Int64 -> Int64
+  (let [(now (nowNs))
+        (old? (fn [(n String)] -> Bool (> (- now (treeStamp! (str cache "/" n))) minAgeNs)))
+        (heads (filter headFile? names))
+        (live (filter (fn [(h String)] -> Bool (some? (headRoot! h))) heads))
+        (dead (filter (fn [(h String)] -> Bool (and (not (listContains? live h)) (old? h))) heads))
+        (deadGone (listLength (filter (fn [(h String)] -> Bool (ok? (pathRemove (str cache "/" h)))) dead)))
+        (tmpGone (listLength (filter (fn [(n String)] -> Bool (and (and (tmpDead? n) (old? n)) (ok? (pathRemove (str cache "/" n))))) names)))
+        (stored (filter storeName? names))
+        (stamps (fold (fn [(m (Map String Int64)) (n String)] -> (Map String Int64) (mapSet m n (treeStamp! (str cache "/" n)))) (mapEmpty) stored))
+        (targets (listAppend (listAppend leased (newestOfKinds stored stamps)) (map (fn [(h String)] -> String (sys/baseName (stringTrim (resultOr (fileReadString (str cache "/" h)) "")))) live)))
+        (entries (map (fn [(n String)] -> StoreEntry (storeEntry! (list (str cache "/" n)) (listContains? targets (stringReplace n ".failed" "")))) stored))]
+    (+ (+ deadGone tmpGone) (pairSecond (sweepEntries! entries capBytes minAgeNs))))

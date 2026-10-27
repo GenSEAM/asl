@@ -1,4 +1,4 @@
-(module asl-compiler/checkCache :x [Verdict cacheDir! verdictKey! keyText encodeVerdict decodeVerdict lookup! store! replay!] :i [(asl-checker/resolve :a r)])
+(module asl-compiler/checkCache :x [Verdict cacheDir! verdictKey! verdictKeyWith! keyText encodeVerdict decodeVerdict lookup! store! replay!] :i [(asl-checker/resolve :a r)])
 
 (schema Verdict (:f exitCode Int64) (:f body String))
 
@@ -48,6 +48,17 @@ fn ! verdictKey! entry: String -> (Option String)
             ((some d) (match (hashLines! checkerDeps (pairSecond d) "")
               ((none) (none))
               ((some c) (some (bytesSha256 (stringToBytes (keyText entryReal (pairFirst d) (pairFirst c)))))))))))))))))
+
+; (:m :ref SCRIPT-RUN-UNCHECKED :do "a caller whose checker is compiled into it keys by its own build id instead of rehashing the checker source closure, and an entry staged under a per-run name (asl -e, asl -) is keyed under a stable alias in place of its path; the deps lines still carry its content digest")
+fn ! verdictKeyWith! entry: String alias: String checkerId: String -> (Option String)
+  (match (resultToOption (realPath entry))
+    ((none) (none))
+    ((some entryReal) (match (closureOf! entryReal)
+      ((none) (none))
+      ((some deps) (match (hashLines! deps (mapEmpty) "")
+        ((none) (none))
+        ((some d) (let [(text (keyText entryReal (pairFirst d) checkerId))]
+                    (some (bytesSha256 (stringToBytes (if (stringEmpty? alias) text (stringReplace text entryReal alias))))))))))))
 
 fn entryPath dir: String key: String -> String
   (str dir "/" key ".verdict")

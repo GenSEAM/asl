@@ -1,5 +1,5 @@
 (module asl-cli/command
-  :x [main dispatch! route! asnEcho testFiles!]
+  :x [main dispatch! route! asnEcho testFiles! readStdin!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/heal :a healCli) (asl/packages/asl-gates/src/suiteRunner :a runner)])
 
 (schema Open

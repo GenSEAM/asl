@@ -1,5 +1,5 @@
 (module asl-cli/nativeBuild
-  :x [Build variantKey! main link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! transientFailure?]
+  :x [Build variantKey! main storeCapFor! capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! transientFailure?]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r)])
 
 (schema Build
@@ -225,6 +225,40 @@ fn ! linkPartsFor! dir: String -> (Result Int64 String)
     ((some word) (partsValue word))
     ((none) (ok (min 8 (onlineCores!)))))
 
+; (:m :ref BIN-NO-PERSIST-20261026 :do "the byte cap of a build store is the :native :storeCap row of the nearest .asl.config.asn or ~/.asl/config.asn, a count of bytes with an optional K, M or G suffix; 2G when absent or unreadable")
+fn defaultStoreCap -> Int64
+  2147483648
+
+fn capValue word: String -> (Option Int64)
+  (let [(w (stringTrim (stringReplace word "\"" "")))
+        (unit (if (stringEmpty? w) "" (optionOr (stringSlice w (- (stringLength w) 1) (stringLength w)) "")))
+        (scale (cond ((= unit "K") 1024) ((= unit "M") 1048576) ((= unit "G") 1073741824) (else 1)))
+        (digits (if (= scale 1) w (optionOr (stringSlice w 0 (- (stringLength w) 1)) "")))]
+    (match (stringToInt64 digits)
+      ((some n) (if (and (> n 0) (<= n (/ 9223372036854775807 scale))) (some (* n scale)) (none)))
+      ((none) (none))))
+
+; (:m :ref BIN-NO-PERSIST-20261026 :do "the sweep of the native CLI store runs unless :native :sweep is false (it holds the build lock, leases and the 6 hour / newest-4 floor); a store entry used within :native :storeMinAge (minutes, or with an m or h suffix; 60m) is never swept, and the native CLI store keeps its 6 hour floor on top")
+fn ! sweepOn? dir: String -> Bool
+  (!= (optionOr (configured! dir ":sweep") "") "false")
+
+fn ageValue word: String -> (Option Int64)
+  (let [(w (stringTrim (stringReplace word "\"" "")))
+        (unit (if (stringEmpty? w) "" (optionOr (stringSlice w (- (stringLength w) 1) (stringLength w)) "")))
+        (scale (if (= unit "h") 3600000000000 60000000000))
+        (digits (if (or (= unit "h") (= unit "m")) (optionOr (stringSlice w 0 (- (stringLength w) 1)) "") w))]
+    (match (stringToInt64 digits)
+      ((some n) (if (and (> n 0) (<= n (/ 9223372036854775807 scale))) (some (* n scale)) (none)))
+      ((none) (none))))
+
+fn ! storeMinAgeNs! dir: String -> Int64
+  (optionOr (match (configured! dir ":storeMinAge") ((some w) (ageValue w)) ((none) (none))) 3600000000000)
+
+fn ! storeCapFor! dir: String -> Int64
+  (match (configured! dir ":storeCap")
+    ((some word) (optionOr (capValue word) (defaultStoreCap)))
+    ((none) (defaultStoreCap)))
+
 fn ! linkLevelFor! dir: String -> (Result String String)
   (match (configured! dir ":level")
     ((some word) (levelFlag word))
@@ -367,7 +401,7 @@ fn ! variantRuntime! b: Build asl1: String packagesDir: String variant: String g
   (match (variantKey! b packagesDir variant)
     ((err e) (err e))
     ((ok key)
-      (let [(dir (str b.cache "/rt-" variant "-" key)) (lib (str dir "/libaslrt-" variant ".a"))]
+      (let [(dir (str b.cache "/rt-" variant "-" key)) (lib (str dir "/libaslrt-" variant ".a")) (_ (useEntry! b dir))]
         (if (sys/isFile? lib) (ok lib)
           (let [(tmp (str b.tmp "/rt-" variant "." (stringFromInt64 (procSelf))))
                 (specs (list (pair (pair (str packagesDir "/asl-target-llvm/src/gcRoute.asl") "gcAsl") gcExtra)
@@ -381,11 +415,18 @@ fn ! variantRuntime! b: Build asl1: String packagesDir: String variant: String g
                     ((err e) (match built ((err first) (err (str first "; " e))) ((ok _) (err e))))
                     ((ok _) built))))))))))
 
+; (:m :ref BIN-NO-PERSIST-20261026 :do "every seed, runtime, asl1 or cli entry a build reuses or makes is leased before use (nc/leaseEntry!), which pins it against a sweep while the build runs, and touched, so the sweep sees its last use")
+fn ! useEntry! b: Build dir: String -> Unit
+  (do (nc/leaseEntry! b.cache (sys/baseName dir) (nowNs))
+      (fileUtime dir (nowNs))
+      ())
+
 fn ! seed! b: Build row: String -> (Result String String)
   (let [(file (optionOr (seedField row "file") ""))
         (llSha (optionOr (seedField row "llSha256") ""))
         (dir (str b.cache "/seed-" llSha "-" (optionOr (stringSlice b.base 0 16) b.base)))
-        (ll (str b.tmp "/seed.ll"))]
+        (ll (str b.tmp "/seed.ll"))
+        (_ (useEntry! b dir))]
     (cond
       ((or (stringEmpty? file) (!= (stringLength llSha) 64)) (err "the seed row lacks :file or :llSha256"))
       ((sys/executable? (str dir "/bin")) (ok (str dir "/bin")))
@@ -478,6 +519,7 @@ fn ! stage! b: Build name: String compiler: String tag: String entry: String ext
     ((ok deps) (match (keyOf! b b.root (str tag "+notrace") entry deps)
       ((err e) (err e))
       ((ok key) (let [(dir (str b.cache "/" name "-" key))
+                       (_ (useEntry! b dir))
                        (marker (str dir ".failed"))
                        (markerPresent (sys/isFile? marker))
                        (markerText (if markerPresent (stringTrim (resultOr (fileReadString marker) "")) ""))
@@ -540,9 +582,12 @@ fn ! main args: (List String) -> (Result Int64 String)
       (else
         (let [(_ (say! (str "asl: native build pid " pid " started for " root)))
               (code (match (build! root cacheDir owner)
-                      ((ok dir) (do (say! (str "asl: native build: " dir)) (say! (str "asl: native build pruned " (stringFromInt64 (nc/pruneNativeCache! cacheDir 4 21600000000000)) " old cache dirs")) 0))
+                      ((ok dir) (do (say! (str "asl: native build: " dir))
+                                     (if (sweepOn? root) (say! (str "asl: native build swept " (stringFromInt64 (nc/sweepNativeCache! cacheDir (storeCapFor! root) (storeMinAgeNs! root))) " cache entries")) true)
+                                     0))
                       ((err e) (do (say! (str "asl: native build failed: " e)) 1))))
               (_ (pathRemove (str cacheDir "/tmp." pid)))
+              (_ (nc/dropLeases! cacheDir))
               (_ (releaseLock! cacheDir owner))]
           (do (say! (str "asl: native build pid " pid " exit " (stringFromInt64 code)))
               (ok code))))))

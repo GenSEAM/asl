@@ -489,6 +489,11 @@ fn argStr args: (List String) i: Int64 fallback: String -> String
 fn preludeMainDone u: Unit -> (Result Unit String)
   (ok u)
 
+; (:m :ref TOP-LEVEL-CODE :do "a script statement that checks as (err e) ends the script here: one ASN line on stderr naming its form number and line, then exit status 1")
+fn ! preludeScriptFail form: Int64 line: Int64 msg: String -> (Result Int64 String)
+  (do (eprintln (str "(:err :form " form " :line " line " :msg \"" (stringReplace (stringReplace (stringReplace msg "\\" "\\\\") "\"" "\\\"") "\n" "\\n") "\")"))
+      (ok 1))
+
 fn preludeRankPow5 t: Int64 -> Int64
   (let [t2 (mod (* t t) 2147483647)
         t4 (mod (* t2 t2) 2147483647)]

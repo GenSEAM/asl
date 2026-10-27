@@ -1,6 +1,6 @@
 (:package asl-utils
  :version "0.1.0"
  :entry "src/timeout.asl"
- :description "Optional coreutils-style commands missing on macOS or Linux, in pure AgentSlang: timeout"
+ :description "Optional coreutils-style commands missing on macOS or Linux, in pure AgentSlang: timeout; and the script kit: flags, args, env, glob, atomic edits with --dry diffs, guarded children"
  :aslFirst true
- :dependencies [])
+ :dependencies ["asl-regex"])

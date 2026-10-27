@@ -365,7 +365,7 @@ fn ! runOutside! ctx: sys/Context file: String absFile: String args: (List Strin
       ((err e) (do (sys/sayErr! (str "(:run :status :failed :error ERR_BUILD :message \"cannot stage " file ": " e "\")")) 1))
       ((ok rel)
         (do (eprintln (str "NATIVE-BYPASS " file " :reason absolute-path-outside-workspace :staged " rel))
-            (nativeTest! (cons "run" (cons (str ctx.root "/" rel) (rest args))))))))
+            (nativeTest! (listAppend (list "run" "--as" file (str ctx.root "/" rel)) (rest args)))))))
 
 ; (:m :ref R1-NATIVE-RECERT :do "nt/main prints its own 'FAIL path: ERR_NATIVE_UNSUPPORTED: path exports neither runTests nor main' when run! delegates straight to it, same generic wrap as the test-side gap but with no Built.reason string this layer could intercept; a cheap static nt/entryOf read of the file's own header, done here before delegating, catches the same no-entry case and reports it with the canonical ERR_NO_ENTRY CONTRACT.asn names, while any file that does declare an entry still goes to nativeTest! exactly as before")
 ; (:m :ref POSTFIX :do "the early-intercept FAIL line reinvented nt/main's own construction and got it wrong on 3 points: it rooted (relative) both path mentions where nt/main's runFile uses the raw absFile for the FAIL prefix and only the relative logical path for the message body, it dropped the colon after ERR_NO_ENTRY, and it appended a bogus (after 0 asserts) suffix nt/main's run leg never prints (that suffix is test/eval-only, from failLine, not runFile's bare failReason); matched verbatim to nt/main's own text so nativeCliTest's native-equals-asl-host comparison holds")
@@ -668,6 +668,7 @@ fn ! evalRejected! path: String reason: String -> Int64
       (do (sys/sayErr! (str "asl eval: " reason)) 1)
       (do (map printDiag! diags) 1)))
 
+; (:m :ref BIN-NO-PERSIST-20261026 :do "asl eval builds into an ephemeral slot and removes it and its source after the run; only the shared library objects stay")
 fn ! evalValue! ctx: sys/Context expr: String -> Int64
   (let [(src (evalSource expr))
         (digest (nt/slotKey "eval" src))
@@ -676,18 +677,22 @@ fn ! evalValue! ctx: sys/Context expr: String -> Int64
         (fp (nt/fingerprint))
         (cDir (let [(configured (optionOr (envGet "ASL_NATIVE_TEST_CACHE") ""))]
                 (if (stringEmpty? configured) (str ctx.root "/.asl/cache/nativeTest") configured)))
-        (key (nt/slotKey (str "eval:" (nt/importPathOf path)) digest))
-        (slot (str cDir "/" fp "/" key))
+        (slot (nt/ephemeralSlotIn! cDir))
+        (key (nt/slotKey (str "eval:" (nt/importPathOf path) ":" slot) digest))
         (made (match (dirCreate dir) ((err e) (str e)) ((ok _) (match (fileWrite path src) ((err e) (str e)) ((ok _) (match (dirCreate slot) ((err e) (str e)) ((ok _) "")))))))]
     (if (not (stringEmpty? made))
-      (do (sys/sayErr! (str "asl eval: cannot prepare " path ": " made)) 1)
-      (let [(built (nt/compileIn cDir path path src slot key fp "eval"))]
-                (match built.binary
-                  ((none) (evalRejected! path built.reason))
-                  ((some bin) (let [(out (nt/runProc (list bin) (some (nt/withEnvOverrides! (list (preludeOverride ctx))))))]
-                                (do (print out.stdout)
-                                    (eprintText out.stderr)
-                                    out.exitCode)))))))
+      (do (pathRemove slot) (pathRemove path) (sys/sayErr! (str "asl eval: cannot prepare " path ": " made)) 1)
+      (let [(built (nt/compileIn cDir path path src slot key fp "eval"))
+            (code (match built.binary
+                    ((none) (evalRejected! path built.reason))
+                    ((some bin) (let [(out (nt/runProc (list bin) (some (nt/withEnvOverrides! (list (preludeOverride ctx))))))]
+                                  (do (print out.stdout)
+                                      (eprintText out.stderr)
+                                      out.exitCode)))))
+            (_ (pathRemove slot))
+            (_ (pathRemove path))
+            (_ (nt/sweepStore! cDir))]
+        code)))
 
 fn ! eval! ctx: sys/Context args: (List String) -> Int64
   (let [(expr (stringJoin args " "))
@@ -758,12 +763,52 @@ fn ! dispatchRaw! ctx: sys/Context verb: String args: (List String) dir: String 
     ((= verb "check") (check! ctx args))
     (else (cmd/dispatch! ctx verb args)))
 
+; (:m :ref SHEBANG :do "inline code is staged by content digest like an outside file and run as a script module in the caller's cwd, with the arguments after it")
+; (:m :ref SCRIPT-ENTRY :do "asl -e and asl - stage their text under a name unique to this process (pid and a digest prefix), so concurrent runs of the same text never share or delete each other's file, and remove it once the run ends")
+fn ! inlineStagePath ctx: sys/Context code: String mark: String -> String
+  (if (stringStartsWith? mark "f")
+    (str (outsideStageDir ctx) "/inline" mark ".asl")
+    (str (outsideStageDir ctx) "/inline" mark (stringFromInt64 (procSelf)) "x" (optionOr (stringSlice (bytesSha256 (stringToBytes code)) 0 16) "") ".asl"))
+
+fn ! runInline! ctx: sys/Context mark: String code: String args: (List String) -> Int64
+  (let [(dest (inlineStagePath ctx code mark))]
+    (match (ensureDir! (outsideStageDir ctx))
+      ((err e) (do (sys/sayErr! (str "(:run :status :failed :error ERR_BUILD :message \"cannot create " (outsideStageDir ctx) ": " e "\")")) 1))
+      ((ok _) (match (fileWrite dest code)
+                ((err e) (do (sys/sayErr! (str "(:run :status :failed :error ERR_BUILD :message \"cannot write " dest ": " e "\")")) 1))
+                ((ok _) (let [(exit (runEntryChecked! ctx dest (cons dest args))) (_ (pathRemove dest))] exit))))))
+
+fn ! inlineUsage! -> Int64
+  (do (sys/sayErr! "(:run :status :failed :error ERR_MISSING_ARG :message \"usage: asl -e CODE [ARG ...]\")") 2)
+
+; (:m :ref SHEBANG :do "asl - reads stdin: text whose first form is keyword-headed, like (:tools), is a batch of operation forms as before; any other text is top-level script code and the arguments after - are its args")
+fn ! stdinEntry! ctx: sys/Context args: (List String) -> Int64
+  (match (cmd/readStdin! (list))
+    ((err e) (do (sys/sayErr! (str "asl -: stdin: " e)) 2))
+    ((ok text) (if (stringStartsWith? (sys/trimLeft text) "(:")
+                 (if (listEmpty? (rest args)) (dispatch! ctx "rpc" (list (sys/stripTrailingNewlines text))) (do (sys/sayErr! "(:batch :status :failed :error ERR_MISSING_ARG :message \"usage: asl - reads forms from stdin and takes no other argument\")") 2))
+                 (runInline! ctx "s" text (rest args)))))
+
+; (:m :ref SHEBANG :do "a first argument that is an existing file and names a path (holds a / or ends in .asl) runs as a program: its main or top-level code when it has one, else its runTests; any verb without a / stays a verb, so verbs win over files of the same name; a file without the .asl suffix (an executable with a #! line) is staged by content")
+fn ! pathArg? verb: String -> Bool
+  (and (sys/isFile? verb) (or (stringContains? verb "/") (stringEndsWith? verb ".asl")))
+
+fn ! runPath! ctx: sys/Context file: String args: (List String) -> Int64
+  (match (fileReadString file)
+    ((err _) (run! ctx (cons file args)))
+    ((ok src) (cond ((not (listContains? (nt/exportsOf src) "main")) (test! ctx (cons file args)))
+                    ((stringEndsWith? file ".asl") (run! ctx (cons file args)))
+                    (else (runInline! ctx (str "f" (stringFromInt64 (procSelf)) "x-" (optionOr (listLast (stringSplit file "/")) file)) src args)))))
+
 fn ! entry! ctx: sys/Context args: (List String) -> Int64
   (let [(head (first args))]
-    (if (or (= head "-f") (= head "-"))
-      (match (cmd/main args) ((ok code) code) ((err _) 2))
-      (let [(r (cmd/route! ctx args))]
-        (dispatch! ctx (pairFirst r) (pairSecond r)))))
+    (cond
+      ((= head "-e") (if (listEmpty? (rest args)) (inlineUsage!) (runInline! ctx "e" (first (rest args)) (rest (rest args)))))
+      ((= head "-") (stdinEntry! ctx args))
+      ((= head "-f") (match (cmd/main args) ((ok code) code) ((err _) 2)))
+      ((pathArg? head) (runPath! ctx head (rest args)))
+      (else (let [(r (cmd/route! ctx args))]
+              (dispatch! ctx (pairFirst r) (pairSecond r))))))
 
 fn ! main args: (List String) -> (Result Int64 String)
   (match (sys/context!)

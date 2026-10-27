@@ -1,4 +1,4 @@
-(module asl-parser/ast :x [moduleNode ModuleNode SchemaNode EnumNode DefunNode EnumCase Param AstField TopForm ParseError PosForm KidForm readForms parse parseLegacy parseForTypeCheck retiredProse retiredSpelling retiredSource spellingErrors retiredFormErrors bangedBuiltins parseForChecker renderNode AstLit litInt litFloat litString litBool litUnit AstPattern patWildcard patVar patLit patTuple patRecord patCtor AstMatchArm matchArm makeMatchArm AstExpr exprLit exprIdent exprMember exprCall exprLet exprIf exprMatch exprTry exprBlock exprRecord exprCond exprLambda exprInterpolation AstType typeNamed typeTuple typeRecord typeFn charsWithin? tailExprs sexprItems nthExpr hasTailrec? isInlineBodyCandidate? typeNodeText joinFnHeader readKidForms kidFormsFor findTokenPos findQualifiedTokenPos] :i [(lexer :a lx) (reader :a rd) (indentParser :a ip) (asl-syntax/core/tree :a tr) (fnHeader :a fh)])
+(module asl-parser/ast :x [moduleNode ModuleNode SchemaNode EnumNode DefunNode EnumCase Param AstField TopForm ParseError PosForm KidForm readForms parse parseLegacy parseForTypeCheck retiredProse retiredSpelling retiredSource spellingErrors retiredFormErrors bangedBuiltins parseForChecker renderNode AstLit litInt litFloat litString litBool litUnit AstPattern patWildcard patVar patLit patTuple patRecord patCtor AstMatchArm matchArm makeMatchArm AstExpr exprLit exprIdent exprMember exprCall exprLet exprIf exprMatch exprTry exprBlock exprRecord exprCond exprLambda exprInterpolation AstType typeNamed typeTuple typeRecord typeFn charsWithin? tailExprs sexprItems nthExpr hasTailrec? isInlineBodyCandidate? typeNodeText joinFnHeader readKidForms kidFormsFor findTokenPos findQualifiedTokenPos scriptStepParts scriptStepAt shebangless scriptMainDoc scriptStatementsOf] :i [(lexer :a lx) (reader :a rd) (indentParser :a ip) (asl-syntax/core/tree :a tr) (fnHeader :a fh)])
 
 (schema ParseError (:f msg String) (:f line Int64) (:f col Int64))
 
@@ -490,19 +490,25 @@ fn retiredSpelling src: String -> (Option ParseError)
 fn retiredSource src: String -> (Option ParseError)
   (match (retiredProse src) ((some e) (some e)) ((none) (retiredSpelling src)))
 
-fn parse src: String -> (Result (List TopForm) ParseError)
-  (match (retiredSource src)
+; (:m :ref SHEBANG :do "a first line starting with #! is blanked before reading, its newline kept so every later line keeps its number; only line 1 is looked at")
+fn shebangless src: String -> String
+  (if (stringStartsWith? src "#!")
+    (match (stringIndexOf src "\n") ((some i) (optionOr (stringSlice src i (stringLength src)) "")) ((none) ""))
+    src)
+
+fn parse raw: String -> (Result (List TopForm) ParseError)
+  (let [(src (shebangless raw))] (match (retiredSource src)
     ((some e) (err e))
     ((none) (match (parseLegacy src)
       ((err e) (err e))
-      ((ok forms) (rejectBareLiteralTopExpr forms)))))
+      ((ok forms) (rejectBareLiteralTopExpr forms))))))
 
-fn parseForTypeCheck src: String -> (Result (List TopForm) ParseError)
-  (match (retiredSource src)
+fn parseForTypeCheck raw: String -> (Result (List TopForm) ParseError)
+  (let [(src (shebangless raw))] (match (retiredSource src)
     ((some e) (err e))
     ((none) (match (parseForChecker src)
       ((err e) (err e))
-      ((ok forms) (rejectBareLiteralTopExpr (desugarWith forms))))))
+      ((ok forms) (rejectBareLiteralTopExpr (desugarWith forms)))))))
 
 fn parseLegacy src: String -> (Result (List TopForm) ParseError)
   (match (parseForChecker src)
@@ -669,7 +675,7 @@ fn desugarWithIn wc: WithCtx forms: (List TopForm) -> (List TopForm)
        forms)
 
 fn parseForChecker src: String -> (Result (List TopForm) ParseError)
-  (parseWithFallback src)
+  (parseWithFallback (shebangless src))
 
 fn displayUntypedParam p: Param -> Param
   (with p :type (if (stringEmpty? p.type) "Any" p.type))
@@ -708,16 +714,105 @@ fn scriptEntries decls: (List TopForm) -> (List String)
     (listReverse names))
 
 ; (:m :ref IMPLICIT-MODULE :do "a source with no module header that defines main or runTests is a script module: the parser synthesises its header with an empty path (the loader names it from its file), no imports and those entries exported; a headerless source without an entry stays a bare fragment")
-fn scriptModule rest: (List KidForm) decls: (List TopForm) -> (Result (List TopForm) ParseError)
-  (let [(entries (scriptEntries decls))]
-    (if (listEmpty? entries)
-      (ok decls)
-      (match (declForms rest entries)
-        ((err e) (err e))
-        ((ok exportedDecls) (ok (cons (topModule (ModuleNode :path "" :docstring "" :exported entries :imports (list) :defs exportedDecls)) exportedDecls))))))
+; (:m :ref TOP-LEVEL-CODE :do "column-0 code forms of a headerless source become the body of a synthesised effectful main args: (List String) -> (Result Int64 String), run in order; each is wrapped in a preludeScriptStep marker carrying its form number, line and column, so the checker types it and places its diagnostics at its own statement, and the linker elaborates a Result-valued step into an early exit; a let with no body scopes over the forms after it; (use path ...) forms become imports aliased by their last segment")
+fn scriptStatement? t: TopForm -> Bool
+  (match t
+    ((topExpr pf) (and (rd/isList? pf.expr) (let [(h (rd/sexprHead pf.expr))] (and (not (stringEmpty? h)) (and (not (stringStartsWith? h ":")) (!= h "use"))))))
+    (_ false))
+
+fn useForm? t: TopForm -> Bool
+  (match t ((topExpr pf) (and (rd/isList? pf.expr) (= (rd/sexprHead pf.expr) "use"))) (_ false))
+
+fn lastSegment p: String -> String
+  (optionOr (listLast (stringSplit p "/")) p)
+
+fn useImports decls: (List TopForm) -> (List (Pair String String))
+  (fold (fn [acc t] (match t ((topExpr pf) (if (useForm? t) (listAppend acc (map (fn [m] (pair (rd/sexprHead m) (lastSegment (rd/sexprHead m)))) (tailExprs (sexprItems pf.expr)))) acc)) (_ acc))) (list) decls)
+
+fn scriptStatements decls: (List TopForm) -> (List PosForm)
+  (fold (fn [acc t] (match t ((topExpr pf) (if (scriptStatement? t) (listAppend acc (list pf)) acc)) (_ acc))) (list) decls)
+
+fn scriptStepAt n: Int64 pf: PosForm e: rd/SExpr -> rd/SExpr
+  (rd/makeList (list (rd/makeAtom "preludeScriptStep") (rd/makeAtom (stringFromInt64 n)) (rd/makeAtom (stringFromInt64 pf.line)) (rd/makeAtom (stringFromInt64 pf.col)) e))
+
+fn scriptStepParts e: rd/SExpr -> (Option (List rd/SExpr))
+  (let [(items (sexprItems e))]
+    (if (and (rd/isList? e) (and (= (rd/sexprHead e) "preludeScriptStep") (= (listLength items) 5))) (some (tailExprs items)) (none)))
+
+fn scriptLet? e: rd/SExpr -> Bool
+  (and (rd/isList? e) (and (= (rd/sexprHead e) "let") (and (= (listLength (sexprItems e)) 2) (some? (bindingItems (nthExpr (sexprItems e) 1))))))
+
+fn scriptBinding n: Int64 pf: PosForm b: rd/SExpr -> rd/SExpr
+  (let [(items (sexprItems b)) (k (listLength items))]
+    (if (and (rd/isList? b) (>= k 2)) (rd/makeList (listAppend (listTake items (- k 1)) (list (scriptStepAt n pf (nthExpr items (- k 1)))))) b))
+
+fn scriptBindings n: Int64 pf: PosForm vec: rd/SExpr -> rd/SExpr
+  (let [(items (optionOr (bindingItems vec) (list)))]
+    (if (rd/isAtom? (nthExpr items 0))
+      (rd/makeVect (map (fn [i] (if (= (mod i 2) 1) (scriptStepAt n pf (nthExpr items i)) (nthExpr items i))) (range 0 (listLength items))))
+      (rd/makeVect (map (fn [b] (scriptBinding n pf b)) items))))
+
+fn scriptDo acc: (List rd/SExpr) last: rd/SExpr -> rd/SExpr
+  (if (listEmpty? acc) last (rd/makeList (cons (rd/makeAtom "do") (listReverse (cons last acc)))))
+
+fn scriptRun stmts: (List PosForm) n: Int64 acc: (List rd/SExpr) -> rd/SExpr
+  (match (listHead stmts)
+    ((none) (scriptDo acc (rd/makeList (list (rd/makeAtom "ok") (rd/makeAtom "0")))))
+    ((some pf) (if (scriptLet? pf.expr)
+                 (scriptDo acc (rd/makeList (list (rd/makeAtom "let") (scriptBindings n pf (nthExpr (sexprItems pf.expr) 1)) (scriptRun (tailExprsPos stmts) (+ n 1) (list)))))
+                 (scriptRun (tailExprsPos stmts) (+ n 1) (cons (scriptStepAt n pf pf.expr) acc)))))
+
+fn tailExprsPos xs: (List PosForm) -> (List PosForm)
+  (optionOr (listTail xs) (list))
+
+; (:m :ref TOP-LEVEL-CODE :do "the inverse of scriptRun: the code forms a synthesised script main was built from, markers removed, so a printer writes the script back as its author wrote it")
+fn unstep e: rd/SExpr -> rd/SExpr
+  (match (scriptStepParts e) ((some sp) (nthExpr sp 3)) ((none) e))
+
+fn unstepBinding b: rd/SExpr -> rd/SExpr
+  (let [(items (sexprItems b)) (k (listLength items))]
+    (cond ((some? (scriptStepParts b)) (unstep b))
+          ((and (rd/isList? b) (>= k 2)) (rd/makeList (listAppend (listTake items (- k 1)) (list (unstep (nthExpr items (- k 1)))))))
+          (else b)))
+
+fn scriptStatementsOf e: rd/SExpr -> (List rd/SExpr)
+  (let [(items (sexprItems e)) (h (rd/sexprHead e))]
+    (cond
+      ((and (rd/isList? e) (= h "do")) (let [(body (tailExprs items)) (n (listLength body))]
+                                          (listAppend (map unstep (listTake body (- n 1))) (scriptStatementsOf (nthExpr body (- n 1))))))
+      ((and (rd/isList? e) (and (= h "let") (= (listLength items) 3)))
+        (cons (rd/makeList (list (rd/makeAtom "let") (rd/makeVect (map unstepBinding (sexprItems (nthExpr items 1)))))) (scriptStatementsOf (nthExpr items 2))))
+      ((and (rd/isList? e) (= h "ok")) (list))
+      (else (list (unstep e)))))
+
+fn scriptMainDoc -> String
+  "the top-level code of this script"
+
+fn scriptMain stmts: (List PosForm) -> TopForm
+  (topDefun (DefunNode :name "main" :typeVars (list) :isExported true :effect true :params (list (Param :name "args" :type "(List String)")) :retType "(Result Int64 String)" :docstring (scriptMainDoc) :body (list (scriptRun stmts 1 (list))) :bodyPos (listTake stmts 1)))
+
+fn scriptCode decls: (List TopForm) -> (Result (List TopForm) ParseError)
+  (let [(stmts (scriptStatements decls)) (items (filter (fn [t] (not (or (scriptStatement? t) (useForm? t)))) decls))]
+    (cond
+      ((listEmpty? stmts) (ok (filter (fn [t] (not (useForm? t))) decls)))
+      ((listContains? (scriptEntries decls) "main") (err (perr "ERR_SCRIPT_MAIN a script with top-level code has no fn main: its top-level forms are the entry" (optionOr (listHead stmts) (PosForm :expr (rd/makeAtom "") :line 1 :col 1)))))
+      (else (ok (listAppend items (list (scriptMain stmts)))))))
+
+fn exportedAs d: DefunNode flag: Bool -> DefunNode
+  (with d :isExported flag)
+
+fn scriptModule decls: (List TopForm) -> (Result (List TopForm) ParseError)
+  (let [(uses (useImports decls))]
+    (match (scriptCode decls)
+      ((err e) (err e))
+      ((ok body) (let [(entries (scriptEntries body))]
+                   (if (and (listEmpty? entries) (listEmpty? uses))
+                     (ok body)
+                     (let [(exported (exportedSetOf entries)) (marked (map (fn [t] (match t ((topDefun d) (topDefun (exportedAs d (mapHas? exported d.name)))) (_ t))) body))]
+                       (ok (cons (topModule (ModuleNode :path "" :docstring "" :exported entries :imports uses :defs marked)) marked))))))))
 
 fn buildModuleDecls mods: (List PosForm) rest: (List KidForm) path: String -> (Result (List TopForm) ParseError)
-  (let [(exported (modsExported mods))] (match (declForms rest exported) ((err e) (err e)) ((ok decls) (match (listHead mods) ((some m) (ok (cons (topModule (moduleNode m.expr path decls)) decls))) ((none) (scriptModule rest decls))))))
+  (let [(exported (modsExported mods))] (match (declForms rest exported) ((err e) (err e)) ((ok decls) (match (listHead mods) ((some m) (ok (cons (topModule (moduleNode m.expr path decls)) decls))) ((none) (scriptModule decls))))))
 
 fn buildModule forms: (List KidForm) -> (Result (List TopForm) ParseError)
   (let [(mods (filter isModulePosForm? (map (fn [(k KidForm)] -> PosForm k.pf) forms))) (rest (filter (fn [(k KidForm)] -> Bool (isNotModulePosForm? k.pf)) forms))] (match (modulePath mods) ((err e) (err e)) ((ok path) (buildModuleDecls mods rest path))))
@@ -1145,23 +1240,36 @@ fn isDeclHead? h: String -> Bool
 fn exportedSetOf exported: (List String) -> (Map String Bool)
   (fold (fn [(m (Map String Bool)) (e String)] -> (Map String Bool) (mapSet m e true)) (mapEmpty) exported)
 
-fn appendDecl k: KidForm exported: (Map String Bool) xs: (List TopForm) -> (Result (List TopForm) ParseError)
-  (let [(pf k.pf) (s pf.expr)]
+; (:m :ref SCRIPT-ENTRY :do "a second fn, schema or enum with a name already defined in the module is a parse error at the second one, so check rejects it with its locus instead of a late link or compile failure; fns and types are separate name groups")
+fn declKind t: TopForm -> String
+  (match t ((topDefun _) "fn") ((topSchema _) "type") ((topEnum _) "type") (_ ""))
+
+fn declName t: TopForm -> String
+  (match t ((topDefun d) d.name) ((topSchema sc) sc.name) ((topEnum e) e.name) (_ ""))
+
+fn declKey t: TopForm -> String
+  (str (declKind t) " " (declName t))
+
+; (:m :ref SCRIPT-ENTRY-LOWS :do "names already defined are kept in a set keyed by kind and name, so the duplicate check costs one lookup per declaration instead of a scan of the ones before it")
+fn appendDecl k: KidForm exported: (Map String Bool) acc: (Pair (List TopForm) (Map String Bool)) -> (Result (Pair (List TopForm) (Map String Bool)) ParseError)
+  (let [(pf k.pf) (s pf.expr) (xs (pairFirst acc)) (seen (pairSecond acc))]
     (cond
-      ((isTag? s) (ok xs))
+      ((isTag? s) (ok acc))
       ((not (isDeclHead? (rd/sexprHead s)))
-       (ok (cons (topExpr pf) xs)))
+       (ok (pair (cons (topExpr pf) xs) seen)))
       (else
        (match (declForm pf k.kids exported)
-         ((ok t) (ok (cons t xs)))
+         ((ok t) (cond ((stringEmpty? (declKind t)) (ok (pair (cons t xs) seen)))
+                       ((mapHas? seen (declKey t)) (err (perr (str "ERR_DUPLICATE_DEF " (declKind t) " " (declName t) " is already defined in this module") pf)))
+                       (else (ok (pair (cons t xs) (mapSet seen (declKey t) true))))))
          ((err e) (err e))))))
 
-fn declStep acc: (Result (List TopForm) ParseError) k: KidForm exported: (Map String Bool) -> (Result (List TopForm) ParseError)
-  (match acc ((err e) (err e)) ((ok xs) (appendDecl k exported xs)))
+fn declStep acc: (Result (Pair (List TopForm) (Map String Bool)) ParseError) k: KidForm exported: (Map String Bool) -> (Result (Pair (List TopForm) (Map String Bool)) ParseError)
+  (match acc ((err e) (err e)) ((ok a) (appendDecl k exported a)))
 
 fn declForms forms: (List KidForm) exported: (List String) -> (Result (List TopForm) ParseError)
   (let [(exportedSet (exportedSetOf exported))]
-    (resultMap (fold (fn [(acc (Result (List TopForm) ParseError)) (k KidForm)] -> (Result (List TopForm) ParseError) (declStep acc k exportedSet)) (ok (list)) forms) (fn [(xs (List TopForm))] -> (List TopForm) (listReverse xs))))
+    (resultMap (fold (fn [(acc (Result (Pair (List TopForm) (Map String Bool)) ParseError)) (k KidForm)] -> (Result (Pair (List TopForm) (Map String Bool)) ParseError) (declStep acc k exportedSet)) (ok (pair (list) (mapEmpty))) forms) (fn [(a (Pair (List TopForm) (Map String Bool)))] -> (List TopForm) (listReverse (pairFirst a)))))
 
 fn declForm pf: PosForm kids: (List (Pair Int64 Int64)) exported: (Map String Bool) -> (Result TopForm ParseError)
   (let [(s pf.expr) (h (rd/sexprHead s))] (cond ((not (rd/isList? s)) (err (perr "expected a top-level declaration" pf))) ((or (= h "defun") (or (= h "df") (= h "fn"))) (funNode s exported pf kids)) ((or (= h "defschema") (or (= h "dfs") (= h "schema"))) (schemaNode s pf)) ((or (= h "defenum") (or (= h "dfe") (= h "enum"))) (enumNode s pf)) (else (err (perr (str "not a declaration head: '" h "'") pf)))))
@@ -1201,6 +1309,13 @@ fn typeNodeText node: rd/SExpr -> String
   (resolveTypeText (rd/renderSexpr (typeNodeVect node)))
 
 ; (:m :ref MAIN-SUGAR :do "fn main with no -> is a Unit main: it is effectful, returns (Result Unit String), and its last statement is passed to preludeMainDone, which takes Unit and returns (ok ()), so a Result it ends on is a type error at that statement, never dropped; the statement count and positions stay; with no parameters it still binds args, the argument list")
+; (:m :ref SCRIPT-ENTRY :do "a sugared main is called with the argument list, so it names no parameter or one (List String); anything else is an error at the parameter")
+fn mainParamsOk? params: (List Param) -> Bool
+  (or (listEmpty? params) (and (= (listLength params) 1) (= (optionMap (fn [(p Param)] -> String p.type) (listHead params)) (some "(List String)"))))
+
+fn paramAt pf: PosForm head: (List rd/SExpr) -> PosForm
+  (with pf :col (+ pf.col (+ (stringLength (stringJoin (map rd/sexprHead head) " ")) 1)))
+
 fn mainParams sugar: Bool params: (List Param) -> (List Param)
   (if (and sugar (listEmpty? params)) (list (Param :name "args" :type "(List String)")) params)
 
@@ -1280,6 +1395,7 @@ fn funNode s: rd/SExpr exported: (Map String Bool) pf: PosForm kids: (List (Pair
       ((not (= arrow "->")) (err (perr "defun return type must be introduced by ->" pf)))
       ((stringEmpty? ret) (err (perr "defun has no return type" pf)))
       ((listEmpty? body) (err (perr "defun has no body" pf)))
+      ((and mainSugar (not (mainParamsOk? params))) (err (perr (str "ERR_MAIN_PARAM a main with no -> takes no parameter or one (List String) parameter, found " (stringJoin (map (fn [(p Param)] -> String (str p.name ": " p.type)) params) " ")) (paramAt pf (listTake items (- (listLength items) (listLength rest4Actual)))))))
       (else (ok (topDefun (DefunNode :name name :typeVars (list) :isExported (mapHas? exported name) :effect (or eff mainSugar) :params (mainParams mainSugar params) :retType (if mainSugar "(Result Unit String)" ret) :docstring doc :body (mainBody mainSugar body) :bodyPos bPos))))))
 
 fn vectItems v: rd/SExpr -> (List rd/SExpr)

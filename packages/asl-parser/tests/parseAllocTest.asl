@@ -50,8 +50,8 @@ fn ! runTests -> Bool
     (do
       (println (str "parseAlloc read " (pairFirst readRun) " parse " (pairFirst parseRun) " delta " parseBytes))
       ; (:m :ref PERF-FREECHAIN :do "prelude forms 264 -> 268: preludeRankLane gave way to preludeRankByte and preludeRankEnd (MAPRANK), preludeKeyOrder (MONO-MAPKEY), preludeTreeHas? and preludeTreeGetOr (FREECHAIN)")
-      ; (:m :ref WAVE2 :do "prelude forms 268 -> 302: HASHMAP added the 34 prelude HashMap forms; 302 -> 303: TEXTPASS2 preludeNextByte; bin/asl parse of asl/prelude/prelude.asl also prints 303; 303 -> 304: LISTSUM listSumFloat64; 304 -> 307 measured: argInt, argStr, preludeMainDone (TOKEN-DEFAULTS MAIN-SUGAR)")
-      (assert (stringContains? (pairSecond parseRun) "parseAlloc parse forms 307 28 12") (str "every workload module parses to its form count: " (pairSecond parseRun)))
+      ; (:m :ref WAVE2 :do "prelude forms 268 -> 302: HASHMAP added the 34 prelude HashMap forms; 302 -> 303: TEXTPASS2 preludeNextByte; bin/asl parse of asl/prelude/prelude.asl also prints 303; 303 -> 304: LISTSUM listSumFloat64; 304 -> 307 measured: argInt, argStr, preludeMainDone (TOKEN-DEFAULTS MAIN-SUGAR); 307 -> 308: preludeScriptFail (SCRIPT-ENTRY)")
+      (assert (stringContains? (pairSecond parseRun) "parseAlloc parse forms 308 28 12") (str "every workload module parses to its form count: " (pairSecond parseRun)))
       (assert (and (> (pairFirst readRun) 0) (> parseBytes 0)) "both runs report bytesAllocated and parsing allocates")
       (assert (< parseBytes 241000000) (str "parsing prelude and the jsonTest closure allocates < 241 MB (0.5x base 482 MB), got " parseBytes))
       true))
