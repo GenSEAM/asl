@@ -211,11 +211,11 @@ fn wrapperSourceRunInt64 importPath: String takesArgs: Bool -> String
        "fn ! main args: (List String) -> (Result Int64 String)\n"
        "  (do (dropEphemeral!) (ok (suite/main" (if takesArgs " args" "") ")))\n")
 
-; (:m :ref BIN-NO-PERSIST-20261026 :do "a run binary built into an ephemeral slot removes its own file and slot first thing in main, so a script, -e or - leaves no binary behind once it is running; a binary anywhere else (prepare, tests) is left alone")
+; (:m :ref BIN-NO-PERSIST-20261026 :do "a run binary built into an ephemeral slot removes its own file and slot first thing in main unless ASL_NATIVE_KEEP_LL is set (the kept IR lives in the slot), so a script, -e or - leaves no binary behind once it is running; a binary anywhere else (prepare, tests) is left alone")
 fn dropEphemeralSource -> String
   (str "fn ! dropEphemeral! -> Bool\n"
        "  (match (procExePath)\n"
-       "    ((ok p) (if (and (stringContains? p \"/ephemeral/run.\") (stringEndsWith? p \"/run\")) (ok? (pathRemove (optionOr (stringSlice p 0 (- (stringLength p) 4)) p))) false))\n"
+       "    ((ok p) (if (and (not (some? (envGet \"ASL_NATIVE_KEEP_LL\"))) (and (stringContains? p \"/ephemeral/run.\") (stringEndsWith? p \"/run\"))) (ok? (pathRemove (optionOr (stringSlice p 0 (- (stringLength p) 4)) p))) false))\n"
        "    ((err _) false))\n\n")
 
 fn mainTakesArgs src: String -> Bool
@@ -1867,12 +1867,13 @@ fn ! runStaged! root: String rel: String path: String shown: String args: (List 
   (let [(cDir (cacheDir!))
         (slot (ephemeralSlotIn! cDir))
         (built (buildEphemeral! cDir (str root "/" rel) rel fp "run" slot))
-        (_ (if (inlineStaged? rel) (pathRemove (str root "/" rel)) (ok ())))]
+        (_ (if (inlineStaged? rel) (pathRemove (str root "/" rel)) (ok ())))
+        (keepLl? (some? (envGet "ASL_NATIVE_KEEP_LL")))]
     (match built.binary
       ((some bin) (do (telemetry (str "NATIVE-CACHE " path " :cache :" built.cache))
-                      (keepOnly! slot (sys/baseName bin))
+                      (if keepLl? () (keepOnly! slot (sys/baseName bin)))
                       (let [(code (execStaged! bin args))
-                            (_ (pathRemove slot))]
+                            (_ (if keepLl? (ok ()) (pathRemove slot)))]
                         code)))
       ((none) (do (pathRemove slot) (eprintln (failText root rel path shown (failReason built.reason (if (inlineStaged? rel) (inlineName rel) rel)))) 1))))
 
