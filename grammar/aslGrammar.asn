@@ -149,7 +149,7 @@
     (:rule genLambda (seq "(fn [" (opt (seq genLambdaParam (star (seq " " genLambdaParam)))) "]" (opt (seq " -> " genType)) (plus (seq genSep genExpr)) ")")
       :d "(fn [(x T) ...] -> R body).")
     (:rule genLambdaParam (alt (seq "(" genWordName " " genType ")") genWordName) :d "A lambda parameter, typed or bare.")
-    (:rule genMatch (seq "(" (alt "mt" "match") genSep genExpr (plus (seq genSep genArm)) ")") :d "(mt subject (pattern body) ...).")
+    (:rule genMatch (seq "(" "match" genSep genExpr (plus (seq genSep genArm)) ")") :d "(match subject (pattern body) ...); mt is retired (ERR_READ_SPELLING).")
     (:rule genArm (seq "(" genPattern (plus (seq genSep genExpr)) ")") :d "A match arm.")
     (:rule genPattern (alt (seq "(" genName (star (seq " " genName)) ")") number string genName) :d "(ctor binders), a literal, a binder, _ or else.")
     (:rule genCond (seq "(cond" (plus (seq genSep genClause)) ")") :d "(cond (test body) ... (else body)).")

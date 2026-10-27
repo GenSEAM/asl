@@ -1,7 +1,7 @@
 (module asl-proc :x [runCmd! execReceipt! releaseReceipt! runPipeline! logInfo! logWarn! logErr! boundPortHeadWindow] :i [(asl-proc/process :a proc) (asl-proc/coreProcess :a cp) (asl-proc/pipe :a pipe) (asl-proc/log :a log) (spool :a spool) (deadline :a wd) (apm :a apm)])
 
 fn boundPortHeadWindow s: String -> String
-  (let [(len (int32ToInt64 (stringLength s)))]
+  (let [(len (stringLength s))]
     (if (<= len 65536) s (optionOr (stringSlice s 0 65536) s)))
 
 fn ! execReceipt! c: cp/ProcessCmd -> (Result cp/ProcessReceipt cp/ProcessError)
