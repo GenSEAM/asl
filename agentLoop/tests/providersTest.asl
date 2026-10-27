@@ -144,11 +144,22 @@ fn ! resolveHost repo: String -> (Option String)
                     (assert false (str "the stage-0 host is absent at " p "; build it with sh asl/host/build.sh or set ASL_HOST"))
                     (none))))))
 
+; (:m :ref INTEG9 :do "an asl run script builds its entry module on every call (BIN-NO-PERSIST), about a second before main, so a stub that sleeps and is killed by a 1 s provider timeout never reached its own record; the wrapper records argv, stdin, cwd and env first for those sleeping stubs, and the stub overwrites them with the same content when it does run")
+fn preRecord t: String -> String
+  (str "#!/bin/sh\n"
+       "q() { sed -e 's/\\\\/\\\\\\\\/g' -e 's/\"/\\\\\"/g' -e 's/^/\"/' -e 's/$/\"/'; }\n"
+       "cat > \"$STUB_DIR/stdin\"\n"
+       "if [ -f \"$STUB_DIR/reply.sleepMs\" ]; then\n"
+       "  { printf '%s\\n' " t " \"$@\"; } | q > \"$STUB_DIR/argv\"\n"
+       "  pwd -P > \"$STUB_DIR/cwd\"\n"
+       "  env | q > \"$STUB_DIR/env\"\n"
+       "fi\n")
+
 fn ! makeStubBin host: String root: String -> Bool
   (let [(stub (resultOr (realPath "asl/agentLoop/tests/providerStub.asl") "providerStub.asl"))
         (bin (str root "/bin"))
         (made (and (ok? (dirCreate bin)) (ok? (dirCreate (str root "/emptyBin")))))
-        (wrote (map (fn [t] (writeFile (str bin "/" t) (str "#!/bin/sh\nexec \"" host "\" run \"" stub "\" " t " \"$@\"\n"))) (list "codex" "claude" "curl")))
+        (wrote (map (fn [t] (writeFile (str bin "/" t) (str (preRecord t) "exec \"" host "\" run \"" stub "\" " t " \"$@\" < \"$STUB_DIR/stdin\"\n"))) (list "codex" "claude" "curl")))
         (chmod (cp/exec! (cp/cmd "chmod" (list "755" (str bin "/codex") (str bin "/claude") (str bin "/curl")))))]
     (and made (and (listAll? (fn [w] w) wrote) (match chmod ((ok o) (= o.exitCode 0)) ((err _) false)))))
 
