@@ -227,6 +227,7 @@ fn walkTree! root: String tmp: String pid: String rel: String -> (List (Pair Str
                   isDir (match (fileStat full) ((ok st) st.isDir) ((err _) false))]
               (cond
                 ((= p "bin/asl-mesh") acc)
+                ((= p "home/.asl") acc)
                 (isLink (listAppend acc (list (pair p (str "@link:" (normalize (resultOr (fileReadlink full) "") root tmp))))))
                 (isDir (listAppend (listAppend acc (list (pair (str p "/") ""))) (walkTree! root tmp pid p)))
                 (else (listAppend acc (list (pair (normalize p root tmp) (normalize (pidMarked (resultOr (fileReadString full) "") pid) root tmp))))))))
@@ -349,12 +350,19 @@ fn largePatch n: Int64 -> String
        (stringJoin (map (fn [k] (str "(f \\\"" (stringFromInt64 k) "\\\")\\n")) (range 0 n)) "")
        "\")")
 
+; (:m :ref INTEG9 :do "an asl run script builds its entry per call (BIN-NO-PERSIST) and so needs clang and uname on PATH: the curl-less PATH is a directory of links to every tool in /usr/bin and /bin except curl")
+fn ! pathWithout! dir: String name: String -> Bool
+  (do (dirCreate dir)
+      (map (fn [d] (map (fn [n] (if (or (= n name) (fileExists? (str dir "/" n))) () (do (pathSymlink (str d "/" n) (str dir "/" n)) ()))) (resultOr (dirList d) (list))))
+           (list "/usr/bin" "/bin"))
+      true)
+
 fn curlAbsent! base: String host: String cmdPath: String -> String
   (let [root (str base "/absent/r")
         empty (str base "/absent/emptybin")
         board "(:meshDefectBlackboard\n  :defects (\n    (:defect\n      :id \"DEF-Z-1\"\n      :target \"src/a.asl#f\"\n      :hazard \"h\"\n      :status :corroborated\n      :confirmations 1)\n  ))\n"
         made (dirCreate (str root "/.asl/mem/gaps"))
-        made2 (dirCreate empty)
+        made2 (pathWithout! empty "curl")
         w (fileWrite (str root "/.asl/mem/gaps/MeshDefectBlackboard.asn") board)
         env (list (str "PATH=" empty) (str "HOME=" root) (str "ROOT_DIR=" root) "GATEWAY_URL=http://127.0.0.1:1/gw")
         r (runChild! (list host "run" cmdPath "propose-fix" "--id" "DEF-Z-1") root env)]
@@ -367,6 +375,7 @@ fn escapeAttempt! base: String host: String cmdPath: String k: String target: St
         patch (str "(:replace :target \\\"" target "#f\\\" :old \\\"(+ x 1)\\\" :new \\\"(+ x 2)\\\")")
         board (str "(:meshDefectBlackboard\n  :defects (\n    (:defect\n      :id \"DEF-E-1\"\n      :target \"src/a.asl#f\"\n      :status :corroborated\n      :confirmations 1\n      :fixProposal (\n        :proposedPatch \"" patch "\"))\n  ))\n")
         made (fold (fn [acc p] (match acc ((err e) (err e)) ((ok _) (dirCreate p)))) (ok ()) (list (str root "/.asl/mem/gaps") (str root "/src") empty (dirOf outside)))
+        w0 (pathWithout! empty "curl")
         w1 (fileWrite (str root "/.asl/mem/gaps/MeshDefectBlackboard.asn") board)
         w2 (fileWrite (str root "/src/a.asl") "(+ x 1)\n")
         w3 (fileWrite outside "(+ x 1)\n")
