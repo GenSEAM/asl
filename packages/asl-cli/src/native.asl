@@ -796,7 +796,7 @@ fn ! pathArg? verb: String -> Bool
 fn ! runPath! ctx: sys/Context file: String args: (List String) -> Int64
   (match (fileReadString file)
     ((err _) (run! ctx (cons file args)))
-    ((ok src) (cond ((not (listContains? (nt/exportsOf src) "main")) (test! ctx (cons file args)))
+    ((ok src) (cond ((not (listContains? (nt/exportsOf src) "main")) (dispatch! ctx "test" (cons file args)))
                     ((stringEndsWith? file ".asl") (run! ctx (cons file args)))
                     (else (runInline! ctx (str "f" (stringFromInt64 (procSelf)) "x-" (optionOr (listLast (stringSplit file "/")) file)) src args)))))
 
