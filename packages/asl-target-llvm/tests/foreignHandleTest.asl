@@ -307,8 +307,66 @@ fn ! churnIn root: String work: String mode: String -> Bool
         (assert (= (stringTrim ran.out) "files 2000") (str "under :rc :" mode " every dropped FILE is closed by its finaliser, 2000 of 2000 opens under ulimit -n 64: " ran.out))
         true))
 
+fn liveSource -> String
+  (stringJoin (list
+    "(module ffiLive :x [main] :i [])"
+    ""
+    "(schema Box"
+    "  (:f h Handle)"
+    "  (:f n Int64))"
+    ""
+    "fn ! openFile path: String mode: String -> (Result Handle String)"
+    "  (foreign \"c\" \"fopen\" \"cstr cstr -> handle:fclose !null\")"
+    ""
+    "fn ! writeText s: String f: Handle -> (Result Int64 String)"
+    "  (foreign \"c\" \"fputs\" \"cstr handle:fclose -> i32 !neg\")"
+    ""
+    "fn ! closeFile f: Handle -> (Result Int64 String)"
+    "  (foreign \"c\" \"fclose\" \"close:fclose -> i32 !neg\")"
+    ""
+    "fn ! bigChurn k: Int64 -> Int64"
+    "  (fold (fn [(a Int64) (r Int64)] -> Int64 (+ a (stringLength (stringJoin (map (fn [(i Int64)] -> String (str \"x\" i r)) (range 0 5000)) \"\")))) 0 (range 0 k))"
+    ""
+    "fn ! main args: (List String) -> (Result Int64 String)"
+    "  (let [(dir (optionOr (listHead args) \".\"))]"
+    "    (match (openFile (str dir \"/uaf.txt\") \"w\")"
+    "      ((err e) (err e))"
+    "      ((ok h)"
+    "        (let [(b (Box :h h :n 1)) (keep (list b b))]"
+    "          (do (println (str \"w1 \" (writeText \"one \" h)))"
+    "              (println (str \"churn \" (bigChurn 400)))"
+    "              (println (str \"w2 \" (writeText \"two \" b.h)))"
+    "              (println (str \"keep \" (listLength keep)))"
+    "              (println (str \"close \" (closeFile h)))"
+    "              (println (str \"file \" (resultOr (fileReadString (str dir \"/uaf.txt\")) \"\")))"
+    "              (ok 0))))))"
+    "") "\n")
+
+; (:m :ref FFI2 :do "a counted Handle is still a large object to the traced collector: one held by a local, a record and a list survives the collections that 15 MB of large strings force, its writes land and its close succeeds")
+fn ! liveIn root: String work: String mode: String -> Bool
+  (let [(dir (str work "/live-" mode))
+        (made (dirCreate dir))
+        (wrote (and (ok? (fileWrite (str dir "/manifest.asn") "(:package ffiLive :version \"0.1.0\" :entry \"main.asl\")\n"))
+                    (and (ok? (fileWrite (str dir "/.asl.config.asn") (str "(:asl-config :native (:rc :" mode "))\n")))
+                         (ok? (fileWrite (str dir "/main.asl") (liveSource))))))
+        (exe (str dir "/live"))
+        (built (build root dir exe))
+        (ran (if (= built.exit 0) (runIn (list "/bin/sh" "-c" "exec \"$0\" \"$1\" 2>&1" exe dir) dir 180) built))
+        (lines (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines ran.out)))
+        (at (fn [(i Int64)] -> String (optionOr (listGet lines i) "")))]
+    (do (assert (and (ok? made) wrote) (str "the " mode " live fixture was written under " dir))
+        (assert (= built.exit 0) (str "bin/asl build links the " mode " live fixture: exit " built.exit " " built.out))
+        (assert (= ran.exit 0) (str "the " mode " live fixture runs: exit " ran.exit " " ran.out))
+        (assert (stringStartsWith? (at 0) "w1 (ok ") (str "under :rc :" mode " the first write lands: " ran.out))
+        (assert (stringStartsWith? (at 1) "churn ") (str "under :rc :" mode " the large-string churn runs: " ran.out))
+        (assert (stringStartsWith? (at 2) "w2 (ok ") (str "under :rc :" mode " the Handle survives the collections and the second write lands: " ran.out))
+        (assert (= (at 4) "close (ok 0)") (str "under :rc :" mode " close succeeds on the live Handle: " ran.out))
+        (assert (= (at 5) "file one two ") (str "under :rc :" mode " both writes reached the file: " ran.out))
+        true))
+
 fn ! testRcModes root: String work: String -> Bool
-  (fold (fn [(acc Bool) (mode String)] -> Bool (and (churnIn root work mode) acc)) true (list "counted" "asan" "notrace"))
+  (and (fold (fn [(acc Bool) (mode String)] -> Bool (and (liveIn root work mode) acc)) true (list "counted" "asan"))
+       (fold (fn [(acc Bool) (mode String)] -> Bool (and (churnIn root work mode) acc)) true (list "counted" "asan" "notrace")))
 
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
