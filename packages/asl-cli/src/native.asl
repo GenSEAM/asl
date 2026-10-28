@@ -231,8 +231,20 @@ fn ! testDataDirs configText: String -> (List String)
       ((none) (list))
       ((some close) (quotedStringsIn (optionOr (stringSlice rest 0 close) ""))))))
 
-fn ! testDataFiles! root: String configText: String -> (List String)
-  (fold (fn [(acc (List String)) (d String)] -> (List String) (let [(dir (str root "/" d))] (if (sys/isDir? dir) (listAppend acc (tsa/filesUnder! dir)) acc))) (list) (testDataDirs configText))
+; (:m :ref INBOXFIX-TESTDATAFILE-20261028 :do "a :testData entry is a directory (every file under it) or a regular file (that file at its relative path); an entry that is neither is an error naming it, never dropped")
+fn ! testDataEntryFiles! root: String entry: String -> (Result (List String) String)
+  (let [(path (str root "/" entry))]
+    (cond
+      ((sys/isDir? path) (ok (tsa/filesUnder! path)))
+      ((sys/isFile? path) (ok (list path)))
+      (else (err (str ":testData entry \"" entry "\" is neither a file nor a directory under " root)))))
+
+fn ! testDataFiles! root: String configText: String -> (Result (List String) String)
+  (fold (fn [(acc (Result (List String) String)) (d String)] -> (Result (List String) String)
+          (match acc
+            ((err e) (err e))
+            ((ok files) (match (testDataEntryFiles! root d) ((err e) (err e)) ((ok more) (ok (listAppend files more)))))))
+        (ok (list)) (testDataDirs configText))
 
 ; (:m :ref MAINRED4-SYMLINK-20261025 :do "the index walk never indexes a symlink, so a symlinked .asl in a package is no module of it (the escapePkg confinement fixture); the mirror copies bytes through symlinks, which turned such an entry into a real module inside the staged root, so symlinked .asl files are left out of the mirror")
 fn ! indexable? path: String -> Bool
@@ -344,8 +356,26 @@ fn ! stagePackageMirror! ctx: sys/Context root: String -> (Result String String)
         (mirrorDir (str (outsidePkgStageDir ctx) "/" digest))
         (pkgDir (str mirrorDir "/" (if (stringEmpty? wsName) "pkg" wsName)))
         (cfgText (resultOr (fileReadString (str root "/.asl.config.asn")) ""))
-        (files (filter indexable? (listAppend (optionOr (gitFiles! root) (fallbackFiles! root)) (testDataFiles! root cfgText))))]
-    (match (ensureDir! pkgDir)
+        (dataFiles (testDataFiles! root cfgText))
+        (files (filter indexable? (listAppend (optionOr (gitFiles! root) (fallbackFiles! root)) (resultOr dataFiles (list)))))]
+    (match dataFiles
+      ((err e) (err e))
+      ((ok _) (stagePackageFiles! ctx root files digest mirrorDir pkgDir))))
+
+; (:m :ref INBOXFIX-STALESTAGE-20261028 :do "staging mirrors the source exactly: after the copies, every regular file under the package's own staging dir (mirrorDir) that no copy wrote is removed, so a module deleted or checked out away no longer resolves; hidden paths (.used, .asl caches) are never pruned, nothing outside mirrorDir is touched, and the walk compares listings only (no recopy)")
+fn ! stagedDests root: String dir: String files: (List String) -> (List String)
+  (map (fn [(f String)] -> String (str dir "/" (dropPrefixLen f (+ (stringLength root) 1)))) files)
+
+fn hiddenRel? rel: String -> Bool
+  (listAny? (fn [(seg String)] -> Bool (stringStartsWith? seg ".")) (stringSplit rel "/"))
+
+fn ! pruneStaleStaged! mirrorDir: String expected: (List String) -> Int64
+  (let [(keep (fold (fn [(m (Map String Bool)) (d String)] -> (Map String Bool) (mapSet m d true)) (mapEmpty) expected))
+        (stale (filter (fn [(f String)] -> Bool (and (not (some? (mapGet keep f))) (not (hiddenRel? (dropPrefixLen f (+ (stringLength mirrorDir) 1)))))) (tsa/filesUnder! mirrorDir)))]
+    (do (map (fn [(f String)] -> Bool (ok? (pathRemove f))) stale) (listLength stale)))
+
+fn ! stagePackageFiles! ctx: sys/Context root: String files: (List String) digest: String mirrorDir: String pkgDir: String -> (Result String String)
+  (match (ensureDir! pkgDir)
       ((err e) (err (str "cannot create " pkgDir ": " e)))
       ((ok _)
         (match (mirrorFiles! root mirrorDir files)
@@ -359,7 +389,7 @@ fn ! stagePackageMirror! ctx: sys/Context root: String -> (Result String String)
                   ((ok _)
                     (match (writeMirrorConfig! root pkgDir)
                       ((err e) (err (str "cannot write " pkgDir "/.asl.config.asn: " e)))
-                      ((ok _) (do (touchUsed! mirrorDir) (pruneStage! (outsidePkgStageDir ctx) "" digest) (ok pkgDir)))))))))))))
+                      ((ok _) (do (pruneStaleStaged! mirrorDir (listAppend (stagedDests root mirrorDir files) (listAppend (stagedDests root pkgDir files) (listAppend (stagedDests ctx.root pkgDir (firstPartyFiles! ctx.root files)) (list (str pkgDir "/.asl.config.asn")))))) (touchUsed! mirrorDir) (pruneStage! (outsidePkgStageDir ctx) "" digest) (ok pkgDir))))))))))))
 
 fn ! stageOutside! ctx: sys/Context absFile: String -> (Result String String)
   (match (findPackageRoot! (ckr/parentDirOf absFile) 0)
