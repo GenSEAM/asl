@@ -465,6 +465,7 @@ fn ! gatewayCliMain args: (List String) -> (Result Int64 String)
       ((= mode "usage") (gatewayUsageCli! (optionOr (listTail args) (list))))
       ((= mode "session") (ses/sessionsCli! (optionOr (listTail args) (list))))
       ((and (= mode "models") (= second "sync")) (msync/modelsSyncCli! (optionOr (listTail (optionOr (listTail args) (list))) (list))))
+      ((and (= mode "models") (= second "apply")) (msync/modelsApplyCli! (optionOr (listTail (optionOr (listTail args) (list))) (list))))
       ((and (= mode "models") (= second "pace")) (space/modelsPaceCli! (optionOr (listTail (optionOr (listTail args) (list))) (list))))
       (else (do (sys/sayErr! "unknown gateway ASL CLI mode") (ok 2)))))
 

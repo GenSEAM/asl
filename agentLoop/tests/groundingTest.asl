@@ -1,7 +1,7 @@
 (module asl/agentLoop/tests/groundingTest
   :x [runTests]
   :i [(asl/agentLoop/grounding :a gr) (asl/agentLoop/journal :a jr) (asl/agentLoop/reply :a rp) (asl/agentLoop/exec :a ex)
-      (asl/agentLoop/core :a c) (asl-json/json :a j) (aslHarness/tests/agentLoopRecorderKit :a rk)])
+      (asl/agentLoop/core :a c) (asl-json/json :a j) (aslHarness/tests/agentLoopRecorderKit :a rk) (asl-checker/check :a chk) (asl-checker/types :a ty)])
 
 ; (:m :ref LEON-ASL-GROUNDING :do "the ASL card Leon sends a model is cut from tools.asn and the canonical examples, its write steps bind through the same raw-block parser the loop uses, it rides only on ASL tasks, and a rejected write or unknown-key receipt comes back next turn as an (:expect) form with the exact step shape")
 
@@ -12,6 +12,18 @@ fn rawMissingGot -> String
        "(:receipt :id \"71dd738bd583a6a4\" :op \"query\" :status :rejected :hits ((:query :status :rejected :error ERR_UNKNOWN_KEY :keys (:query) :accepted (:text :in :limit) :see \"(:help :op query)\")))\n"
        "(:receipt :id \"912c631e1eed39f0\" :op \"write\" :status :ok :file \"scratch/b.asl\")")
 
+; (:m :do "the Option match example returns the element itself, so its xs is a list of Int64; every other example reads xs as strings")
+fn xsType expr: String -> String
+  (if (stringStartsWith? expr "(match (listGet xs 0)") "(List Int64)" "(List String)")
+
+fn exampleSource examples: (List (Pair String String)) -> String
+  (str "(module q/card\n  :x [" (stringJoin (map (fn [i] (str "e" (stringFromInt64 i))) (range 0 (listLength examples))) " ") "]\n  :i [])\n"
+       (stringJoin (map (fn [p] (str "\nfn e" (stringFromInt64 (pairFirst p)) " xs: " (xsType (pairFirst (pairSecond p))) " s: String ns: (List Int64) n: Int64 r: (Result Int64 String) -> " (pairSecond (pairSecond p)) "\n  " (pairFirst (pairSecond p)) "\n"))
+                        (enumerate examples)) ""))
+
+fn exampleDiags examples: (List (Pair String String)) -> Int64
+  (listLength (chk/checkSource (exampleSource examples) (mapEmpty) "q/card.asl"))
+
 fn countOf hay: String needle: String -> Int64
   (- (listLength (stringSplit hay needle)) 1)
 
@@ -21,10 +33,9 @@ fn ! runTests -> Bool
         card (resultOr cardR "")
         lang (resultOr (gr/languageText! root) "")
         rules (gr/languageRules lang)
-        lib (resultOr (fileReadString (str root "/asl/grammar/examples/greeting.asl")) "")
-        tst (resultOr (fileReadString (str root "/asl/grammar/examples/tests/examplesTest.asl")) "")
-        libEx (gr/libExample lib "greet")
-        testEx (gr/testExample tst "asl/grammar/examples/greeting" "greet")
+        lib (resultOr (fileReadString (str root "/asl/grammar/examples/record.asl")) "")
+        libEx (gr/libExample lib (gr/cardItems))
+        types (gr/typeRules lang)
         bound (rp/bindRawBlocks card)
         aslPrompt (resultOr (jr/buildSystemPrompt root "Create scratch/x.asl with fn double" root "" (list "./bin/asl test scratch/xTest.asl") none false) "ERR")
         otherPrompt (resultOr (jr/buildSystemPrompt root "port the loop" root "" (list "./bin/asl test x") none false) "ERR")
@@ -42,19 +53,37 @@ fn ! runTests -> Bool
       (assert (listAny? (fn [r] (stringStartsWith? r "A function is a bare line, fn name a: Int64 b: String -> Bool")) rules) "the fn line rule with typed params is carried")
       (assert (listAny? (fn [r] (stringStartsWith? r "A test exports runTests")) rules) "the test rule is carried")
       (assert (listAll? (fn [r] (or (stringEndsWith? r ".") (stringEndsWith? r ";"))) rules) "a rule is cut at its sentence end")
-      (assert (stringStartsWith? libEx "(module asl/grammar/examples/greeting\n  :x [greet]\n  :i [])") "the lib example header exports only the shown fn")
-      (assert (stringContains? lib "fn greet name: String -> String\n  (str \"Hello, \" name \"!\")") "the source carries the fn block the card shows")
-      (assert (stringContains? libEx "fn greet name: String -> String\n  (str \"Hello, \" name \"!\")") "the fn block is cut from greeting.asl by symbol")
-      (assert (stringContains? testEx ":i [(asl/grammar/examples/greeting :a g)]") "the test example imports the lib by module name with an alias")
-      (assert (stringContains? testEx "(assert (= (g/greet \"world\") \"Hello, world!\") \"greet formats a name\")") "the test example asserts with a message through the alias")
-      (assert (not (stringContains? testEx "r/describePoint")) "asserts on other modules are left out")
-      (assert (stringEndsWith? testEx "true)") "the test example ends true")
-      (assert (stringContains? card (str "(:step :op \"write\" :file \"asl/grammar/examples/greeting.asl\" :content :raw)\n```\n" libEx "\n```")) "the lib is shown as the raw write step Leon parses")
-      (assert (= bound.count 2) "both card write steps bind their fenced block through reply/bindRawBlocks")
-      (assert (listEmpty? bound.missing) "no card write step is left without its raw block")
+      (assert (stringStartsWith? libEx "(module asl/grammar/examples/record\n  :x [Point origin moveBy]\n  :i [])") "the lib example header exports only the shown items")
+      (assert (stringContains? libEx "\n(schema Point (:f x Int64) (:f y Int64))\n") "the schema line is cut from record.asl by name")
+      (assert (stringContains? libEx "fn origin -> Point\n  (Point :x 0 :y 0)") "construction names every field")
+      (assert (stringContains? libEx "fn moveBy p: Point dx: Int64 dy: Int64 -> Point\n  (with p :x (+ p.x dx) :y (+ p.y dy))") "the with copy is cut from record.asl by symbol")
+      (assert (listAll? (fn [l] (stringContains? lib l)) (filter (fn [l] (not (stringEmpty? l))) (listDrop (stringLines libEx) 3))) "every shown line is a line of record.asl")
+      (assert (stringContains? card (str "(:step :op \"write\" :file \"asl/grammar/examples/record.asl\" :content :raw)\n```\n" libEx "\n```")) "the lib is shown as the raw write step Leon parses")
+      (assert (= bound.count 1) "the card write step binds their fenced block through reply/bindRawBlocks")
+      (assert (listEmpty? bound.missing) "the card write step has its raw block")
       (assert (stringContains? bound.text (str "\"" (c/escapeAsn (str libEx "\n")) "\""))  "the bound content is the lib example itself, newline-terminated")
-      (assert (< (stringLength card) 2600) "the card stays within its budget of about 600 tokens")
-      (assert (stringContains? aslPrompt "(:aslCard :src (") "an ASL task gets the card in its system prompt")
+      (assert (< (stringLength card) 2000) "the card stays within its byte budget")
+      (assert (= (listLength types) (listLength (gr/cardTypeAnchors))) "every type anchor is found in the language topic")
+      (assert (listAll? (fn [r] (stringContains? lang r)) types) "each type rule is a verbatim sentence of the language topic")
+      (assert (stringStartsWith? card (str "(:aslCard :types (\"" (c/escapeAsn (optionOr (listHead types) "")) "\"")) "the card leads with the no-nil Option rule")
+      (assert (stringContains? (optionOr (listHead types) "") "listGet, listSlice, stringSlice and mapGet return (some v) or (none)") "the lead rule names the Option-returning builtins")
+      (assert (< (optionOr (stringIndexOf card ":sigs") 0) (optionOr (stringIndexOf card ":rules") 0)) "signatures come before the shape rules")
+      (assert (= (gr/sigLine "listGet") "listGet (List T) Int64 -> (Option T)") "a signature line is the checker's own builtinSig")
+      (assert (listAll? (fn [n] (stringContains? card (str "\"" (gr/sigLine n) "\""))) (gr/cardSigNames)) "every listed builtin carries its checker signature")
+      (assert (listAll? (fn [n] (not (stringEmpty? (gr/sigLine n)))) (gr/cardSigNames)) "every listed builtin is known to the checker")
+      (assert (stringContains? card ":sigs (\"mapEmpty () -> (Map K V)\" \"mapSet (Map K V) K V -> (Map K V)\" \"pair A B -> (Pair A B)\" \"pairFirst (Pair A B) -> A\" \"pairSecond (Pair A B) -> B\" \"stringSplit") "the map and pair signatures lead the sigs, as the checker's builtinSig prints them")
+      (assert (= (gr/sigLine "mapEmpty") "mapEmpty () -> (Map K V)") "a builtin with no parameters prints () where the checker has an empty list")
+      (assert (listAll? (fn [s] (not (stringEmpty? (gr/sigLine s)))) (list "mapEmpty" "mapSet" "pair" "pairFirst" "pairSecond")) "the map and pair builtins are known to the checker")
+      (assert (stringContains? card "\"stringSplit String String -> (List String)\" \"stringSlice String Int64 Int64 -> (Option String)\" \"stringUpper String -> String\"") "the three string signatures follow them, as the checker's builtinSig prints them")
+      (assert (listAll? (fn [s] (not (stringEmpty? (gr/sigLine s)))) (list "stringSplit" "stringSlice" "stringUpper")) "the string builtins are known to the checker")
+      (assert (stringContains? card (c/escapeAsn "(match (listGet xs 0) ((some v) v) ((none) 0))")) "the Option match example is on the card")
+      (assert (stringContains? card (c/escapeAsn "(match r ((ok v) (ok (+ v 1))) ((err e) (err e)))")) "the Result match example is on the card")
+      (assert (= (exampleDiags (list (pair "(match (listGet xs 0) ((some v) v) ((none) 0))" "Int64") (pair "(match r ((ok v) (ok (+ v 1))) ((err e) (err e)))" "(Result Int64 String)"))) 0) "both match examples type-check at their declared types")
+      (refute (= (exampleDiags (list (pair "(match (listGet xs 0) ((some v) v) ((none) \"\"))" "Int64"))) 0) "arms of different types are rejected, so the match check is not vacuous")
+      (assert (listAll? (fn [p] (stringContains? card (c/escapeAsn (pairFirst p)))) (gr/cardExamples)) "every example is on the card")
+      (assert (= (exampleDiags (gr/cardExamples)) 0) "every card example type-checks at its declared type")
+      (refute (= (exampleDiags (list (pair "(stringLength (listGet xs 0))" "Int64"))) 0) "the checker rejects an Option used as a String, so the example check is not vacuous")
+      (assert (stringContains? aslPrompt "(:aslCard :types (") "an ASL task gets the card in its system prompt")
       (assert (stringContains? otherPrompt "(:pool :ask (:ask :to i :body (...))") "every prompt names the pool ask and answer forms")
       (assert (not (stringContains? otherPrompt "(:aslCard")) "a task with no .asl in task or gates gets no card")
       (assert (gr/wantsAslCard "port it" (list "./bin/asl test a/bTest.asl")) "an .asl gate alone asks for the card")

@@ -30,6 +30,7 @@
     "aslGateway/chat"
     "aslGateway/cliDispatch"
     "aslGateway/config"
+    "aslGateway/codeRoute"
     "aslGateway/dispatch"
     "aslGateway/fleet"
     "aslGateway/plugin"

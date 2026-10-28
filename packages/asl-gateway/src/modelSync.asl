@@ -1,6 +1,6 @@
 (module aslGateway/modelSync
   :x [SyncDiff SyncProbe modelFilterFor nonChatId? listedModels syncDiff chainsWith proposeAlias calStatus toProbe syncProposals
-      syncPatchText syncCalText syncListText modelsSyncCli!]
+      syncPatchText syncCalText syncListText modelsSyncCli! applyPatchText modelsApplyCli!]
   :i [(config :a c)
       (search :a srch)
       (localTime :a lt)
@@ -352,3 +352,183 @@ fn ! modelsSyncCli! args: (List String) -> (Result Int64 String)
                                  " :added " (stringFromInt64 (listLength props)) " :joining " (stringFromInt64 (listLength (filter joins? props)))
                                  " :skipped (" (skippedText (listAppend noKey failed)) ") :list " (q listPath) " :cal " (q calPath) " :patch " (q patchPath) " :configWritten false)"))
                   (ok (if wrote 0 1)))))))))
+
+; (:m :ref GW-SYNC-APPLY-TOOL :do "asl gateway models apply PATCH [--config PATH]: the lead-run step for a models sync patch. Reads PATCH (:add model rows, :appendTail alias appends), splices them into the config text, writes the result beside the config as a tmp file, runs the configCheck on that tmp text, and only on a clean check backs the config up and renames the tmp over it; any configCheck error refuses with the config untouched. :leave rows are listed, never applied. It is reached only by this command, nothing runs it automatically")
+fn gwCharAt s: String i: Int64 -> String
+  (optionOr (stringSlice s i (+ i 1)) "")
+
+fn gwSpace? c: String -> Bool
+  (or (= c " ") (or (= c "\n") (or (= c "\t") (= c "\r"))))
+
+fn skipSpace s: String i: Int64 n: Int64 -> Int64
+  (if (and (< i n) (gwSpace? (gwCharAt s i))) (skipSpace s (+ i 1) n) i)
+
+; (:m :do "index of the bracket that closes the one at i; strings and semicolon comments are skipped, -1 when unbalanced")
+fn scanClose s: String i: Int64 n: Int64 depth: Int64 inStr: Bool esc: Bool cmt: Bool -> Int64
+  (if (>= i n)
+    -1
+    (let [(c (gwCharAt s i))]
+      (cond
+        (cmt (scanClose s (+ i 1) n depth false false (!= c "\n")))
+        (inStr (cond (esc (scanClose s (+ i 1) n depth true false false))
+                     ((= c "\\") (scanClose s (+ i 1) n depth true true false))
+                     ((= c "\"") (scanClose s (+ i 1) n depth false false false))
+                     (else (scanClose s (+ i 1) n depth true false false))))
+        ((= c "\"") (scanClose s (+ i 1) n depth true false false))
+        ((= c ";") (scanClose s (+ i 1) n depth false false true))
+        ((or (= c "(") (= c "[")) (scanClose s (+ i 1) n (+ depth 1) false false false))
+        ((or (= c ")") (= c "]")) (if (= depth 1) i (scanClose s (+ i 1) n (- depth 1) false false false)))
+        (else (scanClose s (+ i 1) n depth false false false)))))
+
+fn closeOf s: String open: Int64 -> Int64
+  (scanClose s open (stringLength s) 0 false false false)
+
+; (:m :do "index of the bracket opening the list that follows key, between from and end, outside strings and comments; -1 when absent")
+fn keyOpen s: String from: Int64 end: Int64 key: String inStr: Bool esc: Bool cmt: Bool -> Int64
+  (if (>= from end)
+    -1
+    (let [(c (gwCharAt s from))]
+      (cond
+        (cmt (keyOpen s (+ from 1) end key false false (!= c "\n")))
+        (inStr (cond (esc (keyOpen s (+ from 1) end key true false false))
+                     ((= c "\\") (keyOpen s (+ from 1) end key true true false))
+                     ((= c "\"") (keyOpen s (+ from 1) end key false false false))
+                     (else (keyOpen s (+ from 1) end key true false false))))
+        ((= c "\"") (keyOpen s (+ from 1) end key true false false))
+        ((= c ";") (keyOpen s (+ from 1) end key false false true))
+        ((and (= c ":") (= (stringSlice s from (+ from (stringLength key))) (some key)))
+          (let [(j (skipSpace s (+ from (stringLength key)) end))]
+            (if (and (< j end) (or (= (gwCharAt s j) "(") (= (gwCharAt s j) "[")))
+              j
+              (keyOpen s (+ from 1) end key false false false))))
+        (else (keyOpen s (+ from 1) end key false false false)))))
+
+fn sliceOr s: String a: Int64 b: Int64 -> String
+  (optionOr (stringSlice s a b) "")
+
+; (:m :do "the top-level forms of a list body, each as its source text")
+fn splitForms s: String i: Int64 n: Int64 acc: (List String) -> (List String)
+  (let [(j (skipSpace s i n))]
+    (cond
+      ((>= j n) (listReverse acc))
+      ((= (gwCharAt s j) ";") (splitForms s (optionOr (stringIndexOf (sliceOr s j n) "\n") (- n j)) n acc))
+      ((or (= (gwCharAt s j) "(") (= (gwCharAt s j) "["))
+        (let [(e (scanClose s j n 0 false false false))]
+          (if (< e 0) (listReverse acc) (splitForms s (+ e 1) n (cons (sliceOr s j (+ e 1)) acc)))))
+      (else (splitForms s (+ j 1) n acc))))
+
+fn patchForms patch: String key: String -> (Result (List String) String)
+  (let [(o (keyOpen patch 0 (stringLength patch) key false false false))]
+    (if (< o 0)
+      (err (str "patch has no " key " list"))
+      (let [(e (closeOf patch o))]
+        (if (< e 0) (err (str "patch " key " list is unbalanced")) (ok (splitForms patch (+ o 1) e (list)))))))
+
+fn tokensOf form: String -> (List String)
+  (filter (fn [(t String)] -> Bool (not (stringEmpty? t)))
+          (stringSplit (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace form "(" " ") ")" " ") "[" " ") "]" " ") "\n" " ") " "))
+
+fn tokenAfter toks: (List String) key: String -> String
+  (match (listIndexOf toks key) ((some i) (optionOr (listGet toks (+ i 1)) "")) ((none) ""))
+
+fn tokensFrom toks: (List String) key: String -> (List String)
+  (match (listIndexOf toks key) ((some i) (listDrop toks (+ i 1))) ((none) (list)))
+
+; (:m :do "models rows the config lacks, spliced before the close of its :models list")
+fn addModels cfg: String rows: (List String) -> (Result (Pair String (Pair Int64 (List String))) String)
+  (let [(fresh (filter (fn [(r String)] -> Bool (not (stringContains? cfg (str "(:model :id " (tokenAfter (tokensOf r) ":id") " ")))) rows))
+        (skipped (map (fn [(r String)] -> String (tokenAfter (tokensOf r) ":id")) (filter (fn [(r String)] -> Bool (not (listContains? fresh r))) rows)))
+        (o (keyOpen cfg 0 (stringLength cfg) ":models" false false false))
+        (e (if (< o 0) -1 (closeOf cfg o)))]
+    (cond
+      ((listEmpty? fresh) (ok (pair cfg (pair 0 skipped))))
+      ((< e 0) (err "config has no balanced :models list"))
+      (else (ok (pair (str (sliceOr cfg 0 e) "\n           " (stringJoin fresh "\n           ") (sliceOr cfg e (stringLength cfg)))
+                      (pair (listLength fresh) skipped))))))
+
+; (:m :do "one profile row of a patch :appendTail: the aliases the route chain lacks, appended before the close of that chain")
+fn appendTail cfg: String form: String -> (Result (Pair String Int64) String)
+  (let [(toks (tokensOf form))
+        (prof (tokenAfter toks ":profile"))
+        (intent (tokenAfter toks ":intent"))
+        (aliases (tokensFrom toks ":aliases"))
+        (pIdx (optionOr (stringIndexOf cfg (str "(:profile :id " prof " ")) -1))
+        (pe (if (< pIdx 0) -1 (closeOf cfg pIdx)))
+        (ri (if (< pe 0) -1 (optionOr (stringIndexOf (sliceOr cfg pIdx pe) (str "(:intent " intent " ")) -1)))
+        (rs (if (< ri 0) -1 (+ pIdx ri)))
+        (re (if (< rs 0) -1 (closeOf cfg rs)))
+        (co (if (< re 0) -1 (keyOpen cfg rs re ":chain" false false false)))
+        (ce (if (< co 0) -1 (closeOf cfg co)))]
+    (cond
+      ((< pIdx 0) (err (str "profile " prof " not found in the config")))
+      ((< ri 0) (err (str "profile " prof " has no route for intent " intent)))
+      ((< ce 0) (err (str "route " intent " of profile " prof " has no balanced :chain")))
+      (else
+        (let [(have (tokensOf (sliceOr cfg co (+ ce 1))))
+              (fresh (filter (fn [(a String)] -> Bool (not (listContains? have a))) aliases))]
+          (if (listEmpty? fresh)
+            (ok (pair cfg 0))
+            (ok (pair (str (sliceOr cfg 0 ce) " " (stringJoin fresh " ") (sliceOr cfg ce (stringLength cfg))) (listLength fresh))))))))
+
+; (:m :do "the patched text and an (:applied ...) summary; err when the patch does not fit the config")
+fn applyPatchText cfg: String patch: String -> (Result (Pair String String) String)
+  (match (patchForms patch ":add")
+    ((err e) (err e))
+    ((ok rows)
+      (match (addModels cfg rows)
+        ((err e) (err e))
+        ((ok added)
+          (match (patchForms patch ":appendTail")
+            ((err e) (err e))
+            ((ok tails)
+              (let [(step (fold (fn [(acc (Result (Pair String Int64) String)) (f String)] -> (Result (Pair String Int64) String)
+                                  (match acc
+                                    ((err e) (err e))
+                                    ((ok st) (match (appendTail (pairFirst st) f)
+                                               ((err e) (err e))
+                                               ((ok r) (ok (pair (pairFirst r) (+ (pairSecond st) (pairSecond r)))))))))
+                                (ok (pair (pairFirst added) 0)) tails))
+                    (leave (resultOr (patchForms patch ":leave") (list)))]
+                (match step
+                  ((err e) (err e))
+                  ((ok done)
+                    (ok (pair (pairFirst done)
+                              (str "(:applied :models " (stringFromInt64 (pairFirst (pairSecond added))) " :modelsAlreadyThere (" (stringJoin (pairSecond (pairSecond added)) " ") ")"
+                                   " :aliasesAppended " (stringFromInt64 (pairSecond done)) " :leaveNotApplied " (stringFromInt64 (listLength leave)) ")"))))))))))))
+
+fn ! applyRefuse! why: String -> (Result Int64 String)
+  (do (sys/sayErr! (str "(:modelsApply :status :refused :why " (q why) " :configWritten false)")) (ok 1))
+
+fn ! modelsApplyCli! args: (List String) -> (Result Int64 String)
+  (let [(home (optionOr (envGet "HOME") "/tmp"))
+        (patchPath (optionOr (listHead (filter (fn [(a String)] -> Bool (not (stringStartsWith? a "--"))) (if (listContains? args "--config") (filter (fn [(a String)] -> Bool (!= a (argAfter args "--config" ""))) args) args))) ""))
+        (config (argAfter args "--config" (c/gatewayProfilesPath home)))
+        (root (optionOr (envGet "ASL_GATEWAY_ROOT") (optionOr (envGet "ROOT_DIR") ".")))
+        (registryEnv (optionOr (envGet "ASL_CALIBRATION_INDEX") ""))
+        (registry (if (stringEmpty? registryEnv) (str root "/.asl/mem/calibration/index.asn") registryEnv))
+        (tmp (str config ".apply.tmp"))]
+    (cond
+      ((stringEmpty? patchPath) (applyRefuse! "usage: asl gateway models apply PATCH [--config PATH]"))
+      (else
+        (match (fileReadString patchPath)
+          ((err e) (applyRefuse! (str "cannot read " patchPath ": " e)))
+          ((ok patch)
+            (match (fileReadString config)
+              ((err e) (applyRefuse! (str "cannot read " config ": " e)))
+              ((ok cfgText)
+                (match (applyPatchText cfgText patch)
+                  ((err e) (applyRefuse! e))
+                  ((ok applied)
+                    (let [(checked (c/gatewayConfigCheckText! (pairFirst applied) tmp registry))]
+                      (if (= (pairFirst applied) cfgText)
+                        (do (sys/say! (str "(:modelsApply :status :ok :patch " (q patchPath) " :config " (q config) " " (pairSecond applied) " :configWritten false :why \"already applied\")")) (ok 0))
+                      (if (!= (pairSecond checked) 0)
+                        (do (sys/sayErr! (pairFirst checked)) (applyRefuse! "configCheck failed on the patched config; the config is untouched"))
+                        (let [(backup (str config ".bak-" (todayUtc!) "-" (stringFromInt64 (/ (nowNs) 1000000))))]
+                          (cond
+                            ((not (ok? (fileWrite backup cfgText))) (applyRefuse! (str "cannot write the backup " backup)))
+                            ((not (ok? (fileWrite tmp (pairFirst applied)))) (applyRefuse! (str "cannot write " tmp)))
+                            (else
+                              (match (pathRename tmp config)
+                                ((err e) (do (pathRemove tmp) (applyRefuse! (str "cannot rename over " config ": " e))))
+                                ((ok _) (do (sys/say! (str "(:modelsApply :status :ok :patch " (q patchPath) " :config " (q config) " :backup " (q backup) " " (pairSecond applied) " :configWritten true)")) (ok 0)))))))))))))))))))

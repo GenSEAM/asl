@@ -7,7 +7,7 @@ fn sourceDiags src: String -> (List ty/Diagnostic)
   (c/checkSource src (mapEmpty) "unknownTypeNameTest.asl")
 
 fn testUnknownTypeNameInLambdaParam -> Bool
-  (let [(ds (sourceDiags "(module m :x [foo]) (fn foo [] -> Int64 (let [(g (fn [(x (Fn A B))] -> Int64 1))] (g 1)))"))]
+  (let [(ds (sourceDiags "(module m :x [foo]) (fn foo [] -> Int64 (let [(g (fn [(x (Nope A B))] -> Int64 1))] (g 1)))"))]
     (checkHasCode ds "rule-10"))
 
 fn testUnknownTypeNameInLambdaReturn -> Bool

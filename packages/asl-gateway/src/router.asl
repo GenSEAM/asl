@@ -1,6 +1,6 @@
 (module aslGateway/router
   :x [Candidate Rule Profile Request ModelCalibration EndpointState ScoreParts Decision RouteDecision RouterError route parseRules score replay mergeSampling matches
-      spreadOrder spreadAvailable?]
+      spreadOrder spreadAvailable? spreadSeedState]
   :i [(asl-intel/fixture :a asn)])
 
 (schema Candidate
@@ -314,3 +314,13 @@ fn spreadOrder now: Int64 cooldownSec: Int64 members: (List (Pair String Int64))
                   (withBumped (fold (fn [(m (Map String Int64)) (x (Pair String Int64))] -> (Map String Int64) (mapSet m (pairFirst x) (pairSecond x))) state bumped))
                   (finalState (mapSet withBumped bestAlias (- (pairSecond b) total)))]
               (pair order finalState)))))))
+
+; (:m :ref GW-SPREAD-START-20261028 :do "a process starts its smooth weighted round-robin mid-rotation: seed mod total weight dry rounds from the empty state, so two processes seeded differently open on different members while each keeps the configured ratio; seed 0 is the old first-member start")
+fn spreadSeedLoop members: (List (Pair String Int64)) state: (Map String Int64) n: Int64 -> (Map String Int64)
+  (if (<= n 0) state
+    (spreadSeedLoop members (pairSecond (spreadOrder 0 0 members (mapEmpty) (fn [(a String)] -> Bool false) state)) (- n 1)))
+
+fn spreadSeedState members: (List (Pair String Int64)) seed: Int64 -> (Map String Int64)
+  (let [(total (listSum (map pairSecond members)))]
+    (if (<= total 0) (mapEmpty)
+      (spreadSeedLoop members (mapEmpty) (mod (if (< seed 0) (- 0 seed) seed) total))))

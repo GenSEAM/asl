@@ -1,4 +1,4 @@
-(module asl-checker/types :x [Type Diagnostic genericRows genericMulti? genericAlias genericConcrete genericCandidates genericRenamed renamedHint genericName? genericSigName receiverOver isTyVar? resolveTypeAlias unorderedType? intRangeBounds preludeUnionCases isNumericType? isIntegralType? builtinSig parseTypeStr showTypes showType collectTvars])
+(module asl-checker/types :x [Type Diagnostic genericRows genericMulti? genericAlias genericConcrete genericCandidates genericRenamed genericAliasNames stringBuiltinNames renamedHint genericName? genericSigName receiverOver isTyVar? resolveTypeAlias unorderedType? intRangeBounds preludeUnionCases isNumericType? isIntegralType? builtinSig parseTypeStr showTypes showType collectTvars])
 
 (enum Type (:c tyCon [(name String) (args (List Type)) (mod (Option String)) (shown (Option String))] "A nominal or constructed type") (:c tyVar [(id Int64) (kind String)] "A type variable metavariable: any, num, or int") (:c tyFun [(params (List Type)) (ret Type)] "A function type"))
 
@@ -369,6 +369,9 @@ fn genericRenamed name: String -> String
 
 fn genericAliasNames -> (List String)
   (list "head" "tail" "last" "take" "drop" "all?" "any?" "sort" "sortBy" "startsWith?" "endsWith?" "split" "join" "replace" "trim" "chars" "lines" "upper" "lower" "repeat" "countChar" "keys" "values" "pairs" "remove" "getFloat64" "setFloat64" "sha256")
+
+fn stringBuiltinNames -> (List String)
+  (list "str" "stringChars" "stringConcat" "stringContains?" "stringCountChar" "stringEmpty?" "stringEndsWith?" "stringFromFloat64" "stringFromInt64" "stringIndexOf" "stringJoin" "stringLength" "stringLines" "stringLower" "stringRepeat" "stringReplace" "stringReverse" "stringSlice" "stringSliceUtf8" "stringSplit" "stringStartsWith?" "stringToBytes" "stringToFloat64" "stringToInt64" "stringTrim" "stringUpper")
 
 fn renamedHint name: String -> String
   (let [(renamed (genericRenamed name))] (if (stringEmpty? renamed) "" (str "; renamed to " renamed " (D159)")))

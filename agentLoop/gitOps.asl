@@ -1,7 +1,7 @@
 (module asl/agentLoop/gitOps
   :x [RVal rStr rInt rBool rNull rPair LineArg laNone laBad laNum Bounded GitCtx
       makeGitCtx runBounded! isPathInRepo! lineArg gitSlice gitNextForm execGitOp!
-      runGates! runGatesWatched! gatePreflight! formatGatePreflight changedOwnedFiles!
+      runGates! runGatesWatched! scratchTree! scratchDrop! gitText! gatePreflight! formatGatePreflight changedOwnedFiles!
       serRec serRecs recGet pyStrip pySplitLines pyNormpath pyRelpath! pyRealpath! pyRepr cpLength]
   :i [(asl/agentLoop/core :a c)])
 
@@ -369,23 +369,6 @@ fn afterKill! sp: SpawnedProc outOpen: Bool errOpen: Bool out: String errText: S
       ((err e) (err e))
       ((ok _) (ok (Bounded :code (none) :out (universalNewlines (pairFirst texts)) :errText (universalNewlines (pairSecond texts)) :timedOut true)))))
 
-; (:m :ref LEON-FOREIGN-CONSOLIDATE :do "a watched pid rides in env under watchKey, which runBounded! strips before the spawn, so gates keep one sh argv site and one spawn site")
-fn watchKey -> String
-  "ASL_GATE_WATCH_PID"
-
-fn watchOf env: (Option (List String)) -> (Option Int64)
-  (match env
-    ((some rows)
-      (match (listHead (filter (fn [r] (= (envRowKey r) (watchKey))) rows))
-        ((some r) (pyInt (c/sliceOf r (+ (stringLength (watchKey)) 1) (stringLength r))))
-        ((none) (none))))
-    ((none) (none)))
-
-fn withoutWatch env: (Option (List String)) -> (Option (List String))
-  (match env
-    ((some rows) (some (filter (fn [r] (!= (envRowKey r) (watchKey))) rows)))
-    ((none) (none)))
-
 ; (:m :ref LEON-ORPHAN-PARENT :do "a watched gate is pumped in half-second slices; between slices a gone watched pid kills the gate's group like a timeout")
 fn ! watchedGone? watch: (Option Int64) -> Bool
   (match watch
@@ -406,13 +389,13 @@ fn ! pumpWatched! sp: SpawnedProc outOpen: Bool errOpen: Bool out: String errTex
           ((pumpDone o e) (pumpDone o e))
           ((pumpFailed m) (pumpFailed m))))))
 
-fn runBounded! argv: (List String) cwd: (Option String) timeoutSec: (Option Int64) env: (Option (List String)) -> (Result Bounded String)
-  (match (procSpawnv argv cwd (withoutWatch env))
+fn runBounded! argv: (List String) cwd: (Option String) timeoutSec: (Option Int64) env: (Option (List String)) watch: (Option Int64) -> (Result Bounded String)
+  (match (procSpawnv argv cwd env)
     ((err kind) (err (spawnMessage! kind cwd (c/firstOf argv))))
     ((ok sp)
       (let [closed (fdClose sp.stdin)
             deadline (match timeoutSec ((some t) (some (+ (monotonicNs) (* t 1000000000)))) ((none) (none)))]
-        (match (pumpWatched! sp true true "" "" deadline (watchOf env))
+        (match (pumpWatched! sp true true "" "" deadline watch)
           ((pumpFailed m) (do (killGroup! sp.pid) (procWaitPid sp.pid false) (err m)))
           ((pumpLate oo eo o e) (do (killGroup! sp.pid) (afterKill! sp oo eo o e)))
           ((pumpDone o e)
@@ -548,7 +531,7 @@ fn execGitOp! op: (List (Pair String c/KvVal)) ctx: GitCtx rid: String -> (List 
 
 fn runGitArgv! rid: String opName: String argv: (List String) ctx: GitCtx path: String base: String rev: String rawBase: String limit: (Option String) start: LineArg end: LineArg -> (List (Pair String RVal))
   (let [t ctx.timeoutSec]
-    (match (runBounded! argv (some ctx.root) (some t) ctx.env)
+    (match (runBounded! argv (some ctx.root) (some t) ctx.env (none))
       ((err m) (list (rs "id" rid) (rs "op" opName) (rs "status" "rejected") (rs "error" "ERR_GIT_FAILED") (rs "message" m) (ri "exit" 1)))
       ((ok b)
         (if b.timedOut
@@ -557,14 +540,14 @@ fn runGitArgv! rid: String opName: String argv: (List String) ctx: GitCtx path: 
           (gitRunRec rid opName argv b path base rev rawBase limit start end ctx.readCap)))))
 
 fn runGatesWatched! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) -> (List (List (Pair String RVal)))
-  (runGates! gates root timeoutSec (match watch ((some pid) (some (envWith (envBase! env) (watchKey) (itos pid)))) ((none) env)))
+  (runGates! gates root timeoutSec env watch)
 
-fn runGates! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) -> (List (List (Pair String RVal)))
+fn runGates! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) -> (List (List (Pair String RVal)))
   (let [childEnv (some (envWith (envBase! env) "PYTHONDONTWRITEBYTECODE" "1"))]
     (map (fn [g]
            (let [rid (pairFirst g)
                  cmd (pairSecond g)]
-             (match (runBounded! (list "sh" "-c" cmd) (some root) (some timeoutSec) childEnv)
+             (match (runBounded! (list "sh" "-c" cmd) (some root) (some timeoutSec) childEnv watch)
                ((err m) (list (rs "id" rid) (rs "cmd" cmd) (ri "exit" 1) (rs "stderr" m)))
                ((ok b)
                  (listAppend
@@ -574,7 +557,7 @@ fn runGates! gates: (List (Pair String String)) root: String timeoutSec: Int64 e
       gates))
 
 fn preflightOne! i: Int64 cmd: String root: String env: (Option (List String)) -> (Option (List (Pair String RVal)))
-  (let [res (runBounded! (list "sh" "-n" "-c" cmd) (if (stringEmpty? root) (none) (some root)) (some 10) env)
+  (let [res (runBounded! (list "sh" "-n" "-c" cmd) (if (stringEmpty? root) (none) (some root)) (some 10) env (none))
         code (match res ((ok b) b.code) ((err _) (some 1)))
         errText (match res ((ok b) b.errText) ((err m) m))
         timedOut (match res ((ok b) b.timedOut) ((err _) false))]
@@ -610,7 +593,7 @@ fn formatGatePreflight bad: (List (List (Pair String RVal))) -> String
 fn changedOwnedFiles! owns: (List String) root: String env: (Option (List String)) -> (Result (List String) String)
   (if (listEmpty? owns)
     (ok (list))
-    (match (runBounded! (listAppend (list "git" "status" "--porcelain" "--untracked-files=all" "--") owns) (some root) (none) env)
+    (match (runBounded! (listAppend (list "git" "status" "--porcelain" "--untracked-files=all" "--") owns) (some root) (none) env (none))
       ((err m) (err m))
       ((ok b)
         (ok (map (fn [l] (pyStrip (cpDrop l 3)))
@@ -629,3 +612,52 @@ fn serRec rec: (List (Pair String RVal)) -> String
 
 fn serRecs head: String recs: (List (List (Pair String RVal))) -> String
   (str "(" head (stringJoin (map (fn [r] (str " " (serRec r))) recs) "") ")")
+
+; (:m :ref LEON-ROUTE-SCRATCH-COST :do "a scratch tree for judging an answer: when root is a git worktree top, a detached worktree at HEAD plus the root's uncommitted tracked diff and its untracked unignored files (ignored files are not carried); otherwise, or when any step fails, a cp -a copy; scratchDrop! always removes it and prunes the worktree record")
+fn ! gitText! argv: (List String) cwd: String -> (Option String)
+  (match (runBounded! argv (some cwd) (some 120) none none)
+    ((ok b) (if (= (optionOr b.code 1) 0) (some b.out) none))
+    ((err _) none))
+
+fn ! gitOk! argv: (List String) cwd: String -> Bool
+  (some? (gitText! argv cwd))
+
+fn ! copyUntracked! root: String scratch: String files: (List String) -> Bool
+  (fold (fn [acc f]
+          (and acc
+            (let [parts (stringSplit f "/")
+                  parent (stringJoin (listAppend (list scratch) (listTake parts (- (listLength parts) 1))) "/")]
+              (and (gitOk! (list "mkdir" "-p" parent) root)
+                   (gitOk! (list "cp" "-p" (str root "/" f) (str scratch "/" f)) root)))))
+        true files)
+
+fn ! scratchCopy! root: String scratch: String -> (Result String String)
+  (match (runBounded! (list "cp" "-a" root scratch) none (some 300) none none)
+    ((ok b) (if (= (optionOr b.code 1) 0) (ok "copy") (err (str "cp failed: " b.errText))))
+    ((err e) (err e)))
+
+fn ! scratchDrop! root: String scratch: String kind: String -> Bool
+  (let [removed (if (= kind "worktree") (gitOk! (list "git" "worktree" "remove" "--force" scratch) root) true)
+        pruned (if (= kind "worktree") (gitOk! (list "git" "worktree" "prune") root) true)
+        _ (pathRemove scratch)
+        _ (pathRemove (str scratch ".patch"))]
+    true)
+
+fn ! scratchTree! root: String scratch: String -> (Result String String)
+  (let [top (gitText! (list "git" "rev-parse" "--show-toplevel") root)
+        isTop (match top ((some t) (= (resultOr (realPath (stringTrim t)) (stringTrim t)) (resultOr (realPath root) root))) ((none) false))]
+    (if (and isTop (gitOk! (list "git" "worktree" "add" "--detach" scratch "HEAD") root))
+      (let [patch (str scratch ".patch")
+            diff (gitText! (list "git" "diff" "--binary" "HEAD") root)
+            patched (match diff
+                      ((some d) (if (stringEmpty? d) true
+                                  (and (ok? (fileWrite patch d)) (gitOk! (list "git" "apply" "--whitespace=nowarn" patch) scratch))))
+                      ((none) false))
+            untracked (gitText! (list "git" "ls-files" "--others" "--exclude-standard") root)
+            copied (match untracked
+                     ((some t) (copyUntracked! root scratch (filter (fn [l] (not (stringEmpty? l))) (stringSplit t "\n"))))
+                     ((none) false))]
+        (if (and patched copied)
+          (ok "worktree")
+          (do (scratchDrop! root scratch "worktree") (scratchCopy! root scratch))))
+      (scratchCopy! root scratch)))

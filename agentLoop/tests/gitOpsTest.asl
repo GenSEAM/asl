@@ -55,7 +55,7 @@ fn setupStep! base: String setupEnv: (List String) line: String -> Bool
       ((= step "mkdir") (ok? (dirCreate path)))
       ((= step "write") (ok? (fileWrite path (getS kv "text"))))
       ((= step "run")
-        (match (g/runBounded! (listed kv "a") (some (str base "/" (getS kv "cwd"))) (some 60) (some (listAppend (cleanEnv! "") setupEnv)))
+        (match (g/runBounded! (listed kv "a") (some (str base "/" (getS kv "cwd"))) (some 60) (some (listAppend (cleanEnv! "") setupEnv)) (none))
           ((ok b) (= (optionOr b.code -1) 0))
           ((err e) (do (eprintln (str "setup run failed: " e)) false))))
       (else false)))
@@ -112,9 +112,9 @@ fn runCase! base: String kv: (List (Pair String c/KvVal)) formats: (Map String S
               path (let [p (getS op "path")] (if (stringEmpty? p) (getS op "file") p))]
           (pair (g/gitNextForm (getS kv "opName") (getS op "rev") path (getS op "base") (optStr (kvGet op "limit")) (getI kv "start")) formats)))
       ((= fnName "runGates")
-        (pair (subBase base (g/serRecs "gates" (g/runGates! (map (fn [x] (pair "ID" x)) (listed kv "g")) root (getI kv "t") env))) formats))
+        (pair (subBase base (g/serRecs "gates" (g/runGates! (map (fn [x] (pair "ID" x)) (listed kv "g")) root (getI kv "t") env (none)))) formats))
       ((= fnName "runGatesGroup")
-        (let [recs (g/runGates! (map (fn [x] (pair "ID" (withBase base x))) (listed kv "g")) root (getI kv "t") env)
+        (let [recs (g/runGates! (map (fn [x] (pair "ID" (withBase base x))) (listed kv "g")) root (getI kv "t") env (none))
               pid (optionOr (stringToInt64 (stringTrim (resultOr (fileReadString (str base "/bg.pid")) ""))) 0)]
           (pair (str (subBase base (g/serRecs "gates" recs)) " (alive " (if (pidAlive! pid 100) "true" "false") ")") formats)))
       ((= fnName "preflight")

@@ -10,7 +10,7 @@ fn ! moduleDiagCount m: r/ModuleSummary deps: (Map Str r/ModuleSummary) -> Int64
   (let [(path m.path)] (match (fileReadString path) ((err _) 0) ((ok src) (match (a/parse src) ((err _) 1) ((ok forms) (listLength (chk/checkModule forms deps path)))))))
 
 fn typeDebtRatchet -> Int64
-  187
+  87
 
 fn ! corpusDiagTotal -> Int64
   (let [(entry "asl/packages/asl-cli/src/main.asl")] (match (fileReadString entry) ((err _) 0) ((ok src) (match (a/parse src) ((err _) 0) ((ok forms) (let [(summary (r/collectSummary forms entry)) (importPaths (r/mapValuesList summary.imports))] (match (r/loadModuleDeps! (bootstrapRoots) importPaths) ((err _) 0) ((ok deps) (fold (fn [(acc Int64) (m r/ModuleSummary)] -> Int64 (let [(n (moduleDiagCount m deps))] (do (if (> n 0) (print (str "  (module " m.name " :diagnostics " (stringFromInt64 n) ")")) ()) (+ acc n)))) 0 (mapValues deps))))))))))

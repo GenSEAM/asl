@@ -625,7 +625,7 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
     ; (:m :ref GW-SPREAD-LIVE-20261018 :do "the only place rt/spreadOrder is ever called: real per-profile+intent state read from and written back to srv.spreadState, real wall clock, real breaker availability via srv.breaker keyed by the pool the caller resolved per alias -- chat.asl and router.asl both stay clock/breaker-free")
     ((ch/effSpreadOrder profile intent spread cooldownSec pools)
       (let [(key (str profile "|" intent))
-            (state (optionOr (mapGet srv.spreadState key) (mapEmpty)))
+            (state (match (mapGet srv.spreadState key) ((some s) s) ((none) (rt/spreadSeedState spread (nowNs)))))
             (now (/ (nowNs) 1000000))
             (poolMap (mapFromPairs pools))
             (breakerOpen? (fn [(alias String)] -> Bool

@@ -230,7 +230,7 @@ fn checkCache! root: String cacheList: (List rd/SExpr) -> Bool
 
 fn routeOf expr: rd/SExpr -> cfg/GatewayRoute
   (let [(p (propsOf expr))]
-    (cfg/GatewayRoute :intent (propStr p "intent") :chain (strs (prop p "chain")) :models (strs (prop p "models")) :temperature none :spread (list) :cooldownSec 60))
+    (cfg/GatewayRoute :intent (propStr p "intent") :chain (strs (prop p "chain")) :models (strs (prop p "models")) :temperature none :temperatureOverride none :spread (list) :cooldownSec 60))
 
 fn checkModels mExpr: rd/SExpr -> Bool
   (let [(p (propsOf mExpr))

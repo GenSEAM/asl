@@ -215,7 +215,8 @@ else
   rm -f "$OUT/$RT_NAME"
 fi
 rm -f "$PRIOR_RT"
-cp "$HERE/../prelude/prelude.asl" "$OUT/prelude.asl"
+# (:m :why "NATIVECACHE: out/prelude.asl is a toolchain root of the native fingerprint and the ASL_PRELUDE of running suites; an unchanged copy keeps its bytes and stamp, and a changed one lands by rename, so a neighbour rebuilding the host never shows a reader a truncated file or a new stamp")
+cmp -s "$HERE/../prelude/prelude.asl" "$OUT/prelude.asl" || install_copy "$HERE/../prelude/prelude.asl" "$OUT/prelude.asl"
 
 # (:m :why "TOOLSHOST-THIN: a tree with no native CLI head gets one here, so a fresh clone runs no host at all: the seed asl1 compiles asl-cli/nativeBuild (cached by its sources), which builds native.asl and writes the head with the keys bin/asl's fallback build uses; a tree that has a head is left to asl-cli/nativeCli")
 native_cli() {

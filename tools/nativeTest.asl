@@ -1800,11 +1800,12 @@ fn singleBalancedForm? expr: String -> Bool
   (let [(tree (paren/parseString expr))]
     (and (not (paren/hasErrors tree)) (= (paren/topLevelFormCount tree) 1)))
 
+; (:m :ref NATIVECACHE-EVALNAME :do "the eval source is named by its text, pid and clock, not its text alone: two evals of the same text at once (parallel suites) wrote one file and the first to finish removed it under the other's compile")
 fn ! evalExpression! expr: String fp: String -> Int64
   (if (not (singleBalancedForm? expr))
     (do (eprintln "usage: nativeTest eval EXPR (exactly one balanced ASL form required)") 2)
     (let [(digest (bytesSha256 (stringToBytes expr)))
-        (path (toolPath (str ".asl/cache/nativeTest/evals/" digest ".asl")))
+        (path (toolPath (str ".asl/cache/nativeTest/evals/" digest "x" (stringFromInt64 (procSelf)) "x" (stringFromInt64 (monotonicNs)) ".asl")))
         (src (str "(module nativeEval :x [main] :i [])\n\n"
                   "fn ! main -> (Result Int64 String)\n"
                   "  (do (println (stringFromInt64 " expr "\n  )) (ok 0))\n"))

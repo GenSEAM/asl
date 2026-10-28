@@ -93,6 +93,9 @@ fn ! runTests -> Bool
         (droppedFull (run! (cfgWith " :dropEmptyTools true" "") (bodyWith "\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\"}}],") true (list)))
         (budget (run! (cfgWith "" " :contextBudget 10") (longBody) true (list)))
         (budgetFits (run! (cfgWith "" " :contextBudget 100000") (longBody) true (list)))
+        (emptySys (run! (twoModels) (sysBody "") true (list)))
+        (blankSys (run! (twoModels) (sysBody "  \\n ") true (list)))
+        (fullSys (run! (twoModels) (sysBody "be terse") true (list)))
         (explicit (run! (twoModels) "{\"model\":\"m1\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}" false (list)))]
     (do
       (assert (stringContains? throttled.labels "bucket:") (str "the rate bucket is consulted: " throttled.labels))
@@ -131,6 +134,9 @@ fn ! runTests -> Bool
       (assert (stringContains? droppedFull.labels "\"tools\"") (str "dropEmptyTools leaves a non-empty tools array alone: " droppedFull.labels))
       (assert (and (not (stringContains? budget.labels "http:n1")) (stringContains? budget.labels "http:n2") (= budget.status 200)) (str "a member whose contextBudget the prompt exceeds is skipped for the next: " budget.labels))
       (assert (stringContains? budgetFits.labels "http:n1") (str "a prompt inside the budget is sent to that member: " budgetFits.labels))
+      (assert (and (stringContains? emptySys.labels "http:n1") (not (stringContains? emptySys.labels "\"system\"")) (stringContains? emptySys.labels "\"user\"")) (str "an empty system message is dropped before sending and the user message stays: " emptySys.labels))
+      (assert (and (stringContains? blankSys.labels "http:n1") (not (stringContains? blankSys.labels "\"system\""))) (str "a whitespace-only system message is dropped: " blankSys.labels))
+      (assert (and (stringContains? fullSys.labels "\"system\"") (stringContains? fullSys.labels "be terse")) (str "a non-empty system message is sent unchanged: " fullSys.labels))
       true))
 
 fn groqDaily -> String
@@ -147,3 +153,6 @@ fn longBody -> String
 
 fn rep s: String n: Int64 -> String
   (if (<= n 0) "" (str s (rep s (- n 1))))
+
+fn sysBody content: String -> String
+  (str "{\"model\":\"default\",\"messages\":[{\"role\":\"system\",\"content\":\"" content "\"},{\"role\":\"user\",\"content\":\"hi\"}]}")

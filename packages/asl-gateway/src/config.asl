@@ -103,7 +103,7 @@
       gatewayConfigAsn
       gatewayConfigReceipt
       gatewayConfigCheckText!
-      DecidePoint decideModes defaultDecidePoint gatewayDecideRows gatewayDecidePoint gatewayDecideLoad!
+      DecidePoint decideModes defaultDecidePoint gatewayDecideRows gatewayDecidePoint gatewayDecideLoad! CodeRoute gatewayCodeRoute!
       headerGet]
   :i [(wire :a wire)
       (asl-parser/ast :a ast)
@@ -169,6 +169,8 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
   (:f chain (List String))
   (:f models (List String))
   (:f temperature (Option Float64))
+  ; (:m :ref GW-ROUTE-TEMPERATURE :do "a route-level sampling temperature that wins over the model row's :temperature for every entry this route contributes (a client-sent temperature still wins over it); :temperature stays the weaker per-route default, model-row :temperature stays the default for routes without an override, so a temperature sweep edits one route row instead of adding scratch model rows")
+  (:f temperatureOverride (Option Float64))
   ; (:m :ref GW-SPREAD-20261017 :do "beside :chain, never instead of it: (ALIAS WEIGHT) pairs over aliases also present in :models, tried by smooth weighted round-robin before the plain chain; absent :spread is the empty list, unchanged behaviour")
   (:f spread (List (Pair String Int64)))
   (:f cooldownSec Int64))
@@ -860,14 +862,14 @@ fn parseV1Route rf: rd/SExpr pid: String -> (Result GatewayRoute String)
                           (let [(allStr (listAll? (fn [(m rd/SExpr)] -> Bool (and (isStringLiteral? m) (not (stringEmpty? (stripQuotesAndUnescape (sexprRawText m)))))) mItems))]
                             (if (not allStr)
                               (err (str "profile " pid " route " intent ": :models must be a non-empty list of strings"))
-                              (ok (GatewayRoute :intent intent :chain (list) :models (map (fn [(m rd/SExpr)] -> String (stripQuotesAndUnescape (sexprRawText m))) mItems) :temperature none :spread (list) :cooldownSec 60))))))
+                              (ok (GatewayRoute :intent intent :chain (list) :models (map (fn [(m rd/SExpr)] -> String (stripQuotesAndUnescape (sexprRawText m))) mItems) :temperature none :temperatureOverride none :spread (list) :cooldownSec 60))))))
                       ((rd/sexprVect mItems)
                         (if (listEmpty? mItems)
                           (err (str "profile " pid " route " intent ": :models must be a non-empty list of strings"))
                           (let [(allStr (listAll? (fn [(m rd/SExpr)] -> Bool (and (isStringLiteral? m) (not (stringEmpty? (stripQuotesAndUnescape (sexprRawText m)))))) mItems))]
                             (if (not allStr)
                               (err (str "profile " pid " route " intent ": :models must be a non-empty list of strings"))
-                              (ok (GatewayRoute :intent intent :chain (list) :models (map (fn [(m rd/SExpr)] -> String (stripQuotesAndUnescape (sexprRawText m))) mItems) :temperature none :spread (list) :cooldownSec 60))))))
+                              (ok (GatewayRoute :intent intent :chain (list) :models (map (fn [(m rd/SExpr)] -> String (stripQuotesAndUnescape (sexprRawText m))) mItems) :temperature none :temperatureOverride none :spread (list) :cooldownSec 60))))))
                       (_ (err (str "profile " pid " route " intent ": :models must be a non-empty list of strings")))))))))))))
 
 fn parseV1Routes rItems: (List rd/SExpr) pid: String acc: (List GatewayRoute) -> (Result (List GatewayRoute) String)
@@ -1371,14 +1373,17 @@ fn parseChainItem a: rd/SExpr models: (Map String GatewayModel) pid: String inte
         (_ (pair cList (listAppendOne cErrs (str "profile " pid " route " intent ": chain entry compound is neither an alias nor a model string")))))))
 
 fn parseRouteTemperature props: (Map String rd/SExpr) pid: String intent: String -> (Pair (Option Float64) (List String))
-  (match (mapGet props "temperature")
+  (parseRouteTemperatureKey props "temperature" pid intent)
+
+fn parseRouteTemperatureKey props: (Map String rd/SExpr) key: String pid: String intent: String -> (Pair (Option Float64) (List String))
+  (match (mapGet props key)
     ((none) (pair (none) (list)))
     ((some expr)
       (let [(sc (asn_figure expr))]
         (match sc
           ((scalarFloat f) (pair (some f) (list)))
           ((scalarInt n) (pair (some (int64ToFloat64 n)) (list)))
-          (_ (pair (none) (list (str "profile " pid " route " intent ": :temperature must be a number"))))))))
+          (_ (pair (none) (list (str "profile " pid " route " intent ": :" key " must be a number"))))))))
 
 ; (:m :ref GW-SPREAD-20261017 :do "one (ALIAS WEIGHT) pair: ALIAS is a bare atom checked against :models the same way parseChainItem checks a chain entry (never a string, never the raw model name); WEIGHT must be a positive integer, so 0, negative or a non-integer each name the offending alias rather than being silently dropped")
 fn parseSpreadItem item: rd/SExpr models: (Map String GatewayModel) pid: String intent: String st: (Pair (List (Pair String Int64)) (List String)) -> (Pair (List (Pair String Int64)) (List String))
@@ -1444,14 +1449,17 @@ fn parseProfileRoute rf: rd/SExpr pid: String intents: (Map String (Option Strin
                       (tempRes (parseRouteTemperature props pid intent))
                       (temperature (pairFirst tempRes))
                       (tempErrs (pairSecond tempRes))
+                      (overRes (parseRouteTemperatureKey props "temperatureOverride" pid intent))
+                      (tempOverride (pairFirst overRes))
+                      (overErrs (pairSecond overRes))
                       (spreadRes (match (mapGet props "spread") ((none) (pair (list) (list))) ((some sExpr) (parseSpread sExpr models pid intent))))
                       (spread (pairFirst spreadRes))
                       (spreadErrs (pairSecond spreadRes))
                       (cooldownRes (parseCooldownSec props pid intent))
                       (cooldownSec (pairFirst cooldownRes))
                       (cooldownErrs (pairSecond cooldownRes))
-                      (finalErrs (listAppend (listAppend (listAppend (listAppend errs2 chainErrs) tempErrs) spreadErrs) cooldownErrs))]
-                  (pair (some (GatewayRoute :intent intent :chain chain :models (list) :temperature temperature :spread spread :cooldownSec cooldownSec)) finalErrs)))))))))
+                      (finalErrs (listAppend (listAppend (listAppend (listAppend (listAppend errs2 chainErrs) tempErrs) overErrs) spreadErrs) cooldownErrs))]
+                  (pair (some (GatewayRoute :intent intent :chain chain :models (list) :temperature temperature :temperatureOverride tempOverride :spread spread :cooldownSec cooldownSec)) finalErrs)))))))))
 
 fn profileFallbackStep profiles: (Map String GatewayProfile) cur: String seen: (List String) -> (Option (List String))
   (if (listContains? seen cur)
@@ -1848,11 +1856,33 @@ fn entriesLoop! table: GatewayTable cur: String line: (List String) seen: (List 
                          (pair tried acc)
                          chain))
               (nextTried (pairFirst res))
-              (nextAcc (pairSecond res))
+              (nextAcc (withTemperatureOverride (pairSecond res) (- (listLength (pairSecond res)) (listLength acc)) (routeTemperatureOverrideOf (routeFindLineOrAny prof.routes line))))
               (nextSeen (cons cur seen))]
           (match prof.fallback
             ((none) (listReverse nextAcc))
             ((some fb) (entriesLoop! table fb line nextSeen nextTried nextAcc)))))))
+
+fn routeTemperatureOverrideOf r: (Option GatewayRoute) -> (Option Float64)
+  (match r ((some x) x.temperatureOverride) ((none) none))
+
+; (:m :ref GW-ROUTE-TEMPERATURE :do "acc is newest-first (reversed at the end), so the first n entries are the ones the current route just added; only those take the route's override, entries from an earlier profile in the fallback walk keep their own route's")
+fn paramsWithTemperature p: GatewayParams t: Float64 -> GatewayParams
+  (with p :temperature (some t))
+
+fn entryWithTemperature en: GatewayEntry t: Float64 -> GatewayEntry
+  (with en :params (paramsWithTemperature en.params t))
+
+fn withTemperatureOverride acc: (List GatewayResolvedEntry) n: Int64 t: (Option Float64) -> (List GatewayResolvedEntry)
+  (match t
+    ((none) acc)
+    ((some temp)
+      (listAppend
+        (map (fn [(e GatewayResolvedEntry)] -> GatewayResolvedEntry
+               (match e
+                 ((entryResolved en) (entryResolved (entryWithTemperature en temp)))
+                 ((entryUnresolved a) (entryUnresolved a))))
+             (listTake acc n))
+        (listDrop acc n))))
 
 fn gateway_v2_entries! table: GatewayTable name: String intent: String -> (List GatewayResolvedEntry)
   (let [(line (gateway_intent_line table intent))]
@@ -1874,7 +1904,7 @@ fn entriesLoopExact! table: GatewayTable cur: String line: (List String) seen: (
                          (pair tried acc)
                          chain))
               (nextTried (pairFirst res))
-              (nextAcc (pairSecond res))
+              (nextAcc (withTemperatureOverride (pairSecond res) (- (listLength (pairSecond res)) (listLength acc)) (routeTemperatureOverrideOf (routeFindLine prof.routes line))))
               (nextSeen (cons cur seen))]
           (match prof.fallback
             ((none) (listReverse nextAcc))
@@ -2345,6 +2375,99 @@ fn ! gatewayDecideLoad! path: String point: String -> (Pair DecidePoint (List St
     ((err _) (pair (defaultDecidePoint point) (list (str "no gateway config at " path))))
     ((ok text) (gatewayDecidePoint text point)))
 
+; (:m :ref CODE-ROUTE-20261028 :do "a code route is declared per row (:gateway ... :codeRoutes ((:codeRoute :id ID :writer ALIAS :retries N :escalate ALIAS :escalateTimeoutSec S :escalateRetries N :escalateRetryStatuses (CODE ...)))); writer and escalate name :models aliases of the same config, never an upstream model id; the temperature is the alias row's own; :retries defaults 2 and may not exceed 2")
+(schema CodeRoute
+  (:f id String)
+  (:f writer String)
+  (:f retries Int64)
+  (:f escalate String)
+  (:f retryWriter String)
+  (:f escalateTimeoutSec Float64)
+  (:f escalateRetries Int64)
+  (:f escalateRetryStatuses (List Int64)))
+
+fn codeRouteAlias props: (Map String rd/SExpr) key: String what: String table: GatewayTable -> (Result String String)
+  (match (mapGet props key)
+    ((none) (err (str what " needs :" key)))
+    ((some e)
+      (match (asn_name e (str what " :" key))
+        ((err m) (err m))
+        ((ok a) (if (mapHas? table.models a) (ok a) (err (str what " :" key ": unknown alias " a)))))))
+
+fn codeRouteOptAlias props: (Map String rd/SExpr) key: String what: String table: GatewayTable -> (Result String String)
+  (match (mapGet props key)
+    ((none) (ok ""))
+    ((some _) (codeRouteAlias props key what table)))
+
+fn codeRouteInt props: (Map String rd/SExpr) key: String fallback: Int64 lo: Int64 hi: Int64 what: String -> (Result Int64 String)
+  (match (mapGet props key)
+    ((none) (ok fallback))
+    ((some e)
+      (match (asn_scalar e)
+        ((scalarInt n) (if (or (< n lo) (> n hi)) (err (str what " :" key " must be within " (stringFromInt64 lo) ".." (stringFromInt64 hi))) (ok n)))
+        (_ (err (str what " :" key " must be an integer"))))))
+
+fn codeRouteStatuses props: (Map String rd/SExpr) what: String -> (Result (List Int64) String)
+  (match (mapGet props "escalateRetryStatuses")
+    ((none) (ok (list 502)))
+    ((some e)
+      (let [(items (match e ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list))))
+            (codes (map (fn [(x rd/SExpr)] -> (Option Int64) (match (asn_scalar x) ((scalarInt n) (some n)) (_ (none)))) items))]
+        (if (or (listEmpty? items) (listAny? (fn [(c (Option Int64))] -> Bool (= (optionOr c -1) -1)) codes))
+          (err (str what " :escalateRetryStatuses must be a non-empty list of integers"))
+          (ok (map (fn [(c (Option Int64))] -> Int64 (optionOr c 0)) codes))))))
+
+fn codeRouteOne props: (Map String rd/SExpr) table: GatewayTable -> (Result CodeRoute String)
+  (match (mapGet props "id")
+    ((none) (err "(:codeRoute ...) needs :id"))
+    ((some iExpr)
+      (match (asn_name iExpr "(:codeRoute :id ...)")
+        ((err e) (err e))
+        ((ok id)
+          (let [(what (str "codeRoute " id))]
+            (match (codeRouteAlias props "writer" what table)
+              ((err e) (err e))
+              ((ok writer)
+                (match (codeRouteAlias props "escalate" what table)
+                  ((err e) (err e))
+                  ((ok escalate)
+                    (match (codeRouteOptAlias props "retryWriter" what table)
+                      ((err e) (err e))
+                      ((ok retryWriter)
+                    (match (codeRouteInt props "retries" 2 0 2 what)
+                      ((err e) (err e))
+                      ((ok retries)
+                        (match (codeRouteInt props "escalateTimeoutSec" 240 1 3600 what)
+                          ((err e) (err e))
+                          ((ok timeout)
+                            (match (codeRouteInt props "escalateRetries" 2 0 5 what)
+                              ((err e) (err e))
+                              ((ok escRetries)
+                                (match (codeRouteStatuses props what)
+                                  ((err e) (err e))
+                                  ((ok statuses)
+                                    (ok (CodeRoute :id id :writer writer :retries retries :escalate escalate :retryWriter retryWriter :escalateTimeoutSec (int64ToFloat64 timeout) :escalateRetries escRetries :escalateRetryStatuses statuses)))))))))))))))))))))
+
+; (:m :do "text is a whole gateway.asn; the row named id is parsed and its aliases checked against the same config's :models; an unreadable config, a missing row or a malformed row is an error naming the cause, never a default route")
+fn ! gatewayCodeRoute! text: String id: String registryPath: String -> (Result CodeRoute String)
+  (match (gateway_config_parse! text "codeRoute" registryPath)
+    ((err e) (err e))
+    ((ok table)
+      (match (ast/readForms (lx/tokenize text))
+        ((err e) (err (str "gateway config unreadable: " e)))
+        ((ok forms)
+          (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
+            (match (asn_props top (some ":gateway"))
+              ((err e) (err e))
+              ((ok g)
+                (let [(rows (getSubForms g "codeRoutes" ":codeRoute"))
+                      (named (filter (fn [(p (Map String rd/SExpr))] -> Bool
+                                       (match (mapGet p "id") ((some x) (match (asn_name x "id") ((ok s) (= s id)) ((err _) false))) ((none) false)))
+                                     (pairFirst rows)))]
+                  (match (listHead named)
+                    ((none) (err (str "no codeRoute " id " in the gateway config")))
+                    ((some p) (if (> (listLength named) 1) (err (str "codeRoute " id " is declared twice")) (codeRouteOne p table))))))))))))
+
 fn headerGet headers: (List (Pair String String)) name: String -> String
   (match (listHead headers)
     ((none) "")
@@ -2584,6 +2707,12 @@ fn gatewayConfigReceipt path: String registry: String status: String v: Int64 er
   (str "(:configCheck :file " (asnQuoted path) " :v " (stringFromInt64 v) " :registry " (asnQuoted registry) " :status :" status
        " :errors (" (stringJoin (map asnQuoted errors) " ") ") :warnings (" (stringJoin (map asnQuoted warnings) " ") ")" extra ")")
 
+; (:m :ref CONFIG-CHECK-CODEROUTE :do "configCheck parses every (:codeRoute ...) row with the same codeRouteOne the runtime uses, so a missing or unknown writer, retryWriter or escalate alias, or an out-of-range number, is a config error naming the route and the field instead of a failure at the first code run")
+fn codeRouteErrors g: (Map String rd/SExpr) table: GatewayTable -> (List String)
+  (fold (fn [(acc (List String)) (p (Map String rd/SExpr))] -> (List String)
+          (match (codeRouteOne p table) ((err e) (listAppend acc (list e))) ((ok _) acc)))
+        (list) (pairFirst (getSubForms g "codeRoutes" ":codeRoute")))
+
 fn gatewayConfigCheckText! text: String source: String registry: String -> (Pair String Int64)
   (let [(tokens (lx/tokenize text))
         (checked (match (asnReadCheck text)
@@ -2622,7 +2751,8 @@ fn gatewayConfigCheckText! text: String source: String registry: String -> (Pair
                           0)))
                     (let [(built (gateway_config_v2_build! g source registry))
                           (table (pairFirst built))
-                          (errors (pairSecond built))
+                          (errors0 (pairSecond built))
+                          (errors (if (listEmpty? errors0) (codeRouteErrors g table) errors0))
                           (warnings (if (listEmpty? errors) (listAppend table.warnings (gateway_any_only_intents table)) table.warnings))
                           (extra (str " :profiles " (stringFromInt64 (listLength (mapKeys table.profiles)))
                                       " :models " (stringFromInt64 (listLength (mapKeys table.models)))

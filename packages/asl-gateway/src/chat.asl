@@ -531,6 +531,19 @@ fn paramJson cx: Ctx e: c/GatewayEntry key: String typed: j/Json -> j/Json
 fn floatJson v: (Option Float64) -> j/Json
   (match v ((some f) (j/jfloat f)) ((none) (j/jnull)))
 
+; (:m :ref GW-EMPTY-SYSTEM :do "openai-kind providers answer 400 'system message must have content' to a system message whose content is empty or only whitespace (commandCode, Vercel free models); such a message is dropped before sending, a non-empty one and every other role are untouched")
+fn emptySystemMessage? msg: j/Json -> Bool
+  (and (= (getOr msg "role" (j/jnull)) (j/jstr "system"))
+       (match (getOr msg "content" (j/jnull))
+         ((j/jstr s) (stringEmpty? (pt/pyStrip s)))
+         ((j/jnull) true)
+         (_ false)))
+
+fn dropEmptySystem body: j/Json -> j/Json
+  (match (getOr body "messages" (j/jnull))
+    ((j/jarr xs) (pt/jset body "messages" (j/jarr (filter (fn [(m j/Json)] -> Bool (not (emptySystemMessage? m))) xs))))
+    (_ body))
+
 ; (:m :ref GW-IFM-EMPTY-TOOLS :do "true when the body carries tools as an empty array, which a provider with :dropEmptyTools true must not receive")
 fn emptyTools? body: j/Json -> Bool
   (match (getOr body "tools" (j/jnull))
@@ -1146,7 +1159,8 @@ fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json 
         (out1 (if (and ollama chosenValid) (pt/jset out0 "reasoning_effort" chosen) out0))
         (out2 (jdel (jdel (jdel (jdel out1 "role") "intent") "lens") "workspace"))
         (out3a (if (some? v2) (jdel (jdel out2 "timeout") "queue_timeout") out2))
-        (out3 (match v2 ((some e) (if (and e.dropEmptyTools (emptyTools? out3a)) (jdel out3a "tools") out3a)) ((none) out3a)))
+        (out3b (match v2 ((some e) (if (and e.dropEmptyTools (emptyTools? out3a)) (jdel out3a "tools") out3a)) ((none) out3a)))
+        (out3 (match v2 ((some e) (if (= e.kind "openai") (dropEmptySystem out3b) out3b)) ((none) out3b)))
         (sent (if (and truthy ollama) (if chosenValid (some (some (strOr chosen ""))) (some none)) none))
         (respApi (match v2 ((some e) (cond ((= e.kind "anthropic") "anthropic") ((= e.kind "gemini") "gemini") (else (optionOr e.params.api "chat")))) ((none) "chat")))
         (upBody0 (cond ((= respApi "anthropic") (anthropicBody out3 target)) ((= respApi "gemini") (geminiBody out3 target)) ((= respApi "responses") (responsesBody out3 target)) (else out3)))

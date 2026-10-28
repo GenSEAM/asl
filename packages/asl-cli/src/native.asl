@@ -15,6 +15,17 @@ fn rooted ctx: sys/Context file: String -> String
   (let [(prefix (str ctx.root "/"))]
     (if (stringStartsWith? file prefix) (optionOr (stringSlice file (stringLength prefix) (stringLength file)) file) file))
 
+; (:m :ref NATIVECACHE-REALROOT :do "arguments are resolved with realPath, so they are compared with the resolved root too: a root reached through a symlink (/tmp, /var on macOS) made every in-root suite look outside it, so it was staged into outsidePkg and ran from the mirror, where its cwd-relative reads (the corpus cache roots) were missing")
+fn ! realRoot ctx: sys/Context -> String
+  (resultOr (realPath ctx.root) ctx.root)
+
+fn ! inRoot? ctx: sys/Context absFile: String -> Bool
+  (or (stringStartsWith? absFile (str ctx.root "/")) (stringStartsWith? absFile (str (realRoot ctx) "/")))
+
+fn ! rootedAbs ctx: sys/Context absFile: String -> String
+  (let [(real (realRoot ctx))]
+    (if (stringStartsWith? absFile (str real "/")) (optionOr (stringSlice absFile (+ (stringLength real) 1) (stringLength absFile)) absFile) (rooted ctx absFile)))
+
 fn ! nativeTest! args: (List String) -> Int64
   (match (nt/main (cons "--self-fp" (cons (nt/fingerprint) args)))
     ((ok code) code)
@@ -375,17 +386,17 @@ fn ! runEntryChecked! ctx: sys/Context absFile: String args: (List String) -> In
     ((ok src)
       (if (listContains? (nt/exportsOf src) "main")
         (nativeTest! (cons "run" (cons absFile (rest args))))
-        (do (eprintln (str "FAIL " absFile ": ERR_NO_ENTRY: " (rooted ctx absFile) " exports neither runTests nor main")) 1))))
+        (do (eprintln (str "FAIL " absFile ": ERR_NO_ENTRY: " (rootedAbs ctx absFile) " exports neither runTests nor main")) 1))))
 
 ; (:m :ref OUT-OF-ROOT-USERPATH :do "an in-root file is run as absFile, not (rooted ctx absFile): nativeTest.asl's runFile now reads the path it is given against the caller's actual cwd (OUT-OF-ROOT-USERPATH), so a root-stripped name only resolves when cwd already equals root; absFile is cwd-independent and runFile derives its own logical/import name by stripping toolRoot internally")
 fn ! run! ctx: sys/Context args: (List String) -> Int64
   (let [(file (first args))
         (absFile (resultOr (realPath file) file))
-        (inRoot (stringStartsWith? absFile (str ctx.root "/")))]
+        (inRoot (inRoot? ctx absFile))]
     (cond
       ((or (listEmpty? args) (or (= file "--help") (= file "-h"))) (cmd/dispatch! ctx "run" args))
       ((not inRoot) (runOutside! ctx file absFile args))
-      ((= (rooted ctx absFile) "asl/tools/nativeTest.asl") (nativeTool! (rest args)))
+      ((= (rootedAbs ctx absFile) "asl/tools/nativeTest.asl") (nativeTool! (rest args)))
       (else (runEntryChecked! ctx absFile args))))
 
 fn ! eprintText text: String -> Unit
@@ -434,8 +445,8 @@ fn ! hostSuite! ctx: sys/Context path: String reason: String -> Int64
 
 fn ! suiteRelPath! ctx: sys/Context path: String -> (Result String String)
   (let [(absPath (resultOr (realPath path) path))]
-    (if (stringStartsWith? absPath (str ctx.root "/"))
-      (ok (rooted ctx absPath))
+    (if (inRoot? ctx absPath)
+      (ok (rootedAbs ctx absPath))
       (stageOutside! ctx absPath)))
 
 fn ! suite! ctx: sys/Context fp: String path: String -> Int64
@@ -602,7 +613,7 @@ fn ! check! ctx: sys/Context args: (List String) -> Int64
     (match (sw/nativeCheckSweep!) ((ok code) code) ((err e) (do (sys/sayErr! e) 1))))
 
 fn ! rootRelativeArg ctx: sys/Context a: String -> String
-  (rooted ctx (resultOr (realPath a) a))
+  (rootedAbs ctx (resultOr (realPath a) a))
 
 fn ! reexecTestAtRoot! ctx: sys/Context args: (List String) dir: String -> Int64
   (sys/execv! (listAppend (list "/bin/sh" "-c" "cd -- \"$0\" && exec \"$@\"" ctx.root (str ctx.root "/bin/asl") "test")
@@ -611,7 +622,7 @@ fn ! reexecTestAtRoot! ctx: sys/Context args: (List String) dir: String -> Int64
               (list))
 
 fn ! outOfRoot? ctx: sys/Context a: String -> Bool
-  (not (stringStartsWith? (resultOr (realPath a) a) (str ctx.root "/")))
+  (not (inRoot? ctx (resultOr (realPath a) a)))
 
 ; (:m :ref OUT-OF-ROOT-USERPATH :do "reexecTestAtRoot! exists so a plain-file arg given relative to a toolchain SUBdirectory still resolves (cd to root, then make the arg root-relative); an already-absolute, genuinely out-of-root arg (a /tmp fixture repo, fleetCompareTest's base/head) gains nothing from that cd and loses everything from it, since the fixture's own relative data-file reads (at runtime, inside the compiled suite) stay anchored to whatever cwd the reexec left behind, not the fixture's own root; skip the reexec for those and let the normal else-branch pipeline (suites!, whose suiteRelPath! already stages a genuinely out-of-root path) run with cwd untouched")
 fn ! anyOutOfRoot? ctx: sys/Context args: (List String) -> Bool
@@ -669,11 +680,12 @@ fn ! evalRejected! path: String reason: String -> Int64
       (do (map printDiag! diags) 1)))
 
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "asl eval builds into an ephemeral slot and removes it and its source after the run; only the shared library objects stay")
+; (:m :ref NATIVECACHE-EVALNAME :do "the source is named by its text, pid and clock, so two evals of the same text at once never share, and remove, one file")
 fn ! evalValue! ctx: sys/Context expr: String -> Int64
   (let [(src (evalSource expr))
         (digest (nt/slotKey "eval" src))
         (dir (str ctx.root "/.asl/cache/nativeTest/evals"))
-        (path (str dir "/" digest ".asl"))
+        (path (str dir "/" digest "x" (stringFromInt64 (procSelf)) "x" (stringFromInt64 (monotonicNs)) ".asl"))
         (fp (nt/fingerprint))
         (cDir (let [(configured (optionOr (envGet "ASL_NATIVE_TEST_CACHE") ""))]
                 (if (stringEmpty? configured) (str ctx.root "/.asl/cache/nativeTest") configured)))

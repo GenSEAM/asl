@@ -1,5 +1,5 @@
 (module asl/agentLoop/providers
-  :x [ProviderError providerError valueError fileMissing toolAbsent cliTimeout ioError errorCode errorMessage
+  :x [ProviderError providerError valueError fileMissing toolAbsent cliTimeout ioError errorCode errorMessage configPathRefusal
       ProviderEnv VendorConfig Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
       parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
@@ -1174,6 +1174,12 @@ fn called cfg: VendorConfig r: (Pair (Result (Option String) ProviderError) Turn
 fn configHome path: String -> (Option String)
   (if (stringEndsWith? path "/.asl/gateway.asn") (some (sub path 0 (- (stringLength path) (stringLength "/.asl/gateway.asn")))) none)
 
+; (:m :ref GW-CONFIG-PATH-SUFFIX :do "the suffix rule is structural, not security: linkOpen! takes a HOME and derives the config, the secrets file, the ledger and the sessions store from HOME/.asl, so a config elsewhere would split them from its own home; the refusal is typed ERR_CONFIG_PATH and names the rule and the path")
+fn configPathRefusal config: String -> ProviderError
+  (gatewayError "ERR_CONFIG_PATH"
+    (str "in-process gateway config path must end in /.asl/gateway.asn (its HOME is the part before /.asl, where the secrets, ledger and sessions also live); got " config)
+    "put the config at <home>/.asl/gateway.asn and set ASL_GATEWAY_CONFIG to it or HOME to <home>, or set ASL_GATEWAY_URL for an HTTP gateway")
+
 fn ! openLink! cfg: VendorConfig -> (Result gs/GatewayLoop ProviderError)
   (match cfg.link
     ((some l) (ok l))
@@ -1182,7 +1188,7 @@ fn ! openLink! cfg: VendorConfig -> (Result gs/GatewayLoop ProviderError)
             (env (fold (fn [acc kv] (mapSet acc (pairFirst kv) (pairSecond kv))) (gu/envMapFromList (envList)) (mapPairs cfg.env.childEnv)))
             (root (optionOr (mapGet env "ASL_GATEWAY_ROOT") (optionOr (mapGet env "ROOT_DIR") cfg.rootDir)))]
         (match (configHome config)
-          ((none) (err (gatewayError "ERR_GATEWAY_CONFIG" (str "in-process gateway reads HOME/.asl/gateway.asn, not " config) "set ASL_GATEWAY_URL for an HTTP gateway")))
+          ((none) (err (configPathRefusal config)))
           ((some home)
             (match (gs/linkOpen! env home root (gd/builtinFamilies))
               ((err e) (err (gatewayError "ERR_GATEWAY_CONFIG" (str "in-process gateway: " e) "set ASL_GATEWAY_URL for an HTTP gateway")))

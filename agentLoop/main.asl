@@ -1,9 +1,9 @@
 (module asl/agentLoop/main
-  :x [knownParams acceptedKeys nearestKey! tokenizeAsn Invocation paramGet parseInvocation
+  :x [withRemote knownParams acceptedKeys nearestKey! tokenizeAsn Invocation paramGet parseInvocation
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveBody! loopResultOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveBody! parentWatch! parentUnwatch! loopResultOf main mainCli mainWithRoots]
   :i [(asl/agentLoop/core :a c)
       (asl/agentLoop/diff :a diff)
       (asl/agentLoop/providers :a pv)
@@ -24,6 +24,9 @@
       (asl/agentLoop/claimBacking :a cb)
       (asl/agentLoop/agentConfig :a ac)
       (asl/agentLoop/poolOps :a po)
+      (aslGateway/codeRoute :a cr)
+      (aslGateway/config :a gc)
+      (asl-tools/fleet/run :a fr)
       (asl-json/json :a j)
       (asl/agentLoop/grounding :a gr)])
 
@@ -125,15 +128,17 @@
   (:f wallBudget (Option Int64))
   (:f intent (Option String))
   (:f base String)
+  (:f remote String)
   (:f contextTokens (Option Int64))
   (:f plan Bool)
   (:f resume (Option ResumeState))
   (:f pool (Option po/PoolSelf))
-  (:f parentPid (Option Int64)))
+  (:f parentPid (Option Int64))
+  (:f route (Option RouteSetup)))
 
 fn knownParams -> (List String)
   (list "agent" "task" "mode" "intent" "root" "owns" "gates" "backend" "budget" "inputTokenBudget" "dryRun" "resume" "answer" "role"
-        "model" "timeout" "contextFile" "base" "queueTimeout" "contextTokens" "gateTimeout" "wallBudget" "plan" "poolChan" "poolIdx" "parentPid")
+        "model" "timeout" "contextFile" "base" "queueTimeout" "contextTokens" "gateTimeout" "wallBudget" "plan" "poolChan" "poolIdx" "parentPid" "remote")
 
 fn acceptedKeys -> (List String)
   (listSortBy (fn [k] k) (filter (fn [k] (not (listContains? (list "agent" "mode" "role" "poolChan" "poolIdx" "parentPid") k))) (knownParams)))
@@ -345,7 +350,7 @@ fn strParam v: j/Json -> j/Json
 
 fn applyKey ps: (List (Pair String j/Json)) key: String v: j/Json -> (Pair (List (Pair String j/Json)) (Option String))
   (cond
-    ((listContains? (list "task" "root" "backend" "resume" "answer" "model" "contextFile" "base" "poolChan") key)
+    ((listContains? (list "task" "root" "backend" "resume" "answer" "model" "contextFile" "base" "poolChan" "remote") key)
       (pair (paramSet ps key (strParam v)) none))
     ((= key "mode") (pair (paramSet ps "modeHint" (j/jstr (lstripColons (pv/pyStr v)))) none))
     ((or (= key "intent") (= key "role")) (pair (paramSet ps key (j/jstr (lstripColons (pv/pyStr v)))) none))
@@ -1272,6 +1277,10 @@ fn ! liveOwnsField! rootDir: String journal: (Option String) -> String
             (if (listEmpty? forms) "" (str " :ownsRejected (" (stringJoin forms " ") ")")))))))
     ((none) ""))
 
+; (:m :ref LEON-REMOTE-TOOLS :do "a task-level :remote UNIT sets :remote on every remote-capable step that names none, so the whole run edits and tests in that VPS worktree")
+fn withRemote op: (List (Pair String c/KvVal)) unit: String -> (List (Pair String c/KvVal))
+  (if (or (stringEmpty? unit) (listAny? (fn [p] (= (pairFirst p) "remote")) op)) op (listAppend op (list (pair "remote" (c/kvStr unit)))))
+
 fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: String repoRoot: String sid: String journal: String env: ex/ExecEnv run: rl/LoopRun -> (Pair rl/LoopRun (Pair String Bool))
   (if (listEmpty? ops)
     (pair run (pair "" false))
@@ -1291,7 +1300,7 @@ fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: 
                 (pair "status" (ex/vStr "rejected")) (pair "error" (ex/vStr "ERR_JOURNAL"))
                 (pair "message" (ex/vStr e))) :procs run.procs))
             ((ok written)
-              (ex/execOp! op env run.procs (fn [] (resultOr (newSessionId) sid))
+              (ex/execOp! (withRemote op ra.remote) env run.procs (fn [] (resultOr (newSessionId) sid))
                 (fn [path] (listContains? (rl/writtenPaths written) path))
                 (fn [path patch mode] (listContains? (rl/writtenPaths written) path)) runOp))))
           receipt (if pooled (po/poolOpReceipt! ra.pool op) (ex/formatOpReceipt out.rec env.readCap))
@@ -1404,6 +1413,123 @@ fn liveGateResultsGreen? gates: (List g/GateResult) -> Bool
     ((= (g/gateExit (c/firstOf gates)) 0) (liveGateResultsGreen? (c/restOf gates)))
     (else false))
 
+; (:m :ref LEON-ORPHAN-RESIDUE :do "a model call blocks this thread, so while it runs a forked sidecar polls the parent pid; once the parent is gone it logs parentGone, kills every descendant of this run (the vendor CLI or curl, which ends the call), and after a short grace kills the run itself, so a dead parent ends a call within a bound instead of at the next turn boundary")
+fn ! parentIsGone? pid: Int64 -> Bool
+  (and (> pid 0) (not (resultOr (procAlive? pid) true)))
+
+fn ! killBelow! leon: Int64 keep: Int64 -> Int64
+  (fold (fn [(n Int64) (p Int64)] -> Int64 (if (= p keep) n (match (procKill p "SIGKILL") ((ok _) (+ n 1)) ((err _) n))))
+        0 (fr/descendantsOf (fr/psSnapshot) leon))
+
+fn ! watchParent! pid: Int64 leon: Int64 path: String turn: Int64 -> Int64
+  (cond
+    ((not (resultOr (procAlive? leon) false)) 0)
+    ((not (parentIsGone? pid)) (do (sleepMs 250) (watchParent! pid leon path turn)))
+    (else
+      (let [_ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :parentGone :reason \"parent pid " (stringFromInt64 pid) " is gone during the model call\")\n"))
+            _ (killBelow! leon (procSelf))
+            _ (sleepMs 2000)]
+        (if (resultOr (procAlive? leon) false) (do (procKill leon "SIGKILL") 0) 0))))
+
+fn ! parentWatch! parent: (Option Int64) path: String turn: Int64 spanS: Int64 -> (Option fr/Forked)
+  (match parent
+    ((some pid)
+      (if (> pid 0)
+        (let [leon (procSelf)]
+          (match (fr/forkLimited! "/dev/null" (fr/limits spanS 8) (fn [] -> Int64 (watchParent! pid leon path turn)))
+            ((ok f) (some f))
+            ((err _) none)))
+        none))
+    ((none) none))
+
+fn ! parentUnwatch! watcher: (Option fr/Forked) -> Bool
+  (match watcher
+    ((some f) (do (fr/forkKill! f "done") true))
+    ((none) true))
+
+; (:m :ref CODE-WIRE-20261028 :do "a code-intent run whose gateway config declares a :codeRoute id code drives the gateway codeRoute step machine for its model call: the writer alias is asked with the turn's prompt, Leon's own task gates judge the answer, the raw gate output is fed back, then one escalation; no declared route, or an intent other than code, keeps the plain provider call")
+(schema RouteSetup
+  (:f row gc/CodeRoute)
+  (:f penv pv/ProviderEnv))
+
+fn ! codeRouteSetup! intent: (Option String) cfgText: String repoRoot: String penv: pv/ProviderEnv -> (Option RouteSetup)
+  (if (!= (optionOr intent "") "code")
+    none
+    (let [path (optionOr (ac/agentLoopValue cfgText ":gatewayConfig") penv.gatewayConfig)]
+      (match (fileReadString path)
+        ((err _) none)
+        ((ok text)
+          (match (gc/gatewayCodeRoute! text "code" (str repoRoot "/asl/grammar/calibration.asn"))
+            ((ok row) (some (RouteSetup :row row :penv penv)))
+            ((err _) none))))))
+
+fn routeStatus message: String -> Int64
+  (match (stringIndexOf message "HTTP error ")
+    ((none) 500)
+    ((some at) (optionOr (stringToInt64 (c/sliceOf message (+ at 11) (min (stringLength message) (+ at 14)))) 500)))
+
+fn routeReplyOf reply: (Result (Option String) pv/ProviderError) -> cr/RouteReply
+  (match reply
+    ((ok o) (match o ((some t) (cr/RouteReply :status 200 :text t)) ((none) (cr/RouteReply :status 204 :text ""))))
+    ((err e) (cr/RouteReply :status (routeStatus (pv/errorMessage e)) :text (pv/errorMessage e))))
+
+fn ! routeCall! ra: RunArgs rs: RouteSetup rootDir: String sid: String prov: pv/Provider alias: String prompt: String timeoutSec: Float64 system: String -> pv/Turn
+  (if (or (stringStartsWith? ra.backend "script/") (stringStartsWith? ra.backend "replay/"))
+    (pv/nextTurn! prov system prompt)
+    (match (pv/makeProvider! ra.backend "auto" rootDir alias (if (> timeoutSec 0.0) (optionOr (float64ToInt64 timeoutSec) ra.timeout) ra.timeout) sid ra.queueTimeout ra.timeoutSet rs.penv "code")
+      ((err e) (pv/Turn :provider prov :reply (err e) :meta (pv/emptyMeta)))
+      ((ok p) (let [t (pv/nextTurn! p system prompt)] (pv/Turn :provider prov :reply t.reply :meta t.meta)))))
+
+; (:m :ref CODE-WIRE-20261028 :do "usage of the route's calls is summed per key so the turn books the whole route, not the last call")
+fn routeUsageAdd acc: (List (Pair String j/Json)) meta: pv/TurnMeta -> (List (Pair String j/Json))
+  (match meta.usage
+    ((none) acc)
+    ((some fields)
+      (map (fn [key] (pair key (j/jint (+ (providerUsageInt acc key) (providerUsageInt fields key)))))
+           (list "inputTokens" "cachedTokens" "outputTokens"))))
+
+fn ! driveRoute! step: cr/RouteStep prov: pv/Provider usage: (List (Pair String j/Json)) ra: RunArgs rs: RouteSetup rootDir: String sid: String system: String gate: (fn [String] -> cr/GateVerdict) fuel: Int64 -> (Pair cr/RouteResult (Pair pv/Provider (List (Pair String j/Json))))
+  (if (<= fuel 0)
+    (pair (cr/RouteResult :passed false :stage "none" :text "" :error "route out of fuel" :calls 0 :trail (list)) (pair prov usage))
+    (match step
+      ((cr/routeDone r) (pair r (pair prov usage)))
+      ((cr/routeAsk alias prompt t k)
+        (let [turn (routeCall! ra rs rootDir sid prov alias prompt t system)]
+          (driveRoute! (k (routeReplyOf turn.reply)) turn.provider (routeUsageAdd usage turn.meta) ra rs rootDir sid system gate (- fuel 1))))
+      ((cr/routeGate text k) (driveRoute! (k (gate text)) prov usage ra rs rootDir sid system gate (- fuel 1)))))
+
+; (:m :ref CODE-WIRE-20261028 :do "the gate judges an answer in a scratch copy of the run root: its ops and the task gates run there and the copy is removed, so the real tree is written once, by the turn that replays the final answer; the error is the failing gates' own cmd, exit, stdout and stderr verbatim")
+fn ! routeVerdict! text: String ra: RunArgs rootDir: String repoRoot: String path: String mkEnv: (fn [String] -> ex/ExecEnv) run: rl/LoopRun left: (Option Int64) -> cr/GateVerdict
+  (let [clean (tr/turnReply text (some ra.gates))
+        ops clean.facts.ops
+        defect (or (listEmpty? ops) (or (listEmpty? clean.facts.forms) (stringEmpty? (stringTrim clean.text))))]
+    (if defect
+      (cr/GateVerdict :passed false :error "the reply contained no actionable operations")
+      (let [scratch (str (optionOr (envGet "TMPDIR") "/tmp") "/leonRoute_" (stringFromInt64 (procSelf)) "_" (stringFromInt64 (nowNs)))
+            copied (go/scratchTree! rootDir scratch)]
+        (match copied
+          ((err e) (cr/GateVerdict :passed false :error (str "route scratch copy failed: " e)))
+          ((ok kind)
+            (let [ran (liveExecOps! ops ra scratch repoRoot run.session (str scratch "/.routeJournal") (mkEnv scratch) run)
+                  gates (runLiveGates! ra.gates scratch (wallCapped ra.gateTimeout left) ra.parentPid)
+                  red (filter (fn [gt] (!= (g/gateExit gt) 0)) gates)
+                  removed (go/scratchDrop! rootDir scratch kind)]
+              (cr/GateVerdict :passed (listEmpty? red)
+                :error (c/joinSep (map (fn [gt] (str (g/gateCmd gt) " exit " (stringFromInt64 (g/gateExit gt)) "\n" (g/gateStdout gt) (g/gateStderr gt))) red) "\n"))))))))
+
+fn ! routedCall! ra: RunArgs rs: RouteSetup rootDir: String path: String turn: Int64 sid: String system: String user: String prov: pv/Provider gate: (fn [String] -> cr/GateVerdict) -> (Pair pv/Turn Int64)
+  (let [driven (driveRoute! (cr/codeRouteStart rs.row user) prov (list) ra rs rootDir sid system gate 64)
+        r (pairFirst driven)
+        p (pairFirst (pairSecond driven))
+        usage (pairSecond (pairSecond driven))
+        meta (pv/TurnMeta :timing none :usage (if (listEmpty? usage) none (some usage)) :served none :finish none :truncated false)
+        _ (fileAppend path (str "(:codeRoute :turn " (stringFromInt64 turn) " :passed " (if r.passed "true" "false") " :stage \"" r.stage "\" :calls " (stringFromInt64 r.calls) " :trail (" (c/joinSep (map (fn [t] (str "\"" (c/escapeAsn t) "\"")) r.trail) " ") "))\n"))]
+    (pair
+      (if (and (not r.passed) (stringEmpty? r.text))
+        (pv/Turn :provider p :reply (err (pv/providerError "ERR_VENDOR" r.error)) :meta meta)
+        (pv/Turn :provider p :reply (ok (some r.text)) :meta meta))
+      (max 0 (- r.calls 1))))
+
 fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system: String env: ls/LoopEnv
     providerCall: (fn [pv/Provider String String] -> pv/Turn) wrapped: rl/ProviderRun -> (Pair rl/ProviderRun ls/Step)
   (if (parentGone? ra.parentPid)
@@ -1447,12 +1573,21 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
           (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." "")
           writeNudge)
         _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :sent \"" (c/escapeAsn user) "\")\n"))
-        retried (liveProviderRetry! wrapped.provider
+        watcher (parentWatch! ra.parentPid path turn (min 86400 (+ (+ ra.timeout ra.queueTimeout) 300)))
+        routeEnvFor (fn [root] (ex/makeExecEnv root repoRoot (optionOr (modeOf ra.modeHint) "auto") ra.owns state.writesPersisted ra.base
+          ra.gates (resultOr (tx/loadEffects! repoRoot) (list)) "" (list) (ctx/readPayloadChars (optionOr state.contextTokens 24000))
+          ra.timeout none run.session none))
+        routeLeft (wallLeft env.wallBudget (- (env.now) state.runStarted))
+        retried (match ra.route
+          ((some rs) (routedCall! ra rs rootDir path turn run.session system user wrapped.provider
+            (fn [text] (routeVerdict! text ra rootDir repoRoot path routeEnvFor run routeLeft))))
+          ((none) (liveProviderRetry! wrapped.provider
           (fn [p attempt] (providerCall (wallCappedProvider p (wallLeft env.wallBudget (- (env.now) state.runStarted))) system user))
           (match env.wallBudget
             ((some w) (some (max 0 (- w (optionOr (float64ToInt64 (- (env.now) state.runStarted)) 0)))))
             ((none) none))
-          env.sleep env.now)
+          env.sleep env.now)))
+        _unwatched (parentUnwatch! watcher)
         _retryLogged (appendRetryLines! path turn (pairSecond retried))
         response (pairFirst retried)
         _usageLogged (match (providerUsageLine response.meta)
@@ -1549,7 +1684,7 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
                     (ok none))
                   reviewLogged (if reviewInvoked (appendLiveHook! path turn "reviewer" reviewResult) true)
                   integrity (if (and terminal (not (listEmpty? ra.gates)))
-                    (gi/gateIntegrityWritten! ra.gates ra.owns rootDir newGates (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) none (rl/writtenPaths executed.written))
+                    (gi/gateIntegrityWritten! ra.gates ra.owns rootDir newGates (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) none (rl/writtenPaths executed.written) ra.parentPid)
                     (pair true "not required"))
                   _ (if (and terminal (not (listEmpty? ra.gates)))
                     (ok? (fileAppend path (str "(:gateIntegrity :ok " (if (pairFirst integrity) "true" "false")
@@ -1621,7 +1756,8 @@ fn liveExitCode r: LoopResult -> Int64
                         (match r.specCheck ((some v) (= v.verdict "unavailable")) ((none) false))))]
     (if (and (or (= r.status "ok") reviewerOnly) (= r.unbacked 0)) 0 1))
 
-fn ! executeLive ra: RunArgs repoRoot: String rootDir: String env: pv/ProviderEnv -> MainResult
+fn ! executeLive ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderEnv -> MainResult
+  (let [ra (with ra0 :route (codeRouteSetup! ra0.intent (ac/configText! rootDir) repoRoot env))]
   (match (pv/makeProvider! ra.backend "auto" rootDir ra.model ra.timeout "" ra.queueTimeout ra.timeoutSet env (optionOr ra.intent "auto"))
     ((err e) (rejectWith (str ":error ERR_BACKEND :message \"" (c/escapeAsn (pv/errorMessage e)) "\"") 1))
     ((ok provider)
@@ -1654,10 +1790,10 @@ fn ! executeLive ra: RunArgs repoRoot: String rootDir: String env: pv/ProviderEn
                         :grade (fn [role sys msg] (liveGrader provider graderIntent graderProfile path sys msg))
                         :newId (fn [] session) :now (fn [] (ao/nowMono))
                         :sleep (fn [seconds] (do (if (> seconds 0) (sleepMs (* seconds 1000)) ()) true)))
-                      result (rl/runLoopWithProvider! liveEnv provider (fn [le wrapped] (liveBody! ra repoRoot rootDir path system le providerCall wrapped)))
+                      result (rl/runLoopWithProviderWatched! liveEnv provider ra.parentPid (fn [le wrapped] (liveBody! ra repoRoot rootDir path system le providerCall wrapped)))
                       receipt (loopResultOf ra rootDir result (liveJournalUsage! rootDir result.journal))
                       line (formatReceipt receipt)]
-                  (MainResult :stdout line :exitCode (liveExitCode receipt))))))))))
+                  (MainResult :stdout line :exitCode (liveExitCode receipt)))))))))))
 
 fn ! executeDryRun ra: RunArgs repoRoot: String rootDir: String env: pv/ProviderEnv -> MainResult
   (match (pv/buildDryRunInfo! ra.backend "auto" rootDir ra.model ra.timeout ra.queueTimeout env)
@@ -1688,8 +1824,9 @@ fn resumed ra: RunArgs st: ResumeState -> RunArgs
            :budget ra.budget :inputTokenBudget ra.inputTokenBudget :gateTimeout ra.gateTimeout :wallBudget ra.wallBudget
            :intent (match ra.intent ((some i) (some i)) ((none) st.intent))
            :base st.base
+           :remote ra.remote
            :contextTokens (match ra.contextTokens ((some t) (if (= t 0) st.contextTokens (some t))) ((none) st.contextTokens))
-           :plan ra.plan :resume (some st) :pool ra.pool :parentPid ra.parentPid)
+           :plan ra.plan :resume (some st) :pool ra.pool :parentPid ra.parentPid :route ra.route)
 
 fn ! dispatch ps: (List (Pair String j/Json)) repoRoot: String rootDir: String timeout: Int64 queueTimeout: Int64 plan: Bool -> MainResult
   (let [resumeV (paramOr ps "resume" (j/jnull))
@@ -1703,8 +1840,8 @@ fn ! dispatch ps: (List (Pair String j/Json)) repoRoot: String rootDir: String t
                     :wallBudget (some (optionOr (intValue (paramOr ps "wallBudget" (j/jint (min 86400 (+ timeout queueTimeout)))))
                                                   (min 86400 (+ timeout queueTimeout))))
                     :intent (optText (paramGet ps "intent"))
-                    :base (textValue (paramOr ps "base" (j/jstr ""))) :contextTokens (intValue (paramOr ps "contextTokens" (j/jnull)))
-                    :plan plan :resume none :parentPid (intValue (paramOr ps "parentPid" (j/jnull)))
+                    :base (textValue (paramOr ps "base" (j/jstr ""))) :remote (textValue (paramOr ps "remote" (j/jstr ""))) :contextTokens (intValue (paramOr ps "contextTokens" (j/jnull)))
+                    :plan plan :resume none :parentPid (intValue (paramOr ps "parentPid" (j/jnull))) :route none
                     :pool (po/poolSelf (textValue (paramOr ps "poolChan" (j/jstr ""))) (optionOr (intValue (paramOr ps "poolIdx" (j/jint -1))) -1)))
         dry (match (paramOr ps "dryRun" (j/jbool false)) ((j/jbool b) b) (_ false))]
     (cond

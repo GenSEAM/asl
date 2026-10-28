@@ -352,3 +352,4 @@
 (:doc :symbol "asl/packages/asl-cli/src/nativeCli.asl#clangPick" :text "the first of the config row, the CLANG value and the clangs found on PATH; err names what was tried.")
 (:doc :symbol "asl/packages/asl-cli/src/nativeCli.asl#configClang" :text "the :clang value of the :native row in a config text, none when there is no such row.")
 (:doc :symbol "asl/packages/asl-cli/src/nativeCli.asl#clangOnPathIn!" :text "the clangCandidates present as executable files in the directories of a PATH value, in candidate order.")
+(:doc :symbol "asl/packages/asl-cli/src/asl1Cache.asl#baseHashesIn" :text "the base names the compiler and runtime by role and content, not by absolute path, so a fresh worktree whose sources match an earlier one reuses its cached asl1-native")

@@ -1,5 +1,5 @@
 (module asl/agentLoop/runLoop
-  :x [withUnbacked specCheckRun! journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! head! finish! runLoopWith! runLoopWithProvider! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
+  :x [withUnbacked specCheckRun! journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
   :i [(asl/agentLoop/loopState :a s) (asl/agentLoop/loop :a lp)
       (asl/agentLoop/context :a ctx) (asl/agentLoop/journal :a jr)
       (asl/agentLoop/gitOps :a go) (asl/agentLoop/runOps :a ro) (asl/agentLoop/reply :a rp)
@@ -444,8 +444,8 @@ fn noOutline f: String -> (Pair Int64 String)
   (pair 1 "")
 
 ; (:m :ref LEON-CAPS :do "the task's gates run once before the first turn, in the run root, with the run's gate timeout; a gate that exits 0 here is green before any edit, so a later green of it proves nothing about the change and the end status lists it as vacuous; a resumed run skips this because its root may already carry edits")
-fn ! baselineGreen! gates: (List String) rootDir: String timeout: Int64 -> (List String)
-  (let [rows (go/runGates! (map (fn [p] (pair (stringFromInt64 (+ (pairFirst p) 1)) (pairSecond p))) (enumerate gates)) rootDir timeout none)]
+fn ! baselineGreen! gates: (List String) rootDir: String timeout: Int64 parent: (Option Int64) -> (List String)
+  (let [rows (go/runGatesWatched! (map (fn [p] (pair (stringFromInt64 (+ (pairFirst p) 1)) (pairSecond p))) (enumerate gates)) rootDir timeout none parent)]
     (map (fn [row] (rowText row "cmd"))
       (filter (fn [row] (= (rowExit row) 0)) rows)))
 
@@ -494,14 +494,18 @@ fn withUnbacked state: s/LoopState claims: (List j/Json) -> s/LoopState
   (with state :runUnbackedClaims claims)
 
 fn ! setup! env: s/LoopEnv -> LoopSetup
+  (setupWatched! env none)
+
+; (:m :ref LEON-ORPHAN-RESIDUE :do "the calling CLI pid reaches the baseline gates, so a dead parent kills them like the per-turn gates")
+fn ! setupWatched! env: s/LoopEnv parent: (Option Int64) -> LoopSetup
   (let [state (stateFor env)
         sid (optionOr env.sessionId (env.newId))
         rootDir (absoluteRoot! env.rootDir)]
     (match (startHead! rootDir)
       ((err e) (early (emptyResult env sid "failed" (some e) 0 none (list) none none none)))
-      ((ok head) (setupAt! env state sid rootDir head))))
+      ((ok head) (setupAt! env state sid rootDir head parent))))
 
-fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head: (Option String) -> LoopSetup
+fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head: (Option String) parent: (Option Int64) -> LoopSetup
   (let [timeout (optionOr env.gateTimeout 10)
         header (match env.resume
           ((some resume) (str "(:turn " (stringFromInt64 (intField resume "turn" 0)) " :answer \""
@@ -545,7 +549,7 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
               (early (emptyResult env sid "rejected" (some "ERR_RESUME_PATCH") 0 none (list) none (some message) none)))))
         (else
           (let [green (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates))))
-                        (baselineGreen! env.gates rootDir (match env.wallBudget ((some w) (if (> w 0) (max 1 (min timeout w)) timeout)) ((none) timeout)))
+                        (baselineGreen! env.gates rootDir (match env.wallBudget ((some w) (if (> w 0) (max 1 (min timeout w)) timeout)) ((none) timeout)) parent)
                         (list))
                 _ (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates)))) (ok? (jr/journalWrite env.journalPath (str "(:baseline :green (" (quoted green) ") :red (" (quoted (filter (fn [g] (not (listContains? green g))) env.gates)) "))\n"))) true)
                 _skipped (if (and (not baselineOn) (and (none? env.resume) (not (listEmpty? env.gates)))) (ok? (jr/journalWrite env.journalPath "(:baseline :skipped :why \"config :agentLoop :baseline false\")\n")) true)]
@@ -909,7 +913,10 @@ fn ! runBodyWithProvider! env: s/LoopEnv wrapped: ProviderRun body: (fn [s/LoopE
           ((stop) headed)))))
 
 fn ! runLoopWithProvider! env: s/LoopEnv provider: pv/Provider body: (fn [s/LoopEnv ProviderRun] -> (Pair ProviderRun s/Step)) -> s/RunResult
-  (match (setup! env)
+  (runLoopWithProviderWatched! env provider none body)
+
+fn ! runLoopWithProviderWatched! env: s/LoopEnv provider: pv/Provider parent: (Option Int64) body: (fn [s/LoopEnv ProviderRun] -> (Pair ProviderRun s/Step)) -> s/RunResult
+  (match (setupWatched! env parent)
     ((early result)
       (match (cleanup! env result.session)
         ((err e) (emptyResult env result.session "failed" (some e) result.turns none (list) none none none))

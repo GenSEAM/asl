@@ -1,5 +1,5 @@
 (module asl/agentLoop/pool
-  :x [PoolTask PoolSlot Refusal Admission PoolLimits defaultLimits claimOf claimsOverlap? taskOf! admit admitWith lanesOf runPool! runPoolWith! runTask! receiptStatus receiptJournal poolSummary poolExit poolMain! poolMainWith! main]
+  :x [PoolTask PoolSlot Refusal Admission PoolLimits defaultLimits withPoolParent claimOf claimsOverlap? taskOf! admit admitWith lanesOf runPool! runPoolWith! runTask! receiptStatus receiptJournal poolSummary poolExit poolMain! poolMainWith! main]
   :i [(asl/agentLoop/main :a m)
       (asl/agentLoop/core :a c)
       (asl/agentLoop/poolChannel :a ch)
@@ -185,14 +185,22 @@ fn defaultLimits -> PoolLimits
 fn outPath dir: String t: PoolTask ext: String -> String
   (str dir "/" (stringFromInt64 t.idx) "." ext)
 
+; (:m :ref LEON-ORPHAN-RESIDUE :do "the pool process pid rides in each child form as :parentPid, so a child ends when its pool is gone; a form that names a parent keeps it")
+fn withPoolParent form: String pid: Int64 -> String
+  (let [(f (stringTrim form))]
+    (if (or (stringContains? f ":parentPid") (not (stringEndsWith? f ")")))
+      form
+      (str (c/sliceOf f 0 (- (stringLength f) 1)) " :parentPid " (stringFromInt64 pid) ")")))
+
 ; (:m :ref LEON-POOL-TRAP :do "the child is the trap boundary: fleet/run forkLimited! runs one task in its own process group with stdout and stderr in the task's log, under the fleet lease, timeout and descendant limit, and the task leaves its receipt in a file, so a trap ends only that child (no receipt file, nonzero exit)")
 fn ! startTask! dir: String repoRoot: String t: PoolTask runner: (fn [String PoolTask] -> m/MainResult) lim: PoolLimits -> (Result fr/Forked String)
+  (let [(parent (procSelf))]
   (fr/forkLimited! (outPath dir t "log") (fr/Limits :timeoutMs (+ t.wallMs lim.graceMs) :maxDesc lim.maxDesc :class "" :jsDir "")
     (fn [] -> Int64
-      (let [(res (runner repoRoot (PoolTask :idx t.idx :form t.form :root t.root :owns t.owns :claims t.claims :wallMs t.wallMs :waitsFor t.waitsFor :chan dir)))]
+      (let [(res (runner repoRoot (PoolTask :idx t.idx :form (withPoolParent t.form parent) :root t.root :owns t.owns :claims t.claims :wallMs t.wallMs :waitsFor t.waitsFor :chan dir)))]
         (do (fileWrite (outPath dir t "receipt") res.stdout)
             (fileWrite (outPath dir t "exit") (stringFromInt64 res.exitCode))
-            0))))
+            0)))))
 
 ; (:m :ref LEON-POOL-TRAP :do "the trap's own ERR_ line, not the last one: a runtime that prints a summary after the trap (the test runner does) would otherwise hide it")
 fn ! trapLine path: String -> String

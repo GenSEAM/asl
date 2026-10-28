@@ -1,17 +1,35 @@
 (module asl/agentLoop/grounding
-  :x [cardSources cardRuleAnchors languageText! languageRules libExample testExample aslCard! wantsAslCard
+  :x [cardSources cardRuleAnchors cardTypeAnchors cardSigNames cardExamples sigLine cardItems languageText! languageRules typeRules libExample aslCard! wantsAslCard
       rejectedReceipts rejectHints lastGot hintCodes]
-  :i [(asl/agentLoop/core :a c) (asl-json/json :a j)])
+  :i [(asl/agentLoop/core :a c) (asl-json/json :a j) (asl-checker/types :a ty)])
 
 ; (:m :ref LEON-ASL-GROUNDING :do "a model with no ASL priors gets the language from the workspace's own sources: rule sentences cut by anchor from the tools.asn language topic and code cut by symbol from the canonical examples, shown as the write steps Leon parses; nothing here restates the language in its own words")
 
+; (:m :ref LEON-CARD-TUNE :do "CAL ensemble-20261028: free writers fail by using an Option as a String, so the card leads with the type sentences, the checker's own signatures of the Option- and Result-returning builtins, and one checked expression per type rule; shape rules and the record example (schema construction naming every field, with) follow")
 fn cardSources -> (List String)
-  (list "asl/grammar/tools.asn" "asl/grammar/examples/greeting.asl" "asl/grammar/examples/tests/examplesTest.asl")
+  (list "asl/grammar/tools.asn" "asl/grammar/examples/record.asl" "asl/packages/asl-checker/src/types.asl#builtinSig")
+
+fn cardTypeAnchors -> (List String)
+  (list "There is no nil" "Int and Float never mix" "Conditions, and, or, not")
 
 fn cardRuleAnchors -> (List String)
-  (list "An ASL file is a module header" "Imports name the module" "A function is a bare line" "(let [(a 1)"
-        "(fn [x] body) is a value" "Conditions, and, or, not" "Int and Float never mix" "There is no nil"
-        "Builtins are camelCase" "A test exports runTests")
+  (list "An ASL file is a module header" "A function is a bare line" "(let [(a 1)" "(with x :k v)" "A test exports runTests")
+
+fn cardSigNames -> (List String)
+  (list "mapEmpty" "mapSet" "pair" "pairFirst" "pairSecond" "stringSplit" "stringSlice" "stringUpper" "listGet" "mapGet" "stringToInt64" "optionOr" "fold")
+
+fn cardExamples -> (List (Pair String String))
+  (list (pair "(match (listGet xs 0) ((some v) v) ((none) 0))" "Int64")
+        (pair "(match r ((ok v) (ok (+ v 1))) ((err e) (err e)))" "(Result Int64 String)")
+        (pair "(optionOr (listGet xs 0) \"\")" "String")
+        (pair "(+ n (optionOr (listGet ns 0) 0))" "Int64")
+        (pair "(fold (fn [acc x] (+ acc x)) 0 ns)" "Int64"))
+
+fn sigLine name: String -> String
+  (match (ty/builtinSig name)
+    ((some s) (str name " " (if (listEmpty? (pairFirst s)) "()" (stringJoin (pairFirst s) " ")) " -> " (pairSecond (pairSecond s))))
+    ((none) ""))
+
 
 fn at s: String i: Int64 -> String
   (optionOr (stringSlice s i (+ i 1)) "")
@@ -56,8 +74,14 @@ fn ruleAt text: String anchor: String -> (Option String)
     ((none) none)
     ((some p) (some (cut text p (sentenceEnd text (stringLength text) p)))))
 
+fn rulesFor text: String anchors: (List String) -> (List String)
+  (filter (fn [r] (not (stringEmpty? r))) (map (fn [a] (optionOr (ruleAt text a) "")) anchors))
+
 fn languageRules text: String -> (List String)
-  (filter (fn [r] (not (stringEmpty? r))) (map (fn [a] (optionOr (ruleAt text a) "")) (cardRuleAnchors)))
+  (rulesFor text (cardRuleAnchors))
+
+fn typeRules text: String -> (List String)
+  (rulesFor text (cardTypeAnchors))
 
 fn moduleName text: String -> String
   (let [first (optionOr (listHead (stringLines text)) "")
@@ -80,25 +104,16 @@ fn blockLines lines: (List String) head: String -> (List String)
         (cons l (takeWhileIndented (listDrop lines 1)))
         (blockLines (listDrop lines 1) head))))
 
-fn libExample text: String fnName: String -> String
-  (str "(module " (moduleName text) "\n  :x [" fnName "]\n  :i [])\n\n" (stringJoin (blockLines (stringLines text) fnName) "\n"))
+fn itemLines lines: (List String) name: String -> (List String)
+  (let [decl (filter (fn [l] (stringStartsWith? l (str "(schema " name " "))) lines)]
+    (if (listEmpty? decl) (blockLines lines name) decl))
 
-fn aliasOf testText: String libModule: String -> String
-  (let [marker (str "(" libModule " :a ")]
-    (match (stringIndexOf testText marker)
-      ((none) "")
-      ((some p)
-        (let [rest (from testText (+ p (stringLength marker)))]
-          (cut rest 0 (optionOr (stringIndexOf rest ")") 0))))))
+fn libExample text: String names: (List String) -> String
+  (str "(module " (moduleName text) "\n  :x [" (stringJoin names " ") "]\n  :i [])\n\n"
+       (stringJoin (map (fn [n] (stringJoin (itemLines (stringLines text) n) "\n")) names) "\n\n"))
 
-fn testExample testText: String libModule: String fnName: String -> String
-  (let [alias (aliasOf testText libModule)
-        block (blockLines (stringLines testText) "runTests")
-        calls (filter (fn [l] (stringContains? l (str "(" alias "/" fnName " "))) block)
-        frame (listTake block 2)
-        last (listDrop block (- (listLength block) 1))]
-    (str "(module " (moduleName testText) "\n  :x [runTests]\n  :i [(" libModule " :a " alias ")])\n\n"
-         (stringJoin (listAppend frame (listAppend calls last)) "\n")))
+fn cardItems -> (List String)
+  (list "Point" "origin" "moveBy")
 
 fn rawStep path: String code: String -> String
   (str "(:step :op \"write\" :file \"" path "\" :content :raw)\n```\n" code "\n```")
@@ -107,22 +122,17 @@ fn quotedList xs: (List String) -> String
   (c/joinSep (map (fn [x] (str "\"" (c/escapeAsn x) "\"")) xs) " ")
 
 fn ! aslCard! repoRoot: String -> (Result String String)
-  (let [paths (cardSources)
-        libPath (optionOr (listGet paths 1) "")
-        testPath (optionOr (listGet paths 2) "")]
+  (let [libPath (optionOr (listGet (cardSources) 1) "")]
     (match (languageText! repoRoot)
       ((err e) (err e))
       ((ok lang)
         (match (fileReadString (str repoRoot "/" libPath))
           ((err e) (err e))
           ((ok lib)
-            (match (fileReadString (str repoRoot "/" testPath))
-              ((err e) (err e))
-              ((ok tst)
-                (ok (str "(:aslCard :src (" (quotedList paths) ") :rules (" (quotedList (languageRules lang)) ")"
-                         " :reply \"a write step ends its line and the file follows unescaped in a ``` fence on the next lines, as in this example module and its test\")\n"
-                         (rawStep libPath (libExample lib "greet")) "\n"
-                         (rawStep testPath (testExample tst (moduleName lib) "greet")))))))))))
+            (ok (str "(:aslCard :types (" (quotedList (typeRules lang)) ")\n :sigs (" (quotedList (map sigLine (cardSigNames))) ")\n :examples ("
+                 (quotedList (map pairFirst (cardExamples))) ")\n :rules (" (quotedList (languageRules lang)) ")\n"
+                 " :reply \"a write step ends its line; the file follows unescaped in a ``` fence\")\n"
+                 (rawStep libPath (libExample lib (cardItems))))))))))
 
 fn wantsAslCard task: String gates: (List String) -> Bool
   (or (stringContains? task ".asl") (listAny? (fn [g] (stringContains? g ".asl")) gates))

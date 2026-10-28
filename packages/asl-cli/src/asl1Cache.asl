@@ -1,5 +1,5 @@
 (module asl-cli/asl1Cache
-  :x [memoSha! memoShaIn! statFacts! notraceLib! nativeAsl1! singleFlight! bootstrap! buildNative! buildNativeTransaction! closure!]
+  :x [baseHashesIn memoSha! memoShaIn! statFacts! notraceLib! nativeAsl1! singleFlight! bootstrap! buildNative! buildNativeTransaction! closure!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl-parser/ast :a a) (asl-checker/resolve :a r) (asl/packages/asl-cli/src/nativeBuild :a nb)])
 
 fn compilerPath! ctx: sys/Context -> String
@@ -167,10 +167,17 @@ fn ! versionLine clang: String -> (Result String String)
         (err "clang --version failed")
         (ok (optionOr (listHead (stringLines captured.stdout)) "")))))
 
-fn ! baseHashes compiler: String lib: String clangVersion: String -> (Result String String)
-  (match (appendFileHash (list compiler lib) "")
+; (:m :ref ASL1-COLD-COMPILE :do "the base names the compiler and runtime by role and content, not by absolute path, so a fresh worktree whose sources match an earlier one reuses its cached asl1-native instead of recompiling it for about 5 minutes")
+fn ! baseHashesIn stamps: String compiler: String lib: String clangVersion: String -> (Result String String)
+  (match (memoSha! stamps compiler (optionOr (listHead (statFacts! (list compiler))) ""))
     ((err e) (err e))
-    ((ok hashes) (ok (str hashes "clang=" clangVersion "\nrc=notrace\n"))))
+    ((ok c) (match (memoSha! stamps lib (optionOr (listHead (statFacts! (list lib))) ""))
+      ((err e) (err e))
+      ((ok l) (ok (str "compiler=" (pairFirst c) "\nlib=" (pairFirst l) "\nclang=" clangVersion "\nrc=notrace\n"))))))
+
+fn ! baseHashes compiler: String lib: String clangVersion: String -> (Result String String)
+  (baseHashesIn (stampDir!) compiler lib clangVersion)
+
 
 fn headPath! base: String -> String
   (str (cacheDir!) "/head-" (bytesSha256 (stringToBytes base)))

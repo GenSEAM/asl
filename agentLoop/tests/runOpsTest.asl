@@ -32,7 +32,7 @@ fn setupStep! base: String setupEnv: (List String) line: String -> Bool
       ((= step "run")
         (let [argv (map (fn [i] (getS kv (str "a" (stringFromInt64 i)))) (range 0 (getI kv "n")))
               env (listAppend (filter (fn [r] (not (stringStartsWith? (envKey r) "GIT_"))) (envList)) setupEnv)]
-          (match (g/runBounded! argv (some (str base "/" (getS kv "cwd"))) (some 60) (some env))
+          (match (g/runBounded! argv (some (str base "/" (getS kv "cwd"))) (some 60) (some env) (none))
             ((ok b) (= (optionOr b.code -1) 0))
             ((err e) (do (eprintln (str "setup run failed: " e)) false)))))
       (else false)))

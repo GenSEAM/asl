@@ -158,8 +158,61 @@ fn nullaryCaseValue v: String found: (Pair ty/Type InferState) env: (Map String 
                        found))
     (_ found))
 
+fn editRow a: Bytes b: Bytes i: Int64 j: Int64 prev: (List Int64) left: Int64 acc: (List Int64) -> (List Int64)
+  (if (> j (bytesLength b))
+    (listReverse acc)
+    (let [(diag (optionOr (listGet prev (- j 1)) 0))
+          (up (optionOr (listGet prev j) 0))
+          (cost (if (= (bytesGet a (- i 1)) (bytesGet b (- j 1))) 0 1))
+          (cell (min (+ diag cost) (min (+ up 1) (+ left 1))))]
+      (editRow a b i (+ j 1) prev cell (cons cell acc))))
+
+fn editRows a: Bytes b: Bytes i: Int64 prev: (List Int64) -> Int64
+  (if (> i (bytesLength a))
+    (optionOr (listGet prev (bytesLength b)) 0)
+    (editRows a b (+ i 1) (editRow a b i 1 prev i (list i))))
+
+fn editDistance x: String y: String -> Int64
+  (let [(b (stringToBytes (stringLower y)))]
+    (editRows (stringToBytes (stringLower x)) b 1 (range 0 (+ (bytesLength b) 1))))
+
+fn helperStem v: String -> String
+  (let [(lower (stringLower v))]
+    (cond
+      ((stringStartsWith? lower "string") (optionOr (stringSlice lower 6 (stringLength lower)) lower))
+      ((stringStartsWith? lower "str") (optionOr (stringSlice lower 3 (stringLength lower)) lower))
+      (else lower)))
+
+fn helperDistance v: String c: String -> Int64
+  (min (editDistance v c) (editDistance (helperStem v) (helperStem c)))
+
+fn stringHelperName? v: String -> Bool
+  (let [(lower (stringLower v))] (and (stringStartsWith? lower "str") (not (stringContains? v "/"))))
+
+fn hintVocabulary mod: r/ModuleSummary -> (List String)
+  (listAppend (mapKeys mod.funs)
+    (listAppend (ty/stringBuiltinNames)
+      (listAppend (map (fn [(p (Pair String String))] -> String (optionOr (listHead (stringSplit (pairFirst p) "/")) "")) (ty/genericRows))
+                  (ty/genericAliasNames))))
+
+fn nearNames v: String mod: r/ModuleSummary -> (List String)
+  (let [(limit (max 1 (/ (stringLength (helperStem v)) 3)))
+        (scored (fold (fn [(acc (List (Pair Int64 String))) (c String)] -> (List (Pair Int64 String))
+                        (if (or (= c v) (or (stringEmpty? c) (or (not (stringEmpty? (ty/renamedHint c))) (listAny? (fn [(q (Pair Int64 String))] -> Bool (= (pairSecond q) c)) acc))))
+                          acc
+                          (let [(d (helperDistance v c))] (if (<= d limit) (cons (pair d c) acc) acc))))
+                      (list) (hintVocabulary mod)))
+        (ordered (listSortBy (fn [(p (Pair Int64 String))] -> String (str (stringFromInt64 (+ 1000 (pairFirst p))) " " (pairSecond p))) scored))]
+    (map (fn [(p (Pair Int64 String))] -> String (pairSecond p)) (listTake ordered 3)))
+
+fn builtinNearHint v: String mod: r/ModuleSummary -> String
+  (if (or (not (stringHelperName? v)) (not (stringEmpty? (ty/renamedHint v))))
+    ""
+    (let [(names (nearNames v mod))]
+      (if (listEmpty? names) "" (str "; did you mean " (stringJoin names ", ") " (prelude builtins)"))))
+
 fn inferAtom v: String env: (Map String ty/Type) mod: r/ModuleSummary deps: r/DepIndex scope: String path: String st: InferState -> (Pair ty/Type InferState)
-  (cond ((stringStartsWith? v "\"") (pair (ty/tyCon "String" (list) (none) (none)) st)) ((or (= v "true") (= v "false")) (pair (ty/tyCon "Bool" (list) (none) (none)) st)) ((and (= v "none") (not (mapHas? env v))) (let [(fRes (freshVar st "any"))] (pair (ty/tyCon "Option" (list (pairFirst fRes)) (none) (none)) (pairSecond fRes)))) ((or (= v "()") (= v "nil")) (pair (unitType) st)) ((isFloatLit? v) (pair (ty/tyCon "Float64" (list) (none) (none)) st)) ((isIntLit? v) (let [(vid st.nextVar) (fRes (freshVar st "int")) (vty (pairFirst fRes)) (st1 (pairSecond fRes)) (st2 (noteIntLiteral st1 v vid))] (pair vty st2))) ((and (stringStartsWith? v ":") (not (mapHas? env v))) (pair (ty/tyCon "Keyword" (list) (none) (none)) st)) (else (match (lookupSymbolType v env mod deps st) ((some found) (nullaryCaseValue v found env mod deps)) ((none) (let [(st1 (addDiag st "rule-1" (str "unbound symbol: " v (ty/renamedHint v)) path))] (freshVar st1 "any"))))))
+  (cond ((stringStartsWith? v "\"") (pair (ty/tyCon "String" (list) (none) (none)) st)) ((or (= v "true") (= v "false")) (pair (ty/tyCon "Bool" (list) (none) (none)) st)) ((and (= v "none") (not (mapHas? env v))) (let [(fRes (freshVar st "any"))] (pair (ty/tyCon "Option" (list (pairFirst fRes)) (none) (none)) (pairSecond fRes)))) ((or (= v "()") (= v "nil")) (pair (unitType) st)) ((isFloatLit? v) (pair (ty/tyCon "Float64" (list) (none) (none)) st)) ((isIntLit? v) (let [(vid st.nextVar) (fRes (freshVar st "int")) (vty (pairFirst fRes)) (st1 (pairSecond fRes)) (st2 (noteIntLiteral st1 v vid))] (pair vty st2))) ((and (stringStartsWith? v ":") (not (mapHas? env v))) (pair (ty/tyCon "Keyword" (list) (none) (none)) st)) (else (match (lookupSymbolType v env mod deps st) ((some found) (nullaryCaseValue v found env mod deps)) ((none) (let [(st1 (addDiag st "rule-1" (str "unbound symbol: " v (ty/renamedHint v) (builtinNearHint v mod)) path))] (freshVar st1 "any"))))))
 
 fn inferAtomFm fm: FrameMachine v: String st: InferState -> (Pair ty/Type InferState)
   (inferAtom v fm.env fm.mod fm.deps fm.scope fm.path st)
@@ -603,21 +656,122 @@ fn unknownSymbolName d: ty/Diagnostic -> (Option String)
        (some (optionOr (stringSlice d.message 0 (- (stringLength d.message) (stringLength suffix))) "")))
       (else (none))))
 
-fn refineUnknownSymbolPositions src: String ds: (List ty/Diagnostic) -> (List ty/Diagnostic)
+fn formStartLine f: a/TopForm -> Int64
+  (match f
+    ((a/topDefun d) (match (listHead d.bodyPos) ((some p) p.line) ((none) 0)))
+    ((a/topExpr p) p.line)
+    (_ 0))
+
+fn regionStarts forms: (List a/TopForm) -> (List Int64)
+  (listSort (filter (fn [(k Int64)] -> Bool (> k 0)) (map formStartLine forms)))
+
+fn regionOf starts: (List Int64) line: Int64 -> (Pair Int64 Int64)
+  (pair (fold (fn [(best Int64) (k Int64)] -> Int64 (if (<= k line) k best)) 0 starts)
+        (fold (fn [(best Int64) (k Int64)] -> Int64 (if (and (> k line) (< k best)) k best)) 9223372036854775807 starts))
+
+fn refineUnknownSymbolPositions forms: (List a/TopForm) src: String ds: (List ty/Diagnostic) -> (List ty/Diagnostic)
+  (let [(starts (regionStarts forms))]
   (listReverse (pairSecond (fold (fn [(acc (Pair (Map String (Pair Int64 Int64)) (List ty/Diagnostic))) (d ty/Diagnostic)] -> (Pair (Map String (Pair Int64 Int64)) (List ty/Diagnostic))
                                     (let [(seen (pairFirst acc)) (outAcc (pairSecond acc))]
                                       (match (unknownSymbolName d)
                                         ((none) (pair seen (cons d outAcc)))
                                         ((some name)
-                                          (let [(key (str d.code " " name))
+                                          (let [(region (regionOf starts d.line))
+                                                (key (str d.code " " name " " (stringFromInt64 (pairFirst region))))
                                                 (floor (optionOr (mapGet seen key) (pair d.line d.col)))
-                                                (pos (a/findTokenPos src (pairFirst floor) (pairSecond floor) name))
+                                                (found (a/findTokenPos src (pairFirst floor) (pairSecond floor) name))
+                                                (pos (if (>= (pairFirst found) (pairSecond region)) (pair d.line d.col) found))
                                                 (nd (ty/Diagnostic :code d.code :message d.message :msg d.msg :line (pairFirst pos) :col (pairSecond pos) :path d.path))]
                                             (pair (mapSet seen key (pair nd.line (+ nd.col 1))) (cons nd outAcc)))))))
-                                  (pair (mapEmpty) (list)) ds)))
+                                  (pair (mapEmpty) (list)) ds))))
+
+fn armCtor? x: String -> Bool
+  (or (= x "some") (or (= x "ok") (or (= x "err") (= x "none"))))
+
+fn binderAtom? x: String -> Bool
+  (and (not (= x "_")) (and (not (r/isLiteralAtom? x)) (not (stringStartsWith? x ":"))))
+
+fn patternBinders pat: rd/SExpr -> (List String)
+  (match pat
+    ((rd/sexprAtom x) (if (binderAtom? x) (list x) (list)))
+    ((rd/sexprList items) (fold (fn [(acc (List String)) (it rd/SExpr)] -> (List String) (listAppend acc (patternBinders it))) (list) (listDrop items 1)))
+    ((rd/sexprVect items) (fold (fn [(acc (List String)) (it rd/SExpr)] -> (List String) (listAppend acc (patternBinders it))) (list) items)))
+
+fn atomText e: rd/SExpr -> String
+  (match e ((rd/sexprAtom x) x) (_ ""))
+
+fn vectorArmHints items: (List rd/SExpr) -> (List (Pair String (Pair String String)))
+  (match (optionOr (listHead items) (rd/makeAtom ""))
+    ((rd/sexprList pitems)
+     (let [(ctor (atomText (optionOr (listHead pitems) (rd/makeAtom ""))))
+           (hint (str "; hint: a match arm is a list ((" ctor " v) body), not a vector [(" ctor " v) body]"))]
+       (map (fn [(b String)] -> (Pair String (Pair String String)) (pair b (pair (str "[(" ctor) hint))) (patternBinders (rd/makeList pitems)))))
+    (_ (list)))
+
+fn armHints arm: rd/SExpr -> (List (Pair String (Pair String String)))
+  (match arm
+    ((rd/sexprVect items) (vectorArmHints items))
+    ((rd/sexprList items)
+     (let [(ctor (atomText (optionOr (listHead items) (rd/makeAtom ""))))]
+       (if (= ctor "list")
+         (vectorArmHints (listDrop items 1))
+       (if (and (armCtor? ctor) (>= (listLength items) 2))
+         (let [(hint (str "; hint: the arm (" ctor " v) is read as a catch-all binding " ctor " with body v; a match arm wraps its pattern: ((" ctor " v) body)"))]
+           (map (fn [(b String)] -> (Pair String (Pair String String)) (pair b (pair (str "(" ctor " " b) hint))) (filter binderAtom? (map atomText (listDrop items 1)))))
+         (list)))))
+    (_ (list)))
+
+fn exprArmHints e: rd/SExpr -> (List (Pair String (Pair String String)))
+  (match e
+    ((rd/sexprAtom _) (list))
+    ((rd/sexprVect items) (fold (fn [(acc (List (Pair String (Pair String String)))) (it rd/SExpr)] -> (List (Pair String (Pair String String))) (listAppend acc (exprArmHints it))) (list) items))
+    ((rd/sexprList items)
+     (let [(inner (fold (fn [(acc (List (Pair String (Pair String String)))) (it rd/SExpr)] -> (List (Pair String (Pair String String))) (listAppend acc (exprArmHints it))) (list) items))]
+       (if (= (atomText (optionOr (listHead items) (rd/makeAtom ""))) "match")
+         (listAppend (fold (fn [(acc (List (Pair String (Pair String String)))) (arm rd/SExpr)] -> (List (Pair String (Pair String String))) (listAppend acc (armHints arm))) (list) (listDrop items 2)) inner)
+         inner))))
+
+fn moduleArmHints forms: (List a/TopForm) -> (List (Pair String (Pair String String)))
+  (fold (fn [(acc (List (Pair String (Pair String String)))) (f a/TopForm)] -> (List (Pair String (Pair String String)))
+          (match f
+            ((a/topDefun d) (listAppend acc (fold (fn [(xs (List (Pair String (Pair String String)))) (e rd/SExpr)] -> (List (Pair String (Pair String String))) (listAppend xs (exprArmHints e))) (list) d.body)))
+            ((a/topExpr p) (listAppend acc (exprArmHints p.expr)))
+            (_ acc)))
+        (list) forms)
+
+fn armHintAt hints: (List (Pair String (Pair String String))) lines: (List String) name: String line: Int64 -> (Option String)
+  (let [(here (optionOr (listGet lines (- line 1)) ""))
+        (hit (filter (fn [(h (Pair String (Pair String String)))] -> Bool (and (= (pairFirst h) name) (stringContains? here (pairFirst (pairSecond h))))) hints))]
+    (match (listHead hit) ((none) (none)) ((some h) (some (pairSecond (pairSecond h))))))
+
+fn armShapeHints forms: (List a/TopForm) src: String ds: (List ty/Diagnostic) -> (List ty/Diagnostic)
+  (let [(hints (moduleArmHints forms))]
+    (if (listEmpty? hints)
+      ds
+      (let [(lines (stringSplit src "\n"))]
+        (map (fn [(d ty/Diagnostic)] -> ty/Diagnostic
+               (match (unknownSymbolName d)
+                 ((none) d)
+                 ((some name) (match (armHintAt hints lines name d.line) ((none) d) ((some h) (with d :message (str d.message h) :msg (str d.msg h)))))))
+             ds))))
+
+fn pairFieldMistake? msg: String -> Bool
+  (listAny? (fn [(f String)] -> Bool (or (stringEndsWith? msg (str " field " f)) (stringContains? msg (str " field " f ";"))))
+            (list "fst" "snd" "first" "second"))
+
+fn mapEmptyMistake? d: ty/Diagnostic -> Bool
+  (or (and (= d.code "ERR_ARITY") (and (stringStartsWith? d.message "map takes ") (stringEndsWith? d.message "given 0")))
+      (and (= d.code "ERR_TYPE_MISMATCH") (and (stringContains? d.message "expected (Map ") (stringContains? d.message "found (List _)"))))
+
+fn messageHint d: ty/Diagnostic -> ty/Diagnostic
+  (let [(hint (cond
+                ((mapEmptyMistake? d) "; hint: the empty map is (mapEmpty); map is the list function")
+                ((and (pairFieldMistake? d.message) (or (and (= d.code "ERR_UNKNOWN_SYMBOL") (stringContains? d.message "has a field")) (and (= d.code "ERR_TYPE_MISMATCH") (stringContains? d.message "found (Pair ")))) "; hint: read a pair with (pairFirst p) and (pairSecond p)")
+                (else "")))]
+    (if (stringEmpty? hint) d (with d :message (str d.message hint) :msg (str d.msg hint))))
 
 fn checkModuleSource forms: (List a/TopForm) deps: (Map String r/ModuleSummary) path: String src: String -> (List ty/Diagnostic)
-  (normalizeCheckDiags (refineUnknownSymbolPositions src (refineNotExportedPositions src (listAppend (checkModule forms deps path) (listAppend (tp/notTailDiags forms src path) (listAppend (ca/constantAssertDiags forms src path) (r/letrecDiags forms path src)))))))
+  (map messageHint (normalizeCheckDiags (armShapeHints forms src (refineUnknownSymbolPositions forms src (refineNotExportedPositions src (listAppend (checkModule forms deps path) (listAppend (tp/notTailDiags forms src path) (listAppend (ca/constantAssertDiags forms src path) (r/letrecDiags forms path src)))))))))
 
 fn checkDefunWithUntyped d: a/DefunNode summary: r/ModuleSummary deps: r/DepIndex path: String -> (List ty/Diagnostic)
   (listAppend (untypedParamDiags d path) (checkDefunDiags d summary deps path))

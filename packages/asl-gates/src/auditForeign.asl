@@ -678,8 +678,9 @@ fn langFromHead hb: Bytes name: String -> String
       ((and (>= n 2) (= (bytesGet hb 0) 35) (= (bytesGet hb 1) 33))
        (let [(words (shebangWords hb n 2 (list) (list)))
              (first (optionOr (listHead words) ""))
-             (argv (if (= (baseName first) "env") (filter (fn [(w String)] -> Bool (not (stringStartsWith? w "-"))) (optionOr (listTail words) (list))) words))]
-         (shebangLang (baseName (optionOr (listHead argv) "")))))
+             (argv (if (= (baseName first) "env") (filter (fn [(w String)] -> Bool (not (stringStartsWith? w "-"))) (optionOr (listTail words) (list))) words))
+             (interp (baseName (optionOr (listHead argv) "")))]
+         (if (= interp "asl") (extLang name) (shebangLang interp))))
       (else (extLang name))))
 
 fn binaryLang? lang: String -> Bool

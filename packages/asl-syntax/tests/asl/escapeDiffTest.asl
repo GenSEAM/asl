@@ -90,7 +90,7 @@ fn checkCase! dir: String index: Int64 body: String expected: Bool -> Bool
           (assert (= hostAccepts expected) (str label ": host verdict " (if hostAccepts "accept" "reject")))
           (assert (= lexAccepts expected) (str label ": lexer verdict " (if lexAccepts "accept" "reject")))
           (assert (= (lexErrorFound? text) (not expected)) (str label ": stringErrorAt agrees"))
-          (assert (or expected (stringContains? res.stderr (str path ":1:2: ERR_BAD_ESCAPE"))) (str label ": host names ERR_BAD_ESCAPE at FILE:1:2, got " res.stderr))
+          (assert (or expected (stringContains? res.stderr (str path ":1:2: ERR_READ ERR_BAD_ESCAPE"))) (str label ": host names ERR_READ ERR_BAD_ESCAPE at the escape, FILE:1:2, got " res.stderr))
           (and (= hostAccepts expected) (= lexAccepts expected))))))
 
 fn checkCases! dir: String cases: (List (Pair String Bool)) index: Int64 agreed: Int64 -> Int64

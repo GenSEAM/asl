@@ -12,7 +12,8 @@
       (asl/agentLoop/runOps :a r)
       (asl/agentLoop/reply :a rp)
       (asl/agentLoop/plan :a p)
-      (asl/agentLoop/claims :a cl)])
+      (asl/agentLoop/claims :a cl)
+      (asl/agentLoop/remoteOps :a rr)])
 
 enum Val
   (vStr text: String)
@@ -607,7 +608,7 @@ fn ! execGateOp! n: (Option c/KvVal) env: ExecEnv newId: (fn [] -> String) -> (L
                          (map (fn [k] (pair (+ k 1) (optionOr (listGet gates k) ""))) (range 0 count))
                          (list (pair i (optionOr (listGet gates (- i 1)) ""))))
                 withIds (map (fn [pk] (pair (newId) (pairSecond pk))) picked)
-                runs (g/runGates! withIds env.root (stepTimeout! env) (none))
+                runs (g/runGates! withIds env.root (stepTimeout! env) (none) (none))
                 recs (map (fn [k] (listAppend (mapRec (optionOr (listGet runs k) (list)) fromGit)
                                     (list (pair "n" (vInt (pairFirst (optionOr (listGet picked k) (pair 0 ""))))))))
                        (range 0 (min (listLength picked) (listLength runs))))
@@ -666,6 +667,15 @@ fn ! runCtx! env: ExecEnv -> r/RunCtx
 fn ! aslOp! op: (List (Pair String c/KvVal)) env: ExecEnv newId: (fn [] -> String) snap: (fn [String] -> Bool) run: (fn [String String] -> t/AslRun) -> (List (Pair String Val))
   (mapRec (o/execAslOpMemo! op env.owns env.root env.session newId snap run env.readCap (o/budgetLeft env.deadlineAt (o/nowMono))) fromAsl)
 
+; (:m :ref LEON-REMOTE-TOOLS :do "a step with :remote UNIT leaves the local root: the owns check still applies to write and edit, the rest is remoteOps over the relay")
+fn ! remoteRec! op: (List (Pair String c/KvVal)) opName: String env: ExecEnv newId: (fn [] -> String) -> (List (Pair String Val))
+  (let [refused (if (or (= opName "write") (= opName "edit")) (writeCheck op opName env newId) (none))]
+    (match refused
+      ((some rec) rec)
+      ((none)
+        (map (fn [p] (if (= (pairFirst p) "exit") (pair "exit" (vInt (optionOr (stringToInt64 (pairSecond p)) 1))) (vs (pairFirst p) (pairSecond p))))
+          (rr/remoteOp! op opName (newId) (stepTimeout! env) env.readCap)))))
+
 fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId: (fn [] -> String) snap: (fn [String] -> Bool) onKeep: (fn [String (Option String) Int64] -> Bool) run: (fn [String String] -> t/AslRun) -> ExecOut
   (let [opType (opStr op "type" "raw")
         opName (opStr op "op" opType)
@@ -683,6 +693,8 @@ fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId:
               (vs "message" (str "Operation '" opName "' not declared in effects registry")))
           procs))
       ((match effect ((t/effectConfirm) true) (_ false)) (eo (needsConfirmRec (newId) opName) procs))
+      ((and step (and (listContains? (rr/remoteOpNames) opName) (not (stringEmpty? (rr/remoteUnit op)))))
+        (eo (remoteRec! op opName env newId) procs))
       ((and step (= opName "gate")) (eo (execGateOp! (opGet op "n") env newId) procs))
       ((some? gateIdx)
         (let [k (optionOr gateIdx 0)

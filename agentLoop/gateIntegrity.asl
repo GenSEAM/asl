@@ -97,7 +97,7 @@ fn ! scanSwallowedErrors! root: String written: (List (Pair String (Option Strin
     (scanSwallowedLoop! root normalizedWritten all))
 
 fn ! rawHead! root: String rel: String timeout: Int64 env: (Option (List String)) -> (Option String)
-  (match (io/runBounded! (list "git" "show" (str "HEAD:" rel)) (some root) (some timeout) env)
+  (match (io/runBounded! (list "git" "show" (str "HEAD:" rel)) (some root) (some timeout) env (none))
     ((ok b) (if (= (optionOr b.code 1) 0) (some b.out) (none)))
     ((err _) (none)))
 
@@ -117,9 +117,9 @@ fn rint rec: (List (Pair String io/RVal)) key: String -> Int64
 fn rbool rec: (List (Pair String io/RVal)) key: String -> Bool
   (= (rstr rec key) "true")
 
-fn ! runIntegrityGates! gates: (List String) root: String timeout: Int64 env: (Option (List String)) -> (List g/GateResult)
+fn ! runIntegrityGates! gates: (List String) root: String timeout: Int64 env: (Option (List String)) watch: (Option Int64) -> (List g/GateResult)
   (map (fn [rec] (g/makeGateResult (rstr rec "cmd") (rint rec "exit") (rstr rec "stdout") (rstr rec "stderr") (rbool rec "timeout") (max 0 (rint rec "seconds"))))
-    (io/runGates! (map (fn [cmd] (pair cmd cmd)) gates) root timeout env))
+    (io/runGates! (map (fn [cmd] (pair cmd cmd)) gates) root timeout env watch))
 
 fn ! writeTexts! root: String files: (List (Pair String (Option String))) -> Bool
   (fold (fn [ok p]
@@ -152,17 +152,17 @@ fn implFiles changed: (List String) gates: (List String) -> (List String)
 fn unionPaths a: (List String) b: (List String) -> (List String)
   (fold (fn [acc f] (if (listContains? acc f) acc (listAppend acc (list f)))) a b)
 
-fn ! gateIntegrityWritten! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) written: (List String) -> (Pair Bool String)
+fn ! gateIntegrityWritten! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) written: (List String) watch: (Option Int64) -> (Pair Bool String)
   (match (io/changedOwnedFiles! owns root env)
     ((err message) (pair false (str "changedOwnedFiles failed: " message)))
-    ((ok changed) (gateIntegrityWithChanged! gates root gateResults timeout env (unionPaths changed (map (fn [f] (scanPath root f)) written)))))
+    ((ok changed) (gateIntegrityWithChanged! gates root gateResults timeout env (unionPaths changed (map (fn [f] (scanPath root f)) written)) watch)))
 
 fn ! gateIntegrity! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) -> (Pair Bool String)
   (match (io/changedOwnedFiles! owns root env)
     ((err message) (pair false (str "changedOwnedFiles failed: " message)))
-    ((ok changed) (gateIntegrityWithChanged! gates root gateResults timeout env changed)))
+    ((ok changed) (gateIntegrityWithChanged! gates root gateResults timeout env changed (none))))
 
-fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) changed: (List String) -> (Pair Bool String)
+fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) changed: (List String) watch: (Option Int64) -> (Pair Bool String)
   (let [impl (implFiles changed gates)
         verdicts (g/gateVerdicts gateResults false)
         vac (g/gateVacuousMessage gateResults verdicts)]
@@ -177,13 +177,13 @@ fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (L
               newFiles (map pairFirst (filter (fn [p] (not (some? (pairSecond p)))) headText))
               wroteHead (writeTexts! root existing)
               bumped (fold (fn [ok p] (and ok (bumpMtime! (str root "/" (pairFirst p))))) wroteHead existing)
-              firstRun (if (and bumped (not (listEmpty? existing))) (runIntegrityGates! gates root timeout env) (list))
+              firstRun (if (and bumped (not (listEmpty? existing))) (runIntegrityGates! gates root timeout env watch) (list))
               firstDecision (g/gateRevertVerdict firstRun (g/gateVerdicts firstRun true) impl newFiles)
               answer (if (and bumped (pairFirst firstDecision))
                 firstDecision
                 (let [headRestored (and (writeTexts! root existing) (bumpTexts! root existing))
                       removedNew (removeNames! root newFiles)
-                      secondRun (if (and headRestored removedNew) (runIntegrityGates! gates root timeout env) (list))]
+                      secondRun (if (and headRestored removedNew) (runIntegrityGates! gates root timeout env watch) (list))]
                   (g/gateRevertVerdict secondRun (g/gateVerdicts secondRun true) impl (list))))
               restored (fold (fn [ok p] (and ok (match (pairSecond p)
                 ((some b) (and (ok? (fileWrite (str root "/" (pairFirst p)) b)) (bumpMtime! (str root "/" (pairFirst p)))))

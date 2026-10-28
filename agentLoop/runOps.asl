@@ -607,7 +607,7 @@ fn sortMarks ms: (List Mark) -> (List Mark)
   (listSortBy (fn [m] m.rel) ms)
 
 fn gitListing! argv: (List String) root: String -> (Result g/Bounded String)
-  (g/runBounded! argv (some root) (none) (none))
+  (g/runBounded! argv (some root) (none) (none) (none))
 
 fn nulSplit s: String -> (List String)
   (filter (fn [x] (not (stringEmpty? x))) (stringSplit s "\x00"))
