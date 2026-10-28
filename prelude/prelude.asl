@@ -940,31 +940,41 @@ fn preludeB64Enc b: Bytes i: Int64 n: Int64 acc: (List String) -> String
 fn bytesToBase64 b: Bytes -> String
   (preludeB64Enc b 0 (bytesLength b) (list))
 
-fn preludeB64At s: String i: Int64 padFrom: Int64 -> (Option Int64)
-  (match (stringIndexOf "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" (preludeSlice s i (+ i 1)))
-    ((some v) (some v))
-    (none (if (>= i padFrom) (some 0) none)))
+; (:m :ref PERF-B64-SUPERLINEAR :do "the string is turned into bytes once and indexed with bytesGet, because stringSlice by character index costs O(index), which made the per-character lookup quadratic (192 KB decoded in 902 ms, 12 KB in 2 ms); a non-ASCII character makes the byte length differ from the character length and is refused as invalid")
+fn preludeB64Val c: Int64 -> Int64
+  (cond
+    ((and (>= c 65) (<= c 90)) (- c 65))
+    ((and (>= c 97) (<= c 122)) (+ (- c 97) 26))
+    ((and (>= c 48) (<= c 57)) (+ (- c 48) 52))
+    ((= c 43) 62)
+    ((= c 47) 63)
+    (else -1))
 
-fn ! preludeB64Dec s: String out: Bytes g: Int64 groups: Int64 padFrom: Int64 -> (Result Bytes String)
+fn preludeB64At sb: Bytes i: Int64 padFrom: Int64 -> Int64
+  (let [v (preludeB64Val (bytesGet sb i))]
+    (if (and (< v 0) (>= i padFrom)) 0 v))
+
+fn ! preludeB64Dec sb: Bytes out: Bytes g: Int64 groups: Int64 padFrom: Int64 -> (Result Bytes String)
   (if (>= g groups) (ok out)
     (let [i (* g 4) o (* g 3) n (bytesLength out)
-          v0 (preludeB64At s i (stringLength s)) v1 (preludeB64At s (+ i 1) (stringLength s))
-          v2 (preludeB64At s (+ i 2) padFrom) v3 (preludeB64At s (+ i 3) padFrom)]
-      (if (or (none? v0) (or (none? v1) (or (none? v2) (none? v3))))
+          a (preludeB64At sb i (bytesLength sb)) b (preludeB64At sb (+ i 1) (bytesLength sb))
+          c (preludeB64At sb (+ i 2) padFrom) d (preludeB64At sb (+ i 3) padFrom)]
+      (if (or (< a 0) (or (< b 0) (or (< c 0) (< d 0))))
         (err (str "bytesFromBase64: invalid character in group at " i))
-        (let [a (optionOr v0 0) b (optionOr v1 0) c (optionOr v2 0) d (optionOr v3 0)]
-          (do
-            (bytesSet out o (+ (* a 4) (/ b 16)))
-            (if (< (+ o 1) n) (bytesSet out (+ o 1) (+ (* (mod b 16) 16) (/ c 4))) ())
-            (if (< (+ o 2) n) (bytesSet out (+ o 2) (+ (* (mod c 4) 64) d)) ())
-            (preludeB64Dec s out (+ g 1) groups padFrom))))))
+        (do
+          (bytesSet out o (+ (* a 4) (/ b 16)))
+          (if (< (+ o 1) n) (bytesSet out (+ o 1) (+ (* (mod b 16) 16) (/ c 4))) ())
+          (if (< (+ o 2) n) (bytesSet out (+ o 2) (+ (* (mod c 4) 64) d)) ())
+          (preludeB64Dec sb out (+ g 1) groups padFrom)))))
 
 fn ! bytesFromBase64 s: String -> (Result Bytes String)
   (let [n (stringLength s)
+        sb (stringToBytes s)
         pad (cond ((stringEndsWith? s "==") 2) ((stringEndsWith? s "=") 1) (else 0))]
-    (if (!= (mod n 4) 0)
-      (err (str "bytesFromBase64: length " n " is not a multiple of 4"))
-      (preludeB64Dec s (bytesAlloc (- (* (/ n 4) 3) pad)) 0 (/ n 4) (- n pad))))
+    (cond
+      ((!= (mod n 4) 0) (err (str "bytesFromBase64: length " n " is not a multiple of 4")))
+      ((!= (bytesLength sb) n) (err "bytesFromBase64: invalid character in group at 0"))
+      (else (preludeB64Dec sb (bytesAlloc (- (* (/ n 4) 3) pad)) 0 (/ n 4) (- n pad)))))
 
 fn preludeFnvMul h: Int64 -> Int64
   (let [u (preludeLow h)
