@@ -32,6 +32,81 @@ fn subModels -> String
 fn calFixture -> String
   "(:cal :id FREE-PROBE-20261027 :models ((openrouter \"new/flaky:free\" :vps 429 :mac 429 :ms 250) (openrouter \"new/broken:free\" :vps 404 :mac 404 :ms 90)))\n"
 
+; (:m :ref GW-SUB-PACE-APPLY :do "a mini config with two routes, three model rows and one dropped alias, and a SUB-PACE patch touching every section: :spreads replaces a route spread, :rpm and :models set fields, :drops removes an alias from every chain and spread, :decisions drops a route member and sets a weight")
+fn subConfig -> String
+  (str "(:gateway :v 2\n"
+       "  :providers ((:provider :id p1 :kind openai :base \"https://example.test/v1\" :keyEnv GWSUB_TEST_UNSET_KEY))\n"
+       "  :models ((:model :id mA :provider p1 :name \"a\" :rpm 9)\n"
+       "           (:model :id mB :provider p1 :name \"b\")\n"
+       "           (:model :id mC :provider p1 :name \"c\" :temperature 0.9)\n"
+       "           (:model :id mGone :provider p1 :name \"g\"))\n"
+       "  :intents ((:intent :id plan) (:intent :id code))\n"
+       "  :profiles ((:profile :id pool :routes ((:intent plan :chain (mA mB mC mGone) :spread ((mA 3) (mB 3) (mC 3) (mGone 3)))\n"
+       "                                         (:intent code :chain (mA mB mGone)))))\n"
+       "  :uses ((:use :for default :profile pool)))\n")
+
+fn subPatch host: String -> String
+  (str "(:patch :id \"SUB-PACE-TEST\" :host " host " :apply \"test (with parens) and :rpm words\"\n"
+       "  :spreads ((:set :profile pool :intent plan :spread ((mA 7) (mB 2) (mC 4) (mGone 1)))\n"
+       "            (:set :profile pool :intent code :spread ((mA 5) (mB 5) (mGone 5))))\n"
+       "  :rpm ((mB :rpm 0.5 :why \"month\") (mA :rpm 1.25 :why \"month\"))\n"
+       "  :models ((:set :model mC :temperature 0.2) (:set :model mC :timeoutSec 240) (:set :model mC :retry (:max 1)))\n"
+       "  :drops (mGone)\n"
+       "  :decisions ((:dropRoute :model mB :route pool/code :by lead) (:weight :model mA :route pool/plan :value 1 :by lead))\n"
+       "  :budgets ((:budget :provider p1 :renews \"2026-11-13\" :remainingPercent 57.000 :daysLeft 16))\n"
+       "  :changes ((mA rpm 9 1.25)))\n")
+
+fn otherHost -> String
+  (match (platformInfo) ((ok p) (if (= p.os "Darwin") "vps" "mac")) ((err _) "mac"))
+
+fn thisHost -> String
+  (if (= (otherHost) "vps") "mac" "vps")
+
+fn ! testSubPace! -> Bool
+  (let [(dir (str "/tmp/gwSubPace-" (procSelf) "-" (nowNs)))
+        (_d (dirCreate dir))
+        (cfgPath (str dir "/gateway.asn"))
+        (w1 (fileWrite cfgPath (subConfig)))
+        (good (str dir "/good.patch"))
+        (w2 (fileWrite good (subPatch (thisHost))))
+        (wrong (str dir "/wrong.patch"))
+        (w3 (fileWrite wrong (subPatch (otherHost))))
+        (misfit (str dir "/misfit.patch"))
+        (w4 (fileWrite misfit (stringReplace (subPatch (thisHost)) "pool/plan :value 1" "pool/plan :value 1) (:dropRoute :model mC :route nowhere/plan")))
+        (before (resultOr (fileReadString cfgPath) "READ-FAILED"))
+        (checked (ms/modelsApplyCli! (list good "--config" cfgPath "--check")))
+        (afterCheck (resultOr (fileReadString cfgPath) "READ-FAILED"))
+        (refusedHost (ms/modelsApplyCli! (list wrong "--config" cfgPath)))
+        (afterHost (resultOr (fileReadString cfgPath) "READ-FAILED"))
+        (refusedMisfit (ms/modelsApplyCli! (list misfit "--config" cfgPath)))
+        (afterMisfit (resultOr (fileReadString cfgPath) "READ-FAILED"))
+        (applied (ms/modelsApplyCli! (list good "--config" cfgPath)))
+        (after (resultOr (fileReadString cfgPath) "READ-FAILED"))
+        (again (ms/modelsApplyCli! (list good "--config" cfgPath)))
+        (afterAgain (resultOr (fileReadString cfgPath) "READ-FAILED"))
+        (backups (filter (fn [(n String)] -> Bool (stringStartsWith? n "gateway.asn.bak-")) (names dir)))
+        (removed (pathRemove dir))]
+    (do
+      (assert (and (ok? w1) (and (ok? w2) (and (ok? w3) (ok? w4)))) "the SUB-PACE fixtures are written")
+      (assert (= checked (ok 0)) (str "--check exits 0 on a fitting patch, got " checked))
+      (assert (= afterCheck before) "--check writes nothing")
+      (assert (= refusedHost (ok 1)) (str "a patch for the other host is refused, got " refusedHost))
+      (assert (= afterHost before) "a host refusal leaves the config untouched")
+      (assert (= refusedMisfit (ok 1)) (str "a patch naming a route the config lacks is refused, got " refusedMisfit))
+      (assert (= afterMisfit before) "a misfit refusal leaves the config byte-identical, even for the edits before the misfit")
+      (assert (= applied (ok 0)) (str "the SUB-PACE patch applies, got " applied))
+      (assert (stringContains? after "(:intent plan :chain (mA mB mC) :spread ((mA 1) (mB 2) (mC 4)))") (str "plan: spread replaced, mGone dropped from chain and spread, mA weight set by the decision: " after))
+      (assert (stringContains? after "(:intent code :chain (mA) :spread ((mA 5)))") (str "code: spread added after the chain, mB dropped by the decision and mGone by :drops: " after))
+      (assert (stringContains? after ":name \"b\" :rpm 0.5)") "an absent :rpm is appended to the model row")
+      (assert (stringContains? after "(:model :id mA :provider p1 :name \"a\" :rpm 1.25)") "a present :rpm is replaced")
+      (assert (and (stringContains? after ":temperature 0.2") (and (stringContains? after ":timeoutSec 240") (stringContains? after ":retry (:max 1)"))) "model fields are replaced or appended, a list value keeps its shape")
+      (assert (not (stringContains? after "0.9")) "the replaced temperature is gone")
+      (assert (= again (ok 0)) (str "re-applying exits 0, got " again))
+      (assert (= afterAgain after) "re-applying changes nothing")
+      (assert (= (listLength backups) 1) (str "one backup, from the one real apply: " backups))
+      (assert (ok? removed) "the scratch dir is removed")
+      true))
+
 fn names dir: String -> (List String)
   (resultOr (dirList dir) (list))
 
@@ -89,4 +164,4 @@ fn ! runTests -> Bool
       (assert (not (listAny? (fn [(n String)] -> Bool (stringContains? n ".tmp")) finalNames)) (str "no tmp file is left after a refusal: " finalNames))
       (assert (= (listLength (filter (fn [(n String)] -> Bool (stringStartsWith? n "gateway.asn.bak-")) finalNames)) 1) (str "the idempotent rerun and the refusals make no backup, only the first apply did: " finalNames))
       (assert (ok? removed) "the scratch dir is removed")
-      true))
+      (testSubPace!)))

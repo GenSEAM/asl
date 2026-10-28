@@ -1,6 +1,6 @@
 (module aslGateway/modelSync
   :x [SyncDiff SyncProbe modelFilterFor nonChatId? listedModels syncDiff chainsWith proposeAlias calStatus toProbe syncProposals
-      syncPatchText syncCalText syncListText modelsSyncCli! applyPatchText modelsApplyCli!]
+      syncPatchText syncCalText syncListText modelsSyncCli! applyPatchText applySubPace patchHost modelsApplyCli!]
   :i [(config :a c)
       (search :a srch)
       (localTime :a lt)
@@ -472,6 +472,13 @@ fn appendTail cfg: String form: String -> (Result (Pair String Int64) String)
 
 ; (:m :do "the patched text and an (:applied ...) summary; err when the patch does not fit the config")
 fn applyPatchText cfg: String patch: String -> (Result (Pair String String) String)
+  (if (>= (keyOpen patch 0 (stringLength patch) ":spreads" false false false) 0)
+    (match (applySubPace cfg patch)
+      ((err e) (err e))
+      ((ok r) (ok (pair (pairFirst r) (str "(:applied :kind subPace :count " (stringFromInt64 (listLength (pairSecond r))) " :changes (" (stringJoin (map q (pairSecond r)) " ") "))")))))
+    (applyAddPatch cfg patch))
+
+fn applyAddPatch cfg: String patch: String -> (Result (Pair String String) String)
   (match (patchForms patch ":add")
     ((err e) (err e))
     ((ok rows)
@@ -496,6 +503,226 @@ fn applyPatchText cfg: String patch: String -> (Result (Pair String String) Stri
                               (str "(:applied :models " (stringFromInt64 (pairFirst (pairSecond added))) " :modelsAlreadyThere (" (stringJoin (pairSecond (pairSecond added)) " ") ")"
                                    " :aliasesAppended " (stringFromInt64 (pairSecond done)) " :leaveNotApplied " (stringFromInt64 (listLength leave)) ")"))))))))))))
 
+
+; (:m :ref GW-SUB-PACE-APPLY :do "the SUB-PACE patch shape (:patch :id :host :spreads :rpm :models :drops :decisions, with :budgets and :changes informational): text edits on the config, each recomputed against the current text so offsets never go stale; an edit that already holds changes nothing, an edit whose target is missing (route, model row, a weight on a non-member) makes the whole patch a misfit")
+fn keyValue s: String from: Int64 end: Int64 key: String inStr: Bool esc: Bool cmt: Bool -> Int64
+  (if (>= from end)
+    -1
+    (let [(c (gwCharAt s from))]
+      (cond
+        (cmt (keyValue s (+ from 1) end key false false (!= c "\n")))
+        (inStr (cond (esc (keyValue s (+ from 1) end key true false false))
+                     ((= c "\\") (keyValue s (+ from 1) end key true true false))
+                     ((= c "\"") (keyValue s (+ from 1) end key false false false))
+                     (else (keyValue s (+ from 1) end key true false false))))
+        ((= c "\"") (keyValue s (+ from 1) end key true false false))
+        ((= c ";") (keyValue s (+ from 1) end key false false true))
+        ((and (= c ":") (and (= (stringSlice s from (+ from (stringLength key))) (some key)) (gwSpace? (gwCharAt s (+ from (stringLength key))))))
+          (skipSpace s (+ from (stringLength key)) end))
+        (else (keyValue s (+ from 1) end key false false false)))))
+
+fn valueEnd s: String i: Int64 n: Int64 -> Int64
+  (let [(c (gwCharAt s i))]
+    (cond
+      ((or (= c "(") (= c "[")) (+ (closeOf s i) 1))
+      ((= c "\"") (+ (scanStringEnd s (+ i 1) n) 1))
+      (else (scanAtomEnd s i n))))
+
+fn scanStringEnd s: String i: Int64 n: Int64 -> Int64
+  (cond
+    ((>= i n) n)
+    ((= (gwCharAt s i) "\\") (scanStringEnd s (+ i 2) n))
+    ((= (gwCharAt s i) "\"") i)
+    (else (scanStringEnd s (+ i 1) n)))
+
+fn scanAtomEnd s: String i: Int64 n: Int64 -> Int64
+  (if (or (>= i n) (or (gwSpace? (gwCharAt s i)) (or (= (gwCharAt s i) ")") (= (gwCharAt s i) "]")))) i (scanAtomEnd s (+ i 1) n))
+
+fn splice s: String a: Int64 b: Int64 text: String -> String
+  (str (sliceOr s 0 a) text (sliceOr s b (stringLength s)))
+
+; (:m :do "row span of a model row or -1 -1: from its (:model :id ALIAS opener to its closing bracket")
+fn modelSpan cfg: String alias: String -> (Pair Int64 Int64)
+  (let [(i (optionOr (stringIndexOf cfg (str "(:model :id " alias " ")) -1))]
+    (if (< i 0) (pair -1 -1) (pair i (closeOf cfg i))))
+
+fn routeSpan cfg: String prof: String intent: String -> (Pair Int64 Int64)
+  (let [(pIdx (optionOr (stringIndexOf cfg (str "(:profile :id " prof " ")) -1))
+        (pe (if (< pIdx 0) -1 (closeOf cfg pIdx)))
+        (ri (if (< pe 0) -1 (optionOr (stringIndexOf (sliceOr cfg pIdx pe) (str "(:intent " intent " ")) -1)))
+        (rs (if (< ri 0) -1 (+ pIdx ri)))
+        (re (if (< rs 0) -1 (closeOf cfg rs)))]
+    (if (< re 0) (pair -1 -1) (pair rs re)))
+
+; (:m :do "set KEY to VALTEXT inside the form spanning a..b: replaced when present with another value, appended before the close when absent, untouched when already equal")
+fn setField cfg: String a: Int64 b: Int64 key: String valText: String -> (Pair String Bool)
+  (let [(v (keyValue cfg a b key false false false))]
+    (if (< v 0)
+      (pair (splice cfg b b (str " " key " " valText)) true)
+      (let [(ve (valueEnd cfg v b))]
+        (if (= (tokensOf (sliceOr cfg v ve)) (tokensOf valText))
+          (pair cfg false)
+          (pair (splice cfg v ve valText) true)))))
+
+fn oneLine t: String -> String
+  (stringJoin (tokensKeep t) " ")
+
+fn tokensKeep t: String -> (List String)
+  (filter (fn [(x String)] -> Bool (not (stringEmpty? x))) (stringSplit (stringReplace (stringReplace t "\n" " ") "\t" " ") " "))
+
+fn formKey form: String key: String -> String
+  (let [(o (keyValue form 0 (stringLength form) key false false false))]
+    (if (< o 0) "" (sliceOr form o (valueEnd form o (stringLength form)))))
+
+fn pairAlias pairText: String -> String
+  (tokenAfter (cons "" (tokensOf pairText)) "")
+
+fn spreadItems cfg: String so: Int64 -> (List String)
+  (splitForms cfg (+ so 1) (closeOf cfg so) (list))
+
+fn spreadHas? items: (List String) alias: String -> Bool
+  (listAny? (fn [(it String)] -> Bool (= (optionOr (listHead (tokensOf it)) "") alias)) items)
+
+fn listWithout cfg: String open: Int64 alias: String isPairs: Bool -> (Pair String Bool)
+  (let [(e (closeOf cfg open))
+        (inner (sliceOr cfg (+ open 1) e))
+        (kept (if isPairs
+                (filter (fn [(it String)] -> Bool (!= (optionOr (listHead (tokensOf it)) "") alias)) (splitForms cfg (+ open 1) e (list)))
+                (filter (fn [(t String)] -> Bool (!= t alias)) (tokensKeep inner))))]
+    (if (= (listLength kept) (if isPairs (listLength (splitForms cfg (+ open 1) e (list))) (listLength (tokensKeep inner))))
+      (pair cfg false)
+      (pair (splice cfg (+ open 1) e (stringJoin kept " ")) true)))
+
+fn dropEverywhere cfg: String alias: String key: String isPairs: Bool from: Int64 n: Int64 -> (Pair String Int64)
+  (let [(o (keyOpen cfg from (stringLength cfg) key false false false))]
+    (if (< o 0)
+      (pair cfg n)
+      (let [(r (listWithout cfg o alias isPairs))]
+        (dropEverywhere (pairFirst r) alias key isPairs (+ o 1) (if (pairSecond r) (+ n 1) n)))))
+
+fn opSpread cfg: String form: String -> (Result (Pair String (List String)) String)
+  (let [(toks (tokensOf form))
+        (prof (tokenAfter toks ":profile"))
+        (intent (tokenAfter toks ":intent"))
+        (so0 (formKey form ":spread"))
+        (span (routeSpan cfg prof intent))
+        (rs (pairFirst span))
+        (re (pairSecond span))]
+    (cond
+      ((< rs 0) (err (str "spread: no route " prof "/" intent " in the config")))
+      ((stringEmpty? so0) (err (str "spread: patch row for " prof "/" intent " has no :spread list")))
+      (else
+        (let [(r (setField cfg rs re ":spread" (oneLine so0)))]
+          (ok (pair (pairFirst r) (if (pairSecond r) (list (str "spread " prof "/" intent)) (list))))))))
+
+fn opRpm cfg: String form: String -> (Result (Pair String (List String)) String)
+  (let [(toks (tokensOf form))
+        (alias (optionOr (listHead toks) ""))
+        (v (tokenAfter toks ":rpm"))
+        (span (modelSpan cfg alias))]
+    (cond
+      ((< (pairFirst span) 0) (err (str "rpm: no model row " alias " in the config")))
+      ((stringEmpty? v) (err (str "rpm: patch row for " alias " has no :rpm value")))
+      (else
+        (let [(r (setField cfg (pairFirst span) (pairSecond span) ":rpm" v))]
+          (ok (pair (pairFirst r) (if (pairSecond r) (list (str "rpm " alias " " v)) (list))))))))
+
+fn opModel cfg: String form: String -> (Result (Pair String (List String)) String)
+  (let [(toks (tokensOf form))
+        (alias (tokenAfter toks ":model"))
+        (field (optionOr (listGet toks 3) ""))
+        (fi (optionOr (stringIndexOf form (str " " field " ")) -1))
+        (val (if (< fi 0) "" (oneLine (sliceOr form (+ fi (+ 2 (stringLength field))) (- (stringLength form) 1)))))
+        (span (modelSpan cfg alias))]
+    (cond
+      ((< (pairFirst span) 0) (err (str "models: no model row " alias " in the config")))
+      ((or (stringEmpty? field) (stringEmpty? val)) (err (str "models: patch row for " alias " has no field value")))
+      (else
+        (let [(r (setField cfg (pairFirst span) (pairSecond span) field val))]
+          (ok (pair (pairFirst r) (if (pairSecond r) (list (str "model " alias " " field " " val)) (list))))))))
+
+fn opDrop cfg: String alias: String -> (Result (Pair String (List String)) String)
+  (let [(a (dropEverywhere cfg alias ":chain" false 0 0))
+        (b (dropEverywhere (pairFirst a) alias ":spread" true 0 0))]
+    (ok (pair (pairFirst b) (if (> (pairSecond a) 0) (list (str "drop " alias " from " (stringFromInt64 (pairSecond a)) " chains")) (list)))))
+
+fn routeParts route: String -> (Pair String String)
+  (let [(parts (stringSplit route "/"))]
+    (pair (optionOr (listGet parts 0) "") (optionOr (listGet parts 1) "")))
+
+fn opDecision cfg: String form: String -> (Result (Pair String (List String)) String)
+  (let [(toks (tokensOf form))
+        (kind (optionOr (listHead toks) ""))
+        (alias (tokenAfter toks ":model"))
+        (rt (routeParts (tokenAfter toks ":route")))
+        (span (routeSpan cfg (pairFirst rt) (pairSecond rt)))
+        (rs (pairFirst span))
+        (re (pairSecond span))
+        (co (if (< rs 0) -1 (keyOpen cfg rs re ":chain" false false false)))
+        (so (if (< rs 0) -1 (keyOpen cfg rs re ":spread" false false false)))]
+    (cond
+      ((< rs 0) (err (str "decisions: no route " (tokenAfter toks ":route") " in the config")))
+      ((= kind ":dropRoute")
+        (let [(a (if (< co 0) (pair cfg false) (listWithout cfg co alias false)))
+              (span2 (routeSpan (pairFirst a) (pairFirst rt) (pairSecond rt)))
+              (so2 (keyOpen (pairFirst a) (pairFirst span2) (pairSecond span2) ":spread" false false false))
+              (b (if (< so2 0) (pair (pairFirst a) false) (listWithout (pairFirst a) so2 alias true)))]
+          (ok (pair (pairFirst b) (if (or (pairSecond a) (pairSecond b)) (list (str "dropRoute " alias " " (tokenAfter toks ":route"))) (list))))))
+      ((= kind ":weight")
+        (let [(w (tokenAfter toks ":value"))
+              (newPair (str "(" alias " " w ")"))]
+          (cond
+            ((< so 0) (err (str "decisions: route " (tokenAfter toks ":route") " has no :spread to weight " alias " in")))
+            ((spreadHas? (spreadItems cfg so) alias)
+              (let [(items (spreadItems cfg so))
+                    (cur (optionOr (listHead (filter (fn [(it String)] -> Bool (= (optionOr (listHead (tokensOf it)) "") alias)) items)) ""))]
+                (if (= (tokensOf cur) (tokensOf newPair))
+                  (ok (pair cfg (list)))
+                  (ok (pair (splice cfg so (+ (closeOf cfg so) 1) (str "(" (stringJoin (map (fn [(it String)] -> String (if (= (optionOr (listHead (tokensOf it)) "") alias) newPair it)) items) " ") ")"))
+                            (list (str "weight " alias " " (tokenAfter toks ":route") " " w)))))))
+            ((and (>= co 0) (listContains? (tokensOf (sliceOr cfg co (+ (closeOf cfg co) 1))) alias))
+              (let [(se (closeOf cfg so))]
+                (ok (pair (splice cfg se se (str " " newPair)) (list (str "weight " alias " " (tokenAfter toks ":route") " " w))))))
+            (else (err (str "decisions: " alias " is not a member of " (tokenAfter toks ":route")))))))
+      (else (err (str "decisions: unknown kind " kind)))))
+
+fn foldOps cfg: String forms: (List String) f: (fn [String String] -> (Result (Pair String (List String)) String)) acc: (List String) -> (Result (Pair String (List String)) String)
+  (match (listHead forms)
+    ((none) (ok (pair cfg acc)))
+    ((some form)
+      (match (f cfg form)
+        ((err e) (err e))
+        ((ok r) (foldOps (pairFirst r) (optionOr (listTail forms) (list)) f (listAppend acc (pairSecond r)))))))
+
+fn patchAtoms patch: String key: String -> (List String)
+  (let [(o (keyOpen patch 0 (stringLength patch) key false false false))]
+    (if (< o 0) (list) (tokensKeep (stringReplace (stringReplace (sliceOr patch (+ o 1) (closeOf patch o)) "(" " ") ")" " "))))
+
+fn patchHost patch: String -> String
+  (let [(o (keyValue patch 0 (stringLength patch) ":host" false false false))]
+    (if (< o 0) "" (sliceOr patch o (scanAtomEnd patch o (stringLength patch)))))
+
+fn listOr patch: String key: String -> (List String)
+  (resultOr (patchForms patch key) (list))
+
+; (:m :ref GW-SUB-PACE-APPLY :do "apply a SUB-PACE patch to cfg: spreads, rpm, model fields, drops, then the lead's decisions; returns the new text and the change list, or the first misfit")
+fn applySubPace cfg: String patch: String -> (Result (Pair String (List String)) String)
+  (match (foldOps cfg (listOr patch ":spreads") opSpread (list))
+    ((err e) (err e))
+    ((ok a)
+      (match (foldOps (pairFirst a) (listOr patch ":rpm") opRpm (pairSecond a))
+        ((err e) (err e))
+        ((ok b)
+          (match (foldOps (pairFirst b) (listOr patch ":models") opModel (pairSecond b))
+            ((err e) (err e))
+            ((ok c)
+              (match (foldOps (pairFirst c) (patchAtoms patch ":drops") (fn [(t String) (alias String)] -> (Result (Pair String (List String)) String) (opDrop t alias)) (pairSecond c))
+                ((err e) (err e))
+                ((ok d) (foldOps (pairFirst d) (listOr patch ":decisions") opDecision (pairSecond d))))))))))
+
+fn ! machineHost! -> String
+  (match (platformInfo) ((ok p) (if (= p.os "Darwin") "mac" "vps")) ((err _) "vps"))
+
 fn ! applyRefuse! why: String -> (Result Int64 String)
   (do (sys/sayErr! (str "(:modelsApply :status :refused :why " (q why) " :configWritten false)")) (ok 1))
 
@@ -516,10 +743,14 @@ fn ! modelsApplyCli! args: (List String) -> (Result Int64 String)
             (match (fileReadString config)
               ((err e) (applyRefuse! (str "cannot read " config ": " e)))
               ((ok cfgText)
-                (match (applyPatchText cfgText patch)
+                (match (if (and (>= (keyOpen patch 0 (stringLength patch) ":spreads" false false false) 0) (!= (patchHost patch) (machineHost!)))
+                         (err (str "patch is for host " (patchHost patch) " but this machine is " (machineHost!)))
+                         (applyPatchText cfgText patch))
                   ((err e) (applyRefuse! e))
                   ((ok applied)
                     (let [(checked (c/gatewayConfigCheckText! (pairFirst applied) tmp registry))]
+                      (if (and (listContains? args "--check") (= (pairSecond checked) 0))
+                        (do (sys/say! (str "(:modelsApply :status :check :patch " (q patchPath) " :config " (q config) " " (pairSecond applied) " :configCheck :ok :changed " (if (= (pairFirst applied) cfgText) "false" "true") " :configWritten false)")) (ok 0))
                       (if (= (pairFirst applied) cfgText)
                         (do (sys/say! (str "(:modelsApply :status :ok :patch " (q patchPath) " :config " (q config) " " (pairSecond applied) " :configWritten false :why \"already applied\")")) (ok 0))
                       (if (!= (pairSecond checked) 0)
@@ -531,4 +762,4 @@ fn ! modelsApplyCli! args: (List String) -> (Result Int64 String)
                             (else
                               (match (pathRename tmp config)
                                 ((err e) (do (pathRemove tmp) (applyRefuse! (str "cannot rename over " config ": " e))))
-                                ((ok _) (do (sys/say! (str "(:modelsApply :status :ok :patch " (q patchPath) " :config " (q config) " :backup " (q backup) " " (pairSecond applied) " :configWritten true)")) (ok 0)))))))))))))))))))
+                                ((ok _) (do (sys/say! (str "(:modelsApply :status :ok :patch " (q patchPath) " :config " (q config) " :backup " (q backup) " " (pairSecond applied) " :configWritten true)")) (ok 0))))))))))))))))))))
