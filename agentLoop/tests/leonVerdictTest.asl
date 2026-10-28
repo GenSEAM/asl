@@ -31,7 +31,7 @@ fn ! runCase! tag: String replies: (List String) gates: String extra: String -> 
     journal)
 
 fn fragment -> String
-  "(:turn 2 :sent \"I will write the file now\")"
+  "(:note \"I will write the file now\")"
 
 fn writeAndDone content: String -> String
   (str "(:step :op \"write\" :file \"w.txt\" :content \"" content "\")\n(:done)")

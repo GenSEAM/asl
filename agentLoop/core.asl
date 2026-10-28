@@ -1,5 +1,5 @@
 (module asl/agentLoop/core
-  :x [asnUnescape escapeAsn parseForms stripForms parseKv parseReply isProseWrapped checkOwns effectiveOwns fieldVal evidenceKey mergeSpans spanSeen recordRead renderSeen renderTranscript renderWindow makeTurn serString serOps serKey serSpans joinAll editDistance nearestOp terminalForms dataFindings uniqueSteps gateVerdict noteStep runOutward changePlan harnessPath hiddenPath runReadOnly firstOf restOf sliceOf ch dictGet isSpace isWordByte joinSep KvVal kvInt kvStr windowOf isDigit truthy headOf dictHas dictOr formEnd mapBytes progName runEnd strBodyEnd stripLeft stripRight trimSpace charIndex charLen charPrefix Turn
+  :x [asnUnescape escapeAsn parseForms stripForms parseKv parseReply isProseWrapped checkOwns effectiveOwns fieldVal evidenceKey mergeSpans spanSeen recordRead renderSeen renderTranscript renderWindow makeTurn serString serOps serKey serSpans joinAll editDistance nearestOp terminalForms dataFindings echoHeads isEchoForm echoForms echoCount stripEchoes malformedLine uniqueSteps gateVerdict noteStep runOutward changePlan harnessPath hiddenPath runReadOnly firstOf restOf sliceOf ch dictGet isSpace isWordByte joinSep KvVal kvInt kvStr windowOf isDigit truthy headOf dictHas dictOr formEnd mapBytes progName runEnd strBodyEnd stripLeft stripRight trimSpace charIndex charLen charPrefix Turn
       residueWordCount hasFormResidue joinForms]
   :i [])
 
@@ -851,10 +851,36 @@ fn dataFindingForm op: (List (Pair String KvVal)) -> String
 fn isExplicitFinding op: (List (Pair String KvVal)) declared: (List String) -> Bool
   (and (= (dictGet op "type") (some (kvStr "findings"))) (isDataOp op declared))
 
+; (:m :ref LEON-TURN-ECHO :do "frames the loop itself sends or journals (turn receipt poolAsks gate err served liveUsage baseline) are never a model answer, so a reply that echoes one at top level has it stripped before findings are read and counted as an echo")
+fn echoHeads -> (List String)
+  (list "turn" "receipt" "poolAsks" "gate" "err" "served" "liveUsage" "baseline")
+
+; (:m :ref LEON-TURN-ECHO :do "gate is also a model op (claims argumentHeads), so a gate frame is an echo only with the loop-output keys cmd and one of exit asserts failed, as context.asl renders it, every other echo head is no op head")
+fn isEchoForm f: String -> Bool
+  (let [h (headOf f)]
+    (and (listContains? (echoHeads) h)
+         (or (!= h "gate")
+             (and (stringContains? f ":cmd")
+                  (or (stringContains? f ":exit") (or (stringContains? f ":asserts") (stringContains? f ":failed")))))))
+
+fn echoForms reply: String -> (List String)
+  (filter isEchoForm (parseForms reply))
+
+fn echoCount reply: String -> Int64
+  (listLength (echoForms reply))
+
+fn stripEchoes reply: String -> String
+  (fold (fn [acc f] (stringReplace acc f "")) reply (echoForms reply))
+
+; (:m :ref LEON-TURN-ECHO :do "the journal line for a turn whose reply echoed loop frames, so the loop can re-prompt")
+fn malformedLine turn: Int64 echoes: Int64 -> String
+  (str "(:malformed :turn " (stringFromInt64 turn) " :echo " (stringFromInt64 echoes) ")")
+
 ; (:m :ref LEONCTX2-FINDINGS-DONE :do "a reply pairing a proper (:findings ...) form with another recognized op in the same turn (most often (:done), ending a scout delivery in the turn that states it) used to lose every finding, since the former all-ops-must-be-data fold demanded the whole reply be undeclared ad-hoc data and :done broke that for the entire reply; an explicit (:findings ...) op is now taken unconditionally (its type is only set by the parser for a syntactically real findings form), and the ad-hoc all-or-nothing fallback applies only when the reply carries no explicit findings op")
 ; (:m :ref LEON-DATAFINDINGS-FALLBACK-20261017 :do "a confused or garbled reply can still carry a few colon-headed parenthetical fragments among many non-colon ones (a hallucinated receipt, a rambling note); parseReply already drops the latter via headOf before building ops, so a fold over the survivors alone cannot tell scattered noise from a deliberate all-data reply; require every top-level balanced-paren fragment in the raw text to have survived that filter before treating any of them as ad-hoc findings data")
-fn dataFindings reply: String declared: (List String) -> (List String)
-  (let [ops (parseReply reply)
+fn dataFindings reply0: String declared: (List String) -> (List String)
+  (let [reply (stripEchoes reply0)
+        ops (parseReply reply)
         explicit (filter (fn [op] (isExplicitFinding op declared)) ops)
         raw (parseForms reply)
         kept (filter (fn [f] (!= (headOf f) "")) raw)

@@ -1659,6 +1659,7 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
                        (stringFromInt64 (g/gateExit gate)) (if (g/gateTimeout gate) " :timeout true" "") ")\n"))))) true newGates)
                   _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :reply \"" (c/escapeAsn normalized) "\")\n"))
                   _ (if parseDefect (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :parse-defect true)\n"))) true)
+                  _ (if (> (c/echoCount normalized) 0) (ok? (fileAppend path (str (c/malformedLine turn (c/echoCount normalized)) "\n"))) true)
                   done (liveDoneOps? operations)
                   findingsDelivery (and (not (listEmpty? findingForms))
                     (listContains? (list "scout" "review") (optionOr (modeOf ra.modeHint) "")))
