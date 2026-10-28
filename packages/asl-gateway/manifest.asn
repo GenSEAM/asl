@@ -41,4 +41,6 @@
     "aslGateway/usage"
     "aslGateway/usageLedger"
     "aslGateway/modelSync"
-    "aslGateway/subPacing"))
+    "aslGateway/subPacing"
+    "aslGateway/subPace"
+    "aslGateway/subsRefresh"))

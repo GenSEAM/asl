@@ -4,7 +4,7 @@
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
       (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/router :a rt) (asl-json/json :a j)
-      (aslGateway/omniApi :a om) (aslGateway/federation :a fed) (aslGateway/balancer :a bl) (asl-http/http11 :a h)])
+      (aslGateway/subPace :a spc) (aslGateway/subsRefresh :a subsr) (aslGateway/omniApi :a om) (aslGateway/federation :a fed) (aslGateway/balancer :a bl) (asl-http/http11 :a h)])
 
 (schema GatewayTurnVerdict
   (:f allowed Bool)
@@ -229,9 +229,9 @@ fn ! gatewayRestart! launch: Launch args: (List String) -> (Result Int64 String)
 fn ! main args: (List String) -> (Result Int64 String)
   (mainWith args "asl/packages/asl-gateway/src/server.asl" (list))
 
-; (:m :ref GW-MODELS-MODE :do "the gateway subcommands that run in the CLI main instead of the server: config, configCheck, convert, stats, session and models (models sync reaches cliDispatch)")
+; (:m :ref GW-MODELS-MODE :do "the gateway subcommands that run in the CLI main instead of the server: config, configCheck, convert, stats, session, models and subs (models sync and subs refresh reach cliDispatch)")
 fn gatewayCliMode? mode: String -> Bool
-  (listContains? (list "config" "configCheck" "convert" "stats" "session" "models") mode)
+  (listContains? (list "config" "configCheck" "convert" "stats" "session" "models" "subs") mode)
 
 fn ! mainWith args: (List String) module: String families: (List dp/LifecycleFamily) -> (Result Int64 String)
   (let [(launch (Launch :module module :families (listAppend (dp/builtinFamilies) families)))
@@ -615,7 +615,7 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
             (wrote (ul/appendCallRow! ledgerPath row))
             ; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "written in addition to, never instead of, the stats ledger above: GW-STATS's per-HOME ledgerPath keeps serving its own calibration/--by queries unchanged, this is the separate shared ledger (default outside scratch homes once the operator sets :sharedUsagePath, see gatewaySharedUsagePathOverride) that a scratch HOME's deletion cannot take with it")
             (sharedPath (optionOr (match srv.wiringText ((some t) (c/gatewaySharedUsagePathOverride t)) ((none) none)) (ul/defaultSharedUsagePath srv.home)))
-            (wroteShared (ul/appendCallRow! sharedPath row))]
+            (wroteShared (if (= sharedPath ledgerPath) (ok true) (ul/appendCallRow! sharedPath row)))]
         (do (match wrote ((ok _) true) ((err e) (logLine! (str "(:gateway :statsLedger :error \"" (wire/asnEscape e) "\")"))))
           (do (match wroteShared ((ok _) true) ((err e) (logLine! (str "(:gateway :sharedUsageLedger :error \"" (wire/asnEscape e) "\")"))))
             (do (logLine! (str "(:gateway :usage :provider \"" (wire/asnEscape p) "\" :alias \"" (wire/asnEscape alias) "\" :outcome \"" (wire/asnEscape o) "\")"))
@@ -623,6 +623,7 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
     ((ch/effUsageFallback p a)
       (do (logLine! (str "(:gateway :fallback :provider \"" (wire/asnEscape p) "\" :alias \"" (wire/asnEscape a) "\")")) (pair srv ch/outDone)))
     ; (:m :ref GW-SPREAD-LIVE-20261018 :do "the only place rt/spreadOrder is ever called: real per-profile+intent state read from and written back to srv.spreadState, real wall clock, real breaker availability via srv.breaker keyed by the pool the caller resolved per alias -- chat.asl and router.asl both stay clock/breaker-free")
+    ; (:m :ref SUBPACE :do "pacing hook below: subscription factors come from the cache the spread state keeps under paceCacheKey, refreshed from subscriptions.asn and the shared ledger at most once a minute; a member whose subscription is over its hard pace leaves the spread and so falls behind the rest of the chain")
     ((ch/effSpreadOrder profile intent spread cooldownSec pools)
       (let [(key (str profile "|" intent))
             (state (match (mapGet srv.spreadState key) ((some s) s) ((none) (rt/spreadSeedState spread (nowNs)))))
@@ -631,10 +632,14 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
             (breakerOpen? (fn [(alias String)] -> Bool
                             (let [(pk (optionOr (mapGet poolMap alias) ""))]
                               (if (stringEmpty? pk) false (> (pairSecond (b/breakerDownFor srv.breaker pk (nowSec!))) 0)))))
-            (stepped (rt/spreadOrder now cooldownSec spread srv.spreadLast429 breakerOpen? state))
+            (cached (optionOr (mapGet srv.spreadState (spc/paceCacheKey)) (mapEmpty)))
+            (factors (if (spc/paceCacheFresh? cached now) cached
+                       (subsr/paceFactors! srv.home (optionOr (match srv.wiringText ((some t) (c/gatewaySharedUsagePathOverride t)) ((none) none)) (ul/defaultSharedUsagePath srv.home)) now)))
+            (paced (spc/adjustSpread factors pools spread))
+            (stepped (rt/spreadOrder now cooldownSec paced srv.spreadLast429 breakerOpen? state))
             (order (pairFirst stepped))
             (nextState (pairSecond stepped))]
-        (pair (loopSpreadState srv (mapSet srv.spreadState key nextState) srv.spreadLast429) (ch/outStrings order))))
+        (pair (loopSpreadState srv (mapSet (mapSet srv.spreadState key nextState) (spc/paceCacheKey) factors) srv.spreadLast429) (ch/outStrings order))))
     ((ch/effSpreadNote429 alias)
       (pair (loopSpreadState srv srv.spreadState (mapSet srv.spreadLast429 alias (/ (nowNs) 1000000))) ch/outDone))
     ((ch/effTelemetry rec)

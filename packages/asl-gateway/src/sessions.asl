@@ -177,7 +177,7 @@ fn sessRowForked r: SessRow to: String now: Int64 -> SessRow
 
 fn ! sessCtxAt! home: String env: (List String) -> SessCtx
   (let [(text (resultOr (fileReadString (str home "/.asl/gateway.asn")) ""))]
-    (sessCtxLedger (sessCtxFromText text (str home "/.asl/run/sessions") env) (str home "/.asl/run/gatewayCalls.asn")))
+    (sessCtxLedger (sessCtxFromText text (str home "/.asl/run/sessions") env) (str home "/.asl/run/usage/gatewayCalls.asn")))
 
 fn ! sessCtxHome! -> SessCtx
   (sessCtxAt! (optionOr (envGet "HOME") "") (envList))

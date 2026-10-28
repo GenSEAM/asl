@@ -55,7 +55,8 @@
       (secrets :a sc)
       (asl-cli/system :a sys)
       (modelSync :a msync)
-      (subPacing :a space)])
+      (subPacing :a space)
+      (subsRefresh :a subsr)])
 
 (schema CliUsage
   (:f inputTokens Int64)
@@ -467,6 +468,9 @@ fn ! gatewayCliMain args: (List String) -> (Result Int64 String)
       ((and (= mode "models") (= second "sync")) (msync/modelsSyncCli! (optionOr (listTail (optionOr (listTail args) (list))) (list))))
       ((and (= mode "models") (= second "apply")) (msync/modelsApplyCli! (optionOr (listTail (optionOr (listTail args) (list))) (list))))
       ((and (= mode "models") (= second "pace")) (space/modelsPaceCli! (optionOr (listTail (optionOr (listTail args) (list))) (list))))
+      ((and (= mode "subs") (= second "refresh")) (subsr/subsRefreshCli! (optionOr (listTail (optionOr (listTail args) (list))) (list))))
+      ((and (= mode "subs") (= second "status")) (subsr/subsStatusCli! (optionOr (listTail (optionOr (listTail args) (list))) (list))))
+      ((and (= mode "subs") (= second "ledgerMerge")) (subsr/ledgerMergeCli! (optionOr (listTail (optionOr (listTail args) (list))) (list))))
       (else (do (sys/sayErr! "unknown gateway ASL CLI mode") (ok 2)))))
 
 fn ! main args: (List String) -> (Result Int64 String)

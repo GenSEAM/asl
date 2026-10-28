@@ -5,6 +5,7 @@
       Stat
       maxLedgerBytes
       defaultLedgerPath
+      legacyLedgerPath
       defaultSharedUsagePath
       callRowLine
       callRowParse
@@ -94,7 +95,11 @@ fn defaultCallParams -> CallParams
 fn maxLedgerBytes -> Int64
   10485760
 
+; (:m :ref SUBPACE :do "one ledger: the stats ledger and the shared accounting ledger are the same file (usage/gatewayCalls.asn), so every reader sees every call; before this the server appended each row to two files that started on different days and counted differently (4947 against 1852 rows on the Mac); legacyLedgerPath is the old stats file, folded in once by subs ledgerMerge")
 fn defaultLedgerPath home: String -> String
+  (g/posixJoin home ".asl/run/usage/gatewayCalls.asn")
+
+fn legacyLedgerPath home: String -> String
   (g/posixJoin home ".asl/run/gatewayCalls.asn")
 
 ; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "distinct from defaultLedgerPath above: this is the shared accounting ledger every gateway call appends to regardless of HOME, meant to survive a scratch HOME's deletion; the default here is still home-derived (same as defaultLedgerPath) because a process with no override genuinely has no other home to use -- gatewaySharedUsagePathOverride (asl-gateway/config) is what actually makes this survive a scratch HOME, by carrying an absolute path verbatim into every copy of the real gateway.asn")
