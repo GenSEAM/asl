@@ -23,8 +23,11 @@ fn ! asanRuntime! -> (Result String String)
 fn abiTest -> String
   "asl/packages/asl-target-llvm/tests/abiPrograms.asl"
 
+fn clangCmd -> String
+  (let [(c (optionOr (envGet "CLANG") ""))] (if (stringEmpty? c) "clang" c))
+
 fn clangLink -> String
-  "/usr/bin/clang -Wno-override-module -x ir "
+  (str (clangCmd) " -Wno-override-module -x ir ")
 
 fn lib -> String
   " -x none asl/host/out/libaslrt.a -lm -o "
@@ -148,7 +151,7 @@ fn ! compiledText path: String -> (Result String String)
               ((ok code) (ok code)))))
 
 fn asanLink -> String
-  "/usr/bin/clang -Wno-override-module -fsanitize=address,undefined -x ir "
+  (str (clangCmd) " -Wno-override-module -fsanitize=address,undefined -x ir ")
 
 fn ! asanLib -> String
   (str " -x none " (resultOr (asanRuntime!) "") " -lm -o ")

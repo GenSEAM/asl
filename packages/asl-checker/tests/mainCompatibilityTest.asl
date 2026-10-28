@@ -21,7 +21,7 @@ fn testFixedPlusSignature -> Bool
                     (assert (= (pairSecond (pairSecond s)) "N") "plus retains its numeric result type") true))))
 
 fn testLambdaUnknownTypeRule -> Bool
-  (let [(ds (c/checkSource "(module m :x [foo]) (fn foo [] -> Int64 (let [(g (fn [(x (Fn A B))] -> Int64 1))] (g 1)))" (mapEmpty) "m.asl"))]
+  (let [(ds (c/checkSource "(module m :x [foo]) (fn foo [] -> Int64 (let [(g (fn [(x (Nope A B))] -> Int64 1))] (g 1)))" (mapEmpty) "m.asl"))]
     (do (assert (hasCode ds "rule-10") "unknown lambda annotation constructors remain rule-10 diagnostics") true))
 
 fn testImportedUnqualifiedSchemaAnnotation -> Bool

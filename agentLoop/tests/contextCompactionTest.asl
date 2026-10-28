@@ -15,7 +15,7 @@ fn plainHistory n: Int64 -> (List j/Json)
     (range 0 n))
 
 fn oldSummaryPrefix n: Int64 keepTurns: Int64 maxOlderLines: Int64 -> String
-  (let [older (optionOr (listSlice (plainHistory n) 0 (max 0 (- n keepTurns))) (list))
+  (let [older (optionOr (listSlice (plainHistory n) 0 (ctx/compactionCut n keepTurns (ctx/contextCompactStep))) (list))
         olderCount (listLength older)
         survivors (optionOr (listSlice older (max 0 (- olderCount maxOlderLines)) olderCount) (list))]
     (stringJoin (map ctx/turnReceiptLine survivors) "\n"))
@@ -49,12 +49,12 @@ fn maxSentLen lines: (List String) -> Int64
   (fold (fn [acc l] (max acc (stringLength l))) 0 lines)
 
 fn runTests -> Bool
-  (let [h11 (plainHistory 11)
-        h12 (plainHistory 12)
+  (let [h11 (plainHistory 12)
+        h12 (plainHistory 13)
         result11 (ctx/renderTranscriptBounded h11 5 300 50)
         result12 (ctx/renderTranscriptBounded h12 5 300 50)
-        prefix11 (oldSummaryPrefix 11 5 50)
-        prefix12 (oldSummaryPrefix 12 5 50)
+        prefix11 (oldSummaryPrefix 12 5 50)
+        prefix12 (oldSummaryPrefix 13 5 50)
 
         h60 (plainHistory 60)
         resultDropped (ctx/renderTranscriptBounded h60 5 300 10)
@@ -88,12 +88,12 @@ fn runTests -> Bool
 
       (assert (not (stringContains? resultDropped "(:turnSummary :turn 1 "))
         "once older turns exceed maxOlderLines, the oldest excess are dropped with no line at all")
-      (assert (not (stringContains? resultDropped "(:turnSummary :turn 45 "))
-        "turn 45 is still past the 10-line survivor window at 60 turns / keepTurns 5 and is dropped too")
-      (assert (stringContains? resultDropped "(:turnSummary :turn 46 ")
-        "turn 46 is the oldest surviving summary line (60 turns, keepTurns 5, maxOlderLines 10 -> survivors are turns 46..55)")
-      (assert (stringContains? resultDropped "(:turnSummary :turn 55 ")
-        "turn 55 is the newest line still in the summary section (turn 56..60 are in the kept-whole tail)")
+      (assert (not (stringContains? resultDropped "(:turnSummary :turn 42 "))
+        "turn 42 is still past the 10-line survivor window at 60 turns / keepTurns 5 and is dropped too")
+      (assert (stringContains? resultDropped "(:turnSummary :turn 43 ")
+        "turn 43 is the oldest surviving summary line (60 turns, keepTurns 5, maxOlderLines 10 -> survivors are turns 43..52, the cut moves in steps of 4 so 52 turns are summarised)")
+      (assert (stringContains? resultDropped "(:turnSummary :turn 52 ")
+        "turn 52 is the newest line still in the summary section (turn 53..60 are in the kept-whole tail)")
 
       (assert (stringContains? resultClipped "more bytes clipped, see turn 1 in the journal")
         "a kept turn's tool output past toolCapBytes is clipped with a pointer back to the journal")

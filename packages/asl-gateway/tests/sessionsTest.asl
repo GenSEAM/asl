@@ -132,7 +132,7 @@ fn testLive -> Bool
   (let [(me (stringFromInt64 (procSelf)))
         (dir (str "/tmp/aslSessionsTest" me))
         (sd (str dir "/state"))
-        (ctx (s/SessCtx :dir (str dir "/sessions") :env (listAppend (envList) (list "ASLCANARY=secret" "ASLLISTED=yes")) :timeoutSec 20 :ttlSec 0 :ledger ""
+        (ctx (s/SessCtx :secretsFile "" :dir (str dir "/sessions") :env (listAppend (envList) (list "ASLCANARY=secret" "ASLLISTED=yes")) :timeoutSec 20 :ttlSec 0 :ledger ""
                         :vendors (list (fakeVendor sd) (plainVendor "fails" "/usr/bin/false") (plainVendor "noid" "/bin/echo"))))
         (_mk (dirCreate sd))
         (seen (observe! ctx dir sd))

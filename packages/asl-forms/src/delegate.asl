@@ -1,4 +1,4 @@
-(module asl-forms/delegate :x [DelegateCtx Outcome Spawned engineOk? engineExchangeWith engineFrameData contextFromEnv! delegateOp? runDelegate agentKillSeconds fieldNumber spawnRun spawnRunInput stepHead okLine rejectedLine pyStrip pyRepr pyExt errnoText timeoutText researchGatewayEntry! researchGatewayRoutes! resolveResearchEntry! researchEntryJson searchLimit researchCliArgv! researchCliText researchTimeoutSeconds researchDispatch researchDispatchWith researchTriage? searchFailed? crawlerSpawn] :i [(asl-forms/kernel :a k) (asl-forms/extract :a ex) (aslGateway/search :a srch) (aslGateway/research :a rs) (aslGateway/config :a cfg) (aslGateway/pyText :a pt) (asl-json/json :a j) (asl-engine/transport :a etp) (asl-intel/text :a it) (asl-forms/evalOp :a ev)])
+(module asl-forms/delegate :x [DelegateCtx Outcome Spawned engineOk? engineExchangeWith engineFrameData contextFromEnv! delegateOp? runDelegate agentKillSeconds poolRoute? poolForms poolStepWith fieldNumber spawnRun spawnRunInput stepHead okLine rejectedLine pyStrip pyRepr pyExt errnoText timeoutText researchGatewayEntry! researchGatewayRoutes! resolveResearchEntry! researchEntryJson searchLimit researchCliArgv! researchCliText researchTimeoutSeconds researchDispatch researchDispatchWith researchTriage? searchFailed? crawlerSpawn] :i [(asl-forms/kernel :a k) (asl-forms/extract :a ex) (aslGateway/search :a srch) (aslGateway/research :a rs) (aslGateway/config :a cfg) (aslGateway/pyText :a pt) (asl-json/json :a j) (asl-engine/transport :a etp) (asl-intel/text :a it) (asl-forms/evalOp :a ev) (asl-tools/fleet/run :a fr)])
 
 
 (schema DelegateCtx (:f rootDir String) (:f binDir String) (:f wsDir String))
@@ -794,6 +794,70 @@ fn ! agentStep ctx: DelegateCtx id: Int64 kw: (Map String String) stepStr: Strin
                                 (msgTail (str "empty output, exit " (stringFromInt64 sp.code) " (the agent stderr went to stderr)")) ")")
                      :errCount (+ 1 bad))))))))
 
+fn listEndAt cs: (List String) i: Int64 depth: Int64 inStr: Bool esc: Bool -> Int64
+  (match (listGet cs i)
+    ((none) -1)
+    ((some ch)
+      (cond
+        (esc (listEndAt cs (+ i 1) depth inStr false))
+        ((and inStr (= ch "\\")) (listEndAt cs (+ i 1) depth true true))
+        ((= ch "\"") (listEndAt cs (+ i 1) depth (not inStr) false))
+        (inStr (listEndAt cs (+ i 1) depth true false))
+        ((= ch "(") (listEndAt cs (+ i 1) (+ depth 1) false false))
+        ((= ch ")") (if (= depth 1) i (listEndAt cs (+ i 1) (- depth 1) false false)))
+        (else (listEndAt cs (+ i 1) depth false false)))))
+
+fn itemsFrom cs: (List String) i: Int64 acc: (List String) -> (List String)
+  (match (listGet cs i)
+    ((none) (listReverse acc))
+    ((some ch)
+      (cond
+        ((= ch ")") (listReverse acc))
+        ((= ch "(") (let [(e (listEndAt cs i 0 false false))]
+                      (if (< e 0) (listReverse acc) (itemsFrom cs (+ e 1) (cons (stringJoin (listTake (listDrop cs i) (+ (- e i) 1)) "") acc)))))
+        (else (itemsFrom cs (+ i 1) acc)))))
+
+; (:m :ref LEON-POOL-WIRE :do "the pool binary starts only through fleet/run runGuarded (rule spawnSafety): the kill deadline is the tasks' summed agent wall, the descendant limit 64 per task plus one, and a fleet verdict comes back as the step's ERR_AGENT_DISPATCH")
+; (:m :ref LEON-POOL-WIRE :do "each element of :pool is a (:task ...) or (:agent ...) form; a (:task \"t\" ...) element becomes (:agent :task \"t\" ...), the form asl/agentLoop/pool main takes one per argument")
+fn poolForms stepStr: String -> (Result (List String) String)
+  (match (stringIndexOf stepStr ":pool (")
+    ((none) (err "no :pool list"))
+    ((some at)
+      (let [(cs (stringChars (optionOr (stringSlice stepStr (+ at 7) (stringLength stepStr)) "")))
+            (items (itemsFrom cs 0 (list)))
+            (forms (map (fn [(it String)] -> String
+                          (cond ((stringStartsWith? it "(:task ") (str "(:agent :task " (optionOr (stringSlice it 7 (stringLength it)) "")))
+                                (else it)))
+                        items))]
+        (if (listEmpty? forms) (err "empty :pool list") (ok forms)))))
+
+fn ! poolStepWith ctx: DelegateCtx id: Int64 kw: (Map String String) stepStr: String run: (fn [(List String)] -> Spawned) -> Outcome
+  (match (poolForms stepStr)
+    ((err e) (rejectedLine id "agent" "ERR_POOL_FORM" (msgTail e)))
+    ((ok forms)
+      (let [(sp (run forms))
+            (out (pyStrip sp.out))]
+        (cond
+          ((not (stringEmpty? sp.failure)) (rejectedLine id "agent" "ERR_AGENT_DISPATCH" (msgTail sp.failure)))
+          ((stringStartsWith? out "(:poolReceipt ")
+            (Outcome :line (str (stepHead id "agent") " :status \"" (if (= sp.code 0) "ok" "failed") "\" :pool true :receipt " out ")")
+                     :errCount (if (= sp.code 0) 0 1)))
+          (else (rejectedLine id "agent" "ERR_AGENT_DISPATCH" (msgTail (str "no (:poolReceipt ...) line, exit " (stringFromInt64 sp.code)))))))))
+
+fn poolRoute? op: String stepStr: String -> Bool
+  (and (= op "agent") (stringContains? stepStr ":pool ("))
+
+fn ! poolStep ctx: DelegateCtx id: Int64 kw: (Map String String) stepStr: String -> Outcome
+  (poolStepWith ctx id kw stepStr
+    (fn [(forms (List String))] -> Spawned
+      (match (if (k/isFile! (k/aslPath! ctx.rootDir "agentLoop/pool.asl")) (ev/nativeEntry! ctx.rootDir "asl/agentLoop/pool" true) (err "ASL agent pool not installed"))
+        ((err e) (Spawned :code 2 :out "" :errText "" :failure e))
+        ((ok b) (let [(o (fr/runGuarded (cons b forms) ctx.rootDir (fr/childEnv (list (str "ASL_ROOT_DIR=" ctx.wsDir)))
+                                        (fr/Limits :timeoutMs (* 1000 (* (listLength forms) (agentKillSeconds kw)))
+                                                   :maxDesc (* 64 (+ (listLength forms) 1)) :class "" :jsDir "")))
+                      (verdict (match (stringIndexOf o.stderr "(:fleetRun :verdict :") ((some i) (optionOr (stringSlice o.stderr i (stringLength o.stderr)) "")) ((none) "")))]
+                  (Spawned :code o.exitCode :out o.stdout :errText o.stderr :failure (pyStrip verdict)))))))
+
 fn delegateOp? op: String -> Bool
   (listContains? (list "search" "research" "crawl" "tiktok" "automate" "inBrowserAgent" "intel" "manage" "proc" "engine" "agent") op)
 
@@ -807,5 +871,6 @@ fn ! runDelegate ctx: DelegateCtx id: Int64 op: String kw: (Map String String) a
     ((= op "inBrowserAgent") (inBrowserAgentStep ctx id kw args))
     ((= op "intel") (intelStep ctx id kw args))
     ((listContains? (list "manage" "proc" "engine") op) (engineStep ctx id op kw args stepStr))
+    ((poolRoute? op stepStr) (poolStep ctx id kw stepStr))
     ((= op "agent") (agentStep ctx id kw stepStr))
     (else (rejectedLine id op "ERR_NOT_PORTED" (msgTail (str "op " op " is not a delegating op of asl-forms/delegate; run scripts/aslForms.py")))))

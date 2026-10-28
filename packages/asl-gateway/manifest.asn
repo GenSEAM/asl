@@ -25,6 +25,8 @@
     "aslGateway/poolDispatch"
     "aslGateway/breaker"
     "aslGateway/budget"
+    "aslGateway/secrets"
+    "aslGateway/federation"
     "aslGateway/chat"
     "aslGateway/cliDispatch"
     "aslGateway/config"

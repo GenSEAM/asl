@@ -12,6 +12,9 @@
       sessSubst
       sessArgv
       sessVendorEnv
+      sessSecretRows
+      sessVendorEnvFull!
+      sessVendorEnvAt!
       sessRowPath
       sessRowFiles!
       sessStart!
@@ -59,6 +62,7 @@
       sessTurnOf]
   :i [(asl-tools/fleet/run :a fr)
       (config :a cfg)
+      (secrets :a sc)
       (asl-parser/ast :a ast)
       (asl-parser/lexer :a lx)
       (asl-parser/reader :a rd)
@@ -70,7 +74,7 @@
   (:f idFrom String) (:f replyFrom String) (:f wrap String) (:f wrapResume String) (:f sep String) (:f modelArgs (List String)) (:f fork (List String)))
 (schema SessTurn (:f id String) (:f reply String) (:f usage String) (:f inTok Int64) (:f outTok Int64))
 (schema SessRun (:f g fr/Guarded) (:f idFrom String) (:f replyFrom String) (:f prevId String))
-(schema SessCtx (:f dir String) (:f vendors (List SessVendor)) (:f env (List String)) (:f timeoutSec Int64) (:f ttlSec Int64) (:f ledger String))
+(schema SessCtx (:f secretsFile String) (:f dir String) (:f vendors (List SessVendor)) (:f env (List String)) (:f timeoutSec Int64) (:f ttlSec Int64) (:f ledger String))
 (schema SessRow
   (:f name String) (:f vendor String) (:f cwd String) (:f args (List String)) (:f sessionId String)
   (:f startedAt Int64) (:f updatedAt Int64) (:f turns Int64)
@@ -146,7 +150,7 @@ fn sessVendorList g: (Map String rd/SExpr) -> (List SessVendor)
              (list) items))))
 
 fn sessEmptyCtx dir: String env: (List String) -> SessCtx
-  (SessCtx :dir dir :vendors (list) :env env :timeoutSec 600 :ttlSec 0 :ledger "")
+  (SessCtx :secretsFile "" :dir dir :vendors (list) :env env :timeoutSec 600 :ttlSec 0 :ledger "")
 
 ; (:m :do "absent or unparseable gateway.asn text yields an empty allowlist, so every start is refused rather than guessed")
 fn sessCtxFromText text: String dir: String env: (List String) -> SessCtx
@@ -160,7 +164,7 @@ fn sessCtxFromText text: String dir: String env: (List String) -> SessCtx
            ((err _) (sessEmptyCtx dir env))
            ((ok g)
             (let [(t (sessPropInt g "sessionsTimeoutSec"))]
-              (SessCtx :dir dir :vendors (sessVendorList g) :env env :timeoutSec (if (> t 0) t 600) :ttlSec (sessPropInt g "sessionsTtlSec") :ledger ""))))))))
+              (SessCtx :secretsFile (cfg/gatewaySecretsPathFromProps g) :dir dir :vendors (sessVendorList g) :env env :timeoutSec (if (> t 0) t 600) :ttlSec (sessPropInt g "sessionsTtlSec") :ledger ""))))))))
 
 fn sessCtxLedger c: SessCtx path: String -> SessCtx
   (with c :ledger path)
@@ -189,6 +193,29 @@ fn sessVendorEnv ctx: SessCtx v: SessVendor -> (List String)
   (filter (fn [(row String)] -> Bool
             (let [(n (sessEnvName row))] (or (listContains? (sessBaseNames) n) (listContains? v.env n))))
           ctx.env)
+
+; (:m :ref GW-WIRE-UP :do "a vendor row's :env entry NAME@secretId asks for NAME to be set in the vendor child from the secrets file; the pure sessVendorEnv never sees the name because it matches no ctx.env row, and the value reaches the child env only, never a receipt: a missing secret fails the turn with the id and not the value")
+fn sessSecretRows v: SessVendor -> (List (Pair String String))
+  (listFlatMap (fn [(e String)] -> (List (Pair String String))
+                 (match (stringIndexOf e "@")
+                   ((none) (list))
+                   ((some at) (let [(n (optionOr (stringSlice e 0 at) "")) (id (optionOr (stringSlice e (+ at 1) (stringLength e)) ""))]
+                                (if (or (stringEmpty? n) (stringEmpty? id)) (list) (list (pair n id)))))))
+               v.env)
+
+fn ! sessVendorEnvFull! ctx: SessCtx v: SessVendor -> (Result (List String) String)
+  (sessVendorEnvAt! ctx v (if (stringEmpty? ctx.secretsFile) (sc/secretsDefaultPath) ctx.secretsFile))
+
+fn ! sessVendorEnvAt! ctx: SessCtx v: SessVendor secretsPath: String -> (Result (List String) String)
+  (let [(rows (sessSecretRows v))
+        (base (sessVendorEnv ctx v))]
+    (if (listEmpty? rows) (ok base)
+      (match (sc/secretsLoad! secretsPath)
+        ((err e) (err (sessErr "secretsUnavailable" e)))
+        ((ok store)
+          (match (sc/secretsEnvFor store (mapEmpty) rows)
+            ((err e) (err (sessErr "secretMissing" e)))
+            ((ok m) (ok (listAppend base (map (fn [(r (Pair String String))] -> String (str (pairFirst r) "=" (optionOr (mapGet m (pairFirst r)) ""))) rows)))))))))
 
 fn sessSubst s: String id: String prompt: String -> String
   (stringReplace (stringReplace s "{id}" id) "{prompt}" (sessQuote prompt))
@@ -429,11 +456,14 @@ fn sessReplyOf out: String key: String -> String
 
 ; (:m :do "a turn in flight: guardStart! spawns the vendor through fleet/run and the lease file names the child so a stop can find it; sessAdvance! steps it without blocking, which is how a server parks a turn instead of waiting on it")
 fn ! sessBegin! ctx: SessCtx name: String v: SessVendor cwd: String id: String extra: (List String) prompt: String -> (Result SessRun String)
-  (match (fr/guardStart! (sessArgv v id extra prompt) cwd (sessVendorEnv ctx v) (fr/limits ctx.timeoutSec 256))
-    ((err o) (err (sessErr "vendorFailed" (str "exit " (stringFromInt64 o.exitCode) ": " (sessClip (stringTrim o.stderr) 300)))))
-    ((ok g)
-     (let [(_l (sessLeaseWrite! ctx name g.run.pid))]
-       (ok (SessRun :g g :idFrom v.idFrom :replyFrom v.replyFrom :prevId id)))))
+  (match (sessVendorEnvFull! ctx v)
+    ((err e) (err e))
+    ((ok childEnv)
+      (match (fr/guardStart! (sessArgv v id extra prompt) cwd childEnv (fr/limits ctx.timeoutSec 256))
+        ((err o) (err (sessErr "vendorFailed" (str "exit " (stringFromInt64 o.exitCode) ": " (sessClip (stringTrim o.stderr) 300)))))
+        ((ok g)
+         (let [(_l (sessLeaseWrite! ctx name g.run.pid))]
+           (ok (SessRun :g g :idFrom v.idFrom :replyFrom v.replyFrom :prevId id)))))))
 
 fn sessTurnOf r: SessRun o: fr/ProcOut -> (Result SessTurn String)
   (if (!= o.exitCode 0)

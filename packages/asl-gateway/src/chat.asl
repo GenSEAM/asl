@@ -55,6 +55,11 @@
       httpFailed
       raised
       anthropicBody
+      cacheHints
+      credentialKey
+      missingKeyWhy
+      missingKey
+      anthropicCacheHints
       anthropicToChat
       anthropicMessagesOf
       anthropicStopReasonToFinish
@@ -70,7 +75,8 @@
       (usage :a g)
       (breaker :a b)
       (localTime :a lt)
-      (aslGateway/dispatch :a dp)])
+      (aslGateway/dispatch :a dp)
+      (secrets :a sc)])
 
 (schema ChatRequest
   (:f path String)
@@ -536,12 +542,20 @@ fn entryBody cx: Ctx e: c/GatewayEntry -> j/Json
         (b5 (if (and (some? ep.timeoutSec) (not cx.timeoutExplicit)) (pt/jset b4 "timeout" (paramJson cx e "timeoutSec" (floatJson ep.timeoutSec))) b4))]
     b5)
 
+; (:m :ref GW-WIRE-UP :do "the provider's :secret wins over :keyEnv, as resolveProviderCredential! decides: the host puts each resolved secret into ChatWorld.env under secret:<id> before the chat runs, so this stays pure and never reads or prints the secrets file; a provider naming a secret the host did not resolve gets an empty key, never its keyEnv value")
+fn credentialKey kind: String env: (Map String String) keyEnv: String secretId: String -> String
+  (cond
+    ((= kind "cli") "")
+    ((not (stringEmpty? secretId)) (optionOr (mapGet env (sc/secretEnvName secretId)) ""))
+    (else (optionOr (mapGet env keyEnv) "")))
+
 fn entryUpstream cx: Ctx e: c/GatewayEntry -> u/UpstreamEndpoint
   (let [(up e.upstream)
         (pv (match cx.table ((some tbl) (mapGet tbl.providers e.provider)) ((none) none)))
         (keyEnv (match pv ((some p) p.keyEnv) ((none) "")))
         (sessionHeader (match pv ((some p) p.sessionHeader) ((none) "")))
-        (key (if (= e.kind "cli") "" (optionOr (mapGet cx.world.env keyEnv) "")))]
+        (secretId (match pv ((some p) p.secret) ((none) "")))
+        (key (credentialKey e.kind cx.world.env keyEnv secretId))]
     (u/UpstreamEndpoint :provider up.provider :url up.url :key key :sessionHeader sessionHeader))
 
 fn upstreamFor cx: Ctx m: String -> u/UpstreamEndpoint
@@ -985,6 +999,88 @@ fn geminiBody body: j/Json target: String -> j/Json
               (_ b2)))]
     b3)
 
+; (:m :ref LEON-PREFIX-CACHE-20261026 :tags (cache) :do "provider cache hints are added on the wire only, after the body is converted: Anthropic gets cache_control breakpoints on the last tool, the system prompt and the message just before the final one (so everything up to the last user message is one cached prefix, 3 of the 4 allowed breakpoints); Gemini gets cachedContent when the caller names one in cached_content; OpenAI-compatible providers whose config declares :promptCacheKey true get prompt_cache_key (the caller's, else a digest of the system text). Any other provider's body is untouched except that cached_content is dropped")
+fn cacheMark -> j/Json
+  (j/jobj (list (pair "type" (j/jstr "ephemeral"))))
+
+fn markBlock block: j/Json -> j/Json
+  (pt/jset block "cache_control" (cacheMark))
+
+fn cacheEligible? block: j/Json -> Bool
+  (let [(t (strOr (getOr block "type" (j/jnull)) ""))]
+    (or (= t "text") (or (= t "tool_result") (= t "image"))))
+
+fn lastEligibleIndex xs: (List j/Json) i: Int64 -> Int64
+  (cond
+    ((< i 0) -1)
+    ((cacheEligible? (optionOr (listGet xs i) (j/jnull))) i)
+    (else (lastEligibleIndex xs (- i 1))))
+
+fn replaceAt xs: (List j/Json) i: Int64 v: j/Json -> (List j/Json)
+  (listAppend (listTake xs i) (cons v (optionOr (listSlice xs (+ i 1) (listLength xs)) (list))))
+
+; (:m :ref LEON-PREFIX-CACHE-20261026 :do "Anthropic allows 4 cache_control marks per request and the client may already have placed some, so marks are counted over the whole body first and the gateway adds only up to the remainder; only text, tool_result and image blocks are marked")
+fn countMarks v: j/Json -> Int64
+  (match v
+    ((j/jobj kvs) (fold (fn [acc kv] (+ acc (+ (if (= (pairFirst kv) "cache_control") 1 0) (countMarks (pairSecond kv))))) 0 kvs))
+    ((j/jarr xs) (fold (fn [acc x] (+ acc (countMarks x))) 0 xs))
+    (_ 0))
+
+fn markContent content: j/Json -> j/Json
+  (match content
+    ((j/jstr s) (if (stringEmpty? s) content
+                  (j/jarr (list (markBlock (j/jobj (list (pair "type" (j/jstr "text")) (pair "text" content))))))))
+    ((j/jarr xs)
+      (let [(i (lastEligibleIndex xs (- (listLength xs) 1)))]
+        (if (< i 0) content
+          (j/jarr (replaceAt xs i (markBlock (optionOr (listGet xs i) (j/jnull))))))))
+    (_ content))
+
+fn markMessageAt msgs: (List j/Json) i: Int64 -> (List j/Json)
+  (if (or (< i 0) (>= i (listLength msgs))) msgs
+    (let [(m (optionOr (listGet msgs i) (j/jnull)))]
+      (replaceAt msgs i (pt/jset m "content" (markContent (getOr m "content" (j/jnull)))))))
+
+fn markLast xs: (List j/Json) -> (List j/Json)
+  (let [(n (listLength xs))]
+    (if (= n 0) xs
+      (replaceAt xs (- n 1) (markBlock (optionOr (listGet xs (- n 1)) (j/jnull))))))
+
+fn anthropicCacheHints up: j/Json -> j/Json
+  (let [(room0 (- 4 (countMarks up)))
+        (c1 (match (getOr up "tools" (j/jnull))
+              ((j/jarr xs) (if (> room0 0) (pt/jset up "tools" (j/jarr (markLast xs))) up))
+              (_ up)))
+        (room1 (- 4 (countMarks c1)))
+        (c2 (match (getOr c1 "system" (j/jnull))
+              ((j/jstr s) (if (> room1 0) (pt/jset c1 "system" (markContent (j/jstr s))) c1))
+              (_ c1)))
+        (room2 (- 4 (countMarks c2)))
+        (msgs (match (getOr c2 "messages" (j/jnull)) ((j/jarr xs) xs) (_ (list))))]
+    (if (or (< (listLength msgs) 2) (<= room2 0)) c2
+      (pt/jset c2 "messages" (j/jarr (markMessageAt msgs (- (listLength msgs) 2))))))
+
+fn geminiCacheHints src: j/Json up: j/Json -> j/Json
+  (match (getOr src "cached_content" (j/jnull))
+    ((j/jstr s) (if (stringEmpty? s) up (pt/jset up "cachedContent" (j/jstr s))))
+    (_ up))
+
+fn promptCacheKeyHint prov: String table: (Option c/GatewayTable) src: j/Json up: j/Json -> j/Json
+  (let [(base (jdel up "cached_content"))]
+    (if (not (match table ((some t) (c/providerPromptCacheKey? t prov)) ((none) false))) base
+      (let [(msgs (match (getOr src "messages" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
+            (given (strOr (getOr src "prompt_cache_key" (j/jnull)) ""))
+            (key (if (stringEmpty? given)
+                   (str "asl-" (u/slice (bytesSha256 (stringToBytes (respSystemJoin msgs (list)))) 0 16))
+                   given))]
+        (pt/jset base "prompt_cache_key" (j/jstr key)))))
+
+fn cacheHints api: String prov: String table: (Option c/GatewayTable) src: j/Json up: j/Json -> j/Json
+  (cond
+    ((= api "anthropic") (anthropicCacheHints up))
+    ((= api "gemini") (geminiCacheHints src up))
+    (else (promptCacheKeyHint prov table src up)))
+
 fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json Attempt)
   (let [(v2 (match entry ((c/entryResolved e) (some e)) ((c/entryUnresolved _) none)))
         (m (match entry ((c/entryResolved e) e.dispatch) ((c/entryUnresolved a) a)))
@@ -1020,7 +1116,8 @@ fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json 
         (out3 (if (some? v2) (jdel (jdel out2 "timeout") "queue_timeout") out2))
         (sent (if (and truthy ollama) (if chosenValid (some (some (strOr chosen ""))) (some none)) none))
         (respApi (match v2 ((some e) (cond ((= e.kind "anthropic") "anthropic") ((= e.kind "gemini") "gemini") (else (optionOr e.params.api "chat")))) ((none) "chat")))
-        (upBody (cond ((= respApi "anthropic") (anthropicBody out3 target)) ((= respApi "gemini") (geminiBody out3 target)) ((= respApi "responses") (responsesBody out3 target)) (else out3)))
+        (upBody0 (cond ((= respApi "anthropic") (anthropicBody out3 target)) ((= respApi "gemini") (geminiBody out3 target)) ((= respApi "responses") (responsesBody out3 target)) (else out3)))
+        (upBody (cacheHints respApi prov cx.table out3 upBody0))
         (data (if truthy (pt/jsonDumps upBody -1) cx.req.body))]
     (pair body1 (Attempt :entry entry :v2 v2 :model m :target target :upstream upstream :alias alias :pool pool :providerPool providerPool :sentEffort sent
       :poolConfig (match v2 ((some e) e.pool) ((none) none)) :data data :api respApi
@@ -1038,6 +1135,24 @@ fn withBreakerPools pools: (List String) k: (fn [Float64 String] -> ChatStep) ->
            (fn [(left Float64)] -> ChatStep
              (if (!= left 0.0) (k left p) (withBreakerPools rest k))))))))
 
+; (:m :ref GW-MISSINGKEY-UNAUTH :do "a non-cli provider that declares a keyEnv or a secret but resolved to an empty key is never sent: the request would reach the provider with no Authorization and burn a 401; the attempt is skipped before any network effect, the next candidate is tried, and the reason names the provider id and the keyEnv or secret id, never a value")
+fn missingKeyWhy providerId: String keyEnv: String secretId: String kind: String key: String -> (Option String)
+  (cond
+    ((= kind "cli") none)
+    ((not (stringEmpty? key)) none)
+    ((and (stringEmpty? keyEnv) (stringEmpty? secretId)) none)
+    (else (some (str "(:err :code ERR_KEY_MISSING :provider " providerId
+                     (if (stringEmpty? secretId) "" (str " :secret " secretId))
+                     (if (stringEmpty? keyEnv) "" (str " :keyEnv " keyEnv)) ")"))))
+
+fn missingKey cx: Ctx a: Attempt -> (Option String)
+  (match a.v2
+    ((none) none)
+    ((some e)
+      (match (match cx.table ((some tbl) (mapGet tbl.providers e.provider)) ((none) none))
+        ((none) none)
+        ((some p) (missingKeyWhy e.provider p.keyEnv p.secret e.kind a.upstream.key)))))
+
 fn attempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> ChatStep
   (let [(prepared (prepareAttempt cx l entry))
         (body (pairFirst prepared))
@@ -1054,7 +1169,15 @@ fn attempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> ChatStep
                                    :lastErr (some (str "circuit breaker open for " downPool " (" secs "s left)"))
                                    :skipped (listAppend l1.skipped (list downPool)) :emptyRetries l1.emptyRetries
                                    :telBound l1.telBound :head l1.head)))))
-          (if (cliProvider? prov) (cliAttempt cx l1 a) (rateAttempt cx l1 a))))))
+          (match (missingKey cx a)
+            ((some why)
+              (tellAll (list (effLog (str "[Gateway Key] skip " a.alias ": " why "\n")) (usageNote prov a.alias "keyMissing"))
+                (fn [] -> ChatStep
+                  (loopStep cx (Loop :body body :models l1.models :idx (+ l1.idx 1)
+                                     :lastErr (some why)
+                                     :skipped l1.skipped :emptyRetries l1.emptyRetries
+                                     :telBound l1.telBound :head l1.head)))))
+            ((none) (if (cliProvider? prov) (cliAttempt cx l1 a) (rateAttempt cx l1 a))))))))
 
 
 fn systemPrompt msgs: (List j/Json) -> (Result String pt/PyErr)
@@ -1487,7 +1610,8 @@ fn anthropicToChat body: String -> (Option String)
              (cacheCreate (usageInt usage "cache_creation_input_tokens"))
              (use (j/jobj (list (pair "prompt_tokens" (j/jint (+ inputTokens (+ cacheRead cacheCreate))))
                                 (pair "completion_tokens" (j/jint (usageInt usage "output_tokens")))
-                                (pair "cached_tokens" (j/jint cacheRead)))))
+                                (pair "cached_tokens" (j/jint cacheRead))
+                                (pair "cache_creation_tokens" (j/jint cacheCreate)))))
              (chat (j/jobj (list (pair "choices" (j/jarr (list choice))) (pair "usage" use))))]
          (some (pt/jsonDumps chat -1))))))
 

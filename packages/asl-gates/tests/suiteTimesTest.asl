@@ -170,6 +170,22 @@ fn ! testPruneStaleRows! dir: String -> Bool
       (assert (= (msOf after "liveTest.asl") 11) "a reported live suite is overwritten")
       true))
 
+; (:m :ref GATE-POOL-ANYWAIT :do "k=2 over a long job A then short B and C, each logging start and end to one file: the pool reuses the slot B frees while A still runs, so C starts and ends before A ends; waiting on the oldest child alone would start C only after A ended. The evidence is the log order, not wall time")
+fn ! testAnyFinishOrder! dir: String -> Bool
+  (let [(log (str dir "/anyFinish.log"))
+        (job (fn [(name String) (secs Int64)] -> sr/Job
+               (sr/Job :input "" :argv (list "/bin/sh" "-c" (str "echo " name "-start >> " log "; sleep " (stringFromInt64 secs) "; echo " name "-end >> " log)) :cwd (none) :env (none) :timeoutMs 30000)))
+        (res (sr/runJobsBy! (list (job "A" 3) (job "B" 0) (job "C" 0)) (list 0 1 2) 2 (none) (none)))
+        (lines (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines (readText! log))))
+        (at (fn [(tag String)] -> Int64 (optionOr (listIndexOf lines tag) -1)))]
+    (do
+      (assert (ok? res) "the pool ran all three jobs")
+      (assert (= (listLength lines) 6) (str "each job logged start and end: " (stringJoin lines " ")))
+      (assert (< (at "B-end") (at "A-end")) "B, started after A, ended before A")
+      (assert (< (at "C-start") (at "A-end")) "C started while A still ran: the slot B freed was reused at once")
+      (assert (< (at "C-end") (at "A-end")) "C, started after A, finished before A: completion order is not start order")
+      true))
+
 fn ! runTests -> Bool
   (let [(dir (optionOr (match (sr/makeTempDir! "aslSuiteTimesTest") ((ok d) (some d)) ((err _) (none))) ""))]
     (do
@@ -180,5 +196,6 @@ fn ! runTests -> Bool
       (assert (testLongestFirst! dir) "longest known job starts first")
       (assert (testRunnerRecords! dir) "runner records per-suite times")
       (assert (testPruneStaleRows! dir) "train's write drops rows of deleted suites and keeps unselected live ones")
+      (assert (testAnyFinishOrder! dir) "a short job started after a long one finishes first and its slot is reused")
       (assert (ok? (pathRemove dir)) "scratch directory removed")
       true))

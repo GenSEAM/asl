@@ -1,4 +1,4 @@
-(module asl-compiler/checkCache :x [Verdict cacheDir! verdictKey! verdictKeyWith! keyText encodeVerdict decodeVerdict lookup! store! replay!] :i [(asl-checker/resolve :a r)])
+(module asl-compiler/checkCache :x [Verdict cacheDir! verdictKey! verdictKeyWith! keyText encodeVerdict decodeVerdict lookup! store! replay! capOf defaultCap sweepWith!] :i [(asl-checker/resolve :a r)])
 
 (schema Verdict (:f exitCode Int64) (:f body String))
 
@@ -90,10 +90,53 @@ fn decodeVerdict key: String text: String -> (Option Verdict)
                              (some (Verdict :exitCode code :body body))
                              (none))))))))))))))
 
+; (:m :ref CHECK-VERDICT-CAP :do "a hit stamps its entry, so the sweep drops the least recently used verdicts")
 fn ! lookup! key: String -> (Option Verdict)
   (match (fileReadString (entryPath (cacheDir!) key))
     ((err _) (none))
-    ((ok text) (decodeVerdict key text)))
+    ((ok text) (match (decodeVerdict key text)
+                 ((none) (none))
+                 ((some v) (do (fileUtime (entryPath (cacheDir!) key) (nowNs)) (some v))))))
+
+; (:m :ref CHECK-VERDICT-CAP :do "the verdict cache held 59090 files (2026-10-27); it is capped at the (:check :cacheCap N) row of ~/.asl/config.asn, 20000 entries when absent")
+fn defaultCap -> Int64
+  20000
+
+fn capOf configText: String -> Int64
+  (match (stringIndexOf configText "(:check :cacheCap ")
+    ((none) (defaultCap))
+    ((some i) (let [(rest (optionOr (stringSlice configText (+ i 18) (stringLength configText)) ""))
+                    (digits (stringTrim (optionOr (listHead (stringSplit (stringReplace rest ")" " ") " ")) "")))]
+                (match (stringToInt64 digits)
+                  ((some n) (if (> n 0) n (defaultCap)))
+                  ((none) (defaultCap))))))
+
+fn ! capFor! -> Int64
+  (capOf (resultOr (fileReadString (str (optionOr (envGet "HOME") ".") "/.asl/config.asn")) ""))
+
+; (:m :ref CHECK-VERDICT-CAP :do "one sweep at a time under sweep.lock: when more than cap verdicts are stored the oldest by mtime go until cap remain; returns the count removed, 0 when the lock is held")
+fn ! sweepWith! dir: String cap: Int64 -> Int64
+  (let [(lock (str dir "/sweep.lock"))]
+    (match (fileCreateExclusive lock (stringFromInt64 (procSelf)))
+      ((err _) 0)
+      ((ok _)
+       (let [(names (filter (fn [(n String)] -> Bool (stringEndsWith? n ".verdict")) (resultOr (dirList dir) (list))))
+             (excess (- (listLength names) cap))
+             (removed (if (<= excess 0)
+                        0
+                        (let [(stamped (map (fn [(n String)] -> (Pair String Int64) (pair n (match (fileStat (str dir "/" n)) ((ok st) st.mtimeNs) ((err _) 0)))) names))
+                              (oldest (listTake (listSortBy (fn [(p (Pair String Int64))] -> Int64 (pairSecond p)) stamped) excess))]
+                          (listLength (filter (fn [(p (Pair String Int64))] -> Bool (ok? (pathRemove (str dir "/" (pairFirst p))))) oldest)))))
+             (_ (pathRemove lock))]
+         removed))))
+
+; (:m :ref CHECK-VERDICT-CAP :do "a sweep lists every entry, so a store sweeps at most once a minute per cache, marked by the swept file")
+fn ! sweepSoon! dir: String -> Int64
+  (let [(mark (str dir "/swept"))
+        (last (match (fileStat mark) ((ok st) st.mtimeNs) ((err _) 0)))]
+    (if (< (- (nowNs) last) 60000000000)
+      0
+      (do (fileWrite mark "") (sweepWith! dir (capFor!)))))
 
 fn ! dropTmp! tmp: String -> Unit
   (if (fileExists? tmp) (match (pathRemove tmp) ((ok _) ()) ((err _) ())) ())
@@ -107,7 +150,7 @@ fn ! store! key: String v: Verdict -> (Result Unit String)
         ((err _) (do (dropTmp! tmp) (err (str "cannot write " tmp))))
         ((ok _) (match (pathRename tmp (entryPath dir key))
           ((err e) (do (dropTmp! tmp) (err (str "cannot rename " tmp ": " e))))
-          ((ok _) (ok ()))))))))
+          ((ok _) (do (sweepSoon! dir) (ok ())))))))))
 
 fn ! replay! v: Verdict -> (Result Int64 String)
   (do (if (stringEmpty? v.body) ()

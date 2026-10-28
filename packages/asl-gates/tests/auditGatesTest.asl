@@ -1,6 +1,6 @@
 (module ws/auditGatesTest
   :x [runTests]
-  :i [(asl-gates/auditGates :a ag) (asl-gates/auditMain :a am) (asl-gates/suiteRunner :a sr) (asl-proc/coreProcess :a p) (asl-proc/gitFixture :a gf)])
+  :i [(asl-gates/auditGates :a ag) (asl-gates/auditMain :a am) (asl-gates/suiteRunner :a sr) (asl-proc/coreProcess :a p) (asl-proc/gitFixture :a gf) (asl-tools/fleet/run :a fr)])
 
 enum AVal
   (aStr raw: String)
@@ -486,7 +486,7 @@ fn testRoot! tmp: String -> Bool
         (run (am/runAudit! root (list "steps") "" false))
         (repo (stringTrim (resultOr (runGit! "." (list "rev-parse" "--show-toplevel") (none) (none)) "")))
         (envRun (p/exec! (p/withCwd (p/cmd "env" (list (str "ROOT_DIR=" root) (str repo "/bin/asl") "run" (str repo "/asl/packages/asl-gates/src/auditMain.asl") "steps")) repo)))
-        (envOutput (match envRun ((err _) "") ((ok o) o.stdout)))
+        (envOutput (match envRun ((err e) "") ((ok o) (str o.stdout "EXIT" (stringFromInt64 o.exitCode) "ERR" o.stderr))))
         (cliRoot (p/exec! (p/withCwd (p/cmd (str repo "/bin/asl") (list "run" (str repo "/asl/packages/asl-gates/src/auditMain.asl") "gates" "--static" "--root" root)) repo)))
         (cliOutput (match cliRoot ((err _) "") ((ok o) o.stdout)))
         (cleaned (pathRemove root))]
@@ -494,7 +494,7 @@ fn testRoot! tmp: String -> Bool
       (assert (and (ok? made) (and (ok? init) (and (ok? tasks) (and (ok? task) (and (ok? added) (ok? committed)))))) "explicit root is a committed fixture tree")
       (assert (and (ok? result) (= (resultOr result -1) run.exitCode)) "--root selects the fixture toolchain root")
       (assert (stringContains? run.receipt "ERR_PLACEHOLDER_DIGEST") "fixture root's placeholder is the observed receipt")
-      (assert (stringContains? envOutput "ERR_PLACEHOLDER_DIGEST") "ROOT_DIR selects fixture root without --root")
+      (assert (stringContains? envOutput "ERR_PLACEHOLDER_DIGEST") (str "ROOT_DIR selects fixture root without --root " envOutput))
       (assert (and (stringContains? cliOutput ":scope :static") (not (stringContains? cliOutput "ERR_USAGE"))) "--root is stripped before gates rejects extra arguments")
       (assert (ok? cleaned) "root fixture removed")
       true))
@@ -525,6 +525,23 @@ fn testFullAsync! tmp: String -> Bool
       (assert (ok? cleaned) "async stub root removed")
       true))
 
+fn testSsotRetry! tmp: String -> Bool
+  (let [(root (str tmp "/ssotRetry"))
+        (made (dirCreate (str root "/scripts")))
+        (flaky (fileWrite (str root "/scripts/install.sh") (stringToBytes "#!/bin/sh\nif [ -e seen ]; then echo ok; exit 0; fi\n: > seen\necho '  UNKNOWN llms-web names what does not exist: (:check)'\nexit 1\n")))
+        (chmod (fr/shellOut (str "chmod +x '" root "/scripts/install.sh'") 5000))
+        (spurious (ag/ssotCheck! root))
+        (always (fileWrite (str root "/scripts/install.sh") (stringToBytes "#!/bin/sh\necho '  UNKNOWN stable names what does not exist: (:x)'\nexit 1\n")))
+        (real (ag/ssotCheck! root))
+        (cleaned (pathRemove root))]
+    (do
+      (assert (and (ok? made) (and (ok? flaky) (and (ok? chmod) (ok? always)))) "ssot retry fixture installed")
+      (assert (= spurious.status ":passed") "a rules check that fails once and then passes is a pass")
+      (assert (= real.status ":failed") "a rules check that fails every attempt stays failed")
+      (assert (stringContains? real.ev "UNKNOWN stable") "the failing output reaches the evidence when no DRIFT line explains the exit")
+      (assert (ok? cleaned) "ssot retry fixture removed")
+      true))
+
 fn testTerminatedMapping -> Bool
   (let [(c (ag/snapshotFault "gate5Suites" (sr/Fault :kind "terminated" :msg "signal 15")))]
     (do
@@ -543,6 +560,7 @@ fn ! runTests -> Bool
         (rootOk (testRoot! tmp))
         (asyncOk (testFullAsync! tmp))
         (terminatedOk (testTerminatedMapping))
+        (ssotRetryOk (testSsotRetry! tmp))
         (records (filter (fn [(f AVal)] -> Bool (= (headOf f) "record")) forms))
         (recordMismatches (fold (fn [(acc (List String)) (c AVal)] -> (List String) (listAppend acc (recordFails! tmp c))) (list) records))
         (cleaned (pathRemove tmp))]
@@ -555,6 +573,7 @@ fn ! runTests -> Bool
       (assert refused "record refusal parity")
       (assert rootOk "explicit toolchain root")
       (assert asyncOk "full async spawn stub")
+      (assert ssotRetryOk "ssot rules check retries a spurious failure")
       (assert terminatedOk "terminated runner faults map to internal audit errors")
       (assert (testPlaceholderDigest) "placeholder :digest detection")
       (assert (= (listLength records) (numField header "records")) "every fixture record replayed")

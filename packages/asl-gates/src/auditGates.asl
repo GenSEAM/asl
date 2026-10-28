@@ -201,23 +201,32 @@ fn remoteCheck! root: String -> Check
       (passCheck "workspaceIsolation" (none) (none))
       (failCheck "workspaceIsolation" "ERR_WORKSPACE_REMOTE" (str "git remote lists " (stringJoin remotes " ")) (none) (none))))
 
+fn ssotTail out: String err: String -> String
+  (let [(rest (filter (fn [(l String)] -> Bool (not (or (stringEmpty? (stringTrim l)) (stringStartsWith? (stringTrim l) "ok ")))) (stringSplit (str out err) "\n")))
+        (t (stringJoin (map stringTrim rest) " | "))]
+    (if (stringEmpty? t) "" (str " out: " (cut t 0 (min 600 (stringLength t))))))
+
 fn ssotCheck! root: String -> Check
   (let [(installPath (str root "/scripts/install.sh"))]
     (if (not (isFile! installPath))
       (failCheck "ssot" "ERR_SSOT_DRIFT" "exit 127; " (none) (none))
-      (match (p/exec! (p/withTimeout (p/withCwd (p/cmd installPath (list "--check-rules")) root) 600000))
-        ((err _) (failCheck "ssot" "ERR_SSOT_DRIFT" "exit 127; " (none) (none)))
-        ((ok o)
-         (let [(lines (stringSplit (str o.stdout o.stderr) "\n"))
-               (drift (fold (fn [(acc (List String)) (l String)] -> (List String)
-                              (if (stringContains? l "DRIFT")
-                                (cons (stringTrim l) acc)
-                                acc))
-                            (list)
-                            lines))]
-           (if (and (= o.exitCode 0) (listEmpty? drift))
-             (passCheck "ssot" (none) (none))
-             (failCheck "ssot" "ERR_SSOT_DRIFT" (str "exit " (itos o.exitCode) "; " (stringJoin (listTake (listReverse drift) 6) "; ")) (none) (none))))))))
+      (ssotAttempt! root installPath 3)))
+
+fn ssotAttempt! root: String installPath: String left: Int64 -> Check
+  (match (p/exec! (p/withTimeout (p/withCwd (p/cmd installPath (list "--check-rules")) root) 600000))
+    ((err _) (failCheck "ssot" "ERR_SSOT_DRIFT" "exit 127; " (none) (none)))
+    ((ok o)
+     (let [(lines (stringSplit (str o.stdout o.stderr) "\n"))
+           (drift (fold (fn [(acc (List String)) (l String)] -> (List String)
+                          (if (stringContains? l "DRIFT")
+                            (cons (stringTrim l) acc)
+                            acc))
+                        (list)
+                        lines))]
+       (cond
+         ((and (= o.exitCode 0) (listEmpty? drift)) (passCheck "ssot" (none) (none)))
+         ((> left 1) (ssotAttempt! root installPath (- left 1)))
+         (else (failCheck "ssot" "ERR_SSOT_DRIFT" (str "exit " (itos o.exitCode) "; " (stringJoin (listTake (listReverse drift) 6) "; ") (if (listEmpty? drift) (ssotTail o.stdout o.stderr) "")) (none) (none)))))))
 
 fn hasEmoji? line: String -> Bool
   (let [(bs (stringToBytes line)) (n (bytesLength bs))]

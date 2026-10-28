@@ -4,7 +4,7 @@
       vendorBounds fitVendorCall contextTokensFor modelBase calibrationIndexPath calibrationIndexPath! servedContextTokens servedContextTokens!
       readPayloadChars renderTranscript renderTurnContext renderWindow stableSectionAt stableWindowTurn gateOutcome gateTail gateNow
       noWriteNudge noWriteNudgeTurns readStreakEscalate noWriteTurns parseDefectEscalate parseDefectEscalateIn parseDefectEscalateFor! batchingRates costForm reinforceWhyFor escalationNear nowForm stepState! spanHolder seenReceipt failureSignatures
-      renderTranscriptBounded turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
+      renderTranscriptBounded contextCompactStep compactionCut turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
       contextMaxOlderLines contextMaxOlderLinesIn contextMaxOlderLinesFor!
       coreDelta coreStatsLine formEnd sitePath possibleSitesOf readCovers siteNamed openPossible findingsRun possibleSiteList possibleNotice
       hiddenVars hiddenEnv! prefetchPaths! prefetchBlock! receiptPhase taskHintLines unmetForm specUnescape specCheckDiff! parseSpecVerdict
@@ -743,12 +743,19 @@ fn turnWhole h: j/Json cap: Int64 -> String
     (str "(:turn " turn " :sent \"" (c/escapeAsn sent) "\" :got \"" (c/escapeAsn (clipGot got turn cap)) "\")"))
 
 ; (:m :do "everything older than the last keepTurns turns collapses to one deterministic receipt line each (ops/files/gates, never model text); only the most recent maxOlderLines of those survive at all, the rest are dropped with nothing rendered in their place, giving a true fixed ceiling for a run of any length. Below that cap the older section is pure append-only as turns age out of the kept window one at a time, so the rendered prefix stays byte-stable call over call; the kept tail is re-rendered whole (clipped per-turn) every call")
+; (:m :ref LEON-PREFIX-CACHE-20261026 :do "the cut between summarised and whole turns only moves at fixed compaction points (every contextCompactStep turns) so the rendered bytes between two points are an append-only extension of the previous call's bytes, which is what provider prefix caches match on; the kept window is therefore keepTurns to keepTurns+step-1 whole turns")
+fn contextCompactStep -> Int64
+  4
+
+fn compactionCut n: Int64 keepTurns: Int64 step: Int64 -> Int64
+  (let [raw (max 0 (- n (max 0 keepTurns)))]
+    (if (<= step 1) raw (* step (/ raw step))))
+
 fn renderTranscriptBounded history: (List j/Json) keepTurns: Int64 toolCapBytes: Int64 maxOlderLines: Int64 -> String
   (if (listEmpty? history)
     ""
     (let [n (listLength history)
-          k (max 0 (min keepTurns n))
-          cutAt (- n k)
+          cutAt (compactionCut n keepTurns (contextCompactStep))
           older (optionOr (listSlice history 0 cutAt) (list))
           olderCount (listLength older)
           survivors (optionOr (listSlice older (max 0 (- olderCount maxOlderLines)) olderCount) (list))

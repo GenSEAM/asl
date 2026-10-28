@@ -1027,6 +1027,21 @@ fn ! buildHost! snap: String real: String baseS: Int64 guard: (Option Guard) reg
             (ok ())
             (err (str "native CLI build failed: exit " (stringFromInt64 d.code) ": " (tail1500 (pyStrip (stripSnap d.merged snap real)))))))))))
 
+; (:m :ref NATIVECLI-LOCK-WAIT :do "bin/asl in the snapshot may queue on the shared native-CLI build lock when its sources look newer than the cached binary; one bounded warm call before the pool pays that wait outside every suite alarm, and the wait is reported as (:wait :nativeCli :ms N). A failed warm is not an error here: the suites then report it themselves")
+fn ! warmNative! snap: String real: String baseS: Int64 guard: (Option Guard) registry: (Option String) -> (Result Unit String)
+  (match (envInt! "ASL_HOST_BUILD_TIMEOUT_S" 1800)
+    ((err e) (err e))
+    ((ok warmS)
+     (match (runJobs! (list (Job :input "" :argv (list (str snap "/bin/asl") "eval" "(+ 1 2)") :cwd (some snap)
+                          :env (some (withEnv! (list "ASL_IN_RUNNER=1" (str "ASL_CLI_ROOT=" real) (str "ASL_NATIVE_BUILD_WAIT=" (stringFromInt64 warmS)) (str "ASL_NATIVE_TEST_CACHE=" (nativeTestCacheRoot!)) (nestedTimes snap))))
+                          :timeoutMs (* (max baseS warmS) 1000))) 1 guard registry)
+       ((err e) (err e))
+       ((ok ds)
+        (let [(d (optionOr (listHead ds) (Done :code -1 :out "" :errText "" :merged "" :startNs 0 :endNs 0)))
+              (ms (doneMs d))]
+          (do (if (> ms 1000) (eprintln (str "(:wait :nativeCli :ms " (stringFromInt64 ms) ")")) ())
+              (ok ())))))))
+
 fn unquote s: String -> String
   (let [(a (if (stringStartsWith? s "\"") (unquote (optionOr (stringSlice s 1 (stringLength s)) "")) s))]
     (if (stringEndsWith? a "\"") (unquote (optionOr (stringSlice a 0 (- (stringLength a) 1)) "")) a))
@@ -1203,6 +1218,9 @@ fn ! suitePhase! snap: String real: String baseS: Int64 suites: (List String) wo
         (match (if (listAny? (fn [(s String)] -> Bool (stringEndsWith? s ".asl")) suites) (buildHost! snap real baseS (some guard) (some registry)) (ok ()))
           ((err e) (err e))
           ((ok _)
+           (match (if (listAny? (fn [(s String)] -> Bool (stringEndsWith? s ".asl")) suites) (warmNative! snap real baseS (some guard) (some registry)) (ok ()))
+            ((err e) (err e))
+            ((ok _)
            (match (getDirt! snap)
              ((err e) (err e))
              ((ok before)
@@ -1219,7 +1237,7 @@ fn ! suitePhase! snap: String real: String baseS: Int64 suites: (List String) wo
                           ((err e) (err e))
                           ((ok after)
                            (ok (SnapRun :results (map (fn [(p (Pair String Done))] -> SuiteResult (toResult! snap real (pairFirst p) (pairSecond p))) (zip suites dones))
-                                        :gained (checkGained before after) :wallMs wallMs :times times))))))))))))))))))
+                                        :gained (checkGained before after) :wallMs wallMs :times times))))))))))))))))))))
 
 fn ! snapRun root: String suites: (List String) workers: Int64 lockWaitS: Int64 -> (Result SnapRun Fault)
   (match (envInt! "ASL_SUITE_TIMEOUT_S" 300)

@@ -4,7 +4,7 @@
       (asl/agentLoop/context :a ctx) (asl/agentLoop/journal :a jr)
       (asl/agentLoop/gitOps :a go) (asl/agentLoop/runOps :a ro) (asl/agentLoop/reply :a rp)
       (asl/agentLoop/core :a c) (asl/agentLoop/gates :a g) (asl-json/json :a j)
-      (asl/agentLoop/providers :a pv) (asl/agentLoop/agentConfig :a ac)])
+      (asl/agentLoop/providers :a pv) (asl/agentLoop/agentConfig :a ac) (asl/agentLoop/aslOps :a ao)])
 
 schema LoopRun
   (:f state s/LoopState) (:f procs ro/Procs) (:f written jr/Written) (:f session String)
@@ -861,9 +861,11 @@ fn ! runBody! env: s/LoopEnv run: LoopRun body: (fn [s/LoopEnv LoopRun] -> (Pair
           ((nextTurn) headed)
           ((stop) headed)))))
 
+; (:m :ref LEON-PREFIX-CACHE-TOOLMEMO :do "cleanup! is the one exit every run path reaches, early stop, success and failure, so the read memo scope ends here; it opens in the ready branches after setup")
 fn ! cleanup! env: s/LoopEnv sid: String -> (Result Bool String)
-  (match (jr/retainJournal env.journalPath env.rootDir sid)
-    ((err e) (err e)) ((ok _) (ok true)))
+  (let [_memoEnded (ao/memoRunEnd! (absoluteRoot! env.rootDir) sid)]
+    (match (jr/retainJournal env.journalPath env.rootDir sid)
+      ((err e) (err e)) ((ok _) (ok true))))
 
 fn ! runLoopWith! env: s/LoopEnv body: (fn [s/LoopEnv LoopRun] -> (Pair LoopRun s/Step)) -> s/RunResult
   (match (setup! env)
@@ -872,7 +874,8 @@ fn ! runLoopWith! env: s/LoopEnv body: (fn [s/LoopEnv LoopRun] -> (Pair LoopRun 
         ((err e) (emptyResult env result.session "failed" (some e) result.turns none (list) none none none))
         ((ok _) result)))
     ((ready run)
-      (let [finished (runBody! env run body)
+      (let [_memoBegun (ao/memoRunBeginIfOn! (absoluteRoot! env.rootDir) run.session)
+            finished (runBody! env run body)
             result (finish! env finished)]
         (match (cleanup! env finished.session)
           ((err e) (emptyResultWith env finished.session "failed" (some e) finished.state.turn none (list) none none none finished.state.baselineGreen))
@@ -897,7 +900,8 @@ fn ! runLoopWithProvider! env: s/LoopEnv provider: pv/Provider body: (fn [s/Loop
         ((err e) (emptyResult env result.session "failed" (some e) result.turns none (list) none none none))
         ((ok _) result)))
     ((ready run)
-      (let [finished (runBodyWithProvider! env (ProviderRun :run run :provider provider :history run.state.history) body)
+      (let [_memoBegun (ao/memoRunBeginIfOn! (absoluteRoot! env.rootDir) run.session)
+            finished (runBodyWithProvider! env (ProviderRun :run run :provider provider :history run.state.history) body)
             completed finished.run
             result (finish! env completed)]
         (match (cleanup! env completed.session)

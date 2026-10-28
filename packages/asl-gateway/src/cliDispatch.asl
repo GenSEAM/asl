@@ -37,6 +37,10 @@
       agyBuildCmd!
       claudeBuildCmd!
       buildEnvString!
+      buildEnvStringAt!
+      runSpawnChecked!
+      secretValueOk?
+      cliEnvAssignments
       runSpawnDispatch!
       agyAgentMarkdown
       jsonIntField
@@ -48,6 +52,7 @@
       (config :a cfg)
       (usageLedger :a ul)
       (sessions :a ses)
+      (secrets :a sc)
       (asl-cli/system :a sys)])
 
 (schema CliUsage
@@ -1080,17 +1085,60 @@ fn parseEnvLines s: String -> (List String)
         (parts (stringSplit s sep))]
     (map cleanEnvEntry (filter (fn [line] (stringContains? line "=")) (map stringTrim parts))))
 
-fn buildEnvString! provider: String -> String
+; (:m :ref GW-WIRE-UP :do "a vendor CLI key variable the process env lacks is taken from the secrets file row whose id is the variable name, and goes into the child env string only")
+fn resultToOption r: (Result T String) -> (Option T)
+  (match r ((ok v) (some v)) ((err _) none))
+
+fn secretFor store: (Option sc/SecretStore) name: String -> (Option String)
+  (match store
+    ((none) none)
+    ((some st) (match (sc/secretsGet st name) ((ok v) (some v)) ((err _) none))))
+
+; (:m :ref GW-CLIDISPATCH-SECRETS-TEST :do "the env string of a vendor CLI child: each base and key variable comes from the process env, and a key variable the env lacks from the secrets store row of the same id; the lookup is a parameter so a test needs no real env")
+; (:m :ref AUDIT11-A5 :do "a secrets file that cannot be trusted (permissions, symlink, changed while read, unparseable) fails the dispatch with its receipt instead of starting the vendor without its key; only an absent file means no secrets. A secret value with a newline, a carriage return or wrapping quotes is refused by id, because the child env string is line-parsed and unquoted and would otherwise be altered or split into extra variables")
+fn secretValueOk? v: String -> Bool
+  (and (not (stringContains? v "\n"))
+    (and (not (stringContains? v "\r"))
+      (not (and (>= (stringLength v) 2) (or (stringStartsWith? v "\"") (stringStartsWith? v "'"))))))
+
+fn cliEnvAssignments names: (List String) keyVars: (List String) lookup: (fn [String] -> (Option String)) store: (Option sc/SecretStore) -> (Result String String)
+  (match
+    (fold (fn [acc varName]
+            (match acc
+              ((err e) (err e))
+              ((ok lines)
+                (match (lookup varName)
+                  ((some v) (ok (cons (str varName "=" v) lines)))
+                  ((none) (if (listContains? keyVars varName)
+                            (match (secretFor store varName)
+                              ((some v) (if (secretValueOk? v) (ok (cons (str varName "=" v) lines)) (err (str "(:err :code ERR_SECRET_VALUE :id " varName ")"))))
+                              ((none) (ok lines)))
+                            (ok lines)))))))
+          (ok (list))
+          names)
+    ((err e) (err e))
+    ((ok lines) (ok (stringJoin (listReverse lines) "\n"))))
+
+fn secretsStoreFor! keyVars: (List String) secretsPath: String -> (Result (Option sc/SecretStore) String)
+  (if (listEmpty? keyVars) (ok none)
+    (match (sc/secretsLoad! secretsPath)
+      ((ok st) (ok (some st)))
+      ((err e) (if (stringContains? e ":why missing") (ok none) (err e)))))
+
+fn buildEnvStringAt! provider: String secretsPath: String -> (Result String String)
   (let [(baseVars (list "PATH" "HOME" "USER" "LOGNAME" "TMPDIR" "SHELL" "TERM" "LANG" "LC_ALL" "ROOT_DIR" "ASL_AGENT_UNSAFE"))
-        (keyVars (match (cliProviderNamed provider) ((some row) row.keyVars) ((none) (list))))
-        (allVars (listAppend baseVars keyVars))
-        (envAssignments (fold (fn [acc varName]
-                                (match (envGet varName)
-                                  ((some v) (cons (str varName "=" v) acc))
-                                  ((none) acc)))
-                              (list)
-                              allVars))]
-    (stringJoin (listReverse envAssignments) "\n"))
+        (keyVars (match (cliProviderNamed provider) ((some row) row.keyVars) ((none) (list))))]
+    (match (secretsStoreFor! keyVars secretsPath)
+      ((err e) (err e))
+      ((ok store) (cliEnvAssignments (listAppend baseVars keyVars) keyVars (fn [n] (envGet n)) store))))
+
+fn buildEnvString! provider: String -> (Result String String)
+  (buildEnvStringAt! provider (sc/secretsDefaultPath))
+
+fn runSpawnChecked! envRes: (Result String String) cmdList: (List String) ws: String stdinFile: (Option String) pidFile: String tmpDir: String timeoutSec: Int64 client: String -> (Result CliParseResult String)
+  (match envRes
+    ((err e) (do (pathRemove tmpDir) (err e)))
+    ((ok envStr) (runSpawnDispatch! cmdList ws envStr stdinFile pidFile tmpDir timeoutSec client)))
 
 fn runSpawnDispatch! cmdList: (List String) ws: String envStr: String stdinFile: (Option String) pidFile: String tmpDir: String timeoutSec: Int64 client: String -> (Result CliParseResult String)
   (let [(envLines (parseEnvLines envStr))
@@ -1185,8 +1233,8 @@ fn dispatchCodexFallback! prompt: String opts: DispatchOptions -> (Result CliPar
                     ((ok _)
                      (let [(pidFile (str tmpDir "/child.pid"))
                            (cmd (codexBuildCmd codexBin ws promptPath opts.noTools opts.effort opts.model))
-                           (envStr (buildEnvString! "codex"))]
-                       (runSpawnDispatch! cmd ws envStr (some promptFile) pidFile tmpDir opts.timeout "codex")))))))))))))
+                           (envRes (buildEnvString! "codex"))]
+                       (runSpawnChecked! envRes cmd ws (some promptFile) pidFile tmpDir opts.timeout "codex")))))))))))))
 
 fn dispatch_codex_fallback! prompt: String model: (Option String) effort: (Option String) timeout: Int64 workspace: (Option String) systemPrompt: (Option String) noTools: Bool -> (Result CliParseResult String)
   (dispatchCodexFallback! prompt (DispatchOptions
@@ -1220,8 +1268,8 @@ fn dispatchAgyFallback! prompt: String opts: DispatchOptions -> (Result CliParse
                    ((ok _)
                     (let [(pidFile (str tmpDir "/child.pid"))
                           (cmd (agyBuildCmd! agyBin ws tmpDir rootDir opts.timeout opts.model opts.effort opts.agent opts.addDirs prompt opts.noTools))
-                          (envStr (buildEnvString! "agy"))]
-                      (runSpawnDispatch! cmd ws envStr none pidFile tmpDir opts.timeout "agy")))))
+                          (envRes (buildEnvString! "agy"))]
+                      (runSpawnChecked! envRes cmd ws none pidFile tmpDir opts.timeout "agy")))))
                (let [(sysText (optionOr opts.systemPrompt (proxySystemPrompt)))
                      (agentText (if (stringEmpty? prompt) sysText (str sysText "\n\n(:conversation)\n" prompt)))
                      (promptDirRes (cliWritePromptDir! "agy" agentText opts.noTools))]
@@ -1231,8 +1279,8 @@ fn dispatchAgyFallback! prompt: String opts: DispatchOptions -> (Result CliParse
                     (let [(tmpDir promptDir.tmpDir)
                           (pidFile (str tmpDir "/child.pid"))
                           (cmd (agyBuildCmd! agyBin ws tmpDir rootDir opts.timeout opts.model opts.effort opts.agent opts.addDirs prompt opts.noTools))
-                          (envStr (buildEnvString! "agy"))]
-                      (runSpawnDispatch! cmd ws envStr none pidFile tmpDir opts.timeout "agy"))))))))))))
+                          (envRes (buildEnvString! "agy"))]
+                      (runSpawnChecked! envRes cmd ws none pidFile tmpDir opts.timeout "agy"))))))))))))
 
 fn dispatch_agy_fallback! prompt: String model: (Option String) effort: (Option String) timeout: Int64 agent: (Option String) addDirs: (List String) workspace: (Option String) systemPrompt: (Option String) noTools: Bool -> (Result CliParseResult String)
   (dispatchAgyFallback! prompt (DispatchOptions
@@ -1271,8 +1319,8 @@ fn dispatchClaudeFallback! prompt: String opts: DispatchOptions -> (Result CliPa
                     ((ok _)
                      (let [(pidFile (str tmpDir "/child.pid"))
                            (cmd (claudeBuildCmd! claudeBin promptPath opts.noTools opts.model opts.effort))
-                           (envStr (buildEnvString! "claude"))]
-                       (runSpawnDispatch! cmd ws envStr (some promptFile) pidFile tmpDir opts.timeout "claude")))))))))))))
+                           (envRes (buildEnvString! "claude"))]
+                       (runSpawnChecked! envRes cmd ws (some promptFile) pidFile tmpDir opts.timeout "claude")))))))))))))
 
 fn dispatch_claude_fallback! prompt: String model: (Option String) effort: (Option String) timeout: Int64 workspace: (Option String) systemPrompt: (Option String) noTools: Bool -> (Result CliParseResult String)
   (dispatchClaudeFallback! prompt (DispatchOptions

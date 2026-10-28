@@ -76,10 +76,13 @@
       ConfigHealth
       gatewayProfilesPath
       gatewayLedgerPathOverride
+      gatewaySecretsFileOverride
+      gatewaySecretsFileChoice
+      keyFilesEnvOverlay!
       gatewaySharedUsagePathOverride
       gatewayDailyTokenBudget
       gatewayBreakerCooldownSecOverride
-      expandUserPath keyFileLookup! resolveProviderKey! gatewayKeyFilesFromProps keyFilesSuffix
+      expandUserPath keyFileLookup! resolveProviderKey! resolveProviderCredential! gatewaySecretsPathFromProps isValidSecretId? providerPromptCacheKey? gatewayKeyFilesFromProps keyFilesSuffix
       profilePinPath profilePinRead! writeProfilePin!
       gatewayConfigKey!
       configKeyEqual?
@@ -107,7 +110,8 @@
       (asl-parser/lexer :a lx)
       (asl-parser/reader :a rd)
       (aslGateway/batchPool :a bp)
-      (aslGateway/usage :a ug)])
+      (aslGateway/usage :a ug)
+      (aslGateway/secrets :a sc)])
 
 (enum AsnScalar
   (:c scalarBool [(b Bool)])
@@ -187,6 +191,8 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
   (:f kind String)
   (:f base String)
   (:f keyEnv String)
+  (:f secret String)
+  (:f promptCacheKey Bool)
   (:f sessionHeader String)
   (:f timeoutSec Float64)
   (:f firstByteSec Float64)
@@ -281,6 +287,29 @@ fn ! resolveProviderKey! keyFiles: (List String) keyEnv: String -> (Option Strin
     (match (keyFileLookup! keyFiles keyEnv)
       ((some v) (some v))
       ((none) (envGet keyEnv))))
+
+fn providerPromptCacheKey? table: GatewayTable provider: String -> Bool
+  (match (mapGet table.providers provider)
+    ((some p) p.promptCacheKey)
+    ((none) false))
+
+fn isValidSecretId? s: String -> Bool
+  (and (not (stringEmpty? s))
+       (listAll? (fn [(c String)] -> Bool (not (or (= c " ") (or (= c "\"") (or (= c "(") (or (= c ")") (or (= c ";") (or (= c "\n") (= c "\\")))))))))
+                 (stringChars s)))
+
+fn gatewaySecretsPathFromProps g: (Map String rd/SExpr) -> String
+  (match (mapGet g "secretsFile")
+    ((none) (sc/secretsDefaultPath))
+    ((some value) (match (asn_scalar value) ((scalarStr s) (if (stringEmpty? s) (sc/secretsDefaultPath) (expandUserPath s))) (_ (sc/secretsDefaultPath)))))
+
+; (:m :ref GW-SECRETS-FILE-20261027 :do "a provider's :secret names a row in the secrets file and wins over :keyEnv; no :secret falls back to :keyEnv with the key files; a secret absent from the file is an ERR_SECRET_MISSING receipt naming the id, never a value, and it does not fall back to the environment")
+fn ! resolveProviderCredential! secretsPath: String keyFiles: (List String) secret: String keyEnv: String -> (Result (Option String) String)
+  (if (stringEmpty? secret)
+    (ok (resolveProviderKey! keyFiles keyEnv))
+    (match (sc/secretsLoad! secretsPath)
+      ((err e) (err e))
+      ((ok store) (match (sc/secretsGet store secret) ((ok v) (ok (some v))) ((err e) (err e)))))) 
 
 ; (:m :ref GW-KEYSTORE-20261019 :do "a missing key names what was searched -- the env var always, the key files too when any were configured -- never the value")
 fn keyFilesSuffix keyFiles: (List String) -> String
@@ -923,13 +952,13 @@ fn defaultProviders! -> (Map String GatewayProvider)
                                    ((none) (none))
                                    ((some s) (if (isFloatString? s) (stringToFloat64 s) (match (stringToInt64 s) ((some n) (some (int64ToFloat64 n)) ((none) (none)))))))
                                  300.0))
-        (p1 (GatewayProvider :id "agy" :kind "cli" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p2 (GatewayProvider :id "codex" :kind "cli" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p3 (GatewayProvider :id "claude" :kind "cli" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p4 (GatewayProvider :id "gemini" :kind "openai" :base geminiBase :keyEnv "GEMINI_API_KEY" :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p5 (GatewayProvider :id "groq" :kind "openai" :base groqBase :keyEnv "GROQ_API_KEY" :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p6 (GatewayProvider :id "openrouter" :kind "openai" :base openrouterBase :keyEnv "OPENROUTER_API_KEY" :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p7 (GatewayProvider :id "ollama" :kind "openai" :base ollamaBase :keyEnv "OLLAMA_API_KEY" :sessionHeader "" :timeoutSec ollamaTimeout :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))]
+        (p1 (GatewayProvider :id "agy" :kind "cli" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p2 (GatewayProvider :id "codex" :kind "cli" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p3 (GatewayProvider :id "claude" :kind "cli" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p4 (GatewayProvider :id "gemini" :kind "openai" :base geminiBase :keyEnv "GEMINI_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p5 (GatewayProvider :id "groq" :kind "openai" :base groqBase :keyEnv "GROQ_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p6 (GatewayProvider :id "openrouter" :kind "openai" :base openrouterBase :keyEnv "OPENROUTER_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p7 (GatewayProvider :id "ollama" :kind "openai" :base ollamaBase :keyEnv "OLLAMA_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec ollamaTimeout :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))]
     (mapFromPairs (list (pair "agy" p1) (pair "codex" p2) (pair "claude" p3) (pair "gemini" p4) (pair "groq" p5) (pair "openrouter" p6) (pair "ollama" p7))))
 
 fn extractPropList items: (List rd/SExpr) head: String accForms: (List (Map String rd/SExpr)) accErrs: (List String) -> (Pair (List (Map String rd/SExpr)) (List String))
@@ -1044,12 +1073,12 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
         ((err e) (pair provs (listAppendOne curErrs e)))
         ((ok pid)
           (let [(withKeyErr (if (mapHas? p "key") (listAppendOne curErrs (str "provider " pid ": keys are named by :keyEnv, never stored in the file")) curErrs))
-                (existing (optionOr (mapGet provs pid) (GatewayProvider :id pid :kind "" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))
+                (existing (optionOr (mapGet provs pid) (GatewayProvider :id pid :kind "" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))
                 (kind (match (mapGet p "kind")
                         ((some kExpr) (scalarToString (asn_scalar kExpr)))
                         ((none) existing.kind)))
-                (kindErr (if (and (!= kind "openai") (and (!= kind "cli") (and (!= kind "anthropic") (!= kind "gemini"))))
-                           (listAppendOne withKeyErr (str "provider " pid ": :kind must be openai, anthropic, gemini or cli"))
+                (kindErr (if (and (!= kind "openai") (and (!= kind "cli") (and (!= kind "anthropic") (and (!= kind "gemini") (!= kind "gateway")))))
+                           (listAppendOne withKeyErr (str "provider " pid ": :kind must be openai, anthropic, gemini, cli or gateway"))
                            (if (and (= kind "cli") (not (or (= pid "agy") (or (= pid "codex") (= pid "claude")))))
                              (listAppendOne withKeyErr (str "provider " pid ": a cli provider is one of agy, codex, claude"))
                              withKeyErr)))
@@ -1073,13 +1102,30 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                                    (pair ke withBaseErr))))))
                 (keyEnv (pairFirst keyEnvRes))
                 (withKeErr (pairSecond keyEnvRes))
+                (secretRes (match (mapGet p "secret")
+                             ((none) (pair existing.secret withKeErr))
+                             ((some sExpr)
+                               (let [(sid (scalarToString (asn_scalar sExpr)))]
+                                 (if (isValidSecretId? sid)
+                                   (pair sid withKeErr)
+                                   (pair existing.secret (listAppendOne withKeErr (str "provider " pid ": :secret must name a secrets-file id"))))))))
+                (secret (pairFirst secretRes))
+                (withSecretErr (pairSecond secretRes))
+                (pckRes (match (mapGet p "promptCacheKey")
+                          ((none) (pair existing.promptCacheKey withSecretErr))
+                          ((some pExpr)
+                            (match (asn_scalar pExpr)
+                              ((scalarBool b) (pair b withSecretErr))
+                              (_ (pair existing.promptCacheKey (listAppendOne withSecretErr (str "provider " pid ": :promptCacheKey must be true or false"))))))))
+                (promptCacheKey (pairFirst pckRes))
+                (withPckErr (pairSecond pckRes))
                 (sessionHeaderRes (match (mapGet p "sessionHeader")
-                                    ((none) (pair existing.sessionHeader withKeErr))
+                                    ((none) (pair existing.sessionHeader withPckErr))
                                     ((some shExpr)
                                       (let [(sh (scalarToString (asn_scalar shExpr)))]
                                         (if (not (isValidHeaderName? sh))
-                                          (pair existing.sessionHeader (listAppendOne withKeErr (str "provider " pid ": :sessionHeader must name an http header")))
-                                          (pair sh withKeErr))))))
+                                          (pair existing.sessionHeader (listAppendOne withPckErr (str "provider " pid ": :sessionHeader must name an http header")))
+                                          (pair sh withPckErr))))))
                 (sessionHeader (pairFirst sessionHeaderRes))
                 (withShErr (pairSecond sessionHeaderRes))
                 (timeoutRes (match (mapGet p "timeoutSec")
@@ -1128,10 +1174,13 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                                 ((ok retryValue) (pair (some retryValue) withPoolErr))))))
                 (retryValue (pairFirst retryRes))
                 (withRetryErr (pairSecond retryRes))
-                (finalErrs (if (and (or (= kind "openai") (or (= kind "anthropic") (= kind "gemini"))) (stringEmpty? base))
+                (baseErrs (if (and (or (= kind "openai") (or (= kind "anthropic") (or (= kind "gemini") (= kind "gateway")))) (stringEmpty? base))
                              (listAppendOne withRetryErr (str "provider " pid ": an " kind " provider needs :base"))
                              withRetryErr))
-                (updated (GatewayProvider :id pid :kind kind :base base :keyEnv keyEnv :sessionHeader sessionHeader :timeoutSec timeoutSec :firstByteSec firstByteSec :rpm rpm :pool poolValue :retry retryValue))]
+                (finalErrs (if (and (= kind "gateway") (stringEmpty? secret))
+                             (listAppendOne baseErrs (str "provider " pid ": a gateway provider needs :secret naming its bearer token in the secrets file"))
+                             baseErrs))
+                (updated (GatewayProvider :id pid :kind kind :base base :keyEnv (if (stringEmpty? secret) keyEnv (sc/secretEnvName secret)) :secret secret :promptCacheKey promptCacheKey :sessionHeader sessionHeader :timeoutSec timeoutSec :firstByteSec firstByteSec :rpm rpm :pool poolValue :retry retryValue))]
             (pair (mapSet provs pid updated) finalErrs))))))
 
 fn loopProviders pForms: (List (Map String rd/SExpr)) provs: (Map String GatewayProvider) errs: (List String) -> (Pair (Map String GatewayProvider) (List String))
@@ -1555,12 +1604,16 @@ fn gateway_config_v2_build! g: (Map String rd/SExpr) source: String registryPath
                     allErrs1))
         (keyFilesList (gatewayKeyFilesFromProps g))
         (envWarns (fold (fn [(acc (List String)) (pid String)] -> (List String)
-                          (let [(pv (optionOr (mapGet providers pid) (GatewayProvider :id pid :kind "" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))]
-                            (if (and (not (stringEmpty? pv.keyEnv)) (listAny? (fn [(m GatewayModel)] -> Bool (= m.provider pid)) (mapValues models)))
+                          (let [(pv (optionOr (mapGet providers pid) (GatewayProvider :id pid :kind "" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))]
+                            (if (and (not (stringEmpty? pv.keyEnv)) (and (stringEmpty? pv.secret) (listAny? (fn [(m GatewayModel)] -> Bool (= m.provider pid)) (mapValues models))))
                               (match (resolveProviderKey! keyFilesList pv.keyEnv)
                                 ((none) (listAppendOne acc (str "provider " pid ": key env " pv.keyEnv " is not set" (keyFilesSuffix keyFilesList))))
                                 ((some val) (if (stringEmpty? val) (listAppendOne acc (str "provider " pid ": key env " pv.keyEnv " is not set" (keyFilesSuffix keyFilesList))) acc)))
-                              acc)))
+                              (if (and (not (stringEmpty? pv.secret)) (listAny? (fn [(m GatewayModel)] -> Bool (= m.provider pid)) (mapValues models)))
+                                (match (resolveProviderCredential! (gatewaySecretsPathFromProps g) keyFilesList pv.secret "")
+                                  ((err e) (listAppendOne acc (str "provider " pid ": " e)))
+                                  ((ok _) acc))
+                                acc))))
                         (list)
                         (providerOrder! (pairFirst provForms))))
         (allWarns (listAppend warnings envWarns))
@@ -1925,6 +1978,63 @@ fn gatewayUndeclaredIntents table: GatewayTable -> (Map String Int64)
 
 fn gatewayProfilesPath home: String -> String
   (str (rstripSlash home) "/.asl/gateway.asn")
+
+; (:m :ref GW-SECRETS-FILE-OVERRIDE :do "an optional top-level (:gateway ... :secretsFile \"path\") names the secrets file the server and config check both read; ~ expands against HOME, absent or unparseable text is none so the default ~/.asl/secrets.asn applies")
+fn gatewaySecretsFileOverride text: String -> (Option String)
+  (match (ast/readForms (lx/tokenize text))
+    ((err _) none)
+    ((ok forms)
+     (if (!= (listLength forms) 1)
+       none
+       (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
+         (match (asn_props top (some ":gateway"))
+           ((err _) none)
+           ((ok g)
+            (match (mapGet g "secretsFile")
+              ((none) none)
+              ((some value)
+               (match (asn_scalar value)
+                 ((scalarStr s) (if (stringEmpty? s) none (some (expandUserPath s))))
+                 (_ none))))))))))
+
+; (:m :ref GW-SERVE-KEYFILES :do "serve and link read provider keys from the process env only, so a key kept in a (:gateway :keyFiles) file never reached a request; this overlays each provider keyEnv the env lacks with the value resolveProviderKey! finds in those files, and never prints a value")
+fn ! keyFilesEnvOverlay! text: String env: (Map String String) -> (Map String String)
+  (match (ast/readForms (lx/tokenize text))
+    ((err _) env)
+    ((ok forms)
+     (match (asn_props (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr (some ":gateway"))
+       ((err _) env)
+       ((ok g)
+        (let [(files (gatewayKeyFilesFromProps g))
+              (rows (match (mapGet g "providers") ((some (rd/sexprList l)) l) (_ (list))))
+              (keyEnvs (map (fn [(row rd/SExpr)] -> String
+                              (match (asn_props row (some ":provider"))
+                                ((ok p) (match (mapGet p "keyEnv") ((some v) (scalarToString (asn_scalar v))) ((none) "")))
+                                ((err _) "")))
+                         rows))]
+          (if (listEmpty? files) env
+            (fold (fn [(acc (Map String String)) (name String)] -> (Map String String)
+                    (if (or (stringEmpty? name) (mapHas? acc name)) acc
+                      (match (resolveProviderKey! files name) ((some v) (if (stringEmpty? v) acc (mapSet acc name v))) ((none) acc))))
+              env keyEnvs)))))))
+
+; (:m :ref AUDIT12-B6 :do "the strict form of gatewaySecretsFileOverride for serve: unparseable non-empty text or a :secretsFile that is not a non-empty string is an error instead of none, so serve auth cannot fail open on a config it could not read; absent key is ok none")
+fn gatewaySecretsFileChoice text: String -> (Result (Option String) String)
+  (if (stringEmpty? (stringTrim text)) (ok none)
+    (match (ast/readForms (lx/tokenize text))
+      ((err e) (err (str "ERR_SECRETS_CONFIG: gateway config does not parse: " e)))
+      ((ok forms)
+       (if (!= (listLength forms) 1)
+         (err "ERR_SECRETS_CONFIG: gateway config is not exactly one form")
+         (match (asn_props (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr (some ":gateway"))
+           ((err e) (err (str "ERR_SECRETS_CONFIG: " e)))
+           ((ok g)
+            (match (mapGet g "secretsFile")
+              ((none) (ok none))
+              ((some value)
+               (match (asn_scalar value)
+                 ((scalarStr s) (if (stringEmpty? s) (err "ERR_SECRETS_CONFIG: :secretsFile is empty") (ok (some (expandUserPath s)))))
+                 (_ (err "ERR_SECRETS_CONFIG: :secretsFile must be a string path")))))))))))
 
 ; (:m an optional top-level (:gateway ... :ledgerPath "...") string overrides ul/defaultLedgerPath's home/.asl/run/gatewayCalls.asn; absent, unparseable or non-string text is none, never guessed)
 fn gatewayLedgerPathOverride text: String -> (Option String)

@@ -6,12 +6,13 @@
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/sysRoute :a rt)
       (asl-target-llvm/ffiRoute :a ffi)
+      (asl-target-llvm/ssa :a llvm)
       (asl-tools/fleet/run :a run)])
 
 ; (:m :ref FFI1 :do "foreign end to end: ffiRoute turns each stub into a checked wrapper with a typed extern, wasm rejects it, and bin/asl build links a fixture that calls libm cbrt, libc strlen toupper isdigit strerror and libz crc32 adler32 (named by :linkLibraries) natively; outputs are compared with the C results")
 fn unitSource -> String
   (stringJoin (list
-    "(module ffiUnit :x [cubeRoot crc toUpper errorText digit] :i [])"
+    "(module ffiUnit :x [cubeRoot crc toUpper errorText digit scale combine seven] :i [])"
     ""
     "fn ! cubeRoot x: Float64 -> Float64"
     "  (foreign \"m\" \"cbrt\" \"f64 -> f64\")"
@@ -27,7 +28,33 @@ fn unitSource -> String
     ""
     "fn ! digit c: Int64 -> Bool"
     "  (foreign \"c\" \"isdigit\" \"i32 -> bool\")"
+    ""
+    "fn ! scale x: Float64 n: Int64 -> Float64"
+    "  (foreign \"m\" \"scalbln\" \"f64 i64 -> f64\")"
+    ""
+    "fn ! combine a: Int64 b: Int64 n: Int64 -> Int64"
+    "  (foreign \"z\" \"crc32_combine\" \"u64 u64 i64 -> u64\")"
+    ""
+    "fn ! seven a: Int64 b: Int64 c: Int64 d: Int64 e: Int64 f: Int64 g: Int64 h: Float64 -> Float64"
+    "  (foreign \"c\" \"aslSevenProbe\" \"i64 i64 i64 i64 i64 i64 i64 f64 -> f64\")"
     "") "\n")
+
+; (:m :ref LINUXFFI :do "a C symbol is declared and called with the C convention even when its signature is only i64 and f64: as an ASL tailcc extern, cbrt returned garbage and crashed on x86_64 Linux, and a seventh scalar argument would go to asl_rt_spill instead of the C stack")
+fn cDeclared? ll: String ret: String sym: String args: String -> Bool
+  (and (stringContains? ll (str "declare " ret " @" sym "(" args ")"))
+       (not (stringContains? ll (str "tailcc " ret " @" sym "("))))
+
+fn ! testCConvention out: ty/SsaModule -> Bool
+  (match (llvm/emitLlvmModule out)
+    ((err ds) (do (assert (listEmpty? ds) (str "the routed module emits LLVM: " (stringJoin (diagCodes ds) " "))) false))
+    ((ok ll) (do (assert (cDeclared? ll "double" "cbrt" "double") "cbrt (f64 -> f64) is declared and called with the C convention, not tailcc")
+                 (assert (cDeclared? ll "double" "scalbln" "double, i64") "scalbln (f64 i64 -> f64) is a plain C declaration, not tailcc")
+                 (assert (cDeclared? ll "i64" "crc32_combine" "i64, i64, i64") "crc32_combine (u64 u64 i64 -> u64) is a plain C declaration, not tailcc")
+                 (assert (not (stringContains? ll "musttail call tailcc double @cbrt")) "the cbrt wrapper calls C without musttail")
+                 (assert (stringContains? ll "= call double (double) @cbrt(double %x)") (str "the cbrt wrapper calls cbrt with the C convention: " (stringJoin (filter (fn [(l String)] -> Bool (stringContains? l "@cbrt")) (stringLines ll)) " | ")))
+                 (assert (cDeclared? ll "double" "aslSevenProbe" "i64, i64, i64, i64, i64, i64, i64, double") "a C symbol with seven i64 arguments is declared with all of them, so x86_64 passes the seventh on the C stack")
+                 (assert (stringContains? ll "= call double (i64, i64, i64, i64, i64, i64, i64, double) @aslSevenProbe(") "the seven i64 arguments reach the C call itself, none through asl_rt_spill")
+                 true)))
 
 fn clashSource -> String
   (stringJoin (list
@@ -56,7 +83,7 @@ fn ! testRoute -> Bool
       (let [(stubs (ffi/foreignNames m))
             (native (rt/routeModule (libc/darwinArm64Facts) m))
             (wasm (rt/routeModule (libc/wasm32Facts) m))]
-        (do (assert (= (listLength stubs) 5) (str "the five foreign fns lower to stubs: " (stringJoin stubs " ")))
+        (do (assert (= (listLength stubs) 8) (str "the eight foreign fns lower to stubs: " (stringJoin stubs " ")))
             (match native
               ((err ds) (do (assert (listEmpty? ds) (str "the native route binds every stub: " (stringJoin (diagCodes ds) " "))) false))
               ((ok r) (let [(out r.result)
@@ -69,6 +96,7 @@ fn ! testRoute -> Bool
                             (assert (= (optionMap (fn [(e ty/SsaExtern)] -> (List String) (tyNames e.params)) upper) (some (list "i32"))) "toupper takes a C int")
                             (assert (= (optionMap (fn [(e ty/SsaExtern)] -> (List String) (tyNames e.params)) cbrt) (some (list "f64"))) "cbrt takes a double")
                             (assert (ok? (vfy/verifySsa out)) (str "the routed module verifies: " (match (vfy/verifySsa out) ((err ds) (stringJoin (diagCodes ds) " ")) ((ok _) ""))))
+                            (assert (testCConvention out) "every foreign C symbol keeps the C calling convention")
                             true))))
             (assert (listContains? (match wasm ((err ds) (diagCodes ds)) ((ok _) (list))) "ERR_FOREIGN_TARGET") "wasm32 rejects foreign with ERR_FOREIGN_TARGET")
             (match (low/lowerSource (clashSource))
@@ -123,6 +151,21 @@ fn fixtureSource -> String
     "fn ! absBool b: Bool -> Int64"
     "  (foreign \"c\" \"abs\" \"bool -> i32\")"
     ""
+    "fn ! scale x: Float64 n: Int64 -> Float64"
+    "  (foreign \"m\" \"scalbln\" \"f64 i64 -> f64\")"
+    ""
+    "fn ! nearest x: Float64 -> Int64"
+    "  (foreign \"m\" \"lround\" \"f64 -> i64\")"
+    ""
+    "fn ! fused a: Float64 b: Float64 c: Float64 -> Float64"
+    "  (foreign \"m\" \"fma\" \"f64 f64 f64 -> f64\")"
+    ""
+    "fn ! combine a: Int64 b: Int64 n: Int64 -> Int64"
+    "  (foreign \"z\" \"crc32_combine\" \"u64 u64 i64 -> u64\")"
+    ""
+    "fn ! nameInfo sa: String saLen: Int64 host: String hostLen: Int64 serv: String servLen: Int64 flags: Int64 -> Int64"
+    "  (foreign \"c\" \"getnameinfo\" \"cstr u32 cstr u32 cstr u32 i32 -> i32\")"
+    ""
     "fn ! envText name: String -> String"
     "  (foreign \"c\" \"getenv\" \"cstr -> cstr\")"
     ""
@@ -137,7 +180,9 @@ fn fixtureSource -> String
     "    ((listContains? args \"trap\") (do (println (str (lower 4294967296))) (ok 0)))"
     "    ((listContains? args \"nul\") (do (println (str (cLength \"a\\x00b\"))) (ok 0)))"
     "    ((listContains? args \"null\") (do (println (str (stringLength (envText \"ASL_FFI1_UNSET_PROBE_NAME\")))) (ok 0)))"
-    "    (else (do (println (str \"cbrt \" (cubeRoot 27.0) \" \" (cubeRoot -8.0)))"
+    "    (else (do (println (str \"cbrt \" (cubeRoot 8.0) \" \" (cubeRoot 64.0) \" \" (cubeRoot -8.0)))"
+    "        (println (str \"mixed \" (scale 3.0 4) \" \" (nearest 2.5) \" \" (fused 2.0 3.0 1.0) \" \" (combine (crc 0 (stringToBytes \"hel\")) (crc 0 (stringToBytes \"lo\")) 2)))"
+    "        (println (str \"seven \" (nameInfo \"\" 0 \"\" 0 \"\" 0 -1) \" \" (nameInfo \"\" 0 \"\" 0 \"\" 0 0)))"
     "        (println (str \"strlen \" (cLength \"héllo\") \" \" (cLength \"\")))"
     "        (println (str \"crc32 \" (crc 0 (stringToBytes \"hello\")) \" \" (crc 0 (stringToBytes \"\"))))"
     "        (println (str \"adler32 \" (adler 1 \"hello\")))"
@@ -154,8 +199,14 @@ fn fixtureSource -> String
     "        (ok 0))))"
     "") "\n")
 
-fn expectedLines -> (List String)
-  (list "cbrt 3.0 -2.0"
+; (:m :ref LINUXFFI :do "the double ABI lines: cbrt of exact cubes (glibc cbrt 27.0 is 3.0000000000000004, so no inexact root), scalbln f64 i64, lround f64 -> i64, fma f64 f64 f64, crc32_combine u64 u64 i64, and getnameinfo with seven arguments so x86_64 passes flags on the stack; glibc rejects flags -1 with EAI_BADFLAGS before it reads the empty address (EAI_FAMILY), macOS returns 0 for both")
+fn sevenLine os: String -> String
+  (if (= os "Linux") "seven -1 -6" "seven 0 0")
+
+fn expectedLines os: String -> (List String)
+  (list "cbrt 2.0 4.0 -2.0"
+        "mixed 48.0 3 7.0 907060870"
+        (sevenLine os)
         "strlen 6 0"
         "crc32 907060870 0"
         "adler32 103547413"
@@ -182,6 +233,7 @@ fn ! testBuild root: String work: String -> Bool
         (wroteManifest (fileWrite (str dir "/manifest.asn") (fixtureManifest)))
         (wroteSource (fileWrite (str dir "/main.asl") (fixtureSource)))
         (exe (str dir "/fixture"))
+        (os (stringTrim (runIn (list "/bin/sh" "-c" "uname -s") dir 30).out))
         (errFile (str dir "/build.err"))
         (built (runIn (list "/bin/sh" "-c" (str "exec \"$0\" build \"$1\" -o \"$2\" 2> " (shellQuote errFile)) (str root "/bin/asl") (str dir "/main.asl") exe) root 1500))
         (buildErr (resultOr (fileReadString errFile) ""))
@@ -192,13 +244,14 @@ fn ! testBuild root: String work: String -> Bool
         (lines (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines ran.out)))]
     (do (assert (ok? made) (str "the fixture directory " dir " was created"))
         (assert (and (ok? wroteManifest) (ok? wroteSource)) "the fixture files were written")
+        (assert (or (= os "Linux") (= os "Darwin")) (str "the host is Linux or Darwin: " os))
         (assert (= built.exit 0) (str "bin/asl build links the foreign fixture with -lz from :linkLibraries: exit " built.exit " " built.out " " buildErr))
         (assert (= ran.exit 0) (str "the fixture runs: exit " ran.exit " " ran.out))
-        (assert (= (listLength lines) (listLength (expectedLines))) (str "the fixture prints " (listLength (expectedLines)) " lines: " ran.out))
+        (assert (= (listLength lines) (listLength (expectedLines os))) (str "the fixture prints " (listLength (expectedLines os)) " lines: " ran.out))
         (fold (fn [(acc Bool) (i Int64)] -> Bool
-                (do (assert (= (optionOr (listGet lines i) "") (optionOr (listGet (expectedLines) i) "")) (str "line " (+ i 1) " is the C result: got " (optionOr (listGet lines i) "") ", want " (optionOr (listGet (expectedLines) i) "")))
+                (do (assert (= (optionOr (listGet lines i) "") (optionOr (listGet (expectedLines os) i) "")) (str "line " (+ i 1) " is the C result: got " (optionOr (listGet lines i) "") ", want " (optionOr (listGet (expectedLines os) i) "")))
                     acc))
-              true (range 0 (listLength (expectedLines))))
+              true (range 0 (listLength (expectedLines os))))
         (assert (!= trapped.exit 0) (str "a plain foreign fn traps on an out-of-range argument: exit " trapped.exit))
         (assert (stringContains? trapped.out "ERR_RANGE") (str "the trap names ERR_RANGE: " trapped.out))
         (assert (stringContains? trapped.out "C tolower") (str "the trap names the C symbol: " trapped.out))

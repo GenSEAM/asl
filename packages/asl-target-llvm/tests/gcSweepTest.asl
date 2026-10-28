@@ -1,9 +1,11 @@
 (module asl-target-llvm/tests/gcSweepTest
   :x [runTests]
-  :i [(asl-target-llvm/ssa :a ssa)])
+  :i [(asl-target-llvm/tests/rcTest :a rc)
+      (asl-target-llvm/ssa :a ssa)])
 
-fn lib -> String
-  "asl/host/out/libaslrt.a"
+; (:m :ref COUNTED-RT-KEY :do "links the counted runtime keyed by its source closure, so a runtime edit is tested without a host rebuild; an unbuildable runtime fails the link loudly")
+fn ! lib -> String
+  (match (rc/runtimes!) ((ok l) l.plain) ((err e) (str "counted-runtime-unavailable:" (stringReplace e " " "_"))))
 
 fn clangLink -> String
   "/usr/bin/clang -Wno-override-module -x ir "

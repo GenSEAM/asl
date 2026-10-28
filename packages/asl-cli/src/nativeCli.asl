@@ -1,6 +1,6 @@
 (module asl-cli/nativeCli
-  :x [cacheDir! headPath underRoot clangFacts! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl-tools/fleet/run :a run)])
+  :x [cacheDir! headPath underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs]
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl-tools/fleet/run :a run) (asl-parser/reader :a rd)])
 
 fn ! cacheDir! -> String
   (let [(configured (optionOr (envGet "ASL_NATIVE_CLI_CACHE") ""))
@@ -54,8 +54,56 @@ fn ! boundedCapture! cmd: String timeoutMs: Int64 -> sys/Captured
               ((ok o) (sys/Captured :exitCode o.exitCode :stdout o.stdout :stderr o.stderr)))))
 
 ; (:m :ref BIN-ASL-FORKS :do "the warm path needs clang's version and target triple on every call (the CLI freshness gate, the nativeTest fingerprint); spawning clang for them forks, so where no child can start (ulimit -u, a full process table) a warm call failed. The facts are recorded once per clang identity, the stat of the clang command and of the Xcode toolchain it dispatches to plus CLANG, DEVELOPER_DIR and the xcode-select link, and read back without a spawn; an unreadable record spawns clang as before and a failed spawn records nothing")
+; (:m :ref CLI-CLANG-PROBE :do "one clang for every native step: the :native :clang row of the nearest .asl.config.asn or ~/.asl/config.asn, else CLANG, else the first of clang, clang-19 .. clang-15 on PATH (build.sh's probe order; a distro may ship only clang-18). A row or CLANG is taken as given. ASL has no process-global state, so each call resolves again: a substring test of the config text and at most six names per PATH entry, no fork")
+fn clangCandidates -> (List String)
+  (list "clang" "clang-19" "clang-18" "clang-17" "clang-16" "clang-15")
+
+fn rowAfter items: (List rd/SExpr) key: String -> (Option rd/SExpr)
+  (match (listHead items)
+    ((none) (none))
+    ((some h) (if (and (rd/isAtom? h) (= (rd/sexprHead h) key)) (listGet items 1) (rowAfter (optionOr (listTail items) (list)) key))))
+
+fn configClang text: String -> (Option String)
+  (if (not (stringContains? text ":clang"))
+    (none)
+    (match (rowAfter (rd/sexprToList (rd/parseSexpr text)) ":native")
+      ((none) (none))
+      ((some native) (match (rowAfter (rd/sexprToList native) ":clang")
+                       ((some v) (if (rd/isAtom? v) (let [(w (stringReplace (rd/sexprHead v) "\"" ""))] (if (stringEmpty? w) (none) (some w))) (none)))
+                       ((none) (none))))))
+
+fn ! clangOnPathIn! pathVar: String -> (List String)
+  (filter (fn [(c String)] -> Bool
+            (fold (fn [(acc Bool) (d String)] -> Bool
+                    (or acc (let [(p (str (if (stringEmpty? d) "." d) "/" c))] (and (sys/isFile? p) (sys/executable? p)))))
+                  false (stringSplit pathVar ":")))
+          (clangCandidates))
+
+fn clangPick row: (Option String) envClang: (Option String) found: (List String) -> (Result String String)
+  (let [(given (filter (fn [(c String)] -> Bool (not (stringEmpty? c))) (listAppend (optionOr (optionMap (fn [(r String)] -> (List String) (list r)) row) (list))
+                                                                                   (optionOr (optionMap (fn [(c String)] -> (List String) (list c)) envClang) (list)))))]
+    (match (listHead (listAppend given found))
+      ((some c) (ok c))
+      ((none) (err (str "no clang: no :native :clang row in .asl.config.asn or ~/.asl/config.asn, CLANG unset, and none of " (stringJoin (clangCandidates) " ") " on PATH; install clang or set one of them")))))
+
+fn ! nearestConfigText! dir: String -> String
+  (let [(cfg (str dir "/.asl.config.asn"))]
+    (cond
+      ((fileExists? cfg) (resultOr (fileReadString cfg) ""))
+      ((or (stringEmpty? dir) (= dir "/")) "")
+      (else (nearestConfigText! (sys/parentOf dir)))))
+
+fn ! clangFor! dir: String -> (Result String String)
+  (let [(home (optionOr (envGet "HOME") ""))
+        (row (match (configClang (nearestConfigText! dir))
+               ((some r) (some r))
+               ((none) (if (stringEmpty? home) (none) (configClang (resultOr (fileReadString (str home "/.asl/config.asn")) ""))))))
+        (envClang (envGet "CLANG"))]
+    (clangPick row envClang (if (or (some? row) (some? envClang)) (list) (clangOnPathIn! (optionOr (envGet "PATH") "")))))
+
+; (:m :ref CLI-CLANG-PROBE :do "the clang a native step spawns, resolved from the cwd; when nothing resolves the bare name stays, so the spawn fails and clangFor!'s error is what a caller that checks reports")
 fn ! clangCommand! -> String
-  (optionOr (envGet "CLANG") "clang")
+  (resultOr (clangFor! (resultOr (realPath ".") ".")) "clang")
 
 fn ! statStamp path: String -> String
   (match (fileStat path)

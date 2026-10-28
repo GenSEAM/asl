@@ -24,7 +24,7 @@ fn testFork -> Bool
   (let [(me (stringFromInt64 (procSelf)))
         (dir (str "/tmp/aslSfFork" me))
         (sd (str dir "/state"))
-        (ctx (s/SessCtx :dir (str dir "/sessions") :env (envList) :timeoutSec 20 :ttlSec 0 :ledger "" :vendors (list (forkVendor sd))))
+        (ctx (s/SessCtx :secretsFile "" :dir (str dir "/sessions") :env (envList) :timeoutSec 20 :ttlSec 0 :ledger "" :vendors (list (forkVendor sd))))
         (_mk (dirCreate sd))
         (start (s/sessStart! ctx "src" "fake" dir (list) "alpha"))
         (fork (s/sessFork! ctx "src" "kid"))
@@ -60,7 +60,7 @@ fn testArgv -> Bool
 fn ! testLock -> Bool
   (let [(me (stringFromInt64 (procSelf)))
         (dir (str "/tmp/aslSfLock" me))
-        (ctx (s/SessCtx :dir (str dir "/sessions") :env (envList) :timeoutSec 20 :ttlSec 0 :ledger "" :vendors (list)))
+        (ctx (s/SessCtx :secretsFile "" :dir (str dir "/sessions") :env (envList) :timeoutSec 20 :ttlSec 0 :ledger "" :vendors (list)))
         (t1 (s/sessLockTake! ctx "n"))
         (held (s/sessLockHeld? ctx "n" t1))
         (t2 (s/sessLockTake! ctx "n"))

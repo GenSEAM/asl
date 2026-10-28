@@ -1,6 +1,7 @@
 (module asl-target-llvm/tests/exitCodeTest
   :x [runTests]
-  :i [(asl-ir/types :a ty)
+  :i [(asl-target-llvm/tests/rcTest :a rc)
+      (asl-ir/types :a ty)
       (asl-target-llvm :a llvm)
       (asl-tools/nativeTest :a nt)])
 
@@ -10,8 +11,9 @@ fn asl1Path -> String
 fn clang -> String
   "/usr/bin/clang -Wno-override-module"
 
-fn lib -> String
-  "asl/host/out/libaslrt.a"
+; (:m :ref COUNTED-RT-KEY :do "links the counted runtime keyed by its source closure, so a runtime edit is tested without a host rebuild; an unbuildable runtime fails the link loudly")
+fn ! lib -> String
+  (match (rc/runtimes!) ((ok l) l.plain) ((err e) (str "counted-runtime-unavailable:" (stringReplace e " " "_"))))
 
 fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)

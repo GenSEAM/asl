@@ -1,5 +1,5 @@
 (module asl-cli/nativeBuild
-  :x [Build variantKey! main storeCapFor! capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! transientFailure?]
+  :x [Build variantKey! main storeCapFor! capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure?]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r)])
 
 (schema Build
@@ -44,8 +44,9 @@ fn ! say! line: String -> Bool
 fn ! envInt! name: String fallback: Int64 -> Int64
   (optionOr (stringToInt64 (optionOr (envGet name) "")) fallback)
 
+; (:m :ref CLI-CLANG-PROBE :do "the shared resolver: :native :clang row, CLANG, then clang and clang-19 .. clang-15 on PATH")
 fn ! clang! -> String
-  (optionOr (envGet "CLANG") "clang")
+  (nc/clangCommand!)
 
 fn ! remainingS b: Build -> Int64
   (max 1 (/ (- b.deadlineNs (monotonicNs)) 1000000000))
@@ -374,6 +375,10 @@ fn ! asanRuntime! b: Build asl1: String packagesDir: String -> (Result String St
 
 fn ! notraceRuntime! b: Build asl1: String packagesDir: String -> (Result String String)
   (variantRuntime! b asl1 packagesDir "notrace" (list "notrace") (list))
+
+; (:m :ref COUNTED-RT-KEY :do "the counted runtime is the traced one asl/host/build.sh packs, built here as a variant keyed by its source closure, so a gcAsl or rc edit reaches counted-mode links without a host rebuild instead of reusing a stale asl/host/out/libaslrt.a")
+fn ! countedRuntime! b: Build asl1: String packagesDir: String -> (Result String String)
+  (variantRuntime! b asl1 packagesDir "counted" (list) (list))
 
 fn ! clearDir! dir: String -> (Result Unit String)
   (match (dirList dir)

@@ -1,12 +1,12 @@
 (module aslGateway/dispatch
-  :x [Slot Serverless Wiring RouteHint DecisionRow Plan planSend planReject planWait
+  :x [Slot Serverless Wiring RouteHint DecisionRow Plan planSend planReject planReserving planWait
       LifecycleSpec LifecycleFamily StartOutcome startOk startRefused SlotReady readyNow readyLater readyGone
       rowsFromTable pluginsFromRows emptyWiring wiringFromConfig parseWiring httpFamily builtinFamilies
       plan started settle carrySpend sendTimeout usageTokens decisionText retarget startSlot! waiting pollSlots! slotReady anyWarming?
-      slotNamed priceFor servedModel callUsageTokens]
+      slotNamed priceFor servedModel callUsageTokens settledConsumed observeReply]
   :i [(aslGateway/router :a rt) (aslGateway/fleet :a fl) (aslGateway/budget :a bgt) (aslGateway/plugin :a p)
       (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/pyText :a pt)
-      (aslGateway/poolDispatch :a pd) (asl-parser/reader :a rd) (asl-json/json :a j) (aslGateway/usage :a g)])
+      (aslGateway/poolDispatch :a pd) (aslGateway/balancer :a bl) (asl-parser/reader :a rd) (asl-json/json :a j) (aslGateway/usage :a g) (aslGateway/secrets :a sc)])
 
 (schema Serverless
   (:f coldStartMs Int64)
@@ -29,7 +29,13 @@
   (:f profile (Option rt/Profile))
   (:f slots (List Slot))
   (:f ledger (Option bgt/Ledger))
-  (:f settings u/UpstreamSettings))
+  (:f settings u/UpstreamSettings)
+  ; (:m :ref GW-BALANCER-WIRE :do "some when the gateway form carries a balancer section: plan routes every request through bl/pick and settle charges its windows, none keeps the router and passthrough paths byte for byte")
+  (:f pool (Option bl/Pool))
+  ; (:m :ref GW-BALANCER-ALIAS :do "the pool alias the last settle charged, none after a non-pool settle; the server writes it as the usage row alias so the ledger names the picked model, not the chat alias")
+  (:f settledAlias (Option String))
+  ; (:m :ref GW-UNKNOWN-MODEL-FALLTHROUGH :do "with a gateway table: every model id and model :name (effort suffix dropped) it declares; none without a table, so a config-less gateway keeps dispatching raw upstream names")
+  (:f known (Option (List String))))
 
 (schema RouteHint
   (:f provider String)
@@ -45,7 +51,8 @@
   (:f pick String)
   (:f admission String)
   (:f budget String)
-  (:f model String))
+  (:f model String)
+  (:f why String))
 
 (enum Plan
   (:c planSend [(slot String) (plugin String) (request u/UpstreamRequest) (row DecisionRow)])
@@ -93,7 +100,7 @@ fn rowsFromTable table: (Option c/GatewayTable) -> (List u/UpstreamProvider)
     ((some tbl)
       (let [(configured (fold (fn [(acc (List u/UpstreamProvider)) (pid String)] -> (List u/UpstreamProvider)
                                 (match (mapGet tbl.providers pid)
-                                  ((some pv) (if (and (or (= pv.kind "openai") (or (= pv.kind "anthropic") (= pv.kind "gemini"))) (none? (defaultRowNamed pid))) (listAppend acc (list (configuredRow pv))) acc))
+                                  ((some pv) (if (and (or (= pv.kind "openai") (or (= pv.kind "anthropic") (or (= pv.kind "gemini") (= pv.kind "gateway")))) (none? (defaultRowNamed pid))) (listAppend acc (list (configuredRow pv))) acc))
                                   ((none) acc)))
                           (list) (mapKeys tbl.providers)))
 ]
@@ -215,7 +222,7 @@ fn parseWiring text: String -> (Result WiringConfig String)
 
 fn ! emptyWiring st: u/UpstreamSettings -> Wiring
   (Wiring :rows (u/upstreamProviders) :plugins (resultOr (pluginsFromRows (u/upstreamProviders) st (mapEmpty)) (list))
-    :profile none :slots (list) :ledger none :settings st)
+    :profile none :slots (list) :ledger none :settings st :pool none :settledAlias none :known none)
 
 
 fn endpointStateNamed name: String -> (Option p/EndpointState)
@@ -329,7 +336,26 @@ fn ! attachLifecycle! families: (List LifecycleFamily) rows: (List u/UpstreamPro
                           ((err e) (err e))
                           ((ok next) (ok (Attached :plugins (replacePlugin acc.plugins next) :slots (serverlessSlots acc.slots provider spec))))))))))))))))
 
+; (:m :ref GW-BALANCER-WIRE :do "dispatch can send a balancer pick only over an HTTP row: a provider configured with another kind (cli, agy) stays out of the pool")
+fn routableProvider? table: (Option c/GatewayTable) rows: (List u/UpstreamProvider) pid: String -> Bool
+  (and (some? (u/upstreamProviderNamed rows pid))
+       (match table
+         ((none) true)
+         ((some tbl) (match (mapGet tbl.providers pid) ((some pv) (listContains? (list "openai" "anthropic" "gemini" "gateway") pv.kind)) ((none) true)))))
+
 fn ! wiringFromConfig table: (Option c/GatewayTable) text: String st: u/UpstreamSettings env: (Map String String) families: (List LifecycleFamily) -> (Result Wiring String)
+  (match (missingSecret table env)
+    ((some receipt) (err receipt))
+    ((none) (wiringFromRows table text st env families)))
+
+fn missingSecret table: (Option c/GatewayTable) env: (Map String String) -> (Option String)
+  (match table
+    ((none) none)
+    ((some tbl)
+      (optionMap (fn [(pv c/GatewayProvider)] -> String (sc/secretsMissingReceipt pv.secret))
+        (listFind (fn [(pv c/GatewayProvider)] -> Bool (and (not (stringEmpty? pv.secret)) (not (mapHas? env pv.keyEnv)))) (mapValues tbl.providers)))))
+
+fn ! wiringFromRows table: (Option c/GatewayTable) text: String st: u/UpstreamSettings env: (Map String String) families: (List LifecycleFamily) -> (Result Wiring String)
   (let [(rows (rowsFromTable table))]
     (match (if (stringEmpty? text) (ok (WiringConfig :profile none :slots (list) :ledger none :lifecycles (list) :redirects (mapEmpty))) (parseWiring text))
       ((err e) (err e))
@@ -341,7 +367,32 @@ fn ! wiringFromConfig table: (Option c/GatewayTable) text: String st: u/Upstream
                         (match acc ((err e) (err e)) ((ok a) (attachLifecycle! families rows st env a form))))
                   (ok (Attached :plugins plugins :slots cfg.slots)) cfg.lifecycles)
               ((err e) (err (str ":lifecycles: " e)))
-              ((ok a) (ok (Wiring :rows rows :plugins a.plugins :profile cfg.profile :slots a.slots :ledger cfg.ledger :settings st)))))))))
+              ((ok a)
+                (match (bl/loadPool! text table (optionOr (mapGet env "HOME") "") (fn [(pid String)] -> Bool (routableProvider? table rows pid)))
+                  ((err e) (err (str ":balancer: " e)))
+                  ((ok pool) (ok (Wiring :rows rows :plugins a.plugins :profile cfg.profile :slots a.slots :ledger cfg.ledger :settings st :pool pool :settledAlias none :known (knownModels table))))))))))))
+
+fn knownModels table: (Option c/GatewayTable) -> (Option (List String))
+  (match table
+    ((none) none)
+    ((some tbl) (some (fold (fn [(acc (List String)) (m c/GatewayModel)] -> (List String) (listAppend acc (list m.id (bl/modelKey m.name)))) (list) (mapValues tbl.models)))))
+
+fn rowClaims? rows: (List u/UpstreamProvider) model: String -> Bool
+  (listAny? (fn [(r u/UpstreamProvider)] -> Bool
+              (or (listAny? (fn [(p String)] -> Bool (and (not (stringEmpty? p)) (stringStartsWith? model p))) r.prefixes) (listContains? r.names model)))
+            rows)
+
+; (:m :ref GW-UNKNOWN-MODEL-FALLTHROUGH :do "a hint naming a model the table does not declare and no provider row claims by prefix or name would fall through to the fallback upstream with whatever key it has; it is refused locally instead")
+fn unknownModel? w: Wiring hint: RouteHint -> Bool
+  (match w.known
+    ((none) false)
+    ((some ks) (and (not (stringEmpty? hint.model))
+                    (not (listContains? ks hint.model))
+                    (not (listContains? ks (bl/modelKey hint.model)))
+                    (not (rowClaims? w.rows hint.model)))))
+
+fn unknownModelText hint: RouteHint -> String
+  (str "(:err :code ERR_UNKNOWN_MODEL :status 400 :model \"" (stringReplace hint.model "\"" "'") "\" :why \"no gateway model id or :name declares it and no provider claims it, so it is not sent upstream\")")
 
 
 fn slotNamed slots: (List Slot) id: String -> (Option Slot)
@@ -401,7 +452,7 @@ fn coldStartMs s: Slot -> Int64
 
 fn pickLoop w: Wiring hint: RouteHint request: u/UpstreamRequest env: (Map String String) nowMs: Int64 rule: String names: (List String) left: (List Slot) refused: (List String) budgetDenied: Bool held: (Option Slot) -> Plan
   (let [(row (fn [(pick String) (model String) (a String) (b String)] -> DecisionRow
-               (DecisionRow :rule rule :candidates names :refused refused :pick pick :admission a :budget b :model model)))]
+               (DecisionRow :rule rule :candidates names :refused refused :pick pick :admission a :budget b :model model :why "")))]
     (if (listEmpty? left)
       (match held
         ((some s)
@@ -429,10 +480,55 @@ fn pickLoop w: Wiring hint: RouteHint request: u/UpstreamRequest env: (Map Strin
                (pickLoop w hint request env nowMs rule names rest refused budgetDenied (some chosen))
                (pickLoop w hint request env nowMs rule names rest (listAppend refused (list (str chosen.id ":" (admissionText admission)))) budgetDenied held)))))))
 
+; (:m :ref GW-BALANCER-WIRE :do "the balancer replaces router and passthrough choice: the pick is retargeted to its provider row and upstream model name, a refusal is a 429 whose reason is one ASN form naming the budgets at their hard cap, and the receipt row carries the score parts")
+fn estimateTokens hint: RouteHint -> Int64
+  (* 2 (max 1 hint.promptTokens))
+
+; (:m :ref GW-MODEL-SUBSTITUTION :do "a request whose provider and model already name pool aliases is honoured: the balancer picks among those only, and chooses freely only when the hint names no pool model or every asked alias is refused, then the receipt names the substitution as (:substituted :asked :served :reason)")
+fn balancerPlan w: Wiring pool: bl/Pool hint: RouteHint request: u/UpstreamRequest env: (Map String String) nowMs: Int64 -> Plan
+  (let [(req (bl/poolRequest pool hint.intent nowMs (estimateTokens hint)))
+        (askedIds (bl/poolAliasesFor pool hint.provider hint.model))
+        (honoured (if (listEmpty? askedIds) none (some (bl/poolHonour pool req askedIds))))
+        (picked (match honoured ((some (bl/picked id score q explore)) (bl/picked id score q explore)) (_ (bl/poolPick pool req))))
+        (substitution (match (pair honoured picked)
+                        ((pair (some (bl/refused reason)) (bl/picked id _ _ _))
+                          (str " (:substituted :asked \"" hint.provider "/" hint.model "\" :served " id " :reason \"" reason "\")"))
+                        (_ "")))
+        (names (map (fn [(m bl/PoolModel)] -> String m.id) pool.bal.models))
+        (why (str (bl/pickWhy pool req picked) (match honoured ((some (bl/picked _ _ _ _)) " (:honoured true)") ((some (bl/refused reason)) (if (stringEmpty? substitution) (str " (:asked \"" hint.provider "/" hint.model "\" :refused \"" reason "\")") substitution)) ((none) (match picked ((bl/picked id _ _ _) (if (stringEmpty? hint.model) "" (str " (:asked \"" hint.provider "/" hint.model "\" :inPool false :served " id ")"))) (_ ""))))))
+        (row (fn [(pick String) (model String) (a String) (b String)] -> DecisionRow
+               (DecisionRow :rule "balancer" :candidates names :refused (list) :pick pick :admission a :budget b :model model :why why)))]
+    (match picked
+      ((bl/refused reason) (planReject 429 (bl/refusalText pool req reason) (row "" hint.model "none" "deny")))
+      ((bl/picked id _ _ _)
+        (match (bl/poolTarget pool id)
+          ((none) (planReject 502 (str "balancer pick " id " has no provider row") (row id "" "none" "allow")))
+          ((some target)
+            (let [(s (Slot :id id :provider (pairFirst target) :model (pairSecond target) :pricePerMillion 0
+                       :state (warmState (fleetEndpoint (pairFirst target) (pairSecond target) (fl/direct) 1000000)) :serverless none :polledMs 0 :deadlineMs 0))]
+              (match (retarget w s hint request env)
+                ((err e) (planReject 502 e (row id s.model "balancer" "allow")))
+                ((ok sent) (planSend id s.provider sent (row id s.model "balancer" "allow"))))))))))
+
 fn ! plan w: Wiring hint: RouteHint request: u/UpstreamRequest env: (Map String String) nowMs: Int64 -> Plan
-  (let [(routed (routeCandidates w hint))
-        (names (map (fn [(s Slot)] -> String s.id) (pairSecond routed)))]
-    (pickLoop w hint request env nowMs (pairFirst routed) names (pairSecond routed) (list) false none))
+  (if (unknownModel? w hint)
+    (planReject 400 (unknownModelText hint) (DecisionRow :rule "unknownModel" :candidates (list) :refused (list hint.model) :pick "" :admission "none" :budget "unchecked" :model hint.model :why ""))
+  (match w.pool
+    ((some pool) (balancerPlan w pool hint request env nowMs))
+    ((none)
+      (let [(routed (routeCandidates w hint))
+            (names (map (fn [(s Slot)] -> String s.id) (pairSecond routed)))]
+        (pickLoop w hint request env nowMs (pairFirst routed) names (pairSecond routed) (list) false none)))))
+
+; (:m :ref AUDIT11-A3 :do "plan plus the wiring to keep: a balancer send holds its estimated charge in the pool from plan time, so concurrent requests planned before any settle cannot overrun a hard budget; settle releases the hold and charges the actual")
+fn ! planReserving w: Wiring hint: RouteHint request: u/UpstreamRequest env: (Map String String) nowMs: Int64 -> (Pair Plan Wiring)
+  (let [(planned (plan w hint request env nowMs))]
+    (match w.pool
+      ((none) (pair planned w))
+      ((some pool)
+        (match planned
+          ((planSend slot _ _ _) (pair planned (with w :pool (some (bl/poolReserve pool slot nowMs (estimateTokens hint))))))
+          (_ (pair planned w))))))
 
 fn sendTimeout w: Wiring hint: RouteHint provider: String timeoutSec: Float64 -> Float64
   (if (= provider hint.provider) timeoutSec
@@ -594,6 +690,7 @@ fn callUsageTokens body: String -> (List Int64)
       ((none) (list 0 0 0))
       ((some usage) (g/usageTokens usage)))))
 
+; (:m :ref GW-BALANCER-WIRE :do "a balancer pick is charged to its windows whether or not the upstream call succeeded: a provider counts the request either way, so charging only greens would overrun a daily request quota, and a failed pick sits out its cooldown so the chat cascade retry reaches another model (GW-BALANCER-CASCADE)")
 fn settle w: Wiring slotId: String provider: String tokens: Int64 latencyMs: Int64 success: Bool nowMs: Int64 -> (Pair Wiring String)
   (let [(slot (slotNamed w.slots slotId))
         (price (match slot ((some s) s.pricePerMillion) ((none) 0)))
@@ -608,12 +705,25 @@ fn settle w: Wiring slotId: String provider: String tokens: Int64 latencyMs: Int
                    ((some l) (match (bgt/charge l (bgt/Charge :endpoint slotId :provider provider :unit "request" :atMs nowMs :cost cost))
                      ((ok next) (pair (some next) "charged"))
                      ((err _) (pair (some l) "overCap"))))))]
-    (pair (withSlots w slots (pairFirst charged))
-      (str "(:gateway :charge :endpoint \"" slotId "\" :tokens " (stringFromInt64 tokens) " :cost " (stringFromInt64 cost) " :status " (pairSecond charged) ")")))
+    (pair (with (withSlots w slots (pairFirst charged))
+            :pool (match w.pool ((some pool) (some (let [(charged (bl/poolCharge (bl/poolRelease pool slotId) slotId nowMs tokens))] (if success charged (bl/poolFailed charged slotId nowMs))))) ((none) none))
+            :settledAlias (match w.pool ((some pool) (if (some? (bl/poolTarget pool slotId)) (some slotId) none)) ((none) none)))
+      (str "(:gateway :charge :endpoint \"" slotId "\" :tokens " (stringFromInt64 tokens) " :cost " (stringFromInt64 cost) " :status " (pairSecond charged)
+           (match w.pool ((some pool) (if (some? (bl/poolTarget pool slotId)) " :balancer charged" "")) ((none) "")) ")")))
+
+; (:m :ref GW-BALANCER-LIVE-QUOTA :do "feeds an upstream reply status and its rate-limit headers to the pool when the slot is a pool alias, a no-op otherwise")
+fn observeReply w: Wiring slotId: String status: Int64 headers: (List (Pair String String)) nowMs: Int64 -> Wiring
+  (match w.pool
+    ((some pool) (with w :pool (some (bl/poolObserve pool slotId status headers nowMs))))
+    ((none) w))
+
+fn settledConsumed w: Wiring -> Wiring
+  (with w :settledAlias none)
 
 fn quoted xs: (List String) -> String
   (stringJoin (map (fn [(x String)] -> String (str "\"" x "\"")) xs) " ")
 
 fn decisionText row: DecisionRow -> String
   (str "(:gateway :route :rule \"" row.rule "\" :candidates (" (quoted row.candidates) ") :pick \"" row.pick
-       "\" :refused (" (quoted row.refused) ") :model \"" row.model "\" :admission " row.admission " :budget " row.budget ")")
+       "\" :refused (" (quoted row.refused) ") :model \"" row.model "\" :admission " row.admission " :budget " row.budget
+       (if (stringEmpty? row.why) "" (str " :why " row.why)) ")")

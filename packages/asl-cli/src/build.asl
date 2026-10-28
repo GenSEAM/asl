@@ -1,6 +1,6 @@
 (module asl-cli/build
   :x [buildCommand!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/asl1Cache :a cache) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/nativeBuild :a nb) (asl/packages/asl-cli/src/rcConfig :a rcc) (asl-parser/reader :a rd) (asl-parser/ast :a a) (asl-checker/resolve :a r) (asl-checker/foreign :a fsig)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/asl1Cache :a cache) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/nativeBuild :a nb) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/rcConfig :a rcc) (asl-parser/reader :a rd) (asl-parser/ast :a a) (asl-checker/resolve :a r) (asl-checker/foreign :a fsig)])
 
 fn usage -> String
   "usage: asl build FILE [-o OUT]"
@@ -243,14 +243,15 @@ fn ! buildFile! ctx: sys/Context clang: String lib: String target: String o: Opt
 
 fn ! buildCommand! ctx: sys/Context args: (List String) -> Int64
   (let [(first (optionOr (listHead args) ""))
-        (clangName (let [(c (optionOr (envGet "CLANG") ""))] (if (stringEmpty? c) "clang" c)))
+        (clangRes (nc/clangFor! ctx.root))
+        (clangName (resultOr clangRes "clang"))
         (lib (let [(configured (optionOr (envGet "ASL_HOST_LIBRARY") ""))] (if (stringEmpty? configured) (str ctx.root "/asl/host/out/libaslrt.a") configured)))]
     (cond
       ((or (= first "-h") (= first "--help")) (do (sys/say! (usage)) 0))
       ((listEmpty? args) (fail (usage) 2))
       (else
         (match (findClang! clangName)
-          ((none) (fail (str "ERR_BUILD: clang not found: " clangName "; install clang or set CLANG") 1))
+          ((none) (fail (match clangRes ((err e) (str "ERR_BUILD: " e)) ((ok _) (str "ERR_BUILD: clang not found: " clangName "; install clang or set CLANG"))) 1))
           ((some clang)
             (if (not (sys/isFile? lib))
               (fail (str "ERR_BUILD: libaslrt.a not found at " lib "; build it with sh asl/host/build.sh") 1)

@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [Job Done Limits Proc ProcOut Running RunningSep Lease job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardFds spawn spawnSep reapStaleLeases! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procSnapshot treeOf killTree! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
+  :x [Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardFds spawn spawnSep reapStaleLeases! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procSnapshot treeOf killTree! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
   :i [(asl-tools/fleet/jobserver :a js)])
 
 (schema Job
@@ -535,3 +535,92 @@ fn withPwd cwd: String env: (List String) -> (List String)
   (if (stringStartsWith? cwd "/")
     (cons (str "PWD=" cwd) (filter (fn [(row String)] -> Bool (not (stringStartsWith? row "PWD="))) env))
     (filter (fn [(row String)] -> Bool (not (stringStartsWith? row "PWD="))) env))
+
+; (:m :ref LEON-POOL-SPAWNSAFETY :do "a child that is a fork of this process, not an exec: for an in-process task (Leon's pool) that must not take the caller down when it traps; it gets the same lease, timeoutMs, maxDesc and killTree verdicts as a guarded spawn; lim.class must be empty, since a jobserver token binds to an exec'd child")
+(schema Forked
+  (:f pid Int64)
+  (:f lim Limits)
+  (:f startNs Int64)
+  (:f lastCheck Int64)
+  (:f groups (List Int64))
+  (:f known (List Int64)))
+
+(schema ForkEnd
+  (:f exit Int64)
+  (:f verdict String)
+  (:f desc Int64)
+  (:f note String))
+
+(schema ForkStep
+  (:f end (Option ForkEnd))
+  (:f fork Forked))
+
+fn ! cFork -> (Result Int64 String)
+  (foreign "c" "fork" "-> i32 !neg")
+
+fn ! cExit code: Int64 -> Int64
+  (foreign "c" "_exit" "i32 -> i64")
+
+fn ! cSetpgid pid: Int64 pgid: Int64 -> Int64
+  (foreign "c" "setpgid" "i32 i32 -> i32")
+
+fn ! cOpen path: String mode: String -> (Result Handle String)
+  (foreign "c" "fopen" "cstr cstr -> handle:fclose !null")
+
+fn ! cFileno f: Handle -> Int64
+  (foreign "c" "fileno" "handle:fclose -> i32")
+
+fn ! cDup2 from: Int64 to: Int64 -> (Result Int64 String)
+  (foreign "c" "dup2" "i32 i32 -> i32 !neg")
+
+fn ! redirectTo! log: String -> Bool
+  (match (cOpen log "w")
+    ((err _) false)
+    ((ok h) (let [(fd (cFileno h))] (and (ok? (cDup2 fd 1)) (ok? (cDup2 fd 2))))))
+
+; (:m :ref LEON-POOL-SPAWNSAFETY :do "the child leads its own process group (set on both sides of the fork, so the group exists before the parent's first tree walk) with stdout and stderr in log, runs body and leaves by _exit with its result, or with 125 when it cannot set its group or open its log, so the parent's stdio buffers are not flushed twice; a trap in body exits the child alone")
+fn ! forkLimited! log: String lim: Limits body: (fn [] -> Int64) -> (Result Forked String)
+  (cond
+    ((not (stringEmpty? lim.class)) (err (str "forkLimited!: lim.class must be empty, a jobserver token cannot bind to a fork: " lim.class)))
+    ((<= lim.timeoutMs 0) (err "forkLimited!: timeoutMs must be positive, a fork child is never unbounded"))
+    (else
+      (let [(_ (reapStaleLeases!))]
+        (match (cFork)
+          ((ok 0) (ok (Forked :pid (cExit (if (and (>= (cSetpgid 0 0) 0) (redirectTo! log)) (body) 125))
+                              :lim lim :startNs 0 :lastCheck 0 :groups (list) :known (list))))
+          ((ok pid) (let [(_ (cSetpgid pid pid))
+                          (now (monotonicNs))
+                          (_ (writeLease! pid (procSelf) now (leaseDeadline now lim.timeoutMs)))]
+                      (ok (Forked :pid pid :lim lim :startNs now :lastCheck 0 :groups (list pid) :known (list)))))
+          ((err e) (err e))))))
+
+fn forkNote f: Forked verdict: String desc: Int64 left: Int64 -> String
+  (str "(:fleetRun :verdict :" verdict " :pid " f.pid " :desc " desc " :timeoutMs " f.lim.timeoutMs " :maxDesc " f.lim.maxDesc " :left " left ")")
+
+; (:m :ref LEON-POOL-SPAWNSAFETY :do "a caller-made verdict (its own deadline): the same tree kill and reap as a limit verdict")
+fn ! forkKill! f: Forked verdict: String -> ForkEnd
+  (let [(left (killTreeWith! f.pid f.groups f.known))
+        (_ (procWaitPid f.pid false))
+        (_ (removeLease! f.pid))]
+    (ForkEnd :exit -1 :verdict verdict :desc (listLength f.known) :note (forkNote f verdict (listLength f.known) left)))
+
+; (:m :ref LEON-POOL-SPAWNSAFETY :do "one non-blocking step: reap if the child ended, else judge timeoutMs every step and the descendant count every checkEveryNs, killing the whole tree on a timeout or runaway verdict")
+fn ! forkAdvance! f: Forked -> ForkStep
+  (match (procWaitPid f.pid true)
+    ((ok (some code)) (let [(_ (removeLease! f.pid))] (ForkStep :end (some (ForkEnd :exit code :verdict "" :desc 0 :note "")) :fork f)))
+    ((err _) (let [(left (killTreeWith! f.pid f.groups f.known)) (_ (removeLease! f.pid))]
+               (ForkStep :end (some (ForkEnd :exit -1 :verdict "" :desc 0 :note (forkNote f "waitFailed" 0 left))) :fork f)))
+    ((ok (none))
+      (let [(now (monotonicNs))
+            (overTime (and (> f.lim.timeoutMs 0) (> (/ (- now f.startNs) 1000000) f.lim.timeoutMs)))
+            (checked (and (> f.lim.maxDesc 0) (>= (- now f.lastCheck) (checkEveryNs))))
+            (snap (if checked (procSnapshot) (list)))
+            (tree (if checked (treeOf snap f.pid f.groups f.known (ownGroup snap (procSelf))) (pair f.known f.groups)))
+            (f2 (Forked :pid f.pid :lim f.lim :startNs f.startNs :lastCheck (if checked now f.lastCheck)
+                        :groups (pairSecond tree) :known (addNew f.known (pairFirst tree))))
+            (descN (if checked (listLength (pairFirst tree)) 0))]
+        (cond
+          (overTime (ForkStep :end (some (forkKill! f2 "timeout")) :fork f2))
+          ((> descN f.lim.maxDesc) (let [(e (forkKill! f2 "runaway"))]
+                                     (ForkStep :end (some (ForkEnd :exit e.exit :verdict e.verdict :desc descN :note (forkNote f2 "runaway" descN 0))) :fork f2)))
+          (else (ForkStep :end none :fork f2))))))

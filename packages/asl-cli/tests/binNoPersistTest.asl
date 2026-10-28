@@ -23,21 +23,31 @@ fn ! entries! cache: String prefix: String n: Int64 ageHours: Int64 -> Int64
 fn ! oldFile! path: String bytes: Int64 ageHours: Int64 -> Bool
   (and (put! path bytes) (ok? (fileUtime path (- (nowNs) (* ageHours 3600000000000)))))
 
+fn inlineCode i: Int64 -> String
+  (str "(println (+ " (stringFromInt64 i) " 1000))")
+
 fn ! inlineRun! asl: String cwd: String store: String i: Int64 -> Bool
-  (let [(r (run/runGuarded (list asl "-e" (str "(println (+ " (stringFromInt64 i) " 1000))")) cwd (run/childEnv (list (str "ASL_NATIVE_TEST_CACHE=" store))) (run/limits 900 24)))]
+  (let [(r (run/runGuarded (list asl "-e" (inlineCode i)) cwd (run/childEnv (list (str "ASL_NATIVE_TEST_CACHE=" store))) (run/limits 900 24)))]
     (and (= r.exitCode 0) (= r.stdout (str (stringFromInt64 (+ i 1000)) "\n"))))
 
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "the runs use a store of their own, so a suite running beside this one cannot add files to it; the staged text and entry wrappers stay in the workspace store, which is watched too")
-fn ! watched! root: String store: String -> (List String)
-  (listAppend (filesUnder! store) (listAppend (filesUnder! (str root "/.asl/cache/nativeTest/outside")) (filesUnder! (str root "/.asl/cache/nativeTest/entries"))))
+; (:m :ref RUNCOST :do "the workspace dirs are shared with suites running in parallel, so only what these runs can write there is watched: the wrappers of this store (entries/<key of the store>, as nativeTest's wrapperDirIn names them) and staged text named by the digest of one of these texts; the whole store is still watched")
+fn ! ownStaged? digests: (List String) path: String -> Bool
+  (fold (fn [(acc Bool) (d String)] -> Bool (or acc (stringEndsWith? path (str "x" d ".asl")))) false digests)
+
+fn ! watched! root: String store: String digests: (List String) -> (List String)
+  (listAppend (filesUnder! store)
+              (listAppend (filter (fn [(p String)] -> Bool (ownStaged? digests p)) (filesUnder! (str root "/.asl/cache/nativeTest/outside")))
+                          (filesUnder! (str root "/.asl/cache/nativeTest/entries/" (nt/slotKey "entries" (resultOr (realPath store) store))))))
 
 fn ! testInlineLeavesNothing root: String work: String -> Bool
   (let [(asl (str root "/bin/asl"))
         (store (str work "/store"))
+        (digests (map (fn [(i Int64)] -> String (optionOr (stringSlice (bytesSha256 (stringToBytes (inlineCode i))) 0 16) "")) (range 0 101)))
         (warm (inlineRun! asl root store 0))
-        (before (watched! root store))
+        (before (watched! root store digests))
         (ran (listLength (filter (fn [(i Int64)] -> Bool (inlineRun! asl root store i)) (range 1 101))))
-        (after (watched! root store))
+        (after (watched! root store digests))
         (fresh (filter (fn [(p String)] -> Bool (not (listContains? before p))) after))]
     (do (assert warm "a first asl -e runs")
         (assert (= ran 100) (str "100 distinct asl -e texts print their values: " (stringFromInt64 ran)))

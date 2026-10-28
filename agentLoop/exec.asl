@@ -664,7 +664,7 @@ fn ! runCtx! env: ExecEnv -> r/RunCtx
   (r/makeRunCtx env.root env.owns env.session (stepTimeout! env) (r/hiddenVars env.hiddenRaw) env.repoRoot)
 
 fn ! aslOp! op: (List (Pair String c/KvVal)) env: ExecEnv newId: (fn [] -> String) snap: (fn [String] -> Bool) run: (fn [String String] -> t/AslRun) -> (List (Pair String Val))
-  (mapRec (o/execAslOpCustom! op env.owns env.root newId snap run env.readCap (o/budgetLeft env.deadlineAt (o/nowMono))) fromAsl)
+  (mapRec (o/execAslOpMemo! op env.owns env.root env.session newId snap run env.readCap (o/budgetLeft env.deadlineAt (o/nowMono))) fromAsl)
 
 fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId: (fn [] -> String) snap: (fn [String] -> Bool) onKeep: (fn [String (Option String) Int64] -> Bool) run: (fn [String String] -> t/AslRun) -> ExecOut
   (let [opType (opStr op "type" "raw")

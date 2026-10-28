@@ -589,8 +589,35 @@ fn refineNotExportedPositions src: String ds: (List ty/Diagnostic) -> (List ty/D
                                         (pair seen (cons d outAcc)))))
                                   (pair (mapEmpty) (list)) ds)))
 
+; (:m :ref CHECK-DIAG-SYMBOL-POS :do "the checker tracks diagnostics per body statement, so an unknown symbol nested in a let body or a call was reported at the statement; the symbol name is read back from the finalized message (rule-1 'unbound symbol: X', rule-2 'X is not defined') and its real line:col is found in the source from the statement position, the next occurrence of the same name searching from just past the previous one")
+fn unknownSymbolName d: ty/Diagnostic -> (Option String)
+  (let [(prefix "unbound symbol: ") (suffix " is not defined")]
+    (cond
+      ((= d.code "rule-1")
+       (match (stringIndexOf d.message prefix)
+         ((none) (none))
+         ((some i0)
+           (let [(rest (optionOr (stringSlice d.message (+ i0 (stringLength prefix)) (stringLength d.message)) ""))]
+             (some (optionOr (listHead (stringSplit (optionOr (listHead (stringSplit rest ";")) rest) " ")) rest))))))
+      ((and (= d.code "rule-2") (stringEndsWith? d.message suffix))
+       (some (optionOr (stringSlice d.message 0 (- (stringLength d.message) (stringLength suffix))) "")))
+      (else (none))))
+
+fn refineUnknownSymbolPositions src: String ds: (List ty/Diagnostic) -> (List ty/Diagnostic)
+  (listReverse (pairSecond (fold (fn [(acc (Pair (Map String (Pair Int64 Int64)) (List ty/Diagnostic))) (d ty/Diagnostic)] -> (Pair (Map String (Pair Int64 Int64)) (List ty/Diagnostic))
+                                    (let [(seen (pairFirst acc)) (outAcc (pairSecond acc))]
+                                      (match (unknownSymbolName d)
+                                        ((none) (pair seen (cons d outAcc)))
+                                        ((some name)
+                                          (let [(key (str d.code " " name))
+                                                (floor (optionOr (mapGet seen key) (pair d.line d.col)))
+                                                (pos (a/findTokenPos src (pairFirst floor) (pairSecond floor) name))
+                                                (nd (ty/Diagnostic :code d.code :message d.message :msg d.msg :line (pairFirst pos) :col (pairSecond pos) :path d.path))]
+                                            (pair (mapSet seen key (pair nd.line (+ nd.col 1))) (cons nd outAcc)))))))
+                                  (pair (mapEmpty) (list)) ds)))
+
 fn checkModuleSource forms: (List a/TopForm) deps: (Map String r/ModuleSummary) path: String src: String -> (List ty/Diagnostic)
-  (normalizeCheckDiags (refineNotExportedPositions src (listAppend (checkModule forms deps path) (listAppend (tp/notTailDiags forms src path) (listAppend (ca/constantAssertDiags forms src path) (r/letrecDiags forms path src))))))
+  (normalizeCheckDiags (refineUnknownSymbolPositions src (refineNotExportedPositions src (listAppend (checkModule forms deps path) (listAppend (tp/notTailDiags forms src path) (listAppend (ca/constantAssertDiags forms src path) (r/letrecDiags forms path src)))))))
 
 fn checkDefunWithUntyped d: a/DefunNode summary: r/ModuleSummary deps: r/DepIndex path: String -> (List ty/Diagnostic)
   (listAppend (untypedParamDiags d path) (checkDefunDiags d summary deps path))

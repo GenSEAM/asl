@@ -1,5 +1,5 @@
 (module asl-target-llvm/sysRoute
-  :x [RouteTable Routed routeTables tableBuiltins wrapperName routes? routeModule tripleOf routeFactsFor hostFactsOf routeHost! routeHostLinked! routeTargetLinked! targetFacts! internalize routeConst signalNames errKinds tagGuardText poolWith]
+  :x [RouteTable Routed routeTables tableBuiltins wrapperName routes? routeModule tripleOf routeFactsFor hostFactsOf routeHost! routeHostLinked! routeTargetLinked! targetFacts! internalize routeConst signalNames errKinds tagGuardText poolWith sameSignature? nativeIfAny]
   :i [(asl-ir/types :a ty)
       (asl-ir/verify :a vfy)
       (asl-target-llvm/libc :a libc)
@@ -233,15 +233,24 @@ fn routeDiag code: String message: String locus: String -> ty/IrDiag
 fn dedupeExterns externs: (List ty/SsaExtern) -> (List ty/SsaExtern)
   (fold (fn [(acc (List ty/SsaExtern)) (e ty/SsaExtern)] -> (List ty/SsaExtern)
           (if (listAny? (fn [(o ty/SsaExtern)] -> Bool (= o.name e.name)) acc)
-            (map (fn [(o ty/SsaExtern)] -> ty/SsaExtern (if (= o.name e.name) e o)) acc)
+            (map (fn [(o ty/SsaExtern)] -> ty/SsaExtern (if (= o.name e.name) (nativeIfAny e (list o)) o)) acc)
             (listAppend acc (list e))))
         (list) externs)
 
+; (:m :ref LINUXFFI :do "a foreign fn's C symbol (native, ffiRoute) and the same symbol routed here agree when their types do; the merged extern stays native if either is, so every call to it is ccc")
+fn sameSignature? a: ty/SsaExtern b: ty/SsaExtern -> Bool
+  (and (= a.params b.params) (and (= a.ret b.ret) (and (= a.typed b.typed) (= a.variadic b.variadic))))
+
+fn nativeIfAny o: ty/SsaExtern added: (List ty/SsaExtern) -> ty/SsaExtern
+  (if (or o.native (not (listAny? (fn [(e ty/SsaExtern)] -> Bool (and (= e.name o.name) e.native)) added)))
+    o
+    (ty/SsaExtern :name o.name :arity o.arity :params o.params :ret o.ret :typed o.typed :variadic o.variadic :native true))
+
 fn mergeExterns own: (List ty/SsaExtern) added: (List ty/SsaExtern) locus: String -> (Result (List ty/SsaExtern) (List ty/IrDiag))
-  (let [(clashes (filter (fn [(e ty/SsaExtern)] -> Bool (listAny? (fn [(o ty/SsaExtern)] -> Bool (and (= o.name e.name) (not (= o e)))) own)) added))
+  (let [(clashes (filter (fn [(e ty/SsaExtern)] -> Bool (listAny? (fn [(o ty/SsaExtern)] -> Bool (and (= o.name e.name) (not (sameSignature? o e)))) own)) added))
         (fresh (filter (fn [(e ty/SsaExtern)] -> Bool (not (listAny? (fn [(o ty/SsaExtern)] -> Bool (= o.name e.name)) own))) added))]
     (if (listEmpty? clashes)
-      (ok (listAppend own fresh))
+      (ok (listAppend (map (fn [(o ty/SsaExtern)] -> ty/SsaExtern (nativeIfAny o added)) own) fresh))
       (err (map (fn [(e ty/SsaExtern)] -> ty/IrDiag (routeDiag "ERR_LLVM_SYSROUTE_EXTERN" (str "extern '" e.name "' is declared with another signature than the routed syscall functions need") locus)) clashes))))
 
 fn dedupeFunctions fns: (List ty/SsaFunction) -> (List ty/SsaFunction)

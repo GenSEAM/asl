@@ -3,7 +3,7 @@
       budgetLeft stepTimeout nowMono chooseTransport transportField engineSocketPath! gateTimeoutSec
       engineRequest runAslSocket
       nearestLines placeholderAssert? runBounded runAsl
-      execAslOp! execAslOpCustom! readOutlineBytes readOutlineBytesIn readOutlineBytesFor! serReceipt serValue
+      memoRunId memoSessionOk? memoRunBegin! memoRunBeginIfOn! memoRunEnd! memoRunDir! memoPrune! toolMemoIn toolMemoOn! memoKey memoGet! memoPut! execAslOp! execAslOpCustom! execAslOpMemo! readOutlineBytes readOutlineBytesIn readOutlineBytesFor! serReceipt serValue
       runExit runStdout runStderr runTimedOut runSeconds runFellBack chooseTransportFor]
   :i [(asl/agentLoop/core :a c)
       (asl/agentLoop/agentConfig :a ac)
@@ -663,7 +663,101 @@ fn aslRunOut r: t/AslRun -> String
 fn aslRunErr r: t/AslRun -> String
   (match r ((t/aslRun _ _ errText) errText))
 
-fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root: String newId: (fn [] -> String) snap: (fn [String] -> Bool) run: (fn [String String] -> t/AslRun) cap: Int64 budgetLeft: (Option Float64) -> (List (Pair String RVal))
+; (:m :ref LEON-PREFIX-CACHE-20261026 :do "a read-only read result is memoised on disk under .asl/run/agentLoop/memo, keyed by the sha256 of the read form, the resolved path and the file's current bytes: an identical read returns the stored result without running the form, and any write to the file changes its bytes and so misses. Only successful reads are stored; commands, writes and every other op never go through it")
+fn memoDir root: String -> String
+  (str root "/.asl/run/agentLoop/memo")
+
+; (:m :do "the memo is scoped to one run: memoRunBegin! creates memo/<pid>-<sessionId>, memoRunEnd! removes only that dir, and the read path addresses it by the same session id, so concurrent runs in one root keep each other's entries. With no such dir nothing is read or stored. Pruning removes only dirs whose pid is dead and never leaves memoDir")
+fn memoRunId session: String -> String
+  (str (stringFromInt64 (procSelf)) "-" session)
+
+fn memoSessionOk? session: String -> Bool
+  (and (not (stringEmpty? session)) (and (not (stringContains? session "/")) (not (stringContains? session ".."))))
+
+fn ! memoRunDir! root: String session: String -> (Option String)
+  (if (memoSessionOk? session)
+    (let [dir (str (memoDir root) "/" (memoRunId session))]
+      (if (fileExists? dir) (some dir) none))
+    none)
+
+fn memoDirPid name: String -> (Option Int64)
+  (let [parts (stringSplit name "-")]
+    (if (< (listLength parts) 2) none (match (listGet parts 0) ((some p) (stringToInt64 p)) ((none) none))))
+
+fn ! memoPrune! root: String -> Bool
+  (let [base (memoDir root)
+        names (resultOr (dirList base) (list))]
+    (fold (fn [acc name]
+            (match (memoDirPid name)
+              ((some pid) (if (and (> pid 1) (not (resultOr (procAlive? pid) false)))
+                            (and (ok? (pathRemove (str base "/" name))) acc)
+                            acc))
+              ((none) acc)))
+          true names))
+
+fn ! memoRunBegin! root: String session: String -> (Result String String)
+  (if (memoSessionOk? session)
+    (let [id (memoRunId session)
+          _pruned (memoPrune! root)]
+      (match (dirCreate (str (memoDir root) "/" id))
+        ((err e) (err e))
+        ((ok _) (ok id))))
+    (err "memo session id unusable"))
+
+fn ! memoRunBeginIfOn! root: String session: String -> Bool
+  (if (toolMemoOn! root) (ok? (memoRunBegin! root session)) true)
+
+fn ! memoRunEnd! root: String session: String -> Bool
+  (if (memoSessionOk? session) (ok? (pathRemove (str (memoDir root) "/" (memoRunId session)))) true)
+
+fn memoFile dir: String key: String -> String
+  (str dir "/" key ".memo")
+
+; (:m :do "the memo is opt-in per workspace with :toolMemo true in .asl.config.asn: callers that inject a fake run, and tests that compare receipts across transports, must see every read reach the run")
+fn toolMemoIn text: String -> Bool
+  (= (ac/agentLoopValue text ":toolMemo") (some "true"))
+
+fn ! toolMemoOn! root: String -> Bool
+  (match (fileReadString (str root "/.asl.config.asn"))
+    ((ok text) (toolMemoIn text))
+    ((err _) false))
+
+fn ! memoKey root: String form: String fullPath: String -> (Option String)
+  (match (fileReadString fullPath)
+    ((err _) none)
+    ((ok text) (some (bytesSha256 (stringToBytes (str form "\n" fullPath "\n" text))))))
+
+fn ! memoGet! dir: String key: String -> (Option t/AslRun)
+  (match (fileReadString (memoFile dir key))
+    ((err _) none)
+    ((ok text)
+      (match (stringIndexOf text "\n")
+        ((none) none)
+        ((some nl)
+          (let [parts (stringSplit (c/sliceOf text 0 nl) " ")
+                code (stringToInt64 (c/firstOf parts))
+                outLen (stringToInt64 (c/firstOf (c/restOf parts)))
+                body (c/sliceOf text (+ nl 1) (stringLength text))]
+            (match code
+              ((none) none)
+              ((some cd)
+                (match outLen
+                  ((none) none)
+                  ((some ol)
+                    (if (> ol (stringLength body)) none
+                      (some (t/aslRun cd (c/sliceOf body 0 ol) (c/sliceOf body ol (stringLength body))))))))))))))
+
+; (:m :do "a memo entry is written to a temp name and renamed into place so a reader never sees a partial file; any error means the entry is skipped, and the receipt says memo skipped")
+fn ! memoPut! dir: String key: String res: t/AslRun -> Bool
+  (let [out (aslRunOut res)
+        path (memoFile dir key)
+        tmp (str path ".tmp" (stringFromInt64 (procSelf)))
+        body (str (stringFromInt64 (aslRunCode res)) " " (stringFromInt64 (stringLength out)) "\n" out (aslRunErr res))]
+    (match (fileWrite tmp body)
+      ((err _) false)
+      ((ok _) (ok? (pathRename tmp path)))))
+
+fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: String session: String newId: (fn [] -> String) snap: (fn [String] -> Bool) run: (fn [String String] -> t/AslRun) cap: Int64 budgetLeft: (Option Float64) -> (List (Pair String RVal))
   (let [opHead (getKvStr op "_head")
         rawOpName (let [o (getKvStr op "op")] (if (!= o "") o opHead))
         opName (if (= rawOpName "") "step" rawOpName)
@@ -788,7 +882,15 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
               effStart (match widened ((some w) (match w ((t/widenItem a _ _ _) (stringFromInt64 a)))) ((none) startVal))
               effEnd (match widened ((some w) (match w ((t/widenItem _ b _ _) (stringFromInt64 b)))) ((none) endVal))
               form (buildReadForm filePath symbolVal anchorVal effStart effEnd cap)
-              res (run form root)
+              memoPath (t/normPath (if (stringStartsWith? filePath "/") filePath (str root "/" filePath)))
+              memoRun (if (toolMemoOn! root) (memoRunDir! root session) none)
+              mkey (match memoRun ((some _) (memoKey root form memoPath)) ((none) none))
+              memoDirNow (optionOr memoRun "")
+              memoHit (match mkey ((some k) (memoGet! memoDirNow k)) ((none) none))
+              res (match memoHit ((some r) r) ((none) (run form root)))
+              putOk (match memoHit
+                      ((some _) true)
+                      ((none) (match mkey ((some k) (if (= (aslRunCode res) 0) (memoPut! memoDirNow k res) true)) ((none) true))))
               code (aslRunCode res)
               out (aslRunOut res)
               errText (aslRunErr res)
@@ -824,7 +926,7 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
                          (match (optionOr widened (t/widenItem 0 0 "" ""))
                            ((t/widenItem a b nm kd) (some (str "widened to the enclosing " kd " " nm ", lines " (stringFromInt64 a) "-" (stringFromInt64 b))))))
                        (else (none)))]
-          (list (pair "id" (rStr rid)) (pair "op" (rStr "read")) (pair "file" (rStr filePath))
+          (listAppend (list (pair "id" (rStr rid)) (pair "op" (rStr "read")) (pair "file" (rStr filePath))
             (pair "span" (match span ((some sp) (rPair (pairFirst sp) (pairSecond sp))) ((none) (rNone))))
             (pair "content" (if (= code 0) (rStr fullCont) (rNone)))
             (pair "status" (rStr st))
@@ -832,7 +934,8 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
             (pair "message" (match msgVal ((some m) (rStr m)) ((none) (rNone))))
             (pair "cmd" (rStr (str "asl read " filePath)))
             (pair "exit" (rInt code))
-            (pair "stdout" (rStr out)))))))
+            (pair "stdout" (rStr out)))
+          (if (some? memoHit) (list (pair "memo" (rStr "hit"))) (if putOk (list) (list (pair "memo" (rStr "skipped"))))))))))
       ((or (= opName "query") (= opName "q"))
         (let [queryText (let [q (getKvStr op "query")] (if (!= q "") q (getKvStr op "text")))
               inMode (getKvStr op "in")
@@ -951,6 +1054,10 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
           (list (pair "id" (rStr rid)) (pair "op" (rStr opName))
             (pair "status" (rStr st)) (pair "cmd" (rStr (str "asl " opName)))
             (pair "exit" (rInt code)) (pair "stdout" (rStr out)))))))
+
+; (:m :do "execAslOpCustom! is the memo-less entry: with no session id no run scope is addressed, so nothing is read or stored")
+fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root: String newId: (fn [] -> String) snap: (fn [String] -> Bool) run: (fn [String String] -> t/AslRun) cap: Int64 budgetLeft: (Option Float64) -> (List (Pair String RVal))
+  (execAslOpMemo! op owns root "" newId snap run cap budgetLeft)
 
 fn ! execAslOp! op: (List (Pair String c/KvVal)) owns: (List String) root: String repoRoot: String mode: String env: (Option (List String)) newId: (fn [] -> String) snap: (fn [String] -> Bool) cap: Int64 runTimeout: Int64 deadlineAt: (Option Float64) -> (List (Pair String RVal))
   (let [run (fn [f r]

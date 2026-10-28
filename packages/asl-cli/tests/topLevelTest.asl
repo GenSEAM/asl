@@ -86,7 +86,7 @@ fn ! testCli root: String work: String -> Bool
         (assert (and (stringContains? (str two.stdout two.stderr) "ERR_MULTIPLE_ENTRY") (and (stringContains? (str two.stdout two.stderr) "helper.asl") (stringContains? (str two.stdout two.stderr) "twoEntry.asl"))) (str "ERR_MULTIPLE_ENTRY names both files: " two.stdout two.stderr))
         (assert (!= lib.exitCode 0) "a module importing a script does not run")
         (assert (stringContains? (str lib.stdout lib.stderr) "ERR_TOPLEVEL_IN_LIBRARY") (str "importing a script is ERR_TOPLEVEL_IN_LIBRARY: " lib.stdout lib.stderr))
-        (assert (and (stringContains? (str badChecked.stdout badChecked.stderr) "bad.asl:3:1:") (stringContains? (str badChecked.stdout badChecked.stderr) "bad.asl:4:1:")) (str "each diagnostic stands at its own statement, past the #! line: " badChecked.stdout))
+        (assert (and (stringContains? (str badChecked.stdout badChecked.stderr) "bad.asl:3:1:") (stringContains? (str badChecked.stdout badChecked.stderr) "bad.asl:4:11:")) (str "each diagnostic stands at its own statement, past the #! line: " badChecked.stdout))
         (assert (= unwrapChecked.exitCode 0) (str "a Result statement bound by let checks as its ok type: " unwrapChecked.stdout))
         true))
 

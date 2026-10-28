@@ -194,7 +194,7 @@ fn skipDelim toks: (List String) delim: String -> (List String)
   (match (listHead toks) ((some str) (if (= str delim) (safeToksTail toks) toks)) ((none) toks))
 
 fn parseTypeToks toks: (List String) typevars: (List String) -> (Pair Type (List String))
-  (match (listHead toks) ((none) (pair (tyCon "Unit" (list) (none) (none)) (list))) ((some s) (let [(rest (safeToksTail toks))] (if (= s "(") (match (listHead rest) ((none) (pair (tyCon "Unit" (list) (none) (none)) (list))) ((some sSym) (let [(rest2 (safeToksTail rest))] (if (= sSym ")") (pair (tyCon "Unit" (list) (none) (none)) rest2) (if (= sSym "fn") (let [(curToks (skipDelim (skipDelim rest2 "!") "[")) (pRes (parseFnParams curToks typevars (list))) (params (pairFirst pRes)) (afterParams (pairSecond pRes)) (cur2 (skipDelim afterParams "->")) (retRes (parseTypeToks cur2 typevars)) (ret (pairFirst retRes)) (afterRet (pairSecond retRes)) (finalRem (skipDelim afterRet ")"))] (pair (tyFun params ret) finalRem)) (let [(argsRes (parseTypeArgs rest2 typevars (list))) (args (pairFirst argsRes)) (afterArgs (pairSecond argsRes)) (conInfo (parseConName sSym)) (cName (pairFirst conInfo)) (cMod (pairFirst (pairSecond conInfo))) (cShown (pairSecond (pairSecond conInfo)))] (pair (tyCon cName args cMod cShown) afterArgs))))))) (if (listContains? typevars s) (let [(varId (getTypevarId s typevars)) (kind (if (= s "N") "num" (if (or (= s "A") (or (= s "B") (or (= s "T") (= s "E")))) "any" "any")))] (pair (tyVar varId kind) rest)) (let [(conInfo (parseConName s)) (cName (pairFirst conInfo)) (cMod (pairFirst (pairSecond conInfo))) (cShown (pairSecond (pairSecond conInfo)))] (pair (tyCon cName (list) cMod cShown) rest)))))))
+  (match (listHead toks) ((none) (pair (tyCon "Unit" (list) (none) (none)) (list))) ((some s) (let [(rest (safeToksTail toks))] (if (= s "(") (match (listHead rest) ((none) (pair (tyCon "Unit" (list) (none) (none)) (list))) ((some sSym) (let [(rest2 (safeToksTail rest))] (if (= sSym ")") (pair (tyCon "Unit" (list) (none) (none)) rest2) (if (or (= sSym "fn") (= sSym "Fn")) (fnTypeAfter rest2 typevars) (let [(argsRes (parseTypeArgs rest2 typevars (list))) (args (pairFirst argsRes)) (afterArgs (pairSecond argsRes)) (conInfo (parseConName sSym)) (cName (pairFirst conInfo)) (cMod (pairFirst (pairSecond conInfo))) (cShown (pairSecond (pairSecond conInfo)))] (pair (tyCon cName args cMod cShown) afterArgs))))))) (if (listContains? typevars s) (let [(varId (getTypevarId s typevars)) (kind (if (= s "N") "num" (if (or (= s "A") (or (= s "B") (or (= s "T") (= s "E")))) "any" "any")))] (pair (tyVar varId kind) rest)) (let [(conInfo (parseConName s)) (cName (pairFirst conInfo)) (cMod (pairFirst (pairSecond conInfo))) (cShown (pairSecond (pairSecond conInfo)))] (pair (tyCon cName (list) cMod cShown) rest)))))))
 
 fn parseDelimitedTypes toks: (List String) typevars: (List String) closing: String acc: (List Type) -> (Pair (List Type) (List String))
   (match (listHead toks) ((none) (pair (listReverse acc) (list))) ((some str) (if (= str closing) (let [(revAcc (listReverse acc)) (remToks (safeToksTail toks))] (pair revAcc remToks)) (let [(res (parseTypeToks toks typevars))] (parseDelimitedTypes (pairSecond res) typevars closing (cons (pairFirst res) acc))))))
@@ -204,6 +204,45 @@ fn parseTypeArgs toks: (List String) typevars: (List String) acc: (List Type) ->
 
 fn parseFnParams toks: (List String) typevars: (List String) acc: (List Type) -> (Pair (List Type) (List String))
   (parseDelimitedTypes toks typevars "]" acc)
+
+; (:m :ref FN-BARE-PARAMS :do "a fn type is spelled three ways: (fn [A B] -> R) with bracketed params, (Fn A B -> R) bare up to the arrow, and (Fn A B R) where the last type is the return, the type-constructor spelling ten files still use; reading Fn like fn must keep all three")
+fn bareFnToks toks: (List String) depth: Int64 acc: (List String) -> (Pair (List String) (List String))
+  (match (listHead toks)
+    ((none) (pair (listReverse acc) (list)))
+    ((some t) (let [(tl (safeToksTail toks))]
+                (cond ((and (= t ")") (= depth 0)) (pair (listReverse acc) tl))
+                      ((or (= t "(") (= t "[")) (bareFnToks tl (+ depth 1) (cons t acc)))
+                      ((or (= t ")") (= t "]")) (bareFnToks tl (- depth 1) (cons t acc)))
+                      (else (bareFnToks tl depth (cons t acc)))))))
+
+fn splitArrow toks: (List String) depth: Int64 acc: (List String) -> (Option (Pair (List String) (List String)))
+  (match (listHead toks)
+    ((none) (none))
+    ((some t) (let [(tl (safeToksTail toks))]
+                (cond ((and (= t "->") (= depth 0)) (some (pair (listReverse acc) tl)))
+                      ((or (= t "(") (= t "[")) (splitArrow tl (+ depth 1) (cons t acc)))
+                      ((or (= t ")") (= t "]")) (splitArrow tl (- depth 1) (cons t acc)))
+                      (else (splitArrow tl depth (cons t acc)))))))
+
+fn typesOf toks: (List String) typevars: (List String) -> (List Type)
+  (pairFirst (parseDelimitedTypes (listAppend toks (list ")")) typevars ")" (list)))
+
+fn fnTypeAfter toks: (List String) typevars: (List String) -> (Pair Type (List String))
+  (let [(t (skipDelim toks "!"))
+        (unit (tyCon "Unit" (list) (none) (none)))]
+    (if (= (optionOr (listHead t) "") "[")
+      (let [(pRes (parseFnParams (safeToksTail t) typevars (list)))
+            (retRes (parseTypeToks (skipDelim (pairSecond pRes) "->") typevars))]
+        (pair (tyFun (pairFirst pRes) (pairFirst retRes)) (skipDelim (pairSecond retRes) ")")))
+      (let [(split (bareFnToks t 0 (list)))
+            (inner (pairFirst split))
+            (rest (pairSecond split))]
+        (match (splitArrow inner 0 (list))
+          ((some ba) (pair (tyFun (typesOf (pairFirst ba) typevars) (pairFirst (parseTypeToks (pairSecond ba) typevars))) rest))
+          ((none) (let [(all (typesOf inner typevars))
+                        (n (listLength all))]
+                    (if (= n 0) (pair (tyFun (list) unit) rest)
+                      (pair (tyFun (listTake all (- n 1)) (optionOr (listGet all (- n 1)) unit)) rest))))))))
 
 fn parseTypeStr s: String typevars: (List String) -> Type
   (let [(toks (tokenizeTypeStr s))] (pairFirst (parseTypeToks toks typevars)))

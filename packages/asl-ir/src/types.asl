@@ -1,4 +1,4 @@
-(module asl-ir/types :x [IrType IrParam IrExpr IrSwitchCase IrStmt IrFunction IrModule IrDiag makeIrType makeIrParam makeIrLet makeIrDrop makeIrReturn makeIrSwitch makeIrFunction makeIrModule makeIrDiag verifyAnfStmt verifyAnfFunction verifyAnfModule SsaTy SsaConst SsaOp SsaEdge SsaCase SsaTerm SsaParam SsaInstr SsaBlock SsaFunction SsaVariant SsaTypeDecl SsaRecordDecl SsaGlobal SsaExtern SsaModule ssaParam ssaInstr ssaEdge ssaCase ssaBlock ssaFunction ssaVariant ssaTypeDecl ssaRecordDecl ssaRecordDeclTyped ssaRecordRaw? ssaGlobal ssaExtern ssaExternTyped ssaExternVariadic ssaModule ssaTyName ssaAbiName ssaIsRec? ssaIsRaw? termEdges opOperands SsaPrim primSignature SsaBuiltin builtinEntries builtinEntry] :i [])
+(module asl-ir/types :x [IrType IrParam IrExpr IrSwitchCase IrStmt IrFunction IrModule IrDiag makeIrType makeIrParam makeIrLet makeIrDrop makeIrReturn makeIrSwitch makeIrFunction makeIrModule makeIrDiag verifyAnfStmt verifyAnfFunction verifyAnfModule SsaTy SsaConst SsaOp SsaEdge SsaCase SsaTerm SsaParam SsaInstr SsaBlock SsaFunction SsaVariant SsaTypeDecl SsaRecordDecl SsaGlobal SsaExtern SsaModule ssaParam ssaInstr ssaEdge ssaCase ssaBlock ssaFunction ssaVariant ssaTypeDecl ssaRecordDecl ssaRecordDeclTyped ssaRecordRaw? ssaGlobal ssaExtern ssaExternTyped ssaExternVariadic ssaExternNative ssaModule ssaTyName ssaAbiName ssaIsRec? ssaIsRaw? termEdges opOperands SsaPrim primSignature SsaBuiltin builtinEntries builtinEntry] :i [])
 
 (schema IrType (:f kind Str) (:f repr Str) (:f isSecondClass Bool))
 
@@ -150,7 +150,7 @@ fn verifyAnfModule moduleObj: IrModule -> (Option IrDiag)
 
 (schema SsaGlobal (:f name String) (:f init String))
 
-(schema SsaExtern (:f name String) (:f arity Int64) (:f params (List SsaTy)) (:f ret SsaTy) (:f typed Bool) (:f variadic Bool))
+(schema SsaExtern (:f name String) (:f arity Int64) (:f params (List SsaTy)) (:f ret SsaTy) (:f typed Bool) (:f variadic Bool) (:f native Bool))
 
 (schema SsaModule (:f name String) (:f strings (List String)) (:f types (List SsaTypeDecl)) (:f records (List SsaRecordDecl)) (:f externs (List SsaExtern)) (:f globals (List SsaGlobal)) (:f functions (List SsaFunction)))
 
@@ -191,13 +191,16 @@ fn ssaGlobal name: String init: String -> SsaGlobal
   (SsaGlobal :name name :init init)
 
 fn ssaExtern name: String arity: Int64 -> SsaExtern
-  (SsaExtern :name name :arity arity :params (list) :ret (tyVal) :typed false :variadic false)
+  (SsaExtern :name name :arity arity :params (list) :ret (tyVal) :typed false :variadic false :native false)
 
 fn ssaExternTyped name: String params: (List SsaTy) ret: SsaTy -> SsaExtern
-  (SsaExtern :name name :arity (listLength params) :params params :ret ret :typed true :variadic false)
+  (SsaExtern :name name :arity (listLength params) :params params :ret ret :typed true :variadic false :native false)
 
 fn ssaExternVariadic name: String params: (List SsaTy) ret: SsaTy -> SsaExtern
-  (SsaExtern :name name :arity (listLength params) :params params :ret ret :typed true :variadic true)
+  (SsaExtern :name name :arity (listLength params) :params params :ret ret :typed true :variadic true :native false)
+
+fn ssaExternNative name: String params: (List SsaTy) ret: SsaTy -> SsaExtern
+  (SsaExtern :name name :arity (listLength params) :params params :ret ret :typed true :variadic false :native true)
 
 fn ssaModule name: String strings: (List String) types: (List SsaTypeDecl) records: (List SsaRecordDecl) externs: (List SsaExtern) globals: (List SsaGlobal) functions: (List SsaFunction) -> SsaModule
   (SsaModule :name name :strings strings :types types :records records :externs externs :globals globals :functions functions)

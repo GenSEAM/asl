@@ -50,10 +50,10 @@ fn poolWith strings: (List String) wanted: (List String) -> (Pair (List String) 
         (pair strings (mapEmpty)) wanted)
 
 fn mergeExterns own: (List ty/SsaExtern) added: (List ty/SsaExtern) locus: String -> (Result (List ty/SsaExtern) (List ty/IrDiag))
-  (let [(clashes (filter (fn [(e ty/SsaExtern)] -> Bool (listAny? (fn [(o ty/SsaExtern)] -> Bool (and (= o.name e.name) (not (= o e)))) own)) added))
+  (let [(clashes (filter (fn [(e ty/SsaExtern)] -> Bool (listAny? (fn [(o ty/SsaExtern)] -> Bool (and (= o.name e.name) (not (rt/sameSignature? o e)))) own)) added))
         (fresh (filter (fn [(e ty/SsaExtern)] -> Bool (not (listAny? (fn [(o ty/SsaExtern)] -> Bool (= o.name e.name)) own))) added))]
     (if (listEmpty? clashes)
-      (ok (listAppend own fresh))
+      (ok (listAppend (map (fn [(o ty/SsaExtern)] -> ty/SsaExtern (rt/nativeIfAny o added)) own) fresh))
       (err (map (fn [(e ty/SsaExtern)] -> ty/IrDiag (diag "ERR_LLVM_PARROUTE_EXTERN" (str "extern '" e.name "' is declared with another signature than asl-target-llvm/parallel needs") locus)) clashes))))
 
 fn routeVerified facts: libc/TripleFacts m: ty/SsaModule calls: (List (Pair String Int64)) -> (Result rt/Routed (List ty/IrDiag))

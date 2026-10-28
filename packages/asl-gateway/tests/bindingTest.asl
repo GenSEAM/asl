@@ -134,8 +134,8 @@ fn testLive -> Bool
         (dir (str "/tmp/aslBindingTest" me))
         (sd (str dir "/state"))
         (vendors (list (fakeVendor "fake" sd) (fakeVendor "fake2" sd) (noForkVendor "nofork" sd)))
-        (ctx (s/SessCtx :dir (str dir "/sessions") :env (envList) :timeoutSec 20 :ttlSec 0 :ledger (str dir "/ledger.asn") :vendors vendors))
-        (ttlCtx (s/SessCtx :dir (str dir "/sessions") :env (envList) :timeoutSec 20 :ttlSec 1 :ledger "" :vendors vendors))
+        (ctx (s/SessCtx :secretsFile "" :dir (str dir "/sessions") :env (envList) :timeoutSec 20 :ttlSec 0 :ledger (str dir "/ledger.asn") :vendors vendors))
+        (ttlCtx (s/SessCtx :secretsFile "" :dir (str dir "/sessions") :env (envList) :timeoutSec 20 :ttlSec 1 :ledger "" :vendors vendors))
         (_mk (dirCreate sd))
         (seen (observe! ctx ttlCtx dir sd))
         (_rm (pathRemove dir))]

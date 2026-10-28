@@ -746,3 +746,6 @@
 (:doc :symbol "asl/packages/asl-forms/tests/editsParityTest.asl#normHost" :text "the python version in :syntaxHost is the machine's")
 (:doc :symbol "asl/packages/asl-forms/tests/editsParityTest.asl#replayAll!" :text "fixture lines grouped by scenario, in order")
 (:doc :symbol "asl/packages/asl-forms/src/tools.asl#unknownKeys!" :text "Keys a step passes that the tools catalogue declares neither in :params nor in :accepts for op. Returns (sorted unknown keys, accepted keys); both empty when the catalogue or op is missing or declares nothing.")
+(:doc :symbol "asl/packages/asl-forms/src/delegate.asl#poolRoute?" :text "true for an agent step that carries a :pool list; runDelegate sends it to the Leon pool instead of a single agent run")
+(:doc :symbol "asl/packages/asl-forms/src/delegate.asl#poolForms" :text "the elements of a step's :pool list as one (:agent ...) form each, a (:task ...) element rewritten to (:agent :task ...); err when the list is missing or empty")
+(:doc :symbol "asl/packages/asl-forms/src/delegate.asl#poolStepWith" :text "run the pool forms through run (the native asl/agentLoop/pool entry in poolStep) and return its (:poolReceipt ...) line as the step receipt, :status failed when the pool exits nonzero")

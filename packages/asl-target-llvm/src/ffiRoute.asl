@@ -62,19 +62,19 @@ fn cReturnType kind: String -> ty/SsaTy
     (else (ty/tyI64)))
 
 fn helperExterns -> (List ty/SsaExtern)
-  (list (ty/ssaExternTyped "malloc" (list (ty/tyI64)) (ty/tyPtr))
-        (ty/ssaExternTyped "free" (list (ty/tyPtr)) (ty/tyI64))
-        (ty/ssaExternTyped "valToCStr" (list (ty/tyVal) (ty/tyI32)) (ty/tyPtr))
-        (ty/ssaExternTyped "strlen" (list (ty/tyPtr)) (ty/tyI64))
-        (ty/ssaExternTyped "mkStr" (list (ty/tyPtr) (ty/tyI64)) (ty/tyVal))
-        (ty/ssaExternTyped "ffiMkHandle" (list (ty/tyPtr) (ty/tyPtr)) (ty/tyVal))
-        (ty/ssaExternTyped "ffiHandlePtr" (list (ty/tyVal)) (ty/tyPtr))
-        (ty/ssaExternTyped "ffiHandleFin" (list (ty/tyVal)) (ty/tyPtr))
-        (ty/ssaExternTyped "ffiHandleClear" (list (ty/tyVal)) (ty/tyPtr)))
+  (list (ty/ssaExternNative "malloc" (list (ty/tyI64)) (ty/tyPtr))
+        (ty/ssaExternNative "free" (list (ty/tyPtr)) (ty/tyI64))
+        (ty/ssaExternNative "valToCStr" (list (ty/tyVal) (ty/tyI32)) (ty/tyPtr))
+        (ty/ssaExternNative "strlen" (list (ty/tyPtr)) (ty/tyI64))
+        (ty/ssaExternNative "mkStr" (list (ty/tyPtr) (ty/tyI64)) (ty/tyVal))
+        (ty/ssaExternNative "ffiMkHandle" (list (ty/tyPtr) (ty/tyPtr)) (ty/tyVal))
+        (ty/ssaExternNative "ffiHandlePtr" (list (ty/tyVal)) (ty/tyPtr))
+        (ty/ssaExternNative "ffiHandleFin" (list (ty/tyVal)) (ty/tyPtr))
+        (ty/ssaExternNative "ffiHandleClear" (list (ty/tyVal)) (ty/tyPtr)))
 
 fn errnoExterns accessor: String -> (List ty/SsaExtern)
-  (list (ty/ssaExternTyped accessor (list) (ty/tyPtr))
-        (ty/ssaExternTyped "strerror" (list (ty/tyI32)) (ty/tyPtr)))
+  (list (ty/ssaExternNative accessor (list) (ty/tyPtr))
+        (ty/ssaExternNative "strerror" (list (ty/tyI32)) (ty/tyPtr)))
 
 fn emit g: Gen dest: String t: ty/SsaTy op: ty/SsaOp -> Gen
   (with g :instrs (cons (ty/ssaInstr dest t op) g.instrs))
@@ -371,11 +371,18 @@ fn buildWrapper errno: String m: ty/SsaModule f: ty/SsaFunction strings: (List S
                   (g2 (finish (pairFirst out) (pairFirst (pairSecond out)) (pairSecond (pairSecond out)) f.retTy))
                   (cTypes (fold (fn [(acc (List ty/SsaTy)) (k String)] -> (List ty/SsaTy) (listAppend acc (cParamTypes k))) (list) sig.args))]
               (ok (Built :function (ty/ssaFunction f.name f.captures f.params f.retTy (entryFirst (listReverse g2.done)))
-                         :externs (cons (ty/ssaExternTyped spec.symbol cTypes (cReturnType sig.ret)) (listAppend (helperExterns) (if (stringEmpty? sig.check) (list) (errnoExterns errno))))
+                         :externs (cons (ty/ssaExternNative spec.symbol cTypes (cReturnType sig.ret)) (listAppend (helperExterns) (if (stringEmpty? sig.check) (list) (errnoExterns errno))))
                          :strings g2.strings))))))))
 
 fn symbolOf b: Built -> String
   (optionOr (listHead (map (fn [(x ty/SsaExtern)] -> String x.name) b.externs)) "")
+
+; (:m :ref LINUXFFI :do "a C symbol the module already declares (sysRoute's strlen, malloc) merges with the foreign one when the types agree, and stays native if either side is")
+fn sameSignature? a: ty/SsaExtern b: ty/SsaExtern -> Bool
+  (and (= a.params b.params) (and (= a.ret b.ret) (and (= a.typed b.typed) (= a.variadic b.variadic))))
+
+fn nativeOf e: ty/SsaExtern native: Bool -> ty/SsaExtern
+  (ty/SsaExtern :name e.name :arity e.arity :params e.params :ret e.ret :typed e.typed :variadic e.variadic :native native)
 
 fn mergeExterns own: (List ty/SsaExtern) added: (List ty/SsaExtern) -> (Result (List ty/SsaExtern) (List ty/IrDiag))
   (fold (fn [(acc (Result (List ty/SsaExtern) (List ty/IrDiag))) (e ty/SsaExtern)] -> (Result (List ty/SsaExtern) (List ty/IrDiag))
@@ -383,7 +390,7 @@ fn mergeExterns own: (List ty/SsaExtern) added: (List ty/SsaExtern) -> (Result (
             ((err ds) (err ds))
             ((ok have) (match (listFind (fn [(o ty/SsaExtern)] -> Bool (= o.name e.name)) have)
                          ((none) (ok (listAppend have (list e))))
-                         ((some o) (if (= o e) (ok have)
+                         ((some o) (if (sameSignature? o e) (ok (map (fn [(x ty/SsaExtern)] -> ty/SsaExtern (if (= x.name e.name) (nativeOf x (or x.native e.native)) x)) have))
                                      (err (list (diag "ERR_FOREIGN_EXTERN" (str "C symbol " e.name " is declared with two different signatures in one program") e.name)))))))))
         (ok own) added)
 
@@ -394,7 +401,7 @@ fn withResultType types: (List ty/SsaTypeDecl) -> (List ty/SsaTypeDecl)
 
 ; (:m :ref FFI2 :do "a finaliser named only by handle:F is declared as int F(void *) unless a foreign fn of the program declares F itself")
 fn withFinalisers externs: (List ty/SsaExtern) fins: (List String) -> (List ty/SsaExtern)
-  (listAppend externs (map (fn [(n String)] -> ty/SsaExtern (ty/ssaExternTyped n (list (ty/tyPtr)) (ty/tyI32)))
+  (listAppend externs (map (fn [(n String)] -> ty/SsaExtern (ty/ssaExternNative n (list (ty/tyPtr)) (ty/tyI32)))
                            (filter (fn [(n String)] -> Bool (not (listAny? (fn [(e ty/SsaExtern)] -> Bool (= e.name n)) externs))) fins)))
 
 fn finsIn m: ty/SsaModule f: ty/SsaFunction -> (List String)

@@ -1462,7 +1462,7 @@ fn recycleFastText asan: Bool -> String
                            "entry:"
                            "  %cls = lshr i64 %h, 56"
                            "  %big = icmp uge i64 %cls, 2"
-                           "  %pooled = icmp ne i64 %cls, 255"
+                           (str "  %pooled = icmp ult i64 %cls, " (classes))
                            "  %fast = and i1 %big, %pooled"
                            "  br i1 %fast, label %node, label %slow"
                            "slow:"
@@ -1479,7 +1479,7 @@ fn recycleBody name: String asan: Bool rooted: Bool notrace: Bool -> String
                  "  %cls = lshr i64 %h, 56"
                  "  %big = icmp uge i64 %cls, 2"
                  (str "  %isLarge = icmp eq i64 %cls, 255\n  br i1 %isLarge, label %" (if notrace "largeFree" "largeFinalise") ", label %classed\nclassed:")
-                 (if rooted "  br i1 %big, label %node, label %smallNode" "  br label %small")
+                 (if rooted (str "  %inFree = icmp ult i64 %cls, " (classes) "\n  br i1 %inFree, label %pooledClass, label %badClass\nbadClass:\n  call void @llvm.trap()\n  unreachable\npooledClass:\n  br i1 %big, label %node, label %smallNode") "  br label %small")
                  (if notrace (largeFreeText) (largeFinaliseText))
                  "small:"
                  (str "  %hs = or i64 %h, " (sticky))
@@ -1523,8 +1523,16 @@ fn largeFreeText -> String
                "  ret void"))
 
 ; (:m :ref FFI2 :do "under the traced runtime the only large object RC counts is a Handle (aslRc.obj admits type 7), and the sweep owns its memory: at count zero it runs fin(p) at once, clears both words so the sweep never runs it again, and sticks the header so later drops ignore it")
+; (:m :ref RC-LARGE-RECYCLE-GUARD :do "the Handle type is checked here, not assumed from aslRc.obj: any other large type keeps its header untouched, since gcAsl largeSkip reads a nonzero byte 48 as permanent for every type but 7, so the sweep still frees it and widening aslRc.obj never runs a data word as fin; a pooled class past the free-list array traps in the slow path, and the inlined fast path admits only classes below it")
 fn largeFinaliseText -> String
   (lines (list "largeFinalise:"
+               "  %gty = lshr i64 %h, 32"
+               "  %gty8 = and i64 %gty, 255"
+               "  %gHnd = icmp eq i64 %gty8, 7"
+               "  br i1 %gHnd, label %largeHandle, label %largeLeave"
+               "largeLeave:"
+               "  ret void"
+               "largeHandle:"
                "  %gfp = getelementptr inbounds i8, ptr %o, i64 24"
                "  %gf = load ptr, ptr %gfp"
                "  %gnf = icmp eq ptr %gf, null"

@@ -7,7 +7,14 @@ set -eu
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 OUT=${ASL_HOST_OUT:-$HERE/out}
 mkdir -p "$OUT"
-CLANG="${CLANG:-clang}"
+# (:m :why "VPSLIN-2: with CLANG unset the first of clang, clang-19 .. clang-15 on PATH is used (a distro that ships only clang-18 has no bare clang); an explicit CLANG is never second-guessed")
+if [ -z "${CLANG:-}" ]; then
+  CLANG=clang
+  for c in clang clang-19 clang-18 clang-17 clang-16 clang-15; do
+    if command -v "$c" >/dev/null 2>&1; then CLANG=$c; break; fi
+  done
+fi
+export CLANG
 RT_NAME="libaslrt.a"
 PACKAGES="$HERE/../packages"
 GC_ROUTE="$PACKAGES/asl-target-llvm/src/gcRoute.asl"
@@ -149,7 +156,6 @@ runtime_possible() {
   if [ ! -f "$GC_ROUTE" ]; then echo "build.sh: no $RT_NAME: $GC_ROUTE is absent" >&2; return 1; fi
   if [ ! -f "$RT_ABI" ]; then echo "build.sh: no $RT_NAME: $RT_ABI is absent" >&2; return 1; fi
   if [ ! -f "$RT_FLOOR" ]; then echo "build.sh: no $RT_NAME: $RT_FLOOR is absent" >&2; return 1; fi
-  if ! command -v "$CLANG" >/dev/null 2>&1; then echo "build.sh: no $RT_NAME: $CLANG not found; install clang or set CLANG" >&2; return 1; fi
   return 0
 }
 
@@ -169,6 +175,10 @@ cacheReadonly() {
 
 # (:m :why "REBUILD-NODESTROY: a tree that already has a working $RT_NAME must never lose it just because a later rebuild attempt (stale toolchain, scratch-cache probe, transient compiler failure) fails partway; $RT_NAME is deleted up front only when the tree is genuinely incomplete (runtime_possible false), everywhere else the existing file is left alone unless a rebuild actually produces a replacement to atomically install over it")
 RT_OK=1
+if ! command -v "$CLANG" >/dev/null 2>&1; then
+  echo "build.sh: no $RT_NAME: $CLANG not found; install clang (clang-15 .. clang-19 are probed) or set CLANG; an installed $RT_NAME is kept" >&2
+  exit 1
+fi
 if runtime_possible; then
   if [ "$CACHE_OK" = "1" ] && [ "${ASL_HOST_CACHE:-1}" != "0" ]; then
     GC_KEY=$( (
@@ -208,23 +218,25 @@ rm -f "$PRIOR_RT"
 cp "$HERE/../prelude/prelude.asl" "$OUT/prelude.asl"
 
 # (:m :why "TOOLSHOST-THIN: a tree with no native CLI head gets one here, so a fresh clone runs no host at all: the seed asl1 compiles asl-cli/nativeBuild (cached by its sources), which builds native.asl and writes the head with the keys bin/asl's fallback build uses; a tree that has a head is left to asl-cli/nativeCli")
+CLI_OK=1
+# (:m :why "HOSTBUILD-EXIT-MASK: a native CLI step that fails sets CLI_OK=0 and the script exits 1 at the end, so the exit status matches the log")
 native_cli() {
   [ -f "$PACKAGES/asl-cli/src/nativeBuild.asl" ] || return 0
-  asl1=$(native_asl1 "$OUT/$RT_NAME") || { echo "build.sh: no native CLI: no native asl1" >&2; return 0; }
+  asl1=$(native_asl1 "$OUT/$RT_NAME") || { echo "build.sh: no native CLI: no native asl1" >&2; CLI_OK=0; return 0; }
   root=$(cd "$HERE/../.." && pwd -P)
   clang_version=$("$CLANG" --version | head -n 1)
-  deps=$(cd "$root" && ASL_PRELUDE="$root/asl/prelude/prelude.asl" "$asl1" deps asl/packages/asl-cli/src/nativeBuild.asl) || { echo "build.sh: no native CLI: asl1 deps of asl-cli/nativeBuild failed" >&2; return 0; }
+  deps=$(cd "$root" && ASL_PRELUDE="$root/asl/prelude/prelude.asl" "$asl1" deps asl/packages/asl-cli/src/nativeBuild.asl) || { echo "build.sh: no native CLI: asl1 deps of asl-cli/nativeBuild failed" >&2; CLI_OK=0; return 0; }
   key=$( { echo "$asl1"; echo "$clang_version"; for f in $deps "$root"/asl/prelude/prelude.asl "$root"/asl/prelude/native/*.asl; do case $f in (/*) ;; (*) f="$root/$f" ;; esac; echo "${f#"$root"/}"; cat "$f"; done; } | hash_stdin )
   dir="$CACHE_DIR/nativeBuild/$key"
   if [ ! -x "$dir/aslNativeBuild" ]; then
     tmp="$CACHE_DIR/nativeBuild/.tmp.$$"
-    rm -rf "$tmp" && mkdir -p "$tmp" || return 0
+    rm -rf "$tmp" && mkdir -p "$tmp" || { CLI_OK=0; return 0; }
     if (cd "$root" && ASL_PRELUDE="$root/asl/prelude/prelude.asl" "$asl1" build asl/packages/asl-cli/src/nativeBuild.asl -o "$tmp/nativeBuild.ll") >&2 \
        && "$CLANG" -O2 -Wno-override-module -x ir "$tmp/nativeBuild.ll" -x none "$OUT/$RT_NAME" -lm -o "$tmp/aslNativeBuild" && mkdir -p "$dir" && mv -f "$tmp/aslNativeBuild" "$dir/aslNativeBuild"; then
       rm -rf "$tmp"
       cacheReadonly "$dir/aslNativeBuild"
     else
-      rm -rf "$tmp"; echo "build.sh: no native CLI: the seed asl1 could not build asl-cli/nativeBuild" >&2; return 0
+      rm -rf "$tmp"; echo "build.sh: no native CLI: the seed asl1 could not build asl-cli/nativeBuild" >&2; CLI_OK=0; return 0
     fi
   fi
   install_copy "$dir/aslNativeBuild" "$OUT/aslNativeBuild"
@@ -239,7 +251,7 @@ native_cli() {
   done > "$stamp/deps"
   printf '%s\n' "$clang_version" > "$stamp/clang-version"
   cp "$OUT/aslNativeBuild" "$stamp/bin" && chmod +x "$stamp/bin"
-  "$OUT/aslNativeBuild" "$root" --if-cold >&2 || echo "build.sh: the native CLI build failed" >&2
+  "$OUT/aslNativeBuild" "$root" --if-cold >&2 || { echo "build.sh: the native CLI build failed" >&2; CLI_OK=0; }
 }
 native_cli
-[ "$RT_OK" = "1" ] || exit 1
+[ "$RT_OK" = "1" ] && [ "$CLI_OK" = "1" ] || exit 1

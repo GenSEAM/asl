@@ -29,6 +29,7 @@ fn shellQuote s: String -> String
 fn ! root -> String
   (resultOr (realPath ".") ".")
 
+; (:m :ref COUNTED-RT-KEY :do "the counted runtime is a variant keyed by its source closure, not asl/host/out/libaslrt.a, so a gcAsl or rc edit is linked without a host rebuild")
 fn ! runtimes! -> (Result Libs String)
   (let [(r (root))
         (plain (str r "/asl/host/out/libaslrt.a"))
@@ -46,7 +47,9 @@ fn ! runtimes! -> (Result Libs String)
                      ((err e) (err (str "ASan runtime: " e)))
                      ((ok asan) (match (nb/notraceRuntime! b asl1 (str r "/asl/packages"))
                                   ((err e) (err (str "untraced runtime: " e)))
-                                  ((ok notrace) (ok (Libs :plain plain :asan asan :notrace notrace))))))))))
+                                  ((ok notrace) (match (nb/countedRuntime! b asl1 (str r "/asl/packages"))
+                                                  ((err e) (err (str "counted runtime: " e)))
+                                                  ((ok counted) (ok (Libs :plain counted :asan asan :notrace notrace))))))))))))
 
 fn ! testVariantTmpCleared dir: String -> Bool
   (let [(r (root))
@@ -72,6 +75,43 @@ fn ! testVariantTmpCleared dir: String -> Bool
                   (assert (ok? (pathRemove cacheDir)) "fresh runtime cache directory removed")
                   true)))))))
 
+fn ! shOk? cmd: String -> Bool
+  (let [(c (sh cmd))] (= c.exitCode 0))
+
+; (:m :ref COUNTED-RT-KEY :do "on a scratch copy of the tree, an edit to gcRoute.asl that adds a global reaches the counted runtime the next build returns, with no host rebuild")
+fn ! testCountedFresh libs: Libs dir: String -> Bool
+  (let [(r (root))
+        (t (str dir "/countedTree"))
+        (copied (sh (str "mkdir -p " (shellQuote (str t "/asl")) " && cp -R asl/packages " (shellQuote (str t "/asl/packages")) " && cp -R asl/prelude " (shellQuote (str t "/asl/prelude")) " && cp .asl.config.asn " (shellQuote (str t "/.asl.config.asn")))))
+        (cacheDir (str t "/rtCache"))
+        (made (dirCreate cacheDir))
+        (plain (str r "/asl/host/out/libaslrt.a"))
+        (ctx (sys/Context :root r :scriptDir "" :argv0 "" :hostBin ""))
+        (b (nb/Build :root t :cache cacheDir :tmp cacheDir :lib plain :base "" :clangVersion "" :owner ""
+                     :deadlineNs (+ (monotonicNs) 900000000000) :maxDesc 16))
+        (packages (str t "/asl/packages"))
+        (route (str packages "/asl-target-llvm/src/gcRoute.asl"))
+        (marks (fn [(lib String)] -> Int64 (let [(c (sh (str "nm " (shellQuote lib) " | /usr/bin/grep -c countedRtEdited")))] (optionOr (stringToInt64 (stringTrim c.stdout)) -1))))
+        (anchor "define void @gcTestFailNextPageSetGrow(")]
+    (match (cache/nativeAsl1! ctx plain (optionOr (envGet "CLANG") "clang"))
+      ((err e) (do (assert false (str "native asl1: " e)) false))
+      ((ok asl1)
+        (let [(lib0 (resultOr (nb/countedRuntime! b asl1 packages) ""))
+              (text (resultOr (fileReadString route) ""))
+              (edited (and (stringContains? text anchor) (ok? (fileWrite route (stringReplace text anchor (str "@countedRtEdited = global i64 7\\n" anchor))))))
+              (lib1 (resultOr (nb/countedRuntime! b asl1 packages) ""))]
+          (do (assert (= copied.exitCode 0) (str "the scratch tree was copied: " copied.stderr))
+              (assert (ok? made) "the scratch runtime cache was created")
+              (assert (!= libs.plain plain) (str "the suite links the counted variant, not the host archive: " libs.plain))
+              (assert (sys/isFile? lib0) (str "the scratch counted runtime was built: " lib0))
+              (assert (= (marks lib0) 0) "the unedited counted runtime has no countedRtEdited global")
+              (assert edited "gcRoute.asl in the scratch copy was edited")
+              (assert (sys/isFile? lib1) (str "the counted runtime was rebuilt after the edit: " lib1))
+              (assert (!= lib0 lib1) "the edit moves the counted runtime to a new key")
+              (assert (= (marks lib1) 1) "the counted runtime built after the edit carries the edited global, not the stale archive")
+              (assert (shOk? (str "rm -rf " (shellQuote t))) "the scratch tree was removed")
+              true)))))
+
 fn ! sh cmd: String -> Captured
   (let [(base (str (optionOr (envGet "TMPDIR") "/tmp") "/rcTest." (procSelf) "." (monotonicNs)))
         (outPath (str base ".out"))
@@ -91,10 +131,13 @@ fn fixture name: String -> String
 fn diagText diags: (List irTy/IrDiag) -> String
   (stringJoin (map (fn [(d irTy/IrDiag)] -> String (str d.code ": " d.message)) diags) "; ")
 
+fn clangCmd -> String
+  (let [(c (optionOr (envGet "CLANG") ""))] (if (stringEmpty? c) "clang" c))
+
 fn ! linkCmd libs: Libs mode: String ll: String exe: String -> String
   (if (or (= mode "asan") (= mode "asanNotrace"))
-    (str "/usr/bin/clang " (stringJoin (nb/sanitizeFlags) " ") " -Wno-override-module -x ir " (shellQuote ll) " -x none " (shellQuote (if (= mode "asan") libs.asan libs.notrace)) " -lm -o " (shellQuote exe))
-    (str "/usr/bin/clang -O1 -Wno-override-module -x ir " (shellQuote ll) " -x none " (shellQuote (if (or (= mode "notrace") (= mode "notraceStats")) libs.notrace libs.plain)) " -lm -o " (shellQuote exe)))
+    (str (clangCmd) " " (stringJoin (nb/sanitizeFlags) " ") " -Wno-override-module -x ir " (shellQuote ll) " -x none " (shellQuote (if (= mode "asan") libs.asan libs.notrace)) " -lm -o " (shellQuote exe))
+    (str (clangCmd) " -O1 -Wno-override-module -x ir " (shellQuote ll) " -x none " (shellQuote (if (or (= mode "notrace") (= mode "notraceStats")) libs.notrace libs.plain)) " -lm -o " (shellQuote exe)))
 
 fn ! buildRun libs: Libs dir: String name: String mode: String -> (Result Built String)
   (match (lk/linkEntry! (fixture name))
@@ -572,5 +615,6 @@ fn ! runWith libs: Libs -> Bool
         (assert (checkFixture libs dir "rcSmall" "100000\n" 99999 99999 10 0) "16-byte none cells are freed onto the small-class stack and reused")
         (assert (checkFixture libs dir "rcSys" "12000\n" 10000 9000 1000 0) "arguments and results of the routed fileStat, realPath, fileReadString, fileReadBytes (adopted slurp buffer), dirList and fileExists? are borrowed and freed, none pinned")
         (assert (testVariantTmpCleared dir) "a variant runtime build removes its work directory")
+        (assert (testCountedFresh libs dir) "a runtime source edit reaches the counted runtime without a host rebuild")
         (assert (ok? (pathRemove dir)) "rcTest work directory removed")
         true))
