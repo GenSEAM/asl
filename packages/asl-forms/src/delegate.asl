@@ -1,4 +1,4 @@
-(module asl-forms/delegate :x [DelegateCtx Outcome Spawned engineOk? engineExchangeWith engineFrameData contextFromEnv! delegateOp? runDelegate agentKillSeconds poolRoute? poolForms poolStepWith fieldNumber spawnRun spawnRunInput stepHead okLine rejectedLine pyStrip pyRepr pyExt errnoText timeoutText researchGatewayEntry! researchGatewayRoutes! resolveResearchEntry! researchEntryJson searchLimit researchCliArgv! researchCliText researchTimeoutSeconds researchDispatch researchDispatchWith researchTriage? searchFailed? crawlerSpawn] :i [(asl-forms/kernel :a k) (asl-forms/extract :a ex) (aslGateway/search :a srch) (aslGateway/research :a rs) (aslGateway/config :a cfg) (aslGateway/pyText :a pt) (asl-json/json :a j) (asl-engine/transport :a etp) (asl-intel/text :a it) (asl-forms/evalOp :a ev) (asl-tools/fleet/run :a fr)])
+(module asl-forms/delegate :x [DelegateCtx Outcome Spawned withParentPid agentStep engineOk? engineExchangeWith engineFrameData contextFromEnv! delegateOp? runDelegate agentKillSeconds poolRoute? poolForms poolStepWith fieldNumber spawnRun spawnRunInput stepHead okLine rejectedLine pyStrip pyRepr pyExt errnoText timeoutText researchGatewayEntry! researchGatewayRoutes! resolveResearchEntry! researchEntryJson searchLimit researchCliArgv! researchCliText researchTimeoutSeconds researchDispatch researchDispatchWith researchTriage? searchFailed? crawlerSpawn] :i [(asl-forms/kernel :a k) (asl-forms/extract :a ex) (aslGateway/search :a srch) (aslGateway/research :a rs) (aslGateway/config :a cfg) (aslGateway/pyText :a pt) (asl-json/json :a j) (asl-engine/transport :a etp) (asl-intel/text :a it) (asl-forms/evalOp :a ev) (asl-tools/fleet/run :a fr)])
 
 
 (schema DelegateCtx (:f rootDir String) (:f binDir String) (:f wsDir String))
@@ -775,13 +775,21 @@ fn agentKillSeconds kw: (Map String String) -> Int64
         (timeout (if (>= given 0) given (max 600 (- (budget kw "wallBudget" 0) queue))))]
     (+ timeout (+ queue 30)))
 
+; (:m :ref LEON-ORPHAN-PARENT :do "Leon runs in its own process group, so a signal that ends this CLI does not reach it; the form carries this pid and Leon ends once it is gone. A form that already names :parentPid keeps it")
+fn withParentPid stepStr: String pid: Int64 -> String
+  (let [(trimmed (pyStrip stepStr))
+        (n (stringLength trimmed))]
+    (if (or (stringContains? trimmed ":parentPid ") (not (stringEndsWith? trimmed ")")))
+      stepStr
+      (str (optionOr (stringSlice trimmed 0 (- n 1)) "") " :parentPid " (stringFromInt64 pid) ")")))
+
 fn ! agentStep ctx: DelegateCtx id: Int64 kw: (Map String String) stepStr: String -> Outcome
   (let [(agentMain (k/aslPath! ctx.rootDir "agentLoop/main.asl"))
         (bin (if (k/isFile! agentMain) (ev/nativeEntry! ctx.rootDir "asl/agentLoop/main" true) (err (str "ASL agent loop not installed: " agentMain))))]
     (match bin
       ((err e) (rejectedLine id "agent" "ERR_AGENT_DISPATCH" (msgTail e)))
       ((ok b)
-      (let [(sp (spawnRun (list b stepStr) (some ctx.rootDir) (mapSet (mapEmpty) "ASL_ROOT_DIR" ctx.wsDir) (agentKillSeconds kw)))
+      (let [(sp (spawnRun (list b (withParentPid stepStr (procSelf))) (some ctx.rootDir) (mapSet (mapEmpty) "ASL_ROOT_DIR" ctx.wsDir) (agentKillSeconds kw)))
             (shown (if (stringEmpty? sp.errText) true (do (eprintln (if (stringEndsWith? sp.errText "\n") (optionOr (stringSlice sp.errText 0 (- (stringLength sp.errText) 1)) "") sp.errText)) true)))
             (out (pyStrip sp.out))
             (bad (if (!= sp.code 0) 1 0))]

@@ -376,7 +376,7 @@ fn testTrackedParenAslFiles! -> Bool
                           "asl/packages/asl-replay/src/main.asl"
                           "asl/packages/asl-ui/src/main.asl"
                           "asl/packages/asl-mem/src/tasks.asl"
-                          "tests/acceptance/d81/Task58801IntermediatePolicyTest.asl"
+                          "asl/packages/asl-pack/tests/intermediatePolicyAcceptanceTest.asl"
                           "tests/fixtures/attractor_bench/clean_eval.asl"
                           "tests/fixtures/attractor_bench/clean_vector.asl"
                           "tests/fixtures/attractor_bench/defect_concurrency.asl"
@@ -396,14 +396,14 @@ fn testTrackedParenAslFiles! -> Bool
     (assert (= totalChecked 26) "checked all 26 valid paren asl files")
     (assert (= mismatches 0) "zero mismatches on valid paren asl files")
     (assert (verifyFixtureFile! "asl/grammar/corpus/semantic/exportBareCase.asl" true 2) "exportBareCase.asl has 2 top-level forms")
-    (assert (verifyFixtureFile! "tests/acceptance/d81/Task58801IntermediatePolicyTest.asl" true 6) "Task58801 has 6 top-level forms")
+    (assert (verifyFixtureFile! "asl/packages/asl-pack/tests/intermediatePolicyAcceptanceTest.asl" true 6) "Task58801 has 6 top-level forms")
     (assert (verifyFixtureFile! "asl/packages/asl-syntax/manifest.asn" true 1) "manifest.asn has 1 top-level form")
     (assert (verifyFixtureFile! ".asl.config.asn" true 1) ".asl.config.asn has 1 top-level form")
     (assert (verifyFixtureFile! "asl/packages/asl-forms/tests/fixtures/formsCorpus.asn" true 179) "formsCorpus.asn has 179 top-level forms")
     (assert (verifyFixtureFile! "asl/packages/asl-forms/tests/fixtures/ws/symbols.asn" true 8) "symbols.asn has 8 top-level forms")
     true)
 
-; (:m :ref ORGPREMOVE-PARENTEST-PRIVATE :do "the dossier.asn form-count check and testBenchmarkPerformance! moved to tools/tests/privateCorpusFixturesTest.asl: both read .asl/mem/tasks/asl_language_and_runtime_audit_dossier.asn or .asl/mem/notes.asn, private workspace notes rather than public fixtures, which never ship with the published GenSEAM/asl repo; the checks are unchanged, just relocated. Left in place: the tests/acceptance/d81/Task58801IntermediatePolicyTest.asl and tests/fixtures/* entries above also read outside asl/ (top-level tests/, not .asl/mem) -- a separate, already-flagged public/private split gap in tests/ itself (ORG-SPLIT-SURVEY), out of this unit's scope")
+; (:m :ref ORGPREMOVE-PARENTEST-PRIVATE :do "the dossier.asn form-count check and testBenchmarkPerformance! moved to tools/tests/privateCorpusFixturesTest.asl: both read .asl/mem/tasks/asl_language_and_runtime_audit_dossier.asn or .asl/mem/notes.asn, private workspace notes rather than public fixtures, which never ship with the published GenSEAM/asl repo; the checks are unchanged, just relocated. Left in place: the asl/packages/asl-pack/tests/intermediatePolicyAcceptanceTest.asl and tests/fixtures/* entries above also read outside asl/ (top-level tests/, not .asl/mem) -- a separate, already-flagged public/private split gap in tests/ itself (ORG-SPLIT-SURVEY), out of this unit's scope")
 
 fn ! runTests -> Bool
   (and (testParseUnclosedParen)

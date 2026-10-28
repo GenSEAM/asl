@@ -274,8 +274,11 @@ fn liveCount lanes: (List Lane) -> Int64
 fn finished? lanes: (List Lane) -> Bool
   (listAll? (fn [(l Lane)] -> Bool (and (none? l.live) (listEmpty? l.pending))) lanes)
 
-fn liveIdxs lanes: (List Lane) -> (List Int64)
-  (fold (fn [(acc (List Int64)) (l Lane)] -> (List Int64) (match l.live ((some x) (cons x.task.idx acc)) ((none) acc))) (list) lanes)
+fn livePairs lanes: (List Lane) -> (List (Pair Int64 Int64))
+  (fold (fn [(acc (List (Pair Int64 Int64))) (l Lane)] -> (List (Pair Int64 Int64)) (match l.live ((some x) (cons (pair x.task.idx l.id) acc)) ((none) acc))) (list) lanes)
+
+fn queuedPairs lanes: (List Lane) -> (List (Pair Int64 Int64))
+  (fold (fn [(acc (List (Pair Int64 Int64))) (l Lane)] -> (List (Pair Int64 Int64)) (listAppend acc (map (fn [(t PoolTask)] -> (Pair Int64 Int64) (pair t.idx l.id)) l.pending))) (list) lanes)
 
 fn ! reactor! dir: String repoRoot: String runner: (fn [String PoolTask] -> m/MainResult) lim: PoolLimits cap: Int64 lanes: (List Lane) done: (List PoolSlot) asks: (Map Int64 Int64) -> (List PoolSlot)
   (let [(now (monotonicNs))
@@ -284,7 +287,7 @@ fn ! reactor! dir: String repoRoot: String runner: (fn [String PoolTask] -> m/Ma
         (reaped (fold (fn [(acc (List PoolSlot)) (p (Pair Lane (List PoolSlot)))] -> (List PoolSlot) (listAppend acc (pairSecond p))) done polled))
         (tick (fold (fn [(acc Tick) (l Lane)] -> Tick (fillLane! dir repoRoot runner lim cap now acc l))
                     (Tick :lanes (list) :slots reaped :active (liveCount after) :asks asks) after))
-        (routed (ch/route! dir (liveIdxs tick.lanes) tick.asks))]
+        (routed (ch/route! dir (livePairs tick.lanes) (queuedPairs tick.lanes) tick.asks))]
     (if (finished? tick.lanes)
       tick.slots
       (do (sleepMs 20) (reactor! dir repoRoot runner lim cap tick.lanes tick.slots routed))))
@@ -292,8 +295,15 @@ fn ! reactor! dir: String repoRoot: String runner: (fn [String PoolTask] -> m/Ma
 fn laneBudgetMs ts: (List PoolTask) graceMs: Int64 -> Int64
   (fold (fn [(a Int64) (t PoolTask)] -> Int64 (+ a (+ t.wallMs graceMs))) 0 ts)
 
+; (:m :ref LEON-POOL-ASK-OP :do "the task's own form gains :poolChan and :poolIdx, so its Leon run can send (:ask) ops and serve the asks of its peers")
+fn pooledForm t: PoolTask -> String
+  (let [(f (stringTrim t.form))]
+    (if (stringEndsWith? f ")")
+      (str (c/sliceOf f 0 (- (stringLength f) 1)) " :poolChan \"" t.chan "\" :poolIdx " (stringFromInt64 t.idx) ")")
+      f))
+
 fn ! runTask! repoRoot: String t: PoolTask -> m/MainResult
-  (m/mainWithRoots (list t.form) repoRoot t.root)
+  (m/mainWithRoots (list (pooledForm t)) repoRoot t.root)
 
 fn ! runPoolWith! repoRoot: String lanes: (List (List PoolTask)) lim: PoolLimits runner: (fn [String PoolTask] -> m/MainResult) -> (List PoolSlot)
   (let [(dir (str (optionOr (envGet "TMPDIR") "/tmp") "/leonPool-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))

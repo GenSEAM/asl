@@ -3,7 +3,7 @@
       ProviderEnv VendorConfig Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
       parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
-      curlConfig parseCurlResponse tempDir! freshDir! buildDryRunInfo! providerEnv! makeProvider! nextTurn! advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField]
+      curlConfig parseCurlResponse tempDir! freshDir! buildDryRunInfo! providerEnv! makeProvider! nextTurn! advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
   :i [(asl-json/json :a j) (asl-proc/coreProcess :a cp) (aslGateway/server :a gs) (aslGateway/dispatch :a gd) (aslGateway/upstream :a gu) (aslGateway/config :a cfg)])
 
 enum ProviderError
@@ -53,6 +53,7 @@ enum Provider
   (:f reviewer (Option String))
   (:f gradeReply (Option String))
   (:f gradeModel (Option String))
+  (:f gradeError (Option String))
   (:f attemptLogPath (Option String)))
 
 (schema Timing
@@ -597,6 +598,7 @@ fn parseScriptFixture text: String attemptLogPath: (Option String) -> ScriptData
       :reviewer (fixtureField text ":reviewer" 0 n)
       :gradeReply (fixtureField text ":gradeReply" 0 n)
       :gradeModel (fixtureField text ":gradeModel" 0 n)
+      :gradeError (fixtureField text ":gradeError" 0 n)
       :attemptLogPath attemptLogPath))
 
 fn lineBreakWidth bs: Bytes n: Int64 i: Int64 -> Int64
@@ -1347,6 +1349,18 @@ fn ! advise! p: Provider system: String text: String -> (Option Turn)
 fn withProfile env: ProviderEnv profile: String -> ProviderEnv
   (with env :profile profile)
 
+; (:m :ref LEON-WALLBUDGET-ORPHAN :do "a vendor call never gets more than the seconds left of the run's wall budget: queue and call timeouts are cut to fit, so the gateway link deadline lands near the budget")
+fn capConfig cfg: VendorConfig left: Int64 -> VendorConfig
+  (if (>= left (+ cfg.timeout cfg.queueTimeout))
+    cfg
+    (let [(q (min cfg.queueTimeout (/ left 4)))]
+      (with cfg :queueTimeout q :timeout (max 1 (- left q)) :timeoutSet true)))
+
+fn capTimeouts p: Provider left: Int64 -> Provider
+  (match p
+    ((vendorProvider cfg) (vendorProvider (capConfig cfg left)))
+    (_ p))
+
 fn graderConfig cfg: VendorConfig intent: String profile: String -> VendorConfig
   (with cfg :intent intent :model "" :env (if (stringEmpty? profile) cfg.env (withProfile cfg.env profile)))
 
@@ -1364,7 +1378,10 @@ fn ! grade! p: Provider intent: String profile: String system: String text: Stri
           (Turn :provider p :reply (ok (some reply))
             :meta (TurnMeta :timing none :usage none :finish none :truncated false
                     :served (match fixture.gradeModel ((some m) (some (list (pair "model" m)))) ((none) none)))))
-        ((none) (noGraderChannel p))))
+        ((none)
+          (match fixture.gradeError
+            ((some message) (Turn :provider p :reply (err (providerError "ERR_VENDOR" message)) :meta (emptyMeta)))
+            ((none) (noGraderChannel p))))))
     ((vendorProvider cfg)
       (let [(r (callVendor! (graderConfig cfg intent profile) system text))]
         (Turn :provider p :reply r.reply :meta r.meta)))
@@ -1372,7 +1389,7 @@ fn ! grade! p: Provider intent: String profile: String system: String text: Stri
 
 fn graderAvailable? p: Provider -> Bool
   (match p
-    ((scriptFixtureProvider _ fixture _) (some? fixture.gradeReply))
+    ((scriptFixtureProvider _ fixture _) (or (some? fixture.gradeReply) (some? fixture.gradeError)))
     ((vendorProvider _) true)
     (_ false))
 

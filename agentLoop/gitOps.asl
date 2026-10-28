@@ -1,7 +1,7 @@
 (module asl/agentLoop/gitOps
   :x [RVal rStr rInt rBool rNull rPair LineArg laNone laBad laNum Bounded GitCtx
       makeGitCtx runBounded! isPathInRepo! lineArg gitSlice gitNextForm execGitOp!
-      runGates! gatePreflight! formatGatePreflight changedOwnedFiles!
+      runGates! runGatesWatched! gatePreflight! formatGatePreflight changedOwnedFiles!
       serRec serRecs recGet pyStrip pySplitLines pyNormpath pyRelpath! pyRealpath! pyRepr cpLength]
   :i [(asl/agentLoop/core :a c)])
 
@@ -369,13 +369,50 @@ fn afterKill! sp: SpawnedProc outOpen: Bool errOpen: Bool out: String errText: S
       ((err e) (err e))
       ((ok _) (ok (Bounded :code (none) :out (universalNewlines (pairFirst texts)) :errText (universalNewlines (pairSecond texts)) :timedOut true)))))
 
+; (:m :ref LEON-FOREIGN-CONSOLIDATE :do "a watched pid rides in env under watchKey, which runBounded! strips before the spawn, so gates keep one sh argv site and one spawn site")
+fn watchKey -> String
+  "ASL_GATE_WATCH_PID"
+
+fn watchOf env: (Option (List String)) -> (Option Int64)
+  (match env
+    ((some rows)
+      (match (listHead (filter (fn [r] (= (envRowKey r) (watchKey))) rows))
+        ((some r) (pyInt (c/sliceOf r (+ (stringLength (watchKey)) 1) (stringLength r))))
+        ((none) (none))))
+    ((none) (none)))
+
+fn withoutWatch env: (Option (List String)) -> (Option (List String))
+  (match env
+    ((some rows) (some (filter (fn [r] (!= (envRowKey r) (watchKey))) rows)))
+    ((none) (none)))
+
+; (:m :ref LEON-ORPHAN-PARENT :do "a watched gate is pumped in half-second slices; between slices a gone watched pid kills the gate's group like a timeout")
+fn ! watchedGone? watch: (Option Int64) -> Bool
+  (match watch
+    ((some pid) (and (> pid 0) (not (resultOr (procAlive? pid) true))))
+    ((none) false))
+
+fn ! pumpWatched! sp: SpawnedProc outOpen: Bool errOpen: Bool out: String errText: String deadline: (Option Int64) watch: (Option Int64) -> PumpEnd
+  (match watch
+    ((none) (pumpPipes! sp outOpen errOpen out errText deadline))
+    ((some _)
+      (let [slice (+ (monotonicNs) 500000000)
+            d (match deadline ((some x) (min x slice)) ((none) slice))]
+        (match (pumpPipes! sp outOpen errOpen out errText (some d))
+          ((pumpLate oo eo o e)
+            (if (or (match deadline ((some x) (>= (monotonicNs) x)) ((none) false)) (watchedGone? watch))
+              (pumpLate oo eo o e)
+              (pumpWatched! sp oo eo o e deadline watch)))
+          ((pumpDone o e) (pumpDone o e))
+          ((pumpFailed m) (pumpFailed m))))))
+
 fn runBounded! argv: (List String) cwd: (Option String) timeoutSec: (Option Int64) env: (Option (List String)) -> (Result Bounded String)
-  (match (procSpawnv argv cwd env)
+  (match (procSpawnv argv cwd (withoutWatch env))
     ((err kind) (err (spawnMessage! kind cwd (c/firstOf argv))))
     ((ok sp)
       (let [closed (fdClose sp.stdin)
             deadline (match timeoutSec ((some t) (some (+ (monotonicNs) (* t 1000000000)))) ((none) (none)))]
-        (match (pumpPipes! sp true true "" "" deadline)
+        (match (pumpWatched! sp true true "" "" deadline (watchOf env))
           ((pumpFailed m) (do (killGroup! sp.pid) (procWaitPid sp.pid false) (err m)))
           ((pumpLate oo eo o e) (do (killGroup! sp.pid) (afterKill! sp oo eo o e)))
           ((pumpDone o e)
@@ -518,6 +555,9 @@ fn runGitArgv! rid: String opName: String argv: (List String) ctx: GitCtx path: 
           (list (rs "id" rid) (rs "op" opName) (rs "status" "rejected") (rs "error" "ERR_GIT_FAILED")
             (rs "message" (str "git " opName " killed after " (itos t) " s")) (pair "timeout" (rBool true)) (ri "seconds" t) (ri "exit" 1))
           (gitRunRec rid opName argv b path base rev rawBase limit start end ctx.readCap)))))
+
+fn runGatesWatched! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) -> (List (List (Pair String RVal)))
+  (runGates! gates root timeoutSec (match watch ((some pid) (some (envWith (envBase! env) (watchKey) (itos pid)))) ((none) env)))
 
 fn runGates! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) -> (List (List (Pair String RVal)))
   (let [childEnv (some (envWith (envBase! env) "PYTHONDONTWRITEBYTECODE" "1"))]

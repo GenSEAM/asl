@@ -1,5 +1,5 @@
 (module asl/agentLoop/gateIntegrity
-  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity!]
+  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles]
   :i [(asl/agentLoop/gates :a g) (asl/agentLoop/gitOps :a io) (asl/agentLoop/context :a ctx) (asl/agentLoop/loop :a lp) (asl/agentLoop/core :a c) (asl/agentLoop/diff :a d)])
 
 enum Claim
@@ -137,14 +137,33 @@ fn ! removeNames! root: String files: (List String) -> Bool
       (not (match (fileStat (str root "/" f)) ((ok _) true) ((err _) false))))))
     true files)
 
+; (:m :ref LEON-REVERTCHECK-GATEFILES :do "gate files are the files a gate command names and test files; everything else that changed is code under test and gets the revert check. Leon's own writes count as changed even when git does not list them (a gitignored scratch/ dir hid the smoke run's leonSmoke.asl, so the check was skipped as gate-only)")
+fn testFile? path: String -> Bool
+  (let [name (optionOr (listHead (listReverse (stringSplit path "/"))) path)
+        stem (optionOr (listHead (stringSplit name ".")) name)]
+    (or (stringStartsWith? path "tests/")
+      (or (stringContains? path "/tests/")
+        (or (stringEndsWith? stem "Test")
+          (or (stringStartsWith? name "test_") (stringEndsWith? stem "_test"))))))
+
+fn implFiles changed: (List String) gates: (List String) -> (List String)
+  (filter (fn [f] (not (testFile? f))) (pairSecond (g/gatePartitionFiles changed (g/gateRunScripts gates))))
+
+fn unionPaths a: (List String) b: (List String) -> (List String)
+  (fold (fn [acc f] (if (listContains? acc f) acc (listAppend acc (list f)))) a b)
+
+fn ! gateIntegrityWritten! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) written: (List String) -> (Pair Bool String)
+  (match (io/changedOwnedFiles! owns root env)
+    ((err message) (pair false (str "changedOwnedFiles failed: " message)))
+    ((ok changed) (gateIntegrityWithChanged! gates root gateResults timeout env (unionPaths changed (map (fn [f] (scanPath root f)) written)))))
+
 fn ! gateIntegrity! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) -> (Pair Bool String)
   (match (io/changedOwnedFiles! owns root env)
     ((err message) (pair false (str "changedOwnedFiles failed: " message)))
     ((ok changed) (gateIntegrityWithChanged! gates root gateResults timeout env changed)))
 
 fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) changed: (List String) -> (Pair Bool String)
-  (let [split (g/gatePartitionFiles changed (g/gateRunScripts gates))
-        impl (pairSecond split)
+  (let [impl (implFiles changed gates)
         verdicts (g/gateVerdicts gateResults false)
         vac (g/gateVacuousMessage gateResults verdicts)]
     (match vac

@@ -829,6 +829,7 @@ fn terminalForms mode: String -> (List String)
     (list "(:findings (:claim s :file f))" "(:escalate :reason s)")
     (list "(:done)" "(:escalate :reason s)"))
 
+; (:m :ref LEON-POOL-ASK-SCOUT :do "(:ask) and (:answer) are pool ops the loop runs, never ad-hoc data: a reply holding only (:ask ...) used to be filed as a finding")
 fn isDataOp op: (List (Pair String KvVal)) declared: (List String) -> Bool
   (let [name (match (dictOr op "op") ((kvStr t) t) ((kvInt t) t))
         form (match (dictOr op "form") ((kvStr t) t) ((kvInt t) t))
@@ -839,7 +840,7 @@ fn isDataOp op: (List (Pair String KvVal)) declared: (List String) -> Bool
       (and (= (dictGet op "type") (some (kvStr "step")))
         (and (= h name)
           (and (not (listContains? declared name))
-            (not (listContains? (list "step" "txn" "patch") name)))))))
+            (not (listContains? (list "step" "txn" "patch" "ask" "answer") name)))))))
 
 fn dataFindingForm op: (List (Pair String KvVal)) -> String
   (let [form (match (dictOr op "form") ((kvStr t) t) ((kvInt t) t))]

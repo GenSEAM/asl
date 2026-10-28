@@ -600,7 +600,7 @@ fn arrExterns -> (List ty/SsaExtern)
           (ty/ssaExternTyped "memcpy" (list (ptr) (ptr) (i64)) (ptr)) (ty/ssaExternTyped "memset" (list (ptr) (i32) (i64)) (ptr))
           (ty/ssaExternTyped "strlen" (list (ptr)) (i64)) (ty/ssaExternVariadic "snprintf" (list (ptr) (i64) (ptr)) (i32))
           (ty/ssaExternTyped "mkStr" (list (ptr) (i64)) (val))
-          (ty/ssaExternTyped "gcWillAllocate" (list (i64)) (i64)) (ty/ssaExternTyped "gcAccount" (list (ptr) (i64)) (i64))))
+          (ty/ssaExternNative "gcWillAllocate" (list (i64)) (i64)) (ty/ssaExternTyped "gcAccount" (list (ptr) (i64)) (i64))))
 
 fn helperDefinitions -> (List (Pair String String))
   (list (pair "declare ptr @aslArrWord0(%Val)"

@@ -799,7 +799,7 @@ fn deriveInstanceWithRoles sec: (Map String rd/SExpr) table: (Option cfg/Gateway
       (let [(remoteRows (match table
                           ((none) (list))
                           ((some tbl) (filter (fn [(pv cfg/GatewayProvider)] -> Bool (and (= pv.kind "gateway") (!= (mapGetOr roles pv.id "") "outward")))
-                                              (map (fn [(id String)] -> cfg/GatewayProvider (optionOr (mapGet tbl.providers id) (cfg/GatewayProvider :id "" :kind "" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))
+                                              (map (fn [(id String)] -> cfg/GatewayProvider (optionOr (mapGet tbl.providers id) (cfg/GatewayProvider :rpmShared false :dropEmptyTools false :id "" :kind "" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))
                                                    (mapKeys tbl.providers))))))]
         (match (listGet remoteRows 0)
           ((some pv) (pair "remote" (str "instance remote: provider " pv.id " is a gateway row to " (urlHost pv.base)

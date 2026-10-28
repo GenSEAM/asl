@@ -146,7 +146,7 @@ fn testRecoveryFixtures -> Bool
     true)
 
 fn testOutlineDiagramWorkbench! -> Bool
-  (let [(path "docs/diagrams/DiagramWorkbench.html")]
+  (let [(path "asl/packages/asl-syntax/tests/fixtures/html/DiagramWorkbench.html")]
     (match (fileReadString path)
       ((err e) (assert false (str "missing DiagramWorkbench.html: " e)))
       ((ok text)
@@ -193,8 +193,8 @@ fn checkTrackedHtmlFile! acc: (Pair Int64 Int64) path: String -> (Pair Int64 Int
 
 fn testAllTrackedHtmlFiles! -> Bool
   (let [(files (list "asl/packages/asl-browser-plugin/src/popup.html"
-                     "docs/diagrams/DiagramWorkbench.html"
-                     "docs/diagrams/OrchestrationTopology.html"
+                     "asl/packages/asl-syntax/tests/fixtures/html/DiagramWorkbench.html"
+                     "asl/packages/asl-syntax/tests/fixtures/html/OrchestrationTopology.html"
                      "editorial-matrix/assets/review/index.html"))
         (stats (fold checkTrackedHtmlFile! (pair 0 0) files))
         (totalChecked (pairFirst stats))
@@ -228,7 +228,7 @@ fn testReparseGuardSpanEdit -> Bool
       true))
 
 fn testBenchmarkPerformance! -> Bool
-  (let [(path "docs/diagrams/DiagramWorkbench.html")]
+  (let [(path "asl/packages/asl-syntax/tests/fixtures/html/DiagramWorkbench.html")]
     (match (fileReadBytes path)
       ((err e) (assert false (str "missing DiagramWorkbench: " e)))
       ((ok bs)

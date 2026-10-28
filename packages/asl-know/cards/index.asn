@@ -31,7 +31,7 @@
 (:c "asl-foreign" "Typed first-class inline foreign blo..." (js py))
 (:c "asl-forms" "Agent-plane forms kernel in pure ASL" (runPayload! runPayloadText!))
 (:c "asl-gates" "Pure AgentSlang Verification Gate Ru..." (verifySourceSyntax verifyForeignExt))
-(:c "asl-gateway" "Sovereign L7 Cognitive Gateway & Omn..." (extractThinkBlocks detectEshViolation))
+(:c "asl-gateway" "Sovereign L7 Cognitive Gateway & Omn..." (gatewayCliMode? breakerEvent!))
 (:c "asl-grammar" "The single ASL grammar (asl/grammar/..." (grammarParse grammarBuild))
 (:c "asl-harness" "asl launch in ASL: harness prompt re..." (readAll readOne))
 (:c "asl-help" "Self-Contained Machine-Readable ASN ..." (canonicalTools catalogSize))

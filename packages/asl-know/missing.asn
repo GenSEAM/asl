@@ -803,7 +803,6 @@
 "asl-cli#asl-cli/batch/makeStepResultOk nodoc"
 "asl-cli#asl-cli/batch/parseTokensToRequest nodoc"
 "asl-cli#asl-cli/build/buildCommand! nodoc"
-"asl-cli#asl-cli/check/applyCandidatePatchAndJournal! nodoc"
 "asl-cli#asl-cli/check/checkSourceWithFix nodoc"
 "asl-cli#asl-cli/check/formatCheckHelp nodoc"
 "asl-cli#asl-cli/check/runCheckCommand! nodoc"

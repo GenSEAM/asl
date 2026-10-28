@@ -69,5 +69,19 @@ fn testKeywordEndingInQuestionMark -> Bool
 fn testRecordLiteralBodyLowering -> Bool
   (let [(src (str "fn sysvAbi -> Map\n" "  (do {:intArgs [\"rdi\" \"rsi\"] :retReg \"rax\"})\n")) (res (ip/parseIndented src))] (match res ((ok sexpr) (let [(r (rd/renderPrefix sexpr))] (assert (= r "(fn sysvAbi [] -> Map (do ({ :intArgs (list \"rdi\" \"rsi\") :retReg \"rax\" })))") (str "a record literal, also as a do-block's sole body statement, is the ({ k v ... }) list asl-ir/lower lowers to opRecord; a flat { field... } splice reaches lower as an unknown symbol {: got " r)) true)) ((err msg) (assert false (str "Failed to parse record-literal do body: " msg)) false)))
 
+fn formCountOf src: String -> Int64
+  (match (ip/parseIndentedForms src) ((ok forms) (listLength forms)) ((err _) -1))
+
+fn testLaterBraceDoesNotCaptureEarlierForm -> Bool
+  (let [(enumThenBrace (formCountOf "enum P\n  (a x: Int64)\n  (b y: String)\n\nschema S {\n  t: Int64\n}\n"))
+        (schemaThenBrace (formCountOf "schema A\n  x: Int64\n\nschema B {\n  y: Int64\n}\n"))
+        (braceEnum (formCountOf "enum E { a b }\n\nschema S {\n  t: Int64\n}\n"))]
+    (do (assert (= enumThenBrace 2) "an indented enum is not turned into a brace enum by a later brace schema")
+        (assert (= schemaThenBrace 2) "an indented schema is not turned into a brace schema by a later brace schema")
+        (assert (= braceEnum 2) "a brace enum still ends at its own closing brace")
+        (refute (= enumThenBrace 1) "the later schema must not be swallowed")
+        true))
+
+
 fn runTests -> Bool
-  (do (assert (testUnannotatedParameterUsesAny) "unannotated parameter infers Any") (assert (testBracketInsideStringLiteral) "testBracketInsideStringLiteral passed") (assert (testDotAccessLowering) "testDotAccessLowering passed") (assert (testInterpolationLowering) "testInterpolationLowering passed") (assert (testFunctionDeclarationLowering) "testFunctionDeclarationLowering passed") (assert (testFnHeaderContinuationLowering) "testFnHeaderContinuationLowering passed") (assert (testFnHeaderJoinSkipsStringLiteral) "testFnHeaderJoinSkipsStringLiteral passed") (assert (testFnHeaderJoinErrorPositionRemap) "testFnHeaderJoinErrorPositionRemap passed") (assert (testFnHeaderJoinStripsCr) "testFnHeaderJoinStripsCr passed") (assert (testMatchWithArmsLowering) "testMatchWithArmsLowering passed") (assert (testRecordLiteralBodyLowering) "testRecordLiteralBodyLowering passed") (assert (testSchemaLowering) "testSchemaLowering passed") (assert (testEnumLowering) "testEnumLowering passed") (assert (testPipelineLowering) "testPipelineLowering passed") (assert (testBracketFreeLetLowering) "testBracketFreeLetLowering passed") (assert (testKeywordEndingInQuestionMark) "testKeywordEndingInQuestionMark passed") true)
+  (do (assert (testLaterBraceDoesNotCaptureEarlierForm) "testLaterBraceDoesNotCaptureEarlierForm passed") (assert (testUnannotatedParameterUsesAny) "unannotated parameter infers Any") (assert (testBracketInsideStringLiteral) "testBracketInsideStringLiteral passed") (assert (testDotAccessLowering) "testDotAccessLowering passed") (assert (testInterpolationLowering) "testInterpolationLowering passed") (assert (testFunctionDeclarationLowering) "testFunctionDeclarationLowering passed") (assert (testFnHeaderContinuationLowering) "testFnHeaderContinuationLowering passed") (assert (testFnHeaderJoinSkipsStringLiteral) "testFnHeaderJoinSkipsStringLiteral passed") (assert (testFnHeaderJoinErrorPositionRemap) "testFnHeaderJoinErrorPositionRemap passed") (assert (testFnHeaderJoinStripsCr) "testFnHeaderJoinStripsCr passed") (assert (testMatchWithArmsLowering) "testMatchWithArmsLowering passed") (assert (testRecordLiteralBodyLowering) "testRecordLiteralBodyLowering passed") (assert (testSchemaLowering) "testSchemaLowering passed") (assert (testEnumLowering) "testEnumLowering passed") (assert (testPipelineLowering) "testPipelineLowering passed") (assert (testBracketFreeLetLowering) "testBracketFreeLetLowering passed") (assert (testKeywordEndingInQuestionMark) "testKeywordEndingInQuestionMark passed") true)

@@ -545,7 +545,7 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
               (early (emptyResult env sid "rejected" (some "ERR_RESUME_PATCH") 0 none (list) none (some message) none)))))
         (else
           (let [green (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates))))
-                        (baselineGreen! env.gates rootDir timeout)
+                        (baselineGreen! env.gates rootDir (match env.wallBudget ((some w) (if (> w 0) (max 1 (min timeout w)) timeout)) ((none) timeout)))
                         (list))
                 _ (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates)))) (ok? (jr/journalWrite env.journalPath (str "(:baseline :green (" (quoted green) ") :red (" (quoted (filter (fn [g] (not (listContains? green g))) env.gates)) "))\n"))) true)
                 _skipped (if (and (not baselineOn) (and (none? env.resume) (not (listEmpty? env.gates)))) (ok? (jr/journalWrite env.journalPath "(:baseline :skipped :why \"config :agentLoop :baseline false\")\n")) true)]
@@ -593,6 +593,12 @@ fn ! head! env: s/LoopEnv state: s/LoopState parseDefects: Int64 -> (Pair s/Loop
         (pair (withHeadState state nextTurn state.readStreak state.writesPersisted state.deliver
           state.allGateResults state.lastGates "escalated" none
           (some (str "(:escalate :reason \"budget exhausted after " (stringFromInt64 state.turn) " turns\")")) state.runStarted) (stop)))
+      ((= decision "wallBudget")
+        (do
+        (journalSignal! env state.turn "wallBudget" (str (wallSeconds (- (env.now) state.runStarted)) " s spent of the " (stringFromInt64 (optionOr env.wallBudget 0)) " s wall budget after " (stringFromInt64 state.turn) " turns"))
+        (pair (withHeadState state state.turn state.readStreak state.writesPersisted state.deliver
+          state.allGateResults state.lastGates "escalated" (some "wallBudget")
+          (some (str "(:escalate :reason \"wall budget of " (stringFromInt64 (optionOr env.wallBudget 0)) " s spent after " (stringFromInt64 state.turn) " turns\")")) state.runStarted) (stop))))
       ((= decision "readStreak")
         (do
         (journalSignal! env state.turn "readStreak" (str (stringFromInt64 state.readStreak) " turns without a write while a gate is red"))
@@ -713,7 +719,10 @@ fn ! commit! env: s/LoopEnv run: LoopRun rootDir: String status: String gatesGre
 
 fn specText spec: (Option s/SpecVerdict) -> String
   (match spec
-    ((some v) (str (if (= v.verdict "skipped") " :specCheck (:verdict skipped :reason noGrader)" (str " :specCheck (:verdict " v.verdict " :model \"" (c/escapeAsn v.model) "\" :reasons (" (quoted v.reasons) "))"))))
+    ((some v) (cond
+                ((= v.verdict "skipped") " :specCheck (:verdict skipped :reason noGrader)")
+                ((= v.verdict "unavailable") (str " :specCheck (:verdict unavailable :reviewer unavailable :reasons (" (quoted v.reasons) "))"))
+                (else (str " :specCheck (:verdict " v.verdict " :model \"" (c/escapeAsn v.model) "\" :reasons (" (quoted v.reasons) "))"))))
     ((none) ""))
 
 fn modelOfLine line: String -> (Option String)
@@ -728,6 +737,11 @@ fn modelOfLine line: String -> (Option String)
 ; (:m :ref LEON-CAPS :do "the model named on the last journal row that starts with tag: (:served ...) rows come from the writer's turns, (:graderServed ...) rows from the spec-check call; empty when the journal holds none")
 fn journalModel text: String tag: String -> String
   (fold (fn [acc line] (if (stringStartsWith? line tag) (optionOr (modelOfLine line) acc) acc)) "" (stringLines text))
+
+; (:m :ref LEON-SPECCHECK-REVIEWER-DOWN :do "a reviewer call the gateway could not serve (no upstream answered, a breaker open, a 5xx) is no verdict on the diff: it ends needsReview with :reviewer unavailable, and a green gated run is not failed by it alone")
+fn reviewerUnavailable? message: String -> Bool
+  (listAny? (fn [m] (stringContains? message m))
+    (list "ERR_NO_UPSTREAM" "no model answered" "circuit breaker open" "Gateway HTTP error 502" "Gateway HTTP error 503" "Gateway HTTP error 504"))
 
 fn specFail model: String reasons: (List String) -> s/SpecVerdict
   (s/SpecVerdict :verdict "fail" :model model :reasons reasons)
@@ -746,9 +760,10 @@ fn ! specCheckRun! env: s/LoopEnv run: LoopRun rootDir: String written: (List St
       ((ok verdict)
         (match verdict
           ((ctx/reviewError m)
-            (if (stringContains? m "ERR_NO_GRADER_CHANNEL")
-              (s/SpecVerdict :verdict "skipped" :model "" :reasons (list "noGrader"))
-              (specFail grader (list m))))
+            (cond
+              ((stringContains? m "ERR_NO_GRADER_CHANNEL") (s/SpecVerdict :verdict "skipped" :model "" :reasons (list "noGrader")))
+              ((reviewerUnavailable? m) (s/SpecVerdict :verdict "unavailable" :model "" :reasons (list m)))
+              (else (specFail grader (list m)))))
           ((ctx/reviewVerdict met missing)
             (cond
               ((not met) (specFail grader (if (listEmpty? missing) (list "the grader found the task unmet") missing)))
@@ -828,7 +843,7 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
               spec (if (and env.specCheck (and (= status0 "ok") (not (listEmpty? written))))
                      (some (specCheckRun! env run rootDir written))
                      none)
-              finalStatus (match spec ((some v) (if (or (= v.verdict "fail") (= v.verdict "skipped")) "needsReview" status0)) ((none) status0))
+              finalStatus (match spec ((some v) (if (listContains? (list "fail" "skipped" "unavailable") v.verdict) "needsReview" status0)) ((none) status0))
               gatesGreen (declaredGatesGreen env.gates state.lastGates)
               preserveGreen (and gatesGreen (not (listEmpty? env.gates)))
               preserve (lp/preserveFiles finalStatus (optionOr state.escalateReceipt "")

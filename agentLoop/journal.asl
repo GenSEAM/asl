@@ -3,7 +3,7 @@
       harnessLayers buildSystemPrompt retainJournal journalWrite snapshotBeforeWrite patchLines filePatch!
       applyResumePatch handBack writtenField handBackFields
       newWritten idleWritten git! asnRead asnReadOne pathNorm pathRel pathJoin pathDirname splitExt loadEffects]
-  :i [(asl/agentLoop/core :a c) (asl/agentLoop/diff :a d) (asl-proc/coreProcess :a cp) (asl-proc/runnerBin :a rb) (asl-harness/launch :a lh)])
+  :i [(asl/agentLoop/core :a c) (asl/agentLoop/diff :a d) (asl-proc/coreProcess :a cp) (asl-proc/runnerBin :a rb) (asl-harness/launch :a lh) (asl/agentLoop/grounding :a gr)])
 
 (schema Snapshot
   (:f bytes (Option String))
@@ -870,6 +870,10 @@ fn planRow -> String
 fn batchRow -> String
   "(:batch :example ((:step :op \"edit\" :file \"src/ring.py\" :old \"return xs[len(xs)]\" :new \"return xs[len(xs) - 1]\") (:step :op \"read\" :file \"tests/ringTest.sh\" :start 1 :end 60) (:step :op \"gate\" :n 1)) :waits (:step :needs receiptNotSeen))"
 
+; (:m :ref LEONPOOL3 :do "pool tasks talk through ask and answer forms; outside a pool both are ERR_NOT_IN_POOL")
+fn poolRow -> String
+  "(:pool :ask (:ask :to i :body (...)) :waits answer :answers (:poolAsks ...) :reply (:answer :to from :body (...)) :outside ERR_NOT_IN_POOL)"
+
 fn gatesRow gates: (List String) -> String
   (str "(:gates :run (:step :op \"gate\") :nth (:step :op \"gate\" :n i) :after everyActingTurn :counts (:gate :asserts n :failed 0) :needs (:gt n 0) :redOnRevert (:gt failed 0) :items (" (quoted gates) "))")
 
@@ -881,16 +885,21 @@ fn ! buildSystemPrompt repoRoot: String task: String rootDir: String base: Strin
         rows (listAppend (opt (not (listEmpty? shapes)) (str "(:ops :raw \"code with quotes, backslashes or many lines: :raw and a fenced block on the following lines\" :forms (" (quoted shapes) "))"))
                (listAppend (opt (not (listEmpty? confirm)) (str "(:needsConfirm :answers needsConfirmReceipt :ops (" (quoted confirm) "))"))
                  (listAppend (opt plan (planRow))
-                   (listAppend (list (batchRow))
+                   (listAppend (list (batchRow) (poolRow))
                      (opt (not (listEmpty? gates)) (gatesRow gates))))))
         layers (match contextTokens
                  ((some _) (harnessLayers repoRoot rootDir "implement"))
-                 ((none) (ok "")))]
+                 ((none) (ok "")))
+        card (if (gr/wantsAslCard task gates) (gr/aslCard! repoRoot) (ok ""))]
     (match layers
       ((err e) (err e))
       ((ok lay)
-        (ok (c/joinSep (listAppend (opt (not (stringEmpty? lay)) lay)
-                         (listAppend rows
-                           (listAppend (opt (not (stringEmpty? task)) (str "(:task " (quoted (list task)) ")"))
-                                       (opt (not (stringEmpty? base)) (str "(:base " (quoted (list base)) ")")))))
-                       "\n")))))
+        (match card
+          ((err e) (err (str "RuntimeError: ERR_HARNESS: aslCard: " e)))
+          ((ok cardText)
+            (ok (c/joinSep (listAppend (opt (not (stringEmpty? lay)) lay)
+                             (listAppend rows
+                               (listAppend (opt (not (stringEmpty? cardText)) cardText)
+                                 (listAppend (opt (not (stringEmpty? task)) (str "(:task " (quoted (list task)) ")"))
+                                             (opt (not (stringEmpty? base)) (str "(:base " (quoted (list base)) ")"))))))
+                           "\n")))))))

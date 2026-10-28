@@ -23,7 +23,9 @@
       (asl/agentLoop/claims :a cl)
       (asl/agentLoop/claimBacking :a cb)
       (asl/agentLoop/agentConfig :a ac)
-      (asl-json/json :a j)])
+      (asl/agentLoop/poolOps :a po)
+      (asl-json/json :a j)
+      (asl/agentLoop/grounding :a gr)])
 
 (schema Invocation
   (:f params (List (Pair String j/Json)))
@@ -125,14 +127,16 @@
   (:f base String)
   (:f contextTokens (Option Int64))
   (:f plan Bool)
-  (:f resume (Option ResumeState)))
+  (:f resume (Option ResumeState))
+  (:f pool (Option po/PoolSelf))
+  (:f parentPid (Option Int64)))
 
 fn knownParams -> (List String)
   (list "agent" "task" "mode" "intent" "root" "owns" "gates" "backend" "budget" "inputTokenBudget" "dryRun" "resume" "answer" "role"
-        "model" "timeout" "contextFile" "base" "queueTimeout" "contextTokens" "gateTimeout" "wallBudget" "plan")
+        "model" "timeout" "contextFile" "base" "queueTimeout" "contextTokens" "gateTimeout" "wallBudget" "plan" "poolChan" "poolIdx" "parentPid")
 
 fn acceptedKeys -> (List String)
-  (listSortBy (fn [k] k) (filter (fn [k] (not (listContains? (list "agent" "mode" "role") k))) (knownParams)))
+  (listSortBy (fn [k] k) (filter (fn [k] (not (listContains? (list "agent" "mode" "role" "poolChan" "poolIdx" "parentPid") k))) (knownParams)))
 
 fn keywordValued -> (List String)
   (list "intent" "mode" "role")
@@ -341,12 +345,13 @@ fn strParam v: j/Json -> j/Json
 
 fn applyKey ps: (List (Pair String j/Json)) key: String v: j/Json -> (Pair (List (Pair String j/Json)) (Option String))
   (cond
-    ((listContains? (list "task" "root" "backend" "resume" "answer" "model" "contextFile" "base") key)
+    ((listContains? (list "task" "root" "backend" "resume" "answer" "model" "contextFile" "base" "poolChan") key)
       (pair (paramSet ps key (strParam v)) none))
     ((= key "mode") (pair (paramSet ps "modeHint" (j/jstr (lstripColons (pv/pyStr v)))) none))
     ((or (= key "intent") (= key "role")) (pair (paramSet ps key (j/jstr (lstripColons (pv/pyStr v)))) none))
     ((or (= key "owns") (= key "gates")) (pair (paramSet ps key (listParam v)) none))
     ((= key "budget") (pair (paramSet ps key (intParam v 3000)) none))
+    ((= key "poolIdx") (pair (paramSet ps key (intParam v -1)) none))
     ((= key "inputTokenBudget") (pair (paramSet ps key (intParam v 0)) none))
     ((= key "timeout") (pair (paramSet ps key (intParam v 600)) none))
     ((= key "queueTimeout") (pair (paramSet ps key (intParam v 1200)) none))
@@ -354,7 +359,7 @@ fn applyKey ps: (List (Pair String j/Json)) key: String v: j/Json -> (Pair (List
       (pair (paramSet ps key (j/jbool (match v ((j/jbool b) b) ((j/jstr s) (= s "true")) (_ false)))) none))
     ((= key "contextTokens")
       (pair (paramSet ps key (match (pyIntOf v) ((some i) (j/jint i)) ((none) (j/jnull)))) none))
-    ((or (= key "gateTimeout") (= key "wallBudget")) (pair (paramSet ps key (intOrNull v)) none))
+    ((or (= key "gateTimeout") (or (= key "wallBudget") (= key "parentPid"))) (pair (paramSet ps key (intOrNull v)) none))
     ((= key "plan") (pair (paramSet ps key (match v ((j/jbool b) (j/jbool b)) (_ (j/jnull)))) none))
     ((= key "agent") (pair ps none))
     (else (pair ps (some key))))
@@ -839,6 +844,10 @@ fn gateCmd g: j/Json -> String
 fn keptFindings xs: (List String) -> (List String)
   (filter (fn [f] (not (stringEmpty? f))) (map pv/pyStrip xs))
 
+fn unavailableSpecText reasons: (List String) -> String
+  (str " :specCheck (:verdict unavailable :reviewer unavailable :reasons ("
+       (stringJoin (map (fn [x] (str "\"" (c/escapeAsn x) "\"")) reasons) " ") "))")
+
 fn formatReceipt r: LoopResult -> String
   (str "(:agentReceipt :status :" r.status
        (match (nonEmpty r.modeHint) ((some m) (str " :modeHint \"" (c/escapeAsn m) "\"")) ((none) ""))
@@ -891,9 +900,11 @@ fn formatReceipt r: LoopResult -> String
        (match r.plan ((some p) (pl/planField p)) ((none) ""))
        (if (listEmpty? r.vacuousGates) "" (str " :vacuousGates (" (stringJoin (map (fn [g] (str "\"" (c/escapeAsn g) "\"")) r.vacuousGates) " ") ")"))
        (match r.specCheck
-         ((some v) (if (= v.verdict "skipped") " :specCheck (:verdict skipped :reason noGrader)"
-                          (str " :specCheck (:verdict " v.verdict " :model \"" (c/escapeAsn v.model) "\" :reasons ("
-                        (stringJoin (map (fn [x] (str "\"" (c/escapeAsn x) "\"")) v.reasons) " ") "))")))
+         ((some v) (cond
+                     ((= v.verdict "skipped") " :specCheck (:verdict skipped :reason noGrader)")
+                     ((= v.verdict "unavailable") (unavailableSpecText v.reasons))
+                     (else (str " :specCheck (:verdict " v.verdict " :model \"" (c/escapeAsn v.model) "\" :reasons ("
+                        (stringJoin (map (fn [x] (str "\"" (c/escapeAsn x) "\"")) v.reasons) " ") "))"))))
          ((none) ""))
        ")")
 
@@ -1215,6 +1226,18 @@ fn ! appendRetryLines! path: String turn: Int64 retries: Int64 -> Bool
       (fileAppend path (str "(:retry :turn " (stringFromInt64 turn) " :attempt " (stringFromInt64 retries) ")\n"))
       (appendRetryLines! path turn (- retries 1))))
 
+; (:m :ref LEON-WALLBUDGET-ORPHAN :do "seconds left of the run's :wallBudget; a model call and a gate never get longer than that, so the run ends near its budget even inside a slow call")
+fn wallLeft wallBudget: (Option Int64) elapsed: Float64 -> (Option Int64)
+  (match wallBudget
+    ((some w) (if (> w 0) (some (max 1 (- w (optionOr (float64ToInt64 elapsed) 0)))) none))
+    ((none) none))
+
+fn wallCapped base: Int64 left: (Option Int64) -> Int64
+  (match left ((some l) (max 1 (min base l))) ((none) base))
+
+fn wallCappedProvider p: pv/Provider left: (Option Int64) -> pv/Provider
+  (match left ((some l) (pv/capTimeouts p l)) ((none) p))
+
 fn ! liveProviderRetry! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) wallBudget: (Option Int64) sleep: (fn [Int64] -> Bool) now: (fn [] -> Float64) -> (Pair pv/Turn Int64)
   (rt/retryTurn! provider call 3 (list 1 2 4) wallBudget sleep now)
 
@@ -1261,15 +1284,17 @@ fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: 
           before (if owned (jr/snapshotBeforeWrite run.written target) (ok run.written))
           runOp (fn [form root] (let [r (ao/runAsl repoRoot form root ra.timeout none "subprocess")]
                                   (tx/aslRun (ao/runExit r) (ao/runStdout r) (ao/runStderr r))))
-          out (match before
+          ; (:m :ref LEON-POOL-ASK-OP :do "(:ask) and (:answer) are pool ops: poolOps runs them and exec never sees them")
+          pooled (po/poolOp? op)
+          out (if pooled (ex/ExecOut :rec (list) :procs run.procs) (match before
             ((err e) (ex/ExecOut :rec (list (pair "id" (ex/vStr sid)) (pair "op" (ex/vStr opName))
                 (pair "status" (ex/vStr "rejected")) (pair "error" (ex/vStr "ERR_JOURNAL"))
                 (pair "message" (ex/vStr e))) :procs run.procs))
             ((ok written)
               (ex/execOp! op env run.procs (fn [] (resultOr (newSessionId) sid))
                 (fn [path] (listContains? (rl/writtenPaths written) path))
-                (fn [path patch mode] (listContains? (rl/writtenPaths written) path)) runOp)))
-          receipt (ex/formatOpReceipt out.rec env.readCap)
+                (fn [path patch mode] (listContains? (rl/writtenPaths written) path)) runOp))))
+          receipt (if pooled (po/poolOpReceipt! ra.pool op) (ex/formatOpReceipt out.rec env.readCap))
           _ownsLogged (if (liveOwnsRejected? out)
             (ok? (fileAppend journal (str "(:liveOwnsRejected (:turn " (stringFromInt64 run.state.turn)
               " :op \"" (c/escapeAsn opName) "\" :file \"" (c/escapeAsn target) "\" :error ERR_OWNS))\n")))
@@ -1326,8 +1351,14 @@ fn liveGateResult row: (List (Pair String go/RVal)) -> g/GateResult
 fn liveLastGateMap gates: (List g/GateResult) old: (Map String j/Json) -> (Map String j/Json)
   (fold (fn [acc gate] (mapSet acc (g/gateCmd gate) (ls/gateJson gate))) old gates)
 
-fn ! runLiveGates! gates: (List String) rootDir: String timeout: Int64 -> (List g/GateResult)
-  (map liveGateResult (go/runGates! (map (fn [p] (pair (stringFromInt64 (+ (pairFirst p) 1)) (pairSecond p))) (enumerate gates)) rootDir timeout none))
+fn ! runLiveGates! gates: (List String) rootDir: String timeout: Int64 parent: (Option Int64) -> (List g/GateResult)
+  (map liveGateResult (go/runGatesWatched! (map (fn [p] (pair (stringFromInt64 (+ (pairFirst p) 1)) (pairSecond p))) (enumerate gates)) rootDir timeout none parent))
+
+; (:m :ref LEON-ORPHAN-PARENT :do "the calling CLI passes its pid as :parentPid; once that process is gone nobody reads this run, so Leon ends at the next turn boundary, and a gate it waits on is killed with its group")
+fn ! parentGone? parent: (Option Int64) -> Bool
+  (match parent
+    ((some pid) (and (> pid 0) (not (resultOr (procAlive? pid) true))))
+    ((none) false))
 
 ; (:m :ref LEON-CONTEXT-RESEND-20261017 :do "a deterministic gate-verdict summary for the turn's receipt line; feeds the aged-out-turn summary in ctx/renderTranscriptBounded instead of that turn's raw model text")
 fn liveGateSummary gates: (List g/GateResult) -> String
@@ -1375,6 +1406,18 @@ fn liveGateResultsGreen? gates: (List g/GateResult) -> Bool
 
 fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system: String env: ls/LoopEnv
     providerCall: (fn [pv/Provider String String] -> pv/Turn) wrapped: rl/ProviderRun -> (Pair rl/ProviderRun ls/Step)
+  (if (parentGone? ra.parentPid)
+    (let [state wrapped.run.state
+          pid (stringFromInt64 (optionOr ra.parentPid 0))
+          _ (fileAppend path (str "(:turn " (stringFromInt64 state.turn) " :signal :parentGone :reason \"parent pid " pid " is gone\")\n"))
+          next (rl/withHeadState state state.turn state.readStreak state.writesPersisted state.deliver
+                 state.allGateResults state.lastGates "escalated" (some "parentGone")
+                 (some (str "(:escalate :reason \"parent pid " pid " is gone after " (stringFromInt64 state.turn) " turns\")")) state.runStarted)]
+      (pair (rl/ProviderRun :run (rl/withState wrapped.run next) :provider wrapped.provider :history wrapped.history) (stop)))
+    (liveTurn! ra repoRoot rootDir path system env providerCall wrapped))
+
+fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system: String env: ls/LoopEnv
+    providerCall: (fn [pv/Provider String String] -> pv/Turn) wrapped: rl/ProviderRun -> (Pair rl/ProviderRun ls/Step)
   (let [run wrapped.run
         state run.state
         turn state.turn
@@ -1393,7 +1436,9 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
             (c/joinSep ra.owns ", ") " -- stop re-reading and make the edit.")
           "")
         prefetched (rl/firstTurnPrefetch state)
+        expects (gr/rejectHints (gr/lastGot wrapped.history) (ex/opShapes))
         user (str "Task: " ra.task (if (stringEmpty? prefetched) "" (str "\n\n" prefetched)) (if (stringEmpty? transcript) "" (str "\n\n" transcript))
+          (if (stringEmpty? expects) "" (str "\n\n" expects))
           (if (stringEmpty? advisorText) "" (str "\n\nAdvisor: " advisorText))
           (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." "")
           writeNudge)
@@ -1403,7 +1448,7 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
           writeNudge)
         _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :sent \"" (c/escapeAsn user) "\")\n"))
         retried (liveProviderRetry! wrapped.provider
-          (fn [p attempt] (providerCall p system user))
+          (fn [p attempt] (providerCall (wallCappedProvider p (wallLeft env.wallBudget (- (env.now) state.runStarted))) system user))
           (match env.wallBudget
             ((some w) (some (max 0 (- w (optionOr (float64ToInt64 (- (env.now) state.runStarted)) 0)))))
             ((none) none))
@@ -1463,8 +1508,10 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
                     (rl/batchingPlus executedUsage.state.batching (listLength operations))))
                   opReceipts (pairFirst (pairSecond execResult))
                   wrote (pairSecond (pairSecond execResult))
-                  got (str normalized (if (stringEmpty? opReceipts) "" (str "\n" opReceipts)))
-                  newGates (if parseDefect (list) (runLiveGates! ra.gates rootDir ra.gateTimeout))
+                  ; (:m :ref LEON-POOL-ASK-OP :do "between turns the asks other pool tasks sent this one reach the model as a (:poolAsks ...) observation")
+                  poolAsks (po/servePending! ra.pool)
+                  got (str normalized (if (stringEmpty? opReceipts) "" (str "\n" opReceipts)) (if (stringEmpty? poolAsks) "" (str "\n" poolAsks)))
+                  newGates (if parseDefect (list) (runLiveGates! ra.gates rootDir (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) ra.parentPid))
                   allGates (listAppend state.allGateResults newGates)
                   lastGates (liveLastGateMap newGates state.lastGates)
                   turnOpNames (c/joinSep (map liveOpName operations) " ")
@@ -1502,7 +1549,7 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
                     (ok none))
                   reviewLogged (if reviewInvoked (appendLiveHook! path turn "reviewer" reviewResult) true)
                   integrity (if (and terminal (not (listEmpty? ra.gates)))
-                    (gi/gateIntegrity! ra.gates ra.owns rootDir newGates ra.gateTimeout none)
+                    (gi/gateIntegrityWritten! ra.gates ra.owns rootDir newGates (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) none (rl/writtenPaths executed.written))
                     (pair true "not required"))
                   _ (if (and terminal (not (listEmpty? ra.gates)))
                     (ok? (fileAppend path (str "(:gateIntegrity :ok " (if (pairFirst integrity) "true" "false")
@@ -1567,6 +1614,13 @@ fn loopResultOf ra: RunArgs rootDir: String result: ls/RunResult usage: (Option 
     :batching batching :plan (livePlan result.planSummary) :vacuousGates result.vacuousGates
     :specCheck result.specCheck))
 
+; (:m :ref LEON-SPECCHECK-REVIEWER-DOWN :do "exit 0 for an ok run, and for a gated run that only lacks a reviewer: its status stays needsReview in the receipt")
+fn liveExitCode r: LoopResult -> Int64
+  (let [reviewerOnly (and (= r.status "needsReview")
+                      (and (not (listEmpty? r.gates))
+                        (match r.specCheck ((some v) (= v.verdict "unavailable")) ((none) false))))]
+    (if (and (or (= r.status "ok") reviewerOnly) (= r.unbacked 0)) 0 1))
+
 fn ! executeLive ra: RunArgs repoRoot: String rootDir: String env: pv/ProviderEnv -> MainResult
   (match (pv/makeProvider! ra.backend "auto" rootDir ra.model ra.timeout "" ra.queueTimeout ra.timeoutSet env (optionOr ra.intent "auto"))
     ((err e) (rejectWith (str ":error ERR_BACKEND :message \"" (c/escapeAsn (pv/errorMessage e)) "\"") 1))
@@ -1603,7 +1657,7 @@ fn ! executeLive ra: RunArgs repoRoot: String rootDir: String env: pv/ProviderEn
                       result (rl/runLoopWithProvider! liveEnv provider (fn [le wrapped] (liveBody! ra repoRoot rootDir path system le providerCall wrapped)))
                       receipt (loopResultOf ra rootDir result (liveJournalUsage! rootDir result.journal))
                       line (formatReceipt receipt)]
-                  (MainResult :stdout line :exitCode (if (and (= receipt.status "ok") (= receipt.unbacked 0)) 0 1))))))))))
+                  (MainResult :stdout line :exitCode (liveExitCode receipt))))))))))
 
 fn ! executeDryRun ra: RunArgs repoRoot: String rootDir: String env: pv/ProviderEnv -> MainResult
   (match (pv/buildDryRunInfo! ra.backend "auto" rootDir ra.model ra.timeout ra.queueTimeout env)
@@ -1635,7 +1689,7 @@ fn resumed ra: RunArgs st: ResumeState -> RunArgs
            :intent (match ra.intent ((some i) (some i)) ((none) st.intent))
            :base st.base
            :contextTokens (match ra.contextTokens ((some t) (if (= t 0) st.contextTokens (some t))) ((none) st.contextTokens))
-           :plan ra.plan :resume (some st))
+           :plan ra.plan :resume (some st) :pool ra.pool :parentPid ra.parentPid)
 
 fn ! dispatch ps: (List (Pair String j/Json)) repoRoot: String rootDir: String timeout: Int64 queueTimeout: Int64 plan: Bool -> MainResult
   (let [resumeV (paramOr ps "resume" (j/jnull))
@@ -1650,7 +1704,8 @@ fn ! dispatch ps: (List (Pair String j/Json)) repoRoot: String rootDir: String t
                                                   (min 86400 (+ timeout queueTimeout))))
                     :intent (optText (paramGet ps "intent"))
                     :base (textValue (paramOr ps "base" (j/jstr ""))) :contextTokens (intValue (paramOr ps "contextTokens" (j/jnull)))
-                    :plan plan :resume none)
+                    :plan plan :resume none :parentPid (intValue (paramOr ps "parentPid" (j/jnull)))
+                    :pool (po/poolSelf (textValue (paramOr ps "poolChan" (j/jstr ""))) (optionOr (intValue (paramOr ps "poolIdx" (j/jint -1))) -1)))
         dry (match (paramOr ps "dryRun" (j/jbool false)) ((j/jbool b) b) (_ false))]
     (cond
       ((and (truthy resumeV) (not (paramHas ps "answer"))) (resumeReport (textValue resumeV) rootDir))

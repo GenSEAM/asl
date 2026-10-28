@@ -6,6 +6,8 @@
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/sysRoute :a rt)
       (asl-target-llvm/ffiRoute :a ffi)
+      (asl-target-llvm/parRoute :a par)
+      (asl-target-llvm/arrayRoute :a arr)
       (asl-target-llvm/ssa :a llvm)
       (asl-tools/fleet/run :a run)])
 
@@ -75,6 +77,36 @@ fn tyNames ts: (List ty/SsaTy) -> (List String)
 
 fn diagCodes ds: (List ty/IrDiag) -> (List String)
   (map (fn [(d ty/IrDiag)] -> String d.code) ds)
+
+; (:m :ref EXTERN-MERGE-PARROUTE-GATE :do "a program with a foreign fn, parMap and an array builtin goes through the native route chain (sys with ffi, then par, then array, as main.asl runs it): the foreign helpers declare malloc, free, strlen and mkStr native, the par and array routes declare the same C symbols with the same types, and each route must merge them by signature and keep them native instead of comparing whole records")
+fn chainSource -> String
+  (stringJoin (list
+    "(module ffiChain :x [main] :i [])"
+    ""
+    "fn ! cLength s: String -> Int64"
+    "  (foreign \"c\" \"strlen\" \"cstr -> u64\")"
+    ""
+    "fn ! main args: (List String) -> (Result Int64 String)"
+    "  (do (println (str (i64ArraySum (i64ArrayGenerate 4 (fn [(i Int64)] -> Int64 (* i i)))) \" \" (parMap (fn [(s String)] -> Int64 (cLength s)) (list \"a\" \"bb\") 2)))"
+    "      (ok 0))"
+    "") "\n")
+
+fn externNative? m: ty/SsaModule name: String -> Bool
+  (match (externNamed m name) ((some e) e.native) ((none) false))
+
+fn ! testRouteChain -> Bool
+  (match (low/lowerSource (chainSource))
+    ((err ds) (do (assert (listEmpty? ds) (str "the chain source lowers: " (stringJoin (diagCodes ds) " "))) false))
+    ((ok m)
+      (match (rt/routeModule (libc/darwinArm64Facts) m)
+        ((err ds) (do (assert (listEmpty? ds) (str "the sys route binds the foreign fn: " (stringJoin (diagCodes ds) " "))) false))
+        ((ok s) (match (par/routeModule (libc/darwinArm64Facts) s.result)
+                  ((err ds) (do (assert (listEmpty? ds) (str "the par route merges the foreign C externs: " (stringJoin (diagCodes ds) " "))) false))
+                  ((ok p) (match (arr/routeModule p.result)
+                            ((err ds) (do (assert (listEmpty? ds) (str "the array route merges the foreign C externs: " (stringJoin (diagCodes ds) " "))) false))
+                            ((ok a) (do (assert (listAll? (fn [(n String)] -> Bool (externNative? a.result n)) (list "malloc" "free" "strlen" "mkStr")) "malloc, free, strlen and mkStr stay native through the par and array routes")
+                                        (assert (= (listLength (filter (fn [(e ty/SsaExtern)] -> Bool (= e.name "strlen")) a.result.externs)) 1) "strlen is declared once after the merges")
+                                        true)))))))))
 
 fn ! testRoute -> Bool
   (match (low/lowerSource (unitSource))
@@ -182,6 +214,7 @@ fn fixtureSource -> String
     "    ((listContains? args \"null\") (do (println (str (stringLength (envText \"ASL_FFI1_UNSET_PROBE_NAME\")))) (ok 0)))"
     "    (else (do (println (str \"cbrt \" (cubeRoot 8.0) \" \" (cubeRoot 64.0) \" \" (cubeRoot -8.0)))"
     "        (println (str \"mixed \" (scale 3.0 4) \" \" (nearest 2.5) \" \" (fused 2.0 3.0 1.0) \" \" (combine (crc 0 (stringToBytes \"hel\")) (crc 0 (stringToBytes \"lo\")) 2)))"
+    "        (println (str \"routes \" (i64ArraySum (i64ArrayGenerate 4 (fn [(i Int64)] -> Int64 (* i i)))) \" \" (stringJoin (map stringFromInt64 (parMap (fn [(s String)] -> Int64 (cLength s)) (list \"a\" \"bb\" \"ccc\") 2)) \",\")))"
     "        (println (str \"seven \" (nameInfo \"\" 0 \"\" 0 \"\" 0 -1) \" \" (nameInfo \"\" 0 \"\" 0 \"\" 0 0)))"
     "        (println (str \"strlen \" (cLength \"héllo\") \" \" (cLength \"\")))"
     "        (println (str \"crc32 \" (crc 0 (stringToBytes \"hello\")) \" \" (crc 0 (stringToBytes \"\"))))"
@@ -206,6 +239,7 @@ fn sevenLine os: String -> String
 fn expectedLines os: String -> (List String)
   (list "cbrt 2.0 4.0 -2.0"
         "mixed 48.0 3 7.0 907060870"
+        "routes 14 1,2,3"
         (sevenLine os)
         "strlen 6 0"
         "crc32 907060870 0"
@@ -227,9 +261,22 @@ fn shellQuote s: String -> String
 fn ! runIn argv: (List String) cwd: String secs: Int64 -> run/Done
   (run/runOneLimited (run/job argv cwd (run/childEnv (list))) (run/limits secs 24))
 
+; (:m :ref VPS-COLD-ASL1-TIMEOUT :do "bin/asl build compiles the native asl1 first when its cache is cold (about 25 minutes on the VPS after a compiler change), which the 1500 s fixture build limit cut off with exit 124; a trivial program is built first under a 3600 s limit, so the cold compile happens there and the fixture build starts warm")
+fn warmSource -> String
+  "(module ffiWarm :x [main] :i [])\n\nfn ! main args: (List String) -> (Result Int64 String)\n  (do (println \"warm\") (ok 0))\n"
+
+fn ! warmBuild root: String work: String -> run/Done
+  (let [(dir (str work "/ffiWarm"))
+        (made (dirCreate dir))
+        (wrote (fileWrite (str dir "/main.asl") (warmSource)))
+        (exe (str dir "/warm"))
+        (built (runIn (list "/bin/sh" "-c" "exec \"$0\" build \"$1\" -o \"$2\" 2>&1" (str root "/bin/asl") (str dir "/main.asl") exe) root 3600))]
+    (if (and (ok? made) (and (ok? wrote) (= built.exit 0))) (runIn (list exe) dir 60) built))
+
 fn ! testBuild root: String work: String -> Bool
   (let [(dir (str work "/ffiFixture"))
         (made (dirCreate dir))
+        (warm (warmBuild root work))
         (wroteManifest (fileWrite (str dir "/manifest.asn") (fixtureManifest)))
         (wroteSource (fileWrite (str dir "/main.asl") (fixtureSource)))
         (exe (str dir "/fixture"))
@@ -244,6 +291,7 @@ fn ! testBuild root: String work: String -> Bool
         (lines (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines ran.out)))]
     (do (assert (ok? made) (str "the fixture directory " dir " was created"))
         (assert (and (ok? wroteManifest) (ok? wroteSource)) "the fixture files were written")
+        (assert (and (= warm.exit 0) (= (stringTrim warm.out) "warm")) (str "a trivial program builds and runs first, warming the native asl1 cache: exit " warm.exit " " warm.out))
         (assert (or (= os "Linux") (= os "Darwin")) (str "the host is Linux or Darwin: " os))
         (assert (= built.exit 0) (str "bin/asl build links the foreign fixture with -lz from :linkLibraries: exit " built.exit " " built.out " " buildErr))
         (assert (= ran.exit 0) (str "the fixture runs: exit " ran.exit " " ran.out))
@@ -285,10 +333,12 @@ fn ! runTests -> Bool
         (_ (dirCreate (str root "/.asl/cache")))
         (made (dirCreate work))
         (routed (testRoute))
+        (chained (testRouteChain))
         (built (if (ok? made) (testBuild root work) false))
         (validated (if (ok? made) (testLinkValidation root work) false))
         (cleaned (run/runOneLimited (run/job (list "/bin/rm" "-rf" work) root (run/childEnv (list))) (run/limits 60 4)))]
     (do (assert routed "ffiRoute binds and rejects as declared")
+        (assert chained "a foreign fn, parMap and an array builtin route together")
         (assert built "the native foreign fixture builds and prints the C results")
         (assert validated "bin/asl build validates :linkLibraries names")
         (assert (= cleaned.exit 0) "the work directory was removed")

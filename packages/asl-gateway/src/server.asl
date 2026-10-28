@@ -1,6 +1,6 @@
 (module aslGateway/server
-  :x [GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main! main mainWith
-      GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! gatewayTurn! loopConns apiKindOf PendingCall runEffect! budgetRefusal! cliAdmit!]
+  :x [gatewayCliMode? breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main! main mainWith
+      GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! gatewayTurn! loopConns apiKindOf PendingCall runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv!]
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
       (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/router :a rt) (asl-json/json :a j)
@@ -229,6 +229,10 @@ fn ! gatewayRestart! launch: Launch args: (List String) -> (Result Int64 String)
 fn ! main args: (List String) -> (Result Int64 String)
   (mainWith args "asl/packages/asl-gateway/src/server.asl" (list))
 
+; (:m :ref GW-MODELS-MODE :do "the gateway subcommands that run in the CLI main instead of the server: config, configCheck, convert, stats, session and models (models sync reaches cliDispatch)")
+fn gatewayCliMode? mode: String -> Bool
+  (listContains? (list "config" "configCheck" "convert" "stats" "session" "models") mode)
+
 fn ! mainWith args: (List String) module: String families: (List dp/LifecycleFamily) -> (Result Int64 String)
   (let [(launch (Launch :module module :families (listAppend (dp/builtinFamilies) families)))
         (first (gatewayServerArg args 0))
@@ -257,7 +261,7 @@ fn ! mainWith args: (List String) module: String families: (List dp/LifecycleFam
           (match (gatewayRunServer! launch port upstream "")
             ((err e) (do (sys/sayErr! e) (ok 1)))
             ((ok _) (ok 0)))))
-      ((or (= mode "config") (or (= mode "configCheck") (or (= mode "convert") (or (= mode "stats") (= mode "session")))))
+      ((gatewayCliMode? mode)
         (cli/gatewayCliMain args))
       ((or (= mode "restart") (= mode "update"))
         (match (gatewayRestart! launch args)
@@ -351,11 +355,7 @@ fn ! gatewayRunServer! launch: Launch port: Int64 upstream: String readyPath: St
           (match (sockLocalPort listenerFd)
             ((err e) (do (fdClose listenerFd) (err e)))
             ((ok boundPort)
-              (if (stringEmpty? readyPath)
-                (gatewayServe! listenerFd upstreamPort launch.families)
-                (match (fileWrite readyPath (str boundPort))
-                  ((err e) (do (fdClose listenerFd) (err e)))
-                  ((ok _) (gatewayServe! listenerFd upstreamPort launch.families))))))))))
+              (gatewayServe! listenerFd upstreamPort launch.families readyPath boundPort)))))))
 
 (enum ConnPhase
   (:c connReading [])
@@ -534,9 +534,9 @@ fn poolReplyHttp result: (Result u/UpstreamResponse pd/PoolFailure) -> ch/HttpRe
 fn ! logLine! text: String -> Bool
   (do (eprintln text) true)
 
-fn breakerEvent! st: b/BreakerState event: String pool: String now: Int64 -> b/BreakerState
+fn breakerEvent! st: b/BreakerState event: String pool: String now: Int64 parkSec: Int64 -> b/BreakerState
   (cond
-    ((= event "markDown") (b/breakerMarkDown st pool now))
+    ((= event "markDown") (b/breakerMarkDownFor st pool now parkSec))
     ((= event "note503") (pairFirst (b/breakerNote503 st pool now)))
     ((= event "reset503") (b/breakerReset503 st pool))
     ((= event "clear") (b/breakerClear st pool))
@@ -594,8 +594,8 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
                          (pair (pairFirst d) (listAppend (pairSecond acc) (list (int64ToFloat64 (pairSecond d)))))))
                  (pair srv.breaker (list)) pools))]
         (pair (loopState srv (pairFirst r) srv.buckets srv.profiles) (ch/outFloats (pairSecond r)))))
-    ((ch/effBreakerEvent event pool)
-      (pair (loopState srv (breakerEvent! srv.breaker event pool (nowSec!)) srv.buckets srv.profiles) ch/outDone))
+    ((ch/effBreakerEvent event pool parkSec)
+      (pair (loopState srv (breakerEvent! srv.breaker event pool (nowSec!) parkSec) srv.buckets srv.profiles) ch/outDone))
     ((ch/effUsageNote p a o usage)
       (let [(pc srv.pendingCall)
             ; (:m :ref GW-BALANCER-ALIAS :do "after a balancer dispatch the row names the pool alias the settle charged, so two pool aliases on one upstream model stay apart; any other row keeps the chat alias")
@@ -831,13 +831,28 @@ fn ! settled! srv: GatewayLoop slot: String provider: String intent: String mode
           (pending (PendingCall :intent intent :model served :latencyMs latencyMs :charge charge :tag tag :params params :profile profile))]
       (do (logLine! (pairSecond out)) (loopPending srv1 (some pending)))))
 
+; (:m :ref GW-KEYFILES-WIRED :do "the loop env itself carries the key-file values, so dispatch retargeting, the wiring and the balancer status polls read the same keys chat does")
+fn loopEnv srv: GatewayLoop env: (Map String String) -> GatewayLoop
+  (with srv :env env)
+
 fn ! chatWorld! srv: GatewayLoop -> (Pair GatewayLoop (Result ch/ChatWorld String))
   (let [(loaded (c/gatewayProfilesLoad! srv.profiles srv.home srv.registryPath))
-        (srv1 (loopState srv srv.breaker srv.buckets (pairFirst loaded)))]
-    (match (u/upstreamSettings srv.env)
+        (srv0 (loopState srv srv.breaker srv.buckets (pairFirst loaded)))
+        (srv1 (loopEnv srv0 (keyFilesWorldEnv! (pairSecond loaded) srv0.env)))]
+    (match (u/upstreamSettings srv1.env)
       ((err e) (pair srv1 (err e)))
-      ((ok settings) (pair (wired! srv1 (pairSecond loaded) settings) (ok (ch/ChatWorld :env srv.env :rootDir srv.rootDir :settings settings
+      ((ok settings) (pair (wired! srv1 (pairSecond loaded) settings) (ok (ch/ChatWorld :env srv1.env :rootDir srv.rootDir :settings settings
                                       :agyPromptMaxBytes srv.promptMaxBytes :table (pairSecond loaded)))))))
+
+; (:m :ref GW-KEYFILES-SEND :do "a provider key held only in a (:gateway :keyFiles) file reaches the provider call: the world env the chat effects read is the process env overlaid, per provider row with a keyEnv, by the key file value, the file winning as GW-KEYSTORE-20261019 orders it; values are never logged")
+fn ! keyFilesWorldEnv! table: (Result c/GatewayTable String) env: (Map String String) -> (Map String String)
+  (match table
+    ((err _) env)
+    ((ok t)
+      (fold (fn [(acc (Map String String)) (pv c/GatewayProvider)] -> (Map String String)
+              (if (stringEmpty? pv.keyEnv) acc
+                (match (c/keyFileLookup! t.keyFiles pv.keyEnv) ((some v) (mapSet acc pv.keyEnv v)) ((none) acc))))
+        env (mapValues t.providers))))
 
 fn ! wired! srv: GatewayLoop table: (Result c/GatewayTable String) settings: u/UpstreamSettings -> GatewayLoop
   (let [(path (c/gatewayProfilesPath srv.home))
@@ -1103,10 +1118,14 @@ fn ! gatewayEventLoop! srv: GatewayLoop -> (Result Int64 String)
       ((err e) (if (= e "interrupted") (gatewayEventLoop! srv) (err (str "gateway poll failed: " e))))
       ((ok ready) (gatewayEventLoop! (gatewayTurn! srv ready)))))
 
-fn ! gatewayServe! listenerFd: Int64 upstreamPort: Int64 families: (List dp/LifecycleFamily) -> (Result Int64 String)
+; (:m :ref GW-READY-BEFORE-REFUSE :do "the --ready file is written only after the config and secrets overlay succeed, so a refused serve leaves no ready file for a launcher to trust")
+fn ! gatewayServe! listenerFd: Int64 upstreamPort: Int64 families: (List dp/LifecycleFamily) readyPath: String boundPort: Int64 -> (Result Int64 String)
   (match (secretsOverlayAt! (optionOr (mapGet (u/envMapFromList (envList)) "HOME") "") (u/envMapFromList (envList)))
     ((err e) (do (fdClose listenerFd) (err e)))
-    ((ok env) (gatewayServeWith! listenerFd upstreamPort families (keyFilesAt! (optionOr (mapGet env "HOME") "") env))))
+    ((ok env)
+      (match (if (stringEmpty? readyPath) (ok true) (resultMap (fileWrite readyPath (str boundPort)) (fn [(_ Unit)] -> Bool true)))
+        ((err e) (do (fdClose listenerFd) (err e)))
+        ((ok _) (gatewayServeWith! listenerFd upstreamPort families (keyFilesAt! (optionOr (mapGet env "HOME") "") env))))))
 
 ; (:m :ref GW-SERVE-KEYFILES :do "the config's keyFiles supply provider keys the world env lacks")
 fn ! keyFilesAt! home: String env: (Map String String) -> (Map String String)

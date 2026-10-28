@@ -29,7 +29,7 @@ fn isParenOrInvalidFile path: String -> Bool
   (or (= path "asl/packages/asl-macro/src/macro.asl")
   (or (= path "asl/packages/asl-ui/src/main.asl")
   (or (= path "asl/packages/asl-mem/src/tasks.asl")
-  (or (= path "tests/acceptance/d81/Task58801IntermediatePolicyTest.asl")
+  (or (= path "asl/packages/asl-pack/tests/intermediatePolicyAcceptanceTest.asl")
       ; (:m :ref NAMESFIX-FIX :do "astPrinter gap confirmed on base 010f3a1bc, matching printReparseLib.asl/printHostValidLib.asl's own exemption for this file: one top form's raw \\x00/\\xNN byte-escape string literal re-serializes with a different escape rendering than the source, so a JSON-schema round trip (fromJsonCorpusLib) differs from the original form just as a print/reparse round trip does")
       (= path "asl/packages/asl-target-llvm/tests/nativeStringTest.asl"))))))))))))))))
 

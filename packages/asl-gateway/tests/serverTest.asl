@@ -1,4 +1,4 @@
-(module aslGateway/tests/serverTest :x [testExtractThinkBlocks testDetectEshViolation testInspectCompletionCleanTurn testInspectCompletionEshRejection testInspectCompletionQuarantine testStatePathIsolation testEnsureSessionHeader testApiKindOf testEffSleepMsDoesNotBlockReactor testEffBucketWaitDoesNotBlockReactor testBucketWaitReservationsAreSpaced testEffUsageNoteRecordsProfile testBudgetRefusalBlocksOverBudgetProfile testSpreadOrderRatioPersistsAcrossRealCalls testSpreadNote429CooldownGatesViaRealLoop runTests]
+(module aslGateway/tests/serverTest :x [testModelsModeRoutesToCli testBreakerEventParks testExtractThinkBlocks testDetectEshViolation testInspectCompletionCleanTurn testInspectCompletionEshRejection testInspectCompletionQuarantine testStatePathIsolation testEnsureSessionHeader testApiKindOf testEffSleepMsDoesNotBlockReactor testEffBucketWaitDoesNotBlockReactor testBucketWaitReservationsAreSpaced testEffUsageNoteRecordsProfile testBudgetRefusalBlocksOverBudgetProfile testSpreadOrderRatioPersistsAcrossRealCalls testSpreadNote429CooldownGatesViaRealLoop runTests]
   :i [(server :a srv) (aslGateway/config :a c) (aslGateway/usageLedger :a ul) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b) (aslGateway/upstream :a u) (aslGateway/dispatch :a dp) (aslGateway/chat :a ch) (asl-json/json :a j) (aslGateway/omniApi :a om)])
 
 fn testExtractThinkBlocks -> Bool
@@ -243,5 +243,21 @@ fn ! testHalfOpenProbeAdmitsOnceThenRetripsOnFailure -> Bool
       (assert (> (pairSecond immediatelyAfterFailedProbe) 0) "HALFOPEN: a probe call that fails re-trips the breaker before any further call is admitted")
       true))
 
+; (:m :ref GW-PARK-TYPED :do "the server hands a markDown event's parkSec to the breaker: the pool stays down for that long, not the fixed cooldown, and an event without parkSec keeps the cooldown")
+fn ! testBreakerEventParks -> Bool
+  (let [(st0 (b/defaultBreakerState))
+        (parked (srv/breakerEvent! st0 "markDown" "fp:m1" 1000 7200))
+        (plain (srv/breakerEvent! st0 "markDown" "fp:m1" 1000 0))]
+    (do (assert (= (pairSecond (b/breakerDownFor parked "fp:m1" 1000)) 7200) "a markDown event with parkSec 7200 parks the pool for 7200 s")
+        (assert (= (pairSecond (b/breakerDownFor plain "fp:m1" 1000)) 600) "a markDown event without parkSec keeps the fixed cooldown")
+        true))
+
+; (:m :ref GW-MODELS-MODE :do "mode models routes to gatewayCliMain with the other CLI subcommands; run and start stay server modes")
+fn testModelsModeRoutesToCli -> Bool
+  (do (assert (srv/gatewayCliMode? "models") "mode models goes to gatewayCliMain")
+      (assert (and (srv/gatewayCliMode? "config") (srv/gatewayCliMode? "session") (srv/gatewayCliMode? "stats")) "the existing CLI modes still do")
+      (assert (not (or (srv/gatewayCliMode? "run") (srv/gatewayCliMode? "start") (srv/gatewayCliMode? ""))) "server modes stay out")
+      true)
+
 fn ! runTests -> Bool
-  (and (testExtractThinkBlocks) (and (testDetectEshViolation) (and (testInspectCompletionCleanTurn) (and (testInspectCompletionEshRejection) (and (testInspectCompletionQuarantine) (and (testStatePathIsolation) (and (testEnsureSessionHeader) (and (testApiKindOf) (and (testEffSleepMsDoesNotBlockReactor) (and (testEffBucketWaitDoesNotBlockReactor) (and (testBucketWaitReservationsAreSpaced) (and (testEffUsageNoteRecordsProfile) (and (testBudgetRefusalBlocksOverBudgetProfile) (and (testSpreadOrderRatioPersistsAcrossRealCalls) (and (testSpreadNote429CooldownGatesViaRealLoop) (and (testLinkOpenBreakerCooldownComposesFromConfig) (testHalfOpenProbeAdmitsOnceThenRetripsOnFailure)))))))))))))))))
+  (and (testModelsModeRoutesToCli) (and (testBreakerEventParks) (and (testExtractThinkBlocks) (and (testDetectEshViolation) (and (testInspectCompletionCleanTurn) (and (testInspectCompletionEshRejection) (and (testInspectCompletionQuarantine) (and (testStatePathIsolation) (and (testEnsureSessionHeader) (and (testApiKindOf) (and (testEffSleepMsDoesNotBlockReactor) (and (testEffBucketWaitDoesNotBlockReactor) (and (testBucketWaitReservationsAreSpaced) (and (testEffUsageNoteRecordsProfile) (and (testBudgetRefusalBlocksOverBudgetProfile) (and (testSpreadOrderRatioPersistsAcrossRealCalls) (and (testSpreadNote429CooldownGatesViaRealLoop) (and (testLinkOpenBreakerCooldownComposesFromConfig) (testHalfOpenProbeAdmitsOnceThenRetripsOnFailure)))))))))))))))))))

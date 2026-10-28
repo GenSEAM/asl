@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ASL Sovereign Diagram Workbench & Visual Renderer</title>
+  <style>
+    :root {
+      --bg-primary: #090d16;
+      --bg-secondary: #0f172a;
+      --border-color: #1e293b;
+      --accent-color: #38bdf8;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    header {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 10;
+    }
+    .title-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .title {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .badge {
+      font-size: 11px;
+      text-transform: uppercase;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent-color);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+    .tabs {
+      display: flex;
+      gap: 6px;
+      background: #090d16;
+      padding: 4px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.15s ease;
+    }
+    .tab-btn:hover {
+      color: #fff;
+    }
+    .tab-btn.active {
+      background: #1e293b;
+      color: var(--accent-color);
+      font-weight: 600;
+    }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+    }
+    button.tool-btn {
+      background: #1e293b;
+      color: var(--text-main);
+      border: 1px solid #334155;
+      padding: 7px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.15s ease;
+    }
+    button.tool-btn:hover {
+      background: #334155;
+      border-color: var(--accent-color);
+      color: #fff;
+    }
+    #main-layout {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+    #viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, #111827 0%, var(--bg-primary) 100%);
+      cursor: grab;
+    }
+    #viewport:active {
+      cursor: grabbing;
+    }
+    #diagram-container {
+      transform-origin: center center;
+      transition: transform 0.05s ease-out;
+      user-select: none;
+      padding: 40px;
+    }
+    .mermaid {
+      display: flex;
+      justify-content: center;
+    }
+    .mermaid svg {
+      max-width: none !important;
+      height: auto;
+    }
+    #editor-drawer {
+      width: 400px;
+      background: var(--bg-secondary);
+      border-left: 1px solid var(--border-color);
+      display: none;
+      flex-direction: column;
+    }
+    #editor-drawer.open {
+      display: flex;
+    }
+    .editor-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    #mermaid-source {
+      flex: 1;
+      background: #090d16;
+      color: #e2e8f0;
+      border: none;
+      padding: 16px;
+      font-family: 'Fira Code', Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      resize: none;
+      outline: none;
+    }
+    .editor-footer {
+      padding: 10px 16px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+  </style>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      themeVariables: {
+        darkMode: true,
+        background: '#090d16',
+        primaryColor: '#1e293b',
+        primaryBorderColor: '#38bdf8',
+        primaryTextColor: '#f8fafc',
+        lineColor: '#60a5fa',
+        secondaryColor: '#0f172a',
+        tertiaryColor: '#1e293b',
+        clusterBkg: '#0d1322',
+        clusterBorder: '#334155'
+      }
+    });
+
+    const diagrams = {
+      topology: `flowchart TD
+    subgraph Host["Host Workspace Environment (Orca / GenSEAM)"]
+        Harness["Antigravity Multi-Process Harness<br/>(Priority Supervisor & Telemetry Watchdog)"]
+        Rewrite["Subagent Rewrite System<br/>(Prompt Synthesis, Teleology & Inference Config)"]
+        Queue["Orchestrator Task Queue<br/>(Soft Limit: 4, Hard Burst: 8)"]
+    end
+
+    subgraph DynamicElected["Elected Primary Orchestrator (On-Demand)"]
+        AD["AD (Primary Agent)<br/>(agent/ repo, Native ASL Executive)"]
+        Agy["Antigravity (agy)<br/>(Supervisor & Multi-Tool Engine)"]
+        Claude["Claude Code<br/>(External High-Reasoning Subprocess)"]
+    end
+
+    subgraph Subagents["Ephemeral Subagent Workers (Connected On-Demand)"]
+        W1["Subagent: Scout<br/>(AST & Call Graph)"]
+        W2["Subagent: Planner<br/>(Topological DAG)"]
+        W3["Subagent: Implementer<br/>(In-Memory VFS)"]
+        W4["Subagent: Auditor<br/>(Ground-Truth Gate)"]
+    end
+
+    Harness --> DynamicElected
+    DynamicElected --> Rewrite
+    Rewrite --> Queue
+    Queue --> W1
+    Queue --> W2
+    Queue --> W3
+    Queue --> W4`,
+
+      dag: `flowchart LR
+    T1["T1: Triage Backlog<br/>(Candidate Extraction)"] --> T2["T2: Plan Wave DAG<br/>(Failing Gates & :owns)"]
+    T2 --> T3["T3: Claim Session Lease<br/>(Check Crash Recovery)"]
+    T3 --> T4["T4: Step-by-Step DAG<br/>(Atomic In-Memory VFS)"]
+    T4 --> T5["T5: Physical Gate Execution<br/>(Exit 0 & Non-Vacuous Asserts)"]
+    T5 --> T6["T6: Settle & Receipt<br/>(Unblock Dependents)"]`,
+
+      sequence: `sequenceDiagram
+    autonumber
+    actor User
+    participant Orchestrator as Primary Orchestrator (AD / Agy / Claude)
+    participant Rewrite as Subagent Rewrite System
+    participant Harness as Antigravity Harness
+    participant Worker as Ephemeral Subagent
+
+    User->>Orchestrator: Dispatch Task Directive
+    Orchestrator->>Rewrite: Synthesize Mandate & Invariants (C1, C2, D51)
+    Rewrite-->>Orchestrator: Dense Epistemic Prompt + Thinking Budget
+    Orchestrator->>Harness: Request Concurrency Lease (Soft 4, Hard 8)
+    Harness-->>Orchestrator: Lease Granted
+    Orchestrator->>Worker: Spawn Subagent with failing gate
+    Worker->>Worker: Execute in-memory VFS patches
+    Worker->>Worker: Run physical verification gate (exit 0)
+    Worker-->>Orchestrator: Physical Task Receipt
+    Orchestrator-->>User: Settled Delivery Report`
+    };
+
+    let activeKey = 'topology';
+    let scale = 1;
+    let pointX = 0;
+    let pointY = 0;
+    let start = { x: 0, y: 0 };
+    let panning = false;
+
+    const viewport = document.getElementById('viewport');
+    const container = document.getElementById('diagram-container');
+    const editor = document.getElementById('mermaid-source');
+    const drawer = document.getElementById('editor-drawer');
+
+    async function renderCurrent() {
+      const code = editor.value.trim();
+      container.innerHTML = `<pre class="mermaid">${code}</pre>`;
+      try {
+        await mermaid.run({ nodes: container.querySelectorAll('.mermaid') });
+      } catch (err) {
+        console.error('Mermaid render error:', err);
+      }
+    }
+
+    window.switchTab = function (key) {
+      activeKey = key;
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === key);
+      });
+      if (diagrams[key]) {
+        editor.value = diagrams[key];
+      }
+      window.resetZoom();
+      renderCurrent();
+    };
+
+    window.toggleEditor = function () {
+      drawer.classList.toggle('open');
+    };
+
+    window.applyEditor = function () {
+      diagrams[activeKey] = editor.value;
+      renderCurrent();
+    };
+
+    function setTransform() {
+      container.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`;
+    }
+
+    viewport.onmousedown = function (e) {
+      if (e.target.closest('#editor-drawer') || e.target.tagName === 'BUTTON' || e.target.tagName === 'TEXTAREA') return;
+      e.preventDefault();
+      start = { x: e.clientX - pointX, y: e.clientY - pointY };
+      panning = true;
+    };
+
+    window.onmouseup = function () { panning = false; };
+
+    viewport.onmousemove = function (e) {
+      if (!panning) return;
+      e.preventDefault();
+      pointX = (e.clientX - start.x);
+      pointY = (e.clientY - start.y);
+      setTransform();
+    };
+
+    viewport.onwheel = function (e) {
+      e.preventDefault();
+      const xs = (e.clientX - pointX) / scale;
+      const ys = (e.clientY - pointY) / scale;
+      const delta = -e.deltaY;
+      if (delta > 0) scale *= 1.12;
+      else scale /= 1.12;
+      scale = Math.min(Math.max(0.15, scale), 6);
+      pointX = e.clientX - xs * scale;
+      pointY = e.clientY - ys * scale;
+      setTransform();
+    };
+
+    window.zoomIn = () => { scale *= 1.25; setTransform(); };
+    window.zoomOut = () => { scale /= 1.25; setTransform(); };
+    window.resetZoom = () => { scale = 1; pointX = 0; pointY = 0; setTransform(); };
+    window.exportSvg = () => {
+      const svg = container.querySelector('svg');
+      if (!svg) return;
+      const blob = new Blob([svg.outerHTML], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${activeKey}_diagram.svg`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    window.switchTab('topology');
+  </script>
+</head>
+<body>
+  <header>
+    <div class="title-group">
+      <span class="title">ASL Diagram Workbench</span>
+      <span class="badge">Visual Mode</span>
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="topology" onclick="window.switchTab('topology')">Orchestration Topology</button>
+        <button class="tab-btn" data-tab="dag" onclick="window.switchTab('dag')">Action DAG</button>
+        <button class="tab-btn" data-tab="sequence" onclick="window.switchTab('sequence')">Supervisory Protocol</button>
+      </div>
+    </div>
+    <div class="toolbar">
+      <button class="tool-btn" onclick="window.toggleEditor()">Toggle Source Editor</button>
+      <button class="tool-btn" onclick="window.zoomIn()">+ Zoom</button>
+      <button class="tool-btn" onclick="window.zoomOut()">- Zoom</button>
+      <button class="tool-btn" onclick="window.resetZoom()">Reset</button>
+      <button class="tool-btn" onclick="window.exportSvg()">Download SVG</button>
+    </div>
+  </header>
+  <div id="main-layout">
+    <div id="viewport">
+      <div id="diagram-container"></div>
+    </div>
+    <div id="editor-drawer">
+      <div class="editor-header">
+        <span>Mermaid Source</span>
+        <button class="tool-btn" onclick="window.applyEditor()">Apply & Render</button>
+      </div>
+      <textarea id="mermaid-source" spellcheck="false"></textarea>
+      <div class="editor-footer">
+        <button class="tool-btn" onclick="window.applyEditor()">Re-render</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

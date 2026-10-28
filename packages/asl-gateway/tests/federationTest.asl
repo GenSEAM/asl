@@ -143,4 +143,6 @@ fn ! runTests -> Bool
             (assert (err? (f/federationAuth (list (pair "Authorization" "Bearer nope")) "tok")) "a wrong bearer is 401")
             (assert (ok? (f/federationAuth (list (pair "authorization" "Bearer tok")) "tok")) "the right bearer passes")
             (assert (err? (f/federationAuth (list (pair "Authorization" "Bearer ")) "")) "an empty expected token never authenticates")
+            (assert (err? (f/federationAuth (list (pair "Authorization" "Bearer toX")) "tok")) "an equal-length bearer differing in the last byte is 401")
+            (assert (err? (f/federationAuth (list (pair "Authorization" "Bearer Xok")) "tok")) "an equal-length bearer differing in the first byte is 401")
             true)))))

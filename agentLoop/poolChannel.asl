@@ -123,25 +123,37 @@ fn ! answer! dir: String idx: Int64 q: PoolMsg body: String -> (Result Bool Stri
 fn ! refuse! dir: String m: PoolMsg code: String -> Bool
   (put! (str (inboxDir dir m.from) "/answer-" m.id ".msg") (msgLine (PoolMsg :kind "answer" :id m.id :from -1 :to m.from :error code :body "")))
 
-fn ! routeOne! dir: String live: (List Int64) counts: (Map Int64 Int64) name: String -> (Map Int64 Int64)
+fn laneOf xs: (List (Pair Int64 Int64)) idx: Int64 -> (Option Int64)
+  (match (listHead (filter (fn [(p (Pair Int64 Int64))] -> Bool (= (pairFirst p) idx)) xs))
+    ((some p) (some (pairSecond p)))
+    ((none) none))
+
+; (:m :ref LEON-POOL-WAIT-DEADLOCK :do "an ask to a task still queued in another lane stays in the outbox until that task starts, bounded by the asker's own wait; an ask to a task queued behind the asker in its own lane could only start after the asker ends, so it is refused at once with ERR_PEER_QUEUED_BEHIND; a held ask whose asker has ended is dropped")
+fn ! routeOne! dir: String live: (List (Pair Int64 Int64)) queued: (List (Pair Int64 Int64)) counts: (Map Int64 Int64) name: String -> (Map Int64 Int64)
   (let [(path (str (outboxDir dir) "/" name))
         (msg (parseMsg (resultOr (fileReadString path) "")))
-        (sent (optionOr (match msg ((some m) (mapGet counts m.from)) ((none) none)) 0))]
+        (sent (optionOr (match msg ((some m) (mapGet counts m.from)) ((none) none)) 0))
+        (liveIdx (map pairFirst live))]
     (match msg
       ((none) (do (pathRemove path) counts))
       ((some m)
         (cond
           ((= m.kind "answer")
-            (do (if (listContains? live m.to)
+            (do (if (listContains? liveIdx m.to)
                   (pathRename path (str (inboxDir dir m.to) "/answer-" m.id ".msg"))
                   (pathRemove path))
                 counts))
+          ((not (listContains? liveIdx m.from)) (do (pathRemove path) counts))
           ((>= sent (maxAsks)) (do (refuse! dir m "ERR_ASK_LIMIT") (pathRemove path) counts))
-          ((or (= m.to m.from) (not (listContains? live m.to))) (do (refuse! dir m "ERR_PEER_NOT_RUNNING") (pathRemove path) (mapSet counts m.from (+ sent 1))))
-          (else (do (pathRename path (str (inboxDir dir m.to) "/ask-" m.id ".msg")) (mapSet counts m.from (+ sent 1))))))))
+          ((and (!= m.to m.from) (listContains? liveIdx m.to))
+            (do (pathRename path (str (inboxDir dir m.to) "/ask-" m.id ".msg")) (mapSet counts m.from (+ sent 1))))
+          ((and (some? (laneOf queued m.to)) (= (laneOf queued m.to) (laneOf live m.from)))
+            (do (refuse! dir m "ERR_PEER_QUEUED_BEHIND") (pathRemove path) (mapSet counts m.from (+ sent 1))))
+          ((some? (laneOf queued m.to)) counts)
+          (else (do (refuse! dir m "ERR_PEER_NOT_RUNNING") (pathRemove path) (mapSet counts m.from (+ sent 1))))))))
 
-; (:m :ref LEON-POOL-WIRE :do "the router runs in the pool's reactor between polls; live is the set of running task indices, counts the asks each task has sent so far")
-fn ! route! dir: String live: (List Int64) counts: (Map Int64 Int64) -> (Map Int64 Int64)
-  (fold (fn [(acc (Map Int64 Int64)) (n String)] -> (Map Int64 Int64) (routeOne! dir live acc n))
+; (:m :ref LEON-POOL-WIRE :do "the router runs in the pool's reactor between polls; live and queued pair each running or not yet started task index with its lane, counts holds the asks each task has had routed so far")
+fn ! route! dir: String live: (List (Pair Int64 Int64)) queued: (List (Pair Int64 Int64)) counts: (Map Int64 Int64) -> (Map Int64 Int64)
+  (fold (fn [(acc (Map Int64 Int64)) (n String)] -> (Map Int64 Int64) (routeOne! dir live queued acc n))
         counts
         (listSort (filter (fn [(n String)] -> Bool (stringEndsWith? n ".msg")) (resultOr (dirList (outboxDir dir)) (list)))))

@@ -558,7 +558,7 @@ fn buildReadForm filePath: String symbol: String anchor: String start: String en
     (str f5 ")"))
 
 fn buildQueryForm qText: String inMode: String limitStr: String -> String
-  (let [f0 (str "(:query :query \"" (c/escapeAsn qText) "\"")
+  (let [f0 (str "(:query :text \"" (c/escapeAsn qText) "\"")
         cleanIn (if (stringStartsWith? inMode ":") (c/sliceOf inMode 1 (stringLength inMode)) inMode)
         f1 (if (listContains? (list "code" "text" "all") cleanIn) (str f0 " :in " cleanIn) f0)
         f2 (if (allDigits limitStr) (str f1 " :limit " limitStr) f1)]

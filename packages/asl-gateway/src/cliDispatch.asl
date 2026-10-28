@@ -53,7 +53,9 @@
       (usageLedger :a ul)
       (sessions :a ses)
       (secrets :a sc)
-      (asl-cli/system :a sys)])
+      (asl-cli/system :a sys)
+      (modelSync :a msync)
+      (subPacing :a space)])
 
 (schema CliUsage
   (:f inputTokens Int64)
@@ -462,6 +464,8 @@ fn ! gatewayCliMain args: (List String) -> (Result Int64 String)
       ((= mode "stats") (gatewayStatsCli! (optionOr (listTail args) (list))))
       ((= mode "usage") (gatewayUsageCli! (optionOr (listTail args) (list))))
       ((= mode "session") (ses/sessionsCli! (optionOr (listTail args) (list))))
+      ((and (= mode "models") (= second "sync")) (msync/modelsSyncCli! (optionOr (listTail (optionOr (listTail args) (list))) (list))))
+      ((and (= mode "models") (= second "pace")) (space/modelsPaceCli! (optionOr (listTail (optionOr (listTail args) (list))) (list))))
       (else (do (sys/sayErr! "unknown gateway ASL CLI mode") (ok 2)))))
 
 fn ! main args: (List String) -> (Result Int64 String)

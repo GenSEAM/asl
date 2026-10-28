@@ -83,7 +83,7 @@ fn testMultipleScriptsOneBrokenOneValid! -> Bool
       true))
 
 fn testDiagramWorkbenchScriptSymbols! -> Bool
-  (let [(path "docs/diagrams/DiagramWorkbench.html")]
+  (let [(path "asl/packages/asl-syntax/tests/fixtures/html/DiagramWorkbench.html")]
     (match (fileReadString path)
       ((err e) (assert false (str "missing DiagramWorkbench.html: " e)))
       ((ok text)
@@ -116,7 +116,7 @@ fn testDiagramWorkbenchScriptSymbols! -> Bool
                true)))))))
 
 fn testOrchestrationTopologyScriptSymbols! -> Bool
-  (let [(path "docs/diagrams/OrchestrationTopology.html")]
+  (let [(path "asl/packages/asl-syntax/tests/fixtures/html/OrchestrationTopology.html")]
     (match (fileReadString path)
       ((err e) (assert false (str "missing OrchestrationTopology.html: " e)))
       ((ok text)
@@ -203,7 +203,7 @@ fn testReviewHtmlFile! -> Bool
                true)))))))
 
 fn testUnifiedExtractSymbolsIncludesHtmlAndEmbedded! -> Bool
-  (let [(path "docs/diagrams/DiagramWorkbench.html")]
+  (let [(path "asl/packages/asl-syntax/tests/fixtures/html/DiagramWorkbench.html")]
     (match (fileReadString path)
       ((err e) (assert false (str "missing DiagramWorkbench.html: " e)))
       ((ok text)
@@ -236,8 +236,8 @@ fn checkSingleTrackedHtmlFile! path: String -> Bool
 fn testAllFourTrackedFilesLosslessRoundTrip! -> Bool
   (do
     (checkSingleTrackedHtmlFile! "asl/packages/asl-browser-plugin/src/popup.html")
-    (checkSingleTrackedHtmlFile! "docs/diagrams/DiagramWorkbench.html")
-    (checkSingleTrackedHtmlFile! "docs/diagrams/OrchestrationTopology.html")
+    (checkSingleTrackedHtmlFile! "asl/packages/asl-syntax/tests/fixtures/html/DiagramWorkbench.html")
+    (checkSingleTrackedHtmlFile! "asl/packages/asl-syntax/tests/fixtures/html/OrchestrationTopology.html")
     (checkSingleTrackedHtmlFile! "editorial-matrix/assets/review/index.html")
     true)
 

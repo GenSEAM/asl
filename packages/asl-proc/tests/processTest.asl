@@ -42,8 +42,28 @@ fn testExecTimeout! -> Bool
 fn testExecLargeStdin! -> Bool
   (let [(chunk "0123456789abcdef0123456789abcdef") (c1 (str chunk chunk chunk chunk chunk chunk chunk chunk chunk chunk)) (c2 (str c1 c1 c1 c1 c1 c1 c1 c1 c1 c1)) (largeInput (str c2 c2 c2 c2 c2 c2 c2 c2 c2 c2 c2 c2 c2 c2 c2 c2 c2 c2 c2 c2)) (c (proc/withStdin (proc/cmd "wc" (list "-c")) largeInput)) (res (proc/exec! c))] (assert (ok? res) "large stdin wc must succeed") (let [(out (outOf res))] (assert (= out.exitCode 0) "wc exit code 0") (assert (stringContains? out.stdout "64000") "wc output contains 64000 bytes") true))
 
+fn testCommandConstruction -> Bool
+  (let [(base (proc/cmd "echo" (list "hello" "world")))
+        (withDir (proc/withCwd base "tmp"))
+        (withE (proc/withEnv withDir "STAGE" "production"))
+        (withT (proc/withTimeout withE 4000))
+        (withIn (proc/withStdin withT "input stream"))
+        (shellCmd (proc/buildShellCmd withIn "tmp/mock_stdin.txt"))]
+    (assert (= base.bin "echo") "base cmd binary matches echo")
+    (refute (!= base.bin "echo") "base cmd binary must not deviate from echo")
+    (assert (= (listLength base.args) 2) "base cmd arg count is 2")
+    (assert (= withT.timeoutMs 4000) "timeout configured to 4000ms")
+    (refute (!= withT.timeoutMs 4000) "timeout must not deviate from 4000ms")
+    (assert (stringContains? shellCmd "'echo'") "shell command contains quoted binary")
+    (assert (stringContains? shellCmd "cd 'tmp' &&") "shell command contains working directory prefix")
+    (assert (stringContains? shellCmd "STAGE='production'") "shell command contains environment binding")
+    (assert (stringContains? shellCmd "sleep 4") "shell command configures the timeout interval")
+    (refute (stringContains? shellCmd "STAGE=production ") "environment values must be shell-quoted")
+    true)
+
+
 fn ! runTests -> Bool
-  (do (assert (testExecEcho!) "test-exec-echo must pass") (assert (testExecCatStdin!) "test-exec-cat-stdin must pass") (assert (testExecTrueFalse!) "test-exec-true-false must pass") (assert (testExecGrepFiltering!) "test-exec-grep-filtering must pass") (assert (testExecNotFound!) "test-exec-not-found must pass") (assert (testExecStdinFailure!) "test-exec-stdin-failure must pass") (assert (testPipeEchoCat!) "test-pipe-echo-cat must pass") (assert (testPipeMultiStage!) "test-pipe-multi-stage must pass") (assert (testExecCwd!) "test-exec-cwd must pass") (assert (testExecEnv!) "test-exec-env must pass") (assert (testExecTimeout!) "test-exec-timeout must pass") (assert (testExecLargeStdin!) "test-exec-large-stdin must pass") true)
+  (do (assert (testCommandConstruction) "testCommandConstruction must pass") (assert (testExecEcho!) "test-exec-echo must pass") (assert (testExecCatStdin!) "test-exec-cat-stdin must pass") (assert (testExecTrueFalse!) "test-exec-true-false must pass") (assert (testExecGrepFiltering!) "test-exec-grep-filtering must pass") (assert (testExecNotFound!) "test-exec-not-found must pass") (assert (testExecStdinFailure!) "test-exec-stdin-failure must pass") (assert (testPipeEchoCat!) "test-pipe-echo-cat must pass") (assert (testPipeMultiStage!) "test-pipe-multi-stage must pass") (assert (testExecCwd!) "test-exec-cwd must pass") (assert (testExecEnv!) "test-exec-env must pass") (assert (testExecTimeout!) "test-exec-timeout must pass") (assert (testExecLargeStdin!) "test-exec-large-stdin must pass") true)
 
 fn ! runTests! -> (Result Unit String)
   (if (runTests) (ok ()) (err "process_test failed"))

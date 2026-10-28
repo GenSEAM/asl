@@ -55,7 +55,7 @@ fn federationAuth headers: (List (Pair String String)) expected: String -> (Resu
   (match (u/headerGet headers "Authorization")
     ((none) (err "(:err :code ERR_AUTH :status 401 :why missingBearer)"))
     ((some v)
-      (if (and (not (stringEmpty? expected)) (= v (str "Bearer " expected))) (ok ())
+      (if (and (not (stringEmpty? expected)) (s/secretsEqual? v (str "Bearer " expected))) (ok ())
         (err "(:err :code ERR_AUTH :status 401 :why badBearer)"))))
 
 fn serveTokenId -> String

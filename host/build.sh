@@ -218,40 +218,41 @@ rm -f "$PRIOR_RT"
 cp "$HERE/../prelude/prelude.asl" "$OUT/prelude.asl"
 
 # (:m :why "TOOLSHOST-THIN: a tree with no native CLI head gets one here, so a fresh clone runs no host at all: the seed asl1 compiles asl-cli/nativeBuild (cached by its sources), which builds native.asl and writes the head with the keys bin/asl's fallback build uses; a tree that has a head is left to asl-cli/nativeCli")
-CLI_OK=1
-# (:m :why "HOSTBUILD-EXIT-MASK: a native CLI step that fails sets CLI_OK=0 and the script exits 1 at the end, so the exit status matches the log")
 native_cli() {
   [ -f "$PACKAGES/asl-cli/src/nativeBuild.asl" ] || return 0
-  asl1=$(native_asl1 "$OUT/$RT_NAME") || { echo "build.sh: no native CLI: no native asl1" >&2; CLI_OK=0; return 0; }
+  asl1=$(native_asl1 "$OUT/$RT_NAME") || { echo "build.sh: no native CLI: no native asl1" >&2; return 1; }
   root=$(cd "$HERE/../.." && pwd -P)
   clang_version=$("$CLANG" --version | head -n 1)
-  deps=$(cd "$root" && ASL_PRELUDE="$root/asl/prelude/prelude.asl" "$asl1" deps asl/packages/asl-cli/src/nativeBuild.asl) || { echo "build.sh: no native CLI: asl1 deps of asl-cli/nativeBuild failed" >&2; CLI_OK=0; return 0; }
+  deps=$(cd "$root" && ASL_PRELUDE="$root/asl/prelude/prelude.asl" "$asl1" deps asl/packages/asl-cli/src/nativeBuild.asl) || { echo "build.sh: no native CLI: asl1 deps of asl-cli/nativeBuild failed" >&2; return 1; }
   key=$( { echo "$asl1"; echo "$clang_version"; for f in $deps "$root"/asl/prelude/prelude.asl "$root"/asl/prelude/native/*.asl; do case $f in (/*) ;; (*) f="$root/$f" ;; esac; echo "${f#"$root"/}"; cat "$f"; done; } | hash_stdin )
   dir="$CACHE_DIR/nativeBuild/$key"
   if [ ! -x "$dir/aslNativeBuild" ]; then
     tmp="$CACHE_DIR/nativeBuild/.tmp.$$"
-    rm -rf "$tmp" && mkdir -p "$tmp" || { CLI_OK=0; return 0; }
+    rm -rf "$tmp" && mkdir -p "$tmp" || return 1
     if (cd "$root" && ASL_PRELUDE="$root/asl/prelude/prelude.asl" "$asl1" build asl/packages/asl-cli/src/nativeBuild.asl -o "$tmp/nativeBuild.ll") >&2 \
        && "$CLANG" -O2 -Wno-override-module -x ir "$tmp/nativeBuild.ll" -x none "$OUT/$RT_NAME" -lm -o "$tmp/aslNativeBuild" && mkdir -p "$dir" && mv -f "$tmp/aslNativeBuild" "$dir/aslNativeBuild"; then
       rm -rf "$tmp"
       cacheReadonly "$dir/aslNativeBuild"
     else
-      rm -rf "$tmp"; echo "build.sh: no native CLI: the seed asl1 could not build asl-cli/nativeBuild" >&2; CLI_OK=0; return 0
+      rm -rf "$tmp"; echo "build.sh: no native CLI: the seed asl1 could not build asl-cli/nativeBuild" >&2; return 1
     fi
   fi
-  install_copy "$dir/aslNativeBuild" "$OUT/aslNativeBuild"
+  install_copy "$dir/aslNativeBuild" "$OUT/aslNativeBuild" || { echo "build.sh: no native CLI: aslNativeBuild did not install" >&2; return 1; }
   stamp="$OUT/aslNativeBuild-fresh"
   # (:m :why "STAMP-SHADOW: the source snapshot sits in .src behind the symlink src (nativeCli fresh? reads dir/src/p); the module index (asl-checker/resolve walkEntry!) skips dot names and symlinks, so the copies never make an undeclared import such as asl-parser/indentParser ambiguous")
-  rm -rf "$stamp" && mkdir -p "$stamp/.src" && ln -s .src "$stamp/src"
+  rm -rf "$stamp" && mkdir -p "$stamp/.src" && ln -s .src "$stamp/src" || { echo "build.sh: no native CLI: the source stamp dir was not made" >&2; return 1; }
   printf '%s\n' "$deps" | while IFS= read -r f; do
     [ -n "$f" ] || continue
     case "$f" in /*) rel=${f#"$root"/} ;; *) rel=$f; f="$root/$f" ;; esac
     mkdir -p "$stamp/.src/$(dirname "$rel")" && cp "$f" "$stamp/.src/$rel" || exit 1
     printf '%s\n' "$rel"
-  done > "$stamp/deps"
-  printf '%s\n' "$clang_version" > "$stamp/clang-version"
-  cp "$OUT/aslNativeBuild" "$stamp/bin" && chmod +x "$stamp/bin"
-  "$OUT/aslNativeBuild" "$root" --if-cold >&2 || { echo "build.sh: the native CLI build failed" >&2; CLI_OK=0; }
+  done > "$stamp/deps" || { echo "build.sh: no native CLI: the source stamp was not copied" >&2; return 1; }
+  printf '%s\n' "$clang_version" > "$stamp/clang-version" && cp "$OUT/aslNativeBuild" "$stamp/bin" && chmod +x "$stamp/bin" || { echo "build.sh: no native CLI: the stamp binary was not copied" >&2; return 1; }
+  "$OUT/aslNativeBuild" "$root" --if-cold >&2 || { echo "build.sh: the native CLI build failed" >&2; return 1; }
 }
-native_cli
+# (:m :why "HOSTBUILD-EXIT-MASK: every failed step makes the script exit 1 and names the step last on stderr; native_cli runs in an || list, where set -e does not apply, so each of its steps checks its own status and returns 1")
+CLI_OK=1
+native_cli || CLI_OK=0
+[ "$RT_OK" = "1" ] || echo "build.sh: failed step: runtime $RT_NAME" >&2
+[ "$CLI_OK" = "1" ] || echo "build.sh: failed step: native CLI" >&2
 [ "$RT_OK" = "1" ] && [ "$CLI_OK" = "1" ] || exit 1

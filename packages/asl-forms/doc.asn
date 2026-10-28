@@ -70,6 +70,8 @@
 (:doc :symbol "asl/packages/asl-forms/src/delegate.asl#engineExchangeWith" :text "step text in, one-line receipt back in step; transport is injected at this boundary")
 (:doc :symbol "asl/packages/asl-forms/src/delegate.asl#engineExchange" :text "production adapter owns fd writes, reads and close; semantics are shared with injected tests")
 (:doc :symbol "asl/packages/asl-forms/src/delegate.asl#agentKillSeconds" :text "agent_kill_seconds: queue plus run plus slack")
+(:doc :symbol "asl/packages/asl-forms/src/delegate.asl#withParentPid" :text "the (:agent) form with :parentPid pid added before its last paren, unless it already names one")
+(:doc :symbol "asl/packages/asl-forms/src/delegate.asl#agentStep" :text "runs an (:agent) step as the native Leon child with this CLI pid as :parentPid and returns its receipt as the step line")
 (:doc :symbol "asl/packages/asl-forms/src/delegate.asl#runDelegate" :text "one delegating step; stepStr is the raw form")
 (:doc :symbol "asl/packages/asl-forms/src/docOp.asl#" :text "Agent-plane (:doc) op: look up D150 ledgered doc text by :symbol or list a :file's rows, through asl-gates/docLedger.")
 (:doc :symbol "asl/packages/asl-forms/src/edit.asl#" :text "Staged edit steps of aslForms.py run_step: write edit diff preflush flush discard txn over asl-forms/vfs")

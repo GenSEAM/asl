@@ -20,7 +20,7 @@
 (:doc :symbol "asl/packages/asl-cli/src/rcConfig.asl#rcModeOf" :text "the mode named by a config text, the fallback when it names none; ERR_CONFIG for an unknown :rc value")
 (:doc :symbol "asl/packages/asl-cli/src/rcConfig.asl#rcModeIn!" :text "rcModeOf of the nearest .asl.config.asn at or above dir; the fallback when none exists")
 (:doc :symbol "asl/packages/asl-cli/tests/rcConfigTest.asl#" :text "Gate for RC-CONFIG: rcModeOf on each keyword and a bad value, then asl build of one fixture under no config (notrace by default), :rc :tracing, :rc :counted, :rc :notrace and a bad value; the counted and untraced binaries print RC stats, the untraced one lacks the tracing collector's markPhase, the bad value fails with ERR_CONFIG.")
-(:doc :symbol "asl/packages/asl-cli/src/check.asl#" :text "Pure ASL Check Command Handler with Self-Healing Candidate AST Patches and Rollback Journaling")
+(:doc :symbol "asl/packages/asl-cli/src/check.asl#" :text "Pure ASL Check Command Handler: semantic diagnostics over files; --fix is not implemented")
 (:doc :symbol "asl/packages/asl-cli/src/cli.asl#" :text "Pure AgentSlang native command-line interface toolchain.")
 (:doc :symbol "asl/packages/asl-cli/src/conform.asl#" :text "Pure AgentSlang CLI runner for cross-platform target conformance suite")
 (:doc :symbol "asl/packages/asl-cli/src/conform.asl#ConformOptions.profile" :text "Target profile identifier")

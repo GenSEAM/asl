@@ -38,10 +38,11 @@ fn testRetryableHttpStatus -> Bool
   (do
     (assert (u/retryableHttpStatus? 429 "Upstream model provider is temporarily unavailable") "laguna-style 429 retries")
     (refute (u/retryableHttpStatus? 429 "You exceeded your quota: insufficient_quota") "provider-wide 429 does not retry")
-    (refute (u/retryableHttpStatus? 429 "some unrelated upstream message") "an unrecognised 429 body stays conservative: no retry")
+    (assert (u/retryableHttpStatus? 429 "some unrelated upstream message") "an unrecognised 429 body retries: only quota and daily-cap bodies are final")
     (assert (u/retryableHttpStatus? 502 "Bad Gateway") "502 always retries")
     (assert (u/retryableHttpStatus? 503 "Service Unavailable") "503 always retries")
-    (assert (u/retryableHttpStatus? 504 "Gateway Timeout") "504 always retries")
+    (assert (u/retryableHttpStatus? 504 "Gateway Timeout") "504 is a gateway timeout and retries like the transport timeouts")
+    (refute (u/retryableHttpStatus? 404 "Not Found") "404 is never retried")
     (refute (u/retryableHttpStatus? 500 "Internal Server Error") "500 is not in the retry set")
     (refute (u/retryableHttpStatus? 400 "Bad Request") "400 is not in the retry set")
     (refute (u/retryableHttpStatus? 401 "Unauthorized") "401 is not in the retry set")

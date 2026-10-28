@@ -24,8 +24,9 @@ fn entries -> (List String)
 ; (:m :ref FFI2 :do "checkSemanticTest linked IR repinned on merge sh/FFI1 2d7d8c9f0 into sh/FFI2 (+7387 bytes): asl-checker/foreign gained the handle and close kinds, kindBase, kindFinaliser and the !neg/!null conventions; measured by this file own goldenDigests printer")
 ; (:m :ref BATCH8 :do "checkSemanticTest linked text repinned on INTEG8b (+5039 bytes: merged branches add link units and imports in asl-checker/resolve and the llvm target); measured by this file own goldenDigests printer")
 ; (:m :ref FFI2 :do "checkSemanticTest linked IR re-recorded on merge sh/INTEG8b into sh/FFI2 (5041040 bytes: BATCH8 plus the foreign checker rules); measured by this file own goldenDigests printer")
+; (:m :ref INTEG12 :do "checkSemanticTest linked IR re-recorded after the wave12 merges (+242 bytes, 5123186: the compiler closure and prelude changes of LINUXFFI2 and sibling merges); measured by this file own goldenDigests printer")
 fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "7881161972184722476:5122944")
+  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "-4420333302120191248:5123186")
         (pair "lowerSourceWith" "6806003338108627551:8856"))
 
 fn diagLine d: ty/IrDiag -> String

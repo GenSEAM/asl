@@ -273,7 +273,7 @@ fn parStrings -> (List String)
         "%s" "%s expects %s, got %s" "parMap" "parFold" "parFold slots"
         "parMap expects at least 2 arguments, got %lld" "parMap expects 2 or 3 arguments, got %lld" "parFold expects 4 or 5 arguments, got %lld"
         "parMap expects (parMap fn list [slots]) or (parMap slots fn list)"
-        "parMap slots must be positive, got %lld" "parFold slots must be positive, got %lld"
+        "parMap slots must be positive, got %lld" "parFold slots must be positive, got %lld" "parFold init must be an identity of combine: (combine init init) differs from init, so the result would depend on the worker count"
         "parMap process tables" "parFold process tables" "parMap poll buffers" "parFold poll buffers" "parMap sequential state" "parallel key table"
         "parMap element %lld: %s" "parMap worker result exceeds serialization size limit" "parFold worker result exceeds serialization size limit"
         "cannot serialize parMap result across worker process" "cannot serialize parFold result across worker process"
@@ -302,7 +302,7 @@ fn parExterns facts: libc/TripleFacts -> (List ty/SsaExtern)
             (ty/ssaExternVariadic "aslError" (list (ptr) (ptr)) (i64)) (ty/ssaExternVariadic "snprintf" (list (ptr) (i64) (ptr)) (i32))
             (t "valToCStr" (list (val) (i32)) (ptr)) (t "symName" (list (i32)) (ptr)) (t "intern" (list (ptr) (i64)) (i32)) (t "tagName" (list (i32)) (ptr))
             (t "mkStr" (list (ptr) (i64)) (val)) (t "mkBytes" (list (ptr) (i64)) (val)) (t "mkCtor" (list (i32) (i32)) (val))
-            (t "gcWillAllocate" (list (i64)) (i64)) (t "gcAccount" (list (ptr) (i64)) (i64)))))
+            (ty/ssaExternNative "gcWillAllocate" (list (i64)) (i64)) (t "gcAccount" (list (ptr) (i64)) (i64)))))
 
 fn parGlobals -> (List ty/SsaGlobal)
   (list (ty/ssaGlobal (pn "keyTable") (pn "keyTableInit")))
@@ -958,6 +958,7 @@ fn mapRunFn c: ParCtx -> ty/SsaFunction
               (block "push" (list (en "acc1" (val) "cons" (list "v" "acc")) (addK "i1" "i" 1)) (jump "items" (list "i1" "acc1")))
               (block "finish" (list (hp "fb3" (i64) "freeBufs" (list "bufs" "kn")) (hp "fc3" (i64) "freeCtl" (list "ctl")) (hp "r" (val) "reverse" (list "out"))) (returnTerm "r"))))))
 
+; (:m :ref PARFOLD-INIT-PER-CHUNK :do "each worker folds its chunk from init and the chunk results are combined, so init must be an identity of combine or the result depends on the worker count, which parFold/4 takes from the CPU count (7 + 0..999 gave 499570 on 10 CPUs, 499556 on 8); a non-empty fold first checks (combine init init) = init and raises ERR_ARG otherwise, on every machine and worker count")
 fn foldRunFn c: ParCtx -> ty/SsaFunction
   (function "foldRun" (list (pV "step") (pV "combine") (pV "init") (pV "xs") (pI "slots")) (val)
     (appendAll
@@ -965,8 +966,10 @@ fn foldRunFn c: ParCtx -> ty/SsaFunction
         (list (block "entry" (list (k "z" 0) (k "one" 1) (cmp "nonPos" "leInt" "slots" "z")) (branch "nonPos" "argErr" "listCheck"))
               (raiseB c "argErr" (list) "ERR_ARG" "parFold slots must be positive, got %lld" (list "slots")))
         (listGuardBlocks c "parFold" "counted")
-        (list (block "counted" (list (hp "m" (i64) "count" (list "xs")) (cmp "none" "eqInt" "m" "z")) (branch "none" "initRet" "workersK"))
-              (block "initRet" (list) (returnTerm "init")))
+        (list (block "counted" (list (hp "m" (i64) "count" (list "xs")) (cmp "none" "eqInt" "m" "z")) (branch "none" "initRet" "identity"))
+              (block "initRet" (list) (returnTerm "init"))
+              (block "identity" (list (vop "twice" (ty/opCallClosure "combine" (list "init" "init"))) (en "same" (i1) "=" (list "twice" "init"))) (branch "same" "workersK" "idErr"))
+              (raiseB c "idErr" (list) "ERR_ARG" "parFold init must be an identity of combine: (combine init init) differs from init, so the result would depend on the worker count" (list)))
         (kSlotsBlocks "decideK")
         (list (paramBlock "decideK" (list (pI "kn")) (list (cmpK "single" "leInt" "kn" 1)) (branch "single" "seqB" "par"))
               (block "seqB" (list (hp "sr" (val) "seqFold" (list "step" "init" "xs"))) (returnTerm "sr"))

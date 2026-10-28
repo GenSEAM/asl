@@ -18,7 +18,7 @@
 (:sym "fold" :sig "fold : (fn [B A] -> B) B (List A) -> B" :doc "Left fold with an initial accumulator.")
 (:sym "arenaRun" :sig "arenaRun : (fn [] -> T) -> T" :doc "Call a thunk in its own memory region: under the untraced RC runtime its allocations are freed together on return and the result is copied out.")
 (:sym "parMap" :sig "parMap : (fn [A] -> B) (List A) Int64 -> (List B)" :doc "Apply a function in parallel across worker processes via fork+pipe, preserving input order. If fork is unavailable, falls back to sequential map (D151). Propagates worker traps as ERR_WORKER_TRAP.")
-(:sym "parFold" :sig "parFold : (fn [B A] -> B) (fn [B B] -> B) B (List A) Int64 -> B" :doc "Fold a list in parallel across worker processes via fork+pipe. Each chunk i folds step from init and chunk results are combined with combine. Requires init to be an identity of combine and combine associative. If fork is unavailable, falls ...")
+(:sym "parFold" :sig "parFold : (fn [B A] -> B) (fn [B B] -> B) B (List A) Int64 -> B" :doc "Fold a list in parallel across worker processes via fork+pipe. Each chunk i folds step from init and chunk results are combined with combine. Requires init to be an identity of combine and combine associative, so the result does not depend ...")
 (:sym "range" :sig "range : Int64 Int64 -> (List Int64)" :doc "Half-open integer range; empty when start is not below end.")
 (:sym "listTake" :sig "listTake : (List T) Int64 -> (List T)" :doc "The first n elements, fewer when the list is shorter; n <= 0 gives (list).")
 (:sym "listDrop" :sig "listDrop : (List T) Int64 -> (List T)" :doc "The list without its first n elements; (list) when it is shorter.")

@@ -56,14 +56,38 @@ fn ! postTwo! env: (Map String String) -> Seen
     ((some w)
       (drive! (ch/chatStart! (ch/ChatRequest :path "/v1/chat/completions" :headers (list) :body "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}") w) 0 120)))
 
+fn ! postModel! model: String -> Seen
+  (match (world! (mapFromPairs (list (pair "MISSINGKEY_TEST_KEY" "k-CCCC3333"))))
+    ((none) (Seen :body "no world" :sent 0))
+    ((some w)
+      (drive! (ch/chatStart! (ch/ChatRequest :path "/v1/chat/completions" :headers (list) :body (str "{\"model\":\"" model "\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}")) w) 0 120)))
+
+; (:m :ref GWWIRE6 :do "chat and dispatch share one claim rule: with a loaded table a slash slug is refused unless a provider row claims it by prefix (a configured provider claims its id plus a slash); with no table (builtin config) nothing is refused locally")
+fn ! postBare! model: String -> Seen
+  (match (u/upstreamSettings (mapEmpty))
+    ((err _) (Seen :body "no settings" :sent 0))
+    ((ok st)
+      (drive! (ch/chatStart! (ch/ChatRequest :path "/v1/chat/completions" :headers (list) :body (str "{\"model\":\"" model "\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"))
+                (ch/ChatWorld :env (mapEmpty) :rootDir "/tmp" :settings st :agyPromptMaxBytes 10000 :table (err "builtin"))) 0 120)))
+
 fn ! runTests -> Bool
   (let [(missing (post! (mapEmpty)))
         (failover (postTwo! (mapFromPairs (list (pair "HASKEY_TEST_KEY" "k-BBBB2222")))))
+        (unknown (postModel! "nosuchmodel"))
+        (known (postModel! "m"))
+        (slashUnknown (postModel! "vendor/solo:free"))
+        (slashClaimed (postModel! "keyed/anything"))
+        (bare (postBare! "vendor/solo:free"))
         (present (post! (mapFromPairs (list (pair "MISSINGKEY_TEST_KEY" "k-AAAA1111")))))]
     (do
       (assert (= missing.sent 0) "an empty resolved key emits no http effect")
       (assert (and (stringContains? missing.body "ERR_KEY_MISSING") (stringContains? missing.body "keyed") (stringContains? missing.body "MISSINGKEY_TEST_KEY")) (str "the reply names the provider and keyEnv: " missing.body))
       (assert (= present.sent 1) "with the key set the same request emits the http effect")
       (assert (and (= failover.sent 1) (= failover.body "haskey")) (str "a keyless first candidate fails over to the second: " failover.body))
+      (assert (and (= unknown.sent 0) (stringContains? unknown.body "ERR_UNKNOWN_MODEL") (stringContains? unknown.body "nosuchmodel") (not (stringContains? unknown.body "ERR_NO_UPSTREAM"))) (str "an unclaimed model is a local 400 ERR_UNKNOWN_MODEL: " unknown.body))
+      (assert (and (= slashUnknown.sent 0) (stringContains? slashUnknown.body "ERR_UNKNOWN_MODEL") (stringContains? slashUnknown.body "vendor/solo:free")) (str "with a table a slash slug no row claims is a local 400: " slashUnknown.body))
+      (assert (= slashClaimed.sent 1) (str "a slash slug a configured row claims by prefix is sent: " slashClaimed.body))
+      (assert (not (stringContains? bare.body "ERR_UNKNOWN_MODEL")) (str "with no table nothing is refused locally: " bare.body))
+      (assert (= known.sent 1) "a configured alias still dispatches")
       (assert (not (stringContains? (str missing.body present.body) "AAAA1111")) "no key value appears in a reply")
       true))

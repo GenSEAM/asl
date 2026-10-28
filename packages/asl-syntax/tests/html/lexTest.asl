@@ -757,8 +757,8 @@ fn verifyTrackedFileKnownTokens! path: String htmlTagEnd: Int64 -> Bool
 
 fn testAllTrackedHtmlFilesLossless! -> Bool
   (let [(files (list "asl/packages/asl-browser-plugin/src/popup.html"
-                     "docs/diagrams/DiagramWorkbench.html"
-                     "docs/diagrams/OrchestrationTopology.html"
+                     "asl/packages/asl-syntax/tests/fixtures/html/DiagramWorkbench.html"
+                     "asl/packages/asl-syntax/tests/fixtures/html/OrchestrationTopology.html"
                      "editorial-matrix/assets/review/index.html"))
         (stats (fold checkOneHtmlFile! (pair 0 0) files))
         (totalChecked (pairFirst stats))
@@ -766,13 +766,13 @@ fn testAllTrackedHtmlFilesLossless! -> Bool
     (assert (= totalChecked 4) "checked all 4 tracked html files")
     (assert (= mismatches 0) "zero tiling or print mismatches across all 4 files")
     (assert (verifyTrackedFileKnownTokens! "asl/packages/asl-browser-plugin/src/popup.html" 32) "browser-plugin tokens match")
-    (assert (verifyTrackedFileKnownTokens! "docs/diagrams/DiagramWorkbench.html" 32) "DiagramWorkbench tokens match")
-    (assert (verifyTrackedFileKnownTokens! "docs/diagrams/OrchestrationTopology.html" 32) "OrchestrationTopology tokens match")
+    (assert (verifyTrackedFileKnownTokens! "asl/packages/asl-syntax/tests/fixtures/html/DiagramWorkbench.html" 32) "DiagramWorkbench tokens match")
+    (assert (verifyTrackedFileKnownTokens! "asl/packages/asl-syntax/tests/fixtures/html/OrchestrationTopology.html" 32) "OrchestrationTopology tokens match")
     (assert (verifyTrackedFileKnownTokens! "editorial-matrix/assets/review/index.html" 32) "review/index.html tokens match")
     true)
 
 fn testBenchmarkPerformance! -> Bool
-  (let [(path "docs/diagrams/DiagramWorkbench.html")]
+  (let [(path "asl/packages/asl-syntax/tests/fixtures/html/DiagramWorkbench.html")]
     (match (fileReadBytes path)
       ((err e) (assert false (str "benchmark file missing: " e)))
       ((ok bs)

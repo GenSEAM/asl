@@ -1,5 +1,5 @@
 (module asl-gates/tests/docLedgerTest
-  :x [testLoadValid! testMalformedRows! testLoadMissingIsEmpty! testFindBySymbolHitMiss! testFindByFile! testResolveRows! testRoundTripWithExtractor! testMutantGuards! runTests]
+  :x [testLoadValid! testMalformedRows! testLoadMissingIsEmpty! testFindBySymbolHitMiss! testFindByFile! testResolveRows! testRoundTripWithExtractor! testMutantGuards! testExportGaps! testCoverageRatchet! runTests]
   :i [(asl-gates/docLedger :a dl) (asl-gates/docExtract :a dx)])
 
 fn fixtureDir -> String
@@ -178,6 +178,43 @@ fn testMutantGuards! -> Bool
     (assert (mustErr! "missingText.asn" "mutant guard: a :symbol-only row is still rejected, not defaulted to empty text") "missing :text stays an error")
     true)
 
+fn testExportGaps! -> Bool
+  (let [(rows (list (dl/DocRow :symbol "asl/tools/x.asl#kept" :text "documented")))
+        (gaps (dl/exportGaps rows "asl/tools/x.asl" (list "kept" "missing!")))
+        (parsed (dl/exportsOf "(module ws/x\n  :x [alpha beta!]\n  :i [])\n\nfn alpha -> Int64\n  1\n\nfn beta! -> Int64\n  2\n"))
+        (broken (dl/exportsOf "(module ws/x :x [a]"))]
+    (do (assert (= gaps (list "asl/tools/x.asl#missing!")) (str "only the export without a row is a gap: " (stringJoin gaps " ")))
+        (assert (= parsed (list "alpha" "beta!")) (str "exports come from the module :x list: " (stringJoin parsed " ")))
+        (assert (= broken (list "!parse")) (str "a file that does not parse is a gap, not skipped: " (stringJoin broken " ")))
+        true))
+
+fn baselinePath -> String
+  "asl/packages/asl-gates/tests/docCoverageBaseline.asn"
+
+fn ! baseline! -> (List String)
+  (map (fn [(l String)] -> String (stringReplace (stringReplace l "(:gap \"" "") "\")" ""))
+       (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:gap \"")) (stringLines (resultOr (fileReadString (baselinePath)) ""))))
+
+fn ! docAreas! -> (List String)
+  (map (fn [(n String)] -> String (stringReplace n ".asn" ""))
+       (filter (fn [(n String)] -> Bool (stringEndsWith? n ".asn")) (listSort (resultOr (dirList "asl/doc") (list)))))
+
+; (:m :ref DOCLEDGER-TOOLS-COVERAGE :do "every export under asl/<area> has a row in asl/doc/<area>.asn, one area per asl/doc/*.asn, except the gaps already listed in the ratchet baseline; covered baseline rows are printed as stale so the list can shrink")
+fn ! testCoverageRatchet! -> Bool
+  (let [(known (baseline!))
+        (areas (docAreas!))
+        (results (map (fn [(a String)] -> (Pair String (Result (List String) String)) (pair a (dl/coverageGaps! "." a))) areas))
+        (failed (filter (fn [(r (Pair String (Result (List String) String)))] -> Bool (not (ok? (pairSecond r)))) results))
+        (gaps (fold (fn [(acc (List String)) (r (Pair String (Result (List String) String)))] -> (List String) (listAppend acc (resultOr (pairSecond r) (list)))) (list) results))
+        (fresh (filter (fn [(g String)] -> Bool (not (listContains? known g))) gaps))
+        (stale (filter (fn [(g String)] -> Bool (not (listContains? gaps g))) known))
+        (_ (if (listEmpty? stale) () (println (str "(:docCoverage :stale " (listLength stale) " :first \"" (optionOr (listHead stale) "") "\")"))))]
+    (do (assert (listContains? areas "tools") (str "asl/doc/tools.asn is one of the areas: " (stringJoin areas " ")))
+        (assert (> (listLength known) 0) (str "the baseline loads from " (baselinePath)))
+        (assert (listEmpty? failed) (str "every area scans: " (stringJoin (map (fn [(r (Pair String (Result (List String) String)))] -> String (pairFirst r)) failed) " ")))
+        (assert (listEmpty? fresh) (str "every export has a doc row in its asl/doc home or is in the baseline; missing: " (stringJoin (listTake fresh 10) " ")))
+        true))
+
 fn ! runTests -> Bool
   (do
     (assert (testLoadValid!) "testLoadValid!")
@@ -188,4 +225,6 @@ fn ! runTests -> Bool
     (assert (testResolveRows!) "testResolveRows!")
     (assert (testRoundTripWithExtractor!) "testRoundTripWithExtractor!")
     (assert (testMutantGuards!) "testMutantGuards!")
+    (assert (testExportGaps!) "testExportGaps!")
+    (assert (testCoverageRatchet!) "testCoverageRatchet!")
     true)

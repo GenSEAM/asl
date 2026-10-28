@@ -5,12 +5,14 @@
       (asl-target-llvm :a llvm)
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/ssa :a ssa)
-      (asl-target-llvm/parRoute :a pr)])
+      (asl-target-llvm/parRoute :a pr)
+      (asl-cli/nativeCli :a ncli)])
 
 ; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): checkParity used to run the leftover host binary live (`asl-host run <src> <args>`) and diff its full stdout/stderr/exitCode against native's own run, for 20 distinct (label, env, args) combinations across testCases/testCodec/testFail/testArity/testLiteral. All 20 are captured once via the leftover host binary at ~/projects/asex/asl/host/out/asl-host, read-only, outside this worktree, into the recordedRaw cond table below, keyed by the same `label` string each call site already passes; the capturing run's own mktemp work directory (embedded in 14 of the parFail stderr captures via the host CLI's own 'FAIL <path>: <message> (after N asserts)' failure-report wrapper, since hostError parses that prefix using the replay-time `src` path) is normalized to the placeholder @@PARWORK@@ and substituted back with (dirOf src) at replay time; neither stdout leaks the work path in any of the 20 captures. testWire (the only genuinely-blocked piece: its wireCheck.c harness needs #include \"parallel.c\" and links against asl/host/out/libaslhost.a, both deleted by HL-DELETE with no replacement, the same gap already frozen for gcAslTest/gcStressTest/tailCallSpillGcTest) is removed entirely, along with its now-dead wireStandIn/wireDumpFn/wireSource/wireCheckSource helpers and the now-unused arrayRoute/sysRoute imports. testFail's trap-fallback block used to rely on native AND the live host both appending into the same trapFile (ASL_PAR_FORCE_FALLBACK=1 runs every element in one process, so each side's 6 pid lines were expected to share one pid); since the host is now a recorded value that never touches the filesystem, only native's own 6 entries land in trapFile, so the host-side self-consistency half of that check is dropped and the count assertion changes from 12 to 6")
 
-fn clang -> String
-  "/usr/bin/clang -Wno-override-module"
+; (:m :ref ARRAYNATIVE-CLANG-PATH :do "the link uses the clang the native build resolves (config, CLANG, then PATH), not /usr/bin/clang, which a Linux host with only clang-18 lacks")
+fn ! clang -> String
+  (str "'" (stringReplace (ncli/clangCommand!) "'" "'\\''") "' -Wno-override-module")
 
 fn lib -> String
   "asl/host/out/libaslrt.a"
@@ -68,7 +70,7 @@ fn casesSource -> String
     "fn ! foldCase n: Int64 w: Int64 -> String"
     "  (let [(before (census))"
     "        (xs (range 0 n))"
-    "        (got (parFold (fn [(a String) (x Int64)] -> String (str a \".\" x)) (fn [(a String) (b String)] -> String (str a \"|\" b)) \"\" xs w))"
+    "        (got (parFold (fn [(a String) (x Int64)] -> String (str a \".\" x)) (fn [(a String) (b String)] -> String (if (stringEmpty? a) b (if (stringEmpty? b) a (str a \"|\" b)))) \"\" xs w))"
     "        (after (census))]"
     "    (str \"fold \" n \" \" w \" \" (stringLength got) \" \" (if (<= n 7) got (stringSlice got 0 40)) \" clean \" (= before after)))"
     ""
@@ -194,6 +196,7 @@ fn failSource -> String
     "fn ! run mode: String pidFile: String -> String"
     "  (cond ((or (= mode \"trap\") (= mode \"kill\") (= mode \"stall\")) (str (parMap (fn [(x Int64)] -> Int64 (element mode pidFile x)) (range 0 9) 3)))"
     "        ((= mode \"foldTrap\") (str (parFold (fn [(a Int64) (x Int64)] -> Int64 (+ a (element \"trap\" pidFile x))) (fn [(a Int64) (b Int64)] -> Int64 (- a b)) 0 (range 0 9) 3)))"
+    "        ((= mode \"foldInit\") (str (parFold (fn [(a Int64) (x Int64)] -> Int64 (+ a (element \"plain\" pidFile x))) (fn [(a Int64) (b Int64)] -> Int64 (+ a b)) 7 (range 0 9) 3)))"
     "        ((= mode \"longTrap\") (str (parMap (fn [(x Int64)] -> Int64 (element \"long\" pidFile x)) (range 0 9) 3)))"
     "        ((= mode \"foldLong\") (str (parFold (fn [(a Int64) (x Int64)] -> Int64 (+ a (element \"long\" pidFile x))) (fn [(a Int64) (b Int64)] -> Int64 (- a b)) 0 (range 0 9) 3)))"
     "        ((= mode \"unserializable\") (str (listLength (parMap (fn [(x Int64)] -> (List (fn [Int64] -> Int64)) (if (= (mark pidFile x) 2) (list (fn [(y Int64)] -> Int64 (+ x y))) (list))) (range 0 4) 2))))"
@@ -215,7 +218,7 @@ fn aritySource -> String
     ""
     "fn ! main args: (List String) -> (Result Int64 String)"
     "  (do (println \"map2\" (parMap (fn [(x Int64)] -> Int64 (* x 3)) (range 0 20)))"
-    "      (println \"fold4\" (parFold (fn [(a Int64) (x Int64)] -> Int64 (+ a x)) (fn [(a Int64) (b Int64)] -> Int64 (+ a b)) 7 (range 0 1000)))"
+    "      (println \"fold4\" (parFold (fn [(a Int64) (x Int64)] -> Int64 (+ a x)) (fn [(a Int64) (b Int64)] -> Int64 (+ a b)) 0 (range 0 1000)))"
     "      (println \"fold4 empty\" (parFold (fn [(a Int64) (x Int64)] -> Int64 (+ a x)) (fn [(a Int64) (b Int64)] -> Int64 (+ a b)) 7 (list)))"
     "      (ok 0))"))
 
@@ -281,6 +284,7 @@ fn pidsOf text: String -> (List String)
   (map (fn [(l String)] -> String (optionOr (stringSlice l 4 (stringLength l)) ""))
        (filter (fn [(l String)] -> Bool (stringStartsWith? l "pid ")) (stringSplit text "\n")))
 
+; (:m :ref PARFOLD-INIT-PER-CHUNK :do "parFold init must be an identity of combine (the native foldRun raises ERR_ARG otherwise), so the result no longer depends on the CPU count: parArity folds 0..999 from 0 to 499500 on every host, parFail foldInit checks that init 7 with + is refused, and parCases joins chunks with | only between non-empty sides so that its empty init is an identity")
 fn ! recordedVm key: String work: String -> Recorded
   (let [(raw (recordedRaw key))]
     (Recorded :exitCode (pairFirst raw)
@@ -296,6 +300,7 @@ fn ! recordedRaw key: String -> (Pair Int64 (Pair String String))
     ((= key "parFail foldTrap") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_WORKER_TRAP: ERR_DIV_ZERO: division by zero (after 0 asserts)\n")))
     ((= key "parFail longTrap") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_WORKER_TRAP: parMap element 5: ERR_ARG: yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy (after 0 asserts)\n")))
     ((= key "parFail foldLong") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_WORKER_TRAP: ERR_ARG: yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy (after 0 asserts)\n")))
+    ((= key "parFail foldInit") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_ARG: parFold init must be an identity of combine: (combine init init) differs from init, so the result would depend on the worker count (after 0 asserts)\n")))
     ((= key "parFail kill") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_WORKER_TRAP: worker 1 killed by signal 9 (after 0 asserts)\n")))
     ((= key "parFail stall") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_WORKER_TRAP: parMap element 0: ERR_DIV_ZERO: division by zero (after 0 asserts)\n")))
     ((= key "parFail unserializable") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_WORKER_TRAP: parMap element 2: ERR_NOT_SERIALIZABLE: cannot serialize parMap result across worker process (after 0 asserts)\n")))
@@ -306,7 +311,7 @@ fn ! recordedRaw key: String -> (Pair Int64 (Pair String String))
     ((= key "parFail slots") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_ARG: parMap slots must be positive, got 0 (after 0 asserts)\n")))
     ((= key "parFail trap fallback") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_WORKER_TRAP: parMap element 5: ERR_DIV_ZERO: division by zero (after 0 asserts)\n")))
     ((= key "parFail foldTrap fallback") (pair 1 (pair "start\n" "FAIL @@PARWORK@@/parFail.asl: ERR_DIV_ZERO: division by zero (after 0 asserts)\n")))
-    ((= key "parArity") (pair 0 (pair "map2 (0 3 6 9 12 15 18 21 24 27 30 33 36 39 42 45 48 51 54 57)\nfold4 499570\nfold4 empty 7\n" "")))
+    ((= key "parArity") (pair 0 (pair "map2 (0 3 6 9 12 15 18 21 24 27 30 33 36 39 42 45 48 51 54 57)\nfold4 499500\nfold4 empty 7\n" "")))
     ((= key "parLiteral") (pair 0 (pair "declare ptr @aslParWord0(%Val)\ndeclare i32 @setjmp(ptr)\n30\nunrouted\n" "")))
     ((= key "parLiteralRouted") (pair 0 (pair "declare ptr @aslParWord0(%Val)\ndeclare i32 @setjmp(ptr)\n30\n(\"@aslParWord0(1\" \"@aslParWord0(2\")\n" "")))
     (else (pair -1 (pair "" (str "no recorded case: " key)))))
@@ -368,6 +373,7 @@ fn failModes -> (List (Pair String String))
         (pair "foldTrap" "ERR_WORKER_TRAP: ERR_DIV_ZERO: division by zero")
         (pair "longTrap" (str "ERR_WORKER_TRAP: parMap element 5: ERR_ARG: " (stringRepeat "y" 991)))
         (pair "foldLong" (str "ERR_WORKER_TRAP: ERR_ARG: " (stringRepeat "y" 1010)))
+        (pair "foldInit" "ERR_ARG: parFold init must be an identity of combine: (combine init init) differs from init, so the result would depend on the worker count")
         (pair "kill" "ERR_WORKER_TRAP: worker 1 killed by signal 9")
         (pair "stall" "ERR_WORKER_TRAP: parMap element 0: ERR_DIV_ZERO: division by zero")
         (pair "unserializable" "ERR_WORKER_TRAP: parMap element 2: ERR_NOT_SERIALIZABLE: cannot serialize parMap result across worker process")
@@ -391,7 +397,7 @@ fn ! testFail work: String -> Bool
                      (pids (pidLines pidFile))]
                  (do (assert (= (otherLines (pairFirst outs).stderr) (pairSecond m)) (str "parFail " (pairFirst m) ": native error is '" (pairSecond m) "': " (otherLines (pairFirst outs).stderr)))
                      (assert (= (pairFirst outs).exitCode (if (stringEmpty? (pairSecond m)) 0 1)) (str "parFail " (pairFirst m) ": exit " (pairFirst outs).exitCode))
-                     (assert (= (listEmpty? pids) (= (pairFirst m) "slots")) (str "parFail " (pairFirst m) ": the elements report their pids (none for slots, which runs none): " pids))
+                     (assert (= (listEmpty? pids) (or (= (pairFirst m) "slots") (= (pairFirst m) "foldInit"))) (str "parFail " (pairFirst m) ": the elements report their pids (none for slots and foldInit, which run none): " pids))
                      (checkGone (str "parFail " (pairFirst m)) pids))))
              (failModes))
         (let [(stallPids (pidLines (str work "/stall.pids")))]

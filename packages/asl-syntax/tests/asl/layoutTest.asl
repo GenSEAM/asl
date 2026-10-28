@@ -180,7 +180,7 @@ fn isParenOrInvalidFile path: String -> Bool
   (or (= path "asl/packages/asl-macro/src/macro.asl")
   (or (= path "asl/packages/asl-ui/src/main.asl")
   (or (= path "asl/packages/asl-mem/src/tasks.asl")
-      (= path "tests/acceptance/d81/Task58801IntermediatePolicyTest.asl")))))))))))))
+      (= path "asl/packages/asl-pack/tests/intermediatePolicyAcceptanceTest.asl")))))))))))))
 
 fn checkTrackedIndentedFile! acc: (Pair Int64 Int64) path: String -> (Pair Int64 Int64)
   (if (isParenOrInvalidFile path)

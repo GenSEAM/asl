@@ -1,6 +1,9 @@
 (module aslGateway/tests/secretsTest
   :x [runTests]
-  :i [(secrets :a s)])
+  :i [(secrets :a s)
+      (pyText :a pt)
+      (wire :a w)
+      (asl-json/json :a j)])
 
 fn ! scratch! -> String
   (let [(d (str "/tmp/gwSecretsTest-" (procSelf) "-" (nowNs)))
@@ -135,6 +138,39 @@ fn ! testEqual! -> Bool
     (assert (s/secretsEqual? "" "") "empty strings are equal")
     true)
 
+; (:m :ref GW-JSON-ESCAPE-REDACT-CHECK :do "the forms are made by the real encoders in reach (asl-json jsonEmit, pyText jsonDumps, wire asnEscape) plus the optional escaped slash, upper-hex, a second encoding and the chat space form, over a value holding a quote, backslash, slash, tab, CR, LF, two- three- and four-byte characters")
+fn trickyValue -> String
+  (str "a\"b\\c/d" "\t" "e" "\r" "f" "\n" "gé€" "\u{1F600}" "z")
+
+fn unq s: String -> String
+  (optionOr (stringSlice s 1 (- (stringLength s) 1)) "")
+
+fn forms -> (List (Pair String String))
+  (let [(v (trickyValue))
+        (je (unq (j/jsonEmit (j/jstr v))))
+        (pd (unq (pt/jsonDumps (j/jstr v) -1)))
+        (twice (unq (j/jsonEmit (j/jstr je))))]
+    (list (pair "asl-json jsonEmit" je)
+          (pair "python ensure_ascii jsonDumps" pd)
+          (pair "jsonEmit with escaped slash" (stringReplace je "/" "\\/"))
+          (pair "ensure_ascii with escaped slash" (stringReplace pd "/" "\\/"))
+          (pair "ensure_ascii upper hex" (stringReplace (stringReplace (stringReplace pd "\\u00e9" "\\u00E9") "\\u20ac" "\\u20AC") "\\ud83d\\ude00" "\\uD83D\\uDE00"))
+          (pair "ensure_ascii escaped slash upper hex" (stringReplace (stringReplace (stringReplace (stringReplace pd "\\u00e9" "\\u00E9") "\\u20ac" "\\u20AC") "\\ud83d\\ude00" "\\uD83D\\uDE00") "/" "\\/"))
+          (pair "encoded twice" twice)
+          (pair "wire asnEscape" (w/asnEscape v))
+          (pair "chat space form" (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace v "\\" "\\\\") "\"" "\\\"") "\n" " ") "\r" " ") "\t" " "))))
+
+fn ! testEncoderForms! -> Bool
+  (let [(st (s/SecretStore :path "/x" :ids (list "odd") :values (mapFromPairs (list (pair "odd" (trickyValue))))))
+        (bad (filter (fn [(f (Pair String String))] -> Bool
+                       (let [(out (s/secretsRedact st (str "x " (pairSecond f) " y")))]
+                         (or (stringContains? out (pairSecond f)) (not (stringContains? out "<secret:odd>")))))
+                     (forms)))]
+    (do
+      (assert (>= (listLength (forms)) 8) "the encoder forms were built")
+      (assert (listEmpty? bad) (str "forms not redacted: " (stringJoin (map pairFirst bad) " | ")))
+      true))
+
 fn ! runTests -> Bool
   (let [(dir (scratch!))
         (ok1 (testLoadAndGet! dir))
@@ -147,5 +183,6 @@ fn ! runTests -> Bool
         (ok8 (testJsonEscaped! dir))
         (ok9 (testRedactForms!))
         (ok10 (testEqual!))
+        (ok11 (testEncoderForms!))
         (_ (drop! dir))]
-    (and ok1 (and ok2 (and ok3 (and ok4 (and ok5 (and ok6 (and ok7 (and ok8 (and ok9 ok10))))))))))
+    (and ok1 (and ok2 (and ok3 (and ok4 (and ok5 (and ok6 (and ok7 (and ok8 (and ok9 (and ok10 ok11)))))))))))

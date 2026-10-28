@@ -38,4 +38,6 @@
     "aslGateway/binding"
     "aslGateway/upstream"
     "aslGateway/usage"
-    "aslGateway/usageLedger"))
+    "aslGateway/usageLedger"
+    "aslGateway/modelSync"
+    "aslGateway/subPacing"))

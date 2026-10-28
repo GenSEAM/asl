@@ -345,7 +345,7 @@ fn ! captureBreaker! step: ch/ChatStep downAcc: (List String) eventAcc: (List St
       ((ch/stepEffect eff k)
        (match eff
          ((ch/effBreakerDown p) (captureBreaker! (k (ch/outFloat 0.0)) (cons p downAcc) eventAcc status reason httpBody (- remaining 1)))
-         ((ch/effBreakerEvent e p) (captureBreaker! (k ch/outDone) downAcc (cons (str e ":" p) eventAcc) status reason httpBody (- remaining 1)))
+         ((ch/effBreakerEvent e p _) (captureBreaker! (k ch/outDone) downAcc (cons (str e ":" p) eventAcc) status reason httpBody (- remaining 1)))
          ((ch/effHttp _ _ _ _ _ _ _) (captureBreaker! (k (ch/outHttp (ch/httpError status reason (list) httpBody))) downAcc eventAcc status reason httpBody (- remaining 1)))
          ((ch/effPoolHttp _ _ _ _ _ _) (captureBreaker! (k (ch/outHttp (ch/httpError status reason (list) httpBody))) downAcc eventAcc status reason httpBody (- remaining 1)))
          ((ch/effRealpath _) (captureBreaker! (k (ch/outPath "/")) downAcc eventAcc status reason httpBody (- remaining 1)))

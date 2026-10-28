@@ -199,7 +199,7 @@
     (:name "parMap" :sec "List" :type "(fn [A] -> B) (List A) [Int64] -> (List B)" :src "asl/host/src/parallel.c"
       :doc "Apply a function in parallel across worker processes via fork+pipe, preserving input order. If fork is unavailable, falls back to sequential map (D151). Propagates worker traps as ERR_WORKER_TRAP.")
     (:name "parFold" :sec "List" :type "(fn [B A] -> B) (fn [B B] -> B) B (List A) [Int64] -> B" :src "asl/host/src/parallel.c"
-      :doc "Fold a list in parallel across worker processes via fork+pipe. Each chunk i folds step from init and chunk results are combined with combine. Requires init to be an identity of combine and combine associative. If fork is unavailable, falls back to sequential fold (D151). Propagates worker traps as ERR_WORKER_TRAP.")
+      :doc "Fold a list in parallel across worker processes via fork+pipe. Each chunk i folds step from init and chunk results are combined with combine. Requires init to be an identity of combine and combine associative, so the result does not depend on the worker count; a non-empty fold raises ERR_ARG when (combine init init) differs from init. If fork is unavailable, falls back to sequential fold (D151). Propagates worker traps as ERR_WORKER_TRAP.")
     (:name "range" :sec "List" :type "Int64 Int64 -> (List Int64)" :src "asl/prelude/prelude.asl"
       :doc "Half-open integer range; empty when start is not below end.")
     (:name "listTake" :sec "List" :type "(List T) Int64 -> (List T)" :src "asl/prelude/prelude.asl"

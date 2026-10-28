@@ -70,6 +70,8 @@
       looksProviderWideQuota?
       looksTransientText?
       retryableHttpStatus?
+      dailyCapKind
+      dailyCapParkSec
       parseCurlExitCode
       retryableTransportCode?
       retryableRaised?
@@ -704,12 +706,72 @@ fn looksTransientText? body: String -> Bool
       (or (stringContains? t "overloaded")
         (stringContains? t "rate limit"))))
 
-; (:m :tags (retry) :do "429 retries only when the body reads as a transient per-model hiccup (not an account-wide quota/billing marker); 502/503/504 always retry; anything else does not")
+; (:m :ref GW-RETRY-CLASSES :do "a status is retried only when it is 429 (unless the body is an account-wide quota or a daily cap, which no retry can clear), 502, 503 or 504 (a gateway timeout, so the timeout class); 400 401 402 403 413 and every other status are never retried, and timeouts and transport resets are classified by retryableRaised? instead")
 fn retryableHttpStatus? status: Int64 body: String -> Bool
   (cond
-    ((= status 429) (and (not (looksProviderWideQuota? body)) (looksTransientText? body)))
+    ((= status 429) (and (not (looksProviderWideQuota? body)) (stringEmpty? (dailyCapKind status body))))
     ((or (= status 502) (or (= status 503) (= status 504))) true)
     (else false))
+
+fn numChar? c: String -> Bool
+  (and (not (stringEmpty? c)) (stringContains? "0123456789." c))
+
+fn safeSlice s: String a: Int64 b: Int64 -> String
+  (let [(n (stringLength s))]
+    (slice s (if (< a n) a n) (if (< b n) b n)))
+
+fn numEnd s: String i: Int64 -> Int64
+  (if (and (< i (stringLength s)) (numChar? (safeSlice s i (+ i 1)))) (numEnd s (+ i 1)) i)
+
+fn firstDigitFrom s: String i: Int64 -> (Option Int64)
+  (if (>= i (stringLength s)) none (if (numChar? (safeSlice s i (+ i 1))) (some i) (firstDigitFrom s (+ i 1))))
+
+; (:m :ref GW-DAILY-PARK :do "reads a run of number-unit pairs such as 7m12.96s, 2h3m4s, 34s or 200ms starting at i, summing them in seconds; stops at the first character that is no number")
+fn durationAt s: String i: Int64 acc: Float64 -> Float64
+  (if (not (and (< i (stringLength s)) (numChar? (safeSlice s i (+ i 1)))))
+    acc
+    (let [(j (numEnd s i))
+          (n (optionOr (stringToFloat64 (safeSlice s i j)) 0.0))
+          (u2 (safeSlice s j (+ j 2)))
+          (u1 (safeSlice s j (+ j 1)))]
+      (cond
+        ((= u2 "ms") (durationAt s (+ j 2) (+ acc (/ n 1000.0))))
+        ((= u1 "h") (durationAt s (+ j 1) (+ acc (* n 3600.0))))
+        ((= u1 "m") (durationAt s (+ j 1) (+ acc (* n 60.0))))
+        ((= u1 "s") (durationAt s (+ j 1) (+ acc n)))
+        (else acc))))
+
+; (:m :ref GW-DAILY-PARK :do "the wait a body names: groq says try again in 7m12.96s, google carries retryDelay 34s; 0 when it names none")
+fn bodyWaitSec body: String -> Float64
+  (cond
+    ((some? (stringIndexOf body "try again in ")) (durationAt body (+ (optionOr (stringIndexOf body "try again in ") 0) 13) 0.0))
+    ((some? (stringIndexOf body "retryDelay")) (match (firstDigitFrom body (optionOr (stringIndexOf body "retryDelay") 0)) ((some d) (durationAt body d 0.0)) ((none) 0.0)))
+    (else 0.0))
+
+; (:m :ref GW-DAILY-PARK :do "which free-tier daily cap a 429 is, by the wording each provider uses: openrouter free_model_daily_requests, a google quotaId naming PerDay, groq tokens or requests per day; empty for an ordinary per-minute 429")
+fn dailyCapKind status: Int64 body: String -> String
+  (cond
+    ((!= status 429) "")
+    ((or (stringContains? body "free_model_daily_requests") (stringContains? body "free-models-per-day")) "openrouter")
+    ((and (stringContains? body "PerDay") (stringContains? body "quotaId")) "gemini")
+    ((or (stringContains? body "tokens per day") (or (stringContains? body "requests per day") (stringContains? body "(TPD)"))) "groq")
+    (else ""))
+
+fn secondsToUtcHour nowSec: Float64 hour: Int64 -> Int64
+  (let [(t (optionOr (float64ToInt64 nowSec) 0))
+        (since (mod t 86400))
+        (target (* hour 3600))]
+    (if (> target since) (- target since) (- (+ target 86400) since)))
+
+; (:m :ref GW-DAILY-PARK :do "seconds to park a model after a daily-cap 429: the provider's own reset (openrouter X-RateLimit-Reset as epoch seconds or milliseconds) or the wait its body names, else the next reset boundary (openrouter 00:00 UTC, google midnight Pacific taken as 08:00 UTC, groq an hour); never under 60 s nor over a day and an hour")
+fn dailyCapParkSec kind: String headers: (List (Pair String String)) body: String nowSec: Float64 -> Int64
+  (let [(resetRaw (match (headerGet headers "X-RateLimit-Reset") ((some v) (optionOr (stringToFloat64 (pyStrip v)) 0.0)) ((none) 0.0)))
+        (resetSec (if (> resetRaw 1000000000000.0) (/ resetRaw 1000.0) resetRaw))
+        (fromHeader (if (> resetSec nowSec) (optionOr (float64ToInt64 (- resetSec nowSec)) 0) 0))
+        (fromBody (optionOr (float64ToInt64 (bodyWaitSec body)) 0))
+        (boundary (cond ((= kind "openrouter") (secondsToUtcHour nowSec 0)) ((= kind "gemini") (secondsToUtcHour nowSec 8)) (else 3600)))
+        (picked (cond ((> fromHeader 0) fromHeader) ((> fromBody 0) (+ fromBody 1)) (else boundary)))]
+    (if (< picked 60) 60 (if (> picked 90000) 90000 picked)))
 
 ; (:m :tags (retry) :do "server.asl's failureReply renders a transportFailure as httpRaised false (str \"curl exit \" code \": \" stderr); this re-extracts the curl exit code from that text so chat.asl's raised can classify it without a new effect field")
 fn parseCurlExitCode text: String -> (Option Int64)

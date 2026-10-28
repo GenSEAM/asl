@@ -146,15 +146,39 @@ fn uEscape cp: Int64 upper: Bool -> String
     (let [(v (- cp 65536))]
       (str "\\u" (hexPad (+ 55296 (/ v 1024)) 4 upper) "\\u" (hexPad (+ 56320 (mod v 1024)) 4 upper))))
 
-fn uForm v: String all: Bool upper: Bool -> String
+; (:m :ref GW-JSON-ESCAPE-REDACT-CHECK :do "every string encoder in reach: asl-json emitString (quote, backslash, b t n f r, other controls as lower \\u00xx, everything else raw), wire.asl emitPythonJsonString (the same plus ensure_ascii: DEL and non-ASCII as lower \\uXXXX with surrogate pairs), the optional escaped slash of JavaScript and PHP encoders, upper-hex \\uXXXX of some encoders, a string encoded twice (a secret inside an embedded JSON string), wire.asnEscape and core.serString (the n r t subset of the JSON escapes), and chat.escapeAsnStr (quote and backslash escaped, n r t turned into spaces). jsonFull builds the first group from the options ascii, slash and upper hex")
+fn jsonFull v: String ascii: Bool slash: Bool upper: Bool -> String
   (stringJoin (map (fn [(c String)] -> String
                      (let [(cp (codepointOf c))]
-                       (if (and (< cp 128) (not all)) (jsonEscaped c) (uEscape cp upper))))
+                       (cond
+                         ((= cp 34) "\\\"")
+                         ((= cp 92) "\\\\")
+                         ((and slash (= cp 47)) "\\/")
+                         ((= cp 8) "\\b")
+                         ((= cp 9) "\\t")
+                         ((= cp 10) "\\n")
+                         ((= cp 12) "\\f")
+                         ((= cp 13) "\\r")
+                         ((< cp 32) (uEscape cp upper))
+                         ((and ascii (>= cp 127)) (uEscape cp upper))
+                         (else c))))
                    (stringChars v)) "")
 
+fn uForm v: String all: Bool upper: Bool -> String
+  (stringJoin (map (fn [(c String)] -> String (uEscape (codepointOf c) upper)) (stringChars v)) "")
+
+fn spaceForm v: String -> String
+  (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace v "\\" "\\\\") "\"" "\\\"") "\n" " ") "\r" " ") "\t" " ")
+
 fn redactForms v: String -> (List String)
-  (list v (jsonEscaped v) (percentForm v true) (percentForm v false)
-        (uForm v false false) (uForm v false true) (uForm v true false) (uForm v true true))
+  (listReverse (listSortBy (fn [(f String)] -> Int64 (stringLength f))
+    (list v (jsonEscaped v) (percentForm v true) (percentForm v false)
+          (jsonFull v false false false) (jsonFull v false true false)
+          (jsonFull v true false false) (jsonFull v true true false)
+          (jsonFull v true false true) (jsonFull v true true true)
+          (jsonFull (jsonFull v false false false) false false false)
+          (uForm v true false) (uForm v true true)
+          (spaceForm v))))
 
 ; (:m :ref AUDIT11-A6 :do "equality of two secret strings without an early exit: the lengths and every byte up to the longer length are folded, so the time depends on the longer length only")
 fn secretsEqual? a: String b: String -> Bool

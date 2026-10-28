@@ -12,6 +12,7 @@
       breakerDownFor
       breaker_down_for
       breakerMarkDown
+      breakerMarkDownFor
       breaker_mark_down
       breakerClear
       breaker_clear
@@ -142,9 +143,13 @@ fn breaker_down_for st: BreakerState provider: String now: Int64 -> (Pair Breake
   (breakerDownFor st provider now)
 
 fn breakerMarkDown st: BreakerState provider: String now: Int64 -> BreakerState
+  (breakerMarkDownFor st provider now 0)
+
+; (:m :ref GW-PARK-TYPED :do "a daily-cap 429 parks the pool for parkSec seconds (its provider's reset) instead of the fixed cooldown; parkSec 0 keeps the cooldown")
+fn breakerMarkDownFor st: BreakerState provider: String now: Int64 parkSec: Int64 -> BreakerState
   (if (stringEmpty? provider)
     st
-    (let [(until (+ now st.cooldownSec))]
+    (let [(until (+ now (if (> parkSec 0) parkSec st.cooldownSec)))]
       (with st :breakers (mapSet st.breakers provider until) :count503 (mapSet st.count503 provider 0) :countTimeout (mapSet st.countTimeout provider 0) :seen (mapSet st.seen provider true))))
 
 fn breaker_mark_down st: BreakerState provider: String now: Int64 -> BreakerState

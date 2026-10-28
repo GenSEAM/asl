@@ -1,9 +1,10 @@
 (module asl-target-llvm/tests/arrayNativeTest
   :x [runTests]
-  :i [(asl-tools/nativeTest :a nt)])
+  :i [(asl-tools/nativeTest :a nt) (asl-cli/nativeCli :a ncli)])
 
-fn clang -> String
-  "/usr/bin/clang -Wno-override-module"
+; (:m :ref ARRAYNATIVE-CLANG-PATH :do "the link uses the clang the native build resolves (config, CLANG, then PATH), not /usr/bin/clang, which a Linux host with only clang-18 lacks")
+fn ! clang -> String
+  (str "'" (stringReplace (ncli/clangCommand!) "'" "'\\''") "' -Wno-override-module")
 
 fn lib -> String
   "asl/host/out/libaslrt.a"

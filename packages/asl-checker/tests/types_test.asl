@@ -1,1 +1,0 @@
-typesTest.asl

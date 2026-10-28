@@ -1,8 +1,0 @@
-(:package migrationGeometry
- :version "0.1.0"
- :entry "geometry.asl"
- :description "Polyglot migration example: Python point distance kernel ported to pure AgentSlang"
- :target (:pythonNativeFfi
-   :hostModule "geometry_native"
-   :glueEngine :ctypes)
- :dependencies [])

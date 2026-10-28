@@ -1,7 +1,7 @@
 (:package asl-pack
  :version "0.1.0"
  :entry "src/pack.asl"
- :description "Universal cross-platform packager and runtime runner for AgentSlang (the build-graph, package-manifest, OS-packaging and target-adapter modules this package once also held were deleted in DEAD-PACKAGES/ba298292c as dead; these nine src modules and four mobile targets remain live, imported by tests/acceptance/d81/Task51003.asl, tests/acceptance/d81/Task51004.asl, tests/acceptance/d81/Task58801IntermediatePolicyTest.asl, tests/conformance/audit/multiLensRemediationTest.asl, asl/packages/asl-target-llvm/tests/nativeRtGapsTest.asl and asl/packages/asl-pack/tests/*)"
+ :description "Universal cross-platform packager and runtime runner for AgentSlang (the build-graph, package-manifest, OS-packaging and target-adapter modules this package once also held were deleted in DEAD-PACKAGES/ba298292c as dead; these nine src modules and four mobile targets remain live, imported by asl/packages/asl-pack/tests/releaseOrchestratorAcceptanceTest.asl, asl/packages/asl-pack/tests/packUnitSuitesTest.asl, asl/packages/asl-pack/tests/intermediatePolicyAcceptanceTest.asl, tests/conformance/audit/multiLensRemediationTest.asl, asl/packages/asl-target-llvm/tests/nativeRtGapsTest.asl and asl/packages/asl-pack/tests/*)"
  :aslFirst true
  :modules [
    "aslPack/dist"

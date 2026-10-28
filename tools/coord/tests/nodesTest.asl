@@ -1,0 +1,53 @@
+(module asl-tools/coord/tests/nodesTest
+  :x [runTests]
+  :i [(asl-tools/coord/nodes :a nd) (asl-tools/fleet/run :a fr) (tools/fleet/model :a fm) (asl-parser/reader :a rd)])
+
+; (:m :ref FK-REGISTRY :do "probe cores must equal the OS's own count read through a bounded child, parse must refuse a row without :role or :arch, and round-trip goes through a scratch path never ~/.asl; parseCount is checked on distinct inputs so a constant probe cannot pass")
+
+fn ! scratch tag: String -> String
+  (str (optionOr (envGet "TMPDIR") "/tmp") "/nodesTest-" (stringFromInt64 (procSelf)) "-" tag)
+
+fn ! osCores -> Int64
+  (let [(os (stringLower (stringTrim (resultOr (fr/shellOut "/usr/bin/uname -s" 5000) ""))))
+        (cmd (if (= os "darwin") "/usr/sbin/sysctl -n hw.ncpu" "nproc"))
+        (d (fr/runOneLimited (fr/job (list "sh" "-c" cmd) "/" (fr/childEnv (list))) (fr/limits 10 8)))]
+    (optionOr (stringToInt64 (stringTrim d.out)) -1))
+
+fn ! parseOne text: String -> (Result nd/Node String)
+  (match (fm/parseForms text)
+    ((err e) (err e))
+    ((ok forms) (nd/parseNode (optionOr (listHead forms) (rd/makeAtom "")))))
+
+fn ! runTests -> Bool
+  (let [(truth (osCores))
+        (probed (nd/probeCores!))
+        (_ (assert (> truth 0) "independent core count read"))
+        (_ (assert (= probed truth) "probed cores equal the OS count"))
+        (_ (assert (and (= (nd/parseCount "8") 8) (= (nd/parseCount "16") 16) (= (nd/parseCount "x") 0)) "parseCount distinct inputs"))
+        (_ (assert (= (nd/coresCommand "darwin") "/usr/sbin/sysctl -n hw.ncpu") "darwin cores command"))
+        (_ (assert (= (nd/coresCommand "linux") "nproc") "linux cores command"))
+        (noRole (parseOne "(:node :id a :arch arm64)"))
+        (noArch (parseOne "(:node :id a :role worker)"))
+        (badRole (parseOne "(:node :id a :role king :arch arm64)"))
+        (good (parseOne "(:node :id a :role macCheck :arch arm64 :os darwin :cores 4 :channels (\"leon\" \"agy\") :relay none)"))
+        (_ (assert (err? noRole) "row without :role refused"))
+        (_ (assert (err? noArch) "row without :arch refused"))
+        (_ (assert (err? badRole) "unknown role refused"))
+        (_ (assert (ok? good) "complete row parses"))
+        (dir (scratch "rt"))
+        (_ (dirCreate dir))
+        (path (str dir "/nodes.asn"))
+        (me (nd/probe! "local" "primary" (list "leon" "claude") "none"))
+        (_ (assert (and (= me.cores truth) (> me.ramGb 0) (> me.diskFreeGb 0) (not (stringEmpty? me.arch))) "probe fills the local row"))
+        (_ (assert (ok? (nd/upsertNode! path me)) "write row"))
+        (changed (nd/Node :id "local" :role "worker" :arch me.arch :os me.os :cores 3 :ramGb 1 :diskFreeGb 1 :clang "" :channels (list) :relay "none"))
+        (_ (assert (ok? (nd/upsertNode! path changed)) "upsert replaces by id"))
+        (other (nd/Node :id "vps" :role "worker" :arch "x86_64" :os "linux" :cores 2 :ramGb 4 :diskFreeGb 20 :clang "" :channels (list "leon") :relay "ssh"))
+        (_ (assert (ok? (nd/upsertNode! path other)) "append second row"))
+        (rows (resultOr (nd/readNodes! path) (list)))
+        (_ (assert (= (listLength rows) 2) "two rows after upsert"))
+        (first (optionOr (listHead rows) other))
+        (_ (assert (and (= first.id "local") (= first.role "worker") (= first.cores 3)) "replaced row kept its slot"))
+        (_ (assert (not (stringContains? (resultOr (fileReadString path) "") "token")) "no token field in rows"))
+        (_ (fr/shellOut (str "/bin/rm -rf " dir) 5000))]
+    true)

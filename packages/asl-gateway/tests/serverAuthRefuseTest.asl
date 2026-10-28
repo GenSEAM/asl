@@ -32,16 +32,17 @@ fn ! refusal! config: String -> (Pair Bool String)
       ((ok g)
         (let [(ended (settle! g 3000))
               (_2 (if ended true (do (fr/killTree! g.run.pid) true)))
+                            (listened (fileExists? readyPath))
                             (err (resultOr (fileReadString (str dir "/gateway.err")) ""))
               (_3 (dropAll! dir))]
-          (pair ended err)))))
+          (pair (and ended (not listened)) err)))))
 
 fn ! runTests -> Bool
   (let [(missing (refusal! "(:gateway :v 2 :secretsFile \"/tmp/gwAuthRefuse-no-such-file.asn\" :providers () :models () :profiles () :uses ())\n"))
         (nonString (refusal! "(:gateway :v 2 :secretsFile 42 :providers () :models () :profiles () :uses ())\n"))
         (broken (refusal! "(:gateway :v 2 :secretsFile \"x\" :providers (\n"))]
     (do
-      (assert (and (pairFirst missing) (stringContains? (pairSecond missing) "ERR_SECRETS_MISSING")) (str "a missing :secretsFile file refuses to start: " (pairSecond missing)))
+      (assert (and (pairFirst missing) (stringContains? (pairSecond missing) "ERR_SECRETS_MISSING")) (str "a missing :secretsFile file refuses to start and leaves no ready file: " (pairSecond missing)))
       (assert (and (pairFirst nonString) (stringContains? (pairSecond nonString) "ERR_SECRETS_CONFIG")) (str "a non-string :secretsFile refuses to start: " (pairSecond nonString)))
       (assert (pairFirst broken) (str "a config that does not parse refuses to start: " (pairSecond broken)))
       true))

@@ -46,6 +46,7 @@ fn noWriteLimitReached runTurns: Float64 turnLimit: Float64 wallBudget: Int64 el
 
 ; (:m :ref LEON-TURN-RUNAWAY-20261017 :do "the noWriteTurns/noWriteWall branch below only ever applies once the model has declared deliver=patch; a reply with no parseable op at all (pure inert prose, no :intent, no :done) never sets deliver, so a model that just rambles turn after turn was caught by nothing shorter than the full turn budget (default 3000) -- ccBeam's implement-constraints-from-spec run took 165 consecutive non-actionable replies before its first real op; parseDefects (a same-turn streak, reset by noteParseTurn on any non-defect turn) closes that gap independent of deliver")
 ; (:m :ref FREEBENCH-TOKENBUDGET-20261017 :do "a case-level cumulative input-token cap, independent of the turn-count budget above: a verbose model can burn a real-money token budget in a handful of turns, long before the 3000-turn default ever trips; inputTokenBudget 0 means no cap (unset, the default for every caller outside the bench harness)")
+; (:m :ref LEON-WALLBUDGET-ORPHAN :do "a run past its :wallBudget ends at the next turn boundary with a receipt, whatever else it is doing; before this only a run that had written nothing ever looked at the wall clock")
 fn loopBoundary redGate: Bool readStreak: Int64 readLimit: Int64 deliver: String writesPersisted: Bool runTurns: Float64 noWriteTurnLimit: Float64 wallBudget: Int64 elapsed: Float64 share: Float64 nextTurn: Int64 budget: Int64 parseDefects: Int64 parseDefectLimit: Int64 inputTokens: Int64 inputTokenBudget: Int64 -> String
   (cond
     ((and redGate (>= readStreak readLimit)) "readStreak")
@@ -53,6 +54,7 @@ fn loopBoundary redGate: Bool readStreak: Int64 readLimit: Int64 deliver: String
     ((and (> share 0.0) (= deliver "patch") (not writesPersisted) (> runTurns 0.0)
           (noWriteLimitReached runTurns noWriteTurnLimit wallBudget elapsed share))
       (if (>= runTurns noWriteTurnLimit) "noWriteTurns" "noWriteWall"))
+    ((and (> wallBudget 0) (>= elapsed (int64ToFloat64 wallBudget))) "wallBudget")
     ((> nextTurn budget) "budget")
     ((and (> inputTokenBudget 0) (>= inputTokens inputTokenBudget)) "tokenBudget")
     (else "continue"))
