@@ -217,7 +217,7 @@ fn ! runTests -> Bool
           (pair "test" "local") (pair "tree" "local") (pair "observe" "local") (pair "outline" "local")
           (pair "intel" "local") (pair "fix" "local") (pair "txn" "local") (pair "tools" "local")
           (pair "help" "local") (pair "findings" "local") (pair "step" "local") (pair "evidence" "local")
-          (pair "escalate" "local") (pair "done" "local") (pair "gitDiff" "local") (pair "gitLog" "local")
+          (pair "escalate" "local") (pair "need" "local") (pair "done" "local") (pair "gitDiff" "local") (pair "gitLog" "local")
           (pair "gitShow" "local") (pair "note" "local") (pair "delete" "local") (pair "run" "local")
           (pair "gate" "local") (pair "push" "needsConfirm") (pair "search" "local")
           (pair "research" "local") (pair "crawl" "local") (pair "manage" "local")

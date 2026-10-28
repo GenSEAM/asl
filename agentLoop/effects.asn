@@ -22,6 +22,7 @@
     (:effect :op "step" :class :local :doc "Generic step wrapper")
     (:effect :op "evidence" :class :local :doc "Evidence claim")
     (:effect :op "escalate" :class :local :doc "Escalation signal")
+    (:effect :op "need" :class :local :doc "Resource request receipt: ctx, owns or time")
     (:effect :op "done" :class :local :doc "Terminal done signal")
     (:effect :op "gitDiff" :class :local :doc "Show git diff for path against base rev or working tree")
     (:effect :op "gitLog" :class :local :doc "Show git commit log")
