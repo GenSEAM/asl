@@ -693,12 +693,19 @@ fn isEmptyContent? content: j/Json -> Bool
     ((j/jstr s) (stringEmpty? (pyStrip s)))
     (_ false))
 
+; (:m :ref GW-429-BODY-SAMPLES :do "a body that names one model's own limit (google Quota exceeded for metric, groq Rate limit reached for model, the openrouter free-model counters) is that model's 429 even when its boilerplate says billing, so it never trips the whole provider; keep in sync with breaker.asl")
+fn modelScopedQuota? body: String -> Bool
+  (or (stringContains? body "Quota exceeded for metric")
+    (or (stringContains? body "Rate limit reached for model")
+      (or (stringContains? body "free_model_daily_requests") (stringContains? body "free-models-per-day"))))
+
 ; (:m :tags (retry) :do "duplicated from breaker.breakerIsProviderWideQuota (not imported, to keep upstream.asl free of a breaker dependency); keep both in sync")
 fn looksProviderWideQuota? body: String -> Bool
   (let [(t (stringUpper body))]
     (or (stringContains? t "INSUFFICIENT_QUOTA")
-      (or (stringContains? t "BILLING")
-        (and (stringContains? t "ACCOUNT") (stringContains? t "QUOTA")))))
+      (and (not (modelScopedQuota? body))
+        (or (stringContains? t "BILLING")
+          (and (stringContains? t "ACCOUNT") (stringContains? t "QUOTA"))))))
 
 fn looksTransientText? body: String -> Bool
   (let [(t (pyLower body))]
@@ -754,6 +761,7 @@ fn dailyCapKind status: Int64 body: String -> String
     ((!= status 429) "")
     ((or (stringContains? body "free_model_daily_requests") (stringContains? body "free-models-per-day")) "openrouter")
     ((and (stringContains? body "PerDay") (stringContains? body "quotaId")) "gemini")
+    ((and (stringContains? body "Quota exceeded for metric") (stringContains? body "per day")) "gemini")
     ((or (stringContains? body "tokens per day") (or (stringContains? body "requests per day") (stringContains? body "(TPD)"))) "groq")
     (else ""))
 

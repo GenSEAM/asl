@@ -114,12 +114,19 @@ fn breakerIsQuotaError text: String -> Bool
 fn breaker_is_quota_error text: String -> Bool
   (breakerIsQuotaError text)
 
+; (:m :ref GW-429-BODY-SAMPLES :do "copy of upstream.modelScopedQuota?: a body naming one model's own limit is not provider-wide; keep in sync")
+fn breakerModelScopedQuota text: String -> Bool
+  (or (stringContains? text "Quota exceeded for metric")
+    (or (stringContains? text "Rate limit reached for model")
+      (or (stringContains? text "free_model_daily_requests") (stringContains? text "free-models-per-day"))))
+
 ; (:m :tags (breaker pool) :do "a 429 is per-model by default (each free model on a shared provider has its own upstream limit); these markers mean the account itself is out, so the whole provider pool trips instead of just the one model")
 fn breakerIsProviderWideQuota text: String -> Bool
   (let [(t (stringUpper text))]
     (or (stringContains? t "INSUFFICIENT_QUOTA")
-      (or (stringContains? t "BILLING")
-        (and (stringContains? t "ACCOUNT") (stringContains? t "QUOTA")))))
+      (and (not (breakerModelScopedQuota text))
+        (or (stringContains? t "BILLING")
+          (and (stringContains? t "ACCOUNT") (stringContains? t "QUOTA"))))))
 
 fn breakerDownFor st: BreakerState provider: String now: Int64 -> (Pair BreakerState Int64)
   (if (stringEmpty? provider)
