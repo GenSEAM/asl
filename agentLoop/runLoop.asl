@@ -831,11 +831,13 @@ fn ! failedAfterKill! env: s/LoopEnv run: LoopRun rootDir: String e: String -> s
     ((err handErr) (emptyResultWith env run.session "failed" (some handErr) run.state.turn none (list) none none none run.state.baselineGreen))
     ((ok hand) (emptyResultWith env run.session "failed" (some e) run.state.turn (pairFirst (pairSecond hand)) (pairSecond (pairSecond hand)) none none none run.state.baselineGreen)))
 
+; (:m :ref LEON-FAIL-STATUS :do "stale ad-hoc findings data does not fail a run that wrote its owned files and ended on green declared gates, and a downgrade to failed writes a verdict line naming the cause")
 fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
   (let [state run.state
         rootDir (absoluteRoot! env.rootDir)
         findings (map ctx/pyStr state.findingsList)
-        outcome (stringSplit (lp/finalOutcome state.status (optionOr state.deliver "") (not (listEmpty? findings))
+        wroteGreen (and (not (listEmpty? env.gates)) (and (declaredGatesGreen env.gates state.lastGates) (and (!= (optionOr state.deliver "") "findings") (not (listEmpty? (distinct (listAppend state.writtenFiles (writtenPaths run.written))))))))
+        outcome (stringSplit (lp/finalOutcome state.status (optionOr state.deliver "") (and (not (listEmpty? findings)) (not wroteGreen))
           (listAny? (fn [f] (stringContains? f ":claim")) findings) (listLength state.runUnbackedClaims) 0) "|")
         status0 (c/firstOf outcome)
         finalUnbacked (optionOr (stringToInt64 (optionOr (listGet outcome 1) "")) 0)
@@ -844,6 +846,7 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
       ((err e) (failedAfterKill! env run rootDir e))
       ((ok _)
         (let [written (distinct (listAppend state.writtenFiles (writtenPaths run.written)))
+              _why (if (and (= status0 "failed") (= state.status "ok")) (ok? (jr/journalWrite env.journalPath (str "(:verdict :failed :why \"findings without a claim, and no green declared gate over written files\" :findings " (stringFromInt64 (listLength findings)) ")\n"))) true)
               spec (if (and env.specCheck (and (= status0 "ok") (not (listEmpty? written))))
                      (some (specCheckRun! env run rootDir written))
                      none)
