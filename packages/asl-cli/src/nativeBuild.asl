@@ -1,6 +1,6 @@
 (module asl-cli/nativeBuild
   :x [Build variantKey! main storeCapFor! capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure?]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/nativeRefresh :a nr) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r)])
 
 (schema Build
   (:f root String)
@@ -574,6 +574,23 @@ fn ! releaseLock! cacheDir: String owner: String -> Bool
         (held (stringTrim (resultOr (fileReadString (str lock "/pid")) "")))]
     (if (and (not (stringEmpty? held)) (or (= held (stringFromInt64 (procSelf))) (= held owner))) (ok? (pathRemove lock)) false))
 
+; (:m :ref BIN-ASL-ASL :do "buildCode! is the build half of main (no lock release), shared by the locked entry and by refresh")
+fn ! buildCode! root: String cacheDir: String owner: String -> Int64
+  (let [(pid (stringFromInt64 (procSelf)))
+        (_ (say! (str "asl: native build pid " pid " started for " root)))
+        (code (match (build! root cacheDir owner)
+                ((ok dir) (do (say! (str "asl: native build: " dir))
+                               (if (sweepOn? root) (say! (str "asl: native build swept " (stringFromInt64 (nc/sweepNativeCache! cacheDir (storeCapFor! root) (storeMinAgeNs! root))) " cache entries")) true)
+                               0))
+                ((err e) (do (say! (str "asl: native build failed: " e)) 1))))
+        (_ (pathRemove (str cacheDir "/tmp." pid)))
+        (_ (nc/dropLeases! cacheDir))]
+    code)
+
+fn ! coldCode! root: String cacheDir: String -> Int64
+  (let [(head (stringTrim (resultOr (fileReadString (nc/headPath cacheDir root)) "")))]
+    (if (and (nc/fresh? root head) (nc/probe? root head)) 0 (buildCode! root cacheDir "")))
+
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(root (optionOr (listHead args) ""))
         (second (optionOr (listGet args 1) "--"))
@@ -583,16 +600,10 @@ fn ! main args: (List String) -> (Result Int64 String)
     (cond
       ((stringEmpty? root) (do (say! "usage: nativeBuild ROOT [CACHE] [--if-cold] [--lock-owner PID]") (ok 2)))
       ((and (listContains? args "--if-cold") (let [(head (stringTrim (resultOr (fileReadString (nc/headPath cacheDir root)) "")))] (and (nc/fresh? root head) (nc/probe? root head)))) (ok 0))
+      ((= root "refresh") (ok (nr/refresh! (optionOr (listGet args 1) "") (optionOr (listGet args 2) (nc/cacheDir!)) (fn [r c] (coldCode! r c)))))
       ((and (not (stringEmpty? owner)) (or (<= (optionOr (stringToInt64 owner) 0) 1) (not (nc/alive? (optionOr (stringToInt64 owner) 0))))) (do (releaseLock! cacheDir owner) (ok 1)))
       (else
-        (let [(_ (say! (str "asl: native build pid " pid " started for " root)))
-              (code (match (build! root cacheDir owner)
-                      ((ok dir) (do (say! (str "asl: native build: " dir))
-                                     (if (sweepOn? root) (say! (str "asl: native build swept " (stringFromInt64 (nc/sweepNativeCache! cacheDir (storeCapFor! root) (storeMinAgeNs! root))) " cache entries")) true)
-                                     0))
-                      ((err e) (do (say! (str "asl: native build failed: " e)) 1))))
-              (_ (pathRemove (str cacheDir "/tmp." pid)))
-              (_ (nc/dropLeases! cacheDir))
+        (let [(code (buildCode! root cacheDir owner))
               (_ (releaseLock! cacheDir owner))]
           (do (say! (str "asl: native build pid " pid " exit " (stringFromInt64 code)))
               (ok code))))))
