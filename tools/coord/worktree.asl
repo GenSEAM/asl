@@ -1,5 +1,5 @@
 (module asl-tools/coord/worktree
-  :x [Cfg Wt Entry safeUnit? wtPath parseWorktrees listWt! addWt! rescueBranch! removeWt! renderWt]
+  :x [Cfg Wt Entry Act safeUnit? wtPath parseWorktrees listWt! addWt! rescueBranch! removeWt! renderWt protectedUnit? ageSec! gcWt! auditWt! main]
   :i [(asl-tools/fleet/run :a fr)])
 
 (schema Cfg
@@ -194,3 +194,127 @@ fn ! removeWt! cfg: Cfg unit: String force: Bool -> (Result String String)
                   ((err e) (err e))
                   ((ok a) (dropWt! cfg w force a rb))))
               (else (dropWt! cfg w force "" rb))))))))
+
+(schema Act
+  (:f w Wt)
+  (:f age Int64)
+  (:f verdict String))
+
+fn q s: String -> String
+  (str "\"" (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\"")
+
+; (:m :ref WTGC :do "units that are never collected: the repo's main worktree, the train scratch, and names of other projects; the branch named like mainRef is protected too, so a VPS base/main checkout survives")
+fn protectedUnit? unit: String -> Bool
+  (or (= unit "main")
+    (or (= unit "train")
+      (or (stringEndsWith? unit "-train")
+        (or (stringStartsWith? unit "dev-") (stringStartsWith? unit "vtbot-")))))
+
+fn mtimeOf! p: String -> Int64
+  (match (fileStat p) ((ok s) s.mtime) ((err _) 0))
+
+; (:m :ref WTGC :do "age is seconds since the newest of the worktree admin HEAD and index mtimes (checkout, add, commit and status refresh touch them), so a fresh worktree at the main tip is young, not as old as its head commit")
+fn ! ageSec! w: Wt -> Int64
+  (let [(gd (stringTrim (git! w.path (list "rev-parse" "--absolute-git-dir")).out))
+        (a (mtimeOf! (str gd "/HEAD")))
+        (b (mtimeOf! (str gd "/index")))
+        (newest (if (> a b) a b))
+        (age (- (/ (nowNs) 1000000000) newest))]
+    (if (or (= newest 0) (< age 0)) 0 age))
+
+fn ! classify! cfg: Cfg keep: (List String) w: Wt -> String
+  (cond
+    ((or (protectedUnit? w.unit) (or (listContains? keep w.unit) (or (= w.branch "main") (= w.branch cfg.mainRef)))) "protected")
+    ((= (realPath! w.path) (realPath! cfg.repo)) "protected")
+    ((not w.merged) "unmerged")
+    ((> w.dirty 0) "dirtyMerged")
+    (else "merged"))
+
+fn actRow a: Act -> String
+  (str "(:wtAged :unit " a.w.unit " :ageSec " a.age " :dirty " a.w.dirty " :branch " (q a.w.branch) ")")
+
+fn ! applyOne! cfg: Cfg a: Act -> (Pair String String)
+  (cond
+    ((= a.verdict "merged")
+      (match (dropWt! cfg a.w false "" "")
+        ((ok _) (pair "removed" (str "(:wtRemoved :unit " a.w.unit " :ageSec " a.age ")")))
+        ((err e) (pair "kept" (str "(:wtKept :unit " a.w.unit " :reason removeFailed :err " (q e) ")"))))) 
+    ((= a.verdict "dirtyMerged")
+      (match (archiveDirty! cfg a.w)
+        ((ok p) (pair "kept" (str "(:wtKept :unit " a.w.unit " :reason dirtyMerged :dirty " a.w.dirty " :archive " (q p) ")")))
+        ((err e) (pair "kept" (str "(:wtKept :unit " a.w.unit " :reason archiveFailed :err " (q e) ")")))))
+    (else (pair "kept" (kept a.w.unit a.verdict))))
+
+fn ! actsOf! cfg: Cfg keep: (List String) only: (List String) -> (Result (List Act) String)
+  (match (listWt! cfg)
+    ((err e) (err e))
+    ((ok ws) (ok (map (fn [(w Wt)] -> Act (Act :w w :age (ageSec! w) :verdict (classify! cfg keep w)))
+                      (filter (fn [(w Wt)] -> Bool (or (listEmpty? only) (listContains? only w.branch))) ws)))))
+
+; (:m :ref WTGC :do "gc removes only worktrees that are clean and merged into mainRef; a dirty merged one is archived and kept; unmerged, protected and out-of-base ones are never touched; dry unless apply, which also runs git worktree prune; only restricts the pass to worktrees on those branches")
+fn ! gcWt! cfg: Cfg keep: (List String) only: (List String) apply: Bool -> (Result String String)
+  (match (actsOf! cfg keep only)
+    ((err e) (err e))
+    ((ok acts)
+      (let [(of (fn [(v String)] -> (List Act) (filter (fn [(a Act)] -> Bool (= a.verdict v)) acts)))
+            (outs (if apply (map (fn [(a Act)] -> (Pair String String) (applyOne! cfg a)) (filter (fn [(a Act)] -> Bool (or (= a.verdict "merged") (= a.verdict "dirtyMerged"))) acts)) (list)))
+            (pr (if apply (git! cfg.repo (list "worktree" "prune")) (git! cfg.repo (list "worktree" "list"))))
+            (sel (fn [(k String)] -> String (stringJoin (map pairSecond (filter (fn [(o (Pair String String))] -> Bool (= (pairFirst o) k)) outs)) " ")))
+            (prot (stringJoin (map (fn [(a Act)] -> String (kept a.w.unit "protected")) (of "protected")) " "))]
+        (if (!= pr.exit 0)
+          (err (str "worktree prune failed: " (stringTrim pr.out)))
+          (ok (str "(:wtGc :apply " (if apply "true" "false")
+                   " :merged (" (stringJoin (map actRow (of "merged")) " ") ")"
+                   " :dirtyMerged (" (stringJoin (map actRow (of "dirtyMerged")) " ") ")"
+                   " :unmerged " (listLength (of "unmerged"))
+                   " :removed (" (sel "removed") ")"
+                   " :kept (" (if (stringEmpty? prot) (sel "kept") (str prot " " (sel "kept"))) "))"))))))
+
+; (:m :ref WTGC :do "audit lists every worktree merged into mainRef, still present and older than olderSec; exit 1 when any, else 0; protected units are never listed")
+fn ! auditWt! cfg: Cfg keep: (List String) olderSec: Int64 -> (Result (Pair Int64 String) String)
+  (match (actsOf! cfg keep (list))
+    ((err e) (err e))
+    ((ok acts)
+      (let [(stale (filter (fn [(a Act)] -> Bool (and (or (= a.verdict "merged") (= a.verdict "dirtyMerged")) (> a.age olderSec))) acts))]
+        (ok (pair (if (listEmpty? stale) 0 1)
+                  (str "(:wtAudit :olderSec " olderSec " :stale (" (stringJoin (map actRow stale) " ") ") :count " (listLength stale) ")"))))))
+
+fn flagArg args: (List String) name: String -> (Option String)
+  (match (listHead args)
+    ((none) (none))
+    ((some a) (let [(rest (optionOr (listTail args) (list)))]
+                (if (= a name) (listHead rest) (flagArg rest name)))))
+
+fn csv s: String -> (List String)
+  (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (map stringTrim (stringSplit s ",")))
+
+fn ! cfgFromArgs! args: (List String) -> (Result Cfg String)
+  (let [(repoArg (optionOr (flagArg args "--repo") "."))
+        (repo (resultOr (realPath repoArg) repoArg))
+        (up (stringReplace repo (str "/" (baseName repo)) ""))
+        (base (optionOr (flagArg args "--base") (str up "/worktrees")))]
+    (if (not (fileExists? base))
+      (err (str "no worktree base " base))
+      (ok (Cfg :repo repo :base base :prefix (optionOr (flagArg args "--prefix") "asex-")
+               :archive (optionOr (flagArg args "--archive") (str base "/.archive"))
+               :mainRef (optionOr (flagArg args "--main") "main")))))
+
+; (:m :ref WTGC :do "asl run asl/tools/coord/worktree.asl gc|audit [--repo DIR] [--base DIR] [--prefix P] [--archive DIR] [--main REF] [--keep UNIT,..] [--only BRANCH,..] [--apply] [--older SEC]; the VPS passes --repo ~/asex --base ~/wt --prefix ''")
+fn ! main args: (List String) -> (Result Int64 String)
+  (let [(verb (optionOr (listHead args) ""))
+        (keep (csv (optionOr (flagArg args "--keep") "")))
+        (only (csv (optionOr (flagArg args "--only") "")))
+        (older (optionOr (stringToInt64 (optionOr (flagArg args "--older") "7200")) 7200))]
+    (match (cfgFromArgs! args)
+      ((err e) (do (println (str "(:wtGc :status :failed :error " (q e) ")")) (ok 2)))
+      ((ok cfg)
+        (cond
+          ((= verb "gc")
+            (match (gcWt! cfg keep only (listContains? args "--apply"))
+              ((ok r) (do (println r) (ok 0)))
+              ((err e) (do (println (str "(:wtGc :status :failed :error " (q e) ")")) (ok 2)))))
+          ((= verb "audit")
+            (match (auditWt! cfg keep older)
+              ((ok r) (do (println (pairSecond r)) (ok (pairFirst r))))
+              ((err e) (do (println (str "(:wtAudit :status :failed :error " (q e) ")")) (ok 2)))))
+          (else (do (println "(:wt :error \"verb is gc or audit\")") (ok 2)))))))

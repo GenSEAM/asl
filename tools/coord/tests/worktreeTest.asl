@@ -110,10 +110,61 @@ fn ! testLifecycle root: String -> Bool
       (assert (fileExists? (str root "/wts/vtbotfeature")) "foreign worktree intact")
       true))
 
+fn ! exitOf r: (Result Int64 String) -> Int64
+  (match r ((ok n) n) ((err _) -9))
+
+fn ! mkUnit cfg: w/Cfg unit: String -> Bool
+  (match (w/addWt! cfg unit "") ((ok _) true) ((err _) false))
+
+fn ! testGc root: String -> Bool
+  (let [(cfg (cfgOf root))
+        (repo (str root "/repo"))
+        (wt (fn [(u String)] -> String (str root "/wts/asex-" u)))
+        (args (fn [(verb String) (extra (List String))] -> (List String) (listAppend (list verb "--repo" repo "--base" (str root "/wts") "--archive" (str root "/archive")) extra)))]
+    (do
+      (assert (and (mkUnit cfg "g1") (and (mkUnit cfg "g2") (and (mkUnit cfg "g3") (and (mkUnit cfg "g4") (mkUnit cfg "train"))))) "gc units added")
+      (assert (put (str (wt "g2") "/wip.txt") "w") "g2 dirty")
+      (assert (put (str (wt "g3") "/new.txt") "n") "g3 file")
+      (assert (git (wt "g3") (list "add" "-A")) "g3 add")
+      (assert (git (wt "g3") (list "commit" "-q" "-m" "g3 work")) "g3 unmerged commit")
+      (assert (git repo (list "worktree" "add" "-q" "--detach" (str root "/wts/vtbotgc") "main")) "foreign worktree")
+      (let [(dry (resText (w/gcWt! cfg (list) (list) false)))]
+        (do (assert (stringContains? dry ":apply false") (str "dry receipt: " dry))
+            (assert (stringContains? dry ":unmerged 1") "dry counts the unmerged worktree")
+            (assert (stringContains? dry ":unit g1") "dry lists the merged clean worktree")
+            (assert (stringContains? dry ":removed ()") "dry removes nothing")
+            (assert (fileExists? (wt "g1")) "dry keeps g1")
+            true))
+      (assert (= (exitOf (w/main (args "audit" (list "--older" "-1")))) 1) "audit exits 1 when a merged worktree is older than the threshold")
+      (assert (= (exitOf (w/main (args "audit" (list "--older" "7200")))) 0) "audit exits 0 when no merged worktree is that old")
+      (let [(only (resText (w/gcWt! cfg (list) (list "sh/g4") true)))]
+        (do (assert (stringContains? only "wtRemoved :unit g4") (str "only g4 removed: " only))
+            (assert (fileExists? (wt "g1")) "only keeps g1")
+            true))
+      (let [(r (resText (w/gcWt! cfg (list) (list) true)))]
+        (do (assert (stringContains? r "wtRemoved :unit g1") (str "apply removes merged clean g1: " r))
+            (assert (not (fileExists? (wt "g1"))) "g1 path gone")
+            (assert (stringContains? r "reason dirtyMerged") "apply keeps dirty merged g2")
+            (assert (stringContains? r ":archive") "apply archives g2")
+            (assert (fileExists? (wt "g2")) "g2 kept")
+            (assert (fileExists? (str (wt "g2") "/wip.txt")) "g2 file kept")
+            (assert (fileExists? (wt "g3")) "g3 unmerged kept")
+            (assert (fileExists? (wt "train")) "train scratch protected")
+            (assert (stringContains? r "reason protected") "protected reported")
+            (assert (fileExists? (str root "/wts/vtbotgc")) "foreign worktree untouched")
+            (assert (not (listEmpty? (resultOr (dirList (str root "/archive")) (list)))) "archive dir holds g2")
+            true))
+      (assert (= (exitOf (w/main (args "audit" (list "--older" "-1")))) 1) "audit still lists the kept dirty merged worktree")
+      (assert (stringContains? (resText (w/removeWt! cfg "g2" true)) "wtRemoved") "g2 force-removed")
+      (assert (= (exitOf (w/main (args "audit" (list "--older" "-1")))) 0) "audit exits 0 once only unmerged and protected remain")
+      true))
+
 fn ! runTests -> Bool
   (let [(root (scratch))]
     (do (assert (fixture root) "fixture repository built")
         (assert (testPure) "pure helpers")
         (assert (testLifecycle root) "lifecycle")
+        (assert (fixture (str root "/gc")) "gc fixture repository built")
+        (assert (testGc (str root "/gc")) "gc and audit")
         (assert (= (sh "." (list "rm" "-rf" root)).exit 0) "fixture removed")
         true))
