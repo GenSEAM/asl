@@ -965,7 +965,7 @@ fn lowerWithExpr ctx: LowerCtx env: (Map String String) st: LowerState args: (Li
                            (match (lowerWithValues ctx env rRec.st rRec.value pairs declared)
                              ((err d) (err d))
                              ((ok r) (ok (emitAs r.st (ty/tyRec schema) (ty/opRecord schema declared r.values))))))))))
-            (_ (err (unsupported ctx "with" "needs a record of known schema")))))))))
+            (_ (err (unsupported ctx "with" "needs a record of known schema: annotate the value, as a typed parameter (fn [(p Item)] ...) or a typed let, or pass it from a parameter declared (List Item)")))))))))
 
 fn lowerField ctx: LowerCtx env: (Map String String) st: LowerState name: String args: (List rd/SExpr) -> (Result Lowered ty/IrDiag)
   (if (!= (listLength args) 1)
@@ -1717,6 +1717,113 @@ fn siteOf args: (List rd/SExpr) -> String
     ((some a) (if (and (rd/isList? a) (= (rd/sexprHead a) "@site")) (rd/sexprHead (nthOf (rd/sexprToList a) 1)) ""))
     ((none) ""))
 
+; (:m :ref LANG-WITH-IN-LAMBDA :do "lowering keeps a Val's record schema only for annotated parameters and constructor or typed-call results, so (with p ...) on an unannotated lambda parameter had no schema; a parameter declared (List Item) is a list of Item, so the lambda handed to map, filter, listSortBy, listAny?, listAll? or fold over it is rewritten to (fn [(p Item)] ...) before lowering, the same annotated form a user may write by hand; only atoms bound by a declared (List Record) parameter or by a let from such a list, and filter, listSortBy, listReverse, listTake, listDrop and listTail of one, are followed")
+fn listElemSchema ctx: LowerCtx typeText: String -> String
+  (let [(t (stringTrim typeText))]
+    (if (and (stringStartsWith? t "(List ") (stringEndsWith? t ")"))
+      (let [(inner (stringTrim (optionOr (stringSlice t 6 (- (stringLength t) 1)) "")))]
+        (if (and (not (stringEmpty? inner)) (and (not (stringContains? inner " ")) (ty/ssaIsRec? (resolveTy ctx.info (annotTy inner)))))
+          inner
+          ""))
+      ""))
+
+fn elemOf ctx: LowerCtx env: (Map String String) e: rd/SExpr -> String
+  (cond
+    ((rd/isAtom? e) (optionOr (mapGet env (rd/sexprHead e)) ""))
+    ((rd/isList? e)
+      (let [(items (rd/sexprToList e))
+            (head (rd/sexprHead (nthOf items 0)))
+            (last (optionOr (listGet items (- (listLength items) 1)) (rd/makeAtom "")))
+            (second (nthOf items 1))]
+        (cond
+          ((or (= head "filter") (= head "listSortBy")) (if (= (listLength items) 3) (elemOf ctx env last) ""))
+          ((or (= head "listReverse") (= head "listTail")) (if (= (listLength items) 2) (elemOf ctx env second) ""))
+          ((or (= head "listTake") (= head "listDrop")) (if (= (listLength items) 3) (elemOf ctx env second) ""))
+          (else ""))))
+    (else ""))
+
+; (:m :ref LANG-WITH-IN-LAMBDA :do "the reader desugars a [..] binding vector to (list ..) in code, so rebuilding a vector keeps whichever of the two forms it had")
+fn rebuildVec orig: rd/SExpr items: (List rd/SExpr) -> rd/SExpr
+  (if (rd/isVect? orig) (rd/makeVect items) (rd/makeList (cons (rd/makeAtom "list") items)))
+
+fn annotateParam p: rd/SExpr schema: String -> rd/SExpr
+  (if (and (rd/isAtom? p) (not (stringEmpty? schema)))
+    (rd/makeList (list p (rd/makeAtom schema)))
+    p)
+
+; (:m :ref LANG-WITH-IN-LAMBDA :do "the lambda argument a collection builtin hands its list's element to: paramIndex is which lambda parameter receives the element (fold's second, the others' first)")
+fn annotateLambda f: rd/SExpr paramIndex: Int64 schema: String -> rd/SExpr
+  (if (or (stringEmpty? schema) (not (rd/isList? f)))
+    f
+    (let [(items (rd/sexprToList f))]
+      (if (and (= (rd/sexprHead (nthOf items 0)) "fn") (some? (bindingVector (nthOf items 1))))
+        (let [(ps (optionOr (bindingVector (nthOf items 1)) (list)))]
+          (if (< paramIndex (listLength ps))
+            (rd/makeList (cons (nthOf items 0)
+                               (cons (rebuildVec (nthOf items 1) (map (fn [(i Int64)] -> rd/SExpr (if (= i paramIndex) (annotateParam (nthOf ps i) schema) (nthOf ps i))) (range 0 (listLength ps))))
+                                     (tailOf (tailOf items)))))
+            f))
+        f)))
+
+fn lambdaListCall ctx: LowerCtx env: (Map String String) head: String items: (List rd/SExpr) -> (Option rd/SExpr)
+  (let [(args (tailOf items))
+        (isFold (= head "fold"))
+        (listPos (if isFold 2 1))
+        (elem (if (or (and isFold (= (listLength args) 3)) (and (not isFold) (= (listLength args) 2)))
+                (elemOf ctx env (nthOf args listPos))
+                ""))]
+    (if (stringEmpty? elem)
+      none
+      (some (rd/makeList (cons (nthOf items 0) (map (fn [(i Int64)] -> rd/SExpr (if (= i 0) (annotateLambda (nthOf args 0) (if isFold 1 0) elem) (nthOf args i))) (range 0 (listLength args))))))))
+
+fn annotateAll ctx: LowerCtx env: (Map String String) xs: (List rd/SExpr) -> (List rd/SExpr)
+  (map (fn [(x rd/SExpr)] -> rd/SExpr (annotateExpr ctx env x)) xs)
+
+fn annotateLet ctx: LowerCtx env: (Map String String) bindings: (List rd/SExpr) acc: (List rd/SExpr) -> (Pair (List rd/SExpr) (Map String String))
+  (match (listHead bindings)
+    ((none) (pair (listReverse acc) env))
+    ((some b)
+      (let [(parts (rd/sexprToList b))]
+        (if (and (rd/isList? b) (and (= (listLength parts) 2) (rd/isAtom? (nthOf parts 0))))
+          (let [(name (rd/sexprHead (nthOf parts 0)))
+                (init (annotateExpr ctx env (nthOf parts 1)))
+                (elem (elemOf ctx env init))
+                (env2 (if (stringEmpty? elem) (mapRemove env name) (mapSet env name elem)))]
+            (annotateLet ctx env2 (tailOf bindings) (cons (rd/makeList (list (nthOf parts 0) init)) acc)))
+          (annotateLet ctx env (tailOf bindings) (cons b acc))))))
+
+fn annotateExpr ctx: LowerCtx env: (Map String String) e: rd/SExpr -> rd/SExpr
+  (cond
+    ((rd/isVect? e) (rd/makeVect (annotateAll ctx env (rd/sexprToList e))))
+    ((rd/isList? e)
+      (let [(items (rd/sexprToList e))
+            (head (rd/sexprHead (nthOf items 0)))]
+        (cond
+          ((and (= head "let") (some? (bindingVector (nthOf items 1))))
+            (let [(r (annotateLet ctx env (optionOr (bindingVector (nthOf items 1)) (list)) (list)))]
+              (rd/makeList (cons (nthOf items 0) (cons (rebuildVec (nthOf items 1) (pairFirst r)) (annotateAll ctx (pairSecond r) (tailOf (tailOf items))))))))
+          ((and (= head "fn") (some? (bindingVector (nthOf items 1))))
+            (let [(shadow (fold (fn [(m (Map String String)) (p rd/SExpr)] -> (Map String String) (mapRemove m (paramName p))) env (optionOr (bindingVector (nthOf items 1)) (list))))]
+              (rd/makeList (cons (nthOf items 0) (cons (nthOf items 1) (annotateAll ctx shadow (tailOf (tailOf items))))))))
+          (else
+            (let [(inner (annotateAll ctx env items))]
+              (match (if (or (= head "map") (or (= head "filter") (or (= head "listSortBy") (or (= head "listAny?") (or (= head "listAll?") (= head "fold"))))))
+                       (lambdaListCall ctx env head inner)
+                       none)
+                ((some call) call)
+                ((none) (rd/makeList inner))))))))
+    (else e))
+
+fn paramListEnv ctx: LowerCtx params: (List ast/Param) -> (Map String String)
+  (fold (fn [(m (Map String String)) (p ast/Param)] -> (Map String String)
+          (let [(elem (listElemSchema ctx p.type))]
+            (if (stringEmpty? elem) m (mapSet m p.name elem))))
+        (mapEmpty) params)
+
+fn annotateBody ctx: LowerCtx d: ast/DefunNode -> (List rd/SExpr)
+  (let [(env (paramListEnv ctx d.params))]
+    (if (listEmpty? (mapKeys env)) d.body (annotateAll ctx env d.body)))
+
 fn lowerFunction ctx: LowerCtx strings: StringPool d: ast/DefunNode -> (Result LoweredFn ty/IrDiag)
   (let [(names (map (fn [(p ast/Param)] -> String p.name) d.params))
         (sig (resolveSig ctx.info (sigOf d)))
@@ -1729,7 +1836,7 @@ fn lowerFunction ctx: LowerCtx strings: StringPool d: ast/DefunNode -> (Result L
         (kinds (fold (fn [(k (Map String String)) (p ast/Param)] -> (Map String String) (mapSet k p.name (kindOfAnnotation p.type))) (mapEmpty) d.params))]
     (match (lowerSeq ctx env st0 (if (and (preludeBitOp? ctx d.name) (= ctx.fnName (str "prelude." d.name)))
                                 (list (rd/makeList (cons (rd/makeAtom d.name) (map rd/makeAtom names))))
-                                (withSites ctx.sites (resolveAll ctx kinds d.body))))
+                                (withSites ctx.sites (resolveAll ctx kinds (annotateBody ctx d)))))
       ((err e) (err e))
       ((ok r0) (let [(r (coerce r0.st r0.value sig.ret))
                      (final (closeBlock r.st (ty/termReturn r.value) "" (list)))]
