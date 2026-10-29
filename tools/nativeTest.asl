@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [runTests main failLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [runTests main failLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -113,8 +113,17 @@ fn ! absPath rel: String -> String
   (let [(root (toolRoot))]
     (if (= root ".") (str (resultOr (realPath ".") ".") "/" rel) (str root "/" rel)))
 
+; (:m :ref GATE-SPEED :do "a linked git worktree (its .git is a file) shares the compile cache ~/.asl/run/nativeTest with every other one, as audit gates already does: entries are keyed by content, so a unit worktree compiles only what it changed (conductorTest 49 s CPU cold, 1.4 s on a shared hit); the main checkout and an explicit ASL_NATIVE_TEST_CACHE keep their choice")
+fn ! linkedWorktree? root: String -> Bool
+  (match (fileStat (str root "/.git"))
+    ((ok st) (not st.isDir))
+    ((err _) false))
+
+fn ! defaultCacheDirFor root: String home: String -> String
+  (if (and (not (stringEmpty? home)) (linkedWorktree? root)) (str home "/.asl/run/nativeTest") ".asl/cache/nativeTest")
+
 fn ! cacheDir! -> String
-  (let [(c (optionOr (envGet "ASL_NATIVE_TEST_CACHE") ".asl/cache/nativeTest"))]
+  (let [(c (optionOr (envGet "ASL_NATIVE_TEST_CACHE") (defaultCacheDirFor (toolRoot) (optionOr (envGet "HOME") ""))))]
     (if (stringStartsWith? c "/") c (toolPath c)))
 
 fn modulesDirIn cDir: String -> String
