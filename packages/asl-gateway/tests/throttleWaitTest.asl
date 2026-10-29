@@ -21,7 +21,7 @@ fn ! drive! step: ch/ChatStep labels: String granted: (List String) fuel: Int64 
          ((ch/effBucket m _ t)
           (drive! (k (ch/outBool (listContains? granted m))) (str labels "|bucket:" m ":" (stringFromFloat64 t)) granted (- fuel 1)))
          ((ch/effCli _ _) (drive! (k (ch/outCli none)) (str labels "|cli") granted (- fuel 1)))
-         ((ch/effHttp _ m _ _ _ _ _)
+         ((ch/effHttp _ m _ _ _ _ _ _)
           (drive! (k (ch/outHttp (ch/httpOk 200 (list (pair "Content-Type" "application/json")) "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"fine\"},\"finish_reason\":\"stop\"}]}"))) (str labels "|http:" m) granted (- fuel 1)))
          (_ (drive! (k ch/outDone) labels granted (- fuel 1)))))))
 

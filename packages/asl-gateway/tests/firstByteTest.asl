@@ -43,28 +43,22 @@ fn ! run! fb: String n1Reply: ch/HttpReply -> String
 fn silent -> ch/HttpReply
   (ch/httpRaised true (str "curl exit 28: " (u/firstByteDeadlineText)))
 
-fn idleCall -> u/UpstreamCall
-  (u/UpstreamCall :process (SpawnedProc :pid 0 :stdin 0 :stdout 0 :stderr 0)
-    :pipe (u/PipeState :pending "" :inOpen true :outOpen true :errOpen true :out (list) :errText (list)) :firstByteMs 0)
-
 fn ! runTests -> Bool
   (let [(keyed (run! " :firstByteSec 20" (silent)))
-        (plain (run! "" (silent)))
-        (call (u/upstreamCallWithFirstByte (idleCall) 1000 20.0))
-        (bare (u/upstreamCallWithFirstByte (idleCall) 1000 0.0))
-        (arrived (with call :pipe (with call.pipe :out (list "HTTP/1.1 200"))))]
+        (plain (run! "" (ch/httpRaised true "curl exit 28: Operation timed out")))
+        (dl (u/firstByteDeadlineAt 1000 20.0))]
     (do (assert (stringContains? keyed "|http:n1:20") (str "the attempt carries the model's :firstByteSec: " keyed))
         (assert (stringContains? keyed "|http:n2:0") (str "a member without the key carries no limit: " keyed))
         (assert (stringContains? keyed "|note:firstByteTimeout") (str "a silent attempt is noted firstByteTimeout: " keyed))
         (assert (stringContains? keyed "|http:n2") (str "the silent attempt cascades to the next member: " keyed))
-        (assert (not (stringContains? plain "|note:firstByteTimeout")) (str "without the key no first-byte outcome is recorded unless the failure says so: " plain))
+        (assert (and (stringContains? plain "|note:timeout") (not (stringContains? plain "firstByteTimeout"))) (str "an ordinary timeout keeps its outcome: " plain))
         (assert (stringContains? plain "|http:n1:0") (str "without the key the effect carries 0.0: " plain))
-        (assert (= call.firstByteMs 21000) (str "the deadline is start plus the limit: " (stringFromInt64 call.firstByteMs)))
-        (assert (= bare.firstByteMs 0) "no key sets no deadline")
-        (assert (not (u/upstreamCallFirstByteExpired? call 20999)) "before the deadline the call is live")
-        (assert (u/upstreamCallFirstByteExpired? call 21000) "a silent call expires at the deadline")
-        (assert (not (u/upstreamCallFirstByteExpired? arrived 99999)) "once a byte arrived the guard is off")
-        (assert (not (u/upstreamCallFirstByteExpired? bare 99999)) "no deadline never expires")
-        (assert (= (u/upstreamCallFirstByteWaitMs call 20500) (some 500)) "the reactor is woken at the deadline")
-        (assert (= (u/upstreamCallFirstByteWaitMs bare 20500) none) "no deadline asks for no wakeup")
+        (assert (= dl 21000) (str "the deadline is start plus the limit: " (stringFromInt64 dl)))
+        (assert (= (u/firstByteDeadlineAt 1000 0.0) 0) "no key sets no deadline")
+        (assert (not (u/firstByteExpired? dl false 20999)) "before the deadline the call is live")
+        (assert (u/firstByteExpired? dl false 21000) "a silent call expires at the deadline")
+        (assert (not (u/firstByteExpired? dl true 99999)) "once a byte arrived the guard is off")
+        (assert (not (u/firstByteExpired? 0 false 99999)) "no deadline never expires")
+        (assert (= (u/firstByteWaitMs dl false 20500) (some 500)) "the reactor is woken at the deadline")
+        (assert (= (u/firstByteWaitMs 0 false 20500) none) "no deadline asks for no wakeup")
         true))

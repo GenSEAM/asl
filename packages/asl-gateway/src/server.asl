@@ -361,7 +361,7 @@ fn ! gatewayRunServer! launch: Launch port: Int64 upstream: String readyPath: St
   (:c connReading [])
   (:c connHttp [(call u/UpstreamCall) (k (fn [ch/ChatOutcome] -> ch/ChatStep)) (slot String) (provider String) (startMs Int64) (model String) (intent String) (tag String) (params ul/CallParams) (profile String)])
   (:c connPool [(requestId Int64) (k (fn [ch/ChatOutcome] -> ch/ChatStep))])
-  (:c connWarm [(slot String) (provider String) (request u/UpstreamRequest) (timeout Float64) (k (fn [ch/ChatOutcome] -> ch/ChatStep)) (deadlineMs Int64) (model String) (intent String) (tag String) (profile String)])
+  (:c connWarm [(slot String) (provider String) (request u/UpstreamRequest) (timeout Float64) (k (fn [ch/ChatOutcome] -> ch/ChatStep)) (deadlineMs Int64) (model String) (intent String) (tag String) (profile String) (firstByteSec Float64)])
   ; (:m :tags (retry) :do "a retry backoff wait (effSleepMs) parks here instead of blocking: no fd, just a wall-clock deadline; the reactor resumes it once nowMs! passes deadlineMs, same turn it would otherwise have spent sleeping, so every other connection keeps being served meanwhile")
   (:c connTimer [(deadlineMs Int64) (k (fn [ch/ChatOutcome] -> ch/ChatStep)) (tag String)])
   ; (:m :tags (retry) :do "a token-bucket wait (effBucket) parks here instead of blocking, same shape as connTimer: the token is already reserved/debited into srv.buckets at park time (GW-BUCKET-RESERVE), so a second concurrent request for the same model+rpm sees the debit and computes a wait pushed out by another 1/rate, giving N parked requests deadlines spaced ~1/rate apart instead of all waking at once; resume just proceeds (the reservation already happened), no stale-snapshot write-back needed here")
@@ -681,7 +681,7 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
     ((ch/effCli client args)
       (let [(adm (cliAdmit! srv client args))]
         (if (pairSecond adm) (cliRunSync! (pairFirst adm) client args) (pair (pairFirst adm) (ch/outCli none)))))
-    ((ch/effHttp _ _ _ _ _ _ _) (pair srv (ch/outHttp (ch/httpRaised false "an HTTP effect reached the synchronous effect runner"))))
+    ((ch/effHttp _ _ _ _ _ _ _ _) (pair srv (ch/outHttp (ch/httpRaised false "an HTTP effect reached the synchronous effect runner"))))
     ((ch/effPoolHttp _ _ _ _ _ _) (pair srv (ch/outHttp (ch/httpRaised false "a pool effect reached the synchronous effect runner")))))
 
 fn ! drive! srv: GatewayLoop fd: Int64 tag: String step: ch/ChatStep -> GatewayLoop
@@ -690,9 +690,9 @@ fn ! drive! srv: GatewayLoop fd: Int64 tag: String step: ch/ChatStep -> GatewayL
     ((ch/stepRaised kind message) (addConn srv fd (connWriting (errorResponse 500 (str kind ": " message)))))
     ((ch/stepEffect eff k)
       (match eff
-        ((ch/effHttp provider model intent role request timeout profile)
+        ((ch/effHttp provider model intent role request timeout profile firstByteSec)
           (dispatchHttp! srv fd tag (dp/RouteHint :provider provider :model model :intent intent :role role
-                                  :promptTokens (/ (stringLength request.data) 4)) request timeout k profile))
+                                  :promptTokens (/ (stringLength request.data) 4)) request timeout k profile firstByteSec))
         ((ch/effPoolHttp provider model base pool request timeout)
           (let [(sub (pd/poolSubmit! srv.pools provider model base pool request timeout srv.env (nowMs!)))
                 (out (pairSecond sub))]
@@ -796,7 +796,7 @@ fn ! budgetRefusal! srv: GatewayLoop profile: String -> (Option String)
               (some (str "profile " profile " is over its daily token budget (" (stringFromInt64 total) "/" (stringFromInt64 cap) " tokens today)"))
               none))))))
 
-fn ! dispatchHttp! srv: GatewayLoop fd: Int64 tag: String hint: dp/RouteHint request: u/UpstreamRequest timeout: Float64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) profile: String -> GatewayLoop
+fn ! dispatchHttp! srv: GatewayLoop fd: Int64 tag: String hint: dp/RouteHint request: u/UpstreamRequest timeout: Float64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) profile: String firstByteSec: Float64 -> GatewayLoop
   (match (budgetRefusal! srv profile)
     ((some reason) (do (logLine! (str "(:gateway :budget :profile \"" (wire/asnEscape profile) "\" :result refused :reason \"" (wire/asnEscape reason) "\")")) (drive! srv fd tag (k (errorOutcome 429 reason)))))
     ((none)
@@ -809,14 +809,14 @@ fn ! dispatchHttp! srv: GatewayLoop fd: Int64 tag: String hint: dp/RouteHint req
               (drive! srv fd tag (k (errorOutcome status reason)))))
           ((dp/planSend slot provider sent row)
             (do (logLine! (dp/decisionText row))
-              (sendPlanned! (loopWiring srv (pairSecond reserved) srv.wiringText) fd tag slot provider sent (dp/sendTimeout w hint provider timeout) (servedModelK w slot hint k) hint.model hint.intent profile)))
+              (sendPlanned! (loopWiring srv (pairSecond reserved) srv.wiringText) fd tag slot provider sent (dp/sendTimeout w hint provider timeout) (servedModelK w slot hint k) hint.model hint.intent profile firstByteSec)))
           ((dp/planWait slot provider sent row cold deadline)
             (do (logLine! (dp/decisionText row))
               (if cold
                 (match (dp/startSlot! w slot (nowMs!) deadline)
                   ((dp/startRefused status reason line) (do (logLine! line) (drive! srv fd tag (k (errorOutcome status reason)))))
-                  ((dp/startOk next line) (do (logLine! line) (addConn (loopWiring srv next srv.wiringText) fd (connWarm slot provider sent (dp/sendTimeout w hint provider timeout) k deadline hint.model hint.intent tag profile)))))
-                (addConn (loopWiring srv (dp/waiting w slot) srv.wiringText) fd (connWarm slot provider sent (dp/sendTimeout w hint provider timeout) k deadline hint.model hint.intent tag profile)))))))))
+                  ((dp/startOk next line) (do (logLine! line) (addConn (loopWiring srv next srv.wiringText) fd (connWarm slot provider sent (dp/sendTimeout w hint provider timeout) k deadline hint.model hint.intent tag profile firstByteSec)))))
+                (addConn (loopWiring srv (dp/waiting w slot) srv.wiringText) fd (connWarm slot provider sent (dp/sendTimeout w hint provider timeout) k deadline hint.model hint.intent tag profile firstByteSec)))))))))
 
 ; (:m :ref GW-SERVED-MODEL-HEADER :do "when the planned slot is not the model the caller asked for, the client reply carries x-asl-served-model: <alias>/<upstream model> so a substituted pick is visible")
 fn servedModelK w: dp/Wiring slot: String hint: dp/RouteHint k: (fn [ch/ChatOutcome] -> ch/ChatStep) -> (fn [ch/ChatOutcome] -> ch/ChatStep)
@@ -831,17 +831,17 @@ fn withServedModel o: ch/ChatOutcome label: String -> ch/ChatOutcome
     ((ch/outHttp (ch/httpOk status headers body)) (ch/outHttp (ch/httpOk status (listAppend headers (list (pair "x-asl-served-model" label))) body)))
     (_ o))
 
-fn ! sendPlanned! srv: GatewayLoop fd: Int64 tag: String slot: String provider: String sent: u/UpstreamRequest timeout: Float64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) model: String intent: String profile: String -> GatewayLoop
+fn ! sendPlanned! srv: GatewayLoop fd: Int64 tag: String slot: String provider: String sent: u/UpstreamRequest timeout: Float64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) model: String intent: String profile: String firstByteSec: Float64 -> GatewayLoop
   (let [(w srv.wiring)
         (params (paramsFromRequest sent))]
     (match (p/sendHttp! w.plugins provider sent srv.env timeout)
       ((err f) (drive! (settled! srv slot provider intent model tag params "" 0 false profile (failureStatus f) (failureHeaders f)) fd tag (k (ch/outHttp (failureReply f)))))
-      ((ok call) (addConn (loopWiring srv (dp/started w slot) srv.wiringText) fd (connHttp call k slot provider (nowMs!) model intent tag params profile)))))
+      ((ok call) (addConn (loopWiring srv (dp/started w slot) srv.wiringText) fd (connHttp (u/upstreamCallWithFirstByte call (nowMs!) firstByteSec) k slot provider (nowMs!) model intent tag params profile)))))
 
-fn ! stepWarm! srv: GatewayLoop conn: GatewayConn tag: String slot: String provider: String sent: u/UpstreamRequest timeout: Float64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) deadline: Int64 model: String intent: String profile: String -> GatewayLoop
+fn ! stepWarm! srv: GatewayLoop conn: GatewayConn tag: String slot: String provider: String sent: u/UpstreamRequest timeout: Float64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) deadline: Int64 model: String intent: String profile: String firstByteSec: Float64 -> GatewayLoop
   (let [(now (nowMs!))]
     (match (dp/slotReady srv.wiring slot now)
-      ((dp/readyNow) (sendPlanned! srv conn.fd tag slot provider sent timeout k model intent profile))
+      ((dp/readyNow) (sendPlanned! srv conn.fd tag slot provider sent timeout k model intent profile firstByteSec))
       ((dp/readyGone reason) (drive! srv conn.fd tag (k (errorOutcome 503 reason))))
       ((dp/readyLater)
         (if (> now deadline)
@@ -977,13 +977,17 @@ fn ! stepWriting! srv: GatewayLoop conn: GatewayConn data: String ready: (List (
             (addConn srv conn.fd (connWriting rest)))))))
 
 fn ! stepHttp! srv: GatewayLoop conn: GatewayConn tag: String call: u/UpstreamCall k: (fn [ch/ChatOutcome] -> ch/ChatStep) slot: String provider: String startMs: Int64 model: String intent: String params: ul/CallParams profile: String ready: (List (Pair Int64 Int64)) -> GatewayLoop
-  (match (u/upstreamCallPump! call ready)
-    ((err f) (drive! (settled! srv slot provider intent model tag params "" startMs false profile (failureStatus f) (failureHeaders f)) conn.fd tag (k (ch/outHttp (failureReply f)))))
-    ((ok next)
-      (if (u/upstreamCallOpen? next) (addConn srv conn.fd (connHttp next k slot provider startMs model intent tag params profile))
-        (match (u/upstreamCallFinish! next)
-          ((ok resp) (drive! (settled! srv slot provider intent model tag params resp.body startMs true profile resp.status resp.headers) conn.fd tag (k (ch/outHttp (ch/httpOk resp.status (list) resp.body)))))
-          ((err f) (drive! (settled! srv slot provider intent model tag params "" startMs false profile (failureStatus f) (failureHeaders f)) conn.fd tag (k (ch/outHttp (failureReply f)))))))))
+  (if (u/upstreamCallFirstByteExpired? call (nowMs!))
+    (let [(f (u/transportFailure 28 (u/firstByteDeadlineText)))]
+      (do (u/upstreamCallAbort! call)
+        (drive! (settled! srv slot provider intent model tag params "" startMs false profile (failureStatus f) (failureHeaders f)) conn.fd tag (k (ch/outHttp (failureReply f))))))
+    (match (u/upstreamCallPump! call ready)
+      ((err f) (drive! (settled! srv slot provider intent model tag params "" startMs false profile (failureStatus f) (failureHeaders f)) conn.fd tag (k (ch/outHttp (failureReply f)))))
+      ((ok next)
+        (if (u/upstreamCallOpen? next) (addConn srv conn.fd (connHttp next k slot provider startMs model intent tag params profile))
+          (match (u/upstreamCallFinish! next)
+            ((ok resp) (drive! (settled! srv slot provider intent model tag params resp.body startMs true profile resp.status resp.headers) conn.fd tag (k (ch/outHttp (ch/httpOk resp.status (list) resp.body)))))
+            ((err f) (drive! (settled! srv slot provider intent model tag params "" startMs false profile (failureStatus f) (failureHeaders f)) conn.fd tag (k (ch/outHttp (failureReply f))))))))))
 
 ; (:m :tags (retry) :do "resumes once the wall clock passes deadlineMs, same as any other conn this turn; otherwise re-parks for the next poll, exactly like stepWarm!'s coldStart wait")
 fn ! stepTimer! srv: GatewayLoop conn: GatewayConn deadlineMs: Int64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) tag: String -> GatewayLoop
@@ -1009,7 +1013,7 @@ fn ! stepConn! srv: GatewayLoop conn: GatewayConn ready: (List (Pair Int64 Int64
     ((connReading) (stepReading! srv conn ready))
     ((connHttp call k slot provider startMs model intent tag params profile) (stepHttp! srv conn tag call k slot provider startMs model intent params profile ready))
     ((connPool _ _) (loopConns srv (listAppend srv.conns (list conn))))
-    ((connWarm slot provider sent timeout k deadline model intent tag profile) (stepWarm! srv conn tag slot provider sent timeout k deadline model intent profile))
+    ((connWarm slot provider sent timeout k deadline model intent tag profile firstByteSec) (stepWarm! srv conn tag slot provider sent timeout k deadline model intent profile firstByteSec))
     ((connTimer deadlineMs k tag) (stepTimer! srv conn deadlineMs k tag))
     ((connCli p k tag t0) (stepCli! srv conn p k tag t0))
     ((connBucketWait deadlineMs k tag) (stepBucketWait! srv conn deadlineMs k tag))
@@ -1039,7 +1043,7 @@ fn connWatch conn: GatewayConn -> (List (Pair Int64 Int64))
     ((connReading) (list (pair conn.fd 1)))
     ((connHttp call _ _ _ _ _ _ _ _ _) (u/upstreamCallWatch call))
     ((connPool _ _) (list))
-    ((connWarm _ _ _ _ _ _ _ _ _ _) (list))
+    ((connWarm _ _ _ _ _ _ _ _ _ _ _) (list))
     ((connTimer _ _ _) (list))
     ((connCli p _ _ _) (bd/boundFds p))
     ((connBucketWait _ _ _) (list))
@@ -1107,13 +1111,15 @@ fn cliParked? conn: GatewayConn -> Bool
   (match conn.phase ((connCli _ _ _ _) true) (_ false))
 
 fn parked? conn: GatewayConn -> Bool
-  (match conn.phase ((connWarm _ _ _ _ _ _ _ _ _ _) true) (_ false))
+  (match conn.phase ((connWarm _ _ _ _ _ _ _ _ _ _ _) true) (_ false))
 
 ; (:m :tags (retry) :do "the deadline-ordered timer queue the poll loop watches alongside its sockets: how long until this one conn's connTimer or connBucketWait should fire, clamped to >=0; none for every other phase")
 fn timerWaitMs now: Int64 conn: GatewayConn -> (Option Int64)
   (match conn.phase
     ((connTimer deadlineMs _ _) (some (max 0 (- deadlineMs now))))
     ((connBucketWait deadlineMs _ _) (some (max 0 (- deadlineMs now))))
+    ; (:m :ref GW-SLOW-STREAM :do "a call with a first-byte deadline wakes the reactor when it falls due, so a silent connection is failed on time even with no fd ready")
+    ((connHttp call _ _ _ _ _ _ _ _ _) (u/upstreamCallFirstByteWaitMs call now))
     (_ none))
 
 ; (:m :tags (retry) :do "the soonest a parked connTimer needs the reactor to look again; -1 (no constraint) when none are parked")

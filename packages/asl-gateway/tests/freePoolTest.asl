@@ -20,7 +20,7 @@ fn ok200 -> ch/HttpReply
 fn effLabel eff: ch/ChatEffect -> String
   (match eff
     ((ch/effBucket m _ _) (str "bucket:" m))
-    ((ch/effHttp _ m _ _ req _ _) (str "http:" m "=" req.data))
+    ((ch/effHttp _ m _ _ req _ _ _) (str "http:" m "=" req.data))
     ((ch/effPoolHttp _ m _ _ _ _) (str "pool:" m))
     ((ch/effCli client _) (str "cli:" client))
     ((ch/effBreakerEvent e p park) (str "bk:" e ":" p ":" (stringFromInt64 park)))
@@ -47,7 +47,7 @@ fn ! drive! step: ch/ChatStep labels: String bucketOk: Bool replies: (List ch/Ht
            ((ch/effBreakerDownAll _) (drive! (k (ch/outFloats (list 0.0))) labels2 bucketOk replies (- fuel 1)))
            ((ch/effBucket _ _ _) (drive! (k (ch/outBool bucketOk)) labels2 bucketOk replies (- fuel 1)))
            ((ch/effCli _ _) (drive! (k (ch/outCli none)) labels2 bucketOk replies (- fuel 1)))
-           ((ch/effHttp _ _ _ _ _ _ _) (drive! (k (ch/outHttp (optionOr (listHead replies) (ok200)))) labels2 bucketOk (optionOr (listTail replies) (list)) (- fuel 1)))
+           ((ch/effHttp _ _ _ _ _ _ _ _) (drive! (k (ch/outHttp (optionOr (listHead replies) (ok200)))) labels2 bucketOk (optionOr (listTail replies) (list)) (- fuel 1)))
            ((ch/effPoolHttp _ _ _ _ _ _) (drive! (k (ch/outHttp (optionOr (listHead replies) (ok200)))) labels2 bucketOk (optionOr (listTail replies) (list)) (- fuel 1)))
            (_ (drive! (k ch/outDone) labels2 bucketOk replies (- fuel 1))))))))
 

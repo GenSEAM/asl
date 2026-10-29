@@ -94,6 +94,13 @@
       parseCurlOutput
       httpErrorText
       UpstreamCall
+      firstByteDeadlineText
+      firstByteDeadlineAt
+      firstByteExpired?
+      firstByteWaitMs
+      upstreamCallWithFirstByte
+      upstreamCallFirstByteWaitMs
+      upstreamCallFirstByteExpired?
       upstreamCallStart!
       upstreamCallStartFollowing!
       upstreamCallWatch
@@ -181,7 +188,8 @@
 
 (schema UpstreamCall
   (:f process SpawnedProc)
-  (:f pipe PipeState))
+  (:f pipe PipeState)
+  (:f firstByteMs Int64))
 
 fn pairUp xs: (List String) acc: (List String) -> (List String)
   (match (listHead xs)
@@ -1290,9 +1298,31 @@ fn ! upstreamCallStartFollowing! req: UpstreamRequest env: (Map String String) t
        ((err e) (err (toolAbsent "curl" (if (= e "notFound") "curl is not on PATH" e))))
        ((ok sp)
         (match (fdNonBlocking sp.stdin true)
-          ((err e) (do (upstreamCallAbort! (UpstreamCall :process sp :pipe (PipeState :pending "" :inOpen true :outOpen true :errOpen true :out (list) :errText (list))))
+          ((err e) (do (upstreamCallAbort! (UpstreamCall :process sp :pipe (PipeState :pending "" :inOpen true :outOpen true :errOpen true :out (list) :errText (list)) :firstByteMs 0))
                      (err (protocolFailure (str "curl stdin nonblocking: " e)))))
-          ((ok _) (ok (UpstreamCall :process sp :pipe (PipeState :pending cfg :inOpen true :outOpen true :errOpen true :out (list) :errText (list))))))))))
+          ((ok _) (ok (UpstreamCall :process sp :pipe (PipeState :pending cfg :inOpen true :outOpen true :errOpen true :out (list) :errText (list)) :firstByteMs 0))))))))
+
+; (:m :ref GW-SLOW-STREAM :do "the reactor's first-byte guard: startMs plus sec is the wall-clock ms by which curl must have written any stdout byte (headers or a stream chunk); sec 0.0 sets no deadline. The text is what chat.asl matches to note the attempt firstByteTimeout")
+fn firstByteDeadlineText -> String
+  "no response bytes within the first-byte deadline"
+
+fn firstByteDeadlineAt startMs: Int64 sec: Float64 -> Int64
+  (if (> sec 0.0) (+ startMs (ceilMs sec)) 0)
+
+fn firstByteExpired? deadlineMs: Int64 gotBytes: Bool nowMs: Int64 -> Bool
+  (and (> deadlineMs 0) (and (not gotBytes) (>= nowMs deadlineMs)))
+
+fn firstByteWaitMs deadlineMs: Int64 gotBytes: Bool nowMs: Int64 -> (Option Int64)
+  (if (and (> deadlineMs 0) (not gotBytes)) (some (max 0 (- deadlineMs nowMs))) none)
+
+fn upstreamCallWithFirstByte call: UpstreamCall startMs: Int64 sec: Float64 -> UpstreamCall
+  (with call :firstByteMs (firstByteDeadlineAt startMs sec))
+
+fn upstreamCallFirstByteExpired? call: UpstreamCall nowMs: Int64 -> Bool
+  (firstByteExpired? call.firstByteMs (not (listEmpty? call.pipe.out)) nowMs)
+
+fn upstreamCallFirstByteWaitMs call: UpstreamCall nowMs: Int64 -> (Option Int64)
+  (firstByteWaitMs call.firstByteMs (not (listEmpty? call.pipe.out)) nowMs)
 
 fn upstreamCallWatch call: UpstreamCall -> (List (Pair Int64 Int64))
   (watchSet call.process call.pipe)
@@ -1334,7 +1364,7 @@ fn ! upstreamCallLoop! call: UpstreamCall firstByteDeadline: Float64 -> (Result 
            ((ok next) (upstreamCallLoop! next firstByteDeadline)))))
       (let [(remainSec (- firstByteDeadline (wallSeconds!)))]
         (if (<= remainSec 0.0)
-          (do (upstreamCallAbort! call) (err (transportFailure 28 "no response bytes within the first-byte deadline")))
+          (do (upstreamCallAbort! call) (err (transportFailure 28 (firstByteDeadlineText))))
           (match (fdPoll (upstreamCallWatch call) (ceilMs remainSec))
             ((err e) (do (upstreamCallAbort! call) (err (protocolFailure (str "curl pipe poll: " e)))))
             ((ok ready)

@@ -28,7 +28,7 @@ fn ! drive! step: ch/ChatStep binMissing: Bool seen: Seen fuel: Int64 -> Seen
          ((ch/effBucket _ _ _) (drive! (k (ch/outBool false)) binMissing seen (- fuel 1)))
          ((ch/effUsageNote _ _ o _) (drive! (k ch/outDone) binMissing (with seen :notes (str seen.notes "|" o)) (- fuel 1)))
          ((ch/effCli _ _) (drive! (k (ch/outCli none)) binMissing (with seen :cli (+ seen.cli 1)) (- fuel 1)))
-         ((ch/effHttp _ _ _ _ _ _ _) (with seen :notes (str seen.notes "|http")))
+         ((ch/effHttp _ _ _ _ _ _ _ _) (with seen :notes (str seen.notes "|http")))
          ((ch/effPoolHttp _ _ _ _ _ _) (with seen :notes (str seen.notes "|http")))
          (_ (drive! (k ch/outDone) binMissing seen (- fuel 1)))))))
 

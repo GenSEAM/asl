@@ -111,7 +111,7 @@
   (:c effLog [(text String)])
   (:c effBucket [(model String) (rpm Float64) (timeout Float64)])
   (:c effSleepMs [(ms Int64)])
-  (:c effHttp [(provider String) (model String) (intent String) (role String) (request u/UpstreamRequest) (timeout Float64) (profile String)])
+  (:c effHttp [(provider String) (model String) (intent String) (role String) (request u/UpstreamRequest) (timeout Float64) (profile String) (firstByteSec Float64)])
   (:c effPoolHttp [(provider String) (model String) (base String) (pool c/GatewayPool) (request u/UpstreamRequest) (timeout Float64)])
   (:c effCli [(client String) (args (List (Pair String j/Json)))]))
 
@@ -1477,6 +1477,12 @@ fn rateAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
          (httpAttempt cx l a)))
       ((none) (httpAttempt cx l a))))
 
+; (:m :ref GW-SLOW-STREAM :do "the attempt's resolved :firstByteSec (model over provider); 0.0 means none was set and the reactor applies no first-byte deadline, so only a configured row changes behaviour")
+fn httpFirstByteSec a: Attempt -> Float64
+  (match a.v2
+    ((some e) e.firstByteSec)
+    ((none) 0.0))
+
 fn upTimeout cx: Ctx l: Loop a: Attempt -> (Result Float64 pt/PyErr)
   (let [(body l.body)
         (fallback (fn [] -> Float64
@@ -1505,7 +1511,7 @@ fn httpAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
          ((ok timeout)
           (askHttp (match (poolConfigFor a)
             ((some poolConfig) (effPoolHttp up.provider a.model up.url poolConfig request timeout))
-            ((none) (effHttp up.provider a.target cx.intent cx.role request timeout cx.profileName)))
+            ((none) (effHttp up.provider a.target cx.intent cx.role request timeout cx.profileName (httpFirstByteSec a))))
             (fn [(r HttpReply)] -> ChatStep
               (match r
                 ((httpOk status headers body) (httpAnswered cx l a status headers body))
@@ -1535,7 +1541,7 @@ fn retryOrFinish cx: Ctx l: Loop a: Attempt policy: c/RetryPolicy retryAfterHead
 fn retryTransport cx: Ctx l: Loop a: Attempt timeout: Bool text: String policy: c/RetryPolicy -> ChatStep
   (retryOrFinish cx l a policy none
     (str "[Gateway Retry] " a.model " transport error: " text ". Retrying attempt " (stringFromInt64 (+ a.retryUsed 1)) " of " (stringFromInt64 policy.maxAttempts) "...\n")
-    (str "retry " (if timeout "timeout" "transport"))
+    (str "retry " (if (stringContains? text (u/firstByteDeadlineText)) "firstByteTimeout" (if timeout "timeout" "transport")))
     (fn [] -> ChatStep (raisedFinal cx l a timeout text)))
 
 fn raised cx: Ctx l: Loop a: Attempt timeout: Bool text: String -> ChatStep
@@ -1544,12 +1550,19 @@ fn raised cx: Ctx l: Loop a: Attempt timeout: Bool text: String -> ChatStep
       (retryTransport cx l a timeout text policy)
       (raisedFinal cx l a timeout text)))
 
+; (:m :ref GW-SLOW-STREAM :do "an attempt the reactor failed for a silent connection keeps the timeout flag (so :retry and the cascade treat it as a timeout) but is noted firstByteTimeout in the usage ledger")
+fn raisedOutcome timeout: Bool text: String -> String
+  (cond
+    ((not timeout) "other")
+    ((stringContains? text (u/firstByteDeadlineText)) "firstByteTimeout")
+    (else "timeout"))
+
 fn raisedFinal cx: Ctx l: Loop a: Attempt timeout: Bool text: String -> ChatStep
   (let [(prov a.upstream.provider)
         (pool a.providerPool)
         (l1 (failed l text))
         (rest (fn [] -> ChatStep
-                (tell (usageNote prov a.alias (if timeout "timeout" "other"))
+                (tell (usageNote prov a.alias (raisedOutcome timeout text))
                   (fn [] -> ChatStep
                     (if (> cx.cascadeLen 1)
                       (tellAll (list (effUsageFallback prov a.alias) (effLog (str "[Gateway Cascade] Model " a.model " error: " text ". Cascading to next...\n")))
@@ -2032,7 +2045,7 @@ fn effectJson eff: ChatEffect -> j/Json
                             (pair "url" (j/jstr (if (stringEmpty? req.fragment) req.url (str req.url "#" req.fragment))))
                             (pair "method" (j/jstr req.method)) (pair "headers" (pairsJson req.headers))
                             (pair "data" (j/jstr req.data)) (pair "timeout" (j/jfloat t)))))
-      ((effHttp _ _ _ _ req t _)
+      ((effHttp _ _ _ _ req t _ _)
        (op "http" (list (pair "url" (j/jstr (if (stringEmpty? req.fragment) req.url (str req.url "#" req.fragment))))
                         (pair "method" (j/jstr req.method)) (pair "headers" (pairsJson req.headers))
                         (pair "data" (j/jstr req.data)) (pair "timeout" (j/jfloat t)))))

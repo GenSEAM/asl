@@ -281,7 +281,7 @@ fn ! drive! step: ch/ChatStep reply: String remaining: Int64 -> (Option ch/ChatR
     (match step
       ((ch/stepEffect eff k)
        (match eff
-         ((ch/effHttp _ _ _ _ _ _ _) (drive! (k (ch/outHttp (ch/httpOk 200 (list) reply))) reply (- remaining 1)))
+         ((ch/effHttp _ _ _ _ _ _ _ _) (drive! (k (ch/outHttp (ch/httpOk 200 (list) reply))) reply (- remaining 1)))
          ((ch/effPoolHttp _ _ _ _ _ _) (drive! (k (ch/outHttp (ch/httpOk 200 (list) reply))) reply (- remaining 1)))
          ((ch/effRealpath _) (drive! (k (ch/outPath "/")) reply (- remaining 1)))
          ((ch/effIsDir _) (drive! (k (ch/outBool true)) reply (- remaining 1)))
@@ -346,7 +346,7 @@ fn ! captureBreaker! step: ch/ChatStep downAcc: (List String) eventAcc: (List St
        (match eff
          ((ch/effBreakerDown p) (captureBreaker! (k (ch/outFloat 0.0)) (cons p downAcc) eventAcc status reason httpBody (- remaining 1)))
          ((ch/effBreakerEvent e p _) (captureBreaker! (k ch/outDone) downAcc (cons (str e ":" p) eventAcc) status reason httpBody (- remaining 1)))
-         ((ch/effHttp _ _ _ _ _ _ _) (captureBreaker! (k (ch/outHttp (ch/httpError status reason (list) httpBody))) downAcc eventAcc status reason httpBody (- remaining 1)))
+         ((ch/effHttp _ _ _ _ _ _ _ _) (captureBreaker! (k (ch/outHttp (ch/httpError status reason (list) httpBody))) downAcc eventAcc status reason httpBody (- remaining 1)))
          ((ch/effPoolHttp _ _ _ _ _ _) (captureBreaker! (k (ch/outHttp (ch/httpError status reason (list) httpBody))) downAcc eventAcc status reason httpBody (- remaining 1)))
          ((ch/effRealpath _) (captureBreaker! (k (ch/outPath "/")) downAcc eventAcc status reason httpBody (- remaining 1)))
          ((ch/effIsDir _) (captureBreaker! (k (ch/outBool true)) downAcc eventAcc status reason httpBody (- remaining 1)))
@@ -409,7 +409,7 @@ fn ! spreadDrive! step: ch/ChatStep answerOrder: (List String) remaining: Int64 
       ((ch/stepEffect eff k)
        (match eff
          ((ch/effSpreadOrder _ _ _ _ _) (spreadDrive! (k (ch/outStrings answerOrder)) answerOrder (- remaining 1)))
-         ((ch/effHttp _ model _ _ _ _ _) model)
+         ((ch/effHttp _ model _ _ _ _ _ _) model)
          ((ch/effRealpath _) (spreadDrive! (k (ch/outPath "/")) answerOrder (- remaining 1)))
          ((ch/effIsDir _) (spreadDrive! (k (ch/outBool true)) answerOrder (- remaining 1)))
          ((ch/effClock) (spreadDrive! (k (ch/outFloat 1.0)) answerOrder (- remaining 1)))
