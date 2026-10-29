@@ -1232,11 +1232,67 @@ fn ! linkGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String 
           ((err e) (Called :reply (err (gatewayError "ERR_VENDOR" (str "in-process gateway: " e) "")) :meta (emptyMeta) :cfg next))
           ((ok raw) (called next (readResponse "Gateway" raw)))))))
 
-fn ! sendGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String String)) -> Called
-  (if cfg.env.inProcess (linkGateway! cfg payload headers) (called cfg (postGateway! cfg payload headers)))
+; (:m :ref ORCH-LEON-CLIENT :do "the hub transport is read from HOME/.asl/hub.asn (the home of the gateway config), never from env: a :sock names the unix socket of the one-per-node hub, calls carry X-Asl-Class and X-Asl-Unit, and a refused connection is retried at :backoffMs doubling until :downAfterMs has passed, then ERR_GATEWAY_DOWN; with :fallback inProcess the down hub falls back to the in-process link, with no hub.asn the older gateway path is unchanged")
+fn hubAsnPath cfg: VendorConfig -> String
+  (match (configHome cfg.env.gatewayConfig)
+    ((some home) (str home "/.asl/hub.asn"))
+    (none (str (envOr! "HOME" "") "/.asl/hub.asn")))
+
+fn hubAsnString text: String key: String fallback: String -> String
+  (match (stringIndexOf text (str ":" key " \""))
+    (none fallback)
+    ((some at)
+      (let [(rest (sub text (+ at (+ 3 (stringLength key))) (stringLength text)))]
+        (match (stringIndexOf rest "\"")
+          (none fallback)
+          ((some end) (sub rest 0 end))))))
+
+fn hubAsnInt text: String key: String fallback: Int64 -> Int64
+  (match (stringIndexOf text (str ":" key " "))
+    (none fallback)
+    ((some at)
+      (let [(rest (sub text (+ at (+ 2 (stringLength key))) (stringLength text)))
+            (token (optionOr (listHead (stringSplit (optionOr (listHead (stringSplit rest ")")) "") " ")) ""))]
+        (optionOr (stringToInt64 token) fallback))))
+
+fn hubHeaders cfg: VendorConfig class: String headers: (List (Pair String String)) -> (List (Pair String String))
+  (listAppend headers
+    (listAppend (list (pair "X-Asl-Class" class))
+      (if (stringEmpty? cfg.sessionId) (list) (list (pair "X-Asl-Unit" cfg.sessionId)))))
 
 ; (:m :effect net)
+fn ! hubPost! cfg: VendorConfig sock: String payload: j/Json headers: (List (Pair String String)) delayMs: Int64 waitedMs: Int64 capMs: Int64 -> (Pair (Result (Option String) ProviderError) TurnMeta)
+  (let [(r (postUrlVia! cfg "http://hub/v1/chat/completions" sock "Hub" "start the hub (asl/tools/hub/main.asl serve)" payload headers))]
+    (match (pairFirst r)
+      ((err e)
+        (if (not (= (errorCode e) "ERR_GATEWAY_OFFLINE")) r
+          (if (>= waitedMs capMs)
+            (pair (err (gatewayError "ERR_GATEWAY_DOWN" (str "hub socket " sock " refused connections for " (stringFromInt64 waitedMs) " ms: " (errorMessage e)) "start the hub or declare :fallback inProcess in hub.asn")) (emptyMeta))
+            (do (sleepMs delayMs) (hubPost! cfg sock payload headers (* delayMs 2) (+ waitedMs delayMs) capMs)))))
+      (_ r)))
+
+fn ! sendGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String String)) -> Called
+  (let [(hub (resultOr (fileReadString (hubAsnPath cfg)) ""))
+        (sock (hubAsnString hub "sock" ""))]
+    (cond
+      ((not (stringEmpty? sock))
+        (let [(r (hubPost! cfg sock payload (hubHeaders cfg (hubAsnString hub "class" "free") headers) (hubAsnInt hub "backoffMs" 1000) 0 (hubAsnInt hub "downAfterMs" 30000)))]
+          (if (and (stringContains? hub ":fallback inProcess")
+                   (match (pairFirst r) ((err e) (= (errorCode e) "ERR_GATEWAY_DOWN")) (_ false)))
+            (linkGateway! cfg payload headers)
+            (called cfg r))))
+      (cfg.env.inProcess (linkGateway! cfg payload headers))
+      (else (called cfg (postGateway! cfg payload headers)))))
+
+; (:m :effect net)
+fn unixLine sock: String -> String
+  (if (stringEmpty? sock) "" (str "unix-socket = " (configQuote sock) "\n"))
+
 fn ! postUrl! cfg: VendorConfig url: String service: String hint: String payload: j/Json headers: (List (Pair String String)) -> (Pair (Result (Option String) ProviderError) TurnMeta)
+  (postUrlVia! cfg url "" service hint payload headers)
+
+; (:m :effect net)
+fn ! postUrlVia! cfg: VendorConfig url: String sock: String service: String hint: String payload: j/Json headers: (List (Pair String String)) -> (Pair (Result (Option String) ProviderError) TurnMeta)
   (let [(body (pyJsonDumps payload))
         (maxTime (stringFromFloat64 (int64ToFloat64 (+ (+ cfg.timeout cfg.queueTimeout) 30))))
         (bad (filter (fn [p] (illegalHeaderValue (pairSecond p))) headers))]
@@ -1244,7 +1300,7 @@ fn ! postUrl! cfg: VendorConfig url: String service: String hint: String payload
       ((not (urlHasScheme url)) (pair (err (valueError (str "unknown url type: " (pyReprString url)))) (emptyMeta)))
       ((not (listEmpty? bad)) (pair (err (valueError (str "Invalid header value " (pyReprBytes (pairSecond (optionOr (listHead bad) (pair "" ""))))))) (emptyMeta)))
       (else
-        (let [(conf (curlConfig url body headers maxTime (isLoopback url)))
+        (let [(conf (str (unixLine sock) (curlConfig url body headers maxTime (isLoopback url))))
               (c0 (cp/withStdin (cp/withTimeout (cp/cmd "curl" (list "--config" "-")) (* (+ (+ cfg.timeout cfg.queueTimeout) 60) 1000)) conf))
               (c (fold (fn [acc kv] (cp/withEnv acc (pairFirst kv) (pairSecond kv))) c0 (mapPairs cfg.env.childEnv)))]
           (match (cp/exec! c)
