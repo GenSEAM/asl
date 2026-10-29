@@ -158,7 +158,7 @@ fn ! loopFor w: dp/Wiring home: String pending: srv/PendingCall -> srv/GatewayLo
     :promptMaxBytes 188000 :conns (list) :pools (pd/emptyPoolRegistry) :replies (list) :breaker (b/defaultBreakerState)
     :buckets (u/emptyBucketRegistry) :profiles (cfg/emptyProfilesCache) :wiring w
     :wiringText none :families (list) :outbox (list) :pendingCall (some pending) :spreadState (mapEmpty) :spreadLast429 (mapEmpty)
-    :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)))
+    :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :startMs 0)
 
 fn ! testTwinAliasesChargedApart base: String -> Bool
   (let [(home (str (scratchDir) "/home"))

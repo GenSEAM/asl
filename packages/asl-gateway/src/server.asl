@@ -4,7 +4,7 @@
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
       (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/router :a rt) (asl-json/json :a j)
-      (aslGateway/subPace :a spc) (aslGateway/subsRefresh :a subsr) (aslGateway/omniApi :a om) (aslGateway/federation :a fed) (aslGateway/balancer :a bl) (asl-http/http11 :a h)])
+      (aslGateway/subPace :a spc) (aslGateway/subsRefresh :a subsr) (aslGateway/omniApi :a om) (aslGateway/federation :a fed) (aslGateway/balancer :a bl) (aslGateway/rateLearn :a rl) (asl-http/http11 :a h)])
 
 (schema GatewayTurnVerdict
   (:f allowed Bool)
@@ -703,6 +703,13 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
     ((ch/effHttp _ _ _ _ _ _ _ _) (pair srv (ch/outHttp (ch/httpRaised false "an HTTP effect reached the synchronous effect runner"))))
     ((ch/effPoolHttp _ _ _ _ _ _) (pair srv (ch/outHttp (ch/httpRaised false "a pool effect reached the synchronous effect runner")))))
 
+; (:m :ref ORCH-AIMD-LIVE :do "the learner writes ratesByName.asn under the hub run dir, learned rpm keyed by the upstream model name that keys the bucket; a model it lists refills at that rate, any other model, an absent file or a non-positive configured rpm keeps the configured one, so a hub with no learner behaves as before")
+fn ! hubLearnedRpm! home: String model: String rpm: Float64 -> Float64
+  (if (<= rpm 0.0) rpm
+    (match (mapGet (rl/readStore! (str home "/.asl/run/hub/ratesByName.asn")) model)
+      ((some r) (if (> r 0.0) r rpm))
+      ((none) rpm)))
+
 fn ! drive! srv: GatewayLoop fd: Int64 tag: String step: ch/ChatStep -> GatewayLoop
   (match step
     ((ch/stepDone resp) (addConn srv fd (connWriting (renderResponse resp))))
@@ -719,8 +726,9 @@ fn ! drive! srv: GatewayLoop fd: Int64 tag: String step: ch/ChatStep -> GatewayL
         ; (:m :tags (retry) :do "park, don't block: effSleepMs never reaches runEffect!'s own (blocking) case from here, so a retry backoff never stalls the single-threaded reactor for any other connection")
         ((ch/effSleepMs ms) (addConn srv fd (connTimer (+ (nowMs!) ms) k tag)))
         ; (:m :tags (retry) :do "park, don't block, same as effSleepMs: tokenBucketBegin is pure and cheap, so it always runs synchronously now (committing the refilled bucket state immediately). GW-BUCKET-RESERVE: on an actual bucketWait, the token is debited now too (takeToken on the already-under-1.0 bucket, going negative -- a reservation, not an acquisition), so the NEXT concurrent request for this same model+rpm reads that debit and computes a wait pushed out by another 1/rate, spacing parked requests instead of letting them all wake at the same instant and over-acquire")
-        ((ch/effBucket model rpm timeout)
-          (let [(got (u/geminiBucket srv.buckets model rpm (u/wallSeconds!)))
+        ((ch/effBucket model rpm0 timeout)
+          (let [(rpm (hubLearnedRpm! srv.home model rpm0))
+                (got (u/geminiBucket srv.buckets model rpm (u/wallSeconds!)))
                 (begun (u/tokenBucketBegin (pairSecond got) timeout (u/wallSeconds!)))
                 (b1 (pairFirst begun))]
             (match (pairSecond begun)

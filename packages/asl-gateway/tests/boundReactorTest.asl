@@ -23,7 +23,7 @@ fn emptyLoop home: String -> srv/GatewayLoop
      :promptMaxBytes 188000 :conns (list) :pools (pd/emptyPoolRegistry) :replies (list) :breaker (b/defaultBreakerState)
      :buckets (u/emptyBucketRegistry) :profiles (c/emptyProfilesCache)
      :wiring (dp/emptyWiring (u/UpstreamSettings :geminiUrl "" :geminiKey "" :groqUrl "" :ollamaUrl "" :groqKey "" :url "" :key "" :ollamaTimeoutSec 45.0))
-     :wiringText none :families (list) :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)))
+     :wiringText none :families (list) :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :startMs 0)
 
 fn onlyConn lp: srv/GatewayLoop fd: Int64 -> srv/GatewayLoop
   (with lp :conns (filter (fn [(cn srv/GatewayConn)] -> Bool (= cn.fd fd)) lp.conns))

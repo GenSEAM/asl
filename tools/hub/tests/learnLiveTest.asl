@@ -1,6 +1,6 @@
 (module asl-tools/hub/tests/learnLiveTest
   :x [runTests]
-  :i [(asl-tools/fleet/run :a fr) (aslGateway/rateLearn :a rl)])
+  :i [(asl-tools/fleet/run :a fr) (aslGateway/rateLearn :a rl) (asl-tools/hub/learn :a ln)])
 
 ; (:m :ref ORCH-AIMD-LIVE :do "the hub's learner process on scratch files: one tick over a throttled-only window raises the alias rpm by 20 percent of its start (20 to 24), a window with 3.2 percent real 429 cuts it by 0.7, and the looping timer, started with no stored rate, writes the store by itself within its first interval")
 fn row at: Int64 outcome: String -> String
@@ -36,6 +36,10 @@ fn ! runTests -> Bool
         (wroteL1 (fileWrite (str temp "/ledger.asn") (stringJoin (rows 9999000 10 "throttled") "\n")))
         (t1 (tickOut! temp))
         (up (rateOf! temp))
+        (byName (mapGetOr (rl/readStore! (str temp "/ratesByName.asn")) "m1-target" -1.0))
+        (tailFile (fileWrite (str temp "/tail.txt") "aaaa\nbbbb\ncccc\n"))
+        (tailCut (ln/tailLines (str temp "/tail.txt") 7))
+        (tailAll (ln/tailLines (str temp "/tail.txt") 100))
         (wroteL2 (fileWrite (str temp "/ledger.asn") (stringJoin (listAppend (rows 9999000 30 "ok") (rows 9999100 1 "429")) "\n")))
         (t2 (tickOut! temp))
         (down (rateOf! temp))
@@ -68,6 +72,8 @@ fn ! runTests -> Bool
     (do
       (assert (and (ok? wroteG) (and (ok? wroteL1) (stringContains? t1 "EXIT:0"))) (str "one learner tick ran: " t1))
       (assert (near up 24.0) (str "a throttled-only window raises 20 by 20 percent of its start: " (stringFromFloat64 up)))
+      (assert (near byName 24.0) (str "the learner also writes the learned rate by upstream model name: " (stringFromFloat64 byName)))
+      (assert (and (ok? tailFile) (and (= tailCut (list "cccc" "")) (= (listLength tailAll) 4))) "tailLines drops the cut first line only when it cut, and reads all of a small file")
       (assert (and (ok? wroteL2) (stringContains? t2 "EXIT:0")) (str "the second tick ran: " t2))
       (assert (near down (* 24.0 0.7)) (str "3.2 percent real 429 cuts by 0.7: " (stringFromFloat64 down)))
       (assert (and (ok? wroteL3) stored) "the looping timer wrote the store with no stored rate before it")

@@ -1,6 +1,6 @@
 (module asl-tools/hub/learn
-  :x [specsOf totalsOf learnTick! main]
-  :i [(aslGateway/config :a c) (aslGateway/rateLearn :a rl)])
+  :x [specsOf totalsOf tailLines learnTick! main]
+  :i [(asl-tools/fleet/run :a fr) (aslGateway/config :a c) (aslGateway/rateLearn :a rl)])
 
 ; (:m :ref ORCH-AIMD-LIVE :do "the live half of GW-RPM-AIMD: every :every-sec the loop reads the gateway config for each alias's configured :rpm (the start) and the provider :rpmTotal of shared providers, replays the last window of the usage ledger through rateLearn/learnAll, and rewrites the rate store; it exits when --parent is gone, so a hub restart never leaves a learner behind")
 fn specsOf table: c/GatewayTable -> (List rl/Spec)
@@ -20,6 +20,34 @@ fn totalsOf table: c/GatewayTable -> (Map String Float64)
                      (if (and prov.rpmShared (> prov.rpm 0.0)) (list (pair (pairFirst p) prov.rpm)) (list))))
       (mapPairs table.providers)))
 
+; (:m :ref ORCH-AIMD-LIVE :do "the ledger only grows and its rows are time ordered, so one tick reads the last tailBytes of it through tail -c (no byte-to-string builtin lowers), not the whole file; the cut first line is dropped, and a window older than the tail counts only the part inside it")
+fn tailBytes -> Int64
+  4194304
+
+fn ! tailLines path: String maxBytes: Int64 -> (List String)
+  (let [(size (resultOr (fileSize path) 0))
+        (text (if (or (<= size 0) (stringContains? path "'")) ""
+                (resultOr (fr/shellOut (str "/usr/bin/tail -c " (stringFromInt64 maxBytes) " '" path "'") 20000) "")))]
+    (if (> size maxBytes) (listDrop (stringSplit text "\n") 1) (stringSplit text "\n")))
+
+; (:m :ref ORCH-AIMD-LIVE :do "the gateway's bucket key is the upstream model name, not the alias: the learner also writes the learned rates by that name, the lowest of the aliases sharing one name, next to the alias store, so the reactor reads a small file with no config parse")
+fn byNamePath storePath: String -> String
+  (let [(parts (stringSplit storePath "/"))]
+    (str (stringJoin (listTake parts (- (listLength parts) 1)) "/") "/ratesByName.asn"))
+
+fn byNameRates table: c/GatewayTable learned: (Map String Float64) -> (Map String Float64)
+  (fold (fn [(acc (Map String Float64)) (id String)] -> (Map String Float64)
+              (match (mapGet learned id)
+                ((none) acc)
+                ((some r)
+                  (match (mapGet table.models id)
+                    ((none) acc)
+                    ((some m) (mapSet acc m.name (match (mapGet acc m.name) ((some old) (min old r)) ((none) r))))))))
+    (mapEmpty) table.modelOrder)
+
+fn ! writeByName! table: c/GatewayTable learned: (Map String Float64) path: String -> Bool
+  (ok? (rl/writeStore! path (byNameRates table learned)))
+
 fn ! learnTick! gatewayPath: String ledgerPath: String storePath: String nowMs: Int64 windowMs: Int64 -> (Result Int64 String)
   (match (fileReadString gatewayPath)
     ((err e) (err (str "ERR_HUB_LEARN_CONFIG: " e)))
@@ -27,11 +55,11 @@ fn ! learnTick! gatewayPath: String ledgerPath: String storePath: String nowMs: 
       (match (c/gateway_config_parse! text "default" "")
         ((err e) (err (str "ERR_HUB_LEARN_CONFIG: " e)))
         ((ok table)
-          (let [(lines (stringSplit (resultOr (fileReadString ledgerPath) "") "\n"))
+          (let [(lines (tailLines ledgerPath (tailBytes)))
                 (learned (rl/learnAll (specsOf table) (rl/readStore! storePath) lines (- nowMs windowMs) nowMs (totalsOf table)))]
             (match (rl/writeStore! storePath learned)
               ((err e) (err (str "ERR_HUB_LEARN_STORE: " e)))
-              ((ok _) (ok (mapSize learned)))))))))
+              ((ok _) (do (writeByName! table learned (byNamePath storePath)) (ok (mapSize learned))))))))))
 
 fn flagAfter args: (List String) flag: String fallback: String -> String
   (match (listIndexOf args flag)
