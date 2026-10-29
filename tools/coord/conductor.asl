@@ -2,9 +2,9 @@
   :x [CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig rulingVerdict
-      pickWriteProfile tick! wake! status! drain! stopAll! gatesRes loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
+      pickWriteProfile pickWriteProfileH schedPace tick! wake! status! drain! stopAll! gatesRes loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
       main]
-  :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp)
+  :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp)
       (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
 
 ; (:m :ref CONDUCTOR :do "deterministic scheduler, no model in the loop: units are store rows (:after = deps, :owns, :gate, :channel = lane), the conductor keeps one state row per unit under <dir>/cond and appends one journal row per transition; the store lease is held from writing to merging so owns stay disjoint, and the store row turns done only when the unit is merged")
@@ -458,6 +458,20 @@ fn ! poolSize dir: String -> Int64
 fn jobserverPace dir: String allowance: (fn [String] -> Int64) -> Pace
   (Pace :tokens (fn [] -> Int64 (poolSize dir)) :allowance allowance)
 
+; (:m :ref SCHED :do "the light pool: without ~/.asl/conductor/sched.asn it is the jobserver token count and nothing adapts; with one the slots come from the store's slots.asn, sampled at most once a minute from the gateway ledger, free RAM and load; gates and builds keep the jobserver class writer tokens")
+fn ! lightSlots! dir: String home: String -> Int64
+  (let [(txt (readOr (str home "/.asl/conductor/sched.asn")))]
+    (if (stringEmpty? txt)
+      (poolSize "")
+      (let [(cfg (sc/parseCfg txt))
+            (now (/ (nowNs) 1000000))]
+        (if (sc/slotsDue? dir now 60000)
+          (sc/schedTick! dir cfg now (stringLines (readOr (str home "/.asl/run/usage/gatewayCalls.asn"))) (sc/memFreeMB (readOr "/proc/meminfo")) (sc/loadOne (readOr "/proc/loadavg")) (resultOr (cpuCount) 1))
+          (pairFirst (sc/slotsRead! dir))))))
+
+fn schedPace dir: String home: String -> Pace
+  (Pace :tokens (fn [] -> Int64 (lightSlots! dir home)) :allowance allowanceUnlimited)
+
 fn realPace -> Pace
   (jobserverPace "" allowanceUnlimited)
 
@@ -521,7 +535,7 @@ fn ! gatesRes gateSec: Int64 task: String u: st/Task c: CUnit -> Res
       ((not (stringEmpty? refused)) (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig refused :ms 0 :exit 3 :asserts 0 :verdict ""))
       ((not (stringEmpty? broken)) (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig broken :ms 0 :exit 3 :asserts 0 :verdict ""))
       (else
-        (let [(d (fr/runShell! u.gate c.wt (fr/childEnv (list)) (fr/limits gateSec 200)))]
+        (let [(d (fr/runShell! u.gate c.wt (fr/childEnv (list)) (fr/heavy (fr/limits gateSec 200) "writer" "")))]
           (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig (gateSig d.out) :ms d.ms :exit d.exit :asserts (optionOr (fr/executedOf d.out) 0) :verdict "")))))
 
 ; (:m :ref COND3 :do "a retried write finds its branch sh/UNIT left by an earlier attempt without a worktree and checks it out again instead of failing on the existing branch")
@@ -583,12 +597,20 @@ fn slotProfile ps: (List String) ws: (List Int64) slot: Int64 -> String
 
 ; (:m :ref ROTATE :do "a (:writeProfiles :tier T :profiles (P..) :weights (w..)) row picks the profile from a stable hash of the unit id mod the weight sum, so every attempt of a unit keeps its profile and units spread by weight; a malformed row or none gives the base")
 fn pickWriteProfile lanes: String id: String lane: String base: String -> String
+  (pickWriteProfileH lanes id lane base "")
+
+; (:m :ref SCHED :do "with a :leads (provider ..) list parallel to :profiles on the row and a providerHealth text, each weight is scaled by the clamped ok share of its lead provider (0.2..1.0), so new units shift off saturated providers while a unit that already has a profile keeps it")
+fn pickWriteProfileH lanes: String id: String lane: String base: String health: String -> String
   (let [(rows (filter (fn [(l String)] -> Bool (and (stringContains? l "(:writeProfiles ") (= (sp/tokAfter l ":tier") lane))) (stringLines lanes)))]
     (match (listHead rows)
       ((none) base)
       ((some l)
         (let [(ps (listAfter l ":profiles"))
-              (ws (map (fn [(x String)] -> Int64 (max 0 (optionOr (stringToInt64 x) 0))) (listAfter l ":weights")))
+              (ws0 (map (fn [(x String)] -> Int64 (max 0 (optionOr (stringToInt64 x) 0))) (listAfter l ":weights")))
+              (leads (listAfter l ":leads"))
+              (ws (if (and (not (stringEmpty? health)) (= (listLength leads) (listLength ws0)))
+                    (map (fn [(i Int64)] -> Int64 (optionOr (float64ToInt64 (* (int64ToFloat64 (* 100 (optionOr (listGet ws0 i) 0))) (sc/okShareOf health (optionOr (listGet leads i) "")))) 0)) (range 0 (listLength ws0)))
+                    ws0))
               (total (fold (fn [(a Int64) (w Int64)] -> Int64 (+ a w)) 0 ws))
               (pick (if (and (> total 0) (= (listLength ps) (listLength ws))) (slotProfile ps ws (mod (idHash id) total)) ""))]
           (if (stringEmpty? pick) base pick)))))
@@ -598,8 +620,8 @@ fn writeProfile rc: RealCfg lane: String -> String
         (given (match (listHead rows) ((some l) (sp/tokAfter l ":profile")) ((none) "")))]
     (cond ((not (stringEmpty? given)) given) ((= lane "paid") "paidCheap") ((= lane "strong") "strong") (else rc.profile)))
 
-fn writeProfileFor rc: RealCfg id: String lane: String -> String
-  (pickWriteProfile (readOr rc.lanes) id lane (writeProfile rc lane))
+fn ! writeProfileFor rc: RealCfg dir: String id: String lane: String -> String
+  (pickWriteProfileH (readOr rc.lanes) id lane (writeProfile rc lane) (readOr (str dir "/providerHealth.asn")))
 
 ; (:m :ref WRITEESC :do "a write whose branch has no commit past its base and no dirty file made no progress; an unreadable count is not a verdict")
 fn ! noEdits? p: String base: String -> Bool
@@ -612,7 +634,7 @@ fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
     (match added
       ((err e) (failRes e))
       ((ok p)
-        (let [(prof (writeProfileFor rc u.id c.lane))
+        (let [(prof (writeProfileFor rc dir u.id c.lane))
               (_ (fileAppend (journalPath dir) (str "(:profile :unit " (st/q u.id) " :lane " (st/q c.lane) " :profile " (st/q prof) " :at " (n (/ (nowNs) 1000000)) ")\n")))
               (d (fp/runLeonProfile! prof rc.repo p rc.home (taskText dir u) u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) rc.leaseSec rc.keys))
               (model (fp/modelOf d.out))
@@ -675,7 +697,7 @@ fn ! redBefore! rc: RealCfg u: st/Task c: CUnit -> (Pair Int64 Int64)
         (_ (gitOut c.wt (list "worktree" "remove" "--force" bpath)))
         (added (gitOut c.wt (list "worktree" "add" "--detach" bpath sha)))]
     (if (or (!= mb.exit 0) (!= added.exit 0)) (pair -1 0)
-      (let [(d (fr/runShell! u.gate bpath (fr/childEnv (list)) (fr/limits rc.gateSec 200)))
+      (let [(d (fr/runShell! u.gate bpath (fr/childEnv (list)) (fr/heavy (fr/limits rc.gateSec 200) "writer" "")))
             (_ (gitOut c.wt (list "worktree" "remove" "--force" bpath)))]
         (pair d.exit (optionOr (fr/executedOf d.out) 0)))))
 
@@ -897,7 +919,7 @@ fn ! main args: (List String) -> (Result Int64 String)
         (dir (st/opt args "store" (str (resultOr (getHomeDir) ".") "/.asl/run/conductor")))
         (rc (realCfg args dir))
         (ctx (Ctx :dir dir :holder (str "conductor" (n (procSelf))) :ttlMs 3600000 :maxWait (st/intOpt args "max-wait" 30) :maxSame 3
-                  :stageSec (st/intOpt args "stage-sec" 4200) :maxDesc 200 :launch (realLaunch args dir) :pace (realPace)))]
+                  :stageSec (st/intOpt args "stage-sec" 4200) :maxDesc 200 :launch (realLaunch args dir) :pace (schedPace dir rc.home)))]
     (cond
       ((= cmd "stage") (ok (stageMain! args dir)))
       ((= cmd "tick") (match (tick! ctx) ((ok c) (do (println (str "(:tick :changed " (n c) ")")) (ok 0))) ((err e) (do (eprintln e) (ok 1)))))

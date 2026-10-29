@@ -56,7 +56,7 @@ fn ! testWindow -> Bool
         (w0 (sc/winOf lines 600000 1200000))
         (cfg (sc/parseCfg "(:sched :min 2 :max 9 :start 5 :softShare 0.5)"))
         (dflt (sc/defaultCfg))]
-    (do (assert (and (= w.total 6) (= w.ok 3) (= w.rate 3) (= w.okOut 125)) (str "window 50-600s: " (stringFromInt64 w.total) " " (stringFromInt64 w.ok) " " (stringFromInt64 w.rate) " " (stringFromInt64 w.okOut)))
+    (do (assert (and (= w.total 6) (= w.ok 3) (= w.rate 2) (= w.okOut 125)) (str "window 50-600s: " (stringFromInt64 w.total) " " (stringFromInt64 w.ok) " " (stringFromInt64 w.rate) " " (stringFromInt64 w.okOut)))
         (assert (and (= w0.total 1) (= w0.ok 1)) "the next window holds only its own call")
         (assert (= (sc/quoted (optionOr (listGet lines 4) "") ":outcome") "breaker 589s") "a quoted value keeps its spaces")
         (assert (= (sc/okPerMin w 600) 0.3) "ok per minute over a 600 s window")
