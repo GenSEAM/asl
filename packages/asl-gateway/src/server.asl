@@ -253,12 +253,12 @@ fn ! mainWith args: (List String) module: String families: (List dp/LifecycleFam
       ((= mode "serve")
         (let [(upstream (gatewayFindArg args "--upstream" ""))
               (ready (gatewayFindArg args "--ready" ""))]
-          (match (gatewayRunServer! launch port upstream ready)
+          (match (gatewayRunAt! launch port upstream ready (gatewayFindArg args "--unix" ""))
             ((err e) (do (sys/sayErr! e) (ok 1)))
             ((ok _) (ok 0)))))
       ((= mode "run")
         (let [(upstream (gatewayFindArg args "--upstream" ""))]
-          (match (gatewayRunServer! launch port upstream "")
+          (match (gatewayRunAt! launch port upstream "" (gatewayFindArg args "--unix" ""))
             ((err e) (do (sys/sayErr! e) (ok 1)))
             ((ok _) (ok 0)))))
       ((gatewayCliMode? mode)
@@ -356,6 +356,23 @@ fn ! gatewayRunServer! launch: Launch port: Int64 upstream: String readyPath: St
             ((err e) (do (fdClose listenerFd) (err e)))
             ((ok boundPort)
               (gatewayServe! listenerFd upstreamPort launch.families readyPath boundPort)))))))
+
+; (:m :ref ORCH-1 :do "serve --unix PATH listens on a unix socket (mode 0600) instead of a TCP port, for the one-per-node orchestrator daemon; a live listener on PATH refuses the start, a dead socket file is replaced, the ready file gets 1 in place of a port")
+fn ! gatewayRunAt! launch: Launch port: Int64 upstream: String readyPath: String unixPath: String -> (Result Int64 String)
+  (if (stringEmpty? unixPath) (gatewayRunServer! launch port upstream readyPath)
+    (let [(upstreamPort (gatewayUpstreamPort upstream))]
+      (if (or (<= upstreamPort 0) (> upstreamPort 65535))
+        (err "upstream must be an http URL with an explicit port")
+        (match (unixConnect unixPath)
+          ((ok liveFd) (do (fdClose liveFd) (err (str "gateway socket already served: " unixPath))))
+          ((err _)
+            (do (pathRemove unixPath)
+              (match (unixListen unixPath)
+                ((err e) (err (str "gateway listen failed: " e)))
+                ((ok listenerFd)
+                  (match (fileChmod unixPath 384)
+                    ((err e) (do (fdClose listenerFd) (pathRemove unixPath) (err (str "gateway socket chmod failed: " e))))
+                    ((ok _) (gatewayServe! listenerFd upstreamPort launch.families readyPath 1)))))))))))
 
 (enum ConnPhase
   (:c connReading [])
