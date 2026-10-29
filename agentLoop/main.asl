@@ -7,7 +7,7 @@
   :i [(asl/agentLoop/core :a c)
       (asl/agentLoop/diff :a diff)
       (asl/agentLoop/providers :a pv)
-      (asl/agentLoop/attractor :a at)
+      (asl/agentLoop/attractor :a at) (asl/agentLoop/nativeTools :a nt)
       (asl/agentLoop/context :a ctx)
       (asl/agentLoop/journal :a jr)
       (asl/agentLoop/gitOps :a go)
@@ -133,6 +133,7 @@
   (:f contextTokens (Option Int64))
   (:f plan Bool)
   (:f attractor String :default "")
+  (:f nativeTools String :default "")
   (:f resume (Option ResumeState))
   (:f pool (Option po/PoolSelf))
   (:f parentPid (Option Int64))
@@ -140,7 +141,7 @@
 
 fn knownParams -> (List String)
   (list "agent" "task" "mode" "intent" "root" "owns" "gates" "backend" "budget" "inputTokenBudget" "dryRun" "resume" "answer" "role"
-        "model" "timeout" "contextFile" "base" "queueTimeout" "contextTokens" "gateTimeout" "wallBudget" "plan" "attractor" "poolChan" "poolIdx" "parentPid" "remote")
+        "model" "timeout" "contextFile" "base" "queueTimeout" "contextTokens" "gateTimeout" "wallBudget" "plan" "attractor" "nativeTools" "poolChan" "poolIdx" "parentPid" "remote")
 
 fn acceptedKeys -> (List String)
   (listSortBy (fn [k] k) (filter (fn [k] (not (listContains? (list "agent" "mode" "role" "poolChan" "poolIdx" "parentPid") k))) (knownParams)))
@@ -369,6 +370,7 @@ fn applyKey ps: (List (Pair String j/Json)) key: String v: j/Json -> (Pair (List
     ((or (= key "gateTimeout") (or (= key "wallBudget") (= key "parentPid"))) (pair (paramSet ps key (intOrNull v)) none))
     ((= key "plan") (pair (paramSet ps key (match v ((j/jbool b) (j/jbool b)) (_ (j/jnull)))) none))
     ((= key "attractor") (pair (paramSet ps key (j/jstr (lstripColons (pv/pyStr v)))) none))
+    ((= key "nativeTools") (pair (paramSet ps key (j/jstr (lstripColons (pv/pyStr v)))) none))
     ((= key "agent") (pair ps none))
     (else (pair ps (some key))))
 
@@ -1264,6 +1266,13 @@ fn wallCappedProvider p: pv/Provider left: (Option Int64) -> pv/Provider
   (match left ((some l) (pv/capTimeouts p l)) ((none) p))
 
 ; (:m :ref LEONATTR :do "the provider a live turn calls: wall-capped, and carrying the prefill only when the attractor set one, so an off turn sends the request as before")
+; (:m :ref PROTO-STUDY :do "the tool schemas a session offers on its main turns: one per local op shape for ops, the single step(form) tool for step, none when off; advisor and grader calls never carry them")
+fn sessionTools v: String -> (List j/Json)
+  (cond
+    ((= v "ops") (nt/toolSpecs (map pairSecond (filter (fn [p] (not (listContains? (list "diff" "flush" "discard") (pairFirst p)))) (ex/opShapes)))))
+    ((= v "step") (list (nt/stepToolSpec)))
+    (else (list)))
+
 fn attractorProvider p: pv/Provider prefill: String left: (Option Int64) -> pv/Provider
   (if (stringEmpty? prefill) (wallCappedProvider p left) (pv/withPrefill (wallCappedProvider p left) prefill))
 
@@ -1824,8 +1833,10 @@ fn ! executeLive ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderE
       ; (:m :ref LEON-ATTRIB-20261028 :do "the provider is made with the journal's session id, so the X-ASL-Session of every gateway call is the id the journal and the receipt carry and the ledger row joins the session")
       (match (pv/makeProvider! ra.backend "auto" rootDir ra.model ra.timeout (pairFirst sp) ra.queueTimeout ra.timeoutSet env (optionOr ra.intent "auto"))
         ((err e) (rejectWith (str ":error ERR_BACKEND :message \"" (c/escapeAsn (pv/errorMessage e)) "\"") 1))
-        ((ok provider)
-          (let [session (pairFirst sp)
+        ((ok provider0)
+          (let [provider provider0
+                turnProvider (pv/withTools provider0 (sessionTools ra.nativeTools))
+                session (pairFirst sp)
                 path (pairSecond sp)
                 model (if (stringEmpty? ra.model) (defaultModel ra.backend) ra.model)
                 tokens (ctx/contextTokensFor (some model) (match ra.contextTokens ((some t) (j/jint t)) ((none) (j/jnull)))
@@ -1834,8 +1845,9 @@ fn ! executeLive ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderE
                          ra.gates (some tokens) ra.plan)]
             (match prompt
               ((err e) (rejectWith (str ":error ERR_HARNESS :message \"" (c/escapeAsn e) "\"") 1))
-              ((ok system)
-                (let [call (fn [sys user] (pv/nextTurn! provider sys user))
+              ((ok system0)
+                (let [system (str system0 (nt/systemHint ra.nativeTools))
+                      call (fn [sys user] (pv/nextTurn! turnProvider sys user))
                       providerCall (fn [p sys user] (pv/nextTurn! p sys user))
                       hooks (liveHooks! provider)
                       cfgText (ac/configText! rootDir)
@@ -1851,7 +1863,7 @@ fn ! executeLive ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderE
                         :grade (fn [role sys msg] (liveGrader provider graderIntent graderProfile path sys msg))
                         :newId (fn [] session) :now (fn [] (ao/nowMono))
                         :sleep (fn [seconds] (do (if (> seconds 0) (sleepMs (* seconds 1000)) ()) true)))
-                      result (rl/runLoopWithProviderWatched! liveEnv provider ra.parentPid (fn [le wrapped] (liveBody! ra repoRoot rootDir path system le providerCall wrapped)))
+                      result (rl/runLoopWithProviderWatched! liveEnv turnProvider ra.parentPid (fn [le wrapped] (liveBody! ra repoRoot rootDir path system le providerCall wrapped)))
                       receipt (loopResultOf ra rootDir result (liveJournalUsage! rootDir result.journal))
                       line (formatReceipt receipt)]
                   (MainResult :stdout line :exitCode (liveExitCode receipt)))))))))))
@@ -1887,7 +1899,7 @@ fn resumed ra: RunArgs st: ResumeState -> RunArgs
            :base st.base
            :remote ra.remote
            :contextTokens (match ra.contextTokens ((some t) (if (= t 0) st.contextTokens (some t))) ((none) st.contextTokens))
-           :plan ra.plan :attractor ra.attractor :resume (some st) :pool ra.pool :parentPid ra.parentPid :route ra.route)
+           :plan ra.plan :attractor ra.attractor :nativeTools ra.nativeTools :resume (some st) :pool ra.pool :parentPid ra.parentPid :route ra.route)
 
 fn ! dispatch ps: (List (Pair String j/Json)) repoRoot: String rootDir: String timeout: Int64 queueTimeout: Int64 plan: Bool -> MainResult
   (let [resumeV (paramOr ps "resume" (j/jnull))
@@ -1902,7 +1914,7 @@ fn ! dispatch ps: (List (Pair String j/Json)) repoRoot: String rootDir: String t
                                                   (min 86400 (+ timeout queueTimeout))))
                     :intent (optText (paramGet ps "intent"))
                     :base (textValue (paramOr ps "base" (j/jstr ""))) :remote (textValue (paramOr ps "remote" (j/jstr ""))) :contextTokens (intValue (paramOr ps "contextTokens" (j/jnull)))
-                    :plan plan :attractor (textValue (paramOr ps "attractor" (j/jstr ""))) :resume none :parentPid (intValue (paramOr ps "parentPid" (j/jnull))) :route none
+                    :plan plan :attractor (textValue (paramOr ps "attractor" (j/jstr ""))) :nativeTools (textValue (paramOr ps "nativeTools" (j/jstr ""))) :resume none :parentPid (intValue (paramOr ps "parentPid" (j/jnull))) :route none
                     :pool (po/poolSelf (textValue (paramOr ps "poolChan" (j/jstr ""))) (optionOr (intValue (paramOr ps "poolIdx" (j/jint -1))) -1)))
         dry (match (paramOr ps "dryRun" (j/jbool false)) ((j/jbool b) b) (_ false))]
     (cond
@@ -1929,6 +1941,8 @@ fn ! checkWall ps: (List (Pair String j/Json)) repoRoot: String rootDir: String 
                     2))
       ((not (at/validAttractor? (textValue (paramOr ps "attractor" (j/jstr "")))))
         (rejectWith ":error ERR_INVALID_ARG :key \"attractor\" :message \"attractor is asn or off; absent means off\"" 2))
+      ((not (nt/validTools? (textValue (paramOr ps "nativeTools" (j/jstr "")))))
+        (rejectWith ":error ERR_INVALID_ARG :key \"nativeTools\" :message \"nativeTools is ops, step or off; absent means off\"" 2))
       ((not (inRange (intValue (paramOr ps "wallBudget" (j/jint limit))) 1 limit))
         (rejectWith (str ":error ERR_INVALID_ARG :key \"wallBudget\" :limit " (stringFromInt64 limit)
                          " :message \"wallBudget must be an integer of seconds from 1 to timeout + queueTimeout, at most 86400 (bin/asl kills the dispatch 30 s after that); raise :timeout, or leave it out and :wallBudget sets it\"")

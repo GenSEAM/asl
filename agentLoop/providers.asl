@@ -3,8 +3,8 @@
       ProviderEnv VendorConfig Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
       parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
-      curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! providerEnv! makeProvider! nextTurn! withPrefill outgoingMessages profileMessages advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
-  :i [(asl-json/json :a j) (asl-proc/coreProcess :a cp) (aslGateway/server :a gs) (aslGateway/dispatch :a gd) (aslGateway/upstream :a gu) (aslGateway/config :a cfg)])
+      curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! providerEnv! makeProvider! nextTurn! withPrefill withTools acceptHeader readJsonReply outgoingMessages profileMessages advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
+  :i [(asl-json/json :a j) (asl-proc/coreProcess :a cp) (aslGateway/server :a gs) (aslGateway/dispatch :a gd) (aslGateway/upstream :a gu) (aslGateway/config :a cfg) (asl/agentLoop/nativeTools :a nt)])
 
 enum ProviderError
   (providerError code: String message: String)
@@ -35,7 +35,8 @@ enum ProviderError
   (:f env ProviderEnv)
   (:f link (Option gs/GatewayLoop))
   (:f turn Int64)
-  (:f prefill String :default ""))
+  (:f prefill String :default "")
+  (:f tools (List j/Json) :default (list)))
 
 enum Provider
   (scriptProvider name: String turns: (List String) index: Int64)
@@ -843,6 +844,22 @@ fn withTurn cfg: VendorConfig turn: Int64 -> VendorConfig
 fn cfgPrefill cfg: VendorConfig prefill: String -> VendorConfig
   (with cfg :prefill prefill)
 
+; (:m :ref PROTO-STUDY :do "native tool schemas ride on the config like the prefill; an empty list sends no tools key and keeps the ASN wire")
+fn cfgTools cfg: VendorConfig tools: (List j/Json) -> VendorConfig
+  (with cfg :tools tools)
+
+fn withTools p: Provider tools: (List j/Json) -> Provider
+  (match p
+    ((vendorProvider cfg) (vendorProvider (cfgTools cfg tools)))
+    (_ p))
+
+; (:m :ref PROTO-STUDY :do "the ASN wire carries only text content, so a call that offers tools asks for JSON, whose message keeps its tool_calls")
+fn acceptHeader tools: (List j/Json) -> (List (Pair String String))
+  (if (listEmpty? tools) (list) (list (pair "Accept" "application/json")))
+
+fn hasAccept headers: (List (Pair String String)) -> Bool
+  (not (listEmpty? (filter (fn [h] (= (stringLower (pairFirst h)) "accept")) headers)))
+
 fn withPrefill p: Provider prefill: String -> Provider
   (match p
     ((vendorProvider cfg) (vendorProvider (cfgPrefill cfg prefill)))
@@ -947,7 +964,7 @@ fn curlConfig url: String body: String headers: (List (Pair String String)) maxT
          "silent\n"
          "show-error\n"
          (hdr "Content-Type" "application/json")
-         (hdr "Accept" "application/asn+sexpr")
+         (if (hasAccept headers) "" (hdr "Accept" "application/asn+sexpr"))
          (stringJoin (map (fn [p] (hdr (pairFirst p) (pairSecond p))) headers) "")
          "header = \"Expect:\"\n"
          "data-raw = " (configQuote body) "\n"
@@ -1120,10 +1137,15 @@ fn replyContent resp: j/Json -> (Result (Option String) ProviderError)
               (let [(msg (optionOr (jsonLookup c0 "message") (j/jobj (list))))]
                 (if (not (isObject msg))
                   (err (gatewayError "ERR_VENDOR" "Gateway message is not an object" ""))
-                  (match (optionOr (jsonLookup msg "content") (j/jnull))
-                    ((j/jnull) (noReply "Empty content in gateway response"))
-                    ((j/jstr s) (if (stringEmpty? (pyStrip s)) (noReply "Empty content in gateway response") (ok (some (pyStrip s)))))
-                    (v (ok (some (pyStrip (pyStr v))))))))))))
+                  (let [(calls (match (optionOr (jsonLookup msg "tool_calls") (j/jnull)) ((j/jarr xs) xs) (_ (list))))
+                        (content (match (optionOr (jsonLookup msg "content") (j/jnull)) ((j/jnull) "") ((j/jstr s) s) (v (pyStr v))))]
+                    ; (:m :ref PROTO-STUDY :do "a native tool call reads back as the ASN form it names, after any text content")
+                    (if (not (listEmpty? calls))
+                      (ok (some (pyStrip (nt/callsText content calls))))
+                      (match (optionOr (jsonLookup msg "content") (j/jnull))
+                        ((j/jnull) (noReply "Empty content in gateway response"))
+                        ((j/jstr s) (if (stringEmpty? (pyStrip s)) (noReply "Empty content in gateway response") (ok (some (pyStrip s)))))
+                        (v (ok (some (pyStrip (pyStr v))))))))))))))
       (_ (noReply "Empty choices in gateway response"))))
 
 fn readJsonReply body: String -> (Pair (Result (Option String) ProviderError) TurnMeta)
@@ -1224,7 +1246,7 @@ fn ! linkGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String 
     ((err e) (Called :reply (err e) :meta (emptyMeta) :cfg cfg))
     ((ok l)
       (let [(body (pyJsonDumps payload))
-            (sent (listAppend (list (pair "Content-Type" "application/json") (pair "Accept" "application/asn+sexpr"))
+            (sent (listAppend (cons (pair "Content-Type" "application/json") (if (hasAccept headers) (list) (list (pair "Accept" "application/asn+sexpr"))))
                     (listAppend headers (list (pair "Content-Length" (stringFromInt64 (bytesLength (stringToBytes body))))))))
             (out (gs/linkSend! l "POST" "/v1/chat/completions" sent body (* (+ (+ cfg.timeout cfg.queueTimeout) 30) 1000)))
             (next (withLink cfg (pairFirst out)))]
@@ -1329,13 +1351,13 @@ fn ! callProfile! cfg: VendorConfig system: String user: String model: String ->
         (profile cfg.env.profile)
         (headers (listAppend
                    (if (and (= model "profile") (not (stringEmpty? profile))) (list (pair "X-ASL-Profile" profile)) (list))
-                   (listAppend (if (stringEmpty? cfg.sessionId) (list) (list (pair "X-ASL-Session" cfg.sessionId))) (attribHeaders cfg))))
+                   (listAppend (if (stringEmpty? cfg.sessionId) (list) (list (pair "X-ASL-Session" cfg.sessionId))) (listAppend (attribHeaders cfg) (acceptHeader cfg.tools)))))
         (payload (j/jobj (listAppend
                            (listAppend
                              (list (pair "model" (j/jstr model))
                                    (pair "intent" (j/jstr cfg.intent))
                                    (pair "messages" (j/jarr (profileMessages system user cfg.prefill))))
-                             (listAppend (toolsField (list)) (list (pair "workspace" (j/jstr ws)))))
+                             (listAppend (toolsField cfg.tools) (list (pair "workspace" (j/jstr ws)))))
                            (listAppend (if cfg.timeoutSet (list (pair "timeout" (j/jint cfg.timeout))) (list))
                                        (list (pair "queue_timeout" (j/jint cfg.queueTimeout)))))))]
     (match (makeDirs ws)
