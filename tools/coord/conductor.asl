@@ -2,7 +2,7 @@
   :x [CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig rulingVerdict
-      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? pickWriteProfile pickWriteProfileH schedPace tick! wake! status! drain! stopAll! gatesRes loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
+      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace tick! wake! status! drain! stopAll! gatesRes loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
       main]
   :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp)
       (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -665,18 +665,50 @@ fn vacuousSig gate: String -> String
 fn vacuousSig? sig: String -> Bool
   (stringStartsWith? sig "vacuousGate: ")
 
-; (:m :ref WRITEESC :do "a write whose branch has no commit past its base and no dirty file made no progress; an unreadable count is not a verdict")
-fn ! noEdits? p: String base: String -> Bool
+; (:m :ref CONDUCTOR-ZERO-MERGE :do "the changed paths inside the unit's :owns, untracked ones included; driver debris outside :owns (.asl/gatewayProfilePin.asn) is no edit, and an owned path the writer never created is simply absent, where git add -- owns failed on it and committed nothing")
+fn ! ownedChanges! p: String owns: (List String) -> (List String)
+  (if (listEmpty? owns)
+    (if (fp/gitDirty? p) (list ".") (list))
+    (let [(r (gitOut p (listAppend (list "status" "--porcelain" "--untracked-files=all" "--") owns)))]
+      (if (!= r.exit 0) (list)
+        (map (fn [(l String)] -> String
+               (let [(path (optionOr (stringSlice l 3 (stringLength l)) ""))]
+                 (match (stringIndexOf path " -> ") ((some at) (optionOr (stringSlice path (+ at 4) (stringLength path)) path)) ((none) path))))
+             (filter (fn [(l String)] -> Bool (> (stringLength l) 3)) (stringLines r.out))))))
+
+; (:m :ref CONDUCTOR-ZERO-MERGE :do "the driver commit stages only the owned paths that changed; true when a commit landed")
+fn ! commitWrite! p: String owns: (List String) id: String model: String -> Bool
+  (let [(changed (ownedChanges! p owns))]
+    (if (listEmpty? changed) false
+      (fp/driverCommitRow! p (if (listEmpty? owns) (list) changed) id model)))
+
+fn ! commitsPast? p: String base: String -> Bool
   (let [(r (gitOut p (list "rev-list" "--count" (str base "..HEAD"))))]
-    (and (= r.exit 0) (and (= (stringTrim r.out) "0") (not (fp/gitDirty? p)))))
+    (or (!= r.exit 0) (!= (stringTrim r.out) "0")))
+
+; (:m :ref WRITEESC :do "a write whose branch has no commit past its base and no changed owned file made no progress; an unreadable count is not a verdict")
+fn ! noEdits? p: String base: String owns: (List String) -> Bool
+  (and (not (commitsPast? p base)) (listEmpty? (ownedChanges! p owns)))
+
+; (:m :ref CONDUCTOR-ZERO-MERGE :do "a unit worktree kept across retries was reused as it stood, so a unit created in the morning ran Leon and its gates on the morning's tree all day (NODE2-ASEX-DETACHED at ace2ae8ec while main moved on); a reused worktree with no tracked change is brought onto its base like a re-attached one")
+fn ! reuseWt! rc: RealCfg u: st/Task path: String -> (Result String String)
+  (if (stringEmpty? (stringTrim (gitOut path (list "status" "--porcelain" "--untracked-files=no")).out))
+    (freshBase! rc u path)
+    (ok path))
+
+; (:m :ref CONDUCTOR-ZERO-MERGE :do "how far the unit's tree is behind its base, for the receipt: (:base :sha S :behind N)")
+fn ! baseNote! p: String base: String -> String
+  (let [(sha (stringTrim (gitOut p (list "rev-parse" "--short" base)).out))
+        (behind (stringTrim (gitOut p (list "rev-list" "--count" (str "HEAD.." base))).out))]
+    (str "(:base :sha " (st/q sha) " :behind " (if (stringEmpty? behind) "-1" behind) ")"))
 
 fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
   (let [(path (w/wtPath rc.wt u.id))
-        (added (if (fileExists? path) (ok path) (attachOrAdd rc u path)))]
+        (added (if (fileExists? path) (reuseWt! rc u path) (attachOrAdd rc u path)))]
     (match added
       ((err e) (failRes e))
       ((ok p)
-        (let [(fresh (noEdits? p u.base))
+        (let [(fresh (noEdits? p u.base u.owns))
               (task (taskText dir u))
               (prof (writeProfileFor rc dir u.id c.lane))
               (arm (writeArm rc u.id))
@@ -684,8 +716,9 @@ fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
               (d (fp/runLeonProfileExtra! prof rc.repo p rc.home task u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) rc.leaseSec rc.keys (armExtra arm)))
               (model (fp/modelOf d.out))
               (vacuous (and fresh (vacuousWrite? d.out u.gate task)))
-              (_ (if (and (not vacuous) (fp/gitDirty? p)) (fp/driverCommitRow! p u.owns u.id model) false))
-              (noEdit (and (= d.exit 0) (noEdits? p u.base)))]
+              (_ (if vacuous false (commitWrite! p u.owns u.id model)))
+              ; (:m :ref CONDUCTOR-ZERO-MERGE :do "review diffs base...HEAD and merge trains the branch, so a write is progress only when a commit landed: an owned edit the driver could not commit was reviewed as an empty diff 6 times (NODE2-ASEX-DETACHED)")
+              (noEdit (and (= d.exit 0) (not (commitsPast? p u.base))))]
           (Res :tiers "" :ok (if (and (= d.exit 0) (and (not noEdit) (not vacuous))) 1 0) :wt p :branch (str "sh/" u.id) :model model :tokens (leonTokens d.out) :costMicro (leonCost d.out (rs/costRows (readOr (str rc.home "/.asl/gateway.asn")) (readOr rc.lanes)) model) :claimedGreen 0
                :sig (cond (vacuous (vacuousSig u.gate)) ((!= d.exit 0) (gateSig d.out)) (noEdit "noEdit") (else "")) :ms d.ms :exit d.exit :asserts 0 :verdict "")))))
 
@@ -704,10 +737,28 @@ fn ! dropRemotes! dir: String -> Int64
 fn ! mergeEnv -> (List String)
   (fr/childEnv (list "ASL_E2E=0"))
 
+; (:m :ref CONDUCTOR-ZERO-MERGE :do "dev sat at ace2ae8ec all day while main moved, until the lead fast-forwarded it by hand; before each train main is brought into dev: fast-forward when dev has nothing of its own, else a merge commit, and a conflict refuses the train rather than merging onto a stale dev")
+fn ! promoteDev! rc: RealCfg -> String
+  (if (= rc.devRepo rc.repo) "same"
+    (let [(f (gitOut rc.devRepo (list "fetch" "--quiet" rc.repo "+refs/heads/main:refs/heads/srcMain")))]
+      (cond
+        ((!= f.exit 0) "fetchFailed")
+        ((= (gitOut rc.devRepo (list "merge-base" "--is-ancestor" "srcMain" "HEAD")).exit 0) "current")
+        ((= (gitOut rc.devRepo (list "merge" "--ff-only" "--quiet" "srcMain")).exit 0) "fastForward")
+        (else
+          (let [(m (gitOut rc.devRepo (list "merge" "--no-ff" "--quiet" "-m" "(:c :a coord :do \"bring main into dev before a train\" :ev (CONDUCTOR-ZERO-MERGE))" "srcMain")))]
+            (if (= m.exit 0) "merged"
+              (let [(_ (gitOut rc.devRepo (list "merge" "--abort")))] "conflict")))))))
+
 fn ! mergeRes rc: RealCfg u: st/Task c: CUnit -> Res
-  (let [(cur (currentBranch rc.devRepo))]
-    (if (or (= rc.devBranch "main") (or (= rc.devBranch "master") (!= cur rc.devBranch)))
-      (failRes (str "refused: devRepo is on " cur ", dev branch " rc.devBranch " must not be main"))
+  (let [(cur (currentBranch rc.devRepo))
+        (promoted (if (or (= rc.devBranch "main") (or (= rc.devBranch "master") (!= cur rc.devBranch))) "" (promoteDev! rc)))]
+    (cond
+      ((or (= rc.devBranch "main") (or (= rc.devBranch "master") (!= cur rc.devBranch)))
+        (failRes (str "refused: devRepo is on " cur ", dev branch " rc.devBranch " must not be main")))
+      ((or (= promoted "conflict") (= promoted "fetchFailed"))
+        (failRes (str "refused: main does not come into dev (" promoted ")")))
+      (else
       (let [(_ (if (= rc.devRepo rc.repo) 0 (dropRemotes! rc.devRepo)))
             (fetched (if (= rc.devRepo rc.repo) (fr/Done :idx 0 :exit 0 :out "" :ms 0 :verdict "")
                        (gitOut rc.devRepo (list "fetch" "--quiet" rc.repo (str "+refs/heads/" c.branch ":refs/heads/" c.branch)))))
@@ -716,7 +767,7 @@ fn ! mergeRes rc: RealCfg u: st/Task c: CUnit -> Res
         (if (and (= fetched.exit 0) (and (= d.exit 0) (not (stringContains? d.out ":commitError"))))
           (let [(_ (w/removeWt! rc.wt u.id true))]
             (Res :tiers "" :ok 1 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig "" :ms d.ms :exit 0 :asserts 0 :verdict ""))
-          (let [(f (failRes (gateSig d.out)))] (with f :ms d.ms))))))
+          (let [(f (failRes (gateSig d.out)))] (with f :ms d.ms)))))))
 
 ; (:m :ref CONDUCTOR :do "thin adapter for the COND2 ladder: its Ruling action (merge|fix|await|blocked) maps to the review verdict pass|fail|defer|block; an unknown action blocks")
 fn rulingVerdict action: String -> String
@@ -747,10 +798,10 @@ fn ! redBefore! rc: RealCfg u: st/Task c: CUnit -> (Pair Int64 Int64)
             (_ (gitOut c.wt (list "worktree" "remove" "--force" bpath)))]
         (pair d.exit (optionOr (fr/executedOf d.out) 0)))))
 
-fn receiptText u: st/Task g: Res before: (Pair Int64 Int64) -> String
+fn receiptText u: st/Task g: Res before: (Pair Int64 Int64) base: String -> String
   (str "(:receipt " (st/q u.id) " :gates ((:gate " (st/q u.gate) " :exit " (n g.exit) " :executed " (n g.asserts) "))"
        (if (> (pairFirst before) 0) (str " :redBefore ((:gate " (st/q u.gate) " :exit " (n (pairFirst before)) " :executed " (n (pairSecond before)) "))") "")
-       ")")
+       " " base ")")
 
 ; (:m :ref COND3 :do "the real gates stage: the conductor's own rerun of the gate in the unit's worktree plus the red-before run, and the receipt written to <store>/runs/UNIT-receipt.asn for the review stage")
 fn ! gatesStage rc: RealCfg dir: String u: st/Task c: CUnit -> Res
@@ -758,7 +809,7 @@ fn ! gatesStage rc: RealCfg dir: String u: st/Task c: CUnit -> Res
     (if (and (= g.exit 0) (> g.asserts 0))
       (let [(before (redBefore! rc u c))
             (_ (dirCreate (runsDir dir)))
-            (_ (fileWrite (runPath dir u.id "receipt" "asn") (str (receiptText u g before) "\n")))]
+            (_ (fileWrite (runPath dir u.id "receipt" "asn") (str (receiptText u g before (baseNote! c.wt (baseRef u))) "\n")))]
         g)
       g))
 
