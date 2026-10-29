@@ -1232,7 +1232,7 @@ fn ! linkGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String 
           ((err e) (Called :reply (err (gatewayError "ERR_VENDOR" (str "in-process gateway: " e) "")) :meta (emptyMeta) :cfg next))
           ((ok raw) (called next (readResponse "Gateway" raw)))))))
 
-; (:m :ref ORCH-LEON-CLIENT :do "the hub transport is read from HOME/.asl/hub.asn (the home of the gateway config), never from env: a :sock names the unix socket of the one-per-node hub, calls carry X-Asl-Class and X-Asl-Unit, and a refused connection is retried at :backoffMs doubling until :downAfterMs has passed, then ERR_GATEWAY_DOWN; with :fallback inProcess the down hub falls back to the in-process link, with no hub.asn the older gateway path is unchanged")
+; (:m :ref ORCH-LEON-CLIENT :do "the hub transport is read from HOME/.asl/hub.asn (the home of the gateway config), never from env: a :sock names the unix socket of the one-per-node hub, calls carry X-Asl-Class and X-Asl-Unit, and a refused connection or an HTTP 503 from the hub (its accept limit) is a wait, retried at :backoffMs doubling until :downAfterMs has passed, then ERR_GATEWAY_DOWN for a refused connection and the 503 error itself for a busy hub; with :fallback inProcess the down hub falls back to the in-process link, with no hub.asn the older gateway path is unchanged")
 fn hubAsnPath cfg: VendorConfig -> String
   (match (configHome cfg.env.gatewayConfig)
     ((some home) (str home "/.asl/hub.asn"))
@@ -1265,10 +1265,11 @@ fn ! hubPost! cfg: VendorConfig sock: String payload: j/Json headers: (List (Pai
   (let [(r (postUrlVia! cfg "http://hub/v1/chat/completions" sock "Hub" "start the hub (asl/tools/hub/main.asl serve)" payload headers))]
     (match (pairFirst r)
       ((err e)
-        (if (not (= (errorCode e) "ERR_GATEWAY_OFFLINE")) r
-          (if (>= waitedMs capMs)
-            (pair (err (gatewayError "ERR_GATEWAY_DOWN" (str "hub socket " sock " refused connections for " (stringFromInt64 waitedMs) " ms: " (errorMessage e)) "start the hub or declare :fallback inProcess in hub.asn")) (emptyMeta))
-            (do (sleepMs delayMs) (hubPost! cfg sock payload headers (* delayMs 2) (+ waitedMs delayMs) capMs)))))
+        (let [(busy (stringContains? (errorMessage e) "Hub HTTP error 503"))]
+          (if (not (or busy (= (errorCode e) "ERR_GATEWAY_OFFLINE"))) r
+            (if (>= waitedMs capMs)
+              (if busy r (pair (err (gatewayError "ERR_GATEWAY_DOWN" (str "hub socket " sock " refused connections for " (stringFromInt64 waitedMs) " ms: " (errorMessage e)) "start the hub or declare :fallback inProcess in hub.asn")) (emptyMeta)))
+              (do (sleepMs delayMs) (hubPost! cfg sock payload headers (* delayMs 2) (+ waitedMs delayMs) capMs))))))
       (_ r)))
 
 fn ! sendGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String String)) -> Called

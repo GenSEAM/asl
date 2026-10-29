@@ -19,17 +19,20 @@ fn ! readRequest! fd: Int64 acc: String -> String
       ((err _) acc)
       ((ok chunk) (if (stringEmpty? chunk) acc (readRequest! fd (str acc chunk))))))
 
+fn ! reply! conn: Int64 status: String body: String -> Bool
+  (do (fdWrite conn (str "HTTP/1.1 " status "\r\nContent-Type: application/asn+sexpr\r\nContent-Length: " (stringFromInt64 (stringLength body)) "\r\nConnection: close\r\n\r\n" body))
+    (fdClose conn) true)
+
+fn ! serve! listener: Int64 out: String busy: Bool -> (Result Int64 String)
+  (match (sockAccept listener)
+    ((err e) (err e))
+    ((ok conn)
+      (let [(req (readRequest! conn ""))]
+        (if busy
+          (do (reply! conn "503 Service Unavailable" "(:error :status 503 :reason \"hub busy\")") (serve! listener out false))
+          (do (fileWrite out req) (reply! conn "200 OK" "(:reply :content \"hello from hub\")") (fdClose listener) (ok 0))))))
+
 fn ! main args: (List String) -> (Result Int64 String)
-  (let [(sock (optionOr (listGet args 0) ""))
-        (out (optionOr (listGet args 1) ""))
-        (body "(:reply :content \"hello from hub\")")]
-    (match (unixListen sock)
-      ((err e) (err e))
-      ((ok listener)
-        (match (sockAccept listener)
-          ((err e) (err e))
-          ((ok conn)
-            (let [(req (readRequest! conn ""))
-                  (wrote (fileWrite out req))]
-              (do (fdWrite conn (str "HTTP/1.1 200 OK\r\nContent-Type: application/asn+sexpr\r\nContent-Length: " (stringFromInt64 (stringLength body)) "\r\nConnection: close\r\n\r\n" body))
-                (fdClose conn) (fdClose listener) (ok 0))))))))
+  (match (unixListen (optionOr (listGet args 0) ""))
+    ((err e) (err e))
+    ((ok listener) (serve! listener (optionOr (listGet args 1) "") (= (optionOr (listGet args 2) "") "busy"))))
