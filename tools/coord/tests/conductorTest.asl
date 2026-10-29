@@ -121,13 +121,13 @@ fn ! testOwnsSerialised bin: String -> Bool
         (assert (< wZ mX) "the disjoint Z did not wait for X")
         true))
 
-; (:m :ref CONDUCTOR :do "admission = min(ready, capacity, lane allowance): capacity 1 admits only P; allowance 0 keeps S ready with capacity to spare")
+; (:m :ref CONDUCTOR :do "admission = min(ready, capacity, lane allowance): capacity 1 admits only P; allowance 0 keeps S ready with capacity to spare; maxWait 0 proves a capacity wait never escalates (ADMITWAIT)")
 fn ! admitted2 bin: String name: String tokens: Int64 slowAllow: Int64 -> (List String)
   (let [(dir (scratch name))
         (_ (cleanup dir))
         (put (putAll! dir (list (task "P" (list "p/p") (list) (greenGate) "leon") (task "Q" (list "p/q") (list) (greenGate) "leon") (task "S" (list "p/s") (list) (greenGate) "slow"))))
         (base (ctxOf dir bin tokens 5 50))
-        (ctx (cd/Ctx :dir dir :holder "conductorTest" :ttlMs 600000 :maxWait 50 :maxSame 3 :stageSec 60 :maxDesc 50 :launch base.launch
+        (ctx (cd/Ctx :dir dir :holder "conductorTest" :ttlMs 600000 :maxWait 0 :maxSame 3 :stageSec 60 :maxDesc 50 :launch base.launch
                      :pace (cd/Pace :tokens (fn [] -> Int64 tokens) :allowance (fn [(lane String)] -> Int64 (if (= lane "slow") slowAllow 5)))))
         (t1 (cd/tick! ctx))
         (t2 (cd/tick! ctx))
