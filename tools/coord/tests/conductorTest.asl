@@ -520,7 +520,7 @@ fn ! testRotateProfiles -> Bool
         (assert (= picks picks2) "the same id always gets the same profile")
         (assert (= none1 "base") "no row keeps the old profile")
         (assert (= other "base") "a row of another tier keeps the old profile")
-        true)))
+        true))
 
 fn ! runTests -> Bool
   (let [(bin (fixtureBinary!))]
