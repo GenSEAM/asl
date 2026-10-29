@@ -2,7 +2,7 @@
   :x [CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig rulingVerdict
-      pickWriteProfile pickWriteProfileH schedPace tick! wake! status! drain! stopAll! gatesRes loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
+      depStalled? pickWriteProfile pickWriteProfileH schedPace tick! wake! status! drain! stopAll! gatesRes loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
       main]
   :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp)
       (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -147,6 +147,10 @@ fn ! fail! ctx: Ctx c: CUnit stage: String model: String sig: String ms: Int64 -
           (let [(c2 (escalate! ctx c1 sig (str stage " failed " (n fails) "x with the same signature")))]
             (move! ctx c2 "blocked" stage model 0 0 (str "escalated: " (verdictSig sig)) ms))))
       (move! ctx c1 "ready" stage model 0 0 (str "fail: " (verdictSig sig)) ms)))
+
+; (:m :ref DEPWAIT :do "a dependency wait counts toward maxWait only when a dependency is missing, blocked or failed; one still queued, ready or in a stage is progress, not a stall")
+fn depStalled? u: st/Task cus: (List CUnit) -> Bool
+  (listAny? (fn [(d String)] -> Bool (match (cuOf cus d) ((some x) (listContains? (list "blocked" "failed") x.st)) ((none) true))) u.after)
 
 fn depsMerged? u: st/Task cus: (List CUnit) -> Bool
   (listAll? (fn [(d String)] -> Bool (match (cuOf cus d) ((some x) (= x.st "merged")) ((none) false))) u.after)
@@ -345,7 +349,7 @@ fn ! step! ctx: Ctx u: st/Task cap: Int64 -> Int64
       ((= c.st "queued")
         (if (depsMerged? u cus)
           (let [(_ (move! ctx c "ready" "deps" "" 0 0 "depsMerged" 0))] cap)
-          (let [(_ (waitMore! ctx c "deps not merged"))] cap)))
+          (if (depStalled? u cus) (let [(_ (waitMore! ctx c "deps not merged"))] cap) cap)))
       ((= c.st "ready")
         (let [(pace ctx.pace)
               (allowOf pace.allowance)

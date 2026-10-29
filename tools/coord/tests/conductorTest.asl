@@ -136,6 +136,18 @@ fn ! admitted2 bin: String name: String tokens: Int64 slowAllow: Int64 -> (List 
         (_ (cleanup dir))]
     afterTwo)
 
+; (:m :ref DEPWAIT :do "a dependency in a stage or ready is no stall; a missing, blocked or failed one is")
+fn cuSt id: String st: String -> cd/CUnit
+  (cd/CUnit :id id :st st :lane "free" :fails 0 :sig "" :waited 0 :parked 0 :epoch 0 :branch "" :wt "" :model "" :tokens 0 :costMicro 0 :esc 0 :launched 0 :await "")
+
+fn testDepStalled -> Bool
+  (let [(u (task "T" (list "p/t") (list "D") (greenGate) "leon"))]
+    (do (assert (not (cd/depStalled? u (list (cuSt "D" "writing")))) "a writing dependency is not a stall")
+        (assert (not (cd/depStalled? u (list (cuSt "D" "ready")))) "a ready dependency is not a stall")
+        (assert (cd/depStalled? u (list (cuSt "D" "blocked"))) "a blocked dependency is a stall")
+        (assert (cd/depStalled? u (list (cuSt "X" "writing"))) "a missing dependency is a stall")
+        true))
+
 fn ! testAdmission bin: String -> Bool
   (let [(byTokens (admitted2 bin "admTok" 1 5))
         (byAllowance (admitted2 bin "admAllow" 9 0))]
@@ -548,6 +560,7 @@ fn ! runTests -> Bool
         (assert (testDag bin) "dag order")
         (assert (testOwnsSerialised bin) "overlapping owns serialised")
         (assert (testAdmission bin) "admission = min(ready, capacity, allowance)")
+        (assert (testDepStalled) "dependency waits count only when stalled")
         (assert (testGateEscalates bin) "3 same-signature gate failures escalate")
         (assert (testWriteTierHop bin) "write failures hop free to paid to strong before blocking")
         (assert (testSignatureReset bin) "a new signature resets the count")
