@@ -36,11 +36,14 @@ fn ! testShrink -> Bool
       true)
 
 fn ! testLeonLaunch -> Bool
-  (let [(j (fp/leonJob "/repo/main" "/wt/UNIT" "/home/h" "task text" (list "p/a.asl") "/no-such-keys"))]
+  (let [(j (fp/leonJob "/repo/main" "/wt/UNIT" "/home/h" "task text" (list "p/a.asl") (list "./bin/asl test t/xTest.asl") "/no-such-keys"))
+        (form (optionOr (listGet j.argv 1) ""))]
     (do (assert (= (optionOr (listHead j.argv) "") "/repo/main/bin/asl") (str "Leon binary is the repo build: " (optionOr (listHead j.argv) "")))
         (assert (= j.cwd "/wt/UNIT") "the worktree is the working directory")
         (assert (listContains? j.env "ASL_ROOT=/wt/UNIT") "the worktree is the workspace root")
         (assert (not (listAny? (fn [(a String)] -> Bool (stringContains? a "/wt/UNIT/bin")) j.argv)) "no argv entry points into the worktree's bin")
+        (assert (stringContains? form ":gates (\"./bin/asl test t/xTest.asl\")") (str "the unit gate rides in the Leon form: " form))
+        (assert (not (stringContains? (fp/leonForm "t" (list)) ":gates")) "no gates, no :gates key")
         true))
 
 fn ! runTests -> Bool

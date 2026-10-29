@@ -556,7 +556,7 @@ fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
     (match added
       ((err e) (failRes e))
       ((ok p)
-        (let [(d (fp/runLeonProfile! rc.profile rc.repo p rc.home (taskText dir u) u.owns rc.leaseSec rc.keys))
+        (let [(d (fp/runLeonProfile! rc.profile rc.repo p rc.home (taskText dir u) u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) rc.leaseSec rc.keys))
               (model (fp/modelOf d.out))
               (_ (if (fp/gitDirty? p) (fp/driverCommitRow! p u.owns u.id model) false))]
           (Res :tiers "" :ok (if (= d.exit 0) 1 0) :wt p :branch (str "sh/" u.id) :model model :tokens (leonTokens d.out) :costMicro (leonCost d.out (rs/costRows (readOr (str rc.home "/.asl/gateway.asn")) (readOr rc.lanes)) model) :claimedGreen 0
