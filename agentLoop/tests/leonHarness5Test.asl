@@ -25,7 +25,7 @@ fn ! runTests -> Bool
       (assert (has full "(:escalate :reason s)") "the escalate form is named in the protocol rows")
       (assert (has full "(:plan :first") "a plan run carries the plan row")
       (assert (has full "(:gates :run") "declared gates render as a gates row")
-      (assert (has full "(:task \"port the loop\")") "the task is an ASN row")
+      (assert (not (has full "(:task \"port the loop\")")) "the task is not in the system prompt; the user turn carries it once")
       (assert (has full "(:base \"02aff5d0\")") "the base is an ASN row")
       (assert (not (has full "answer contract:")) "the old prose answer contract is gone")
       (assert (not (has full "grounding: a claim holds")) "the old prose grounding sentence is gone")

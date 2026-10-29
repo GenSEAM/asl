@@ -1542,6 +1542,12 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
       (pair (rl/ProviderRun :run (rl/withState wrapped.run next) :provider wrapped.provider :history wrapped.history) (stop)))
     (liveTurn! ra repoRoot rootDir path system env providerCall wrapped))
 
+; (:m :ref LEON-ECHO-GUARD :do "every user turn ends with one imperative line naming the next required form, so a weak model that continues the prompt text has an instruction to follow")
+fn nextFormLine persisted: Bool -> String
+  (if persisted
+    "\n\nReply with ASN forms only; the next form is a (:step :op \"gate\") or the (:done)."
+    "\n\nReply with ASN forms only; the next form is a (:step :op ...).")
+
 fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system: String env: ls/LoopEnv
     providerCall: (fn [pv/Provider String String] -> pv/Turn) wrapped: rl/ProviderRun -> (Pair rl/ProviderRun ls/Step)
   (let [run wrapped.run
@@ -1567,7 +1573,8 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
           (if (stringEmpty? expects) "" (str "\n\n" expects))
           (if (stringEmpty? advisorText) "" (str "\n\nAdvisor: " advisorText))
           (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." "")
-          writeNudge)
+          writeNudge
+          (nextFormLine state.writesPersisted))
         turnOwnSent (str "Task: " ra.task (if (stringEmpty? prefetched) "" (str "\n\n" prefetched))
           (if (stringEmpty? advisorText) "" (str "\n\nAdvisor: " advisorText))
           (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." "")

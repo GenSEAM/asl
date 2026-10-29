@@ -882,11 +882,12 @@ fn ! buildSystemPrompt repoRoot: String task: String rootDir: String base: Strin
         confirm (map pairFirst (filter (fn [e] (listContains? (list "outward" "irreversible" "needsConfirm") (pairSecond e))) effects))
         accepted (map pairFirst (filter (fn [e] (and (= (pairSecond e) "local") (not (= (pairFirst e) "step")))) effects))
         shapes (someOf (map (fn [op] (if (listContains? (list "diff" "flush" "discard") op) none (dictAt (opShapes) op))) accepted))
-        rows (listAppend (opt (not (listEmpty? shapes)) (str "(:ops :raw \"code with quotes, backslashes or many lines: :raw and a fenced block on the following lines\" :forms (" (quoted shapes) "))"))
-               (listAppend (opt (not (listEmpty? confirm)) (str "(:needsConfirm :answers needsConfirmReceipt :ops (" (quoted confirm) "))"))
-                 (listAppend (opt plan (planRow))
-                   (listAppend (list (batchRow) (poolRow))
-                     (opt (not (listEmpty? gates)) (gatesRow gates))))))
+        ; (:m :ref LEON-STABLE-PREFIX :do "static layers, ops, batch, pool and the card come first and depend on neither session nor task; cwd/git/date (env layer), plan, gates and base follow as the tail; the task lives only in the user turn")
+        statRows (listAppend (opt (not (listEmpty? shapes)) (str "(:ops :raw \"code with quotes, backslashes or many lines: :raw and a fenced block on the following lines\" :forms (" (quoted shapes) "))"))
+                   (listAppend (opt (not (listEmpty? confirm)) (str "(:needsConfirm :answers needsConfirmReceipt :ops (" (quoted confirm) "))"))
+                     (list (batchRow) (poolRow))))
+        dynRows (listAppend (opt plan (planRow))
+                  (opt (not (listEmpty? gates)) (gatesRow gates)))
         layers (match contextTokens
                  ((some _) (harnessLayers repoRoot rootDir "implement"))
                  ((none) (ok "")))
@@ -897,9 +898,14 @@ fn ! buildSystemPrompt repoRoot: String task: String rootDir: String base: Strin
         (match card
           ((err e) (err (str "RuntimeError: ERR_HARNESS: aslCard: " e)))
           ((ok cardText)
-            (ok (c/joinSep (listAppend (opt (not (stringEmpty? lay)) lay)
-                             (listAppend rows
-                               (listAppend (opt (not (stringEmpty? cardText)) cardText)
-                                 (listAppend (opt (not (stringEmpty? task)) (str "(:task " (quoted (list task)) ")"))
-                                             (opt (not (stringEmpty? base)) (str "(:base " (quoted (list base)) ")"))))))
-                           "\n")))))))
+            (let [lines (stringLines lay)
+                  isEnv (fn [l] (stringStartsWith? l "(:layer :id env"))
+                  staticLay (c/joinSep (filter (fn [l] (not (isEnv l))) lines) "\n")
+                  envLay (c/joinSep (filter isEnv lines) "\n")]
+              (ok (c/joinSep (listAppend (opt (not (stringEmpty? staticLay)) staticLay)
+                               (listAppend statRows
+                                 (listAppend (opt (not (stringEmpty? cardText)) cardText)
+                                   (listAppend (opt (not (stringEmpty? envLay)) envLay)
+                                     (listAppend dynRows
+                                       (opt (not (stringEmpty? base)) (str "(:base " (quoted (list base)) ")")))))))
+                           "\n"))))))))

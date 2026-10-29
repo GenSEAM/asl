@@ -312,6 +312,7 @@ fn formatOpReceipt rec: (List (Pair String Val)) readCap: Int64 -> String
                 (if (truthyField rec "flushed") (str " :flushed (" (quotedList (field "flushed")) ")") "")
                 (if (truthyField rec "error") (str " :error :" (lstripColons (fieldStr rec "error" ""))) "")
                 (if (truthyField rec "message") (str " :message \"" (escField rec "message") "\"") "")
+                (if (truthyField rec "canonical") (str " :canonical \"" (escField rec "canonical") "\"") "")
                 (if (truthyField rec "warning") (str " :warning \"" (escField rec "warning") "\"") "")
                 (if (notNone rec "line") (str " :line " (fieldStr rec "line" "")) "")
                 (if (notNone rec "arrived") (str " :arrived \"" (escField rec "arrived") "\"") "")
@@ -677,6 +678,11 @@ fn ! remoteRec! op: (List (Pair String c/KvVal)) opName: String env: ExecEnv new
         (map (fn [p] (if (= (pairFirst p) "exit") (pair "exit" (vInt (optionOr (stringToInt64 (pairSecond p)) 1))) (vs (pairFirst p) (pairSecond p))))
           (rr/remoteOp! op opName (newId) (stepTimeout! env) env.readCap)))))
 
+; (:m :ref LEON-WRITE-ALIAS :do "an op parsed from the (:write ...) / (:edit ...) shorthand carries :aliased; its receipt shows the canonical step form so the model learns it")
+fn withCanonical op: (List (Pair String c/KvVal)) rec: (List (Pair String Val)) -> (List (Pair String Val))
+  (let [canon (opStr op "aliased" "")]
+    (if (stringEmpty? canon) rec (recSet rec "canonical" (vStr canon))))
+
 fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId: (fn [] -> String) snap: (fn [String] -> Bool) onKeep: (fn [String (Option String) Int64] -> Bool) run: (fn [String String] -> t/AslRun) -> ExecOut
   (let [opType (opStr op "type" "raw")
         opName (opStr op "op" opType)
@@ -723,7 +729,7 @@ fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId:
         (let [res (r/execManageOp! op (runCtx! env) procs (newId) onKeep)]
           (eo (mapRec res.rec fromRun) res.procs)))
       ((and step (= opName "note")) (eo (execNoteOp op (newId)) procs))
-      (else (eo (execRest! op opType opName env newId snap run) procs))))
+      (else (eo (withCanonical op (execRest! op opType opName env newId snap run)) procs))))
 
 fn ! execRest! op: (List (Pair String c/KvVal)) opType: String opName: String env: ExecEnv newId: (fn [] -> String) snap: (fn [String] -> Bool) run: (fn [String String] -> t/AslRun) -> (List (Pair String Val))
   (let [step (= opType "step")

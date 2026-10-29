@@ -294,8 +294,51 @@ fn evidenceOps nested: (List String) -> (List (List (Pair String KvVal)))
               acc)))
     (list) nested)
 
-fn nativeOp kv: (List (Pair String KvVal)) head: String form: String -> (List (Pair String KvVal))
-  (let [e0 (fold (fn [e p] (match p ((pair k v) (if (= k "_head") e (dictSet e k v))))) (list (pair "type" (kvStr "step"))) kv)
+; (:m :ref LEON-WRITE-ALIAS :do "(:write PATH CONTENT), (:write PATH :content C) and (:write :file F :content C) are aliases of the canonical (:step :op \"write\" ...); positional strings fill the missing fields in order, and the op carries :aliased with the canonical form so the receipt teaches it")
+fn posStrings s: String n: Int64 p: Int64 acc: (List String) -> (List String)
+  (if (>= p n)
+    (listReverse acc)
+    (let [c (ch s p)]
+      (cond
+        ((= c "(") (listReverse acc))
+        ((= c "\"")
+          (let [e (strBodyEnd s n (+ p 1))]
+            (if (< e 0) (listReverse acc) (posStrings s n (+ e 1) (cons (asnUnescape (sliceOf s (+ p 1) e)) acc)))))
+        (else
+          (match (keyAt s n p)
+            ((pair q r)
+              (if (< q 0)
+                (posStrings s n (+ p 1) acc)
+                (posStrings s n (if (= (ch s r) "\"") (stepFrom s n r) (max (+ r 1) (runEnd s n r isAtomByte))) acc))))))))
+
+fn aliasFields head: String -> (List String)
+  (if (= head "write") (list "file" "content") (list "file" "old" "new"))
+
+fn aliasFill kv: (List (Pair String KvVal)) fields: (List String) pos: (List String) -> (List (Pair String KvVal))
+  (cond
+    ((or (listEmpty? fields) (listEmpty? pos)) kv)
+    ((or (dictHas kv (firstOf fields)) (and (= (firstOf fields) "file") (dictHas kv "path")))
+      (aliasFill kv (restOf fields) pos))
+    (else (aliasFill (dictSet kv (firstOf fields) (kvStr (firstOf pos))) (restOf fields) (restOf pos))))
+
+fn aliasCanonical head: String kv: (List (Pair String KvVal)) -> String
+  (let [file (match (dictOr kv "file") ((kvStr t) t) ((kvInt t) t))
+        f (if (= file "") "PATH" file)]
+    (if (= head "write")
+      (str "(:step :op \"write\" :file \"" (escapeAsn f) "\" :content \"...\")")
+      (str "(:step :op \"edit\" :file \"" (escapeAsn f) "\" :old \"...\" :new \"...\")")))
+
+fn aliasKv kv: (List (Pair String KvVal)) head: String form: String -> (List (Pair String KvVal))
+  (if (not (or (= head "write") (= head "edit")))
+    kv
+    (let [n (stringLength form)
+          start (+ (runEnd form n 1 isSpace) (+ 1 (stringLength head)))
+          filled (aliasFill kv (aliasFields head) (posStrings form n start (list)))]
+      (dictSet filled "aliased" (kvStr (aliasCanonical head filled)))))
+
+fn nativeOp kv0: (List (Pair String KvVal)) head: String form: String -> (List (Pair String KvVal))
+  (let [kv (aliasKv kv0 head form)
+        e0 (fold (fn [e p] (match p ((pair k v) (if (= k "_head") e (dictSet e k v))))) (list (pair "type" (kvStr "step"))) kv)
         e1 (dictSet (dictSet e0 "op" (kvStr head)) "form" (kvStr form))]
     (if (and (= head "help") (and (truthy (dictGet kv "op")) (not (dictHas kv "name"))))
       (dictSet e1 "name" (dictOr kv "op"))
@@ -839,8 +882,9 @@ fn isDataOp op: (List (Pair String KvVal)) declared: (List String) -> Bool
         (not (listContains? declared h)))
       (and (= (dictGet op "type") (some (kvStr "step")))
         (and (= h name)
+          (and (not (dictHas op "aliased"))
           (and (not (listContains? declared name))
-            (not (listContains? (list "step" "txn" "patch" "ask" "answer") name)))))))
+            (not (listContains? (list "step" "txn" "patch" "ask" "answer") name))))))))
 
 fn dataFindingForm op: (List (Pair String KvVal)) -> String
   (let [form (match (dictOr op "form") ((kvStr t) t) ((kvInt t) t))]
