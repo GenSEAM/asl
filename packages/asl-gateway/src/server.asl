@@ -447,7 +447,9 @@ fn attribConsumer packed: String -> (Option String)
   ; (:m :ref GW-SPREAD-LIVE-20261018 :do "live SWRR state: keyed profile|intent, each a (List (Pair String Int64)) alias->current-weight map persisted across calls; spreadLast429 is alias->epoch-ms of its last 429, independent of and in addition to srv.breaker's own per-model trip")
   (:f spreadState (Map String (Map String Int64)))
   (:f spreadLast429 (Map String Int64))
-  (:f omni om/OmniState))
+  (:f omni om/OmniState)
+  (:f admitWaits (List Int64))
+  (:f startMs Int64))
 
 fn omniZeroKey -> om/Word64
   (om/Word64 :hi 0 :lo 0)
@@ -725,10 +727,10 @@ fn ! drive! srv: GatewayLoop fd: Int64 tag: String step: ch/ChatStep -> GatewayL
               ((err _) (drive! (loopState srv srv.breaker (u/bucketRegistryPut (pairFirst got) model rpm b1) srv.profiles) fd tag (k (ch/outBool false))))
               ((ok s)
                (match s
-                 ((u/bucketAcquired) (drive! (loopState srv srv.breaker (u/bucketRegistryPut (pairFirst got) model rpm b1) srv.profiles) fd tag (k (ch/outBool true))))
+                 ((u/bucketAcquired) (drive! (hubNoteAdmit (loopState srv srv.breaker (u/bucketRegistryPut (pairFirst got) model rpm b1) srv.profiles) 0) fd tag (k (ch/outBool true))))
                  ((u/bucketRefused) (drive! (loopState srv srv.breaker (u/bucketRegistryPut (pairFirst got) model rpm b1) srv.profiles) fd tag (k (ch/outBool false))))
                  ((u/bucketWait secs)
-                  (addConn (loopState srv srv.breaker (u/bucketRegistryPut (pairFirst got) model rpm (u/takeToken b1)) srv.profiles) fd
+                  (addConn (hubNoteAdmit (loopState srv srv.breaker (u/bucketRegistryPut (pairFirst got) model rpm (u/takeToken b1)) srv.profiles) (u/ceilMs secs)) fd
                     (connBucketWait (+ (nowMs!) (u/ceilMs secs)) k tag))))))))
         ((ch/effCli client args)
           (let [(adm (cliAdmit! srv client args))
@@ -923,9 +925,11 @@ fn ensureSessionHeader headers: (List (Pair String String)) fd: Int64 nowMs: Int
 ; (:m :ref GW-FEDERATION-20261027 :do "when the secrets file holds a gatewayServeToken every request must carry it as a bearer, else a 401 before any routing: the host gateway that serves the VPS over the tunnel is never open on its port; without that secret the gateway behaves as before")
 ; (:m :ref GW-SERVE-AUTH-HEALTH-EXEMPT :do "GET /health answers without a bearer so a tunnel keeper or a load check can see the gateway is up; it returns a fixed status row and nothing about providers, models, budgets or keys, every other path still needs the bearer")
 fn ! dispatch! srv: GatewayLoop fd: Int64 raw: String request: HttpRequest -> GatewayLoop
+  (if (and (= request.method "GET") (= request.path "/hub/status"))
+    (hubStatusRoute! srv fd request)
   (if (and (= request.method "GET") (= request.path "/health"))
     (addConn srv fd (connWriting (renderResponse (ch/ChatResponse :head (list (ch/headStatus 200) (ch/headField "Content-Type" "application/asn+sexpr")) :body "(:health :status ok)\n"))))
-    (dispatchGuarded! srv fd raw request))
+    (dispatchGuarded! srv fd raw request)))
 
 fn ! dispatchGuarded! srv: GatewayLoop fd: Int64 raw: String request: HttpRequest -> GatewayLoop
   (match (fed/serveAuthError srv.env request.headers)
@@ -946,6 +950,56 @@ fn ! dispatchAuthed! srv: GatewayLoop fd: Int64 raw: String request: HttpRequest
         (match (tcpConnect srv.upstreamPort)
           ((err e) (addConn srv fd (connWriting (errorResponse 502 (str "upstream connect failed: " e)))))
           ((ok upstreamFd) (addConn srv fd (connProxy upstreamFd (if (fed/serveAuthOn? srv.env) (fed/withoutAuthorization raw) raw) "")))))))
+
+; (:m :ref ORCH-HUB-STATUS :do "GET /hub/status (bearer-checked like every route but /health): in-flight streams, those parked on a bucket or a retry timer, per-bucket fill and queue (a bucket's reserved tokens drive it below zero), and the p50/p95 of the last 500 admit waits since start (0 for an immediate token, the park time for a wait)")
+fn hubNoteAdmit srv: GatewayLoop ms: Int64 -> GatewayLoop
+  (with srv :admitWaits (listTake (cons ms srv.admitWaits) 500))
+
+fn hubInFlight? c: GatewayConn -> Bool
+  (match c.phase
+    ((connReading) false)
+    ((connWriting d) false)
+    (_ true))
+
+fn hubParked? c: GatewayConn -> Bool
+  (match c.phase
+    ((connBucketWait d k t) true)
+    ((connTimer d k t) true)
+    (_ false))
+
+fn hubPercentile xs: (List Int64) pct: Int64 -> Int64
+  (let [(n (listLength xs))
+        (sorted (listSort xs))]
+    (if (= n 0) 0
+      (optionOr (listGet sorted (max 0 (- (/ (+ (* pct n) 99) 100) 1))) 0)))
+
+fn hubBucketRow key: String b: u/TokenBucket nowSec: Float64 -> String
+  (let [(tokens (hubMinF b.capacity (+ b.tokens (* (- nowSec b.lastUpdate) b.rate))))
+        (queued (if (< tokens 0.0) (optionOr (float64ToInt64 (ceil (- 0.0 tokens))) 0) 0))]
+    (str "(:bucket :model " (hubAsnStr (optionOr (listHead (stringSplit key "\u{0}")) key)) " :rpm " (stringFromFloat64 (* b.rate 60.0))
+         " :tokens " (stringFromFloat64 tokens) " :queued " (stringFromInt64 queued) ")"))
+
+fn hubMinF a: Float64 b: Float64 -> Float64
+  (if (< b a) b a)
+
+fn hubAsnStr s: String -> String
+  (str "\"" s "\"")
+
+fn ! hubStatusText! srv: GatewayLoop -> String
+  (let [(now (nowMs!))
+        (nowSec (u/wallSeconds!))
+        (flying (filter hubInFlight? srv.conns))
+        (waits srv.admitWaits)]
+    (str "(:hub :uptimeSec " (stringFromInt64 (/ (- now srv.startMs) 1000))
+         " :streams " (stringFromInt64 (listLength flying))
+         " :waiting " (stringFromInt64 (listLength (filter hubParked? flying)))
+         " :buckets (" (stringJoin (map (fn [(p (Pair String u/TokenBucket))] -> String (hubBucketRow (pairFirst p) (pairSecond p) nowSec)) srv.buckets.buckets) " ") ")"
+         " :admitWait (:n " (stringFromInt64 (listLength waits)) " :p50 " (stringFromInt64 (hubPercentile waits 50)) " :p95 " (stringFromInt64 (hubPercentile waits 95)) "))"))
+
+fn ! hubStatusRoute! srv: GatewayLoop fd: Int64 request: HttpRequest -> GatewayLoop
+  (match (fed/serveAuthError srv.env request.headers)
+    ((some e) (addConn srv fd (connWriting (errorResponse 401 e))))
+    ((none) (addConn srv fd (connWriting (renderResponse (ch/ChatResponse :head (list (ch/headStatus 200) (ch/headField "Content-Type" "application/asn+sexpr")) :body (str (hubStatusText! srv) "\n")))))))
 
 ; (:m :ref MAINFIX10 :do "omniApi.asl implemented every /api/asl/ route (browser target+extension registration and poll, project/channel sync ingest) but was never imported outside itself, so every /api/asl/ request fell through to the generic proxy and 502'd against whatever --upstream happened to be. omniRoute! handles only paths omniDispatch itself recognizes under /api/asl/, returning none for anything else (including every non-/api/asl path) so the existing fallback arm's proxy call is unchanged for everything this does not claim")
 fn ! omniRoute! srv: GatewayLoop fd: Int64 request: HttpRequest -> (Option GatewayLoop)
@@ -1207,7 +1261,7 @@ fn ! gatewayServeWith! listenerFd: Int64 upstreamPort: Int64 families: (List dp/
       :buckets (u/emptyBucketRegistry) :profiles (c/emptyProfilesCache)
       :wiring (dp/emptyWiring (resultOr (u/upstreamSettings env) (u/UpstreamSettings :geminiUrl "" :geminiKey "" :groqUrl "" :ollamaUrl "" :groqKey "" :url "" :key "" :ollamaTimeoutSec 45.0)))
       :wiringText none :families families :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty)
-      :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey)))))
+      :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey)) :admitWaits (list) :startMs (nowMs!))))
 
 
 ; (:m :ref GW-BREAKER-STALE-20261018 :tags (breaker config) :do "the breaker's cooldown comes from the loaded config's (:gateway ... :breakerCooldownSec N) when present, else the 600s default via makeBreakerState's own guard; a config that never sets it is unchanged from before. BreakerState itself is held only in this GatewayLoop value, freshly built here on every linkOpen! call -- there is no file-backed persistence across processes, so GW-BREAKER-STALE-20261018's '45-cell sweep stuck open' incident was one long-lived in-process breaker outlasting a fixed 600s cooldown within a single sweep run, not state surviving a restart")
@@ -1237,7 +1291,7 @@ fn ! linkOpenWith! env: (Map String String) home: String rootDir: String familie
                         :breaker (b/makeBreakerState (optionOr (c/gatewayBreakerCooldownSecOverride text) 600))
                         :buckets (u/emptyBucketRegistry) :profiles (pairFirst loaded) :wiring w :wiringText (some text)
                         :families families :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty)
-                        :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey))))))))))))
+                        :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey)) :admitWaits (list) :startMs (nowMs!)))))))))))
 
 fn outboxFor srv: GatewayLoop fd: Int64 -> (Option String)
   (optionMap pairSecond (listHead (filter (fn [(x (Pair Int64 String))] -> Bool (= (pairFirst x) fd)) srv.outbox)))

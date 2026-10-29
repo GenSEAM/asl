@@ -1,5 +1,5 @@
 (module asl-tools/hub/measure
-  :x [rowAt rowOutcome tally measureText main]
+  :x [rowAt rowOutcome tally measureText fetchStatus! main]
   :i [])
 
 ; (:m :ref ORCH-NODE2-CUTOVER-PREP :do "reads the whole gateway call ledger (it rotates at 10 MiB; default HOME/.asl/run/usage/gatewayCalls.asn) for the last N minutes and prints one (:hubMeasure ...) form: callsPerMin, real429Share (outcome 429), ownThrottleShare (outcome throttled); the ledger rows carry no queue wait, so admitWait is absent; the lead compares a window before the hub cutover with a window after it")
@@ -51,6 +51,25 @@ fn flagAfter args: (List String) flag: String fallback: String -> String
   (match (listIndexOf args flag)
     ((none) fallback)
     ((some i) (optionOr (listGet args (+ i 1)) fallback)))
+
+fn ! readAll! fd: Int64 acc: String -> String
+  (match (fdRead fd 65536)
+    ((err _) acc)
+    ((ok chunk) (if (stringEmpty? chunk) acc (readAll! fd (str acc chunk)))))
+
+; (:m :ref ORCH-HUB-STATUS :do "GET /hub/status over the hub's unix socket; the reply body is the (:hub ...) form, the HTTP head is dropped")
+fn ! fetchStatus! sock: String -> (Result String String)
+  (match (unixConnect sock)
+    ((err e) (err e))
+    ((ok fd)
+      (match (fdWrite fd "GET /hub/status HTTP/1.1\r\nHost: hub\r\nConnection: close\r\n\r\n")
+        ((err e) (do (fdClose fd) (err e)))
+        ((ok _)
+          (let [(raw (readAll! fd ""))
+                (closed (fdClose fd))]
+            (match (stringIndexOf raw "\r\n\r\n")
+              ((none) (err "ERR_HUB_STATUS_NO_BODY"))
+              ((some end) (ok (stringTrim (optionOr (stringSlice raw (+ end 4) (stringLength raw)) ""))))))))))
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(home (optionOr (envGet "HOME") ""))
