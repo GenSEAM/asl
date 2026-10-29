@@ -289,7 +289,7 @@
 (:sym "gitRun!" :mod "asl-gates/suiteRunner" :kind fn! :sig "gitRun! root: String args: (List String) -> (Result Done String)" :pit (result effect))
 (:sym "gitRoot!" :mod "asl-gates/suiteRunner" :kind fn! :sig "gitRoot! -> (Result String String)" :pit (result effect))
 (:sym "absPath" :mod "asl-gates/suiteRunner" :sig "absPath root: String p: String -> String")
-(:sym "slowSuiteTimeoutS" :mod "asl-gates/suiteRunner" :sig "slowSuiteTimeoutS suite: String -> (Option Int64)" :doc "measured 19m36s and 4m40s, liftLowerIdentityTest 277s wall on 2026-09-30; limits adopted with headroom; buildNativeAsl1Test measured 1376s under load on 2026-10-03, split from the stage1 pair to 2400; coreParityTest.sh measured 640s under l..." :pit (option))
+(:sym "slowSuiteTimeoutS" :mod "asl-gates/suiteRunner" :sig "slowSuiteTimeoutS suite: String -> (Option Int64)" :doc "measured 19m36s and 4m40s, liftLowerIdentityTest 277s wall on 2026-09-30; limits adopted with headroom; buildNativeAsl1Test measured 1376s under load on 2026-10-03 and 1284s on node2 (EPYC Zen5 8c), 873s on the Mac, on 2026-10-29 (five asl1..." :pit (option))
 (:sym "suiteJob!" :mod "asl-gates/suiteRunner" :kind fn! :sig "suiteJob! snap: String suite: String baseS: Int64 -> Job" :pit (effect))
 (:sym "makeTempDir!" :mod "asl-gates/suiteRunner" :kind fn! :sig "makeTempDir! prefix: String -> (Result String String)" :pit (result effect))
 (:sym "sweepStaleTemps!" :mod "asl-gates/suiteRunner" :kind fn! :sig "sweepStaleTemps! -> Unit" :doc "rmtree ignore_errors: best-effort cleanup of dead runners" :pit (effect))
