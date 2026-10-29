@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveBody! parentWatch! parentUnwatch! loopResultOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveBody! attractorProvider parentWatch! parentUnwatch! loopResultOf main mainCli mainWithRoots]
   :i [(asl/agentLoop/core :a c)
       (asl/agentLoop/diff :a diff)
       (asl/agentLoop/providers :a pv)
@@ -1246,6 +1246,10 @@ fn wallCapped base: Int64 left: (Option Int64) -> Int64
 fn wallCappedProvider p: pv/Provider left: (Option Int64) -> pv/Provider
   (match left ((some l) (pv/capTimeouts p l)) ((none) p))
 
+; (:m :ref LEONATTR :do "the provider a live turn calls: wall-capped, and carrying the prefill only when the attractor set one, so an off turn sends the request as before")
+fn attractorProvider p: pv/Provider prefill: String left: (Option Int64) -> pv/Provider
+  (if (stringEmpty? prefill) (wallCappedProvider p left) (pv/withPrefill (wallCappedProvider p left) prefill))
+
 fn ! liveProviderRetry! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) wallBudget: (Option Int64) sleep: (fn [Int64] -> Bool) now: (fn [] -> Float64) -> (Pair pv/Turn Int64)
   (rt/retryTurn! provider call 3 (list 1 2 4) wallBudget sleep now)
 
@@ -1603,7 +1607,7 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
           ((some rs) (routedCall! ra rs rootDir path turn run.session sysA user wrapped.provider
             (fn [text] (routeVerdict! text ra rootDir repoRoot path routeEnvFor run routeLeft))))
           ((none) (liveProviderRetry! wrapped.provider
-          (fn [p attempt] (providerCall (if (stringEmpty? prefill) (wallCappedProvider p (wallLeft env.wallBudget (- (env.now) state.runStarted))) (pv/withPrefill (wallCappedProvider p (wallLeft env.wallBudget (- (env.now) state.runStarted))) prefill)) sysA user))
+          (fn [p attempt] (providerCall (attractorProvider p prefill (wallLeft env.wallBudget (- (env.now) state.runStarted))) sysA user))
           (match env.wallBudget
             ((some w) (some (max 0 (- w (optionOr (float64ToInt64 (- (env.now) state.runStarted)) 0)))))
             ((none) none))

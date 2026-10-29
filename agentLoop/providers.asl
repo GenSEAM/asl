@@ -3,7 +3,7 @@
       ProviderEnv VendorConfig Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
       parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
-      curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! providerEnv! makeProvider! nextTurn! withPrefill profileMessages advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
+      curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! providerEnv! makeProvider! nextTurn! withPrefill outgoingMessages profileMessages advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
   :i [(asl-json/json :a j) (asl-proc/coreProcess :a cp) (aslGateway/server :a gs) (aslGateway/dispatch :a gd) (aslGateway/upstream :a gu) (aslGateway/config :a cfg)])
 
 enum ProviderError
@@ -847,6 +847,12 @@ fn withPrefill p: Provider prefill: String -> Provider
   (match p
     ((vendorProvider cfg) (vendorProvider (cfgPrefill cfg prefill)))
     (_ p))
+
+; (:m :ref LEONATTR :do "the messages a provider would send on the profile chat call; callProfile! builds its request from the same cfg.prefill")
+fn outgoingMessages p: Provider system: String user: String -> (List j/Json)
+  (match p
+    ((vendorProvider cfg) (profileMessages system user cfg.prefill))
+    (_ (profileMessages system user "")))
 
 fn profileMessages system: String user: String prefill: String -> (List j/Json)
   (listAppend (list (msg "system" system) (msg "user" user))

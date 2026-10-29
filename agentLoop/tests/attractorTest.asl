@@ -61,6 +61,21 @@ fn testProse -> Bool
       (assert (= (at/proseChars "(:step :op \"write\" :file \"a.txt\" :content :raw)\n```\nhello\n```\n(:done)") 0) "a raw block bound to a step is not prose")
       true)
 
+fn liveProvider -> pv/Provider
+  (pv/vendorProvider (pv/VendorConfig :vendor "agy" :mode "scout" :rootDir "/tmp" :model "m" :timeout 10 :queueTimeout 10 :sessionId "s1" :intent "auto"
+    :timeoutSet false :env (pv/ProviderEnv :gatewayUrl "" :inProcess false :profile "" :gatewayConfig "" :tmpDir "/tmp" :childEnv (mapEmpty)) :link none :turn 0)))
+
+fn testLivePath -> Bool
+  (let [on (m/attractorProvider (liveProvider) (at/attractorPrefill "asn") none)
+        off (m/attractorProvider (liveProvider) (at/attractorPrefill "") none)
+        onMsgs (j/jsonEmit (j/jarr (pv/outgoingMessages on "S" "U")))
+        offMsgs (j/jsonEmit (j/jarr (pv/outgoingMessages off "S" "U")))]
+    (do (assert (= (listLength (pv/outgoingMessages on "S" "U")) 3) "knob on: the live provider sends three messages")
+        (assert (stringContains? onMsgs "\"role\":\"assistant\",\"content\":\"(:step\"") "knob on: the outgoing list ends in the assistant prefill")
+        (assert (= (listLength (pv/outgoingMessages off "S" "U")) 2) "knob off: two messages")
+        (assert (not (stringContains? offMsgs "assistant")) "knob off: no trailing assistant message")
+        true)))
+
 fn initRepo! root: String -> Bool
   (and (ok? (fileWrite (str root "/subject.txt") "before\n"))
     (gk/initGitRepo! root "attractorTest" "attractor@example.invalid"))
@@ -99,4 +114,4 @@ fn testJournal -> Bool
         true))
 
 fn runTests -> Bool
-  (and (testOffIdentical) (and (testOnShape) (and (testPrefixStable) (and (testCards) (and (testProse) (testJournal))))))
+  (and (testOffIdentical) (and (testOnShape) (and (testPrefixStable) (and (testCards) (and (testProse) (and (testLivePath) (testJournal)))))) )
