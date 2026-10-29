@@ -1,6 +1,6 @@
 (module asl-tools/hub/tests/hubLearnedTest
   :x [runTests]
-  :i [(asl-tools/fleet/run :a fr) (asl-tools/hub/measure :a ms)])
+  :i [(asl-tools/fleet/run :a fr) (asl-tools/hub/measure :a ms) (aslGateway/server :a srv)])
 
 ; (:m :ref ORCH-HUB-STATUS :do "GET /hub/status on a running hub: idle it reports no streams and no admit samples; with two clients on one rpm 12 model one is parked, so one stream waits and the bucket shows a queue of 1; after both are answered the admit wait has 2 samples with p50 0 and p95 near the 5 s refill")
 (schema StubConn
@@ -149,6 +149,9 @@ fn ! statusAt! w: World sock: String tag: String -> World
   (pump! (sendGet! w (unixConnect sock) tag) (fn [(x World)] -> Bool (tagDone? x tag)) (+ (nowMs!) 5000))
 
 ; (:m :ref ORCH-AIMD-LIVE :do "a hub whose home holds ratesByName.asn: the bucket of the named model refills at the learned rate (config 12, learned 600), and a second hub with no such file keeps the configured 12")
+fn near a: Float64 b: Float64 -> Bool
+  (< (abs (- a b)) 0.001)
+
 fn ! bucketRowAt! temp: String learned: Bool -> String
   (let [(listener (resultOr (tcpListen 0) -1))
         (base (str "http://127.0.0.1:" (stringFromInt64 (resultOr (sockLocalPort listener) 0)) "/v1"))
@@ -178,6 +181,10 @@ fn ! runTests -> Bool
     (do
       (assert (stringContains? withRate ":model \"m1-target\" :rpm 600.0") (str "a learned rate replaces the configured rpm of the bucket: " withRate))
       (assert (stringContains? without ":model \"m1-target\" :rpm 12.0") (str "no store keeps the configured rpm: " without))
+      (assert (and (near (srv/hubLearnedFrom "(:rate :alias \"m\" :rpm 24.0 :cfg 20.0)\n" "m" 20.0) 24.0) (near (srv/hubLearnedFrom "(:rate :alias \"m\" :rpm 24.0 :cfg 20.0)\n" "m" 100.0) 24.0)) "a bucket at its configured rpm takes the learned rate (a free model still rises)")
+      (assert (near (srv/hubLearnedFrom "(:rate :alias \"m\" :rpm 24.0 :cfg 20.0)\n" "m" 4.288) 4.288) "a bucket paced below its config (subscription pace) is not lifted by a throttled-only learned rate")
+      (assert (near (srv/hubLearnedFrom "(:rate :alias \"m\" :rpm 3.0 :cfg 20.0)\n" "m" 4.288) 3.0) "a paced bucket still takes a lower learned rate after real 429s")
+      (assert (and (near (srv/hubLearnedFrom "(:rate :alias \"m\" :rpm 24.0 :cfg 20.0)\n" "other" 20.0) 20.0) (near (srv/hubLearnedFrom "" "m" 20.0) 20.0)) "an unlisted model or an absent store keeps the incoming rpm")
       (assert removed "temp dir removed")
       true))
 

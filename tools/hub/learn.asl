@@ -9,7 +9,7 @@ fn specsOf table: c/GatewayTable -> (List rl/Spec)
                    ((none) (list))
                    ((some m)
                      (match m.params.rpm
-                       ((some r) (if (> r 0.0) (list (rl/Spec :alias id :provider m.provider :start r :max 0.0)) (list)))
+                       ((some r) (if (> r 0.0) (list (rl/Spec :alias id :provider m.provider :start r :max (* r 4.0))) (list)))
                        ((none) (list))))))
     table.modelOrder)
 
@@ -35,18 +35,28 @@ fn byNamePath storePath: String -> String
   (let [(parts (stringSplit storePath "/"))]
     (str (stringJoin (listTake parts (- (listLength parts) 1)) "/") "/ratesByName.asn"))
 
-fn byNameRates table: c/GatewayTable learned: (Map String Float64) -> (Map String Float64)
-  (fold (fn [(acc (Map String Float64)) (id String)] -> (Map String Float64)
+; (:m :ref ORCH-AIMD-LIVE :do "each row carries the configured rpm as :cfg beside the learned :rpm, so the reactor can tell a bucket whose rpm was paced below the config (subscription pace) from one at its config, and never lift a paced bucket")
+fn byNameRows table: c/GatewayTable learned: (Map String Float64) -> (Map String (Pair Float64 Float64))
+  (fold (fn [(acc (Map String (Pair Float64 Float64))) (id String)] -> (Map String (Pair Float64 Float64))
               (match (mapGet learned id)
                 ((none) acc)
                 ((some r)
                   (match (mapGet table.models id)
                     ((none) acc)
-                    ((some m) (mapSet acc m.name (match (mapGet acc m.name) ((some old) (min old r)) ((none) r))))))))
+                    ((some m)
+                      (let [(cfg (match m.params.rpm ((some c0) c0) ((none) 0.0)))]
+                        (match (mapGet acc m.name)
+                          ((some old) (if (< r (pairFirst old)) (mapSet acc m.name (pair r cfg)) acc))
+                          ((none) (mapSet acc m.name (pair r cfg))))))))))
     (mapEmpty) table.modelOrder)
 
+fn byNameText rows: (Map String (Pair Float64 Float64)) -> String
+  (stringJoin (map (fn [(p (Pair String (Pair Float64 Float64)))] -> String
+                     (str "(:rate :alias \"" (pairFirst p) "\" :rpm " (stringFromFloat64 (pairFirst (pairSecond p))) " :cfg " (stringFromFloat64 (pairSecond (pairSecond p))) ")\n"))
+                   (mapPairs rows)) "")
+
 fn ! writeByName! table: c/GatewayTable learned: (Map String Float64) path: String -> Bool
-  (ok? (rl/writeStore! path (byNameRates table learned)))
+  (ok? (fileWrite path (byNameText (byNameRows table learned))))
 
 fn ! learnTick! gatewayPath: String ledgerPath: String storePath: String nowMs: Int64 windowMs: Int64 -> (Result Int64 String)
   (match (fileReadString gatewayPath)

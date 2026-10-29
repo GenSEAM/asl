@@ -1,6 +1,6 @@
 (module aslGateway/server
   :x [gatewayCliMode? breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main! main mainWith
-      GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv!]
+      GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv!]
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
       (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/limits :a lim) (aslGateway/router :a rt) (asl-json/json :a j)
@@ -710,12 +710,22 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
     ((ch/effHttp _ _ _ _ _ _ _ _) (pair srv (ch/outHttp (ch/httpRaised false "an HTTP effect reached the synchronous effect runner"))))
     ((ch/effPoolHttp _ _ _ _ _ _) (pair srv (ch/outHttp (ch/httpRaised false "a pool effect reached the synchronous effect runner")))))
 
-; (:m :ref ORCH-AIMD-LIVE :do "the learner writes ratesByName.asn under the hub run dir, learned rpm keyed by the upstream model name that keys the bucket; a model it lists refills at that rate, any other model, an absent file or a non-positive configured rpm keeps the configured one, so a hub with no learner behaves as before")
-fn ! hubLearnedRpm! home: String model: String rpm: Float64 -> Float64
+; (:m :ref ORCH-AIMD-LIVE :do "the learner writes ratesByName.asn under the hub run dir: per upstream model name the learned :rpm and the configured :cfg. A bucket whose incoming rpm is already below its :cfg is paced down (subscription pace): it takes the lower of the two and is never lifted; a bucket at its config takes the learned rate; a model with no row, a non-positive rpm or learned rate keeps the incoming rpm, so a hub with no learner behaves as before")
+fn hubLearnedFrom text: String model: String rpm: Float64 -> Float64
   (if (<= rpm 0.0) rpm
-    (match (mapGet (rl/readStore! (str home "/.asl/run/hub/ratesByName.asn")) model)
-      ((some r) (if (> r 0.0) r rpm))
-      ((none) rpm)))
+    (let [(rows (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "(:rate ") (= (spc/quotedAfter l ":alias") model))) (stringSplit text "\n")))]
+      (match (listHead rows)
+        ((none) rpm)
+        ((some row)
+          (let [(learned (optionOr (stringToFloat64 (spc/tokAfter row ":rpm")) 0.0))
+                (cfg (optionOr (stringToFloat64 (spc/tokAfter row ":cfg")) 0.0))]
+            (cond
+              ((<= learned 0.0) rpm)
+              ((and (> cfg 0.0) (< rpm (* cfg 0.999))) (min rpm learned))
+              (else learned)))))))
+
+fn ! hubLearnedRpm! home: String model: String rpm: Float64 -> Float64
+  (hubLearnedFrom (resultOr (fileReadString (str home "/.asl/run/hub/ratesByName.asn")) "") model rpm)
 
 fn ! drive! srv: GatewayLoop fd: Int64 tag: String step: ch/ChatStep -> GatewayLoop
   (match step
