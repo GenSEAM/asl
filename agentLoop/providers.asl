@@ -840,9 +840,12 @@ fn withTurn cfg: VendorConfig turn: Int64 -> VendorConfig
   (with cfg :turn turn)
 
 ; (:m :ref LEONATTR :do "a non-empty prefill rides as a trailing assistant message of the profile chat call; an empty one leaves the request as before; script and replay providers have no transport and pass through")
+fn cfgPrefill cfg: VendorConfig prefill: String -> VendorConfig
+  (with cfg :prefill prefill)
+
 fn withPrefill p: Provider prefill: String -> Provider
   (match p
-    ((vendorProvider cfg) (vendorProvider (with cfg :prefill prefill)))
+    ((vendorProvider cfg) (vendorProvider (cfgPrefill cfg prefill)))
     (_ p))
 
 fn profileMessages system: String user: String prefill: String -> (List j/Json)
