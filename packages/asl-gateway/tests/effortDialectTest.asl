@@ -33,7 +33,7 @@ fn ! wireChecks -> Bool
       (assert (= (pairFirst offD) (bodyOf)) "off sends nothing")
       (assert (none? (pairSecond offD)) "off reports none")
       (assert (= (pairFirst bad) (bodyOf)) "an unknown effort sends nothing")
-      true)))
+      true))
 
 fn ! defaultChecks -> Bool
   (do
