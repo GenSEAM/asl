@@ -1,5 +1,5 @@
 (module aslGateway/chat
-  :x [ChatRequest
+  :x [ChatRequest upstreamTools
       gatewayOriginHeader
       ChatWorld
       ChatEffect
@@ -559,6 +559,13 @@ fn dropEmptySystem body: j/Json -> j/Json
     (_ body))
 
 ; (:m :ref GW-IFM-EMPTY-TOOLS :do "true when the body carries tools as an empty array, which a provider with :dropEmptyTools true must not receive")
+; (:m :ref NATIVE-TOOLS-DEFAULT :do "the tools a provider receives: a row with :nativeTools false gets none (tools and tool_choice dropped), a :dropEmptyTools provider gets no empty array, everything else is sent as the caller built it")
+fn upstreamTools params: c/GatewayParams dropEmpty: Bool body: j/Json -> j/Json
+  (cond
+    ((match params.nativeTools ((some b) (not b)) ((none) false)) (jdel (jdel body "tools") "tool_choice"))
+    ((and dropEmpty (emptyTools? body)) (jdel body "tools"))
+    (else body))
+
 fn emptyTools? body: j/Json -> Bool
   (match (getOr body "tools" (j/jnull))
     ((j/jarr xs) (listEmpty? xs))
@@ -1224,7 +1231,7 @@ fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json 
         (out1 (pairFirst effApplied))
         (out2 (jdel (jdel (jdel (jdel out1 "role") "intent") "lens") "workspace"))
         (out3a (if (some? v2) (jdel (jdel out2 "timeout") "queue_timeout") out2))
-        (out3b (match v2 ((some e) (if (and e.dropEmptyTools (emptyTools? out3a)) (jdel out3a "tools") out3a)) ((none) out3a)))
+        (out3b (match v2 ((some e) (upstreamTools e.params e.dropEmptyTools out3a)) ((none) out3a)))
         (out3 (match v2 ((some e) (if (= e.kind "openai") (dropEmptySystem out3b) out3b)) ((none) out3b)))
         (sent (if truthy (if ollama (some (pairSecond effApplied)) (match (pairSecond effApplied) ((some s) (some (some s))) ((none) none))) none))
         (respApi (match v2 ((some e) (cond ((= e.kind "anthropic") "anthropic") ((= e.kind "gemini") "gemini") (else (optionOr e.params.api "chat")))) ((none) "chat")))

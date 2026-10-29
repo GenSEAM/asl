@@ -143,7 +143,8 @@ fn scalarToString sc: AsnScalar -> String
   (:f rpm (Option Float64))
   (:f api (Option String))
   (:f prefill (Option Bool))
-  (:f retry (Option RetryPolicy)))
+  (:f retry (Option RetryPolicy))
+  (:f nativeTools (Option Bool) :default none))
 
 fn emptyGatewayParams -> GatewayParams
   (GatewayParams
@@ -173,7 +174,8 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
     :rpm (if (some? override.rpm) override.rpm base.rpm)
     :api (if (some? override.api) override.api base.api)
     :prefill (if (some? override.prefill) override.prefill base.prefill)
-    :retry (if (some? override.retry) override.retry base.retry))
+    :retry (if (some? override.retry) override.retry base.retry)
+    :nativeTools (if (some? override.nativeTools) override.nativeTools base.nativeTools))
 
 (schema GatewayRoute
   (:f intent String)
@@ -729,6 +731,15 @@ fn checkFirstByteSec props: (Map String rd/SExpr) what: String cur: GatewayParam
               (pair cur (cons (str what ": :firstByteSec must be a positive number") errs))))
           (_ (pair cur (cons (str what ": :firstByteSec must be a positive number") errs)))))))
 
+; (:m :ref NATIVE-TOOLS-DEFAULT :do "a model row's :nativeTools false marks a route that rejects or mishandles native tools: the gateway strips tools and tool_choice from the body it sends there, so the caller's text contract carries the turn; absent means tools pass through")
+fn checkNativeTools props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
+  (match (mapGet props "nativeTools")
+    ((none) (pair cur errs))
+    ((some expr)
+      (match (asn_figure expr)
+        ((scalarBool b) (pair (with cur :nativeTools (some b)) errs))
+        (_ (pair cur (cons (str what ": :nativeTools must be true or false") errs))))))
+
 fn checkReasoning props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (match (mapGet props "reasoning")
     ((none) (pair cur errs))
@@ -767,8 +778,9 @@ fn gateway_params props: (Map String rd/SExpr) what: String -> (Pair GatewayPara
         (s8 (checkApi props what (pairFirst s7) (pairSecond s7)))
         (s8b (checkEffortDialect props what (pairFirst s8) (pairSecond s8)))
         (s8c (checkPrefill props what (pairFirst s8b) (pairSecond s8b)))
-        (s9 (checkRetry props what (pairFirst s8c) (pairSecond s8c)))]
-    (pair (pairFirst s9) (listReverse (pairSecond s9))))
+        (s9 (checkRetry props what (pairFirst s8c) (pairSecond s8c)))
+        (s9b (checkNativeTools props what (pairFirst s9) (pairSecond s9)))]
+    (pair (pairFirst s9b) (listReverse (pairSecond s9b))))
 
 fn checkApi props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (match (mapGet props "api")
@@ -815,6 +827,7 @@ fn paramPresent? params: GatewayParams k: String -> Bool
     ((= k "rpm") (some? params.rpm))
     ((= k "api") (some? params.api))
     ((= k "prefill") (some? params.prefill))
+    ((= k "nativeTools") (some? params.nativeTools))
     (else false))
 
 fn scalarAsnValue sc: AsnScalar -> String
@@ -833,7 +846,7 @@ fn paramsShown props: (Map String rd/SExpr) params: GatewayParams -> (List (Pair
                 (listAppend acc (list (pair k (scalarAsnValue (asn_figure expr)))))
                 acc))))
         (list)
-        (list "temperature" "effort" "effortDialect" "maxTokens" "contextBudget" "timeoutSec" "firstByteSec" "reasoning" "rpm" "api" "prefill"))
+        (list "temperature" "effort" "effortDialect" "maxTokens" "contextBudget" "timeoutSec" "firstByteSec" "reasoning" "rpm" "api" "prefill" "nativeTools"))
 
 fn shownHasKey? shown: (List (Pair String String)) k: String -> Bool
   (listAny? (fn [(p (Pair String String))] -> Bool (= (pairFirst p) k)) shown)
