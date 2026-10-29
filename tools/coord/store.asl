@@ -1,5 +1,5 @@
 (module asl-tools/coord/store
-  :x [Task Lease Req defaultDir! clashPath unitsDir leasesDir unitPath leasePath renderUnit renderLease parseUnit parseLease
+  :x [Task Lease Req q qList rowFields textField intField opt intOpt defaultDir! clashPath unitsDir leasesDir unitPath leasePath renderUnit renderLease parseUnit parseLease
       live? fenced? ownsClash readUnits! readLeases! put! claim! claimNext! heartbeat! release! commit! list! apply! main]
   :i [(asl-syntax/asl/asn :a asn) (asl-coord/claims :a cl)])
 

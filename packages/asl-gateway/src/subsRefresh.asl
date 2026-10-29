@@ -1,5 +1,5 @@
 (module aslGateway/subsRefresh
-  :x [paceFactors! mergedLedgerText ledgerMergeCli! numText opencodeWindows codexWindow mergeWindows ledgerWindows refreshSubsText newestSessionFiles! subsRefreshCli! subsStatusCli!]
+  :x [paceFactors! mergedLedgerText ledgerMergeCli! numText opencodeWindows kimiWindows codexWindow mergeWindows ledgerWindows refreshSubsText newestSessionFiles! subsRefreshCli! subsStatusCli!]
   :i [(config :a c)
       (search :a srch)
       (localTime :a lt)
@@ -105,11 +105,36 @@ fn ! codexFromDir! root: String nowMs: Int64 -> (Option String)
             ((none) (match (fileReadString f) ((ok t) (codexWindow t nowMs)) ((err _) none)))))
         none (newestSessionFiles! root 6))
 
-; (:m :do "windows that carry the same kind replace each other, others stay in file order, new kinds are appended")
+; (:m :do "windows that carry the same kind replace each other, others stay in file order, new kinds are appended; a replaced window's hand-entered :capacity is carried to its replacement, so a refresh never drops the monthly cap")
 fn mergeWindows old: (List String) fresh: (List String) -> (List String)
   (let [(kindOf (fn [(w String)] -> String (sp/kindOf w)))
-        (fk (map kindOf fresh))]
-    (listAppend (filter (fn [(w String)] -> Bool (not (listContains? fk (kindOf w)))) old) fresh))
+        (fk (map kindOf fresh))
+        (capOf (fn [(w String)] -> String (let [(c (sp/quotedAfter (optionOr (listHead (filter (fn [(o String)] -> Bool (= (kindOf o) (kindOf w))) old)) "") ":capacity"))] c)))
+        (withCap (map (fn [(w String)] -> String
+                        (let [(c (capOf w))]
+                          (if (or (stringEmpty? c) (stringContains? w ":capacity")) w
+                            (str (optionOr (stringSlice w 0 (- (stringLength w) 1)) w) " :capacity " (q c) ")"))))
+                      fresh))]
+    (listAppend (filter (fn [(w String)] -> Bool (not (listContains? fk (kindOf w)))) old) withCap))
+
+; (:m :ref COND5 :do "windows from the Kimi Code usages body {usages:{limit_5h:{used_ratio,reset_time},limit_month_total:{used_ratio,reset_time}}}: the 5 h rolling window and the monthly one, used_ratio 0..1 as :usedPercent, stamped src kimiApi and nowMs; a missing limit gives no window")
+fn kimiWindow u: j/Json key: String kind: String nowMs: Int64 -> (List String)
+  (match (j/jsonGet u key)
+    ((none) (list))
+    ((some w)
+      (match (j/jsonGet w "used_ratio")
+        ((none) (list))
+        ((some r)
+          (let [(pct (match r ((j/jint i) (* 100.0 (int64ToFloat64 i))) ((j/jfloat f) (* 100.0 f)) ((j/jnum f) (* 100.0 f)) (_ 0.0)))]
+            (list (str "(:" kind (if (= kind "rolling") " 5h" "") " :resets " (q (jstrOr (j/jsonGet w "reset_time"))) " :usedPercent " (sp/fixed1 pct) " :src kimiApi :at " (stringFromInt64 nowMs) ")")))))))
+
+fn kimiWindows body: String nowMs: Int64 -> (List String)
+  (match (j/jsonParse body)
+    ((err _) (list))
+    ((ok doc)
+      (match (j/jsonGet doc "usages")
+        ((none) (list))
+        ((some u) (listAppend (kimiWindow u "limit_5h" "rolling" nowMs) (kimiWindow u "limit_month_total" "monthly" nowMs))))))
 
 ; (:m :do "ledger estimates for every sub line that has a capacity (or the commandCode default) and gets no other source in freshIds: a monthly window ending at renews, used = calls / capacity, with :calls and :tokens")
 fn ledgerWindows z: lt/Zone subsText: String ledgerText: String nowMs: Int64 freshIds: (List String) -> (List (Pair String String))
@@ -166,6 +191,20 @@ fn ! opencodeBody! table: c/GatewayTable -> (Result String String)
               ((srch/httpResp status _ _ body) (if (= status 200) (ok body) (err (str "usage status " (stringFromInt64 status)))))
               ((srch/httpFail _ timedOut) (err (if timedOut "usage timeout" "usage request failed")))))))))
 
+; (:m :ref COND5 :do "GET <kimiCode base>/usages with the provider key; free, only the body is read")
+fn ! kimiBody! table: c/GatewayTable -> (Result String String)
+  (match (mapGet table.providers "kimiCode")
+    ((none) (err "no kimiCode provider in the config"))
+    ((some pv)
+      (match (c/resolveProviderKey! table.keyFiles pv.keyEnv)
+        ((none) (err "no key for kimiCode"))
+        ((some key)
+          (let [(env (srch/curlChildEnv (mapFromPairs (map (fn [(n String)] -> (Pair String String) (pair n (optionOr (envGet n) ""))) (list "PATH" "https_proxy" "HTTPS_PROXY" "SSL_CERT_FILE")))))
+                (req (srch/HttpReq :url (str pv.base "/usages") :headers (list (pair "Authorization" (str "Bearer " key)) (pair "Content-Type" "application/json")) :data (none) :timeout (j/jint 30)))]
+            (match (optionOr (listHead (srch/runCurlBatch! (list req) env)) (srch/httpFail (srch/httpError 0 "no result") false))
+              ((srch/httpResp status _ _ body) (if (= status 200) (ok body) (err (str "usages status " (stringFromInt64 status)))))
+              ((srch/httpFail _ timedOut) (err (if timedOut "usages timeout" "usages request failed")))))))))
+
 fn ! ledgerPathOf! args: (List String) home: String configText: String -> String
   (argAfter args "--ledger" (optionOr (c/gatewaySharedUsagePathOverride configText) (ul/defaultSharedUsagePath home)))
 
@@ -182,6 +221,7 @@ fn ! subsRefreshCli! args: (List String) -> (Result Int64 String)
         (configText (readOr! configPath))
         (ledgerText (readOr! (ledgerPathOf! args home configText)))
         (ocFixture (argAfter args "--oc-body" ""))
+        (kimiFixture (argAfter args "--kimi-body" ""))
         (zone (zoneOf! args))]
     (match (fileReadString subsPath)
       ((err e) (do (sys/sayErr! (str "(:subsRefresh :status :error :why " (q (str "cannot read " subsPath ": " e)) ")")) (ok 1)))
@@ -193,16 +233,24 @@ fn ! subsRefreshCli! args: (List String) -> (Result Int64 String)
                                 ((err e) (err (str "config: " e)))
                                 ((ok table) (opencodeBody! table))))))
               (ocWins (match ocBody ((ok b) (opencodeWindows b now)) ((err _) (list))))
+              (kimiBodyR (cond
+                           ((not (stringEmpty? kimiFixture)) (fileReadString kimiFixture))
+                           ((listContains? args "--no-net") (err "skipped by --no-net"))
+                           (else (match (c/gatewayConfigParse! configText configPath "")
+                                   ((err e) (err (str "config: " e)))
+                                   ((ok table) (kimiBody! table))))))
+              (kimiWins (match kimiBodyR ((ok b) (kimiWindows b now)) ((err _) (list))))
               (cxWin (codexFromDir! codexRoot now))
               (cxWins (match cxWin ((some w) (list w)) ((none) (list))))
-              (apiFresh (listAppend (if (listEmpty? ocWins) (list) (list "opencodeGo")) (if (listEmpty? cxWins) (list) (list "codexLuna"))))
+              (apiFresh (listAppend (listAppend (if (listEmpty? ocWins) (list) (list "opencodeGo")) (if (listEmpty? cxWins) (list) (list "codexLuna"))) (if (listEmpty? kimiWins) (list) (list "kimiPro"))))
               (ledgerFresh (ledgerWindows zone subsText ledgerText now apiFresh))
-              (fresh (listAppend (listAppend (list (pair "opencodeGo" ocWins) (pair "codexLuna" cxWins))
+              (fresh (listAppend (listAppend (list (pair "opencodeGo" ocWins) (pair "codexLuna" cxWins) (pair "kimiPro" kimiWins))
                                              (map (fn [(p (Pair String String))] -> (Pair String (List String)) (pair (pairFirst p) (list (pairSecond p)))) ledgerFresh))
                                  (list)))
               (merged (refreshSubsText subsText fresh))
               (receipt (str "(:subsRefresh :status :ok :subs ("
                             (stringJoin (list (receiptSource "opencodeGo" "opencodeApi" (not (listEmpty? ocWins)) (listLength ocWins) (match ocBody ((err e) (if (listEmpty? ocWins) e "")) ((ok _) (if (listEmpty? ocWins) "no usage windows in the body" ""))))
+                                              (receiptSource "kimiPro" "kimiApi" (not (listEmpty? kimiWins)) (listLength kimiWins) (match kimiBodyR ((err e) (if (listEmpty? kimiWins) e "")) ((ok _) (if (listEmpty? kimiWins) "no usage windows in the body" ""))))
                                               (receiptSource "codexLuna" "codexEvent" (not (listEmpty? cxWins)) (listLength cxWins) (if (listEmpty? cxWins) "no codex rate_limits event found" ""))
                                               (str "(:ledger " (stringJoin (map pairFirst ledgerFresh) " ") ")"))
                                         " ")

@@ -160,6 +160,7 @@ fn testBlocked -> Bool
         (assert (stringContains? row ":disagree") "the escalate row names the disagreement")
         (assert (and (stringContains? row "orNemotronUltraFree pass") (stringContains? row "ocLongcat fail")) "the disagreement names both reviewers' verdicts")
         (assert (stringContains? row ":seen") "the escalate row names what was seen")
+        (assert (and (stringContains? row ":to queue ") (not (stringContains? row ":to claude")) (stringContains? row ":tiers (claude)")) (str "the escalation goes to the queue with Claude as the last tier once the strong lane has been asked: " row))
         true))
 
 fn testBrief -> Bool

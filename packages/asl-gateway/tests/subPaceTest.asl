@@ -39,6 +39,23 @@ fn byId paces: (List sp/SubPace) id: String -> sp/SubPace
 fn near a: Float64 b: Float64 -> Bool
   (< (if (> a b) (- a b) (- b a)) 0.01)
 
+; (:m :ref COND5 :do "KIMI-MONTH-CAP: a monthly window with :capacity \"18 full 5 h windows\" makes the rolling window's allowance the monthly remainder over the rolling windows left: day 1 of the month, 18 windows, 0 used is at most 15 percent of a 5 h window (12.3 adopted arithmetic), half the month used halves it, a sub without a capacity keeps the burst allowance of 80")
+fn kimiLine used: String rolling: String -> String
+  (str "(:subscriptions :v 1 :updated \"2026-10-29\"\n  (:sub :id kimiSub :renews \"2026-11-29\" :windows ((:rolling 5h :usedPercent " rolling " :src kimiApi :at \"2026-10-29 11:50\") (:monthly :capacity \"18 full 5 h windows\" :usedPercent " used " :resets \"2026-11-29\" :src kimiApi :at \"2026-10-29 11:50\")))\n"
+       "  (:sub :id plainSub :renews \"2026-11-29\" :windows ((:rolling 5h :usedPercent 10 :src kimiApi :at \"2026-10-29 11:50\")))\n")
+
+fn ! testMonthlyCap -> Bool
+  (let [(now (sp/parseTimeMs "2026-10-29 12:00"))
+        (fresh (sp/paceSubs (lt/utcZone) (kimiLine "0" "12") "" now))
+        (half (sp/paceSubs (lt/utcZone) (kimiLine "50" "12") "" now))
+        (spent (sp/paceSubs (lt/utcZone) (kimiLine "0" "40") "" now))
+        (a (byId fresh "kimiSub")) (b (byId half "kimiSub")) (c (byId spent "kimiSub")) (plain (byId fresh "plainSub"))]
+    (do (assert (and (= a.window "rolling") (< a.allowance 15.0) (> a.allowance 5.0)) (str "month 0 percent used: per-window allowance at most 15: " (sp/fixed1 a.allowance)))
+        (assert (and (< b.allowance (* 0.6 a.allowance)) (> b.allowance 1.0)) (str "half the month used roughly halves it: " (sp/fixed1 b.allowance) " vs " (sp/fixed1 a.allowance)))
+        (assert (and c.over (< c.factor 0.5)) (str "a window 40 percent used against a 12 percent allowance is over and weighed down: " (sp/fixed1 c.factor)))
+        (assert (near plain.allowance 80.0) (str "no capacity keeps the burst allowance: " (sp/fixed1 plain.allowance)))
+        true))
+
 fn ! runTests -> Bool
   (let [(now (sp/parseTimeMs "2026-10-28 12:00"))
         (paces (sp/paceSubs (lt/utcZone) (subsFixture) (ledgerFixture) now))
@@ -78,6 +95,7 @@ fn ! runTests -> Bool
       (assert (and (stringContains? (sp/statusLine led 1.0 0.0 now) ":used 60.0") (not (stringContains? (sp/statusLine led 1.0 0.0 now) "capacity unknown"))) "a declared capacity shows its percent")
       (assert (and (not (byId localPaces "localSub").hard) (byId localPaces "localSub").expired (not (byId beforePaces "localSub").expired)) "a local reset of 14:00 at UTC+2 is 12:00Z: expired at 12:01Z, not at 11:59Z")
       (assert (and (= (sp/parseStampMs (lt/utcZone) "2026-10-28T14:00:00+02:00") (sp/parseTimeMs "2026-10-28 12:00")) (= (sp/parseStampMs cet "2026-10-28 14:00") (sp/parseTimeMs "2026-10-28 12:00"))) "an explicit offset wins, a bare stamp takes the zone")
+      (assert (testMonthlyCap) "monthly capacity paces the rolling window")
       (assert (= (sp/parseTimeMs "never") 0) "a non-date is 0")
       (assert (and (sp/paceCacheFresh? factors (+ now 59000)) (not (sp/paceCacheFresh? factors (+ now 60000))) (not (sp/paceCacheFresh? (mapEmpty) now))) "the factor cache lives for a minute and an empty cache is never fresh")
       true))

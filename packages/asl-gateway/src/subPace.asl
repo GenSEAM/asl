@@ -1,7 +1,7 @@
 (module aslGateway/subPace
   :x [PaceWin SubPace parseStampMs noData kindOf tokAfter quotedAfter parseTimeMs fixed1 groupsOf windowsSegment subLines subId windowsOf ledgerUse subProviders rollReset providerSub subCapacity paceSubs
       factorsFromPaces adjustSpread statusLine providerOf paceCacheKey paceCacheFresh? paceCacheMs
-      winFactor staleAfterMs hardPoints softPoints]
+      winFactor staleAfterMs hardPoints softPoints monthCapWindows perWindowAllowance]
   :i [(localTime :a lt)])
 
 ; (:m :ref SUBPACE :do "pure pacing core: subscriptions text + ledger text + now give, per subscription, the used percent of its most binding window against an even pace to its reset, with a soft and a hard limit; no model call, no clock, no file here")
@@ -205,6 +205,7 @@ fn providerSub provider: String -> String
     ((= provider "anthropic") "claudeCodeMax")
     ((= provider "agy") "agyGoogle")
     ((= provider "gemini-cli") "agyGoogle")
+    ((= provider "kimiCode") "kimiPro")
     (else provider))
 
 ; (:m :do "requests per month of a subscription with no usage endpoint: its :capacity field, else 0, which means unknown: no percent is shown and no ledger estimate is made")
@@ -218,6 +219,7 @@ fn subProviders id: String -> (List String)
     ((= id "codexLuna") (list "codexLuna" "codex"))
     ((= id "claudeCodeMax") (list "claudeCodeMax" "claude" "anthropic"))
     ((= id "agyGoogle") (list "agyGoogle" "agy" "gemini-cli"))
+    ((= id "kimiPro") (list "kimiPro" "kimiCode"))
     (else (list id)))
 
 fn ledgerUse ledgerText: String id: String startMs: Int64 -> (Pair Int64 Int64)
@@ -251,11 +253,25 @@ fn allowanceOf lenMs: Int64 resetsMs: Int64 nowMs: Int64 -> Float64
           (f (/ (int64ToFloat64 (- nowMs start)) (int64ToFloat64 lenMs)))]
       (* 100.0 (fmin 1.0 (fmax 0.02 f)))))
 
-fn evalWin id: String w: PaceWin nowMs: Int64 calls: Int64 tokens: Int64 -> SubPace
+; (:m :ref COND5 :do "a monthly window may carry :capacity \"18 full 5 h windows\": the number of rolling windows the month holds in full, read as its leading integer; 0 when absent or not a number")
+fn monthCapWindows line: String -> Float64
+  (let [(g (optionOr (listHead (filter (fn [(g String)] -> Bool (= (kindOf g) "monthly")) (groupsOf (let [(seg (windowsSegment line))] (if (stringEmpty? seg) "" (optionOr (stringSlice seg 1 (- (stringLength seg) 1)) "")))))) ""))
+        (cap (quotedAfter g ":capacity"))
+        (lead (optionOr (listHead (stringSplit cap " ")) ""))]
+    (optionOr (stringToFloat64 lead) 0.0))
+
+; (:m :ref COND5 :do "per-window allowance in percent of the rolling window: the monthly remainder (capacity windows times the unused share of the month) divided by the rolling windows left until the month resets, between 1 and 80; -1 (no override) without a capacity. Day 1 of a 30-day month at 18 windows is 18 / 144 = 12.5 percent, adopted")
+fn perWindowAllowance capWindows: Float64 monthUsed: Float64 monthEndMs: Int64 nowMs: Int64 rollingLenMs: Int64 -> Float64
+  (if (or (<= capWindows 0.0) (<= rollingLenMs 0) (<= monthEndMs nowMs)) -1.0
+    (let [(left (* capWindows (fmax 0.0 (- 1.0 (/ monthUsed 100.0)))))
+          (windowsLeft (fmax 1.0 (/ (int64ToFloat64 (- monthEndMs nowMs)) (int64ToFloat64 rollingLenMs))))]
+      (fmin 80.0 (fmax 1.0 (/ (* 100.0 left) windowsLeft)))))
+
+fn evalWin id: String w: PaceWin nowMs: Int64 calls: Int64 tokens: Int64 override: Float64 -> SubPace
   (let [(rolled (rollReset w.resetsMs w.lenMs nowMs))
         (expired (and (> w.resetsMs 0) (<= w.resetsMs nowMs) (!= w.src "ledger")))
         (used (if expired 0.0 w.used))
-        (allowance (allowanceOf w.lenMs rolled nowMs))
+        (allowance (if (and (>= override 0.0) (= w.kind "rolling")) override (allowanceOf w.lenMs rolled nowMs)))
         (age (- nowMs w.atMs))
         (limit (staleAfterMs w.src))
         (stale (and (> limit 0) (or (<= w.atMs 0) (> age limit))))
@@ -284,8 +300,14 @@ fn subPace z: lt/Zone line: String fileAtMs: Int64 ledgerText: String nowMs: Int
         (needEst (and (> cap 0.0) (> monthStart 0) (not (listAny? fresh? wins))))
         (est (PaceWin :kind "monthly" :lenMs 2592000000 :resetsMs (+ monthStart 2592000000)
                       :used (/ (* 100.0 (int64ToFloat64 (pairFirst use))) cap) :src "ledger" :atMs nowMs))
+        (monthly (listHead (filter (fn [(w PaceWin)] -> Bool (and (= w.kind "monthly") (!= w.src "ledger"))) wins)))
+        (monthEnd (match monthly ((some m) (if (> m.resetsMs 0) (rollReset m.resetsMs 2592000000 nowMs) (+ monthStart 2592000000))) ((none) (+ monthStart 2592000000))))
+        (rolling (listHead (filter (fn [(w PaceWin)] -> Bool (= w.kind "rolling")) wins)))
+        (perWin (match rolling
+                  ((none) -1.0)
+                  ((some r) (perWindowAllowance (monthCapWindows line) (match monthly ((some m) m.used) ((none) 0.0)) monthEnd nowMs r.lenMs))))
         (all (if needEst (listAppend wins (list est)) wins))
-        (evals (map (fn [(w PaceWin)] -> SubPace (evalWin id w nowMs (pairFirst use) (pairSecond use))) all))]
+        (evals (map (fn [(w PaceWin)] -> SubPace (evalWin id w nowMs (pairFirst use) (pairSecond use) perWin)) all))]
     (cond
       ((= (tokAfter line ":pace") "exhaust") (SubPace :id id :window "exhaust" :used 0.0 :known false :allowance 100.0 :pace 0.0 :factor 1.0 :src "principal" :atMs fileAtMs :stale false :expired false :over false :hard false :calls (pairFirst use) :tokens (pairSecond use)))
       ((listEmpty? evals) (if (> monthStart 0) (timePace id monthStart nowMs (pairFirst use) (pairSecond use)) (noData id (pairFirst use) (pairSecond use))))

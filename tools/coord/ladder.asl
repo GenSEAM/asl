@@ -325,8 +325,9 @@ fn nameList vs: (List Verdict) -> (List String)
 fn atomOf s: String -> String
   (if (or (stringEmpty? s) (listAny? (fn [(c String)] -> Bool (stringContains? s c)) (list " " "(" ")" "\"" ";" "\n"))) (fm/asnQuote s) s)
 
+; (:m :ref COND3 :do "an escalation goes to the queue (the autonomous conductor has no one to page), with the tiers still to try in order: the strong lane unless R3 already asked it, and Claude only last")
 fn escalateRow u: ReviewUnit rung: String vs: (List Verdict) why: String -> String
-  (str "(:escalate :unit " (atomOf u.id) " :rung " rung " :to claude :why " (fm/asnQuote why)
+  (str "(:escalate :unit " (atomOf u.id) " :rung " rung " :to queue :tiers " (if (listAny? (fn [(v Verdict)] -> Bool (= v.rung "R3")) vs) "(claude)" "(strong claude)") " :why " (fm/asnQuote why)
        " :seen " (fm/asnStrings (nameList vs))
        " :tried " (fm/asnStrings (map (fn [(v Verdict)] -> String (str v.rung " " v.model)) vs))
        " :disagree " (fm/asnStrings (nameList (filter (fn [(v Verdict)] -> Bool (!= v.outcome "abstain")) vs))) ")")

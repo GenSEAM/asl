@@ -28,6 +28,26 @@ fn callRow prov: String at: Int64 -> String
 fn count s: String needle: String -> Int64
   (- (listLength (stringSplit s needle)) 1)
 
+; (:m :ref COND5 :do "KIMI-USAGE-API: the usages body gives a 5 h rolling and a monthly window (used_ratio as percent, reset_time), a refresh keeps the monthly :capacity of the line it replaces, and the paced allowance of the refreshed line is at most 15 percent of a window on day 1 with the month unused")
+fn kimiBody -> String
+  "{\"usages\":{\"limit_5h\":{\"used_ratio\":0.2712,\"reset_time\":\"2026-10-29T17:00:00Z\"},\"limit_month_total\":{\"used_ratio\":0.0148,\"reset_time\":\"2026-11-29T00:00:00Z\"}}}"
+
+fn ! testKimi -> Bool
+  (let [(now (sp/parseTimeMs "2026-10-29 12:00"))
+        (wins (sr/kimiWindows (kimiBody) now))
+        (none (sr/kimiWindows "{\"x\":1}" now))
+        (before "(:subscriptions :v 1 :updated \"2026-10-28\"\n  (:sub :id kimiPro :renews \"2026-11-29\" :windows ((:rolling 5h :usedPercent 0) (:monthly :capacity \"18 full 5 h windows\" :src \"principal\")))\n")
+        (after (sr/refreshSubsText before (list (pair "kimiPro" wins))))
+        (paces (sp/paceSubs (lt/utcZone) after "" now))
+        (p (optionOr (listHead paces) (sp/noData "missing" 0 0)))
+        (month (sp/monthCapWindows (optionOr (listHead (sp/subLines after)) "")))]
+    (do (assert (= (listLength wins) 2) (str "two windows from the body: " (stringJoin wins " ")))
+        (assert (and (stringContains? (optionOr (listHead wins) "") ":rolling 5h") (stringContains? (optionOr (listHead wins) "") ":usedPercent 27.1") (stringContains? (optionOr (listGet wins 1) "") ":usedPercent 1.5") (stringContains? (optionOr (listGet wins 1) "") ":src kimiApi")) (str "used_ratio read as percent: " (stringJoin wins " ")))
+        (assert (listEmpty? none) "a body without usages gives no window")
+        (assert (and (stringContains? after ":capacity \"18 full 5 h windows\"") (= month 18.0)) (str "the refresh keeps the monthly capacity: " after))
+        (assert (and (< p.allowance 15.0) (> p.allowance 5.0)) (str "paced allowance at most 15 percent: " (sp/fixed1 p.allowance) " " p.window))
+        true))
+
 fn ! runTests -> Bool
   (let [(dir (str "/tmp/gwSubsRefresh-" (procSelf) "-" (nowNs)))
         (sessDir (str dir "/codex/2026/10/27"))
@@ -81,6 +101,7 @@ fn ! runTests -> Bool
       (assert (ok? removed) "the scratch dir is removed")
       (assert (= (sr/ledgerWindows (lt/utcZone) (stringReplace (subsBefore) ":capacity 75000 " "") ledger now (list)) (list)) "a sub with no declared capacity gets no ledger percent")
       (assert (ledgerMergeCase) "ledger merge")
+      (assert (testKimi) "kimi usages windows keep the monthly capacity and pace under 15 percent")
       (assert (= (ul/defaultLedgerPath "/h") (ul/defaultSharedUsagePath "/h")) "one ledger: the stats path and the shared path are the same file")
       (assert (not (= (ul/legacyLedgerPath "/h") (ul/defaultSharedUsagePath "/h"))) "the legacy path is the old file")
       true))
