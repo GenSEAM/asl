@@ -751,3 +751,7 @@
 (:doc :symbol "asl/packages/asl-forms/src/delegate.asl#poolRoute?" :text "true for an agent step that carries a :pool list; runDelegate sends it to the Leon pool instead of a single agent run")
 (:doc :symbol "asl/packages/asl-forms/src/delegate.asl#poolForms" :text "the elements of a step's :pool list as one (:agent ...) form each, a (:task ...) element rewritten to (:agent :task ...); err when the list is missing or empty")
 (:doc :symbol "asl/packages/asl-forms/src/delegate.asl#poolStepWith" :text "run the pool forms through run (the native asl/agentLoop/pool entry in poolStep) and return its (:poolReceipt ...) line as the step receipt, :status failed when the pool exits nonzero")
+(:doc :symbol "asl/packages/asl-forms/src/heal.asl#retiredHeadFor" :text "the current head for a retired spelling: mt to match, == to =, not= to !=, else none")
+(:doc :symbol "asl/packages/asl-forms/src/heal.asl#ruleRetiredSpelling" :text "rewrites retired head spellings in every list of the source, returning the new text or an empty list when nothing changed")
+(:doc :symbol "asl/packages/asl-forms/src/heal.asl#ruleImportAdd" :text "import edits for unbound names that exactly one module exports, taken from the exporter map; ambiguous or unknown names add nothing")
+(:doc :symbol "asl/packages/asl-forms/src/heal.asl#healSourceEnv" :text "heals a source text with explicit dependency summaries, vocabulary, exporter map and rule list: spelling normalisation first, then the heal loop up to 24 rounds")
