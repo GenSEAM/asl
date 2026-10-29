@@ -58,7 +58,7 @@ fn countNonSpace s: String n: Int64 i: Int64 k: Int64 -> Int64
     ((c/isSpace (c/ch s i)) (countNonSpace s n (+ i 1) k))
     (else (countNonSpace s n (+ i 1) (+ k 1))))
 
-; characters outside every balanced top-level form and outside raw fenced blocks bound to a :raw step
+; (:m :ref LEONATTR :do "prose chars: non-space characters outside every balanced top-level form and outside raw fenced blocks bound to a :raw step")
 fn proseChars reply: String -> Int64
   (let [bound (r/bindRawBlocks reply)
         plain (r/unfence bound.text)
