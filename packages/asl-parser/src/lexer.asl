@@ -31,6 +31,10 @@ fn isDigit c: String -> Bool
 fn isSymbolChar c: String -> Bool
   (and (not (stringEmpty? c)) (not (stringContains? " \t\n\r()[]{}\";:@" c)))
 
+; (:m :ref LL-NUMLIT :do "the letter or underscore that turns an integer run into one radix or separated literal symbol: 0x 0b 0o and 1_000; a comma or other symbol character still ends the integer")
+fn radixMark? c: String -> Bool
+  (stringContains? "xXbBoO_" c)
+
 fn delimKind c: String -> TokenType
   (if (= c "(") (tokLparen) (if (= c ")") (tokRparen) (if (= c "[") (tokLbracket) (tokRbracket))))
 
@@ -42,7 +46,7 @@ fn isExpMarker? ch: String -> Bool
   (or (= ch "e") (= ch "E"))
 
 fn runNext mode: RunMode ch: String -> RunStep
-  (match mode ((runComment) (if (= ch "\n") (stepEmit) (stepContinue (runComment)))) ((runString) (cond ((= ch "\\") (stepContinue (runStringEsc))) ((= ch "\"") (stepFinish)) (else (stepContinue (runString))))) ((runStringEsc) (stepContinue (runString))) ((runInt) (cond ((isDigit ch) (stepContinue (runInt))) ((= ch ".") (stepContinue (runIntDot))) ((isExpMarker? ch) (stepContinue (runExpSign))) (else (stepEmit)))) ((runIntDot) (if (isDigit ch) (stepContinue (runFloat)) (stepEmit))) ((runFloat) (cond ((isDigit ch) (stepContinue (runFloat))) ((isExpMarker? ch) (stepContinue (runExpSign))) (else (stepEmit)))) ((runExpSign) (cond ((isDigit ch) (stepContinue (runExp))) ((or (= ch "+") (= ch "-")) (stepContinue (runExpSigned))) (else (stepEmit)))) ((runExpSigned) (if (isDigit ch) (stepContinue (runExp)) (stepEmit))) ((runExp) (if (isDigit ch) (stepContinue (runExp)) (stepEmit))) ((runSign) (cond ((isDigit ch) (stepContinue (runInt))) ((isSymbolChar ch) (stepContinue (runSymbol))) (else (stepEmit)))) (_ (if (isSymbolChar ch) (stepContinue mode) (stepEmit))))
+  (match mode ((runComment) (if (= ch "\n") (stepEmit) (stepContinue (runComment)))) ((runString) (cond ((= ch "\\") (stepContinue (runStringEsc))) ((= ch "\"") (stepFinish)) (else (stepContinue (runString))))) ((runStringEsc) (stepContinue (runString))) ((runInt) (cond ((isDigit ch) (stepContinue (runInt))) ((= ch ".") (stepContinue (runIntDot))) ((isExpMarker? ch) (stepContinue (runExpSign))) ((radixMark? ch) (stepContinue (runSymbol))) (else (stepEmit)))) ((runIntDot) (if (isDigit ch) (stepContinue (runFloat)) (stepEmit))) ((runFloat) (cond ((isDigit ch) (stepContinue (runFloat))) ((isExpMarker? ch) (stepContinue (runExpSign))) (else (stepEmit)))) ((runExpSign) (cond ((isDigit ch) (stepContinue (runExp))) ((or (= ch "+") (= ch "-")) (stepContinue (runExpSigned))) (else (stepEmit)))) ((runExpSigned) (if (isDigit ch) (stepContinue (runExp)) (stepEmit))) ((runExp) (if (isDigit ch) (stepContinue (runExp)) (stepEmit))) ((runSign) (cond ((isDigit ch) (stepContinue (runInt))) ((isSymbolChar ch) (stepContinue (runSymbol))) (else (stepEmit)))) (_ (if (isSymbolChar ch) (stepContinue mode) (stepEmit))))
 
 fn symbolToken raw: String -> TokenType
   (cond
