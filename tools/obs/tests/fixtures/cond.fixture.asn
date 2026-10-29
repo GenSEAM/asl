@@ -1,0 +1,3 @@
+(:t :unit "UNIT1" :from ready :to review :stage review :model "model-a" :tokens 1200 :costUsd 0.0 :verdict "green" :ms 5000 :at 1792966872999)
+(:t :unit "UNIT1" :from review :to fix :stage fix :model "model-b" :tokens 800 :costUsd 0.0 :verdict "gate red" :ms 4000 :at 1792966879999)
+(:t :unit "UNIT2" :from ready :to run :stage run :model "model-a" :tokens 0 :costUsd 0.0 :verdict "" :ms 0 :at 1792966889999)

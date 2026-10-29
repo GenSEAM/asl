@@ -1,0 +1,3 @@
+(:fb :variant cardX :case n1 :rep 1 :round 0 :pass true :calls 1 :wallMs 1357)
+(:fb :variant cardX :case n3 :rep 2 :round -1 :pass false :calls 3 :wallMs 15175)
+(:fb :variant cardY :case n3 :rep 1 :round 2 :pass true :calls 3 :wallMs 18081)

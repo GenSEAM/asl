@@ -1,0 +1,5 @@
+(:ensemble :id QUALITY-MODE :date "2026-10-28"
+  :variants (
+    (:id a1 :what "single modelA" :pass "8/12" :calls 1.00 :meanWallMs 2959)
+    (:id a2 :what "single modelB" :pass "9/12 (9 of 9 valid)" :calls 1.00 :meanWallMs 88008)
+    (:id notes :what "no fraction here" :calls 1.00)))

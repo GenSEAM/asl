@@ -1,0 +1,3 @@
+(:benchRun :arm A :client clientA :model "model-a" :case "caseOne" :rep 1 :pass true :exit 0 :secs 31 :reply "/path/replies/A-1.txt" :in 274972 :cached 251686 :out 2473 :turns 10)
+(:benchRun :arm C :client clientA :model "model-a" :case "caseTwo" :rep 1 :pass false :exit 0 :secs 19 :why ("fileLineSet precision 15/17 recall 15/15" "fileLineSet extra pkg/file.asl:5") :reply "/path/replies/C-2.txt" :in 55601 :cached 0 :out 1841 :turns 1)
+(:benchRunDone :rows 2 :skipped 0 :out "/path/benchRun.asn")

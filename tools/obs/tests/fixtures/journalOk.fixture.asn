@@ -1,0 +1,5 @@
+(:session :id "fedcba9876543210" :task "fixture task text" :intent "fix" :root "/work/trees/wt-unit" :owns ("pkg/a.asl") :gates ("./bin/asl check pkg/a.asl") :base "" :model "label-model" :profile "default" :transport :subprocess :gateTimeout 300 :contextTokens 120000 :wallBudget 1800)
+(:turn 1 :sent "Task: fixture task text")
+(:liveUsage :input 8321 :cached 0 :output 3706)
+(:gate :cmd "./bin/asl check pkg/a.asl" :exit 0)
+(:result :status :ok :session "fedcba9876543210" :unbacked 0 :deliver :patch :phases () :usage (:input 8321 :cached 0 :output 3706) :batching (:turns 1 :ops 1 :singleOp 1))
