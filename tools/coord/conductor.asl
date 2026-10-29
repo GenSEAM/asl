@@ -568,18 +568,18 @@ fn listAfter s: String key: String -> (List String)
     ((none) (list))
     ((some i)
       (let [(rest (optionOr (stringSlice s (+ i (stringLength key) 2) (stringLength s)) ""))]
-        (filter (fn [(x String)] -> Bool (not (stringEmpty? x))) (stringSplit (optionOr (listHead (stringSplit rest ")")) "") " "))))))
+        (filter (fn [(x String)] -> Bool (not (stringEmpty? x))) (stringSplit (optionOr (listHead (stringSplit rest ")")) "") " ")))))
 
 fn idHash id: String -> Int64
   (let [(bs (stringToBytes id))]
-    (fold (fn [(h Int64) (i Int64)] -> Int64 (mod (+ (* h 1000003) (bytesGet bs i)) 2147483647)) 7 (range 0 (bytesLength bs)))))
+    (fold (fn [(h Int64) (i Int64)] -> Int64 (mod (+ (* h 1000003) (bytesGet bs i)) 2147483647)) 7 (range 0 (bytesLength bs))))
 
 fn slotProfile ps: (List String) ws: (List Int64) slot: Int64 -> String
   (match (listHead ps)
     ((none) "")
     ((some p)
       (let [(w (optionOr (listHead ws) 0))]
-        (if (< slot w) p (slotProfile (optionOr (listTail ps) (list)) (optionOr (listTail ws) (list)) (- slot w)))))))
+        (if (< slot w) p (slotProfile (optionOr (listTail ps) (list)) (optionOr (listTail ws) (list)) (- slot w))))))
 
 ; (:m :ref ROTATE :do "a (:writeProfiles :tier T :profiles (P..) :weights (w..)) row picks the profile from a stable hash of the unit id mod the weight sum, so every attempt of a unit keeps its profile and units spread by weight; a malformed row or none gives the base")
 fn pickWriteProfile lanes: String id: String lane: String base: String -> String
@@ -591,7 +591,7 @@ fn pickWriteProfile lanes: String id: String lane: String base: String -> String
               (ws (map (fn [(x String)] -> Int64 (max 0 (optionOr (stringToInt64 x) 0))) (listAfter l ":weights")))
               (total (fold (fn [(a Int64) (w Int64)] -> Int64 (+ a w)) 0 ws))
               (pick (if (and (> total 0) (= (listLength ps) (listLength ws))) (slotProfile ps ws (mod (idHash id) total)) ""))]
-          (if (stringEmpty? pick) base pick))))))
+          (if (stringEmpty? pick) base pick)))))
 
 fn writeProfile rc: RealCfg lane: String -> String
   (let [(rows (filter (fn [(l String)] -> Bool (and (stringContains? l "(:writeProfile ") (= (sp/tokAfter l ":tier") lane))) (stringLines (readOr rc.lanes))))
