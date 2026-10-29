@@ -585,7 +585,16 @@ fn entryBody cx: Ctx e: c/GatewayEntry -> j/Json
               ((none) b2)))
         (b4 (if (and (optionOr ep.reasoning false) (belowReasoningFloor? b3)) (pt/jset b3 "max_tokens" (j/jint (reasoningTokenFloor))) b3))
         (b5 (if (and (some? ep.timeoutSec) (not cx.timeoutExplicit)) (pt/jset b4 "timeout" (paramJson cx e "timeoutSec" (floatJson ep.timeoutSec))) b4))]
-    b5)
+    (if (optionOr ep.prefill true) b5 (dropPrefill b5)))
+
+; (:m :ref PREFILL-OFF :do "a body whose last message is the assistant's loses it; any other body is unchanged")
+fn dropPrefill body: j/Json -> j/Json
+  (match (getOr body "messages" (j/jnull))
+    ((j/jarr xs)
+     (match (listLast xs)
+       ((some m) (if (= (strOr (getOr m "role" (j/jnull)) "") "assistant") (pt/jset body "messages" (j/jarr (listTake xs (- (listLength xs) 1)))) body))
+       ((none) body)))
+    (_ body))
 
 ; (:m :ref GW-WIRE-UP :do "the provider's :secret wins over :keyEnv, as resolveProviderCredential! decides: the host puts each resolved secret into ChatWorld.env under secret:<id> before the chat runs, so this stays pure and never reads or prints the secrets file; a provider naming a secret the host did not resolve gets an empty key, never its keyEnv value")
 fn credentialKey kind: String env: (Map String String) keyEnv: String secretId: String -> String

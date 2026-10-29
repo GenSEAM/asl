@@ -142,6 +142,7 @@ fn scalarToString sc: AsnScalar -> String
   (:f reasoning (Option Bool))
   (:f rpm (Option Float64))
   (:f api (Option String))
+  (:f prefill (Option Bool))
   (:f retry (Option RetryPolicy)))
 
 fn emptyGatewayParams -> GatewayParams
@@ -156,6 +157,7 @@ fn emptyGatewayParams -> GatewayParams
     :reasoning (none)
     :rpm (none)
     :api (none)
+    :prefill (none)
     :retry (none))
 
 fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
@@ -170,6 +172,7 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
     :reasoning (if (some? override.reasoning) override.reasoning base.reasoning)
     :rpm (if (some? override.rpm) override.rpm base.rpm)
     :api (if (some? override.api) override.api base.api)
+    :prefill (if (some? override.prefill) override.prefill base.prefill)
     :retry (if (some? override.retry) override.retry base.retry))
 
 (schema GatewayRoute
@@ -763,7 +766,8 @@ fn gateway_params props: (Map String rd/SExpr) what: String -> (Pair GatewayPara
         (s7 (checkRpm props what (pairFirst s6) (pairSecond s6)))
         (s8 (checkApi props what (pairFirst s7) (pairSecond s7)))
         (s8b (checkEffortDialect props what (pairFirst s8) (pairSecond s8)))
-        (s9 (checkRetry props what (pairFirst s8b) (pairSecond s8b)))]
+        (s8c (checkPrefill props what (pairFirst s8b) (pairSecond s8b)))
+        (s9 (checkRetry props what (pairFirst s8c) (pairSecond s8c)))]
     (pair (pairFirst s9) (listReverse (pairSecond s9))))
 
 fn checkApi props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
@@ -777,6 +781,15 @@ fn checkApi props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (
               (pair (with cur :api (some s)) errs)
               (pair cur (cons (str what ": :api must be chat or responses") errs))))
           (_ (pair cur (cons (str what ": :api must be chat or responses") errs)))))))
+
+; (:m :ref PREFILL-OFF :do ":prefill false: the model rejects a trailing assistant message (vercel beam 400 missing reasoning_content, gemini flash-lite, ifm), so the gateway drops Leon's attractor prefill for it; Leon's continueReply already takes a whole reply when no prefill was honoured")
+fn checkPrefill props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
+  (match (mapGet props "prefill")
+    ((none) (pair cur errs))
+    ((some expr)
+      (match (asn_figure expr)
+        ((scalarBool b) (pair (with cur :prefill (some b)) errs))
+        (_ (pair cur (cons (str what ": :prefill must be true or false") errs))))))
 
 fn checkRetry props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (match (mapGet props "retry")
@@ -801,6 +814,7 @@ fn paramPresent? params: GatewayParams k: String -> Bool
     ((= k "reasoning") (some? params.reasoning))
     ((= k "rpm") (some? params.rpm))
     ((= k "api") (some? params.api))
+    ((= k "prefill") (some? params.prefill))
     (else false))
 
 fn scalarAsnValue sc: AsnScalar -> String
@@ -819,7 +833,7 @@ fn paramsShown props: (Map String rd/SExpr) params: GatewayParams -> (List (Pair
                 (listAppend acc (list (pair k (scalarAsnValue (asn_figure expr)))))
                 acc))))
         (list)
-        (list "temperature" "effort" "effortDialect" "maxTokens" "contextBudget" "timeoutSec" "firstByteSec" "reasoning" "rpm" "api"))
+        (list "temperature" "effort" "effortDialect" "maxTokens" "contextBudget" "timeoutSec" "firstByteSec" "reasoning" "rpm" "api" "prefill"))
 
 fn shownHasKey? shown: (List (Pair String String)) k: String -> Bool
   (listAny? (fn [(p (Pair String String))] -> Bool (= (pairFirst p) k)) shown)
