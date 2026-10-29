@@ -1136,7 +1136,7 @@ fn effortDialectFor providerId: String kind: String override: (Option String) ->
               ((= providerId "openrouter") "openrouter")
               ((= providerId "nim") "chatTemplateThinking")
               ((= kind "openai") "reasoningEffort")
-              (else "off")))))
+              (else "off"))))
 
 fn effortObj kvs: (List (Pair String j/Json)) -> j/Json
   (j/jobj kvs)
@@ -1161,7 +1161,7 @@ fn applyEffort dialect: String eff: (Option String) body: j/Json -> (Pair j/Json
                   (some e)))
           ((= dialect "glmThinking")
             (pair (pt/jset body "thinking" (effortObj (list (pair "type" (j/jstr (if off "disabled" "enabled")))))) (some e)))
-          (else (pair body none)))))))
+          (else (pair body none))))))
 
 fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json Attempt)
   (let [(v2 (match entry ((c/entryResolved e) (some e)) ((c/entryUnresolved _) none)))
