@@ -67,10 +67,24 @@ fn hubWatch h: Hub -> (List (Pair Int64 Int64))
   (cons (pair h.listener 1) (map (fn [(s Stub)] -> (Pair Int64 Int64) (pair s.fd 1)) h.stubs))
 
 ; (:m :ref POOL-SERVE :do "scripted turn function: state left:K counts the turns still to send, the reply content is ignored")
+fn doneWith r: String -> sp/Turn
+  (sp/Turn :state "end" :request none :exec none :result (some r))
+
+fn shellExec script: String timeoutS: Int64 -> sp/Exec
+  (sp/Exec :argv (list "/bin/sh" "-c" script) :cwd "/tmp" :env (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin"))) :timeoutS timeoutS :maxDesc 8)
+
 fn turnFn state: String reply: String -> sp/Turn
-  (let [(left (optionOr (stringToInt64 (optionOr (stringSlice state 5 (stringLength state)) "0")) 0))]
-    (if (<= left 0) (sp/Turn :state state :request none :result (some "(:ok)"))
-      (sp/Turn :state (str "left:" (stringFromInt64 (- left 1))) :request (some "{\"m\":1}") :result none)))
+  (cond
+    ((= state "gate") (sp/Turn :state "gated" :request none :exec (some (shellExec "sleep 1; echo gate" 20)) :result none))
+    ((= state "gated") (doneWith reply))
+    ((= state "kill") (sp/Turn :state "killed" :request none :exec (some (shellExec "sleep 30" 1)) :result none))
+    ((= state "killed") (doneWith reply))
+    ((= state "nobin") (sp/Turn :state "nobinDone" :request none :exec (some (sp/Exec :argv (list "/nonexistent/binary") :cwd "/tmp" :env (list) :timeoutS 5 :maxDesc 0)) :result none))
+    ((= state "nobinDone") (doneWith reply))
+    (else
+      (let [(left (optionOr (stringToInt64 (optionOr (stringSlice state 5 (stringLength state)) "0")) 0))]
+        (if (<= left 0) (doneWith "(:ok)")
+          (sp/Turn :state (str "left:" (stringFromInt64 (- left 1))) :request (some "{\"m\":1}") :exec none :result none)))))
 
 fn ! submitAll! p: sp/Pool n: Int64 turns: Int64 -> sp/Pool
   (fold (fn [(acc sp/Pool) (i Int64)] -> sp/Pool (sp/poolSubmit! acc (str "s" (stringFromInt64 i)) (str "left:" (stringFromInt64 turns)) (nowMs!))) p (range 0 n))
@@ -98,6 +112,36 @@ fn ! stepUntilIdle! p: sp/Pool deadline: Int64 -> sp/Pool
   (if (or (sp/poolIdle? p) (>= (nowMs!) deadline)) p
     (do (sleepMs 20) (stepUntilIdle! (sp/poolStep! p (list) turnFn (nowMs!)) deadline)))
 
+fn doneOf p: sp/Pool id: String -> (Option String)
+  (optionMap (fn [(d (Pair String String))] -> String (pairSecond d)) (listFind (fn [(d (Pair String String))] -> Bool (= (pairFirst d) id)) (sp/poolDone p)))
+
+fn ! pumpUntil! p: sp/Pool h: Hub delayMs: Int64 stop: (fn [sp/Pool] -> Bool) deadline: Int64 -> (Pair sp/Pool Hub)
+  (if (or (stop p) (>= (nowMs!) deadline)) (pair p h)
+    (match (fdPoll (listAppend (hubWatch h) (sp/poolWatch p)) 10)
+      ((err _) (pumpUntil! p h delayMs stop deadline))
+      ((ok ready) (pumpUntil! (sp/poolStep! p ready turnFn (nowMs!)) (stepHub! h ready delayMs) delayMs stop deadline))))
+
+; (:m :ref SE4-ASYNC-EXEC :do "a session in a 1 s local process (gate) and one in a killed 30 s process (timeout 1 s) and one with a missing binary share the pool with a hub session of 5 turns: the hub session finishes in under 900 ms while the gate is still running, the gate then returns exit 0 with its output, the timeout kills the long one, the missing binary is an error reply")
+fn withDoneRows p: sp/Pool rows: (List (Pair String String)) -> sp/Pool
+  (with p :done rows)
+
+fn ! execRun! temp: String -> (Pair sp/Pool Int64)
+  (let [(sock (str temp "/exec.sock"))
+        (spill (str temp "/exec-spill"))
+        (made (dirCreate spill))
+        (listener (resultOr (unixListen sock) -1))
+        (h0 (Hub :listener listener :stubs (list) :seen 0))
+        (p0 (fold (fn [(acc sp/Pool) (pair0 (Pair String String))] -> sp/Pool (sp/poolSubmit! acc (pairFirst pair0) (pairSecond pair0) (nowMs!)))
+              (sp/newPool sock 2 8 60000 spill)
+              (list (pair "x" "gate") (pair "k" "kill") (pair "n" "nobin") (pair "h" "left:5"))))
+        (t0 (nowMs!))
+        (first (pumpUntil! p0 h0 60 (fn [(p sp/Pool)] -> Bool (some? (doneOf p "h"))) (+ t0 20000)))
+        (hubWall (- (nowMs!) t0))
+        (gateAtThatTime (doneOf (pairFirst first) "x"))
+        (rest (pumpUntil! (pairFirst first) (pairSecond first) 60 (fn [(p sp/Pool)] -> Bool (sp/poolIdle? p)) (+ (nowMs!) 20000)))
+        (closed (do (map (fn [(s Stub)] -> Bool (do (fdClose s.fd) true)) (pairSecond rest).stubs) (fdClose listener) (pathRemove sock) true))]
+    (pair (withDoneRows (pairFirst rest) (listAppend (sp/poolDone (pairFirst rest)) (list (pair "_hubWallMs" (stringFromInt64 hubWall)) (pair "_gateEarly" (match gateAtThatTime ((some _) "no") ((none) "yes")))))) hubWall))
+
 fn ! rssKb! -> Int64
   (let [(text (resultOr (fileReadString "/proc/self/status") ""))]
     (fold (fn [(acc Int64) (line String)] -> Int64
@@ -113,12 +157,15 @@ fn ! runTests -> Bool
         (manyPool (pairFirst many))
         (leftover (resultOr (fr/shellOut (str "/bin/ls " temp "/many-spill | /usr/bin/wc -l") 5000) "x"))
         (dead (stepUntilIdle! (submitAll! (sp/newPool (str temp "/none.sock") 2 4 1000 (str temp "/many-spill")) 2 1) (+ (nowMs!) 4000)))
-        (cold1 (sp/Sess :id "c1" :state "" :request "r" :fd -1 :buf "" :lastMs 100 :tries 0 :holdMs 0 :spill ""))
-        (cold2 (sp/Sess :id "c2" :state "" :request "r" :fd -1 :buf "" :lastMs 50 :tries 0 :holdMs 0 :spill ""))
-        (warmNew (sp/Sess :id "w1" :state "" :request "r" :fd -1 :buf "" :lastMs 9000 :tries 0 :holdMs 0 :spill ""))
-        (warmOld (sp/Sess :id "w2" :state "" :request "r" :fd -1 :buf "" :lastMs 7500 :tries 0 :holdMs 0 :spill ""))
+        (cold1 (sp/Sess :id "c1" :state "" :request "r" :fd -1 :buf "" :lastMs 100 :tries 0 :holdMs 0 :guard none :spill ""))
+        (cold2 (sp/Sess :id "c2" :state "" :request "r" :fd -1 :buf "" :lastMs 50 :tries 0 :holdMs 0 :guard none :spill ""))
+        (warmNew (sp/Sess :id "w1" :state "" :request "r" :fd -1 :buf "" :lastMs 9000 :tries 0 :holdMs 0 :guard none :spill ""))
+        (warmOld (sp/Sess :id "w2" :state "" :request "r" :fd -1 :buf "" :lastMs 7500 :tries 0 :holdMs 0 :guard none :spill ""))
         (pickWarm (sp/pickNext (list cold2 warmNew cold1 warmOld) 10000 3000))
         (pickCold (sp/pickNext (list cold1 cold2) 10000 3000))
+        (ex (execRun! temp))
+        (exDone (sp/poolDone (pairFirst ex)))
+        (exGet (fn [(id String)] -> String (optionOr (optionMap (fn [(d (Pair String String))] -> String (pairSecond d)) (listFind (fn [(d (Pair String String))] -> Bool (= (pairFirst d) id)) exDone)) "")))
         (rss (rssKb!))
         (removed (ok? (fr/shellOut (str "/bin/rm -rf " temp) 5000)))]
     (do
@@ -130,6 +177,10 @@ fn ! runTests -> Bool
       (assert (and (= (listLength (sp/poolDone dead)) 2) (listAll? (fn [(d (Pair String String))] -> Bool (stringContains? (pairSecond d) "unreachable")) (sp/poolDone dead))) "an unreachable hub ends both sessions after bounded tries")
       (assert (match pickWarm ((some s) (= s.id "w2")) ((none) false)) "oldest warm session resumes first")
       (assert (match pickCold ((some s) (= s.id "c2")) ((none) false)) "with no warm session the oldest cold one resumes first")
+      (assert (and (< (pairSecond ex) 900) (= (exGet "_gateEarly") "yes")) (str "the hub session finished in " (stringFromInt64 (pairSecond ex)) "ms while the 1 s gate was still running"))
+      (assert (and (stringContains? (exGet "x") ":exit 0") (stringContains? (exGet "x") "gate")) (str "the gate returned its exit and output: " (exGet "x")))
+      (assert (and (stringStartsWith? (exGet "k") "(:exec :exit ") (not (stringContains? (exGet "k") ":exit 0 "))) (str "the 30 s process was killed at its 1 s timeout: " (exGet "k")))
+      (assert (not (stringContains? (exGet "n") ":exit 0 ")) (str "a missing binary is an error reply: " (exGet "n")))
       (assert (or (= rss 0) (< rss 524288)) (str "pool RSS stays under 512 MB: " (stringFromInt64 rss) " kB"))
       (assert removed "temp dir removed")
       true))
