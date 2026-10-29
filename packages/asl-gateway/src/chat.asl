@@ -12,6 +12,7 @@
       effBreakerDownAll
       effBreakerEvent
       effUsageNote
+      effLimit
       effUsageFallback
       effSpreadOrder
       effSpreadNote429
@@ -77,6 +78,7 @@
       (usage :a g)
       (breaker :a b)
       (localTime :a lt)
+      (limits :a lim)
       (aslGateway/dispatch :a dp)
       (secrets :a sc)])
 
@@ -102,6 +104,8 @@
   (:c effBreakerEvent [(event String) (pool String) (parkSec Int64)])
   (:c effUsageNote [(provider String) (alias String) (outcome String) (usage j/Json)])
   (:c effUsageFallback [(provider String) (alias String)])
+  ; (:m :ref GW-LIMIT-WINDOWS :do "asks the reactor whether a provider limit window is spent for this member; the answer is empty to go ahead, else (outcome reason)")
+  (:c effLimit [(provider String) (alias String)])
   ; (:m :ref GW-SPREAD-LIVE-20261018 :do "asks the server for this call's spread-member order: real per-profile+intent SWRR state (GatewayLoop.spreadState) and real breaker/429-cooldown availability live server-side, never in chat.asl; pools carries one (alias, providerPool:alias) pair per spread member so the server can check the real BreakerState without re-resolving the config table")
   (:c effSpreadOrder [(profile String) (intent String) (spread (List (Pair String Int64))) (cooldownSec Int64) (pools (List (Pair String String)))])
   ; (:m :ref GW-SPREAD-LIVE-20261018 :do "records this alias's 429 at the server's own wall clock (GatewayLoop.spreadLast429), independent of and in addition to the existing per-model breaker trip -- :cooldownSec is configurable per route and almost never equals BreakerState's own fixed cooldown")
@@ -1497,7 +1501,32 @@ fn upTimeout cx: Ctx l: Loop a: Attempt -> (Result Float64 pt/PyErr)
 fn poolConfigFor a: Attempt -> (Option c/GatewayPool)
   (if (> a.retryUsed 0) none a.poolConfig)
 
+; (:m :ref GW-LIMIT-WINDOWS :do "a member whose provider has a limit row asks once per attempt; a spent window skips it with the outcome limit:<window> (pace:<window> when it only runs ahead of an even spread) and the cascade goes on. A config with no limit rows never asks")
+fn limitedAttempt? cx: Ctx a: Attempt -> Bool
+  (match cx.world.table
+    ((ok t) (lim/hasLimitFor? t.limits a.upstream.provider a.alias))
+    ((err _) false))
+
+fn limitSkipped cx: Ctx l: Loop a: Attempt outcome: String reason: String -> ChatStep
+  (let [(prov a.upstream.provider)
+        (l1 (failed l reason))]
+    (tell (usageNote prov a.alias outcome)
+      (fn [] -> ChatStep
+        (if (> cx.cascadeLen 1)
+          (tellAll (list (effUsageFallback prov a.alias) (effLog (str "[Gateway Limit] Model " a.model " skipped: " reason " (" outcome "). Cascading to next...\n")))
+            (fn [] -> ChatStep (loopStep cx (advance l1 l1.body))))
+          (loopStep cx (advance l1 l1.body))))))
+
 fn httpAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
+  (if (limitedAttempt? cx a)
+    (askStrings (effLimit a.upstream.provider a.alias)
+      (fn [(v (List String))] -> ChatStep
+        (match (listHead v)
+          ((none) (httpAttemptSend cx l a))
+          ((some outcome) (limitSkipped cx l a outcome (optionOr (listGet v 1) outcome))))))
+    (httpAttemptSend cx l a))
+
+fn httpAttemptSend cx: Ctx l: Loop a: Attempt -> ChatStep
   (let [(up a.upstream)
         (reqHeaders (u/withSessionHeader cx.req.headers up.sessionHeader))
         (reqResult (if (= a.api "anthropic")
@@ -2033,6 +2062,7 @@ fn effectJson eff: ChatEffect -> j/Json
       ((effBreakerDownAll ps) (op "breakerDownAll" (list (pair "pools" (j/jarr (map (fn [(p String)] -> j/Json (j/jstr p)) ps))))))
       ((effBreakerEvent e p park) (op "breaker" (listAppend (list (pair "event" (j/jstr e)) (pair "pool" (j/jstr p))) (if (> park 0) (list (pair "parkSec" (j/jint park))) (list)))))
       ((effUsageNote p a o u) (op "usageNote" (list (pair "provider" (j/jstr p)) (pair "alias" (j/jstr a)) (pair "outcome" (j/jstr o)) (pair "usage" u))))
+      ((effLimit p a) (op "limit" (list (pair "provider" (j/jstr p)) (pair "alias" (j/jstr a)))))
       ((effUsageFallback p a) (op "usageFallback" (list (pair "provider" (j/jstr p)) (pair "alias" (j/jstr a)))))
       ((effSpreadOrder prof i spr cd pools)
        (op "spreadOrder" (list (pair "profile" (j/jstr prof)) (pair "intent" (j/jstr i))

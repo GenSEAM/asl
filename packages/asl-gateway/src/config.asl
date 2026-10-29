@@ -23,6 +23,11 @@
       entryUnresolved
       GatewayV1Config
       GatewayTable
+      GatewayLimit
+      gatewayLimitsFromProps
+      gatewayLimitWarnings
+      gatewayLimitsFromText
+      gatewayLimitWindows
       asn_scalar
       asnScalar
       asn_figure
@@ -268,7 +273,8 @@ fn noRetryPolicy -> RetryPolicy
   (:f registryError (Option String))
   (:f warnings (List String))
   (:f undeclaredIntents (Map String Int64))
-  (:f keyFiles (List String)))
+  (:f keyFiles (List String))
+  (:f limits (List GatewayLimit)))
 
 ; (:m :ref GW-KEYSTORE-20261019 :do "a provider's :keyEnv is resolved against (:gateway :keyFiles (path ...)) before the process environment, never the other way: a key file is this workspace's own secret store, checked into no repo, and should win over a stray inherited env var from the caller's shell. ~ expands against HOME; each path is read as dotenv-style NAME=value lines (export prefix and quotes stripped, # comments skipped -- aslGateway/usage's zshLine/loadZshEnvText already implements exactly that grammar for ~/.zshenv, reused here instead of a second parser) and searched in listed order, first match wins; a file that is missing, unreadable or lacks the name is silently skipped, not an error -- only exhausting every file and the environment is")
 fn expandUserPath p: String -> String
@@ -334,6 +340,74 @@ fn gatewayKeyFilesFromProps g: (Map String rd/SExpr) -> (List String)
        (filter (fn [(s String)] -> Bool (not (stringEmpty? s)))
          (map (fn [(it rd/SExpr)] -> String (match (asn_scalar it) ((scalarStr s) s) (_ "")))
            items)))))
+
+; (:m :ref GW-LIMIT-WINDOWS :do "one provider limit from (:gateway :limits ((:limit :provider P :scope account|model :model M :window W :calls N :tokens N) ...)); scope account counts every alias of the provider, scope model one alias; calls and tokens are caps over the window, 0 means that measure is not limited; method, verified, date, note, usd and concurrency are documentation or later work and are read past")
+(schema GatewayLimit
+  (:f provider String)
+  (:f scope String)
+  (:f model String)
+  (:f window String)
+  (:f calls Int64)
+  (:f tokens Int64))
+
+fn gatewayLimitWindows -> (List String)
+  (list "minute" "hour" "fiveHour" "day" "week" "month")
+
+fn limitStr props: (Map String rd/SExpr) key: String -> String
+  (match (mapGet props key)
+    ((none) "")
+    ((some v) (resultOr (asn_name_or_string v key) "")))
+
+fn limitInt props: (Map String rd/SExpr) key: String -> Int64
+  (match (mapGet props key)
+    ((none) 0)
+    ((some v) (match (asn_scalar v) ((scalarInt n) n) (_ -1))))
+
+fn limitItems g: (Map String rd/SExpr) -> (List rd/SExpr)
+  (match (mapGet g "limits")
+    ((none) (list))
+    ((some value) (match value ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list)))))
+
+fn limitOfItem item: rd/SExpr -> (Result GatewayLimit String)
+  (match (asn_props item (some ":limit"))
+    ((err e) (err e))
+    ((ok p)
+     (let [(provider (limitStr p "provider"))
+           (scope (if (stringEmpty? (limitStr p "scope")) "account" (limitStr p "scope")))
+           (model (limitStr p "model"))
+           (window (limitStr p "window"))
+           (calls (limitInt p "calls"))
+           (tokens (limitInt p "tokens"))]
+       (cond
+         ((stringEmpty? provider) (err "limit row needs :provider"))
+         ((not (listContains? (gatewayLimitWindows) window)) (err (str "limit " provider ": :window must be one of minute hour fiveHour day week month, found " window)))
+         ((and (!= scope "account") (!= scope "model")) (err (str "limit " provider ": :scope must be account or model, found " scope)))
+         ((and (= scope "model") (stringEmpty? model)) (err (str "limit " provider ": :scope model needs :model")))
+         ((or (< calls 0) (< tokens 0)) (err (str "limit " provider ": :calls and :tokens must be whole numbers")))
+         ((and (= calls 0) (= tokens 0)) (err (str "limit " provider " " window ": needs :calls or :tokens")))
+         (else (ok (GatewayLimit :provider provider :scope scope :model model :window window :calls calls :tokens tokens)))))))
+
+fn gatewayLimitsFromProps g: (Map String rd/SExpr) -> (List GatewayLimit)
+  (fold (fn [(acc (List GatewayLimit)) (it rd/SExpr)] -> (List GatewayLimit)
+          (match (limitOfItem it) ((ok l) (listAppend acc (list l))) ((err _) acc)))
+    (list) (limitItems g))
+
+fn gatewayLimitsFromText text: String -> (List GatewayLimit)
+  (match (ast/readForms (lx/tokenize text))
+    ((err _) (list))
+    ((ok forms)
+     (if (!= (listLength forms) 1)
+       (list)
+       (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
+         (match (asn_props top (some ":gateway"))
+           ((err _) (list))
+           ((ok g) (gatewayLimitsFromProps g)))))))
+
+; (:m :ref GW-LIMIT-WINDOWS :do "a malformed limit row is dropped from the table and named here, never silently")
+fn gatewayLimitWarnings g: (Map String rd/SExpr) -> (List String)
+  (fold (fn [(acc (List String)) (it rd/SExpr)] -> (List String)
+          (match (limitOfItem it) ((ok _) acc) ((err e) (listAppend acc (list (str "limits: " e))))))
+    (list) (limitItems g))
 
 fn listAppendOne xs: (List T) x: T -> (List T)
   (listAppend xs (list x))
@@ -1665,7 +1739,7 @@ fn gateway_config_v2_build! g: (Map String rd/SExpr) source: String registryPath
                                 acc))))
                         (list)
                         (providerOrder! (pairFirst provForms))))
-        (allWarns (listAppend warnings envWarns))
+        (allWarns (listAppend (listAppend warnings envWarns) (gatewayLimitWarnings g)))
         (table (GatewayTable
                  :version 2
                  :defaultProfile defaultProf
@@ -1682,7 +1756,8 @@ fn gateway_config_v2_build! g: (Map String rd/SExpr) source: String registryPath
                  :registryError regErr
                  :warnings allWarns
                  :undeclaredIntents (mapEmpty)
-                 :keyFiles keyFilesList))]
+                 :keyFiles keyFilesList
+                 :limits (gatewayLimitsFromProps g)))]
     (pair table allErrs2))
 
 fn gatewayConfigV2Build! g: (Map String rd/SExpr) source: String registryPath: String -> (Pair GatewayTable (List String))
@@ -1711,7 +1786,8 @@ fn convertV1ToTable! v1: GatewayV1Config source: String keyFiles: (List String) 
       :registryError (none)
       :warnings (list)
       :undeclaredIntents (mapEmpty)
-      :keyFiles keyFiles))
+      :keyFiles keyFiles
+      :limits (list)))
 
 fn gateway_config_parse! text: String source: String registryPath: String -> (Result GatewayTable String)
   (let [(toks (lx/tokenize text))]

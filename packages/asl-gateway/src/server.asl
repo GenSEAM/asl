@@ -3,7 +3,7 @@
       GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv!]
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
-      (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/router :a rt) (asl-json/json :a j)
+      (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/limits :a lim) (aslGateway/router :a rt) (asl-json/json :a j)
       (aslGateway/subPace :a spc) (aslGateway/subsRefresh :a subsr) (aslGateway/omniApi :a om) (aslGateway/federation :a fed) (aslGateway/balancer :a bl) (aslGateway/rateLearn :a rl) (asl-http/http11 :a h)])
 
 (schema GatewayTurnVerdict
@@ -621,6 +621,13 @@ fn ! cliRunSync! srv: GatewayLoop client: String args: (List (Pair String j/Json
 
 fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/ChatOutcome)
   (match eff
+    ; (:m :ref GW-LIMIT-WINDOWS :do "counts the shared usage ledger against the config's limit rows for this provider and alias; empty means go ahead")
+    ((ch/effLimit provider alias)
+      (let [(text (optionOr srv.wiringText ""))
+            (sharedPath (optionOr (c/gatewaySharedUsagePathOverride text) (ul/defaultSharedUsagePath srv.home)))
+            (rows (resultOr (ul/readRows! sharedPath) (list)))
+            (verdict (lim/decide (c/gatewayLimitsFromText text) rows provider alias (/ (nowNs) 1000000)))]
+        (pair srv (ch/outStrings (match verdict ((some v) (list v.outcome v.reason)) ((none) (list)))))))
     ((ch/effRealpath p) (pair srv (ch/outPath (resultOr (realPath p) p))))
     ((ch/effIsDir p) (pair srv (ch/outBool (match (fileStat p) ((ok st) st.isDir) ((err _) false)))))
     ((ch/effClock) (pair srv (ch/outFloat (/ (int64ToFloat64 (nowNs)) 1000000000.0))))

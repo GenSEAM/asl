@@ -16,7 +16,7 @@ fn row at: Int64 provider: String alias: String outcome: String inTok: Int64 out
               :outcome outcome :charge 0 :tag none :temperature none :topP none :maxTokens none
               :effort none :api "chat" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none)
 
-fn ok at: Int64 alias: String -> ul/CallRow
+fn okRow at: Int64 alias: String -> ul/CallRow
   (row at "nim" alias "ok" 10 10)
 
 fn limit window: String scope: String model: String calls: Int64 tokens: Int64 -> c/GatewayLimit
@@ -26,7 +26,7 @@ fn verdict ls: (List c/GatewayLimit) rows: (List ul/CallRow) alias: String at: I
   (match (lim/decide ls rows "nim" alias at) ((some v) v.outcome) ((none) "none"))
 
 fn times n: Int64 at: Int64 alias: String -> (List ul/CallRow)
-  (if (<= n 0) (list) (cons (ok at alias) (times (- n 1) at alias)))
+  (if (<= n 0) (list) (cons (okRow at alias) (times (- n 1) at alias)))
 
 fn ! drive! step: ch/ChatStep labels: String fuel: Int64 -> String
   (if (<= fuel 0)
@@ -79,7 +79,7 @@ fn ! runTests -> Bool
         (accountMinute (list (limit "minute" "account" "" 1 0)))
         (two (list (limit "hour" "account" "" 10 0) (limit "minute" "account" "" 2 0)))
         (unsent (list (row recent "nim" "a1" "throttled" 1 1) (row recent "nim" "a1" "breaker open" 1 1) (row recent "nim" "a1" "daily" 1 1)
-                      (row recent "nim" "a1" "limit:day" 1 1) (row recent "nim" "a1" "pace:day" 1 1) (row recent "nim" "a1" "skipped" 1 1) (ok recent "a1")))
+                      (row recent "nim" "a1" "limit:day" 1 1) (row recent "nim" "a1" "pace:day" 1 1) (row recent "nim" "a1" "skipped" 1 1) (okRow recent "a1")))
         (withLimits (run! " :limits ((:limit :provider fp :scope model :model m1 :window day :calls 5))"))
         (none_ (run! ""))
         (bad (parsed " :limits ((:limit :provider fp :window decade :calls 5) (:limit :provider fp :window day :calls 5))"))]
@@ -95,10 +95,10 @@ fn ! runTests -> Bool
         (assert (= (verdict dayCap (times 2 today "a1") "a1" (nowMs)) "none") "under the cap goes ahead")
         (assert (= (verdict hourTok (list (row (- (nowMs) 1800000) "nim" "a1" "ok" 600 500)) "a1" (nowMs)) "limit:hour") "an hour token cap counts in plus out")
         (assert (= (verdict hourTok (list (row (- (nowMs) 5400000) "nim" "a1" "ok" 600 500)) "a1" (nowMs)) "none") "tokens older than the hour are ignored")
-        (assert (= (lim/usedCalls weekLim (list (ok 1792972800000 "a1") (ok 1793232000000 "a1") (ok 1792972799999 "a1")) (nowMs)) 2) "the week counts from Monday, not the Sunday before")
-        (assert (= (verdict minuteOne (list (ok recent "a1")) "a1" (nowMs)) "limit:minute") "a model-scoped limit binds its model")
-        (assert (= (verdict minuteOne (list (ok recent "a1")) "a2" (nowMs)) "none") "a model-scoped limit leaves other aliases alone")
-        (assert (= (verdict accountMinute (list (ok recent "a1")) "a2" (nowMs)) "limit:minute") "an account-scoped limit counts every alias")
+        (assert (= (lim/usedCalls weekLim (list (okRow 1792972800000 "a1") (okRow 1793232000000 "a1") (okRow 1792972799999 "a1")) (nowMs)) 2) "the week counts from Monday, not the Sunday before")
+        (assert (= (verdict minuteOne (list (okRow recent "a1")) "a1" (nowMs)) "limit:minute") "a model-scoped limit binds its model")
+        (assert (= (verdict minuteOne (list (okRow recent "a1")) "a2" (nowMs)) "none") "a model-scoped limit leaves other aliases alone")
+        (assert (= (verdict accountMinute (list (okRow recent "a1")) "a2" (nowMs)) "limit:minute") "an account-scoped limit counts every alias")
         (assert (= (verdict two (listAppend (times 4 recent "a1") (list)) "a1" (nowMs)) "limit:minute") "of two rules the spent one binds")
         (assert (= (lim/usedCalls (limit "minute" "account" "" 1 0) unsent (nowMs)) 1) "breaker, skipped, daily, limit, pace and throttled rows are not calls")
         (assert (= (verdict dayCap (list) "a1" (nowMs)) "none") "an empty ledger goes ahead")
