@@ -56,7 +56,7 @@ fn ! testWindow -> Bool
         (w0 (sc/winOf lines 600000 1200000))
         (cfg (sc/parseCfg "(:sched :min 2 :max 9 :start 5 :softShare 0.5)"))
         (dflt (sc/defaultCfg))]
-    (do (assert (and (= w.total 6) (= w.ok 3) (= w.rate 2) (= w.okOut 125)) (str "window 50-600s: " (stringFromInt64 w.total) " " (stringFromInt64 w.ok) " " (stringFromInt64 w.rate) " " (stringFromInt64 w.okOut)))
+    (do (assert (and (= w.total 5) (= w.ok 3) (= w.rate 2) (= w.okOut 125)) (str "window 50-600s, the breaker row is not a call: " (stringFromInt64 w.total) " " (stringFromInt64 w.ok) " " (stringFromInt64 w.rate) " " (stringFromInt64 w.okOut)))
         (assert (and (= w0.total 1) (= w0.ok 1)) "the next window holds only its own call")
         (assert (= (sc/quoted (optionOr (listGet lines 4) "") ":outcome") "breaker 589s") "a quoted value keeps its spaces")
         (assert (= (sc/okPerMin w 600) 0.3) "ok per minute over a 600 s window")
@@ -76,6 +76,21 @@ fn ! testHealth -> Bool
         (assert (< (sc/okShareOf txt "nim") 1.0) "a provider with failures has a share under 1")
         (assert (= (sc/okShareOf txt "ghost") 1.0) "a provider without data keeps full weight")
         (assert (>= (sc/okShareOf txt "openrouter") 0.2) "the multiplier never goes under 0.2")
+        true))
+
+; (:m :ref SCHED-BREAKER-COUNT :do "breaker rows are not calls: a provider out for the day has no calls and no pool share; one whose newest row is a breaker weighs 0")
+fn ! testBreaker -> Bool
+  (let [(lines (listAppend (map (fn [(i Int64)] -> String (call (+ 100000 (* i 1000)) "openrouter" "c" "breaker 31822s" 0)) (range 0 30))
+                           (map (fn [(i Int64)] -> String (call (+ 200000 (* i 1000)) "nim" "a" "ok" 5)) (range 0 10))))
+        (w (sc/winOf lines 50000 600000))
+        (txt (stringJoin (sc/healthRows lines 50000 600000 600) "\n"))
+        (reopened (stringJoin (sc/healthRows (listAppend lines (list (call 400000 "openrouter" "c" "ok" 5))) 50000 600000 600) "\n"))]
+    (do (assert (and (= w.total 10) (= w.ok 10)) (str "30 breaker rows add no calls: " (stringFromInt64 w.total)))
+        (assert (= (sc/rateShare w) 0.0) "breaker rows add no rate share to the pool")
+        (assert (stringContains? txt "(:prov openrouter :okPerMin 0.0 :r429PerMin 0.0 :nonOkShare 0.0 :calls 0") (str "openrouter has no calls: " txt))
+        (assert (= (sc/okShareOf txt "openrouter") 0.0) (str "a provider whose newest row is a breaker weighs 0: " txt))
+        (assert (= (sc/okShareOf txt "nim") 1.0) "a healthy provider keeps full weight")
+        (assert (= (sc/okShareOf reopened "openrouter") 1.0) (str "an ok after the breaker reopens it: " reopened))
         true))
 
 fn ! testTick -> Bool
@@ -103,5 +118,6 @@ fn ! runTests -> Bool
   (do (assert (testTable) "AIMD table")
       (assert (testWindow) "ledger window and config parse")
       (assert (testHealth) "per provider health")
+      (assert (testBreaker) "breaker rows are not calls")
       (assert (testTick) "a persisted tick")
       true)
