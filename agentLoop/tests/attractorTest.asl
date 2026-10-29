@@ -73,13 +73,13 @@ fn drive! root: String name: String attractor: String reply: String -> String
                   (if (stringEmpty? attractor) "" (str " :attractor " attractor)) ")")
         repoRoot (resultOr (realPath ".") ".")
         res (m/mainWithRoots (list form) repoRoot repoRoot)]
-    (journalText root)))
+    (journalText root))
 
 fn journalText root: String -> String
   (let [dir (str root "/.asl/run/agentLoop")
         files (match (dirList dir) ((ok fs) fs) ((err _) (list)))
         all (filter (fn [f] (stringEndsWith? f ".journal")) (map (fn [f] (str dir "/" f)) files))]
-    (stringJoin (map (fn [f] (match (fileReadString f) ((ok t) t) ((err _) ""))) all) "\n")))
+    (stringJoin (map (fn [f] (match (fileReadString f) ((ok t) t) ((err _) ""))) all) "\n"))
 
 fn testJournal -> Bool
   (let [root (rk/freshRecorderRoot! "attractorJournal")
