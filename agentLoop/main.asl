@@ -1067,6 +1067,13 @@ fn ! newSessionId -> (Result String String)
         (ok (stringJoin (map (fn [i] (hexByte (bytesGet bs i))) (list 0 1 2 3 4 5 6 7)) ""))
         (err "/dev/urandom gave fewer than 8 bytes"))))
 
+; (:m :ref PER-TURN-GATE :do "a turn whose ops all only read changes nothing the gates see, so it reuses the last verdict instead of rerunning the task gates (a suite gate cost minutes per read turn); a turn with any other op, an unnamed form or (:done) still runs them")
+fn readOnlyOps -> (List String)
+  (list "read" "query" "outline" "tree" "diff" "tools" "help" "gitDiff" "gitLog" "gitShow" "note" "observe")
+
+fn readOnlyTurn? names: (List String) -> Bool
+  (and (not (listEmpty? names)) (listAll? (fn [n] (listContains? (readOnlyOps) n)) names))
+
 fn liveOpName op: (List (Pair String c/KvVal)) -> String
   (match (c/dictGet op "op")
     ((some value) (match value ((c/kvStr name) name) (_ "")))
@@ -1673,7 +1680,7 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
                   ; (:m :ref LEON-POOL-ASK-OP :do "between turns the asks other pool tasks sent this one reach the model as a (:poolAsks ...) observation")
                   poolAsks (po/servePending! ra.pool)
                   got (str normalized (if (stringEmpty? opReceipts) "" (str "\n" opReceipts)) (if (stringEmpty? poolAsks) "" (str "\n" poolAsks)))
-                  newGates (if parseDefect (list) (runLiveGates! ra.gates rootDir (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) ra.parentPid))
+                  newGates (if (or parseDefect (readOnlyTurn? (map liveOpName operations))) (list) (runLiveGates! ra.gates rootDir (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) ra.parentPid))
                   allGates (listAppend state.allGateResults newGates)
                   lastGates (liveLastGateMap newGates state.lastGates)
                   turnOpNames (c/joinSep (map liveOpName operations) " ")
