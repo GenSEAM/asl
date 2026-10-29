@@ -32,5 +32,5 @@ fn ! main args: (List String) -> (Result Int64 String)
       (match (cd/loadUnit! dir id)
         ((none) (ok 2))
         ((some pr)
-          (let [(r (if (= stage "gates") (cd/gatesRes 60 (pairFirst pr) (pairSecond pr)) (fakeRes args dir stage id)))]
+          (let [(r (if (= stage "gates") (cd/gatesRes 60 "" (pairFirst pr) (pairSecond pr)) (fakeRes args dir stage id)))]
             (match (cd/writeRes! dir id stage r) ((ok _) (ok 0)) ((err _) (ok 1))))))))

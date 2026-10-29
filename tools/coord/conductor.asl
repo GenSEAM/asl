@@ -5,7 +5,7 @@
       tick! wake! status! drain! stopAll! gatesRes loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
       main]
   :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp)
-      (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
+      (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
 
 ; (:m :ref CONDUCTOR :do "deterministic scheduler, no model in the loop: units are store rows (:after = deps, :owns, :gate, :channel = lane), the conductor keeps one state row per unit under <dir>/cond and appends one journal row per transition; the store lease is held from writing to merging so owns stay disjoint, and the store row turns done only when the unit is merged")
 
@@ -463,11 +463,54 @@ fn ! taskText dir: String u: st/Task -> String
     ((ok t) t)
     ((err _) (str "Implement plan unit " u.id " exactly as its row in .asl/mem/work/SH/plan.asn says; the gate is: " u.gate)))
 
+; (:m :ref CONDHARDEN :do "line count of the owned file at the unit's base and now; -1 when it did not exist there or is gone now")
+fn ! baseLinesOf wt: String base: String path: String -> Int64
+  (let [(d (fr/runOne (fr/job (list "git" "-C" wt "show" (str base ":" path)) wt (fr/childEnv (list)))))]
+    (if (= d.exit 0) (listLength (stringLines d.out)) -1))
+
+fn ! nowLinesOf wt: String path: String -> Int64
+  (match (fileReadString (str wt "/" path)) ((ok t) (listLength (stringLines t))) ((err _) 0))
+
+; (:m :ref CONDHARDEN :do "an owned file that existed on the base and lost more than half its lines is refused unless the task text says rewrite; empty when every owned file is fine")
+fn ! shrinkRefusal! wt: String u: st/Task task: String -> String
+  (optionOr (listHead (filter (fn [(s String)] -> Bool (not (stringEmpty? s)))
+    (map (fn [(p String)] -> String (gg/shrinkSig p (baseLinesOf wt u.base p) (nowLinesOf wt p) task)) u.owns))) "")
+
+; (:m :ref CONDHARDEN :do "files in the worktree that import an owned module, found by a literal grep for the module name and confirmed by the import-position check")
+fn ! importerFiles! wt: String owned: (List String) -> (List String)
+  (let [(mods (map (fn [(p String)] -> String (gg/moduleName (resultOr (fileReadString (str wt "/" p)) ""))) owned))
+        (found (fn [(m String)] -> (List String)
+                 (filter (fn [(l String)] -> Bool (not (stringEmpty? l)))
+                   (map stringTrim (stringLines (fr/runOne (fr/job (list "git" "-C" wt "grep" "-l" "-F" "-e" m "--" "*.asl") wt (fr/childEnv (list)))).out)))))
+        (paths (fold (fn [(acc (List String)) (m String)] -> (List String) (if (stringEmpty? m) acc (listAppend acc (found m)))) (list) mods))
+        (files (map (fn [(p String)] -> (Pair String String) (pair p (resultOr (fileReadString (str wt "/" p)) ""))) paths))]
+    (gg/importers files mods owned))
+
+; (:m :ref CONDHARDEN :do "asl check on every owned .asl file and on every importer of an owned module; the first failure is the signature, empty when all check")
+fn ! checkOne! wt: String p: String -> String
+  (let [(d (fr/runOneLimited (fr/job (list (str wt "/bin/asl") "check" p) wt (fr/childEnv (list (str "ASL_ROOT=" wt)))) (fr/limits 300 200)))]
+    (if (= d.exit 0) "" (str "asl check failed on " p ": " (gateSig d.out))))
+
+fn ! firstCheckSig! wt: String targets: (List String) -> String
+  (match (listHead targets)
+    ((none) "")
+    ((some p) (let [(sig (checkOne! wt p))] (if (stringEmpty? sig) (firstCheckSig! wt (optionOr (listTail targets) (list))) sig))))
+
+fn ! checkSig! wt: String owned: (List String) -> String
+  (firstCheckSig! wt (filter (fn [(p String)] -> Bool (and (stringEndsWith? p ".asl") (fileExists? (str wt "/" p)))) (listAppend owned (importerFiles! wt owned))))
+
 ; (:m :ref CONDUCTOR :do "the conductor's own gate stage reruns the declared gate in the unit's worktree and never reads the writer's report")
-fn ! gatesRes gateSec: Int64 u: st/Task c: CUnit -> Res
-  (if (stringEmpty? u.gate) (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig "unit declares no gate" :ms 0 :exit 2 :asserts 0 :verdict "")
-    (let [(d (fr/runShell! u.gate c.wt (fr/childEnv (list)) (fr/limits gateSec 200)))]
-      (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig (gateSig d.out) :ms d.ms :exit d.exit :asserts (optionOr (fr/executedOf d.out) 0) :verdict "")))
+; (:m :ref CONDHARDEN :do "before the declared gate: owned files may not lose more than half their base lines without the word rewrite in the task text, and every owned .asl file and each importer of an owned module must pass asl check; either failure is exit 3 with a :sig naming the file")
+fn ! gatesRes gateSec: Int64 task: String u: st/Task c: CUnit -> Res
+  (let [(refused (if (stringEmpty? u.gate) "" (shrinkRefusal! c.wt u task)))
+        (broken (if (or (stringEmpty? u.gate) (not (stringEmpty? refused))) "" (checkSig! c.wt u.owns)))]
+    (cond
+      ((stringEmpty? u.gate) (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig "unit declares no gate" :ms 0 :exit 2 :asserts 0 :verdict ""))
+      ((not (stringEmpty? refused)) (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig refused :ms 0 :exit 3 :asserts 0 :verdict ""))
+      ((not (stringEmpty? broken)) (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig broken :ms 0 :exit 3 :asserts 0 :verdict ""))
+      (else
+        (let [(d (fr/runShell! u.gate c.wt (fr/childEnv (list)) (fr/limits gateSec 200)))]
+          (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig (gateSig d.out) :ms d.ms :exit d.exit :asserts (optionOr (fr/executedOf d.out) 0) :verdict "")))))
 
 ; (:m :ref COND3 :do "a retried write finds its branch sh/UNIT left by an earlier attempt without a worktree and checks it out again instead of failing on the existing branch")
 ; (:m :ref COND3 :do "a leftover sh/UNIT re-attached for a re-run unit keeps its old base; when the unit's base is not an ancestor of it the branch is rebased onto the base, and when the rebase conflicts it is renamed sh/UNIT-stale-<s> (nothing is lost) and recreated from the base")
@@ -513,7 +556,7 @@ fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
     (match added
       ((err e) (failRes e))
       ((ok p)
-        (let [(d (fp/runLeonProfile! rc.profile p rc.home (taskText dir u) u.owns rc.leaseSec rc.keys))
+        (let [(d (fp/runLeonProfile! rc.profile rc.repo p rc.home (taskText dir u) u.owns rc.leaseSec rc.keys))
               (model (fp/modelOf d.out))
               (_ (if (fp/gitDirty? p) (fp/driverCommitRow! p u.owns u.id model) false))]
           (Res :tiers "" :ok (if (= d.exit 0) 1 0) :wt p :branch (str "sh/" u.id) :model model :tokens (leonTokens d.out) :costMicro (leonCost d.out (rs/costRows (readOr (str rc.home "/.asl/gateway.asn")) (readOr rc.lanes)) model) :claimedGreen 0
@@ -584,7 +627,7 @@ fn receiptText u: st/Task g: Res before: (Pair Int64 Int64) -> String
 
 ; (:m :ref COND3 :do "the real gates stage: the conductor's own rerun of the gate in the unit's worktree plus the red-before run, and the receipt written to <store>/runs/UNIT-receipt.asn for the review stage")
 fn ! gatesStage rc: RealCfg dir: String u: st/Task c: CUnit -> Res
-  (let [(g (gatesRes rc.gateSec u c))]
+  (let [(g (gatesRes rc.gateSec (taskText dir u) u c))]
     (if (and (= g.exit 0) (> g.asserts 0))
       (let [(before (redBefore! rc u c))
             (_ (dirCreate (runsDir dir)))
