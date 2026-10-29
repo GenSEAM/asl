@@ -1,0 +1,7 @@
+# gitleaks rules for the exported asl/ tree: the default rules minus reviewed false positives, each an exact secret value; aslRepoSync exportOne! scans every snapshot with this file
+[extend]
+useDefault = true
+
+[allowlist]
+description = "reviewed false positives: raw primitive names in asl-ir/doc.asn prose after the word access, and the alphabet-run fake token egressTest seeds"
+regexes = ['''^rawAddI64/rawSubI64/rawMulI64$''', '''^abcdefghijklmnop1234$''']
