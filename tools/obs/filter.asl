@@ -56,8 +56,12 @@ fn cleanToken prev: String w: String -> String
     ((longOpaque? (stripLead w)) "<secret>")
     (else w))
 
+fn homeShort text: String -> String
+  (let [(home (optionOr (envGet "HOME") ""))]
+    (if (>= (stringLength home) 2) (stringReplace text home "~") text))
+
 fn redact text: String -> String
-  (let [(words (stringSplit (stringReplace text "/Users/purplelephant" "~") " "))
+  (let [(words (stringSplit (homeShort text) " "))
         (res (fold (fn [(acc (Pair String (List String))) (w String)] -> (Pair String (List String))
                      (pair w (cons (cleanToken (pairFirst acc) w) (pairSecond acc))))
                    (pair "" (list)) words))]

@@ -51,7 +51,8 @@ fn testClassifier -> Bool
 
 fn testFilter -> Bool
   (let [(key "sk-abcdef0123456789abcdef0123456789")
-        (line (str "request failed OPENAI_API_KEY=" key " with Bearer " key " in .asl/mem/work/HRN/x.asn at /Users/purplelephant/projects/a"))
+        (home (optionOr (envGet "HOME") "/tmp/obsHome"))
+        (line (str "request failed OPENAI_API_KEY=" key " with Bearer " key " in .asl/mem/work/HRN/x.asn at " home "/projects/a"))
         (red (flt/safeText line))
         (long (flt/safeText (stringRepeat "x " 400)))
         (multi (flt/safeText "first line\nsecond line"))
@@ -60,7 +61,7 @@ fn testFilter -> Bool
         (assert (not (stringContains? red "abcdef0123456789")) "key body is stripped everywhere")
         (assert (not (stringContains? red ".asl/mem")) "an .asl/mem path is stripped")
         (assert (stringContains? red "OPENAI_API_KEY=<redacted>") "the env name stays, its value goes")
-        (assert (not (stringContains? red "/Users/purplelephant")) "home prefix is shortened")
+        (assert (and (not (stringContains? red (str home "/projects"))) (stringContains? red "~/projects/a")) "the HOME prefix is shortened to ~")
         (assert (<= (stringLength long) 200) "text is clipped to 200 bytes")
         (assert (not (stringContains? short "sk-live")) "a short prefixed key is stripped by its prefix")
         (assert (= multi "first line") "only the first line survives")
