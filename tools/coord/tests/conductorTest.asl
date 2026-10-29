@@ -148,6 +148,23 @@ fn testDepStalled -> Bool
         (assert (cd/depStalled? u (list (cuSt "X" "writing"))) "a missing dependency is a stall")
         true))
 
+; (:m :ref DEPCHAIN :do "a queued unit waiting on a live dependency is stored as queued, so the unit after it sees a queued dependency, not a missing one: A held ready by allowance 0, B after A, C after B; with maxWait 0 two ticks leave B and C queued")
+fn ! testDepChain bin: String -> Bool
+  (let [(dir (scratch "chain"))
+        (_ (cleanup dir))
+        (put (putAll! dir (list (task "A" (list "p/a") (list) (greenGate) "slow") (task "B" (list "p/b") (list "A") (greenGate) "slow") (task "C" (list "p/c") (list "B") (greenGate) "slow"))))
+        (base (ctxOf dir bin 5 5 50))
+        (ctx (cd/Ctx :dir dir :holder "conductorTest" :ttlMs 600000 :maxWait 0 :maxSame 3 :stageSec 60 :maxDesc 50 :launch base.launch
+                     :pace (cd/Pace :tokens (fn [] -> Int64 5) :allowance (fn [(lane String)] -> Int64 0))))
+        (_ (cd/tick! ctx))
+        (_ (cd/tick! ctx))
+        (got (list (stOf dir "A") (stOf dir "B") (stOf dir "C")))
+        (_ (cd/stopAll! ctx))
+        (_ (cleanup dir))]
+    (do (assert put "three units put")
+        (assert (= got (list "ready" "queued" "queued")) (str "a chain behind a live unit does not block: " (stringJoin got ",")))
+        true))
+
 fn ! testAdmission bin: String -> Bool
   (let [(byTokens (admitted2 bin "admTok" 1 5))
         (byAllowance (admitted2 bin "admAllow" 9 0))]
@@ -593,6 +610,7 @@ fn ! runTests -> Bool
         (assert (testOwnsSerialised bin) "overlapping owns serialised")
         (assert (testAdmission bin) "admission = min(ready, capacity, allowance)")
         (assert (testDepStalled) "dependency waits count only when stalled")
+        (assert (testDepChain bin) "a dependency chain behind a live unit waits without blocking")
         (assert (testGateEscalates bin) "3 same-signature gate failures escalate")
         (assert (testWriteTierHop bin) "write failures hop free to paid to strong before blocking")
         (assert (testSignatureReset bin) "a new signature resets the count")
