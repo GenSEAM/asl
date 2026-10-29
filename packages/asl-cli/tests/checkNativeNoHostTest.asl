@@ -45,7 +45,7 @@ fn ! testSingleFileIgnoresPoisonHost binary: String root: String poison: String 
     (do
       (assert (= d.verdict "exit") (str "the native binary ended on its own for a single-file check: " d.out))
       (assert (= d.exit 0) (str "check on a single file passes without asl-host: " d.out))
-      (assert (stringContains? d.out "ok asl/packages/asl-cli/tests/fixtures/sweep/passTest.asl: 1 module(s) checked") (str "the native checker's own verdict is printed: " d.out))
+      (assert (stringContains? d.out "ok asl/packages/asl-cli/tests/fixtures/sweep/passTest.asl: (:checked 1 :summarised 0)") (str "the native checker's own verdict is printed: " d.out))
       (refute (stringContains? d.out "97") (str "the poisoned stand-in host binary was never invoked for a single-file check: " d.out))
       true))
 

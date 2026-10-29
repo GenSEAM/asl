@@ -869,12 +869,12 @@ fn ! nativeCheck! base: String path: String -> HostRun
   (let [(full (if (stringStartsWith? path "/") path (k/joinPath base path)))
         (roots (list base (resultOr (realPath base) base)))
         (rel (unroot full roots))
-        (r (cc/checkFileCached! full (list base (k/joinPath base "asl/packages") (k/joinPath base "asl")) (cc/emptyCache)))]
+        (r (cc/checkFileCached! full (list base (k/joinPath base "asl/packages") (k/joinPath base "asl")) (cc/stampedCache!)))]
     (match (pairFirst r)
       ((err _) (HostRun :code 1 :out "" :errText (str rel ":0:0: ERR_IO cannot open the file or resolve one of its imports\ncheck failed: " rel ": 1 error(s)") :source ""))
       ((ok v)
         (if (listEmpty? v.diags)
-          (HostRun :code 0 :out (str "ok " rel ": " (stringFromInt64 v.moduleCount) " module(s) checked") :errText "" :source "")
+          (HostRun :code 0 :out (str "ok " rel ": " (cc/countsText v)) :errText "" :source "")
           (HostRun :code 1 :out ""
                    :errText (unroot (stringJoin (listAppend (map diagLine v.diags) (list (str "check failed: " rel ": " (stringFromInt64 (listLength v.diags)) " error(s)"))) "\n") roots)
                    :source "")))))

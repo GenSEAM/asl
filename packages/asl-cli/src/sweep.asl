@@ -278,7 +278,7 @@ fn ! checkVerdictDone! ws: String idx: Int64 path: String cache: cc/Cache -> (Pa
       ((err _) (pair (Done :index idx :path path :code 1 :last (str "FAIL " path ": ERR_IO cannot open file (after 0 asserts)") :out "") (pairSecond r)))
       ((ok v)
         (if (listEmpty? v.diags)
-          (pair (Done :index idx :path path :code 0 :last (str "ok " path ": " (stringFromInt64 v.moduleCount) " module(s) checked") :out "") (pairSecond r))
+          (pair (Done :index idx :path path :code 0 :last (str "ok " path ": " (cc/countsText v)) :out "") (pairSecond r))
           (pair (Done :index idx :path path :code 1 :last (str "FAIL " path ": " (stringFromInt64 (listLength v.diags)) " error(s)") :out "") (pairSecond r))))))
 
 fn ! checkVerdictStep! ws: String files: (List (Pair Int64 String)) cache: cc/Cache acc: (List Done) -> (List Done)
@@ -297,7 +297,7 @@ fn ! nativeCheckSweep! -> (Result Int64 String)
           (let [(files (pairFirst planned))
                 (bad (pairSecond planned))
                 (frozen (frozenCountFor! "check" ws))
-                (done (checkVerdictStep! ws (enumerate files) (cc/emptyCache) (list)))]
+                (done (checkVerdictStep! ws (enumerate files) (cc/stampedCache!) (list)))]
             (ok (report! "check" "native" files bad done frozen)))))))
 
 fn ! sweep! verb: String host: String -> (Result Int64 String)

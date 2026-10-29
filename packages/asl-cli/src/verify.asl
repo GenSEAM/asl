@@ -36,7 +36,7 @@ fn ! reportOne! path: String verdict: (Result cc/Verdict String) -> Int64
                  1))
     ((ok v)
       (if (listEmpty? v.diags)
-        (do (sys/say! (str "ok " path ": " (stringFromInt64 v.moduleCount) " module(s) checked")) 0)
+        (do (sys/say! (str "ok " path ": " (cc/countsText v))) 0)
         (let [(shown (map printDiag! v.diags))]
           (do (sys/sayErr! (str "check failed: " path ": " (stringFromInt64 (listLength v.diags)) " error(s)")) 1)))))
 
@@ -49,7 +49,7 @@ fn ! nativeCheckStep! paths: (List String) cache: cc/Cache rc: Int64 -> Int64
         (nativeCheckStep! (optionOr (listTail paths) (list)) (pairSecond r) (if (!= one 0) one rc)))))
 
 fn ! nativeCheckPaths! paths: (List String) -> Int64
-  (nativeCheckStep! paths (cc/emptyCache) 0)
+  (nativeCheckStep! paths (cc/stampedCache!) 0)
 
 fn ! checkAsl! paths: (List String) otherRc: Int64 -> Int64
   (let [(rc (balance! paths))]

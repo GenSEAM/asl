@@ -215,8 +215,12 @@ fn diagItem text: String s: src/Source d: ty/Diagnostic vocab: (List String) own
         (own (match (hn/unboundName d) ((some n) (optionOr (mapGet owners n) (list))) ((none) (list))))]
     (LeftItem :line d.line :col d.col :expected (diagCode d.code) :near (nearSnippet text s d.line d.col) :kind "semantic" :hint (optionOr (hn/hintFor d near own) "")))
 
+; (:m :ref CHECK-IMPORTS-HONEST :do "a diagnostic in an imported module names that module and its site, since its line is not a line of the checked text")
+fn depItem d: ty/Diagnostic -> LeftItem
+  (LeftItem :line 0 :col 0 :expected (diagCode d.code) :near (str d.path ":" (stringFromInt64 d.line) ":" (stringFromInt64 d.col) " " d.message) :kind "dependency")
+
 fn ! runNativeCheck! targetPath: String text: String -> (Result (List LeftItem) String)
-  (let [(r (cc/checkFileCached! targetPath (list "." "asl/packages" "asl") (cc/emptyCache)))]
+  (let [(r (cc/checkFileCached! targetPath (list "." "asl/packages" "asl") (cc/stampedCache!)))]
     (match (pairFirst r)
       ((err _) (err (str "native check could not read " targetPath " or resolve one of its imports")))
       ((ok v)
@@ -224,7 +228,7 @@ fn ! runNativeCheck! targetPath: String text: String -> (Result (List LeftItem) 
           (let [(unbound (fold (fn [(acc (List String)) (d ty/Diagnostic)] -> (List String) (match (hn/unboundName d) ((some n) (cons n acc)) ((none) acc))) (list) v.diags))
               (vocab (if (listEmpty? unbound) (list) (hl/vocabFromSource text (hl/preludeVocab! "asl/prelude/prelude.asl"))))
               (owners (hn/exportersOf! "." unbound))]
-          (ok (map (fn [(d ty/Diagnostic)] -> LeftItem (diagItem text s d vocab owners)) v.diags)))))))
+          (ok (map (fn [(d ty/Diagnostic)] -> LeftItem (if (= d.path targetPath) (diagItem text s d vocab owners) (depItem d))) v.diags)))))))
 
 fn createAslTempFile! dir: String content: String counter: Int64 -> (Result String String)
   (if (> counter 100)
