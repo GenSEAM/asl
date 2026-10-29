@@ -17,7 +17,7 @@ fn testOffIdentical -> Bool
       (assert (= (at/continueReply "" "reply") "reply") "no prefill, the reply is untouched")
       (assert (= (listLength (pv/profileMessages "S" "U" "")) 2) "request messages are system then user")
       (assert (not (stringContains? (j/jsonEmit (j/jarr (pv/profileMessages "S" "U" ""))) "assistant")) "nothing trailing")
-      true))
+      true)
 
 fn testOnShape -> Bool
   (let [sys (at/attractorSystem "asn" (shapes) "SYS")
@@ -31,7 +31,7 @@ fn testOnShape -> Bool
         (assert (stringContains? (j/jsonEmit (j/jarr msgs)) "\"role\":\"assistant\",\"content\":\"(:step\"") "the trailing assistant message carries the prefill")
         (assert (= (c/serOps (c/parseReply (at/continueReply "(:step" cont))) (c/serOps (c/parseReply full))) "a prefilled continuation parses into the ops of the full reply")
         (assert (= (at/continueReply "(:step" full) full) "a full reply from a transport that ignores the prefill is not doubled")
-        true)))
+        true))
 
 fn testPrefixStable -> Bool
   (let [a (at/attractorSystem "asn" (shapes) "SYS one")
@@ -43,7 +43,7 @@ fn testPrefixStable -> Bool
         (assert (!= (at/prefixHash "asn" (shapes)) "") "the hash is journalled when on")
         (assert (= (at/prefixHash "" (shapes)) "") "no hash when off")
         (assert (not (stringContains? pre "/Users")) "no path in the prefix")
-        true)))
+        true))
 
 fn names cards: (List (Pair String String)) -> String
   (stringJoin (map pairFirst cards) ",")
@@ -53,13 +53,13 @@ fn testCards -> Bool
       (assert (= (names (at/attractorCards "asn" "" false false 3)) "gateFirst") "no edit after three turns")
       (assert (= (names (at/attractorCards "asn" "" false true 9)) "") "writes done, no card")
       (assert (stringContains? (at/attractorTail (at/attractorCards "asn" "ERR_USE_RAW" false true 0)) "fenced") "the raw card teaches the fence")
-      true))
+      true)
 
 fn testProse -> Bool
   (do (assert (= (at/proseChars "(:step :op \"gate\")") 0) "a pure step has no prose")
       (assert (> (at/proseChars "Let me start by exploring.\n(:step :op \"gate\")") 20) "leading prose is counted")
       (assert (= (at/proseChars "(:step :op \"write\" :file \"a.txt\" :content :raw)\n```\nhello\n```\n(:done)") 0) "a raw block bound to a step is not prose")
-      true))
+      true)
 
 fn initRepo! root: String -> Bool
   (and (ok? (fileWrite (str root "/subject.txt") "before\n"))
@@ -96,7 +96,7 @@ fn testJournal -> Bool
         (assert (not (stringContains? off ":prefixHash")) "no hash line when off")
         (assert (not (stringContains? off ":proseChars 0)")) "the prose of the off arm is counted")
         (assert cleaned "the fixture root is removed")
-        true)))
+        true))
 
 fn runTests -> Bool
   (and (testOffIdentical) (and (testOnShape) (and (testPrefixStable) (and (testCards) (and (testProse) (testJournal)))))))
