@@ -126,14 +126,26 @@ fn verdictSig sig: String -> String
   (let [(one (stringTrim (stringJoin (stringSplit sig "\n") " ")))]
     (optionOr (stringSlice one 0 (if (< (stringLength one) 400) (stringLength one) 400)) one))
 
-; (:m :ref CONDUCTOR :do "a stage failure releases the lease and retries from ready; the same failure signature maxSame times in a row writes one escalate row and parks the unit in blocked")
+; (:m :ref WRITEESC :do "the write tiers in escalation order; a unit on free that fails the write stage maxSame times in a row moves to paid, then strong, and only a last-tier failure blocks")
+fn writeTiers -> (List String)
+  (list "free" "paid" "strong")
+
+fn nextTier lane: String -> Option String
+  (let [(i (optionOr (listFind (fn [(k Int64)] -> Bool (= (optionOr (listGet (writeTiers) k) "") lane)) (range 0 (listLength (writeTiers)))) -1))]
+    (if (< i 0) (none) (listGet (writeTiers) (+ i 1))))
+
+; (:m :ref CONDUCTOR :do "a stage failure releases the lease and retries from ready; the same failure signature maxSame times in a row writes one escalate row and parks the unit in blocked; WRITEESC: a write failure with a higher tier left hops the unit to that tier instead, resets the count and journals tierHop")
 fn ! fail! ctx: Ctx c: CUnit stage: String model: String sig: String ms: Int64 -> CUnit
   (let [(fails (if (= (sigKey sig) (sigKey c.sig)) (+ c.fails 1) 1))
         (_ (dropLease! ctx c))
-        (c1 (with c :fails fails :sig sig :epoch 0))]
+        (c1 (with c :fails fails :sig sig :epoch 0))
+        (hop (if (= stage "write") (nextTier c.lane) (none)))]
     (if (>= fails ctx.maxSame)
-      (let [(c2 (escalate! ctx c1 sig (str stage " failed " (n fails) "x with the same signature")))]
-        (move! ctx c2 "blocked" stage model 0 0 (str "escalated: " (verdictSig sig)) ms))
+      (match hop
+        ((some next) (move! ctx (with c1 :lane next :fails 0 :sig "" :waited 0) "ready" stage model 0 0 (str "tierHop " c.lane "->" next ": " (verdictSig sig)) ms))
+        ((none)
+          (let [(c2 (escalate! ctx c1 sig (str stage " failed " (n fails) "x with the same signature")))]
+            (move! ctx c2 "blocked" stage model 0 0 (str "escalated: " (verdictSig sig)) ms))))
       (move! ctx c1 "ready" stage model 0 0 (str "fail: " (verdictSig sig)) ms)))
 
 fn depsMerged? u: st/Task cus: (List CUnit) -> Bool
@@ -550,17 +562,29 @@ fn leonCost out: String prices: (List (Pair String Int64)) model: String -> Int6
         (price (match (listFind (fn [(pr (Pair String Int64))] -> Bool (= (pairFirst pr) model)) prices) ((some pr) (pairSecond pr)) ((none) -1)))]
     (if (or (<= turns 0) (< price 0)) -1 (* turns price)))
 
+; (:m :ref WRITEESC :do "the gateway profile a write runs with: a (:writeProfile :tier T :profile P) row of the lanes file wins, else paid and strong use the profiles paidCheap and strong, else the configured one")
+fn writeProfile rc: RealCfg lane: String -> String
+  (let [(rows (filter (fn [(l String)] -> Bool (and (stringContains? l "(:writeProfile ") (= (sp/tokAfter l ":tier") lane))) (stringLines (readOr rc.lanes))))
+        (given (match (listHead rows) ((some l) (sp/tokAfter l ":profile")) ((none) "")))]
+    (cond ((not (stringEmpty? given)) given) ((= lane "paid") "paidCheap") ((= lane "strong") "strong") (else rc.profile)))
+
+; (:m :ref WRITEESC :do "a write whose branch has no commit past its base and no dirty file made no progress; an unreadable count is not a verdict")
+fn ! noEdits? p: String base: String -> Bool
+  (let [(r (gitOut p (list "rev-list" "--count" (str base "..HEAD"))))]
+    (and (= r.exit 0) (and (= (stringTrim r.out) "0") (not (fp/gitDirty? p)))))
+
 fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
   (let [(path (w/wtPath rc.wt u.id))
         (added (if (fileExists? path) (ok path) (attachOrAdd rc u path)))]
     (match added
       ((err e) (failRes e))
       ((ok p)
-        (let [(d (fp/runLeonProfile! rc.profile rc.repo p rc.home (taskText dir u) u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) rc.leaseSec rc.keys))
+        (let [(d (fp/runLeonProfile! (writeProfile rc c.lane) rc.repo p rc.home (taskText dir u) u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) rc.leaseSec rc.keys))
               (model (fp/modelOf d.out))
-              (_ (if (fp/gitDirty? p) (fp/driverCommitRow! p u.owns u.id model) false))]
-          (Res :tiers "" :ok (if (= d.exit 0) 1 0) :wt p :branch (str "sh/" u.id) :model model :tokens (leonTokens d.out) :costMicro (leonCost d.out (rs/costRows (readOr (str rc.home "/.asl/gateway.asn")) (readOr rc.lanes)) model) :claimedGreen 0
-               :sig (if (= d.exit 0) "" (gateSig d.out)) :ms d.ms :exit d.exit :asserts 0 :verdict "")))))
+              (_ (if (fp/gitDirty? p) (fp/driverCommitRow! p u.owns u.id model) false))
+              (noEdit (and (= d.exit 0) (noEdits? p u.base)))]
+          (Res :tiers "" :ok (if (and (= d.exit 0) (not noEdit)) 1 0) :wt p :branch (str "sh/" u.id) :model model :tokens (leonTokens d.out) :costMicro (leonCost d.out (rs/costRows (readOr (str rc.home "/.asl/gateway.asn")) (readOr rc.lanes)) model) :claimedGreen 0
+               :sig (cond ((!= d.exit 0) (gateSig d.out)) (noEdit "noEdit") (else "")) :ms d.ms :exit d.exit :asserts 0 :verdict "")))))
 
 fn ! currentBranch dir: String -> String
   (let [(d (fr/runOne (fr/job (list "git" "-C" dir "rev-parse" "--abbrev-ref" "HEAD") dir (fr/childEnv (list)))))]

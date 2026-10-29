@@ -500,7 +500,7 @@ fn ! testWriteTierHop bin: String -> Bool
         (assert (and (stringContains? j2 "tierHop free->paid") (stringContains? j2 "tierHop paid->strong")) (str "U hopped through every tier: " j2))
         (assert (and (= u.st "blocked") (= u.lane "strong")) (str "U blocked on the last tier: " u.st " " u.lane))
         (assert (= (listLength (stringSplit esc2 "(:escalate")) 2) (str "exactly one escalate row, written after the last tier: " esc2))
-        (assert (= (listLength (filter (fn [(l String)] -> Bool (stringContains? l " :to blocked ")) (journalLines dir2))) 1) "blocked once")
+        (assert (= (listLength (stringSplit j2 " :to blocked ")) 2) "blocked once")
         true))
 
 fn ! runTests -> Bool
