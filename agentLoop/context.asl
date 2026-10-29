@@ -736,11 +736,39 @@ fn clipGot got: String turnLabel: String cap: Int64 -> String
     (str (sub got 0 cap) " ... [" (stringFromInt64 (- (stringLength got) cap)) " more bytes clipped, see turn " turnLabel " in the journal]")
     got)
 
+; (:m :ref CTX-HANDOFF :do "a run's calls cascade across models, so a reply kept in the transcript is read by whichever model serves the next call; one model's own markup (<think> blocks, reasoning ending in </think>, <tool_call> blocks) is dropped from the reply part of got, and a reply left with no ASN form becomes one (:replyDropped ...) marker; receipts after the reply are kept byte for byte, and a reply without that markup is unchanged")
+fn dropSpans text: String open: String close: String -> String
+  (match (stringIndexOf text open)
+    ((none) text)
+    ((some a)
+      (let [rest (sub text (+ a (stringLength open)) (stringLength text))]
+        (match (stringIndexOf rest close)
+          ((none) (sub text 0 a))
+          ((some b) (dropSpans (str (sub text 0 a) (sub rest (+ b (stringLength close)) (stringLength rest))) open close))))))
+
+fn afterLast text: String mark: String -> String
+  (match (stringIndexOf text mark)
+    ((none) text)
+    ((some a) (afterLast (sub text (+ a (stringLength mark)) (stringLength text)) mark)))
+
+fn modelMarkup? text: String -> Bool
+  (or (stringContains? text "</think>") (or (stringContains? text "<think>") (stringContains? text "<tool_call>")))
+
+fn neutralGot got: String turnLabel: String -> String
+  (let [cut (if (stringStartsWith? got "(:receipt ") 0 (match (stringIndexOf got "\n(:receipt ") ((some k) k) ((none) (stringLength got))))
+        reply (sub got 0 cut)
+        rest (sub got cut (stringLength got))
+        clean (pyStrip (afterLast (dropSpans (dropSpans reply "<think>" "</think>") "<tool_call>" "</tool_call>") "</think>"))]
+    (cond
+      ((not (modelMarkup? reply)) got)
+      ((stringStartsWith? clean "(") (str clean rest))
+      (else (str "(:replyDropped :turn " turnLabel " :chars " (stringFromInt64 (stringLength reply)) ")" rest))))
+
 fn turnWhole h: j/Json cap: Int64 -> String
   (let [turn (jgetStr h "turn")
         sent (jgetStr h "sent")
         got (jgetStr h "got")]
-    (str "(:turn " turn " :sent \"" (c/escapeAsn sent) "\" :got \"" (c/escapeAsn (clipGot got turn cap)) "\")"))
+    (str "(:turn " turn " :sent \"" (c/escapeAsn sent) "\" :got \"" (c/escapeAsn (clipGot (neutralGot got turn) turn cap)) "\")"))
 
 ; (:m :do "everything older than the last keepTurns turns collapses to one deterministic receipt line each (ops/files/gates, never model text); only the most recent maxOlderLines of those survive at all, the rest are dropped with nothing rendered in their place, giving a true fixed ceiling for a run of any length. Below that cap the older section is pure append-only as turns age out of the kept window one at a time, so the rendered prefix stays byte-stable call over call; the kept tail is re-rendered whole (clipped per-turn) every call")
 ; (:m :ref LEON-PREFIX-CACHE-20261026 :do "the cut between summarised and whole turns only moves at fixed compaction points (every contextCompactStep turns) so the rendered bytes between two points are an append-only extension of the previous call's bytes, which is what provider prefix caches match on; the kept window is therefore keepTurns to keepTurns+step-1 whole turns")
