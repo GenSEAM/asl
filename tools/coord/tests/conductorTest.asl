@@ -503,9 +503,29 @@ fn ! testWriteTierHop bin: String -> Bool
         (assert (= (listLength (stringSplit j2 " :to blocked ")) 2) "blocked once")
         true))
 
+; (:m :ref ROTATE :do "a (:writeProfiles :tier T :profiles (..) :weights (..)) lanes row picks a profile per unit id by weight, the same id always the same one; without the row the old profile is used")
+fn ! testRotateProfiles -> Bool
+  (let [(lanes "(:writeProfiles :tier free :profiles (pA pB pC) :weights (3 2 1))\n(:writeProfile :tier paid :profile pX)\n")
+        (ids (map (fn [(i Int64)] -> String (str "UNIT" (stringFromInt64 i))) (range 0 600)))
+        (picks (map (fn [(id String)] -> String (cd/pickWriteProfile lanes id "free" "base")) ids))
+        (picks2 (map (fn [(id String)] -> String (cd/pickWriteProfile lanes id "free" "base")) ids))
+        (cnt (fn [(p String)] -> Int64 (listLength (filter (fn [(x String)] -> Bool (= x p)) picks))))
+        (a (cnt "pA")) (b (cnt "pB")) (c (cnt "pC"))
+        (none1 (cd/pickWriteProfile "" "UNIT1" "free" "base"))
+        (other (cd/pickWriteProfile lanes "UNIT1" "strong" "base"))]
+    (do (assert (= (+ a (+ b c)) 600) (str "every id got a listed profile: " (stringFromInt64 a) " " (stringFromInt64 b) " " (stringFromInt64 c)))
+        (assert (and (> a 250) (< a 350)) (str "pA near half: " (stringFromInt64 a)))
+        (assert (and (> b 160) (< b 240)) (str "pB near a third: " (stringFromInt64 b)))
+        (assert (and (> c 60) (< c 140)) (str "pC near a sixth: " (stringFromInt64 c)))
+        (assert (= picks picks2) "the same id always gets the same profile")
+        (assert (= none1 "base") "no row keeps the old profile")
+        (assert (= other "base") "a row of another tier keeps the old profile")
+        true)))
+
 fn ! runTests -> Bool
   (let [(bin (fixtureBinary!))]
     (do (assert (not (stringEmpty? bin)) "the fixture stage binary is prepared")
+        (assert (testRotateProfiles) "writer profiles rotate per unit by weight")
         (assert (testDag bin) "dag order")
         (assert (testOwnsSerialised bin) "overlapping owns serialised")
         (assert (testAdmission bin) "admission = min(ready, capacity, allowance)")
