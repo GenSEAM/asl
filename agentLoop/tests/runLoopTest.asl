@@ -28,6 +28,12 @@ fn ! tempRoot -> String
   (let [path (str (optionOr (envGet "TMPDIR") "/tmp") "/loopRunTest_" (stringFromInt64 (procSelf)))]
     (do (dirCreate path) (resultOr (realPath path) path)))
 
+; (:m :do "the preflight row carries the host shell diagnostic verbatim (bash-as-sh on the Mac, dash on Linux), so the comparison masks that one message and every other byte stays pinned")
+fn maskShellMessage row: String -> String
+  (if (stringStartsWith? row "(:gatePreflight ")
+    (str (optionOr (listHead (stringSplit row ":message ")) "") ":message \"<shell>\"))")
+    row)
+
 fn ! fixtureJournal id: String -> (List String)
   (let [path "asl/agentLoop/tests/loopRunFixtures.asn"
         line (optionOr (listHead (filter (fn [candidate] (stringContains? candidate (str ":id \"" id "\""))) (f/scenarioLines! path))) "")
@@ -596,7 +602,7 @@ fn ! runTests -> Bool
                     (assert (budgetFieldsMatch budgetResult) "budget0 RunResult matches every typed fixture field")
                     (assert (= budgetResult.status "escalated") "budget0 fixture exits before body")
                     (assert (= budgetResult.turns 1) "budget0 fixture reports the synthetic boundary turn")
-                    (assert (= (f/maskJournal tmp (filter (fn [row] (not (stringEmpty? row))) (stringLines rejectJournalText))) (f/maskJournal "<root>" (fixtureJournal "preflightReject"))) "preflightReject journal bytes match recorded fixture")
+                    (assert (= (map maskShellMessage (f/maskJournal tmp (filter (fn [row] (not (stringEmpty? row))) (stringLines rejectJournalText)))) (map maskShellMessage (f/maskJournal "<root>" (fixtureJournal "preflightReject")))) "preflightReject journal bytes match recorded fixture")
                     (assert (rejectFieldsMatch rejectResult) "preflightReject RunResult matches every typed fixture field")
                     (assert (= rejectResult.status "rejected") "preflightReject fixture exits before body")
                     (assert (= rejectResult.error (some "ERR_GATE_UNPARSABLE")) "preflightReject fixture returns its error")
