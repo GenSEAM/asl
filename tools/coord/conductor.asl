@@ -2,7 +2,7 @@
   :x [CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig rulingVerdict
-      depStalled? pickWriteProfile pickWriteProfileH schedPace tick! wake! status! drain! stopAll! gatesRes loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
+      depStalled? vacuousWrite? vacuousSig vacuousSig? pickWriteProfile pickWriteProfileH schedPace tick! wake! status! drain! stopAll! gatesRes loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
       main]
   :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp)
       (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -315,7 +315,12 @@ fn ! finish! ctx: Ctx u: st/Task c: CUnit res: Res -> Unit
           (let [(c1 (move! ctx (written c res.wt res.branch) "gating" "write" res.model res.tokens res.costMicro (if (= res.claimedGreen 1) "claimedGreen" "written") res.ms))
                 (_ (launch! ctx u c1))]
             ())
-          (let [(_ (fail! ctx c "write" res.model res.sig res.ms))] ())))
+          (if (vacuousSig? res.sig)
+            (let [(_ (dropLease! ctx c))
+                  (c1 (escalate! ctx (with c :sig res.sig :epoch 0) res.sig "write: the unit gate passes on the base before any edit, so no write can prove it; make the gate fail on the base or mark the task a regression guard"))
+                  (_ (move! ctx c1 "blocked" "write" res.model 0 0 (str "escalated: " (verdictSig res.sig)) res.ms))]
+              ())
+            (let [(_ (fail! ctx c "write" res.model res.sig res.ms))] ()))))
       ((= c.st "gating")
         (if (and (= res.exit 0) (> res.asserts 0))
           (let [(_ (move! ctx c "awaitReview" "gates" "" 0 0 (str "green " (n res.asserts)) res.ms))] ())
@@ -627,6 +632,26 @@ fn writeProfile rc: RealCfg lane: String -> String
 fn ! writeProfileFor rc: RealCfg dir: String id: String lane: String -> String
   (pickWriteProfileH (readOr rc.lanes) id lane (writeProfile rc lane) (readOr (str dir "/providerHealth.asn")))
 
+; (:m :ref CONDUCTOR-VACUOUS-GATE :do "Leon runs the unit gate once before its first turn and lists the ones already green as :vacuousGates; on a branch with nothing past its base that means the gate passes on the base, so no write can prove it (CONDUCTOR-UNIT-FLAGS got a schema-only commit that way), unless the task calls the gate a regression guard")
+fn regressionGuard? task: String -> Bool
+  (stringContains? (stringLower task) "regression guard")
+
+fn vacuousWrite? out: String gate: String task: String -> Bool
+  (and (not (stringEmpty? gate))
+       (and (not (regressionGuard? task))
+            (match (stringIndexOf out ":vacuousGates (")
+              ((none) false)
+              ((some at)
+                (let [(rest (optionOr (stringSlice out (+ at 15) (stringLength out)) ""))
+                      (listed (str (optionOr (listHead (stringSplit rest "\")")) "") "\""))]
+                  (stringContains? listed (st/q gate)))))))
+
+fn vacuousSig gate: String -> String
+  (str "vacuousGate: " gate)
+
+fn vacuousSig? sig: String -> Bool
+  (stringStartsWith? sig "vacuousGate: ")
+
 ; (:m :ref WRITEESC :do "a write whose branch has no commit past its base and no dirty file made no progress; an unreadable count is not a verdict")
 fn ! noEdits? p: String base: String -> Bool
   (let [(r (gitOut p (list "rev-list" "--count" (str base "..HEAD"))))]
@@ -638,14 +663,17 @@ fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
     (match added
       ((err e) (failRes e))
       ((ok p)
-        (let [(prof (writeProfileFor rc dir u.id c.lane))
+        (let [(fresh (noEdits? p u.base))
+              (task (taskText dir u))
+              (prof (writeProfileFor rc dir u.id c.lane))
               (_ (fileAppend (journalPath dir) (str "(:profile :unit " (st/q u.id) " :lane " (st/q c.lane) " :profile " (st/q prof) " :at " (n (/ (nowNs) 1000000)) ")\n")))
-              (d (fp/runLeonProfile! prof rc.repo p rc.home (taskText dir u) u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) rc.leaseSec rc.keys))
+              (d (fp/runLeonProfile! prof rc.repo p rc.home task u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) rc.leaseSec rc.keys))
               (model (fp/modelOf d.out))
-              (_ (if (fp/gitDirty? p) (fp/driverCommitRow! p u.owns u.id model) false))
+              (vacuous (and fresh (vacuousWrite? d.out u.gate task)))
+              (_ (if (and (not vacuous) (fp/gitDirty? p)) (fp/driverCommitRow! p u.owns u.id model) false))
               (noEdit (and (= d.exit 0) (noEdits? p u.base)))]
-          (Res :tiers "" :ok (if (and (= d.exit 0) (not noEdit)) 1 0) :wt p :branch (str "sh/" u.id) :model model :tokens (leonTokens d.out) :costMicro (leonCost d.out (rs/costRows (readOr (str rc.home "/.asl/gateway.asn")) (readOr rc.lanes)) model) :claimedGreen 0
-               :sig (cond ((!= d.exit 0) (gateSig d.out)) (noEdit "noEdit") (else "")) :ms d.ms :exit d.exit :asserts 0 :verdict "")))))
+          (Res :tiers "" :ok (if (and (= d.exit 0) (and (not noEdit) (not vacuous))) 1 0) :wt p :branch (str "sh/" u.id) :model model :tokens (leonTokens d.out) :costMicro (leonCost d.out (rs/costRows (readOr (str rc.home "/.asl/gateway.asn")) (readOr rc.lanes)) model) :claimedGreen 0
+               :sig (cond (vacuous (vacuousSig u.gate)) ((!= d.exit 0) (gateSig d.out)) (noEdit "noEdit") (else "")) :ms d.ms :exit d.exit :asserts 0 :verdict "")))))
 
 fn ! currentBranch dir: String -> String
   (let [(d (fr/runOne (fr/job (list "git" "-C" dir "rev-parse" "--abbrev-ref" "HEAD") dir (fr/childEnv (list)))))]
