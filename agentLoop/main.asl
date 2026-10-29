@@ -1266,12 +1266,12 @@ fn wallCappedProvider p: pv/Provider left: (Option Int64) -> pv/Provider
   (match left ((some l) (pv/capTimeouts p l)) ((none) p))
 
 ; (:m :ref LEONATTR :do "the provider a live turn calls: wall-capped, and carrying the prefill only when the attractor set one, so an off turn sends the request as before")
-; (:m :ref PROTO-STUDY :do "the tool schemas a session offers on its main turns: one per local op shape for ops, the single step(form) tool for step, none when off; advisor and grader calls never carry them")
+; (:m :ref NATIVE-TOOLS-DEFAULT :do "the tool schemas a session offers on its main turns: one per local op shape for ops, none for off or false, and the single step(form) tool otherwise, so absent means step (PROTO-STUDY: 24/27 sessions green across 9 aliases, beam 0/9 -> 7/9, no loss on any alias that worked); a route that rejects tools is marked :nativeTools false in its gateway row, never here; advisor and grader calls never carry them")
 fn sessionTools v: String -> (List j/Json)
   (cond
     ((= v "ops") (nt/toolSpecs (map pairSecond (filter (fn [p] (not (listContains? (list "diff" "flush" "discard") (pairFirst p)))) (ex/opShapes)))))
-    ((= v "step") (list (nt/stepToolSpec)))
-    (else (list)))
+    ((or (= v "off") (= v "false")) (list))
+    (else (list (nt/stepToolSpec))))
 
 fn attractorProvider p: pv/Provider prefill: String left: (Option Int64) -> pv/Provider
   (if (stringEmpty? prefill) (wallCappedProvider p left) (pv/withPrefill (wallCappedProvider p left) prefill))
@@ -1846,7 +1846,7 @@ fn ! executeLive ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderE
             (match prompt
               ((err e) (rejectWith (str ":error ERR_HARNESS :message \"" (c/escapeAsn e) "\"") 1))
               ((ok system0)
-                (let [system (str system0 (nt/systemHint ra.nativeTools))
+                (let [system system0
                       call (fn [sys user] (pv/nextTurn! turnProvider sys user))
                       providerCall (fn [p sys user] (pv/nextTurn! p sys user))
                       hooks (liveHooks! provider)
@@ -1942,7 +1942,7 @@ fn ! checkWall ps: (List (Pair String j/Json)) repoRoot: String rootDir: String 
       ((not (at/validAttractor? (textValue (paramOr ps "attractor" (j/jstr "")))))
         (rejectWith ":error ERR_INVALID_ARG :key \"attractor\" :message \"attractor is asn or off; absent means off\"" 2))
       ((not (nt/validTools? (textValue (paramOr ps "nativeTools" (j/jstr "")))))
-        (rejectWith ":error ERR_INVALID_ARG :key \"nativeTools\" :message \"nativeTools is ops, step or off; absent means off\"" 2))
+        (rejectWith ":error ERR_INVALID_ARG :key \"nativeTools\" :message \"nativeTools is step, ops or off; absent means step\"" 2))
       ((not (inRange (intValue (paramOr ps "wallBudget" (j/jint limit))) 1 limit))
         (rejectWith (str ":error ERR_INVALID_ARG :key \"wallBudget\" :limit " (stringFromInt64 limit)
                          " :message \"wallBudget must be an integer of seconds from 1 to timeout + queueTimeout, at most 86400 (bin/asl kills the dispatch 30 s after that); raise :timeout, or leave it out and :wallBudget sets it\"")

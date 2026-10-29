@@ -1,14 +1,17 @@
 (module asl/agentLoop/nativeTools
-  :x [validTools? systemHint ShapeParam ShapeTool shapeTool toolSpecs stepToolSpec callForm callsText]
+  :x [validTools? systemHint toolsHint ShapeParam ShapeTool shapeTool toolSpecs stepToolSpec callForm callsText]
   :i [(asl-json/json :a j) (asl/agentLoop/core :a c)])
 
 ; (:m :ref PROTO-STUDY :do "opt-in native tool calling: :tools ops offers one function per op shape (the same grammar the text protocol prints), :tools step offers one step(form) function; every tool_call maps back to the ASN form the text protocol would have carried, so the loop after the reply is unchanged; off (empty) sends no tools")
 fn validTools? v: String -> Bool
-  (listContains? (list "" "off" "ops" "step") v)
+  (listContains? (list "" "off" "false" "ops" "step") v)
 
-; (:m :do "one line after the system prompt when tools are on, so the reply contract names the channel; off adds nothing")
+; (:m :ref NATIVE-TOOLS-DEFAULT :do "the line a call that offers tools appends to its system prompt, so the reply contract names the channel; a call without tools adds nothing")
+fn toolsHint -> String
+  "\n(:reply :via tools :use \"when tools are offered, call them; each call is one op; no prose\")"
+
 fn systemHint v: String -> String
-  (if (or (= v "ops") (= v "step")) "\n(:reply :via tools :use \"call the tools; each call is one op; no prose\")" "")
+  (if (or (= v "off") (= v "false")) "" (toolsHint))
 
 (schema ShapeParam
   (:f key String)

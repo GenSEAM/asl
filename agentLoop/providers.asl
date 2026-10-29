@@ -1356,7 +1356,7 @@ fn ! callProfile! cfg: VendorConfig system: String user: String model: String ->
                            (listAppend
                              (list (pair "model" (j/jstr model))
                                    (pair "intent" (j/jstr cfg.intent))
-                                   (pair "messages" (j/jarr (profileMessages system user cfg.prefill))))
+                                   (pair "messages" (j/jarr (profileMessages (if (listEmpty? cfg.tools) system (str system (nt/toolsHint))) user cfg.prefill))))
                              (listAppend (toolsField cfg.tools) (list (pair "workspace" (j/jstr ws)))))
                            (listAppend (if cfg.timeoutSet (list (pair "timeout" (j/jint cfg.timeout))) (list))
                                        (list (pair "queue_timeout" (j/jint cfg.queueTimeout)))))))]
