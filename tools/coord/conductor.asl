@@ -148,7 +148,7 @@ fn ! fail! ctx: Ctx c: CUnit stage: String model: String sig: String ms: Int64 -
             (move! ctx c2 "blocked" stage model 0 0 (str "escalated: " (verdictSig sig)) ms))))
       (move! ctx c1 "ready" stage model 0 0 (str "fail: " (verdictSig sig)) ms)))
 
-; (:m :ref DEPWAIT :do "a dependency wait counts toward maxWait only when a dependency is missing, blocked or failed; one still queued, ready or in a stage is progress, not a stall")
+; (:m :ref DEPWAIT :do "a dependency wait counts toward maxWait only when a dependency is missing, blocked or failed; one still queued, ready or in a stage is progress, not a stall; step! stores a waiting unit as queued so its own dependents never see it missing (DEPCHAIN)")
 fn depStalled? u: st/Task cus: (List CUnit) -> Bool
   (listAny? (fn [(d String)] -> Bool (match (cuOf cus d) ((some x) (listContains? (list "blocked" "failed") x.st)) ((none) true))) u.after)
 
@@ -354,7 +354,10 @@ fn ! step! ctx: Ctx u: st/Task cap: Int64 -> Int64
       ((= c.st "queued")
         (if (depsMerged? u cus)
           (let [(_ (move! ctx c "ready" "deps" "" 0 0 "depsMerged" 0))] cap)
-          (if (depStalled? u cus) (let [(_ (waitMore! ctx c "deps not merged"))] cap) cap)))
+          (cond
+            ((depStalled? u cus) (let [(_ (waitMore! ctx c "deps not merged"))] cap))
+            ((none? (cuOf cus u.id)) (let [(_ (writeCUnit! ctx.dir c))] cap))
+            (else cap))))
       ((= c.st "ready")
         (let [(pace ctx.pace)
               (allowOf pace.allowance)
