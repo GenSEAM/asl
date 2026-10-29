@@ -2,7 +2,7 @@
   :x [CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig rulingVerdict
-      tick! wake! status! drain! stopAll! gatesRes loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
+      pickWriteProfile tick! wake! status! drain! stopAll! gatesRes loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
       main]
   :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp)
       (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -563,10 +563,43 @@ fn leonCost out: String prices: (List (Pair String Int64)) model: String -> Int6
     (if (or (<= turns 0) (< price 0)) -1 (* turns price)))
 
 ; (:m :ref WRITEESC :do "the gateway profile a write runs with: a (:writeProfile :tier T :profile P) row of the lanes file wins, else paid and strong use the profiles paidCheap and strong, else the configured one")
+fn listAfter s: String key: String -> (List String)
+  (match (stringIndexOf s (str key " ("))
+    ((none) (list))
+    ((some i)
+      (let [(rest (optionOr (stringSlice s (+ i (stringLength key) 2) (stringLength s)) ""))]
+        (filter (fn [(x String)] -> Bool (not (stringEmpty? x))) (stringSplit (optionOr (listHead (stringSplit rest ")")) "") " "))))))
+
+fn idHash id: String -> Int64
+  (let [(bs (stringToBytes id))]
+    (fold (fn [(h Int64) (i Int64)] -> Int64 (mod (+ (* h 1000003) (bytesGet bs i)) 2147483647)) 7 (range 0 (bytesLength bs)))))
+
+fn slotProfile ps: (List String) ws: (List Int64) slot: Int64 -> String
+  (match (listHead ps)
+    ((none) "")
+    ((some p)
+      (let [(w (optionOr (listHead ws) 0))]
+        (if (< slot w) p (slotProfile (optionOr (listTail ps) (list)) (optionOr (listTail ws) (list)) (- slot w)))))))
+
+; (:m :ref ROTATE :do "a (:writeProfiles :tier T :profiles (P..) :weights (w..)) row picks the profile from a stable hash of the unit id mod the weight sum, so every attempt of a unit keeps its profile and units spread by weight; a malformed row or none gives the base")
+fn pickWriteProfile lanes: String id: String lane: String base: String -> String
+  (let [(rows (filter (fn [(l String)] -> Bool (and (stringContains? l "(:writeProfiles ") (= (sp/tokAfter l ":tier") lane))) (stringLines lanes)))]
+    (match (listHead rows)
+      ((none) base)
+      ((some l)
+        (let [(ps (listAfter l ":profiles"))
+              (ws (map (fn [(x String)] -> Int64 (max 0 (optionOr (stringToInt64 x) 0))) (listAfter l ":weights")))
+              (total (fold (fn [(a Int64) (w Int64)] -> Int64 (+ a w)) 0 ws))
+              (pick (if (and (> total 0) (= (listLength ps) (listLength ws))) (slotProfile ps ws (mod (idHash id) total)) ""))]
+          (if (stringEmpty? pick) base pick))))))
+
 fn writeProfile rc: RealCfg lane: String -> String
   (let [(rows (filter (fn [(l String)] -> Bool (and (stringContains? l "(:writeProfile ") (= (sp/tokAfter l ":tier") lane))) (stringLines (readOr rc.lanes))))
         (given (match (listHead rows) ((some l) (sp/tokAfter l ":profile")) ((none) "")))]
     (cond ((not (stringEmpty? given)) given) ((= lane "paid") "paidCheap") ((= lane "strong") "strong") (else rc.profile)))
+
+fn writeProfileFor rc: RealCfg id: String lane: String -> String
+  (pickWriteProfile (readOr rc.lanes) id lane (writeProfile rc lane))
 
 ; (:m :ref WRITEESC :do "a write whose branch has no commit past its base and no dirty file made no progress; an unreadable count is not a verdict")
 fn ! noEdits? p: String base: String -> Bool
@@ -579,7 +612,9 @@ fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
     (match added
       ((err e) (failRes e))
       ((ok p)
-        (let [(d (fp/runLeonProfile! (writeProfile rc c.lane) rc.repo p rc.home (taskText dir u) u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) rc.leaseSec rc.keys))
+        (let [(prof (writeProfileFor rc u.id c.lane))
+              (_ (fileAppend (journalPath dir) (str "(:profile :unit " (st/q u.id) " :lane " (st/q c.lane) " :profile " (st/q prof) " :at " (n (/ (nowNs) 1000000)) ")\n")))
+              (d (fp/runLeonProfile! prof rc.repo p rc.home (taskText dir u) u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) rc.leaseSec rc.keys))
               (model (fp/modelOf d.out))
               (_ (if (fp/gitDirty? p) (fp/driverCommitRow! p u.owns u.id model) false))
               (noEdit (and (= d.exit 0) (noEdits? p u.base)))]
