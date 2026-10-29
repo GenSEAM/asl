@@ -542,6 +542,16 @@ fn testSsotRetry! tmp: String -> Bool
       (assert (ok? cleaned) "ssot retry fixture removed")
       true))
 
+; (:m :do "a skipped check is reported with its reason and does not fail the audit; a failed check beside it still does")
+fn testSkippedCheck -> Bool
+  (let [(only (ag/emit "consistency" (list (ag/passCheck "a" (none) (none)) (ag/skippedCheck "core" "bin/asl-core is a Mach-O binary this Linux host cannot run")) "" "" false))
+        (mixed (ag/emit "consistency" (list (ag/skippedCheck "core" "why") (ag/failCheck "b" "ERR_B" "x" (none) (none))) "" "" false))]
+    (do
+      (assert (= only.exitCode 0) (str "skipped beside passed exits 0: " only.summary))
+      (assert (stringContains? only.receipt "(:check :id core :status :skipped :ev \"bin/asl-core is a Mach-O binary this Linux host cannot run\")") (str "skipped is reported with its reason: " only.receipt))
+      (assert (= mixed.exitCode 1) "a failed check still fails beside a skipped one")
+      true))
+
 fn testTerminatedMapping -> Bool
   (let [(c (ag/snapshotFault "gate5Suites" (sr/Fault :kind "terminated" :msg "signal 15")))]
     (do
@@ -575,6 +585,7 @@ fn ! runTests -> Bool
       (assert asyncOk "full async spawn stub")
       (assert ssotRetryOk "ssot rules check retries a spurious failure")
       (assert terminatedOk "terminated runner faults map to internal audit errors")
+      (assert (testSkippedCheck) "skipped checks do not fail the audit")
       (assert (testPlaceholderDigest) "placeholder :digest detection")
       (assert (= (listLength records) (numField header "records")) "every fixture record replayed")
       (assert (> (listLength records) 0) "at least one fullGreen record case")
