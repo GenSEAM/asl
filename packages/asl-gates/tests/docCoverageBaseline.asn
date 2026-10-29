@@ -884,7 +884,6 @@
 (:gap "asl/grammar/tests/corpusTest.asl#runTests")
 (:gap "asl/grammar/tests/densityTest.asl#runTests")
 (:gap "asl/host/tests/archiveKeyTest.asl#runTests")
-(:gap "asl/host/tests/binAslLockWaitTest.asl#runTests")
 (:gap "asl/host/tests/buildClangTest.asl#runTests")
 (:gap "asl/host/tests/buildExitTest.asl#runTests")
 (:gap "asl/host/tests/floorRtTest.asl#runTests")
