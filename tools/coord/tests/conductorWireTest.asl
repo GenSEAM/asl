@@ -402,6 +402,26 @@ fn ! testGateSig -> Bool
         (assert (= (cd/gateSig (str "plain tail\n" usage "\n")) "plain tail") "with no error line, the last non-usage line")
         true))
 
+; (:m :ref ORCH-NODE2-CUTOVER-BUG :do "the write stage's hub guard: no hub.asn passes any worktree, a hub.asn with a socket refuses a worktree whose providers.asl lacks the hub client with ERR_HUB_CLIENT_MISSING, and passes one that has it")
+fn ! testHubGuard -> Bool
+  (let [(root (scratch "hubguard"))
+        (home (str root "/h"))
+        (wt (str root "/w"))
+        (_ (cleanup root))
+        (_ (dirCreate (str home "/.asl")))
+        (_ (dirCreate (str wt "/asl/agentLoop")))
+        (_ (fileWrite (str wt "/asl/agentLoop/providers.asl") "(module p)\n"))
+        (noHub (cd/hubGuard! home wt))
+        (_ (fileWrite (str home "/.asl/hub.asn") "(:hub :sock \"/x/hub.sock\")\n"))
+        (refused (cd/hubGuard! home wt))
+        (_ (fileWrite (str wt "/asl/agentLoop/providers.asl") "fn hubAsnPath -> String\n  \"\"\n"))
+        (current (cd/hubGuard! home wt))
+        (_ (cleanup root))]
+    (do (assert (not (some? noHub)) "no hub.asn: nothing refused")
+        (assert (match refused ((some r) (and (= r.ok 0) (stringContains? r.sig "ERR_HUB_CLIENT_MISSING"))) ((none) false)) "a worktree without the hub client is refused")
+        (assert (not (some? current)) "a worktree with the hub client passes")
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testAttach) "retry attaches an existing branch")
       (assert (testAttachMissing) "a registered but missing worktree is pruned and attached")
@@ -421,4 +441,5 @@ fn ! runTests -> Bool
       (assert (testLadderWiring) "ladder wiring")
       (assert (testService) "service unit and dev repo steps")
       (assert (testCoverage) "coverage refusal")
+      (assert (testHubGuard) "the write stage refuses a worktree without the hub client")
       true)
