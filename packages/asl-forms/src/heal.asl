@@ -1,7 +1,7 @@
 (module asl-forms/heal
   :x [HealResult Sx Edit healRuleNames healSource healSourceWith healSourceRules heal! healDiags healScore lowerDiags readSx applyEdits
-      preludeVocab! vocabFromSource formatHealReceipt diagText symbolCandidates editDistance]
-  :i [(asl-parser/ast :a a) (asl-checker/types :a ty) (asl-checker/check :a chk) (asl-checker/resolve :a r) (asl-forms/repair :a rep)])
+      preludeVocab! vocabFromSource formatHealReceipt diagText symbolCandidates editDistance retiredHeadFor healSourceEnv ruleRetiredSpelling ruleImportAdd]
+  :i [(asl-parser/ast :a a) (asl-checker/types :a ty) (asl-checker/check :a chk) (asl-checker/resolve :a r) (asl-forms/repair :a rep) (asl-checker/hints :a hn)])
 
 ; (:m :do "the one heal pipeline for generated ASL (HEAL 2026-10-15): a text that already checks and lowers is returned unchanged; otherwise named rules run in order and an edit is kept only when it strictly lowers the diagnostic score, until no rule improves; the receipt is (:repaired (rule ...) :left (diag ...))")
 
@@ -14,7 +14,7 @@
 (schema Edit (:f start Int64) (:f end Int64) (:f with String))
 
 fn healRuleNames -> (List String)
-  (list "delimiterBalance" "lineHeader" "freeComment" "retiredSpelling" "fnHeaderUnwrap" "bodyIndent" "condClauses" "letBindingVector" "testPredicate" "symbolRename" "effectMark")
+  (list "delimiterBalance" "lineHeader" "freeComment" "retiredSpelling" "fnHeaderUnwrap" "bodyIndent" "condClauses" "letBindingVector" "testPredicate" "exportAdd" "importAdd" "symbolRename" "effectMark")
 
 ; (:m :do "reader: byte-offset S-expressions; strings and ; comments are skipped as atoms/blank so edits never land inside them")
 
@@ -150,7 +150,12 @@ fn lowerDiags text: String path: String -> (List ty/Diagnostic)
 fn checkText text: String deps: (Map String r/ModuleSummary) path: String -> (List ty/Diagnostic)
   (match (a/parseForTypeCheck text)
     ((err pe) (list (diagOf "parse" pe.msg pe.line pe.col path)))
-    ((ok forms) (chk/checkModuleSource forms deps path text)))
+    ((ok forms) (let [(ds (chk/checkModuleSource forms deps path text))]
+                  (if (listEmpty? ds) (exportLint forms deps path) ds))))
+
+; (:m :do "STATICHINT gap 3: the checker filters rule-13 (an exported fn names a type this module declares but does not export) out of check as a lint; a model reply that is otherwise clean still breaks every importer, so heal reads it unfiltered, only once nothing else is wrong")
+fn exportLint forms: (List a/TopForm) deps: (Map String r/ModuleSummary) path: String -> (List ty/Diagnostic)
+  (filter (fn [(d ty/Diagnostic)] -> Bool (= d.code "rule-13")) (chk/checkModule forms deps path))
 
 fn healDiags text: String deps: (Map String r/ModuleSummary) path: String -> (List ty/Diagnostic)
   (let [(ds (checkText text deps path))]
@@ -414,10 +419,7 @@ fn ruleTestPredicate text: String -> (List String)
 
 ; (:m :do "rule symbolRename: an unbound name is replaced by the checker's own renamed-to hint, its current spelling (isSome -> some?, println! -> println, snake or kebab -> camel) or the unique nearest vocabulary name; each candidate is kept only if the score drops")
 fn unboundName d: ty/Diagnostic -> (Option String)
-  (cond
-    ((stringStartsWith? d.message "unbound symbol: ") (some (optionOr (listHead (stringSplit (slice d.message 16 (stringLength d.message)) ";")) "")))
-    ((stringEndsWith? d.message " is not defined") (some (slice d.message 0 (- (stringLength d.message) 15))))
-    (else none))
+  (hn/unboundName d)
 
 fn renamedHintOf d: ty/Diagnostic -> (Option String)
   (match (stringIndexOf d.message "; renamed to ")
@@ -482,6 +484,94 @@ fn ruleSymbolRename text: String ds: (List ty/Diagnostic) vocab: (List String) -
             ((some name) (listAppend acc (map (fn [(c String)] -> String (renameAtoms text name c)) (symbolCandidates name (renamedHintOf d) vocab))))))
         (list) ds)
 
+; (:m :do "rules exportAdd and importAdd (STATICHINT 2026-10-28): exportAdd appends to the module header :x a name this text declares when every diagnostic is an export one (rule-13 declared here and not exported, or ERR_NOT_EXPORTED naming this module); importAdd qualifies an unbound name with the alias of the one module whose :x lists it and adds (mod :a alias) to :i; both kept only on a strict score drop like every rule")
+fn moduleHeader text: String -> (Option Sx)
+  (listHead (filter (fn [(x Sx)] -> Bool (headIs? x "module")) (readSx text)))
+
+fn headerVector hdr: Sx key: String -> (Option Sx)
+  (let [(items (listItems hdr))
+        (at (listHead (filter (fn [(i Int64)] -> Bool (= (atomText (optionOr (listGet items i) hdr)) key)) (range 0 (listLength items)))))]
+    (match at
+      ((none) none)
+      ((some i) (match (listGet items (+ i 1)) ((some v) (if (bracketList? v) (some v) none)) ((none) none)))))
+
+fn vectorAppendEdit vec: Sx item: String -> Edit
+  (match (listLast (listItems vec))
+    ((some last) (ins (sxEnd last) (str " " item)))
+    ((none) (ins (+ (sxStart vec) 1) item)))
+
+fn exportName d: ty/Diagnostic own: String -> (Option String)
+  (cond
+    ((stringContains? d.message " is declared here and not exported") (listHead (stringSplit d.message " ")))
+    ((and (stringStartsWith? d.message "ERR_NOT_EXPORTED: ") (stringEndsWith? d.message (str " " own)))
+      (listHead (stringSplit (slice d.message 18 (stringLength d.message)) " ")))
+    (else none))
+
+fn declaredHere? text: String name: String -> Bool
+  (or (listContains? (vocabFromSource text (list)) name)
+      (or (stringContains? text (str "(schema " name " "))
+          (stringContains? text (str "(enum " name "\n"))))
+
+fn ruleExportAdd text: String ds: (List ty/Diagnostic) -> (List String)
+  (match (moduleHeader text)
+    ((none) (list))
+    ((some hdr)
+      (let [(own (atomText (optionOr (listGet (listItems hdr) 1) hdr)))
+            (names (fold (fn [(acc (List String)) (d ty/Diagnostic)] -> (List String)
+                           (match (exportName d own) ((some n) (if (and (declaredHere? text n) (not (listContains? acc n))) (listAppend acc (list n)) acc)) ((none) acc)))
+                         (list) ds))
+            (allExport (listAll? (fn [(d ty/Diagnostic)] -> Bool (some? (exportName d own))) ds))]
+        (match (headerVector hdr ":x")
+          ((some vec) (if (and allExport (not (listEmpty? names))) (list (applyEdits text (list (vectorAppendEdit vec (stringJoin names " "))))) (list)))
+          ((none) (list))))))
+
+fn aliasFor modName: String -> String
+  (optionOr (listLast (stringSplit modName "/")) modName)
+
+fn importedAlias hdr: Sx modName: String -> (Option String)
+  (match (headerVector hdr ":i")
+    ((none) none)
+    ((some vec)
+      (listHead (map (fn [(it Sx)] -> String (atomText (optionOr (listGet (listItems it) 2) it)))
+                     (filter (fn [(it Sx)] -> Bool (and (parenList? it) (= (atomText (optionOr (listHead (listItems it)) it)) modName))) (listItems vec))))))
+
+fn aliasTaken? hdr: Sx alias: String -> Bool
+  (match (headerVector hdr ":i")
+    ((none) false)
+    ((some vec) (listAny? (fn [(it Sx)] -> Bool (and (parenList? it) (= (atomText (optionOr (listGet (listItems it) 2) it)) alias))) (listItems vec))))
+
+fn importCandidate text: String name: String modName: String -> (List String)
+  (match (moduleHeader text)
+    ((none) (list))
+    ((some hdr)
+      (match (importedAlias hdr modName)
+        ((some al) (list (renameAtoms text name (str al "/" name))))
+        ((none)
+          (let [(al (aliasFor modName))
+                (item (str "(" modName " :a " al ")"))
+                (qualified (renameAtoms text name (str al "/" name)))]
+            (if (aliasTaken? hdr al)
+              (list)
+              (match (moduleHeader qualified)
+                ((none) (list))
+                ((some h2)
+                  (match (headerVector h2 ":i")
+                    ((some vec) (list (applyEdits qualified (list (vectorAppendEdit vec item)))))
+                    ((none) (match (headerVector h2 ":x") ((some xv) (list (applyEdits qualified (list (ins (sxEnd xv) (str " :i [" item "]")))))) ((none) (list)))))))))))))
+
+fn ruleImportAdd text: String ds: (List ty/Diagnostic) ex: (Map String (List String)) -> (List String)
+  (fold (fn [(acc (List String)) (d ty/Diagnostic)] -> (List String)
+          (match (unboundName d)
+            ((none) acc)
+            ((some name)
+              (match (mapGet ex name)
+                ((some owners) (if (= (listLength owners) 1) (listAppend acc (importCandidate text name (optionOr (listHead owners) ""))) acc))
+                ((none) acc)))))
+        (list) ds)
+
+fn unboundNames ds: (List ty/Diagnostic) -> (List String)
+  (fold (fn [(acc (List String)) (d ty/Diagnostic)] -> (List String) (match (unboundName d) ((some n) (cons n acc)) ((none) acc))) (list) ds)
+
 ; (:m :do "rule effectMark: a declaration the checker reports as effectful but unmarked gets the ! after fn")
 fn markLine lines: (List String) line: Int64 -> (List String)
   (let [(hdr (optionOr (listLast (filter (fn [(i Int64)] -> Bool (fnHeaderLine? (optionOr (listGet lines i) ""))) (range 0 (min line (listLength lines))))) -1))
@@ -496,7 +586,7 @@ fn ruleEffectMark text: String ds: (List ty/Diagnostic) -> (List String)
     (if (= next text) (list) (list next)))
 
 ; (:m :do "pipeline: rules in order, the first candidate that strictly lowers the score is kept, then the rules start over; a fixpoint or the round cap ends it")
-fn ruleCandidates rule: String text: String ds: (List ty/Diagnostic) vocab: (List String) -> (List String)
+fn ruleCandidates rule: String text: String ds: (List ty/Diagnostic) vocab: (List String) ex: (Map String (List String)) -> (List String)
   (cond
     ((= rule "delimiterBalance") (ruleDelimiterBalance text))
     ((= rule "lineHeader") (ruleLineHeader text))
@@ -506,6 +596,8 @@ fn ruleCandidates rule: String text: String ds: (List ty/Diagnostic) vocab: (Lis
     ((= rule "condClauses") (ruleCondClauses text))
     ((= rule "letBindingVector") (ruleLetBindingVector text))
     ((= rule "testPredicate") (ruleTestPredicate text))
+    ((= rule "exportAdd") (ruleExportAdd text ds))
+    ((= rule "importAdd") (ruleImportAdd text ds ex))
     ((= rule "symbolRename") (ruleSymbolRename text ds vocab))
     ((= rule "effectMark") (ruleEffectMark text ds))
     (else (list)))
@@ -522,13 +614,13 @@ fn firstImproving rule: String cands: (List String) text: String score: Int64 de
           (let [(ds (healDiags c deps path))]
             (if (< (healScore ds) score) (some (Step :text c :diags ds :rule rule)) (firstImproving rule rest text score deps path)))))))
 
-fn tryRules rules: (List String) text: String ds: (List ty/Diagnostic) deps: (Map String r/ModuleSummary) path: String vocab: (List String) -> (Option Step)
+fn tryRules rules: (List String) text: String ds: (List ty/Diagnostic) deps: (Map String r/ModuleSummary) path: String vocab: (List String) ex: (Map String (List String)) -> (Option Step)
   (match (listHead rules)
     ((none) none)
     ((some rule)
-      (match (firstImproving rule (ruleCandidates rule text ds vocab) text (healScore ds) deps path)
+      (match (firstImproving rule (ruleCandidates rule text ds vocab ex) text (healScore ds) deps path)
         ((some s) (some s))
-        ((none) (tryRules (optionOr (listTail rules) (list)) text ds deps path vocab)))))
+        ((none) (tryRules (optionOr (listTail rules) (list)) text ds deps path vocab ex)))))
 
 fn quoteAsn s: String -> String
   (str "\"" (stringReplace (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\n" "\\n") "\"")
@@ -547,12 +639,12 @@ fn parseRuleNames -> (List String)
   (list "delimiterBalance" "lineHeader" "fnHeaderUnwrap" "bodyIndent")
 
 ; (:m :do "parseOnly runs only the parse-level rules and stops as soon as the text parses: the phase heal! runs before it can read the imports it needs for the full check")
-fn healLoop text: String ds: (List ty/Diagnostic) deps: (Map String r/ModuleSummary) path: String vocab: (List String) rules: (List String) parseOnly: Bool rounds: Int64 applied: (List String) -> HealResult
+fn healLoop text: String ds: (List ty/Diagnostic) deps: (Map String r/ModuleSummary) path: String vocab: (List String) ex: (Map String (List String)) rules: (List String) parseOnly: Bool rounds: Int64 applied: (List String) -> HealResult
   (if (or (listEmpty? ds) (or (<= rounds 0) (and parseOnly (not (parseFailed? ds)))))
     (finish text ds applied)
-    (match (tryRules (if parseOnly (filter (fn [(r String)] -> Bool (listContains? (parseRuleNames) r)) rules) rules) text ds deps path vocab)
+    (match (tryRules (if parseOnly (filter (fn [(r String)] -> Bool (listContains? (parseRuleNames) r)) rules) rules) text ds deps path vocab ex)
       ((none) (finish text ds applied))
-      ((some s) (healLoop s.text s.diags deps path vocab rules parseOnly (- rounds 1) (cons s.rule applied)))))
+      ((some s) (healLoop s.text s.diags deps path vocab ex rules parseOnly (- rounds 1) (cons s.rule applied)))))
 
 ; (:m :do "vocabulary for nearest-name repair: the module's own defun names plus a base list (the prelude's, from preludeVocab!)")
 fn vocabFromSource text: String base: (List String) -> (List String)
@@ -569,8 +661,12 @@ fn vocabFromSource text: String base: (List String) -> (List String)
 
 ; (:m :do "healSourceRules runs a chosen subset of the rules: the rule fixtures use it to show each rule is the cause of its repair (the pipeline without it leaves the fixture broken)")
 fn healSourceRules text: String path: String deps: (Map String r/ModuleSummary) vocab: (List String) rules: (List String) -> HealResult
+  (healSourceEnv text path deps vocab (mapEmpty) rules)
+
+; (:m :do "healSourceEnv adds ex, the name -> exporting modules map importAdd reads (heal! builds it from the package index; fixtures pass it directly)")
+fn healSourceEnv text: String path: String deps: (Map String r/ModuleSummary) vocab: (List String) ex: (Map String (List String)) rules: (List String) -> HealResult
   (let [(t0 (spellNormal text rules))]
-    (healLoop t0 (healDiags t0 deps path) deps path (vocabFromSource t0 vocab) rules false 24 (spellApplied text t0)))
+    (healLoop t0 (healDiags t0 deps path) deps path (vocabFromSource t0 vocab) ex rules false 24 (spellApplied text t0)))
 
 fn healSourceWith text: String path: String deps: (Map String r/ModuleSummary) vocab: (List String) -> HealResult
   (healSourceRules text path deps vocab (healRuleNames))
@@ -588,13 +684,15 @@ fn ! heal! path: String text: String roots: (List String) preludePath: String ma
   (let [(t0 (spellNormal text (healRuleNames)))
         (vocab (vocabFromSource t0 (preludeVocab! preludePath)))
         (ds0 (checkText t0 (mapEmpty) path))
-        (first (if (parseFailed? ds0) (healLoop t0 ds0 (mapEmpty) path vocab (healRuleNames) true maxRounds (spellApplied text t0)) (finish t0 (list) (spellApplied text t0))))]
+        (first (if (parseFailed? ds0) (healLoop t0 ds0 (mapEmpty) path vocab (mapEmpty) (healRuleNames) true maxRounds (spellApplied text t0)) (finish t0 (list) (spellApplied text t0))))]
     (match (a/parseForTypeCheck first.text)
       ((err _) (ok first))
       ((ok forms)
         (let [(summary (r/collectSummary forms path))
-              (cl (r/loadModuleDepsFrom! (cons (r/parentDirOf path) roots) (r/mapValuesList summary.imports) (mapEmpty) (r/emptyModIndex)))]
+              (ex (hn/exportersOf! (optionOr (listHead roots) ".") (unboundNames (healDiags first.text (mapEmpty) path))))
+              (owners (fold (fn [(acc (List String)) (os (List String))] -> (List String) (if (= (listLength os) 1) (listAppend acc (filter (fn [(o String)] -> Bool (not (listContains? acc o))) os)) acc)) (list) (mapValues ex)))
+              (cl (r/loadModuleDepsFrom! (cons (r/parentDirOf path) roots) (listAppend (r/mapValuesList summary.imports) owners) (mapEmpty) (r/emptyModIndex)))]
           (if (and (listEmpty? cl.unresolved) (listEmpty? cl.errors))
-            (let [(second (healLoop first.text (healDiags first.text cl.deps path) cl.deps path vocab (healRuleNames) false (- maxRounds (listLength first.repaired)) (list)))]
+            (let [(second (healLoop first.text (healDiags first.text cl.deps path) cl.deps path vocab ex (healRuleNames) false (- maxRounds (listLength first.repaired)) (list)))]
               (ok (finish second.text second.left (listReverse (listAppend first.repaired second.repaired)))))
             (err (str "heal: cannot load the imports of " path ": " (stringJoin (listAppend cl.unresolved cl.errors) "; "))))))))

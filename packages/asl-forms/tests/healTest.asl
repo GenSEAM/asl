@@ -139,6 +139,34 @@ fn testEdits -> Bool
     (assert (= (h/editDistance "kitten" "sitting") 3) "edit distance kitten/sitting")
     true)
 
-fn runTests -> Bool
+; (:m :do "STATICHINT gap 2: exportAdd appends a name this module declares to its :x when every diagnostic is an export one; the near-miss with an unrelated second error is left alone")
+fn testExportAdd -> Bool
+  (and (healsTo? "exportAdd" "(module m :x [f])\n\n(schema Foo (:f a Int64))\n\nfn f x: Foo -> Int64\n  x.a\n" "(module m :x [f Foo])\n\n(schema Foo (:f a Int64))\n\nfn f x: Foo -> Int64\n  x.a\n" (list))
+       (untouched? "exportAdd near-miss" "(module m :x [f Foo])\n\n(schema Foo (:f a Int64))\n\nfn f x: Foo -> Int64\n  x.a\n")
+       (let [(res (h/healSourceWith "(module m :x [f])\n\n(schema Foo (:f a Int64))\n\nfn f x: Foo -> Int64\n  (zzqq x.a)\n" "m.asl" (mapEmpty) (list)))]
+         (do (assert (not (listContains? res.repaired "exportAdd")) (str "exportAdd waits while another error remains, got " res.receipt))
+             true)))
+
+; (:m :do "STATICHINT gap 4: importAdd candidates qualify an unbound name with the alias of the one module whose :x lists it and add (mod :a alias) to :i; the ex map is its only source, so the empty map yields none, two exporters are ambiguous; the strict score drop needs the real package index, so the end-to-end run below goes through heal!")
+fn testImportAdd -> Bool
+  (let [(src "(module m :x [f])\n\nfn f s: String -> (List String)\n  (headerExports s)\n")
+        (want "(module m :x [f] :i [(asl-checker/hints :a hints)])\n\nfn f s: String -> (List String)\n  (hints/headerExports s)\n")
+        (ds (h/healDiags src (mapEmpty) "m.asl"))
+        (res (h/ruleImportAdd src ds (mapSet (mapEmpty) "headerExports" (list "asl-checker/hints"))))
+        (empty (h/ruleImportAdd src ds (mapEmpty)))
+        (two (h/ruleImportAdd src ds (mapSet (mapEmpty) "headerExports" (list "asl-checker/hints" "asl-checker/other"))))]
+    (do (assert (= res (list want)) (str "importAdd candidate is the qualified call plus the :i entry, got " (stringJoin res " | ")))
+        (assert (listEmpty? empty) "no exporter known: no candidate")
+        (assert (listEmpty? two) "two exporting modules: ambiguous, no candidate")
+        true))
+
+fn ! testImportAddIndex -> Bool
+  (match (h/heal! "m.asl" "(module m :x [f])\n\nfn f s: String -> (List String)\n  (headerExports s)\n" (list ".") "asl/prelude/prelude.asl" 24)
+    ((err e) (do (assert false (str "heal! failed: " e)) false))
+    ((ok res) (do (assert (listContains? res.repaired "importAdd") (str "heal! adds the import from the package index, got " res.receipt))
+                  (assert (stringContains? res.text "(hints/headerExports s)") (str "the call is qualified, got " res.text))
+                  true)))
+
+fn ! runTests -> Bool
   (and (testDelimiterBalance) (testLineHeader) (testFreeComment) (testRetiredSpelling) (testFnHeaderUnwrap) (testBodyIndent) (testCondClauses)
-       (testLetBindingVector) (testTestPredicate) (testSymbolRename) (testEffectMark) (testEffectMarkPure) (testUnrepairableIsReported) (testEdits))
+       (testLetBindingVector) (testTestPredicate) (testSymbolRename) (testEffectMark) (testEffectMarkPure) (testExportAdd) (testImportAdd) (testImportAddIndex) (testUnrepairableIsReported) (testEdits))

@@ -5,7 +5,7 @@
       locateParseFailure describeParseFailure autoRepairReply parseReply parseCutInfo detectCutForm topLevelSpans degenerateCut
       capReply replyFacts needsConfirmReceipt! shlexSplit runAsRead! tokenizeForm rawFences hoistInlineRaw bindRawBlocks unfence
       replyMaxBytes rawRequiredBytes]
-  :i [(asl/agentLoop/core :a c) (asl-forms/repair :a rep) (asl-proc/coreProcess :a cp)])
+  :i [(asl/agentLoop/core :a c) (asl-forms/repair :a rep) (asl-forms/heal :a hl) (asl-proc/coreProcess :a cp)])
 
 enum RepairItem
   (repairItem kind: String tok: String line: Int64 col: Int64)
@@ -628,8 +628,16 @@ fn arDelim st: Ar chunk: String s: Int64 e: Int64 idx: Int64 why0: String -> Ar
         (else (arFinal st chunk s e idx why0))))))
 
 fn arChunk reply: String st: Ar s: Int64 e: Int64 idx: Int64 -> Ar
-  (let [chunk (sl reply s e)
-        first (chunkOps chunk)]
+  (let [orig (sl reply s e)
+        spelled (optionOr (listHead (hl/ruleRetiredSpelling orig)) orig)]
+    (if (and (!= spelled orig) (ok? (chunkOps spelled)))
+      (match st ((ar kept rep left spans kinds q)
+        (ar (cons spelled kept) (cons (str "(\"spelling\" :at " (stringFromInt64 idx) ")") rep) left spans (addKind kinds "spelling") q)))
+      (arChunkRaw orig st s e idx)))
+
+; (:m :do "the retired spellings mt, == and not= (heal retiredHeadFor, the single map) are renamed in a reply form before it is parsed; a form that still fails keeps its original text so the cut offsets stay valid")
+fn arChunkRaw chunk: String st: Ar s: Int64 e: Int64 idx: Int64 -> Ar
+  (let [first (chunkOps chunk)]
     (if (ok? first)
       (match st ((ar kept rep left spans kinds q) (ar (cons chunk kept) rep left spans kinds q)))
       (let [qr (repairInnerQuotes chunk)

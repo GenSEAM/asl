@@ -32,7 +32,9 @@
       (asl-syntax/xml :a xmltree)
       (asl-forms/kernel :a k)
       (asl-checker/checkCached :a cc)
-      (asl-checker/types :a ty)])
+      (asl-checker/types :a ty)
+      (asl-checker/hints :a hn)
+      (asl-forms/heal :a hl)])
 
 (schema CheckVerdict
   (:f status String)
@@ -48,7 +50,8 @@
   (:f col Int64)
   (:f expected String)
   (:f near String)
-  (:f kind String))
+  (:f kind String)
+  (:f hint String :default ""))
 
 fn makeLeftItem line: Int64 col: Int64 expected: String near: String kind: String -> LeftItem
   (LeftItem :line line :col col :expected expected :near near :kind kind)
@@ -73,7 +76,9 @@ fn formatLeftItem item: LeftItem -> String
        " :col " (stringFromInt64 item.col)
        " :expected \"" (k/escapeAsnVal item.expected) "\""
        " :near \"" (k/escapeAsnVal item.near) "\""
-       " :kind " item.kind ")")
+       " :kind " item.kind
+       (if (stringEmpty? item.hint) "" (str " :hint \"" (k/escapeAsnVal item.hint) "\""))
+       ")")
 
 fn formatLeftList items: (List LeftItem) -> String
   (if (listEmpty? items)
@@ -205,8 +210,10 @@ fn diagCode code: String -> String
     ((= code "parse") "ERR_PARSE")
     (else (str "ERR_" code)))
 
-fn diagItem text: String s: src/Source d: ty/Diagnostic -> LeftItem
-  (LeftItem :line d.line :col d.col :expected (diagCode d.code) :near (nearSnippet text s d.line d.col) :kind "semantic")
+fn diagItem text: String s: src/Source d: ty/Diagnostic vocab: (List String) owners: (Map String (List String)) -> LeftItem
+  (let [(near (match (hn/unboundName d) ((some n) (hl/symbolCandidates n none vocab)) ((none) (list))))
+        (own (match (hn/unboundName d) ((some n) (optionOr (mapGet owners n) (list))) ((none) (list))))]
+    (LeftItem :line d.line :col d.col :expected (diagCode d.code) :near (nearSnippet text s d.line d.col) :kind "semantic" :hint (optionOr (hn/hintFor d near own) "")))
 
 fn ! runNativeCheck! targetPath: String text: String -> (Result (List LeftItem) String)
   (let [(r (cc/checkFileCached! targetPath (list "." "asl/packages" "asl") (cc/emptyCache)))]
@@ -214,7 +221,10 @@ fn ! runNativeCheck! targetPath: String text: String -> (Result (List LeftItem) 
       ((err _) (err (str "native check could not read " targetPath " or resolve one of its imports")))
       ((ok v)
         (let [(s (src/sourceFromString targetPath text))]
-          (ok (map (fn [(d ty/Diagnostic)] -> LeftItem (diagItem text s d)) v.diags))))))
+          (let [(unbound (fold (fn [(acc (List String)) (d ty/Diagnostic)] -> (List String) (match (hn/unboundName d) ((some n) (cons n acc)) ((none) acc))) (list) v.diags))
+              (vocab (if (listEmpty? unbound) (list) (hl/vocabFromSource text (hl/preludeVocab! "asl/prelude/prelude.asl"))))
+              (owners (hn/exportersOf! "." unbound))]
+          (ok (map (fn [(d ty/Diagnostic)] -> LeftItem (diagItem text s d vocab owners)) v.diags)))))))
 
 fn createAslTempFile! dir: String content: String counter: Int64 -> (Result String String)
   (if (> counter 100)
