@@ -1,5 +1,5 @@
 (module asl/agentLoop/sessionPool
-  :x [Sess Pool Turn Exec newPool poolSubmit! poolStep! poolWatch poolIdle? poolDone pickNext poolMemCount spilledCount httpRequest execReply]
+  :x [Sess Pool Turn Exec asnQuote newPool poolSubmit! poolStep! poolWatch poolIdle? poolDone poolTakeDone poolKnown? pickNext poolMemCount spilledCount httpRequest execReply]
   :i [(asl-tools/fleet/run :a fr)])
 
 ; (:m :ref POOL-SERVE :do "one process, many sessions: a session is a state string plus the request its next turn sends to the hub socket. At most slots requests are in flight, every other session waits parked in memory and, past memCap, spilled to a file under spillDir. A turn function turns (state, reply) into the next state and either the next request body or the final result, so no turn blocks the reactor and the hub's bucket parking is what meters the rate")
@@ -48,6 +48,12 @@ fn newPool sock: String slots: Int64 memCap: Int64 ttlMs: Int64 spillDir: String
 
 fn poolDone p: Pool -> (List (Pair String String))
   p.done
+
+fn poolTakeDone p: Pool -> (Pair Pool (List (Pair String String)))
+  (pair (with p :done (list)) p.done)
+
+fn poolKnown? p: Pool id: String -> Bool
+  (listAny? (fn [(s Sess)] -> Bool (= s.id id)) (listAppend p.active (listAppend p.execs p.waiting)))
 
 fn poolMemCount p: Pool -> Int64
   (listLength (filter (fn [(s Sess)] -> Bool (stringEmpty? s.spill)) p.waiting))
