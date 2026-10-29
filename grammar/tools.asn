@@ -150,6 +150,7 @@
         (:intent :type sym)
         (:model :type str :default "")
         (:nativeTools :type str :default "step" :note "native tool calling on profile calls: step (absent) offers one step(form) function, ops one function per op shape, off none; calls read back as the same forms; a gateway model row :nativeTools false strips tools for routes that reject them")
+        (:prefix :type str :default "" :note "comma list: system prompt sections or groups to drop (rules protocol glossary attractors opsLean aslCard or a layer id) and focus, a per-turn tail with goal, gate and next op; empty is the full prompt")
         (:owns :type forms :default () :note "narrows :root")
         (:plan :type bool :default false)
         (:queueTimeout :type int :default 1200 :note "seconds, outside timeout")

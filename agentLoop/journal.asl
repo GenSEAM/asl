@@ -1,6 +1,6 @@
 (module asl/agentLoop/journal
   :x [Snapshot Written AsnNode Layer
-      harnessLayers buildSystemPrompt retainJournal journalWrite snapshotBeforeWrite patchLines filePatch!
+      harnessLayers buildSystemPrompt buildSystemPromptDrop sectionId retainJournal journalWrite snapshotBeforeWrite patchLines filePatch!
       applyResumePatch handBack writtenField handBackFields
       newWritten idleWritten git! asnRead asnReadOne pathNorm pathRel pathJoin pathDirname splitExt loadEffects]
   :i [(asl/agentLoop/core :a c) (asl/agentLoop/diff :a d) (asl-proc/coreProcess :a cp) (asl-proc/runnerBin :a rb) (asl-harness/launch :a lh) (asl/agentLoop/grounding :a gr)])
@@ -877,28 +877,54 @@ fn poolRow -> String
 fn gatesRow gates: (List String) -> String
   (str "(:gates :run (:step :op \"gate\") :nth (:step :op \"gate\" :n i) :after everyActingTurn :counts (:gate :asserts n :failed 0) :needs (:gt n 0) :redOnRevert (:gt failed 0) :items (" (quoted gates) "))")
 
+; (:m :ref L0-PREFIX :do "the id a prefix row is dropped by: a harness layer by its :id, any other row by its head keyword")
+fn sectionId row: String -> String
+  (let [body (if (stringStartsWith? row "(:layer :id ") (optionOr (stringSlice row 12 (stringLength row)) "") (optionOr (stringSlice row 2 (stringLength row)) ""))
+        cut (fn [t] (c/firstOf (stringSplit (c/firstOf (stringSplit t " ")) ")")))]
+    (cut body))
+
+; (:m :ref L0-PREFIX :do "a drop list names rows or groups: rules is the ontology and teleology layers, protocol is clientRules with batch, pool and needsConfirm, opsLean keeps only the everyday op shapes")
+fn dropIds drop: (List String) -> (List String)
+  (fold (fn [acc d]
+          (listAppend acc
+            (cond
+              ((= d "rules") (list "orient" "authority" "evidence" "reply" "scope" "abstain" "breaker" "task" "work" "memory" "language" "git"))
+              ((= d "protocol") (list "clientRules" "batch" "pool" "needsConfirm"))
+              (else (list d)))))
+    (list) drop)
+
+fn leanOp? op: String -> Bool
+  (listContains? (list "read" "query" "write" "edit" "check" "test" "outline" "gate" "run" "note" "done" "escalate") op)
+
 fn ! buildSystemPrompt repoRoot: String task: String rootDir: String base: String gates: (List String) contextTokens: (Option Int64) plan: Bool -> (Result String String)
-  (let [effects (loadEffects repoRoot)
+  (buildSystemPromptDrop repoRoot task rootDir base gates contextTokens plan (list))
+
+; (:m :ref L0-PREFIX :do "the system prompt without the rows a drop list names; an empty list is byte-identical to buildSystemPrompt")
+fn ! buildSystemPromptDrop repoRoot: String task: String rootDir: String base: String gates: (List String) contextTokens: (Option Int64) plan: Bool drop: (List String) -> (Result String String)
+  (let [ids (dropIds drop)
+        kept (fn [row] (not (listContains? ids (sectionId row))))
+        effects (loadEffects repoRoot)
         confirm (map pairFirst (filter (fn [e] (listContains? (list "outward" "irreversible" "needsConfirm") (pairSecond e))) effects))
         accepted (map pairFirst (filter (fn [e] (and (= (pairSecond e) "local") (not (= (pairFirst e) "step")))) effects))
-        shapes (someOf (map (fn [op] (if (listContains? (list "diff" "flush" "discard") op) none (dictAt (opShapes) op))) accepted))
+        shapes (someOf (map (fn [op] (if (or (listContains? (list "diff" "flush" "discard") op) (and (listContains? ids "opsLean") (not (leanOp? op)))) none (dictAt (opShapes) op))) accepted))
         ; (:m :ref LEON-STABLE-PREFIX :do "static layers, ops, batch, pool and the card come first and depend on neither session nor task; cwd/git/date (env layer), plan, gates and base follow as the tail; the task lives only in the user turn")
-        statRows (listAppend (opt (not (listEmpty? shapes)) (str "(:ops :raw \"code with quotes, backslashes or many lines: :raw and a fenced block on the following lines\" :forms (" (quoted shapes) "))"))
+        statRows0 (listAppend (opt (not (listEmpty? shapes)) (str "(:ops :raw \"code with quotes, backslashes or many lines: :raw and a fenced block on the following lines\" :forms (" (quoted shapes) "))"))
                    (listAppend (opt (not (listEmpty? confirm)) (str "(:needsConfirm :answers needsConfirmReceipt :ops (" (quoted confirm) "))"))
                      (list (batchRow) (poolRow))))
-        dynRows (listAppend (opt plan (planRow))
-                  (opt (not (listEmpty? gates)) (gatesRow gates)))
+        statRows (filter kept statRows0)
+        dynRows (filter kept (listAppend (opt plan (planRow))
+                  (opt (not (listEmpty? gates)) (gatesRow gates))))
         layers (match contextTokens
                  ((some _) (harnessLayers repoRoot rootDir "implement"))
                  ((none) (ok "")))
-        card (if (gr/wantsAslCard task gates) (gr/aslCard! repoRoot) (ok ""))]
+        card (if (and (gr/wantsAslCard task gates) (not (listContains? ids "aslCard"))) (gr/aslCard! repoRoot) (ok ""))]
     (match layers
       ((err e) (err e))
       ((ok lay)
         (match card
           ((err e) (err (str "RuntimeError: ERR_HARNESS: aslCard: " e)))
           ((ok cardText)
-            (let [lines (stringLines lay)
+            (let [lines (filter kept (stringLines lay))
                   isEnv (fn [l] (stringStartsWith? l "(:layer :id env"))
                   staticLay (c/joinSep (filter (fn [l] (not (isEnv l))) lines) "\n")
                   envLay (c/joinSep (filter isEnv lines) "\n")]
