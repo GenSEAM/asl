@@ -1620,7 +1620,7 @@ fn project body: String -> (Option Projection)
               (let [(msg (getOr c "message" (j/jobj (list))))]
                 (if (isObj? msg)
                   (let [(raw (getOr msg "content" (j/jnull)))]
-                    (if (emptyContent? raw)
+                    (if (and (emptyContent? raw) (not (toolCalls? msg)))
                       (match (reasoningFallbackText msg)
                         ((none) (some (Projection :resp resp :content raw)))
                         ((some fb)
@@ -1633,6 +1633,15 @@ fn project body: String -> (Option Projection)
                   none))
               none))
            ((none) none))))))
+
+; (:m :ref PROTO-STUDY :do "a message whose content is null but which carries tool_calls answered; it is neither empty nor replaced by its reasoning text, else a native tool call was retried and ended as ERR_EMPTY_CONTENT 502 (nim, 2026-10-29)")
+fn toolCalls? msg: j/Json -> Bool
+  (match (getOr msg "tool_calls" (j/jnull)) ((j/jarr xs) (not (listEmpty? xs))) (_ false))
+
+fn firstMessage resp: j/Json -> j/Json
+  (match (getOr resp "choices" (j/jnull))
+    ((j/jarr xs) (match (listHead xs) ((some c) (if (isObj? c) (getOr c "message" (j/jnull)) (j/jnull))) ((none) (j/jnull))))
+    (_ (j/jnull)))
 
 fn emptyContent? v: j/Json -> Bool
   (match v ((j/jnull) true) ((j/jstr s) (stringEmpty? (u/pyStrip s))) (_ false))
@@ -1820,7 +1829,7 @@ fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair St
         (proj (project chatBody))]
     (match proj
       ((some p)
-       (if (emptyContent? p.content)
+       (if (and (emptyContent? p.content) (not (toolCalls? (firstMessage p.resp))))
          (tell (usageNote prov alias "empty")
            (fn [] -> ChatStep
              (let [(action (u/emptyContentAction cx.cascadeLen l.emptyRetries))]

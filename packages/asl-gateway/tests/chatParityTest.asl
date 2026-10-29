@@ -337,6 +337,22 @@ fn ! reasoningContentFallbackCheck -> String
          ((none) "no-response")
          ((some resp) resp.body)))))
 
+; (:m :ref PROTO-STUDY :do "TOOLCALLREPLY: a native tool call answers with content null, tool_calls and, on reasoning models, reasoning_content; the call is the answer, not an empty reply to retry or to replace with the reasoning text")
+fn ! toolCallReplyBody -> String
+  "{\"id\":\"gen_3\",\"object\":\"chat.completion\",\"choices\":[{\"index\":0,\"finish_reason\":\"tool_calls\",\"message\":{\"role\":\"assistant\",\"content\":null,\"reasoning_content\":\"I will read it\",\"tool_calls\":[{\"id\":\"c1\",\"type\":\"function\",\"function\":{\"name\":\"read\",\"arguments\":\"{}\"}}]}}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5}}"
+
+fn ! toolCallPlainBody -> String
+  (stringReplace (toolCallReplyBody) "\"reasoning_content\":\"I will read it\"," "")
+
+fn ! toolCallReplyCheck body: String -> String
+  (let [(env (mapSet (mapEmpty) "TEST_KEY" "test-key"))]
+    (match (testChatWorld (reasoningFallbackConfigText) env)
+      ((none) "world-error")
+      ((some world)
+       (match (drive! (ch/chatStart! (reasoningFallbackRequest) world) body 60)
+         ((none) "no-response")
+         ((some resp) resp.body)))))
+
 ; (:m :tags (chat breaker pool) :do "429BREAKERSCOPE: captures effBreakerDown/effBreakerEvent pool keys seen while driving a real cascade, so the markDown/checkDown key choice (per model vs provider-wide) is observed through the public effect API rather than an unexported helper")
 fn ! captureBreaker! step: ch/ChatStep downAcc: (List String) eventAcc: (List String) status: Int64 reason: String httpBody: String remaining: Int64 -> (Pair (List String) (List String))
   (if (<= remaining 0)
@@ -494,6 +510,15 @@ fn ! runTests -> Bool
                   (msg (get first "message"))]
               (assert (= (text (get msg "content")) "the answer is 42")
                       (str "EMPTYCONTENTFALLBACK2: null content falls back to message.reasoning_content: " (text (get msg "content"))))))))
+      (let [(raw3 (toolCallReplyCheck (toolCallPlainBody)))
+            (raw4 (toolCallReplyCheck (toolCallReplyBody)))
+            (content4 (match (pt/jsonLoads raw4)
+                        ((ok v) (get (get (optionOr (listHead (items (get v "choices"))) (j/jnull)) "message") "content"))
+                        ((err _) (j/jstr "unparsed"))))]
+        (assert (stringContains? raw3 "tool_calls") (str "TOOLCALLREPLY: a tool call with null content reaches the client: " raw3))
+        (refute (stringContains? raw3 "ERR_EMPTY_CONTENT") "TOOLCALLREPLY: a tool call is not an empty reply")
+        (assert (stringContains? raw4 "tool_calls") (str "TOOLCALLREPLY: a reasoning model's tool call reaches the client: " raw4))
+        (refute (= content4 (j/jstr "I will read it")) "TOOLCALLREPLY: the reasoning text does not become the content of a tool-call reply"))
       (let [(rl (plainRateLimitEvents))]
         (assert (= (listLength rl) 2) (str "BREAKERSCOPE: a two-model cascade on plain 429 marks down once per model: " (stringFromInt64 (listLength rl))))
         (assert (listContains? rl "markDown:test:m1") "BREAKERSCOPE: model m1's 429 trips its own pool test:m1")
