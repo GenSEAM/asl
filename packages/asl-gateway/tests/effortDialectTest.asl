@@ -43,7 +43,7 @@ fn ! defaultChecks -> Bool
     (assert (= (ch/effortDialectFor "nim" "openai" none) "chatTemplateThinking") "nim default")
     (assert (= (ch/effortDialectFor "nim" "openai" (some "off")) "off") "row override wins")
     (assert (= (ch/effortDialectFor "agy" "cli" none) "off") "non-openai kind sends nothing")
-    true))
+    true)
 
 fn ! configChecks -> Bool
   (let [(okRes (cfg/gateway_params (mapFromPairs (list (pair "effort" (rd/sexprAtom "none")) (pair "effortDialect" (rd/sexprAtom "chatTemplateThinking")))) "t"))
@@ -53,7 +53,7 @@ fn ! configChecks -> Bool
       (assert (= (pairFirst okRes).effortDialect (some "chatTemplateThinking")) "effortDialect parsed")
       (assert (= (pairFirst okRes).effort (some "none")) "effort none parsed")
       (assert (not (listEmpty? (pairSecond badRes))) "an unknown effortDialect is an error")
-      true)))
+      true))
 
 fn ! runTests -> Bool
   (and (wireChecks) (and (defaultChecks) (configChecks)))
