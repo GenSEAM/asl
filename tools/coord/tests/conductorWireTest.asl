@@ -244,6 +244,20 @@ fn ! testCost -> Bool
         (assert (= (cd/leonCost "(:agent)" prices "vendor/a") -1) "no turns is unknown")
         true))
 
+; (:m :ref CONDUCTOR-VACUOUS-GATE :do "a Leon receipt whose :vacuousGates lists the unit gate makes the write vacuous unless the task says the gate is a regression guard")
+fn testVacuousWrite -> Bool
+  (let [(gate "./bin/asl test a/bTest.asl")
+        (out (str "(:agent :status :ok :receipt (:agentReceipt :status :ok :phases (scout) :vacuousGates (\"" gate "\") :usage (:input 1)))"))
+        (other "(:agent :status :ok :receipt (:agentReceipt :status :ok :vacuousGates (\"./bin/asl test c/dTest.asl\")))")]
+    (do (assert (cd/vacuousWrite? out gate "add a flag") "the gate listed in :vacuousGates is vacuous")
+        (assert (not (cd/vacuousWrite? other gate "add a flag")) "another gate listed is not this unit's")
+        (assert (not (cd/vacuousWrite? "(:agent :status :ok :receipt (:agentReceipt :status :ok))" gate "add a flag")) "no :vacuousGates, not vacuous")
+        (assert (not (cd/vacuousWrite? out gate "keep the gate green: it is a Regression Guard")) "a regression guard task may keep a green gate")
+        (assert (not (cd/vacuousWrite? out "" "add a flag")) "no gate, nothing to call vacuous")
+        (assert (cd/vacuousSig? (cd/vacuousSig gate)) "the vacuous signature is recognised")
+        (assert (not (cd/vacuousSig? "noEdit")) "other write signatures are not")
+        true))
+
 fn ! commitFile repo: String file: String text: String msg: String -> Unit
   (let [(_ (fileWrite (str repo "/" file) text))
         (_ (git repo (list "add" file)))
@@ -310,6 +324,7 @@ fn ! runTests -> Bool
       (assert (testSpend) "token spend from provider usage and Leon's usage row")
       (assert (testMergeEnv) "the train cannot start a nested e2e")
       (assert (testCost) "costUsd from gateway price rows, unpriced is -1")
+      (assert (testVacuousWrite) "a gate green on the base makes the write vacuous")
       (assert (testStaleBranch) "a stale leftover branch is rebased or recreated")
       (assert (testGateSig) "gateSig ignores usage lines")
       (assert (testSigKey) "signature key ignores ids")

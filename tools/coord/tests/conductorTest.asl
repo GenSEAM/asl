@@ -248,6 +248,23 @@ fn ! testWriterClaimIgnored bin: String -> Bool
         (assert (listAll? (fn [(u st/Task)] -> Bool (not (= u.st "done"))) storeRows) "the store row is not done")
         true))
 
+; (:m :ref CONDUCTOR-VACUOUS-GATE :do "a write whose unit gate already passed on the base is not proven by any edit: it blocks with one escalate row on the first write, no retry, no tier hop, never gated")
+fn ! testVacuousBlocks bin: String -> Bool
+  (let [(dir (scratch "vacuous"))
+        (_ (cleanup dir))
+        (put (putAll! dir (list (task "V" (list "p/v") (list) (greenGate) "free"))))
+        (ctx (ctxWith dir bin (fn [(stage String) (id String)] -> (List String) (if (= stage "write") (list "--failsig" "vacuousGate: echo green") (list))) 4 4 400 60))
+        (_ (cd/drain! ctx 600))
+        (v (cuOf dir "V"))
+        (esc (readOr dir "escalations.asn"))
+        (tos (tosOf dir "V"))
+        (_ (cleanup dir))]
+    (do (assert put "unit put")
+        (assert (= tos (list "ready" "writing" "blocked")) (str "V blocks on its first vacuous write: " (stringJoin tos ",")))
+        (assert (= v.lane "free") (str "a vacuous gate does not hop tiers: " v.lane))
+        (assert (stringStartsWith? esc "(:escalate :unit \"V\" :seen \"vacuousGate") (str "one escalate row names the vacuous gate: " esc))
+        true))
+
 ; (:m :ref CONDUCTOR :do "a unit waiting on a dependency that never merges escalates after maxWait ticks and blocks")
 fn ! testWaitEscalates bin: String -> Bool
   (let [(dir (scratch "wait"))
@@ -567,6 +584,7 @@ fn ! runTests -> Bool
         (assert (testWake bin) "wake moves a parked unit")
         (assert (testWriterClaimIgnored bin) "writer's green claim is not trusted")
         (assert (testWaitEscalates bin) "waiting past maxWait escalates")
+        (assert (testVacuousBlocks bin) "a vacuous-gate write blocks at once")
         (assert (testParallel bin) "stages overlap")
         (assert (testCapacity bin) "capacity counts units in flight")
         (assert (testKilledChild bin) "killed child is a failed stage")
