@@ -3,7 +3,7 @@
       ProviderEnv VendorConfig Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
       parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
-      curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! providerEnv! makeProvider! nextTurn! advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
+      curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! providerEnv! makeProvider! nextTurn! withPrefill profileMessages advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
   :i [(asl-json/json :a j) (asl-proc/coreProcess :a cp) (aslGateway/server :a gs) (aslGateway/dispatch :a gd) (aslGateway/upstream :a gu) (aslGateway/config :a cfg)])
 
 enum ProviderError
@@ -34,7 +34,8 @@ enum ProviderError
   (:f timeoutSet Bool)
   (:f env ProviderEnv)
   (:f link (Option gs/GatewayLoop))
-  (:f turn Int64))
+  (:f turn Int64)
+  (:f prefill String :default ""))
 
 enum Provider
   (scriptProvider name: String turns: (List String) index: Int64)
@@ -838,6 +839,16 @@ fn setIntent cfg: VendorConfig intent: String -> VendorConfig
 fn withTurn cfg: VendorConfig turn: Int64 -> VendorConfig
   (with cfg :turn turn)
 
+; (:m :ref LEONATTR :do "a non-empty prefill rides as a trailing assistant message of the profile chat call; an empty one leaves the request as before; script and replay providers have no transport and pass through")
+fn withPrefill p: Provider prefill: String -> Provider
+  (match p
+    ((vendorProvider cfg) (vendorProvider (with cfg :prefill prefill)))
+    (_ p))
+
+fn profileMessages system: String user: String prefill: String -> (List j/Json)
+  (listAppend (list (msg "system" system) (msg "user" user))
+              (if (stringEmpty? prefill) (list) (list (msg "assistant" prefill))))
+
 fn withLink cfg: VendorConfig link: gs/GatewayLoop -> VendorConfig
   (with cfg :link (some link))
 
@@ -1257,7 +1268,7 @@ fn ! callProfile! cfg: VendorConfig system: String user: String model: String ->
                            (listAppend
                              (list (pair "model" (j/jstr model))
                                    (pair "intent" (j/jstr cfg.intent))
-                                   (pair "messages" (j/jarr (list (msg "system" system) (msg "user" user)))))
+                                   (pair "messages" (j/jarr (profileMessages system user cfg.prefill))))
                              (listAppend (toolsField (list)) (list (pair "workspace" (j/jstr ws)))))
                            (listAppend (if cfg.timeoutSet (list (pair "timeout" (j/jint cfg.timeout))) (list))
                                        (list (pair "queue_timeout" (j/jint cfg.queueTimeout)))))))]
