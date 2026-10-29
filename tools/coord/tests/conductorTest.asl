@@ -468,6 +468,41 @@ fn ! testIntake bin: String -> Bool
         (assert (stringContains? status "(:parked (\"P1:owns\"))") (str "status lists the parked row: " status))
         true))
 
+; (:m :ref WRITEESC :do "a unit failing the write stage maxSame times on lane free is admitted again on paid (count reset, tierHop journalled) and merges there; with every lane failing it blocks only after the last lane, with exactly one escalate row")
+fn ! laneCtx dir: String bin: String failing: (List String) -> cd/Ctx
+  (cd/Ctx :dir dir :holder "conductorTest" :ttlMs 600000 :maxWait 400 :maxSame 3 :stageSec 60 :maxDesc 50
+          :launch (fn [(stage String) (u st/Task) (c cd/CUnit)] -> (List String)
+                    (listAppend (list bin "stage" stage u.id "--store" dir) (if (and (= stage "write") (listContains? failing c.lane)) (list "--failsig" (str "writer boom on " c.lane)) (list))))
+          :pace (cd/fixedPace 4 4))
+
+fn ! testWriteTierHop bin: String -> Bool
+  (let [(dir (scratch "hop"))
+        (_ (cleanup dir))
+        (put (putAll! dir (list (task "T" (list "p/t") (list) (greenGate) "free"))))
+        (ctx (laneCtx dir bin (list "free")))
+        (ticks (cd/drain! ctx 900))
+        (t (cuOf dir "T"))
+        (j (stringJoin (journalLines dir) "\n"))
+        (esc (readOr dir "escalations.asn"))
+        (dir2 (scratch "hop2"))
+        (_ (cleanup dir2))
+        (put2 (putAll! dir2 (list (task "U" (list "p/u") (list) (greenGate) "free"))))
+        (ctx2 (laneCtx dir2 bin (list "free" "paid" "strong")))
+        (ticks2 (cd/drain! ctx2 1200))
+        (u (cuOf dir2 "U"))
+        (j2 (stringJoin (journalLines dir2) "\n"))
+        (esc2 (readOr dir2 "escalations.asn"))
+        (_ (cleanup dir))
+        (_ (cleanup dir2))]
+    (do (assert (and put put2) "units put")
+        (assert (stringContains? j "tierHop free->paid") (str "free failed 3x and hopped to paid: " j))
+        (assert (and (= t.lane "paid") (not (= t.st "blocked")) (stringEmpty? esc)) (str "T runs on paid, not blocked, no escalate row: " t.lane " " t.st " " esc))
+        (assert (and (stringContains? j2 "tierHop free->paid") (stringContains? j2 "tierHop paid->strong")) (str "U hopped through every tier: " j2))
+        (assert (and (= u.st "blocked") (= u.lane "strong")) (str "U blocked on the last tier: " u.st " " u.lane))
+        (assert (= (listLength (stringSplit esc2 "(:escalate")) 2) (str "exactly one escalate row, written after the last tier: " esc2))
+        (assert (= (listLength (filter (fn [(l String)] -> Bool (stringContains? l " :to blocked ")) (journalLines dir2))) 1) "blocked once")
+        true))
+
 fn ! runTests -> Bool
   (let [(bin (fixtureBinary!))]
     (do (assert (not (stringEmpty? bin)) "the fixture stage binary is prepared")
@@ -475,6 +510,7 @@ fn ! runTests -> Bool
         (assert (testOwnsSerialised bin) "overlapping owns serialised")
         (assert (testAdmission bin) "admission = min(ready, capacity, allowance)")
         (assert (testGateEscalates bin) "3 same-signature gate failures escalate")
+        (assert (testWriteTierHop bin) "write failures hop free to paid to strong before blocking")
         (assert (testSignatureReset bin) "a new signature resets the count")
         (assert (testWake bin) "wake moves a parked unit")
         (assert (testWriterClaimIgnored bin) "writer's green claim is not trusted")
