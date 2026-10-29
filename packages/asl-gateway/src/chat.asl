@@ -475,10 +475,18 @@ fn cliArgs agent: j/Json addDirs: j/Json prompt: String model: String effort: j/
         (pair "queue_timeout" (j/jfloat queue)) (pair "agent" agent) (pair "add_dirs" addDirs) (pair "workspace" (j/jstr ws))
         (pair "system_prompt" (if (stringEmpty? system) (j/jnull) (j/jstr system))) (pair "no_tools" (j/jbool noTools)))
 
+; (:m :ref ROTATE :do "the pool agy:bin answers nonzero when no agy binary is configured or on PATH; the call then skips the CLI without a spawn and notes skipped-noBinary")
 fn agyFallback cx: Ctx prompt: String k: (fn [(Option CliReply)] -> ChatStep) -> ChatStep
   (if (stringEmpty? prompt)
     (k none)
-    (askFloat (effBreakerDown "agy")
+    (askFloat (effBreakerDown "agy:bin")
+      (fn [(missing Float64)] -> ChatStep
+        (if (!= missing 0.0)
+          (tell (usageNote "agy-cli" "agyFallback" "skipped-noBinary") (fn [] -> ChatStep (k none)))
+          (agyFallbackLive cx prompt k)))))
+
+fn agyFallbackLive cx: Ctx prompt: String k: (fn [(Option CliReply)] -> ChatStep) -> ChatStep
+  (askFloat (effBreakerDown "agy")
       (fn [(left Float64)] -> ChatStep
         (if (!= left 0.0)
           (tell (usageNote "agy-cli" "agyFallback" "skipped-breaker") (fn [] -> ChatStep (k none)))
@@ -488,7 +496,7 @@ fn agyFallback cx: Ctx prompt: String k: (fn [(Option CliReply)] -> ChatStep) ->
                                       (pair "no_tools" (j/jbool false))))
             (fn [(r (Option CliReply))] -> ChatStep
               (let [(text (match r ((some x) (if (stringEmpty? x.text) none (some x))) ((none) none)))]
-                (tell (usageNote "agy-cli" "agyFallback" (if (some? text) "ok" "failed")) (fn [] -> ChatStep (k text))))))))))
+                (tell (usageNote "agy-cli" "agyFallback" (if (some? text) "ok" "failed")) (fn [] -> ChatStep (k text)))))))))
 
 fn round3 f: Float64 -> j/Json
   (j/jfloat (g/pyRound3 f))

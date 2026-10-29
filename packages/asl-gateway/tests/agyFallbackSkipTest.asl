@@ -38,7 +38,7 @@ fn ! post! binMissing: Bool -> Seen
     ((ok st)
       (drive! (ch/chatStart! (ch/ChatRequest :path "/v1/chat/completions" :headers (list) :body "{\"model\":\"gemini-2.5-flash\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}")
                 (ch/ChatWorld :env (mapFromPairs (list (pair "GEMINI_API_KEY" "k-AAAA1111"))) :rootDir "/tmp" :settings st :agyPromptMaxBytes 10000 :table (err "builtin")))
-              binMissing (Seen :notes "" :cli 0 :bin 0) 120))))
+              binMissing (Seen :notes "" :cli 0 :bin 0) 120)))
 
 fn ! runTests -> Bool
   (let [(absent (post! true))
@@ -46,4 +46,4 @@ fn ! runTests -> Bool
     (do (assert (> absent.bin 0) (str "the binary probe ran: " absent.notes))
         (assert (and (= absent.cli 0) (stringContains? absent.notes "skipped-noBinary")) (str "no agy binary: no cli effect, noted: " absent.cli absent.notes))
         (assert (and (> present.cli 0) (not (stringContains? present.notes "skipped-noBinary"))) (str "agy present: cli effect runs: " present.cli present.notes))
-        true)))
+        true))

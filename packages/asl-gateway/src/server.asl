@@ -605,6 +605,8 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
     ((ch/effRealpath p) (pair srv (ch/outPath (resultOr (realPath p) p))))
     ((ch/effIsDir p) (pair srv (ch/outBool (match (fileStat p) ((ok st) st.isDir) ((err _) false)))))
     ((ch/effClock) (pair srv (ch/outFloat (/ (int64ToFloat64 (nowNs)) 1000000000.0))))
+    ((ch/effBreakerDown "agy:bin")
+      (pair srv (ch/outFloat (if (fileExists? (cli/resolveCliBin! "AGY_BIN" "agy" "")) 0.0 1.0))))
     ((ch/effBreakerDown pool)
       (let [(r (b/breakerDownFor srv.breaker pool (nowSec!)))]
         (pair (loopState srv (pairFirst r) srv.buckets srv.profiles) (ch/outFloat (int64ToFloat64 (pairSecond r))))))
