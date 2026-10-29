@@ -1,5 +1,5 @@
 (module asl-gates/auditGates
-  :x [Check AuditRun fmtCheck emit passCheck failCheck notComputedCheck perItem
+  :x [Check AuditRun fmtCheck emit passCheck failCheck notComputedCheck skippedCheck perItem
       syntaxCheck! remoteCheck! ssotCheck! emojiCheck! conflictMarkerCheck! coreCheck!
       manifestCheck! groundingCheck! grammarChecks! skillCheck! installerChecks! storageChecks!
       lineHasPlaceholder? staticGateChecks! recordCheck! recordRefused? writeRecord! fullGreenDir cmdGates! cmdGatesAt! spawnFullJob! snapshotFault cmdClosure! cmdSteps! cmdCheck! cmdBuild! cmdConsistency!
@@ -75,8 +75,11 @@ fn failCheck id: String err: String ev: String n: (Option Int64) trust: (Option 
 fn notComputedCheck id: String ev: String -> Check
   (Check :id id :status ":notComputed" :err "ERR_NOT_COMPUTED" :ev ev :n (none) :trust (none))
 
+fn skippedCheck id: String ev: String -> Check
+  (Check :id id :status ":skipped" :err "" :ev ev :n (none) :trust (none))
+
 fn failedOf checks: (List Check) -> (List Check)
-  (filter (fn [(c Check)] -> Bool (!= c.status ":passed")) checks)
+  (filter (fn [(c Check)] -> Bool (and (!= c.status ":passed") (!= c.status ":skipped"))) checks)
 
 fn emit sub: String checks: (List Check) head: String tail: String pending: Bool -> AuditRun
   (let [(failed (failedOf checks))
@@ -332,16 +335,32 @@ fn conflictMarkerCheck! root: String -> (List Check)
                    files))]
     (perItem "conflictMarkers" bad "ERR_CONFLICT_MARKER" (some (listLength files))))
 
+; (:m :do "bin/asl-core is a committed Mach-O binary; a host of another format cannot run it, so the check is not computed there with that reason, and a Mach-O core on a Darwin host still runs and fails on a real inconsistency")
+fn machOCore? bs: Bytes -> Bool
+  (and (= (bytesGet bs 0) 207) (= (bytesGet bs 1) 250) (= (bytesGet bs 2) 237) (= (bytesGet bs 3) 254))
+
+fn hostKernel! root: String -> String
+  (match (p/exec! (p/withTimeout (p/withCwd (p/cmd "uname" (list "-s")) root) 10000))
+    ((ok o) (stringTrim o.stdout))
+    ((err _) "unknown"))
+
+fn foreignCore! root: String corePath: String -> Bool
+  (match (fileReadBytes corePath)
+    ((ok bs) (and (machOCore? bs) (!= (hostKernel! root) "Darwin")))
+    ((err _) false))
+
 fn coreCheck! root: String cid: String args: (List String) -> Check
   (let [(corePath (str root "/bin/asl-core"))]
     (if (not (isFile! corePath))
       (notComputedCheck cid "bin/asl-core absent")
+      (if (foreignCore! root corePath)
+        (skippedCheck cid (str "bin/asl-core is a Mach-O binary this " (hostKernel! root) " host cannot run"))
       (match (p/exec! (p/withTimeout (p/withCwd (p/cmd corePath args) root) 600000))
         ((err _) (failCheck cid "ERR_CORE_FAILED" (str "bin/asl-core " (stringJoin args " ") " could not run") (none) (some ":unverifiedCore")))
         ((ok o)
          (if (= o.exitCode 0)
            (passCheck cid (none) (some ":unverifiedCore"))
-           (failCheck cid "ERR_CORE_FAILED" (str "bin/asl-core " (stringJoin args " ") " exit " (itos o.exitCode)) (none) (some ":unverifiedCore")))))))
+           (failCheck cid "ERR_CORE_FAILED" (str "bin/asl-core " (stringJoin args " ") " exit " (itos o.exitCode)) (none) (some ":unverifiedCore"))))))))
 
 fn manifestCheck! root: String -> (List Check)
   (let [(files (filter (fn [(p String)] -> Bool (= (basename p) "manifest.asn")) (trackedRoot! root (list "*manifest.asn"))))
