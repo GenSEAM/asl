@@ -19,7 +19,7 @@ fn ! runTests -> Bool
       (assert (fileExists? host) "the native asl CLI entry point is available")
       (assert (= proc.exitCode 0) "self-hosted agent entry point exits successfully")
       (assert (stringContains? output "(:dryRunReceipt") "self-hosted agent entry point returns its dry-run receipt")
-      (assert (stringContains? output "(:task \\\"dispatch smoke\\\")") "receipt preserves the requested task")
+      (assert (not (stringContains? output "dispatch smoke")) "the task lives only in the user turn, not in the stable system prompt of the receipt")
       (assert (= relativeProc.exitCode 0) "self-hosted entry point runs from the workspace directory")
       (assert (stringContains? relativeOutput "(:dryRunReceipt") "workspace-relative invocation returns a receipt")
       (assert (ok? removed) "temporary workspace removed")

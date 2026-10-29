@@ -216,7 +216,7 @@ fn testAgentGetsRawForm! -> Bool
       (assert (fileExists? mainPath) "agent routing targets the checked-in ASL loop entry")
       (assert (= out.code 1) "agent loop argument rejection propagates through the router")
       (assert (stringContains? out.out "ERR_ROLE_DEPRECATED") "the router passes the raw task form to ASL main validation")
-      (assert (and (= dry.code 0) (stringContains? dry.out "(:dryRunReceipt") (stringContains? dry.out "route-test")) "a successful routed run: the loop receives the task text from the raw form and exits zero")
+      (assert (and (= dry.code 0) (stringContains? dry.out "(:dryRunReceipt") (not (stringContains? dry.out "route-test"))) "a successful routed run exits zero and the task stays out of the stable system prompt")
       (assert (and (= badBudget.code 1) (stringContains? badBudget.out "ERR_INVALID_ARG :key \"wallBudget\"")) "the loop receives the :wallBudget keyword from the raw form and validates it")
       (assert (ok? (pathRemove root)) "remove isolated agent workspace")
       true))
