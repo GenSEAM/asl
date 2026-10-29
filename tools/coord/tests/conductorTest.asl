@@ -522,9 +522,28 @@ fn ! testRotateProfiles -> Bool
         (assert (= other "base") "a row of another tier keeps the old profile")
         true))
 
+; (:m :ref SCHED :do "with no sched.asn the light pool is the jobserver token count as before; a sched.asn without a state file starts at its :start")
+fn ! testNoSchedFile -> Bool
+  (let [(home (scratch "nosched"))
+        (_ (cleanup home))
+        (dir (str home "/store"))
+        (_ (dirCreate home))
+        (_ (dirCreate dir))
+        (tokens ((cd/realPace).tokens))
+        (plain ((cd/schedPace dir home).tokens))
+        (_ (dirCreate (str home "/.asl")))
+        (_ (dirCreate (str home "/.asl/conductor")))
+        (_ (fileWrite (str home "/.asl/conductor/sched.asn") "(:sched :min 2 :max 9 :step 1 :start 7)\n"))
+        (started ((cd/schedPace dir home).tokens))
+        (_ (cleanup home))]
+    (do (assert (= plain tokens) (str "no sched.asn: admission equals the token count: " (stringFromInt64 plain) " " (stringFromInt64 tokens)))
+        (assert (= started 7) (str "sched.asn without ledger and state starts at :start: " (stringFromInt64 started)))
+        true))
+
 fn ! runTests -> Bool
   (let [(bin (fixtureBinary!))]
     (do (assert (not (stringEmpty? bin)) "the fixture stage binary is prepared")
+        (assert (testNoSchedFile) "the light pool equals the token count without sched.asn")
         (assert (testRotateProfiles) "writer profiles rotate per unit by weight")
         (assert (testDag bin) "dag order")
         (assert (testOwnsSerialised bin) "overlapping owns serialised")
