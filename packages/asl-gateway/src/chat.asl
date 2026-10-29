@@ -3,6 +3,8 @@
       gatewayOriginHeader
       ChatWorld
       ChatEffect
+      effortDialectFor
+      applyEffort
       effRealpath
       effIsDir
       effClock
@@ -1126,6 +1128,41 @@ fn cacheHints api: String prov: String table: (Option c/GatewayTable) src: j/Jso
     ((= api "gemini") (geminiCacheHints src up))
     (else (promptCacheKeyHint prov table src up)))
 
+; (:m :ref GWREASON :do "the provider's dialect for a model's :effort: a row :effortDialect wins, else a built-in per provider id (openrouter, nim), else reasoningEffort for any other openai-kind provider; off sends nothing")
+fn effortDialectFor providerId: String kind: String override: (Option String) -> String
+  (match override
+    ((some d) d)
+    ((none) (cond
+              ((= providerId "openrouter") "openrouter")
+              ((= providerId "nim") "chatTemplateThinking")
+              ((= kind "openai") "reasoningEffort")
+              (else "off")))))
+
+fn effortObj kvs: (List (Pair String j/Json)) -> j/Json
+  (j/jobj kvs)
+
+; (:m :ref GWREASON :do "writes the effort into the upstream body in the dialect and returns the effort actually forwarded, none when nothing was written; none means thinking off where the dialect has an off switch")
+fn applyEffort dialect: String eff: (Option String) body: j/Json -> (Pair j/Json (Option String))
+  (match eff
+    ((none) (pair body none))
+    ((some e)
+      (let [(off (= e "none"))
+            (known (listContains? (list "low" "medium" "high" "xhigh" "none") e))]
+        (cond
+          ((not known) (pair body none))
+          ((or (= dialect "reasoningEffort") (= dialect "gemini"))
+            (pair (pt/jset body "reasoning_effort" (j/jstr (if (and (= dialect "gemini") (= e "xhigh")) "high" e))) (some e)))
+          ((= dialect "openrouter")
+            (pair (pt/jset body "reasoning" (effortObj (list (pair "effort" (j/jstr e))))) (some e)))
+          ((= dialect "chatTemplateThinking")
+            (pair (pt/jset body "chat_template_kwargs"
+                    (effortObj (listAppend (list (pair "enable_thinking" (j/jbool (not off))) (pair "thinking" (j/jbool (not off))))
+                                           (if (= e "low") (list (pair "low_effort" (j/jbool true))) (list)))))
+                  (some e)))
+          ((= dialect "glmThinking")
+            (pair (pt/jset body "thinking" (effortObj (list (pair "type" (j/jstr (if off "disabled" "enabled")))))) (some e)))
+          (else (pair body none)))))))
+
 fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json Attempt)
   (let [(v2 (match entry ((c/entryResolved e) (some e)) ((c/entryUnresolved _) none)))
         (m (match entry ((c/entryResolved e) e.dispatch) ((c/entryUnresolved a) a)))
@@ -1156,12 +1193,19 @@ fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json 
         (chosen (match entryEff ((some s) (j/jstr s)) ((none) (if reqHasEff (getOr body1 "effort" (j/jnull)) (j/jnull)))))
         (chosenValid (match chosen ((j/jstr s) (validEffort? (some s))) (_ false)))
         (out0 (jdel body1 "effort"))
-        (out1 (if (and ollama chosenValid) (pt/jset out0 "reasoning_effort" chosen) out0))
+        (chosenStr (match chosen ((j/jstr s) (some s)) (_ none)))
+        (effGate (if ollama (if chosenValid chosenStr none) (if (or (some? entryEff) chosenValid) chosenStr none)))
+        (provId (match v2 ((some e) e.provider) ((none) prov)))
+        (provKind (match v2 ((some e) e.kind) ((none) "")))
+        (rowDialect (match v2 ((some e) e.params.effortDialect) ((none) none)))
+        (dialect (if (and ollama (none? rowDialect)) "reasoningEffort" (effortDialectFor provId provKind rowDialect)))
+        (effApplied (applyEffort dialect effGate out0))
+        (out1 (pairFirst effApplied))
         (out2 (jdel (jdel (jdel (jdel out1 "role") "intent") "lens") "workspace"))
         (out3a (if (some? v2) (jdel (jdel out2 "timeout") "queue_timeout") out2))
         (out3b (match v2 ((some e) (if (and e.dropEmptyTools (emptyTools? out3a)) (jdel out3a "tools") out3a)) ((none) out3a)))
         (out3 (match v2 ((some e) (if (= e.kind "openai") (dropEmptySystem out3b) out3b)) ((none) out3b)))
-        (sent (if (and truthy ollama) (if chosenValid (some (some (strOr chosen ""))) (some none)) none))
+        (sent (if truthy (if ollama (some (pairSecond effApplied)) (match (pairSecond effApplied) ((some s) (some (some s))) ((none) none))) none))
         (respApi (match v2 ((some e) (cond ((= e.kind "anthropic") "anthropic") ((= e.kind "gemini") "gemini") (else (optionOr e.params.api "chat")))) ((none) "chat")))
         (upBody0 (cond ((= respApi "anthropic") (anthropicBody out3 target)) ((= respApi "gemini") (geminiBody out3 target)) ((= respApi "responses") (responsesBody out3 target)) (else out3)))
         (upBody (cacheHints respApi prov cx.table out3 upBody0))

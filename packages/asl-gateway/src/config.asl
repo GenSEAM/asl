@@ -129,6 +129,7 @@ fn scalarToString sc: AsnScalar -> String
 (schema GatewayParams
   (:f temperature (Option Float64))
   (:f effort (Option String))
+  (:f effortDialect (Option String))
   (:f maxTokens (Option Int64))
   (:f contextBudget (Option Int64))
   (:f timeoutSec (Option Float64))
@@ -142,6 +143,7 @@ fn emptyGatewayParams -> GatewayParams
   (GatewayParams
     :temperature (none)
     :effort (none)
+    :effortDialect (none)
     :maxTokens (none)
     :contextBudget (none)
     :timeoutSec (none)
@@ -155,6 +157,7 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
   (GatewayParams
     :temperature (if (some? override.temperature) override.temperature base.temperature)
     :effort (if (some? override.effort) override.effort base.effort)
+    :effortDialect (if (some? override.effortDialect) override.effortDialect base.effortDialect)
     :maxTokens (if (some? override.maxTokens) override.maxTokens base.maxTokens)
     :contextBudget (if (some? override.contextBudget) override.contextBudget base.contextBudget)
     :timeoutSec (if (some? override.timeoutSec) override.timeoutSec base.timeoutSec)
@@ -570,6 +573,21 @@ fn checkEffort props: (Map String rd/SExpr) what: String cur: GatewayParams errs
               (pair cur (cons (str what ": :effort must be low, medium, high, xhigh or none") errs))))
           (_ (pair cur (cons (str what ": :effort must be low, medium, high, xhigh or none") errs)))))))
 
+; (:m :ref GWREASON :do "a model row's :effortDialect names how its :effort reaches the provider; absent means the provider's built-in default")
+fn effortDialects -> (List String)
+  (list "reasoningEffort" "openrouter" "chatTemplateThinking" "glmThinking" "gemini" "off")
+
+fn checkEffortDialect props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
+  (match (mapGet props "effortDialect")
+    ((none) (pair cur errs))
+    ((some expr)
+      (match (asn_figure expr)
+        ((scalarStr s)
+          (if (listContains? (effortDialects) s)
+            (pair (with cur :effortDialect (some s)) errs)
+            (pair cur (cons (str what ": :effortDialect must be one of reasoningEffort, openrouter, chatTemplateThinking, glmThinking, gemini, off") errs))))
+        (_ (pair cur (cons (str what ": :effortDialect must be one of reasoningEffort, openrouter, chatTemplateThinking, glmThinking, gemini, off") errs)))))))
+
 fn checkMaxTokens props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (match (mapGet props "maxTokens")
     ((none) (pair cur errs))
@@ -670,7 +688,8 @@ fn gateway_params props: (Map String rd/SExpr) what: String -> (Pair GatewayPara
         (s6 (checkReasoning props what (pairFirst s5b) (pairSecond s5b)))
         (s7 (checkRpm props what (pairFirst s6) (pairSecond s6)))
         (s8 (checkApi props what (pairFirst s7) (pairSecond s7)))
-        (s9 (checkRetry props what (pairFirst s8) (pairSecond s8)))]
+        (s8b (checkEffortDialect props what (pairFirst s8) (pairSecond s8)))
+        (s9 (checkRetry props what (pairFirst s8b) (pairSecond s8b)))]
     (pair (pairFirst s9) (listReverse (pairSecond s9))))
 
 fn checkApi props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
@@ -700,6 +719,7 @@ fn paramPresent? params: GatewayParams k: String -> Bool
   (cond
     ((= k "temperature") (some? params.temperature))
     ((= k "effort") (some? params.effort))
+    ((= k "effortDialect") (some? params.effortDialect))
     ((= k "maxTokens") (some? params.maxTokens))
     ((= k "contextBudget") (some? params.contextBudget))
     ((= k "timeoutSec") (some? params.timeoutSec))
@@ -725,7 +745,7 @@ fn paramsShown props: (Map String rd/SExpr) params: GatewayParams -> (List (Pair
                 (listAppend acc (list (pair k (scalarAsnValue (asn_figure expr)))))
                 acc))))
         (list)
-        (list "temperature" "effort" "maxTokens" "contextBudget" "timeoutSec" "firstByteSec" "reasoning" "rpm" "api"))
+        (list "temperature" "effort" "effortDialect" "maxTokens" "contextBudget" "timeoutSec" "firstByteSec" "reasoning" "rpm" "api"))
 
 fn shownHasKey? shown: (List (Pair String String)) k: String -> Bool
   (listAny? (fn [(p (Pair String String))] -> Bool (= (pairFirst p) k)) shown)
