@@ -74,7 +74,7 @@ fn testLivePath -> Bool
         (assert (stringContains? onMsgs "\"role\":\"assistant\",\"content\":\"(:step\"") "knob on: the outgoing list ends in the assistant prefill")
         (assert (= (listLength (pv/outgoingMessages off "S" "U")) 2) "knob off: two messages")
         (assert (not (stringContains? offMsgs "assistant")) "knob off: no trailing assistant message")
-        true)))
+        true))
 
 fn initRepo! root: String -> Bool
   (and (ok? (fileWrite (str root "/subject.txt") "before\n"))
