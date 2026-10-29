@@ -138,6 +138,7 @@
       :form "(:agent :task <str> ...)"
       :params (
         (:answer :type str :default "")
+        (:attractor :type str :default "" :note "opt-in prompt attractor, e.g. asn")
         (:backend :type str :default "agy")
         (:base :type str :default "" :note "rev gitDiff compares to")
         (:budget :type int :default 3000)
