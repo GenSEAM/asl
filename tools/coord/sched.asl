@@ -17,10 +17,10 @@ fn defaultCfg -> Cfg
   (Cfg :min 4 :max 64 :step 2 :start 16 :gainShare 0.05 :flatWindows 3 :softShare 0.30 :minFreeMB 3000 :windowSec 600)
 
 fn numOr text: String key: String d: Int64 -> Int64
-  (optionOr (stringToInt64 (sp/tokAfter text key)) d)
+  (optionOr (stringToInt64 (stringTrim (sp/tokAfter text key))) d)
 
 fn floatOr text: String key: String d: Float64 -> Float64
-  (optionOr (stringToFloat64 (sp/tokAfter text key)) d)
+  (optionOr (stringToFloat64 (stringTrim (sp/tokAfter text key))) d)
 
 ; (:m :ref SCHED :do "a missing or unreadable file is no config: the caller then keeps today's behaviour, so parseCfg is only called on a present (:sched ...) row")
 fn parseCfg text: String -> Cfg

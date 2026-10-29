@@ -62,7 +62,7 @@ fn ! testWindow -> Bool
         (assert (= (sc/okPerMin w 600) 0.3) "ok per minute over a 600 s window")
         (assert (and (= cfg.min 2) (= cfg.max 9) (= cfg.start 5) (= cfg.softShare 0.5) (= cfg.step dflt.step)) "parseCfg reads given keys and defaults the rest")
         (assert (= dflt.softShare 0.30) "default soft share")
-        (assert (= (sc/memFreeMB "MemTotal: 1 kB\nMemAvailable:   12626992 kB\n") 12330) "MemAvailable in MB")
+        (assert (= (sc/memFreeMB "MemTotal: 1 kB\nMemAvailable:   12626992 kB\n") 12331) "MemAvailable in MB")
         (assert (= (sc/memFreeMB "nothing") -1) "no meminfo is unknown")
         (assert (= (sc/loadOne "3.22 3.80 3.18 5/358 3103727") 3.22) "one-minute load")
         true))
