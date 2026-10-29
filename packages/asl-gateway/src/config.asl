@@ -586,7 +586,7 @@ fn checkEffortDialect props: (Map String rd/SExpr) what: String cur: GatewayPara
           (if (listContains? (effortDialects) s)
             (pair (with cur :effortDialect (some s)) errs)
             (pair cur (cons (str what ": :effortDialect must be one of reasoningEffort, openrouter, chatTemplateThinking, glmThinking, gemini, off") errs))))
-        (_ (pair cur (cons (str what ": :effortDialect must be one of reasoningEffort, openrouter, chatTemplateThinking, glmThinking, gemini, off") errs)))))))
+        (_ (pair cur (cons (str what ": :effortDialect must be one of reasoningEffort, openrouter, chatTemplateThinking, glmThinking, gemini, off") errs))))))
 
 fn checkMaxTokens props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (match (mapGet props "maxTokens")
