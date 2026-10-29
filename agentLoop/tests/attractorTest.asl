@@ -99,4 +99,4 @@ fn testJournal -> Bool
         true))
 
 fn runTests -> Bool
-  (and (testOffIdentical) (and (testOnShape) (and (testPrefixStable) (and (testCards) (and (testProse) (testJournal)))))))
+  (and (testOffIdentical) (and (testOnShape) (and (testPrefixStable) (and (testCards) (and (testProse) (testJournal))))))
