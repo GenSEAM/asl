@@ -47,10 +47,32 @@ fn hostBinary! -> (Result String String)
 fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
 
+; (:m :ref STRAY-CHK-PRINT :do "the printed copy must sit beside its source (a copy checked from a temp dir resolves package-relative imports differently and fails), so a run killed between create and remove cannot clean up after itself; each copy is named by its owner pid and every shard first removes the copies whose owner is dead, so a killed run's strays live only until the next shard starts")
+fn tempPrefix -> String
+  ".asl_chk_print_p"
+
+fn ownerOf name: String -> (Option Int64)
+  (if (stringStartsWith? name (tempPrefix))
+    (stringToInt64 (optionOr (listHead (stringSplit (optionOr (stringSlice name (stringLength (tempPrefix)) (stringLength name)) "") "_")) ""))
+    (none))
+
+fn ! staleTemp? dir: String name: String -> Bool
+  (match (ownerOf name)
+    ((some pid) (and (!= pid (procSelf)) (not (resultOr (procAlive? pid) true))))
+    ((none) false))
+
+fn ! sweepDir! dir: String -> Int64
+  (listLength (filter (fn [(n String)] -> Bool (and (staleTemp? dir n) (ok? (pathRemove (str dir "/" n)))))
+                      (resultOr (dirList dir) (list))))
+
+fn ! sweepStrays! root: String files: (List String) -> Int64
+  (let [(dirs (fold (fn [(acc (List String)) (p String)] -> (List String) (let [(d (parentDir (str root "/" p)))] (if (listContains? acc d) acc (cons d acc)))) (list) files))]
+    (fold (fn [(n Int64) (d String)] -> Int64 (+ n (sweepDir! d))) 0 dirs))
+
 fn createTemp! dir: String text: String attempt: Int64 -> (Result String String)
   (if (>= attempt 32)
     (err (str "no free temp name in " dir " after 32 attempts"))
-    (let [(tmp (str dir "/.asl_chk_print_" (stringFromInt64 (monotonicNs)) "_" (stringFromInt64 attempt) ".asl"))]
+    (let [(tmp (str dir "/" (tempPrefix) (stringFromInt64 (procSelf)) "_" (stringFromInt64 (monotonicNs)) "_" (stringFromInt64 attempt) ".asl"))]
       (match (fileCreateExclusive tmp text)
         ((ok _) (ok tmp))
         ((err e)
@@ -162,7 +184,8 @@ fn runShard! label: String n: Int64 k: Int64 -> Bool
         (match (realPath ".")
           ((err _) (do (assert false "cannot canonicalize the repo root") false))
           ((ok root)
-           (let [(shard (prl/shardFiles allFiles n k))
+           (let [(swept (sweepStrays! root allFiles))
+                 (shard (prl/shardFiles allFiles n k))
                  (expected (prl/expectedShardCount (listLength allFiles) n k))
                  (results (map (fn [(p String)] -> FileResult (FileResult :path p :outcome (checkFile! host root p))) shard))
                  (failing (filter fileFails? results))
