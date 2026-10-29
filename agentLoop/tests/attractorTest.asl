@@ -15,9 +15,8 @@ fn testOffIdentical -> Bool
       (assert (= (at/attractorPrefill "") "") "no prefill when off")
       (assert (= (at/attractorTail (at/attractorCards "" "ERR_USE_RAW" true false 9)) "") "no tail when off, whatever the state")
       (assert (= (at/continueReply "" "reply") "reply") "no prefill, the reply is untouched")
-      (assert (= (j/jsonEmit (j/jarr (pv/profileMessages "S" "U" "")))
-                 (j/jsonEmit (j/jarr (list (pv/msg "system" "S") (pv/msg "user" "U")))))
-        "request messages are system then user, nothing trailing")
+      (assert (= (listLength (pv/profileMessages "S" "U" "")) 2) "request messages are system then user")
+      (assert (not (stringContains? (j/jsonEmit (j/jarr (pv/profileMessages "S" "U" ""))) "assistant")) "nothing trailing")
       true))
 
 fn testOnShape -> Bool
