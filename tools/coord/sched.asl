@@ -46,6 +46,19 @@ fn rowAt line: String -> Int64
 fn rateOutcome? o: String -> Bool
   (or (= o "429") (= o "throttled"))
 
+; (:m :ref SCHED-BREAKER-COUNT :do "a ledger row the gateway answered itself without a request (open breaker, skipped member, daily cap or pace) is not a call: counting it made a provider out for the day read nonOkShare 1.0 and drag the pool to its floor")
+fn notSent? o: String -> Bool
+  (or (stringStartsWith? o "breaker") (or (stringStartsWith? o "skipped") (stringStartsWith? o "daily")))
+
+fn callRow? l: String -> Bool
+  (and (stringStartsWith? l "(:call ") (not (notSent? (quoted l ":outcome"))))
+
+; (:m :ref SCHED-BREAKER-COUNT :do "a provider whose newest ledger row in the window is an open breaker is out until it closes")
+fn breakerOpen? rows: (List String) -> Bool
+  (match (listHead (listReverse rows))
+    ((none) false)
+    ((some l) (stringStartsWith? (quoted l ":outcome") "breaker")))
+
 ; (:m :ref SCHED :do "counts the calls with fromMs <= at < toMs: ok, all, rate-limited (429 or the local throttle) and the output tokens of the ok ones")
 fn winOf lines: (List String) fromMs: Int64 toMs: Int64 -> Win
   (fold (fn [(w Win) (l String)] -> Win
@@ -56,7 +69,7 @@ fn winOf lines: (List String) fromMs: Int64 toMs: Int64 -> Win
                 (Win :ok (+ w.ok (if isOk 1 0)) :total (+ w.total 1) :rate (+ w.rate (if (rateOutcome? o) 1 0))
                      :okOut (+ w.okOut (if isOk (optionOr (stringToInt64 (sp/tokAfter l ":out")) 0) 0))))
               w)))
-        (Win :ok 0 :total 0 :rate 0 :okOut 0) (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:call ")) lines))
+        (Win :ok 0 :total 0 :rate 0 :okOut 0) (filter callRow? lines))
 
 fn okPerMin w: Win windowSec: Int64 -> Float64
   (/ (int64ToFloat64 w.ok) (/ (int64ToFloat64 (max 1 windowSec)) 60.0))
@@ -101,8 +114,9 @@ fn loadOne text: String -> Float64
 
 ; (:m :ref SCHED :do "per provider and per alias over one window: ok/min, 429/min (429 or local throttle), non-ok share, and where the provider limits: account when every alias seen at the provider was rate limited, model when only some were, none when none")
 fn healthRows lines: (List String) fromMs: Int64 toMs: Int64 windowSec: Int64 -> (List String)
-  (let [(calls (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "(:call ") (and (>= (rowAt l) fromMs) (< (rowAt l) toMs)))) lines))
-        (provs (uniq (map (fn [(l String)] -> String (quoted l ":provider")) calls)))
+  (let [(inWin (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "(:call ") (and (>= (rowAt l) fromMs) (< (rowAt l) toMs)))) lines))
+        (calls (filter callRow? inWin))
+        (provs (uniq (map (fn [(l String)] -> String (quoted l ":provider")) inWin)))
         (mins (/ (int64ToFloat64 (max 1 windowSec)) 60.0))
         (f (fn [(x Float64)] -> String (stringFromFloat64 (/ (int64ToFloat64 (optionOr (float64ToInt64 (* x 100.0)) 0)) 100.0))))
         (row (fn [(kind String) (name String) (ls (List String))] -> String
@@ -113,7 +127,7 @@ fn healthRows lines: (List String) fromMs: Int64 toMs: Int64 windowSec: Int64 ->
                      (aliases (uniq (map (fn [(l String)] -> String (quoted l ":alias")) mine)))
                      (limited (filter (fn [(a String)] -> Bool (listAny? (fn [(l String)] -> Bool (and (= (quoted l ":alias") a) (rateOutcome? (quoted l ":outcome")))) mine)) aliases))
                      (scope (cond ((= (listLength limited) 0) "none") ((and (> (listLength aliases) 1) (= (listLength limited) (listLength aliases))) "account") ((= (listLength aliases) 1) "unknown") (else "model")))]
-                 (cons (str (row "prov" p mine) " :aliases " (stringFromInt64 (listLength aliases)) " :limit " scope ")")
+                 (cons (str (row "prov" p mine) " :aliases " (stringFromInt64 (listLength aliases)) " :limit " scope (if (breakerOpen? (filter (fn [(l String)] -> Bool (= (quoted l ":provider") p)) inWin)) " :open true" "") ")")
                        (map (fn [(a String)] -> String (str (row "alias" a (filter (fn [(l String)] -> Bool (= (quoted l ":alias") a)) mine)) ")")) aliases))))
              provs))
 
@@ -121,7 +135,7 @@ fn healthRows lines: (List String) fromMs: Int64 toMs: Int64 windowSec: Int64 ->
 fn okShareOf health: String prov: String -> Float64
   (match (listFind (fn [(l String)] -> Bool (stringStartsWith? l (str "(:prov " prov " "))) (stringLines health))
     ((none) 1.0)
-    ((some l) (clampF (- 1.0 (floatOr l ":nonOkShare" 0.0)) 0.2 1.0)))
+    ((some l) (if (stringContains? l ":open true") 0.0 (clampF (- 1.0 (floatOr l ":nonOkShare" 0.0)) 0.2 1.0))))
 
 fn uniq xs: (List String) -> (List String)
   (fold (fn [(acc (List String)) (x String)] -> (List String) (if (listContains? acc x) acc (listAppend acc (list x)))) (list) xs)

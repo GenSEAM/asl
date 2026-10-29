@@ -1445,13 +1445,17 @@ fn cliReplied cx: Ctx l: Loop a: Attempt reply: CliReply client: String telModel
 
 
 ; (:m :ref GW-THROTTLE-NO-AGY :do "a throttled member (bucket depleted) goes straight to the next loop model whenever its entry comes from the config table; the agy CLI rescue stays only for the legacy gemini-only path where no config entry exists")
+; (:m :ref GW-THROTTLE-WAIT :do "the last member of a chain waits up to 30 s for its own bucket instead of failing the request, so a chain skipped only by local rpm buckets ends in a call, not an error; earlier members keep the 0.5 s fall-through")
+fn bucketWaitSec l: Loop -> Float64
+  (if (>= l.idx (- (listLength l.models) 1)) 30.0 0.5)
+
 fn rateAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
   (let [(prov a.upstream.provider)
         (rpm (match a.v2 ((some e) e.rpm) ((none) (if (= prov "gemini") (some 15.0) none))))]
     (match rpm
       ((some r)
        (if (!= r 0.0)
-         (askBool (effBucket (match a.v2 ((some e) (if (stringEmpty? e.rpmKey) a.target e.rpmKey)) ((none) a.target)) r 0.5)
+         (askBool (effBucket (match a.v2 ((some e) (if (stringEmpty? e.rpmKey) a.target e.rpmKey)) ((none) a.target)) r (bucketWaitSec l))
            (fn [(acquired Bool)] -> ChatStep
              (if acquired
                (httpAttempt cx l a)
