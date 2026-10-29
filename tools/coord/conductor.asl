@@ -2,7 +2,7 @@
   :x [CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig rulingVerdict
-      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace tick! wake! status! drain! stopAll! gatesRes loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
+      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
       main]
   :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp)
       (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -786,17 +786,39 @@ fn baseRef u: st/Task -> String
 fn ! gitOut dir: String argv: (List String) -> fr/Done
   (fr/runOne (fr/job (listAppend (list "git" "-C" dir) argv) dir (fr/childEnv (list))))
 
+; (:m :ref REDBEFORE-SHARE :do "the red-before result depends only on the merge-base commit and the gate text, so a genuine red (exit 1..123) is remembered in <store>/runs/UNIT-redbase.asn under that sha and gate and a later gate stage of the same unit (a fix round) reuses it instead of checking the base out and running the gate again; a timeout, a kill, a green base or a different sha or gate runs it afresh")
+fn redBaseRow sha: String gate: String r: (Pair Int64 Int64) -> String
+  (str "(:redBase :sha " (st/q sha) " :exit " (n (pairFirst r)) " :executed " (n (pairSecond r)) " :gate " (st/q gate) ")")
+
+fn redBaseHit text: String sha: String gate: String -> (Option (Pair Int64 Int64))
+  (if (and (stringContains? text (str "(:redBase :sha " (st/q sha) " ")) (stringContains? text (str " :gate " (st/q gate) ")")))
+    (let [(e (optionOr (stringToInt64 (sp/tokAfter text ":exit")) 0))
+          (x (optionOr (stringToInt64 (sp/tokAfter text ":executed")) 0))]
+      (if (and (> e 0) (< e 124)) (some (pair e x)) (none)))
+    (none))
+
+fn ! redCached! path: String sha: String gate: String run: (fn [] -> (Pair Int64 Int64)) -> (Pair Int64 Int64)
+  (match (redBaseHit (readOr path) sha gate)
+    ((some r) r)
+    ((none)
+      (let [(r (run))
+            (_ (if (and (> (pairFirst r) 0) (< (pairFirst r) 124)) (ok? (fileWrite path (str (redBaseRow sha gate r) "\n"))) false))]
+        r)))
+
 ; (:m :ref COND3 :do "red-before: the declared gate is run once more in a detached checkout of the unit's merge-base; its exit and asserts go to the receipt the ladder reads (gatesProven needs a :redBefore row); a gate that is already green at the base leaves no redBefore row, so the ladder cannot merge it on R1")
-fn ! redBefore! rc: RealCfg u: st/Task c: CUnit -> (Pair Int64 Int64)
+fn ! redBefore! rc: RealCfg dir: String u: st/Task c: CUnit -> (Pair Int64 Int64)
   (let [(mb (gitOut c.wt (list "merge-base" "HEAD" (baseRef u))))
-        (sha (stringTrim mb.out))
-        (bpath (str c.wt ".base"))
-        (_ (gitOut c.wt (list "worktree" "remove" "--force" bpath)))
-        (added (gitOut c.wt (list "worktree" "add" "--detach" bpath sha)))]
-    (if (or (!= mb.exit 0) (!= added.exit 0)) (pair -1 0)
-      (let [(d (fr/runShell! u.gate bpath (fr/childEnv (list)) (fr/heavy (fr/limits rc.gateSec 200) "writer" "")))
-            (_ (gitOut c.wt (list "worktree" "remove" "--force" bpath)))]
-        (pair d.exit (optionOr (fr/executedOf d.out) 0)))))
+        (sha (stringTrim mb.out))]
+    (if (!= mb.exit 0) (pair -1 0)
+      (redCached! (runPath dir u.id "redbase" "asn") sha u.gate
+        (fn [] -> (Pair Int64 Int64)
+          (let [(bpath (str c.wt ".base"))
+                (_ (gitOut c.wt (list "worktree" "remove" "--force" bpath)))
+                (added (gitOut c.wt (list "worktree" "add" "--detach" bpath sha)))]
+            (if (!= added.exit 0) (pair -1 0)
+              (let [(d (fr/runShell! u.gate bpath (fr/childEnv (list)) (fr/heavy (fr/limits rc.gateSec 200) "writer" "")))
+                    (_ (gitOut c.wt (list "worktree" "remove" "--force" bpath)))]
+                (pair d.exit (optionOr (fr/executedOf d.out) 0)))))))))
 
 fn receiptText u: st/Task g: Res before: (Pair Int64 Int64) base: String -> String
   (str "(:receipt " (st/q u.id) " :gates ((:gate " (st/q u.gate) " :exit " (n g.exit) " :executed " (n g.asserts) "))"
@@ -807,7 +829,7 @@ fn receiptText u: st/Task g: Res before: (Pair Int64 Int64) base: String -> Stri
 fn ! gatesStage rc: RealCfg dir: String u: st/Task c: CUnit -> Res
   (let [(g (gatesRes rc.gateSec (taskText dir u) u c))]
     (if (and (= g.exit 0) (> g.asserts 0))
-      (let [(before (redBefore! rc u c))
+      (let [(before (redBefore! rc dir u c))
             (_ (dirCreate (runsDir dir)))
             (_ (fileWrite (runPath dir u.id "receipt" "asn") (str (receiptText u g before (baseNote! c.wt (baseRef u))) "\n")))]
         g)
