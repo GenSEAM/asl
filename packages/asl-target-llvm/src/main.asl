@@ -1,5 +1,5 @@
 (module asl-target-llvm
-  :x [emitLlvmModule emitLlvmProgram emitLlvmModuleFor emitLlvmProgramFor emitLlvmModuleForTarget emitLlvmProgramForTarget emitLlvmRuntimeForTarget emitLlvmSupportForTarget emitLlvmProgramNative! emitLlvmProgramNativeWith! emitLlvmProgramNativeFor! runtimeDecls emitLlvmType emitLlvmBlock emitLlvmStmt emitLlvmExpr emitLlvmClosure emitLlvmPanic emitLlvmSource emitLlvmSourceWith emitLlvmTargetTriple llvmPreamble emitLlvmFunction]
+  :x [emitLlvmModule emitLlvmProgram routeFor routeForWith emitLlvmModuleFor emitLlvmProgramFor emitLlvmModuleForTarget emitLlvmProgramForTarget emitLlvmRuntimeForTarget emitLlvmSupportForTarget emitLlvmProgramNative! emitLlvmProgramNativeWith! emitLlvmProgramNativeFor! runtimeDecls emitLlvmType emitLlvmBlock emitLlvmStmt emitLlvmExpr emitLlvmClosure emitLlvmPanic emitLlvmSource emitLlvmSourceWith emitLlvmTargetTriple llvmPreamble emitLlvmFunction]
   :i [(asl-ir/types :a irTy)
       (asl-ir/link :a lk)
       (asl-target-llvm/types :a ty)
@@ -13,6 +13,7 @@
       (asl-target-llvm/sysRoute :a rt)
       (asl-target-llvm/parRoute :a pr)
       (asl-target-llvm/arrayRoute :a ar)
+      (asl-target-llvm/lowLevelRoute :a llr)
       (asl-target-llvm/rc :a rc)])
 
 fn emitLlvmModule m: irTy/SsaModule -> (Result String (List irTy/IrDiag))
@@ -96,7 +97,11 @@ fn ! emitLlvmProgramNativeFor! m: irTy/SsaModule entry: String mode: String targ
       ((ok text) (ok (rc/sanitized (if (or (= mode "") (= mode "0")) text (rc/routeArrayAlloc text)) (or (= mode "asan") (= mode "asanNotrace")))))))
 
 fn routeFor facts: libc/TripleFacts m: irTy/SsaModule -> (Result rt/Routed (List irTy/IrDiag))
-  (thenPar (thenPar (rt/routeModule facts m) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (pr/routeModule facts r))) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (ar/routeModule r)))
+  (routeForWith (llr/features) facts m)
+
+; (:m :ref LL-ROUTE-HUB :do "the low-level hub routes after arrays; fs is the table list of lowLevelRoute, a test passes its own")
+fn routeForWith fs: (List llr/Feature) facts: libc/TripleFacts m: irTy/SsaModule -> (Result rt/Routed (List irTy/IrDiag))
+  (thenPar (thenPar (thenPar (rt/routeModule facts m) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (pr/routeModule facts r))) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (ar/routeModule r))) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (llr/routeModuleWith fs r)))
 
 fn thenPar routed: (Result rt/Routed (List irTy/IrDiag)) par: (fn [irTy/SsaModule] -> (Result rt/Routed (List irTy/IrDiag))) -> (Result rt/Routed (List irTy/IrDiag))
   (match routed

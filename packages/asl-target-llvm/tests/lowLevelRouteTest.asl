@@ -11,19 +11,19 @@ fn mkBlock label: String instrs: (List ty/SsaInstr) term: ty/SsaTerm -> ty/SsaBl
   (ty/ssaBlock label (list) instrs term)
 
 fn oneBlockFn name: String params: (List ty/SsaParam) instrs: (List ty/SsaInstr) term: ty/SsaTerm -> ty/SsaFunction
-  (ty/ssaFunction name (list) params (ty/tyI64) (list (mkBlock "entry" instrs term)))
+  (ty/ssaFunction name (list) params (ty/tyVal) (list (mkBlock "entry" instrs term)))
 
 fn moduleOf externs: (List ty/SsaExtern) functions: (List ty/SsaFunction) -> ty/SsaModule
   (ty/ssaModule "fixture" (list) (list) (list) externs (list) functions)
 
 fn callerOf builtin: String -> ty/SsaFunction
   (oneBlockFn "run" (list)
-    (list (ty/ssaInstr "a" (ty/tyI64) (ty/opConst (ty/constInt 7)))
-          (ty/ssaInstr "r" (ty/tyI64) (ty/opBuiltin builtin (list "a"))))
+    (list (ty/ssaInstr "a" (ty/tyVal) (ty/opConst (ty/constInt 7)))
+          (ty/ssaInstr "r" (ty/tyVal) (ty/opBuiltin builtin (list "a"))))
     (ty/termReturn "r"))
 
 fn helperFn builtin: String -> ty/SsaFunction
-  (oneBlockFn (llr/wrapperName builtin) (list (ty/ssaParam "x" (ty/tyI64))) (list) (ty/termReturn "x"))
+  (oneBlockFn (llr/wrapperName builtin) (list (ty/ssaParam "x" (ty/tyVal))) (list) (ty/termReturn "x"))
 
 fn fixtureFeature -> llr/Feature
   (llr/Feature :name "fixtureRt" :builtins (list "llFixtureId") :functions (list (helperFn "llFixtureId")) :externs (list))
@@ -83,7 +83,7 @@ fn ! testHubInMainRoute -> Bool
             (match (ssa/emitLlvmModule r.result)
               ((err ds) (assert false (str "the routed module emits: " ds)))
               ((ok text)
-                (do (assert (stringContains? text "lowLevelRoute.llFixtureId") "the emitted text defines and calls the routed function")
+                (do (assert (stringContains? text (str "%Val @" (ssa/llvmName (llr/wrapperName "llFixtureId")) "(%Val %x)")) "the emitted text defines the routed function")
                     (assert (stringContains? text "define") "the emitted text has definitions")
                     (assert (ok? (llvm/routeFor fx m)) "the default route leaves an unlisted-table module routable")
                     true))))))))

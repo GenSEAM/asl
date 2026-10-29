@@ -25,6 +25,7 @@
    "asl-target-llvm/parRoute"
    "asl-target-llvm/arrays"
    "asl-target-llvm/arrayRoute"
+   "asl-target-llvm/lowLevelRoute"
    "asl-target-llvm/gcAsl"
    "asl-target-llvm/gcRoute"
    "asl-target-llvm/wasmAlloc"
