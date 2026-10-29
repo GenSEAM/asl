@@ -1067,6 +1067,16 @@ fn ! newSessionId -> (Result String String)
         (ok (stringJoin (map (fn [i] (hexByte (bytesGet bs i))) (list 0 1 2 3 4 5 6 7)) ""))
         (err "/dev/urandom gave fewer than 8 bytes"))))
 
+; (:m :ref LEON-REPEAT-OP :do "a turn whose op receipts include a rejected, error or failed one and that persisted nothing is a failed turn; the same reply failing on failureCap consecutive turns escalates instead of repeating to the wall budget")
+fn withCounts st: ls/LoopState counts: (Map String Int64) -> ls/LoopState
+  (with st :failureCounts counts)
+
+fn repeatFailureCap -> Int64
+  3
+
+fn failedReceipts? receipts: String -> Bool
+  (or (stringContains? receipts ":status :rejected") (or (stringContains? receipts ":status :error") (stringContains? receipts ":status :failed")))
+
 ; (:m :ref PER-TURN-GATE :do "a turn whose ops all only read, or only write and edit without persisting a change (an edit whose :old is not in the file), changes nothing the gates see, so it reuses the last verdict instead of rerunning the task gates (a suite gate cost minutes per read turn; one calibration run repeated a failing edit 24 times and gated each); a turn that wrote, any other op, an unnamed form or (:done) still runs them")
 fn readOnlyOps -> (List String)
   (list "read" "query" "outline" "tree" "diff" "tools" "help" "gitDiff" "gitLog" "gitShow" "note" "observe")
@@ -1743,12 +1753,23 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
                     ((some message) (rl/withCommitMessage executed (some message)))
                     ((none) executed))
                   notedRun (rl/noteParseTurn (rl/withState withCommit nextState) turn parseDefect)
-                  nextRun (if (and terminal (not (pairFirst integrity)))
+                  nextRun0 (if (and terminal (not (pairFirst integrity)))
                     (rl/withState notedRun (rl/withHeadState nextState turn nextState.readStreak writesPersisted deliver allGates lastGates
                       "failed" none (some (pairSecond integrity)) state.runStarted))
-                    notedRun)]
+                    notedRun)
+                  repeatKey (stringTrim normalized)
+                  repeats (if (and (not parseDefect) (and (not wrote) (failedReceipts? opReceipts)))
+                    (+ 1 (optionOr (mapGet state.failureCounts repeatKey) 0)) 0)
+                  counts (if (> repeats 0) (mapSet (mapEmpty) repeatKey repeats) (mapEmpty))
+                  repeatStop (and (not terminal) (>= repeats (repeatFailureCap)))
+                  repeatReason (str "the same reply failed and changed nothing " (stringFromInt64 repeats) " turns in a row")
+                  _ (if repeatStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :repeatFailure :reason \"" repeatReason "\")\n"))) true)
+                  nextRun (if repeatStop
+                    (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
+                      "escalated" (some "repeatFailure") (some (str "(:escalate :reason \"" repeatReason "\")")) state.runStarted) counts))
+                    (rl/withState nextRun0 (withCounts nextRun0.state counts)))]
               (pair (rl/ProviderRun :run nextRun :provider response.provider :history history)
-                    (if terminal (stop) (nextTurn)))))))))
+                    (if (or terminal repeatStop) (stop) (nextTurn)))))))))
 
 fn ! liveJournal ra: RunArgs rootDir: String -> (Result (Pair String String) String)
   (match (dirCreate (pyJoin rootDir ".asl/run/agentLoop"))
