@@ -56,7 +56,7 @@ fn ! runTests -> Bool
       (assert (near floor 5.0) (str "the rate never falls below start/4: " (stringFromFloat64 floor)))
       (assert (near (mapGetOr free "a" 0.0) 24.0) "learnAll raises a throttled alias from its start")
       (assert (near (mapGetOr free "b" 0.0) 20.0) "an alias without calls keeps its start")
-      (assert (near (mapGetOr learned "a" 0.0) 30.0) (str "the provider total 30 scales 24+20 down to a sum of 30: " (stringFromFloat64 (mapGetOr learned "a" 0.0))))
+      (assert (near (mapGetOr learned "a" 0.0) 16.3636) (str "the provider total 30 scales 24 and 20 by 30/44: " (stringFromFloat64 (mapGetOr learned "a" 0.0))))
       (assert (near (+ (mapGetOr learned "a" 0.0) (mapGetOr learned "b" 0.0)) 30.0) "the clamped sum equals the provider total")
       (assert (ok? wrote) "the store is written")
       (assert (and (near (mapGetOr back "a" 0.0) (mapGetOr learned "a" 0.0)) (near (mapGetOr back "b" 0.0) (mapGetOr learned "b" 0.0)) (= (mapSize back) 2)) "the store round-trips")

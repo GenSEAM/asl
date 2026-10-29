@@ -43,4 +43,5 @@
     "aslGateway/modelSync"
     "aslGateway/subPacing"
     "aslGateway/subPace"
+    "aslGateway/rateLearn"
     "aslGateway/subsRefresh"))
