@@ -2,11 +2,12 @@
   :x [runTests]
   :i [(asl/agentLoop/main :a m) (asl/agentLoop/core :a c) (aslHarness/tests/agentLoopRecorderKit :a rk) (asl/agentLoop/tests/gitInitKit :a gk)])
 
-; (:m :ref PER-TURN-GATE :do "the task gates ran after every parsed turn, read-only ones included; with a suite as gate that cost minutes per read turn on node2. A turn whose ops only read reuses the last verdict; a turn that writes, runs or finishes still runs the gates")
+; (:m :ref PER-TURN-GATE :do "the task gates ran after every parsed turn, read-only ones included; with a suite as gate that cost minutes per read turn on node2. A turn whose ops only read, or whose write or edit changed nothing (an edit whose :old is not in the file), reuses the last verdict; a turn that wrote, runs or finishes still runs the gates")
 
 fn fiveReadsThenWrite -> (List String)
-  (listAppend (map (fn [_] "(:step :op \"read\" :file \"subject.txt\")") (range 0 5))
-    (list "(:step :op \"write\" :file \"subject.txt\" :content \"green\\n\") (:done)"))
+  (listAppend (map (fn [_] "(:step :op \"read\" :file \"subject.txt\")") (range 0 4))
+    (list "(:step :op \"edit\" :file \"subject.txt\" :old \"not in the file\" :new \"green\")"
+          "(:step :op \"write\" :file \"subject.txt\" :content \"green\\n\") (:done)"))
 
 fn turnForm num: Int64 reply: String -> String
   (str "    (:turn :num " (stringFromInt64 num) " :reply \"" (c/escapeAsn reply) "\")\n")
