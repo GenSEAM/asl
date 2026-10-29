@@ -1,4 +1,4 @@
-(module asl-checker/numKinds :x [intLitShape parseIntLit parseIntLitBits] :i [])
+(module asl-checker/numKinds :x [intLitShape parseIntLit parseIntLitBits intKindCode intKindWidth intKindSigned?] :i [])
 
 ; (:m :ref LL-NUMLIT :do "numeric literal grammar in one place: 0x 0b 0o radix literals and _ digit separators on top of the decimal atoms stringToInt64 reads; intLitShape names the form (plain sep radix bad none), parseIntLit is the Int64-range value, parseIntLitBits keeps radix literals up to 2^64-1 as their bit pattern")
 fn unsignedBody v: String -> String
@@ -68,3 +68,13 @@ fn parseIntLit v: String -> (Option Int64)
 
 fn parseIntLitBits v: String -> (Option Int64)
   (parseIntLitAs v true)
+
+; (:m :ref LL-NUMLIT :do "sized integer kind table shared by checker and lowering: boxed aux kind codes U8 1 I8 2 U16 3 I16 4 U32 5 I32 6 U64 7, I64 and its aliases Int Int64 0, -1 for any other name; widths in bits, 0 for an unknown name")
+fn intKindCode name: String -> Int64
+  (cond ((= name "U8") 1) ((= name "I8") 2) ((= name "U16") 3) ((= name "I16") 4) ((= name "U32") 5) ((= name "I32") 6) ((= name "U64") 7) ((or (= name "I64") (or (= name "Int") (= name "Int64"))) 0) (else -1))
+
+fn intKindWidth name: String -> Int64
+  (cond ((or (= name "U8") (= name "I8")) 8) ((or (= name "U16") (= name "I16")) 16) ((or (= name "U32") (= name "I32")) 32) ((or (= name "U64") (or (= name "I64") (or (= name "Int") (= name "Int64")))) 64) (else 0))
+
+fn intKindSigned? name: String -> Bool
+  (or (= name "I8") (or (= name "I16") (or (= name "I32") (or (= name "I64") (or (= name "Int") (= name "Int64"))))))
