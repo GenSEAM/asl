@@ -63,7 +63,7 @@ fn testProse -> Bool
 
 fn liveProvider -> pv/Provider
   (pv/vendorProvider (pv/VendorConfig :vendor "agy" :mode "scout" :rootDir "/tmp" :model "m" :timeout 10 :queueTimeout 10 :sessionId "s1" :intent "auto"
-    :timeoutSet false :env (pv/ProviderEnv :gatewayUrl "" :inProcess false :profile "" :gatewayConfig "" :tmpDir "/tmp" :childEnv (mapEmpty)) :link none :turn 0)))
+    :timeoutSet false :env (pv/ProviderEnv :gatewayUrl "" :inProcess false :profile "" :gatewayConfig "" :tmpDir "/tmp" :childEnv (mapEmpty)) :link none :turn 0))
 
 fn testLivePath -> Bool
   (let [on (m/attractorProvider (liveProvider) (at/attractorPrefill "asn") none)
