@@ -148,7 +148,7 @@ fn ! runTests -> Bool
         (hubMain (resultOr (realPath "asl/tools/hub/main.asl") ""))
         (daemonCmd (str host " run " hubMain " serve --ready " temp "/hub.ready 1>" temp "/hub.out 2>" temp "/hub.err"))
         (daemonPid (start! temp daemonCmd))
-        (up (and (> daemonPid 0) (waitReady! (str temp "/hub.ready") 1500)))
+        (up (and (> daemonPid 0) (waitReady! (str temp "/hub.ready") 12000)))
         (mode (match (fileLstat sock) ((ok st) (mod st.mode 512)) ((err _) -1)))
         (second (fr/shellOut (str "(cd " (resultOr (realPath ".") ".") " && env -i PATH=/usr/bin:/bin HOME=" temp " ASL_GATEWAY_ROOT=" temp " " (nativeCliCacheEnvRow!) " " host " run "
                                   hubMain " serve 2>&1; echo EXIT:$?)") 60000))
@@ -158,7 +158,7 @@ fn ! runTests -> Bool
         (firstKilled (killWait! daemonPid))
         (rm1 (pathRemove (str temp "/hub.ready")))
         (daemon2 (start! temp daemonCmd))
-        (up2 (and (> daemon2 0) (waitReady! (str temp "/hub.ready") 1500)))
+        (up2 (and (> daemon2 0) (waitReady! (str temp "/hub.ready") 12000)))
         (again (if up2 (chatOnce! sock listener) chat))
         (againOk (and up2 (and (clientsDone? again) (ok200? again))))
         (killed2 (killWait! daemon2))

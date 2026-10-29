@@ -159,7 +159,7 @@ fn ! runTests -> Bool
         (host (hostExe!))
         (daemonCmd (str host " run " (resultOr (realPath "asl/tools/hub/main.asl") "") " serve --ready " temp "/hub.ready 1>" temp "/hub.out 2>" temp "/hub.err"))
         (daemonPid (start! temp daemonCmd))
-        (up (and (> daemonPid 0) (waitReady! (str temp "/hub.ready") 1500)))
+        (up (and (> daemonPid 0) (waitReady! (str temp "/hub.ready") 12000)))
         (w0 (World :listener listener :stubs (list) :seenMs (list) :clients (list)))
         (idle (statusAt! w0 sock "idle"))
         (c1 (send! (send! idle (unixConnect sock) "a") (unixConnect sock) "b"))

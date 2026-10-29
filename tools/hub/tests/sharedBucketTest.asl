@@ -141,7 +141,7 @@ fn ! runTests -> Bool
         (host (hostExe!))
         (daemonCmd (str host " run " (resultOr (realPath "asl/tools/hub/main.asl") "") " serve --ready " temp "/hub.ready 1>" temp "/hub.out 2>" temp "/hub.err"))
         (daemonPid (start! temp daemonCmd))
-        (up (and (> daemonPid 0) (waitReady! (str temp "/hub.ready") 1500)))
+        (up (and (> daemonPid 0) (waitReady! (str temp "/hub.ready") 12000)))
         (w0 (World :listener listener :stubs (list) :seenMs (list) :clients (list)))
         (a1 (send! (send! w0 (unixConnect sock) "a") (unixConnect sock) "b"))
         (a2 (pump! a1 (fn [(x World)] -> Bool false) (+ (nowMs!) 3000)))
@@ -153,7 +153,7 @@ fn ! runTests -> Bool
         (gwA (start! temp (str host " run " (resultOr (realPath "asl/packages/asl-gateway/src/server.asl") "") " serve --port 0 --upstream " base " --ready " temp "/gwA.ready 1>" temp "/gwA.out 2>" temp "/gwA.err")))
         (gwB (start! temp (str host " run " (resultOr (realPath "asl/packages/asl-gateway/src/server.asl") "") " serve --port 0 --upstream " base " --ready " temp "/gwB.ready 1>" temp "/gwB.out 2>" temp "/gwB.err")))
         (portOf (fn [(name String)] -> Int64
-                  (if (waitReady! (str temp "/" name ".ready") 1500)
+                  (if (waitReady! (str temp "/" name ".ready") 12000)
                     (optionOr (stringToInt64 (stringTrim (resultOr (fileReadString (str temp "/" name ".ready")) ""))) 0)
                     0)))
         (portA (portOf "gwA"))

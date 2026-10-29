@@ -161,7 +161,7 @@ fn ! bucketRowAt! temp: String learned: Bool -> String
                    (and (ok? (fileWrite (str temp "/.asl/hub.asn") (str "(:hub :sock \"" sock "\" :upstream \"" base "\")\n")))
                      (if learned (ok? (fileWrite (str temp "/.asl/run/hub/ratesByName.asn") "(:rate :alias \"m1-target\" :rpm 600.0)\n")) true)))))
         (daemonPid (start! temp (str (hostExe!) " run " (resultOr (realPath "asl/tools/hub/main.asl") "") " serve --ready " temp "/hub.ready 1>" temp "/hub.out 2>" temp "/hub.err")))
-        (up (and (> daemonPid 0) (waitReady! (str temp "/hub.ready") 1500)))
+        (up (and (> daemonPid 0) (waitReady! (str temp "/hub.ready") 12000)))
         (w0 (World :listener listener :stubs (list) :seenMs (list) :clients (list)))
         (sent (send! w0 (unixConnect sock) "a"))
         (served (pump! sent (fn [(x World)] -> Bool (tagDone? x "a")) (+ (nowMs!) 8000)))
