@@ -248,6 +248,21 @@ fn ! testWriterClaimIgnored bin: String -> Bool
         (assert (listAll? (fn [(u st/Task)] -> Bool (not (= u.st "done"))) storeRows) "the store row is not done")
         true))
 
+; (:m :ref ATTRACTOR-AB :do "--attractor-ab on splits writes by the parity of the id's char-code sum: even runs Leon with :attractor asn, odd without; the option is off by default and then no unit gets an arm")
+fn ! testAttractorArm -> Bool
+  (let [(off (cd/realCfg (list) "."))
+        (on (cd/realCfg (list "--attractor-ab" "on") "."))]
+    (do (assert (= (cd/armOf "AA") "asn") "char-code sum 130 is even: arm asn")
+        (assert (= (cd/armOf "AB") "off") "char-code sum 131 is odd: arm off")
+        (assert (not off.attractorAb) "the option is off by default")
+        (assert on.attractorAb "--attractor-ab on turns it on")
+        (assert (= (cd/writeArm off "AA") "") "with the option off no unit gets an arm")
+        (assert (= (cd/writeArm on "AA") "asn") "with it on the arm follows armOf")
+        (assert (= (cd/armExtra "asn") ":attractor asn") "arm asn passes :attractor asn to Leon")
+        (assert (= (cd/armExtra "off") "") "arm off passes no extra keys")
+        (assert (= (cd/armExtra "") "") "no arm passes no extra keys")
+        true))
+
 ; (:m :ref CONDUCTOR-VACUOUS-GATE :do "a write whose unit gate already passed on the base is not proven by any edit: it blocks with one escalate row on the first write, no retry, no tier hop, never gated")
 fn ! testVacuousBlocks bin: String -> Bool
   (let [(dir (scratch "vacuous"))
@@ -585,6 +600,7 @@ fn ! runTests -> Bool
         (assert (testWriterClaimIgnored bin) "writer's green claim is not trusted")
         (assert (testWaitEscalates bin) "waiting past maxWait escalates")
         (assert (testVacuousBlocks bin) "a vacuous-gate write blocks at once")
+        (assert (testAttractorArm) "attractor A/B arm by id parity, off by default")
         (assert (testParallel bin) "stages overlap")
         (assert (testCapacity bin) "capacity counts units in flight")
         (assert (testKilledChild bin) "killed child is a failed stage")
