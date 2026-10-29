@@ -1,4 +1,4 @@
-(module asl-ir/lower :x [LinkScope lowerModule lowerWithPrelude lowerLinked lowerLinkedAs lowerSource declPositions sitedPositions builtinArity builtinArityFor genericConcrete genericAlias genericMulti?] :i [(asl-ir/types :a ty) (asl-parser/ast :a ast) (asl-parser/reader :a rd) (asl-checker/foreign :a ffd) (asl-checker/types :a cty)])
+(module asl-ir/lower :x [LinkScope lowerModule lowerWithPrelude lowerLinked lowerLinkedAs lowerSource declPositions sitedPositions builtinArity builtinArityFor genericConcrete genericAlias genericMulti?] :i [(asl-ir/types :a ty) (asl-parser/ast :a ast) (asl-parser/reader :a rd) (asl-checker/foreign :a ffd) (asl-checker/types :a cty) (asl-checker/numKinds :a nk)])
 
 (schema Ctor (:f typeName String) (:f variant String) (:f arity Int64))
 
@@ -421,7 +421,7 @@ fn lowerAtom ctx: LowerCtx env: (Map String String) st: LowerState v: String -> 
     ((= v "()") (constOf st (ty/constUnit)))
     ((stringStartsWith? v "\"") (lowerString ctx st v))
     ((and (stringStartsWith? v ":") (> (stringLength v) 1)) (constOf st (ty/constKeyword (optionOr (stringSlice v 1 (stringLength v)) ""))))
-    ((some? (stringToInt64 v)) (constOf st (ty/constInt (optionOr (stringToInt64 v) 0))))
+    ((some? (nk/parseIntLitBits v)) (constOf st (ty/constInt (optionOr (nk/parseIntLitBits v) 0))))
     ((and (floatText? v) (some? (stringToFloat64 v))) (constOf st (ty/constFloat (optionOr (stringToFloat64 v) 0.0))))
     ((mapHas? env v) (ok (Lowered :st st :value (optionOr (mapGet env v) ""))))
     ((mapHas? ctx.info.arities v) (functionValue ctx env st v (optionOr (mapGet ctx.info.arities v) 0)))
@@ -983,7 +983,7 @@ fn lowerField ctx: LowerCtx env: (Map String String) st: LowerState name: String
                    ((some t) (ok (coerce read.st read.value t))))))))
 
 fn bindName? e: rd/SExpr -> Bool
-  (and (rd/isAtom? e) (let [(v (rd/sexprHead e))] (and (not (stringEmpty? v)) (and (not (stringStartsWith? v ":")) (and (not (stringStartsWith? v "\"")) (none? (stringToInt64 v)))))))
+  (and (rd/isAtom? e) (let [(v (rd/sexprHead e))] (and (not (stringEmpty? v)) (and (not (stringStartsWith? v ":")) (and (not (stringStartsWith? v "\"")) (none? (nk/parseIntLitBits v)))))))
 
 fn armFamily ctx: LowerCtx bare: Bool arm: rd/SExpr -> String
   (let [(pat (nthOf (rd/sexprToList arm) 0))

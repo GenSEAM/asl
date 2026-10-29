@@ -1,4 +1,4 @@
-(module asl-checker/check :x [InferState Deferred checkModule checkModuleIn checkModuleSource checkSource checkFile! schemaOfCtor elaborateScript needsElaboration?] :i [(types :a ty) (unify :a u) (resolve :a r) (ast :a a) (reader :a rd) (tailPos :a tp) (constAssert :a ca) (foreign :a ff)])
+(module asl-checker/check :x [InferState Deferred checkModule checkModuleIn checkModuleSource checkSource checkFile! schemaOfCtor elaborateScript needsElaboration?] :i [(types :a ty) (unify :a u) (resolve :a r) (ast :a a) (reader :a rd) (tailPos :a tp) (constAssert :a ca) (foreign :a ff) (numKinds :a nk)])
 
 (schema InferState (:f subst (Map Int64 ty/Type)) (:f nextVar Int64) (:f intSites (List (pair String Int64))) (:f mapSites (List (pair ty/Type String))) (:f diags (List ty/Diagnostic)) (:f deferred (List Deferred)))
 
@@ -143,7 +143,7 @@ fn isFloatLit? v: String -> Bool
   (let [(sp (splitExp (r/cleanNumSign v))) (mant (pairFirst sp)) (expPart (pairSecond sp))] (match expPart ((some e) (and (mantissaOk? mant) (expOk? e))) ((none) (and (stringContains? mant ".") (mantissaOk? mant)))))
 
 fn isIntLit? v: String -> Bool
-  (let [(sp (splitExp (r/cleanNumSign v))) (mant (pairFirst sp)) (expPart (pairSecond sp))] (match expPart ((some _) false) ((none) (and (not (stringContains? mant ".")) (mantissaOk? mant)))))
+  (let [(sp (splitExp (r/cleanNumSign v))) (mant (pairFirst sp)) (expPart (pairSecond sp))] (match expPart ((some _) false) ((none) (or (and (not (stringContains? mant ".")) (mantissaOk? mant)) (let [(shape (nk/intLitShape v))] (or (= shape "radix") (= shape "sep")))))))
 
 fn unitType -> ty/Type
   (ty/tyCon "Unit" (list) (none) (none))
@@ -212,7 +212,7 @@ fn builtinNearHint v: String mod: r/ModuleSummary -> String
       (if (listEmpty? names) "" (str "; did you mean " (stringJoin names ", ") " (prelude builtins)"))))
 
 fn inferAtom v: String env: (Map String ty/Type) mod: r/ModuleSummary deps: r/DepIndex scope: String path: String st: InferState -> (Pair ty/Type InferState)
-  (cond ((stringStartsWith? v "\"") (pair (ty/tyCon "String" (list) (none) (none)) st)) ((or (= v "true") (= v "false")) (pair (ty/tyCon "Bool" (list) (none) (none)) st)) ((and (= v "none") (not (mapHas? env v))) (let [(fRes (freshVar st "any"))] (pair (ty/tyCon "Option" (list (pairFirst fRes)) (none) (none)) (pairSecond fRes)))) ((or (= v "()") (= v "nil")) (pair (unitType) st)) ((isFloatLit? v) (pair (ty/tyCon "Float64" (list) (none) (none)) st)) ((isIntLit? v) (let [(vid st.nextVar) (fRes (freshVar st "int")) (vty (pairFirst fRes)) (st1 (pairSecond fRes)) (st2 (noteIntLiteral st1 v vid))] (pair vty st2))) ((and (stringStartsWith? v ":") (not (mapHas? env v))) (pair (ty/tyCon "Keyword" (list) (none) (none)) st)) (else (match (lookupSymbolType v env mod deps st) ((some found) (nullaryCaseValue v found env mod deps)) ((none) (let [(st1 (addDiag st "rule-1" (str "unbound symbol: " v (ty/renamedHint v) (builtinNearHint v mod)) path))] (freshVar st1 "any"))))))
+  (cond ((stringStartsWith? v "\"") (pair (ty/tyCon "String" (list) (none) (none)) st)) ((or (= v "true") (= v "false")) (pair (ty/tyCon "Bool" (list) (none) (none)) st)) ((and (= v "none") (not (mapHas? env v))) (let [(fRes (freshVar st "any"))] (pair (ty/tyCon "Option" (list (pairFirst fRes)) (none) (none)) (pairSecond fRes)))) ((or (= v "()") (= v "nil")) (pair (unitType) st)) ((= (nk/intLitShape v) "bad") (pair (ty/tyCon "Int64" (list) (none) (none)) (addDiag st "ERR_BAD_NUMBER" (str "malformed number: " v) path))) ((isFloatLit? v) (pair (ty/tyCon "Float64" (list) (none) (none)) st)) ((isIntLit? v) (let [(vid st.nextVar) (fRes (freshVar st "int")) (vty (pairFirst fRes)) (st1 (pairSecond fRes)) (st2 (noteIntLiteral st1 v vid))] (pair vty st2))) ((and (stringStartsWith? v ":") (not (mapHas? env v))) (pair (ty/tyCon "Keyword" (list) (none) (none)) st)) (else (match (lookupSymbolType v env mod deps st) ((some found) (nullaryCaseValue v found env mod deps)) ((none) (let [(st1 (addDiag st "rule-1" (str "unbound symbol: " v (ty/renamedHint v) (builtinNearHint v mod)) path))] (freshVar st1 "any"))))))
 
 fn inferAtomFm fm: FrameMachine v: String st: InferState -> (Pair ty/Type InferState)
   (inferAtom v fm.env fm.mod fm.deps fm.scope fm.path st)
@@ -566,7 +566,7 @@ fn evalFm fm: FrameMachine e: rd/SExpr st: InferState -> (Pair ty/Type InferStat
   (evalWithEnv fm e fm.env st)
 
 fn checkLiteralRanges intSites: (List (Pair String Int64)) subst: (Map Int64 ty/Type) path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
-  (fold (fn [(a (List ty/Diagnostic)) (site (Pair String Int64))] -> (List ty/Diagnostic) (let [(tokStr (pairFirst site)) (vid (pairSecond site)) (wty (u/applySubst subst (ty/tyVar vid "int"))) (tname (match wty ((ty/tyCon n _ _ _) n) (_ "Int64")))] (match (ty/intRangeBounds tname) ((none) a) ((some b) (let [(low (pairFirst b)) (high (pairSecond b)) (numOpt (stringToInt64 tokStr)) (badLit? (match numOpt ((none) true) ((some n) (or (< n low) (> n high)))))] (if badLit? (let [(msg (str "the literal " tokStr " does not fit " tname " (" (stringFromInt64 low) ".." (stringFromInt64 high) ")"))] (cons (ty/Diagnostic :code "literal-range" :message msg :msg msg :line 1 :col 1 :path path) a)) a)))))) acc intSites)
+  (fold (fn [(a (List ty/Diagnostic)) (site (Pair String Int64))] -> (List ty/Diagnostic) (let [(tokStr (pairFirst site)) (vid (pairSecond site)) (wty (u/applySubst subst (ty/tyVar vid "int"))) (tname (match wty ((ty/tyCon n _ _ _) n) (_ "Int64")))] (match (ty/intRangeBounds tname) ((none) a) ((some b) (let [(low (pairFirst b)) (high (pairSecond b)) (numOpt (nk/parseIntLit tokStr)) (badLit? (match numOpt ((none) true) ((some n) (or (< n low) (> n high)))))] (if badLit? (let [(msg (str "the literal " tokStr " does not fit " tname " (" (stringFromInt64 low) ".." (stringFromInt64 high) ")"))] (cons (ty/Diagnostic :code "literal-range" :message msg :msg msg :line 1 :col 1 :path path) a)) a)))))) acc intSites)
 
 fn mapHasKey? m: (Map String Bool) k: String -> Bool
   (match (mapGet m k) ((some _) true) ((none) false))
