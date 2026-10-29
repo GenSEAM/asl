@@ -375,11 +375,21 @@ fn ! stageWith! root: String compiler: String source: String lib: String clang: 
         (inputCleanup (if (stringContains? compiler ".boot.native") (and (drop compiler) (drop (str compiler ".tracing"))) true))]
     (if (!= compiled 0)
       (do (drop ll) (drop part) (err (str "native asl1 stage failed (exit " (stringFromInt64 compiled) ")")))
-      (let [(linked (sys/runMerged! (list "nice" "-n" "15" clang "-O2" "-Wno-override-module" "-x" "ir" ll "-x" "none" lib "-lm" "-o" part)))]
+      (let [(linked (partsLink! root clang lib ll part))]
         (do (drop ll)
-          (if (or (!= linked 0) (not (sys/isFile? part)))
-            (do (drop part) (err (str "clang could not link native asl1 (exit " (stringFromInt64 linked) ")")))
-            (ok part))))))
+          (match linked
+            ((err e) (do (drop part) (err (str "clang could not link native asl1: " e))))
+            ((ok _) (if (sys/isFile? part) (ok part) (err "clang could not link native asl1: no output"))))))))
+
+; (:m :ref ASL1-PARALLEL-CLANG :do "the 54 MB boot IR goes through nativeBuild's parts link (split into up to the configured or default parts, at most online cores and 8, compiled by the bounded job pool at -O2, then linked), as bin/asl build already does; one clang -O2 on the whole IR took 192 s of a 210 s cold miss")
+fn ! partsLink! root: String clang: String lib: String ll: String out: String -> (Result (Pair Int64 String) String)
+  (match (versionLine clang)
+    ((err e) (err e))
+    ((ok version)
+      (let [(n (nb/partsForSize (resultOr (nb/linkPartsFor! root) 1) (resultOr (fileSize ll) 0)))
+            (b (nb/Build :root root :cache (cacheDir!) :tmp (cacheDir!) :lib lib :base "" :clangVersion version :owner ""
+                         :deadlineNs (+ (monotonicNs) 3600000000000) :maxDesc (+ 16 (* 4 n))))]
+        (nb/linkParts! b clang (list "-O2") ll out n))))
 
 fn fromSeed! seed: String stage: Any install: Any -> (Result String String)
   (bootstrap! (none) (ok seed) (fn [(c String)] -> (Result String String)

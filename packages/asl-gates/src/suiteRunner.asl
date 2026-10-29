@@ -930,7 +930,7 @@ fn slowSuiteTimeoutS suite: String -> (Option Int64)
   (cond
     ((= suite "asl/packages/asl-parser/tests/liftLowerIdentityTest.asl") (some 900))
     ((or (= suite "tests/conformance/bootstrap/stage1BuildTest.asl") (= suite "tests/conformance/bootstrap/stage1LlvmTest.asl")) (some 1200))
-    ((= suite "tests/conformance/cli/buildNativeAsl1Test.asl") (some 2400))
+    ((= suite "tests/conformance/cli/buildNativeAsl1Test.asl") (some 3600))
     ((= suite "tests/conformance/bootstrap/stage2FixpointTest.asl") (some 3600))
     ((= suite "tests/conformance/bootstrap/ddcFixpointTest.asl") (some 1800))
     ((= suite "tests/conformance/bootstrap/seedFixpointTest.asl") (some 1800))

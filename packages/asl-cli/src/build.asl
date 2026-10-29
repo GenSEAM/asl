@@ -189,8 +189,18 @@ fn ! linkAttempt! ctx: sys/Context clang: String flags: (List String) lib: Strin
 fn ! absolutePath! p: String -> String
   (if (stringStartsWith? p "/") p (str (resultOr (realPath ".") ".") "/" p))
 
-fn ! link! ctx: sys/Context clang: String lib: String target: String out: String tmp: String mode: String shape: (Pair Int64 String) exact: Bool links: (List String) -> Int64
-  (let [(ll (str tmp "/out.ll"))
+; (:m :ref NATIVE-FALLBACK-NOTRACE :do "the notrace runtime is built by a native asl1, so when none is available (an unusable cache dir) the build falls back to the tracing runtime, compiled and linked as :tracing, and says so on stderr, instead of failing ERR_BUILD after the interpreter fallback")
+fn ! effectiveMode! ctx: sys/Context clang: String lib: String requested: String -> String
+  (if (!= requested "notrace")
+    requested
+    (match (cache/nativeAsl1! ctx lib clang)
+      ((ok _) requested)
+      ((err why) (do (sys/sayErr! (str "(:receipt :rc tracing :reason \"notrace runtime needs a native asl1: " (stringReplace why "\"" "'") "\" :effect \"compiled and linked with the tracing runtime\")"))
+                     "0"))))
+
+fn ! link! ctx: sys/Context clang: String lib: String target: String out: String tmp: String requested: String shape: (Pair Int64 String) exact: Bool links: (List String) -> Int64
+  (let [(mode (effectiveMode! ctx clang lib requested))
+        (ll (str tmp "/out.ll"))
         (part (absolutePath! (str out ".part" (stringFromInt64 (procSelf)))))
         (compiled (compileLl! ctx clang lib target ll mode))]
     (cond

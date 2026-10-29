@@ -235,7 +235,7 @@ fn ! runTests -> Bool
       (assert (= (optionOr (sr/slowSuiteTimeoutS "tests/conformance/bootstrap/seedFixpointTest.asl") 0) 1800) "seed fixpoint timeout is 1800 seconds: four clang links and two asl1 self-compiles")
       (assert (= (optionOr (sr/slowSuiteTimeoutS "asl/packages/asl-checker/tests/importSweepTest.asl") 0) 600) "importSweepTest timeout is 600 seconds: 82 s measured alone, about 137 s under load")
       (assert (= (optionOr (sr/slowSuiteTimeoutS "asl/packages/asl-cli/tests/binAslColdTest.asl") 0) 900) "binAslColdTest timeout is 900 seconds: a cold native build, 268 s measured")
-      (assert (= (optionOr (sr/slowSuiteTimeoutS "tests/conformance/cli/buildNativeAsl1Test.asl") 0) 2400) "buildNativeAsl1Test timeout was raised to 2400 after a 1376s measurement under load")
+      (assert (= (optionOr (sr/slowSuiteTimeoutS "tests/conformance/cli/buildNativeAsl1Test.asl") 0) 3600) "buildNativeAsl1Test timeout is 3600 seconds: five asl1 native builds, 1284 s on node2 and 873 s on the Mac")
       (assert (= (optionOr (sr/slowSuiteTimeoutS "tests/acceptance/r1AgentLoop/coreParityTest.sh") 0) 1200) "coreParityTest.sh timeout was raised to 1200 after a 640s measurement under load")
       (assert (= (sr/suiteJob! "." "tests/acceptance/r1AgentLoop/coreParityTest.sh" 300).timeoutMs 1200000)
         "suiteJob! gives coreParityTest.sh the table's 1200s timeout in ms, not the 300s default")

@@ -488,7 +488,7 @@
 (:doc :symbol "asl/packages/asl-gates/src/suiteRunner.asl#parseShellGateLine" :text "gate line: :asserts n then :failed m")
 (:doc :symbol "asl/packages/asl-gates/src/suiteRunner.asl#hostVerdict" :text "last FAIL naming suite; diagnostic without line:col")
 (:doc :symbol "asl/packages/asl-gates/src/suiteRunner.asl#shellResult" :text "last gate line counts; exit and failed decide")
-(:doc :symbol "asl/packages/asl-gates/src/suiteRunner.asl#slowSuiteTimeoutS" :text "measured 19m36s and 4m40s, liftLowerIdentityTest 277s wall on 2026-09-30; limits adopted with headroom; buildNativeAsl1Test measured 1376s under load on 2026-10-03, split from the stage1 pair to 2400; coreParityTest.sh measured 640s under load on 2026-10-03 against a 300s default cap, given 1200")
+(:doc :symbol "asl/packages/asl-gates/src/suiteRunner.asl#slowSuiteTimeoutS" :text "measured 19m36s and 4m40s, liftLowerIdentityTest 277s wall on 2026-09-30; limits adopted with headroom; buildNativeAsl1Test measured 1376s under load on 2026-10-03 and 1284s on node2 (EPYC Zen5 8c), 873s on the Mac, on 2026-10-29 (five asl1 native builds), given 3600; coreParityTest.sh measured 640s under load on 2026-10-03 against a 300s default cap, given 1200")
 (:doc :symbol "asl/packages/asl-gates/src/suiteRunner.asl#workerCount" :text "half the physical cores; jobs raise the cap")
 (:doc :symbol "asl/packages/asl-gates/src/suiteRunner.asl#sessionEnvKeys" :text "Session launch context is private to the runner; keep this declared suite-boundary list together.")
 (:doc :symbol "asl/packages/asl-gates/src/suiteRunner.asl#nestedTimes" :text "runners nested in suites stay off the ledger")
