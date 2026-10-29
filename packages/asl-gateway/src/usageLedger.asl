@@ -60,7 +60,11 @@
   (:f stream Bool)
   (:f toolCount Int64)
   (:f promptBytes Int64)
-  (:f sysHash String))
+  (:f sysHash String)
+  (:f session (Option String))
+  (:f turn (Option Int64))
+  (:f consumer (Option String))
+  (:f cacheWriteTokens (Option Int64)))
 
 ; (:m the effective request parameters actually sent upstream, read back out of the outgoing request body rather than guessed from config, so a parameter the provider ignored is still recorded as sent)
 (schema CallParams
@@ -125,6 +129,13 @@ fn optStrGroup v: (Option String) -> String
 fn boolAsn b: Bool -> String
   (if b "true" "false")
 
+; (:m :ref LEON-ATTRIB-20261028 :do "the attribution fields are written only when the caller supplied them, never as absent or a default: a row with no session, turn, consumer or cache-write figure is byte-identical to one written before the fields existed")
+fn attribAsn row: CallRow -> String
+  (str (match row.session ((some s) (str " :session " (asnStr s))) ((none) ""))
+       (match row.turn ((some n) (str " :turn " (stringFromInt64 n))) ((none) ""))
+       (match row.consumer ((some c) (str " :consumer " (asnStr c))) ((none) ""))
+       (match row.cacheWriteTokens ((some n) (str " :cacheWrite " (stringFromInt64 n))) ((none) "")))
+
 fn callRowLine row: CallRow -> String
   (str "(:call :at " (stringFromInt64 row.atMs)
        " :profile " (asnStr row.profile)
@@ -149,7 +160,7 @@ fn callRowLine row: CallRow -> String
        " :stream " (boolAsn row.stream)
        " :toolCount " (stringFromInt64 row.toolCount)
        " :promptBytes " (stringFromInt64 row.promptBytes)
-       " :sysHash " (asnStr row.sysHash) ")\n")
+       " :sysHash " (asnStr row.sysHash) (attribAsn row) ")\n")
 
 fn fieldInt props: (Map String rd/SExpr) key: String -> (Option Int64)
   (match (mapGet props key)
@@ -225,7 +236,9 @@ fn callRowParse line: String -> (Result CallRow String)
                    :charge (optionOr charge 0) :tag (optionOr tag none)
                    :temperature (optionOr temperature none) :topP (optionOr topP none) :maxTokens (optionOr maxTokens none)
                    :effort (optionOr effort none) :api (optionOr api "") :stream (optionOr stream false)
-                   :toolCount (optionOr toolCount 0) :promptBytes (optionOr promptBytes 0) :sysHash (optionOr sysHash "")))))))))
+                   :toolCount (optionOr toolCount 0) :promptBytes (optionOr promptBytes 0) :sysHash (optionOr sysHash "")
+                   :session (optionOr (fieldOptStr props "session") none) :turn (optionOr (fieldOptInt props "turn") none)
+                   :consumer (optionOr (fieldOptStr props "consumer") none) :cacheWriteTokens (optionOr (fieldOptInt props "cacheWrite") none)))))))))
 
 fn ! rotateIfNeeded! path: String -> (Result Bool String)
   (match (fileStat path)

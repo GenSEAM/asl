@@ -29,7 +29,7 @@ fn gatewayRow ctx: Ctx line: String -> (Option ob/Obs)
     (let [(f (sx/topFields line))
           (raw (sOf f ":outcome"))]
       (some (finalize ctx
-              (with (ob/blankObs) :at (sx/intField f ":at") :source "gateway" :run (sOf f ":profile") :unitId (sOf f ":provider")
+              (with (ob/blankObs) :at (sx/intField f ":at") :source "gateway" :run (if (stringEmpty? (sOf f ":session")) (sOf f ":profile") (sOf f ":session")) :turn (sx/intField f ":turn") :unitId (sOf f ":provider")
                     :model (sOf f ":alias") :family (sOf f ":model") :intent (sOf f ":intent") :card (sOf f ":sysHash")
                     :temperature (sOf f ":temperature") :tokensIn (sx/intField f ":in") :tokensOut (sx/intField f ":out")
                     :ms (sx/intField f ":ms") :outcome (outcomeOf raw))
@@ -87,6 +87,18 @@ fn lastGate ls: (List String) -> (Option (List (Pair String String)))
 fn sumUsage ls: (List String) k: String -> Int64
   (listSum (map (fn [(l String)] -> Int64 (sx/intField (sx/topFields l) k)) (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:liveUsage ")) ls)))
 
+; (:m :ref OBS-GATEERR-ROW :do "the first receipt error of a session: a :gateErr row when the journal has one (its :line), else the code of the first (:turn N :error :CODE) line, else the code on the :result row; the empty string when none, so a journal without errors classifies exactly as before")
+fn errAfter l: String -> String
+  (optionOr (listHead (stringSplit (stringReplace (optionOr (listGet (stringSplit l " :error :") 1) "") ")" " ") " ")) "")
+
+fn firstReceiptError ls: (List String) res: (Option String) -> String
+  (match (listFind (fn [(l String)] -> Bool (stringStartsWith? l "(:gateErr ")) ls)
+    ((some g) (sOf (sx/topFields g) ":line"))
+    ((none)
+      (match (listFind (fn [(l String)] -> Bool (and (stringStartsWith? l "(:turn ") (stringContains? l " :error :"))) ls)
+        ((some t) (errAfter t))
+        ((none) (match res ((some r) (errAfter r)) ((none) ""))))))
+
 ; (:m :ref OBSCORPUS :do "a Leon journal is one session: session row for model, intent and task digest, result row for status, gate rows for the last gate exit; a journal without a result row older than six hours is a failed session with sig noResult, a younger one is still running and yields nothing")
 fn journalObs ctx: Ctx nowMs: Int64 text: String -> (Option ob/Obs)
   (let [(ls (stringLines text))
@@ -104,7 +116,7 @@ fn journalObs ctx: Ctx nowMs: Int64 text: String -> (Option ob/Obs)
               (old (< ctx.mtime (- nowMs 21600000)))
               (outcome (cond ((= status "ok") "ok") ((some? res) "fail") (old "fail") (else "open")))
               (defect (listAny? (fn [(l String)] -> Bool (stringContains? l ":parse-defect true")) ls))
-              (blob (str "session " (if (some? res) status "noResult") (if defect " parse-defect" "") (if (> gexit 0) " gate red" "")))
+              (blob (str "session " (if (some? res) status "noResult") (if defect " parse-defect" "") (if (> gexit 0) " gate red" "") (let [(e (firstReceiptError ls res))] (if (stringEmpty? e) "" (str " " e)))))
               (gateCmd (match gate ((some g) (sOf g ":cmd")) ((none) "")))
               (task (sOf sf ":task"))
               (served (match (listLast (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:served ")) ls)) ((some l) (sOf (sx/topFields l) ":model")) ((none) "")))]

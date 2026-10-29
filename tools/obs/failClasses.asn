@@ -6,7 +6,7 @@
 (:failClass :id parseBracket :any ("err_parse" "err_unbalanced" "unclosed (" "unexpected )" "parse unmatched" "err_read_spelling" "err_else_keyword" "is retired") :ex ("ERR_UNBALANCED unclosed (" "ERR_PARSE unmatched ')'" "ERR_READ_SPELLING (== a b) is retired: write (= a b)"))
 (:failClass :id abandoned :any ("noresult") :ex ("session noResult"))
 (:failClass :id protocol :any ("parse-defect" "err_malformed_payload" "err_gateway_response" "malformed asn" "echoed frame" "no frame in reply" "err_pool_form" "err_bad_arg" "err_invalid_arg") :ex ("parse-defect true" "ERR_MALFORMED_PAYLOAD reply is not an ASN form" "ERR_INVALID_ARG unknown key"))
-(:failClass :id emptyReply :any ("empty" "err_empty_content" "no content") :ex ("gateway empty" "ERR_EMPTY_CONTENT after retries"))
+(:failClass :id emptyReply :any ("empty" "err_empty_content" "no content" "err_no_reply") :ex ("gateway empty" "ERR_EMPTY_CONTENT after retries" "ERR_NO_REPLY"))
 (:failClass :id timeout :any ("timeout" "timed out" "deadline exceeded" "wall budget") :ex ("gateway timeout" "glm timed out"))
 (:failClass :id quota429 :any ("429" "throttled" "breaker" "rate limit" "quota" "too many requests") :ex ("gateway 429" "gateway throttled" "gateway breaker Ns"))
 (:failClass :id upstream5xx :any ("5xx" "err_vendor" "err_no_upstream" "bad gateway" "service unavailable" "overloaded" " 502" " 503" " 500") :ex ("gateway 5xx" "ERR_VENDOR glm" "ERR_NO_UPSTREAM after N s"))

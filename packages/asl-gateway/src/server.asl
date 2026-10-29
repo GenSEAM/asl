@@ -1,6 +1,6 @@
 (module aslGateway/server
   :x [gatewayCliMode? breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main! main mainWith
-      GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! gatewayTurn! loopConns apiKindOf PendingCall runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv!]
+      GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv!]
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
       (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/router :a rt) (asl-json/json :a j)
@@ -387,6 +387,27 @@ fn ! gatewayRunServer! launch: Launch port: Int64 upstream: String readyPath: St
   (:f params ul/CallParams)
   (:f profile String))
 
+; (:m :ref LEON-ATTRIB-20261028 :do "the connection tag is an opaque string all the way to the ledger row, so the caller attribution (X-ASL-Tag, X-ASL-Session, X-ASL-Turn, X-ASL-Consumer) rides in it as four newline-joined parts (a header value never holds a newline) and is split only where the row is built; an absent header stays an empty part and the row omits that field")
+fn packAttrib tag: String session: String turn: String consumer: String -> String
+  (stringJoin (list tag session turn consumer) "\n")
+
+fn attribPart packed: String i: Int64 -> String
+  (optionOr (listGet (stringSplit packed "\n") i) "")
+
+fn attribText packed: String i: Int64 -> (Option String)
+  (let [(p (attribPart packed i))] (if (stringEmpty? p) none (some p)))
+
+fn attribTurn packed: String -> (Option Int64)
+  (match (stringToInt64 (attribPart packed 2))
+    ((some n) (if (> n 0) (some n) none))
+    ((none) none))
+
+; (:m a consumer outside the closed set is recorded as other, an absent one stays absent)
+fn attribConsumer packed: String -> (Option String)
+  (match (attribText packed 3)
+    ((some c) (some (if (listContains? (list "leon" "conductor" "bench" "other") c) c "other")))
+    ((none) none))
+
 (schema GatewayLoop
   (:f listener Int64)
   (:f upstreamPort Int64)
@@ -608,9 +629,11 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
                    :reasoningTokens (optionOr (listGet tokens 3) 0)
                    :ttftMs none :ms (match pc ((some x) (some x.latencyMs)) ((none) none)) :outcome o
                    :charge (match pc ((some x) x.charge) ((none) 0))
-                   :tag (match pc ((some x) (if (stringEmpty? x.tag) none (some x.tag))) ((none) none))
+                   :tag (match pc ((some x) (attribText x.tag 0)) ((none) none))
                    :temperature params.temperature :topP params.topP :maxTokens params.maxTokens :effort params.effort
-                   :api params.api :stream params.stream :toolCount params.toolCount :promptBytes params.promptBytes :sysHash params.sysHash))
+                   :api params.api :stream params.stream :toolCount params.toolCount :promptBytes params.promptBytes :sysHash params.sysHash
+                   :session (match pc ((some x) (attribText x.tag 1)) ((none) none)) :turn (match pc ((some x) (attribTurn x.tag)) ((none) none))
+                   :consumer (match pc ((some x) (attribConsumer x.tag)) ((none) none)) :cacheWriteTokens (g/usageCacheWrite usage)))
             (ledgerPath (optionOr (match srv.wiringText ((some t) (c/gatewayLedgerPathOverride t)) ((none) none)) (ul/defaultLedgerPath srv.home)))
             (wrote (ul/appendCallRow! ledgerPath row))
             ; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "written in addition to, never instead of, the stats ledger above: GW-STATS's per-HOME ledgerPath keeps serving its own calibration/--by queries unchanged, this is the separate shared ledger (default outside scratch homes once the operator sets :sharedUsagePath, see gatewaySharedUsagePathOverride) that a scratch HOME's deletion cannot take with it")
@@ -893,7 +916,7 @@ fn ! dispatchGuarded! srv: GatewayLoop fd: Int64 raw: String request: HttpReques
 fn ! dispatchAuthed! srv: GatewayLoop fd: Int64 raw: String request: HttpRequest -> GatewayLoop
   (if (and (= request.method "POST") (chatPath? request.path))
     (let [(w (chatWorld! srv))
-          (tag (c/headerGet request.headers "X-ASL-Tag"))
+          (tag (packAttrib (c/headerGet request.headers "X-ASL-Tag") (c/headerGet request.headers "X-ASL-Session") (c/headerGet request.headers "X-ASL-Turn") (c/headerGet request.headers "X-ASL-Consumer")))
           (headersWithSession (ensureSessionHeader request.headers fd (nowMs!)))]
       (match (pairSecond w)
         ((err e) (addConn (pairFirst w) fd (connWriting (errorResponse 500 e))))

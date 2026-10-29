@@ -3,7 +3,7 @@
       ProviderEnv VendorConfig Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
       parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
-      curlConfig parseCurlResponse tempDir! freshDir! buildDryRunInfo! providerEnv! makeProvider! nextTurn! advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
+      curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! providerEnv! makeProvider! nextTurn! advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
   :i [(asl-json/json :a j) (asl-proc/coreProcess :a cp) (aslGateway/server :a gs) (aslGateway/dispatch :a gd) (aslGateway/upstream :a gu) (aslGateway/config :a cfg)])
 
 enum ProviderError
@@ -33,7 +33,8 @@ enum ProviderError
   (:f intent String)
   (:f timeoutSet Bool)
   (:f env ProviderEnv)
-  (:f link (Option gs/GatewayLoop)))
+  (:f link (Option gs/GatewayLoop))
+  (:f turn Int64))
 
 enum Provider
   (scriptProvider name: String turns: (List String) index: Int64)
@@ -795,7 +796,7 @@ fn ! makeProvider! backend: String mode: String rootDir: String model: String ti
       (let [(sid (if (stringEmpty? sessionId) (uniqueTag) sessionId))]
           (ok (vendorProvider (VendorConfig :vendor backend :mode (if (stringEmpty? mode) "scout" mode) :rootDir (absPath rootDir)
                                 :model model :timeout (if (= timeout 0) 600 timeout) :queueTimeout (if (= queueTimeout 0) 1200 queueTimeout)
-                                :sessionId sid :intent (if (stringEmpty? intent) "auto" intent) :timeoutSet timeoutSet :env env :link none)))))
+                                :sessionId sid :intent (if (stringEmpty? intent) "auto" intent) :timeoutSet timeoutSet :env env :link none :turn 0)))))
     (else (err (valueError (str "Unknown backend: " backend)))))
 
 fn providerName p: Provider -> String
@@ -833,6 +834,9 @@ fn nth xs: (List String) i: Int64 -> (Option String)
 
 fn setIntent cfg: VendorConfig intent: String -> VendorConfig
   (with cfg :intent intent)
+
+fn withTurn cfg: VendorConfig turn: Int64 -> VendorConfig
+  (with cfg :turn turn)
 
 fn withLink cfg: VendorConfig link: gs/GatewayLoop -> VendorConfig
   (with cfg :link (some link))
@@ -1248,7 +1252,7 @@ fn ! callProfile! cfg: VendorConfig system: String user: String model: String ->
         (profile cfg.env.profile)
         (headers (listAppend
                    (if (and (= model "profile") (not (stringEmpty? profile))) (list (pair "X-ASL-Profile" profile)) (list))
-                   (if (stringEmpty? cfg.sessionId) (list) (list (pair "X-ASL-Session" cfg.sessionId)))))
+                   (listAppend (if (stringEmpty? cfg.sessionId) (list) (list (pair "X-ASL-Session" cfg.sessionId))) (attribHeaders cfg))))
         (payload (j/jobj (listAppend
                            (listAppend
                              (list (pair "model" (j/jstr model))
@@ -1293,7 +1297,12 @@ fn ! callAgy! cfg: VendorConfig system: String user: String -> Called
                                    ((ok _) (writeText (str pluginDir "/agents/" agent ".md") (agentFileText agent system)))))))]
           (match written
             ((err e) (Called :reply (err e) :meta (emptyMeta) :cfg cfg))
-            ((ok _) (sendGateway! cfg payload (if (stringEmpty? cfg.sessionId) (list) (list (pair "X-ASL-Session" cfg.sessionId))))))))))
+            ((ok _) (sendGateway! cfg payload (listAppend (if (stringEmpty? cfg.sessionId) (list) (list (pair "X-ASL-Session" cfg.sessionId))) (attribHeaders cfg)))))))))
+
+; (:m :ref LEON-ATTRIB-20261028 :do "every gateway call names its consumer (leon) and, once the first main turn has run, the turn number, so the gateway ledger row joins the session by X-ASL-Session; advisor and grader calls carry the turn of the last main turn, and a call made before any turn carries no turn header")
+fn attribHeaders cfg: VendorConfig -> (List (Pair String String))
+  (listAppend (list (pair "X-ASL-Consumer" "leon"))
+    (if (> cfg.turn 0) (list (pair "X-ASL-Turn" (stringFromInt64 cfg.turn))) (list)))
 
 fn ! callVendor! cfg: VendorConfig system: String user: String -> Called
   (cond
@@ -1336,7 +1345,7 @@ fn ! nextTurn! p: Provider system: String user: String -> Turn
                   :reply (match released ((ok _) (ok (pairFirst s))) ((err e) (err (ioError (str "unlock: " e)))))
                   :meta (emptyMeta))))))
     ((vendorProvider cfg)
-      (let [(r (callVendor! cfg system user))]
+      (let [(r (callVendor! (withTurn cfg (+ cfg.turn 1)) system user))]
         (Turn :provider (vendorProvider r.cfg) :reply r.reply :meta r.meta))))
 
 fn ! advise! p: Provider system: String text: String -> (Option Turn)

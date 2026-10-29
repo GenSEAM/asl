@@ -1759,12 +1759,13 @@ fn liveExitCode r: LoopResult -> Int64
 
 fn ! executeLive ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderEnv -> MainResult
   (let [ra (with ra0 :route (codeRouteSetup! ra0.intent (ac/configText! rootDir) repoRoot env))]
-  (match (pv/makeProvider! ra.backend "auto" rootDir ra.model ra.timeout "" ra.queueTimeout ra.timeoutSet env (optionOr ra.intent "auto"))
-    ((err e) (rejectWith (str ":error ERR_BACKEND :message \"" (c/escapeAsn (pv/errorMessage e)) "\"") 1))
-    ((ok provider)
-      (match (liveJournal ra rootDir)
-        ((err e) (rejectWith (str ":error ERR_JOURNAL :message \"" (c/escapeAsn e) "\"") 1))
-        ((ok sp)
+  (match (liveJournal ra rootDir)
+    ((err e) (rejectWith (str ":error ERR_JOURNAL :message \"" (c/escapeAsn e) "\"") 1))
+    ((ok sp)
+      ; (:m :ref LEON-ATTRIB-20261028 :do "the provider is made with the journal's session id, so the X-ASL-Session of every gateway call is the id the journal and the receipt carry and the ledger row joins the session")
+      (match (pv/makeProvider! ra.backend "auto" rootDir ra.model ra.timeout (pairFirst sp) ra.queueTimeout ra.timeoutSet env (optionOr ra.intent "auto"))
+        ((err e) (rejectWith (str ":error ERR_BACKEND :message \"" (c/escapeAsn (pv/errorMessage e)) "\"") 1))
+        ((ok provider)
           (let [session (pairFirst sp)
                 path (pairSecond sp)
                 model (if (stringEmpty? ra.model) (defaultModel ra.backend) ra.model)

@@ -1,0 +1,6 @@
+(:session :id "def4560000000000" :task "fixture task two" :intent "fix" :root "/work/trees/wt-unit" :model "label-model")
+(:turn 1 :sent "Task: fixture task two")
+(:gate :cmd "./bin/asl check pkg/a.asl" :exit 1)
+(:gateErr :line "ERR_UNKNOWN_SYMBOL unbound symbol: fooBar")
+(:turn 2 :error :ERR_NO_REPLY)
+(:result :status :failed :session "def4560000000000" :unbacked 0 :contextTokens 8000)

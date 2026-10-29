@@ -6,6 +6,7 @@
       jsonDedup
       usageInit
       usageTokens
+      usageCacheWrite
       usageNote
       usageFallback
       usageHttpError
@@ -207,6 +208,18 @@ fn usageTokens usage: j/Json -> (List Int64)
          (list (positiveInt (u/objGet kvs "prompt_tokens")) (positiveInt c) (positiveInt (u/objGet kvs "completion_tokens"))
                (reasoningTokensFrom kvs)))))
     (_ (list 0 0 0 0)))
+
+; (:m :ref LEON-ATTRIB-20261028 :do "the provider-reported cache write count, none when the usage object names no such field (a provider that never reports writes is not a provider that wrote zero)")
+fn usageCacheWrite usage: j/Json -> (Option Int64)
+  (match usage
+    ((j/jobj kvs)
+     (match (u/objGet kvs "cache_creation_tokens")
+       ((some v) (some (positiveInt (some v))))
+       ((none)
+        (match (u/objGet kvs "cache_creation_input_tokens")
+          ((some v) (some (positiveInt (some v))))
+          ((none) none)))))
+    (_ none))
 
 fn defaultRow -> j/Json
   (j/jobj (list (pair "requests" (j/jint 0)) (pair "ok" (j/jint 0)) (pair "errors" (j/jobj (list))) (pair "fallbacks" (j/jint 0))

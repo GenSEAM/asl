@@ -1,5 +1,5 @@
 (module ws/asl/tools/obs/corpus
-  :x [main mkdirs! readText listDir mtimeMs sizeOf isDir? baseName hk collect! collectArchive! writeDay! dayKey reportText! loadTable! discoverRoots Found]
+  :x [main mkdirs! readText listDir mtimeMs sizeOf isDir? baseName hk collect! collectArchive! writeDay! dayKey reportText! loadTable! discoverRoots pickOldest Found]
   :i [(ws/asl/tools/obs/sx :a sx)
       (ws/asl/tools/obs/obs :a ob)
       (ws/asl/tools/obs/classify :a cl)
@@ -122,6 +122,15 @@ fn condPaths bases: (List String) -> (List String)
                  (map (fn [(d String)] -> String (str b "/" d "/journal.asn")) (filter (fn [(d String)] -> Bool (stringStartsWith? d "cond")) (listDir b))))
                bases)
 
+; (:m :ref LEON-JOURNAL-ROOT :do "a Leon journal is written under the run root (the unit worktree) and retained as a copy under the source checkout when the worktree goes; both roots are read, so one session id can appear twice: one journal per file name is kept, the oldest copy (the original), the first listed on a tie")
+fn pickOldest items: (List (Pair String Int64)) -> (List String)
+  (let [(names (uniq (map (fn [(i (Pair String Int64))] -> String (baseName (pairFirst i))) items)))]
+    (map (fn [(n String)] -> String
+           (pairFirst (fold (fn [(best (Pair String Int64)) (i (Pair String Int64))] -> (Pair String Int64)
+                              (if (and (= (baseName (pairFirst i)) n) (or (= (pairFirst best) "") (< (pairSecond i) (pairSecond best)))) i best))
+                            (pair "" 0) items)))
+         names))
+
 fn collectFound! table: (List cl/FailClass) host: String home: String roots: (List String) marks: (Map String Int64) nowMs: Int64 sinceMs: Int64 -> (List Found)
   (let [(runBases (map (fn [(r String)] -> String (str r "/.asl/run")) roots))
         (gw (existing (list (str home "/.asl/run/usage/gatewayCalls.asn") (str home "/.asl/run/gatewayCalls.asn"))))
@@ -129,7 +138,7 @@ fn collectFound! table: (List cl/FailClass) host: String home: String roots: (Li
                                       (cons (str home "/.asl/run") runBases))))
         (fresh (listFlatMap (fn [(r String)] -> (List String) (filesIn (str r "/.asl/tmp/fresh") ".log")) roots))
         (cond (existing (condPaths (cons (str home "/.asl/run") runBases))))
-        (journals (filter (fn [(p String)] -> Bool (>= (mtimeMs p) sinceMs)) (listFlatMap (fn [(r String)] -> (List String) (filesIn (str r "/.asl/run/agentLoop") ".journal")) roots)))
+        (journals (pickOldest (map (fn [(p String)] -> (Pair String Int64) (pair p (mtimeMs p))) (filter (fn [(p String)] -> Bool (>= (mtimeMs p) sinceMs)) (listFlatMap (fn [(r String)] -> (List String) (filesIn (str r "/.asl/run/agentLoop") ".journal")) roots)))))
         (evals (existing (evalPaths roots)))
         (cals (listFlatMap (fn [(r String)] -> (List String) (filesIn (str r "/.asl/mem/work/CAL") ".asn")) roots))]
     (list

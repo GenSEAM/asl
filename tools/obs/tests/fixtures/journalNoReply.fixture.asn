@@ -1,0 +1,5 @@
+(:session :id "abc1230000000000" :task "fixture task text" :intent "fix" :root "/work/trees/wt-unit" :model "label-model")
+(:turn 1 :sent "Task: fixture task text")
+(:turn 2 :error :ERR_NO_REPLY)
+(:turn 3 :error :ERR_PARSE)
+(:result :status :failed :session "abc1230000000000" :unbacked 0 :contextTokens 8000 :error :ERR_PARSE)

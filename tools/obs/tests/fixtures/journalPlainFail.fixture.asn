@@ -1,0 +1,3 @@
+(:session :id "9990000000000000" :task "fixture task three" :intent "fix" :root "/work/trees/wt-unit" :model "label-model")
+(:turn 1 :sent "Task: fixture task three")
+(:result :status :failed :session "9990000000000000" :unbacked 0 :contextTokens 8000)

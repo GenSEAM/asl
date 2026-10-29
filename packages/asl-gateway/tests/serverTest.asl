@@ -136,7 +136,7 @@ fn ! testEffUsageNoteRecordsProfile -> Bool
         (rows (resultOr rowsRes (list)))
         (fallbackRow (ul/CallRow :atMs 0 :profile "" :intent "" :alias "" :provider "" :model "" :inTokens 0 :cachedTokens 0 :outTokens 0
                        :reasoningTokens 0 :ttftMs none :ms none :outcome "" :charge 0 :tag none :temperature none :topP none :maxTokens none
-                       :effort none :api "" :stream false :toolCount 0 :promptBytes 0 :sysHash ""))
+                       :effort none :api "" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none))
         (row (optionOr (listHead rows) fallbackRow))
         (cleanedShared (pathRemove sharedPath))
         (cleanedStats (pathRemove statsPath))]
@@ -156,7 +156,7 @@ fn ! testBudgetRefusalBlocksOverBudgetProfile -> Bool
         (seeded (ul/appendCallRow! sharedPath
                   (ul/CallRow :atMs atMs :profile "freeBulk" :intent "coder" :alias "mA" :provider "fixp" :model "m"
                     :inTokens 60 :cachedTokens 0 :outTokens 60 :reasoningTokens 0 :ttftMs none :ms none :outcome "ok" :charge 0
-                    :tag none :temperature none :topP none :maxTokens none :effort none :api "chat" :stream false :toolCount 0 :promptBytes 0 :sysHash "")))
+                    :tag none :temperature none :topP none :maxTokens none :effort none :api "chat" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none)))
         (overBudgetText "(:gateway :v 2 :dailyTokenBudgets ((freeBulk 100)))")
         (underBudgetText "(:gateway :v 2 :dailyTokenBudgets ((freeBulk 1000)))")
         (noBudgetText "(:gateway :v 2)")

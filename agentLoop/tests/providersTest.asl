@@ -332,7 +332,8 @@ fn ! runGatewayCase kv: (List (Pair String c/KvVal)) root: String -> Bool
               (workspace (if (fileExists? agents) "True" "False"))
               (cleaned (pv/cleanup! p))
               (wantHeaders (map (fn [h] (let [(xs (map jsonText (jsonItems h)))] (headerRow (str (optionOr (listHead xs) "") ": " (optionOr (listLast xs) ""))))) (jsonItems (jsonOf (fld! kv "sentHeaders")))))
-              (gotHeaders (map headerRow (filter (fn [h] (!= h "Expect:")) (configRows config "header"))))]
+              ; (:m LEON-ATTRIB: the recorded fixtures predate the attribution headers; attribHeadersTest pins them, so they are left out of this pinned comparison)
+              (gotHeaders (map headerRow (filter (fn [h] (and (!= h "Expect:") (and (!= (headerRow h) "x-asl-consumer: leon") (not (stringStartsWith? (headerRow h) "x-asl-turn: "))))) (configRows config "header"))))]
           (and (checkTrue (str cid " stub staged") (and staged cfgOk))
             (and (checkOutcome! kv root t.reply)
               (and (check (str cid " timing") (fld! kv "timing") (timingText meta.timing))
@@ -356,7 +357,7 @@ fn ! runGatewayCase kv: (List (Pair String c/KvVal)) root: String -> Bool
 
 fn ! runVendorUnknown kv: (List (Pair String c/KvVal)) root: String -> Bool
   (let [(cfg (pv/VendorConfig :vendor (fld! kv "vendor") :mode "scout" :rootDir root :model "" :timeout 600 :queueTimeout 1200
-               :sessionId "sother" :intent "auto" :timeoutSet true :env (envFor! root (str root "/stub/other") "stub" "" "" "") :link none))
+               :sessionId "sother" :intent "auto" :timeoutSet true :env (envFor! root (str root "/stub/other") "stub" "" "" "") :link none :turn 0))
         (t (pv/nextTurn! (pv/vendorProvider cfg) "s" "u"))]
     (checkOutcome! kv root t.reply))
 
@@ -441,7 +442,7 @@ fn ! checkSessionHeaderEmpty root: String -> Bool
         (staged (setupStub stubDir "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}" "0" "" ""))
         (env (envFor! root stubDir "stub" "http://127.0.0.1:8765/v1/chat/completions" "" (str root "/none.asn")))
         (cfg (pv/VendorConfig :vendor "agy" :mode "scout" :rootDir root :model "" :timeout 600 :queueTimeout 1200
-               :sessionId "" :intent "auto" :timeoutSet true :env env :link none))
+               :sessionId "" :intent "auto" :timeoutSet true :env env :link none :turn 0))
         (t (pv/nextTurn! (pv/vendorProvider cfg) "s" "u"))
         (config (resultOr (fileReadString (str stubDir "/stdin")) ""))
         (headers (stringJoin (map headerRow (configRows config "header")) " | "))]
