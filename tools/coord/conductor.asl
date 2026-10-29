@@ -2,7 +2,7 @@
   :x [CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig rulingVerdict
-      depStalled? vacuousWrite? vacuousSig vacuousSig? pickWriteProfile pickWriteProfileH schedPace tick! wake! status! drain! stopAll! gatesRes loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
+      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? pickWriteProfile pickWriteProfileH schedPace tick! wake! status! drain! stopAll! gatesRes loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
       main]
   :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp)
       (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -30,7 +30,7 @@
   (:f launch (fn [String st/Task CUnit] -> (List String))) (:f pace Pace))
 
 (schema RealCfg
-  (:f repo String) (:f devRepo String) (:f devBranch String) (:f wt w/Cfg) (:f home String) (:f keys String) (:f leaseSec Int64) (:f gateSec Int64) (:f lanes String) (:f writerAlias String) (:f profile String))
+  (:f repo String) (:f devRepo String) (:f devBranch String) (:f wt w/Cfg) (:f home String) (:f keys String) (:f leaseSec Int64) (:f gateSec Int64) (:f lanes String) (:f writerAlias String) (:f profile String) (:f attractorAb Bool))
 
 fn cuDir dir: String -> String
   (str dir "/cond")
@@ -632,6 +632,16 @@ fn writeProfile rc: RealCfg lane: String -> String
 fn ! writeProfileFor rc: RealCfg dir: String id: String lane: String -> String
   (pickWriteProfileH (readOr rc.lanes) id lane (writeProfile rc lane) (readOr (str dir "/providerHealth.asn")))
 
+; (:m :ref ATTRACTOR-AB :do "--attractor-ab on splits the write stage into two arms by the parity of the unit id's char-code sum: even runs Leon with :attractor asn, odd without; the arm goes into the write stage's (:profile ...) journal row; off by default, and then no arm is named")
+fn armOf id: String -> String
+  (if (= (mod (fold (fn [(acc Int64) (ch String)] -> Int64 (+ acc (charCode ch))) 0 (stringChars id)) 2) 0) "asn" "off")
+
+fn writeArm rc: RealCfg id: String -> String
+  (if rc.attractorAb (armOf id) "")
+
+fn armExtra arm: String -> String
+  (if (= arm "asn") ":attractor asn" "")
+
 ; (:m :ref CONDUCTOR-VACUOUS-GATE :do "Leon runs the unit gate once before its first turn and lists the ones already green as :vacuousGates; on a branch with nothing past its base that means the gate passes on the base, so no write can prove it (CONDUCTOR-UNIT-FLAGS got a schema-only commit that way), unless the task calls the gate a regression guard")
 fn regressionGuard? task: String -> Bool
   (stringContains? (stringLower task) "regression guard")
@@ -666,8 +676,9 @@ fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
         (let [(fresh (noEdits? p u.base))
               (task (taskText dir u))
               (prof (writeProfileFor rc dir u.id c.lane))
-              (_ (fileAppend (journalPath dir) (str "(:profile :unit " (st/q u.id) " :lane " (st/q c.lane) " :profile " (st/q prof) " :at " (n (/ (nowNs) 1000000)) ")\n")))
-              (d (fp/runLeonProfile! prof rc.repo p rc.home task u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) rc.leaseSec rc.keys))
+              (arm (writeArm rc u.id))
+              (_ (fileAppend (journalPath dir) (str "(:profile :unit " (st/q u.id) " :lane " (st/q c.lane) " :profile " (st/q prof) (if (stringEmpty? arm) "" (str " :arm " (st/q arm))) " :at " (n (/ (nowNs) 1000000)) ")\n")))
+              (d (fp/runLeonProfileExtra! prof rc.repo p rc.home task u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) rc.leaseSec rc.keys (armExtra arm)))
               (model (fp/modelOf d.out))
               (vacuous (and fresh (vacuousWrite? d.out u.gate task)))
               (_ (if (and (not vacuous) (fp/gitDirty? p)) (fp/driverCommitRow! p u.owns u.id model) false))
@@ -925,7 +936,8 @@ fn ! realCfg args: (List String) dir: String -> RealCfg
     (RealCfg :repo repo :devRepo (st/opt args "dev-repo" repo) :devBranch (st/opt args "dev" "dev")
              :wt (w/Cfg :repo repo :base (st/opt args "worktrees" (str repo "/../worktrees")) :prefix "asex-" :archive (st/opt args "archive" (str dir "/archive")) :mainRef "main")
              :home (st/opt args "home" (resultOr (getHomeDir) ".")) :keys (st/opt args "keys" (str repo "/.env.free")) :leaseSec 3600 :gateSec 3600
-             :lanes (st/opt args "lanes" (str repo "/.asl/mem/work/CAL/reviewLanes.asn")) :writerAlias (st/opt args "writer-alias" "") :profile (st/opt args "profile" "freeBulk")))
+             :lanes (st/opt args "lanes" (str repo "/.asl/mem/work/CAL/reviewLanes.asn")) :writerAlias (st/opt args "writer-alias" "") :profile (st/opt args "profile" "freeBulk")
+             :attractorAb (= (st/opt args "attractor-ab" "off") "on")))
 
 ; (:m :ref CONDUCTOR :do "the stage child: conductor.asl stage STAGE UNIT --store DIR runs one stage for one unit and writes its Res row, printing nothing; a crash leaves no row and the poll reports the stage died")
 fn ! stageMain! args: (List String) dir: String -> Int64
@@ -942,7 +954,7 @@ fn realLaunch args: (List String) dir: String -> (fn [String st/Task CUnit] -> (
   (let [(repo (st/opt args "repo" "."))
         (pass (fold (fn [(acc (List String)) (k String)] -> (List String)
                       (if (stringEmpty? (st/opt args k "")) acc (listAppend acc (list (str "--" k) (st/opt args k "")))))
-                    (list) (list "repo" "dev-repo" "dev" "worktrees" "archive" "home" "keys" "lanes" "writer-alias" "profile")))]
+                    (list) (list "repo" "dev-repo" "dev" "worktrees" "archive" "home" "keys" "lanes" "writer-alias" "profile" "attractor-ab")))]
     (fn [(stage String) (u st/Task) (c CUnit)] -> (List String)
       (listAppend (list (str repo "/bin/asl") "run" (str repo "/asl/tools/coord/conductor.asl") "stage" stage u.id "--store" dir) pass)))
 
