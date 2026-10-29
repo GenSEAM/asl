@@ -4,7 +4,7 @@
       vendorBounds fitVendorCall contextTokensFor modelBase calibrationIndexPath calibrationIndexPath! servedContextTokens servedContextTokens!
       readPayloadChars renderTranscript renderTurnContext renderWindow stableSectionAt stableWindowTurn gateOutcome gateTail gateNow
       noWriteNudge noWriteNudgeTurns readStreakEscalate noWriteTurns parseDefectEscalate parseDefectEscalateIn parseDefectEscalateFor! batchingRates costForm reinforceWhyFor escalationNear nowForm stepState! spanHolder seenReceipt failureSignatures
-      renderTranscriptBounded contextCompactStep compactionCut turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
+      renderTranscriptBounded contextLatestCapBytes contextCompactStep compactionCut turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
       contextMaxOlderLines contextMaxOlderLinesIn contextMaxOlderLinesFor!
       coreDelta coreStatsLine formEnd sitePath possibleSitesOf readCovers siteNamed openPossible findingsRun possibleSiteList possibleNotice
       hiddenVars hiddenEnv! prefetchPaths! prefetchBlock! receiptPhase taskHintLines unmetForm specUnescape specCheckDiff! parseSpecVerdict
@@ -751,7 +751,11 @@ fn compactionCut n: Int64 keepTurns: Int64 step: Int64 -> Int64
   (let [raw (max 0 (- n (max 0 keepTurns)))]
     (if (<= step 1) raw (* step (/ raw step))))
 
-fn renderTranscriptBounded history: (List j/Json) keepTurns: Int64 toolCapBytes: Int64 maxOlderLines: Int64 -> String
+; (:m :ref LEONFAIL :do "the newest turn's output is what the model just asked for, so it is clipped at latestCapBytes (twice the read payload) instead of toolCapBytes: a 1500-byte clip of three 120-line reads left free-lane runs re-reading the same files for 80-270 turns with zero writes; the turn is clipped to toolCapBytes once a newer one exists")
+fn contextLatestCapBytes contextTokens: Int64 -> Int64
+  (* 2 (readPayloadChars contextTokens))
+
+fn renderTranscriptBounded history: (List j/Json) keepTurns: Int64 toolCapBytes: Int64 maxOlderLines: Int64 latestCapBytes: Int64 -> String
   (if (listEmpty? history)
     ""
     (let [n (listLength history)
@@ -759,10 +763,12 @@ fn renderTranscriptBounded history: (List j/Json) keepTurns: Int64 toolCapBytes:
           older (optionOr (listSlice history 0 cutAt) (list))
           olderCount (listLength older)
           survivors (optionOr (listSlice older (max 0 (- olderCount maxOlderLines)) olderCount) (list))
-          kept (optionOr (listSlice history cutAt n) (list))
+          kept (optionOr (listSlice history cutAt (- n 1)) (list))
+          latest (optionOr (listSlice history (max cutAt (- n 1)) n) (list))
           summaryLines (map turnReceiptLine survivors)
-          keptLines (map (fn [h] (turnWhole h toolCapBytes)) kept)]
-      (c/joinSep (listAppend summaryLines keptLines) "\n")))
+          keptLines (map (fn [h] (turnWhole h toolCapBytes)) kept)
+          latestLines (map (fn [h] (turnWhole h (max toolCapBytes latestCapBytes))) latest)]
+      (c/joinSep (listAppend summaryLines (listAppend keptLines latestLines)) "\n")))
 
 fn noWriteNudge deliver: (Option String) wrote: Bool done: Int64 files: (List String) win: (Option (List Int64)) readStreak: Int64 redGate: j/Json -> String
   (cond

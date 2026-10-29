@@ -1566,7 +1566,8 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
   (let [run wrapped.run
         state run.state
         turn state.turn
-        transcript (ctx/renderTranscriptBounded wrapped.history (ctx/contextKeepTurnsFor! rootDir) (ctx/contextToolCapBytesFor! rootDir) (ctx/contextMaxOlderLinesFor! rootDir))
+        transcript (ctx/renderTranscriptBounded wrapped.history (ctx/contextKeepTurnsFor! rootDir) (ctx/contextToolCapBytesFor! rootDir) (ctx/contextMaxOlderLinesFor! rootDir)
+          (ctx/contextLatestCapBytes (optionOr state.contextTokens 24000)))
         advisorInvoked (= (optionOr ra.intent "") "reinforce")
         advisorResult (if advisorInvoked
           (env.advise (ctx/advisorSystem) (str "Task: " ra.task "\n\n" transcript))

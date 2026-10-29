@@ -51,17 +51,18 @@ fn maxSentLen lines: (List String) -> Int64
 fn runTests -> Bool
   (let [h11 (plainHistory 12)
         h12 (plainHistory 13)
-        result11 (ctx/renderTranscriptBounded h11 5 300 50)
-        result12 (ctx/renderTranscriptBounded h12 5 300 50)
+        result11 (ctx/renderTranscriptBounded h11 5 300 50 300)
+        result12 (ctx/renderTranscriptBounded h12 5 300 50 300)
         prefix11 (oldSummaryPrefix 12 5 50)
         prefix12 (oldSummaryPrefix 13 5 50)
 
         h60 (plainHistory 60)
-        resultDropped (ctx/renderTranscriptBounded h60 5 300 10)
+        resultDropped (ctx/renderTranscriptBounded h60 5 300 10 300)
 
         bigGot (stringJoin (map (fn [_] "x") (range 0 1000)) "")
-        hBig (list (histEntry 1 "sentx" bigGot "read" "subject.txt" ""))
-        resultClipped (ctx/renderTranscriptBounded hBig 5 50 50)
+        hBig (list (histEntry 1 "sentx" bigGot "read" "subject.txt" "") (histEntry 2 "senty" bigGot "read" "subject.txt" ""))
+        resultClipped (ctx/renderTranscriptBounded hBig 5 50 50 2000)
+        resultLatestCut (ctx/renderTranscriptBounded hBig 5 50 50 500)
 
         cfgText "(:agentLoop :contextKeepTurns 3 :contextToolCapBytes 77 :contextMaxOlderLines 9)"
 
@@ -97,8 +98,13 @@ fn runTests -> Bool
 
       (assert (stringContains? resultClipped "more bytes clipped, see turn 1 in the journal")
         "a kept turn's tool output past toolCapBytes is clipped with a pointer back to the journal")
-      (assert (not (stringContains? resultClipped bigGot))
+      (assert (not (stringContains? resultClipped (str "sentx\" :got \"" bigGot)))
         "the clipped kept turn never contains the full, unclipped tool output")
+      (assert (stringContains? resultClipped (str "senty\" :got \"" bigGot "\")"))
+        "the newest turn's tool output stays whole up to latestCapBytes, past toolCapBytes")
+      (assert (stringContains? resultLatestCut "more bytes clipped, see turn 2 in the journal")
+        "the newest turn is still clipped past latestCapBytes")
+      (assert (= (ctx/contextLatestCapBytes 120000) 72000) "the newest-turn cap is twice the read payload")
 
       (assert (= (ctx/contextKeepTurnsIn cfgText) (some 3)) "contextKeepTurnsIn reads the configured turn count")
       (assert (= (ctx/contextToolCapBytesIn cfgText) (some 77)) "contextToolCapBytesIn reads the configured byte cap")

@@ -12,7 +12,7 @@ fn history n: Int64 -> (List j/Json)
   (map (fn [i] (histEntry (+ i 1))) (range 0 n))
 
 fn render n: Int64 -> String
-  (ctx/renderTranscriptBounded (history n) 8 1500 50)
+  (ctx/renderTranscriptBounded (history n) 8 1500 50 1500)
 
 ; (:m :do "does the render of n+1 turns keep the render of n turns as an exact prefix")
 fn prefixKept n: Int64 -> Bool
