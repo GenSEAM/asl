@@ -145,7 +145,7 @@ fn active? c: CUnit -> Bool
 fn laneActive cus: (List CUnit) lane: String -> Int64
   (listLength (filter (fn [(x CUnit)] -> Bool (and (active? x) (= x.lane lane))) cus))
 
-; (:m :do "a unit waiting more than maxWait ticks for deps, owns or admission escalates and blocks")
+; (:m :do "a unit waiting more than maxWait ticks for deps or a claim escalates and blocks; a wait for lane capacity is backpressure and never counts (ADMITWAIT)")
 fn ! waitMore! ctx: Ctx c: CUnit why: String -> CUnit
   (let [(c1 (with c :waited (+ c.waited 1)))]
     (if (> c1.waited ctx.maxWait)
@@ -339,7 +339,7 @@ fn ! step! ctx: Ctx u: st/Task cap: Int64 -> Int64
               (allowOf pace.allowance)
               (allow (allowOf c.lane))]
           (if (or (<= cap 0) (>= (laneActive cus c.lane) allow))
-            (let [(_ (waitMore! ctx c "no admission"))] cap)
+            cap
             (match (st/claim! ctx.dir c.id ctx.holder ctx.ttlMs)
               ((err e) (let [(_ (waitMore! ctx c e))] cap))
               ((ok text)
