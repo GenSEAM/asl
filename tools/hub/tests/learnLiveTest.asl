@@ -76,6 +76,7 @@ fn ! runTests -> Bool
       (assert (near byName 24.0) (str "the learner also writes the learned rate by upstream model name: " (stringFromFloat64 byName)))
       (assert (stringContains? byNameText ":cfg 20.0") (str "the by-name row carries the configured rpm: " byNameText))
       (assert (and (ok? tailFile) (and (= tailCut (list "cccc" "")) (= (listLength tailAll) 4))) "tailLines drops the cut first line only when it cut, and reads all of a small file")
+      (assert (not (stringContains? (resultOr (fileReadString "asl/tools/hub/learn.asl") "") "shellOut")) "the ledger tail is read in-process (fileReadRange, bytesToString), not through a shell")
       (assert (and (ok? wroteL2) (stringContains? t2 "EXIT:0")) (str "the second tick ran: " t2))
       (assert (near down (* 24.0 0.7)) (str "3.2 percent real 429 cuts by 0.7: " (stringFromFloat64 down)))
       (assert (and (ok? wroteL3) stored) "the looping timer wrote the store with no stored rate before it")
