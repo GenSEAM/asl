@@ -452,6 +452,77 @@ fn ! testMergeRetry bin: String -> Bool
         (assert (= (listLength (filter (fn [(l String)] -> Bool (= l "M write")) (stringLines startsB))) 1) "one write")
         true))
 
+fn ! mergeLive dir: String -> Int64
+  (listLength (filter (fn [(c cd/CUnit)] -> Bool (and (= c.st "merging") (!= c.launched 0))) (cd/readCUnits! dir)))
+
+fn ! tickMax! ctx: cd/Ctx dir: String peak: Int64 left: Int64 -> Int64
+  (let [(both (and (= (stOf dir "S1") "merged") (= (stOf dir "S2") "merged")))]
+    (if (or both (<= left 0)) peak
+      (let [(_ (cd/tick! ctx)) (live (mergeLive dir)) (_ (sleepMs 50))]
+        (tickMax! ctx dir (if (> live peak) live peak) (- left 1)))))
+
+; (:m :ref COND-MERGE-STAGE-RED :do "two reviewed disjoint units whose merge stage sleeps 1.5 s: at no tick are two merge children live, the second merge starts after the first lands, and both reach merged with one merge start each")
+fn ! testMergeSerial bin: String -> Bool
+  (let [(dir (scratch "mergeSerial"))
+        (_ (cleanup dir))
+        (put (putAll! dir (list (task "S1" (list "p/s1") (list) (greenGate) "leon") (task "S2" (list "p/s2") (list) (greenGate) "leon"))))
+        (ctx (ctxWith dir bin (fn [(stage String) (id String)] -> (List String) (if (= stage "merge") (list "--sleep" "1500") (list))) 4 4 400 60))
+        (peak (tickMax! ctx dir 0 600))
+        (s1 (stOf dir "S1"))
+        (s2 (stOf dir "S2"))
+        (starts (stringLines (readOr dir "starts.log")))
+        (merges (filter (fn [(l String)] -> Bool (stringEndsWith? l " merge")) starts))
+        (merged (readOr dir "merged.log"))
+        (_ (cd/stopAll! ctx))
+        (_ (cleanup dir))]
+    (do (assert put "two units put")
+        (assert (= peak 1) (str "one merge child live at a time, peak " (stringFromInt64 peak)))
+        (assert (and (= s1 "merged") (= s2 "merged")) (str "both reviewed units reach merged: " s1 " " s2))
+        (assert (= (listLength merges) 2) (str "one merge start per unit: " (stringJoin merges ",")))
+        (assert (= (listLength (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines merged))) 2) (str "two merges landed: " merged))
+        true))
+
+fn killedTrainOut -> String
+  (str "(:redLive \"asl/tests/corpusTest.asl\" 1 114 :kind suite :err (\"ERR_UNKNOWN_SYMBOL unbound symbol: HOSTFAIL\\\\\\\\\\\\\\\"\\\\\\\")\" \"ERR_ASSERT: assertion failed: case 115 stdout matches recorded behavior\"))\n"
+       "\n(:fleetRun :verdict :timeout :pid 1912259 :desc 3 :timeoutMs 3600000 :maxDesc 200 :left 0)\n")
+
+fn doneTrainOut -> String
+  (str "(:redLive \"asl/a/aTest.asl\" 1 3 :kind suite :err (\"ERR_ASSERT: a \\\"q\\\" broke\"))\n"
+       "(:redLive \"asl/b/bTest.asl\" 1 0 :kind suite :err (\"ERR_UNKNOWN_SYMBOL unbound symbol: X\"))\n"
+       "(:train :head \"abc\" :merged \"def\" :branches (\"sh/X\") :changed 2 :selected 2 :keyMs 1 :cached 0 :ran 2 :green 0 :invariants 0"
+       " :red ((\"asl/a/aTest.asl\" \"sh/X\" 1 3 :kind suite :why fresh :err (\"ERR_ASSERT: a \\\"q\\\" broke\")))"
+       " :preexisting ((\"asl/b/bTest.asl\" \"sh/X\" 1 0 :kind suite :why preexisting)) :assertLoss () :baseKnown 2 :seconds 9)\n")
+
+; (:m :ref COND-MERGE-STAGE-RED :do "a merge signature names the train's own cause: a run.asl timeout kill reads killed: timeout after 3600 s, a finished red train names its fresh red suites by path and drops the preexisting one, neither carries a backslash from the suite output it quotes; a plain gate output keeps its first ERR line")
+fn testTrainSig -> Bool
+  (let [(killed (cd/gateSig (killedTrainOut)))
+        (red (cd/gateSig (doneTrainOut)))
+        (plain (cd/gateSig "building\nsuite x: ERR_ASSERT: boom\ndone"))]
+    (do (assert (= killed "killed: timeout after 3600 s") (str "a killed train names the kill: " killed))
+        (assert (= red "train red: asl/a/aTest.asl") (str "a red train names its fresh red suite: " red))
+        (assert (not (or (stringContains? killed "\\") (stringContains? red "\\"))) "no backslash from nested suite output")
+        (assert (= plain "ERR_ASSERT: boom") (str "a plain gate output keeps its first ERR line: " plain))
+        true))
+
+fn ! verdictOf line: String -> String
+  (match (st/rowFields line "t") ((ok fs) (st/textField fs "verdict")) ((err _) "unreadable"))
+
+; (:m :ref COND-MERGE-STAGE-RED :do "a merge signature with a quote and a backslash passes the stage result, the unit row and the journal and is escaped once: each retry row decodes with one read to exactly retry: plus the signature, and the retries carry the same text")
+fn ! testMergeVerdictOnce bin: String -> Bool
+  (let [(dir (scratch "mergeEsc"))
+        (_ (cleanup dir))
+        (sig "train red: \"a\\b\" exit 1")
+        (_ (putAll! dir (list (task "E" (list "p/e") (list) (greenGate) "leon"))))
+        (ctx (ctxWith dir bin (fn [(stage String) (id String)] -> (List String) (if (= stage "merge") (list "--mergefail" "9" "--failsig" sig) (list))) 4 4 400 60))
+        (_ (cd/drain! ctx 800))
+        (rows (filter (fn [(l String)] -> Bool (and (stringContains? l "(:t :unit \"E\" ") (stringContains? l " :stage merge "))) (journalLines dir)))
+        (verdicts (map verdictOf rows))
+        (_ (cleanup dir))]
+    (do (assert (= (listLength verdicts) 3) (str "two retries and one escalation: " (stringFromInt64 (listLength verdicts))))
+        (assert (= (listTake verdicts 2) (list (str "retry: " sig) (str "retry: " sig))) (str "each retry decodes to the signature once: " (stringJoin verdicts " | ")))
+        (assert (= (optionOr (listGet verdicts 2) "") (str "escalated: " sig)) "the escalation row decodes to it too")
+        true))
+
 ; (:m :ref COND4 :do "a stage cost of -1 (unpriced) journals :priced false and adds nothing to the unit's spend; a priced cost adds and journals no marker")
 fn ! testUnpriced bin: String -> Bool
   (let [(dir (scratch "unpriced"))
@@ -669,4 +740,7 @@ fn ! runTests -> Bool
         (assert (testOfferStrong bin) "the queue offers a blocked unit to the strong lane")
         (assert (testIntake bin) "the service cycle imports the ledger and queues need rows for parked ones")
         (assert (testMergeRetry bin) "a merge failure retries the merge with its reason journalled")
+        (assert (testTrainSig) "a merge signature names the train's own cause")
+        (assert (testMergeSerial bin) "merge stages run one at a time and both reviewed units merge")
+        (assert (testMergeVerdictOnce bin) "a merge verdict is escaped once in the journal")
         true))

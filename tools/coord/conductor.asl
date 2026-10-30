@@ -1,7 +1,7 @@
 (module asl-tools/coord/conductor
   :x [hubGuard! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
-      allowanceUnlimited fixedPace jobserverPace gateSig rulingVerdict
+      allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! rungCap hopsSince nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       main]
   :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (asl-tools/hub/preflight :a hp)
@@ -294,8 +294,12 @@ fn ! killRun! dir: String id: String stage: String -> Unit
     ((none) ()))
 
 ; (:m :ref CONDUCTOR :do "a stage is a detached child started through run.asl's spawnSep in its own process group; the store keeps its pid and deadline in <store>/runs/UNIT-STAGE.run, the child's only output is the Res row, so a restarted conductor resumes from the rows alone")
+; (:m :ref COND-MERGE-STAGE-RED :do "merge stages run one at a time: every train shares the dev repo and its one scratch worktree, and on 2026-10-30 TIMEOUT-WRAPPER-ORPHAN's train reset the scratch under LL-SVD-PARSE's running train; a unit reaching merging while another unit's merge child is live stays merging with launched 0 and step! launches it on a later tick")
+fn ! mergeBusy? dir: String id: String -> Bool
+  (listAny? (fn [(x CUnit)] -> Bool (and (!= x.id id) (and (= x.st "merging") (!= x.launched 0)))) (readCUnits! dir))
+
 fn ! launch! ctx: Ctx u: st/Task c: CUnit -> CUnit
-  (if (draining? ctx.dir) (let [(c0 (with c :launched 0)) (_ (writeCUnit! ctx.dir c0))] c0)
+  (if (or (draining? ctx.dir) (and (= c.st "merging") (mergeBusy? ctx.dir c.id))) (let [(c0 (with c :launched 0)) (_ (writeCUnit! ctx.dir c0))] c0)
   (let [(stage (stageName c.st))
         (mk ctx.launch)
         (argv (mk stage u c))
@@ -546,9 +550,43 @@ fn schedPace dir: String home: String -> Pace
 fn realPace -> Pace
   (jobserverPace "" allowanceUnlimited)
 
-; (:m :do "the first ERR line, else the last non-empty line, cut to 160 chars: the same failure gives the same signature")
+fn quotedAfter line: String marker: String -> String
+  (match (listGet (stringSplit line marker) 1)
+    ((some rest) (optionOr (listHead (stringSplit rest "\"")) ""))
+    ((none) ""))
+
+fn segment text: String from: String to: String -> String
+  (match (listGet (stringSplit text from) 1)
+    ((some rest) (optionOr (listHead (stringSplit rest to)) ""))
+    ((none) ""))
+
+; (:m :ref COND-MERGE-STAGE-RED :do "the cause a killed or red train names itself, before any ERR line: a run.asl kill row, a train failure row, the receipt's commit error, else the streamed red suites the receipt still counts as fresh (preexisting ones dropped), by path only; the ERR lines inside those rows are suite output quoted once per nesting level, and LL-SVD-PARSE's merge took one such fragment (HOSTFAIL followed by 15 backslashes) as its signature; empty when the output has none of these rows")
+fn wordAfter line: String marker: String -> String
+  (optionOr (listHead (stringSplit (stringReplace (segment line marker "\n") ")" " ") " ")) "")
+
+fn killSig line: String -> String
+  (str "killed: " (wordAfter line "(:fleetRun :verdict :") " after " (n (/ (optionOr (stringToInt64 (wordAfter line " :timeoutMs ")) 0) 1000)) " s")
+
+fn trainSig lines: (List String) -> String
+  (let [(kill (listFind (fn [(l String)] -> Bool (stringStartsWith? l "(:fleetRun :verdict :")) lines))
+        (failed (listFind (fn [(l String)] -> Bool (stringStartsWith? l "(:train :status :failed")) lines))
+        (receipt (optionOr (listLast (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:train :head ")) lines)) ""))
+        (fresh (segment receipt " :red (" " :preexisting ("))
+        (lost (segment receipt " :assertLoss (" ")"))
+        (reds (filter (fn [(p String)] -> Bool (and (not (stringEmpty? p)) (or (stringEmpty? receipt) (stringContains? fresh (str "(\"" p "\" ")))))
+                      (map (fn [(l String)] -> String (quotedAfter l "(:redLive \"")) (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:redLive ")) lines))))]
+    (cond
+      ((some? kill) (killSig (optionOr kill "")))
+      ((some? failed) (optionOr failed ""))
+      ((stringContains? receipt " :commitError ") (str "commitError " (quotedAfter receipt " :commitError \"")))
+      ((not (listEmpty? reds)) (str "train red: " (stringJoin (listTake reds 3) " ")))
+      ((not (stringEmpty? lost)) (str "train assertLoss: " (stringReplace lost "\"" "")))
+      (else "")))
+
+; (:m :do "a train's own cause first (trainSig), else the first ERR line, else the last non-empty line, cut to 160 chars: the same failure gives the same signature")
 fn gateSig out: String -> String
-  (let [(errs (fr/errorLinesOf out))
+  (let [(own (trainSig (map stringTrim (stringLines out))))
+        (errs (if (stringEmpty? own) (fr/errorLinesOf out) (list own)))
         (lines (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (map stringTrim (stringLines out))))
         (quiet (filter (fn [(l String)] -> Bool (not (or (stringStartsWith? l "(:gateway :usage") (stringStartsWith? l "(:usage")))) lines))
         (marked (filter (fn [(l String)] -> Bool (let [(low (stringLower l))] (or (stringContains? low "fail") (or (stringContains? low "error") (stringContains? low "exit"))))) quiet))
