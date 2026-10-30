@@ -74,6 +74,12 @@ fn ! stepConn! st: St c: Conn ready: (List (Pair Int64 Int64)) holdMs: Int64 -> 
                 (with st :conns (listAppend st.conns (list (Conn :fd c.fd :input input :replyAt (+ (nowMs!) holdMs) :reply (replyFor input)))) :profiles (listAppend st.profiles (list (profileOf input))))
                 (with st :conns (listAppend st.conns (list (Conn :fd c.fd :input input :replyAt 0 :reply "")))))))))))
 
+fn noConns s: St -> St
+  (with s :conns (list))
+
+fn withPeak s: St -> St
+  (with s :peak (max s.peak (held s)))
+
 fn ! loop! st: St out: String holdMs: Int64 -> Bool
   (match (fdPoll (cons (pair st.listener 1) (map (fn [(c Conn)] -> (Pair Int64 Int64) (pair c.fd 1)) st.conns)) 20)
     ((err _) (loop! st out holdMs))
@@ -83,8 +89,8 @@ fn ! loop! st: St out: String holdMs: Int64 -> Bool
                           ((ok fd) (with st :conns (listAppend st.conns (list (Conn :fd fd :input "" :replyAt 0 :reply ""))))) 
                           ((err _) st))
                         st))
-            (stepped (fold (fn [(acc St) (c Conn)] -> St (stepConn! acc c ready holdMs)) (with accepted :conns (list)) accepted.conns))
-            (peaked (with stepped :peak (max stepped.peak (held stepped))))
+            (stepped (fold (fn [(acc St) (c Conn)] -> St (stepConn! acc c ready holdMs)) (noConns accepted) accepted.conns))
+            (peaked (withPeak stepped))
             (written (fileWrite out (str "maxInFlight " (stringFromInt64 peaked.peak) "\n" (stringJoin (map (fn [(p String)] -> String (str "profile " p)) peaked.profiles) "\n") "\n")))]
         (loop! peaked out holdMs))))
 

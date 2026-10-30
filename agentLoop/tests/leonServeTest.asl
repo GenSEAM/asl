@@ -3,7 +3,7 @@
   :i [(asl/agentLoop/leonServe :a ls) (asl/agentLoop/leonPool :a lp) (asl/agentLoop/poolServe :a ps)
       (asl/agentLoop/sessionPool :a sp) (asl-tools/fleet/run :a fr) (aslHarness/tests/agentLoopRecorderKit :a rk)])
 
-; (:m :ref SE5B-LEON-SERVE :do "two scripted Leon runs submitted over the control socket as (:run ...) share one pool process and each leaves a receipt file with exit 0 and its Leon receipt; a run the check chain rejects is queued and has its receipt (exit 2) at once; the same unit id twice is refused; (:status) answers; (:stop) ends the loop. Client and server share this thread, as in poolServeTest")
+; (:m :ref SE5B-LEON-SERVE :do "two scripted Leon runs submitted over the control socket as (:run ...) are declined with exit 125 because a script provider is not the hub ask path (the accepted hub case is leonPoolE2ETest); a run the check chain rejects is queued and has its receipt (exit 2) at once; the same unit id twice is refused; (:status) answers; (:stop) ends the loop. Client and server share this thread, as in poolServeTest")
 fn ! nowMs! -> Int64
   (/ (monotonicNs) 1000000)
 
@@ -106,7 +106,7 @@ fn ! runTests -> Bool
       (assert (and (stringContains? recBad ":exit 2") (stringContains? recBad "ERR_INVALID_ARG")) (str "a rejected run has its receipt at once: " recBad))
       (assert (and (stringContains? recRt ":exit 125") (stringContains? recRt ":declined")) (str "a routed run is declined with exit 125: " recRt))
       (assert (stringContains? (pairSecond r5) ":slots 4") (str "status answers: " (pairSecond r5)))
-      (assert (and (stringContains? recE1 ":state \"done\" :exit 0") (stringContains? recE2 ":state \"done\" :exit 0")) (str "both scripted runs ended ok:\n" recE1 "\n" recE2))
+      (assert (and (stringContains? recE1 ":exit 125") (stringContains? recE2 ":exit 125") (stringContains? recE1 ":declined")) (str "script-provider runs are declined with exit 125 (a hub run is accepted in leonPoolE2ETest):\n" recE1 "\n" recE2))
       (assert (stringContains? (pairSecond r6) "(:stopping)") (str "stop answers: " (pairSecond r6)))
       (assert removed "temp dir removed")
       true))

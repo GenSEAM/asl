@@ -1,6 +1,6 @@
 (module asl/agentLoop/providers
   :x [retryAfterSec ProviderError providerError valueError fileMissing toolAbsent cliTimeout ioError errorCode errorMessage configPathRefusal
-      ProviderEnv VendorConfig HubCall Ask askDone askHub nextTurnAsk! nextTurnReply hubBusy? Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
+      ProviderEnv VendorConfig HubCall Ask askDone askHub nextTurnAsk! nextTurnReply hubBusy? hubAsk? Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
       parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
       curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! providerEnv! makeProvider! nextTurn! withPrefill withTools acceptHeader readJsonReply outgoingMessages profileMessages advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
@@ -1560,6 +1560,12 @@ fn ! nextTurnAsk! p: Provider system: String user: String -> Ask
 
 fn noToolsProvider cfg: VendorConfig -> Provider
   (vendorProvider (with cfg :tools (list) :noTools true))
+
+; (:m :ref SE5-NONHUB :do "whether a provider's model calls go to the hub socket (nextTurnAsk! returns askHub): a vendor provider whose HOME/.asl/hub.asn names a :sock; script, replay and the other providers answer inside the call, so a pool must not run them as sessions")
+fn ! hubAsk? p: Provider -> Bool
+  (match p
+    ((vendorProvider cfg) (not (stringEmpty? (hubAsnString (resultOr (fileReadString (hubAsnPath cfg)) "") "sock" ""))))
+    (_ false))
 
 fn ! nextTurnReply p: Provider raw: String -> Turn
   (let [(r (readResponse "Hub" raw))
