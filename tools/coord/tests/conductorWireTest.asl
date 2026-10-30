@@ -422,6 +422,27 @@ fn ! testHubGuard -> Bool
         (assert (not (some? current)) "a worktree with the hub client passes")
         true))
 
+; (:m :ref DEV-PROMOTE-ON-DEPLOY :do "a worktree cloned before the deployed main's last Leon commit is refused, a later non-Leon commit on main changes nothing, and the worktree passes once it holds that commit")
+fn ! testLeonGuard -> Bool
+  (let [(root (scratch "leonguard"))
+        (repo (str root "/repo"))
+        (wt (str root "/wt"))
+        (sh (fn [(c String)] -> String (resultOr (fr/shellOut c 60000) "")))
+        (_ (cleanup root))
+        (made (sh (str "mkdir -p " repo "/asl/agentLoop && cd " repo " && git init -q -b main && git config user.email t@example.invalid && git config user.name t"
+                       " && echo a > asl/agentLoop/a.asl && git add -A && git commit -qm a && git clone -q " repo " " wt " 2>&1 && echo madeOk")))
+        (current (cd/leonGuard! repo wt))
+        (_ (sh (str "cd " repo " && echo b > asl/agentLoop/b.asl && git add -A && git commit -qm b && echo other > other.txt && git add -A && git commit -qm other")))
+        (stale (cd/leonGuard! repo wt))
+        (_ (sh (str "cd " wt " && git pull -q --ff-only origin main 2>&1")))
+        (pulled (cd/leonGuard! repo wt))
+        (_ (cleanup root))]
+    (do (assert (stringContains? made "madeOk") "the fixture repo and its clone exist")
+        (assert (not (some? current)) "a worktree holding the deployed Leon passes")
+        (assert (match stale ((some r) (and (= r.ok 0) (stringContains? r.sig "ERR_LEON_STALE"))) ((none) false)) "a worktree without the last Leon commit is refused")
+        (assert (not (some? pulled)) "after the worktree takes main it passes")
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testAttach) "retry attaches an existing branch")
       (assert (testAttachMissing) "a registered but missing worktree is pruned and attached")
@@ -442,4 +463,5 @@ fn ! runTests -> Bool
       (assert (testService) "service unit and dev repo steps")
       (assert (testCoverage) "coverage refusal")
       (assert (testHubGuard) "the write stage refuses a worktree without the hub client")
+      (assert (testLeonGuard) "the write stage refuses a worktree without the deployed Leon")
       true)

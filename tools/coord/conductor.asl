@@ -1,5 +1,5 @@
 (module asl-tools/coord/conductor
-  :x [hubGuard! CUnit Res Pace Ctx RealCfg
+  :x [hubGuard! leonGuard! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! rungCap hopsSince nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
@@ -805,13 +805,27 @@ fn ! hubGuard! home: String wt: String -> (Option Res)
     ((err e) (some (failRes e)))
     ((ok _) none))
 
+; (:m :ref DEV-PROMOTE-ON-DEPLOY :do "a unit worktree must hold the deployed Leon: the last commit touching asl/agentLoop on the deployed main (the conductor's --repo) is an ancestor of the unit's HEAD, else the write stage refuses with ERR_LEON_STALE instead of running a Leon older than the one deployed; an unreadable deployed head is not a verdict")
+fn ! leonGuard! repo: String wt: String -> (Option Res)
+  (let [(d (gitOut repo (list "log" "-1" "--format=%H" "HEAD" "--" "asl/agentLoop")))
+        (sha (stringTrim d.out))]
+    (cond
+      ((or (!= d.exit 0) (stringEmpty? sha)) none)
+      ((= (gitOut wt (list "merge-base" "--is-ancestor" sha "HEAD")).exit 0) none)
+      (else (some (failRes (str "ERR_LEON_STALE: worktree lacks the deployed Leon " (optionOr (stringSlice sha 0 9) sha) "; bring the unit base onto main"))))))
+
+fn ! writeGuard! home: String repo: String wt: String -> (Option Res)
+  (match (hubGuard! home wt)
+    ((some r) (some r))
+    ((none) (leonGuard! repo wt)))
+
 fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
   (let [(path (w/wtPath rc.wt u.id))
         (added (if (fileExists? path) (reuseWt! rc u path) (attachOrAdd rc u path)))]
     (match added
       ((err e) (failRes e))
       ((ok p)
-       (match (hubGuard! rc.home p)
+       (match (writeGuard! rc.home rc.repo p)
         ((some refused) refused)
         ((none)
         (let [(fresh (noEdits? p u.base u.owns))
