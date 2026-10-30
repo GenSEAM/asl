@@ -276,19 +276,104 @@ fn stackGuardAltStackBytes -> Int64
 fn stackDepthMsg -> String
   (str "ERR_STACK_DEPTH: native call stack exceeded the " (mainStackBytes) "-byte body thread stack")
 
-; (:m :ref NATIVE-STACK-GUARD :do "a program body recursing past the 1 GiB thread stack (rtAbi mainText) used to SIGSEGV raw: no C stack depth counter exists (every ASL call is a real native call), so the cheapest sound catch is the stack pthread already refuses to extend past -- a guard-page fault -- turned into a loud, nonzero exit instead of a silent crash. rtAbi.locateStack records not just stackTop (for gcScanConservative) but stackBase (stackTop - mainStackBytes) and installs a SIGSEGV/SIGBUS handler on its own sigaltstack (the faulting thread's own stack is exhausted, so the handler needs stack space that is not); the handler checks the fault address against a 1 MiB window just below stackBase -- where a real overflow lands, never a wild unrelated pointer -- reports ERR_STACK_DEPTH and _exit(1) on a match, else restores SIG_DFL and re-raises so a genuine unrelated fault still crashes exactly as before. One-time setup cost only (sigaltstack + two sigaction calls at thread start); no per-call probe, so steady-state recursion speed is unchanged")
+fn guardConst facts: libc/TripleFacts name: String -> (Result Int64 String)
+  (match (libc/libcConst facts name)
+    ((none) (err (str "ERR_LLVM_RTABI: libc.asl has no " name " constant for " facts.triple)))
+    ((some n) (ok n)))
 
-fn locateDarwinText facts: libc/TripleFacts -> String
-  (let [(sigsegv (optionOr (libc/libcConst facts "SIGSEGV") 11))
-        (sigbus (optionOr (libc/libcConst facts "SIGBUS") 10))
-        (saFlags (+ (optionOr (libc/libcConst facts "SA_SIGINFO") 64) (optionOr (libc/libcConst facts "SA_ONSTACK") 1)))]
-    (stringJoin
-      (list "@rtAbi.stackBase = internal global ptr null, align 8"
-            (str "@rtAbi.sigStackBuf = internal global [" (stackGuardAltStackBytes) " x i8] zeroinitializer, align 16")
-            "@rtAbi.altStackBuf = internal global [24 x i8] zeroinitializer, align 8"
-            "@rtAbi.sigActionBuf = internal global [16 x i8] zeroinitializer, align 8"
-            (cString "rtAbi.stackDepthMsg" (stackDepthMsg))
-            ""
+fn guardField facts: libc/TripleFacts structName: String field: String -> (Result Int64 String)
+  (match (libc/pairFind facts.structs structName)
+    ((none) (err (str "ERR_LLVM_RTABI: libc.asl has no " structName " layout for " facts.triple)))
+    ((some sf)
+      (match (libc/structFieldOffset sf field)
+        ((none) (err (str "ERR_LLVM_RTABI: libc.asl " structName " has no " field " offset for " facts.triple)))
+        ((some n) (ok n)))))
+
+fn guardSize facts: libc/TripleFacts structName: String -> (Result Int64 String)
+  (match (libc/structSize facts structName)
+    ((none) (err (str "ERR_LLVM_RTABI: libc.asl has no " structName " size for " facts.triple)))
+    ((some n) (ok n)))
+
+; (:m :ref NATIVE-STACK-GUARD-LINUX :do "the guard's constants and struct offsets come from the per-triple libc table, never inline: Darwin and glibc differ in SIGBUS, SA_ONSTACK, SA_SIGINFO, stack_t field order (sp size flags vs sp flags size), sigaction mask and flags offsets and the si_addr offset; a row missing from the table is an error naming it")
+fn guardLayout facts: libc/TripleFacts -> (Result (List (Pair String Int64)) String)
+  (fold (fn [(acc (Result (List (Pair String Int64)) String)) (p (Pair String (Result Int64 String)))] -> (Result (List (Pair String Int64)) String)
+          (match acc
+            ((err e) (err e))
+            ((ok done)
+              (match (pairSecond p)
+                ((err e) (err e))
+                ((ok n) (ok (cons (pair (pairFirst p) n) done)))))))
+        (ok (list))
+        (list (pair "segv" (guardConst facts "SIGSEGV"))
+              (pair "bus" (guardConst facts "SIGBUS"))
+              (pair "onStack" (guardConst facts "SA_ONSTACK"))
+              (pair "sigInfo" (guardConst facts "SA_SIGINFO"))
+              (pair "stackTSize" (guardSize facts "stack_t"))
+              (pair "ssSp" (guardField facts "stack_t" "ss_sp"))
+              (pair "ssSize" (guardField facts "stack_t" "ss_size"))
+              (pair "ssFlags" (guardField facts "stack_t" "ss_flags"))
+              (pair "actionSize" (guardSize facts "sigaction"))
+              (pair "saHandler" (guardField facts "sigaction" "sa_handler"))
+              (pair "saMask" (guardField facts "sigaction" "sa_mask"))
+              (pair "saFlags" (guardField facts "sigaction" "sa_flags"))
+              (pair "siAddr" (guardField facts "siginfo_t" "si_addr"))))
+
+fn layoutOf layout: (List (Pair String Int64)) key: String -> Int64
+  (optionOr (libc/pairFind layout key) 0)
+
+; (:m :ref NATIVE-STACK-GUARD :do "a program body recursing past the 1 GiB thread stack (rtAbi mainText) used to SIGSEGV raw: no C stack depth counter exists (every ASL call is a real native call), so the cheapest sound catch is the stack pthread already refuses to extend past -- a guard-page fault -- turned into a loud, nonzero exit instead of a silent crash. rtAbi.locateStack records not just stackTop (for gcScanConservative) but stackBase (the lowest usable stack address) and installs a SIGSEGV/SIGBUS handler on its own sigaltstack (the faulting thread's own stack is exhausted, so the handler needs stack space that is not); the handler checks the fault address against a 1 MiB window just below stackBase -- where a real overflow lands, never a wild unrelated pointer -- reports ERR_STACK_DEPTH and _exit(1) on a match, else restores SIG_DFL and re-raises so a genuine unrelated fault still crashes exactly as before. One-time setup cost only (sigaltstack + two sigaction calls at thread start); no per-call probe, so steady-state recursion speed is unchanged. NATIVE-STACK-GUARD-LINUX: the same guard now installs on linux (glibc layouts from the libc table); before it only existed in the Darwin locateStack and a linux overflow died raw with SIGSEGV (exit 139)")
+fn stackGuardText layout: (List (Pair String Int64)) -> (List String)
+  (list "@rtAbi.stackBase = internal global ptr null, align 8"
+        (str "@rtAbi.sigStackBuf = internal global [" (stackGuardAltStackBytes) " x i8] zeroinitializer, align 16")
+        (str "@rtAbi.altStackBuf = internal global [" (layoutOf layout "stackTSize") " x i8] zeroinitializer, align 8")
+        (str "@rtAbi.sigActionBuf = internal global [" (layoutOf layout "actionSize") " x i8] zeroinitializer, align 8")
+        (cString "rtAbi.stackDepthMsg" (stackDepthMsg))
+        ""
+        "define internal void @rtAbi.installStackGuard() {"
+        "entry:"
+        (str "  %altSpAt = getelementptr i8, ptr @rtAbi.altStackBuf, i64 " (layoutOf layout "ssSp"))
+        "  store ptr @rtAbi.sigStackBuf, ptr %altSpAt"
+        (str "  %altSizeAt = getelementptr i8, ptr @rtAbi.altStackBuf, i64 " (layoutOf layout "ssSize"))
+        (str "  store i64 " (stackGuardAltStackBytes) ", ptr %altSizeAt")
+        (str "  %altFlagsAt = getelementptr i8, ptr @rtAbi.altStackBuf, i64 " (layoutOf layout "ssFlags"))
+        "  store i32 0, ptr %altFlagsAt"
+        "  %altSet = call i32 @sigaltstack(ptr @rtAbi.altStackBuf, ptr null)"
+        (str "  %saHandlerAt = getelementptr i8, ptr @rtAbi.sigActionBuf, i64 " (layoutOf layout "saHandler"))
+        "  store ptr @rtAbi.stackGuardHandler, ptr %saHandlerAt"
+        (str "  %saMaskAt = getelementptr i8, ptr @rtAbi.sigActionBuf, i64 " (layoutOf layout "saMask"))
+        "  %emptied = call i32 @sigemptyset(ptr %saMaskAt)"
+        (str "  %saFlagsAt = getelementptr i8, ptr @rtAbi.sigActionBuf, i64 " (layoutOf layout "saFlags"))
+        (str "  store i32 " (+ (layoutOf layout "sigInfo") (layoutOf layout "onStack")) ", ptr %saFlagsAt")
+        (str "  %segvSet = call i32 @sigaction(i32 " (layoutOf layout "segv") ", ptr @rtAbi.sigActionBuf, ptr null)")
+        (str "  %busSet = call i32 @sigaction(i32 " (layoutOf layout "bus") ", ptr @rtAbi.sigActionBuf, ptr null)")
+        "  ret void"
+        "}"
+        ""
+        "define internal void @rtAbi.stackGuardHandler(i32 %sig, ptr %info, ptr %uctx) {"
+        "entry:"
+        (str "  %addrAt = getelementptr i8, ptr %info, i64 " (layoutOf layout "siAddr"))
+        "  %addr = load ptr, ptr %addrAt"
+        "  %base = load ptr, ptr @rtAbi.stackBase"
+        "  %belowBase = icmp ult ptr %addr, %base"
+        (str "  %marginBase = getelementptr i8, ptr %base, i64 -" (stackGuardWindowBytes))
+        "  %aboveMargin = icmp uge ptr %addr, %marginBase"
+        "  %inGuard = and i1 %belowBase, %aboveMargin"
+        "  br i1 %inGuard, label %report, label %chain"
+        "report:"
+        (str "  %msgWritten = call i64 @write(i32 2, ptr @rtAbi.stackDepthMsg, i64 " (stringLength (stackDepthMsg)) ")")
+        "  call void @_exit(i32 1)"
+        "  unreachable"
+        "chain:"
+        "  %restored = call ptr @signal(i32 %sig, ptr null)"
+        "  %raised = call i32 @raise(i32 %sig)"
+        "  unreachable"
+        "}")
+
+fn locateDarwinText layout: (List (Pair String Int64)) -> String
+  (stringJoin
+    (listAppend
+      (stackGuardText layout)
+      (list ""
             "define internal void @rtAbi.locateStack() {"
             "entry:"
             "  %self = call ptr @pthread_self()"
@@ -298,73 +383,40 @@ fn locateDarwinText facts: libc/TripleFacts -> String
             "  store ptr %base, ptr @rtAbi.stackBase"
             "  call void @rtAbi.installStackGuard()"
             "  ret void"
-            "}"
-            ""
-            "define internal void @rtAbi.installStackGuard() {"
-            "entry:"
-            "  store ptr @rtAbi.sigStackBuf, ptr @rtAbi.altStackBuf"
-            "  %altSizeAt = getelementptr i8, ptr @rtAbi.altStackBuf, i64 8"
-            (str "  store i64 " (stackGuardAltStackBytes) ", ptr %altSizeAt")
-            "  %altFlagsAt = getelementptr i8, ptr @rtAbi.altStackBuf, i64 16"
-            "  store i32 0, ptr %altFlagsAt"
-            "  %altSet = call i32 @sigaltstack(ptr @rtAbi.altStackBuf, ptr null)"
-            "  store ptr @rtAbi.stackGuardHandler, ptr @rtAbi.sigActionBuf"
-            "  %saMaskAt = getelementptr i8, ptr @rtAbi.sigActionBuf, i64 8"
-            "  %emptied = call i32 @sigemptyset(ptr %saMaskAt)"
-            "  %saFlagsAt = getelementptr i8, ptr @rtAbi.sigActionBuf, i64 12"
-            (str "  store i32 " saFlags ", ptr %saFlagsAt")
-            (str "  %segvSet = call i32 @sigaction(i32 " sigsegv ", ptr @rtAbi.sigActionBuf, ptr null)")
-            (str "  %busSet = call i32 @sigaction(i32 " sigbus ", ptr @rtAbi.sigActionBuf, ptr null)")
-            "  ret void"
-            "}"
-            ""
-            "define internal void @rtAbi.stackGuardHandler(i32 %sig, ptr %info, ptr %uctx) {"
-            "entry:"
-            "  %addrAt = getelementptr i8, ptr %info, i64 24"
-            "  %addr = load ptr, ptr %addrAt"
-            "  %base = load ptr, ptr @rtAbi.stackBase"
-            "  %belowBase = icmp ult ptr %addr, %base"
-            (str "  %marginBase = getelementptr i8, ptr %base, i64 -" (stackGuardWindowBytes))
-            "  %aboveMargin = icmp uge ptr %addr, %marginBase"
-            "  %inGuard = and i1 %belowBase, %aboveMargin"
-            "  br i1 %inGuard, label %report, label %chain"
-            "report:"
-            (str "  %msgWritten = call i64 @write(i32 2, ptr @rtAbi.stackDepthMsg, i64 " (stringLength (stackDepthMsg)) ")")
-            "  call void @_exit(i32 1)"
-            "  unreachable"
-            "chain:"
-            "  %restored = call ptr @signal(i32 %sig, ptr null)"
-            "  %raised = call i32 @raise(i32 %sig)"
-            "  unreachable"
-            "}")
-      "\n"))
+            "}"))
+    "\n")
 
-fn locateLinuxText attrSize: Int64 -> String
+fn locateLinuxText attrSize: Int64 layout: (List (Pair String Int64)) -> String
   (stringJoin
-    (list "define internal void @rtAbi.locateStack() {"
-          "entry:"
-          (str "  %at = alloca [" attrSize " x i8], align 16")
-          "  %addr = alloca ptr, align 8"
-          "  %size = alloca i64, align 8"
-          "  %self = call i64 @pthread_self()"
-          "  %got = call i32 @pthread_getattr_np(i64 %self, ptr %at)"
-          "  %gotFail = icmp ne i32 %got, 0"
-          "  br i1 %gotFail, label %fail, label %read"
-          "read:"
-          "  %rc = call i32 @pthread_attr_getstack(ptr %at, ptr %addr, ptr %size)"
-          "  %destroyed = call i32 @pthread_attr_destroy(ptr %at)"
-          "  %readFail = icmp ne i32 %rc, 0"
-          "  br i1 %readFail, label %fail, label %done"
-          "done:"
-          "  %base = load ptr, ptr %addr"
-          "  %bytes = load i64, ptr %size"
-          "  %top = getelementptr i8, ptr %base, i64 %bytes"
-          "  store ptr %top, ptr @rtAbi.stackTop"
-          "  ret void"
-          "fail:"
-          "  call void (ptr, ptr, ...) @gcFloorFail(ptr @rtAbi.errInternal, ptr @rtAbi.noStack)"
-          "  unreachable"
-          "}")
+    (listAppend
+      (stackGuardText layout)
+      (list ""
+            "define internal void @rtAbi.locateStack() {"
+            "entry:"
+            (str "  %at = alloca [" attrSize " x i8], align 16")
+            "  %addr = alloca ptr, align 8"
+            "  %size = alloca i64, align 8"
+            "  %self = call i64 @pthread_self()"
+            "  %got = call i32 @pthread_getattr_np(i64 %self, ptr %at)"
+            "  %gotFail = icmp ne i32 %got, 0"
+            "  br i1 %gotFail, label %fail, label %read"
+            "read:"
+            "  %rc = call i32 @pthread_attr_getstack(ptr %at, ptr %addr, ptr %size)"
+            "  %destroyed = call i32 @pthread_attr_destroy(ptr %at)"
+            "  %readFail = icmp ne i32 %rc, 0"
+            "  br i1 %readFail, label %fail, label %done"
+            "done:"
+            "  %base = load ptr, ptr %addr"
+            "  %bytes = load i64, ptr %size"
+            "  %top = getelementptr i8, ptr %base, i64 %bytes"
+            "  store ptr %top, ptr @rtAbi.stackTop"
+            "  store ptr %base, ptr @rtAbi.stackBase"
+            "  call void @rtAbi.installStackGuard()"
+            "  ret void"
+            "fail:"
+            "  call void (ptr, ptr, ...) @gcFloorFail(ptr @rtAbi.errInternal, ptr @rtAbi.noStack)"
+            "  unreachable"
+            "}"))
     "\n")
 
 fn declLines darwin: Bool asan: Bool -> (List String)
@@ -409,11 +461,17 @@ fn declLines darwin: Bool asan: Bool -> (List String)
 
 fn locateText facts: libc/TripleFacts -> (Result String String)
   (cond
-    ((= facts.triple "darwin-arm64") (ok (locateDarwinText facts)))
+    ((= facts.triple "darwin-arm64")
+      (match (guardLayout facts)
+        ((err e) (err e))
+        ((ok layout) (ok (locateDarwinText layout)))))
     ((stringStartsWith? facts.triple "linux-")
       (match (libc/structSize facts "pthread_attr_t")
         ((none) (err (str "ERR_LLVM_RTABI: libc.asl has no pthread_attr_t size for " facts.triple)))
-        ((some n) (ok (locateLinuxText n)))))
+        ((some n)
+          (match (guardLayout facts)
+            ((err e) (err e))
+            ((ok layout) (ok (locateLinuxText n layout)))))))
     (else (err (str "ERR_LLVM_RTABI: no native stack lookup for " facts.triple))))
 
 fn abiText facts: libc/TripleFacts asan: Bool -> (Result String String)

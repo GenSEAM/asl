@@ -218,7 +218,8 @@ fn linuxLimits -> (List (Pair String Int64))
 
 fn linuxSignals -> (List (Pair String Int64))
   (list (pair "SIGHUP" 1) (pair "SIGINT" 2) (pair "SIGQUIT" 3) (pair "SIGKILL" 9) (pair "SIGUSR1" 10) (pair "SIGUSR2" 12)
-        (pair "SIGPIPE" 13) (pair "SIGTERM" 15) (pair "SIGCONT" 18) (pair "SIGSTOP" 19) (pair "SIGWINCH" 28))
+        (pair "SIGPIPE" 13) (pair "SIGTERM" 15) (pair "SIGCONT" 18) (pair "SIGSTOP" 19) (pair "SIGWINCH" 28)
+        (pair "SIGBUS" 7) (pair "SIGSEGV" 11) (pair "SA_SIGINFO" 4) (pair "SA_ONSTACK" 134217728))
 
 fn linuxSignalHandlers -> (List (Pair String Int64))
   (list (pair "SIG_DFL" 0) (pair "SIG_IGN" 1))
@@ -313,7 +314,11 @@ fn linuxSigaction -> (Pair String StructFacts)
 
 fn linuxSiginfo -> (Pair String StructFacts)
   (pair "siginfo_t" (StructFacts :size 128 :fields (list
-    (pair "si_signo" 0) (pair "si_pid" 16))))
+    (pair "si_signo" 0) (pair "si_pid" 16) (pair "si_addr" 16))))
+
+fn linuxStackT -> (Pair String StructFacts)
+  (pair "stack_t" (StructFacts :size 24 :fields (list
+    (pair "ss_sp" 0) (pair "ss_flags" 8) (pair "ss_size" 16))))
 
 fn linuxSignalfdSiginfo -> (Pair String StructFacts)
   (pair "signalfd_siginfo" (StructFacts :size 128 :fields (list
@@ -339,7 +344,7 @@ fn linuxIovec -> (Pair String StructFacts)
 
 fn linuxCommonStructs -> (List (Pair String StructFacts))
   (list (linuxFlock) (linuxSockaddrIn) (linuxSockaddrUn) (linuxUtsname) (linuxTm) (linuxRusage) (linuxDirent) (linuxPollfd)
-        (linuxTimespec) (linuxTimeval) (linuxSpawnFileActions) (linuxSigset) (linuxSigaction) (linuxSiginfo) (linuxSignalfdSiginfo)
+        (linuxTimespec) (linuxTimeval) (linuxSpawnFileActions) (linuxSigset) (linuxSigaction) (linuxSiginfo) (linuxStackT) (linuxSignalfdSiginfo)
         (linuxPasswd) (linuxMsghdr) (linuxCmsghdr) (linuxIovec))
 
 fn linuxCommonVariadic -> (List (Pair String Bool))
