@@ -295,7 +295,7 @@ fn ! runTests -> Bool
     (do
       (assert noArgFixture "no argv is rejected with its recorded exit code")
       (assert (= noArgAsl.exitCode 2) "no argv exits 2")
-      (assert (listEmpty? rejected) "every rejected form returns a rejection receipt and its recorded exit code")
+      (assert (listEmpty? rejected) (str "every rejected form returns a rejection receipt and its recorded exit code: " (stringJoin rejected " | ")))
       (assert (listEmpty? dry) "every dry-run form returns its recorded receipt class and exit code")
       (assert planOn "ASL_LEON_PLAN=1 runs the plan-on dry-run path")
       (assert planBad "ASL_LEON_PLAN=2 is rejected")
