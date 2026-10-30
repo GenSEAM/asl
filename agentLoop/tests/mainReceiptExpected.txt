@@ -16,10 +16,10 @@ null
 null
 "spaced"
 null
-task
+attractor
 base
 wallBudget
-contextFile
+prefix
 gateTimeout
 model
 plan
