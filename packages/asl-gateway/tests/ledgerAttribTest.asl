@@ -45,7 +45,7 @@ fn ! loopAt home: String pending: srv/PendingCall -> srv/GatewayLoop
     :buckets (u/emptyBucketRegistry) :profiles (c/emptyProfilesCache)
     :wiring (dp/emptyWiring (u/UpstreamSettings :geminiUrl "" :geminiKey "" :groqUrl "" :ollamaUrl "" :groqKey "" :url "" :key "" :ollamaTimeoutSec 45.0))
     :wiringText none :families (list) :outbox (list) :pendingCall (some pending) :spreadState (mapEmpty) :spreadLast429 (mapEmpty)
-    :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :startMs 0)
+    :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs 0)
 
 fn ! settle! home: String tag: String usage: j/Json -> Bool
   (let [(pending (srv/PendingCall :intent "coder" :model "m" :latencyMs 10 :charge 0 :tag tag :params (ul/defaultCallParams) :profile "freeBulk"))

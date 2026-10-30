@@ -449,6 +449,9 @@ fn attribConsumer packed: String -> (Option String)
   (:f spreadLast429 (Map String Int64))
   (:f omni om/OmniState)
   (:f admitWaits (List Int64))
+  ; (:m :ref LIMITS-LEDGER-COST :do "rows the provider limit windows count over, and when they were last read from the shared ledger (0 = never)")
+  (:f limitRows (List ul/CallRow))
+  (:f limitSeededMs Int64)
   (:f startMs Int64))
 
 fn omniZeroKey -> om/Word64
@@ -619,15 +622,24 @@ fn ! cliRunSync! srv: GatewayLoop client: String args: (List (Pair String j/Json
       (pair srv (ch/outCli (bd/boundCliEffect! sctx client args)))
       (do (logLine! (str "(:gateway :cli :unavailable \"" (wire/asnEscape client) "\" :entry http)")) (pair srv (ch/outCli none)))))
 
+; (:m :ref LIMITS-LEDGER-COST :do "reads the shared ledger only when the held rows are unseeded or older than seedTtlMs, and keeps just the rows a configured window can still count")
+fn ! limitSeeded! srv: GatewayLoop text: String limits: (List c/GatewayLimit) nowMs: Int64 -> GatewayLoop
+  (if (not (lim/needsSeed? srv.limitSeededMs nowMs))
+    srv
+    (let [(sharedPath (optionOr (c/gatewaySharedUsagePathOverride text) (ul/defaultSharedUsagePath srv.home)))
+          (rows (resultOr (ul/readRows! sharedPath) (list)))]
+      (with srv :limitRows (lim/keepRows rows (lim/longestStartMs limits nowMs)) :limitSeededMs nowMs)))
+
 fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/ChatOutcome)
   (match eff
     ; (:m :ref GW-LIMIT-WINDOWS :do "counts the shared usage ledger against the config's limit rows for this provider and alias; empty means go ahead")
     ((ch/effLimit provider alias)
       (let [(text (optionOr srv.wiringText ""))
-            (sharedPath (optionOr (c/gatewaySharedUsagePathOverride text) (ul/defaultSharedUsagePath srv.home)))
-            (rows (resultOr (ul/readRows! sharedPath) (list)))
-            (verdict (lim/decide (c/gatewayLimitsFromText text) rows provider alias (/ (nowNs) 1000000)))]
-        (pair srv (ch/outStrings (match verdict ((some v) (list v.outcome v.reason)) ((none) (list)))))))
+            (limits (c/gatewayLimitsFromText text))
+            (now (/ (nowNs) 1000000))
+            (srv1 (limitSeeded! srv text limits now))
+            (verdict (lim/decide limits srv1.limitRows provider alias now))]
+        (pair srv1 (ch/outStrings (match verdict ((some v) (list v.outcome v.reason)) ((none) (list)))))))
     ((ch/effRealpath p) (pair srv (ch/outPath (resultOr (realPath p) p))))
     ((ch/effIsDir p) (pair srv (ch/outBool (match (fileStat p) ((ok st) st.isDir) ((err _) false)))))
     ((ch/effClock) (pair srv (ch/outFloat (/ (int64ToFloat64 (nowNs)) 1000000000.0))))
@@ -670,7 +682,7 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
         (do (match wrote ((ok _) true) ((err e) (logLine! (str "(:gateway :statsLedger :error \"" (wire/asnEscape e) "\")"))))
           (do (match wroteShared ((ok _) true) ((err e) (logLine! (str "(:gateway :sharedUsageLedger :error \"" (wire/asnEscape e) "\")"))))
             (do (logLine! (str "(:gateway :usage :provider \"" (wire/asnEscape p) "\" :alias \"" (wire/asnEscape alias) "\" :outcome \"" (wire/asnEscape o) "\")"))
-              (pair (loopPending (with srv :wiring (dp/settledConsumed srv.wiring)) none) ch/outDone))))))
+              (pair (loopPending (with srv :wiring (dp/settledConsumed srv.wiring) :limitRows (lim/withOwnRow srv.limitRows srv.limitSeededMs row)) none) ch/outDone))))))
     ((ch/effUsageFallback p a)
       (do (logLine! (str "(:gateway :fallback :provider \"" (wire/asnEscape p) "\" :alias \"" (wire/asnEscape a) "\")")) (pair srv ch/outDone)))
     ; (:m :ref GW-SPREAD-LIVE-20261018 :do "the only place rt/spreadOrder is ever called: real per-profile+intent state read from and written back to srv.spreadState, real wall clock, real breaker availability via srv.breaker keyed by the pool the caller resolved per alias -- chat.asl and router.asl both stay clock/breaker-free")
@@ -1286,7 +1298,7 @@ fn ! gatewayServeWith! listenerFd: Int64 upstreamPort: Int64 families: (List dp/
       :buckets (u/emptyBucketRegistry) :profiles (c/emptyProfilesCache)
       :wiring (dp/emptyWiring (resultOr (u/upstreamSettings env) (u/UpstreamSettings :geminiUrl "" :geminiKey "" :groqUrl "" :ollamaUrl "" :groqKey "" :url "" :key "" :ollamaTimeoutSec 45.0)))
       :wiringText none :families families :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty)
-      :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey)) :admitWaits (list) :startMs (nowMs!))))
+      :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs (nowMs!))))
 
 
 ; (:m :ref GW-BREAKER-STALE-20261018 :tags (breaker config) :do "the breaker's cooldown comes from the loaded config's (:gateway ... :breakerCooldownSec N) when present, else the 600s default via makeBreakerState's own guard; a config that never sets it is unchanged from before. BreakerState itself is held only in this GatewayLoop value, freshly built here on every linkOpen! call -- there is no file-backed persistence across processes, so GW-BREAKER-STALE-20261018's '45-cell sweep stuck open' incident was one long-lived in-process breaker outlasting a fixed 600s cooldown within a single sweep run, not state surviving a restart")
@@ -1316,7 +1328,7 @@ fn ! linkOpenWith! env: (Map String String) home: String rootDir: String familie
                         :breaker (b/makeBreakerState (optionOr (c/gatewayBreakerCooldownSecOverride text) 600))
                         :buckets (u/emptyBucketRegistry) :profiles (pairFirst loaded) :wiring w :wiringText (some text)
                         :families families :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty)
-                        :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey)) :admitWaits (list) :startMs (nowMs!)))))))))))
+                        :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs (nowMs!)))))))))))
 
 fn outboxFor srv: GatewayLoop fd: Int64 -> (Option String)
   (optionMap pairSecond (listHead (filter (fn [(x (Pair Int64 String))] -> Bool (= (pairFirst x) fd)) srv.outbox)))

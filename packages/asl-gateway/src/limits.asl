@@ -1,5 +1,5 @@
 (module aslGateway/limits
-  :x [Verdict windowStartMs windowEndMs sentRow? usedCalls usedTokens decide hasLimitFor?]
+  :x [seedTtlMs needsSeed? longestStartMs keepRows withOwnRow Verdict windowStartMs windowEndMs sentRow? usedCalls usedTokens decide hasLimitFor?]
   :i [(aslGateway/config :a c)
       (aslGateway/usageLedger :a ul)
       (aslGateway/localTime :a lt)])
@@ -101,3 +101,21 @@ fn decide limits: (List c/GatewayLimit) rows: (List ul/CallRow) provider: String
        (match paced
          ((some p) (some (Verdict :outcome (str "pace:" (pairFirst p).window) :reason (str "provider " provider " " (pairFirst p).window " use is ahead of an even spread"))))
          ((none) none)))))
+
+; (:m :ref LIMITS-LEDGER-COST :do "the server counts limit windows from rows it holds, not from a whole-file ledger read per attempt: it seeds them once from the shared ledger, adds each row it writes itself, and reseeds every seedTtlMs to pick up other writers. Adopted: 300 s")
+fn seedTtlMs -> Int64
+  300000
+
+fn needsSeed? seededMs: Int64 nowMs: Int64 -> Bool
+  (or (<= seededMs 0) (>= (- nowMs seededMs) (seedTtlMs)))
+
+; (:m :ref LIMITS-LEDGER-COST :do "the oldest instant any configured window can still count: rows before it are dropped at seeding, so a month window is the only thing that keeps a month of rows")
+fn longestStartMs limits: (List c/GatewayLimit) nowMs: Int64 -> Int64
+  (fold (fn [(acc Int64) (l c/GatewayLimit)] -> Int64 (min acc (windowStartMs l.window nowMs))) nowMs limits)
+
+fn keepRows rows: (List ul/CallRow) fromMs: Int64 -> (List ul/CallRow)
+  (filter (fn [(r ul/CallRow)] -> Bool (>= r.atMs fromMs)) rows)
+
+; (:m :ref LIMITS-LEDGER-COST :do "a row this server just wrote joins the held rows only once they were seeded; before that the first seed reads it from the ledger")
+fn withOwnRow rows: (List ul/CallRow) seededMs: Int64 row: ul/CallRow -> (List ul/CallRow)
+  (if (> seededMs 0) (cons row rows) rows)
