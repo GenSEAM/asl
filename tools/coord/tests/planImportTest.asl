@@ -57,6 +57,24 @@ fn ! testImport -> Bool
         (assert (not (stringContains? parked3 "I9")) (str "and leaves parked.asn: " parked3))
         true))
 
+; (:m :ref PLANIMPORT-PARKED-WIPE :do "an import from a second (side) ledger keeps the parked rows of ids it does not carry; it still replaces the rows of its own ids")
+fn ! testSideLedgerKeepsParked -> Bool
+  (let [(store (scratchStore "side"))
+        (_ (dirCreate store))
+        (main (pi/plan! "(:u :id P1 :auto true :do \"main parked\" :gate \"true\")\n" store "dev" false))
+        (side (pi/plan! "(:u :id S1 :queue conductor :do \"side row\" :owns (\"docs/s.md\") :gate \"true\")\n(:u :id S2 :queue conductor :do \"side parked\" :gate \"true\")\n" store "dev" false))
+        (parked (resultOr (fileReadString (str store "/parked.asn")) ""))
+        (sideAgain (pi/plan! "(:u :id S2 :queue conductor :do \"side parked\" :owns (\"docs/s2.md\") :gate \"true\")\n" store "dev" false))
+        (parked2 (resultOr (fileReadString (str store "/parked.asn")) ""))
+        (_ (pathRemove store))]
+    (do (assert (and (ok? main) (ok? side)) "both imports run")
+        (assert (stringContains? parked ":id \"P1\" :need owns") (str "the main ledger's parked row survives a side import: " parked))
+        (assert (stringContains? parked ":id \"S2\" :need owns") (str "the side ledger's own parked row is written: " parked))
+        (assert (and (ok? sideAgain) (not (stringContains? parked2 "S2"))) (str "a side row that gained :owns leaves parked.asn: " parked2))
+        (assert (stringContains? parked2 ":id \"P1\"") (str "and P1 still stays: " parked2))
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testImport) "plan import on a fixture ledger")
+      (assert (testSideLedgerKeepsParked) "side-ledger import keeps parked rows")
       true)

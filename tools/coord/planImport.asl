@@ -68,6 +68,14 @@ fn parkedRow r: PlanRow need: String -> String
 fn report r: Report -> String
   (str "(:import :put " (st/qList r.put) " :skipped " (st/qList r.skipped) " :parked " (st/qList r.parked) " :bad " (st/qList r.bad) ")")
 
+; (:m :ref PLANIMPORT-PARKED-WIPE :do "parked rows of ids this ledger does not carry and the store does not hold stay, so an import from a side ledger no longer wipes the main ledger's parked rows")
+fn keptParked existing: String ids: (List String) -> (List String)
+  (filter (fn [(line String)] -> Bool
+            (match (st/rowFields line "parked")
+              ((err _) false)
+              ((ok fs) (not (listContains? ids (st/textField fs "id"))))))
+          (stringLines existing))
+
 ; (:m :ref COND4 :do "plan! LEDGER-TEXT STORE BASE DRY: rows to tasks; parked.asn is rewritten from the rows still parked, so a row that gained :owns leaves it at the next import")
 fn ! plan! text: String store: String base: String dry: Bool -> (Result Report String)
   (match (match (st/readUnits! store) ((ok us) (ok us)) ((err _) (ok (list))))
@@ -86,7 +94,9 @@ fn ! plan! text: String store: String base: String dry: Bool -> (Result Report S
                                     (let [(_ (if (fileExists? (str store "/tasks/" r.id ".txt")) (ok ()) (fileWrite (str store "/tasks/" r.id ".txt") r.doc)))]
                                       (st/put! store (st/Task :id r.id :owns r.owns :reads r.reads :gate r.gate :channel r.channel :model "" :base base :after r.after :st "queued" :epoch 0 :receipt ""))))))
                           (filter (fn [(r PlanRow)] -> Bool (listContains? keep r.id)) fresh)))
-            (_ (if dry (ok ()) (fileWrite (str store "/parked.asn") (str (stringJoin (map (fn [(p (Pair PlanRow String))] -> String (parkedRow (pairFirst p) (pairSecond p))) needs) "\n") (if (listEmpty? needs) "" "\n")))))]
+            (parkedLines (listAppend (keptParked (resultOr (fileReadString (str store "/parked.asn")) "") (listAppend inStore (map (fn [(r PlanRow)] -> String r.id) rows)))
+                                     (map (fn [(p (Pair PlanRow String))] -> String (parkedRow (pairFirst p) (pairSecond p))) needs)))
+            (_ (if dry (ok ()) (fileWrite (str store "/parked.asn") (str (stringJoin parkedLines "\n") (if (listEmpty? parkedLines) "" "\n")))))]
         (ok (Report :put (map pairFirst (filter (fn [(p (Pair String (Result String String)))] -> Bool (ok? (pairSecond p))) results))
                     :skipped (filter (fn [(i String)] -> Bool (listContains? inStore i)) (map (fn [(r PlanRow)] -> String r.id) rows))
                     :parked (map (fn [(p (Pair PlanRow String))] -> String (str (let [(r (pairFirst p))] r.id) ":" (pairSecond p))) needs)
