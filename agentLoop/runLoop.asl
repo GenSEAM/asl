@@ -1,5 +1,5 @@
 (module asl/agentLoop/runLoop
-  :x [withUnbacked specCheckRun! journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
+  :x [withUnbacked specCheckRun! journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
   :i [(asl/agentLoop/loopState :a s) (asl/agentLoop/loop :a lp)
       (asl/agentLoop/context :a ctx) (asl/agentLoop/journal :a jr)
       (asl/agentLoop/gitOps :a go) (asl/agentLoop/runOps :a ro) (asl/agentLoop/reply :a rp)
@@ -19,6 +19,11 @@ schema ProviderRun
 enum LoopSetup
   (ready LoopRun)
   (early s/RunResult)
+
+; (:m :ref SE3-POOL-DRIVER :do "what opening a provider run gives back: the run to step, or the finished result of a setup that stopped early")
+enum LoopOpen
+  (openRun ProviderRun)
+  (openDone s/RunResult)
 
 fn withState run: LoopRun state: s/LoopState -> LoopRun
   (LoopRun :state state :procs run.procs :written run.written :session run.session
@@ -903,32 +908,44 @@ fn ! runLoopWith! env: s/LoopEnv body: (fn [s/LoopEnv LoopRun] -> (Pair LoopRun 
           ((err e) (emptyResultWith env finished.session "failed" (some e) finished.state.turn none (list) none none none finished.state.baselineGreen))
           ((ok _) result)))))
 
-fn ! runBodyWithProvider! env: s/LoopEnv wrapped: ProviderRun body: (fn [s/LoopEnv ProviderRun] -> (Pair ProviderRun s/Step)) -> ProviderRun
+; (:m :ref SE3-POOL-DRIVER :do "the provider run as three steps a driver can interleave: loopOpen! (setup, early results already cleaned up), loopHead! (the head decision of one turn), loopFinish! (finish and cleanup); runBodyWithProvider! and runLoopWithProviderWatched! are composed from them and behave as before")
+fn ! loopOpen! env: s/LoopEnv provider: pv/Provider parent: (Option Int64) -> LoopOpen
+  (match (setupWatched! env parent)
+    ((early result)
+      (match (cleanup! env result.session)
+        ((err e) (openDone (emptyResult env result.session "failed" (some e) result.turns none (list) none none none)))
+        ((ok _) (openDone result))))
+    ((ready run)
+      (let [_memoBegun (ao/memoRunBeginIfOn! (absoluteRoot! env.rootDir) run.session)]
+        (openRun (ProviderRun :run run :provider provider :history run.state.history)))))
+
+fn ! loopHead! env: s/LoopEnv wrapped: ProviderRun -> (Pair ProviderRun s/Step)
   (match (head! env wrapped.run.state wrapped.run.parseDefectStreak)
     ((pair current step)
-      (let [headed (ProviderRun :run (withState wrapped.run current) :provider wrapped.provider :history wrapped.history)]
-        (match step
-          ((proceed)
-            (match (body env headed)
-              ((pair next nextStep)
-                (match nextStep ((stop) next) ((nextTurn) (runBodyWithProvider! env next body)) ((proceed) (runBodyWithProvider! env next body))))))
-          ((nextTurn) headed)
-          ((stop) headed)))))
+      (pair (ProviderRun :run (withState wrapped.run current) :provider wrapped.provider :history wrapped.history) step)))
+
+fn ! loopFinish! env: s/LoopEnv finished: ProviderRun -> s/RunResult
+  (let [completed finished.run
+        result (finish! env completed)]
+    (match (cleanup! env completed.session)
+      ((err e) (emptyResultWith env completed.session "failed" (some e) completed.state.turn none (list) none none none completed.state.baselineGreen))
+      ((ok _) result)))
+
+fn ! runBodyWithProvider! env: s/LoopEnv wrapped: ProviderRun body: (fn [s/LoopEnv ProviderRun] -> (Pair ProviderRun s/Step)) -> ProviderRun
+  (match (loopHead! env wrapped)
+    ((pair headed step)
+      (match step
+        ((proceed)
+          (match (body env headed)
+            ((pair next nextStep)
+              (match nextStep ((stop) next) ((nextTurn) (runBodyWithProvider! env next body)) ((proceed) (runBodyWithProvider! env next body))))))
+        ((nextTurn) headed)
+        ((stop) headed))))
 
 fn ! runLoopWithProvider! env: s/LoopEnv provider: pv/Provider body: (fn [s/LoopEnv ProviderRun] -> (Pair ProviderRun s/Step)) -> s/RunResult
   (runLoopWithProviderWatched! env provider none body)
 
 fn ! runLoopWithProviderWatched! env: s/LoopEnv provider: pv/Provider parent: (Option Int64) body: (fn [s/LoopEnv ProviderRun] -> (Pair ProviderRun s/Step)) -> s/RunResult
-  (match (setupWatched! env parent)
-    ((early result)
-      (match (cleanup! env result.session)
-        ((err e) (emptyResult env result.session "failed" (some e) result.turns none (list) none none none))
-        ((ok _) result)))
-    ((ready run)
-      (let [_memoBegun (ao/memoRunBeginIfOn! (absoluteRoot! env.rootDir) run.session)
-            finished (runBodyWithProvider! env (ProviderRun :run run :provider provider :history run.state.history) body)
-            completed finished.run
-            result (finish! env completed)]
-        (match (cleanup! env completed.session)
-          ((err e) (emptyResultWith env completed.session "failed" (some e) completed.state.turn none (list) none none none completed.state.baselineGreen))
-          ((ok _) result)))))
+  (match (loopOpen! env provider parent)
+    ((openDone result) result)
+    ((openRun wrapped) (loopFinish! env (runBodyWithProvider! env wrapped body))))

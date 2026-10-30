@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
   :i [(asl/agentLoop/core :a c)
       (asl/agentLoop/diff :a diff)
       (asl/agentLoop/providers :a pv)
@@ -1591,9 +1591,8 @@ fn ! routedCall! ra: RunArgs rs: RouteSetup rootDir: String path: String turn: I
         (pv/Turn :provider p :reply (ok (some r.text)) :meta meta))
       (max 0 (- r.calls 1))))
 
-fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system: String env: ls/LoopEnv
-    providerCall: (fn [pv/Provider String String] -> pv/Turn) wrapped: rl/ProviderRun -> (Pair rl/ProviderRun ls/Step)
-  (if (parentGone? ra.parentPid)
+; (:m :ref SE3-POOL-DRIVER :do "the orphan stop of one turn, apart from liveBody! so a pool driver stops its sessions the same way: journal the signal, escalate with reason parentGone")
+fn ! liveGone! ra: RunArgs path: String wrapped: rl/ProviderRun -> (Pair rl/ProviderRun ls/Step)
     (let [state wrapped.run.state
           pid (stringFromInt64 (optionOr ra.parentPid 0))
           _ (fileAppend path (str "(:turn " (stringFromInt64 state.turn) " :signal :parentGone :reason \"parent pid " pid " is gone\")\n"))
@@ -1601,6 +1600,11 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
                  state.allGateResults state.lastGates "escalated" (some "parentGone")
                  (some (str "(:escalate :reason \"parent pid " pid " is gone after " (stringFromInt64 state.turn) " turns\")")) state.runStarted)]
       (pair (rl/ProviderRun :run (rl/withState wrapped.run next) :provider wrapped.provider :history wrapped.history) (stop)))
+
+fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system: String env: ls/LoopEnv
+    providerCall: (fn [pv/Provider String String] -> pv/Turn) wrapped: rl/ProviderRun -> (Pair rl/ProviderRun ls/Step)
+  (if (parentGone? ra.parentPid)
+    (liveGone! ra path wrapped)
     (liveTurn! ra repoRoot rootDir path system env providerCall wrapped))
 
 ; (:m :ref LEON-ECHO-GUARD :do "every user turn ends with one imperative line naming the next required form, so a weak model that continues the prompt text has an instruction to follow")
@@ -1875,14 +1879,29 @@ fn liveExitCode r: LoopResult -> Int64
                         (match r.specCheck ((some v) (= v.verdict "unavailable")) ((none) false))))]
     (if (and (or (= r.status "ok") reviewerOnly) (= r.unbacked 0)) 0 1))
 
-fn ! executeLive ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderEnv -> MainResult
+; (:m :ref SE3-POOL-DRIVER :do "executeLive in two halves: liveSetup! builds everything a run needs (journal, provider, system prompt, loop env) or the rejection, liveRun runs it blocking and liveResult turns a run result into the receipt; a pool driver prepares many sessions with liveSetup! and ends each with liveResult")
+schema LiveSession
+  (:f ra RunArgs)
+  (:f repoRoot String)
+  (:f rootDir String)
+  (:f path String)
+  (:f system String)
+  (:f env ls/LoopEnv)
+  (:f turnProvider pv/Provider)
+  (:f providerCall (fn [pv/Provider String String] -> pv/Turn))
+
+enum LivePrep
+  (prepared LiveSession)
+  (prepRejected MainResult)
+
+fn ! liveSetup! ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderEnv -> LivePrep
   (let [ra (with ra0 :route (codeRouteSetup! ra0.intent (ac/configText! rootDir) repoRoot env))]
   (match (liveJournal ra rootDir)
-    ((err e) (rejectWith (str ":error ERR_JOURNAL :message \"" (c/escapeAsn e) "\"") 1))
+    ((err e) (prepRejected (rejectWith (str ":error ERR_JOURNAL :message \"" (c/escapeAsn e) "\"") 1)))
     ((ok sp)
       ; (:m :ref LEON-ATTRIB-20261028 :do "the provider is made with the journal's session id, so the X-ASL-Session of every gateway call is the id the journal and the receipt carry and the ledger row joins the session")
       (match (pv/makeProvider! ra.backend "auto" rootDir ra.model ra.timeout (pairFirst sp) ra.queueTimeout ra.timeoutSet env (optionOr ra.intent "auto"))
-        ((err e) (rejectWith (str ":error ERR_BACKEND :message \"" (c/escapeAsn (pv/errorMessage e)) "\"") 1))
+        ((err e) (prepRejected (rejectWith (str ":error ERR_BACKEND :message \"" (c/escapeAsn (pv/errorMessage e)) "\"") 1)))
         ((ok provider0)
           (let [provider provider0
                 turnProvider (pv/withTools provider0 (sessionTools ra.nativeTools))
@@ -1894,7 +1913,7 @@ fn ! executeLive ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderE
                 prompt (jr/buildSystemPromptDrop repoRoot ra.task rootDir ra.base
                          ra.gates (some tokens) ra.plan (prefixDrop ra.prefix))]
             (match prompt
-              ((err e) (rejectWith (str ":error ERR_HARNESS :message \"" (c/escapeAsn e) "\"") 1))
+              ((err e) (prepRejected (rejectWith (str ":error ERR_HARNESS :message \"" (c/escapeAsn e) "\"") 1)))
               ((ok system0)
                 (let [system system0
                       call (fn [sys user] (pv/nextTurn! turnProvider sys user))
@@ -1912,11 +1931,21 @@ fn ! executeLive ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderE
                         :next call :advise (pairFirst hooks) :review (pairSecond hooks)
                         :grade (fn [role sys msg] (liveGrader provider graderIntent graderProfile path sys msg))
                         :newId (fn [] session) :now (fn [] (ao/nowMono))
-                        :sleep (fn [seconds] (do (if (> seconds 0) (sleepMs (* seconds 1000)) ()) true)))
-                      result (rl/runLoopWithProviderWatched! liveEnv turnProvider ra.parentPid (fn [le wrapped] (liveBody! ra repoRoot rootDir path system le providerCall wrapped)))
-                      receipt (loopResultOf ra rootDir result (liveJournalUsage! rootDir result.journal))
-                      line (formatReceipt receipt)]
-                  (MainResult :stdout line :exitCode (liveExitCode receipt)))))))))))
+                        :sleep (fn [seconds] (do (if (> seconds 0) (sleepMs (* seconds 1000)) ()) true)))]
+                  (prepared (LiveSession :ra ra :repoRoot repoRoot :rootDir rootDir :path path :system system :env liveEnv :turnProvider turnProvider :providerCall providerCall)))))))))))
+
+fn ! liveResult ls: LiveSession result: ls/RunResult -> MainResult
+  (let [receipt (loopResultOf ls.ra ls.rootDir result (liveJournalUsage! ls.rootDir result.journal))]
+    (MainResult :stdout (formatReceipt receipt) :exitCode (liveExitCode receipt)))
+
+fn ! liveRun ls: LiveSession -> MainResult
+  (liveResult ls (rl/runLoopWithProviderWatched! ls.env ls.turnProvider ls.ra.parentPid
+    (fn [le wrapped] (liveBody! ls.ra ls.repoRoot ls.rootDir ls.path ls.system le ls.providerCall wrapped))))
+
+fn ! executeLive ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderEnv -> MainResult
+  (match (liveSetup! ra0 repoRoot rootDir env)
+    ((prepRejected r) r)
+    ((prepared ls) (liveRun ls)))
 
 fn ! executeDryRun ra: RunArgs repoRoot: String rootDir: String env: pv/ProviderEnv -> MainResult
   (match (pv/buildDryRunInfo! ra.backend "auto" rootDir ra.model ra.timeout ra.queueTimeout env)
@@ -1951,9 +1980,9 @@ fn resumed ra: RunArgs st: ResumeState -> RunArgs
            :contextTokens (match ra.contextTokens ((some t) (if (= t 0) st.contextTokens (some t))) ((none) st.contextTokens))
            :plan ra.plan :attractor ra.attractor :nativeTools ra.nativeTools :prefix ra.prefix :resume (some st) :pool ra.pool :parentPid ra.parentPid :route ra.route)
 
-fn ! dispatch ps: (List (Pair String j/Json)) repoRoot: String rootDir: String timeout: Int64 queueTimeout: Int64 plan: Bool -> MainResult
-  (let [resumeV (paramOr ps "resume" (j/jnull))
-        ra (RunArgs :task (textValue (paramOr ps "task" (j/jstr ""))) :modeHint (optText (paramGet ps "modeHint"))
+; (:m :ref SE3-POOL-DRIVER :do "the run arguments of an invocation's parameters, as dispatch builds them, so a pool driver starts a run from the same parameters")
+fn ! runArgsOf ps: (List (Pair String j/Json)) timeout: Int64 queueTimeout: Int64 plan: Bool -> RunArgs
+  (RunArgs :task (textValue (paramOr ps "task" (j/jstr ""))) :modeHint (optText (paramGet ps "modeHint"))
                     :owns (listValue (paramOr ps "owns" (j/jarr (list)))) :gates (listValue (paramOr ps "gates" (j/jarr (list))))
                     :backend (textValue (paramOr ps "backend" (j/jstr "agy"))) :model (optionOr (optText (paramGet ps "model")) "")
                     :timeout timeout :timeoutSet (paramHas ps "timeout") :queueTimeout queueTimeout
@@ -1966,6 +1995,10 @@ fn ! dispatch ps: (List (Pair String j/Json)) repoRoot: String rootDir: String t
                     :base (textValue (paramOr ps "base" (j/jstr ""))) :remote (textValue (paramOr ps "remote" (j/jstr ""))) :contextTokens (intValue (paramOr ps "contextTokens" (j/jnull)))
                     :plan plan :attractor (textValue (paramOr ps "attractor" (j/jstr ""))) :nativeTools (textValue (paramOr ps "nativeTools" (j/jstr ""))) :prefix (textValue (paramOr ps "prefix" (j/jstr ""))) :resume none :parentPid (intValue (paramOr ps "parentPid" (j/jnull))) :route none
                     :pool (po/poolSelf (textValue (paramOr ps "poolChan" (j/jstr ""))) (optionOr (intValue (paramOr ps "poolIdx" (j/jint -1))) -1)))
+
+fn ! dispatch ps: (List (Pair String j/Json)) repoRoot: String rootDir: String timeout: Int64 queueTimeout: Int64 plan: Bool -> MainResult
+  (let [resumeV (paramOr ps "resume" (j/jnull))
+        ra (runArgsOf ps timeout queueTimeout plan)
         dry (match (paramOr ps "dryRun" (j/jbool false)) ((j/jbool b) b) (_ false))]
     (cond
       ((and (truthy resumeV) (not (paramHas ps "answer"))) (resumeReport (textValue resumeV) rootDir))
