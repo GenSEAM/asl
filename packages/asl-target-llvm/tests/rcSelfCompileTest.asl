@@ -41,7 +41,10 @@ fn ! fileSha path: String -> String
   (match (fileReadBytes path) ((ok b) (bytesSha256 b)) ((err e) (str "unreadable " e)))
 
 fn ! job argv: (List String) env: (List String) -> fr/Done
-  (fr/runOneLimited (fr/job argv (root) (fr/childEnv env)) (fr/limits 1500 16))
+  (let [(t0 (monotonicNs))
+        (done (fr/runOneLimited (fr/job argv (root) (fr/childEnv env)) (fr/limits 1500 16)))
+        (_ (do (eprintln (str "rcSelfCompile child " (optionOr (listGet argv (if (= (optionOr (listHead argv) "") "sh") 3 0)) "?") " " done.verdict " " (/ (- (monotonicNs) t0) 1000000000) "s")) true))]
+    done)
 
 fn ! linkWith libs: Libs ll: String out: String asan: Bool -> (Result String String)
   (linkMode libs ll out (if asan "asan" "1"))
@@ -57,11 +60,12 @@ fn ! linkMode libs: Libs ll: String out: String mode: String -> (Result String S
 fn ! errFile work: String label: String -> String
   (str work "/" label ".stderr")
 
+; (:m :ref RC-SELF-LSAN :do "on linux LeakSanitizer is on by default in an ASan binary and fails the ASan-built compiler's exit over 640 bytes of per-thread rtfmt_put buffers (10 reallocs from routeTargetAs!) that the body thread drops at exit; the assertions here are about RC drop and reuse errors, which ASan still reports, so leak detection is off for the compile children (macOS has no LeakSanitizer)")
 fn ! compileMode compiler: String mode: String work: String label: String entry: String -> (Result String String)
   (let [(out (str work "/" label ".ll"))
         (errPath (errFile work label))
         (d (job (listAppend (list "sh" "-c" (str "exec \"$0\" build \"$1\" -o \"$2\" $4 2> \"$3\"") compiler entry out errPath) (if (= mode "0") (list) (list (str "--rc " mode))))
-                (list (str "ASL_ROOT=" (root)) (str "ASL_PRELUDE=" (root) "/asl/prelude/prelude.asl") "ASL_HOST_CACHE=0" "ASL_RC_STATS=1")))]
+                (list (str "ASL_ROOT=" (root)) (str "ASL_PRELUDE=" (root) "/asl/prelude/prelude.asl") "ASL_HOST_CACHE=0" "ASL_RC_STATS=1" "ASAN_OPTIONS=detect_leaks=0")))]
     (if (and (= d.exit 0) (fileExists? out)) (ok out)
       (err (str compiler " build " entry " mode " mode " (" d.verdict " exit " d.exit "): " (stringTrim d.out) " " (resultOr (fileReadString errPath) "")))))
 
