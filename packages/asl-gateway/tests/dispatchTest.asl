@@ -385,7 +385,7 @@ fn ! socketChecks -> Bool
                    (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") "FIXA_KEY=aKey" "RUNPOD_API_KEY=rpKey" (nativeCliCacheEnvRow!)))
         (spawned (procSpawnv (list "/bin/sh" "-c" command) (none) (some env)))
         (pid (match spawned ((ok sp) sp.pid) ((err _) 0)))
-        (gatewayPort (if (> pid 0) (waitPort! readyPath 500) 0))
+        (gatewayPort (if (> pid 0) (waitPort! readyPath 12000) 0))
         (first (exchange! listener gatewayPort (list)))
         (second (exchange! listener gatewayPort first.seen))
         (cfgPath (str temp "/.asl/gateway.asn"))
