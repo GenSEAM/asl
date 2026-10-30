@@ -5,7 +5,8 @@
       (asl-target-llvm/sys :a sys)
       (asl-target-llvm/sysNet :a sysNet)
       (asl-target-llvm/libc :a libc)
-      (asl-tools/fleet/run :a run)])
+      (asl-tools/fleet/run :a run)
+      (asl-target-llvm/tests/llvmTools :a lt)])
 
 ; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): runTests used to spawn the leftover host binary live (`asl-host run <work>/tcpEchoSrc.asl` / unixEchoSrc.asl) and compare only its exitCode, both against a hardcoded literal 65 and against the native build's own exit. The host is gone; a real run of both fixtures against the leftover host binary at ~/projects/asex/asl/host/out/asl-host, read-only, outside this worktree, confirmed exitCode 65 for both the tcp and the unix echo fixture (verified at port time, not guessed), so the now-dead `(assert (= tcpHost.exitCode 65) ...)`/`(assert (= unixHost.exitCode 65) ...)` self-checks (tautological once that value is a recorded constant rather than a live run) are dropped, and the native-vs-host comparison becomes native-vs-recorded-65 directly")
 
@@ -57,7 +58,7 @@ fn ! writeAndLink work: String name: String text: String -> Bool
         true))
 
 fn ! opt -> String
-  (if (= (sh "test -x /opt/homebrew/opt/llvm/bin/opt").exitCode 0) "/opt/homebrew/opt/llvm/bin/opt" "opt")
+  (lt/optPath!)
 
 fn ! verifies? work: String name: String -> Bool
   (let [(out (sh (str (opt) " -passes=verify -disable-output " work "/" name ".ll")))]

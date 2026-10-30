@@ -5,7 +5,8 @@
       (asl-target-llvm :a targetLlvm)
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/target :a target)
-      (asl-tools/fleet/run :a run)])
+      (asl-tools/fleet/run :a run)
+      (asl-target-llvm/tests/llvmTools :a lt)])
 
 fn trapSource name: String expression: String -> String
   (str "(module " name " :x [main] :i [])\n\nfn ! main -> (Result Int64 String)\n  " expression)
@@ -98,10 +99,10 @@ fn ! wasmTrapCase name: String source: String expectedMessage: String -> Bool
         (obj (str work "/main.o"))
         (wasm (str work "/main.wasm"))
         (node (nodeBin))
-        (llc "/opt/homebrew/opt/llvm/bin/llc")
-        (nm "/opt/homebrew/opt/llvm/bin/llvm-nm")
-        (ld "/opt/homebrew/opt/lld/bin/wasm-ld")
-        (clang "/usr/bin/clang -Wno-override-module")
+        (llc (lt/llcPath!))
+        (nm (lt/llvmNmPath!))
+        (ld (lt/wasmLdPath!))
+        (clang (str (lt/clangPath!) " -Wno-override-module"))
         (nodeCode "const fs=require(\"fs\");let i,got=\"\",next=65536;const alloc=n=>{const p=next;next=(next+Math.max(Number(n),1)+7)&~7;while(next>i.exports.memory.buffer.byteLength)i.exports.memory.grow(1);return p};const mod=new WebAssembly.Module(fs.readFileSync(process.argv[1]));const imports={};for(const x of WebAssembly.Module.imports(mod)){imports[x.module] ||= {};imports[x.module][x.name]=(...a)=>{if(x.module===\"asl\"&&x.name===\"trap\"){const b=new Uint8Array(i.exports.memory.buffer);const z=b.indexOf(0,a[0]);const d=new TextDecoder();got=d.decode(b.subarray(a[0],z))+\"|\"+d.decode(b.subarray(a[1],a[1]+Number(a[2])));throw new Error(\"trap\")}if(x.name===\"asl_alloc\")return alloc(a[1]);if(x.name===\"malloc\")return alloc(a[0]);if(x.name===\"calloc\")return alloc(Number(a[0])*Number(a[1]));if(x.name===\"realloc\"){const p=alloc(a[1]);new Uint8Array(i.exports.memory.buffer).set(new Uint8Array(i.exports.memory.buffer,a[0],Number(a[1])),p);return p}return 0}}i=new WebAssembly.Instance(mod,imports);try{i.exports.main()}catch(e){}if(got)process.stdout.write(got);else process.exit(1);")]
     (do
       (assert (ok? (dirCreate work)) "creates the wasm trap test directory")

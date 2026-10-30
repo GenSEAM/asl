@@ -1,7 +1,8 @@
 (module asl-target-llvm/tests/wasmTailCallTest
   :x [runTests]
   :i [(asl-target-llvm/target :a target)
-      (asl-target-llvm/wasmLink :a wl)])
+      (asl-target-llvm/wasmLink :a wl)
+      (asl-target-llvm/tests/llvmTools :a lt)])
 
 fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
@@ -61,7 +62,7 @@ fn ! runTests -> Bool
           (assert (ok? (dirCreate work)) "creates build directory")
           (assert (ok? (fileWrite input src)) "writes fixture")
           (assert (ok? (fileWrite wasmLl wasmText)) "lowers fixture for wasm32")
-          (let [(nativeLinked (sh (str "/usr/bin/cc -O2 -x ir " (shellQuote input) " -o " (shellQuote nativeBin))))]
+          (let [(nativeLinked (sh (str (lt/clangPath!) " -Wno-override-module -O2 -x ir " (shellQuote input) " -o " (shellQuote nativeBin))))]
             (assert (= nativeLinked.exitCode 0) (str "native fixture compiles: " nativeLinked.stderr)))
           (let [(compiled (sh (str (shellQuote llcBin) " -mtriple=wasm32-unknown-unknown -mattr=+bulk-memory,+tail-call -filetype=obj " (shellQuote wasmLl) " -o " (shellQuote obj))))]
             (assert (= compiled.exitCode 0) (str "llc compiles with wasm tail-call feature: " compiled.stderr)))

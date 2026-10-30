@@ -1,5 +1,5 @@
 (module asl-cli/nativeCli
-  :x [cacheDir! headPath underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs]
+  :x [cacheDir! headPath underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl-tools/fleet/run :a run) (asl-parser/reader :a rd)])
 
 fn ! cacheDir! -> String
@@ -63,14 +63,18 @@ fn rowAfter items: (List rd/SExpr) key: String -> (Option rd/SExpr)
     ((none) (none))
     ((some h) (if (and (rd/isAtom? h) (= (rd/sexprHead h) key)) (listGet items 1) (rowAfter (optionOr (listTail items) (list)) key))))
 
-fn configClang text: String -> (Option String)
-  (if (not (stringContains? text ":clang"))
+; (:m :ref LLVM-NODE2-REDS :do "the :native row names any tool by key, :clang and now :llc :opt :wasmLd :llvmNm :node, so a test resolves its tool the way the native steps resolve clang")
+fn configNative text: String key: String -> (Option String)
+  (if (not (stringContains? text (str ":" key)))
     (none)
     (match (rowAfter (rd/sexprToList (rd/parseSexpr text)) ":native")
       ((none) (none))
-      ((some native) (match (rowAfter (rd/sexprToList native) ":clang")
+      ((some native) (match (rowAfter (rd/sexprToList native) (str ":" key))
                        ((some v) (if (rd/isAtom? v) (let [(w (stringReplace (rd/sexprHead v) "\"" ""))] (if (stringEmpty? w) (none) (some w))) (none)))
                        ((none) (none))))))
+
+fn configClang text: String -> (Option String)
+  (configNative text "clang")
 
 fn ! clangOnPathIn! pathVar: String -> (List String)
   (filter (fn [(c String)] -> Bool

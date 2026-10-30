@@ -7,7 +7,8 @@
       (asl-target-llvm/target :a target)
       (asl-target-llvm/gcRoute :a gr)
       (asl-target-llvm/wasmLink :a wl)
-      (asl-tools/fleet/run :a run)])
+      (asl-tools/fleet/run :a run)
+      (asl-target-llvm/tests/llvmTools :a lt)])
 
 fn ! node -> String
   (let [(candidates (list "/usr/local/bin/node" "/opt/homebrew/bin/node"))
@@ -18,10 +19,10 @@ fn ! node -> String
       ((none) "")))
 
 fn llc -> String
-  "/opt/homebrew/opt/llvm/bin/llc"
+  (lt/llcPath!)
 
 fn linker -> String
-  "/opt/homebrew/opt/lld/bin/wasm-ld"
+  (lt/wasmLdPath!)
 
 fn ! workRoot -> String
   (str "/tmp/asl-wasm-stack-roots-" (nowNs))
