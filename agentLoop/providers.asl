@@ -43,7 +43,9 @@ enum ProviderError
   (:f prefill String :default "")
   (:f tools (List j/Json) :default (list))
   (:f defer Bool :default false)
-  (:f hub (Option HubCall) :default none))
+  (:f hub (Option HubCall) :default none)
+  ; (:m :ref TOOLS-400-FALLBACK :do "set once a route answered HTTP 400 to a request carrying tools: cfgTools then keeps the tool list empty for the rest of the session, so every later turn speaks the text protocol")
+  (:f noTools Bool :default false))
 
 enum Provider
   (scriptProvider name: String turns: (List String) index: Int64)
@@ -853,7 +855,7 @@ fn cfgPrefill cfg: VendorConfig prefill: String -> VendorConfig
 
 ; (:m :ref PROTO-STUDY :do "native tool schemas ride on the config like the prefill; an empty list sends no tools key and keeps the ASN wire")
 fn cfgTools cfg: VendorConfig tools: (List j/Json) -> VendorConfig
-  (with cfg :tools tools)
+  (if cfg.noTools cfg (with cfg :tools tools))
 
 fn withTools p: Provider tools: (List j/Json) -> Provider
   (match p
@@ -1368,8 +1370,21 @@ fn msg role: String content: String -> j/Json
 fn toolsField tools: (List j/Json) -> (List (Pair String j/Json))
   (if (listEmpty? tools) (list) (list (pair "tools" (j/jarr tools))))
 
+; (:m :ref TOOLS-400-FALLBACK :do "a route that answers HTTP 400 to a request carrying tools cannot take native tools (a tool-less model, or a gateway that rejects the schema): the turn is retried once without them, in the text protocol, and the config remembers the route as no-tools; a 400 without tools is an ordinary error")
+fn toolsRejected? reply: (Result (Option String) ProviderError) -> Bool
+  (match reply
+    ((err e) (stringContains? (errorMessage e) "HTTP error 400"))
+    ((ok _) false))
+
 ; (:m :effect net)
 fn ! callProfile! cfg: VendorConfig system: String user: String model: String -> Called
+  (let [(once (callProfileOnce! cfg system user model))]
+    (if (and (not (listEmpty? cfg.tools)) (toolsRejected? once.reply))
+      (callProfileOnce! (with cfg :tools (list) :noTools true) system user model)
+      once))
+
+; (:m :effect net)
+fn ! callProfileOnce! cfg: VendorConfig system: String user: String model: String -> Called
   (let [(ws (absPath (str cfg.rootDir "/.asl/run/agentLoop/agents/" cfg.sessionId)))
         (profile cfg.env.profile)
         (headers (listAppend
@@ -1506,10 +1521,20 @@ fn ! nextTurnAsk! p: Provider system: String user: String -> Ask
           ((none) (do (logUsage! r.cfg r.meta) (askDone (Turn :provider back :reply r.reply :meta r.meta)))))))
     (_ (askDone (nextTurn! p system user))))
 
+fn noToolsProvider cfg: VendorConfig -> Provider
+  (vendorProvider (with cfg :tools (list) :noTools true))
+
 fn ! nextTurnReply p: Provider raw: String -> Turn
   (let [(r (readResponse "Hub" raw))
-        (logged (match p ((vendorProvider cfg) (logUsage! cfg (pairSecond r))) (_ false)))]
-    (Turn :provider p :reply (pairFirst r) :meta (pairSecond r)))
+        (logged (match p ((vendorProvider cfg) (logUsage! cfg (pairSecond r))) (_ false)))
+        ; (:m :ref TOOLS-400-FALLBACK :do "the hub answer arrives after the turn was cut, so the retry cannot happen here: the failed turn stands and the provider goes back no-tools, so the next turn speaks the text protocol")
+        (back (match p
+                ((vendorProvider cfg)
+                  (if (and (not (listEmpty? cfg.tools)) (toolsRejected? (pairFirst r)))
+                    (noToolsProvider cfg)
+                    p))
+                (_ p)))]
+    (Turn :provider back :reply (pairFirst r) :meta (pairSecond r)))
 
 ; (:m :ref SE1-PROVIDER-SPLIT :do "the hub answers 503 when it is busy: that is a wait for the caller, not a failure, the same rule hubPost! applies")
 fn hubBusy? t: Turn -> Bool
