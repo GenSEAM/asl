@@ -18,7 +18,8 @@
       (asl/packages/asl-cli/src/rcConfig :a rcc)
       (asl-cli/verify :a verify)
       (asl-compiler/checkCache :a ccache)
-      (asl-checker/check :a chk)])
+      (asl-checker/check :a chk)
+      (asl-checker/checkCached :a ccd)])
 
 (schema Verdict
   (:f exit Int64)
@@ -1414,10 +1415,11 @@ fn ! checkerRejection! actualPath: String logicalPath: String fp: String -> (Opt
 
 ; (:m :ref SCRIPT-RUN-UNCHECKED :do "a file the checker cannot key or read is checked uncached or rejected, never let through unchecked")
 fn ! freshRejection! actualPath: String logicalPath: String key: (Option String) -> (Option String)
-  (match (chk/checkFile! actualPath (checkRootsForNative))
+  (match (pairFirst (ccd/checkFileCached! actualPath (checkRootsForNative) (ccd/stampedCache!)))
     ((err e) (some (str logicalPath ":0:0: ERR_IO " e)))
-    ((ok diags)
-     (let [(body (if (listEmpty? diags) "" (stringReplace (verify/formatDiags diags) actualPath logicalPath)))
+    ((ok verdict)
+     (let [(diags verdict.diags)
+           (body (if (listEmpty? diags) "" (stringReplace (verify/formatDiags diags) actualPath logicalPath)))
            (_ (match key
                 ((some k) (match (ccache/store! k (ccache/Verdict :exitCode (if (listEmpty? diags) 0 1) :body body)) ((ok _) ()) ((err _) ())))
                 ((none) ())))]
