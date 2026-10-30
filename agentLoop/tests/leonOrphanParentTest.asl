@@ -68,7 +68,9 @@ fn ! orphanRun! tag: String gate: String owns: String replies: (List String) rep
 
 fn ! runTests -> Bool
   (let [notes (map (fn [_] "(:step :op \"note\" :text \"waiting\")") (range 0 20))
-        live (orphanRun! "orph" (slowGate) "x.txt" notes false)
+        ; (:m :ref AGENTLOOP-MAIN-REDS :do "since fbcd05da7 and 3d81018b8 a turn that persisted no change skips the gates, so the slow gate runs only after a write that lands: two different writes of x.txt give the gate its first (touch started) and second (sleep) run")
+        writes (list "(:step :op \"write\" :file \"x.txt\" :content \"a\")" "(:step :op \"write\" :file \"x.txt\" :content \"b\")")
+        live (orphanRun! "orph" (slowGate) "x.txt" (listAppend writes notes) false)
         integ (orphanRun! "integ" (integrityGate) "impl.txt" (cons "(:step :op \"write\" :file \"impl.txt\" :content \"i\")" notes) true)]
     (do
       (assert live.forked "the CLI stand-in forks")
