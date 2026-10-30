@@ -66,6 +66,7 @@ fn ! replyTo! book: (List (Pair String Live)) id: String live: Live ask: m/LiveA
 fn budgetOpen left: (Option Int64) -> Bool
   (match left ((some n) (> n 0)) ((none) true))
 
+; (:m :ref HUB-RETRY-POOL :do "a hub 429 or 503 carrying Retry-After N holds the run at least N seconds (capped by the wall left) as the same Turn.holdMs the backoff uses, so the pool thread never sleeps for it")
 ; (:m :ref SE3F-POOL-PARITY :do "provider retry as retryTurn! decides it, from the same functions: a transient error is retried up to 3 times under the wall budget with the pause list 1 2 4; the retried call is issued at once and a hub request carries the pause as its hold, so the pool waits without blocking; a provider that answers in the call (script, replay, CLI) pauses after the retried call instead of before it, which changes timing only. The retry rows go to the journal before the apply, as liveTurn! writes them")
 fn ! decide! book: (List (Pair String Live)) id: String live: Live ask: m/LiveAsk t: pv/Turn pause: Int64 -> (Pair (List (Pair String Live)) sp/Turn)
   (let [(sess live.sess)
@@ -76,7 +77,9 @@ fn ! decide! book: (List (Pair String Live)) id: String live: Live ask: m/LiveAs
         (let [(spent (rt/chargeSeconds (- (sess.env.now) live.askedAt)))
               (afterCall (match live.left ((some n) (some (max 0 (- n spent)))) ((none) none)))
               (transient (rt/errorTransient (pv/errorCode error) (pv/errorMessage error)))
-              (wait (rt/providerRetryPause transient (+ live.retries 1) (list 1 2 4) afterCall))]
+              (backoff (rt/providerRetryPause transient (+ live.retries 1) (list 1 2 4) afterCall))
+              (hinted (pv/retryAfterSec (pv/errorMessage error)))
+              (wait (max backoff (min hinted (match afterCall ((some n) n) ((none) hinted)))))]
           (if (and (< live.retries 3) (and transient (budgetOpen afterCall)))
             (callAsk! book id live live.wrapped ask t.provider (+ live.retries 1) (match afterCall ((some n) (some (max 0 (- n wait)))) ((none) none)) wait)
             (settled! book id live ask t))))))
