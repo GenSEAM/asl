@@ -225,6 +225,8 @@ native_cli() {
   root=$(cd "$HERE/../.." && pwd -P)
   clang_version=$("$CLANG" --version | head -n 1)
   deps=$(cd "$root" && ASL_PRELUDE="$root/asl/prelude/prelude.asl" "$asl1" deps asl/packages/asl-cli/src/nativeBuild.asl) || { echo "build.sh: no native CLI: asl1 deps of asl-cli/nativeBuild failed" >&2; return 1; }
+  # (:m :why "STAMP-ENTRY: asl1 deps omits the entry file")
+  deps=$(printf '%s\n%s\n' asl/packages/asl-cli/src/nativeBuild.asl "$deps")
   key=$( { echo "$asl1"; echo "$clang_version"; for f in $deps "$root"/asl/prelude/prelude.asl "$root"/asl/prelude/native/*.asl; do case $f in (/*) ;; (*) f="$root/$f" ;; esac; echo "${f#"$root"/}"; cat "$f"; done; } | hash_stdin )
   dir="$CACHE_DIR/nativeBuild/$key"
   if [ ! -x "$dir/aslNativeBuild" ]; then
