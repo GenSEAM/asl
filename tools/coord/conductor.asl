@@ -2,7 +2,7 @@
   :x [hubGuard! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig rulingVerdict
-      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
+      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
       main]
   :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (asl-tools/hub/preflight :a hp)
       (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -471,15 +471,19 @@ fn jobserverPace dir: String allowance: (fn [String] -> Int64) -> Pace
   (Pace :tokens (fn [] -> Int64 (poolSize dir)) :allowance allowance)
 
 ; (:m :ref SCHED :do "the light pool: without ~/.asl/conductor/sched.asn it is the jobserver token count and nothing adapts; with one the slots come from the store's slots.asn, sampled at most once a minute from the gateway ledger, free RAM and load; gates and builds keep the jobserver class writer tokens")
-fn ! lightSlots! dir: String home: String -> Int64
+; (:m :ref CONDTEST-SCHED-RED :do "the sample with the machine readings passed in: conductorTest read node2's real load (37 on 8 cores), which stepped a fresh :start 7 down to 6; tests pass fixed readings, lightSlots! the real ones")
+fn ! lightSlotsAt! dir: String home: String freeMB: Int64 load: Float64 cores: Int64 -> Int64
   (let [(txt (readOr (str home "/.asl/conductor/sched.asn")))]
     (if (stringEmpty? txt)
       (poolSize "")
       (let [(cfg (sc/parseCfg txt))
             (now (/ (nowNs) 1000000))]
         (if (sc/slotsDue? dir now 60000)
-          (sc/schedTick! dir cfg now (stringLines (readOr (str home "/.asl/run/usage/gatewayCalls.asn"))) (sc/memFreeMB (readOr "/proc/meminfo")) (sc/loadOne (readOr "/proc/loadavg")) (resultOr (cpuCount) 1))
+          (sc/schedTick! dir cfg now (stringLines (readOr (str home "/.asl/run/usage/gatewayCalls.asn"))) freeMB load cores)
           (pairFirst (sc/slotsRead! dir))))))
+
+fn ! lightSlots! dir: String home: String -> Int64
+  (lightSlotsAt! dir home (sc/memFreeMB (readOr "/proc/meminfo")) (sc/loadOne (readOr "/proc/loadavg")) (resultOr (cpuCount) 1))
 
 fn schedPace dir: String home: String -> Pace
   (Pace :tokens (fn [] -> Int64 (lightSlots! dir home)) :allowance allowanceUnlimited)
