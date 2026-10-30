@@ -3,10 +3,12 @@
   :i [(asl/agentLoop/main :a m) (asl/agentLoop/leonPool :a lp) (asl/agentLoop/poolServe :a ps)
       (asl/agentLoop/sessionPool :a sp) (asl/agentLoop/providers :a pv)])
 
-; (:m :ref SE5B-LEON-SERVE :do "one Leon process serving many units: a control socket takes (:run :unit U :form F :repo R :root D), every run is a session of leonPool in one sessionPool, and a receipt file per unit carries its exit and the Leon receipt. The pool socket is the hub socket of HOME/.asl/hub.asn (the same one a blocking Leon posts to), so the hub still owns pacing and the learned rates; the process ends at :stop or at its deadline and is never a service")
+; (:m :ref SE5B-LEON-SERVE :do "a routed run (a code route declared for its intent) answers exit 125 and is dropped: its model call would block every other session of the process, so the conductor spawns it instead. One Leon process serving many units: a control socket takes (:run :unit U :form F :repo R :root D), every run is a session of leonPool in one sessionPool, and a receipt file per unit carries its exit and the Leon receipt. The pool socket is the hub socket of HOME/.asl/hub.asn (the same one a blocking Leon posts to), so the hub still owns pacing and the learned rates; the process ends at :stop or at its deadline and is never a service")
 fn ! openRun! book: (List (Pair String lp/Live)) id: String form: String repo: String root: String -> (Pair (List (Pair String lp/Live)) (Option (Pair Int64 String)))
   (let [(opened (lp/leonOpen! book id form repo root (pv/providerEnv! root)))]
-    (pair (pairFirst opened) (optionMap (fn [(r m/MainResult)] -> (Pair Int64 String) (pair r.exitCode r.stdout)) (pairSecond opened))))
+    (if (lp/leonRouted? (pairFirst opened) id)
+      (pair (lp/leonDrop (pairFirst opened) id) (some (pair 125 "(:declined :why \"a routed run blocks the pool for its model call; spawn it\")")))
+      (pair (pairFirst opened) (optionMap (fn [(r m/MainResult)] -> (Pair Int64 String) (pair r.exitCode r.stdout)) (pairSecond opened)))))
 
 fn ! nowMs! -> Int64
   (/ (monotonicNs) 1000000)

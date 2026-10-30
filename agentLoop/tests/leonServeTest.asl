@@ -1,7 +1,7 @@
 (module asl/agentLoop/tests/leonServeTest
   :x [runTests]
   :i [(asl/agentLoop/leonServe :a ls) (asl/agentLoop/leonPool :a lp) (asl/agentLoop/poolServe :a ps)
-      (asl/agentLoop/sessionPool :a sp) (asl-tools/fleet/run :a fr)])
+      (asl/agentLoop/sessionPool :a sp) (asl-tools/fleet/run :a fr) (aslHarness/tests/agentLoopRecorderKit :a rk)])
 
 ; (:m :ref SE5B-LEON-SERVE :do "two scripted Leon runs submitted over the control socket as (:run ...) share one pool process and each leaves a receipt file with exit 0 and its Leon receipt; a run the check chain rejects is queued and has its receipt (exit 2) at once; the same unit id twice is refused; (:status) answers; (:stop) ends the loop. Client and server share this thread, as in poolServeTest")
 fn ! nowMs! -> Int64
@@ -16,6 +16,24 @@ fn ! prepRoot! root: String fixtureText: String -> Bool
       (and (ok? (fileWrite (str root "/tests/fixtures/agentLoop/mvp/edit.asn") fixtureText))
         (and (ok? (fileWrite (str root "/subject.txt") "before\n"))
           (sh! (str "cd " root " && git init -q -b main && git config user.name leonServe && git config user.email leon-serve@example.invalid && git add -- subject.txt && git commit -q -m initial"))))))
+
+fn routedGateway -> String
+  "(:gateway :v 2 :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id wr :provider fp :name \"n1\" :temperature 0.8) (:model :id esc :provider fp :name \"n2\" :temperature 0.2)) :profiles ((:profile :id default :routes ((:intent any :chain (wr))))) :uses ((:use :for default :profile default)) :codeRoutes ((:codeRoute :id code :writer wr :escalate esc)))\n"
+
+fn writeReply content: String -> String
+  (str "(:step :op \"write\" :file \"w.txt\" :content \"" content "\")")
+
+fn ! prepRouted! root: String -> Bool
+  (and (sh! (str "/bin/mkdir -p " root "/tests/fixtures/agentLoop/mvp"))
+    (and (ok? (fileWrite (str root "/.asl.config.asn") (str "(:aslConfig :agentLoop (:specCheck false :baseline false :gatewayConfig \"" root "/gw.asn\"))\n")))
+      (and (ok? (fileWrite (str root "/gw.asn") (routedGateway)))
+        (and (ok? (fileWrite (str root "/gate.sh") "grep -q good w.txt\n"))
+          (and (ok? (fileWrite (str root "/tests/fixtures/agentLoop/mvp/routed.asn") (rk/scriptFixtureTextFromReplies! "routed" (list (writeReply "good")))))
+            (and (ok? (fileWrite (str root "/subject.txt") "s\n"))
+              (sh! (str "cd " root " && git init -q -b main && git config user.name leonServe && git config user.email leon-serve@example.invalid && git add -A && git commit -q -m initial"))))))))
+
+fn routedForm -> String
+  "(:agent :task \"write w.txt\" :backend \"script/routed\" :mode \"implement\" :intent \"code\" :owns (\"w.txt\") :gates (\"sh gate.sh\") :budget 20 :contextTokens 8000 :gateTimeout 30)"
 
 fn editForm -> String
   "(:agent :task \"write then gate\" :backend \"script/edit\" :mode \"implement\" :owns (\"subject.txt\") :gates (\"grep -qx green subject.txt\"))"
@@ -59,7 +77,8 @@ fn ! runTests -> Bool
         (editText (resultOr (fileReadString "asl/agentLoop/tests/fixtures/liveLoop/edit.asn") ""))
         (rootA (str temp "/eA"))
         (rootB (str temp "/eB"))
-        (prepared (and (prepRoot! rootA editText) (prepRoot! rootB editText)))
+        (rootC (str temp "/rC"))
+        (prepared (and (prepRoot! rootA editText) (and (prepRoot! rootB editText) (prepRouted! rootC))))
         (ctl (str temp "/ctl.sock"))
         (rdir (str temp "/receipts"))
         (made (and (ok? (dirCreate rdir)) (ok? (dirCreate (str temp "/spill")))))
@@ -69,12 +88,14 @@ fn ! runTests -> Bool
         (r2 (ask! (pairFirst (pairFirst r1)) (pairSecond (pairFirst r1)) ctl (runLine "e2" (editForm) repo rootB)))
         (r3 (ask! (pairFirst (pairFirst r2)) (pairSecond (pairFirst r2)) ctl (runLine "e1" (editForm) repo rootA)))
         (r4 (ask! (pairFirst (pairFirst r3)) (pairSecond (pairFirst r3)) ctl (runLine "bad" (badForm) repo rootA)))
-        (r5 (ask! (pairFirst (pairFirst r4)) (pairSecond (pairFirst r4)) ctl "(:status)"))
+        (r4b (ask! (pairFirst (pairFirst r4)) (pairSecond (pairFirst r4)) ctl (runLine "rt" (routedForm) repo rootC)))
+        (r5 (ask! (pairFirst (pairFirst r4b)) (pairSecond (pairFirst r4b)) ctl "(:status)"))
         (w (pump! (pairFirst (pairFirst r5)) (pairSecond (pairFirst r5))
              (fn [(x ps/Serve)] -> Bool (and (fileExists? (ps/receiptPath rdir "e1")) (fileExists? (ps/receiptPath rdir "e2")))) (+ (nowMs!) 120000)))
         (r6 (ask! (pairFirst w) (pairSecond w) ctl "(:stop)"))
         (recE1 (resultOr (fileReadString (ps/receiptPath rdir "e1")) ""))
         (recE2 (resultOr (fileReadString (ps/receiptPath rdir "e2")) ""))
+        (recRt (resultOr (fileReadString (ps/receiptPath rdir "rt")) ""))
         (recBad (resultOr (fileReadString (ps/receiptPath rdir "bad")) ""))
         (closed (do (fdClose listener) true))
         (removed (ok? (fr/shellOut (str "/bin/rm -rf " temp) 5000)))]
@@ -83,6 +104,7 @@ fn ! runTests -> Bool
       (assert (and (stringContains? (pairSecond r1) "(:queued :unit \"e1\")") (stringContains? (pairSecond r2) "(:queued :unit \"e2\")")) (str "both runs queued: " (pairSecond r1) " / " (pairSecond r2)))
       (assert (stringContains? (pairSecond r3) ":why \"duplicate\"") (str "the same unit id is refused: " (pairSecond r3)))
       (assert (and (stringContains? recBad ":exit 2") (stringContains? recBad "ERR_INVALID_ARG")) (str "a rejected run has its receipt at once: " recBad))
+      (assert (and (stringContains? recRt ":exit 125") (stringContains? recRt ":declined")) (str "a routed run is declined with exit 125: " recRt))
       (assert (stringContains? (pairSecond r5) ":slots 4") (str "status answers: " (pairSecond r5)))
       (assert (and (stringContains? recE1 ":state \"done\" :exit 0") (stringContains? recE2 ":state \"done\" :exit 0")) (str "both scripted runs ended ok:\n" recE1 "\n" recE2))
       (assert (stringContains? (pairSecond r6) "(:stopping)") (str "stop answers: " (pairSecond r6)))

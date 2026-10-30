@@ -1,5 +1,5 @@
 (module asl/agentLoop/leonPool
-  :x [Live Book leonOpen! leonTurn! leonExit]
+  :x [Live Book leonOpen! leonTurn! leonExit leonRouted? leonDrop]
   :i [(asl/agentLoop/main :a m) (asl/agentLoop/sessionPool :a sp) (asl/agentLoop/runLoop :a rl)
       (asl/agentLoop/loopState :a ls) (asl/agentLoop/providers :a pv) (asl/agentLoop/retry :a rt)])
 
@@ -24,6 +24,14 @@ fn leonExit book: (List (Pair String Live)) id: String -> Int64
   (match (bookGet book id)
     ((some l) l.exit)
     ((none) -1))
+
+fn leonRouted? book: (List (Pair String Live)) id: String -> Bool
+  (match (bookGet book id)
+    ((some l) (some? l.sess.ra.route))
+    ((none) false))
+
+fn leonDrop book: (List (Pair String Live)) id: String -> (List (Pair String Live))
+  (filter (fn [(e (Pair String Live))] -> Bool (!= (pairFirst e) id)) book)
 
 fn resultTurn id: String text: String -> sp/Turn
   (sp/Turn :state id :request none :exec none :result (some text))

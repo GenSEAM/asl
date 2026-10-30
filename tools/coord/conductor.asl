@@ -5,7 +5,7 @@
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
-  :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (asl-tools/hub/preflight :a hp)
+  :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
       (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
 
 ; (:m :ref CONDUCTOR :do "deterministic scheduler, no model in the loop: units are store rows (:after = deps, :owns, :gate, :channel = lane), the conductor keeps one state row per unit under <dir>/cond and appends one journal row per transition; the store lease is held from writing to merging so owns stay disjoint, and the store row turns done only when the unit is merged")
@@ -31,7 +31,7 @@
   (:f launch (fn [String st/Task CUnit] -> (List String))) (:f pace Pace))
 
 (schema RealCfg
-  (:f repo String) (:f devRepo String) (:f devBranch String) (:f wt w/Cfg) (:f home String) (:f keys String) (:f leaseSec Int64) (:f gateSec Int64) (:f lanes String) (:f writerAlias String) (:f profile String) (:f attractorAb Bool))
+  (:f repo String) (:f devRepo String) (:f devBranch String) (:f wt w/Cfg) (:f home String) (:f keys String) (:f leaseSec Int64) (:f gateSec Int64) (:f lanes String) (:f writerAlias String) (:f profile String) (:f attractorAb Bool) (:f leonPool String :default ""))
 
 fn cuDir dir: String -> String
   (str dir "/cond")
@@ -1139,6 +1139,13 @@ fn ! writeGuard! home: String repo: String wt: String dir: String id: String -> 
             (_ (if (and (not (some? g)) (!= before after)) (ok? (fileAppend (journalPath dir) (str "(:stale :unit " (st/q id) " :result rebased :from " (st/q before) " :to " (st/q after) ")\n"))) false))]
         g)))
 
+; (:m :ref SE5C-CONDUCTOR-POOL :do "a free-lane write goes to the Leon pool process named by --leon-pool when it answers (:status), as one session of that process; a refused or unreachable submit (exit 125) and every other lane or an unset pool spawn Leon as before, so the flag only ever moves where Leon runs")
+fn ! runWrite! rc: RealCfg lane: String id: String prof: String p: String task: String owns: (List String) gates: (List String) extra: String -> fr/Done
+  (if (lc/pooledWrite? lane rc.leonPool)
+    (let [(d (fp/runLeonPooledExtra! rc.leonPool (str id "-" (stringFromInt64 (nowMs))) prof p rc.home task owns gates rc.leaseSec extra))]
+      (if (= d.exit 125) (fp/runLeonProfileExtra! prof rc.repo p rc.home task owns gates rc.leaseSec rc.keys extra) d))
+    (fp/runLeonProfileExtra! prof rc.repo p rc.home task owns gates rc.leaseSec rc.keys extra))
+
 fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
   (let [(path (w/wtPath rc.wt u.id))
         (added (if (fileExists? path) (reuseWt! rc u path) (attachOrAdd rc u path)))]
@@ -1154,7 +1161,7 @@ fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
               (prof (writeProfileFor rc dir u.id c.lane))
               (arm (writeArm rc u.id))
               (_ (fileAppend (journalPath dir) (str "(:profile :unit " (st/q u.id) " :lane " (st/q c.lane) " :profile " (st/q prof) (if (stringEmpty? arm) "" (str " :arm " (st/q arm))) " :at " (n (/ (nowNs) 1000000)) ")\n")))
-              (d (fp/runLeonProfileExtra! prof rc.repo p rc.home task u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) rc.leaseSec rc.keys (armExtra arm)))
+              (d (runWrite! rc c.lane u.id prof p task u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) (armExtra arm)))
               (model (fp/modelOf d.out))
               (vacuous (and fresh (vacuousWrite? d.out u.gate task)))
               (_ (if vacuous false (commitWrite! p u.owns u.id model)))
@@ -1488,7 +1495,7 @@ fn ! realCfg args: (List String) dir: String -> RealCfg
              :wt (w/Cfg :repo repo :base (st/opt args "worktrees" (str repo "/../worktrees")) :prefix "asex-" :archive (st/opt args "archive" (str dir "/archive")) :mainRef "main")
              :home (st/opt args "home" (resultOr (getHomeDir) ".")) :keys (st/opt args "keys" (str repo "/.env.free")) :leaseSec 3600 :gateSec 3600
              :lanes (st/opt args "lanes" (str repo "/.asl/mem/work/CAL/reviewLanes.asn")) :writerAlias (st/opt args "writer-alias" "") :profile (st/opt args "profile" "freeBulk")
-             :attractorAb (= (st/opt args "attractor-ab" "off") "on")))
+             :attractorAb (= (st/opt args "attractor-ab" "off") "on") :leonPool (st/opt args "leon-pool" "")))
 
 ; (:m :ref CONDUCTOR :do "the stage child: conductor.asl stage STAGE UNIT --store DIR runs one stage for one unit and writes its Res row, printing nothing; a crash leaves no row and the poll reports the stage died")
 fn ! stageMain! args: (List String) dir: String -> Int64
@@ -1505,7 +1512,7 @@ fn realLaunch args: (List String) dir: String -> (fn [String st/Task CUnit] -> (
   (let [(repo (st/opt args "repo" "."))
         (pass (fold (fn [(acc (List String)) (k String)] -> (List String)
                       (if (stringEmpty? (st/opt args k "")) acc (listAppend acc (list (str "--" k) (st/opt args k "")))))
-                    (list) (list "repo" "dev-repo" "dev" "worktrees" "archive" "home" "keys" "lanes" "writer-alias" "profile" "attractor-ab")))]
+                    (list) (list "repo" "dev-repo" "dev" "worktrees" "archive" "home" "keys" "lanes" "writer-alias" "profile" "attractor-ab" "leon-pool")))]
     (fn [(stage String) (u st/Task) (c CUnit)] -> (List String)
       (listAppend (list (str repo "/bin/asl") "run" (str repo "/asl/tools/coord/conductor.asl") "stage" stage u.id "--store" dir) pass)))
 
