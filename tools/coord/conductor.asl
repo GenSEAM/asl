@@ -2,7 +2,7 @@
   :x [hubGuard! leonGuard! staleSig? staleField staleWake! repoPath CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
-      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! rungCap hopsSince nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
+      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! rungCap hopsSince offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       main]
   :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (asl-tools/hub/preflight :a hp)
       (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -149,9 +149,45 @@ fn hopsSince rows: (List String) rung: String since: Int64 -> Int64
                              (and (stringContains? l "tierHop ") (>= (optionOr (stringToInt64 (sp/tokAfter l ":at")) 0) since))))
                       rows))
 
+; (:m :ref ESC-LEAD-HOOK :do "the lead rung is open only while <store>/leadOnline.asn (:leadOnline :at MS), written by a follower of vps events --class lead, is younger than leadTtlMs (adopted 120000: the follower polls every 2 s); no row, an unreadable row or a stale one means no lead is online and the ladder blocks the unit with the plain escalate row")
+fn leadTtlMs -> Int64
+  120000
+
+fn leadFresh? text: String now: Int64 -> Bool
+  (let [(at (optionOr (stringToInt64 (sp/tokAfter (stringTrim text) ":at")) -1))]
+    (and (>= at 0) (<= (- now at) (leadTtlMs))))
+
+; (:m :ref ESC-LEAD-HOOK :do "entering the lead rung appends one (:lead :unit :at :seen :tried) row to escalations.asn, the row a follower of class lead receives; the plain escalate row is kept for its other readers")
+fn ! leadRow! dir: String c: CUnit seen: String tried: String -> Bool
+  (ok? (fileAppend (escalationsPath dir) (str "(:lead :unit " (st/q c.id) " :at " (n (/ (nowNs) 1000000)) " :seen " (st/q seen) " :tried " (st/q (verdictSig tried)) ")\n")))
+
 fn ! rungOpen? dir: String rung: String now: Int64 -> Bool
   (let [(cap (rungCap (readOr (ladderPath dir)) rung))]
-    (or (= rung "lead") (or (< cap 0) (< (hopsSince (stringLines (readOr (journalPath dir))) rung (- now (mod now 86400000))) cap))))
+    (if (= rung "lead") (leadFresh? (readOr (str dir "/leadOnline.asn")) now) (or (< cap 0) (< (hopsSince (stringLines (readOr (journalPath dir))) rung (- now (mod now 86400000))) cap))))
+
+; (:m :ref ESC-LEAD-HOOK :do "the newest :at over the rows that name the unit and carry the marker, -1 when none")
+fn rowsAt rows: (List String) id: String marker: String -> Int64
+  (fold (fn [(a Int64) (l String)] -> Int64
+          (if (and (stringContains? l (str ":unit " (st/q id) " ")) (stringContains? l marker))
+            (max a (optionOr (stringToInt64 (sp/tokAfter l ":at")) -1))
+            a))
+        -1 rows)
+
+; (:m :ref ESC-LEAD-HOOK :do "while the heartbeat is fresh, each unit blocked on a plain escalate (no :await lead) whose newest blocked move is newer than its newest (:lead row gets one (:lead row, oldest blocked first, at most leadBacklogCap per tick; the row's :at is newer than the blocked move, so the next tick offers nothing twice; returns the rows written")
+fn leadBacklogCap -> Int64
+  20
+
+fn ! offerBacklog! dir: String now: Int64 -> Int64
+  (if (not (leadFresh? (readOr (str dir "/leadOnline.asn")) now)) 0
+    (let [(cands (filter (fn [(c CUnit)] -> Bool (and (= c.st "blocked") (and (stringEmpty? c.await) (= c.esc 1)))) (readCUnits! dir)))]
+      (if (listEmpty? cands) 0
+        (let [(jr (stringLines (readOr (journalPath dir))))
+              (er (stringLines (readOr (escalationsPath dir))))
+              (pend (filter (fn [(p (Pair CUnit Int64))] -> Bool (< (rowsAt er (pairFirst p).id "(:lead ") (pairSecond p)))
+                            (map (fn [(c CUnit)] -> (Pair CUnit Int64) (pair c (rowsAt jr c.id " :to blocked "))) cands)))
+              (take (listTake (listSortBy (fn [(p (Pair CUnit Int64))] -> Int64 (pairSecond p)) pend) (leadBacklogCap)))
+              (wrote (map (fn [(p (Pair CUnit Int64))] -> Bool (leadRow! dir (pairFirst p) (str "backlog: blocked on " (pairFirst p).lane) (pairFirst p).sig)) take))]
+          (listLength wrote)))))
 
 ; (:m :ref ESC-LADDER :do "the rung above lane whose daily cap has room; a capped rung is skipped")
 fn ! nextRung! dir: String lane: String now: Int64 -> Option String
@@ -193,6 +229,7 @@ fn ! fail! ctx: Ctx c: CUnit stage: String model: String sig: String ms: Int64 -
         ((some next)
           (if (= next "lead")
             (let [(_ (priorWrite! ctx.dir c.id c.lane sig))
+                  (_ (leadRow! ctx.dir c (str stage " failed " (n fails) "x on " c.lane) sig))
                   (c2 (escalateTiered! ctx c1 sig (str stage " failed " (n fails) "x on " c.lane) "lead"))]
               (move! ctx (with c2 :lane "lead" :await "lead") "blocked" stage model 0 0 (str "tierHop " c.lane "->lead: " (verdictSig sig)) ms))
             (let [(_ (priorWrite! ctx.dir c.id c.lane sig))]
@@ -479,6 +516,7 @@ fn ! tick! ctx: Ctx -> (Result Int64 String)
             (pace ctx.pace)
             (tokensOf pace.tokens)
             (flying (listLength (filter inFlight? (readCUnits! ctx.dir))))
+            (_ (offerBacklog! ctx.dir (/ (nowNs) 1000000)))
             (_ (stepAll! ctx units (- (tokensOf) flying)))
             (after (snapshot ctx.dir))]
         (ok (if (= before after) 0 1)))))
