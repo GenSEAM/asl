@@ -57,13 +57,18 @@ fn startOf starts: (List (Pair Int64 String)) pid: Int64 -> String
     ((some r) (pairSecond r))
     ((none) ""))
 
-fn closure procs: (List fr/Proc) members: (List Int64) self: Int64 rounds: Int64 -> (List Int64)
+fn reach procs: (List fr/Proc) members: (List Int64) fence: (List Int64) rounds: Int64 -> (List Int64)
   (let [(more (map (fn [(p fr/Proc)] -> Int64 p.pid)
-                   (filter (fn [(p fr/Proc)] -> Bool (and (> p.pid 1) (and (!= p.pid self) (and (not (listContains? members p.pid)) (listContains? members p.ppid)))))
+                   (filter (fn [(p fr/Proc)] -> Bool (and (> p.pid 1) (and (not (listContains? fence p.pid)) (and (not (listContains? members p.pid)) (listContains? members p.ppid)))))
                            procs)))]
     (if (or (listEmpty? more) (<= rounds 0))
       members
-      (closure procs (listAppend members more) self (- rounds 1))))
+      (reach procs (listAppend members more) fence (- rounds 1))))
+
+; (:m :ref NODE2-SIGSTOP-RC :do "self and its ancestors (fr/fenceOf) are never members, seeds included, so a shim handed a root above itself signals nothing of its own parent chain")
+fn closure procs: (List fr/Proc) members: (List Int64) self: Int64 rounds: Int64 -> (List Int64)
+  (let [(fence (pairFirst (fr/fenceOf procs self)))]
+    (reach procs (filter (fn [(m Int64)] -> Bool (and (> m 1) (not (listContains? fence m)))) members) fence rounds))
 
 ; (:m :ref PROCSHIM :do "every live process of the tree: the pinned ones whose start time still matches, plus whatever hangs off them by parentage")
 fn ! sweep! known: (List (Pair Int64 String)) root: Int64 -> (List (Pair Int64 String))

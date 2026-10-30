@@ -1278,13 +1278,10 @@ fn ! settleWatch t0: Int64 w: WorkerWatch -> WorkerWatch
       (WorkerWatch :proc w.proc :outOpen false :errOpen false :errText w.errText :groups w.groups :known w.known
                    :verdict w.verdict :exit exit :done true)))
 
-fn groupOf procs: (List fr/Proc) pid: Int64 -> Int64
-  (match (listHead (filter (fn [(p fr/Proc)] -> Bool (= p.pid pid)) procs)) ((some p) p.pgid) ((none) -1))
-
-fn ! judgeWatch lim: fr/Limits now: Int64 t0: Int64 snap: (List fr/Proc) own: Int64 checked: Bool w: WorkerWatch -> WorkerWatch
+fn ! judgeWatch lim: fr/Limits now: Int64 t0: Int64 snap: (List fr/Proc) self: Int64 checked: Bool w: WorkerWatch -> WorkerWatch
   (if w.done w
     (let [(overTime (> (/ (- now t0) 1000000) lim.timeoutMs))
-          (tree (if checked (fr/treeOf snap w.proc.pid w.groups w.known own) (pair w.known w.groups)))
+          (tree (if checked (fr/treeOf snap w.proc.pid w.groups w.known self) (pair w.known w.groups)))
           (descN (if checked (listLength (pairFirst tree)) 0))
           (verdict (cond (overTime "timeout") ((> descN lim.maxDesc) "runaway") (else "")))]
       (if (stringEmpty? verdict)
@@ -1310,8 +1307,8 @@ fn ! watchLoop lim: fr/Limits t0: Int64 ws: (List WorkerWatch) lastCheck: Int64 
           (now (monotonicNs))
           (checked (>= (- now lastCheck) 250000000))
           (snap (if checked (fr/procSnapshot) (list)))
-          (own (if checked (groupOf snap (procSelf)) -1))
-          (states (map (fn [(w WorkerWatch)] -> WorkerWatch (judgeWatch lim now t0 snap own checked (settleWatch t0 w))) (map pairSecond pumped)))
+          (self (if checked (procSelf) -1))
+          (states (map (fn [(w WorkerWatch)] -> WorkerWatch (judgeWatch lim now t0 snap self checked (settleWatch t0 w))) (map pairSecond pumped)))
           (finished (- (listLength (filter (fn [(w WorkerWatch)] -> Bool w.done) states)) (listLength (filter (fn [(w WorkerWatch)] -> Bool w.done) ws))))]
       (do (if (and (not progress) (= finished 0)) (do (fdPoll (watchFds states) 50) ()) ())
           (watchLoop lim t0 states (if checked now lastCheck)))))
