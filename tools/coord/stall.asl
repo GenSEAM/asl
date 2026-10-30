@@ -144,16 +144,17 @@ fn ! walkNewest! path: String depth: Int64 budget: Int64 -> (Pair Int64 Int64)
                           (pair (max (pairFirst acc) (pairFirst r)) (pairSecond r)))))
                     (pair 0 (- budget 1)) names)))))))
 
-fn ! newestJournal! wt: String -> (Pair Int64 String)
+; (:m :ref COND-STALL-AUTO :do "only journals written since the current admit (mtime >= sinceMs) count: a requeued unit reuses its worktree, and the previous session's looping journal re-tripped the probe at once (AUDIT-META-ROUTE, 3 times at 60 s)")
+fn ! newestJournal! wt: String since: Int64 -> (Pair Int64 String)
   (let [(jd (str wt "/.asl/run/agentLoop"))
         (names (filter (fn [(f String)] -> Bool (stringEndsWith? f ".journal")) (resultOr (dirList jd) (list))))
         (best (fold (fn [(acc (Pair Int64 String)) (f String)] -> (Pair Int64 String)
-                      (let [(m (statMs (str jd "/" f)))] (if (> m (pairFirst acc)) (pair m f) acc)))
+                      (let [(m (statMs (str jd "/" f)))] (if (and (>= m since) (> m (pairFirst acc))) (pair m f) acc)))
                     (pair 0 "") names))]
     (if (stringEmpty? (pairSecond best)) (pair 0 "") (pair (pairFirst best) (readOr (str jd "/" (pairSecond best))))))
 
 fn ! signalOf! cfg: Cfg p: Probe now: Int64 -> Signal
-  (let [(j (newestJournal! p.wt))
+  (let [(j (newestJournal! p.wt p.sinceMs))
         (turnAt (max (pairFirst j) p.sinceMs))
         (turnAge (- now turnAt))
         (writeAge (if (> turnAge (* cfg.stalledMin 60000)) (- now (max (newestWrite! p.wt) p.sinceMs)) 0))]
