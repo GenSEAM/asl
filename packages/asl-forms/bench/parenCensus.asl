@@ -234,8 +234,12 @@ fn ! censusDir! dir: String limit: Int64 -> Tot
         (use (if (> limit 0) (listTake paths limit) paths))]
     (fold (fn [(t Tot) (p String)] -> Tot (censusFile rx t p)) (emptyTot) use))
 
+fn quoted s: String -> String
+  (str "\"" (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\"")
+
+; (:m :ref PAREN-BENCH-LOCK-QUOTE :do "a key is quoted: census keys are raw error text such as 'unexpected )', and a bare one unbalances the lock file")
 fn rowOf m: (Map String Int64) -> String
-  (stringJoin (map (fn [(p (Pair String Int64))] -> String (str "(:k " (pairFirst p) " :n " (pairSecond p) ")"))
+  (stringJoin (map (fn [(p (Pair String Int64))] -> String (str "(:k " (quoted (pairFirst p)) " :n " (pairSecond p) ")"))
                    (listTake (listSortBy (fn [(p (Pair String Int64))] -> Int64 (- 0 (pairSecond p))) (mapPairs m)) 20)) " ")
 
 fn ! main args: (List String) -> (Result Int64 String)
