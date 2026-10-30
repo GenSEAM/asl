@@ -1378,6 +1378,13 @@ fn buildProviders providerForms: (List (Map String rd/SExpr)) initial: (Map Stri
   (:f errs (List String))
   (:f warns (List String)))
 
+; (:m :ref GW-GEMINI-400 :do "Google's generativelanguage host answers HTTP 400 \"Requests ending with a model turn are not supported\" to a body whose last message is the assistant's, which is what Leon's attractor prefill is; a model on that host without its own :prefill therefore defaults to :prefill false, an explicit :prefill true still wins")
+fn providerPrefillDefault providers: (Map String GatewayProvider) pid: String params: GatewayParams -> GatewayParams
+  (if (some? params.prefill) params
+    (match (mapGet providers pid)
+      ((some p) (if (stringContains? p.base "generativelanguage.googleapis.com") (with params :prefill (some false)) params))
+      ((none) params)))
+
 fn applyOneModel acc: ModelAccumulator m: (Map String rd/SExpr) providers: (Map String GatewayProvider) registry: (Map String (Pair GatewayParams (List (Pair String String)))) regError: (Option String) -> ModelAccumulator
   (match (mapGet m "id")
     ((none) acc)
@@ -1427,7 +1434,7 @@ fn applyOneModel acc: ModelAccumulator m: (Map String rd/SExpr) providers: (Map 
                 (finalParams (pairFirst (pairFirst (pairSecond calRes))))
                 (finalShown (pairSecond (pairFirst (pairSecond calRes))))
                 (finalWarns (pairSecond (pairSecond calRes)))
-                (model (GatewayModel :id mid :provider pid :name name :calibration cal :params finalParams :shown finalShown))]
+                (model (GatewayModel :id mid :provider pid :name name :calibration cal :params (providerPrefillDefault providers pid finalParams) :shown finalShown))]
             (ModelAccumulator
               :models (if providerKnown (mapSet acc.models mid model) acc.models)
               :order (if providerKnown (listAppendOne acc.order mid) acc.order)
