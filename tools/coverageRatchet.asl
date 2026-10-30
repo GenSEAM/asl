@@ -161,7 +161,7 @@ fn ! show! v: String -> Unit
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(root (argValue args "--root" "."))
-        (path (argValue args "--baseline" (str root "/tests/coverageBaseline.asn")))
+        (path (argValue args "--baseline" (str root "/tools/coverageBaseline.asn")))
         (current (packageCounts! root))
         (exports (fold (fn [(a Int64) (c Count)] -> Int64 (+ a c.exports)) 0 current))
         (covered (fold (fn [(a Int64) (c Count)] -> Int64 (+ a c.covered)) 0 current))
