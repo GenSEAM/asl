@@ -2,7 +2,7 @@
   :x [RVal AslRun TxnStep TxnPrep AbortAid WidenItem Effect FileText
       execTxn! txnPrepare txnFinish! serReceipt serValue balanceAid txnRefusal abortAid! abortAidOn applySteps stepsOf
       intelSubop widenWanted widenPick widenForm widenToSymbol! insideRoot normPath parseEffects loadEffects! checkEffect readText! splitLines outlineItems stripRightAt
-      langForPath tryRepairText!]
+      langForPath tryRepairText! orderSubs moduleHints moduleOf importsOf expectedModule txnSubs]
   :i [(asl/agentLoop/core :a c)
       (asl/agentLoop/diff :a diff)
       (asl-forms/repair :a rep)
@@ -653,6 +653,112 @@ fn confirmReceipt rid: String op: String -> (List (Pair String RVal))
   (list (pair "id" (rStr rid)) (pair "op" (rStr op)) (pair "status" (rStr "needsConfirm")) (pair "needsConfirm" (rBool true))
     (pair "message" (rStr (str "not executed: '" op "' is an outward effect that needs the principal's confirmation; the run goes on"))))
 
+enum TxnW
+  (txnW form: String file: String mod: String imps: (List String))
+
+; (:m :ref TXN-WRITE-ORDER :do "the module a source text declares: the first word after (module when the text starts with it, else empty")
+fn moduleOf text: String -> String
+  (let [t (pyStrip text)]
+    (if (stringStartsWith? t "(module ")
+      (optionOr (listHead (stringSplit (optionOr (listHead (stringSplit (optionOr (stringSlice t 8 (stringLength t)) "") "\n")) "") " ")) "")
+      ""))
+
+; (:m :ref TXN-WRITE-ORDER :do "the module names in the :i [ ... ] list of a source text, the first word of each (name :a alias) item")
+fn importsOf text: String -> (List String)
+  (match (listGet (stringSplit text ":i [") 1)
+    (none (list))
+    ((some r)
+      (let [body (optionOr (listHead (stringSplit r "]")) "")]
+        (filter (fn [w] (not (stringEmpty? w)))
+          (map (fn [piece] (optionOr (listHead (stringSplit (pyStrip piece) " ")) ""))
+               (optionOr (listTail (stringSplit body "(")) (list)))))))
+
+fn noW -> TxnW
+  (txnW "" "" "" (list))
+
+fn writeOf f: String -> (Option TxnW)
+  (let [kv (c/parseKv f)
+        head (kvGet kv "_head")
+        op (if (= head "step") (kvGet kv "op") head)
+        content (kvGet kv "content")]
+    (if (and (= op "write") (stringEndsWith? (kvGet kv "file") ".asl"))
+      (some (txnW f (kvGet kv "file") (moduleOf content) (importsOf content)))
+      none))
+
+fn wForm w: TxnW -> String
+  (match w ((txnW f _ _ _) f))
+
+fn wFile w: TxnW -> String
+  (match w ((txnW _ file _ _) file))
+
+fn wMod w: TxnW -> String
+  (match w ((txnW _ _ m _) m))
+
+fn wImps w: TxnW -> (List String)
+  (match w ((txnW _ _ _ i) i))
+
+fn writesOf subs: (List String) -> (List TxnW)
+  (fold (fn [acc f] (match (writeOf f) ((some w) (listAppend acc (list w))) (none acc))) (list) subs)
+
+; (:m :ref TXN-WRITE-ORDER :do "stable order of the staged .asl writes so a module comes before the writes that import it: the first pending write none of whose imports is declared by another pending write goes next; a cycle emits the first pending write unchanged")
+fn topoWrites pending: (List TxnW) done: (List TxnW) -> (List TxnW)
+  (if (listEmpty? pending)
+    (listReverse done)
+    (let [mods (map wMod pending)
+          blocked (fn [w] (listAny? (fn [m] (and (!= m (wMod w)) (listContains? mods m))) (wImps w)))
+          idx (optionOr (listFind (fn [i] (not (blocked (optionOr (listGet pending i) (noW))))) (range 0 (listLength pending))) 0)
+          pick (optionOr (listGet pending idx) (noW))]
+      (topoWrites (map (fn [i] (optionOr (listGet pending i) pick)) (filter (fn [i] (!= i idx)) (range 0 (listLength pending)))) (cons pick done))))
+
+fn editsOf f: String -> String
+  (let [kv (c/parseKv f)
+        head (kvGet kv "_head")]
+    (if (= (if (= head "step") (kvGet kv "op") head) "edit") (kvGet kv "file") ""))
+
+; (:m :ref TXN-WRITE-ORDER :do "files staged in one txn resolve against each other whatever order the model wrote them in: the .asl write steps are re-slotted by topoWrites into the positions the writes held; nothing moves when fewer than two writes, when an edit step targets a file the txn also writes, or when the order already holds")
+fn orderSubs subs: (List String) -> (List String)
+  (let [writes (writesOf subs)
+        files (map wFile writes)
+        editsWritten (listAny? (fn [f] (let [e (editsOf f)] (and (!= e "") (listContains? files e)))) subs)
+        sorted (map wForm (topoWrites writes (list)))]
+    (if (or (< (listLength writes) 2) (or editsWritten (= sorted (map wForm writes))))
+      subs
+      (pairSecond
+        (fold (fn [acc f]
+                (if (some? (writeOf f))
+                  (pair (optionOr (listTail (pairFirst acc)) (list)) (listAppend (pairSecond acc) (list (optionOr (listHead (pairFirst acc)) f))))
+                  (pair (pairFirst acc) (listAppend (pairSecond acc) (list f)))))
+              (pair sorted (list)) subs))))
+
+; (:m :ref TXN-WRITE-ORDER :do "the module name the path calls for: asl/tools/X -> asl-tools/X, asl/packages/P/src|tests/X -> P/X, else the path without .asl")
+fn expectedModule file: String -> String
+  (let [base (if (stringEndsWith? file ".asl") (optionOr (stringSlice file 0 (- (stringLength file) 4)) file) file)
+        parts (stringSplit base "/")]
+    (cond
+      ((and (> (listLength parts) 4) (and (= (optionOr (listGet parts 0) "") "asl") (and (= (optionOr (listGet parts 1) "") "packages") (listContains? (list "src" "tests") (optionOr (listGet parts 3) "")))))
+        (stringJoin (cons (optionOr (listGet parts 2) "") (optionOr (listSlice parts 4 (listLength parts)) (list))) "/"))
+      ((and (> (listLength parts) 2) (and (= (optionOr (listGet parts 0) "") "asl") (= (optionOr (listGet parts 1) "") "tools")))
+        (str "asl-tools/" (stringJoin (optionOr (listSlice parts 2 (listLength parts)) (list)) "/")))
+      (else base)))
+
+fn lastSeg s: String -> String
+  (optionOr (listLast (stringSplit s "/")) s)
+
+; (:m :ref TXN-WRITE-ORDER :do "a static hint for staged .asl writes whose module header cannot belong to the file: the last segment of the module is not the file's base name (a src file carrying its test's module name, a test carrying the src's), or two writes of the txn declare one module; empty when all are fine")
+fn moduleHints subs: (List String) -> String
+  (let [writes (writesOf subs)
+        names (map wMod writes)
+        bad (filter (fn [w] (and (!= (wMod w) "") (!= (lastSeg (wMod w)) (lastSeg (expectedModule (wFile w)))))) writes)
+        dup (filter (fn [w] (and (!= (wMod w) "") (> (listLength (filter (fn [m] (= m (wMod w))) names)) 1))) writes)
+        mis (map (fn [w] (str "module '" (wMod w) "' in " (wFile w) " does not fit its path, the module is named after the file: expected '" (expectedModule (wFile w)) "'; a src file must not reuse its test's module name")) bad)
+        dups (map (fn [w] (str (wFile w) " declares module '" (wMod w) "' that another write of this txn declares too; each file has its own module name")) (filter (fn [w] (not (listAny? (fn [b] (= (wFile b) (wFile w))) bad))) dup))]
+    (stringJoin (listAppend mis dups) "; "))
+
+fn txnSubs form: String -> (List String)
+  (let [n (stringLength form)
+        inner (if (>= n 2) (c/sliceOf form 1 (- n 1)) "")]
+    (filter (fn [f] (stringStartsWith? (pyStrip f) "(:")) (c/parseForms inner)))
+
 enum SubAcc
   (subGo forms: (List String) targets: (List String))
   (subStop receipt: (List (Pair String RVal)))
@@ -698,9 +804,7 @@ fn ! txnPrepare form: String owns: (List String) root: String effects: (List (Pa
         unowned (filter (fn [p] (not (c/checkOwns p sessionOwns root))) txnOwns)]
     (if (not (listEmpty? unowned))
       (prepDone (ownsReceipt rid "txn" (c/firstOf unowned) owns))
-      (let [n (stringLength form)
-            inner (if (>= n 2) (c/sliceOf form 1 (- n 1)) "")
-            subs (filter (fn [f] (stringStartsWith? (pyStrip f) "(:")) (c/parseForms inner))
+      (let [subs (orderSubs (txnSubs form))
             acc (fold (fn [a f] (match a
                                   ((subGo fs ts) (mapSub (c/parseKv f) sessionOwns txnOwns root effects rid newId fs ts))
                                   ((subStop _) a)))
@@ -817,6 +921,10 @@ fn ! snapAll snap: (fn [String] -> Bool) targets: (List String) -> String
     ((snap (c/firstOf targets)) (snapAll snap (c/restOf targets)))
     (else (c/firstOf targets)))
 
+; (:m :ref TXN-WRITE-ORDER :do "the module hint rides on the receipt, ok or rejected, as the field moduleHint; no hint adds nothing")
+fn withHint r: (List (Pair String RVal)) hint: String -> (List (Pair String RVal))
+  (if (stringEmpty? hint) r (listAppend r (list (pair "moduleHint" (rStr hint)))))
+
 ; (:m :tags (txn))
 fn ! execTxn! form: String owns: (List String) root: String effects: (List (Pair String String)) newId: (fn [] -> String) snap: (fn [String] -> Bool) run: (fn [String String] -> AslRun) -> (List (Pair String RVal))
   (let [rid (newId)
@@ -827,4 +935,4 @@ fn ! execTxn! form: String owns: (List String) root: String effects: (List (Pair
         (let [failed (snapAll snap targets)]
           (if (!= failed "")
             (simpleReject rid (rStr "txn") "ERR_SNAPSHOT" (str "'" failed "' could not be snapshotted before the write; nothing was sent"))
-            (txnFinish! prep (run sent root) root rid))))))
+            (withHint (txnFinish! prep (run sent root) root rid) (moduleHints (txnSubs form))))))))
