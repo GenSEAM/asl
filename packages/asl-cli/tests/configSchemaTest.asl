@@ -18,7 +18,7 @@ fn validText -> String
     ";; a comment line outside any form"
     "(:aslConfig :workspace \"w\" :build (:anything 1 :goes (2 3))"
     "  ; another comment"
-    "  :native (:parts 8 :level :dev :rc :notrace :clang \"/usr/bin/clang\" :llc \"/usr/bin/llc\" :opt \"/usr/bin/opt\" :wasmLd \"/usr/bin/wasm-ld\" :llvmNm \"/usr/bin/llvm-nm\" :node \"/usr/bin/node\" :storeCap 2G :storeMinAge 60m :sweep false)"
+    "  :native (:parts 8 :level :dev :rc :notrace :clang \"/usr/bin/clang\" :llc \"/usr/bin/llc\" :opt \"/usr/bin/opt\" :wasmLd \"/usr/bin/wasm-ld\" :llvmNm \"/usr/bin/llvm-nm\" :node \"/usr/bin/node\" :storeCap 2G :storeMinAge 60m :sweep false :claimWaitS 900 :lockGraceS 10)"
     "  :nativeCli (:buildWaitS 3600 :relayPin true :relayPaths [\"tools/remote\" \"asl/tools/fleet\"])"
     "  :release (:pin \"0.0.2\" :min \"0.0.1\" :mode :warn))"
     "") "\n")
@@ -26,9 +26,9 @@ fn validText -> String
 fn ! testValid -> Bool
   (let [(rules (schemaRules))
         (c (checkOf (validText)))]
-    (do (assert (= (cs/keyCount rules) 18) (str "the schema holds 18 key rows, got " (stringFromInt64 (cs/keyCount rules))))
+    (do (assert (>= (cs/keyCount rules) 20) (str "the schema holds at least the 20 key rows this test uses, got " (stringFromInt64 (cs/keyCount rules))))
         (assert (listEmpty? c.issues) (str "a config using every key at a sound value is clean: " (stringJoin (codesOf c) " ")))
-        (assert (= c.checked 18) (str "every key of the three strict groups was checked, got " (stringFromInt64 c.checked)))
+        (assert (= c.checked (cs/keyCount rules)) (str "every key of the three strict groups was checked, got " (stringFromInt64 c.checked)))
         (assert (= (cs/defaultOf rules "native" "storeCap") (some "2G")) "a key's documented default is readable from its row")
         (assert (= (cs/defaultOf rules "native" "nope") (none)) "an unknown key has no default")
         (let [(repo (checkOf (resultOr (fileReadString ".asl.config.asn") "")))]
