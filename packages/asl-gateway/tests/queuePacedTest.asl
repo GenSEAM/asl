@@ -22,19 +22,22 @@ fn ! drive! step: ch/ChatStep labels: String granted: (List String) fuel: Int64 
          ((ch/effRealpath _) (drive! (k (ch/outPath "/tmp")) labels granted (- fuel 1)))
          ((ch/effIsDir _) (drive! (k (ch/outBool true)) labels granted (- fuel 1)))
          ((ch/effClock) (drive! (k (ch/outFloat 1.0)) labels granted (- fuel 1)))
-         ((ch/effBreakerDown _) (drive! (k (ch/outFloat 0.0)) labels granted (- fuel 1)))
-         ((ch/effBreakerDownAll _) (drive! (k (ch/outFloats (list 0.0))) labels granted (- fuel 1)))
+         ((ch/effBreakerDown _) (drive! (k (ch/outFloat (if (listContains? granted "breakerDown") 2.5 0.0))) labels granted (- fuel 1)))
+         ((ch/effBreakerDownAll _) (drive! (k (ch/outFloats (list 7.0 2.5))) labels granted (- fuel 1)))
          ((ch/effBucket m _ t)
           (drive! (k (ch/outBool (listContains? granted m))) (str labels "|bucket:" m ":" (stringFromFloat64 t)) granted (- fuel 1)))
          ((ch/effHttp _ m _ _ _ _ _ _)
           (drive! (k (ch/outHttp (ch/httpOk 200 (list (pair "Content-Type" "application/json")) "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"fine\"},\"finish_reason\":\"stop\"}]}"))) (str labels "|http:" m) granted (- fuel 1)))
          (_ (drive! (k ch/outDone) labels granted (- fuel 1)))))))
 
-fn cfg chain: String -> String
-  (str "(:gateway :v 2 :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id m1 :provider fp :name \"n1\" :rpm 5) (:model :id m2 :provider fp :name \"n2\" :rpm 5)) :profiles ((:profile :id default :routes ((:intent any :chain (" chain "))))) :uses ((:use :for default :profile default)))\n")
+fn cfg chain: String extra: String -> String
+  (str "(:gateway :v 2" extra " :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id m1 :provider fp :name \"n1\" :rpm 5) (:model :id m2 :provider fp :name \"n2\" :rpm 5)) :profiles ((:profile :id default :routes ((:intent any :chain (" chain "))))) :uses ((:use :for default :profile default)))\n")
 
 fn ! run! chain: String headers: (List (Pair String String)) extraBody: String granted: (List String) -> String
-  (match (c/gateway_config_parse! (cfg chain) "default" ".asl/mem/calibration/index.asn")
+  (runWith! chain "" headers extraBody granted)
+
+fn ! runWith! chain: String extra: String headers: (List (Pair String String)) extraBody: String granted: (List String) -> String
+  (match (c/gateway_config_parse! (cfg chain extra) "default" ".asl/mem/calibration/index.asn")
     ((err e) (str "config: " e))
     ((ok table)
       (match (u/upstreamSettings (mapEmpty))
@@ -50,7 +53,10 @@ fn ! runTests -> Bool
         (viaBody (run! "m1" (list) ",\"queue_timeout\":7" (list)))
         (viaLeon (run! "m1" (list) ",\"queue_timeout\":1200" (list)))
         (two (run! "m1 m2" (list) ",\"queue_timeout\":9" (list)))
-        (served (run! "m1" (list) ",\"queue_timeout\":9" (list "n1")))]
+        (served (run! "m1" (list) ",\"queue_timeout\":9" (list "n1")))
+        (down (run! "m1" (list) "" (list "breakerDown")))
+        (tuned (runWith! "m1" " :queueBudgetSec 4" (list) "" (list)))
+        (bad (c/gateway_config_parse! (cfg "m1" " :queueBudgetSec 0") "default" ".asl/mem/calibration/index.asn"))]
     (do (assert (stringContains? plain "|bucket:n1:30") (str "no budget keeps the 30 s wait: " plain))
         (assert (stringContains? plain "|status:429|ra:12|") (str "a refused last member ends 429 with Retry-After = ceil(60/rpm): " plain))
         (assert (not (stringContains? plain "gemini")) (str "the refusal names the token bucket, not gemini: " plain))
@@ -60,4 +66,8 @@ fn ! runTests -> Bool
         (assert (stringContains? two "|bucket:n1:5.0|bucket:n2:9.0|") (str "a member before the last keeps the 5 s default, the last takes the budget: " two))
         (assert (stringContains? two "|status:429|ra:12|") (str "a two-member chain refused by buckets ends 429: " two))
         (assert (stringContains? served "|http:n1|status:200|ra:-|") (str "a granted bucket calls the member: " served))
+        (assert (stringContains? down "|status:503|ra:3|") (str "every member in breaker cooldown ends 503 with Retry-After = the shortest cooldown left, rounded up: " down))
+        (assert (stringContains? tuned "|bucket:n1:4.0|") (str "the gateway :queueBudgetSec is the wait when the caller gave no budget: " tuned))
+        (assert (stringContains? viaMs "|bucket:n1:2.5|") (str "a caller budget still wins over :queueBudgetSec: " viaMs))
+        (assert (match bad ((ok t) (and (= t.queueBudgetSec 30.0) (listAny? (fn [(w String)] -> Bool (stringContains? w "queueBudgetSec")) t.warnings))) ((err _) false)) "a non-positive :queueBudgetSec warns and keeps the 30 s default")
         true))

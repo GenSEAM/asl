@@ -2,7 +2,7 @@
   :x [main]
   :i [])
 
-; (:m :ref HUB-QUEUE-PACED :do "stand-in hub: mode retry answers the first request 429 with Retry-After 2 and every later one a text reply, mode long answers every request 429 with Retry-After 9999; every request is appended to the log")
+; (:m :ref HUB-QUEUE-PACED :do "stand-in hub: mode down answers the first request 503 with Retry-After 2 and later ones a text reply, mode retry answers the first request 429 with Retry-After 2 and every later one a text reply, mode long answers every request 429 with Retry-After 9999; every request is appended to the log")
 fn bodyComplete? raw: String -> Bool
   (match (stringIndexOf raw "\r\n\r\n")
     ((none) false)
@@ -31,7 +31,7 @@ fn ! serve! listener: Int64 out: String mode: String n: Int64 -> (Result Int64 S
             (_logged (fileAppend out (str "at " (stringFromInt64 (/ (nowNs) 1000000)) "\n" req "\n----\n")))
             (limited (or (= mode "long") (= n 0)))]
         (do (if limited
-              (reply! conn "429 Too Many Requests" (str "Retry-After: " (if (= mode "long") "9999" "2") "\r\n") "application/json" "{\"error\":\"ERR_RATE_LIMITED: no rate-limit token within the queue budget; retry in 2s\"}")
+              (reply! conn (if (= mode "down") "503 Service Unavailable" "429 Too Many Requests") (str "Retry-After: " (if (= mode "long") "9999" "2") "\r\n") "application/json" "{\"error\":\"ERR_RATE_LIMITED: no rate-limit token within the queue budget; retry in 2s\"}")
               (reply! conn "200 OK" "" "application/asn+sexpr" "(:reply :content \"text ok\")"))
             (serve! listener out mode (+ n 1))))))
 

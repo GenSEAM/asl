@@ -18,7 +18,8 @@
   (:f arrived Int64)
   (:f log String)
   (:f firstAt Int64)
-  (:f retryAt Int64))
+  (:f retryAt Int64)
+  (:f status Int64))
 
 fn ! nowMs! -> Int64
   (/ (monotonicNs) 1000000)
@@ -55,9 +56,9 @@ fn replyFor input: String -> String
         (body (str "(:reply :content \"" content "\")"))]
     (str "HTTP/1.1 200 OK\r\nContent-Type: application/asn+sexpr\r\nContent-Length: " (stringFromInt64 (stringLength body)) "\r\nConnection: close\r\n\r\n" body))
 
-fn tooMany -> String
+fn tooMany status: Int64 -> String
   (let [(body "{\"error\":\"ERR_RATE_LIMITED: no rate-limit token within the queue budget; retry in 2s\"}")]
-    (str "HTTP/1.1 429 Too Many Requests\r\nContent-Type: application/json\r\nRetry-After: 2\r\nContent-Length: " (stringFromInt64 (stringLength body)) "\r\nConnection: close\r\n\r\n" body))
+    (str "HTTP/1.1 " (stringFromInt64 status) " Retry\r\nContent-Type: application/json\r\nRetry-After: 2\r\nContent-Length: " (stringFromInt64 (stringLength body)) "\r\nConnection: close\r\n\r\n" body))
 
 fn noted h: Hub input: String -> Hub
   (with h :arrived (+ h.arrived 1) :log (str h.log (if (stringContains? input "blue") "B" "F"))
@@ -89,7 +90,7 @@ fn ! stepStub! h: Hub s: Stub ready: (List (Pair Int64 Int64)) delayMs: Int64 ->
             (let [(input (str s.input chunk))]
               (let [(done (complete? input))
                     (h2 (if done (noted h input) h))]
-                (withStubs h2 (listAppend h.stubs (list (Stub :fd s.fd :input input :replyAt (if done (+ (nowMs!) delayMs) 0) :reply (if done (if (= h.arrived 0) (tooMany) (replyFor input)) ""))))))))))))
+                (withStubs h2 (listAppend h.stubs (list (Stub :fd s.fd :input input :replyAt (if done (+ (nowMs!) delayMs) 0) :reply (if done (if (= h.arrived 0) (tooMany h.status) (replyFor input)) ""))))))))))))
 
 fn ! stepHub! h: Hub ready: (List (Pair Int64 Int64)) delayMs: Int64 -> Hub
   (let [(accepted (if (ready? ready h.listener)
@@ -133,7 +134,7 @@ fn ! openAll! book: (List (Pair String lp/Live)) p: sp/Pool roots: (List String)
               ((none) (pair (sp/poolSubmit! (pairFirst acc) id id (nowMs!)) (pairFirst opened))))))
     (pair p book) roots)
 
-fn ! runSet! temp: String name: String n: Int64 repoRoot: String -> (Pair Hub Int64)
+fn ! runSet! temp: String name: String n: Int64 repoRoot: String status: Int64 -> (Pair Hub Int64)
   (let [(sock (str temp "/" name ".sock"))
         (roots (map (fn [(i Int64)] -> String (str temp "/" name (stringFromInt64 i))) (range 0 n)))
         (prepared (listAll? (fn [(r String)] -> Bool (prepRoot! r sock)) roots))
@@ -142,7 +143,7 @@ fn ! runSet! temp: String name: String n: Int64 repoRoot: String -> (Pair Hub In
         (listener (resultOr (unixListen sock) -1))
         (opened (openAll! (list) (sp/newPool sock 16 64 60000 spill) roots repoRoot))
         (t0 (nowMs!))
-        (out (pump! (pairFirst opened) (Hub :listener listener :stubs (list) :seen 0 :peak 0 :arrived 0 :log "" :firstAt 0 :retryAt 0) (pairSecond opened) 0 (+ t0 240000)))
+        (out (pump! (pairFirst opened) (Hub :listener listener :stubs (list) :seen 0 :peak 0 :arrived 0 :log "" :firstAt 0 :retryAt 0 :status status) (pairSecond opened) 0 (+ t0 240000)))
         (book (pairSecond (pairSecond out)))
         (okRuns (listLength (filter (fn [(r String)] -> Bool (= (lp/leonExit book (stringReplace r "/" "_")) 0)) roots)))
         (closed (do (map (fn [(s Stub)] -> Bool (do (fdClose s.fd) true)) (pairFirst out).stubs) (fdClose listener) (pathRemove sock) true))]
@@ -151,12 +152,17 @@ fn ! runSet! temp: String name: String n: Int64 repoRoot: String -> (Pair Hub In
 fn ! runTests -> Bool
   (let [(temp (stringTrim (resultOr (fr/shellOut "/usr/bin/mktemp -d /tmp/leonPoolRetryAfterTest.XXXXXX" 5000) "")))
         (repoRoot (resultOr (realPath ".") "."))
-        (two (runSet! temp "two" 2 repoRoot))
+        (two (runSet! temp "two" 2 repoRoot 429))
+        (busy (runSet! temp "busy" 2 repoRoot 503))
         (hub (pairFirst two))
+        (busyHub (pairFirst busy))
         (removed (ok? (fr/shellOut (str "/bin/rm -rf " temp) 5000)))]
     (do
       (assert (= (pairSecond two) 2) (str "both runs ended ok: " (stringFromInt64 (pairSecond two))))
       (assert (= hub.log "FFBFB") (str "the other run's calls were answered during the hold, the held run reposted after them: " hub.log))
       (assert (>= (- hub.retryAt hub.firstAt) 2000) (str "the repost came at least Retry-After seconds after the 429 (lower bound only): " (stringFromInt64 (- hub.retryAt hub.firstAt)) " ms"))
+      (assert (= (pairSecond busy) 2) (str "503: both runs ended ok: " (stringFromInt64 (pairSecond busy))))
+      (assert (= busyHub.log "FFBFB") (str "503: the other run's calls were answered during the hold: " busyHub.log))
+      (assert (>= (- busyHub.retryAt busyHub.firstAt) 2000) (str "503: the repost came at least Retry-After seconds later (lower bound only): " (stringFromInt64 (- busyHub.retryAt busyHub.firstAt)) " ms"))
       (assert removed "temp dir removed")
       true))
