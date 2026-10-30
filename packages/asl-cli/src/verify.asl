@@ -1,5 +1,5 @@
 (module asl-cli/verify
-  :x [checkFiles! checkRoots nativeCheckPaths! formatDiag formatDiags indentFields! balanceReceipt!]
+  :x [checkFiles! checkRoots nativeCheckPaths! formatDiag formatDiags formatDiagsHinted! diagHints! indentFields! balanceReceipt!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-gates/src/dyck :a dyck) (asl-forms/indent :a ind) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
 
 fn checkRoots -> (List String)
@@ -28,6 +28,23 @@ fn indentFields! path: String -> String
 fn balanceReceipt! path: String -> String
   (pairSecond (dyck/reportFile! path (fn [(p String)] -> String (indentFields! p))))
 
+; (:m :ref PAREN-CHECK-HOST-MSG :do "a reader balance error (ERR_READ_UNBALANCED, or the checker's parse code with an unmatched/unclosed/closes/unterminated message, which asl test and run hit with no balance pass first) is followed by one (:indentFix ...) line per file naming the closer edits indentation implies; the diagnostic lines themselves keep their path:line:col CODE form")
+fn unbalancedRead? d: ty/Diagnostic -> Bool
+  (or (or (stringStartsWith? d.code "ERR_READ_UNBALANCED") (= d.code "ERR_UNBALANCED"))
+      (and (= d.code "parse") (listAny? (fn [(w String)] -> Bool (stringContains? d.message w)) (list "unmatched" "unclosed" " closes " "unterminated"))))
+
+fn ! indentLine! path: String -> String
+  (let [(fields (indentFields! path))]
+    (if (stringEmpty? fields) "" (str "(:indentFix :file \"" (dyck/esc path) "\"" fields ")")))
+
+fn ! diagHints! diags: (List ty/Diagnostic) -> (List String)
+  (let [(paths (fold (fn [(acc (List String)) (d ty/Diagnostic)] -> (List String) (if (and (unbalancedRead? d) (not (listContains? acc d.path))) (listAppend acc (list d.path)) acc))
+                     (list) diags))]
+    (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (map (fn [(p String)] -> String (indentLine! p)) paths)))
+
+fn ! formatDiagsHinted! diags: (List ty/Diagnostic) -> String
+  (stringJoin (listAppend (map formatDiag diags) (diagHints! diags)) "\n")
+
 fn ! balance! paths: (List String) -> Int64
   (match (dyck/mainWith paths (fn [(p String)] -> String (indentFields! p))) ((ok rc) rc) ((err e) (do (sys/sayErr! e) 2)))
 
@@ -50,7 +67,8 @@ fn ! reportOne! path: String verdict: (Result cc/Verdict String) -> Int64
     ((ok v)
       (if (listEmpty? v.diags)
         (do (sys/say! (str "ok " path ": " (cc/countsText v))) 0)
-        (let [(shown (map printDiag! v.diags))]
+        (let [(shown (map printDiag! v.diags))
+              (hinted (map (fn [(l String)] -> Bool (sys/sayErr! l)) (diagHints! v.diags)))]
           (do (sys/sayErr! (str "check failed: " path ": " (stringFromInt64 (listLength v.diags)) " error(s)")) 1)))))
 
 fn ! nativeCheckStep! paths: (List String) cache: cc/Cache rc: Int64 -> Int64

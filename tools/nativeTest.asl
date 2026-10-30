@@ -1454,20 +1454,21 @@ fn ! checkRootsForNative -> (List String)
 fn ! checkerRejection! actualPath: String logicalPath: String fp: String -> (Option String)
   (let [(inline (inlineStaged? logicalPath))
         (shown (if inline (inlineName logicalPath) logicalPath))]
-    (match (ccache/verdictKeyWith! actualPath (if inline (str "inline " shown) "") (str "nativeTest " fp))
+    (match (ccache/verdictKeyWith! actualPath (if inline (str "inline " shown) "") (str "nativeTest render2 " fp))
       ((none) (freshRejection! actualPath shown (none)))
       ((some key)
        (match (ccache/lookup! key)
          ((some v) (if (= v.exitCode 0) (none) (some v.body)))
          ((none) (freshRejection! actualPath shown (some key)))))))
 
+; (:m :ref PAREN-CHECK-HOST-MSG :do "render2 in the verdict key: the cached body is rendered text and the toolchain fingerprint does not cover asl-cli/verify, so a renderer change (here the :indentFix line) bumps the tag or old bodies replay without it")
 ; (:m :ref SCRIPT-RUN-UNCHECKED :do "a file the checker cannot key or read is checked uncached or rejected, never let through unchecked")
 fn ! freshRejection! actualPath: String logicalPath: String key: (Option String) -> (Option String)
   (match (pairFirst (ccd/checkFileCached! actualPath (checkRootsForNative) (ccd/stampedCache!)))
     ((err e) (some (str logicalPath ":0:0: ERR_IO " e)))
     ((ok verdict)
      (let [(diags verdict.diags)
-           (body (if (listEmpty? diags) "" (stringReplace (verify/formatDiags diags) actualPath logicalPath)))
+           (body (if (listEmpty? diags) "" (stringReplace (verify/formatDiagsHinted! diags) actualPath logicalPath)))
            (_ (match key
                 ((some k) (match (ccache/store! k (ccache/Verdict :exitCode (if (listEmpty? diags) 0 1) :body body)) ((ok _) ()) ((err _) ())))
                 ((none) ())))]
