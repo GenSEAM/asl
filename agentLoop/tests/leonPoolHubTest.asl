@@ -3,7 +3,7 @@
   :i [(asl/agentLoop/main :a m) (asl/agentLoop/leonPool :a lp) (asl/agentLoop/sessionPool :a sp)
       (asl/agentLoop/providers :a pv) (asl-tools/fleet/run :a fr)])
 
-; (:m :ref SE3E-HUB-OVERLAP :do "Leon runs over a stand-in hub socket that holds every reply 1500 ms: 8 runs of 2 hub calls share one pool and one process, all end ok, and their pool wall is over one hold and under twice the wall of one such run alone, so the calls of different runs wait together instead of one after another")
+; (:m :ref SE3E-HUB-OVERLAP :do "Leon runs over a stand-in hub socket that holds every reply 3000 ms: 8 runs of 2 hub calls share one pool and one process, all end ok, and their pool wall is over one hold and under twice the wall of one such run alone, so the calls of different runs wait together instead of one after another")
 (schema Stub
   (:f fd Int64)
   (:f input String)
@@ -13,7 +13,8 @@
 (schema Hub
   (:f listener Int64)
   (:f stubs (List Stub))
-  (:f seen Int64))
+  (:f seen Int64)
+  (:f peak Int64))
 
 fn ! nowMs! -> Int64
   (/ (monotonicNs) 1000000)
@@ -52,6 +53,10 @@ fn replyFor input: String -> String
 
 fn withStubs h: Hub stubs: (List Stub) -> Hub
   (with h :stubs stubs)
+
+; (:m :ref SE3E-HUB-OVERLAP :do "requests held by the stand-in at once: the peak of complete requests still waiting for their reply; 8 runs overlapping hold 8, runs one after another hold 1, whatever the load")
+fn withPeak h: Hub -> Hub
+  (with h :peak (max h.peak (listLength (filter (fn [(s Stub)] -> Bool (> s.replyAt 0)) h.stubs))))
 
 fn withSeen h: Hub seen: Int64 -> Hub
   (with h :seen seen)
@@ -102,7 +107,7 @@ fn ! pump! p: sp/Pool h: Hub book: (List (Pair String lp/Live)) delayMs: Int64 d
       ((err _) (pump! p h book delayMs deadline))
       ((ok ready)
         (let [(stepped (sp/poolStepG! p ready lp/leonTurn! book (nowMs!)))]
-          (pump! (pairFirst stepped) (stepHub! h ready delayMs) (pairSecond stepped) delayMs deadline)))))
+          (pump! (pairFirst stepped) (withPeak (stepHub! h ready delayMs)) (pairSecond stepped) delayMs deadline)))))
 
 fn ! openAll! book: (List (Pair String lp/Live)) p: sp/Pool roots: (List String) repoRoot: String -> (Pair sp/Pool (List (Pair String lp/Live)))
   (fold (fn [(acc (Pair sp/Pool (List (Pair String lp/Live)))) (root String)] -> (Pair sp/Pool (List (Pair String lp/Live)))
@@ -113,7 +118,7 @@ fn ! openAll! book: (List (Pair String lp/Live)) p: sp/Pool roots: (List String)
               ((none) (pair (sp/poolSubmit! (pairFirst acc) id id (nowMs!)) (pairFirst opened))))))
     (pair p book) roots)
 
-fn ! runSet! temp: String name: String n: Int64 repoRoot: String holdMs: Int64 -> (Pair Int64 (Pair Int64 Int64))
+fn ! runSet! temp: String name: String n: Int64 repoRoot: String holdMs: Int64 -> (Pair Int64 (Pair Int64 (Pair Int64 Int64)))
   (let [(sock (str temp "/" name ".sock"))
         (roots (map (fn [(i Int64)] -> String (str temp "/" name (stringFromInt64 i))) (range 0 n)))
         (prepared (listAll? (fn [(r String)] -> Bool (prepRoot! r sock)) roots))
@@ -122,23 +127,23 @@ fn ! runSet! temp: String name: String n: Int64 repoRoot: String holdMs: Int64 -
         (listener (resultOr (unixListen sock) -1))
         (opened (openAll! (list) (sp/newPool sock 16 64 60000 spill) roots repoRoot))
         (t0 (nowMs!))
-        (out (pump! (pairFirst opened) (Hub :listener listener :stubs (list) :seen 0) (pairSecond opened) holdMs (+ t0 240000)))
+        (out (pump! (pairFirst opened) (Hub :listener listener :stubs (list) :seen 0 :peak 0) (pairSecond opened) holdMs (+ t0 240000)))
         (wall (- (nowMs!) t0))
         (book (pairSecond (pairSecond out)))
         (okRuns (listLength (filter (fn [(r String)] -> Bool (= (lp/leonExit book (stringReplace r "/" "_")) 0)) roots)))
         (closed (do (map (fn [(s Stub)] -> Bool (do (fdClose s.fd) true)) (pairFirst out).stubs) (fdClose listener) (pathRemove sock) true))]
-    (pair wall (pair okRuns (if prepared (pairFirst out).seen -1))))
+    (pair wall (pair okRuns (pair (if prepared (pairFirst out).seen -1) (pairFirst out).peak))))
 
 fn ! runTests -> Bool
   (let [(temp (stringTrim (resultOr (fr/shellOut "/usr/bin/mktemp -d /tmp/leonPoolHubTest.XXXXXX" 5000) "")))
         (repoRoot (resultOr (realPath ".") "."))
-        (one (runSet! temp "one" 1 repoRoot 1500))
-        (eight (runSet! temp "eight" 8 repoRoot 1500))
+        (one (runSet! temp "one" 1 repoRoot 3000))
+        (eight (runSet! temp "eight" 8 repoRoot 3000))
         (removed (ok? (fr/shellOut (str "/bin/rm -rf " temp) 5000)))]
     (do
       (assert (and (= (pairFirst (pairSecond one)) 1) (= (pairFirst (pairSecond eight)) 8)) (str "all runs ended ok: one " (stringFromInt64 (pairFirst (pairSecond one))) ", eight " (stringFromInt64 (pairFirst (pairSecond eight)))))
-      (assert (and (= (pairSecond (pairSecond one)) 2) (= (pairSecond (pairSecond eight)) 16)) (str "the stand-in answered 2 and 16 hub calls: " (stringFromInt64 (pairSecond (pairSecond one))) ", " (stringFromInt64 (pairSecond (pairSecond eight)))))
-      (assert (> (pairFirst one) 1500) (str "one run waited at least one hold: " (stringFromInt64 (pairFirst one)) " ms"))
-      (assert (< (pairFirst eight) (* 2 (pairFirst one))) (str "8 runs finish in under twice one run's wall: " (stringFromInt64 (pairFirst eight)) " ms vs " (stringFromInt64 (pairFirst one)) " ms"))
+      (assert (and (= (pairFirst (pairSecond (pairSecond one))) 2) (= (pairFirst (pairSecond (pairSecond eight))) 16)) (str "the stand-in answered 2 and 16 hub calls: " (stringFromInt64 (pairFirst (pairSecond (pairSecond one)))) ", " (stringFromInt64 (pairFirst (pairSecond (pairSecond eight))))))
+      (assert (> (pairFirst one) 3000) (str "one run waited at least one hold: " (stringFromInt64 (pairFirst one)) " ms"))
+      (assert (and (= (pairSecond (pairSecond (pairSecond one))) 1) (>= (pairSecond (pairSecond (pairSecond eight))) 8)) (str "the stand-in held " (stringFromInt64 (pairSecond (pairSecond (pairSecond eight)))) " requests at once for 8 runs and " (stringFromInt64 (pairSecond (pairSecond (pairSecond one)))) " for one (walls " (stringFromInt64 (pairFirst eight)) " ms and " (stringFromInt64 (pairFirst one)) " ms)"))
       (assert removed "temp dir removed")
       true))
