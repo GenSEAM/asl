@@ -1,6 +1,6 @@
 (module asl-tools/nativeTest
   :x [takeLock! lockLive? unparsableStale? runTests main failLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
-  :i [(asl-tools/corpusNative :a cn)
+  :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
       (asl-ir/lower :a low)
@@ -1454,14 +1454,14 @@ fn ! checkRootsForNative -> (List String)
 fn ! checkerRejection! actualPath: String logicalPath: String fp: String -> (Option String)
   (let [(inline (inlineStaged? logicalPath))
         (shown (if inline (inlineName logicalPath) logicalPath))]
-    (match (ccache/verdictKeyWith! actualPath (if inline (str "inline " shown) "") (str "nativeTest render2 " fp))
+    (match (ccache/verdictKeyWith! actualPath (if inline (str "inline " shown) "") (str "nativeTest render " (rtag/renderTagIn! (toolRoot)) " " fp))
       ((none) (freshRejection! actualPath shown (none)))
       ((some key)
        (match (ccache/lookup! key)
          ((some v) (if (= v.exitCode 0) (none) (some v.body)))
          ((none) (freshRejection! actualPath shown (some key)))))))
 
-; (:m :ref PAREN-CHECK-HOST-MSG :do "render2 in the verdict key: the cached body is rendered text and the toolchain fingerprint does not cover asl-cli/verify, so a renderer change (here the :indentFix line) bumps the tag or old bodies replay without it")
+; (:m :ref NT-VERDICT-KEY-COVERS-RENDER :do "the verdict key carries asl-tools/renderTag: the cached body is rendered text and the toolchain fingerprint does not cover asl-cli/verify, so the key digests verify and its direct imports and a renderer edit misses old bodies")
 ; (:m :ref SCRIPT-RUN-UNCHECKED :do "a file the checker cannot key or read is checked uncached or rejected, never let through unchecked")
 fn ! freshRejection! actualPath: String logicalPath: String key: (Option String) -> (Option String)
   (match (pairFirst (ccd/checkFileCached! actualPath (checkRootsForNative) (ccd/stampedCache!)))
