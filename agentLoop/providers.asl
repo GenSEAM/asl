@@ -1388,16 +1388,33 @@ fn toolsField tools: (List j/Json) -> (List (Pair String j/Json))
   (if (listEmpty? tools) (list) (list (pair "tools" (j/jarr tools))))
 
 ; (:m :ref TOOLS-400-FALLBACK :do "a route that answers HTTP 400 to a request carrying tools cannot take native tools (a tool-less model, or a gateway that rejects the schema): the turn is retried once without them, in the text protocol, and the config remembers the route as no-tools; a 400 without tools is an ordinary error")
+; (:m :ref TOOLS-400-OBSERVE :do "a 400 whose body names a context, length or token limit is the request being too big, not the tools being refused: no fallback, the error stands (dropping the tools would not shrink it)")
+fn sizeLimit? text: String -> Bool
+  (let [(low (stringLower text))]
+    (or (stringContains? low "context") (or (stringContains? low "length") (stringContains? low "token"))))
+
 fn toolsRejected? reply: (Result (Option String) ProviderError) -> Bool
   (match reply
-    ((err e) (stringContains? (errorMessage e) "HTTP error 400"))
+    ((err e) (and (stringContains? (errorMessage e) "HTTP error 400") (not (sizeLimit? (errorMessage e)))))
+    ((ok _) false))
+
+; (:m :ref TOOLS-400-OBSERVE :do "records the fallback in the session journal so a run's text-protocol turns are explained after the fact; no session or a failed write records nothing and never fails the turn")
+fn ! noteFallback! cfg: VendorConfig model: String reply: (Result (Option String) ProviderError) -> Bool
+  (match reply
+    ((err e)
+     (if (stringEmpty? cfg.sessionId)
+       false
+       (match (jr/journalWrite (sessionJournal cfg) (jr/fallbackRowText model 400 (errorMessage e)))
+         ((ok _) true)
+         ((err _) false))))
     ((ok _) false))
 
 ; (:m :effect net)
 fn ! callProfile! cfg: VendorConfig system: String user: String model: String -> Called
   (let [(once (callProfileOnce! cfg system user model))]
     (if (and (not (listEmpty? cfg.tools)) (toolsRejected? once.reply))
-      (callProfileOnce! (with cfg :tools (list) :noTools true) system user model)
+      (do (noteFallback! cfg model once.reply)
+        (callProfileOnce! (with cfg :tools (list) :noTools true) system user model))
       once))
 
 ; (:m :effect net)
@@ -1471,6 +1488,9 @@ fn stepTurns turns: (List String) index: Int64 -> (Pair (Option String) Int64)
     (none (pair none index)))
 
 ; (:m :ref JOURNAL-USAGE-ROWS :do "appends the reply's usage to the session journal at rootDir/.asl/run/agentLoop/<session>.journal, the path the loop's own rows use; no usage or no session writes nothing, a failed write returns false and never fails the turn")
+fn sessionJournal cfg: VendorConfig -> String
+  (jr/pathJoin (jr/pathJoin cfg.rootDir ".asl/run/agentLoop") (str cfg.sessionId ".journal"))
+
 fn ! logUsage! cfg: VendorConfig meta: TurnMeta -> Bool
   (match meta.usage
     ((none) false)
@@ -1479,7 +1499,7 @@ fn ! logUsage! cfg: VendorConfig meta: TurnMeta -> Bool
        false
        (let [(num (fn [k] (match (optionOr (jsonLookup (j/jobj fields) k) (j/jint 0)) ((j/jint n) n) (_ 0))))
              (model (match meta.served ((some s) (optionOr (dictGet s "model") cfg.model)) ((none) cfg.model)))
-             (path (jr/pathJoin (jr/pathJoin cfg.rootDir ".asl/run/agentLoop") (str cfg.sessionId ".journal")))]
+             (path (sessionJournal cfg))]
          (match (jr/journalWrite path (jr/usageRowText (num "inputTokens") (num "cachedTokens") (num "outputTokens") model))
            ((ok _) true)
            ((err _) false))))))

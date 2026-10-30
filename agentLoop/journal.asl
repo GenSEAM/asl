@@ -1,6 +1,6 @@
 (module asl/agentLoop/journal
   :x [Snapshot Written AsnNode Layer
-      harnessLayers buildSystemPrompt buildSystemPromptDrop sectionId retainJournal journalWrite usageRowText snapshotBeforeWrite patchLines filePatch!
+      harnessLayers buildSystemPrompt buildSystemPromptDrop sectionId retainJournal journalWrite usageRowText fallbackRowText snapshotBeforeWrite patchLines filePatch!
       applyResumePatch handBack writtenField handBackFields
       newWritten idleWritten git! asnRead asnReadOne pathNorm pathRel pathJoin pathDirname splitExt loadEffects]
   :i [(asl/agentLoop/core :a c) (asl/agentLoop/diff :a d) (asl-proc/coreProcess :a cp) (asl-proc/runnerBin :a rb) (asl-harness/launch :a lh) (asl/agentLoop/grounding :a gr)])
@@ -245,6 +245,10 @@ fn ! chmod! p: String mode: Int64 -> (Result Int64 String)
 ; (:m :ref JOURNAL-USAGE-ROWS :do "one journal row per provider reply that carried usage: tokens in, of those cached, and out, with the model that answered")
 fn usageRowText inTokens: Int64 cachedTokens: Int64 outTokens: Int64 model: String -> String
   (str "(:usage :in " (stringFromInt64 inTokens) " :cached " (stringFromInt64 cachedTokens) " :out " (stringFromInt64 outTokens) " :model \"" (escapeAsn model) "\")\n")
+
+; (:m :ref TOOLS-400-OBSERVE :do "one journal row when a route's 400 to a tools request made the turn fall back to the text protocol: the model asked for and the first 120 characters of the error it answered")
+fn fallbackRowText model: String status: Int64 reason: String -> String
+  (str "(:fallback :noTools true :model \"" (escapeAsn model) "\" :status " (stringFromInt64 status) " :reason \"" (escapeAsn (optionOr (stringSlice reason 0 (min 120 (stringLength reason))) "")) "\")\n")
 
 fn ! journalWrite path: String text: String -> (Result Int64 String)
   (if (stringEmpty? path)
