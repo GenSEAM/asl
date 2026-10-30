@@ -4,7 +4,7 @@
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
       parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
       curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! providerEnv! makeProvider! nextTurn! withPrefill withTools acceptHeader readJsonReply outgoingMessages profileMessages advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
-  :i [(asl-json/json :a j) (asl-proc/coreProcess :a cp) (aslGateway/server :a gs) (aslGateway/dispatch :a gd) (aslGateway/upstream :a gu) (aslGateway/config :a cfg) (asl/agentLoop/nativeTools :a nt)])
+  :i [(asl-json/json :a j) (asl/agentLoop/journal :a jr) (asl-proc/coreProcess :a cp) (aslGateway/server :a gs) (aslGateway/dispatch :a gd) (aslGateway/upstream :a gu) (aslGateway/config :a cfg) (asl/agentLoop/nativeTools :a nt)])
 
 enum ProviderError
   (providerError code: String message: String)
@@ -1155,6 +1155,19 @@ fn replyContent resp: j/Json -> (Result (Option String) ProviderError)
                         (v (ok (some (pyStrip (pyStr v))))))))))))))
       (_ (noReply "Empty choices in gateway response"))))
 
+; (:m :ref JOURNAL-USAGE-ROWS :do "a gateway or hub that answers the plain OpenAI usage block (no asl envelope) still reports tokens: prompt_tokens is the input, prompt_tokens_details.cached_tokens the cached share, completion_tokens the output; a reply without prompt_tokens has no usage")
+fn openAiUsage resp: j/Json -> (Option (List (Pair String j/Json)))
+  (match (jsonLookup resp "usage")
+    ((some u)
+     (if (and (isObject u) (some? (jsonLookup u "prompt_tokens")))
+       (some (list (pair "inputTokens" (optionOr (jsonLookup u "prompt_tokens") (j/jint 0)))
+                   (pair "cachedTokens" (match (jsonLookup u "prompt_tokens_details")
+                                          ((some d) (if (isObject d) (optionOr (jsonLookup d "cached_tokens") (j/jint 0)) (j/jint 0)))
+                                          ((none) (j/jint 0))))
+                   (pair "outputTokens" (optionOr (jsonLookup u "completion_tokens") (j/jint 0)))))
+       none))
+    ((none) none))
+
 fn readJsonReply body: String -> (Pair (Result (Option String) ProviderError) TurnMeta)
   (match (j/jsonParse body)
     ((err e) (pair (err (gatewayError "ERR_VENDOR" (str "Failed to parse gateway JSON response: " e) "")) (emptyMeta)))
@@ -1172,7 +1185,7 @@ fn readJsonReply body: String -> (Pair (Result (Option String) ProviderError) Tu
                                          (some (map (fn [k] (pair k (optionOr (jsonLookup u k) (j/jint 0)))) (list "inputTokens" "cachedTokens" "outputTokens")))
                                          none))
                              (none none)))
-                    (usage internalUsage)
+                    (usage (match internalUsage ((some u) (some u)) ((none) (openAiUsage resp))))
                     (served (servedFields (dictPut (jsonDict asl) "model" (optionOr (jsonLookup resp "model") (j/jnull)))))
                     (meta (TurnMeta :timing timing :usage usage :served served :finish none :truncated false))]
                 (pair (replyContent resp) meta))))))))
@@ -1425,6 +1438,20 @@ fn stepTurns turns: (List String) index: Int64 -> (Pair (Option String) Int64)
     ((some r) (pair (some r) (+ index 1)))
     (none (pair none index)))
 
+; (:m :ref JOURNAL-USAGE-ROWS :do "appends the reply's usage to the session journal at rootDir/.asl/run/agentLoop/<session>.journal, the path the loop's own rows use; no usage or no session writes nothing, a failed write returns false and never fails the turn")
+fn ! logUsage! cfg: VendorConfig meta: TurnMeta -> Bool
+  (match meta.usage
+    ((none) false)
+    ((some fields)
+     (if (stringEmpty? cfg.sessionId)
+       false
+       (let [(num (fn [k] (match (optionOr (jsonLookup (j/jobj fields) k) (j/jint 0)) ((j/jint n) n) (_ 0))))
+             (model (match meta.served ((some s) (optionOr (dictGet s "model") cfg.model)) ((none) cfg.model)))
+             (path (jr/pathJoin (jr/pathJoin cfg.rootDir ".asl/run/agentLoop") (str cfg.sessionId ".journal")))]
+         (match (jr/journalWrite path (jr/usageRowText (num "inputTokens") (num "cachedTokens") (num "outputTokens") model))
+           ((ok _) true)
+           ((err _) false))))))
+
 fn ! nextTurn! p: Provider system: String user: String -> Turn
   (match p
     ((scriptProvider name turns index)
@@ -1455,7 +1482,8 @@ fn ! nextTurn! p: Provider system: String user: String -> Turn
                   :meta (emptyMeta))))))
     ((vendorProvider cfg)
       (let [(r (callVendor! (withTurn cfg (+ cfg.turn 1)) system user))]
-        (Turn :provider (vendorProvider r.cfg) :reply r.reply :meta r.meta))))
+        (do (logUsage! r.cfg r.meta)
+          (Turn :provider (vendorProvider r.cfg) :reply r.reply :meta r.meta)))))
 
 ; (:m :ref SE1-PROVIDER-SPLIT :do "the turn cut at the network: nextTurnAsk! runs everything nextTurn! runs up to the hub post and, when the call would go to the hub socket, returns askHub with the provider (turn already counted) and the exact body, headers and socket instead of posting; every other provider and path (script, replay, cli vendors, in-process, HTTP gateway) returns askDone with the Turn nextTurn! gives. nextTurnReply turns the raw HTTP reply of an askHub into the Turn nextTurn! would have returned. A pool posts the call itself, without waiting, between the two")
 enum Ask
@@ -1475,11 +1503,12 @@ fn ! nextTurnAsk! p: Provider system: String user: String -> Ask
             (back (vendorProvider (withDefer r.cfg false)))]
         (match r.cfg.hub
           ((some h) (askHub back h))
-          ((none) (askDone (Turn :provider back :reply r.reply :meta r.meta))))))
+          ((none) (do (logUsage! r.cfg r.meta) (askDone (Turn :provider back :reply r.reply :meta r.meta)))))))
     (_ (askDone (nextTurn! p system user))))
 
-fn nextTurnReply p: Provider raw: String -> Turn
-  (let [(r (readResponse "Hub" raw))]
+fn ! nextTurnReply p: Provider raw: String -> Turn
+  (let [(r (readResponse "Hub" raw))
+        (logged (match p ((vendorProvider cfg) (logUsage! cfg (pairSecond r))) (_ false)))]
     (Turn :provider p :reply (pairFirst r) :meta (pairSecond r)))
 
 ; (:m :ref SE1-PROVIDER-SPLIT :do "the hub answers 503 when it is busy: that is a wait for the caller, not a failure, the same rule hubPost! applies")

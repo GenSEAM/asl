@@ -1,6 +1,6 @@
 (module asl/agentLoop/journal
   :x [Snapshot Written AsnNode Layer
-      harnessLayers buildSystemPrompt buildSystemPromptDrop sectionId retainJournal journalWrite snapshotBeforeWrite patchLines filePatch!
+      harnessLayers buildSystemPrompt buildSystemPromptDrop sectionId retainJournal journalWrite usageRowText snapshotBeforeWrite patchLines filePatch!
       applyResumePatch handBack writtenField handBackFields
       newWritten idleWritten git! asnRead asnReadOne pathNorm pathRel pathJoin pathDirname splitExt loadEffects]
   :i [(asl/agentLoop/core :a c) (asl/agentLoop/diff :a d) (asl-proc/coreProcess :a cp) (asl-proc/runnerBin :a rb) (asl-harness/launch :a lh) (asl/agentLoop/grounding :a gr)])
@@ -241,6 +241,10 @@ fn ! chmod! p: String mode: Int64 -> (Result Int64 String)
           ((ok o) (if (= o.exitCode 0) (ok 0) (err (str "PermissionError: chmod " (pyQuote p) ": " o.stderr))))
           ((err e) (err e)))))
     ((none) (err (osError "notFound" p))))
+
+; (:m :ref JOURNAL-USAGE-ROWS :do "one journal row per provider reply that carried usage: tokens in, of those cached, and out, with the model that answered")
+fn usageRowText inTokens: Int64 cachedTokens: Int64 outTokens: Int64 model: String -> String
+  (str "(:usage :in " (stringFromInt64 inTokens) " :cached " (stringFromInt64 cachedTokens) " :out " (stringFromInt64 outTokens) " :model \"" (escapeAsn model) "\")\n")
 
 fn ! journalWrite path: String text: String -> (Result Int64 String)
   (if (stringEmpty? path)
