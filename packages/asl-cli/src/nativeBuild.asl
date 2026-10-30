@@ -66,7 +66,8 @@ fn lastLines text: String -> String
 
 ; (:m :ref NATIVECLI-STICKY-FAIL-20261018 :do "owner-gone/deadline (child!, compileParts!'s own ad hoc message) and timeout/runaway/spawnFailed (run/Done.verdict, via failure) are transient infrastructure causes, never a compiler diagnostic; only an 'exited N' message (failure's d.verdict = exit branch) reflects the compiler itself running and rejecting the input, which is the one case safe to cache and replay under the input digest. transientFailure? names every other message shape this module ever produces, by the fixed substrings failure/compileParts! always write for a non-exit verdict, so compile!'s .failed marker is written only for a deterministic failure")
 fn transientFailure? why: String -> Bool
-  (or (stringContains? why " was killed: ") (stringContains? why " did not run: "))
+  (or (or (stringContains? why " was killed: ") (stringContains? why " did not run: "))
+      (or (stringContains? why " exited -9: ") (stringContains? why " exited -15: ")))
 
 fn failure what: String d: run/Done -> String
   (if (= d.verdict "exit")
