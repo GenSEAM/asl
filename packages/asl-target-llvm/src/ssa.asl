@@ -1,5 +1,5 @@
 (module asl-target-llvm/ssa
-  :x [emitLlvmModule emitLlvmProgram ownedEntryName emitLlvmModuleWasm32 emitLlvmProgramWasm32 trapLowering llvmName llvmBytes llvmFloat runtimeDecls cDeclFits? overwideCDecls cRuntimeModule ModEnv FnEnv NameIndex nameIndexSet tailCall? pinMusttailCallees linkInits definesInit? ensureInit listBuilder? headOffsetsText headOffsets usedDeclsKeyed usedDeclsJoin]
+  :x [emitLlvmModule emitLlvmModuleCEntries emitLlvmProgram ownedEntryName emitLlvmModuleWasm32 emitLlvmProgramWasm32 trapLowering llvmName llvmBytes llvmFloat runtimeDecls cDeclFits? overwideCDecls cRuntimeModule ModEnv FnEnv NameIndex nameIndexSet tailCall? pinMusttailCallees linkInits definesInit? ensureInit listBuilder? headOffsetsText headOffsets usedDeclsKeyed usedDeclsJoin]
 
   :i [(asl-ir/types :a ty)
       (asl-ir/verify :a vfy)
@@ -3887,6 +3887,23 @@ fn emitDiags m: ty/SsaModule -> (List ty/IrDiag)
 
 fn emitLlvmModule m: ty/SsaModule -> (Result String (List ty/IrDiag))
   (emitModuleWith m false)
+
+; (:m :ref C-EXPORT-ABI :do "x86_64 tailcc is not the C convention: the callee pops its argument area (ret $8), so a C caller of a compiled function crashes there; arm64 happened to agree. emitLlvmModuleCEntries is emitLlvmModule plus, for every plain top-level function, a ccc definition @c.<name> with the same registers that calls the tailcc body; default IR is unchanged, embedding and FFI export call the shim")
+fn cEntryShim ll: String f: ty/SsaFunction -> String
+  (let [(sym (fnSym f.name))
+        (rt (llTy f.retTy))
+        (plain (and (listEmpty? f.captures) (not (stringContains? sym "\""))))]
+    (if (and plain (stringContains? ll (str "define tailcc " rt " " sym "(")))
+      (let [(params (registerParamList f))]
+        (str "define " rt " @c." (optionOr (stringSlice sym 1 (stringLength sym)) "") "(" params ") {\n"
+             "  %c.res = call tailcc " rt " " sym "(" params ")\n"
+             "  ret " rt " %c.res\n}\n"))
+      ""))
+
+fn emitLlvmModuleCEntries m: ty/SsaModule -> (Result String (List ty/IrDiag))
+  (match (emitLlvmModule m)
+    ((err ds) (err ds))
+    ((ok ll) (ok (str ll "\n" (stringJoin (map (fn [(f ty/SsaFunction)] -> String (cEntryShim ll f)) m.functions) "")))))
 
 fn emitLlvmModuleWasm32 m: ty/SsaModule -> (Result String (List ty/IrDiag))
   (emitModuleWith m true)

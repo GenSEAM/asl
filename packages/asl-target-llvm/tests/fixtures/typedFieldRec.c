@@ -6,8 +6,9 @@
  * (Person -> String, a plain Val read). The source declares Point (x y) and Person
  * (age name); here each schema is built once in declared order and once with its keys
  * swapped, so a static slot read that skipped the keys[i] check would return the other field.
- * getY and nameOf are tailcc in the IR; each takes one %Val (two integer registers) and
- * nothing travels on the stack, where tailcc and the C convention assign the same registers.
+ * getY and nameOf are tailcc in the IR, and tailcc is not the C convention on x86_64 (the callee pops its
+ * argument area, ret $8; only arm64 happens to agree), so the fixture calls the ccc shims .getY and
+ * @c.nameOf that emitLlvmModuleCEntries adds (C-EXPORT-ABI).
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -32,8 +33,8 @@ static Val record(const char *schema, const char *const *keys, int *ids, const V
   return v;
 }
 
-int64_t getY(Val p);
-Val nameOf(Val p);
+int64_t getY(Val p) __asm__("c.getY");
+Val nameOf(Val p) __asm__("c.nameOf");
 
 static const char *sameVal(Val got, Val want) {
   return got.tag == want.tag && got.u.o == want.u.o ? "same" : "other";

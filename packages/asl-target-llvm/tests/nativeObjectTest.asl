@@ -526,7 +526,7 @@ fn ! testReport dir: String -> Bool
       (match (ssa/emitLlvmModule suite)
         ((err ds) (assert false (str "objSuite emits: " (formatDiags ds))))
         ((ok suiteCode)
-          (let [(entry (irTy/ssaModule "objEntry" (list) (list) (list) (list (irTy/ssaExtern "checks" 1)) (list)
+          (let [(entry (irTy/ssaModule "objEntry" (list) (list) (list) (list (irTy/ssaExternTyped "checks" (list (irTy/tyVal)) (irTy/tyVal))) (list)
                          (list (irTy/ssaFunction "start" (list) (list) (irTy/tyVal)
                                  (list (irTy/ssaBlock "entry" (list)
                                          (list (irTy/ssaInstr "seven" (irTy/tyVal) (irTy/opConst (irTy/constInt 7)))

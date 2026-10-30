@@ -673,8 +673,8 @@ fn keyOrderCaller -> String
     "  Val v = {7, 0, {.o = r}};"
     "  return v;"
     "}"
-    "int64_t same(Val a, Val b);"
-    "int64_t differ(Val a, Val b);"
+    "int64_t same(Val a, Val b) __asm__(\"c.same\");"
+    "int64_t differ(Val a, Val b) __asm__(\"c.differ\");"
     "static Val intVal(int64_t i) { Val v = {2, 0, {.i = i}}; return v; }"
     "int main(void) {"
     "  asl_rt_init();"
@@ -697,8 +697,8 @@ fn keyOrderCaller -> String
 fn ! testKeyOrder dir: String -> Bool
   (match (low/lowerSource (keyOrderSource))
     ((err ds) (do (assert false (str "keyOrder: the source lowers: " (formatDiags ds))) true))
-    ((ok m) (match (ssa/emitLlvmModule m)
-              ((err ds) (do (assert false (str "keyOrder: emitLlvmModule emits same and differ: " (formatDiags ds))) true))
+    ((ok m) (match (ssa/emitLlvmModuleCEntries m)
+              ((err ds) (do (assert false (str "keyOrder: emitLlvmModuleCEntries emits same and differ: " (formatDiags ds))) true))
               ((ok ll)
                 (let [(lib (str dir "/keyOrderLib.ll"))
                       (caller (str dir "/keyOrderCaller.c"))

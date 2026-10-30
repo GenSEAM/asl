@@ -296,7 +296,7 @@ fn floorMain -> String
     "Val aslCall(Val fn, int argc, Val *args);"
     "void *aslHandlerSlot(void);"
     "char *aslErrorText(void);"
-    "Val makeAdder(void);"
+    "Val makeAdder(void) __asm__(\"c.makeAdder\");"
     "static jmp_buf jb;"
     "int main(void) {"
     "  asl_rt_init();"
@@ -319,7 +319,7 @@ fn ! testFloorCalls dir: String -> Bool
       (assert (ok? (fileWrite (str dir "/valRuntime.ll") (ssa/cRuntimeModule))) "fileWrite valRuntime.ll, the C main's runtime definitions")
       (match (low/lowerSource (floorLibSource))
         ((err ds) (assert false (str "valLib lowers: " (formatDiags ds))))
-        ((ok m) (match (ssa/emitLlvmModule m)
+        ((ok m) (match (ssa/emitLlvmModuleCEntries m)
                   ((err ds) (assert false (str "valLib emits: " (formatDiags ds))))
                   ((ok code)
                     (let [(exe (linkWith dir "valLib" code (str dir "/valRuntime.ll -x c " cSrc " -x none " (runtime))))
