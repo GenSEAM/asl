@@ -399,6 +399,15 @@ fn gatewayQueueBudgetWarnings g: (Map String rd/SExpr) -> (List String)
     ((some f) (if (> f 0.0) (list) (list ":queueBudgetSec must be a positive number; using the default")))
     ((none) (list)))
 
+; (:m :ref GW-ALL-DOWN-RETRY-AFTER :do "config check is strict where the runtime load only warns: a non-positive :bucketWaitSec or :queueBudgetSec is an error in the check receipt, while serve keeps the default so a live hub never dies on it")
+fn waitErrorOf key: String value: (Option Float64) -> (List String)
+  (match value
+    ((some f) (if (> f 0.0) (list) (list (str ":" key " must be a positive number of seconds"))))
+    ((none) (list)))
+
+fn gatewayWaitErrors g: (Map String rd/SExpr) -> (List String)
+  (listAppend (waitErrorOf "bucketWaitSec" (bucketWaitValue g)) (waitErrorOf "queueBudgetSec" (queueBudgetValue g)))
+
 fn gatewayLimitWindows -> (List String)
   (list "minute" "hour" "fiveHour" "day" "week" "month")
 
@@ -2930,7 +2939,7 @@ fn gatewayConfigCheckText! text: String source: String registry: String -> (Pair
                     (let [(built (gateway_config_v2_build! g source registry))
                           (table (pairFirst built))
                           (errors0 (pairSecond built))
-                          (errors (if (listEmpty? errors0) (codeRouteErrors g table) errors0))
+                          (errors (listAppend (if (listEmpty? errors0) (codeRouteErrors g table) errors0) (gatewayWaitErrors g)))
                           (warnings (if (listEmpty? errors) (listAppend table.warnings (gateway_any_only_intents table)) table.warnings))
                           (extra (str " :profiles " (stringFromInt64 (listLength (mapKeys table.profiles)))
                                       " :models " (stringFromInt64 (listLength (mapKeys table.models)))
