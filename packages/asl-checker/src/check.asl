@@ -788,7 +788,7 @@ fn isCheckLint d: ty/Diagnostic -> Bool
   (or (checkLintCode? d.code) (lintDiagnosticMessage? d))
 
 fn lintDiagnosticMessage? d: ty/Diagnostic -> Bool
-  (and (= d.code "builtin-reference") (stringContains? d.message "is a builtin, not a value"))
+  (or (stringContains? d.message "is exported as a type but not defined as a schema or enum") (and (= d.code "builtin-reference") (stringContains? d.message "is a builtin, not a value")))
 
 fn hostCheckCode code: String -> String
   (cond ((= code "rule-1") "ERR_UNKNOWN_SYMBOL") ((= code "rule-2") "ERR_UNKNOWN_SYMBOL") ((= code "rule-12") "ERR_EFFECT_UNMARKED") ((= code "unresolved-import") "ERR_UNRESOLVED_IMPORT") ((= code "arity") "ERR_ARITY") ((= code "ctor") "ERR_BAD_CONSTRUCTOR") ((= code "type") "ERR_TYPE_MISMATCH") ((= code "rule-6") "ERR_TYPE_MISMATCH") ((= code "rule-4") "ERR_MATCH_NONEXHAUSTIVE") ((= code "literal-range") "ERR_INT_RANGE") ((= code "else-keyword") "ERR_ELSE_KEYWORD") ((= code "unreachable-arm") "ERR_UNREACHABLE_ARM") (else code))
