@@ -26,8 +26,9 @@ fn entries -> (List String)
 ; (:m :ref FFI2 :do "checkSemanticTest linked IR re-recorded on merge sh/INTEG8b into sh/FFI2 (5041040 bytes: BATCH8 plus the foreign checker rules); measured by this file own goldenDigests printer")
 ; (:m :ref INTEG12 :do "checkSemanticTest linked IR re-recorded after the wave12 merges (+242 bytes, 5123186: the compiler closure and prelude changes of LINUXFFI2 and sibling merges); measured by this file own goldenDigests printer")
 ; (:m :ref INTEG13 :do "checkSemanticTest linked IR re-recorded after the wave13 merges (+40100 bytes, 5163286: checker hint names ty/stringBuiltinNames and unknown-symbol hints, indentLexer change); measured by this file own goldenDigests printer")
+; (:m :ref CONFORMANCE-MAIN-REDS :do "checkSemanticTest linked IR re-recorded on main 5fab8c0a0 (+24932 bytes, 5781512): numKinds literal grammar and int kinds (f4e15216e 6535c0608), the lowLevelRoute hub (cd5241d9d), the lexer radix continuation (12d40c785) and the ERR_UNDEFINED_EXPORT checker and :x sweep (db0fe60ae c1ea15a18 fe10c72ed); measured by this file own goldenDigests printer")
 fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "7970664847138001670:5756580")
+  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "-7241547328944911777:5781512")
         (pair "lowerSourceWith" "6806003338108627551:8856"))
 
 fn diagLine d: ty/IrDiag -> String
