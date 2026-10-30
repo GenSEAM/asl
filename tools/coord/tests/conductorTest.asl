@@ -297,6 +297,26 @@ fn ! testVacuousBlocks bin: String -> Bool
         (assert (stringStartsWith? esc "(:escalate :unit \"V\" :seen \"vacuousGate") (str "one escalate row names the vacuous gate: " esc))
         true))
 
+; (:m :ref DEV-PROMOTE-ON-DEPLOY :do "a write refused as stale (its worktree lacks the deployed Leon and could not be rebased) parks the unit blocked :await rebase at once: no failure count, no tier hop, no escalate row, one (:stale ...) journal row")
+fn ! testStaleBlocks bin: String -> Bool
+  (let [(dir (scratch "stale"))
+        (_ (cleanup dir))
+        (put (putAll! dir (list (task "S" (list "p/s") (list) (greenGate) "free"))))
+        (ctx (ctxWith dir bin (fn [(stage String) (id String)] -> (List String) (if (= stage "write") (list "--failsig" "STALE_NEEDS_REBASE leon abc123def") (list))) 4 4 400 60))
+        (_ (cd/drain! ctx 600))
+        (s (cuOf dir "S"))
+        (esc (readOr dir "escalations.asn"))
+        (tos (tosOf dir "S"))
+        (stale (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:stale :unit \"S\"")) (journalLines dir)))
+        (_ (cleanup dir))]
+    (do (assert put "unit put")
+        (assert (= tos (list "ready" "writing" "blocked")) (str "S blocks on its first stale write: " (stringJoin tos ",")))
+        (assert (and (= s.fails 0) (= s.esc 0)) (str "staleness is not a failure: fails " (stringFromInt64 s.fails) " esc " (stringFromInt64 s.esc)))
+        (assert (and (= s.lane "free") (= s.await "rebase")) (str "no tier hop, waits on a rebase: " s.lane " " s.await))
+        (assert (not (stringContains? esc "\"S\"")) "no escalate row for a stale unit")
+        (assert (= (listLength stale) 1) "one stale journal row")
+        true))
+
 ; (:m :ref CONDUCTOR :do "a unit waiting on a dependency that never merges escalates after maxWait ticks and blocks")
 fn ! testWaitEscalates bin: String -> Bool
   (let [(dir (scratch "wait"))
@@ -730,6 +750,7 @@ fn ! runTests -> Bool
         (assert (testWriterClaimIgnored bin) "writer's green claim is not trusted")
         (assert (testWaitEscalates bin) "waiting past maxWait escalates")
         (assert (testVacuousBlocks bin) "a vacuous-gate write blocks at once")
+        (assert (testStaleBlocks bin) "a stale write blocks awaiting a rebase, not as a failure")
         (assert (testAttractorArm) "attractor A/B arm by id parity, off by default")
         (assert (testParallel bin) "stages overlap")
         (assert (testCapacity bin) "capacity counts units in flight")

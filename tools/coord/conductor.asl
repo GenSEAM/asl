@@ -1,5 +1,5 @@
 (module asl-tools/coord/conductor
-  :x [hubGuard! leonGuard! CUnit Res Pace Ctx RealCfg
+  :x [hubGuard! leonGuard! staleSig? CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! rungCap hopsSince nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
@@ -374,12 +374,17 @@ fn ! finish! ctx: Ctx u: st/Task c: CUnit res: Res -> Unit
           (let [(c1 (move! ctx (written c res.wt res.branch) "gating" "write" res.model res.tokens res.costMicro (if (= res.claimedGreen 1) "claimedGreen" "written") res.ms))
                 (_ (launch! ctx u c1))]
             ())
+          (if (staleSig? res.sig)
+            (let [(_ (dropLease! ctx c))
+                  (_ (fileAppend (journalPath ctx.dir) (str "(:stale :unit " (st/q c.id) " :leon " (st/q (optionOr (listLast (stringSplit res.sig " ")) "")) " :result blocked :needs rebase)\n")))
+                  (_ (move! ctx (with c :await "rebase") "blocked" "write" res.model 0 0 "needs rebase" res.ms))]
+              ())
           (if (vacuousSig? res.sig)
             (let [(_ (dropLease! ctx c))
                   (c1 (escalate! ctx (with c :sig res.sig :epoch 0) res.sig "write: the unit gate passes on the base before any edit, so no write can prove it; make the gate fail on the base or mark the task a regression guard"))
                   (_ (move! ctx c1 "blocked" "write" res.model 0 0 (str "escalated: " (verdictSig res.sig)) res.ms))]
               ())
-            (let [(_ (fail! ctx c "write" res.model res.sig res.ms))] ()))))
+            (let [(_ (fail! ctx c "write" res.model res.sig res.ms))] ())))))
       ((= c.st "gating")
         (if (and (= res.exit 0) (> res.asserts 0))
           (let [(_ (move! ctx c "awaitReview" "gates" "" 0 0 (str "green " (n res.asserts)) res.ms))] ())
@@ -805,19 +810,33 @@ fn ! hubGuard! home: String wt: String -> (Option Res)
     ((err e) (some (failRes e)))
     ((ok _) none))
 
-; (:m :ref DEV-PROMOTE-ON-DEPLOY :do "a unit worktree must hold the deployed Leon: the last commit touching asl/agentLoop on the deployed main (the conductor's --repo) is an ancestor of the unit's HEAD, else the write stage refuses with ERR_LEON_STALE instead of running a Leon older than the one deployed; an unreadable deployed head is not a verdict")
+; (:m :ref DEV-PROMOTE-ON-DEPLOY :do "a unit worktree must hold the deployed Leon: the last commit touching asl/agentLoop on the deployed main (the conductor's --repo) is an ancestor of the unit's HEAD; a stale clean worktree is rebased onto the deployed main and the write goes on, a dirty one or a rebase conflict (aborted) returns a STALE_NEEDS_REBASE result, which finish! parks as blocked :await rebase with no failure count and no ladder hop; an unreadable deployed head is not a verdict")
+fn staleSig? sig: String -> Bool
+  (stringStartsWith? sig "STALE_NEEDS_REBASE ")
+
+fn staleRes sha: String -> Res
+  (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig (str "STALE_NEEDS_REBASE leon " sha) :ms 0 :exit 1 :asserts 0 :verdict "")
+
 fn ! leonGuard! repo: String wt: String -> (Option Res)
   (let [(d (gitOut repo (list "log" "-1" "--format=%H" "HEAD" "--" "asl/agentLoop")))
-        (sha (stringTrim d.out))]
+        (sha (stringTrim d.out))
+        (short (optionOr (stringSlice sha 0 9) sha))]
     (cond
       ((or (!= d.exit 0) (stringEmpty? sha)) none)
       ((= (gitOut wt (list "merge-base" "--is-ancestor" sha "HEAD")).exit 0) none)
-      (else (some (failRes (str "ERR_LEON_STALE: worktree lacks the deployed Leon " (optionOr (stringSlice sha 0 9) sha) "; bring the unit base onto main"))))))
+      ((not (stringEmpty? (stringTrim (gitOut wt (list "status" "--porcelain" "--untracked-files=no")).out))) (some (staleRes short)))
+      ((and (= (gitOut wt (list "fetch" "-q" repo "HEAD")).exit 0) (= (gitOut wt (list "rebase" "-q" "FETCH_HEAD")).exit 0)) none)
+      (else (let [(_ (gitOut wt (list "rebase" "--abort")))] (some (staleRes short))))))
 
-fn ! writeGuard! home: String repo: String wt: String -> (Option Res)
+fn ! writeGuard! home: String repo: String wt: String dir: String id: String -> (Option Res)
   (match (hubGuard! home wt)
     ((some r) (some r))
-    ((none) (leonGuard! repo wt)))
+    ((none)
+      (let [(before (stringTrim (gitOut wt (list "rev-parse" "HEAD")).out))
+            (g (leonGuard! repo wt))
+            (after (stringTrim (gitOut wt (list "rev-parse" "HEAD")).out))
+            (_ (if (and (not (some? g)) (!= before after)) (ok? (fileAppend (journalPath dir) (str "(:stale :unit " (st/q id) " :result rebased :from " (st/q before) " :to " (st/q after) ")\n"))) false))]
+        g)))
 
 fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
   (let [(path (w/wtPath rc.wt u.id))
@@ -825,7 +844,7 @@ fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
     (match added
       ((err e) (failRes e))
       ((ok p)
-       (match (writeGuard! rc.home rc.repo p)
+       (match (writeGuard! rc.home rc.repo p dir u.id)
         ((some refused) refused)
         ((none)
         (let [(fresh (noEdits? p u.base u.owns))

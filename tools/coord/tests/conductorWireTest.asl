@@ -422,25 +422,34 @@ fn ! testHubGuard -> Bool
         (assert (not (some? current)) "a worktree with the hub client passes")
         true))
 
-; (:m :ref DEV-PROMOTE-ON-DEPLOY :do "a worktree cloned before the deployed main's last Leon commit is refused, a later non-Leon commit on main changes nothing, and the worktree passes once it holds that commit")
+; (:m :ref DEV-PROMOTE-ON-DEPLOY :do "a worktree holding the deployed Leon passes; a stale clean worktree with its own commit is rebased onto the deployed main and passes with that commit kept; a stale worktree whose commit conflicts is aborted back and gets a STALE_NEEDS_REBASE result, not a failure")
 fn ! testLeonGuard -> Bool
   (let [(root (scratch "leonguard"))
         (repo (str root "/repo"))
         (wt (str root "/wt"))
         (sh (fn [(c String)] -> String (resultOr (fr/shellOut c 60000) "")))
+        (cfg " && git config user.email t@example.invalid && git config user.name t")
         (_ (cleanup root))
-        (made (sh (str "mkdir -p " repo "/asl/agentLoop && cd " repo " && git init -q -b main && git config user.email t@example.invalid && git config user.name t"
-                       " && echo a > asl/agentLoop/a.asl && git add -A && git commit -qm a && git clone -q " repo " " wt " 2>&1 && echo madeOk")))
+        (made (sh (str "mkdir -p " repo "/asl/agentLoop && cd " repo " && git init -q -b main" cfg
+                       " && echo a > asl/agentLoop/a.asl && git add -A && git commit -qm a && git clone -q " repo " " wt " 2>&1 && cd " wt cfg " && echo madeOk")))
         (current (cd/leonGuard! repo wt))
-        (_ (sh (str "cd " repo " && echo b > asl/agentLoop/b.asl && git add -A && git commit -qm b && echo other > other.txt && git add -A && git commit -qm other")))
-        (stale (cd/leonGuard! repo wt))
-        (_ (sh (str "cd " wt " && git pull -q --ff-only origin main 2>&1")))
-        (pulled (cd/leonGuard! repo wt))
+        (_ (sh (str "cd " repo " && echo b > asl/agentLoop/b.asl && git add -A && git commit -qm b && cd " wt " && echo u > u.txt && git add -A && git commit -qm unit")))
+        (leonSha (stringTrim (sh (str "git -C " repo " rev-parse HEAD"))))
+        (rebased (cd/leonGuard! repo wt))
+        (hasLeon (stringContains? (sh (str "git -C " wt " merge-base --is-ancestor " leonSha " HEAD && echo yes")) "yes"))
+        (kept (stringContains? (sh (str "git -C " wt " log --format=%s -1")) "unit"))
+        (_ (sh (str "cd " repo " && echo repoSide > asl/agentLoop/a.asl && git commit -qam repoSide && cd " wt " && echo wtSide > asl/agentLoop/a.asl && git commit -qam wtSide")))
+        (head0 (stringTrim (sh (str "git -C " wt " rev-parse HEAD"))))
+        (conflict (cd/leonGuard! repo wt))
+        (head1 (stringTrim (sh (str "git -C " wt " rev-parse HEAD"))))
+        (clean (stringEmpty? (stringTrim (sh (str "git -C " wt " status --porcelain")))))
         (_ (cleanup root))]
     (do (assert (stringContains? made "madeOk") "the fixture repo and its clone exist")
         (assert (not (some? current)) "a worktree holding the deployed Leon passes")
-        (assert (match stale ((some r) (and (= r.ok 0) (stringContains? r.sig "ERR_LEON_STALE"))) ((none) false)) "a worktree without the last Leon commit is refused")
-        (assert (not (some? pulled)) "after the worktree takes main it passes")
+        (assert (not (some? rebased)) "a stale clean worktree is rebased and passes")
+        (assert (and hasLeon kept) "after the rebase the worktree holds the deployed Leon and keeps its own commit")
+        (assert (match conflict ((some r) (and (cd/staleSig? r.sig) (not (stringContains? r.sig "ERR_")))) ((none) false)) "a conflicting stale worktree gets a STALE_NEEDS_REBASE result")
+        (assert (and (= head0 head1) clean) "the conflicting rebase is aborted back to the unit's own head")
         true))
 
 fn ! runTests -> Bool
