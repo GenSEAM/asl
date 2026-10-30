@@ -80,7 +80,7 @@ fn ! testUndefinedExportLintFiltered -> Bool
       (assert (listAny? (fn [(d ty/Diagnostic)] -> Bool (stringContains? d.message "is exported but not defined in this module")) raw) "fixture emits exported-but-undefined lint before filtering")
       (match checked
         ((err e) (do (assert false (str "checkFile! succeeds: " e)) false))
-        ((ok ds) (do (assert (listEmpty? ds) (str "undefined-export lint is filtered from check errors; diagnostics=" (stringFromInt64 (listLength ds)))) true)))))
+        ((ok ds) (do (assert (and (= (listLength ds) 1) (listAny? (fn [(d ty/Diagnostic)] -> Bool (= d.code "ERR_UNDEFINED_EXPORT")) ds)) (str "an undefined export is the one ERR_UNDEFINED_EXPORT check error; diagnostics=" (stringFromInt64 (listLength ds)))) true)))))
 
 fn testNullaryBuiltinTypes -> Bool
   (let [(ds (c/checkSource "(module m :x [f]) (fn f [(p SpawnedProc) (i PlatformInfo) (r Rusage) (s FileStat)] -> Unit ())" (mapEmpty) "m.asl"))]
