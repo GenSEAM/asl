@@ -110,16 +110,25 @@ fn ! quotedValueAfter s: String needle: String -> String
 fn ! workspaceNameOf configText: String -> String
   (quotedValueAfter configText ":workspace")
 
+; (:m :ref STAGE-CONCURRENT-RUNS :do "two asl test runs of one package share its staging dir and each restaged every file while the other read it: a source equal to its staged copy is left alone, and a changed one is written to a hidden .part.PID.NAME beside it (never pruned by a concurrent stager) and renamed over dest, so a concurrent reader sees the old file or the new one, never a partial one")
 fn ! mirrorFile! src: String dest: String -> (Result Unit String)
   (match (fileReadBytes src)
     ((err e) (err (str "cannot read " src ": " e)))
     ((ok content)
-      (match (ensureDir! (ckr/parentDirOf dest))
-        ((err e2) (err (str "cannot create " (ckr/parentDirOf dest) ": " e2)))
-        ((ok _)
-          (match (fileWrite dest content)
-            ((err e3) (err (str "cannot write " dest ": " e3)))
-            ((ok _) (ok ())))))))
+      (match (fileReadBytes dest)
+        ((ok staged) (if (= staged content) (ok ()) (writeAtomic! dest content)))
+        ((err _) (writeAtomic! dest content)))))
+
+fn ! writeAtomic! dest: String content: Bytes -> (Result Unit String)
+  (match (ensureDir! (ckr/parentDirOf dest))
+    ((err e2) (err (str "cannot create " (ckr/parentDirOf dest) ": " e2)))
+    ((ok _)
+      (let [(part (str (ckr/parentDirOf dest) "/.part." (stringFromInt64 (procSelf)) "." (sys/baseName dest)))]
+        (match (fileWrite part content)
+          ((err e3) (err (str "cannot write " part ": " e3)))
+          ((ok _) (match (pathRename part dest)
+                    ((err e4) (do (pathRemove part) (err (str "cannot rename " part " to " dest ": " e4))))
+                    ((ok _) (ok ()))))))))
 
 ; (:m :ref OUTSIDEPKG-STAGE-SOURCES-20261024 :do "a staged package copied every listed file, so one asl test of a package with multi-GB exported data wrote tens of GB per cache key (68G in 13 entries on 2026-10-24); the build reads only .asl and .asn sources (and the manifest, an .asn), which stay real copies, while every other file, and an .asn over 1MB, is a symlink to the original: relative and workspace-qualified data paths still open, nothing is duplicated, and removing the stage drops the links only")
 fn ! sourceSized? path: String -> Bool
@@ -148,13 +157,31 @@ fn ! settleOne! destDir: String src: String -> Int64
 fn ! settleEach! destDir: String srcs: (List String) -> Int64
   (fold (fn [(n Int64) (src String)] -> Int64 (let [(r (settleOne! destDir src))] (if (< r 0) -1000000000 (+ n r)))) 0 srcs)
 
+; (:m :ref STAGE-CONCURRENT-RUNS :do "a staged clone is current when dest is a link (it names the source) or a regular file of the source size no older than the source; only stale ones are cloned, into a hidden per-process dir beside them, and each is renamed over its dest, so a concurrent run never finds a data file removed or half cloned (ERR_PARQUET cannot read column chunk, vtbot 2026-10-30)")
+fn ! cloneCurrent? src: String dest: String -> Bool
+  (match (fileLstat dest)
+    ((err _) false)
+    ((ok lst) (or lst.isSymlink
+                  (match (fileStat src)
+                    ((err _) false)
+                    ((ok st) (and (= lst.size st.size) (>= lst.mtimeNs st.mtimeNs)))))))
+
+fn ! landClones! tmp: String destDir: String names: (List String) -> Bool
+  (let [(moved (map (fn [(n String)] -> Bool (or (not (fileExists? (str tmp "/" n))) (ok? (pathRename (str tmp "/" n) (str destDir "/" n))))) names))
+        (_ (runIn! destDir (list "rm" "-rf" "--" tmp)))]
+    (listAll? (fn [(b Bool)] -> Bool b) moved))
+
 fn ! cloneChunks! destDir: String srcs: (List String) -> Int64
   (if (listEmpty? srcs)
     0
-    (let [(chunk (listTake srcs 200))
+    (let [(chunk (filter (fn [(src String)] -> Bool (not (cloneCurrent? src (str destDir "/" (sys/baseName src))))) (listTake srcs 200)))
           (rest (listDrop srcs 200))
-          (_gone (map (fn [(src String)] -> Bool (ok? (pathRemove (str destDir "/" (sys/baseName src))))) chunk))
-          (here (if (cloneBatch! destDir chunk) 0 (settleEach! destDir chunk)))
+          (tmp (str destDir "/.stage." (stringFromInt64 (procSelf))))
+          (here (cond
+                  ((listEmpty? chunk) 0)
+                  ((not (ok? (ensureDir! tmp))) -1000000000)
+                  (else (let [(n (if (cloneBatch! tmp chunk) 0 (settleEach! tmp chunk)))]
+                          (if (landClones! tmp destDir (map sys/baseName chunk)) n -1000000000)))))
           (more (cloneChunks! destDir rest))]
       (+ here more)))
 
