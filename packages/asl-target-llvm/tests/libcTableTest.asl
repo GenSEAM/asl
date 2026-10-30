@@ -49,6 +49,14 @@ fn parseMacroLine line: String -> (Option (Pair String Int64))
 fn headerRecords -> (List (Pair String String))
   (list (pair "struct __siginfo" "siginfo_t") (pair "struct __darwin_sigaltstack" "stack_t"))
 
+; (:m :ref RETIRED-PROBES :do "glibc declares both as anonymous structs behind a typedef, so clang names them by the header that holds them: stack_t.h whole, siginfo_t.h only the outer record at its top-level line 36")
+fn recordTypedef body: String -> String
+  (cond
+    ((some? (lc/pairFind (headerRecords) body)) (optionOr (lc/pairFind (headerRecords) body) ""))
+    ((and (stringStartsWith? body "struct (unnamed at ") (stringContains? body "/bits/types/stack_t.h:")) "stack_t")
+    ((and (stringStartsWith? body "struct (unnamed at ") (and (stringContains? body "/bits/types/siginfo_t.h:36:") (stringEndsWith? body ")"))) "siginfo_t")
+    (else ""))
+
 fn layoutStep state: (Pair String (List (Pair String Int64))) line: String -> (Pair String (List (Pair String Int64)))
   (let [(cur (pairFirst state)) (acc (pairSecond state))]
     (match (stringIndexOf line "|")
@@ -63,7 +71,7 @@ fn layoutStep state: (Pair String (List (Pair String Int64))) line: String -> (P
                 ((none) state)
                 ((some n) (pair "" (cons (pair (str "sizeof_" cur) n) acc))))))
           ((and (stringStartsWith? right " ") (not (stringStartsWith? right "  ")))
-            (pair (optionOr (lc/pairFind (headerRecords) body) "") acc))
+            (pair (recordTypedef body) acc))
           ((and (not (stringEmpty? cur)) (and (stringStartsWith? right "   ") (not (stringStartsWith? right "    "))))
             (match (stringToInt64 left)
               ((none) state)
@@ -140,6 +148,15 @@ fn ! assertVariadicProbe facts: lc/TripleFacts work: String -> Bool
     (assert (not (compiles? work "variadicFlock")) "flock(fd, op) is fixed-arity: an extra argument is a compile error")
     true)
 
+; (:m :ref RETIRED-PROBES :do "the table row the probe is compared against is the host's own: the probe C is portable and measures the machine it runs on, so a Linux host checks its linux row and macOS keeps darwin-arm64")
+fn ! hostTriple! -> String
+  (let [(s (sh "uname -s")) (m (sh "uname -m"))] (let [(sys (stringTrim s.stdout)) (arch (stringTrim m.stdout))]
+    (cond
+      ((and (= sys "Darwin") (= arch "arm64")) "darwin-arm64")
+      ((and (= sys "Linux") (= arch "x86_64")) "linux-x86_64")
+      ((and (= sys "Linux") (or (= arch "aarch64") (= arch "arm64"))) "linux-aarch64")
+      (else (str sys "-" arch)))))
+
 fn ! runTests -> Bool
   (let [(made (sh "mktemp -d"))]
     (assert (= made.exitCode 0) "mktemp -d makes a work directory")
@@ -148,15 +165,19 @@ fn ! runTests -> Bool
         (assert (= built.exitCode 0) (str "clang builds libcProbe: " built.stderr))
         (let [(ran (sh (str work "/libcProbe")))]
           (assert (= ran.exitCode 0) (str "libcProbe runs: " ran.stderr))
-          (let [(probed (listAppend (headerFacts!) (parseProbeOutput ran.stdout))) (facts (lc/darwinArm64Facts))]
+          (let [(probed (listAppend (headerFacts!) (parseProbeOutput ran.stdout))) (darwin (lc/darwinArm64Facts)) (triple (hostTriple!)) (facts (optionOr (lc/libcFacts (hostTriple!)) (lc/emptyTripleFacts)))]
             (assert (> (listLength probed) 0) "probe produced output")
             (assert (lc/libcVerified "darwin-arm64") "darwin-arm64 is the measured row")
-            (assert (= facts.triple "darwin-arm64") "darwinArm64Facts.triple")
+            (assert (lc/libcVerified triple) (str "the host row " triple " is a measured row"))
+            (assert (= darwin.triple "darwin-arm64") "darwinArm64Facts.triple")
+            (assert (= facts.triple triple) "libcFacts resolves the host triple")
             (assert (some? (lc/libcFacts "darwin-arm64")) "libcFacts resolves darwin-arm64")
             (assert (none? (lc/libcFacts "windows-x86_64")) "libcFacts has no row for an unsupported triple")
             (assert (assertConstsMatch probed facts.consts) "O_*/F_*/LOCK_*/errno/_SC_NPROCESSORS_ONLN constants match the probe")
             (assert (assertStructsMatch probed facts.structs) "struct sizes and field offsets match the probe")
-            (assert (= facts.errnoAccessor "__error") "darwinArm64Facts.errnoAccessor is __error")
+            (assert (= darwin.errnoAccessor "__error") "darwinArm64Facts.errnoAccessor is __error")
+            (assert (= facts.errnoAccessor (if (= triple "darwin-arm64") "__error" "__errno_location"))
+              "the host row's errnoAccessor is the host libc's")
             (assert (= (optionOr (lc/pairFind probed "errnoAccessorMatchesMacro") 0) 1)
               "the probe's own __error() call reads the same storage as the errno macro after a real failure")
             (assertVariadicProbe facts work)
