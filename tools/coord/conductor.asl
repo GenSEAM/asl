@@ -3,9 +3,9 @@
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
-      requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
+      stallProbes stallHooks stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
-  :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (asl-tools/hub/preflight :a hp)
+  :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (asl-tools/hub/preflight :a hp)
       (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
 
 ; (:m :ref CONDUCTOR :do "deterministic scheduler, no model in the loop: units are store rows (:after = deps, :owns, :gate, :channel = lane), the conductor keeps one state row per unit under <dir>/cond and appends one journal row per transition; the store lease is held from writing to merging so owns stay disjoint, and the store row turns done only when the unit is merged")
@@ -508,6 +508,30 @@ fn ! stepAll! ctx: Ctx units: (List st/Task) cap: Int64 -> Unit
 fn ! snapshot dir: String -> (List String)
   (map (fn [(c CUnit)] -> String (renderCUnit c)) (readCUnits! dir))
 
+; (:m :ref COND-STALL-AUTO :do "the stall sweep of stall.asl over the writing units: the probe carries the run record's pid liveness and start time, a unit whose Res row is already written is left to poll!, the hooks kill through the run record and requeue the unit to ready with the stall note as the newest prior failure, so the next write brief carries it; the strong lane only while its daily cap has room")
+fn ! stallProbes ctx: Ctx -> (List stl/Probe)
+  (let [(repo (stringTrim (readOr (repoPath ctx.dir))))]
+    (map (fn [(c CUnit)] -> stl/Probe
+           (stl/Probe :id c.id :lane c.lane :wt (str repo "/../worktrees/asex-" c.id)
+                      :alive (match (runRow ctx.dir c.id "write") ((some r) (alive? (pairFirst r))) ((none) false))
+                      :sinceMs (stl/statMs (runPath ctx.dir c.id "write" "run"))))
+         (filter (fn [(c CUnit)] -> Bool (and (= c.st "writing") (and (!= c.launched 0) (not (fileExists? (runPath ctx.dir c.id "write" "asn")))))) (readCUnits! ctx.dir))))
+
+fn ! stallRequeue! ctx: Ctx c: CUnit lane: String note: String -> Unit
+  (let [(to (if (and (= lane "strong") (not (rungOpen? ctx.dir "strong" (nowMs)))) c.lane lane))
+        (_ (priorWrite! ctx.dir c.id c.lane note))
+        (_ (dropLease! ctx c))
+        (_ (move! ctx (with c :lane to :fails 0 :sig "" :epoch 0 :esc 0 :await "") "ready" "write" "" 0 0 "stalled" 0))]
+    ())
+
+fn ! stallHooks ctx: Ctx -> stl/Hooks
+  (stl/Hooks
+    :kill (fn [(id String)] -> Unit (let [(_ (killRun! ctx.dir id "write")) (_ (dropRun! ctx.dir id "write"))] ()))
+    :requeue (fn [(id String) (lane String) (note String)] -> Unit
+               (match (cuOf (readCUnits! ctx.dir) id)
+                 ((none) ())
+                 ((some c) (stallRequeue! ctx c lane note)))))
+
 ; (:m :ref CONDUCTOR :do "one tick starts, polls and transitions only, never waits for a stage: every unit moves at most one transition in id order; capacity = pace tokens minus the units already in flight; the result is 1 when any unit row changed, 0 when the tick was idle")
 fn ! tick! ctx: Ctx -> (Result Int64 String)
   (match (st/readUnits! ctx.dir)
@@ -515,6 +539,7 @@ fn ! tick! ctx: Ctx -> (Result Int64 String)
     ((ok units)
       (let [(_ (requeueDrain! ctx units))
             (_ (depWake! ctx units))
+            (_ (stl/sweep! ctx.dir (nowMs) (stallProbes ctx) (stallHooks ctx)))
             (before (snapshot ctx.dir))
             (pace ctx.pace)
             (tokensOf pace.tokens)
