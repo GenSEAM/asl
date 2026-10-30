@@ -169,7 +169,7 @@ fn ! blankKeys -> (Map String String)
         (mapEmpty) (envList))
 
 fn envFor! root: String stubDir: String pathMode: String url: String profile: String config: String -> pv/ProviderEnv
-  (pv/ProviderEnv :gatewayUrl url :inProcess false :profile profile :gatewayConfig config :tmpDir (str root "/tmp")
+  (pv/ProviderEnv :gatewayUrl url :inProcess false :profile profile :gatewayConfig (if (stringEmpty? config) (str root "/.asl/gateway.asn") config) :tmpDir (str root "/tmp")
     :childEnv (mapSet (mapSet (blankKeys) "PATH" (str (if (= pathMode "empty") (str root "/emptyBin") (str root "/bin")) ":/usr/bin:/bin")) "STUB_DIR" stubDir))
 
 fn ! setupStub stubDir: String out: String code: String last: String sleep: String -> Bool
@@ -312,8 +312,10 @@ fn ! runGatewayCase kv: (List (Pair String c/KvVal)) root: String -> Bool
         (mode (fld! kv "mode"))
         (stubDir (str root "/stub/" cid))
         (staged (setupStub stubDir (fld! kv "raw") (if (has kv "curlExit") (fld! kv "curlExit") "0") "" ""))
-        (cfgPath (str root "/gwcfg_" cid ".asn"))
-        (cfgOk (or (not (has kv "config")) (writeFile cfgPath (fld! kv "config"))))
+        (cfgHome (str root "/gwhome_" cid))
+        (cfgDirs (and (ok? (dirCreate cfgHome)) (ok? (dirCreate (str cfgHome "/.asl")))))
+        (cfgPath (str cfgHome "/.asl/gateway.asn"))
+        (cfgOk (and cfgDirs (or (not (has kv "config")) (writeFile cfgPath (fld! kv "config")))))
         (env (envFor! root stubDir "stub" (fld! kv "url") (fld! kv "profile") cfgPath))
         (made (pv/makeProvider! "agy" mode root (fld! kv "model") (optionOr (stringToInt64 (fld! kv "timeout")) 600) session
                 (optionOr (stringToInt64 (fld! kv "queueTimeout")) 1200) (= (fld! kv "timeoutSet") "True") env "auto"))]
@@ -395,7 +397,7 @@ fn ! runDryRun kv: (List (Pair String c/KvVal)) root: String -> Bool
 fn ! checkRedirect root: String -> Bool
   (let [(stubDir (str root "/stub/redirect302"))
         (staged (setupStub stubDir "HTTP/1.1 302 Found\r\nLocation: /elsewhere\r\nContent-Length: 0\r\n\r\n" "0" "" ""))
-        (env (envFor! root stubDir "stub" "http://127.0.0.1:9/v1/chat/completions" "" (str root "/none.asn")))]
+        (env (envFor! root stubDir "stub" "http://127.0.0.1:9/v1/chat/completions" "" (str root "/.asl/gateway.asn")))]
     (match (pv/makeProvider! "agy" "scout" root "" 600 "gredirect" 1200 true env "auto")
       ((err e) (checkTrue (str "redirect302 provider: " (pv/errorMessage e)) false))
       ((ok p)
@@ -408,7 +410,7 @@ fn ! checkRedirect root: String -> Bool
 fn ! checkIntentPlan root: String -> Bool
   (let [(stubDir (str root "/stub/intentPlan"))
         (staged (setupStub stubDir "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}" "0" "" ""))
-        (env (envFor! root stubDir "stub" "http://127.0.0.1:8765/v1/chat/completions" "" (str root "/intentPlan.asn")))
+        (env (envFor! root stubDir "stub" "http://127.0.0.1:8765/v1/chat/completions" "" (str root "/.asl/gateway.asn")))
         (made (pv/makeProvider! "agy" "scout" root "" 600 "sintentplan" 1200 true env "plan"))]
     (match made
       ((err e) (checkTrue (str "intentPlan provider made: " (pv/errorMessage e)) false))
@@ -424,7 +426,7 @@ fn ! checkIntentPlan root: String -> Bool
 fn ! checkSessionHeader root: String -> Bool
   (let [(stubDir (str root "/stub/sessionHeader"))
         (staged (setupStub stubDir "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}" "0" "" ""))
-        (env (envFor! root stubDir "stub" "http://127.0.0.1:8765/v1/chat/completions" "" (str root "/none.asn")))
+        (env (envFor! root stubDir "stub" "http://127.0.0.1:8765/v1/chat/completions" "" (str root "/.asl/gateway.asn")))
         (made (pv/makeProvider! "agy" "scout" root "" 600 "gsesshdr" 1200 true env "auto"))]
     (match made
       ((err e) (checkTrue (str "sessionHeader provider made: " (pv/errorMessage e)) false))
@@ -440,7 +442,7 @@ fn ! checkSessionHeader root: String -> Bool
 fn ! checkSessionHeaderEmpty root: String -> Bool
   (let [(stubDir (str root "/stub/sessionHeaderEmpty"))
         (staged (setupStub stubDir "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}" "0" "" ""))
-        (env (envFor! root stubDir "stub" "http://127.0.0.1:8765/v1/chat/completions" "" (str root "/none.asn")))
+        (env (envFor! root stubDir "stub" "http://127.0.0.1:8765/v1/chat/completions" "" (str root "/.asl/gateway.asn")))
         (cfg (pv/VendorConfig :vendor "agy" :mode "scout" :rootDir root :model "" :timeout 600 :queueTimeout 1200
                :sessionId "" :intent "auto" :timeoutSet true :env env :link none :turn 0))
         (t (pv/nextTurn! (pv/vendorProvider cfg) "s" "u"))
@@ -458,7 +460,7 @@ fn checkFreePoolProfilePin root: String -> Bool
         (_ (writeFile (str root "/.asl/gatewayProfilePin.asn") "(:profile \"freeBulk\")\n"))
         (penv (pv/providerEnv! root))
         (resolved penv.profile)
-        (env (envFor! root stubDir "stub" "http://127.0.0.1:8765/v1/chat/completions" resolved (str root "/none.asn")))
+        (env (envFor! root stubDir "stub" "http://127.0.0.1:8765/v1/chat/completions" resolved (str root "/.asl/gateway.asn")))
         (made (pv/makeProvider! "agy" "scout" root "" 600 "gfreepool" 1200 true env "auto"))]
     (match made
       ((err e) (checkTrue (str "freePoolProfilePin provider made: " (pv/errorMessage e)) false))
