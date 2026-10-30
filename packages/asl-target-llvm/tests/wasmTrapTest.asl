@@ -83,12 +83,7 @@ fn errorMessage line: String -> String
     (optionOr (stringSlice line (+ start 2) (stringLength line)) ""))
 
 fn ! nodeBin -> String
-  (let [(candidates (list "/usr/local/bin/node" "/opt/homebrew/bin/node"))
-        (pathDirs (stringSplit (optionOr (envGet "PATH") "") ":"))
-        (allCandidates (listAppend candidates (map (fn [(dir String)] -> String (str dir "/node")) pathDirs)))]
-    (match (listHead (filter fileExists? allCandidates))
-      ((some p) p)
-      ((none) "")))
+  (lt/nodePath!)
 
 fn ! wasmTrapCase name: String source: String expectedMessage: String -> Bool
   (let [(work (str "/tmp/asl-wasm-trap-" name))
