@@ -1,5 +1,5 @@
 (module asl-tools/coord/conductor
-  :x [hubGuard! leonGuard! staleSig? CUnit Res Pace Ctx RealCfg
+  :x [hubGuard! leonGuard! staleSig? staleField staleWake! repoPath CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! rungCap hopsSince nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
@@ -376,8 +376,16 @@ fn ! finish! ctx: Ctx u: st/Task c: CUnit res: Res -> Unit
             ())
           (if (staleSig? res.sig)
             (let [(_ (dropLease! ctx c))
-                  (_ (fileAppend (journalPath ctx.dir) (str "(:stale :unit " (st/q c.id) " :leon " (st/q (optionOr (listLast (stringSplit res.sig " ")) "")) " :result blocked :needs rebase)\n")))
-                  (_ (move! ctx (with c :await "rebase") "blocked" "write" res.model 0 0 "needs rebase" res.ms))]
+                  (leon (staleField res.sig "leon"))
+                  (woken (stringStartsWith? c.sig "STALE_WOKEN"))
+                  (main (if (and woken (not (stringEmpty? (staleField c.sig "main")))) (staleField c.sig "main") (staleField res.sig "main")))
+                  (_ (fileAppend (journalPath ctx.dir) (str "(:stale :unit " (st/q c.id) " :leon " (st/q leon) " :main " (st/q main) " :result blocked :needs rebase)\n")))
+                  ; (:m :ref STALE-WAKE :do "still stale after a wake: the lead class gets one (:lead ...) row per unit")
+                  (leadRow (str "(:lead :unit " (st/q c.id) " :needs rebase"))
+                  (_ (if (and woken (not (stringContains? (readOr (escalationsPath ctx.dir)) leadRow)))
+                       (ok? (fileAppend (escalationsPath ctx.dir) (str leadRow " :leon " (st/q leon) " :main " (st/q main) ")\n")))
+                       false))
+                  (_ (move! ctx (with c :await "rebase" :sig (str "STALE_NEEDS_REBASE leon " leon " main " main)) "blocked" "write" res.model 0 0 "needs rebase" res.ms))]
               ())
           (if (vacuousSig? res.sig)
             (let [(_ (dropLease! ctx c))
@@ -440,6 +448,7 @@ fn ! step! ctx: Ctx u: st/Task cap: Int64 -> Int64
           (let [(c1 (move! ctx c "reviewing" "review" "" 0 0 "start" 0))
                 (_ (launch! ctx u c1))]
             cap)))
+      ((and (= c.st "blocked") (= c.await "rebase")) (let [(_ (staleWake! ctx c))] cap))
       ((= (stageName c.st) "") cap)
       ((not (beat? ctx c))
         (let [(_ (killRun! ctx.dir c.id (stageName c.st)))
@@ -814,19 +823,40 @@ fn ! hubGuard! home: String wt: String -> (Option Res)
 fn staleSig? sig: String -> Bool
   (stringStartsWith? sig "STALE_NEEDS_REBASE ")
 
-fn staleRes sha: String -> Res
-  (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig (str "STALE_NEEDS_REBASE leon " sha) :ms 0 :exit 1 :asserts 0 :verdict "")
+fn staleRes sha: String main: String -> Res
+  (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig (str "STALE_NEEDS_REBASE leon " sha " main " main) :ms 0 :exit 1 :asserts 0 :verdict "")
+
+; (:m :ref STALE-WAKE :do "a word after its key in a stale signature (leon SHA, main SHA); empty when absent")
+fn staleField sig: String key: String -> String
+  (match (listGet (stringSplit sig (str " " key " ")) 1)
+    ((some r) (optionOr (listHead (stringSplit r " ")) ""))
+    ((none) ""))
+
+; (:m :ref STALE-WAKE :do "<store>/repo.path names the conductor's --repo (the deployed main); written by run")
+fn repoPath dir: String -> String
+  (str dir "/repo.path")
+
+; (:m :ref STALE-WAKE :do "a unit blocked :await rebase wakes once the deployed main moved past the head recorded in its stale signature: it goes back to ready for one write retry, lane, fails and esc unchanged, with sig STALE_WOKEN main HEAD; an unchanged or unreadable head leaves it blocked")
+fn ! staleWake! ctx: Ctx c: CUnit -> Unit
+  (let [(was (staleField c.sig "main"))
+        (repo (stringTrim (readOr (repoPath ctx.dir))))
+        (head (if (stringEmpty? repo) "" (stringTrim (gitOut repo (list "rev-parse" "--short=9" "HEAD")).out)))]
+    (if (or (stringEmpty? head) (= head was)) ()
+      (let [(_ (fileAppend (journalPath ctx.dir) (str "(:stale :unit " (st/q c.id) " :result woken :from " (st/q was) " :to " (st/q head) ")\n")))
+            (_ (move! ctx (with c :await "" :sig (str "STALE_WOKEN main " head)) "ready" "wake" "" 0 0 "staleWake" 0))]
+        ())))
 
 fn ! leonGuard! repo: String wt: String -> (Option Res)
   (let [(d (gitOut repo (list "log" "-1" "--format=%H" "HEAD" "--" "asl/agentLoop")))
         (sha (stringTrim d.out))
-        (short (optionOr (stringSlice sha 0 9) sha))]
+        (short (optionOr (stringSlice sha 0 9) sha))
+        (main (stringTrim (gitOut repo (list "rev-parse" "--short=9" "HEAD")).out))]
     (cond
       ((or (!= d.exit 0) (stringEmpty? sha)) none)
       ((= (gitOut wt (list "merge-base" "--is-ancestor" sha "HEAD")).exit 0) none)
-      ((not (stringEmpty? (stringTrim (gitOut wt (list "status" "--porcelain" "--untracked-files=no")).out))) (some (staleRes short)))
+      ((not (stringEmpty? (stringTrim (gitOut wt (list "status" "--porcelain" "--untracked-files=no")).out))) (some (staleRes short main)))
       ((and (= (gitOut wt (list "fetch" "-q" repo "HEAD")).exit 0) (= (gitOut wt (list "rebase" "-q" "FETCH_HEAD")).exit 0)) none)
-      (else (let [(_ (gitOut wt (list "rebase" "--abort")))] (some (staleRes short))))))
+      (else (let [(_ (gitOut wt (list "rebase" "--abort")))] (some (staleRes short main))))))
 
 fn ! writeGuard! home: String repo: String wt: String dir: String id: String -> (Option Res)
   (match (hubGuard! home wt)
@@ -1231,6 +1261,7 @@ fn ! main args: (List String) -> (Result Int64 String)
             (let [(_ (pathRemove (stopPath dir)))
                   (_ (pathRemove (restartPath dir)))
                   (_ (let [(l (st/opt args "ledger" ""))] (if (stringEmpty? l) (ok ()) (fileWrite (ledgerPath dir) (str l "\n" (st/opt args "ledger-base" "HEAD") "\n")))))
+                  (_ (fileWrite (repoPath dir) (str rc.repo "\n")))
                   (_ (println (str "(:run :store " (st/q dir) " :refreshMin " (n (st/intOpt args "refresh-min" 15)) ")")))]
               (ok (runLoop! ctx (fn [] -> (List (Pair String Int64)) (laneSnapshot rc)) (fn [] -> Unit (let [(_ (sr/subsRefreshCli! (list)))] ()))
                             (nowMs) (* (st/intOpt args "refresh-min" 15) 60000) 12))))))
