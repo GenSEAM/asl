@@ -1480,12 +1480,20 @@ fn positiveSec v: j/Json scale: Float64 -> (Option Float64)
     ((ok f) (if (> f 0.0) (some (/ f scale)) none))
     ((err _) none))
 
+fn tableQueueBudgetSec cx: Ctx -> Float64
+  (match cx.world.table ((ok t) t.queueBudgetSec) ((err _) (c/defaultQueueBudgetSec)))
+
+; (:m :ref GW-ALL-DOWN-RETRY-AFTER :do "the 503 for a chain whose every member is in breaker cooldown carries Retry-After = the shortest cooldown left, rounded up to whole seconds (at least 1), so a caller waits for the first member to come back rather than guessing")
+fn minLeftSec lefts: (List Float64) -> Int64
+  (let [(least (fold (fn [(acc Float64) (f Float64)] -> Float64 (if (and (> f 0.0) (< f acc)) f acc)) 1000000.0 lefts))]
+    (if (>= least 1000000.0) 1 (max 1 (truncInt (+ least 0.999)))))
+
 fn queueBudgetSec cx: Ctx -> Float64
   (let [(hs cx.req.headers)
         (fromMs (match (u/headerGet hs "X-ASL-Queue-Ms") ((some h) (positiveSec (j/jstr h) 1000.0)) ((none) none)))
         (fromHeader (match (u/headerGet hs "X-ASL-Queue-Timeout") ((some h) (positiveSec (j/jstr h) 1.0)) ((none) none)))
         (fromBody (if (isObj? cx.baseBody) (positiveSec (getOr cx.baseBody "queue_timeout" (j/jnull)) 1.0) none))]
-    (optionOr fromMs (optionOr fromHeader (optionOr fromBody 30.0))))
+    (optionOr fromMs (optionOr fromHeader (optionOr fromBody (tableQueueBudgetSec cx)))))
 
 fn retryAfterOf rpm: Float64 -> Int64
   (max 1 (truncInt (+ (/ 60.0 rpm) 0.999)))
@@ -2069,7 +2077,7 @@ fn afterLoop cx: Ctx l: Loop -> ChatStep
        (let [(pools (uniqueSorted skipped))]
          (askFloats (effBreakerDownAll pools)
            (fn [(lefts (List Float64))] -> ChatStep
-             (sendError cx l.head 503 (str "providers " (stringJoin pools ", ") " are in circuit-breaker cooldown after quota or timeout failures; retry in "
+             (sendError cx (listAppend l.head (list (headField "Retry-After" (stringFromInt64 (minLeftSec lefts))))) 503 (str "providers " (stringJoin pools ", ") " are in circuit-breaker cooldown after quota or timeout failures; retry in "
                                                (stringFromInt64 (truncInt (maxFloat lefts))) "s") true)))))
       (cx.profileRouted
        (sendError cx l.head 502 (str "profile " cx.profileName ": no model answered (" (labels l.models) ")" (lastErrSuffix l)) true))

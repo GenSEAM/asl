@@ -1013,7 +1013,7 @@ fn headerValue lines: (List String) name: String -> String
 
 ; (:m :ref HUB-QUEUE-PACED :do "a 429's Retry-After header rides in the status reason as [retry-after=N] so the error text carries it to the caller; other statuses are untouched")
 fn withRetryAfter st: (Pair Int64 String) header: String -> (Pair Int64 String)
-  (if (and (= (pairFirst st) 429) (not (stringEmpty? header)))
+  (if (and (or (= (pairFirst st) 429) (= (pairFirst st) 503)) (not (stringEmpty? header)))
     (pair (pairFirst st) (str (pairSecond st) " [retry-after=" header "]"))
     st)
 
@@ -1325,7 +1325,7 @@ fn ! hubPost! cfg: VendorConfig sock: String payload: j/Json headers: (List (Pai
       ((err e)
         (let [(busy (stringContains? (errorMessage e) "Hub HTTP error 503"))
               (askedMs (* 1000 (retryAfterSec (errorMessage e))))]
-          (if (and (stringContains? (errorMessage e) "Hub HTTP error 429") (and (> askedMs 0) (<= (+ waitedMs askedMs) (* 1000 cfg.queueTimeout))))
+          (if (and (or (stringContains? (errorMessage e) "Hub HTTP error 429") (stringContains? (errorMessage e) "Hub HTTP error 503")) (and (> askedMs 0) (<= (+ waitedMs askedMs) (* 1000 cfg.queueTimeout))))
             (do (sleepMs askedMs) (hubPost! cfg sock payload headers delayMs (+ waitedMs askedMs) capMs))
           (if (not (or busy (= (errorCode e) "ERR_GATEWAY_OFFLINE"))) r
             (if (>= waitedMs capMs)

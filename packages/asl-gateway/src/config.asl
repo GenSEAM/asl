@@ -29,6 +29,8 @@
       gatewayLimitsFromText
       gatewayLimitWindows
       defaultBucketWaitSec
+      defaultQueueBudgetSec
+      gatewayQueueBudgetSecFromProps
       gatewayBucketWaitSecFromProps
       asn_scalar
       asnScalar
@@ -282,7 +284,8 @@ fn noRetryPolicy -> RetryPolicy
   (:f undeclaredIntents (Map String Int64))
   (:f keyFiles (List String))
   (:f limits (List GatewayLimit))
-  (:f bucketWaitSec Float64))
+  (:f bucketWaitSec Float64)
+  (:f queueBudgetSec Float64))
 
 ; (:m :ref GW-KEYSTORE-20261019 :do "a provider's :keyEnv is resolved against (:gateway :keyFiles (path ...)) before the process environment, never the other way: a key file is this workspace's own secret store, checked into no repo, and should win over a stray inherited env var from the caller's shell. ~ expands against HOME; each path is read as dotenv-style NAME=value lines (export prefix and quotes stripped, # comments skipped -- aslGateway/usage's zshLine/loadZshEnvText already implements exactly that grammar for ~/.zshenv, reused here instead of a second parser) and searched in listed order, first match wins; a file that is missing, unreadable or lacks the name is silently skipped, not an error -- only exhausting every file and the environment is")
 fn expandUserPath p: String -> String
@@ -375,6 +378,25 @@ fn gatewayBucketWaitSecFromProps g: (Map String rd/SExpr) -> Float64
 fn gatewayBucketWaitWarnings g: (Map String rd/SExpr) -> (List String)
   (match (bucketWaitValue g)
     ((some f) (if (> f 0.0) (list) (list ":bucketWaitSec must be a positive number; using the default")))
+    ((none) (list)))
+
+; (:m :ref GW-ALL-DOWN-RETRY-AFTER :do "how long the last chain member waits for its rpm bucket when the caller gave no queue budget (X-ASL-Queue-Ms, X-ASL-Queue-Timeout, body queue_timeout); (:gateway :queueBudgetSec N), default 30 s adopted, a non-positive value warns and keeps the default")
+fn defaultQueueBudgetSec -> Float64
+  30.0
+
+fn queueBudgetValue props: (Map String rd/SExpr) -> (Option Float64)
+  (match (mapGet props "queueBudgetSec")
+    ((none) none)
+    ((some v) (match (asn_scalar v) ((scalarInt n) (some (int64ToFloat64 n))) ((scalarFloat f) (some f)) (_ (some -1.0)))))
+
+fn gatewayQueueBudgetSecFromProps g: (Map String rd/SExpr) -> Float64
+  (match (queueBudgetValue g)
+    ((some f) (if (> f 0.0) f (defaultQueueBudgetSec)))
+    ((none) (defaultQueueBudgetSec)))
+
+fn gatewayQueueBudgetWarnings g: (Map String rd/SExpr) -> (List String)
+  (match (queueBudgetValue g)
+    ((some f) (if (> f 0.0) (list) (list ":queueBudgetSec must be a positive number; using the default")))
     ((none) (list)))
 
 fn gatewayLimitWindows -> (List String)
@@ -1795,7 +1817,7 @@ fn gateway_config_v2_build! g: (Map String rd/SExpr) source: String registryPath
                                 acc))))
                         (list)
                         (providerOrder! (pairFirst provForms))))
-        (allWarns (listAppend (listAppend warnings envWarns) (listAppend (gatewayLimitWarnings g) (gatewayBucketWaitWarnings g))))
+        (allWarns (listAppend (listAppend warnings envWarns) (listAppend (gatewayLimitWarnings g) (listAppend (gatewayBucketWaitWarnings g) (gatewayQueueBudgetWarnings g)))))
         (table (GatewayTable
                  :version 2
                  :defaultProfile defaultProf
@@ -1814,7 +1836,8 @@ fn gateway_config_v2_build! g: (Map String rd/SExpr) source: String registryPath
                  :undeclaredIntents (mapEmpty)
                  :keyFiles keyFilesList
                  :limits (gatewayLimitsFromProps g)
-                 :bucketWaitSec (gatewayBucketWaitSecFromProps g)))]
+                 :bucketWaitSec (gatewayBucketWaitSecFromProps g)
+                 :queueBudgetSec (gatewayQueueBudgetSecFromProps g)))]
     (pair table allErrs2))
 
 fn gatewayConfigV2Build! g: (Map String rd/SExpr) source: String registryPath: String -> (Pair GatewayTable (List String))
@@ -1845,7 +1868,8 @@ fn convertV1ToTable! v1: GatewayV1Config source: String keyFiles: (List String) 
       :undeclaredIntents (mapEmpty)
       :keyFiles keyFiles
       :limits (list)
-      :bucketWaitSec (defaultBucketWaitSec)))
+      :bucketWaitSec (defaultBucketWaitSec)
+      :queueBudgetSec (defaultQueueBudgetSec)))
 
 fn gateway_config_parse! text: String source: String registryPath: String -> (Result GatewayTable String)
   (let [(toks (lx/tokenize text))]

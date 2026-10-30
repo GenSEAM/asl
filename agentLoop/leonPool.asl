@@ -60,8 +60,14 @@ fn ! leonTurn! book: (List (Pair String Live)) id: String raw: String -> (Pair (
 fn ! replyTo! book: (List (Pair String Live)) id: String live: Live ask: m/LiveAsk raw: String -> (Pair (List (Pair String Live)) sp/Turn)
   (let [(t (pv/nextTurnReply live.provider raw))]
     (if (pv/hubBusy? t)
-      (pair book (sp/Turn :state id :request none :exec none :result none :busy true))
+      (pair book (sp/Turn :state id :request none :exec none :result none :busy true :holdMs (* 1000 (busyHoldSec live t))))
       (decide! book id live ask t 0)))
+
+; (:m :ref GW-ALL-DOWN-RETRY-AFTER :do "a 503 carrying Retry-After N parks the ask for N seconds (capped by the wall left, 300 s without one) through Turn.holdMs; without the header the pool keeps its 1 s")
+fn busyHoldSec live: Live t: pv/Turn -> Int64
+  (match t.reply
+    ((err e) (min (pv/retryAfterSec (pv/errorMessage e)) (match live.left ((some n) n) ((none) 300))))
+    ((ok _) 0))
 
 fn budgetOpen left: (Option Int64) -> Bool
   (match left ((some n) (> n 0)) ((none) true))
