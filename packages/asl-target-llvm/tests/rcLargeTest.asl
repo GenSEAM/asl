@@ -118,6 +118,11 @@ fn ! buildExe! libs: rc/Libs dir: String name: String mode: String probe: Bool -
                (let [(linked (rc/sh (rc/linkCmd libs mode ll exe)))]
                  (if (!= linked.exitCode 0) (err (str name " " mode " links: " linked.stderr)) (ok exe)))))))))))
 
+; (:m :ref RC-LARGE-TRAP-ARCH :do "llvm.trap lowers to brk on arm64 (SIGTRAP, exit 133) and to ud2 on x86_64 (SIGILL, exit 132); the guard is the trap itself, so the expected exit follows the host architecture, and any other exit (a plain crash 139, a clean 0) still fails")
+fn ! trapExit! -> Int64
+  (let [(m (rc/sh "uname -m"))]
+    (if (or (stringContains? m.stdout "x86_64") (stringContains? m.stdout "amd64")) 132 133))
+
 fn ! testProbe libs: rc/Libs dir: String mode: String -> Bool
   (match (buildExe! libs dir "rcLarge" mode true)
     ((err e) (do (assert false (str "probe build " mode ": " e)) false))
@@ -135,7 +140,7 @@ fn ! testProbe libs: rc/Libs dir: String mode: String -> Bool
                     (assert (= handle.exitCode 10) (str mode ": a large Handle runs fin once and is stuck (want 10; got " handle.exitCode " " handle.stderr ")"))
                     true))
               true)
-            (assert (= range.exitCode 133) (str mode ": a size class past the 63-entry free list traps (SIGTRAP, 133) instead of indexing aslRc.free (got " range.exitCode " " range.stderr ")"))
+            (assert (= range.exitCode (trapExit!)) (str mode ": a size class past the 63-entry free list traps (llvm.trap: SIGTRAP 133 on arm64, SIGILL 132 on x86_64; want " (trapExit!) ") instead of indexing aslRc.free (got " range.exitCode " " range.stderr ")"))
             true))))
 
 fn ! testChurn libs: rc/Libs dir: String mode: String -> Bool
