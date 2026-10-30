@@ -1,6 +1,6 @@
 (module asl/agentLoop/providers
   :x [ProviderError providerError valueError fileMissing toolAbsent cliTimeout ioError errorCode errorMessage configPathRefusal
-      ProviderEnv VendorConfig Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
+      ProviderEnv VendorConfig HubCall Ask askDone askHub nextTurnAsk! nextTurnReply hubBusy? Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
       parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
       curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! providerEnv! makeProvider! nextTurn! withPrefill withTools acceptHeader readJsonReply outgoingMessages profileMessages advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
@@ -22,6 +22,11 @@ enum ProviderError
   (:f tmpDir String)
   (:f childEnv (Map String String)))
 
+(schema HubCall
+  (:f sock String)
+  (:f body String)
+  (:f headers (List (Pair String String))))
+
 (schema VendorConfig
   (:f vendor String)
   (:f mode String)
@@ -36,7 +41,9 @@ enum ProviderError
   (:f link (Option gs/GatewayLoop))
   (:f turn Int64)
   (:f prefill String :default "")
-  (:f tools (List j/Json) :default (list)))
+  (:f tools (List j/Json) :default (list))
+  (:f defer Bool :default false)
+  (:f hub (Option HubCall) :default none))
 
 enum Provider
   (scriptProvider name: String turns: (List String) index: Int64)
@@ -1299,11 +1306,14 @@ fn ! sendGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String 
         (sock (hubAsnString hub "sock" ""))]
     (cond
       ((not (stringEmpty? sock))
-        (let [(r (hubPost! cfg sock payload (hubHeaders cfg (hubAsnString hub "class" "free") headers) (hubAsnInt hub "backoffMs" 1000) 0 (hubAsnInt hub "downAfterMs" 30000)))]
-          (if (and (stringContains? hub ":fallback inProcess")
-                   (match (pairFirst r) ((err e) (= (errorCode e) "ERR_GATEWAY_DOWN")) (_ false)))
-            (linkGateway! cfg payload headers)
-            (called cfg r))))
+        (let [(hdrs (hubHeaders cfg (hubAsnString hub "class" "free") headers))]
+          (if cfg.defer
+            (Called :reply (ok none) :meta (emptyMeta) :cfg (withHub cfg (HubCall :sock sock :body (pyJsonDumps payload) :headers hdrs)))
+            (let [(r (hubPost! cfg sock payload hdrs (hubAsnInt hub "backoffMs" 1000) 0 (hubAsnInt hub "downAfterMs" 30000)))]
+              (if (and (stringContains? hub ":fallback inProcess")
+                       (match (pairFirst r) ((err e) (= (errorCode e) "ERR_GATEWAY_DOWN")) (_ false)))
+                (linkGateway! cfg payload headers)
+                (called cfg r))))))
       (cfg.env.inProcess (linkGateway! cfg payload headers))
       (else (called cfg (postGateway! cfg payload headers)))))
 
@@ -1446,6 +1456,37 @@ fn ! nextTurn! p: Provider system: String user: String -> Turn
     ((vendorProvider cfg)
       (let [(r (callVendor! (withTurn cfg (+ cfg.turn 1)) system user))]
         (Turn :provider (vendorProvider r.cfg) :reply r.reply :meta r.meta))))
+
+; (:m :ref SE1-PROVIDER-SPLIT :do "the turn cut at the network: nextTurnAsk! runs everything nextTurn! runs up to the hub post and, when the call would go to the hub socket, returns askHub with the provider (turn already counted) and the exact body, headers and socket instead of posting; every other provider and path (script, replay, cli vendors, in-process, HTTP gateway) returns askDone with the Turn nextTurn! gives. nextTurnReply turns the raw HTTP reply of an askHub into the Turn nextTurn! would have returned. A pool posts the call itself, without waiting, between the two")
+enum Ask
+  (askDone t: Turn)
+  (askHub p: Provider call: HubCall)
+
+fn withHub cfg: VendorConfig call: HubCall -> VendorConfig
+  (with cfg :hub (some call))
+
+fn withDefer cfg: VendorConfig on: Bool -> VendorConfig
+  (with cfg :defer on :hub none)
+
+fn ! nextTurnAsk! p: Provider system: String user: String -> Ask
+  (match p
+    ((vendorProvider cfg)
+      (let [(r (callVendor! (withDefer (withTurn cfg (+ cfg.turn 1)) true) system user))
+            (back (vendorProvider (withDefer r.cfg false)))]
+        (match r.cfg.hub
+          ((some h) (askHub back h))
+          ((none) (askDone (Turn :provider back :reply r.reply :meta r.meta))))))
+    (_ (askDone (nextTurn! p system user))))
+
+fn nextTurnReply p: Provider raw: String -> Turn
+  (let [(r (readResponse "Hub" raw))]
+    (Turn :provider p :reply (pairFirst r) :meta (pairSecond r)))
+
+; (:m :ref SE1-PROVIDER-SPLIT :do "the hub answers 503 when it is busy: that is a wait for the caller, not a failure, the same rule hubPost! applies")
+fn hubBusy? t: Turn -> Bool
+  (match t.reply
+    ((err e) (stringContains? (errorMessage e) "Hub HTTP error 503"))
+    ((ok _) false))
 
 fn ! advise! p: Provider system: String text: String -> (Option Turn)
   (match p
