@@ -1,4 +1,4 @@
-(module asl-forms/gate :x [GateEnv GateOutcome RunOut HostRun nativeCheck! DelimDiag Repair RepairRun gateOp? readOnlyOp? linesFailed? runGate! doctorStep! foreignSyntax! validateStaged! buildOverlay! aslDelimiterDiag aslDelimiterError aslRepair repairAsn pySplitLines pyExt runArgv! stagedWritable!] :i [(asl-forms/kernel :a k) (asl-forms/edit :a e) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
+(module asl-forms/gate :x [GateEnv GateOutcome RunOut HostRun nativeCheck! DelimDiag Repair RepairRun gateOp? readOnlyOp? linesFailed? runGate! doctorStep! foreignSyntax! validateStaged! buildOverlay! aslDelimiterDiag aslDelimiterError aslRepair repairAsn pySplitLines pyExt runArgv! stagedWritable!] :i [(asl-forms/kernel :a k) (asl-forms/edit :a e) (asl-forms/indent :a ind) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
 
 
 (schema GateEnv (:f root String) (:f rootDir String) (:f binDir String) (:f host String) (:f staged (List (Pair String String))))
@@ -1101,6 +1101,24 @@ fn heuristicTier? kw: (Map String String) key: String -> Bool
 fn heuristicAllowed? kw: (Map String String) key: String -> Bool
   (or (listContains? (list "indentation" "heuristic") (kwLower kw key)) (truthy? (optionOr (mapGet kw "indentation") "")) (heuristicTier? kw key))
 
+; (:m :ref PAREN-DESIGN :do "the closer edits indentation implies for the segments that do not balance, so a rejected repair still names each opener and line; empty when indentation implies none")
+fn indentHint text: String -> String
+  (let [(g (ind/guideBroken text))]
+    (if (listEmpty? g.edits) "" (str " :indent " (ind/editsAsn g.edits) " :hint \"(:fix :file F :by :indent :apply true) stages these\"")))
+
+; (:m :ref PAREN-DESIGN :do "(:fix :by :indent) takes closers from indentation: only segments whose delimiters do not balance change unless :scope :all, disagreements in balanced segments come back as :skipped, and :apply true stages a result that balances")
+fn indentFix! id: Int64 kw: (Map String String) path: String rel: String fileF: String text: String apply: Bool -> GateOutcome
+  (let [(g (if (= (kwLower kw "scope") "all") (ind/guide text) (ind/guideBroken text)))
+        (left (aslDelimiterError g.text))
+        (changed (not (listEmpty? g.edits)))
+        (stage (and apply (and changed (stringEmpty? left))))
+        (patch (if changed (stringJoin (e/unifiedDiff! (pySplitLines text true) (pySplitLines g.text true) (str "current/" rel) (str "repaired/" rel) 1) "") ""))
+        (skipped (if (listEmpty? g.skipped) "" (str " :skipped " (ind/editsAsn (listTake g.skipped 6)) " :skippedCount " (stringFromInt64 (listLength g.skipped)))))
+        (leftF (if (stringEmpty? left) " :balanced true" (str " :balanced false :left " (q left))))]
+    (GateOutcome :lines (list (str (head id "fix") " :status \"ok\"" fileF " :by :indent :edits " (ind/editsAsn g.edits) skipped leftF " :staged " (if stage "true" "false") (if changed (str " :patch " (q patch)) "") ")"))
+                 :errCount 0
+                 :stage (if stage (some (pair path g.text)) (none))))
+
 fn fixStep! env: GateEnv id: Int64 kw: (Map String String) args: (List String) -> GateOutcome
   (let [(raw (fileArg kw args))
         (res (if (stringEmpty? raw) (pair "" "Missing file argument") (k/resolveEditTarget! env.root raw)))
@@ -1117,28 +1135,30 @@ fn fixStep! env: GateEnv id: Int64 kw: (Map String String) args: (List String) -
           (match read
             ((err e) (rejectLine id "fix" ":ERR_READ_FAILED" (msgTail e)))
             ((ok text)
-              (let [(src (if (some? staged) ":staged" ":disk"))
-                    (rel (relOf env path))
-                    (fileF (str " :file " (q rel) " :source " src))
-                    (fault (k/escapeAsnVal (aslDelimiterError text)))
-                    (run (aslRepair text (heuristicTier? kw "apply")))
-                    (status run.status)
-                    (basis run.basis)]
-                (cond
-                  ((= status "none") (okLine (str (head id "fix") " :status \"ok\"" fileF " :balanced true :repair (:none) :staged false)")))
-                  ((= status "unique")
-                    (let [(patch (stringJoin (e/unifiedDiff! (pySplitLines text true) (pySplitLines run.text true) (str "current/" rel) (str "repaired/" rel) 1) ""))
-                          (stage (and apply (or (= basis "structural") (heuristicAllowed? kw "apply"))))
-                          (rej (stringJoin (map (fn [(r Repair)] -> String (repairAsn (some r))) run.rejected) " "))
-                          (basisF (str " :basis :" basis (rankAsn run.repair) (if (or (= basis "indentation") (= basis "heuristic")) (str " :rejected [" rej "]") "")))
-                          (note (if (and apply (not stage)) " :message \"indentation-based repair; pass :apply :indentation to stage it\"" ""))]
-                      (GateOutcome :lines (list (str (head id "fix") " :status \"ok\"" fileF " :fault \"" fault "\" :repair " (repairAsn run.repair) basisF " :staged " (if stage "true" "false") note " :patch " (q patch) ")"))
-                                   :errCount 0
-                                   :stage (if stage (some (pair path run.text)) (none)))))
-                  ((= status "ambiguous")
-                    (rejectLine id "fix" ":ERR_AMBIGUOUS_REPAIR" (str fileF " :fault \"" fault "\" :candidates [" (stringJoin (map stringFromInt64 run.candidates) " ")
-                                                                    "] :message \"more than one structurally distinct minimal edit balances the file and indentation does not single one out; edit it at one of the candidate byte offsets\"")))
-                  (else (rejectLine id "fix" ":ERR_UNREPAIRABLE" (str fileF " :fault \"" fault "\" :message \"no single minimal delimiter edit balances the file\"")))))))))))
+              (if (= (kwLower kw "by") "indent")
+                (indentFix! id kw path (relOf env path) (str " :file " (q (relOf env path)) " :source " (if (some? staged) ":staged" ":disk")) text apply)
+                (let [(src (if (some? staged) ":staged" ":disk"))
+                      (rel (relOf env path))
+                      (fileF (str " :file " (q rel) " :source " src))
+                      (fault (k/escapeAsnVal (aslDelimiterError text)))
+                      (run (aslRepair text (heuristicTier? kw "apply")))
+                      (status run.status)
+                      (basis run.basis)]
+                  (cond
+                    ((= status "none") (okLine (str (head id "fix") " :status \"ok\"" fileF " :balanced true :repair (:none) :staged false)")))
+                    ((= status "unique")
+                      (let [(patch (stringJoin (e/unifiedDiff! (pySplitLines text true) (pySplitLines run.text true) (str "current/" rel) (str "repaired/" rel) 1) ""))
+                            (stage (and apply (or (= basis "structural") (heuristicAllowed? kw "apply"))))
+                            (rej (stringJoin (map (fn [(r Repair)] -> String (repairAsn (some r))) run.rejected) " "))
+                            (basisF (str " :basis :" basis (rankAsn run.repair) (if (or (= basis "indentation") (= basis "heuristic")) (str " :rejected [" rej "]") "")))
+                            (note (if (and apply (not stage)) " :message \"indentation-based repair; pass :apply :indentation to stage it\"" ""))]
+                        (GateOutcome :lines (list (str (head id "fix") " :status \"ok\"" fileF " :fault \"" fault "\" :repair " (repairAsn run.repair) basisF " :staged " (if stage "true" "false") note " :patch " (q patch) ")"))
+                                     :errCount 0
+                                     :stage (if stage (some (pair path run.text)) (none)))))
+                    ((= status "ambiguous")
+                      (rejectLine id "fix" ":ERR_AMBIGUOUS_REPAIR" (str fileF " :fault \"" fault "\" :candidates [" (stringJoin (map stringFromInt64 run.candidates) " ")
+                                                                      "] :message \"more than one structurally distinct minimal edit balances the file and indentation does not single one out; edit it at one of the candidate byte offsets\"" (indentHint text))))
+                    (else (rejectLine id "fix" ":ERR_UNREPAIRABLE" (str fileF " :fault \"" fault "\" :message \"no single minimal delimiter edit balances the file\"" (indentHint text)))))))))))))
 
 (schema CapRow (:f id String) (:f status String) (:f probe (Option String)) (:f expect String) (:f end Int64))
 

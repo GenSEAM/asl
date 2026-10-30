@@ -369,14 +369,17 @@
       :params (
         (:file :type str :req true :note "path to ASL or ASN file to balance")
         (:apply :type sym :default :none :note "stage proposed repair (:true, :indentation, :heuristic)")
+        (:by :type sym :default :minimal :note ":indent takes every closer from indentation: a line at column x closes the frames opened at column x or right of it and reopens a frame the previous line closed at column x - 2 or left of it; each edit names its opener and the deciding line")
+        (:scope :type sym :default :broken :note "with :by :indent, :broken changes only top-level forms whose delimiters do not balance and lists the rest as :skipped; :all also moves closers in balanced forms whose indentation disagrees")
       )
       :accepts (path)
       :examples (
         "(:fix :file \"asl/grammar/rules.asn\")"
+        "(:fix :file \"src/a.asl\" :by :indent :apply true)"
       )
       :errors (ERR_MISSING_ARG ERR_FILE_NOT_FOUND ERR_UNSUPPORTED_LANGUAGE ERR_AMBIGUOUS_REPAIR ERR_UNREPAIRABLE)
       :related (check test edit)
-      :doc "Propose, or with :apply stage, the minimal delimiter repair of an ASL/ASN file when it is structurally unique; an indentation tie-break is staged only with :apply :indentation.")
+      :doc "Propose, or with :apply stage, the minimal delimiter repair of an ASL/ASN file when it is structurally unique; an indentation tie-break is staged only with :apply :indentation. With :by :indent the closers follow the indentation instead, which repairs a missing or extra closer at the line where it was lost; a rejected minimal repair carries the :indent edits as a hint.")
 
     (:op :txn
       :scope any

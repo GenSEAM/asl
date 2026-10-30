@@ -21,6 +21,7 @@
    "asl-forms/lens"
    "asl-forms/query"
    "asl-forms/repair"
+   "asl-forms/indent"
    "asl-forms/heal"
    "asl-forms/rewrite"
    "asl-forms/docOp"
