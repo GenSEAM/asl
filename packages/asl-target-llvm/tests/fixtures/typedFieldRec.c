@@ -7,8 +7,8 @@
  * (age name); here each schema is built once in declared order and once with its keys
  * swapped, so a static slot read that skipped the keys[i] check would return the other field.
  * getY and nameOf are tailcc in the IR, and tailcc is not the C convention on x86_64 (the callee pops its
- * argument area, ret $8; only arm64 happens to agree), so the fixture calls the ccc shims .getY and
- * @c.nameOf that emitLlvmModuleCEntries adds (C-EXPORT-ABI).
+ * argument area, ret $8; only arm64 happens to agree), so the fixture calls the ccc shims aslc_getY and
+ * aslc_nameOf that emitLlvmModuleCEntries adds (C-EXPORT-ABI).
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -33,8 +33,8 @@ static Val record(const char *schema, const char *const *keys, int *ids, const V
   return v;
 }
 
-int64_t getY(Val p) __asm__("c.getY");
-Val nameOf(Val p) __asm__("c.nameOf");
+int64_t aslc_getY(Val p);
+Val aslc_nameOf(Val p);
 
 static const char *sameVal(Val got, Val want) {
   return got.tag == want.tag && got.u.o == want.u.o ? "same" : "other";
@@ -58,7 +58,7 @@ int main(void) {
   Val orderedPerson = record("Person", declaredPerson, orderedPersonIds, orderedAN);
   Val swappedPersonRec = record("Person", swappedPerson, swappedPersonIds, swappedNA);
   printf("orderedY=%lld swappedY=%lld orderedName=%s swappedName=%s\n",
-         (long long)getY(ordered), (long long)getY(swapped),
-         sameVal(nameOf(orderedPerson), ada), sameVal(nameOf(swappedPersonRec), grace));
+         (long long)aslc_getY(ordered), (long long)aslc_getY(swapped),
+         sameVal(aslc_nameOf(orderedPerson), ada), sameVal(aslc_nameOf(swappedPersonRec), grace));
   return 0;
 }

@@ -2,7 +2,7 @@
   :x [runTests]
   :i [(asl-ir/lower :a low) (asl-target-llvm/ssa :a ssa)])
 
-; (:m :ref C-EXPORT-ABI :do "tailcc is not the C convention on x86_64 (callee pops, ret $8), so a C caller needs a ccc entry: the default IR keeps the tailcc definitions only, the opt-in IR adds define ... @c.<name> with the same registers that calls the tailcc body")
+; (:m :ref C-EXPORT-ABI :do "tailcc is not the C convention on x86_64 (callee pops, ret $8), so a C caller needs a ccc entry: the default IR keeps the tailcc definitions only, the opt-in IR adds define ... @aslc_<name> with the same registers that calls the tailcc body")
 fn source -> String
   (stringJoin (list
     "(module cEntryMod :x [getY twice] :i [])"
@@ -21,11 +21,11 @@ fn ! runTests -> Bool
     ((ok m) (match (pair (ssa/emitLlvmModule m) (ssa/emitLlvmModuleCEntries m))
               ((pair (ok plain) (ok shimmed))
                 (do (assert (stringContains? plain "define tailcc i64 @getY(") "default IR defines getY as tailcc")
-                    (refute (stringContains? plain "@c.getY") "default IR has no C entry")
+                    (refute (stringContains? plain "@aslc_getY") "default IR has no C entry")
                     (assert (stringContains? shimmed "define tailcc i64 @getY(") "opt-in IR keeps the tailcc body")
-                    (assert (stringContains? shimmed "define i64 @c.getY(%Val %p) {") "opt-in IR defines the ccc entry @c.getY with the same registers")
+                    (assert (stringContains? shimmed "define i64 @aslc_getY(%Val %p) {") "opt-in IR defines the ccc entry @aslc_getY with the same registers")
                     (assert (stringContains? shimmed "call tailcc i64 @getY(") "the C entry calls the tailcc body")
-                    (assert (stringContains? shimmed "define i64 @c.twice(i64 %n) {") "an Int64 function gets its own ccc entry")
+                    (assert (stringContains? shimmed "define i64 @aslc_twice(i64 %n) {") "an Int64 function gets its own ccc entry")
                     (assert (stringStartsWith? shimmed plain) "the opt-in IR is the default IR plus the entries")
                     true))
               (_ (do (assert false "both emit") false)))))

@@ -3888,14 +3888,14 @@ fn emitDiags m: ty/SsaModule -> (List ty/IrDiag)
 fn emitLlvmModule m: ty/SsaModule -> (Result String (List ty/IrDiag))
   (emitModuleWith m false)
 
-; (:m :ref C-EXPORT-ABI :do "x86_64 tailcc is not the C convention: the callee pops its argument area (ret $8), so a C caller of a compiled function crashes there; arm64 happened to agree. emitLlvmModuleCEntries is emitLlvmModule plus, for every plain top-level function, a ccc definition @c.<name> with the same registers that calls the tailcc body; default IR is unchanged, embedding and FFI export call the shim")
+; (:m :ref C-EXPORT-ABI :do "x86_64 tailcc is not the C convention: the callee pops its argument area (ret $8), so a C caller of a compiled function crashes there; arm64 happened to agree. emitLlvmModuleCEntries is emitLlvmModule plus, for every plain top-level function, a ccc definition @aslc_<name> with the same registers that calls the tailcc body; default IR is unchanged, embedding and FFI export call the shim")
 fn cEntryShim ll: String f: ty/SsaFunction -> String
   (let [(sym (fnSym f.name))
         (rt (llTy f.retTy))
         (plain (and (listEmpty? f.captures) (not (stringContains? sym "\""))))]
     (if (and plain (stringContains? ll (str "define tailcc " rt " " sym "(")))
       (let [(params (registerParamList f))]
-        (str "define " rt " @c." (optionOr (stringSlice sym 1 (stringLength sym)) "") "(" params ") {\n"
+        (str "define " rt " @aslc_" (optionOr (stringSlice sym 1 (stringLength sym)) "") "(" params ") {\n"
              "  %c.res = call tailcc " rt " " sym "(" params ")\n"
              "  ret " rt " %c.res\n}\n"))
       ""))
