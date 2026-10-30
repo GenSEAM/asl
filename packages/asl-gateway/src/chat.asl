@@ -1636,7 +1636,7 @@ fn raisedOutcome timeout: Bool text: String -> String
 
 fn raisedFinal cx: Ctx l: Loop a: Attempt timeout: Bool text: String -> ChatStep
   (let [(prov a.upstream.provider)
-        (pool a.providerPool)
+        (pool a.pool)
         (l1 (failed l text))
         (rest (fn [] -> ChatStep
                 (tell (usageNote prov a.alias (raisedOutcome timeout text))
@@ -2011,7 +2011,7 @@ fn httpFailedParked cx: Ctx l: Loop a: Attempt status: Int64 reason: String head
         (alias a.alias)
         (providerWide (or (= status 401) (or (= status 402) (b/breakerIsProviderWideQuota body))))
         (quota (or (= status 429) (b/breakerIsQuotaError body)))
-        (pool (cond (providerWide a.providerPool) (quota a.pool) (else a.providerPool)))
+        (pool (b/breakerScope status body a.providerPool a.pool))
         (park (if (and (> parkSec 0) (and quota (not providerWide))) parkSec 0))
         (errText (u/httpErrorText status reason))
         (l1 (failed l errText))

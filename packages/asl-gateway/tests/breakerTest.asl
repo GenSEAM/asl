@@ -333,6 +333,25 @@ fn testDirectApiEquivalence -> Bool
         (assert (= (brk/defaultCooldownSec) 600) "defaultCooldownSec is 600")
         true)))
 
+; (:m :ref PAIDCHEAP-BREAKER-ALL-OPEN :do "one member's three 503s open only that member: its sibling on the same provider and the provider pool stay closed; 401, 402 and an insufficient_quota body still trip the provider pool, a model-scoped 429 stays on the member")
+fn testMemberScope -> Bool
+  (let [(k1 (brk/breakerScope 503 "Service Unavailable" "opencodeGo" "opencodeGo:ocGlmFlash"))
+        (k2 (brk/breakerScope 503 "Service Unavailable" "opencodeGo" "opencodeGo:ocDeepseekFlash"))
+        (s3 (fold (fn [(st brk/BreakerState) (i Int64)] -> brk/BreakerState (pairFirst (brk/breakerNote503 st k1 (+ 1000 i))))
+                  (brk/makeBreakerState 600) (range 0 3)))
+        (downA (pairSecond (brk/breakerDownFor s3 k1 1010)))
+        (downB (pairSecond (brk/breakerDownFor s3 k2 1010)))
+        (downP (pairSecond (brk/breakerDownFor s3 "opencodeGo" 1010)))]
+    (do
+      (assert (> downA 0) (str "three 503s on one member open that member: " k1))
+      (assert (= downB 0) (str "its sibling on the same provider still serves: " k2))
+      (assert (= downP 0) "the provider pool stays closed")
+      (assert (= (brk/breakerScope 402 "Payment Required" "together" "together:tgGlm53Flash") "together") "402 trips the provider pool")
+      (assert (= (brk/breakerScope 401 "" "p" "p:m") "p") "401 trips the provider pool")
+      (assert (= (brk/breakerScope 429 "insufficient_quota" "p" "p:m") "p") "an insufficient_quota body trips the provider pool")
+      (assert (= (brk/breakerScope 429 "Rate limit reached for model m" "p" "p:m") "p:m") "a model-scoped 429 stays on the member")
+      true))
+
 fn ! runTests -> Bool
   (do
     (assert (testFixtureLoaded!) "testFixtureLoaded passed")
@@ -342,4 +361,5 @@ fn ! runTests -> Bool
     (assert (testSuccessResetsAndClear) "testSuccessResetsAndClear passed")
     (assert (testCooldownExpiryAndSnapshot) "testCooldownExpiryAndSnapshot passed")
     (assert (testDirectApiEquivalence) "testDirectApiEquivalence passed")
+    (assert (testMemberScope) "testMemberScope passed")
     true)

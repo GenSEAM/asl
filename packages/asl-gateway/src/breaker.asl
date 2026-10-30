@@ -27,6 +27,7 @@
       breakerIsQuotaError
       breaker_is_quota_error
       breakerIsProviderWideQuota
+      breakerScope
       breakerSnapshot
       breaker_snapshot
       formatBreakerSnapshotAsn
@@ -127,6 +128,10 @@ fn breakerIsProviderWideQuota text: String -> Bool
       (and (not (breakerModelScopedQuota text))
         (or (stringContains? t "BILLING")
           (and (stringContains? t "ACCOUNT") (stringContains? t "QUOTA"))))))
+
+; (:m :ref PAIDCHEAP-BREAKER-ALL-OPEN :do "the key a failure counts under: an account-wide failure (401, 402, a provider-wide quota body) trips the provider pool; every other failure (429, 503, 5xx, 4xx) counts on the member's own providerPool:alias key, so one member's 503 streak never closes its siblings on the same provider")
+fn breakerScope status: Int64 body: String providerPool: String pool: String -> String
+  (if (or (= status 401) (or (= status 402) (breakerIsProviderWideQuota body))) providerPool pool)
 
 fn breakerDownFor st: BreakerState provider: String now: Int64 -> (Pair BreakerState Int64)
   (if (stringEmpty? provider)
