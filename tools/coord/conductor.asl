@@ -2,7 +2,7 @@
   :x [hubGuard! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig rulingVerdict
-      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
+      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! rungCap hopsSince nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
       main]
   :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (asl-tools/hub/preflight :a hp)
       (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -127,22 +127,76 @@ fn verdictSig sig: String -> String
     (optionOr (stringSlice one 0 (if (< (stringLength one) 400) (stringLength one) 400)) one))
 
 ; (:m :ref WRITEESC :do "the write tiers in escalation order; a unit on free that fails the write stage maxSame times in a row moves to paid, then strong, and only a last-tier failure blocks")
+; (:m :ref ESC-LADDER :do "the ladder: free writers retry maxSame times per signature (L0), paid is the DeepSeek Flash fixer (L1), strong our strong paid models (L2), lead parks the unit blocked with :await lead (L3); a unit on paid or strong passes up after its second failure whatever the signature")
 fn writeTiers -> (List String)
-  (list "free" "paid" "strong")
+  (list "free" "paid" "strong" "lead")
 
-fn nextTier lane: String -> Option String
-  (let [(i (optionOr (listFind (fn [(k Int64)] -> Bool (= (optionOr (listGet (writeTiers) k) "") lane)) (range 0 (listLength (writeTiers)))) -1))]
-    (if (< i 0) (none) (listGet (writeTiers) (+ i 1))))
+fn rungLimit ctx: Ctx lane: String -> Int64
+  (if (or (= lane "paid") (= lane "strong")) 2 ctx.maxSame)
+
+fn ladderPath dir: String -> String
+  (str dir "/ladder.asn")
+
+; (:m :ref ESC-LADDER :do "a (:rung :tier T :perDay N) row of <store>/ladder.asn caps the units that enter rung T per UTC day; no row is no cap; lead is never capped")
+fn rungCap text: String rung: String -> Int64
+  (match (listFind (fn [(l String)] -> Bool (and (stringStartsWith? (stringTrim l) "(:rung ") (= (sp/tokAfter l ":tier") rung))) (stringLines text))
+    ((some l) (optionOr (stringToInt64 (sp/tokAfter l ":perDay")) -1))
+    ((none) -1))
+
+fn hopsSince rows: (List String) rung: String since: Int64 -> Int64
+  (listLength (filter (fn [(l String)] -> Bool
+                        (and (stringContains? l (str "->" rung ": "))
+                             (and (stringContains? l "tierHop ") (>= (optionOr (stringToInt64 (sp/tokAfter l ":at")) 0) since))))
+                      rows))
+
+fn ! rungOpen? dir: String rung: String now: Int64 -> Bool
+  (let [(cap (rungCap (readOr (ladderPath dir)) rung))]
+    (or (= rung "lead") (or (< cap 0) (< (hopsSince (stringLines (readOr (journalPath dir))) rung (- now (mod now 86400000))) cap))))
+
+; (:m :ref ESC-LADDER :do "the rung above lane whose daily cap has room; a capped rung is skipped")
+fn ! nextRung! dir: String lane: String now: Int64 -> Option String
+  (let [(tiers (writeTiers))
+        (i (optionOr (listFind (fn [(k Int64)] -> Bool (= (optionOr (listGet tiers k) "") lane)) (range 0 (listLength tiers))) -1))]
+    (if (< i 0) (none)
+      (listFind (fn [(r String)] -> Bool (rungOpen? dir r now)) (optionOr (listSlice tiers (+ i 1) (listLength tiers)) (list)))))
+
+; (:m :ref ESC-LADDER :do "every hop appends the failure that caused it as one line lane<TAB>signature, the lead hop too")
+fn ! priorWrite! dir: String id: String lane: String sig: String -> Unit
+  (let [(_ (dirCreate (runsDir dir)))
+        (_ (fileAppend (runPath dir id "prior" "txt") (str lane "\t" (verdictSig sig) "\n")))]
+    ())
+
+fn priorEntry line: String -> String
+  (let [(parts (stringSplit line "\t"))]
+    (str (optionOr (listHead parts) "") ": " (stringJoin (optionOr (listTail parts) (list)) " ")))
+
+; (:m :ref ESC-LADDER :do "the fixer on the next rung gets the newest failure as :last and the earlier rungs' failures as :history, oldest first; the earlier commits stay on the branch")
+fn ! priorNote! dir: String id: String -> String
+  (let [(rows (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringLines (readOr (runPath dir id "prior" "txt")))))]
+    (match (listLast rows)
+      ((none) "")
+      ((some last)
+        (str "(:prior :last " (st/q (stringJoin (optionOr (listTail (stringSplit last "\t")) (list)) " "))
+             " :history (" (stringJoin (map (fn [(l String)] -> String (st/q (priorEntry l))) (listTake rows (- (listLength rows) 1))) " ") "))\n"
+             "Lower rungs failed this unit; their commits are on this branch, fix forward from them."))))
 
 ; (:m :ref CONDUCTOR :do "a stage failure releases the lease and retries from ready; the same failure signature maxSame times in a row writes one escalate row and parks the unit in blocked; WRITEESC: a write failure with a higher tier left hops the unit to that tier instead, resets the count and journals tierHop")
 fn ! fail! ctx: Ctx c: CUnit stage: String model: String sig: String ms: Int64 -> CUnit
-  (let [(fails (if (= (sigKey sig) (sigKey c.sig)) (+ c.fails 1) 1))
+  (let [(climb (listContains? (list "write" "gates" "review") stage))
+        (fails (if (or (= (sigKey sig) (sigKey c.sig)) (and climb (or (= c.lane "paid") (= c.lane "strong")))) (+ c.fails 1) 1))
         (_ (dropLease! ctx c))
         (c1 (with c :fails fails :sig sig :epoch 0))
-        (hop (if (= stage "write") (nextTier c.lane) (none)))]
-    (if (>= fails ctx.maxSame)
+        (limit (if climb (rungLimit ctx c.lane) ctx.maxSame))
+        (hop (if (and climb (>= fails limit)) (nextRung! ctx.dir c.lane (/ (nowNs) 1000000)) (none)))]
+    (if (>= fails limit)
       (match hop
-        ((some next) (move! ctx (with c1 :lane next :fails 0 :sig "" :waited 0) "ready" stage model 0 0 (str "tierHop " c.lane "->" next ": " (verdictSig sig)) ms))
+        ((some next)
+          (if (= next "lead")
+            (let [(_ (priorWrite! ctx.dir c.id c.lane sig))
+                  (c2 (escalateTiered! ctx c1 sig (str stage " failed " (n fails) "x on " c.lane) "lead"))]
+              (move! ctx (with c2 :lane "lead" :await "lead") "blocked" stage model 0 0 (str "tierHop " c.lane "->lead: " (verdictSig sig)) ms))
+            (let [(_ (priorWrite! ctx.dir c.id c.lane sig))]
+              (move! ctx (with c1 :lane next :fails 0 :sig "" :waited 0) "ready" stage model 0 0 (str "tierHop " c.lane "->" next ": " (verdictSig sig)) ms))))
         ((none)
           (let [(c2 (escalate! ctx c1 sig (str stage " failed " (n fails) "x with the same signature")))]
             (move! ctx c2 "blocked" stage model 0 0 (str "escalated: " (verdictSig sig)) ms))))
@@ -722,7 +776,8 @@ fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
         ((some refused) refused)
         ((none)
         (let [(fresh (noEdits? p u.base u.owns))
-              (task (taskText dir u))
+              (prior (priorNote! dir u.id))
+              (task (if (stringEmpty? prior) (taskText dir u) (str (taskText dir u) "\n\n" prior)))
               (prof (writeProfileFor rc dir u.id c.lane))
               (arm (writeArm rc u.id))
               (_ (fileAppend (journalPath dir) (str "(:profile :unit " (st/q u.id) " :lane " (st/q c.lane) " :profile " (st/q prof) (if (stringEmpty? arm) "" (str " :arm " (st/q arm))) " :at " (n (/ (nowNs) 1000000)) ")\n")))
