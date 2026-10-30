@@ -1,5 +1,5 @@
 (module asl-cli/nativeCli
-  :x [cacheDir! headPath underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs]
+  :x [cacheDir! headPath toolchainRootPaths rootsText pinned? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl-tools/fleet/run :a run) (asl-parser/reader :a rd)])
 
 fn ! cacheDir! -> String
@@ -206,12 +206,40 @@ fn ! hostExec! ctx: sys/Context args: (List String) extra: (List String) -> Int6
     (execWith! (listAppend (list ctx.hostBin "run" (str ctx.root "/asl/packages/asl-cli/src/command.asl")) args) (list "ASL_NATIVE_CLI_DIR" "ASL_NATIVE_QUIET_PID") extra)
     (do (sys/say! "(:asl :status :failed :error ERR_HOST_ABSENT :message \"asl runs on the stage-0 host at asl/host/out/asl-host; build it with sh asl/host/build.sh or set ASL_HOST\")") 2))
 
+; (:m :ref MAC-CLI-REBUILD-STALL :do "the sources whose bytes key the native compile cache (nativeTest fingerprints exactly these); every CLI dir carries them, with its entry's package, as its roots file, written by the build that made it")
+fn toolchainRootPaths -> (List String)
+  (list "asl/packages/asl-compiler/src" "asl/packages/asl-checker/src" "asl/packages/asl-codegen/src" "asl/packages/asl-ir/src"
+        "asl/packages/asl-parser/src" "asl/packages/asl-syntax/src/core" "asl/packages/asl-target-llvm/src"
+        "asl/host/out/libaslrt.a" "asl/host/out/prelude.asl" "asl/prelude/prelude.asl" "asl/prelude/native" "asl/tools/nativeTest.asl")
+
+fn rootsText entry: String -> String
+  (let [(parts (stringSplit entry "/"))
+        (pkg (if (and (>= (listLength parts) 3) (= (optionOr (listGet parts 1) "") "packages")) (stringJoin (listTake parts 3) "/") entry))]
+    (str (stringJoin (listAppend (toolchainRootPaths) (list pkg)) "\n") "\n"))
+
+fn ! mtimeOf path: String -> Int64
+  (match (fileStat path) ((ok st) st.mtimeNs) ((err _) 0))
+
+fn under? path: String roots: (List String) -> Bool
+  (listAny? (fn [(r String)] -> Bool (or (= path r) (stringStartsWith? path (str r "/")))) roots)
+
+; (:m :ref MAC-CLI-REBUILD-STALL :do "run tools/remote/vps.asl keeps the current CLI without the lock when every dep that moved since the head lies outside the roots its build wrote: such an edit changes neither what the CLI compiles (the compile cache key) nor its own package; no roots file, no deps, a missing dep or a moved path under a root is not pinned, and the next unpinned call refreshes; aslNativeBuild refresh and the native CLI's own stale gate both ask it")
+fn ! pinned? root: String dir: String stampPath: String cmd: (List String) -> Bool
+  (let [(roots (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines (resultOr (fileReadString (str dir "/roots")) ""))))
+        (deps (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines (resultOr (fileReadString (str dir "/deps")) ""))))
+        (stamp (mtimeOf stampPath))]
+    (and (= (listTake cmd 2) (list "run" "tools/remote/vps.asl"))
+      (and (not (listEmpty? roots))
+        (and (not (listEmpty? deps))
+          (listAll? (fn [(p String)] -> Bool (and (fileExists? (str root "/" p)) (or (<= (mtimeOf (str root "/" p)) stamp) (not (under? p roots))))) deps)))))
+
 fn ! nativeGate! ctx: sys/Context args: (List String) -> (Option Int64)
   (let [(dir (optionOr (envGet "ASL_NATIVE_CLI_DIR") ""))]
     (cond
       ((not (direct?)) (none))
       ((= (verbKind args) "host") (some (hostExec! ctx args (list))))
       ((or (stringEmpty? dir) (fresh? ctx.root dir)) (none))
+      ((pinned? ctx.root dir (headPath (cacheDir!) ctx.root) args) (none))
       (else (some (awaitStaleRebuild! ctx dir args)))))
 
 fn leadingDigitsAt s: String n: Int64 i: Int64 -> String

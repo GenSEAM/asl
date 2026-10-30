@@ -1,5 +1,5 @@
 (module asl-cli/nativeBuild
-  :x [Build variantKey! main storeCapFor! capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure?]
+  :x [Build toolchainRootPaths variantKey! main storeCapFor! capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure?]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/nativeRefresh :a nr) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r)])
 
 (schema Build
@@ -487,10 +487,14 @@ fn ! copyAll! from: String to: String paths: (List String) -> (Result Unit Strin
                   ((err e) (err (str "cannot snapshot " p ": " e)))
                   ((ok _) (copyAll! from to (optionOr (listTail paths) (list))))))))
 
+; (:m :ref MAC-CLI-REBUILD-STALL :do "the compile cache's toolchain roots, kept in nativeCli (a dep of this builder, so a change rebuilds it); install! writes them beside deps as the CLI dir's roots file")
+fn toolchainRootPaths -> (List String)
+  (nc/toolchainRootPaths)
+
 fn ! install! b: Build name: String tag: String entry: String key: String dir: String deps: (List String) bin: String -> (Result String String)
   (let [(staged (str b.tmp "/" name ".dir"))]
     (match (match (dirCreate staged) ((err e) (err e)) ((ok _) (match (fileWrite (str staged "/deps") (str (stringJoin deps "\n") "\n"))
-      ((err e) (err e)) ((ok _) (match (fileWrite (str staged "/clang-version") (str b.clangVersion "\n")) ((err e) (err e)) ((ok _) (fileWrite (str staged "/rc") "notrace\n")))))))
+      ((err e) (err e)) ((ok _) (match (fileWrite (str staged "/clang-version") (str b.clangVersion "\n")) ((err e) (err e)) ((ok _) (match (fileWrite (str staged "/rc") "notrace\n") ((err e) (err e)) ((ok _) (fileWrite (str staged "/roots") (nc/rootsText entry))))))))))
       ((err e) (err (str "cannot stage " staged ": " e)))
       ((ok _) (match (copyAll! b.root (str staged "/src") deps)
         ((err e) (err e))
@@ -598,9 +602,9 @@ fn ! main args: (List String) -> (Result Int64 String)
         (owner (optionOr (flagValue args "--lock-owner") ""))
         (pid (stringFromInt64 (procSelf)))]
     (cond
+      ((= root "refresh") (ok (nr/refresh! (optionOr (listGet args 1) "") (optionOr (listGet args 2) (nc/cacheDir!)) (if (= (optionOr (listGet args 3) "") "--") (listDrop args 4) (list)) (fn [r c] (coldCode! r c)))))
       ((stringEmpty? root) (do (say! "usage: nativeBuild ROOT [CACHE] [--if-cold] [--lock-owner PID]") (ok 2)))
       ((and (listContains? args "--if-cold") (let [(head (stringTrim (resultOr (fileReadString (nc/headPath cacheDir root)) "")))] (and (nc/fresh? root head) (nc/probe? root head)))) (ok 0))
-      ((= root "refresh") (ok (nr/refresh! (optionOr (listGet args 1) "") (optionOr (listGet args 2) (nc/cacheDir!)) (fn [r c] (coldCode! r c)))))
       ((and (not (stringEmpty? owner)) (or (<= (optionOr (stringToInt64 owner) 0) 1) (not (nc/alive? (optionOr (stringToInt64 owner) 0))))) (do (releaseLock! cacheDir owner) (ok 1)))
       (else
         (let [(code (buildCode! root cacheDir owner))

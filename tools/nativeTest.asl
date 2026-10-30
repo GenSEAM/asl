@@ -351,9 +351,7 @@ fn hostVerdictLine text: String -> String
 
 ; (:m :ref HL-FIXWAVE :do "toolchainRoots fed its fingerprint hash two paths HL-DELETE can never produce again -- asl/host/out/asl-host and asl/host/out/libaslhost.a; both are dropped, leaving the native runtime archive, the prelude and the compiler sources that actually change the fingerprint")
 fn ! toolchainRoots -> (List String)
-  (map toolPath (list "asl/packages/asl-compiler/src" "asl/packages/asl-checker/src" "asl/packages/asl-codegen/src" "asl/packages/asl-ir/src"
-        "asl/packages/asl-parser/src" "asl/packages/asl-syntax/src/core" "asl/packages/asl-target-llvm/src"
-        "asl/host/out/libaslrt.a" "asl/host/out/prelude.asl" "asl/prelude/prelude.asl" "asl/prelude/native" "asl/tools/nativeTest.asl"))
+  (map toolPath (nb/toolchainRootPaths))
 
 fn ! fileDigest path: String -> String
   (match (fileReadBytes path)

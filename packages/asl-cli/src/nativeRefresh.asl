@@ -59,7 +59,9 @@ fn ! installHead! cache: String root: String dir: String -> Bool
     (and (ok? (fileWrite part (str dir "\n"))) (ok? (pathRename part head))))
 
 ; (:m :ref BIN-ASL-ASL :do "build is the in-process verify-or-rebuild of the builder (exit code); the caller holds no lock")
-fn ! refresh! root: String cache: String build: (fn [String String] -> Int64) -> Int64
+fn ! refresh! root: String cache: String cmd: (List String) build: (fn [String String] -> Int64) -> Int64
+  (if (nc/pinned? root (headDir cache root) (nc/headPath cache root) cmd)
+    (do (eprintln "asl: native CLI pinned: every moved source lies outside its roots") 0)
   (let [head (nc/headPath cache root)
         dir0 (headDir cache root)
         waitS (envInt "ASL_NATIVE_BUILD_WAIT" 3600)
@@ -85,4 +87,4 @@ fn ! refresh! root: String cache: String build: (fn [String String] -> Int64) ->
                       ((not (fileExists? (str dir2 "/bin"))) (do (pathRemove lock) (staleFail cache dir2 (str "the rebuild left no head at " head))))
                       ((not (installHead! cache root dir2)) (do (pathRemove lock) (staleFail cache dir2 (str "cannot rewrite " head))))
                       ((suspect? root dir2 head) (do (pathRemove lock) (staleFail cache dir2 "its sources moved again during the rebuild")))
-                      (else (do (pathRemove lock) 0))))))))))))
+                      (else (do (pathRemove lock) 0)))))))))))))
