@@ -4,7 +4,7 @@
 
 (enum ParquetColumn (:c i64Column [(name String) (values I64Array) (encoding String)] "I64 column") (:c f64Column [(name String) (values F64Array) (encoding String)] "F64 column") (:c i8Column [(name String) (values I8Array) (encoding String)] "I8 column"))
 
-(schema ChunkMeta (:f name String) (:f physical Int64) (:f encoding String) (:f values Int64) (:f offset Int64) (:f compressed Int64) (:f uncompressed Int64) (:f stats Bytes))
+(schema ChunkMeta (:f name String) (:f physical Int64) (:f encoding String) (:f values Int64) (:f offset Int64) (:f compressed Int64) (:f uncompressed Int64))
 
 (schema GroupMeta (:f chunks (List ChunkMeta)) (:f rows Int64))
 
@@ -140,7 +140,7 @@ fn columnsValid? columns: (List ParquetColumn) -> Bool
     (listAll? (fn [column]
       (and (validName? (columnName column))
         (typeEncodingValid? column)
-        (>= (arrayCount column) 0))) columns))
+        (> (arrayCount column) 0))) columns))
 
 fn firstColumnCount columns: (List ParquetColumn) -> Int64
   (match (listHead columns)
@@ -255,6 +255,15 @@ fn deltaBlocksValid? values: I64Array start: Int64 -> Bool
     (let [(last (min (+ start 127) (- (i64ArrayLen values) 1)))]
       (and (deltaBlockValid? values start last 0 0)
         (deltaBlocksValid? values (+ last 1)))))
+
+fn columnDeltasValid? column: ParquetColumn -> Bool
+  (match column
+    ((i64Column _ values encoding) (if (= encoding "DELTA_BINARY_PACKED") (deltaBlocksValid? values 1) true))
+    ((f64Column _ _ _) true)
+    ((i8Column _ _ _) true))
+
+fn columnsDeltasValid? columns: (List ParquetColumn) -> Bool
+  (listAll? (fn [column] (columnDeltasValid? column)) columns)
 
 fn deltaAt values: I64Array index: Int64 -> Int64
   (if (= index 0) 0 (- (i64ArrayGet values index) (i64ArrayGet values (- index 1))))
@@ -432,63 +441,6 @@ fn chunkUncompressedSum chunks: (List ChunkMeta) -> Int64
       ((none) 0)
       ((some chunk) (+ chunk.uncompressed (chunkUncompressedSum (listDrop chunks 1))))))
 
-; (:m :ref V0021-PQ-STATS :do "a chunk's statistics are the min and max of its values, little endian at the physical width (8, 8, 4 bytes) as min then max, empty when the chunk has no values or a double is NaN; the footer then carries null_count 0 and max_value, min_value")
-fn i64Low values: I64Array index: Int64 best: Int64 -> Int64
-  (if (>= index (i64ArrayLen values)) best (i64Low values (+ index 1) (min best (i64ArrayGet values index))))
-
-fn i64High values: I64Array index: Int64 best: Int64 -> Int64
-  (if (>= index (i64ArrayLen values)) best (i64High values (+ index 1) (max best (i64ArrayGet values index))))
-
-fn i8Low values: I8Array index: Int64 best: Int64 -> Int64
-  (if (>= index (i8ArrayLen values)) best (i8Low values (+ index 1) (min best (i8ArrayGet values index))))
-
-fn i8High values: I8Array index: Int64 best: Int64 -> Int64
-  (if (>= index (i8ArrayLen values)) best (i8High values (+ index 1) (max best (i8ArrayGet values index))))
-
-fn f64Low values: F64Array index: Int64 best: Float64 -> Float64
-  (if (>= index (f64ArrayLen values)) best (f64Low values (+ index 1) (min best (f64ArrayGet values index))))
-
-fn f64High values: F64Array index: Int64 best: Float64 -> Float64
-  (if (>= index (f64ArrayLen values)) best (f64High values (+ index 1) (max best (f64ArrayGet values index))))
-
-fn f64HasNan? values: F64Array index: Int64 -> Bool
-  (if (>= index (f64ArrayLen values)) false
-    (or (isNan? (f64ArrayGet values index)) (f64HasNan? values (+ index 1))))
-
-fn ! columnStats! column: ParquetColumn -> Bytes
-  (match column
-    ((i64Column _ values _)
-      (if (= (i64ArrayLen values) 0) (bytesAlloc 0)
-        (let [(out (bytesAlloc 16))
-              (_ (littlePut! out 0 (i64Low values 1 (i64ArrayGet values 0)) 8))
-              (_ (littlePut! out 8 (i64High values 1 (i64ArrayGet values 0)) 8))]
-          out)))
-    ((f64Column _ values _)
-      (if (or (= (f64ArrayLen values) 0) (f64HasNan? values 0)) (bytesAlloc 0)
-        (let [(out (bytesAlloc 16))
-              (_ (bytesSetFloat64 out 0 (f64Low values 1 (f64ArrayGet values 0))))
-              (_ (bytesSetFloat64 out 1 (f64High values 1 (f64ArrayGet values 0))))]
-          out)))
-    ((i8Column _ values _)
-      (if (= (i8ArrayLen values) 0) (bytesAlloc 0)
-        (let [(out (bytesAlloc 8))
-              (_ (littlePut! out 0 (i8Low values 1 (i8ArrayGet values 0)) 4))
-              (_ (littlePut! out 4 (i8High values 1 (i8ArrayGet values 0)) 4))]
-          out))))
-
-fn ! statsStruct! out: Bytes at: Int64 stats: Bytes -> Int64
-  (if (= (bytesLength stats) 0) at
-    (let [(half (/ (bytesLength stats) 2))
-          (s1 (compactField! out at 9 12 12))
-          (s2 (compactLongField! out s1 0 3 0))
-          (s3 (compactField! out s2 3 5 8))
-          (s4 (unsignedVarint! out s3 half))
-          (s5 (copyBytes! stats half out s4 half))
-          (s6 (compactField! out s5 5 6 8))
-          (s7 (unsignedVarint! out s6 half))
-          (s8 (copyBytes! stats 0 out s7 half))]
-      (bytePut! out s8 0)))
-
 fn ! columnChunk! out: Bytes at: Int64 chunk: ChunkMeta compression: String -> Int64
   (let [(p1 (compactLongField! out at 0 2 chunk.offset))
         (p2 (compactField! out p1 2 3 12))
@@ -505,9 +457,8 @@ fn ! columnChunk! out: Bytes at: Int64 chunk: ChunkMeta compression: String -> I
         (p13 (compactLongField! out p12 5 6 chunk.uncompressed))
         (p14 (compactLongField! out p13 6 7 chunk.compressed))
         (p15 (compactLongField! out p14 7 9 chunk.offset))
-        (p16 (statsStruct! out p15 chunk.stats))
-        (p17 (bytePut! out p16 0))]
-    (bytePut! out p17 0))
+        (p16 (bytePut! out p15 0))]
+    (bytePut! out p16 0))
 
 fn ! columnChunks! out: Bytes at: Int64 chunks: (List ChunkMeta) compression: String -> Int64
   (if (listEmpty? chunks) at
@@ -533,17 +484,12 @@ fn ! rowGroups! out: Bytes at: Int64 groups: (List GroupMeta) compression: Strin
       ((none) at)
       ((some group) (rowGroups! out (rowGroup! out at group compression) (listDrop groups 1) compression))))
 
-; (:m :ref V0021-PQ-STATS :do "column_orders (FileMetaData field 7) names TypeDefinedOrder for every leaf, which is what makes min_value and max_value authoritative: pyarrow ignores them without it")
-fn ! columnOrders! out: Bytes at: Int64 count: Int64 -> Int64
-  (if (<= count 0) at
-    (columnOrders! out (bytePut! out (bytePut! out (bytePut! out at 28) 0) 0) (- count 1)))
-
 fn ! parquetFooter! columns: (List ParquetColumn) groups: (List GroupMeta) rows: Int64 compression: String kv: (List (List String)) -> Bytes
   (let [(ncols (listLength columns))
         (ngroups (listLength groups))
         (kvBytes (kvByteCount kv))
         (nameBytes (columnNameByteCount columns))
-        (out (bytesAlloc (+ 4096 (* ncols 256) (* ngroups ncols 256) (* (+ ngroups 1) nameBytes) kvBytes)))
+        (out (bytesAlloc (+ 4096 (* ncols 256) (* ngroups ncols 192) (* (+ ngroups 1) nameBytes) kvBytes)))
         (p1 (compactIntField! out 0 0 1 1))
         (p2 (schemaList! out p1 columns))
         (p3 (compactLongField! out p2 2 3 rows))
@@ -551,11 +497,8 @@ fn ! parquetFooter! columns: (List ParquetColumn) groups: (List GroupMeta) rows:
         (p5 (compactList! out p4 ngroups 12))
         (p6 (rowGroups! out p5 groups compression))
         (p7 (kvList! out p6 kv))
-        (p8 (compactField! out p7 5 7 9))
-        (p9 (compactList! out p8 ncols 12))
-        (p10 (columnOrders! out p9 ncols))
-        (p11 (bytePut! out p10 0))]
-    (exactBytes! out p11))
+        (p8 (bytePut! out p7 0))]
+    (exactBytes! out p8))
 
 fn ! columnSlice! column: ParquetColumn start: Int64 end: Int64 -> ParquetColumn
   (match column
@@ -569,57 +512,47 @@ fn ! columnData! column: ParquetColumn -> (Result Bytes String)
       ((= encoding "PLAIN") (ok (plainData! column)))
       ((= encoding "BYTE_STREAM_SPLIT") (splitData! column))
       (else (match column
-        ((i64Column _ values _)
-          (if (deltaBlocksValid? values 1) (ok (deltaData! values))
-            (err "DELTA_BINARY_PACKED values contain an overflowing INT64 delta")))
+        ((i64Column _ values _) (ok (deltaData! values)))
         ((f64Column _ _ _) (err "DELTA_BINARY_PACKED is supported only for INT64 columns"))
         ((i8Column _ _ _) (err "DELTA_BINARY_PACKED is supported only for INT64 columns"))))))
 
-fn ! writePages! temp: String column: ParquetColumn at: Int64 count: Int64 pageRows: Int64 compression: String level: Int64 compressed: Int64 uncompressed: Int64 -> (Result (Pair Int64 Int64) String)
-  (if (>= at count) (ok (pair compressed uncompressed))
-    (let [(n (if (> pageRows 0) (min pageRows (- count at)) (- count at)))
-          (page (columnSlice! column at (+ at n)))]
-      (match (columnData! page)
-        ((err e) (err e))
-        ((ok raw)
-          (match (if (= compression "zstd") (zstdCompress! raw level) (ok raw))
-            ((err e) (err e))
-            ((ok body)
-              (let [(header (pageHeader! n (columnEncoding page) (bytesLength raw) (bytesLength body)))]
-                (match (fileAppend temp header)
-                  ((err e) (err (str e)))
-                  ((ok _)
-                    (match (fileAppend temp body)
-                      ((err e) (err (str e)))
-                      ((ok _)
-                        (writePages! temp column (+ at n) count pageRows compression level
-                          (+ compressed (+ (bytesLength header) (bytesLength body)))
-                          (+ uncompressed (+ (bytesLength header) (bytesLength raw)))))))))))))))
-
-fn ! writeColumns! temp: String columns: (List ParquetColumn) start: Int64 count: Int64 compression: String level: Int64 pageRows: Int64 offset: Int64 -> (Result (List ChunkMeta) String)
+fn ! writeColumns! temp: String columns: (List ParquetColumn) start: Int64 count: Int64 compression: String level: Int64 offset: Int64 -> (Result (List ChunkMeta) String)
   (if (listEmpty? columns) (ok (list))
     (match (listHead columns)
       ((none) (ok (list)))
       ((some wholeColumn)
-        (let [(column (columnSlice! wholeColumn start (+ start count)))]
-          (match (writePages! temp column 0 count pageRows compression level 0 0)
+        (let [(column (columnSlice! wholeColumn start (+ start count)))
+              (rawResult (columnData! column))]
+          (match rawResult
             ((err e) (err e))
-            ((ok sizes)
-              (match (writeColumns! temp (listDrop columns 1) start count compression level pageRows (+ offset (pairFirst sizes)))
+            ((ok raw)
+              (match (if (= compression "zstd") (zstdCompress! raw level) (ok raw))
                 ((err e) (err e))
-                ((ok rest)
-                  (ok (listAppend
-                    (list (ChunkMeta :name (columnName column) :physical (physicalType column)
-                           :encoding (columnEncoding column) :values count :offset offset
-                           :compressed (pairFirst sizes) :uncompressed (pairSecond sizes) :stats (columnStats! column))) rest))))))))))
+                ((ok compressedBytes)
+                  (let [(header (pageHeader! count (columnEncoding column) (bytesLength raw) (bytesLength compressedBytes)))
+                        (compressed (+ (bytesLength header) (bytesLength compressedBytes)))
+                        (uncompressed (+ (bytesLength header) (bytesLength raw)))]
+                    (match (fileAppend temp header)
+                      ((err e) (err (str e)))
+                      ((ok _)
+                        (match (fileAppend temp compressedBytes)
+                          ((err e) (err (str e)))
+                          ((ok _)
+                            (match (writeColumns! temp (listDrop columns 1) start count compression level (+ offset compressed))
+                              ((err e) (err e))
+                              ((ok rest)
+                                (ok (listAppend
+                                  (list (ChunkMeta :name (columnName column) :physical (physicalType column)
+                                         :encoding (columnEncoding column) :values count :offset offset
+                                         :compressed compressed :uncompressed uncompressed)) rest)))))))))))))))))
 
-fn ! writeGroups! temp: String columns: (List ParquetColumn) start: Int64 total: Int64 groupSize: Int64 compression: String level: Int64 pageRows: Int64 offset: Int64 groups: (List GroupMeta) -> (Result (List GroupMeta) String)
+fn ! writeGroups! temp: String columns: (List ParquetColumn) start: Int64 total: Int64 groupSize: Int64 compression: String level: Int64 offset: Int64 groups: (List GroupMeta) -> (Result (List GroupMeta) String)
   (if (>= start total) (ok groups)
     (let [(count (min groupSize (- total start)))]
-      (match (writeColumns! temp columns start count compression level pageRows offset)
+      (match (writeColumns! temp columns start count compression level offset)
         ((err e) (err e))
         ((ok chunks)
-          (writeGroups! temp columns (+ start count) total groupSize compression level pageRows
+          (writeGroups! temp columns (+ start count) total groupSize compression level
             (+ offset (chunkCompressedSum chunks))
             (listAppend groups (list (GroupMeta :chunks chunks :rows count))))))))
 
@@ -628,12 +561,12 @@ fn ! removeWriteTemp! temp: String cause: String -> (Result Unit String)
     ((err cleanup) (err (str cause "; temporary cleanup failed: " cleanup)))
     ((ok _) (err cause)))
 
-fn ! writeFile! path: String columns: (List ParquetColumn) kv: (List (List String)) groupSize: Int64 compression: String level: Int64 pageRows: Int64 total: Int64 -> (Result Unit String)
+fn ! writeFile! path: String columns: (List ParquetColumn) kv: (List (List String)) groupSize: Int64 compression: String level: Int64 total: Int64 -> (Result Unit String)
   (let [(temp (str path ".asl-parquet-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs)) ".tmp"))]
     (match (fileWrite temp "PAR1")
       ((err e) (err e))
       ((ok _)
-        (match (writeGroups! temp columns 0 total groupSize compression level pageRows 4 (list))
+        (match (writeGroups! temp columns 0 total groupSize compression level 4 (list))
           ((err e) (removeWriteTemp! temp e))
           ((ok groups)
             (let [(effectiveKv (if (= compression "zstd") (listAppend kv (list (list "asl.parquet.zstd.level" (stringFromInt64 level)))) kv))
@@ -660,13 +593,11 @@ fn ! parquetWrite path: String columns: (List ParquetColumn) options: (List (Lis
         (levelText (optionValue options "level" "3"))
         (dictionary (optionValue options "dictionary" "false"))
         (groupText (optionValue options "rowGroupRows" "1000000"))
-        (pageText (optionValue options "pageRows" "8192"))
-        (pageRowsResult (optionToResult (stringToInt64 pageText) "pageRows must be an integer"))
         (level (optionToResult (stringToInt64 levelText) "compression level must be an integer"))
         (groupRows (optionToResult (stringToInt64 groupText) "rowGroupRows must be an integer"))]
     (cond
       ((stringEmpty? path) (err "path must not be empty"))
-      ((not (columnsValid? columns)) (err "invalid Parquet column: names, types and encodings are required"))
+      ((not (columnsValid? columns)) (err "invalid Parquet column: names, types, encoding and nonempty arrays are required"))
       ((not (metadataPairsValid? kv)) (err "key-value metadata entries must be string pairs"))
       ((metadataHasKey? kv "asl.parquet.zstd.level") (err "key-value metadata uses reserved key asl.parquet.zstd.level"))
       ((not (or (= compression "zstd") (= compression "none"))) (err "compression must be zstd or none"))
@@ -682,13 +613,11 @@ fn ! parquetWrite path: String columns: (List ParquetColumn) options: (List (Lis
                   (err "compression level must be in 1..22")
                   (if (<= groupValue 0)
                     (err "rowGroupRows must be positive")
-                    (match pageRowsResult
-                      ((err e) (err e))
-                      ((ok pageValue)
-                    (if (< pageValue 0) (err "pageRows must not be negative")
                     (if (not (= dictionary "false"))
                       (err "dictionary encoding is not supported")
                       (if (not (sameColumnLengths? columns (firstColumnCount columns)))
                         (err "Parquet columns must have the same number of rows")
-                        (writeFile! path columns kv groupValue compression levelValue pageValue
-                          (firstColumnCount columns))))))))))))))))
+                        (if (not (columnsDeltasValid? columns))
+                          (err "DELTA_BINARY_PACKED values contain an overflowing INT64 delta")
+                          (writeFile! path columns kv groupValue compression levelValue
+                            (firstColumnCount columns))))))))))))))

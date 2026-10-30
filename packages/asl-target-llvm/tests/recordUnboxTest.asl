@@ -1,6 +1,7 @@
 (module asl-target-llvm/tests/recordUnboxTest
   :x [runTests]
   :i [(asl-ir/link :a lk)
+      (asl-ir/types :a irTy)
       (asl-target-llvm :a llvm)
       (asl-target-llvm/tests/rcTest :a rct)])
 

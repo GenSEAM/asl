@@ -12,6 +12,7 @@
       llvmValidate]
   :i [(asl-syntax/core/source :a src)
       (asl-syntax/core/tree :a tr)
+      (asl-syntax/llvm/lex :a lx)
       (asl-syntax/llvm/cst :a cst)])
 
 (schema Item

@@ -7,30 +7,28 @@
       defaultCooldownSec
       providerCooldownSec
       makeBreakerState
-      makeBreakerStateWith
-      QuotaPolicy
-      quotaPolicy
-      defaultQuotaPolicy
-      quotaCooldownSec
-      quotaHintSec
-      breakerNote429
       defaultBreakerState
       touchSeen
       breakerDownFor
+      breaker_down_for
       breakerMarkDown
       breakerMarkDownFor
-      withParkMax
-      defaultParkMaxSec
+      breaker_mark_down
       breakerClear
+      breaker_clear
       breakerNote503
+      breaker_note_503
       breakerReset503
+      breaker_reset_503
       breakerNoteTimeout
+      breaker_note_timeout
       breakerResetTimeout
+      breaker_reset_timeout
       breakerIsQuotaError
-      breakerIsConcurrency429
+      breaker_is_quota_error
       breakerIsProviderWideQuota
-      breakerScope
       breakerSnapshot
+      breaker_snapshot
       formatBreakerSnapshotAsn
       stepBreaker
       stepBreakerResult
@@ -50,43 +48,18 @@
       decTripped
       decDownFor
       decSnapshot]
-  :i [(aslGateway/localTime :a lt)])
+  :i [])
 
 (schema ProviderStatus
   (:f down Bool)
   (:f secondsLeft Int64))
-
-; (:m :ref GW-429-WINDOW-WAIT :do "how long a member waits after a 429 that is not a daily cap: :cooldown429Sec (default 15), doubled on each further 429 in a row up to :cooldown429MaxSec (default 600), and :cooldownSlackSec (default 1) added past a minute window's end; all three are (:gateway ...) config rows, out-of-range values fall back to these defaults")
-(schema QuotaPolicy
-  (:f baseSec Int64)
-  (:f maxSec Int64)
-  (:f slackSec Int64)
-  (:f parkMaxSec Int64))
-
-fn quotaPolicy baseSec: Int64 maxSec: Int64 slackSec: Int64 -> QuotaPolicy
-  (let [(b (if (> baseSec 0) baseSec 15))
-        (m (if (> maxSec 0) (max maxSec b) (max 600 b)))
-        (s (if (>= slackSec 0) slackSec 1))]
-    (QuotaPolicy :baseSec b :maxSec m :slackSec s :parkMaxSec (defaultParkMaxSec)))
-
-; (:m :ref OLLAMA-MONTHLY-EXHAUSTED :do "the longest a markDown may park a pool for its provider's reset, daily or monthly: 32 days unless (:gateway ... :parkMaxSec N) says otherwise, which server.asl reads into withParkMax; a non-positive value keeps the default")
-fn defaultParkMaxSec -> Int64
-  2764800
-
-fn withParkMax st: BreakerState sec: Int64 -> BreakerState
-  (with st :quota (with st.quota :parkMaxSec (if (> sec 0) sec (defaultParkMaxSec))))
-
-fn defaultQuotaPolicy -> QuotaPolicy
-  (quotaPolicy 15 600 1)
 
 (schema BreakerState
   (:f cooldownSec Int64)
   (:f breakers (Map String Int64))
   (:f count503 (Map String Int64))
   (:f countTimeout (Map String Int64))
-  (:f seen (Map String Bool))
-  (:f quota QuotaPolicy)
-  (:f count429 (Map String Int64)))
+  (:f seen (Map String Bool)))
 
 (enum BreakerEvent
   (:c evMarkDown [(provider String)])
@@ -115,9 +88,6 @@ fn providerCooldownSec -> Int64
   600
 
 fn makeBreakerState cooldown: Int64 -> BreakerState
-  (makeBreakerStateWith cooldown (defaultQuotaPolicy))
-
-fn makeBreakerStateWith cooldown: Int64 policy: QuotaPolicy -> BreakerState
   (let [(cd (if (> cooldown 0) cooldown 600))
         (initSeen (mapSet (mapSet (mapSet (mapEmpty) "agy" true) "codex" true) "claude" true))]
     (BreakerState
@@ -125,9 +95,7 @@ fn makeBreakerStateWith cooldown: Int64 policy: QuotaPolicy -> BreakerState
       :breakers (mapEmpty)
       :count503 (mapEmpty)
       :countTimeout (mapEmpty)
-      :seen initSeen
-      :quota policy
-      :count429 (mapEmpty)))
+      :seen initSeen))
 
 fn defaultBreakerState -> BreakerState
   (makeBreakerState 600)
@@ -143,6 +111,9 @@ fn breakerIsQuotaError text: String -> Bool
       (or (stringContains? t "RESOURCE_EXHAUSTED")
         (stringContains? t "QUOTA"))))
 
+fn breaker_is_quota_error text: String -> Bool
+  (breakerIsQuotaError text)
+
 ; (:m :ref GW-429-BODY-SAMPLES :do "copy of upstream.modelScopedQuota?: a body naming one model's own limit is not provider-wide; keep in sync")
 fn breakerModelScopedQuota text: String -> Bool
   (or (stringContains? text "Quota exceeded for metric")
@@ -156,90 +127,6 @@ fn breakerIsProviderWideQuota text: String -> Bool
       (and (not (breakerModelScopedQuota text))
         (or (stringContains? t "BILLING")
           (and (stringContains? t "ACCOUNT") (stringContains? t "QUOTA"))))))
-
-; (:m :ref PAIDCHEAP-BREAKER-ALL-OPEN :do "the key a failure counts under: an account-wide failure (401, 402, a provider-wide quota body) trips the provider pool; every other failure (429, 503, 5xx, 4xx) counts on the member's own providerPool:alias key, so one member's 503 streak never closes its siblings on the same provider")
-fn breakerScope status: Int64 body: String providerPool: String pool: String -> String
-  (if (or (= status 401) (or (= status 402) (or (breakerIsProviderWideQuota body) (breakerIsMonthlyCap body)))) providerPool pool)
-
-; (:m :ref OLLAMA-MONTHLY-EXHAUSTED :do "a monthly usage limit (ollama: you have reached your monthly usage limit) is the account's, so breakerScope counts it on the provider pool; it stays out of breakerIsProviderWideQuota because chat.asl parks only a quota that is not provider-wide until its reset (upstream dailyCapKind monthly); keep the wording in sync with upstream")
-fn breakerIsMonthlyCap text: String -> Bool
-  (stringContains? text "monthly usage limit")
-
-fn grownSec base: Int64 cap: Int64 streak: Int64 -> Int64
-  (if (or (<= streak 0) (>= base cap))
-    (min base cap)
-    (grownSec (* base 2) cap (- streak 1)))
-
-; (:m :ref GW-429-WINDOW-WAIT :do "a hint is delta seconds, or an epoch in seconds or milliseconds (openrouter X-RateLimit-Reset), read against now")
-fn hintLeftSec hint: Int64 now: Int64 -> Int64
-  (cond
-    ((> hint 1000000000000) (- (/ hint 1000) now))
-    ((> hint 1000000000) (- hint now))
-    (else hint))
-
-; (:m :ref GW-429-WINDOW-WAIT :do "the cooldown after a 429: the provider's own hint when it names one (capped at a day and an hour), else the end of the member's aligned window (its :rpm minute, or a :limits minute, hour or day) plus slack, never past the window, else the base doubled per 429 in a row up to the max")
-fn quotaCooldownSec p: QuotaPolicy hintSec: Int64 windowSec: Int64 now: Int64 streak: Int64 -> Int64
-  (let [(left (if (> hintSec 0) (hintLeftSec hintSec now) 0))]
-    (cond
-      ((> left 0) (min left 90000))
-      ((> windowSec 0) (min windowSec (+ (- windowSec (mod now windowSec)) p.slackSec)))
-      (else (grownSec p.baseSec p.maxSec streak))))
-
-fn ceilSec f: Float64 -> Int64
-  (optionOr (float64ToInt64 (+ f 0.999)) 0)
-
-fn durationNumber buf: String -> Float64
-  (optionOr (stringToFloat64 buf) 0.0)
-
-; (:m :ref GW-429-WINDOW-WAIT :do "an x-ratelimit-reset duration as OpenAI-style providers send it (6m0s, 2.5s, 850ms, 1h2m); -1 when the text is not one")
-fn durationSecAt t: String i: Int64 buf: String total: Float64 -> Float64
-  (if (>= i (stringLength t))
-    (if (stringEmpty? buf) total -1.0)
-    (let [(c (optionOr (stringSlice t i (+ i 1)) ""))
-          (next (optionOr (stringSlice t (+ i 1) (+ i 2)) ""))]
-      (cond
-        ((stringContains? "0123456789." c) (durationSecAt t (+ i 1) (str buf c) total))
-        ((stringEmpty? buf) -1.0)
-        ((and (= c "m") (= next "s")) (durationSecAt t (+ i 2) "" (+ total (/ (durationNumber buf) 1000.0))))
-        ((= c "h") (durationSecAt t (+ i 1) "" (+ total (* (durationNumber buf) 3600.0))))
-        ((= c "m") (durationSecAt t (+ i 1) "" (+ total (* (durationNumber buf) 60.0))))
-        ((= c "s") (durationSecAt t (+ i 1) "" (+ total (durationNumber buf))))
-        (else -1.0))))
-
-fn hintOfText text: String -> Int64
-  (match (stringToFloat64 text)
-    ((some f) (if (> f 0.0) (ceilSec f) 0))
-    ((none) (let [(d (durationSecAt text 0 "" 0.0))] (if (> d 0.0) (ceilSec d) 0))))
-
-fn headerText headers: (List (Pair String String)) name: String -> String
-  (match (listFind (fn [(h (Pair String String))] -> Bool (= (stringLower (pairFirst h)) name)) headers)
-    ((some h) (stringTrim (pairSecond h)))
-    ((none) ""))
-
-; (:m :ref GW-429-WINDOW-WAIT :do "the wait a 429's headers name: Retry-After delta seconds first, else the longest of x-ratelimit-reset-requests, x-ratelimit-reset-tokens and x-ratelimit-reset; an IMF-fixdate Retry-After ending GMT counts from the clock; 0 when none parses, so the window or the base applies")
-fn retryAfterHintSec text: String nowSec: Float64 -> Int64
-  (let [(delta (hintOfText text))]
-    (if (> delta 0) delta
-      (match (if (stringEndsWith? text " GMT") (lt/parseHttpDateEpochSeconds text) none)
-        ((some epoch) (if (> epoch nowSec) (ceilSec (- epoch nowSec)) 0))
-        ((none) 0))))
-
-fn quotaHintSec headers: (List (Pair String String)) nowSec: Float64 -> Int64
-  (let [(retry (retryAfterHintSec (headerText headers "retry-after") nowSec))]
-    (if (> retry 0)
-      retry
-      (max (hintOfText (headerText headers "x-ratelimit-reset-requests"))
-           (max (hintOfText (headerText headers "x-ratelimit-reset-tokens"))
-                (hintOfText (headerText headers "x-ratelimit-reset"))))))
-
-; (:m :ref GW-429-WINDOW-WAIT :do "a 429 opens the member for quotaCooldownSec and counts toward its streak; breakerClear (a success) ends the streak")
-fn breakerNote429 st: BreakerState provider: String now: Int64 hintSec: Int64 windowSec: Int64 -> BreakerState
-  (if (stringEmpty? provider)
-    st
-    (let [(streak (optionOr (mapGet st.count429 provider) 0))
-          (cd (quotaCooldownSec st.quota hintSec windowSec now streak))]
-      (with st :breakers (mapSet st.breakers provider (+ now cd)) :count429 (mapSet st.count429 provider (+ streak 1))
-               :count503 (mapSet st.count503 provider 0) :countTimeout (mapSet st.countTimeout provider 0) :seen (mapSet st.seen provider true))))
 
 fn breakerDownFor st: BreakerState provider: String now: Int64 -> (Pair BreakerState Int64)
   (if (stringEmpty? provider)
@@ -255,11 +142,12 @@ fn breakerDownFor st: BreakerState provider: String now: Int64 -> (Pair BreakerS
                              :breakers (mapRemove stSeen.breakers provider)
                              :count503 stSeen.count503
                              :countTimeout stSeen.countTimeout
-                             :seen stSeen.seen
-                             :quota stSeen.quota
-                             :count429 stSeen.count429))]
+                             :seen stSeen.seen))]
                (pair pruned 0))
              (pair stSeen left)))))))
+
+fn breaker_down_for st: BreakerState provider: String now: Int64 -> (Pair BreakerState Int64)
+  (breakerDownFor st provider now)
 
 fn breakerMarkDown st: BreakerState provider: String now: Int64 -> BreakerState
   (breakerMarkDownFor st provider now 0)
@@ -268,13 +156,19 @@ fn breakerMarkDown st: BreakerState provider: String now: Int64 -> BreakerState
 fn breakerMarkDownFor st: BreakerState provider: String now: Int64 parkSec: Int64 -> BreakerState
   (if (stringEmpty? provider)
     st
-    (let [(until (+ now (if (> parkSec 0) (min parkSec st.quota.parkMaxSec) st.cooldownSec)))]
+    (let [(until (+ now (if (> parkSec 0) parkSec st.cooldownSec)))]
       (with st :breakers (mapSet st.breakers provider until) :count503 (mapSet st.count503 provider 0) :countTimeout (mapSet st.countTimeout provider 0) :seen (mapSet st.seen provider true))))
+
+fn breaker_mark_down st: BreakerState provider: String now: Int64 -> BreakerState
+  (breakerMarkDown st provider now)
 
 fn breakerClear st: BreakerState provider: String -> BreakerState
   (if (stringEmpty? provider)
     st
-    (with st :breakers (mapRemove st.breakers provider) :count429 (mapSet st.count429 provider 0) :count503 (mapSet st.count503 provider 0) :countTimeout (mapSet st.countTimeout provider 0) :seen (mapSet st.seen provider true)))
+    (with st :breakers (mapRemove st.breakers provider) :count503 (mapSet st.count503 provider 0) :countTimeout (mapSet st.countTimeout provider 0) :seen (mapSet st.seen provider true)))
+
+fn breaker_clear st: BreakerState provider: String -> BreakerState
+  (breakerClear st provider)
 
 fn breakerNote503 st: BreakerState provider: String now: Int64 -> (Pair BreakerState Bool)
   (if (stringEmpty? provider)
@@ -289,24 +183,26 @@ fn breakerNote503 st: BreakerState provider: String now: Int64 -> (Pair BreakerS
                         :breakers (mapSet stSeen.breakers provider until)
                         :count503 (mapSet stSeen.count503 provider 0)
                         :countTimeout stSeen.countTimeout
-                        :seen stSeen.seen
-                        :quota stSeen.quota
-                        :count429 stSeen.count429))]
+                        :seen stSeen.seen))]
           (pair nextSt true))
         (let [(nextSt (BreakerState
                         :cooldownSec stSeen.cooldownSec
                         :breakers stSeen.breakers
                         :count503 (mapSet stSeen.count503 provider cnt)
                         :countTimeout stSeen.countTimeout
-                        :seen stSeen.seen
-                        :quota stSeen.quota
-                        :count429 stSeen.count429))]
+                        :seen stSeen.seen))]
           (pair nextSt false)))))
+
+fn breaker_note_503 st: BreakerState provider: String now: Int64 -> (Pair BreakerState Bool)
+  (breakerNote503 st provider now)
 
 fn breakerReset503 st: BreakerState provider: String -> BreakerState
   (if (stringEmpty? provider)
     st
     (with st :count503 (mapSet st.count503 provider 0)))
+
+fn breaker_reset_503 st: BreakerState provider: String -> BreakerState
+  (breakerReset503 st provider)
 
 fn breakerNoteTimeout st: BreakerState provider: String now: Int64 -> (Pair BreakerState Bool)
   (if (stringEmpty? provider)
@@ -321,24 +217,26 @@ fn breakerNoteTimeout st: BreakerState provider: String now: Int64 -> (Pair Brea
                         :breakers (mapSet stSeen.breakers provider until)
                         :count503 stSeen.count503
                         :countTimeout (mapSet stSeen.countTimeout provider 0)
-                        :seen stSeen.seen
-                        :quota stSeen.quota
-                        :count429 stSeen.count429))]
+                        :seen stSeen.seen))]
           (pair nextSt true))
         (let [(nextSt (BreakerState
                         :cooldownSec stSeen.cooldownSec
                         :breakers stSeen.breakers
                         :count503 stSeen.count503
                         :countTimeout (mapSet stSeen.countTimeout provider cnt)
-                        :seen stSeen.seen
-                        :quota stSeen.quota
-                        :count429 stSeen.count429))]
+                        :seen stSeen.seen))]
           (pair nextSt false)))))
+
+fn breaker_note_timeout st: BreakerState provider: String now: Int64 -> (Pair BreakerState Bool)
+  (breakerNoteTimeout st provider now)
 
 fn breakerResetTimeout st: BreakerState provider: String -> BreakerState
   (if (stringEmpty? provider)
     st
     (with st :countTimeout (mapSet st.countTimeout provider 0)))
+
+fn breaker_reset_timeout st: BreakerState provider: String -> BreakerState
+  (breakerResetTimeout st provider)
 
 fn breakerSnapshot st: BreakerState now: Int64 -> (Pair BreakerState (Map String ProviderStatus))
   (let [(breakerKeys (mapKeys st.breakers))
@@ -361,6 +259,9 @@ fn breakerSnapshot st: BreakerState now: Int64 -> (Pair BreakerState (Map String
               (pair nextSt nextMap)))
           initPair
           sortedNames))
+
+fn breaker_snapshot st: BreakerState now: Int64 -> (Pair BreakerState (Map String ProviderStatus))
+  (breakerSnapshot st now)
 
 fn formatBreakerSnapshotAsn snapshot: (Map String ProviderStatus) -> String
   (let [(keys (mapKeys snapshot))
@@ -414,7 +315,3 @@ fn breakerUntil st: BreakerState provider: String -> (Option Int64)
 
 fn breakerSeenProviders st: BreakerState -> (List String)
   (mapKeys st.seen)
-
-; (:m :ref GW-ADAPTIVE-ADMISSION :do "a 429 whose body names concurrent requests is the provider's concurrency cap, not a spent quota: the gateway lowers its lane cap and parks instead of opening a breaker")
-fn breakerIsConcurrency429 status: Int64 body: String -> Bool
-  (and (= status 429) (stringContains? (stringLower body) "concurrent"))

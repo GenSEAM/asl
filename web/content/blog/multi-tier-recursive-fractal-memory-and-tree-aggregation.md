@@ -20,14 +20,14 @@ This post describes the memory we run today in AgentSlang (ASL), and the recursi
 
 ## 1. Today: Plain Ledgers, One Directory
 
-Our memory is plain ASN text in a memory directory at the workspace root, kept beside the code it describes. The tools know a handful of ledger kinds:
-- intent and roadmap ledgers: what the work is for and what comes next.
-- a decisions ledger: decision records with their rationale.
-- a notes ledger: observations, written and listed with the `(:note)` op.
+Our memory is plain ASN text under `.asl/mem` at the workspace root, kept beside the code it describes. The tools know a handful of ledger kinds:
+- `intent.asn` and `roadmap.asn`: what the work is for and what comes next.
+- `decisions/decisions.asn`: decision records with their rationale.
+- `notes.asn`: observations, written and listed with the `(:note)` op.
 
-The ops that touch it are confined to it. `(:mem :op list|get|query|put ...)` reads and stages row-keyed ledger changes, and a path that leaves that directory is rejected with `ERR_BOUNDARY_VIOLATION`. `(:note :action :list)` reports the notes ledger, and `asl '(:observe :dim memory)'` reports ledger sizes; the old `asl mem` command is retired in its favour.
+The ops that touch it are confined to it. `(:mem :op list|get|query|put ...)` reads and stages row-keyed ledger changes, and a path that leaves `.asl/mem` is rejected with `ERR_BOUNDARY_VIOLATION`. `(:note :action :list)` reports the notes ledger, and `asl '(:observe :dim memory)'` reports ledger sizes; the old `asl mem` command is retired in its favour.
 
-The ledgers are workspace state, not part of the published language repository: a fresh clone of it has no memory directory, and `(:note :action :list)` there answers `:status :empty`. Today there is one tier, the workspace that holds the working directory.
+The ledgers are workspace state, not part of the published language repository: a fresh clone of it has no `.asl/mem`, and `(:note :action :list)` there answers `:status :empty`. Today there is one tier, the workspace that holds the working directory.
 
 ---
 
@@ -40,7 +40,7 @@ Tier 0 workspace -> Tier 1 subsystems -> Tier 2 packages -> Tier 3 components ->
 ```
 
 ```text
-Workspace memory directory
+Workspace .asl/mem
 ├── Subsystem: asl
 │   ├── Package: asl-checker
 │   └── Package: asl-compiler
@@ -61,7 +61,7 @@ Only the root tier exists today; ledgers below it are the next step.
 
 In most systems memory is passive text: Markdown, JSON, or embeddings. An agent reads it, translates it, and writes glue to apply it.
 
-In ASL, memory records are S-expressions, the same syntax as the code, and a function is a value that a record can hold. An invariant can therefore carry its own check. This runs today:
+In ASL, memory records are S-expressions, the same syntax as the code, and a function is a value that a record can hold. An invariant can therefore carry its own check. This runs on the stage-0 host today:
 
 ```asl
 (module probe/invariant :x [Invariant noDoubleComment zeroComment holds runTests])
@@ -87,7 +87,7 @@ fn runTests -> Bool
     true)
 ```
 
-`asl test` on this file prints `1 assertion(s) executed, 1 refutation(s) executed (2 passed)` (2026-10-14). Today our ledgers hold data, not predicates; storing executable invariants in the memory directory so that a gate can evaluate them directly is part of the design.
+`host/out/asl-host test` on this file prints `1 assertion(s) executed, 1 refutation(s) executed (2 passed)` (2026-10-14). Today our ledgers hold data, not predicates; storing executable invariants in `.asl/mem` so that a gate can evaluate them directly is part of the design.
 
 ---
 
@@ -97,7 +97,7 @@ Physical paths are host-specific: they change when a package moves or runs insid
 - `mem:root/intent`: the workspace intent.
 - `mem:asl/checker/invariants`: the checker package's invariants.
 
-The resolver would look in an in-memory cache first and hydrate from the tier's memory files on a miss, so the agent names what it wants and the storage can be the local disk, a Git snapshot, or a browser file system. None of this is implemented yet; today tools address memory by workspace-relative path.
+The resolver would look in an in-memory cache first and hydrate from the tier's `.asl/mem` files on a miss, so the agent names what it wants and the storage can be the local disk, a Git snapshot, or a browser file system. None of this is implemented yet; today tools address memory by workspace-relative path.
 
 ---
 
@@ -109,7 +109,7 @@ Focused work wants local memory; coordinators and humans also want the whole pic
 (:memorySnapshot
   :tiers 2
   :subsystems [
-    (:subsystem :name "asl" :path "asl" :memory "asl/<memory directory>")
+    (:subsystem :name "asl" :path "asl" :memory "asl/.asl/mem")
   ]
   :status :consistent)
 ```
@@ -124,4 +124,4 @@ An earlier version of this post printed a tree and a comparison table (token cos
 
 Memory for an agent is not a key-value store or a pile of notes. It is the structure through which the agent sees the system. Our current memory is deliberately plain: line-oriented ASN ledgers in one directory beside the code. The recursion, the logical addresses and the aggregation are where it is going, and each will be described as shipped only when a command does it.
 
-- Explore test runners and what they report in [Test Telemetry](/blog/test-telemetry-and-resource-observability-for-agents).
+- Explore test runners and what they report in [Test Telemetry](/blog/zero-overhead-test-telemetry-and-resource-observability).

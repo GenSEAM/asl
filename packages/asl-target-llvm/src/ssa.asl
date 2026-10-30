@@ -1,5 +1,5 @@
 (module asl-target-llvm/ssa
-  :x [emitLlvmModule emitLlvmModuleCEntries emitLlvmProgram ownedEntryName emitLlvmModuleWasm32 emitLlvmProgramWasm32 trapLowering llvmName llvmBytes llvmFloat runtimeDecls cDeclFits? overwideCDecls cRuntimeModule ModEnv FnEnv NameIndex nameIndexSet tailCall? pinMusttailCallees linkInits definesInit? ensureInit listBuilder? headOffsetsText headOffsets usedDeclsKeyed usedDeclsJoin]
+  :x [emitLlvmModule emitLlvmProgram ownedEntryName emitLlvmModuleWasm32 emitLlvmProgramWasm32 trapLowering llvmName llvmBytes llvmFloat runtimeDecls cDeclFits? overwideCDecls cRuntimeModule ModEnv FnEnv NameIndex nameIndexSet tailCall? pinMusttailCallees linkInits definesInit? ensureInit listBuilder? headOffsetsText headOffsets usedDeclsKeyed usedDeclsJoin]
 
   :i [(asl-ir/types :a ty)
       (asl-ir/verify :a vfy)
@@ -17,7 +17,7 @@
 
 (schema ListCells (:f lines (List String)) (:f index Int64) (:f tail String))
 
-(schema FnEnv (:f mod ModEnv) (:f defs (NameIndex ty/SsaTy)) (:f blocks (NameIndex ty/SsaBlock)) (:f order (List ty/SsaBlock)) (:f retTy ty/SsaTy) (:f name String) (:f fused (NameIndex ty/SsaOp)) (:f records (NameIndex ty/SsaOp)) (:f wants (NameIndex (Pair String String))) (:f preds (NameIndex (List (Pair ty/SsaBlock Int64)))) (:f arms (NameIndex Bool)) (:f steps (NameIndex (Pair String Int64))) (:f size Int64))
+(schema FnEnv (:f mod ModEnv) (:f defs (NameIndex ty/SsaTy)) (:f blocks (NameIndex ty/SsaBlock)) (:f order (List ty/SsaBlock)) (:f retTy ty/SsaTy) (:f name String) (:f fused (NameIndex ty/SsaOp)) (:f records (NameIndex ty/SsaOp)) (:f wants (NameIndex (Pair String String))) (:f preds (NameIndex (List (Pair ty/SsaBlock Int64)))) (:f arms (NameIndex Bool)) (:f size Int64))
 
 (enum NameIndex
   (:c nameIndexEmpty [])
@@ -459,51 +459,6 @@ fn recordMap f: ty/SsaFunction -> (NameIndex ty/SsaOp)
   (fold (fn [(acc (NameIndex ty/SsaOp)) (ins ty/SsaInstr)] -> (NameIndex ty/SsaOp)
           (match ins.op ((ty/opRecord _ _ _) (nameIndexSet acc ins.dest ins.op)) ((ty/opBox _) (nameIndexSet acc ins.dest ins.op)) (_ acc)))
         (nameIndexEmpty) (allInstrs f))
-
-fn intConstMap f: ty/SsaFunction -> (NameIndex Int64)
-  (fold (fn [(acc (NameIndex Int64)) (ins ty/SsaInstr)] -> (NameIndex Int64)
-          (match ins.op
-            ((ty/opConst c) (match c ((ty/constInt n) (if (= (ty/ssaTyName ins.ty) "i64") (nameIndexSet acc ins.dest n) acc)) (_ acc)))
-            (_ acc)))
-        (nameIndexEmpty) (allInstrs f))
-
-fn checkedStep? name: String -> Bool
-  (listContains? (list "addInt" "addIntHost" "subInt" "subIntHost") name)
-
-fn primMap f: ty/SsaFunction -> (NameIndex ty/SsaOp)
-  (fold (fn [(acc (NameIndex ty/SsaOp)) (ins ty/SsaInstr)] -> (NameIndex ty/SsaOp)
-          (match ins.op ((ty/opPrim name _) (if (checkedStep? name) (nameIndexSet acc ins.dest ins.op) acc)) (_ acc)))
-        (nameIndexEmpty) (allInstrs f))
-
-; (:m :ref PERF-CHECKS :do "the literal step of param p when op is p + c, c + p or p - c")
-fn stepOf consts: (NameIndex Int64) p: String op: ty/SsaOp -> (Option Int64)
-  (match op
-    ((ty/opPrim name args)
-      (let [(x (optionOr (listGet args 0) "")) (y (optionOr (listGet args 1) ""))
-            (sub (or (= name "subInt") (= name "subIntHost")))]
-        (cond ((= x p) (nameIndexGet consts y))
-              ((and (not sub) (= y p)) (nameIndexGet consts x))
-              (else (none)))))
-    (_ (none)))
-
-; (:m :ref PERF-CHECKS :do "a checked add or sub of a literal to param k that is argument k of a self call is a loop counter step: by add dest, the param and the literal; only these take the bound-check form, because elsewhere adds and b.vs on the flags is the cheaper check")
-fn stepMap f: ty/SsaFunction -> (NameIndex (Pair String Int64))
-  (let [(consts (intConstMap f))
-        (prims (primMap f))
-        (names (map (fn [(p ty/SsaParam)] -> String p.name) f.params))]
-    (fold (fn [(acc (NameIndex (Pair String Int64))) (ins ty/SsaInstr)] -> (NameIndex (Pair String Int64))
-            (match ins.op
-              ((ty/opCall callee args)
-                (if (or (!= callee f.name) (!= (listLength args) (listLength names)))
-                  acc
-                  (fold (fn [(m (NameIndex (Pair String Int64))) (k Int64)] -> (NameIndex (Pair String Int64))
-                          (let [(a (optionOr (listGet args k) "")) (p (optionOr (listGet names k) ""))]
-                            (match (nameIndexGet prims a)
-                              ((some op) (match (stepOf consts p op) ((some c) (nameIndexSet m a (pair p c))) ((none) m)))
-                              ((none) m))))
-                        acc (range 0 (listLength args)))))
-              (_ acc)))
-          (nameIndexEmpty) (allInstrs f)))
 
 fn opRecordFields op: ty/SsaOp -> (Option (List String))
   (match op ((ty/opRecord _ fields _) (some fields)) (_ (none)))
@@ -1707,31 +1662,6 @@ fn overflowPrim lhs: String dest: String intrinsic: String a: String b: String -
          "  " bad " = extractvalue {i64, i1} " pair ", 1\n"
          (trapUnless dest bad true)))
 
-fn int64Max -> Int64 9223372036854775807
-fn int64Min -> Int64 (- (- 0 (int64Max)) 1)
-
-; (:m :ref PERF-CHECKS :do "x + c overflows exactly when x > MAX - c (c > 0) or x < MIN - c (c < 0); x - c exactly when x < MIN + c (c > 0) or x > MAX + c (c < 0); c = 0 never; the bound is computed here without overflow")
-fn constBoundCheck sub: Bool c: Int64 a: String bad: String -> String
-  (let [(up (if sub (< c 0) (> c 0)))
-        (bound (if sub (if (< c 0) (+ (int64Max) c) (+ (int64Min) c)) (if (> c 0) (- (int64Max) c) (- (int64Min) c))))]
-    (str "  " bad " = icmp " (if up "sgt" "slt") " i64 " a ", " bound "\n"))
-
-; (:m :ref PERF-CHECKS :do "an add or sub whose other operand is a raw literal: one compare against a constant bound and add/sub nsw, the same trap as with.overflow, which SCEV and LSR fold into the loop counter; a zero literal checks false, which LLVM drops, so the .p.ok label phis name still exists")
-fn constOverflowPrim lhs: String dest: String sub: Bool host: Bool kind: String a: String b: String c: Int64 -> String
-  (let [(bad (primPart dest "bad"))
-        (op (if sub "sub nsw i64 " "add nsw i64 "))]
-    (str (if (= c 0) (str "  " bad " = icmp ne i64 0, 0\n") (constBoundCheck sub c a bad))
-         (if host (hostTrapUnless dest bad kind) (trapUnless dest bad true))
-         lhs op a ", " b "\n"))
-
-fn emitPrimIn env: FnEnv lhs: String dest: String name: String args: (List String) -> String
-  (match (if (checkedStep? name) (nameIndexGet env.steps dest) (none))
-    ((some step) (let [(sub (or (= name "subInt") (= name "subIntHost")))
-                       (host (or (= name "addIntHost") (= name "subIntHost")))
-                       (c (pairSecond step))]
-                   (constOverflowPrim lhs dest sub host (if sub "1" "0") (val (pairFirst step)) (stringFromInt64 c) c)))
-    ((none) (emitPrim lhs dest name args)))
-
 fn quotPrim lhs: String dest: String a: String b: String -> String
   (let [(zero (primPart dest "zero")) (min (primPart dest "min")) (neg (primPart dest "neg")) (over (primPart dest "over")) (bad (primPart dest "bad"))]
     (str "  " zero " = icmp eq i64 " b ", 0\n"
@@ -1963,7 +1893,7 @@ fn emitInstr env: FnEnv ins: ty/SsaInstr -> String
            ((ty/opGlobal g) (if (opt/singleton? g) (str lhs "call %Val " (globalGetSym g) "()\n") (str lhs "load %Val, ptr " (globalSym g) "\n")))
            ((ty/opLoadGlobal g) (if (stringStartsWith? g "&") (str lhs "getelementptr i8, ptr " (externGlobalSym (dropAddressMark g)) ", i64 0\n") (str lhs "load ptr, ptr " (externGlobalSym g) "\n")))
            ((ty/opBox v) (boxInline lhs d (defType env v) (val v)))
-           ((ty/opPrim name args) (emitPrimIn env lhs d name args))
+           ((ty/opPrim name args) (emitPrim lhs d name args))
            (_ ""))))))
 
 fn countTarget edges: (List ty/SsaEdge) target: String -> Int64
@@ -2399,7 +2329,6 @@ fn emitBodyAs menv: ModEnv f: ty/SsaFunction rooted: Bool retTy: ty/SsaTy head: 
                     :wants (entryUnboxes f)
                     :preds predIdx
                     :arms (armFieldMap menv blocks blockIdx predIdx)
-                    :steps (stepMap f)
                     :size (listLength blocks)))
         (allocas (stringJoin (map (fn [(b ty/SsaBlock)] -> String (stringJoin (map allocaFor b.instrs) "")) blocks) ""))
         (allParams (listAppend f.captures f.params))
@@ -2626,7 +2555,7 @@ fn boxableAbi? t: ty/SsaTy -> Bool
 fn probeEnv menv: ModEnv f: ty/SsaFunction -> FnEnv
   (FnEnv :mod menv :defs (nameIndexEmpty)
          :blocks (fold (fn [(acc (NameIndex ty/SsaBlock)) (b ty/SsaBlock)] -> (NameIndex ty/SsaBlock) (nameIndexSet acc b.label b)) (nameIndexEmpty) f.blocks)
-         :order f.blocks :retTy (ty/tyVal) :name f.name :fused (nameIndexEmpty) :records (nameIndexEmpty) :wants (nameIndexEmpty) :preds (nameIndexEmpty) :arms (nameIndexEmpty) :steps (nameIndexEmpty)
+         :order f.blocks :retTy (ty/tyVal) :name f.name :fused (nameIndexEmpty) :records (nameIndexEmpty) :wants (nameIndexEmpty) :preds (nameIndexEmpty) :arms (nameIndexEmpty)
          :size (listLength f.blocks))
 
 fn rawCallee? env: FnEnv callee: String -> Bool
@@ -2924,12 +2853,8 @@ fn emitErrorBuiltin lhs: String dest: String name: String args: (List String) ->
 
 fn mathBuiltin? name: String n: Int64 -> Bool
   (or (and (= n 1) (or (= name "abs") (or (= name "int64ToFloat64") (or (= name "float64ToInt64") (= name "~")))))
-      (or (and (= n 2) (or (= name "min") (or (= name "max") (or (= name "<<") (or (= name ">>") (or (= name "&") (or (= name "|") (or (= name "^") (wrapName? name)))))))))
+      (or (and (= n 2) (or (= name "min") (or (= name "max") (or (= name "<<") (or (= name ">>") (or (= name "&") (or (= name "|") (= name "^"))))))))
           (and (= n 3) (= name "clamp"))))
-
-; (:m :ref LOWLEVEL-WRAP-NATIVE :do "mulWrap addWrap subWrap rotateLeft rotateRight lower over Int64 only, like the bit operators: add mul sub with no nsw or nuw so the result is the product or sum modulo 2^64, a rotate masks its amount with 63 and ors a shl with an lshr by the masked negation, which LLVM matches to its rotate; sized integers stay unrouted in check")
-fn wrapName? name: String -> Bool
-  (listContains? (list "mulWrap" "addWrap" "subWrap" "rotateLeft" "rotateRight") name)
 
 fn mathSym name: String -> String
   (cond ((= name "<<") "@mathrt.shiftLeft")
@@ -2948,7 +2873,6 @@ fn mathConstants -> (List (Pair String String))
        (list (pair "@.mathrt.who.abs" "abs") (pair "@.mathrt.who.min" "min") (pair "@.mathrt.who.max" "max") (pair "@.mathrt.who.clamp" "clamp")
              (pair "@.mathrt.who.int64ToFloat64" "int64ToFloat64") (pair "@.mathrt.who.float64ToInt64" "float64ToInt64")
              (pair "@.mathrt.who.shiftLeft" "<<") (pair "@.mathrt.who.shiftRight" ">>")
-             (pair "@.mathrt.who.mulWrap" "mulWrap") (pair "@.mathrt.who.addWrap" "addWrap") (pair "@.mathrt.who.subWrap" "subWrap") (pair "@.mathrt.who.rotateLeft" "rotateLeft") (pair "@.mathrt.who.rotateRight" "rotateRight")
              (pair "@.mathrt.who.bitAnd" "&") (pair "@.mathrt.who.bitOr" "|") (pair "@.mathrt.who.bitXor" "^") (pair "@.mathrt.who.bitNot" "~")
              (pair "@.mathrt.want" "%s expects %s, got %s") (pair "@.mathrt.pair" "%s expects two Int or two Float, got %s and %s")
              (pair "@.mathrt.clampRange" "clamp: lo <= hi required, got lo=%f hi=%f") (pair "@.mathrt.absMin" "abs of INT64_MIN")))
@@ -3141,11 +3065,6 @@ fn mathFunctions -> (List (Pair String String))
            "  ret %Val %noneVal\n}"))
     (pair "@mathrt.shiftLeft" (mathShift "shiftLeft" "shl"))
     (pair "@mathrt.shiftRight" (mathShift "shiftRight" "ashr"))
-    (pair "@mathrt.mulWrap" (mathBitwise "mulWrap" "mul"))
-    (pair "@mathrt.addWrap" (mathBitwise "addWrap" "add"))
-    (pair "@mathrt.subWrap" (mathBitwise "subWrap" "sub"))
-    (pair "@mathrt.rotateLeft" (mathRotate "rotateLeft" "shl" "lshr"))
-    (pair "@mathrt.rotateRight" (mathRotate "rotateRight" "lshr" "shl"))
     (pair "@mathrt.bitAnd" (mathBitwise "bitAnd" "and"))
     (pair "@mathrt.bitOr" (mathBitwise "bitOr" "or"))
     (pair "@mathrt.bitXor" (mathBitwise "bitXor" "xor"))
@@ -3163,21 +3082,6 @@ fn mathBitwise who: String instr: String -> String
        (mathWant "b" who 2 "apply")
        "apply:\n"
        "  %r = " instr " i64 %a.bits, %b.bits\n"
-       "  %v = insertvalue %Val { i64 2, i64 0 }, i64 %r, 1\n"
-       "  ret %Val %v\n}")
-
-fn mathRotate who: String near: String far: String -> String
-  (str "define internal %Val @mathrt." who "(%Val %a, %Val %b) {\nentry:\n"
-       (mathWant "a" who 2 "second")
-       "second:\n"
-       (mathWant "b" who 2 "rotate")
-       "rotate:\n"
-       "  %count = and i64 %b.bits, 63\n"
-       "  %neg = sub i64 0, %count\n"
-       "  %inv = and i64 %neg, 63\n"
-       "  %hi = " near " i64 %a.bits, %count\n"
-       "  %lo = " far " i64 %a.bits, %inv\n"
-       "  %r = or i64 %hi, %lo\n"
        "  %v = insertvalue %Val { i64 2, i64 0 }, i64 %r, 1\n"
        "  ret %Val %v\n}")
 
@@ -3983,23 +3887,6 @@ fn emitDiags m: ty/SsaModule -> (List ty/IrDiag)
 
 fn emitLlvmModule m: ty/SsaModule -> (Result String (List ty/IrDiag))
   (emitModuleWith m false)
-
-; (:m :ref C-EXPORT-ABI :do "x86_64 tailcc is not the C convention: the callee pops its argument area (ret $8), so a C caller of a compiled function crashes there; arm64 happened to agree. emitLlvmModuleCEntries is emitLlvmModule plus, for every plain top-level function, a ccc definition @aslc_<name> with the same registers that calls the tailcc body; default IR is unchanged, embedding and FFI export call the shim")
-fn cEntryShim ll: String f: ty/SsaFunction -> String
-  (let [(sym (fnSym f.name))
-        (rt (llTy f.retTy))
-        (plain (and (listEmpty? f.captures) (not (stringContains? sym "\""))))]
-    (if (and plain (stringContains? ll (str "define tailcc " rt " " sym "(")))
-      (let [(params (registerParamList f))]
-        (str "define " rt " @aslc_" (optionOr (stringSlice sym 1 (stringLength sym)) "") "(" params ") {\n"
-             "  %c.res = call tailcc " rt " " sym "(" params ")\n"
-             "  ret " rt " %c.res\n}\n"))
-      ""))
-
-fn emitLlvmModuleCEntries m: ty/SsaModule -> (Result String (List ty/IrDiag))
-  (match (emitLlvmModule m)
-    ((err ds) (err ds))
-    ((ok ll) (ok (str ll "\n" (stringJoin (map (fn [(f ty/SsaFunction)] -> String (cEntryShim ll f)) m.functions) "")))))
 
 fn emitLlvmModuleWasm32 m: ty/SsaModule -> (Result String (List ty/IrDiag))
   (emitModuleWith m true)

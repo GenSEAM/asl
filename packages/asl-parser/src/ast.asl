@@ -1,4 +1,4 @@
-(module asl-parser/ast :x [moduleNode ModuleNode SchemaNode EnumNode DefunNode EnumCase Param AstField TopForm ParseError PosForm KidForm readForms parse parseLegacy parseForTypeCheck retiredProse retiredSpelling retiredSource spellingErrors retiredFormErrors canonicalSpelling bangedBuiltins parseForChecker renderNode AstLit litInt litFloat litString litBool litUnit AstPattern patWildcard patVar patLit patTuple patRecord patCtor AstMatchArm matchArm makeMatchArm AstExpr exprLit exprIdent exprMember exprCall exprLet exprIf exprMatch exprTry exprBlock exprRecord exprCond exprLambda exprInterpolation AstType typeNamed typeTuple typeRecord typeFn charsWithin? tailExprs sexprItems nthExpr hasTailrec? isInlineBodyCandidate? typeNodeText joinFnHeader readKidForms kidFormsFor findTokenPos findQualifiedTokenPos scriptStepParts scriptStepAt shebangless scriptMainDoc scriptStatementsOf] :i [(lexer :a lx) (reader :a rd) (indentParser :a ip) (asl-syntax/core/tree :a tr) (fnHeader :a fh)])
+(module asl-parser/ast :x [moduleNode ModuleNode SchemaNode EnumNode DefunNode EnumCase Param AstField TopForm ParseError PosForm KidForm readForms parse parseLegacy parseForTypeCheck retiredProse retiredSpelling retiredSource spellingErrors retiredFormErrors bangedBuiltins parseForChecker renderNode AstLit litInt litFloat litString litBool litUnit AstPattern patWildcard patVar patLit patTuple patRecord patCtor AstMatchArm matchArm makeMatchArm AstExpr exprLit exprIdent exprMember exprCall exprLet exprIf exprMatch exprTry exprBlock exprRecord exprCond exprLambda exprInterpolation AstType typeNamed typeTuple typeRecord typeFn charsWithin? tailExprs sexprItems nthExpr hasTailrec? isInlineBodyCandidate? typeNodeText joinFnHeader readKidForms kidFormsFor findTokenPos findQualifiedTokenPos scriptStepParts scriptStepAt shebangless scriptMainDoc scriptStatementsOf] :i [(lexer :a lx) (reader :a rd) (indentParser :a ip) (asl-syntax/core/tree :a tr) (fnHeader :a fh)])
 
 (schema ParseError (:f msg String) (:f line Int64) (:f col Int64))
 
@@ -454,40 +454,7 @@ fn retiredHeadMessage x: String -> String
     ((= x "mt") "ERR_READ_SPELLING (mt subject arm ...) is retired: write (match subject arm ...)")
     ((= x "==") "ERR_READ_SPELLING (== a b) is retired: write (= a b)")
     ((= x "not=") "ERR_READ_SPELLING (not= a b) is retired: write (!= a b)")
-    ((= x "%") "ERR_READ_SPELLING (% a b) is not ASL: write (mod a b)")
     (else ""))
-
-; (:m :ref MISS-ABSORB :do "foreign heads the reader takes as their canonical spelling instead of failing: every model of the 2026-11-13 generation bench wrote (== a b) and (% a b), and a rejection costs a model turn while the meaning is not in doubt; spellingErrors and retiredFormErrors still report them, so audits of stored text and asl heal keep the corpus canonical")
-fn acceptedHead x: String -> String
-  (cond ((= x "==") "= ") ((= x "%") "mod") (else ""))
-
-fn acceptedSpelling? e: ParseError -> Bool
-  (or (stringStartsWith? e.msg "ERR_READ_SPELLING (== ") (stringStartsWith? e.msg "ERR_READ_SPELLING (% "))
-
-; (:m :ref MISS-ABSORB :do "the canonical spelling of every head the scan reports; asl heal writes these, so stored text never keeps a foreign head")
-fn canonicalHead x: String -> String
-  (cond ((= x "mt") "match") ((= x "==") "=") ((= x "not=") "!=") ((= x "%") "mod") (else ""))
-
-; (:m :ref MISS-ABSORB :do "col is the lexer's column, counted in characters, so the line is cut by characters too: a byte slice misses the head once a multi-byte character stands before it on the line")
-fn swapHeadAt ln: String col: Int64 to: (fn [String] -> String) -> String
-  (let [(cs (stringChars ln))
-        (rest (listDrop cs (- col 1)))
-        (from (stringJoin rest ""))
-        (was (cond ((stringStartsWith? from "==") "==") ((stringStartsWith? from "%") "%") ((stringStartsWith? from "not=") "not=") ((stringStartsWith? from "mt") "mt") (else "")))]
-    (if (or (stringEmpty? was) (stringEmpty? (to was)))
-      ln
-      (str (stringJoin (listTake cs (- col 1)) "") (to was) (stringJoin (listDrop rest (stringLength was)) ""))))
-
-; (:m :ref MISS-ABSORB :do "errs arrive sorted by position; the swaps of one line are applied right to left so an earlier column stays valid after (% grows to (mod")
-fn acceptSwaps src: String errs: (List ParseError) to: (fn [String] -> String) -> String
-  (if (listEmpty? errs)
-    src
-    (stringJoin
-      (map (fn [(p (Pair Int64 String))] -> String
-             (fold (fn [(ln String) (e ParseError)] -> String (if (= e.line (+ (pairFirst p) 1)) (swapHeadAt ln e.col to) ln))
-                   (pairSecond p) (listReverse errs)))
-           (zip (range 0 (listLength (stringSplit src "\n"))) (stringSplit src "\n")))
-      "\n"))
 
 fn spellingErr msg: String t: lx/Token -> ParseError
   (ParseError :msg msg :line t.line :col t.col)
@@ -502,24 +469,8 @@ fn spellingStep st: SpellScan t: lx/Token -> SpellScan
         (errs (if (stringEmpty? headMsg) st.errs (cons (spellingErr headMsg t) st.errs)))]
     (with st :before st.prev :prev x :opens opens :errs errs))
 
-; (:m :ref MISS-ABSORB :do "an accepted foreign head is a synonym only while the module does not use the name itself: every import is qualified, so a name the module binds shows as an occurrence that is not a flagged call head (fn % ..., a let or lambda binder, a value); such a module keeps its own % or == and the scan reports nothing for it")
-fn ownName? toks: (List lx/Token) errs: (List ParseError) name: String -> Bool
-  (> (listCount (fn [(t lx/Token)] -> Bool (and (spellingSymbol? t) (= t.rawText name))) toks)
-     (listCount (fn [(e ParseError)] -> Bool (= e.msg (retiredHeadMessage name))) errs))
-
-fn ownDropped st: SpellScan toks: (List lx/Token) -> SpellScan
-  (if (listEmpty? st.errs)
-    st
-    (let [(own (filter (fn [(x String)] -> Bool (ownName? toks st.errs x)) (list "==" "%")))]
-      (if (listEmpty? own)
-        st
-        (with st :errs (filter (fn [(e ParseError)] -> Bool (not (listAny? (fn [(x String)] -> Bool (= e.msg (retiredHeadMessage x))) own))) st.errs)))))
-
-fn scanTokens toks: (List lx/Token) -> SpellScan
-  (ownDropped (fold spellingStep (SpellScan :before "" :prev "" :opens (list) :errs (list)) toks) toks)
-
 fn spellingScan src: String -> SpellScan
-  (scanTokens (lx/tokenize src))
+  (fold spellingStep (SpellScan :before "" :prev "" :opens (list) :errs (list)) (lx/tokenize src))
 
 fn scanErrors st: SpellScan -> (List ParseError)
   (listSortBy (fn [(e ParseError)] -> Int64 (+ (* e.line 100000) e.col)) (listReverse st.errs))
@@ -531,29 +482,13 @@ fn retiredFormErrors src: String -> (List ParseError)
   (listReverse (spellingScan src).errs)
 
 fn mayHoldRetiredHead? src: String -> Bool
-  (or (stringContains? src "mt") (or (stringContains? src "==") (or (stringContains? src "not=") (stringContains? src "%"))))
-
-; (:m :ref MISS-ABSORB :do "the text with every reported head in its canonical spelling, for asl heal: only call heads the scan reports are rewritten, never a binder or a name the module owns, so a text that checks keeps its bytes")
-fn canonicalSpelling src: String -> String
-  (if (mayHoldRetiredHead? src) (acceptSwaps src (scanErrors (spellingScan src)) canonicalHead) src)
+  (or (stringContains? src "mt") (or (stringContains? src "==") (stringContains? src "not=")))
 
 fn retiredSpelling src: String -> (Option ParseError)
   (if (mayHoldRetiredHead? src) (listHead (scanErrors (spellingScan src))) (none))
 
 fn retiredSource src: String -> (Option ParseError)
   (match (retiredProse src) ((some e) (some e)) ((none) (retiredSpelling src)))
-
-; (:m :ref MISS-ABSORB :do "the text the parser reads: a retired form is an error, an accepted foreign head is swapped for its canonical spelling; (== keeps every column, (% moves the rest of its line right by two")
-fn readableSource src: String -> (Result String ParseError)
-  (match (retiredProse src)
-    ((some e) (err e))
-    ((none)
-      (if (not (mayHoldRetiredHead? src))
-        (ok src)
-        (let [(errs (scanErrors (spellingScan src)))]
-          (match (listFind (fn [(e ParseError)] -> Bool (not (acceptedSpelling? e))) errs)
-            ((some e) (err e))
-            ((none) (ok (acceptSwaps src errs acceptedHead))))))))
 
 ; (:m :ref SHEBANG :do "a first line starting with #! is blanked before reading, its newline kept so every later line keeps its number; only line 1 is looked at")
 fn shebangless src: String -> String
@@ -562,18 +497,18 @@ fn shebangless src: String -> String
     src)
 
 fn parse raw: String -> (Result (List TopForm) ParseError)
-  (match (readableSource (shebangless raw))
-    ((err e) (err e))
-    ((ok src) (match (parseLegacy src)
+  (let [(src (shebangless raw))] (match (retiredSource src)
+    ((some e) (err e))
+    ((none) (match (parseLegacy src)
       ((err e) (err e))
-      ((ok forms) (rejectBareLiteralTopExpr forms)))))
+      ((ok forms) (rejectBareLiteralTopExpr forms))))))
 
 fn parseForTypeCheck raw: String -> (Result (List TopForm) ParseError)
-  (match (readableSource (shebangless raw))
-    ((err e) (err e))
-    ((ok src) (match (parseForChecker src)
+  (let [(src (shebangless raw))] (match (retiredSource src)
+    ((some e) (err e))
+    ((none) (match (parseForChecker src)
       ((err e) (err e))
-      ((ok forms) (rejectBareLiteralTopExpr (desugarWith forms))))))
+      ((ok forms) (rejectBareLiteralTopExpr (desugarWith forms)))))))
 
 fn parseLegacy src: String -> (Result (List TopForm) ParseError)
   (match (parseForChecker src)
@@ -1046,17 +981,6 @@ fn oldFieldError text: String bs: Bytes at: Int64 -> ip/IndentError
         (field (optionOr (stringSlice text (+ at 2) end) ""))]
     (ip/IndentError :msg (str "ERR_READ_FIELD (.-" field " x) is retired: write x." field ", or (expr)." field " for an expression") :line pos.line :col pos.col))
 
-; (:m :ref unbalancedFormDiagnostic :do "an item is parsed from its own text, so the opener position inside a closes-opened-at message is item-relative while the error position is file-absolute; the opener is rebased the same way, so the message names the real line of the unmatched opener")
-fn rebaseOpenedAt msg: String line: Int64 col: Int64 -> String
-  (let [(parts (stringSplit msg " opened at "))
-        (lc (stringSplit (optionOr (listGet parts 1) "") ":"))]
-    (if (or (!= (listLength parts) 2) (!= (listLength lc) 2)) msg
-      (match (stringToInt64 (optionOr (listGet lc 0) ""))
-        ((none) msg)
-        ((some ol) (match (stringToInt64 (optionOr (listGet lc 1) ""))
-          ((none) msg)
-          ((some oc) (str (optionOr (listGet parts 0) "") " opened at " (stringFromInt64 (+ line (- ol 1))) ":" (stringFromInt64 (if (= ol 1) (+ col (- oc 1)) oc)))))))))
-
 fn lowerTopNodeToKid text: String node: tr/Node startPos: LineCol -> (Result KidForm ParseError)
   (let [(start node.start)
         (end node.end)
@@ -1072,7 +996,7 @@ fn lowerTopNodeToKid text: String node: tr/Node startPos: LineCol -> (Result Kid
              (eCol e.col)
              (adjLine (+ line (- eLine 1)))
              (adjCol (if (= eLine 1) (+ col (- eCol 1)) eCol))]
-         (err (ParseError :msg (rebaseOpenedAt e.msg line col) :line adjLine :col adjCol))))
+         (err (ParseError :msg e.msg :line adjLine :col adjCol))))
       ((ok forms)
        (match (listHead forms)
          ((none) (err (ParseError :msg "no form produced" :line line :col col)))

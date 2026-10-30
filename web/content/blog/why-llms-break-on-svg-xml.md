@@ -55,7 +55,7 @@ Agents write ASN; browsers render SVG. Two renderers exist in the repository:
 - `asl/packages/asl-vdom/src/asnSvg.asl` (`asnToSvg`), tested by `asl/packages/asl-vdom/tests/asnSvgTest.asl`.
 - `asl/packages/asl-transpile/src/svgTranspile.asl` (`asnToSvg`, `svgToAsn`), tested by `asl/packages/asl-transpile/tests/svgTranspileTest.asl`.
 
-Both suites pass: `asl test` reports 27 assertions executed for the first and 62 for the second. There is no CLI command for the conversion; the renderers are library functions. A vector-graphics skill for coding agents is a plan; today the only skill shipped in `asl/skills` is `asl-toolbelt`.
+Both suites pass on the stage-0 host: `asl-host test` reports 27 assertions executed for the first and 62 for the second. There is no CLI command for the conversion; the renderers are library functions. A vector-graphics skill for coding agents is a plan; today the only skill shipped in `asl/skills` is `asl-toolbelt`.
 
 ---
 
@@ -64,4 +64,4 @@ Both suites pass: `asl test` reports 27 assertions executed for the first and 62
 Do not let models drown in syntax boilerplate. S-expressions give autoregressive models one delimiter rule, whether they are generating code, API frames or vector graphics.
 
 - Explore [The Agent Operational Circle](/blog/the-agent-operational-circle).
-- Next Article: [Against Agent Framework Bloat: The Case for Radical Simplicity over Large Orchestrators](/blog/against-agent-framework-bloat).
+- Next Article: [Against Agent Framework Bloat: The Case for Radical Simplicity over Large Orchestrators](/blog/kill-80-percent-agent-code-bloat).

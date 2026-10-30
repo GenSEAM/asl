@@ -25,7 +25,7 @@ Agents do not need to be polite to each other. They need typed, deterministic, l
 
 **AgP (Agentic Protocol)** replaces natural language chatter with typed, single-pass S-expression frames. Its specification lives in `asl/docs/agenticProtocol.md`, marked as a target design, and its target transports are JSON-RPC 2.0 stdio and SSE, Google A2A streams, and Unix domain sockets or WebSockets for local agent clusters.
 
-Where it stands today: the frame layer and error taxonomy are specified,, and an agent skill describes them. No code implements the sigil grammar or the taxonomy below yet. What the `asl-agent-bus` package does implement is a smaller envelope, `CanonicalWireFrame` (five string fields with stdio, Unix socket, HTTP and SSE encoders), plus newline-delimited ASN frames, swarm presence and task contracts. Their suites pass (on 2026-10-14, `asl test` executed 29 assertions in `wireTest.asl`, 18 in `transportTest.asl`, 31 in `ndAsnTest.asl`, 24 in `presenceTest.asl` and 40 in `meshTest.asl`). The decoder that enforces AgP is the next piece.
+Where it stands today: the frame layer and error taxonomy are specified, and the `seambus` skill in `asl/packages/asl-agent-bus/skills/seambus/` describes them to agents. No code implements the sigil grammar or the taxonomy below yet. What `asl/packages/asl-agent-bus/src` does implement is a smaller envelope, `CanonicalWireFrame` (five string fields with stdio, Unix socket, HTTP and SSE encoders), plus newline-delimited ASN frames, swarm presence and task contracts. Their suites pass on the strict stage-0 host (on 2026-10-14, `asl-host test` executed 29 assertions in `wireTest.asl`, 18 in `transportTest.asl`, 31 in `ndAsnTest.asl`, 24 in `presenceTest.asl` and 40 in `meshTest.asl`). The decoder that enforces AgP is the next piece.
 
 ### The Lexical Rule: Sigils as Causal Heads
 
@@ -56,7 +56,7 @@ An AgP frame begins with one of three single-character sigils:
 
 AgP values are AgentSlang literals, not JSON:
 * Lists are whitespace-delimited (`["idle" "active"]`), with no commas.
-* Keys are camelCase with the physical unit in the name (`:timeoutMs`), following the language dialect. The specification is camelCase throughout (`:replyTo`, `:scopeViolation`).
+* Keys are camelCase with the physical unit in the name (`:timeoutMs`), following the language dialect. The specification and the `seambus` skill are camelCase throughout (`:replyTo`, `:scopeViolation`).
 * Payloads are constructor forms such as `(fsm :states 3)`, read directly as S-expressions without a JSON decoding step.
 
 How much this saves depends on the frame, and we have no corpus measurement. The one recorded example is in the [README](https://github.com/GenSEAM/asl#why): a `git status` tool call is 51 `cl100k_base` tokens as a JSON object and 18 as a positional sigil frame. That is one example, not a benchmark.
@@ -88,7 +88,7 @@ The table is the specification's spelling. Because the set is closed, failure ha
 
 ## 3. The Session Layer: Handshake and Handoff
 
-Above the frame layer sits the session layer: peer registry, dialect negotiation, delivery and context-isolated delegation. None of it is implemented yet.
+Above the frame layer sits the session layer: peer registry, dialect negotiation, delivery and context-isolated delegation. The specification calls it SkyLoom; the `seambus` skill describes the same design under the name SeamBus. None of it is implemented yet.
 
 ```text
 Coordinator (Alpha)                              Worker (Beta)

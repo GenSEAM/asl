@@ -1,5 +1,5 @@
 (module asl-intel/trace
-  :x [TraceSummary FunctionHit sortHits analyzeTrace! traceJson formatTraceAsn formatTraceSummary runTrace!]
+  :x [TraceSummary analyzeTrace! traceJson formatTraceAsn formatTraceSummary runTrace!]
   :i [(asl-intel/text :a t)
       (asl-intel/pats :a p)
       (asl-intel/json :a j)
@@ -17,10 +17,6 @@
   (:f status String)
   (:f branches Int64)
   (:f asserts Int64))
-
-; (:m :ref INTEL-PARITY-RED-20261031 :do "hits sort by calls desc then file asc; ties keep input order, so no result depends on the directory walk")
-fn sortHits hits: (List FunctionHit) -> (List FunctionHit)
-  (tb/sortWith (fn [(x FunctionHit) (y FunctionHit)] -> Bool (or (> x.calls y.calls) (and (= x.calls y.calls) (< x.file y.file)))) hits)
 
 (schema TraceSummary
   (:f target String)
@@ -110,14 +106,14 @@ fn analyzeTrace! ctx: h/Ctx target: String -> (Result TraceSummary String)
                                  (fold (fn [(a2 Acc) (hd st/Header)] -> Acc
                                          (let [(s hd.bodyStart) (e hd.bodyEnd)
                                                (br (wordCount brT b s e s 0)) (asr (wordCount asT b s e s 0))
-                                               (hq (hitOf (t/bareName hd.rawName) modName rel isTest br asr (cpSpan b s e 0)))
+                                               (hq (hitOf hd.rawName modName rel isTest br asr (cpSpan b s e 0)))
                                                (hit (pairFirst hq))]
                                            (Acc :hits (cons hit a2.hits) :taken (+ a2.taken (pairSecond hq))
                                                 :branches (+ a2.branches br) :asserts (+ a2.asserts asr)
                                                 :calls (+ a2.calls hit.calls) :unique (if (> hit.calls 0) (+ a2.unique 1) a2.unique))))
                                        a (st/headersOf! code b n))))))
                          (Acc :hits (list) :taken 0 :branches 0 :asserts 0 :calls 0 :unique 0) files))
-              (sorted (sortHits (listReverse acc.hits)))
+              (sorted (tb/sortWith (fn [(x FunctionHit) (y FunctionHit)] -> Bool (> x.calls y.calls)) (listReverse acc.hits)))
               (hot0 (t/takeN (filter (fn [(x FunctionHit)] -> Bool (= x.status "hot")) sorted) 10))
               (hot (if (and (listEmpty? hot0) (not (listEmpty? sorted))) (t/takeN sorted 5) hot0))
               (cold (t/takeN (filter (fn [(x FunctionHit)] -> Bool (= x.status "cold")) sorted) 5))

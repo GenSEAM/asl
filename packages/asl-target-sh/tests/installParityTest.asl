@@ -175,7 +175,6 @@ fn walk! env: Env dir: String rel: String skip: (List String) acc: (List String)
                   (else (cons (str shown " :file " (match (fileReadString p) ((ok t) (bytesSha256 (stringToBytes (stringReplace t env.sandbox "<S>")))) ((err _) "<unreadable>"))) a)))))
             acc names)))
 
-
 fn treeRows n: Node -> (List String)
   (listSort (map (fn [row] (str (atom (nth row 0)) " " (atom (nth row 1)) " " (atom (nth row 2)))) (items n)))
 
@@ -189,18 +188,14 @@ fn nativeCliCache! -> String
 fn checkCacheDir! -> String
   (optionOr (envGet "ASL_CHECK_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/cache/check"))
 
-; (:m :ref BASE-RED-4 :do "asl test writes its compile cache under $HOME/.asl/run/nativeTest; the sandbox HOME must stay clean, so the child pins that cache to the caller's own like the native CLI and check caches")
-fn nativeTestCache! -> String
-  (optionOr (envGet "ASL_NATIVE_TEST_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeTest"))
-
 fn childEnv! env: Env -> (List String)
   (listAppend
     (filter (fn [r] (not (or (stringStartsWith? r "PATH=") (stringStartsWith? r "HOME=") (stringStartsWith? r "TMPDIR=") (stringStartsWith? r "LC_ALL=")
-                             (stringStartsWith? r "STUB_") (stringStartsWith? r "ASL_ROOT=") (stringStartsWith? r "ASL_HOST=") (stringStartsWith? r "ASL_NATIVE_CLI_CACHE=") (stringStartsWith? r "ASL_CHECK_CACHE=") (stringStartsWith? r "ASL_NATIVE_TEST_CACHE=")
+                             (stringStartsWith? r "STUB_") (stringStartsWith? r "ASL_ROOT=") (stringStartsWith? r "ASL_HOST=") (stringStartsWith? r "ASL_NATIVE_CLI_CACHE=") (stringStartsWith? r "ASL_CHECK_CACHE=")
                              (stringContains? (optionOr (listHead (stringSplit r "=")) "") "_API_KEY"))))
       (envList))
     (list (str "PATH=" env.sandbox "/stub/bin:/usr/bin:/bin:/usr/sbin:/sbin") (str "HOME=" env.home) (str "TMPDIR=" env.sandbox "/tmp")
-          "LC_ALL=C" (str "STUB_LOG=" env.sandbox "/stub/log") (str "STUB_STATE=" env.sandbox "/stub/state") (str "ASL_NATIVE_CLI_CACHE=" (nativeCliCache!)) (str "ASL_CHECK_CACHE=" (checkCacheDir!)) (str "ASL_NATIVE_TEST_CACHE=" (nativeTestCache!))))
+          "LC_ALL=C" (str "STUB_LOG=" env.sandbox "/stub/log") (str "STUB_STATE=" env.sandbox "/stub/state") (str "ASL_NATIVE_CLI_CACHE=" (nativeCliCache!)) (str "ASL_CHECK_CACHE=" (checkCacheDir!))))
 
 fn stripSkillLines s: String -> String
   (dist/joinLines (filter (fn [l] (not (stringContains? l " install-skill"))) (dist/splitLines s)))

@@ -22,11 +22,16 @@
       rewriteAll
       extract
       extractAll]
-  :i [(asl-syntax/core/tree :a tr)
+  :i [(asl-syntax/core/source :a src)
+      (asl-syntax/core/tree :a tr)
+      (asl-syntax/asl/lex :a aslLex)
       (asl-syntax/asl/paren :a aslParen)
+      (asl-syntax/js/lex :a jsLex)
       (asl-syntax/js/module :a jsMod)
       (asl-syntax/ts/module :a tsMod)
-      (asl-syntax/css/rules :a cssRules)])
+      (asl-syntax/css/lex :a cssLex)
+      (asl-syntax/css/rules :a cssRules)
+      (asl-syntax/registry :a reg)])
 
 (schema Binding
   (:f name String)

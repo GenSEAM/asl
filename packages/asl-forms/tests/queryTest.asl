@@ -1,7 +1,8 @@
 (module asl-forms/tests/queryTest
   :x [runTests]
   :i [(asl-forms/query :a q)
-      (asl-forms/repair :a rep)])
+      (asl-forms/repair :a rep)
+      (asl-syntax/core/source :a src)])
 
 fn testQueryParse -> Bool
   (let [(q1 (q/queryCompile "(list @target (keyword \":id\") (string) @id)"))

@@ -27,7 +27,8 @@
       commentHasNewline?
       isAsiNewlineTrivia?]
   :i [(asl-syntax/core/source :a src)
-      (asl-syntax/core/tree :a tr)])
+      (asl-syntax/core/tree :a tr)
+      (asl-syntax/core/print :a pr)])
 
 fn goalDefault -> Int64
   0

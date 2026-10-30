@@ -12,7 +12,7 @@ We have not benchmarked any model's speed, memory use or accuracy in this reposi
 
 The design bet is that a small model does better on a language whose structure is carried by delimiters than on one carried by indentation. In ASL every form is a balanced S-expression, so a malformed output is caught by counting brackets, and the set of tokens that may come next is easy to compute.
 
-That second point is what `packages/asl-slm` builds on. It compiles a grammar into an automaton (`compileGrammarToDfa`), tracks the parser state as tokens arrive (`advanceMaskerState`), and computes the set of vocabulary ids allowed at that state (`computeTokenMaskBitset`). Its suites pass (`asl test`, 2026-10-14: `maskerTest` 114 checks, `slmTest` 35). It is not yet wired into a sampler, so it does not constrain any model's decoding today, and whether it raises a small model's pass rate is unmeasured.
+That second point is what `packages/asl-slm` builds on. It compiles a grammar into an automaton (`compileGrammarToDfa`), tracks the parser state as tokens arrive (`advanceMaskerState`), and computes the set of vocabulary ids allowed at that state (`computeTokenMaskBitset`). Its suites pass on the stage-0 host (`asl-host test`, 2026-10-14: `maskerTest` 114 checks, `slmTest` 35). It is not yet wired into a sampler, so it does not constrain any model's decoding today, and whether it raises a small model's pass rate is unmeasured.
 
 ## 3. Reaching a Model
 
@@ -20,4 +20,4 @@ The gateway (`packages/asl-gateway`) can route requests to an Ollama endpoint: t
 
 ## 4. Native Code on Apple Silicon
 
-The one piece of the toolchain that is specific to Apple Silicon is the native compiler: the compiler, written in ASL, is bootstrapped from an LLVM IR seed for `arm64-apple-darwin`, the only triple with a seed so far, and the self-compile is gated on macOS only. A local loop that has a small model propose ASL and the native toolchain check and run it is the direction, not something we have measured end to end.
+The one piece of the toolchain that is specific to Apple Silicon is the native compiler seed: `seed/arm64-apple-darwin` holds the self-hosted compiler `asl1` as LLVM IR, and it is the only triple with a seed so far. Self-hosting is in progress. A local loop that has a small model propose ASL and the native toolchain check and run it is the direction, not something we have measured end to end.

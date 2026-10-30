@@ -7,16 +7,16 @@
       getTasksData! tasksJson getMemData! memJson getDaemonsData emptyIntelCache
       getIntelCouplingData! getVitalityData! getStubsData! envRootDir pyJoin cockpitEnvFromProcess!
       CockpitResponse CockpitCaches CockpitDispatchResult emptyCockpitCaches pyJsonDump
-      observatoryBlastRadius 
-      serveCockpitDashboard! 
-      serveCockpitObservatoryApi! 
-      serveCockpitIntelApi! 
-      serveCockpitVitalityApi! 
-      serveCockpitStubsApi! 
-      serveCockpitDaemonsApi 
-      serveCockpitTasksApi! 
-      serveCockpitMemApi! 
-      cockpitDispatchGet! ]
+      observatoryBlastRadius observatory_blast_radius
+      serveCockpitDashboard! serve_cockpit_dashboard!
+      serveCockpitObservatoryApi! serve_cockpit_observatory_api!
+      serveCockpitIntelApi! serve_cockpit_intel_api!
+      serveCockpitVitalityApi! serve_cockpit_vitality_api!
+      serveCockpitStubsApi! serve_cockpit_stubs_api!
+      serveCockpitDaemonsApi serve_cockpit_daemons_api
+      serveCockpitTasksApi! serve_cockpit_tasks_api!
+      serveCockpitMemApi! serve_cockpit_mem_api!
+      cockpitDispatchGet! cockpit_dispatch_get!]
   :i [(localTime :a lt)
       (pyText :a pt)
       (asl-json/json :a j)
@@ -1136,6 +1136,9 @@ fn observatoryBlastRadius intel: j/Json -> j/Json
                   (pair "coupling" summaryVal)
                   (pair "packages" pkgsVal))))
 
+fn observatory_blast_radius intel: j/Json -> j/Json
+  (observatoryBlastRadius intel)
+
 fn serveCockpitDashboard! state: CockpitState env: CockpitEnv -> (Result CockpitResponse String)
   (match (cockpitHtml! state env)
     ((err e) (err e))
@@ -1146,6 +1149,9 @@ fn serveCockpitDashboard! state: CockpitState env: CockpitEnv -> (Result Cockpit
               :headers (list (pair "Content-Type" "text/html; charset=utf-8")
                              (pair "Content-Length" (stringFromInt64 bodyLen)))
               :body page)))))
+
+fn serve_cockpit_dashboard! state: CockpitState env: CockpitEnv -> (Result CockpitResponse String)
+  (serveCockpitDashboard! state env)
 
 fn serveCockpitObservatoryApi! cache: IntelCache now: Float64 env: CockpitEnv -> (Pair IntelCache CockpitResponse)
   (let [(step (getIntelCouplingData! cache now env))
@@ -1158,6 +1164,9 @@ fn serveCockpitObservatoryApi! cache: IntelCache now: Float64 env: CockpitEnv ->
                      :headers (list (pair "Content-Type" "application/json"))
                      :body body)))
 
+fn serve_cockpit_observatory_api! cache: IntelCache now: Float64 env: CockpitEnv -> (Pair IntelCache CockpitResponse)
+  (serveCockpitObservatoryApi! cache now env)
+
 fn serveCockpitIntelApi! cache: IntelCache now: Float64 env: CockpitEnv -> (Pair IntelCache CockpitResponse)
   (let [(step (getIntelCouplingData! cache now env))
         (newCache (pairFirst step))
@@ -1167,6 +1176,9 @@ fn serveCockpitIntelApi! cache: IntelCache now: Float64 env: CockpitEnv -> (Pair
                      :status 200
                      :headers (list (pair "Content-Type" "application/json"))
                      :body body)))
+
+fn serve_cockpit_intel_api! cache: IntelCache now: Float64 env: CockpitEnv -> (Pair IntelCache CockpitResponse)
+  (serveCockpitIntelApi! cache now env)
 
 fn serveCockpitVitalityApi! cache: IntelCache now: Float64 env: CockpitEnv -> (Pair IntelCache CockpitResponse)
   (let [(step (getVitalityData! cache now env))
@@ -1178,6 +1190,9 @@ fn serveCockpitVitalityApi! cache: IntelCache now: Float64 env: CockpitEnv -> (P
                      :headers (list (pair "Content-Type" "application/json"))
                      :body body)))
 
+fn serve_cockpit_vitality_api! cache: IntelCache now: Float64 env: CockpitEnv -> (Pair IntelCache CockpitResponse)
+  (serveCockpitVitalityApi! cache now env)
+
 fn serveCockpitStubsApi! cache: IntelCache now: Float64 env: CockpitEnv -> (Pair IntelCache CockpitResponse)
   (let [(step (getStubsData! cache now env))
         (newCache (pairFirst step))
@@ -1188,6 +1203,9 @@ fn serveCockpitStubsApi! cache: IntelCache now: Float64 env: CockpitEnv -> (Pair
                      :headers (list (pair "Content-Type" "application/json"))
                      :body body)))
 
+fn serve_cockpit_stubs_api! cache: IntelCache now: Float64 env: CockpitEnv -> (Pair IntelCache CockpitResponse)
+  (serveCockpitStubsApi! cache now env)
+
 fn serveCockpitDaemonsApi pid: Int64 port: Int64 st: GatewayStatus -> CockpitResponse
   (let [(daemons (getDaemonsData pid port st))
         (body (pyJsonDump daemons))]
@@ -1195,6 +1213,9 @@ fn serveCockpitDaemonsApi pid: Int64 port: Int64 st: GatewayStatus -> CockpitRes
       :status 200
       :headers (list (pair "Content-Type" "application/json"))
       :body body))
+
+fn serve_cockpit_daemons_api pid: Int64 port: Int64 st: GatewayStatus -> CockpitResponse
+  (serveCockpitDaemonsApi pid port st)
 
 fn serveCockpitTasksApi! env: CockpitEnv -> (Result CockpitResponse String)
   (match (getTasksData! env)
@@ -1207,6 +1228,9 @@ fn serveCockpitTasksApi! env: CockpitEnv -> (Result CockpitResponse String)
               :headers (list (pair "Content-Type" "application/json"))
               :body body)))))
 
+fn serve_cockpit_tasks_api! env: CockpitEnv -> (Result CockpitResponse String)
+  (serveCockpitTasksApi! env)
+
 fn serveCockpitMemApi! env: CockpitEnv -> (Result CockpitResponse String)
   (match (getMemData! env)
     ((err e) (err e))
@@ -1217,6 +1241,9 @@ fn serveCockpitMemApi! env: CockpitEnv -> (Result CockpitResponse String)
               :status 200
               :headers (list (pair "Content-Type" "application/json"))
               :body body)))))
+
+fn serve_cockpit_mem_api! env: CockpitEnv -> (Result CockpitResponse String)
+  (serveCockpitMemApi! env)
 
 fn cockpitDispatchGet! path: String state: CockpitState env: CockpitEnv caches: CockpitCaches -> (Option CockpitDispatchResult)
   (cond
@@ -1255,3 +1282,5 @@ fn cockpitDispatchGet! path: String state: CockpitState env: CockpitEnv caches: 
 
     (else (none)))
 
+fn cockpit_dispatch_get! path: String state: CockpitState env: CockpitEnv caches: CockpitCaches -> (Option CockpitDispatchResult)
+  (cockpitDispatchGet! path state env caches)

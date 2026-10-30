@@ -157,7 +157,7 @@ fn ! loopFor w: dp/Wiring home: String pending: srv/PendingCall -> srv/GatewayLo
   (srv/GatewayLoop :listener -1 :upstreamPort 0 :env (mapEmpty) :home home :rootDir home :registryPath "/tmp/absent.asn"
     :promptMaxBytes 188000 :conns (list) :pools (pd/emptyPoolRegistry) :replies (list) :breaker (b/defaultBreakerState)
     :buckets (u/emptyBucketRegistry) :profiles (cfg/emptyProfilesCache) :wiring w
-    :wiringText none :families (list) :outbox (list) :pendingCall (some pending) :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :affinity (mapEmpty)
+    :wiringText none :families (list) :outbox (list) :pendingCall (some pending) :spreadState (mapEmpty) :spreadLast429 (mapEmpty)
     :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs 0)
 
 fn ! testTwinAliasesChargedApart base: String -> Bool
@@ -165,7 +165,7 @@ fn ! testTwinAliasesChargedApart base: String -> Bool
         (made (dirCreate home))
         (sharedPath (ul/defaultSharedUsagePath home))
         (cleared (pathRemove sharedPath))
-        (pending (srv/PendingCall :intent "any" :model "chat-b" :latencyMs 5 :charge 0 :tag "" :params (ul/defaultCallParams) :profile "default" :status 0 :reason ""))]
+        (pending (srv/PendingCall :intent "any" :model "chat-b" :latencyMs 5 :charge 0 :tag "" :params (ul/defaultCallParams) :profile "default"))]
     (match (wiringFor (twinConfig base))
       ((err e) (do (assert false (str "twin wiring builds: " e)) false))
       ((ok w)

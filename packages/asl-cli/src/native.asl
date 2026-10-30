@@ -1,6 +1,6 @@
 (module asl-cli/native
-  :x [main pruneStaleStaged!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheGc :a cg) (asl/packages/asl-cli/src/cacheFallback :a cf) (asl/packages/asl-cli/src/command :a cmd) (asl/packages/asl-remote/src/target :a rt) (asl-tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl-checker/resolve :a ckr) (asl-tools/agentSurfaceAudit :a tsa) (asl-pack/pkgCli :a pkg) (asl-tools/fleet/jobserver :a js)])
+  :x [main]
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheFallback :a cf) (asl/packages/asl-cli/src/command :a cmd) (asl-tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl-checker/resolve :a ckr) (asl-tools/agentSurfaceAudit :a tsa) (asl-pack/pkgCli :a pkg) (asl-tools/fleet/jobserver :a js)])
 
 fn rest args: (List String) -> (List String)
   (optionOr (listTail args) (list))
@@ -61,7 +61,7 @@ fn ! touchUsed! path: String -> Bool
     (ok? (fileWrite (str path "/.used") (stringFromInt64 (nowNs))))
     (match (fileReadBytes path)
       ((err _) false)
-      ((ok b) (let [(part (str path ".part." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs))))]
+      ((ok b) (let [(part (str path ".part." (stringFromInt64 (procSelf))))]
                 (and (ok? (fileWrite part b)) (ok? (pathRename part path)))))))
 
 fn ! pruneStage! dir: String prefix: String current: String -> Int64
@@ -77,11 +77,7 @@ fn ! stageOutsideSingle! ctx: sys/Context absFile: String -> (Result String Stri
         (match (ensureDir! (outsideStageDir ctx))
           ((err e2) (err (str "cannot create " (outsideStageDir ctx) ": " e2)))
           ((ok _)
-            (match (if (sys/isFile? dest)
-                      (match (fileReadString dest)
-                        ((ok d) (if (= d src) (ok ()) (writeAtomic! dest (stringToBytes src))))
-                        ((err _) (writeAtomic! dest (stringToBytes src))))
-                      (writeAtomic! dest (stringToBytes src)))
+            (match (if (sys/isFile? dest) (ok ()) (fileWrite dest src))
               ((err e3) (err (str "cannot write " dest ": " e3)))
               ((ok _) (do (touchUsed! dest) (pruneStage! (outsideStageDir ctx) "" (str digest ".asl")) (ok rel)))))))))
 
@@ -114,25 +110,16 @@ fn ! quotedValueAfter s: String needle: String -> String
 fn ! workspaceNameOf configText: String -> String
   (quotedValueAfter configText ":workspace")
 
-; (:m :ref STAGE-CONCURRENT-RUNS :do "two asl test runs of one package share its staging dir and each restaged every file while the other read it: a source equal to its staged copy is left alone, and a changed one is written to a hidden .part.PID.NAME beside it (never pruned by a concurrent stager) and renamed over dest, so a concurrent reader sees the old file or the new one, never a partial one")
 fn ! mirrorFile! src: String dest: String -> (Result Unit String)
   (match (fileReadBytes src)
     ((err e) (err (str "cannot read " src ": " e)))
     ((ok content)
-      (match (fileReadBytes dest)
-        ((ok staged) (if (= staged content) (ok ()) (writeAtomic! dest content)))
-        ((err _) (writeAtomic! dest content)))))
-
-fn ! writeAtomic! dest: String content: Bytes -> (Result Unit String)
-  (match (ensureDir! (ckr/parentDirOf dest))
-    ((err e2) (err (str "cannot create " (ckr/parentDirOf dest) ": " e2)))
-    ((ok _)
-      (let [(part (str (ckr/parentDirOf dest) "/.part." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs)) "." (sys/baseName dest)))]
-        (match (fileWrite part content)
-          ((err e3) (err (str "cannot write " part ": " e3)))
-          ((ok _) (match (pathRename part dest)
-                    ((err e4) (do (pathRemove part) (err (str "cannot rename " part " to " dest ": " e4))))
-                    ((ok _) (ok ()))))))))
+      (match (ensureDir! (ckr/parentDirOf dest))
+        ((err e2) (err (str "cannot create " (ckr/parentDirOf dest) ": " e2)))
+        ((ok _)
+          (match (fileWrite dest content)
+            ((err e3) (err (str "cannot write " dest ": " e3)))
+            ((ok _) (ok ())))))))
 
 ; (:m :ref OUTSIDEPKG-STAGE-SOURCES-20261024 :do "a staged package copied every listed file, so one asl test of a package with multi-GB exported data wrote tens of GB per cache key (68G in 13 entries on 2026-10-24); the build reads only .asl and .asn sources (and the manifest, an .asn), which stay real copies, while every other file, and an .asn over 1MB, is a symlink to the original: relative and workspace-qualified data paths still open, nothing is duplicated, and removing the stage drops the links only")
 fn ! sourceSized? path: String -> Bool
@@ -161,31 +148,13 @@ fn ! settleOne! destDir: String src: String -> Int64
 fn ! settleEach! destDir: String srcs: (List String) -> Int64
   (fold (fn [(n Int64) (src String)] -> Int64 (let [(r (settleOne! destDir src))] (if (< r 0) -1000000000 (+ n r)))) 0 srcs)
 
-; (:m :ref STAGE-CONCURRENT-RUNS :do "a staged clone is current when dest is a link (it names the source) or a regular file of the source size no older than the source; only stale ones are cloned, into a hidden per-process dir beside them, and each is renamed over its dest, so a concurrent run never finds a data file removed or half cloned (ERR_PARQUET cannot read column chunk, vtbot 2026-10-30)")
-fn ! cloneCurrent? src: String dest: String -> Bool
-  (match (fileLstat dest)
-    ((err _) false)
-    ((ok lst) (or lst.isSymlink
-                  (match (fileStat src)
-                    ((err _) false)
-                    ((ok st) (and (= lst.size st.size) (>= lst.mtimeNs st.mtimeNs)))))))
-
-fn ! landClones! tmp: String destDir: String names: (List String) -> Bool
-  (let [(moved (map (fn [(n String)] -> Bool (or (not (fileExists? (str tmp "/" n))) (ok? (pathRename (str tmp "/" n) (str destDir "/" n))))) names))
-        (_ (runIn! destDir (list "rm" "-rf" "--" tmp)))]
-    (listAll? (fn [(b Bool)] -> Bool b) moved))
-
 fn ! cloneChunks! destDir: String srcs: (List String) -> Int64
   (if (listEmpty? srcs)
     0
-    (let [(chunk (filter (fn [(src String)] -> Bool (not (cloneCurrent? src (str destDir "/" (sys/baseName src))))) (listTake srcs 200)))
+    (let [(chunk (listTake srcs 200))
           (rest (listDrop srcs 200))
-          (tmp (str destDir "/.stage." (stringFromInt64 (procSelf))))
-          (here (cond
-                  ((listEmpty? chunk) 0)
-                  ((not (ok? (ensureDir! tmp))) -1000000000)
-                  (else (let [(n (if (cloneBatch! tmp chunk) 0 (settleEach! tmp chunk)))]
-                          (if (landClones! tmp destDir (map sys/baseName chunk)) n -1000000000)))))
+          (_gone (map (fn [(src String)] -> Bool (ok? (pathRemove (str destDir "/" (sys/baseName src))))) chunk))
+          (here (if (cloneBatch! destDir chunk) 0 (settleEach! destDir chunk)))
           (more (cloneChunks! destDir rest))]
       (+ here more)))
 
@@ -233,7 +202,7 @@ fn ! writeMirrorConfig! root: String mirrorDir: String -> (Result Unit String)
   (let [(origText (resultOr (fileReadString (str root "/.asl.config.asn")) ""))
         (ws (workspaceNameOf origText))
         (synth (str "(:asl-config :workspace \"" ws "\" :root true)\n"))]
-    (writeAtomic! (str mirrorDir "/.asl.config.asn") (stringToBytes synth)))
+    (fileWrite (str mirrorDir "/.asl.config.asn") synth))
 
 ; (:m :ref NATIVETEST-OUTSIDE-CLOSURE-20261020 :do "a test opens data files (parquet fixtures, .asn contracts) by paths relative to the package, so the mirror carries every tracked and untracked-but-not-ignored file of the package as bytes, listed by git; a package that is not a git work tree falls back to every file outside dot-directories plus the .asl files under .asl/mem that the index walk skips")
 fn ! gitFiles! root: String -> (Option (List String))
@@ -391,9 +360,7 @@ fn ! stagePackageMirror! ctx: sys/Context root: String -> (Result String String)
         (files (filter indexable? (listAppend (optionOr (gitFiles! root) (fallbackFiles! root)) (resultOr dataFiles (list)))))]
     (match dataFiles
       ((err e) (err e))
-      ((ok _) (match (stagePackageFiles! ctx root files digest mirrorDir pkgDir)
-                ((err e) (err e))
-                ((ok staged) (do (cg/recordOrigin! mirrorDir root) (ok staged)))))))
+      ((ok _) (stagePackageFiles! ctx root files digest mirrorDir pkgDir))))
 
 ; (:m :ref INBOXFIX-STALESTAGE-20261028 :do "staging mirrors the source exactly: after the copies, every regular file under the package's own staging dir (mirrorDir) that no copy wrote is removed, so a module deleted or checked out away no longer resolves; hidden paths (.used, .asl caches) are never pruned, nothing outside mirrorDir is touched, and the walk compares listings only (no recopy)")
 fn ! stagedDests root: String dir: String files: (List String) -> (List String)
@@ -402,27 +369,9 @@ fn ! stagedDests root: String dir: String files: (List String) -> (List String)
 fn hiddenRel? rel: String -> Bool
   (listAny? (fn [(seg String)] -> Bool (stringStartsWith? seg ".")) (stringSplit rel "/"))
 
-; (:m :ref LEON-LAUNCH-STAGE-RACE :do "a mirror file written in the last 600 s belongs to a concurrent stager with the same digest, so prune leaves it; five launches in one second lost bounded.asl and jobPool.asl to each other's prune")
-fn ! freshStaged? path: String -> Bool
-  (match (fileStat path)
-    ((ok st) (< (- (nowNs) st.mtimeNs) 600000000000))
-    ((err _) false))
-
 fn ! pruneStaleStaged! mirrorDir: String expected: (List String) -> Int64
-  (pruneStaleStagedFrom! mirrorDir expected (fn [(f String)] -> Bool true))
-
-; (:m :ref ASLCLI-PREEXISTING-REDS :do "a mirror file has a live source when it maps to an existing file: a flat copy (outside pkgDir) only to root/rel; a copy under pkgDir to root/rel, root/tail or toolRoot/tail, where tail is its path past pkgDir (the package's own files and the first-party files staged from the toolchain root)")
-fn ! liveSource? root: String toolRoot: String mirrorDir: String pkgDir: String f: String -> Bool
-  (let [(rel (dropPrefixLen f (+ (stringLength mirrorDir) 1)))]
-    (or (sys/isFile? (str root "/" rel))
-        (and (stringStartsWith? f (str pkgDir "/"))
-             (let [(tail (dropPrefixLen f (+ (stringLength pkgDir) 1)))]
-               (or (sys/isFile? (str root "/" tail)) (sys/isFile? (str toolRoot "/" tail)))))))
-
-; (:m :ref ASLCLI-PREEXISTING-REDS :do "prune a file no copy wrote when it is old, or when it is fresh but live says its source is gone: the 600 s guard protects a concurrent stager's files, never a module deleted between two runs")
-fn ! pruneStaleStagedFrom! mirrorDir: String expected: (List String) live: (fn [String] -> Bool) -> Int64
   (let [(keep (fold (fn [(m (Map String Bool)) (d String)] -> (Map String Bool) (mapSet m d true)) (mapEmpty) expected))
-        (stale (filter (fn [(f String)] -> Bool (and (not (some? (mapGet keep f))) (and (not (hiddenRel? (dropPrefixLen f (+ (stringLength mirrorDir) 1)))) (or (not (freshStaged? f)) (not (live f)))))) (tsa/filesUnder! mirrorDir)))]
+        (stale (filter (fn [(f String)] -> Bool (and (not (some? (mapGet keep f))) (not (hiddenRel? (dropPrefixLen f (+ (stringLength mirrorDir) 1)))))) (tsa/filesUnder! mirrorDir)))]
     (do (map (fn [(f String)] -> Bool (ok? (pathRemove f))) stale) (listLength stale)))
 
 fn ! stagePackageFiles! ctx: sys/Context root: String files: (List String) digest: String mirrorDir: String pkgDir: String -> (Result String String)
@@ -440,7 +389,7 @@ fn ! stagePackageFiles! ctx: sys/Context root: String files: (List String) diges
                   ((ok _)
                     (match (writeMirrorConfig! root pkgDir)
                       ((err e) (err (str "cannot write " pkgDir "/.asl.config.asn: " e)))
-                      ((ok _) (do (pruneStaleStagedFrom! mirrorDir (listAppend (stagedDests root mirrorDir files) (listAppend (stagedDests root pkgDir files) (listAppend (stagedDests ctx.root pkgDir (firstPartyFiles! ctx.root files)) (list (str pkgDir "/.asl.config.asn"))))) (fn [(f String)] -> Bool (liveSource? root ctx.root mirrorDir pkgDir f))) (touchUsed! mirrorDir) (pruneStage! (outsidePkgStageDir ctx) "" digest) (ok pkgDir))))))))))))
+                      ((ok _) (do (pruneStaleStaged! mirrorDir (listAppend (stagedDests root mirrorDir files) (listAppend (stagedDests root pkgDir files) (listAppend (stagedDests ctx.root pkgDir (firstPartyFiles! ctx.root files)) (list (str pkgDir "/.asl.config.asn")))))) (touchUsed! mirrorDir) (pruneStage! (outsidePkgStageDir ctx) "" digest) (ok pkgDir))))))))))))
 
 fn ! stageOutside! ctx: sys/Context absFile: String -> (Result String String)
   (match (findPackageRoot! (ckr/parentDirOf absFile) 0)
@@ -530,10 +479,10 @@ fn ! suiteRelPath! ctx: sys/Context path: String -> (Result String String)
       (ok (rootedAbs ctx absPath))
       (stageOutside! ctx absPath)))
 
-fn ! suite! ctx: sys/Context fp: String path: String opts: TestOpts -> Int64
+fn ! suite! ctx: sys/Context fp: String path: String -> Int64
   (match (suiteRelPath! ctx path)
     ((err e) (do (eprintln (str "FAIL " path ": ERR_BUILD cannot stage " path ": " e " (after 0 asserts)")) 1))
-    ((ok rel) (let [(_ (if (listEmpty? opts.flags) 0 (nt/reapOrphanedRuns!)))] (suiteBuilt! ctx fp path rel opts))))
+    ((ok rel) (suiteBuilt! ctx fp path rel)))
 
 ; (:m :ref OUT-OF-ROOT-USERPATH :do "rel is always root-relative (rooted for an in-root file, stageOutside!'s rel for a staged one); nt/prepare would read it bare against the actual cwd (OUT-OF-ROOT-USERPATH), wrong whenever test! skipped reexecTestAtRoot! (anyOutOfRoot?) and cwd never became ctx.root, so prepareSourceIn reads the absolute ctx.root-anchored path while keeping rel as the logical/import name")
 ; (:m :ref NATIVETEST-OUTSIDE-CLOSURE-20261020 :do "a staged package sits at <digest>/<workspace>/ under outsidePkg and its suite runs with <digest> as the working directory, the arrangement of the source tree where the package directory is named by its workspace, so a data path written workspace-qualified (vtbot/asl/tests/fixtures/x.parquet) opens the same file; every other suite keeps the cwd it was started with")
@@ -545,90 +494,26 @@ fn ! suiteCwd ctx: sys/Context rel: String -> (Option String)
         (some (str ctx.root "/" marker digest)))
       (none)))
 
-; (:m :ref TEST-RUNNER-SELECT :do "a selected run builds from a hidden sibling .STEM.only.PID.asl (nt/selectionSource: the file with the function added to :x), beside the file so its imports resolve as the file's do; the pid keeps concurrent selections apart, and the copy and its one-off slot go when the run ends")
-fn selectionRel rel: String pid: Int64 -> String
-  (let [(parts (stringSplit rel "/"))
-        (base (optionOr (listLast parts) rel))
-        (stem (if (stringEndsWith? base ".asl") (optionOr (stringSlice base 0 (- (stringLength base) 4)) base) base))
-        (dir (stringJoin (listTake parts (- (listLength parts) 1)) "/"))]
-    (str (if (stringEmpty? dir) "" (str dir "/")) "." stem ".only." (stringFromInt64 pid) ".asl"))
-
-; (:m :ref TEST-RUNNER-SELECT :do "the pid of a selection copy name .STEM.only.PID.asl, none for any other name")
-fn selectionPid name: String -> (Option Int64)
-  (let [(parts (stringSplit name "."))
-        (n (listLength parts))]
-    (if (and (stringStartsWith? name ".") (and (>= n 5) (and (= (listGet parts (- n 1)) (some "asl")) (= (listGet parts (- n 3)) (some "only")))))
-      (stringToInt64 (optionOr (listGet parts (- n 2)) ""))
-      (none)))
-
-; (:m :ref TEST-RUNNER-SELECT :do "a runner killed before it removed its copy leaves .STEM.only.PID.asl beside the file; the next selected run in that directory removes every copy whose pid is not alive (a procAlive? error counts as alive), and discovery never takes a dot file for a suite")
-fn ! dropStaleSelections! dirAbs: String -> Int64
-  (fold (fn [(n Int64) (name String)] -> Int64
-          (match (selectionPid name)
-            ((some pid) (if (and (!= pid (procSelf)) (not (resultOr (procAlive? pid) true))) (do (pathRemove (str dirAbs "/" name)) (+ n 1)) n))
-            ((none) n)))
-        0 (resultOr (dirList dirAbs) (list)))
-
-fn ! selectedSuite! ctx: sys/Context fp: String path: String rel: String opts: TestOpts -> Int64
-  (let [(copyRel (selectionRel rel (procSelf)))
-        (copyAbs (str ctx.root "/" copyRel))
-        (_ (dropStaleSelections! (sys/parentOf copyAbs)))]
-    (match (nt/selectionSource (resultOr (fileReadString (str ctx.root "/" rel)) "") opts.only)
-      ((err e) (do (eprintln (str "FAIL " path " --only " opts.only ": ERR_USAGE: " e " (after 0 asserts)")) 1))
-      ((ok src) (match (fileWrite copyAbs src)
-                  ((err e) (do (eprintln (str "FAIL " path " --only " opts.only ": ERR_IO: cannot write " copyRel ": " e " (after 0 asserts)")) 1))
-                  ((ok _) (let [(code (suiteBuiltFrom! ctx fp path rel copyRel opts))
-                                (_ (pathRemove copyAbs))]
-                            code))))))
-
-fn ! suiteBuilt! ctx: sys/Context fp: String path: String rel: String opts: TestOpts -> Int64
-  (if (stringEmpty? opts.only) (suiteBuiltFrom! ctx fp path rel rel opts) (selectedSuite! ctx fp path rel opts))
-
-fn ! dropSelectedSlot! rel: String buildRel: String bin: String -> Unit
-  (if (= rel buildRel) () (do (pathRemove (sys/parentOf bin)) ()))
-
-; (:m :ref TEST-RUNNER-SELECT :do "the wall a run gets and where it came from: --wall S, else a declared fn suiteWallS, else the 1800 s default, the limits nt/suiteWall applies")
-fn wallOf opts: TestOpts src: String -> (Pair Int64 String)
-  (cond
-    ((> opts.wallS 0) (pair opts.wallS "--wall"))
-    ((some? (nt/declaredWallS src)) (pair (nt/suiteWall src) "fn suiteWallS"))
-    (else (pair (nt/suiteWall src) "the default")))
-
-fn runLabel path: String opts: TestOpts -> String
-  (if (stringEmpty? opts.only) path (str path " --only " opts.only))
-
-; (:m :ref TEST-RUNNER-SELECT :do "the binary runs under nt/runWatched with the wall of wallOf and the --max-rss cap; ps samples (for the cap and for --stats) are taken only when one of them asks, so a plain run spawns nothing more than before; a binary that ends without an assertion report after the runner killed it, or after a signal, gets the FAIL line naming the limit or the signal; --stats adds one (:testRun ...) receipt line on stderr")
-fn ! suiteBuiltFrom! ctx: sys/Context fp: String path: String rel: String buildRel: String opts: TestOpts -> Int64
-  (let [(built (if (stringEmpty? opts.only) (nt/prepareTestSource (str ctx.root "/" buildRel) buildRel fp) (nt/prepareTestSelected (str ctx.root "/" buildRel) buildRel fp opts.only)))]
+fn ! suiteBuilt! ctx: sys/Context fp: String path: String rel: String -> Int64
+  (let [(built (nt/prepareTestSource (str ctx.root "/" rel) rel fp))]
     (match built.binary
       ((some binPath)
         (let [(bin (if (stringStartsWith? binPath "/") binPath (str ctx.root "/" binPath)))
-              (wall (wallOf opts (resultOr (fileReadString (str ctx.root "/" rel)) "")))
-              (sampling (or opts.stats (> opts.maxRssMb 0)))
-              (env (listAppend (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff))
-                               (listAppend (if opts.keepGoing (list "ASL_ASSERT_KEEP_GOING=1") (list)) (if opts.stats (list "ASL_NATIVE_TEST_STATS=1") (list)))))
-              (w (nt/runWatched (list "nice" "-n" "15" bin) (suiteCwd ctx rel) (some (nt/withEnvOverrides! env)) (pairFirst wall) (* opts.maxRssMb 1024) sampling))
-              (rawErr (if (= rel buildRel) w.out.stderr (stringReplace (stringReplace w.out.stderr (str ctx.root "/" buildRel) (str ctx.root "/" rel)) buildRel rel)))
-              (errText (nt/withoutPeakLines rawErr))
-              (judged (nt/judgeInit! bin path (preludeOverride ctx) (if (stringEmpty? opts.only) (nt/verdictOf path w.out.exitCode errText) (nt/selectedVerdict path opts.only w.out.exitCode errText))))
-              (limit (if (some? (nt/reportCounts errText)) (none) (nt/limitLine (runLabel path opts) w (pairFirst wall) (pairSecond wall) opts.maxRssMb (not (listEmpty? opts.flags)))))
-              (v (match limit ((some l) (nt/Verdict :exit 1 :line l :stderr judged.stderr)) ((none) judged)))]
-          (do (print w.out.stdout)
+              (out (nt/runProcIn (list "nice" "-n" "15" bin) (suiteCwd ctx rel) (some (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff))))))
+              (v (nt/judgeInit! bin path (preludeOverride ctx) (nt/verdictOf path out.exitCode out.stderr)))]
+          (do (print out.stdout)
               (eprintText v.stderr)
               (if (= v.exit 0) (println v.line) (eprintln v.line))
-              (if opts.stats (eprintln (nt/runReceipt (runLabel path opts) w rawErr (pairFirst wall) (pairSecond wall) opts.maxRssMb v.exit)) ())
-              (dropSelectedSlot! rel buildRel bin)
               v.exit)))
-      ((none) (cond
-                ((= built.cache "checker-reject") (do (eprintln (nt/suiteFailLine ctx.root rel path built.reason)) 1))
-                ((not (listEmpty? opts.flags)) (do (eprintln (str "FAIL " path " " (stringJoin opts.flags " ") ": " (unsupportedTag built.reason) ": " (oneLine built.reason) "; asl-host runs whole suites only, so these options need a native build (after 0 asserts)")) 1))
-                (else (hostSuite! ctx path built.reason))))))
+      ((none) (if (= built.cache "checker-reject")
+                (do (eprintln (nt/failLine rel built.reason)) 1)
+                (hostSuite! ctx path built.reason)))))
 
-fn ! suites! ctx: sys/Context paths: (List String) opts: TestOpts -> Int64
+fn ! suites! ctx: sys/Context paths: (List String) -> Int64
   (if (not (sys/isFile? (str ctx.root "/asl/host/out/libaslrt.a")))
     (do (eprintln (str "asl test: " ctx.root "/asl/host/out/libaslrt.a not found; run sh asl/host/build.sh")) 2)
     (let [(fp (nt/fingerprint))
-          (codes (map (fn [(p String)] -> Int64 (if (sys/isFile? p) (suite! ctx fp p opts) (do (eprintln (str p ":0:0: ERR_IO cannot open file\nFAIL " p ": 1 load error(s) (after 0 asserts)")) 1))) paths))]
+          (codes (map (fn [(p String)] -> Int64 (if (sys/isFile? p) (suite! ctx fp p) (do (eprintln (str p ":0:0: ERR_IO cannot open file\nFAIL " p ": 1 load error(s) (after 0 asserts)")) 1))) paths))]
       (optionOr (listHead (filter (fn [(c Int64)] -> Bool (!= c 0)) codes)) 0)))
 
 fn ! absolute path: String -> String
@@ -636,11 +521,11 @@ fn ! absolute path: String -> String
 
 fn ! sweepJob ctx: sys/Context ws: String tmp: String i: Int64 bin: String -> run/Job
   (run/job (list "/bin/sh" "-c" "exec \"$0\" 2>\"$NATIVE_SWEEP_ERR\"" bin) ws
-           (nt/withoutRunnerSwitches (run/childEnv (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff) (str "NATIVE_SWEEP_ERR=" tmp "/" (stringFromInt64 i) ".err")))))
+           (run/childEnv (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff) (str "NATIVE_SWEEP_ERR=" tmp "/" (stringFromInt64 i) ".err"))))
 
 fn ! initProbeJob ctx: sys/Context ws: String tmp: String i: Int64 bin: String -> run/Job
   (run/job (list "/bin/sh" "-c" "exec \"$0\" 2>\"$NATIVE_SWEEP_ERR\"" bin) ws
-           (nt/withoutRunnerSwitches (run/childEnv (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOn) (str "NATIVE_SWEEP_ERR=" tmp "/" (stringFromInt64 i) ".init.err")))))
+           (run/childEnv (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOn) (str "NATIVE_SWEEP_ERR=" tmp "/" (stringFromInt64 i) ".init.err"))))
 
 fn ! initProbed tmp: String timeoutS: Int64 done: sw/Done d: run/Done -> sw/Done
   (if (!= d.verdict "exit")
@@ -670,8 +555,7 @@ fn ! sweepDone! ctx: sys/Context ws: String timeoutS: Int64 k: Int64 files: (Lis
         (rootReal (resultOr (realPath ctx.root) ctx.root))
         (tmp (str "/tmp/aslNativeSweep" (stringFromInt64 (procSelf))))
         (made (dirCreate tmp))
-        (rel (map (fn [(ip (Pair Int64 String))] -> String (nt/relativeTo rootReal (str ws "/" (pairSecond ip)))) (enumerate files)))
-        (built (zip (enumerate files) (nt/prepareAll rel fp k)))
+        (built (map (fn [(ip (Pair Int64 String))] -> (Pair (Pair Int64 String) nt/Built) (pair ip (nt/prepare (nt/relativeTo rootReal (str ws "/" (pairSecond ip))) fp))) (enumerate files)))
         (runnable (filter (fn [(b (Pair (Pair Int64 String) nt/Built))] -> Bool (some? (pairSecond b).binary)) built))
         (rejected (filter (fn [(b (Pair (Pair Int64 String) nt/Built))] -> Bool (and (none? (pairSecond b).binary) (= (pairSecond b).cache "checker-reject"))) built))
         (unbuilt (filter (fn [(b (Pair (Pair Int64 String) nt/Built))] -> Bool (and (none? (pairSecond b).binary) (!= (pairSecond b).cache "checker-reject"))) built))
@@ -753,78 +637,18 @@ fn ! changedTest! ctx: sys/Context args: (List String) -> Int64
                     ((err e) (changedFailed! (str "ERR_TIMEOUT: " e)))
                     ((ok timeoutS) (sw/changedReport! base changed selected (sweepDone! ctx ws timeoutS 2 selected) frozen))))))))))))
 
-; (:m :ref CHECK-FOREIGN-ASL-PKGS :do "asl check of a .asl file outside the toolchain root checks its staged mirror under the root (stageOutside!, the view asl test checks), where asl-* packages resolve; the caller's path stays in every line; in-root files and other arguments take the old path")
-fn ! outsideAsl? ctx: sys/Context a: String -> Bool
-  (and (stringEndsWith? a ".asl") (and (sys/isFile? a) (not (inRoot? ctx (resultOr (realPath a) a)))))
-
-; (:m :ref CHECK-FOREIGN-LOWS :do "the staged view of one outside file: a package file checks inside the package mirror (stagePackageMirror!, the view asl test checks) with the flat mirror and the indexed <workspace>/ mirror both mapped back to the package root, absolute and root-relative; a lone file checks its single-file stage mapped back to the path given")
-fn ! relForm ctx: sys/Context p: String -> String
-  (if (stringStartsWith? p (str ctx.root "/")) (dropPrefixLen p (+ (stringLength ctx.root) 1)) p)
-
-fn ! stagedView! ctx: sys/Context a: String -> (Result verify/Staged String)
-  (let [(abs (resultOr (realPath a) a))]
-    (match (findPackageRoot! (ckr/parentDirOf abs) 0)
-      ((some root)
-        (match (stagePackageMirror! ctx root)
-          ((err e) (err (str a ": cannot stage: " e)))
-          ((ok mirrorDir)
-            (let [(wsRaw (workspaceNameOf (resultOr (fileReadString (str root "/.asl.config.asn")) "")))
-                  (ws (if (stringEmpty? wsRaw) "pkg" wsRaw))
-                  (indexed (str mirrorDir "/" ws "/"))
-                  (flat (str mirrorDir "/"))]
-              (ok (verify/Staged :actual (str mirrorDir "/" (dropPrefixLen abs (+ (stringLength root) 1))) :shown a
-                                 :maps (list (pair indexed (str root "/")) (pair flat (str root "/"))
-                                             (pair (relForm ctx indexed) (str root "/")) (pair (relForm ctx flat) (str root "/")))))))))
-      ((none)
-        (match (stageOutsideSingle! ctx abs)
-          ((err e) (err (str a ": cannot stage: " e)))
-          ((ok rel) (ok (verify/Staged :actual (str ctx.root "/" rel) :shown a :maps (list (pair rel a)))))))))
-
-fn ! stagedViews! ctx: sys/Context files: (List String) -> (Result (List verify/Staged) String)
-  (fold (fn [(acc (Result (List verify/Staged) String)) (a String)] -> (Result (List verify/Staged) String)
-          (match acc
-            ((err e) (err e))
-            ((ok ss) (match (stagedView! ctx a) ((err e) (err e)) ((ok s) (ok (listAppend ss (list s))))))))
-        (ok (list)) files)
-
-; (:m :ref CHECK-REFUSAL-WORDING :do "the same words as command.asl: a bare test would sweep every suite, a bare check every file")
-fn bareSweepNoun verb: String -> String
-  (if (= verb "check") "file" "suite")
-
-fn ! bareSweepRefused! verb: String -> Int64
-  (do (sys/say! (str "(:" verb " :status :failed :error ERR_BARE_SWEEP :message \"asl " verb " needs paths or --all; a bare asl " verb " would sweep every " (bareSweepNoun verb) "\")")) 2)
-
-fn ! allWithPaths! verb: String -> Int64
-  (do (sys/say! (str "(:" verb " :status :failed :error ERR_USAGE :message \"asl " verb " --all takes no paths\")")) 2)
-
 fn ! check! ctx: sys/Context args: (List String) -> Int64
-  (cond
-    ((listEmpty? args) (bareSweepRefused! "check"))
-    ((and (listContains? args "--all") (> (listLength args) 1)) (allWithPaths! "check"))
-    ((= args (list "--all")) (match (sw/nativeCheckSweep!) ((ok code) code) ((err e) (do (sys/sayErr! e) 1))))
-    (else (checkPaths! ctx args)))
-
-fn ! checkPaths! ctx: sys/Context args: (List String) -> Int64
-  (let [(outside (filter (fn [(a String)] -> Bool (outsideAsl? ctx a)) args))
-        (others (filter (fn [(a String)] -> Bool (not (outsideAsl? ctx a))) args))]
-    (if (listEmpty? outside)
-      (cmd/dispatch! ctx "check" args)
-      (match (stagedViews! ctx outside)
-        ((err e) (do (sys/sayErr! e) 1))
-        ((ok views)
-          (let [(inRootAsl (filter (fn [(a String)] -> Bool (stringEndsWith? a ".asl")) others))
-                (nonAsl (filter (fn [(a String)] -> Bool (not (stringEndsWith? a ".asl"))) others))
-                (all (listAppend views (map (fn [(a String)] -> verify/Staged (verify/Staged :actual a :shown a :maps (list))) inRootAsl)))
-                (rc (verify/checkStaged! all nonAsl))]
-            rc)))))
+  (if (not (listEmpty? args))
+    (cmd/dispatch! ctx "check" args)
+    (match (sw/nativeCheckSweep!) ((ok code) code) ((err e) (do (sys/sayErr! e) 1))))
 
 fn ! rootRelativeArg ctx: sys/Context a: String -> String
   (rootedAbs ctx (resultOr (realPath a) a))
 
-fn ! reexecTestAtRoot! ctx: sys/Context args: (List String) dir: String flags: (List String) -> Int64
+fn ! reexecTestAtRoot! ctx: sys/Context args: (List String) dir: String -> Int64
   (sys/execv! (listAppend (list "/bin/sh" "-c" "cd -- \"$0\" && exec \"$@\"" ctx.root (str ctx.root "/bin/asl") "test")
                           (listAppend (if (stringEmpty? dir) (list) (list "--jobserverDir" dir))
-                          (listAppend (map (fn [(a String)] -> String (rootRelativeArg ctx a)) args) flags)))
+                          (map (fn [(a String)] -> String (rootRelativeArg ctx a)) args)))
               (list))
 
 fn ! outOfRoot? ctx: sys/Context a: String -> Bool
@@ -834,70 +658,16 @@ fn ! outOfRoot? ctx: sys/Context a: String -> Bool
 fn ! anyOutOfRoot? ctx: sys/Context args: (List String) -> Bool
   (listAny? (fn [(a String)] -> Bool (outOfRoot? ctx a)) (filter (fn [(a String)] -> Bool (not (stringStartsWith? a "--"))) args))
 
-; (:m :ref TEST-RUNNER-SELECT :do "the options of asl test FILE: --only NAME runs one test function, --keep-going lets failed assertions pass on and lists them all; every other argument stays a file in its order, so a run without options sees exactly the arguments it was given; flags keeps the option words for a re-exec at the root and the FAIL line")
-(schema TestOpts (:f only String) (:f keepGoing Bool) (:f wallS Int64) (:f maxRssMb Int64) (:f stats Bool) (:f flags (List String)) (:f files (List String)) (:f error String))
-
-fn noTestOpts -> TestOpts
-  (TestOpts :only "" :keepGoing false :wallS 0 :maxRssMb 0 :stats false :flags (list) :files (list) :error "")
-
-fn testOptsStep acc: TestOpts args: (List String) -> TestOpts
-  (match (listHead args)
-    ((none) acc)
-    ((some a)
-      (cond
-        ((not (stringEmpty? acc.error)) acc)
-        ((= a "--only")
-          (let [(n (optionOr (listGet args 1) ""))]
-            (cond
-              ((or (stringEmpty? n) (stringStartsWith? n "-")) (with acc :error "--only needs a test function name"))
-              ((not (stringEmpty? acc.only)) (with acc :error "--only is given twice; one run selects one function"))
-              (else (testOptsStep (with acc :only n :flags (listAppend acc.flags (list "--only" n))) (listDrop args 2))))))
-        ((or (= a "--wall") (= a "--max-rss"))
-          (let [(v (optionOr (listGet args 1) ""))
-                (n (optionOr (stringToInt64 v) 0))]
-            (cond
-              ((or (< n 1) (and (= a "--wall") (> n (nt/maxWallS)))) (with acc :error (str a " needs a whole number " (if (= a "--wall") "of seconds from 1 to 7200" "of megabytes above 0") ", got " v)))
-              ((= a "--wall") (testOptsStep (with acc :wallS n :flags (listAppend acc.flags (list a v))) (listDrop args 2)))
-              (else (testOptsStep (with acc :maxRssMb n :flags (listAppend acc.flags (list a v))) (listDrop args 2))))))
-        ((= a "--stats") (testOptsStep (with acc :stats true :flags (listAppend acc.flags (list a))) (rest args)))
-        ((= a "--keep-going") (testOptsStep (with acc :keepGoing true :flags (listAppend acc.flags (list a))) (rest args)))
-        (else (testOptsStep (with acc :files (listAppend acc.files (list a))) (rest args))))))
-
-fn ! testUsageError! message: String -> Int64
-  (do (sys/say! (str "(:test :status :failed :error ERR_USAGE :message \"asl test FILE [--only NAME] [--keep-going] [--wall S] [--max-rss MB] [--stats]: " message "\")")) 2)
-
-fn plainFileArgs? args: (List String) -> Bool
-  (and (not (listEmpty? args)) (not (listAny? (fn [(a String)] -> Bool (stringStartsWith? a "--")) args)))
-
-; (:m :ref TEST-RUNNER-SELECT :do "--only NAME must name one of the file's test functions (nt/testFunctionsOf); an unknown name is refused before anything is built, with the names it could have been")
-fn ! selectionRefused? opts: TestOpts path: String -> Bool
-  (if (stringEmpty? opts.only)
-    false
-    (let [(names (nt/testFunctionsOf (resultOr (fileReadString path) "")))]
-      (if (listContains? names opts.only)
-        false
-        (do (sys/say! (str "(:test :status :failed :error ERR_UNKNOWN_TEST :message \"asl test --only " opts.only ": " path " has no top-level fn " opts.only " -> Bool without parameters\" :available (" (stringJoin names " ") "))")) true))))
-
 fn ! test! ctx: sys/Context args: (List String) dir: String -> Int64
-  (let [(opts (testOptsStep (noTestOpts) args))
-        (tracing (= (optionOr (envGet "ASL_TRACE") "0") "1"))]
-    (cond
-      ((not (stringEmpty? opts.error)) (testUsageError! opts.error))
-      ((listEmpty? opts.flags) (testRun! ctx args dir opts))
-      ((or tracing (not (plainFileArgs? opts.files))) (testUsageError! (str (stringJoin opts.flags " ") " applies to plain FILE arguments, not to --all, --changed, --native, --compare or --trace")))
-      (else (testRun! ctx opts.files dir opts))))
-
-fn ! testRun! ctx: sys/Context args: (List String) dir: String opts: TestOpts -> Int64
   (let [(tracing (or (listContains? args "--trace") (= (optionOr (envGet "ASL_TRACE") "0") "1")))
-        (plainFiles (and (not (listEmpty? args)) (and (not (listContains? args "--changed")) (and (not (listContains? args "--all")) (not (= (first args) "--native"))))))
+        (plainFiles (and (not (listEmpty? args)) (and (not (listContains? args "--changed")) (not (= (first args) "--native")))))
         (hosted (or (listContains? args "--compare") (or tracing (and (not plainFiles) (not (atRoot? ctx))))))]
     (cond
       (hosted (cmd/dispatch! ctx "test" args))
-      ((and plainFiles (not (atRoot? ctx)) (not (anyOutOfRoot? ctx args))) (reexecTestAtRoot! ctx args dir opts.flags))
+      ((and plainFiles (not (atRoot? ctx)) (not (anyOutOfRoot? ctx args))) (reexecTestAtRoot! ctx args dir))
       ((listContains? args "--changed") (changedTest! ctx args))
-      ((listEmpty? args) (bareSweepRefused! "test"))
-      ((listContains? args "--all") (if (= args (list "--all")) (sweepTest! ctx) (allWithPaths! "test")))
-      ((= (first args) "--native") (if (listEmpty? (rest args)) (cmd/dispatch! ctx "test" args) (suites! ctx (rest args) opts)))
+      ((listEmpty? args) (sweepTest! ctx))
+      ((= (first args) "--native") (if (listEmpty? (rest args)) (cmd/dispatch! ctx "test" args) (suites! ctx (rest args))))
       (else (match (cmd/testFiles! args (list))
               ((err code) code)
               ((ok paths)
@@ -906,10 +676,7 @@ fn ! testRun! ctx: sys/Context args: (List String) dir: String opts: TestOpts ->
                       (selected (pairFirst selection))
                       (frozen (pairSecond selection))
                       (note (if (listEmpty? dirs) true (sys/say! (str "(:test :frozen " (stringFromInt64 (listLength frozen)) ")"))))]
-                  (cond
-                    ((and (not (stringEmpty? opts.only)) (!= (listLength selected) 1)) (testUsageError! (str "--only selects a function of one file; " (stringFromInt64 (listLength selected)) " test files were given")))
-                    ((selectionRefused? opts (optionOr (listHead selected) "")) 2)
-                    (else (suites! ctx selected opts)))))))))
+                  (suites! ctx selected)))))))
 
 fn readCode msg: String -> String
   (if (or (or (stringStartsWith? msg "unmatched") (stringStartsWith? msg "unclosed")) (or (stringContains? msg "' closes '") (stringContains? msg "unterminated")))
@@ -1075,26 +842,12 @@ fn ! runPath! ctx: sys/Context file: String args: (List String) -> Int64
                     ((stringEndsWith? file ".asl") (run! ctx (cons file args)))
                     (else (runInline! ctx (str "f" (stringFromInt64 (procSelf)) "x-" (optionOr (listLast (stringSplit file "/")) file)) src args)))))
 
-; (:m :ref ASL-STDIN-EDIT-HANG :do "asl -f FILE dispatches the file's forms through the native rpc like asl -; the command.asl main it used before spawned asl run asl-forms/main.asl, a source compile that never finished")
-fn ! fileEntry! ctx: sys/Context args: (List String) -> Int64
-  (if (or (!= (listLength args) 2) (not (sys/isFile? (first (rest args)))))
-    (do (sys/say! "(:batch :status :failed :error ERR_MISSING_ARG :message \"usage: asl -f FILE, one readable file of forms and no other argument\")") 2)
-    (match (fileReadString (first (rest args)))
-      ((err _) (do (sys/say! "(:batch :status :failed :error ERR_MISSING_ARG :message \"usage: asl -f FILE, one readable file of forms and no other argument\")") 2))
-      ((ok text) (dispatch! ctx "rpc" (list (sys/stripTrailingNewlines text))))))
-
-; (:m :ref REMOTE-TARGET :do "asl --on NODE:UNIT and a remote .asl/target.asn route forms, test and check to tools/remote/on.asl before any local dispatch (cmd/remote!), run natively like asl run; --local drops the profile for one call")
 fn ! entry! ctx: sys/Context args: (List String) -> Int64
-  (match (cmd/remote! ctx args (fn [(a (List String))] -> Int64 (run! ctx a)))
-    ((some code) code)
-    ((none) (localEntry! ctx (rt/localArgs args))))
-
-fn ! localEntry! ctx: sys/Context args: (List String) -> Int64
   (let [(head (first args))]
     (cond
       ((= head "-e") (if (listEmpty? (rest args)) (inlineUsage!) (runInline! ctx "e" (first (rest args)) (rest (rest args)))))
       ((= head "-") (stdinEntry! ctx args))
-      ((= head "-f") (fileEntry! ctx args))
+      ((= head "-f") (match (cmd/main args) ((ok code) code) ((err _) 2)))
       ((pathArg? head) (runPath! ctx head (rest args)))
       (else (let [(r (cmd/route! ctx args))]
               (dispatch! ctx (pairFirst r) (pairSecond r))))))

@@ -19,7 +19,7 @@ fn realOr! p: String -> String
 fn workspaceRoot! rootArg: String cwd: String -> String
   (cond
     ((not (stringEmpty? rootArg)) (realOr! rootArg))
-    ((not (stringEmpty? (k/envWorkspaceRoot! cwd))) (realOr! (k/envWorkspaceRoot! cwd)))
+    ((not (stringEmpty? (envOr! "ASL_ROOT"))) (realOr! (envOr! "ASL_ROOT")))
     (else (let [(top (gitTop! cwd))] (if (stringEmpty? top) cwd top))))
 
 fn toolchainRoot! cwd: String -> String

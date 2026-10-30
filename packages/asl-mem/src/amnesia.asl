@@ -1,4 +1,4 @@
-(module aslMem/amnesia :x [Chunk ChunkDAG RetiredChunk validateMemoryChunk isLowConfidence? chunkDagEmpty chunkDagAdd chunkDagFind detectCycle? chunkDagAncestors evictBelowThreshold transitionToRetired evaluateRetirement retireChunk queryRetiredChunks loadActiveChunks] :i [(viewLayer :a vl)])
+(module aslMem/amnesia :x [Chunk ChunkDAG RetiredChunk validateMemoryChunk isLowConfidence? chunkDagEmpty chunkDagAdd chunkDagFind detectCycle? chunkDagAncestors evictBelowThreshold transitionToRetired evaluateRetirement retireChunk queryRetiredChunks loadActiveChunks] :i [(viewLayer :a vl) (hydration :a h)])
 
 (schema Chunk (:f id Str) (:f ts I64) (:f conf F64) (:f summary Str) (:f facts (List Str)) (:f directives (List Str)) (:f refs (List Str)))
 

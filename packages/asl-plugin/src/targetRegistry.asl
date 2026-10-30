@@ -1,4 +1,4 @@
-(module asl-plugin/targetRegistry :x [TargetRegistry emptyTargetRegistry registerTarget registerCodegenTarget hasTarget? lookupTarget dispatchTargetCodegen listRegisteredTargets] :i [(ast :a a)])
+(module asl-plugin/targetRegistry :x [TargetRegistry emptyTargetRegistry registerTarget registerCodegenTarget hasTarget? lookupTarget dispatchTargetCodegen listRegisteredTargets] :i [(ast :a a) (reader :a rd)])
 
 (schema TargetRegistry (:field targets (Map Str (fn [(List a/TopForm) (Map Str Str)] -> (Result Str Str)))) (:field docstrings (Map Str Str)))
 

@@ -48,13 +48,7 @@
       (:needs notDone (:each (stub deadFlag missingDependency)))
       (:needs verdictNo (:each blocker))
       (:needs claim anchor :from toolResult))
-    (:layer :id reply :when (shell)
-      (:splitsInto reply (done claimed unverified))
-      (:has reply (command exitCode executedAsserts))
-     
-      (:holdsWhen methodClaim commandResult)
-      (:not announcedStep executed))
-    (:layer :id reply :when (chat)
+    (:layer :id reply
       (:splitsInto reply (done claimed unverified))
       (:has reply (command exitCode executedAsserts))
      
@@ -73,20 +67,11 @@
       (:needs ruledOutSite siteName)
       (:not (:dominates signalOverNoise completeness))
       (:refutedBy generalization counterexample))
-    (:layer :id abstain :when (shell)
+    (:layer :id abstain
       (:prefers abstain guess :when evidenceDeficit)
       (:has abstention (evidenceDeficit unresolvedHypotheses escalationTarget) :lit abstainForm)
       (:not edit :when gateUnrunnable))
-    (:layer :id abstain :when (chat)
-      (:prefers abstain guess :when evidenceDeficit)
-      (:has abstention (evidenceDeficit unresolvedHypotheses escalationTarget) :lit abstainForm)
-      (:not edit :when gateUnrunnable))
-    (:layer :id breaker :when (shell)
-      (:yields sameFailure3 witness :lit witnessForm)
-      (:yields witness (newHypothesis escalate))
-      (:has escalate (seen tried fork resolves))
-      (:is progress newEvidence))
-    (:layer :id breaker :when (chat)
+    (:layer :id breaker
       (:yields sameFailure3 witness :lit witnessForm)
       (:yields witness (newHypothesis escalate))
       (:has escalate (seen tried fork resolves))

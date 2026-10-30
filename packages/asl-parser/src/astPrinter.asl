@@ -1,4 +1,4 @@
-(module asl-parser/astPrinter :x [printAstModule printAstExpr printAstPattern printAstType printTopForm printAst] :i [(ast :a a) (astConverter :a cv) (reader :a rd)])
+(module asl-parser/astPrinter :x [printAstModule printAstExpr printAstPattern printAstType printTopForm printAst] :i [(ast :a a) (astConverter :a cv) (reader :a rd) (indentPrinter :a ip)])
 
 fn printAst expr: a/AstExpr -> String
   (printAstExpr expr 0)

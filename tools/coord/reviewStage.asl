@@ -1,6 +1,6 @@
 (module asl-tools/coord/reviewStage
-  :x [LaneRow RevOut tableFor writerAliasFor profileChain modelNames modelRows costRows usageCost laneTable laneRowsOf unknownOf paceAllowance lanesFor startupProblems usageSum tokenSum tokensFilled callModelFor! reviewUnit! allowanceMap risingLanes]
-  :i [(asl-tools/coord/ladder :a l) (asl-tools/fleet/model :a fm) (aslGateway/subPace :a sp) (asl-parser/reader :a rd) (aslAgent/providers :a prov) (asl-json/json :a j)])
+  :x [LaneRow RevOut tableFor modelRows costRows usageCost laneTable laneRowsOf unknownOf paceAllowance lanesFor startupProblems usageSum tokenSum callModelFor! reviewUnit! allowanceMap risingLanes]
+  :i [(asl-tools/coord/ladder :a l) (tools/fleet/model :a fm) (aslGateway/subPace :a sp) (asl-parser/reader :a rd) (asl/agentLoop/providers :a prov) (asl-json/json :a j)])
 
 ; (:m :ref COND3 :do "the conductor's real review stage over the COND2 ladder: lanes come from the lane table (alias, tier, quality, default allowance) with the allowance of subscription-backed aliases taken from subPace, the model call is the in-process gateway call Leon's provider uses, and the verdict goes back as a plain RevOut so the conductor owns the state machine")
 
@@ -38,49 +38,6 @@ fn costRows text: String lanesText: String -> (List (Pair String Int64))
                                              (if (stringEmpty? name) (list) (list (pair name price)))))))
                    (list)
                    (fm/itemsOf (optionOr (fm/kvGet (fm/itemsOf form) ":models") (fm/makeEmpty))))))))
-
-; (:m :ref REVIEW-DEFER :do "alias and served model name of every gateway model row")
-fn modelNames text: String -> (List (Pair String String))
-  (match (fm/parseForms text)
-    ((err _) (list))
-    ((ok forms)
-      (match (listHead forms)
-        ((none) (list))
-        ((some form)
-          (map (fn [(m rd/SExpr)] -> (Pair String String)
-                 (let [(items (fm/itemsOf m))]
-                   (pair (fm/textOf (optionOr (fm/kvGet items ":id") (fm/makeEmpty))) (fm/textOf (optionOr (fm/kvGet items ":name") (fm/makeEmpty))))))
-               (fm/itemsOf (optionOr (fm/kvGet (fm/itemsOf form) ":models") (fm/makeEmpty))))))))
-
-; (:m :ref REVIEW-WRITER-FAMILY :do "the grade intent routes are left out: they name the reviewers a profile may call, not the models that write, and the leon grade chain (glm, kimi) made the writer union moonshot+deepseek+zhipu so no lane could review its units")
-; (:m :ref NODE2-WRITER-LITERAL-UNKNOWN :do "every alias on any route chain of the gateway profile with this id, in order, distinct: node2 writes run under profile ids (freeWriterNim, freeWriterOr, ...) that are never aliases, so the writer of such a unit has the families of its chains; empty for an id that is no profile")
-fn profileChain gatewayText: String id: String -> (List String)
-  (match (fm/parseForms gatewayText)
-    ((err _) (list))
-    ((ok forms)
-      (match (listHead forms)
-        ((none) (list))
-        ((some form)
-          (fold (fn [(acc (List String)) (m rd/SExpr)] -> (List String)
-                  (let [(items (fm/itemsOf m))]
-                    (if (!= (fm/textOf (optionOr (fm/kvGet items ":id") (fm/makeEmpty))) id) acc
-                      (fold (fn [(a2 (List String)) (r rd/SExpr)] -> (List String)
-                              (if (= (fm/textOf (optionOr (fm/kvGet (fm/itemsOf r) ":intent") (fm/makeEmpty))) "grade") a2
-                              (fold (fn [(a3 (List String)) (x String)] -> (List String) (if (listContains? a3 x) a3 (listAppend a3 (list x))))
-                                    a2 (fm/atomsOf (optionOr (fm/kvGet (fm/itemsOf r) ":chain") (fm/makeEmpty))))))
-                            acc (fm/itemsOf (optionOr (fm/kvGet items ":routes") (fm/makeEmpty)))))))
-                (list)
-                (fm/itemsOf (optionOr (fm/kvGet (fm/itemsOf form) ":profiles") (fm/makeEmpty))))))))
-
-; (:m :ref REVIEW-DEFER :do "the writer a review excludes, as an alias with a family: Leon's receipt names the served model (k3.1-pro), which no family row matches, so the review parked on writerFamily for good (node2 CACHE-BY-TURN); a name with no family resolves to the first gateway alias serving that model name that has one family; with none it stays as given and selection still waits")
-fn writerAliasFor gatewayText: String lanesText: String writer: String -> String
-  (let [(rows (l/familyRows (tableFor lanesText)))]
-    (if (not (listEmpty? (l/familiesIn rows writer))) writer
-      (match (listFind (fn [(p (Pair String String))] -> Bool (and (= (pairSecond p) writer) (not (stringEmpty? (l/familyIn rows (pairFirst p)))))) (modelNames gatewayText))
-        ((some p) (pairFirst p))
-        ((none)
-          (let [(fams (filter (fn [(a String)] -> Bool (not (listEmpty? (l/familiesIn rows a)))) (profileChain gatewayText writer)))]
-            (if (listEmpty? fams) writer (stringJoin fams "+")))))))
 
 ; (:m :ref COND4 :do "sum of the :costMicros of the usage rows; -1 (priced false) as soon as one call had no price, 0 for no calls")
 fn usageCost text: String -> Int64
@@ -192,32 +149,6 @@ fn usageSum text: String -> Int64
           (+ a (optionOr (stringToInt64 (sp/tokAfter line ":tokens")) 0)))
         0 (filter (fn [(x String)] -> Bool (stringContains? x "(:usage ")) (stringLines text)))
 
-; (:m :ref TRIAL-REVIEW-ROWS :do "the ladder cannot see usage, so its (:reviewCall ...) rows carry :tokens 0; the stage fills each from the usage rows of the same alias, in call order (the nth reviewCall of an alias takes the nth usage row of that alias); a call that never reached the provider writes no usage row and shifts later calls of the same alias, which only happens when one alias is called twice in a ruling")
-fn usageFor alias: String us: (List (Pair String Int64)) -> (Option Int64)
-  (optionMap pairSecond (listFind (fn [(x (Pair String Int64))] -> Bool (= (pairFirst x) alias)) us))
-
-fn dropFirstUsage alias: String us: (List (Pair String Int64)) -> (List (Pair String Int64))
-  (pairSecond (fold (fn [(acc (Pair Bool (List (Pair String Int64)))) (x (Pair String Int64))] -> (Pair Bool (List (Pair String Int64)))
-                      (if (and (not (pairFirst acc)) (= (pairFirst x) alias))
-                        (pair true (pairSecond acc))
-                        (pair (pairFirst acc) (listAppend (pairSecond acc) (list x)))))
-                    (pair false (list)) us))
-
-fn usageRowsOf text: String -> (List (Pair String Int64))
-  (map (fn [(x String)] -> (Pair String Int64) (pair (sp/tokAfter x ":alias") (optionOr (stringToInt64 (sp/tokAfter x ":tokens")) 0)))
-       (filter (fn [(x String)] -> Bool (stringContains? x "(:usage ")) (stringLines text)))
-
-fn tokensFilled rows: (List String) usageText: String -> (List String)
-  (pairFirst (fold (fn [(acc (Pair (List String) (List (Pair String Int64)))) (row String)] -> (Pair (List String) (List (Pair String Int64)))
-                     (if (not (stringStartsWith? row "(:reviewCall "))
-                       (pair (listAppend (pairFirst acc) (list row)) (pairSecond acc))
-                       (let [(alias (sp/tokAfter row ":alias"))]
-                         (match (usageFor alias (pairSecond acc))
-                           ((none) (pair (listAppend (pairFirst acc) (list row)) (pairSecond acc)))
-                           ((some t) (pair (listAppend (pairFirst acc) (list (stringReplace row " :tokens 0 " (str " :tokens " (stringFromInt64 t) " "))))
-                                           (dropFirstUsage alias (pairSecond acc))))))))
-                   (pair (list) (usageRowsOf usageText)) rows))
-
 ; (:m :ref COND3 :do "the model call of the ladder is the in-process gateway call of Leon's provider (providers makeProvider! + nextTurn! with the alias as model); each call appends one usage row so the stage can report tokens")
 fn ! callModelFor! root: String usagePath: String prices: (List (Pair String Int64)) -> (fn ! [String String] -> (Result String String))
   (fn [(alias String) (prompt String)] -> (Result String String)
@@ -233,15 +164,8 @@ fn ! callModelFor! root: String usagePath: String prices: (List (Pair String Int
               ((ok (some text)) (ok text))
               ((ok (none)) (err "empty reply"))))))))
 
-; (:m :ref WRITERFAMILY-UNKNOWN-POLICY :do "a writer alias the lane file lists :unknown (a stealth vendor such as kiloGlyphCluster) is its own pseudo-family unknown:ALIAS for review selection only, so every known-family lane may review it; node2 2026-11-13 TEXT-WRAP deferred on writerFamily for good; the startup coverage gate keeps the plain table, so a listed unknown still never becomes a lane")
-fn reviewTableFor lanesText: String writer: String -> String
-  (let [(base (tableFor lanesText))
-        (run (stringJoin (l/tokensOf writer) " "))]
-    (if (or (stringEmpty? run) (not (listContains? (unknownOf lanesText) writer))) base
-      (str (optionOr (stringSlice base 0 (- (stringLength base) 1)) base) " (:f :match \"" run "\" :family \"unknown:" writer "\"))")))
-
 fn ! reviewUnit! gatewayText: String lanesText: String paces: (List sp/SubPace) root: String usagePath: String ru: l/ReviewUnit diff: String receipt: String call: (fn ! [String String] -> (Result String String)) -> (Result RevOut String)
-  (match (l/reviewWith (reviewTableFor lanesText ru.writerAlias) ru diff receipt (lanesFor gatewayText lanesText paces) call)
+  (match (l/reviewWith (tableFor lanesText) ru diff receipt (lanesFor gatewayText lanesText paces) call)
     ((err e) (err e))
     ((ok r)
       (ok (RevOut :action r.action
@@ -249,4 +173,4 @@ fn ! reviewUnit! gatewayText: String lanesText: String paces: (List sp/SubPace) 
                   :tokens (usageSum (resultOr (fileReadString usagePath) ""))
                   :costMicro (usageCost (resultOr (fileReadString usagePath) ""))
                   :sig (cond ((= r.action "fix") (stringJoin r.defects "; ")) ((= r.action "await") r.awaitLane) ((= r.action "blocked") r.why) (else ""))
-                  :rows (tokensFilled r.rows (resultOr (fileReadString usagePath) ""))))))
+                  :rows r.rows))))

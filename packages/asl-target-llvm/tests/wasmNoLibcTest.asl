@@ -7,17 +7,21 @@
       (asl-target-llvm/target :a target)
       (asl-target-llvm/gcRoute :a gr)
       (asl-target-llvm/wasmLink :a wl)
-      (asl-tools/fleet/run :a run)
-      (asl-target-llvm/tests/llvmTools :a lt)])
+      (asl-tools/fleet/run :a run)])
 
 fn ! node -> String
-  (lt/nodePath!)
+  (let [(candidates (list "/usr/local/bin/node" "/opt/homebrew/bin/node"))
+        (pathDirs (stringSplit (optionOr (envGet "PATH") "") ":"))
+        (allCandidates (listAppend candidates (map (fn [(dir String)] -> String (str dir "/node")) pathDirs)))]
+    (match (listHead (filter fileExists? allCandidates))
+      ((some p) p)
+      ((none) "")))
 
 fn llc -> String
-  (lt/llcPath!)
+  "/opt/homebrew/opt/llvm/bin/llc"
 
 fn linker -> String
-  (lt/wasmLdPath!)
+  "/opt/homebrew/opt/lld/bin/wasm-ld"
 
 fn allowed -> (List String)
   (list "asl.write" "asl.exit" "asl.nowNs" "asl.trap")
@@ -138,17 +142,6 @@ fn stringSource -> String
       "")
     "\n")
 
-fn searchSource -> String
-  (stringJoin
-    (list
-      "(module wasmStringSearch :x [main] :i [])"
-      ""
-      "fn ! main -> Int64"
-      "  (do (println (stringContains? \"needle in a haystack\" \"hay\") (stringContains? \"needle\" \"pin\") (stringContains? \"abc\" \"\") (stringContains? \"ab\" \"abc\"))"
-      "      4)"
-      "")
-    "\n")
-
 fn emitFor facts: libc/TripleFacts tf: target/TargetFacts source: String -> (Result String (List irTy/IrDiag))
   (match (low/lowerSource source)
     ((err ds) (err ds))
@@ -179,7 +172,7 @@ fn ! nativeRun name: String source: String work: String -> Captured
         (do
           (assert (ok? text) (str name " emits native IR: " (whyOf text)))
           (assert (ok? (fileWrite ll (textOf text))) (str name " writes native IR"))
-          (let [(linked (sh (str (lt/clangPath!) " -Wno-override-module -x ir " (shellQuote ll) " -x none asl/host/out/libaslrt.a -lm -o " (shellQuote bin))))]
+          (let [(linked (sh (str "/usr/bin/cc -Wno-override-module -x ir " (shellQuote ll) " -x none asl/host/out/libaslrt.a -lm -o " (shellQuote bin))))]
             (do
               (assert (= linked.exitCode 0) (str name " links natively: " linked.stderr))
               (sh (shellQuote bin))))))))
@@ -280,5 +273,4 @@ fn ! runTests -> Bool
       (assert (wasmCase "hello" (helloSource)) "hello")
       (assert (wasmCase "allocation" (allocationSource)) "allocation")
       (assert (wasmCase "string" (stringSource)) "string")
-      (assert (wasmCase "search" (searchSource)) "search: stringContains? links (memmem) and runs")
       true))

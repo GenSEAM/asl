@@ -1,6 +1,6 @@
 (module asl-cli/system
-  :x [Context Captured context! childEnv! childEnvOf execv! run! runWith! runMerged! runAt! capture! captureWith! findCommand! onPath! executable? isFile? isDir? trimLeft stripTrailingNewlines hostAbsent say! sayErr! parentOf baseName]
-  :i [(asl-text/say :a out)])
+  :x [Context Captured context! childEnv! execv! run! runWith! runMerged! runAt! capture! captureWith! findCommand! onPath! executable? isFile? isDir? trimLeft stripTrailingNewlines hostAbsent say! sayErr! parentOf baseName]
+  :i [])
 
 (schema Context
   (:f root String)
@@ -21,10 +21,10 @@
   (:f errText String))
 
 fn say! text: String -> Bool
-  (out/say! text)
+  (do (println text) true)
 
 fn sayErr! text: String -> Bool
-  (out/sayErr! text)
+  (do (eprintln text) true)
 
 fn envOr! name: String -> String
   (optionOr (envGet name) "")
@@ -125,17 +125,14 @@ fn ! contextAt! root: String -> Context
 fn envName entry: String -> String
   (match (stringIndexOf entry "=") ((some i) (optionOr (stringSlice entry 0 i) entry)) ((none) entry))
 
-; (:m :ref CLI-HOST-FALLBACK :do "the rows a re-entered bin/asl inherits: every ASL_CLI_ name the launcher sets again is dropped, except ASL_CLI_USER_PRELUDE, the launcher's record of the top-level user's prelude choice (set and empty means none): dropped, the next launcher read its own ASL_PRELUDE as a user override and sent check to the retired host; a row named in extra replaces the inherited one")
-fn childEnvOf rows: (List String) extra: (List String) dropHost: Bool -> (List String)
-  (let [(names (map envName extra))
+fn childEnv! extra: (List String) -> (List String)
+  (let [(dropHost (= (envOr! "ASL_CLI_HOST_UNSET") "1"))
+        (names (map envName extra))
         (kept (filter (fn [(e String)] -> Bool
                         (let [(n (envName e))]
-                          (not (or (and (stringStartsWith? n "ASL_CLI_") (not (= n "ASL_CLI_USER_PRELUDE"))) (or (and dropHost (= n "ASL_HOST")) (listContains? names n))))))
-                      rows))]
+                          (not (or (stringStartsWith? n "ASL_CLI_") (or (and dropHost (= n "ASL_HOST")) (listContains? names n))))))
+                      (envList)))]
     (listAppend kept extra))
-
-fn childEnv! extra: (List String) -> (List String)
-  (childEnvOf (envList) extra (= (envOr! "ASL_CLI_HOST_UNSET") "1"))
 
 fn ! execv! argv: (List String) extra: (List String) -> Int64
   (match (procExecv argv (some (childEnv! extra)))

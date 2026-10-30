@@ -2,7 +2,8 @@
   :x [runTests]
   :i [(ws/asl/tools/obs/retain :a rt)
       (ws/asl/tools/obs/archive :a ar)
-      (ws/asl/tools/obs/corpus :a co)])
+      (ws/asl/tools/obs/corpus :a co)
+      (ws/asl/tools/obs/obs :a ob)])
 
 fn readText p: String -> String
   (resultOr (fileReadString p) "")

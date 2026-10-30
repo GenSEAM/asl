@@ -1,5 +1,5 @@
 (module asl-know/render
-  :x [Card Group q unquoteRow tokensOf brandWords indexPurpose camelId cardFile exampleText pitTags packageCard areaCards langCard groupsOf groupsOf! effectiveGroups orphanMembers otherMembers shortIdIn groupMarker groupFile indexText groupIndexText indexFiles missingOf allCards!]
+  :x [Card q unquoteRow tokensOf camelId cardFile exampleText pitTags packageCard areaCards langCard indexText missingOf allCards!]
   :i [(asl-know/scan :a sc)])
 
 ; (:m :tags (know) :note "L0 index, L1 cards and L2 symbol rows as single-line ASN frames; token figures are bytes/4, labelled :tokensBy bytes36")
@@ -14,42 +14,6 @@ fn tokensOf s: String -> Int64
 
 fn capWords s: String n: Int64 -> String
   (if (<= (stringLength s) n) s (str (optionOr (stringSliceUtf8 s 0 n) (optionOr (stringSlice s 0 n) "")) "..."))
-
-fn lastSpaceBefore s: String i: Int64 -> Int64
-  (cond
-    ((<= i 0) 0)
-    ((= (optionOr (stringSlice s i (+ i 1)) "") " ") i)
-    (else (lastSpaceBefore s (- i 1))))
-
-; (:m :ref KNOWCARDS-STALE :do "an index purpose cut at the last word boundary within n bytes, then ...; no mid-word cut; a first word longer than n falls back to the byte cut of capWords")
-fn capAtWord s: String n: Int64 -> String
-  (if (<= (stringLength s) n)
-    s
-    (let [(at (lastSpaceBefore s n))]
-      (if (<= at 0) (capWords s n) (str (stringTrim (optionOr (stringSlice s 0 at) "")) "..."))))
-
-; (:m :ref KNOWCARDS-STALE :do "index purpose length: 82 cards at the old 36-byte cut measured 2023 o200k tokens, over the 2000 budget; 24 bytes cut at a word boundary measures 1766 (28: 1824, 20: 1690), leaving 11.7% headroom")
-fn indexPurposeBytes -> Int64
-  24
-
-; (:m :ref KNOW-INDEX-BRANDING :do "leading words that name the language or praise a package; the index drops them before the byte cut, so its 24 bytes show what the package does (21 of 82 lines were only these words, 2026-11-13)")
-fn brandWords -> (List String)
-  (list "100%" "Self-Hosted" "Self-Contained" "Pure" "AgentSlang" "ASL" "Aslany" "Native" "Standalone" "Sovereign" "Standard" "Universal" "Autonomous" "Unified")
-
-; (:m :ref KNOW-INDEX-FILLER :do "praise adjectives that lead a purpose (High-performance vector memory, Zero-Cost Schema) say nothing the 24 index bytes need; trimmed in render, not in each package manifest, because the full purpose stays on the L1 card and the manifests belong to their packages; compared lower-cased")
-fn fillerWords -> (List String)
-  (list "high-performance" "high-frequency" "zero-cost" "lightweight" "fast" "efficient" "robust" "powerful" "modern" "comprehensive" "seamless" "advanced")
-
-fn dropBrand words: (List String) -> (List String)
-  (match (listHead words)
-    ((some w) (if (or (listContains? (brandWords) w) (listContains? (fillerWords) (stringLower w))) (dropBrand (optionOr (listTail words) (list))) words))
-    ((none) words))
-
-; (:m :ref KNOW-INDEX-BRANDING :do "the purpose an index line shows: the card purpose without its leading branding words, the whole purpose when nothing else is left, cut at a word within indexPurposeBytes")
-fn indexPurpose purpose: String -> String
-  (let [(rest (dropBrand (stringSplit purpose " ")))
-        (shown (if (listEmpty? rest) purpose (stringJoin rest " ")))]
-    (capAtWord shown (indexPurposeBytes)))
 
 fn upperFirst w: String -> String
   (if (stringEmpty? w) w (str (stringUpper (optionOr (stringSlice w 0 1) "")) (optionOr (stringSlice w 1 (stringLength w)) "")))
@@ -217,82 +181,10 @@ fn langCard spec: String ex: String -> Card
                    (exampleField ex) ")"))]
     (Card :id "core/lang" :purpose "how to write ASL: syntax, effects, matching, records" :keys (list "module" "fn" "match" "let") :line line :rows (list) :missing (list)))
 
-; (:m :ref KNOW-INDEX-SCALE :do "tiered L0: index.asn holds one (:g id count purpose (members)) line per group, index-GROUP.asn one (:c id purpose (keys)) line per card of that group, so L0 grows by groups, not packages; groups come from groups.asn rows, core/* cards form the core group, a card no row lists lands in other")
-(schema Group (:f id String) (:f purpose String) (:f members (List String)))
-
-fn groupsOf text: String -> (List Group)
-  (listFlatMap (fn [(l String)] -> (List Group)
-                 (if (stringStartsWith? l "(:group ")
-                   (list (Group :id (optionOr (sc/fieldAfter l ":id") "") :purpose (optionOr (sc/fieldAfter l ":purpose") "")
-                                :members (filter (fn [(m String)] -> Bool (not (stringEmpty? m))) (stringSplit (optionOr (sc/fieldAfter l ":members") "") " "))))
-                   (list)))
-               (stringLines text))
-
-fn ! groupsOf! root: String -> (List Group)
-  (groupsOf (resultOr (fileReadString (str root "/asl/packages/asl-know/groups.asn")) ""))
-
-fn coreCard? c: Card -> Bool
-  (stringStartsWith? c.id "core/")
-
-; (:m :ref KNOW-INDEX-SCALE :do "the groups L0 lists: core first (every core/* card), then groups.asn rows with members that name no card dropped, then other for any card no row lists")
-fn effectiveGroups groups: (List Group) cards: (List Card) -> (List Group)
-  (let [(ids (map (fn [(c Card)] -> String c.id) cards))
-        (core (Group :id "core" :purpose "the language and its builtins, no import: syntax, strings, lists, maps, bytes, io, numbers, option and result"
-                     :members (map (fn [(c Card)] -> String c.id) (filter coreCard? cards))))
-        (real (map (fn [(g Group)] -> Group (Group :id g.id :purpose g.purpose :members (filter (fn [(m String)] -> Bool (listContains? ids m)) g.members))) groups))
-        (base (cons core (filter (fn [(g Group)] -> Bool (not (listEmpty? g.members))) real)))
-        (placed (listFlatMap (fn [(g Group)] -> (List String) g.members) base))
-        (left (filter (fn [(i String)] -> Bool (not (listContains? placed i))) ids))]
-    (if (listEmpty? left) base (listAppend base (list (Group :id "other" :purpose "cards no groups.asn row lists, add them to a group" :members left)))))
-
-; (:m :ref KNOW-TIER-LOWS2 :do "group rows whose member names no card are dropped from the index without a word: each is listed as GROUP/MEMBER so gen can report it")
-fn orphanMembers groups: (List Group) cards: (List Card) -> (List String)
-  (let [(ids (map (fn [(c Card)] -> String c.id) cards))]
-    (listFlatMap (fn [(g Group)] -> (List String)
-                   (map (fn [(m String)] -> String (str g.id "/" m)) (filter (fn [(m String)] -> Bool (not (listContains? ids m))) g.members)))
-                 groups))
-
-; (:m :ref KNOW-TIER-LOWS2 :do "the cards that fall to index-other, because no groups.asn row lists them (a removed group's members land here): gen reports them")
-fn otherMembers groups: (List Group) cards: (List Card) -> (List String)
-  (match (listHead (filter (fn [(g Group)] -> Bool (= g.id "other")) (effectiveGroups groups cards)))
-    ((some g) g.members)
-    ((none) (list)))
-
-; (:m :ref KNOW-TIER-LOWS2 :do "every index-GROUP.asn this generator writes opens with this head, which is how a later gen tells its own stale file from a hand-made index-*.asn it must never delete")
-fn groupMarker -> String
-  "(:know :tier L0g :group "
-
-fn shortId id: String -> String
-  (cond
-    ((stringStartsWith? id "core/") (optionOr (stringSlice id 5 (stringLength id)) id))
-    ((stringStartsWith? id "asl-") (optionOr (stringSlice id 4 (stringLength id)) id))
-    (else id))
-
-; (:m :ref KNOW-TIER-LOWS :do "a short member name shared by two cards (core/parquet and asl-parquet) would make L0 ambiguous: both keep their full id, every other card its short name")
-fn shortIdIn id: String ids: (List String) -> String
-  (let [(s (shortId id))]
-    (if (> (listLength (filter (fn [(i String)] -> Bool (= (shortId i) s)) ids)) 1) id s))
-
-fn groupFile g: Group -> String
-  (str "index-" g.id ".asn")
-
-fn indexLine c: Card -> String
-  (str "(:c " (q c.id) " " (q (indexPurpose c.purpose)) " (" (stringJoin (listTake c.keys 2) " ") "))")
-
-fn indexText groups: (List Group) cards: (List Card) -> String
-  (let [(gs (effectiveGroups groups cards))
-        (ids (map (fn [(c Card)] -> String c.id) cards))
-        (lines (map (fn [(g Group)] -> String (str "(:g " (q g.id) " " (listLength g.members) " " (q g.purpose) " (" (stringJoin (map (fn [(m String)] -> String (shortIdIn m ids)) g.members) " ") "))")) gs))]
-    (str "(:know :tier L0 :cards " (listLength cards) " :groups " (listLength gs) " :tokensBy bytes36 :use \"(:know :q intent-or-name :budget N) or asl know; asl know index ROOT GROUP lists the cards of one group, a card id or exact symbol returns its card\")\n"
-         (stringJoin lines "\n") "\n"))
-
-fn groupIndexText g: Group cards: (List Card) -> String
-  (str (groupMarker) (q g.id) " :cards " (listLength g.members) " :tokensBy bytes36)\n"
-       (stringJoin (map indexLine (filter (fn [(c Card)] -> Bool (listContains? g.members c.id)) cards)) "\n") "\n")
-
-fn indexFiles groups: (List Group) cards: (List Card) -> (List (Pair String String))
-  (cons (pair "index.asn" (indexText groups cards))
-        (map (fn [(g Group)] -> (Pair String String) (pair (groupFile g) (groupIndexText g cards))) (effectiveGroups groups cards)))
+fn indexText cards: (List Card) -> String
+  (let [(lines (map (fn [(c Card)] -> String (str "(:c " (q c.id) " " (q (capWords c.purpose 36)) " (" (stringJoin (listTake c.keys 2) " ") "))")) cards))
+        (body (stringJoin lines "\n"))]
+    (str "(:know :tier L0 :cards " (listLength cards) " :tokensBy bytes36 :use \"(:know :q intent-or-name :budget N) or asl know; a card id or exact symbol returns its card\")\n" body "\n"))
 
 fn missingOf cards: (List Card) -> (List String)
   (listSort (listFlatMap (fn [(c Card)] -> (List String) c.missing) cards))

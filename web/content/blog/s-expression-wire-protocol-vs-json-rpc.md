@@ -23,6 +23,6 @@ That is one call, not a distribution. Part of the saving comes from the notation
 
 ## 4. What Runs Today
 
-The implemented wire is smaller than that design. `packages/asl-agent-bus/src/wire.asl` defines a canonical frame of five string fields (`identity`, `sessionId`, `causality`, `payload`, `digest`) with encoders and decoders for stdio, Unix sockets, HTTP and SSE; `ndAsn.asl` carries newline-delimited ASN frames. Their suites pass (`asl test`, 2026-10-14: `wireTest` 29 assertions, `ndAsnTest` 31, `transportTest` 18).
+The implemented wire is smaller than that design. `packages/asl-agent-bus/src/wire.asl` defines a canonical frame of five string fields (`identity`, `sessionId`, `causality`, `payload`, `digest`) with encoders and decoders for stdio, Unix sockets, HTTP and SSE; `ndAsn.asl` carries newline-delimited ASN frames. Their suites pass on the stage-0 host (`asl-host test`, 2026-10-14: `wireTest` 29 assertions, `ndAsnTest` 31, `transportTest` 18).
 
 There is no shared-memory transport, and we have not measured latency or throughput for any of these paths. The ring buffer in `asnlRing.asl` is an in-language data structure, not a POSIX shared-memory segment. When we publish dispatch figures, they will come with the command that produced them.

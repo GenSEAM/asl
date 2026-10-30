@@ -1,6 +1,6 @@
 (module asl-tools/coord/ladder
-  :x [tokensOf joinAwait familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven decide permanentError? causeOf absent? starved? scrubLines reviewBrief reviewWith review]
-  :i [(asl-tools/coord/egress :a eg) (asl-tools/coord/grade :a g) (asl-tools/fleet/model :a fm) (asl-parser/reader :a rd)])
+  :x [tokensOf familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn selectFree selectOne parseVerdict gatesProven decide scrubLines reviewBrief reviewWith review]
+  :i [(asl-tools/coord/grade :a g) (tools/fleet/model :a fm) (asl-parser/reader :a rd)])
 
 ; (:m :ref COND2 :do "review ladder for the conductor: R1 two free reviewers of two families, R2 one paid-cheap, R3 one strong; verdicts merge by tally; the family map is the ASN table familyTableAsn; the model call is injected")
 
@@ -44,8 +44,7 @@
   (:c stepMerge [] "merge")
   (:c stepFix [(defects (List String))] "back to the writer for one fix round")
   (:c stepEscalate [] "run the next rung")
-  (:c stepBlocked [(why String)] "waits for Claude")
-  (:c stepDefer [(lanes String) (why String)] "fewer reviewers answered than the quorum needs: wait for those lanes, never block"))
+  (:c stepBlocked [(why String)] "waits for Claude"))
 
 ; (:m :ref COND2 :do "family map: a row matches when its :match, one or more space-separated tokens, is a whole token run of the alias or model name (camelCase, digit and separator boundaries); an alias with zero or several distinct families has no family")
 fn familyTableAsn -> String
@@ -162,14 +161,13 @@ fn coverageProblems rows: (List rd/SExpr) aliases: (List String) unknown: (List 
 fn laneFamily rows: (List rd/SExpr) lane: Lane -> String
   (familyIn rows lane.alias)
 
-fn eligible rows: (List rd/SExpr) wfams: (List String) tier: String lane: Lane -> Bool
+fn eligible rows: (List rd/SExpr) wfam: String tier: String lane: Lane -> Bool
   (and (= lane.tier tier)
        (and (> lane.allowance 0)
             (let [(f (laneFamily rows lane))]
-              (and (not (stringEmpty? f)) (not (listContains? wfams f))))))
+              (and (not (stringEmpty? f)) (!= f wfam)))))
 
-; (:m :ref COND2 :do "the lanes a rung waits for: every lane of the tier that is out of allowance and would be eligible, space-separated in lane order, else the tier name")
-; (:m :ref REVIEW-STRONG-STARVED :do "node2 2026-11-12: the await named only the first such lane, so 20 units sat on ocDeepseekPro while ocGlm53 and synKimiK31Pro of the same tier regained allowance; wake! matches any name of a space-separated await, so naming every candidate lane wakes the unit on the first of them to rise")
+; (:m :ref COND2 :do "the lane a rung waits for: first lane of the tier that is out of allowance and would be eligible, else the tier name")
 fn insertRanked l: Lane sorted: (List Lane) -> (List Lane)
   (match (listHead (filter (fn [(x Lane)] -> Bool (< x.quality l.quality)) sorted))
     ((none) (listAppend sorted (list l)))
@@ -180,36 +178,35 @@ fn insertRanked l: Lane sorted: (List Lane) -> (List Lane)
 fn rankLanes lanes: (List Lane) -> (List Lane)
   (fold (fn [(acc (List Lane)) (l Lane)] -> (List Lane) (insertRanked l acc)) (list) lanes)
 
-fn waitLane rows: (List rd/SExpr) wfams: (List String) tier: String skipFamily: String lanes: (List Lane) -> String
-  (let [(waits (filter (fn [(l Lane)] -> Bool
-                         (let [(f (laneFamily rows l))]
-                           (and (= l.tier tier) (and (not (stringEmpty? f)) (and (not (listContains? wfams f)) (!= f skipFamily))))))
-                       lanes))]
-    (if (listEmpty? waits) tier (stringJoin (map (fn [(l Lane)] -> String l.alias) waits) " ")))
+fn waitLane rows: (List rd/SExpr) wfam: String tier: String skipFamily: String lanes: (List Lane) -> String
+  (match (listHead (filter (fn [(l Lane)] -> Bool
+                             (let [(f (laneFamily rows l))]
+                               (and (= l.tier tier) (and (not (stringEmpty? f)) (and (!= f wfam) (!= f skipFamily))))))
+                           lanes))
+    ((some l) l.alias)
+    ((none) tier))
 
 fn selectOne rows: (List rd/SExpr) writerAlias: String tier: String lanes: (List Lane) -> Pick
-  (let [(wfams (familiesIn rows writerAlias))
-        (wfam (stringJoin wfams "+"))]
+  (let [(wfam (familyIn rows writerAlias))]
     (cond
-      ((and (listEmpty? wfams) (not (stringEmpty? writerAlias))) (pickAwait "writerFamily" (str "writer " writerAlias ": unknown model family")))
+      ((stringEmpty? wfam) (pickAwait "writerFamily" (str "writer " writerAlias ": unknown model family")))
       (else
-        (match (listHead (rankLanes (filter (fn [(l Lane)] -> Bool (eligible rows wfams tier l)) lanes)))
+        (match (listHead (rankLanes (filter (fn [(l Lane)] -> Bool (eligible rows wfam tier l)) lanes)))
           ((some l) (pickOk (list l)))
-          ((none) (pickAwait (waitLane rows wfams tier "" lanes) (str "no " tier " lane with allowance outside family " wfam)))))))
+          ((none) (pickAwait (waitLane rows wfam tier "" lanes) (str "no " tier " lane with allowance outside family " wfam)))))))
 
 fn selectFree rows: (List rd/SExpr) writerAlias: String lanes: (List Lane) -> Pick
-  (let [(wfams (familiesIn rows writerAlias))
-        (wfam (stringJoin wfams "+"))
-        (els (rankLanes (filter (fn [(l Lane)] -> Bool (eligible rows wfams "free" l)) lanes)))]
+  (let [(wfam (familyIn rows writerAlias))
+        (els (rankLanes (filter (fn [(l Lane)] -> Bool (eligible rows wfam "free" l)) lanes)))]
     (cond
-      ((and (listEmpty? wfams) (not (stringEmpty? writerAlias))) (pickAwait "writerFamily" (str "writer " writerAlias ": unknown model family")))
+      ((stringEmpty? wfam) (pickAwait "writerFamily" (str "writer " writerAlias ": unknown model family")))
       (else
         (match (listHead els)
-          ((none) (pickAwait (waitLane rows wfams "free" "" lanes) (str "no free lane with allowance outside family " wfam)))
+          ((none) (pickAwait (waitLane rows wfam "free" "" lanes) (str "no free lane with allowance outside family " wfam)))
           ((some a)
             (let [(af (laneFamily rows a))]
               (match (listHead (filter (fn [(l Lane)] -> Bool (!= (laneFamily rows l) af)) els))
-                ((none) (pickAwait (waitLane rows wfams "free" af lanes) (str "no second free lane of a family other than " af " and " wfam)))
+                ((none) (pickAwait (waitLane rows wfam "free" af lanes) (str "no second free lane of a family other than " af " and " wfam)))
                 ((some b) (pickOk (list a b))))))))))
 
 fn dropFence s: String -> String
@@ -276,17 +273,7 @@ fn defectsOf vs: (List Verdict) -> (List String)
           (if (= v.outcome "fail") (listAppend acc (map (fn [(d String)] -> String (str v.model ": " d)) v.defects)) acc))
         (list) vs)
 
-; (:m :ref COND2 :do "tally over every verdict of this review cycle (all) and the latest rung (cur); abstain counts for nothing, so a reviewer with no verdict is absent and not a vote: at the last rung a split needs a pass and a fail, and fewer answers than the quorum with no fail (node2: pass 1 fail 0, pass 0 fail 0 from lanes without credits or on 429) defer to those lanes instead of blocking")
-; (:m :ref CONDWIRE-A :do "a reviewer is absent when it gave no answer: the call failed (rate limit, no credit, timeout) or the reply was blank; a garbled reply, a fail without a defect and a reply naming both outcomes are answers that carry no vote, not absences; only a cur of abstentions that are all absent defers, anything else at the last rung keeps the tiebreak block")
-fn absent? v: Verdict -> Bool
-  (and (= v.outcome "abstain")
-       (let [(why (optionOr (listHead v.defects) ""))]
-         (or (stringStartsWith? why "call failed") (stringStartsWith? why "no answer"))))
-
-fn starved? cur: (List Verdict) -> Bool
-  (let [(abst (filter (fn [(v Verdict)] -> Bool (= v.outcome "abstain")) cur))]
-    (and (not (listEmpty? abst)) (listAll? absent? abst)))
-
+; (:m :ref COND2 :do "tally over every verdict of this review cycle (all) and the latest rung (cur); abstain counts for nothing")
 fn decide rung: String cur: (List Verdict) all: (List Verdict) priorEmpty: Bool finalRung: String fixesUsed: Int64 gatesOk: Bool -> Step
   (let [(p (countOf "pass" all))
         (f (countOf "fail" all))
@@ -302,60 +289,27 @@ fn decide rung: String cur: (List Verdict) all: (List Verdict) priorEmpty: Bool 
           ((< (rungNum rung) (rungNum finalRung)) (stepEscalate))
           (else (stepMerge))))
       ((> f p) (fixOr "fail after the fix round at the last rung"))
-      ((and last (and (= f 0) (starved? cur)))
-        (let [(absent (map (fn [(v Verdict)] -> String v.model) (filter (fn [(v Verdict)] -> Bool (= v.outcome "abstain")) cur)))]
-          (stepDefer (if (listEmpty? absent) rung (stringJoin absent " ")) (str "quorumStarved: reviewers did not answer at the last rung (pass " (stringFromInt64 p) " fail 0, quorum " (stringFromInt64 needed) "): " (stringJoin (map (fn [(v Verdict)] -> String (str v.model " " (stringJoin v.defects "; "))) (filter (fn [(v Verdict)] -> Bool (= v.outcome "abstain")) cur)) ", ")))))
-      (last (stepBlocked (str "tiebreak: reviewers split at the last rung (pass " (stringFromInt64 p) " fail " (stringFromInt64 f) ")")))
+      (last (stepBlocked "reviewers split at the last rung"))
       (else (stepEscalate))))
 
-; (:m :ref SECRET-SCRUB :do "the review brief is stricter than egress, never weaker: any egress hit, plus the bare words below; only the identifiers tokenize and tokensOf are blanked before that match")
 fn secretLike? l: String -> Bool
-  (or (eg/secretLike? l) (strictHit? l))
-
-fn strictHit? l: String -> Bool
-  (let [(s (stringReplace (stringReplace (stringLower l) "tokeniz" "") "tokensof" ""))]
+  (let [(s (stringLower l))]
     (listAny? (fn [(n String)] -> Bool (stringContains? s n))
-              (list ".asl/mem" "secret" "token" "password" "apikey" "api_key" "api-key" "_key" "bearer" "\"sk-" " sk-" "=sk-" ":sk-" "sk-or-" "sk-ant-" "sk-proj-" "aizasy" "github_pat_" "ghp_" "xoxb-" "xoxp-" "xoxa-" "passwd" "private key" "authorization:")))
-
-; (:m :ref AHEAD-WRITER-UNKNOWN :do "an empty writer alias means no writer evidence exists at all (no write row of the unit, no unit model, no configured alias), so there is no family to stay independent of and any lane may review; the literal unknown, a writer the journal names but nobody can place, and an alias with no family still wait, so a misconfigured family table never reviews its own work (superseded in part by NODE2-WRITER-LITERAL-UNKNOWN: the conductor resolves the literal unknown to its write profiles families before selection; selectOne and selectFree still wait on it when none can be derived)")
-; (:m :ref WRITER-UNKNOWN :do "the writer a review excludes: the unit's model, else the configured writer alias; an unknown writer stays unknown so selection waits instead of guessing a family NODE2-WRITER-LITERAL-UNKNOWN: the write stage now journals the dispatched model when the receipt names none, and realReview resolves a literal unknown writer to the + join of the tier write profiles (unknownWriterFor), so this function only returns unknown for a unit whose profiles name no family; selection then still waits.")
-fn reviewWriter model: String fallback: String -> String
-  (cond
-    ((and (= model "unknown") (stringEmpty? fallback)) "unknown")
-    ((or (stringEmpty? model) (= model "unknown")) fallback)
-    (else model))
+              (list ".asl/mem" "secret" "token" "password" "apikey" "api_key" "api-key" "_key" "bearer" "sk-or-" "sk-ant-" "sk-proj-" "ghp_" "xoxb-" "private key" "authorization:")))
 
 fn clip s: String n: Int64 -> String
   (if (> (stringLength s) n) (optionOr (stringSlice s 0 n) s) s)
 
 ; (:m :ref COND2 :do "lines that may go to an external model: no memory contents, no secret-looking lines, bounded count and width")
 fn scrubLines text: String maxLines: Int64 width: Int64 -> (List String)
-  (eg/scrubLinesBy (fn [(l String)] -> Bool (secretLike? l)) text maxLines width)
-
-; (:m :ref REVIEW-DIFF-INCOMPLETE :do "the brief held only 60 diff lines of 200 chars, so reviewers saw half a test file or none and failed green units for missing tests and bodiless functions; 800 lines of 400 chars fits a 120k-token reviewer, and a longer diff ends with a note naming the cut lines so the reviewer does not judge code it was not shown")
-fn reviewDiffLines -> Int64
-  800
-
-fn withheldLine -> String
-  "(one line withheld by the secret filter; it exists, so do not fail on its absence)"
-
-; (:m :ref REVIEW-SCRUB-SILENT :do "node2 2026-11-11: the filter dropped every diff line naming token or secret, so aggRow lost its inTokens and cachedTokens lines and synDs41Flash failed THROUGHPUT-DAILY for indices it was not shown; a withheld line now leaves a marker in its place")
-fn reviewScrub diff: String maxLines: Int64 width: Int64 -> (List String)
-  (eg/scrubLinesBy (fn [(l String)] -> Bool false)
-                   (stringJoin (map (fn [(l String)] -> String (if (secretLike? l) (withheldLine) l)) (stringLines diff)) "\n")
-                   maxLines width)
-
-fn reviewDiffPart diff: String -> (List String)
-  (let [(shown (reviewScrub diff (reviewDiffLines) 400))
-        (total (listLength (stringLines diff)))]
-    (if (> total (reviewDiffLines))
-      (listAppend shown (list (str "(diff clipped: " (stringFromInt64 (- total (reviewDiffLines))) " more lines not shown; do not fail on code you were not shown)")))
-      shown))
+  (listTake (map (fn [(l String)] -> String (clip l width))
+                 (filter (fn [(l String)] -> Bool (and (not (stringEmpty? (stringTrim l))) (not (secretLike? l)))) (stringLines text)))
+            maxLines)
 
 fn reviewBrief u: ReviewUnit diff: String gates: String -> String
   (str "(:review :unit " (fm/asnQuote u.id) " :risk " u.risk
        " :task " (fm/asnQuote (stringJoin (scrubLines u.task 12 240) " "))
-       " :diff " (fm/asnStrings (reviewDiffPart diff))
+       " :diff " (fm/asnStrings (scrubLines diff 60 200))
        " :gates " (fm/asnStrings (scrubLines gates 20 200))
        " :reply \"one form only: (:verdict :pass|:fail :defects (\\\"concrete defect with path and symbol\\\") :model name); :fail needs a concrete defect\")")
 
@@ -371,15 +325,9 @@ fn nameList vs: (List Verdict) -> (List String)
 fn atomOf s: String -> String
   (if (or (stringEmpty? s) (listAny? (fn [(c String)] -> Bool (stringContains? s c)) (list " " "(" ")" "\"" ";" "\n"))) (fm/asnQuote s) s)
 
-; (:m :ref REVIEW-TIEBREAK :do "a split at the last rung is not a verdict anyone can act on: its escalation row carries :need tiebreak and the families that already voted, so the lead or the Claude tier decides with a reviewer family not yet used instead of finding a bare blocked unit")
-fn tiebreakNeed why: String vs: (List Verdict) -> String
-  (if (stringStartsWith? why "tiebreak: ")
-    (str " :need tiebreak :usedModels " (fm/asnStrings (map (fn [(v Verdict)] -> String v.model) vs)))
-    "")
-
 ; (:m :ref COND3 :do "an escalation goes to the queue (the autonomous conductor has no one to page), with the tiers still to try in order: the strong lane unless R3 already asked it, and Claude only last")
 fn escalateRow u: ReviewUnit rung: String vs: (List Verdict) why: String -> String
-  (str "(:escalate :unit " (atomOf u.id) " :rung " rung " :to queue :tiers " (if (listAny? (fn [(v Verdict)] -> Bool (= v.rung "R3")) vs) "(claude)" "(strong claude)") " :why " (fm/asnQuote why) (tiebreakNeed why vs)
+  (str "(:escalate :unit " (atomOf u.id) " :rung " rung " :to queue :tiers " (if (listAny? (fn [(v Verdict)] -> Bool (= v.rung "R3")) vs) "(claude)" "(strong claude)") " :why " (fm/asnQuote why)
        " :seen " (fm/asnStrings (nameList vs))
        " :tried " (fm/asnStrings (map (fn [(v Verdict)] -> String (str v.rung " " v.model)) vs))
        " :disagree " (fm/asnStrings (nameList (filter (fn [(v Verdict)] -> Bool (!= v.outcome "abstain")) vs))) ")")
@@ -390,128 +338,27 @@ fn modelsOf vs: (List Verdict) -> String
 fn ruling action: String rung: String defects: (List String) awaitLane: String rows: (List String) vs: (List Verdict) why: String -> Ruling
   (Ruling :action action :rung rung :defects defects :awaitLane awaitLane :rows rows :verdicts vs :why why)
 
-; (:m :ref TRIAL-REVIEW-ROWS :do "one (:reviewCall :unit :rung :alias :verdict :defects N :tokens :ms :empty BOOL) row per reviewer call, so per-reviewer verdicts no longer sit inside the one (:grade :note); :empty is true when the reply was blank or the call said empty; :tokens is 0 here, the call has no usage channel in the ladder, and the review stage fills it from its usage rows")
-; (:m :ref LANE-PERMANENT-ERROR :do "a call failure is permanent when the provider says it will not answer this lane at all: HTTP 400 insufficient credits, 401, 403, 404 (bad key, no access, unknown model); every other failure (429, 5xx, timeout, blank) is transient and stays absence; the status code must be a whole number token of the error text")
-fn codeTokens e: String -> (List String)
-  (filter (fn [(t String)] -> Bool (not (stringEmpty? t)))
-          (stringSplit (fold (fn [(a String) (c String)] -> String (stringReplace a c " ")) (stringLower e) (list ":" "/" "," ";" "(" ")" "\"" "=" "-" "_")) " "))
+fn ! askLane callModel: (fn ! [String String] -> (Result String String)) prompt: String rung: String lane: Lane -> Verdict
+  (match (callModel lane.alias prompt)
+    ((err e) (abstain lane.alias rung (str "call failed: " (clip e 160))))
+    ((ok text) (parseVerdict text lane.alias rung)))
 
-; (:m :ref LANE-PERMANENT-ERROR-FIX :do "a status counts only as a status: 401, 403 or 404 right after http, status, code or error, or as the first token of the message; a number elsewhere (retry after 403 s, req-404-ab, timeout after 401 ms) is no status, and a message that also carries a transient mark (429, a 5xx, timeout, rate limit, overloaded, retry) is transient whatever else it says")
-fn transientMark? toks: (List String) low: String -> Bool
-  (or (listAny? (fn [(t String)] -> Bool (or (= t "429") (and (= (stringLength t) 3) (and (stringStartsWith? t "5") (some? (stringToInt64 t)))))) toks)
-      (listAny? (fn [(m String)] -> Bool (stringContains? low m)) (list "timeout" "timed out" "rate limit" "overloaded" "retry")))
-
-fn statusIdx? toks: (List String) i: Int64 -> Bool
-  (and (listContains? (list "401" "403" "404") (optionOr (listGet toks i) ""))
-       (or (= i 0) (listContains? (list "http" "status" "code" "error") (optionOr (listGet toks (- i 1)) ""))))
-
-fn statusAt toks: (List String) -> Bool
-  (listAny? (fn [(i Int64)] -> Bool (statusIdx? toks i)) (range 0 (listLength toks)))
-
-; (:m :ref LANE-UNAVAILABLE-MEMORY-FIX :do "the cause word of a permanent lane error from the same reading permanentError? uses: credits for an insufficient-credit message, else the first token that counts as a status (401 403 404), else permanent; a number inside a message is not a cause")
-fn causeOf why: String -> String
-  (let [(toks (codeTokens why))
-        (hits (filter (fn [(i Int64)] -> Bool (statusIdx? toks i)) (range 0 (listLength toks))))]
-    (cond ((stringContains? (stringLower why) "credit") "credits")
-          ((not (listEmpty? hits)) (optionOr (listGet toks (optionOr (listHead hits) 0)) "permanent"))
-          (else "permanent")))
-
-fn permanentError? e: String -> Bool
-  (let [(low (stringLower e))
-        (toks (codeTokens e))]
-    (and (not (transientMark? toks low))
-         (or (stringContains? low "insufficient credit") (statusAt toks))))
-
-; (:m :ref LANE-PERMANENT-ERROR-FIX :do "an await whose target names no live lane (a tier name, because the permanent errors left the tier empty) is one wake! cannot resolve and the starved cap never counts: the ruling blocks at once with the sig review: no live lane on tier T (permanent: alias cause), the escalate row and the laneUnavailable rows, so it is bounded and the lead sees it")
-fn unresolvable? r: Ruling live: (List Lane) -> Bool
-  (and (= r.action "await")
-       (not (listAny? (fn [(a String)] -> Bool (listAny? (fn [(l Lane)] -> Bool (= l.alias a)) live)) (stringSplit r.awaitLane " "))))
-
-fn tierOfRung rung: String -> String
-  (cond ((= rung "R1") "free") ((= rung "R2") "paid") (else "strong"))
-
-fn blockedNoLane u: ReviewUnit rung: String prior: (List Verdict) dead: (List Verdict) earlier: (List String) -> Ruling
-  (let [(why (str "review: no live lane on tier " (tierOfRung rung) " (permanent: " (stringJoin (map (fn [(v Verdict)] -> String (str v.model " " (causeOf (optionOr (listHead v.defects) "")))) dead) ", ") ")"))]
-    (ruling "blocked" rung (defectsOf prior) ""
-            (listAppend (list (g/gradeRow u.id "none" (modelsOf prior) u.writerChannel "pending" why) (escalateRow u rung prior why)) earlier)
-            prior why))
-
-fn unavailable? v: Verdict -> Bool
-  (and (= v.outcome "abstain") (stringStartsWith? (optionOr (listHead v.defects) "") "lane unavailable"))
-
-; (:m :ref LANE-PERMANENT-ERROR :do "one (:laneUnavailable ... :sev warn) row per lane that failed permanently in this review; the lane leaves the pool for the rest of the review and the rung is picked again from the lanes that remain")
-fn unavailableRow u: ReviewUnit rung: String v: Verdict -> String
-  (str "(:laneUnavailable :unit " (atomOf u.id) " :rung " rung " :lane " (atomOf v.model) " :sev warn :why " (fm/asnQuote (optionOr (listHead v.defects) "")) ")")
-
-fn reviewCallRow u: ReviewUnit v: Verdict ms: Int64 empty: Bool -> String
-  (str "(:reviewCall :unit " (atomOf u.id) " :rung " v.rung " :alias " (atomOf v.model) " :verdict " v.outcome " :defects " (stringFromInt64 (if (= v.outcome "abstain") 0 (listLength v.defects))) " :tokens 0 :ms " (stringFromInt64 ms) " :empty " (if empty "true" "false") ")")
-
-fn ! askLaneRow u: ReviewUnit callModel: (fn ! [String String] -> (Result String String)) prompt: String rung: String lane: Lane -> (Pair Verdict String)
-  (let [(t0 (/ (nowNs) 1000000))
-        (reply (callModel lane.alias prompt))
-        (ms (- (/ (nowNs) 1000000) t0))
-        (empty (match reply ((err e) (stringContains? (stringLower e) "empty")) ((ok text) (stringEmpty? (stringTrim text)))))
-        (v (match reply
-             ((err e) (abstain lane.alias rung (str (if (permanentError? e) "lane unavailable: " "call failed: ") (clip e 160))))
-             ((ok text) (if (stringEmpty? (stringTrim text)) (abstain lane.alias rung "no answer: empty reply") (parseVerdict text lane.alias rung)))))]
-    (pair v (reviewCallRow u v ms empty)))
-
-; (:m :ref LANE-PERMANENT-ERROR :do "rows of an earlier attempt join a ruling after its head rows (grade, await, escalate) and before the review calls of the later attempt, so the head row stays first and calls keep their order")
-fn withEarlier r: Ruling earlier: (List String) -> Ruling
-  (ruling r.action r.rung r.defects r.awaitLane
-          (listAppend (filter (fn [(x String)] -> Bool (not (stringStartsWith? x "(:reviewCall "))) r.rows)
-                      (listAppend earlier (filter (fn [(x String)] -> Bool (stringStartsWith? x "(:reviewCall ")) r.rows)))
-          r.verdicts r.why)
-
-; (:m :ref REVIEW-DEFER :do "an await is one (:await :unit :rung :lane ...) row with its reason, which the conductor journals, so a parked review says what it waits for")
-fn awaitRow u: ReviewUnit rung: String lane: String why: String -> String
-  (str "(:await :unit " (atomOf u.id) " :rung " rung " :lane " (atomOf lane) " :why " (fm/asnQuote why) ")")
-
-; (:m :ref WAKE-LOWS :do "the R2 and R3 wake sets join as a union in first-seen order, so a lane named by both (an alias in both tiers) appears once in the await")
-fn joinAwait a: String b: String -> String
-  (stringJoin (fold (fn [(acc (List String)) (nm String)] -> (List String) (if (or (stringEmpty? nm) (listContains? acc nm)) acc (listAppend acc (list nm))))
-                    (list) (listAppend (stringSplit a " ") (stringSplit b " ")))
-              " ")
-
-; (:m :ref REVIEW-DEFER :do "a paid rung with no lane falls through to the strong rung with the verdicts so far (node2 2026-11-04: every paid lane outside the writer family was out of allowance and the unit parked on a lane whose window resets in nine days); when the strong rung has no lane either the R2 await stands at R2 with both lanes, space-separated, as its wake set and a reason naming both rungs")
 fn ! runRung u: ReviewUnit rows: (List rd/SExpr) lanes: (List Lane) prompt: String receipt: String callModel: (fn ! [String String] -> (Result String String)) rung: String prior: (List Verdict) fixesUsed: Int64 -> (Result Ruling String)
   (let [(pick (cond ((= rung "R1") (selectFree rows u.writerAlias lanes))
                     ((= rung "R2") (selectOne rows u.writerAlias "paid" lanes))
                     (else (selectOne rows u.writerAlias "strong" lanes))))]
     (match pick
-      ((pickAwait lane why)
-        (let [(here (ruling "await" rung (list) lane (list (awaitRow u rung lane why)) prior why))]
-          (if (!= rung "R2") (ok here)
-            (match (runRung u rows lanes prompt receipt callModel "R3" prior fixesUsed)
-              ((err e) (err e))
-              ((ok r3) (if (= r3.action "await")
-                         (let [(both (str why "; R3: " r3.why))
-                               (lanes2 (joinAwait lane r3.awaitLane))]
-                           (ok (ruling "await" rung (list) lanes2 (list (awaitRow u rung lanes2 both)) prior both)))
-                         (ok r3)))))))
+      ((pickAwait lane why) (ok (ruling "await" rung (list) lane (list) prior why)))
       ((pickOk ls)
-        (let [(asked (map (fn [(l Lane)] -> (Pair Verdict String) (askLaneRow u callModel prompt rung l)) ls))
-              (dead (filter unavailable? (map pairFirst asked)))]
-         (if (not (listEmpty? dead))
-          (let [(deadAliases (map (fn [(v Verdict)] -> String v.model) dead))
-                (live (filter (fn [(l Lane)] -> Bool (not (listContains? deadAliases l.alias))) lanes))
-                (earlier (listAppend (map pairSecond asked) (map (fn [(v Verdict)] -> String (unavailableRow u rung v)) dead)))]
-            (match (runRung u rows live prompt receipt callModel rung prior fixesUsed)
-              ((err e) (err e))
-              ((ok next) (ok (if (unresolvable? next live) (blockedNoLane u rung prior dead earlier) (withEarlier next earlier))))))
-           (let [(cur (map pairFirst asked))
-                 (calls (map pairSecond asked))
-                 (all (listAppend prior cur))
-                 (step (decide rung cur all (listEmpty? prior) (finalRungOf u) fixesUsed (gatesProven receipt)))
-                 (grade (fn [(verdict String) (note String)] -> String (g/gradeRow u.id "none" (modelsOf all) u.writerChannel verdict note)))]
-             (match step
-               ((stepMerge) (ok (ruling "merge" rung (list) "" (listAppend (list (grade "accept" (str "ladder " rung))) calls) all "")))
-               ((stepFix ds) (ok (ruling "fix" rung ds "" (listAppend (list (grade "reject" (clip (stringJoin ds "; ") 300))) calls) all "")))
-               ((stepDefer ls why) (ok (ruling "await" rung (list) ls (listAppend (list (awaitRow u rung ls why)) calls) all why)))
-               ((stepBlocked why) (ok (ruling "blocked" rung (defectsOf all) "" (listAppend (list (grade "pending" why) (escalateRow u rung all why)) calls) all why)))
-               ((stepEscalate) (match (runRung u rows lanes prompt receipt callModel (nextRung rung) all 0)
-                                 ((err e) (err e))
-                                 ((ok next) (ok (withEarlier next calls))))))))))))
+        (let [(cur (map (fn [(l Lane)] -> Verdict (askLane callModel prompt rung l)) ls))
+              (all (listAppend prior cur))
+              (step (decide rung cur all (listEmpty? prior) (finalRungOf u) fixesUsed (gatesProven receipt)))
+              (grade (fn [(verdict String) (note String)] -> String (g/gradeRow u.id "none" (modelsOf all) u.writerChannel verdict note)))]
+          (match step
+            ((stepMerge) (ok (ruling "merge" rung (list) "" (list (grade "accept" (str "ladder " rung))) all "")))
+            ((stepFix ds) (ok (ruling "fix" rung ds "" (list (grade "reject" (clip (stringJoin ds "; ") 300))) all "")))
+            ((stepBlocked why) (ok (ruling "blocked" rung (defectsOf all) "" (list (grade "pending" why) (escalateRow u rung all why)) all why)))
+            ((stepEscalate) (runRung u rows lanes prompt receipt callModel (nextRung rung) all 0)))))))
 
 ; (:m :ref COND2 :do "the conductor's review stage: (review unit diff gates lanes callModel) -> Ruling.")
 ; (:m :ref COND2 :do "callModel takes a lane alias and a prompt and returns the reply text; ruling.action is merge | fix | await | blocked.")

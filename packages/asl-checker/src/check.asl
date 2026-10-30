@@ -1,6 +1,6 @@
-(module asl-checker/check :x [InferState Deferred checkModule checkModuleIn checkModuleSource checkSource checkFile! schemaOfCtor elaborateScript elaborateMatches needsElaboration?] :i [(types :a ty) (unify :a u) (resolve :a r) (ast :a a) (reader :a rd) (tailPos :a tp) (constAssert :a ca) (foreign :a ff) (numKinds :a nk) (lowLevelSigs :a ll)])
+(module asl-checker/check :x [InferState Deferred checkModule checkModuleIn checkModuleSource checkSource checkFile! schemaOfCtor elaborateScript needsElaboration?] :i [(types :a ty) (unify :a u) (resolve :a r) (ast :a a) (reader :a rd) (tailPos :a tp) (constAssert :a ca) (foreign :a ff) (numKinds :a nk)])
 
-(schema InferState (:f subst (Map Int64 ty/Type)) (:f nextVar Int64) (:f intSites (List (Pair String Int64))) (:f mapSites (List (Pair ty/Type String))) (:f diags (List ty/Diagnostic)) (:f deferred (List Deferred)))
+(schema InferState (:f subst (Map Int64 ty/Type)) (:f nextVar Int64) (:f intSites (List (pair String Int64))) (:f mapSites (List (pair ty/Type String))) (:f diags (List ty/Diagnostic)) (:f deferred (List Deferred)))
 
 (schema Deferred (:f name String) (:f recv ty/Type) (:f args (List ty/Type)) (:f result ty/Type))
 
@@ -12,19 +12,6 @@ fn freshVar st: InferState kind: String -> (Pair ty/Type InferState)
 
 fn addDiag st: InferState code: String msg: String path: String -> InferState
   (with st :diags (cons (ty/Diagnostic :code code :message msg :msg msg :line 1 :col 1 :path path) st.diags))
-
-
-; (:m :ref checkMissesVariantCall :do "a call whose head is itself a form must evaluate to a function; a concrete non-function type (a Result from a duplicated ((ok x) ...) clause, a List from a vector head) is a type error at check time, not ERR_TYPE cannot call a Variant at run time. Any is left alone")
-fn nonCallableHead h: rd/SExpr calleeTy: ty/Type st: InferState path: String -> InferState
-  (if (rd/isAtom? h)
-    st
-    (match (u/applySubst st.subst calleeTy)
-      ((ty/tyCon name _ _ _)
-       (let [(shown (ty/showType (u/applySubst st.subst calleeTy)))]
-         (if (or (= name "Any") (= shown "Any"))
-           st
-           (addDiag st "type" (str "cannot call " (rd/renderSexpr h) ": it is a " shown " value, not a function (a pattern or constructor in call position?)") path))))
-      (_ st)))
 
 fn setDiags st: InferState ds: (List ty/Diagnostic) -> InferState
   (with st :diags ds)
@@ -48,7 +35,7 @@ fn typeText t: ty/Type -> String
   (match t ((ty/tyCon name args _ _) (if (listEmpty? args) name (str "(" name " " (stringJoin (map typeText args) " ") ")"))) ((ty/tyVar _ _) "_") ((ty/tyFun _ _) "fn"))
 
 fn expectType st: InferState have: ty/Type want: ty/Type where: String path: String modName: String -> InferState
-  (let [(st1 (noteMapType (noteMapType st have where) want where))] (match (u/unify want have st1.subst modName) ((u/uOk nextSubst) (setSubst st1 nextSubst)) ((u/uErr msg isNum) (let [(code (if isNum "rule-6" "type"))] (addDiag st1 code (str where ": " msg (mixedWidthHint (u/applySubst st1.subst want) (u/applySubst st1.subst have))) path)))))
+  (let [(st1 (noteMapType (noteMapType st have where) want where))] (match (u/unify want have st1.subst modName) ((u/uOk nextSubst) (setSubst st1 nextSubst)) ((u/uErr msg isNum) (let [(code (if isNum "rule-6" "type"))] (addDiag st1 code (str where ": " msg) path)))))
 
 fn qualifyTypeWithMod t: ty/Type mod: r/ModuleSummary deps: r/DepIndex -> ty/Type
   (match t
@@ -69,7 +56,7 @@ fn knownTypeName? name: String argc: Int64 optMod: (Option String) isLocal: Bool
   (or (some? optMod)
       (or (ty/isNumericType? name)
           (or (listContains? (list "String" "Bool" "Unit" "Bytes" "Keyword" "IoError" "PreludeMap" "PreludeTree" "HashMap" "ProcessOutput" "SpawnedProc" "PlatformInfo" "Rusage" "FileStat" "F64Array" "I8Array" "I64Array" "SExpr" "ParquetHandle" "Handle") name)
-              (or (and (or (= name "List") (or (= name "Option") (= name "Buf"))) (= argc 1))
+              (or (and (or (= name "List") (= name "Option")) (= argc 1))
                   (or (and (or (= name "Result") (or (= name "Map") (= name "Pair"))) (= argc 2))
                       (or (and (= (stringLength name) 1) (= (stringUpper name) name))
                           (or (stringStartsWith? name "#") (or isLocal (some? nextMod)))))))))
@@ -90,7 +77,7 @@ fn importedUnqualifiedTypeModule name: String mod: r/ModuleSummary deps: r/DepIn
         (mapValues mod.imports))
 
 fn freshVarsFrom typevars: (List String) vmap: (Map String ty/Type) st: InferState -> (Pair (Map String ty/Type) InferState)
-  (match (listHead typevars) ((none) (pair vmap st)) ((some vname) (let [(kind (if (= vname "N") "num" (if (or (= vname "I") (= vname "J")) "int" (if (= vname "X") "text" "any")))) (fRes (freshVar st kind))] (freshVarsFrom (optionOr (listTail typevars) (list)) (mapSet vmap vname (pairFirst fRes)) (pairSecond fRes)))))
+  (match (listHead typevars) ((none) (pair vmap st)) ((some vname) (let [(kind (if (= vname "N") "num" (if (= vname "I") "int" (if (= vname "X") "text" "any")))) (fRes (freshVar st kind))] (freshVarsFrom (optionOr (listTail typevars) (list)) (mapSet vmap vname (pairFirst fRes)) (pairSecond fRes)))))
 
 fn instantiateSig params: (List String) ret: String typevars: (List String) mod: r/ModuleSummary deps: r/DepIndex st: InferState -> (Pair (Pair (List ty/Type) ty/Type) InferState)
   (let [(vRes (freshVarsFrom typevars (mapEmpty) st)) (vmap (pairFirst vRes)) (st1 (pairSecond vRes)) (instP (map (fn [(p String)] -> ty/Type (qualifyTypeWithMod (substParsedType (ty/parseTypeStr p (list)) vmap) mod deps)) params)) (instR (qualifyTypeWithMod (substParsedType (ty/parseTypeStr ret (list)) vmap) mod deps))] (pair (pair instP instR) st1))
@@ -369,188 +356,6 @@ fn bindMatchPattern pat: rd/SExpr scrutTy: ty/Type env: (Map String ty/Type) mod
                       res)))
                  (_ (bindUnknownSubpats subPats env st1))))))))))))
 
-; (:m :ref MATCH-BY-SCRUTINEE :do "in a match pattern a bare case name is first a case of the enum inferred for its position (the scrutinee, or the field of the constructor around it): a position is a candidate when the name-scope rule could mean something else there (a top-level or applied name that an import enum declares and that this module, the prelude or a second import also claims; a nested atom naming any case, which the name-scope rule binds), and the inference notes, per match, the spelling the matched enum gives it (alias/case for an import, the bare case for this module and the prelude; a nested atom naming a zero-field case is refused with ERR_NESTED_CASE_ATOM, see nestedAtomMessage); elaborateMatches writes those spellings into the forms that the check and the lowering both consume, so neither decides by name where the type decided")
-fn patternName? v: String -> Bool
-  (not (or (stringEmpty? v) (or (= v "_") (or (= v "else") (or (= v "list") (or (= v "cons") (or (r/isLiteralAtom? v) (or (stringStartsWith? v ":") (stringContains? v "/")))))))))
-
-fn contestedCase? name: String mod: r/ModuleSummary deps: r/DepIndex -> Bool
-  (let [(owners (r/bareCaseOwners name mod deps))]
-    (and (not (listEmpty? owners))
-         (or (> (listLength owners) 1) (or (mapHas? mod.caseOwner name) (or (mapHas? mod.funs name) (r/preludeShadows? name))))))
-
-fn nestedCaseName? name: String mod: r/ModuleSummary deps: r/DepIndex -> Bool
-  (or (mapHas? mod.caseOwner name) (or (some? (ty/preludeUnionCases name)) (not (listEmpty? (r/bareCaseOwners name mod deps)))))
-
-fn candidateName? name: String nested: Bool mod: r/ModuleSummary deps: r/DepIndex -> Bool
-  (and (patternName? name) (if nested (nestedCaseName? name mod deps) (contestedCase? name mod deps)))
-
-fn listHeadName items: (List rd/SExpr) -> String
-  (let [(h (optionOr (listHead items) (rd/makeAtom "")))] (if (rd/isAtom? h) (rd/sexprHead h) ""))
-
-fn candidatePattern? pat: rd/SExpr nested: Bool mod: r/ModuleSummary deps: r/DepIndex -> Bool
-  (match pat
-    ((rd/sexprAtom v) (candidateName? v nested mod deps))
-    ((rd/sexprList items) (or (candidateName? (listHeadName items) false mod deps) (listAny? (fn [(p rd/SExpr)] -> Bool (candidatePattern? p true mod deps)) (r/safeTail items))))
-    (_ false))
-
-fn armPattern arm: rd/SExpr -> rd/SExpr
-  (match arm ((rd/sexprList parts) (optionOr (listHead parts) (rd/makeAtom "_"))) (_ (rd/makeAtom "_")))
-
-fn candidateMatch? arms: (List rd/SExpr) mod: r/ModuleSummary deps: r/DepIndex -> Bool
-  (listAny? (fn [(arm rd/SExpr)] -> Bool (candidatePattern? (armPattern arm) false mod deps)) arms)
-
-fn enumDeclares? m: r/ModuleSummary ename: String name: String -> Bool
-  (match (r/modEnum m ename) ((some e) (listAny? (fn [(c r/CaseSummary)] -> Bool (= c.name name)) e.cases)) ((none) false))
-
-fn importSpelling name: String ename: String owner: String mod: r/ModuleSummary deps: r/DepIndex -> (Option String)
-  (fold (fn [(acc (Option String)) (alias String)] -> (Option String)
-          (match acc
-            ((some _) acc)
-            ((none) (match (r/resolveDepIn (optionOr (mapGet mod.imports alias) "") deps)
-                      ((ok target) (if (and (= target.name owner) (and (enumDeclares? target ename name) (mapHas? target.exportedCases name))) (some (str alias "/" name)) (none)))
-                      ((err _) (none))))))
-        (none) (listSort (mapKeys mod.imports)))
-
-; (:m :ref MATCH-BY-SCRUTINEE :do "a bare atom is a constructor test only of a zero-field case: an atom cannot take a case with fields apart, and a binder named like the one constructor of a record-like enum ((cronSchedule cron) over a Cron whose case is cron) stays a binding")
-fn nullaryIn? m: r/ModuleSummary ename: String name: String -> Bool
-  (match (r/modEnum m ename) ((some e) (listAny? (fn [(c r/CaseSummary)] -> Bool (and (= c.name name) (listEmpty? c.params))) e.cases)) ((none) false))
-
-; (:m :ref MATCH-BY-SCRUTINEE :do "a prelude case is zero-field when the prelude declares it (types#preludeUnionCases) and its constructor signature takes no argument (types#builtinSig)")
-fn preludeNullary? name: String -> Bool
-  (and (some? (ty/preludeUnionCases name)) (match (ty/builtinSig name) ((some s) (and (listEmpty? (pairFirst s)) (not (pairFirst (pairSecond s))))) ((none) false)))
-
-fn atomCase? name: String t: ty/Type mod: r/ModuleSummary deps: r/DepIndex -> Bool
-  (match t
-    ((ty/tyCon ename _ optMod _)
-     (let [(owner (optionOr optMod ""))]
-       (cond
-         ((stringEmpty? owner) (preludeNullary? name))
-         ((= owner mod.name) (nullaryIn? mod ename name))
-         (else (listAny? (fn [(alias String)] -> Bool (match (r/resolveDepIn (optionOr (mapGet mod.imports alias) "") deps) ((ok target) (and (= target.name owner) (nullaryIn? target ename name))) ((err _) false))) (mapKeys mod.imports))))))
-    (_ false))
-
-fn caseSpelling name: String t: ty/Type mod: r/ModuleSummary deps: r/DepIndex -> (Option String)
-  (match t
-    ((ty/tyCon ename _ optMod _)
-     (let [(owner (optionOr optMod ""))]
-       (cond
-         ((and (not (stringEmpty? owner)) (= owner mod.name)) (if (enumDeclares? mod ename name) (some name) (none)))
-         ((stringEmpty? owner) (match (r/preludeUnionForTag name)
-                                 ((some u) (if (and (= (pairFirst u) ename) (not (or (mapHas? mod.caseOwner name) (mapHas? mod.funs name)))) (some name) (none)))
-                                 ((none) (none))))
-         (else (importSpelling name ename owner mod deps)))))
-    (_ (none)))
-
-fn unknownTy -> ty/Type
-  (ty/tyCon "?" (list) (none) (none))
-
-fn fieldTypesOf head: String t: ty/Type mod: r/ModuleSummary deps: r/DepIndex st: InferState -> (List ty/Type)
-  (match (lookupSymbolType head (mapEmpty) mod deps st)
-    ((some res) (let [(st1 (pairSecond res))]
-                  (match (u/applySubst st1.subst (pairFirst res))
-                    ((ty/tyFun cparams cret) (let [(st2 (expectType st1 t cret "pattern" "" ""))] (map (fn [(p ty/Type)] -> ty/Type (u/applySubst st2.subst p)) cparams)))
-                    (_ (list)))))
-    ((none) (list)))
-
-; (:m :ref MATCH-BY-SCRUTINEE :do "a nested bare atom naming a zero-field case of the enum inferred there is refused, not guessed: the name-scope rule binds it and the matched enum would test for the case, and the checker has no nested exhaustiveness to catch the trap the wrong guess leaves, so the message gives both exact spellings")
-fn freeBinder v: String mod: r/ModuleSummary deps: r/DepIndex -> String
-  (optionOr (listFind (fn [(c String)] -> Bool (not (or (nestedCaseName? c mod deps) (or (mapHas? mod.funs c) (some? (ty/builtinSig c)))))) (map (fn [(sfx String)] -> String (str v sfx)) (list "Value" "Val" "Item" "1" "2"))) (str v "Value"))
-
-fn nestedAtomMessage v: String sp: String t: ty/Type mod: r/ModuleSummary deps: r/DepIndex -> String
-  (str "nested pattern " v " names the zero-field case " sp " of " (match t ((ty/tyCon ename _ _ _) ename) (_ "the matched enum")) ", which a bare name does not test: write (" sp ") to test for the case, or rename the binder, e.g. " (freeBinder v mod deps) ", to bind the value")
-
-fn patternEdits pat: rd/SExpr t: ty/Type nested: Bool at: String mod: r/ModuleSummary deps: r/DepIndex st: InferState -> (List String)
-  (match pat
-    ((rd/sexprAtom v)
-     (if (candidateName? v nested mod deps)
-       (match (if (atomCase? v t mod deps) (caseSpelling v t mod deps) (none))
-         ((some sp) (if nested (list (str "!" (nestedAtomMessage v sp t mod deps))) (if (= sp v) (list) (list (str "a:" sp ":" at)))))
-         ((none) (list)))
-       (list)))
-    ((rd/sexprList items)
-     (let [(h (listHeadName items))
-           (spelled (if (candidateName? h false mod deps) (caseSpelling h t mod deps) (none)))
-           (head (optionOr spelled h))
-           (own (match spelled ((some sp) (if (= sp h) (list) (list (str "h:" sp ":" at)))) ((none) (list))))
-           (subs (r/safeTail items))
-           (types (if (or (stringEmpty? head) (listEmpty? subs)) (list) (fieldTypesOf head t mod deps st)))]
-       (listAppend own (listFlatMap (fn [(j Int64)] -> (List String) (patternEdits (optionOr (listGet subs j) (rd/makeAtom "_")) (optionOr (listGet types j) (unknownTy)) true (str at "." (stringFromInt64 (+ j 1))) mod deps st))
-                                    (range 0 (listLength subs))))))
-    (_ (list)))
-
-fn noteMatchCases fm: FrameMachine expr: rd/SExpr arms: (List rd/SExpr) scrutTy: ty/Type st: InferState -> InferState
-  (if (not (candidateMatch? arms fm.mod fm.deps))
-    st
-    (let [(found (listFlatMap (fn [(i Int64)] -> (List String) (patternEdits (armPattern (optionOr (listGet arms i) (rd/makeAtom "_"))) scrutTy false (stringFromInt64 (+ i 2)) fm.mod fm.deps st))
-                              (range 0 (listLength arms))))
-          (edits (filter (fn [(e String)] -> Bool (not (stringStartsWith? e "!"))) found))
-          (st1 (fold (fn [(s InferState) (e String)] -> InferState (addDiag s "ERR_NESTED_CASE_ATOM" (optionOr (stringSlice e 1 (stringLength e)) e) fm.path))
-                     st (filter (fn [(e String)] -> Bool (stringStartsWith? e "!")) found)))]
-      (addDiag st1 "matchCase" (str (stringJoin edits " ") "\t" fm.scope "\t" (rd/renderSexpr expr)) fm.path)))
-
-fn matchCaseTable ds: (List ty/Diagnostic) -> (Map String String)
-  (fold (fn [(m (Map String String)) (d ty/Diagnostic)] -> (Map String String)
-          (match (stringIndexOf d.message "\t")
-            ((none) m)
-            ((some i) (let [(edits (optionOr (stringSlice d.message 0 i) ""))
-                            (key (optionOr (stringSlice d.message (+ i 1) (stringLength d.message)) ""))]
-                        (match (mapGet m key)
-                          ((some prev) (if (= prev edits) m (mapSet m key "\t")))
-                          ((none) (mapSet m key edits)))))))
-        (mapEmpty) (filter (fn [(d ty/Diagnostic)] -> Bool (= d.code "matchCase")) ds))
-
-fn editAt e: rd/SExpr steps: (List Int64) mode: String name: String -> rd/SExpr
-  (match (listHead steps)
-    ((none) (cond
-              ((= mode "h") (match e ((rd/sexprList items) (rd/makeList (cons (rd/makeAtom name) (r/safeTail items)))) (_ e)))
-              (else (match e ((rd/sexprAtom _) (rd/makeAtom name)) (_ e)))))
-    ((some k) (match e
-                ((rd/sexprList items) (rd/makeList (map (fn [(j Int64)] -> rd/SExpr (let [(it (optionOr (listGet items j) (rd/makeAtom "_")))] (if (= j k) (editAt it (optionOr (listTail steps) (list)) mode name) it))) (range 0 (listLength items)))))
-                (_ e))))
-
-; (:m :ref MATCH-BY-SCRUTINEE :do "an edit is mode:name:arm.item...; the arm index counts the match form's items, so the steps from the match form are the arm, then 0 for its pattern, then the items inside the pattern")
-fn applyEdit e: rd/SExpr edit: String -> rd/SExpr
-  (let [(parts (stringSplit edit ":"))
-        (mode (optionOr (listGet parts 0) ""))
-        (name (optionOr (listGet parts 1) ""))
-        (idx (map (fn [(s String)] -> Int64 (optionOr (stringToInt64 s) -1)) (stringSplit (optionOr (listGet parts 2) "") ".")))]
-    (if (or (!= (listLength parts) 3) (or (stringEmpty? name) (listContains? idx -1)))
-      e
-      (editAt e (cons (optionOr (listHead idx) 0) (cons 0 (optionOr (listTail idx) (list)))) mode name)))
-
-fn rewriteMatches e: rd/SExpr scope: String table: (Map String String) -> rd/SExpr
-  (match e
-    ((rd/sexprList items)
-     (let [(inner (rd/makeList (map (fn [(x rd/SExpr)] -> rd/SExpr (rewriteMatches x scope table)) items)))]
-       (if (= (listHeadName items) "match")
-         (match (mapGet table (str scope "\t" (rd/renderSexpr e)))
-           ((some edits) (if (or (= edits "\t") (stringEmpty? edits)) inner (fold applyEdit inner (stringSplit edits " "))))
-           ((none) inner))
-         inner)))
-    ((rd/sexprVect items) (rd/makeVect (map (fn [(x rd/SExpr)] -> rd/SExpr (rewriteMatches x scope table)) items)))
-    (_ e))
-
-fn exprHasCandidate? e: rd/SExpr mod: r/ModuleSummary deps: r/DepIndex -> Bool
-  (match e
-    ((rd/sexprList items) (or (and (= (listHeadName items) "match") (candidateMatch? (r/safeTail (r/safeTail items)) mod deps))
-                              (listAny? (fn [(x rd/SExpr)] -> Bool (exprHasCandidate? x mod deps)) items)))
-    ((rd/sexprVect items) (listAny? (fn [(x rd/SExpr)] -> Bool (exprHasCandidate? x mod deps)) items))
-    (_ false))
-
-fn formsHaveCandidate? forms: (List a/TopForm) mod: r/ModuleSummary deps: r/DepIndex -> Bool
-  (listAny? (fn [(t a/TopForm)] -> Bool
-              (match t
-                ((a/topDefun d) (listAny? (fn [(x rd/SExpr)] -> Bool (exprHasCandidate? x mod deps)) d.body))
-                ((a/topExpr p) (exprHasCandidate? p.expr mod deps))
-                (_ false)))
-            forms)
-
-fn rewriteTopMatches table: (Map String String) t: a/TopForm -> a/TopForm
-  (match t
-    ((a/topDefun d) (a/topDefun (withBody d (map (fn [(x rd/SExpr)] -> rd/SExpr (rewriteMatches x (str "function " d.name) table)) d.body))))
-    ((a/topExpr p) (a/topExpr (a/PosForm :expr (rewriteMatches p.expr "top-level expression" table) :line p.line :col p.col)))
-    (_ t))
-
 fn retiredTryMessage -> String
   "unbound symbol: try (try is retired; match the Result with match)"
 
@@ -583,7 +388,7 @@ fn evalDoArgs fm: FrameMachine args: (List rd/SExpr) st: InferState -> (Pair ty/
         (evalDoArgs fm rest (evalStatement fm first st))))))
 
 fn fmEvalStep expr: rd/SExpr restFrames: (List InferFrame) fm: FrameMachine -> FrameMachine
-  (match expr ((rd/sexprAtom v) (let [(res (inferAtomFm fm v fm.state))] (with fm :frames restFrames :values (cons (pairFirst res) fm.values) :state (noteMapType (pairSecond res) (pairFirst res) fm.scope)))) ((rd/sexprVect items) (let [(fRes (freshVar fm.state "any")) (elemTy (pairFirst fRes)) (st1 (pairSecond fRes))] (with fm :frames restFrames :values (cons (ty/tyCon "List" (list elemTy) (none) (none)) fm.values) :state st1))) ((rd/sexprList items) (match (listHead items) ((none) (with fm :frames restFrames :values (cons (unitType) fm.values))) ((some h) (let [(headTok (if (rd/isAtom? h) (rd/sexprHead h) "")) (tailArgs (r/safeTail items))] (cond ((and (or (= headTok "quote") (= headTok "quasiquote")) (and (none? (r/modFun fm.mod headTok)) (not (mapHas? fm.env headTok)))) (let [(sexprTy (ty/tyCon "SExpr" (list) (none) (none)))] (with fm :frames restFrames :values (cons sexprTy fm.values)))) ((or (= headTok "assert") (= headTok "refute")) (let [(condRes (evalFm fm (optionOr (listHead tailArgs) (rd/makeAtom "()")) fm.state)) (st1 (expectType (pairSecond condRes) (pairFirst condRes) (ty/tyCon "Bool" (list) (none) (none)) (str headTok " condition") fm.path fm.mod.name)) (st2 (match (listGet tailArgs 1) ((some m) (pairSecond (evalFm fm m st1))) ((none) st1))) (st3 (if (or (listEmpty? tailArgs) (> (listLength tailArgs) 2)) (addDiag st2 "arity" (str headTok " takes a condition and an optional message, given " (stringFromInt64 (listLength tailArgs))) fm.path) st2)) (trap (match (listHead tailArgs) ((some c0) (and (rd/isAtom? c0) (= (rd/sexprHead c0) (if (= headTok "assert") "false" "true")))) ((none) false))) (res (if trap (freshVar st3 "any") (pair (unitType) st3)))] (with fm :frames restFrames :values (cons (pairFirst res) fm.values) :state (pairSecond res)))) ((or (= headTok "when") (= headTok "unless")) (let [(condRes (evalFm fm (optionOr (listHead tailArgs) (rd/makeAtom "true")) fm.state)) (st1 (expectType (pairSecond condRes) (pairFirst condRes) (ty/tyCon "Bool" (list) (none) (none)) (str headTok " condition") fm.path fm.mod.name)) (st2 (fold (fn [(acc InferState) (arg rd/SExpr)] -> InferState (pairSecond (evalFm fm arg acc))) st1 (r/safeTail tailArgs)))] (fmPushFresh fm restFrames st2))) ((= headTok "do") (let [(res (evalDoArgs fm tailArgs fm.state))] (with fm :frames restFrames :values (cons (pairFirst res) fm.values) :state (pairSecond res)))) ((= headTok "let") (let [(bitems (r/firstVectItems tailArgs)) (tails (r/safeTail tailArgs))] (if (listEmpty? bitems) (let [(lastE (lastExprUnit tails))] (with fm :frames (cons (fEval lastE) restFrames))) (let [(firstB (r/firstExprEmpty bitems)) (flat? (match firstB ((rd/sexprAtom _) true) (_ false))) (brest (if flat? (r/safeTail (r/safeTail bitems)) (r/safeTail bitems))) (bparts (if flat? (list firstB (r/secondExprEmpty bitems)) (match firstB ((rd/sexprList bp) bp) ((rd/sexprVect bp) bp) (_ (list))))) (bname (if flat? (rd/sexprHead firstB) (r/firstHeadIdent bparts))) (bval (letBindValue bparts))] (with fm :frames (cons (fEval bval) (cons (fLetVal bname brest tails fm.env (letAnnType bparts fm.mod fm.deps)) restFrames)) :state (letAnnState fm.state bparts fm.path)))))) ((= headTok "with") (let [(res (inferWith fm tailArgs))] (with fm :frames restFrames :values (cons (pairFirst res) fm.values) :state (pairSecond res)))) ((= headTok "if") (let [(condE (optionOr (listGet tailArgs 0) (rd/makeAtom "true"))) (thenE (optionOr (listGet tailArgs 1) (rd/makeAtom "()"))) (elseE (optionOr (listGet tailArgs 2) (rd/makeAtom "()")))] (with fm :frames (cons (fEval condE) (cons (fIfCond thenE elseE fm.env) restFrames))))) ((= headTok "cond") (let [(fRes (freshVar fm.state "any")) (outVar (pairFirst fRes)) (stOut (pairSecond fRes)) (stFinal (fold (fn [(stAcc InferState) (clause rd/SExpr)] -> InferState (match clause ((rd/sexprList cparts) (let [(cheadExpr (r/firstExprEmpty cparts)) (chead (rd/sexprHead cheadExpr)) (cbodies (r/safeTail cparts)) (lastB (lastExprUnit cbodies))] (if (= chead "else") (let [(bres (evalFm fm lastB stAcc))] (expectType (pairSecond bres) (pairFirst bres) outVar "cond else clause, branches disagree" fm.path fm.mod.name)) (let [(cres (evalFm fm cheadExpr stAcc)) (stC (expectType (pairSecond cres) (pairFirst cres) (ty/tyCon "Bool" (list) (none) (none)) "cond test" fm.path fm.mod.name)) (bres (evalFm fm lastB stC))] (expectType (pairSecond bres) (pairFirst bres) outVar "cond clause, branches disagree" fm.path fm.mod.name))))) (_ stAcc))) stOut tailArgs))] (with fm :frames restFrames :values (cons (u/applySubst stFinal.subst outVar) fm.values) :state stFinal))) ((= headTok "match") (let [(scrutinee (r/firstExprUnit tailArgs)) (arms (r/safeTail tailArgs)) (scrutRes (evalFm fm scrutinee fm.state)) (scrutTy (pairFirst scrutRes)) (stScrut (noteMatchCases fm expr arms (u/applySubst (pairSecond scrutRes).subst scrutTy) (pairSecond scrutRes))) (fRes (freshVar stScrut "any")) (outVar (pairFirst fRes)) (stOut (pairSecond fRes)) (family (r/matchFamily arms fm.mod fm.deps.deps)) (stFinal (fold (fn [(stAcc InferState) (arm rd/SExpr)] -> InferState (match arm ((rd/sexprList armParts) (let [(pat (match (listHead armParts) ((some p) p) ((none) (rd/makeAtom "_")))) (bodyExprs (r/safeTail armParts)) (bindRes (if (r/ctorPatternAtom? pat family fm.mod fm.deps.deps) (pair fm.env stAcc) (bindArmPattern pat (u/applySubst stAcc.subst scrutTy) fm.env fm.mod fm.deps stAcc))) (armEnv (pairFirst bindRes)) (stArm (pairSecond bindRes)) (lastBody (lastExprUnit bodyExprs)) (bodyRes (evalWithEnv fm lastBody armEnv stArm)) (bodyTy (pairFirst bodyRes)) (stB (pairSecond bodyRes))] (expectType stB bodyTy outVar "match arm, branches disagree" fm.path fm.mod.name))) (_ stAcc))) stOut arms))] (with fm :frames restFrames :values (cons (u/applySubst stFinal.subst outVar) fm.values) :state stFinal))) ((= headTok "try") (let [(st1 (addDiag fm.state "ERR_UNKNOWN_SYMBOL" (retiredTryMessage) fm.path))] (with fm :frames (cons (fEval (r/firstExprUnit tailArgs)) restFrames) :state st1))) ((= headTok "fn") (let [(isBang (and (not (listEmpty? tailArgs)) (= (r/firstHeadIdent tailArgs) "!"))) (remArgs (if isBang (r/safeTail tailArgs) tailArgs)) (afterParams (r/safeTail remArgs)) (hasRetAnn (and (not (listEmpty? afterParams)) (= (r/firstHeadIdent afterParams) "->"))) (bodyNodes (if hasRetAnn (r/safeTail (r/safeTail afterParams)) afterParams)) (paramItems (r/firstVectItems remArgs)) (afterArrow (if hasRetAnn (r/safeTail afterParams) (list))) (retNodeOpt (listHead afterArrow)) (retAnnText (match retNodeOpt ((some rnode) (a/typeNodeText rnode)) ((none) ""))) (lamBound (lambdaTypeBound paramItems retAnnText)) (pRes (fold (fn [(acc (Pair (Pair (List ty/Type) (Map String ty/Type)) InferState)) (p rd/SExpr)] -> (Pair (Pair (List ty/Type) (Map String ty/Type)) InferState) (let [(pann (parseParamAnn p fm.mod fm.deps)) (pname (pairFirst pann)) (tyRes (match (pairSecond pann) ((some pty) (pair pty (checkLambdaAnnText (pairSecond acc) (paramAnnText p) lamBound fm.mod fm.deps "lambda parameter" fm.path))) ((none) (freshVar (pairSecond acc) "any")))) (pty (pairFirst tyRes))] (pair (pair (cons pty (pairFirst (pairFirst acc))) (mapSet (pairSecond (pairFirst acc)) pname pty)) (pairSecond tyRes)))) (pair (pair (list) fm.env) fm.state) paramItems)) (paramsTy (listReverse (pairFirst (pairFirst pRes)))) (fnEnv (pairSecond (pairFirst pRes))) (st1 (checkLambdaAnnText (pairSecond pRes) retAnnText lamBound fm.mod fm.deps "lambda return" fm.path)) (retInfo (match retNodeOpt ((some rnode) (pair (qualifyTypeWithMod (ty/parseTypeStr (a/typeNodeText rnode) (list)) fm.mod fm.deps) st1)) ((none) (freshVar st1 "any")))) (retTy (pairFirst retInfo)) (st2 (pairSecond retInfo)) (lastBody (lastExprUnit bodyNodes)) (bodyRes (runExprDirect lastBody fnEnv (some retTy) true fm.scope fm.path fm.mod fm.deps st2)) (bodyTy (pairFirst bodyRes)) (st3 (expectType (pairSecond bodyRes) bodyTy retTy "lambda body" fm.path fm.mod.name)) (fnTy (ty/tyFun paramsTy retTy))] (with fm :frames restFrames :values (cons fnTy fm.values) :state st3))) ((stringStartsWith? headTok ".-") (let [(fname (r/sliceFrom headTok 2)) (tgtE (r/firstExprUnit tailArgs)) (tgtRes (evalFm fm tgtE fm.state)) (tgtTy (u/applySubst (pairSecond tgtRes).subst (pairFirst tgtRes))) (st1 (pairSecond tgtRes))] (match tgtTy ((ty/tyCon tname targs toptMod _) (if (= tname "?") (fmPushFresh fm restFrames st1) (if (= tname "Pair") (fmPushFresh fm restFrames (addDiag st1 "type" (notRecordMessage fname tgtTy) fm.path)) (let [(targetMod (match toptMod ((some m) (moduleNamed m fm.mod fm.deps)) ((none) (some fm.mod))))] (match targetMod ((none) (let [(st2 (addDiag st1 "type" (str "unknown module for type " (ty/showType tgtTy)) fm.path))] (fmPushFresh fm restFrames st2))) ((some smod) (match (checkerSchema smod tname) ((some ssum) (let [(fMatch (filter (fn [(f r/FieldSummary)] -> Bool (= f.name fname)) ssum.fields))] (match (listHead fMatch) ((some fdef) (let [(fieldTy (ty/parseTypeStr fdef.type (list))) (substMap (buildTypeSubstMap ssum.typevars targs (mapEmpty))) (instField (qualifyTypeWithMod (substParsedType fieldTy substMap) smod fm.deps))] (with fm :frames restFrames :values (cons instField fm.values) :state st1))) ((none) (let [(st2 (addDiag st1 "type" (str (ty/showType tgtTy) " has no field " fname) fm.path))] (fmPushFresh fm restFrames st2)))))) ((none) (let [(msg (if (some? toptMod) (str "unknown schema " tname " in module " smod.name) (notRecordMessage fname tgtTy))) (st2 (addDiag st1 "type" msg fm.path))] (fmPushFresh fm restFrames st2)))))))))) (_ (fmPushFresh fm restFrames st1))))) ((= headTok "{") (let [(st1 (inferCtorArgs fm (list) fm.mod (mapEmpty) "map literal" tailArgs fm.state)) (fRes (freshVar st1 "any"))] (with fm :frames restFrames :values (cons (pairFirst fRes) fm.values) :state (pairSecond fRes)))) ((and (= headTok "preludeScriptStep") (= (listLength tailArgs) 4)) (scriptStepFm fm restFrames tailArgs)) ((lowLevelFormHead? headTok tailArgs fm) (lowLevelForm headTok tailArgs restFrames fm)) ((recordCtorHead? headTok tailArgs fm.mod fm.deps) (let [(res (inferCtorForm fm headTok tailArgs fm.state))] (with fm :frames restFrames :values (cons (pairFirst res) fm.values) :state (pairSecond res)))) (else (let [(calleeRes (if (rd/isAtom? h) (inferAtomFm fm headTok fm.state) (evalFm fm h fm.state))) (calleeTy (pairFirst calleeRes)) (st1 (nonCallableHead h calleeTy (pairSecond calleeRes) fm.path))] (if (listEmpty? tailArgs) (match (u/applySubst st1.subst calleeTy) ((ty/tyFun p r) (with fm :frames restFrames :values (cons r fm.values) :state st1)) ((ty/tyVar _ _) (let [(fRes (freshVar st1 "any")) (rTy (pairFirst fRes)) (st2 (expectType (pairSecond fRes) calleeTy (ty/tyFun (list) rTy) "call" fm.path fm.mod.name))] (with fm :frames restFrames :values (cons rTy fm.values) :state st2))) (_ (with fm :frames restFrames :values (cons calleeTy fm.values) :state st1))) (let [(firstArg (r/firstExprUnit tailArgs)) (pendingArgs (r/safeTail tailArgs))] (with fm :frames (cons (fEval firstArg) (cons (fCall (if (rd/isAtom? h) headTok (rd/renderSexpr h)) calleeTy (list) pendingArgs fm.env) restFrames)) :state st1)))))))))))
+  (match expr ((rd/sexprAtom v) (let [(res (inferAtomFm fm v fm.state))] (with fm :frames restFrames :values (cons (pairFirst res) fm.values) :state (noteMapType (pairSecond res) (pairFirst res) fm.scope)))) ((rd/sexprVect items) (let [(fRes (freshVar fm.state "any")) (elemTy (pairFirst fRes)) (st1 (pairSecond fRes))] (with fm :frames restFrames :values (cons (ty/tyCon "List" (list elemTy) (none) (none)) fm.values) :state st1))) ((rd/sexprList items) (match (listHead items) ((none) (with fm :frames restFrames :values (cons (unitType) fm.values))) ((some h) (let [(headTok (if (rd/isAtom? h) (rd/sexprHead h) "")) (tailArgs (r/safeTail items))] (cond ((and (or (= headTok "quote") (= headTok "quasiquote")) (and (none? (r/modFun fm.mod headTok)) (not (mapHas? fm.env headTok)))) (let [(sexprTy (ty/tyCon "SExpr" (list) (none) (none)))] (with fm :frames restFrames :values (cons sexprTy fm.values)))) ((or (= headTok "assert") (= headTok "refute")) (let [(condRes (evalFm fm (optionOr (listHead tailArgs) (rd/makeAtom "()")) fm.state)) (st1 (expectType (pairSecond condRes) (pairFirst condRes) (ty/tyCon "Bool" (list) (none) (none)) (str headTok " condition") fm.path fm.mod.name)) (st2 (match (listGet tailArgs 1) ((some m) (pairSecond (evalFm fm m st1))) ((none) st1))) (st3 (if (or (listEmpty? tailArgs) (> (listLength tailArgs) 2)) (addDiag st2 "arity" (str headTok " takes a condition and an optional message, given " (stringFromInt64 (listLength tailArgs))) fm.path) st2)) (trap (match (listHead tailArgs) ((some c0) (and (rd/isAtom? c0) (= (rd/sexprHead c0) (if (= headTok "assert") "false" "true")))) ((none) false))) (res (if trap (freshVar st3 "any") (pair (unitType) st3)))] (with fm :frames restFrames :values (cons (pairFirst res) fm.values) :state (pairSecond res)))) ((or (= headTok "when") (= headTok "unless")) (let [(condRes (evalFm fm (optionOr (listHead tailArgs) (rd/makeAtom "true")) fm.state)) (st1 (expectType (pairSecond condRes) (pairFirst condRes) (ty/tyCon "Bool" (list) (none) (none)) (str headTok " condition") fm.path fm.mod.name)) (st2 (fold (fn [(acc InferState) (arg rd/SExpr)] -> InferState (pairSecond (evalFm fm arg acc))) st1 (r/safeTail tailArgs)))] (fmPushFresh fm restFrames st2))) ((= headTok "do") (let [(res (evalDoArgs fm tailArgs fm.state))] (with fm :frames restFrames :values (cons (pairFirst res) fm.values) :state (pairSecond res)))) ((= headTok "let") (let [(bitems (r/firstVectItems tailArgs)) (tails (r/safeTail tailArgs))] (if (listEmpty? bitems) (let [(lastE (lastExprUnit tails))] (with fm :frames (cons (fEval lastE) restFrames))) (let [(firstB (r/firstExprEmpty bitems)) (flat? (match firstB ((rd/sexprAtom _) true) (_ false))) (brest (if flat? (r/safeTail (r/safeTail bitems)) (r/safeTail bitems))) (bparts (if flat? (list firstB (r/secondExprEmpty bitems)) (match firstB ((rd/sexprList bp) bp) ((rd/sexprVect bp) bp) (_ (list))))) (bname (if flat? (rd/sexprHead firstB) (r/firstHeadIdent bparts))) (bval (letBindValue bparts))] (with fm :frames (cons (fEval bval) (cons (fLetVal bname brest tails fm.env (letAnnType bparts fm.mod fm.deps)) restFrames)) :state (letAnnState fm.state bparts fm.path)))))) ((= headTok "with") (let [(res (inferWith fm tailArgs))] (with fm :frames restFrames :values (cons (pairFirst res) fm.values) :state (pairSecond res)))) ((= headTok "if") (let [(condE (optionOr (listGet tailArgs 0) (rd/makeAtom "true"))) (thenE (optionOr (listGet tailArgs 1) (rd/makeAtom "()"))) (elseE (optionOr (listGet tailArgs 2) (rd/makeAtom "()")))] (with fm :frames (cons (fEval condE) (cons (fIfCond thenE elseE fm.env) restFrames))))) ((= headTok "cond") (let [(fRes (freshVar fm.state "any")) (outVar (pairFirst fRes)) (stOut (pairSecond fRes)) (stFinal (fold (fn [(stAcc InferState) (clause rd/SExpr)] -> InferState (match clause ((rd/sexprList cparts) (let [(cheadExpr (r/firstExprEmpty cparts)) (chead (rd/sexprHead cheadExpr)) (cbodies (r/safeTail cparts)) (lastB (lastExprUnit cbodies))] (if (= chead "else") (let [(bres (evalFm fm lastB stAcc))] (expectType (pairSecond bres) (pairFirst bres) outVar "cond else clause, branches disagree" fm.path fm.mod.name)) (let [(cres (evalFm fm cheadExpr stAcc)) (stC (expectType (pairSecond cres) (pairFirst cres) (ty/tyCon "Bool" (list) (none) (none)) "cond test" fm.path fm.mod.name)) (bres (evalFm fm lastB stC))] (expectType (pairSecond bres) (pairFirst bres) outVar "cond clause, branches disagree" fm.path fm.mod.name))))) (_ stAcc))) stOut tailArgs))] (with fm :frames restFrames :values (cons (u/applySubst stFinal.subst outVar) fm.values) :state stFinal))) ((= headTok "match") (let [(scrutinee (r/firstExprUnit tailArgs)) (arms (r/safeTail tailArgs)) (scrutRes (evalFm fm scrutinee fm.state)) (scrutTy (pairFirst scrutRes)) (stScrut (pairSecond scrutRes)) (fRes (freshVar stScrut "any")) (outVar (pairFirst fRes)) (stOut (pairSecond fRes)) (family (r/matchFamily arms fm.mod fm.deps.deps)) (stFinal (fold (fn [(stAcc InferState) (arm rd/SExpr)] -> InferState (match arm ((rd/sexprList armParts) (let [(pat (match (listHead armParts) ((some p) p) ((none) (rd/makeAtom "_")))) (bodyExprs (r/safeTail armParts)) (bindRes (if (r/ctorPatternAtom? pat family fm.mod fm.deps.deps) (pair fm.env stAcc) (bindArmPattern pat (u/applySubst stAcc.subst scrutTy) fm.env fm.mod fm.deps stAcc))) (armEnv (pairFirst bindRes)) (stArm (pairSecond bindRes)) (lastBody (lastExprUnit bodyExprs)) (bodyRes (evalWithEnv fm lastBody armEnv stArm)) (bodyTy (pairFirst bodyRes)) (stB (pairSecond bodyRes))] (expectType stB bodyTy outVar "match arm, branches disagree" fm.path fm.mod.name))) (_ stAcc))) stOut arms))] (with fm :frames restFrames :values (cons (u/applySubst stFinal.subst outVar) fm.values) :state stFinal))) ((= headTok "try") (let [(st1 (addDiag fm.state "ERR_UNKNOWN_SYMBOL" (retiredTryMessage) fm.path))] (with fm :frames (cons (fEval (r/firstExprUnit tailArgs)) restFrames) :state st1))) ((= headTok "fn") (let [(isBang (and (not (listEmpty? tailArgs)) (= (r/firstHeadIdent tailArgs) "!"))) (remArgs (if isBang (r/safeTail tailArgs) tailArgs)) (afterParams (r/safeTail remArgs)) (hasRetAnn (and (not (listEmpty? afterParams)) (= (r/firstHeadIdent afterParams) "->"))) (bodyNodes (if hasRetAnn (r/safeTail (r/safeTail afterParams)) afterParams)) (paramItems (r/firstVectItems remArgs)) (afterArrow (if hasRetAnn (r/safeTail afterParams) (list))) (retNodeOpt (listHead afterArrow)) (retAnnText (match retNodeOpt ((some rnode) (a/typeNodeText rnode)) ((none) ""))) (lamBound (lambdaTypeBound paramItems retAnnText)) (pRes (fold (fn [(acc (Pair (Pair (List ty/Type) (Map String ty/Type)) InferState)) (p rd/SExpr)] -> (Pair (Pair (List ty/Type) (Map String ty/Type)) InferState) (let [(pann (parseParamAnn p fm.mod fm.deps)) (pname (pairFirst pann)) (tyRes (match (pairSecond pann) ((some pty) (pair pty (checkLambdaAnnText (pairSecond acc) (paramAnnText p) lamBound fm.mod fm.deps "lambda parameter" fm.path))) ((none) (freshVar (pairSecond acc) "any")))) (pty (pairFirst tyRes))] (pair (pair (cons pty (pairFirst (pairFirst acc))) (mapSet (pairSecond (pairFirst acc)) pname pty)) (pairSecond tyRes)))) (pair (pair (list) fm.env) fm.state) paramItems)) (paramsTy (listReverse (pairFirst (pairFirst pRes)))) (fnEnv (pairSecond (pairFirst pRes))) (st1 (checkLambdaAnnText (pairSecond pRes) retAnnText lamBound fm.mod fm.deps "lambda return" fm.path)) (retInfo (match retNodeOpt ((some rnode) (pair (qualifyTypeWithMod (ty/parseTypeStr (a/typeNodeText rnode) (list)) fm.mod fm.deps) st1)) ((none) (freshVar st1 "any")))) (retTy (pairFirst retInfo)) (st2 (pairSecond retInfo)) (lastBody (lastExprUnit bodyNodes)) (bodyRes (runExprDirect lastBody fnEnv (some retTy) true fm.scope fm.path fm.mod fm.deps st2)) (bodyTy (pairFirst bodyRes)) (st3 (expectType (pairSecond bodyRes) bodyTy retTy "lambda body" fm.path fm.mod.name)) (fnTy (ty/tyFun paramsTy retTy))] (with fm :frames restFrames :values (cons fnTy fm.values) :state st3))) ((stringStartsWith? headTok ".-") (let [(fname (r/sliceFrom headTok 2)) (tgtE (r/firstExprUnit tailArgs)) (tgtRes (evalFm fm tgtE fm.state)) (tgtTy (u/applySubst (pairSecond tgtRes).subst (pairFirst tgtRes))) (st1 (pairSecond tgtRes))] (match tgtTy ((ty/tyCon tname targs toptMod _) (if (= tname "?") (fmPushFresh fm restFrames st1) (if (= tname "Pair") (fmPushFresh fm restFrames (addDiag st1 "type" (notRecordMessage fname tgtTy) fm.path)) (let [(targetMod (match toptMod ((some m) (moduleNamed m fm.mod fm.deps)) ((none) (some fm.mod))))] (match targetMod ((none) (let [(st2 (addDiag st1 "type" (str "unknown module for type " (ty/showType tgtTy)) fm.path))] (fmPushFresh fm restFrames st2))) ((some smod) (match (checkerSchema smod tname) ((some ssum) (let [(fMatch (filter (fn [(f r/FieldSummary)] -> Bool (= f.name fname)) ssum.fields))] (match (listHead fMatch) ((some fdef) (let [(fieldTy (ty/parseTypeStr fdef.type (list))) (substMap (buildTypeSubstMap ssum.typevars targs (mapEmpty))) (instField (qualifyTypeWithMod (substParsedType fieldTy substMap) smod fm.deps))] (with fm :frames restFrames :values (cons instField fm.values) :state st1))) ((none) (let [(st2 (addDiag st1 "type" (str (ty/showType tgtTy) " has no field " fname) fm.path))] (fmPushFresh fm restFrames st2)))))) ((none) (let [(msg (if (some? toptMod) (str "unknown schema " tname " in module " smod.name) (notRecordMessage fname tgtTy))) (st2 (addDiag st1 "type" msg fm.path))] (fmPushFresh fm restFrames st2)))))))))) (_ (fmPushFresh fm restFrames st1))))) ((= headTok "{") (let [(st1 (inferCtorArgs fm (list) fm.mod (mapEmpty) "map literal" tailArgs fm.state)) (fRes (freshVar st1 "any"))] (with fm :frames restFrames :values (cons (pairFirst fRes) fm.values) :state (pairSecond fRes)))) ((and (= headTok "preludeScriptStep") (= (listLength tailArgs) 4)) (scriptStepFm fm restFrames tailArgs)) ((recordCtorHead? headTok tailArgs fm.mod fm.deps) (let [(res (inferCtorForm fm headTok tailArgs fm.state))] (with fm :frames restFrames :values (cons (pairFirst res) fm.values) :state (pairSecond res)))) (else (let [(calleeRes (if (rd/isAtom? h) (inferAtomFm fm headTok fm.state) (evalFm fm h fm.state))) (calleeTy (pairFirst calleeRes)) (st1 (pairSecond calleeRes))] (if (listEmpty? tailArgs) (match (u/applySubst st1.subst calleeTy) ((ty/tyFun p r) (with fm :frames restFrames :values (cons r fm.values) :state st1)) ((ty/tyVar _ _) (let [(fRes (freshVar st1 "any")) (rTy (pairFirst fRes)) (st2 (expectType (pairSecond fRes) calleeTy (ty/tyFun (list) rTy) "call" fm.path fm.mod.name))] (with fm :frames restFrames :values (cons rTy fm.values) :state st2))) (_ (with fm :frames restFrames :values (cons calleeTy fm.values) :state st1))) (let [(firstArg (r/firstExprUnit tailArgs)) (pendingArgs (r/safeTail tailArgs))] (with fm :frames (cons (fEval firstArg) (cons (fCall (if (rd/isAtom? h) headTok (rd/renderSexpr h)) calleeTy (list) pendingArgs fm.env) restFrames)) :state st1)))))))))))
 fn moduleNamed name: String mod: r/ModuleSummary deps: r/DepIndex -> (Option r/ModuleSummary)
   (if (= name mod.name) (some mod) (match (r/modImport mod name) ((some mpath) (match (r/resolveDepIn mpath deps) ((ok m) (some m)) ((err _) (none)))) ((none) (match (r/resolveDepIn name deps) ((ok m) (some m)) ((err _) (none))))))
 
@@ -682,72 +487,8 @@ fn inferCtorForm fm: FrameMachine head: String args: (List rd/SExpr) st: InferSt
     ((none) (freshVar (inferCtorArgs fm (list) fm.mod (mapEmpty) head args st) "any"))
     ((some found) (let [(sch (pairFirst found)) (owner (pairSecond found)) (tvars sch.typevars) (vRes (freshVarsFrom tvars (mapEmpty) st)) (vmap (pairFirst vRes)) (st1 (inferCtorArgs fm sch.fields owner vmap sch.name args (pairSecond vRes))) (targs (map (fn [(v String)] -> ty/Type (optionOr (mapGet vmap v) (unitType))) tvars)) (shown (if (stringContains? head "/") (some head) (none)))] (pair (ty/tyCon sch.name targs (some owner.name) shown) st1))))
 
-fn fmCallStepCore cname: String cty: ty/Type argsDone: (List ty/Type) argsPending: (List rd/SExpr) cenv: (Map String ty/Type) restFrames: (List InferFrame) fm: FrameMachine -> FrameMachine
-  (let [(pv (popValue fm)) (val (pairFirst pv)) (remValues (pairSecond pv)) (revDone (cons val argsDone))] (if (listEmpty? argsPending) (if (and (ty/genericMulti? cname) (and (not (mapHas? fm.env cname)) (ty/isTyVar? (u/applySubst fm.state.subst cty)))) (genericCallStep cname (listReverse revDone) remValues restFrames fm) (let [(prunedCallee (u/applySubst fm.state.subst cty))] (match prunedCallee ((ty/tyFun params ret) (let [(stUnify (foldExpectArgs (listReverse revDone) params cname fm.path fm.mod.name fm.state))] (with fm :frames restFrames :values (cons (u/applySubst stUnify.subst ret) remValues) :state stUnify))) (_ (let [(fRes (freshVar fm.state "any"))] (with fm :frames restFrames :values (cons (pairFirst fRes) remValues) :state (pairSecond fRes))))))) (let [(nextArg (r/firstExprUnit argsPending)) (remPending (r/safeTail argsPending))] (with fm :frames (cons (fEval nextArg) (cons (fCall cname cty revDone remPending cenv) restFrames)) :values remValues))))
-
-; (:m :ref LL-SIZED-CHECK-2 :do "the reported lowering gap for names and forms: one message, one diagnostic code, used by the call wrapper, the generic Buf rows and the Buf, wrap and clamp forms")
-fn unroutedMessage name: String -> String
-  (str name " has a signature but no lowering in the native target yet, so a build would fail; its lowering unit adds it to loweredNames")
-
-fn noteUnrouted st: InferState name: String path: String -> InferState
-  (addDiag st "ERR_LOWLEVEL_UNROUTED" (unroutedMessage name) path)
-
-; (:m :ref MAC-FENCE-UNSUPPORTED :do "a name the module itself binds (local, function, enum constructor, or a constructor imported unqualified) shadows a low-level builtin of the same name: fence is a builtin name here and a constructor in agentLoop/reply.asl, and reporting it unrouted made every native test of that module fail")
-fn ownsName? name: String fm: FrameMachine -> Bool
-  (or (mapHas? fm.env name) (or (some? (r/modFun fm.mod name)) (or (mapHas? fm.mod.caseOwner name) (some? (lookupUnqualifiedCaseInDeps name fm.mod fm.deps fm.state)))))
-
-fn lowLevelFormHead? headTok: String tailArgs: (List rd/SExpr) fm: FrameMachine -> Bool
-  (and (listContains? (ll/formNames) headTok) (and (or (!= headTok "clamp") (= (listLength tailArgs) 2)) (not (ownsName? headTok fm))))
-
-fn bufElemOk? text: String -> Bool
-  (let [(t (ty/resolveTypeAlias text))] (or (ty/isIntegralType? t) (= t "Float64")))
-
-; (:m :ref LL-SIZED-CHECK-2 :do "(Buf T n): T is a type name read as written, n any integer; the value is (Buf T) with T canonical so an Int64 element unifies with the alias I64")
-fn bufForm tailArgs: (List rd/SExpr) restFrames: (List InferFrame) fm: FrameMachine -> FrameMachine
-  (let [(elemText (rd/renderSexpr (r/firstExprUnit tailArgs)))
-        (elemName (ty/resolveTypeAlias elemText))
-        (st0 (noteUnrouted fm.state "Buf" fm.path))
-        (st1 (if (bufElemOk? elemText) st0 (addDiag st0 "type" (str "Buf element type must be an integer type or Float64, found " elemText) fm.path)))
-        (nRes (evalFm fm (optionOr (listGet tailArgs 1) (rd/makeAtom "0")) st1))
-        (iv (freshVar (pairSecond nRes) "int"))
-        (st2 (expectType (pairSecond iv) (pairFirst nRes) (pairFirst iv) "Buf length" fm.path fm.mod.name))
-        (st3 (if (= (listLength tailArgs) 2) st2 (addDiag st2 "ERR_ARITY" (str "Buf takes an element type and a length, given " (stringFromInt64 (listLength tailArgs)) " arguments") fm.path)))]
-    (with fm :frames restFrames :values (cons (ty/tyCon "Buf" (list (ty/tyCon elemName (list) (none) (none))) (none) (none)) fm.values) :state st3))
-
-; (:m :ref LL-SIZED-CHECK-2 :do "(wrap T x) and (clamp T x): T an integer type name, x any integer, the value has type T; a float or a non-type first argument is a type error")
-fn convForm headTok: String tailArgs: (List rd/SExpr) restFrames: (List InferFrame) fm: FrameMachine -> FrameMachine
-  (let [(tArg (r/firstExprUnit tailArgs))
-        (tText (rd/renderSexpr tArg))
-        (tName (ty/resolveTypeAlias tText))
-        (known (and (rd/isAtom? tArg) (ty/isIntegralType? tName)))
-        (st0 (noteUnrouted fm.state headTok fm.path))
-        (st1 (if known st0 (addDiag st0 (if (= headTok "clamp") "arity" "type") (str headTok " takes an integer type name first, found " tText) fm.path)))
-        (xRes (evalFm fm (optionOr (listGet tailArgs 1) (rd/makeAtom "0")) st1))
-        (iv (freshVar (pairSecond xRes) "int"))
-        (st2 (expectType (pairSecond iv) (pairFirst xRes) (pairFirst iv) (str headTok " argument") fm.path fm.mod.name))
-        (st3 (if (= (listLength tailArgs) 2) st2 (addDiag st2 "ERR_ARITY" (str headTok " takes an integer type and a value, given " (stringFromInt64 (listLength tailArgs)) " arguments") fm.path)))
-        (rf (freshVar st3 "any"))
-        (rTy (if known (ty/tyCon tName (list) (none) (none)) (pairFirst rf)))]
-    (with fm :frames restFrames :values (cons rTy fm.values) :state (pairSecond rf)))
-
-fn lowLevelForm headTok: String tailArgs: (List rd/SExpr) restFrames: (List InferFrame) fm: FrameMachine -> FrameMachine
-  (if (= headTok "Buf") (bufForm tailArgs restFrames fm) (convForm headTok tailArgs restFrames fm))
-
-; (:m :ref LL-SIZED-CHECK-2 :do "a bit operator whose resolved operand type is a sized integer (U8 .. I16) is unrouted: the lowering has bit operators for Int64 only; returns the sized type name or empty")
-fn sizedBitOperand cname: String argsDone: (List ty/Type) fm: FrameMachine -> String
-  (if (or (listContains? (ll/bitOperatorNames) cname) (listContains? (ll/wrapOperatorNames) cname))
-    (let [(pv (popValue fm))
-          (names (map (fn [(t ty/Type)] -> String (match (u/applySubst fm.state.subst t) ((ty/tyCon n _ _ _) n) (_ ""))) (cons (pairFirst pv) argsDone)))]
-      (optionOr (listHead (filter (fn [(n String)] -> Bool (listContains? (ll/sizedIntNames) n)) names)) ""))
-    "")
-
 fn fmCallStep cname: String cty: ty/Type argsDone: (List ty/Type) argsPending: (List rd/SExpr) cenv: (Map String ty/Type) restFrames: (List InferFrame) fm: FrameMachine -> FrameMachine
-  (if (and (listEmpty? argsPending) (not (ownsName? cname fm)))
-    (let [(sized (sizedBitOperand cname argsDone fm))
-          (st1 (if (ll/unroutedName? cname) (noteUnrouted fm.state cname fm.path) fm.state))
-          (st2 (if (stringEmpty? sized) st1 (addDiag st1 "ERR_LOWLEVEL_UNROUTED" (str cname " over " sized " has no sized lowering yet: bit operators lower as Int64 only") fm.path)))]
-      (fmCallStepCore cname cty argsDone argsPending cenv restFrames (with fm :state st2)))
-    (fmCallStepCore cname cty argsDone argsPending cenv restFrames fm))
+  (let [(pv (popValue fm)) (val (pairFirst pv)) (remValues (pairSecond pv)) (revDone (cons val argsDone))] (if (listEmpty? argsPending) (if (and (ty/genericMulti? cname) (and (not (mapHas? fm.env cname)) (ty/isTyVar? (u/applySubst fm.state.subst cty)))) (genericCallStep cname (listReverse revDone) remValues restFrames fm) (let [(prunedCallee (u/applySubst fm.state.subst cty))] (match prunedCallee ((ty/tyFun params ret) (let [(stUnify (foldExpectArgs (listReverse revDone) params cname fm.path fm.mod.name fm.state))] (with fm :frames restFrames :values (cons (u/applySubst stUnify.subst ret) remValues) :state stUnify))) (_ (let [(fRes (freshVar fm.state "any"))] (with fm :frames restFrames :values (cons (pairFirst fRes) remValues) :state (pairSecond fRes))))))) (let [(nextArg (r/firstExprUnit argsPending)) (remPending (r/safeTail argsPending))] (with fm :frames (cons (fEval nextArg) (cons (fCall cname cty revDone remPending cenv) restFrames)) :values remValues))))
 
 fn genericCallStep cname: String args: (List ty/Type) remValues: (List ty/Type) restFrames: (List InferFrame) fm: FrameMachine -> FrameMachine
   (let [(st fm.state)
@@ -760,15 +501,12 @@ fn genericCallStep cname: String args: (List ty/Type) remValues: (List ty/Type) 
                    (else (resolveGenericCall cname concrete args (pairFirst fr) fm.mod fm.path (pairSecond fr)))))]
     (with fm :frames restFrames :values (cons (u/applySubst st1.subst (pairFirst fr)) remValues) :state st1))
 
-fn resolveGenericCallCore cname: String concrete: String args: (List ty/Type) result: ty/Type mod: r/ModuleSummary path: String st: InferState -> InferState
+fn resolveGenericCall cname: String concrete: String args: (List ty/Type) result: ty/Type mod: r/ModuleSummary path: String st: InferState -> InferState
   (match (lookupSysBuiltinSig concrete mod st)
     ((none) st)
     ((some res) (match (pairFirst res)
                   ((ty/tyFun params ret) (expectType (foldExpectArgs args params cname path mod.name (pairSecond res)) ret result (str "result of " cname) path mod.name))
                   (_ (pairSecond res)))))
-
-fn resolveGenericCall cname: String concrete: String args: (List ty/Type) result: ty/Type mod: r/ModuleSummary path: String st: InferState -> InferState
-  (resolveGenericCallCore cname concrete args result mod path (if (ll/unroutedName? concrete) (noteUnrouted st concrete path) st))
 
 fn resolveDeferred st: InferState mod: r/ModuleSummary path: String -> InferState
   (fold (fn [(acc InferState) (d Deferred)] -> InferState
@@ -827,31 +565,8 @@ fn scriptStepFm fm: FrameMachine restFrames: (List InferFrame) args: (List rd/SE
 fn evalFm fm: FrameMachine e: rd/SExpr st: InferState -> (Pair ty/Type InferState)
   (evalWithEnv fm e fm.env st)
 
-; (:m :ref LL-SIZED-CHECK :do "a U64 literal is its 64-bit pattern: a radix literal up to 0xFFFFFFFFFFFFFFFF is accepted whole (it parses to a negative Int64 bit pattern), a decimal literal must fit Int64 as everywhere else, and a signed negative literal never fits")
-fn u64LitBad? tokStr: String -> Bool
-  (if (stringStartsWith? tokStr "-")
-    true
-    (match (nk/parseIntLitBits tokStr)
-      ((none) true)
-      ((some n) (and (< n 0) (!= (nk/intLitShape tokStr) "radix")))))
-
-; (:m :ref LL-SIZED-CHECK :do "two different sized integral types never convert implicitly: the mismatch names the explicit conversion, (U32 x) for a U32 wanted and an argument of another sized type")
-fn conversionName name: String -> String
-  (cond ((= name "Int64") "I64") ((= name "Int32") "I32") (else name))
-
-fn mixedWidthHint want: ty/Type have: ty/Type -> String
-  (match want
-    ((ty/tyCon wn _ _ _)
-      (match have
-        ((ty/tyCon hn _ _ _)
-          (if (and (!= wn hn) (and (ty/isIntegralType? wn) (ty/isIntegralType? hn)))
-            (str "; no implicit conversion between integer types, write (" (conversionName wn) " x)")
-            ""))
-        (_ "")))
-    (_ ""))
-
 fn checkLiteralRanges intSites: (List (Pair String Int64)) subst: (Map Int64 ty/Type) path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
-  (fold (fn [(a (List ty/Diagnostic)) (site (Pair String Int64))] -> (List ty/Diagnostic) (let [(tokStr (pairFirst site)) (vid (pairSecond site)) (wty (u/applySubst subst (ty/tyVar vid "int"))) (tname (match wty ((ty/tyCon n _ _ _) n) (_ "Int64")))] (match (ty/intRangeBounds tname) ((none) a) ((some b) (let [(low (pairFirst b)) (high (pairSecond b)) (numOpt (nk/parseIntLit tokStr)) (badLit? (if (= tname "U64") (u64LitBad? tokStr) (match numOpt ((none) true) ((some n) (or (< n low) (> n high))))))] (if badLit? (let [(msg (str "the literal " tokStr " does not fit " tname " (" (stringFromInt64 low) ".." (stringFromInt64 high) ")"))] (cons (ty/Diagnostic :code "literal-range" :message msg :msg msg :line 1 :col 1 :path path) a)) a)))))) acc intSites)
+  (fold (fn [(a (List ty/Diagnostic)) (site (Pair String Int64))] -> (List ty/Diagnostic) (let [(tokStr (pairFirst site)) (vid (pairSecond site)) (wty (u/applySubst subst (ty/tyVar vid "int"))) (tname (match wty ((ty/tyCon n _ _ _) n) (_ "Int64")))] (match (ty/intRangeBounds tname) ((none) a) ((some b) (let [(low (pairFirst b)) (high (pairSecond b)) (numOpt (nk/parseIntLit tokStr)) (badLit? (match numOpt ((none) true) ((some n) (or (< n low) (> n high)))))] (if badLit? (let [(msg (str "the literal " tokStr " does not fit " tname " (" (stringFromInt64 low) ".." (stringFromInt64 high) ")"))] (cons (ty/Diagnostic :code "literal-range" :message msg :msg msg :line 1 :col 1 :path path) a)) a)))))) acc intSites)
 
 fn mapHasKey? m: (Map String Bool) k: String -> Bool
   (match (mapGet m k) ((some _) true) ((none) false))
@@ -880,38 +595,10 @@ fn paramInferType p: a/Param summary: r/ModuleSummary deps: r/DepIndex vmap: (Ma
 fn defunTvars d: a/DefunNode -> (List String)
   (if (listEmpty? d.typeVars) (ty/collectTvars (map (fn [(p a/Param)] -> String p.type) d.params) d.retType) d.typeVars)
 
-; (:m :ref typeVarParamUnchecked :do "a signature type variable is rigid in its own body: callers instantiate it freshly, so a body that pins it to a concrete type (passing c: C to a function that takes a record) let asl check accept any argument and fail at run time with ERR_TYPE; the pin is a check error at the definition. Any and the unknown type stay unflagged, and so does the variable own name written in a lambda or let annotation of the body, which parses as a nominal type; prelude own kinded variables (N I J X) are exempt because checkedDiv and its helpers narrow N by a run-time preludeIsFloat test")
-fn concreteBinding? t: ty/Type own: String -> Bool
-  (match t ((ty/tyVar _ _) false) ((ty/tyCon name _ _ _) (not (or (= name "?") (or (= name "Any") (= name own))))) ((ty/tyFun _ _) true))
-
-fn preludeFile? path: String -> Bool
-  (stringEndsWith? path "prelude/prelude.asl")
-
-fn rigidTvarDiags st: InferState tvars: (List String) vmap: (Map String ty/Type) fname: String path: String modName: String -> InferState
-  (fold (fn [(s InferState) (v String)] -> InferState
-          (match (mapGet vmap v)
-            ((none) s)
-            ((some tv) (let [(bound (u/applySubst s.subst tv))]
-                         (if (and (concreteBinding? bound v) (not (and (= modName "prelude") (listContains? (list "N" "I" "J" "X") v))))
-                           (addDiag s "type" (str "type variable " v " of " fname " is used as " (ty/showType bound) " in the body, so callers are not checked against it: write " (ty/showType bound) " in the signature") path)
-                           s)))))
-        st tvars)
-
-fn mergedTvarDiags st: InferState tvars: (List String) vmap: (Map String ty/Type) fname: String path: String -> InferState
-  (pairSecond (fold (fn [(acc (Pair (List (Pair Int64 String)) InferState)) (v String)] -> (Pair (List (Pair Int64 String)) InferState)
-          (match (mapGet vmap v)
-            ((none) acc)
-            ((some tv) (match (u/applySubst (pairSecond acc).subst tv)
-                         ((ty/tyVar id _) (match (listHead (filter (fn [(e (Pair Int64 String))] -> Bool (= (pairFirst e) id)) (pairFirst acc)))
-                                            ((some e) (pair (pairFirst acc) (addDiag (pairSecond acc) "type" (str "type variables " (pairSecond e) " and " v " of " fname " are used as one type in the body, so callers are not checked against it: use one variable in the signature") path)))
-                                            ((none) (pair (cons (pair id v) (pairFirst acc)) (pairSecond acc)))))
-                         (_ acc)))))
-        (pair (list) st) tvars))
-
 fn checkDefunDiags d: a/DefunNode summary: r/ModuleSummary deps: r/DepIndex path: String -> (List ty/Diagnostic)
   (let [(st00 (makeInferState)) (tvRes (freshVarsFrom (defunTvars d) (mapEmpty) st00)) (vmap (pairFirst tvRes)) (st0 (pairSecond tvRes)) (env0 (fold (fn [(e (Map String ty/Type)) (p a/Param)] -> (Map String ty/Type) (mapSet e p.name (paramInferType p summary deps vmap))) (mapEmpty) d.params)) (retTy (qualifyTypeWithMod (substParsedType (ty/parseTypeStr d.retType (list)) vmap) summary deps)) (scopeName (str "function " d.name)) (stParams (fold (fn [(s InferState) (p a/Param)] -> InferState (noteMapType s (paramInferType p summary deps vmap) scopeName)) st0 d.params)) (stNote (noteMapType stParams retTy scopeName)) (bodyNodes d.body)]
     (if (listEmpty? bodyNodes) (list)
-      (let [(allBodyRes (fold (fn [(accRes (Pair ty/Type InferState)) (ie (Pair Int64 rd/SExpr))] -> (Pair ty/Type InferState) (let [(i (pairFirst ie)) (e (pairSecond ie)) (before (listLength (pairSecond accRes).diags)) (res (runExprDirect e env0 (some retTy) false scopeName path summary deps (pairSecond accRes))) (pos (bodyDiagPos d i (pairSecond res).diags))] (pair (pairFirst res) (setDiags (pairSecond res) (placeFresh (pairSecond res).diags before pos))))) (pair (unitType) stNote) (zip (range 0 (listLength bodyNodes)) bodyNodes))) (lastTy (pairFirst allBodyRes)) (st1 (pairSecond allBodyRes)) (placed (listLength st1.diags)) (st2 (mergedTvarDiags (rigidTvarDiags (resolveDeferred (expectType st1 lastTy retTy (str "return of " d.name) path summary.name) summary path) (defunTvars d) vmap d.name path (if (preludeFile? path) "prelude" "")) (defunTvars d) vmap d.name path)) (st3Subst st2.subst) (dLit (checkLiteralRanges st2.intSites st3Subst path st2.diags)) (dMap (checkMapKeyRules st2.mapSites st3Subst summary deps path dLit))]
+      (let [(allBodyRes (fold (fn [(accRes (Pair ty/Type InferState)) (ie (Pair Int64 rd/SExpr))] -> (Pair ty/Type InferState) (let [(i (pairFirst ie)) (e (pairSecond ie)) (before (listLength (pairSecond accRes).diags)) (res (runExprDirect e env0 (some retTy) false scopeName path summary deps (pairSecond accRes))) (pos (bodyDiagPos d i (pairSecond res).diags))] (pair (pairFirst res) (setDiags (pairSecond res) (placeFresh (pairSecond res).diags before pos))))) (pair (unitType) stNote) (zip (range 0 (listLength bodyNodes)) bodyNodes))) (lastTy (pairFirst allBodyRes)) (st1 (pairSecond allBodyRes)) (placed (listLength st1.diags)) (st2 (resolveDeferred (expectType st1 lastTy retTy (str "return of " d.name) path summary.name) summary path)) (st3Subst st2.subst) (dLit (checkLiteralRanges st2.intSites st3Subst path st2.diags)) (dMap (checkMapKeyRules st2.mapSites st3Subst summary deps path dLit))]
         (placeFresh dMap placed (bodyDiagPos d (- (listLength bodyNodes) 1) st2.diags)))))
 
 fn untypedParamDiags d: a/DefunNode path: String -> (List ty/Diagnostic)
@@ -921,7 +608,7 @@ fn typePhaseCode? code: String -> Bool
   (or (= code "ERR_TYPE_MISMATCH") (or (= code "ERR_UNTYPED_PARAM") (= code "ERR_INVALID_MT_ARM")))
 
 fn typeBoundary ds: (List ty/Diagnostic) -> (List ty/Diagnostic)
-  (if (listAny? (fn [(d ty/Diagnostic)] -> Bool (not (or (typePhaseCode? d.code) (or (= d.code "ERR_NOT_EXPORTED") (or (= d.code "ERR_EFFECT_UNMARKED") (or (= d.code "scriptStep") (= d.code "matchCase"))))))) ds)
+  (if (listAny? (fn [(d ty/Diagnostic)] -> Bool (not (or (typePhaseCode? d.code) (or (= d.code "ERR_NOT_EXPORTED") (or (= d.code "ERR_EFFECT_UNMARKED") (= d.code "scriptStep")))))) ds)
     (filter (fn [(d ty/Diagnostic)] -> Bool (not (typePhaseCode? d.code))) ds)
     ds)
 
@@ -937,34 +624,6 @@ fn extractNotExportedName msg: String -> (Option String)
             ((none) (none))
             ((some j) (some (optionOr (stringSlice rest 0 j) ""))))))))
 
-; (:m :ref CHECK-LOWER-CONSTRUCTOR :do "resolve.asl reports ERR_UNKNOWN_CONSTRUCTOR at the statement, like ERR_NOT_EXPORTED; its message carries the pattern as written between 'in a match pattern: ' and ' is ', and the pattern without its opening paren is the needle, so the position found is the constructor itself; the reader hands a [a b] pattern over as (list a b), so a list pattern not found as written is looked for in its bracket spelling")
-fn unknownCtorNeedle msg: String -> (Option String)
-  (let [(prefix "in a match pattern: ")]
-    (match (stringIndexOf msg prefix)
-      ((none) (none))
-      ((some i0)
-        (let [(rest (optionOr (stringSlice msg (+ i0 (stringLength prefix)) (stringLength msg)) ""))]
-          (match (stringIndexOf rest " is ")
-            ((none) (none))
-            ((some j) (let [(pat (optionOr (stringSlice rest 0 j) ""))]
-                        (some (if (stringStartsWith? pat "(") (optionOr (stringSlice pat 1 (stringLength pat)) pat) pat)))))))))
-
-fn positionNeedle d: ty/Diagnostic -> (Option String)
-  (cond ((= d.code "rule-9") (extractNotExportedName d.message))
-        ((= d.code "ERR_UNKNOWN_CONSTRUCTOR") (unknownCtorNeedle d.message))
-        (else (none)))
-
-fn bracketNeedle needle: String -> String
-  (if (and (stringStartsWith? needle "list") (stringEndsWith? needle ")"))
-    (str "[" (stringTrim (optionOr (stringSlice needle 4 (- (stringLength needle) 1)) "")) "]")
-    needle)
-
-fn refineUnknownCtorDiag src: String d: ty/Diagnostic floor: (Pair Int64 Int64) -> ty/Diagnostic
-  (let [(needle (optionOr (unknownCtorNeedle d.message) ""))
-        (asWritten (a/findTokenPos src (pairFirst floor) (pairSecond floor) needle))
-        (pos (if (= asWritten floor) (a/findTokenPos src (pairFirst floor) (pairSecond floor) (bracketNeedle needle)) asWritten))]
-    (ty/Diagnostic :code d.code :message d.message :msg d.msg :line (pairFirst pos) :col (pairSecond pos) :path d.path))
-
 fn refineNotExportedDiag src: String d: ty/Diagnostic floor: (Pair Int64 Int64) -> ty/Diagnostic
   (let [(pos (a/findQualifiedTokenPos src (pairFirst floor) (pairSecond floor) (optionOr (extractNotExportedName d.message) "")))]
     (ty/Diagnostic :code d.code :message d.message :msg d.msg :line (pairFirst pos) :col (pairSecond pos) :path d.path))
@@ -973,12 +632,12 @@ fn refineNotExportedDiag src: String d: ty/Diagnostic floor: (Pair Int64 Int64) 
 fn refineNotExportedPositions src: String ds: (List ty/Diagnostic) -> (List ty/Diagnostic)
   (listReverse (pairSecond (fold (fn [(acc (Pair (Map String (Pair Int64 Int64)) (List ty/Diagnostic))) (d ty/Diagnostic)] -> (Pair (Map String (Pair Int64 Int64)) (List ty/Diagnostic))
                                     (let [(seen (pairFirst acc)) (outAcc (pairSecond acc))]
-                                      (if (some? (positionNeedle d))
-                                        (match (positionNeedle d)
+                                      (if (= d.code "rule-9")
+                                        (match (extractNotExportedName d.message)
                                           ((none) (pair seen (cons d outAcc)))
                                           ((some name)
                                            (let [(floor (optionOr (mapGet seen name) (pair d.line d.col)))
-                                                 (nd (if (= d.code "rule-9") (refineNotExportedDiag src d floor) (refineUnknownCtorDiag src d floor)))]
+                                                 (nd (refineNotExportedDiag src d floor))]
                                              (pair (mapSet seen name (pair nd.line (+ nd.col 1))) (cons nd outAcc)))))
                                         (pair seen (cons d outAcc)))))
                                   (pair (mapEmpty) (list)) ds)))
@@ -1104,23 +763,6 @@ fn mapEmptyMistake? d: ty/Diagnostic -> Bool
   (or (and (= d.code "ERR_ARITY") (and (stringStartsWith? d.message "map takes ") (stringEndsWith? d.message "given 0")))
       (and (= d.code "ERR_TYPE_MISMATCH") (and (stringContains? d.message "expected (Map ") (stringContains? d.message "found (List _)"))))
 
-; (:m :ref unknownTypeAccepted :do "ERR_UNKNOWN_TYPE names the nearest known types (builtins plus the module own schemas and enums) so a misspelt Stringing points at String; a name with nothing near gets no suggestion")
-fn knownTypeVocabulary forms: (List a/TopForm) path: String -> (List String)
-  (let [(m (r/collectSummary forms path))]
-    (listAppend (mapKeys m.schemas) (listAppend (mapKeys m.enums) (list "String" "Bool" "Unit" "Bytes" "Int64" "Int32" "Float64" "List" "Option" "Result" "Map" "HashMap" "Pair" "Any" "IoError" "Keyword" "Buf"))))
-
-fn unknownTypeHint vocab: (List String) d: ty/Diagnostic -> ty/Diagnostic
-  (if (not (and (= d.code "ERR_UNKNOWN_TYPE") (stringContains? d.message " is neither a known type")))
-    d
-    (let [(name (optionOr (listHead (stringSplit d.message " ")) ""))
-          (limit (max 2 (/ (stringLength name) 3)))
-          (scored (fold (fn [(acc (List (Pair Int64 String))) (c String)] -> (List (Pair Int64 String))
-                          (let [(dist (editDistance name c))] (if (and (<= dist limit) (!= c name)) (cons (pair dist c) acc) acc)))
-                        (list) vocab))
-          (ordered (listSortBy (fn [(p (Pair Int64 String))] -> String (str (stringFromInt64 (+ 1000 (pairFirst p))) " " (pairSecond p))) scored))
-          (names (map (fn [(p (Pair Int64 String))] -> String (pairSecond p)) (listTake ordered 3)))]
-      (if (listEmpty? names) d (let [(hint (str "; did you mean " (stringJoin names ", ")))] (with d :message (str d.message hint) :msg (str d.msg hint))))))
-
 fn messageHint d: ty/Diagnostic -> ty/Diagnostic
   (let [(hint (cond
                 ((mapEmptyMistake? d) "; hint: the empty map is (mapEmpty); map is the list function")
@@ -1129,7 +771,7 @@ fn messageHint d: ty/Diagnostic -> ty/Diagnostic
     (if (stringEmpty? hint) d (with d :message (str d.message hint) :msg (str d.msg hint))))
 
 fn checkModuleSource forms: (List a/TopForm) deps: (Map String r/ModuleSummary) path: String src: String -> (List ty/Diagnostic)
-  (let [(vocab (knownTypeVocabulary forms path))] (map (fn [(d ty/Diagnostic)] -> ty/Diagnostic (unknownTypeHint vocab (messageHint d))) (normalizeCheckDiags (armShapeHints forms src (refineUnknownSymbolPositions forms src (refineNotExportedPositions src (listAppend (checkModule forms deps path) (listAppend (tp/notTailDiags forms src path) (listAppend (ca/constantAssertDiags forms src path) (r/letrecDiags forms path src))))))))))
+  (map messageHint (normalizeCheckDiags (armShapeHints forms src (refineUnknownSymbolPositions forms src (refineNotExportedPositions src (listAppend (checkModule forms deps path) (listAppend (tp/notTailDiags forms src path) (listAppend (ca/constantAssertDiags forms src path) (r/letrecDiags forms path src)))))))))
 
 fn checkDefunWithUntyped d: a/DefunNode summary: r/ModuleSummary deps: r/DepIndex path: String -> (List ty/Diagnostic)
   (listAppend (untypedParamDiags d path) (checkDefunDiags d summary deps path))
@@ -1139,7 +781,8 @@ fn checkExprDiags p: a/PosForm summary: r/ModuleSummary deps: r/DepIndex path: S
     (placeFresh dMap placed pos))
 
 fn checkLintCode? code: String -> Bool
-  (or (= code "rule-13") (= code "type-arity"))
+  (or (= code "rule-10")
+    (or (= code "rule-13") (= code "type-arity")))
 
 fn isCheckLint d: ty/Diagnostic -> Bool
   (or (checkLintCode? d.code) (lintDiagnosticMessage? d))
@@ -1148,7 +791,7 @@ fn lintDiagnosticMessage? d: ty/Diagnostic -> Bool
   (or (stringContains? d.message "is exported as a type but not defined as a schema or enum") (and (= d.code "builtin-reference") (stringContains? d.message "is a builtin, not a value")))
 
 fn hostCheckCode code: String -> String
-  (cond ((= code "rule-1") "ERR_UNKNOWN_SYMBOL") ((= code "rule-2") "ERR_UNKNOWN_SYMBOL") ((= code "rule-12") "ERR_EFFECT_UNMARKED") ((= code "unresolved-import") "ERR_UNRESOLVED_IMPORT") ((= code "arity") "ERR_ARITY") ((= code "ctor") "ERR_BAD_CONSTRUCTOR") ((= code "type") "ERR_TYPE_MISMATCH") ((= code "rule-6") "ERR_TYPE_MISMATCH") ((= code "rule-10") "ERR_UNKNOWN_TYPE") ((= code "rule-4") "ERR_MATCH_NONEXHAUSTIVE") ((= code "literal-range") "ERR_INT_RANGE") ((= code "else-keyword") "ERR_ELSE_KEYWORD") ((= code "unreachable-arm") "ERR_UNREACHABLE_ARM") (else code))
+  (cond ((= code "rule-1") "ERR_UNKNOWN_SYMBOL") ((= code "rule-2") "ERR_UNKNOWN_SYMBOL") ((= code "rule-12") "ERR_EFFECT_UNMARKED") ((= code "unresolved-import") "ERR_UNRESOLVED_IMPORT") ((= code "arity") "ERR_ARITY") ((= code "ctor") "ERR_BAD_CONSTRUCTOR") ((= code "type") "ERR_TYPE_MISMATCH") ((= code "rule-6") "ERR_TYPE_MISMATCH") ((= code "rule-4") "ERR_MATCH_NONEXHAUSTIVE") ((= code "literal-range") "ERR_INT_RANGE") ((= code "else-keyword") "ERR_ELSE_KEYWORD") ((= code "unreachable-arm") "ERR_UNREACHABLE_ARM") (else code))
 
 fn hostCheckDiagCode d: ty/Diagnostic -> String
   (cond
@@ -1270,34 +913,18 @@ fn elaborateMarked forms: (List a/TopForm) deps: (Map String r/ModuleSummary) pa
       (map (fn [(t a/TopForm)] -> a/TopForm (match t ((a/topDefun d) (if (scriptMainOf? t) (a/topDefun (withBody d (list (elabSeq steps d.body)))) t)) (_ t))) forms))
 
 fn checkModuleIn forms: (List a/TopForm) deps: r/DepIndex path: String -> (List ty/Diagnostic)
-  (filter (fn [(d ty/Diagnostic)] -> Bool (and (!= d.code "scriptStep") (!= d.code "matchCase"))) (checkModuleNoted forms deps path))
+  (filter (fn [(d ty/Diagnostic)] -> Bool (!= d.code "scriptStep")) (checkModuleNoted forms deps path))
 
-fn moduleSummaryIn forms: (List a/TopForm) deps: r/DepIndex path: String -> r/ModuleSummary
+fn checkModuleNoted forms: (List a/TopForm) deps: r/DepIndex path: String -> (List ty/Diagnostic)
   (let [(summary0 (r/collectSummary forms path))
         (existingMod (match (mapGet deps.deps path)
                        ((some m) (some m))
                        ((none) (match (r/resolveDepIn path deps)
                                  ((ok m) (some m))
-                                 ((err _) (none))))))]
-    (match existingMod
-      ((some m) (r/withImports summary0 m.imports))
-      ((none) summary0)))
-
-; (:m :ref MATCH-BY-SCRUTINEE :do "the forms checked are the forms the lowering gets: a module with a candidate pattern is inferred once to note the spellings its matched enums give, rewritten, and checked as rewritten; a module without one is checked once as written")
-fn matchElaboratedIn forms: (List a/TopForm) deps: r/DepIndex path: String -> (List a/TopForm)
-  (if (not (formsHaveCandidate? forms (moduleSummaryIn forms deps path) deps))
-    forms
-    (let [(table (matchCaseTable (checkModuleRaw forms deps path)))]
-      (if (= (mapSize table) 0) forms (map (fn [(t a/TopForm)] -> a/TopForm (rewriteTopMatches table t)) forms))))
-
-fn elaborateMatches forms: (List a/TopForm) deps: (Map String r/ModuleSummary) path: String -> (List a/TopForm)
-  (matchElaboratedIn forms (r/depIndexOf deps) path)
-
-fn checkModuleNoted forms: (List a/TopForm) deps: r/DepIndex path: String -> (List ty/Diagnostic)
-  (checkModuleRaw (matchElaboratedIn forms deps path) deps path)
-
-fn checkModuleRaw forms: (List a/TopForm) deps: r/DepIndex path: String -> (List ty/Diagnostic)
-  (let [(summary (moduleSummaryIn forms deps path))
+                                 ((err _) (none))))))
+        (summary (match existingMod
+                   ((some m) (r/withImports summary0 m.imports))
+                   ((none) summary0)))
         (p12Diags (r/resolveModuleIn summary forms deps)) (defunDiags (fold (fn [(acc (List ty/Diagnostic)) (form a/TopForm)] -> (List ty/Diagnostic) (match form ((a/topDefun d) (listAppend (typeBoundary (checkDefunWithUntyped d summary deps path)) acc)) ((a/topExpr p) (listAppend (typeBoundary (checkExprDiags p summary deps path)) acc)) (_ acc))) (list) forms))] (map unpinned (listAppend p12Diags (listAppend (ff/foreignDiags forms path) defunDiags))))
 
 fn parseErrDiag pe: a/ParseError path: String -> (List ty/Diagnostic)

@@ -1,9 +1,11 @@
 // DOM bridge for aslang.dev. Every decision on the page is ASL compiled into /site.wasm:
 // this file loads the module, forwards clicks on [data-msg] to its update export and applies
 // the operations it prints, one ASN form per line: (:attr sel name value) (:text sel s)
-// (:swap sel html) (:copy s) (:store key value) (:after ms msg).
+// (:swap sel html) (:copy s) (:store key value) (:after ms msg). wasm32 has no clock builtin,
+// so the bridge times the module's render export and hands the numbers back to measured.
 const dec = new TextDecoder();
 let wasm, out = '', model = 0n;
+
 class Exit { constructor(code) { this.code = code; } }
 
 const cString = (ptr) => {
@@ -46,11 +48,16 @@ function apply(text) {
 }
 
 function run(f) {
-  out = ''; let result;
+  out = '';
+  let result;
   try { result = f(); } catch (e) { if (!(e instanceof Exit)) throw e; }
-  apply(out); return result;
+  apply(out);
+  return result;
 }
-function send(code) { model = run(() => wasm.update(BigInt(code), model)); }
+
+function send(code) {
+  model = run(() => wasm.update(BigInt(code), model));
+}
 
 function environment() {
   let stored = null;
@@ -59,44 +66,23 @@ function environment() {
   return BigInt((light ? 1 : 0) + (stored ? 2 : 0));
 }
 
-// Leon sits on the corner branch at the top left and stays there; the stylesheet swings him once
-// when he lands, then he breathes and blinks. Left-hand eggs leave before they reach him.
-const clamp = (x) => Math.min(1, Math.max(0, x)), ease = (x) => x * x * (3 - 2 * x);
-const still = matchMedia('(prefers-reduced-motion: reduce)');
-
-function spot() {
-  const narrow = innerWidth < 640, margin = $('main .shell')?.getBoundingClientRect().left ?? 0;
-  return { x: narrow ? 2 : 6, y: 60, w: narrow ? 56 : Math.min(120, Math.max(88, margin - 12)) };
-}
-
-function tick() {
-  const calm = still.matches, at = spot(), perch = $('#chameleon-perch');
-  if (perch) {
-    perch.style.transform = `translate3d(${at.x}px,${at.y}px,0)`;
-    perch.style.width = `${at.w.toFixed(1)}px`;
-    if (perch.dataset.rest !== 'branch') perch.dataset.rest = 'branch';
-  }
-  const leonY = at.y + at.w / 2, sy = window.scrollY || document.documentElement.scrollTop || 0, drift = calm ? 0 : sy * 0.65;
-  document.querySelectorAll('[data-egg]').forEach((el) => {
-    const ey = Number(el.dataset.y), ex = Number(el.dataset.x), er = Number(el.dataset.r), vy = ((ey - drift) % 3120 + 3120) % 3120 - 160;
-    const near = clamp((leonY + 340 - vy) / 340), away = el.dataset.egg === 'L' ? (calm ? Math.round(near) : ease(near)) : 0;
-    el.setAttribute('transform', `translate(${(ex - away * 220).toFixed(1)},${vy.toFixed(1)}) rotate(${(er - away * 40).toFixed(1)})`); el.style.opacity = (0.82 * (1 - away * 0.96)).toFixed(2);
-  });
-}
-let queued = false;
-function frame() { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; tick(); }); }
-['scroll', 'resize', 'load'].forEach((ev) => window.addEventListener(ev, frame, { passive: true }));
-document.addEventListener('scroll', frame, { passive: true, capture: true });
-tick();
-
 const source = fetch('/site.wasm');
 const { instance } = await (WebAssembly.instantiateStreaming
   ? WebAssembly.instantiateStreaming(source, imports)
   : source.then((r) => r.arrayBuffer()).then((b) => WebAssembly.instantiate(b, imports)));
 wasm = instance.exports;
 run(() => wasm._start());
-const timed = () => { const t0 = performance.now(), b = wasm.render(); return [BigInt(Math.round((performance.now() - t0) * 1e6)), b]; };
-const [cold] = timed(), [warm, bytes] = timed();
+const timed = () => {
+  const t0 = performance.now();
+  const bytes = wasm.render();
+  return [BigInt(Math.round((performance.now() - t0) * 1e6)), bytes];
+};
+const [cold] = timed();
+const [warm, bytes] = timed();
 run(() => wasm.measured(cold, warm, bytes));
-model = environment(); send(1);
-document.addEventListener('click', (e) => { const t = e.target.closest('[data-msg]'); if (t) send(Number(t.dataset.msg)); });
+model = environment();
+send(1);
+document.addEventListener('click', (e) => {
+  const target = e.target.closest('[data-msg]');
+  if (target) send(Number(target.dataset.msg));
+});

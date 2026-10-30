@@ -1,6 +1,7 @@
 (module asl-mesh/tests/swarmClusterTest
   :x [runTests RunTests testFiveNodeClusterInit testNetworkPartitionMajorityQuorum testSplitBrainResistance testPostPartitionStateConvergence testDualPolarityRefutations]
-  :i [(asl-mesh/raft :a raft)])
+  :i [(asl-mesh/raft :a raft)
+      (asl-mesh/vectorClock :a vc)])
 
 fn testFiveNodeClusterInit -> Bool
   (let [(cluster (list "node-1" "node-2" "node-3" "node-4" "node-5"))

@@ -32,13 +32,13 @@ Consider a 384-dimensional dense embedding (the size of `all-MiniLM-L6-v2` and s
 * 10,000 such vectors occupy **15.36 MB**.
 * Cosine similarity between a query `q` and a candidate `v` is `dot(q, v) / (|q| * |v|)`. When vectors are stored at unit length, it is the dot product alone.
 
-One dated measurement, taken on 2026-10-14 with an earlier build of the runtime and not a current figure: we ran `asl test` on a file that builds 10,000 384-dimensional `F64Array` vectors and takes each one's dot product with a query. Over five runs on a 4-core Linux cloud VM (Intel Xeon, 2.8 GHz), timed as whole-process wall time from Python's `subprocess.run`, the median was 0.37 s, vector construction and process start-up included. The same scan over 1,000 vectors took a median of 0.05 s.
+One measurement on today's interpreter: on 2026-10-14 we ran `asl-host test` on a file that builds 10,000 384-dimensional `F64Array` vectors and takes each one's dot product with a query. Over five runs on a 4-core Linux cloud VM (Intel Xeon, 2.8 GHz), timed as whole-process wall time from Python's `subprocess.run`, the median was 0.37 s, vector construction and host start-up included. The same scan over 1,000 vectors took a median of 0.05 s.
 
 ---
 
 ## 2. Recall in Plain AgentSlang
 
-The runtime binds unboxed `F64Array` builtins (`f64ArrayGenerate`, `f64ArrayGet`, `f64ArrayLen`, `f64ArraySum`, among others) and `sqrt`, which is enough for an in-process cosine scan. This sample passes `asl check` and `asl test` (3 assertions):
+The stage-0 host binds unboxed `F64Array` builtins (`f64ArrayGenerate`, `f64ArrayGet`, `f64ArrayLen`, `f64ArraySum`, among others) and `sqrt`, which is enough for an in-process cosine scan. This sample passes `asl-host check` and `asl-host test` (3 assertions):
 
 ```asl
 (module probe/p13eTest :x [dot cosine topMatch runTests] :i [])
@@ -54,7 +54,7 @@ fn cosine a: F64Array b: F64Array -> Float64
   (/ (dot a b) (* (sqrt (dot a a)) (sqrt (dot b b))))
 
 fn topMatch query: F64Array items: (List VectorItem) -> (Option String)
-  (match (listHead (listSortBy (fn [it] (- 0.0 (cosine query it.vector))) items))
+  (mt (listHead (listSortBy (fn [it] (- 0.0 (cosine query it.vector))) items))
     ((some best) (some best.id))
     ((none) (none)))
 
@@ -70,7 +70,7 @@ fn runTests -> Bool
       true))
 ```
 
-The repository also carries a fuller store in `asl/packages/asl-mem/src/store.asl` (vector items, dimension validation, normalization, a flat slab layout). Its math suite, `asl/packages/asl-mem/tests/mathTest.asl`, passes (27 assertions, 2026-10-14). That store keeps vectors as `(List F64)`; moving it onto the unboxed `F64Array` builtins shown above is open work.
+The repository also carries a fuller store in `asl/packages/asl-mem/src/store.asl` (vector items, dimension validation, normalization, a flat slab layout). Its math suite, `asl/packages/asl-mem/tests/mathTest.asl`, passes on the strict host (27 assertions, 2026-10-14). That store keeps vectors as `(List F64)`; moving it onto the unboxed `F64Array` builtins shown above is open work.
 
 ---
 
@@ -78,7 +78,7 @@ The repository also carries a fuller store in `asl/packages/asl-mem/src/store.as
 
 The weakness of a hosted vector database is **temporal decoupling**: a convention stored there is global, mutable and blind to Git branches.
 
-The toolbelt keeps agent memory as ASN ledgers in a memory directory of the repository it works on, so the ledgers can be tracked in Git like any other file. The `(:mem)` op lists, gets and queries rows there, and `(:mem :op put ...)` stages a row change through the same buffer as `(:edit)`, written only by `(:flush)`. Paths outside that directory are rejected with `ERR_BOUNDARY_VIOLATION`. Tracked in Git, that gives three properties:
+The toolbelt keeps agent memory as ASN ledgers under `.asl/mem/` in the repository it works on, so the ledgers can be tracked in Git like any other file. The `(:mem)` op lists, gets and queries rows there, and `(:mem :op put ...)` stages a row change through the same buffer as `(:edit)`, written only by `(:flush)`. Paths outside `.asl/mem` are rejected with `ERR_BOUNDARY_VIOLATION`. Tracked in Git, that gives three properties:
 1. **Memory as Repository Data:** plans, decisions and findings are plain S-expression files next to the code they describe.
 2. **Branch-Aware Context:** checking out a branch checks out the memory written on it.
 3. **Reproducible Runs:** a clone carries the same memory, with no API keys, database or network tunnel.
@@ -92,4 +92,4 @@ Recall over these ledgers is text search today: `(:mem :op query :text ...)` mat
 Agent memory does not need to be a remote service. Kept as versioned files and scanned in process, it:
 * **Moves with the code:** memory follows `git checkout`, merge and revert.
 * **Needs no infrastructure:** no API keys, no daemon, no hosted index.
-* **Is cheap at working-set size:** a 10,000-vector dot-product scan took 0.37 s in the dated measurement above (earlier runtime build), and compiled array kernels are the direction for bringing that down.
+* **Is cheap at working-set size:** a 10,000-vector dot-product scan took 0.37 s on the stage-0 interpreter in the measurement above, and compiled array kernels are the direction for bringing that down.

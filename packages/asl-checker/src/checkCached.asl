@@ -1,5 +1,5 @@
 (module asl-checker/checkCached
-  :x [Cache emptyCache stampCacheAt stampedCache! stampKeyIn! Verdict countsText checkFileCached! checkFileCachedIn! checkSourceCachedIn!]
+  :x [Cache emptyCache stampCacheAt stampedCache! Verdict countsText checkFileCached!]
   :i [(types :a ty) (resolve :a r) (ast :a a) (check :a chk)])
 
 ; (:m :ref CHECK-IMPORTS-HONEST :do "bodies maps the real path of each module whose body this process checked to its diagnostics, so a sweep checks a shared dependency once and every later importer counts it as summarised")
@@ -26,19 +26,8 @@ fn ! stampedCache! -> Cache
 fn stampText key: String -> String
   (str "aslBodyStamp 1\n" key "\n")
 
-fn stampLabel base: String p: String -> String
-  (if (stringStartsWith? p (str base "/")) (optionOr (stringSlice p (+ (stringLength base) 1) (stringLength p)) p) p)
-
-; (:m :ref TRAIN-SUITE-FRONTEND-SHARE :do "what a body verdict reads besides its source and resolved imports: the :pure flag of the nearest manifest.asn (rule 12, resolve packagePure!), so it is in both stamp keys; builtin signatures and the prelude are compiled into the checker and covered by its id; .asl.config.asn, manifest :dependencies and ~/.asl/pkgs only steer resolution, covered by the resolved paths in the key; hints change diagnostic text only and only clean bodies are stamped")
-fn ! pureMark path: String -> String
-  (if (r/packagePure! path) " pure" "")
-
 fn ! stampKey! checkerId: String paths: (List String) -> (Option String)
-  (stampKeyIn! (resultOr (realPath ".") ".") checkerId paths)
-
-; (:m :ref LEONSERVE-COLD-START :do "a dependency inside the base (the workspace the run starts in) is named in the stamp key by its path from the base, with its content digest: a worktree at another path with the same sources reuses the clean-closure stamps instead of checking the whole closure again (leonServe: about 400 s in a fresh worktree); a file outside the base keeps its absolute path")
-fn ! stampKeyIn! base: String checkerId: String paths: (List String) -> (Option String)
-  (let [(lines (map (fn [(p String)] -> String (match (fileReadBytes p) ((ok b) (str (stampLabel base p) "=" (bytesSha256 b) (pureMark p))) ((err _) ""))) (listSort paths)))]
+  (let [(lines (map (fn [(p String)] -> String (match (fileReadBytes p) ((ok b) (str p "=" (bytesSha256 b))) ((err _) ""))) (listSort paths)))]
     (if (listAny? (fn [(l String)] -> Bool (stringEmpty? l)) lines)
       (none)
       (some (bytesSha256 (stringToBytes (str (stampText checkerId) (stringJoin lines "\n")))))))
@@ -106,121 +95,22 @@ fn ! bodyStep! paths: (List String) roots: (List String) known: (Map String r/Mo
                       (ds (pairFirst r))]
                   (bodyStep! rest roots known (Tally :diags (listAppend t.diags ds) :checked (+ t.checked 1) :summarised t.summarised :cache (Cache :index (pairSecond r) :bodies (mapSet t.cache.bodies p ds) :stampDir t.cache.stampDir :checkerId t.cache.checkerId)))))))))))
 
-; (:m :ref TRAIN-SUITE-FRONTEND-SHARE :do "a body checked clean is also stamped on its own, in stampDir/modules apart from the closure stamps: its key is this checker, its path from the base with its content digest, and the keys of the modules it imports, so it covers the module's whole import closure; a closure whose stamp misses after one edit checks only the edited module and its importers, and a second root with that closure checks none of them (cardTest: 273 bodies, 149 s, on one leaf edit)")
-(schema KeyMemo (:f keys (Map String String)) (:f index r/ModIndex))
-
-fn modStampDir dir: String -> String
-  (str dir "/modules")
-
-fn setKey m: KeyMemo p: String k: String -> KeyMemo
-  (KeyMemo :keys (mapSet m.keys p k) :index m.index)
-
-fn anyEmpty? xs: (List String) -> Bool
-  (listAny? (fn [(x String)] -> Bool (stringEmpty? x)) xs)
-
-; (:m :ref TRAIN-SUITE-FRONTEND-SHARE :do "a module of the closure load already carries its imports resolved to real paths (resolve loadModule!, alias to path), so its direct dependencies are read from that summary without parsing or resolving again; an import left unresolved there is not a loaded path and yields no key; a module outside the load is parsed and resolved here")
-fn ! parsedDeps! dep: String roots: (List String) known: (Map String r/ModuleSummary) ix: r/ModIndex -> (Pair (Option (List String)) r/ModIndex)
-  (match (fileReadString dep)
-    ((err _) (pair (none) ix))
-    ((ok src)
-      (match (a/parseForTypeCheck src)
-        ((err _) (pair (none) ix))
-        ((ok forms)
-          (let [(summary (r/collectSummary forms dep))
-                (imports (filter (fn [(i String)] -> Bool (!= i "sys")) (r/mapValuesList summary.imports)))
-                (cl (r/loadModuleDepsFrom! (cons (r/parentDirOf dep) roots) imports known ix))
-                (found (map (fn [(i String)] -> String (match (mapGet cl.deps i) ((some s) s.path) ((none) ""))) imports))]
-            (match (classify cl)
-              ((err _) (pair (none) cl.index))
-              ((ok _) (pair (if (anyEmpty? found) (none) (some found)) cl.index))))))))
-
-fn ! directDeps! dep: String roots: (List String) known: (Map String r/ModuleSummary) ix: r/ModIndex -> (Pair (Option (List String)) r/ModIndex)
-  (match (mapGet known dep)
-    ((none) (parsedDeps! dep roots known ix))
-    ((some s)
-      (let [(paths (filter (fn [(p String)] -> Bool (!= p "sys")) (r/mapValuesList s.imports)))]
-        (pair (if (listAll? (fn [(p String)] -> Bool (mapHas? known p)) paths) (some paths) (none)) ix))))
-
-; (:m :ref TRAIN-SUITE-FRONTEND-SHARE :do "an empty key marks a module in progress or without a key, so an import cycle or an unreadable or unresolved dependency yields no key and that body is checked as before")
-fn ! modKey! base: String id: String roots: (List String) known: (Map String r/ModuleSummary) path: String memo: KeyMemo -> (Pair String KeyMemo)
-  (match (mapGet memo.keys path)
-    ((some k) (pair k memo))
-    ((none)
-      (match (fileReadBytes path)
-        ((err _) (pair "" (setKey memo path "")))
-        ((ok b)
-          (let [(own (str "aslModStamp 1\n" id "\n" (stampLabel base path) "=" (bytesSha256 b) (pureMark path)))]
-            (if (not (stringEndsWith? path ".asl"))
-              (let [(k (bytesSha256 (stringToBytes own)))] (pair k (setKey memo path k)))
-              (let [(dd (directDeps! path roots known memo.index))
-                    (m1 (setKey (KeyMemo :keys memo.keys :index (pairSecond dd)) path ""))]
-                (match (pairFirst dd)
-                  ((none) (pair "" m1))
-                  ((some ps)
-                    (let [(acc (fold (fn [(st (Pair (List String) KeyMemo)) (p String)] -> (Pair (List String) KeyMemo)
-                                       (let [(r (modKey! base id roots known p (pairSecond st)))]
-                                         (pair (cons (if (stringEmpty? (pairFirst r)) "" (str (stampLabel base p) " " (pairFirst r))) (pairFirst st)) (pairSecond r))))
-                                     (pair (list) m1) ps))
-                          (m2 (pairSecond acc))
-                          (k (if (anyEmpty? (pairFirst acc)) "" (bytesSha256 (stringToBytes (str own "\n" (stringJoin (listSort (pairFirst acc)) "\n"))))))]
-                      (pair k (setKey m2 path k))))))))))))
-
-fn ! modKeysOf! base: String id: String roots: (List String) known: (Map String r/ModuleSummary) paths: (List String) ix: r/ModIndex -> KeyMemo
-  (fold (fn [(m KeyMemo) (p String)] -> KeyMemo (pairSecond (modKey! base id roots known p m))) (KeyMemo :keys (mapEmpty) :index ix) paths)
-
-fn modKeyOf memo: KeyMemo p: String -> String
-  (optionOr (mapGet memo.keys p) "")
-
-; (:m :ref TRAIN-SUITE-FRONTEND-SHARE :do "a stamp is written only when the key taken again after the check equals the key taken before it, so a source or dependency edited while its body was checked is not stamped under the old key")
-fn ! modStampsWrite! dir: String mods: KeyMemo post: KeyMemo hits: (List String) bodies: (Map String (List ty/Diagnostic)) paths: (List String) -> Int64
-  (fold (fn [(n Int64) (p String)] -> Int64
-          (let [(k (modKeyOf mods p))
-                (same (= k (modKeyOf post p)))
-                (clean (match (mapGet bodies p) ((some ds) (listEmpty? ds)) ((none) false)))]
-            (if (and (not (stringEmpty? k)) (and clean (and same (and (not (listContains? hits p)) (stampWrite! dir k))))) (+ n 1) n)))
-        0 paths)
-
 ; (:m :ref CHECK-IMPORTS-HONEST :do "a closure stamped clean under this checker and these dependency digests is summarised without checking its bodies; a clean check writes the stamp, also when this run had every body already, a dirty one never does")
-fn ! closureVerdict! base: String path: String src: String forms: (List a/TopForm) roots: (List String) cl: r/ModuleClosure deps: (Map String r/ModuleSummary) cache: Cache -> (Pair (Result Verdict String) Cache)
+fn ! closureVerdict! path: String src: String forms: (List a/TopForm) roots: (List String) cl: r/ModuleClosure deps: (Map String r/ModuleSummary) cache: Cache -> (Pair (Result Verdict String) Cache)
   (let [(self (resultOr (realPath path) path))
         (own (chk/checkModuleSource forms deps path src))
         (depPaths (filter (fn [(p String)] -> Bool (and (!= p self) (stringEndsWith? p ".asl"))) cl.paths))
         (fresh (filter (fn [(p String)] -> Bool (not (mapHas? cache.bodies p))) depPaths))
-        (key (if (or (listEmpty? depPaths) (stringEmpty? cache.checkerId)) (none) (stampKeyIn! base cache.checkerId depPaths)))
+        (key (if (or (listEmpty? depPaths) (stringEmpty? cache.checkerId)) (none) (stampKey! cache.checkerId depPaths)))
         (start (Cache :index cl.index :bodies (mapSet cache.bodies self own) :stampDir cache.stampDir :checkerId cache.checkerId))]
     (if (and (not (listEmpty? fresh)) (match key ((some k) (stampHit! cache.stampDir k)) ((none) false)))
       (pair (ok (Verdict :diags own :checked 1 :summarised (listLength depPaths))) start)
-      (let [(known (realDeps cl))
-            (mods (if (or (listEmpty? fresh) (stringEmpty? cache.checkerId)) (KeyMemo :keys (mapEmpty) :index cl.index) (modKeysOf! base cache.checkerId roots known fresh cl.index)))
-            (mDir (modStampDir cache.stampDir))
-            (hits (filter (fn [(p String)] -> Bool (let [(k (modKeyOf mods p))] (and (not (stringEmpty? k)) (stampHit! mDir k)))) fresh))
-            (seeded (Cache :index mods.index :bodies (fold (fn [(acc (Map String (List ty/Diagnostic))) (p String)] -> (Map String (List ty/Diagnostic)) (mapSet acc p (list))) start.bodies hits) :stampDir cache.stampDir :checkerId cache.checkerId))
-            (t (bodyStep! depPaths roots known (Tally :diags own :checked 1 :summarised 0 :cache seeded)))
-            (written (filter (fn [(p String)] -> Bool (and (not (listContains? hits p)) (match (mapGet t.cache.bodies p) ((some ds) (listEmpty? ds)) ((none) false)))) fresh))
-            (post (if (or (listEmpty? written) (stringEmpty? cache.checkerId)) (KeyMemo :keys (mapEmpty) :index t.cache.index) (modKeysOf! base cache.checkerId roots known written t.cache.index)))
-            (modsWritten (modStampsWrite! mDir mods post hits t.cache.bodies written))
+      (let [(t (bodyStep! depPaths roots (realDeps cl) (Tally :diags own :checked 1 :summarised 0 :cache start)))
             (clean (= (listLength t.diags) (listLength own)))
             (stamped (match key ((some k) (and clean (stampWrite! cache.stampDir k))) ((none) false)))]
         (pair (ok (Verdict :diags t.diags :checked t.checked :summarised t.summarised)) t.cache))))
 
 fn ! checkFileCached! path: String roots: (List String) cache: Cache -> (Pair (Result Verdict String) Cache)
-  (checkFileCachedIn! (resultOr (realPath ".") ".") path roots cache)
-
-; (:m :ref RELAY-FORMS-SLOW :do "base is the tree stampKeyIn! labels the closure's deps from; a check of a byte-identical copy (asl-forms' staged overlay) passes the copy's root, so its deps match the workspace stamp instead of being labelled by their absolute copy paths and re-checked")
-fn ! checkSourceCachedIn! base: String path: String src: String roots: (List String) cache: Cache -> (Pair (Result Verdict String) Cache)
-  (match (a/parseForTypeCheck src)
-    ((err pe) (pair (ok (Verdict :diags (parseErrDiag pe path) :checked 1 :summarised 0)) cache))
-    ((ok forms)
-      (let [(summary (r/collectSummary forms path))
-            (importPaths (r/mapValuesList summary.imports))
-            (allRoots (cons (r/parentDirOf path) roots))
-            (cl (r/loadModuleDepsFrom! allRoots importPaths (mapEmpty) cache.index))
-            (nextCache (with cache :index cl.index))]
-        (match (classify cl)
-          ((err _) (pair (ok (Verdict :diags (closureDiags path cl) :checked 1 :summarised 0)) nextCache))
-          ((ok deps) (closureVerdict! base path src forms allRoots cl deps cache))))))
-
-fn ! checkFileCachedIn! base: String path: String roots: (List String) cache: Cache -> (Pair (Result Verdict String) Cache)
   (match (fileReadString path)
     ((err ioErr) (pair (err ioErr) cache))
     ((ok src)
@@ -234,4 +124,4 @@ fn ! checkFileCachedIn! base: String path: String roots: (List String) cache: Ca
                 (nextCache (with cache :index cl.index))]
             (match (classify cl)
               ((err _) (pair (ok (Verdict :diags (closureDiags path cl) :checked 1 :summarised 0)) nextCache))
-              ((ok deps) (closureVerdict! base path src forms allRoots cl deps cache))))))))
+              ((ok deps) (closureVerdict! path src forms allRoots cl deps cache))))))))

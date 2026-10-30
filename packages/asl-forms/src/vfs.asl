@@ -40,9 +40,8 @@ fn storeDir! v: Vfs -> String
     (let [(d (k/joinPath v.dir v.session))]
       (do (resultOr (dirCreate d) ()) d)))
 
-; (:m :ref FORMS-FLUSH-CR :do "staging and snapshots read the bytes as they are, so a flush writes back every byte outside the edited span (CRLF, a lone CR, a tab, trailing spaces); the read op normalises line endings for display itself")
 fn readText! p: String -> (Result String String)
-  (fileReadString p)
+  (match (fileReadString p) ((err e) (err e)) ((ok s) (ok (k/universalNewlines s))))
 
 fn countChars b: Bytes i: Int64 n: Int64 acc: Int64 -> Int64
   (if (>= i n) acc (countChars b (+ i 1) n (if (= (& (bytesGet b i) 192) 128) acc (+ acc 1))))

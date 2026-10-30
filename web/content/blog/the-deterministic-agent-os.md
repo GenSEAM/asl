@@ -1,7 +1,7 @@
 # Stop Making LLMs Do OS Work: Why Autonomous Coding Needs an ALU / Kernel Split
 *By GenSEAM | September 2026*
 
-When building autonomous software engineering agents, the prevailing industry pattern is asking the language model to act as a complete, self-contained computer.
+When building autonomous software engineering agents, the prevailing industry pattern is asking the language model to act as a complete, sovereign computer.
 
 The model is prompted to be the planner, the terminal shell, the compiler, the file system browser, the test runner, and the quality inspector all at once. When something breaks, a long stack trace is dumped back into the prompt, and the agent is asked to "figure it out."
 
@@ -21,7 +21,7 @@ Our position: separate **the stochastic semantic ALU** from **the deterministic 
 stochastic plane      the model (the ALU) and its context window (the registers)
                               |  forms in, receipts out
 deterministic plane   the harness: tool routing, delimiter and name checks
-                      staged edits and git, with the memory ledgers
+                      staged edits and git, with the .asl/mem ledgers
                       process supervision: stdin firewall and idle watchdog
 ```
 
@@ -29,7 +29,7 @@ deterministic plane   the harness: tool routing, delimiter and name checks
 - **The Harness is the OS**: The harness controls process lifetimes, routes tools, validates delimiters, and isolates execution.
 - **The Context Window is a register file, not a trash bin**: What enters it should be chosen, bounded, and replaceable.
 
-Much of the deterministic plane already exists as tools. The `asl` agent plane reads a symbol or a bounded slice of a file (`(:read :file ... :symbol ...)`) instead of `cat`, stages edits in a session buffer (`(:edit ...)`, `(:diff)`) and writes them to disk only on `(:flush)`, and resolves names, arity and enum coverage before anything runs (`asl check FILE`, also run by `(:check)`). The rest of this post describes the parts we are still building.
+Much of the deterministic plane already exists as tools. The `asl` agent plane reads a symbol or a bounded slice of a file (`(:read :file ... :symbol ...)`) instead of `cat`, stages edits in a session buffer (`(:edit ...)`, `(:diff)`) and writes them to disk only on `(:flush)`, and resolves names, arity and enum coverage before anything runs (`host/out/asl-host check FILE`, also run by `(:check)`). The rest of this post describes the parts we are still building.
 
 ---
 
@@ -58,7 +58,7 @@ This is direction, not a measured result. We have not yet run a controlled compa
 
 Traditional agent state engines rely on SQLite databases, Redis caches, or cloud vector endpoints. When multiple agents collaborate across Git branches, binary files collide.
 
-Our working memory is plain ASN text in a memory directory of the workspace (ledgers for intent, roadmap, principles, notes, known-red suites and dated work), versioned with the code. The `(:mem)` op lists, queries and stages changes to those row-keyed ledgers, and `(:note)` records and lists observations in the notes ledger.
+Our working memory is plain ASN text in the workspace under `.asl/mem` (`intent.asn`, `roadmap.asn`, `principles.asn`, `notes.asn`, `knownRed.asn` and dated work ledgers), versioned with the code. The `(:mem)` op lists, queries and stages changes to those row-keyed ledgers, and `(:note)` records and lists observations in `notes.asn`.
 
 The property we rely on is that a record is one self-contained line, so additions from parallel branches merge as line additions:
 
@@ -82,7 +82,7 @@ The process package `asl-proc` handles this in ASL (`packages/asl-proc/src/core/
 
 The model then sees a structured receipt instead of a frozen terminal and can re-run with non-interactive flags (e.g. `-y`).
 
-The module loads, and its suites pass there (on 2026-10-14: `processTest.asl` 47 passed checks, `sessionTest.asl` 30, and `rpcProcTest.asl` 42, which steps a session through the deadline). The escalation is a session model stepped by elapsed time, not yet a guarantee for every command the agent plane runs.
+The module loads on the stage-0 host, and its suites pass there (on 2026-10-14: `processTest.asl` 47 passed checks, `sessionTest.asl` 30, and `rpcProcTest.asl` 42, which steps a session through the deadline). The escalation is a session model stepped by elapsed time, not yet a guarantee for every command the agent plane runs.
 
 ---
 

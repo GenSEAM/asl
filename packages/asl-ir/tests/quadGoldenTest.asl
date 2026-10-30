@@ -1,5 +1,5 @@
 (module asl-ir/tests/quadGoldenTest
-  :x [entries goldenDigests linkedText sourceText runTests]
+  :x [entries goldenDigests linkedText runTests]
   :i [(asl-ir/types :a ty)
       (asl-ir/printer :a prn)
       (asl-ir/link :a lk)])
@@ -26,13 +26,8 @@ fn entries -> (List String)
 ; (:m :ref FFI2 :do "checkSemanticTest linked IR re-recorded on merge sh/INTEG8b into sh/FFI2 (5041040 bytes: BATCH8 plus the foreign checker rules); measured by this file own goldenDigests printer")
 ; (:m :ref INTEG12 :do "checkSemanticTest linked IR re-recorded after the wave12 merges (+242 bytes, 5123186: the compiler closure and prelude changes of LINUXFFI2 and sibling merges); measured by this file own goldenDigests printer")
 ; (:m :ref INTEG13 :do "checkSemanticTest linked IR re-recorded after the wave13 merges (+40100 bytes, 5163286: checker hint names ty/stringBuiltinNames and unknown-symbol hints, indentLexer change); measured by this file own goldenDigests printer")
-; (:m :ref CONFORMANCE-MAIN-REDS :do "checkSemanticTest linked IR re-recorded on main 5fab8c0a0 (+24932 bytes, 5781512): numKinds literal grammar and int kinds (f4e15216e 6535c0608), the lowLevelRoute hub (cd5241d9d), the lexer radix continuation (12d40c785) and the ERR_UNDEFINED_EXPORT checker and :x sweep (db0fe60ae c1ea15a18 fe10c72ed); measured by this file own goldenDigests printer")
-; (:m :ref ASLIR-STALE-GOLDENS :do "checkSemanticTest linked IR re-recorded on 766de3ec0 (+21506 bytes, 5803018): the only source change in its link closure since the 4d09b2c23 pin (which reproduced the old digest) is e84bdce13 sized ints in asl-checker (new module lowLevelSigs, 13 new fns in check and lowLevelSigs, edits in types and resolve); all other linked lines differ only by renumbered string and id indexes; measured by this file own goldenDigests printer")
-; (:m :ref QUADGOLDEN-RED-MAIN :do "checkSemanticTest linked IR re-recorded by goldenRegen --apply on main fe6f09707 (+15410 bytes, 5835229): its link closure changed since the b8a32dd70 pin only by 9dfcb541e heal, 633865026 forms kernel, d7cef1f38 checkCached, 90688a703 and 207d8fd6b indentParser schema defaults, b45aa7ff8 resolve effect worklist; asl-ir src, prelude and lowerSourceWith are unchanged in that range, so the drift is those source changes, not a lowering regression")
-; (:m :ref LOWLEVEL-WRAP-NATIVE :do "checkSemanticTest linked IR re-recorded by goldenRegen --apply on WRAPNAT d448d30b8 (+702 bytes, 5837165): closure change only lowLevelSigs.asl and check.asl wrap-builtin routing")
-; (:m :ref MATCH-BY-SCRUTINEE :do "checkSemanticTest linked IR re-recorded by goldenRegen --apply on 62db78e74 over main 668522103 (+59227 bytes, 6104690): closure change only check.asl and resolve.asl (match patterns resolved by the inferred enum, ERR_NESTED_CASE_ATOM, unreachable-arm covering arm) and link.asl elaborateUnits")
 fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "-8883695896353586377:6104690")
+  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "7970664847138001670:5756580")
         (pair "lowerSourceWith" "6806003338108627551:8856"))
 
 fn diagLine d: ty/IrDiag -> String

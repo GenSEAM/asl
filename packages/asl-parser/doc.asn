@@ -675,4 +675,3 @@
 (:doc :symbol "asl/packages/asl-parser/src/ast.asl#shebangless" :text "The source with a #! first line blanked and its newline kept, so later lines keep their numbers; any other source unchanged.")
 (:doc :symbol "asl/packages/asl-parser/src/ast.asl#scriptMainDoc" :text "The docstring of the main the parser synthesises from a script's top-level code; the linker reads it to tell such a module from one that defines main.")
 (:doc :symbol "asl/packages/asl-parser/src/ast.asl#scriptStatementsOf" :text "The top-level code forms a synthesised script main body was built from, markers removed and in order, so a printer writes the script back as written.")
-(:doc :symbol "asl/packages/asl-parser/src/ast.asl#canonicalSpelling" :text "the source with every reported retired call head rewritten to its canonical spelling, unchanged when it holds none")

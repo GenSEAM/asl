@@ -1,5 +1,5 @@
 (module asl-gates/suiteRunner
-  :x [SuiteResult SnapRun Fault Job Done discover frozenCount isFrozenPath! selectDirectorySuites! getExcludedForm snapRun gainedPaths workerCount envInt! gate main makeSuiteResult esc trustForm gateCounts computeDigest normpath dirname relpath makeSnapshot! runJobs! runJobsBy! doneMs runOne! gitOut! gitRun! gitRoot! absPath slowSuiteTimeoutS suiteJob! makeTempDir! sweepStaleTemps! isFile! nonHermeticReason driverCorpus pyStrip pyLines isSuiteName isExcludedSegment helpers! buildHost! nativeCliReady? aslResult! countConstant! skipAllowedPaths skipDecision! suiteJobFor! toResult! countedAsserts countedRefutes countedDeclared]
+  :x [SuiteResult SnapRun Fault Job Done discover frozenCount isFrozenPath! selectDirectorySuites! getExcludedForm snapRun gainedPaths workerCount envInt! gate main makeSuiteResult esc trustForm gateCounts computeDigest normpath dirname relpath makeSnapshot! runJobs! runJobsBy! doneMs runOne! gitOut! gitRun! gitRoot! absPath slowSuiteTimeoutS suiteJob! makeTempDir! sweepStaleTemps! isFile! nonHermeticReason driverCorpus pyStrip pyLines isSuiteName isExcludedSegment helpers! buildHost! nativeCliReady?]
   :i [(asl-gates/suiteTimes :a st) (asl-proc/runnerBin :a rb)])
 
 (schema SuiteResult
@@ -14,16 +14,6 @@
 
 fn makeSuiteResult suite: String cause: String digest: String failLine: String asserts: Int64 refutes: Int64 declared: Int64 failed: Int64 -> SuiteResult
   (SuiteResult :suite suite :cause cause :digest digest :failLine failLine :asserts asserts :refutes refutes :declared declared :failed failed)
-
-; (:m :ref SKIP-AND-CONSTANT :do "a skipped suite reports the asserts it ran on its own row but adds 0 to every executed total, so a skip never satisfies the executed-above-zero invariant")
-fn countedAsserts r: SuiteResult -> Int64
-  (if (= r.cause "SKIPPED") 0 r.asserts)
-
-fn countedRefutes r: SuiteResult -> Int64
-  (if (= r.cause "SKIPPED") 0 r.refutes)
-
-fn countedDeclared r: SuiteResult -> Int64
-  (if (= r.cause "SKIPPED") 0 r.declared)
 
 (schema HostVerdict
   (:f cause String)
@@ -147,8 +137,7 @@ fn isExcludedSegment p: String -> Bool
             (stringSplit p "/"))
 
 fn getDriverCorpora -> (List (Pair String String))
-  (list (pair "tests/acceptance/r1Host/" "tests/acceptance/r1Host/run.sh")
-        (pair "tests/harnessBench/cases/" "tests/harnessBench/verifyCases.asl"))
+  (list (pair "tests/acceptance/r1Host/" "tests/acceptance/r1Host/run.sh"))
 
 fn driverCorpus p: String -> (Option String)
   (match (listHead (filter (fn [(d (Pair String String))] -> Bool (stringStartsWith? p (pairFirst d))) (getDriverCorpora)))
@@ -292,59 +281,6 @@ fn declaredAsserts! path: String -> Int64
   (match (fileReadBytes path)
     ((ok data) (countDeclaredLoop data (bytesLength data) 0 false 0 0))
     ((err _) 0))
-
-; (:m :ref SKIP-AND-CONSTANT :do "a constant assert is one whose condition is the literal true; a suite whose executed asserts are all constant is ERR_CONSTANT_ASSERT, since it can only pass")
-fn countConstantLoop data: Bytes n: Int64 i: Int64 inStr: Bool acc: Int64 -> Int64
-  (if (>= i n)
-    acc
-    (let [(b (bytesGet data i))]
-      (cond
-        (inStr
-          (cond
-            ((= b 92) (countConstantLoop data n (+ i 2) true acc))
-            ((= b 34) (countConstantLoop data n (+ i 1) false acc))
-            (else (countConstantLoop data n (+ i 1) true acc))))
-        ((= b 34) (countConstantLoop data n (+ i 1) true acc))
-        ((and (= b 40) (< (+ i 7) n) (litAt data n (+ i 1) "assert") (isSpaceByte (bytesGet data (+ i 7))))
-         (countConstantLoop data n (+ i 7) false (+ acc (checkGuard data n (+ i 7) "true"))))
-        (else (countConstantLoop data n (+ i 1) false acc)))))
-
-fn countConstant! path: String -> Int64
-  (match (fileReadBytes path)
-    ((ok data) (countConstantLoop data (bytesLength data) 0 false 0))
-    ((err _) 0))
-
-; (:m :ref SKIP-BY-RUNNER :do "the runner decides a skip, never the suite output: a row of skipAllowed.asn names a suite and a precondition the runner checks itself before running it, a false precondition means the suite is not run and is SKIPPED with 0 asserts, a skip row printed by a suite has no effect")
-fn skipAllowedPaths text: String -> (List String)
-  (fold (fn [(acc (List String)) (l String)] -> (List String)
-          (let [(t (pyStrip l))]
-            (if (stringStartsWith? t "(:skip :suite \"")
-              (match (listGet (stringSplit t "\"") 1) ((some p) (cons p acc)) ((none) acc))
-              acc)))
-        (list)
-        (stringLines text))
-
-fn ! expandHome! p: String -> String
-  (if (stringStartsWith? p "~/") (str (resultOr (getHomeDir) "") (optionOr (stringSlice p 1 (stringLength p)) "")) p)
-
-fn ! preconditionHolds! parts: (List String) -> Bool
-  (let [(kind (optionOr (listGet parts 2) ""))
-        (a (optionOr (listGet parts 3) ""))
-        (b (optionOr (listGet parts 5) ""))]
-    (cond
-      ((stringContains? kind ":env") (= (envGet a) (some b)))
-      ((stringContains? kind ":fileHas") (match (fileReadString (expandHome! a)) ((ok t) (stringContains? t b)) ((err _) false)))
-      (else true)))
-
-fn ! skipDecision! snap: String suite: String -> (Option String)
-  (match (fileReadString (str snap "/.asl/mem/skipAllowed.asn"))
-    ((err _) (none))
-    ((ok text)
-     (match (listHead (filter (fn [(l String)] -> Bool (let [(t (pyStrip l))] (and (stringStartsWith? t "(:skip :suite \"") (= (listGet (stringSplit t "\"") 1) (some suite))))) (stringLines text)))
-       ((none) (none))
-       ((some row)
-        (let [(parts (stringSplit (pyStrip row) "\""))]
-          (if (preconditionHolds! parts) (none) (some (str "precondition false, not run: " (optionOr (listGet parts 7) "")))))))))
 
 (schema SpawnedProc
   (:f pid Int64)
@@ -809,7 +745,6 @@ fn computeDigest cause: String failLine: String -> String
 
 fn gateCounts cause: String declared: Int64 asserts: Int64 refutes: Int64 failedCount: Int64 -> (Pair Int64 Int64)
   (cond
-    ((= cause "SKIPPED") (pair 0 0))
     ((= cause "OK") (pair (+ asserts refutes) 0))
     ((= cause "ERR_DECLARED_GAP") (pair declared (- declared (+ asserts refutes))))
     (else
@@ -959,13 +894,8 @@ fn aslResult! snap: String suite: String code: Int64 out: String -> SuiteResult
         (asserts v.asserts)
         (refutes v.refutes)
         (declared (declaredAsserts! (str snap "/" suite)))
-        (constant (countConstant! (str snap "/" suite)))
         (gap (- declared (+ asserts refutes)))]
     (cond
-      ((and (= cause "OK") (> asserts 0) (>= constant asserts))
-       (let [(failLine (str "constant=" (stringFromInt64 constant) " of " (stringFromInt64 asserts)))]
-         (SuiteResult :suite suite :cause "ERR_CONSTANT_ASSERT" :digest (computeDigest "ERR_CONSTANT_ASSERT" failLine) :failLine failLine
-                      :asserts asserts :refutes refutes :declared declared :failed 1)))
       ((and (= cause "OK") (> gap 0))
        (let [(failLine (str "gap=" (stringFromInt64 gap)))]
          (SuiteResult :suite suite :cause "ERR_DECLARED_GAP" :digest (computeDigest "ERR_DECLARED_GAP" failLine) :failLine failLine
@@ -1062,28 +992,21 @@ fn ! nativeTestCacheRoot! -> String
 fn ! nativeSuiteArgv! snap: String real: String suite: String -> (List String)
   (list (rb/runnerBin! real) "test" suite)
 
-; (:m :ref SKIP-DECIDED-ONCE :do "the runner decides a skip once, before the run, and carries that decision to the result: a suite that fails and then rewrites its own precondition file is still a run")
-fn ! suiteJobFor! snap: String suite: String baseS: Int64 skip: (Option String) -> Job
+fn ! suiteJob! snap: String suite: String baseS: Int64 -> Job
   (let [(path (str snap "/" suite))]
-    (if (some? skip)
-      (Job :input "" :argv (list "/bin/sh" "-c" "exit 0") :cwd (some snap) :env (none) :timeoutMs 10000)
     (if (stringEndsWith? suite ".sh")
       (Job :input "" :argv (if (isExecutable! path) (list path) (list "/bin/sh" path)) :cwd (some snap)
            :env (some (withEnv! (list (str "ASL_TRANSCRIPT_DIR=" snap "/.noTranscripts") "ASL_IN_RUNNER=1" (nestedTimes snap)))) :timeoutMs (* (optionOr (slowSuiteTimeoutS suite) baseS) 1000))
       (let [(real (resultOr (realPath snap) snap))]
         (Job :input "" :argv (nativeSuiteArgv! snap real suite) :cwd (some snap)
              :env (some (withEnv! (list "ASL_IN_RUNNER=1" (str "ASL_CLI_ROOT=" real) (str "ASL_NATIVE_TEST_CACHE=" (nativeTestCacheRoot!)) (nestedTimes snap))))
-             :timeoutMs (* (optionOr (slowSuiteTimeoutS suite) baseS) 1000))))))
+             :timeoutMs (* (optionOr (slowSuiteTimeoutS suite) baseS) 1000)))))
 
-fn ! suiteJob! snap: String suite: String baseS: Int64 -> Job
-  (suiteJobFor! snap suite baseS (skipDecision! snap suite))
-
-fn ! toResult! snap: String real: String suite: String d: Done skip: (Option String) -> SuiteResult
+fn toResult! snap: String real: String suite: String d: Done -> SuiteResult
   (let [(out (stripSnap d.merged snap real))]
-    (cond
-      ((some? skip) (SuiteResult :suite suite :cause "SKIPPED" :digest "" :failLine (optionOr skip "") :asserts 0 :refutes 0 :declared 0 :failed 0))
-      ((stringEndsWith? suite ".sh") (shellResult suite d.code out))
-      (else (aslResult! snap suite d.code out))))
+    (if (stringEndsWith? suite ".sh")
+      (shellResult suite d.code out)
+      (aslResult! snap suite d.code out)))
 
 fn tail1500 s: String -> String
   (let [(n (stringLength s))]
@@ -1301,9 +1224,8 @@ fn ! suitePhase! snap: String real: String baseS: Int64 suites: (List String) wo
            (match (getDirt! snap)
              ((err e) (err e))
              ((ok before)
-              (let [(skipped (map (fn [(s String)] -> (Pair String (Option String)) (pair s (skipDecision! snap s))) suites))
-                    (t0 (monotonicNs))]
-                (match (runJobsBy! (map (fn [(p (Pair String (Option String)))] -> Job (suiteJobFor! snap (pairFirst p) baseS (pairSecond p))) skipped) (st/startOrder suites known) workers (some guard) (some registry))
+              (let [(t0 (monotonicNs))]
+                (match (runJobsBy! (map (fn [(s String)] -> Job (suiteJob! snap s baseS)) suites) (st/startOrder suites known) workers (some guard) (some registry))
                   ((err e) (err e))
                   ((ok dones)
                    (let [(wallMs (/ (- (monotonicNs) t0) 1000000))
@@ -1314,7 +1236,7 @@ fn ! suitePhase! snap: String real: String baseS: Int64 suites: (List String) wo
                         (match (getDirt! snap)
                           ((err e) (err e))
                           ((ok after)
-                           (ok (SnapRun :results (map (fn [(p (Pair (Pair String (Option String)) Done))] -> SuiteResult (toResult! snap real (pairFirst (pairFirst p)) (pairSecond p) (pairSecond (pairFirst p)))) (zip skipped dones))
+                           (ok (SnapRun :results (map (fn [(p (Pair String Done))] -> SuiteResult (toResult! snap real (pairFirst p) (pairSecond p))) (zip suites dones))
                                         :gained (checkGained before after) :wallMs wallMs :times times))))))))))))))))))))
 
 fn ! snapRun root: String suites: (List String) workers: Int64 lockWaitS: Int64 -> (Result SnapRun Fault)
@@ -1389,9 +1311,9 @@ fn ! gate root: String arg: String -> Int64
        (let [(counts (gateCounts r.cause r.declared r.asserts r.refutes r.failed))]
          (do
            (println (str "(:gateCause :suite \"" (esc suite 400) "\" :cause " r.cause " :digest \"" r.digest "\" :ev \"" (esc r.failLine 400) "\""
-                         (if (= r.cause "SKIPPED") (str " :skipped true :asserts " (stringFromInt64 (+ r.asserts r.refutes))) "") (if (stringEndsWith? suite ".asl") (str " " (trustForm)) "") ")"))
+                         (if (stringEndsWith? suite ".asl") (str " " (trustForm)) "") ")"))
            (println (str "(:gate :name \"" (esc suite 400) "\" :asserts " (stringFromInt64 (pairFirst counts)) " :failed " (stringFromInt64 (pairSecond counts)) ")"))
-           (if (or (= r.cause "OK") (= r.cause "SKIPPED")) 0 1))))))
+           (if (= r.cause "OK") 0 1))))))
 
 fn printLines! lines: (List String) -> Unit
   (fold (fn [(u Unit) (l String)] -> Unit (println l)) () lines)

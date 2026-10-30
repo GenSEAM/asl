@@ -17,7 +17,7 @@
     (:topic :name :errors :text "Failures produce predictable uppercase error codes under :error in rejected step receipts. Common codes include ERR_MISSING_ARG (required parameter absent), ERR_FILE_NOT_FOUND (target path does not exist in workspace), ERR_BOUNDARY_VIOLATION (path escapes repository root), ERR_NO_MATCH (old string not found), ERR_AMBIGUOUS (multiple matches without :all true), ERR_UNBALANCED (delimiter mismatch), ERR_SYNTAX (language syntax invalid), ERR_OWNS (target outside transaction owns)." :examples (
       "(:read :file \"missing.txt\")"
     ))
-    (:topic :name :language :text "An ASL file is a module header, then items starting in column 0: (module ws/name :x [exported names] :i [(other/module :a alias)]). Imports name the module a file declares, not its path. A standalone program needs no header: its column-0 code forms run in order as the entry like a shell script, with args bound (argInt args 0 7, argStr args 1 \"x\") and the file's fns visible; a top-level (let [(x e)]) binds x for the forms after it, unwrapping an ok, and a form that checks as (err e) stops the script with one ASN line on stderr naming its form number, line and e, and exit 1; (use pkg/mod) imports mod as mod/; a #! first line is skipped, so asl FILE, ./FILE, asl -e 'code' and asl - run it; only the entry may hold code, importing it is ERR_TOPLEVEL_IN_LIBRARY. A headerless file that defines main is a script too, and fn main with no -> binds args, returns (ok ()) and ends on a Unit line; lambda parameters need no types, (fn [x] (* x 2)). Docs are not in source: each lives as a (:doc :symbol \"path#name\" :text \"...\") row in the package doc.asn, and the reader rejects :d docstrings and prose ; comments. A function is a bare line, fn name a: Int64 b: String -> Bool, with its body indented below; that line is not a form, so the body closes only its own parentheses. Each bracket kind pairs exactly: ( ) forms, [ ] lists, { } records. enum Shape (circle r: Int64) (square side: Int64) makes positional constructors, taken apart by (match s ((circle r) ...) ((square a) ...)); patterns nest one level. A record field reads as x.f, chains as a.b.c, and on an expression as (expr).f; (with x :k v) is a copy of record x with field k set to v. (let [(a 1) (b (+ a 1))] body) binds in sequence; (fn [x] body) is a value; cond ends with (else v). Conditions, and, or, not and assert take only true or false. Int and Float never mix; overflow and division by zero trap. There is no nil, exception or try: listHead, listTail, listGet, listSlice, stringSlice and mapGet return (some v) or (none), failures are (err e), unwrapped by match, optionOr or resultOr. Builtins are camelCase like user names, predicates end in ?: listLength, stringContains?, some?; len and head do not exist; + is not a value. A test exports runTests, returning true after at least one (assert cond \"msg\") or refute. The native asl CLI enforces all this before running, and (:test), (:check), asl test and asl check of an .asl file and asl eval run on it (asl eval prints a keyword-headed form back as ASN data); asl test --all or asl check --all sweeps every discovered suite or tracked file on it, and the lenient asl-core runner is retired." :tools "After an ASL edit run asl check FILE, then asl test FILE: exit 0 and the executed assert count are the evidence; a test is (module ws/t :x [runTests]) with fn runTests -> Bool ending true after (assert c); asl run FILE or asl FILE runs a program; asl '(:help :builtin stringTo)' lists builtins by name, else by doc, with types." :examples (
+    (:topic :name :language :text "An ASL file is a module header, then items starting in column 0: (module ws/name :x [exported names] :i [(other/module :a alias)]). Imports name the module a file declares, not its path. A standalone program needs no header: its column-0 code forms run in order as the entry like a shell script, with args bound (argInt args 0 7, argStr args 1 \"x\") and the file's fns visible; a top-level (let [(x e)]) binds x for the forms after it, unwrapping an ok, and a form that checks as (err e) stops the script with one ASN line on stderr naming its form number, line and e, and exit 1; (use pkg/mod) imports mod as mod/; a #! first line is skipped, so asl FILE, ./FILE, asl -e 'code' and asl - run it; only the entry may hold code, importing it is ERR_TOPLEVEL_IN_LIBRARY. A headerless file that defines main is a script too, and fn main with no -> binds args, returns (ok ()) and ends on a Unit line; lambda parameters need no types, (fn [x] (* x 2)). Docs are not in source: each lives as a (:doc :symbol \"path#name\" :text \"...\") row in the package doc.asn, and the reader rejects :d docstrings and prose ; comments. A function is a bare line, fn name a: Int64 b: String -> Bool, with its body indented below; that line is not a form, so the body closes only its own parentheses. Each bracket kind pairs exactly: ( ) forms, [ ] lists, { } records. enum Shape (circle r: Int64) (square side: Int64) makes positional constructors, taken apart by (match s ((circle r) ...) ((square a) ...)); patterns nest one level. A record field reads as x.f, chains as a.b.c, and on an expression as (expr).f; (with x :k v) is a copy of record x with field k set to v. (let [(a 1) (b (+ a 1))] body) binds in sequence; (fn [x] body) is a value; cond ends with (else v). Conditions, and, or, not and assert take only true or false. Int and Float never mix; overflow and division by zero trap. There is no nil, exception or try: listHead, listTail, listGet, listSlice, stringSlice and mapGet return (some v) or (none), failures are (err e), unwrapped by match, optionOr or resultOr. Builtins are camelCase like user names, predicates end in ?: listLength, stringContains?, some?; len and head do not exist; + is not a value. A test exports runTests, returning true after at least one (assert cond \"msg\") or refute. The stage-0 host asl/host/out/asl-host enforces all this before running, and (:test), (:check), asl test and asl check of an .asl file and asl eval run on it (asl eval prints a keyword-headed form back as ASN data); a bare asl test or asl check sweeps every discovered suite or tracked file on it, and the lenient asl-core runner is retired." :tools "After an ASL edit run asl/host/out/asl-host check FILE, then test FILE: exit 0 and the executed assert count are the evidence; a test is (module ws/t :x [runTests]) with fn runTests -> Bool ending true after (assert c); asl run FILE or asl FILE runs a program; asl '(:help :builtin stringTo)' lists builtins by name, else by doc, with types." :examples (
       "(:read :file \"asl/prelude/prelude.asl\" :limit 20)"
     ))
   )
@@ -135,14 +135,13 @@
     (:op :agent
       :scope toolchain
       :brief "(:agent :task t [:root dir] [:owns (paths)] [:gates (commands)] [:intent i]) hands a task to Leon, the asl agent loop, which edits inside :root (default the calling repo), narrowed by :owns, and runs the gates"
-      :form "(:agent :task <str> [:answer <str>] [:attractor <str>] [:backend <str>] [:base <str>] [:budget <int>] [:commit <bool>] [:contextFile <str>] [:contextTokens <int>] [:dryRun <bool>] [:gates <forms>] [:gateTimeout <int>] [:intent <sym>] [:model <str>] [:nativeTools <str>] [:prefix <str>] [:owns <forms>] [:plan <bool>] [:queueTimeout <int>] [:resume <str>] [:root <str>] [:toolRoot <str>] [:timeout <int>] [:unit <str>] [:events <str>] [:wallBudget <int>])"
+      :form "(:agent :task <str> ...)"
       :params (
         (:answer :type str :default "")
         (:attractor :type str :default "" :note "opt-in prompt attractor, e.g. asn")
         (:backend :type str :default "agy")
         (:base :type str :default "" :note "rev gitDiff compares to")
         (:budget :type int :default 3000)
-        (:commit :type bool :default false :note "commit the session's written paths with the message of its (:done :commit s); absent, nothing is committed")
         (:contextFile :type str :default "")
         (:contextTokens :type int)
         (:dryRun :type bool :default false)
@@ -151,8 +150,6 @@
         (:intent :type sym)
         (:model :type str :default "")
         (:nativeTools :type str :default "step" :note "native tool calling on profile calls: step (absent) offers one step(form) function, ops one function per op shape, off none; calls read back as the same forms; a gateway model row :nativeTools false strips tools for routes that reject them")
-        (:unit :type str :default "" :note "plan row id named in the run's completion event; absent means the session id (SIGNAL-LEON-DONE)")
-        (:events :type str :default "~/.asl/bus/events.asn" :note "file each finished (:agent) run appends one (:event ...) row to (SIGNAL-LEON-DONE)")
         (:prefix :type str :default "" :note "comma list: system prompt sections or groups to drop (rules protocol glossary attractors opsLean aslCard or a layer id) and focus, a per-turn tail with goal, gate and next op; empty is the full prompt")
         (:owns :type forms :default () :note "narrows :root")
         (:plan :type bool :default false)
@@ -160,14 +157,13 @@
         (:resume :type str :default "")
         (:root :type str)
         (:task :type str :req true)
-        (:toolRoot :type str :default "" :note "absolute repo whose bin/asl runs the tool ops, default the :root checkout")
         (:timeout :type int :default 600 :note "execution seconds")
         (:wallBudget :type int)
       )
       :accepts (role)
       :examples (
         "(:agent :task \"Survey the parser\")"
-        "(:agent :task \"Fix the failing check\" :owns (\"src\") :gates (\"asl check src\"))"
+        "(:agent :task \"Fix the failing check\" :owns (\"src\") :gates (\"asl check\"))"
       )
       :errors (ERR_UNKNOWN_ARG ERR_MISSING_ARG ERR_CONTEXT_FILE ERR_BACKEND ERR_OWNS ERR_EFFECT_UNDECLARED ERR_PARSE ERR_NO_REPLY ERR_VENDOR ERR_GATEWAY_OFFLINE)
       :doc "Leon loop. Receipt: status session journal findings gates queueWaitSec execSec; exit 1 failed or escalated, 2 bad invocation.")
@@ -191,7 +187,7 @@
     (:op :read
       :scope any
       :public "Return a symbol or bounded slice of a file."
-      :form "(:read :file <path> [:symbol <str>] [:anchor <str>] [:limit <int>] [:start <int>] [:end <int>])"
+      :form "(:read :file <path> [:symbol <sym>] [:anchor <str>] [:limit <int>] [:start <int>] [:end <int>])"
       :params (
         (:file :type str :req true :note "path to file in repository")
         (:symbol :type str :default "" :note "symbol definition to extract")
@@ -254,7 +250,6 @@
         (:content :type str :req true :note "complete staged file content")
         (:force :type bool :default false :note "stage despite balance or syntax errors")
       )
-      :accepts (path pick)
       :examples (
         "(:write :file \".asl/scratch.asn\" :content \"(:scratch true)\" :force true)"
       )
@@ -365,26 +360,23 @@
       )
       :errors (ERR_MISSING_ARG ERR_TEST_FAILED ERR_VACUOUS_PASS ERR_HOST_ABSENT ERR_EXEC_FAILED ERR_FILE_NOT_FOUND ERR_UNPARSEABLE_ASSERT_COUNT)
       :related (check fix)
-      :doc "Run asl test on the file as the next flush would write it: an unknown name is an error, assert takes only true or false, and runTests must return true. It passes only with a positive executed :assertCount; a failure carries the host's :exit, the asserts run before it, and its diagnostics.")
+      :doc "Run asl/host/out/asl-host test on the file as the next flush would write it: an unknown name is an error, assert takes only true or false, and runTests must return true. It passes only with a positive executed :assertCount; a failure carries the host's :exit, the asserts run before it, and its diagnostics.")
 
     (:op :fix
       :scope asl
       :public "Propose or stage minimal delimiter repair."
-      :form "(:fix :file <path> [:apply <sym>] [:by <sym>] [:scope <sym>])"
+      :form "(:fix :file <path> [:apply <sym>])"
       :params (
         (:file :type str :req true :note "path to ASL or ASN file to balance")
         (:apply :type sym :default :none :note "stage proposed repair (:true, :indentation, :heuristic)")
-        (:by :type sym :default :minimal :note ":indent takes every closer from indentation: a line at column x closes the frames opened at column x or right of it and reopens a frame the previous line closed at column x - 2 or left of it; each edit names its opener and the deciding line")
-        (:scope :type sym :default :broken :note "with :by :indent, :broken changes only top-level forms whose delimiters do not balance and lists the rest as :skipped; :all also moves closers in balanced forms whose indentation disagrees")
       )
       :accepts (path)
       :examples (
         "(:fix :file \"asl/grammar/rules.asn\")"
-        "(:fix :file \"src/a.asl\" :by :indent :apply true)"
       )
       :errors (ERR_MISSING_ARG ERR_FILE_NOT_FOUND ERR_UNSUPPORTED_LANGUAGE ERR_AMBIGUOUS_REPAIR ERR_UNREPAIRABLE)
       :related (check test edit)
-      :doc "Propose, or with :apply stage, the minimal delimiter repair of an ASL/ASN file when it is structurally unique; an indentation tie-break is staged only with :apply :indentation. With :by :indent the closers follow the indentation instead, which repairs a missing or extra closer at the line where it was lost; a rejected minimal repair carries the :indent edits as a hint.")
+      :doc "Propose, or with :apply stage, the minimal delimiter repair of an ASL/ASN file when it is structurally unique; an indentation tie-break is staged only with :apply :indentation.")
 
     (:op :txn
       :scope any

@@ -1,4 +1,4 @@
-(module asl-forms/edit :x [SyntaxResult Checkers Verdict DelimDiag delimDiag delimError validateStaged! unifiedDiff! fnmatch parseOwns linesFailed stepReadOnly writeStep! editStep! diffStep! preflushStep! flushStep! flushCheckedStep! flushCheckDeadlineMs flushLimit discardStep! txnStep! editOp!] :i [(asl-forms/kernel :a k) (asl-forms/vfs :a v) (asl-forms/repair :a rep) (asl-coord/claims :a coord) (asl-forms/heal :a h)])
+(module asl-forms/edit :x [SyntaxResult Checkers Verdict DelimDiag delimDiag delimError validateStaged! unifiedDiff! fnmatch parseOwns linesFailed stepReadOnly writeStep! editStep! diffStep! preflushStep! flushStep! discardStep! txnStep! editOp!] :i [(asl-forms/kernel :a k) (asl-forms/vfs :a v) (asl-forms/repair :a rep) (asl-coord/claims :a coord) (asl-forms/heal :a h)])
 
 
 (schema SyntaxResult (:f status String) (:f message String) (:f before String) (:f host String))
@@ -17,7 +17,7 @@
 
 (schema Snap (:f path String) (:f prior (Option String)) (:f disk (Option String)) (:f fd Int64))
 
-(schema TxnRun (:f snaps (List Snap)) (:f lines (List String)) (:f failedAt String) (:f forced (List String)))
+(schema TxnRun (:f snaps (List Snap)) (:f lines (List String)) (:f failedAt String))
 
 
 fn stepHead id: Int64 op: String -> String
@@ -292,71 +292,24 @@ fn lastIndex text: String b: Bytes needle: String from: Int64 last: Int64 -> Int
   (let [(at (k/findFrom text b needle from))]
     (if (< at 0) last (lastIndex text b needle (+ at 1) at)))
 
-; (:m :ref FORMS-FLUSH-CR :do "line ends are matched on an LF view of the file and written on its raw bytes: crlfLfIndexes lists the view index of every LF that was a CRLF, rawAt maps a view offset back to a raw offset, spliceRaw copies the raw bytes outside each matched span; a lone CR stays a byte")
-fn crlfLfIndexes b: Bytes n: Int64 i: Int64 removed: Int64 acc: (List Int64) -> (List Int64)
-  (if (>= (+ i 1) n)
-    (listReverse acc)
-    (if (and (= (bytesGet b i) 13) (= (bytesGet b (+ i 1)) 10))
-      (crlfLfIndexes b n (+ i 2) (+ removed 1) (cons (- i removed) acc))
-      (crlfLfIndexes b n (+ i 1) removed acc)))
-
-fn rawAt lfs: (List Int64) v: Int64 -> Int64
-  (+ v (listLength (filter (fn [(l Int64)] -> Bool (< l v)) lfs)))
-
-fn firstBreakEnding raw: String from: Int64 to: Int64 -> String
-  (let [(seg (optionOr (stringSlice raw from to) ""))]
-    (match (stringIndexOf seg "\n")
-      ((none) "")
-      ((some i) (if (and (> i 0) (= (optionOr (stringSlice seg (- i 1) i) "") "\r")) "\r\n" "\n"))))
-
-; (:m :ref FORMS-FLUSH-CR :do "the new text takes the line ending of the span it replaces (CRLF or LF by its first break); a span with no break takes the file's first break, a file with none LF")
-fn endingFor raw: String rs: Int64 re: Int64 -> String
-  (let [(inSpan (firstBreakEnding raw rs re))]
-    (if (stringEmpty? inSpan)
-      (let [(whole (firstBreakEnding raw 0 (stringLength raw)))] (if (stringEmpty? whole) "\n" whole))
-      inSpan))
-
-fn newFor new: String ending: String -> String
-  (if (= ending "\r\n") (stringReplace (stringReplace new "\r\n" "\n") "\n" "\r\n") new)
-
-fn occAt view: String vb: Bytes old: String from: Int64 acc: (List Int64) -> (List Int64)
-  (let [(at (k/findFrom view vb old from))]
-    (if (< at 0) (listReverse acc) (occAt view vb old (+ at (stringLength old)) (cons at acc))))
-
-fn spliceRaw raw: String lfs: (List Int64) oldLen: Int64 new: String offs: (List Int64) cursor: Int64 outLen: Int64 lastEnd: Int64 acc: (List String) -> (Pair String Int64)
-  (match (listHead offs)
-    ((none) (pair (k/concatAll (listReverse (cons (optionOr (stringSlice raw cursor (stringLength raw)) "") acc))) lastEnd))
-    ((some at)
-      (let [(rs (rawAt lfs at))
-            (re (rawAt lfs (+ at oldLen)))
-            (gap (optionOr (stringSlice raw cursor rs) ""))
-            (nt (newFor new (endingFor raw rs re)))
-            (end (+ (+ outLen (stringLength gap)) (stringLength nt)))]
-        (spliceRaw raw lfs oldLen new (optionOr (listTail offs) (list)) re end end (cons nt (cons gap acc))))))
-
-fn editLocked! vs: v/Vfs ch: Checkers id: Int64 kw: (Map String String) fpath: String oldIn: String new: String -> k/EditOutcome
+fn editLocked! vs: v/Vfs ch: Checkers id: Int64 kw: (Map String String) fpath: String old: String new: String -> k/EditOutcome
   (let [(rel (k/relToRoot vs.root fpath))
         (all (flagOn? kw "all"))]
     (match (stagedOrDisk! vs fpath)
       ((err e) (failStep id "edit" ":ERR_EDIT_FAILED" (msgTail e)))
       ((ok found)
         (let [(base (optionOr found ""))
-              (view (stringReplace base "\r\n" "\n"))
-              (vb (stringToBytes view))
-              (old (stringReplace oldIn "\r\n" "\n"))
-              (lfs (crlfLfIndexes (stringToBytes base) (stringLength base) 0 0 (list)))
-              (offs (occAt view vb old 0 (list)))
-              (occ (listLength offs))]
+              (bb (stringToBytes base))
+              (occ (countFrom base bb old 0 0))]
           (cond
             ((= occ 0) (failStep id "edit" ":ERR_NO_MATCH" (msgTail (str "Old target string not found in file: " rel))))
             ((and (> occ 1) (not all))
               (failStep id "edit" ":ERR_AMBIGUOUS" (str " :count " (stringFromInt64 occ) (msgTail (str "Old target string matches " (stringFromInt64 occ) " times in " rel "; widen it or pass :all true")))))
             (else
-              (let [(sp (spliceRaw base lfs (stringLength old) new offs 0 0 0 (list)))
-                    (replaced (pairFirst sp))
+              (let [(replaced (replaceFrom base bb old new 0 all (list)))
                     (lang (languageOf! fpath))
-                    (at (rawAt lfs (optionOr (listHead offs) 0)))
-                    (spanEnd (pairSecond sp))
+                    (at (k/findFrom base bb old 0))
+                    (spanEnd (+ (if all (+ (lastIndex base bb old 0 -1) (* (- occ 1) (- (stringLength new) (stringLength old)))) at) (stringLength new)))
                     (repairing (and (not (autofixOff? kw)) (or (= lang "asl") (= lang "asn")) (some? (delimDiag replaced))))]
                 (if repairing
                   (let [(r (repairRun replaced lang at spanEnd (if all (none) (some old)) (k/kwOr kw "pick" "")))]
@@ -696,59 +649,6 @@ fn flushStep! vs: v/Vfs held: (List String) id: Int64 kw: (Map String String) ar
                                         (if (listEmpty? inPlace) "true" (str "false :inPlace [" (stringJoin (map (fn [(x String)] -> String (quoted (k/relToRoot root x))) inPlace) " ") "]"))
                                         " :files [" (stringJoin (map (fn [(x (Pair String Bool))] -> String (quoted (k/relToRoot root (pairFirst x)))) flushed) " ") "]")))))))))
 
-; (:m :ref FLUSH-AFTER-CHECK :do "the deadline in milliseconds for the type check of one staged .asl at flush; the in-process checker cannot be preempted, so an overrun is measured after the call and refused as unchecked, never passed")
-fn flushCheckDeadlineMs -> Int64
-  30000
-
-; (:m :ref FLUSH-AFTER-CHECK :do "the limit of one check: a caller :checkMs may lower the default deadline but never raise it, and a missing, non-numeric or non-positive value is the default")
-fn flushLimit kw: (Map String String) -> Int64
-  (let [(asked (optionOr (stringToInt64 (k/kwOr kw "checkMs" "")) 0))]
-    (if (<= asked 0) (flushCheckDeadlineMs) (min asked (flushCheckDeadlineMs))))
-
-; (:m :ref FLUSH-AFTER-CHECK :do "the line and code of a checker message shaped path:line:col: CODE text, as receipt fields, empty when the message has another shape")
-fn checkLoc msg: String -> String
-  (let [(parts (stringSplit msg ":"))]
-    (match (listGet parts 1)
-      ((none) "")
-      ((some ln)
-        (match (stringToInt64 ln)
-          ((none) "")
-          ((some n) (str " :line " (stringFromInt64 n) " :checkCode " (quoted (stringTrim (optionOr (listHead (stringSplit (stringTrim (optionOr (listGet parts 3) "")) " ")) "")))))))))
-
-; (:m :ref FLUSH-AFTER-CHECK :do "one staged .asl about to be written: the checker runs on the exact text flushOne! will write; a check error that the disk file did not already have refuses (the comparison is by status only: when the disk file already errors, a different new error passes) with the file, line and code; a status other than ok or error, or an overrun of the deadline, refuses as unchecked; empty string means writable")
-fn ! flushCheckOne! vs: v/Vfs ch: Checkers limitMs: Int64 tp: String -> String
-  (if (not (stringEndsWith? tp ".asl"))
-    ""
-    (match (v/stagedContent! vs tp)
-      ((none) "")
-      ((some staged0)
-        (let [(rel (k/relToRoot vs.root tp))
-              (text (effectMarkOnWrite! tp staged0))
-              (before (match (v/readText! tp) ((ok b) (some b)) ((err _) none)))
-              (t0 (monotonicNs))
-              (r (ch.aslCheck tp text before))
-              (ms (/ (- (monotonicNs) t0) 1000000))]
-          (cond
-            ((> ms limitMs) (str " :file " (quoted rel) " :unchecked true :reason \"deadline\" :ms " (stringFromInt64 ms)))
-            ((= r.status "ok") "")
-            ((and (= r.status "error") (= r.before "error")) "")
-            ((= r.status "error") (str " :file " (quoted rel) (checkLoc r.message) " :checkMessage " (quoted r.message)))
-            (else (str " :file " (quoted rel) " :unchecked true :reason " (quoted (str "check " r.status)) " :checkMessage " (quoted r.message))))))))
-
-fn ! flushCheckAll! vs: v/Vfs ch: Checkers limitMs: Int64 targets: (List String) -> String
-  (fold (fn [(bad String) (tp String)] -> String (if (stringEmpty? bad) (flushCheckOne! vs ch limitMs tp) bad)) "" targets)
-
-; (:m :ref FLUSH-AFTER-CHECK :do "flush of staged files checks every .asl first: any ERR_CHECK refuses the whole flush and nothing is written; non-.asl files behave as before")
-fn ! flushCheckedStep! vs: v/Vfs ch: Checkers held: (List String) id: Int64 kw: (Map String String) args: (List String) -> k/EditOutcome
-  (let [(raw (targetArg kw args))
-        (res (if (stringEmpty? raw) (pair "" "") (k/resolveInRoot! vs.root raw)))
-        (targets (cond ((stringEmpty? raw) (v/stagedPaths! vs)) ((stringEmpty? (pairSecond res)) (list (pairFirst res))) (else (list))))
-        (limit (flushLimit kw))
-        (bad (flushCheckAll! vs ch limit targets))]
-    (if (stringEmpty? bad)
-      (flushStep! vs held id kw args)
-      (failStep id "flush" ":ERR_CHECK" (str " :flushedCount 0" bad))))
-
 fn flat r: (Result (Result T String) String) -> (Result T String)
   (match r ((err e) (err e)) ((ok inner) inner))
 
@@ -916,27 +816,6 @@ fn snapTake! vs: v/Vfs held: (List String) st: TxnRun path: String -> (Result Tx
             ((ok disk)
               (ok (with st :snaps (listAppend st.snaps (list (Snap :path path :prior (v/stagedContent! vs path) :disk disk :fd fd)))))))))))
 
-fn deferForm op: String kw: (Map String String) fs: String -> String
-  (if (and (or (= op "write") (= op "edit")) (not (flagOn? kw "force")))
-    (let [(t (stringTrim fs))]
-      (str (optionOr (stringSlice t 0 (- (stringLength t) 1)) t) " :force true)"))
-    fs)
-
-fn noteForced st: TxnRun op: String kw: (Map String String) path: String -> TxnRun
-  (if (and (or (= op "write") (= op "edit")) (flagOn? kw "force")) (with st :forced (cons path st.forced)) st)
-
-fn recheckStaged! vs: v/Vfs ch: Checkers st: TxnRun -> String
-  (fold (fn [(bad String) (s Snap)] -> String
-          (if (or (not (stringEmpty? bad)) (not (aslFile? s.path)) (listContains? st.forced s.path))
-            bad
-            (match (v/stagedContent! vs s.path)
-              ((none) bad)
-              ((some c)
-                (let [(vd (validateStaged! ch s.path s.disk c false))]
-                  (if (stringEmpty? vd.code) "" (str (k/relToRoot vs.root s.path) ": " vd.message)))))))
-        ""
-        st.snaps)
-
 fn txnInner! vs: v/Vfs run: (fn [Int64 String (List String)] -> k/EditOutcome) held: (List String) owns: (List String) st: TxnRun k: Int64 fs: String -> TxnRun
   (let [(p (k/parseStep fs))
         (op p.op)
@@ -954,7 +833,7 @@ fn txnInner! vs: v/Vfs run: (fn [Int64 String (List String)] -> k/EditOutcome) h
             (abortWith st (innerLine k op (str " :status \"rejected\" :error-code \":ERR_OWNS\" :file " (quoted target) (msgTail (if (stringEmpty? ierr) (str target " is outside :owns") ierr)))) here)
             (match (snapTake! vs held st ipath)
               ((err e) (abortWith st (innerLine k op (str " :status \"rejected\" :error-code \":ERR_LOCK\" :file " (quoted target) (msgTail e))) here))
-              ((ok st2) (runInner vs run held (noteForced st2 op kw ipath) k op (deferForm op kw fs))))))
+              ((ok st2) (runInner vs run held st2 k op fs)))))
         (if (not (stepReadOnly op kw))
           (abortWith st (innerLine k (k/escapeAsnVal op) " :status \"rejected\" :error-code \":ERR_TXN_FORBIDDEN\" :message \"only edit, write, fix and read-only steps may run inside a txn; the txn flushes or restores itself\"") here)
           (runInner vs run held st k op fs)))))
@@ -1000,16 +879,14 @@ fn flushSnaps! vs: v/Vfs held: (List String) snaps: (List Snap) todo: (List Snap
 fn relList vs: v/Vfs paths: (List String) -> String
   (stringJoin (map (fn [(p String)] -> String (quoted (k/relToRoot vs.root p))) paths) " ")
 
-fn txnFinish! vs: v/Vfs ch: Checkers held: (List String) id: Int64 owns: (List String) st: TxnRun -> k/EditOutcome
+fn txnFinish! vs: v/Vfs held: (List String) id: Int64 owns: (List String) st: TxnRun -> k/EditOutcome
   (let [(snaps st.snaps)
         (touched (relList vs (map (fn [(s Snap)] -> String s.path) snaps)))
         (ownsAsn (stringJoin (map quoted owns) " "))
-        (steps (stringJoin (listReverse st.lines) " "))
-        (bad (if (stringEmpty? st.failedAt) (recheckStaged! vs ch st) ""))
-        (failedAt (if (stringEmpty? bad) st.failedAt (str "recheck " bad)))]
-    (if (not (stringEmpty? failedAt))
+        (steps (stringJoin (listReverse st.lines) " "))]
+    (if (not (stringEmpty? st.failedAt))
       (let [(errs (listAppend (restoreStaged! vs snaps) (releaseAll! vs snaps)))]
-        (failStep id "txn" ":ERR_TXN_ABORTED" (str " :failedAt " (quoted failedAt)" :owns [" ownsAsn "] :restored [" touched "] :flushed [] :steps [" steps "]" (errTail errs))))
+        (failStep id "txn" ":ERR_TXN_ABORTED" (str " :failedAt " (quoted st.failedAt) " :owns [" ownsAsn "] :restored [" touched "] :flushed [] :steps [" steps "]" (errTail errs))))
       (match (scopePathList! vs.root (optionOr (envGet "ASL_UNIT") "") (txnPending! vs snaps))
         ((err refusal)
           (let [(errs (listAppend (restoreStaged! vs snaps) (releaseAll! vs snaps)))]
@@ -1032,16 +909,16 @@ fn txnCommit! vs: v/Vfs held: (List String) id: Int64 ownsAsn: String steps: Str
           (okStep id "txn" (str " :owns [" ownsAsn "] :flushed [" (relList vs flushed) "] :steps [" steps "]"))
           (failStep id "txn" ":ERR_LOCK" (str " :owns [" ownsAsn "] :flushed [" (relList vs flushed) "] :steps [" steps "]" (errTail errs)))))))
 
-fn txnStep! vs: v/Vfs ch: Checkers run: (fn [Int64 String (List String)] -> k/EditOutcome) held: (List String) id: Int64 kw: (Map String String) args: (List String) -> k/EditOutcome
+fn txnStep! vs: v/Vfs run: (fn [Int64 String (List String)] -> k/EditOutcome) held: (List String) id: Int64 kw: (Map String String) args: (List String) -> k/EditOutcome
   (let [(owns (parseOwns (k/kwOr kw "owns" "")))
         (inner (filter (fn [(a String)] -> Bool (stringStartsWith? a "(")) args))]
     (if (or (listEmpty? owns) (listEmpty? inner))
       (failStep id "txn" ":ERR_MISSING_ARG" " :message \"txn needs :owns (paths) and at least one nested form\"")
       (let [(st (fold (fn [(acc (Pair TxnRun Int64)) (fs String)] -> (Pair TxnRun Int64)
                         (pair (txnInner! vs run held owns (pairFirst acc) (pairSecond acc) fs) (+ (pairSecond acc) 1)))
-                      (pair (TxnRun :snaps (list) :lines (list) :failedAt "" :forced (list)) 1)
+                      (pair (TxnRun :snaps (list) :lines (list) :failedAt "") 1)
                       inner))]
-        (txnFinish! vs ch held id owns (pairFirst st)))))
+        (txnFinish! vs held id owns (pairFirst st)))))
 
 fn scopePathList! root: String unit: String paths: (List String) -> (Result Unit String)
   (match (listHead paths)
@@ -1083,7 +960,7 @@ fn editOp! vs: v/Vfs ch: Checkers run: (fn [Int64 String (List String)] -> k/Edi
     ((= op "flush")
       (match (scopeFlushCheck! vs kw args)
         ((some refusal) (some (failStep id "flush" ":ERR_SCOPE_REFUSED" (str " :receipt " refusal))))
-        ((none) (some (flushCheckedStep! vs ch held id kw args)))))
+        ((none) (some (flushStep! vs held id kw args)))))
     ((= op "discard") (some (discardStep! vs held id kw args)))
-    ((= op "txn") (some (txnStep! vs ch run held id kw args)))
+    ((= op "txn") (some (txnStep! vs run held id kw args)))
     (else (none)))

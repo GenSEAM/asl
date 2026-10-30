@@ -20,7 +20,6 @@
    "asl-proc/github"
    "asl-proc/ansi"
    "asl-proc/gitFixture"
-   "asl-proc/atomicWrite"
    "asl-proc/log"
    "asl-proc/coreProcess"
    "asl-proc/runnerBin"

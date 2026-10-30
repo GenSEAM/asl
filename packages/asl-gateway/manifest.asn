@@ -3,10 +3,9 @@
   :entry "src/server.asl"
   :description "Sovereign L7 Cognitive Gateway & Omni-Protocol Nexus: LMK key management, pure Dyck-1 data synchronization, universal browser frames, and generative media accounting"
   :aslFirst true
-  :dependencies ("asl-text" "asl-json" "asl-proc" "asl-http")
+  :dependencies ("asl-text" "asl-json" "asl-proc" "asl-http" "asl-cli")
   :modules (
     "aslGateway/server"
-    "aslGateway/bus"
     "aslGateway/wire"
     "aslGateway/lmk"
     "aslGateway/gateway"
@@ -45,7 +44,4 @@
     "aslGateway/subPacing"
     "aslGateway/subPace"
     "aslGateway/rateLearn"
-    "aslGateway/subsRefresh"
-    "aslGateway/capOrder"
-    "aslGateway/capOrderStats"
-    "aslGateway/modelWindows"))
+    "aslGateway/subsRefresh"))

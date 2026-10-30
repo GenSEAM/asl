@@ -20,7 +20,7 @@ Of the builtins a program can call, only `print` reaches the host on that target
 
 ## 4. Effects in the Source
 
-The same idea runs through the language. A function that calls an effectful builtin must say so, as `fn ! name` or a name ending in `!`; otherwise `asl check` rejects it with `ERR_EFFECT_UNMARKED` before anything runs. A reader, human or model, can see from a signature whether a call can touch the outside world.
+The same idea runs through the language. A function that calls an effectful builtin must say so, as `fn ! name` or a name ending in `!`; otherwise `asl-host check` rejects it with `ERR_EFFECT_UNMARKED` before anything runs. A reader, human or model, can see from a signature whether a call can touch the outside world.
 
 ## 5. Deterministic Replay: A Goal
 

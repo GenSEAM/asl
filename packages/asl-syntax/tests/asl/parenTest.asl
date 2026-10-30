@@ -3,6 +3,7 @@
   :i [(asl-syntax/core/source :a src)
       (asl-syntax/core/tree :a tr)
       (asl-syntax/core/print :a pr)
+      (asl-syntax/asl/lex :a lx)
       (asl-syntax/asl/paren :a prn)
       (asl-tools/fleet/run :a run)])
 

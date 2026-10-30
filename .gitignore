@@ -21,9 +21,10 @@ packages/asl-skyloom/dist/
 .DS_Store
 rust_out
 host/out/
+web/dist/
+!web/dist/install.sh
 dist/
 !dist/install.sh
-!web/dist/
 .agents/
 .cursorrules
 *.local.asn

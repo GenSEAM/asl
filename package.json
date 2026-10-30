@@ -8,6 +8,8 @@
     "node": ">=20.0.0"
   },
   "scripts": {
+    "build:web": "sh web/build.sh",
+    "build": "sh web/build.sh",
     "preview:web": "npx --yes serve web/dist -l 4173"
   }
 }

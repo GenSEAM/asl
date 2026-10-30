@@ -485,24 +485,6 @@ fn ! testPreludeNameClash dir: String -> Bool
       (assert (stringContains? d.message (str dir "/linkfx/evilPrelude.asl")) (str "reserved module name message names the offending file: " d.message))
       true))
 
-; (:m :ref MATCH-BY-SCRUTINEE :do "the linker itself, not a test helper, writes the case the matched enum names into the patterns it lowers: an entry importing two enums that both declare spot links its bare top-level spot to the scrutinee's enum and its nested (spot) to the field's enum, so loadClosureWith! without elaborateUnits fails here")
-fn ! testMatchedEnumCase dir: String -> Bool
-  (let [(sig (writeOne! dir "sigA" "(module linkfx/sigA :x [Sig spot dash] :i [])\n\n(enum Sig (:c spot [] \"s\") (:c dash [] \"d\"))\n"))
-        (mark (writeOne! dir "markB" "(module linkfx/markB :x [Mark spot blot] :i [])\n\n(enum Mark (:c spot [] \"s\") (:c blot [] \"b\"))\n"))
-        (entry (writeOne! dir "scrut" (joinLines (list "(module linkfx/scrut :x [main pick nestedPick] :i [(linkfx/sigA :a sa) (linkfx/markB :a mb)])" ""
-                                                       "fn pick s: sa/Sig -> Int64" "  (match s (spot 3) (dash 4))" ""
-                                                       "fn nestedPick o: (Option sa/Sig) -> Int64" "  (match o ((some (spot)) 30) ((some (dash)) 40) ((none) 0))" ""
-                                                       "fn main -> Int64" "  (+ (pick (sa/dash)) (nestedPick (some (sa/spot))))" ""))))
-        (res (lk/linkEntry! (str dir "/linkfx/scrut.asl")))
-        (text (printed res))]
-    (do
-      (assert (and sig (and mark entry)) "the two enum modules and the entry are written")
-      (assert (ok? res) (str "an entry matching bare cases that two imports declare links and verifies: " text))
-      (assert (stringContains? text "(switch s linkfx/sigA.Sig (spot (arm0.0)) (dash (arm0.1)))") (str "the top-level bare spot and dash switch on the scrutinee's enum linkfx/sigA.Sig:\n" text))
-      (assert (stringContains? text "(switch %0 linkfx/sigA.Sig (spot (arm2.0)) (default (arm2.1)))") (str "the nested (spot) switches on the field's enum linkfx/sigA.Sig:\n" text))
-      (assert (not (stringContains? text "linkfx/markB.Mark (spot (arm")) (str "no pattern switches on the other import's enum:\n" text))
-      true))
-
 fn twinSource body: String -> String
   (joinLines (list "(module linkfx/twin :x [f])" "" "(fn f [] -> Int64" (str "  " body ")")))
 
@@ -555,6 +537,5 @@ fn ! runTests -> Bool
       (testPreludeNameClash dir)
       (testDuplicateFunction)
       (testLinkReusesIndex dir)
-      (testMatchedEnumCase dir)
       (assert (= (processRun (str "rm -rf " dir)).exitCode 0) "fixture directory removed")
       true))

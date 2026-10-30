@@ -1,6 +1,8 @@
 (module asl-syntax/tests/ts/symbolsTest
   :x [runTests]
   :i [(asl-syntax/core/source :a src)
+      (asl-syntax/core/symbols :a sym)
+      (asl-syntax/core/outline :a out)
       (asl-syntax/ts/symbols :a tssym)])
 
 fn testSymbolQueries! -> Bool

@@ -485,14 +485,6 @@ fn testPlaceholderDigest -> Bool
             "zeros followed by another hex digit are not a placeholder")
     true)
 
-; (:m :ref AUDITGATES-ROOTDIR-FLAKE :do "a failed p/exec! names its own error in the assert message, never an empty output")
-fn execErrText e: p/ProcessError -> String
-  (match e
-    ((p/notFound b) (str "notFound " b))
-    ((p/permissionDenied b) (str "permissionDenied " b))
-    ((p/timeout ms) (str "timeout after " (stringFromInt64 ms) " ms"))
-    ((p/executionFailed code msg) (str "executionFailed " (stringFromInt64 code) " " msg)))
-
 fn testRoot! tmp: String -> Bool
   (let [(root (str tmp "/rootOption"))
         (made (dirCreate root))
@@ -505,16 +497,16 @@ fn testRoot! tmp: String -> Bool
         (run (am/runAudit! root (list "steps") "" false))
         (repo (stringTrim (resultOr (runGit! "." (list "rev-parse" "--show-toplevel") (none) (none)) "")))
         (envRun (p/exec! (p/withCwd (p/cmd "env" (list (str "ROOT_DIR=" root) (str repo "/bin/asl") "run" (str repo "/asl/packages/asl-gates/src/auditMain.asl") "steps")) repo)))
-        (envOutput (match envRun ((err e) (str "execError " (execErrText e))) ((ok o) (str o.stdout "EXIT" (stringFromInt64 o.exitCode) "ERR" o.stderr))))
+        (envOutput (match envRun ((err e) "") ((ok o) (str o.stdout "EXIT" (stringFromInt64 o.exitCode) "ERR" o.stderr))))
         (cliRoot (p/exec! (p/withCwd (p/cmd (str repo "/bin/asl") (list "run" (str repo "/asl/packages/asl-gates/src/auditMain.asl") "gates" "--static" "--root" root)) repo)))
-        (cliOutput (match cliRoot ((err e) (str "execError " (execErrText e))) ((ok o) o.stdout)))
+        (cliOutput (match cliRoot ((err _) "") ((ok o) o.stdout)))
         (cleaned (pathRemove root))]
     (do
       (assert (and (ok? made) (and (ok? init) (and (ok? tasks) (and (ok? task) (and (ok? added) (ok? committed)))))) "explicit root is a committed fixture tree")
       (assert (and (ok? result) (= (resultOr result -1) run.exitCode)) "--root selects the fixture toolchain root")
       (assert (stringContains? run.receipt "ERR_PLACEHOLDER_DIGEST") "fixture root's placeholder is the observed receipt")
       (assert (stringContains? envOutput "ERR_PLACEHOLDER_DIGEST") (str "ROOT_DIR selects fixture root without --root " envOutput))
-      (assert (and (stringContains? cliOutput ":scope :static") (not (stringContains? cliOutput "ERR_USAGE"))) (str "--root is stripped before gates rejects extra arguments: " cliOutput))
+      (assert (and (stringContains? cliOutput ":scope :static") (not (stringContains? cliOutput "ERR_USAGE"))) "--root is stripped before gates rejects extra arguments")
       (assert (ok? cleaned) "root fixture removed")
       true))
 
@@ -578,24 +570,6 @@ fn testTerminatedMapping -> Bool
       (assert (= c.err "ERR_AUDIT_INTERNAL") "terminated snapshot maps to ERR_AUDIT_INTERNAL")
       true))
 
-; (:m :ref RATCHET-PERMANENT-DELTA :do "gate9CoverageRatchet carried only the covered total, so a passing ratchet hid which packages moved; the receipt now carries the (:delta ...) lines in :ev, and a violation lists them after the violations")
-fn ! testGate9Deltas! tmp: String -> Bool
-  (let [(root (str tmp "/gate9"))
-        (made (and (ok? (dirCreate (str root "/asl/packages/p/src"))) (ok? (dirCreate (str root "/asl/packages/p/tests"))) (ok? (dirCreate (str root "/tools")))
-                   (ok? (fileWrite (str root "/asl/packages/p/src/m.asl") "(module p/m :x [alpha] :i [])\nfn alpha x: Int64 -> Int64 x\n"))
-                   (ok? (fileWrite (str root "/asl/packages/p/tests/mTest.asl") "(module p/mTest :x [runTests] :i [(p/m :a m)])\nfn ! runTests -> Bool\n  (= (m/alpha 1) 1)\n"))
-                   (ok? (fileWrite (str root "/tools/coverageBaseline.asn") "(:coverageBaseline :date \"d\" :unit COVRATCHET\n  (:pkg p :exports 3 :covered 1)\n)\n"))))
-        (c (ag/coverageCheck! root))
-        (line (ag/fmtCheck c))
-        (_w (fileWrite (str root "/tools/coverageBaseline.asn") "(:coverageBaseline :date \"d\" :unit COVRATCHET\n  (:pkg p :exports 1 :covered 1)\n)\n"))
-        (quiet (ag/coverageCheck! root))]
-    (do (assert made "the gate9 fixture root is written")
-        (assert (= c.status ":passed") (str "gate9 passes when no package is below its row: " line))
-        (assert (stringContains? c.ev "(:delta :pkg p :exports 3->1 :covered 1->1)") (str "the passing receipt names the package delta: " line))
-        (assert (stringContains? line ":ev ") "the printed check line carries :ev")
-        (assert (and (= quiet.status ":passed") (stringEmpty? quiet.ev)) "with the row at the measured counts the receipt has no delta")
-        true))
-
 fn ! runTests -> Bool
   (let [(forms (resultOr (loadFixture!) (list)))
         (header (optionOr (listHead forms) (aList (list))))
@@ -608,12 +582,10 @@ fn ! runTests -> Bool
         (asyncOk (testFullAsync! tmp))
         (terminatedOk (testTerminatedMapping))
         (ssotRetryOk (testSsotRetry! tmp))
-        (gate9Ok (testGate9Deltas! tmp))
         (records (filter (fn [(f AVal)] -> Bool (= (headOf f) "record")) forms))
         (recordMismatches (fold (fn [(acc (List String)) (c AVal)] -> (List String) (listAppend acc (recordFails! tmp c))) (list) records))
         (cleaned (pathRemove tmp))]
     (do
-      (assert (= (ag/coreSweepArgv) (list "check" "--all")) "the core sweep passes the explicit --all")
       (assert (= (headOf header) "auditParity") "fixture header is (:auditParity ...)")
       (assert (ok? made) "temp root created")
       (assert (= t.cases (numField header "cases")) (str "replayed cases " (stringFromInt64 t.cases) " = header :cases"))
@@ -623,7 +595,6 @@ fn ! runTests -> Bool
       (assert rootOk "explicit toolchain root")
       (assert asyncOk "full async spawn stub")
       (assert ssotRetryOk "ssot rules check retries a spurious failure")
-      (assert gate9Ok "gate9 receipt carries the package deltas")
       (assert terminatedOk "terminated runner faults map to internal audit errors")
       (assert (testSkippedCheck) "skipped checks do not fail the audit")
       (assert (testPlaceholderDigest) "placeholder :digest detection")

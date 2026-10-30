@@ -1,6 +1,6 @@
 (module asl-cli/nativeCli
-  :x [kwPrev? plainArg? readOnly? readHeads toolchainMoved? kept? testPinned? testArgv? testPinOn? cacheDir! headPath toolchainRootPaths rootsText pinned? relayPinned? formsPinned? formsOnly? formsPinOn? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? nsId! nsFromLink statRestOf statStartField statPpidField startOf! ancestorsOf! idText! idField lockStaleWhy lockStale! claimLock! dropStale! writeId! verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs storeBytes dropEntry!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cliClosure :a cc) (asl/packages/asl-remote/src/target :a rt) (asl-tools/fleet/run :a run) (asl-parser/reader :a rd)])
+  :x [cacheDir! headPath underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs]
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl-tools/fleet/run :a run) (asl-parser/reader :a rd)])
 
 fn ! cacheDir! -> String
   (let [(configured (optionOr (envGet "ASL_NATIVE_CLI_CACHE") ""))
@@ -16,12 +16,12 @@ fn headPath cache: String root: String -> String
 fn verbKind args: (List String) -> String
   (let [(verb (optionOr (listHead args) "help"))]
     (cond
-      ((or (listContains? (list "run" "test" "parse" "eval" "launch" "check" "pkg" "-e" "--on" "--local") verb) (or (stringEndsWith? verb ".asl") (stringContains? verb "/"))) "native")
+      ((or (listContains? (list "run" "test" "parse" "eval" "launch" "check" "pkg" "-e") verb) (or (stringEndsWith? verb ".asl") (stringContains? verb "/"))) "native")
       ((or (stringStartsWith? verb "(")
            (or (stringStartsWith? verb ":")
                (listContains? (list "rpc" "intel" "coupling" "graph" "complexity" "vitality" "full" "stubs" "trace"
                                      "crawler" "crawl" "engine" "mesh" "train" "timeout" "version" "-v" "--version"
-                                     "build" "cache" "audit" "pack" "target" "vcs" "help" "-h" "--help"
+                                     "build" "audit" "pack" "target" "help" "-h" "--help"
                                      "note" "doc" "heal" "lens" "consilium" "browser" "web" "search" "research"
                                      "gateway" "relay" "rla" "mem" "tool" "lint" "gate" "-" "-f") verb)))
         "forms")
@@ -63,18 +63,14 @@ fn rowAfter items: (List rd/SExpr) key: String -> (Option rd/SExpr)
     ((none) (none))
     ((some h) (if (and (rd/isAtom? h) (= (rd/sexprHead h) key)) (listGet items 1) (rowAfter (optionOr (listTail items) (list)) key))))
 
-; (:m :ref LLVM-NODE2-REDS :do "the :native row names any tool by key, :clang and now :llc :opt :wasmLd :llvmNm :node, so a test resolves its tool the way the native steps resolve clang")
-fn configNative text: String key: String -> (Option String)
-  (if (not (stringContains? text (str ":" key)))
+fn configClang text: String -> (Option String)
+  (if (not (stringContains? text ":clang"))
     (none)
     (match (rowAfter (rd/sexprToList (rd/parseSexpr text)) ":native")
       ((none) (none))
-      ((some native) (match (rowAfter (rd/sexprToList native) (str ":" key))
+      ((some native) (match (rowAfter (rd/sexprToList native) ":clang")
                        ((some v) (if (rd/isAtom? v) (let [(w (stringReplace (rd/sexprHead v) "\"" ""))] (if (stringEmpty? w) (none) (some w))) (none)))
                        ((none) (none))))))
-
-fn configClang text: String -> (Option String)
-  (configNative text "clang")
 
 fn ! clangOnPathIn! pathVar: String -> (List String)
   (filter (fn [(c String)] -> Bool
@@ -206,260 +202,12 @@ fn ! hostExec! ctx: sys/Context args: (List String) extra: (List String) -> Int6
     (execWith! (listAppend (list ctx.hostBin "run" (str ctx.root "/asl/packages/asl-cli/src/command.asl")) args) (list "ASL_NATIVE_CLI_DIR" "ASL_NATIVE_QUIET_PID") extra)
     (do (sys/say! "(:asl :status :failed :error ERR_HOST_ABSENT :message \"asl runs on the stage-0 host at asl/host/out/asl-host; build it with sh asl/host/build.sh or set ASL_HOST\")") 2))
 
-; (:m :ref MAC-CLI-REBUILD-STALL :do "the sources whose bytes key the native compile cache (nativeTest fingerprints exactly these); every CLI dir carries them, with its entry's package, as its roots file, written by the build that made it")
-fn toolchainRootPaths -> (List String)
-  (list "asl/packages/asl-compiler/src" "asl/packages/asl-checker/src" "asl/packages/asl-codegen/src" "asl/packages/asl-ir/src"
-        "asl/packages/asl-parser/src" "asl/packages/asl-syntax/src/core" "asl/packages/asl-target-llvm/src"
-        "asl/host/out/libaslrt.a" "asl/host/out/prelude.asl" "asl/prelude/prelude.asl" "asl/prelude/native" "asl/tools/nativeTest.asl")
-
-fn rootsText entry: String -> String
-  (let [(parts (stringSplit entry "/"))
-        (pkg (if (and (>= (listLength parts) 3) (= (optionOr (listGet parts 1) "") "packages")) (stringJoin (listTake parts 3) "/") entry))]
-    (str (stringJoin (listAppend (toolchainRootPaths) (list pkg)) "\n") "\n"))
-
-fn ! mtimeOf path: String -> Int64
-  (match (fileStat path) ((ok st) st.mtimeNs) ((err _) 0))
-
-fn under? path: String roots: (List String) -> Bool
-  (listAny? (fn [(r String)] -> Bool (or (= path r) (stringStartsWith? path (str r "/")))) roots)
-
-; (:m :ref MAC-CLI-REBUILD-STALL :do "run tools/remote/vps.asl keeps the current CLI without the lock when every dep that moved since the head lies outside the roots its build wrote: such an edit changes neither what the CLI compiles (the compile cache key) nor its own package; no roots file, no deps, a missing dep or a moved path under a root is not pinned, and the next unpinned call refreshes; aslNativeBuild refresh and the native CLI's own stale gate both ask it")
-fn ! pinned? root: String dir: String stampPath: String cmd: (List String) -> Bool
-  (let [(roots (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines (resultOr (fileReadString (str dir "/roots")) ""))))
-        (deps (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines (resultOr (fileReadString (str dir "/deps")) ""))))
-        (stamp (mtimeOf stampPath))]
-    (and (= (listTake cmd 2) (list "run" "tools/remote/vps.asl"))
-      (and (not (listEmpty? roots))
-        (and (not (listEmpty? deps))
-          (listAll? (fn [(p String)] -> Bool (and (fileExists? (str root "/" p)) (or (<= (mtimeOf (str root "/" p)) stamp) (not (under? p roots))))) deps)))))
-
-; (:m :ref RELAY-CLIENT-PINNED :do "run tools/remote/vps.asl also keeps the current CLI when a toolchain root moved, as long as the relay client's own sources (.asl.config.asn :nativeCli :relayPaths, tests directories skipped) are no newer than the head file and :nativeCli :relayPin is true: the relay tool is read from the tree at run time, so a CLI built before the toolchain edit still runs it; a moved relay source, a missing path, an absent head or the knob off is not pinned and the call rebuilds first; nativeGate then starts the new build in the background")
-fn configWord text: String key: String -> String
-  (match (stringIndexOf text (str ":" key " "))
-    ((none) "")
-    ((some i) (let [(rest (stringTrim (optionOr (stringSlice text (+ i (+ (stringLength key) 2)) (stringLength text)) "")))]
-                (optionOr (listHead (stringSplit (optionOr (listHead (stringSplit (optionOr (listHead (stringLines rest)) "") " ")) "") ")")) ""))))
-
-fn configStrings text: String key: String -> (List String)
-  (match (stringIndexOf text (str ":" key " ["))
-    ((none) (list))
-    ((some i) (let [(rest (optionOr (stringSlice text (+ i (+ (stringLength key) 3)) (stringLength text)) ""))
-                    (body (optionOr (stringSlice rest 0 (optionOr (stringIndexOf rest "]") (stringLength rest))) ""))]
-                (filter (fn [(p String)] -> Bool (not (stringEmpty? (stringTrim p)))) (stringSplit body "\"")))))
-
-fn ! newestSource! path: String -> Int64
-  (match (fileLstat path)
-    ((err _) 4611686018427387904)
-    ((ok st) (if (and st.isDir (not st.isSymlink))
-               (if (= (sys/baseName path) "tests")
-                 0
-                 (fold (fn [(acc Int64) (n String)] -> Int64 (max acc (newestSource! (str path "/" n)))) 0 (resultOr (dirList path) (list))))
-               st.mtimeNs)))
-
-fn ! relayPinned? root: String dir: String stampPath: String cmd: (List String) -> Bool
-  (let [(text (resultOr (fileReadString (str root "/.asl.config.asn")) ""))
-        (paths (configStrings text "relayPaths"))
-        (stamp (mtimeOf stampPath))]
-    (and (= (listTake cmd 2) (list "run" "tools/remote/vps.asl"))
-      (and (= (configWord text "relayPin") "true")
-        (and (not (listEmpty? paths))
-          (and (> stamp 0) (and (fileExists? (str dir "/roots"))
-            (and (sys/executable? (str dir "/bin"))
-              (listAll? (fn [(p String)] -> Bool (<= (newestSource! (str root "/" p)) stamp)) paths))))))))
-
-fn ! relayRefresh! ctx: sys/Context -> Bool
-  (let [(native (str ctx.root "/asl/host/out/aslNativeBuild"))]
-    (if (and (sys/executable? native) (fresh? ctx.root (str ctx.root "/asl/host/out/aslNativeBuild-fresh")))
-      (do (eprintln (str "asl: native CLI kept for the relay client; its refresh runs in the background: " (startBuild! ctx (cacheDir!) 2 ""))) true)
-      false))
-
-; (:m :ref PERF-CLI-REBUILD :do "asl test with plain suite paths (no other flag than --jobserverDir DIR, ASL_TRACE off, no remote profile) keeps the current CLI when every dep that moved since the head is an .asl file outside the toolchain roots and outside the files the test verb reaches (cliClosure from native.asl main, other verbs' handlers cut); a moved non-.asl dep, a moved toolchain root, a missing dep, a reached file outside deps or a closure that cannot be computed is not pinned; .asl.config.asn :nativeCli :testPin false turns it off")
-fn testArgs args: (List String) -> (List String)
-  (match (listIndexOf args "--jobserverDir")
-    ((some i) (testArgs (listAppend (listTake args i) (listDrop args (+ i 2)))))
-    ((none) args))
-
-fn testPathArg? a: String -> Bool
-  (and (not (stringEmpty? a)) (not (or (stringStartsWith? a "-") (or (stringStartsWith? a "(") (stringStartsWith? a ":")))))
-
-fn testArgv? cmd: (List String) -> Bool
-  (let [(args (testArgs (optionOr (listTail cmd) (list))))]
-    (and (= (optionOr (listHead cmd) "") "test") (and (not (listEmpty? args)) (listAll? testPathArg? args))))
-
-fn ! relativeTo root: String path: String -> (Option String)
-  (if (stringStartsWith? path (str root "/")) (stringSlice path (+ (stringLength root) 1) (stringLength path)) (none))
-
-; (:m :ref PERF-CLI-REBUILD :do "the reached files are cached as root-relative lines in DIR/testClosure, written only when none of them differs from DIR/src, so the cache always describes the sources DIR was built from; an absent or unreadable cache is computed again from the tree")
-fn ! testClosure! root: String dir: String moved: (List String) -> (Option (List String))
-  (match (fileReadString (str dir "/testClosure"))
-    ((ok text) (some (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines text))))
-    ((err _)
-      (let [(real (resultOr (realPath root) root))]
-        (match (cc/closureOf! (str real "/" (cc/testEntry)) (list "main") (cc/testCuts) (cc/testGates))
-          ((err e) (do (eprintln (str "asl: test pin off, closure: " e)) (none)))
-          ((ok files)
-            (let [(rel (map (fn [(f String)] -> (Option String) (relativeTo real f)) files))]
-              (if (listAny? none? rel)
-                (none)
-                (let [(paths (map (fn [(o (Option String))] -> String (optionOr o "")) rel))
-                      (part (str dir "/testClosure.part." (stringFromInt64 (procSelf))))
-                      (_ (if (listAny? (fn [(p String)] -> Bool (listContains? moved p)) paths)
-                           false
-                           (and (ok? (fileWrite part (str (stringJoin paths "\n") "\n"))) (ok? (pathRename part (str dir "/testClosure"))))))]
-                  (some paths)))))))))
-
-fn testPinOn? text: String -> Bool
-  (!= (configWord text "testPin") "false")
-
-; (:m :ref PERF-CLI-REBUILD :do "a dep moved when its bytes differ from the copy DIR/src holds, the same comparison fresh? makes, so an edit that keeps an mtime still counts")
-fn ! movedDeps root: String dir: String deps: (List String) -> (List String)
-  (filter (fn [(p String)] -> Bool (not (sameBytes? (underRoot root p) (str dir "/src/" p)))) deps)
-
-fn ! testPinned? root: String dir: String stampPath: String cmd: (List String) -> Bool
-  (if (not (and (testArgv? cmd) (and (!= (optionOr (envGet "ASL_TRACE") "") "1") (> (mtimeOf stampPath) 0))))
-    false
-    (let [(deps (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines (resultOr (fileReadString (str dir "/deps")) ""))))
-          (moved (movedDeps root dir deps))]
-      (and (testPinOn? (resultOr (fileReadString (str root "/.asl.config.asn")) ""))
-        (and (not (listEmpty? deps))
-          (and (listAll? (fn [(p String)] -> Bool (and (fileExists? (str root "/" p)) (and (stringEndsWith? p ".asl") (not (under? p (toolchainRootPaths)))))) moved)
-            (and (= (rt/findProfile! (resultOr (realPath ".") ".")) (ok (none)))
-              (match (testClosure! root dir moved)
-                ((none) false)
-                ((some reached) (and (listAll? (fn [(p String)] -> Bool (listContains? deps p)) reached)
-                                     (not (listAny? (fn [(p String)] -> Bool (listContains? reached p)) moved)))))))))))
-
-; (:m :ref FORMS-PINNED-CLI :do "an argv that is only ASN forms of the edit family (read query observe edit write diff flush discard, intel outline) runs on the newest already-built CLI without a staleness rebuild: such a form reads or stages text and never needs the toolchain edit that made the CLI stale; every keyword of every form, nested ones included, must be in the op's allow-list (allowedKeys) so a :gates, :run or :cmd field never rides along; check, test, run and every other verb keep the staleness rule; only .asl.config.asn :nativeCli :formsPin true turns it on, absent or any other word is off")
-fn formsAllowed -> (List String)
-  (listAppend (readHeads) (list ":edit" ":write" ":diff" ":flush" ":discard"))
-
-; (:m :ref AGENTEFF-03 :do "the read class: forms that only read the tree or a ledger (read query observe tree help tools, intel outline, mem list get query) and the bare help and version verbs; a stale CLI serves them whatever moved, and bin/asl answers them without waiting while one background rebuild runs. The write family (edit write diff flush discard) parses and checks staged text, so it is kept only while no toolchain root moved; check, test, run, audit and every other verb always wait for the rebuild")
-fn readHeads -> (List String)
-  (list ":read" ":query" ":observe" ":tree" ":help" ":tools" ":intel :outline" ":intel :op outline" ":mem :op list" ":mem :op get" ":mem :op query")
-
-fn allowedKeys head: String -> (List String)
-  (cond
-    ((= head ":read") (list ":file" ":symbol" ":anchor" ":limit" ":start" ":end"))
-    ((= head ":query") (list ":text" ":in" ":limit"))
-    ((= head ":observe") (list ":dim" ":scope" ":limit" ":symbol" ":module" ":path" ":spec" ":id"))
-    ((= head ":edit") (list ":file" ":old" ":new" ":all" ":autofix" ":force"))
-    ((= head ":write") (list ":file" ":content" ":force"))
-    ((= head ":diff") (list ":file"))
-    ((= head ":flush") (list ":file"))
-    ((= head ":discard") (list ":file"))
-    ((= head ":intel :outline") (list ":outline" ":file" ":symbol" ":limit" ":module" ":target"))
-    ((= head ":intel :op outline") (list ":op" ":file" ":symbol" ":limit" ":module" ":target"))
-    ((= head ":tree") (list ":path" ":depth"))
-    ((= head ":help") (list ":op" ":topic" ":builtin"))
-    ((= head ":tools") (list ":op"))
-    ((stringStartsWith? head ":mem :op ") (list ":op" ":dir" ":file" ":id" ":text" ":limit"))
-    (else (list)))
-
-fn charAt s: String i: Int64 -> String
-  (optionOr (stringSlice s i (+ i 1)) "")
-
-fn blank? c: String -> Bool
-  (or (= c " ") (or (= c "\n") (or (= c "\t") (= c "\r"))))
-
-fn wordAt s: String i: Int64 -> String
-  (let [(c (charAt s i))]
-    (if (or (stringEmpty? c) (or (blank? c) (or (= c "(") (= c ")"))))
-      ""
-      (str c (wordAt s (+ i 1)))))
-
-fn headAt s: String i: Int64 -> String
-  (let [(w (wordAt s (+ i 1)))]
-    (if (or (= w ":intel") (= w ":mem"))
-      (let [(w2 (wordAt s (+ i (+ (stringLength w) 2))))]
-        (if (= w2 ":op")
-          (str w " " w2 " " (wordAt s (+ i (+ (stringLength w) (+ (stringLength w2) 3)))))
-          (str w " " w2)))
-      w))
-
-; (:m :ref FORMS-PINNED-CLI :do "a :word counts as a keyword after a blank, an open or close paren or a closing quote; rows (HEAD, KEYWORD) of the top-level forms of one argv element, KEYWORD empty for the head row itself: every :word that starts a token outside a string counts, nested form heads too, only the head right after a top-level open paren is the head; none for text outside a form or unbalanced delimiters")
-fn kwPrev? prev: String -> Bool
-  (or (blank? prev) (listContains? (list "(" ")" "[" "]" "{" "}" "\"") prev))
-
-fn scanForms s: String i: Int64 n: Int64 depth: Int64 inStr: Bool esc: Bool cur: String acc: (List (Pair String String)) -> (Option (List (Pair String String)))
-  (if (>= i n)
-    (if (and (= depth 0) (not inStr)) (some acc) (none))
-    (let [(c (charAt s i))
-          (prev (if (= i 0) "" (charAt s (- i 1))))]
-      (cond
-        (inStr (scanForms s (+ i 1) n depth (or esc (not (= c "\""))) (and (not esc) (= c "\\")) cur acc))
-        ((= c "(") (if (= depth 0)
-                     (let [(h (headAt s i))] (scanForms s (+ i 1) n 1 false false h (cons (pair h "") acc)))
-                     (scanForms s (+ i 1) n (+ depth 1) false false cur acc)))
-        ((= c ")") (if (= depth 0) (none) (scanForms s (+ i 1) n (- depth 1) false false cur acc)))
-        ((= c "\"") (if (= depth 0) (none) (scanForms s (+ i 1) n depth true false cur acc)))
-        ((blank? c) (scanForms s (+ i 1) n depth false false cur acc))
-        ((and (= c ":") (and (> depth 0) (kwPrev? prev)))
-          (scanForms s (+ i 1) n depth false false cur (if (and (= depth 1) (= prev "(")) acc (cons (pair cur (wordAt s i)) acc))))
-        (else (if (= depth 0) (none) (scanForms s (+ i 1) n depth false false cur acc))))))
-
-fn rowOk? row: (Pair String String) -> Bool
-  (and (listContains? (formsAllowed) (pairFirst row))
-    (or (stringEmpty? (pairSecond row)) (listContains? (allowedKeys (pairFirst row)) (pairSecond row))))
-
-; (:m :ref FORMS-PINNED-CLI :do "a trailing argument of intel outline is a plain path: it starts with neither ( nor : nor - and holds no quote, so no form or flag rides along")
-fn plainArg? a: String -> Bool
-  (and (not (stringEmpty? a))
-    (and (not (stringStartsWith? a "(")) (and (not (stringStartsWith? a ":")) (and (not (stringStartsWith? a "-")) (not (stringContains? a "\""))))))
-
-fn formsOnly? cmd: (List String) -> Bool
-  (or (and (= (listTake cmd 2) (list "intel" "outline"))
-        (listAll? plainArg? (optionOr (listTail (optionOr (listTail cmd) (list))) (list))))
-    (and (not (listEmpty? cmd))
-      (listAll? (fn [(a String)] -> Bool
-                  (match (scanForms a 0 (stringLength a) 0 false false "" (list))
-                    ((none) false)
-                    ((some rows) (and (not (listEmpty? rows)) (listAll? rowOk? rows)))))
-                cmd)))
-
-; (:m :ref AGENTEFF-03 :do "a form keeps its :op once: (:mem :op get :op put) is not a read")
-fn opOnce? rows: (List (Pair String String)) -> Bool
-  (listAll? (fn [(row (Pair String String))] -> Bool
-              (<= (listLength (filter (fn [(r (Pair String String))] -> Bool (and (= (pairFirst r) (pairFirst row)) (= (pairSecond r) ":op"))) rows))
-                  (listLength (filter (fn [(r (Pair String String))] -> Bool (and (= (pairFirst r) (pairFirst row)) (stringEmpty? (pairSecond r)))) rows))))
-            rows)
-
-fn readOnly? cmd: (List String) -> Bool
-  (or (and (= (listLength cmd) 1) (listContains? (list "help" "-h" "--help" "version" "-v" "--version") (optionOr (listHead cmd) "")))
-    (or (and (= (listTake cmd 2) (list "intel" "outline"))
-          (listAll? plainArg? (optionOr (listTail (optionOr (listTail cmd) (list))) (list))))
-      (and (formsOnly? cmd)
-        (listAll? (fn [(a String)] -> Bool
-                    (match (scanForms a 0 (stringLength a) 0 false false "" (list))
-                      ((none) false)
-                      ((some rows) (and (opOnce? rows) (listAll? (fn [(r (Pair String String))] -> Bool (listContains? (readHeads) (pairFirst r))) rows)))))
-                  cmd))))
-
-fn ! toolchainMoved? root: String dir: String -> Bool
-  (let [(deps (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines (resultOr (fileReadString (str dir "/deps")) ""))))]
-    (or (listEmpty? deps)
-      (listAny? (fn [(p String)] -> Bool (and (under? p (toolchainRootPaths)) (not (sameBytes? (underRoot root p) (str dir "/src/" p))))) deps)))
-
-fn formsPinOn? text: String -> Bool
-  (= (configWord text "formsPin") "true")
-
-fn ! formsPinned? root: String dir: String cmd: (List String) -> Bool
-  (let [(text (resultOr (fileReadString (str root "/.asl.config.asn")) ""))]
-    (and (formsPinOn? text)
-      (and (sys/executable? (str dir "/bin"))
-        (or (readOnly? cmd) (and (formsOnly? cmd) (not (toolchainMoved? root dir)))))))
-
-; (:m :ref PERF-CLI-REBUILD :do "the one answer the CLI's own stale gate and aslNativeBuild refresh share: a forms-only argv, the relay tool on an unmoved toolchain, or asl test outside the reached files keeps the current CLI")
-fn ! kept? root: String dir: String stampPath: String cmd: (List String) -> Bool
-  (or (formsPinned? root dir cmd) (or (pinned? root dir stampPath cmd) (testPinned? root dir stampPath cmd)))
-
 fn ! nativeGate! ctx: sys/Context args: (List String) -> (Option Int64)
   (let [(dir (optionOr (envGet "ASL_NATIVE_CLI_DIR") ""))]
     (cond
       ((not (direct?)) (none))
       ((= (verbKind args) "host") (some (hostExec! ctx args (list))))
       ((or (stringEmpty? dir) (fresh? ctx.root dir)) (none))
-      ((kept? ctx.root dir (headPath (cacheDir!) ctx.root) args) (none))
-      ((relayPinned? ctx.root dir (headPath (cacheDir!) ctx.root) args) (do (relayRefresh! ctx) (none)))
       (else (some (awaitStaleRebuild! ctx dir args)))))
 
 fn leadingDigitsAt s: String n: Int64 i: Int64 -> String
@@ -497,101 +245,6 @@ fn ! heldPid lock: String -> Int64
 fn ! alive? pid: Int64 -> Bool
   (and (> pid 1) (resultOr (procAlive? pid) false))
 
-; (:m :ref NATIVE-LOCK-PIDNS :do "a lock records pid plus identity (lock/id.PID: namespace id, process start, creation time) because a bare pid is meaningless across pid namespaces: a bubblewrap --unshare-pid jail reuses small numbers, so a killed holder's lock read as alive forever; lockStaleWhy names why a holder no longer holds (foreignNamespace, ownPid, ancestor, dead, startMismatch, expired) and an old pid-only lock is judged by the rules that need no identity")
-fn nsFromLink text: String -> String
-  (let [(t (stringTrim text))]
-    (if (and (stringStartsWith? t "pid:[") (and (stringEndsWith? t "]") (> (stringLength t) 6))) t ""))
-
-fn ! nsId! -> String
-  (nsFromLink (resultOr (fileReadlink "/proc/self/ns/pid") ""))
-
-fn statRestOf text: String -> (List String)
-  (let [(parts (stringSplit text ")"))]
-    (if (< (listLength parts) 2)
-      (list)
-      (filter (fn [(f String)] -> Bool (not (stringEmpty? f))) (stringSplit (stringTrim (optionOr (listGet parts (- (listLength parts) 1)) "")) " "))))
-
-fn statStartField text: String -> String
-  (let [(f (statRestOf text))]
-    (if (>= (listLength f) 20) (optionOr (listGet f 19) "") ""))
-
-fn statPpidField text: String -> String
-  (let [(f (statRestOf text))]
-    (if (>= (listLength f) 2) (optionOr (listGet f 1) "") ""))
-
-fn ! statRest! pid: Int64 -> (List String)
-  (statRestOf (resultOr (fileReadString (str "/proc/" (stringFromInt64 pid) "/stat")) ""))
-
-fn ! psField! pid: Int64 field: String -> String
-  (let [(d (boundedCapture! (str "ps -o " field "= -p " (stringFromInt64 pid) " 2>/dev/null") 3000))]
-    (stringTrim (stringReplace d.stdout "\n" " ")))
-
-fn ! startOf! pid: Int64 -> String
-  (let [(f (optionOr (listGet (statRest! pid) 19) ""))]
-    (if (stringEmpty? f) (psField! pid "lstart") f))
-
-fn ! ppidOf! pid: Int64 -> Int64
-  (let [(f (optionOr (listGet (statRest! pid) 1) ""))]
-    (optionOr (stringToInt64 (if (stringEmpty? f) (psField! pid "ppid") f)) 0))
-
-fn ! ancestorsOf! pid: Int64 depth: Int64 -> (List Int64)
-  (if (or (<= pid 1) (<= depth 0))
-    (list)
-    (let [(p (ppidOf! pid))]
-      (if (<= p 0) (list) (cons p (ancestorsOf! p (- depth 1))))))
-
-fn ! idText! pid: Int64 -> String
-  (str "ns=" (nsId!) "\nstart=" (startOf! pid) "\ncreated=" (stringFromInt64 (nowNs)) "\n")
-
-fn idField text: String key: String -> String
-  (let [(prefix (str key "="))]
-    (match (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? l prefix)) (stringLines text)))
-      ((none) "")
-      ((some l) (stringTrim (optionOr (stringSlice l (stringLength prefix) (stringLength l)) "")))))
-
-fn lockStaleWhy held: Int64 id: String selfPid: Int64 ancestors: (List Int64) selfNs: String curStart: String isAlive: Bool ageS: Int64 budgetS: Int64 -> String
-  (let [(ns (idField id "ns"))
-        (start (idField id "start"))]
-    (cond
-      ((and (not (stringEmpty? ns)) (and (not (stringEmpty? selfNs)) (!= ns selfNs))) "foreignNamespace")
-      ((= held selfPid) "ownPid")
-      ((listContains? ancestors held) "ancestor")
-      ((not isAlive) "dead")
-      ((and (not (stringEmpty? start)) (and (not (stringEmpty? curStart)) (!= start curStart))) "startMismatch")
-      ((> ageS budgetS) "expired")
-      (else "")))
-
-fn ! lockStale! lock: String budgetS: Int64 -> String
-  (let [(held (heldPid lock))
-        (id (resultOr (fileReadString (str lock "/id." (stringFromInt64 held))) ""))
-        (isAlive (alive? held))
-        (made (optionOr (stringToInt64 (idField id "created")) (match (fileStat (str lock "/pid")) ((ok st) st.mtimeNs) ((err _) (nowNs)))))
-        (ageS (/ (- (nowNs) made) 1000000000))
-        (start (idField id "start"))]
-    (if (<= held 0)
-      ""
-      (lockStaleWhy held id (procSelf) (if isAlive (ancestorsOf! (procSelf) 64) (list)) (nsId!) (if (and isAlive (not (stringEmpty? start))) (startOf! held) "") isAlive ageS budgetS)))
-
-fn ! writeId! lock: String pid: Int64 -> Bool
-  (ok? (fileWrite (str lock "/id." (stringFromInt64 pid)) (idText! pid)))
-
-fn ! claimLock! lock: String pid: Int64 -> Bool
-  (if (ok? (fileCreateExclusive (str lock "/pid") (str (stringFromInt64 pid) "\n")))
-    (do (writeId! lock pid) true)
-    false)
-
-fn ! dropStale! lock: String held: Int64 -> Bool
-  (let [(pidPath (str lock "/pid"))
-        (mine (str pidPath ".stale." (stringFromInt64 (procSelf))))
-        (before (stringTrim (resultOr (fileReadString pidPath) "")))]
-    (if (and (= before (stringFromInt64 held)) (ok? (pathRename pidPath mine)))
-      (let [(got (stringTrim (resultOr (fileReadString mine) "")))
-            (same (= got before))
-            (_ (if same (pathRemove (str lock "/id." (stringFromInt64 held))) (fileCreateExclusive pidPath (str got "\n"))))
-            (_r (pathRemove mine))]
-        same)
-      false))
-
 fn detachScript -> String
   "perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV or exit 127' \"$@\" < /dev/null >> \"$NATIVE_CLI_LOG\" 2>&1 & echo $!"
 
@@ -617,7 +270,7 @@ fn ! spawnBuilder! ctx: sys/Context cache: String lock: String -> String
             (part (str lock "/pid.part"))]
         (if (or (!= d.exitCode 0) (<= pid 1))
           (do (pathRemove lock) (str "its build did not start: " (stringReplace (stringTrim (str d.stdout " " d.stderr)) "\n" " ")))
-          (do (writeId! lock pid) (match (fileWrite part (str (stringFromInt64 pid) "\n")) ((ok _) (pathRename part (str lock "/pid"))) ((err e) (err e)))
+          (do (match (fileWrite part (str (stringFromInt64 pid) "\n")) ((ok _) (pathRename part (str lock "/pid"))) ((err e) (err e)))
               (str "its build started in the background (log " log ")"))))))
 
 fn ! startBuild! ctx: sys/Context cache: String tries: Int64 last: String -> String
@@ -626,17 +279,16 @@ fn ! startBuild! ctx: sys/Context cache: String tries: Int64 last: String -> Str
       last
       (match (dirCreate lock)
         ((err e) (str "cannot create " lock ": " e))
-        ((ok _) (if (claimLock! lock (procSelf))
-          (spawnBuilder! ctx cache lock)
-          (let [(held (heldPid lock))
-                (why (lockStale! lock (buildWaitS! ctx)))]
-            (if (and (> held 1) (stringEmpty? why))
-              (str "pid " (stringFromInt64 held) " is building it")
-              (do (dropStale! lock held) (startBuild! ctx cache (- tries 1) (str "a stale build lock was cleared (" (if (stringEmpty? why) "unreadable" why) ")"))))))))))
+        ((ok _) (match (fileCreateExclusive (str lock "/pid") (str (stringFromInt64 (procSelf)) "\n"))
+          ((ok _) (spawnBuilder! ctx cache lock))
+          ((err e) (let [(held (heldPid lock))]
+                     (if (alive? held)
+                       (str "pid " (stringFromInt64 held) " is building it")
+                       (do (pathRemove lock) (startBuild! ctx cache (- tries 1) "a stale build lock was cleared"))))))))))
 
 fn ! waitBuild! lock: String deadlineNs: Int64 -> Bool
   (let [(owner (optionOr (stringToInt64 (stringTrim (resultOr (fileReadString (str lock "/owner")) ""))) 0))]
-  (if (and (> (heldPid lock) 1) (stringEmpty? (lockStale! lock 3600)) (or (= owner 0) (alive? owner)) (< (monotonicNs) deadlineNs))
+  (if (and (alive? (heldPid lock)) (or (= owner 0) (alive? owner)) (< (monotonicNs) deadlineNs))
     (do (sleepMs 1000) (waitBuild! lock deadlineNs))
     true))
 
@@ -792,7 +444,7 @@ fn ! takeLock! cache: String -> (Option Bool)
       ((= held (procSelf)) (some false))
       ((and (> held 1) (listContains? (run/descendantsOf (run/psSnapshot) held) (procSelf))) (some false))
       ((not (ok? (dirCreate lock))) (none))
-      ((claimLock! lock (procSelf)) (some true))
+      ((ok? (fileCreateExclusive (str lock "/pid") (str (stringFromInt64 (procSelf)) "\n"))) (some true))
       (else (none))))
 
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "a build leases every seed, rt, asl1 or cli entry it reuses or makes before it touches it: leases/NAME@PID holds pid and start; a lease of a live pid pins NAME, a dead one is dropped, and the build drops its own at its end")
@@ -834,9 +486,6 @@ fn ! unleasedBuild? cache: String names: (List String) -> Bool
 fn sharedFloorNs -> Int64
   21600000000000
 
-fn staleAgeNs -> Int64
-  1209600000000000
-
 fn keepNewest -> Int64
   4
 
@@ -851,39 +500,23 @@ fn ! newestOfKinds names: (List String) stamps: (Map String Int64) -> (List Stri
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "after a native CLI build, under the build lock: a head whose root no longer exists is removed, a tmp dir whose builder is dead goes, and the cli, asl1, seed and rt entries are held under capBytes by last use above the floor, with the target of every live head and every leased entry pinned; returns the count removed")
 fn ! sweepNativeCache! cache: String capBytes: Int64 minAgeNs: Int64 -> Int64
   (match (takeLock! cache)
-    ((none) (sweepDeadTmp! cache (resultOr (dirList cache) (list))))
+    ((none) 0)
     ((some taken) (let [(removed (match (dirList cache)
                                    ((err _) 0)
                                    ((ok names) (if (unleasedBuild? cache names) 0 (sweepLocked! cache names (liveLeases! cache) capBytes (max minAgeNs (sharedFloorNs)))))))
                         (_ (if taken (pathRemove (str cache "/lock")) (ok ())))]
-                    (+ (sweepDeadTmp! cache (resultOr (dirList cache) (list))) removed))))
-
-; (:m :ref U6-NATIVECLI-REAP :do "a tmp.PID dir is private to its pid: one whose pid is dead goes at every sweep, before the build lock and the unleased-build gate and with no age floor; a live pid's tmp dir is never touched")
-fn ! sweepDeadTmp! cache: String names: (List String) -> Int64
-  (listLength (filter (fn [(n String)] -> Bool (and (tmpDead? n) (ok? (pathRemove (str cache "/" n))))) names))
-
-; (:m :ref NATIVECLI-HEAD-LEAK :do "a head whose root is gone names nothing a build can use, yet the 6 hour floor kept every one a test made under /private/tmp; with the opt-in marker file deadHeadSweep in the store a dead head goes at the first sweep, and without it (every store until the principal adds it) the floor still holds")
-fn deadHeadMarker -> String
-  "deadHeadSweep"
-
-fn ! freshDeadHeads? cache: String -> Bool
-  (fileExists? (str cache "/" (deadHeadMarker)))
+                    removed)))
 
 fn ! sweepLocked! cache: String names: (List String) leased: (List String) capBytes: Int64 minAgeNs: Int64 -> Int64
   (let [(now (nowNs))
         (old? (fn [(n String)] -> Bool (> (- now (treeStamp! (str cache "/" n))) minAgeNs)))
         (heads (filter headFile? names))
         (live (filter (fn [(h String)] -> Bool (some? (headRoot! h))) heads))
-        (dead (filter (fn [(h String)] -> Bool (and (not (listContains? live h)) (or (freshDeadHeads? cache) (old? h)))) heads))
+        (dead (filter (fn [(h String)] -> Bool (and (not (listContains? live h)) (old? h))) heads))
         (deadGone (listLength (filter (fn [(h String)] -> Bool (ok? (pathRemove (str cache "/" h)))) dead)))
+        (tmpGone (listLength (filter (fn [(n String)] -> Bool (and (and (tmpDead? n) (old? n)) (ok? (pathRemove (str cache "/" n))))) names)))
         (stored (filter storeName? names))
         (stamps (fold (fn [(m (Map String Int64)) (n String)] -> (Map String Int64) (mapSet m n (treeStamp! (str cache "/" n)))) (mapEmpty) stored))
-        (named (map (fn [(h String)] -> String (sys/baseName (stringTrim (resultOr (fileReadString (str cache "/" h)) "")))) live))
-        (held (listAppend leased named))
-        (stale? (fn [(n String)] -> Bool (and (> (- now (treeStamp! (str cache "/" n))) (staleAgeNs)) (not (listContains? held (stringReplace n ".failed" ""))))))
-        (stale (filter stale? stored))
-        (kept (filter (fn [(n String)] -> Bool (not (listContains? stale n))) stored))
-        (staleGone (listLength (filter (fn [(n String)] -> Bool (ok? (pathRemove (str cache "/" n)))) stale)))
-        (targets (listAppend (listAppend leased (newestOfKinds kept stamps)) named))
-        (entries (map (fn [(n String)] -> StoreEntry (storeEntry! (list (str cache "/" n)) (listContains? targets (stringReplace n ".failed" "")))) kept))]
-    (+ deadGone staleGone (pairSecond (sweepEntries! entries capBytes minAgeNs))))
+        (targets (listAppend (listAppend leased (newestOfKinds stored stamps)) (map (fn [(h String)] -> String (sys/baseName (stringTrim (resultOr (fileReadString (str cache "/" h)) "")))) live)))
+        (entries (map (fn [(n String)] -> StoreEntry (storeEntry! (list (str cache "/" n)) (listContains? targets (stringReplace n ".failed" "")))) stored))]
+    (+ (+ deadGone tmpGone) (pairSecond (sweepEntries! entries capBytes minAgeNs))))

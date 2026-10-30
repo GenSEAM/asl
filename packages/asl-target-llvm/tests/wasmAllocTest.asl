@@ -1,7 +1,6 @@
 (module asl-target-llvm/tests/wasmAllocTest
   :x [runTests]
-  :i [(asl-target-llvm/wasmAlloc :a wa) (asl-tools/fleet/run :a run)
-      (asl-target-llvm/tests/llvmTools :a lt)])
+  :i [(asl-target-llvm/wasmAlloc :a wa) (asl-tools/fleet/run :a run)])
 
 (schema Captured
   (:f exitCode Int64)
@@ -28,7 +27,12 @@ fn ! sh cmd: String -> Captured
   (shWithin cmd 1200)
 
 fn ! node -> String
-  (lt/nodePath!)
+  (let [(candidates (list "/usr/local/bin/node" "/opt/homebrew/bin/node"))
+        (pathDirs (stringSplit (optionOr (envGet "PATH") "") ":"))
+        (allCandidates (listAppend candidates (map (fn [(dir String)] -> String (str dir "/node")) pathDirs)))]
+    (match (listHead (filter fileExists? allCandidates))
+      ((some p) p)
+      ((none) "")))
 
 fn probeLl -> String
   (stringJoin
@@ -124,8 +128,8 @@ fn ! testAllocator -> Bool
       (assert (= dirOut.exitCode 0) "create isolated wasm allocator test directory")
       (assert (ok? (fileWrite ll (probeLl))) "write executable allocator LLVM module")
       (assert (ok? (fileWrite js (nodeDriver))) "write WebAssembly execution driver")
-      (let [(compiled (sh (str (lt/llcPath!) " -mtriple=wasm32-unknown-unknown -mattr=+bulk-memory -filetype=obj " ll " -o " obj)))
-            (linked (sh (str (lt/wasmLdPath!) " --fatal-warnings --no-entry --export=probe --initial-memory=131072 --max-memory=2359296 " obj " -o " wasm)))
+      (let [(compiled (sh (str "/opt/homebrew/opt/llvm/bin/llc -mtriple=wasm32-unknown-unknown -mattr=+bulk-memory -filetype=obj " ll " -o " obj)))
+            (linked (sh (str "/opt/homebrew/opt/lld/bin/wasm-ld --fatal-warnings --no-entry --export=probe --initial-memory=131072 --max-memory=2359296 " obj " -o " wasm)))
             (ran (sh (str (node) " " js " " wasm)))
             (cleaned (sh (str "rm -rf " work)))]
         (do

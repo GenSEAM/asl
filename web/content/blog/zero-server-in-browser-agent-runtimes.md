@@ -52,7 +52,7 @@ The first piece is real, and you are looking at it. aslang.dev is an ASL program
 
 The module is deliberately sandboxed by construction. On wasm32 the only host builtin a program can call is `print`; clocks, files, environment and sockets are rejected when the program is lowered, with `ERR_CAPABILITY_ABSENT`. The module brings its own allocator and garbage collector, so it needs nothing from the page beyond the four imports.
 
-Outside the browser, the same toolchain needs no server and no package manager: `asl check`, `asl test` and `asl run` work on files in a checkout. We quote no start-up figure for it here.
+Outside the browser, the same toolchain is small and starts quickly. The stage-0 host, `asl/host/out/asl-host`, is a C program that checks, tests and runs ASL with no server and no package manager; built in a Linux x86_64 container on 2026-10-14 it was 360,488 bytes, and 200 fresh-process runs of `asl-host eval '(+ 1 2)'` there had a median wall time of about 12 ms, including process creation.
 
 What is not built: the checker and test runner compiled to WebAssembly, the OPFS repository, the in-tab agent loop and the browser IDE. The site proves that ASL programs run in a tab under a narrow capability surface; it does not yet prove an IDE.
 

@@ -1,49 +1,5 @@
-(module asl-forms/delegate :x [withSearchKeys! DelegateCtx agentBusEvent postBusEvent! receiptToken Outcome Spawned withParentPid agentStep engineOk? engineExchangeWith engineFrameData contextFromEnv! delegateOp? runDelegate agentKillSeconds poolRoute? poolForms poolStepWith fieldNumber spawnRun spawnRunInput stepHead okLine rejectedLine pyStrip pyRepr pyExt errnoText timeoutText researchGatewayEntry! researchGatewayRoutes! resolveResearchEntry! researchEntryJson searchLimit researchCliArgv! researchCliText researchTimeoutSeconds researchDispatch researchDispatchWith researchTriage? searchFailed? crawlerSpawn] :i [(asl-forms/kernel :a k) (asl-forms/extract :a ex) (aslGateway/search :a srch) (aslGateway/research :a rs) (aslGateway/config :a cfg) (aslGateway/pyText :a pt) (asl-json/json :a j) (asl-engine/transport :a etp) (asl-intel/text :a it) (asl-forms/evalOp :a ev) (asl-tools/fleet/run :a fr) (aslGateway/bus :a bus)])
+(module asl-forms/delegate :x [DelegateCtx Outcome Spawned withParentPid agentStep engineOk? engineExchangeWith engineFrameData contextFromEnv! delegateOp? runDelegate agentKillSeconds poolRoute? poolForms poolStepWith fieldNumber spawnRun spawnRunInput stepHead okLine rejectedLine pyStrip pyRepr pyExt errnoText timeoutText researchGatewayEntry! researchGatewayRoutes! resolveResearchEntry! researchEntryJson searchLimit researchCliArgv! researchCliText researchTimeoutSeconds researchDispatch researchDispatchWith researchTriage? searchFailed? crawlerSpawn] :i [(asl-forms/kernel :a k) (asl-forms/extract :a ex) (aslGateway/search :a srch) (aslGateway/research :a rs) (aslGateway/config :a cfg) (aslGateway/pyText :a pt) (asl-json/json :a j) (asl-engine/transport :a etp) (asl-intel/text :a it) (asl-forms/evalOp :a ev) (asl-tools/fleet/run :a fr)])
 
-
-fn agentEventQuote s: String -> String
-  (str "\"" (k/escapeAsnVal s) "\"")
-
-; (:m :ref ULOOP-LOWS2 :do "an (:agent) run is reported in the one BusEvent shape the waiter parses; the receipt path is the run's journal and the head its :head")
-fn agentBusEvent unit: String stop: String receipt: String exit: Int64 at: Int64 -> bus/BusEvent
-  (bus/BusEvent :unit unit :stop stop :head (receiptToken receipt ":head") :gates "" :exit exit :asserts 0
-    :receiptPath (receiptToken receipt ":journal") :at at)
-
-; (:m :ref ULOOP-LOWS2 :do "Leon already emits for a run with :unit; the dispatcher adds a row only when none for the unit landed since the run started, so a killed or failed run still signals and a finished one is not doubled")
-fn ! postBusEvent! path: String ev: bus/BusEvent sinceMs: Int64 -> (Result Bool String)
-  (match (bus/readEvents! path)
-    ((err e) (err e))
-    ((ok evs)
-      (match (bus/findEvent evs ev.unit sinceMs)
-        ((some _) (ok false))
-        ((none) (bus/emitTerminal! path ev)))))
-
-; (:m :ref SIGNAL-LEON-DONE :do "the value after key in a receipt line: a quoted string unquoted, else the bare token up to a space or close paren; empty when absent")
-fn receiptToken text: String key: String -> String
-  (match (stringIndexOf text (str key " "))
-    ((none) "")
-    ((some at)
-      (let [(rest (optionOr (stringSlice text (+ at (+ (stringLength key) 1)) (stringLength text)) ""))]
-        (if (stringStartsWith? rest "\"")
-          (let [(body (optionOr (stringSlice rest 1 (stringLength rest)) ""))]
-            (optionOr (stringSlice body 0 (optionOr (stringIndexOf body "\"") 0)) ""))
-          (let [(sp (optionOr (stringIndexOf rest " ") (stringLength rest)))
-                (cp (optionOr (stringIndexOf rest ")") (stringLength rest)))]
-            (optionOr (stringSlice rest 0 (if (< sp cp) sp cp)) ""))))))
-
-; (:m :ref SIGNAL-LEON-DONE :do "every (:agent) run that returns posts one event row; stop is the receipt :stop or the dispatch failure; a failed append is reported on stderr and in the step line, never dropped")
-fn ! postAgentEvent! ctx: DelegateCtx kw: (Map String String) stop: String receipt: String exit: Int64 sinceMs: Int64 -> String
-  (let [(unit (k/kwOr kw "unit" (receiptToken receipt ":session")))
-        (r (postBusEvent! (agentEventsPath! kw) (agentBusEvent unit stop receipt exit (/ (nowNs) 1000000)) sinceMs))]
-    (match r
-      ((ok _) "")
-      ((err e) (do (eprintln (str "agent event not written: " e)) (str " :eventError " (agentEventQuote e))))))
-
-fn ! agentEventsPath! kw: (Map String String) -> String
-  (let [(given (k/kwOr kw "events" ""))]
-    (if (stringEmpty? given)
-      (str (optionOr (envGet "HOME") "") "/.asl/bus/events.asn")
-      given))
 
 (schema DelegateCtx (:f rootDir String) (:f binDir String) (:f wsDir String))
 
@@ -275,20 +231,6 @@ fn envMapFromList! -> (Map String String)
             ((none) (mapSet m row ""))))
         (mapEmpty) (envList))
 
-; (:m :ref SEARCH-KEYS-FILE :do "search engine keys absent from the process env (bounded.asl and Leon runs strip it) come from the key files the gateway reads, so (:search) and (:research) see SYNTHETIC/TAVILY/BRAVE/SERPER without exporting them")
-fn searchKeyNames -> (List String)
-  (list "SYNTHETIC_API_KEY" "TAVILY_API_KEY" "BRAVE_API_KEY" "SERPER_API_KEY")
-
-fn ! withSearchKeys! env: (Map String String) paths: (List String) -> (Map String String)
-  (fold (fn [(m (Map String String)) (k String)] -> (Map String String)
-          (if (stringEmpty? (optionOr (mapGet m k) ""))
-            (match (cfg/keyFileLookup! paths k) ((some v) (mapSet m k v)) ((none) m))
-            m))
-        env (searchKeyNames))
-
-fn ! searchEnv! -> (Map String String)
-  (withSearchKeys! (envMapFromList!) (list "~/.asl/keys.env"))
-
 fn listOf v: j/Json -> (List j/Json)
   (match v ((j/jarr xs) xs) (_ (list)))
 
@@ -317,7 +259,7 @@ fn ! searchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List S
         (eng (k/kwOr kw "engine" "auto"))]
     (if (stringEmpty? q)
       (rejectedLine id "search" "ERR_MISSING_ARG" (msgTail "Missing query argument"))
-      (let [(env (searchEnv!))
+      (let [(env (envMapFromList!))
             (now (monotonicNs))
             (st (srch/newHubState env (/ now 1000000) 0 (mapEmpty) (mapEmpty)))
             (step (srch/executeSearchHub! st q eng lim))]
@@ -405,7 +347,7 @@ fn resolveResearchEntry! table: cfg/GatewayTable model: String profile: (Option 
     ((err e) (err e))
     ((ok routes) (match (listHead (pairSecond routes)) ((none) (err (pt/pyErr "ValueError" "gateway profile has no research route"))) ((some entry) (ok entry)))))
 
-; (:m :ref PROFILE-PIN-NAME-20261018 :do "rule no-env-config: FREEBULK-ROUTED-DEEPSEEK-20261017 dropped ASL_PROFILE everywhere it was read, this included -- a (:research ...) op reads the same per-worktree pin file asl/packages/asl-agent/src/providers.asl's providerEnv! and tools/fleet/freePool.asl's writeProfilePin! already use, instead of a process-wide env var; absent or unparseable, this returns none, same as an unset ASL_PROFILE did. Previously this was its own stringIndexOf/split scan of researchProfilePinPath; now it is cfg/profilePinRead!, the one shared reader every caller uses")
+; (:m :ref PROFILE-PIN-NAME-20261018 :do "rule no-env-config: FREEBULK-ROUTED-DEEPSEEK-20261017 dropped ASL_PROFILE everywhere it was read, this included -- a (:research ...) op reads the same per-worktree pin file asl/agentLoop/providers.asl's providerEnv! and tools/fleet/freePool.asl's writeProfilePin! already use, instead of a process-wide env var; absent or unparseable, this returns none, same as an unset ASL_PROFILE did. Previously this was its own stringIndexOf/split scan of researchProfilePinPath; now it is cfg/profilePinRead!, the one shared reader every caller uses")
 fn researchProfileFromConfig! rootDir: String -> (Option String)
   (cfg/profilePinRead! rootDir)
 
@@ -521,7 +463,7 @@ fn ! researchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List
         (match (researchGatewayEntry! model ctx.rootDir)
           ((err e) (rejectedLine id "research" (failureCode e.msg) (msgTail e.msg)))
           ((ok routes)
-            (let [(env (searchEnv!))
+            (let [(env (envMapFromList!))
                   (now (monotonicNs))
                   (st (srch/newHubState env (/ now 1000000) 0 (mapEmpty) (mapEmpty)))
                   (entries (pairFirst (pairSecond routes)))
@@ -841,29 +783,20 @@ fn withParentPid stepStr: String pid: Int64 -> String
       stepStr
       (str (optionOr (stringSlice trimmed 0 (- n 1)) "") " :parentPid " (stringFromInt64 pid) ")")))
 
-; (:m :ref WALL-GRACEFUL :do "a Leon child killed at its agentKillSeconds deadline is a timeout, not a rejected dispatch; any other spawn failure stays ERR_AGENT_DISPATCH")
-fn agentFailCode failure: String -> String
-  (if (stringContains? failure "' timed out after ") "ERR_AGENT_TIMEOUT" "ERR_AGENT_DISPATCH")
-
 fn ! agentStep ctx: DelegateCtx id: Int64 kw: (Map String String) stepStr: String -> Outcome
-  (let [(agentMain (k/aslPath! ctx.rootDir "packages/asl-agent/src/main.asl"))
-        (bin (if (k/isFile! agentMain) (ev/nativeEntry! ctx.rootDir "aslAgent/main" true) (err (str "ASL agent loop not installed: " agentMain))))]
+  (let [(agentMain (k/aslPath! ctx.rootDir "agentLoop/main.asl"))
+        (bin (if (k/isFile! agentMain) (ev/nativeEntry! ctx.rootDir "asl/agentLoop/main" true) (err (str "ASL agent loop not installed: " agentMain))))]
     (match bin
       ((err e) (rejectedLine id "agent" "ERR_AGENT_DISPATCH" (msgTail e)))
       ((ok b)
-      (let [(startMs (/ (nowNs) 1000000))
-            (sp (spawnRun (list b (withParentPid stepStr (procSelf))) (some ctx.rootDir) (mapSet (mapEmpty) "ASL_ROOT_DIR" ctx.wsDir) (agentKillSeconds kw)))
+      (let [(sp (spawnRun (list b (withParentPid stepStr (procSelf))) (some ctx.rootDir) (mapSet (mapEmpty) "ASL_ROOT_DIR" ctx.wsDir) (agentKillSeconds kw)))
             (shown (if (stringEmpty? sp.errText) true (do (eprintln (if (stringEndsWith? sp.errText "\n") (optionOr (stringSlice sp.errText 0 (- (stringLength sp.errText) 1)) "") sp.errText)) true)))
             (out (pyStrip sp.out))
             (bad (if (!= sp.code 0) 1 0))]
         (cond
-          ((not (stringEmpty? sp.failure))
-            (let [(ev (postAgentEvent! ctx kw (agentFailCode sp.failure) "" sp.code startMs))
-                  (o (rejectedLine id "agent" (agentFailCode sp.failure) (msgTail sp.failure)))]
-              o))
+          ((not (stringEmpty? sp.failure)) (rejectedLine id "agent" "ERR_AGENT_DISPATCH" (msgTail sp.failure)))
           ((not (stringEmpty? out))
-            (let [(ev (postAgentEvent! ctx kw (receiptToken out ":stop") out sp.code startMs))]
-              (Outcome :line (str (stepHead id "agent") " :status \"" (if (= bad 0) "ok" "failed") "\"" ev " :receipt " out ")") :errCount bad)))
+            (Outcome :line (str (stepHead id "agent") " :status \"" (if (= bad 0) "ok" "failed") "\" :receipt " out ")") :errCount bad))
           (else
             (Outcome :line (str (stepHead id "agent") " :status \"rejected\" :error-code \":ERR_AGENT_DISPATCH\""
                                 (msgTail (str "empty output, exit " (stringFromInt64 sp.code) " (the agent stderr went to stderr)")) ")")
@@ -893,7 +826,7 @@ fn itemsFrom cs: (List String) i: Int64 acc: (List String) -> (List String)
         (else (itemsFrom cs (+ i 1) acc)))))
 
 ; (:m :ref LEON-POOL-WIRE :do "the pool binary starts only through fleet/run runGuarded (rule spawnSafety): the kill deadline is the tasks' summed agent wall, the descendant limit 64 per task plus one, and a fleet verdict comes back as the step's ERR_AGENT_DISPATCH")
-; (:m :ref LEON-POOL-WIRE :do "each element of :pool is a (:task ...) or (:agent ...) form; a (:task \"t\" ...) element becomes (:agent :task \"t\" ...), the form aslAgent/pool main takes one per argument")
+; (:m :ref LEON-POOL-WIRE :do "each element of :pool is a (:task ...) or (:agent ...) form; a (:task \"t\" ...) element becomes (:agent :task \"t\" ...), the form asl/agentLoop/pool main takes one per argument")
 fn poolForms stepStr: String -> (Result (List String) String)
   (match (stringIndexOf stepStr ":pool (")
     ((none) (err "no :pool list"))
@@ -913,7 +846,7 @@ fn ! poolStepWith ctx: DelegateCtx id: Int64 kw: (Map String String) stepStr: St
       (let [(sp (run forms))
             (out (pyStrip sp.out))]
         (cond
-          ((not (stringEmpty? sp.failure)) (rejectedLine id "agent" (agentFailCode sp.failure) (msgTail sp.failure)))
+          ((not (stringEmpty? sp.failure)) (rejectedLine id "agent" "ERR_AGENT_DISPATCH" (msgTail sp.failure)))
           ((stringStartsWith? out "(:poolReceipt ")
             (Outcome :line (str (stepHead id "agent") " :status \"" (if (= sp.code 0) "ok" "failed") "\" :pool true :receipt " out ")")
                      :errCount (if (= sp.code 0) 0 1)))
@@ -925,7 +858,7 @@ fn poolRoute? op: String stepStr: String -> Bool
 fn ! poolStep ctx: DelegateCtx id: Int64 kw: (Map String String) stepStr: String -> Outcome
   (poolStepWith ctx id kw stepStr
     (fn [(forms (List String))] -> Spawned
-      (match (if (k/isFile! (k/aslPath! ctx.rootDir "packages/asl-agent/src/pool.asl")) (ev/nativeEntry! ctx.rootDir "aslAgent/pool" true) (err "ASL agent pool not installed"))
+      (match (if (k/isFile! (k/aslPath! ctx.rootDir "agentLoop/pool.asl")) (ev/nativeEntry! ctx.rootDir "asl/agentLoop/pool" true) (err "ASL agent pool not installed"))
         ((err e) (Spawned :code 2 :out "" :errText "" :failure e))
         ((ok b) (let [(o (fr/runGuarded (cons b forms) ctx.rootDir (fr/childEnv (list (str "ASL_ROOT_DIR=" ctx.wsDir)))
                                         (fr/Limits :timeoutMs (* 1000 (* (listLength forms) (agentKillSeconds kw)))

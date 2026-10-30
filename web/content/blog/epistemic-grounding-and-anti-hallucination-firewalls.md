@@ -52,11 +52,11 @@ Large language models are probabilistic token predictors, not deductive truth en
 ## 2. Structural Grounding: The Closure Check
 
 In AgentSlang (ASL), every name in a module must resolve to one of three things:
-1. A builtin or a function of the standard prelude.
+1. A builtin of the host or a function of its prelude.
 2. A local binding (a function defined with a `fn` line, a `let` binding, or a parameter).
 3. A symbol imported from another module (`:i [(pkg/module :a m)]`), called as `m/name`.
 
-The checker checks this before anything runs. `asl check FILE` resolves every name in the module graph, checks call arity, and checks that a match covers every case of an enum. Here is a module an agent might plausibly write:
+The stage-0 host checks this before anything runs. `asl/host/out/asl-host check FILE` resolves every name in the module graph, checks call arity, and checks that a match covers every case of an enum. Here is a module an agent might plausibly write:
 
 ```agentslang
 (module probe/p10a :x [total runTests] :i [])
@@ -77,19 +77,19 @@ check failed: p10a.asl: 1 error(s)
 
 The hallucinated name never reaches runtime, never becomes an obscure runtime exception, and never reaches a peer agent's context.
 
-A caution from our own history: an older evaluator read an unknown name as data and passed files like this one. It has been retired, and `asl check` and `asl test` are the checks to trust.
+A caution from our own history: this guarantee belongs to the host. Our older evaluator, asl-core, read an unknown name as data and passed files like this one. It is retired: `asl check` and `asl test` on an `.asl` file now run on the stage-0 host, and the host is the check to trust.
 
 ---
 
 ## 3. Tests That Cannot Fake Green
 
-The same split shows up in the test runner. `asl test FILE` runs the exported `runTests`, which has to return `true`, and requires at least one `assert` or `refute` to execute:
+The same split shows up in the test runner. `asl-host test FILE` runs the exported `runTests`, which has to return `true`, and requires at least one `assert` or `refute` to execute:
 
 * A `runTests` that executes its assertions and then returns `false` fails with `ERR_TEST_FAILED: runTests returned false, not true`.
 * A `runTests` with no assertions fails with `ERR_TEST_FAILED: zero assertions executed`.
 * An assertion whose condition is a constant, such as `(assert true "ok")` or `(assert (= (+ 1 1) 2) "ok")`, is rejected before the suite runs with `ERR_CONSTANT_ASSERT`: it can never fail, so it proves nothing.
 
-The project's own gate rule adds a counting requirement: every gate suite has to execute more than zero assertions, and the assertions it declares are reconciled against the ones it executes, so deleting or skipping an assertion shows up as a gap rather than a silent green.
+The workspace gate rule in `grammar/rules.asn` adds a counting requirement: every gate suite has to execute more than zero assertions, and the assertions it declares are reconciled against the ones it executes, so deleting or skipping an assertion shows up as a gap rather than a silent green.
 
 ---
 
@@ -115,7 +115,7 @@ fn runTests -> Bool
     (do (assert (grounded? good doc) "quoted verbatim") (refute (grounded? bad doc) "not in the source") true))
 ```
 
-The check is a plain substring search of the quote in the retrieved source: if the quote does not appear verbatim, the claim is not grounded and is not acted on. This removes the "lazy summary" failure where an agent invents a plausible feature the documentation never mentions. The sample passes `asl test` (one assertion, one refutation). It is a pattern, not a library: the toolchain does not ship a citation verifier today.
+The check is a plain substring search of the quote in the retrieved source: if the quote does not appear verbatim, the claim is not grounded and is not acted on. This removes the "lazy summary" failure where an agent invents a plausible feature the documentation never mentions. The sample passes `asl-host test` (one assertion, one refutation). It is a pattern, not a library: the toolchain does not ship a citation verifier today.
 
 ---
 
@@ -127,7 +127,7 @@ When an agent edits files through the `asl` toolbelt:
 2. **Owned Paths:** a transaction, `(:txn :owns (<path> ...) <form> ...)`, stages edits only inside its `:owns` prefixes (anything else is `ERR_OWNS`), runs its nested gates on the staged content and flushes only if they pass. The agent loop, `(:agent ...)`, takes the same `:owns` and `:gates`.
 3. **Staged Writes:** edits are staged with `(:edit)`, inspected with `(:diff)` and written atomically with `(:flush)`, or dropped with `(:discard)`.
 
-The language half is effect markers. A function that names an effectful builtin such as `println`, or calls a function that does, must be marked (`fn ! name` or a trailing `!`), and `asl check` rejects an unmarked one with `ERR_EFFECT_UNMARKED`. The marker makes effects visible to a reviewer; running marked code inside a granted capability context is still a design goal.
+The language half is effect markers. A function that names an effectful builtin such as `println`, or calls a function that does, must be marked (`fn ! name` or a trailing `!`), and `asl-host check` rejects an unmarked one with `ERR_EFFECT_UNMARKED`. The marker makes effects visible to a reviewer; running marked code inside a granted capability context is still a design goal.
 
 ---
 

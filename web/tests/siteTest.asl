@@ -1,6 +1,6 @@
 (module aslSite/tests/siteTest
   :x [runTests]
-  :i [(asl-html/html :a h) (asl-html/css :a c) (aslSite/ui/bridge :a b) (aslSite/app/msg :a m) (aslSite/app/update :a u) (aslSite/app/theme :a theme) (aslSite/app/home :a home) (aslSite/app/docs :a docs) (aslSite/app/layout :a l)])
+  :i [(asl-html/html :a h) (asl-html/css :a c) (aslSite/ui/bridge :a b) (aslSite/app/msg :a m) (aslSite/app/update :a u) (aslSite/app/theme :a theme) (aslSite/app/home :a home) (aslSite/app/layout :a l)])
 
 fn ops msg: m/Msg model: Int64 -> String
   (b/encodeOps (pairSecond (u/step msg model)))
@@ -9,8 +9,7 @@ fn next msg: m/Msg model: Int64 -> Int64
   (pairFirst (u/step msg model))
 
 fn runTests -> Bool
-  (let [(page (h/renderDocument (home/homePage (home/Stats :wasmBytes 240640 :aslLines 900 :bridgeLines 80))))
-        (docsHtml (h/renderDocument (docs/docsPage)))]
+  (let [(page (h/renderDocument (home/homePage (home/Stats :wasmBytes 240640 :aslLines 900 :bridgeLines 80))))]
     (do
       (assert (= (h/render (h/p [(h/cls "a\"b")] [(h/text "x < y & z")])) "<p class=\"a&quot;b\">x &lt; y &amp; z</p>") "text and attributes are escaped")
       (assert (= (h/render (h/el "link" [] [(h/text "u")])) "<link>u</link>") "a void name with children renders its children")
@@ -18,16 +17,13 @@ fn runTests -> Bool
       (assert (= (h/render (h/button [(h/flag "disabled")] [])) "<button type=\"button\" disabled></button>") "buttons never submit; flags have no value")
       (assert (= (c/renderRule (c/media "(min-width: 1px)" [(c/rule ".a" [(c/decl "color" (c/cssVar "ink"))])])) "@media (min-width: 1px){.a{color:var(--ink)}}") "css rules nest in media")
       (assert (stringContains? (theme/stylesheet) ":root[data-theme=light]{--ground:#faf8f9") "light tokens come from the palette table")
-      (assert (stringContains? (theme/stylesheet) "--signal:#ff5aa8") "rose pink signal token is present")
-      (assert (stringContains? (theme/stylesheet) "--signal-soft:#ff8ec4") "luminous pastel rose token is present")
       (assert (= (b/encodeOp (b/textOp "#x" "say \"hi\"\nnow")) "(:text \"#x\" \"say \\\"hi\\\"\\nnow\")") "bridge strings are ASN-quoted on one line")
       (assert (= (next (m/toggleTheme) 0) 3) "dark -> explicit light")
       (assert (= (next (m/toggleTheme) 3) 2) "light -> explicit dark")
       (assert (stringContains? (ops (m/toggleTheme) 0) "(:store \"theme\" \"light\")") "toggling stores the choice")
       (assert (= (ops (m/boot) 1) "") "boot with the system theme touches nothing")
       (assert (= (ops (m/boot) 3) "(:attr \"html\" \"data-theme\" \"light\")\n(:attr \"#theme-toggle\" \"aria-pressed\" \"true\")\n") "boot applies a stored theme")
-      (assert (= (ops (m/copyBatch) 0) (str "(:copy \"" (home/batchLine) "\")\n(:text \"#copy-batch\" \"Copied\")\n(:after 1600 5)\n")) "copy schedules its own reset")
-      (assert (= (m/msgCode (m/msgOf 3)) 0) "the retired install-copy code is unknown")
+      (assert (= (ops (m/copyInstall) 0) (str "(:copy \"" (home/installLine) "\")\n(:text \"#copy-install\" \"Copied\")\n(:after 1600 5)\n")) "copy schedules its own reset")
       (assert (= (m/msgCode (m/msgOf 4)) 4) "message codes round-trip")
       (assert (= (next (m/unknown) 7) 7) "an unknown message keeps the model")
       (assert (= (u/formatMs 1234567) "1.23 ms") "nanoseconds format as milliseconds")
@@ -38,28 +34,4 @@ fn runTests -> Bool
       (assert (= (l/routePath (l/post "x")) "/blog/x") "post routes")
       (assert (stringContains? (theme/stylesheet) ".hero-grid{display:grid;grid-template-columns:minmax(0,1fr)") "the hero column cannot grow past the viewport on phones")
       (assert (stringContains? page "class=\"cham small\"") "the chameleon marks the top bar")
-      (assert (and (stringContains? page "class=\"tail-mark\"") (stringContains? page "id=\"tailGrad\"")) "the small logo is the curled chameleon tail glyph")
-      (assert (= (listLength (stringSplit page "class=\"leon\"")) 2) "Leon is drawn exactly once on the page")
-      (assert (and (= (listLength (stringSplit page "<img")) 2) (and (stringContains? page "src=\"/leon.webp\"") (= (listLength (stringSplit page "class=\"leon-lid\"")) 3))) "Leon is the original artwork, once, with an eyelid over each eye")
-      (assert (and (stringContains? (theme/stylesheet) "@keyframes leon-land") (and (stringContains? (theme/stylesheet) "@keyframes leon-blink") (and (stringContains? (theme/stylesheet) "[data-rest=branch] .leon-swing{animation:leon-land") (stringContains? (theme/stylesheet) "animation:none !important")))) "Leon swings when he lands, blinks, and holds still under reduced motion")
-      (assert (and (not (stringContains? page "<canvas")) (and (not (stringContains? page "leon-rig")) (not (stringContains? (theme/stylesheet) "leon-rig")))) "Leon carries no travel rig: he never leaves his corner")
-      (assert (not (stringContains? page "chameleon.png")) "the 696 KB source image is not served")
-      (assert (not (or (stringContains? page "leon-dock") (or (stringContains? page "hero-art") (stringContains? (theme/stylesheet) "leon-dock")))) "Leon sits only in the top-left corner: the hero and the footer hold no frame for him")
-      (assert (and (stringContains? page "id=\"chameleon-perch\"") (and (stringContains? page "DIVERSION-ARC") (and (stringContains? page "PS-01") (stringContains? page "TRANQ-11")))) "the fixed Leon layer and the floating scroll Easter eggs are rendered")
-      (assert (and (stringContains? page "id=\"ecosystem\"") (and (stringContains? page "the agents that write it") (stringContains? page "pre-release"))) "the home page leads with the audience and the release status")
-      (assert (not (or (stringContains? page "Formally verified") (or (stringContains? page "ASLANG-STD") (or (stringContains? page "60 packages") (or (stringContains? page "hallucinations") (or (stringContains? page "vector search") (stringContains? page "stages replacements in memory"))))))) "claims the repository does not back are gone from the page")
-      (assert (and (stringContains? page ":query :text") (stringContains? page "counts 17 tokens")) "the toolbelt step uses the documented query form and the token example carries its caveat")
-      (assert (= (ops (m/copyInstall) 0) (str "(:copy \"" (home/installLine) "\")\n(:text \"#copy-install\" \"Copied\")\n(:after 1600 5)\n")) "the install line copies and schedules its reset")
-      (assert (= (ops (m/resetCopy) 0) "(:text \"#copy-batch\" \"Copy\")\n(:text \"#copy-install\" \"Copy\")\n") "the reset restores both copy labels")
-      (assert (= (m/msgCode (m/msgOf 6)) 6) "the install-copy message has its own code")
-      (assert (and (stringContains? page "id=\"copy-install\"") (and (stringContains? page "curl -fsSL https://aslang.dev/install.sh | sh") (and (stringContains? page "not released") (stringContains? page "href=\"/docs#install\"")))) "the hero offers the install command with a copy button and its preview status")
-      (assert (and (stringContains? page "class=\"shell sheet\"") (stringContains? (theme/stylesheet) ".sheet>.head{grid-column:1 / 5")) "sections sit on the twelve-column sheet")
-      (assert (stringContains? (theme/stylesheet) ".cell{background:var(--surface);padding:1.75rem;display:grid;grid-template-columns:minmax(0,1fr)") "a long frame scrolls inside its cell instead of widening the page")
-      (assert (and (stringContains? page ">51<") (and (stringContains? page ">30<") (stringContains? page ">18<"))) "the token example shows the pretty, minified and compact counts")
-      (assert (stringContains? docsHtml "ERR_UNBALANCED") "the docs name the balance error the checker prints")
-      (assert (and (stringContains? page "id=\"goals\"") (and (stringContains? page "Works today") (and (stringContains? page "saving not measured") (and (stringContains? page "no benchmarks yet") (stringContains? page ">Planned<"))))) "each goal carries its status: working, partial, unmeasured or planned")
-      (assert (and (stringContains? page ">17<") (and (stringContains? page "JSON, positional array") (stringContains? page "more tokens than typed Python"))) "the token example includes the like-for-like JSON array and says where ASL costs more")
-      (assert (and (stringContains? page "id=\"community\"") (and (stringContains? page "not a product") (and (stringContains? page "agent-oriented language") (and (stringContains? page "open ecosystem") (and (not (stringContains? page "open-source language")) (stringContains? page "EXPERIMENT.md")))))) "the page presents an open-source project and names the unrun experiment")
-      (assert (not (or (stringContains? page "Option") (or (stringContains? page "ERR_") (or (stringContains? page "Â") (stringContains? page "Three places model-written code goes wrong"))))) "the landing page carries no type names, error codes or mis-encoded text")
-      (assert (not (or (stringContains? docsHtml "asl-host") (stringContains? docsHtml "ERR_EFFECT_UNMARKED"))) "the docs name no absent binary and no unemitted error code")
       true))

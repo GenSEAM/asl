@@ -20,8 +20,10 @@
       elementChildren
       extractSymbols
       extractSymbolsFromText]
-  :i [(asl-syntax/core/tree :a tr)
-      (asl-syntax/core/symbols :a sym)])
+  :i [(asl-syntax/core/source :a src)
+      (asl-syntax/core/tree :a tr)
+      (asl-syntax/core/symbols :a sym)
+      (asl-syntax/core/print :a pr)])
 
 (schema XmlAttr
   (:f name String)

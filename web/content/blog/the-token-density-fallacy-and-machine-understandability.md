@@ -46,12 +46,12 @@ Compilers care about **homonym collisions**: two different entities sharing one 
 
 For agents generating code from parametric memory, **synonym collisions** matter as much. If a codebase allows both `cleanTerm` and `clnTerm` for one concept, the model has to guess which spelling this codebase chose, and a wrong guess costs a full loop:
 1. The agent writes `(clnTerm buffer)`.
-2. The checker stops before running anything: `asl check` reports `ERR_UNKNOWN_SYMBOL clnTerm`.
+2. The stage-0 host stops before running anything: `asl/host/out/asl-host check` reports `ERR_UNKNOWN_SYMBOL clnTerm`.
 3. The agent inspects the failure, searches for the right name, patches, and re-runs.
 
 The one-token "saving" is paid back many times over by that repair turn.
 
-The AgentSlang builtins follow one spelling per concept, in camelCase with predicates ending in `?`: `listLength`, `stringContains?`, `some?`. Short aliases such as `len`, `head` or `includes?` are not bound and fail with `ERR_UNKNOWN_SYMBOL`. For user-defined names, one canonical spelling is a convention we adopt rather than a rule the host enforces: on 2026-10-14 `asl check` accepts a `snake_case` function name. The one naming mark the checker does enforce is for effects: a function that calls an effectful builtin must be marked, as `fn !` or with a trailing `!`, or the check fails with `ERR_EFFECT_UNMARKED`.
+The AgentSlang builtins follow one spelling per concept, in camelCase with predicates ending in `?`: `listLength`, `stringContains?`, `some?`. Short aliases such as `len`, `head` or `includes?` are not bound on the host and fail with `ERR_UNKNOWN_SYMBOL`. For user-defined names, one canonical spelling is a convention we adopt rather than a rule the host enforces: on 2026-10-14 `asl-host check` accepts a `snake_case` function name. The one naming mark the host does enforce is for effects: a function that calls an effectful builtin must be marked, as `fn !` or with a trailing `!`, or the check fails with `ERR_EFFECT_UNMARKED`.
 
 ---
 
@@ -81,11 +81,11 @@ Beyond token counts lies a hard physical constraint: **how agents actually chang
 
 Most coding agents do not edit by AST offsets. They search with `grep` and apply string replacements that must match exactly once:
 ```text
-  <<<<<<< SEARCH
+<<<<<<< SEARCH
 (let [(t (getText node))]
-  =======
+=======
 (let [(text (getText node))]
-  >>>>>>> REPLACE
+>>>>>>> REPLACE
 ```
 
 If an identifier is hyper-terse (`t`, `st`, `p`):

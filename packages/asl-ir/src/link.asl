@@ -1,4 +1,4 @@
-(module asl-ir/link :x [LinkUnit LinkAcc elaborateUnits loadClosure! loadClosureWith! linkEntryWith! linkUnits linkWith! linkEntry! linkWithBare! linkEntryBare! lowerSourceWith lowerSourceLinked! preludePath lowerPrelude importForms firstByName firstRecordByName allFunctions emptyUnit nativeOverlayDir overlayUnit! overlayUnitAt! linkUnitsWith linkUnitsWithBareEntry rewriteModuleBuiltins rewriteModuleBuiltinsAgainst definedNames functionBuiltinRefs] :i [(asl-ir/types :a ty) (asl-ir/lower :a low) (asl-ir/verify :a vfy) (asl-parser/ast :a ast) (asl-checker/resolve :a r) (asl-checker/check :a chk)])
+(module asl-ir/link :x [LinkUnit LinkAcc loadClosure! loadClosureWith! linkEntryWith! linkUnits linkWith! linkEntry! linkWithBare! linkEntryBare! lowerSourceWith lowerSourceLinked! preludePath lowerPrelude importForms firstByName firstRecordByName allFunctions emptyUnit nativeOverlayDir overlayUnit! overlayUnitAt! linkUnitsWith linkUnitsWithBareEntry rewriteModuleBuiltins rewriteModuleBuiltinsAgainst definedNames functionBuiltinRefs] :i [(asl-ir/types :a ty) (asl-ir/lower :a low) (asl-ir/verify :a vfy) (asl-parser/ast :a ast) (asl-checker/resolve :a r) (asl-checker/check :a chk)])
 
 (schema LinkUnit
   (:f path String)
@@ -154,18 +154,9 @@ fn ! loadClosure! entryPath: String -> (Result (List LinkUnit) (List ty/IrDiag))
 
 fn ! loadClosureWith! entryPath: String ix: r/ModIndex -> (Result (List LinkUnit) (List ty/IrDiag))
   (let [(st (visit! (LoadState :units (list) :seen (mapEmpty) :diags (list) :index ix) entryPath))
-        (units (elaborateUnits (listReverse st.units)))
+        (units (listReverse st.units))
         (diags (listAppend (listAppend (listAppend (listReverse st.diags) (duplicateModules units)) (reservedPreludeNameDiags units)) (entryDiags units)))]
     (if (listEmpty? diags) (ok units) (err diags)))
-
-; (:m :ref MATCH-BY-SCRUTINEE :do "the lowering resolves a match pattern by name and knows no types, so it gets the checker's decision instead: every unit's forms pass asl-checker/check#elaborateMatches against the summaries of the loaded units (each with its imports as the linker resolved them), which writes the case the matched enum names as alias/case or (case) where the name-scope rule would mean something else; a unit with no such pattern is left as read")
-fn unitSummary u: LinkUnit -> r/ModuleSummary
-  (let [(s (r/collectSummary u.forms u.path))]
-    (r/withImports s (fold (fn [(m (Map String String)) (imp (Pair String String))] -> (Map String String) (mapSet m (pairFirst imp) (pairSecond imp))) s.imports u.imports)))
-
-fn elaborateUnits units: (List LinkUnit) -> (List LinkUnit)
-  (let [(deps (fold (fn [(m (Map String r/ModuleSummary)) (u LinkUnit)] -> (Map String r/ModuleSummary) (mapSet m u.path (unitSummary u))) (mapEmpty) units))]
-    (map (fn [(u LinkUnit)] -> LinkUnit (with u :forms (chk/elaborateMatches u.forms deps u.path))) units))
 
 fn importForms units: (List LinkUnit) u: LinkUnit -> (Map String (List ast/TopForm))
   (fold (fn [(acc (Map String (List ast/TopForm))) (imp (Pair String String))] -> (Map String (List ast/TopForm))

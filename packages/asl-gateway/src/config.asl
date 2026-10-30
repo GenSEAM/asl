@@ -26,40 +26,49 @@
       GatewayLimit
       gatewayLimitsFromProps
       gatewayLimitWarnings
-      gatewayLimitErrors
-      GatewayGroup
-      LimitScope
-      emptyLimitScope
-      gatewayLimitScopeFromText
-      defaultConcurrencyLeaseSec
-      defaultConcurrencyPollMs
       gatewayLimitsFromText
       gatewayLimitWindows
       defaultBucketWaitSec
-      defaultQueueBudgetSec
-      queueBudgetMaxSec
-      defaultBusyRetrySec
-      gatewayQueueBudgetSecFromProps
       gatewayBucketWaitSecFromProps
+      asn_scalar
       asnScalar
+      asn_figure
       asnFigure
+      asn_props
       asnProps
+      asn_name
       asnName
+      gateway_params
       gatewayParams
+      calibration_registry_load!
       calibrationRegistryLoad!
+      gateway_profiles_parse
       gatewayProfilesParse
+      gateway_config_v2_build!
       gatewayConfigV2Build!
+      gateway_config_parse!
       gatewayConfigParse!
+      gateway_intent_line
       gatewayIntentLine
+      gateway_v2_route
       gatewayV2Route
+      gateway_v2_route_temperature
       gatewayV2RouteTemperature
+      gateway_v2_entry!
       gatewayV2Entry!
+      gateway_v2_entries!
       gatewayV2Entries!
+      gateway_v2_entries_exact!
       gatewayV2EntriesExact!
+      gateway_v2_alias_entry!
       gatewayV2AliasEntry!
+      gateway_note_intent
       gatewayNoteIntent
+      gateway_undeclared_intents
       gatewayUndeclaredIntents
+      gateway_any_only_intents
       gatewayAnyOnlyIntents
+      gateway_entry_label
       gatewayEntryLabel
       ConfigKey
       keyBuiltin
@@ -80,10 +89,6 @@
       gatewaySharedUsagePathOverride
       gatewayDailyTokenBudget
       gatewayBreakerCooldownSecOverride
-      gatewayTopIntOverride
-      gatewayContextCap
-      gatewayTopScalarOverride
-      JudgeRules judgeDefault gatewayProfileMode gatewayProfileJudge gatewayProfileBudgetFirst
       expandUserPath keyFileLookup! resolveProviderKey! resolveProviderCredential! gatewaySecretsPathFromProps isValidSecretId? providerPromptCacheKey? gatewayKeyFilesFromProps keyFilesSuffix
       profilePinPath profilePinRead! writeProfilePin!
       gatewayConfigKey!
@@ -92,12 +97,12 @@
       gatewayLoadWarningLines
       emptyProfilesCache
       gatewayProfilesLoad!
-      profilesStale
       gatewayProfileName
       gatewayProfileSelect
       gatewayProfileModels
       gatewayRouteEntries!
       gatewayRouteEntriesExact!
+      gateway_chain_containing_model!
       gatewayChainContainingModel!
       gatewayProfileHealth
       gatewayConfigHealth
@@ -129,7 +134,6 @@ fn scalarToString sc: AsnScalar -> String
     ((scalarStr s) s))
 
 (schema GatewayParams
-  (:f topP (Option Float64) :default none)
   (:f temperature (Option Float64))
   (:f effort (Option String))
   (:f effortDialect (Option String))
@@ -142,11 +146,7 @@ fn scalarToString sc: AsnScalar -> String
   (:f api (Option String))
   (:f prefill (Option Bool))
   (:f retry (Option RetryPolicy))
-  (:f nativeTools (Option Bool) :default none)
-  ; (:m :ref KIMI-TEMP-FIXED :do "a model that accepts one sampling temperature only (Kimi: 1): the gateway sends this value whatever the request or the route says; exclusive with :temperature on the same row")
-  (:f temperatureFixed (Option Float64) :default none)
-  ; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "a model row :stream true is a route that answers only with stream true (Synthetic infinite mode): the gateway sends stream and stream_options include_usage and folds the SSE reply into one chat completion")
-  (:f stream (Option Bool) :default none))
+  (:f nativeTools (Option Bool) :default none))
 
 fn emptyGatewayParams -> GatewayParams
   (GatewayParams
@@ -166,7 +166,6 @@ fn emptyGatewayParams -> GatewayParams
 fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
   (GatewayParams
     :temperature (if (some? override.temperature) override.temperature base.temperature)
-    :topP (if (some? override.topP) override.topP base.topP)
     :effort (if (some? override.effort) override.effort base.effort)
     :effortDialect (if (some? override.effortDialect) override.effortDialect base.effortDialect)
     :maxTokens (if (some? override.maxTokens) override.maxTokens base.maxTokens)
@@ -178,9 +177,7 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
     :api (if (some? override.api) override.api base.api)
     :prefill (if (some? override.prefill) override.prefill base.prefill)
     :retry (if (some? override.retry) override.retry base.retry)
-    :nativeTools (if (some? override.nativeTools) override.nativeTools base.nativeTools)
-    :temperatureFixed (if (some? override.temperatureFixed) override.temperatureFixed base.temperatureFixed)
-    :stream (if (some? override.stream) override.stream base.stream))
+    :nativeTools (if (some? override.nativeTools) override.nativeTools base.nativeTools))
 
 (schema GatewayRoute
   (:f intent String)
@@ -193,25 +190,10 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
   (:f spread (List (Pair String Int64)))
   (:f cooldownSec Int64))
 
-; (:m :ref GW-MODES :do "a judge-mode profile's static reply checks: an empty answer (message content, before any reasoning salvage, with no tool calls), a truncated one (finish_reason length), and for the intents in stepIntents an answer holding none of stepHeads; a failed check moves to the next member")
-(schema JudgeRules
-  (:f empty Bool)
-  (:f truncated Bool)
-  (:f stepIntents (List String))
-  (:f stepHeads (List String)))
-
-fn judgeDefault -> JudgeRules
-  (JudgeRules :empty true :truncated true :stepIntents (list) :stepHeads (list "(:step"))
-
 (schema GatewayProfile
   (:f id String)
   (:f routes (List GatewayRoute))
-  (:f fallback (Option String))
-  ; (:m :ref GW-MODES :do "pin: the route's first member only, its failure relayed as is; route (default): chain, spread, limits, breakers; judge: route plus the judge checks")
-  (:f mode String)
-  (:f judge JudgeRules)
-  ; (:m :ref CTX-ROUTE :do "prompt estimate in tokens above which the members are tried largest contextBudget first; 0 keeps the chain order")
-  (:f budgetFirstAbove Int64))
+  (:f fallback (Option String)))
 
 (schema GatewayModel
   (:f id String)
@@ -219,8 +201,7 @@ fn judgeDefault -> JudgeRules
   (:f name String)
   (:f calibration (Option String))
   (:f params GatewayParams)
-  (:f shown (List (Pair String String)))
-  (:f gone Bool))
+  (:f shown (List (Pair String String))))
 
 (schema GatewayProvider
   (:f id String)
@@ -235,10 +216,8 @@ fn judgeDefault -> JudgeRules
   (:f rpm Float64)
   ; (:m :ref GW-PROVIDER-BUCKET :do "provider :rpmShared true makes :rpm the provider's own budget: every model of the provider draws from one rate bucket keyed on the provider, whatever rpm a model names")
   (:f rpmShared Bool)
-  ; (:m :ref GW-IFM-EMPTY-TOOLS :do "provider :dropEmptyTools true :assistantReasoning false removes an empty tools array from the body sent to the provider, which some free upstreams reject")
+  ; (:m :ref GW-IFM-EMPTY-TOOLS :do "provider :dropEmptyTools true removes an empty tools array from the body sent to the provider, which some free upstreams reject")
   (:f dropEmptyTools Bool)
-  ; (:m :ref IFM-4XX-20261031 :do "provider :assistantReasoning true adds reasoning_content \"\" to assistant messages that carry no thinking field, which ifm requires in multi-turn history")
-  (:f assistantReasoning Bool)
   (:f pool (Option GatewayPool))
   (:f retry (Option RetryPolicy)))
 
@@ -274,8 +253,6 @@ fn noRetryPolicy -> RetryPolicy
   (:f rpm (Option Float64))
   (:f rpmKey String)
   (:f dropEmptyTools Bool)
-  ; (:m :ref IFM-4XX-20261031 :do "provider :assistantReasoning true adds reasoning_content \"\" to assistant messages that carry no thinking field, which ifm requires in multi-turn history")
-  (:f assistantReasoning Bool)
   (:f pool (Option GatewayPool))
   (:f retry (Option RetryPolicy)))
 
@@ -305,8 +282,7 @@ fn noRetryPolicy -> RetryPolicy
   (:f undeclaredIntents (Map String Int64))
   (:f keyFiles (List String))
   (:f limits (List GatewayLimit))
-  (:f bucketWaitSec Float64)
-  (:f queueBudgetSec Float64))
+  (:f bucketWaitSec Float64))
 
 ; (:m :ref GW-KEYSTORE-20261019 :do "a provider's :keyEnv is resolved against (:gateway :keyFiles (path ...)) before the process environment, never the other way: a key file is this workspace's own secret store, checked into no repo, and should win over a stray inherited env var from the caller's shell. ~ expands against HOME; each path is read as dotenv-style NAME=value lines (export prefix and quotes stripped, # comments skipped -- aslGateway/usage's zshLine/loadZshEnvText already implements exactly that grammar for ~/.zshenv, reused here instead of a second parser) and searched in listed order, first match wins; a file that is missing, unreadable or lacks the name is silently skipped, not an error -- only exhausting every file and the environment is")
 fn expandUserPath p: String -> String
@@ -350,7 +326,7 @@ fn isValidSecretId? s: String -> Bool
 fn gatewaySecretsPathFromProps g: (Map String rd/SExpr) -> String
   (match (mapGet g "secretsFile")
     ((none) (sc/secretsDefaultPath))
-    ((some value) (match (asnScalar value) ((scalarStr s) (if (stringEmpty? s) (sc/secretsDefaultPath) (expandUserPath s))) (_ (sc/secretsDefaultPath)))))
+    ((some value) (match (asn_scalar value) ((scalarStr s) (if (stringEmpty? s) (sc/secretsDefaultPath) (expandUserPath s))) (_ (sc/secretsDefaultPath)))))
 
 ; (:m :ref GW-SECRETS-FILE-20261027 :do "a provider's :secret names a row in the secrets file and wins over :keyEnv; no :secret falls back to :keyEnv with the key files; a secret absent from the file is an ERR_SECRET_MISSING receipt naming the id, never a value, and it does not fall back to the environment")
 fn ! resolveProviderCredential! secretsPath: String keyFiles: (List String) secret: String keyEnv: String -> (Result (Option String) String)
@@ -370,51 +346,17 @@ fn gatewayKeyFilesFromProps g: (Map String rd/SExpr) -> (List String)
     ((some value)
      (let [(items (match value ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list))))]
        (filter (fn [(s String)] -> Bool (not (stringEmpty? s)))
-         (map (fn [(it rd/SExpr)] -> String (match (asnScalar it) ((scalarStr s) s) (_ "")))
+         (map (fn [(it rd/SExpr)] -> String (match (asn_scalar it) ((scalarStr s) s) (_ "")))
            items)))))
 
-; (:m :ref GW-LIMIT-SCOPES :do "one provider limit from (:gateway :limits ((:limit :scope account|group|model|endpoint ...) ...)): account counts every alias of :provider, model one alias of :provider (:model M), group the aliases of a (:group :id G :provider P :models (...)) row (:group G), endpoint every provider whose :base is :endpoint; the units are :calls, :tokens (in plus out), :tokensIn, :tokensOut, :tokensCached over a :window, :usd over a :window priced by the models' :priceInPerM and :priceOutPerM, and :concurrency (calls in flight, no window); 0 or absent means that unit is not limited; method, verified, date and note are documentation and are read past")
+; (:m :ref GW-LIMIT-WINDOWS :do "one provider limit from (:gateway :limits ((:limit :provider P :scope account|model :model M :window W :calls N :tokens N) ...)); scope account counts every alias of the provider, scope model one alias; calls and tokens are caps over the window, 0 means that measure is not limited; method, verified, date, note, usd and concurrency are documentation or later work and are read past")
 (schema GatewayLimit
   (:f provider String)
   (:f scope String)
   (:f model String)
   (:f window String)
   (:f calls Int64)
-  (:f tokens Int64)
-  (:f group String :default "")
-  (:f endpoint String :default "")
-  (:f tokensIn Int64 :default 0)
-  (:f tokensOut Int64 :default 0)
-  (:f tokensCached Int64 :default 0)
-  (:f usd Float64 :default 0.0)
-  (:f concurrency Int64 :default 0)
-  ; (:m :ref GW-ADAPTIVE-ADMISSION :do "upper bound the learned concurrency cap may rise to; 0 or absent means twice :concurrency")
-  (:f max Int64 :default 0)
-  (:f resetDay Int64 :default 1)
-  (:f pace String :default "even"))
-
-; (:m :ref GW-LIMIT-SCOPES :do "a (:group :id G :provider P :models (ALIAS ...)) row under (:gateway :groups (...)): the listed aliases of provider P share every limit row that names the group, so one budget spans several models (a plan quota shared across its models, a free-tier daily count across all free models)")
-(schema GatewayGroup
-  (:f id String)
-  (:f provider String)
-  (:f models (List String)))
-
-; (:m :ref GW-LIMIT-SCOPES :do "what a limit row needs beyond the usage rows to say whether a call is inside its scope and what it cost: the groups, each provider's :base (endpoint scope) and each model's :priceInPerM and :priceOutPerM (usd units)")
-(schema LimitScope
-  (:f groups (List GatewayGroup))
-  (:f bases (List (Pair String String)))
-  (:f prices (List (Pair String (Pair Float64 Float64)))))
-
-fn emptyLimitScope -> LimitScope
-  (LimitScope :groups (list) :bases (list) :prices (list))
-
-; (:m :ref GW-LIMIT-SCOPES :do "(:gateway :concurrencyLeaseSec N): a call holding a concurrency slot longer than this is treated as lost and frees it, so a dropped connection never keeps a slot; 10..86400, default 600 adopted")
-fn defaultConcurrencyLeaseSec -> Int64
-  600
-
-; (:m :ref GW-LIMIT-SCOPES :do "(:gateway :concurrencyPollMs N): how often a call parked behind a full :concurrency limit asks again, up to the call's queue budget; 10..5000, default 250 adopted")
-fn defaultConcurrencyPollMs -> Int64
-  250
+  (:f tokens Int64))
 
 ; (:m :ref GW-BUCKET-SHORTWAIT :do "how long a chain member before the last waits for its own rpm bucket to refill before the cascade moves on (the last member keeps its 30 s); (:gateway :bucketWaitSec N), default 5 s adopted")
 fn defaultBucketWaitSec -> Float64
@@ -423,7 +365,7 @@ fn defaultBucketWaitSec -> Float64
 fn bucketWaitValue props: (Map String rd/SExpr) -> (Option Float64)
   (match (mapGet props "bucketWaitSec")
     ((none) none)
-    ((some v) (match (asnScalar v) ((scalarInt n) (some (int64ToFloat64 n))) ((scalarFloat f) (some f)) (_ (some -1.0)))))
+    ((some v) (match (asn_scalar v) ((scalarInt n) (some (int64ToFloat64 n))) ((scalarFloat f) (some f)) (_ (some -1.0)))))
 
 fn gatewayBucketWaitSecFromProps g: (Map String rd/SExpr) -> Float64
   (match (bucketWaitValue g)
@@ -435,110 +377,8 @@ fn gatewayBucketWaitWarnings g: (Map String rd/SExpr) -> (List String)
     ((some f) (if (> f 0.0) (list) (list ":bucketWaitSec must be a positive number; using the default")))
     ((none) (list)))
 
-; (:m :ref GW-ALL-DOWN-RETRY-AFTER :do "how long the last chain member waits for its rpm bucket when the caller gave no queue budget (X-ASL-Queue-Ms, X-ASL-Queue-Timeout, body queue_timeout); (:gateway :queueBudgetSec N), default 30 s adopted, a non-positive value warns and keeps the default")
-fn defaultQueueBudgetSec -> Float64
-  30.0
-
-fn queueBudgetValue props: (Map String rd/SExpr) -> (Option Float64)
-  (match (mapGet props "queueBudgetSec")
-    ((none) none)
-    ((some v) (match (asnScalar v) ((scalarInt n) (some (int64ToFloat64 n))) ((scalarFloat f) (some f)) (_ (some -1.0)))))
-
-; (:m :ref GW-LIMIT-LEFTOVERS :do "(:gateway :queueBudgetSec N) is 1..3600 seconds (3600 adopted as the upper bound, a longer wait outlives any client): above it config check is an error and the runtime load warns and keeps the default 30")
-fn queueBudgetMaxSec -> Float64
-  3600.0
-
-; (:m :ref GW-LIMIT-LEFTOVERS :do "(:gateway :busyRetrySec N): the Retry-After the gateway puts on a 503 it makes itself when a retry soon is the right answer (an endpoint that went away or did not warm in time, no endpoint admitted); 1..3600, default 1 adopted, the wait Leon applies to a 503 without the header")
-fn defaultBusyRetrySec -> Int64
-  1
-
-fn gatewayQueueBudgetSecFromProps g: (Map String rd/SExpr) -> Float64
-  (match (queueBudgetValue g)
-    ((some f) (if (and (> f 0.0) (<= f (queueBudgetMaxSec))) f (defaultQueueBudgetSec)))
-    ((none) (defaultQueueBudgetSec)))
-
-fn gatewayQueueBudgetWarnings g: (Map String rd/SExpr) -> (List String)
-  (match (queueBudgetValue g)
-    ((some f) (if (and (> f 0.0) (<= f (queueBudgetMaxSec))) (list) (list ":queueBudgetSec must be a positive number of at most 3600 seconds; using the default")))
-    ((none) (list)))
-
-fn queueBudgetRangeErrors g: (Map String rd/SExpr) -> (List String)
-  (match (queueBudgetValue g)
-    ((some f) (if (> f (queueBudgetMaxSec)) (list ":queueBudgetSec must be at most 3600 seconds") (list)))
-    ((none) (list)))
-
-; (:m :ref GW-ALL-DOWN-RETRY-AFTER :do "config check is strict where the runtime load only warns: a non-positive :bucketWaitSec or :queueBudgetSec is an error in the check receipt, while serve keeps the default so a live hub never dies on it")
-fn waitErrorOf key: String value: (Option Float64) -> (List String)
-  (match value
-    ((some f) (if (> f 0.0) (list) (list (str ":" key " must be a positive number of seconds"))))
-    ((none) (list)))
-
-fn topIntOf g: (Map String rd/SExpr) key: String -> (Option Int64)
-  (match (mapGet g key)
-    ((none) none)
-    ((some value) (match (asnScalar value) ((scalarInt n) (some n)) (_ none))))
-
-; (:m :ref GW-429-WINDOW-WAIT :do "config check ranges for the 429 cooldown rows: :cooldown429Sec 1..3600, :cooldown429MaxSec 1..90000 and not under :cooldown429Sec, :cooldownSlackSec 0..30; a present value that is not an integer is an error too, while serve falls back to the default")
-fn cooldownErrorOf g: (Map String rd/SExpr) key: String lo: Int64 hi: Int64 -> (List String)
-  (rangeErrorOf g key lo hi "seconds")
-
-fn rangeErrorOf g: (Map String rd/SExpr) key: String lo: Int64 hi: Int64 unit: String -> (List String)
-  (match (mapGet g key)
-    ((none) (list))
-    ((some _)
-      (match (topIntOf g key)
-        ((some n) (if (and (>= n lo) (<= n hi)) (list) (list (str ":" key " must be an integer from " lo " to " hi " " unit))))
-        ((none) (list (str ":" key " must be an integer number of " unit))))))
-
-fn gatewayCooldownErrors g: (Map String rd/SExpr) -> (List String)
-  (let [(base (topIntOf g "cooldown429Sec"))
-        (top (topIntOf g "cooldown429MaxSec"))
-        (order (match base
-                 ((some b) (match top ((some m) (if (< m b) (list ":cooldown429MaxSec must not be under :cooldown429Sec") (list))) ((none) (list))))
-                 ((none) (list))))]
-    (listAppend (listAppend (cooldownErrorOf g "cooldown429Sec" 1 3600) (cooldownErrorOf g "cooldown429MaxSec" 1 90000))
-                (listAppend (listAppend (cooldownErrorOf g "cooldownSlackSec" 0 30) (cooldownErrorOf g "parkMaxSec" 60 2764800))
-                            (listAppend (listAppend (rangeErrorOf g "ledgerMaxBytes" 65536 1073741824 "bytes") (rangeErrorOf g "ledgerKeep" 1 64 "files"))
-                                        (listAppend (rangeErrorOf g "contextCap" 1 10000000 "tokens") order)))))
-
-; (:m :ref GW-SESSION-AFFINITY :do "config check for the affinity rows: :affinity is true or false, :affinityStickSec 1..86400, :affinityForgetSec 1..604800 and not under :affinityStickSec, :affinitySwitch dropReasoning or keep")
-fn gatewayAffinityErrors g: (Map String rd/SExpr) -> (List String)
-  (let [(on (match (mapGet g "affinity")
-              ((none) (list))
-              ((some v) (match (asnScalar v) ((scalarBool _) (list)) (_ (list ":affinity must be true or false"))))))
-        (switch (match (mapGet g "affinitySwitch")
-                  ((none) (list))
-                  ((some v) (match (asnScalar v)
-                              ((scalarStr s) (if (listContains? (list "dropReasoning" "keep") s) (list) (list ":affinitySwitch must be dropReasoning or keep")))
-                              (_ (list ":affinitySwitch must be dropReasoning or keep"))))))
-        (order (match (topIntOf g "affinityStickSec")
-                 ((some s) (match (topIntOf g "affinityForgetSec") ((some f) (if (< f s) (list ":affinityForgetSec must not be under :affinityStickSec") (list))) ((none) (list))))
-                 ((none) (list))))]
-    (listAppend (listAppend on switch)
-                (listAppend (listAppend (cooldownErrorOf g "affinityStickSec" 1 86400) (cooldownErrorOf g "affinityForgetSec" 1 604800)) order)))
-
-; (:m :ref GW-LIMIT-LEARN :do "the learn settings, range checked in config check and kept at their defaults at runtime: :learnRamp true|false (default false), :learnRampPct 5..100 (default 25), :learnWindows a string of window names from minute hour fiveHour day week")
-fn learnWindowErrors s: String -> (List String)
-  (let [(bad (filter (fn [(w String)] -> Bool (not (listContains? (list "minute" "hour" "fiveHour" "day" "week") w))) (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit s " "))))]
-    (if (listEmpty? bad) (list) (list (str ":learnWindows names unknown windows: " (stringJoin bad " ")))))
-
-fn learnConfigErrors g: (Map String rd/SExpr) -> (List String)
-  (let [(ramp (match (mapGet g "learnRamp")
-                ((none) (list))
-                ((some v) (match (asnScalar v) ((scalarBool _) (list)) (_ (list ":learnRamp must be true or false"))))))
-        (windows (match (mapGet g "learnWindows")
-                   ((none) (list))
-                   ((some v) (match (asnScalar v) ((scalarStr s) (learnWindowErrors s)) (_ (list ":learnWindows must be a string of window names"))))))]
-    (listAppend (listAppend ramp windows) (rangeErrorOf g "learnRampPct" 5 100 "percent")))
-
-fn gatewayWaitErrors g: (Map String rd/SExpr) -> (List String)
-  (listAppend (listAppend (listAppend (listAppend (listAppend (waitErrorOf "bucketWaitSec" (bucketWaitValue g)) (waitErrorOf "queueBudgetSec" (queueBudgetValue g))) (gatewayCooldownErrors g))
-              (gatewayAffinityErrors g))
-              (gatewayLimitErrors g))
-              (listAppend (listAppend (queueBudgetRangeErrors g) (rangeErrorOf g "busyRetrySec" 1 3600 "seconds")) (learnConfigErrors g)))
-
 fn gatewayLimitWindows -> (List String)
-  (list "minute" "hour" "fiveHour" "rollingDay" "day" "week" "month")
+  (list "minute" "hour" "fiveHour" "day" "week" "month")
 
 fn limitStr props: (Map String rd/SExpr) key: String -> String
   (match (mapGet props key)
@@ -548,90 +388,36 @@ fn limitStr props: (Map String rd/SExpr) key: String -> String
 fn limitInt props: (Map String rd/SExpr) key: String -> Int64
   (match (mapGet props key)
     ((none) 0)
-    ((some v) (match (asnScalar v) ((scalarInt n) n) (_ -1))))
+    ((some v) (match (asn_scalar v) ((scalarInt n) n) (_ -1))))
 
-fn itemsOf g: (Map String rd/SExpr) key: String -> (List rd/SExpr)
-  (match (mapGet g key)
+fn limitItems g: (Map String rd/SExpr) -> (List rd/SExpr)
+  (match (mapGet g "limits")
     ((none) (list))
     ((some value) (match value ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list)))))
 
-fn limitItems g: (Map String rd/SExpr) -> (List rd/SExpr)
-  (itemsOf g "limits")
-
-fn limitFloat props: (Map String rd/SExpr) key: String -> Float64
-  (match (mapGet props key)
-    ((none) 0.0)
-    ((some v) (match (asnScalar v) ((scalarFloat f) f) ((scalarInt n) (int64ToFloat64 n)) (_ -1.0))))
-
-fn limitScopes -> (List String)
-  (list "account" "group" "model" "endpoint")
-
-; (:m :ref GW-LIMIT-LONG-WINDOW :do "even spreads a calendar window's cap over the whole window; remaining spreads what is left of it over the days left, today included; off never paces, so the row stops calls only once its cap is spent")
-fn limitPaces -> (List String)
-  (list "even" "remaining" "off")
-
-fn limitMaxConcurrency -> Int64
-  1024
-
-fn limitWho provider: String group: String endpoint: String -> String
-  (cond
-    ((not (stringEmpty? provider)) provider)
-    ((not (stringEmpty? group)) (str "group " group))
-    (else endpoint))
-
 fn limitOfItem item: rd/SExpr -> (Result GatewayLimit String)
-  (match (asnProps item (some ":limit"))
+  (match (asn_props item (some ":limit"))
     ((err e) (err e))
     ((ok p)
      (let [(provider (limitStr p "provider"))
            (scope (if (stringEmpty? (limitStr p "scope")) "account" (limitStr p "scope")))
            (model (limitStr p "model"))
-           (group (limitStr p "group"))
-           (endpoint (limitStr p "endpoint"))
            (window (limitStr p "window"))
            (calls (limitInt p "calls"))
-           (tokens (limitInt p "tokens"))
-           (tIn (limitInt p "tokensIn"))
-           (tOut (limitInt p "tokensOut"))
-           (tCached (limitInt p "tokensCached"))
-           (usd (limitFloat p "usd"))
-           (conc (limitInt p "concurrency"))
-           (maxCap (limitInt p "max"))
-           (reset (if (mapHas? p "resetDay") (limitInt p "resetDay") 1))
-           (pace (if (stringEmpty? (limitStr p "pace")) "even" (limitStr p "pace")))
-           (windowed (or (> calls 0) (or (> tokens 0) (or (> tIn 0) (or (> tOut 0) (or (> tCached 0) (> usd 0.0)))))))
-           (who (limitWho provider group endpoint))]
+           (tokens (limitInt p "tokens"))]
        (cond
-         ((not (listContains? (limitScopes) scope)) (err (str "limit " who ": :scope must be account, group, model or endpoint, found " scope)))
-         ((and (or (= scope "account") (= scope "model")) (stringEmpty? provider)) (err "limit row needs :provider"))
-         ((and (= scope "group") (stringEmpty? group)) (err "limit row: :scope group needs :group"))
-         ((and (= scope "endpoint") (stringEmpty? endpoint)) (err "limit row: :scope endpoint needs :endpoint"))
-         ((and (= scope "model") (stringEmpty? model)) (err (str "limit " who ": :scope model needs :model")))
-         ((or (< calls 0) (or (< tokens 0) (or (< tIn 0) (or (< tOut 0) (or (< tCached 0) (< usd 0.0)))))) (err (str "limit " who ": :calls :tokens :tokensIn :tokensOut :tokensCached and :usd must be whole numbers or amounts of zero or more")))
-         ((or (< conc 0) (> conc (limitMaxConcurrency))) (err (str "limit " who ": :concurrency must be a whole number from 1 to 1024")))
-         ((and windowed (not (listContains? (gatewayLimitWindows) window))) (err (str "limit " who ": :window must be one of minute hour fiveHour rollingDay day week month, found " window)))
-         ((and (not windowed) (= conc 0)) (err (str "limit " who " " window ": needs :calls, :tokens, :tokensIn, :tokensOut, :tokensCached, :usd or :concurrency")))
-         ((or (< reset 1) (> reset 31)) (err (str "limit " who ": :resetDay must be a day of the month from 1 to 31, found " (stringFromInt64 reset))))
-         ((and (!= reset 1) (!= window "month")) (err (str "limit " who " " window ": :resetDay applies only to a month window")))
-         ((not (listContains? (limitPaces) pace)) (err (str "limit " who ": :pace must be even, remaining or off, found " pace)))
-         ((and (= pace "remaining") (not (listContains? (list "day" "week" "month") window))) (err (str "limit " who " " window ": :pace remaining needs a day, week or month window")))
-         (else (ok (GatewayLimit :provider provider :scope scope :model model :window window :calls calls :tokens tokens
-                                 :group group :endpoint endpoint :tokensIn tIn :tokensOut tOut :tokensCached tCached :usd usd :concurrency conc :max maxCap :resetDay reset :pace pace)))))))
-
-; (:m :ref GW-DAILY-SHORTHAND :do "a provider row (:provider :id P ... :dailyCalls N) is the account limit row (:limit :provider P :scope account :window day :calls N); a missing, zero or invalid N makes no row")
-fn dailyCallsLimit p: (Map String rd/SExpr) -> (List GatewayLimit)
-  (let [(n (limitInt p "dailyCalls"))]
-    (if (> n 0)
-      (list (GatewayLimit :provider (limitStr p "id") :scope "account" :model "" :window "day" :calls n :tokens 0
-                          :group "" :endpoint "" :tokensIn 0 :tokensOut 0 :tokensCached 0 :usd 0.0 :concurrency 0))
-      (list)))
+         ((stringEmpty? provider) (err "limit row needs :provider"))
+         ((not (listContains? (gatewayLimitWindows) window)) (err (str "limit " provider ": :window must be one of minute hour fiveHour day week month, found " window)))
+         ((and (!= scope "account") (!= scope "model")) (err (str "limit " provider ": :scope must be account or model, found " scope)))
+         ((and (= scope "model") (stringEmpty? model)) (err (str "limit " provider ": :scope model needs :model")))
+         ((or (< calls 0) (< tokens 0)) (err (str "limit " provider ": :calls and :tokens must be whole numbers")))
+         ((and (= calls 0) (= tokens 0)) (err (str "limit " provider " " window ": needs :calls or :tokens")))
+         (else (ok (GatewayLimit :provider provider :scope scope :model model :window window :calls calls :tokens tokens)))))))
 
 fn gatewayLimitsFromProps g: (Map String rd/SExpr) -> (List GatewayLimit)
-  (listAppend
-    (fold (fn [(acc (List GatewayLimit)) (it rd/SExpr)] -> (List GatewayLimit)
-            (match (limitOfItem it) ((ok l) (listAppend acc (list l))) ((err _) acc)))
-      (list) (limitItems g))
-    (listFlatMap (fn [(it rd/SExpr)] -> (List GatewayLimit) (match (asnProps it (some ":provider")) ((ok p) (dailyCallsLimit p)) ((err _) (list)))) (itemsOf g "providers")))
+  (fold (fn [(acc (List GatewayLimit)) (it rd/SExpr)] -> (List GatewayLimit)
+          (match (limitOfItem it) ((ok l) (listAppend acc (list l))) ((err _) acc)))
+    (list) (limitItems g))
 
 fn gatewayLimitsFromText text: String -> (List GatewayLimit)
   (match (ast/readForms (lx/tokenize text))
@@ -640,7 +426,7 @@ fn gatewayLimitsFromText text: String -> (List GatewayLimit)
      (if (!= (listLength forms) 1)
        (list)
        (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-         (match (asnProps top (some ":gateway"))
+         (match (asn_props top (some ":gateway"))
            ((err _) (list))
            ((ok g) (gatewayLimitsFromProps g)))))))
 
@@ -648,88 +434,7 @@ fn gatewayLimitsFromText text: String -> (List GatewayLimit)
 fn gatewayLimitWarnings g: (Map String rd/SExpr) -> (List String)
   (fold (fn [(acc (List String)) (it rd/SExpr)] -> (List String)
           (match (limitOfItem it) ((ok _) acc) ((err e) (listAppend acc (list (str "limits: " e))))))
-    (fold (fn [(acc (List String)) (it rd/SExpr)] -> (List String)
-            (match (asnProps it (some ":provider"))
-              ((err _) acc)
-              ((ok p) (if (and (some? (mapGet p "dailyCalls")) (<= (limitInt p "dailyCalls") 0))
-                        (listAppend acc (list (str "limits: provider " (limitStr p "id") ": :dailyCalls must be a whole number of 1 or more")))
-                        acc))))
-      (list) (itemsOf g "providers"))
-    (limitItems g))
-
-fn rowProps g: (Map String rd/SExpr) key: String tag: String -> (List (Map String rd/SExpr))
-  (fold (fn [(acc (List (Map String rd/SExpr))) (it rd/SExpr)] -> (List (Map String rd/SExpr))
-          (match (asnProps it (some tag)) ((ok p) (listAppend acc (list p))) ((err _) acc)))
-    (list) (itemsOf g key))
-
-fn namesOf v: rd/SExpr -> (List String)
-  (let [(items (match v ((rd/sexprList l) l) ((rd/sexprVect vv) vv) (_ (list))))]
-    (filter (fn [(s String)] -> Bool (not (stringEmpty? s)))
-      (map (fn [(it rd/SExpr)] -> String (match (asnScalar it) ((scalarStr s) s) (_ ""))) items)))
-
-fn groupOfProps p: (Map String rd/SExpr) -> GatewayGroup
-  (GatewayGroup :id (limitStr p "id") :provider (limitStr p "provider")
-                :models (match (mapGet p "models") ((none) (list)) ((some v) (namesOf v))))
-
-fn gatewayGroupsFromProps g: (Map String rd/SExpr) -> (List GatewayGroup)
-  (map groupOfProps (rowProps g "groups" ":group"))
-
-fn priceOfProps p: (Map String rd/SExpr) -> (Pair String (Pair Float64 Float64))
-  (pair (limitStr p "id") (pair (limitFloat p "priceInPerM") (limitFloat p "priceOutPerM")))
-
-; (:m :ref GW-LIMIT-SCOPES :do "the group rows, each provider's :base and each model's price per million tokens, read from the config text the server already holds")
-fn gatewayLimitScopeFromProps g: (Map String rd/SExpr) -> LimitScope
-  (LimitScope :groups (gatewayGroupsFromProps g)
-              :bases (map (fn [(p (Map String rd/SExpr))] -> (Pair String String) (pair (limitStr p "id") (limitStr p "base"))) (rowProps g "providers" ":provider"))
-              :prices (map priceOfProps (rowProps g "models" ":model")))
-
-fn gatewayLimitScopeFromText text: String -> LimitScope
-  (match (ast/readForms (lx/tokenize text))
-    ((err _) (emptyLimitScope))
-    ((ok forms)
-     (if (!= (listLength forms) 1)
-       (emptyLimitScope)
-       (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-         (match (asnProps top (some ":gateway"))
-           ((err _) (emptyLimitScope))
-           ((ok g) (gatewayLimitScopeFromProps g)))))))
-
-fn groupErrors g: (Map String rd/SExpr) -> (List String)
-  (let [(groups (gatewayGroupsFromProps g))
-        (models (map (fn [(p (Map String rd/SExpr))] -> (Pair String String) (pair (limitStr p "id") (limitStr p "provider"))) (rowProps g "models" ":model")))]
-    (fold (fn [(acc (List String)) (gr GatewayGroup)] -> (List String)
-            (let [(dup (> (listLength (filter (fn [(o GatewayGroup)] -> Bool (= o.id gr.id)) groups)) 1))
-                  (bad (filter (fn [(m String)] -> Bool (not (listAny? (fn [(mp (Pair String String))] -> Bool (and (= (pairFirst mp) m) (= (pairSecond mp) gr.provider))) models))) gr.models))]
-              (cond
-                ((stringEmpty? gr.id) (listAppend acc (list "groups: a group row needs :id")))
-                (dup (listAppend acc (list (str "groups: group " gr.id " is declared twice"))))
-                ((stringEmpty? gr.provider) (listAppend acc (list (str "groups: group " gr.id " needs :provider"))))
-                ((listEmpty? gr.models) (listAppend acc (list (str "groups: group " gr.id " needs :models"))))
-                ((not (listEmpty? bad)) (listAppend acc (list (str "groups: group " gr.id " names " (stringJoin bad " ") " that is not a model of provider " gr.provider))))
-                (else acc))))
-      (list) groups))
-
-fn limitGroupErrors g: (Map String rd/SExpr) -> (List String)
-  (let [(groups (gatewayGroupsFromProps g))]
-    (fold (fn [(acc (List String)) (it rd/SExpr)] -> (List String)
-            (match (limitOfItem it)
-              ((err _) acc)
-              ((ok l) (if (and (= l.scope "group") (not (listAny? (fn [(gr GatewayGroup)] -> Bool (= gr.id l.group)) groups)))
-                        (listAppend acc (list (str "limits: group " l.group " is not declared under :groups")))
-                        acc))))
-      (list) (limitItems g)))
-
-; (:m :ref GW-LIMIT-SCOPES :do "config check is strict where the runtime load drops or warns: a malformed limit row, a group that names an unknown model or is declared twice, a limit naming an undeclared group and an out-of-range :concurrencyLeaseSec or :concurrencyPollMs are errors")
-fn gatewayLimitErrors g: (Map String rd/SExpr) -> (List String)
-  (listAppend (listAppend (gatewayLimitWarnings g) (listAppend (groupErrors g) (limitGroupErrors g)))
-              (listAppend (listAppend (rangeErrorOf g "concurrencyLeaseSec" 10 86400 "seconds") (listAppend (rangeErrorOf g "concurrencyPollMs" 10 5000 "milliseconds") (listAppend (rangeErrorOf g "requestDeadlineSec" 1 86400 "seconds") (listAppend (rangeErrorOf g "healthKeep" 1 10000 "files") (rangeErrorOf g "requestKeepRows" 100 10000000 "rows")))))
-                          (listAppend (rangeErrorOf g "ledgerRollupKeepDays" 62 3660 "days") (rollupPathErrors g))))
-
-; (:m :ref GW-LIMIT-LONG-WINDOW :do "an optional (:gateway ... :ledgerRollupPath \"...\") names the day-rollup file of the shared ledger; present, it is a non-empty string")
-fn rollupPathErrors g: (Map String rd/SExpr) -> (List String)
-  (match (mapGet g "ledgerRollupPath")
-    ((none) (list))
-    ((some v) (match (asnScalar v) ((scalarStr s) (if (stringEmpty? s) (list ":ledgerRollupPath must be a non-empty path") (list))) (_ (list ":ledgerRollupPath must be a quoted path")))))
+    (list) (limitItems g))
 
 fn listAppendOne xs: (List T) x: T -> (List T)
   (listAppend xs (list x))
@@ -860,7 +565,7 @@ fn rstripSlash s: String -> String
     s)
 
 
-fn asnName v: rd/SExpr what: String -> (Result String String)
+fn asn_name v: rd/SExpr what: String -> (Result String String)
   (match v
     ((rd/sexprAtom s)
       (if (or (stringEmpty? s) (stringStartsWith? s ":") (stringStartsWith? s "\""))
@@ -868,13 +573,16 @@ fn asnName v: rd/SExpr what: String -> (Result String String)
         (ok s)))
     (_ (err (str what " must be a bare atom, found compound"))))
 
+fn asnName v: rd/SExpr what: String -> (Result String String)
+  (asn_name v what)
+
 ; (:m :do "a bare atom names most things (:id plan), but a composite key like a role:lens pair (auditor:logic) cannot lex as one atom since ':' always breaks a symbol run; a quoted string carries it instead, so :id/:as/:intent accept either form")
 fn asn_name_or_string v: rd/SExpr what: String -> (Result String String)
-  (match (asnScalar v)
+  (match (asn_scalar v)
     ((scalarStr s) (if (stringEmpty? s) (err (str what " must be a bare atom or string, found " (sexprRawText v))) (ok s)))
     (_ (err (str what " must be a bare atom or string, found " (sexprRawText v)))))
 
-fn asnScalar expr: rd/SExpr -> AsnScalar
+fn asn_scalar expr: rd/SExpr -> AsnScalar
   (match expr
     ((rd/sexprAtom raw)
       (if (isStringLiteral? expr)
@@ -887,6 +595,9 @@ fn asnScalar expr: rd/SExpr -> AsnScalar
           (else (scalarStr (lstripColons raw))))))
     ((rd/sexprList _) (scalarStr ""))
     ((rd/sexprVect _) (scalarStr "")))
+
+fn asnScalar expr: rd/SExpr -> AsnScalar
+  (asn_scalar expr)
 
 fn parsePropsPairs items: (List rd/SExpr) what: String acc: (Map String rd/SExpr) -> (Result (Map String rd/SExpr) String)
   (match (listHead items)
@@ -902,7 +613,7 @@ fn parsePropsPairs items: (List rd/SExpr) what: String acc: (Map String rd/SExpr
                 (let [(key (lstripColons (sexprRawText kExpr)))]
                   (parsePropsPairs rest what (mapSet acc key vExpr))))))))))
 
-fn asnProps form: rd/SExpr head: (Option String) -> (Result (Map String rd/SExpr) String)
+fn asn_props form: rd/SExpr head: (Option String) -> (Result (Map String rd/SExpr) String)
   (let [(what (match head ((some h) (str "(" h " ...)")) ((none) "a property list")))]
     (match form
       ((rd/sexprList items)
@@ -923,59 +634,39 @@ fn asnProps form: rd/SExpr head: (Option String) -> (Result (Map String rd/SExpr
               (parsePropsPairs items what (mapEmpty))))))
       (_ (err (str "expected " what ", found compound")))))
 
-fn asnFigure expr: rd/SExpr -> AsnScalar
+fn asnProps form: rd/SExpr head: (Option String) -> (Result (Map String rd/SExpr) String)
+  (asn_props form head)
+
+fn asn_figure expr: rd/SExpr -> AsnScalar
   (match expr
     ((rd/sexprList items)
-      (match (asnProps expr (none))
+      (match (asn_props expr (none))
         ((ok props)
           (match (mapGet props "v")
-            ((some vExpr) (asnScalar vExpr))
-            ((none) (asnScalar expr))))
-        ((err _) (asnScalar expr))))
-    (_ (asnScalar expr)))
+            ((some vExpr) (asn_scalar vExpr))
+            ((none) (asn_scalar expr))))
+        ((err _) (asn_scalar expr))))
+    (_ (asn_scalar expr)))
 
+fn asnFigure expr: rd/SExpr -> AsnScalar
+  (asn_figure expr)
 
-fn checkTopP props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
-  (match (mapGet props "topP")
-    ((none) (pair cur errs))
-    ((some expr)
-      (let [(sc (asnFigure expr))]
-        (match sc
-          ((scalarFloat f)
-            (if (and (not (< f 0.0)) (not (> f 1.0)))
-              (pair (with cur :topP (some f)) errs)
-              (pair cur (cons (str what ": :topP must be a number in 0..1") errs))))
-          ((scalarInt n)
-            (if (and (not (< n 0)) (not (> n 1)))
-              (pair (with cur :topP (some (int64ToFloat64 n))) errs)
-              (pair cur (cons (str what ": :topP must be a number in 0..1") errs))))
-          (_ (pair cur (cons (str what ": :topP must be a number in 0..1") errs)))))))
 
 fn checkTemperature props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (match (mapGet props "temperature")
     ((none) (pair cur errs))
     ((some expr)
-      (let [(sc (asnFigure expr))]
+      (let [(sc (asn_figure expr))]
         (match sc
           ((scalarFloat f) (pair (with cur :temperature (some f)) errs))
           ((scalarInt n) (pair (with cur :temperature (some (int64ToFloat64 n))) errs))
           (_ (pair cur (cons (str what ": :temperature must be a number") errs)))))))
 
-fn checkTemperatureFixed props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
-  (match (mapGet props "temperatureFixed")
-    ((none) (pair cur errs))
-    ((some expr)
-      (let [(clash (if (mapHas? props "temperature") (list (str what ": :temperatureFixed and :temperature are exclusive on one row")) (list)))]
-        (match (asnFigure expr)
-          ((scalarFloat f) (pair (with cur :temperatureFixed (some f)) (listAppend clash errs)))
-          ((scalarInt n) (pair (with cur :temperatureFixed (some (int64ToFloat64 n))) (listAppend clash errs)))
-          (_ (pair cur (cons (str what ": :temperatureFixed must be a number") (listAppend clash errs))))))))
-
 fn checkEffort props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (match (mapGet props "effort")
     ((none) (pair cur errs))
     ((some expr)
-      (let [(sc (asnFigure expr))]
+      (let [(sc (asn_figure expr))]
         (match sc
           ((scalarStr s)
             (if (or (= s "low") (or (= s "medium") (or (= s "high") (or (= s "xhigh") (= s "none")))))
@@ -991,7 +682,7 @@ fn checkEffortDialect props: (Map String rd/SExpr) what: String cur: GatewayPara
   (match (mapGet props "effortDialect")
     ((none) (pair cur errs))
     ((some expr)
-      (match (asnFigure expr)
+      (match (asn_figure expr)
         ((scalarStr s)
           (if (listContains? (effortDialects) s)
             (pair (with cur :effortDialect (some s)) errs)
@@ -1002,7 +693,7 @@ fn checkMaxTokens props: (Map String rd/SExpr) what: String cur: GatewayParams e
   (match (mapGet props "maxTokens")
     ((none) (pair cur errs))
     ((some expr)
-      (let [(sc (asnFigure expr))]
+      (let [(sc (asn_figure expr))]
         (match sc
           ((scalarInt n)
             (if (> n 0)
@@ -1015,28 +706,26 @@ fn checkMaxTokens props: (Map String rd/SExpr) what: String cur: GatewayParams e
           (_ (pair cur (cons (str what ": :maxTokens must be a positive number") errs)))))))
 
 fn checkContextBudget props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
-  (let [(key (if (mapHas? props "contextBudget") "contextBudget" "contextTokens"))
-        (found (match (mapGet props "contextBudget") ((some e) (some e)) ((none) (mapGet props "contextTokens"))))]
-    (match found
-      ((none) (pair cur errs))
-      ((some expr)
-        (let [(sc (asnFigure expr))]
-          (match sc
-            ((scalarInt n)
-              (if (> n 0)
-                (pair (with cur :contextBudget (some n)) errs)
-                (pair cur (cons (str what ": :" key " must be a positive number") errs))))
-            ((scalarFloat f)
-              (if (and (> f 0.0) (some? (float64ToInt64 f)))
-                (pair (with cur :contextBudget (float64ToInt64 f)) errs)
-                (pair cur (cons (str what ": :" key " must be a positive number") errs))))
-            (_ (pair cur (cons (str what ": :" key " must be a positive number") errs))))))))
+  (match (mapGet props "contextBudget")
+    ((none) (pair cur errs))
+    ((some expr)
+      (let [(sc (asn_figure expr))]
+        (match sc
+          ((scalarInt n)
+            (if (> n 0)
+              (pair (with cur :contextBudget (some n)) errs)
+              (pair cur (cons (str what ": :contextBudget must be a positive number") errs))))
+          ((scalarFloat f)
+            (if (and (> f 0.0) (some? (float64ToInt64 f)))
+              (pair (with cur :contextBudget (float64ToInt64 f)) errs)
+              (pair cur (cons (str what ": :contextBudget must be a positive number") errs))))
+          (_ (pair cur (cons (str what ": :contextBudget must be a positive number") errs)))))))
 
 fn checkTimeoutSec props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (match (mapGet props "timeoutSec")
     ((none) (pair cur errs))
     ((some expr)
-      (let [(sc (asnFigure expr))]
+      (let [(sc (asn_figure expr))]
         (match sc
           ((scalarFloat f)
             (if (> f 0.0)
@@ -1052,7 +741,7 @@ fn checkFirstByteSec props: (Map String rd/SExpr) what: String cur: GatewayParam
   (match (mapGet props "firstByteSec")
     ((none) (pair cur errs))
     ((some expr)
-      (let [(sc (asnFigure expr))]
+      (let [(sc (asn_figure expr))]
         (match sc
           ((scalarFloat f)
             (if (> f 0.0)
@@ -1069,23 +758,15 @@ fn checkNativeTools props: (Map String rd/SExpr) what: String cur: GatewayParams
   (match (mapGet props "nativeTools")
     ((none) (pair cur errs))
     ((some expr)
-      (match (asnFigure expr)
+      (match (asn_figure expr)
         ((scalarBool b) (pair (with cur :nativeTools (some b)) errs))
         (_ (pair cur (cons (str what ": :nativeTools must be true or false") errs))))))
-
-fn checkStream props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
-  (match (mapGet props "stream")
-    ((none) (pair cur errs))
-    ((some expr)
-      (match (asnFigure expr)
-        ((scalarBool b) (pair (with cur :stream (some b)) errs))
-        (_ (pair cur (cons (str what ": :stream must be true or false") errs))))))
 
 fn checkReasoning props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (match (mapGet props "reasoning")
     ((none) (pair cur errs))
     ((some expr)
-      (let [(sc (asnFigure expr))]
+      (let [(sc (asn_figure expr))]
         (match sc
           ((scalarBool b) (pair (with cur :reasoning (some b)) errs))
           (_ (pair cur (cons (str what ": :reasoning must be true or false") errs)))))))
@@ -1094,7 +775,7 @@ fn checkRpm props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (
   (match (mapGet props "rpm")
     ((none) (pair cur errs))
     ((some expr)
-      (let [(sc (asnFigure expr))]
+      (let [(sc (asn_figure expr))]
         (match sc
           ((scalarFloat f)
             (if (> f 0.0)
@@ -1106,10 +787,9 @@ fn checkRpm props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (
               (pair cur (cons (str what ": :rpm must be a positive number") errs))))
           (_ (pair cur (cons (str what ": :rpm must be a positive number") errs)))))))
 
-fn gatewayParams props: (Map String rd/SExpr) what: String -> (Pair GatewayParams (List String))
+fn gateway_params props: (Map String rd/SExpr) what: String -> (Pair GatewayParams (List String))
   (let [(s0 (pair (emptyGatewayParams) (list)))
-        (s0b (checkTopP props what (pairFirst s0) (pairSecond s0)))
-        (s1 (checkTemperature props what (pairFirst s0b) (pairSecond s0b)))
+        (s1 (checkTemperature props what (pairFirst s0) (pairSecond s0)))
         (s2 (checkEffort props what (pairFirst s1) (pairSecond s1)))
         (s3 (checkMaxTokens props what (pairFirst s2) (pairSecond s2)))
         (s4 (checkContextBudget props what (pairFirst s3) (pairSecond s3)))
@@ -1121,16 +801,14 @@ fn gatewayParams props: (Map String rd/SExpr) what: String -> (Pair GatewayParam
         (s8b (checkEffortDialect props what (pairFirst s8) (pairSecond s8)))
         (s8c (checkPrefill props what (pairFirst s8b) (pairSecond s8b)))
         (s9 (checkRetry props what (pairFirst s8c) (pairSecond s8c)))
-        (s9b (checkNativeTools props what (pairFirst s9) (pairSecond s9)))
-        (s9c (checkTemperatureFixed props what (pairFirst s9b) (pairSecond s9b)))
-        (s9d (checkStream props what (pairFirst s9c) (pairSecond s9c)))]
-    (pair (pairFirst s9d) (listReverse (pairSecond s9d))))
+        (s9b (checkNativeTools props what (pairFirst s9) (pairSecond s9)))]
+    (pair (pairFirst s9b) (listReverse (pairSecond s9b))))
 
 fn checkApi props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (match (mapGet props "api")
     ((none) (pair cur errs))
     ((some expr)
-      (let [(sc (asnFigure expr))]
+      (let [(sc (asn_figure expr))]
         (match sc
           ((scalarStr s)
             (if (or (= s "chat") (= s "responses"))
@@ -1143,7 +821,7 @@ fn checkPrefill props: (Map String rd/SExpr) what: String cur: GatewayParams err
   (match (mapGet props "prefill")
     ((none) (pair cur errs))
     ((some expr)
-      (match (asnFigure expr)
+      (match (asn_figure expr)
         ((scalarBool b) (pair (with cur :prefill (some b)) errs))
         (_ (pair cur (cons (str what ": :prefill must be true or false") errs))))))
 
@@ -1155,10 +833,12 @@ fn checkRetry props: (Map String rd/SExpr) what: String cur: GatewayParams errs:
         ((err e) (pair cur (cons e errs)))
         ((ok policy) (pair (with cur :retry (some policy)) errs)))))
 
+fn gatewayParams props: (Map String rd/SExpr) what: String -> (Pair GatewayParams (List String))
+  (gateway_params props what)
+
 fn paramPresent? params: GatewayParams k: String -> Bool
   (cond
     ((= k "temperature") (some? params.temperature))
-    ((= k "topP") (some? params.topP))
     ((= k "effort") (some? params.effort))
     ((= k "effortDialect") (some? params.effortDialect))
     ((= k "maxTokens") (some? params.maxTokens))
@@ -1170,8 +850,6 @@ fn paramPresent? params: GatewayParams k: String -> Bool
     ((= k "api") (some? params.api))
     ((= k "prefill") (some? params.prefill))
     ((= k "nativeTools") (some? params.nativeTools))
-    ((= k "temperatureFixed") (some? params.temperatureFixed))
-    ((= k "stream") (some? params.stream))
     (else false))
 
 fn scalarAsnValue sc: AsnScalar -> String
@@ -1187,10 +865,10 @@ fn paramsShown props: (Map String rd/SExpr) params: GatewayParams -> (List (Pair
             ((none) acc)
             ((some expr)
               (if (paramPresent? params k)
-                (listAppend acc (list (pair k (scalarAsnValue (asnFigure expr)))))
+                (listAppend acc (list (pair k (scalarAsnValue (asn_figure expr)))))
                 acc))))
         (list)
-        (list "temperature" "topP" "effort" "effortDialect" "maxTokens" "contextBudget" "timeoutSec" "firstByteSec" "reasoning" "rpm" "api" "prefill" "nativeTools" "temperatureFixed" "stream"))
+        (list "temperature" "effort" "effortDialect" "maxTokens" "contextBudget" "timeoutSec" "firstByteSec" "reasoning" "rpm" "api" "prefill" "nativeTools"))
 
 fn shownHasKey? shown: (List (Pair String String)) k: String -> Bool
   (listAny? (fn [(p (Pair String String))] -> Bool (= (pairFirst p) k)) shown)
@@ -1245,7 +923,7 @@ fn calibrationRowId idExpr: rd/SExpr -> (Result String String)
     (err (str "calibration row :id must be a string, found '" (sexprRawText idExpr) "'")))
 
 fn parseCalibrationModel mForm: rd/SExpr -> (Result (Pair String (Pair GatewayParams (List (Pair String String)))) String)
-  (match (asnProps mForm (some ":model"))
+  (match (asn_props mForm (some ":model"))
     ((err e) (err e))
     ((ok props)
       (match (match (mapGet props "id") ((none) (err "calibration row :id must be a string, found None")) ((some idExpr) (calibrationRowId idExpr)))
@@ -1254,12 +932,12 @@ fn parseCalibrationModel mForm: rd/SExpr -> (Result (Pair String (Pair GatewayPa
           (let [(pRes (match (mapGet props "params")
                         ((none) (ok (mapEmpty)))
                         ((some pExpr) (match pExpr
-                                        ((rd/sexprList _) (asnProps pExpr (none)))
+                                        ((rd/sexprList _) (asn_props pExpr (none)))
                                         (_ (ok (mapEmpty)))))))]
             (match pRes
               ((err e) (err e))
               ((ok pProps)
-                (let [(checked (gatewayParams pProps (str "calibration " id)))]
+                (let [(checked (gateway_params pProps (str "calibration " id)))]
                   (if (listEmpty? (pairSecond checked))
                     (ok (pair id (pair (pairFirst checked) (paramsShown pProps (pairFirst checked)))))
                     (err (stringJoin (pairSecond checked) "; ")))))))))))
@@ -1286,7 +964,7 @@ fn calibrationRowsLoad! path: String -> (Result (Map String (Pair GatewayParams 
               (if (!= (listLength forms) 1)
                 (err (str "calibration registry " path ": expected one (:calibrationIndex ...) form, found " (stringFromInt64 (listLength forms))))
                 (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-                  (match (asnProps top (some ":calibrationIndex"))
+                  (match (asn_props top (some ":calibrationIndex"))
                     ((err e) (err (str "calibration registry " path ": " e)))
                     ((ok props)
                       (match (mapGet props "models")
@@ -1297,20 +975,23 @@ fn calibrationRowsLoad! path: String -> (Result (Map String (Pair GatewayParams 
                             ((rd/sexprVect mList) (match (parseCalibrationModels mList (mapEmpty)) ((ok rows) (ok rows)) ((err e) (err (str "calibration registry " path ": " e)))))
                             (_ (ok (mapEmpty))))))))))))))))
 
-fn calibrationRegistryLoad! path: String -> (Result (Map String GatewayParams) String)
+fn calibration_registry_load! path: String -> (Result (Map String GatewayParams) String)
   (match (calibrationRowsLoad! path)
     ((err e) (err e))
     ((ok rows) (ok (mapFromPairs (map (fn [(p (Pair String (Pair GatewayParams (List (Pair String String)))))] -> (Pair String GatewayParams) (pair (pairFirst p) (pairFirst (pairSecond p)))) (mapPairs rows))))))
 
+fn calibrationRegistryLoad! path: String -> (Result (Map String GatewayParams) String)
+  (calibration_registry_load! path)
+
 
 fn parseV1Route rf: rd/SExpr pid: String -> (Result GatewayRoute String)
-  (match (asnProps rf (none))
+  (match (asn_props rf (none))
     ((err e) (err e))
     ((ok props)
       (match (mapGet props "intent")
         ((none) (err (str "profile " pid " route :intent must be a bare atom, found ()")))
         ((some intentExpr)
-          (match (asnName intentExpr (str "profile " pid " route :intent"))
+          (match (asn_name intentExpr (str "profile " pid " route :intent"))
             ((err e) (err e))
             ((ok rawIntent)
               (let [(intent (stringLower rawIntent))]
@@ -1344,13 +1025,13 @@ fn parseV1Routes rItems: (List rd/SExpr) pid: String acc: (List GatewayRoute) ->
           ((ok route) (parseV1Routes tail pid (cons route acc)))))))
 
 fn parseV1Profile pf: rd/SExpr profiles: (Map String (List GatewayRoute)) -> (Result (Pair String (List GatewayRoute)) String)
-  (match (asnProps pf (some ":profile"))
+  (match (asn_props pf (some ":profile"))
     ((err e) (err e))
     ((ok pProps)
       (match (mapGet pProps "id")
         ((none) (err "(:profile :id ...) must be a bare atom, found ()"))
         ((some idExpr)
-          (match (asnName idExpr "(:profile :id ...)")
+          (match (asn_name idExpr "(:profile :id ...)")
             ((err e) (err e))
             ((ok pid)
               (if (mapHas? profiles pid)
@@ -1382,7 +1063,7 @@ fn parseV1ProfilesList pfList: (List rd/SExpr) profiles: (Map String (List Gatew
           ((err e) (err e))
           ((ok pPair) (parseV1ProfilesList tail (mapSet profiles (pairFirst pPair) (pairSecond pPair))))))))
 
-fn gatewayProfilesParse text: String -> (Result GatewayV1Config String)
+fn gateway_profiles_parse text: String -> (Result GatewayV1Config String)
   (let [(toks (lx/tokenize text))]
     (match (match (asnReadCheck text) ((some e) (err (ast/ParseError :msg e :line 0 :col 0))) ((none) (ast/readForms toks)))
       ((err e) (err (str e.msg)))
@@ -1390,7 +1071,7 @@ fn gatewayProfilesParse text: String -> (Result GatewayV1Config String)
         (if (!= (listLength forms) 1)
           (err (str "expected one (:gateway ...) form, found " (stringFromInt64 (listLength forms))))
           (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-            (match (asnProps top (some ":gateway"))
+            (match (asn_props top (some ":gateway"))
               ((err e) (err e))
               ((ok g)
                 (match (mapGet g "profiles")
@@ -1404,10 +1085,13 @@ fn gatewayProfilesParse text: String -> (Result GatewayV1Config String)
                           ((ok profiles)
                             (let [(defaultName (match (mapGet g "profile")
                                                  ((none) "default")
-                                                 ((some defExpr) (resultOr (asnName defExpr "(:gateway :profile ...)") "default"))))]
+                                                 ((some defExpr) (resultOr (asn_name defExpr "(:gateway :profile ...)") "default"))))]
                               (if (not (mapHas? profiles defaultName))
                                 (err (str ":profile " defaultName " names no defined profile"))
                                 (ok (GatewayV1Config :defaultProfile defaultName :profiles profiles)))))))))))))))))
+
+fn gatewayProfilesParse text: String -> (Result GatewayV1Config String)
+  (gateway_profiles_parse text)
 
 
 fn defaultProviders! -> (Map String GatewayProvider)
@@ -1417,15 +1101,15 @@ fn defaultProviders! -> (Map String GatewayProvider)
         (ollamaBase (str (rstripSlash (optionOr (envGet "OLLAMA_BASE_URL") "https://ollama.com")) "/v1"))
         (ollamaTimeout (optionOr (match (envGet "OLLAMA_TIMEOUT_SEC")
                                    ((none) (none))
-                                   ((some s) (if (isFloatString? s) (stringToFloat64 s) (match (stringToInt64 s) ((some n) (some (int64ToFloat64 n))) ((none) (none))))))
+                                   ((some s) (if (isFloatString? s) (stringToFloat64 s) (match (stringToInt64 s) ((some n) (some (int64ToFloat64 n)) ((none) (none)))))))
                                  300.0))
-        (p1 (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id "agy" :kind "cli" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p2 (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id "codex" :kind "cli" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p3 (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id "claude" :kind "cli" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p4 (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id "gemini" :kind "openai" :base geminiBase :keyEnv "GEMINI_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p5 (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id "groq" :kind "openai" :base groqBase :keyEnv "GROQ_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p6 (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id "openrouter" :kind "openai" :base openrouterBase :keyEnv "OPENROUTER_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p7 (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id "ollama" :kind "openai" :base ollamaBase :keyEnv "OLLAMA_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec ollamaTimeout :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))]
+        (p1 (GatewayProvider :rpmShared false :dropEmptyTools false :id "agy" :kind "cli" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p2 (GatewayProvider :rpmShared false :dropEmptyTools false :id "codex" :kind "cli" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p3 (GatewayProvider :rpmShared false :dropEmptyTools false :id "claude" :kind "cli" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p4 (GatewayProvider :rpmShared false :dropEmptyTools false :id "gemini" :kind "openai" :base geminiBase :keyEnv "GEMINI_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p5 (GatewayProvider :rpmShared false :dropEmptyTools false :id "groq" :kind "openai" :base groqBase :keyEnv "GROQ_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p6 (GatewayProvider :rpmShared false :dropEmptyTools false :id "openrouter" :kind "openai" :base openrouterBase :keyEnv "OPENROUTER_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p7 (GatewayProvider :rpmShared false :dropEmptyTools false :id "ollama" :kind "openai" :base ollamaBase :keyEnv "OLLAMA_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec ollamaTimeout :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))]
     (mapFromPairs (list (pair "agy" p1) (pair "codex" p2) (pair "claude" p3) (pair "gemini" p4) (pair "groq" p5) (pair "openrouter" p6) (pair "ollama" p7))))
 
 fn extractPropList items: (List rd/SExpr) head: String accForms: (List (Map String rd/SExpr)) accErrs: (List String) -> (Pair (List (Map String rd/SExpr)) (List String))
@@ -1433,7 +1117,7 @@ fn extractPropList items: (List rd/SExpr) head: String accForms: (List (Map Stri
     ((none) (pair (listReverse accForms) (listReverse accErrs)))
     ((some f)
       (let [(tail (optionOr (listTail items) (list)))]
-        (match (asnProps f (some head))
+        (match (asn_props f (some head))
           ((ok props) (extractPropList tail head (cons props accForms) accErrs))
           ((err e) (extractPropList tail head accForms (cons e accErrs)))))))
 
@@ -1450,7 +1134,7 @@ fn poolPositiveInt props: (Map String rd/SExpr) key: String -> (Result Int64 Str
   (match (mapGet props key)
     ((none) (err (str "pool requires :" key)))
     ((some expr)
-      (match (asnScalar expr)
+      (match (asn_scalar expr)
         ((scalarInt n) (if (> n 0) (ok n) (err (str "pool :" key " must be a positive integer"))))
         (_ (err (str "pool :" key " must be a positive integer"))))))
 
@@ -1458,7 +1142,7 @@ fn poolBool props: (Map String rd/SExpr) key: String -> (Result Bool String)
   (match (mapGet props key)
     ((none) (err (str "pool requires :" key)))
     ((some expr)
-      (match (asnScalar expr)
+      (match (asn_scalar expr)
         ((scalarBool b) (ok b))
         (_ (err (str "pool :" key " must be true or false"))))))
 
@@ -1469,12 +1153,12 @@ fn poolOptionalPath props: (Map String rd/SExpr) key: String -> (Result String S
   (match (mapGet props key)
     ((none) (ok ""))
     ((some expr)
-      (match (asnScalar expr)
+      (match (asn_scalar expr)
         ((scalarStr text) (if (stringStartsWith? text "/") (ok text) (err (str "pool :" key " must be a path starting with /"))))
         (_ (err (str "pool :" key " must be a string path"))))))
 
 fn parsePoolConfig expr: rd/SExpr -> (Result GatewayPool String)
-  (match (asnProps expr (none))
+  (match (asn_props expr (none))
     ((err e) (err (str "invalid :pool: " e)))
     ((ok props)
       (match (poolPositiveInt props "windowMs")
@@ -1502,7 +1186,7 @@ fn retryRequiredNonNegInt props: (Map String rd/SExpr) key: String what: String 
   (match (mapGet props key)
     ((none) (err (str what ": :retry requires :" key)))
     ((some expr)
-      (match (asnScalar expr)
+      (match (asn_scalar expr)
         ((scalarInt n) (if (>= n 0) (ok n) (err (str what ": :retry :" key " must be a nonnegative integer"))))
         (_ (err (str what ": :retry :" key " must be a nonnegative integer"))))))
 
@@ -1510,13 +1194,13 @@ fn retryOptionalPosInt props: (Map String rd/SExpr) key: String fallback: Int64 
   (match (mapGet props key)
     ((none) (ok fallback))
     ((some expr)
-      (match (asnScalar expr)
+      (match (asn_scalar expr)
         ((scalarInt n) (if (> n 0) (ok n) (err (str what ": :retry :" key " must be a positive integer"))))
         (_ (err (str what ": :retry :" key " must be a positive integer"))))))
 
 ; (:m :tags (retry) :do "(:retry (:max N :baseMs N :capMs N)): :max is the extra attempts after the first (0 keeps today's no-retry behaviour); :baseMs/:capMs default to 1000/20000 and bound the exponential backoff")
 fn parseRetryPolicy expr: rd/SExpr what: String -> (Result RetryPolicy String)
-  (match (asnProps expr (none))
+  (match (asn_props expr (none))
     ((err e) (err (str what ": invalid :retry: " e)))
     ((ok props)
       (match (retryRequiredNonNegInt props "max" what)
@@ -1536,13 +1220,13 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
   (match (mapGet p "id")
     ((none) (pair provs curErrs))
     ((some idExpr)
-      (match (asnName idExpr "(:provider :id ...)")
+      (match (asn_name idExpr "(:provider :id ...)")
         ((err e) (pair provs (listAppendOne curErrs e)))
         ((ok pid)
           (let [(withKeyErr (if (mapHas? p "key") (listAppendOne curErrs (str "provider " pid ": keys are named by :keyEnv, never stored in the file")) curErrs))
-                (existing (optionOr (mapGet provs pid) (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id pid :kind "" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))
+                (existing (optionOr (mapGet provs pid) (GatewayProvider :rpmShared false :dropEmptyTools false :id pid :kind "" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))
                 (kind (match (mapGet p "kind")
-                        ((some kExpr) (scalarToString (asnScalar kExpr)))
+                        ((some kExpr) (scalarToString (asn_scalar kExpr)))
                         ((none) existing.kind)))
                 (kindErr (if (and (!= kind "openai") (and (!= kind "cli") (and (!= kind "anthropic") (and (!= kind "gemini") (!= kind "gateway")))))
                            (listAppendOne withKeyErr (str "provider " pid ": :kind must be openai, anthropic, gemini, cli or gateway"))
@@ -1563,7 +1247,7 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                 (keyEnvRes (match (mapGet p "keyEnv")
                              ((none) (pair existing.keyEnv withBaseErr))
                              ((some keExpr)
-                               (let [(ke (scalarToString (asnScalar keExpr)))]
+                               (let [(ke (scalarToString (asn_scalar keExpr)))]
                                  (if (not (isValidEnvName? ke))
                                    (pair existing.keyEnv (listAppendOne withBaseErr (str "provider " pid ": :keyEnv must name an environment variable")))
                                    (pair ke withBaseErr))))))
@@ -1572,7 +1256,7 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                 (secretRes (match (mapGet p "secret")
                              ((none) (pair existing.secret withKeErr))
                              ((some sExpr)
-                               (let [(sid (scalarToString (asnScalar sExpr)))]
+                               (let [(sid (scalarToString (asn_scalar sExpr)))]
                                  (if (isValidSecretId? sid)
                                    (pair sid withKeErr)
                                    (pair existing.secret (listAppendOne withKeErr (str "provider " pid ": :secret must name a secrets-file id"))))))))
@@ -1581,7 +1265,7 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                 (pckRes (match (mapGet p "promptCacheKey")
                           ((none) (pair existing.promptCacheKey withSecretErr))
                           ((some pExpr)
-                            (match (asnScalar pExpr)
+                            (match (asn_scalar pExpr)
                               ((scalarBool b) (pair b withSecretErr))
                               (_ (pair existing.promptCacheKey (listAppendOne withSecretErr (str "provider " pid ": :promptCacheKey must be true or false"))))))))
                 (promptCacheKey (pairFirst pckRes))
@@ -1589,29 +1273,22 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                 (rsRes (match (mapGet p "rpmShared")
                          ((none) (pair existing.rpmShared withPckErr0))
                          ((some rsExpr)
-                           (match (asnScalar rsExpr)
+                           (match (asn_scalar rsExpr)
                              ((scalarBool b) (pair b withPckErr0))
                              (_ (pair existing.rpmShared (listAppendOne withPckErr0 (str "provider " pid ": :rpmShared must be true or false"))))))))
                 (rpmShared (pairFirst rsRes))
                 (dtRes (match (mapGet p "dropEmptyTools")
                          ((none) (pair existing.dropEmptyTools (pairSecond rsRes)))
                          ((some dtExpr)
-                           (match (asnScalar dtExpr)
+                           (match (asn_scalar dtExpr)
                              ((scalarBool b) (pair b (pairSecond rsRes)))
                              (_ (pair existing.dropEmptyTools (listAppendOne (pairSecond rsRes) (str "provider " pid ": :dropEmptyTools must be true or false"))))))))
                 (dropEmptyTools (pairFirst dtRes))
-                (arRes (match (mapGet p "assistantReasoning")
-                         ((none) (pair existing.assistantReasoning (pairSecond dtRes)))
-                         ((some arExpr)
-                           (match (asnScalar arExpr)
-                             ((scalarBool b) (pair b (pairSecond dtRes)))
-                             (_ (pair existing.assistantReasoning (listAppendOne (pairSecond dtRes) (str "provider " pid ": :assistantReasoning must be true or false"))))))))
-                (assistantReasoning (pairFirst arRes))
-                (withPckErr (pairSecond arRes))
+                (withPckErr (pairSecond dtRes))
                 (sessionHeaderRes (match (mapGet p "sessionHeader")
                                     ((none) (pair existing.sessionHeader withPckErr))
                                     ((some shExpr)
-                                      (let [(sh (scalarToString (asnScalar shExpr)))]
+                                      (let [(sh (scalarToString (asn_scalar shExpr)))]
                                         (if (not (isValidHeaderName? sh))
                                           (pair existing.sessionHeader (listAppendOne withPckErr (str "provider " pid ": :sessionHeader must name an http header")))
                                           (pair sh withPckErr))))))
@@ -1620,7 +1297,7 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                 (timeoutRes (match (mapGet p "timeoutSec")
                               ((none) (pair existing.timeoutSec withShErr))
                               ((some tExpr)
-                                (let [(sc (asnScalar tExpr))]
+                                (let [(sc (asn_scalar tExpr))]
                                   (match sc
                                     ((scalarFloat f) (if (> f 0.0) (pair f withShErr) (pair existing.timeoutSec (listAppendOne withShErr (str "provider " pid ": :timeoutSec must be a positive number")))))
                                     ((scalarInt n) (if (> n 0) (pair (int64ToFloat64 n) withShErr) (pair existing.timeoutSec (listAppendOne withShErr (str "provider " pid ": :timeoutSec must be a positive number")))))
@@ -1630,7 +1307,7 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                 (firstByteSecRes (match (mapGet p "firstByteSec")
                               ((none) (pair existing.firstByteSec withToErr))
                               ((some fbExpr)
-                                (let [(sc (asnScalar fbExpr))]
+                                (let [(sc (asn_scalar fbExpr))]
                                   (match sc
                                     ((scalarFloat f) (if (> f 0.0) (pair f withToErr) (pair existing.firstByteSec (listAppendOne withToErr (str "provider " pid ": :firstByteSec must be a positive number")))))
                                     ((scalarInt n) (if (> n 0) (pair (int64ToFloat64 n) withToErr) (pair existing.firstByteSec (listAppendOne withToErr (str "provider " pid ": :firstByteSec must be a positive number")))))
@@ -1640,7 +1317,7 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                 (rpmRes (match (mapGet p "rpm")
                           ((none) (pair existing.rpm withFbErr))
                           ((some rExpr)
-                            (let [(sc (asnScalar rExpr))]
+                            (let [(sc (asn_scalar rExpr))]
                               (match sc
                                 ((scalarFloat f) (if (> f 0.0) (pair f withFbErr) (pair existing.rpm (listAppendOne withFbErr (str "provider " pid ": :rpm must be a positive number")))))
                                 ((scalarInt n) (if (> n 0) (pair (int64ToFloat64 n) withFbErr) (pair existing.rpm (listAppendOne withFbErr (str "provider " pid ": :rpm must be a positive number")))))
@@ -1669,7 +1346,7 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                 (finalErrs (if (and (= kind "gateway") (stringEmpty? secret))
                              (listAppendOne baseErrs (str "provider " pid ": a gateway provider needs :secret naming its bearer token in the secrets file"))
                              baseErrs))
-                (updated (GatewayProvider :rpmShared rpmShared :dropEmptyTools dropEmptyTools :assistantReasoning assistantReasoning :id pid :kind kind :base base :keyEnv (if (stringEmpty? secret) keyEnv (sc/secretEnvName secret)) :secret secret :promptCacheKey promptCacheKey :sessionHeader sessionHeader :timeoutSec timeoutSec :firstByteSec firstByteSec :rpm rpm :pool poolValue :retry retryValue))]
+                (updated (GatewayProvider :rpmShared rpmShared :dropEmptyTools dropEmptyTools :id pid :kind kind :base base :keyEnv (if (stringEmpty? secret) keyEnv (sc/secretEnvName secret)) :secret secret :promptCacheKey promptCacheKey :sessionHeader sessionHeader :timeoutSec timeoutSec :firstByteSec firstByteSec :rpm rpm :pool poolValue :retry retryValue))]
             (pair (mapSet provs pid updated) finalErrs))))))
 
 fn loopProviders pForms: (List (Map String rd/SExpr)) provs: (Map String GatewayProvider) errs: (List String) -> (Pair (Map String GatewayProvider) (List String))
@@ -1701,24 +1378,17 @@ fn buildProviders providerForms: (List (Map String rd/SExpr)) initial: (Map Stri
   (:f errs (List String))
   (:f warns (List String)))
 
-; (:m :ref GW-GEMINI-400 :do "Google's generativelanguage host answers HTTP 400 \"Requests ending with a model turn are not supported\" to a body whose last message is the assistant's, which is what Leon's attractor prefill is; a model on that host without its own :prefill therefore defaults to :prefill false, an explicit :prefill true still wins")
-fn providerPrefillDefault providers: (Map String GatewayProvider) pid: String params: GatewayParams -> GatewayParams
-  (if (some? params.prefill) params
-    (match (mapGet providers pid)
-      ((some p) (if (stringContains? p.base "generativelanguage.googleapis.com") (with params :prefill (some false)) params))
-      ((none) params)))
-
 fn applyOneModel acc: ModelAccumulator m: (Map String rd/SExpr) providers: (Map String GatewayProvider) registry: (Map String (Pair GatewayParams (List (Pair String String)))) regError: (Option String) -> ModelAccumulator
   (match (mapGet m "id")
     ((none) acc)
     ((some idExpr)
-      (match (asnName idExpr "(:model :id ...)")
+      (match (asn_name idExpr "(:model :id ...)")
         ((err e) (with acc :errs (listAppendOne acc.errs e)))
         ((ok mid)
           (let [(dupErr (if (mapHas? acc.models mid) (listAppendOne acc.errs (str "model alias " mid " is defined twice")) acc.errs))
                 (pidRes (match (mapGet m "provider")
                           ((none) (err (str "model " mid " :provider must be a bare atom, found ()")))
-                          ((some pExpr) (asnName pExpr (str "model " mid " :provider")))))
+                          ((some pExpr) (asn_name pExpr (str "model " mid " :provider")))))
                 (nameRes (match (mapGet m "name")
                            ((none) (err (str "model " mid ": :name must be a non-empty string")))
                            ((some nExpr)
@@ -1735,7 +1405,7 @@ fn applyOneModel acc: ModelAccumulator m: (Map String rd/SExpr) providers: (Map 
                          errs1))
                 (errs3 (match nameRes ((err e) (listAppendOne errs2 e)) ((ok _) errs2)))
                 (name (resultOr nameRes ""))
-                (ownParamsRes (gatewayParams m (str "model " mid)))
+                (ownParamsRes (gateway_params m (str "model " mid)))
                 (ownParams (pairFirst ownParamsRes))
                 (ownShown (paramsShown m ownParams))
                 (paramErrs (pairSecond ownParamsRes))
@@ -1757,39 +1427,12 @@ fn applyOneModel acc: ModelAccumulator m: (Map String rd/SExpr) providers: (Map 
                 (finalParams (pairFirst (pairFirst (pairSecond calRes))))
                 (finalShown (pairSecond (pairFirst (pairSecond calRes))))
                 (finalWarns (pairSecond (pairSecond calRes)))
-                (statusRes (modelStatusGone m mid))
-                (model (GatewayModel :id mid :provider pid :name name :calibration cal :params (providerPrefillDefault providers pid finalParams) :shown finalShown :gone (resultOr statusRes false)))]
+                (model (GatewayModel :id mid :provider pid :name name :calibration cal :params finalParams :shown finalShown))]
             (ModelAccumulator
               :models (if providerKnown (mapSet acc.models mid model) acc.models)
               :order (if providerKnown (listAppendOne acc.order mid) acc.order)
-              :errs (match statusRes ((err e) (listAppendOne errs4 e)) ((ok _) errs4))
+              :errs errs4
               :warns finalWarns))))))
-
-; (:m :ref GATEWAY-GONE-MODEL-ROWS :do "a model row's :status: absent or active is live, gone marks a model the provider no longer serves; any other value is a config error")
-fn modelStatusGone m: (Map String rd/SExpr) mid: String -> (Result Bool String)
-  (match (mapGet m "status")
-    ((none) (ok false))
-    ((some e)
-      (let [(s (resultOr (asnName e (str "model " mid " :status")) ""))]
-        (if (= s "active") (ok false)
-          (if (= s "gone") (ok true)
-            (err (str "model " mid ": :status must be active or gone")))))))
-
-; (:m :ref GATEWAY-GONE-MODEL-ROWS :do "the one predicate config check and the runtime share: an alias whose model row is :status gone")
-fn gone? models: (Map String GatewayModel) alias: String -> Bool
-  (match (mapGet models alias) ((some md) md.gone) ((none) false))
-
-fn goneTag -> String
-  "gone: "
-
-; (:m :ref GONE-QUOTED-CHAIN :do "the gone model a quoted chain entry names: the entry read as an alias id or as provider/name; the model's alias id, none when no gone model matches")
-fn goneByString models: (Map String GatewayModel) s: String -> (Option String)
-  (let [(hits (filter (fn [(md GatewayModel)] -> Bool (and md.gone (or (= md.id s) (= (str md.provider "/" md.name) s)))) (map pairSecond (mapPairs models))))]
-    (match (listHead hits) ((some md) (some md.id)) ((none) (none))))
-
-; (:m :ref GATEWAY-GONE-MODEL-ROWS :do "a skipped gone alias travels as a tagged note through the route errors; gatewayConfigV2Build! moves the notes out of the errors into one warning per alias, and config check turns those warnings back into errors")
-fn goneNote alias: String pid: String intent: String -> String
-  (str (goneTag) alias " " pid "/" intent)
 
 fn loopModels mForms: (List (Map String rd/SExpr)) acc: ModelAccumulator providers: (Map String GatewayProvider) registry: (Map String (Pair GatewayParams (List (Pair String String)))) regError: (Option String) -> ModelAccumulator
   (match (listHead mForms)
@@ -1864,16 +1507,12 @@ fn parseChainItem a: rd/SExpr models: (Map String GatewayModel) pid: String inte
       (let [(s (stripQuotesAndUnescape (sexprRawText a)))]
         (if (stringEmpty? s)
           (pair cList (listAppendOne cErrs (str "profile " pid " route " intent ": chain entry \"\" is neither an alias nor a model string")))
-          (match (goneByString models s)
-            ((some gid) (pair cList (listAppendOne cErrs (goneNote gid pid intent))))
-            ((none) (pair (listAppendOne cList s) cErrs)))))
+          (pair (listAppendOne cList s) cErrs)))
       (match a
         ((rd/sexprAtom rawA)
           (if (not (mapHas? models rawA))
             (pair (listAppendOne cList rawA) (listAppendOne cErrs (str "profile " pid " route " intent ": unknown alias " rawA)))
-            (if (gone? models rawA)
-              (pair cList (listAppendOne cErrs (goneNote rawA pid intent)))
-              (pair (listAppendOne cList rawA) cErrs))))
+            (pair (listAppendOne cList rawA) cErrs)))
         (_ (pair cList (listAppendOne cErrs (str "profile " pid " route " intent ": chain entry compound is neither an alias nor a model string")))))))
 
 fn parseRouteTemperature props: (Map String rd/SExpr) pid: String intent: String -> (Pair (Option Float64) (List String))
@@ -1883,18 +1522,11 @@ fn parseRouteTemperatureKey props: (Map String rd/SExpr) key: String pid: String
   (match (mapGet props key)
     ((none) (pair (none) (list)))
     ((some expr)
-      (let [(sc (asnFigure expr))]
+      (let [(sc (asn_figure expr))]
         (match sc
           ((scalarFloat f) (pair (some f) (list)))
           ((scalarInt n) (pair (some (int64ToFloat64 n)) (list)))
           (_ (pair (none) (list (str "profile " pid " route " intent ": :" key " must be a number"))))))))
-
-; (:m :ref GW-SPREAD-EDIT-GUARD :do "the offending :spread entry as written, so a bare (4) left behind by an alias removal is named in the per-route config error instead of only its count; a string literal is shown as ... so a value typed into an entry never reaches the stale error, the header or the log; nested forms show as ...")
-fn spreadItemText item: rd/SExpr -> String
-  (let [(parts (match item ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list))))]
-    (match item
-      ((rd/sexprAtom a) (if (stringStartsWith? a "\"") "..." a))
-      (_ (str "(" (stringJoin (map (fn [(p rd/SExpr)] -> String (match p ((rd/sexprAtom a) (if (stringStartsWith? a "\"") "..." a)) (_ "..."))) parts) " ") ")"))))
 
 ; (:m :ref GW-SPREAD-20261017 :do "one (ALIAS WEIGHT) pair: ALIAS is a bare atom checked against :models the same way parseChainItem checks a chain entry (never a string, never the raw model name); WEIGHT must be a positive integer, so 0, negative or a non-integer each name the offending alias rather than being silently dropped")
 fn parseSpreadItem item: rd/SExpr models: (Map String GatewayModel) pid: String intent: String st: (Pair (List (Pair String Int64)) (List String)) -> (Pair (List (Pair String Int64)) (List String))
@@ -1902,22 +1534,20 @@ fn parseSpreadItem item: rd/SExpr models: (Map String GatewayModel) pid: String 
         (errs (pairSecond st))
         (parts (match item ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list))))]
     (if (!= (listLength parts) 2)
-      (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread entry " (spreadItemText item) " must be (ALIAS WEIGHT)")))
+      (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread entry must be (ALIAS WEIGHT)")))
       (let [(aExpr (optionOr (listGet parts 0) (rd/makeAtom "")))
             (wExpr (optionOr (listGet parts 1) (rd/makeAtom "")))]
-        (match (asnName aExpr (str "profile " pid " route " intent " :spread alias"))
+        (match (asn_name aExpr (str "profile " pid " route " intent " :spread alias"))
           ((err e) (pair acc (listAppendOne errs e)))
           ((ok alias)
             (if (not (mapHas? models alias))
               (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread unknown alias " alias)))
-              (if (gone? models alias)
-                (pair acc (listAppendOne errs (goneNote alias pid (str intent " :spread"))))
-                (match (asnScalar wExpr)
-                  ((scalarInt w)
-                    (if (<= w 0)
-                      (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread weight for " alias " must be a positive integer")))
-                      (pair (listAppendOne acc (pair alias w)) errs)))
-                  (_ (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread weight for " alias " must be a positive integer"))))))))))))
+              (match (asn_scalar wExpr)
+                ((scalarInt w)
+                  (if (<= w 0)
+                    (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread weight for " alias " must be a positive integer")))
+                    (pair (listAppendOne acc (pair alias w)) errs)))
+                (_ (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread weight for " alias " must be a positive integer")))))))))))
 
 fn parseSpread expr: rd/SExpr models: (Map String GatewayModel) pid: String intent: String -> (Pair (List (Pair String Int64)) (List String))
   (let [(items (match expr ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list))))]
@@ -1930,44 +1560,12 @@ fn parseCooldownSec props: (Map String rd/SExpr) pid: String intent: String -> (
   (match (mapGet props "cooldownSec")
     ((none) (pair 60 (list)))
     ((some expr)
-      (match (asnScalar expr)
+      (match (asn_scalar expr)
         ((scalarInt n) (if (> n 0) (pair n (list)) (pair 60 (list (str "profile " pid " route " intent ": :cooldownSec must be a positive integer")))))
         (_ (pair 60 (list (str "profile " pid " route " intent ": :cooldownSec must be a positive integer")))))))
 
-; (:m :ref GW-CAP-ORDER :do "optional :order measured on a route (with :explore 0..50, :refreshS >= 60, :minSamples >= 1, :staleS >= 60, :orderOff (ALIAS ..) of known aliases, :orderAt >= 0): opt-in to measured chain order written back by `gateway order`; any of the options without :order, a value other than measured, an out-of-range number or an unknown alias in :orderOff is an error, and a route without :order is read exactly as before")
-fn orderIntOk props: (Map String rd/SExpr) key: String lo: Int64 hi: Int64 -> Bool
-  (match (mapGet props key)
-    ((none) true)
-    ((some v) (match (asnScalar v) ((scalarInt n) (and (>= n lo) (<= n hi))) (_ false))))
-
-fn parseRouteOrder props: (Map String rd/SExpr) models: (Map String GatewayModel) pid: String intent: String -> (List String)
-  (let [(where (str "profile " pid " route " intent ": "))
-        (opts (list "explore" "refreshS" "minSamples" "staleS" "orderOff" "orderAt"))]
-    (match (mapGet props "order")
-      ((none) (map (fn [(k String)] -> String (str where ":" k " needs :order measured")) (filter (fn [(k String)] -> Bool (mapHas? props k)) opts)))
-      ((some v)
-        (listAppend
-          (match (asnScalar v) ((scalarStr s) (if (= s "measured") (list) (list (str where ":order must be measured")))) (_ (list (str where ":order must be measured"))))
-          (listAppend
-            (filter (fn [(e String)] -> Bool (not (stringEmpty? e)))
-              (list (if (orderIntOk props "explore" 0 50) "" (str where ":explore must be an integer 0..50"))
-                    (if (orderIntOk props "refreshS" 60 31536000) "" (str where ":refreshS must be an integer >= 60"))
-                    (if (orderIntOk props "minSamples" 1 1000000) "" (str where ":minSamples must be an integer >= 1"))
-                    (if (orderIntOk props "staleS" 60 31536000) "" (str where ":staleS must be an integer >= 60"))
-                    (if (orderIntOk props "orderAt" 0 9007199254740991) "" (str where ":orderAt must be an integer >= 0"))))
-            (match (mapGet props "orderOff")
-              ((none) (list))
-              ((some e)
-                (let [(items (match e ((rd/sexprList l) l) ((rd/sexprVect vv) vv) (_ (list))))]
-                  (filter (fn [(m String)] -> Bool (not (stringEmpty? m)))
-                    (map (fn [(it rd/SExpr)] -> String
-                           (match it
-                             ((rd/sexprAtom a) (if (mapHas? models a) "" (str where ":orderOff unknown alias " a)))
-                             (_ (str where ":orderOff entries must be aliases"))))
-                         items)))))))))) 
-
 fn parseProfileRoute rf: rd/SExpr pid: String intents: (Map String (Option String)) models: (Map String GatewayModel) -> (Pair (Option GatewayRoute) (List String))
-  (match (asnProps rf (none))
+  (match (asn_props rf (none))
     ((err e) (pair (none) (list (str "profile " pid ": " e))))
     ((ok props)
       (let [(intentRes (match (mapGet props "intent")
@@ -2003,8 +1601,7 @@ fn parseProfileRoute rf: rd/SExpr pid: String intents: (Map String (Option Strin
                       (cooldownRes (parseCooldownSec props pid intent))
                       (cooldownSec (pairFirst cooldownRes))
                       (cooldownErrs (pairSecond cooldownRes))
-                      (orderErrs (parseRouteOrder props models pid intent))
-                      (finalErrs (listAppend (listAppend (listAppend (listAppend (listAppend (listAppend errs2 chainErrs) tempErrs) overErrs) spreadErrs) cooldownErrs) orderErrs))]
+                      (finalErrs (listAppend (listAppend (listAppend (listAppend (listAppend errs2 chainErrs) tempErrs) overErrs) spreadErrs) cooldownErrs))]
                   (pair (some (GatewayRoute :intent intent :chain chain :models (list) :temperature temperature :temperatureOverride tempOverride :spread spread :cooldownSec cooldownSec)) finalErrs)))))))))
 
 fn profileFallbackStep profiles: (Map String GatewayProfile) cur: String seen: (List String) -> (Option (List String))
@@ -2029,76 +1626,6 @@ fn detectProfileFallbackCycles profiles: (Map String GatewayProfile) keys: (List
           ((some path) (some (str "profile fallback cycle: " (stringJoin path " -> "))))
           ((none) (detectProfileFallbackCycles profiles (optionOr (listTail keys) (list))))))))
 
-fn profileModes -> (List String)
-  (list "pin" "route" "judge")
-
-; (:m :ref GW-MODES :do "a profile's :mode, route when absent; any other word than pin, route or judge is a config error")
-fn profileModeOf p: (Map String rd/SExpr) pid: String -> (Pair String (List String))
-  (match (mapGet p "mode")
-    ((none) (pair "route" (list)))
-    ((some e)
-      (match (asnScalar e)
-        ((scalarStr s) (if (listContains? (profileModes) s) (pair s (list)) (pair "route" (list (str "profile " pid ": :mode must be pin, route or judge")))))
-        (_ (pair "route" (list (str "profile " pid ": :mode must be pin, route or judge")))))))
-
-fn stringItems e: rd/SExpr -> (Option (List String))
-  (match e
-    ((rd/sexprList xs) (some (map (fn [(x rd/SExpr)] -> String (scalarToString (asnScalar x))) xs)))
-    ((rd/sexprVect xs) (some (map (fn [(x rd/SExpr)] -> String (scalarToString (asnScalar x))) xs)))
-    (_ none))
-
-fn judgeBool props: (Map String rd/SExpr) key: String d: Bool pid: String -> (Pair Bool (List String))
-  (match (mapGet props key)
-    ((none) (pair d (list)))
-    ((some e) (match (asnScalar e)
-                ((scalarBool b) (pair b (list)))
-                (_ (pair d (list (str "profile " pid ": :judge :" key " must be true or false")))))))
-
-fn judgeList props: (Map String rd/SExpr) key: String d: (List String) pid: String -> (Pair (List String) (List String))
-  (match (mapGet props key)
-    ((none) (pair d (list)))
-    ((some e) (match (stringItems e)
-                ((some xs) (pair xs (list)))
-                ((none) (pair d (list (str "profile " pid ": :judge :" key " must be a list")))))))
-
-; (:m :ref GW-MODES :do "a profile's (:judge :empty B :truncated B :stepIntents (INTENT ...) :stepHeads (\"TEXT\" ...)) rows over judgeDefault; an unknown key or a wrong type is a config error")
-fn profileJudgeOf p: (Map String rd/SExpr) pid: String -> (Pair JudgeRules (List String))
-  (let [(d (judgeDefault))]
-    (match (mapGet p "judge")
-      ((none) (pair d (list)))
-      ((some e)
-        (match (asnProps e (none))
-          ((err msg) (pair d (list (str "profile " pid " :judge: " msg))))
-          ((ok props)
-            (let [(unknown (filter (fn [(k String)] -> Bool (not (listContains? (list "empty" "truncated" "stepIntents" "stepHeads") k))) (mapKeys props)))
-                  (em (judgeBool props "empty" d.empty pid))
-                  (tr (judgeBool props "truncated" d.truncated pid))
-                  (si (judgeList props "stepIntents" d.stepIntents pid))
-                  (sh (judgeList props "stepHeads" d.stepHeads pid))]
-              (pair (JudgeRules :empty (pairFirst em) :truncated (pairFirst tr) :stepIntents (map stringLower (pairFirst si)) :stepHeads (pairFirst sh))
-                    (listAppend (map (fn [(k String)] -> String (str "profile " pid ": unknown :judge key :" k)) unknown)
-                                (listAppend (listAppend (pairSecond em) (pairSecond tr)) (listAppend (pairSecond si) (pairSecond sh)))))))))))
-
-; (:m :ref GW-MODES :do "the mode and judge rules of a named profile; an unknown profile is route with the default rules")
-fn gatewayProfileMode table: GatewayTable name: String -> String
-  (match (mapGet table.profiles name) ((some p) p.mode) ((none) "route"))
-
-fn gatewayProfileJudge table: GatewayTable name: String -> JudgeRules
-  (match (mapGet table.profiles name) ((some p) p.judge) ((none) (judgeDefault)))
-
-; (:m :ref CTX-ROUTE :do "a named profile's :budgetFirstAbove, 0 for an unknown profile or none set")
-fn gatewayProfileBudgetFirst table: GatewayTable name: String -> Int64
-  (match (mapGet table.profiles name) ((some p) p.budgetFirstAbove) ((none) 0))
-
-; (:m :ref CTX-ROUTE :do "a profile's :budgetFirstAbove N, a positive integer of tokens; absent is 0, anything else a config error")
-fn profileBudgetFirstOf p: (Map String rd/SExpr) pid: String -> (Pair Int64 (List String))
-  (match (mapGet p "budgetFirstAbove")
-    ((none) (pair 0 (list)))
-    ((some e)
-      (match (asnScalar e)
-        ((scalarInt n) (if (> n 0) (pair n (list)) (pair 0 (list (str "profile " pid ": :budgetFirstAbove must be a positive integer")))))
-        (_ (pair 0 (list (str "profile " pid ": :budgetFirstAbove must be a positive integer")))))))
-
 (schema ProfileAccumulator
   (:f profiles (Map String GatewayProfile))
   (:f order (List String))
@@ -2108,7 +1635,7 @@ fn applyOneProfile acc: ProfileAccumulator p: (Map String rd/SExpr) intents: (Ma
   (match (mapGet p "id")
     ((none) acc)
     ((some idExpr)
-      (match (asnName idExpr "(:profile :id ...)")
+      (match (asn_name idExpr "(:profile :id ...)")
         ((err e) (with acc :errs (listAppendOne acc.errs e)))
         ((ok pid)
           (let [(dupErr (if (mapHas? acc.profiles pid) (listAppendOne acc.errs (str "profile " pid " is defined twice")) acc.errs))
@@ -2130,16 +1657,12 @@ fn applyOneProfile acc: ProfileAccumulator p: (Map String rd/SExpr) intents: (Ma
                 (fbRes (match (mapGet p "fallback")
                          ((none) (ok (none)))
                          ((some fbExpr)
-                           (match (asnName fbExpr (str "profile " pid " :fallback"))
+                           (match (asn_name fbExpr (str "profile " pid " :fallback"))
                              ((err e) (err e))
                              ((ok fb) (ok (some fb)))))))
-                (errs2a (match fbRes ((err e) (listAppendOne errs1 e)) ((ok _) errs1)))
+                (errs2 (match fbRes ((err e) (listAppendOne errs1 e)) ((ok _) errs1)))
                 (fallback (resultOr fbRes (none)))
-                (modeRes (profileModeOf p pid))
-                (judgeRes (profileJudgeOf p pid))
-                (bfRes (profileBudgetFirstOf p pid))
-                (errs2 (listAppend errs2a (listAppend (pairSecond modeRes) (listAppend (pairSecond judgeRes) (pairSecond bfRes)))))
-                (profile (GatewayProfile :id pid :routes routes :fallback fallback :mode (pairFirst modeRes) :judge (pairFirst judgeRes) :budgetFirstAbove (pairFirst bfRes)))]
+                (profile (GatewayProfile :id pid :routes routes :fallback fallback))]
             (ProfileAccumulator
               :profiles (mapSet acc.profiles pid profile)
               :order (listAppendOne acc.order pid)
@@ -2179,13 +1702,13 @@ fn applyOneUse uses: (Pair (Map String String) (List String)) errs: (List String
   (match (mapGet u "for")
     ((none) (pair uses errs))
     ((some forExpr)
-      (match (asnName forExpr "(:use :for ...)")
+      (match (asn_name forExpr "(:use :for ...)")
         ((err e) (pair uses (listAppendOne errs e)))
         ((ok uf)
           (match (mapGet u "profile")
             ((none) (pair uses (listAppendOne errs (str "use " uf " :profile must be a bare atom, found ()"))))
             ((some pExpr)
-              (match (asnName pExpr (str "use " uf " :profile"))
+              (match (asn_name pExpr (str "use " uf " :profile"))
                 ((err e) (pair uses (listAppendOne errs e)))
                 ((ok up)
                   (let [(upErr (if (not (mapHas? profiles up)) (listAppendOne errs (str "use " uf ": unknown profile " up)) errs))
@@ -2203,7 +1726,7 @@ fn loopUses uForms: (List (Map String rd/SExpr)) uses: (Pair (Map String String)
 fn buildUses useForms: (List (Map String rd/SExpr)) profiles: (Map String GatewayProfile) -> (Pair (Pair (Map String String) (List String)) (List String))
   (loopUses useForms (pair (mapEmpty) (list)) (list) profiles)
 
-fn gatewayConfigV2Build! g: (Map String rd/SExpr) source: String registryPath: String -> (Pair GatewayTable (List String))
+fn gateway_config_v2_build! g: (Map String rd/SExpr) source: String registryPath: String -> (Pair GatewayTable (List String))
   (let [(provForms (getSubForms g "providers" ":provider"))
         (modelForms (getSubForms g "models" ":model"))
         (intentForms (getSubForms g "intents" ":intent"))
@@ -2240,7 +1763,7 @@ fn gatewayConfigV2Build! g: (Map String rd/SExpr) source: String registryPath: S
                         (match (mapGet g "profile")
                           ((none) (pair (none) (listAppendOne allErrs0 "no default profile: add (:use :for default :profile ID)")))
                           ((some pExpr)
-                            (match (asnName pExpr "(:gateway :profile ...)")
+                            (match (asn_name pExpr "(:gateway :profile ...)")
                               ((err e) (pair (none) (listAppendOne allErrs0 e)))
                               ((ok defName)
                                 (if (not (mapHas? profiles defName))
@@ -2253,7 +1776,7 @@ fn gatewayConfigV2Build! g: (Map String rd/SExpr) source: String registryPath: S
                     allErrs1))
         (keyFilesList (gatewayKeyFilesFromProps g))
         (envWarns (fold (fn [(acc (List String)) (pid String)] -> (List String)
-                          (let [(pv (optionOr (mapGet providers pid) (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id pid :kind "" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))]
+                          (let [(pv (optionOr (mapGet providers pid) (GatewayProvider :rpmShared false :dropEmptyTools false :id pid :kind "" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))]
                             (if (and (not (stringEmpty? pv.keyEnv)) (and (stringEmpty? pv.secret) (listAny? (fn [(m GatewayModel)] -> Bool (= m.provider pid)) (mapValues models))))
                               (match (resolveProviderKey! keyFilesList pv.keyEnv)
                                 ((none) (listAppendOne acc (str "provider " pid ": key env " pv.keyEnv " is not set" (keyFilesSuffix keyFilesList))))
@@ -2265,9 +1788,7 @@ fn gatewayConfigV2Build! g: (Map String rd/SExpr) source: String registryPath: S
                                 acc))))
                         (list)
                         (providerOrder! (pairFirst provForms))))
-        (goneNotes (filter (fn [(e String)] -> Bool (stringStartsWith? e (goneTag))) allErrs2))
-        (errs (filter (fn [(e String)] -> Bool (not (stringStartsWith? e (goneTag)))) allErrs2))
-        (allWarns (listAppend (listAppend (listAppend warnings envWarns) (listAppend (gatewayLimitWarnings g) (listAppend (gatewayBucketWaitWarnings g) (gatewayQueueBudgetWarnings g)))) (goneWarnings goneNotes)))
+        (allWarns (listAppend (listAppend warnings envWarns) (listAppend (gatewayLimitWarnings g) (gatewayBucketWaitWarnings g))))
         (table (GatewayTable
                  :version 2
                  :defaultProfile defaultProf
@@ -2286,25 +1807,16 @@ fn gatewayConfigV2Build! g: (Map String rd/SExpr) source: String registryPath: S
                  :undeclaredIntents (mapEmpty)
                  :keyFiles keyFilesList
                  :limits (gatewayLimitsFromProps g)
-                 :bucketWaitSec (gatewayBucketWaitSecFromProps g)
-                 :queueBudgetSec (gatewayQueueBudgetSecFromProps g)))]
-    (pair table errs))
+                 :bucketWaitSec (gatewayBucketWaitSecFromProps g)))]
+    (pair table allErrs2))
 
+fn gatewayConfigV2Build! g: (Map String rd/SExpr) source: String registryPath: String -> (Pair GatewayTable (List String))
+  (gateway_config_v2_build! g source registryPath)
 
-; (:m :ref GATEWAY-GONE-MODEL-ROWS :do "one warning per gone alias, naming every route it was skipped in; each starts with goneTag so config check can raise them")
-fn goneNoteAlias n: String -> String
-  (optionOr (listHead (stringSplit (optionOr (stringSlice n (stringLength (goneTag)) (stringLength n)) "") " ")) "")
-
-fn goneWarnings notes: (List String) -> (List String)
-  (let [(aliases (orderedUnique (map goneNoteAlias notes)))]
-    (map (fn [(a String)] -> String
-           (str (goneTag) "model " a " is :status gone, skipped in "
-                (stringJoin (map (fn [(n String)] -> String (optionOr (stringSlice n (+ (stringLength (goneTag)) (+ (stringLength a) 1)) (stringLength n)) "")) (filter (fn [(n String)] -> Bool (= (goneNoteAlias n) a)) notes)) ", ")))
-         aliases))
 
 fn convertV1ToTable! v1: GatewayV1Config source: String keyFiles: (List String) -> GatewayTable
   (let [(profilesMap (fold (fn [(acc (Map String GatewayProfile)) (pairEntry (Pair String (List GatewayRoute)))] -> (Map String GatewayProfile)
-                             (mapSet acc (pairFirst pairEntry) (GatewayProfile :id (pairFirst pairEntry) :routes (pairSecond pairEntry) :fallback (none) :mode "route" :judge (judgeDefault) :budgetFirstAbove 0)))
+                             (mapSet acc (pairFirst pairEntry) (GatewayProfile :id (pairFirst pairEntry) :routes (pairSecond pairEntry) :fallback (none))))
                            (mapEmpty)
                            (mapPairs v1.profiles)))
         (profileOrder (mapKeys v1.profiles))]
@@ -2326,10 +1838,9 @@ fn convertV1ToTable! v1: GatewayV1Config source: String keyFiles: (List String) 
       :undeclaredIntents (mapEmpty)
       :keyFiles keyFiles
       :limits (list)
-      :bucketWaitSec (defaultBucketWaitSec)
-      :queueBudgetSec (defaultQueueBudgetSec)))
+      :bucketWaitSec (defaultBucketWaitSec)))
 
-fn gatewayConfigParse! text: String source: String registryPath: String -> (Result GatewayTable String)
+fn gateway_config_parse! text: String source: String registryPath: String -> (Result GatewayTable String)
   (let [(toks (lx/tokenize text))]
     (match (match (asnReadCheck text) ((some e) (err (ast/ParseError :msg e :line 0 :col 0))) ((none) (ast/readForms toks)))
       ((err e) (err (str e.msg)))
@@ -2337,25 +1848,28 @@ fn gatewayConfigParse! text: String source: String registryPath: String -> (Resu
         (if (!= (listLength forms) 1)
           (err (str "expected one (:gateway ...) form, found " (stringFromInt64 (listLength forms))))
           (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-            (match (asnProps top (some ":gateway"))
+            (match (asn_props top (some ":gateway"))
               ((err e) (err e))
               ((ok g)
                 (let [(v (match (mapGet g "v")
                            ((none) 1)
                            ((some vExpr)
-                             (match (asnScalar vExpr)
+                             (match (asn_scalar vExpr)
                                ((scalarInt n) n)
                                (_ 1)))))]
                   (if (= v 2)
-                    (let [(built (gatewayConfigV2Build! g source registryPath))
+                    (let [(built (gateway_config_v2_build! g source registryPath))
                           (tbl (pairFirst built))
                           (errs (pairSecond built))]
                       (if (not (listEmpty? errs))
                         (err (stringJoin errs "; "))
                         (ok tbl)))
-                    (match (gatewayProfilesParse text)
+                    (match (gateway_profiles_parse text)
                       ((err e) (err e))
                       ((ok v1) (ok (convertV1ToTable! v1 source (gatewayKeyFilesFromProps g))))))))))))))
+
+fn gatewayConfigParse! text: String source: String registryPath: String -> (Result GatewayTable String)
+  (gateway_config_parse! text source registryPath)
 
 
 fn intentLineLoop intents: (Map String (Option String)) cur: String acc: (List String) -> (List String)
@@ -2369,9 +1883,12 @@ fn intentLineLoop intents: (Map String (Option String)) cur: String acc: (List S
             ((none) (listReverse nextAcc))
             ((some parent) (intentLineLoop intents parent nextAcc)))))))
 
-fn gatewayIntentLine table: GatewayTable intent: String -> (List String)
+fn gateway_intent_line table: GatewayTable intent: String -> (List String)
   (let [(cur (stringLower (lstripColons intent)))]
     (intentLineLoop table.intents cur (list)))
+
+fn gatewayIntentLine table: GatewayTable intent: String -> (List String)
+  (gateway_intent_line table intent)
 
 fn routeFindIntent routes: (List GatewayRoute) targetIntent: String -> (Option GatewayRoute)
   (match (listHead routes)
@@ -2394,18 +1911,24 @@ fn routeFindLineOrAny routes: (List GatewayRoute) line: (List String) -> (Option
     ((some r) (some r))
     ((none) (routeFindIntent routes "any")))
 
-fn gatewayV2Route profile: GatewayProfile line: (List String) -> (List String)
+fn gateway_v2_route profile: GatewayProfile line: (List String) -> (List String)
   (match (routeFindLineOrAny profile.routes line)
     ((some r) r.chain)
     ((none) (list)))
 
+fn gatewayV2Route profile: GatewayProfile line: (List String) -> (List String)
+  (gateway_v2_route profile line)
+
 ; (:m :do "the per-route :temperature default, for the same route resolution gateway_v2_route uses, so a role/intent's calibrated sampling temperature comes from config instead of a hardcoded table")
-fn gatewayV2RouteTemperature profile: GatewayProfile line: (List String) -> (Option Float64)
+fn gateway_v2_route_temperature profile: GatewayProfile line: (List String) -> (Option Float64)
   (match (routeFindLineOrAny profile.routes line)
     ((some r) r.temperature)
     ((none) none))
 
-fn gatewayV2Entry! table: GatewayTable alias: String -> GatewayResolvedEntry
+fn gatewayV2RouteTemperature profile: GatewayProfile line: (List String) -> (Option Float64)
+  (gateway_v2_route_temperature profile line)
+
+fn gateway_v2_entry! table: GatewayTable alias: String -> GatewayResolvedEntry
   (match (mapGet table.models alias)
     ((none) (entryUnresolved alias))
     ((some m)
@@ -2425,7 +1948,7 @@ fn gatewayV2Entry! table: GatewayTable alias: String -> GatewayResolvedEntry
                              :firstByteSec 0.0
                              :rpm (none)
                              :rpmKey ""
-                             :dropEmptyTools false :assistantReasoning false
+                             :dropEmptyTools false
                              :pool none
                              :retry (none)))
             (let [(key (optionOr (resolveProviderKey! table.keyFiles pv.keyEnv) ""))
@@ -2456,14 +1979,17 @@ fn gatewayV2Entry! table: GatewayTable alias: String -> GatewayResolvedEntry
                                :firstByteSec fbSec
                                :rpm rpmVal
                                :rpmKey (if (and pv.rpmShared (> pv.rpm 0.0)) (str "provider:" pv.id) "")
-                               :dropEmptyTools pv.dropEmptyTools :assistantReasoning pv.assistantReasoning
+                               :dropEmptyTools pv.dropEmptyTools
                                :pool pv.pool
                                :retry retryVal))))))))
+
+fn gatewayV2Entry! table: GatewayTable alias: String -> GatewayResolvedEntry
+  (gateway_v2_entry! table alias)
 
 fn entriesStep! pairState: (Pair (List String) (List GatewayResolvedEntry)) a: String table: GatewayTable -> (Pair (List String) (List GatewayResolvedEntry))
   (if (listContains? (pairFirst pairState) a)
     pairState
-    (pair (cons a (pairFirst pairState)) (cons (gatewayV2Entry! table a) (pairSecond pairState))))
+    (pair (cons a (pairFirst pairState)) (cons (gateway_v2_entry! table a) (pairSecond pairState))))
 
 fn entriesLoop! table: GatewayTable cur: String line: (List String) seen: (List String) tried: (List String) acc: (List GatewayResolvedEntry) -> (List GatewayResolvedEntry)
   (if (or (stringEmpty? cur) (listContains? seen cur))
@@ -2471,7 +1997,7 @@ fn entriesLoop! table: GatewayTable cur: String line: (List String) seen: (List 
     (match (mapGet table.profiles cur)
       ((none) (listReverse acc))
       ((some prof)
-        (let [(chain (gatewayV2Route prof line))
+        (let [(chain (gateway_v2_route prof line))
               (res (fold (fn [(st (Pair (List String) (List GatewayResolvedEntry))) (a String)] -> (Pair (List String) (List GatewayResolvedEntry))
                            (entriesStep! st a table))
                          (pair tried acc)
@@ -2505,9 +2031,12 @@ fn withTemperatureOverride acc: (List GatewayResolvedEntry) n: Int64 t: (Option 
              (listTake acc n))
         (listDrop acc n))))
 
-fn gatewayV2Entries! table: GatewayTable name: String intent: String -> (List GatewayResolvedEntry)
-  (let [(line (gatewayIntentLine table intent))]
+fn gateway_v2_entries! table: GatewayTable name: String intent: String -> (List GatewayResolvedEntry)
+  (let [(line (gateway_intent_line table intent))]
     (entriesLoop! table name line (list) (list) (list)))
+
+fn gatewayV2Entries! table: GatewayTable name: String intent: String -> (List GatewayResolvedEntry)
+  (gateway_v2_entries! table name intent)
 
 ; (:m :do "the exact-match sibling of entriesLoop!: a profile fallback chain is still honored, but there is no silent substitution of the profile's :intent any catch-all route when the requested intent has no route of its own -- used where a caller is testing several candidate keys in turn (role, then a role:lens composite, then a bare role) and must tell a real miss from the generic default, rather than have every candidate succeed via the same any route")
 fn entriesLoopExact! table: GatewayTable cur: String line: (List String) seen: (List String) tried: (List String) acc: (List GatewayResolvedEntry) -> (List GatewayResolvedEntry)
@@ -2528,9 +2057,12 @@ fn entriesLoopExact! table: GatewayTable cur: String line: (List String) seen: (
             ((none) (listReverse nextAcc))
             ((some fb) (entriesLoopExact! table fb line nextSeen nextTried nextAcc)))))))
 
-fn gatewayV2EntriesExact! table: GatewayTable name: String intent: String -> (List GatewayResolvedEntry)
-  (let [(line (gatewayIntentLine table intent))]
+fn gateway_v2_entries_exact! table: GatewayTable name: String intent: String -> (List GatewayResolvedEntry)
+  (let [(line (gateway_intent_line table intent))]
     (entriesLoopExact! table name line (list) (list) (list)))
+
+fn gatewayV2EntriesExact! table: GatewayTable name: String intent: String -> (List GatewayResolvedEntry)
+  (gateway_v2_entries_exact! table name intent)
 
 fn findModelByProviderAndName models: (List GatewayModel) target: String -> (Option GatewayModel)
   (match (listHead models)
@@ -2540,20 +2072,26 @@ fn findModelByProviderAndName models: (List GatewayModel) target: String -> (Opt
         (some m)
         (findModelByProviderAndName (optionOr (listTail models) (list)) target))))
 
-fn gatewayV2AliasEntry! table: GatewayTable model: String -> (Option GatewayResolvedEntry)
+fn gateway_v2_alias_entry! table: GatewayTable model: String -> (Option GatewayResolvedEntry)
   (if (!= table.version 2)
     (none)
     (match (mapGet table.models model)
-      ((some _) (some (gatewayV2Entry! table model)))
+      ((some _) (some (gateway_v2_entry! table model)))
       ((none)
         (match (findModelByProviderAndName (mapValues table.models) model)
-          ((some m) (some (gatewayV2Entry! table m.id)))
+          ((some m) (some (gateway_v2_entry! table m.id)))
           ((none) (none))))))
 
-fn gatewayEntryLabel e: GatewayResolvedEntry -> String
+fn gatewayV2AliasEntry! table: GatewayTable model: String -> (Option GatewayResolvedEntry)
+  (gateway_v2_alias_entry! table model)
+
+fn gateway_entry_label e: GatewayResolvedEntry -> String
   (match e
     ((entryResolved entry) entry.alias)
     ((entryUnresolved alias) alias))
+
+fn gatewayEntryLabel e: GatewayResolvedEntry -> String
+  (gateway_entry_label e)
 
 ; (:m :tags (retry) :do "a model's own :retry wins; absent, it falls back to its provider's :retry; absent on both, noRetryPolicy (maxAttempts 0) keeps today's behaviour unchanged")
 fn providerRetryOf table: (Option GatewayTable) providerId: String -> (Option RetryPolicy)
@@ -2570,7 +2108,7 @@ fn anyOnlyForProfile table: GatewayTable pid: String pr: GatewayProfile -> (List
         (named (map (fn [(r GatewayRoute)] -> String r.intent) namedRoutes))
         (leonIntents (list "auto" "code" "plan" "research" "reinforce"))]
     (fold (fn [(acc (List String)) (i String)] -> (List String)
-            (let [(line (gatewayIntentLine table i))
+            (let [(line (gateway_intent_line table i))
                   (hasMatch (listAny? (fn [(l String)] -> Bool (listContains? named l)) line))]
               (if hasMatch
                 acc
@@ -2578,7 +2116,7 @@ fn anyOnlyForProfile table: GatewayTable pid: String pr: GatewayProfile -> (List
           (list)
           leonIntents))
 
-fn gatewayAnyOnlyIntents table: GatewayTable -> (List String)
+fn gateway_any_only_intents table: GatewayTable -> (List String)
   (fold (fn [(acc (List String)) (pid String)] -> (List String)
           (match (mapGet table.profiles pid)
             ((none) acc)
@@ -2586,15 +2124,24 @@ fn gatewayAnyOnlyIntents table: GatewayTable -> (List String)
         (list)
         table.profileOrder)
 
-fn gatewayNoteIntent table: GatewayTable intent: String -> GatewayTable
+fn gatewayAnyOnlyIntents table: GatewayTable -> (List String)
+  (gateway_any_only_intents table)
+
+fn gateway_note_intent table: GatewayTable intent: String -> GatewayTable
   (if (and (= table.version 2) (and (not (stringEmpty? intent)) (not (mapHas? table.intents intent))))
     (let [(curCount (optionOr (mapGet table.undeclaredIntents intent) 0))
           (nextMap (mapSet table.undeclaredIntents intent (+ curCount 1)))]
       (with table :undeclaredIntents nextMap))
     table)
 
-fn gatewayUndeclaredIntents table: GatewayTable -> (Map String Int64)
+fn gatewayNoteIntent table: GatewayTable intent: String -> GatewayTable
+  (gateway_note_intent table intent)
+
+fn gateway_undeclared_intents table: GatewayTable -> (Map String Int64)
   table.undeclaredIntents
+
+fn gatewayUndeclaredIntents table: GatewayTable -> (Map String Int64)
+  (gateway_undeclared_intents table)
 
 
 (enum ConfigKey
@@ -2603,8 +2150,7 @@ fn gatewayUndeclaredIntents table: GatewayTable -> (Map String Int64)
 
 (schema ProfilesCache
   (:f key (Option ConfigKey))
-  (:f result (Result GatewayTable String))
-  (:f stale String))
+  (:f result (Result GatewayTable String)))
 
 (schema ProfileSelection
   (:f name String)
@@ -2645,13 +2191,13 @@ fn gatewaySecretsFileOverride text: String -> (Option String)
      (if (!= (listLength forms) 1)
        none
        (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-         (match (asnProps top (some ":gateway"))
+         (match (asn_props top (some ":gateway"))
            ((err _) none)
            ((ok g)
             (match (mapGet g "secretsFile")
               ((none) none)
               ((some value)
-               (match (asnScalar value)
+               (match (asn_scalar value)
                  ((scalarStr s) (if (stringEmpty? s) none (some (expandUserPath s))))
                  (_ none))))))))))
 
@@ -2660,14 +2206,14 @@ fn ! keyFilesEnvOverlay! text: String env: (Map String String) -> (Map String St
   (match (ast/readForms (lx/tokenize text))
     ((err _) env)
     ((ok forms)
-     (match (asnProps (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr (some ":gateway"))
+     (match (asn_props (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr (some ":gateway"))
        ((err _) env)
        ((ok g)
         (let [(files (gatewayKeyFilesFromProps g))
               (rows (match (mapGet g "providers") ((some (rd/sexprList l)) l) (_ (list))))
               (keyEnvs (map (fn [(row rd/SExpr)] -> String
-                              (match (asnProps row (some ":provider"))
-                                ((ok p) (match (mapGet p "keyEnv") ((some v) (scalarToString (asnScalar v))) ((none) "")))
+                              (match (asn_props row (some ":provider"))
+                                ((ok p) (match (mapGet p "keyEnv") ((some v) (scalarToString (asn_scalar v))) ((none) "")))
                                 ((err _) "")))
                          rows))]
           (if (listEmpty? files) env
@@ -2684,13 +2230,13 @@ fn gatewaySecretsFileChoice text: String -> (Result (Option String) String)
       ((ok forms)
        (if (!= (listLength forms) 1)
          (err "ERR_SECRETS_CONFIG: gateway config is not exactly one form")
-         (match (asnProps (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr (some ":gateway"))
+         (match (asn_props (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr (some ":gateway"))
            ((err e) (err (str "ERR_SECRETS_CONFIG: " e)))
            ((ok g)
             (match (mapGet g "secretsFile")
               ((none) (ok none))
               ((some value)
-               (match (asnScalar value)
+               (match (asn_scalar value)
                  ((scalarStr s) (if (stringEmpty? s) (err "ERR_SECRETS_CONFIG: :secretsFile is empty") (ok (some (expandUserPath s)))))
                  (_ (err "ERR_SECRETS_CONFIG: :secretsFile must be a string path")))))))))))
 
@@ -2702,13 +2248,13 @@ fn gatewayLedgerPathOverride text: String -> (Option String)
      (if (!= (listLength forms) 1)
        none
        (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-         (match (asnProps top (some ":gateway"))
+         (match (asn_props top (some ":gateway"))
            ((err _) none)
            ((ok g)
             (match (mapGet g "ledgerPath")
               ((none) none)
               ((some value)
-               (match (asnScalar value)
+               (match (asn_scalar value)
                  ((scalarStr s) (some s))
                  (_ none))))))))))
 
@@ -2720,41 +2266,33 @@ fn gatewaySharedUsagePathOverride text: String -> (Option String)
      (if (!= (listLength forms) 1)
        none
        (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-         (match (asnProps top (some ":gateway"))
+         (match (asn_props top (some ":gateway"))
            ((err _) none)
            ((ok g)
             (match (mapGet g "sharedUsagePath")
               ((none) none)
               ((some value)
-               (match (asnScalar value)
+               (match (asn_scalar value)
                  ((scalarStr s) (some s))
                  (_ none))))))))))
 
 ; (:m :ref GW-BREAKER-STALE-20261018 :do "an optional top-level (:gateway ... :breakerCooldownSec N), same shape as :ledgerPath above; absent, unparseable or non-int text is none, so a config that never sets this keeps the 600s default -- GW-BREAKER-STALE-20261018's own incident was a cooldown fixed at 600s outlasting an entire sweep with no way to shorten it")
 fn gatewayBreakerCooldownSecOverride text: String -> (Option Int64)
-  (gatewayTopIntOverride text "breakerCooldownSec")
-
-; (:m :ref GW-429-WINDOW-WAIT :do "an optional top-level (:gateway ... :KEY N) int, read the way :breakerCooldownSec always was; absent, unparseable or non-int is none")
-; (:m :ref CTX-ROUTE :do "the top-level (:gateway :contextCap N) row, the ceiling gateway models sync and apply put on a model's :contextBudget; adopted default 200000 when absent or not an integer; config check accepts 1 to 10000000")
-fn gatewayContextCap text: String -> Int64
-  (optionOr (gatewayTopIntOverride text "contextCap") 200000)
-
-fn gatewayTopIntOverride text: String key: String -> (Option Int64)
-  (match (gatewayTopScalarOverride text key)
-    ((some (scalarInt n)) (some n))
-    (_ none))
-
-; (:m :ref GW-SESSION-AFFINITY :do "an optional top-level (:gateway ... :KEY V) scalar; absent or unparseable text is none")
-fn gatewayTopScalarOverride text: String key: String -> (Option AsnScalar)
   (match (ast/readForms (lx/tokenize text))
     ((err _) none)
     ((ok forms)
      (if (!= (listLength forms) 1)
        none
        (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-         (match (asnProps top (some ":gateway"))
+         (match (asn_props top (some ":gateway"))
            ((err _) none)
-           ((ok g) (optionMap asnScalar (mapGet g key))))))))
+           ((ok g)
+            (match (mapGet g "breakerCooldownSec")
+              ((none) none)
+              ((some value)
+               (match (asn_scalar value)
+                 ((scalarInt n) (some n))
+                 (_ none))))))))))
 
 ; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "walks (:dailyTokenBudgets ((profileId N) ...)) looking for one row naming profile; a profile absent from the list has no budget (none), never guessed, so an operator who sets no budget for a profile keeps today's unlimited behaviour")
 fn gatewayDailyTokenBudgetItems items: (List rd/SExpr) profile: String -> (Option Int64)
@@ -2763,7 +2301,7 @@ fn gatewayDailyTokenBudgetItems items: (List rd/SExpr) profile: String -> (Optio
     ((some entry)
      (let [(parts (match entry ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list))))
            (name (match (listHead parts) ((none) "") ((some n) (resultOr (asn_name_or_string n "dailyTokenBudgets entry") ""))))
-           (budget (match (asnScalar (optionOr (listGet parts 1) (rd/makeAtom ""))) ((scalarInt n) (some n)) (_ none)))]
+           (budget (match (asn_scalar (optionOr (listGet parts 1) (rd/makeAtom ""))) ((scalarInt n) (some n)) (_ none)))]
        (if (= name profile) budget (gatewayDailyTokenBudgetItems (optionOr (listTail items) (list)) profile)))))
 
 fn gatewayDailyTokenBudget text: String profile: String -> (Option Int64)
@@ -2773,7 +2311,7 @@ fn gatewayDailyTokenBudget text: String profile: String -> (Option Int64)
      (if (!= (listLength forms) 1)
        none
        (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-         (match (asnProps top (some ":gateway"))
+         (match (asn_props top (some ":gateway"))
            ((err _) none)
            ((ok g)
             (match (mapGet g "dailyTokenBudgets")
@@ -2782,7 +2320,7 @@ fn gatewayDailyTokenBudget text: String profile: String -> (Option Int64)
                (let [(items (match value ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list))))]
                  (gatewayDailyTokenBudgetItems items profile))))))))))
 
-; (:m :ref PROFILE-PIN-NAME-20261018 :do "a per-worktree/per-rootDir pin naming which gateway profile this run should use, written by tools/fleet/freePool.asl and tools/orch/main.asl's Leon lane, read by asl/packages/asl-agent/src/providers.asl's providerEnv! and asl-forms/delegate.asl's (:research ...) op -- previously each of those four call sites duplicated its own profilePinPath string and its own ad-hoc parse (a byte tokenizer in one, a stringIndexOf/split in another); this is the one shared path, reader and writer all four now call. .asl.config.asn already has several unrelated :profile rows of its own (FREEPOOL-PROFILE-COLLISION), so the pin keeps its own dedicated file rather than folding into that surface; renamed from freePoolProfile.asn since the pin is not free-pool-specific -- orch's own non-freePool Leon lane and :research read it too")
+; (:m :ref PROFILE-PIN-NAME-20261018 :do "a per-worktree/per-rootDir pin naming which gateway profile this run should use, written by tools/fleet/freePool.asl and tools/orch/main.asl's Leon lane, read by asl/agentLoop/providers.asl's providerEnv! and asl-forms/delegate.asl's (:research ...) op -- previously each of those four call sites duplicated its own profilePinPath string and its own ad-hoc parse (a byte tokenizer in one, a stringIndexOf/split in another); this is the one shared path, reader and writer all four now call. .asl.config.asn already has several unrelated :profile rows of its own (FREEPOOL-PROFILE-COLLISION), so the pin keeps its own dedicated file rather than folding into that surface; renamed from freePoolProfile.asn since the pin is not free-pool-specific -- orch's own non-freePool Leon lane and :research read it too")
 fn profilePinPath rootDir: String -> String
   (str rootDir "/.asl/gatewayProfilePin.asn")
 
@@ -2803,7 +2341,7 @@ fn profilePinFromText text: String -> (Option String)
                  (match (listGet items 1)
                    ((none) none)
                    ((some valueExpr)
-                    (match (asnScalar valueExpr)
+                    (match (asn_scalar valueExpr)
                       ((scalarStr s) (if (stringEmpty? s) none (some s)))
                       (_ none))))))))
            (_ none))))))
@@ -2867,7 +2405,7 @@ fn gatewayProfilesLoadText! path: String exists: Bool text: (Result String Strin
     (match text
       ((err e) (err (str path ": " e)))
       ((ok t)
-        (match (gatewayConfigParse! t path registryPath)
+        (match (gateway_config_parse! t path registryPath)
           ((err e) (if (gatewayNoRoutesError? e) (err (str "ERR_GATEWAY_NO_CONFIG: " path)) (err (str path ": " e))))
           ((ok tbl) (if (gatewayProfileHasRoutes? tbl) (ok tbl) (err (str "ERR_GATEWAY_NO_CONFIG: " path))))))))
 
@@ -2875,15 +2413,14 @@ fn gatewayLoadWarningLines path: String table: GatewayTable -> (List String)
   (map (fn [(w String)] -> String (str "[Gateway Config] " path ": " w)) table.warnings)
 
 fn emptyProfilesCache -> ProfilesCache
-  (ProfilesCache :key (none) :result (err "gateway profiles not loaded") :stale "")
+  (ProfilesCache :key (none) :result (err "gateway profiles not loaded"))
 
 fn cacheHit? cache: ProfilesCache key: ConfigKey -> Bool
   (match cache.key
     ((none) false)
     ((some k) (configKeyEqual? k key)))
 
-; (:m :ref GW-CONFIG-LAST-GOOD :do "a changed file that fails to parse keeps serving the table loaded earlier in this process: the error is logged once per file key and held in :stale for hub status; a process that never loaded a good table still fails typed, and the next good file clears :stale")
-fn ! gatewayProfilesLoad! cache: ProfilesCache home: String registryPath: String -> (Pair ProfilesCache (Result GatewayTable String))
+fn gatewayProfilesLoad! cache: ProfilesCache home: String registryPath: String -> (Pair ProfilesCache (Result GatewayTable String))
   (let [(path (gatewayProfilesPath home))
         (exists (fileExists? path))
         (key (if exists (gatewayConfigKey! path registryPath) (keyBuiltin)))]
@@ -2891,19 +2428,13 @@ fn ! gatewayProfilesLoad! cache: ProfilesCache home: String registryPath: String
       (pair cache cache.result)
       (let [(text (if exists (fileReadString path) (err "not read")))
             (result (gatewayProfilesLoadText! path exists text registryPath))]
-        (match result
-          ((ok tbl)
-            (let [(lines (gatewayLoadWarningLines path tbl))]
-              (do (if (and exists (not (listEmpty? lines))) (eprintln (stringJoin lines "\n")) ())
-                  (pair (ProfilesCache :key (some key) :result result :stale "") result))))
-          ((err e)
-            (if (ok? cache.result)
-              (do (eprintln (str "[Gateway Config] " e " (serving the last good config)"))
-                  (pair (ProfilesCache :key (some key) :result cache.result :stale e) cache.result))
-              (pair (ProfilesCache :key (some key) :result result :stale "") result)))))))
-
-fn profilesStale cache: ProfilesCache -> String
-  cache.stale
+        (do
+          (match result
+            ((ok tbl)
+              (let [(lines (gatewayLoadWarningLines path tbl))]
+                (if (and exists (not (listEmpty? lines))) (eprintln (stringJoin lines "\n")) ())))
+            ((err _) ()))
+          (pair (ProfilesCache :key (some key) :result result) result)))))
 
 ; (:m :ref HRN-DECISION-LAYER :do "a decision point is switched per row (:gateway ... :decides ((:decide :point P :mode off|static|model|shadow :model M :threshold T))); a point with no valid row of its own runs static (no outward call); shadow and model, the modes that send error lines to a provider, come only from an explicit valid row for that point, and a malformed row of another point never changes this one; keyFiles ride along so a caller resolves the provider key through keyFileLookup! and not the environment first")
 (schema DecidePoint
@@ -2923,7 +2454,7 @@ fn decideThreshold props: (Map String rd/SExpr) what: String -> (Result Float64 
   (match (mapGet props "threshold")
     ((none) (ok 0.5))
     ((some expr)
-      (let [(v (match (asnScalar expr) ((scalarFloat f) (some f)) ((scalarInt n) (some (int64ToFloat64 n))) (_ (none))))]
+      (let [(v (match (asn_scalar expr) ((scalarFloat f) (some f)) ((scalarInt n) (some (int64ToFloat64 n))) (_ (none))))]
         (match v
           ((none) (err (str what " :threshold must be a number")))
           ((some f) (if (or (< f 0.0) (> f 1.0)) (err (str what " :threshold must be within 0..1")) (ok f)))))))
@@ -2932,13 +2463,13 @@ fn decideOne props: (Map String rd/SExpr) -> (Result DecidePoint String)
   (match (mapGet props "point")
     ((none) (err "(:decide ...) needs :point"))
     ((some pExpr)
-      (match (asnName pExpr "(:decide :point ...)")
+      (match (asn_name pExpr "(:decide :point ...)")
         ((err e) (err e))
         ((ok point)
           (let [(what (str "decide " point))
                 (modeRes (match (mapGet props "mode")
                            ((none) (err (str what " needs :mode off, static, model or shadow")))
-                           ((some m) (match (asnName m (str what " :mode"))
+                           ((some m) (match (asn_name m (str what " :mode"))
                                        ((err e) (err e))
                                        ((ok mode) (if (listContains? (decideModes) mode) (ok mode) (err (str what " :mode must be one of off static model shadow, found " mode))))))))
                 (modelRes (match (mapGet props "model")
@@ -2958,7 +2489,7 @@ fn gatewayDecideRows g: (Map String rd/SExpr) -> (Pair (Map String DecidePoint) 
   (let [(forms (getSubForms g "decides" ":decide"))
         (keyFiles (gatewayKeyFilesFromProps g))
         (named (map (fn [(props (Map String rd/SExpr))] -> String
-                      (match (mapGet props "point") ((some p) (match (asnName p "point") ((ok s) s) ((err _) ""))) ((none) "")))
+                      (match (mapGet props "point") ((some p) (match (asn_name p "point") ((ok s) s) ((err _) ""))) ((none) "")))
                     (pairFirst forms)))
         (twice (fn [(p String)] -> Bool (> (listCount (fn [(s String)] -> Bool (= s p)) named) 1)))]
     (fold (fn [(acc (Pair (Map String DecidePoint) (List String))) (props (Map String rd/SExpr))] -> (Pair (Map String DecidePoint) (List String))
@@ -2979,7 +2510,7 @@ fn gatewayDecidePoint text: String point: String -> (Pair DecidePoint (List Stri
     ((err e) (pair (defaultDecidePoint point) (list (str "gateway config unreadable: " e))))
     ((ok forms)
       (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-        (match (asnProps top (some ":gateway"))
+        (match (asn_props top (some ":gateway"))
           ((err e) (pair (defaultDecidePoint point) (list e)))
           ((ok g)
             (let [(rows (gatewayDecideRows g))
@@ -3006,7 +2537,7 @@ fn codeRouteAlias props: (Map String rd/SExpr) key: String what: String table: G
   (match (mapGet props key)
     ((none) (err (str what " needs :" key)))
     ((some e)
-      (match (asnName e (str what " :" key))
+      (match (asn_name e (str what " :" key))
         ((err m) (err m))
         ((ok a) (if (mapHas? table.models a) (ok a) (err (str what " :" key ": unknown alias " a)))))))
 
@@ -3019,7 +2550,7 @@ fn codeRouteInt props: (Map String rd/SExpr) key: String fallback: Int64 lo: Int
   (match (mapGet props key)
     ((none) (ok fallback))
     ((some e)
-      (match (asnScalar e)
+      (match (asn_scalar e)
         ((scalarInt n) (if (or (< n lo) (> n hi)) (err (str what " :" key " must be within " (stringFromInt64 lo) ".." (stringFromInt64 hi))) (ok n)))
         (_ (err (str what " :" key " must be an integer"))))))
 
@@ -3028,7 +2559,7 @@ fn codeRouteStatuses props: (Map String rd/SExpr) what: String -> (Result (List 
     ((none) (ok (list 502)))
     ((some e)
       (let [(items (match e ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list))))
-            (codes (map (fn [(x rd/SExpr)] -> (Option Int64) (match (asnScalar x) ((scalarInt n) (some n)) (_ (none)))) items))]
+            (codes (map (fn [(x rd/SExpr)] -> (Option Int64) (match (asn_scalar x) ((scalarInt n) (some n)) (_ (none)))) items))]
         (if (or (listEmpty? items) (listAny? (fn [(c (Option Int64))] -> Bool (= (optionOr c -1) -1)) codes))
           (err (str what " :escalateRetryStatuses must be a non-empty list of integers"))
           (ok (map (fn [(c (Option Int64))] -> Int64 (optionOr c 0)) codes))))))
@@ -3037,7 +2568,7 @@ fn codeRouteOne props: (Map String rd/SExpr) table: GatewayTable -> (Result Code
   (match (mapGet props "id")
     ((none) (err "(:codeRoute ...) needs :id"))
     ((some iExpr)
-      (match (asnName iExpr "(:codeRoute :id ...)")
+      (match (asn_name iExpr "(:codeRoute :id ...)")
         ((err e) (err e))
         ((ok id)
           (let [(what (str "codeRoute " id))]
@@ -3066,19 +2597,19 @@ fn codeRouteOne props: (Map String rd/SExpr) table: GatewayTable -> (Result Code
 
 ; (:m :do "text is a whole gateway.asn; the row named id is parsed and its aliases checked against the same config's :models; an unreadable config, a missing row or a malformed row is an error naming the cause, never a default route")
 fn ! gatewayCodeRoute! text: String id: String registryPath: String -> (Result CodeRoute String)
-  (match (gatewayConfigParse! text "codeRoute" registryPath)
+  (match (gateway_config_parse! text "codeRoute" registryPath)
     ((err e) (err e))
     ((ok table)
       (match (ast/readForms (lx/tokenize text))
         ((err e) (err (str "gateway config unreadable: " e)))
         ((ok forms)
           (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-            (match (asnProps top (some ":gateway"))
+            (match (asn_props top (some ":gateway"))
               ((err e) (err e))
               ((ok g)
                 (let [(rows (getSubForms g "codeRoutes" ":codeRoute"))
                       (named (filter (fn [(p (Map String rd/SExpr))] -> Bool
-                                       (match (mapGet p "id") ((some x) (match (asnName x "id") ((ok s) (= s id)) ((err _) false))) ((none) false)))
+                                       (match (mapGet p "id") ((some x) (match (asn_name x "id") ((ok s) (= s id)) ((err _) false))) ((none) false)))
                                      (pairFirst rows)))]
                   (match (listHead named)
                     ((none) (err (str "no codeRoute " id " in the gateway config")))
@@ -3149,7 +2680,7 @@ fn gatewayProfileModels routes: (List GatewayRoute) intent: String -> (Option (L
 fn routeTemperatureFor table: GatewayTable name: String intent: String -> (Option Float64)
   (match (mapGet table.profiles name)
     ((none) (none))
-    ((some prof) (gatewayV2RouteTemperature prof (gatewayIntentLine table intent))))
+    ((some prof) (gateway_v2_route_temperature prof (gateway_intent_line table intent))))
 
 ; (:m :do "the exact-match sibling of routeTemperatureFor: walks the same profile fallback chain as entriesLoopExact! (so a profile that falls back to another one inherits its temperature, not just its models) but never substitutes the :intent any catch-all for a specific miss")
 fn routeTemperatureForExactLoop table: GatewayTable cur: String line: (List String) seen: (List String) -> (Option Float64)
@@ -3163,18 +2694,18 @@ fn routeTemperatureForExactLoop table: GatewayTable cur: String line: (List Stri
          ((none) (match prof.fallback ((none) none) ((some fb) (routeTemperatureForExactLoop table fb line (cons cur seen)))))))))
 
 fn routeTemperatureForExact table: GatewayTable name: String intent: String -> (Option Float64)
-  (routeTemperatureForExactLoop table name (gatewayIntentLine table intent) (list))
+  (routeTemperatureForExactLoop table name (gateway_intent_line table intent) (list))
 
 ; (:m :ref GW-SPREAD-LIVE-20261018 :do "routeTemperatureFor's sibling for :spread/:cooldownSec: same single-profile, :intent any-substituting lookup, never a fallback walk")
 fn routeSpreadFor table: GatewayTable name: String intent: String -> (List (Pair String Int64))
   (match (mapGet table.profiles name)
     ((none) (list))
-    ((some prof) (match (routeFindLineOrAny prof.routes (gatewayIntentLine table intent)) ((some r) r.spread) ((none) (list)))))
+    ((some prof) (match (routeFindLineOrAny prof.routes (gateway_intent_line table intent)) ((some r) r.spread) ((none) (list)))))
 
 fn routeCooldownSecFor table: GatewayTable name: String intent: String -> Int64
   (match (mapGet table.profiles name)
     ((none) 60)
-    ((some prof) (match (routeFindLineOrAny prof.routes (gatewayIntentLine table intent)) ((some r) r.cooldownSec) ((none) 60))))
+    ((some prof) (match (routeFindLineOrAny prof.routes (gateway_intent_line table intent)) ((some r) r.cooldownSec) ((none) 60))))
 
 ; (:m :do "the exact-match sibling of routeSpreadFor/routeCooldownSecFor: walks the profile fallback chain exactly like routeTemperatureForExactLoop, no :intent any substitution")
 fn routeSpreadForExactLoop table: GatewayTable cur: String line: (List String) seen: (List String) -> (List (Pair String Int64))
@@ -3188,7 +2719,7 @@ fn routeSpreadForExactLoop table: GatewayTable cur: String line: (List String) s
          ((none) (match prof.fallback ((none) (list)) ((some fb) (routeSpreadForExactLoop table fb line (cons cur seen)))))))))
 
 fn routeSpreadForExact table: GatewayTable name: String intent: String -> (List (Pair String Int64))
-  (routeSpreadForExactLoop table name (gatewayIntentLine table intent) (list))
+  (routeSpreadForExactLoop table name (gateway_intent_line table intent) (list))
 
 fn routeCooldownSecForExactLoop table: GatewayTable cur: String line: (List String) seen: (List String) -> Int64
   (if (or (stringEmpty? cur) (listContains? seen cur))
@@ -3201,27 +2732,15 @@ fn routeCooldownSecForExactLoop table: GatewayTable cur: String line: (List Stri
          ((none) (match prof.fallback ((none) 60) ((some fb) (routeCooldownSecForExactLoop table fb line (cons cur seen)))))))))
 
 fn routeCooldownSecForExact table: GatewayTable name: String intent: String -> Int64
-  (routeCooldownSecForExactLoop table name (gatewayIntentLine table intent) (list))
-
-; (:m :ref GATEWAY-GONE-MODEL-ROWS :do "a route whose every chain alias was skipped as gone has an empty chain (the parse refuses an empty one otherwise): asking for it is an error for that route only, never a silent fall to another route")
-fn goneRouteCheck table: GatewayTable name: String intent: String exact: Bool re: RouteEntries -> (Result RouteEntries String)
-  (if (not (listEmpty? re.entries)) (ok re)
-    (match (mapGet table.profiles name)
-      ((none) (ok re))
-      ((some prof)
-        (let [(line (gatewayIntentLine table intent))
-              (r (if exact (routeFindLine prof.routes line) (routeFindLineOrAny prof.routes line)))]
-          (match r
-            ((some x) (if (listEmpty? x.chain) (err (str "profile " name " route " x.intent ": every chain alias is :status gone")) (ok re)))
-            ((none) (ok re)))))))
+  (routeCooldownSecForExactLoop table name (gateway_intent_line table intent) (list))
 
 fn gatewayRouteEntries! table: GatewayTable headers: (List (Pair String String)) envProfile: (Option String) intent: String -> (Result RouteEntries String)
   (match (gatewayProfileName table headers envProfile)
     ((err e) (err e))
     ((ok name)
       (if (= table.version 2)
-        (let [(noted (gatewayNoteIntent table (stringLower (lstripColons intent))))]
-          (goneRouteCheck noted name intent false (RouteEntries :name name :entries (gatewayV2Entries! noted name intent) :table noted :temperature (routeTemperatureFor noted name intent)
+        (let [(noted (gateway_note_intent table (stringLower (lstripColons intent))))]
+          (ok (RouteEntries :name name :entries (gateway_v2_entries! noted name intent) :table noted :temperature (routeTemperatureFor noted name intent)
                 :spread (routeSpreadFor noted name intent) :cooldownSec (routeCooldownSecFor noted name intent))))
         (let [(routes (match (mapGet table.profiles name) ((some pr) pr.routes) ((none) (list))))
               (models (optionOr (gatewayProfileModels routes intent) (list)))]
@@ -3233,8 +2752,8 @@ fn gatewayRouteEntriesExact! table: GatewayTable headers: (List (Pair String Str
     ((err e) (err e))
     ((ok name)
       (if (= table.version 2)
-        (let [(noted (gatewayNoteIntent table (stringLower (lstripColons intent))))]
-          (goneRouteCheck noted name intent true (RouteEntries :name name :entries (gatewayV2EntriesExact! noted name intent) :table noted :temperature (routeTemperatureForExact noted name intent)
+        (let [(noted (gateway_note_intent table (stringLower (lstripColons intent))))]
+          (ok (RouteEntries :name name :entries (gateway_v2_entries_exact! noted name intent) :table noted :temperature (routeTemperatureForExact noted name intent)
                 :spread (routeSpreadForExact noted name intent) :cooldownSec (routeCooldownSecForExact noted name intent))))
         (let [(routes (match (mapGet table.profiles name) ((some pr) pr.routes) ((none) (list))))
               (models (optionOr (routeModelsNamed routes (stringLower (lstripColons intent))) (list)))]
@@ -3246,13 +2765,16 @@ fn routeChainContaining routes: (List GatewayRoute) model: String -> (Option (Li
     ((none) none)
     ((some r) (some r.chain)))
 
-fn gatewayChainContainingModel! table: GatewayTable headers: (List (Pair String String)) envProfile: (Option String) model: String -> (Option (List String))
+fn gateway_chain_containing_model! table: GatewayTable headers: (List (Pair String String)) envProfile: (Option String) model: String -> (Option (List String))
   (match (gatewayProfileName table headers envProfile)
     ((err _) none)
     ((ok name)
       (match (mapGet table.profiles name)
         ((none) none)
         ((some prof) (routeChainContaining prof.routes model)))))
+
+fn gatewayChainContainingModel! table: GatewayTable headers: (List (Pair String String)) envProfile: (Option String) model: String -> (Option (List String))
+  (gateway_chain_containing_model! table headers envProfile model)
 
 fn gatewayProfileHealth loaded: (Result GatewayTable String) headers: (List (Pair String String)) envProfile: (Option String) path: String exists: Bool -> ProfileHealth
   (let [(errSource (if exists path "builtin"))]
@@ -3316,7 +2838,7 @@ fn modelAsn m: GatewayModel -> String
                ((none) "")
                ((some c) (if (stringEmpty? c) "" (str " :calibration " (asnQuoted c))))))
         (params (stringJoin (map (fn [(p (Pair String String))] -> String (str " :" (pairFirst p) " " (pairSecond p))) m.shown) ""))]
-    (str "(:model :id " m.id " :provider " m.provider " :name " (asnQuoted m.name) cal params (if m.gone " :status gone" "") ")"))
+    (str "(:model :id " m.id " :provider " m.provider " :name " (asnQuoted m.name) cal params ")"))
 
 fn gatewayConfigAsn cfg: (Option ConfigHealth) -> String
   (match cfg
@@ -3353,7 +2875,7 @@ fn gatewayConfigCheckText! text: String source: String registry: String -> (Pair
           (pair (gatewayConfigReceipt source registry "error" 0
                     (list (str "expected one (:gateway ...) form, found " (stringFromInt64 (listLength forms)))) (list) "") 1)
           (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-            (match (asnProps top (some ":gateway"))
+            (match (asn_props top (some ":gateway"))
               ((err e)
                 (let [(message (if (isStringLiteral? top)
                                  (str "expected (:gateway ...), found '" (stripQuotesAndUnescape (sexprRawText top)) "'")
@@ -3363,24 +2885,22 @@ fn gatewayConfigCheckText! text: String source: String registry: String -> (Pair
                 (let [(version (match (mapGet g "v")
                                 ((none) 1)
                                 ((some value)
-                                  (match (asnScalar value)
+                                  (match (asn_scalar value)
                                     ((scalarInt n) n)
                                     (_ 1)))))]
                   (if (!= version 2)
-                    (match (gatewayProfilesParse text)
+                    (match (gateway_profiles_parse text)
                       ((err e) (pair (gatewayConfigReceipt source registry "error" 1 (list e) (list) "") 1))
                       ((ok parsed)
                         (pair
                           (gatewayConfigReceipt source registry "ok" 1 (list) (list)
                             (str " :profiles " (stringFromInt64 (listLength (mapKeys parsed.profiles)))))
                           0)))
-                    (let [(built (gatewayConfigV2Build! g source registry))
+                    (let [(built (gateway_config_v2_build! g source registry))
                           (table (pairFirst built))
-                          (goneErrs (filter (fn [(w String)] -> Bool (stringStartsWith? w (goneTag))) table.warnings))
-                          (liveWarns (filter (fn [(w String)] -> Bool (not (stringStartsWith? w (goneTag)))) table.warnings))
-                          (errors0 (listAppend (pairSecond built) goneErrs))
-                          (errors (listAppend (if (listEmpty? errors0) (codeRouteErrors g table) errors0) (gatewayWaitErrors g)))
-                          (warnings (if (listEmpty? errors) (listAppend liveWarns (gatewayAnyOnlyIntents table)) liveWarns))
+                          (errors0 (pairSecond built))
+                          (errors (if (listEmpty? errors0) (codeRouteErrors g table) errors0))
+                          (warnings (if (listEmpty? errors) (listAppend table.warnings (gateway_any_only_intents table)) table.warnings))
                           (extra (str " :profiles " (stringFromInt64 (listLength (mapKeys table.profiles)))
                                       " :models " (stringFromInt64 (listLength (mapKeys table.models)))
                                       " :uses " (stringFromInt64 (listLength (mapKeys table.uses)))))

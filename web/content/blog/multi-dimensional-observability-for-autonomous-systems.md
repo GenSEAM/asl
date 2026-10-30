@@ -49,7 +49,7 @@ fn processCheckout prices: (List Int64) -> (Result Int64 String)
   (pay/charge (cart/total prices))
 ```
 
-The checker resolves every import by the module name a file declares before anything runs: an import of a module no file declares is `ERR_UNRESOLVED_IMPORT`, and a call to a name that is neither bound, imported nor a builtin is `ERR_UNKNOWN_SYMBOL`. Both are reported with file, line and column, so the coordinator gets the exact location rather than a log to search. (With two small `store/cart` and `store/payment` modules beside it, this example passes `asl check`.)
+The stage-0 host resolves every import by the module name a file declares before anything runs: an import of a module no file declares is `ERR_UNRESOLVED_IMPORT`, and a call to a name that is neither bound, imported nor a builtin is `ERR_UNKNOWN_SYMBOL`. Both are reported with file, line and column, so the coordinator gets the exact location rather than a log to search. (With two small `store/cart` and `store/payment` modules beside it, this example passes `asl-host check`.)
 
 Cycles are audited at the package level. `asl coupling` reads the import declarations across the repository and reports cohesion, fan-in, fan-out and inter-package cycles. Run on 2026-10-14, it reported 66 packages, 718 modules and 22 inter-package cycles, plus 70 imports of a package the importer's manifest does not declare. Those are real findings, not a clean bill of health: the audit is how we see them, and the count is what has to come down. Module-level cycles inside a package are not rejected by the host checker today.
 
@@ -73,7 +73,7 @@ Letting an autonomous agent run arbitrary shell or Python commands on a host is 
 
 What exists today is a path boundary at the tool layer. Every path an `asl` op receives resolves against the workspace root; a path outside it is rejected with `ERR_BOUNDARY_VIOLATION` before anything is read or written. The agent loop, `(:agent ...)`, adds a declared ownership list: it edits only inside `:owns` and returns a receipt listing status, findings and the gates it ran.
 
-The language adds the second half: effects are marked and checked. A function that calls an effectful builtin such as `println` must be marked (`fn ! main ...` or a name ending in `!`); otherwise `asl check` rejects it with `ERR_EFFECT_UNMARKED` before anything runs. And when a program is compiled to `wasm32-unknown-unknown` through `asl-target-llvm`, the module imports only four host functions (`asl.write`, `asl.exit`, `asl.nowNs`, `asl.trap`), and a program that calls a file, environment or socket builtin fails to compile with `ERR_CAPABILITY_ABSENT` naming it. What we do not have yet is a per-run capability envelope that grants a generated program a chosen subset of the host.
+The language adds the second half: effects are marked and checked. A function that calls an effectful builtin such as `println` must be marked (`fn ! main ...` or a name ending in `!`); otherwise `asl-host check` rejects it with `ERR_EFFECT_UNMARKED` before anything runs. And when a program is compiled to `wasm32-unknown-unknown` through `asl-target-llvm`, the module imports only four host functions (`asl.write`, `asl.exit`, `asl.nowNs`, `asl.trap`), and a program that calls a file, environment or socket builtin fails to compile with `ERR_CAPABILITY_ABSENT` naming it. What we do not have yet is a per-run capability envelope that grants a generated program a chosen subset of the host.
 
 ---
 
@@ -83,7 +83,7 @@ The same queries serve both audiences. A human reads the receipt; an agent parse
 
 * **Module graph:** `asl coupling` for the package DAG and cycles; `(:observe :dim callers)` for one symbol.
 * **Token cost:** `(:observe :dim tokenCost)` by kind, file and scope.
-* **Working state:** `(:observe :dim session)` for running agent sessions and overlapping ownership; `(:observe :dim memory)` for the size of the memory ledgers.
-* **Correctness:** `asl check` for names, arity, enum coverage and effect marking, and `asl test` for executed assertions.
+* **Working state:** `(:observe :dim session)` for running agent sessions and overlapping ownership; `(:observe :dim memory)` for the size of the `.asl/mem` ledgers.
+* **Correctness:** `asl-host check` for names, arity, enum coverage and effect marking, and `asl-host test` for executed assertions.
 
 By treating observability as structured queries over the code rather than string logging, we give coordinators something they can act on without reading the logs first. Per-turn token attribution and per-run capability grants are the parts still under construction.

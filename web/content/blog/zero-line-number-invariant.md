@@ -14,7 +14,7 @@ The design rule for the `asl` toolbelt is that an agent addresses code by what i
 - `(:query :text "area")` finds definitions and uses of a name across the repository.
 - `(:edit :file "src/app.asl" :old "..." :new "...")` replaces an exact string. If the string is not there, the edit fails with `ERR_NO_MATCH`; if it occurs more than once, it fails with `ERR_AMBIGUOUS` unless `:all true` is given. An edit either hits exactly the text the agent saw or does nothing.
 
-This is an invariant for agent commands, not a ban on line numbers everywhere. `(:read)` still accepts `:start` and `:end` line bounds for a plain slice, and diagnostics from the checker report `file:line:col`, because a person reading an error wants to jump to it.
+This is an invariant for agent commands, not a ban on line numbers everywhere. `(:read)` still accepts `:start` and `:end` line bounds for a plain slice, and diagnostics from the host report `file:line:col`, because a person reading an error wants to jump to it.
 
 ## 3. Why It Removes Line-Drift Errors
 

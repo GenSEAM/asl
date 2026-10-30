@@ -1,5 +1,5 @@
 (module asl-cli/nativeRefresh
-  :x [refresh! acquire! guard! under? rebuildAllowed? refusalReceipt suspect? staleFail]
+  :x [refresh! suspect? staleFail]
   :i [(asl/packages/asl-cli/src/nativeCli :a nc)])
 
 ; (:m :ref BIN-ASL-ASL :do "the slow half of bin/asl, moved out of the shell: a native CLI whose deps list names a source that is missing or newer than the head is suspect and never runs before this refresh has taken the shared build lock (lock/pid, created exclusively, dead holders cleared), verified the binary byte for byte or rebuilt it through the builder closure, rewritten the head and checked the sources did not move again; a failure is one ERR_NATIVE_STALE line on stdout and exit 2, progress goes to stderr")
@@ -36,21 +36,20 @@ fn ! heldPid lock: String -> String
 fn ! sinceS beganNs: Int64 -> Int64
   (/ (- (monotonicNs) beganNs) 1000000000)
 
-; (:m :ref NATIVE-LOCK-PIDNS :do "lock/pid is created exclusively with its identity (lock/id.PID); an empty pid file counts a try and is dropped after five; a holder that nc/lockStale! names stale (foreign pid namespace, own pid or ancestor, dead, start time changed, older than the wait budget) is dropped by an atomic rename that only succeeds on the pid file that was judged, then the loop claims again")
+; (:m :ref BIN-ASL-ASL :do "lock/pid is created exclusively; an empty pid file counts a try and is dropped after five, a dead holder is dropped at once")
 fn ! acquire! lock: String beganNs: Int64 deadlineNs: Int64 nextReportNs: Int64 tries: Int64 waitS: Int64 reportS: Int64 -> (Result Int64 String)
-  (if (nc/claimLock! lock (procSelf))
+  (if (ok? (fileCreateExclusive (str lock "/pid") (str (stringFromInt64 (procSelf)) "\n")))
     (ok (sinceS beganNs))
     (let [held (heldPid lock)
           heldN (optionOr (stringToInt64 held) 0)
           emptyHeld (stringEmpty? held)
           tries2 (if emptyHeld (+ tries 1) tries)
-          why (if emptyHeld "" (nc/lockStale! lock waitS))
-          _drop (if (and emptyHeld (> tries2 5)) (ok? (pathRemove (str lock "/pid"))) (if (stringEmpty? why) false (nc/dropStale! lock heldN)))]
-      (if (and (>= (monotonicNs) deadlineNs) (not _drop))
+          _drop (if (or (and emptyHeld (> tries2 5)) (and (not emptyHeld) (not (nc/alive? heldN)))) (ok? (pathRemove (str lock "/pid"))) false)]
+      (if (>= (monotonicNs) deadlineNs)
         (err (str "the build lock stayed held by pid " (if emptyHeld "unknown" held) " for " (stringFromInt64 (sinceS beganNs)) "s, past the budget ASL_NATIVE_BUILD_WAIT=" (stringFromInt64 waitS) "s"))
-        (let [report (and (not _drop) (>= (monotonicNs) nextReportNs))
+        (let [report (>= (monotonicNs) nextReportNs)
               _say (if report (do (eprintln (str "(:wait :nativeCli :lockPid " (if emptyHeld "unknown" held) " :elapsedS " (stringFromInt64 (sinceS beganNs)) " :budgetS " (stringFromInt64 waitS) ")")) true) false)
-              _sleep (if _drop false (do (sleepMs 1000) true))
+              _sleep (sleepMs 1000)
               _mk (dirCreate lock)]
           (acquire! lock beganNs deadlineNs (if report (+ (monotonicNs) (* reportS 1000000000)) nextReportNs) tries2 waitS reportS)))))
 
@@ -59,33 +58,8 @@ fn ! installHead! cache: String root: String dir: String -> Bool
         part (str head ".part." (stringFromInt64 (procSelf)))]
     (and (ok? (fileWrite part (str dir "\n"))) (ok? (pathRename part head))))
 
-; (:m :ref WT-MAIN-HOME-REBUILD :do "a rebuild starts only in the caller's own tree: ASL_NATIVE_CLI_CACHE names the pin store explicitly, or the tree lives under the caller's HOME (so the pin path resolves under it), or the caller's cwd is inside the tree; otherwise (bin/asl run with HOME overridden against another user's or another agent's worktree) the answer is one (:err :code rebuildRefused :tree :home) receipt and exit 2, nothing is built")
-fn under? path: String dir: String -> Bool
-  (and (not (stringEmpty? dir)) (or (= path dir) (stringStartsWith? path (str dir "/"))))
-
-fn rebuildAllowed? root: String home: String cwd: String explicitCache: Bool -> Bool
-  (or explicitCache (or (under? root home) (under? cwd root)))
-
-fn escaped s: String -> String
-  (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"")
-
-fn refusalReceipt root: String home: String -> String
-  (str "(:err :code rebuildRefused :tree \"" (escaped root) "\" :home \"" (escaped home) "\")")
-
-fn ! guard! root: String -> Int64
-  (let [(rootReal (resultOr (realPath root) root))
-        (home (optionOr (envGet "HOME") ""))
-        (homeReal (if (stringEmpty? home) "" (resultOr (realPath home) home)))
-        (cwdReal (resultOr (realPath ".") "."))
-        (explicit (not (stringEmpty? (optionOr (envGet "ASL_NATIVE_CLI_CACHE") ""))))]
-    (if (rebuildAllowed? rootReal homeReal cwdReal explicit)
-      0
-      (do (println (refusalReceipt rootReal homeReal)) 2)))
-
 ; (:m :ref BIN-ASL-ASL :do "build is the in-process verify-or-rebuild of the builder (exit code); the caller holds no lock")
-fn ! refreshBody! root: String cache: String cmd: (List String) build: (fn [String String] -> Int64) -> Int64
-  (if (or (nc/kept? root (headDir cache root) (nc/headPath cache root) cmd) (nc/relayPinned? root (headDir cache root) (nc/headPath cache root) cmd))
-    (do (eprintln "asl: native CLI pinned: kept for this command") 0)
+fn ! refresh! root: String cache: String build: (fn [String String] -> Int64) -> Int64
   (let [head (nc/headPath cache root)
         dir0 (headDir cache root)
         waitS (envInt "ASL_NATIVE_BUILD_WAIT" 3600)
@@ -111,10 +85,4 @@ fn ! refreshBody! root: String cache: String cmd: (List String) build: (fn [Stri
                       ((not (fileExists? (str dir2 "/bin"))) (do (pathRemove lock) (staleFail cache dir2 (str "the rebuild left no head at " head))))
                       ((not (installHead! cache root dir2)) (do (pathRemove lock) (staleFail cache dir2 (str "cannot rewrite " head))))
                       ((suspect? root dir2 head) (do (pathRemove lock) (staleFail cache dir2 "its sources moved again during the rebuild")))
-                      (else (do (pathRemove lock) 0)))))))))))))
-fn ! refresh! root: String cache: String cmd: (List String) build: (fn [String String] -> Int64) -> Int64
-  (let [(head (nc/headPath cache root))
-        (pinned (or (nc/pinned? root (headDir cache root) head cmd) (or (nc/relayPinned? root (headDir cache root) head cmd) (nc/testPinned? root (headDir cache root) head cmd))))
-        (refused (if pinned 0 (guard! root)))]
-    (if (!= refused 0) refused (refreshBody! root cache cmd build)))
-
+                      (else (do (pathRemove lock) 0))))))))))))

@@ -10,7 +10,7 @@ fn ! refresh! root: String cache: String extra: (List String) -> run/Done
 fn ! headDirOf root: String -> String
   (stringTrim (resultOr (fileReadString (nc/headPath (nc/cacheDir!) root)) ""))
 
-; (:m :ref BIN-ASL-ASL :do "two stubs racing on a stale builder never run build.sh at the same time: a scratch root has a copy of bin/asl, a fake build.sh that takes the --cold CACHE lock dir the way the real one does (the stub must pass --cold and the cache: the lock lives in build.sh since COLDSTART-WAIT-LIVE-HOLDER), logs s, sleeps and logs e, a suspect head and no builder; the log must alternate s e s e, children are bounded by the pool limits and the scratch dir is removed")
+; (:m :ref BIN-ASL-ASL :do "two stubs racing on a stale builder never run build.sh at the same time: a scratch root has a copy of bin/asl, a fake build.sh that logs s, sleeps and logs e, a suspect head and no builder; the log must alternate s e s e, children are bounded by the pool limits and the scratch dir is removed")
 fn ! put! path: String text: String -> Bool
   (ok? (fileWrite path text))
 
@@ -25,7 +25,7 @@ fn ! raceBuilds! root: String -> (Pair (List String) (List String))
         (log (str base "/build.log"))
         (made (listAll? (fn [(d String)] -> Bool (ok? (dirCreate d))) (list (str root "/.asl/cache/binEntryRace") base cache ndir r (str r "/bin") (str r "/asl") (str r "/asl/host") (str r "/asl/host/out"))))
         (stub (exe! (str r "/bin/asl") (resultOr (fileReadString (str root "/bin/asl")) "")))
-        (build (exe! (str r "/asl/host/build.sh") (str "[ \"$1\" = --cold ] && [ \"$2\" = " cache " ] || exit 64; n=0; while ! mkdir \"$2/build.lockd\" 2>/dev/null; do n=$((n+1)); [ $n -le 250 ] || exit 75; sleep 0.2; done; trap 'rmdir \"$2/build.lockd\"' EXIT; echo s >> " log "; sleep 2; mkdir -p " r "/asl/host/out/aslNativeBuild-fresh; printf '#!/bin/sh\nexit 0\n' > " r "/asl/host/out/aslNativeBuild; chmod +x " r "/asl/host/out/aslNativeBuild; echo e >> " log "\n")))
+        (build (exe! (str r "/asl/host/build.sh") (str "echo s >> " log "; sleep 2; mkdir -p " r "/asl/host/out/aslNativeBuild-fresh; printf '#!/bin/sh\nexit 0\n' > " r "/asl/host/out/aslNativeBuild; chmod +x " r "/asl/host/out/aslNativeBuild; echo e >> " log "\n")))
         (served (exe! (str ndir "/bin") "#!/bin/sh\necho served\n"))
         (deps (put! (str ndir "/deps") "no/such/source\n"))
         (pointed (put! (str cache "/head" (stringReplace (resultOr (realPath r) r) "/" "_")) (str ndir "\n")))
@@ -44,12 +44,7 @@ fn ! alternates? events: (List String) -> Bool
                 ((none) (= e "e"))
                 ((some n) (and (!= e n) (alternates? (optionOr (listTail events) (list))))))))
 
-; (:m :ref NATIVE-LOCK-PIDNS :do "the live holder is a process that is neither this test nor an ancestor of the refresh it runs (the lock treats own pid and ancestors as stale), recorded with its real start time and this namespace")
-fn ! otherLive! -> Int64
-  (let [(skip (cons (procSelf) (nc/ancestorsOf! (procSelf) 64)))]
-    (optionOr (listHead (filter (fn [(p Int64)] -> Bool (and (nc/alive? p) (not (listContains? skip p)))) (map (fn [(q (Pair Int64 Int64))] -> Int64 (pairFirst q)) (run/psSnapshot)))) 0))
-
-fn ! runTests -> Bool
+fn ! runTests -> Bool -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (built (headDirOf root))
         (cache (str root "/.asl/cache/binEntry/" (stringFromInt64 (procSelf))))
@@ -58,8 +53,7 @@ fn ! runTests -> Bool
         (pointed (put! head (str built "\n")))
         (heldLock (str cache "/lock"))
         (heldMade (dirCreate heldLock))
-        (holder (otherLive!))
-        (heldPid (and (> holder 1) (and (put! (str heldLock "/pid") (str (stringFromInt64 holder) "\n")) (put! (str heldLock "/id." (stringFromInt64 holder)) (str "ns=" (nc/nsId!) "\nstart=" (nc/startOf! holder) "\ncreated=" (stringFromInt64 (nowNs)) "\n")))))
+        (heldPid (put! (str heldLock "/pid") (str (stringFromInt64 (procSelf)) "\n")))
         (held (refresh! root cache (list "ASL_NATIVE_BUILD_WAIT=2" "ASL_NATIVE_WAIT_REPORT_S=1")))
         (stillHeld (stringTrim (resultOr (fileReadString (str heldLock "/pid")) "")))
         (cleared (pathRemove heldLock))
@@ -87,9 +81,9 @@ fn ! runTests -> Bool
     (do (assert (and (ok? madeCache) pointed (ok? heldMade) heldPid) "the private cache, its head and a live lock holder were made")
         (assert (= held.exit 2) (str "a live lock holder that outlasts ASL_NATIVE_BUILD_WAIT fails the refresh: " held.out))
         (assert (stringContains? held.out "ERR_NATIVE_STALE") (str "the held-lock failure is ERR_NATIVE_STALE on stdout: " held.out))
-        (assert (stringContains? held.out (str "the build lock stayed held by pid " (stringFromInt64 holder))) (str "the failure names the holder: " held.out))
+        (assert (stringContains? held.out (str "the build lock stayed held by pid " (stringFromInt64 (procSelf)))) (str "the failure names the holder: " held.out))
         (assert (stringContains? held.out "(:wait :nativeCli :lockPid") (str "waiting on the lock reports progress on stderr: " held.out))
-        (assert (= stillHeld (stringFromInt64 holder)) "a refresh that never got the lock leaves the holder's pid file alone")
+        (assert (= stillHeld (stringFromInt64 (procSelf))) "a refresh that never got the lock leaves the holder's pid file alone")
         (assert (and (ok? cleared) (ok? deadMade) deadPid) "the live lock was replaced by one held by a dead pid")
         (assert (= dead.exit 0) (str "a dead holder is cleared and a fresh head verifies: " dead.out dead.out))
         (assert lockGone "a finished refresh removes the lock")
@@ -99,7 +93,7 @@ fn ! runTests -> Bool
         (assert (and okDeps (not okAfterStamp)) "a source older than the stamp does not")
         (assert (and emptyDeps empty) "an empty deps list is suspect")
         (assert (and (ok? noDeps) absent) "a missing deps file is suspect")
-        (assert (and (<= entryLines 52) (not (stringContains? entry "lock/pid")) (not (stringContains? entry "native_refresh")) (stringContains? entry "aslNativeBuild\" refresh")) (str "bin/asl is a stub that calls the ASL refresh and holds no lock logic (cap 52: 29 plus the 2-line no-builder guard, bootstrap debt WT-MAIN-HOME-REBUILD-SH, plus the 21 lines of the AGENTEFF-03 read-class path, which holds only its own single-flight pid file): " (stringFromInt64 entryLines) " lines"))
+        (assert (and (<= entryLines 29) (not (stringContains? entry "lock/pid")) (not (stringContains? entry "native_refresh")) (stringContains? entry "aslNativeBuild\" refresh")) (str "bin/asl is a stub that calls the ASL refresh and holds no lock logic: " (stringFromInt64 entryLines) " lines"))
         (assert (ok? cleaned) "the private cache was removed")
         (assert (and (listContains? (pairFirst race) "s") (alternates? (pairFirst race)) (listAll? (fn [(o String)] -> Bool (= o "0:served")) (pairSecond race))) (str "two stubs racing on a stale builder build one at a time and both serve: " (stringJoin (pairFirst race) ",") " " (stringJoin (pairSecond race) ",")))
         true))

@@ -1,5 +1,5 @@
 (module asl-gates/tests/docLedgerTest
-  :x [testLoadValid! testMalformedRows! testLoadMissingIsEmpty! testFindBySymbolHitMiss! testFindByFile! testResolveRows! testRoundTripWithExtractor! testMutantGuards! testExportGaps! testCoverageRatchet! testPackageGaps! testPackageRatchet! runTests]
+  :x [testLoadValid! testMalformedRows! testLoadMissingIsEmpty! testFindBySymbolHitMiss! testFindByFile! testResolveRows! testRoundTripWithExtractor! testMutantGuards! testExportGaps! testCoverageRatchet! runTests]
   :i [(asl-gates/docLedger :a dl) (asl-gates/docExtract :a dx)])
 
 fn fixtureDir -> String
@@ -172,19 +172,6 @@ fn ! testRoundTripWithExtractor! -> Bool
       (assert (= (processRun (str "rm -rf '" dir "'")).exitCode 0) "sandbox removed")
       true))
 
-; (:m :ref CHK-PRINT-TEMP-LEAK :do "a dot file named like the print-host-valid temp (.asl_chk_print_pPID_NS_0.asl) beside a source is not listed by aslFilesUnder!, so its exports are never counted as missing doc rows; the plain source beside it still is")
-fn ! testDotFilesSkipped! -> Bool
-  (let [(dir (sandboxDir!))
-        (a (fileWrite (str dir "/a.asl") "(module m/a\n  :x [f])\nfn f -> Bool\n  true\n"))
-        (b (fileWrite (str dir "/.asl_chk_print_p1_2_0.asl") "(module m/a\n  :x [f])\nfn f -> Bool\n  true\n"))
-        (listed (dl/aslFilesUnder! dir ""))
-        (cleaned (pathRemove dir))]
-    (do
-      (assert (and (ok? a) (ok? b)) "the sandbox files are written")
-      (assert (= (resultOr listed (list "error")) (list "/a.asl")) (str "only the plain source is listed: " (match listed ((ok l) (stringJoin l " ")) ((err e) e))))
-      (assert (ok? cleaned) "the sandbox is removed")
-      true))
-
 fn testMutantGuards! -> Bool
   (do
     (assert (= (dl/renderText "a\\nb") "a\nb") "mutant guard: renderText decodes the escaped newline a reader stored verbatim")
@@ -212,7 +199,7 @@ fn ! docAreas! -> (List String)
   (map (fn [(n String)] -> String (stringReplace n ".asn" ""))
        (filter (fn [(n String)] -> Bool (stringEndsWith? n ".asn")) (listSort (resultOr (dirList "asl/doc") (list)))))
 
-; (:m :ref DOCLEDGER-TOOLS-COVERAGE :do "every export under asl/<area> has a row in asl/doc/<area>.asn, one area per asl/doc/*.asn, except the gaps already listed in the ratchet baseline; a baseline row that is no longer a gap is red (DOCLEDGER-STALE-RED), so the list shrinks by regeneration")
+; (:m :ref DOCLEDGER-TOOLS-COVERAGE :do "every export under asl/<area> has a row in asl/doc/<area>.asn, one area per asl/doc/*.asn, except the gaps already listed in the ratchet baseline; covered baseline rows are printed as stale so the list can shrink")
 fn ! testCoverageRatchet! -> Bool
   (let [(known (baseline!))
         (areas (docAreas!))
@@ -220,53 +207,12 @@ fn ! testCoverageRatchet! -> Bool
         (failed (filter (fn [(r (Pair String (Result (List String) String)))] -> Bool (not (ok? (pairSecond r)))) results))
         (gaps (fold (fn [(acc (List String)) (r (Pair String (Result (List String) String)))] -> (List String) (listAppend acc (resultOr (pairSecond r) (list)))) (list) results))
         (fresh (filter (fn [(g String)] -> Bool (not (listContains? known g))) gaps))
-        (stale (dl/staleGaps known gaps))]
+        (stale (filter (fn [(g String)] -> Bool (not (listContains? gaps g))) known))
+        (_ (if (listEmpty? stale) () (println (str "(:docCoverage :stale " (listLength stale) " :first \"" (optionOr (listHead stale) "") "\")"))))]
     (do (assert (listContains? areas "tools") (str "asl/doc/tools.asn is one of the areas: " (stringJoin areas " ")))
         (assert (> (listLength known) 0) (str "the baseline loads from " (baselinePath)))
         (assert (listEmpty? failed) (str "every area scans: " (stringJoin (map (fn [(r (Pair String (Result (List String) String)))] -> String (pairFirst r)) failed) " ")))
         (assert (listEmpty? fresh) (str "every export has a doc row in its asl/doc home or is in the baseline; missing: " (stringJoin (listTake fresh 10) " ")))
-        (assert (listEmpty? stale) (str "every area baseline row is still a gap, else regenerate docCoverageBaseline.asn with asl run asl/packages/asl-gates/src/docLedger.asl --gaps " (stringJoin areas " ") "; covered or gone: " (stringJoin (listTake stale 10) " ")))
-        true))
-
-fn packageBaselinePath -> String
-  "asl/packages/asl-gates/tests/docPackageBaseline.asn"
-
-fn ! gapSet! path: String -> (Map String Bool)
-  (fold (fn [(m (Map String Bool)) (l String)] -> (Map String Bool) (if (stringStartsWith? l "(:gap \"") (mapSet m (stringReplace (stringReplace l "(:gap \"" "") "\")" "") true) m))
-        (mapEmpty) (stringLines (resultOr (fileReadString path) "")))
-
-fn ! testPackageGaps! -> Bool
-  (let [(dir (sandboxDir!))
-        (made (and (ok? (dirCreate (str dir "/asl/packages/fxpkg/src"))) (and (ok? (dirCreate (str dir "/asl/packages/fxpkg/tests"))) (ok? (dirCreate (str dir "/asl/packages/nodoc/src"))))))
-        (doc (ok? (fileWrite (str dir "/asl/packages/fxpkg/doc.asn") "(:doc :symbol \"asl/packages/fxpkg/src/thing.asl#kept\" :text \"documented\")\n")))
-        (src (ok? (fileWrite (str dir "/asl/packages/fxpkg/src/thing.asl") "(module fxpkg/thing\n  :x [kept fresh]\n  :i [])\n\nfn kept -> Int64\n  1\n\nfn fresh -> Int64\n  2\n")))
-        (tst (ok? (fileWrite (str dir "/asl/packages/fxpkg/tests/thingTest.asl") "(module fxpkg/tests/thingTest\n  :x [runTests]\n  :i [])\n\nfn runTests -> Bool\n  true\n")))
-        (bare (ok? (fileWrite (str dir "/asl/packages/nodoc/src/x.asl") "(module nodoc/x\n  :x [y]\n  :i [])\n\nfn y -> Int64\n  1\n")))
-        (gaps (resultOr (dl/packageGaps! dir "fxpkg") (list "!scan")))
-        (pkgs (dl/docPackages! dir))
-        (stale (dl/staleGaps (list "asl/packages/fxpkg/src/thing.asl#kept" "asl/packages/fxpkg/src/thing.asl#fresh" "asl/packages/fxpkg/src/thing.asl#removed") gaps))
-        (gone (ok? (pathRemove dir)))]
-    (do (assert (and made (and doc (and src (and tst bare)))) "package fixture written")
-        (assert (= gaps (list "asl/packages/fxpkg/src/thing.asl#fresh" "asl/packages/fxpkg/tests/thingTest.asl#runTests")) (str "a package export without a row in its doc.asn is a gap, src and tests alike: " (stringJoin gaps " ")))
-        (assert (= stale (list "asl/packages/fxpkg/src/thing.asl#kept" "asl/packages/fxpkg/src/thing.asl#removed")) (str "a baseline row whose export has a doc row or is gone is stale and named: " (stringJoin stale " ")))
-        (assert (= pkgs (list "fxpkg")) (str "only packages with a doc.asn are scanned: " (stringJoin pkgs " ")))
-        (assert gone "package fixture removed")
-        true))
-
-; (:m :ref DOCLEDGER-SCOPE-GAP :do "every export under a package with a doc.asn has a row there, except the gaps listed in docPackageBaseline.asn on its date; a baseline row that is no longer a gap is red (DOCLEDGER-STALE-RED), so the list shrinks by regeneration")
-fn ! testPackageRatchet! -> Bool
-  (let [(known (gapSet! (packageBaselinePath)))
-        (pkgs (dl/docPackages! "."))
-        (results (map (fn [(p String)] -> (Pair String (Result (List String) String)) (pair p (dl/packageGaps! "." p))) pkgs))
-        (failed (filter (fn [(r (Pair String (Result (List String) String)))] -> Bool (not (ok? (pairSecond r)))) results))
-        (gaps (fold (fn [(acc (List String)) (r (Pair String (Result (List String) String)))] -> (List String) (listAppend acc (resultOr (pairSecond r) (list)))) (list) results))
-        (fresh (filter (fn [(g String)] -> Bool (not (mapHas? known g))) gaps))
-        (stale (dl/staleGaps (mapKeys known) gaps))]
-    (do (assert (listContains? pkgs "asl-gates") (str "asl-gates has a doc.asn: " (stringJoin pkgs " ")))
-        (assert (> (listLength (mapKeys known)) 0) (str "the package baseline loads from " (packageBaselinePath)))
-        (assert (listEmpty? failed) (str "every package scans: " (stringJoin (map (fn [(r (Pair String (Result (List String) String)))] -> String (pairFirst r)) failed) " ")))
-        (assert (listEmpty? fresh) (str "every package export has a row in its doc.asn or is in the package baseline; missing: " (stringJoin (listTake fresh 10) " ")))
-        (assert (listEmpty? stale) (str "every package baseline row is still a gap, else regenerate docPackageBaseline.asn with asl run asl/packages/asl-gates/src/docLedger.asl --gaps packages; covered or gone: " (stringJoin (listTake stale 10) " ")))
         true))
 
 fn ! runTests -> Bool
@@ -279,9 +225,6 @@ fn ! runTests -> Bool
     (assert (testResolveRows!) "testResolveRows!")
     (assert (testRoundTripWithExtractor!) "testRoundTripWithExtractor!")
     (assert (testMutantGuards!) "testMutantGuards!")
-    (assert (testDotFilesSkipped!) "a temp dot file is not a source")
     (assert (testExportGaps!) "testExportGaps!")
     (assert (testCoverageRatchet!) "testCoverageRatchet!")
-    (assert (testPackageGaps!) "testPackageGaps!")
-    (assert (testPackageRatchet!) "testPackageRatchet!")
     true)

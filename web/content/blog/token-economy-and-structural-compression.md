@@ -37,19 +37,19 @@ The effect across a whole codebase is small. Rewriting every camelCase identifie
 
 If shortening keywords does not pay, what should a language choose? AgentSlang's rule is whole words in camelCase and one spelling per concept, and among names that carry the meaning, the measured cheapest wins.
 
-The forms the checker accepts today:
+The forms the stage-0 host accepts today:
 
 | Concept | Form | Accepted alias |
 |---|---|---|
 | Function | `fn name a: Type -> Type` line | `lambda` for anonymous `fn` |
 | Record type | `schema Name` with field lines | |
 | Variants | `enum Name (case field: Type) ...` | |
-| Match | `match` | `mt` (short alias) |
+| Match | `mt` | `match` |
 | Sequence | `do` | `begin` |
 | Module exports, imports | `:x`, `:i` | |
 | Primitive types | `Int64`, `Float64`, `String`, `Bool` | |
 
-The older `defun` and `df` definition heads are rejected by the checker (`ERR_UNSUPPORTED_TOPLEVEL`), and so are `:d` docstrings (`ERR_READ_DOC`): documentation lives as rows in each package's `doc.asn`, not in the source.
+The older `defun` and `df` definition heads are rejected by the host (`ERR_UNSUPPORTED_TOPLEVEL`), and so are `:d` docstrings (`ERR_READ_DOC`): documentation lives as rows in each package's `doc.asn`, not in the source.
 
 ```agentslang
 (module math/vector :x [dot runTests] :i [])
@@ -65,7 +65,7 @@ fn runTests -> Bool
   (do (assert (= (dot {:x 1.0 :y 2.0} {:x 3.0 :y 4.0}) 11.0) "dot product") true)
 ```
 
-This module passes `asl check` and `asl test`.
+This module passes `asl-host check` and `asl-host test`.
 
 ---
 
@@ -84,7 +84,7 @@ The comment repeats what the names already say.
 The convention we adopt:
 1. **No restating comments:** names carry the *what*.
 2. **Docs out of the source:** a symbol's contract is one row in the package `doc.asn`, looked up with `asl '(:doc :symbol "path#name")'`.
-3. **Rationale in the ledger:** long design justifications live in the project memory (principles, decisions), where an agent retrieves them only when it needs them, with `(:mem :op query ...)` or `(:query :text "..." :in text)`.
+3. **Rationale in the ledger:** long design justifications live in the project memory under `.asl/mem/` (principles, decisions), where an agent retrieves them only when it needs them, with `(:mem :op query ...)` or `(:query :text "..." :in text)`.
 
 ---
 
@@ -124,7 +124,7 @@ timeout_ms: 50
 (? agent-coder synthesize-fsm ["idle" "active" "error"] 50)
 ```
 
-On this frame, moving from JSON to the positional form saves 51.2% under `cl100k_base` (41 to 20) and 52.4% under `o200k_base` (42 to 20). The README shows a second frame, a `git status` command with its arguments, working directory and timeout: 51 tokens as pretty-printed JSON and 18 as a positional frame under `cl100k_base`, a 64.7% saving. Minified, the same JSON is 30 tokens, so the saving against what is actually sent is 40%, and a positional JSON array of the call is 17 tokens (recounted with tiktoken 0.12.0 on 2026-11-13): the gain is from dropping key names, which any notation can do.
+On this frame, moving from JSON to the positional form saves 51.2% under `cl100k_base` (41 to 20) and 52.4% under `o200k_base` (42 to 20). The README shows a second frame, a `git status` command with its arguments, working directory and timeout: 51 tokens as JSON and 18 as a positional frame under `cl100k_base`, a 64.7% saving.
 
 ### Tabular Data: ASN Against JSON
 
@@ -147,7 +147,7 @@ AgentSlang Notation (ASN) states the column names once and streams the rows as p
   [103 "C-99" 12 "delivered"]])
 ```
 
-These three records take 85 tokens as JSON and 51 as the ASN table under `cl100k_base`, a 40.0% saving against JSON as written above. Minified, that JSON is 59 tokens, and a minified columnar JSON object with the same header and rows is 49 (recounted with tiktoken 0.12.0 on 2026-11-13), so the row shape, not the notation, carries the saving. The header is paid once, so the share of the stream spent on key names shrinks as rows are added, while JSON pays for every key on every row.
+These three records take 85 tokens as JSON and 51 as the ASN table under `cl100k_base`, a 40.0% saving. The header is paid once, so the share of the stream spent on key names shrinks as rows are added, while JSON pays for every key on every row.
 
 ---
 
@@ -158,4 +158,4 @@ These three records take 85 tokens as JSON and 51 as the ASN table under `cl100k
 3. **Hoist repeated schemas:** in multi-record handoffs, send the column names once and the rows as positional vectors.
 4. **Keep rationale out of the code:** the contract in a doc row, the long justification in the memory ledger.
 
-Structure, not spelling, is where the tokens are. On the samples above, replacing spaced, keyed JSON with positional frames and tables cut token counts by 40.0% to 64.7%; against minified JSON the same frames save 13.6% (table) and 40% (README frame), and JSON in the same positional shape is within two tokens of the S-expression. These are three small samples, not a benchmark.
+Structure, not spelling, is where the tokens are. On the samples above, replacing keyed JSON with positional S-expressions and ASN tables cut token counts by 40% to 65%.

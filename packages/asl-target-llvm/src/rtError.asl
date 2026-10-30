@@ -68,14 +68,6 @@ fn messageText key: String -> String
 fn reportText -> String
   "%lld assertion(s) executed, %lld refutation(s) executed"
 
-; (:m :ref TEST-RUNNER-SELECT :do "the report record under asl test --keep-going: the counts of reportText and the failures that execution went on past, on a fresh line; the runner trusts its failed count together with the exit status rterr.exit forces non-zero")
-fn keptReportText -> String
-  "%lld assertion(s) executed, %lld refutation(s) executed, %lld failed"
-
-; (:m :ref TEST-RUNNER-SELECT :do "after a failed assertion has printed its site line: under ASL_ASSERT_KEEP_GOING and no error handler, rterr.keep counts it and execution goes on at pass, otherwise the raise below runs as before")
-fn keepOr code: String format: String arg: String raiseLabel: String -> String
-  (str "  %kept." raiseLabel " = call i1 @rterr.keep(%Val %site, ptr " code ", ptr " format ", ptr " arg ")\n  br i1 %kept." raiseLabel ", label %pass, label %" raiseLabel)
-
 fn msgSym key: String -> String
   (str "@.rterr.m." key)
 
@@ -240,12 +232,6 @@ fn rtErrorValueLlvm -> (List String)
     "@rterr.assertCount = weak global i64 0"
     "@rterr.refuteCount = weak global i64 0"
     "@rterr.siteReport = weak global i1 false"
-    "@rterr.keepGoing = weak global i1 false"
-    "@rterr.failCount = weak global i64 0"
-    (cText "@.rterr.keepEnv" "ASL_ASSERT_KEEP_GOING")
-    (cText "@.rterr.noSite" "(no site)")
-    (str "@.rterr.keptReport = private unnamed_addr constant [" (+ (stringLength (keptReportText)) 2) " x i8] c\"" (keptReportText) "\\0A\\00\"")
-    "@.rterr.nl = private unnamed_addr constant [2 x i8] c\"\\0A\\00\""
     (cText "@.rterr.ok" "ok")
     (cText "@.rterr.reportEnv" "ASL_ASSERT_REPORT")
     (str "@.rterr.reportLine = private unnamed_addr constant [" (+ (stringLength (reportText)) 2) " x i8] c\"" (reportText) "\\0A\\00\"")
@@ -311,17 +297,9 @@ fn rtErrorValueLlvm -> (List String)
     (raiseNumber "ERR_RANGE" "mainRange" "%code")
     "exit:"
     "  %code32 = trunc i64 %code to i32"
-    "  br label %status"
+    "  ret i32 %code32"
     "zero:"
-    "  br label %status"
-    "status:"
-    "  %plain = phi i32 [ %code32, %exit ], [ 0, %zero ]"
-    "  %keptN = load i64, ptr @rterr.failCount"
-    "  %anyKept = icmp sgt i64 %keptN, 0"
-    "  %wasZero = icmp eq i32 %plain, 0"
-    "  %force = and i1 %anyKept, %wasZero"
-    "  %final = select i1 %force, i32 1, i32 %plain"
-    "  ret i32 %final"
+    "  ret i32 0"
     "}"
     ""
     "define internal %Val @rterr.trap(%Val %code, %Val %msg) {"
@@ -397,8 +375,6 @@ fn rtErrorValueLlvm -> (List String)
     "  %shown = call %Val @asl_rt_format_val(%Val %m, i32 0, i32 8)"
     "  %shownText = call ptr @rterr.text(%Val %shown)"
     (str "  call void @rterr.siteLine(%Val %site, ptr " (codeSym "ERR_ASSERT") ", ptr " (msgSym "assertFailed") ", ptr %shownText)")
-    (keepOr (codeSym "ERR_ASSERT") (msgSym "assertFailed") "%shownText" "raise")
-    "raise:"
     (raiseText "ERR_ASSERT" "assertFailed" "%shownText")
     "}"
     ""
@@ -427,60 +403,12 @@ fn rtErrorValueLlvm -> (List String)
     "  br i1 %bare, label %held.bare, label %held.message"
     "held.bare:"
     (str "  call void @rterr.siteLine(%Val %site, ptr " (codeSym "ERR_REFUTE") ", ptr " (msgSym "refuteHeld") ", ptr null)")
-    (keepOr (codeSym "ERR_REFUTE") (msgSym "refuteHeld") "null" "raise.bare")
-    "raise.bare:"
     (raiseFixed "ERR_REFUTE" "refuteHeld")
     "held.message:"
     "  %shown = call %Val @asl_rt_format_val(%Val %m, i32 0, i32 8)"
     "  %shownText = call ptr @rterr.text(%Val %shown)"
     (str "  call void @rterr.siteLine(%Val %site, ptr " (codeSym "ERR_REFUTE") ", ptr " (msgSym "refuteFailed") ", ptr %shownText)")
-    (keepOr (codeSym "ERR_REFUTE") (msgSym "refuteFailed") "%shownText" "raise.message")
-    "raise.message:"
     (raiseText "ERR_REFUTE" "refuteFailed" "%shownText")
-    "}"
-    ""
-    "define internal i1 @rterr.keep(%Val %site, ptr %code, ptr %format, ptr %arg) {"
-    "entry:"
-    "  %msg = alloca [4096 x i8]"
-    "  %line = alloca [8192 x i8]"
-    "  %on = load i1, ptr @rterr.keepGoing"
-    "  br i1 %on, label %check, label %no"
-    "check:"
-    "  %slot = call ptr @aslHandlerSlot()"
-    "  %handler = load ptr, ptr %slot"
-    "  %caught = icmp ne ptr %handler, null"
-    "  br i1 %caught, label %no, label %count"
-    "count:"
-    "  %before = load i64, ptr @rterr.failCount"
-    "  %after = add i64 %before, 1"
-    "  store i64 %after, ptr @rterr.failCount"
-    "  %word = extractvalue %Val %site, 0"
-    "  %tag = trunc i64 %word to i32"
-    "  %named = icmp eq i32 %tag, 5"
-    "  br i1 %named, label %yes, label %bare"
-    "bare:"
-    "  %shown = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %msg, i64 4096, ptr %format, ptr %arg)"
-    "  %written = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %line, i64 8192, ptr @.rterr.siteFormat, ptr @.rterr.noSite, ptr %code, ptr %msg)"
-    "  %len = call i64 @strlen(ptr %line)"
-    "  %flushed = call i32 @fflush(ptr null)"
-    "  call void @rterr.freshLine()"
-    "  call void @rterr.writeAll(i32 2, ptr %line, i64 %len)"
-    "  br label %yes"
-    "yes:"
-    "  ret i1 true"
-    "no:"
-    "  ret i1 false"
-    "}"
-    ""
-    "define internal void @rterr.freshLine() {"
-    "entry:"
-    "  %on = load i1, ptr @rterr.keepGoing"
-    "  br i1 %on, label %emit, label %done"
-    "emit:"
-    "  call void @rterr.writeAll(i32 2, ptr @.rterr.nl, i64 1)"
-    "  br label %done"
-    "done:"
-    "  ret void"
     "}"
     ""
     "define internal void @rterr.siteLine(%Val %site, ptr %code, ptr %format, ptr %arg) {"
@@ -504,7 +432,6 @@ fn rtErrorValueLlvm -> (List String)
     "  %written = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %line, i64 8192, ptr @.rterr.siteFormat, ptr %where, ptr %code, ptr %msg)"
     "  %len = call i64 @strlen(ptr %line)"
     "  %flushed = call i32 @fflush(ptr null)"
-    "  call void @rterr.freshLine()"
     "  call void @rterr.writeAll(i32 2, ptr %line, i64 %len)"
     "  br label %done"
     "done:"
@@ -517,17 +444,7 @@ fn rtErrorValueLlvm -> (List String)
     "  store i8 0, ptr %buf"
     "  %asserts = load i64, ptr @rterr.assertCount"
     "  %refutes = load i64, ptr @rterr.refuteCount"
-    "  %on = load i1, ptr @rterr.keepGoing"
-    "  br i1 %on, label %kept, label %plain"
-    "kept:"
-    "  call void @rterr.writeAll(i32 2, ptr @.rterr.nl, i64 1)"
-    "  %failed = load i64, ptr @rterr.failCount"
-    "  %keptLen = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 128, ptr @.rterr.keptReport, i64 %asserts, i64 %refutes, i64 %failed)"
-    "  br label %write"
-    "plain:"
     "  %written = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 128, ptr @.rterr.reportLine, i64 %asserts, i64 %refutes)"
-    "  br label %write"
-    "write:"
     "  %len = call i64 @strlen(ptr %buf)"
     "  call void @rterr.writeAll(i32 2, ptr %buf, i64 %len)"
     "  ret void"
@@ -546,16 +463,6 @@ fn rtErrorValueLlvm -> (List String)
     "  %rc = call i32 @atexit(ptr @rterr.report)"
     "  store i1 true, ptr @rterr.siteReport"
     "  %uc = call i32 @unsetenv(ptr @.rterr.reportEnv)"
-    "  %keepEnv = call ptr @getenv(ptr @.rterr.keepEnv)"
-    "  %keepSet = icmp ne ptr %keepEnv, null"
-    "  br i1 %keepSet, label %keepCheck, label %installed"
-    "keepCheck:"
-    "  %keepFirst = load i8, ptr %keepEnv"
-    "  %keepOne = icmp eq i8 %keepFirst, 49"
-    "  store i1 %keepOne, ptr @rterr.keepGoing"
-    "  %ku = call i32 @unsetenv(ptr @.rterr.keepEnv)"
-    "  br label %installed"
-    "installed:"
     "  %failed = icmp ne i32 %rc, 0"
     "  br i1 %failed, label %fail, label %done"
     "fail:"

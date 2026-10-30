@@ -42,12 +42,12 @@
   (:f instrs (List ty/SsaInstr))
   (:f lifted (List ty/SsaFunction))
   (:f lambdas Int64)
-  (:f types (TypeIndex String))
-  (:f twins (TypeIndex String)))
+  (:f types TypeIndex)
+  (:f twins TypeIndex))
 
 (enum TypeIndex
   (:c typeIndexEmpty [] "Empty type index")
-  (:c typeIndexNode [(key String) (value V) (left (TypeIndex V)) (right (TypeIndex V)) (height Int64)] "AVL node indexed by SSA value name"))
+  (:c typeIndexNode [(key String) (value V) (left TypeIndex) (right TypeIndex) (height Int64)] "AVL node indexed by SSA value name"))
 
 (schema Lowered (:f st LowerState) (:f value String))
 
@@ -57,7 +57,7 @@
 
 (schema LoweredFn (:f function ty/SsaFunction) (:f lifted (List ty/SsaFunction)) (:f strings StringPool))
 
-(schema StringPool (:f items (List String)) (:f count Int64) (:f index (TypeIndex Int64)))
+(schema StringPool (:f items (List String)) (:f count Int64) (:f index TypeIndex))
 
 (schema Lambda (:f params (List String)) (:f types (List ty/SsaTy)) (:f body (List rd/SExpr)))
 
@@ -71,7 +71,6 @@ fn builtinArity name: String -> (Option Int64)
     ((= name "=") (some 2)) ((= name "!=") (some 2))
     ((= name "not") (some 1)) ((= name "abs") (some 1)) ((= name "min") (some 2))
     ((= name "max") (some 2)) ((= name "<<") (some 2)) ((= name ">>") (some 2))
-    ((= name "mulWrap") (some 2)) ((= name "addWrap") (some 2)) ((= name "subWrap") (some 2)) ((= name "rotateLeft") (some 2)) ((= name "rotateRight") (some 2))
     ((= name "&") (some 2)) ((= name "|") (some 2)) ((= name "^") (some 2)) ((= name "~") (some 1))
     ((= name "trap") (some 2)) ((= name "foreign") (some -1)) ((= name "str") (some -1)) ((= name "stringConcat") (some 2))
     ((= name "stringLength") (some 1)) ((= name "stringFromInt64") (some 1)) ((= name "print") (some -1))
@@ -173,15 +172,15 @@ fn nthOf xs: (List rd/SExpr) i: Int64 -> rd/SExpr
 fn stateWith st: LowerState next: Int64 labels: Int64 strings: StringPool -> LowerState
   (with st :next next :labels labels :strings strings)
 
-fn typeIndexHeight tree: (TypeIndex V) -> Int64
+fn typeIndexHeight tree: TypeIndex -> Int64
   (match tree
     ((typeIndexEmpty) 0)
     ((typeIndexNode _ _ _ _ height) height))
 
-fn typeIndexNodeOf key: String value: V left: (TypeIndex V) right: (TypeIndex V) -> (TypeIndex V)
+fn typeIndexNodeOf key: String value: V left: TypeIndex right: TypeIndex -> TypeIndex
   (typeIndexNode key value left right (+ 1 (max (typeIndexHeight left) (typeIndexHeight right))))
 
-fn typeIndexBalance key: String value: V left: (TypeIndex V) right: (TypeIndex V) -> (TypeIndex V)
+fn typeIndexBalance key: String value: V left: TypeIndex right: TypeIndex -> TypeIndex
   (let [(lh (typeIndexHeight left)) (rh (typeIndexHeight right))]
     (cond
       ((> lh (+ rh 1))
@@ -210,7 +209,7 @@ fn typeIndexBalance key: String value: V left: (TypeIndex V) right: (TypeIndex V
                     (typeIndexNodeOf rightKey rightValue pivotRight rightRight))))))))
       (else (typeIndexNodeOf key value left right))))
 
-fn typeIndexSet tree: (TypeIndex V) key: String value: V -> (TypeIndex V)
+fn typeIndexSet tree: TypeIndex key: String value: V -> TypeIndex
   (match tree
     ((typeIndexEmpty) (typeIndexNodeOf key value (typeIndexEmpty) (typeIndexEmpty)))
     ((typeIndexNode currentKey currentValue left right _)
@@ -219,7 +218,7 @@ fn typeIndexSet tree: (TypeIndex V) key: String value: V -> (TypeIndex V)
         ((< key currentKey) (typeIndexBalance currentKey currentValue (typeIndexSet left key value) right))
         (else (typeIndexBalance currentKey currentValue left (typeIndexSet right key value))))))
 
-fn typeIndexGet tree: (TypeIndex V) key: String -> (Option V)
+fn typeIndexGet tree: TypeIndex key: String -> (Option V)
   (match tree
     ((typeIndexEmpty) (none))
     ((typeIndexNode currentKey value left right _)
@@ -228,10 +227,10 @@ fn typeIndexGet tree: (TypeIndex V) key: String -> (Option V)
         ((< key currentKey) (typeIndexGet left key))
         (else (typeIndexGet right key)))))
 
-fn typeIndexHas? tree: (TypeIndex V) key: String -> Bool
+fn typeIndexHas? tree: TypeIndex key: String -> Bool
   (some? (typeIndexGet tree key))
 
-fn typeIndexAdd tree: (TypeIndex Int64) key: String n: Int64 -> (TypeIndex Int64)
+fn typeIndexAdd tree: TypeIndex key: String n: Int64 -> TypeIndex
   (typeIndexSet tree key (+ n (optionOr (typeIndexGet tree key) 0)))
 
 fn typeFromName name: String -> ty/SsaTy
@@ -1552,9 +1551,8 @@ fn kindReturned name: String recv: String -> String
         ((or (= name "append") (= name "reverse")) recv)
         (else ""))
 
-; (:m :ref MATCH-PARITY :do "a name the module binds is not a generic alias: its own function, and also a constructor or record it sees, so (take 3) of an enum case take stays a construction instead of becoming listTake with one operand (ERR_LOWER_ARITY at build after a green check)")
 fn shadowed? ctx: LowerCtx kinds: (Map String String) name: String -> Bool
-  (or (mapHas? kinds name) (moduleBoundName? ctx name))
+  (or (mapHas? kinds name) (mapHas? ctx.info.arities name))
 
 fn kindOf ctx: LowerCtx kinds: (Map String String) e: rd/SExpr -> String
   (match e
@@ -1831,7 +1829,7 @@ fn lowerFunction ctx: LowerCtx strings: StringPool d: ast/DefunNode -> (Result L
         (sig (resolveSig ctx.info (sigOf d)))
         (params (map (fn [(i Int64)] -> ty/SsaParam (ty/ssaParam (optionOr (listGet names i) "") (optionOr (listGet sig.params i) (ty/tyVal)))) (range 0 (listLength names))))
         (env (mapFromPairs (map (fn [(n String)] -> (Pair String String) (pair n n)) names)))
-        (types (fold (fn [(m (TypeIndex String)) (p ty/SsaParam)] -> (TypeIndex String)
+        (types (fold (fn [(m TypeIndex) (p ty/SsaParam)] -> TypeIndex
                        (if (or (ty/ssaIsRaw? p.ty) (ty/ssaIsRec? p.ty))
                          (typeIndexSet m p.name (ty/ssaTyName p.ty)) m)) (typeIndexEmpty) params))
         (st0 (LowerState :next 0 :labels 0 :strings strings :done (list) :label "entry" :params (list) :instrs (list) :lifted (list) :lambdas 0 :types types :twins (typeIndexEmpty)))
@@ -2078,12 +2076,8 @@ fn importedCtors scope: LinkScope -> (Map String Ctor)
             (if (= (optionOr (mapGet counts c.variant) 0) 1) (mapSet acc c.variant c) acc))
           (mapEmpty) all))
 
-; (:m :ref MATCH-PARITY :do "the checker's precedence for a bare name: the prelude (its cases, its functions, the builtins and generic names of asl-checker/types) before a case of an import, which is then written alias/case; without the test a bare imported case named like a builtin was a constructor here and the builtin in type inference")
-fn preludeBound? late: (Map String Int64) name: String -> Bool
-  (or (mapHas? late name) (or (cty/genericMulti? name) (some? (cty/builtinSig (cty/genericSigName name)))))
-
-fn withBareCtors v: Vis bare: (Map String Ctor) late: (Map String Int64) -> Vis
-  (with v :ctors (fold (fn [(acc (Map String Ctor)) (k String)] -> (Map String Ctor) (if (or (mapHas? acc k) (preludeBound? late k)) acc (mapSet acc k (optionOr (mapGet bare k) (Ctor :typeName "" :variant "" :arity 0)))))
+fn withBareCtors v: Vis bare: (Map String Ctor) -> Vis
+  (with v :ctors (fold (fn [(acc (Map String Ctor)) (k String)] -> (Map String Ctor) (if (mapHas? acc k) acc (mapSet acc k (optionOr (mapGet bare k) (Ctor :typeName "" :variant "" :arity 0)))))
                     v.ctors (mapKeys bare)))
 
 fn preludeVisOf prelude: (List ast/TopForm) -> Vis
@@ -2096,7 +2090,7 @@ fn linkedInfoAs forms: (List ast/TopForm) scope: LinkScope prefix: String -> Mod
   (let [(preludeVis (preludeVisOf scope.prelude))
         (withPrelude (belowModule preludeVis))
         (aliasNames (mapKeys scope.imports))
-        (withImports (withBareCtors (fold (fn [(v Vis) (a String)] -> Vis (importVis v a (optionOr (mapGet scope.imports a) (list)))) withPrelude aliasNames) (importedCtors scope) preludeVis.arities))
+        (withImports (withBareCtors (fold (fn [(v Vis) (a String)] -> Vis (importVis v a (optionOr (mapGet scope.imports a) (list)))) withPrelude aliasNames) (importedCtors scope)))
         (aliases (fold (fn [(m (Map String String)) (a String)] -> (Map String String) (mapSet m a (moduleName (optionOr (mapGet scope.imports a) (list))))) (sysAliases forms) aliasNames))]
     (infoOf forms withImports preludeVis.arities prefix aliases true))
 
@@ -2157,7 +2151,7 @@ fn functionExternRefs f: ty/SsaFunction -> (List String)
                      (list) f.blocks))
 
 fn dedupeStrings xs: (List String) -> (List String)
-  (listReverse (pairSecond (fold (fn [(acc (Pair (TypeIndex Bool) (List String))) (s String)] -> (Pair (TypeIndex Bool) (List String))
+  (listReverse (pairSecond (fold (fn [(acc (Pair TypeIndex (List String))) (s String)] -> (Pair TypeIndex (List String))
                                    (if (typeIndexHas? (pairFirst acc) s) acc (pair (typeIndexSet (pairFirst acc) s true) (cons s (pairSecond acc)))))
                                  (pair (typeIndexEmpty) (list)) xs)))
 
@@ -2199,21 +2193,21 @@ fn splitLiveLimit -> Int64
 fn positionKey i: Int64 -> String
   (stringFromInt64 i)
 
-fn lastUses instrs: (List ty/SsaInstr) result: String -> (TypeIndex Int64)
-  (let [(walked (fold (fn [(acc (Pair Int64 (TypeIndex Int64))) (ins ty/SsaInstr)] -> (Pair Int64 (TypeIndex Int64))
+fn lastUses instrs: (List ty/SsaInstr) result: String -> TypeIndex
+  (let [(walked (fold (fn [(acc (Pair Int64 TypeIndex)) (ins ty/SsaInstr)] -> (Pair Int64 TypeIndex)
                         (pair (+ (pairFirst acc) 1)
-                              (fold (fn [(m (TypeIndex Int64)) (v String)] -> (TypeIndex Int64) (typeIndexSet m v (pairFirst acc)))
+                              (fold (fn [(m TypeIndex) (v String)] -> TypeIndex (typeIndexSet m v (pairFirst acc)))
                                     (pairSecond acc) (ty/opOperands ins.op))))
                       (pair 0 (typeIndexEmpty)) instrs))]
     (typeIndexSet (pairSecond walked) result (pairFirst walked)))
 
-fn endsAt uses: (TypeIndex Int64) inputs: (List ty/SsaParam) instrs: (List ty/SsaInstr) -> (TypeIndex Int64)
-  (let [(fromInputs (fold (fn [(m (TypeIndex Int64)) (p ty/SsaParam)] -> (TypeIndex Int64)
+fn endsAt uses: TypeIndex inputs: (List ty/SsaParam) instrs: (List ty/SsaInstr) -> TypeIndex
+  (let [(fromInputs (fold (fn [(m TypeIndex) (p ty/SsaParam)] -> TypeIndex
                             (match (typeIndexGet uses p.name)
                               ((some u) (typeIndexAdd m (positionKey u) 1))
                               ((none) m)))
                           (typeIndexEmpty) inputs))]
-    (pairSecond (fold (fn [(acc (Pair Int64 (TypeIndex Int64))) (ins ty/SsaInstr)] -> (Pair Int64 (TypeIndex Int64))
+    (pairSecond (fold (fn [(acc (Pair Int64 TypeIndex)) (ins ty/SsaInstr)] -> (Pair Int64 TypeIndex)
                         (pair (+ (pairFirst acc) 1)
                               (typeIndexAdd (pairSecond acc) (positionKey (optionOr (typeIndexGet uses ins.dest) (pairFirst acc))) 1)))
                       (pair 0 fromInputs) instrs)))

@@ -1,7 +1,6 @@
 (module asl-target-llvm/tests/wasmSysValTest
   :x [runTests]
-  :i [(asl-target-llvm/tests/llvmTools :a lt)
-      (asl-ir/types :a irTy)
+  :i [(asl-ir/types :a irTy)
       (asl-ir/lower :a low)
       (asl-target-llvm :a targetLlvm)
       (asl-target-llvm/libc :a libc)
@@ -12,7 +11,10 @@ fn allowed -> (List String)
   (list "asl.write" "asl.exit" "asl.nowNs" "asl.trap")
 
 fn ! node -> String
-  (lt/nodePath!)
+  (let [(candidates (list "/usr/local/bin/node" "/opt/homebrew/bin/node"))]
+    (match (listHead (filter fileExists? candidates))
+      ((some p) p)
+      ((none) (stringReplace (processRun "command -v node 2>/dev/null").stdout "\n" ""))))
 
 fn ! llc -> String
   (let [(candidates (list "/opt/homebrew/opt/llvm/bin/llc" "/opt/homebrew/bin/llc" "/usr/local/opt/llvm/bin/llc" "/usr/lib/llvm-20/bin/llc" "/usr/lib/llvm-19/bin/llc" "/usr/lib/llvm-18/bin/llc"))]

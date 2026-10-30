@@ -1,6 +1,6 @@
 (module aslGateway/tests/gatewayCliTest
   :x [runTests main]
-  :i [(asl-tools/fleet/run :a fr)])
+  :i [])
 
 fn ! gatewayShellQuoteTail text: String index: Int64 -> String
   (if (>= index (stringLength text)) ""
@@ -24,10 +24,7 @@ fn ! cliRoot -> String
   (stringTrim (processRun "pwd").stdout)
 
 fn ! cliInvoke command: String -> ProcessOutput
-  (let [(home (str "/tmp/asl-gateway-home." (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
-        (made (dirCreate home))
-        (out (processRun (str "HOME=" home " " (stringJoin (fr/cacheEnv!) " ") " " command)))]
-    (do (pathRemove home) out))
+  (processRun (str "HOME=/dev/null " command))
 
 ; (:m :ref TEST-FIXED-PORTS :do "an offline-status port is bound with port 0, read back and closed, so no fixed port can be held by another process")
 fn ! gatewayTestFreePort -> Int64
@@ -48,7 +45,7 @@ fn ! testGatewayCliAndLifecycle -> Bool
         (injectionMarker (str temp "/shell-injection-ran"))
         (pathDir (str temp "/path"))
         (_path (processRun (str "/bin/mkdir -p " pathDir " && /bin/ln -sf /bin/bash " pathDir "/bash && /bin/ln -sf /usr/bin/dirname " pathDir "/dirname && /bin/ln -sf /usr/bin/basename " pathDir "/basename && /bin/ln -sf /bin/mkdir " pathDir "/mkdir"
-                           " && /bin/ln -sf /usr/bin/clang " pathDir "/clang && /bin/ln -sf /usr/bin/perl " pathDir "/perl && /bin/ln -sf /usr/bin/uname " pathDir "/uname" " && /bin/ln -sf /usr/bin/ld " pathDir "/ld")))
+                           " && /bin/ln -sf /usr/bin/clang " pathDir "/clang && /bin/ln -sf /usr/bin/perl " pathDir "/perl && /bin/ln -sf /usr/bin/uname " pathDir "/uname")))
         (valid (str temp "/valid.asn"))
         (invalidA (str temp "/invalid-a.asn"))
         (invalidB (str temp "/invalid-b.asn"))
@@ -86,7 +83,7 @@ fn ! testGatewayCliAndLifecycle -> Bool
       (assert (!= offlinePort "-1") "a free loopback port was bound with port 0 and read back")
       (let [(python (processRun (str "PATH=" pathDir " command -v python3")))
             (run (processRun (str "PATH=" pathDir " ASL_GATEWAY_PORT=" offlinePort " " runner " status --port " offlinePort)))]
-        (assert (and (!= python.exitCode 0) (= python.stdout "")) "runtime PATH has no python3")
+        (assert (= python.exitCode 1) "runtime PATH has no python3")
         (assert (= run.exitCode 0) "gateway status runs with python3 absent from PATH"))
       (let [(run (cliInvoke (str runner " config check " valid)))
             (expected (str "(:configCheck :file \"" valid "\" :v 1 :registry \"" registry "\" :status :ok :errors () :warnings () :profiles 1)\n"))]
@@ -121,14 +118,7 @@ fn ! testGatewayCliAndLifecycle -> Bool
             (expected (str "(:configCheck :file \"" invalidUtf8Path "\" :v 0 :registry \"" registry "\" :status :error :errors (\"'utf-8' codec can't decode byte 0xff in position 15: invalid start byte\") :warnings ())\n"))]
         (assert (= run.exitCode 1) "invalid UTF-8 config is rejected")
         (assert (= run.stdout expected) "invalid UTF-8 receipt matches Python capture")
-        (assert (= run.stderr (str "gateway configCheck: FAILED " invalidUtf8Path ": do not reload this file, a running hub keeps its last good config and reports :configStale, a fresh start refuses it\n")) "GW-CONFIG-STALE-LOUD: the failed check adds one loud stderr line naming the file, the receipt stays on stdout"))
-      (let [(_s (fileWrite (str temp "/status-stale.asn") "(:hub :uptimeSec 1 :configStale (:error \"/h/.asl/gateway.asn: profile p1 route any: bad entry\") :requests 0)\n"))
-            (_c (fileWrite (str temp "/status-clean.asn") "(:hub :uptimeSec 1 :requests 0)\n"))
-            (stale (cliInvoke (str runner " hubStatus --file " temp "/status-stale.asn")))
-            (clean (cliInvoke (str runner " hubStatus --file " temp "/status-clean.asn")))]
-        (assert (= stale.exitCode 0) "GW-CONFIG-STALE-LOUD: hubStatus without --strict exits zero on a stale status")
-        (assert (= stale.stderr "gateway: WARNING the hub serves its last good config, the file on disk does not load: /h/.asl/gateway.asn: profile p1 route any: bad entry\n") (str "GW-CONFIG-STALE-LOUD: hubStatus prints one warning line naming the error: " stale.stderr))
-        (assert (and (= clean.exitCode 0) (= clean.stderr "")) "GW-CONFIG-STALE-LOUD: a clean status prints no warning"))
+        (assert (= run.stderr "") "invalid UTF-8 diagnostics stay on the receipt channel"))
       (let [(run (cliInvoke (str runner " config check " invalidContinuationPath)))]
         (assert (= run.exitCode 1) "invalid UTF-8 continuation exits one")
         (assert (stringContains? run.stdout "invalid continuation byte") "invalid UTF-8 continuation matches Python's reason"))
@@ -147,7 +137,7 @@ fn ! testGatewayCliAndLifecycle -> Bool
       (gatewayLifecycleTest! root temp host runner)
       (let [(run (cliInvoke (str runner " status --port " offlinePort)))]
         (assert (= run.exitCode 0) "offline status exits zero")
-        (assert (stringContains? run.stdout (str "(:gateway :status :offline :port " offlinePort " :requests (:stuck ")) "offline status is an ASL receipt carrying the request accounting"))
+        (assert (stringContains? run.stdout (str "(:gateway :status :offline :port " offlinePort ")")) "offline status is an ASL receipt"))
       (let [(run (cliInvoke (str "ASL_GATEWAY_PORT=" offlinePort " " runner)))]
         (assert (= run.exitCode 0) "no-argument status exits zero")
         (assert (= run.stdout (str "ASL Cognitive Gateway: OFFLINE (Port: " offlinePort ")\n")) "no-argument status preserves the legacy output exactly"))

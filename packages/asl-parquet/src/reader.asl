@@ -1,8 +1,8 @@
-(module asl-parquet/reader :x [PqCursor parquetCursorI64 parquetCursorF64 parquetCursorI8 parquetCursorDecodes parquetCursorReadI64 parquetCursorReadF64 parquetCursorReadI8 parquetHasColumn parquetGroupRows parquetReadRangeF64 parquetReadRangeI64 parquetReadRangeI8 parquetOpen parquetNumRowGroups parquetNumRows parquetColumnType parquetReadF64 parquetReadI64 parquetReadI8 parquetKvMetadata pqLoadUAt pqLoad64 parquetColumnRange parquetWindowGroups parquetLowerBound] :i [])
+(module asl-parquet/reader :x [parquetOpen parquetNumRowGroups parquetNumRows parquetColumnType parquetReadF64 parquetReadI64 parquetReadI8 parquetKvMetadata pqLoadUAt pqLoad64] :i [])
 
 (schema PqCol (:f name String) (:f ptype Int64) (:f maxDef Int64) (:f int8 Bool))
 
-(schema PqChunk (:f ptype Int64) (:f codec Int64) (:f nvals Int64) (:f dictOff Int64) (:f dataOff Int64) (:f compSize Int64) (:f encodings (List Int64)) (:f stats Int64) (:f statLow Int64) (:f statHigh Int64))
+(schema PqChunk (:f ptype Int64) (:f codec Int64) (:f nvals Int64) (:f dictOff Int64) (:f dataOff Int64) (:f compSize Int64) (:f encodings (List Int64)))
 
 (schema PqFile (:f path String) (:f size Int64) (:f rows Int64) (:f cols (List PqCol)) (:f groupRows (List Int64)) (:f chunks (List PqChunk)) (:f kv (List (Pair String String))))
 
@@ -267,23 +267,6 @@ fn ! pqEncodings tr: PqTr et: Int64 i: Int64 k: Int64 acc: (List Int64) -> (List
     (let [(enc (pqTrInt tr et))]
       (pqEncodings tr et (+ i 1) k (if (< (listLength acc) 16) (listAppend acc (list enc)) acc))))
 
-; (:m :ref PQ-WINDOW-SCAN :do "Statistics min_value (6) and max_value (5) of eight bytes fill slots 7 and 8, slot 6 counts which of the two were seen (3 means both); a chunk without them keeps zero and is never pruned")
-fn ! pqStats tr: PqTr s: Bytes last: Int64 -> Bool
-  (match (pqTrField tr last)
-    ((none) true)
-    ((some f)
-      (let [(id (pairFirst f))
-            (ty (pairSecond f))]
-        (if (and (or (= id 5) (= id 6)) (= ty 8))
-          (let [(b (pqTrBinary tr))]
-            (do
-              (if (and (= (pairSecond b) 8) (not (pqTrErr? tr)))
-                (do (pqSlotSet s (if (= id 6) 7 8) (pqLoad64 tr.data (pairFirst b)))
-                    (pqSlotSet s 6 (+ (pqSlotGet s 6) (if (= id 6) 1 2))))
-                false)
-              (pqStats tr s id)))
-          (do (pqTrSkip tr ty 0) (pqStats tr s id))))))
-
 fn ! pqColumnMeta tr: PqTr s: Bytes last: Int64 encs: (List Int64) -> (List Int64)
   (match (pqTrField tr last)
     ((none) encs)
@@ -296,7 +279,6 @@ fn ! pqColumnMeta tr: PqTr s: Bytes last: Int64 encs: (List Int64) -> (List Int6
             (if (!= ty 9) (do (pqTrSkip tr ty 0) (pqColumnMeta tr s id encs))
               (let [(l (pqTrList tr))]
                 (pqColumnMeta tr s id (pqEncodings tr (pairSecond l) 0 (pairFirst l) encs)))))
-          ((and (= id 12) (= ty 12)) (do (pqStats tr s 0) (pqColumnMeta tr s id encs)))
           ((>= slot 0) (do (pqSlotSet s slot (pqTrInt tr ty)) (pqColumnMeta tr s id encs)))
           (else (do (pqTrSkip tr ty 0) (pqColumnMeta tr s id encs)))))))
 
@@ -309,9 +291,9 @@ fn ! pqColumnChunk tr: PqTr s: Bytes last: Int64 encs: (List Int64) -> (List Int
         (do (pqTrSkip tr (pairSecond f) 0) (pqColumnChunk tr s (pairFirst f) encs)))))
 
 fn ! pqChunk tr: PqTr -> PqChunk
-  (let [(s (pqSlots 9))
+  (let [(s (pqSlots 6))
         (encs (pqColumnChunk tr s 0 (list)))]
-    (PqChunk :ptype (pqSlotGet s 0) :codec (pqSlotGet s 1) :nvals (pqSlotGet s 2) :dictOff (pqSlotGet s 5) :dataOff (pqSlotGet s 4) :compSize (pqSlotGet s 3) :encodings encs :stats (pqSlotGet s 6) :statLow (pqSlotGet s 7) :statHigh (pqSlotGet s 8)))
+    (PqChunk :ptype (pqSlotGet s 0) :codec (pqSlotGet s 1) :nvals (pqSlotGet s 2) :dictOff (pqSlotGet s 5) :dataOff (pqSlotGet s 4) :compSize (pqSlotGet s 3) :encodings encs))
 
 fn ! pqChunks tr: PqTr j: Int64 c: Int64 acc: (List PqChunk) -> (List PqChunk)
   (if (or (>= j c) (pqTrErr? tr)) acc
@@ -824,197 +806,3 @@ fn ! parquetReadI8 h: PqFile name: String rg: Int64 -> I8Array
     (let [(bad (pqFirstBadI8 cells 0 n))]
       (if (>= bad 0) (trap "ERR_RANGE" (str "parquetReadI8: " (stringFromInt64 (pqLoad64 cells (* bad 8))) " outside Int(8)"))
         (i8ArrayGenerate n (fn [(i Int64)] -> Int64 (pqLoad64 cells (* i 8)))))))
-
-; (:m :ref PQ-WINDOW-SCAN :do "parquetColumnRange is the footer's (min max) of an Int64 column in one row group, none when the file has no statistics for it or the column is not Int64; parquetWindowGroups keeps the row groups that can hold a value in [lo, hi), and keeps every group whose range is unknown, so pruning never drops a row; parquetLowerBound is the first index of an ascending array whose value is at least target, so [lowerBound lo, lowerBound hi) are the rows of a window")
-fn parquetColumnRange h: PqFile name: String rg: Int64 -> (Option (Pair Int64 Int64))
-  (let [(i (pqColIndex h name "parquetColumnRange"))
-        (c (pqChunkAt h i rg))]
-    (if (and (= (pqColAt h i).ptype 2) (= c.stats 3)) (some (pair c.statLow c.statHigh)) (none)))
-
-fn parquetWindowGroups h: PqFile name: String lo: Int64 hi: Int64 -> (List Int64)
-  (filter (fn [(rg Int64)] -> Bool
-            (match (parquetColumnRange h name rg)
-              ((none) true)
-              ((some r) (and (< (pairFirst r) hi) (>= (pairSecond r) lo)))))
-          (range 0 (parquetNumRowGroups h)))
-
-fn pqLowerBoundIn values: I64Array lo: Int64 hi: Int64 target: Int64 -> Int64
-  (if (>= lo hi) lo
-    (let [(mid (+ lo (/ (- hi lo) 2)))]
-      (if (< (i64ArrayGet values mid) target)
-        (pqLowerBoundIn values (+ mid 1) hi target)
-        (pqLowerBoundIn values lo mid target))))
-
-fn parquetLowerBound values: I64Array target: Int64 -> Int64
-  (pqLowerBoundIn values 0 (i64ArrayLen values) target)
-
-; (:m :ref PQ-RANGE :do "a row range inside a group is read page by page: a page header is read (128 bytes), a page that ends before the range is skipped without being read, a page that overlaps is read and decoded alone, and reading stops after the page holding the last row of the range; a dictionary page is decoded whole; memory is one page, compressed and decoded, plus the range itself, so a file written with one page per group costs a whole group")
-fn parquetGroupRows h: PqFile rg: Int64 -> Int64
-  (if (or (< rg 0) (>= rg (listLength h.groupRows))) -1 (pqGroupRows h rg))
-
-fn ! pqRangeDict q: PqFile c: PqChunk cd: PqCol cs: Int64 pos: Int64 hl: Int64 h: PqPage -> (Result Bytes String)
-  (match (pqReadExact q.path (+ cs (+ pos hl)) h.comp)
-    ((none) (err "ERR_IO: cannot read column chunk"))
-    ((some buf)
-      (match (pqDecompress c.codec buf 0 h.comp h.uncomp)
-        ((err e) (err e))
-        ((ok d)
-          (let [(w (if (= cd.ptype 1) 4 8))]
-            (if (> h.nvals (/ h.uncomp w)) (err "ERR_PARQUET: dictionary page truncated")
-              (let [(nd (bytesAlloc (* h.nvals 8)))]
-                (if (pqPlain cd.ptype (pairFirst d) (pairSecond d) h.uncomp h.nvals nd 0) (ok nd)
-                  (err "ERR_PARQUET: dictionary page truncated")))))))))
-
-(schema PqCursor (:f q PqFile) (:f col Int64) (:f rg Int64) (:f kind Int64) (:f pos Int64) (:f rowAt Int64) (:f dict Bytes) (:f ndict Int64) (:f pageAt Int64) (:f pageRows Int64) (:f cells Bytes) (:f decodes Int64))
-
-; (:m :ref PQ-CURSOR :do "a cursor walks the data pages of one column chunk forward: it keeps the byte position of the next page, the decoded dictionary and the one decoded page it last read, so following reads of the same page decode nothing and no page header is read twice; opening it reads every page header once and requires the page value counts to sum to the row group row count, so an understated or overstated header is an error before any offset is trusted")
-fn ! pqSumPages q: PqFile c: PqChunk cs: Int64 pos: Int64 sum: Int64 -> (Result Int64 String)
-  (if (>= pos c.compSize) (ok sum)
-    (let [(rem (- c.compSize pos))
-          (toRead (min rem 128))]
-      (match (pqReadExact q.path (+ cs pos) toRead)
-        ((none) (err "ERR_IO: cannot read column chunk"))
-        ((some hb)
-          (let [(tr (pqTrAt hb 0 toRead))]
-            (match (pqPageHeader tr)
-              ((none) (err "ERR_PARQUET: malformed page header"))
-              ((some h)
-                (let [(hl (pqTrPos tr))]
-                  (if (> h.comp (- rem hl)) (err "ERR_PARQUET: page beyond the column chunk")
-                    (pqSumPages q c cs (+ pos (+ hl h.comp))
-                      (if (or (= h.kind 0) (= h.kind 3)) (+ sum h.nvals) sum)))))))))))
-
-fn ! pqCursorOpen q: PqFile name: String rg: Int64 kind: Int64 -> (Result PqCursor String)
-  (let [(col (pqColIndexFrom q.cols name 0))
-        (rows (parquetGroupRows q rg))]
-    (cond
-      ((< col 0) (err (str "ERR_PARQUET: no column " name)))
-      ((< rows 0) (err (str "ERR_RANGE: row group " (stringFromInt64 rg) " outside the file")))
-      (else
-        (let [(cd (pqColAt q col))
-              (c (pqChunkAt q col rg))]
-          (cond
-            ((or (and (= kind 5) (!= cd.ptype 5)) (or (and (= kind 2) (!= cd.ptype 2)) (and (= kind 1) (not (and (= cd.ptype 1) cd.int8)))))
-              (err (str "ERR_TYPE: column " cd.name " is not of that type")))
-            ((!= c.nvals rows) (err "ERR_PARQUET: chunk value count differs from the row group"))
-            (else
-              (match (pqSumPages q c (pqChunkStart c) 0 0)
-                ((err e) (err e))
-                ((ok sum)
-                  (if (!= sum rows) (err (str "ERR_PARQUET: pages hold " (stringFromInt64 sum) " values, the row group " (stringFromInt64 rows)))
-                    (ok (PqCursor :q q :col col :rg rg :kind kind :pos 0 :rowAt 0 :dict (bytesAlloc 0) :ndict -1 :pageAt 0 :pageRows 0 :cells (bytesAlloc 0) :decodes 0)))))))))))
-
-fn ! pqCursorCopy cur: PqCursor out: Bytes start: Int64 end: Int64 -> Bool
-  (let [(from (max start cur.pageAt))
-        (to (min end (+ cur.pageAt cur.pageRows)))]
-    (if (< from to) (pqCopy cur.cells (* (- from cur.pageAt) 8) out (* (- from start) 8) (* (- to from) 8)) true))
-
-fn ! pqCursorFill cur: PqCursor out: Bytes start: Int64 end: Int64 -> (Result PqCursor String)
-  (do
-    (pqCursorCopy cur out start end)
-    (if (>= (+ cur.pageAt cur.pageRows) end) (ok cur)
-      (let [(q cur.q)
-            (c (pqChunkAt q cur.col cur.rg))
-            (cd (pqColAt q cur.col))
-            (cs (pqChunkStart c))
-            (rem (- c.compSize cur.pos))]
-        (if (<= rem 0) (err "ERR_PARQUET: malformed page header")
-          (match (pqReadExact q.path (+ cs cur.pos) (min rem 128))
-            ((none) (err "ERR_IO: cannot read column chunk"))
-            ((some hb)
-              (let [(tr (pqTrAt hb 0 (min rem 128)))]
-                (match (pqPageHeader tr)
-                  ((none) (err "ERR_PARQUET: malformed page header"))
-                  ((some h)
-                    (let [(hl (pqTrPos tr))
-                          (next (+ cur.pos (+ hl h.comp)))]
-                      (cond
-                        ((> h.comp (- rem hl)) (err "ERR_PARQUET: page beyond the column chunk"))
-                        ((= h.kind 2)
-                          (match (pqRangeDict q c cd cs cur.pos hl h)
-                            ((err e) (err e))
-                            ((ok nd) (pqCursorFill (with cur :pos next :dict nd :ndict h.nvals :decodes (+ cur.decodes 1)) out start end))))
-                        ((and (!= h.kind 0) (!= h.kind 3)) (pqCursorFill (with cur :pos next) out start end))
-                        ((<= (+ cur.rowAt h.nvals) start) (pqCursorFill (with cur :pos next :rowAt (+ cur.rowAt h.nvals)) out start end))
-                        (else
-                          (match (pqReadExact q.path (+ cs cur.pos) (+ hl h.comp))
-                            ((none) (err "ERR_IO: cannot read column chunk"))
-                            ((some buf)
-                              (let [(tmp (bytesAlloc (* h.nvals 8)))]
-                                (match (pqDataPage c cd buf hl h cur.dict cur.ndict tmp 0)
-                                  ((err e) (err e))
-                                  ((ok _)
-                                    (pqCursorFill (with cur :pos next :rowAt (+ cur.rowAt h.nvals) :pageAt cur.rowAt :pageRows h.nvals :cells tmp :decodes (+ cur.decodes 1)) out start end))))))))))))))))))
-
-; (:m :ref PQ-CURSOR :do "reads move forward: start must not lie before the page the cursor last decoded; the returned cursor keeps that page for the next read")
-fn ! pqCursorRead cur: PqCursor start: Int64 count: Int64 -> (Result (Pair Bytes PqCursor) String)
-  (let [(rows (parquetGroupRows cur.q cur.rg))]
-    (cond
-      ((or (< start 0) (or (< count 0) (> count (- rows start)))) (err (str "ERR_RANGE: rows " (stringFromInt64 start) "+" (stringFromInt64 count) " outside a group of " (stringFromInt64 rows))))
-      ((and (> cur.pageRows 0) (< start cur.pageAt)) (err "ERR_RANGE: cursor reads move forward"))
-      ((= count 0) (ok (pair (bytesAlloc 0) cur)))
-      (else
-        (let [(out (bytesAlloc (* count 8)))]
-          (match (pqCursorFill cur out start (+ start count))
-            ((err e) (err e))
-            ((ok moved) (ok (pair out moved))))))))
-
-fn ! pqRangeCells q: PqFile name: String rg: Int64 start: Int64 count: Int64 kind: Int64 -> (Result Bytes String)
-  (match (pqCursorOpen q name rg kind)
-    ((err e) (err e))
-    ((ok cur)
-      (match (pqCursorRead cur start count)
-        ((err e) (err e))
-        ((ok p) (ok (pairFirst p))))))
-
-fn ! parquetCursorI64 h: PqFile name: String rg: Int64 -> (Result PqCursor String)
-  (pqCursorOpen h name rg 2)
-
-fn ! parquetCursorF64 h: PqFile name: String rg: Int64 -> (Result PqCursor String)
-  (pqCursorOpen h name rg 5)
-
-fn ! parquetCursorI8 h: PqFile name: String rg: Int64 -> (Result PqCursor String)
-  (pqCursorOpen h name rg 1)
-
-fn parquetCursorDecodes cur: PqCursor -> Int64
-  cur.decodes
-
-fn ! parquetCursorReadI64 cur: PqCursor start: Int64 count: Int64 -> (Result (Pair I64Array PqCursor) String)
-  (match (pqCursorRead cur start count)
-    ((err e) (err e))
-    ((ok p) (ok (pair (i64ArrayGenerate count (fn [(i Int64)] -> Int64 (pqLoad64 (pairFirst p) (* i 8)))) (pairSecond p)))))
-
-fn ! parquetCursorReadF64 cur: PqCursor start: Int64 count: Int64 -> (Result (Pair F64Array PqCursor) String)
-  (match (pqCursorRead cur start count)
-    ((err e) (err e))
-    ((ok p) (ok (pair (f64ArrayGenerate count (fn [(i Int64)] -> Float64 (bytesGetFloat64 (pairFirst p) i))) (pairSecond p)))))
-
-fn ! parquetCursorReadI8 cur: PqCursor start: Int64 count: Int64 -> (Result (Pair I8Array PqCursor) String)
-  (match (pqCursorRead cur start count)
-    ((err e) (err e))
-    ((ok p)
-      (let [(cells (pairFirst p))
-            (bad (pqFirstBadI8 cells 0 count))]
-        (if (>= bad 0) (err (str "ERR_RANGE: " (stringFromInt64 (pqLoad64 cells (* bad 8))) " outside Int(8)"))
-          (ok (pair (i8ArrayGenerate count (fn [(i Int64)] -> Int64 (pqLoad64 cells (* i 8)))) (pairSecond p)))))))
-
-fn ! parquetReadRangeI64 h: PqFile name: String rg: Int64 start: Int64 count: Int64 -> (Result I64Array String)
-  (match (pqRangeCells h name rg start count 2)
-    ((err e) (err e))
-    ((ok cells) (ok (i64ArrayGenerate count (fn [(i Int64)] -> Int64 (pqLoad64 cells (* i 8)))))))
-
-fn ! parquetReadRangeF64 h: PqFile name: String rg: Int64 start: Int64 count: Int64 -> (Result F64Array String)
-  (match (pqRangeCells h name rg start count 5)
-    ((err e) (err e))
-    ((ok cells) (ok (f64ArrayGenerate count (fn [(i Int64)] -> Float64 (bytesGetFloat64 cells i))))))
-
-fn ! parquetReadRangeI8 h: PqFile name: String rg: Int64 start: Int64 count: Int64 -> (Result I8Array String)
-  (match (pqRangeCells h name rg start count 1)
-    ((err e) (err e))
-    ((ok cells)
-      (let [(bad (pqFirstBadI8 cells 0 count))]
-        (if (>= bad 0) (err (str "ERR_RANGE: " (stringFromInt64 (pqLoad64 cells (* bad 8))) " outside Int(8)"))
-          (ok (i8ArrayGenerate count (fn [(i Int64)] -> Int64 (pqLoad64 cells (* i 8)))))))))
-
-fn parquetHasColumn h: PqFile name: String -> Bool
-  (>= (pqColIndexFrom h.cols name 0) 0)

@@ -81,7 +81,7 @@ AgentSlang (ASL) rejects both indentation-based scoping and implicit operator pr
 enum Shape (circle r: Float64) (rect w: Float64 h: Float64)
 
 fn area s: Shape -> Float64
-  (match s
+  (mt s
     ((circle r) (* 3.141592653589793 (* r r)))
     ((rect w h) (* w h)))
 
@@ -89,12 +89,12 @@ fn runTests -> Bool
   (do (assert (= (area (rect 2.0 3.0)) 6.0) "rect area") true)
 ```
 
-This module passes `asl check` and `asl test` (1 assertion executed). (Docs live outside the source, in the package `doc.asn`; the reader rejects a `:d` docstring in the header with `ERR_READ_DOC`.)
+This module passes `asl-host check` and `asl-host test` (1 assertion executed) on the stage-0 host. (Docs live outside the source, in the package `doc.asn`; the reader rejects a `:d` docstring in the header with `ERR_READ_DOC`.)
 
 ### Why S-Expressions Help Attention Heads
 
 1. **Homoiconic 1:1 Mapping:** The textual representation of an S-expression is a direct serialization of the syntax tree. There is no intermediate lowering step between grammar and tree.
-2. **Balanced Delimiters as Causal Anchors:** Every subtree begins with `(` and ends with `)`. When a model generates `)`, it does not compute whitespace heuristics; it closes one specific opening node. Each bracket kind pairs exactly: `( )` forms, `[ ]` lists, `{ }` records, and the checker rejects a mismatch before running anything.
+2. **Balanced Delimiters as Causal Anchors:** Every subtree begins with `(` and ends with `)`. When a model generates `)`, it does not compute whitespace heuristics; it closes one specific opening node. Each bracket kind pairs exactly: `( )` forms, `[ ]` lists, `{ }` records, and the host rejects a mismatch before running anything.
 3. **No Operator Precedence:** In C, JavaScript, or Python, an expression like `a + b * c > d and e or f` requires the model to apply several layers of precedence rules. In ASL, prefix notation makes the order of evaluation explicit by construction: `(or (and (> (+ a (* b c)) d) e) f)`.
 4. **Single-Pass Parsing:** The reader needs no backtracking. A well-formed token stream becomes a tree in one linear scan.
 
@@ -110,19 +110,19 @@ Beyond syntax parsing, models generate broken code when type invariants are impl
 
 A common failure in generated Python is a `None` reaching code that expected a value (`AttributeError: 'NoneType' object has no attribute 'x'`).
 
-ASL has no `nil`: absence is `(none)`, and builtins such as `listHead` and `mapGet` return `(some v)` or `(none)`. Closed variants are declared with `enum` and taken apart with `match`. If an agent adds a variant and forgets to handle it, `asl check` rejects the module before it runs. Removing the `rect` arm from the sample above gives:
+ASL has no `nil`: absence is `(none)`, and builtins such as `listHead` and `mapGet` return `(some v)` or `(none)`. Closed variants are declared with `enum` and taken apart with `mt`. If an agent adds a variant and forgets to handle it, `asl-host check` rejects the module before it runs. Removing the `rect` arm from the sample above gives:
 
 ```text
 ERR_MATCH_NONEXHAUSTIVE match over enum Shape misses variant(s): rect
 ```
 
-The same check runs from `asl check` on an `.asl` file and from the `(:check)` op.
+The check runs on the stage-0 host, which is what `asl-host check`, `asl check` on an `.asl` file and the `(:check)` op all use.
 
 ### Explicit Effect Boundaries
 
 In most languages any function can secretly perform network requests, disk mutations, or environment reads, and agents do introduce side effects inside calculation routines.
 
-ASL makes effects visible in the name. A function that calls an effectful builtin such as `println` must be marked, either `fn ! f ...` or by a name ending in `!`, and the mark propagates: a caller of `f!` must be marked too. The checker rejects an unmarked one before it runs:
+ASL makes effects visible in the name. A function that calls an effectful builtin such as `println` must be marked, either `fn ! f ...` or by a name ending in `!`, and the mark propagates: a caller of `f!` must be marked too. The host rejects an unmarked one before it runs:
 
 ```text
 ERR_EFFECT_UNMARKED fn f names effectful println: mark it (fn ! f ...) or rename it f!
@@ -134,7 +134,7 @@ A reviewer, or a coordinator, can therefore tell from a function's name whether 
 
 ## 5. Measuring the First-Run Pass Rate
 
-The claim this post makes is testable: give models the same specifications in Python, Rust, and AgentSlang, and count first-run parse success, first-run test success, and repair iterations to green, with each language's strictest checker (`mypy --strict`, `cargo check`, `asl check`) as the gate. We have not yet run that comparison with a recorded method and result, so this post quotes no pass rates.
+The claim this post makes is testable: give models the same specifications in Python, Rust, and AgentSlang, and count first-run parse success, first-run test success, and repair iterations to green, with each language's strictest checker (`mypy --strict`, `cargo check`, `asl-host check`) as the gate. We have not yet run that comparison with a recorded method and result, so this post quotes no pass rates.
 
 ### The Systems Takeaway
 

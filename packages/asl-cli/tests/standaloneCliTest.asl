@@ -1,6 +1,6 @@
 (module asl-cli/tests/standaloneCliTest
   :x [runTests]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl-tools/fleet/run :a fr)])
+  :i [(asl/packages/asl-cli/src/system :a sys)])
 
 fn okSource -> String
   "(module standaloneOk :x [f] :i [])\nfn f -> Int64 1\n"
@@ -26,14 +26,8 @@ fn ! makeDir! path: String -> (Result String String)
 fn ! writeFile! path: String text: String -> (Result String String)
   (match (fileWrite path text) ((err e) (err (str "write " path ": " e))) ((ok _) (ok path)))
 
-; (:m :ref NOSELFHOST-WRAPPED-BINASL :do "the build and the built binary run through fr/runGuarded with a deadline and their own process group instead of sys/capture!, which has neither; the Captured shape the cases read is rebuilt from the separate stdout and stderr, a timeout is an err")
-fn ! limited! argv: (List String) cwd: String secs: Int64 -> (Result sys/Captured String)
-  (let [(p (fr/runGuarded argv cwd (fr/childEnv (list)) (fr/limits secs 64)))]
-    (if p.timedOut (err (str "timed out after " (stringFromInt64 secs) " s: " (stringJoin argv " ")))
-      (ok (sys/Captured :exitCode p.exitCode :stdout p.stdout :stderr p.stderr))))
-
 fn ! build! root: String binary: String -> (Result String String)
-  (match (limited! (list (str root "/bin/asl") "build" (str root "/asl/packages/asl-cli/src/command.asl") "-o" binary) root 1200)
+  (match (sys/capture! (list (str root "/bin/asl") "build" (str root "/asl/packages/asl-cli/src/command.asl") "-o" binary) (some root))
     ((err e) (err (str "asl build: " e)))
     ((ok got)
       (if (and (= got.exitCode 0) (sys/executable? binary))
@@ -64,10 +58,10 @@ fn ! setupOutside! base: String binary: String -> (Result String String)
                             ((ok _) (ok cwd)))))))))))))))
 
 fn ! runClean! cwd: String path: String program: String file: String -> (Result sys/Captured String)
-  (limited! (list "/usr/bin/env" "-i" (str "PATH=" path) program "check" file) cwd 120)
+  (sys/capture! (list "/usr/bin/env" "-i" (str "PATH=" path) program "check" file) (some cwd))
 
 fn ! runCleanHelp! cwd: String path: String program: String -> (Result sys/Captured String)
-  (limited! (list "/usr/bin/env" "-i" (str "PATH=" path) program "help") cwd 120)
+  (sys/capture! (list "/usr/bin/env" "-i" (str "PATH=" path) program "help") (some cwd))
 
 fn lastLine text: String -> String
   (optionOr (listLast (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringSplit text "\n"))) "")

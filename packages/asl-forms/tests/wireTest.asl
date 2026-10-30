@@ -35,21 +35,7 @@ fn testFileNearest! -> Bool
     (assert (= (w/wireReceipt! (ws root) "  (:step :id 1 :op \"read\" :status \"rejected\" :error-code \":ERR_FILE_NOT_FOUND\" :message \"File not found: sub/unique.tx\")" true "read")
                "(:read :status :rejected :error ERR_FILE_NOT_FOUND :message \"File not found: sub/unique.tx\" :nearest (\"sub/unique.txt\" \"sub/dup.txt\") :hint \"paths resolve against the workspace root; :nearest, when present, names entries beside the missing one\" :see \"(:help :op read)\")")
             "a missing file names close siblings")
-    (assert (= (w/wireReceipt! (ws root) "  (:step :id 1 :op \"read\" :status \"rejected\" :error-code \":ERR_FILE_NOT_FOUND\" :message \"File not found: sub/dp\")" true "read")
-               "(:read :status :rejected :error ERR_FILE_NOT_FOUND :message \"File not found: sub/dp\" :nearest (\"sub/deep\" \"sub/dup.txt\") :hint \"paths resolve against the workspace root; :nearest, when present, names entries beside the missing one\" :see \"(:help :op read)\")")
-            "a close sibling is ranked by its name, not by its workspace path")
     true)
-
-fn testKitNearest -> Bool
-  (let [(files (list "harness/tests/agentLoopRecorderKit.asl" "asl/agentSpecCore.md"))
-        (kit (w/nearestPaths "asl/harness/tests/agentLoopRecorderKit.asl" (list) files))
-        (sib (w/nearestPaths "sub/unique.tx" (list "sub/unique.txt" "sub/dup.txt") (list "other/unique.tx")))]
-    (do
-      (assert (= (optionOr (listHead kit) "") "harness/tests/agentLoopRecorderKit.asl") "kit path comes first for a two-segment tail")
-      (assert (<= (listLength kit) 3) "at most three nearest paths")
-      (assert (= (optionOr (listHead sib) "") "sub/unique.txt") "an existing sibling match still wins")
-      (assert (not (listContains? sib "other/unique.tx")) "a sibling match skips the tracked fallback")
-      true))
 
 fn ! runTests -> Bool
   (do
@@ -57,5 +43,4 @@ fn ! runTests -> Bool
     (assert (testCamel) "testCamel")
     (assert (testStepReceipts!) "testStepReceipts")
     (assert (testFileNearest!) "testFileNearest")
-    (assert (testKitNearest) "testKitNearest")
     true)

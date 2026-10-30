@@ -1,6 +1,6 @@
 (module aslGateway/tests/dispatchTest
   :x [runTests]
-  :i [(asl-tools/fleet/readyWait :a sk) (aslGateway/dispatch :a dp) (aslGateway/config :a cfg) (aslGateway/upstream :a u) (aslGateway/plugin :a p)
+  :i [(aslGateway/dispatch :a dp) (aslGateway/config :a cfg) (aslGateway/upstream :a u) (aslGateway/plugin :a p)
       (aslGateway/budget :a bgt) (aslGateway/fleet :a fl) (aslGateway/tests/fixtures/launch/launchFixture :a lf) (asl-parser/reader :a rd) (asl-json/json :a j)])
 
 fn wiringConfig base: String withRouter: Bool -> String
@@ -85,7 +85,7 @@ fn ! wiringFor text: String -> (Result dp/Wiring String)
 
 fn ! testRowsFromTableIncludesGeminiProvider -> Bool
   (let [(text "(:gateway :v 2\n  :providers ((:provider :id testGeminiRow :kind gemini :base \"https://example.test/v1\" :keyEnv TESTGEMINIROW_API_KEY))\n  :models ((:model :id testGeminiRowModel :provider testGeminiRow :name \"m\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (testGeminiRowModel)))))\n  :uses ((:use :for default :profile p1)))")
-        (res (cfg/gatewayConfigParse! text "rowsFromTableGemini" ".asl/mem/calibration/index.asn"))]
+        (res (cfg/gateway_config_parse! text "rowsFromTableGemini" ".asl/mem/calibration/index.asn"))]
     (match res
       ((err e) (assert false (str "ROWSFROMTABLE: config must parse: " e)))
       ((ok tbl)
@@ -97,7 +97,7 @@ fn ! testRowsFromTableIncludesGeminiProvider -> Bool
 ; (:m :do "GW-OPENROUTER-PLUGIN-20261018: rowsFromTable's some-tbl branch excludes any id defaultRowNamed already knows (gemini/groq/ollama/openrouter/cli ids) from configured, then appends only upstreamProviders(), which itself excludes the openrouter catch-all row (upstreamFallback is a separate function, listed beside, not inside, upstreamProviders()); so once a real config table exists (every live gateway), the openrouter row never reaches rows/plugins and any model wired to provider openrouter gets ERR_NO_UPSTREAM no plugin for provider openrouter")
 fn ! testRowsFromTableIncludesOpenrouterProvider -> Bool
   (let [(text "(:gateway :v 2\n  :models ((:model :id testOpenrouterModel :provider openrouter :name \"m\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (testOpenrouterModel)))))\n  :uses ((:use :for default :profile p1)))")
-        (res (cfg/gatewayConfigParse! text "rowsFromTableOpenrouter" ".asl/mem/calibration/index.asn"))]
+        (res (cfg/gateway_config_parse! text "rowsFromTableOpenrouter" ".asl/mem/calibration/index.asn"))]
     (match res
       ((err e) (assert false (str "ROWSFROMTABLE: config must parse: " e)))
       ((ok tbl)
@@ -362,6 +362,12 @@ fn ! exchange! listener: Int64 gatewayPort: Int64 seen: (List Seen) -> Run
         (let [(run (pumpRun! (Run :listener listener :client fd :response "" :done (not (writeAll! fd request)) :stubs (list) :seen seen) (+ (nowMs!) 15000)))]
           (do (fdClose fd) run)))))
 
+fn ! waitPort! path: String attempts: Int64 -> Int64
+  (if (<= attempts 0) 0
+    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
+      ((some port) (if (> port 0) port (do (sleepMs 20) (waitPort! path (- attempts 1)))))
+      ((none) (do (sleepMs 20) (waitPort! path (- attempts 1))))))
+
 fn seenAt seen: (List Seen) index: Int64 -> Seen
   (optionOr (listGet seen index) (Seen :path "" :auth "" :model ""))
 
@@ -379,7 +385,7 @@ fn ! socketChecks -> Bool
                    (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") "FIXA_KEY=aKey" "RUNPOD_API_KEY=rpKey" (nativeCliCacheEnvRow!)))
         (spawned (procSpawnv (list "/bin/sh" "-c" command) (none) (some env)))
         (pid (match spawned ((ok sp) sp.pid) ((err _) 0)))
-        (gatewayPort (if (> pid 0) (sk/waitPort! readyPath pid) 0))
+        (gatewayPort (if (> pid 0) (waitPort! readyPath 12000) 0))
         (first (exchange! listener gatewayPort (list)))
         (second (exchange! listener gatewayPort first.seen))
         (cfgPath (str temp "/.asl/gateway.asn"))
@@ -442,17 +448,8 @@ fn ! socketChecks -> Bool
       (assert (not (listAny? (fn [(x String)] -> Bool (stringEndsWith? x "/chat/completions")) (pathsFrom fifth.seen (listLength third.seen)))) "a request that timed out on a cold start is never sent")
       (and killed (and closed removed))))
 
-; (:m :ref CALL-USAGE-TOKENS-ARITY :do "callUsageTokens has one arity: four values with and without usage")
-fn callUsageArity -> Bool
-  (do
-    (assert (= (listLength (dp/callUsageTokens "{\"choices\":[]}")) 4) "a body with no usage gives four values")
-    (assert (= (dp/callUsageTokens "not json") (list 0 0 0 0)) "an unparseable body gives four zeros")
-    (assert (= (listLength (dp/callUsageTokens "{\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3}}")) 4) "a body with usage gives four values")
-    (assert (= (optionOr (listGet (dp/callUsageTokens "{\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3}}") 2) -1) 3) "the third value is the output tokens")
-    true)
-
 fn ! runTests -> Bool
-  (and (testRowsFromTableIncludesGeminiProvider) (and (testRowsFromTableIncludesOpenrouterProvider) (and (unitChecks) (and (redirectChecks) (and (coldChecks) (and (socketChecks) (callUsageArity)))))))
+  (and (testRowsFromTableIncludesGeminiProvider) (and (testRowsFromTableIncludesOpenrouterProvider) (and (unitChecks) (and (redirectChecks) (and (coldChecks) (socketChecks))))))
 
 fn ! hostExe! -> String
   (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl"))

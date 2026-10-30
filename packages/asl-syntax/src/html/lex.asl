@@ -42,7 +42,8 @@
       doctypeTokenForceQuirks
       commentTokenData]
   :i [(asl-syntax/core/source :a src)
-      (asl-syntax/core/tree :a tr)])
+      (asl-syntax/core/tree :a tr)
+      (asl-syntax/core/print :a pr)])
 
 (schema HtmlAttribute
   (:f name String)

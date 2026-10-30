@@ -1,4 +1,4 @@
-(module asl-checker/types :x [Type Diagnostic genericRows genericMulti? genericAlias genericConcrete genericCandidates genericRenamed genericAliasNames stringBuiltinNames renamedHint genericName? genericSigName receiverOver isTyVar? resolveTypeAlias unorderedType? intRangeBounds preludeUnionCases isNumericType? isIntegralType? builtinSig parseTypeStr showTypes showType collectTvars] :i [(lowLevelSigs :a ll)])
+(module asl-checker/types :x [Type Diagnostic genericRows genericMulti? genericAlias genericConcrete genericCandidates genericRenamed genericAliasNames stringBuiltinNames renamedHint genericName? genericSigName receiverOver isTyVar? resolveTypeAlias unorderedType? intRangeBounds preludeUnionCases isNumericType? isIntegralType? builtinSig parseTypeStr showTypes showType collectTvars])
 
 (enum Type (:c tyCon [(name String) (args (List Type)) (mod (Option String)) (shown (Option String))] "A nominal or constructed type") (:c tyVar [(id Int64) (kind String)] "A type variable metavariable: any, num, or int") (:c tyFun [(params (List Type)) (ret Type)] "A function type"))
 
@@ -11,16 +11,16 @@ fn unorderedType? name: String -> Bool
   (or (= name "Float64") (= name "IoError"))
 
 fn intRangeBounds name: String -> (Option (Pair Int64 Int64))
-  (cond ((= name "U8") (some (pair 0 255))) ((= name "I8") (some (pair -128 127))) ((= name "U16") (some (pair 0 65535))) ((= name "I16") (some (pair -32768 32767))) ((= name "U32") (some (pair 0 4294967295))) ((= name "U64") (some (pair 0 9223372036854775807))) ((= name "Int32") (some (pair -2147483648 2147483647))) ((= name "Int64") (some (pair -9223372036854775808 9223372036854775807))) (else (none)))
+  (cond ((= name "Int32") (some (pair -2147483648 2147483647))) ((= name "Int64") (some (pair -9223372036854775808 9223372036854775807))) (else (none)))
 
 fn preludeUnionCases caseName: String -> (Option String)
   (cond ((= caseName "alreadyExists") (some "IoError")) ((= caseName "interrupted") (some "IoError")) ((= caseName "invalidPath") (some "IoError")) ((= caseName "notFound") (some "IoError")) ((= caseName "other") (some "IoError")) ((= caseName "permissionDenied") (some "IoError")) ((= caseName "some") (some "Option")) ((= caseName "none") (some "Option")) ((= caseName "ok") (some "Result")) ((= caseName "err") (some "Result")) ((= caseName "list") (some "List")) ((= caseName "cons") (some "List")) ((= caseName "preludeLeaf") (some "PreludeTree")) ((= caseName "preludeNode") (some "PreludeTree")) (else (none)))
 
 fn isNumericType? name: String -> Bool
-  (or (listContains? (ll/sizedIntNames) name) (or (= name "Int32") (or (= name "Int64") (= name "Float64"))))
+  (or (= name "Int32") (or (= name "Int64") (= name "Float64")))
 
 fn isIntegralType? name: String -> Bool
-  (or (listContains? (ll/sizedIntNames) name) (or (= name "Int32") (= name "Int64")))
+  (or (= name "Int32") (= name "Int64"))
 
 fn sigFn params: (List String) ret: String -> (Option (Pair (List String) (Pair Bool String)))
   (some (pair params (pair false ret)))
@@ -84,7 +84,7 @@ fn arrayBuiltinSig name: String -> (Option (Pair (List String) (Pair Bool String
     (else (none)))
 
 fn builtinSig name: String -> (Option (Pair (List String) (Pair Bool String)))
-  (cond ((= name "fnv1a64") (sigFn (list "String") "Int64")) ((some? (ll/lowLevelSig name)) (ll/lowLevelSig name)) (else (match (arrayBuiltinSig name) ((some signature) (some signature)) ((none) (match (builtinSigFallback name) ((some signature) (some signature)) ((none) (hostBuiltinSig name)))))))
+  (cond ((= name "fnv1a64") (sigFn (list "String") "Int64")) (else (match (arrayBuiltinSig name) ((some signature) (some signature)) ((none) (match (builtinSigFallback name) ((some signature) (some signature)) ((none) (hostBuiltinSig name)))))))
 
 fn hostBuiltinSig name: String -> (Option (Pair (List String) (Pair Bool String)))
   (cond ((= name "fdClose") (sigFn (list "Int64") "(Result Unit String)"))
@@ -269,8 +269,7 @@ fn genericRows -> (List (Pair String String))
         (pair "indexOf/String" "stringIndexOf") (pair "indexOf/List" "listIndexOf") (pair "reverse/String" "stringReverse") (pair "reverse/List" "listReverse")
         (pair "append/String" "stringConcat") (pair "append/List" "listAppend")
         (pair "sum/List" "listSum") (pair "sum/I64Array" "i64ArraySum") (pair "sum/I8Array" "i8ArraySum") (pair "sum/F64Array" "f64ArraySum")
-        (pair "countEq/I64Array" "i64ArrayCountEq") (pair "countEq/I8Array" "i8ArrayCountEq") (pair "countEq/F64Array" "f64ArrayCountEq")
-        (pair "length/Buf" "bufLength") (pair "get/Buf" "bufGet") (pair "set/Buf" "bufSet") (pair "slice/Buf" "bufSlice"))
+        (pair "countEq/I64Array" "i64ArrayCountEq") (pair "countEq/I8Array" "i8ArrayCountEq") (pair "countEq/F64Array" "f64ArrayCountEq"))
 
 fn genericMulti? name: String -> Bool
   (listContains? (list "length" "empty?" "get" "set" "slice" "contains?" "indexOf" "reverse" "append" "sum" "countEq") name)
@@ -317,10 +316,6 @@ fn genericConcrete name: String over: String -> String
       ((= key "length/I64Array") "i64ArrayLen")
       ((= key "length/I8Array") "i8ArrayLen")
       ((= key "length/F64Array") "f64ArrayLen")
-      ((= key "length/Buf") "bufLength")
-      ((= key "get/Buf") "bufGet")
-      ((= key "set/Buf") "bufSet")
-      ((= key "slice/Buf") "bufSlice")
       ((= key "empty?/String") "stringEmpty?")
       ((= key "empty?/List") "listEmpty?")
       ((= key "get/List") "listGet")
@@ -360,7 +355,7 @@ fn genericCandidates name: String -> String
 fn receiverOver t: Type -> String
   (match t
     ((tyVar _ _) "")
-    ((tyCon name _ _ _) (if (listContains? (list "String" "List" "Bytes" "Map" "I64Array" "I8Array" "F64Array" "Buf") name) name "?"))
+    ((tyCon name _ _ _) (if (listContains? (list "String" "List" "Bytes" "Map" "I64Array" "I8Array" "F64Array") name) name "?"))
     (_ "?"))
 
 fn isTyVar? t: Type -> Bool

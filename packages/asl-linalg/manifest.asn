@@ -1,6 +1,0 @@
-(:package asl-linalg
- :version "0.1.0"
- :entry "src/dense.asl"
- :description "Dense linear algebra on row-major F64Array: Cholesky factor and solve, Householder QR least squares with column pivoting and rank, symmetric eigen by cyclic Jacobi; every kernel returns (err msg) on shape, rank or definiteness errors, pure AgentSlang"
- :aslFirst true
- :dependencies ())

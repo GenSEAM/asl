@@ -3,6 +3,6 @@
  :entry "src/writer.asl"
  :description "ASL Parquet writer, footer metadata reader and pure-ASL reader"
  :aslFirst true
- :modules ["asl-parquet/writer" "asl-parquet/footer" "asl-parquet/reader" "asl-parquet/merge"]
+ :modules ["asl-parquet/writer" "asl-parquet/footer" "asl-parquet/reader"]
  :dependencies ["asl-syntax"]
  :externalTools ["zstd"])

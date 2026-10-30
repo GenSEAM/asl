@@ -22,6 +22,7 @@
       (asl-syntax/core/tree :a tr)
       (asl-syntax/core/symbols :a sym)
       (asl-syntax/core/outline :a otl)
+      (asl-syntax/core/print :a pr)
       (asl-json/json :a j)
       (asl-syntax/core/bytesText :a btxt)])
 

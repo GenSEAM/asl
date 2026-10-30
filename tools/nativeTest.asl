@@ -1,8 +1,7 @@
 (module asl-tools/nativeTest
-  :x [withoutRunnerSwitches reapOrphanedRuns! Watched PumpState runWatched limitLine runReceipt withoutPeakLines maxWallS selectionSource testFunctionsOf selectedVerdict prepareTestSelected workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest ifaceMapOf initsInUnitOrder moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
-  :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
+  :x [runTests main failLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :i [(asl-tools/corpusNative :a cn)
       (asl-parser/ast :a ast)
-      (asl-parser/reader :a rd)
       (asl-ir/types :a irTy)
       (asl-ir/lower :a low)
       (asl-ir/link :a lk)
@@ -38,33 +37,26 @@ fn ! pumpCollect outFd: Int64 errFd: Int64 outAcc: String errAcc: String outOpen
       (match w
         ((ok opt) (ProcOut :exitCode (optionOr opt 0) :stdout outAcc :stderr errAcc))
         ((err _) (ProcOut :exitCode 1 :stdout outAcc :stderr errAcc))))
-    (let [(s (pumpStep outFd errFd outAcc errAcc outOpen errOpen))]
-      (pumpCollect outFd errFd s.outAcc s.errAcc s.outOpen s.errOpen pid)))
-
-; (:m :ref TEST-RUNNER-SELECT :do "one read of each open pipe, then a 50 ms poll when neither gave bytes: the step pumpCollect repeats until both pipes close, and pumpWatched between its limit checks")
-(schema PumpState (:f outAcc String) (:f errAcc String) (:f outOpen Bool) (:f errOpen Bool))
-
-fn ! pumpStep outFd: Int64 errFd: Int64 outAcc: String errAcc: String outOpen: Bool errOpen: Bool -> PumpState
-  (let [(rOut (if outOpen (fdRead outFd 65536) (err "closed")))
-        (hadOut (match rOut
-                  ((ok c) (if (> (stringLength c) 0) true (let [(_ (fdClose outFd))] false)))
-                  ((err _) false)))
-        (nextOutAcc (match rOut ((ok c) (if (> (stringLength c) 0) (str outAcc c) outAcc)) ((err _) outAcc)))
-        (nextOutOpen (if outOpen (match rOut ((ok c) (> (stringLength c) 0)) ((err _) true)) false))
-        (rErr (if errOpen (fdRead errFd 65536) (err "closed")))
-        (hadErr (match rErr
-                  ((ok c) (if (> (stringLength c) 0) true (let [(_ (fdClose errFd))] false)))
-                  ((err _) false)))
-        (nextErrAcc (match rErr ((ok c) (if (> (stringLength c) 0) (str errAcc c) errAcc)) ((err _) errAcc)))
-        (nextErrOpen (if errOpen (match rErr ((ok c) (> (stringLength c) 0)) ((err _) true)) false))
-        (_ (if (and (not hadOut) (not hadErr) (or nextOutOpen nextErrOpen))
-             (let [(fds (cond
-                          ((and nextOutOpen nextErrOpen) (list (pair outFd 1) (pair errFd 1)))
-                          (nextOutOpen (list (pair outFd 1)))
-                          (else (list (pair errFd 1)))))]
-               (do (fdPoll fds 50) ()))
-             ()))]
-    (PumpState :outAcc nextOutAcc :errAcc nextErrAcc :outOpen nextOutOpen :errOpen nextErrOpen))
+    (let [(rOut (if outOpen (fdRead outFd 65536) (err "closed")))
+          (hadOut (match rOut
+                    ((ok c) (if (> (stringLength c) 0) true (let [(_ (fdClose outFd))] false)))
+                    ((err _) false)))
+          (nextOutAcc (match rOut ((ok c) (if (> (stringLength c) 0) (str outAcc c) outAcc)) ((err _) outAcc)))
+          (nextOutOpen (if outOpen (match rOut ((ok c) (> (stringLength c) 0)) ((err _) true)) false))
+          (rErr (if errOpen (fdRead errFd 65536) (err "closed")))
+          (hadErr (match rErr
+                    ((ok c) (if (> (stringLength c) 0) true (let [(_ (fdClose errFd))] false)))
+                    ((err _) false)))
+          (nextErrAcc (match rErr ((ok c) (if (> (stringLength c) 0) (str errAcc c) errAcc)) ((err _) errAcc)))
+          (nextErrOpen (if errOpen (match rErr ((ok c) (> (stringLength c) 0)) ((err _) true)) false))]
+      (if (and (not hadOut) (not hadErr) (or nextOutOpen nextErrOpen))
+        (let [(fds (cond
+                     ((and nextOutOpen nextErrOpen) (list (pair outFd 1) (pair errFd 1)))
+                     (nextOutOpen (list (pair outFd 1)))
+                     (else (list (pair errFd 1)))))]
+          (do (fdPoll fds 50)
+              (pumpCollect outFd errFd nextOutAcc nextErrAcc nextOutOpen nextErrOpen pid)))
+        (pumpCollect outFd errFd nextOutAcc nextErrAcc nextOutOpen nextErrOpen pid))))
 
 fn ! runProc argv: (List String) envOpt: (Option (List String)) -> ProcOut
   (runProcIn argv (none) envOpt)
@@ -73,145 +65,25 @@ fn ! runProc argv: (List String) envOpt: (Option (List String)) -> ProcOut
 fn ! fromFr p: fr/ProcOut -> ProcOut
   (ProcOut :exitCode p.exitCode :stdout p.stdout :stderr p.stderr)
 
-; (:m :ref PROC-REAPER-ALL :do "a native test binary gets the same bounded fleet lease as a runGuarded suite: its own pgid is the lease key, the default suite timeout is its deadline, and the row is removed only after pumpCollect has reaped it; a later runGuarded can therefore kill the group if this runner dies first")
 fn ! runProcIn argv: (List String) cwd: (Option String) envOpt: (Option (List String)) -> ProcOut
-  (runProcWithin argv cwd envOpt (/ (fr/defaultLimits).timeoutMs 1000))
-
-; (:m :ref NATIVETEST-PER-SUITE-WALL :do "runProcIn with the lease deadline wallS seconds after the start, so a suite binary runs under its declared wall; since TEST-RUNNER-SELECT it is runWatched without a cap or samples, the one bare start of this file, so the runner itself kills at the wall and the lease is the backstop")
-fn ! runProcWithin argv: (List String) cwd: (Option String) envOpt: (Option (List String)) wallS: Int64 -> ProcOut
-  (runWatched argv cwd envOpt wallS 0 false).out
-
-; (:m :ref TEST-RUNNER-SELECT :do "a test binary run by asl test FILE under limits the runner enforces itself: the wall deadline and, with --max-rss, a resident-size cap sampled by ps about once a second; when one fires the runner kills the group and says which (killedBy wall or memory), so a -9 is never left unexplained. The fleet lease gets 60 s more than the wall, so the runner's own kill comes first and the lease stays the backstop for a runner that died")
-(schema Watched
-  (:f out ProcOut)
-  (:f killedBy String)
-  (:f sampledKb Int64)
-  (:f wallMs Int64))
-
-fn ! rssKbOf! pid: Int64 -> Int64
-  (match (fr/shellOut (str "ps -o rss= -p " (stringFromInt64 pid)) 5000)
-    ((ok text) (optionOr (stringToInt64 (stringTrim text)) -1))
-    ((err _) -1))
-
-fn ! killWatched! outFd: Int64 errFd: Int64 s: PumpState pid: Int64 reason: String peak: Int64 -> Watched
-  (let [(_ (fr/killTree! pid))]
-    (Watched :out (pumpCollect outFd errFd s.outAcc s.errAcc s.outOpen s.errOpen pid) :killedBy reason :sampledKb peak :wallMs 0))
-
-fn ! pumpWatched outFd: Int64 errFd: Int64 s: PumpState pid: Int64 deadlineNs: Int64 capKb: Int64 sample: Bool nextSampleNs: Int64 sampledKb: Int64 -> Watched
-  (if (and (not s.outOpen) (not s.errOpen))
-    (waitWatched s pid deadlineNs capKb sample nextSampleNs sampledKb)
-    (let [(now (monotonicNs))
-          (due (and sample (>= now nextSampleNs)))
-          (rss (if due (rssKbOf! pid) -1))
-          (peak (max sampledKb rss))]
-      (cond
-        ((> now deadlineNs) (killWatched! outFd errFd s pid "wall" peak))
-        ((and (> capKb 0) (> rss capKb)) (killWatched! outFd errFd s pid "memory" peak))
-        (else (pumpWatched outFd errFd (pumpStep outFd errFd s.outAcc s.errAcc s.outOpen s.errOpen) pid deadlineNs capKb sample (if due (+ now 1000000000) nextSampleNs) peak)))))
-
-; (:m :ref TEST-RUNNER-SELECT :do "the wait once both pipes closed: a binary that closed fd 1 and 2 still runs under the wall and the cap, so the wait never blocks; procWaitPid without hang each 50 ms, and at a limit the group is killed and reaped and the limit named")
-fn ! waitWatched s: PumpState pid: Int64 deadlineNs: Int64 capKb: Int64 sample: Bool nextSampleNs: Int64 sampledKb: Int64 -> Watched
-  (match (procWaitPid pid true)
-    ((ok (some code)) (Watched :out (ProcOut :exitCode code :stdout s.outAcc :stderr s.errAcc) :killedBy "" :sampledKb sampledKb :wallMs 0))
-    ((err _) (Watched :out (ProcOut :exitCode 1 :stdout s.outAcc :stderr s.errAcc) :killedBy "" :sampledKb sampledKb :wallMs 0))
-    ((ok (none))
-      (let [(now (monotonicNs))
-            (due (and sample (>= now nextSampleNs)))
-            (rss (if due (rssKbOf! pid) -1))
-            (peak (max sampledKb rss))]
-        (cond
-          ((> now deadlineNs) (reapKilled! s pid "wall" peak))
-          ((and (> capKb 0) (> rss capKb)) (reapKilled! s pid "memory" peak))
-          (else (let [(_ (sleepMs 50))] (waitWatched s pid deadlineNs capKb sample (if due (+ now 1000000000) nextSampleNs) peak)))))))
-
-fn ! reapKilled! s: PumpState pid: Int64 reason: String peak: Int64 -> Watched
-  (let [(_ (fr/killTree! pid))
-        (code (match (procWaitPid pid false) ((ok opt) (optionOr opt -9)) ((err _) -9)))]
-    (Watched :out (ProcOut :exitCode code :stdout s.outAcc :stderr s.errAcc) :killedBy reason :sampledKb peak :wallMs 0))
-
-fn ! runWatched argv: (List String) cwd: (Option String) envOpt: (Option (List String)) wallS: Int64 capKb: Int64 sample: Bool -> Watched
-  (let [(startNs (monotonicNs))
-        (wall (if (> wallS 0) wallS 3600))
-        (spawnRes (procSpawnv argv cwd envOpt))]
+  (let [(spawnRes (procSpawnv argv cwd envOpt))]
     (match spawnRes
-      ((err e) (Watched :out (ProcOut :exitCode 127 :stdout "" :stderr (str "spawn failed: " e)) :killedBy "" :sampledKb -1 :wallMs 0))
+      ((err e) (ProcOut :exitCode 127 :stdout "" :stderr (str "spawn failed: " e)))
       ((ok sp)
-        (let [(_ (fr/writeLease! sp.pid (procSelf) startNs (+ startNs (* (+ wall 60) 1000000000))))
-              (_ (fdClose sp.stdin))
-              (_ (fdNonBlocking sp.stdout true))
-              (_ (fdNonBlocking sp.stderr true))
-              (w (pumpWatched sp.stdout sp.stderr (PumpState :outAcc "" :errAcc "" :outOpen true :errOpen true) sp.pid (+ startNs (* wall 1000000000)) capKb (or sample (> capKb 0)) (+ startNs 250000000) -1))
-              (_ (pathRemove (fr/leasePath sp.pid)))]
-          (Watched :out w.out :killedBy w.killedBy :sampledKb w.sampledKb :wallMs (ms (- (monotonicNs) startNs)))))))
-
-; (:m :ref TEST-RUNNER-SELECT :do "before a run with asl test options: a binary whose runner was killed (its lease owner is gone) is killed now through the fleet lease reaper, not when its lease runs out")
-fn ! reapOrphanedRuns! -> Int64
-  (fr/reapStaleLeases!)
-
-fn signalName n: Int64 -> String
-  (cond
-    ((= n 1) "SIGHUP") ((= n 2) "SIGINT") ((= n 3) "SIGQUIT") ((= n 6) "SIGABRT") ((= n 9) "SIGKILL")
-    ((= n 11) "SIGSEGV") ((= n 13) "SIGPIPE") ((= n 14) "SIGALRM") ((= n 15) "SIGTERM")
-    ((= n 24) "SIGXCPU") ((= n 25) "SIGXFSZ")
-    (else (str "signal " n)))
-
-fn peakMarker -> String
-  "ASL_TEST_PEAK_RSS_KB "
-
-; (:m :ref TEST-RUNNER-SELECT :do "the wrapper's peak line, also where the test left an unterminated write before it on the same line")
-fn peakLine? line: String -> Bool
-  (stringContains? line (peakMarker))
-
-fn peakAt line: String -> Int64
-  (optionOr (stringIndexOf line (peakMarker)) 0)
-
-; (:m :ref TEST-RUNNER-SELECT :do "the peak resident size the wrapper reports when the test entry returns (getrusage of the binary itself), else none: a run that raised or was killed reports none and the runner falls back to its own ps samples")
-fn reportedPeakKb text: String -> Int64
-  (match (listLast (filter peakLine? (stringLines text)))
-    ((none) -1)
-    ((some l) (optionOr (stringToInt64 (stringTrim (optionOr (stringSlice l (+ (peakAt l) (stringLength (peakMarker))) (stringLength l)) ""))) -1)))
-
-fn withoutPeakLines text: String -> String
-  (let [(kept (listFlatMap (fn [(l String)] -> (List String)
-                             (if (peakLine? l)
-                               (let [(before (optionOr (stringSlice l 0 (peakAt l)) ""))] (if (stringEmpty? before) (list) (list before)))
-                               (list l)))
-                           (textLines text)))]
-    (if (listEmpty? kept) "" (str (stringJoin kept "\n") (if (stringEndsWith? text "\n") "\n" ""))))
-
-; (:m :ref TEST-RUNNER-SELECT :do "the FAIL line of a binary that ended without an assertion report: killed by the runner at its wall or memory limit, naming the limit and where it came from, or, when the run gave --only, --keep-going, --wall, --max-rss or --stats, killed by a signal no runner limit sent; none otherwise, so a plain run keeps the line asl test printed before these options (native binary exited -N without an assertion report)")
-fn limitLine label: String w: Watched wallS: Int64 wallFrom: String capMb: Int64 named: Bool -> (Option String)
-  (cond
-    ((= w.killedBy "wall") (some (str "FAIL " label ": ERR_LIMIT: the runner killed the native binary at its wall limit of " wallS " s (" wallFrom ") after " w.wallMs " ms")))
-    ((= w.killedBy "memory") (some (str "FAIL " label ": ERR_LIMIT: the runner killed the native binary at its memory cap of " capMb " MB (--max-rss) with " (/ w.sampledKb 1024) " MB resident, after " w.wallMs " ms")))
-    ((and named (< w.out.exitCode 0)) (some (str "FAIL " label ": native binary killed by " (signalName (- 0 w.out.exitCode)) " (signal " (- 0 w.out.exitCode) ") after " w.wallMs " ms without an assertion report; no runner limit fired (wall limit " wallS " s from " wallFrom (if (> capMb 0) (str ", memory cap " capMb " MB") ", no memory cap") "), so the signal came from outside the runner")))
-    (else (none)))
-
-; (:m :ref TEST-RUNNER-SELECT :do "the receipt line of one asl test FILE run on stderr after its verdict: wall time, peak resident size and where that came from (rusage when the entry returned, sampled when only the runner's ps samples saw it, none), the wall limit and its source, the cap, the verdict's exit and the exit status of the binary itself (non-zero after any failure it kept going past)")
-fn runReceipt label: String w: Watched errText: String wallS: Int64 wallFrom: String capMb: Int64 exit: Int64 -> String
-  (let [(reported (reportedPeakKb errText))
-        (peak (if (> reported 0) reported w.sampledKb))
-        (from (cond ((> reported 0) "rusage") ((> w.sampledKb 0) "sampled") (else "none")))]
-    (str "(:testRun :file \"" (esc label) "\" :exit " exit " :binaryExit " w.out.exitCode " :wallMs " w.wallMs " :peakRssKb " (max peak 0) " :peakFrom " from
-         " :wallLimitS " wallS " :wallFrom \"" wallFrom "\"" (if (> capMb 0) (str " :maxRssMb " capMb) "") (if (stringEmpty? w.killedBy) "" (str " :killedBy " w.killedBy)) ")"))
-
-
-; (:m :ref TEST-RUNNER-SELECT :do "the switches only asl test sets for a run it marks as not a suite pass (--keep-going, --stats); a test binary never inherits them, a runner passes them as overrides")
-fn runnerSwitches -> (List String)
-  (list "ASL_ASSERT_KEEP_GOING" "ASL_NATIVE_TEST_STATS")
-
-; (:m :ref TEST-RUNNER-SELECT :do "the one strip both test-binary paths share: asl test FILE (withEnvOverrides!) and the --all/--changed sweep (sweepJob, initProbeJob in asl-cli/native)")
-fn withoutRunnerSwitches rows: (List String) -> (List String)
-  (filter (fn [(row String)] -> Bool (not (listContains? (runnerSwitches) (optionOr (listHead (stringSplit row "=")) row)))) rows)
+        (let [(_ (fdClose sp.stdin))
+              (outFd sp.stdout)
+              (errFd sp.stderr)
+              (_ (fdNonBlocking outFd true))
+              (_ (fdNonBlocking errFd true))]
+          (pumpCollect outFd errFd "" "" true true sp.pid)))))
 
 fn withEnvOverrides! overrides: (List String) -> (List String)
   (let [(names (map (fn [(s String)] -> String (optionOr (listHead (stringSplit s "=")) s)) overrides))]
     (listAppend overrides
-                (withoutRunnerSwitches
-                  (filter (fn [(row String)] -> Bool
-                            (let [(k (optionOr (listHead (stringSplit row "=")) row))]
-                              (not (listContains? names k))))
-                          (envList)))))
+                (filter (fn [(row String)] -> Bool
+                          (let [(k (optionOr (listHead (stringSplit row "=")) row))]
+                            (not (listContains? names k))))
+                        (envList))))
 
 fn withEnvStripped! names: (List String) -> (List String)
   (filter (fn [(row String)] -> Bool
@@ -258,20 +130,10 @@ fn ! cacheDir! -> String
 fn modulesDirIn cDir: String -> String
   (str cDir "/modules")
 
-; (:m :ref FABLE-BOOTFIX :do "a wrapper imports its suite by a root-relative path, which resolves only under a .asl.config.asn; a tree that is just asl/ (the published subtree, a git archive of asl/) has none at its root or above, so there the wrapper goes under asl/, whose own config names the workspace asl and resolves asl/...")
-fn ! configAbove? dir: String -> Bool
-  (if (fileExists? (str dir "/.asl.config.asn")) true
-    (let [(up (resultOr (realPath (str dir "/..")) dir))]
-      (if (or (= up dir) (= dir "/")) false (configAbove? up))))
-
-fn ! wrapperBase root: String -> String
-  (if (or (configAbove? root) (not (fileExists? (str root "/asl/.asl.config.asn")))) ".asl/cache/nativeTest/entries" "asl/.asl/cache/nativeTest/entries")
-
 fn ! wrapperDirIn cDir: String -> String
-  (let [(full (resultOr (realPath cDir) cDir))
-        (base (wrapperBase (selfRoot)))]
-    (if (or (stringStartsWith? base "asl/") (stringStartsWith? (relativeTo (selfRoot) full) "/"))
-      (toolPath (str base "/" (slotKey "entries" full)))
+  (let [(full (resultOr (realPath cDir) cDir))]
+    (if (stringStartsWith? (relativeTo (selfRoot) full) "/")
+      (toolPath (str ".asl/cache/nativeTest/entries/" (slotKey "entries" full)))
       (str cDir "/entries")))
 
 fn modulesDir! -> String
@@ -349,8 +211,7 @@ fn mainReturnsBareInt64 src: String -> Bool
     ((none) false)
     ((some l) (match (stringIndexOf l "->")
                 ((none) false)
-                ((some i) (let [(t (stringTrim (optionOr (stringSlice l (+ i 2) (stringLength l)) "")))]
-                            (or (= t "Int64") (stringStartsWith? t "Int64 ")))))))
+                ((some i) (= (stringTrim (optionOr (stringSlice l (+ i 2) (stringLength l)) "")) "Int64")))))
 
 fn wrapperSourceRunInt64 importPath: String takesArgs: Bool -> String
   (str "(module nativeTestEntry\n"
@@ -378,8 +239,8 @@ fn importPathOf path: String -> String
     (if (stringEndsWith? p ".asl") (optionOr (stringSlice p 0 (- (stringLength p) 4)) p) p))
 
 fn entryBody entry: String takesArgs: Bool -> String
-  (if (not (or (= entry "main") (= entry "run")))
-    (str "  (let [(passed (suite/" entry ")) (_ (peakNote!))] (if passed (ok 0) (do (eprintln \"ERR_TEST_FAILED: " entry " returned false, not true\") (ok 1))))\n")
+  (if (= entry "runTests")
+    "  (if (suite/runTests) (ok 0) (do (eprintln \"ERR_TEST_FAILED: runTests returned false, not true\") (ok 1)))\n"
     (str "  (match (suite/main" (if (= entry "run") (if takesArgs " args" "") (if takesArgs " (list)" "")) ")\n"
          (if (= entry "run") "    ((ok code) (ok code))\n" "    ((ok _) (ok 0))\n")
          "    ((err e) (do (eprintln (str \"ERR_TEST_FAILED: main returned (err \" e \"), not (ok ...)\")) (ok 1))))\n"))
@@ -398,48 +259,22 @@ fn guardedBody entry: String takesArgs: Bool -> String
          "    ((not (listEmpty? args)) (do (eprintln \"" (argvGuardMessage) "\") (ok 97)))\n"
          "    (else " (entryBody entry takesArgs) "  ))\n"))
 
-; (:m :ref TEST-RUNNER-SELECT :do "a test entry, when the runner sets ASL_NATIVE_TEST_STATS=1, prints the binary own peak resident size (getrusage) on stderr once the test function returns; the runner takes the line out of the text it shows and puts the number in its receipt")
-fn peakNoteSource -> String
-  (str "fn ! peakNote! -> Bool\n"
-       "  (if (= (envGet \"ASL_NATIVE_TEST_STATS\") (some \"1\"))\n"
-       "    (match (procRusage) ((ok u) (do (eprintln (str \"ASL_TEST_PEAK_RSS_KB \" u.selfMaxRssKb)) true)) ((err _) false))\n"
-       "    false)\n\n")
-
 fn wrapperSource importPath: String entry: String takesArgs: Bool -> String
   (str "(module nativeTestEntry\n"
        "  :x [main]\n"
        "  :i [(" importPath " :a suite)])\n\n"
        (if (= entry "run") (dropEphemeralSource) "")
-       (if (or (= entry "run") (= entry "main")) "" (peakNoteSource))
        "fn ! main args: (List String) -> (Result Int64 String)\n"
        (if (= entry "run") (str "  (do (dropEphemeral!)\n" (guardedBody entry takesArgs) "  )\n") (guardedBody entry takesArgs)))
 
-fn plainReport? words: (List String) -> Bool
-  (and (some? (stringToInt64 (optionOr (listGet words 0) "")))
-       (and (= (listGet words 1) (some "assertion(s)"))
-            (and (= (listGet words 2) (some "executed,"))
-                 (some? (stringToInt64 (optionOr (listGet words 3) ""))))))
-
-; (:m :ref TEST-RUNNER-SELECT :do "the report record: N assertion(s) executed, M refutation(s) executed, and under --keep-going the same with , K failed; the runtime writes it at exit, last on stderr and on a fresh line when keep-going is on")
 fn reportLine? line: String -> Bool
   (let [(words (stringSplit line " "))]
-    (and (plainReport? words)
-         (or (and (= (listLength words) 6) (stringEndsWith? line " refutation(s) executed"))
-             (and (= (listLength words) 8)
-                  (and (= (listGet words 5) (some "executed,"))
-                       (and (= (listGet words 7) (some "failed"))
-                            (some? (stringToInt64 (optionOr (listGet words 6) "")))))))))
-
-; (:m :ref TEST-RUNNER-SELECT :do "the failed count of the last report record: K of a keep-going record, 0 of a plain one (a plain run raises at its first failure), -1 with no record")
-fn reportFailed stderr: String -> Int64
-  (match (listLast (filter reportLine? (stringLines stderr)))
-    ((none) -1)
-    ((some l) (let [(words (stringSplit l " "))]
-                (if (= (listLength words) 8) (optionOr (stringToInt64 (optionOr (listGet words 6) "")) 1) 0))))
-
-; (:m :ref TEST-RUNNER-SELECT :do "a site line rtError prints for an assertion or refutation that failed with no handler, anywhere in a line, so text written before it on the same line cannot hide it")
-fn siteLine? line: String -> Bool
-  (or (stringContains? line ": ERR_ASSERT: assertion failed: ") (stringContains? line ": ERR_REFUTE: refutation failed: "))
+    (and (= (listLength words) 6)
+         (and (stringEndsWith? line " refutation(s) executed")
+              (and (some? (stringToInt64 (optionOr (listGet words 0) "")))
+                   (and (= (listGet words 1) (some "assertion(s)"))
+                        (and (= (listGet words 2) (some "executed,"))
+                             (some? (stringToInt64 (optionOr (listGet words 3) "")))))))))
 
 fn reportCounts stderr: String -> (Option (Pair Int64 Int64))
   (match (listLast (filter reportLine? (stringLines stderr)))
@@ -464,15 +299,9 @@ fn textLines text: String -> (List String)
 fn errorLine? line: String -> Bool
   (and (stringStartsWith? line "ERR_") (stringContains? line ": "))
 
-; (:m :ref TEST-RUNNER-SELECT :do "green only when the binary exited 0, its report record is there with no failures and, in a keep-going run, no site line of a failed assertion or refutation shows (a plain run aborts at its first failure with a non-zero exit, so there the rule is main's and a passing suite may echo such a line): the exit status rterr.exit forces non-zero after a kept failure and the failed count of the record the runtime writes last are the verdict, stderr text the program writes can add a failure but never remove one. Kept failures (--keep-going) get one FAIL line counting them, naming a later raise or exit after them; with none kept the verdict is the one asl test gave before --keep-going existed, and the blank lines the runtime wrote to start its lines fresh are not shown")
 fn verdictOf path: String exitCode: Int64 stderr: String -> Verdict
   (let [(counts (reportCounts stderr))
-        (failed (reportFailed stderr))
-        (kept (> failed 0))
-        (lines (textLines stderr))
-        (keepRecord (match (listLast (filter reportLine? lines)) ((some l) (= (listLength (stringSplit l " ")) 8)) ((none) false)))
-        (shown (if keepRecord (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) lines) lines))
-        (withoutReport (dropLastMatch shown (fn [(l String)] -> Bool (not (reportLine? l)))))
+        (withoutReport (dropLastMatch (textLines stderr) (fn [(l String)] -> Bool (not (reportLine? l)))))
         (errLine (listLast (filter errorLine? withoutReport)))
         (rest (if (and (!= exitCode 0) (some? errLine)) (dropLastMatch withoutReport (fn [(l String)] -> Bool (not (errorLine? l)))) withoutReport))
         (restText (stringJoin rest "\n"))]
@@ -480,39 +309,9 @@ fn verdictOf path: String exitCode: Int64 stderr: String -> Verdict
       ((none) (Verdict :exit 1 :line (str "FAIL " path ": " (optionOr errLine (str "native binary exited " exitCode " without an assertion report"))) :stderr restText))
       ((some c) (let [(a (pairFirst c)) (r (pairSecond c))]
                   (cond
-                    (kept (Verdict :exit 1 :line (str "FAIL " path ": ERR_ASSERT: " failed " assertion(s) or refutation(s) failed, execution kept going (--keep-going)" (cond ((some? errLine) (str "; then " (optionOr errLine ""))) ((and (!= exitCode 0) (!= exitCode 1)) (str "; then native binary exited " exitCode)) (else "")) " (after " a " asserts)") :stderr restText))
                     ((!= exitCode 0) (Verdict :exit 1 :line (str "FAIL " path ": " (optionOr errLine (str "native binary exited " exitCode)) " (after " a " asserts)") :stderr restText))
-                    ((and keepRecord (listAny? siteLine? rest)) (Verdict :exit 1 :line (str "FAIL " path ": ERR_ASSERT: a failed assertion or refutation printed its site line, yet the binary exited 0 (after " a " asserts)") :stderr restText))
                     ((<= (+ a r) 0) (Verdict :exit 1 :line (str "FAIL " path ": ERR_TEST_FAILED: zero assertions executed (after 0 asserts)") :stderr restText))
                     (else (Verdict :exit 0 :line (str path ": " (cn/summary a r)) :stderr restText)))))))
-
-; (:m :ref TEST-RUNNER-SELECT :do "the test functions asl test --only may name: every top-level fn of the file with no parameters returning Bool, runTests and suiteWallS aside, in source order; a file that does not parse has none")
-fn testFunctionsOf src: String -> (List String)
-  (match (ast/parse src)
-    ((ok forms) (listFlatMap (fn [(t ast/TopForm)] -> (List String)
-                               (match t
-                                 ((ast/topDefun d) (if (and (listEmpty? d.params) (and (= (stringTrim d.retType) "Bool") (!= d.name "runTests"))) (list d.name) (list)))
-                                 (_ (list))))
-                             forms))
-    ((err _) (list)))
-; (:m :ref TEST-RUNNER-SELECT :do "the lowering lets the wrapper call only what the suite exports, and suites export runTests alone, so a selected run builds a copy of the file whose :x list also names the function; the copy is otherwise the same text, so its imports and positions are those of the file")
-fn selectionSource src: String name: String -> (Result String String)
-  (let [(header (headerOf src))]
-    (match (stringIndexOf header ":x [")
-      ((none) (err "the file has no module header with an :x [...] export list"))
-      ((some i) (let [(at (+ i 4))]
-                  (ok (str (optionOr (stringSlice src 0 at) "") name " " (optionOr (stringSlice src at (stringLength src)) "")))))))
-
-
-; (:m :ref TEST-RUNNER-SELECT :do "the verdict of one selected function: the whole-suite verdict with its lines renamed path --only NAME, and a pass worded N assertion(s) ran in NAME, so nothing that counts N assertion(s) executed (audit gates, sweep totals, claim backing) can take a selected run for a suite pass; zero assertions in the function stay red")
-fn selectedVerdict path: String only: String exitCode: Int64 stderr: String -> Verdict
-  (let [(v (verdictOf path exitCode stderr))
-        (counts (optionOr (reportCounts stderr) (pair 0 0)))
-        (failHead (str "FAIL " path ": "))
-        (rest (if (stringStartsWith? v.line failHead) (optionOr (stringSlice v.line (stringLength failHead) (stringLength v.line)) "") ""))]
-    (if (!= v.exit 0)
-      (Verdict :exit v.exit :line (str "FAIL " path " --only " only ": " (stringReplace rest "zero assertions executed" (str "zero assertions executed in " only))) :stderr v.stderr)
-      (Verdict :exit 0 :line (str path " --only " only ": " (pairFirst counts) " assertion(s) ran in " only ", " (pairSecond counts) " refutation(s) ran (selected function, not a suite pass)") :stderr v.stderr)))
 
 fn initAssertLine path: String asserts: Int64 refutes: Int64 -> String
   (str "FAIL " path ": ERR_ASSERT_AT_INIT: "
@@ -552,7 +351,9 @@ fn hostVerdictLine text: String -> String
 
 ; (:m :ref HL-FIXWAVE :do "toolchainRoots fed its fingerprint hash two paths HL-DELETE can never produce again -- asl/host/out/asl-host and asl/host/out/libaslhost.a; both are dropped, leaving the native runtime archive, the prelude and the compiler sources that actually change the fingerprint")
 fn ! toolchainRoots -> (List String)
-  (map toolPath (nb/toolchainRootPaths))
+  (map toolPath (list "asl/packages/asl-compiler/src" "asl/packages/asl-checker/src" "asl/packages/asl-codegen/src" "asl/packages/asl-ir/src"
+        "asl/packages/asl-parser/src" "asl/packages/asl-syntax/src/core" "asl/packages/asl-target-llvm/src"
+        "asl/host/out/libaslrt.a" "asl/host/out/prelude.asl" "asl/prelude/prelude.asl" "asl/prelude/native" "asl/tools/nativeTest.asl"))
 
 fn ! fileDigest path: String -> String
   (match (fileReadBytes path)
@@ -596,115 +397,7 @@ fn ! optLevelFor mode: String -> String
   (optionOr (envGet "ASL_NATIVE_OPT") (if (= mode "test") "-O1" "-O2"))
 
 fn ! fingerprintOf clangVersion: String targetTriple: String -> String
-  (fingerprintIn (toolRoot) clangVersion targetTriple)
-
-; (:m :ref FPNARROW :do "nativeTest.asl enters the fingerprint as its artifactSlice, not its bytes: a cached object, prelude, suite binary or checker verdict can only come from code the compile paths run, so editing a driver-only body (sweep, suite pool, test runner, verdict parsing, the key itself) or a top-level comment keeps every module warm; every other root still enters by content digest")
-fn ! fingerprintIn root: String clangVersion: String targetTriple: String -> String
-  (let [(under (fn [(rel String)] -> String (if (= root ".") rel (str root "/" rel))))
-        (lines (fold (fn [(acc (List String)) (r String)] -> (List String)
-                       (listAppend acc (if (= r (selfSource))
-                                         (list (match (fileReadString (under r))
-                                                 ((err e) (str r " missing " e))
-                                                 ((ok src) (str r " slice " (bytesSha256 (stringToBytes (artifactSlice src)))))))
-                                         (map (fn [(l String)] -> String (relativeTo root l)) (treeLines (under r))))))
-                     (list) (nb/toolchainRootPaths)))]
-    (bytesSha256 (stringToBytes (stringJoin (cons (format) (cons clangVersion (cons targetTriple lines))) "\n"))))
-
-; (:m :ref FPNARROW :do "bodies that cannot shape a cached artifact: entry dispatch, the suite sweep and its pool, the test runner and verdict parsing, and the fingerprint itself; one of them still enters the slice when any other fn names it")
-fn driverOnlyNames -> (List String)
-  (list "main" "dispatch!" "testMain" "runTests" "prepareAll" "prepareAllIn" "suiteWorkersFor" "strideOrder" "unstride" "prepareCommand!"
-        "runOne" "runFile" "runBuilt!" "runStaged!" "runKept!" "execStaged!" "evalExpression!"
-        "verdictOf" "reportCounts" "hostVerdictLine" "failLine" "suiteFailLine" "initVerdict" "judgeInit!"
-        "fingerprint" "fingerprintOf" "fingerprintIn" "fingerprintOr" "fingerprintMemoDir" "treeStamps" "toolchainRoots"
-        "driverOnlyNames" "driverOnly?" "routeNames" "artifactSlice" "sliceStep" "sliceReach" "reachFrom" "scanLine" "closeToken" "identByte?" "itemNameOf")
-
-; (:m :ref FPNARROW :do "main is driver-only for traversal, its routes to the runner and sweep stay out, yet its own text is hashed: the --compile-units route into compileUnitsWorker! runs in every worker, so an edit to main changes the fingerprint")
-fn routeNames -> (List String)
-  (list "main")
-
-fn driverOnly? name: String -> Bool
-  (or (listContains? (driverOnlyNames) name)
-      (let [(bs (stringToBytes name))]
-        (and (stringStartsWith? name "test") (> (bytesLength bs) 4) (>= (bytesGet bs 4) 65) (<= (bytesGet bs 4) 90))))
-
-(schema LineScan
-  (:f inString Bool)
-  (:f text String)
-  (:f idents (List String)))
-
-(schema SliceItem
-  (:f name String)
-  (:f header Bool)
-  (:f lines (List String))
-  (:f idents (List String)))
-
-(schema SliceAcc
-  (:f inString Bool)
-  (:f items (List SliceItem)))
-
-fn identByte? b: Int64 -> Bool
-  (or (and (>= b 97) (<= b 122)) (and (>= b 65) (<= b 90)) (and (>= b 48) (<= b 57)) (= b 95) (= b 33) (= b 63) (= b 45))
-
-fn closeToken line: String tok: Int64 at: Int64 acc: (List String) -> (List String)
-  (if (>= tok 0) (cons (optionOr (stringSlice line tok at) "") acc) acc)
-
-; (:m :ref FPNARROW :do "one line, string state carried in: identifiers outside strings and comments are the references, and the text up to a comment is what the slice hashes")
-fn scanLine line: String bs: Bytes n: Int64 i: Int64 inStr: Bool tok: Int64 acc: (List String) -> LineScan
-  (cond
-    ((>= i n) (LineScan :inString inStr :text line :idents (closeToken line tok n acc)))
-    (inStr (let [(b (bytesGet bs i))]
-             (cond ((= b 92) (scanLine line bs n (+ i 2) true -1 acc))
-                   ((= b 34) (scanLine line bs n (+ i 1) false -1 acc))
-                   (else (scanLine line bs n (+ i 1) true -1 acc)))))
-    (else (let [(b (bytesGet bs i))]
-            (cond ((identByte? b) (scanLine line bs n (+ i 1) false (if (>= tok 0) tok i) acc))
-                  ((= b 59) (LineScan :inString false :text (optionOr (stringSlice line 0 i) "") :idents (closeToken line tok i acc)))
-                  (else (scanLine line bs n (+ i 1) (= b 34) -1 (closeToken line tok i acc)))))))
-
-fn itemNameOf line: String -> String
-  (if (stringStartsWith? line "fn ")
-    (let [(ws (stringSplit line " "))
-          (w1 (optionOr (listGet ws 1) ""))]
-      (if (= w1 "!") (optionOr (listGet ws 2) "") w1))
-    "")
-
-; (:m :ref FPNARROW :do "a line starting in column 0 outside a string opens a new top-level item; a misread boundary only moves lines into an item that is always kept, never out of one")
-fn sliceStep acc: SliceAcc line: String -> SliceAcc
-  (let [(bs (stringToBytes line))
-        (n (bytesLength bs))
-        (opens (or (listEmpty? acc.items) (and (not acc.inString) (> n 0) (!= (bytesGet bs 0) 32) (!= (bytesGet bs 0) 9))))
-        (sc (scanLine line bs n 0 acc.inString -1 (list)))
-        (cur (if opens (SliceItem :name (itemNameOf line) :header (stringStartsWith? line "(module") :lines (list) :idents (list))
-                 (optionOr (listHead acc.items) (SliceItem :name "" :header false :lines (list) :idents (list)))))
-        (rest (if opens acc.items (listDrop acc.items 1)))]
-    (SliceAcc :inString sc.inString :items (cons (SliceItem :name cur.name :header cur.header :lines (if (and (not acc.inString) (stringEmpty? (stringTrim sc.text))) cur.lines (cons sc.text cur.lines)) :idents (listAppend sc.idents cur.idents)) rest)))
-
-fn reachFrom refs: (Map String (List String)) todo: (List String) seen: (Map String Bool) -> (Map String Bool)
-  (match (listHead todo)
-    ((none) seen)
-    ((some x) (if (or (mapHas? seen x) (not (mapHas? refs x)))
-                (reachFrom refs (listDrop todo 1) seen)
-                (reachFrom refs (listAppend (optionOr (mapGet refs x) (list)) (listDrop todo 1)) (mapSet seen x true)))))
-
-; (:m :ref FPNARROW :do "kept fns: every fn not driver-only, every name a kept fn or a non-header item references, transitively; same-named fns merge their references")
-fn sliceReach items: (List SliceItem) -> (Map String Bool)
-  (let [(refs (fold (fn [(m (Map String (List String))) (it SliceItem)] -> (Map String (List String))
-                      (if (stringEmpty? it.name) m (mapSet m it.name (listAppend it.idents (optionOr (mapGet m it.name) (list))))))
-                    (mapEmpty) items))
-        (seeds (fold (fn [(acc (List String)) (it SliceItem)] -> (List String)
-                       (cond ((stringEmpty? it.name) (if it.header acc (listAppend it.idents acc)))
-                             ((driverOnly? it.name) acc)
-                             (else (cons it.name acc))))
-                     (list) items))]
-    (reachFrom refs seeds (mapEmpty)))
-
-; (:m :ref FPNARROW :do "the module header, schemas, routeNames and kept fns in file order, comments and blank lines outside strings dropped")
-fn artifactSlice src: String -> String
-  (let [(items (listReverse (fold (fn [(acc SliceAcc) (l String)] -> SliceAcc (sliceStep acc l)) (SliceAcc :inString false :items (list)) (stringSplit src "\n")).items))
-        (kept (sliceReach items))]
-    (stringJoin (fold (fn [(acc (List String)) (it SliceItem)] -> (List String) (if (or (stringEmpty? it.name) (mapHas? kept it.name) (listContains? (routeNames) it.name)) (listAppend acc (listReverse it.lines)) acc))
-                      (list) items)
-                "\n"))
+  (bytesSha256 (stringToBytes (stringJoin (cons (format) (cons clangVersion (cons targetTriple (fold (fn [(acc (List String)) (r String)] -> (List String) (listAppend acc (map (fn [(l String)] -> String (relativeTo (toolRoot) l)) (treeLines r)))) (list) (toolchainRoots))))) "\n")))
 
 ; (:m :ref RUN-ENTRY-REBUILD-COST :do "a stat walk of the toolchain roots: one path size mtime line per file and the newest mtime seen")
 fn ! treeStamps path: String -> (Pair Int64 (List String))
@@ -740,23 +433,10 @@ fn ! fingerprint -> String
         fp)))
 
 fn wrapperVersion -> String
-  "wrapper/4;argvGuard;initPhase;peakNote"
+  "wrapper/3;argvGuard;initPhase"
 
 fn slotKey path: String suiteDigest: String -> String
   (bytesSha256 (stringToBytes (str (format) "\n" (wrapperVersion) "\n" path "\n" suiteDigest)))
-
-; (:m :ref MODKEY-OPTLEVEL :do "the linked binary carries the opt level its objects were compiled at, so a slot built under another ASL_NATIVE_OPT is another slot")
-fn suiteSlotKeyIn tree: String mode: String opt: String rc: String logicalPath: String digest: String -> String
-  (slotKey (str mode opt rc ":" (importPathOf logicalPath) "@" tree) digest)
-
-fn ! treeOf root: String -> String
-  (resultOr (realPath root) root)
-
-fn ! suiteSlotKey mode: String logicalPath: String actualPath: String -> String
-  (suiteSlotKeyIn (treeOf (toolRoot)) mode (optLevelFor mode) (rcTag (rcModeFor! logicalPath)) logicalPath (fileDigest actualPath))
-
-fn ! suiteSlotKeyFor mode: String only: String logicalPath: String actualPath: String -> String
-  (suiteSlotKeyIn (treeOf (toolRoot)) (if (stringEmpty? only) mode (str mode "#only=" only)) (optLevelFor mode) (rcTag (rcModeFor! logicalPath)) logicalPath (fileDigest actualPath))
 
 fn relativeTo root: String path: String -> String
   (if (stringStartsWith? path (str root "/")) (optionOr (stringSlice path (+ (stringLength root) 1) (stringLength path)) path) path)
@@ -837,7 +517,7 @@ fn ! manifestHolds? text: String -> Bool
   (manifestHoldsAt "." -1 text)
 
 fn ! writeAtomic path: String text: String -> (Result Unit String)
-  (let [(tmp (str path ".tmp." (stringFromInt64 (procSelf)) "." (monotonicNs)))]
+  (let [(tmp (str path ".tmp." (monotonicNs)))]
     (match (fileWrite tmp text)
       ((err e) (err e))
       ((ok _) (pathRename tmp path))))
@@ -1073,8 +753,7 @@ fn overlayRounds px: lk/LinkUnit names: (List String) acc: lk/LinkAcc -> lk/Link
   (:f lowerMs Int64)
   (:f emitMs Int64)
   (:f llcStart Int64)
-  (:f opt String)
-  (:f lock String))
+  (:f opt String))
 
 (schema UnitStep
   (:f done (Option ModCompileResult))
@@ -1085,14 +764,10 @@ fn unitFailed path: String e: String -> UnitStep
 
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "the key holds the unit name: an implicit script module is named by its path as seen from the cwd (greet from its own dir, asl/packages/.../greet from the root), and an object compiled under one name linked under the other left greet.main undefined once run binaries stopped being reused")
 ; (:m :ref RUN-ENTRY-REBUILD-COST :do "the entry wrapper is keyed by its text, imports and inits, not its path: an ephemeral run writes it under a per-run name, and the same text lowers to the same object wherever it sits, so a warm run reuses the wrapper object instead of compiling it again")
-; (:m :ref LEONSERVE-COLD-START :do "a module inside the workspace is keyed by its path from the workspace root, not the absolute one: the object holds the module name and root-relative loci only, so a worktree at another path with the same source and imports reuses the objects instead of compiling the whole closure again (226 modules, 529 s for leonServe in a fresh worktree)")
-fn ! unitKey fp: String opt: String u: lk/LinkUnit ifaceMap: (Map String String) isEntry: Bool inits: (List String) -> String
-  (unitKeyIn (selfRoot) fp opt u ifaceMap isEntry inits)
-
-fn ! unitKeyIn root: String fp: String opt: String u: lk/LinkUnit ifaceMap: (Map String String) isEntry: Bool inits: (List String) -> String
-  (moduleCacheKey fp (if isEntry "@entry" (relativeTo root u.path)) (fileDigest u.path)
-                  (listAppend (map (fn [(imp (Pair String String))] -> String (str (relativeTo root (pairSecond imp)) " " (optionOr (mapGet ifaceMap (pairSecond imp)) ""))) u.imports)
-                              (cons (str "@name " u.name) (cons (str "@opt " opt) (if isEntry (list (str "@inits " (stringJoin inits ","))) (list))))))
+fn ! unitKey fp: String u: lk/LinkUnit ifaceMap: (Map String String) isEntry: Bool inits: (List String) -> String
+  (moduleCacheKey fp (if isEntry "@entry" u.path) (fileDigest u.path)
+                  (listAppend (map (fn [(imp (Pair String String))] -> String (str (pairSecond imp) " " (optionOr (mapGet ifaceMap (pairSecond imp)) ""))) u.imports)
+                              (cons (str "@name " u.name) (if isEntry (list (str "@inits " (stringJoin inits ","))) (list)))))
 
 ; (:m :ref RUN-ENTRY-REBUILD-COST :do "an ephemeral slot keeps only the objects of transient text (-e, -, eval) and of an entry whose closure holds such text; a script's entry object goes to the shared module cache, content-addressed and swept like any other")
 fn ! slotObject? slot: String u: lk/LinkUnit units: (List lk/LinkUnit) isEntry: Bool -> Bool
@@ -1106,24 +781,24 @@ fn hitResult path: String objPath: String refs: (List String) -> ModCompileResul
                     :initName (optionOr (listHead (map (fn [(r String)] -> String (optionOr (stringSlice r 6 (stringLength r)) "")) (filter (fn [(r String)] -> Bool (stringStartsWith? r "@init:")) refs))) "")
                     :err "")
 
-fn ! unitObjPath cDir: String fp: String opt: String slot: String u: lk/LinkUnit units: (List lk/LinkUnit) ifaceMap: (Map String String) isEntry: Bool inits: (List String) -> String
-  (str (if (slotObject? slot u units isEntry) slot (modulesDirIn cDir)) "/" (unitKey fp opt u ifaceMap isEntry inits))
+fn ! unitObjPath cDir: String fp: String slot: String u: lk/LinkUnit units: (List lk/LinkUnit) ifaceMap: (Map String String) isEntry: Bool inits: (List String) -> String
+  (str (if (slotObject? slot u units isEntry) slot (modulesDirIn cDir)) "/" (unitKey fp u ifaceMap isEntry inits))
 
 ; (:m :ref RUN-ENTRY-REBUILD-COST :do "every unit of the closure, the entry last with the inits of the units before it, as compileUnitsStep keys them; none at the first unit whose object is not cached")
-fn ! cachedUnits cDir: String fp: String opt: String slot: String units: (List lk/LinkUnit) ifaceMap: (Map String String) entry: lk/LinkUnit -> (Option (List ModCompileResult))
+fn ! cachedUnits cDir: String fp: String slot: String units: (List lk/LinkUnit) ifaceMap: (Map String String) entry: lk/LinkUnit -> (Option (List ModCompileResult))
   (fold (fn [(acc (Option (List ModCompileResult))) (u lk/LinkUnit)] -> (Option (List ModCompileResult))
           (match acc
             ((none) (none))
             ((some rs)
              (let [(isEntry (= u.name entry.name))
-                   (stem (unitObjPath cDir fp opt slot u units ifaceMap isEntry (filter (fn [(n String)] -> Bool (not (stringEmpty? n))) (map (fn [(r ModCompileResult)] -> String r.initName) rs))))]
+                   (stem (unitObjPath cDir fp slot u units ifaceMap isEntry (filter (fn [(n String)] -> Bool (not (stringEmpty? n))) (map (fn [(r ModCompileResult)] -> String r.initName) rs))))]
                (match (readVerifiedMeta (str stem ".meta") (str stem ".o"))
                  ((none) (none))
                  ((some refs) (some (listAppend rs (list (hitResult u.path (str stem ".o") refs))))))))))
         (some (list)) units)
 
 ; (:m :ref RUN-ENTRY-REBUILD-COST :do "a build whose every unit object and the full prelude object are cached links them at once: the prelude and the native overlay are not parsed and nothing is lowered, so a warm run spawns one clang, the link")
-fn ! cachedLink! cDir: String fp: String opt: String slot: String bin: String key: String uRes: (Result (List lk/LinkUnit) (List irTy/IrDiag)) t0: Int64 -> (Option Built)
+fn ! cachedLink! cDir: String fp: String slot: String bin: String key: String uRes: (Result (List lk/LinkUnit) (List irTy/IrDiag)) t0: Int64 -> (Option Built)
   (match uRes
     ((err _) (none))
     ((ok units)
@@ -1134,55 +809,23 @@ fn ! cachedLink! cDir: String fp: String opt: String slot: String bin: String ke
          (match (readVerifiedMeta (str pStem ".meta") (str pStem ".o"))
            ((none) (none))
            ((some _)
-            (match (cachedUnits cDir fp opt slot units (ifaceMapOf units) (optionOr (listGet units (- (listLength units) 1)) (lk/emptyUnit "")))
+            (match (cachedUnits cDir fp slot units (ifaceMapOf units) (optionOr (listGet units (- (listLength units) 1)) (lk/emptyUnit "")))
               ((none) (none))
               ((some results)
                (let [(t1 (monotonicNs))
                      (_ (telemetry "NATIVE-PRELUDE-CACHE :hit :full"))]
                  (some (linkUnits! slot bin (closureDeps units key) (str pStem ".o") results darwin (nativeFacts! cDir fp) t0 t1 t1)))))))))))
 
-; (:m :ref NT-COMPILE-ONCE :do "N processes that miss one module or prelude key at once compiled it N times (node2 2026-10-30: 45 Leon writers, prelude 114x, modules 86x, 128 clang on 8 cores). A miss now claims KEY.o.lock (pid, created exclusively); a loser waits for the verified object or the holder's death, then takes the key over. The holder releases after the object and metadata landed or the compile failed. A lock this process already holds, or a wait past claimWaitNs, compiles unclaimed as before")
-(schema Claim (:f hit (Option (List String))) (:f lock String))
-
-fn ! claimWaitNs! -> Int64
-  (nb/claimWaitFor! (toolRoot))
-
-fn ! claimObject! objPath: String metaPath: String deadlineNs: Int64 -> Claim
-  (let [(lock (str objPath ".lock"))]
-    (match (readVerifiedMeta metaPath objPath)
-      ((some refs) (Claim :hit (some refs) :lock ""))
-      ((none)
-       (cond
-         ((takeLock! lock 3)
-          (match (readVerifiedMeta metaPath objPath)
-            ((some refs) (do (releaseClaim! lock) (Claim :hit (some refs) :lock "")))
-            ((none) (Claim :hit (none) :lock lock))))
-         ((= (optionOr (lockPid lock) 0) (procSelf)) (Claim :hit (none) :lock ""))
-         ((>= (monotonicNs) deadlineNs) (Claim :hit (none) :lock ""))
-         (else (do (sleepMs 200) (claimObject! objPath metaPath deadlineNs)))))))
-
-fn ! releaseClaim! lock: String -> Unit
-  (if (and (not (stringEmpty? lock)) (= (optionOr (lockPid lock) 0) (procSelf)))
-    (match (pathRemove lock) ((ok _) ()) ((err _) ()))
-    ())
-
-fn ! settled! lock: String step: UnitStep -> UnitStep
-  (match step.pending
-    ((some _) step)
-    ((none) (do (releaseClaim! lock) step)))
-
 fn ! compileUnitPrepare facts: (Option libc/TripleFacts) cDir: String fp: String u: lk/LinkUnit units: (List lk/LinkUnit) ifaceMap: (Map String String) prelude: lk/LinkUnit px: lk/LinkUnit ovlNames: (List String) entry: lk/LinkUnit slot: String counter: Int64 inits: (List String) opt: String -> UnitStep
   (let [(isEntry (= u.name entry.name))
-        (uKey (unitKey fp opt u ifaceMap isEntry inits))
+        (uKey (unitKey fp u ifaceMap isEntry inits))
         (objDir (if (slotObject? slot u units isEntry) slot (modulesDirIn cDir)))
         (objPath (str objDir "/" uKey ".o"))
-        (metaPath (str objDir "/" uKey ".meta"))
-        (claim (claimObject! objPath metaPath (+ (monotonicNs) (claimWaitNs!))))]
-    (match claim.hit
+        (metaPath (str objDir "/" uKey ".meta"))]
+    (match (readVerifiedMeta metaPath objPath)
       ((some refs)
        (UnitStep :done (some (hitResult u.path objPath refs)) :pending (none)))
       ((none)
-       (settled! claim.lock
        (let [(_ (if (fileExists? objPath) (pathRemove objPath) (ok ())))
              (_ (if (fileExists? metaPath) (pathRemove metaPath) (ok ())))
              (scope (low/LinkScope :path u.path :imports (lk/importForms units u) :prelude prelude.forms :strings (list) :only (none)))
@@ -1215,11 +858,11 @@ fn ! compileUnitPrepare facts: (Option libc/TripleFacts) cDir: String fp: String
                                :pending (some (PendingObj :path u.path :pid 0 :outFd -1 :errFd -1 :tmpLl tmpLl :tmpO tmpO :objPath objPath :metaPath metaPath
                                                           :pExts (filter (fn [(n String)] -> Bool (stringStartsWith? n "prelude.")) (map (fn [(e irTy/SsaExtern)] -> String e.name) m.externs))
                                                           :initName (if (llvm/definesInit? ll m.name) m.name "")
-                                                          :lowerMs (ms (- lowerEnd lowerStart)) :emitMs (ms (- emitEnd emitStart)) :llcStart 0 :opt opt :lock claim.lock))))))))))))))))
+                                                          :lowerMs (ms (- lowerEnd lowerStart)) :emitMs (ms (- emitEnd emitStart)) :llcStart 0 :opt opt)))))))))))))))
 
 fn ! compileUnitSpawn p: PendingObj -> UnitStep
   (match (procSpawnv (list (clangCommand) p.opt "-Wno-override-module" "-c" p.tmpLl "-o" p.tmpO) (none) (none))
-    ((err e) (do (releaseClaim! p.lock) (unitFailed p.path (str "spawn failed: " e))))
+    ((err e) (unitFailed p.path (str "spawn failed: " e)))
     ((ok sp)
      (let [(_ (fdClose sp.stdin))
            (_ (fdNonBlocking sp.stdout true))
@@ -1229,15 +872,9 @@ fn ! compileUnitSpawn p: PendingObj -> UnitStep
        (UnitStep :done (none)
                  :pending (some (PendingObj :path p.path :pid sp.pid :outFd sp.stdout :errFd sp.stderr :tmpLl p.tmpLl :tmpO p.tmpO
                                             :objPath p.objPath :metaPath p.metaPath :pExts p.pExts :initName p.initName
-                                            :lowerMs p.lowerMs :emitMs p.emitMs :llcStart startNs :opt p.opt :lock p.lock))))))
+                                            :lowerMs p.lowerMs :emitMs p.emitMs :llcStart startNs :opt p.opt))))))
 
-; (:m :ref NT-COMPILE-ONCE :do "the claim on the unit key is released only after the object and its metadata landed or the compile failed, so a waiter wakes to a verified hit or takes the key over")
 fn ! compileUnitFinish p: PendingObj -> ModCompileResult
-  (let [(r (compileUnitLand p))
-        (_ (releaseClaim! p.lock))]
-    r)
-
-fn ! compileUnitLand p: PendingObj -> ModCompileResult
   (let [(cRes (pumpCollect p.outFd p.errFd "" "" true true p.pid))
         (finishNs (monotonicNs))
         (llcMs (ms (- finishNs p.llcStart)))
@@ -1272,8 +909,7 @@ fn ! compileUnitLand p: PendingObj -> ModCompileResult
   (:f tmpPLl String)
   (:f tmpPO String)
   (:f preludeObj String)
-  (:f preludeMeta String)
-  (:f lock String))
+  (:f preludeMeta String))
 
 (schema PreludeStep
   (:f done (Option PreludeCompileResult))
@@ -1285,29 +921,24 @@ fn dedupeStr xs: (List String) -> (List String)
 fn preludeFailed err: String -> PreludeStep
   (PreludeStep :done (some (PreludeCompileResult :ok false :obj "" :err err)) :pending (none))
 
-fn ! compilePreludeSpawn slot: String preludeKey: String preludeObj: String preludeMeta: String rawLl: String counter: Int64 opt: String extra: (List String) lock: String -> PreludeStep
+fn ! compilePreludeSpawn slot: String preludeKey: String preludeObj: String preludeMeta: String rawLl: String counter: Int64 opt: String extra: (List String) -> PreludeStep
   (let [(pLl (llvm/ensureInit rawLl "prelude"))
         (tmpPLl (str slot "/prelude-" preludeKey "." (stringFromInt64 (procSelf)) "." (stringFromInt64 counter) ".ll"))
         (tmpPO (str slot "/prelude-" preludeKey "." (stringFromInt64 (procSelf)) "." (stringFromInt64 counter) ".part.o"))
         (wRes (writeAtomic tmpPLl pLl))]
     (match wRes
-      ((err we) (do (releaseClaim! lock) (preludeFailed (str "cannot write " tmpPLl ": " we))))
+      ((err we) (preludeFailed (str "cannot write " tmpPLl ": " we)))
       ((ok _)
        (match (procSpawnv (cons (clangCommand) (cons opt (listAppend extra (list "-Wno-override-module" "-c" tmpPLl "-o" tmpPO)))) (none) (none))
-         ((err e) (do (releaseClaim! lock) (preludeFailed (str "spawn failed: " e))))
+         ((err e) (preludeFailed (str "spawn failed: " e)))
          ((ok sp)
           (let [(_ (fdClose sp.stdin))
                 (_ (fdNonBlocking sp.stdout true))
                 (_ (fdNonBlocking sp.stderr true))]
             (PreludeStep :done (none)
-                         :pending (some (PendingPrelude :pid sp.pid :outFd sp.stdout :errFd sp.stderr :tmpPLl tmpPLl :tmpPO tmpPO :preludeObj preludeObj :preludeMeta preludeMeta :lock lock)))))))))
+                         :pending (some (PendingPrelude :pid sp.pid :outFd sp.stdout :errFd sp.stderr :tmpPLl tmpPLl :tmpPO tmpPO :preludeObj preludeObj :preludeMeta preludeMeta)))))))))
 
 fn ! compilePreludeAwait pp: PendingPrelude -> PreludeCompileResult
-  (let [(r (compilePreludeLand pp))
-        (_ (releaseClaim! pp.lock))]
-    r)
-
-fn ! compilePreludeLand pp: PendingPrelude -> PreludeCompileResult
   (let [(cRes (pumpCollect pp.outFd pp.errFd "" "" true true pp.pid))
         (rmLl (if (some? (envGet "ASL_NATIVE_KEEP_LL")) (ok ()) (pathRemove pp.tmpPLl)))]
     (if (!= cRes.exitCode 0)
@@ -1390,17 +1021,16 @@ fn ! compileSubsetPrelude facts: (Option libc/TripleFacts) cDir: String fp: Stri
 " (preludeDigestIn (toolRoot)) "
 " (stringJoin (listSort preludeFns) ",")))))
         (preludeObj (str (modulesDirIn cDir) "/prelude-" preludeKey ".o"))
-        (preludeMeta (str (modulesDirIn cDir) "/prelude-" preludeKey ".meta"))
-        (claim (claimObject! preludeObj preludeMeta (+ (monotonicNs) (claimWaitNs!))))]
-    (match claim.hit
+        (preludeMeta (str (modulesDirIn cDir) "/prelude-" preludeKey ".meta"))]
+    (match (readVerifiedMeta preludeMeta preludeObj)
       ((some _)
        (do (telemetry "NATIVE-PRELUDE-CACHE :hit :subset")
            (PreludeStep :done (some (PreludeCompileResult :ok true :obj preludeObj :err "")) :pending (none))))
       ((none)
        (let [(_ (dropStale preludeObj preludeMeta))]
          (match (preludeLl facts prelude ovlNames preludeFns)
-           ((err e) (do (releaseClaim! claim.lock) (preludeFailed e)))
-           ((ok pLl) (compilePreludeSpawn slot preludeKey preludeObj preludeMeta pLl counter opt extra claim.lock)))))))
+           ((err e) (preludeFailed e))
+           ((ok pLl) (compilePreludeSpawn slot preludeKey preludeObj preludeMeta pLl counter opt extra)))))))
 
 ; (:m :ref PRELUDEKEY :do "fp alone is the caller's claim and some callers pass a label (nativeOracle selfBuild), so a prelude object keyed by fp outlived its prelude: a 2026-10-18 object without HashMap was linked into units calling prelude.hashMapEmpty. Prelude keys now also cover the digests of the prelude source and native overlay files actually compiled")
 fn ! preludeDigestIn root: String -> String
@@ -1425,23 +1055,16 @@ fn ! compileFullPrelude facts: (Option libc/TripleFacts) cDir: String fp: String
        (do (telemetry "NATIVE-PRELUDE-FULL :unsupported (cached); compiling the referenced subset")
            (none)))
       (else
-       (let [(claim (claimObject! preludeObj preludeMeta (+ (monotonicNs) (claimWaitNs!))))]
-         (match claim.hit
-           ((some _)
-            (do (telemetry "NATIVE-PRELUDE-CACHE :hit :full :waited")
-                (some (PreludeStep :done (some (PreludeCompileResult :ok true :obj preludeObj :err "")) :pending (none)))))
-           ((none)
-            (let [(_ (dropStale preludeObj preludeMeta))
-                  (names (listSort (dedupeStr (lk/definedNames prelude))))]
-              (match (preludeLl facts prelude ovlNames names)
-                ((err e)
-                 (do (telemetry (str "NATIVE-PRELUDE-FULL :unsupported " (firstLines e 1) "; compiling the referenced subset"))
-                     (match (writeAtomic marker e) ((ok _) ()) ((err we) (eprintln (str "nativeTest: cannot write " marker ": " we))))
-                     (releaseClaim! claim.lock)
-                     (none)))
-                ((ok pLl)
-                 (do (telemetry (str "NATIVE-PRELUDE-CACHE :miss :full :fns " (listLength names)))
-                     (some (compilePreludeSpawn slot (str "full-" key) preludeObj preludeMeta pLl counter opt extra claim.lock))))))))))))
+       (let [(_ (dropStale preludeObj preludeMeta))
+             (names (listSort (dedupeStr (lk/definedNames prelude))))]
+         (match (preludeLl facts prelude ovlNames names)
+           ((err e)
+            (do (telemetry (str "NATIVE-PRELUDE-FULL :unsupported " (firstLines e 1) "; compiling the referenced subset"))
+                (match (writeAtomic marker e) ((ok _) ()) ((err we) (eprintln (str "nativeTest: cannot write " marker ": " we))))
+                (none)))
+           ((ok pLl)
+            (do (telemetry (str "NATIVE-PRELUDE-CACHE :miss :full :fns " (listLength names)))
+                (some (compilePreludeSpawn slot (str "full-" key) preludeObj preludeMeta pLl counter opt extra)))))))))
 
 fn ! fullPreludeWanted? -> Bool
   (match (envGet "ASL_NATIVE_PRELUDE") ((some v) (!= v "subset")) ((none) true))
@@ -1457,12 +1080,6 @@ fn ! drainAllPending acc: (List ModCompileResult) inFlight: (List PendingObj) ->
     (let [(r (finishOldest acc inFlight))]
       (drainAllPending (pairFirst r) (pairSecond r))))
 
-; (:m :ref NT-CACHE-ABS-PATH-KEY :do "the entry's inits follow the closure order of their units, not the order the objects settled: cached units used to come before the ones still at llc, so the entry key and its init call order changed with the hit pattern, a worktree whose library objects were all cached never met the entry object built beside a compile (1 llc per suite), and a dependent's init could run before its import's")
-fn initsInUnitOrder paths: (List String) named: (List (Pair String String)) -> (List String)
-  (let [(byPath (fold (fn [(m (Map String String)) (n (Pair String String))] -> (Map String String) (mapSet m (pairFirst n) (pairSecond n))) (mapEmpty) named))]
-    (filter (fn [(n String)] -> Bool (not (stringEmpty? n)))
-            (map (fn [(p String)] -> String (optionOr (mapGet byPath p) "")) paths)))
-
 fn ! compileUnitsStep facts: (Option libc/TripleFacts) cDir: String fp: String units: (List lk/LinkUnit) allUnits: (List lk/LinkUnit) ifaceMap: (Map String String) prelude: lk/LinkUnit px: lk/LinkUnit ovlNames: (List String) entry: lk/LinkUnit slot: String idx: Int64 acc: (List ModCompileResult) inFlight: (List PendingObj) jobs: Int64 opt: String -> (Pair (List ModCompileResult) (List PendingObj))
   (match (listHead units)
     ((none) (pair acc inFlight))
@@ -1471,9 +1088,9 @@ fn ! compileUnitsStep facts: (Option libc/TripleFacts) cDir: String fp: String u
            (preTrim (if (>= (listLength inFlight) jobs) (finishOldest acc inFlight) (pair acc inFlight)))
            (acc0 (pairFirst preTrim))
            (inFlight0 (pairSecond preTrim))
-           (inits (initsInUnitOrder (map (fn [(x lk/LinkUnit)] -> String x.path) allUnits)
-                                    (listAppend (map (fn [(r ModCompileResult)] -> (Pair String String) (pair r.path r.initName)) acc0)
-                                                (map (fn [(p PendingObj)] -> (Pair String String) (pair p.path p.initName)) inFlight0))))
+           (inits (filter (fn [(n String)] -> Bool (not (stringEmpty? n)))
+                          (listAppend (map (fn [(r ModCompileResult)] -> String r.initName) acc0)
+                                      (map (fn [(p PendingObj)] -> String p.initName) inFlight0))))
            (prepared (compileUnitPrepare facts cDir fp u allUnits ifaceMap prelude px ovlNames entry slot idx inits opt))
            (step (match prepared.pending ((some p) (compileUnitSpawn p)) ((none) prepared)))
            (acc1 (match step.done ((some r) (listAppend acc0 (list r))) ((none) acc0)))
@@ -1497,54 +1114,17 @@ fn ! leaveIfOrphaned! -> Unit
                      (do (eprintln (str "nativeTest: the self builder " pid " is gone, so this stage stops"))
                          (match (procKill (procSelf) "SIGTERM") ((ok _) ()) ((err _) ()))))))))
 
-; (:m :ref NATIVETEST-CACHE-KEY-IMPORTS-20261022 :do "a unit's digest covers its import closure: its own interface and, by import name, the closure digest of each import, so an interface edit two or more imports away gives every dependent another object key; keyed on the direct imports alone, a unit that reaches a type through an unchanged signature kept the object lowered against the old type")
-fn ifaceRound units: (List lk/LinkUnit) base: (Map String String) prev: (Map String String) -> (Map String String)
-  (fold (fn [(acc (Map String String)) (u lk/LinkUnit)] -> (Map String String)
-          (mapSet acc u.path
-                  (bytesSha256 (stringToBytes (str "ifaceClosure/1\n" (optionOr (mapGet base u.path) "") "\n"
-                                                   (stringJoin (listSort (map (fn [(imp (Pair String String))] -> String (str (pairFirst imp) " " (optionOr (mapGet acc (pairSecond imp)) ""))) u.imports)) "\n"))))))
-        prev units)
-
-fn ifaceLine units: (List lk/LinkUnit) m: (Map String String) -> String
-  (stringJoin (map (fn [(u lk/LinkUnit)] -> String (optionOr (mapGet m u.path) "")) units) " ")
-
-; (:m :ref NATIVETEST-CACHE-KEY-IMPORTS-20261022 :do "rounds repeat until no digest moves, so the result does not depend on the order of the units; an import cycle never settles and stops at one round per unit, still a function of the sources alone")
-fn ifaceSettle units: (List lk/LinkUnit) base: (Map String String) prev: (Map String String) left: Int64 -> (Map String String)
-  (let [(next (ifaceRound units base prev))]
-    (if (or (<= left 0) (= (ifaceLine units next) (ifaceLine units prev))) next (ifaceSettle units base next (- left 1))))
-
 fn ifaceMapOf units: (List lk/LinkUnit) -> (Map String String)
-  (let [(base (fold (fn [(acc (Map String String)) (u lk/LinkUnit)] -> (Map String String) (mapSet acc u.path (interfaceDigest u.forms))) (mapEmpty) units))]
-    (ifaceSettle units base (mapEmpty) (listLength units)))
+  (fold (fn [(acc (Map String String)) (u lk/LinkUnit)] -> (Map String String) (mapSet acc u.path (interfaceDigest u.forms))) (mapEmpty) units)
 
-; (:m :ref NATIVE-WORKERS-DEFAULT :do "the count for a suite built alone: the :native :suiteWorkers config row, capped at (cpus-2)/2 so its workers leave room for the clang jobs; ASL_NATIVE_WORKERS, when set, still names the count outright, capped at the cpus")
-fn soloWorkersOf asked: (Option Int64) configured: Int64 cpus: Int64 -> Int64
-  (match asked
-    ((some n) (max 1 (min n cpus)))
-    ((none) (max 1 (min configured (/ (- cpus 2) 2)))))
-
-fn ! askedWorkers! -> (Option Int64)
-  (match (envGet "ASL_NATIVE_WORKERS") ((none) (none)) ((some s) (stringToInt64 s)))
-
-fn ! soloWorkers! -> Int64
-  (soloWorkersOf (askedWorkers!) (nb/suiteWorkersFor! (toolRoot)) (resultOr (cpuCount) 1))
-
-; (:m :ref NATIVE-WORKERS-DEFAULT :do "a worker costs about 0.5 s to start and load the prelude, so the config default gives each one at least minWorkerBytes of uncached source: a small suite (emojiGuardTest, 3 units) ran 1.28 s alone and 1.74 s over 3 workers on 2026-11-11; an explicit ASL_NATIVE_WORKERS is taken as asked")
-fn minWorkerBytes -> Int64
-  65536
-
-fn soloSpread k: Int64 bytes: Int64 -> Int64
-  (max 1 (min k (/ bytes (minWorkerBytes))))
-
-; (:m :ref NATIVE-WORKERS-DEFAULT :do "cap 0 means a suite built alone (soloWorkers!); a sweep passes 1, since it already builds suites in parallel")
-fn ! workerCount! cap: Int64 jobs: Int64 -> Int64
-  (max 1 (min (if (> cap 0) cap (soloWorkers!)) jobs))
+fn ! workerCount! jobs: Int64 -> Int64
+  (let [(envK (match (envGet "ASL_NATIVE_WORKERS") ((none) 4) ((some s) (optionOr (stringToInt64 s) 4))))
+        (cpus (resultOr (cpuCount) envK))]
+    (max 1 (min (min envK cpus) jobs)))
 
 ; (:m :ref NATIVETEST-HOSTLESS :do "workers run one self binary: asl/tools/nativeTest.asl compiled once per fingerprint into the self cache (never the suite cache, so a suite's module and prelude counts never include nativeTest's own closure), only when ASL_NATIVE_WORKERS asks for two or more, and never the running executable; the self build itself and a worker get none")
-; (:m :ref NATIVE-WORKERS-DEFAULT :do "the self binary costs about 90 s cold, more than workers save on the largest suite, so the config default uses workers only once it is built; an explicit ASL_NATIVE_WORKERS still builds it")
-fn ! selfWarm? fp: String -> Bool
-  (let [(root (selfRoot))]
-    (some? (selfBinaryOf (selfCacheIn root fp) root fp)))
+fn ! workersAsked? -> Bool
+  (> (optionOr (stringToInt64 (optionOr (envGet "ASL_NATIVE_WORKERS") "")) 0) 1)
 
 fn ! runningExe? bin: String -> Bool
   (= (resultOr (realPath bin) bin) (resultOr (realPath (resultOr (procExePath) "")) ""))
@@ -1570,16 +1150,16 @@ fn ! selfWorker! fp: String -> (Option String)
 fn ! workerArgv cDir: String fp: String -> (Option (List String))
   (cond
     ((some? (envGet "ASL_NATIVE_WORKER")) (none))
-    ((and (none? (askedWorkers!)) (not (selfWarm? fp))) (do (telemetry "NATIVE-WORKERS :self-cold (the default runs without workers until the self binary is built)") (none)))
+    ((not (workersAsked?)) (none))
     ((stringStartsWith? cDir (selfDirIn (selfRoot))) (none))
     (else (match (selfWorker! fp)
             ((some b) (if (runningExe? b) (none) (some (list b))))
             ((none) (none)))))
 
-fn ! uncachedUnits cDir: String fp: String opt: String units: (List lk/LinkUnit) entry: lk/LinkUnit ifaceMap: (Map String String) -> (List lk/LinkUnit)
+fn ! uncachedUnits cDir: String fp: String units: (List lk/LinkUnit) entry: lk/LinkUnit ifaceMap: (Map String String) -> (List lk/LinkUnit)
   (filter (fn [(u lk/LinkUnit)] -> Bool
             (and (!= u.name entry.name)
-                 (let [(k (unitKey fp opt u ifaceMap false (list)))]
+                 (let [(k (unitKey fp u ifaceMap false (list)))]
                    (none? (readVerifiedMeta (str (modulesDirIn cDir) "/" k ".meta") (str (modulesDirIn cDir) "/" k ".o"))))))
           units)
 
@@ -1631,23 +1211,21 @@ fn ! fullPreludePending? cDir: String fp: String opt: String extra: (List String
          (none? (readVerifiedMeta (str stem ".meta") (str stem ".o")))
          (not (fileExists? (str stem ".unsupported")))))
 
-; (:m :ref NATIVE-WORKERS-DEFAULT :do "balancedGroups weights each worker by its startup cost, so a short todo leaves some worker groups empty; those are not spawned, since a worker with no units only prints its usage")
-fn ! spawnUnitWorkers! t0: Int64 cap: Int64 cDir: String fp: String mode: String slot: String wrapper: String units: (List lk/LinkUnit) entry: lk/LinkUnit ifaceMap: (Map String String) jobs: Int64 parentBusy: Bool -> WorkerPlan
+fn ! spawnUnitWorkers! t0: Int64 cDir: String fp: String mode: String slot: String wrapper: String units: (List lk/LinkUnit) entry: lk/LinkUnit ifaceMap: (Map String String) jobs: Int64 parentBusy: Bool -> WorkerPlan
   (let [(_ (leaveIfOrphaned!))
-        (k0 (workerCount! cap jobs))
-        (todo0 (if (>= k0 2) (uncachedUnits cDir fp (optLevelFor mode) units entry ifaceMap) (list)))
-        (k (if (or (> cap 0) (some? (askedWorkers!))) k0 (soloSpread k0 (fold (fn [(a Int64) (u lk/LinkUnit)] -> Int64 (+ a (sourceSize u))) 0 todo0))))
+        (k (workerCount! jobs))
+        (todo0 (if (>= k 2) (uncachedUnits cDir fp units entry ifaceMap) (list)))
         (argv (if (>= (min k (listLength todo0)) 2) (workerArgv cDir fp) (none)))
         (todo (if (some? argv) todo0 (list)))
         (n (min k (listLength todo)))]
     (if (< n 2)
       (WorkerPlan :procs (list) :own (list) :planned (list) :jobs jobs)
       (let [(perWorker (max 1 (/ jobs n)))
-            (env (some (withEnvOverrides! (list (str "ASL_NATIVE_JOBS=" perWorker) "ASL_NATIVE_WORKERS=1" (if (telemetryQuiet?) "ASL_NATIVE_WORKER=quiet" "ASL_NATIVE_WORKER=1")))))
+            (env (some (withEnvOverrides! (list (str "ASL_NATIVE_JOBS=" perWorker) "ASL_NATIVE_WORKERS=1" "ASL_NATIVE_WORKER=1"))))
             (base (listAppend (optionOr argv (list)) (list "--compile-units" cDir fp mode slot wrapper)))
             (meanSize (/ (fold (fn [(a Int64) (u lk/LinkUnit)] -> Int64 (+ a (sourceSize u))) 0 todo) (max 1 (listLength todo))))
             (groups (balancedGroups todo n (if parentBusy 0 (/ (* 3 meanSize) 2))))
-            (spawned (filter (fn [(g (List String))] -> Bool (not (listEmpty? g))) (if parentBusy groups (listDrop groups 1))))
+            (spawned (if parentBusy groups (listDrop groups 1)))
             (_ (telemetry (str "NATIVE-WORKERS :k " n " :units " (listLength todo) " :workers " (listLength spawned) " :jobsPerWorker " perWorker (if parentBusy " :parent prelude" ""))))]
         (WorkerPlan :procs (fold (fn [(acc (List WorkerProc)) (g (List String))] -> (List WorkerProc) (spawnWorker! t0 base env acc g)) (list) spawned)
                     :own (if parentBusy (list) (optionOr (listHead groups) (list)))
@@ -1702,24 +1280,25 @@ fn ! settleWatch t0: Int64 w: WorkerWatch -> WorkerWatch
       (WorkerWatch :proc w.proc :outOpen false :errOpen false :errText w.errText :groups w.groups :known w.known
                    :verdict w.verdict :exit exit :done true)))
 
-; (:m :ref NT-KNOWN-ADDNEW :do "a breach kills with this check's tree: its groups and the pins of its members, found with the pins carried from the previous check, so a setsid child seen in the tree and then orphaned out of the lineage dies with the worker; fr/killTree! started from nothing and missed it")
-fn ! judgeWatch lim: fr/Limits now: Int64 t0: Int64 snap: (List fr/Proc) self: Int64 checked: Bool w: WorkerWatch -> WorkerWatch
+fn groupOf procs: (List fr/Proc) pid: Int64 -> Int64
+  (match (listHead (filter (fn [(p fr/Proc)] -> Bool (= p.pid pid)) procs)) ((some p) p.pgid) ((none) -1))
+
+fn ! judgeWatch lim: fr/Limits now: Int64 t0: Int64 snap: (List fr/Proc) own: Int64 checked: Bool w: WorkerWatch -> WorkerWatch
   (if w.done w
     (let [(overTime (> (/ (- now t0) 1000000) lim.timeoutMs))
-          (tree (if checked (fr/treeOf snap w.proc.pid w.groups w.known self) (pair w.known w.groups)))
-          (known (fr/pinsOf snap (pairFirst tree)))
+          (tree (if checked (fr/treeOf snap w.proc.pid w.groups w.known own) (pair w.known w.groups)))
           (descN (if checked (listLength (pairFirst tree)) 0))
           (verdict (cond (overTime "timeout") ((> descN lim.maxDesc) "runaway") (else "")))]
       (if (stringEmpty? verdict)
-        (WorkerWatch :proc w.proc :outOpen w.outOpen :errOpen w.errOpen :errText w.errText :groups (pairSecond tree) :known known
+        (WorkerWatch :proc w.proc :outOpen w.outOpen :errOpen w.errOpen :errText w.errText :groups (pairSecond tree) :known (pairFirst tree)
                      :verdict "" :exit w.exit :done false)
-        (let [(left (fr/killTreeWith! w.proc.pid (pairSecond tree) known))
+        (let [(left (fr/killTree! w.proc.pid))
               (_ (if w.outOpen (do (fdClose w.proc.outFd) ()) ()))
               (_ (if w.errOpen (do (fdClose w.proc.errFd) ()) ()))
               (_ (reapWorker w.proc.pid))]
           (WorkerWatch :proc w.proc :outOpen false :errOpen false
                        :errText (str w.errText "\nNATIVE-WORKERS :killed :verdict :" verdict " :pid " w.proc.pid " :desc " descN " :timeoutMs " lim.timeoutMs " :maxDesc " lim.maxDesc " :left " left "\n")
-                       :groups (pairSecond tree) :known known :verdict verdict :exit (if (= verdict "timeout") 124 125) :done true)))))
+                       :groups (pairSecond tree) :known (pairFirst tree) :verdict verdict :exit (if (= verdict "timeout") 124 125) :done true)))))
 
 fn watchFds ws: (List WorkerWatch) -> (List (Pair Int64 Int64))
   (fold (fn [(acc (List (Pair Int64 Int64))) (w WorkerWatch)] -> (List (Pair Int64 Int64))
@@ -1733,8 +1312,8 @@ fn ! watchLoop lim: fr/Limits t0: Int64 ws: (List WorkerWatch) lastCheck: Int64 
           (now (monotonicNs))
           (checked (>= (- now lastCheck) 250000000))
           (snap (if checked (fr/procSnapshot) (list)))
-          (self (if checked (procSelf) -1))
-          (states (map (fn [(w WorkerWatch)] -> WorkerWatch (judgeWatch lim now t0 snap self checked (settleWatch t0 w))) (map pairSecond pumped)))
+          (own (if checked (groupOf snap (procSelf)) -1))
+          (states (map (fn [(w WorkerWatch)] -> WorkerWatch (judgeWatch lim now t0 snap own checked (settleWatch t0 w))) (map pairSecond pumped)))
           (finished (- (listLength (filter (fn [(w WorkerWatch)] -> Bool w.done) states)) (listLength (filter (fn [(w WorkerWatch)] -> Bool w.done) ws))))]
       (do (if (and (not progress) (= finished 0)) (do (fdPoll (watchFds states) 50) ()) ())
           (watchLoop lim t0 states (if checked now lastCheck)))))
@@ -1789,20 +1368,13 @@ fn ! compileUnitsWorker! args: (List String) -> (Result Int64 String)
         (failWith (fn [(what String) (ds (List irTy/IrDiag))] -> (Result Int64 String) (do (eprintln (str "nativeTest --compile-units: " what ": " (diagText ds))) (ok 1))))]
     (if (or (stringEmpty? wrapper) (listEmpty? paths))
       (do (eprintln "usage: nativeTest --compile-units CACHEDIR FINGERPRINT MODE SLOT WRAPPER UNIT...") (ok 2))
-      (let [(t0 (monotonicNs))
-            (closure (workerClosure! wrapper slot paths))
-            (t1 (monotonicNs))
-            (preludeRes (lk/loadClosure! (toolPath (lk/preludePath))))
-            (t2 (monotonicNs))
-            (overlayRes (lk/overlayUnitAt! (toolPath (lk/nativeOverlayDir))))
-            (t3 (monotonicNs))]
-      (match closure
+      (match (workerClosure! wrapper slot paths)
         ((err ds) (failWith "closure load failed" ds))
         ((ok units)
-         (match preludeRes
+         (match (lk/loadClosure! (toolPath (lk/preludePath)))
            ((err pds) (failWith "prelude load failed" pds))
            ((ok pUnits)
-            (match overlayRes
+            (match (lk/overlayUnitAt! (toolPath (lk/nativeOverlayDir)))
               ((err ods) (failWith "native overlay load failed" ods))
               ((ok o)
                (let [(prelude (optionOr (listHead pUnits) (lk/LinkUnit :path "" :name "prelude" :forms (list) :positions (mapEmpty) :imports (list))))
@@ -1810,11 +1382,9 @@ fn ! compileUnitsWorker! args: (List String) -> (Result Int64 String)
                      (mine (filter (fn [(u lk/LinkUnit)] -> Bool (and (listContains? paths u.path) (!= u.name entryUnit.name))) units))
                      (raw (compileUnitsStep (nativeFacts! cDir fp) cDir fp mine units (ifaceMapOf units) prelude (withOverlay prelude o) (overlayNamesOf o) entryUnit slot 0 (list) (list) (jobSlots!) (optLevelFor mode)))
                      (results (drainAllPending (pairFirst raw) (pairSecond raw)))
-                     (t4 (monotonicNs))
-                     (_ (traceOnly (str "NATIVE-WORKER-PHASES :units " (stringFromInt64 (listLength mine)) " :closure " (stringFromInt64 (listLength units)) " :closureMs " (ms (- t1 t0)) " :preludeMs " (ms (- t2 t1)) " :overlayMs " (ms (- t3 t2)) " :compileMs " (ms (- t4 t3)))))
                      (bad (filter (fn [(r ModCompileResult)] -> Bool (not r.ok)) results))]
                  (do (map (fn [(r ModCompileResult)] -> Unit (eprintln (str "nativeTest --compile-units: " r.path ": " r.err))) bad)
-                     (ok (if (and (listEmpty? bad) (= (listLength mine) (listLength paths))) 0 1)))))))))))))
+                     (ok (if (and (listEmpty? bad) (= (listLength mine) (listLength paths))) 0 1))))))))))))
 
 ; (:m :ref NATIVETEST-RC :do "the RC pass needs the whole program (its user set and the routed helpers), so a suite under a .asl.config.asn :native :rc other than :tracing is linked and emitted as one module and linked with that mode's runtime; :tracing keeps the per-module cached pipeline")
 fn ! rcModeFor! path: String -> (Result String String)
@@ -1836,21 +1406,20 @@ fn ! checkRootsForNative -> (List String)
 fn ! checkerRejection! actualPath: String logicalPath: String fp: String -> (Option String)
   (let [(inline (inlineStaged? logicalPath))
         (shown (if inline (inlineName logicalPath) logicalPath))]
-    (match (ccache/verdictKeyWith! actualPath (if inline (str "inline " shown) "") (str "nativeTest render " (rtag/renderTagIn! (toolRoot)) " " fp))
+    (match (ccache/verdictKeyWith! actualPath (if inline (str "inline " shown) "") (str "nativeTest " fp))
       ((none) (freshRejection! actualPath shown (none)))
       ((some key)
        (match (ccache/lookup! key)
          ((some v) (if (= v.exitCode 0) (none) (some v.body)))
          ((none) (freshRejection! actualPath shown (some key)))))))
 
-; (:m :ref NT-VERDICT-KEY-COVERS-RENDER :do "the verdict key carries asl-tools/renderTag: the cached body is rendered text and the toolchain fingerprint does not cover asl-cli/verify, so the key digests verify and its direct imports and a renderer edit misses old bodies")
 ; (:m :ref SCRIPT-RUN-UNCHECKED :do "a file the checker cannot key or read is checked uncached or rejected, never let through unchecked")
 fn ! freshRejection! actualPath: String logicalPath: String key: (Option String) -> (Option String)
   (match (pairFirst (ccd/checkFileCached! actualPath (checkRootsForNative) (ccd/stampedCache!)))
     ((err e) (some (str logicalPath ":0:0: ERR_IO " e)))
     ((ok verdict)
      (let [(diags verdict.diags)
-           (body (if (listEmpty? diags) "" (stringReplace (verify/formatDiagsHinted! diags) actualPath logicalPath)))
+           (body (if (listEmpty? diags) "" (stringReplace (verify/formatDiags diags) actualPath logicalPath)))
            (_ (match key
                 ((some k) (match (ccache/store! k (ccache/Verdict :exitCode (if (listEmpty? diags) 0 1) :body body)) ((ok _) ()) ((err _) ())))
                 ((none) ())))]
@@ -1893,12 +1462,12 @@ fn ! linkWhole! slot: String bin: String ll: String deps: (List String) libFlags
            (Built :binary (some bin) :reason "" :cache "miss" :recompiled deps :reused (list)
                   :depsMs (ms (- t1 t0)) :asl1Ms (ms (- t2 t1)) :clangMs (ms (- t3 t2)))))))
 
-fn ! compileWhole! cDir: String path: String src: String slot: String key: String mode: String rc: String only: String -> Built
+fn ! compileWhole! cDir: String path: String src: String slot: String key: String mode: String rc: String -> Built
   (let [(wrapper (str (wrapperDirIn cDir) "/" key ".asl"))
         (bin (str slot "/" mode))
         (ll (str slot "/" mode ".ll"))
         (t0 (monotonicNs))]
-    (match (if (stringEmpty? only) (entryFor mode src) (some only))
+    (match (entryFor mode src)
       ((none) (storeFallback slot (list path) (str "ERR_NO_ENTRY: " path " exports neither runTests nor main") (list)))
       ((some e)
        (match (dirCreate (wrapperDirIn cDir))
@@ -1928,17 +1497,14 @@ fn ! compileWhole! cDir: String path: String src: String slot: String key: Strin
                                ((ok libFlags) (linkWhole! slot bin ll deps libFlags t0 t1))))))))))))))))))))
 
 fn ! compileIn cDir: String path: String actualPath: String src: String slot: String key: String fp: String mode: String -> Built
-  (compileInWith 0 cDir path actualPath src slot key fp mode "")
-
-fn ! compileInWith cap: Int64 cDir: String path: String actualPath: String src: String slot: String key: String fp: String mode: String only: String -> Built
   (match (if (or (= mode "test") (= mode "run")) (checkerRejection! actualPath path fp) (none))
     ((some body) (Built :binary (none) :reason body :cache "checker-reject" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
     ((none)
      (if (= mode "eval")
-       (compileSeparate! cap cDir path src slot key fp mode only)
+       (compileSeparate! cDir path src slot key fp mode)
        (match (rcModeFor! path)
          ((err e) (storeFallback slot (list path) e (list)))
-         ((ok rc) (if (= rc "0") (compileSeparate! cap cDir path src slot key fp mode only) (compileWhole! cDir path src slot key mode rc only)))))))
+         ((ok rc) (if (= rc "0") (compileSeparate! cDir path src slot key fp mode) (compileWhole! cDir path src slot key mode rc)))))))
 
 ; (:m :ref RUN-ENTRY-REBUILD-COST :do "the link of a separate build, shared by the compiling path and the all-cached path: the prelude object, the unit objects in closure order and the runtime archive")
 fn ! linkUnits! slot: String bin: String deps: (List String) preludeObj: String unitResults: (List ModCompileResult) darwin: Bool facts: (Option libc/TripleFacts) t0: Int64 t1: Int64 t2: Int64 -> Built
@@ -1968,8 +1534,8 @@ fn ! linkUnits! slot: String bin: String deps: (List String) preludeObj: String 
                 :recompiled recompiled :reused reused
                 :depsMs (ms (- t1 t0)) :asl1Ms (ms (- t2 t1)) :clangMs (ms (- t3 tClang0)))))))
 
-fn ! compileSeparate! cap: Int64 cDir: String path: String src: String slot: String key: String fp: String mode: String only: String -> Built
-  (let [(entry (if (not (stringEmpty? only)) (some only) (if (or (= mode "run") (= mode "eval")) (if (listContains? (exportsOf src) "main") (some (if (= mode "eval") "main" "run")) (none)) (entryOf src))))
+fn ! compileSeparate! cDir: String path: String src: String slot: String key: String fp: String mode: String -> Built
+  (let [(entry (if (or (= mode "run") (= mode "eval")) (if (listContains? (exportsOf src) "main") (some (if (= mode "eval") "main" "run")) (none)) (entryOf src)))
         (wrapper (if (= mode "eval") path (str (wrapperDirIn cDir) "/" key ".asl")))
         (bin (str slot "/" mode))]
     (match entry
@@ -1989,7 +1555,7 @@ fn ! compileSeparate! cap: Int64 cDir: String path: String src: String slot: Str
                ((ok _)
                 (let [(tA (monotonicNs))
                       (uA (lk/loadClosure! wrapper))]
-                 (match (cachedLink! cDir fp (optLevelFor mode) slot bin key uA tA)
+                 (match (cachedLink! cDir fp slot bin key uA tA)
                   ((some b) b)
                   ((none)
                 (let [(t0 tA)
@@ -2002,7 +1568,7 @@ fn ! compileSeparate! cap: Int64 cDir: String path: String src: String slot: Str
                       (preludeOpt (optLevelFor "run"))
                       (plan (if (listEmpty? units0)
                               (WorkerPlan :procs (list) :own (list) :planned (list) :jobs jobs)
-                              (spawnUnitWorkers! t0 cap cDir fp mode slot wrapper units0 (optionOr (listGet units0 (- (listLength units0) 1)) (lk/emptyUnit "")) ifaceMap0 jobs (fullPreludePending? cDir fp preludeOpt pExtra))))
+                              (spawnUnitWorkers! t0 cDir fp mode slot wrapper units0 (optionOr (listGet units0 (- (listLength units0) 1)) (lk/emptyUnit "")) ifaceMap0 jobs (fullPreludePending? cDir fp preludeOpt pExtra))))
                       (pRes (lk/loadClosure! (toolPath (lk/preludePath))))
                       (t1 (monotonicNs))]
                   (match uRes
@@ -2122,16 +1688,11 @@ fn stemOfName n: String -> String
   (let [(parts (stringSplit n "."))]
     (if (< (listLength parts) 2) n (stringJoin (listTake parts (- (listLength parts) 1)) ".")))
 
-; (:m :ref NATIVETEST-SWEEP-LOCK-SPLIT :do "a module's files are KEY.o, KEY.meta and, while a compile holds the claim, KEY.o.lock; they group by KEY (the name up to its first dot), so the lock lands in the object's entry, and a live lock pins it: stemOfName grouped KEY.o.lock under KEY.o and a held claim pinned nothing")
-fn moduleStem n: String -> String
-  (optionOr (listHead (stringSplit n ".")) n)
-
 fn ! moduleEntries! dir: String -> (List ncli/StoreEntry)
   (let [(groups (fold (fn [(m (Map String (List String))) (n String)] -> (Map String (List String))
-                        (mapSet m (moduleStem n) (cons (str dir "/" n) (mapGetOr m (moduleStem n) (list)))))
-                      (mapEmpty) (resultOr (dirList dir) (list))))
-        (held (fn [(ps (List String))] -> Bool (listAny? (fn [(p String)] -> Bool (and (stringEndsWith? p ".lock") (lockLive? p))) ps)))]
-    (map (fn [(k String)] -> ncli/StoreEntry (ncli/storeEntry! (mapGetOr groups k (list)) (held (mapGetOr groups k (list))))) (mapKeys groups)))
+                        (mapSet m (stemOfName n) (cons (str dir "/" n) (mapGetOr m (stemOfName n) (list)))))
+                      (mapEmpty) (resultOr (dirList dir) (list))))]
+    (map (fn [(k String)] -> ncli/StoreEntry (ncli/storeEntry! (mapGetOr groups k (list)) false)) (mapKeys groups)))
 
 fn hexKey? n: String -> Bool
   (= (stringLength n) 64)
@@ -2152,17 +1713,7 @@ fn ! sweepStore! cDir: String -> Int64
   (let [(mark (str cDir "/swept"))]
     (if (< (- (nowNs) (ncli/entryStamp! mark)) 60000000000)
       0
-      (if (buildingLive? cDir) 0 (do (fileWrite mark "") (sweepStoreNow! cDir)))))
-
-; (:m :ref NATIVE-SWEEP-PARALLEL-COMPILE :do "prepareAllIn writes cDir/building.PID (own marker per builder, name carries the pid) while parMap workers build; any live marker holds off store pruning, a dead pid marker is removed when seen")
-fn ! markerLive? cDir: String name: String -> Bool
-  (let [(live (match (stringToInt64 (optionOr (listGet (stringSplit name ".") 1) "")) ((some pid) (pidAlive? pid)) ((none) false)))]
-    (if live true (do (pathRemove (str cDir "/" name)) false)))
-
-fn ! buildingLive? cDir: String -> Bool
-  (listAny? (fn [(l Bool)] -> Bool l)
-    (map (fn [(n String)] -> Bool (markerLive? cDir n))
-         (filter (fn [(n String)] -> Bool (stringStartsWith? n "building.")) (resultOr (dirList cDir) (list)))))
+      (do (fileWrite mark "") (sweepStoreNow! cDir))))
 
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "one sweep at a time per store, under sweep.lock; a build leases its slot with slot/lock while it fills it, and sweepEntries! re-stamps each entry right before deleting it")
 fn ! sweepStoreNow! cDir: String -> Int64
@@ -2207,73 +1758,36 @@ fn ! compile path: String src: String slot: String key: String fp: String -> Bui
 
 ; (:m :ref OUT-OF-ROOT-USERPATH :do "a run/test FILE argument is the caller's own, resolved against the caller's cwd like any other CLI tool (NATIVE-CHDIR: the native CLI never chdirs to the toolchain root first); only the toolchain's own internal lookups (cache dirs, dep manifests) are root-relative, so prepareIn reads and digests path as given, never through resolveIn (toolRoot)")
 fn ! prepareIn cDir: String path: String fp: String mode: String -> Built
-  (prepareInWith 0 cDir path fp mode)
-
-fn ! prepareInWith cap: Int64 cDir: String path: String fp: String mode: String -> Built
   (match (fileReadString path)
     ((err _) (Built :binary (none) :reason (str "cannot read " path) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-    ((ok src) (let [(key (suiteSlotKey mode path path))
+    ((ok src) (let [(key (slotKey (str mode (rcTag (rcModeFor! path)) ":" (importPathOf path)) (fileDigest path)))
                     (slot (str cDir "/" fp "/" key))]
                 (match (lookup slot mode)
                   ((some b) b)
                   ((none) (match (dirCreate slot)
                             ((err e) (Built :binary (none) :reason (str "cannot create " slot ": " e) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-                            ((ok _) (let [(built (leasedBuild! slot (do (leaseSlot! slot) (dropWrapperIn cDir key (compileInWith cap cDir path path src slot key fp mode "")))))
+                            ((ok _) (let [(built (leasedBuild! slot (do (leaseSlot! slot) (dropWrapperIn cDir key (compileIn cDir path path src slot key fp mode)))))
                                           (_ (sweepStore! cDir))]
                                       built))))))))
 
 fn ! prepareSourceIn cDir: String actualPath: String logicalPath: String fp: String mode: String -> Built
-  (prepareSourceSelectIn cDir actualPath logicalPath fp mode "")
-
-; (:m :ref TEST-RUNNER-SELECT :do "only names the one test function the wrapper calls in place of the entry (asl test FILE --only NAME); its slot key carries the name, so a selected binary never shares a slot, wrapper or cached link with the whole-suite binary of the same file")
-fn ! prepareSourceSelectIn cDir: String actualPath: String logicalPath: String fp: String mode: String only: String -> Built
   (match (fileReadString actualPath)
     ((err _) (Built :binary (none) :reason (str "cannot read " actualPath) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-    ((ok src) (let [(key (suiteSlotKeyFor mode only logicalPath actualPath))
+    ((ok src) (let [(key (slotKey (str mode (rcTag (rcModeFor! logicalPath)) ":" (importPathOf logicalPath)) (fileDigest actualPath)))
                     (slot (str cDir "/" fp "/" key))]
                 (match (lookup slot mode)
                   ((some b) b)
                   ((none) (match (dirCreate slot)
                             ((err e) (Built :binary (none) :reason (str "cannot create " slot ": " e) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-                            ((ok _) (let [(built (leasedBuild! slot (do (leaseSlot! slot) (dropWrapperIn cDir key (compileInWith 0 cDir logicalPath actualPath src slot key fp mode only)))))
+                            ((ok _) (let [(built (leasedBuild! slot (do (leaseSlot! slot) (dropWrapperIn cDir key (compileIn cDir logicalPath actualPath src slot key fp mode)))))
                                           (_ (sweepStore! cDir))]
                                       built))))))))
 
 fn ! prepareTestSource actualPath: String logicalPath: String fp: String -> Built
   (prepareSourceIn (cacheDir!) actualPath logicalPath fp "test")
 
-fn ! prepareTestSelected actualPath: String logicalPath: String fp: String only: String -> Built
-  (prepareSourceSelectIn (cacheDir!) actualPath logicalPath fp "test" only)
-
 fn ! prepare path: String fp: String -> Built
   (prepareIn (cacheDir!) path fp "test")
-
-; (:m :ref SWEEP-STRIDE :do "parMap hands each worker one contiguous chunk, and cold suites cluster by directory, so one worker got the whole cold tail (measured 2026-11-10: one worker busy for an hour while three sat done); dealing paths round-robin spreads them, and the inverse puts results back in input order")
-fn strideOrder n: Int64 w: Int64 -> (List Int64)
-  (fold (fn [(acc (List Int64)) (r Int64)] -> (List Int64) (listAppend acc (filter (fn [(i Int64)] -> Bool (= (mod i w) r)) (range 0 n)))) (list) (range 0 w))
-
-fn unstride order: (List Int64) xs: (List Built) -> (List Built)
-  (let [(byIndex (fold (fn [(m (Map Int64 Built)) (p (Pair Int64 Built))] -> (Map Int64 Built) (mapSet m (pairFirst p) (pairSecond p))) (mapEmpty) (zip order xs)))]
-    (map (fn [(i Int64)] -> Built (optionOr (mapGet byIndex i) (Built :binary (none) :reason "stride lost a result" :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))) (range 0 (listLength order))))
-
-fn ! prepareAllIn cDir: String paths: (List String) fp: String k: Int64 -> (List Built)
-  (let [(build (fn [(p String)] -> Built (prepareInWith 1 cDir p fp "test")))
-        (marker (str cDir "/building." (stringFromInt64 (procSelf))))
-        (_ (if (fileExists? cDir) true (do (dirCreate cDir) true)))
-        (_ (fileWrite marker ""))
-        (w (suiteWorkersFor k (resultOr (cpuCount) 1)))
-        (order (strideOrder (listLength paths) w))
-        (built (if (> w 1) (unstride order (parMap build (map (fn [(i Int64)] -> String (optionOr (listGet paths i) "")) order) w)) (map build paths)))
-        (_ (pathRemove marker))
-        (_ (sweepStore! cDir))]
-    built)
-
-; (:m :ref NATIVE-SWEEP-PARALLEL-COMPILE :do "each suite worker may run jobSlots! (default 4) clang jobs of its own, so suite workers are capped at (cpus - 2) / 2: 4 on 10 cpus, a peak of 16 short clang jobs plus 4 lowerings, and two cpus left for the principal (U7-K)")
-fn suiteWorkersFor k: Int64 cpus: Int64 -> Int64
-  (max 1 (min k (/ (- cpus 2) 2)))
-
-fn ! prepareAll paths: (List String) fp: String k: Int64 -> (List Built)
-  (prepareAllIn (cacheDir!) paths fp k)
 
 fn ! prepareRunIn cDir: String path: String fp: String -> Built
   (prepareIn cDir path fp "run")
@@ -2337,46 +1851,13 @@ fn ! emit out: ProcOut v: Verdict -> Unit
       (eprintText v.stderr)
       (if (= v.exit 0) (println v.line) (eprintln v.line)))
 
-fn defaultWallS -> Int64
-  1800
-
-fn maxWallS -> Int64
-  7200
-
-; (:m :ref SUITEWALL-DECL-PARSE :do "a suite declares its wall as a top-level fn suiteWallS -> Int64 (the parser lists a module's defuns as top-level forms) with no params whose body is one integer literal, read from the parsed source, so the same text inside a string or a nested form is no declaration; none when absent, not an integer or the source does not parse")
-fn declaredWallS text: String -> (Option Int64)
-  (match (ast/parse text)
-    ((ok forms) (listHead (listFlatMap wallsOfTop forms)))
-    ((err _) (none)))
-
-fn wallsOfTop t: ast/TopForm -> (List Int64)
-  (match t
-    ((ast/topDefun d) (wallsOfDefun d))
-    (_ (list)))
-
-fn wallsOfDefun d: ast/DefunNode -> (List Int64)
-  (if (and (= d.name "suiteWallS") (and (= (listLength d.params) 0) (= (stringTrim d.retType) "Int64")))
-    (match (if (= (listLength d.body) 1) (listHead d.body) (none))
-      ((some b) (match b
-                  ((rd/sexprAtom v) (match (stringToInt64 v) ((some n) (list n)) ((none) (list))))
-                  (_ (list))))
-      ((none) (list)))
-    (list))
-
-; (:m :ref NATIVETEST-PER-SUITE-WALL :do "the wall a suite binary runs under: the 1800 s default, raised to a declared suiteWallS, never above 7200 s")
-fn suiteWall text: String -> Int64
-  (match (declaredWallS text)
-    ((some s) (min (maxWallS) (max (defaultWallS) s)))
-    ((none) (defaultWallS)))
-
 fn ! runOne path: String fp: String -> Outcome
   (let [(built (prepare path fp))]
     (match built.binary
       ((some bin)
        (let [(t0 (monotonicNs))
              (prelude (str "ASL_PRELUDE=" (absPath "asl/host/out/prelude.asl")))
-             (wall (suiteWall (resultOr (fileReadString path) "")))
-             (out (fromFr (fr/runGuarded (list "nice" "-n" "15" bin) "." (withEnvOverrides! (list "ASL_ASSERT_REPORT=1" prelude (initPhaseOff))) (fr/limits wall 64))))
+             (out (fromFr (fr/runGuarded (list "nice" "-n" "15" bin) "." (withEnvOverrides! (list "ASL_ASSERT_REPORT=1" prelude (initPhaseOff))) (fr/defaultLimits))))
              (took (ms (- (monotonicNs) t0)))
              (v (judgeInit! bin path prelude (verdictOf path out.exitCode out.stderr)))]
          (do (emit out v)
@@ -2485,23 +1966,12 @@ fn inlineName rel: String -> String
 fn stemOf rel: String -> String
   (if (stringEndsWith? rel ".asl") (optionOr (stringSlice rel 0 (- (stringLength rel) 4)) rel) rel)
 
-; (:m :ref FIX-HINT-PATH-ESCAPE :do "the rendered body names rel raw in diagnostics, once escaped as the :indentFix :file string and twice inside its :fix string; each quoted site takes name escaped to its own depth, so a name with a quote or backslash still reads back as itself")
-fn quotedNamed reason: String rel: String name: String -> String
-  (stringReplace (stringReplace reason (str "\\\"" (esc (esc rel)) "\\\"") (str "\\\"" (esc (esc name)) "\\\""))
-                 (str "\"" (esc rel) "\"") (str "\"" (esc name) "\""))
-
 ; (:m :ref SCRIPT-RUN-UNCHECKED :do "a staged copy of an outside file is named by the path the user gave (run --as), as asl check names it")
 fn failText root: String rel: String path: String shown: String reason: String -> String
   (if (or (inlineStaged? rel) (not (stringEmpty? shown)))
     (let [(name (if (inlineStaged? rel) (inlineName rel) shown))]
-      (str "FAIL " name ": " (fold (fn [(acc String) (p String)] -> String (stringReplace acc p name)) (quotedNamed reason rel name) (list (str root "/" rel) (str root "/" (stemOf rel)) rel (stemOf rel)))))
+      (str "FAIL " name ": " (fold (fn [(acc String) (p String)] -> String (stringReplace acc p name)) reason (list (str root "/" rel) (str root "/" (stemOf rel)) rel (stemOf rel)))))
     (str "FAIL " path ": " reason))
-
-; (:m :ref PAREN-OUTSIDE-PATH :do "a checker-rejected suite staged from outside the workspace (outside/ or outsidePkg/) is named by the path the user gave in its FAIL line, diagnostics and :indentFix hint, as run --as and asl check name it; an in-root suite keeps its root-relative name")
-fn suiteFailLine root: String rel: String path: String reason: String -> String
-  (if (stringStartsWith? rel ".asl/cache/nativeTest/outside")
-    (str (failText root rel path path (failReason reason rel)) " (after 0 asserts)")
-    (failLine rel reason))
 
 ; (:m :ref INTEG9-F1 :do "a script that was prepared on purpose (nativeTest prepare FILE leaves a binary in the store) runs from that binary when its sources still match, so a tool that must start where fork is gone (fleet guard) needs no compile; a script nobody prepared still builds into an ephemeral slot and leaves nothing")
 fn ! keptRun root: String rel: String fp: String -> (Option String)
@@ -2509,7 +1979,7 @@ fn ! keptRun root: String rel: String fp: String -> (Option String)
     (none)
     (match (fileReadString (str root "/" rel))
       ((err _) (none))
-      ((ok _) (let [(key (suiteSlotKeyIn (treeOf root) "run" (optLevelFor "run") (rcTag (rcModeFor! rel)) rel (fileDigest (str root "/" rel))))]
+      ((ok _) (let [(key (slotKey (str "run" (rcTag (rcModeFor! rel)) ":" (importPathOf rel)) (fileDigest (str root "/" rel))))]
                 (match (lookup (str (cacheDir!) "/" fp "/" key) "run")
                   ((some b) b.binary)
                   ((none) (none)))))))
@@ -2568,10 +2038,8 @@ fn ! selfDirIn root: String -> String
 fn ! selfCacheIn root: String fp: String -> String
   (str (selfDirIn root) "/" fp)
 
-; (:m :ref NATIVE-WORKERS-DEFAULT :do "the self slot is the one prepareRunIn writes, keyed like any run slot by tree, opt level, rc and digest; the old run: key named a slot nothing wrote, so a built self binary always read as absent")
 fn ! selfSlotOf cDir: String root: String fp: String -> String
-  (let [(abs (str root "/" (selfSource)))]
-    (str cDir "/" fp "/" (suiteSlotKeyIn (treeOf root) "run" (optLevelFor "run") (rcTag (rcModeFor! abs)) (selfSource) (fileDigest abs))))
+  (str cDir "/" fp "/" (slotKey (str "run:" (importPathOf (selfSource))) (fileDigest (str root "/" (selfSource)))))
 
 (schema SelfState
   (:f binary (Option String))
@@ -2595,25 +2063,10 @@ fn ! selfStateOf cDir: String root: String fp: String -> SelfState
 fn ! selfBinaryOf cDir: String root: String fp: String -> (Option String)
   (selfStateOf cDir root fp).binary
 
-; (:m :ref NATIVE-WORKERS-DEFAULT :do "a compile worker is quiet when the process that spawned it was: its pid never matches the parent's ASL_NATIVE_QUIET_PID, so the parent says so in ASL_NATIVE_WORKER")
-fn ! telemetryQuiet? -> Bool
-  (and (!= (optionOr (envGet "ASL_NATIVE_TRACE") "") "1")
-       (or (= (optionOr (envGet "ASL_NATIVE_QUIET_PID") "") (stringFromInt64 (procSelf)))
-           (= (optionOr (envGet "ASL_NATIVE_WORKER") "") "quiet")))
-
 fn ! telemetry line: String -> Unit
-  (if (telemetryQuiet?)
+  (if (and (= (optionOr (envGet "ASL_NATIVE_QUIET_PID") "") (stringFromInt64 (procSelf))) (!= (optionOr (envGet "ASL_NATIVE_TRACE") "") "1"))
     ()
     (do (eprintln line) ()))
-
-; (:m :ref WORKER-PHASES-QUIET :do "a line only a trace asks for prints on ASL_NATIVE_TRACE=1 alone; telemetry also prints whenever no parent said quiet, which a compile worker never sees")
-fn workerPhasesWanted? trace: String -> Bool
-  (= trace "1")
-
-fn ! traceOnly line: String -> Unit
-  (if (workerPhasesWanted? (optionOr (envGet "ASL_NATIVE_TRACE") ""))
-    (do (eprintln line) ())
-    ())
 
 fn ! lockPid path: String -> (Option Int64)
   (match (fileReadString path)
@@ -2624,10 +2077,9 @@ fn ! lockPid path: String -> (Option Int64)
 fn ! pidAlive? pid: Int64 -> Bool
   (and (> pid 1) (resultOr (procAlive? pid) false))
 
-; (:m :ref LOCKLIVE-UNPARSABLE :do "a lock with no pid in it is live while it is younger than the :native :lockGraceS row, the same rule takeLock! uses to break it, and dead after; the sweep therefore never treats a creator mid-write as dead and never keeps a long-dead empty lock")
 fn ! lockLive? path: String -> Bool
   (and (fileExists? path)
-       (match (lockPid path) ((none) (not (unparsableStale? path))) ((some pid) (pidAlive? pid))))
+       (match (lockPid path) ((none) true) ((some pid) (pidAlive? pid))))
 
 fn ! breakLock! path: String deadPid: Int64 -> Unit
   (let [(stale (str path ".stale." (stringFromInt64 (procSelf))))]
@@ -2640,26 +2092,13 @@ fn ! breakLock! path: String deadPid: Int64 -> Unit
                (match (fileCreateExclusive path moved) ((ok _) ()) ((err _) ())))
              (match (pathRemove stale) ((ok _) ()) ((err _) ())))))))
 
-; (:m :ref NT-CLAIM-WAIT-CFG :do "an unparsable lock counts as dead only when it is older than the grace row, because a live creator has the file before it has the pid in it")
-fn ! unparsableStale? path: String -> Bool
-  (match (fileStat path)
-    ((ok st) (> (- (nowNs) st.mtimeNs) (nb/lockGraceFor! (toolRoot))))
-    ((err _) false))
-
-; (:m :ref NT-CLAIM-WAIT-CFG :do "a lock file whose text holds no pid cannot belong to a live process, so it is moved aside and removed at once instead of being waited on to the deadline; a file that vanished meanwhile is left alone")
-fn ! breakUnparsable! path: String -> Unit
-  (let [(stale (str path ".stale." (stringFromInt64 (procSelf))))]
-    (match (pathRename path stale)
-      ((err _) ())
-      ((ok _) (match (pathRemove stale) ((ok _) ()) ((err _) ())))))
-
 fn ! takeLock! path: String tries: Int64 -> Bool
   (match (fileCreateExclusive path (stringFromInt64 (procSelf)))
     ((ok _) true)
     ((err _) (if (<= tries 0)
                false
                (match (lockPid path)
-                 ((none) (if (unparsableStale? path) (do (breakUnparsable! path) (takeLock! path (- tries 1))) false))
+                 ((none) false)
                  ((some pid) (if (pidAlive? pid) false (do (breakLock! path pid) (takeLock! path (- tries 1)))))))))
 
 fn ! prepareCommand! path: String fp: String -> Int64
@@ -2704,9 +2143,6 @@ fn testHeaderParsing -> Bool
         (mainOnly "(module a/c :x [main other] :i [])\n\nfn ! main args: (List String) -> (Result Int64 String)\n  (ok 0)\n")
         (bare "(module a/d :i [])\n\nfn f -> Int64\n  (:x [runTests])\n")]
     (do (assert (= (exportsOf src) (list "helper" "runTests")) "exports read across lines of the :x vector")
-        (assert (mainReturnsBareInt64 src) "a main header that ends at -> Int64 returns a bare Int64")
-        (assert (mainReturnsBareInt64 "(module a/e :x [main] :i [])\n\nfn main -> Int64   (+ 1 2)\n") "a body on the header line after -> Int64 is still a bare Int64 main")
-        (refute (mainReturnsBareInt64 mainOnly) "a Result main is not a bare Int64 main")
         (assert (= (entryOf src) (some "runTests")) "runTests is the entry when exported")
         (assert (= (entryOf mainOnly) (some "main")) "main is the entry when runTests is not exported")
         (assert (none? (entryOf bare)) "an :x after the header is not an export")
@@ -2789,9 +2225,6 @@ fn ! testManifestStamp dir: String -> Bool
         (assert (= (wrapperDirIn "rel/cache") "rel/cache/entries") "the entry wrapper lives under a cache root inside the workspace")
         (assert (stringStartsWith? (wrapperDirIn "/c") ".asl/cache/nativeTest/entries/") "a cache root outside the workspace keeps its wrappers inside it, where imports resolve")
         (refute (= (wrapperDirIn "/c") (wrapperDirIn "/d")) "one entries directory per outside cache root")
-        (assert (configAbove? (resultOr (realPath dir) dir)) "a directory inside this workspace has a .asl.config.asn above it")
-        (assert (= (wrapperBase (selfRoot)) ".asl/cache/nativeTest/entries") "a root with a config above keeps its wrappers under its own .asl")
-        (assert (= (wrapperBase (str (resultOr (realPath dir) dir) "/absent")) ".asl/cache/nativeTest/entries") "a root without asl/.asl.config.asn keeps the default")
         true))
 
 fn ! testLock dir: String -> Bool

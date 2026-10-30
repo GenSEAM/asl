@@ -14,7 +14,7 @@ fn row at: Int64 provider: String alias: String outcome: String inTok: Int64 out
   (ul/CallRow :atMs at :profile "" :intent "" :alias alias :provider provider :model alias
               :inTokens inTok :cachedTokens 0 :outTokens outTok :reasoningTokens 0 :ttftMs none :ms none
               :outcome outcome :charge 0 :tag none :temperature none :topP none :maxTokens none
-              :effort none :api "chat" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none :status 0 :reason none)
+              :effort none :api "chat" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none)
 
 fn okRow at: Int64 alias: String -> ul/CallRow
   (row at "nim" alias "ok" 10 10)
@@ -55,7 +55,7 @@ fn cfg limits: String -> String
   (str "(:gateway :v 2 :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id m1 :provider fp :name \"n1\" :rpm 5) (:model :id m2 :provider fp :name \"n2\" :rpm 5)) :profiles ((:profile :id default :routes ((:intent any :chain (m1 m2))))) :uses ((:use :for default :profile default))" limits ")")
 
 fn ! parsed limits: String -> (Result c/GatewayTable String)
-  (c/gatewayConfigParse! (cfg limits) "default" ".asl/mem/calibration/index.asn")
+  (c/gateway_config_parse! (cfg limits) "default" ".asl/mem/calibration/index.asn")
 
 fn ! run! limits: String -> String
   (match (parsed limits)

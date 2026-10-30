@@ -1,5 +1,5 @@
 (module asl-proc/jobPool
-  :x [Job Done Limits Proc job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! shellOut childEnv inheritedOk? gitUnsetPrefix gitGuarded secretName? executedOf errorLinesOf quoteArgv]
+  :x [Job Done Limits Proc job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited psPairs descendantsOf psSnapshot procsOf procSnapshot treeOf killTree! shellOut childEnv secretName? executedOf errorLinesOf quoteArgv]
   :i [])
 
 ; (:m :ref HL-FIXWAVE-M4 :do "the bounded-job, process-tree-killing engine asl/tools/fleet/run.asl carries (watchdog timeout, descendant cap, group-wide SIGSTOP/SIGKILL) moved here verbatim so the published asl/ subtree (asl-cli/nativeBuild.asl, asl-cli/native.asl) can build and run its own native CLI without importing tools/, which lives outside asl/ and is absent from a standalone checkout; asl/tools/fleet/run.asl keeps its own copy for its many existing callers (fleetRunTest.asl and the fleetCompareTest/fleetGuardTest/fleetWatchTest/fleetReceiptTest/fleetRedBeforeTest families, none of them under asl/), since re-exporting a schema type under a second module name is not available here")
@@ -18,15 +18,12 @@
 
 (schema Limits
   (:f timeoutMs Int64)
-  (:f maxDesc Int64)
-  (:f owner Int64 :default 0))
+  (:f maxDesc Int64))
 
 (schema Proc
   (:f pid Int64)
   (:f ppid Int64)
-  (:f pgid Int64)
-  (:f age Int64 :default -1)
-  (:f born Int64 :default -1))
+  (:f pgid Int64))
 
 (schema Running
   (:f idx Int64)
@@ -52,7 +49,7 @@ fn ! childEnv overrides: (List String) -> (List String)
         (names (map nameOf overrides))]
     (listAppend overrides
       (filter (fn [(row String)] -> Bool
-                (let [(k (nameOf row))] (and (not (listContains? names k)) (and (not (secretName? k)) (inheritedOk? k)))))
+                (let [(k (nameOf row))] (and (not (listContains? names k)) (not (secretName? k)))))
               (envList))))
 
 fn quoteArgv argv: (List String) -> String
@@ -98,97 +95,26 @@ fn walkDesc m: (Map Int64 (List Int64)) frontier: (List Int64) acc: (List Int64)
 fn descendantsOf pairs: (List (Pair Int64 Int64)) root: Int64 -> (List Int64)
   (walkDesc (childMap pairs) (list root) (list))
 
-; (:m :ref GITCONFIG-GUARD-SHELLOUT :do "the one definition, which asl/tools/fleet/run.asl imports: childEnv here and there and both shellOut defs use it; an inherited GIT_ variable reaches a child only when it names an identity, a transport or a prompt")
-fn inheritedOk? name: String -> Bool
-  (or (not (stringStartsWith? name "GIT_"))
-      (listContains? (list "GIT_AUTHOR_NAME" "GIT_AUTHOR_EMAIL" "GIT_AUTHOR_DATE" "GIT_COMMITTER_NAME" "GIT_COMMITTER_EMAIL" "GIT_COMMITTER_DATE" "GIT_SSH" "GIT_SSH_COMMAND" "GIT_ASKPASS" "GIT_TERMINAL_PROMPT" "GIT_EDITOR" "GIT_PAGER") name))
-
-; (:m :ref GITCONFIG-GUARD-SHELLOUT :do "processSpawn hands the child this process's whole environment, so shellOut opens the command with an unset of every inherited name inheritedOk? drops (GIT_DIR, GIT_WORK_TREE, GIT_CONFIG_* ...): a hook's or a fixture's repository variables never reach it; a name the shell cannot unset (a - or . in it, NONPLAIN-GIT-NAME) is removed by env -u around the command instead; names with any other shell-special character stay unlisted for the child's shell to ignore")
-fn gitBadChars -> (List String)
-  (list " " ";" "&" "|" "$" "`" "'" "\"" "(" ")" "<" ">" "\\" "*" "?" "\n" "\t")
-
-fn gitNames -> (List String)
-  (filter (fn [(n String)] -> Bool (and (not (stringEmpty? n)) (not (inheritedOk? n)) (not (listAny? (fn [(c String)] -> Bool (stringContains? n c)) (gitBadChars)))))
-          (map (fn [(row String)] -> String (optionOr (listHead (stringSplit row "=")) row)) (envList)))
-
-fn nonPlainName? n: String -> Bool
-  (or (stringContains? n "-") (stringContains? n "."))
-
-fn ! gitUnsetPrefix -> String
-  (let [(names (filter (fn [(n String)] -> Bool (not (nonPlainName? n))) (gitNames)))]
-    (if (listEmpty? names) "" (str "unset " (stringJoin names " ") "; ")))
-
-fn ! gitGuarded cmd: String -> String
-  (let [(odd (filter nonPlainName? (gitNames)))
-        (inner (str (gitUnsetPrefix) cmd))]
-    (if (listEmpty? odd) inner
-      (str "env " (stringJoin (map (fn [(n String)] -> String (str "-u '" n "'")) odd) " ") " /bin/sh -c '" (stringReplace inner "'" "'\\''") "'")))
-
 fn ! shellOut cmd: String timeoutMs: Int64 -> (Result String String)
-  (match (processSpawn (gitGuarded cmd))
+  (match (processSpawn cmd)
     ((err e) (err (str "spawn failed: " e)))
     ((ok h) (match (processWait h timeoutMs)
               ((err e) (err (str "wait failed: " e)))
               ((ok o) (if (= o.exitCode 0) (ok o.stdout) (err (str "exit " o.exitCode ": " (stringTrim o.stderr))))))))
 
-; (:m :ref NODE2-SIGSTOP-RC :do "a user manager (comm systemd) or an sshd process is never a snapshot row, so no tree killer can reach it or walk through it")
-fn guardedComm? comm: String -> Bool
-  (let [(base (optionOr (listLast (stringSplit comm "/")) comm))]
-    (or (= base "systemd") (stringStartsWith? base "sshd")))
-
-; (:m :ref KILL-SETSID-ESCAPEE :do "ps etime ([[dd-]hh:]mm:ss, the only elapsed-time column both procps and BSD ps print) as seconds; anything else is -1, unknown")
-fn etimeSeconds text: String -> Int64
-  (let [(dayParts (stringSplit text "-"))
-        (days (if (= (listLength dayParts) 2) (optionOr (stringToInt64 (optionOr (listHead dayParts) "")) -1) 0))
-        (clock (stringSplit (optionOr (listLast dayParts) "") ":"))
-        (nums (map (fn [(c String)] -> Int64 (optionOr (stringToInt64 c) -1)) clock))]
-    (if (or (stringEmpty? text) (or (> (listLength dayParts) 2) (or (< days 0) (or (< (listLength nums) 2) (or (> (listLength nums) 3) (listAny? (fn [(n Int64)] -> Bool (< n 0)) nums))))))
-      -1
-      (+ (* days 86400) (fold (fn [(acc Int64) (n Int64)] -> Int64 (+ (* acc 60) n)) 0 nums))))
-
 fn procRow acc: (List Proc) line: String -> (List Proc)
   (let [(ws (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringTrim line) " ")))
         (stat (optionOr (listGet ws 3) ""))
         (num (fn [(i Int64)] -> Int64 (optionOr (stringToInt64 (optionOr (listGet ws i) "")) -1)))]
-    (if (or (stringStartsWith? stat "Z") (or (guardedComm? (optionOr (listGet ws 5) "")) (or (< (num 0) 1) (or (< (num 1) 0) (< (num 2) 0)))))
+    (if (or (stringStartsWith? stat "Z") (or (< (num 0) 1) (or (< (num 1) 0) (< (num 2) 0))))
       acc
-      (cons (Proc :pid (num 0) :ppid (num 1) :pgid (num 2) :age (etimeSeconds (optionOr (listGet ws 4) ""))) acc)))
+      (cons (Proc :pid (num 0) :ppid (num 1) :pgid (num 2)) acc)))
 
 fn procsOf text: String -> (List Proc)
   (fold procRow (list) (stringLines text))
 
-; (:m :ref KILL-SETSID-ESCAPEE :do "rows of a ps text taken at nowSec: born is nowSec minus etime, -1 when etime is unknown; the snapshot uses the wall clock, a test passes its own")
-fn procsAt text: String nowSec: Int64 -> (List Proc)
-  (map (fn [(p Proc)] -> Proc (Proc :pid p.pid :ppid p.ppid :pgid p.pgid :age p.age :born (if (< p.age 0) -1 (- nowSec p.age)))) (procsOf text))
-
-fn pinBase -> Int64
-  8388608
-
-; (:m :ref KILL-SETSID-ESCAPEE :do "a known entry is a bare pid or a pin, born * 2^23 + pid, recorded when the pid was seen in the tree; pids stay below 2^23 on Linux and macOS")
-; (:m :ref PIN-PID-BITS :do "a pid outside 1..2^23-1 stays bare, so it can never decode as another pid; Linux caps pid_max at 2^22 (PID_MAX_LIMIT) and macOS pids stay below 100000, so no live pid is left unpinned")
-fn pinOf pid: Int64 born: Int64 -> Int64
-  (if (or (< born 0) (or (< pid 1) (>= pid (pinBase)))) pid (+ (* born (pinBase)) pid))
-
-fn pinPid k: Int64 -> Int64
-  (- k (* (/ k (pinBase)) (pinBase)))
-
-fn pinBorn k: Int64 -> Int64
-  (/ k (pinBase))
-
-fn pinsOf procs: (List Proc) pids: (List Int64) -> (List Int64)
-  (map (fn [(pid Int64)] -> Int64 (match (listHead (filter (fn [(p Proc)] -> Bool (= p.pid pid)) procs)) ((some p) (pinOf pid p.born)) ((none) pid))) pids)
-
-fn knownPid? known: (List Int64) pid: Int64 -> Bool
-  (listAny? (fn [(k Int64)] -> Bool (= (pinPid k) pid)) known)
-
-; (:m :ref KILL-SETSID-ESCAPEE :do "g is the very process that was recorded: a pin for g whose birth matches g's current birth within 2 s; a reused pid has a later birth and a bare pid never matches")
-fn pinnedLive? procs: (List Proc) known: (List Int64) g: Int64 -> Bool
-  (match (listHead (filter (fn [(p Proc)] -> Bool (= p.pid g)) procs))
-    ((none) false)
-    ((some p) (and (>= p.born 0) (listAny? (fn [(k Int64)] -> Bool (and (= (pinPid k) g) (and (> (pinBorn k) 0) (and (<= (- (pinBorn k) p.born) 2) (>= (- (pinBorn k) p.born) -2))))) known))))
-
 fn ! procSnapshot -> (List Proc)
-  (procsAt (resultOr (shellOut "ps -A -o pid= -o ppid= -o pgid= -o stat= -o etime= -o comm=" 10000) "") (/ (nowNs) 1000000000))
+  (procsOf (resultOr (shellOut "ps -A -o pid= -o ppid= -o pgid= -o stat=" 10000) ""))
 
 fn ! psSnapshot -> (List (Pair Int64 Int64))
   (map (fn [(p Proc)] -> (Pair Int64 Int64) (pair p.pid p.ppid)) (procSnapshot))
@@ -199,62 +125,28 @@ fn addNew xs: (List Int64) ys: (List Int64) -> (List Int64)
 fn ownGroup procs: (List Proc) self: Int64 -> Int64
   (match (listHead (filter (fn [(p Proc)] -> Bool (= p.pid self)) procs)) ((some p) p.pgid) ((none) -1))
 
-fn lineageUp procs: (List Proc) pid: Int64 acc: (List Int64) -> (List Int64)
-  (if (or (<= pid 1) (or (listContains? acc pid) (> (listLength acc) 512)))
-    acc
-    (match (listHead (filter (fn [(p Proc)] -> Bool (= p.pid pid)) procs))
-      ((some p) (lineageUp procs p.ppid (cons pid acc)))
-      ((none) (cons pid acc))))
-
-; (:m :ref NODE2-SIGSTOP-RC :do "the fence of a killer: itself and every ancestor up to init, and the groups they are in; no tree walk adds a fenced pid or group, so a killer never stops itself, its parent chain or a group one of them sits in")
-fn fenceOf procs: (List Proc) self: Int64 -> (Pair (List Int64) (List Int64))
-  (let [(up (lineageUp procs self (list)))]
-    (pair up (map (fn [(p Proc)] -> Int64 p.pgid) (filter (fn [(p Proc)] -> Bool (listContains? up p.pid)) procs))))
-
-fn fenced? procs: (List Proc) root: Int64 self: Int64 -> Bool
-  (or (<= root 1) (listContains? (pairFirst (fenceOf procs self)) root))
-
-fn leaderGone? procs: (List Proc) g: Int64 -> Bool
-  (listEmpty? (filter (fn [(p Proc)] -> Bool (= p.pid g)) procs))
-
-; (:m :ref KILL-SETSID-ESCAPEE :do "g started no earlier than the root (ps etime, 1 s resolution): a known pid that setsid away from the job is younger than the job, a foreign process that ended up in known is older; unknown ages never qualify")
-fn bornAfter? procs: (List Proc) root: Int64 g: Int64 -> Bool
-  (let [(ageOf (fn [(pid Int64)] -> Int64 (match (listHead (filter (fn [(p Proc)] -> Bool (= p.pid pid)) procs)) ((some p) p.age) ((none) -1))))
-        (rootAge (ageOf root))
-        (age (ageOf g))]
-    (and (>= rootAge 0) (and (>= age 0) (<= age rootAge))))
-
-; (:m :ref NODE2-SIGSTOP-RC :do "a member's group joins the tree only when its leader is a member, or was one (known) and is gone or started no earlier than the root (bornAfter?): a member sitting in a foreign group no longer pulls that whole group, and everything hanging off it, into the kill")
-fn treeStep procs: (List Proc) root: Int64 members: (List Int64) groups: (List Int64) known: (List Int64) fence: (Pair (List Int64) (List Int64)) rounds: Int64 -> (Pair (List Int64) (List Int64))
-  (let [(adopt (fn [(g Int64)] -> Bool (and (> g 1) (and (not (listContains? (pairSecond fence) g)) (or (listContains? members g) (or (and (knownPid? known g) (leaderGone? procs g)) (and (pinnedLive? procs known g) (bornAfter? procs root g))))))))
-        (gs (addNew groups (filter adopt (map (fn [(p Proc)] -> Int64 p.pgid) (filter (fn [(p Proc)] -> Bool (listContains? members p.pid)) procs)))))
+fn treeStep procs: (List Proc) members: (List Int64) groups: (List Int64) own: Int64 rounds: Int64 -> (Pair (List Int64) (List Int64))
+  (let [(gs (addNew groups (filter (fn [(g Int64)] -> Bool (and (> g 1) (!= g own)))
+                                   (map (fn [(p Proc)] -> Int64 p.pgid) (filter (fn [(p Proc)] -> Bool (listContains? members p.pid)) procs)))))
         (more (map (fn [(p Proc)] -> Int64 p.pid)
-                   (filter (fn [(p Proc)] -> Bool (and (> p.pid 1)
-                                                       (and (not (listContains? (pairFirst fence) p.pid))
-                                                            (and (not (listContains? members p.pid))
-                                                                 (or (listContains? members p.ppid) (listContains? gs p.pgid))))))
+                   (filter (fn [(p Proc)] -> Bool (and (not (listContains? members p.pid))
+                                                       (or (listContains? members p.ppid) (listContains? gs p.pgid))))
                            procs)))]
     (if (or (listEmpty? more) (<= rounds 0))
       (pair members gs)
-      (treeStep procs root (addNew members more) gs known fence (- rounds 1))))
+      (treeStep procs (addNew members more) gs own (- rounds 1))))
 
-; (:m :ref NODE2-SIGSTOP-RC :do "a remembered group stays only when a known pid still holds it (an orphan of init or a child in the lineage, or a pinned pid whose birth still matches: an orphan a subreaper such as systemd --user adopted has a ppid that is neither 1 nor in the lineage) and its leader is gone, in the lineage, or known and started no earlier than the root (a setsid escapee); a live leader older than the root (a foreign sleeper or a user manager that ended up in known) never anchors its group")
-fn anchoredGroups procs: (List Proc) root: Int64 groups: (List Int64) known: (List Int64) lineage: (List Int64) -> (List Int64)
-  (let [(anchors (filter (fn [(p Proc)] -> Bool (and (knownPid? known p.pid) (or (= p.ppid 1) (or (listContains? lineage p.ppid) (pinnedLive? procs known p.pid))))) procs))
-        (held (map (fn [(p Proc)] -> Int64 p.pgid) anchors))
-        (ours (fn [(g Int64)] -> Bool (or (listContains? lineage g) (or (leaderGone? procs g) (and (pinnedLive? procs known g) (bornAfter? procs root g))))))]
-    (filter (fn [(g Int64)] -> Bool (or (= g root) (and (listContains? held g) (ours g)))) groups))
+fn anchoredGroups procs: (List Proc) root: Int64 groups: (List Int64) known: (List Int64) -> (List Int64)
+  (let [(lineage (cons root (descendantsOf (map (fn [(p Proc)] -> (Pair Int64 Int64) (pair p.pid p.ppid)) procs) root)))
+        (anchors (filter (fn [(p Proc)] -> Bool (and (listContains? known p.pid) (or (= p.ppid 1) (listContains? lineage p.ppid)))) procs))
+        (held (map (fn [(p Proc)] -> Int64 p.pgid) anchors))]
+    (filter (fn [(g Int64)] -> Bool (or (= g root) (listContains? held g))) groups))
 
-; (:m :ref NODE2-SIGSTOP-RC :do "self is the killer's pid: a root of 0 or 1 (every process descends from them; a failed pid parse once froze all of node2's user processes) or a root in the killer's fence gives an empty tree")
-fn treeOf procs: (List Proc) root: Int64 groups: (List Int64) known: (List Int64) self: Int64 -> (Pair (List Int64) (List Int64))
-  (let [(fence (fenceOf procs self))]
-    (if (fenced? procs root self)
-      (pair (list) (list))
-      (let [(lineage (cons root (filter (fn [(p Int64)] -> Bool (not (listContains? (pairFirst fence) p))) (descendantsOf (map (fn [(p Proc)] -> (Pair Int64 Int64) (pair p.pid p.ppid)) procs) root))))
-            (start (filter (fn [(g Int64)] -> Bool (and (> g 1) (not (listContains? (pairSecond fence) g)))) (addNew (anchoredGroups procs root groups known lineage) (list root))))
-            (seed (cons root (map (fn [(p Proc)] -> Int64 p.pid) (filter (fn [(p Proc)] -> Bool (and (> p.pid 1) (and (!= p.pid root) (and (not (listContains? (pairFirst fence) p.pid)) (listContains? start p.pgid))))) procs))))
-            (t (treeStep procs root seed start known fence 10000))]
-        (pair (filter (fn [(p Int64)] -> Bool (!= p root)) (pairFirst t)) (pairSecond t)))))
+fn treeOf procs: (List Proc) root: Int64 groups: (List Int64) known: (List Int64) own: Int64 -> (Pair (List Int64) (List Int64))
+  (let [(start (filter (fn [(g Int64)] -> Bool (and (> g 1) (!= g own))) (addNew (anchoredGroups procs root groups known) (list root))))
+        (seed (cons root (map (fn [(p Proc)] -> Int64 p.pid) (filter (fn [(p Proc)] -> Bool (and (!= p.pid root) (listContains? start p.pgid))) procs))))
+        (t (treeStep procs seed start own 10000))]
+    (pair (filter (fn [(p Int64)] -> Bool (!= p root)) (pairFirst t)) (pairSecond t)))
 
 fn ! signalAll pids: (List Int64) sig: String -> Int64
   (fold (fn [(n Int64) (p Int64)] -> Int64 (match (procKill p sig) ((ok _) (+ n 1)) ((err _) n))) 0 pids)
@@ -264,7 +156,7 @@ fn ! signalGroups groups: (List Int64) sig: String -> Int64
 
 fn ! freeze! root: Int64 seen: (List Int64) groups: (List Int64) known: (List Int64) rounds: Int64 -> (Pair (List Int64) (List Int64))
   (let [(snap (procSnapshot))
-        (t (treeOf snap root groups (addNew known seen) (procSelf)))
+        (t (treeOf snap root groups (addNew known seen) (ownGroup snap (procSelf))))
         (gs (pairSecond t))
         (now (cons root (pairFirst t)))
         (fresh (filter (fn [(p Int64)] -> Bool (not (listContains? seen p))) now))
@@ -274,20 +166,17 @@ fn ! freeze! root: Int64 seen: (List Int64) groups: (List Int64) known: (List In
       (pair (addNew seen fresh) gs)
       (freeze! root (addNew seen fresh) gs known (- rounds 1))))
 
-; (:m :ref NODE2-SIGSTOP-RC :do "a fenced root signals nothing; otherwise every pid and group a freeze stopped gets SIGKILL in the same round, and the killer is never among them")
 fn ! killRounds root: Int64 groups: (List Int64) known: (List Int64) rounds: Int64 -> Int64
-  (if (fenced? (procSnapshot) root (procSelf))
-    0
-    (let [(frozen (freeze! root (list) groups known 20))
-          (gs (pairSecond frozen))
-          (_ (signalGroups gs "SIGKILL"))
-          (_ (signalAll (pairFirst frozen) "SIGKILL"))
-          (_ (sleepMs 50))
-          (snap (procSnapshot))
-          (left (pairFirst (treeOf snap root gs (addNew known (pairFirst frozen)) (procSelf))))]
-      (if (or (listEmpty? left) (<= rounds 0))
-        (listLength left)
-        (killRounds root gs (addNew known (pairFirst frozen)) (- rounds 1)))))
+  (let [(frozen (freeze! root (list) groups known 20))
+        (gs (pairSecond frozen))
+        (_ (signalGroups gs "SIGKILL"))
+        (_ (signalAll (pairFirst frozen) "SIGKILL"))
+        (_ (sleepMs 50))
+        (snap (procSnapshot))
+        (left (pairFirst (treeOf snap root gs (addNew known (pairFirst frozen)) (ownGroup snap (procSelf)))))]
+    (if (or (listEmpty? left) (<= rounds 0))
+      (listLength left)
+      (killRounds root gs (addNew known (pairFirst frozen)) (- rounds 1))))
 
 fn ! killTreeWith! root: Int64 groups: (List Int64) known: (List Int64) -> Int64
   (killRounds root groups known 5)
@@ -303,15 +192,13 @@ fn ! pumpOne r: Running -> (Pair Bool Running)
           (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text (str r.text got)
                    :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed r.killed :groups r.groups :known r.known)))
 
-; (:m :ref BUILD-DETACHED-ESCAPE :do "a run whose Limits names an owner pid ends, tree and all, at the first check after that owner is gone: a killed bin/asl left its cold aslNativeBuild orphaned under init spawning -O2 clang parts of ~1.2 GB each (node2, 2026-10-31)")
-fn ! judge lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool r: Running -> Running
+fn ! judge lim: Limits now: Int64 snap: (List Proc) own: Int64 checked: Bool r: Running -> Running
   (let [(overTime (and (> lim.timeoutMs 0) (> (/ (- now r.startNs) 1000000) lim.timeoutMs)))
-        (tree (if checked (treeOf snap r.pid r.groups r.known self) (pair (list) r.groups)))
+        (tree (if checked (treeOf snap r.pid r.groups r.known own) (pair (list) r.groups)))
         (groups (pairSecond tree))
-        (known (if checked (addNew r.known (pinsOf snap (pairFirst tree))) r.known))
+        (known (if checked (pairFirst tree) r.known))
         (descN (if (and checked (> lim.maxDesc 0)) (listLength (pairFirst tree)) 0))
-        (ownerGone (and checked (and (> lim.owner 1) (not (resultOr (procAlive? lim.owner) false)))))
-        (verdict (cond (overTime "timeout") ((> descN lim.maxDesc) "runaway") (ownerGone "owner-gone") (else "")))]
+        (verdict (cond (overTime "timeout") ((> descN lim.maxDesc) "runaway") (else "")))]
     (if (stringEmpty? verdict)
       (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text r.text
                :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups groups :known known)
@@ -363,8 +250,8 @@ fn ! poolLoop jobs: (List Job) next: Int64 slots: Int64 lim: Limits running: (Li
             (now (monotonicNs))
             (checked (and (> lim.maxDesc 0) (>= (- now lastCheck) (checkEveryNs))))
             (snap (if checked (procSnapshot) (list)))
-            (self (if checked (procSelf) -1))
-            (states (map (fn [(r Running)] -> Running (judge lim now snap self checked r)) (map pairSecond pumped)))
+            (own (if checked (ownGroup snap (procSelf)) -1))
+            (states (map (fn [(r Running)] -> Running (judge lim now snap own checked r)) (map pairSecond pumped)))
             (over? (fn [(r Running)] -> Bool (or (not (stringEmpty? r.killed)) (and (not r.outOpen) (not r.errOpen)))))
             (closed (filter over? states))
             (still (filter (fn [(r Running)] -> Bool (not (over? r))) states))

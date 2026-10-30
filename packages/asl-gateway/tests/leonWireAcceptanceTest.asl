@@ -1,6 +1,6 @@
 (module aslGateway/tests/leonWireAcceptanceTest
   :x [runTests]
-  :i [(aslAgent/providers :a pv)
+  :i [(asl/agentLoop/providers :a pv)
       (asl-json/json :a j)])
 
 fn field fields: (List (Pair String String)) key: String -> (Option String)

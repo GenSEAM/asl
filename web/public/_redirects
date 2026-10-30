@@ -6,10 +6,3 @@
 /in-ide / 301
 /ide / 301
 /blog/agent-script-the-optimal-agent-language /blog/agent-slang-the-optimal-agent-language 301
-/blog/from-vibe-code-to-wasm-in-0-04ms /blog/agent-test-sandboxes-in-memory-with-webassembly 301
-/blog/kill-80-percent-agent-code-bloat /blog/against-agent-framework-bloat 301
-/blog/the-agent-native-developer-cockpit /blog/developer-tooling-for-coding-agents 301
-/blog/the-death-of-json-rpc-and-zero-copy-wire-protocols /blog/beyond-json-rpc-s-expression-agent-messages 301
-/blog/zero-overhead-test-telemetry-and-resource-observability /blog/test-telemetry-and-resource-observability-for-agents 301
-/blog/universal-cross-platform-glue-without-drift /blog/one-source-native-and-wasm-against-glue-drift 301
-/blog/why-3b-local-models-fail-at-python-but-fly-on-s-expressions /blog/why-small-local-models-struggle-with-python 301
