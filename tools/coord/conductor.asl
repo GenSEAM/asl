@@ -2,7 +2,7 @@
   :x [hubGuard! leonGuard! staleSig? staleField staleWake! repoPath CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
-      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! rungCap hopsSince offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
+      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       main]
   :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (asl-tools/hub/preflight :a hp)
       (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -407,7 +407,7 @@ fn ! finish! ctx: Ctx u: st/Task c: CUnit res: Res -> Unit
         (_ (dropRun! ctx.dir c.id stage))]
     (cond
       ((= c.st "writing")
-        (if (= res.ok 1)
+        (if (providerHit? ctx u c res) (providerRequeue! ctx c res) (let [(_ (pwReset! ctx.dir c.id))] (if (= res.ok 1)
           (let [(c1 (move! ctx (written c res.wt res.branch) "gating" "write" res.model res.tokens res.costMicro (if (= res.claimedGreen 1) "claimedGreen" "written") res.ms))
                 (_ (launch! ctx u c1))]
             ())
@@ -429,7 +429,7 @@ fn ! finish! ctx: Ctx u: st/Task c: CUnit res: Res -> Unit
                   (c1 (escalate! ctx (with c :sig res.sig :epoch 0) res.sig "write: the unit gate passes on the base before any edit, so no write can prove it; make the gate fail on the base or mark the task a regression guard"))
                   (_ (move! ctx c1 "blocked" "write" res.model 0 0 (str "escalated: " (verdictSig res.sig)) res.ms))]
               ())
-            (let [(_ (fail! ctx c "write" res.model res.sig res.ms))] ())))))
+            (let [(_ (fail! ctx c "write" res.model res.sig res.ms))] ())))))))
       ((= c.st "gating")
         (if (and (= res.exit 0) (> res.asserts 0))
           (let [(_ (move! ctx c "awaitReview" "gates" "" 0 0 (str "green " (n res.asserts)) res.ms))] ())
@@ -471,7 +471,7 @@ fn ! step! ctx: Ctx u: st/Task cap: Int64 -> Int64
         (let [(pace ctx.pace)
               (allowOf pace.allowance)
               (allow (allowOf c.lane))]
-          (if (or (or (<= cap 0) (>= (laneActive cus c.lane) allow)) (draining? ctx.dir))
+          (if (or (or (or (<= cap 0) (>= (laneActive cus c.lane) allow)) (draining? ctx.dir)) (providerWaiting? ctx.dir c.id (/ (nowNs) 1000000)))
             cap
             (match (st/claim! ctx.dir c.id ctx.holder ctx.ttlMs)
               ((err e) (let [(_ (waitMore! ctx c e))] cap))
@@ -869,6 +869,101 @@ fn staleField sig: String key: String -> String
   (match (listGet (stringSplit sig (str " " key " ")) 1)
     ((some r) (optionOr (listHead (stringSplit r " ")) ""))
     ((none) ""))
+
+; (:m :ref COND-PROVIDER-FAIL-NO-HOP :do "the store's ladder.asn may hold one (:providerFail :backoffS S :maxInRow N :patterns (\"p\" ...)) row, patterns last and without parentheses, matched case-insensitively against the failed write's signature; schema in asl/grammar/conductorConfig.asn; no row or a row pfErrors rejects means the documented defaults (adopted: 60 s, 6 in a row, the provider-class words below)")
+fn pfDefaultPatterns -> (List String)
+  (list "err_vendor" "err_no_upstream" "bad gateway" "service unavailable" "overloaded" " 502" " 503" " 504" " 429" "breaker")
+
+fn pfRowOf dir: String -> String
+  (optionOr (listFind (fn [(l String)] -> Bool (stringStartsWith? (stringTrim l) "(:providerFail ")) (stringLines (readOr (ladderPath dir)))) "")
+
+fn pfHead row: String -> String
+  (optionOr (listHead (stringSplit row " :patterns ")) row)
+
+fn pfPatterns row: String -> (List String)
+  (match (listGet (stringSplit row " :patterns (") 1)
+    ((none) (pfDefaultPatterns))
+    ((some r)
+      (let [(parts (stringSplit (optionOr (listHead (stringSplit r ")")) "") "\""))]
+        (filter (fn [(p String)] -> Bool (not (stringEmpty? p)))
+                (map (fn [(i Int64)] -> String (stringLower (optionOr (listGet parts i) "")))
+                     (filter (fn [(i Int64)] -> Bool (= (mod i 2) 1)) (range 0 (listLength parts))))))))
+
+fn pfInt row: String key: String dflt: Int64 -> Int64
+  (optionOr (stringToInt64 (sp/tokAfter (pfHead row) key)) dflt)
+
+fn pfBackoffS row: String -> Int64
+  (pfInt row ":backoffS" 60)
+
+fn pfMaxInRow row: String -> Int64
+  (pfInt row ":maxInRow" 6)
+
+; (:m :ref COND-PROVIDER-FAIL-NO-HOP :do "config check of a (:providerFail ...) row: unknown keys, :backoffS outside 1..3600, :maxInRow outside 1..100 and an empty :patterns list are errors; no error means the row is used")
+fn pfErrors row: String -> (List String)
+  (let [(keys (filter (fn [(t String)] -> Bool (stringStartsWith? t ":")) (stringSplit (pfHead row) " ")))
+        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":backoffS" ":maxInRow") k))) keys))
+        (b (pfBackoffS row))
+        (m (pfMaxInRow row))]
+    (listAppend
+      (map (fn [(k String)] -> String (str "unknown key " k)) bad)
+      (listAppend
+        (if (or (< b 1) (> b 3600)) (list (str ":backoffS " (n b) " outside 1..3600")) (list))
+        (listAppend
+          (if (or (< m 1) (> m 100)) (list (str ":maxInRow " (n m) " outside 1..100")) (list))
+          (if (and (stringContains? row " :patterns ") (listEmpty? (pfPatterns row))) (list ":patterns is empty") (list))))))
+
+fn ! pfCfg dir: String -> String
+  (let [(row (pfRowOf dir))]
+    (if (listEmpty? (pfErrors row)) row ""))
+
+fn providerFailSig? sig: String pats: (List String) -> Bool
+  (let [(low (stringLower sig))]
+    (listAny? (fn [(p String)] -> Bool (stringContains? low p)) pats))
+
+; (:m :ref COND-PROVIDER-FAIL-NO-HOP :do "a write that left no commit past its base made no progress; an unreadable count or no worktree counts as none, so the provider class decides")
+fn ! noCommits? p: String base: String -> Bool
+  (if (stringEmpty? p) true
+    (let [(r (gitOut p (list "rev-list" "--count" (str base "..HEAD"))))]
+      (or (!= r.exit 0) (= (stringTrim r.out) "0"))))
+
+; (:m :ref COND-PROVIDER-FAIL-NO-HOP :do "<store>/providerWait.asn keeps (:pw :unit ID :n N :until MS) rows, the newest per unit wins: N is the provider fails in a row (0 after any other outcome), MS when the unit may be admitted again; the unit row itself (fails, sig, lane) is untouched")
+fn providerWaitPath dir: String -> String
+  (str dir "/providerWait.asn")
+
+fn ! pwLast dir: String id: String -> (Pair Int64 Int64)
+  (match (listLast (filter (fn [(l String)] -> Bool (stringContains? l (str ":unit " (st/q id) " "))) (stringLines (readOr (providerWaitPath dir)))))
+    ((none) (pair 0 0))
+    ((some l) (pair (optionOr (stringToInt64 (sp/tokAfter l ":n")) 0) (optionOr (stringToInt64 (sp/tokAfter l ":until")) 0))))
+
+fn ! pwNote! dir: String id: String run: Int64 until: Int64 -> Bool
+  (ok? (fileAppend (providerWaitPath dir) (str "(:pw :unit " (st/q id) " :n " (n run) " :until " (n until) ")\n")))
+
+fn ! providerWaiting? dir: String id: String now: Int64 -> Bool
+  (> (pairSecond (pwLast dir id)) now)
+
+fn ! pwReset! dir: String id: String -> Bool
+  (if (> (pairFirst (pwLast dir id)) 0) (pwNote! dir id 0 0) false)
+
+; (:m :ref COND-PROVIDER-FAIL-NO-HOP :do "a provider-class write failure (sig matches a pattern, no commit past base, not stale or vacuous, at most :maxInRow in a row) requeues the unit after :backoffS with its fail count, signature and lane untouched and journals (:providerFail :unit :route :backoffS :n :at); the next one past :maxInRow is an ordinary failure, so a dead route cannot hold a unit forever")
+fn ! providerHit? ctx: Ctx u: st/Task c: CUnit res: Res -> Bool
+  (let [(row (pfCfg ctx.dir))]
+    (and (= res.ok 0)
+         (and (not (staleSig? res.sig))
+              (and (not (vacuousSig? res.sig))
+                   (and (providerFailSig? res.sig (pfPatterns row))
+                        (and (noCommits? res.wt u.base)
+                             (<= (+ (pairFirst (pwLast ctx.dir c.id)) 1) (pfMaxInRow row))))))))
+
+fn ! providerRequeue! ctx: Ctx c: CUnit res: Res -> Unit
+  (let [(row (pfCfg ctx.dir))
+        (back (pfBackoffS row))
+        (now (/ (nowNs) 1000000))
+        (run (+ (pairFirst (pwLast ctx.dir c.id)) 1))
+        (_ (dropLease! ctx c))
+        (_ (pwNote! ctx.dir c.id run (+ now (* back 1000))))
+        (_ (fileAppend (journalPath ctx.dir) (str "(:providerFail :unit " (st/q c.id) " :route " (st/q res.model) " :backoffS " (n back) " :n " (n run) " :at " (n now) ")\n")))
+        (_ (move! ctx (with c :epoch 0) "ready" "write" res.model 0 0 (str "providerFail: " (verdictSig res.sig)) res.ms))]
+    ())
 
 ; (:m :ref STALE-WAKE :do "<store>/repo.path names the conductor's --repo (the deployed main); written by run")
 fn repoPath dir: String -> String
