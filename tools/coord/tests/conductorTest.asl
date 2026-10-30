@@ -770,6 +770,33 @@ fn ! testLeadOffline bin: String -> Bool
         (assert (and (not (cd/leadFresh? "" 5)) (not (cd/leadFresh? "(:leadOnline :at junk)" 5))) "no row or an unreadable row is stale")
         true))
 
+; (:m :ref ESC-BACKLOG-CAP-GATE :do "25 units blocked on a plain escalate and a fresh heartbeat: the first offerBacklog! writes (:lead rows for the 20 oldest blocked, the second the remaining 5, the third none; no unit gets two rows")
+fn ! backlogId i: Int64 -> String
+  (str "B" (if (< i 10) "0" "") (stringFromInt64 i))
+
+fn ! testBacklogCap -> Bool
+  (let [(dir (scratch "cap"))
+        (_ (cleanup dir))
+        (_ (dirCreate dir))
+        (ids (map (fn [(i Int64)] -> String (backlogId i)) (range 1 26)))
+        (_ (map (fn [(id String)] -> Bool (ok? (fileAppend (str dir "/journal.asn") (str "(:t :unit \"" id "\" :from writing :to blocked :stage write :model \"\" :tokens 0 :costUsd 0.000000 :verdict \"x\" :ms 1 :at " (stringFromInt64 (+ 1000 (optionOr (stringToInt64 (optionOr (stringSlice id 1 3) "")) 0))) ")\n")))) ids))
+        (_ (map (fn [(id String)] -> Bool (do (cd/writeCUnit! dir (cd/CUnit :id id :st "blocked" :lane "strong" :fails 0 :sig "boom" :waited 0 :parked 0 :epoch 0 :branch "" :wt "" :model "" :tokens 0 :costMicro 0 :esc 1 :launched 0 :await "")) true)) ids))
+        (now (/ (nowNs) 1000000))
+        (_ (beatFresh! dir))
+        (n1 (cd/offerBacklog! dir now))
+        (e1 (readOr dir "escalations.asn"))
+        (n2 (cd/offerBacklog! dir now))
+        (e2 (readOr dir "escalations.asn"))
+        (n3 (cd/offerBacklog! dir now))
+        (e3 (readOr dir "escalations.asn"))
+        (rows (fn [(t String)] -> Int64 (- (listLength (stringSplit t "(:lead ")) 1)))
+        (_ (cleanup dir))]
+    (do (assert (and (= n1 20) (= (rows e1) 20)) (str "the first pass writes exactly the cap: " (stringFromInt64 n1) " " (stringFromInt64 (rows e1))))
+        (assert (and (stringContains? e1 "\"B01\"") (stringContains? e1 "\"B20\"") (not (stringContains? e1 "\"B21\""))) "oldest blocked first: B01..B20, not B21")
+        (assert (and (= n2 5) (= (rows e2) 25) (stringContains? e2 "\"B25\"")) (str "the second pass writes the other 5: " (stringFromInt64 n2) " " (stringFromInt64 (rows e2))))
+        (assert (and (= n3 0) (= e3 e2)) (str "the third pass writes nothing: " (stringFromInt64 n3)))
+        true))
+
 ; (:m :ref ROTATE :do "a (:writeProfiles :tier T :profiles (..) :weights (..)) lanes row picks a profile per unit id by weight, the same id always the same one; without the row the old profile is used")
 fn ! testRotateProfiles -> Bool
   (let [(lanes "(:writeProfiles :tier free :profiles (pA pB pC) :weights (3 2 1))\n(:writeProfile :tier paid :profile pX)\n")
@@ -825,6 +852,7 @@ fn ! runTests -> Bool
         (assert (testWriteTierHop bin) "write failures hop free to paid to strong to lead")
         (assert (testEscLadder bin) "the escalation ladder walks free paid strong lead and skips a capped rung")
         (assert (testLeadOffline bin) "no fresh lead heartbeat: the ladder blocks at strong, no lead hop")
+        (assert (testBacklogCap) "the lead backlog is capped per pass, oldest first, never twice")
         (assert (testSignatureReset bin) "a new signature resets the count")
         (assert (testWake bin) "wake moves a parked unit")
         (assert (testWriterClaimIgnored bin) "writer's green claim is not trusted")
