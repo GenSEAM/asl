@@ -1,5 +1,5 @@
 (module asl/agentLoop/poolServe
-  :x [Serve newServe serveStep! serveWatch handleLine! validId? quotedAfter asnQuote receiptPath]
+  :x [Serve newServe serveStep! serveStepG! receiptRow serveWatch handleLine! validId? quotedAfter asnQuote receiptPath]
   :i [(asl/agentLoop/sessionPool :a sp)])
 
 ; (:m :ref SE5-SERVE-ENTRY :do "the control face of one pool process: a unix socket taking one ASN line per connection and answering one line. (:submit :unit U :state S) queues a session (:queued / :refused), (:receipt :unit U) answers (:receipt :unit U :state running|done|unknown [:result R]), (:status) the counters, (:stop) ends serve. Finished sessions leave memory at once: their result is a file under receiptDir, so a pool of thousands of sessions holds none of them done in RAM and a restart still answers receipts")
@@ -52,7 +52,31 @@ fn receiptPath dir: String id: String -> String
 fn reply form: String -> String
   (str form "\n")
 
-fn ! handleLine! s: Serve line: String -> (Pair Serve String)
+; (:m :ref SE5A-SERVE-RUN :do "handleLine! threads the driver value d like the pool does and returns the next one; (:run :unit U :form F :repo R :root D) hands the run to the open hook, which returns the next d and, for a run that ended or was rejected before it started, its exit and receipt text, otherwise the run is submitted to the pool under its id; every other line is the old control form")
+fn ! handleLine! s: Serve line: String d: T open: (fn [T String String String String] -> (Pair T (Option (Pair Int64 String)))) -> (Pair (Pair Serve T) String)
+  (if (stringStartsWith? line "(:run ")
+    (match (quotedAfter line ":unit")
+      ((none) (pair (pair s d) (reply "(:refused :why \"no :unit\")")))
+      ((some id)
+        (cond
+          ((not (validId? id)) (pair (pair s d) (reply (str "(:refused :unit " (asnQuote id) " :why \"bad id\")"))))
+          ((or (sp/poolKnown? s.pool id) (fileExists? (receiptPath s.receiptDir id))) (pair (pair s d) (reply (str "(:refused :unit " (asnQuote id) " :why \"duplicate\")"))))
+          (else (runOpened! s id d (open d id (optionOr (quotedAfter line ":form") "") (optionOr (quotedAfter line ":repo") "") (optionOr (quotedAfter line ":root") "")))))))
+    (let [(r (handleOld! s line))]
+      (pair (pair (pairFirst r) d) (pairSecond r))))
+
+fn ! runOpened! s: Serve id: String d: T opened: (Pair T (Option (Pair Int64 String))) -> (Pair (Pair Serve T) String)
+  (match (pairSecond opened)
+    ((some ended)
+      (do (fileWrite (receiptPath s.receiptDir id) (receiptRow id (pairFirst ended) (pairSecond ended)))
+        (pair (pair s (pairFirst opened)) (reply (str "(:queued :unit " (asnQuote id) ")")))))
+    ((none)
+      (pair (pair (withPool s (sp/poolSubmit! s.pool id id (nowMs))) (pairFirst opened)) (reply (str "(:queued :unit " (asnQuote id) ")")))))
+
+fn receiptRow id: String exit: Int64 text: String -> String
+  (str "(:receipt :unit " (asnQuote id) " :state \"done\" :exit " (stringFromInt64 exit) " :result " (asnQuote text) ")\n")
+
+fn ! handleOld! s: Serve line: String -> (Pair Serve String)
   (cond
     ((stringStartsWith? line "(:submit ")
       (match (quotedAfter line ":unit")
@@ -105,32 +129,38 @@ fn ! writeAll! fd: Int64 data: String -> Bool
       ((ok n) (if (<= n 0) false (writeAll! fd (optionOr (stringSlice data n (stringLength data)) ""))))))
 
 ; (:m :ref SE5-SERVE-ENTRY :do "a control line is at most 256 KiB; a connection that sends more, or closes before a newline, is dropped without a reply, so one bad client cannot grow the pool process")
-fn ! stepConn! s: Serve c: Conn ready: (List (Pair Int64 Int64)) -> Serve
-  (if (not (ready? ready c.fd)) (withConns s (listAppend s.conns (list c)))
+fn ! stepConn! s: Serve c: Conn ready: (List (Pair Int64 Int64)) d: T open: (fn [T String String String String] -> (Pair T (Option (Pair Int64 String)))) -> (Pair Serve T)
+  (if (not (ready? ready c.fd)) (pair (withConns s (listAppend s.conns (list c))) d)
     (match (fdRead c.fd 65536)
-      ((err _) (do (fdClose c.fd) s))
+      ((err _) (do (fdClose c.fd) (pair s d)))
       ((ok chunk)
-        (if (stringEmpty? chunk) (do (fdClose c.fd) s)
+        (if (stringEmpty? chunk) (do (fdClose c.fd) (pair s d))
           (let [(buf (str c.buf chunk))]
             (match (stringIndexOf buf "\n")
-              ((none) (if (> (stringLength buf) 262144) (do (fdClose c.fd) s) (withConns s (listAppend s.conns (list (Conn :fd c.fd :buf buf))))))
+              ((none) (if (> (stringLength buf) 262144) (do (fdClose c.fd) (pair s d)) (pair (withConns s (listAppend s.conns (list (Conn :fd c.fd :buf buf)))) d)))
               ((some at)
-                (let [(out (handleLine! s (optionOr (stringSlice buf 0 at) "")))]
+                (let [(out (handleLine! s (optionOr (stringSlice buf 0 at) "") d open))]
                   (do (writeAll! c.fd (pairSecond out)) (fdClose c.fd) (pairFirst out))))))))))
 
-fn ! drainDone! s: Serve -> Serve
+fn ! drainDone! s: Serve d: T exitOf: (fn [T String] -> Int64) -> Serve
   (let [(taken (sp/poolTakeDone s.pool))
-        (_ (map (fn [(d (Pair String String))] -> Bool
-                  (ok? (fileWrite (receiptPath s.receiptDir (pairFirst d)) (str "(:receipt :unit " (asnQuote (pairFirst d)) " :state \"done\" :result " (asnQuote (pairSecond d)) ")\n"))))
+        (_ (map (fn [(x (Pair String String))] -> Bool
+                  (ok? (fileWrite (receiptPath s.receiptDir (pairFirst x)) (receiptRow (pairFirst x) (exitOf d (pairFirst x)) (pairSecond x)))))
                 (pairSecond taken)))]
     (withPool s (pairFirst taken)))
 
-fn ! serveStep! s: Serve ready: (List (Pair Int64 Int64)) turn: (fn [String String] -> sp/Turn) now: Int64 -> Serve
+; (:m :ref SE5A-SERVE-RUN :do "serveStepG! is serveStep! with the driver value: the turn function, the open hook for (:run ...) and the exit lookup for receipts all take and return it; serveStep! keeps its signature with an unused value")
+fn ! serveStepG! s: Serve ready: (List (Pair Int64 Int64)) turn: (fn [T String String] -> (Pair T sp/Turn)) d: T open: (fn [T String String String String] -> (Pair T (Option (Pair Int64 String)))) exitOf: (fn [T String] -> Int64) now: Int64 -> (Pair Serve T)
   (let [(accepted (if (ready? ready s.listener)
                     (match (sockAccept s.listener)
                       ((ok fd) (withConns s (listAppend s.conns (list (Conn :fd fd :buf "")))))
                       ((err _) s))
                     s))
-        (conned (fold (fn [(acc Serve) (c Conn)] -> Serve (stepConn! acc c ready)) (withConns accepted (list)) accepted.conns))
-        (stepped (withPool conned (sp/poolStep! conned.pool ready turn now)))]
-    (drainDone! stepped))
+        (conned (fold (fn [(acc (Pair Serve T)) (c Conn)] -> (Pair Serve T) (stepConn! (pairFirst acc) c ready (pairSecond acc) open)) (pair (withConns accepted (list)) d) accepted.conns))
+        (stepped (sp/poolStepG! (pairFirst conned).pool ready turn (pairSecond conned) now))]
+    (pair (drainDone! (withPool (pairFirst conned) (pairFirst stepped)) (pairSecond stepped) exitOf) (pairSecond stepped)))
+
+fn ! serveStep! s: Serve ready: (List (Pair Int64 Int64)) turn: (fn [String String] -> sp/Turn) now: Int64 -> Serve
+  (pairFirst (serveStepG! s ready (fn [(u Int64) (st String) (rp String)] -> (Pair Int64 sp/Turn) (pair u (turn st rp))) 0
+    (fn [(u Int64) (a String) (b String) (c String) (e String)] -> (Pair Int64 (Option (Pair Int64 String))) (pair u none))
+    (fn [(u Int64) (i String)] -> Int64 0) now))
