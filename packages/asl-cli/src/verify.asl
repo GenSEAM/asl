@@ -1,6 +1,6 @@
 (module asl-cli/verify
-  :x [checkFiles! checkRoots nativeCheckPaths! formatDiag formatDiags]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-gates/src/dyck :a dyck) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
+  :x [checkFiles! checkRoots nativeCheckPaths! formatDiag formatDiags indentFields! balanceReceipt!]
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-gates/src/dyck :a dyck) (asl-forms/indent :a ind) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
 
 fn checkRoots -> (List String)
   (list "." "asl/packages" "asl")
@@ -15,8 +15,21 @@ fn formatDiags diags: (List ty/Diagnostic) -> String
 fn balanceError rc: Int64 -> String
   (if (= rc 2) "ERR_NO_FILE" "ERR_UNBALANCED")
 
+; (:m :ref PAREN-CHECK-DIAG :do "an unbalanced file's receipt carries the closer edits its indentation implies, each naming its opener and deciding line, and the (:fix) form that stages them; none when indentation implies no edit")
+fn indentFields! path: String -> String
+  (match (fileReadString path)
+    ((err _) "")
+    ((ok text)
+      (let [(g (ind/guideBroken text))]
+        (if (listEmpty? g.edits)
+          ""
+          (str " :indent " (ind/editsAsn g.edits) " :fix \"(:fix :file \\\"" (dyck/esc (dyck/esc path)) "\\\" :by :indent :apply true)\"")))))
+
+fn balanceReceipt! path: String -> String
+  (pairSecond (dyck/reportFile! path (fn [(p String)] -> String (indentFields! p))))
+
 fn ! balance! paths: (List String) -> Int64
-  (match (dyck/main paths) ((ok rc) rc) ((err e) (do (sys/sayErr! e) 2)))
+  (match (dyck/mainWith paths (fn [(p String)] -> String (indentFields! p))) ((ok rc) rc) ((err e) (do (sys/sayErr! e) 2)))
 
 fn ! checkOther! paths: (List String) -> Int64
   (if (listEmpty? paths)

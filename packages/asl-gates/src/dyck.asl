@@ -1,5 +1,5 @@
 (module asl-gates/dyck
-  :x [check checkString checkFile! esc main]
+  :x [check checkString checkFile! esc lineCol receipt reportFile! main mainWith]
   :i [])
 
 fn esc text: String -> String
@@ -94,28 +94,63 @@ fn checkFile! path: String -> (Result (Option (Pair Int64 String)) String)
 fn maxRc a: Int64 b: Int64 -> Int64
   (if (> a b) a b)
 
-fn processPaths! paths: (List String) rc: Int64 -> Int64
-  (if (listEmpty? paths)
-    rc
-    (let [(p (optionOr (listHead paths) ""))
-          (tail (optionOr (listTail paths) (list)))
-          (r (checkFile! p))]
-      (match r
-        ((err errEv)
-          (let [(_ (println (str "(:unreadable :file \"" (esc p) "\" :ev \"" (esc errEv) "\")")))]
-            (processPaths! tail 2)))
-        ((ok res)
-          (match res
-            ((none) (processPaths! tail rc))
-            ((some unb)
-              (let [(byteOff (pairFirst unb))
-                    (msg (pairSecond unb))
-                    (_ (println (str "(:unbalanced :file \"" (esc p) "\" :byte " (stringFromInt64 byteOff) " :ev \"" (esc msg) "\")")))]
-                (processPaths! tail (maxRc rc 1)))))))))
-fn ! main paths: (List String) -> (Result Int64 String)
+; (:m :ref PAREN-CHECK-DIAG :do "1-based line and column of a byte offset, so a receipt names a place an editor and a model can find")
+fn lineColLoop data: Bytes off: Int64 i: Int64 line: Int64 start: Int64 -> (Pair Int64 Int64)
+  (cond
+    ((>= i off) (pair line (+ (- off start) 1)))
+    ((= (bytesGet data i) 10) (lineColLoop data off (+ i 1) (+ line 1) (+ i 1)))
+    (else (lineColLoop data off (+ i 1) line start)))
+
+fn lineCol data: Bytes off: Int64 -> (Pair Int64 Int64)
+  (lineColLoop data (min off (bytesLength data)) 0 1 0)
+
+fn at data: Bytes off: Int64 -> String
+  (let [(lc (lineCol data off))]
+    (str (stringFromInt64 (pairFirst lc)) ":" (stringFromInt64 (pairSecond lc))))
+
+; (:m :ref PAREN-CHECK-DIAG :do "the check message names the opener as line:col; check itself keeps byte offsets for its callers")
+fn evText data: Bytes msg: String -> String
+  (match (stringIndexOf msg " opened at byte ")
+    ((none) msg)
+    ((some i)
+      (match (stringToInt64 (optionOr (stringSlice msg (+ i 16) (stringLength msg)) ""))
+        ((some off) (str (optionOr (stringSlice msg 0 i) msg) " opened at " (at data off)))
+        ((none) msg))))
+
+fn receipt p: String data: Bytes unb: (Pair Int64 String) extra: String -> String
+  (let [(lc (lineCol data (pairFirst unb)))]
+    (str "(:unbalanced :file \"" (esc p) "\" :line " (stringFromInt64 (pairFirst lc)) " :col " (stringFromInt64 (pairSecond lc))
+         " :ev \"" (esc (evText data (pairSecond unb))) "\"" extra ")"))
+
+; (:m :ref PAREN-CHECK-DIAG :do "one file's balance verdict as (exit, receipt line); hint adds fields for an unbalanced file, so a caller with a repair engine can name the fix without this module depending on it")
+fn reportFile! p: String hint: (fn [String] -> String) -> (Pair Int64 String)
+  (match (checkFile! p)
+    ((err errEv) (pair 2 (str "(:unreadable :file \"" (esc p) "\" :ev \"" (esc errEv) "\")")))
+    ((ok res)
+      (match res
+        ((none) (pair 0 ""))
+        ((some unb) (pair 1 (receipt p (resultOr (fileReadBytes p) (stringToBytes "")) unb (hint p)))))))
+
+fn sayIf! line: String -> Bool
+  (if (stringEmpty? line) false (do (println line) true))
+
+fn processPaths! paths: (List String) rc: Int64 hint: (fn [String] -> String) -> Int64
+  (match (listHead paths)
+    ((none) rc)
+    ((some p)
+      (let [(r (reportFile! p hint))
+            (_ (sayIf! (pairSecond r)))]
+        (processPaths! (optionOr (listTail paths) (list)) (maxRc rc (pairFirst r)) hint))))
+
+fn noHint p: String -> String
+  ""
+
+fn ! mainWith paths: (List String) hint: (fn [String] -> String) -> (Result Int64 String)
   (if (listEmpty? paths)
     (do
       (eprintln "usage: dyck.py FILE...")
       (ok 64))
-    (let [(rc (processPaths! paths 0))]
-      (ok rc)))
+    (ok (processPaths! paths 0 hint)))
+
+fn ! main paths: (List String) -> (Result Int64 String)
+  (mainWith paths noHint)
