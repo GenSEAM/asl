@@ -24,7 +24,6 @@ fn ! testOrphanedPipes -> Bool
         (ms (/ (- (monotonicNs) t0) 1000000))
         (gc (pidOf r.stdout))
         (_ (cleanup! gc))]
-
     (do (assert (= r.exitCode 0) (str "the child's exit 0 is returned: " r.exitCode " " r.stderr))
         (assert (> gc 1) (str "the grandchild pid was printed before the parent exited: " r.stdout))
         (assert (< ms 5000) (str "the shim returned once the direct child was reaped, not after the 30 s grandchild: " ms " ms"))
