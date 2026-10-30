@@ -89,12 +89,13 @@ fn pressure? s: Stats cfg: Cfg -> Bool
 ; (:m :ref SCHED :do "one step per window, never more than one down: RAM or load pressure steps down by one; a rate share above softShare holds when goodput rose and steps down by one when it is flat; healthy growth adds step only with known free RAM above the floor and load under the cores; otherwise hold")
 fn nextSlots cur: Int64 s: Stats cfg: Cfg -> Int64
   (let [(up (rose? s cfg))
-        (down1 (max cfg.min (- cur 1)))]
-    (cond
-      ((pressure? s cfg) down1)
-      ((> s.rateShare cfg.softShare) (if up cur down1))
-      ((and up (and (> s.freeMB cfg.minFreeMB) (and (>= s.load 0.0) (< s.load (int64ToFloat64 s.cores))))) (min cfg.max (+ cur cfg.step)))
-      (else cur)))
+        (down1 (max cfg.min (- cur 1)))
+        (n (cond
+             ((pressure? s cfg) down1)
+             ((> s.rateShare cfg.softShare) (if up cur down1))
+             ((and up (and (> s.freeMB cfg.minFreeMB) (and (>= s.load 0.0) (< s.load (int64ToFloat64 s.cores))))) (min cfg.max (+ cur cfg.step)))
+             (else cur)))]
+    (max cfg.min (min cfg.max n)))
 
 ; (:m :ref SCHED :do "consecutive windows without a goodput rise; flatWindows of them is the stable plateau the journal shows")
 fn nextFlat s: Stats cfg: Cfg -> Int64
