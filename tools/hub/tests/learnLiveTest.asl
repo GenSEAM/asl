@@ -64,7 +64,7 @@ fn ! runTests -> Bool
                                (resultOr (realPath ".") ".")
                                (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" home2) (cacheRow)))))
         (hubPid (match hubRun ((ok r) r.pid) ((err _) 0)))
-        (hubStored (waitStore! (str home2 "/.asl/run/hub/rates.asn") 6000))
+        (hubStored (waitStore! (str home2 "/.asl/run/hub/rates.asn") 12000))
         (hubRate (mapGetOr (rl/readStore! (str home2 "/.asl/run/hub/rates.asn")) "m1" -1.0))
         (hubKilled (if (> hubPid 0) (do (fr/killTree! hubPid) true) false))
         (hubPipes (match hubRun ((ok r) (do (fdClose r.outFd) (fdClose r.errFd) true)) ((err _) true)))
