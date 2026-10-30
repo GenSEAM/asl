@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procSnapshot treeOf fenceOf fenced? killTree! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
+  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procSnapshot treeOf fenceOf fenced? killTree! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
   :i [(asl-tools/fleet/jobserver :a js)])
 
 (schema Job
@@ -70,6 +70,23 @@ fn job argv: (List String) cwd: String env: (List String) -> Job
 
 fn secretName? name: String -> Bool
   (or (stringEndsWith? name "_API_KEY") (or (stringContains? name "TOKEN") (stringContains? name "SECRET")))
+
+; (:m :ref CACHE-HOME-LEAK :do "the caches that key off HOME, each with its one override: a child started with another HOME (a test's temp home) reuses the shared caches only when it gets every row; ASL_CHECK_CACHE missing alone made a fresh-HOME vps.asl run 349894 ms against 4157 ms (node2, 2026-10-30). ASL_NATIVE_TEST_CACHE keys off HOME only in a linked worktree (nativeTest defaultCacheDirFor); the main checkout keeps .asl/cache/nativeTest, so the row is left out there unless set")
+fn cacheRows -> (List (Pair String String))
+  (list (pair "ASL_NATIVE_CLI_CACHE" "/.asl/run/nativeCli") (pair "ASL_HOST_CACHE_DIR" "/.asl/run/hosts") (pair "ASL_NATIVE_TEST_CACHE" "/.asl/run/nativeTest")
+        (pair "ASL_NATIVE_ASL1_CACHE" "/.asl/run/asl1") (pair "ASL_CHECK_CACHE" "/.asl/cache/check") (pair "ASL_CORPUS_CACHE" "/.asl/run/corpusCache"))
+
+; (:m :ref CACHE-HOME-LEAK :do "NAME=dir rows for this process's caches, as seen from cwd: the override when set and non-empty, else this HOME's default; pass them with a child's own HOME")
+fn ! cacheEnv! -> (List String)
+  (let [(home (optionOr (envGet "HOME") "/tmp"))
+        (linked (match (fileStat ".git") ((ok st) (not st.isDir)) ((err _) false)))]
+    (fold (fn [(acc (List String)) (r (Pair String String))] -> (List String)
+            (let [(set (optionOr (envGet (pairFirst r)) ""))]
+              (cond
+                ((not (stringEmpty? set)) (listAppend acc (list (str (pairFirst r) "=" set))))
+                ((and (= (pairFirst r) "ASL_NATIVE_TEST_CACHE") (not linked)) acc)
+                (else (listAppend acc (list (str (pairFirst r) "=" home (pairSecond r))))))))
+          (list) (cacheRows)))
 
 fn ! childEnv overrides: (List String) -> (List String)
   (let [(nameOf (fn [(row String)] -> String (optionOr (listHead (stringSplit row "=")) row)))
