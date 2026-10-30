@@ -188,7 +188,9 @@
   (:f skipped (List String))
   (:f emptyRetries Int64)
   (:f telBound Bool)
-  (:f head (List HeadItem)))
+  (:f head (List HeadItem))
+  ; (:m :ref HUB-QUEUE-PACED :do "seconds to the next bucket token when the last failure was a refused rpm bucket, else 0; afterLoop answers 429 with this Retry-After")
+  (:f retryAfterSec Int64))
 
 (schema Attempt
   (:f entry c/GatewayResolvedEntry)
@@ -803,10 +805,10 @@ fn reorderBySpread models: (List c/GatewayResolvedEntry) order: (List String) ->
 ; (:m :ref GW-SPREAD-LIVE-20261018 :do "cascadeChosen's own last step: an empty :spread (the default) skips the effect entirely, zero behaviour change for any route without one; otherwise asks the server for this call's spread order and reorders models by it before Loop is built -- the literal 'orders Loop.models by spreadOrder before construction'")
 fn startLoop cx: Ctx body: j/Json models: (List c/GatewayResolvedEntry) -> ChatStep
   (if (listEmpty? cx.spread)
-    (loopStep cx (Loop :body body :models models :idx 0 :lastErr none :skipped (list) :emptyRetries 0 :telBound false :head (list)))
+    (loopStep cx (Loop :body body :models models :idx 0 :lastErr none :skipped (list) :emptyRetries 0 :telBound false :head (list) :retryAfterSec 0))
     (askStrings (effSpreadOrder cx.profileName cx.intent cx.spread cx.cooldownSec (spreadPools models cx.spread))
       (fn [(order (List String))] -> ChatStep
-        (loopStep cx (Loop :body body :models (reorderBySpread models order) :idx 0 :lastErr none :skipped (list) :emptyRetries 0 :telBound false :head (list))))))
+        (loopStep cx (Loop :body body :models (reorderBySpread models order) :idx 0 :lastErr none :skipped (list) :emptyRetries 0 :telBound false :head (list) :retryAfterSec 0)))))
 
 fn cascadeChosen cx: Ctx body: j/Json explicitRole: String composite: String models: (List c/GatewayResolvedEntry) calibrated: Float64 -> ChatStep
   (let [(world cx.world)
@@ -855,7 +857,7 @@ fn advance l: Loop body: j/Json -> Loop
   (with l :body body :idx (+ l.idx 1))
 
 fn failed l: Loop err: String -> Loop
-  (with l :lastErr (some err))
+  (with l :lastErr (some err) :retryAfterSec 0)
 
 fn loopStep cx: Ctx l: Loop -> ChatStep
   (match (listGet l.models l.idx)
@@ -1285,7 +1287,7 @@ fn attempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> ChatStep
           (fn [] -> ChatStep
             (loopStep cx (Loop :body body :models l1.models :idx (+ l1.idx 1) :lastErr (some why)
                                :skipped (listAppend l1.skipped (list a.alias)) :emptyRetries l1.emptyRetries
-                               :telBound l1.telBound :head l1.head)))))
+                               :telBound l1.telBound :head l1.head :retryAfterSec 0)))))
     (withBreakerPools (list a.providerPool a.pool)
       (fn [(left Float64) (downPool String)] -> ChatStep
         (if (!= left 0.0)
@@ -1295,7 +1297,7 @@ fn attempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> ChatStep
                 (loopStep cx (Loop :body body :models l1.models :idx (+ l1.idx 1)
                                    :lastErr (some (str "circuit breaker open for " downPool " (" secs "s left)"))
                                    :skipped (listAppend l1.skipped (list downPool)) :emptyRetries l1.emptyRetries
-                                   :telBound l1.telBound :head l1.head)))))
+                                   :telBound l1.telBound :head l1.head :retryAfterSec 0)))))
           (match (missingKey cx a)
             ((some why)
               (tellAll (list (effLog (str "[Gateway Key] skip " a.alias ": " why "\n")) (usageNote prov a.alias "keyMissing"))
@@ -1303,7 +1305,7 @@ fn attempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> ChatStep
                   (loopStep cx (Loop :body body :models l1.models :idx (+ l1.idx 1)
                                      :lastErr (some why)
                                      :skipped l1.skipped :emptyRetries l1.emptyRetries
-                                     :telBound l1.telBound :head l1.head)))))
+                                     :telBound l1.telBound :head l1.head :retryAfterSec 0)))))
             ((none) (if (cliProvider? prov) (cliAttempt cx l1 a) (rateAttempt cx l1 a)))))))))
 
 ; (:m :ref GW-CONTEXT-BUDGET :do "an entry whose :contextBudget (tokens) is below the prompt estimate (a quarter of the serialized messages, the gateway's usual chars-per-token guess) is skipped for the next loop member instead of being sent a request its window cannot hold; some carries the reason text")
@@ -1469,8 +1471,27 @@ fn cliReplied cx: Ctx l: Loop a: Attempt reply: CliReply client: String telModel
 ; (:m :ref GW-BUCKET-SHORTWAIT :do "a member before the last waits for its bucket up to the config's :bucketWaitSec (default 5 s) instead of 0.5 s, so a bucket refilling within a few seconds is used rather than skipped; the last member still waits 30 s")
 fn bucketWaitSec cx: Ctx l: Loop -> Float64
   (if (>= l.idx (- (listLength l.models) 1))
-    30.0
+    (queueBudgetSec cx)
     (match cx.world.table ((ok t) t.bucketWaitSec) ((err _) (c/defaultBucketWaitSec))))
+
+; (:m :ref HUB-QUEUE-PACED :do "the request's own queue budget in seconds: X-ASL-Queue-Ms, else X-ASL-Queue-Timeout, else the body's queue_timeout (Leon always sends one); 30 s when the caller gave none, the wait the last member always had")
+fn positiveSec v: j/Json scale: Float64 -> (Option Float64)
+  (match (floatOf v)
+    ((ok f) (if (> f 0.0) (some (/ f scale)) none))
+    ((err _) none))
+
+fn queueBudgetSec cx: Ctx -> Float64
+  (let [(hs cx.req.headers)
+        (fromMs (match (u/headerGet hs "X-ASL-Queue-Ms") ((some h) (positiveSec (j/jstr h) 1000.0)) ((none) none)))
+        (fromHeader (match (u/headerGet hs "X-ASL-Queue-Timeout") ((some h) (positiveSec (j/jstr h) 1.0)) ((none) none)))
+        (fromBody (if (isObj? cx.baseBody) (positiveSec (getOr cx.baseBody "queue_timeout" (j/jnull)) 1.0) none))]
+    (optionOr fromMs (optionOr fromHeader (optionOr fromBody 30.0))))
+
+fn retryAfterOf rpm: Float64 -> Int64
+  (max 1 (truncInt (+ (/ 60.0 rpm) 0.999)))
+
+fn withRetryAfter l: Loop secs: Int64 -> Loop
+  (with l :retryAfterSec secs)
 
 fn rateAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
   (let [(prov a.upstream.provider)
@@ -1486,7 +1507,7 @@ fn rateAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
                  (fn [] -> ChatStep
                    (if (or cx.profileRouted (some? a.v2))
                      (tell (effLog (str "[Gateway RateLimit] Gemini token bucket depleted for " a.alias ". Trying the next profile model...\n"))
-                       (fn [] -> ChatStep (loopStep cx (failed (advance l l.body) (str "gemini rate limit for " a.alias)))))
+                       (fn [] -> ChatStep (loopStep cx (withRetryAfter (failed (advance l l.body) (str "token bucket empty for " a.alias)) (if (>= l.idx (- (listLength l.models) 1)) (retryAfterOf r) 0)))))
                      (tell (effLog (str "[Gateway RateLimit] Gemini token bucket depleted for " a.model ". Cascading to agy fallback...\n"))
                        (fn [] -> ChatStep
                          (match (fallbackPrompt l.body)
@@ -2041,6 +2062,9 @@ fn afterLoop cx: Ctx l: Loop -> ChatStep
   (let [(skipped l.skipped)
         (model cx.explicitModel)]
     (cond
+      ((> l.retryAfterSec 0)
+       (sendError cx (listAppend l.head (list (headField "Retry-After" (stringFromInt64 l.retryAfterSec))))
+                  429 (str "ERR_RATE_LIMITED: no rate-limit token within the queue budget" (lastErrSuffix l) "; retry in " (stringFromInt64 l.retryAfterSec) "s") true))
       ((and (not (listEmpty? skipped)) (>= (listLength skipped) cx.cascadeLen))
        (let [(pools (uniqueSorted skipped))]
          (askFloats (effBreakerDownAll pools)

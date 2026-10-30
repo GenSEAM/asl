@@ -1011,6 +1011,19 @@ fn headerValue lines: (List String) name: String -> String
     ((some l) (pyStrip (sub l (+ (optionOr (stringIndexOf l ":") 0) 1) (stringLength l))))
     (none ""))
 
+; (:m :ref HUB-QUEUE-PACED :do "a 429's Retry-After header rides in the status reason as [retry-after=N] so the error text carries it to the caller; other statuses are untouched")
+fn withRetryAfter st: (Pair Int64 String) header: String -> (Pair Int64 String)
+  (if (and (= (pairFirst st) 429) (not (stringEmpty? header)))
+    (pair (pairFirst st) (str (pairSecond st) " [retry-after=" header "]"))
+    st)
+
+fn retryAfterSec message: String -> Int64
+  (match (stringIndexOf message "[retry-after=")
+    ((none) 0)
+    ((some at)
+      (let [(rest (sub message (+ at 13) (stringLength message)))]
+        (optionOr (stringToInt64 (optionOr (listHead (stringSplit rest "]")) "")) 0))))
+
 fn parseCurlResponse out: String -> (Result (Pair (Pair Int64 String) (Pair String String)) String)
   (let [(he (headEnd out))
         (lines (headLines (sub out 0 (pairFirst he))))
@@ -1020,7 +1033,7 @@ fn parseCurlResponse out: String -> (Result (Pair (Pair Int64 String) (Pair Stri
       ((some st)
         (if (and (>= (pairFirst st) 100) (< (pairFirst st) 200))
           (parseCurlResponse rest)
-          (ok (pair st (pair (headerValue (listDrop lines 1) "content-type") rest)))))))
+          (ok (pair (withRetryAfter st (headerValue (listDrop lines 1) "retry-after")) (pair (headerValue (listDrop lines 1) "content-type") rest)))))))
 
 fn illegalAt bs: Bytes n: Int64 k: Int64 -> Bool
   (let [(b (bytesGet bs k))
@@ -1305,15 +1318,19 @@ fn hubHeaders cfg: VendorConfig class: String headers: (List (Pair String String
       (if (stringEmpty? cfg.sessionId) (list) (list (pair "X-Asl-Unit" cfg.sessionId)))))
 
 ; (:m :effect net)
+; (:m :ref HUB-QUEUE-PACED :do "a 429 whose Retry-After fits what is left of the queue timeout is waited out and reposted; a longer one is the caller's error")
 fn ! hubPost! cfg: VendorConfig sock: String payload: j/Json headers: (List (Pair String String)) delayMs: Int64 waitedMs: Int64 capMs: Int64 -> (Pair (Result (Option String) ProviderError) TurnMeta)
   (let [(r (postUrlVia! cfg "http://hub/v1/chat/completions" sock "Hub" "start the hub (asl/tools/hub/main.asl serve)" payload headers))]
     (match (pairFirst r)
       ((err e)
-        (let [(busy (stringContains? (errorMessage e) "Hub HTTP error 503"))]
+        (let [(busy (stringContains? (errorMessage e) "Hub HTTP error 503"))
+              (askedMs (* 1000 (retryAfterSec (errorMessage e))))]
+          (if (and (stringContains? (errorMessage e) "Hub HTTP error 429") (and (> askedMs 0) (<= (+ waitedMs askedMs) (* 1000 cfg.queueTimeout))))
+            (do (sleepMs askedMs) (hubPost! cfg sock payload headers delayMs (+ waitedMs askedMs) capMs))
           (if (not (or busy (= (errorCode e) "ERR_GATEWAY_OFFLINE"))) r
             (if (>= waitedMs capMs)
               (if busy r (pair (err (gatewayError "ERR_GATEWAY_DOWN" (str "hub socket " sock " refused connections for " (stringFromInt64 waitedMs) " ms: " (errorMessage e)) "start the hub or declare :fallback inProcess in hub.asn")) (emptyMeta)))
-              (do (sleepMs delayMs) (hubPost! cfg sock payload headers (* delayMs 2) (+ waitedMs delayMs) capMs))))))
+              (do (sleepMs delayMs) (hubPost! cfg sock payload headers (* delayMs 2) (+ waitedMs delayMs) capMs)))))))
       (_ r)))
 
 fn ! sendGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String String)) -> Called
