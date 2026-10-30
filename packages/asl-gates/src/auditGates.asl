@@ -3,7 +3,7 @@
       syntaxCheck! remoteCheck! ssotCheck! emojiCheck! conflictMarkerCheck! coreCheck!
       manifestCheck! groundingCheck! grammarChecks! skillCheck! installerChecks! storageChecks!
       lineHasPlaceholder? staticGateChecks! recordCheck! recordRefused? writeRecord! fullGreenDir cmdGates! cmdGatesAt! spawnFullJob! snapshotFault cmdClosure! cmdSteps! cmdCheck! cmdBuild! cmdConsistency!
-      agentSurfaceCheck!
+      agentSurfaceCheck! coverageCheck!
       esc isFile! isLink? readText! readBytes! git! gitOk! discoverRoot! itos basename dirname]
   :i [(asl-gates/dyck :a dyck)
       (asl-gates/runnerMain :a rm)
@@ -12,7 +12,8 @@
       (asl-gates/auditForeign :a af)
       (asl-proc/coreProcess :a p)
       (asl-proc/gitFixture :a gf)
-      (asl-tools/agentSurfaceAudit :a asa)])
+      (asl-tools/agentSurfaceAudit :a asa)
+      (asl-tools/coverageRatchet :a cov)])
 
 (schema Check
   (:f id String)
@@ -774,7 +775,7 @@ fn cmdConsistency! root: String argv: (List String) -> AuditRun
         (c3 (emojiCheck! root))
         (c4 (conflictMarkerCheck! root))
         (c5 (list (coreCheck! root "coreConsistency" (list "audit" "consistency"))))
-        (c6 (list (agentSurfaceCheck! root)))
+        (c6 (list (agentSurfaceCheck! root) (coverageCheck! root)))
         (checks (listAppend c1 (listAppend c2 (listAppend c3 (listAppend c4 (listAppend c5 c6))))))]
     (emit "consistency" checks "" "" false))
 
@@ -902,3 +903,9 @@ fn cmdGatesAt! root: String argv: (List String) inRunner: Bool -> AuditRun
 
 fn cmdGates! root: String argv: (List String) -> AuditRun
   (cmdGatesAt! root argv (not (stringEmpty? (optionOr (envGet "ASL_IN_RUNNER") ""))))
+
+fn ! coverageCheck! root: String -> Check
+  (let [(v (cov/verdict! root (str root "/tests/coverageBaseline.asn")))]
+    (if (listEmpty? v.violations)
+      (passCheck "gate9CoverageRatchet" (some v.covered) (none))
+      (failCheck "gate9CoverageRatchet" "ERR_COVERAGE_RATCHET" (stringJoin v.violations "; ") (none) (none))))
