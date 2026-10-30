@@ -1,4 +1,4 @@
-(module jsFixtures/typed :x [area firstOr mapBoth describe origin isBig label])
+(module jsFixtures/typed :x [area firstOr mapBoth describe origin label])
 
 enum Shape (circle r: Int64) (square side: Int64)
 

@@ -1,5 +1,5 @@
 (module asl-target-llvm/wasmLink
-  :x [! linkWasm32 ! wasmImports importsOutside])
+  :x [linkWasm32 wasmImports importsOutside])
 
 fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")

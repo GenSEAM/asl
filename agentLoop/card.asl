@@ -1,5 +1,5 @@
 (module asl/agentLoop/card
-  :x [Backend Pool AgentCard defaultAllowlist buildCard formatCardAsn main]
+  :x [Backend Pool AgentCard buildCard formatCardAsn main]
   :i [(asl/agentLoop/main :a m) (asl/agentLoop/core :a c) (asl/agentLoop/exec :a ex) (asl/agentLoop/providers :a pv)])
 
 (schema Backend

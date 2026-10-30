@@ -1,5 +1,5 @@
 (module aslSite/tools/build
-  :x [! main]
+  :x [main]
   :i [(asl-ir/types :a irTy)
       (asl-ir/link :a lk)
       (asl-target-llvm :a llvm)

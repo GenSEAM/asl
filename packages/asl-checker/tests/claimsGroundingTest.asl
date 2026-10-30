@@ -1,5 +1,5 @@
 (module asl/packages/asl-checker/tests/claimsGroundingTest
-  :x [testCitationConstructors testGroundedReceiptConstructors testPublishedClaimsExtraction! testUnbackedClaimRefutation testFullClaimsGroundingPass testRulesClaimGrounding! testDualPolarityRefutations! runTests RunTests!]
+  :x [testCitationConstructors testGroundedReceiptConstructors testPublishedClaimsExtraction! testUnbackedClaimRefutation testFullClaimsGroundingPass testDualPolarityRefutations! runTests RunTests!]
   :i [(asl-checker/claims :a cl)])
 
 fn testCitationConstructors -> Bool

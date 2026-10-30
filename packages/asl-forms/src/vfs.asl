@@ -1,4 +1,4 @@
-(module asl-forms/vfs :x [Vfs VfsMeta vfsAt vfsRoot! vfsContext! vfsContextFrom! storeDir readText! charLength shaText atomicWrite! writeGuard! isLink? vfsKey lockPath stagedContent! stagedMeta! stage! unstage! stagedPaths! stagedByOther! withLock! lockAcquire! lockRelease! discardAll! jsonQuote] :i [(asl-forms/kernel :a k) (asl-json/json :a j)])
+(module asl-forms/vfs :x [Vfs VfsMeta vfsAt vfsRoot! vfsContext! vfsContextFrom! readText! charLength shaText atomicWrite! writeGuard! isLink? vfsKey lockPath stagedContent! stagedMeta! stage! unstage! stagedPaths! stagedByOther! withLock! lockAcquire! lockRelease! discardAll! jsonQuote] :i [(asl-forms/kernel :a k) (asl-json/json :a j)])
 
 
 (schema Vfs (:f root String) (:f dir String) (:f session String))

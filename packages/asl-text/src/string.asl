@@ -1,4 +1,4 @@
-(module asl-text/string :x [starts? ends? has? split concat join txtStarts? txtEnds? txtHas? txtSplit txt/starts? txt/ends? txt/has? txt/split] :i [])
+(module asl-text/string :x [starts? ends? has? split concat join txtStarts? txtEnds? txtHas? txtSplit] :i [])
 
 fn starts? s: Str prefix: Str -> Bool
   (stringStartsWith? s prefix)

@@ -1,5 +1,5 @@
 (module asl-html/svgCli
-  :x [! main]
+  :x [main]
   :i [(asl-html/asnSvg :a conv)])
 
 fn ! main -> Int64

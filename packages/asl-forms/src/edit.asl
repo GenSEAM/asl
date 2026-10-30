@@ -1,4 +1,4 @@
-(module asl-forms/edit :x [SyntaxResult Checkers Verdict DelimDiag delimDiag delimError languageOf syntaxLang validateStaged! unifiedDiff! fnmatch parseOwns linesFailed stepReadOnly writeStep! editStep! diffStep! preflushStep! flushStep! discardStep! txnStep! editOp!] :i [(asl-forms/kernel :a k) (asl-forms/vfs :a v) (asl-forms/repair :a rep) (asl-coord/claims :a coord) (asl-forms/heal :a h)])
+(module asl-forms/edit :x [SyntaxResult Checkers Verdict DelimDiag delimDiag delimError validateStaged! unifiedDiff! fnmatch parseOwns linesFailed stepReadOnly writeStep! editStep! diffStep! preflushStep! flushStep! discardStep! txnStep! editOp!] :i [(asl-forms/kernel :a k) (asl-forms/vfs :a v) (asl-forms/repair :a rep) (asl-coord/claims :a coord) (asl-forms/heal :a h)])
 
 
 (schema SyntaxResult (:f status String) (:f message String) (:f before String) (:f host String))

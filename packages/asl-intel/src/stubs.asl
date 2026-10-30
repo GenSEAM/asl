@@ -1,5 +1,5 @@
 (module asl-intel/stubs
-  :x [Header StubFinding StubSummary parenTrim constSpan? headersOf! headerParams constantBody? paramsUnused? placeholder? trackedAsl! analyzeStubs! stubsJson stubJson formatStubsAsn formatStubsSummary runStubs!]
+  :x [Header StubFinding StubSummary parenTrim constSpan? headersOf! headerParams paramsUnused? placeholder? trackedAsl! analyzeStubs! stubsJson stubJson formatStubsAsn formatStubsSummary runStubs!]
   :i [(asl-intel/text :a t)
       (asl-intel/rx :a r)
       (asl-intel/pats :a p)

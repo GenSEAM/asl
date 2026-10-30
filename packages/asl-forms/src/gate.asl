@@ -1,4 +1,4 @@
-(module asl-forms/gate :x [GateEnv GateOutcome RunOut HostRun nativeCheck! DelimDiag Repair RepairRun gateOp? readOnlyOp? linesFailed? runGate! checkStep testStep fixStep doctorStep! auditStep languageOf syntaxLang readText foreignSyntax! validateStaged! buildOverlay! runHost aslDelimiterDiag aslDelimiterError aslRepair repairAsn pySplitLines pyExt runArgv! whichTool stagedWritable!] :i [(asl-forms/kernel :a k) (asl-forms/edit :a e) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
+(module asl-forms/gate :x [GateEnv GateOutcome RunOut HostRun nativeCheck! DelimDiag Repair RepairRun gateOp? readOnlyOp? linesFailed? runGate! doctorStep! foreignSyntax! validateStaged! buildOverlay! aslDelimiterDiag aslDelimiterError aslRepair repairAsn pySplitLines pyExt runArgv! stagedWritable!] :i [(asl-forms/kernel :a k) (asl-forms/edit :a e) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
 
 
 (schema GateEnv (:f root String) (:f rootDir String) (:f binDir String) (:f host String) (:f staged (List (Pair String String))))

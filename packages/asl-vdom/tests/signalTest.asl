@@ -1,5 +1,5 @@
 (module aslVdom/tests/signalTest
-  :x [testSignalSourceIntegrity! testSignalGrammarRegistration testSignalSyntaxAndDelimiters! testSignalRuntimeBehavior! testReactiveDependencyPropagation runTests RunTests!]
+  :x [testSignalSourceIntegrity! testSignalSyntaxAndDelimiters! testSignalRuntimeBehavior! testReactiveDependencyPropagation runTests RunTests!]
   :i [(aslVdom/signals :a sig)])
 
 fn testSignalSourceIntegrity! -> Bool
