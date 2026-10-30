@@ -64,6 +64,7 @@ fn initText -> String
        "  ret void\n"
        "}")
 
+; (:m :ref FLEETGUARD-NODE2-STACK :do "when only pthread_create fails (Linux counts threads against RLIMIT_NPROC, so a fork-starved or ulimit -u user gets EAGAIN) main runs on the process stack through the same mainThread entry, which restores the mask and exits; a guard must still start when tasks are exhausted. Any other setup failure stays ERR_INTERNAL")
 fn mainText facts: libc/TripleFacts maskBytes: Int64 attrBytes: Int64 -> String
   (let [(thread (if (= facts.triple "darwin-arm64") "ptr" "i64"))
         (block (optionOr (libc/libcConst facts "SIG_BLOCK") 0))
@@ -102,6 +103,12 @@ fn mainText facts: libc/TripleFacts maskBytes: Int64 attrBytes: Int64 -> String
             "  call void (ptr, ptr, ...) @gcFloorFail(ptr @rtAbi.errInternal, ptr %joinedText)"
             "  unreachable"
             "noThread:"
+            "  %onlyCreate = icmp eq i32 %any3, 0"
+            "  br i1 %onlyCreate, label %inline, label %fail"
+            "inline:"
+            "  %inlined = call ptr @rtAbi.mainThread(ptr null)"
+            "  unreachable"
+            "fail:"
             "  %noThreadText = alloca [256 x i8], align 1"
             (str "  %noThreadLen = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %noThreadText, i64 256, ptr @rtAbi.noMainThread, i64 " (mainStackBytes) ", i32 %filled, i32 %masked, i32 %inited, i32 %sized, i32 %started)")
             "  call void (ptr, ptr, ...) @gcFloorFail(ptr @rtAbi.errInternal, ptr %noThreadText)"
