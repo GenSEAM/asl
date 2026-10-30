@@ -9,7 +9,7 @@
           <name>MODER</name>
           <addressOffset>0x00</addressOffset>
           <size>32</size>
-          <resetValue>0x00000000</resetValue>
+          <resetValue>0xA8000000</resetValue>
         </register>
         <register>
           <name>IDR</name>
