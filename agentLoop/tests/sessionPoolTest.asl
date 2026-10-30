@@ -95,7 +95,7 @@ fn ! pump! p: sp/Pool h: Hub delayMs: Int64 deadline: Int64 -> (Pair sp/Pool Hub
       ((err _) (pump! p h delayMs deadline))
       ((ok ready) (pump! (sp/poolStep! p ready turnFn (nowMs!)) (stepHub! h ready delayMs) delayMs deadline))))
 
-fn ! runPool! temp: String name: String n: Int64 turns: Int64 slots: Int64 memCap: Int64 -> (Pair sp/Pool Int64)
+fn ! drivePool! temp: String name: String n: Int64 turns: Int64 slots: Int64 memCap: Int64 -> (Pair sp/Pool Int64)
   (let [(sock (str temp "/" name ".sock"))
         (spill (str temp "/" name "-spill"))
         (made (dirCreate spill))
@@ -151,9 +151,9 @@ fn ! rssKb! -> Int64
 
 fn ! runTests -> Bool
   (let [(temp (stringTrim (resultOr (fr/shellOut "/usr/bin/mktemp -d /tmp/sessionPoolTest.XXXXXX" 5000) "")))
-        (single (runPool! temp "one" 1 5 1 100))
-        (eight (runPool! temp "eight" 8 5 8 100))
-        (many (runPool! temp "many" 64 2 8 16))
+        (single (drivePool! temp "one" 1 5 1 100))
+        (eight (drivePool! temp "eight" 8 5 8 100))
+        (many (drivePool! temp "many" 64 2 8 16))
         (manyPool (pairFirst many))
         (leftover (resultOr (fr/shellOut (str "/bin/ls " temp "/many-spill | /usr/bin/wc -l") 5000) "x"))
         (dead (stepUntilIdle! (submitAll! (sp/newPool (str temp "/none.sock") 2 4 1000 (str temp "/many-spill")) 2 1) (+ (nowMs!) 4000)))
