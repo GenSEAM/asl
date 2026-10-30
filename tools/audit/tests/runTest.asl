@@ -1,6 +1,6 @@
 (module asl/tools/audit/tests/runTest
   :x [runTests]
-  :i [(asl-tools/audit/run :a ar) (tools/fleet/model :a fm)])
+  :i [(asl-tools/audit/run :a ar) (tools/fleet/model :a fm) (asl-tools/coord/store :a st)])
 
 ; (:m :ref AUD-RUN :do "fixture repo only: tag v0.0.1, then one commit touching two scoped source files and one test; the stub model call says real to knob prompts only; the run finds 4 candidates over 2 files, flags the 2 knob ones under rule all, writes one row per file, imports dry then for real into a scratch store, and a rerun is skipped by the import")
 fn cfgText out: String store: String -> String
@@ -124,9 +124,42 @@ fn ! testDry -> Bool
         (assert none "and writes no task")
         true))
 
+; (:m :ref AUD-RUN-DEDUPE :do "a store task still open (no cond row, or one not merged or done) or an open plan row of the conductor's ledger that owns a file blocks a new row on it; the summary pairs each skipped row id with the owner; a merged owner blocks nothing")
+fn ! testDedupe -> Bool
+  (let [(root (scratch "dedupe"))
+        (_ (pathRemove root))
+        (_ (dirCreate root))
+        (repo (str root "/repo"))
+        (store (str root "/store"))
+        (_ (dirCreate store))
+        (_ (dirCreate (str root "/out")))
+        (built (fixtureRepo! repo))
+        (owner (st/put! store (st/Task :id "OWN-1" :owns (list "asl/packages/pkg/src/a.asl") :reads (list) :gate "true" :channel "free" :model "" :base "dev" :after (list) :st "queued" :epoch 0 :receipt "")))
+        (_ (fileWrite (str root "/plan.asn") "(:u :id PLAN-2 :owns (\"asl/tools/x/b.asl\") :gate \"true\" :do \"fix b\")\n(:u :id PLAN-3 :status :done :owns (\"asl/packages/pkg/src/a.asl\") :gate \"true\" :do \"old\")\n"))
+        (_ (fileWrite (str store "/ledger.path") (str root "/plan.asn\nHEAD\n")))
+        (cfg (ar/parseConfig (cfgText (str root "/out/<version>") store)))
+        (first (match cfg ((ok c) (ar/run! c repo "" false (stubCall))) ((err e) (err e))))
+        (sum (match first ((ok r) r.summary) ((err e) e)))
+        (rows (match first ((ok r) r.rows) ((err _) "")))
+        (_ (dirCreate (str store "/cond")))
+        (_ (fileWrite (str store "/cond/OWN-1.asn") "(:cu :id \"OWN-1\" :st merged :lane \"free\")\n"))
+        (second (match cfg ((ok c) (ar/run! c repo "" true (stubCall))) ((err e) (err e))))
+        (sum2 (match second ((ok r) r.summary) ((err e) e)))
+        (rows2 (match second ((ok r) r.rows) ((err _) "")))
+        (_ (pathRemove root))]
+    (do (assert (and built (ok? owner)) "fixture with an open store task and an open plan row")
+        (assert (ok? first) (str "run: " sum))
+        (assert (stringEmpty? (stringTrim rows)) (str "no new row on a file an open task or plan row owns: " rows))
+        (assert (stringContains? sum ":rows 0 ") (str "summary counts no rows: " sum))
+        (assert (stringContains? sum ":dedup ((\"AUD-v001-pkg-a\" \"OWN-1\") (\"AUD-v001-x-b\" \"PLAN-2\"))") (str "skipped ids paired with their owners: " sum))
+        (assert (and (stringContains? rows2 ":id AUD-v001-pkg-a ") (not (stringContains? rows2 ":id AUD-v001-x-b "))) (str "a merged owner releases its file, the open plan row still holds b: " rows2))
+        (assert (stringContains? sum2 ":dedup ((\"AUD-v001-x-b\" \"PLAN-2\"))") (str "only the plan row is reported: " sum2))
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testConfigCheck) "config check")
       (assert (testConsensus) "consensus rule")
       (assert (testRun) "fixture run")
       (assert (testDry) "dry run")
+      (assert (testDedupe) "dedupe against open owners")
       true)

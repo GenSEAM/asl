@@ -1,12 +1,12 @@
 (module asl-tools/audit/run
-  :x [Lens AuditCfg Finding RunOut segs parseConfig scanText promptOf real? flagged? rowsFor git! rangeFiles! run! main]
+  :x [Lens AuditCfg Finding RunOut segs parseConfig scanText promptOf real? flagged? rowsFor heldBy git! rangeFiles! run! main]
   :i [(tools/fleet/model :a fm) (asl-tools/fleet/run :a fr) (asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/reviewStage :a rs) (asl-parser/reader :a rd)])
 
 ; (:m :ref AUD-RUN :do "the release audit loop as one command: ~/.asl/audit.asn names the lenses, their models and consensus rule; the range runs from the last release tag (or :since) to HEAD; static lenses find candidates, models vote on bounded code slices, flagged findings of :queue true lenses become (:u ...) rows that are imported dry, then for real; one (:auditRun ...) row per run")
 
 (schema Lens (:f name String) (:f queue Bool) (:f models (List String)) (:f rule String))
 
-(schema AuditCfg (:f out String) (:f since String) (:f lenses (List Lens)) (:f slice Int64) (:f store String))
+(schema AuditCfg (:f out String) (:f since String) (:f lenses (List Lens)) (:f slice Int64) (:f store String) (:f plans (List String)))
 
 (schema Finding (:f id String) (:f lens String) (:f file String) (:f line Int64) (:f symbol String) (:f ret String) (:f severity String) (:f claim String) (:f evidence String))
 
@@ -16,7 +16,7 @@ fn lensNames -> (List String)
   (list "knob" "swallow" "stub")
 
 fn topKeys -> (List String)
-  (list ":v" ":out" ":since" ":lenses" ":slice" ":store")
+  (list ":v" ":out" ":since" ":lenses" ":slice" ":store" ":plans")
 
 fn lensKeys -> (List String)
   (list ":lens" ":queue" ":models" ":rule")
@@ -69,7 +69,7 @@ fn parseConfig text: String -> (Result AuditCfg String)
                   ((ok lenses)
                     (if (listEmpty? lenses) (err "audit config: :lenses is empty")
                       (ok (AuditCfg :out (textAt items ":out" "~/.asl/run/audit/<version>/") :since (textAt items ":since" "")
-                                    :lenses lenses :slice (optionOr (fm/intOf (fm/kvGet items ":slice")) 8) :store (textAt items ":store" "~/.asl/run/conductor")))))))))))))
+                                    :lenses lenses :slice (optionOr (fm/intOf (fm/kvGet items ":slice")) 8) :store (textAt items ":store" "~/.asl/run/conductor") :plans (match (fm/kvGet items ":plans") ((none) (list)) ((some v) (fm/atomsOf v)))))))))))))))
 
 fn after s: String pat: String -> (Option String)
   (match (stringIndexOf s pat)
@@ -224,6 +224,62 @@ fn rowsFor tag: String head: String fs: (List Finding) -> String
                      files)
                 "\n"))
 
+; (:m :ref AUD-RUN-DEDUPE :do "open owners of files: store tasks whose cond row (or, without one, the task itself) is not merged, done or dropped, and (:u ...) rows of the store's ledger.path and of :plans whose :status is none of those")
+fn closed? s: String -> Bool
+  (listContains? (list "merged" "done" "dropped") s)
+
+fn ! condSt! store: String id: String -> String
+  (match (fileReadString (str store "/cond/" id ".asn"))
+    ((err _) "")
+    ((ok t) (match (fm/parseForms t)
+              ((err _) "")
+              ((ok forms) (match (listHead forms) ((none) "") ((some f) (textAt (fm/itemsOf f) ":st" "")))))))
+
+fn ownsOf items: (List rd/SExpr) -> (List String)
+  (match (fm/kvGet items ":owns")
+    ((none) (list))
+    ((some v) (let [(xs (fm/atomsOf v))] (if (listEmpty? xs) (list (fm/textOf v)) xs))))
+
+fn pairsOf owns: (List String) id: String -> (List (Pair String String))
+  (map (fn [(o String)] -> (Pair String String) (pair o id)) owns)
+
+fn ! storeOwners! store: String -> (List (Pair String String))
+  (match (st/readUnits! store)
+    ((err _) (list))
+    ((ok us) (fold (fn [(acc (List (Pair String String))) (u st/Task)] -> (List (Pair String String))
+                     (let [(c (condSt! store u.id))]
+                       (if (closed? (if (stringEmpty? c) u.st c)) acc (listAppend acc (pairsOf u.owns u.id)))))
+                   (list) us)))
+
+fn planOwners text: String -> (List (Pair String String))
+  (fold (fn [(acc (List (Pair String String))) (line String)] -> (List (Pair String String))
+          (if (not (stringStartsWith? line "(:u :id ")) acc
+            (match (fm/parseForms line)
+              ((err _) acc)
+              ((ok forms)
+                (match (listHead forms)
+                  ((none) acc)
+                  ((some f)
+                    (let [(items (fm/itemsOf f)) (id (textAt items ":id" ""))]
+                      (if (or (stringEmpty? id) (closed? (textAt items ":status" ""))) acc (listAppend acc (pairsOf (ownsOf items) id))))))))))
+        (list) (stringLines text))
+
+fn ! owners! store: String plans: (List String) -> (List (Pair String String))
+  (let [(ledger (stringTrim (optionOr (listHead (stringLines (resultOr (fileReadString (str store "/ledger.path")) ""))) "")))
+        (paths (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (cons ledger plans)))]
+    (fold (fn [(acc (List (Pair String String))) (p String)] -> (List (Pair String String)) (listAppend acc (planOwners (resultOr (fileReadString p) ""))))
+          (storeOwners! store) paths))
+
+; (:m :ref AUD-RUN-DEDUPE :do "pairs (row id, owner id) for each file of the queued findings an open owner already holds; an owner with the row's own id is left to the import, which skips ids already in the store")
+fn heldBy tag: String fs: (List Finding) owned: (List (Pair String String)) -> (List (Pair String String))
+  (fold (fn [(acc (List (Pair String String))) (f Finding)] -> (List (Pair String String))
+          (let [(id (unitId tag f.file))]
+            (if (listAny? (fn [(h (Pair String String))] -> Bool (= (pairFirst h) id)) acc) acc
+              (match (listFind (fn [(o (Pair String String))] -> Bool (and (= (pairFirst o) f.file) (!= (pairSecond o) id))) owned)
+                ((none) acc)
+                ((some o) (listAppend acc (list (pair id (pairSecond o)))))))))
+        (list) fs)
+
 fn ! git! dir: String args: (List String) -> fr/Done
   (fr/runOneLimited (fr/job (listAppend (list "git" "-C" dir) args) dir (fr/childEnv (list))) (fr/limits 120 8))
 
@@ -284,18 +340,20 @@ fn ! run! cfg: AuditCfg repo: String since: String dry: Bool call: (fn ! [String
                          (let [(f (pairFirst fv))] (match (listFind (fn [(x Lens)] -> Bool (= x.name f.lens)) cfg.lenses) ((some l) (flagged? l (pairSecond fv))) ((none) false)))))
             (flaggedFs (map pairFirst (filter isFlagged voted)))
             (queued (filter (fn [(f Finding)] -> Bool (listAny? (fn [(l Lens)] -> Bool (and l.queue (= l.name f.lens))) cfg.lenses)) flaggedFs))
-            (rows (rowsFor tag head queued))
+            (store (expand cfg.store ""))
+            (held (heldBy tag queued (owners! store (map (fn [(p String)] -> String (expand p "")) cfg.plans))))
+            (rows (rowsFor tag head (filter (fn [(f Finding)] -> Bool (not (listAny? (fn [(h (Pair String String))] -> Bool (= (pairFirst h) (unitId tag f.file))) held))) queued)))
             (_ (fileWrite (str out "/findings.asn") (stringJoin (map (fn [(fv (Pair Finding (List Bool)))] -> String
                                                                       (findingRow (pairFirst fv) (isFlagged fv) (str "(" (stringJoin (map (fn [(v Bool)] -> String (if v "true" "false")) (pairSecond fv)) " ") ")")))
                                                                     voted) "\n")))
             (_ (fileWrite (str out "/rows.asn") (if (stringEmpty? rows) "" (str rows "\n"))))
-            (store (expand cfg.store ""))
             (dryRep (pi/plan! rows store head true))
             (clean (match dryRep ((ok rep) (listEmpty? rep.bad)) ((err _) false)))
             (realRep (if (or dry (or (not clean) (stringEmpty? rows))) (none) (some (pi/plan! rows store head false))))
             (summary (str "(:auditRun :range " (fm/asnQuote (str tag ".." head)) " :files " (stringFromInt64 (listLength files)) " :findings " (stringFromInt64 (listLength found))
                           " :flagged " (stringFromInt64 (listLength flaggedFs)) " :queued " (stringFromInt64 (listLength queued))
                           " :rows " (stringFromInt64 (listLength (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:u ")) (stringLines rows))))
+                          " :dedup (" (stringJoin (map (fn [(h (Pair String String))] -> String (str "(" (fm/asnQuote (pairFirst h)) " " (fm/asnQuote (pairSecond h)) ")")) held) " ") ")"
                           " :dry " (importText dryRep) " :import " (match realRep ((some r) (importText r)) ((none) (if dry "skipped" "none"))) " :out " (fm/asnQuote out) ")"))
             (_ (fileAppend (str out "/summary.asn") (str summary "\n")))]
         (ok (RunOut :summary summary :rows rows :findings found :flagged flaggedFs)))))
