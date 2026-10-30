@@ -56,7 +56,10 @@ fn ! runTests -> Bool
         (served (run! "m1" (list) ",\"queue_timeout\":9" (list "n1")))
         (down (run! "m1" (list) "" (list "breakerDown")))
         (tuned (runWith! "m1" " :queueBudgetSec 4" (list) "" (list)))
-        (bad (c/gateway_config_parse! (cfg "m1" " :queueBudgetSec 0") "default" ".asl/mem/calibration/index.asn"))]
+        (bad (c/gateway_config_parse! (cfg "m1" " :queueBudgetSec 0") "default" ".asl/mem/calibration/index.asn"))
+        (chkQ (c/gatewayConfigCheckText! (cfg "m1" " :queueBudgetSec 0") "src" ".asl/mem/calibration/index.asn"))
+        (chkB (c/gatewayConfigCheckText! (cfg "m1" " :bucketWaitSec -1") "src" ".asl/mem/calibration/index.asn"))
+        (chkOk (c/gatewayConfigCheckText! (cfg "m1" " :queueBudgetSec 4 :bucketWaitSec 2") "src" ".asl/mem/calibration/index.asn"))]
     (do (assert (stringContains? plain "|bucket:n1:30") (str "no budget keeps the 30 s wait: " plain))
         (assert (stringContains? plain "|status:429|ra:12|") (str "a refused last member ends 429 with Retry-After = ceil(60/rpm): " plain))
         (assert (not (stringContains? plain "gemini")) (str "the refusal names the token bucket, not gemini: " plain))
@@ -70,4 +73,7 @@ fn ! runTests -> Bool
         (assert (stringContains? tuned "|bucket:n1:4.0|") (str "the gateway :queueBudgetSec is the wait when the caller gave no budget: " tuned))
         (assert (stringContains? viaMs "|bucket:n1:2.5|") (str "a caller budget still wins over :queueBudgetSec: " viaMs))
         (assert (match bad ((ok t) (and (= t.queueBudgetSec 30.0) (listAny? (fn [(w String)] -> Bool (stringContains? w "queueBudgetSec")) t.warnings))) ((err _) false)) "a non-positive :queueBudgetSec warns and keeps the 30 s default")
+        (assert (and (= (pairSecond chkQ) 1) (and (stringContains? (pairFirst chkQ) ":status :error") (stringContains? (pairFirst chkQ) "queueBudgetSec"))) (str "config check rejects a non-positive :queueBudgetSec as an error: " (pairFirst chkQ)))
+        (assert (and (= (pairSecond chkB) 1) (stringContains? (pairFirst chkB) "bucketWaitSec")) (str "config check rejects a non-positive :bucketWaitSec as an error: " (pairFirst chkB)))
+        (assert (= (pairSecond chkOk) 0) (str "config check accepts positive waits: " (pairFirst chkOk)))
         true))
