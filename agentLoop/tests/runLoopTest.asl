@@ -240,7 +240,7 @@ fn budgetFieldsMatch r: s/RunResult -> Bool
   (and (none? r.gatesGreen) (and (none? r.commit)
   (and (none? r.commitError) (and (none? r.commitMissing)
   (and (none? r.queueWaitSec) (and (none? r.execSec)
-  (and (none? r.usage) (and (none? r.signal)
+  (and (none? r.usage) (and (= r.signal (some "turnBudget"))
   (and (listEmpty? r.ownsRejected) (and (none? r.planSummary)
   (and (= (j/jsonEmit r.coreHost) "{\"calls\":0,\"cases\":0,\"sec\":0.0,\"built\":0}")
   (and (listEmpty? r.openPossible) (and (none? r.gatePreflight) (none? r.message))))))))))))))))))))))))))))))))))))

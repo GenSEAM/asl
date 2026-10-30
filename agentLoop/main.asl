@@ -1,7 +1,7 @@
 (module asl/agentLoop/main
   :x [withRemote knownParams acceptedKeys nearestKey! tokenizeAsn Invocation paramGet parseInvocation
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
-      NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt receiptFieldsIn receiptFieldNames
+      NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
       providerUsageLine liveJournalUsage! liveProviderRetry! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
   :i [(asl/agentLoop/core :a c)
@@ -107,7 +107,9 @@
   (:f batching (Option Batching))
   (:f plan (Option pl/PlanSummary))
   (:f vacuousGates (List String))
-  (:f specCheck (Option ls/SpecVerdict)))
+  (:f specCheck (Option ls/SpecVerdict))
+  (:f stop (Option String))
+  (:f lastStep (Option String)))
 
 (schema MainResult
   (:f stdout String)
@@ -860,8 +862,50 @@ fn unavailableSpecText reasons: (List String) -> String
   (str " :specCheck (:verdict unavailable :reviewer unavailable :reasons ("
        (stringJoin (map (fn [x] (str "\"" (c/escapeAsn x) "\"")) reasons) " ") "))")
 
+; (:m :ref LEON-WRITE-FAIL-CLASSIFY :do "why the run stopped, for a receipt the conductor journal cuts short: the loop signal that ended it (turnBudget wallBudget tokenBudget readStreak noWrite parseDefect repeatFailure provider noReply gateIntegrity), else error for a run that failed with an error, gateVacuous for a failed run whose declared gates were green before any write, done for ok, and the status otherwise")
+fn stopCause status: String signal: (Option String) error: (Option String) vacuous: (List String) -> String
+  (match (nonEmpty signal)
+    ((some s) s)
+    ((none)
+      (cond
+        ((some? (nonEmpty error)) "error")
+        ((= status "ok") "done")
+        ((and (= status "failed") (not (listEmpty? vacuous))) "gateVacuous")
+        (else status))))
+
+fn replyOp reply: String -> String
+  (match (stringIndexOf reply ":op \\\"")
+    ((some at)
+      (let [rest (c/sliceOf reply (+ at 6) (stringLength reply))]
+        (c/sliceOf rest 0 (optionOr (stringIndexOf rest "\\") (stringLength rest)))))
+    ((none)
+      (cond
+        ((stringEmpty? (stringTrim reply)) "empty")
+        ((stringStartsWith? reply "(:")
+          (let [rest (c/sliceOf reply 2 (stringLength reply))
+                ends (map (fn [o] (optionOr o 0)) (filter (fn [o] (some? o)) (list (stringIndexOf rest " ") (stringIndexOf rest ")"))))]
+            (c/sliceOf rest 0 (optionOr (listMin ends) (stringLength rest)))))
+        (else "prose"))))
+
+; (:m :ref LEON-WRITE-FAIL-CLASSIFY :do "the last reply the journal holds, as (:turn N :op name): the op of a (:step :op ...) reply, else the head of its first form, empty or prose")
+fn lastStepIn text: String -> (Option String)
+  (let [replies (filter (fn [l] (and (stringStartsWith? l "(:turn ") (stringContains? l " :reply \""))) (stringSplit text "\n"))]
+    (match (listLast replies)
+      ((none) none)
+      ((some l)
+        (let [at (optionOr (stringIndexOf l " :reply \"") 0)
+              body (c/sliceOf l (+ at 9) (max (+ at 9) (- (stringLength l) 2)))]
+          (some (str "(:turn " (c/sliceOf l 7 at) " :op \"" (c/escapeAsn (replyOp body)) "\")"))))))
+
+fn ! liveLastStep! rootDir: String journal: (Option String) -> (Option String)
+  (match journal
+    ((some p) (match (fileReadString (pyJoin rootDir p)) ((ok text) (lastStepIn text)) ((err _) none)))
+    ((none) none))
+
 fn formatReceipt r: LoopResult -> String
   (str "(:agentReceipt :status :" r.status
+       (match (nonEmpty r.stop) ((some s) (str " :stop " s)) ((none) ""))
+       (match (nonEmpty r.lastStep) ((some l) (str " :lastStep " l)) ((none) ""))
        (match (nonEmpty r.modeHint) ((some m) (str " :modeHint \"" (c/escapeAsn m) "\"")) ((none) ""))
        (match (nonEmpty r.deliver) ((some d) (str " :deliver :" d)) ((none) ""))
        " :phases (" (stringJoin r.phases " ") ")"
@@ -1708,7 +1752,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
           (fileAppend path (str "(:err :turn " (stringFromInt64 turn) " :class :" (rt/errorClass (pv/errorCode e) (pv/errorMessage e))
             " :code :" (pv/errorCode e) " :retries " (stringFromInt64 retries) " :message \"" (c/escapeAsn (pv/errorMessage e)) "\")\n"))
           (let [nextState (rl/withHeadState state turn state.readStreak state.writesPersisted none
-                    state.allGateResults state.lastGates "failed" none none state.runStarted)
+                    state.allGateResults state.lastGates "failed" (some "provider") none state.runStarted)
                 nextRun (rl/withState run nextState)]
             (pair (rl/ProviderRun :run nextRun :provider response.provider :history wrapped.history) (stop)))))
       ((ok replyOpt)
@@ -1717,7 +1761,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
             (do
               (fileAppend path (str "(:turn " (stringFromInt64 turn) " :error :ERR_NO_REPLY)\n"))
               (let [nextState (rl/withHeadState state turn state.readStreak state.writesPersisted none
-                        state.allGateResults state.lastGates "failed" none none state.runStarted)
+                        state.allGateResults state.lastGates "failed" (some "noReply") none state.runStarted)
                     nextRun (rl/withState run nextState)]
                 (pair (rl/ProviderRun :run nextRun :provider response.provider :history wrapped.history) (stop)))))
           ((some replyRaw)
@@ -1818,7 +1862,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   notedRun (rl/noteParseTurn (rl/withState withCommit nextState) turn parseDefect)
                   nextRun0 (if (and terminal (not (pairFirst integrity)))
                     (rl/withState notedRun (rl/withHeadState nextState turn nextState.readStreak writesPersisted deliver allGates lastGates
-                      "failed" none (some (pairSecond integrity)) state.runStarted))
+                      "failed" (some "gateIntegrity") (some (pairSecond integrity)) state.runStarted))
                     notedRun)
                   repeatKey (stringTrim normalized)
                   repeats (if (and (not parseDefect) (and (not wrote) (failedReceipts? opReceipts)))
@@ -1853,7 +1897,7 @@ fn receiptPhases result: ls/RunResult -> (List String)
       ((some phase) (if (listContains? result.phases phase) result.phases (listAppend result.phases (list phase))))
       ((none) result.phases)))
 
-fn loopResultOf ra: RunArgs rootDir: String result: ls/RunResult usage: (Option Usage) -> LoopResult
+fn loopResultOf ra: RunArgs rootDir: String result: ls/RunResult usage: (Option Usage) lastStep: (Option String) -> LoopResult
   (let [counts result.batching
         countAt (fn [key] (optionOr (intValue (optionOr (j/jsonGet counts key) (j/jint 0))) 0))
         batching (some (Batching :turns (countAt "turns") :ops (countAt "ops") :single (countAt "single")))]
@@ -1870,7 +1914,7 @@ fn loopResultOf ra: RunArgs rootDir: String result: ls/RunResult usage: (Option 
     :findings (some (map pv/pyStr result.findings)) :queueWaitSec result.queueWaitSec
     :execSec result.execSec :usage (match (liveUsage result.usage) ((some u) (some u)) ((none) usage))
     :batching batching :plan (livePlan result.planSummary) :vacuousGates result.vacuousGates
-    :specCheck result.specCheck))
+    :specCheck result.specCheck :stop (some (stopCause result.status result.signal result.error result.vacuousGates)) :lastStep lastStep))
 
 ; (:m :ref LEON-SPECCHECK-REVIEWER-DOWN :do "exit 0 for an ok run, and for a gated run that only lacks a reviewer: its status stays needsReview in the receipt")
 fn liveExitCode r: LoopResult -> Int64
@@ -1935,7 +1979,7 @@ fn ! liveSetup! ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderEn
                   (prepared (LiveSession :ra ra :repoRoot repoRoot :rootDir rootDir :path path :system system :env liveEnv :turnProvider turnProvider :providerCall providerCall)))))))))))
 
 fn ! liveResult ls: LiveSession result: ls/RunResult -> MainResult
-  (let [receipt (loopResultOf ls.ra ls.rootDir result (liveJournalUsage! ls.rootDir result.journal))]
+  (let [receipt (loopResultOf ls.ra ls.rootDir result (liveJournalUsage! ls.rootDir result.journal) (liveLastStep! ls.rootDir result.journal))]
     (MainResult :stdout (formatReceipt receipt) :exitCode (liveExitCode receipt)))
 
 fn ! liveRun ls: LiveSession -> MainResult

@@ -39,7 +39,7 @@ fn minimalResult -> m/LoopResult
                 :unbackedClaims (list) :contextTokens none :turns none :gates (list) :escalate none :patch none
                 :restored (list) :written (list) :needsConfirm (list) :ownsRejected (list) :error none :gatePreflight (list)
                 :parseDefect false :parseDefectTurn none :findings none :queueWaitSec none :execSec none :usage none
-                :batching none :plan none :vacuousGates (list) :specCheck none)
+                :batching none :plan none :vacuousGates (list) :specCheck none :stop none :lastStep none)
 
 fn fullGates -> String
   "[{\"cmd\":\"echo \\\"a\\\"\",\"exit\":0},{\"cmd\":\"sleep 9\",\"timeout\":true,\"seconds\":5}]"
@@ -58,7 +58,8 @@ fn fullResult -> m/LoopResult
                 :parseDefect true :parseDefectTurn (some 4) :findings (some (list " f1 " "" "  " "(:f 2)"))
                 :queueWaitSec (some 0.1) :execSec (some 2.0) :usage (some (m/Usage :input 10 :cached 3 :output 5))
                 :batching (some (m/Batching :turns 4 :ops 6 :single 2)) :plan (some (pl/summaryOf 3 1 1 0)) :vacuousGates (list "g1")
-                :specCheck (some (ls/SpecVerdict :verdict "fail" :model "m\"1" :reasons (list "r1" "r\"2"))))
+                :specCheck (some (ls/SpecVerdict :verdict "fail" :model "m\"1" :reasons (list "r1" "r\"2")))
+                :stop (some "repeatFailure") :lastStep (some "(:turn 3 :op \"gate\")"))
 
 fn edgeResult -> m/LoopResult
   (m/LoopResult :status "failed" :modeHint (some "") :deliver (some "") :phases (list) :session (some "") :journal (some "")
@@ -66,7 +67,8 @@ fn edgeResult -> m/LoopResult
                 :patch (some "") :restored (list) :written (list) :needsConfirm (list) :ownsRejected (list) :error (some "")
                 :gatePreflight (list) :parseDefect true :parseDefectTurn none :findings (some (list)) :queueWaitSec (some 0.0)
                 :execSec none :usage (some (m/Usage :input 0 :cached 0 :output 0))
-                :batching (some (m/Batching :turns 0 :ops 0 :single 0)) :plan (some (pl/summaryOf 0 0 0 0)) :vacuousGates (list) :specCheck none)
+                :batching (some (m/Batching :turns 0 :ops 0 :single 0)) :plan (some (pl/summaryOf 0 0 0 0)) :vacuousGates (list) :specCheck none
+                :stop (some "") :lastStep (some ""))
 
 fn sessions -> (List String)
   (list "full" "legacy" "hints" "noTurn" "endedOk" "a..b" "missing" "bad id")
@@ -133,5 +135,14 @@ fn ! runTests -> Bool
       (assert (match synthetic ((ok fs) (= fs (list "status" "alpha" "gates" "beta"))) ((err _) false)) "receipt fields follow a changed formatReceipt source, once each, nested cmd and exit dropped")
       (assert (match noFn ((ok _) false) ((err e) (stringContains? e "no fn formatReceipt"))) "a source without fn formatReceipt is an error")
       (assert (match noHead ((ok _) false) ((err e) (stringContains? e "(:agentReceipt"))) "a formatReceipt without (:agentReceipt is an error")
+      (assert (= (m/stopCause "escalated" (some "turnBudget") none (list)) "turnBudget") "the loop signal that ended a run is its stop cause")
+      (assert (= (m/stopCause "escalated" (some "parseDefect") none (list)) "parseDefect") "a parse-defect stop keeps its own cause")
+      (assert (= (m/stopCause "failed" none (some "ERR_X") (list)) "error") "a run that failed with an error and no signal stops on error")
+      (assert (= (m/stopCause "failed" none none (list "g")) "gateVacuous") "a failed run whose gates were green before any write stops on gateVacuous")
+      (assert (= (m/stopCause "ok" none none (list)) "done") "an ok run is done")
+      (assert (= (m/lastStepIn "(:turn 1 :reply \"(:read \\\"a\\\")\")\n(:turn 7 :reply \"(:step :op \\\"gate\\\" :n 1)\")\n(:result :status :failed)\n") (some "(:turn 7 :op \"gate\")")) "the last step is the op of the newest reply")
+      (assert (= (m/lastStepIn "(:turn 2 :reply \"(:note :text \\\"x\\\")\")\n") (some "(:turn 2 :op \"note\")")) "a reply without :op names its form head")
+      (assert (= (m/lastStepIn "(:turn 4 :reply \"\")\n") (some "(:turn 4 :op \"empty\")")) "an empty reply is an empty step")
+      (assert (= (m/lastStepIn "(:session :id \"s\")\n") none) "a journal without a reply has no last step")
       (assert (ok? removed) "fixture root removed")
       true))

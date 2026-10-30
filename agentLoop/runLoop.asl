@@ -600,7 +600,7 @@ fn ! head! env: s/LoopEnv state: s/LoopState parseDefects: Int64 -> (Pair s/Loop
     (cond
       ((= decision "budget")
         (pair (withHeadState state nextTurn state.readStreak state.writesPersisted state.deliver
-          state.allGateResults state.lastGates "escalated" none
+          state.allGateResults state.lastGates "escalated" (some "turnBudget")
           (some (str "(:escalate :reason \"budget exhausted after " (stringFromInt64 state.turn) " turns\")")) state.runStarted) (stop)))
       ((= decision "wallBudget")
         (do
