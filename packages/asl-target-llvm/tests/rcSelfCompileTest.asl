@@ -60,12 +60,11 @@ fn ! linkMode libs: Libs ll: String out: String mode: String -> (Result String S
 fn ! errFile work: String label: String -> String
   (str work "/" label ".stderr")
 
-; (:m :ref RC-SELF-LSAN :do "on linux LeakSanitizer is on by default in an ASan binary and fails the ASan-built compiler's exit over 640 bytes of per-thread rtfmt_put buffers (10 reallocs from routeTargetAs!) that the body thread drops at exit; the assertions here are about RC drop and reuse errors, which ASan still reports, so leak detection is off for the compile children (macOS has no LeakSanitizer)")
 fn ! compileMode compiler: String mode: String work: String label: String entry: String -> (Result String String)
   (let [(out (str work "/" label ".ll"))
         (errPath (errFile work label))
         (d (job (listAppend (list "sh" "-c" (str "exec \"$0\" build \"$1\" -o \"$2\" $4 2> \"$3\"") compiler entry out errPath) (if (= mode "0") (list) (list (str "--rc " mode))))
-                (list (str "ASL_ROOT=" (root)) (str "ASL_PRELUDE=" (root) "/asl/prelude/prelude.asl") "ASL_HOST_CACHE=0" "ASL_RC_STATS=1" "ASAN_OPTIONS=detect_leaks=0")))]
+                (list (str "ASL_ROOT=" (root)) (str "ASL_PRELUDE=" (root) "/asl/prelude/prelude.asl") "ASL_HOST_CACHE=0" "ASL_RC_STATS=1")))]
     (if (and (= d.exit 0) (fileExists? out)) (ok out)
       (err (str compiler " build " entry " mode " mode " (" d.verdict " exit " d.exit "): " (stringTrim d.out) " " (resultOr (fileReadString errPath) "")))))
 
