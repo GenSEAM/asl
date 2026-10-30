@@ -2,7 +2,7 @@
   :x [buildRetryBrief costForm batchingRates reinforceWhyFor escalationNear nowForm noWriteNudge gateNow
       advisorSummary advisorSkip parseAdvice parseSpecVerdict digestLine evidenceDigest advisorGateOutput advisorOpLine
       makeGateRec makeReceiptRec verdictMet verdictMissing adviceNext adviceWhy adviceAvoid escapeAsn
-      providerRetryPause errorTransient errorClass httpStatusIn retryTurn! GateRec ReceiptRec AdviceRec SpecVerdict]
+      providerRetryPause chargeSeconds errorTransient errorClass httpStatusIn retryTurn! GateRec ReceiptRec AdviceRec SpecVerdict]
   :i [(asl/agentLoop/context :a ctx) (asl/agentLoop/providers :a pv)])
 
 ; (:m :ref LEON-CAPS :do "a transport error is transient (429, 408, 5xx, timeout, connection reset, empty body, gateway or queue trouble) and is retried with backoff under the wall budget, or permanent (4xx, unknown codes) and is surfaced at once; ERR_VENDOR with no status in its message stays transient as before, because the gateway reports unreadable and statusless failures through it")

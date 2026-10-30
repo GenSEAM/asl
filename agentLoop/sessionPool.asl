@@ -17,7 +17,8 @@
   (:f exec (Option Exec))
   (:f result (Option String))
   (:f headers (List (Pair String String)) :default (list))
-  (:f busy Bool :default false))
+  (:f busy Bool :default false)
+  (:f holdMs Int64 :default 0))
 
 (schema Sess
   (:f id String)
@@ -156,17 +157,17 @@ fn ! settle! p: Pool s: Sess t: Turn turn: (fn [T String String] -> (Pair T Turn
         ((some x) (startExec! p (with s :state t.state) x turn d now))
         ((none)
           (match t.request
-            ((some body) (pair (with p :waiting (listAppend p.waiting (list (with s :state t.state :request (httpRequest s.id body t.headers) :fd -1 :buf "" :lastMs now :tries 0 :holdMs 0 :busyN 0)))) d))
+            ((some body) (pair (with p :waiting (listAppend p.waiting (list (with s :state t.state :request (httpRequest s.id body t.headers) :fd -1 :buf "" :lastMs now :tries 0 :holdMs (+ now t.holdMs) :busyN 0)))) d))
             ((none)
               (if t.busy
-                (parkBusy p (with s :state t.state) d now)
+                (parkBusy p (with s :state t.state) (if (> t.holdMs 0) t.holdMs 1000) d now)
                 (pair (with p :done (listAppend p.done (list (pair s.id "(:err \"turn gave neither request nor result\")")))) d))))))))
 
 ; (:m :ref SE3-POOL-DRIVER :do "a hub 503 is a wait, not a failure: the same request goes back to waiting for one second, without using up its three connection tries, and the session is given up on after 120 such waits")
-fn ! parkBusy p: Pool s: Sess d: T now: Int64 -> (Pair Pool T)
+fn ! parkBusy p: Pool s: Sess hold: Int64 d: T now: Int64 -> (Pair Pool T)
   (if (>= s.busyN 120)
     (pair (with p :done (listAppend p.done (list (pair s.id "(:err \"hub busy for 120 s\")")))) d)
-    (pair (with p :waiting (listAppend p.waiting (list (with s :fd -1 :buf "" :holdMs (+ now 1000) :busyN (+ s.busyN 1))))) d))
+    (pair (with p :waiting (listAppend p.waiting (list (with s :fd -1 :buf "" :holdMs (+ now hold) :busyN (+ s.busyN 1))))) d))
 
 fn asnQuote text: String -> String
   (str "\"" (stringReplace (stringReplace (stringReplace text "\\" "\\\\") "\"" "\\\"") "\n" "\\n") "\"")

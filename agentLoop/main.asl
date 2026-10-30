@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
   :i [(asl/agentLoop/core :a c)
       (asl/agentLoop/diff :a diff)
       (asl/agentLoop/providers :a pv)
@@ -2008,7 +2008,29 @@ fn ! dispatch ps: (List (Pair String j/Json)) repoRoot: String rootDir: String t
           ((ok st) (execute (resumed ra st) dry repoRoot rootDir))))
       (else (execute ra dry repoRoot rootDir))))
 
-fn ! checkWall ps: (List (Pair String j/Json)) repoRoot: String rootDir: String -> MainResult
+; (:m :ref SE3F-POOL-PARITY :do "the CLI check chain returns what it decided instead of running it: valid carries the checked parameters, roots and wall, invalid carries the rejection receipt; mainWithRoots dispatches a valid one, and a pool driver starts a run from the same valid one, so both reject the same invocations with the same receipt")
+schema Checked
+  (:f ps (List (Pair String j/Json)))
+  (:f repoRoot String)
+  (:f rootDir String)
+  (:f timeout Int64)
+  (:f queueTimeout Int64)
+  (:f plan Bool)
+
+enum Valid
+  (valid Checked)
+  (invalid MainResult)
+
+fn rejectValid fields: String exit: Int64 -> Valid
+  (invalid (rejectWith fields exit))
+
+fn unknownValid! uop: String -> Valid
+  (invalid (unknownArg! uop))
+
+fn contextValid kind: String path: String -> Valid
+  (invalid (contextFileRejection kind path))
+
+fn ! checkWall ps: (List (Pair String j/Json)) repoRoot: String rootDir: String -> Valid
   (let [given (optionOr (intValue (paramOr ps "timeout" (j/jint 600))) 600)
         queueTimeout (optionOr (intValue (paramOr ps "queueTimeout" (j/jint 1200))) 1200)
         wall (intValue (paramOr ps "wallBudget" (j/jnull)))
@@ -2019,30 +2041,30 @@ fn ! checkWall ps: (List (Pair String j/Json)) repoRoot: String rootDir: String 
         plan (match (paramGet ps "plan") ((some v) (match v ((j/jbool b) b) (_ false))) ((none) (= planEnv "1")))]
     (cond
       ((or planNull (not (listContains? (list "" "0" "1") planEnv)))
-        (rejectWith (str ":error ERR_INVALID_ARG :key \"" (if planNull "plan" "ASL_LEON_PLAN") "\" :value \"" (c/escapeAsn (if planNull "" planEnv)) "\""
+        (rejectValid (str ":error ERR_INVALID_ARG :key \"" (if planNull "plan" "ASL_LEON_PLAN") "\" :value \"" (c/escapeAsn (if planNull "" planEnv)) "\""
                          " :message \"plan is true or false; ASL_LEON_PLAN is 1 or 0 and sets it when :plan is absent\"")
                     2))
       ((not (at/validAttractor? (textValue (paramOr ps "attractor" (j/jstr "")))))
-        (rejectWith ":error ERR_INVALID_ARG :key \"attractor\" :message \"attractor is asn or off; absent means off\"" 2))
+        (rejectValid ":error ERR_INVALID_ARG :key \"attractor\" :message \"attractor is asn or off; absent means off\"" 2))
       ((not (nt/validTools? (textValue (paramOr ps "nativeTools" (j/jstr "")))))
-        (rejectWith ":error ERR_INVALID_ARG :key \"nativeTools\" :message \"nativeTools is step, ops or off; absent means step\"" 2))
+        (rejectValid ":error ERR_INVALID_ARG :key \"nativeTools\" :message \"nativeTools is step, ops or off; absent means step\"" 2))
       ((not (validPrefix? (textValue (paramOr ps "prefix" (j/jstr "")))))
-        (rejectWith (str ":error ERR_INVALID_ARG :key \"prefix\" :message \"prefix is a comma list of " (c/joinSep (prefixTokens) " ") "\"") 2))
+        (rejectValid (str ":error ERR_INVALID_ARG :key \"prefix\" :message \"prefix is a comma list of " (c/joinSep (prefixTokens) " ") "\"") 2))
       ((not (inRange (intValue (paramOr ps "wallBudget" (j/jint limit))) 1 limit))
-        (rejectWith (str ":error ERR_INVALID_ARG :key \"wallBudget\" :limit " (stringFromInt64 limit)
+        (rejectValid (str ":error ERR_INVALID_ARG :key \"wallBudget\" :limit " (stringFromInt64 limit)
                          " :message \"wallBudget must be an integer of seconds from 1 to timeout + queueTimeout, at most 86400 (bin/asl kills the dispatch 30 s after that); raise :timeout, or leave it out and :wallBudget sets it\"")
                     2))
-      (else (dispatch ps repoRoot rootDir timeout queueTimeout plan))))
+      (else (valid (Checked :ps ps :repoRoot repoRoot :rootDir rootDir :timeout timeout :queueTimeout queueTimeout :plan plan)))))
 
-fn ! checkBounds ps: (List (Pair String j/Json)) repoRoot: String rootDir: String -> MainResult
+fn ! checkBounds ps: (List (Pair String j/Json)) repoRoot: String rootDir: String -> Valid
   (cond
     ((and (paramHas ps "contextTokens") (not (inRange (intValue (paramOr ps "contextTokens" (j/jnull))) 4000 2000000)))
-      (rejectWith ":error ERR_INVALID_ARG :key \"contextTokens\" :message \"contextTokens must be an integer from 4000 to 2000000\"" 2))
+      (rejectValid ":error ERR_INVALID_ARG :key \"contextTokens\" :message \"contextTokens must be an integer from 4000 to 2000000\"" 2))
     ((not (inRange (intValue (paramOr ps "gateTimeout" (j/jint 300))) 1 86400))
-      (rejectWith ":error ERR_INVALID_ARG :key \"gateTimeout\" :message \"gateTimeout must be an integer of seconds from 1 to 86400\"" 2))
+      (rejectValid ":error ERR_INVALID_ARG :key \"gateTimeout\" :message \"gateTimeout must be an integer of seconds from 1 to 86400\"" 2))
     (else (checkWall ps repoRoot rootDir)))
 
-fn ! checkRoot ps: (List (Pair String j/Json)) repoRoot: String rootDir: String -> MainResult
+fn ! checkRoot ps: (List (Pair String j/Json)) repoRoot: String rootDir: String -> Valid
   (let [rootV (paramOr ps "root" (j/jnull))]
     (if (not (truthy rootV))
       (checkBounds ps repoRoot rootDir)
@@ -2050,24 +2072,26 @@ fn ! checkRoot ps: (List (Pair String j/Json)) repoRoot: String rootDir: String 
             target (go/pyRealpath! (pyJoin rootDir (expandUser raw)))]
         (if (isDir target)
           (checkBounds ps repoRoot target)
-          (rejectWith (str ":error ERR_INVALID_ARG :key \"root\" :value \"" (c/escapeAsn raw) "\" :message \"root is not a directory: " (c/escapeAsn target) "\"") 2)))))
+          (rejectValid (str ":error ERR_INVALID_ARG :key \"root\" :value \"" (c/escapeAsn raw) "\" :message \"root is not a directory: " (c/escapeAsn target) "\"") 2)))))
 
-fn ! checkInvocation inv: Invocation repoRoot: String rootDir: String -> MainResult
+fn ! checkInvocation inv: Invocation repoRoot: String rootDir: String -> Valid
   (let [ps inv.params]
     (cond
-      ((some? inv.syntaxError) (rejectWith (str ":error ERR_SYNTAX :message \"" (c/escapeAsn (optionOr inv.syntaxError "")) "\"") 2))
-      ((paramHas ps "role") (rejectWith ":error ERR_ROLE_DEPRECATED :message \"use :intent or state the task\"" 2))
-      ((not (listEmpty? inv.unknownOps)) (unknownArg! (c/firstOf inv.unknownOps)))
+      ((some? inv.syntaxError) (rejectValid (str ":error ERR_SYNTAX :message \"" (c/escapeAsn (optionOr inv.syntaxError "")) "\"") 2))
+      ((paramHas ps "role") (rejectValid ":error ERR_ROLE_DEPRECATED :message \"use :intent or state the task\"" 2))
+      ((not (listEmpty? inv.unknownOps)) (unknownValid! (c/firstOf inv.unknownOps)))
       ((some? inv.contextFileError)
-        (let [e (optionOr inv.contextFileError (pair "" ""))] (contextFileRejection (pairFirst e) (pairSecond e))))
+        (let [e (optionOr inv.contextFileError (pair "" ""))] (contextValid (pairFirst e) (pairSecond e))))
       ((and (not (truthy (paramOr ps "task" (j/jstr "")))) (not (truthy (paramOr ps "resume" (j/jnull)))))
-        (rejectWith ":error ERR_MISSING_ARG :message \"missing :task\"" 2))
+        (rejectValid ":error ERR_MISSING_ARG :message \"missing :task\"" 2))
       (else (checkRoot ps repoRoot rootDir))))
 
 fn ! mainWithRoots argv: (List String) repoRoot: String rootDir: String -> MainResult
   (if (listEmpty? argv)
     (rejectWith ":error ERR_MISSING_ARG :message \"no form provided\"" 2)
-    (checkInvocation (parseInvocation (c/firstOf argv) rootDir) repoRoot rootDir))
+    (match (checkInvocation (parseInvocation (c/firstOf argv) rootDir) repoRoot rootDir)
+      ((invalid r) r)
+      ((valid c) (dispatch c.ps c.repoRoot c.rootDir c.timeout c.queueTimeout c.plan))))
 
 fn ! mainCli argv: (List String) -> Int64
   (let [repoRoot (resultOr (realPath ".") ".")
