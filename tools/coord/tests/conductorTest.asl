@@ -891,6 +891,65 @@ fn ! testNoSchedFile -> Bool
         (assert (= pressed 6) (str "load above 1.5 x cores steps the first sample down by one: " (stringFromInt64 pressed)))
         true))
 
+fn inStage c: cd/CUnit -> cd/CUnit
+  (with c :st "writing" :await "")
+
+fn cuBlocked id: String lane: String -> cd/CUnit
+  (cd/CUnit :id id :st "blocked" :lane lane :fails 3 :sig "boom" :waited 31 :parked 0 :epoch 0 :branch "" :wt "" :model "" :tokens 5 :costMicro 7 :esc 1 :launched 0 :await "lead")
+
+; (:m :ref COND-REQUEUE :do "requeue rows put a blocked unit back to queued with a clean count and its store lane, journal one requeue move, ignore a unit in any other state or unknown id, and the request file is consumed once")
+fn ! testRequeue -> Bool
+  (let [(dir (scratch "requeue"))
+        (_ (cleanup dir))
+        (units (list (task "RA" (list "p/ra") (list) (greenGate) "free") (task "RB" (list "p/rb") (list) (greenGate) "free")))
+        (put (putAll! dir units))
+        (_ (cd/writeCUnit! dir (cuBlocked "RA" "lead")))
+        (_ (cd/writeCUnit! dir (inStage (cuBlocked "RB" "free"))))
+        (ctx (ctxOf dir "none" 0 0 400))
+        (asked (cd/requestRequeue! dir (list "RA" "RB" "NOPE")))
+        (had (fileExists? (cd/requeuePath dir)))
+        (n1 (cd/requeueDrain! ctx units))
+        (n2 (cd/requeueDrain! ctx units))
+        (a (cuOf dir "RA"))
+        (b (cuOf dir "RB"))
+        (jr (stringJoin (journalLines dir) "\n"))
+        (_ (cleanup dir))]
+    (do (assert (and put asked had) "units put and the request file written")
+        (assert (= n1 1) (str "only the blocked unit is requeued: " (stringFromInt64 n1)))
+        (assert (= n2 0) "the request file is consumed: a second drain requeues nothing")
+        (assert (and (= a.st "queued") (= a.fails 0) (= a.esc 0) (= a.waited 0) (= a.lane "free") (stringEmpty? a.await) (stringEmpty? a.sig))
+                (str "RA clean and back on its store lane: " a.st " " (stringFromInt64 a.fails) " " a.lane " " a.await))
+        (assert (and (= a.tokens 5) (= a.costMicro 7)) "spend is kept")
+        (assert (and (= b.st "writing") (= b.fails 3)) (str "a unit in a stage is left alone: " b.st))
+        (assert (stringContains? jr "(:t :unit \"RA\" :from blocked :to queued :stage requeue ") (str "one requeue move is journalled: " jr))
+        true))
+
+fn quiet c: cd/CUnit st: String -> cd/CUnit
+  (with c :st st :sig "" :fails 0 :await "")
+
+; (:m :ref COND-DEP-WAKE :do "a dependent blocked only by deps not merged stays blocked while its root is blocked, wakes to queued once the root is merged or requeued, and a blocked unit with a failure signature is never woken")
+fn ! testDepWake -> Bool
+  (let [(dir (scratch "depwake"))
+        (_ (cleanup dir))
+        (units (list (task "DR" (list "p/dr") (list) (greenGate) "free") (task "DD" (list "p/dd") (list "DR") (greenGate) "free") (task "DS" (list "p/ds") (list "DR") (greenGate) "free")))
+        (put (putAll! dir units))
+        (_ (cd/writeCUnit! dir (cuBlocked "DR" "free")))
+        (_ (cd/writeCUnit! dir (quiet (cuBlocked "DD" "free") "blocked")))
+        (_ (cd/writeCUnit! dir (cuBlocked "DS" "free")))
+        (ctx (ctxOf dir "none" 0 0 30))
+        (n1 (cd/depWake! ctx units))
+        (d1 (cuOf dir "DD"))
+        (_ (cd/writeCUnit! dir (quiet (cuBlocked "DR" "free") "merged")))
+        (n2 (cd/depWake! ctx units))
+        (d2 (cuOf dir "DD"))
+        (s2 (cuOf dir "DS"))
+        (_ (cleanup dir))]
+    (do (assert put "units put")
+        (assert (and (= n1 0) (= d1.st "blocked")) (str "root blocked: dependent stays blocked: " d1.st))
+        (assert (and (= n2 1) (= d2.st "queued") (= d2.esc 0) (= d2.waited 0)) (str "root merged: dependent queued clean: " d2.st " " (stringFromInt64 n2)))
+        (assert (= s2.st "blocked") (str "a unit with its own failure signature stays blocked: " s2.st))
+        true))
+
 fn ! runTests -> Bool
   (let [(bin (fixtureBinary!))]
     (do (assert (not (stringEmpty? bin)) "the fixture stage binary is prepared")
@@ -909,6 +968,8 @@ fn ! runTests -> Bool
         (assert (testProviderFail bin) "provider-class write failures requeue after a backoff without a fail count or hop")
         (assert (testSignatureReset bin) "a new signature resets the count")
         (assert (testWake bin) "wake moves a parked unit")
+        (assert (testRequeue) "requeue puts a blocked unit back to queued once")
+        (assert (testDepWake) "a dependent blocked on deps wakes when its root leaves blocked")
         (assert (testWriterClaimIgnored bin) "writer's green claim is not trusted")
         (assert (testWaitEscalates bin) "waiting past maxWait escalates")
         (assert (testVacuousBlocks bin) "a vacuous-gate write blocks at once")

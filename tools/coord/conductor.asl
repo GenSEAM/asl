@@ -3,6 +3,7 @@
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
+      requeuePath requestRequeue! requeueDrain! depWake!
       main]
   :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (asl-tools/hub/preflight :a hp)
       (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -512,7 +513,9 @@ fn ! tick! ctx: Ctx -> (Result Int64 String)
   (match (st/readUnits! ctx.dir)
     ((err e) (err e))
     ((ok units)
-      (let [(before (snapshot ctx.dir))
+      (let [(_ (requeueDrain! ctx units))
+            (_ (depWake! ctx units))
+            (before (snapshot ctx.dir))
             (pace ctx.pace)
             (tokensOf pace.tokens)
             (flying (listLength (filter inFlight? (readCUnits! ctx.dir))))
@@ -549,6 +552,51 @@ fn ! wake! ctx: Ctx lane: String -> Int64
   (let [(cus (filter (fn [(c CUnit)] -> Bool (and (= c.st "awaitReview") (and (= c.parked 1) (or (= c.lane lane) (= c.await lane))))) (readCUnits! ctx.dir)))
         (_ (map (fn [(c CUnit)] -> CUnit (move! ctx (parkedOf c 0) "awaitReview" "wake" "" 0 0 lane 0)) cus))]
     (listLength cus))
+
+; (:m :ref COND-REQUEUE :do "requeue: `conductor requeue --ids A,B | --all-blocked --store DIR` appends (:requeue :unit ID) rows to <store>/requeue.asn; the running tick claims the file by rename, and each named unit that is blocked or failed goes back to queued with a clean count, lane, wait and escalation flag (one journal row, stage requeue); other states and unknown ids are ignored, so the verb never races a stage")
+fn requeuePath dir: String -> String
+  (str dir "/requeue.asn")
+
+fn ! requestRequeue! dir: String ids: (List String) -> Bool
+  (if (listEmpty? ids) true
+    (ok? (fileAppend (requeuePath dir) (str (stringJoin (map (fn [(id String)] -> String (str "(:requeue :unit " (st/q id) ")")) ids) "\n") "\n"))))
+
+fn cleaned c: CUnit lane: String -> CUnit
+  (with c :lane lane :fails 0 :sig "" :waited 0 :parked 0 :epoch 0 :esc 0 :await "")
+
+fn ! requeueOne! ctx: Ctx units: (List st/Task) id: String -> Bool
+  (match (cuOf (readCUnits! ctx.dir) id)
+    ((none) false)
+    ((some c)
+      (if (not (listContains? (list "blocked" "failed") c.st)) false
+        (let [(lane (match (listFind (fn [(u st/Task)] -> Bool (= u.id id)) units) ((some u) u.channel) ((none) c.lane)))
+              (_ (dropLease! ctx c))
+              (_ (pwReset! ctx.dir c.id))
+              (_ (move! ctx (cleaned c lane) "queued" "requeue" "" 0 0 "requeued" 0))]
+          true))))
+
+fn ! requeueDrain! ctx: Ctx units: (List st/Task) -> Int64
+  (let [(p (requeuePath ctx.dir))
+        (taken (str p ".taken"))
+        (_ (if (and (fileExists? p) (not (fileExists? taken))) (pathRename p taken) (ok ())))]
+    (if (not (fileExists? taken)) 0
+      (let [(ids (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map (fn [(l String)] -> String (quotedAfter l ":unit \"")) (stringLines (readOr taken)))))
+            (done (filter (fn [(id String)] -> Bool (requeueOne! ctx units id)) ids))
+            (_ (pathRemove taken))]
+        (listLength done))))
+
+; (:m :ref COND-DEP-WAKE :do "a unit blocked only by 'deps not merged' (no failure signature, wait past maxWait) goes back to queued on the tick after none of its :after units is blocked, failed or missing, so a requeued or merged root releases its dependents")
+fn ! depWake! ctx: Ctx units: (List st/Task) -> Int64
+  (let [(cus (readCUnits! ctx.dir))
+        (wake (filter (fn [(u st/Task)] -> Bool
+                        (and (not (listEmpty? u.after))
+                             (and (not (depStalled? u cus))
+                                  (match (cuOf cus u.id)
+                                    ((none) false)
+                                    ((some c) (and (= c.st "blocked") (and (stringEmpty? c.sig) (and (stringEmpty? c.await) (> c.waited ctx.maxWait)))))))))
+                      units))
+        (done (filter (fn [(u st/Task)] -> Bool (requeueOne! ctx units u.id)) wake))]
+    (listLength done))
 
 fn idList cus: (List CUnit) pred: (fn [CUnit] -> Bool) -> String
   (stringJoin (map (fn [(c CUnit)] -> String (st/q c.id)) (filter pred cus)) " ")
@@ -1383,6 +1431,10 @@ fn ! main args: (List String) -> (Result Int64 String)
       ((= cmd "status") (do (println (status! ctx)) (ok 0)))
       ((= cmd "wake") (let [(lane (optionOr (listGet args 1) ""))]
                         (do (println (str "(:wake :lane " (st/q lane) " :units " (n (wake! ctx lane)) ")")) (ok 0))))
+      ((= cmd "requeue") (let [(ids (if (listContains? args "--all-blocked")
+                                      (map (fn [(c CUnit)] -> String c.id) (filter (fn [(c CUnit)] -> Bool (= c.st "blocked")) (readCUnits! dir)))
+                                      (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map stringTrim (stringSplit (st/opt args "ids" "") ",")))))]
+                           (do (println (str "(:requeue :requested " (if (requestRequeue! dir ids) "true" "false") " :units " (st/qList ids) ")")) (ok 0))))
       ((= cmd "check") (let [(ps (startupProblemsFor rc))]
                          (do (println (str "(:check :problems " (st/qList ps) ")")) (ok (if (listEmpty? ps) 0 1)))))
       ((= cmd "restart") (do (println (str "(:restart :requested " (if (requestRestart! dir (st/intOpt args "grace-sec" 1200)) "true" "false") ")")) (ok 0)))
@@ -1398,4 +1450,4 @@ fn ! main args: (List String) -> (Result Int64 String)
                   (_ (println (str "(:run :store " (st/q dir) " :refreshMin " (n (st/intOpt args "refresh-min" 15)) ")")))]
               (ok (runLoop! ctx (fn [] -> (List (Pair String Int64)) (laneSnapshot rc)) (fn [] -> Unit (let [(_ (sr/subsRefreshCli! (list)))] ()))
                             (nowMs) (* (st/intOpt args "refresh-min" 15) 60000) 12))))))
-      (else (do (eprintln "usage: conductor tick|run|status|check|stop|restart [--grace-sec S]|wake LANE --store DIR") (ok 2)))))
+      (else (do (eprintln "usage: conductor tick|run|status|check|stop|requeue (--ids A,B|--all-blocked)|restart [--grace-sec S]|wake LANE --store DIR") (ok 2)))))
