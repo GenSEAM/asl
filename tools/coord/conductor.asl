@@ -3,7 +3,7 @@
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
-      requeuePath requestRequeue! requeueDrain! depWake!
+      requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
   :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (asl-tools/hub/preflight :a hp)
       (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -472,7 +472,7 @@ fn ! step! ctx: Ctx u: st/Task cap: Int64 -> Int64
         (let [(pace ctx.pace)
               (allowOf pace.allowance)
               (allow (allowOf c.lane))]
-          (if (or (or (or (<= cap 0) (>= (laneActive cus c.lane) allow)) (draining? ctx.dir)) (providerWaiting? ctx.dir c.id (/ (nowNs) 1000000)))
+          (if (or (or (or (or (<= cap 0) (>= (laneActive cus c.lane) allow)) (draining? ctx.dir)) (providerWaiting? ctx.dir c.id (/ (nowNs) 1000000))) (writerHeld? ctx cus c.id))
             cap
             (match (st/claim! ctx.dir c.id ctx.holder ctx.ttlMs)
               ((err e) (let [(_ (waitMore! ctx c e))] cap))
@@ -597,6 +597,71 @@ fn ! depWake! ctx: Ctx units: (List st/Task) -> Int64
                       units))
         (done (filter (fn [(u st/Task)] -> Bool (requeueOne! ctx units u.id)) wake))]
     (listLength done))
+
+; (:m :ref COND-ADMIT-TOKENS :do "writer admission: with a (:writers :minFreeMb N :warmFirst true|false :jobserver DIR :meminfo PATH) row in the store's ladder.asn, a ready unit starts its writer only while the node has a free jobserver token (tokenCount - heldCount > 0) and MemAvailable >= :minFreeMb (default 2000, adopted), and, after each conductor start, one writer starts alone: the rest wait until that writer's session journal shows its first served model turn, its unit left writing, or warmMaxMs passed. No row, or a row wrOpts rejects: no gate. :jobserver and :meminfo default to the node's own and exist so tests can fake them")
+fn wrRowOf dir: String -> String
+  (optionOr (listFind (fn [(l String)] -> Bool (stringStartsWith? (stringTrim l) "(:writers ")) (stringLines (readOr (ladderPath dir)))) "")
+
+fn wrInt row: String key: String dflt: Int64 -> Int64
+  (optionOr (stringToInt64 (sp/tokAfter row key)) dflt)
+
+fn wrMinFreeMb row: String -> Int64
+  (wrInt row ":minFreeMb" 2000)
+
+fn wrWarmFirst? row: String -> Bool
+  (not (stringContains? row ":warmFirst false"))
+
+fn wrErrors row: String -> (List String)
+  (let [(keys (filter (fn [(t String)] -> Bool (stringStartsWith? t ":")) (stringSplit row " ")))
+        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":minFreeMb" ":warmFirst" ":jobserver" ":meminfo") k))) keys))
+        (m (wrMinFreeMb row))]
+    (listAppend (map (fn [(k String)] -> String (str "unknown key " k)) bad)
+                (if (or (< m 0) (> m 1000000)) (list (str ":minFreeMb " (n m) " outside 0..1000000")) (list))))
+
+fn wrCfg dir: String -> String
+  (let [(row (wrRowOf dir))]
+    (if (listEmpty? (wrErrors row)) row ""))
+
+; (:m :ref COND-ADMIT-TOKENS :do "the pure decision: a free token and enough memory; an unreadable meminfo (-1) does not block")
+fn admitWriter? free: Int64 freeMb: Int64 minMb: Int64 -> Bool
+  (and (> free 0) (or (< freeMb 0) (>= freeMb minMb)))
+
+fn warmPath dir: String -> String
+  (str dir "/warm.asn")
+
+fn warmMaxMs -> Int64
+  900000
+
+fn ! firstCallSeen? dir: String id: String -> Bool
+  (let [(jd (str (stringTrim (readOr (repoPath dir))) "/../worktrees/asex-" id "/.asl/run/agentLoop"))
+        (names (filter (fn [(f String)] -> Bool (stringEndsWith? f ".journal")) (resultOr (dirList jd) (list))))]
+    (listAny? (fn [(f String)] -> Bool (stringContains? (readOr (str jd "/" f)) "(:served :turn ")) names))
+
+; (:m :ref COND-ADMIT-TOKENS :do "warm gate: true while this conductor's warm writer is still before its first model turn; the first unit asked after a start becomes the warm writer (row (:warm :holder :unit :at) in <store>/warm.asn, rewritten with :done when it is over)")
+fn ! warmWait! ctx: Ctx cus: (List CUnit) id: String -> Bool
+  (let [(row (readOr (warmPath ctx.dir)))
+        (now (/ (nowNs) 1000000))
+        (mine (stringContains? row (str ":holder " (st/q ctx.holder) " ")))]
+    (cond
+      ((not mine)
+        (let [(_ (fileWrite (warmPath ctx.dir) (str "(:warm :holder " (st/q ctx.holder) " :unit " (st/q id) " :at " (n now) ")\n")))] false))
+      ((stringContains? row " :done") false)
+      (else
+        (let [(w (quotedAfter row ":unit \""))
+              (at (wrInt row ":at" now))
+              (stillWarming (and (< (- now at) (warmMaxMs))
+                                 (match (cuOf cus w) ((some wc) (and (= wc.st "writing") (not (firstCallSeen? ctx.dir w)))) ((none) false))))
+              (_ (if stillWarming true (ok? (fileWrite (warmPath ctx.dir) (str "(:warm :holder " (st/q ctx.holder) " :unit " (st/q w) " :at " (n at) " :done " (n now) ")\n")))))]
+          stillWarming))))
+
+fn ! writerHeld? ctx: Ctx cus: (List CUnit) id: String -> Bool
+  (let [(row (wrCfg ctx.dir))]
+    (if (stringEmpty? row) false
+      (let [(jdir (quotedAfter row ":jobserver \""))
+            (minfo (let [(m (quotedAfter row ":meminfo \""))] (if (stringEmpty? m) "/proc/meminfo" m)))
+            (free (- (js/tokenCount jdir) (js/heldCount jdir)))]
+        (if (not (admitWriter? free (sc/memFreeMB (readOr minfo)) (wrMinFreeMb row))) true
+          (if (wrWarmFirst? row) (warmWait! ctx cus id) false)))))
 
 fn idList cus: (List CUnit) pred: (fn [CUnit] -> Bool) -> String
   (stringJoin (map (fn [(c CUnit)] -> String (st/q c.id)) (filter pred cus)) " ")
