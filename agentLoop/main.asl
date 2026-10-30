@@ -1609,8 +1609,16 @@ fn nextFormLine persisted: Bool -> String
     "\n\nReply with ASN forms only; the next form is a (:step :op \"gate\") or the (:done)."
     "\n\nReply with ASN forms only; the next form is a (:step :op ...).")
 
-fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system: String env: ls/LoopEnv
-    providerCall: (fn [pv/Provider String String] -> pv/Turn) wrapped: rl/ProviderRun -> (Pair rl/ProviderRun ls/Step)
+; (:m :ref SE2-LIVETURN-SPLIT :do "what the first half of a turn hands the second: the system and user text and prefill the model call needs, the sent text the history records, the attractor card names the journal logs and whether the advisor hook was acceptable; liveTurn! composes liveAsk!, the blocking call and liveApply! so its behaviour is unchanged, and a pool runs the call between the two")
+(schema LiveAsk
+  (:f sysA String)
+  (:f user String)
+  (:f prefill String)
+  (:f turnOwnSent String)
+  (:f cardNames (List String))
+  (:f advisorOk Bool))
+
+fn ! liveAsk! ra: RunArgs repoRoot: String rootDir: String path: String system: String env: ls/LoopEnv wrapped: rl/ProviderRun -> LiveAsk
   (let [run wrapped.run
         state run.state
         turn state.turn
@@ -1647,7 +1655,18 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
           (if (stringEmpty? advisorText) "" (str "\n\nAdvisor: " advisorText))
           (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." "")
           writeNudge)
-        _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :sent \"" (c/escapeAsn user) "\")\n"))
+        _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :sent \"" (c/escapeAsn user) "\")\n"))]
+    (LiveAsk :sysA sysA :user user :prefill prefill :turnOwnSent turnOwnSent :cardNames (map pairFirst cards) :advisorOk (liveHookOk? advisorResult)))
+
+fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system: String env: ls/LoopEnv
+    providerCall: (fn [pv/Provider String String] -> pv/Turn) wrapped: rl/ProviderRun -> (Pair rl/ProviderRun ls/Step)
+  (let [ask (liveAsk! ra repoRoot rootDir path system env wrapped)
+        run wrapped.run
+        state run.state
+        turn state.turn
+        sysA ask.sysA
+        user ask.user
+        prefill ask.prefill
         watcher (parentWatch! ra.parentPid path turn (min 86400 (+ (+ ra.timeout ra.queueTimeout) 300)))
         routeEnvFor (fn [root] (ex/makeExecEnv root repoRoot (optionOr (modeOf ra.modeHint) "auto") ra.owns state.writesPersisted ra.base
           ra.gates (resultOr (tx/loadEffects! repoRoot) (list)) "" (list) (ctx/readPayloadChars (optionOr state.contextTokens 24000))
@@ -1663,8 +1682,16 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
             ((none) none))
           env.sleep env.now)))
         _unwatched (parentUnwatch! watcher)
-        _retryLogged (appendRetryLines! path turn (pairSecond retried))
-        response (pairFirst retried)
+        _retryLogged (appendRetryLines! path turn (pairSecond retried))]
+    (liveApply! ra repoRoot rootDir path env wrapped ask (pairFirst retried) (pairSecond retried)))
+
+fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: ls/LoopEnv wrapped: rl/ProviderRun ask: LiveAsk response: pv/Turn retries: Int64 -> (Pair rl/ProviderRun ls/Step)
+  (let [run wrapped.run
+        state run.state
+        turn state.turn
+        prefill ask.prefill
+        turnOwnSent ask.turnOwnSent
+        shapes (map pairSecond (ex/opShapes))
         _usageLogged (match (providerUsageLine response.meta)
           ((some form) (ok? (fileAppend path (str form "\n")))) ((none) true))
         _servedLogged (match (servedModel response.meta)
@@ -1675,7 +1702,7 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
         (do
           (fileAppend path (str "(:turn " (stringFromInt64 turn) " :error :" (pv/errorCode e) " :message \"" (c/escapeAsn (pv/errorMessage e)) "\")\n"))
           (fileAppend path (str "(:err :turn " (stringFromInt64 turn) " :class :" (rt/errorClass (pv/errorCode e) (pv/errorMessage e))
-            " :code :" (pv/errorCode e) " :retries " (stringFromInt64 (pairSecond retried)) " :message \"" (c/escapeAsn (pv/errorMessage e)) "\")\n"))
+            " :code :" (pv/errorCode e) " :retries " (stringFromInt64 retries) " :message \"" (c/escapeAsn (pv/errorMessage e)) "\")\n"))
           (let [nextState (rl/withHeadState state turn state.readStreak state.writesPersisted none
                     state.allGateResults state.lastGates "failed" none none state.runStarted)
                 nextRun (rl/withState run nextState)]
@@ -1737,7 +1764,7 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
                   _ (if parseDefect (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :parse-defect true)\n"))) true)
                   _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :proseChars " (stringFromInt64 (at/proseChars reply)) ")\n"))
                   _ (if (at/attractorOn? ra.attractor)
-                      (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :prefixHash \"" (at/prefixHash ra.attractor shapes) "\" :attractors (" (c/joinSep (map pairFirst cards) " ") "))\n")))
+                      (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :prefixHash \"" (at/prefixHash ra.attractor shapes) "\" :attractors (" (c/joinSep ask.cardNames " ") "))\n")))
                       true)
                   _ (if (> (c/echoCount normalized) 0) (ok? (fileAppend path (str (c/malformedLine turn (c/echoCount normalized)) "\n"))) true)
                   done (liveDoneOps? operations)
@@ -1771,7 +1798,7 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
                     (ok? (fileAppend path (str "(:gateIntegrity :ok " (if (pairFirst integrity) "true" "false")
                       " :message \"" (c/escapeAsn (pairSecond integrity)) "\")\n"))) true)
                   reviewOk (if reviewInvoked (liveReviewAccepts? reviewResult) true)
-                  hooksOk (and (liveHookOk? advisorResult) reviewOk)
+                  hooksOk (and ask.advisorOk reviewOk)
                   status (if (or (not (pairFirst integrity)) (not hooksOk))
                     "failed" (if terminal "ok" "running"))
                   nextState0 (rl/withHeadState executed.state turn state.readStreak writesPersisted
