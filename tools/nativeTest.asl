@@ -751,7 +751,8 @@ fn overlayRounds px: lk/LinkUnit names: (List String) acc: lk/LinkAcc -> lk/Link
   (:f lowerMs Int64)
   (:f emitMs Int64)
   (:f llcStart Int64)
-  (:f opt String))
+  (:f opt String)
+  (:f lock String))
 
 (schema UnitStep
   (:f done (Option ModCompileResult))
@@ -814,16 +815,48 @@ fn ! cachedLink! cDir: String fp: String slot: String bin: String key: String uR
                      (_ (telemetry "NATIVE-PRELUDE-CACHE :hit :full"))]
                  (some (linkUnits! slot bin (closureDeps units key) (str pStem ".o") results darwin (nativeFacts! cDir fp) t0 t1 t1)))))))))))
 
+; (:m :ref NT-COMPILE-ONCE :do "N processes that miss one module or prelude key at once compiled it N times (node2 2026-10-30: 45 Leon writers, prelude 114x, modules 86x, 128 clang on 8 cores). A miss now claims KEY.o.lock (pid, created exclusively); a loser waits for the verified object or the holder's death, then takes the key over. The holder releases after the object and metadata landed or the compile failed. A lock this process already holds, or a wait past claimWaitNs, compiles unclaimed as before")
+(schema Claim (:f hit (Option (List String))) (:f lock String))
+
+fn claimWaitNs -> Int64
+  (* 900 1000000000)
+
+fn ! claimObject! objPath: String metaPath: String deadlineNs: Int64 -> Claim
+  (let [(lock (str objPath ".lock"))]
+    (match (readVerifiedMeta metaPath objPath)
+      ((some refs) (Claim :hit (some refs) :lock ""))
+      ((none)
+       (cond
+         ((takeLock! lock 3)
+          (match (readVerifiedMeta metaPath objPath)
+            ((some refs) (do (releaseClaim! lock) (Claim :hit (some refs) :lock "")))
+            ((none) (Claim :hit (none) :lock lock))))
+         ((= (optionOr (lockPid lock) 0) (procSelf)) (Claim :hit (none) :lock ""))
+         ((>= (monotonicNs) deadlineNs) (Claim :hit (none) :lock ""))
+         (else (do (sleepMs 200) (claimObject! objPath metaPath deadlineNs)))))))
+
+fn ! releaseClaim! lock: String -> Unit
+  (if (and (not (stringEmpty? lock)) (= (optionOr (lockPid lock) 0) (procSelf)))
+    (match (pathRemove lock) ((ok _) ()) ((err _) ()))
+    ())
+
+fn ! settled! lock: String step: UnitStep -> UnitStep
+  (match step.pending
+    ((some _) step)
+    ((none) (do (releaseClaim! lock) step)))
+
 fn ! compileUnitPrepare facts: (Option libc/TripleFacts) cDir: String fp: String u: lk/LinkUnit units: (List lk/LinkUnit) ifaceMap: (Map String String) prelude: lk/LinkUnit px: lk/LinkUnit ovlNames: (List String) entry: lk/LinkUnit slot: String counter: Int64 inits: (List String) opt: String -> UnitStep
   (let [(isEntry (= u.name entry.name))
         (uKey (unitKey fp u ifaceMap isEntry inits))
         (objDir (if (slotObject? slot u units isEntry) slot (modulesDirIn cDir)))
         (objPath (str objDir "/" uKey ".o"))
-        (metaPath (str objDir "/" uKey ".meta"))]
-    (match (readVerifiedMeta metaPath objPath)
+        (metaPath (str objDir "/" uKey ".meta"))
+        (claim (claimObject! objPath metaPath (+ (monotonicNs) (claimWaitNs))))]
+    (match claim.hit
       ((some refs)
        (UnitStep :done (some (hitResult u.path objPath refs)) :pending (none)))
       ((none)
+       (settled! claim.lock
        (let [(_ (if (fileExists? objPath) (pathRemove objPath) (ok ())))
              (_ (if (fileExists? metaPath) (pathRemove metaPath) (ok ())))
              (scope (low/LinkScope :path u.path :imports (lk/importForms units u) :prelude prelude.forms :strings (list) :only (none)))
@@ -856,11 +889,11 @@ fn ! compileUnitPrepare facts: (Option libc/TripleFacts) cDir: String fp: String
                                :pending (some (PendingObj :path u.path :pid 0 :outFd -1 :errFd -1 :tmpLl tmpLl :tmpO tmpO :objPath objPath :metaPath metaPath
                                                           :pExts (filter (fn [(n String)] -> Bool (stringStartsWith? n "prelude.")) (map (fn [(e irTy/SsaExtern)] -> String e.name) m.externs))
                                                           :initName (if (llvm/definesInit? ll m.name) m.name "")
-                                                          :lowerMs (ms (- lowerEnd lowerStart)) :emitMs (ms (- emitEnd emitStart)) :llcStart 0 :opt opt)))))))))))))))
+                                                          :lowerMs (ms (- lowerEnd lowerStart)) :emitMs (ms (- emitEnd emitStart)) :llcStart 0 :opt opt :lock claim.lock))))))))))))))))
 
 fn ! compileUnitSpawn p: PendingObj -> UnitStep
   (match (procSpawnv (list (clangCommand) p.opt "-Wno-override-module" "-c" p.tmpLl "-o" p.tmpO) (none) (none))
-    ((err e) (unitFailed p.path (str "spawn failed: " e)))
+    ((err e) (do (releaseClaim! p.lock) (unitFailed p.path (str "spawn failed: " e))))
     ((ok sp)
      (let [(_ (fdClose sp.stdin))
            (_ (fdNonBlocking sp.stdout true))
@@ -870,9 +903,15 @@ fn ! compileUnitSpawn p: PendingObj -> UnitStep
        (UnitStep :done (none)
                  :pending (some (PendingObj :path p.path :pid sp.pid :outFd sp.stdout :errFd sp.stderr :tmpLl p.tmpLl :tmpO p.tmpO
                                             :objPath p.objPath :metaPath p.metaPath :pExts p.pExts :initName p.initName
-                                            :lowerMs p.lowerMs :emitMs p.emitMs :llcStart startNs :opt p.opt))))))
+                                            :lowerMs p.lowerMs :emitMs p.emitMs :llcStart startNs :opt p.opt :lock p.lock))))))
 
+; (:m :ref NT-COMPILE-ONCE :do "the claim on the unit key is released only after the object and its metadata landed or the compile failed, so a waiter wakes to a verified hit or takes the key over")
 fn ! compileUnitFinish p: PendingObj -> ModCompileResult
+  (let [(r (compileUnitLand p))
+        (_ (releaseClaim! p.lock))]
+    r)
+
+fn ! compileUnitLand p: PendingObj -> ModCompileResult
   (let [(cRes (pumpCollect p.outFd p.errFd "" "" true true p.pid))
         (finishNs (monotonicNs))
         (llcMs (ms (- finishNs p.llcStart)))
@@ -907,7 +946,8 @@ fn ! compileUnitFinish p: PendingObj -> ModCompileResult
   (:f tmpPLl String)
   (:f tmpPO String)
   (:f preludeObj String)
-  (:f preludeMeta String))
+  (:f preludeMeta String)
+  (:f lock String))
 
 (schema PreludeStep
   (:f done (Option PreludeCompileResult))
@@ -919,24 +959,29 @@ fn dedupeStr xs: (List String) -> (List String)
 fn preludeFailed err: String -> PreludeStep
   (PreludeStep :done (some (PreludeCompileResult :ok false :obj "" :err err)) :pending (none))
 
-fn ! compilePreludeSpawn slot: String preludeKey: String preludeObj: String preludeMeta: String rawLl: String counter: Int64 opt: String extra: (List String) -> PreludeStep
+fn ! compilePreludeSpawn slot: String preludeKey: String preludeObj: String preludeMeta: String rawLl: String counter: Int64 opt: String extra: (List String) lock: String -> PreludeStep
   (let [(pLl (llvm/ensureInit rawLl "prelude"))
         (tmpPLl (str slot "/prelude-" preludeKey "." (stringFromInt64 (procSelf)) "." (stringFromInt64 counter) ".ll"))
         (tmpPO (str slot "/prelude-" preludeKey "." (stringFromInt64 (procSelf)) "." (stringFromInt64 counter) ".part.o"))
         (wRes (writeAtomic tmpPLl pLl))]
     (match wRes
-      ((err we) (preludeFailed (str "cannot write " tmpPLl ": " we)))
+      ((err we) (do (releaseClaim! lock) (preludeFailed (str "cannot write " tmpPLl ": " we))))
       ((ok _)
        (match (procSpawnv (cons (clangCommand) (cons opt (listAppend extra (list "-Wno-override-module" "-c" tmpPLl "-o" tmpPO)))) (none) (none))
-         ((err e) (preludeFailed (str "spawn failed: " e)))
+         ((err e) (do (releaseClaim! lock) (preludeFailed (str "spawn failed: " e))))
          ((ok sp)
           (let [(_ (fdClose sp.stdin))
                 (_ (fdNonBlocking sp.stdout true))
                 (_ (fdNonBlocking sp.stderr true))]
             (PreludeStep :done (none)
-                         :pending (some (PendingPrelude :pid sp.pid :outFd sp.stdout :errFd sp.stderr :tmpPLl tmpPLl :tmpPO tmpPO :preludeObj preludeObj :preludeMeta preludeMeta)))))))))
+                         :pending (some (PendingPrelude :pid sp.pid :outFd sp.stdout :errFd sp.stderr :tmpPLl tmpPLl :tmpPO tmpPO :preludeObj preludeObj :preludeMeta preludeMeta :lock lock)))))))))
 
 fn ! compilePreludeAwait pp: PendingPrelude -> PreludeCompileResult
+  (let [(r (compilePreludeLand pp))
+        (_ (releaseClaim! pp.lock))]
+    r)
+
+fn ! compilePreludeLand pp: PendingPrelude -> PreludeCompileResult
   (let [(cRes (pumpCollect pp.outFd pp.errFd "" "" true true pp.pid))
         (rmLl (if (some? (envGet "ASL_NATIVE_KEEP_LL")) (ok ()) (pathRemove pp.tmpPLl)))]
     (if (!= cRes.exitCode 0)
@@ -1019,16 +1064,17 @@ fn ! compileSubsetPrelude facts: (Option libc/TripleFacts) cDir: String fp: Stri
 " (preludeDigestIn (toolRoot)) "
 " (stringJoin (listSort preludeFns) ",")))))
         (preludeObj (str (modulesDirIn cDir) "/prelude-" preludeKey ".o"))
-        (preludeMeta (str (modulesDirIn cDir) "/prelude-" preludeKey ".meta"))]
-    (match (readVerifiedMeta preludeMeta preludeObj)
+        (preludeMeta (str (modulesDirIn cDir) "/prelude-" preludeKey ".meta"))
+        (claim (claimObject! preludeObj preludeMeta (+ (monotonicNs) (claimWaitNs))))]
+    (match claim.hit
       ((some _)
        (do (telemetry "NATIVE-PRELUDE-CACHE :hit :subset")
            (PreludeStep :done (some (PreludeCompileResult :ok true :obj preludeObj :err "")) :pending (none))))
       ((none)
        (let [(_ (dropStale preludeObj preludeMeta))]
          (match (preludeLl facts prelude ovlNames preludeFns)
-           ((err e) (preludeFailed e))
-           ((ok pLl) (compilePreludeSpawn slot preludeKey preludeObj preludeMeta pLl counter opt extra)))))))
+           ((err e) (do (releaseClaim! claim.lock) (preludeFailed e)))
+           ((ok pLl) (compilePreludeSpawn slot preludeKey preludeObj preludeMeta pLl counter opt extra claim.lock)))))))
 
 ; (:m :ref PRELUDEKEY :do "fp alone is the caller's claim and some callers pass a label (nativeOracle selfBuild), so a prelude object keyed by fp outlived its prelude: a 2026-10-18 object without HashMap was linked into units calling prelude.hashMapEmpty. Prelude keys now also cover the digests of the prelude source and native overlay files actually compiled")
 fn ! preludeDigestIn root: String -> String
@@ -1053,16 +1099,23 @@ fn ! compileFullPrelude facts: (Option libc/TripleFacts) cDir: String fp: String
        (do (telemetry "NATIVE-PRELUDE-FULL :unsupported (cached); compiling the referenced subset")
            (none)))
       (else
-       (let [(_ (dropStale preludeObj preludeMeta))
-             (names (listSort (dedupeStr (lk/definedNames prelude))))]
-         (match (preludeLl facts prelude ovlNames names)
-           ((err e)
-            (do (telemetry (str "NATIVE-PRELUDE-FULL :unsupported " (firstLines e 1) "; compiling the referenced subset"))
-                (match (writeAtomic marker e) ((ok _) ()) ((err we) (eprintln (str "nativeTest: cannot write " marker ": " we))))
-                (none)))
-           ((ok pLl)
-            (do (telemetry (str "NATIVE-PRELUDE-CACHE :miss :full :fns " (listLength names)))
-                (some (compilePreludeSpawn slot (str "full-" key) preludeObj preludeMeta pLl counter opt extra)))))))))
+       (let [(claim (claimObject! preludeObj preludeMeta (+ (monotonicNs) (claimWaitNs))))]
+         (match claim.hit
+           ((some _)
+            (do (telemetry "NATIVE-PRELUDE-CACHE :hit :full :waited")
+                (some (PreludeStep :done (some (PreludeCompileResult :ok true :obj preludeObj :err "")) :pending (none)))))
+           ((none)
+            (let [(_ (dropStale preludeObj preludeMeta))
+                  (names (listSort (dedupeStr (lk/definedNames prelude))))]
+              (match (preludeLl facts prelude ovlNames names)
+                ((err e)
+                 (do (telemetry (str "NATIVE-PRELUDE-FULL :unsupported " (firstLines e 1) "; compiling the referenced subset"))
+                     (match (writeAtomic marker e) ((ok _) ()) ((err we) (eprintln (str "nativeTest: cannot write " marker ": " we))))
+                     (releaseClaim! claim.lock)
+                     (none)))
+                ((ok pLl)
+                 (do (telemetry (str "NATIVE-PRELUDE-CACHE :miss :full :fns " (listLength names)))
+                     (some (compilePreludeSpawn slot (str "full-" key) preludeObj preludeMeta pLl counter opt extra claim.lock))))))))))))
 
 fn ! fullPreludeWanted? -> Bool
   (match (envGet "ASL_NATIVE_PRELUDE") ((some v) (!= v "subset")) ((none) true))
