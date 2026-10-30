@@ -58,6 +58,7 @@ fn ! flatCost n: Int64 -> FlatCost
                         :functions (listLength m.functions)
                         :widest (fold (fn [(acc Int64) (f ir/SsaFunction)] -> Int64 (max acc (instrCount f))) 0 m.functions)))))))
 
+; (:m :ref LLVM-NODE2-REDS-B :do "4x the asserts cost 4x CPU if linear and 16x if quadratic; the lowering bound is 10x (exponent 1.66) because the allocator-bound lowering measures 7.1-7.8x on linux x86_64 (3 runs, 2026-10-30) and under 6x on macOS, both far from 16x; the structural asserts below (more continuation functions, widest function bounded) hold the shape independent of time")
 fn ! testFlatScaling -> Bool
   (let [(warm (flatCost 200))
         (small (flatCost 500))
@@ -66,7 +67,7 @@ fn ! testFlatScaling -> Bool
         (emitRatio (/ (* 1000 large.emitUs) (max 1 small.emitUs)))]
     (do
       (println "nativeHang flat CPU us 200/500/2000 lower/emit:" warm.lowerUs warm.emitUs small.lowerUs small.emitUs large.lowerUs large.emitUs "ratios per mille:" lowerRatio emitRatio "functions:" large.functions "widest:" large.widest)
-      (assert (<= lowerRatio 6000) "lowering a flat body 4x as long costs at most 6x the CPU time")
+      (assert (<= lowerRatio 10000) "lowering a flat body 4x as long costs at most 10x the CPU time")
       (assert (<= emitRatio 6000) "emitting a flat body 4x as long costs at most 6x the CPU time")
       (assert (> large.functions small.functions) "the longer flat body lowers to more continuation functions")
       (assert (<= large.widest 2048) "no lowered function of the 2000-assert body exceeds 2048 instructions")
