@@ -28,6 +28,8 @@
       gatewayLimitWarnings
       gatewayLimitsFromText
       gatewayLimitWindows
+      defaultBucketWaitSec
+      gatewayBucketWaitSecFromProps
       asn_scalar
       asnScalar
       asn_figure
@@ -279,7 +281,8 @@ fn noRetryPolicy -> RetryPolicy
   (:f warnings (List String))
   (:f undeclaredIntents (Map String Int64))
   (:f keyFiles (List String))
-  (:f limits (List GatewayLimit)))
+  (:f limits (List GatewayLimit))
+  (:f bucketWaitSec Float64))
 
 ; (:m :ref GW-KEYSTORE-20261019 :do "a provider's :keyEnv is resolved against (:gateway :keyFiles (path ...)) before the process environment, never the other way: a key file is this workspace's own secret store, checked into no repo, and should win over a stray inherited env var from the caller's shell. ~ expands against HOME; each path is read as dotenv-style NAME=value lines (export prefix and quotes stripped, # comments skipped -- aslGateway/usage's zshLine/loadZshEnvText already implements exactly that grammar for ~/.zshenv, reused here instead of a second parser) and searched in listed order, first match wins; a file that is missing, unreadable or lacks the name is silently skipped, not an error -- only exhausting every file and the environment is")
 fn expandUserPath p: String -> String
@@ -354,6 +357,25 @@ fn gatewayKeyFilesFromProps g: (Map String rd/SExpr) -> (List String)
   (:f window String)
   (:f calls Int64)
   (:f tokens Int64))
+
+; (:m :ref GW-BUCKET-SHORTWAIT :do "how long a chain member before the last waits for its own rpm bucket to refill before the cascade moves on (the last member keeps its 30 s); (:gateway :bucketWaitSec N), default 5 s adopted")
+fn defaultBucketWaitSec -> Float64
+  5.0
+
+fn bucketWaitValue props: (Map String rd/SExpr) -> (Option Float64)
+  (match (mapGet props "bucketWaitSec")
+    ((none) none)
+    ((some v) (match (asn_scalar v) ((scalarInt n) (some (int64ToFloat64 n))) ((scalarFloat f) (some f)) (_ (some -1.0)))))
+
+fn gatewayBucketWaitSecFromProps g: (Map String rd/SExpr) -> Float64
+  (match (bucketWaitValue g)
+    ((some f) (if (> f 0.0) f (defaultBucketWaitSec)))
+    ((none) (defaultBucketWaitSec)))
+
+fn gatewayBucketWaitWarnings g: (Map String rd/SExpr) -> (List String)
+  (match (bucketWaitValue g)
+    ((some f) (if (> f 0.0) (list) (list ":bucketWaitSec must be a positive number; using the default")))
+    ((none) (list)))
 
 fn gatewayLimitWindows -> (List String)
   (list "minute" "hour" "fiveHour" "day" "week" "month")
@@ -1766,7 +1788,7 @@ fn gateway_config_v2_build! g: (Map String rd/SExpr) source: String registryPath
                                 acc))))
                         (list)
                         (providerOrder! (pairFirst provForms))))
-        (allWarns (listAppend (listAppend warnings envWarns) (gatewayLimitWarnings g)))
+        (allWarns (listAppend (listAppend warnings envWarns) (listAppend (gatewayLimitWarnings g) (gatewayBucketWaitWarnings g))))
         (table (GatewayTable
                  :version 2
                  :defaultProfile defaultProf
@@ -1784,7 +1806,8 @@ fn gateway_config_v2_build! g: (Map String rd/SExpr) source: String registryPath
                  :warnings allWarns
                  :undeclaredIntents (mapEmpty)
                  :keyFiles keyFilesList
-                 :limits (gatewayLimitsFromProps g)))]
+                 :limits (gatewayLimitsFromProps g)
+                 :bucketWaitSec (gatewayBucketWaitSecFromProps g)))]
     (pair table allErrs2))
 
 fn gatewayConfigV2Build! g: (Map String rd/SExpr) source: String registryPath: String -> (Pair GatewayTable (List String))
@@ -1814,7 +1837,8 @@ fn convertV1ToTable! v1: GatewayV1Config source: String keyFiles: (List String) 
       :warnings (list)
       :undeclaredIntents (mapEmpty)
       :keyFiles keyFiles
-      :limits (list)))
+      :limits (list)
+      :bucketWaitSec (defaultBucketWaitSec)))
 
 fn gateway_config_parse! text: String source: String registryPath: String -> (Result GatewayTable String)
   (let [(toks (lx/tokenize text))]

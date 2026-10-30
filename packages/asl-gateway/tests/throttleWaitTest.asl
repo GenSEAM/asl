@@ -25,11 +25,11 @@ fn ! drive! step: ch/ChatStep labels: String granted: (List String) fuel: Int64 
           (drive! (k (ch/outHttp (ch/httpOk 200 (list (pair "Content-Type" "application/json")) "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"fine\"},\"finish_reason\":\"stop\"}]}"))) (str labels "|http:" m) granted (- fuel 1)))
          (_ (drive! (k ch/outDone) labels granted (- fuel 1)))))))
 
-fn cfg chain: String -> String
-  (str "(:gateway :v 2 :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id m1 :provider fp :name \"n1\" :rpm 5) (:model :id m2 :provider fp :name \"n2\" :rpm 5)) :profiles ((:profile :id default :routes ((:intent any :chain (" chain "))))) :uses ((:use :for default :profile default)))")
+fn cfg chain: String extra: String -> String
+  (str "(:gateway :v 2 :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id m1 :provider fp :name \"n1\" :rpm 5) (:model :id m2 :provider fp :name \"n2\" :rpm 5)) :profiles ((:profile :id default :routes ((:intent any :chain (" chain "))))) :uses ((:use :for default :profile default))" extra ")")
 
-fn ! run! chain: String granted: (List String) -> String
-  (match (c/gateway_config_parse! (cfg chain) "default" ".asl/mem/calibration/index.asn")
+fn ! run! chain: String extra: String granted: (List String) -> String
+  (match (c/gateway_config_parse! (cfg chain extra) "default" ".asl/mem/calibration/index.asn")
     ((err e) (str "config: " e))
     ((ok table)
       (match (u/upstreamSettings (mapEmpty))
@@ -40,10 +40,15 @@ fn ! run! chain: String granted: (List String) -> String
                   "" granted 200)))))
 
 fn ! runTests -> Bool
-  (let [(two (run! "m1 m2" (list "n2")))
-        (one (run! "m1" (list "n1")))
-        (none_ (run! "m1 m2" (list)))]
-    (do (assert (stringContains? two "|bucket:n1:0.5") (str "a member before the last falls through after 0.5 s: " two))
+  (let [(two (run! "m1 m2" "" (list "n2")))
+        (one (run! "m1" "" (list "n1")))
+        (none_ (run! "m1 m2" "" (list)))
+        (tuned (run! "m1 m2" " :bucketWaitSec 2" (list "n2")))
+        (bad (c/gateway_config_parse! (cfg "m1" " :bucketWaitSec 0") "default" ".asl/mem/calibration/index.asn"))]
+    (do (assert (stringContains? tuned "|bucket:n1:2") (str "the configured :bucketWaitSec sets the wait of a member before the last: " tuned))
+        (assert (stringContains? tuned "|bucket:n2:30") (str "the last member keeps 30 s whatever :bucketWaitSec says: " tuned))
+        (assert (match bad ((ok t) (and (= t.bucketWaitSec 5.0) (listAny? (fn [(w String)] -> Bool (stringContains? w "bucketWaitSec")) t.warnings))) ((err _) false)) "a non-positive :bucketWaitSec warns and keeps the default")
+        (assert (stringContains? two "|bucket:n1:5") (str "a member before the last waits the default 5 s for its bucket: " two))
         (assert (stringContains? two "|bucket:n2:30") (str "the last member waits up to 30 s: " two))
         (assert (stringContains? two "|http:n2") (str "the waited member is called: " two))
         (assert (stringContains? one "|bucket:n1:30") (str "a single-member chain waits: " one))

@@ -1466,8 +1466,11 @@ fn cliReplied cx: Ctx l: Loop a: Attempt reply: CliReply client: String telModel
 
 ; (:m :ref GW-THROTTLE-NO-AGY :do "a throttled member (bucket depleted) goes straight to the next loop model whenever its entry comes from the config table; the agy CLI rescue stays only for the legacy gemini-only path where no config entry exists")
 ; (:m :ref GW-THROTTLE-WAIT :do "the last member of a chain waits up to 30 s for its own bucket instead of failing the request, so a chain skipped only by local rpm buckets ends in a call, not an error; earlier members keep the 0.5 s fall-through")
-fn bucketWaitSec l: Loop -> Float64
-  (if (>= l.idx (- (listLength l.models) 1)) 30.0 0.5)
+; (:m :ref GW-BUCKET-SHORTWAIT :do "a member before the last waits for its bucket up to the config's :bucketWaitSec (default 5 s) instead of 0.5 s, so a bucket refilling within a few seconds is used rather than skipped; the last member still waits 30 s")
+fn bucketWaitSec cx: Ctx l: Loop -> Float64
+  (if (>= l.idx (- (listLength l.models) 1))
+    30.0
+    (match cx.world.table ((ok t) t.bucketWaitSec) ((err _) (c/defaultBucketWaitSec))))
 
 fn rateAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
   (let [(prov a.upstream.provider)
@@ -1475,7 +1478,7 @@ fn rateAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
     (match rpm
       ((some r)
        (if (!= r 0.0)
-         (askBool (effBucket (match a.v2 ((some e) (if (stringEmpty? e.rpmKey) a.target e.rpmKey)) ((none) a.target)) r (bucketWaitSec l))
+         (askBool (effBucket (match a.v2 ((some e) (if (stringEmpty? e.rpmKey) a.target e.rpmKey)) ((none) a.target)) r (bucketWaitSec cx l))
            (fn [(acquired Bool)] -> ChatStep
              (if acquired
                (httpAttempt cx l a)
