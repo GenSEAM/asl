@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procSnapshot treeOf fenceOf fenced? killTree! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
+  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
   :i [(asl-tools/fleet/jobserver :a js)])
 
 (schema Job
@@ -23,7 +23,9 @@
 (schema Proc
   (:f pid Int64)
   (:f ppid Int64)
-  (:f pgid Int64))
+  (:f pgid Int64)
+  (:f age Int64 :default -1)
+  (:f born Int64 :default -1))
 
 (schema Running
   (:f idx Int64)
@@ -185,19 +187,58 @@ fn guardedComm? comm: String -> Bool
   (let [(base (optionOr (listLast (stringSplit comm "/")) comm))]
     (or (= base "systemd") (stringStartsWith? base "sshd")))
 
+; (:m :ref KILL-SETSID-ESCAPEE :do "ps etime ([[dd-]hh:]mm:ss, the only elapsed-time column both procps and BSD ps print) as seconds; anything else is -1, unknown")
+fn etimeSeconds text: String -> Int64
+  (let [(dayParts (stringSplit text "-"))
+        (days (if (= (listLength dayParts) 2) (optionOr (stringToInt64 (optionOr (listHead dayParts) "")) -1) 0))
+        (clock (stringSplit (optionOr (listLast dayParts) "") ":"))
+        (nums (map (fn [(c String)] -> Int64 (optionOr (stringToInt64 c) -1)) clock))]
+    (if (or (stringEmpty? text) (or (> (listLength dayParts) 2) (or (< days 0) (or (< (listLength nums) 2) (or (> (listLength nums) 3) (listAny? (fn [(n Int64)] -> Bool (< n 0)) nums))))))
+      -1
+      (+ (* days 86400) (fold (fn [(acc Int64) (n Int64)] -> Int64 (+ (* acc 60) n)) 0 nums))))
+
 fn procRow acc: (List Proc) line: String -> (List Proc)
   (let [(ws (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringTrim line) " ")))
         (stat (optionOr (listGet ws 3) ""))
         (num (fn [(i Int64)] -> Int64 (optionOr (stringToInt64 (optionOr (listGet ws i) "")) -1)))]
-    (if (or (stringStartsWith? stat "Z") (or (guardedComm? (optionOr (listGet ws 4) "")) (or (< (num 0) 1) (or (< (num 1) 0) (< (num 2) 0)))))
+    (if (or (stringStartsWith? stat "Z") (or (guardedComm? (optionOr (listGet ws 5) "")) (or (< (num 0) 1) (or (< (num 1) 0) (< (num 2) 0)))))
       acc
-      (cons (Proc :pid (num 0) :ppid (num 1) :pgid (num 2)) acc)))
+      (cons (Proc :pid (num 0) :ppid (num 1) :pgid (num 2) :age (etimeSeconds (optionOr (listGet ws 4) ""))) acc)))
 
 fn procsOf text: String -> (List Proc)
   (fold procRow (list) (stringLines text))
 
+; (:m :ref KILL-SETSID-ESCAPEE :do "rows of a ps text taken at nowSec: born is nowSec minus etime, -1 when etime is unknown; the snapshot uses the wall clock, a test passes its own")
+fn procsAt text: String nowSec: Int64 -> (List Proc)
+  (map (fn [(p Proc)] -> Proc (Proc :pid p.pid :ppid p.ppid :pgid p.pgid :age p.age :born (if (< p.age 0) -1 (- nowSec p.age)))) (procsOf text))
+
+fn pinBase -> Int64
+  8388608
+
+; (:m :ref KILL-SETSID-ESCAPEE :do "a known entry is a bare pid or a pin, born * 2^23 + pid, recorded when the pid was seen in the tree; pids stay below 2^23 on Linux and macOS")
+fn pinOf pid: Int64 born: Int64 -> Int64
+  (if (< born 0) pid (+ (* born (pinBase)) pid))
+
+fn pinPid k: Int64 -> Int64
+  (- k (* (/ k (pinBase)) (pinBase)))
+
+fn pinBorn k: Int64 -> Int64
+  (/ k (pinBase))
+
+fn pinsOf procs: (List Proc) pids: (List Int64) -> (List Int64)
+  (map (fn [(pid Int64)] -> Int64 (match (listHead (filter (fn [(p Proc)] -> Bool (= p.pid pid)) procs)) ((some p) (pinOf pid p.born)) ((none) pid))) pids)
+
+fn knownPid? known: (List Int64) pid: Int64 -> Bool
+  (listAny? (fn [(k Int64)] -> Bool (= (pinPid k) pid)) known)
+
+; (:m :ref KILL-SETSID-ESCAPEE :do "g is the very process that was recorded: a pin for g whose birth matches g's current birth within 2 s; a reused pid has a later birth and a bare pid never matches")
+fn pinnedLive? procs: (List Proc) known: (List Int64) g: Int64 -> Bool
+  (match (listHead (filter (fn [(p Proc)] -> Bool (= p.pid g)) procs))
+    ((none) false)
+    ((some p) (and (>= p.born 0) (listAny? (fn [(k Int64)] -> Bool (and (= (pinPid k) g) (and (> (pinBorn k) 0) (and (<= (- (pinBorn k) p.born) 2) (>= (- (pinBorn k) p.born) -2))))) known))))
+
 fn ! procSnapshot -> (List Proc)
-  (procsOf (resultOr (shellOut "ps -A -o pid= -o ppid= -o pgid= -o stat= -o comm=" 10000) ""))
+  (procsAt (resultOr (shellOut "ps -A -o pid= -o ppid= -o pgid= -o stat= -o etime= -o comm=" 10000) "") (/ (nowNs) 1000000000))
 
 fn ! psSnapshot -> (List (Pair Int64 Int64))
   (map (fn [(p Proc)] -> (Pair Int64 Int64) (pair p.pid p.ppid)) (procSnapshot))
@@ -226,9 +267,16 @@ fn fenced? procs: (List Proc) root: Int64 self: Int64 -> Bool
 fn leaderGone? procs: (List Proc) g: Int64 -> Bool
   (listEmpty? (filter (fn [(p Proc)] -> Bool (= p.pid g)) procs))
 
-; (:m :ref NODE2-SIGSTOP-RC :do "a member's group joins the tree only when its leader is a member, or was one (known) and is gone: a member sitting in a foreign group no longer pulls that whole group, and everything hanging off it, into the kill")
-fn treeStep procs: (List Proc) members: (List Int64) groups: (List Int64) known: (List Int64) fence: (Pair (List Int64) (List Int64)) rounds: Int64 -> (Pair (List Int64) (List Int64))
-  (let [(adopt (fn [(g Int64)] -> Bool (and (> g 1) (and (not (listContains? (pairSecond fence) g)) (or (listContains? members g) (and (listContains? known g) (leaderGone? procs g)))))))
+; (:m :ref KILL-SETSID-ESCAPEE :do "g started no earlier than the root (ps etime, 1 s resolution): a known pid that setsid away from the job is younger than the job, a foreign process that ended up in known is older; unknown ages never qualify")
+fn bornAfter? procs: (List Proc) root: Int64 g: Int64 -> Bool
+  (let [(ageOf (fn [(pid Int64)] -> Int64 (match (listHead (filter (fn [(p Proc)] -> Bool (= p.pid pid)) procs)) ((some p) p.age) ((none) -1))))
+        (rootAge (ageOf root))
+        (age (ageOf g))]
+    (and (>= rootAge 0) (and (>= age 0) (<= age rootAge))))
+
+; (:m :ref NODE2-SIGSTOP-RC :do "a member's group joins the tree only when its leader is a member, or was one (known) and is gone or started no earlier than the root (bornAfter?): a member sitting in a foreign group no longer pulls that whole group, and everything hanging off it, into the kill")
+fn treeStep procs: (List Proc) root: Int64 members: (List Int64) groups: (List Int64) known: (List Int64) fence: (Pair (List Int64) (List Int64)) rounds: Int64 -> (Pair (List Int64) (List Int64))
+  (let [(adopt (fn [(g Int64)] -> Bool (and (> g 1) (and (not (listContains? (pairSecond fence) g)) (or (listContains? members g) (or (and (knownPid? known g) (leaderGone? procs g)) (and (pinnedLive? procs known g) (bornAfter? procs root g))))))))
         (gs (addNew groups (filter adopt (map (fn [(p Proc)] -> Int64 p.pgid) (filter (fn [(p Proc)] -> Bool (listContains? members p.pid)) procs)))))
         (more (map (fn [(p Proc)] -> Int64 p.pid)
                    (filter (fn [(p Proc)] -> Bool (and (> p.pid 1)
@@ -238,13 +286,13 @@ fn treeStep procs: (List Proc) members: (List Int64) groups: (List Int64) known:
                            procs)))]
     (if (or (listEmpty? more) (<= rounds 0))
       (pair members gs)
-      (treeStep procs (addNew members more) gs known fence (- rounds 1))))
+      (treeStep procs root (addNew members more) gs known fence (- rounds 1))))
 
-; (:m :ref NODE2-SIGSTOP-RC :do "a remembered group stays only when a known pid still holds it (an orphan of init or a child in the lineage) and its leader is gone or in the lineage; a live leader outside the lineage (a foreign sleeper or a user manager that ended up in known) never anchors its group")
+; (:m :ref NODE2-SIGSTOP-RC :do "a remembered group stays only when a known pid still holds it (an orphan of init or a child in the lineage) and its leader is gone, in the lineage, or known and started no earlier than the root (a setsid escapee); a live leader older than the root (a foreign sleeper or a user manager that ended up in known) never anchors its group")
 fn anchoredGroups procs: (List Proc) root: Int64 groups: (List Int64) known: (List Int64) lineage: (List Int64) -> (List Int64)
-  (let [(anchors (filter (fn [(p Proc)] -> Bool (and (listContains? known p.pid) (or (= p.ppid 1) (listContains? lineage p.ppid)))) procs))
+  (let [(anchors (filter (fn [(p Proc)] -> Bool (and (knownPid? known p.pid) (or (= p.ppid 1) (listContains? lineage p.ppid)))) procs))
         (held (map (fn [(p Proc)] -> Int64 p.pgid) anchors))
-        (ours (fn [(g Int64)] -> Bool (or (listContains? lineage g) (leaderGone? procs g))))]
+        (ours (fn [(g Int64)] -> Bool (or (listContains? lineage g) (or (leaderGone? procs g) (and (pinnedLive? procs known g) (bornAfter? procs root g))))))]
     (filter (fn [(g Int64)] -> Bool (or (= g root) (and (listContains? held g) (ours g)))) groups))
 
 ; (:m :ref NODE2-SIGSTOP-RC :do "self is the killer's pid: a root of 0 or 1 (every process descends from them; a failed pid parse once froze all of node2's user processes) or a root in the killer's fence gives an empty tree")
@@ -255,7 +303,7 @@ fn treeOf procs: (List Proc) root: Int64 groups: (List Int64) known: (List Int64
       (let [(lineage (cons root (filter (fn [(p Int64)] -> Bool (not (listContains? (pairFirst fence) p))) (descendantsOf (map (fn [(p Proc)] -> (Pair Int64 Int64) (pair p.pid p.ppid)) procs) root))))
             (start (filter (fn [(g Int64)] -> Bool (and (> g 1) (not (listContains? (pairSecond fence) g)))) (addNew (anchoredGroups procs root groups known lineage) (list root))))
             (seed (cons root (map (fn [(p Proc)] -> Int64 p.pid) (filter (fn [(p Proc)] -> Bool (and (> p.pid 1) (and (!= p.pid root) (and (not (listContains? (pairFirst fence) p.pid)) (listContains? start p.pgid))))) procs))))
-            (t (treeStep procs seed start known fence 10000))]
+            (t (treeStep procs root seed start known fence 10000))]
         (pair (filter (fn [(p Int64)] -> Bool (!= p root)) (pairFirst t)) (pairSecond t)))))
 
 fn ! signalAll pids: (List Int64) sig: String -> Int64
@@ -309,7 +357,7 @@ fn ! judge lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool r:
   (let [(overTime (and (> lim.timeoutMs 0) (> (/ (- now r.startNs) 1000000) lim.timeoutMs)))
         (tree (if checked (treeOf snap r.pid r.groups r.known self) (pair (list) r.groups)))
         (groups (pairSecond tree))
-        (known (if checked (pairFirst tree) r.known))
+        (known (if checked (addNew r.known (pinsOf snap (pairFirst tree))) r.known))
         (descN (if (and checked (> lim.maxDesc 0)) (listLength (pairFirst tree)) 0))
         (verdict (cond (overTime "timeout") ((> descN lim.maxDesc) "runaway") (else "")))]
     (if (stringEmpty? verdict)
@@ -358,7 +406,7 @@ fn ! judgeSep lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool
   (let [(overTime (and (> lim.timeoutMs 0) (> (/ (- now r.startNs) 1000000) lim.timeoutMs)))
         (tree (if checked (treeOf snap r.pid r.groups r.known self) (pair (list) r.groups)))
         (groups (pairSecond tree))
-        (known (if checked (pairFirst tree) r.known))
+        (known (if checked (addNew r.known (pinsOf snap (pairFirst tree))) r.known))
         (descN (if (and checked (> lim.maxDesc 0)) (listLength (pairFirst tree)) 0))
         (verdict (cond (overTime "timeout") ((> descN lim.maxDesc) "runaway") (else "")))]
     (if (stringEmpty? verdict)
@@ -671,7 +719,7 @@ fn ! forkAdvance! f: Forked -> ForkStep
             (snap (if checked (procSnapshot) (list)))
             (tree (if checked (treeOf snap f.pid f.groups f.known (procSelf)) (pair f.known f.groups)))
             (f2 (Forked :pid f.pid :lim f.lim :startNs f.startNs :lastCheck (if checked now f.lastCheck)
-                        :groups (pairSecond tree) :known (addNew f.known (pairFirst tree))))
+                        :groups (pairSecond tree) :known (addNew f.known (pinsOf snap (pairFirst tree)))))
             (descN (if checked (listLength (pairFirst tree)) 0))]
         (cond
           (overTime (ForkStep :end (some (forkKill! f2 "timeout")) :fork f2))
