@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [takeLock! runTests main failLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [takeLock! lockLive? unparsableStale? runTests main failLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -2126,9 +2126,10 @@ fn ! lockPid path: String -> (Option Int64)
 fn ! pidAlive? pid: Int64 -> Bool
   (and (> pid 1) (resultOr (procAlive? pid) false))
 
+; (:m :ref LOCKLIVE-UNPARSABLE :do "a lock with no pid in it is live while it is younger than the :native :lockGraceS row, the same rule takeLock! uses to break it, and dead after; the sweep therefore never treats a creator mid-write as dead and never keeps a long-dead empty lock")
 fn ! lockLive? path: String -> Bool
   (and (fileExists? path)
-       (match (lockPid path) ((none) true) ((some pid) (pidAlive? pid))))
+       (match (lockPid path) ((none) (not (unparsableStale? path))) ((some pid) (pidAlive? pid))))
 
 fn ! breakLock! path: String deadPid: Int64 -> Unit
   (let [(stale (str path ".stale." (stringFromInt64 (procSelf))))]
