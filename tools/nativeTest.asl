@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [runTests main failLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [takeLock! runTests main failLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -818,8 +818,8 @@ fn ! cachedLink! cDir: String fp: String slot: String bin: String key: String uR
 ; (:m :ref NT-COMPILE-ONCE :do "N processes that miss one module or prelude key at once compiled it N times (node2 2026-10-30: 45 Leon writers, prelude 114x, modules 86x, 128 clang on 8 cores). A miss now claims KEY.o.lock (pid, created exclusively); a loser waits for the verified object or the holder's death, then takes the key over. The holder releases after the object and metadata landed or the compile failed. A lock this process already holds, or a wait past claimWaitNs, compiles unclaimed as before")
 (schema Claim (:f hit (Option (List String))) (:f lock String))
 
-fn claimWaitNs -> Int64
-  (* 900 1000000000)
+fn ! claimWaitNs! -> Int64
+  (nb/claimWaitFor! (toolRoot))
 
 fn ! claimObject! objPath: String metaPath: String deadlineNs: Int64 -> Claim
   (let [(lock (str objPath ".lock"))]
@@ -851,7 +851,7 @@ fn ! compileUnitPrepare facts: (Option libc/TripleFacts) cDir: String fp: String
         (objDir (if (slotObject? slot u units isEntry) slot (modulesDirIn cDir)))
         (objPath (str objDir "/" uKey ".o"))
         (metaPath (str objDir "/" uKey ".meta"))
-        (claim (claimObject! objPath metaPath (+ (monotonicNs) (claimWaitNs))))]
+        (claim (claimObject! objPath metaPath (+ (monotonicNs) (claimWaitNs!))))]
     (match claim.hit
       ((some refs)
        (UnitStep :done (some (hitResult u.path objPath refs)) :pending (none)))
@@ -1065,7 +1065,7 @@ fn ! compileSubsetPrelude facts: (Option libc/TripleFacts) cDir: String fp: Stri
 " (stringJoin (listSort preludeFns) ",")))))
         (preludeObj (str (modulesDirIn cDir) "/prelude-" preludeKey ".o"))
         (preludeMeta (str (modulesDirIn cDir) "/prelude-" preludeKey ".meta"))
-        (claim (claimObject! preludeObj preludeMeta (+ (monotonicNs) (claimWaitNs))))]
+        (claim (claimObject! preludeObj preludeMeta (+ (monotonicNs) (claimWaitNs!))))]
     (match claim.hit
       ((some _)
        (do (telemetry "NATIVE-PRELUDE-CACHE :hit :subset")
@@ -1099,7 +1099,7 @@ fn ! compileFullPrelude facts: (Option libc/TripleFacts) cDir: String fp: String
        (do (telemetry "NATIVE-PRELUDE-FULL :unsupported (cached); compiling the referenced subset")
            (none)))
       (else
-       (let [(claim (claimObject! preludeObj preludeMeta (+ (monotonicNs) (claimWaitNs))))]
+       (let [(claim (claimObject! preludeObj preludeMeta (+ (monotonicNs) (claimWaitNs!))))]
          (match claim.hit
            ((some _)
             (do (telemetry "NATIVE-PRELUDE-CACHE :hit :full :waited")
@@ -2141,13 +2141,26 @@ fn ! breakLock! path: String deadPid: Int64 -> Unit
                (match (fileCreateExclusive path moved) ((ok _) ()) ((err _) ())))
              (match (pathRemove stale) ((ok _) ()) ((err _) ())))))))
 
+; (:m :ref NT-CLAIM-WAIT-CFG :do "an unparsable lock counts as dead only when it is older than the grace row, because a live creator has the file before it has the pid in it")
+fn ! unparsableStale? path: String -> Bool
+  (match (fileStat path)
+    ((ok st) (> (- (nowNs) st.mtimeNs) (nb/lockGraceFor! (toolRoot))))
+    ((err _) false))
+
+; (:m :ref NT-CLAIM-WAIT-CFG :do "a lock file whose text holds no pid cannot belong to a live process, so it is moved aside and removed at once instead of being waited on to the deadline; a file that vanished meanwhile is left alone")
+fn ! breakUnparsable! path: String -> Unit
+  (let [(stale (str path ".stale." (stringFromInt64 (procSelf))))]
+    (match (pathRename path stale)
+      ((err _) ())
+      ((ok _) (match (pathRemove stale) ((ok _) ()) ((err _) ())))))
+
 fn ! takeLock! path: String tries: Int64 -> Bool
   (match (fileCreateExclusive path (stringFromInt64 (procSelf)))
     ((ok _) true)
     ((err _) (if (<= tries 0)
                false
                (match (lockPid path)
-                 ((none) false)
+                 ((none) (if (unparsableStale? path) (do (breakUnparsable! path) (takeLock! path (- tries 1))) false))
                  ((some pid) (if (pidAlive? pid) false (do (breakLock! path pid) (takeLock! path (- tries 1)))))))))
 
 fn ! prepareCommand! path: String fp: String -> Int64

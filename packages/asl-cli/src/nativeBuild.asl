@@ -1,5 +1,5 @@
 (module asl-cli/nativeBuild
-  :x [Build toolchainRootPaths variantKey! main storeCapFor! capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure?]
+  :x [Build toolchainRootPaths variantKey! main storeCapFor! claimWaitFor! lockGraceFor! claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure?]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/nativeRefresh :a nr) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r)])
 
 (schema Build
@@ -255,6 +255,28 @@ fn ageValue word: String -> (Option Int64)
 
 fn ! storeMinAgeNs! dir: String -> Int64
   (optionOr (match (configured! dir ":storeMinAge") ((some w) (ageValue w)) ((none) (none))) 3600000000000)
+
+; (:m :ref NT-CLAIM-WAIT-CFG :do "how long a nativeTest process waits for another process compiling the same module or prelude key is the :native :claimWaitS row of the nearest .asl.config.asn or ~/.asl/config.asn, whole seconds 1 to 86400; 900 when absent, unreadable or out of range")
+fn defaultClaimWaitS -> Int64
+  900
+
+fn claimWaitValue word: String -> (Option Int64)
+  (match (stringToInt64 (stringTrim (stringReplace word "\"" "")))
+    ((some n) (if (and (>= n 1) (<= n 86400)) (some n) (none)))
+    ((none) (none)))
+
+fn ! claimWaitFor! dir: String -> Int64
+  (* 1000000000 (match (configured! dir ":claimWaitS")
+                 ((some word) (optionOr (claimWaitValue word) (defaultClaimWaitS)))
+                 ((none) (defaultClaimWaitS))))
+
+; (:m :ref NT-CLAIM-WAIT-CFG :do "a nativeTest lock whose text holds no pid is broken only once its mtime is older than the :native :lockGraceS row, whole seconds 1 to 3600, 10 when absent or out of range, so a creator that has made the file and not yet written its pid is never broken")
+fn ! lockGraceFor! dir: String -> Int64
+  (* 1000000000 (match (configured! dir ":lockGraceS")
+                 ((some word) (match (stringToInt64 (stringTrim (stringReplace word "\"" "")))
+                                ((some n) (if (and (>= n 1) (<= n 3600)) n 10))
+                                ((none) 10)))
+                 ((none) 10)))
 
 fn ! storeCapFor! dir: String -> Int64
   (match (configured! dir ":storeCap")
