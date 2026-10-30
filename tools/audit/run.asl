@@ -224,9 +224,9 @@ fn rowsFor tag: String head: String fs: (List Finding) -> String
                      files)
                 "\n"))
 
-; (:m :ref AUD-RUN-DEDUPE :do "open owners of files: store tasks whose cond row (or, without one, the task itself) is not merged, done or dropped, and (:u ...) rows of the store's ledger.path and of :plans whose :status is none of those")
+; (:m :ref AUD-RUN-DEDUPE :do "open owners of files: store tasks whose cond row (or, without one, the task itself) is not merged, done or dropped, and (:u ...) rows of the store ledger.path and of :plans whose :status (else :st, the key most SH/plan.asn rows use) is not terminal: the done, merged, dropped, obsolete, superseded, fixed, live, reverted, declined, rejected, refuted, answered, final states of the ledger, and imported, whose owner is then the store task")
 fn closed? s: String -> Bool
-  (listContains? (list "merged" "done" "dropped") s)
+  (listContains? (list "merged" "done" "dropped" "obsolete" "superseded" "fixed" "live" "reverted" "declined" "rejected" "refuted" "answered" "final" "imported") s)
 
 fn ! condSt! store: String id: String -> String
   (match (fileReadString (str store "/cond/" id ".asn"))
@@ -234,6 +234,9 @@ fn ! condSt! store: String id: String -> String
     ((ok t) (match (fm/parseForms t)
               ((err _) "")
               ((ok forms) (match (listHead forms) ((none) "") ((some f) (textAt (fm/itemsOf f) ":st" "")))))))
+
+fn rowState items: (List rd/SExpr) -> String
+  (let [(s (textAt items ":status" ""))] (if (stringEmpty? s) (textAt items ":st" "") s))
 
 fn ownsOf items: (List rd/SExpr) -> (List String)
   (match (fm/kvGet items ":owns")
@@ -261,7 +264,7 @@ fn planOwners text: String -> (List (Pair String String))
                   ((none) acc)
                   ((some f)
                     (let [(items (fm/itemsOf f)) (id (textAt items ":id" ""))]
-                      (if (or (stringEmpty? id) (closed? (textAt items ":status" ""))) acc (listAppend acc (pairsOf (ownsOf items) id))))))))))
+                      (if (or (stringEmpty? id) (closed? (rowState items))) acc (listAppend acc (pairsOf (ownsOf items) id))))))))))
         (list) (stringLines text))
 
 fn ! owners! store: String plans: (List String) -> (List (Pair String String))

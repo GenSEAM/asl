@@ -135,7 +135,7 @@ fn ! testDedupe -> Bool
         (_ (dirCreate (str root "/out")))
         (built (fixtureRepo! repo))
         (owner (st/put! store (st/Task :id "OWN-1" :owns (list "asl/packages/pkg/src/a.asl") :reads (list) :gate "true" :channel "free" :model "" :base "dev" :after (list) :st "queued" :epoch 0 :receipt "")))
-        (_ (fileWrite (str root "/plan.asn") "(:u :id PLAN-2 :owns (\"asl/tools/x/b.asl\") :gate \"true\" :do \"fix b\")\n(:u :id PLAN-3 :status :done :owns (\"asl/packages/pkg/src/a.asl\") :gate \"true\" :do \"old\")\n"))
+        (_ (fileWrite (str root "/plan.asn") "(:u :id PLAN-2 :owns (\"asl/tools/x/b.asl\") :gate \"true\" :do \"fix b\")\n(:u :id PLAN-3 :status :done :owns (\"asl/packages/pkg/src/a.asl\") :gate \"true\" :do \"old\")\n(:u :id PLAN-4 :st done :owns (\"asl/packages/pkg/src/a.asl\") :gate \"true\" :do \"closed by :st\")\n(:u :id PLAN-5 :st superseded :owns (\"asl/packages/pkg/src/a.asl\") :gate \"true\" :do \"superseded\")\n"))
         (_ (fileWrite (str store "/ledger.path") (str root "/plan.asn\nHEAD\n")))
         (cfg (ar/parseConfig (cfgText (str root "/out/<version>") store)))
         (first (match cfg ((ok c) (ar/run! c repo "" false (stubCall))) ((err e) (err e))))
