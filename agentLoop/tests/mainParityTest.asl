@@ -98,6 +98,15 @@ fn promptStub stdout: String -> String
             to (promptEnd stdout from)]
         (str (optionOr (stringSlice stdout 0 from) "") "{PROMPT}" (optionOr (stringSlice stdout to (stringLength stdout)) "")))))
 
+; (:m :ref MAINPARITY-REJECT-RED :do "a gate preflight receipt carries /bin/sh's own syntax-error text, which differs by shell (bash on macOS, dash on Linux); both sides compare with that message stubbed, keeping the error class, command and exit code")
+fn shellStub stdout: String -> String
+  (match (stringIndexOf stdout " :shell \"sh\" :message \"")
+    ((none) stdout)
+    ((some i)
+      (let [from (+ i 23)
+            to (promptEnd stdout from)]
+        (str (optionOr (stringSlice stdout 0 from) "") "{SHELL}" (shellStub (optionOr (stringSlice stdout to (stringLength stdout)) ""))))))
+
 fn ! matchesFixtureRow repo: String hostDisplay: String scope: String env: String form: String row: String -> Bool
   (let [rowScope (fixtureField row "scope")
         expected (receiptExpected repo hostDisplay row)
@@ -105,7 +114,7 @@ fn ! matchesFixtureRow repo: String hostDisplay: String scope: String env: Strin
     (and (!= row "")
          (or (= rowScope scope) (and (= scope "default") (= rowScope "")))
          (fixtureFormMatches repo row form)
-         (= (promptStub actual.stdout) expected)
+         (= (shellStub (promptStub actual.stdout)) (shellStub expected))
          (= actual.exitCode (fixtureInt row "exit"))))
 
 fn ! fixtureMismatchesAt repo: String hostDisplay: String scope: String env: String prefix: String index: Int64 forms: (List String) acc: (List String) -> (List String)
@@ -296,7 +305,7 @@ fn ! runTests -> Bool
       (assert noArgFixture "no argv is rejected with its recorded exit code")
       (assert (= noArgAsl.exitCode 2) "no argv exits 2")
       (assert (listEmpty? rejected) (str "every rejected form returns a rejection receipt and its recorded exit code: " (stringJoin rejected " | ")))
-      (assert (listEmpty? dry) "every dry-run form returns its recorded receipt class and exit code")
+      (assert (listEmpty? dry) (str "every dry-run form returns its recorded receipt class and exit code: " (stringJoin dry " | ")))
       (assert planOn "ASL_LEON_PLAN=1 runs the plan-on dry-run path")
       (assert planBad "ASL_LEON_PLAN=2 is rejected")
       (assert planOff ":plan true wins over ASL_LEON_PLAN=0")
