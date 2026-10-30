@@ -1,0 +1,7 @@
+(:spec :id fuseConfig :v 1 :date "2026-10-30" :file "~/.asl/conductor/fuse.asn" :reader "tools/remote/fuse.asl cfgOf" :check "tools/remote/fuse.asl configCheck (tested in tools/remote/tests/fuseTest.asl testConfig; `fuse config-check` runs it on the node)"
+  :doc "thresholds of the node fuse, one row `(:fuse :minStopped N :minStopSecs S :tripWindowS S :killPaths (\"prefix/\" ...))`; a missing file or key means the default, a file that configCheck rejects is ignored whole and the defaults apply"
+  :minStopped "adopted default 20: how many of the user's processes in state T count as a node-wide stop; range 2..10000"
+  :minStopSecs "adopted default 40: how long the stop must persist across ticks (the timer fires every 20 s) before anything is signalled; range 20..3600"
+  :tripWindowS "adopted default 600: a second trip inside this window thaws without killing and writes an escalate row; range 60..86400"
+  :killPaths "adopted default (\"~/.asl/run/nativeTest/\" \"~/.asl/cache/nativeTest/\" \"/tmp/aslMutants/\"): stopped processes whose exe starts with one of these prefixes are SIGKILLed, every other stopped process of the user is SIGCONTed; each prefix is absolute or ~/, ends in / and has no .."
+  :ranges "unknown keys, non-integers and out-of-range values are errors")
