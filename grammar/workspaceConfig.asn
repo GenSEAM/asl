@@ -1,0 +1,22 @@
+(:spec :id workspaceConfig :v 1 :date "2026-10-30" :files (".asl.config.asn" "~/.asl/config.asn") :check "asl run asl/tools/workspaceConfigCheck.asl check FILE" :reader "asl/packages/asl-cli/src/configSchema.asl"
+  :doc "schema registry of the workspace config groups that code reads: one (:cfgKey ...) row per key of a strict group. A group named here is closed: a key without a row, a value of the wrong type or a value outside its range is an error of the check. A top-level group without a row is not checked. At runtime the reading code keeps the documented :default for a bad value and warns, the check is where it is rejected. The nearest .asl.config.asn wins over ~/.asl/config.asn per key"
+  :row "(:cfgKey :grp GROUP :name KEY :kind int|bool|enum|string|path|size|age|version|strList :lo N :hi N :choices (WORD ...) :default TEXT :status live|planned :ref ID :doc TEXT); :lo and :hi bound an int, :choices lists the enum words without the colon, size is digits with an optional K M or G, age is digits with an optional m or h, version is N.N or N.N.N, strList is a list of non-empty strings"
+  :receipt "(:workspaceConfigCheck :file PATH :status :ok|:error :checked N :errors (ISSUE ...) :warnings (ISSUE ...)); exit 1 when :errors is not empty")
+(:cfgKey :grp native :name parts :kind int :lo 1 :hi 64 :default "min(online cores, 8)" :status live :ref BUILDPAR :doc "upper bound on link parts of a native build; each part keeps at least 4 MB of IR")
+(:cfgKey :grp native :name level :kind enum :choices (dev release) :default "release" :status live :ref BUILDPAR :doc "clang level of the link: dev is -O1, release is -O2")
+(:cfgKey :grp native :name rc :kind enum :choices (tracing counted asan notrace) :default "notrace for asl build, tracing for asl test" :status live :ref RC-CONFIG :doc "native memory mode of a build")
+(:cfgKey :grp native :name clang :kind path :default "CLANG, else the first clang candidate on PATH" :status live :ref NATIVE-CLANG :doc "clang executable")
+(:cfgKey :grp native :name llc :kind path :default "tool found on PATH" :status live :ref LLVM-NODE2-REDS :doc "llc executable")
+(:cfgKey :grp native :name opt :kind path :default "tool found on PATH" :status live :ref LLVM-NODE2-REDS :doc "opt executable")
+(:cfgKey :grp native :name wasmLd :kind path :default "tool found on PATH" :status live :ref LLVM-NODE2-REDS :doc "wasm-ld executable")
+(:cfgKey :grp native :name llvmNm :kind path :default "tool found on PATH" :status live :ref LLVM-NODE2-REDS :doc "llvm-nm executable")
+(:cfgKey :grp native :name node :kind path :default "tool found on PATH" :status live :ref LLVM-NODE2-REDS :doc "node executable for wasm tests")
+(:cfgKey :grp native :name storeCap :kind size :default "2G" :status live :ref BIN-NO-PERSIST-20261026 :doc "byte cap of a native build store, digits with an optional K, M or G")
+(:cfgKey :grp native :name storeMinAge :kind age :default "60m" :status live :ref BIN-NO-PERSIST-20261026 :doc "a store entry used within this age is never swept, digits in minutes or with an m or h suffix")
+(:cfgKey :grp native :name sweep :kind bool :default "true" :status live :ref BIN-NO-PERSIST-20261026 :doc "false turns the sweep of the native CLI store off")
+(:cfgKey :grp nativeCli :name buildWaitS :kind int :lo 1 :hi 604800 :default "3600" :status live :ref NATIVE-STALE-CONVERGE :doc "seconds bin/asl waits for a rebuild of a stale native CLI; ASL_NATIVE_BUILD_WAIT overrides it")
+(:cfgKey :grp nativeCli :name relayPin :kind bool :default "false" :status planned :ref RELAY-CLIENT-PINNED :doc "true keeps the last good native CLI answering the relay client while a toolchain root edit rebuilds")
+(:cfgKey :grp nativeCli :name relayPaths :kind strList :default "empty: never pinned" :status planned :ref RELAY-CLIENT-PINNED :doc "paths relative to the root whose sources the relay client reads at run time")
+(:cfgKey :grp release :name pin :kind version :default "none" :status planned :ref INBOX-RELEASE-PIN :doc "the release version the workspace is built and gated with, N.N.N")
+(:cfgKey :grp release :name min :kind version :default "none" :status planned :ref INBOX-RELEASE-PIN :doc "the oldest release version the workspace accepts, N.N.N")
+(:cfgKey :grp release :name mode :kind enum :choices (warn refuse) :default "warn" :status planned :ref INBOX-RELEASE-PIN :doc "what a release outside pin or min does: warn and go on, or refuse")
