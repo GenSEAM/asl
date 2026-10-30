@@ -42,7 +42,8 @@
 (schema ProcOut
   (:f exitCode Int64)
   (:f stdout String)
-  (:f stderr String))
+  (:f stderr String)
+  (:f timedOut Bool :default false))
 
 (schema RunningSep
   (:f pid Int64)
@@ -321,7 +322,8 @@ fn ! finishSep r: RunningSep -> ProcOut
         (_ (closeIfOpen r.errFd r.errOpen))
         (code (match (procWaitPid r.pid false) ((ok status) (optionOr status 1)) ((err _) 1)))
         (killed (not (stringEmpty? r.killed)))]
-    (ProcOut :exitCode (if killed (killedExit r.killed) code) :stdout r.outText :stderr r.errText))
+    (ProcOut :exitCode (if killed (killedExit r.killed) code) :stdout r.outText :stderr r.errText
+             :timedOut (= r.killed "timeout")))
 
 fn ! spawnSep argv: (List String) cwd: String env: (List String) -> (Result RunningSep ProcOut)
   (let [(start (monotonicNs))]
