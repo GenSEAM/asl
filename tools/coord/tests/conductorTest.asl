@@ -595,10 +595,14 @@ fn ! testNoSchedFile -> Bool
         (_ (dirCreate (str home "/.asl")))
         (_ (dirCreate (str home "/.asl/conductor")))
         (_ (fileWrite (str home "/.asl/conductor/sched.asn") "(:sched :min 2 :max 9 :step 1 :start 7)\n"))
-        (started ((cd/schedPace dir home).tokens))
+        (started (cd/lightSlotsAt! dir home 8000 0.5 8))
+        (pressDir (str home "/store2"))
+        (_ (dirCreate pressDir))
+        (pressed (cd/lightSlotsAt! pressDir home 8000 40.0 8))
         (_ (cleanup home))]
     (do (assert (= plain tokens) (str "no sched.asn: admission equals the token count: " (stringFromInt64 plain) " " (stringFromInt64 tokens)))
         (assert (= started 7) (str "sched.asn without ledger and state starts at :start: " (stringFromInt64 started)))
+        (assert (= pressed 6) (str "load above 1.5 x cores steps the first sample down by one: " (stringFromInt64 pressed)))
         true))
 
 fn ! runTests -> Bool
