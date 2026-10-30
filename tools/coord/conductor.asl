@@ -2,7 +2,7 @@
   :x [hubGuard! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig rulingVerdict
-      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! rungCap hopsSince nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! loopOnce! runLoop! gatesStage
+      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! rungCap hopsSince nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       main]
   :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (asl-tools/hub/preflight :a hp)
       (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -295,6 +295,7 @@ fn ! killRun! dir: String id: String stage: String -> Unit
 
 ; (:m :ref CONDUCTOR :do "a stage is a detached child started through run.asl's spawnSep in its own process group; the store keeps its pid and deadline in <store>/runs/UNIT-STAGE.run, the child's only output is the Res row, so a restarted conductor resumes from the rows alone")
 fn ! launch! ctx: Ctx u: st/Task c: CUnit -> CUnit
+  (if (draining? ctx.dir) (let [(c0 (with c :launched 0)) (_ (writeCUnit! ctx.dir c0))] c0)
   (let [(stage (stageName c.st))
         (mk ctx.launch)
         (argv (mk stage u c))
@@ -309,7 +310,7 @@ fn ! launch! ctx: Ctx u: st/Task c: CUnit -> CUnit
                             (str "(:run :unit " (st/q c.id) " :stage " stage " :pid " (n r.pid) " :startedMs " (n (nowMs)) " :deadlineMs " (n (+ (nowMs) (* ctx.stageSec 1000))) ")\n")))
               (c1 (with c :launched 1))
               (_ (writeCUnit! ctx.dir c1))]
-          c1))))
+          c1)))))
 
 ; (:m :ref COND3 :do "a merge failure retries the merge itself, keeping the lease, the branch and the reviewed work; the same signature maxSame times escalates; the journal row carries the reason because the scratch store is cleaned after a run")
 fn ! mergeFail! ctx: Ctx u: st/Task c: CUnit sig: String ms: Int64 -> CUnit
@@ -416,7 +417,7 @@ fn ! step! ctx: Ctx u: st/Task cap: Int64 -> Int64
         (let [(pace ctx.pace)
               (allowOf pace.allowance)
               (allow (allowOf c.lane))]
-          (if (or (<= cap 0) (>= (laneActive cus c.lane) allow))
+          (if (or (or (<= cap 0) (>= (laneActive cus c.lane) allow)) (draining? ctx.dir))
             cap
             (match (st/claim! ctx.dir c.id ctx.holder ctx.ttlMs)
               ((err e) (let [(_ (waitMore! ctx c e))] cap))
@@ -426,7 +427,7 @@ fn ! step! ctx: Ctx u: st/Task cap: Int64 -> Int64
                       (_ (launch! ctx u c1))]
                   (- cap 1)))))))
       ((= c.st "awaitReview")
-        (if (= c.parked 1) cap
+        (if (or (= c.parked 1) (draining? ctx.dir)) cap
           (let [(c1 (move! ctx c "reviewing" "review" "" 0 0 "start" 0))
                 (_ (launch! ctx u c1))]
             cap)))
@@ -979,6 +980,38 @@ fn stopPath dir: String -> String
 fn ! requestStop! dir: String -> Bool
   (ok? (fileWrite (stopPath dir) "stop\n"))
 
+; (:m :ref COND-GRACEFUL-RESTART :do "a restart file in the store (written by `conductor restart`, which vps sync --deploy runs when the deployed range touches asl/tools/coord) drains the loop: nothing new is launched, neither an admission nor a unit's next stage, in-flight stages are polled until they finish or :untilMs passes, one (:restart :finished :left) journal row records them, and the loop ends with exit 0 so systemd (Restart=always) starts the new code; a stage still running at the deadline is left to the next start, which resumes it from its rows")
+fn restartPath dir: String -> String
+  (str dir "/restart")
+
+fn ! draining? dir: String -> Bool
+  (fileExists? (restartPath dir))
+
+fn ! requestRestart! dir: String graceSec: Int64 -> Bool
+  (let [(at (/ (nowNs) 1000000))]
+    (ok? (fileWrite (restartPath dir) (str "(:restart :at " (n at) " :untilMs " (n (+ at (* graceSec 1000))) ")\n"))))
+
+fn ! restartUntil! dir: String -> Int64
+  (let [(until (match (st/rowFields (readOr (restartPath dir)) "restart") ((ok fs) (st/intField fs "untilMs")) ((err _) 0)))]
+    (if (> until 0) until (+ (/ (nowNs) 1000000) 1200000)))
+
+fn ! flyingIds! dir: String -> (List String)
+  (map (fn [(c CUnit)] -> String c.id) (filter inFlight? (readCUnits! dir)))
+
+fn ! restartDrain! ctx: Ctx until: Int64 sliceMs: Int64 -> (List String)
+  (let [(_ (tick! ctx))
+        (left (flyingIds! ctx.dir))]
+    (if (or (listEmpty? left) (> (/ (nowNs) 1000000) until)) left
+      (let [(_ (sleepMs sliceMs))] (restartDrain! ctx until sliceMs))))
+
+fn ! restart! ctx: Ctx -> (List String)
+  (let [(was (flyingIds! ctx.dir))
+        (left (restartDrain! ctx (restartUntil! ctx.dir) 500))
+        (done (filter (fn [(id String)] -> Bool (not (listContains? left id))) was))
+        (_ (fileAppend (journalPath ctx.dir) (str "(:restart :finished " (st/qList done) " :left " (st/qList left) " :at " (n (/ (nowNs) 1000000)) ")\n")))
+        (_ (pathRemove (restartPath ctx.dir)))]
+    left)
+
 ; (:m :ref COND4 :do "the queue consumer: a blocked unit whose newest escalate row offers the strong tier first gets a fresh lease and an offer file and goes back to awaitReview, where the review starts at R3 (the strong lane); only when the strong tier has allowance now (subPace), at most that many per call; a row whose tiers are only (claude) is left for Claude")
 fn lastTiers rows: (List String) id: String -> String
   (fold (fn [(acc String) (r String)] -> String
@@ -1038,16 +1071,18 @@ fn ! importCycle! ctx: Ctx -> Int64
 
 ; (:m :ref COND3 :do "no signal handler exists in ASL, so the loop's stop is cooperative: a stop file in the store (written by `conductor stop`, which the service runs as ExecStop) ends the loop after stopAll!; a raw SIGTERM or SIGKILL leaves stage children running and the next start resumes them from the rows")
 fn ! loopOnce! ctx: Ctx snapshot: (fn ! [] -> (List (Pair String Int64))) refresh: (fn ! [] -> Unit) refreshDue: Bool -> Bool
-  (if (fileExists? (stopPath ctx.dir))
-    (let [(_ (stopAll! ctx)) (_ (pathRemove (stopPath ctx.dir)))] false)
+  (cond
+    ((fileExists? (stopPath ctx.dir)) (let [(_ (stopAll! ctx)) (_ (pathRemove (stopPath ctx.dir)))] false))
+    ((draining? ctx.dir) (let [(_ (restart! ctx))] false))
+    (else
     (let [(_ (importCycle! ctx))
           (_ (tick! ctx))
           (_ (offerStrong! ctx snapshot))
           (_ (if refreshDue (refreshWake! ctx snapshot refresh) 0))]
-      true))
+      true)))
 
 fn ! sleepSlices! dir: String slices: Int64 sliceMs: Int64 -> Unit
-  (if (or (<= slices 0) (fileExists? (stopPath dir))) ()
+  (if (or (or (<= slices 0) (fileExists? (stopPath dir))) (draining? dir)) ()
     (let [(_ (sleepMs sliceMs))] (sleepSlices! dir (- slices 1) sliceMs)))
 
 fn ! runLoop! ctx: Ctx snapshot: (fn ! [] -> (List (Pair String Int64))) refresh: (fn ! [] -> Unit) lastRefresh: Int64 everyMs: Int64 tickSlices: Int64 -> Int64
@@ -1116,14 +1151,16 @@ fn ! main args: (List String) -> (Result Int64 String)
                         (do (println (str "(:wake :lane " (st/q lane) " :units " (n (wake! ctx lane)) ")")) (ok 0))))
       ((= cmd "check") (let [(ps (startupProblemsFor rc))]
                          (do (println (str "(:check :problems " (st/qList ps) ")")) (ok (if (listEmpty? ps) 0 1)))))
+      ((= cmd "restart") (do (println (str "(:restart :requested " (if (requestRestart! dir (st/intOpt args "grace-sec" 1200)) "true" "false") ")")) (ok 0)))
       ((= cmd "stop") (do (println (str "(:stop :requested " (if (requestStop! dir) "true" "false") ")")) (ok 0)))
       ((= cmd "run")
         (let [(ps (startupProblemsFor rc))]
           (if (not (listEmpty? ps))
             (do (eprintln (str "(:refuse :why coverage :problems " (st/qList ps) ")")) (ok 1))
             (let [(_ (pathRemove (stopPath dir)))
+                  (_ (pathRemove (restartPath dir)))
                   (_ (let [(l (st/opt args "ledger" ""))] (if (stringEmpty? l) (ok ()) (fileWrite (ledgerPath dir) (str l "\n" (st/opt args "ledger-base" "HEAD") "\n")))))
                   (_ (println (str "(:run :store " (st/q dir) " :refreshMin " (n (st/intOpt args "refresh-min" 15)) ")")))]
               (ok (runLoop! ctx (fn [] -> (List (Pair String Int64)) (laneSnapshot rc)) (fn [] -> Unit (let [(_ (sr/subsRefreshCli! (list)))] ()))
                             (nowMs) (* (st/intOpt args "refresh-min" 15) 60000) 12))))))
-      (else (do (eprintln "usage: conductor tick|run|status|check|stop|wake LANE --store DIR") (ok 2)))))
+      (else (do (eprintln "usage: conductor tick|run|status|check|stop|restart [--grace-sec S]|wake LANE --store DIR") (ok 2)))))
