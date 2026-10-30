@@ -1305,6 +1305,26 @@ fn wallLeft wallBudget: (Option Int64) elapsed: Float64 -> (Option Int64)
     ((some w) (if (> w 0) (some (max 1 (- w (optionOr (float64ToInt64 elapsed) 0)))) none))
     ((none) none))
 
+; (:m :ref WALL-GRACEFUL :do "documented defaults of the two wall settings in .asl.config.asn :agentLoop: :wallReserveSec is held back from :wallBudget for the finish (hand-back, grader, commit) and the dispatch kill margin, :wallGateMinSec is the least wall a gate run may start with; a run that cannot start its gate ends with :stop wallBudget instead of being killed")
+fn defaultWallReserveSec -> Int64
+  120
+
+fn defaultWallGateMinSec -> Int64
+  60
+
+fn wallSetting cfgText: String key: String fallback: Int64 -> Int64
+  (match (ac/agentLoopValue cfgText key)
+    ((some v) (optionOr (ac/positiveInt v) fallback))
+    ((none) fallback))
+
+fn reservedWall wallBudget: (Option Int64) reserve: Int64 -> (Option Int64)
+  (match wallBudget
+    ((some w) (if (> w 0) (some (max 1 (- w reserve))) wallBudget))
+    ((none) none))
+
+fn wallTooShort? left: (Option Int64) need: Int64 -> Bool
+  (match left ((some l) (< l need)) ((none) false))
+
 fn wallCapped base: Int64 left: (Option Int64) -> Int64
   (match left ((some l) (max 1 (min base l))) ((none) base))
 
@@ -1779,8 +1799,13 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                     ra.timeout none run.session none)
                   parseDefect (or (listEmpty? operations)
                     (or (listEmpty? facts.forms) (stringEmpty? (stringTrim normalized))))
+                  gateMin (wallSetting (ac/configText! rootDir) ":wallGateMinSec" (defaultWallGateMinSec))
+                  gateOpStop (and (not (listEmpty? ra.gates))
+                    (and (listAny? (fn [o] (= (liveOpName o) "gate")) operations)
+                      (wallTooShort? (wallLeft env.wallBudget (- (env.now) state.runStarted)) gateMin)))
+                  execOps (if gateOpStop (filter (fn [o] (!= (liveOpName o) "gate")) operations) operations)
                   execResult (if parseDefect (pair run (pair "" false))
-                    (liveExecOps! operations ra rootDir repoRoot run.session path execEnv run))
+                    (liveExecOps! execOps ra rootDir repoRoot run.session path execEnv run))
                   executedRaw (pairFirst execResult)
                   executed0 (match (if ra.plan (livePlanJson facts.forms) none)
                     ((some planState) (rl/withState executedRaw (rl/withPlan executedRaw.state planState)))
@@ -1797,7 +1822,10 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   ; (:m :ref LEON-POOL-ASK-OP :do "between turns the asks other pool tasks sent this one reach the model as a (:poolAsks ...) observation")
                   poolAsks (po/servePending! ra.pool)
                   got (str normalized (if (stringEmpty? opReceipts) "" (str "\n" opReceipts)) (if (stringEmpty? poolAsks) "" (str "\n" poolAsks)))
-                  newGates (if (or parseDefect (unchangedTurn? (map liveOpName operations) wrote)) (list) (runLiveGates! ra.gates rootDir (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) ra.parentPid))
+                  gateLeft (wallLeft env.wallBudget (- (env.now) state.runStarted))
+                  wantGates (not (or parseDefect (unchangedTurn? (map liveOpName operations) wrote)))
+                  wallStop (or gateOpStop (and wantGates (and (not (listEmpty? ra.gates)) (wallTooShort? gateLeft gateMin))))
+                  newGates (if (or (not wantGates) wallStop) (list) (runLiveGates! ra.gates rootDir (wallCapped ra.gateTimeout gateLeft) ra.parentPid))
                   allGates (listAppend state.allGateResults newGates)
                   lastGates (liveLastGateMap newGates state.lastGates)
                   turnOpNames (c/joinSep (map liveOpName operations) " ")
@@ -1871,12 +1899,19 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   repeatStop (and (not terminal) (>= repeats (repeatFailureCap)))
                   repeatReason (str "the same reply failed and changed nothing " (stringFromInt64 repeats) " turns in a row")
                   _ (if repeatStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :repeatFailure :reason \"" repeatReason "\")\n"))) true)
-                  nextRun (if repeatStop
-                    (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
-                      "escalated" (some "repeatFailure") (some (str "(:escalate :reason \"" repeatReason "\")")) state.runStarted) counts))
-                    (rl/withState nextRun0 (withCounts nextRun0.state counts)))]
+                  wallHalt (and wallStop (not terminal))
+                  wallReason (str (stringFromInt64 (optionOr gateLeft 0)) " s of the wall budget left, under the " (stringFromInt64 gateMin) " s a gate run needs")
+                  _ (if wallHalt (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :wallBudget :reason \"" wallReason "\")\n"))) true)
+                  nextRun (cond
+                    (wallHalt
+                      (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
+                        "escalated" (some "wallBudget") (some (str "(:escalate :reason \"" wallReason "\")")) state.runStarted) counts)))
+                    (repeatStop
+                      (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
+                        "escalated" (some "repeatFailure") (some (str "(:escalate :reason \"" repeatReason "\")")) state.runStarted) counts)))
+                    (else (rl/withState nextRun0 (withCounts nextRun0.state counts))))]
               (pair (rl/ProviderRun :run nextRun :provider response.provider :history history)
-                    (if (or terminal repeatStop) (stop) (nextTurn)))))))))
+                    (if (or terminal (or repeatStop wallHalt)) (stop) (nextTurn)))))))))
 
 fn ! liveJournal ra: RunArgs rootDir: String -> (Result (Pair String String) String)
   (match (dirCreate (pyJoin rootDir ".asl/run/agentLoop"))
@@ -1971,7 +2006,7 @@ fn ! liveSetup! ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderEn
                         :owns ra.owns :gates ra.gates :rootDir rootDir :budget ra.budget :inputTokenBudget ra.inputTokenBudget
                         :journalPath path :maxRetries 3 :sessionId (some session) :base (some ra.base)
                         :contextTokens (some tokens) :model (some model) :gateTimeout (some ra.gateTimeout)
-                        :wallBudget ra.wallBudget :resume none :intent ra.intent :plan ra.plan :specCheck specOn
+                        :wallBudget (reservedWall ra.wallBudget (wallSetting cfgText ":wallReserveSec" (defaultWallReserveSec))) :resume none :intent ra.intent :plan ra.plan :specCheck specOn
                         :next call :advise (pairFirst hooks) :review (pairSecond hooks)
                         :grade (fn [role sys msg] (liveGrader provider graderIntent graderProfile path sys msg))
                         :newId (fn [] session) :now (fn [] (ao/nowMono))
