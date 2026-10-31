@@ -1,4 +1,4 @@
-(module aslAgentBus/tests/procTelemetryTest :x [testDescriptorCreation testRegistryLifecycle testLaneFiltering testSerializationNdAsn testHealthAudit runTests] :i [(procTelemetry :a pt) (bus :a b)])
+(module aslAgentBus/tests/procTelemetryTest :x [testDescriptorCreation testRegistryLifecycle testLaneFiltering testSerializationNdAsn testHealthAudit runTests] :i [(procTelemetry :a pt)])
 
 fn testDescriptorCreation -> Bool
   (let [(locus (pt/makeProcLocus "gates/runner.asl" 42 "run-all-gates")) (p (pt/makeProcDescriptor 1001 "task-328-1" "main" 10000 10250 33554432 locus "running"))] (assert (= p.pid 1001) "pid must equal 1001") (assert (= p.taskId "task-328-1") "task-id must match") (assert (= p.lane "main") "lane must be main") (assert (= p.startedMs 10000) "started-ms must match") (assert (= p.elapsedMs 250) "elapsed-ms must be 250") (assert (= p.rssBytes 33554432) "rss-bytes must match") (assert (stringContains? p.locus "gates/runner.asl") "locus must contain file path") (assert (= p.status "running") "status must be running") true)

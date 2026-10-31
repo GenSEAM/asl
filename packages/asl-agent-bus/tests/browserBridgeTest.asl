@@ -1,4 +1,4 @@
-(module aslBusTests/browserBridgeTest :x [testBridgeInit testBridgeRegisterTab testBridgeEnqueueAndPollFifo testBridgeCompleteCommand testFormatCorsHttpResponse runTests] :i [(browserBridge :a bb) (asl-text/string :a s)])
+(module aslBusTests/browserBridgeTest :x [testBridgeInit testBridgeRegisterTab testBridgeEnqueueAndPollFifo testBridgeCompleteCommand testFormatCorsHttpResponse runTests] :i [(browserBridge :a bb)])
 
 fn testBridgeInit -> Bool
   (let [(st (bb/bridgeInit 8765))] (do (assert (= st.port 8765) "port is 8765") (assert (= (listLength st.tabs) 0) "tabs empty") (assert (= (listLength st.commands) 0) "commands empty") true))
