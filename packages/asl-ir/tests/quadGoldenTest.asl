@@ -1,5 +1,5 @@
 (module asl-ir/tests/quadGoldenTest
-  :x [entries goldenDigests linkedText runTests]
+  :x [entries goldenDigests linkedText sourceText runTests]
   :i [(asl-ir/types :a ty)
       (asl-ir/printer :a prn)
       (asl-ir/link :a lk)])

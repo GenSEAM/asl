@@ -1,5 +1,5 @@
 (module asl-ir/tests/lowerCorpusTest
-  :x [startingTable remainingTable runTests]
+  :x [startingTable remainingTable entryPath runTests]
   :i [(asl-ir/types :a ty)
       (asl-ir/link :a lk)])
 
