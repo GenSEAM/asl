@@ -1,4 +1,4 @@
-(:aslOpsFixtures :pin "02aff5d0" :cases 130)
+(:aslOpsFixtures :pin "02aff5d0" :cases 133)
 (:budgetCase :id "bNone" :hasAt false :at "" :now "100.0" :wantNone true :wantBudget "0.0")
 (:budgetCase :id "bPos" :hasAt true :at "120.5" :now "100.0" :wantNone false :wantBudget "20.5")
 (:budgetCase :id "bNeg" :hasAt true :at "95.0" :now "100.0" :wantNone false :wantBudget "-5.0")
