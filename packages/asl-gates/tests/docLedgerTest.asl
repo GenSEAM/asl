@@ -1,5 +1,5 @@
 (module asl-gates/tests/docLedgerTest
-  :x [testLoadValid! testMalformedRows! testLoadMissingIsEmpty! testFindBySymbolHitMiss! testFindByFile! testResolveRows! testRoundTripWithExtractor! testMutantGuards! testExportGaps! testCoverageRatchet! runTests]
+  :x [testLoadValid! testMalformedRows! testLoadMissingIsEmpty! testFindBySymbolHitMiss! testFindByFile! testResolveRows! testRoundTripWithExtractor! testMutantGuards! testExportGaps! testCoverageRatchet! testPackageGaps! testPackageRatchet! runTests]
   :i [(asl-gates/docLedger :a dl) (asl-gates/docExtract :a dx)])
 
 fn fixtureDir -> String
@@ -215,6 +215,46 @@ fn ! testCoverageRatchet! -> Bool
         (assert (listEmpty? fresh) (str "every export has a doc row in its asl/doc home or is in the baseline; missing: " (stringJoin (listTake fresh 10) " ")))
         true))
 
+fn packageBaselinePath -> String
+  "asl/packages/asl-gates/tests/docPackageBaseline.asn"
+
+fn ! gapSet! path: String -> (Map String Bool)
+  (fold (fn [(m (Map String Bool)) (l String)] -> (Map String Bool) (if (stringStartsWith? l "(:gap \"") (mapSet m (stringReplace (stringReplace l "(:gap \"" "") "\")" "") true) m))
+        (mapEmpty) (stringLines (resultOr (fileReadString path) "")))
+
+fn ! testPackageGaps! -> Bool
+  (let [(dir (sandboxDir!))
+        (made (processRun (str "mkdir -p '" dir "/asl/packages/fxpkg/src' '" dir "/asl/packages/fxpkg/tests' '" dir "/asl/packages/nodoc/src'")))
+        (doc (ok? (fileWrite (str dir "/asl/packages/fxpkg/doc.asn") "(:doc :symbol \"asl/packages/fxpkg/src/thing.asl#kept\" :text \"documented\")\n")))
+        (src (ok? (fileWrite (str dir "/asl/packages/fxpkg/src/thing.asl") "(module fxpkg/thing\n  :x [kept fresh]\n  :i [])\n\nfn kept -> Int64\n  1\n\nfn fresh -> Int64\n  2\n")))
+        (tst (ok? (fileWrite (str dir "/asl/packages/fxpkg/tests/thingTest.asl") "(module fxpkg/tests/thingTest\n  :x [runTests]\n  :i [])\n\nfn runTests -> Bool\n  true\n")))
+        (bare (ok? (fileWrite (str dir "/asl/packages/nodoc/src/x.asl") "(module nodoc/x\n  :x [y]\n  :i [])\n\nfn y -> Int64\n  1\n")))
+        (gaps (resultOr (dl/packageGaps! dir "fxpkg") (list "!scan")))
+        (pkgs (dl/docPackages! dir))
+        (gone (processRun (str "rm -rf '" dir "'")))]
+    (do (assert (and (= made.exitCode 0) (and doc (and src (and tst bare)))) "package fixture written")
+        (assert (= gaps (list "asl/packages/fxpkg/src/thing.asl#fresh" "asl/packages/fxpkg/tests/thingTest.asl#runTests")) (str "a package export without a row in its doc.asn is a gap, src and tests alike: " (stringJoin gaps " ")))
+        (assert (= pkgs (list "fxpkg")) (str "only packages with a doc.asn are scanned: " (stringJoin pkgs " ")))
+        (assert (= gone.exitCode 0) "package fixture removed")
+        true))
+
+; (:m :ref DOCLEDGER-SCOPE-GAP :do "every export under a package with a doc.asn has a row there, except the gaps listed in docPackageBaseline.asn on its date; covered baseline rows are printed as stale so the list can shrink")
+fn ! testPackageRatchet! -> Bool
+  (let [(known (gapSet! (packageBaselinePath)))
+        (pkgs (dl/docPackages! "."))
+        (results (map (fn [(p String)] -> (Pair String (Result (List String) String)) (pair p (dl/packageGaps! "." p))) pkgs))
+        (failed (filter (fn [(r (Pair String (Result (List String) String)))] -> Bool (not (ok? (pairSecond r)))) results))
+        (gaps (fold (fn [(acc (List String)) (r (Pair String (Result (List String) String)))] -> (List String) (listAppend acc (resultOr (pairSecond r) (list)))) (list) results))
+        (seen (fold (fn [(m (Map String Bool)) (g String)] -> (Map String Bool) (mapSet m g true)) (mapEmpty) gaps))
+        (fresh (filter (fn [(g String)] -> Bool (not (mapHas? known g))) gaps))
+        (stale (filter (fn [(g String)] -> Bool (not (mapHas? seen g))) (mapKeys known)))
+        (_ (if (listEmpty? stale) () (println (str "(:docPackageCoverage :stale " (listLength stale) " :first \"" (optionOr (listHead stale) "") "\")"))))]
+    (do (assert (listContains? pkgs "asl-gates") (str "asl-gates has a doc.asn: " (stringJoin pkgs " ")))
+        (assert (> (listLength (mapKeys known)) 0) (str "the package baseline loads from " (packageBaselinePath)))
+        (assert (listEmpty? failed) (str "every package scans: " (stringJoin (map (fn [(r (Pair String (Result (List String) String)))] -> String (pairFirst r)) failed) " ")))
+        (assert (listEmpty? fresh) (str "every package export has a row in its doc.asn or is in the package baseline; missing: " (stringJoin (listTake fresh 10) " ")))
+        true))
+
 fn ! runTests -> Bool
   (do
     (assert (testLoadValid!) "testLoadValid!")
@@ -227,4 +267,6 @@ fn ! runTests -> Bool
     (assert (testMutantGuards!) "testMutantGuards!")
     (assert (testExportGaps!) "testExportGaps!")
     (assert (testCoverageRatchet!) "testCoverageRatchet!")
+    (assert (testPackageGaps!) "testPackageGaps!")
+    (assert (testPackageRatchet!) "testPackageRatchet!")
     true)

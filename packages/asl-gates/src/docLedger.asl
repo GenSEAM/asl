@@ -1,5 +1,5 @@
 (module asl-gates/docLedger
-  :x [DocRow loadLedger! findBySymbol! findByFile! renderText unresolvedSymbols! checkLedger! exportsOf aslFilesUnder! exportGaps coverageGaps! main]
+  :x [DocRow loadLedger! findBySymbol! findByFile! renderText unresolvedSymbols! checkLedger! exportsOf aslFilesUnder! exportGaps coverageGaps! packageGaps! docPackages! main]
   :i [(asl-parser/reader :a rd) (asl-parser/ast :a ast) (asl-syntax/asl/asn :a asn) (asl-gates/metaAudit :a meta) (asl-gates/docExtract :a dx)])
 
 (schema DocRow
@@ -229,6 +229,30 @@ fn ! coverageGaps! root: String area: String -> (Result (List String) String)
                               (listAppend acc (exportGaps rows file (exportsOf (resultOr (fileReadString (str root "/" file)) "")))))
                             (list) files))))))
 
+; (:m :ref DOCLEDGER-SCOPE-GAP :do "exports under asl/packages/<pkg>, src and tests, with no row in that package's doc.asn, the ledgerPathFor home of a package path; asl/<area> homes are coverageGaps!'s")
+fn ! packageGaps! root: String pkg: String -> (Result (List String) String)
+  (match (loadLedger! (str root "/asl/packages/" pkg "/doc.asn"))
+    ((err e) (err e))
+    ((ok rows) (match (aslFilesUnder! root (str "asl/packages/" pkg))
+      ((err e) (err e))
+      ((ok files) (ok (fold (fn [(acc (List String)) (file String)] -> (List String)
+                              (listAppend acc (exportGaps rows file (exportsOf (resultOr (fileReadString (str root "/" file)) "")))))
+                            (list) files))))))
+
+; (:m :ref DOCLEDGER-SCOPE-GAP :do "a package is in scope when it has a doc.asn; one without has no home to check against")
+fn ! docPackages! root: String -> (List String)
+  (filter (fn [(p String)] -> Bool (fileExists? (str root "/asl/packages/" p "/doc.asn"))) (listSort (resultOr (dirList (str root "/asl/packages")) (list))))
+
+; (:m :ref DOCLEDGER-SCOPE-GAP :do "the area packages is every package with a doc.asn, in name order; any other area is asl/<area>")
+fn ! areaGaps! root: String area: String -> (Result (List String) String)
+  (if (= area "packages")
+    (fold (fn [(acc (Result (List String) String)) (p String)] -> (Result (List String) String)
+            (match acc
+              ((err e) (err e))
+              ((ok xs) (match (packageGaps! root p) ((err e) (err (str p ": " e))) ((ok ys) (ok (listAppend xs ys)))))))
+          (ok (list)) (docPackages! root))
+    (coverageGaps! root area))
+
 fn ! reportSymbol! root: String symbol: String -> Int64
   (match (findBySymbol! root symbol)
     ((err e) (do (println (str "(:doc :symbol \"" symbol "\" :status :error :message \"" e "\")")) 1))
@@ -247,7 +271,7 @@ fn ! reportFile! root: String file: String -> Int64
 ; (:m :ref DOCLEDGER-TOOLS-COVERAGE :do "--gaps AREA... prints one (:gap \"path#name\") row per undocumented export, the format of the docLedgerTest coverage baseline")
 fn ! reportGaps! areas: (List String) -> Int64
   (fold (fn [(code Int64) (area String)] -> Int64
-          (match (coverageGaps! "." area)
+          (match (areaGaps! "." area)
             ((err e) (do (println (str "(:doc :area \"" area "\" :status :error :message \"" (escRow e) "\")")) 1))
             ((ok gaps) (do (map (fn [(g String)] -> Unit (println (str "(:gap \"" g "\")"))) gaps) code))))
         0 areas)
