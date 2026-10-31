@@ -779,6 +779,7 @@ fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: S
               refMsg (pairSecond ref)
               err0 (cond
                      ((stringContains? out "ERR_OWNS") "ERR_OWNS")
+                     ((= refErr "ERR_TXN_ABORTED") "ERR_TXN_ABORTED")
                      ((or (stringContains? out "ERR_TXN_FLUSH_FAILED") (stringContains? refMsg "refused: the delimiters")) "ERR_TXN_FLUSH_FAILED")
                      ((stringContains? out "ERR_TXN_ABORTED") "ERR_TXN_ABORTED")
                      (else refErr))
@@ -829,6 +830,7 @@ fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: S
               refMsg (pairSecond ref)
               err0 (cond
                      ((stringContains? out "ERR_OWNS") "ERR_OWNS")
+                     ((= refErr "ERR_TXN_ABORTED") "ERR_TXN_ABORTED")
                      ((or (stringContains? out "ERR_TXN_FLUSH_FAILED") (stringContains? refMsg "refused: the delimiters")) "ERR_TXN_FLUSH_FAILED")
                      ((stringContains? out "ERR_TXN_ABORTED") "ERR_TXN_ABORTED")
                      (else refErr))
