@@ -38,7 +38,7 @@ fn cfg m1extra: String -> String
   (str "(:gateway :v 2 :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id m1 :provider fp :name \"n1\"" m1extra ") (:model :id m2 :provider fp :name \"n2\")) :profiles ((:profile :id default :routes ((:intent any :chain (m1 m2))))) :uses ((:use :for default :profile default)))\n")
 
 fn ! run! m1extra: String body: String failFirst: Bool -> String
-  (match (c/gateway_config_parse! (cfg m1extra) "default" ".asl/mem/calibration/index.asn")
+  (match (c/gatewayConfigParse! (cfg m1extra) "default" ".asl/mem/calibration/index.asn")
     ((err e) (str "config: " e))
     ((ok table)
       (match (u/upstreamSettings (mapEmpty))

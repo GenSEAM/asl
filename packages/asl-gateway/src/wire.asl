@@ -22,7 +22,6 @@
       chatReplyAsnStr
       upstreamErrorReason
       sanitizeAsnContent
-      sanitize_asn_content
       extractOutermostSexpr
       ]
   :i [(asl-json/json :a j)])
@@ -654,9 +653,6 @@ fn sanitizeAsnContent content: String -> String
                     (str (optionOr (stringSlice escaped 0 197) "") "...")
                     escaped))]
          (str "(:error :reason \"unbalanced_non_asn\" :raw \"" raw "\")")))))
-
-fn sanitize_asn_content content: String -> String
-  (sanitizeAsnContent content)
 
 fn findRootIndex text: String roots: (List String) -> (Option Int64)
   (if (listEmpty? roots)

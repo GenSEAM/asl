@@ -32,17 +32,14 @@
       defaultQueueBudgetSec
       gatewayQueueBudgetSecFromProps
       gatewayBucketWaitSecFromProps
-      asn_scalar
       asnScalar
       asnFigure
-      asn_props
       asnProps
       asnName
       gatewayParams
       calibrationRegistryLoad!
       gatewayProfilesParse
       gatewayConfigV2Build!
-      gateway_config_parse!
       gatewayConfigParse!
       gatewayIntentLine
       gatewayV2Route
@@ -637,9 +634,6 @@ fn asnScalar expr: rd/SExpr -> AsnScalar
     ((rd/sexprList _) (scalarStr ""))
     ((rd/sexprVect _) (scalarStr "")))
 
-fn asn_scalar expr: rd/SExpr -> AsnScalar
-  (asnScalar expr)
-
 fn parsePropsPairs items: (List rd/SExpr) what: String acc: (Map String rd/SExpr) -> (Result (Map String rd/SExpr) String)
   (match (listHead items)
     ((none) (ok acc))
@@ -674,9 +668,6 @@ fn asnProps form: rd/SExpr head: (Option String) -> (Result (Map String rd/SExpr
               (err (str what " has an odd number of items"))
               (parsePropsPairs items what (mapEmpty))))))
       (_ (err (str "expected " what ", found compound")))))
-
-fn asn_props form: rd/SExpr head: (Option String) -> (Result (Map String rd/SExpr) String)
-  (asnProps form head)
 
 fn asnFigure expr: rd/SExpr -> AsnScalar
   (match expr
@@ -1921,9 +1912,6 @@ fn gatewayConfigParse! text: String source: String registryPath: String -> (Resu
                     (match (gatewayProfilesParse text)
                       ((err e) (err e))
                       ((ok v1) (ok (convertV1ToTable! v1 source (gatewayKeyFilesFromProps g))))))))))))))
-
-fn gateway_config_parse! text: String source: String registryPath: String -> (Result GatewayTable String)
-  (gatewayConfigParse! text source registryPath)
 
 
 fn intentLineLoop intents: (Map String (Option String)) cur: String acc: (List String) -> (List String)

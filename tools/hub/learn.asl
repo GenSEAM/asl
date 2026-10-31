@@ -62,7 +62,7 @@ fn ! learnTick! gatewayPath: String ledgerPath: String storePath: String nowMs: 
   (match (fileReadString gatewayPath)
     ((err e) (err (str "ERR_HUB_LEARN_CONFIG: " e)))
     ((ok text)
-      (match (c/gateway_config_parse! text "default" "")
+      (match (c/gatewayConfigParse! text "default" "")
         ((err e) (err (str "ERR_HUB_LEARN_CONFIG: " e)))
         ((ok table)
           (let [(lines (tailLines ledgerPath (tailBytes)))
