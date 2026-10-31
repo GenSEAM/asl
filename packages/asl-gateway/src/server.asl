@@ -1327,7 +1327,7 @@ fn ! linkOpenWith! env: (Map String String) home: String rootDir: String familie
                   (ok (GatewayLoop :listener -1 :upstreamPort 0 :env env :home home :rootDir rootDir :registryPath registryPath
                         :promptMaxBytes (optionOr (stringToInt64 (optionOr (mapGet env "AGY_PROMPT_MAX_BYTES") "188000")) 188000)
                         :conns (list) :pools (pd/poolWithPlugins (pd/emptyPoolRegistry) w.plugins) :replies (list)
-                        :breaker (b/makeBreakerStateWith (optionOr (c/gatewayBreakerCooldownSecOverride text) 600) (b/quotaPolicy (optionOr (c/gatewayTopIntOverride text "cooldown429Sec") 15) (optionOr (c/gatewayTopIntOverride text "cooldown429MaxSec") 600) (optionOr (c/gatewayTopIntOverride text "cooldownSlackSec") 1)))
+                        :breaker (b/withParkMax (b/makeBreakerStateWith (optionOr (c/gatewayBreakerCooldownSecOverride text) 600) (b/quotaPolicy (optionOr (c/gatewayTopIntOverride text "cooldown429Sec") 15) (optionOr (c/gatewayTopIntOverride text "cooldown429MaxSec") 600) (optionOr (c/gatewayTopIntOverride text "cooldownSlackSec") 1))) (optionOr (c/gatewayTopIntOverride text "parkMaxSec") 0))
                         :buckets (u/emptyBucketRegistry) :profiles (pairFirst loaded) :wiring w :wiringText (some text)
                         :families families :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty)
                         :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs (nowMs!)))))))))))

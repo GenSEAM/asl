@@ -19,6 +19,8 @@
       breakerDownFor
       breakerMarkDown
       breakerMarkDownFor
+      withParkMax
+      defaultParkMaxSec
       breakerClear
       breakerNote503
       breakerReset503
@@ -57,13 +59,21 @@
 (schema QuotaPolicy
   (:f baseSec Int64)
   (:f maxSec Int64)
-  (:f slackSec Int64))
+  (:f slackSec Int64)
+  (:f parkMaxSec Int64))
 
 fn quotaPolicy baseSec: Int64 maxSec: Int64 slackSec: Int64 -> QuotaPolicy
   (let [(b (if (> baseSec 0) baseSec 15))
         (m (if (> maxSec 0) (max maxSec b) (max 600 b)))
         (s (if (>= slackSec 0) slackSec 1))]
-    (QuotaPolicy :baseSec b :maxSec m :slackSec s))
+    (QuotaPolicy :baseSec b :maxSec m :slackSec s :parkMaxSec (defaultParkMaxSec)))
+
+; (:m :ref OLLAMA-MONTHLY-EXHAUSTED :do "the longest a markDown may park a pool for its provider's reset, daily or monthly: 32 days unless (:gateway ... :parkMaxSec N) says otherwise, which server.asl reads into withParkMax; a non-positive value keeps the default")
+fn defaultParkMaxSec -> Int64
+  2764800
+
+fn withParkMax st: BreakerState sec: Int64 -> BreakerState
+  (with st :quota (with st.quota :parkMaxSec (if (> sec 0) sec (defaultParkMaxSec))))
 
 fn defaultQuotaPolicy -> QuotaPolicy
   (quotaPolicy 15 600 1)
@@ -148,7 +158,11 @@ fn breakerIsProviderWideQuota text: String -> Bool
 
 ; (:m :ref PAIDCHEAP-BREAKER-ALL-OPEN :do "the key a failure counts under: an account-wide failure (401, 402, a provider-wide quota body) trips the provider pool; every other failure (429, 503, 5xx, 4xx) counts on the member's own providerPool:alias key, so one member's 503 streak never closes its siblings on the same provider")
 fn breakerScope status: Int64 body: String providerPool: String pool: String -> String
-  (if (or (= status 401) (or (= status 402) (breakerIsProviderWideQuota body))) providerPool pool)
+  (if (or (= status 401) (or (= status 402) (or (breakerIsProviderWideQuota body) (breakerIsMonthlyCap body)))) providerPool pool)
+
+; (:m :ref OLLAMA-MONTHLY-EXHAUSTED :do "a monthly usage limit (ollama: you have reached your monthly usage limit) is the account's, so breakerScope counts it on the provider pool; it stays out of breakerIsProviderWideQuota because chat.asl parks only a quota that is not provider-wide until its reset (upstream dailyCapKind monthly); keep the wording in sync with upstream")
+fn breakerIsMonthlyCap text: String -> Bool
+  (stringContains? text "monthly usage limit")
 
 fn grownSec base: Int64 cap: Int64 streak: Int64 -> Int64
   (if (or (<= streak 0) (>= base cap))
@@ -253,7 +267,7 @@ fn breakerMarkDown st: BreakerState provider: String now: Int64 -> BreakerState
 fn breakerMarkDownFor st: BreakerState provider: String now: Int64 parkSec: Int64 -> BreakerState
   (if (stringEmpty? provider)
     st
-    (let [(until (+ now (if (> parkSec 0) parkSec st.cooldownSec)))]
+    (let [(until (+ now (if (> parkSec 0) (min parkSec st.quota.parkMaxSec) st.cooldownSec)))]
       (with st :breakers (mapSet st.breakers provider until) :count503 (mapSet st.count503 provider 0) :countTimeout (mapSet st.countTimeout provider 0) :seen (mapSet st.seen provider true))))
 
 fn breakerClear st: BreakerState provider: String -> BreakerState

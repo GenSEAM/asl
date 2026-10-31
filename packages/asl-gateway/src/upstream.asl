@@ -113,7 +113,7 @@
       callUpstream!
       wallSeconds!
       ceilMs]
-  :i [(asl-json/json :a j)])
+  :i [(asl-json/json :a j) (localTime :a lt)])
 
 (schema UpstreamSettings
   (:f geminiUrl String)
@@ -763,10 +763,11 @@ fn bodyWaitSec body: String -> Float64
     ((some? (stringIndexOf body "retryDelay")) (match (firstDigitFrom body (optionOr (stringIndexOf body "retryDelay") 0)) ((some d) (durationAt body d 0.0)) ((none) 0.0)))
     (else 0.0))
 
-; (:m :ref GW-DAILY-PARK :do "which free-tier daily cap a 429 is, by the wording each provider uses: openrouter free_model_daily_requests, a google quotaId naming PerDay, groq tokens or requests per day; empty for an ordinary per-minute 429")
+; (:m :ref GW-DAILY-PARK :do "which free-tier daily cap a 429 is, by the wording each provider uses: openrouter free_model_daily_requests, a google quotaId naming PerDay, groq tokens or requests per day; monthly for an account's monthly usage limit (ollama), which breaker.breakerScope counts on the provider pool; empty for an ordinary per-minute 429")
 fn dailyCapKind status: Int64 body: String -> String
   (cond
     ((!= status 429) "")
+    ((stringContains? body "monthly usage limit") "monthly")
     ((or (stringContains? body "free_model_daily_requests") (stringContains? body "free-models-per-day")) "openrouter")
     ((and (stringContains? body "PerDay") (stringContains? body "quotaId")) "gemini")
     ((and (stringContains? body "Quota exceeded for metric") (stringContains? body "per day")) "gemini")
@@ -779,15 +780,24 @@ fn secondsToUtcHour nowSec: Float64 hour: Int64 -> Int64
         (target (* hour 3600))]
     (if (> target since) (- target since) (- (+ target 86400) since)))
 
-; (:m :ref GW-DAILY-PARK :do "seconds to park a model after a daily-cap 429: the provider's own reset (openrouter X-RateLimit-Reset as epoch seconds or milliseconds) or the wait its body names, else the next reset boundary (openrouter 00:00 UTC, google midnight Pacific taken as 08:00 UTC, groq an hour); never under 60 s nor over a day and an hour")
+; (:m :ref OLLAMA-MONTHLY-EXHAUSTED :do "seconds from nowSec to the first day of the next month at 00:00 UTC")
+fn secondsToNextUtcMonth nowSec: Float64 -> Int64
+  (let [(t (optionOr (float64ToInt64 nowSec) 0))
+        (ymd (lt/civilFromDays (/ t 86400)))
+        (y (optionOr (listGet ymd 0) 1970))
+        (m (optionOr (listGet ymd 1) 1))
+        (next (if (= m 12) (lt/daysFromCivil (+ y 1) 1 1) (lt/daysFromCivil y (+ m 1) 1)))]
+    (- (* next 86400) t))
+
+; (:m :ref GW-DAILY-PARK :do "seconds to park a model after a daily-cap 429: the provider's own reset (openrouter X-RateLimit-Reset as epoch seconds or milliseconds) or the wait its body names, else the next reset boundary (openrouter 00:00 UTC, google midnight Pacific taken as 08:00 UTC, a monthly limit the next month start at 00:00 UTC, groq an hour); never under 60 s; a daily cap never over a day and an hour, while a monthly park is bounded only by breaker parkMaxSec (the :parkMaxSec config row)")
 fn dailyCapParkSec kind: String headers: (List (Pair String String)) body: String nowSec: Float64 -> Int64
   (let [(resetRaw (match (headerGet headers "X-RateLimit-Reset") ((some v) (optionOr (stringToFloat64 (pyStrip v)) 0.0)) ((none) 0.0)))
         (resetSec (if (> resetRaw 1000000000000.0) (/ resetRaw 1000.0) resetRaw))
         (fromHeader (if (> resetSec nowSec) (optionOr (float64ToInt64 (- resetSec nowSec)) 0) 0))
         (fromBody (optionOr (float64ToInt64 (bodyWaitSec body)) 0))
-        (boundary (cond ((= kind "openrouter") (secondsToUtcHour nowSec 0)) ((= kind "gemini") (secondsToUtcHour nowSec 8)) (else 3600)))
+        (boundary (cond ((= kind "openrouter") (secondsToUtcHour nowSec 0)) ((= kind "gemini") (secondsToUtcHour nowSec 8)) ((= kind "monthly") (secondsToNextUtcMonth nowSec)) (else 3600)))
         (picked (cond ((> fromHeader 0) fromHeader) ((> fromBody 0) (+ fromBody 1)) (else boundary)))]
-    (if (< picked 60) 60 (if (> picked 90000) 90000 picked)))
+    (cond ((< picked 60) 60) ((and (> picked 90000) (not (= kind "monthly"))) 90000) (else picked)))
 
 ; (:m :tags (retry) :do "server.asl's failureReply renders a transportFailure as httpRaised false (str \"curl exit \" code \": \" stderr); this re-extracts the curl exit code from that text so chat.asl's raised can classify it without a new effect field")
 fn parseCurlExitCode text: String -> (Option Int64)

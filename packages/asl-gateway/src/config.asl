@@ -413,7 +413,7 @@ fn gatewayCooldownErrors g: (Map String rd/SExpr) -> (List String)
                  ((some b) (match top ((some m) (if (< m b) (list ":cooldown429MaxSec must not be under :cooldown429Sec") (list))) ((none) (list))))
                  ((none) (list))))]
     (listAppend (listAppend (cooldownErrorOf g "cooldown429Sec" 1 3600) (cooldownErrorOf g "cooldown429MaxSec" 1 90000))
-                (listAppend (cooldownErrorOf g "cooldownSlackSec" 0 30) order)))
+                (listAppend (listAppend (cooldownErrorOf g "cooldownSlackSec" 0 30) (cooldownErrorOf g "parkMaxSec" 60 2764800)) order)))
 
 fn gatewayWaitErrors g: (Map String rd/SExpr) -> (List String)
   (listAppend (listAppend (waitErrorOf "bucketWaitSec" (bucketWaitValue g)) (waitErrorOf "queueBudgetSec" (queueBudgetValue g))) (gatewayCooldownErrors g))
