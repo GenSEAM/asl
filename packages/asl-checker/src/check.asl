@@ -1,4 +1,4 @@
-(module asl-checker/check :x [InferState Deferred checkModule checkModuleIn checkModuleSource checkSource checkFile! schemaOfCtor elaborateScript needsElaboration?] :i [(types :a ty) (unify :a u) (resolve :a r) (ast :a a) (reader :a rd) (tailPos :a tp) (constAssert :a ca) (foreign :a ff) (numKinds :a nk)])
+(module asl-checker/check :x [InferState Deferred checkModule checkModuleIn checkModuleSource checkSource checkFile! schemaOfCtor elaborateScript needsElaboration?] :i [(types :a ty) (unify :a u) (resolve :a r) (ast :a a) (reader :a rd) (tailPos :a tp) (constAssert :a ca) (foreign :a ff) (numKinds :a nk) (lowLevelSigs :a ll)])
 
 (schema InferState (:f subst (Map Int64 ty/Type)) (:f nextVar Int64) (:f intSites (List (pair String Int64))) (:f mapSites (List (pair ty/Type String))) (:f diags (List ty/Diagnostic)) (:f deferred (List Deferred)))
 
@@ -487,8 +487,13 @@ fn inferCtorForm fm: FrameMachine head: String args: (List rd/SExpr) st: InferSt
     ((none) (freshVar (inferCtorArgs fm (list) fm.mod (mapEmpty) head args st) "any"))
     ((some found) (let [(sch (pairFirst found)) (owner (pairSecond found)) (tvars sch.typevars) (vRes (freshVarsFrom tvars (mapEmpty) st)) (vmap (pairFirst vRes)) (st1 (inferCtorArgs fm sch.fields owner vmap sch.name args (pairSecond vRes))) (targs (map (fn [(v String)] -> ty/Type (optionOr (mapGet vmap v) (unitType))) tvars)) (shown (if (stringContains? head "/") (some head) (none)))] (pair (ty/tyCon sch.name targs (some owner.name) shown) st1))))
 
-fn fmCallStep cname: String cty: ty/Type argsDone: (List ty/Type) argsPending: (List rd/SExpr) cenv: (Map String ty/Type) restFrames: (List InferFrame) fm: FrameMachine -> FrameMachine
+fn fmCallStepCore cname: String cty: ty/Type argsDone: (List ty/Type) argsPending: (List rd/SExpr) cenv: (Map String ty/Type) restFrames: (List InferFrame) fm: FrameMachine -> FrameMachine
   (let [(pv (popValue fm)) (val (pairFirst pv)) (remValues (pairSecond pv)) (revDone (cons val argsDone))] (if (listEmpty? argsPending) (if (and (ty/genericMulti? cname) (and (not (mapHas? fm.env cname)) (ty/isTyVar? (u/applySubst fm.state.subst cty)))) (genericCallStep cname (listReverse revDone) remValues restFrames fm) (let [(prunedCallee (u/applySubst fm.state.subst cty))] (match prunedCallee ((ty/tyFun params ret) (let [(stUnify (foldExpectArgs (listReverse revDone) params cname fm.path fm.mod.name fm.state))] (with fm :frames restFrames :values (cons (u/applySubst stUnify.subst ret) remValues) :state stUnify))) (_ (let [(fRes (freshVar fm.state "any"))] (with fm :frames restFrames :values (cons (pairFirst fRes) remValues) :state (pairSecond fRes))))))) (let [(nextArg (r/firstExprUnit argsPending)) (remPending (r/safeTail argsPending))] (with fm :frames (cons (fEval nextArg) (cons (fCall cname cty revDone remPending cenv) restFrames)) :values remValues))))
+
+fn fmCallStep cname: String cty: ty/Type argsDone: (List ty/Type) argsPending: (List rd/SExpr) cenv: (Map String ty/Type) restFrames: (List InferFrame) fm: FrameMachine -> FrameMachine
+  (if (and (listEmpty? argsPending) (and (ll/unroutedName? cname) (and (not (mapHas? fm.env cname)) (none? (r/modFun fm.mod cname)))))
+    (fmCallStepCore cname cty argsDone argsPending cenv restFrames (with fm :state (addDiag fm.state "ERR_LOWLEVEL_UNROUTED" (str cname " has a signature but no lowering in the native target yet, so a build would fail; its lowering unit adds it to loweredNames") fm.path)))
+    (fmCallStepCore cname cty argsDone argsPending cenv restFrames fm))
 
 fn genericCallStep cname: String args: (List ty/Type) remValues: (List ty/Type) restFrames: (List InferFrame) fm: FrameMachine -> FrameMachine
   (let [(st fm.state)

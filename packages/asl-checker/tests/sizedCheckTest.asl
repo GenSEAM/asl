@@ -1,8 +1,12 @@
 (module asl-checker/sizedCheckTest :x [runTests] :i [(types :a ty) (check :a c) (lowLevelSigs :a ll)])
 
 ; (:m :ref LL-SIZED-CHECK :do "sized integers in the checker: U8 U16 U32 U64 I8 I16 are integral types with their literal ranges, two different sized types never mix in arithmetic and the diagnostic names the conversion, the integral bit operators accept any sized type, and the overflow, conversion, Buf and atomic signatures are registered")
-fn diagsOf body: String -> (List ty/Diagnostic)
+fn diagsAll body: String -> (List ty/Diagnostic)
   (c/checkSource (str "(module m :x [] :i [])\n\n" body) (mapEmpty) "m.asl")
+
+; (:m :ref LL-SIZED-LOWER-GAP :do "typing tests ignore the unrouted-lowering diagnostic, which testUnrouted pins separately")
+fn diagsOf body: String -> (List ty/Diagnostic)
+  (filter (fn [(d ty/Diagnostic)] -> Bool (not (= d.code "ERR_LOWLEVEL_UNROUTED"))) (diagsAll body))
 
 fn showDiags ds: (List ty/Diagnostic) -> String
   (stringJoin (map (fn [(d ty/Diagnostic)] -> String (str "[" d.code "] " d.message)) ds) "; ")
@@ -81,5 +85,20 @@ fn testSigTable -> Bool
       (assert (some? (ty/builtinSig "rotateRight")) "builtinSig reaches the low-level table")
       true)
 
+fn testUnrouted -> Bool
+  (let [(add (diagsAll "fn f a: U8 b: U8 -> U8\n  (addWrap a b)\n"))
+        (conv (diagsAll "fn f a: Int64 -> U8\n  (U8 a)\n"))
+        (bit (diagsAll "fn f a: Int64 b: Int64 -> Int64\n  (& a b)\n"))
+        (own (diagsAll "fn addWrap a: Int64 b: Int64 -> Int64\n  (+ a b)\n\nfn g -> Int64\n  (addWrap 1 2)\n"))]
+    (do (assert (= (map (fn [(d ty/Diagnostic)] -> String d.code) add) (list "ERR_LOWLEVEL_UNROUTED")) (str "a call to addWrap is one unrouted diagnostic; got " (showDiags add)))
+        (assert (stringContains? (showDiags add) "addWrap has a signature but no lowering") "the diagnostic names the builtin and the missing lowering")
+        (assert (= (map (fn [(d ty/Diagnostic)] -> String d.code) conv) (list "ERR_LOWLEVEL_UNROUTED")) (str "a conversion call is unrouted too; got " (showDiags conv)))
+        (assert (listEmpty? bit) (str "the integral operators are lowered; got " (showDiags bit)))
+        (assert (listEmpty? own) (str "a module function of the same name is not flagged; got " (showDiags own)))
+        (assert (ll/unroutedName? "bufGet") "bufGet is unrouted")
+        (assert (not (ll/unroutedName? "<<")) "<< is lowered")
+        (assert (not (ll/unroutedName? "notALowLevelName")) "a name without a signature is not flagged here")
+        true))
+
 fn ! runTests -> Bool
-  (do (testTypes) (testLiterals) (testArithmetic) (testBitOps) (testOverflowOps) (testConversions) (testSigTable) true)
+  (do (testTypes) (testLiterals) (testArithmetic) (testBitOps) (testOverflowOps) (testConversions) (testSigTable) (testUnrouted) true)
